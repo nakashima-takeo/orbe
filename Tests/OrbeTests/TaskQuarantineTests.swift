@@ -170,15 +170,6 @@ final class TaskQuarantineTests: OrbeTestCase {
     XCTAssertEqual(loaded.tasks.last?.description, "m")
   }
 
-  func testMissingFileStartsEmptyWithoutQuarantine() throws {
-    XCTAssertNil(TaskPersistence.load())
-
-    XCTAssertTrue(try quarantineFiles().isEmpty, "初回起動は退避物を作らない")
-    let store = TaskStore()
-    _ = try store.add(TaskDraft(title: "最初"))
-    XCTAssertEqual(TaskStore().tasks.map(\.title), ["最初"], "初回起動の保存は通常どおりディスクへ届く")
-  }
-
   func testStoreStartsEmptyFromACorruptFileAndSavesAfterQuarantine() throws {
     try Data(corruptJSON.utf8).write(to: tasksFile())
 

@@ -2,45 +2,33 @@ import XCTest
 
 @testable import Orbe
 
-/// タスクの行が、そのタスクの worktree で作業中か入力待ちの agent を札に持つこと。どの agent を出すかの規則は
-/// `WorktreeAgentActivityTests` が持つ。
+/// タスクの行が、そのタスクの worktree で作業中か入力待ちの agent を札に持つこと。同じ worktree の agent を
+/// どれに畳むかの規則は `WorktreeAgentActivityTests` が持つ。
 ///
 /// 壊れると何が起きるか: agent が worktree で作業中・入力待ちでも、タスクの行に札が出ず、どのタスクが
-/// 進んでいてどれが人の手を待っているか、タスク画面から分からない。
+/// 進んでいてどれが人の手を待っているか、タスク画面から分からない。逆に応答を終えた・休止中の agent まで
+/// 札に出て、一覧が札で埋まる。
 extension TaskPaletteRowsTests {
-  func testRowCarriesTheAgentOfItsWorktreeOnly() throws {
-    let agent = WorktreeAgentActivity.Agent(
-      name: "claude", state: .waiting, since: Date(timeIntervalSince1970: 0), tabId: 7,
-      tabTitle: "issue-221", branch: nil,
-      defaultBranch: nil)
-    let agents = ["/r/wt/issue-221": agent]
-    let rows = TaskPaletteRows.build(
-      input(
-        [
-          task(1) { $0.worktree = TaskWorktree(key: "/r/wt/issue-221") },
-          task(2) { $0.worktree = TaskWorktree(key: "/r/wt/other") }, task(3),
-        ], agents: agents))
+  func testRowCarriesOnlyAWorkingOrWaitingAgentOfItsWorktree() {
+    func agent(_ state: AgentStateIcon.Kind, tab: Int) -> WorktreeAgentActivity.Agent {
+      WorktreeAgentActivity.Agent(
+        name: "claude", state: state, since: Date(timeIntervalSince1970: 0), tabId: tab,
+        tabTitle: "wt", branch: nil, defaultBranch: nil)
+    }
+    let agents = [
+      "/r/wt/waiting": agent(.waiting, tab: 1), "/r/wt/working": agent(.working, tab: 2),
+      "/r/wt/done": agent(.done, tab: 3), "/r/wt/idle": agent(.idle, tab: 4),
+    ]
+    let worktrees = ["/r/wt/waiting", "/r/wt/working", "/r/wt/done", "/r/wt/idle", "/r/wt/other"]
+    let tasks = worktrees.enumerated().map { index, key in
+      task(index + 1) { $0.worktree = TaskWorktree(key: key) }
+    }
+
+    let rows = TaskPaletteRows.build(input(tasks, agents: agents))
     let tabs = rows.compactMap { row -> TaskPaletteTaskRow? in
       if case .task(let row) = row { row } else { nil }
     }.map { $0.agent?.tabId }
 
-    XCTAssertEqual(tabs, [7, nil, nil], "worktree が一致する行だけ")
-  }
-
-  /// 応答を終えた・休止中の agent は行の札に出さない（右の欄の agent の場所にだけ出る）。
-  func testRowShowsTheAgentOnlyWhileItIsWorkingOrWaiting() throws {
-    let worktree = "/r/wt/issue-221"
-    for state in AgentStateIcon.Kind.allCases {
-      let agent = WorktreeAgentActivity.Agent(
-        name: "claude", state: state, since: Date(timeIntervalSince1970: 0), tabId: 7,
-        tabTitle: "issue-221", branch: nil,
-        defaultBranch: nil)
-      let rows = TaskPaletteRows.build(
-        input([task(1) { $0.worktree = TaskWorktree(key: worktree) }], agents: [worktree: agent]))
-      let row = try XCTUnwrap(
-        rows.lazy.compactMap { if case .task(let row) = $0 { row } else { nil } }.first)
-
-      XCTAssertEqual(row.agent != nil, state == .working || state == .waiting, "\(state)")
-    }
+    XCTAssertEqual(tabs, [1, 2, nil, nil, nil], "worktree が一致し、作業中か入力待ちの agent だけ")
   }
 }

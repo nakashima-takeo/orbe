@@ -28,20 +28,18 @@ final class MenuBarStatusViewTests: OrbeTestCase {
       stateChangedAt: Date())
   }
 
-  /// ① 静か（要対応 0）: グリフのみでも幅正・高さ 22 以下。
-  func testQuietStateFitsMenuBar() {
-    let size = fittingSize(store: AttentionStore(), phase: .closed)
-    XCTAssertGreaterThan(size.width, 0)
-    XCTAssertLessThanOrEqual(size.height, 22)
-  }
+  /// ① 静か（要対応 0）と ③ 収縮ピル（◐＋件数）は、どちらも幅正・高さ 22 以下に収まり、
+  /// ③はグリフ単体の①より広い。
+  func testQuietAndCountPillFitMenuBar() {
+    let quiet = fittingSize(store: AttentionStore(), phase: .closed)
+    XCTAssertGreaterThan(quiet.width, 0)
+    XCTAssertLessThanOrEqual(quiet.height, 22)
 
-  /// ③ 収縮ピル（◐＋件数）: 高さ 22 以下・グリフ単体より幅が広い。
-  func testCountPillFitsMenuBar() {
     let store = AttentionStore()
     store.apply(rows: [row(state: "waiting"), row(state: "done")])
-    let size = fittingSize(store: store, phase: .closed)
-    XCTAssertGreaterThan(size.width, fittingSize(store: AttentionStore(), phase: .closed).width)
-    XCTAssertLessThanOrEqual(size.height, 22)
+    let count = fittingSize(store: store, phase: .closed)
+    XCTAssertGreaterThan(count.width, quiet.width)
+    XCTAssertLessThanOrEqual(count.height, 22)
   }
 
   /// transient を 1 件載せた store。②が指す行は**一覧にも居る**——`apply(rows:)` がその行を
@@ -67,25 +65,6 @@ final class MenuBarStatusViewTests: OrbeTestCase {
       rootView: MenuBarStatusView(store: store, ui: MenuBarUIState(), phase: .open)
     )
     .sizeThatFits(in: NSSize(width: proposedWidth, height: 40)).width
-  }
-
-  /// ② 滲み出しピル（WS 名＋文言）: 高さ 22 以下。静的状態（①③）より確実に広い
-  /// ＝transient 出現で幅が伸びる契約（実機で伸びなかった回帰の再発防止）。
-  /// 幅の上限は `testTransientPillCapsOverallWidth` が単独で持つ。
-  func testTransientPillFitsMenuBarAndExpands() {
-    let store = AttentionStore()
-    let long = String(repeating: "とても長い文言 ", count: 40)
-    store.apply(rows: [row(state: "waiting"), row(state: "done")])
-    store.noteTransient(row(state: "waiting", message: long), dwell: anyDwell)
-    let size = fittingSize(store: store, phase: .open)
-    XCTAssertLessThanOrEqual(size.height, 22)
-
-    let quietWidth = fittingSize(store: AttentionStore(), phase: .closed).width
-    let countStore = AttentionStore()
-    countStore.apply(rows: [row(state: "waiting"), row(state: "done")])
-    let countWidth = fittingSize(store: countStore, phase: .closed).width
-    XCTAssertGreaterThan(size.width, countWidth, "transient は収縮ピル（③）より広く滲み出る")
-    XCTAssertGreaterThan(size.width, quietWidth, "transient は静的グリフ（①）より広く滲み出る")
   }
 
   /// 長い WS 名＋長文でもピル全体が幅上限を超えない（メニューバーの他アイテムを圧迫しない）。

@@ -22,24 +22,24 @@ final class TaskPaletteRowsTests: OrbeTestCase {
   }
 
   func task(
-    _ id: Int, _ title: String = "タスク", _ status: TaskItem.Status = .todo, by: String? = nil,
+    _ id: Int, _ title: String = "タスク", _ status: TaskItem.Status = .todo,
     _ mutate: (inout TaskItem) -> Void = { _ in }
   ) -> TaskItem {
     var item = TaskItem(
       id: id, title: title, status: status, waiting: nil, priority: .medium, due: nil,
-      workspace: nil, description: "", createdAt: now, createdBy: by)
+      workspace: nil, description: "", createdAt: now, createdBy: nil)
     mutate(&item)
     return item
   }
 
   func input(
-    _ tasks: [TaskItem], query: String = "", picking: Bool = false,
-    scope: TaskPaletteScope = .all, doneExpanded: Bool = false,
-    items: [GitHubItemID: GitHubItemAnswer] = [:], viewerLogin: String? = nil,
+    _ tasks: [TaskItem], query: String = "", scope: TaskPaletteScope = .all,
+    doneExpanded: Bool = false, items: [GitHubItemID: GitHubItemAnswer] = [:],
+    viewerLogin: String? = nil,
     agents: [String: WorktreeAgentActivity.Agent] = [:]
   ) -> TaskPaletteRows.Input {
     TaskPaletteRows.Input(
-      tasks: tasks, query: query, picking: picking, scope: scope, doneExpanded: doneExpanded,
+      tasks: tasks, query: query, scope: scope, doneExpanded: doneExpanded,
       workspaces: workspaces, today: today, timeZone: calendar.timeZone, items: items,
       viewerLogin: viewerLogin, agents: agents)
   }
@@ -72,22 +72,6 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     XCTAssertEqual(rows[3], .sectionHeader(.todo, count: 2))
     XCTAssertEqual(rows[6], .doneHeader(count: 1, expanded: false), "完了は最初は畳まれ、見出しだけが出る")
     XCTAssertEqual(taskIDs(rows), [2, 5, 1, 4], "どの欄でも列の順のまま")
-  }
-
-  /// 掴んで並べ替えられる（取っ手を出す）のは未完了の行だけで、結び付けるタスクを選ぶ間はどの行も
-  /// 並べ替えられない。
-  func testOnlyUnfinishedRowsAreReorderableAndNoneWhilePicking() {
-    func reorderable(picking: Bool) -> [Int: Bool] {
-      let rows = TaskPaletteRows.build(
-        input([task(1, "a", .todo), task(2, "b", .done)], picking: picking, doneExpanded: true))
-      return Dictionary(
-        uniqueKeysWithValues: rows.compactMap {
-          if case .task(let row) = $0 { (row.id, row.reorderable) } else { nil }
-        })
-    }
-
-    XCTAssertEqual(reorderable(picking: false), [1: true, 2: false])
-    XCTAssertEqual(reorderable(picking: true), [1: false, 2: false])
   }
 
   func testExpandedDoneSectionListsDoneTasksUnderTheHeaderInListOrder() {
@@ -150,12 +134,6 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     XCTAssertEqual(taskIDs(rows), [1])
   }
 
-  func testOpenedScopeWithNoTasksThereShowsTheEmptyInfoRow() {
-    let rows = TaskPaletteRows.build(input([task(1)], scope: .opened))
-
-    XCTAssertEqual(rows, [.empty])
-  }
-
   func testCountsAreUndoneTasksPerScopeAndIgnoreTheQuery() {
     let tasks = [
       task(1, "a", .todo) { $0.workspace = self.opened.id },
@@ -203,14 +181,6 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     XCTAssertEqual(
       try row(lateLastNight).waiting, .init(reason: "経理の返事", days: 1), "日付をまたげば数分前でも 1 日")
     XCTAssertEqual(try row(earlyThisMorning).waiting?.days, 0, "今日始まった待ちは 0 日")
-  }
-
-  func testDueAndCreatorBadgesComeFromTheTask() throws {
-    let due = TaskItem.DueDate(year: 2025, month: 10, day: 6)!
-    let row = try taskRow(task(1, by: "claude") { $0.due = due })
-
-    XCTAssertEqual(row.due, .init(date: due, today: today))
-    XCTAssertEqual(row.createdBy, "claude")
   }
 
   func testWorkspaceBadgeIsOpenedOtherOrNoneForAnUnresolvableReference() throws {

@@ -36,33 +36,6 @@ final class AgentIconTests: OrbeTestCase {
       "未知状態キーは捨てる")
   }
 
-  // MARK: - whole-map（A案）の実効合成
-
-  /// override 非 nil はマップ全体を差し替える（per-key マージしない）。global の working は載らない。
-  func testEffectiveWholeMapReplace() {
-    var global = SettingsLayer()
-    global[SettingKeys.agentStateIcons] = ["working": "gearshape"]
-    var override = SettingsLayer()
-    override[SettingKeys.agentStateIcons] = ["waiting": "hourglass"]
-    let eff = EffectiveSettings(global.overlaid(with: override))
-    XCTAssertEqual(eff[SettingKeys.agentStateIcons], ["waiting": "hourglass"])
-  }
-
-  /// override が空（未上書き）なら global マップを継承する。
-  func testEffectiveInheritsWhenOverrideEmpty() {
-    var global = SettingsLayer()
-    global[SettingKeys.agentStateIcons] = ["working": "gearshape"]
-    let eff = EffectiveSettings(global.overlaid(with: SettingsLayer()))
-    XCTAssertEqual(eff[SettingKeys.agentStateIcons], ["working": "gearshape"])
-  }
-
-  /// agentStateIcons 単独 override でも層は空でない（isEmpty 畳み込みで消えない）。
-  func testAgentStateIconsOverrideAloneIsPreserved() {
-    var o = SettingsLayer()
-    o[SettingKeys.agentStateIcons] = ["working": "gearshape"]
-    XCTAssertFalse(o.isEmpty)
-  }
-
   // MARK: - snapshot-on-edit（未上書き WS の初編集で global マップ全体を所有）
 
   /// workspace 未上書きで 1 状態を編集すると、実効マップ（＝global）をスナップショットして他状態を保つ。

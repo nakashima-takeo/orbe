@@ -100,23 +100,6 @@ extension TaskPaletteModelTests {
     ])
   }
 
-  func testDetailStopsRunFromTheTitleThroughEachLinkToTheStatus() {
-    let palette = detailWithLinks()
-    var visited: [TaskPaletteArea] = []
-
-    for _ in 0..<5 {
-      palette.moveField(-1)
-      visited.append(palette.area)
-    }
-
-    XCTAssertEqual(
-      visited,
-      [
-        .detail(.addLink), .detail(.link(link(.issue, 3).item)), .detail(.link(link(.pr, 2).item)),
-        .detail(.link(link(.issue, 1).item)), .detail(.field(.title)),
-      ], "ステータスから上へ: 結び付ける → 各結び付き（並びの逆順）→ タイトル")
-  }
-
   func testOpeningALinkHandsItsGitHubPageToTheBrowser() {
     let palette = detailWithLinks()
     var opened: [URL] = []

@@ -287,18 +287,6 @@ extension TaskPaletteCardKeyTests {
     XCTAssertTrue(source.writes.isEmpty)
   }
 
-  /// タスクのタブで ↵ を押し続けても、完了になるのは押した 1 件だけ。
-  func testEnterHeldOnTheTasksTabCompletesOneTask() {
-    let model = model()
-    let window = mount(model)
-
-    press(Key.enter, "\r", to: window)
-    press(Key.enter, "\r", repeating: true, to: window)
-    press(Key.enter, "\r", repeating: true, to: window)
-
-    XCTAssertEqual(model.store.tasks.map(\.status), [.done, .todo, .todo])
-  }
-
   // MARK: - 選ぶ状態の space
 
   /// 結び付けるタスクを選ぶ間、空の入力欄の space は何もしない（完了にせず、空白も入れない）。

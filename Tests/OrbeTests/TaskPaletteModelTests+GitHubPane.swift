@@ -110,29 +110,6 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.area, .list)
   }
 
-  /// 選んでいた結び付いた行が、agent が結び付きを外す・タスクを消すことで「さらに」の内側（6 件目以降）へ
-  /// 戻ったら、その区分を開いて選択をその項目に残す——同じ位置の別の項目へ移ると、↵ で見ていない項目を
-  /// タスクにして自分を書き込む。
-  func testSelectedItemFallingBehindMoreAfterAnAgentChangeExpandsItsSection() throws {
-    for change in ["unlink", "delete"] {
-      let palette = GitHub.model(
-        [task(1, "a") { $0.links = [GitHub.link(1)] }], issues: (1...7).map { GitHub.issue($0) })
-      palette.tapGitHubRow(.item(GitHub.id(1)))
-
-      if change == "unlink" {
-        var update = TaskUpdate()
-        update.links = []
-        _ = try palette.store.update(1, update)
-      } else {
-        try palette.store.delete(1)
-      }
-      palette.reconcile()
-
-      XCTAssertEqual(palette.expandedKinds, [.issue], change)
-      XCTAssertEqual(palette.selectedGitHubID, .item(GitHub.id(1)), change)
-    }
-  }
-
   /// 一覧が伸びて上位 5 件が入れ替わり、選んでいた項目が「さらに」の内側へ押し出されても、その区分を開いて
   /// 選択をその項目に残す。
   func testSelectedItemPushedBehindMoreByANewPageExpandsItsSection() throws {

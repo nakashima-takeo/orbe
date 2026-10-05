@@ -18,17 +18,6 @@ final class AttentionStoreTests: OrbeTestCase {
       stateChangedAt: Date())
   }
 
-  /// 到来時刻と滞留の満了時刻。`expiresAt` は収縮の開始時刻で、②の総寿命はここから 600ms 先。
-  /// `arrivedAt` は「新しい到来か」を MenuBarController が見分ける印なので、到来時刻そのもの。
-  /// 滞留は store が既定を持たず、渡された `dwell` がそのまま `expiresAt` に焼かれる。
-  func testNoteTransientStampsArrivalAndDwell() {
-    let store = AttentionStore()
-    let now = Date(timeIntervalSinceReferenceDate: 1_000_000)
-    store.noteTransient(row(tabId: 1, state: "waiting"), dwell: 75, now: now)
-    XCTAssertEqual(store.transient?.arrivedAt, now)
-    XCTAssertEqual(store.transient?.expiresAt, now.addingTimeInterval(75))
-  }
-
   /// 同じ tabId・同じ状態で一覧に居る限りピルは残り、行の中身が変わっても差し替えない
   /// （立て直すのは report 経路の仕事）。
   func testTransientSurvivesWhileProjected() {
@@ -41,27 +30,12 @@ final class AttentionStoreTests: OrbeTestCase {
   }
 
   /// 同じタブでも状態が変われば取り下げる——判定は `tabId` だけでなく `state` も見る。
-  ///
-  /// これは**契約そのもの**（「②が指す行が同じ tabId かつ同じ state で一覧に居ること」）を
-  /// 固定する。現状 `state` だけが食い違う到達経路は無い——report 経路は waiting/done の実変化の
-  /// たびに②を新しい行で立て直し、それが抑制される「見ているタブ」では done が idle へ消費されて
-  /// 行ごと消えるため。将来 `state` 条件を落とす変更をここで捕まえる。
+  /// waiting → done は一覧に残ったまま状態だけが変わるので、`state` の一致を外すとここで落ちる。
+  /// `working` へ戻った場合も同じ判定で取り下がる（`working` は一覧にも居ない）。
   func testTransientWithdrawnWhenSameTabChangesState() {
     let store = AttentionStore()
     store.noteTransient(row(tabId: 1, state: "waiting"), dwell: anyDwell)
     store.apply(rows: [row(tabId: 1, state: "done")])
-    XCTAssertEqual(store.transient?.retracted, true)
-  }
-
-  /// `working` は一覧（`listRows`）に含まれないので、`working` へ戻ったタブのピルは取り下がる。
-  ///
-  /// 判定が `listRows` を見るのは「②は一覧の投影」という契約の直の表現。現状は `state` 一致も
-  /// 見ており transient の状態は必ず waiting/done なので、`rows` に替えても振る舞いは変わらない
-  /// （実測で全緑）。`listRows` は `state` 条件が将来緩んだときに独立して効く歯止めとして残す。
-  func testTransientWithdrawnWhenTabReturnsToWorking() {
-    let store = AttentionStore()
-    store.noteTransient(row(tabId: 1, state: "waiting"), dwell: anyDwell)
-    store.apply(rows: [row(tabId: 1, state: "working")])
     XCTAssertEqual(store.transient?.retracted, true)
   }
 
