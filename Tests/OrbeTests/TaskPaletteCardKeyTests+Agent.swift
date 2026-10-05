@@ -4,9 +4,9 @@ import XCTest
 
 @testable import Orbe
 
-/// 詳細の agent の場所で ↵ を押すと、その agent のタブへ移る。
+/// 右の欄の agent の場所で ↵ を押すと、その agent のタブへ移る。
 ///
-/// 壊れると何が起きるか: 詳細の「claude が取り掛かっている」に焦点を合わせて ↵ を押しても何も起きず、
+/// 壊れると何が起きるか: 右の欄の「claude が取り掛かっている」に焦点を合わせて ↵ を押しても何も起きず、
 /// 入力待ちの agent のタブを探しにタブ行を辿ることになる。押し続けると、同じタブへの移動が何度も走る。
 extension TaskPaletteCardKeyTests {
   func testEnterOnTheAgentGoesToItsTabOnce() {
@@ -31,7 +31,7 @@ extension TaskPaletteCardKeyTests {
   }
 }
 
-/// カードが agent の索引の変化を見て、詳細の焦点を付け直す配線。
+/// カードが agent の索引の変化を見て、右の欄の焦点を付け直す配線。
 ///
 /// 壊れると何が起きるか: agent の場所に居る間にタブが去ると、焦点が消えた場所に残り、↑↓ も ↵ も効かなくなる。
 extension TaskPaletteCardKeyTests {

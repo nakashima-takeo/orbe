@@ -28,7 +28,7 @@ struct TaskAgentBadge: View {
   }
 }
 
-/// 詳細の agent の場所（「claude が取り掛かっている ／ working 12分 · タブ <名前>」と「↗ タブへ」）。状態を
+/// 右の欄の agent の場所（「claude が取り掛かっている ／ working 12分 · タブ <名前>」と「↗ タブへ」）。状態を
 /// 問わず出し（完了・休止でも、続きを頼みにタブへ移れる）、↵ かクリックでそのタブへ移る。
 struct TaskAgentDetail: View {
   let agent: WorktreeAgentActivity.Agent

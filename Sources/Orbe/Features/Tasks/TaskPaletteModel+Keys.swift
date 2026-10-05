@@ -90,7 +90,7 @@ extension TaskPaletteModel {
     return .handled
   }
 
-  /// カードの器（詳細か右の欄の項目に居て、編集していない間）。
+  /// カードの器（右の欄の項目に居て、編集していない間）。
   func handleCardKey(_ press: KeyPress) -> KeyPress.Result {
     guard draft == nil else { return .ignored }
     switch area {

@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 詳細の agent の場所（タイトルと Issue・PR の欄の間で ↑↓ が止まる場所）の並びと、agent の状態が変わった・
+/// 右の欄の agent の場所（タイトルと Issue・PR の欄の間で ↑↓ が止まる場所）の並びと、agent の状態が変わった・
 /// タブが去ったときの焦点の付け直し、↵ でそのタブへ移ること。
 ///
 /// 壊れると何が起きるか: 応答を終えた・休止中の agent のタブへ、結果を見に・続きを頼みにタスク画面から
@@ -18,7 +18,7 @@ extension TaskPaletteModelTests {
       defaultBranch: nil)
   }
 
-  /// worktree を持ち Issue 1 と PR 2 が結び付いたタスクを選び、その worktree に `state` の agent がいる詳細。
+  /// worktree を持ち Issue 1 と PR 2 が結び付いたタスクを選び、その worktree に `state` の agent がいる右の欄。
   private func detailWithAgent(_ state: AgentStateIcon.Kind) -> TaskPaletteModel {
     let palette = TaskPaletteSamples.model(
       [
@@ -54,7 +54,7 @@ extension TaskPaletteModelTests {
       ], "ステータスから上へ: 結び付ける → 結び付き（逆順）→ agent → タイトル")
   }
 
-  /// 応答を終えた・休止中の agent でも詳細に場所があり、↵ でそのタブへ移る。
+  /// 応答を終えた・休止中の agent でも右の欄に場所があり、↵ でそのタブへ移る。
   func testADoneOrIdleAgentStillHasItsStopAndEnterGoesToItsTab() {
     for state in [AgentStateIcon.Kind.done, .idle] {
       let palette = detailWithAgent(state)

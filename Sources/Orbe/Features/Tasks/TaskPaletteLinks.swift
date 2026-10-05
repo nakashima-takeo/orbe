@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 詳細のタイトルの上の、主の結び付き（「⊙ orbe#212」。owner は出さない）。
+/// 右の欄のタイトルの上の、主の結び付き（「⊙ orbe#212」。owner は出さない）。
 struct TaskPrimaryLinkHeading: View {
   let link: TaskLink
 
@@ -15,7 +15,7 @@ struct TaskPrimaryLinkHeading: View {
   }
 }
 
-/// 詳細の「Issue・PR」の欄。各行は ↑↓ で止まる場所で、クリックで開き、ホバーか選択で出る「外す」で外す。
+/// 右の欄の「Issue・PR」の欄。各行は ↑↓ で止まる場所で、クリックで開き、ホバーか選択で出る「外す」で外す。
 /// タイトルと状態は置き場の答えから引き、値が無い・実体の種別が保存した種別と違えば番号だけを出す。
 /// 末尾の「＋ 結び付ける」（結び付きが 0 件でも出る）は、↵ かクリックで GitHub タブの項目を選ぶ状態へ入る。
 struct TaskPaletteLinks: View {

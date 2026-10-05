@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// タスク画面の ⌘T が、焦点の居場所（ヘッダーの入力欄・詳細のカード・詳細の編集欄）に依らず窓のキーの経路で
+/// タスク画面の ⌘T が、焦点の居場所（ヘッダーの入力欄・右の欄のカード・右の欄の編集欄）に依らず窓のキーの経路で
 /// 受けられ、選んでいるタスクのための ⌘T に差し替わることを、実 `WindowController` の窓に実 `NSEvent` を
 /// 渡して固定する。
 ///
@@ -11,7 +11,7 @@ import XCTest
 /// key window のこの入口へ流す（ここで消費されれば入力欄には届かない）。テストの窓は非アクティブなアプリの
 /// 窓で key window になれず、`NSApp.sendEvent` はこの入口を通らないため、入口を直接叩く。
 ///
-/// 壊れると何が起きるか: 詳細を見ているときや、詳細を打っている途中に ⌘T を押しても何も起きない（または
+/// 壊れると何が起きるか: 右の欄を見ているときや、詳細を打っている途中に ⌘T を押しても何も起きない（または
 /// 入力欄に文字として入る）。詳細を打ちかけのまま ⌘T を押すと、打った内容が消える。追加の行で ⌘T を
 /// 押しても、タスクが足されないまま ⌘T が開く。
 ///
@@ -89,7 +89,7 @@ final class WindowControllerTaskWorktreePaletteTests: OrbeTestCase {
     palette.enterDetail()
     pump()
     XCTAssertEqual(palette.focusTarget, .card)
-    XCTAssertFalse(wc.window.firstResponder is NSText, "前提: 焦点は詳細のカード（文字の入力欄ではない）")
+    XCTAssertFalse(wc.window.firstResponder is NSText, "前提: 焦点は右の欄のカード（文字の入力欄ではない）")
 
     XCTAssertTrue(try pressCommandT(wc))
 
@@ -104,7 +104,7 @@ final class WindowControllerTaskWorktreePaletteTests: OrbeTestCase {
     pump()
     palette.draftText = "打ちかけの詳細"
     XCTAssertEqual(palette.focusTarget, .edit(.description))
-    XCTAssertTrue(wc.window.firstResponder is NSText, "前提: 焦点は詳細の詳細の編集欄にある")
+    XCTAssertTrue(wc.window.firstResponder is NSText, "前提: 焦点は右の欄の詳細の編集欄にある")
 
     XCTAssertTrue(try pressCommandT(wc))
 

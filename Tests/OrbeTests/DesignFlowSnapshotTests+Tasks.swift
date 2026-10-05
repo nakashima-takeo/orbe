@@ -61,7 +61,7 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
-  /// 詳細の Issue・PR の欄: 行に入る・⌫ で外すと焦点が同じ位置へ移る・agent が結び付けると番号だけで
+  /// 右の欄の Issue・PR の欄: 行に入る・⌫ で外すと焦点が同じ位置へ移る・agent が結び付けると番号だけで
   /// 現れる（値はまだ届いていない）、までを撮る。
   func testTaskPaletteLinks() throws {
     let palette = DesignSceneFixtures.taskPaletteModel()

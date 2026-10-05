@@ -2,23 +2,23 @@ import XCTest
 
 @testable import Orbe
 
-/// 詳細（→ で入る右の欄）の項目の移動・選択式の値・文字の項目の編集と、その確定・取り消し。
+/// 右の欄（→ で入る）の項目の移動・選択式の値・文字の項目の編集と、その確定・取り消し。
 extension TaskPaletteModelTests {
-  /// 未着手 2 件（a・b）を開き、a の詳細に入った状態。
+  /// 未着手 2 件（a・b）を開き、a の右の欄に入った状態。
   func detailOfFirst(_ tasks: [TaskItem]? = nil) -> TaskPaletteModel {
     let palette = model(tasks ?? [task(1, "a"), task(2, "b")])
     palette.enterDetail()
-    XCTAssertEqual(palette.selectedTask?.id, 1, "前提: a の詳細")
+    XCTAssertEqual(palette.selectedTask?.id, 1, "前提: a の右の欄")
     return palette
   }
 
-  /// 完了のタスク 1 件だけを開き、完了の欄を開いてその詳細に入った状態。
+  /// 完了のタスク 1 件だけを開き、完了の欄を開いてその右の欄に入った状態。
   func detailOfDone() -> TaskPaletteModel {
     let palette = model([task(1, "a", .done)])
     palette.toggleDoneExpanded()
     palette.jump(1)
     palette.enterDetail()
-    XCTAssertEqual(palette.selectedTask?.status, .done, "前提: 完了のタスクの詳細")
+    XCTAssertEqual(palette.selectedTask?.status, .done, "前提: 完了のタスクの右の欄")
     return palette
   }
 
@@ -64,7 +64,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(try storedTask(palette, 1).status, .inProgress)
     palette.changeValue(-1)
     XCTAssertEqual(try storedTask(palette, 1).status, .todo)
-    XCTAssertEqual(palette.area, .detail(.field(.status)), "値を変えても詳細に居続ける")
+    XCTAssertEqual(palette.area, .detail(.field(.status)), "値を変えても右の欄に居続ける")
     XCTAssertEqual(palette.selectedTask?.id, 1)
   }
 
@@ -270,7 +270,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.error, .due)
   }
 
-  // MARK: - 詳細での完了・削除と、agent の変更
+  // MARK: - 右の欄での完了・削除と、agent の変更
 
   func testCompletingAnUnselectedRowFromItsIconKeepsTheDetail() throws {
     let palette = model([task(1, "a"), task(2, "b"), task(3, "c")])
@@ -279,7 +279,7 @@ extension TaskPaletteModelTests {
 
     palette.toggleDone(1)
 
-    XCTAssertEqual(palette.area, .detail(.field(.status)), "見ている b の詳細に居続ける")
+    XCTAssertEqual(palette.area, .detail(.field(.status)), "見ている b の右の欄に居続ける")
     XCTAssertEqual(palette.selectedTask?.id, 2)
   }
 

@@ -7,7 +7,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか: 同じ worktree に作業中と入力待ちのタブがあると、人の手を待っている方が札に出ず、
 /// 入力待ちに気づかない。応答を終えたタブより休止中のタブが選ばれ、結果を見に行く ↵ が別のタブへ飛ぶ。
-/// 完了したタスクの詳細に、その worktree で始めた別の作業の agent が出て、まだ終わっていないように見える。
+/// 完了したタスクの右の欄に、その worktree で始めた別の作業の agent が出て、まだ終わっていないように見える。
 @MainActor
 final class WorktreeAgentActivityTests: OrbeTestCase {
   private let start = Date(timeIntervalSince1970: 1_800_000_000)

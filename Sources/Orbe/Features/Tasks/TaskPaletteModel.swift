@@ -83,7 +83,7 @@ enum TaskPaletteError: Error, Equatable {
   var error: TaskPaletteError?
   /// 一覧の行の掴み。書くのはモデル（拡張を含む）だけ。
   var drag: TaskPaletteDrag = .idle
-  /// 詳細で居る場所が最後に居た位置（そのタスクの止まる場所の並びでの番号）。
+  /// 右の欄で居る場所が最後に居た位置（そのタスクの止まる場所の並びでの番号）。
   private var detailPosition = 0
   /// focus トリガ。進めると SwiftUI が `focusTarget` を `@FocusState` へ写す。
   private(set) var focusToken = 0
@@ -190,7 +190,7 @@ enum TaskPaletteError: Error, Equatable {
   /// 一覧を送る先。人の操作（選び直し・並べ替え・範囲や開閉の切り替え・画面からの変異）のたびに決め直す。
   var scrollTarget: TaskPaletteScrollTarget<TaskPaletteRowID>? { taskList.scrollTarget }
 
-  /// 選んでいるタスク（詳細に出すもの）。追加の行・完了の見出しでは nil。
+  /// 選んでいるタスク（右の欄に出すもの）。追加の行・完了の見出しでは nil。
   var selectedTask: TaskItem? {
     guard case .task(let id) = selectedID else { return nil }
     return store.tasks.first { $0.id == id }
@@ -224,7 +224,7 @@ enum TaskPaletteError: Error, Equatable {
   func focus() { focusToken &+= 1 }
 
   /// 列・一覧・範囲・タブ・開閉が変わったあとの付け直し。選択は一覧の状態ごとに、その行で付け直す
-  /// （`TaskPaletteListState`）。詳細に居る間に選択が別の行へ移ったら一覧へ戻り、対象が消えた下書きは捨て、
+  /// （`TaskPaletteListState`）。右の欄に居る間に選択が別の行へ移ったら一覧へ戻り、対象が消えた下書きは捨て、
   /// 並びが変わった掴みも捨てる。右の欄に居る間に、選択の同一性が変わった・選んだ行が結び付いていない項目で
   /// なくなったら一覧へ戻る。
   func reconcile() {
@@ -249,7 +249,7 @@ enum TaskPaletteError: Error, Equatable {
     discardStaleDrag()
   }
 
-  /// 詳細で居る場所の位置を覚え直す。焦点の結び付きが外れたとき、同じ位置の止まる場所へ移すため。
+  /// 右の欄で居る場所の位置を覚え直す。焦点の結び付きが外れたとき、同じ位置の止まる場所へ移すため。
   private func rememberDetailPosition() {
     guard case .detail(let stop) = area, let task = selectedTask,
       let index = detailStops(task).firstIndex(of: stop)

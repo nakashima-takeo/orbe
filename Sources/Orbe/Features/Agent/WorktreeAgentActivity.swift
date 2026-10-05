@@ -21,7 +21,7 @@ import Observation
     let branch: String?
     let defaultBranch: String?
 
-    /// 行の札に出す状態（作業中か入力待ち）。完了・休止の agent は、詳細の agent の場所と ↵ でタブへ移る
+    /// 行の札に出す状態（作業中か入力待ち）。完了・休止の agent は、タスク画面の右の欄の agent の場所と ↵ でタブへ移る
     /// 先にだけ出る。
     var isBusy: Bool { state == .working || state == .waiting }
   }

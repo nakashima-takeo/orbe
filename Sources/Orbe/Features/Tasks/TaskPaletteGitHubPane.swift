@@ -3,7 +3,7 @@ import SwiftUI
 /// GitHub タブの右の欄。選んでいる項目の見出し・タイトル・関係の文に続けて、結び付いていない行では「タスクに
 /// する」ための値（自分を足すか・優先度・期限）とボタン、結び付いている行では結び付いたタスクとボタンを出す。
 /// 選ぶ状態の間は、見出しと結び付いたタスクだけを出す（操作は一覧の ↵ だけ）。期限の入力欄は常に mount して
-/// おく（新しく mount した入力欄は `@FocusState` を取りこぼす。詳細と同じ規約）。
+/// おく（新しく mount した入力欄は `@FocusState` を取りこぼす。タスクのタブの右の欄と同じ規約）。
 struct TaskPaletteGitHubPane: View {
   @Bindable var model: TaskPaletteModel
   let focus: FocusState<TaskPaletteFocusTarget?>.Binding
@@ -41,7 +41,7 @@ struct TaskPaletteGitHubPane: View {
             .frame(minHeight: geometry.size.height, alignment: .top)
           }
           .scrollIndicators(.automatic)
-          // キーで移った場所を見える位置へ最小の量だけ送る（詳細と同じ規約）。
+          // キーで移った場所を見える位置へ最小の量だけ送る（タスクのタブの右の欄と同じ規約）。
           .onChange(of: model.area) {
             if case .pane(let stop) = model.area { proxy.scrollTo(stop) }
           }

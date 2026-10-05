@@ -2,12 +2,12 @@ import XCTest
 
 @testable import Orbe
 
-/// 結び付いた Issue・PR を、画面に出ている行の分だけ取りに行くことと、詳細の Issue・PR の欄の行
+/// 結び付いた Issue・PR を、画面に出ている行の分だけ取りに行くことと、右の欄の Issue・PR の欄の行
 /// （↑↓ で止まる・開く・外す・焦点の付け直し）。
 ///
 /// 壊れると何が起きるか: 完了の欄に溜まった結び付きまで毎回取りに行き、使うほど ⌘⇧X を開くたびの
 /// 問い合わせが膨らむ。逆に、agent が結び付けた項目や開いた完了の欄の項目を取りに行かず、番号だけのまま
-/// 残る。外したときに焦点が詳細の先頭へ飛ぶ、または消えた項目に残ってキーが効かなくなる。agent が
+/// 残る。外したときに焦点が右の欄の先頭へ飛ぶ、または消えた項目に残ってキーが効かなくなる。agent が
 /// 結び付きを足しただけで、見ていた項目から焦点がずれ、⌫ が別の項目を外す。
 extension TaskPaletteModelTests {
   /// 頼まれた項目を順に記録し、その場で全部「無かった」と答える取得（取得中に残る項目は無い）。
@@ -90,9 +90,9 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(log.requested.count, count, "答えが届いた後も、この開いている間に試した項目は頼まない")
   }
 
-  // MARK: - 詳細の Issue・PR の欄
+  // MARK: - 右の欄の Issue・PR の欄
 
-  /// 3 つの結び付き（Issue 1・PR 2・Issue 3）を持つ a の詳細に入った状態。
+  /// 3 つの結び付き（Issue 1・PR 2・Issue 3）を持つ a の右の欄に入った状態。
   func detailWithLinks() -> TaskPaletteModel {
     detailOfFirst([
       task(1, "a") { $0.links = [self.link(.issue, 1), self.link(.pr, 2), self.link(.issue, 3)] },
