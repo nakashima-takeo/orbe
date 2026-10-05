@@ -26,7 +26,8 @@ enum TaskPaletteError: Error, Equatable {
   let githubItems: GitHubItemCache
   let viewer: GitHubViewer
   let openLists: GitHubOpenLists
-  /// 開いた workspace の root（GitHub タブのリポジトリを解決する場所）。
+  /// GitHub タブのリポジトリを解決する基点（⌘T と同じ: 開いた workspace のアクティブタブの cwd、0 タブなら
+  /// workspace の root）。
   let root: String
   let agents: WorktreeAgentActivity
   let workspaces: TaskPaletteWorkspaces
