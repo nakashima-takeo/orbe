@@ -30,6 +30,10 @@ extension DesignGallerySnapshotTests {
       DesignSceneFixtures.worktreePaletteIssueModel(base: .defaultBranch), 752)
     try write(
       "worktree_palette_task_pr.png", DesignSceneFixtures.worktreePalettePullRequestModel(), 752)
+    // 英語 UI でも見出しはどれも大文字（タスクの見出し WORKTREE FOR #221 を含む）。
+    try writeWorktreePalette(
+      "worktree_palette_task_issue_en.png", DesignSceneFixtures.worktreePaletteIssueModel(), 752,
+      520, language: .en, dir: dir)
     // 狭い窓でもベースの選択肢がカードからはみ出さない（名前が縮む）。
     try write(
       "worktree_palette_new_branch_narrow.png",
@@ -83,13 +87,15 @@ extension DesignGallerySnapshotTests {
   }
 
   private func writeWorktreePalette(
-    _ name: String, _ model: WorktreePaletteModel, _ w: CGFloat, _ h: CGFloat, dir: URL
+    _ name: String, _ model: WorktreePaletteModel, _ w: CGFloat, _ h: CGFloat,
+    language: Language = .systemDefault, dir: URL
   ) throws {
     try writePNG(
       ZStack {
         BackgroundGlow()
         WorktreePaletteOverlay(model: model)
-      }.frame(width: w, height: h),
+      }.frame(width: w, height: h)
+        .environment(\.localization, LocalizationStore(language: language)),
       size: NSSize(width: w, height: h), name: name, dir: dir)
   }
 }

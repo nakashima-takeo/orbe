@@ -152,4 +152,85 @@ extension DesignFlowSnapshotTests {
         ("unlinked", { palette.unlinkSelectedGitHubItem() }),
       ])
   }
+
+  /// 小さい窓（tasks_small と同じ 800×560）で、詳細を ↓ で下端のメモまで進むと、強調された項目が見える位置へ
+  /// 送られる、までを撮る。
+  func testTaskPaletteSmallDetail() throws {
+    let palette = DesignSceneFixtures.taskPaletteModel()
+    try hostedTaskPaletteFlow(
+      "task_palette_small_detail", palette, size: NSSize(width: 800, height: 560),
+      steps: [
+        ("status", { palette.enterDetail() }),
+        (
+          "due",
+          {
+            palette.moveField(1); palette.moveField(1); palette.moveField(1)
+          }
+        ),
+        (
+          "memo",
+          {
+            palette.moveField(1); palette.moveField(1)
+          }
+        ),
+      ])
+  }
+
+  /// 窓が低い（800×480）とき、GitHub タブの結び付いていない行の右の欄は欄ごとスクロールしてフッターを切らず、
+  /// ↓ で期限まで進むと見える位置へ送られる、までを撮る。
+  func testTaskPaletteSmallGithub() throws {
+    let palette = DesignSceneFixtures.taskPaletteModel()
+    let issue221 = TaskPaletteGitHubRowID.item(GitHubItemID(repo: "nakatake/orbe", number: 221)!)
+    try hostedTaskPaletteFlow(
+      "task_palette_small_github", palette, size: NSSize(width: 800, height: 480),
+      steps: [
+        (
+          "pane_assign",
+          {
+            palette.toggleTab(); palette.tapGitHubRow(issue221); palette.enterPane()
+          }
+        ),
+        (
+          "pane_due",
+          {
+            palette.movePaneStop(1); palette.movePaneStop(1)
+          }
+        ),
+      ])
+  }
+
+  /// タスク画面を 1 つの窓に載せたまま、手順ごとに撮る（名前と置き場は `flow` と同じ）。撮るたびに載せ直すと、
+  /// キーで移った場所へ送ったスクロールが消える。
+  private func hostedTaskPaletteFlow(
+    _ name: String, _ palette: TaskPaletteModel, size: NSSize,
+    steps: [(label: String, action: () -> Void)]
+  ) throws {
+    let appearance = NSAppearance(named: .darkAqua)
+    let host = NSHostingView(
+      rootView: ZStack {
+        BackgroundGlow()
+        TaskPaletteOverlay(model: palette)
+      }
+      .frame(width: size.width, height: size.height)
+      .environment(\.localization, LocalizationStore(language: .ja)))
+    host.frame = NSRect(origin: .zero, size: size)
+    host.appearance = appearance
+    let window = NSWindow(
+      contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+    window.appearance = appearance
+    window.contentView = host
+    defer { window.contentView = nil }
+    let dir = previewDir("flows")
+    for (index, step) in steps.enumerated() {
+      step.action()
+      host.layoutSubtreeIfNeeded()
+      RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+      let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+      host.cacheDisplay(in: host.bounds, to: rep)
+      let url = dir.appendingPathComponent(
+        String(format: "%@_%02d_%@.png", name, index, step.label))
+      try XCTUnwrap(rep.representation(using: .png, properties: [:])).write(to: url)
+      print("[flow] wrote \(url.path)")
+    }
+  }
 }
