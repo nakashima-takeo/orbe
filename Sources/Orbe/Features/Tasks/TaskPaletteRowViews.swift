@@ -1,13 +1,5 @@
 import SwiftUI
 
-/// 行の先頭のアイコンの列の幅。
-private let glyphColumnWidth: CGFloat = 14
-
-/// 一覧の選べる行の寸法。ドラッグの落ちる位置は、欄のタスクの行がこの高さで連続して並ぶことから出す。
-enum TaskPaletteRowMetrics {
-  static let height: CGFloat = 40
-}
-
 /// タスク画面の左の一覧。行は `TaskPaletteRows` が組んだ値をそのまま描き、選択は行の同一性で光らせる。
 struct TaskPaletteList: View {
   @Bindable var model: TaskPaletteModel
@@ -21,10 +13,7 @@ struct TaskPaletteList: View {
           ForEach(rows) { row($0) }
         }
         .coordinateSpace(.named(Self.contentSpace))
-        .padding(.top, Theme.Space.tick)
-        .padding(.bottom, Theme.Space.beat)
-        .padding(.leading, 11)
-        .padding(.trailing, 10)
+        .padding(TaskPaletteRowMetrics.listPadding)
       }
       .scrollIndicators(.automatic)
       .onChange(of: model.scrollTarget) { scroll(proxy, to: model.scrollTarget?.id) }
@@ -52,9 +41,9 @@ struct TaskPaletteList: View {
           Text("＋")
             .font(Font.theme.chrome)
             .foregroundStyle(Color.theme.accentPrimary)
-            .frame(width: glyphColumnWidth)
-          TruncatingSlot(l10n.format(.taskPaletteAdd, title), leading: Theme.Space.beat) {
-            Text($0).font(Font.theme.taskText).foregroundStyle(Color.theme.textPrimary)
+            .frame(width: TaskPaletteRowMetrics.glyphColumn)
+          TruncatingSlot(l10n.format(.taskPaletteAdd, title), leading: Theme.Space.step) {
+            Text($0).font(Font.theme.workspaceName).foregroundStyle(Color.theme.textPrimary)
           }
           Spacer(minLength: 0)
         })
@@ -67,13 +56,13 @@ struct TaskPaletteList: View {
       VStack(spacing: 0) {
         Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
           .padding(.horizontal, 22)
-          .padding(.top, Theme.Space.note)
+          .padding(.top, TaskPaletteRowMetrics.doneRuleGap)
         TaskPaletteRowFrame(
           selected: model.selectedID == .doneHeader, onTap: { model.tapRow(.doneHeader) },
           onHoverEnter: { model.hoverSelect(.doneHeader) },
           content: {
-            TaskStatusGlyph(glyph: .done)
-              .frame(width: glyphColumnWidth)
+            TaskStatusGlyph(glyph: .done, size: TaskPaletteRowMetrics.glyphColumn)
+              .frame(width: TaskPaletteRowMetrics.glyphColumn)
             HStack(spacing: Theme.Space.step) {
               Text(l10n.string(.taskPaletteSectionDone))
               Text("\(count)").foregroundStyle(Color.theme.textMuted)
@@ -84,16 +73,17 @@ struct TaskPaletteList: View {
             }
             .font(Font.theme.chrome)
             .foregroundStyle(Color.theme.textSecondary)
-            .padding(.leading, Theme.Space.beat)
+            .padding(.leading, Theme.Space.step)
             Spacer(minLength: 0)
           })
       }
+      .frame(height: TaskPaletteRowMetrics.doneHeader)
     case .empty:
       Text(l10n.string(.taskPaletteEmpty))
-        .font(Font.theme.chrome)
+        .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.textMuted)
         .padding(.leading, 22)
-        .frame(height: 40)
+        .frame(height: TaskPaletteRowMetrics.line)
     }
   }
 
@@ -139,16 +129,19 @@ struct TaskPaletteList: View {
       .onEnded { _ in model.dragEnded() }
   }
 
+  /// 見出しの字は ⌘T の欄の見出しと同じ。
   private func sectionLabel(_ key: L10nKey, _ count: Int) -> some View {
-    HStack(spacing: Theme.Space.step) {
+    HStack(spacing: Theme.Space.note) {
       Text(l10n.string(key)).foregroundStyle(Color.theme.textMuted)
       Text("\(count)").foregroundStyle(Color.theme.textMuted.opacity(0.8))
     }
-    .font(Font.theme.codeCompact)
+    .font(Font.theme.sectionLabel)
+    .tracking(Theme.Typography.trackingLabel)
     .padding(.leading, 22)
-    .padding(.top, Theme.Space.bar)
-    .padding(.bottom, Theme.Space.step)
-    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.bottom, Theme.Space.tick)
+    .frame(
+      maxWidth: .infinity, minHeight: TaskPaletteRowMetrics.sectionHeader,
+      maxHeight: TaskPaletteRowMetrics.sectionHeader, alignment: .bottomLeading)
   }
 }
 
@@ -157,7 +150,7 @@ struct TaskPaletteRowFrame<Content: View>: View {
   let selected: Bool
   /// 並べ替えの取っ手を出すか（選ばれている未完了のタスクの行）。取っ手は印で、掴む場所は行全体。
   var grip = false
-  var height = TaskPaletteRowMetrics.height
+  var height = TaskPaletteRowMetrics.line
   let onTap: () -> Void
   let onHoverEnter: () -> Void
   @ViewBuilder let content: () -> Content
@@ -165,7 +158,7 @@ struct TaskPaletteRowFrame<Content: View>: View {
   var body: some View {
     HStack(spacing: 0, content: content)
       .padding(.leading, 22)
-      .padding(.trailing, Theme.Space.beat)
+      .padding(.trailing, Theme.Space.step + Theme.Space.hair)
       .frame(height: height)
       .frame(maxWidth: .infinity, alignment: .leading)
       .overlay(alignment: .leading) {
@@ -199,7 +192,8 @@ private struct TaskPaletteGrip: View {
 }
 
 /// タスクの行。アイコン（クリックで完了 ⇄ 未着手）・主の結び付きの印と番号・タイトル・札（「レビュー」・
-/// PR・優先度・期限・追加者）、右寄せで agent の札・待ちの札と workspace。縮むのはタイトルが先。
+/// PR・優先度・期限・追加者）、右寄せで agent の札・待ちの札と workspace。縮むのはタイトルが先。詳細があれば
+/// タイトルの下に先頭を 1 行出す（書き出しはタイトルにそろえ、右寄せの札は 1 行目に残す）。
 struct TaskPaletteTaskRowView: View {
   let row: TaskPaletteTaskRow
   let selected: Bool
@@ -211,80 +205,101 @@ struct TaskPaletteTaskRowView: View {
 
   var body: some View {
     TaskPaletteRowFrame(
-      selected: selected, grip: selected && row.reorderable, onTap: onTap,
-      onHoverEnter: onHoverEnter
+      selected: selected, grip: selected && row.reorderable,
+      height: TaskPaletteRowMetrics.height(.task(row)), onTap: onTap, onHoverEnter: onHoverEnter
     ) {
-      TaskStatusGlyph(glyph: row.glyph)
-        .frame(width: glyphColumnWidth, height: TaskPaletteRowMetrics.height)
+      // アイコンの列は行の高さ全体でクリックを受ける。
+      TaskStatusGlyph(glyph: row.glyph, size: TaskPaletteRowMetrics.glyphColumn)
+        .frame(width: TaskPaletteRowMetrics.glyphColumn, height: TaskPaletteRowMetrics.firstLine)
+        .firstLineSlot()
         .contentShape(Rectangle())
         .onTapGesture(perform: onToggle)
       if let link = row.link {
-        HStack(spacing: Theme.Space.note) {
-          TaskLinkGlyph(kind: link.kind)
+        HStack(spacing: Theme.Space.tick) {
+          TaskLinkGlyph(kind: link.kind, size: 12)
           Text("#\(link.number)")
-            .font(Font.theme.codeCompact)
+            .font(Font.theme.meta)
             .foregroundStyle(Color.theme.textMuted)
         }
         .fixedSize()
-        .padding(.leading, Theme.Space.beat)
+        .frame(height: TaskPaletteRowMetrics.firstLine)
+        .padding(.leading, Theme.Space.step)
+        .firstLineSlot()
       }
-      TruncatingSlot(row.title, leading: Theme.Space.beat) {
-        fontResolver.text($0, base: Theme.Typography.taskText)
-          .font(Font.theme.taskText)
-          .foregroundStyle(titleColor)
-      }
-      .layoutPriority(1)
-      if row.needsReview {
-        Text(l10n.string(.taskPaletteReview))
-          .font(Font.theme.chrome)
-          .foregroundStyle(Color.theme.textMuted)
-          .fixedSize()
-          .padding(.leading, Theme.Space.beat)
-      }
-      if let pullRequest = row.pullRequest {
-        TaskPullRequestBadge(badge: pullRequest)
-          .padding(.leading, Theme.Space.beat)
-      }
-      if let priority = row.priority {
-        TaskPaletteBadge(
-          text: l10n.string(priority == .high ? .taskPalettePriorityHigh : .taskPalettePriorityLow),
-          foreground: priority == .high ? Color.theme.danger : Color.theme.textMuted,
-          fill: priority == .high ? Color.theme.tintRed : Color.theme.plainPillFill
-        )
-        .padding(.leading, Theme.Space.beat)
-      }
-      if let due = row.due {
-        TaskPaletteBadge(
-          symbol: "calendar",
-          text: TaskDueText.label(
-            due.date, today: due.today, weekdays: TaskDueText.weekdays(l10n.language)),
-          foreground: Color.theme.textSecondary, fill: Color.theme.plainPillFill
-        )
-        .padding(.leading, Theme.Space.beat)
-      }
-      if let createdBy = row.createdBy {
-        TruncatingSlot(l10n.format(.taskPaletteAddedBy, createdBy), leading: Theme.Space.beat) {
-          Text($0).font(Font.theme.chrome).foregroundStyle(Color.theme.textMuted)
+      VStack(alignment: .leading, spacing: 0) {
+        HStack(spacing: 0) { firstLine }
+          .frame(height: TaskPaletteRowMetrics.firstLine)
+        if let line = row.descriptionLine {
+          fontResolver.text(line, base: Theme.Typography.meta)
+            .font(Font.theme.meta)
+            .foregroundStyle(Color.theme.textMuted)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .padding(.leading, Theme.Space.step)
+            .frame(height: TaskPaletteRowMetrics.descriptionLine, alignment: .leading)
         }
       }
-      Spacer(minLength: Theme.Space.beat)
-      if let agent = row.agent {
-        TaskAgentBadge(agent: agent)
-          .layoutPriority(2)
-          .padding(.trailing, row.waiting == nil ? 0 : Theme.Space.step)
-      }
-      if let waiting = row.waiting {
-        TaskPaletteBadge(
-          symbol: "clock",
-          text: "\(waiting.reason) \(days(waiting.days))",
-          foreground: Color.theme.textSecondary, fill: Color.theme.plainPillFill, capsule: true
-        )
-        .layoutPriority(2)
-      }
-      workspace
-        .layoutPriority(2)
+      .firstLineSlot()
     }
     .opacity(row.isDone ? Theme.Opacity.dormant : 1)
+  }
+
+  @ViewBuilder private var firstLine: some View {
+    TruncatingSlot(row.title, leading: Theme.Space.step) {
+      fontResolver.text($0, base: Theme.Typography.workspaceName)
+        .font(Font.theme.workspaceName)
+        .foregroundStyle(titleColor)
+    }
+    .layoutPriority(1)
+    if row.needsReview {
+      Text(l10n.string(.taskPaletteReview))
+        .font(Font.theme.meta)
+        .foregroundStyle(Color.theme.textMuted)
+        .fixedSize()
+        .padding(.leading, Theme.Space.step)
+    }
+    if let pullRequest = row.pullRequest {
+      TaskPullRequestBadge(badge: pullRequest)
+        .padding(.leading, Theme.Space.step)
+    }
+    if let priority = row.priority {
+      TaskPaletteBadge(
+        text: l10n.string(priority == .high ? .taskPalettePriorityHigh : .taskPalettePriorityLow),
+        foreground: priority == .high ? Color.theme.danger : Color.theme.textMuted,
+        fill: priority == .high ? Color.theme.tintRed : Color.theme.plainPillFill
+      )
+      .padding(.leading, Theme.Space.step)
+    }
+    if let due = row.due {
+      TaskPaletteBadge(
+        symbol: "calendar",
+        text: TaskDueText.label(
+          due.date, today: due.today, weekdays: TaskDueText.weekdays(l10n.language)),
+        foreground: Color.theme.textSecondary, fill: Color.theme.plainPillFill
+      )
+      .padding(.leading, Theme.Space.step)
+    }
+    if let createdBy = row.createdBy {
+      TruncatingSlot(l10n.format(.taskPaletteAddedBy, createdBy), leading: Theme.Space.step) {
+        Text($0).font(Font.theme.meta).foregroundStyle(Color.theme.textMuted)
+      }
+    }
+    Spacer(minLength: Theme.Space.step)
+    if let agent = row.agent {
+      TaskAgentBadge(agent: agent)
+        .layoutPriority(2)
+        .padding(.trailing, row.waiting == nil ? 0 : Theme.Space.note)
+    }
+    if let waiting = row.waiting {
+      TaskPaletteBadge(
+        symbol: "clock",
+        text: "\(waiting.reason) \(days(waiting.days))",
+        foreground: Color.theme.textSecondary, fill: Color.theme.plainPillFill, capsule: true
+      )
+      .layoutPriority(2)
+    }
+    workspace
+      .layoutPriority(2)
   }
 
   /// 低い優先度のタスクは一段沈める（見本どおり）。
@@ -298,14 +313,14 @@ struct TaskPaletteTaskRowView: View {
       TaskPaletteBadge(
         text: name, foreground: Color.theme.accentBright, fill: Color.theme.tintAccent
       )
-      .padding(.leading, 34)
+      .padding(.leading, Theme.Space.span)
     case .other(let name):
       Text(name)
-        .font(Font.theme.chrome)
+        .font(Font.theme.meta)
         .foregroundStyle(Color.theme.textMuted)
         .lineLimit(1)
         .fixedSize()
-        .padding(.leading, 34)
+        .padding(.leading, Theme.Space.span)
     case nil:
       EmptyView()
     }
@@ -322,8 +337,8 @@ struct TaskPullRequestBadge: View {
   @Environment(\.localization) private var l10n
 
   var body: some View {
-    HStack(spacing: Theme.Space.note) {
-      TaskLinkGlyph(kind: .pr, size: 11)
+    HStack(spacing: Theme.Space.tick) {
+      TaskLinkGlyph(kind: .pr, size: 10)
       Text("#\(badge.number)").foregroundStyle(Color.theme.textPrimary)
       if let phase = badge.phase {
         Text(GitHubItemText.phaseText(phase, l10n.language))
@@ -331,11 +346,11 @@ struct TaskPullRequestBadge: View {
       }
       if let checks = badge.checks { TaskChecksMark.text(checks) }
     }
-    .font(Font.theme.codeCompact)
+    .font(Font.theme.meta)
     .lineLimit(1)
     .fixedSize()
     .padding(.horizontal, Theme.Space.note)
-    .frame(height: 20)
+    .frame(height: TaskPaletteRowMetrics.firstLine)
     .background(RoundedRectangle(cornerRadius: Theme.Radius.sm + 1).fill(Color.theme.tintAccent))
   }
 }
@@ -349,19 +364,26 @@ struct TaskPaletteBadge: View {
   var capsule = false
 
   var body: some View {
-    HStack(spacing: Theme.Space.tick + 1) {
+    HStack(spacing: Theme.Space.tick) {
       if let symbol {
-        Image(systemName: symbol).font(.system(size: 9, weight: .medium))
+        Image(systemName: symbol).font(.system(size: 8, weight: .medium))
       }
       Text(text).lineLimit(1)
     }
-    .font(Font.theme.codeCompact)
+    .font(Font.theme.meta)
     .foregroundStyle(foreground)
     .fixedSize()
-    .padding(.horizontal, capsule ? Theme.Space.step + Theme.Space.hair : Theme.Space.note)
-    .frame(height: 20)
+    .padding(.horizontal, capsule ? Theme.Space.step : Theme.Space.note)
+    .frame(height: TaskPaletteRowMetrics.firstLine)
     .background(
       RoundedRectangle(cornerRadius: capsule ? Theme.Radius.pill : Theme.Radius.sm + 1)
         .fill(fill))
+  }
+}
+
+extension View {
+  /// タスクの行の 1 つの列を、上の余白の下から 1 行目にそろえて置き、行の高さいっぱいに広げる。
+  fileprivate func firstLineSlot() -> some View {
+    padding(.top, TaskPaletteRowMetrics.inset).frame(maxHeight: .infinity, alignment: .top)
   }
 }

@@ -15,11 +15,11 @@ struct TaskPaneButton: View {
         Text(title).foregroundStyle(Color.theme.textPrimary)
         if wide { Spacer(minLength: 0) }
       }
-      .font(Font.theme.taskText)
+      .font(Font.theme.workspaceName)
       .lineLimit(1)
       .fixedSize(horizontal: !wide, vertical: !wide)
-      .padding(.horizontal, Theme.Space.beat)
-      .frame(height: 34)
+      .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
+      .frame(height: 26)
       .background(
         RoundedRectangle(cornerRadius: Theme.Radius.row)
           .fill(primary ? Color.theme.tintAccent : Color.theme.surfaceInk.opacity(0.06))

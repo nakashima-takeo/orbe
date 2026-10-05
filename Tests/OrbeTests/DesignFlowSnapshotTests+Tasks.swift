@@ -5,8 +5,8 @@ import XCTest
 
 /// タスク画面の flow（ファイル分割の拡張）。撮り方・出力先は本体の `flow` を共有する。
 extension DesignFlowSnapshotTests {
-  /// 打って絞り込み・↵ で追加・space で完了・→ で詳細・期限の編集（読めない入力は赤）・esc で一覧、
-  /// agent が上の欄に足しても選択が動かない、までを撮る。
+  /// 打って絞り込み・↵ で追加・space で完了・→ で右の欄・期限の編集（読めない入力は赤）・esc で一覧、
+  /// agent が上の欄に足しても選択が動かない・完了の欄を開く（詳細のある完了の行も沈む）、までを撮る。
   func testTaskPalette() throws {
     let palette = DesignSceneFixtures.taskPaletteModel()
     try flow(
@@ -57,6 +57,7 @@ extension DesignFlowSnapshotTests {
             palette.reconcile()
           }
         ),
+        ("done_expanded", { palette.toggleDoneExpanded() }),
       ])
   }
 
@@ -99,7 +100,7 @@ extension DesignFlowSnapshotTests {
   /// 行・離して並びが変わった後、を撮る。
   func testTaskPaletteDrag() throws {
     let palette = DesignSceneFixtures.taskPaletteModel()
-    let height = TaskPaletteRowMetrics.height
+    let height = TaskPaletteRowMetrics.line
     let start = CGPoint(x: 200, y: 300)
     try flow(
       "task_palette_drag", size: NSSize(width: 1440, height: 900),
@@ -153,8 +154,9 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
-  /// 小さい窓（tasks_small と同じ 800×560）で、詳細を ↓ で下端の詳細まで進むと、強調された項目が見える位置へ
-  /// 送られ、esc → ↓ で次のタスクを選ぶと詳細が先頭から見える、までを撮る。
+  /// 小さい窓（tasks_small と同じ 800×560）で、右の欄を ↓ で下端の詳細の欄まで進むと、強調された項目が見える
+  /// 位置へ送られ、詳細の欄を編集する（フッターは「esc 確定」だけ）・確定すると欄に居たまま終わる・esc → ↓ で
+  /// 次のタスクを選ぶと右の欄が先頭から見える、までを撮る。
   func testTaskPaletteSmallDetail() throws {
     let palette = DesignSceneFixtures.taskPaletteModel()
     try hostedTaskPaletteFlow(
@@ -173,6 +175,13 @@ extension DesignFlowSnapshotTests {
             palette.moveField(1); palette.moveField(1)
           }
         ),
+        (
+          "description_editing",
+          { _ in
+            palette.beginEditing(); palette.draftText += "\n2 行目"
+          }
+        ),
+        ("description_committed", { _ in palette.endEditing(commit: true) }),
         (
           "next_task",
           { _ in

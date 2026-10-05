@@ -14,13 +14,13 @@ struct TaskPaletteFooter: View {
         .truncationMode(.tail)
       Spacer(minLength: Theme.Space.step)
       hints
-        .font(Font.theme.sectionLabel)
+        .font(Font.theme.meta)
         .foregroundStyle(Color.theme.textMuted)
         .fixedSize()
         .layoutPriority(1)
     }
-    .padding(.horizontal, Theme.Space.phrase)
-    .frame(height: 44)
+    .padding(.horizontal, Theme.Space.span)
+    .padding(.vertical, 9)
   }
 
   @ViewBuilder private var actionLine: some View {
@@ -28,8 +28,7 @@ struct TaskPaletteFooter: View {
       Text(l10n.string(errorKey(error))).foregroundStyle(Color.theme.danger)
     } else if let draft = model.draft {
       PaletteActionLine(
-        key: draft.isMultiline ? "esc" : "↵",
-        template: l10n.string(.taskPaletteActionCommit),
+        key: draft.isMultiline ? "esc" : "↵", template: l10n.string(.taskPaletteActionCommit),
         slots: [])
     } else if model.pick != nil {
       TaskPalettePickAction(model: model)
@@ -85,7 +84,7 @@ struct TaskPaletteFooter: View {
   }
 
   private var hints: some View {
-    HStack(spacing: Theme.Space.step + Theme.Space.hair) {
+    HStack(spacing: Theme.Space.beat + Theme.Space.hair) {
       if let draft = model.draft {
         // 複数行の項目は esc が確定（左の 1 行が言う）で、取り消しのキーは無い。
         if !draft.isMultiline {

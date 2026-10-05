@@ -15,24 +15,24 @@ struct TaskPaletteDetail: View {
       ScrollViewReader { proxy in
         ScrollView {
           VStack(alignment: .leading, spacing: 0) {
-            Color.clear.frame(height: Theme.Space.span).id(Self.top)
+            Color.clear.frame(height: Theme.Space.bar).id(Self.top)
             if let primary = task.links.first {
               TaskPrimaryLinkHeading(link: primary)
-                .padding(.bottom, Theme.Space.step)
+                .padding(.bottom, Theme.Space.note)
             }
             titleField(task)
               .id(TaskDetailStop.field(.title))
-              .padding(.bottom, Theme.Space.bar)
+              .padding(.bottom, Theme.Space.beat)
             if let agent = model.agent(of: task) {
               TaskAgentDetail(
                 agent: agent, focused: model.area == .detail(.agent),
                 onGoToTab: { model.focusAgentTab() }
               )
               .id(TaskDetailStop.agent)
-              .padding(.bottom, Theme.Space.bar)
+              .padding(.bottom, Theme.Space.beat)
             }
             TaskPaletteLinks(model: model, task: task)
-              .padding(.bottom, Theme.Space.bar)
+              .padding(.bottom, Theme.Space.beat)
             divider
             fieldRow(.status, label: .taskPaletteFieldStatus) { statusValue(task) }
             divider
@@ -48,12 +48,12 @@ struct TaskPaletteDetail: View {
             divider
             descriptionField(task)
               .id(TaskDetailStop.field(.description))
-              .padding(.top, Theme.Space.bar)
+              .padding(.top, Theme.Space.beat)
             TaskPaletteDetailActions(model: model, task: task)
-              .padding(.top, Theme.Space.bar)
+              .padding(.top, Theme.Space.beat)
           }
-          .padding(.horizontal, Theme.Space.phrase)
-          .padding(.bottom, Theme.Space.span)
+          .padding(.horizontal, Theme.Space.span)
+          .padding(.bottom, Theme.Space.bar)
         }
         .scrollIndicators(.automatic)
         // キーで移った場所を見える位置へ最小の量だけ送る（一覧と同じ規約）。
@@ -90,14 +90,14 @@ struct TaskPaletteDetail: View {
   ) -> some View {
     HStack(spacing: 0) {
       Text(l10n.string(label))
-        .font(Font.theme.taskText)
+        .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.textMuted)
         .lineLimit(1)
-        .frame(width: 84, alignment: .leading)
+        .frame(width: TaskPaletteFieldMetrics.labelWidth, alignment: .leading)
       value()
       Spacer(minLength: 0)
     }
-    .frame(height: 38)
+    .frame(height: TaskPaletteFieldMetrics.rowHeight)
     .padding(.horizontal, Theme.Space.step)
     .background(
       RoundedRectangle(cornerRadius: Theme.Radius.row)
@@ -110,9 +110,9 @@ struct TaskPaletteDetail: View {
   }
 
   private func titleField(_ task: TaskItem) -> some View {
-    editableText(.title, font: Font.theme.taskHeading) {
-      fontResolver.text(task.title, base: Theme.Typography.taskHeading)
-        .font(Font.theme.taskHeading)
+    editableText(.title, font: Font.theme.title) {
+      fontResolver.text(task.title, base: Theme.Typography.title)
+        .font(Font.theme.title)
         .foregroundStyle(Color.theme.textPrimary)
         .lineLimit(1)
         .truncationMode(.tail)
@@ -150,7 +150,8 @@ struct TaskPaletteDetail: View {
   /// 選択式の値（未着手 / 進行中、高 / 中 / 低）。
   private func choices(_ segments: [TaskPaletteSegments.Segment]) -> some View {
     TaskPaletteSegments(
-      segments: segments, font: Font.theme.taskText, height: 24,
+      segments: segments, font: Font.theme.workspaceName,
+      height: TaskPaletteFieldMetrics.choiceHeight,
       selectedFill: Color.theme.tintAccent)
   }
 
@@ -180,7 +181,7 @@ struct TaskPaletteDetail: View {
 
   /// 待ち。完了のタスクには入れられない（ストアの不変条件）ので、操作できない見た目にする。
   private func waitingValue(_ task: TaskItem) -> some View {
-    editableText(.waiting, font: Font.theme.taskText) {
+    editableText(.waiting, font: Font.theme.workspaceName) {
       if let waiting = task.waiting {
         setValue(
           "\(waiting.reason) · \(days(since: waiting.since))", onClear: { model.clearWaiting() })
@@ -192,7 +193,7 @@ struct TaskPaletteDetail: View {
   }
 
   private func dueValue(_ task: TaskItem) -> some View {
-    editableText(.due, font: Font.theme.taskText) {
+    editableText(.due, font: Font.theme.workspaceName) {
       if let due = task.due {
         setValue(
           TaskDueText.label(
@@ -207,7 +208,7 @@ struct TaskPaletteDetail: View {
   /// 空の文字の項目の「＋ …」。
   private func placeholder(_ key: L10nKey) -> some View {
     Text("＋ " + l10n.string(key))
-      .font(Font.theme.taskText)
+      .font(Font.theme.workspaceName)
       .foregroundStyle(Color.theme.textSecondary)
       .lineLimit(1)
   }
@@ -216,14 +217,14 @@ struct TaskPaletteDetail: View {
   private func setValue(_ text: String, onClear: @escaping () -> Void) -> some View {
     HStack(spacing: Theme.Space.step) {
       Text(text)
-        .font(Font.theme.taskText)
+        .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.textPrimary)
         .lineLimit(1)
         .truncationMode(.tail)
-      Text("·").font(Font.theme.taskText).foregroundStyle(Color.theme.textMuted)
+      Text("·").font(Font.theme.workspaceName).foregroundStyle(Color.theme.textMuted)
       Button(action: onClear) {
         Text(l10n.string(.taskPaletteClear))
-          .font(Font.theme.taskText)
+          .font(Font.theme.workspaceName)
           .foregroundStyle(Color.theme.textMuted)
       }
       .buttonStyle(.plain)
@@ -234,7 +235,7 @@ struct TaskPaletteDetail: View {
   private func workspaceValue(_ task: TaskItem) -> some View {
     let entry = model.workspaces.entry(task.workspace)
     return Text(entry?.name ?? l10n.string(.taskPaletteNoWorkspace))
-      .font(Font.theme.taskText)
+      .font(Font.theme.workspaceName)
       .foregroundStyle(entry == nil ? Color.theme.textMuted : Color.theme.textPrimary)
       .lineLimit(1)
   }
@@ -244,23 +245,23 @@ struct TaskPaletteDetail: View {
       TaskItem.DueDate(task.createdAt, timeZone: model.timeZone), today: model.today)
     return HStack(spacing: 0) {
       Text(l10n.string(.taskPaletteFieldAdded))
-        .font(Font.theme.taskText)
+        .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.textMuted)
-        .frame(width: 84, alignment: .leading)
+        .frame(width: TaskPaletteFieldMetrics.labelWidth, alignment: .leading)
       Text(task.createdBy.map { "\(date) · \($0)" } ?? date)
-        .font(Font.theme.taskText)
+        .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.textPrimary)
         .lineLimit(1)
       Spacer(minLength: 0)
     }
-    .frame(height: 38)
+    .frame(height: TaskPaletteFieldMetrics.rowHeight)
   }
 
   /// 詳細の欄。複数行で、↵ は改行、esc で確定。
   private func descriptionField(_ task: TaskItem) -> some View {
     ZStack(alignment: .topLeading) {
       TextEditor(text: $model.draftText)
-        .font(Font.theme.taskText)
+        .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.textPrimary)
         .tint(Color.theme.accentPrimary)
         .scrollContentBackground(.hidden)
@@ -273,14 +274,14 @@ struct TaskPaletteDetail: View {
           task.description.isEmpty
             ? l10n.string(.taskPaletteDescriptionPlaceholder) : task.description
         )
-        .font(Font.theme.taskText)
+        .font(Font.theme.workspaceName)
         .foregroundStyle(task.description.isEmpty ? Color.theme.textMuted : Color.theme.textPrimary)
         .padding(.leading, 5)
         .frame(maxWidth: .infinity, alignment: .topLeading)
       }
     }
-    .padding(Theme.Space.beat)
-    .frame(height: 84, alignment: .topLeading)
+    .padding(Theme.Space.step)
+    .frame(height: TaskPaletteFieldMetrics.descriptionHeight, alignment: .topLeading)
     .background(
       RoundedRectangle(cornerRadius: Theme.Radius.md)
         .fill(Color.theme.surfaceInk.opacity(0.04))
@@ -302,7 +303,7 @@ struct TaskPaletteDetail: View {
   }
 }
 
-/// 詳細の末尾のボタン（「space 完了にする」「⌘⌫ 削除」）。
+/// 右の欄の末尾のボタン（「space 完了にする」「⌘⌫ 削除」）。
 private struct TaskPaletteDetailActions: View {
   let model: TaskPaletteModel
   let task: TaskItem
@@ -318,9 +319,9 @@ private struct TaskPaletteDetailActions: View {
           Text(l10n.string(task.status == .done ? .taskPaletteReopen : .taskPaletteMarkDone))
             .foregroundStyle(Color.theme.textPrimary)
         }
-        .font(Font.theme.taskText)
-        .padding(.horizontal, Theme.Space.beat)
-        .frame(height: 30)
+        .font(Font.theme.workspaceName)
+        .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
+        .frame(height: TaskPaletteFieldMetrics.buttonHeight)
         .background(
           RoundedRectangle(cornerRadius: Theme.Radius.row)
             .fill(Color.theme.surfaceInk.opacity(0.06))
@@ -335,15 +336,29 @@ private struct TaskPaletteDetailActions: View {
       } label: {
         HStack(spacing: Theme.Space.step) {
           Text("⌘⌫").font(Font.theme.meta)
-          Text(l10n.string(.taskPaletteDelete)).font(Font.theme.taskText)
+          Text(l10n.string(.taskPaletteDelete)).font(Font.theme.workspaceName)
         }
         .foregroundStyle(Color.theme.danger)
-        .padding(.horizontal, Theme.Space.beat)
-        .frame(height: 30)
+        .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
+        .frame(height: TaskPaletteFieldMetrics.buttonHeight)
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
       .focusable(false)
     }
   }
+}
+
+/// 右の欄（タスクのタブ・GitHub タブ）の項目の寸法。⌘⇧S の 12pt の行の尺度に合わせる。
+enum TaskPaletteFieldMetrics {
+  /// 項目の行（ラベル＋値）。選択式の値の札の組（`choiceHeight` ＋ 上下 2）が収まる高さ。
+  static let rowHeight: CGFloat = 28
+  /// ラベルの列。12pt で最長のラベル（「ステータス」「Workspace」）が収まる幅。
+  static let labelWidth: CGFloat = 76
+  /// 選択式の値の札。
+  static let choiceHeight: CGFloat = 20
+  /// 詳細の欄の入力の箱（12pt で 3 行と少し）。
+  static let descriptionHeight: CGFloat = 72
+  /// ボタン（完了にする・削除・外す）。
+  static let buttonHeight: CGFloat = 24
 }

@@ -10,7 +10,7 @@ import XCTest
 /// 並べ替えを潰す。捨てた掴みの続きや、終わりの届かなかった前の掴みが、次の操作で勝手に確定する。
 /// 掴んだ行が欄の外へはみ出して描かれ、線が落ちる位置と違う行の縁に出る。
 extension TaskPaletteModelTests {
-  var rowHeight: CGFloat { TaskPaletteRowMetrics.height }
+  var rowHeight: CGFloat { TaskPaletteRowMetrics.line }
   var grabPoint: CGPoint { CGPoint(x: 120, y: 80) }
   var nextGrabPoint: CGPoint { CGPoint(x: 120, y: 160) }
 
@@ -204,15 +204,19 @@ extension TaskPaletteModelTests {
   }
 
   func testChangesOutsideTheGrabbedSectionKeepTheGrab() throws {
-    let palette = model([task(1, "進行中 1", .inProgress), task(2, "進行中 2", .inProgress)])
-    palette.dragChanged(2, start: grabPoint, translation: -rowHeight)
+    let palette = model([
+      task(1, "進行中 1", .inProgress) { $0.description = "人が書いた" },
+      task(2, "進行中 2", .inProgress),
+    ])
+    palette.dragChanged(
+      2, start: grabPoint, translation: -TaskPaletteRowMetrics.taskWithDescription)
 
     let added = try palette.store.add(TaskDraft(title: "agent が未着手に足した"))
     var update = TaskUpdate()
-    update.description = "agent が兄弟の詳細を書いた"
+    update.description = "agent が兄弟の詳細を書き換えた"
     _ = try palette.store.update(1, update)
     palette.reconcile()
-    XCTAssertNotNil(palette.drag.session, "下の欄の変化と兄弟の詳細では捨てない")
+    XCTAssertNotNil(palette.drag.session, "下の欄の変化と、空かどうかが変わらない兄弟の詳細では捨てない")
 
     palette.dragEnded()
     XCTAssertEqual(order(palette), [2, 1, added.id])

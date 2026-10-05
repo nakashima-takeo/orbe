@@ -99,7 +99,7 @@ struct TaskPaletteCard: View {
         }
         .padding(.leading, Theme.Space.step + Theme.Space.hair)
       Spacer(minLength: Theme.Space.step)
-      HStack(spacing: Theme.Space.beat) {
+      HStack(spacing: Theme.Space.step) {
         TaskPaletteSegments(
           segments: [
             .init(
@@ -108,7 +108,8 @@ struct TaskPaletteCard: View {
             .init(
               title: "GitHub", count: model.gitHubCount, selected: model.visibleTab == .github,
               action: { model.setTab(.github) }),
-          ], font: Font.theme.code, height: 26, selectedFill: Color.theme.surfaceInk.opacity(0.08))
+          ], font: Font.theme.chrome, height: 20, selectedFill: Color.theme.surfaceInk.opacity(0.08)
+        )
         TaskPaletteSegments(
           segments: [
             .init(
@@ -117,14 +118,16 @@ struct TaskPaletteCard: View {
             .init(
               title: model.workspaces.opened.name, count: model.counts.opened,
               selected: model.scope == .opened, action: { model.setScope(.opened) }),
-          ], font: Font.theme.code, height: 26, selectedFill: Color.theme.tintAccent)
+          ], font: Font.theme.chrome, height: 20, selectedFill: Color.theme.tintAccent)
       }
       .fixedSize()
     }
-    .padding(.leading, Theme.Space.phrase)
-    .padding(.trailing, Theme.Space.span)
-    .frame(height: 56)
+    .padding(.horizontal, Theme.Space.span)
+    .frame(height: Self.headerHeight)
   }
+
+  /// ヘッダーの高さ。⌘⇧S のヘッダー（上下 16 ＋ 14pt の 1 行）と同じ。札の組はこの中に収まる。
+  private static let headerHeight: CGFloat = 48
 }
 
 /// 切り替えの札の組（ヘッダーのタブ・範囲、詳細の選択式の値）。焦点は取らない——クリックで入力欄から
@@ -158,7 +161,7 @@ struct TaskPaletteSegments: View {
           .font(font)
           .lineLimit(1)
           .fixedSize()
-          .padding(.horizontal, Theme.Space.beat)
+          .padding(.horizontal, Theme.Space.step)
           .frame(height: height)
           .background(
             RoundedRectangle(cornerRadius: Theme.Radius.sm + Theme.Space.hair)
@@ -170,7 +173,7 @@ struct TaskPaletteSegments: View {
         .focusable(false)
       }
     }
-    .padding(3)
+    .padding(Theme.Space.hair)
     .background(
       RoundedRectangle(cornerRadius: Theme.Radius.row).fill(Color.theme.surfaceInk.opacity(0.04)))
   }
@@ -185,17 +188,17 @@ struct TaskPalettePickBanner: View {
   var body: some View {
     HStack(spacing: Theme.Space.step) {
       Image(systemName: "link")
-        .font(.system(size: 11, weight: .semibold))
+        .font(.system(size: 10, weight: .semibold))
         .foregroundStyle(Color.theme.accentBright)
-      fontResolver.text(title, base: Theme.Typography.taskText)
-        .font(Font.theme.taskText)
+      fontResolver.text(title, base: Theme.Typography.workspaceName)
+        .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.textPrimary)
         .lineLimit(1)
         .truncationMode(.tail)
       Spacer(minLength: 0)
     }
-    .padding(.horizontal, Theme.Space.phrase)
-    .frame(height: 36)
+    .padding(.horizontal, Theme.Space.span)
+    .frame(height: TaskPaletteRowMetrics.line + Theme.Space.tick)
     .background(Color.theme.tintAccent)
   }
 
