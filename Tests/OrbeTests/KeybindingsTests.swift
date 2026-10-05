@@ -27,7 +27,7 @@ final class KeybindingsTests: OrbeTestCase {
   }
 
   func testTabsAndFind() {
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("t")), .newTab)
+    XCTAssertEqual(Keybindings.chromeAction(for: .key("t")), .showWorktreePalette)
     // ⌘R はタブリネーム。content 依存の window コマンドとして
     // `testChromeHostingViewInterceptsTabIndependentCommandsOnly` の素通し脚が乗るので、割当も固定する。
     XCTAssertEqual(Keybindings.chromeAction(for: .key("r")), .rename)
@@ -106,19 +106,18 @@ final class KeybindingsTests: OrbeTestCase {
     XCTAssertNil(Keybindings.chromeAction(for: .key("e", [.command, .option])))
   }
 
+  /// ⌘⇧X はタスク画面。Shift なしの Cmd+X（切り取り系）は奪わない。
+  func testTaskPalette() {
+    XCTAssertEqual(Keybindings.chromeAction(for: .key("X", [.command, .shift])), .showTaskPalette)
+    XCTAssertNil(Keybindings.chromeAction(for: .key("x")))
+  }
+
   func testHelpToggle() {
     // ⌘H はヘルプオーバーレイのトグル（macOS Hide から奪取）。
     XCTAssertEqual(Keybindings.chromeAction(for: .key("h")), .toggleHelp)
     // ⌘⌥H（ほかを隠す）・⌘⇧H は奪わない。
     XCTAssertNil(Keybindings.chromeAction(for: .key("h", [.command, .option])))
     XCTAssertNil(Keybindings.chromeAction(for: .key("H", [.command, .shift])))
-  }
-
-  func testDispatchPalette() {
-    XCTAssertEqual(
-      Keybindings.chromeAction(for: .key("X", [.command, .shift])), .showDispatchPalette)
-    // Shift なしの Cmd+X（切り取り系）は奪わない。
-    XCTAssertNil(Keybindings.chromeAction(for: .key("x")))
   }
 
   /// ChromeHostingView は window レベルでタブ非依存 window コマンド（availableWithoutTabs）だけを
@@ -137,23 +136,24 @@ final class KeybindingsTests: OrbeTestCase {
       return true
     }
 
-    XCTAssertTrue(view.performKeyEquivalent(with: .key("t")), "⌘T（newTab）は横取りして処理する")
-    XCTAssertEqual(handled, [.newTab], "⌘T でハンドラが .newTab で1回呼ばれる")
+    XCTAssertTrue(
+      view.performKeyEquivalent(with: .key("t")), "⌘T（worktree パレット）は横取りして処理する")
+    XCTAssertEqual(handled, [.showWorktreePalette], "⌘T でハンドラが .showWorktreePalette で1回呼ばれる")
 
     _ = view.performKeyEquivalent(with: .key("w"))
-    XCTAssertEqual(handled, [.newTab], "⌘W（closeTab・surface 操作系）は横取りせずハンドラを呼ばない")
+    XCTAssertEqual(
+      handled, [.showWorktreePalette], "⌘W（closeTab・surface 操作系）は横取りせずハンドラを呼ばない")
 
     _ = view.performKeyEquivalent(with: .key("r"))
     XCTAssertEqual(
-      handled, [.newTab], "⌘R（renameTab・content 依存）は横取りせず subtree へ流す")
+      handled, [.showWorktreePalette], "⌘R（renameTab・content 依存）は横取りせず subtree へ流す")
   }
 
   /// `ChromeAction.windowCommand`（面の経路・window レベル経路が共有する単一ソース mapping）を網羅固定する。
-  /// window 系15アクションは対応する WindowCommand へ、surface ローカル6アクションは nil へ写す。
+  /// window 系15アクションは対応する WindowCommand へ、surface ローカル7アクションは nil へ写す。
   /// この分類が回帰すると 0タブ配信の可否（availableWithoutTabs）とキー振り分け全体がズレる。
   func testWindowCommandMappingIsExhaustive() {
     let mapped: [(ChromeAction, WindowCommand)] = [
-      (.newTab, .newTab),
       (.closeTab, .closeTab),
       (.showClosedAgentsPalette, .showClosedAgentsPalette),
       (.nextTab, .nextTab),
@@ -161,7 +161,8 @@ final class KeybindingsTests: OrbeTestCase {
       (.switchWorkspace, .switchWorkspace),
       (.launchDefaultAgent, .launchDefaultAgent),
       (.showAgentPalette, .showAgentPalette),
-      (.showDispatchPalette, .showDispatchPalette),
+      (.showWorktreePalette, .showWorktreePalette),
+      (.showTaskPalette, .showTaskPalette),
       (.openEditor, .openEditor),
       (.rename, .renameTab),
       (.showSettings, .showSettings),
@@ -175,7 +176,7 @@ final class KeybindingsTests: OrbeTestCase {
     // surface ローカル操作（WindowController へ届けない）は nil。
     let surfaceLocal: [ChromeAction] = [
       .increaseFontSize, .decreaseFontSize, .resetFontSize, .find,
-      .scrollToTop, .scrollToBottom,
+      .scrollToTop, .scrollToBottom, .saveDocument,
     ]
     for action in surfaceLocal {
       XCTAssertNil(action.windowCommand, "\(action) は surface ローカルゆえ windowCommand は nil")
@@ -187,8 +188,9 @@ final class KeybindingsTests: OrbeTestCase {
   /// 0タブで効くべきキーが死ぬ／効くべきでない content 依存キーが暴発する。
   func testAvailableWithoutTabsClassification() {
     let available: [WindowCommand] = [
-      .newTab, .showClosedAgentsPalette, .switchWorkspace,
-      .launchDefaultAgent, .showAgentPalette, .showDispatchPalette, .showSettings, .toggleHelp,
+      .showClosedAgentsPalette, .switchWorkspace,
+      .launchDefaultAgent, .showAgentPalette, .showWorktreePalette, .showTaskPalette, .showSettings,
+      .toggleHelp,
     ]
     for command in available {
       XCTAssertTrue(command.availableWithoutTabs, "\(command) はタブ非依存ゆえ 0タブでも配信する")

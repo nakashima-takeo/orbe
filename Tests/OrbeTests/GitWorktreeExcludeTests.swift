@@ -182,7 +182,7 @@ final class GitWorktreeExcludeIntegrationTests: OrbeTestCase {
     return try XCTUnwrap(opened)
   }
 
-  /// production（`DispatchDataProvider.createWorktree`）と同じ順序: 対象は作成前に決め、
+  /// production（`WorktreePaletteDataProvider.createWorktree`）と同じ順序: 対象は作成前に決め、
   /// 実際に worktree を作れたときだけ除外を入れる。
   private func createWorktree(at path: String, branch: String) {
     let entry = GitWorktreeExclude.entry(

@@ -12,8 +12,9 @@ import SwiftUI
 @Observable final class AppShellModel {
   /// 前面 overlay の種別。`AppShell` が `.overlay` で対応する SwiftUI を compose する。
   enum Overlay {
-    case none, languageSelect, workspacePalette, workspaceCreate, agentPalette, dispatchPalette,
-      settingsPalette, onboarding, updateChanges, attentionPalette, closedAgentsPalette, help
+    case none, languageSelect, workspacePalette, workspaceCreate, agentPalette, worktreePalette,
+      taskPalette, settingsPalette, onboarding, updateChanges, attentionPalette,
+      closedAgentsPalette, help
   }
 
   /// 上段 chrome（ネイティブ SwiftUI `StatusRowView` の状態）。
@@ -30,9 +31,10 @@ import SwiftUI
   var workspacePalette: WorkspacePaletteModel?
   var workspaceCreate: WorkspaceCreateModel?
   var agentPalette: AgentPaletteModel?
-  var dispatchPalette: DispatchPaletteModel?
-  /// Dispatch の非同期データ供給元（palette と寿命を揃える。dismiss で解放）。
-  var dispatchProvider: DispatchDataProvider?
+  var worktreePalette: WorktreePaletteModel?
+  /// worktree パレットの非同期データ供給元（palette と寿命を揃える。dismiss で解放）。
+  var worktreePaletteProvider: WorktreePaletteDataProvider?
+  var taskPalette: TaskPaletteModel?
   var settingsPalette: SettingsPaletteModel?
   var attentionPalette: AttentionPaletteModel?
   var closedAgentsPalette: ClosedAgentsPaletteModel?
@@ -58,7 +60,8 @@ import SwiftUI
     case .workspacePalette: workspacePalette?.focus()
     case .workspaceCreate: workspaceCreate?.focus()
     case .agentPalette: agentPalette?.focus()
-    case .dispatchPalette: dispatchPalette?.focus()
+    case .worktreePalette: worktreePalette?.focus()
+    case .taskPalette: taskPalette?.focus()
     case .settingsPalette: settingsPalette?.focus()
     case .attentionPalette: attentionPalette?.focus()
     case .closedAgentsPalette: closedAgentsPalette?.focus()
@@ -135,8 +138,10 @@ struct AppShell: View {
       if let create = model.workspaceCreate { WorkspaceCreateOverlay(model: create) }
     case .agentPalette:
       if let palette = model.agentPalette { PaletteOverlay(model: palette.render) }
-    case .dispatchPalette:
-      if let palette = model.dispatchPalette { DispatchOverlay(model: palette) }
+    case .worktreePalette:
+      if let palette = model.worktreePalette { WorktreePaletteOverlay(model: palette) }
+    case .taskPalette:
+      if let palette = model.taskPalette { TaskPaletteOverlay(model: palette) }
     case .settingsPalette:
       if let palette = model.settingsPalette { PaletteOverlay(model: palette.render) }
     case .attentionPalette:

@@ -1,7 +1,7 @@
 ---
 title: workspace
 description: 名前付きコンテナの保持・切替・keep-alive と、workspace 毎の設定上書き。切替・作成の UI は palette/workspace が持つ
-updated: 2026-09-08
+updated: 2026-10-04
 ---
 
 # workspace
@@ -10,7 +10,7 @@ updated: 2026-09-08
 
 host 所有。ドメイン状態（workspace 配列とアクティブ index）の実体は Foundation 純粋型 `SessionStore` が所有し、配列 CRUD・active index 補正・MRU 退避先選定はその純メソッド経由で行う。`WindowController` は store を持つ薄いコーディネータで、ビュー mount/reparent・focus・chrome 投影・永続・制御チャネルを担う。タブ閉鎖・選択のような危険な操作は store が「決定（outcome）」を返し、controller がビュー副作用を実行する——判断と副作用を分けてテスト可能に保つ形。
 
-起動時は既定 workspace 1 つ、または永続からの復元（→ [persistence](persistence.md)）。workspace は root path を持つ。
+起動時は既定 workspace 1 つ、または永続からの復元（→ [persistence](persistence.md)）。workspace は root path を持つ。worktree パレットで新しいブランチを作れたときのベースを「前回」として workspace ごとに覚え、次の作成で最初に選ぶ（→ [worktree](../palette/worktree.md)）。書くのはウィンドウだけで、パレットは読むだけ。
 
 ## 保持・切替
 

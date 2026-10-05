@@ -41,14 +41,14 @@ import SwiftUI
   var rowAccessory: RowAccessory?
 
   /// 選択とホバー追従ガード（`ModalSelection` が代入経路のガードを一手に握る）。
-  private var selection = ModalSelection()
+  private var selection = ModalSelection(0)
 
   /// 選択行。ホバー追従以外の代入はモダリティを `.keyboard` へ戻す（→ `ModalSelection`）。
   var selected: Int {
-    get { selection.index }
+    get { selection.value }
     set {
-      let previous = selection.index
-      selection.index = newValue
+      let previous = selection.value
+      selection.value = newValue
       if newValue != previous { onSelectionChanged?(newValue) }
     }
   }
@@ -66,14 +66,14 @@ import SwiftUI
 
   /// ホバー開始による選択追従（`.pointer` のときだけ効く）。
   func hoverSelect(_ i: Int) {
-    let previous = selection.index
+    let previous = selection.value
     selection.hoverSelect(i)
-    if selection.index != previous { onSelectionChanged?(selection.index) }
+    if selection.value != previous { onSelectionChanged?(selection.value) }
   }
   /// 面の組み立てによる選択の配置（モード遷移の初期選択・行差し替え後の収め直し）。
   /// 開いた直後の初期選択を hover に奪われないようモダリティは `.keyboard` へ戻すが、ユーザが
   /// 選んだのではないので `onSelectionChanged` は通さない（→ `restoreSelection` と同じ理由）。
-  func place(_ i: Int) { selection.index = i }
+  func place(_ i: Int) { selection.value = i }
   /// 裏の再取得で行がずれたときの選択の追い直し。ユーザの意図ではないのでモダリティを奪わない
   /// （→ `ModalSelection.restore`）。`selected` の setter で代入すると `.keyboard` へ戻り、
   /// ポインタ操作中の追従が切れる。

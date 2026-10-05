@@ -74,6 +74,18 @@ extension ControlWireTests {
       ("completion_accept", ["tabId": tab]),
       ("session_log", ["since": "2026-01-01T00:00:00.000Z", "limit": 10]),
       ("restore_sessions", ["sessionIds": ["sess-1"]]),
+      ("list_tasks", ["workspaceId": 3]),
+      (
+        "add_task",
+        [
+          "title": "経費精算", "status": "in_progress", "priority": "high", "due": "2026-10-06",
+          "waitingReason": "返事", "memo": "メモ", "workspaceId": 3, "callerTabId": tab,
+          "links": [["kind": "pr", "repo": "o/n", "number": 214]],
+        ]
+      ),
+      ("update_task", ["taskId": 7, "title": "改題"]),
+      ("move_task", ["taskId": 7, "beforeTaskId": 8]),
+      ("delete_task", ["taskId": 7]),
     ]
   }
 
@@ -121,6 +133,10 @@ extension ControlWireTests {
       RequiredParam(method: "remove_workspace", key: "workspaceId", code: -32602),
       RequiredParam(method: "completion_accept", key: "tabId", code: -32004),
       RequiredParam(method: "restore_sessions", key: "sessionIds", code: -32602),
+      RequiredParam(method: "add_task", key: "title", code: -32602),
+      RequiredParam(method: "update_task", key: "taskId", code: -32602),
+      RequiredParam(method: "move_task", key: "taskId", code: -32602),
+      RequiredParam(method: "delete_task", key: "taskId", code: -32602),
     ]
   }
 

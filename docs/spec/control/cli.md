@@ -1,7 +1,7 @@
 ---
 title: Orbe CLI（orb）
-description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/session/wait サブコマンド・socket 文脈解決・終了コード契約
-updated: 2026-09-07
+description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/session/wait サブコマンド・socket 文脈解決・終了コード契約
+updated: 2026-10-04
 ---
 
 # Orbe CLI（`orb`）
@@ -50,11 +50,26 @@ updated: 2026-09-07
 
 `prompt` は「入力欄が空いている状態にだけ届く」動詞で、対象が `working` / `waiting` なら何も送らずエラー（exit 1）——`waiting` へのテキスト送信は承認の確定になるため。waiting への応答は `tab key` で行う。既定 timeout は 1 時間。人間向け stdout は**答えの文言だけ**（`done` の最終応答・`waiting` の質問文。無ければ空）で、`answer=$(orb agent prompt …)` の形で受けられる。止まった状態は終了コードで伝える（下記）。
 
+### task（タスク一覧）
+
+人と agent が共有する[タスク](../platform/tasks.md)一覧を読み書きする。
+
+- `orb task list [--workspace <id|current>] [--json]` … 列の順に 1 行 1 タスク（`id status priority due workspace title 待ちの理由 結び付き worktree` のタブ区切り。worktree はパス。結び付きは `issue:owner/name#221,pr:owner/name#214` の形で先頭が主。無い値は `-`。制御文字は `session log` と同じく空白に置き換える）。`--workspace` でその workspace のタスクだけ。
+- `orb task add <title> [--status <s>] [--priority <p>] [--due <YYYY-MM-DD>] [--workspace <id|current> | --no-workspace] [--waiting <reason>] [--memo <text>] [--issue <owner/name#N>]... [--pr <owner/name#N>]... [--worktree <path>] [--json]` … 列の末尾に足し、新しい ID だけを出す（`id=$(orb task add …)` で受けられる）。
+- `orb task set <id> [--title <t>] [--status <s>] [--priority <p>] [--due <date> | --no-due] [--workspace <id|current> | --no-workspace] [--waiting <reason> | --no-waiting] [--memo <text> | --no-memo] [--issue <owner/name#N>]... [--pr <owner/name#N>]... [--no-links] [--worktree <path> | --no-worktree] [--json]` … 渡した項目だけを変える。`--no-*` は値を外す。完了は `--status done`（待ちは外れる）。変更フラグが 1 つも無い、または `--x` と `--no-x` を同時に渡すと usage エラー（exit 2）。
+- `--issue` / `--pr` は GitHub の Issue・PR を結び付ける（くり返し可）。**引数に現れた順を保ち、先頭が主**になる。`set` では渡した結び付きで丸ごと置き換え、`--no-links` で全部外す（`--issue` / `--pr` と同時なら usage エラー）。1 つの Issue・PR は 1 つのタスクにだけ付き、ほかのタスクに付いているものは拒否される（[タスク](../platform/tasks.md)）。`owner/name#N` は最後の `#` で割り、後ろが正の整数でなければ usage エラー（exit 2）。`owner/name` の形は control が確かめる。
+- `--worktree` はタスクに作業の場所を付ける（`orb task set 12 --worktree .`）。**相対パスは呼び出し元の作業ディレクトリから解いて**絶対パスで送り、control が実在するディレクトリか確かめて、それを含む worktree のルートに揃える（worktree の中のどこで打ってもルートが付く）。1 つの worktree は 1 つのタスクにだけ付き、ほかのタスクが持つ worktree は相手の ID を添えて拒否される。`set --no-worktree` で外す。
+- `orb task move <id> (--before <id> | --after <id>) [--json]` / `orb task rm <id> [--json]`
+
+**`add` で `--workspace` を省くと、呼び出し元タブ（`ORBE_TAB`）の workspace に付く**——タブの外なら「なし」。`tab new` / `agent spawn` の省略が前面の workspace に落ちるのと違うのは、タブ内の agent が背景で足したタスクを、人が見ている別の workspace に付けないため。同じ理由で、`--workspace current` は**前面の** workspace であって自分のタブの workspace ではない。`add` は `ORBE_TAB` を control へ伝え、タブ内の agent が足したタスクにはその agent の名前が追加者として残る。
+
+ステータスと優先度の語彙と日付の妥当性は control が持ち、CLI は素通しする（`--help` の一覧は人が読むための写し）。メモの `-` 始まりや空文字は値必須フラグの規約で渡せず、メモを外すのは `--no-memo`。
+
 ### session（閉じたエージェントセッションの記録と復元）
 
 [寿命ログ](../platform/session-log.md)を読み、閉じたまま戻っていないセッションを戻す。全 workspace 横断。
 
-- `orb session log [--since <iso|30m|2h|3d>] [--until <iso>] [--limit <n>] [--session <id>] [--json]` … `session_log` をそのまま。人間向けは 1 行 1 イベント（`ts event command sessionId workspace cwd title origin[/reason]` のタブ区切り。`title` は closed だけが持ち、opened は `-`。各列の制御文字——hook 由来の `title`・`reason` や OSC 7 由来の `cwd` に混じりうるタブ・改行・ESC 等——は空白に置き換える）。`--since` の相対指定（`<n>m|h|d` のみ）は CLI が ISO へ直してから送る（`--until` は ISO のみ）。切れた分（`truncated`）は stderr で告げる。
+- `orb session log [--since <iso|30m|2h|3d>] [--until <iso>] [--limit <n>] [--session <id>] [--json]` … `session_log` をそのまま。人間向けは 1 行 1 イベント（`ts event command sessionId workspace cwd title origin[/reason]` のタブ区切り。`title` は closed だけが持ち、opened は `-`。各列の制御文字——hook 由来の `title`・`reason` や OSC 7 由来の `cwd` に混じりうるタブ・改行・ESC 等——と、文字の向きを変える制御文字は空白に置き換える。それ以外の書式文字〔ZWJ でつないだ絵文字など〕は残す）。`--since` の相対指定（`<n>m|h|d` のみ）は CLI が ISO へ直してから送る（`--until` は ISO のみ）。切れた分（`truncated`）は stderr で告げる。
 - `orb session closed [--since …] [--json]` … 閉じたまま戻っていないセッションを、同じ事故で閉じた群（`gesture` 以外の同じ origin が 5 秒以内に続くもの）にまとめて新しい順に出す。`session_log` と `list_tabs` を突き合わせた派生ビューで、CLI が組む。群の代表時刻は群の最古の `closed` の `ts` で、群の一部を復元しても動かない。`--since` は群をその代表時刻で絞る——群を切る範囲は変えない（範囲が変わると代表時刻が動き、`restore --at` で解けなくなる）。人間向けは群ごとに見出し行（`at`、件数、origin）を出し、続けて 1 行 1 セッション（先頭列を空けた `command sessionId workspace cwd reason` のタブ区切り。`reason` が無ければ `-`。制御文字の扱いは `session log` と同じ）。`--json` は `{groups:[{at, origin, sessions:[event…]}]}`。
 - `orb session restore <session-id>... [--json]` / `orb session restore --at <iso> [--json]` … `restore_sessions`。`--at` は `session closed` が出した `at` をそのまま渡し、その `at` を持つ群すべての全員を戻す（受理した ISO はミリ秒付きに正規化してから完全一致で照合する。ミリ秒を省いた値は `.000` として扱う）。id の数が `restore_sessions` の 1 回の上限を超えれば分けて送る。id ごとの status を出し、`unknown` が 1 つでもあれば exit 1。`--workspace` は無い——戻す先はログが決める。
 
@@ -70,15 +85,15 @@ kind の語彙と値域の検証は control が持つ（未知 kind は CLI を�
 
 ### 共通
 
-各サブコマンドは対応する [制御 API](api.md) メソッドへそのまま乗る。`--json` は全サブコマンドで効き、control の result をそのまま出す——成功応答に載る `seq`（[api](api.md)）もそのまま出る（例外は 3 つ——`config get` は `config_list` から抽出した 1 行で `seq` を持たない、`session closed` は `session_log` と `list_tabs` から CLI が組む派生ビューで `seq` を持たない、`tab list` は `--workspace` で絞った後の `{"tabs":[…], "seq": N}`）。write が採番した id（`ws new` の workspaceId・`tab new` の tabId）は人間向け出力にも載るが、書式が割れずに読めるのは `--json` だけ。`--help`（`-h` も同じ）は全階層で効き、固有 usage を持つのは `config set` だけで、他はドメインの usage を出す。`<id|current>` の `current` はアクティブ WS。
+各サブコマンドは対応する [制御 API](api.md) メソッドへそのまま乗る。`--json` は全サブコマンドで効き、control の result をそのまま出す——成功応答に載る `seq`（[api](api.md)）もそのまま出る（例外は 3 つ——`config get` は `config_list` から抽出した 1 行で `seq` を持たない、`session closed` は `session_log` と `list_tabs` から CLI が組む派生ビューで `seq` を持たない、`tab list` は `--workspace` で絞った後の `{"tabs":[…], "seq": N}`）。write が採番した id（`ws new` の workspaceId・`tab new` の tabId・`task add` の taskId）は人間向け出力にも載るが、書式が割れずに読めるのは `--json` だけ。`--help`（`-h` も同じ）は全階層で効き、固有 usage を持つのは `config set` だけで、他はドメインの usage を出す。`<id|current>` の `current` はアクティブ WS。
 
-値必須フラグ（`--workspace <id>` / `--dir <path>` / `--cmd "…"` / `--text <text>` / `--key <key>` / `--kind <kind>` / `--value <value>` / `--after <seq>` / `--timeout-ms <ms>`）の値は `-` 始まりも空（空白だけの形も含む）も取らない（usage エラー、exit 2）。`orb tab new --dir "$DIR" --cmd "$CMD"` の `$DIR` が空になる形が両方ここで落ちる——引用符が無ければトークンごと消えて `--cmd` が cwd に化け、引用符があれば空文字が cwd として通ってしまうため。パスは絶対パスで渡す（`-` 始まりのディレクトリは `./-foo` の形）——相対パスは CLI も control も解決せずそのまま格納するので、利用者のシェルの cwd 基準にはならない。`~` 始まりを展開するのは workspace のパス（`ws new --dir` / `ws dir`）だけで、`tab new --dir` は展開せずそのまま cwd にする。
+値必須フラグ（`--workspace <id>` / `--dir <path>` / `--cmd "…"` / `--text <text>` / `--key <key>` / `--kind <kind>` / `--value <value>` / `--after <seq>` / `--timeout-ms <ms>` / task の項目フラグ）の値は `-` 始まりも空（空白だけの形も含む）も取らない（usage エラー、exit 2）。`orb tab new --dir "$DIR" --cmd "$CMD"` の `$DIR` が空になる形が両方ここで落ちる——引用符が無ければトークンごと消えて `--cmd` が cwd に化け、引用符があれば空文字が cwd として通ってしまうため。パスは絶対パスで渡す（`-` 始まりのディレクトリは `./-foo` の形）——相対パスは CLI も control も解決せずそのまま格納するので、利用者のシェルの cwd 基準にはならない（例外は `task` の `--worktree` で、CLI が呼び出し元の cwd から解く）。`~` 始まりを展開するのは workspace のパス（`ws new --dir` / `ws dir`）だけで、`tab new --dir` は展開せずそのまま cwd にする。
 
 この規約が禁じる形のテキスト——`-` 始まり・空・空白だけ——をタブへ送りたいときは `tab send --stdin` を使う。標準入力は席ではないので規約の対象外で、0 バイトだけを usage エラーにする。`printf '%s' "$PROMPT" | orb tab send --stdin` の `$PROMPT` 未設定が 0 バイトとして現れる形は規約が守ろうとしているものと同じだが、ファイルや heredoc の中身が空白・改行だけであることは正当にあり得るためこの線を引く。
 
 ## 文脈解決
 
-control.sock の解決順は `ORBE_STATE_DIR`（非空の明示指定・最優先。`$ORBE_STATE_DIR/control.sock` を使い `ORBE_SOCK` は見ない）→ `ORBE_SOCK`（タブ注入の絶対パス）→ 既定の Application Support 直下（自ビルドのチャネルが焼いた bundle id・[channel](../platform/channel.md)）。tab は現タブ既定に `ORBE_TAB`（タブ注入の自 tab id）を読む。config/ws はインスタンス/WS 単位なので `ORBE_TAB` を読まない。外部（`ORBE_TAB` 無し）で tab の対象を省略すると usage エラー（exit 2）。
+control.sock の解決順は `ORBE_STATE_DIR`（非空の明示指定・最優先。`$ORBE_STATE_DIR/control.sock` を使い `ORBE_SOCK` は見ない）→ `ORBE_SOCK`（タブ注入の絶対パス）→ 既定の Application Support 直下（自ビルドのチャネルが焼いた bundle id・[channel](../platform/channel.md)）。tab は現タブ既定に `ORBE_TAB`（タブ注入の自 tab id）を読む。`task add` は呼び出し元タブとして `ORBE_TAB` を control へ伝える。config/ws はインスタンス/WS 単位なので `ORBE_TAB` を読まない。外部（`ORBE_TAB` 無し）で tab の対象を省略すると usage エラー（exit 2）。
 
 ## 終了コード・エラー
 

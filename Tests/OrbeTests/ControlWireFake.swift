@@ -79,6 +79,23 @@ final class FakeControlTarget: ControlTarget {
     let workspaceId: Int
     let rootPath: String
   }
+  struct AddedTask {
+    let draft: TaskDraft
+    let workspaceId: ClearableValue<Int>?
+    let callerTabId: Int?
+    let worktree: String?
+  }
+  struct UpdatedTask {
+    let taskId: Int
+    let update: TaskUpdate
+    let workspaceId: ClearableValue<Int>?
+    let worktree: ClearableValue<String>?
+  }
+  struct MovedTask {
+    let taskId: Int
+    let placement: TaskStore.Placement
+    let anchorTaskId: Int
+  }
 
   private(set) var reportedAgents: [ReportedAgent] = []
   private(set) var spawns: [Spawn] = []
@@ -96,6 +113,11 @@ final class FakeControlTarget: ControlTarget {
   private(set) var closedTabIds: [Int] = []
   private(set) var resolvedTabIds: [Int] = []
   private(set) var restoredSessionIds: [[String]] = []
+  private(set) var taskLists: [Int?] = []
+  private(set) var addedTasks: [AddedTask] = []
+  private(set) var updatedTasks: [UpdatedTask] = []
+  private(set) var movedTasks: [MovedTask] = []
+  private(set) var deletedTaskIds: [Int] = []
 
   // MARK: - 宛先
 
@@ -223,5 +245,40 @@ final class FakeControlTarget: ControlTarget {
   func controlRestoreSessions(sessionIds: [String]) -> Result<Any, ControlError> {
     restoredSessionIds.append(sessionIds)
     return outcome(["results": sessionIds.map { ["sessionId": $0, "status": "restored"] }])
+  }
+
+  func controlListTasks(workspaceId: Int?) -> Result<Any, ControlError> {
+    taskLists.append(workspaceId)
+    return outcome(["tasks": []])
+  }
+
+  func controlAddTask(
+    _ draft: TaskDraft, workspaceId: ClearableValue<Int>?, callerTabId: Int?, worktree: String?
+  ) -> Result<Any, ControlError> {
+    addedTasks.append(
+      AddedTask(
+        draft: draft, workspaceId: workspaceId, callerTabId: callerTabId, worktree: worktree))
+    return outcome(["task": ["taskId": 1, "title": draft.title]])
+  }
+
+  func controlUpdateTask(
+    taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<Int>?,
+    worktree: ClearableValue<String>?
+  ) -> Result<Any, ControlError> {
+    updatedTasks.append(
+      UpdatedTask(taskId: taskId, update: update, workspaceId: workspaceId, worktree: worktree))
+    return outcome(["task": ["taskId": taskId]])
+  }
+
+  func controlMoveTask(taskId: Int, _ placement: TaskStore.Placement, anchorTaskId: Int)
+    -> Result<Any, ControlError>
+  {
+    movedTasks.append(MovedTask(taskId: taskId, placement: placement, anchorTaskId: anchorTaskId))
+    return outcome(["ok": true])
+  }
+
+  func controlDeleteTask(taskId: Int) -> Result<Any, ControlError> {
+    deletedTaskIds.append(taskId)
+    return outcome(["ok": true])
   }
 }

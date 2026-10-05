@@ -1,6 +1,6 @@
 import Foundation
 
-// MARK: - worktree / branch（Dispatch パレット）
+// MARK: - worktree / branch（worktree パレット）
 
 /// `git worktree list --porcelain` の 1 チェックアウト。
 struct GitWorktree: Equatable {
@@ -62,6 +62,13 @@ struct GitBranch: Equatable {
   /// `remote.pushDefault` → `branch.<名前>.remote`）で、ローカルブランチを追跡する行は `.`。
   /// 解決できなければ nil（remote ブランチは常に nil）。
   var pushRemote: String?
+
+  /// `origin/feat/x` → `feat/x`（先頭のリモート名を落とす）。リモートのブランチや既定ブランチの値
+  /// （`origin/main`）を、ローカルのブランチ名と比べるときに通す。
+  static func localName(fromRemote name: String) -> String {
+    let parts = name.split(separator: "/", maxSplits: 1)
+    return parts.count == 2 ? String(parts[1]) : name
+  }
 }
 
 // MARK: - GitHub（gh CLI）
@@ -75,6 +82,12 @@ struct GitHubRepoName: Hashable {
   init(nameWithOwner: String) {
     value = nameWithOwner.lowercased()
   }
+
+  /// `owner/name` の owner。
+  var owner: String { String(value.split(separator: "/", maxSplits: 1).first ?? "") }
+
+  /// `owner/name` の name。
+  var name: String { String(value.split(separator: "/", maxSplits: 1).last ?? "") }
 
   /// owner と名前から組む。どちらかが空なら nil。
   init?(owner: String, name: String) {
@@ -104,10 +117,39 @@ struct GitHubRepoName: Hashable {
     self.init(nameWithOwner: "\(parts[parts.count - 2])/\(name)")
   }
 
-  /// GitHub の remote の URL か（「URL に github.com を含むか」。SSH のホスト別名 `github.com-work` 等も
-  /// 拾う）。可用性の判定（`GitRepo.originIsGitHub`）と台帳が共にこの 1 つの規則を読む。
+  /// github.com のリポジトリの URL か。URL の書き方（https・ssh://・scp 形式の `git@host:o/n`）ごとにホストを
+  /// 取り出し、ホストが github.com か ssh.github.com（443 番の SSH）、または SSH の書き方でホストが
+  /// `github.com-` で始まるか `.github.com` で終わる別名（`github.com-work`・`work.github.com`。複数
+  /// アカウントの ssh config の慣習）のときだけ真。
+  /// `github.company.com` のような GitHub Enterprise は偽——問い合わせと書き込みは github.com を名指しする
+  /// ので、別のホストの owner/name を github.com で読み書きしないため。可用性の判定
+  /// （`GitRepo.originIsGitHub`）・台帳・GitHub タブの既定のリポジトリが共にこの 1 つの規則を読む。
   static func isGitHub(remoteURL url: String) -> Bool {
-    url.contains("github.com")
+    guard let (host, isSSH) = host(of: url) else { return false }
+    return host == "github.com" || host == "ssh.github.com"
+      || (isSSH && (host.hasPrefix("github.com-") || host.hasSuffix(".github.com")))
+  }
+
+  /// URL のホスト（小文字）と、SSH の書き方か。`scheme://[user@]host[:port]/path` と scp 形式
+  /// `[user@]host:path`（`:` が最初の `/` より前にある）を読む。どちらでもない（ローカルのパス）なら nil。
+  private static func host(of url: String) -> (host: String, isSSH: Bool)? {
+    let authority: Substring
+    let isSSH: Bool
+    if let scheme = url.range(of: "://") {
+      let rest = url[scheme.upperBound...]
+      authority = rest.prefix { $0 != "/" }
+      isSSH = url[..<scheme.lowerBound].lowercased().contains("ssh")
+    } else if let colon = url.firstIndex(of: ":"),
+      !url[..<colon].contains("/")
+    {
+      authority = url[..<colon]
+      isSSH = true
+    } else {
+      return nil
+    }
+    let hostAndPort = authority.split(separator: "@").last ?? ""
+    let host = hostAndPort.prefix { $0 != ":" }
+    return host.isEmpty ? nil : (host.lowercased(), isSSH)
   }
 }
 
@@ -141,11 +183,6 @@ private struct PullRequestHeadRepository: Decodable {
   }
 }
 
-/// 番号で同一性を持つ GitHub の項目。open 一覧を取り直す途中、前回の一覧との境目を探すのに使う。
-protocol GitHubNumbered {
-  var number: Int { get }
-}
-
 /// GraphQL の connection 1 ページ（`nodes` ＋ `pageInfo`）。
 struct GitHubPage<Node: Decodable>: Decodable {
   struct PageInfo: Decodable {
@@ -158,15 +195,9 @@ struct GitHubPage<Node: Decodable>: Decodable {
   let pageInfo: PageInfo
 }
 
-/// open issue 一覧（GraphQL `issues`）の 1 issue。
-struct GitHubIssue: Decodable, Equatable, GitHubNumbered {
-  let number: Int
-  let title: String
-}
-
 /// `gh pr list --state all --head <branch> --json number,headRefName,state,baseRefName,headRepository,
-/// headRepositoryOwner` の 1 PR。worktree の掃除で「レビュー中か／マージ済みか／未マージのまま閉じられたか」を
-/// 見るための小さな形で、`GitHubPullRequest`（title 必須）ではこの JSON をデコードできない。
+/// headRepositoryOwner,url` の 1 PR。worktree の掃除で「レビュー中か／マージ済みか／未マージのまま閉じられたか」を
+/// 見るための小さな形。
 struct GitHubBranchPR: Decodable, Equatable {
   let number: Int
   let headRefName: String
@@ -176,12 +207,21 @@ struct GitHubBranchPR: Decodable, Equatable {
   let baseRefName: String
   /// head 側のリポジトリ。消えていれば nil。
   let headRepository: GitHubRepoName?
+  /// PR のページ（PR が置かれたリポジトリを指す。head のリポジトリとは限らない）。
+  var url: String?
 
-  /// head のリポジトリとブランチ。`--head` はブランチ名でしか絞れず他人の fork の同名ブランチに
-  /// 立った PR も返るので、worktree と突き合わせるのはこれが等しいものだけ。head のリポジトリが
-  /// 消えていれば nil（どの worktree とも等しくならない）。
+  /// head のリポジトリとブランチ。head のリポジトリが消えていれば nil（どのブランチとも等しくならない）。
   var head: GitHubBranchRef? {
     headRepository.map { GitHubBranchRef(repo: $0, branch: headRefName) }
+  }
+
+  /// `ref` のブランチの PR。`--head` はブランチ名でしか絞れず他人の fork の同名ブランチに立った PR も
+  /// 返るので、ブランチと突き合わせるのは head が等しいものだけ（⌘T の clean と PR の自動の結び付けが
+  /// 共にこの規則を通る）。並びは保つ。
+  static func filter(_ pullRequests: [GitHubBranchPR], headedBy ref: GitHubBranchRef)
+    -> [GitHubBranchPR]
+  {
+    pullRequests.filter { $0.head == ref }
   }
 }
 
@@ -193,43 +233,114 @@ extension GitHubBranchPR {
       headRefName: try container.decode(String.self, forKey: .headRefName),
       state: try container.decode(String.self, forKey: .state),
       baseRefName: try container.decode(String.self, forKey: .baseRefName),
-      headRepository: try PullRequestHeadRepository(from: decoder).name)
+      headRepository: try PullRequestHeadRepository(from: decoder).name,
+      url: try container.decodeIfPresent(String.self, forKey: .url))
   }
 
   private enum CodingKeys: String, CodingKey {
-    case number, headRefName, state, baseRefName
+    case number, headRefName, state, baseRefName, url
   }
 }
 
-/// open PR 一覧（GraphQL `pullRequests`）の 1 PR。
-struct GitHubPullRequest: Decodable, Equatable, GitHubNumbered {
+/// open 一覧（GraphQL の `issues` / `pullRequests`）の 1 項目。どのリポジトリの項目かは、一覧を取った
+/// リポジトリが持つ。
+struct GitHubOpenItem: Equatable {
+  /// PR だけが持つ値。
+  struct PullRequest: Equatable {
+    let isDraft: Bool
+    let review: GitHubItemSummary.ReviewDecision?
+    let checks: GitHubItemSummary.Checks?
+    /// 個人宛のレビュー依頼の login。
+    var reviewers: [String]
+    /// チーム宛のレビュー依頼（`org/slug`）。
+    let teams: [String]
+  }
+
   let number: Int
   let title: String
-  let headRefName: String
-  /// `REVIEW_REQUIRED` / `APPROVED` / `CHANGES_REQUESTED` / null。
-  let reviewDecision: String?
-  /// head 側のリポジトリ。消えていれば nil。
-  let headRepository: GitHubRepoName?
+  let updatedAt: Date
+  /// 作成者の login。消えたアカウントなら nil。
+  let author: String?
+  /// 担当者の login（先頭 10 人）。
+  var assignees: [String]
+  /// PR なら値がある。nil は Issue。
+  var pullRequest: PullRequest?
 
-  /// head のリポジトリとブランチ（行との同一性）。head のリポジトリが消えていれば nil で、どの行とも
-  /// 等しくならない。
-  var head: GitHubBranchRef? {
-    headRepository.map { GitHubBranchRef(repo: $0, branch: headRefName) }
+  var kind: GitHubItemKind { pullRequest == nil ? .issue : .pr }
+
+  /// 表示の規則（`GitHubItemText`）に渡す値。open 一覧の項目なので状態は open。
+  var summary: GitHubItemSummary {
+    GitHubItemSummary(
+      title: title, state: .open,
+      pullRequest: pullRequest.map {
+        GitHubItemSummary.PullRequest(
+          isDraft: $0.isDraft, review: $0.review, checks: $0.checks, author: author)
+      })
   }
 }
 
-extension GitHubPullRequest {
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    self.init(
-      number: try container.decode(Int.self, forKey: .number),
-      title: try container.decode(String.self, forKey: .title),
-      headRefName: try container.decode(String.self, forKey: .headRefName),
-      reviewDecision: try container.decodeIfPresent(String.self, forKey: .reviewDecision),
-      headRepository: try PullRequestHeadRepository(from: decoder).name)
+extension GitHubOpenItem: Decodable {
+  private enum CodingKeys: String, CodingKey {
+    case typename = "__typename"
+    case number, title, updatedAt, author, assignees, isDraft, reviewDecision, commits,
+      reviewRequests
   }
 
-  private enum CodingKeys: String, CodingKey {
-    case number, title, headRefName, reviewDecision
+  /// 更新日時が読めない項目は、壊れた応答として、その一覧の取得を失敗で終える（並べ直しの鍵が無い）。
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    number = try c.decode(Int.self, forKey: .number)
+    title = try c.decode(String.self, forKey: .title)
+    let updated = try c.decode(String.self, forKey: .updatedAt)
+    guard let updatedAt = ISO8601DateFormatter().date(from: updated) else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .updatedAt, in: c, debugDescription: "not an ISO 8601 date: \(updated)")
+    }
+    self.updatedAt = updatedAt
+    author = try c.decodeIfPresent(OpenItemLogin.self, forKey: .author)?.login
+    assignees =
+      try c.decodeIfPresent(OpenItemLogins.self, forKey: .assignees)?.nodes?.compactMap {
+        $0?.login
+      } ?? []
+    guard try c.decode(String.self, forKey: .typename) == "PullRequest" else {
+      pullRequest = nil
+      return
+    }
+    let reviewers =
+      try c.decodeIfPresent(OpenItemReviewRequests.self, forKey: .reviewRequests)?.nodes?
+      .compactMap { $0?.requestedReviewer } ?? []
+    pullRequest = PullRequest(
+      isDraft: try c.decodeIfPresent(Bool.self, forKey: .isDraft) ?? false,
+      review: try c.decodeIfPresent(String.self, forKey: .reviewDecision).flatMap(
+        GitHubItemSummary.ReviewDecision.init(rawValue:)),
+      checks: try c.decodeIfPresent(GitHubLastCommit.self, forKey: .commits)?.checks,
+      reviewers: reviewers.compactMap { $0.typename == "User" ? $0.login : nil },
+      teams: reviewers.compactMap { reviewer in
+        guard reviewer.typename == "Team", let slug = reviewer.slug,
+          let organization = reviewer.organization?.login
+        else { return nil }
+        return "\(organization)/\(slug)"
+      })
   }
+}
+
+private struct OpenItemLogin: Decodable { let login: String? }
+private struct OpenItemLogins: Decodable { let nodes: [OpenItemLogin?]? }
+
+private struct OpenItemReviewRequests: Decodable {
+  struct Node: Decodable { let requestedReviewer: OpenItemReviewer? }
+  let nodes: [Node?]?
+}
+
+/// `User` は login、`Team` は所属の組織と slug。ほかの種別は読まない。
+private struct OpenItemReviewer: Decodable {
+  enum CodingKeys: String, CodingKey {
+    case typename = "__typename"
+    case login, slug, organization
+  }
+
+  let typename: String
+  let login: String?
+  let slug: String?
+  let organization: OpenItemLogin?
 }

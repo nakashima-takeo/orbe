@@ -1,7 +1,7 @@
 ---
 title: レイアウト
 description: window の SwiftUI ホスト構成・workspace / タブ / 面 / surface の構造・一方向参照・フォーカス管理・ショートカット・オーバーレイ提示機構
-updated: 2026-10-02
+updated: 2026-10-04
 ---
 
 # レイアウト
@@ -47,14 +47,14 @@ chrome キーは「どの面が所有するか」（window / 端末 / エディ�
 
 ## ショートカット
 
-- Cmd+E エディター面 ⇄ 端末面（→ [editor/faces](../editor/faces.md)）/ Cmd+S エディターの文書を保存（→ [editor/code](../editor/code.md)）/ Cmd+T 新タブ / Cmd+Shift+T 閉じたエージェント パレット（後述）/ Cmd+Shift+[ ] および Cmd+Shift+←→ タブ切替 / Cmd+W タブを閉じる（エディターに未保存の文書があれば確認 → [editor/shell](../editor/shell.md)。アクティブ workspace の最後のタブを閉じても 0 タブの空状態でアクティブに残る。ウィンドウは閉じない → [workspace](../platform/workspace.md)）/ Cmd+Shift+A エージェント起動パレット・Cmd+Shift+C デフォルトエージェント起動（→ [agent/launch](../agent/launch.md)）/ Cmd+Shift+S workspace パレット（→ [workspace パレット](../palette/workspace.md)）/ Cmd+, 設定パレット（→ [settings](../palette/settings.md)）/ Cmd+F 検索（端末はスクロールバック → [search](../terminal/search.md)、エディターはファイル内 → [editor/code](../editor/code.md)）/ Cmd+R タブリネーム（→ [chrome](chrome.md)）/ Cmd+↑↓ 先頭/末尾ジャンプ（端末はスクロールバック → [terminal/core](../terminal/core.md)、エディターは文書 → [editor/code](../editor/code.md)）/ Cmd+Shift+E アクティブタブの cwd を GUI エディタで開く / ⌘⌘（Cmd 素タップ×2）Attention パレット（→ [attention](../palette/attention.md)。前面時。背面時はメニューバーのドロップダウン → [menubar](menubar.md)）。
+- Cmd+E エディター面 ⇄ 端末面（→ [editor/faces](../editor/faces.md)）/ Cmd+S エディターの文書を保存（→ [editor/code](../editor/code.md)）/ Cmd+T 新タブ（[worktree パレット](../palette/worktree.md)を開く。タブ行の `+` も同じ）/ Cmd+Shift+T 閉じたエージェント パレット（後述）/ Cmd+Shift+[ ] および Cmd+Shift+←→ タブ切替 / Cmd+W タブを閉じる（エディターに未保存の文書があれば確認 → [editor/shell](../editor/shell.md)。アクティブ workspace の最後のタブを閉じても 0 タブの空状態でアクティブに残る。ウィンドウは閉じない → [workspace](../platform/workspace.md)）/ Cmd+Shift+A エージェント起動パレット・Cmd+Shift+C デフォルトエージェント起動（→ [agent/launch](../agent/launch.md)）/ Cmd+Shift+S workspace パレット（→ [workspace パレット](../palette/workspace.md)）/ Cmd+Shift+X タスク画面（→ [tasks](../palette/tasks.md)）/ Cmd+, 設定パレット（→ [settings](../palette/settings.md)）/ Cmd+F 検索（端末はスクロールバック → [search](../terminal/search.md)、エディターはファイル内 → [editor/code](../editor/code.md)）/ Cmd+R タブリネーム（→ [chrome](chrome.md)）/ Cmd+↑↓ 先頭/末尾ジャンプ（端末はスクロールバック → [terminal/core](../terminal/core.md)、エディターは文書 → [editor/code](../editor/code.md)）/ Cmd+Shift+E アクティブタブの cwd を GUI エディタで開く / ⌘⌘（Cmd 素タップ×2）Attention パレット（→ [attention](../palette/attention.md)。前面時。背面時はメニューバーのドロップダウン → [menubar](menubar.md)）。
 - フォント動的ズーム Cmd +/-/0（ghostty binding action）。
 
 **Cmd+Shift+T は「閉じたエージェント」パレットを開く**（→ [closed-agents](../palette/closed-agents.md)）。この workspace で閉じたまま戻っていないエージェントセッションを[寿命ログ](../platform/session-log.md)から一覧し、Enter で 1 件を休眠チケットとして戻して起こす。閉じ方（人のジェスチャ・プロセス終了・制御 API・エージェント自身の終了）を問わず、アプリの再起動をまたいで戻せる。素のシェルタブは対象外——戻してもプロセスもスクロールバックも戻らず、resume を持つ CLI だけが中身ごと戻るため。戻るのは cwd と同一性だけで、明示タイトルは付かず、位置は新規タブと同じ規則——同じ worktree の連が残っていればその右端、無ければ末尾（→ [persistence](../platform/persistence.md)・[chrome](chrome.md) の連）。0 タブの workspace でも開く。
 
 ## cwd の確定
 
-新タブとエージェント起動タブの初期 cwd はアクティブタブの実効 cwd（0 タブなら workspace の root path）を**明示指定**して起こす——cwd 未指定の surface は ghostty がホームへ解決してしまうため、ここで必ず確定させる。workspace 新規作成時の初期シェルは rootPath 指定（→ [workspace](../platform/workspace.md)）。
+cwd を指定せずに起こすタブ（エージェント起動・制御 API の `spawn`・初回起動のシェル）の初期 cwd は、アクティブタブの実効 cwd（0 タブなら workspace の root path）を**明示指定**して起こす——cwd 未指定の surface は ghostty がホームへ解決してしまうため、ここで必ず確定させる。[worktree パレット](../palette/worktree.md)がリポジトリを探す基点も同じ値を使う。workspace 新規作成時の初期シェルは rootPath 指定（→ [workspace](../platform/workspace.md)）。
 
 ## GUI エディタ起動（Cmd+Shift+E）
 

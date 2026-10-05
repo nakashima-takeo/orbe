@@ -64,11 +64,11 @@ final class InputMethodKeyEquivalentsTests: OrbeTestCase {
     let (view, handled) = (root.view, root.handled)
     XCTAssertTrue(root.window.firstResponder === receiver, "前提: 受け手が焦点")
     XCTAssertTrue(view.performKeyEquivalent(with: .key("t")))
-    XCTAssertEqual(handled(), [.newTab], "IME が使わなければ今の順（⌘T は新しいタブ）")
+    XCTAssertEqual(handled(), [.showWorktreePalette], "IME が使わなければ今の順（⌘T は worktree パレット）")
     XCTAssertEqual(receiver.offered, 1)
     receiver.imeUses = true
     XCTAssertTrue(view.performKeyEquivalent(with: .key("t")), "IME が使ったキーは根で止まる")
-    XCTAssertEqual(handled(), [.newTab], "アプリのコマンドは走らない")
+    XCTAssertEqual(handled(), [.showWorktreePalette], "アプリのコマンドは走らない")
     _ = view.performKeyEquivalent(with: .key("t", [.control]))
     XCTAssertEqual(receiver.offered, 2, "⌘ の付かないキーは渡さない")
   }
@@ -77,10 +77,10 @@ final class InputMethodKeyEquivalentsTests: OrbeTestCase {
     let root = root(firstResponder: NSTextView())
     let (view, handled) = (root.view, root.handled)
     XCTAssertTrue(view.performKeyEquivalent(with: .key("t")))
-    XCTAssertEqual(handled(), [.newTab])
+    XCTAssertEqual(handled(), [.showWorktreePalette])
   }
 
-  /// 端末の面は窓の根の口に答える——変換中に IME が使った ⌘ キーは根で止まり、使わなければ今の順（⌘T は新しいタブ）で流れる。
+  /// 端末の面は窓の根の口に答える——変換中に IME が使った ⌘ キーは根で止まり、使わなければ今の順（⌘T は worktree パレット）で流れる。
   func testTheRootOffersTheTerminalsCommandKeysToItsInputMethod() {
     let terminal = SurfaceView(frame: NSRect(x: 0, y: 0, width: 200, height: 100), cwd: "/tmp")
     let context = FakeInputContext(client: terminal)
@@ -96,10 +96,10 @@ final class InputMethodKeyEquivalentsTests: OrbeTestCase {
         replacementRange: NSRange(location: NSNotFound, length: 0))
     }
     XCTAssertTrue(root.view.performKeyEquivalent(with: .key("t")))
-    XCTAssertEqual(root.handled(), [], "IME が使った ⌘T では新しいタブを開かない")
+    XCTAssertEqual(root.handled(), [], "IME が使った ⌘T では worktree パレットを開かない")
     context.onEvent = { $0.doCommand(by: #selector(NSResponder.insertNewline(_:))) }
     XCTAssertTrue(root.view.performKeyEquivalent(with: .key("t")))
-    XCTAssertEqual(root.handled(), [.newTab], "IME が使わなければ今の順")
+    XCTAssertEqual(root.handled(), [.showWorktreePalette], "IME が使わなければ今の順")
     XCTAssertEqual(context.events, 2)
   }
 

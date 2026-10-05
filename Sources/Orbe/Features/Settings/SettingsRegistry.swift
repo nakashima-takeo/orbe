@@ -261,7 +261,7 @@ enum SettingsRegistry {
       id: .worktreeDir, key: "worktree-dir", labelKey: .settingsWorktreeDir, activation: .drillIn,
       defaultValue: { .string(WorktreePathTemplate.defaultTemplate) },
       domain: .pathTemplate,
-      guiConf: nil,  // gui.conf 非経由（Dispatch の worktree 作成時に実効値を pull する）
+      guiConf: nil,  // gui.conf 非経由（worktree パレットの worktree 作成時に実効値を pull する）
       display: { v, _ in if case .string(let s) = v { return s } else { return "" } },
       unsetPlaceholderKey: nil),
     SettingDescriptor(

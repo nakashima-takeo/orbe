@@ -73,7 +73,7 @@ final class WindowControllerRestoreTests: OrbeTestCase {
   // MARK: - 保存 → 復元 → 再保存のラウンドトリップ
 
   /// アクティブが 0 タブ（休眠）なら surface が 1 つも起きず、`WorkspacesFile` が**完全に等値**で戻る。
-  /// 分割比・cwd・エージェントセッション・明示タイトル・上書き設定・最終使用時刻・
+  /// 分割比・cwd・エージェントセッション・明示タイトル・上書き設定・最終使用時刻・前回のベース・
   /// ウィンドウサイズを 1 本で通す——どれか 1 つを復元が落とせばここで落ちる。
   ///
   /// 0 タブでも前面 workspace として利用した時刻は進む。一方、タブの起床状態は
@@ -96,7 +96,8 @@ final class WindowControllerRestoreTests: OrbeTestCase {
               agent: AgentSession(command: "claude", sessionId: "web-1"), explicitTitle: nil),
             TabState(cwd: "/work/docs", agent: nil, explicitTitle: nil),
           ],
-          lastUsedAt: stampFront, settingsOverride: overrideLayer()),
+          lastUsedAt: stampFront, settingsOverride: overrideLayer(),
+          lastWorktreeBase: "origin/release/0.8"),
       ],
       windowSize: WindowSize(width: 700, height: 400))
     WorkspacePersistence.save(original)

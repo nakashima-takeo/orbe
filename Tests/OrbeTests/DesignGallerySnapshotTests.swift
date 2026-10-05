@@ -58,7 +58,8 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
 
     try renderPaletteSnapshots(dir: dir, cardSize: cardSize)
 
-    try renderDispatchSnapshots(dir: dir)
+    try renderWorktreePaletteSnapshots(dir: dir)
+    try renderTaskPaletteSnapshots(dir: dir)
 
     // エディター面は StatusRow の段より前に撮る。連（segments）の段を撮った後は、この test の中で
     // main queue のブロックが入れ子の run loop で捌かれなくなり（原因未特定・test 内の状態）、

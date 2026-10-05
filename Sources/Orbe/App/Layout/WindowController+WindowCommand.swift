@@ -6,7 +6,6 @@ extension WindowController {
   /// （`ChromeHostingView.performKeyEquivalent`）が共有する実体。
   func handleWindowCommand(_ command: WindowCommand) {
     switch command {
-    case .newTab: newTab()
     case .closeTab: activeTab?.close(origin: .gesture)
     case .showClosedAgentsPalette: showClosedAgentsPalette()
     case .nextTab: nextTab()
@@ -14,7 +13,8 @@ extension WindowController {
     case .switchWorkspace: showWorkspacePalette()
     case .launchDefaultAgent: agentLauncher.launchDefault()
     case .showAgentPalette: agentLauncher.showPalette()
-    case .showDispatchPalette: showDispatchPalette()
+    case .showWorktreePalette: showWorktreePalette()
+    case .showTaskPalette: showTaskPalette()
     case .openEditor: openEditor()
     case .renameTab: beginTabRename()
     case .showSettings: showSettingsPalette()
@@ -48,6 +48,13 @@ extension WindowController {
     // （他 overlay 表示中は従来どおり不活性＝他パレットのキーと同じ規律）。
     if command == .toggleHelp, model.overlay == .help {
       dismissHelp()
+      return true
+    }
+    // タスク画面の ⌘T は、そのタスクのための ⌘T を開く（入力欄・詳細・編集欄のどこに焦点があっても届く）。
+    // 日本語入力の変換中は握らず変換に渡す（開くと未確定の文字が捨てられる）。
+    if command == .showWorktreePalette, model.overlay == .taskPalette {
+      guard !IMEComposition.isActive else { return false }
+      model.taskPalette?.openWorktreePalette()
       return true
     }
     guard model.overlay == .none, statusModel.editingIndex == nil else { return false }

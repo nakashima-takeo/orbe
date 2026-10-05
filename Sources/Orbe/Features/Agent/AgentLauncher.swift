@@ -89,7 +89,7 @@ final class AgentLauncher {
     detected.first(where: { $0 == configured }) ?? detected.first
   }
 
-  /// 解決済みデフォルトの command。実際に起動される agent を指す公開窓口（設定パレット・dispatch が読む）。
+  /// 解決済みデフォルトの command。実際に起動される agent を指す公開窓口（設定パレット・worktree パレットが読む）。
   var resolvedDefaultCommand: String? {
     Self.resolveDefault(configured: configuredDefault?(), detected: detectedCommands)
   }
