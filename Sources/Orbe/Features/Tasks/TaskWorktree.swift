@@ -46,7 +46,7 @@ struct TaskWorktree: Hashable, Codable {
     try c.encode(path)
   }
 
-  /// 今 checkout しているブランチ（detached・git の外・消えた worktree なら nil）。
+  /// 今 checkout しているブランチ（detached・git の外・消えた worktree・読めないなら nil）。
   var currentBranch: String? { GitWorktreeRoot.branch(at: path) }
 
   /// 今もディレクトリとして在るか。無い worktree は、読む側が「なし」と同じに扱う。
@@ -59,12 +59,15 @@ struct TaskWorktree: Hashable, Codable {
 
 extension TaskItem {
   /// このタスクの worktree で動いている agent（`agents` は `WorktreeAgentActivity` の索引。状態は問わない）。
-  /// 完了したタスクと、worktree が付けたときと別のブランチにいる間は出さない（今の作業が、別の作業を誤って
-  /// 示す）。
+  /// 完了したタスクと、worktree が記録した作業のブランチと別のブランチにいる間は出さない（今の作業が、別の
+  /// 作業を誤って示す）。記録が未確定（無い・既定ブランチ）か、今のブランチが分からないときは絞らない。
   func agent(in agents: [String: WorktreeAgentActivity.Agent]) -> WorktreeAgentActivity.Agent? {
-    guard status != .done, let worktree, let agent = agents[worktree.path],
-      agent.branch == worktreeBranch
-    else { return nil }
+    guard status != .done, let worktree, let agent = agents[worktree.path] else { return nil }
+    if let recorded = worktreeBranch, recorded != agent.defaultBranch, let current = agent.branch,
+      current != recorded
+    {
+      return nil
+    }
     return agent
   }
 }

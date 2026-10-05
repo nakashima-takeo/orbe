@@ -17,7 +17,8 @@ final class WorktreeAgentActivityTests: OrbeTestCase {
   {
     WorktreeAgentActivity.Agent(
       name: "claude", state: state, since: start.addingTimeInterval(minutesIn * 60), tabId: tab,
-      tabTitle: "t\(tab)", branch: nil)
+      tabTitle: "t\(tab)", branch: nil,
+      defaultBranch: nil)
   }
 
   /// 入力待ち > 作業中 > 完了 > 休止（人の手が要るものから）。どの順で並んでいても同じ 1 つに畳む。

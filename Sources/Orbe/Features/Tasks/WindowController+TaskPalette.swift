@@ -36,25 +36,29 @@ extension WindowController {
   }
 
   /// PR の自動の結び付け（⌘⇧X を開いたとき）。完了していないタスクの、実在する worktree のブランチの PR を、
-  /// そのタスクの結び付きの末尾に足す。worktree が付けたときと別のブランチにいる間は引かない（ブランチを
-  /// 切り替えて使い回す main worktree で、別の作業の PR を足さない）。人が外した項目・既にどこかに付いている
-  /// 項目は足さない（`TaskStore.linkFromBranch`）。答えが届くまでに worktree が別のタスクへ移っていれば、
-  /// 今の持ち主に足す。
+  /// そのタスクの結び付きの末尾に足す。worktree での作業のブランチが確定していれば、そのブランチにいる間だけ
+  /// 引く（ブランチを切り替えて使い回す main worktree で、別の作業の PR を足さない）。未確定（無い・既定
+  /// ブランチ）なら今のブランチで引き、既定ブランチ以外にいればそのブランチで確定する。人が外した項目・既に
+  /// どこかに付いている項目は足さない（`TaskStore.linkFromBranch`）。答えが届くまでに worktree が別のタスクへ
+  /// 移っていれば、今の持ち主の記録が引いたときと同じときだけ、その持ち主に足す。
   private func linkPullRequestsFromBranches() {
-    var worktrees: [String: String] = [:]
+    var worktrees: [String: String?] = [:]
     for task in taskStore.tasks where task.status != .done {
-      guard let worktree = task.worktree, worktree.exists, let branch = task.worktreeBranch
-      else { continue }
-      worktrees[worktree.path] = branch
+      guard let worktree = task.worktree, worktree.exists else { continue }
+      worktrees[worktree.path] = task.worktreeBranch
     }
     guard !worktrees.isEmpty else { return }
     WorktreePullRequestResolver().resolve(worktrees: worktrees) { [weak self] found in
       guard let self else { return }
-      for (path, item) in found {
-        guard let task = self.taskStore.tasks.first(where: { $0.worktree?.path == path }) else {
-          continue
+      for (path, match) in found {
+        guard
+          let task = self.taskStore.tasks.first(where: { $0.worktree?.path == path }),
+          let expected = worktrees[path], task.worktreeBranch == expected
+        else { continue }
+        self.taskStore.confirmWorktreeBranch(task.id, path: path, branch: match.branch)
+        if let item = match.pullRequest {
+          self.taskStore.linkFromBranch(task.id, TaskLink(item: item, kind: .pr))
         }
-        self.taskStore.linkFromBranch(task.id, TaskLink(item: item, kind: .pr))
       }
     }
   }

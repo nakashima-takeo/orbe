@@ -81,7 +81,8 @@ extension DesignSceneFixtures {
     let agent = { (name: String, state: AgentStateIcon.Kind, minutes: Double) in
       WorktreeAgentActivity.Agent(
         name: "claude", state: state, since: Date().addingTimeInterval(-minutes * 60),
-        tabId: 1, tabTitle: name, branch: nil)
+        tabId: 1, tabTitle: name, branch: nil,
+        defaultBranch: nil)
     }
     return WorktreeAgentActivity(agents: [
       taskWorktree("issue-212").path: agent("issue-212", .working, 12),

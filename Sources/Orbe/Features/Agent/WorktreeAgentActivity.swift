@@ -15,9 +15,10 @@ import Observation
     let tabId: Int
     /// タブの表示名。
     let tabTitle: String
-    /// その worktree が今 checkout しているブランチ（detached・git の外なら nil）。タスクが worktree を
-    /// 付けたときのブランチと比べる。
+    /// その worktree が今 checkout しているブランチと、そのリポジトリの既定ブランチ（どちらも読めなければ
+    /// nil）。タスクが worktree に記録したブランチと比べる（`TaskItem.agent(in:)`）。
     let branch: String?
+    let defaultBranch: String?
 
     /// 行の札に出す状態（作業中か入力待ち）。完了・休止の agent は、詳細の agent の場所と ↵ でタブへ移る
     /// 先にだけ出る。

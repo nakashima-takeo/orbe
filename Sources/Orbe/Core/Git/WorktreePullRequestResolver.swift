@@ -1,13 +1,21 @@
 import Foundation
 
-/// worktree ごとに、そのブランチの PR を 1 つ引く（画面に依らない）。突き合わせの規則は ⌘T の clean と同じ
-/// ——ブランチの同一性は remote の台帳（push 先の remote の正式名＋ローカル名）で決め、PR は head がそれと
-/// 等しいものだけを数える。選ぶのは open の最新、無ければ最新（`gh pr list` は作成日時の降順で返す）。
+/// worktree の、PR の head として見るブランチと、そのブランチの PR（引けなければ nil）。
+struct WorktreeBranchPullRequest: Equatable {
+  let branch: String
+  let pullRequest: GitHubItemID?
+}
+
+/// worktree ごとに、PR の head として見るブランチを決め、そのブランチの PR を 1 つ引く（画面に依らない）。
+/// 突き合わせの規則は ⌘T の clean と同じ——ブランチの同一性は remote の台帳（push 先の remote の正式名＋
+/// ローカル名）で決め、PR は head がそれと等しいものだけを数える。選ぶのは open の最新、無ければ最新
+/// （`gh pr list` は作成日時の降順で返す）。
 ///
 /// worktree はリポジトリ（commonDir）ごとにまとめ、gh の可否・remote の一覧・正式名・台帳はリポジトリごとに
-/// 1 回だけ求め、ブランチの PR はその本数をまとめて引く。今のブランチが期待したブランチと違う worktree、
-/// detached・既定ブランチの worktree、GitHub に
-/// 届かない（GitHub でない・gh が無い・未認証）リポジトリ、同一性を確かめられないブランチは答えを持たない。
+/// 1 回だけ求め、ブランチの PR はその本数をまとめて引く。ブランチを見るのは、今のブランチが期待したブランチ
+/// と同じか、期待が未確定（無い・既定ブランチ）で今のブランチが既定ブランチでない worktree だけ——detached・
+/// 既定ブランチの worktree は答えを持たない。ブランチは git の答え（`git worktree list`）で決まり、GitHub に
+/// 届かない（GitHub でない・gh が無い・未認証）リポジトリ、同一性を確かめられないブランチは PR だけを持たない。
 /// 失敗（オフライン等）も答えが無いだけで、外に出さない。全メソッドはメインで呼ばれ、メインで返る。
 final class WorktreePullRequestResolver {
   private let runner: GitRunner
@@ -20,27 +28,29 @@ final class WorktreePullRequestResolver {
     self.cache = cache
   }
 
-  /// `worktrees`（worktree のパス → そこにいるはずのブランチ）ごとの PR。答えの無い worktree はキーごと無い。
+  /// `worktrees`（worktree のパス → そこにいるはずのブランチ。nil は未確定）ごとのブランチと PR。ブランチを
+  /// 見ない worktree はキーごと無い。
   func resolve(
-    worktrees: [String: String], completion: @escaping ([String: GitHubItemID]) -> Void
+    worktrees: [String: String?],
+    completion: @escaping ([String: WorktreeBranchPullRequest]) -> Void
   ) {
-    var repositories: [String: (repo: GitRepo, paths: [String])] = [:]
+    var repositories: [String: (repo: GitRepo, branches: [String: String?])] = [:]
     let opened = DispatchGroup()
-    for path in worktrees.keys {
+    for (path, branch) in worktrees {
       opened.enter()
       GitRepo.open(cwd: path, runner: runner) { repo in
         if let repo {
-          repositories[repo.commonDir, default: (repo, [])].paths.append(path)
+          repositories[repo.commonDir, default: (repo, [:])].branches[path] = branch
         }
         opened.leave()
       }
     }
     opened.notify(queue: .main) {
-      var found: [String: GitHubItemID] = [:]
+      var found: [String: WorktreeBranchPullRequest] = [:]
       let resolved = DispatchGroup()
-      for (repo, paths) in repositories.values {
+      for (repo, branches) in repositories.values {
         resolved.enter()
-        self.resolve(repo, branches: worktrees.filter { paths.contains($0.key) }) { answers in
+        self.resolve(repo, branches: branches) { answers in
           found.merge(answers) { $1 }
           resolved.leave()
         }
@@ -49,10 +59,10 @@ final class WorktreePullRequestResolver {
     }
   }
 
-  /// リポジトリ 1 つ分（`expected` はパス → そこにいるはずのブランチ）。
+  /// リポジトリ 1 つ分（`expected` はパス → そこにいるはずのブランチ。nil は未確定）。
   private func resolve(
-    _ repo: GitRepo, branches expected: [String: String],
-    completion: @escaping ([String: GitHubItemID]) -> Void
+    _ repo: GitRepo, branches expected: [String: String?],
+    completion: @escaping ([String: WorktreeBranchPullRequest]) -> Void
   ) {
     var checkouts: [GitWorktree] = []
     var localBranches: [GitBranch] = []
@@ -86,19 +96,13 @@ final class WorktreePullRequestResolver {
       facts.leave()
     }
     facts.notify(queue: .main) {
-      // パス → ブランチ（期待と違うブランチ・detached・既定ブランチは PR の head として見ない）。
-      var branches: [String: String] = [:]
-      for (path, expectedBranch) in expected {
-        let key = GitWorktreeRoot.normalizedPath(path)
-        guard
-          let branch = checkouts.first(where: { GitWorktreeRoot.normalizedPath($0.path) == key })?
-            .branch, branch == expectedBranch, branch != defaultBranch
-        else { continue }
-        branches[path] = branch
+      let branches = Self.branches(expected, checkouts: checkouts, defaultBranch: defaultBranch)
+      let withoutPullRequests = branches.mapValues {
+        WorktreeBranchPullRequest(branch: $0, pullRequest: nil)
       }
       guard !branches.isEmpty else { return completion([:]) }
       self.gitHub.probe(cwd: repo.root, isGitHub: isGitHub) { availability in
-        guard availability == .ready else { return completion([:]) }
+        guard availability == .ready else { return completion(withoutPullRequests) }
         self.ledger(repo, remotes: remotes) { resolved in
           let identities = GitHubBranchIdentities(
             resolved: resolved, localBranches: localBranches)
@@ -107,11 +111,32 @@ final class WorktreePullRequestResolver {
             if case .ref(let ref) = identities.local(branch) { refs[branch] = ref }
           }
           self.pullRequests(repo, refs: refs) { chosen in
-            completion(branches.compactMapValues { chosen[$0] })
+            completion(
+              branches.mapValues {
+                WorktreeBranchPullRequest(branch: $0, pullRequest: chosen[$0])
+              })
           }
         }
       }
     }
+  }
+
+  /// パス → PR の head として見るブランチ。detached・既定ブランチ・確定した期待（既定ブランチ以外の期待）と
+  /// 違うブランチは見ない。
+  private static func branches(
+    _ expected: [String: String?], checkouts: [GitWorktree], defaultBranch: String
+  ) -> [String: String] {
+    var branches: [String: String] = [:]
+    for (path, expectedBranch) in expected {
+      let key = GitWorktreeRoot.normalizedPath(path)
+      guard
+        let branch = checkouts.first(where: { GitWorktreeRoot.normalizedPath($0.path) == key })?
+          .branch, branch != defaultBranch
+      else { continue }
+      if let expectedBranch, expectedBranch != defaultBranch, expectedBranch != branch { continue }
+      branches[path] = branch
+    }
+    return branches
   }
 
   /// remote の台帳。正式名は置き場の答えを使い、正式名でなければ問い合わせて置き場へ書く。

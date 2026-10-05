@@ -10,12 +10,13 @@ import XCTest
 /// の PR を差し置いて付く。fork から本体へ出した PR が、fork のリポジトリの番号として付き、存在しない PR を
 /// 指す。main の worktree のタスクに、main を head にした無関係な PR が付く。
 extension WorktreePaletteRemoteLedgerProviderTests {
-  private func resolve(_ worktrees: [String: String]) -> [String: GitHubItemID]? {
+  /// worktree ごとの PR（ブランチを見たが PR の無い worktree はキーごと無い）。
+  private func resolve(_ worktrees: [String: String?]) -> [String: GitHubItemID]? {
     var found: [String: GitHubItemID]?
     WorktreePullRequestResolver(gitHub: GitHubCLI(), cache: GitHubCache()).resolve(
       worktrees: worktrees
     ) {
-      found = $0
+      found = $0.compactMapValues(\.pullRequest)
     }
     XCTAssertTrue(pump { found != nil })
     return found

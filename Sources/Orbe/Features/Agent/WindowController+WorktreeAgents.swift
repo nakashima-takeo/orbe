@@ -15,7 +15,8 @@ extension WindowController {
           tab.groupKey,
           WorktreeAgentActivity.Agent(
             name: session.command, state: state, since: report.stateChangedAt, tabId: tab.id,
-            tabTitle: title, branch: GitWorktreeRoot.branch(at: tab.groupKey))
+            tabTitle: title, branch: GitWorktreeRoot.branch(at: tab.groupKey),
+            defaultBranch: GitWorktreeRoot.defaultBranch(at: tab.groupKey))
         )
       })
   }

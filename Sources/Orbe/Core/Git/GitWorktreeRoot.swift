@@ -35,30 +35,49 @@ enum GitWorktreeRoot {
     }
   }
 
-  /// worktree のルートが今 checkout しているブランチの名前。`.git`（ディレクトリ、linked worktree では
-  /// `gitdir:` を書いた file）が指す HEAD を同期で読む——サブプロセスを使わない（chrome の更新ごとに読む）。
-  /// detached・読めない・git の外なら nil。
+  /// worktree のルートが今 checkout しているブランチの名前。gitdir の HEAD を同期で読む——サブプロセスを
+  /// 使わない（chrome の更新ごとに読む）。detached・git の外・HEAD をファイルから読めないとき（reftable の
+  /// リポジトリの HEAD は `refs/heads/.invalid` を指す互換の置き物で、ブランチは ref の表にある）は nil
+  /// （ブランチ不明）。
   static func branch(at root: String) -> String? {
-    let dotGit = (root as NSString).appendingPathComponent(".git")
-    var isDirectory: ObjCBool = false
-    guard FileManager.default.fileExists(atPath: dotGit, isDirectory: &isDirectory) else {
+    guard let gitDir = GitWorktreeOperationProbe.gitDir(worktreeAt: root) else { return nil }
+    return symbolicRef(
+      atPath: (gitDir as NSString).appendingPathComponent("HEAD"), under: "refs/heads/")
+  }
+
+  /// worktree のリポジトリの既定ブランチ（`refs/remotes/origin/HEAD` の指すブランチのローカル名）。
+  /// `GitRepo.defaultBranch` と同じ規則を同期で読み、指していなければ `main`。common dir（linked worktree
+  /// では gitdir の `commondir` が指す先）から読む。git の外・ファイルから読めないときは nil。
+  static func defaultBranch(at root: String) -> String? {
+    guard let gitDir = GitWorktreeOperationProbe.gitDir(worktreeAt: root) else { return nil }
+    var commonDir = gitDir
+    if let pointer = try? String(
+      contentsOfFile: (gitDir as NSString).appendingPathComponent("commondir"), encoding: .utf8),
+      let line = pointer.split(whereSeparator: \.isNewline).first
+    {
+      let path = String(line)
+      commonDir =
+        path.hasPrefix("/")
+        ? path
+        : ((gitDir as NSString).appendingPathComponent(path) as NSString)
+          .standardizingPath
+    }
+    let originHead = (commonDir as NSString).appendingPathComponent("refs/remotes/origin/HEAD")
+    guard FileManager.default.fileExists(atPath: originHead) else { return "main" }
+    return symbolicRef(atPath: originHead, under: "refs/remotes/origin/")
+  }
+
+  /// `ref: <prefix><name>` を書いたファイルの name。読めない・形が違う・ブランチ名として不正（`.` で始まる段
+  /// を持つ。reftable の置き物の `.invalid` を含む）なら nil。
+  private static func symbolicRef(atPath path: String, under prefix: String) -> String? {
+    guard let content = try? String(contentsOfFile: path, encoding: .utf8),
+      let line = content.split(whereSeparator: \.isNewline).first,
+      line.hasPrefix("ref: " + prefix)
+    else { return nil }
+    let name = String(line.dropFirst(("ref: " + prefix).count))
+    guard !name.isEmpty, !name.split(separator: "/").contains(where: { $0.hasPrefix(".") }) else {
       return nil
     }
-    let gitDir: String
-    if isDirectory.boolValue {
-      gitDir = dotGit
-    } else {
-      guard let pointer = try? String(contentsOfFile: dotGit, encoding: .utf8),
-        let line = pointer.split(whereSeparator: \.isNewline).first, line.hasPrefix("gitdir: ")
-      else { return nil }
-      let path = String(line.dropFirst("gitdir: ".count))
-      gitDir = path.hasPrefix("/") ? path : (root as NSString).appendingPathComponent(path)
-    }
-    let head = (gitDir as NSString).appendingPathComponent("HEAD")
-    guard let content = try? String(contentsOfFile: head, encoding: .utf8),
-      let line = content.split(whereSeparator: \.isNewline).first,
-      line.hasPrefix("ref: refs/heads/")
-    else { return nil }
-    return String(line.dropFirst("ref: refs/heads/".count))
+    return name
   }
 }

@@ -24,10 +24,12 @@ struct TaskItem: Codable, Equatable, Identifiable {
   var links: [TaskLink] = []
   /// このタスクの作業の場所。解決できない値（ディレクトリが消えた）は「なし」と同じに扱う（書き換えない）。
   var worktree: TaskWorktree?
-  /// worktree を付けたときにそこで checkout していたブランチ（detached・git の外なら nil）。保つのは
-  /// `TaskStore` で、worktree を付けるたびに読み直す。worktree の今のブランチがこれと同じ間だけ、そこを
+  /// worktree での作業のブランチ。worktree を付けるたびに、そこで checkout していたブランチを記録し
+  /// （detached・git の外・読めなければ nil）、無い・既定ブランチの記録は未確定とみなす——未確定の間は
+  /// ブランチで絞らない。⌘⇧X を開いたときの PR の自動の結び付けが、未確定の worktree が既定ブランチ以外に
+  /// いるのを見たら、そのブランチで確定する。確定した後は、worktree の今のブランチがこれと同じ間だけ、そこを
   /// このタスクの作業とみなす（ブランチを切り替えて使い回す main worktree で、別の作業の PR・agent を
-  /// このタスクに付けない）。tasks.json にだけ出し、ワイヤには出さない。
+  /// このタスクに付けない）。保つのは `TaskStore`。tasks.json にだけ出し、ワイヤには出さない。
   var worktreeBranch: String?
   /// 結び付きから外れた項目。PR の自動の結び付けはこれを避ける。保つのは `TaskStore` で、tasks.json にだけ
   /// 出し、ワイヤには出さない。
