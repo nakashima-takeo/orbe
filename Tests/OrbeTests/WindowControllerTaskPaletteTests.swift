@@ -60,6 +60,33 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
     XCTAssertEqual(wc.taskStore.tasks.last?.workspace, emptyId, "画面を開いた workspace に付く")
   }
 
+  /// GitHub タブのリポジトリは ⌘T と同じ基点（アクティブタブの cwd）で解決する——workspace の root が別の場所
+  /// （既定 workspace の ~ など）でも、タブがいるリポジトリの Issue・PR を出す。
+  func testTheGitHubTabResolvesTheRepositoryFromTheActiveTabsDirectory() throws {
+    let caseDir = try XCTUnwrap(TestIsolation.caseDir)
+    let tabDirectory = caseDir.appendingPathComponent("repo-a").path
+    let root = caseDir.appendingPathComponent("repo-b").path
+    for path in [tabDirectory, root] {
+      try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+    }
+    let file = WorkspacesFile(
+      version: WorkspacePersistence.version, activeWorkspace: 0,
+      workspaces: [
+        WorkspaceState(
+          name: "main", rootPath: root, activeTab: 0,
+          tabs: [TabState(cwd: tabDirectory, agent: nil, explicitTitle: nil)])
+      ])
+    try JSONEncoder().encode(file).write(to: workspacesFile())
+    AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
+    let wc = WindowController()
+
+    let palette = try openTaskPalette(wc)
+
+    XCTAssertEqual(palette.root, tabDirectory)
+    XCTAssertNotNil(GitHubOpenLists.shared.roots[tabDirectory], "その場所でリポジトリを解決しに行く")
+    XCTAssertNil(GitHubOpenLists.shared.roots[root])
+  }
+
   func testClosingTheScreenCommitsTheEditInProgress() throws {
     let wc = try launchOnAnEmptyWorkspace()
     let palette = try openTaskPalette(wc)
