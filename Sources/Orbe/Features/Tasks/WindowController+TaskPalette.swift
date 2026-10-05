@@ -53,7 +53,7 @@ extension WindowController {
       for (path, match) in found {
         guard
           let task = self.taskStore.tasks.first(where: { $0.worktree?.path == path }),
-          let expected = worktrees[path], task.worktreeBranch == expected
+          worktrees[path] == .some(task.worktreeBranch)
         else { continue }
         self.taskStore.confirmWorktreeBranch(task.id, path: path, branch: match.branch)
         if let item = match.pullRequest {

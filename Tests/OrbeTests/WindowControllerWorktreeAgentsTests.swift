@@ -70,8 +70,9 @@ final class WindowControllerWorktreeAgentsTests: OrbeTestCase {
     XCTAssertTrue(pump { wc.worktreeAgents.agents[root] == nil }, "タブが去ると外れる")
   }
 
-  /// タスクがその worktree の agent を示すのは、worktree が付けたときと同じブランチにいる間だけ——ブランチを
-  /// 切り替えて使い回す main worktree で、別の作業の agent をタスクに示さない。戻ればまた示す。
+  /// worktree の作業のブランチが確定していれば（既定ブランチ以外で付けた）、タスクがその worktree の
+  /// agent を示すのはそのブランチにいる間だけ——ブランチを切り替えて使い回す main worktree で、別の作業
+  /// の agent をタスクに示さない。戻ればまた示す。
   func testATaskShowsTheAgentOnlyWhileItsWorktreeIsOnTheBranchItWasAttachedAt() throws {
     let (wc, root) = try launch()
     let git = { (args: [String]) in

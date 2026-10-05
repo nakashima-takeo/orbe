@@ -46,8 +46,9 @@ enum GitWorktreeRoot {
   }
 
   /// worktree のリポジトリの既定ブランチ（`refs/remotes/origin/HEAD` の指すブランチのローカル名）。
-  /// `GitRepo.defaultBranch` と同じ規則を同期で読み、指していなければ `main`。common dir（linked worktree
-  /// では gitdir の `commondir` が指す先）から読む。git の外・ファイルから読めないときは nil。
+  /// common dir（linked worktree では gitdir の `commondir` が指す先）のそのファイルを同期で読み、
+  /// 無ければ `main`（reftable のリポジトリは ref をファイルに持たないので、origin/HEAD があっても
+  /// `main`）。git の外・ファイルを読めない・形が違うときは nil。
   static func defaultBranch(at root: String) -> String? {
     guard let gitDir = GitWorktreeOperationProbe.gitDir(worktreeAt: root) else { return nil }
     var commonDir = gitDir

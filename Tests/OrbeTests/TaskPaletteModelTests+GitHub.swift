@@ -4,7 +4,7 @@ import XCTest
 
 private typealias GitHub = TaskPaletteGitHubSamples
 
-/// GitHub タブ（開いた workspace のリポジトリの open な Issue・PR）の操作: 本体の出し方、タスクにする（右の欄の
+/// GitHub タブ（⌘T と同じ基点で解決したリポジトリの open な Issue・PR）の操作: 本体の出し方、タスクにする（右の欄の
 /// 値と、自分を GitHub に足す書き込み）、⌘T、結び付いたタスクへ移る・外す、絞り込み、「さらに」、右の欄、
 /// タブごとの入力と選択、agent の変更への追従。
 ///

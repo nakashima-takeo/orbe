@@ -60,7 +60,7 @@ struct TaskWorktree: Hashable, Codable {
 extension TaskItem {
   /// このタスクの worktree で動いている agent（`agents` は `WorktreeAgentActivity` の索引。状態は問わない）。
   /// 完了したタスクと、worktree が記録した作業のブランチと別のブランチにいる間は出さない（今の作業が、別の
-  /// 作業を誤って示す）。記録が未確定（無い・既定ブランチ）か、今のブランチが分からないときは絞らない。
+  /// 作業を誤って示す）。記録が未確定（無い・既定ブランチ）か、今のブランチが分からない（detached・読めない）ときは絞らない。
   func agent(in agents: [String: WorktreeAgentActivity.Agent]) -> WorktreeAgentActivity.Agent? {
     guard status != .done, let worktree, let agent = agents[worktree.path] else { return nil }
     if let recorded = worktreeBranch, recorded != agent.defaultBranch, let current = agent.branch,

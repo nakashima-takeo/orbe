@@ -256,7 +256,7 @@ private struct ReviewersResponse: Decodable {
   let requestedReviewers: [UserLogin]
 }
 
-/// 開いた workspace の GitHub のリポジトリを決められない理由。
+/// GitHub タブのリポジトリ（⌘T と同じ基点で gh が既定とするもの）を決められない理由。
 enum GitHubRepositoryUnavailable: Error, Equatable {
   case ghMissing, ghUnauthed
   /// gh が既定のリポジトリを返さなかった（GitHub のリポジトリが無い・オフライン）。

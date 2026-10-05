@@ -12,14 +12,7 @@ import XCTest
 extension WorktreePaletteRemoteLedgerProviderTests {
   /// worktree ごとの PR（ブランチを見たが PR の無い worktree はキーごと無い）。
   private func resolve(_ worktrees: [String: String?]) -> [String: GitHubItemID]? {
-    var found: [String: GitHubItemID]?
-    WorktreePullRequestResolver(gitHub: GitHubCLI(), cache: GitHubCache()).resolve(
-      worktrees: worktrees
-    ) {
-      found = $0.compactMapValues(\.pullRequest)
-    }
-    XCTAssertTrue(pump { found != nil })
-    return found
+    resolveBranches(worktrees)?.compactMapValues(\.pullRequest)
   }
 
   private func pullURL(_ repo: String, _ number: Int) -> String {
@@ -61,8 +54,8 @@ extension WorktreePaletteRemoteLedgerProviderTests {
       resolve([path: "feat"]), [path: try XCTUnwrap(GitHubItemID(repo: "me/r", number: 5))])
   }
 
-  /// worktree が期待したブランチ（タスクに付けたときのブランチ）と別のブランチにいる間は答えない——ブランチを
-  /// 切り替えて使い回す main worktree で、別の作業の PR をタスクに付けない。戻れば答える。
+  /// 期待が確定している（既定ブランチ以外の）とき、worktree がそれと別のブランチにいる間は答えない——
+  /// ブランチを切り替えて使い回す main worktree で、別の作業の PR をタスクに付けない。戻れば答える。
   func testAWorktreeOnAnotherBranchThanExpectedGetsNoPullRequestUntilItReturns() throws {
     addRemote("origin", "me/r")
     try answer("me/r", found: "me/r")

@@ -278,7 +278,10 @@ import SwiftUI
       onExecute(destination)
     case .createBranch(let name):
       // 出すかが決まらない作成行は、↵ と同じく作成の意図として預かる。
-      guard !isCreateRowUndecided else { return pendingActivation = .create(name: name) }
+      guard !isCreateRowUndecided else {
+        pendingActivation = .create(name: name)
+        return
+      }
       guard let choice = selectedBaseChoice else { return }
       guard let base = choice.base else { return enterBasePicker() }
       onExecute(.newBranch(name: name, base: base))
