@@ -63,4 +63,35 @@ final class WorktreeAgentActivityTests: OrbeTestCase {
 
     XCTAssertNil(task.agent(in: agents))
   }
+
+  /// タスクが worktree に記録した作業のブランチで絞るのは、記録が確定していて（既定ブランチ以外）、今の
+  /// ブランチが分かり、それが記録と違うときだけ。記録が無い・既定ブランチの記録は未確定で、今のブランチが
+  /// 分からない（detached・reftable）ときも絞らない。
+  func testTheAgentIsHiddenOnlyWhileAConfirmedRecordDiffersFromTheKnownCurrentBranch() {
+    struct Case {
+      let recorded: String?
+      let current: String?
+      let shown: Bool
+    }
+    let cases = [
+      Case(recorded: nil, current: "x", shown: true),
+      Case(recorded: "main", current: "feat", shown: true),
+      Case(recorded: "feat", current: nil, shown: true),
+      Case(recorded: "feat", current: "feat", shown: true),
+      Case(recorded: "feat", current: "other", shown: false),
+    ]
+    for c in cases {
+      let agent = WorktreeAgentActivity.Agent(
+        name: "claude", state: .working, since: start, tabId: 1, tabTitle: "t1", branch: c.current,
+        defaultBranch: "main")
+      let task = TaskPaletteSamples.task(1, "a") {
+        $0.worktree = TaskWorktree(key: "/r/wt")
+        $0.worktreeBranch = c.recorded
+      }
+
+      XCTAssertEqual(
+        task.agent(in: ["/r/wt": agent]) != nil, c.shown,
+        "記録 \(c.recorded ?? "nil")・今 \(c.current ?? "nil")")
+    }
+  }
 }
