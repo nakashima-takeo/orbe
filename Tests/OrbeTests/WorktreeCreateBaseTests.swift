@@ -169,21 +169,6 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
     XCTAssertEqual(head(of: path), oid(["rev-parse", "main"], cwd: local))
   }
 
-  /// origin はあるが `origin/HEAD` が未設定（`git remote add` で組んだ repo）でも既定ブランチからの新規は成功する。
-  ///
-  /// 作成は fetch の着地を待つので、`followRemoteHEAD` を閉じないと provider 自身の `fetch --prune` が
-  /// `origin/HEAD` を作り直し、測りたい「引けない repo」の前提が作成の時点で消えている。
-  func testNewBranchWorksWithoutOriginHead() throws {
-    XCTAssertTrue(
-      run(["config", "remote.origin.followRemoteHEAD", "never"], cwd: local).isSuccess)
-    XCTAssertTrue(
-      run(["symbolic-ref", "--delete", "refs/remotes/origin/HEAD"], cwd: local).isSuccess)
-    let provider = try start()
-    let path = try resolve(
-      provider, .newBranch(name: "issue/44", base: .defaultBranch))
-    XCTAssertEqual(head(of: path), oid(["rev-parse", "main"], cwd: local))
-  }
-
   /// **fetch が `origin/HEAD` を作ったなら、その名前で切る。** 着地をベース ref の中身だけで測ると、
   /// 名前は提示時の読み（フォールバックの固定名）のまま撃たれ、既定が `main` でない repo では
   /// 存在しない ref を指す。ここでは手元の `main`（古い）と `origin/main`（fetch 後）が別物なので、

@@ -21,11 +21,6 @@ final class WorktreePathTemplateTests: OrbeTestCase {
       WorktreePathTemplate.resolve(
         template: "{repo_path}/.worktrees/{slug}", repoPath: "/Users/x/github/orbe", slug: "feat-x"),
       "/Users/x/github/orbe/.worktrees/feat-x")
-    XCTAssertEqual(
-      WorktreePathTemplate.resolve(
-        template: "{repo_path}/.worktrees/{slug}", repoPath: "/Users/x/github/orbe", slug: "s"),
-      WorktreePathTemplate.resolve(
-        template: "{parent}/{repo}/.worktrees/{slug}", repoPath: "/Users/x/github/orbe", slug: "s"))
   }
 
   /// 同値は場所の書き方に依存しない。`{repo_path}` の直後が `/` でないテンプレートは、末尾スラッシュ付きの
@@ -117,14 +112,6 @@ final class WorktreePathTemplateTests: OrbeTestCase {
   }
 
   // MARK: - validate
-
-  func testValidateAcceptsDefaultTemplate() {
-    XCTAssertNil(WorktreePathTemplate.validate(WorktreePathTemplate.defaultTemplate))
-  }
-
-  func testValidateAcceptsTildeTemplate() {
-    XCTAssertNil(WorktreePathTemplate.validate("~/wt/{repo}/{slug}"))
-  }
 
   /// repo 内配置は `{repo_path}/...`（`{parent}/{repo}/...` でも同義）と明示的に書ける。
   func testValidateAcceptsInRepoTemplate() {

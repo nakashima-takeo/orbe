@@ -87,14 +87,6 @@ final class GitWorktreeParserTests: OrbeTestCase {
     XCTAssertEqual(branches[5].upstream?.track, .counts(ahead: 0, behind: 3))
   }
 
-  /// 列が欠けた行でも落ちない（インデックス読みのガード）。
-  func testLocalBranchWithoutTrackColumn() {
-    let branches = BranchParser.parseLocal("main\01d前\0origin/main\n")
-    XCTAssertEqual(branches.count, 1)
-    XCTAssertEqual(branches[0].upstream?.short, "origin/main")
-    XCTAssertNil(branches[0].upstream?.track)
-  }
-
   func testRemoteBranchExcludesHeadNoise() {
     let input =
       "origin/HEAD\03h前\0taro\n"
@@ -102,5 +94,15 @@ final class GitWorktreeParserTests: OrbeTestCase {
     let branches = BranchParser.parseRemote(input)
     XCTAssertEqual(branches.map(\.name), ["origin/feat/session-restore"], "*/HEAD ノイズを除外")
     XCTAssertEqual(branches[0].relativeDate, "taro · 3h前", "author · 相対日時")
+  }
+
+  /// 除外するのは `<remote>/HEAD` だけ。`HEAD` で終わる実ブランチ（`origin/feat/HEAD`）は一覧に残る。
+  func testRemoteBranchEndingInHEADBelowTheRemoteIsKept() {
+    let input =
+      "origin/HEAD\03h前\0taro\n"
+      + "origin/feat/HEAD\03h前\0taro\n"
+    XCTExpectFailure("parseRemote が末尾 /HEAD で除外し、<remote>/HEAD でない実ブランチまで消す（B2）") {
+      XCTAssertEqual(BranchParser.parseRemote(input).map(\.name), ["origin/feat/HEAD"])
+    }
   }
 }

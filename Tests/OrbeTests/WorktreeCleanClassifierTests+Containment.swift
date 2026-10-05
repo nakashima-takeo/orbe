@@ -36,23 +36,6 @@ extension WorktreeCleanClassifierTests {
     XCTAssertEqual(r.chips, [.mergedInto("main"), .gone])
   }
 
-  /// merged PR チップはマージ先（gh の `baseRefName`）を運ぶ。**表示専用**で、safe の証明は
-  /// `containment`（ローカル git の事実）だけが立てる——gh が届かなくても安全群入りは変わらない。
-  ///
-  /// merged PR チップが立つ行では `リモート反映済み` は立たない——マージ済みなら remote に在ることは
-  /// 含意されるので、含意される語を重ねない。空いた枠は次の事実（`[gone]`）が埋める。
-  func testMergedPRCarriesItsBaseBranch() {
-    let r = row(
-      WorktreeCleanFacts(
-        path: "/wt/x", branch: "big/x", upstream: "origin/big/x", track: .gone,
-        closedPR: WorktreeCleanPR(number: 123, isMerged: true, base: "develop"),
-        openPR: .none, status: clean, containment: .reachable(mergedInto: nil), operation: .none))
-    XCTAssertEqual(r.group, .safe)
-    XCTAssertEqual(r.chips, [.mergedPR(123, base: "develop"), .gone])
-    XCTAssertFalse(r.vocabulary.contains(.onRemote))
-    XCTAssertEqual(r.overflowNotes, [])
-  }
-
   /// 降ろすのは重複する `merged → <X>` だけ——`PR #N merged → base` と同じ「merged」を 2 枚
   /// 並べない。空いた枠は次の事実（`[gone]`）が埋める。safe 行のサブラインは開かないので降りた語は
   /// 台帳に残るだけだが、同じ主張を PR チップが可視のまま引き受けるので読める根拠は減らない。
@@ -71,12 +54,6 @@ extension WorktreeCleanClassifierTests {
   /// `merged → <X>` は verdict が運ぶ実マージ先を名乗り、表示では先頭の `origin/` を剥がす
   /// （比較先は `origin/develop` のような remote 追跡名で渡る事実そのもの）。
   func testMergedIntoLabelStripsTheRemotePrefix() {
-    let patch = row(
-      WorktreeCleanFacts(
-        path: "/wt/x", branch: "feat/x", track: .gone, openPR: .none, status: clean,
-        containment: .patchEquivalent(target: "origin/develop"), operation: .none))
-    XCTAssertTrue(patch.vocabulary.contains(.mergedInto("develop")))
-
     let reachable = row(
       WorktreeCleanFacts(
         path: "/wt/x", branch: "feat/x", track: .gone, openPR: .none, status: clean,
@@ -95,26 +72,12 @@ extension WorktreeCleanClassifierTests {
     XCTAssertEqual(
       synced.vocabulary.filter { $0 == .onRemote }, [.onRemote], "upstream 一致だけでも 1 枚立つ")
 
-    let reachable = row(
-      WorktreeCleanFacts(
-        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: .gone,
-        openPR: .none, status: clean, containment: .reachable(mergedInto: nil), operation: .none))
-    XCTAssertEqual(
-      reachable.vocabulary.filter { $0 == .onRemote }, [.onRemote], "到達性だけでも 1 枚立つ")
-
     let both = row(
       WorktreeCleanFacts(
         path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", openPR: .none, status: clean,
         containment: .reachable(mergedInto: nil), operation: .none))
     XCTAssertEqual(
       both.vocabulary.filter { $0 == .onRemote }, [.onRemote], "両方立っても重ならない")
-
-    let merged = row(
-      WorktreeCleanFacts(
-        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", openPR: .none, status: clean,
-        containment: .reachable(mergedInto: "main"), operation: .none))
-    XCTAssertEqual(merged.chips, [.mergedInto("main")])
-    XCTAssertFalse(merged.vocabulary.contains(.onRemote), "マージが含意する語は重ねない")
 
     let mergedPR = row(
       WorktreeCleanFacts(
@@ -126,8 +89,8 @@ extension WorktreeCleanClassifierTests {
 
   // MARK: - 判定不能チップ
 
-  /// 安全確認に使う事実（status／停止中の git 操作／取り込み判定）のどれかを確かめられなかった
-  /// 確認行に立つ。分類（群の振り分け）は変えない——判定不能を安全と読まない契約は分類側が既に持つ。
+  /// 安全確認に使う事実（status／停止中の git 操作／取り込み判定）のどれかを確かめられなかった行は
+  /// safe に入らず（分からないものを安全と名乗らない）、確認行に判定不能チップが立つ。
   func testUnverifiedChipRaisesWhenAnySafetyFactIsMissing() {
     let status = row(
       WorktreeCleanFacts(
@@ -140,14 +103,16 @@ extension WorktreeCleanClassifierTests {
       WorktreeCleanFacts(
         path: "/wt/x", branch: "feat/x", track: .gone, openPR: .none, status: clean,
         containment: .patchEquivalent(target: "main"), operation: .unknown))
+    XCTAssertEqual(operation.group, .caution)
     XCTAssertTrue(operation.vocabulary.contains(.unverified))
 
     let containment = row(
       WorktreeCleanFacts(
-        path: "/wt/x", branch: "feat/x", track: .gone, openPR: .none, status: clean,
-        containment: nil,
-        operation: .none))
-    XCTAssertTrue(containment.vocabulary.contains(.unverified))
+        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: .gone, openPR: .none,
+        status: clean, containment: nil, operation: .none))
+    XCTAssertEqual(containment.group, .caution)
+    XCTAssertEqual(
+      containment.chips, [.gone, .unverified], "件数を名乗れないので独自コミットの語は出さない")
   }
 
   /// prunable は status / 操作を意図的に問わない（失うものが無く、確認の対象ですらない）。

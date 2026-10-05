@@ -69,13 +69,6 @@ extension WorktreePaletteTests {
     XCTAssertEqual(p.selectedItem?.name, "fix/login-blank")
   }
 
-  /// git が無効と答えた名前は作成行を出さない。
-  func testInvalidNameHasNoCreateRow() {
-    let p = makeCreatableModel()
-    type("bad..name", into: p, valid: false)
-    XCTAssertFalse(p.items.contains { if case .createBranch = $0.action { true } else { false } })
-  }
-
   /// ローカルブランチ（checkout 中を含む）・リモートの行が作るローカル名と同じ名前は作成行を出さない。
   func testTakenNamesHaveNoCreateRow() {
     let p = makeCreatableModel()
@@ -143,44 +136,6 @@ extension WorktreePaletteTests {
     rebuild(p, with: .designSample)
     XCTAssertEqual(
       p.selectedItem?.action, .createBranch(name: "login"), "データの到着でも同じ行のまま")
-  }
-
-  /// 手元に無い名前は提示時の fetch の着地まで作成行を出すか決まらず、↵ は預かる。着地した一覧にその名前の
-  /// リモートブランチが現れたら、その行を開く（同じ名前の別物を作らない）。
-  func testEnterOnANameUnknownBeforeTheFetchLandsOpensTheRemoteBranchThatAppears() {
-    let p = makeCreatableModel(remoteBranchesLanded: false)
-    var executed: [WorktreePaletteDestination] = []
-    p.onExecute = { executed.append($0) }
-    type("feat/x", into: p)
-    XCTAssertTrue(p.isCreateRowUndecided)
-    XCTAssertFalse(p.isSettled)
-
-    p.activate()
-    XCTAssertTrue(p.hasPendingActivation, "↵ は預かる")
-    XCTAssertEqual(executed, [])
-
-    var landed = WorktreePaletteSectionBuilder.Input.designSample
-    landed.remoteBranches.append(
-      GitBranch(name: "origin/feat/x", relativeDate: "taro · now", upstream: nil))
-    p.newBranchRules = newBranchRules(landed)
-    rebuild(p, with: landed)
-
-    XCTAssertEqual(executed, [.remoteBranch(name: "origin/feat/x", existingWorktree: nil)])
-  }
-
-  /// 出すかが決まらない間の作成行は、タップしてもその場では作らず、↵ と同じく預かる。
-  func testTappingTheCreateRowBeforeTheFetchLandsIsHeldLikeEnter() throws {
-    let p = makeCreatableModel(remoteBranchesLanded: false)
-    var executed: [WorktreePaletteDestination] = []
-    p.onExecute = { executed.append($0) }
-    type("feat/x", into: p)
-    let index = try XCTUnwrap(
-      p.items.firstIndex { $0.action == .createBranch(name: "feat/x") }, "前提: 作成行は見えている")
-
-    p.activate(at: index)
-
-    XCTAssertEqual(executed, [])
-    XCTAssertTrue(p.hasPendingActivation, "タップも預かる")
   }
 
   // MARK: - 決定

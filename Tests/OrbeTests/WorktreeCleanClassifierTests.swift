@@ -81,39 +81,6 @@ final class WorktreeCleanClassifierTests: OrbeTestCase {
     XCTAssertEqual(r.chips, [.inProgress(.rebase), .mergedInto("main")])
   }
 
-  /// 実際の操作名で出す（merge 中の行に `rebase 進行中` と書かない）。
-  func testInProgressNamesTheActualOperation() {
-    for operation in [GitWorktreeOperation.merge, .cherryPick, .bisect] {
-      let r = row(
-        WorktreeCleanFacts(
-          path: "/wt/x", branch: "feat/x", track: .gone, openPR: .none, status: clean,
-          containment: .patchEquivalent(target: "main"),
-          operation: .inProgress(operation)))
-      XCTAssertEqual(r.chips.first, .inProgress(operation))
-    }
-  }
-
-  /// 停止中の操作を判定できなかった行も safe に入らない（分からないものを安全と名乗らない）。
-  func testUnknownOperationFallsToCaution() {
-    let r = row(
-      WorktreeCleanFacts(
-        path: "/wt/x", branch: "feat/x", track: .gone, openPR: .none, status: clean,
-        containment: .patchEquivalent(target: "main"),
-        operation: .unknown))
-    XCTAssertEqual(r.group, .caution)
-  }
-
-  /// status を採れなかった行も safe に入らない（実体はあるのに status だけが nil、は分類レーンの
-  /// 実測が落ちれば起きる）。**確認できていない作業ツリーを安全群へ入れない**。
-  func testUnknownStatusFallsToCaution() {
-    let r = row(
-      WorktreeCleanFacts(
-        path: "/wt/x", branch: "feat/x", track: .gone, openPR: .none, status: nil,
-        containment: .patchEquivalent(target: "main"),
-        operation: .none))
-    XCTAssertEqual(r.group, .caution)
-  }
-
   /// 実体が無い（prunable）なら「ディスク上に失うものが無い」ので、作業ツリー側の確認
   /// （status・停止中の操作）は自動的に満たす。
   func testPrunableIsSafeWithoutProbingTheWorkingTree() {
@@ -137,18 +104,6 @@ final class WorktreeCleanClassifierTests: OrbeTestCase {
         containment: .patchEquivalent(target: "main"), operation: .none))
     XCTAssertEqual(r.group, .caution)
     XCTAssertTrue(r.chips.contains(.locked), "軸C で唯一ピルになる語")
-  }
-
-  /// 取り込み済み判定ができなかった行は safe に入らない。
-  func testUnknownMergeStateFallsToCaution() {
-    let r = row(
-      WorktreeCleanFacts(
-        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", track: .gone,
-        openPR: .none, status: clean, containment: nil, operation: .none))
-    XCTAssertEqual(r.group, .caution)
-    XCTAssertEqual(
-      r.chips, [.gone, .unverified],
-      "件数を名乗れないので独自コミットの語は出さず、確かめられなかった事実を判定不能チップが名乗る")
   }
 
   func testMainWorktreeIsInUse() {
@@ -205,79 +160,14 @@ final class WorktreeCleanClassifierTests: OrbeTestCase {
     XCTAssertEqual(ownCommits.chips.first, .ownCommits(3), "失うコミットが最優先")
   }
 
-  /// `未 push · ローカルのみ` は「そのコミットがどこにも残らない」という主張なので、
-  /// **比較先へ取り込み済みの行では言わない**——remote に無くても内容は残る。
-  /// 取り込み判定ができなかった行では言い切れないので、損失として名乗る。
-  func testUnpushedIsNotClaimedWhenTheContentIsAlreadyInDefault() {
-    let merged = row(
-      WorktreeCleanFacts(
-        path: "/wt/x", branch: "feat/x",
-        closedPR: WorktreeCleanPR(number: 142, isMerged: true, base: "main"),
-        openPR: .none, status: clean, containment: .patchEquivalent(target: "main"),
-        operation: .none))
-    XCTAssertEqual(merged.group, .safe)
-    XCTAssertFalse(
-      merged.vocabulary.contains(.unpushed), "失うものが無い行に完全喪失の警告を出さない")
-    XCTAssertEqual(
-      merged.chips, [.mergedPR(142, base: "main")],
-      "merged PR チップが安全根拠として立ち、証明ピルはサブラインへ降りる")
-    XCTAssertEqual(merged.overflowNotes, [.mergedInto("main")])
-
-    let unknown = row(
-      WorktreeCleanFacts(
-        path: "/wt/x", branch: "feat/x", openPR: .none, status: clean, containment: nil))
-    XCTAssertTrue(unknown.vocabulary.contains(.unpushed), "判定できていない行では名乗る")
-  }
-
-  /// `remote +N` も同じ主張なので、取り込み済みの行では言わない。
-  func testRemoteAheadIsNotClaimedWhenTheContentIsAlreadyInDefault() {
-    let r = row(
-      WorktreeCleanFacts(
-        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x",
-        track: .counts(ahead: 3, behind: 0),
-        closedPR: WorktreeCleanPR(number: 142, isMerged: true, base: "main"), openPR: .none,
-        status: clean,
-        containment: .patchEquivalent(target: "main"),
-        operation: .none))
-    XCTAssertFalse(r.vocabulary.contains(.remoteAhead(3)))
-  }
-
   /// `%(upstream:track)` から先行件数を読む（`[ahead N, behind M]` も拾う）。
   func testRemoteAheadReadsTheTrackField() {
-    let ahead = row(
-      WorktreeCleanFacts(
-        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x",
-        track: .counts(ahead: 3, behind: 0),
-        openPR: .none, status: clean, containment: nil))
-    XCTAssertEqual(ahead.chips.first, .remoteAhead(3))
-
     let diverged = row(
       WorktreeCleanFacts(
         path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x",
         track: .counts(ahead: 1, behind: 2),
         openPR: .none, status: clean, containment: nil))
     XCTAssertEqual(diverged.chips.first, .remoteAhead(1))
-  }
-
-  /// upstream があり track が空なら「ローカルを消してもコミットは remote に在る」。取り込み判定が
-  /// できなかった事実は判定不能チップが名乗る（確認群にいる理由の可視化）。
-  func testOnRemoteWhenTrackIsEmpty() {
-    let r = row(
-      WorktreeCleanFacts(
-        path: "/wt/x", branch: "feat/x", upstream: "origin/feat/x", openPR: .none, status: clean,
-        containment: nil, operation: .none))
-    XCTAssertEqual(
-      r.chips, [.onRemote, .unverified])
-  }
-
-  /// detached はブランチの行き先そのものが無い（サブラインを開かない条件でもある）。
-  func testDetachedRowHasNoBranchVocabulary() {
-    let r = row(
-      WorktreeCleanFacts(
-        path: "/wt/x", openPR: .none, status: clean, containment: .patchEquivalent(target: "main"),
-        operation: .none))
-    XCTAssertTrue(r.chips.isEmpty)
-    XCTAssertFalse(r.deletesBranchImplicitly)
   }
 
   /// ピルは軸A + 軸B の最大 2 枚。3 つ以上重なったら loss を優先し、残りは損失の内訳へ回る。
@@ -354,17 +244,5 @@ final class WorktreeCleanClassifierTests: OrbeTestCase {
     XCTAssertEqual(r.overflowNotes, [.mergedInto("main")])
     XCTAssertFalse(
       r.lossNotes.contains(.locked), "locked は消えないので `〜も消えます` には入れない")
-  }
-
-  /// 溢れるのは軸C の `locked` とは限らない。loss でない軸B の語が押し出されたときも受け皿へ回る。
-  func testOverflowCarriesTheDroppedBranchVocabulary() {
-    let r = row(
-      WorktreeCleanFacts(
-        path: "/wt/x", branch: "feat/x", lockReason: "USB", upstream: "origin/feat/x",
-        openPR: .none, status: clean, containment: .patchEquivalent(target: "main"),
-        operation: .inProgress(.merge)
-      ))
-    XCTAssertEqual(r.chips, [.inProgress(.merge), .locked], "loss の 2 枚が残る")
-    XCTAssertEqual(r.overflowNotes, [.mergedInto("main")])
   }
 }

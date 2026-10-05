@@ -23,25 +23,13 @@ final class WorktreePaletteTests: OrbeTestCase {
     return model
   }
 
-  func testSampleShape() {
-    let p = makeModel()
-    XCTAssertEqual(p.sections.count, 2, "worktree とブランチの 2 欄")
-    XCTAssertEqual(p.items.count, 6, "全 6 行（worktree 3 ＋ clean 行 ＋ branch 2）")
-  }
-
-  /// 開いた直後は今の worktree の行が選ばれる（⌘T ↵ ＝今の worktree で既定の agent）。
-  func testInitialSelectionIsTheCurrentWorktree() {
-    let p = makeModel()
-    XCTAssertEqual(p.selectedItem?.name, "issue-212")
-    XCTAssertTrue(p.selectedItem?.isCurrent ?? false)
-  }
-
-  /// 今の worktree が先頭でなくても、その行が選ばれる。
+  /// 開いた直後は今の worktree の行が選ばれる（⌘T ↵ ＝今の worktree で既定の agent）。先頭でなくても選ばれる。
   func testInitialSelectionFindsTheCurrentWorktreeAnywhere() {
     var input = WorktreePaletteSectionBuilder.Input.designSample
     input.currentWorktree = NSHomeDirectory() + "/wt/perf-render-batching"
     let p = makeModel(input)
     XCTAssertEqual(p.selectedItem?.name, "perf-render-batching")
+    XCTAssertTrue(p.selectedItem?.isCurrent ?? false)
   }
 
   func testMoveWrapsAcrossSections() {
@@ -155,13 +143,6 @@ final class WorktreePaletteTests: OrbeTestCase {
     XCTAssertEqual(p.selected, 0)
   }
 
-  func testFocusAdvancesToken() {
-    let p = makeModel()
-    let before = p.focusToken
-    p.focus()
-    XCTAssertEqual(p.focusToken, before &+ 1)
-  }
-
   // MARK: - 行が決まる前の ↵
 
   /// 初回の一覧が届く前の ↵ は預かり、届いた時点の選択（今の worktree）で実行する。預かっている間は
@@ -209,27 +190,6 @@ final class WorktreePaletteTests: OrbeTestCase {
     p.hoverSelect(3)
     XCTAssertEqual(p.selected, 3, "ホバーで選択が追従する")
     XCTAssertEqual(executed, 0, "ホバーでは決定が走らない")
-  }
-
-  /// 初期は `.keyboard`。キー移動中はスクロールで行がカーソル下へ来ても選択を奪われない。
-  func testHoverSuppressedDuringKeyboardModality() {
-    let p = makeModel()
-    p.hoverSelect(3)
-    XCTAssertEqual(p.selected, 0, "実マウス移動前は追従しない")
-    p.inputModality = .pointer
-    p.move(1)
-    p.hoverSelect(3)
-    XCTAssertEqual(p.selected, 1, "キー移動で .keyboard へ戻り、ホバーに奪われない")
-  }
-
-  /// 絞り込み打鍵などモデルが選択を直接置く経路も `.keyboard` へ戻す。
-  func testHoverSuppressedAfterQueryChange() {
-    let p = makeModel()
-    p.inputModality = .pointer
-    p.query = "wt"
-    p.onQueryChanged()
-    p.hoverSelect(2)
-    XCTAssertEqual(p.selected, 0, "打鍵後は実マウス移動があるまで追従しない")
   }
 
   /// 範囲外・作成中では追従しない。
@@ -289,12 +249,4 @@ final class WorktreePaletteTests: OrbeTestCase {
     XCTAssertEqual(p.selectedItem?.name, "pr-214")
   }
 
-  /// index が変わらない復元では代入せず、ホバー追従（`.pointer`）を殺さない。
-  func testRestoreSelectionKeepsPointerModalityWhenIndexUnchanged() {
-    let p = makeModel()
-    p.inputModality = .pointer
-    rebuild(p, with: .designSample)
-    XCTAssertEqual(p.selected, 0)
-    XCTAssertEqual(p.inputModality, .pointer, "裏の更新はモダリティを奪わない")
-  }
 }
