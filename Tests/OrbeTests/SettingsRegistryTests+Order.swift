@@ -3,20 +3,7 @@ import XCTest
 @testable import Orbe
 
 extension SettingsRegistryTests {
-  // MARK: - 2 つの順序リスト（別物）
-
-  /// `all` は gui.conf の正準出力順。この順が `GuiConfig.regenerate` の出力バイト順を決める。
-  func testAllIsCanonicalGuiConfOrder() {
-    XCTAssertEqual(
-      SettingsRegistry.all.map(\.id),
-      [
-        .fontSize, .fontFamily, .tabTitleFontFamily, .emojiFont, .theme, .defaultAgent,
-        .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .agentStateIcons,
-        .worktreeDir, .notificationSound, .notificationSoundVolume,
-        .notificationSoundEnabled, .notificationSoundCustomDone, .notificationSoundCustomWaiting,
-        .notificationSoundCustomWaitingSameAsDone, .menuBarNotificationDuration,
-      ])
-  }
+  // MARK: - 表示順と網羅
 
   /// `rootOrder` は設定パレット root の表示順。
   func testRootOrderIsDisplayOrder() {

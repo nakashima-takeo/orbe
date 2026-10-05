@@ -21,18 +21,12 @@ extension SettingsPaletteTests {
     return { applies }
   }
 
-  /// 先頭（index 0）はスコープ行で既定はグローバル・chevron 無し。
-  func testScopeRowShowsGlobalByDefault() {
-    let p = model()
-    XCTAssertTrue(p.render.rows[0].label.contains("スコープ"))
-    XCTAssertTrue(p.render.rows[0].label.contains("グローバル"))
-    XCTAssertFalse(p.render.rows[0].chevron, "スコープ行は chevron を持たない")
-  }
-
-  /// 先頭（index 0）はスコープ行。↵ でグローバル ⇄ この workspace を反転する。
+  /// 先頭（index 0）はスコープ行で、既定はグローバル・chevron 無し。↵ でグローバル ⇄ この workspace を反転する。
   func testScopeRowTogglesScope() {
     let p = model()
-    XCTAssertTrue(p.render.rows[0].label.contains("グローバル"))
+    XCTAssertTrue(p.render.rows[0].label.contains("スコープ"))
+    XCTAssertTrue(p.render.rows[0].label.contains("グローバル"), "既定はグローバル")
+    XCTAssertFalse(p.render.rows[0].chevron, "スコープ行は chevron を持たない")
     p.render.selected = 0
     p.render.onActivate()  // ↵ で反転
     XCTAssertTrue(p.render.rows[0].label.contains("この workspace"))
@@ -114,16 +108,6 @@ extension SettingsPaletteTests {
     XCTAssertTrue(applies().isEmpty)
   }
 
-  /// 完了条件1: defaultAgent 行も workspace スコープで操作可能（全設定 WS 可・非 scopable 例外の撤廃）。
-  func testDefaultAgentRowOperableInWorkspaceScope() {
-    let p = model(defaultAgent: "claude")
-    XCTAssertTrue(p.render.rows[6].enabled, "global スコープでは操作可")
-    p.render.selected = 0
-    p.render.onActivate()  // workspace スコープへ
-    XCTAssertTrue(p.render.rows[6].enabled, "workspace スコープでも操作可（非 scopable 例外は無い）")
-    XCTAssertEqual(p.render.rows[6].detail, "（継承）", "未上書きは global を継承表示")
-  }
-
   /// 完了条件6: global スコープでアクティブ WS が上書きしている行は、画面に効いている値を注記する。
   func testGlobalScopeAnnotatesWorkspaceOverride() {
     let p = model(
@@ -151,21 +135,17 @@ extension SettingsPaletteTests {
     XCTAssertEqual(p.render.selected, 2, "global 値 Light の行に乗る（WS 上書き Dark ではない）")
   }
 
-  /// workspace スコープでは実効値そのものを出すので「この WS では」注記は出さない（二重表示しない）。
-  func testWorkspaceScopeHasNoOverrideNote() {
-    let p = model(fontSize: 14, scope: .workspace, override: ov { $0[SettingKeys.fontSize] = 16 })
+  /// workspace スコープで開くと、上書き行は上書き値そのもの（「この WS では」注記も継承マークも無し）、
+  /// 上書きの無い行は global 継承を示す。
+  func testWorkspaceScopeShowsOverrideValuesAndInheritsTheRest() {
+    let p = model(
+      fontSize: 14, theme: .light, scope: .workspace,
+      override: ov { $0[SettingKeys.fontSize] = 16 })
     XCTAssertTrue(p.render.rows[1].label.contains("16pt"), "上書き値そのものが現在値")
-    XCTAssertNil(p.render.rows[1].detail)
+    XCTAssertNil(p.render.rows[1].detail, "注記を二重に出さない")
+    XCTAssertFalse(p.render.rows[1].inherited)
+    XCTAssertTrue(p.render.rows[5].label.contains("Light"), "テーマは global 継承")
+    XCTAssertTrue(p.render.rows[5].inherited)
   }
 
-  /// 初期スコープ workspace＋既存 override は上書き値を、未上書き field は global 継承を示す。
-  func testInitialWorkspaceOverrideDisplayed() {
-    let p = model(
-      fontSize: 12, theme: .light, agents: [], scope: .workspace,
-      override: ov { $0[SettingKeys.theme] = .dark })
-    XCTAssertTrue(p.render.rows[5].label.contains("Dark"), "テーマは上書き値")
-    XCTAssertFalse(p.render.rows[5].inherited)
-    XCTAssertTrue(p.render.rows[1].label.contains("12pt"), "フォントサイズは global 継承")
-    XCTAssertTrue(p.render.rows[1].inherited)
-  }
 }

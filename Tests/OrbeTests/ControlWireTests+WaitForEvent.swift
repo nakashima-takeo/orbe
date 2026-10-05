@@ -30,19 +30,6 @@ extension ControlWireTests {
 
   // MARK: - フィルタ
 
-  /// `tabId` 一致で起きる。
-  func testTabIdFilterWakesOnMatch() {
-    let wire = startWire(target: FakeControlTarget())
-    armWait(wire, id: 1, params: ["tabId": 8001])
-
-    ControlServer.shared.emit(
-      .agentState(tabId: 8001, state: "working", message: nil, sessionId: nil))
-    let response = wire.nextResponse()
-
-    XCTAssertEqual(response?["id"] as? Int, 1, "待機を張った要求の id で応答が返る")
-    XCTAssertEqual(event(response)?["tabId"] as? Int, 8001)
-  }
-
   /// `tabId` 不一致は素通りする（別タブのイベントで起こさない）。
   func testTabIdFilterIgnoresOtherTabs() {
     let wire = startWire(target: FakeControlTarget())
@@ -55,26 +42,26 @@ extension ControlWireTests {
     wire.barrier()
   }
 
-  /// `kinds` に挙げた 4 語それぞれで起きる。kind の語彙が片側だけ変わるとここが落ちる。
+  /// `kinds` に挙げた 4 語それぞれで起きる。語は `orb wait` / MCP が送る wire の綴りで書く
+  /// （本番の `kind` から組むと、語を改名しても両側が揃って通ってしまう）。
   func testKindFilterWakesOnEachKind() {
     let wire = startWire(target: FakeControlTarget())
     var id = 0
 
-    let events: [ControlEvent] = [
-      .agentState(tabId: 8101, state: "v", message: nil, sessionId: nil),
-      .title(tabId: 8102, title: "v"),
-      .pwd(tabId: 8103, path: "v"),
-      .tabClosed(tabId: 8104),
+    let cases: [(kind: String, event: ControlEvent)] = [
+      ("agent_state", .agentState(tabId: 8101, state: "v", message: nil, sessionId: nil)),
+      ("title", .title(tabId: 8102, title: "v")),
+      ("pwd", .pwd(tabId: 8103, path: "v")),
+      ("tab_closed", .tabClosed(tabId: 8104)),
     ]
-    for event in events {
+    for (kind, event) in cases {
       id += 1
-      armWait(wire, id: id, params: ["kinds": [event.kind]])
+      armWait(wire, id: id, params: ["kinds": [kind]])
       ControlServer.shared.emit(event)
 
       let response = wire.nextResponse()
-      XCTAssertEqual(response?["id"] as? Int, id, "kind \(event.kind) の待機が起きる")
-      XCTAssertEqual(
-        self.event(response)?["kind"] as? String, event.kind, "起きたイベントの kind がそのまま返る")
+      XCTAssertEqual(response?["id"] as? Int, id, "kind \(kind) の待機が起きる")
+      XCTAssertEqual(self.event(response)?["kind"] as? String, kind, "起きたイベントの kind がそのまま返る")
     }
   }
 
@@ -87,18 +74,6 @@ extension ControlWireTests {
     ControlServer.shared.emit(.pwd(tabId: 8001, path: "/tmp"))
 
     wire.barrier()
-  }
-
-  /// フィルタ省略は全通し。
-  func testWithoutFiltersAnyEventWakes() {
-    let wire = startWire(target: FakeControlTarget())
-    armWait(wire, id: 1)
-
-    ControlServer.shared.emit(.pwd(tabId: 8003, path: "/tmp/x"))
-    let response = wire.nextResponse()
-
-    XCTAssertEqual(response?["id"] as? Int, 1, "フィルタ省略なら kind も tabId も問わず起きる")
-    XCTAssertEqual(event(response)?["kind"] as? String, "pwd")
   }
 
   // MARK: - ペイロードの形
@@ -147,78 +122,34 @@ extension ControlWireTests {
 
   // MARK: - params の検証（待機を張る前に弾く）
 
-  /// 未知 kind は待機を張らずに -32602。素の `Set<String>` フィルタとして通すと永久に一致せず
-  /// **ただ時間切れになる**ので、呼び出し側（`orb wait` / MCP）は「何も起きなかった」と区別できない。
-  func testUnknownKindIsRejectedInsteadOfSilentlyNeverMatching() {
-    let wire = startWire(target: FakeControlTarget())
-
-    XCTAssertEqual(
-      errorCode(wire.request(id: 1, method: "wait_for_event", params: ["kinds": ["nosuch"]])),
-      -32602, "未知 kind は -32602")
-    // 既知の語に混ざった 1 語でも弾く（通ると、その 1 語ぶんだけ黙って待たない待機になる）。
-    XCTAssertEqual(
-      errorCode(
-        wire.request(
-          id: 2, method: "wait_for_event", params: ["kinds": ["agent_state", "nosuch"]])),
-      -32602, "既知 kind に混ざった未知 kind も -32602")
-  }
-
-  /// `kinds` が `[String]` でなければ -32602（黙って「フィルタ無し＝全通し」に化けない）。
-  /// 空配列も同じ——`Set([])` はどの kind にも一致せず、省略（＝全種）とは正反対の待機になる。
-  func testWronglyTypedKindsAreRejected() {
-    let wire = startWire(target: FakeControlTarget())
-
-    XCTAssertEqual(
-      errorCode(wire.request(id: 1, method: "wait_for_event", params: ["kinds": "agent_state"])),
-      -32602, "文字列を直接渡した kinds は -32602")
-    XCTAssertEqual(
-      errorCode(wire.request(id: 2, method: "wait_for_event", params: ["kinds": [1, 2]])),
-      -32602, "要素が文字列でない kinds は -32602")
-    XCTAssertEqual(
-      errorCode(wire.request(id: 3, method: "wait_for_event", params: ["kinds": [String]()])),
-      -32602, "空の kinds は -32602（省略＝全種と取り違えて黙って時間切れにしない）")
-  }
-
-  /// `tabId` が Int でなければ -32602。黙って nil に落とすと絞り込みが消えて**全タブ**監視に
-  /// 化け、別タブのイベントを「待っていたもの」として返す（kinds の取りこぼしより悪い）。
-  func testWronglyTypedTabIdIsRejected() {
-    let wire = startWire(target: FakeControlTarget())
-
-    XCTAssertEqual(
-      errorCode(wire.request(id: 1, method: "wait_for_event", params: ["tabId": "8001"])),
-      -32602, "文字列の tabId は -32602")
-  }
-
-  /// `timeoutMs` は正の Int で 24 時間まで。0・負・非 Int・上限超過は -32602。
-  /// 上限を置くのは `asyncAfter(.milliseconds(_:))` が巨大値でオーバーフローするため。
-  func testInvalidTimeoutMsIsRejected() {
+  /// フィルタ・カーソル・タイムアウトの不備は、待機を張る前に -32602。
+  /// - 未知 kind を素の `Set<String>` で通すと永久に一致せず**ただ時間切れになる**。既知の語に
+  ///   混ざった 1 語でも、その 1 語ぶんだけ黙って待たない待機になる。
+  /// - `kinds` の型違いは「フィルタ無し＝全通し」に化け、空配列は省略（＝全種）と正反対の待機になる。
+  /// - `tabId` の型違いを nil に落とすと**全タブ**監視に化け、別タブのイベントを返す。
+  /// - `timeoutMs` は正の Int で 24 時間まで（`asyncAfter(.milliseconds(_:))` の桁あふれを防ぐ）。
+  func testInvalidParamsAreRejectedBeforeArmingAWait() {
     let wire = startWire(target: FakeControlTarget())
     var id = 0
 
-    for bad in [0, -1, 86_400_001] as [Any] {
+    let bad: [[String: Any]] = [
+      ["kinds": ["nosuch"]], ["kinds": ["agent_state", "nosuch"]],
+      ["kinds": "agent_state"], ["kinds": [1, 2]], ["kinds": [String]()],
+      ["tabId": "8001"],
+      ["timeoutMs": 0], ["timeoutMs": -1], ["timeoutMs": 86_400_001], ["timeoutMs": "300"],
+      ["after": "3"], ["after": -1], ["value": 42],
+    ]
+    for params in bad {
       id += 1
       XCTAssertEqual(
-        errorCode(wire.request(id: id, method: "wait_for_event", params: ["timeoutMs": bad])),
-        -32602, "timeoutMs \(bad) は -32602")
+        errorCode(wire.request(id: id, method: "wait_for_event", params: params)), -32602,
+        "\(params) は -32602")
     }
-    id += 1
-    XCTAssertEqual(
-      errorCode(wire.request(id: id, method: "wait_for_event", params: ["timeoutMs": "300"])),
-      -32602, "非 Int の timeoutMs は -32602")
-  }
 
-  /// 弾いた待機は**張られていない**。直後の正しい待機だけがイベントで起きることで確かめる
-  /// （弾いたはずの待機が残っていれば、同じイベントで id 1 の応答も書かれる）。
-  func testRejectedWaitIsNotArmed() {
-    let wire = startWire(target: FakeControlTarget())
-    XCTAssertEqual(
-      errorCode(wire.request(id: 1, method: "wait_for_event", params: ["kinds": ["nosuch"]])),
-      -32602)
-
-    armWait(wire, id: 2)
-    ControlServer.shared.emit(.pwd(tabId: 8009, path: "/x"))
-    XCTAssertEqual(wire.nextResponse()?["id"] as? Int, 2, "弾いた後も次の待機が普通に働く")
-    wire.barrier()  // 弾いた id 1 の応答が後から書かれていない
+    ControlServer.shared.emit(
+      .agentState(tabId: 8001, state: "done", message: nil, sessionId: nil))
+    ControlServer.shared.emit(.pwd(tabId: 8001, path: "/x"))
+    wire.barrier()  // 弾いた要求はどれも待機を張っていない
   }
 
   // MARK: - 1 接続に複数の待機

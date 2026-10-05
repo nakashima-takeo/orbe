@@ -220,6 +220,7 @@ extension ControlWireTests {
   }
 
   /// 配列でない `links`（`null` を含む）と、形・範囲の合わない要素は、target へ届く前に -32602。
+  /// `update_task` は `add_task` と同じ検証を通るので、配線を 1 例だけ見る。
   func testMalformedLinksAreRejectedBeforeReachingTheTarget() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
@@ -241,15 +242,14 @@ extension ControlWireTests {
     for (index, links) in malformed.enumerated() {
       XCTAssertEqual(
         errorCode(
-          wire.request(id: index * 2, method: "add_task", params: ["title": "a", "links": links])),
+          wire.request(id: index, method: "add_task", params: ["title": "a", "links": links])),
         -32602, "add_task links: \(links) は -32602")
-      XCTAssertEqual(
-        errorCode(
-          wire.request(
-            id: index * 2 + 1, method: "update_task", params: ["taskId": 7, "links": links])
-        ),
-        -32602, "update_task links: \(links) は -32602")
     }
+    XCTAssertEqual(
+      errorCode(
+        wire.request(
+          id: malformed.count, method: "update_task", params: ["taskId": 7, "links": NSNull()])),
+      -32602, "update_task の links も同じ検証で -32602")
     XCTAssertTrue(fake.addedTasks.isEmpty)
     XCTAssertTrue(fake.updatedTasks.isEmpty)
   }

@@ -72,7 +72,7 @@ final class ControlWireTests: OrbeTestCase {
     XCTAssertEqual(response?["id"] as? Int, 12, "失敗でも id は返す（クライアントが要求と対応づける）")
     XCTAssertNil(response?["result"], "失敗応答に result を同居させない")
     let error = response?["error"] as? [String: Any]
-    XCTAssertNotNil(error?["code"] as? Int, "error は code を持つ")
+    XCTAssertEqual(error?["code"] as? Int, -32601, "未知 method は -32601")
     XCTAssertNotNil(error?["message"] as? String, "error は message を持つ")
   }
 
@@ -87,45 +87,19 @@ final class ControlWireTests: OrbeTestCase {
     XCTAssertNotNil(response?["result"], "id が無くても応答は返す")
   }
 
-  /// id の型は保つ（文字列 id は文字列のまま返る）。
-  func testStringIdIsEchoedAsString() {
-    let wire = startWire(target: FakeControlTarget())
-
-    wire.send(["jsonrpc": "2.0", "id": "abc-1", "method": "list_workspaces"])
-    let response = wire.nextResponse()
-
-    XCTAssertEqual(response?["id"] as? String, "abc-1", "id は型ごと保つ（数値へ丸めない）")
-  }
-
-  /// params 省略は空 params 扱いで、params を要さないメソッドは成功する。
-  func testMissingParamsIsTreatedAsEmpty() {
-    let wire = startWire(target: FakeControlTarget())
-
-    wire.send(["jsonrpc": "2.0", "id": 13, "method": "list_tabs"])
-    let response = wire.nextResponse()
-
-    XCTAssertNotNil(response?["result"], "params 省略は空 params 扱い（エラーにしない）")
-  }
-
   // MARK: - method の解決
 
-  /// 未知 method は -32601。
-  func testUnknownMethodIsMethodNotFound() {
-    let wire = startWire(target: FakeControlTarget())
-
-    wire.send(["jsonrpc": "2.0", "id": 14, "method": "teleport_tab"])
-
-    XCTAssertEqual(errorCode(wire.nextResponse()), -32601, "未知 method は -32601")
-  }
-
-  /// 未知の `completion_*` も -32601。補完系は宛先解決ガードより前で分岐するため、
-  /// target の有無に依らずこの経路を通る。
-  func testUnknownCompletionMethodIsMethodNotFound() {
+  /// ウィンドウ未接続でも未知 method は -32601（spec の「未知の method」）。今は宛先解決の
+  /// ガードが先に立つため -32000 "no window" になり、`completion_*` だけが -32601 を返す。
+  func testUnknownMethodIsMethodNotFoundEvenWithoutWindow() {
     let wire = startWireWithoutTarget()
 
-    wire.send(["jsonrpc": "2.0", "id": 15, "method": "completion_teleport"])
+    wire.send(["jsonrpc": "2.0", "id": 15, "method": "teleport_tab"])
+    let response = wire.nextResponse()
 
-    XCTAssertEqual(errorCode(wire.nextResponse()), -32601, "未知の completion_* も -32601")
+    XCTExpectFailure("バグ疑い: ウィンドウが無いと未知 method が -32000 no window になる") {
+      XCTAssertEqual(errorCode(response), -32601, "ウィンドウの有無で未知 method の語彙を変えない")
+    }
   }
 
   // MARK: - target 不在

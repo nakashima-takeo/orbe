@@ -1,169 +1,189 @@
+import GhosttyKit
 import XCTest
 
 @testable import Orbe
 
-/// 生成 conf（GUI が触ったキーだけ sparse に書く。theme 行のみ定数で常時）の検証。
-/// 入力型が `EffectiveSettings` へ替わっても、同一設定値に対する**出力バイトは現行と完全一致**する。
+/// 生成 conf（gui.conf）が libghostty に読まれて、設定パレットで選んだ値が端末に効くことを守る。
+///
+/// 壊れると、パレットで変えた値が端末に効かない・ユーザーの `~/.config/ghostty` を GUI が触っていない
+/// キーまで上書きする・ghostty の解釈できない行が混ざる——どれも ghostty は診断を積むだけで起動し、
+/// 画面の値だけが黙って違う。
 final class GuiConfigTests: OrbeTestCase {
-  private func content() -> String {
-    guard let url = GuiConfig.fileURL else {
-      XCTFail("ハーネスが gui.conf の隔離先を配っていない")
-      return ""
+
+  override func setUpWithError() throws {
+    try super.setUpWithError()
+    // ghostty_config_new は ghostty_init 前に呼ぶと SIGSEGV する。ランタイムを先に起こす。
+    _ = Ghostty.shared
+  }
+
+  // MARK: - libghostty で読んだ実効値
+
+  /// パレットで選んだ値は、ユーザー層に同じキーがあっても libghostty の実効値になる。
+  func testChosenValuesTakeEffectInGhosttyOverUserLayer() throws {
+    try writeUserLayer(
+      "font-size = 12\nbackground-opacity = 0.5\n"
+        + "background-blur = false\ncursor-style-blink = true\n")
+
+    GuiConfig.regenerate(
+      from: settings(
+        fontSize: 17, backgroundOpacity: 37, backgroundBlur: true, cursorStyleBlink: false))
+
+    let cfg = Config.load()
+    defer { ghostty_config_free(cfg) }
+    XCTAssertEqual(get(Float.self, "font-size", cfg), 17)
+    XCTAssertEqual(try XCTUnwrap(get(Double.self, "background-opacity", cfg)), 0.37, accuracy: 1e-9)
+    XCTAssertEqual(get(Int16.self, "background-blur", cfg).map { $0 > 0 }, true, "ブラーが有効")
+    XCTAssertEqual(get(Bool.self, "cursor-style-blink", cfg), false)
+  }
+
+  /// パレットが触っていないキーは gui.conf に出ず、ユーザー層の値がそのまま効く。
+  func testUntouchedKeysLeaveUserLayerInEffect() throws {
+    try writeUserLayer(
+      "font-size = 12\nbackground-opacity = 0.5\n"
+        + "background-blur = true\ncursor-style-blink = false\n")
+
+    GuiConfig.regenerate(from: settings())
+
+    let cfg = Config.load()
+    defer { ghostty_config_free(cfg) }
+    XCTAssertEqual(get(Float.self, "font-size", cfg), 12)
+    XCTAssertEqual(try XCTUnwrap(get(Double.self, "background-opacity", cfg)), 0.5, accuracy: 1e-9)
+    XCTAssertEqual(get(Int16.self, "background-blur", cfg).map { $0 > 0 }, true)
+    XCTAssertEqual(get(Bool.self, "cursor-style-blink", cfg), false)
+  }
+
+  /// 全項目を立てた gui.conf を、libghostty は 1 行も拒まずに読む。
+  func testEveryGeneratedLineIsAcceptedByGhostty() throws {
+    var layer = settingsLayer(
+      fontSize: 14, backgroundOpacity: 80, backgroundBlur: false, cursorStyleBlink: true)
+    layer[SettingKeys.fontFamily] = "Menlo"
+    layer[SettingKeys.emojiFont] = .noto
+    layer[SettingKeys.theme] = .dark
+    GuiConfig.regenerate(from: EffectiveSettings(layer))
+
+    let cfg = Config.load()
+    defer { ghostty_config_free(cfg) }
+    XCTAssertEqual(diagnostics(cfg), [], "gui.conf に ghostty が解釈できない行がある")
+  }
+
+  // MARK: - 常に出る行・出ない行
+
+  /// theme 行はパレットの値に関わらず常に出る（ユーザーの theme 指定を後勝ちで無効化し、端末色を
+  /// Orbe のテーマに固定する）。絵文字の codepoint-map は noto のときだけ出る。
+  func testThemeLineAlwaysPresentAndEmojiMapFollowsMode() throws {
+    for theme in [nil, ThemeMode.auto, .light, .dark] {
+      var layer = SettingsLayer()
+      layer[SettingKeys.theme] = theme
+      GuiConfig.regenerate(from: EffectiveSettings(layer))
+      XCTAssertEqual(try lines(withKey: "theme").count, 1, "theme=\(String(describing: theme))")
     }
-    return (try? String(contentsOf: url, encoding: .utf8)) ?? "<no-file>"
+
+    GuiConfig.regenerate(from: settings())
+    XCTAssertEqual(try lines(withKey: "font-codepoint-map").count, 1, "既定（noto）は map を出す")
+
+    var apple = SettingsLayer()
+    apple[SettingKeys.emojiFont] = .apple
+    GuiConfig.regenerate(from: EffectiveSettings(apple))
+    XCTAssertEqual(try lines(withKey: "font-codepoint-map"), [], "apple は map を出さない")
   }
 
-  /// 明示された項目だけを載せた実効設定（未設定は raw で行を出さない＝既定へ解決しない）。
-  private func eff(
-    fontSize: Int? = nil, theme: ThemeMode? = nil, fontFamily: String? = nil,
-    emojiFont: EmojiFontMode? = nil,
-    backgroundOpacity: Int? = nil, backgroundBlur: Bool? = nil, cursorStyleBlink: Bool? = nil,
-    defaultAgent: String? = nil
+  /// フォントを選ぶと、既定チェーンを空値で reset してから選んだ family を据える（reset が後に来ると
+  /// 選択が消え、reset が無いと選択がチェーン末尾に回って使われない）。
+  func testFontFamilyResetsChainBeforeChosenFamily() throws {
+    var layer = SettingsLayer()
+    layer[SettingKeys.fontFamily] = "SF Mono"
+    GuiConfig.regenerate(from: EffectiveSettings(layer))
+    XCTAssertEqual(
+      try lines(withKey: "font-family"), ["font-family = \"\"", "font-family = SF Mono"])
+  }
+
+  /// gui.conf に出るのはフォント・テーマ・背景・カーソル・絵文字の項目だけ
+  /// （spec platform/config.md）。それ以外の項目は、値を立てても gui.conf を変えない。
+  func testOnlyTerminalAppearanceSettingsChangeGuiConf() throws {
+    let terminalKeys: Set = [
+      "font-size", "font-family", "theme", "emoji-font",
+      "background-opacity", "background-blur", "cursor-style-blink",
+    ]
+    GuiConfig.regenerate(from: settings())
+    let baseline = try content()
+
+    var changing: [String] = []
+    for descriptor in SettingsRegistry.all {
+      GuiConfig.regenerate(
+        from: EffectiveSettings(SettingsLayer([descriptor.id: sampleValue(for: descriptor)])))
+      if try content() != baseline { changing.append(descriptor.key) }
+    }
+    XCTAssertTrue(changing.contains("font-size"), "値を立てても何も変わらない＝検査が空振りしている")
+    XCTAssertEqual(
+      Set(changing).subtracting(terminalKeys), [], "端末の見た目以外の項目が gui.conf に出ている")
+  }
+
+  // MARK: - 補助
+
+  private func settingsLayer(
+    fontSize: Int? = nil, backgroundOpacity: Int? = nil, backgroundBlur: Bool? = nil,
+    cursorStyleBlink: Bool? = nil
+  ) -> SettingsLayer {
+    var layer = SettingsLayer()
+    layer[SettingKeys.fontSize] = fontSize
+    layer[SettingKeys.backgroundOpacity] = backgroundOpacity
+    layer[SettingKeys.backgroundBlur] = backgroundBlur
+    layer[SettingKeys.cursorStyleBlink] = cursorStyleBlink
+    return layer
+  }
+
+  private func settings(
+    fontSize: Int? = nil, backgroundOpacity: Int? = nil, backgroundBlur: Bool? = nil,
+    cursorStyleBlink: Bool? = nil
   ) -> EffectiveSettings {
-    var l = SettingsLayer()
-    l[SettingKeys.fontSize] = fontSize
-    l[SettingKeys.theme] = theme
-    l[SettingKeys.fontFamily] = fontFamily
-    l[SettingKeys.emojiFont] = emojiFont
-    l[SettingKeys.backgroundOpacity] = backgroundOpacity
-    l[SettingKeys.backgroundBlur] = backgroundBlur
-    l[SettingKeys.cursorStyleBlink] = cursorStyleBlink
-    l[SettingKeys.defaultAgent] = defaultAgent
-    return EffectiveSettings(l)
+    EffectiveSettings(
+      settingsLayer(
+        fontSize: fontSize, backgroundOpacity: backgroundOpacity, backgroundBlur: backgroundBlur,
+        cursorStyleBlink: cursorStyleBlink))
   }
 
-  /// 全 nil でも常時 emit される 2 行（正準順: emoji-font の font-codepoint-map → theme 定数行）。
-  /// emoji-font 行は実効既定 noto の map（単一出所）、theme 行はユーザー `~/.config/ghostty` の
-  /// theme 指定を層3後勝ちで無効化する定数。
-  private let constLines =
-    "font-codepoint-map = \(EmojiPresentationRanges.confValue)=Noto Color Emoji\n"
-    + "theme = light:OrbeLight,dark:OrbeDark\n"
-
-  /// fontFamily 選択時に吐く font-family ブロック（reset＋選択）。
-  private func fontBlock(_ family: String) -> String {
-    [
-      "font-family = \"\"",
-      "font-family = \(family)",
-    ].map { $0 + "\n" }.joined()
+  /// その項目の値域に収まる、何か 1 つの値（gui.conf に出るかどうかは値の有無で決まる）。
+  private func sampleValue(for descriptor: SettingDescriptor) -> SettingValue {
+    switch descriptor.domain {
+    case .intRange(let range, _, _): return .int(range.lowerBound)
+    case .toggle: return .bool(false)
+    case .enumeration(let values): return .string(values().last ?? "sample")
+    case .stringMap: return .stringMap(["file": "/tmp/sample.wav"])
+    case .pathTemplate: return .string("~/worktrees/{slug}")
+    }
   }
 
-  func testFontSizeOnly() {
-    GuiConfig.regenerate(from: eff(fontSize: 14))
-    XCTAssertEqual(content(), "font-size = 14\n" + constLines)
+  private func writeUserLayer(_ text: String) throws {
+    let url = try XCTUnwrap(Config.userFileURLOverride)
+    try text.write(to: url, atomically: true, encoding: .utf8)
   }
 
-  /// theme 定数行・emoji-font 行は設定値（auto/dark/light・未設定）に関わらず常時出る。
-  func testThemeConstantLineRegardlessOfMode() {
-    GuiConfig.regenerate(from: eff())
-    XCTAssertEqual(content(), constLines, "全 nil でも常時 emit の 2 行は出る（空ファイルにならない）")
-    GuiConfig.regenerate(from: eff(theme: .dark))
-    XCTAssertEqual(content(), constLines, "dark でも同一の定数行")
-    GuiConfig.regenerate(from: eff(theme: .auto))
-    XCTAssertEqual(content(), constLines, "auto 明示でも同一の定数行")
+  private func content() throws -> String {
+    try String(contentsOf: guiConfFile(), encoding: .utf8)
   }
 
-  /// fontFamily 選択時は 2 行（reset＋選択）を吐く。空白入り family もクォート無し literal で 2 行目に載る。
-  func testFontFamilyOnly() {
-    GuiConfig.regenerate(from: eff(fontFamily: "SF Mono"))
-    XCTAssertEqual(content(), fontBlock("SF Mono") + constLines)
+  private func lines(withKey key: String) throws -> [String] {
+    try content().split(separator: "\n").map(String.init).filter { $0.hasPrefix("\(key) =") }
   }
 
-  /// font-family ブロック（2 行）は font-size の次・emoji-font/theme 定数行の前に並ぶ（正準順）。
-  func testCanonicalOrderFontSizeFamilyTheme() {
-    GuiConfig.regenerate(from: eff(fontSize: 14, theme: .dark, fontFamily: "Menlo"))
-    XCTAssertEqual(content(), "font-size = 14\n" + fontBlock("Menlo") + constLines)
+  /// `ghostty_config_get` は書き込むバイト数を型で決めるため、キーごとの型を誤るとメモリを壊す。
+  /// font-size は f32・background-opacity は f64・background-blur は i16・cursor-style-blink は bool。
+  /// 値が無い（optional が未設定）ときは nil。
+  private func get<T: Numeric>(_ type: T.Type, _ key: String, _ cfg: ghostty_config_t) -> T? {
+    var value: T = 0
+    let ok = key.withCString { ghostty_config_get(cfg, &value, $0, UInt(key.utf8.count)) }
+    return ok ? value : nil
   }
 
-  /// emoji-font=apple では map 行そのものが消える（libghostty が macOS で必ず fallback へ挿す
-  /// Apple Color Emoji がそのまま描くため、行を足す必要が無い）。theme 定数行だけが残る。
-  func testEmojiFontAppleOmitsMapLine() {
-    GuiConfig.regenerate(from: eff(fontSize: 14, emojiFont: .apple))
-    XCTAssertEqual(
-      content(), "font-size = 14\ntheme = light:OrbeLight,dark:OrbeDark\n")
+  private func get(_ type: Bool.Type, _ key: String, _ cfg: ghostty_config_t) -> Bool? {
+    var value = false
+    let ok = key.withCString { ghostty_config_get(cfg, &value, $0, UInt(key.utf8.count)) }
+    return ok ? value : nil
   }
 
-  /// fontFamily=nil（（既定に戻す））で再生成すると font-family 2 行が消え、他キーは残る。
-  func testFontFamilyResetRemovesLineKeepsOthers() {
-    GuiConfig.regenerate(from: eff(fontSize: 14, fontFamily: "Menlo"))
-    XCTAssertEqual(content(), "font-size = 14\n" + fontBlock("Menlo") + constLines)
-    GuiConfig.regenerate(from: eff(fontSize: 14, fontFamily: nil))
-    XCTAssertEqual(content(), "font-size = 14\n" + constLines, "font-family 行が消え font-size は残る")
-  }
-
-  /// ドメインB の defaultAgent 等は生成 conf に出さない（ドメインA のキーだけ）。
-  func testIgnoresNonDomainAFields() {
-    GuiConfig.regenerate(from: eff(fontSize: 16, defaultAgent: "claude"))
-    XCTAssertEqual(content(), "font-size = 16\n" + constLines)
-  }
-
-  /// background-opacity は percent を /100 して 2 桁固定で書く（既定 90→0.90・端数も 2 桁）。
-  func testBackgroundOpacityLine() {
-    GuiConfig.regenerate(from: eff(backgroundOpacity: 90))
-    XCTAssertEqual(content(), constLines + "background-opacity = 0.90\n")
-  }
-
-  /// 境界値: 20%→0.20・100%→1.00。
-  func testBackgroundOpacityBoundaries() {
-    GuiConfig.regenerate(from: eff(backgroundOpacity: 20))
-    XCTAssertEqual(content(), constLines + "background-opacity = 0.20\n")
-    GuiConfig.regenerate(from: eff(backgroundOpacity: 100))
-    XCTAssertEqual(content(), constLines + "background-opacity = 1.00\n")
-  }
-
-  /// backgroundOpacity=nil（GUI 未介入）では行を出さない（他キーは残る）。
-  func testBackgroundOpacityNilOmitsLine() {
-    GuiConfig.regenerate(from: eff(fontSize: 14, backgroundOpacity: nil))
-    XCTAssertEqual(content(), "font-size = 14\n" + constLines, "backgroundOpacity 未設定は行を出さない")
-  }
-
-  /// background-blur は background-opacity の直後・cursor-style-blink の前（正準順）。
-  func testBackgroundBlurOrderBetweenOpacityAndCursorBlink() {
-    GuiConfig.regenerate(
-      from: eff(backgroundOpacity: 90, backgroundBlur: true, cursorStyleBlink: true))
-    XCTAssertEqual(
-      content(),
-      constLines + "background-opacity = 0.90\nbackground-blur = true\ncursor-style-blink = true\n")
-  }
-
-  /// background-blur は true/false をそのまま行に書く。
-  func testBackgroundBlurLine() {
-    GuiConfig.regenerate(from: eff(backgroundBlur: true))
-    XCTAssertEqual(content(), constLines + "background-blur = true\n")
-    GuiConfig.regenerate(from: eff(backgroundBlur: false))
-    XCTAssertEqual(content(), constLines + "background-blur = false\n")
-  }
-
-  /// backgroundBlur=nil（GUI 未介入）では行を出さない（他キーは残る）。
-  func testBackgroundBlurNilOmitsLine() {
-    GuiConfig.regenerate(from: eff(fontSize: 14, backgroundBlur: nil))
-    XCTAssertEqual(content(), "font-size = 14\n" + constLines, "backgroundBlur 未設定は行を出さない")
-  }
-
-  /// cursor-style-blink は正準順の末尾（… → background-opacity → background-blur → cursor-style-blink）。
-  func testCursorStyleBlinkOrderIsLast() {
-    GuiConfig.regenerate(
-      from: eff(
-        fontSize: 14, theme: .dark, fontFamily: "Menlo", backgroundOpacity: 90,
-        cursorStyleBlink: true)
-    )
-    XCTAssertEqual(
-      content(),
-      "font-size = 14\n" + fontBlock("Menlo") + constLines
-        + "background-opacity = 0.90\ncursor-style-blink = true\n"
-    )
-  }
-
-  /// cursor-style-blink は true/false をそのまま行に書く。
-  func testCursorStyleBlinkLine() {
-    GuiConfig.regenerate(from: eff(cursorStyleBlink: true))
-    XCTAssertEqual(content(), constLines + "cursor-style-blink = true\n")
-    GuiConfig.regenerate(from: eff(cursorStyleBlink: false))
-    XCTAssertEqual(content(), constLines + "cursor-style-blink = false\n")
-  }
-
-  /// cursorStyleBlink=nil（GUI 未介入）では行を出さない（他キーは残る）。
-  func testCursorStyleBlinkNilOmitsLine() {
-    GuiConfig.regenerate(from: eff(fontSize: 14, cursorStyleBlink: nil))
-    XCTAssertEqual(content(), "font-size = 14\n" + constLines, "cursorStyleBlink 未設定は行を出さない")
+  private func diagnostics(_ cfg: ghostty_config_t) -> [String] {
+    (0..<ghostty_config_diagnostics_count(cfg)).map {
+      String(cString: ghostty_config_get_diagnostic(cfg, $0).message)
+    }
   }
 }

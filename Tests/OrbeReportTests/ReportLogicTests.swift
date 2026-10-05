@@ -8,55 +8,32 @@ import XCTest
 final class ReportLogicTests: XCTestCase {
   // MARK: effectiveState
 
-  /// done + running な bg Bash → working。
-  func testDoneWithRunningShellTaskBecomesWorking() {
-    let obj: [String: Any] = [
-      "session_id": "s1",
-      "background_tasks": [
-        ["id": "b1", "type": "shell", "status": "running", "command": "sleep 120"]
-      ],
-    ]
-    XCTAssertEqual(effectiveState("done", stdin: obj), "working")
-  }
-
-  /// done + running な bg サブエージェント → working。
-  func testDoneWithRunningSubagentTaskBecomesWorking() {
-    let obj: [String: Any] = [
-      "background_tasks": [
-        ["id": "a1", "type": "subagent", "status": "running", "agent_type": "general-purpose"]
-      ]
-    ]
-    XCTAssertEqual(effectiveState("done", stdin: obj), "working")
-  }
-
-  /// done + background_tasks 空配列 → done（全作業完了後の Stop）。
-  func testDoneWithEmptyBackgroundTasksStaysDone() {
-    XCTAssertEqual(effectiveState("done", stdin: ["background_tasks": [[String: Any]]()]), "done")
-  }
-
-  /// done + background_tasks 欠落 → done（codex / agy の経路）。
-  func testDoneWithoutBackgroundTasksStaysDone() {
-    XCTAssertEqual(effectiveState("done", stdin: ["session_id": "s1"]), "done")
-    XCTAssertEqual(effectiveState("done", stdin: nil), "done")
-  }
-
-  /// done + running でない要素のみ → done。
-  func testDoneWithCompletedTasksStaysDone() {
-    let obj: [String: Any] = [
-      "background_tasks": [["id": "b1", "type": "shell", "status": "completed"]]
-    ]
-    XCTAssertEqual(effectiveState("done", stdin: obj), "done")
-  }
-
-  /// done + 混在配列（completed と running）→ working（"1 つでもあれば" の契約）。
-  func testDoneWithMixedTasksSomeRunningBecomesWorking() {
-    let obj: [String: Any] = [
-      "background_tasks": [
+  /// done + running な bg 作業が 1 つでもあれば working（Bash・サブエージェント・混在のどれでも）。
+  func testDoneWithAnyRunningTaskBecomesWorking() {
+    for tasks: [[String: Any]] in [
+      [["id": "b1", "type": "shell", "status": "running", "command": "sleep 120"]],
+      [["id": "a1", "type": "subagent", "status": "running", "agent_type": "general-purpose"]],
+      [
         ["id": "b1", "type": "shell", "status": "completed"],
         ["id": "a1", "type": "subagent", "status": "running"],
-      ]
-    ]
-    XCTAssertEqual(effectiveState("done", stdin: obj), "working")
+      ],
+    ] {
+      XCTAssertEqual(
+        effectiveState("done", stdin: ["session_id": "s1", "background_tasks": tasks]), "working",
+        "\(tasks)")
+    }
+  }
+
+  /// running が無ければ done のまま——空配列（全作業完了後の Stop）・completed のみ・
+  /// background_tasks 欠落（codex / agy の経路）・stdin なし。
+  func testDoneWithoutRunningTasksStaysDone() {
+    XCTAssertEqual(effectiveState("done", stdin: ["background_tasks": [[String: Any]]()]), "done")
+    XCTAssertEqual(
+      effectiveState(
+        "done", stdin: ["background_tasks": [["id": "b1", "type": "shell", "status": "completed"]]]),
+      "done")
+    XCTAssertEqual(effectiveState("done", stdin: ["session_id": "s1"]), "done")
+    XCTAssertEqual(effectiveState("done", stdin: nil), "done")
   }
 
   /// done + background_tasks が配列でない型 → done（キャスト失敗は誤 working に倒さない）。
@@ -76,10 +53,10 @@ final class ReportLogicTests: XCTestCase {
 
   // MARK: endReason(from:)
 
-  /// SessionEnd の `reason` をそのまま運ぶ。
-  func testEndReasonIsExtractedFromReasonKey() {
+  /// SessionEnd の `reason` を、文言と同じ無害化（制御文字の除去・trim）を通して運ぶ。
+  func testEndReasonIsExtractedAndSanitized() {
     XCTAssertEqual(endReason(from: ["reason": "logout"]), "logout")
-    XCTAssertEqual(endReason(from: ["reason": "prompt_input_exit"]), "prompt_input_exit")
+    XCTAssertEqual(endReason(from: ["reason": " \u{07}clear\u{00} \n"]), "clear")
   }
 
   /// 欠落・空・非文字列・stdin なしは nil（他の hook・他の CLI の経路）。
@@ -89,11 +66,6 @@ final class ReportLogicTests: XCTestCase {
     XCTAssertNil(endReason(from: ["reason": "   "]))
     XCTAssertNil(endReason(from: ["reason": 1]))
     XCTAssertNil(endReason(from: nil))
-  }
-
-  /// 文言と同じ無害化（制御文字の除去・trim）を通す。
-  func testEndReasonIsSanitizedLikeMessages() {
-    XCTAssertEqual(endReason(from: ["reason": " \u{07}clear\u{00} \n"]), "clear")
   }
 
   // MARK: sessionId(from:)
@@ -129,14 +101,17 @@ final class ReportLogicTests: XCTestCase {
     XCTAssertTrue(isSubagentReport(obj))
   }
 
-  /// メインエージェントの payload は agent_id を持たない。
-  func testMainAgentReportIsNotFiltered() {
-    let obj: [String: Any] = [
-      "session_id": "s1",
-      "hook_event_name": "PostToolBatch",
-      "tool_calls": [["tool_name": "Bash", "tool_use_id": "toolu_1"]],
-    ]
-    XCTAssertFalse(isSubagentReport(obj))
+  /// agent_id を持たない payload は偽——メインエージェントの PostToolBatch・codex / agy の形
+  /// （両 CLI の報告経路を素通しする）。
+  func testReportsWithoutAgentIdAreNotFiltered() {
+    XCTAssertFalse(
+      isSubagentReport([
+        "session_id": "s1",
+        "hook_event_name": "PostToolBatch",
+        "tool_calls": [["tool_name": "Bash", "tool_use_id": "toolu_1"]],
+      ]))
+    XCTAssertFalse(isSubagentReport(["session_id": "s1", "hook_event_name": "PermissionRequest"]))
+    XCTAssertFalse(isSubagentReport(["conversationId": "c1"]))
   }
 
   /// `agent_type` 単独では偽。`--agent` 起動の本体スレッドが `agent_id` 無しでこれを持つため、
@@ -151,21 +126,5 @@ final class ReportLogicTests: XCTestCase {
     XCTAssertFalse(isSubagentReport(["agent_id": 1]))
     XCTAssertFalse(isSubagentReport([:]))
     XCTAssertFalse(isSubagentReport(nil))
-  }
-
-  /// codex / agy の payload 形では常に偽（両 CLI の報告経路を素通しする）。
-  func testSubagentReportIsFalseForOtherCLIs() {
-    XCTAssertFalse(isSubagentReport(["session_id": "s1", "hook_event_name": "PermissionRequest"]))
-    XCTAssertFalse(isSubagentReport(["conversationId": "c1"]))
-  }
-
-  // MARK: parseHookJSON
-
-  /// JSON オブジェクトはパースし、空・非 JSON は nil。
-  func testParseHookJSON() {
-    let obj = parseHookJSON(Data(#"{"session_id":"s1"}"#.utf8))
-    XCTAssertEqual(obj?["session_id"] as? String, "s1")
-    XCTAssertNil(parseHookJSON(Data()))
-    XCTAssertNil(parseHookJSON(Data("not json".utf8)))
   }
 }

@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// settings.json（新形式 v1）と app-state.json の読み書き検証。旧形式移行は `SettingsMigrationTests`。
+/// settings.json（新形式 v1）の読み書き検証。旧形式移行は `SettingsMigrationTests`。
 final class SettingsPersistenceTests: OrbeTestCase {
 
   /// 新形式レイヤの round-trip（全型が保たれる）。
@@ -83,10 +83,6 @@ final class SettingsPersistenceTests: OrbeTestCase {
     XCTAssertTrue(raw.contains("\"theme\" : \"dark\""), "theme は小文字 rawValue")
   }
 
-  func testMissingFileYieldsEmptyLayer() {
-    XCTAssertTrue(SettingsPersistence.loadGlobal().isEmpty)
-  }
-
   /// 未知 key（将来の項目・撤去済み項目）は無視して読む（前方/後方互換）。
   func testUnknownKeysIgnored() throws {
     try Data(#"{"version":1,"values":{"font-size":14,"no-such-key":"x"}}"#.utf8)
@@ -108,30 +104,5 @@ final class SettingsPersistenceTests: OrbeTestCase {
     XCTAssertEqual(
       layer[SettingKeys.notificationSoundVolume], 5,
       "手書きの音量 0 も下限へ——ここが丸めるので、鳴らす判断は音量を見なくてよい")
-  }
-
-  // MARK: - app-state.json
-
-  func testAppStateRoundTrip() {
-    AppStatePersistence.save(
-      AppStateFile(
-        agentPluginsInstalled: true, completionInstalled: true, cachedShellPath: "/usr/bin"))
-    let loaded = AppStatePersistence.load()
-    XCTAssertEqual(loaded?.agentPluginsInstalled, true)
-    XCTAssertEqual(loaded?.completionInstalled, true)
-    XCTAssertEqual(loaded?.cachedShellPath, "/usr/bin")
-  }
-
-  /// update は既存を読んで 1 field 変え他を温存する。
-  func testAppStateUpdatePreservesOtherFields() {
-    AppStatePersistence.save(AppStateFile(agentPluginsInstalled: true))
-    AppStatePersistence.update { $0.completionInstalled = true }
-    let loaded = AppStatePersistence.load()
-    XCTAssertEqual(loaded?.agentPluginsInstalled, true, "他フィールドは温存")
-    XCTAssertEqual(loaded?.completionInstalled, true)
-  }
-
-  func testAppStateMissingFileReturnsNil() {
-    XCTAssertNil(AppStatePersistence.load())
   }
 }

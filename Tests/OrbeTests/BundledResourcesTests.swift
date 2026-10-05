@@ -36,15 +36,9 @@ final class BundledResourcesTests: OrbeTestCase {
     assertNothingResolves("同梱物が無いのに所在を返した利用側がある")
   }
 
-  /// 完全な同梱レイアウトを指せば、全利用側がその root 配下の絶対パスへ解決する。
-  /// 各相対パスは `scripts/build-app.sh` が `Contents/Resources/` へ置く配置と同じ。
-  func testCompleteLayoutResolvesEveryConsumerUnderRoot() throws {
-    let root = try makeBundleLayout(named: "app")
-    BundledResources.root = root
-    assertEverythingResolves(under: root)
-  }
-
-  /// root を別の完全レイアウトへ差し替えると、解決先が新しい root 配下へ移る。
+  /// 完全な同梱レイアウトを指せば、全利用側がその root 配下の絶対パスへ解決し、root を別の
+  /// レイアウトへ差し替えると解決先も移る。各相対パスは `scripts/build-app.sh` が
+  /// `Contents/Resources/` へ置く配置と同じ。
   /// 解決結果をメモ化・`static let` 化した瞬間にここが落ちる（上位層の注入点が死ぬ）。
   func testSwappingRootMovesEveryResolution() throws {
     let first = try makeBundleLayout(named: "first")

@@ -131,17 +131,6 @@ extension SettingsPaletteTests {
     XCTAssertEqual(p.render.selected, 11)
   }
 
-  /// 一覧は入力欄を持たないので ← も Esc と同じく root へ戻る（保存しない）。
-  func testWorktreeDirPresetLeftReturnsToRoot() {
-    let p = model()
-    drillIntoWorktreeDir(p)
-    let applied = captureApply(p)
-    p.render.onLeft()
-    XCTAssertNil(applied(), "← でも保存しない")
-    XCTAssertNil(p.render.breadcrumb, "root へ戻る")
-    XCTAssertEqual(p.render.selected, 11, "潜った行へ選択を復元")
-  }
-
   /// → は「カスタム…」行だけで潜る（プリセット行の → は潜らない）。
   func testWorktreeDirRightArrowDrillsInOnlyFromCustomRow() {
     let p = model()
@@ -276,15 +265,6 @@ extension SettingsPaletteTests {
     assertVocabularyShown(p)
   }
 
-  /// 未知プレースホルダはその断片つきでエラー理由が読める。
-  func testWorktreeDirUnknownTokenErrorNamesToken() {
-    let p = model()
-    drillIntoCustom(p)
-    p.render.query = "/wt/{branch}/{slug}"
-    p.render.onActivate()
-    XCTAssertEqual(notice(p), "不正なプレースホルダ: {branch}")
-  }
-
   // MARK: - カスタム入力: repo を区別しないテンプレートの警告（保存は通す）
 
   /// 現在値が repo を区別しないなら、打鍵を待たず入場した時点で警告が出る
@@ -311,13 +291,6 @@ extension SettingsPaletteTests {
     p.render.onActivate()
     XCTAssertEqual(applied()?[SettingKeys.worktreeDir], "~/wt/{slug}", "警告しても保存は拒否しない")
     XCTAssertNil(p.render.breadcrumb, "root へ戻る")
-  }
-
-  /// `{repo_path}` は repo 固有の場所なので警告しない（repo 内配置プリセットがこの形）。
-  func testWorktreeDirRepoPathDoesNotWarn() {
-    let p = model(worktreeDir: "{repo_path}/.worktrees/{slug}")
-    drillIntoCustom(p)
-    XCTAssertNil(notice(p))
   }
 
   /// 警告は妥当なテンプレートにだけ出す（打鍵途中の不完全な入力では説明行のみ）。

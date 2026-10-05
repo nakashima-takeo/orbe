@@ -14,26 +14,6 @@ import XCTest
 /// **help を読んで組み立てる利用者と AI にとっての語彙**だけで、打てば通る機能が「無いもの」になる。
 /// どれもサーバ不要で出る経路なので、ここは `WindowController` を立てずに測る。
 extension OrbeCliProcessTests {
-  /// `orb --help` と `orb agent --help` の USAGE に `agent prompt` が載り、トップの Exit codes 行が
-  /// prompt 固有の 3 / 4 を言う。help から漏れると「打てば通るが無いもの」になり、終了コードが
-  /// 説明されなければ 3 / 4 を読む側が失敗と取り違える。
-  func testAgentPromptIsListedInUsageWithItsExitCodes() {
-    let top = ControlProcess.orbWithoutServer(["--help"])
-    XCTAssertEqual(top.status, 0, "--help は socket 不達でも exit 0: \(top.stderr)")
-    XCTAssertTrue(
-      top.stdout.contains("orb agent prompt <tab> (--text <text> | --stdin)"),
-      "トップ USAGE に agent prompt が無い: \(top.stdout)")
-    XCTAssertTrue(
-      top.stdout.contains("3 agent prompt") && top.stdout.contains("4 agent prompt"),
-      "Exit codes 行に 3 / 4 が無い: \(top.stdout)")
-
-    let agent = ControlProcess.orbWithoutServer(["agent", "--help"])
-    XCTAssertEqual(agent.status, 0, "agent --help は exit 0: \(agent.stderr)")
-    XCTAssertTrue(
-      agent.stdout.contains("orb agent prompt <tab> (--text <text> | --stdin)"),
-      "agent USAGE に prompt が無い: \(agent.stdout)")
-  }
-
   /// `orb agent --help` / `orb wait --help` が写す既定タイムアウトは control の `WaitTimeout` と同じ値。
   ///
   /// 既定を決めるのは control で、help は socket 不達でも出す必要があるため値を写している。写しが

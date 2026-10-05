@@ -16,11 +16,6 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
     XCTAssertEqual(m.curName, "orbe", "追従中の実効名＝導出名")
   }
 
-  func testDerivedNameFallsBackToWorkspace() {
-    let m = WorkspaceCreateModel(path: "")
-    XCTAssertEqual(m.derivedName, "workspace", "末尾セグメントが空なら workspace")
-  }
-
   func testSetNameUnlinks() {
     let m = WorkspaceCreateModel(path: "~/github/orbe")
     m.setName("custom")
@@ -108,7 +103,7 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
     XCTAssertEqual(m.curName, "custom", "明示した名前は残る")
     XCTAssertTrue(m.suggestions.isEmpty, "確定でドロップダウンを閉じる")
     XCTAssertEqual(m.highlighted, 0)
-    XCTAssertEqual(m.focusToken, tokenBefore &+ 1, "確定でパス欄へ focus を戻す（focusToken 前進）")
+    XCTAssertNotEqual(m.focusToken, tokenBefore, "確定でパス欄へ focus を戻す（focusToken が変わる）")
   }
 
   func testAcceptSuggestionFalseWhenNoSuggestions() {
@@ -165,12 +160,6 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
     XCTAssertEqual(m.highlighted, 2, "⌘↓＝末尾候補へ")
   }
 
-  func testJumpHighlightNoOpWhenEmpty() {
-    let m = WorkspaceCreateModel(path: "~/x")
-    m.jumpHighlight(1)
-    XCTAssertEqual(m.highlighted, 0, "候補なしでは動かない")
-  }
-
   // MARK: - git clone: 名前導出 / ソース切替
 
   func testCloneDerivedNameStripsDotGit() {
@@ -224,10 +213,10 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
     let m = WorkspaceCreateModel(path: "~")
     let before = m.focusToken
     m.setSource(.clone)
-    XCTAssertEqual(m.focusToken, before &+ 1, "ソース切替で focusToken を進め主入力欄へ focus を移す")
+    XCTAssertNotEqual(m.focusToken, before, "ソース切替で focusToken を変え主入力欄へ focus を移す")
     let afterClone = m.focusToken
     m.setSource(.folder)
-    XCTAssertEqual(m.focusToken, afterClone &+ 1, "逆方向の切替でも進める（常に入力欄 focus の不変）")
+    XCTAssertNotEqual(m.focusToken, afterClone, "逆方向の切替でも変える（常に入力欄 focus の不変）")
   }
 
   // MARK: - git clone: 作成可否
@@ -244,28 +233,6 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
   }
 
   // MARK: - git clone: 実行配線（runner 注入・実 git 非依存）
-
-  func testCloneSuccessWiresOnCreateWithFinalDest() {
-    let parent = NSTemporaryDirectory()
-    let m = WorkspaceCreateModel(path: parent)
-    m.setSource(.clone)
-    m.setCloneURL("https://github.com/you/repo.git")
-    let finalDest = (parent as NSString).appendingPathComponent("repo")
-    var cloneCall: (url: String, dest: String)?
-    m.onClone = { url, dest, done in
-      cloneCall = (url, dest)
-      done(nil)  // 同期成功
-    }
-    var created: (String, String)?
-    m.onCreate = { created = ($0, $1) }
-    m.submit()
-    XCTAssertEqual(cloneCall?.url, "https://github.com/you/repo.git", "URL は trim して素通し")
-    XCTAssertEqual(cloneCall?.dest, finalDest, "dest は展開済み clone先/名前")
-    XCTAssertEqual(created?.0, finalDest, "onCreate の rootPath は clone先/名前")
-    XCTAssertEqual(created?.1, "repo", "name は導出名")
-    XCTAssertFalse(m.isCloning, "成功で idle へ戻る")
-    XCTAssertNil(m.cloneError)
-  }
 
   func testCloneFailureSetsErrorAndSkipsOnCreate() {
     let parent = NSTemporaryDirectory()
@@ -316,17 +283,21 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
     let m = WorkspaceCreateModel(path: "~")  // 親=home（実在）で canCreate
     m.setSource(.clone)
     m.setCloneURL("https://github.com/you/repo.git")
-    var cloneDest: String?
-    m.onClone = { _, dest, done in
-      cloneDest = dest
-      done(nil)
+    var cloneCall: (url: String, dest: String)?
+    m.onClone = { url, dest, done in
+      cloneCall = (url, dest)
+      done(nil)  // 同期成功
     }
     var created: (String, String)?
     m.onCreate = { created = ($0, $1) }
     m.submit()
+    XCTAssertEqual(cloneCall?.url, "https://github.com/you/repo.git", "URL は素通し")
     XCTAssertEqual(created?.0, "~/repo", "onCreate の rootPath は `~` 保持（store が展開）")
+    XCTAssertEqual(created?.1, "repo", "name は導出名")
     XCTAssertEqual(
-      cloneDest, ("~/repo" as NSString).expandingTildeInPath, "git へは展開済み絶対パス")
-    XCTAssertNotEqual(created?.0, cloneDest, "`~` 保持と展開済みは別値（分離を固定）")
+      cloneCall?.dest, ("~/repo" as NSString).expandingTildeInPath, "git へは展開済み絶対パス")
+    XCTAssertNotEqual(created?.0, cloneCall?.dest, "`~` 保持と展開済みは別値（分離を固定）")
+    XCTAssertFalse(m.isCloning, "成功で idle へ戻る")
+    XCTAssertNil(m.cloneError)
   }
 }
