@@ -15,6 +15,7 @@ struct TaskPaletteDetail: View {
       ScrollViewReader { proxy in
         ScrollView {
           VStack(alignment: .leading, spacing: 0) {
+            Color.clear.frame(height: 0).id(Self.top)
             if let primary = task.links.first {
               TaskPrimaryLinkHeading(link: primary)
                 .padding(.bottom, Theme.Space.step)
@@ -60,11 +61,16 @@ struct TaskPaletteDetail: View {
         .onChange(of: model.area) {
           if case .detail(let stop) = model.area { proxy.scrollTo(stop) }
         }
+        // 別のタスクを選んだら先頭から見せる（前のタスクで送った位置のまま、見出しを隠して出さない）。
+        .onChange(of: task.id) { proxy.scrollTo(Self.top, anchor: .top) }
       }
     } else {
       Color.clear
     }
   }
+
+  /// 詳細の先頭（送りの的）。
+  private static let top = "TaskPaletteDetail.top"
 
   private var divider: some View {
     Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)

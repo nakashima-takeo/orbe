@@ -16,7 +16,7 @@ struct TaskPaletteGitHubPane: View {
         ScrollViewReader { proxy in
           ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-              heading(row)
+              heading(row).id(Self.top)
               if let task = row.task {
                 linkedTask(task.id, row: row)
                   .padding(.top, Theme.Space.bar)
@@ -45,12 +45,17 @@ struct TaskPaletteGitHubPane: View {
           .onChange(of: model.area) {
             if case .pane(let stop) = model.area { proxy.scrollTo(stop) }
           }
+          // 別の項目を選んだら先頭から見せる（前の項目で送った位置のまま、見出しを隠して出さない）。
+          .onChange(of: row.id) { proxy.scrollTo(Self.top, anchor: .top) }
         }
       }
     } else {
       Color.clear
     }
   }
+
+  /// 欄の先頭（送りの的）。
+  private static let top = "TaskPaletteGitHubPane.top"
 
   private var divider: some View {
     Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
