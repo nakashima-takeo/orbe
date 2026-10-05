@@ -39,9 +39,14 @@ enum TaskPaletteDrag: Equatable {
       {
         target += 1
       }
-      while target - 1 >= 0, translation <= offset(of: target - 1) + siblings[target - 1].height / 2
-      {
-        target -= 1
+      // 下へ進んだら上へは戻さない。掴んだ行が下の行より高いと、上へのしきい値が下へのしきい値を追い越し、
+      // 進めた分を押し戻してしまう。
+      if target == from {
+        while target - 1 >= 0,
+          translation <= offset(of: target - 1) + siblings[target - 1].height / 2
+        {
+          target -= 1
+        }
       }
       return target
     }
