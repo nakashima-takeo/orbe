@@ -109,7 +109,11 @@ extension TaskPaletteModel {
     case .rightArrow: changeValue(1)
     case .return:
       switch stop {
-      case .field(let field): if field.isText, press.phase == .down { beginEditing() }
+      // ⌘↵ は確定のキーなので編集を始めない（メモを確定した直後の ⌘↵ で、また編集に入らない）。
+      case .field(let field):
+        if field.isText, press.phase == .down, !press.modifiers.contains(.command) {
+          beginEditing()
+        }
       case .agent: if press.phase == .down { focusAgentTab() }
       // 押し続けたキーリピートで、同じページを何度も開かない。
       case .link(let item): if press.phase == .down { openLink(item) }
@@ -166,8 +170,7 @@ extension TaskPaletteModel {
     if Self.isBacktab(press) { return .handled }
     switch press.key {
     case .escape: endEditing(commit: false)
-    case .return where press.modifiers.contains(.command):
-      if press.phase == .down { endEditing(commit: true) }
+    case .return where press.modifiers.contains(.command): endEditing(commit: true)
     case .tab: break
     default: return .ignored
     }
