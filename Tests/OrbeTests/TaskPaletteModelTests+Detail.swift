@@ -198,15 +198,16 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(try storedTask(palette, 1).description, "1 行目\n  2 行目\n")
   }
 
+  /// 1 行の項目の esc は、打った内容を取り消して項目に居たまま編集を終える。
   func testEscapeDiscardsTheEditAndStaysOnTheField() throws {
     let palette = detailOfFirst()
-    edit(palette, .description, "書きかけ")
+    edit(palette, .waiting, "書きかけ")
 
     palette.endEditing(commit: false)
 
-    XCTAssertEqual(try storedTask(palette, 1).description, "")
+    XCTAssertNil(try storedTask(palette, 1).waiting)
     XCTAssertNil(palette.draft)
-    XCTAssertEqual(palette.area, .detail(.field(.description)))
+    XCTAssertEqual(palette.area, .detail(.field(.waiting)))
   }
 
   // MARK: - 別の操作で編集を抜けると確定する
