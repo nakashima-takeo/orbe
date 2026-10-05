@@ -232,6 +232,25 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(opened, [])
   }
 
+  // MARK: - 選ぶ状態の入力欄の →
+
+  /// タスクを選ぶ間、タスクの行を選んでいても入力欄の → は文字のカーソルを進める（詳細へ入らない）。
+  func testRightArrowWhilePickingATaskMovesTheCaretInTheField() throws {
+    let model = GitHub.model([TaskPaletteSamples.task(1, "abc")], issues: [GitHub.issue(5)])
+    let window = mount(model)
+    press(GitHubKey.l, "l", .command, to: window)
+    type("ab", into: window)
+    XCTAssertEqual(model.selectedID, .task(1), "前提: タスクの行を選んでいる")
+    let editor = try XCTUnwrap(window.firstResponder as? NSTextView, "前提: 入力欄の field editor")
+    arrow(Key.left, to: window)
+    XCTAssertEqual(editor.selectedRange().location, 1, "前提: ← でカーソルが戻る")
+
+    arrow(Key.right, to: window)
+
+    XCTAssertEqual(editor.selectedRange().location, 2)
+    XCTAssertEqual(model.area, .list)
+  }
+
   // MARK: - 押し続けた ↵
 
   /// 「さらに」で ↵ を押し続けても、区分が開くだけでタスクは増えない（出てきた項目に自分を足さない）。
