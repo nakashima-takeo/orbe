@@ -87,6 +87,15 @@ extension TaskPaletteModelTests {
       [.header(.issue), .selectable(.item(GitHub.id(5)))], "取得に失敗した区分")
   }
 
+  /// 基点の場所に GitHub のリポジトリが見つからないときの 1 行は、workspace のこととは言わない（基点は
+  /// アクティブタブの cwd）。
+  func testNotFoundSaysNoGitHubRepositoryWithoutNamingTheWorkspace() {
+    let key = TaskPaletteGitHubList.reasonKey(.notFound)
+
+    XCTAssertEqual(LocalizationStore(language: .ja).string(key), "GitHub のリポジトリが見つかりません")
+    XCTAssertEqual(LocalizationStore(language: .en).string(key), "No GitHub repository found")
+  }
+
   // MARK: - タスクにする
 
   /// ↵ で、開いた workspace の未着手のタスクを、右の欄の優先度と期限、その項目を主の結び付きとして足す。

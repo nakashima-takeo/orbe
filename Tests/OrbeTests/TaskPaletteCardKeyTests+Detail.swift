@@ -175,6 +175,18 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.area, .detail(.field(.memo)))
   }
 
+  /// ⌘↵ は確定のキーなので、詳細の文字の項目（編集していない状態）で押しても編集を始めない。
+  func testCommandEnterOnATextFieldDoesNotStartEditing() {
+    let model = model()
+    let window = mount(model)
+
+    for field in [TaskDetailField.title, .memo] {
+      enterDetail(model, at: field, in: window)
+      press(Key.enter, "\r", .command, to: window)
+      XCTAssertNil(model.draft, "\(field)")
+    }
+  }
+
   func testMemoTakesNewlinesWithEnterAndCommitsWithCommandEnter() {
     let model = model()
     let window = mount(model)
