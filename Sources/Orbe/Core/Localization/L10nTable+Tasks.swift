@@ -95,9 +95,7 @@ extension L10n {
     .taskPaletteGitHubGhUnauthed: (
       "gh が認証されていません — gh auth login で認証してください", "gh isn’t signed in — run gh auth login"
     ),
-    .taskPaletteGitHubNotFound: (
-      "この workspace の GitHub のリポジトリが見つかりません", "No GitHub repository found for this workspace"
-    ),
+    .taskPaletteGitHubNotFound: ("GitHub のリポジトリが見つかりません", "No GitHub repository found"),
     .taskPaletteRelationReviewYou: ("レビュー依頼 · あなた宛", "Review requested · you"),
     .taskPaletteRelationReviewTeam: ("レビュー依頼 · @%@ 宛", "Review requested · @%@"),
     .taskPaletteRelationReview: ("レビュー依頼", "Review requested"),
