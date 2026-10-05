@@ -34,7 +34,7 @@ extension L10n {
     .worktreePaletteErrNotGitRepo: (
       "git リポジトリを解決できませんでした", "Couldn't resolve a git repository"
     ),
-    .worktreePaletteSectionNewBranch: ("新しいブランチ", "NEW BRANCH"),
+    .worktreePaletteSectionNewBranch: ("新しいブランチ", "New branch"),
     .worktreePaletteThisDirectory: ("このディレクトリ", "This directory"),
     .worktreePaletteCreateSuffix: ("を作る", "— create"),
     .worktreePaletteNoMatch: (

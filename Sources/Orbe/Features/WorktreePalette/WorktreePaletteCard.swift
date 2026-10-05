@@ -259,7 +259,7 @@ struct WorktreePaletteCard: View {
 
   /// セクション見出し（選択対象外・大文字・極小・letterSpacing 1・muted）。
   private func sectionLabel(_ title: WorktreePaletteSection.Title) -> some View {
-    Text(sectionTitle(title))
+    Text(sectionTitle(title).uppercased())
       .font(Font.theme.sectionLabel)
       .tracking(Theme.Typography.trackingLabel)
       .foregroundStyle(Color.theme.textMuted)
@@ -272,9 +272,9 @@ struct WorktreePaletteCard: View {
     switch title {
     case .newBranch: l10n.string(.worktreePaletteSectionNewBranch)
     case .worktrees(let repository):
-      repository.isEmpty ? "WORKTREES" : "WORKTREES · \(repository.uppercased())"
-    case .branches: "BRANCHES"
-    case .worktreesAndBranches: "WORKTREES・BRANCHES"
+      repository.isEmpty ? "Worktrees" : "Worktrees · \(repository)"
+    case .branches: "Branches"
+    case .worktreesAndBranches: "Worktrees・Branches"
     case .task(let number):
       number.map { l10n.format(.worktreePaletteSectionTask, "#\($0)") }
         ?? l10n.string(.worktreePaletteSectionThisTask)
