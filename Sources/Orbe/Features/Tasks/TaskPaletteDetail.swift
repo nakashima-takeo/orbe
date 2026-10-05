@@ -133,7 +133,7 @@ struct TaskPaletteDetail: View {
         .foregroundStyle(Color.theme.textPrimary)
         .tint(Color.theme.accentPrimary)
         .focused(focus, equals: .edit(field))
-        .onSubmit { model.endEditing(commit: true) }
+        .onSubmitIgnoringKeyRepeat { model.endEditing(commit: true) }
         .onKeyPress { model.handleEditKey($0, composing: IMEComposition.isActive) }
         .opacity(isEditing(field) ? 1 : 0)
         .allowsHitTesting(isEditing(field))

@@ -4,11 +4,10 @@ import SwiftUI
 /// 届かない）。矢印は単一の catch-all で修飾の有無を分ける。日本語入力の変換中（`composing`）は
 /// 入力欄のキーを一切握らず、変換に使わせる。
 extension TaskPaletteModel {
-  /// ヘッダーの入力欄（一覧）。↵ は `onSubmit` が受ける（変換確定の ↵ では発火しない）。`onSubmit` は
-  /// キーリピートでも発火するので、↵ のリピートはここで握り潰す（押し続けて次々に完了にする・タスクにしない）。
+  /// ヘッダーの入力欄（一覧）。↵ は `onSubmit` が受ける（変換確定の ↵ では発火しない。押し続けたキーリピート
+  /// は確定の入口が捨てる——押し続けて次々に完了にする・タスクにしない）。
   func handleFieldKey(_ press: KeyPress, composing: Bool) -> KeyPress.Result {
     guard !composing else { return .ignored }
-    if press.key == .return, press.phase == .repeat { return .handled }
     if Self.isBacktab(press) {
       toggleTab()
       return .handled
@@ -160,16 +159,15 @@ extension TaskPaletteModel {
     return .handled
   }
 
-  /// 詳細の編集欄。1 行の項目の ↵ は `onSubmit` が受け、メモは ↵ を改行に使って ⌘↵ で確定する。
-  /// `onSubmit` はキーリピートでも発火するので、1 行の項目の ↵ のリピートは握り潰す（押し続けて確定と
-  /// 編集の開始を繰り返さない）。メモのリピートは改行として通す。
+  /// 詳細の編集欄。1 行の項目の ↵ は `onSubmit` が受け（押し続けたキーリピートは確定の入口が捨てる——押し
+  /// 続けて確定と編集の開始を繰り返さない）、メモは ↵ を改行に使って（リピートも改行）⌘↵ で確定する。
   func handleEditKey(_ press: KeyPress, composing: Bool) -> KeyPress.Result {
-    guard !composing, let draft else { return .ignored }
+    guard !composing, draft != nil else { return .ignored }
     if Self.isBacktab(press) { return .handled }
     switch press.key {
-    case .return where press.phase == .repeat && draft.field != .memo: break
     case .escape: endEditing(commit: false)
-    case .return where press.modifiers.contains(.command): endEditing(commit: true)
+    case .return where press.modifiers.contains(.command):
+      if press.phase == .down { endEditing(commit: true) }
     case .tab: break
     default: return .ignored
     }
