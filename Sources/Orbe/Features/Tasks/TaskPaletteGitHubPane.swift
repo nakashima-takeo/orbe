@@ -34,7 +34,10 @@ struct TaskPaletteGitHubPane: View {
             .padding(.horizontal, Theme.Space.phrase)
             .padding(.top, Theme.Space.span)
             .padding(.bottom, Theme.Space.span)
-            // 収まる間は欄の高さいっぱいに広げ、ボタン群を下端へ押す。収まらなければ欄ごとスクロールする。
+            // 幅は欄の幅に留める（縦のスクロールは中身の幅を縛らないので、留めないと長い行が欄を押し広げ、
+            // 区切り線と強調の地がカードの端まで伸びる）。収まる間は欄の高さいっぱいに広げ、ボタン群を下端へ
+            // 押す。収まらなければ欄ごとスクロールする。
+            .frame(width: geometry.size.width)
             .frame(minHeight: geometry.size.height, alignment: .top)
           }
           .scrollIndicators(.automatic)
@@ -229,19 +232,25 @@ struct TaskPaletteGitHubPane: View {
     }
   }
 
+  @ViewBuilder private func makeTaskButtons(_ row: TaskPaletteGitHubItemRow) -> some View {
+    TaskPaneButton(key: "↵", title: l10n.string(.taskPaletteMakeTask), primary: true) {
+      model.makeTask(row)
+    }
+    TaskPaneButton(key: "⌘T", title: l10n.string(.taskPaletteMakeTaskOpen)) {
+      model.openWorktreePaletteFromGitHub()
+    }
+  }
+
   private func unlinkedActions(_ row: TaskPaletteGitHubItemRow) -> some View {
     VStack(alignment: .leading, spacing: Theme.Space.beat) {
       Text(l10n.string(.taskPaletteMakeTaskNote))
         .font(Font.theme.codeCompact)
         .foregroundStyle(Color.theme.textMuted)
         .lineLimit(1)
-      HStack(spacing: Theme.Space.beat) {
-        TaskPaneButton(key: "↵", title: l10n.string(.taskPaletteMakeTask), primary: true) {
-          model.makeTask(row)
-        }
-        TaskPaneButton(key: "⌘T", title: l10n.string(.taskPaletteMakeTaskOpen)) {
-          model.openWorktreePaletteFromGitHub()
-        }
+      // 横に並びきらない狭い欄では縦に積む（ボタンの文字は縮めない）。
+      ViewThatFits(in: .horizontal) {
+        HStack(spacing: Theme.Space.beat) { makeTaskButtons(row) }
+        VStack(alignment: .leading, spacing: Theme.Space.beat) { makeTaskButtons(row) }
       }
       divider.padding(.top, Theme.Space.tick)
       Button {
