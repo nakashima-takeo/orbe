@@ -51,7 +51,8 @@ final class GitHubRepoNameTests: OrbeTestCase {
 
   // MARK: - github.com か
 
-  /// github.com・ssh.github.com（443 番の SSH）・SSH の書き方での `github.com-` の別名だけが github.com。
+  /// github.com・ssh.github.com（443 番の SSH）・SSH の書き方での `github.com-` で始まる別名と `.github.com` で
+  /// 終わる別名だけが github.com。
   /// ホスト名の大小文字は問わない。
   func testGitHubDotComHostsAreGitHub() {
     for url in [
@@ -61,6 +62,8 @@ final class GitHubRepoNameTests: OrbeTestCase {
       "ssh://git@github.com:22/o/r.git",
       "ssh://git@ssh.github.com:443/o/r.git",
       "git@github.com-work:o/r.git",
+      "git@work.github.com:o/r.git",
+      "ssh://git@work.github.com/o/r.git",
       "HTTPS://GitHub.COM/o/r",
     ] {
       XCTAssertTrue(GitHubRepoName.isGitHub(remoteURL: url), "\(url) は github.com")
@@ -77,6 +80,7 @@ final class GitHubRepoNameTests: OrbeTestCase {
       "ssh://git@github.company.com:22/o/n.git",
       "https://github.com.evil.example/o/n",
       "https://github.com-work/o/n",
+      "https://work.github.com/o/n",
       "/tmp/github.com/o/r.git",
     ] {
       XCTAssertFalse(GitHubRepoName.isGitHub(remoteURL: url), "\(url) は github.com ではない")
