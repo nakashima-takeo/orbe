@@ -33,12 +33,13 @@ final class TaskPaletteRowsTests: OrbeTestCase {
   }
 
   func input(
-    _ tasks: [TaskItem], query: String = "", scope: TaskPaletteScope = .all,
-    doneExpanded: Bool = false, items: [GitHubItemID: GitHubItemAnswer] = [:],
-    viewerLogin: String? = nil, agents: [String: WorktreeAgentActivity.Agent] = [:]
+    _ tasks: [TaskItem], query: String = "", picking: Bool = false,
+    scope: TaskPaletteScope = .all, doneExpanded: Bool = false,
+    items: [GitHubItemID: GitHubItemAnswer] = [:], viewerLogin: String? = nil,
+    agents: [String: WorktreeAgentActivity.Agent] = [:]
   ) -> TaskPaletteRows.Input {
     TaskPaletteRows.Input(
-      tasks: tasks, query: query, scope: scope, doneExpanded: doneExpanded,
+      tasks: tasks, query: query, picking: picking, scope: scope, doneExpanded: doneExpanded,
       workspaces: workspaces, today: today, timeZone: calendar.timeZone, items: items,
       viewerLogin: viewerLogin, agents: agents)
   }
@@ -71,6 +72,22 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     XCTAssertEqual(rows[3], .sectionHeader(.todo, count: 2))
     XCTAssertEqual(rows[6], .doneHeader(count: 1, expanded: false), "完了は最初は畳まれ、見出しだけが出る")
     XCTAssertEqual(taskIDs(rows), [2, 5, 1, 4], "どの欄でも列の順のまま")
+  }
+
+  /// 掴んで並べ替えられる（取っ手を出す）のは未完了の行だけで、結び付けるタスクを選ぶ間はどの行も
+  /// 並べ替えられない。
+  func testOnlyUnfinishedRowsAreReorderableAndNoneWhilePicking() {
+    func reorderable(picking: Bool) -> [Int: Bool] {
+      let rows = TaskPaletteRows.build(
+        input([task(1, "a", .todo), task(2, "b", .done)], picking: picking, doneExpanded: true))
+      return Dictionary(
+        uniqueKeysWithValues: rows.compactMap {
+          if case .task(let row) = $0 { (row.id, row.reorderable) } else { nil }
+        })
+    }
+
+    XCTAssertEqual(reorderable(picking: false), [1: true, 2: false])
+    XCTAssertEqual(reorderable(picking: true), [1: false, 2: false])
   }
 
   func testExpandedDoneSectionListsDoneTasksUnderTheHeaderInListOrder() {
