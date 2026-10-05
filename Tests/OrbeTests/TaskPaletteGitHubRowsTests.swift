@@ -248,4 +248,14 @@ final class TaskPaletteGitHubRowsTests: OrbeTestCase {
     XCTAssertNil(role(issue(3), login: nil), "自分が分からない")
   }
 
+  /// チーム宛の依頼がある PR は、自分へのレビュー依頼がまだ分からない間は足す役割が決まらない（担当者として
+  /// 書き込まない）。チーム宛の依頼が無い PR は担当者のまま。
+  func testNoSelfRoleForATeamRequestedPullRequestWhileReviewRequestsAreUnknown() {
+    func role(_ item: GitHubOpenItem) -> GitHubSelfRole? {
+      TaskPaletteGitHubRows.selfRole(item, login: me, reviewRequests: nil)
+    }
+
+    XCTAssertNil(role(pr(1, teams: ["o/core"])))
+    XCTAssertEqual(role(pr(2)), .assignee)
+  }
 }
