@@ -89,7 +89,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.selectedID, .task(2))
   }
 
-  /// タスクを選ぶ間は、選ぶこと以外でタスクを変えない（完了・削除・並べ替え・詳細・タブ切替・⌘T）。
+  /// タスクを選ぶ間は、選ぶこと以外でタスクを変えない（完了・削除・並べ替え・ドラッグ・詳細・タブ切替・⌘T）。
   func testPickingATaskCannotChangeTasks() {
     let palette = pickingFromIssueFive()
     var opened: [Int] = []
@@ -99,6 +99,7 @@ extension TaskPaletteModelTests {
     palette.toggleDone(1)
     palette.delete(2)
     palette.reorder(1)
+    drop(palette, 2, by: -1)
     palette.enterDetail()
     palette.toggleTab()
     palette.openWorktreePalette()
