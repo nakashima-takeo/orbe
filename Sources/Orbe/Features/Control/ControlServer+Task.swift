@@ -40,7 +40,7 @@ extension ControlServer {
         if let priority = try p.priority() { draft.priority = priority }
         draft.due = try p.due()?.value
         draft.waitingReason = try p.nullableString("waitingReason")?.value
-        if let memo = try p.optionalString("memo") { draft.memo = memo }
+        if let description = try p.optionalString("description") { draft.description = description }
         if let links = try p.links() { draft.links = links }
         return target.controlAddTask(
           draft, workspaceId: try p.nullableInt("workspaceId"),
@@ -50,7 +50,7 @@ extension ControlServer {
           title: try p.optionalString("title"), status: try p.status(),
           priority: try p.priority(), due: try p.due(),
           waitingReason: try p.nullableString("waitingReason"),
-          memo: try p.optionalString("memo"), links: try p.links())
+          description: try p.optionalString("description"), links: try p.links())
         return target.controlUpdateTask(
           taskId: try p.int("taskId"), update, workspaceId: try p.nullableInt("workspaceId"),
           worktree: try p.nullableString("worktree"))

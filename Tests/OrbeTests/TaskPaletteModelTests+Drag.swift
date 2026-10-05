@@ -88,11 +88,11 @@ extension TaskPaletteModelTests {
 
   func testGrabbingWhileEditingCommitsTheEditAndReturnsToTheList() throws {
     let palette = detailOfFirst()
-    edit(palette, .memo, "掴む前に書いた")
+    edit(palette, .description, "掴む前に書いた")
 
     palette.dragChanged(2, start: grabPoint, translation: -rowHeight)
 
-    XCTAssertEqual(try storedTask(palette, 1).memo, "掴む前に書いた", "編集していたタスクへ書く")
+    XCTAssertEqual(try storedTask(palette, 1).description, "掴む前に書いた", "編集していたタスクへ書く")
     XCTAssertNil(palette.draft)
     XCTAssertEqual(palette.area, .list)
     XCTAssertEqual(palette.selectedID, .task(2))
@@ -208,11 +208,11 @@ extension TaskPaletteModelTests {
     palette.dragChanged(2, start: grabPoint, translation: -rowHeight)
 
     let added = try palette.store.add(TaskDraft(title: "agent が未着手に足した"))
-    var memo = TaskUpdate()
-    memo.memo = "agent が兄弟のメモを書いた"
-    _ = try palette.store.update(1, memo)
+    var update = TaskUpdate()
+    update.description = "agent が兄弟の詳細を書いた"
+    _ = try palette.store.update(1, update)
     palette.reconcile()
-    XCTAssertNotNil(palette.drag.session, "下の欄の変化と兄弟のメモでは捨てない")
+    XCTAssertNotNil(palette.drag.session, "下の欄の変化と兄弟の詳細では捨てない")
 
     palette.dragEnded()
     XCTAssertEqual(order(palette), [2, 1, added.id])

@@ -7,7 +7,7 @@ import XCTest
 /// 画面を閉じる・別の画面へ差し替わるときの打ちかけの編集の確定。
 ///
 /// 壊れると何が起きるか: タブが 0 枚の workspace でタスク画面が開かない。画面で足したタスクが、見ている
-/// workspace ではなく別の workspace に付く。メモを打ちかけのまま esc 以外で画面を閉じたり ⌘⌘ で
+/// workspace ではなく別の workspace に付く。詳細を打ちかけのまま esc 以外で画面を閉じたり ⌘⌘ で
 /// 差し替えたりすると、打った内容が黙って消える。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
@@ -37,13 +37,13 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
     return try XCTUnwrap(wc.model.taskPalette)
   }
 
-  /// メモを打ちかけた状態。
-  private func typeMemo(_ text: String, on palette: TaskPaletteModel) throws -> Int {
-    let item = try palette.store.add(TaskDraft(title: "メモを書く"))
+  /// 詳細を打ちかけた状態。
+  private func typeDescription(_ text: String, on palette: TaskPaletteModel) throws -> Int {
+    let item = try palette.store.add(TaskDraft(title: "詳細を書く"))
     palette.reconcile()
     palette.jump(1)
     palette.enterDetail()
-    palette.tapField(.memo)
+    palette.tapField(.description)
     palette.draftText = text
     return item.id
   }
@@ -129,23 +129,23 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
   func testClosingTheScreenCommitsTheEditInProgress() throws {
     let wc = try launchOnAnEmptyWorkspace()
     let palette = try openTaskPalette(wc)
-    let id = try typeMemo("閉じても残る", on: palette)
+    let id = try typeDescription("閉じても残る", on: palette)
 
     wc.dismissPalette()
 
     XCTAssertEqual(wc.presentedOverlay, .none)
     XCTAssertNil(wc.model.taskPalette)
-    XCTAssertEqual(wc.taskStore.tasks.first { $0.id == id }?.memo, "閉じても残る")
+    XCTAssertEqual(wc.taskStore.tasks.first { $0.id == id }?.description, "閉じても残る")
   }
 
   func testSwappingToTheAttentionPaletteCommitsTheEditInProgress() throws {
     let wc = try launchOnAnEmptyWorkspace()
     let palette = try openTaskPalette(wc)
-    let id = try typeMemo("差し替わっても残る", on: palette)
+    let id = try typeDescription("差し替わっても残る", on: palette)
 
     wc.toggleAttentionPalette()
 
     XCTAssertEqual(wc.presentedOverlay, .attentionPalette)
-    XCTAssertEqual(wc.taskStore.tasks.first { $0.id == id }?.memo, "差し替わっても残る")
+    XCTAssertEqual(wc.taskStore.tasks.first { $0.id == id }?.description, "差し替わっても残る")
   }
 }

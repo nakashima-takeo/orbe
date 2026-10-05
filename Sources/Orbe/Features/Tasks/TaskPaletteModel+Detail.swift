@@ -2,12 +2,12 @@ import Foundation
 
 /// 詳細の項目（上から並ぶ順）。
 enum TaskDetailField: CaseIterable, Equatable, Hashable {
-  case title, status, waiting, priority, due, workspace, memo
+  case title, status, waiting, priority, due, workspace, description
 
   /// ↵ で編集を始める文字の項目。
   var isText: Bool {
     switch self {
-    case .title, .waiting, .due, .memo: true
+    case .title, .waiting, .due, .description: true
     case .status, .priority, .workspace: false
     }
   }
@@ -70,7 +70,7 @@ struct TaskEditDraft: Equatable {
 /// 詳細の操作（項目の移動・選択式の値・文字の項目の編集と確定・結び付きを開く / 外す）。変異はすべて
 /// ストアのメソッドをそのまま呼び、検証はストアに任せる。
 extension TaskPaletteModel {
-  /// 詳細で止まる場所の並び（タイトル → agent → 各結び付き → 結び付ける → ステータス → … → メモ）。
+  /// 詳細で止まる場所の並び（タイトル → agent → 各結び付き → 結び付ける → ステータス → … → 詳細の欄）。
   func detailStops(_ task: TaskItem) -> [TaskDetailStop] {
     [.field(.title)] + (agent(of: task) == nil ? [] : [.agent]) + task.links.map { .link($0.item) }
       + [.addLink] + TaskDetailField.allCases.filter { $0 != .title }.map { .field($0) }
@@ -120,7 +120,7 @@ extension TaskPaletteModel {
       let options: [UUID?] = [nil] + workspaces.all.map(\.id)
       let current = options.firstIndex(of: workspaces.entry(task.workspace)?.id) ?? 0
       setWorkspace(options[(current + direction + options.count) % options.count])
-    case .title, .waiting, .due, .memo:
+    case .title, .waiting, .due, .description:
       return false
     }
     return true
@@ -209,7 +209,7 @@ extension TaskPaletteModel {
     return true
   }
 
-  /// ↵（メモは ⌘↵）で確定、esc で取り消す。確定できない（期限が読めない・ストアが受け付けない）ときは
+  /// ↵（詳細の欄は ⌘↵）で確定、esc で取り消す。確定できない（期限が読めない・ストアが受け付けない）ときは
   /// 理由を出して編集を続け、false を返す。
   @discardableResult func endEditing(commit: Bool) -> Bool {
     guard finishDraft(commit: commit) else { return false }
@@ -258,7 +258,7 @@ extension TaskPaletteModel {
     case .title: task.title
     case .waiting: task.waiting?.reason ?? ""
     case .due: task.due?.text ?? ""
-    case .memo: task.memo
+    case .description: task.description
     case .status, .priority, .workspace: ""
     }
   }
@@ -309,9 +309,9 @@ extension TaskPaletteModel {
         guard due != task.due else { return nil }
         update.due = .set(due)
       }
-    case .memo:
-      guard text != task.memo else { return nil }
-      update.memo = text
+    case .description:
+      guard text != task.description else { return nil }
+      update.description = text
     case .status, .priority, .workspace:
       return nil
     }
@@ -323,7 +323,7 @@ extension TaskPaletteModel {
     case .title: .title
     case .waiting: .waiting
     case .due: .due
-    case .status, .priority, .workspace, .memo: .failed
+    case .status, .priority, .workspace, .description: .failed
     }
   }
 

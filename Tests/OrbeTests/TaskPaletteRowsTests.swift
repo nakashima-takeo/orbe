@@ -27,7 +27,7 @@ final class TaskPaletteRowsTests: OrbeTestCase {
   ) -> TaskItem {
     var item = TaskItem(
       id: id, title: title, status: status, waiting: nil, priority: .medium, due: nil,
-      workspace: nil, memo: "", createdAt: now, createdBy: by)
+      workspace: nil, description: "", createdAt: now, createdBy: by)
     mutate(&item)
     return item
   }

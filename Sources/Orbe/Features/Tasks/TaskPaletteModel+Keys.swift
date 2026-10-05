@@ -109,7 +109,7 @@ extension TaskPaletteModel {
     case .rightArrow: changeValue(1)
     case .return:
       switch stop {
-      // ⌘↵ は確定のキーなので編集を始めない（メモを確定した直後の ⌘↵ で、また編集に入らない）。
+      // ⌘↵ は確定のキーなので編集を始めない（詳細の欄を確定した直後の ⌘↵ で、また編集に入らない）。
       case .field(let field):
         if field.isText, press.phase == .down, !press.modifiers.contains(.command) {
           beginEditing()
@@ -164,7 +164,7 @@ extension TaskPaletteModel {
   }
 
   /// 詳細の編集欄。1 行の項目の ↵ は `onSubmit` が受け（押し続けたキーリピートは確定の入口が捨てる——押し
-  /// 続けて確定と編集の開始を繰り返さない）、メモは ↵ を改行に使って（リピートも改行）⌘↵ で確定する。
+  /// 続けて確定と編集の開始を繰り返さない）、詳細の欄は ↵ を改行に使って（リピートも改行）⌘↵ で確定する。
   func handleEditKey(_ press: KeyPress, composing: Bool) -> KeyPress.Result {
     guard !composing, draft != nil else { return .ignored }
     if Self.isBacktab(press) { return .handled }

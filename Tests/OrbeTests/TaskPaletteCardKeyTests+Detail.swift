@@ -75,16 +75,16 @@ extension TaskPaletteCardKeyTests {
   func testClickingTheFieldFromTheDetailCommitsAndReturnsTheKeysToTheField() throws {
     let model = model()
     let window = mount(model)
-    enterDetail(model, at: .memo, in: window)
+    enterDetail(model, at: .description, in: window)
     press(Key.enter, "\r", to: window)
     type("abc", into: window)
-    XCTAssertNotNil(model.draft, "前提: メモを編集中")
+    XCTAssertNotNil(model.draft, "前提: 詳細を編集中")
     flush(window)
 
     try click(atFieldOf: window)
     type("x", into: window)
 
-    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.memo, "abc", "打った内容は確定して残る")
+    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.description, "abc", "打った内容は確定して残る")
     XCTAssertNil(model.draft)
     XCTAssertEqual(model.area, .list)
     XCTAssertEqual(model.query, "x", "続く打鍵は入力欄に入る")
@@ -137,11 +137,11 @@ extension TaskPaletteCardKeyTests {
     XCTAssertNil(model.draft)
   }
 
-  /// メモの編集中に ↵ を押し続けると、リピートも改行として入る。
-  func testEnterHeldInTheMemoTypesANewlinePerRepeat() {
+  /// 詳細の編集中に ↵ を押し続けると、リピートも改行として入る。
+  func testEnterHeldInTheDescriptionTypesANewlinePerRepeat() {
     let model = model()
     let window = mount(model)
-    enterDetail(model, at: .memo, in: window)
+    enterDetail(model, at: .description, in: window)
 
     press(Key.enter, "\r", to: window)
     type("1", into: window)
@@ -151,15 +151,15 @@ extension TaskPaletteCardKeyTests {
     type("2", into: window)
     press(Key.enter, "\r", .command, to: window)
 
-    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.memo, "1\n\n\n2")
+    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.description, "1\n\n\n2")
   }
 
-  /// メモの ⌘↵ を押し続けても確定は 1 回——リピートだけでは確定せず、確定の後に続くリピートで編集を
+  /// 詳細の ⌘↵ を押し続けても確定は 1 回——リピートだけでは確定せず、確定の後に続くリピートで編集を
   /// 始め直さない。
-  func testCommandEnterHeldInTheMemoCommitsOnce() {
+  func testCommandEnterHeldInTheDescriptionCommitsOnce() {
     let model = model()
     let window = mount(model)
-    enterDetail(model, at: .memo, in: window)
+    enterDetail(model, at: .description, in: window)
     press(Key.enter, "\r", to: window)
     type("1", into: window)
 
@@ -171,8 +171,8 @@ extension TaskPaletteCardKeyTests {
     press(Key.enter, "\r", .command, repeating: true, to: window)
 
     XCTAssertNil(model.draft, "確定した後に編集を始め直さない")
-    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.memo, "1")
-    XCTAssertEqual(model.area, .detail(.field(.memo)))
+    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.description, "1")
+    XCTAssertEqual(model.area, .detail(.field(.description)))
   }
 
   /// ⌘↵ は確定のキーなので、詳細の文字の項目（編集していない状態）で押しても編集を始めない。
@@ -180,17 +180,17 @@ extension TaskPaletteCardKeyTests {
     let model = model()
     let window = mount(model)
 
-    for field in [TaskDetailField.title, .memo] {
+    for field in [TaskDetailField.title, .description] {
       enterDetail(model, at: field, in: window)
       press(Key.enter, "\r", .command, to: window)
       XCTAssertNil(model.draft, "\(field)")
     }
   }
 
-  func testMemoTakesNewlinesWithEnterAndCommitsWithCommandEnter() {
+  func testDescriptionTakesNewlinesWithEnterAndCommitsWithCommandEnter() {
     let model = model()
     let window = mount(model)
-    enterDetail(model, at: .memo, in: window)
+    enterDetail(model, at: .description, in: window)
 
     press(Key.enter, "\r", to: window)
     type("1", into: window)
@@ -198,6 +198,6 @@ extension TaskPaletteCardKeyTests {
     type("2", into: window)
     press(Key.enter, "\r", .command, to: window)
 
-    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.memo, "1\n2")
+    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.description, "1\n2")
   }
 }

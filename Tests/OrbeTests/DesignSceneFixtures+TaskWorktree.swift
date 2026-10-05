@@ -15,7 +15,7 @@ extension DesignSceneFixtures {
       TaskItem(
         id: id, title: title, status: status,
         waiting: waiting.map { TaskItem.Waiting(reason: $0, since: now) }, priority: .medium,
-        due: nil, workspace: nil, memo: "", createdAt: now, createdBy: nil, links: [link],
+        due: nil, workspace: nil, description: "", createdAt: now, createdBy: nil, links: [link],
         worktree: worktree.map(taskWorktree))
     }
     let tasks = [

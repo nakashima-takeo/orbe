@@ -151,7 +151,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
     draft.priority = .high
     draft.due = TaskItem.DueDate("2026-10-06")
     draft.waitingReason = "返事"
-    draft.memo = "一行目\n二行目"
+    draft.description = "一行目\n二行目"
     draft.links = [
       TaskLink(item: try XCTUnwrap(GitHubItemID(repo: "Owner/Name", number: 221)), kind: .issue),
       TaskLink(item: try XCTUnwrap(GitHubItemID(repo: "o/n", number: 214)), kind: .pr),
@@ -165,7 +165,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
     XCTAssertEqual(full["status"] as? String, "in_progress")
     XCTAssertEqual(full["priority"] as? String, "high")
     XCTAssertEqual(full["due"] as? String, "2026-10-06")
-    XCTAssertEqual(full["memo"] as? String, "一行目\n二行目")
+    XCTAssertEqual(full["description"] as? String, "一行目\n二行目")
     let waiting = try XCTUnwrap(full["waiting"] as? [String: Any])
     XCTAssertEqual(waiting["reason"] as? String, "返事")
     XCTAssertEqual(
@@ -185,7 +185,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
     XCTAssertEqual(minimal["taskId"] as? Int, (full["taskId"] as? Int).map { $0 + 1 })
     XCTAssertEqual(minimal["status"] as? String, "todo")
     XCTAssertEqual(minimal["priority"] as? String, "medium")
-    XCTAssertEqual(minimal["memo"] as? String, "")
+    XCTAssertEqual(minimal["description"] as? String, "")
     for key in ["waiting", "due", "workspaceId", "workspaceName", "createdBy", "links"] {
       XCTAssertNil(minimal[key], "無い値はキーごと出さない: \(key)")
     }
@@ -320,7 +320,8 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
   func testLaunchReadsSavedTasksAndResolvesThemToRestoredWorkspaces() throws {
     let saved = TaskItem(
       id: 4, title: "前回のタスク", status: .todo, waiting: nil, priority: .low, due: nil,
-      workspace: backgroundId, memo: "", createdAt: Date(timeIntervalSince1970: 1_800_000_000),
+      workspace: backgroundId, description: "",
+      createdAt: Date(timeIntervalSince1970: 1_800_000_000),
       createdBy: "claude")
     TaskPersistence.save(TasksFile(version: TaskPersistence.version, nextId: 7, tasks: [saved]))
 

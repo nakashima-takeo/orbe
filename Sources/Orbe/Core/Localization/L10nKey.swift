@@ -195,7 +195,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteFieldDue
   case taskPaletteFieldWorkspace
   case taskPaletteFieldAdded
-  case taskPaletteMemoPlaceholder
+  case taskPaletteDescriptionPlaceholder
   case taskPaletteAddReason
   case taskPaletteSetDue
   case taskPaletteClear
@@ -213,7 +213,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteActionEditTitle
   case taskPaletteActionEditWaiting
   case taskPaletteActionEditDue
-  case taskPaletteActionEditMemo
+  case taskPaletteActionEditDescription
   case taskPaletteActionCommit
   case taskPaletteHintDetail
   case taskPaletteHintReorder

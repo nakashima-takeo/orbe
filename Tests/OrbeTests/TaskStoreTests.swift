@@ -59,7 +59,7 @@ final class TaskStoreTests: OrbeTestCase {
     XCTAssertEqual(second.priority, .medium, "優先度の既定は中")
     XCTAssertNil(second.waiting)
     XCTAssertNil(second.due)
-    XCTAssertEqual(second.memo, "")
+    XCTAssertEqual(second.description, "")
   }
 
   func testAddWithWaitingReasonStartsWaiting() throws {
@@ -113,7 +113,7 @@ final class TaskStoreTests: OrbeTestCase {
     let original = try store.add(
       draft("元のタイトル") {
         $0.priority = .low
-        $0.memo = "元のメモ"
+        $0.description = "元の詳細"
       })
 
     let updated = try store.update(
@@ -123,28 +123,28 @@ final class TaskStoreTests: OrbeTestCase {
     XCTAssertEqual(updated.status, .inProgress)
     XCTAssertEqual(updated.due, try due("2026-10-06"))
     XCTAssertEqual(updated.priority, .low, "渡していない項目は変わらない")
-    XCTAssertEqual(updated.memo, "元のメモ", "渡していない項目は変わらない")
+    XCTAssertEqual(updated.description, "元の詳細", "渡していない項目は変わらない")
     XCTAssertEqual(store.tasks, [updated], "返り値と一覧は同じものを見る")
   }
 
-  func testUpdateClearRemovesDueWaitingWorkspaceAndMemo() throws {
+  func testUpdateClearRemovesDueWaitingWorkspaceAndDescription() throws {
     let store = TaskStore()
     let original = try store.add(
       draft("a") {
         $0.due = try? self.due("2026-10-06")
         $0.waitingReason = "返事"
         $0.workspace = UUID()
-        $0.memo = "メモ"
+        $0.description = "詳細"
       })
 
     let cleared = try store.update(
       original.id,
-      TaskUpdate(due: .clear, waitingReason: .clear, memo: "", workspace: .clear))
+      TaskUpdate(due: .clear, waitingReason: .clear, description: "", workspace: .clear))
 
     XCTAssertNil(cleared.due)
     XCTAssertNil(cleared.waiting)
     XCTAssertNil(cleared.workspace)
-    XCTAssertEqual(cleared.memo, "")
+    XCTAssertEqual(cleared.description, "")
   }
 
   func testMarkingDoneClearsWaiting() throws {
@@ -176,7 +176,7 @@ final class TaskStoreTests: OrbeTestCase {
   func testChangingOnlyTheWaitingReasonKeepsWhenTheWaitStarted() throws {
     let waiting = TaskItem(
       id: 1, title: "a", status: .todo, waiting: .init(reason: "返事", since: past),
-      priority: .medium, due: nil, workspace: nil, memo: "", createdAt: past, createdBy: nil)
+      priority: .medium, due: nil, workspace: nil, description: "", createdAt: past, createdBy: nil)
     let store = TaskStore(
       file: TasksFile(version: TaskPersistence.version, nextId: 2, tasks: [waiting]))
 
@@ -257,7 +257,7 @@ final class TaskStoreTests: OrbeTestCase {
         $0.priority = .high
         $0.due = try? self.due("2028-02-29")
         $0.waitingReason = "返事"
-        $0.memo = "一行目\n二行目"
+        $0.description = "一行目\n二行目"
         $0.workspace = workspace
         $0.createdBy = "claude"
       })

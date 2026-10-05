@@ -11,8 +11,8 @@ import XCTest
 /// key window のこの入口へ流す（ここで消費されれば入力欄には届かない）。テストの窓は非アクティブなアプリの
 /// 窓で key window になれず、`NSApp.sendEvent` はこの入口を通らないため、入口を直接叩く。
 ///
-/// 壊れると何が起きるか: 詳細を見ているときや、メモを打っている途中に ⌘T を押しても何も起きない（または
-/// 入力欄に文字として入る）。メモを打ちかけのまま ⌘T を押すと、打った内容が消える。追加の行で ⌘T を
+/// 壊れると何が起きるか: 詳細を見ているときや、詳細を打っている途中に ⌘T を押しても何も起きない（または
+/// 入力欄に文字として入る）。詳細を打ちかけのまま ⌘T を押すと、打った内容が消える。追加の行で ⌘T を
 /// 押しても、タスクが足されないまま ⌘T が開く。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
@@ -96,21 +96,21 @@ final class WindowControllerTaskWorktreePaletteTests: OrbeTestCase {
     assertOpenedTheWorktreePalette(for: task, in: wc)
   }
 
-  func testCommandTWhileEditingTheMemoCommitsItThenOpensTheWorktreePalette() throws {
+  func testCommandTWhileEditingTheDescriptionCommitsItThenOpensTheWorktreePalette() throws {
     let wc = try launch()
     let (palette, task) = try openTaskPalette(wc)
     palette.enterDetail()
-    palette.tapField(.memo)
+    palette.tapField(.description)
     pump()
-    palette.draftText = "打ちかけのメモ"
-    XCTAssertEqual(palette.focusTarget, .edit(.memo))
-    XCTAssertTrue(wc.window.firstResponder is NSText, "前提: 焦点は詳細のメモの編集欄にある")
+    palette.draftText = "打ちかけの詳細"
+    XCTAssertEqual(palette.focusTarget, .edit(.description))
+    XCTAssertTrue(wc.window.firstResponder is NSText, "前提: 焦点は詳細の詳細の編集欄にある")
 
     XCTAssertTrue(try pressCommandT(wc))
 
     assertOpenedTheWorktreePalette(for: task, in: wc)
     XCTAssertEqual(
-      wc.taskStore.tasks.first { $0.id == task.id }?.memo, "打ちかけのメモ", "打っていたメモは確定してから開く")
+      wc.taskStore.tasks.first { $0.id == task.id }?.description, "打ちかけの詳細", "打っていた詳細は確定してから開く")
   }
 
   func testCommandTOnTheAddRowAddsTheTaskThenOpensItsWorktreePalette() throws {

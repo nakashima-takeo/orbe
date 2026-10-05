@@ -32,14 +32,14 @@ extension DesignSceneFixtures {
     func task(
       _ id: Int, _ title: String, _ status: TaskItem.Status = .todo,
       waiting: (String, Int)? = nil, priority: TaskItem.Priority = .medium,
-      due: String? = nil, workspace: UUID? = nil, memo: String = "", by: String? = nil,
+      due: String? = nil, workspace: UUID? = nil, description: String = "", by: String? = nil,
       links: [TaskLink] = [], worktree: String? = nil
     ) -> TaskItem {
       TaskItem(
         id: id, title: title, status: status,
         waiting: waiting.map { TaskItem.Waiting(reason: $0.0, since: daysAgo($0.1)) },
         priority: priority, due: due.flatMap(TaskItem.DueDate.init), workspace: workspace,
-        memo: memo, createdAt: daysAgo(2), createdBy: by, links: links,
+        description: description, createdAt: daysAgo(2), createdBy: by, links: links,
         worktree: worktree.map(taskWorktree))
     }
     let tasks = [

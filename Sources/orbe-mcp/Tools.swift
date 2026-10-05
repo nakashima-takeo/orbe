@@ -268,12 +268,12 @@ let tools: [[String: Any]] = [
     (
       "description",
       "人と agent が共有するタスク一覧を、ユーザーが決めた列の順で返す。各要素は taskId・title・status"
-        + "（todo / in_progress / done）・priority（high / medium / low）・memo・createdAt、あれば waiting"
+        + "（todo / in_progress / done）・priority（high / medium / low）・description・createdAt、あれば waiting"
         + "{reason,since}・due（YYYY-MM-DD）・workspaceId と workspaceName・createdBy（追加した agent）・"
         + "links（結び付いた GitHub の Issue・PR の列 [{kind: issue / pr, repo: owner/name, number}]。先頭が主）・"
         + "worktree（このタスクの作業の場所＝worktree のルートの絶対パス。ディレクトリが無ければ出ない）。"
         + "workspace に付いていないタスク（付き先が削除されたものを含む）は workspaceId を持たない。"
-        + "完了したタスクも削除されるまで残る。memo は人も agent も読む前提の欄。"
+        + "完了したタスクも削除されるまで残る。description は人も agent も読む前提の欄。"
     ),
     ("inputSchema", schema(["workspaceId": intProp("この workspace のタスクだけに絞る")])),
   ]),
@@ -300,7 +300,7 @@ let tools: [[String: Any]] = [
           "priority": strProp("high / medium / low（既定 medium）"),
           "due": strProp("期限（YYYY-MM-DD）"),
           "waitingReason": strProp("何を待っているか（待ちにする場合）"),
-          "memo": strProp("メモ（複数行可。人も agent も読む）"),
+          "description": strProp("詳細（複数行可。人も agent も読む）"),
           "links": taskLinksProp("結び付ける GitHub の Issue・PR（先頭が主）"),
           "worktree": strProp("このタスクの作業の場所（実在するディレクトリの絶対パス）"),
           "workspaceId": [
@@ -333,7 +333,7 @@ let tools: [[String: Any]] = [
           "waitingReason": [
             "type": ["string", "null"], "description": "待ちの理由（null で待ちを外す）",
           ],
-          "memo": strProp("メモ（置き換え）"),
+          "description": strProp("詳細（置き換え）"),
           "links": taskLinksProp("結び付ける GitHub の Issue・PR（丸ごと置き換え。先頭が主。[] で全部外す）"),
           "worktree": [
             "type": ["string", "null"],

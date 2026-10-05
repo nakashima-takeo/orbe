@@ -124,7 +124,7 @@ extension WindowController {
   private func taskJSON(_ task: TaskItem) -> [String: Any] {
     var json: [String: Any] = [
       "taskId": task.id, "title": task.title, "status": task.status.rawValue,
-      "priority": task.priority.rawValue, "memo": task.memo,
+      "priority": task.priority.rawValue, "description": task.description,
       "createdAt": SessionEvent.iso8601(task.createdAt),
     ]
     if let waiting = task.waiting {

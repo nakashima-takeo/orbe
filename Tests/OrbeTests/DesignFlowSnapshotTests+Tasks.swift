@@ -153,7 +153,7 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
-  /// 小さい窓（tasks_small と同じ 800×560）で、詳細を ↓ で下端のメモまで進むと、強調された項目が見える位置へ
+  /// 小さい窓（tasks_small と同じ 800×560）で、詳細を ↓ で下端の詳細まで進むと、強調された項目が見える位置へ
   /// 送られ、esc → ↓ で次のタスクを選ぶと詳細が先頭から見える、までを撮る。
   func testTaskPaletteSmallDetail() throws {
     let palette = DesignSceneFixtures.taskPaletteModel()
@@ -168,7 +168,7 @@ extension DesignFlowSnapshotTests {
           }
         ),
         (
-          "memo",
+          "description",
           { _ in
             palette.moveField(1); palette.moveField(1)
           }

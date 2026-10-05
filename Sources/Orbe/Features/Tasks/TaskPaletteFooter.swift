@@ -8,7 +8,7 @@ struct TaskPaletteFooter: View {
 
   var body: some View {
     HStack(spacing: Theme.Space.step) {
-      description
+      actionLine
         .font(Font.theme.meta)
         .lineLimit(1)
         .truncationMode(.tail)
@@ -23,12 +23,13 @@ struct TaskPaletteFooter: View {
     .frame(height: 44)
   }
 
-  @ViewBuilder private var description: some View {
+  @ViewBuilder private var actionLine: some View {
     if let error = model.error {
       Text(l10n.string(errorKey(error))).foregroundStyle(Color.theme.danger)
     } else if let draft = model.draft {
       PaletteActionLine(
-        key: draft.field == .memo ? "⌘↵" : "↵", template: l10n.string(.taskPaletteActionCommit),
+        key: draft.field == .description ? "⌘↵" : "↵",
+        template: l10n.string(.taskPaletteActionCommit),
         slots: [])
     } else if model.pick != nil {
       TaskPalettePickAction(model: model)
@@ -121,7 +122,7 @@ struct TaskPaletteFooter: View {
     case .priority: .taskPaletteActionChangePriority
     case .due: .taskPaletteActionEditDue
     case .workspace: .taskPaletteActionChangeWorkspace
-    case .memo: .taskPaletteActionEditMemo
+    case .description: .taskPaletteActionEditDescription
     }
   }
 

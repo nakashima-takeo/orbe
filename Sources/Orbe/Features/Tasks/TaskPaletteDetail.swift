@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// タスク画面の右の詳細。選んでいるのがタスクの行のときだけ、そのタスクを出す。
-/// 文字の項目（タイトル・待ち・期限・メモ）の入力欄は常に mount しておき、編集中でない間は値の表示に
+/// 文字の項目（タイトル・待ち・期限・詳細）の入力欄は常に mount しておき、編集中でない間は値の表示に
 /// 見せる——新しく mount した入力欄は `@FocusState` を取りこぼしてキーが届かなくなるため、焦点の宛先は
 /// いつも在る形にする（ヘッダーの入力欄と同じ規約）。
 struct TaskPaletteDetail: View {
@@ -46,8 +46,8 @@ struct TaskPaletteDetail: View {
             divider
             addedRow(task)
             divider
-            memoField(task)
-              .id(TaskDetailStop.field(.memo))
+            descriptionField(task)
+              .id(TaskDetailStop.field(.description))
               .padding(.top, Theme.Space.bar)
             TaskPaletteDetailActions(model: model, task: task)
               .padding(.top, Theme.Space.bar)
@@ -256,24 +256,27 @@ struct TaskPaletteDetail: View {
     .frame(height: 38)
   }
 
-  /// メモ。複数行で、↵ は改行、⌘↵ で確定。
-  private func memoField(_ task: TaskItem) -> some View {
+  /// 詳細の欄。複数行で、↵ は改行、⌘↵ で確定。
+  private func descriptionField(_ task: TaskItem) -> some View {
     ZStack(alignment: .topLeading) {
       TextEditor(text: $model.draftText)
         .font(Font.theme.taskText)
         .foregroundStyle(Color.theme.textPrimary)
         .tint(Color.theme.accentPrimary)
         .scrollContentBackground(.hidden)
-        .focused(focus, equals: .edit(.memo))
+        .focused(focus, equals: .edit(.description))
         .onKeyPress { model.handleEditKey($0, composing: IMEComposition.isActive) }
-        .opacity(isEditing(.memo) ? 1 : 0)
-        .allowsHitTesting(isEditing(.memo))
-      if !isEditing(.memo) {
-        Text(task.memo.isEmpty ? l10n.string(.taskPaletteMemoPlaceholder) : task.memo)
-          .font(Font.theme.taskText)
-          .foregroundStyle(task.memo.isEmpty ? Color.theme.textMuted : Color.theme.textPrimary)
-          .padding(.leading, 5)
-          .frame(maxWidth: .infinity, alignment: .topLeading)
+        .opacity(isEditing(.description) ? 1 : 0)
+        .allowsHitTesting(isEditing(.description))
+      if !isEditing(.description) {
+        Text(
+          task.description.isEmpty
+            ? l10n.string(.taskPaletteDescriptionPlaceholder) : task.description
+        )
+        .font(Font.theme.taskText)
+        .foregroundStyle(task.description.isEmpty ? Color.theme.textMuted : Color.theme.textPrimary)
+        .padding(.leading, 5)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
       }
     }
     .padding(Theme.Space.beat)
@@ -285,11 +288,12 @@ struct TaskPaletteDetail: View {
     .overlay(
       RoundedRectangle(cornerRadius: Theme.Radius.md)
         .strokeBorder(
-          isFocused(.memo) || isEditing(.memo) ? Color.theme.accentPrimary.opacity(0.6) : .clear,
+          isFocused(.description) || isEditing(.description)
+            ? Color.theme.accentPrimary.opacity(0.6) : .clear,
           lineWidth: Theme.Stroke.hairline)
     )
     .contentShape(Rectangle())
-    .onTapGesture { if !isEditing(.memo) { model.tapField(.memo) } }
+    .onTapGesture { if !isEditing(.description) { model.tapField(.description) } }
   }
 
   private func days(since: Date) -> String {

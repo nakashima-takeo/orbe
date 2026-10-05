@@ -16,7 +16,7 @@ struct TaskItem: Codable, Equatable, Identifiable {
   /// 指していても書き換えない）。
   var workspace: UUID?
   /// 人も agent も読む前提の自由記述（複数行可）。
-  var memo: String
+  var description: String
   let createdAt: Date
   /// 追加した agent の command 名。人が足したタスクは nil。
   let createdBy: String?
@@ -95,7 +95,8 @@ struct TaskItem: Codable, Equatable, Identifiable {
 
 extension TaskItem {
   private enum CodingKeys: String, CodingKey {
-    case id, title, status, waiting, priority, due, workspace, memo, createdAt, createdBy, links,
+    case id, title, status, waiting, priority, due, workspace, description, createdAt, createdBy,
+      links,
       worktree, worktreeBranch, unlinked
   }
 
@@ -109,7 +110,7 @@ extension TaskItem {
     priority = try c.decode(Priority.self, forKey: .priority)
     due = try c.decodeIfPresent(DueDate.self, forKey: .due)
     workspace = try c.decodeIfPresent(UUID.self, forKey: .workspace)
-    memo = try c.decode(String.self, forKey: .memo)
+    description = try c.decode(String.self, forKey: .description)
     createdAt = try c.decode(Date.self, forKey: .createdAt)
     createdBy = try c.decodeIfPresent(String.self, forKey: .createdBy)
     links = try c.decodeIfPresent([TaskLink].self, forKey: .links) ?? []
@@ -128,7 +129,7 @@ extension TaskItem {
     try c.encode(priority, forKey: .priority)
     try c.encodeIfPresent(due, forKey: .due)
     try c.encodeIfPresent(workspace, forKey: .workspace)
-    try c.encode(memo, forKey: .memo)
+    try c.encode(description, forKey: .description)
     try c.encode(createdAt, forKey: .createdAt)
     try c.encodeIfPresent(createdBy, forKey: .createdBy)
     try c.encode(links, forKey: .links)
@@ -227,7 +228,7 @@ struct TaskDraft {
   var priority: TaskItem.Priority = .medium
   var due: TaskItem.DueDate?
   var waitingReason: String?
-  var memo = ""
+  var description = ""
   var workspace: UUID?
   var createdBy: String?
   var links: [TaskLink] = []
@@ -252,7 +253,7 @@ struct TaskUpdate {
   var priority: TaskItem.Priority?
   var due: ClearableValue<TaskItem.DueDate>?
   var waitingReason: ClearableValue<String>?
-  var memo: String?
+  var description: String?
   var workspace: ClearableValue<UUID>?
   /// 丸ごと置き換える。`[]` で全部外す。
   var links: [TaskLink]?
@@ -260,6 +261,6 @@ struct TaskUpdate {
 
   var isEmpty: Bool {
     title == nil && status == nil && priority == nil && due == nil && waitingReason == nil
-      && memo == nil && workspace == nil && links == nil && worktree == nil
+      && description == nil && workspace == nil && links == nil && worktree == nil
   }
 }

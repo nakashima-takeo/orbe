@@ -226,7 +226,7 @@ extension OrbeCliProcessTests {
       // なく「値が空いている」として落ちる（どちらも exit 2 で、後者の方が誤りの所在に近い）。
       (["tab", "list", "--workspace", "   "], "--workspace requires an <id>"),
       (["agent", "spawn", "--workspace"], "--workspace requires an <id>"),
-      (["task", "add", "a", "--memo", ""], "--memo requires a <text>"),
+      (["task", "add", "a", "--description", ""], "--description requires a <text>"),
       (["task", "add", "a", "--waiting", "--due", "2026-10-06"], "--waiting requires a <reason>"),
       (["task", "set", "1", "--due"], "--due requires a <YYYY-MM-DD> date"),
       (["task", "set", "1", "--title", " "], "--title requires a <title>"),

@@ -50,7 +50,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.area, .detail(.field(.title)))
 
     for _ in 0..<10 { palette.moveField(1) }
-    XCTAssertEqual(palette.area, .detail(.field(.memo)))
+    XCTAssertEqual(palette.area, .detail(.field(.description)))
   }
 
   // MARK: - 選択式の値
@@ -189,36 +189,36 @@ extension TaskPaletteModelTests {
     XCTAssertNil(try storedTask(palette, 1).due)
   }
 
-  func testMemoKeepsLinesAndSurroundingWhitespaceAsTyped() throws {
+  func testDescriptionKeepsLinesAndSurroundingWhitespaceAsTyped() throws {
     let palette = detailOfFirst()
-    edit(palette, .memo, "1 行目\n  2 行目\n")
+    edit(palette, .description, "1 行目\n  2 行目\n")
 
     palette.endEditing(commit: true)
 
-    XCTAssertEqual(try storedTask(palette, 1).memo, "1 行目\n  2 行目\n")
+    XCTAssertEqual(try storedTask(palette, 1).description, "1 行目\n  2 行目\n")
   }
 
   func testEscapeDiscardsTheEditAndStaysOnTheField() throws {
     let palette = detailOfFirst()
-    edit(palette, .memo, "書きかけ")
+    edit(palette, .description, "書きかけ")
 
     palette.endEditing(commit: false)
 
-    XCTAssertEqual(try storedTask(palette, 1).memo, "")
+    XCTAssertEqual(try storedTask(palette, 1).description, "")
     XCTAssertNil(palette.draft)
-    XCTAssertEqual(palette.area, .detail(.field(.memo)))
+    XCTAssertEqual(palette.area, .detail(.field(.description)))
   }
 
   // MARK: - 別の操作で編集を抜けると確定する
 
   func testClickingAnotherRowCommitsTheEditToTheTaskBeingEdited() throws {
     let palette = detailOfFirst()
-    edit(palette, .memo, "残したいメモ")
+    edit(palette, .description, "残したい詳細")
 
     palette.tapRow(.task(2))
 
-    XCTAssertEqual(try storedTask(palette, 1).memo, "残したいメモ", "編集していたタスクへ書く")
-    XCTAssertEqual(try storedTask(palette, 2).memo, "")
+    XCTAssertEqual(try storedTask(palette, 1).description, "残したい詳細", "編集していたタスクへ書く")
+    XCTAssertEqual(try storedTask(palette, 2).description, "")
     XCTAssertNil(palette.draft)
     XCTAssertEqual(palette.area, .list)
     XCTAssertEqual(palette.selectedID, .task(2))
@@ -228,34 +228,34 @@ extension TaskPaletteModelTests {
     let palette = detailOfFirst()
     edit(palette, .title, "直した名前")
 
-    palette.tapField(.memo)
+    palette.tapField(.description)
 
     XCTAssertEqual(try storedTask(palette, 1).title, "直した名前")
-    XCTAssertEqual(palette.draft?.field, .memo)
+    XCTAssertEqual(palette.draft?.field, .description)
   }
 
   func testSwitchingScopeOrTabCommitsTheEdit() throws {
     let palette = detailOfFirst()
-    edit(palette, .memo, "範囲で抜ける")
+    edit(palette, .description, "範囲で抜ける")
     palette.toggleScope()
-    XCTAssertEqual(try storedTask(palette, 1).memo, "範囲で抜ける")
+    XCTAssertEqual(try storedTask(palette, 1).description, "範囲で抜ける")
 
     palette.toggleScope()
     palette.enterDetail()
-    edit(palette, .memo, "タブで抜ける")
+    edit(palette, .description, "タブで抜ける")
     palette.toggleTab()
-    XCTAssertEqual(try storedTask(palette, 1).memo, "タブで抜ける")
+    XCTAssertEqual(try storedTask(palette, 1).description, "タブで抜ける")
   }
 
   /// 画面を閉じる・別の画面へ差し替わる・アプリの終了は、どれもこの 1 本を通る。
   func testLeavingEditingCommitsWhatWasTyped() throws {
     let palette = detailOfFirst()
-    edit(palette, .memo, "閉じても残る")
+    edit(palette, .description, "閉じても残る")
 
     palette.leaveEditing()
 
-    XCTAssertEqual(try storedTask(palette, 1).memo, "閉じても残る")
-    XCTAssertEqual(TaskStore().tasks.first?.memo, "閉じても残る", "即時に保存される")
+    XCTAssertEqual(try storedTask(palette, 1).description, "閉じても残る")
+    XCTAssertEqual(TaskStore().tasks.first?.description, "閉じても残る", "即時に保存される")
   }
 
   /// 読めない期限のまま別の行をクリックすると、確定できない入力は捨てられる。そのとき理由は
@@ -295,7 +295,7 @@ extension TaskPaletteModelTests {
 
   func testTaskDeletedByAgentWhileEditingDiscardsTheDraftAndReturnsToTheList() throws {
     let palette = detailOfFirst()
-    edit(palette, .memo, "書きかけ")
+    edit(palette, .description, "書きかけ")
 
     try palette.store.delete(1)
     palette.reconcile()
@@ -303,17 +303,17 @@ extension TaskPaletteModelTests {
     XCTAssertNil(palette.draft)
     XCTAssertEqual(palette.area, .list)
     XCTAssertEqual(palette.selectedID, .task(2))
-    XCTAssertEqual(try storedTask(palette, 2).memo, "", "下書きを別のタスクへ書かない")
+    XCTAssertEqual(try storedTask(palette, 2).description, "", "下書きを別のタスクへ書かない")
   }
 
   /// 項目をクリックして編集を始めただけ（打っていない）なら、離れるときに古い値を書き戻さない。
   func testLeavingAnUntypedEditKeepsWhatTheAgentWroteMeanwhile() throws {
     let palette = detailOfFirst()
-    for field in [TaskDetailField.memo, .title, .waiting, .due] {
+    for field in [TaskDetailField.description, .title, .waiting, .due] {
       palette.tapField(field)
       var update = TaskUpdate()
       switch field {
-      case .memo: update.memo = "agent のメモ"
+      case .description: update.description = "agent の詳細"
       case .title: update.title = "agent のタイトル"
       case .waiting: update.waitingReason = .set("agent の理由")
       default: update.due = .set(TaskItem.DueDate("2025-10-20")!)
@@ -324,7 +324,7 @@ extension TaskPaletteModelTests {
     }
 
     let task = try storedTask(palette, 1)
-    XCTAssertEqual(task.memo, "agent のメモ")
+    XCTAssertEqual(task.description, "agent の詳細")
     XCTAssertEqual(task.title, "agent のタイトル")
     XCTAssertEqual(task.waiting?.reason, "agent の理由")
     XCTAssertEqual(task.due, TaskItem.DueDate("2025-10-20"))
@@ -333,20 +333,20 @@ extension TaskPaletteModelTests {
   /// 打った内容は、その間に agent が同じ項目を変えていても後勝ちで書く。
   func testLeavingATypedEditStillOverwritesTheAgent() throws {
     let palette = detailOfFirst()
-    palette.tapField(.memo)
-    palette.draftText = "人が打ったメモ"
+    palette.tapField(.description)
+    palette.draftText = "人が打った詳細"
     var update = TaskUpdate()
-    update.memo = "agent のメモ"
+    update.description = "agent の詳細"
     _ = try palette.store.update(1, update)
 
     palette.leaveEditing()
 
-    XCTAssertEqual(try storedTask(palette, 1).memo, "人が打ったメモ")
+    XCTAssertEqual(try storedTask(palette, 1).description, "人が打った詳細")
   }
 
   func testAgentChangingAnotherTaskKeepsTheDetailAndTheDraft() throws {
     let palette = detailOfFirst()
-    edit(palette, .memo, "書きかけ")
+    edit(palette, .description, "書きかけ")
 
     let inserted = try palette.store.add(TaskDraft(title: "agent が足した"))
     try palette.store.move(inserted.id, .before, 1)
