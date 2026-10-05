@@ -3,8 +3,9 @@ import Foundation
 /// 作成行を出すかの、名前と作成先の衝突の規則。git の答え（ブランチ名として有効か）とは別に、
 /// ぶつかる名前・作成先の作成行を出さない。
 struct WorktreeNewBranchRules: Equatable {
-  /// 作れない名前。ローカルブランチ（worktree で checkout 中のものを含む）と、リモートブランチの行が
-  /// 作るローカル名——リモートブランチと同じ名前を別のベースから切ると、その行と同じ名前の別物になる。
+  /// ローカルブランチの名前（worktree で checkout 中のものを含む）。
+  let localNames: Set<String>
+  /// 作れない名前。ローカルブランチと、リモートブランチの行が作るローカル名——リモートブランチと同じ名前を別のベースから切ると、その行と同じ名前の別物になる。
   let takenNames: Set<String>
   /// 既存の worktree のパス（`canonical` で解いた値）。
   let worktreePaths: Set<String>
@@ -17,16 +18,21 @@ struct WorktreeNewBranchRules: Equatable {
     localBranches: [String], remoteBranches: [String], worktreePaths: [String], template: String,
     repoPath: String
   ) {
-    takenNames = Set(localBranches).union(remoteBranches.map(GitBranch.localName(fromRemote:)))
+    localNames = Set(localBranches)
+    takenNames = localNames.union(remoteBranches.map(GitBranch.localName(fromRemote:)))
     self.worktreePaths = Set(worktreePaths.map(Self.canonical))
     self.template = template
     self.repoPath = repoPath
   }
 
-  /// その名前の作成行を出してよいか。作成先が既存の worktree と同じ場所になる名前（`issue-212` と
-  /// `issue/212` は同じ slug）は、作成が必ず失敗するので出さない。
+  /// その名前の作成行を出してよいか。ローカルブランチと親子になる名前（`fix/login-blank` があるときの `fix`、
+  /// `fix/login-blank/sub`）は、git の ref が親子の名前を同時に持てず作成が必ず失敗するので出さない。作成先が
+  /// 既存の worktree と同じ場所になる名前（`issue-212` と `issue/212` は同じ slug）も、作成が必ず失敗するので
+  /// 出さない。
   func allows(_ name: String) -> Bool {
-    guard !takenNames.contains(name) else { return false }
+    guard !takenNames.contains(name),
+      !localNames.contains(where: { $0.hasPrefix(name + "/") || name.hasPrefix($0 + "/") })
+    else { return false }
     let path = WorktreePathTemplate.resolve(
       template: template, repoPath: repoPath, slug: WorktreePathTemplate.slug(forBranch: name))
     return !worktreePaths.contains(Self.canonical(path))

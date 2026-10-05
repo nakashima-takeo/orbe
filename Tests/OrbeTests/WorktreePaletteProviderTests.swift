@@ -52,7 +52,7 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
     provider.load()
     XCTAssertTrue(pump { model.newBranchRules != nil })
 
-    for (name, creatable) in [("@{-1}", false), ("feat/new", true)] {
+    for (name, creatable) in [("@{-1}", false), ("topic/new", true)] {
       model.query = name
       model.onQueryChanged()
       XCTAssertTrue(pump { model.branchNameAnswer?.name == name }, "\(name) に答えが届く")

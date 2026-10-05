@@ -55,8 +55,8 @@ extension WorktreePaletteTests {
   /// 一致する既存の行があれば、作成行は出ても既存の行の先頭が選ばれる。
   func testExistingMatchIsSelectedOverTheCreateRow() {
     let p = makeCreatableModel()
-    type("fix", into: p)
-    XCTAssertEqual(p.items.first?.action, .createBranch(name: "fix"))
+    type("login", into: p)
+    XCTAssertEqual(p.items.first?.action, .createBranch(name: "login"))
     XCTAssertEqual(p.selectedItem?.name, "fix/login-blank")
   }
 
@@ -109,15 +109,17 @@ extension WorktreePaletteTests {
   /// 選択を動かした後は、答えの到着で選択を動かさない。
   func testAnswerDoesNotMoveASelectionTheUserMoved() {
     let p = makeCreatableModel()
-    type("fix", into: p, valid: nil)
+    type("login", into: p, valid: nil)
     XCTAssertEqual(p.selectedItem?.name, "fix/login-blank")
-    p.applyBranchNameCheck("fix", isValid: true)
+    p.applyBranchNameCheck("login", isValid: true)
     XCTAssertEqual(p.selectedItem?.name, "fix/login-blank", "既存の一致の先頭のまま")
 
     p.move(-1)
-    XCTAssertEqual(p.selectedItem?.action, .createBranch(name: "fix"), "前提: ユーザーが作成行へ動かした")
+    XCTAssertEqual(
+      p.selectedItem?.action, .createBranch(name: "login"), "前提: ユーザーが作成行へ動かした")
     rebuild(p, with: .designSample)
-    XCTAssertEqual(p.selectedItem?.action, .createBranch(name: "fix"), "データの到着でも同じ行のまま")
+    XCTAssertEqual(
+      p.selectedItem?.action, .createBranch(name: "login"), "データの到着でも同じ行のまま")
   }
 
   // MARK: - 決定
