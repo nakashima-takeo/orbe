@@ -107,7 +107,7 @@ struct TaskPaletteFooter: View {
         PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintBack))
       } else {
         PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteHintOpenWorktree))
-        PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintDetail))
+        PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintEdit))
         PaletteKeyHint(key: "⌥↑↓", label: l10n.string(.taskPaletteHintReorder))
         PaletteKeyHint(key: "⇥", label: l10n.string(.taskPaletteHintScope))
         PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteDelete))
@@ -209,7 +209,7 @@ private struct TaskPaletteGitHubHints: View {
       if row.task == nil {
         PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteMakeTaskOpen))
         PaletteKeyHint(key: "⌘L", label: l10n.string(.taskPaletteHintLink))
-        PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintDetail))
+        PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintEdit))
       } else {
         PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteHintOpenWorktree))
         PaletteKeyHint(key: "⌘L", label: l10n.string(.taskPaletteHintRelink))
