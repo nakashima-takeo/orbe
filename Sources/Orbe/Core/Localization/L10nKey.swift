@@ -287,6 +287,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteHintLink
   case taskPaletteHintRelink
   case taskPaletteHintFilter
+  case taskPaletteHintOpenInBrowser
   case taskPaletteErrAssign
   case taskPaletteErrLink
   case taskPalettePickTask

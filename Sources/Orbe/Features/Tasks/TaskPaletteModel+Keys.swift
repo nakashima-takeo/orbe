@@ -56,9 +56,10 @@ extension TaskPaletteModel {
     return .handled
   }
 
-  /// GitHub タブの入力欄（一覧）。結び付ける（⌘L）と外す（⌘⌫）は修飾付きのキーにして、絞り込みの文字を
-  /// 打つ・消すのと衝突させない。どちらも押した瞬間だけを操作にする（押し続けたキーリピートで、選択が
-  /// 移った先の行まで操作しない）。
+  /// GitHub タブの入力欄（一覧）。結び付ける（⌘L）・外す（⌘⌫）・ブラウザで開く（⌘↵）は修飾付きのキーに
+  /// して、絞り込みの文字を打つ・消すのと衝突させない。どれも押した瞬間だけを操作にする（押し続けた
+  /// キーリピートで、選択が移った先の行まで操作しない）。⌘↵ は選ぶ状態でも握る（`onSubmit` へ流すと ↵ の
+  /// 結び付けとして働く）。
   private func handleGitHubFieldKey(_ press: KeyPress) -> KeyPress.Result {
     switch press.key {
     case .upArrow, .downArrow:
@@ -76,6 +77,8 @@ extension TaskPaletteModel {
       enterPane()
     case _ where Self.isLinkKey(press):
       if press.phase == .down, pick == nil { linkSelectedGitHubItem() }
+    case .return where press.modifiers.contains(.command):
+      if press.phase == .down, pick == nil { openSelectedGitHubItemInBrowser() }
     case _ where Self.isCommandBackspace(press):
       if press.phase == .down, pick == nil, selectedGitHubRow?.task != nil {
         unlinkSelectedGitHubItem()
@@ -128,7 +131,8 @@ extension TaskPaletteModel {
     return .handled
   }
 
-  /// 右の欄の項目。↵（期限の項目以外）と ⌘L は、行の「タスクにする」「結び付ける」と同じ。
+  /// 右の欄の項目。↵（期限の項目以外）・⌘L・⌘↵ は、行の「タスクにする」「結び付ける」「ブラウザで開く」と
+  /// 同じ。
   private func handlePaneKey(_ press: KeyPress, _ stop: TaskGitHubPaneStop) -> KeyPress.Result {
     if Self.isBacktab(press) { return .handled }
     switch press.key {
@@ -138,6 +142,8 @@ extension TaskPaletteModel {
     case .rightArrow: changePaneValue(1)
     case .space:
       if press.phase == .down, stop == .assign { togglePaneAssign() }
+    case .return where press.modifiers.contains(.command):
+      if press.phase == .down { openSelectedGitHubItemInBrowser() }
     case .return:
       guard press.phase == .down else { break }
       if stop == .due {

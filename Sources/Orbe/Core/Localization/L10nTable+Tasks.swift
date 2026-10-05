@@ -133,6 +133,7 @@ extension L10n {
     .taskPaletteHintLink: ("結び付ける", "Link"),
     .taskPaletteHintRelink: ("付け替える", "Move"),
     .taskPaletteHintFilter: ("絞り込み", "Filter"),
+    .taskPaletteHintOpenInBrowser: ("ブラウザで開く", "Open in browser"),
     .taskPaletteErrAssign: ("GitHub に自分を追加できませんでした", "Couldn’t add you on GitHub"),
     .taskPaletteErrLink: ("結び付けられませんでした", "Couldn’t link"),
     .taskPalettePickTask: ("%@ を結び付けるタスクを選ぶ", "Choose a task to link %@ to"),
