@@ -132,9 +132,7 @@ final class UpdateStateTests: OrbeTestCase {
 
     state.settleTransientPhase()
 
-    XCTExpectFailure("settleTransientPhase の .checking 枝が ready を見ず idle へ落とす（B3）") {
-      XCTAssertEqual(state.phase, .readyToRestart)
-    }
+    XCTAssertEqual(state.phase, .readyToRestart)
   }
 
   func testSeedLastCheckDoesNotOverwrite() {
