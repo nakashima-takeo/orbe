@@ -93,7 +93,7 @@ final class SurfaceView: NSView {
     // wantsLayer は立てない。libghostty の Metal レンダラが自前の IOSurfaceLayer を
     // 代入してから wantsLayer=true を立てることで view を layer-hosting にする
     // （順序が逆だと layer-backed になり、IOSurfaceLayer の暗黙アニメ無効化が効かず
-    // スクロールがカクつく）。cf. vendor/ghostty src/renderer/Metal.zig。
+    // スクロールがカクつく）。cf. ghostty の src/renderer/Metal.zig。
     registerForDraggedTypes([.fileURL])
   }
   required init?(coder: NSCoder) { fatalError("not supported") }

@@ -9,7 +9,7 @@ import XCTest
 /// （isSymbol にだけ掛かる `.fit` 制約・presentation 判定より先に確定する override）と噛み合っていること。
 /// 委譲先はシステムフォントなので同梱物とは無関係。libghostty は名前解決に失敗すると警告を 1 行ログへ吐いて
 /// 委譲を捨て、解決できてもグリフが無ければ `hasCodepoint` が false でログすら無く捨てる
-/// （vendor/ghostty `src/font/CodepointResolver.zig` の `getIndexCodepointOverride`）。
+/// （ghostty の `src/font/CodepointResolver.zig` の `getIndexCodepointOverride`）。
 /// 画面には「囲み文字が元の小さい欧文字形に戻る」としか現れない。
 ///
 /// ③ 同梱 TTF: `TerminalFonts` の登録・`build-app.sh` のコピー・`NOTICE` の帰属が一致していること。
@@ -30,7 +30,7 @@ final class TerminalFontDelegationTests: OrbeTestCase {
   private let referenceSize: CGFloat = 12
 
   /// libghostty が「記号らしい」と見なし `.fit` 制約でセル枠に収めるブロック
-  /// （vendor/ghostty `src/build/uucode_config.zig` の `computeIsSymbol` を写したもの）。
+  /// （ghostty の `src/build/uucode_config.zig` の `computeIsSymbol` を写したもの）。
   private let symbolBlocks: [ClosedRange<UInt32>] = [
     0x2190...0x21FF,  // Arrows
     0x2460...0x24FF,  // Enclosed Alphanumerics
@@ -154,7 +154,7 @@ final class TerminalFontDelegationTests: OrbeTestCase {
 
   /// 同梱 JuliaMono がカラーフォント判定されないことを検証する。
   /// JuliaMono は font-family チェーンに入れず `.process` 登録だけで discovery の候補として効かせるが、
-  /// discovery の presentation 検証（vendor/ghostty `src/font/DeferredFace.zig` の `hasCodepoint`）は
+  /// discovery の presentation 検証（ghostty の `src/font/DeferredFace.zig` の `hasCodepoint`）は
   /// カラーフォントを emoji 用と見なし text 用途で拒否する。SVG テーブルを持つ版（0.055 等）へ戻すと
   /// 登録されていても一切引かれず、JuliaMono しか字形を持たない約 1500 点（チェス記号・矢印C・
   /// 音楽記号等）が置換文字に落ちる。実行時は無警告で、画面に □ が出るまで誰も気づけない。

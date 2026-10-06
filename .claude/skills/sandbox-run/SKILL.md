@@ -29,7 +29,7 @@ flowchart TD
     D --> E
 ```
 
-1. **起こす対象を決める。** 既定は `./scripts/build-app.sh` でビルドした `./build/Orbe.app`（前提不足＝フル Xcode 未導入・zig 失敗などでの失敗は出力メッセージ〔`docs/guides/build.md` 参照〕に従う）。呼び出し元が別のバンドルを渡したときはそれを使う（公証済み DMG 内の `Orbe.app` など）。
+1. **起こす対象を決める。** 既定は `./scripts/build-app.sh` でビルドした `./build/Orbe.app`（前提不足＝フル Xcode 未導入・GhosttyKit の取得失敗などでの失敗は出力メッセージ〔`docs/guides/build.md` 参照〕に従う）。呼び出し元が別のバンドルを渡したときはそれを使う（公証済み DMG 内の `Orbe.app` など）。
 2. **`./scripts/sandbox-run.sh start [<app>]` を実行する。** 隔離起動から煙探知までを通し、`state_dir` / `sock` / `pid` / `build_id` / `log` を出す。煙探知は `.app` の起動経路と `AppDelegate` の配線を機械的に確かめる唯一の場所なので、承認モードでも飛ばさない。失敗（control.sock が現れない・目印が出ない）は自分で片付けて非 0 で返るので、駆動も承認も始めず、失敗として呼び出し側へ返す。
 3. モードで分岐:
    - **承認モード（既定）**: 今回の変更が**どこに現れ・何を触って見るか**と、画面 chrome の **build-id が手順2 の `build_id` か**を短く提示する（人間目視が必須の条件があればここで渡す）。`AskUserQuestion` で承認を問う。**この承認が後続（確定・マージ等）の許可**。NG・指摘があれば呼び出し側へ差し戻す。
