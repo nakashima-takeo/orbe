@@ -140,20 +140,18 @@ MCP クライアントからも **`orbe-mcp`** を介してタブの起動・テ
 
 ## ソースからビルド
 
-**フル Xcode（Xcode 26 系以上）・Metal Toolchain・mise（`brew install mise`）・Zig 0.16.0（`mise install` で導入）** を用意してください。Command Line Tools だけではビルドできません。ツールの導入・環境確認は[ビルドガイド](docs/guides/build.md)にまとめています。
+**フル Xcode（Xcode 26 系以上）** を用意してください。Command Line Tools だけではビルドできません。ツールの導入・環境確認は[ビルドガイド](docs/guides/build.md)にまとめています。
 
 ```bash
-git clone --recurse-submodules https://github.com/nakashima-takeo/orbe.git
+git clone https://github.com/nakashima-takeo/orbe.git
 cd orbe
 ./scripts/build-app.sh
 open build/Orbe.app
 ```
 
-既に clone 済みのリポジトリでは、`git submodule update --init --recursive` を実行してからビルドします。Git worktree で開発する場合の submodule の扱いは[ビルドガイド](docs/guides/build.md)を参照してください。
+ビルドスクリプトは、SwiftPM が取得した焼き済みの libghostty をリンクし、そのリソースと合わせてアプリのバンドルを生成します。既定の成果物は **Orbe Dev** です。配布版 Orbe と共存し、設定・タブの保存先も分かれます。開発には SwiftPM を使い、Xcode プロジェクトファイルはありません。
 
-ビルドスクリプトは libghostty のコンパイルとアプリのバンドル生成を行います。既定の成果物は **Orbe Dev** です。配布版 Orbe と共存し、設定・タブの保存先も分かれます。開発には SwiftPM を使い、Xcode プロジェクトファイルはありません。
-
-テストは libghostty をビルドした後、次のコマンドで実行できます。lint・format の手順も[ビルドガイド](docs/guides/build.md)にあります。
+テストは次のコマンドで実行できます。lint・format の手順も[ビルドガイド](docs/guides/build.md)にあります。
 
 ```bash
 swift build --build-tests

@@ -1,7 +1,7 @@
 ---
 title: ライセンスと第三者帰属
 description: Orbe 自身の GPL-3.0-or-later 表明と、第三者ライセンスの帰属（NOTICE）・全文（licenses/）・.app 同梱の構成
-updated: 2026-10-02
+updated: 2026-10-06
 ---
 
 # ライセンスと第三者帰属
@@ -14,7 +14,7 @@ Orbe 自身のライセンスは **GPL-3.0-or-later**。著作権表示は `Copy
 - **`NOTICE`**（ルート）… 配布物に含まれる第三者の帰属表示。冒頭に GPL 宣言・ソース入手先 `https://github.com/nakashima-takeo/orbe`・vendor 除外の注記。各エントリは部品名・ライセンス名・配布物中の所在・上流 URL・全文の所在（`licenses/` 基準）を持つ。
 - **`licenses/`**（ルート）… 第三者ライセンス全文の唯一の置き場。**上流ライセンスファイルの逐語コピー**であり、書き起こしも著作権年の書き換えもしない（Orbe 自身の著作権年を更新する一括処理の対象外）。同じライセンスでも部品ごとにその部品の原本を置き、名前は `<component>-<上流ファイル名>.txt`（`freetype-FTL.txt`・`swift-cmark-COPYING.txt` など）。部品の上流ライセンスファイルが別ファイルを明示的に指す場合は、そのファイルも同じ命名で置く（`freetype-bdf-README.txt`・`uucode-LICENSE_unicode.txt` など）。
 
-ライセンスファイルは、部品を足したときに pin されている版から取る。依存パッケージなら `build.zig.zon`（`vendor/ghostty` 配下を含む）の `.hash` が固定する tarball、または `Package.resolved` が固定するリビジョン。Zig 標準ライブラリなら `mise.toml` が固定するツールチェーンの同梱物。その配布物がライセンスファイルを含まない場合（同梱ソースに組み込まれた部品、`app/` のフォントなど）に限り、上流リポジトリの対応する版から取る。版を特定できなければ、ライセンスファイルが同じである上流の版から取る。
+ライセンスファイルは、部品を足したときに pin されている版から取る。依存パッケージなら `build.zig.zon`（pin した ghostty の `build.zig.zon` を含む）の `.hash` が固定する tarball、または `Package.resolved` が固定するリビジョン。Zig 標準ライブラリなら、pin した ghostty の `build.zig.zon` が要求する版のツールチェーンの同梱物（実際の版は fork の Release ノート）。その配布物がライセンスファイルを含まない場合（同梱ソースに組み込まれた部品、`app/` のフォントなど）に限り、上流リポジトリの対応する版から取る。版を特定できなければ、ライセンスファイルが同じである上流の版から取る。
 
 **第三者の一覧は `NOTICE` が唯一の正で、この spec は持たない。** 同じ一覧を 2 箇所に置くと片方だけが更新されるため。読むべきは `NOTICE` 本体。
 
@@ -41,8 +41,8 @@ Orbe 自身のライセンスは **GPL-3.0-or-later**。著作権表示は `Copy
 
 次のときに、その部品のエントリと上流ライセンスファイルを足す・消す。
 
-- 依存を追加・削除したとき。対象は `Package.resolved`、`build.zig.zon`（`vendor/ghostty` 配下を含む）、`mise.toml` のツールチェーン、補完エンジン（`vendor/completion-engine`）の依存、同梱するフォントやリソースなど。
-- `vendor/ghostty` の pin 更新で、依存の顔ぶれが変わったとき。
+- 依存を追加・削除したとき。対象は `Package.resolved`、`build.zig.zon`（pin した ghostty の `build.zig.zon` を含む）、補完エンジン（`vendor/completion-engine`）の依存、同梱するフォントやリソースなど。
+- ghostty の pin（`Package.swift` の url）の更新で、依存の顔ぶれが変わったとき。ghostty の配布物は自分の帰属表記を持つので、fork（`nakashima-takeo/ghostty`）の `orbe/NOTICE`・`orbe/licenses/` も対で追随する。
 
 **版の更新だけなら、ライセンスの種類が変わらない限り作業は要らない。**
 
@@ -57,7 +57,7 @@ Orbe 自身のライセンスは **GPL-3.0-or-later**。著作権表示は `Copy
 
 libghostty の依存の顔ぶれに疑いがあるときは、実行体に実際に入っている部品を確かめられる。
 
-- **コード:** `build-app.sh` と同じ `zig build` に `-Dstrip=false` を足して組み、`swift build -c release`・`dsymutil` で worktree の外に dSYM を作る。`dwarfdump --debug-line` の行テーブルに、その部品のソース（`vendor/ghostty/zig-pkg/<hash>/` 配下）でアドレスが 0 でない行があれば、その部品は入っている。
+- **コード:** fork の clone で、pin の SHA のソースに対して `orbe/build.sh <ソース> <zip> -Dstrip=false` で zip を作る。`Package.swift` の GhosttyKit を一時的に `path:` でその zip へ向け、`swift build -c release`・`dsymutil` で worktree の外に dSYM を作る。`dwarfdump --debug-line` の行テーブルに、その部品のソース（焼いたソースの `zig-pkg/<hash>/` 配下）でアドレスが 0 でない行があれば、その部品は入っている。
 - **埋め込みフォント:** 元ファイルの断片がバイト列として実行体にあるかで確かめる。
 
-確認後は通常の `zig build` を再実行し、デバッグ情報付きで上書きされた `vendor/ghostty/macos/GhosttyKit.xcframework` を通常の成果物に戻す。
+確認後は `Package.swift` の差し替えを戻す。

@@ -1,12 +1,12 @@
 ---
 title: libghostty の外部契約
-description: 固定 SHA で埋め込む ghostty のターミナルライブラリ（MIT）。Orbe の実装が乗る、変えられない境界
-updated: 2026-09-17
+description: 固定 SHA で焼いて取り込む ghostty のターミナルライブラリ（MIT）。Orbe の実装が乗る、変えられない境界
+updated: 2026-10-06
 ---
 
 # libghostty の外部契約
 
-ghostty のターミナル描画ライブラリ。MIT ライセンスで、Orbe は `vendor/ghostty` submodule として埋め込んでいる。この文書が記すのは Orbe の実装が乗る**外部契約——Orbe 側では変えられない境界**のみ。
+ghostty のターミナル描画ライブラリ。MIT ライセンスで、Orbe は固定 SHA で焼いた xcframework を SwiftPM の `binaryTarget` で取り込んでいる。この文書が記すのは Orbe の実装が乗る**外部契約——Orbe 側では変えられない境界**のみ。
 
 ## API は 2 層
 
@@ -31,7 +31,7 @@ surface の出力ストリーム由来のイベントは `action_cb`（`ghostty_
 - **独自/未知の OSC 番号は受け取れない**: OSC パーサ（`src/terminal/osc.zig`）はホワイトリスト方式で、未知番号は `.invalid` に遷移して全バイトを破棄する。
 - **APC/DCS も host 非露出**: `src/terminal/stream.zig` で parse はされるが、apprt 層で C API action に変換されない。
 
-帰結: アプリ独自データを `action_cb` に乗せて host へ運びたければ、**標準の通知 OSC（9/777）に相乗りする**しか無い。独自番号や APC/DCS を通すには libghostty の改修が要り、pin と衝突する。典拠は `vendor/ghostty` の `include/ghostty.h`・`src/terminal/osc.zig`・`src/terminal/stream.zig`（pin SHA `f9a3f24a`）。
+帰結: アプリ独自データを `action_cb` に乗せて host へ運びたければ、**標準の通知 OSC（9/777）に相乗りする**しか無い。独自番号や APC/DCS を通すには libghostty の改修が要り、pin と衝突する。典拠は pin した ghostty の `include/ghostty.h`・`src/terminal/osc.zig`・`src/terminal/stream.zig`。
 
 ## host が画面テキストを読む（out-of-band 取得）
 
@@ -47,10 +47,11 @@ in-band の境界とは別に、host から能動的に画面テキストを取�
 
 - 既定フォントは埋め込みの JetBrainsMono（NoNF 版、`src/font/embedded.zig`）。
 - **Symbols Nerd Font（symbols-only 版）も埋め込まれ、実行時に常時 fallback face として登録される**（`src/font/SharedGridSet.zig:324`、`fallback = true`）。このため Nerd Font の PUA グリフは、フォント設定もシステム導入もなしで surface 上に描画される。
-- この埋め込み・fallback 登録が効くのは surface（terminal 描画）側のみ。native AppKit（chrome）側で PUA グリフを描くには明示フォント指定が要る。同梱フォントの登録は `CTFontManagerRegisterFontsForURL` で行え、TTF は `vendor/ghostty/src/font/res/` に実在する。
+- この埋め込み・fallback 登録が効くのは surface（terminal 描画）側のみ。native AppKit（chrome）側で PUA グリフを描くには明示フォント指定が要る。同梱フォントの登録は `CTFontManagerRegisterFontsForURL` で行え、TTF は ghostty の `src/font/res/` にあり、配布物の `fonts/` に入っている。
 
 ## 所在
 
-- GitHub: https://github.com/ghostty-org/ghostty
-- Orbe では `vendor/ghostty` submodule として固定 SHA `f9a3f24a` に pin する。
+- 上流: https://github.com/ghostty-org/ghostty
+- 配布と改造の場: fork https://github.com/nakashima-takeo/ghostty 。焼いた配布物（xcframework と、`.app` に同梱する share・フォント・帰属表記）を Release `ghosttykit-<SHA>` に置く。
+- pin は `Package.swift` の url のタグ `ghosttykit-<SHA>` が持つ。タグはその SHA のコミットを指す。
 - ビルド手順は [guides/build](../../guides/build.md)。
