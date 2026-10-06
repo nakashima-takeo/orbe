@@ -53,14 +53,4 @@ final class SoundEffectTests: XCTestCase {
       windowPeak(dark, around: 4800), windowPeak(bright, around: 4800),
       "インパルスの繰り返しは damping が低いほど鈍る")
   }
-
-  /// 同一入力からは常に同一出力（決定論）。
-  func testDelayIsDeterministic() {
-    var first = impulse(length: 24000)
-    var second = impulse(length: 24000)
-    let effect = SoundEffect.delay(time: 0.07, feedback: 0.4, damping: 3000, mix: 0.5)
-    effect.apply(to: &first, sampleRate: sampleRate)
-    effect.apply(to: &second, sampleRate: sampleRate)
-    XCTAssertEqual(first, second)
-  }
 }

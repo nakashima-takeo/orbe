@@ -82,18 +82,8 @@ extension TabFacesViewTests {
     }
   }
 
-  /// ⌘E（全面の往復）と背のクリック（分割から焦点側の全面・全面から反対の全面）でも同じ。
-  func testCommandEAndSpineClickSlidesKeepTheFacesCovered() {
-    let toggle = { (tab: TerminalTab) in
-      tab.setFaces(FaceGeometry.toggle(tab.view.committed), animated: true)
-    }
-    measureSlide(from: Self.editorOnly, to: .terminalOnly, trigger: toggle)
-    measureSlide(from: .terminalOnly, to: Self.editorOnly, trigger: toggle)
-    let click = { (tab: TerminalTab) in _ = tab.view.spine.onClick?() }
-    measureSlide(from: Self.split, to: Self.editorOnly, trigger: click)
-    measureSlide(
-      from: FaceLayout(editorRatio: 0.5, focus: .terminal), to: .terminalOnly, trigger: click)
-    measureSlide(from: Self.editorOnly, to: .terminalOnly, trigger: click)
-    measureSlide(from: .terminalOnly, to: Self.editorOnly, trigger: click)
+  /// 背のクリックが起こす遷移も同じ口を通る（分割から焦点側の全面へ）。
+  func testSpineClickSlideKeepsTheFacesCovered() {
+    measureSlide(from: Self.split, to: Self.editorOnly) { _ = $0.view.spine.onClick?() }
   }
 }

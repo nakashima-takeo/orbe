@@ -62,12 +62,6 @@ final class GitHubCLIRepositoryResolveTests: OrbeTestCase {
     XCTAssertEqual(try resolve("o/r"), .found(GitHubRepoName(nameWithOwner: "vercel/next.js")))
   }
 
-  /// gh が答えを返さずに落ちたら確かめられない（次に開いたとき問い直す側）。
-  func testFailureWithoutAnAnswerIsUnverified() throws {
-    try stageGh(stdout: "", exit: 1)
-    XCTAssertEqual(try resolve("o/r"), .unverified)
-  }
-
   // MARK: - ヘルパ
 
   /// 決まった出力と終了コードを返す偽 `gh` を PATH に置く。

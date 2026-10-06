@@ -1,7 +1,7 @@
 ---
 title: テスト実装ロードマップ
 description: テストアーキテクチャへ到達するためのスライスと進捗
-updated: 2026-10-04
+updated: 2026-10-06
 ---
 
 # テスト実装ロードマップ
@@ -37,7 +37,7 @@ updated: 2026-10-04
 | 1 | wire 契約 | 制御プロトコルの語を socketpair 上の実 `Connection` で固める（`ControlWireTests` 群）。method 名・params キー・エラーコード・成功時の応答キーと宛先への配線・`wait_for_event`・framing・不正入力。前提として `ControlServer` に `adopt(fd:)` を切り出し、不正入力へ `-32700` / `-32600` を返すよう直した。エラーコードの語彙は `docs/spec/control/api.md` の「エラー」節と 1 対 1。#50 #62 | 0 | 完了 |
 | 2 | プロセス境界 | 実 `orbe-cli` / `orbe-mcp` / `orbe-report` を subprocess で駆動し、テストプロセス内の実 `WindowController` ＋ `ControlServer` へ繋ぐ（`ControlProcess`。子の待機は runloop を回して行い、env は明示辞書のみで親から継承しない）。全 22 サブコマンドのライフサイクル・終了コード（`orb wait` の時間切れ 124 を含む）・`--json` の出力先・`ORBE_TAB` / `current` の文脈解決・`--workspace` の意味論・hook 実経路・bare `orb` の PATH 解決・`orbe-report` が書く生 1 行の語。**スライス 1 からの持ち越し**だった `get_tab_text` の `scrollback` も実 surface で固定した。エージェント起動（`orb agent spawn` / `resume`）は偽実行体と `ShellPATH` 差し替えで検出を固定し、**背景 workspace への spawn が手元の画面を奪わないまま読み書きできる**ことまで実タブで見る。`.app` 起動経路と `AppDelegate` 配線は範囲外で、その煙探知は `sandbox-run` が持つ。#63 #64 #74 | 0, 1 | 完了 |
 | 3 | 復元と移行 | 保存 → 復元 → 再保存のラウンドトリップ。`TabState`（タブの面の配置 `faces` を含む）・設定層の寛容 decode の境界・範囲外クランプ・デバウンス・旧バージョンファイルからの起動移行。#56 #68 #54 | 0 | 完了 |
-| 4 | 既存テストの整理 | assert 0 件の PNG 生成器を「テスト」から出す。自分のクロージャを自分で呼ぶ配線テスト・production を再実装したテスト・13 ファイルに浸透した行 index ハードコード・ヘッドレスで fail する 4 本・条件付きアサートを直す | — | 未着手 |
+| 4 | 既存テストの整理 | assert 0 件の PNG 生成器（gallery・flow）は撮影道具として `Tests/OrbeTests/Shots/` に分けた。実装の写し（表・定数・式・switch）・内部状態の固定・L1 と上位層の二重持ち・同じ共通経路の入力違いの量産を削り、偽の緑（XCTSkip に化ける失敗・条件付きアサート・既定を名乗る非既定値・自分のクロージャを自分で呼ぶ配線）を直し、外部契約の写しを独立した正本どうしの突き合わせへ置き換えた。残り——行 index ハードコード・production を再実装したテスト・内部 assert・実時間待ち——は #256 | — | 実装中 |
 | 5 | ターミナル入力表面 | IME の preedit 同期と Backspace 貫通防止・キー翻訳・スクロールの蓄積と合体 flush。実 `SurfaceView` を直接駆動する。キー翻訳は着手済——`TtyDumpTab`（実タブで raw tty の dump を走らせ PTY に届いたバイトを読む駆動台）の上で、`send_key` と物理キー（合成 NSEvent を `keyDown` へ）が端末モードごとに届けるバイトを `SurfaceKeyInputTests` が固定している。クリップボードも同じ駆動台の上で `SurfaceClipboardTests` が固定している——⌘V / ⌘⇧V のペースト（bracketed paste の有無）・⌘C のコピー・選択だけでのコピー・中クリックのペースト・端末アプリ発の読み取り（OSC 52 / Kitty clipboard）がクリップボードの中身に関わらず拒否されること（読み取りを許しても PRIMARY は非対応）・Kitty clipboard の書き込みはテキストと解される MIME だけが入ること。**スライス 1 からの持ち越し**——`completion_accept` の `advance` と `completion_update` の `buffer`/`cursor`。前者は popup（`CompletionController`）が生まれないと `completionAccept` が結果を返さず、後者は無応答契約で観測面がゼロ（値の到達は `CompletionController` の内部状態にしか現れない）。補完経路を実際に駆動するときに `CompletionLearning.shared` のリセット可能化も同じ地点で要る | 0 | 実装中 |
 | 6 | アプリ結合 | 設定適用の配線（scope 別の保存先・ライブ反映）・workspace の keep-alive と全タブ mount。`WindowController.init` の分解が前提。#75 #61 | 0, 3 | 未着手 |
 | 7 | コンポーネント | 状態 → 表示の対応とレイアウト数値。`MenuBarDropdown`・`StatusRowView` の並び替え計算・`CompletionList` の可視範囲 | 0 | 未着手 |

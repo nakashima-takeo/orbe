@@ -66,15 +66,6 @@ final class WorkspacePaletteTests: OrbeTestCase {
 
   // MARK: - 一覧: Enter で切替・絞り込み
 
-  func testEnterFiresSwitchForSelectedWorkspace() {
-    let p = palette()
-    var switched: Int?
-    p.onSwitch = { switched = $0 }
-    p.setItems(items([("default", true), ("api", false), ("web", false)]))
-    send(p, enter)
-    XCTAssertEqual(switched, 0, "空クエリ時の Enter は先頭 workspace の switch")
-  }
-
   func testMoveDownThenEnterSwitchesToSecond() {
     let p = palette()
     var switched: Int?
@@ -96,17 +87,6 @@ final class WorkspacePaletteTests: OrbeTestCase {
     send(p, enter)
     XCTAssertTrue(createFlow, "末尾の常設 createFlow 行へラップし Enter で作成フォームへ")
     XCTAssertNil(switched)
-  }
-
-  func testMoveDownFromCreateFlowWrapsToFirstWorkspace() {
-    let p = palette()
-    var switched: Int?
-    p.onSwitch = { switched = $0 }
-    p.setItems(items([("a", true), ("b", false)]))
-    send(p, up)  // 末尾の createFlow 行へ
-    send(p, down)  // さらに下 → 先頭 workspace へラップ
-    send(p, enter)
-    XCTAssertEqual(switched, 0, "createFlow から下でラップし先頭 workspace を switch")
   }
 
   func testTypingFiltersToMatchingWorkspace() {
@@ -231,45 +211,35 @@ final class WorkspacePaletteTests: OrbeTestCase {
     XCTAssertNil(setDir, "空ディレクトリの確定は無視（現状維持）")
   }
 
+  /// workspace が1つのとき詳細メニューに「削除」を出さない（最後の1つは消せない）。改名・ディレクトリは出す。
   func testSingleWorkspaceHasNoDeleteInSubmenu() {
-    // workspace が1つのとき詳細メニューに「削除」を出さない（最後の1つは消せない）。改名・ディレクトリは出す。
+    let l10n = LocalizationStore(language: .ja)
     let p = palette()
-    var closed: Int?
-    var renamed: (Int, String)?
-    p.onClose = { closed = $0 }
-    p.onRename = { renamed = ($0, $1) }
     p.setItems(items([("only", true)]))
-    send(p, right)  // 詳細メニューへ（rows: [改名, ディレクトリ]・削除なし）
-    key(p, kReturn)  // 先頭の改名へ → 改名モード
-    send(p, enter)  // 改名確定
-    XCTAssertNil(closed, "単一 workspace の詳細メニューに削除は無い")
-    XCTAssertEqual(renamed?.0, 0, "改名は選べる（削除のみ不在）")
+    send(p, right)  // 詳細メニューへ
+    XCTAssertEqual(
+      p.render.rows.map(\.label),
+      [l10n.string(.wsActionRename), l10n.string(.wsActionSetDir)],
+      "単一 workspace の詳細メニューは改名・ディレクトリだけで、削除は無い")
   }
 
   // MARK: - 戻る / 閉じる
 
-  func testLeftArrowReturnsFromSubmenuToList() {
-    let p = palette()
-    var switched: Int?
-    var dismissed = false
-    p.onSwitch = { switched = $0 }
-    p.onDismiss = { dismissed = true }
-    p.setItems(items([("default", true), ("api", false)]))
-    send(p, right)  // 詳細メニューへ（default の詳細）
-    key(p, kLeft)  // ← で一覧へ戻る（閉じない）
-    XCTAssertFalse(dismissed, "← は詳細→一覧で、パレットは閉じない")
-    send(p, enter)  // 一覧に戻っているので先頭の switch
-    XCTAssertEqual(switched, 0, "一覧へ戻り Enter で switch(0)")
-  }
-
-  func testEscFromSubmenuReturnsToListNotDismiss() {
-    let p = palette()
-    var dismissed = false
-    p.onDismiss = { dismissed = true }
-    p.setItems(items([("default", true), ("api", false)]))
-    send(p, right)  // 詳細メニューへ
-    key(p, kEsc)  // Esc は詳細→一覧（閉じない）
-    XCTAssertFalse(dismissed, "詳細メニューの Esc は一覧へ戻るだけ")
+  /// 詳細メニューの ← と Esc は、閉じずに一覧へ戻る（Enter が workspace の switch になる）。
+  func testLeftAndEscReturnFromSubmenuToListWithoutDismissing() {
+    for (name, back) in [("←", kLeft), ("Esc", kEsc)] {
+      let p = palette()
+      var switched: Int?
+      var dismissed = false
+      p.onSwitch = { switched = $0 }
+      p.onDismiss = { dismissed = true }
+      p.setItems(items([("default", true), ("api", false)]))
+      send(p, right)  // 詳細メニューへ（default の詳細）
+      key(p, back)
+      XCTAssertFalse(dismissed, "\(name) は詳細→一覧で、パレットは閉じない")
+      send(p, enter)  // 一覧に戻っているので先頭の switch
+      XCTAssertEqual(switched, 0, "\(name) で一覧へ戻り Enter で switch(0)")
+    }
   }
 
   func testEscFromListDismisses() {
@@ -294,6 +264,7 @@ final class WorkspacePaletteTests: OrbeTestCase {
     send(p, esc)  // Esc は改名→詳細（閉じず・確定せず）
     XCTAssertFalse(dismissed, "改名中の Esc はパレットを閉じない")
     XCTAssertNil(renamed, "Esc 取消では改名を確定しない")
+    XCTAssertEqual(p.render.breadcrumb, "‹ api", "改名中の Esc は api の詳細メニューへ戻る")
   }
 }
 

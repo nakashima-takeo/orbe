@@ -53,15 +53,6 @@ final class GitHubRemoteLedgerTests: OrbeTestCase {
       .settled(settled(["origin": .github(mine), "odd": .unverified])))
   }
 
-  /// GitHub Enterprise の remote は GitHub の remote として数えない（問い合わせを待たず、「GitHub でない」）。
-  func testEnterpriseRemoteIsNotGitHub() {
-    XCTAssertEqual(
-      GitHubRemoteLedger(
-        remotes: ["origin": "git@github.com:me/r.git", "work": "git@github.company.com:me/r.git"],
-        answers: [mine: .found(mine)]),
-      .settled(settled(["origin": .github(mine), "work": .notGitHub])))
-  }
-
   /// URL が改名前の名前のままでも、GitHub が答えた正式名で行の ref が決まる（PR の head と等しくなる）。
   func testRenamedRemoteIsIdentifiedByItsCanonicalName() {
     let old = GitHubRepoName(nameWithOwner: "me/old-name")

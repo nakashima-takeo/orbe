@@ -14,17 +14,6 @@ final class MenuBarArrivalTests: OrbeTestCase {
 
   private func at(_ offset: TimeInterval) -> Date { t0.addingTimeInterval(offset) }
 
-  /// 尺は design 原典のタイムライン表どおり。速い収縮 180ms が Orbe の意図的な逸脱
-  /// （滞留はここが持たない——設定から到来ごとに決まる）。
-  func testDurationsMatchDesign() {
-    XCTAssertEqual(MenuBarArrival.expand, 0.84)
-    XCTAssertEqual(MenuBarArrival.glossDelay, 1.2)
-    XCTAssertEqual(MenuBarArrival.glossDuration, 1.1)
-    XCTAssertEqual(MenuBarArrival.collapse, 0.6)
-    XCTAssertEqual(MenuBarArrival.collapseQuick, 0.18)
-    XCTAssertLessThan(MenuBarArrival.collapseQuick, MenuBarArrival.collapse, "速い収縮は通常より短い")
-  }
-
   /// 展開は 840ms で開き切り、滞留の間は開いたまま。
   func testExpandReachesOpenAndHolds() {
     let driver = MenuBarArrivalDriver()

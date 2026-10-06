@@ -20,14 +20,6 @@ final class PaletteModelHoverTests: OrbeTestCase {
     XCTAssertEqual(m.selected, 2)
   }
 
-  /// 実マウス移動後（`.pointer`）はホバーが選択を追従させる。
-  func testHoverFollowsAfterPointerMove() {
-    let m = model()
-    m.inputModality = .pointer
-    m.hoverSelect(4)
-    XCTAssertEqual(m.selected, 4)
-  }
-
   /// ホバー追従はモダリティを維持し、続くホバーも効き続ける。
   func testHoverKeepsPointerModality() {
     let m = model()

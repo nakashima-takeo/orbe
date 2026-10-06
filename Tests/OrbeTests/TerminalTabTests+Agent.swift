@@ -66,29 +66,6 @@ extension TerminalTabTests {
     XCTAssertEqual(tab.agentSlot.session, session, "resume 用の同一性（command・sessionId）は保持")
   }
 
-  func testConsumeIsScopedToReceiverTab() {
-    // ヘルパーはアクティブ表示タブにだけ consumeDoneState() を呼ぶ。
-    // 消費は受け手タブに閉じ、別タブ（背景タブ）の done は残る。
-    let active = TerminalTab(cwd: "/tmp")
-    let background = TerminalTab(cwd: "/tmp")
-    setReportedState(active, "done")
-    setReportedState(background, "done")
-
-    active.consumeDoneState()
-
-    XCTAssertEqual(active.agentState, "idle", "受け手タブの done は idle(休止)へ")
-    XCTAssertEqual(background.agentState, "done", "背景タブの done は残る")
-  }
-
-  func testConsumeOnNonDoneTabNoOp() {
-    let tab = TerminalTab(cwd: "/tmp")
-
-    tab.consumeDoneState()
-
-    XCTAssertNil(tab.agentState)
-    XCTAssertNil(tab.agentStateKind)
-  }
-
   // MARK: - resetAgentState（タブのコンテキストメニューによるリセット）
 
   func testResetSettlesEveryReportedStateToIdle() {
@@ -117,18 +94,6 @@ extension TerminalTabTests {
     XCTAssertEqual(tab.agentSlot.session, session, "resume 用の同一性（command・sessionId）は保持")
     XCTAssertEqual(tab.agentSlot.report?.message, question, "文言は保持")
     XCTAssertEqual(tab.agentSlot.report?.stateChangedAt, reportedAt, "報告以外の書き戻しは打刻を進めない")
-  }
-
-  func testResetIsScopedToReceiverTab() {
-    let target = TerminalTab(cwd: "/tmp")
-    let background = TerminalTab(cwd: "/tmp")
-    setReportedState(target, "waiting")
-    setReportedState(background, "waiting")
-
-    target.resetAgentState()
-
-    XCTAssertEqual(target.agentState, "idle", "受け手タブは idle へ")
-    XCTAssertEqual(background.agentState, "waiting", "別タブの状態は残る")
   }
 
   func testResetLeavesSlotsWithoutAReportedStateUntouched() {

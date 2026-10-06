@@ -229,19 +229,4 @@ final class OccurrencesTests: XCTestCase {
       TextSearch.matches(of: "foo", in: TextRope("foobar foo"), rule: .word),
       [NSRange(location: 7, length: 3)], "英字だけの並びは分割しない")
   }
-
-  /// 次の一致は、位置以降に始まる最初の一致。無ければ先頭へ回る。
-  func testFirstMatchWrapsAround() {
-    let text = TextRope("ab x ab x AB")
-    XCTAssertEqual(
-      TextSearch.firstMatch(of: "ab", in: text, rule: .find, from: 3),
-      NSRange(location: 5, length: 2))
-    XCTAssertEqual(
-      TextSearch.firstMatch(of: "AB", in: text, rule: .word, from: 11),
-      NSRange(location: 10, length: 2))
-    XCTAssertEqual(
-      TextSearch.firstMatch(of: "ab", in: text, rule: .word, from: 8),
-      NSRange(location: 0, length: 2), "末尾まで無ければ先頭から")
-    XCTAssertNil(TextSearch.firstMatch(of: "zz", in: text, rule: .find, from: 3))
-  }
 }

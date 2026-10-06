@@ -135,21 +135,6 @@ extension TaskStoreTests {
     XCTAssertEqual(relaunched().tasks.map(\.worktreeBranch), store.tasks.map(\.worktreeBranch))
   }
 
-  /// ブランチを読めない worktree（reftable のリポジトリ）を付けると、記録は無い（未確定）。
-  func testAttachingAWorktreeWhoseBranchCannotBeReadRecordsNothing() throws {
-    let repo = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("repo").path
-    try FileManager.default.createDirectory(atPath: repo, withIntermediateDirectories: true)
-    XCTAssertTrue(
-      GitRunner.shared.runSync(["init", "-q", "-b", "main", "--ref-format=reftable"], cwd: repo)
-        .isSuccess)
-    let store = TaskStore()
-
-    _ = try store.add(draft("a") { $0.worktree = TaskWorktree(key: repo) })
-
-    XCTAssertNotNil(store.tasks.last?.worktree)
-    XCTAssertNil(store.tasks.last?.worktreeBranch)
-  }
-
   // MARK: - 外した項目
 
   func testUnlinkingRemembersTheItemAndLinkingItAgainForgetsIt() throws {

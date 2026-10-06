@@ -56,11 +56,8 @@ final class GlyphPixelTests: EngineTestCase {
         }.value)
       let reference = try coreText(opened)
       let name = "\(spaceName)-\(Int(scale))x"
-      writePNG(metal, previewURL("glyphs-metal-\(name).png"))
-      writePNG(reference, previewURL("glyphs-coretext-\(name).png"))
       let right = Int((opened.surface.surfaceLayout.text.maxX * scale).rounded())
       let difference = Self.compare(metal, reference, right: right)
-      print("GLYPHS \(name) ink=\(difference.ink) worst=\(difference.worst)")
       XCTAssertGreaterThan(difference.ink, 500, "前提: 字が描かれている")
       XCTAssertLessThanOrEqual(
         difference.worst, tolerance, "\(name): 字のある画素の差は最大 \(tolerance) 段")

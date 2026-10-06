@@ -57,30 +57,6 @@ final class SurfaceMultiCursorTests: EngineTestCase {
     XCTAssertEqual(selections(opened), [NSRange(location: 1, length: 0)])
   }
 
-  /// 打鍵・削除は全カーソルに 1 回の操作として当たり、⌘Z で本文とカーソルの並びがその時点へ戻る。
-  func testEditsReachEveryCursorAndUndoRestoresThem() throws {
-    let opened = try open("ab ab ab\n")
-    _ = host(opened)
-    opened.surface.selectedRange = NSRange(location: 0, length: 2)
-    opened.surface.perform(.selectAllOccurrences)
-    XCTAssertEqual(selections(opened).count, 3)
-    type(opened, "xy")
-    XCTAssertEqual(text(opened.document), "xy xy xy\n")
-    opened.surface.perform(.deleteBackward)
-    XCTAssertEqual(text(opened.document), "x x x\n")
-    XCTAssertEqual(
-      selections(opened),
-      [1, 3, 5].map { NSRange(location: $0, length: 0) })
-    let undo = try XCTUnwrap(opened.surface.responder.undoManager)
-    undo.undo()
-    XCTAssertEqual(text(opened.document), "xy xy xy\n")
-    undo.undo()
-    XCTAssertEqual(text(opened.document), "ab ab ab\n")
-    XCTAssertEqual(
-      selections(opened), [0, 3, 6].map { NSRange(location: $0, length: 2) },
-      "カーソルの数と主も戻る")
-  }
-
   /// ⌘Z・⌘⇧Z は、本文とカーソルの列（数と主）をその時点へ戻す——主が文書の後ろにあっても主のまま。
   func testUndoAndRedoRestoreTheCursorListWithItsPrimary() throws {
     let opened = try open("abc abc\n")

@@ -71,56 +71,26 @@ final class SessionStoreMoveTabTests: OrbeTestCase {
     XCTAssertEqual(store.current.active, 0, "tab1 の index が 1→0 に追従")
   }
 
-  /// from > to（後方＝前方へ引き戻す）でも active の参照追従は方向対称に成立する。
-  /// アクティブ(tab1)より後ろの tab3 をアクティブより前へ動かす → tab1 の index が 1→2 に繰り下がる。
-  func testMovingTabBackwardKeepsActiveOnSameController() {
-    let (store, t) = makeStore(tabCount: 4, active: 1)  // active = tab1
-    XCTAssertTrue(store.moveTab(from: 3, to: 0))  // tab3 を先頭へ → [3,0,1,2]
-    XCTAssertTrue(store.current.tabs[store.current.active] === t[1], "active は依然 tab1 を指す")
-    XCTAssertEqual(store.current.active, 2, "tab1 の index が 1→2 に追従")
-  }
-
   // MARK: - no-op（false・配列不変）
 
-  /// from == to は実移動なしで false、配列は変わらない。
-  func testSamePositionIsNoOp() {
+  /// 同位置（to == from）と自分の直後（to == from+1。from を抜いた後の実挿入先が from と同じ）は
+  /// 実移動なしで false、配列は変わらない。
+  func testDropOnItsOwnPositionIsNoOp() {
     let (store, t) = makeStore(tabCount: 4)
     XCTAssertFalse(store.moveTab(from: 1, to: 1), "同位置は false")
-    XCTAssertTrue(store.current.tabs.elementsEqual(t, by: ===), "配列は不変")
-  }
-
-  /// 掴んだタブの直後（to == from+1）は、from を抜いた後の実挿入先が from と同じ＝実移動なしで false。
-  func testDropRightAfterSelfIsNoOp() {
-    let (store, t) = makeStore(tabCount: 4)
     XCTAssertFalse(store.moveTab(from: 1, to: 2), "自分の直後へのドロップは実移動なし → false")
     XCTAssertTrue(store.current.tabs.elementsEqual(t, by: ===), "配列は不変")
   }
 
   // MARK: - 範囲外（false・配列不変）
 
-  /// from が範囲外なら false・配列不変。
-  func testFromOutOfRangeReturnsFalse() {
+  /// from が範囲外（from == count・負）か、to が 0…count の外なら false・配列不変。
+  func testOutOfRangeIsRejected() {
     let (store, t) = makeStore(tabCount: 3)
     XCTAssertFalse(store.moveTab(from: 3, to: 0), "from==count は範囲外 → false")
     XCTAssertFalse(store.moveTab(from: -1, to: 0), "負の from → false")
-    XCTAssertTrue(store.current.tabs.elementsEqual(t, by: ===), "配列は不変")
-  }
-
-  /// to が範囲外（0…count を超える／負）なら false・配列不変。
-  func testToOutOfRangeReturnsFalse() {
-    let (store, t) = makeStore(tabCount: 3)
     XCTAssertFalse(store.moveTab(from: 0, to: 4), "to>count は範囲外 → false")
     XCTAssertFalse(store.moveTab(from: 0, to: -1), "負の to → false")
-    XCTAssertTrue(store.current.tabs.elementsEqual(t, by: ===), "配列は不変")
-  }
-
-  // MARK: - 1タブのみ
-
-  /// タブが1本のときは、どんな (from,to) でも実移動が成立せず false・配列不変。
-  func testSingleTabRejectsAllMoves() {
-    let (store, t) = makeStore(tabCount: 1)
-    XCTAssertFalse(store.moveTab(from: 0, to: 0), "同位置 → false")
-    XCTAssertFalse(store.moveTab(from: 0, to: 1), "唯一のタブを末尾へ動かしても実移動なし → false")
     XCTAssertTrue(store.current.tabs.elementsEqual(t, by: ===), "配列は不変")
   }
 }

@@ -17,6 +17,7 @@ import XCTest
 extension DesignFlowSnapshotTests {
   func testWorkspaceGlyphRuns() throws {
     let font = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()  // Shots
       .deletingLastPathComponent()  // OrbeTests
       .deletingLastPathComponent()  // Tests
       .deletingLastPathComponent()  // リポジトリ根

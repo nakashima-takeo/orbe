@@ -33,18 +33,16 @@ final class AgentPluginInstallerTests: OrbeTestCase {
     XCTAssertEqual(AgentPluginInstaller.pluginName(in: pkg), "orbe-agent-dev")
   }
 
-  func testEmptyPluginsDirectoryIsNil() throws {
+  /// `plugins/` が無い・空なら名前は決まらない。
+  func testMissingOrEmptyPluginsDirectoryIsNil() throws {
+    XCTAssertNil(AgentPluginInstaller.pluginName(in: pkg), "plugins/ が無い")
     try makePluginsDir()
-    XCTAssertNil(AgentPluginInstaller.pluginName(in: pkg))
+    XCTAssertNil(AgentPluginInstaller.pluginName(in: pkg), "plugins/ が空")
   }
 
   /// 2 つ在ればどちらが自分の名前か決まらない。
   func testMultipleSubdirectoriesAreNil() throws {
     try makePluginsDir(subdirectories: ["orbe-agent", "orbe-agent-dev"])
-    XCTAssertNil(AgentPluginInstaller.pluginName(in: pkg))
-  }
-
-  func testMissingPluginsDirectoryIsNil() {
     XCTAssertNil(AgentPluginInstaller.pluginName(in: pkg))
   }
 

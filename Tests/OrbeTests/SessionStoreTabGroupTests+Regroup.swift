@@ -38,23 +38,14 @@ extension SessionStoreTabGroupTests {
     XCTAssertEqual(keys(store.current), ["a", "a", "a", "b"])
   }
 
-  /// 単独セグメントのタブは、キーが変わっても位置を変えない（Q2: その場に留まりキーだけ変わる）。
-  func testRegroupLeavesSingletonInPlace() {
-    let store = makeStore(["a", "b", "c"])
-    let tab = store.current.tabs[1]
-    tab.groupKey = "z"
-
-    XCTAssertNil(store.regroup(tab), "不変条件は破れていない＝動かさない")
-    XCTAssertEqual(keys(store.current), ["a", "z", "c"])
-  }
-
-  /// 連の端のタブが別キーへ変わっても、連を割らず・他所に同キーが無ければ動かない。
-  func testRegroupLeavesEdgeTabInPlaceWhenInvariantHolds() {
+  /// 連を割らず（左右の隣が別キー）・他所に同キーが無ければ、キーが変わっても位置を変えない——単独
+  /// セグメントのタブも、連の端から抜けたタブも（Q2: その場に留まりキーだけ変わる）。
+  func testRegroupLeavesTabInPlaceWhenItSplitsNoSegment() {
     let store = makeStore(["a", "a", "b"])
     let tab = store.current.tabs[1]
     tab.groupKey = "z"
 
-    XCTAssertNil(store.regroup(tab))
+    XCTAssertNil(store.regroup(tab), "不変条件は破れていない＝動かさない")
     XCTAssertEqual(keys(store.current), ["a", "z", "b"])
   }
 

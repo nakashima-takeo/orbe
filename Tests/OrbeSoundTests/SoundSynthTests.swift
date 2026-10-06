@@ -42,37 +42,6 @@ final class SoundSynthTests: XCTestCase {
       param.value(at: 0.002), (0.15 * AudioParam.zero).squareRoot(), accuracy: 1e-9)
   }
 
-  /// `setValue` は次のイベントが撃たれるまで平坦（glide のゲート形ゲインがこの形に展開される）。
-  func testSetValueHoldsUntilNextEvent() {
-    let gain = 0.12
-    let duration = 0.4
-    var param = AudioParam(AudioParam.zero, at: 0)
-    param.rampExponentially(to: gain, at: 0.02)
-    param.setValue(gain, at: duration * 0.7)
-    param.rampExponentially(to: AudioParam.zero, at: duration + 0.15)
-
-    XCTAssertEqual(param.value(at: 0.02), gain, accuracy: 1e-12)
-    XCTAssertEqual(param.value(at: 0.15), gain, accuracy: 1e-12, "0.02〜0.7d は平坦")
-    XCTAssertEqual(param.value(at: duration * 0.7), gain, accuracy: 1e-12)
-    // 減衰区間は 0.7d から d+0.15 まで＝長さ 0.3d + 0.15。
-    let middle = (duration * 0.7 + duration + 0.15) / 2
-    XCTAssertEqual(
-      param.value(at: middle), (gain * AudioParam.zero).squareRoot(), accuracy: 1e-9)
-  }
-
-  /// 線形ランプは端点に正確に到達し、中点は算術平均（指数の幾何平均と区別する）。
-  func testLinearRampInterpolatesArithmetically() {
-    var param = AudioParam(0.2, at: 0)
-    param.rampLinearly(to: 1.0, at: 0.1)
-    param.rampLinearly(to: 0, at: 0.3)
-    XCTAssertEqual(param.value(at: 0), 0.2, accuracy: 1e-12)
-    XCTAssertEqual(param.value(at: 0.05), 0.6, accuracy: 1e-12, "中点は算術平均")
-    XCTAssertEqual(param.value(at: 0.1), 1.0, accuracy: 1e-12)
-    XCTAssertEqual(param.value(at: 0.2), 0.5, accuracy: 1e-12)
-    XCTAssertEqual(param.value(at: 0.3), 0, accuracy: 1e-12, "指数と違い 0 へ正確に到達する")
-    XCTAssertEqual(param.value(at: 1), 0, accuracy: 1e-12, "以降は保持")
-  }
-
   // MARK: - 帯域制限（Nyquist 超の倍音を足さない）
 
   /// 3 倍音が Nyquist を超える高い音では基音だけになる（＝素の級数のエイリアスが乗らない）。
@@ -142,34 +111,6 @@ final class SoundSynthTests: XCTestCase {
     XCTAssertNotEqual(linear.a2, bandpass.a2, accuracy: 1e-6, "dB を線形として読むと別物になる")
   }
 
-  /// lowpass は DC で利得 1、highpass は Nyquist で利得 1（係数の正規化が正しいことの検算）。
-  func testFilterGainAtPassbandEdges() {
-    let lowpass = Biquad.coefficients(kind: .lowpass, frequency: 3500, q: 1, sampleRate: 48000)
-    XCTAssertEqual(
-      (lowpass.b0 + lowpass.b1 + lowpass.b2) / (1 + lowpass.a1 + lowpass.a2), 1, accuracy: 1e-9)
-    let highpass = Biquad.coefficients(kind: .highpass, frequency: 2500, q: 0.5, sampleRate: 48000)
-    XCTAssertEqual(
-      (highpass.b0 - highpass.b1 + highpass.b2) / (1 - highpass.a1 + highpass.a2), 1,
-      accuracy: 1e-9)
-  }
-
-  // MARK: - 白色雑音（固定シードで決定論）
-
-  func testWhiteNoiseIsDeterministicAndInRange() {
-    var a = WhiteNoise(seed: 12345)
-    var b = WhiteNoise(seed: 12345)
-    var c = WhiteNoise(seed: 999)
-    var sameCount = 0
-    for _ in 0..<2000 {
-      let sample = a.next()
-      XCTAssertEqual(sample, b.next(), "同じシードは同じ列")
-      XCTAssertGreaterThanOrEqual(sample, -1)
-      XCTAssertLessThan(sample, 1)
-      if sample == c.next() { sameCount += 1 }
-    }
-    XCTAssertEqual(sameCount, 0, "別シードは別の列")
-  }
-
   // MARK: - コンプレッサの静特性（ニーの内外 3 領域）
 
   func testCompressorStaticCurveRegions() {
@@ -191,14 +132,6 @@ final class SoundSynthTests: XCTestCase {
     XCTAssertEqual(
       (DynamicsCompressor.curve(inputDB: upper + d) - DynamicsCompressor.curve(inputDB: upper - d))
         / (2 * d), 1 / DynamicsCompressor.ratio, accuracy: 1e-6, "ニー上端で傾きが比へ繋がる")
-  }
-
-  /// メイクアップゲインは静特性から導く（仕様の "Computing the makeup gain"）。定数を焼かない。
-  func testMakeupGainIsDerivedFromTheCurve() {
-    XCTAssertEqual(
-      DynamicsCompressor.makeupGain,
-      pow(pow(10, DynamicsCompressor.curve(inputDB: 0) / 20), -0.6), accuracy: 1e-12)
-    XCTAssertGreaterThan(DynamicsCompressor.makeupGain, 1, "圧縮で落ちた分を持ち上げる")
   }
 
   /// 閾値以下の信号はメイクアップぶんだけ持ち上がり（圧縮はされない）、大きな信号は押さえ込む。

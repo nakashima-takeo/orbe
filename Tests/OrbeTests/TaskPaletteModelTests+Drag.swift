@@ -104,35 +104,6 @@ extension TaskPaletteModelTests {
 
   // MARK: - 掴み中の見た目
 
-  /// 掴んだ行は指に付いて動き、欄の先頭の行の上端から末尾の行の下端までに収まる。
-  func testGrabbedRowFollowsThePointerWithinItsSection() throws {
-    let palette = threeTodos()
-
-    palette.dragChanged(2, start: grabPoint, translation: 0.3 * rowHeight)
-    XCTAssertEqual(try XCTUnwrap(palette.drag.session).offset, 0.3 * rowHeight)
-
-    palette.dragChanged(2, start: grabPoint, translation: 5 * rowHeight)
-    XCTAssertEqual(try XCTUnwrap(palette.drag.session).offset, rowHeight, "末尾の行の位置で止まる")
-
-    palette.dragChanged(2, start: grabPoint, translation: -5 * rowHeight)
-    XCTAssertEqual(try XCTUnwrap(palette.drag.session).offset, -rowHeight, "先頭の行の位置で止まる")
-  }
-
-  /// 線は、下へ落ちるなら落ちる行の下端、上へなら上端に出る（掴んだ行の元の上端から測る）。元の位置に
-  /// 落ちるなら出ない。
-  func testDropLineMarksTheEdgeOfTheRowItLandsOn() throws {
-    let palette = threeTodos()
-
-    palette.dragChanged(2, start: grabPoint, translation: 0.3 * rowHeight)
-    XCTAssertNil(try XCTUnwrap(palette.drag.session).indicatorY, "元の位置")
-
-    palette.dragChanged(2, start: grabPoint, translation: 0.6 * rowHeight)
-    XCTAssertEqual(try XCTUnwrap(palette.drag.session).indicatorY, 2 * rowHeight, "c の下端")
-
-    palette.dragChanged(2, start: grabPoint, translation: -0.6 * rowHeight)
-    XCTAssertEqual(try XCTUnwrap(palette.drag.session).indicatorY, -rowHeight, "a の上端")
-  }
-
   // MARK: - 高さの違う行が混ざった欄
 
   /// 落ちる位置は行ごとの高さで決まる——詳細つきの背の高い行は、その中点を越えるまで越えない。
@@ -175,9 +146,13 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(order(palette), [2, 3, 1])
   }
 
-  /// 線は、高さの違う行が混ざっていても、落ちる行の縁（下へなら下端、上へなら上端）に出る。
+  /// 線は、高さの違う行が混ざっていても、落ちる行の縁（下へなら下端、上へなら上端）に出る（掴んだ行の元の
+  /// 上端から測る）。元の位置に落ちるなら出ない。
   func testDropLineMarksTheEdgeOfTheRowItLandsOnAmongRowsOfDifferentHeights() throws {
     let palette = model([task(1, "a"), task(2, "b") { $0.description = "詳細" }, task(3, "c")])
+
+    palette.dragChanged(1, start: grabPoint, translation: 0.3 * tallRowHeight)
+    XCTAssertNil(try XCTUnwrap(palette.drag.session).indicatorY, "元の位置")
 
     palette.dragChanged(1, start: grabPoint, translation: 0.6 * tallRowHeight)
     XCTAssertEqual(
@@ -187,9 +162,13 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(try XCTUnwrap(palette.drag.session).indicatorY, -tallRowHeight, "b の上端")
   }
 
-  /// 掴んだ行は、高さの違う行が混ざっていても、欄の先頭の行の上端から末尾の行の下端までに収まる。
+  /// 掴んだ行は指に付いて動き、高さの違う行が混ざっていても、欄の先頭の行の上端から末尾の行の下端までに
+  /// 収まる。
   func testGrabbedRowStaysWithinItsSectionAmongRowsOfDifferentHeights() throws {
     let palette = model([task(1, "a") { $0.description = "詳細" }, task(2, "b"), task(3, "c")])
+
+    palette.dragChanged(1, start: grabPoint, translation: 0.3 * rowHeight)
+    XCTAssertEqual(try XCTUnwrap(palette.drag.session).offset, 0.3 * rowHeight, "指に付く")
 
     palette.dragChanged(1, start: grabPoint, translation: 10 * tallRowHeight)
     XCTAssertEqual(

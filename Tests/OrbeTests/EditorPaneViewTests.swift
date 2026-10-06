@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// 面の中身——焦点の文書があればそのテキスト面が全面に載り、焦点の行き先とクリックの受け方が変わる。
-/// ⌘S は焦点の文書を保存し、テキスト面が first responder になると面の記憶がエディターへ移る。
+/// テキスト面が first responder になると面の記憶がエディターへ移る。
 ///
 /// 壊れると何が起きるか。文書があるのに pane が焦点の行き先だと打鍵がテキスト面に届かない。hitTest が
 /// self 固定のままだとテキスト面をクリックできない。テキスト面の焦点がタブに上がらないと分割中に
@@ -144,21 +144,6 @@ final class EditorPaneViewTests: OrbeTestCase {
     window.makeFirstResponder(nil)
     pane.mouseDown(with: .mouse(.leftMouseDown, at: pane.centerInWindow, in: window))
     XCTAssertTrue(window.firstResponder === document.surface.responder, "文書があればテキスト面")
-    window.orderOut(nil)
-  }
-
-  func testCommandSSavesTheActiveDocument() throws {
-    let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let url = try file("c.txt", "abc")
-    let document = try tab.editor.open(url, as: .pinned)
-    let window = hosted(tab)
-    window.makeFirstResponder(document.surface.responder)
-    document.surface.responder.perform(Selector(("insertText:")), with: "Z")
-    XCTAssertTrue(document.isDirty)
-
-    XCTAssertTrue(tab.view.editor.performKeyEquivalent(with: .key("s")))
-    XCTAssertFalse(document.isDirty)
-    XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "Zabc")
     window.orderOut(nil)
   }
 }

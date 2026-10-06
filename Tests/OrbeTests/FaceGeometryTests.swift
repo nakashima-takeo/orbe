@@ -145,26 +145,17 @@ final class FaceGeometryTests: OrbeTestCase {
 
   // MARK: - 背のドラッグ
 
-  /// ポインタの位置がそのままエディター幅になり、焦点は掴んだときのまま。
+  /// ポインタの位置がそのままエディター幅になり（隠れている面からも引き出せる）、焦点は掴んだときのまま。
   func testDragFollowsThePointerAndKeepsTheFocus() {
-    let split = FaceLayout(editorRatio: 0.5, focus: .terminal)
-
     XCTAssertEqual(
       FaceGeometry.drag(from: resolved(0.5, .terminal), x: 300),
       FaceLayout(editorRatio: 0.3, focus: .terminal))
     XCTAssertEqual(
       FaceGeometry.drag(from: resolved(0.5, .editor), x: 300),
       FaceLayout(editorRatio: 0.3, focus: .editor), "エディター焦点も動かない")
-  }
-
-  /// 隠れている面から引き出せる（端末だけ → 分割、エディター全面 → 分割）。
-  func testDragOpensAHiddenFace() {
     XCTAssertEqual(
       FaceGeometry.drag(from: resolved(0, .terminal), x: 400),
-      FaceLayout(editorRatio: 0.4, focus: .terminal))
-    XCTAssertEqual(
-      FaceGeometry.drag(from: resolved(1, .editor), x: 600),
-      FaceLayout(editorRatio: 0.6, focus: .editor))
+      FaceLayout(editorRatio: 0.4, focus: .terminal), "隠れている面からも引き出せる")
   }
 
   /// 器の外へ引いても内容幅の範囲に収まり、端に着いた面へ焦点が移る（正規形）。
@@ -205,15 +196,5 @@ final class FaceGeometryTests: OrbeTestCase {
     let terminalAtEdge = FaceLayout(editorRatio: 0.96, focus: .terminal)
     XCTAssertEqual(
       FaceGeometry.release(terminalAtEdge, contentWidth: 1000), terminalAtEdge, "端末 40 は残る")
-  }
-
-  /// 閉じる側が焦点の面なら、残る面へ焦点が移る。
-  func testReleaseMovesFocusToTheRemainingFace() {
-    XCTAssertEqual(
-      FaceGeometry.release(FaceLayout(editorRatio: 0.02, focus: .editor), contentWidth: 1000),
-      .terminalOnly)
-    XCTAssertEqual(
-      FaceGeometry.release(FaceLayout(editorRatio: 0.98, focus: .terminal), contentWidth: 1000),
-      FaceLayout(editorRatio: 1, focus: .editor))
   }
 }

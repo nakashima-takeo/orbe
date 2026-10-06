@@ -2,43 +2,50 @@ import XCTest
 
 @testable import Orbe
 
-/// gh の結果の保存先（`GitHubCache`）と、ブランチの PR・probe の問い合わせの検証。
+/// clean が読むブランチの PR の問い合わせと、gh の認証確認。
+///
+/// 壊れると何が起きるか: 窓落ちした PR のぶんだけ「マージ済みなのに merged チップが出ない」「レビュー中なのに
+/// 安全確認を素通りする」が起きる。head のリポジトリを読む欄を頼み忘れると、自分の PR を「確かめて 0 件」と
+/// 読む。疎通不能を未認証と読むと、PR を確かめないまま 0 件と読まれ、worktree の掃除が素通りする。
 @MainActor
 final class GitHubCacheTests: OrbeTestCase {
+  private var dir: URL?
 
-  // MARK: - 保存先
-
-  /// ブランチの PR は **head 単位**で保存する。「キーが無い＝未取得」「`[]`＝0 件」の区別を head ごとに
-  /// 保つので、1 本の失敗が他の head の先描きを消さない。
-  func testBranchPRCacheKeepsHeadsIndependent() {
-    let cache = GitHubCache.shared
-    let key = "/branch-prs/.git"
-    let pr = GitHubBranchPR(
-      number: 7, headRefName: "feat/x", state: "OPEN", baseRefName: "main",
-      headRepository: GitHubRepoName(nameWithOwner: "o/r"))
-    cache.setBranchPullRequests([pr], head: "feat/x", for: key)
-    cache.setBranchPullRequests([], head: "feat/y", for: key)
-    let entry = cache.entry(for: key)
-    XCTAssertEqual(entry?.branchPullRequests["feat/x"], [pr])
-    XCTAssertEqual(entry?.branchPullRequests["feat/y"], [], "0 件も「確かめた」として残る")
-    XCTAssertNil(entry?.branchPullRequests["feat/z"], "キーが無い＝未取得（0 件ではない）")
+  override func tearDownWithError() throws {
+    if let dir { try? FileManager.default.removeItem(at: dir) }
   }
 
   // MARK: - ブランチの PR の取得
 
-  /// ブランチの PR は一覧の窓ではなく **worktree にあるブランチの名指し**で、`--state all` の
-  /// 1 往復で open / closed の両方を引く。直近 N 件の窓では、窓落ちした PR のぶんだけ
-  /// 「マージ済みなのに merged チップが出ない」「レビュー中なのに安全確認を素通りする」が起きる。
-  /// `--limit` は gh が 1 往復で取れる上限（100）。往復コストは件数に依らないので、絞ると
-  /// 他人の fork の同名ブランチの PR で埋まって自分の PR が窓落ちする側にしか働かない。
-  /// head のリポジトリも owner と名前で取る（worktree と突き合わせるのは head が等しい PR だけ）。
-  func testBranchPRFetchNamesTheBranchInsteadOfAWindow() {
+  /// ブランチの PR は一覧の窓ではなく **worktree にあるブランチの名指し**で、open / closed の両方を、gh が
+  /// 1 往復で取れる上限（100 件）まで引く。
+  func testBranchPRFetchNamesTheBranchAcrossAllStates() {
+    let arguments = GitHubCLI.branchPRArguments(head: "refactor/phase2-2b")
+    let pairs = zip(arguments, arguments.dropFirst())
+
+    XCTAssertTrue(pairs.contains { $0 == ("--head", "refactor/phase2-2b") }, "ブランチを名指しする")
+    XCTAssertTrue(pairs.contains { $0 == ("--state", "all") }, "閉じた PR も引く")
+    XCTAssertTrue(pairs.contains { $0 == ("--limit", "100") }, "gh の上限まで引く")
+  }
+
+  /// gh に頼む欄（`--json`）だけを持つ出力から、clean と PR の自動の結び付けが読む値（head と URL）が揃う。
+  func testBranchPRFetchRequestsEveryFieldThePullRequestIsReadFrom() throws {
+    let arguments = GitHubCLI.branchPRArguments(head: "feat")
+    let fields = try XCTUnwrap(arguments.firstIndex(of: "--json")) + 1
+    let requested = Set(arguments[fields].split(separator: ",").map(String.init))
+    let output: [String: Any] = [
+      "number": 7, "headRefName": "feat", "state": "OPEN", "baseRefName": "main",
+      "headRepository": ["name": "r"], "headRepositoryOwner": ["login": "o"],
+      "url": "https://github.com/o/r/pull/7",
+    ]
+
+    let pr = try JSONDecoder().decode(
+      GitHubBranchPR.self,
+      from: JSONSerialization.data(withJSONObject: output.filter { requested.contains($0.key) }))
+
     XCTAssertEqual(
-      GitHubCLI.branchPRArguments(head: "refactor/phase2-2b"),
-      [
-        "pr", "list", "--state", "all", "--head", "refactor/phase2-2b", "--limit", "100",
-        "--json", "number,headRefName,state,baseRefName,headRepository,headRepositoryOwner,url",
-      ])
+      pr.head, GitHubBranchRef(repo: GitHubRepoName(nameWithOwner: "o/r"), branch: "feat"))
+    XCTAssertEqual(pr.url, "https://github.com/o/r/pull/7")
   }
 
   /// 対象は worktree にあるブランチだけ（main worktree は掃除の対象外・detached は PR の head に
@@ -54,11 +61,35 @@ final class GitHubCacheTests: OrbeTestCase {
 
   // MARK: - probe
 
-  /// 認証判定はネットに触らない `gh auth token` で行う。`gh auth status` はトークン検証で API を
-  /// 叩き、疎通不能を未認証と誤判定する。未認証と読まれたリポジトリでは PR を確かめないまま 0 件と読まれ、
-  /// worktree の掃除が素通りする。
-  func testAuthProbeDoesNotUseNetworkVerifyingCommand() {
-    XCTAssertEqual(
-      GitHubCLI.authProbeArguments, ["auth", "token", "--hostname", "github.com"])
+  /// 認証はネットに触らずに確かめる。GitHub に届かない（ネットを要する gh の呼び出しが落ちる）ときも、
+  /// github.com の認証情報があれば使える。
+  func testAuthProbeIsReadyOfflineWithGitHubDotComCredentials() throws {
+    let dir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("orbe-gh-probe-\(UUID().uuidString)")
+    self.dir = dir
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    // オフラインの gh: github.com の認証情報を読むだけの呼び出しは通り、それ以外は落ちる。
+    let script = """
+      #!/bin/sh
+      [ "$1 $2" = "auth token" ] || exit 1
+      case " $* " in *" --hostname github.com "*) exit 0 ;; esac
+      exit 1
+      """
+    let gh = dir.appendingPathComponent("gh").path
+    try script.write(toFile: gh, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: gh)
+    // 戻さない——`OrbeTestCase` が毎テスト `ShellPATH.shared` を張り直す。
+    let path = dir.path
+    ShellPATH.shared = ShellPATH(probe: { path })
+
+    var availability: GitHubAvailability?
+    let done = expectation(description: "probe")
+    GitHubCLI().probe(cwd: dir.path, isGitHub: true) {
+      availability = $0
+      done.fulfill()
+    }
+    wait(for: [done], timeout: 30)
+
+    XCTAssertEqual(availability, .ready)
   }
 }

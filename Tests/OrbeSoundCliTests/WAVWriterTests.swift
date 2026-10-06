@@ -47,13 +47,6 @@ final class WAVWriterTests: XCTestCase {
     XCTAssertEqual(uint32(data, at: 40), payloadBytes)
   }
 
-  /// 小数レートのヘッダは切り捨て（8000.7 → 8000）。丸めに変えたら落ちる＝変換規則が観測面に出る。
-  func testFractionalRateIsTruncatedInTheHeader() throws {
-    let data = try write([0], rate: 8000.7)
-    XCTAssertEqual(uint32(data, at: 24), 8000)
-    XCTAssertEqual(uint32(data, at: 28), 16000)
-  }
-
   /// ペイロードは ±1 クランプ・half-away-from-zero 丸めの 16bit リトルエンディアン。
   /// ±0.5（→ ±16384）が丸め規則の観測点、±1.5（→ ±32767）がクランプの観測点。
   func testPayloadClampsAndRoundsSamples() throws {

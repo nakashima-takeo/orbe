@@ -35,27 +35,6 @@ extension WorkspacePaletteTests {
     XCTAssertEqual(seed, .some(nil), "完全同名があるときは名前を引き継がない")
   }
 
-  func testCreateFlowRowAlwaysPresentAndFiresCallback() {
-    let p = palette()
-    var createFlow = false
-    p.onCreateFlow = { _ in createFlow = true }
-    p.setItems(items([("default", true), ("api", false)]))
-    let last = p.render.rows.last
-    XCTAssertEqual(last?.createStyle, true, "末尾は作成導線の行スタイル")
-    send(p, down)  // api
-    send(p, down)  // createFlow
-    send(p, enter)
-    XCTAssertTrue(createFlow, "createFlow 行の Enter は onCreateFlow")
-  }
-
-  func testCreateFlowRowSurvivesFiltering() {
-    let p = palette()
-    p.setItems(items([("default", true), ("api", false)]))
-    type(p, "zzz")  // 一致なし → 作成導線行だけが残る
-    XCTAssertEqual(p.render.rows.count, 1, "一致ゼロでも作成導線行は 1 本残る")
-    XCTAssertEqual(p.render.rows.last?.createStyle, true, "絞り込み中も createFlow は末尾に残る")
-  }
-
   /// 引き継ぐ名前の有無で行ラベルが 2 態に変わる（行は常に 1 本）。
   func testCreateFlowRowLabelCarriesSeedName() {
     let p = palette()

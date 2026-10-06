@@ -111,7 +111,6 @@ final class FakeControlTarget: ControlTarget {
   private(set) var focusedTabIds: [Int] = []
   private(set) var openedFiles: [(tabId: Int, path: String)] = []
   private(set) var closedTabIds: [Int] = []
-  private(set) var resolvedTabIds: [Int] = []
   private(set) var restoredSessionIds: [[String]] = []
   private(set) var taskLists: [Int?] = []
   private(set) var addedTasks: [AddedTask] = []
@@ -126,8 +125,7 @@ final class FakeControlTarget: ControlTarget {
   var tabId: Int { tab.id }
 
   func controlResolveTab(_ id: Int) -> TerminalTab? {
-    resolvedTabIds.append(id)
-    return id == tab.id ? tab : nil
+    id == tab.id ? tab : nil
   }
 
   // MARK: - ControlTarget

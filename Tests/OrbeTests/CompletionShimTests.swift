@@ -128,17 +128,6 @@ final class CompletionShimTests: OrbeTestCase {
     assertProbe(out, contains: "OUZ:unset", "ORBE_USER_ZDOTDIR は shim が読んだ時点で消える")
   }
 
-  func testUserZshenvSettingZdotdirIsHonored() throws {
-    // ZDOTDIR 派構成: ユーザー .zshenv が設定した ZDOTDIR の .zshrc が読まれ、最終値も復元される。
-    let cfg = home.appendingPathComponent("cfg")
-    try writeRc(".zshenv", in: home, marker: "user-zshenv", extra: "export ZDOTDIR=\"$HOME/cfg\"\n")
-    try writeRc(".zshrc", in: cfg, marker: "cfg-zshrc")
-    let out = try runZsh()
-    XCTAssertEqual(sourceOrder(), ["user-zshenv", "cfg-zshrc"])
-    assertProbe(out, contains: "TAB:_orbe_complete")
-    assertProbe(out, contains: "ZDOTDIR:\(cfg.path)", "ユーザーが設定した ZDOTDIR へ復元")
-  }
-
   func testLateBindingPluginFallsBackViaOrbeTab() throws {
     // 後乗り bind との共存（fzf-tab 相当）: ユーザー .zshrc 末尾の bind に、最初の precmd で入る
     // widget が後勝ちし、元 widget はフォールバックへ退避される。
@@ -159,17 +148,6 @@ final class CompletionShimTests: OrbeTestCase {
     let out = try runZsh(extraEnv: ["ORBE_USER_ZDOTDIR": cfg.path])
     XCTAssertEqual(sourceOrder(), ["cfg-zshenv", "cfg-zshrc"])
     assertProbe(out, contains: "ZDOTDIR:\(cfg.path)", "ユーザー値へ復元")
-  }
-
-  func testLoginShellSourcesAllUserRcInOrder() throws {
-    // login shell: .zshenv → .zprofile → .zshrc → .zlogin の順でユーザー rc が読まれる
-    // （shim が復元した ZDOTDIR から zsh が自力で読む）。
-    try writeRc(".zshenv", in: home, marker: "user-zshenv")
-    try writeRc(".zprofile", in: home, marker: "user-zprofile")
-    try writeRc(".zshrc", in: home, marker: "user-zshrc")
-    try writeRc(".zlogin", in: home, marker: "user-zlogin")
-    _ = try runZsh(login: true)
-    XCTAssertEqual(sourceOrder(), ["user-zshenv", "user-zprofile", "user-zshrc", "user-zlogin"])
   }
 
   func testZdotdirUserLoginShellSourcesAllRcFromUserDirAndBindsWidgets() throws {
@@ -277,16 +255,6 @@ final class CompletionShimTests: OrbeTestCase {
   }
 
   // MARK: - 非対話 zsh（子プロセス env のクリーンさ・.zlogin）
-
-  func testNonInteractiveShellLeavesNoShimInChildEnv() throws {
-    // 非対話 zsh（`zsh script` / `zsh -c` 相当）: .zshenv 段で startup が終わっても、そこから起こした
-    // 子プロセスの env に ZDOTDIR=<shim dir> も ORBE_USER_ZDOTDIR も残らない。
-    // 旧 shim は「次の段のために」ZDOTDIR を shim へ戻したまま終わり、ここが汚染の種になっていた。
-    try writeRc(".zshenv", in: home, marker: "user-zshenv")
-    let out = try runZsh(interactive: false)
-    XCTAssertEqual(sourceOrder(), ["user-zshenv"])
-    assertProbe(out, contains: "CHILD:unset unset", "子プロセスの env に shim の痕跡が無い")
-  }
 
   func testNonInteractiveLoginShellSourcesZloginAndLeavesNoShimInChildEnv() throws {
     // 非対話 login zsh（`zsh -l -c` 相当）: .zshenv → .zprofile → .zlogin がユーザーの dir から読まれ

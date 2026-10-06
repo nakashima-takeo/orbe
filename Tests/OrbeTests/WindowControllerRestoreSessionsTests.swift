@@ -32,8 +32,7 @@ final class WindowControllerRestoreSessionsTests: OrbeTestCase {
   }
 
   private func results(_ result: Result<Any, ControlError>) throws -> [[String: Any]] {
-    guard case .success(let value) = result else { throw XCTSkip("failure") }
-    return try XCTUnwrap((value as? [String: Any])?["results"] as? [[String: Any]])
+    try XCTUnwrap((result.get() as? [String: Any])?["results"] as? [[String: Any]])
   }
 
   func testRestoresIntoTheMatchingWorkspaceWithoutSelectingOrActivating() throws {

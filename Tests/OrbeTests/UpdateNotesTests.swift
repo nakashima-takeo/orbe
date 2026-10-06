@@ -29,15 +29,6 @@ final class UpdateNotesTests: OrbeTestCase {
       plain(section.elements[1]), "ソース: https://github.com/nakashima-takeo/orbe/tree/v0.3.1")
   }
 
-  /// 見出しより前の要素は title なしのセクションへ入る（見出しを持たないノートも描ける）。
-  func testLeadingElementsFormUntitledSection() {
-    let notes = UpdateNotes(markdown: "はじめの段落\n\n### 修正\n- 直した")
-
-    XCTAssertEqual(notes.sections.map(\.title), [nil, "修正"])
-    XCTAssertEqual(notes.sections[0].elements.map(\.kind), [.paragraph])
-    XCTAssertEqual(notes.sections[1].elements.map(\.kind), [.item])
-  }
-
   /// 本文が空の項目は要素にしない（マーカーだけの行が描かれないことの根）。
   func testEmptyElementsAreDropped() {
     let notes = UpdateNotes(markdown: "### 修正\n- 直した\n-\n-   \n")
@@ -66,16 +57,13 @@ final class UpdateNotesTests: OrbeTestCase {
     XCTAssertEqual(notes.sections.map(\.category), [.feature, .improvement, .fix])
   }
 
-  /// 「修正」だけのノートでも修正は修正の分類になる（＝先頭にあるかどうかで変わらない）。
-  func testFixOnlyNoteStaysFix() {
-    XCTAssertEqual(UpdateNotes(markdown: "### 修正\n- 直した").sections.map(\.category), [.fix])
-  }
-
-  /// 規約外の見出し・見出し無しは中立へ落ちる（未知の語でも壊れない）。
+  /// 見出しより前の要素は title なしのセクションへ入り、規約外の見出し・見出し無しは中立へ落ちる
+  /// （見出しを持たないノートも、未知の語でも壊れない）。
   func testUnknownAndMissingHeadingsFallBackToNeutral() {
     let notes = UpdateNotes(markdown: "前置きの段落\n\n### 既知の問題\n- まだ直っていない")
 
     XCTAssertEqual(notes.sections.map(\.title), [nil, "既知の問題"])
+    XCTAssertEqual(notes.sections.map { $0.elements.map(\.kind) }, [[.paragraph], [.item]])
     XCTAssertEqual(notes.sections.map(\.category), [.neutral, .neutral])
   }
 

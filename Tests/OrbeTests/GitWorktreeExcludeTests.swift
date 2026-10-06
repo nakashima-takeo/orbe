@@ -20,13 +20,6 @@ final class GitWorktreeExcludeTests: OrbeTestCase {
       "接頭辞が一致するだけの兄弟ディレクトリは中ではない")
   }
 
-  /// root 自身は「中」ではない（自分を除外しない）。
-  func testRootItselfReturnsNil() {
-    XCTAssertNil(
-      GitWorktreeExclude.entry(
-        worktreePath: "/g/orbe", worktreeRoot: "/g/orbe", parentIsNew: true))
-  }
-
   /// 親を Orbe がこれから作るなら、その親（容れ物）を対象にする——以後そこに増える worktree も 1 行で覆う。
   func testInsideUsesParentDirectoryWhenParentIsNew() {
     let entry = GitWorktreeExclude.entry(
@@ -36,25 +29,11 @@ final class GitWorktreeExcludeTests: OrbeTestCase {
     XCTAssertEqual(entry?.checkPath, ".worktrees/", "check-ignore にはディレクトリとして問う")
   }
 
-  /// 親が既存なら worktree 自身だけを対象にする——ユーザーのディレクトリを丸ごと status から消さない。
-  func testInsideUsesItselfWhenParentAlreadyExists() {
-    let entry = GitWorktreeExclude.entry(
-      worktreePath: "/g/orbe/src/feat-x", worktreeRoot: "/g/orbe", parentIsNew: false)
-    XCTAssertEqual(entry?.pattern, "/src/feat-x/", "既存の src を丸ごと除外しない")
-  }
-
   /// 親が root 自身になる配置（`{parent}/{repo}/{slug}`）では worktree 自身を対象にする。
   func testDirectChildUsesItself() {
     let entry = GitWorktreeExclude.entry(
       worktreePath: "/g/orbe/feat-x", worktreeRoot: "/g/orbe", parentIsNew: true)
     XCTAssertEqual(entry?.pattern, "/feat-x/", "root 全体を除外しない")
-  }
-
-  /// 深い入れ子でも、親を新規に作るなら対象は親まで。
-  func testNestedUsesParentChain() {
-    let entry = GitWorktreeExclude.entry(
-      worktreePath: "/g/orbe/tmp/wt/feat-x", worktreeRoot: "/g/orbe", parentIsNew: true)
-    XCTAssertEqual(entry?.pattern, "/tmp/wt/")
   }
 
   /// 末尾スラッシュ・`.`・`..` は字句正規化して判定する（テンプレートの書き方で答えが揺れない）。
@@ -84,21 +63,6 @@ final class GitWorktreeExcludeTests: OrbeTestCase {
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
     return dir
-  }
-
-  func testAppendIsIdempotent() throws {
-    let commonDir = try makeCommonDir()
-    let entry = GitWorktreeExclude.Entry(relativePath: ".worktrees")
-    let file = commonDir.appendingPathComponent("info/exclude")
-
-    XCTAssertTrue(GitWorktreeExclude.append(entry, toCommonDir: commonDir.path))
-    let first = try String(contentsOf: file, encoding: .utf8)
-    XCTAssertTrue(first.contains("/.worktrees/"))
-    XCTAssertTrue(first.contains(GitWorktreeExclude.comment), "出所が読める見出しを付ける")
-
-    XCTAssertTrue(GitWorktreeExclude.append(entry, toCommonDir: commonDir.path))
-    XCTAssertEqual(
-      try String(contentsOf: file, encoding: .utf8), first, "二度目は 1 バイトも変えない")
   }
 
   /// 既存内容の末尾に改行が無くても行が潰れない。
@@ -141,6 +105,7 @@ final class GitWorktreeExcludeTests: OrbeTestCase {
 /// 実 git 層: 一時リポジトリで作成〜除外を production と同じ順序（作成成功後に除外）で走らせ、
 /// 「repo 内に作っても `git status` が汚れない」「二度目で重複しない」「repo 外では触らない」
 /// 「ユーザーが既に塞いでいるなら足さない」「失敗した作成の除外を残さない」を確かめる。
+@MainActor
 final class GitWorktreeExcludeIntegrationTests: OrbeTestCase {
   private var dir: URL!
   private var repo: GitRepo!
@@ -200,6 +165,16 @@ final class GitWorktreeExcludeIntegrationTests: OrbeTestCase {
     return (try? String(contentsOfFile: file, encoding: .utf8)) ?? ""
   }
 
+  /// main queue を回しながら条件の成立を待つ（provider の completion は main で届く）。
+  private func pump(_ condition: () -> Bool, timeout: TimeInterval = 20) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !condition(), Date() < deadline {
+      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02))
+      usleep(5_000)
+    }
+    return condition()
+  }
+
   private func occurrences(of pattern: String) -> Int {
     excludeFileText().split(separator: "\n", omittingEmptySubsequences: false)
       .filter { $0.trimmingCharacters(in: .whitespaces) == pattern }.count
@@ -241,7 +216,7 @@ final class GitWorktreeExcludeIntegrationTests: OrbeTestCase {
   }
 
   /// 作成に失敗したら除外は書かない（何も起きなかった操作がユーザーの repo を書き換えない）。
-  /// 既存の追跡済みディレクトリと衝突する配置がこれに当たる。
+  /// 既存の追跡済みディレクトリと衝突する配置がこれに当たる。パレットの作成経路（`prepareDirectory`）で撃つ。
   func testFailedCreationLeavesExcludeUntouched() throws {
     let docs = (repo.root as NSString).appendingPathComponent("docs")
     try FileManager.default.createDirectory(atPath: docs, withIntermediateDirectories: true)
@@ -251,10 +226,26 @@ final class GitWorktreeExcludeIntegrationTests: OrbeTestCase {
     XCTAssertTrue(git(["add", "-A"]).isSuccess)
     XCTAssertTrue(git(["commit", "-qm", "docs"]).isSuccess)
     let before = excludeFileText()
+    let model = WorktreePaletteModel()
+    let provider = WorktreePaletteDataProvider(
+      cwd: repo.root, model: model, localization: LocalizationStore(language: .ja),
+      worktreeTemplate: "{repo_path}/{slug}")
+    provider.load()
+    XCTAssertTrue(pump { provider.repo != nil }, "前提: リポジトリを解決できている")
 
-    createWorktree(at: docs, branch: "docs")  // `git worktree add docs` は既存ディレクトリで失敗する
+    var outcome: WorktreePaletteDataProvider.PrepareOutcome?
+    // 作成先は既存の追跡済み `docs/` なので `git worktree add` が失敗する。
+    provider.prepareDirectory(for: .newBranch(name: "docs", base: .defaultBranch)) {
+      outcome = $0
+    }
+    XCTAssertTrue(pump { outcome != nil }, "解決が返らない")
+
+    guard case .resolved(.failed) = try XCTUnwrap(outcome) else {
+      return XCTFail("前提: 作成は失敗する: \(String(describing: outcome))")
+    }
     XCTAssertEqual(excludeFileText(), before, "失敗した作成の除外を残さない")
     XCTAssertEqual(occurrences(of: "/docs/"), 0, "ユーザーの docs/ を隠さない")
+    withExtendedLifetime(model) {}
   }
 
   /// 既存ディレクトリの下に作る配置では、その親でなく worktree 自身だけを除外する

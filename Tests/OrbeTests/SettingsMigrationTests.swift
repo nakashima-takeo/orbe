@@ -205,18 +205,4 @@ final class SettingsMigrationTests: OrbeTestCase {
     XCTAssertEqual(override[SettingKeys.theme], .dark, "綴りが重なる theme も読める")
   }
 
-  /// 新形式（canonical key）の settingsOverride はそのまま読める。
-  func testNewFormatWorkspaceOverrideLoads() throws {
-    let new = """
-      {"version":4,"activeWorkspace":0,"workspaces":[\
-      {"name":"a","rootPath":"/","activeTab":0,\
-      "tabs":[{"cwd":"/"}],\
-      "settingsOverride":{"font-size":18,"default-agent":"codex"}}]}
-      """
-    try Data(new.utf8).write(to: workspacesFile())
-    let file = try XCTUnwrap(WorkspacePersistence.load())
-    let override = try XCTUnwrap(file.workspaces[0].settingsOverride)
-    XCTAssertEqual(override[SettingKeys.fontSize], 18)
-    XCTAssertEqual(override[SettingKeys.defaultAgent], "codex")
-  }
 }

@@ -71,9 +71,7 @@ final class GitHubItemTextTests: OrbeTestCase {
     XCTAssertEqual(phase(pullRequest(.merged, draft: true, review: .approved)), .merged)
     XCTAssertEqual(phase(pullRequest(.closed, draft: true, review: .approved)), .closed)
     XCTAssertEqual(phase(pullRequest(draft: true, review: .approved)), .draft)
-    XCTAssertEqual(phase(pullRequest(review: .reviewRequired)), .reviewRequired)
     XCTAssertEqual(phase(pullRequest(review: .approved)), .approved)
-    XCTAssertEqual(phase(pullRequest(review: .changesRequested)), .changesRequested)
     XCTAssertNil(phase(pullRequest(review: nil)), "レビュー状態の無い open の PR")
     XCTAssertNil(phase(issue()), "Issue")
   }

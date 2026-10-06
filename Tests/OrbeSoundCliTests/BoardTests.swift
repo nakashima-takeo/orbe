@@ -71,15 +71,6 @@ final class BoardTests: XCTestCase {
       wavePoints([Float](repeating: 0, count: 100), buckets: 2), "0,16.0 1,16.0 1,16.0 0,16.0")
   }
 
-  /// 同じディレクトリへの再生成は上書きで通る（ブラウザのリロードだけで最新になる前提）。
-  func testBoardRegeneratesInPlace() throws {
-    let dir = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-sound-board-test-\(UUID().uuidString)", isDirectory: true)
-    defer { try? FileManager.default.removeItem(at: dir) }
-    _ = try generateBoard(to: dir, rate: 8000, volume: 70)
-    XCTAssertNoThrow(try generateBoard(to: dir, rate: 8000, volume: 70))
-  }
-
   /// 各マッチの最初に成立したキャプチャを、出現順に集める。
   private func captures(_ pattern: String, in text: String) throws -> [String] {
     let regex = try NSRegularExpression(pattern: pattern)

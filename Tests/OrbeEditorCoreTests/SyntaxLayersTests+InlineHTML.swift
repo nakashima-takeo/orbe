@@ -10,13 +10,6 @@ import XCTest
 /// 段落をまたいでタグが対になり、別の段落の閉じタグに色が付く。どちらも編集を追う側と新しく解く側が同じ誤りを持つので、
 /// 乱択は緑のまま。
 extension SyntaxLayersTests {
-  func testAClosingInlineTagIsColoredLikeItsOpeningTag() throws {
-    let source = "押すキーは <kbd>⌘</kbd>\n"
-    let layers = try parsed(source, .markdown)
-    XCTAssertEqual(role(of: "kbd>⌘", in: source, layers), .keyword, "前提: 開きタグの名前")
-    XCTAssertEqual(role(of: "kbd>\n", in: source, layers), .keyword, "閉じタグの名前")
-  }
-
   func testEveryInlineTagOfAParagraphIsColored() throws {
     let source = "a <kbd>⌘</kbd> + <kbd>K</kbd> and\n<b>x</b> end\n"
     let layers = try parsed(source, .markdown)

@@ -110,25 +110,4 @@ extension SettingsPaletteTests {
     XCTAssertEqual(p.render.selected, 0)
   }
 
-  /// 列挙不能（全 family 空）は情報行 1 つで Enter は何もしない。
-  func testTabTitleFontEmptyStateInfoRow() {
-    let p = tabTitleModel(allFontNames: [])
-    p.render.selected = 8
-    p.render.onActivate()
-    XCTAssertEqual(p.render.rows.count, 1)
-    XCTAssertFalse(p.render.rows[0].enabled)
-    let applied = captureApply(p)
-    p.render.onActivate()
-    XCTAssertNil(applied())
-  }
-
-  /// ← で root へ戻り、潜った行へ選択を復元する。
-  func testTabTitleFontLeftReturnsToRoot() {
-    let p = tabTitleModel()
-    p.render.selected = 8
-    p.render.onActivate()
-    p.render.onLeft()
-    XCTAssertNil(p.render.breadcrumb)
-    XCTAssertEqual(p.render.selected, 8, "潜った行へ選択を復元")
-  }
 }

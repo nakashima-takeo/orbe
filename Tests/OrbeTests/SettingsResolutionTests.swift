@@ -1,11 +1,11 @@
+import OrbeSound
 import XCTest
 
 @testable import Orbe
 
 /// 設定解決チェーンの純ロジック検証（App 層・I/O 非依存）。
-/// 均一レイヤの `overlaid`/`apply`/`isEmpty`・`EffectiveSettings` の既定解決・`SettingChange(key:jsonValue:)`
-/// の受理/拒否（registry domain 駆動・null 解除）を固定する。担体が均一な層になったため scopable 集合の
-/// 一致テストは消える（構造上ズレ得ない）。
+/// 均一レイヤの `overlaid`/`isEmpty`・`EffectiveSettings` の既定解決・`SettingChange(key:jsonValue:)`
+/// の受理/拒否（registry domain 駆動・null 解除）を固定する。
 final class SettingsResolutionTests: OrbeTestCase {
 
   // MARK: - SettingsLayer: overlaid（override が非 nil 項目で勝つ）
@@ -24,14 +24,6 @@ final class SettingsResolutionTests: OrbeTestCase {
     XCTAssertEqual(merged[SettingKeys.fontSize], 20, "override が勝つ")
     XCTAssertEqual(merged[SettingKeys.theme], .dark, "override が勝つ")
     XCTAssertEqual(merged[SettingKeys.backgroundOpacity], 90, "override に無い項目は base を通す")
-  }
-
-  /// 空 override を重ねても base と同値（純粋な継承）。
-  func testOverlaidWithEmptyIsBase() {
-    var global = SettingsLayer()
-    global[SettingKeys.fontSize] = 14
-    global[SettingKeys.fontFamily] = "Menlo"
-    XCTAssertEqual(global.overlaid(with: SettingsLayer()), global)
   }
 
   /// 全項目を別値で重ね、1 項目でも取りこぼせば base 値が残って落ちる（重ね漏れの一括検知）。
@@ -67,17 +59,7 @@ final class SettingsResolutionTests: OrbeTestCase {
     XCTAssertEqual(eff[SettingKeys.agentStateIcons], ["waiting": "hourglass"])
   }
 
-  // MARK: - SettingsLayer: apply / isEmpty
-
-  /// apply は非 nil で書き、nil で除去する（解除して継承へ）。
-  func testApplyWritesAndRemoves() {
-    var layer = SettingsLayer()
-    layer.apply(SettingChange(SettingKeys.fontSize, 18))
-    XCTAssertEqual(layer[SettingKeys.fontSize], 18)
-    layer.apply(SettingChange(id: .fontSize, value: nil))
-    XCTAssertNil(layer[SettingKeys.fontSize], "nil 代入で除去")
-    XCTAssertTrue(layer.isEmpty, "唯一の項目を除去したら空")
-  }
+  // MARK: - SettingsLayer: isEmpty
 
   /// isEmpty は 1 項目でもあれば false（空上書きの nil 畳み込みの判定源）。
   func testIsEmpty() {
@@ -89,29 +71,33 @@ final class SettingsResolutionTests: OrbeTestCase {
 
   // MARK: - EffectiveSettings: 既定解決
 
-  /// DefaultedSettingKey は未設定で既定へ解決し（non-nil）、明示値があればそれを返す。
-  func testEffectiveResolvesDefaults() {
+  /// 未設定は spec に合意値として書かれた既定へ解決し、明示値があればそれが勝つ。
+  /// spec に値の書かれていない既定（フォントサイズ・不透明度・点滅・音量）は固定しない。
+  func testUnsetResolvesToTheSpecDefaults() {
     let empty = EffectiveSettings(SettingsLayer())
-    XCTAssertEqual(empty[SettingKeys.fontSize], 12, "未設定は既定 12")
-    XCTAssertEqual(empty[SettingKeys.backgroundOpacity], 95)
-    XCTAssertEqual(empty[SettingKeys.theme], .auto, "未設定は既定 .auto")
-    XCTAssertEqual(empty[SettingKeys.cursorStyleBlink], true)
+    XCTAssertEqual(empty[SettingKeys.theme], .auto, "palette/settings: 未設定は Auto")
+    XCTAssertEqual(empty[SettingKeys.emojiFont], .noto, "palette/settings: 未設定は Noto")
+    XCTAssertEqual(empty[SettingKeys.backgroundBlur], true, "platform/config: ブラーは既定 ON")
+    XCTAssertEqual(
+      empty[SettingKeys.worktreeDir], "{parent}/{repo}-worktrees/{slug}",
+      "palette/worktree: 既定はリポジトリの隣")
+    XCTAssertEqual(
+      empty[SettingKeys.notificationSound], .preset(.emblem), "agent/sound: 既定の案は紋章")
+    XCTAssertEqual(empty[SettingKeys.notificationSoundEnabled], true, "agent/sound: 既定はオン")
+    XCTAssertEqual(
+      empty[SettingKeys.notificationSoundCustomWaitingSameAsDone], true,
+      "agent/sound: 入力待ちも完了と同じ音は既定オン")
+    XCTAssertEqual(
+      empty[SettingKeys.menuBarNotificationDuration], 40, "chrome/menubar: 表示時間は既定 40 秒")
     var layer = SettingsLayer()
-    layer[SettingKeys.fontSize] = 20
-    XCTAssertEqual(EffectiveSettings(layer)[SettingKeys.fontSize], 20, "明示値が既定に勝つ")
-  }
-
-  /// unset 意味を持つ key（fontFamily/defaultAgent）は未設定で nil のまま（既定へ解決しない）。
-  func testEffectiveKeepsUnsetForOptionalKeys() {
-    let empty = EffectiveSettings(SettingsLayer())
-    XCTAssertNil(empty[SettingKeys.fontFamily])
-    XCTAssertNil(empty[SettingKeys.defaultAgent])
+    layer[SettingKeys.theme] = .dark
+    XCTAssertEqual(EffectiveSettings(layer)[SettingKeys.theme], .dark, "明示値が既定に勝つ")
   }
 
   // MARK: - SettingChange(key:jsonValue:)（control config_set の受理/拒否）
 
   /// 正常系: 型・値域内の値が該当項目の SettingChange になる。値域境界は registry を SSOT に読む。
-  func testInitAcceptsValidTypedValues() {
+  func testInitAcceptsValidTypedValues() throws {
     let fs = SettingsRegistry.stepperDomain(.fontSize).range
     XCTAssertEqual(
       SettingChange(key: "font-size", jsonValue: fs.lowerBound),
@@ -133,11 +119,10 @@ final class SettingsResolutionTests: OrbeTestCase {
     XCTAssertEqual(
       SettingChange(key: "theme", jsonValue: "auto"), SettingChange(SettingKeys.theme, .auto))
 
-    if let font = FontCatalog.names().first {
-      XCTAssertEqual(
-        SettingChange(key: "font-family", jsonValue: font),
-        SettingChange(SettingKeys.fontFamily, font))
-    }
+    let font = try XCTUnwrap(FontCatalog.names().first, "等幅フォントが 1 つも列挙できない")
+    XCTAssertEqual(
+      SettingChange(key: "font-family", jsonValue: font),
+      SettingChange(SettingKeys.fontFamily, font))
 
     // 完了条件7-③: agent-state-icons が受理側に移る。
     XCTAssertEqual(

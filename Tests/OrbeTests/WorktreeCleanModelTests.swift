@@ -58,15 +58,6 @@ final class WorktreeCleanModelTests: OrbeTestCase {
     XCTAssertEqual(m.cursorRow?.name, "caution", "先頭で上 → 末尾へ wrap")
   }
 
-  /// チェックは 2 値。ブランチの扱いは別の軸なので巡回に混ざらない。
-  func testCheckIsTwoValued() {
-    let m = makeModel()
-    m.toggleAtCursor()
-    XCTAssertFalse(m.isChecked(m.rows[0]))
-    m.toggleAtCursor()
-    XCTAssertTrue(m.isChecked(m.rows[0]))
-  }
-
   /// 確認行はチェックした瞬間にサブラインが開き、ブランチの扱いは `残す` で始まる。
   func testCheckOpensSublineAndDefaultsToKeep() {
     let m = makeModel()
@@ -116,12 +107,6 @@ final class WorktreeCleanModelTests: OrbeTestCase {
     XCTAssertEqual(m.cursorRow?.name, "caution")
   }
 
-  func testSelectedCountCountsCheckedRows() {
-    let m = makeModel()
-    m.toggle(at: m.rows[2].id)
-    XCTAssertEqual(m.selectedCount, 3)
-  }
-
   func testCannotExecuteWithNothingSelected() {
     let m = makeModel()
     m.toggleAtCursor()
@@ -129,29 +114,6 @@ final class WorktreeCleanModelTests: OrbeTestCase {
     m.toggleAtCursor()
     XCTAssertEqual(m.selectedCount, 0)
     XCTAssertFalse(m.canExecute)
-  }
-
-  func testCannotExecuteWhileDeleting() {
-    let m = makeModel()
-    m.beginRun(m.requests())
-    XCTAssertEqual(m.phase, .deleting)
-    XCTAssertFalse(m.canExecute)
-  }
-
-  /// 安全行は実体がありブランチを持つ行だけがブランチを消し、**実体の無い prunable 行は
-  /// ブランチに触らない**。確認行はサブラインで選んだ 2 値がそのまま決める。
-  func testDeletesBranchSplitsSafeAndCaution() {
-    let m = makeModel()
-    XCTAssertTrue(m.rows[0].deletesBranchImplicitly)
-    XCTAssertTrue(m.deletesBranch(m.rows[0]), "安全行は無条件にブランチも消す")
-    XCTAssertFalse(m.rows[1].deletesBranchImplicitly, "prunable 行は消えるのが登録だけ")
-    XCTAssertFalse(m.deletesBranch(m.rows[1]))
-
-    let caution = m.rows[2]
-    XCTAssertFalse(m.deletesBranch(caution), "既定の `残す` では消さない")
-    m.toggle(at: caution.id)
-    m.chooseBranch(.delete)
-    XCTAssertTrue(m.deletesBranch(caution))
   }
 
   /// フッタ実行ボタンの内訳は、チェック済み行のうち**ブランチも消える行だけ**を数える——
@@ -192,6 +154,7 @@ final class WorktreeCleanModelTests: OrbeTestCase {
     XCTAssertEqual(m.run?.requests.map(\.path), ["/wt/safe-a", "/wt/safe-b"], "選んだ行だけが並ぶ")
     XCTAssertEqual(m.run?.states, [.pending, .pending])
     XCTAssertEqual(m.totalCount, 2)
+    XCTAssertFalse(m.canExecute, "削除中は実行できない")
   }
 
   func testProgressIsCountedFromStates() {

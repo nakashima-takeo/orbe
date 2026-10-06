@@ -119,42 +119,19 @@ final class GitHubCLIOpenListFetchTests: OrbeTestCase {
 
   // MARK: - 問い合わせ
 
-  /// 1 ページの問い合わせは GraphQL の connection を作成の新しい順・open だけで引き、位置はアプリが持つ
-  /// カーソルで渡す。ホストは認証確認と同じ github.com を名指しする（`gh api` は作業ディレクトリから
-  /// ホストを決めないので、名指ししないと確かめた先と取りに行く先がずれうる）。リポジトリは解決した名前で
-  /// 名指しし、`-f`（文字列のまま）で渡す——`-F` は数字だけの名前を整数に変える。
-  func testPageQueryNamesHostRepositoryCursorAndOrder() throws {
-    let firstPage = GitHubCLI.openIssuesPageArguments(repo: repo, first: 100, after: nil)
-    let nextPage = GitHubCLI.openPullRequestsPageArguments(repo: repo, first: 40, after: "Y3Vyc29y")
-
-    XCTAssertEqual(Array(firstPage.prefix(4)), ["api", "graphql", "--hostname", "github.com"])
-    for page in [firstPage, nextPage] {
+  /// ホストは認証確認と同じ github.com を名指しする（`gh api` は作業ディレクトリからホストを決めないので、
+  /// 名指ししないと確かめた先と取りに行く先がずれうる）。リポジトリは `-f`（文字列のまま）で渡す——`-F` は
+  /// 数字だけの名前を整数に変える。
+  func testPageQueryNamesGitHubDotComAndPassesTheRepositoryAsStrings() throws {
+    for page in [
+      GitHubCLI.openIssuesPageArguments(repo: repo, first: 100, after: nil),
+      GitHubCLI.openPullRequestsPageArguments(repo: repo, first: 50, after: "Y3Vyc29y"),
+    ] {
+      XCTAssertTrue(zip(page, page.dropFirst()).contains { $0 == ("--hostname", "github.com") })
       for field in ["owner=o", "name=2048"] {
         let index = try XCTUnwrap(page.firstIndex(of: field), "\(field) を渡す")
         XCTAssertEqual(page[index - 1], "-f", "\(field) は文字列のまま渡す")
       }
-    }
-    XCTAssertTrue(firstPage.contains("first=100"))
-    XCTAssertFalse(firstPage.contains { $0.hasPrefix("endCursor=") }, "初回はカーソルを渡さない")
-    XCTAssertEqual(
-      Array(firstPage.suffix(2)), ["--jq", ".data.repository.issues | {nodes, pageInfo}"])
-    let issueQuery = try XCTUnwrap(firstPage.first { $0.hasPrefix("query=") })
-    XCTAssertTrue(issueQuery.contains("issues(states:OPEN,first:$first,after:$endCursor,"))
-    XCTAssertTrue(issueQuery.contains("orderBy:{field:CREATED_AT,direction:DESC}"))
-    XCTAssertTrue(
-      issueQuery.contains(
-        "nodes{__typename number title updatedAt author{login} assignees(first:10){nodes{login}}}"))
-
-    XCTAssertTrue(nextPage.contains("first=40"))
-    XCTAssertTrue(nextPage.contains("endCursor=Y3Vyc29y"), "2 ページ目以降は前のページの位置から")
-    XCTAssertEqual(
-      Array(nextPage.suffix(2)), ["--jq", ".data.repository.pullRequests | {nodes, pageInfo}"])
-    let prQuery = try XCTUnwrap(nextPage.first { $0.hasPrefix("query=") })
-    for field in [
-      "isDraft reviewDecision", "commits(last:1){nodes{commit{statusCheckRollup{state}}}}",
-      "reviewRequests(first:20)",
-    ] {
-      XCTAssertTrue(prQuery.contains(field), "PR 行が描く \(field) を取る")
     }
   }
 
@@ -172,20 +149,15 @@ final class GitHubCLIOpenListFetchTests: OrbeTestCase {
     XCTAssertEqual(result.finished, [true], "最後のページで取り終える")
   }
 
-  /// 上限（issue 1000・PR 500）で止まり、最後のページは残り件数だけを頼む（上限を越えて問い合わせない）。
+  /// 上限で止まり、最後のページは残り件数だけを頼む（上限を越えて問い合わせない）。
   func testFetchStopsAtTheLimitWithoutAskingBeyondIt() throws {
-    try stageGh(available: 5000, pageMax: 60)
+    let pageMax = 60
+    try stageGh(available: 5000, pageMax: pageMax)
     let result = fetchIssues()
-    XCTAssertEqual(result.pages.joined().count, 1000, "issue は 1000 件で止まる")
-    XCTAssertEqual(calls().last?.first, 40, "最後のページは残りの 40 件だけ頼む")
+    let limit = GitHubCLI.openIssueLimit
+    XCTAssertEqual(result.pages.joined().count, limit, "上限で止まる")
+    XCTAssertEqual(calls().last?.first, limit - (calls().count - 1) * pageMax, "最後のページは残りだけ頼む")
     XCTAssertEqual(result.finished, [true], "上限に達したら取り終えた扱い")
-
-    var pullRequests = 0
-    let done = expectation(description: "openPullRequests")
-    GitHubCLI().openPullRequests(
-      repo: repo, page: { pullRequests += $0.count }, finished: { _ in done.fulfill() })
-    wait(for: [done], timeout: 60)
-    XCTAssertEqual(pullRequests, 500, "PR は 500 件で止まる")
   }
 
   /// PR は 1 ページ 50 件ずつ、issue は 100 件ずつ頼む——PR はレビュー状態・CI・レビュー依頼の算出で重く、

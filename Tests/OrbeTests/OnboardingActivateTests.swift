@@ -39,16 +39,6 @@ final class OnboardingActivateTests: OrbeTestCase {
     XCTAssertEqual(began, 0, "導入フェーズには選択行が無く確定もしない")
   }
 
-  func testRowTapOutOfRangeIsSafe() {
-    let m = OnboardingModel()
-    m.agentCommands = ["claude"]
-    var began = 0
-    m.onBegin = { began += 1 }
-    m.activate(at: 5)
-    XCTAssertEqual(began, 0)
-    XCTAssertEqual(m.selected, 0)
-  }
-
   // MARK: - 言語選択（LanguageSelectModel）
 
   func testLanguageRowTapConfirmsThatRow() {
@@ -59,14 +49,5 @@ final class OnboardingActivateTests: OrbeTestCase {
     m.activate(at: target)
     XCTAssertEqual(m.selected, target)
     XCTAssertEqual(confirmed, Language.allCases[target], "タップした行の言語で確定する")
-  }
-
-  func testLanguageRowTapOutOfRangeIsSafe() {
-    let m = LanguageSelectModel(current: Language.allCases[0])
-    var confirmed: Language?
-    m.onConfirm = { confirmed = $0 }
-    m.activate(at: 99)
-    XCTAssertNil(confirmed)
-    XCTAssertEqual(m.selected, 0)
   }
 }

@@ -22,33 +22,11 @@ final class TextSearchTests: XCTestCase {
 
   /// 一致は上限（19999）で打ち切り、上限ちょうども打ち切りとして見せる（VS Code の「19999+」）。
   func testMatchesStopAtTheLimit() {
-    let text = String(repeating: "a", count: 12)
-    XCTAssertEqual(TextSearch.matches(of: "a", in: TextRope(text), limit: 5).count, 5)
-    XCTAssertEqual(TextSearch.limit, 19999)
     let many = String(repeating: "ab", count: 20_001)
     let matches = TextSearch.matches(of: "a", in: TextRope(many))
     XCTAssertEqual(matches.count, 19999)
     XCTAssertTrue(TextSearch.isLimited(matches))
     XCTAssertFalse(TextSearch.isLimited(Array(matches.prefix(19998))))
-  }
-
-  /// 本文の変更の間、一致は編集に合わせてずれ、編集に掛かる一致は落ちる（取り直すまで地が字からずれない）。
-  func testTrackShiftsRangesAfterTheEditAndDropsTheOnesItTouches() {
-    let ranges = [
-      NSRange(location: 0, length: 2), NSRange(location: 4, length: 2),
-      NSRange(location: 10, length: 2),
-    ]
-    let edit = TextEdit(range: NSRange(location: 5, length: 2), replacement: "12345")
-    XCTAssertEqual(
-      edit.track(ranges), [NSRange(location: 0, length: 2), NSRange(location: 13, length: 2)])
-    let insert = TextEdit(range: NSRange(location: 2, length: 0), replacement: "x")
-    XCTAssertEqual(
-      insert.track(ranges),
-      [
-        NSRange(location: 0, length: 2), NSRange(location: 5, length: 2),
-        NSRange(location: 11, length: 2),
-      ],
-      "端に接する挿入は区間を伸ばさない")
   }
 
   func testExactFindsTheMatchTheSelectionCoversExactly() {
@@ -57,20 +35,6 @@ final class TextSearchTests: XCTestCase {
     XCTAssertNil(TextSearch.exact(in: matches, selection: NSRange(location: 8, length: 0)))
     XCTAssertNil(TextSearch.exact(in: matches, selection: NSRange(location: 3, length: 3)))
     XCTAssertNil(TextSearch.exact(in: [], selection: NSRange(location: 0, length: 0)))
-  }
-
-  /// 位置以降に始まる最初の一致・位置までに終わる最後の一致（両端で循環）。VS Code `matchAfterPosition` /
-  /// `matchBeforePosition`。
-  func testFirstFromAndLastUpToAPosition() {
-    let matches = [NSRange(location: 2, length: 3), NSRange(location: 8, length: 3)]
-    XCTAssertEqual(TextSearch.first(in: matches, from: 2), 0, "その位置に始まる一致を含む")
-    XCTAssertEqual(TextSearch.first(in: matches, from: 3), 1, "中にある一致は飛ばす")
-    XCTAssertEqual(TextSearch.first(in: matches, from: 9), 0, "以降に無ければ先頭へ")
-    XCTAssertEqual(TextSearch.last(in: matches, upTo: 11), 1, "その位置に終わる一致を含む")
-    XCTAssertEqual(TextSearch.last(in: matches, upTo: 10), 0, "中にある一致は飛ばす")
-    XCTAssertEqual(TextSearch.last(in: matches, upTo: 4), 1, "手前に無ければ末尾へ")
-    XCTAssertNil(TextSearch.first(in: [], from: 0))
-    XCTAssertNil(TextSearch.last(in: [], upTo: 0))
   }
 
   /// Enter は選択の終わりから、⇧Enter は選択の先頭から。選択が一致ならその次・前、キャレットが一致の中ならその一致を

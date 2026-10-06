@@ -4,6 +4,7 @@ import XCTest
 
 @testable import Orbe
 
+/// 撮影道具であってテストではない（仕様を判定しない・CI では skip）。
 /// デザイン部品ライブラリの「見て直す」ループ用ギャラリー・スナップショッタ。
 /// 各部品を fixture で状態を置いて Light/Dark の見た目を撮る（静止・アサートはしない・AI/人間が見る）。
 /// 振る舞い（アクションが状態を生む過程）は `DesignFlowSnapshotTests` が連番で撮る。
@@ -217,32 +218,8 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       chromeBand(fitting, size: size), size: size, name: "statusrow_fitting.png", dir: dir)
   }
 
-  /// 補完ドロップダウン（薄い行・複数 group・cap 超過でスクロール表現＝右つまみ＋下フェード）を端末地に重ねる。
-  /// 候補が cap（~5 行）を超えるよう厚めに積み、選択を下方に送って scrollY>0 のスクロール追従
-  /// （選択行が下端フェードの上に退避して保たれること）を見る。
+  /// 補完のサイドカードと design 正典の 2 枚組。cap 超過のスクロール追従は flow の `completion_scroll` が撮る。
   private func renderCompletionSnapshot(dir: URL) throws {
-    let completion = CompletionListModel()
-    completion.choices = CompletionList.displayOrdered([
-      CompletionChoice(
-        value: "status", description: "作業ツリーの状態を表示", insertValue: nil, type: "subcommand"),
-      CompletionChoice(
-        value: "commit", description: "ステージした変更を記録", insertValue: nil, type: "subcommand"),
-      CompletionChoice(
-        value: "checkout", description: "ブランチ切替・ファイル復元", insertValue: nil, type: "subcommand"),
-      CompletionChoice(value: "main", description: "", insertValue: nil, type: nil),
-      CompletionChoice(value: "feature/tab-rename", description: "", insertValue: nil, type: nil),
-      CompletionChoice(value: "fix/tab-overflow", description: "", insertValue: nil, type: nil),
-      CompletionChoice(value: "release/0.2.0", description: "", insertValue: nil, type: nil),
-      CompletionChoice(value: "README.md", description: "", insertValue: nil, type: "file"),
-      CompletionChoice(value: "--oneline", description: "", insertValue: nil, type: "option"),
-      CompletionChoice(
-        value: "--graph", description: "コミットグラフを ASCII で描画", insertValue: nil, type: "option"),
-    ])
-    completion.selected = 7
-    try writePNG(
-      completionSnapshot(completion), size: NSSize(width: 320, height: 300),
-      name: "completion.png", dir: dir)
-
     // side card は CompletionList の外（AppKit 配置）なので単体で 1 枚撮る（ピクセル突合用）。
     try writePNG(
       CompletionSideCard(
@@ -266,28 +243,9 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
       size: NSSize(width: 520, height: 240), name: "completion_design.png", dir: dir)
   }
 
-  /// パレット各状態（AgentPalette 一覧/詳細・Workspace・少数行ハグ・多数行 cap）を撮る。
+  /// パレット各状態（Workspace・少数行ハグ・多数行 cap）を撮る。AgentPalette の一覧と詳細は flow の
+  /// `palette_drill` が本物の `AgentPaletteModel` で撮る。
   private func renderPaletteSnapshots(dir: URL, cardSize: NSSize) throws {
-    // AgentPalette（一覧 / 詳細メニュー）。
-    let listModel = PaletteModel()
-    listModel.hint = "↵ 起動   → 詳細   esc 閉じる"
-    listModel.rows = [
-      .init(label: "● claude", chevron: true),
-      .init(label: "  codex", chevron: true),
-      .init(label: "  agy", chevron: true),
-    ]
-    try writePNG(
-      paletteSnapshot(listModel, canvas: cardSize), size: cardSize, name: "palette_list.png",
-      dir: dir)
-
-    let submenuModel = PaletteModel()
-    submenuModel.breadcrumb = "‹ claude"
-    submenuModel.hint = "↵ 実行   ← 戻る   esc 閉じる"
-    submenuModel.rows = [.init(label: "デフォルトに設定")]
-    try writePNG(
-      paletteSnapshot(submenuModel, canvas: cardSize), size: cardSize, name: "palette_submenu.png",
-      dir: dir)
-
     // WorkspacePalette 一覧（フィルタ欄＋WS切替行：名前＋インラインチップ＋パス）。
     let wsModel = PaletteModel()
     wsModel.fieldVisible = true

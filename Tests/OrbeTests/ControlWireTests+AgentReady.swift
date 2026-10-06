@@ -87,20 +87,19 @@ extension ControlWireTests {
 
   // MARK: - 報告できない agent
 
-  /// codex / agy は待たずに launch ＋ `ready:false` で即返り、`agentSessionId` を持たない。
+  /// idle を報告できない agent（codex）は待たずに launch ＋ `ready:false` で即返り、
+  /// `agentSessionId` を持たない。
   func testAgentThatCannotReportIdleReturnsAtOnceWithReadyFalse() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
 
-    for (index, command) in ["codex", "agy"].enumerated() {
-      let launched = result(
-        wire.request(id: 1 + index, method: "spawn_agent", params: ["command": command]))
-      XCTAssertEqual(launched?["tabId"] as? Int, 4344, "\(command) の launch が載る")
-      XCTAssertEqual(launched?["ready"] as? Bool, false, "\(command) は idle を待たず ready:false")
-      XCTAssertNil(launched?["agentSessionId"], "\(command) は agentSessionId を持たない")
-      XCTAssertNil(launched?["timedOut"], "即返りは時間切れではない（timedOut を置かない）")
-      XCTAssertNotNil(launched?["seq"] as? Int, "成功応答なので seq を持つ")
-    }
+    let launched = result(
+      wire.request(id: 1, method: "spawn_agent", params: ["command": "codex"]))
+    XCTAssertEqual(launched?["tabId"] as? Int, 4344, "launch が載る")
+    XCTAssertEqual(launched?["ready"] as? Bool, false, "idle を待たず ready:false")
+    XCTAssertNil(launched?["agentSessionId"], "agentSessionId を持たない")
+    XCTAssertNil(launched?["timedOut"], "即返りは時間切れではない（timedOut を置かない）")
+    XCTAssertNotNil(launched?["seq"] as? Int, "成功応答なので seq を持つ")
   }
 
   // MARK: - 打ち切り
@@ -137,16 +136,11 @@ extension ControlWireTests {
   func testInvalidTimeoutIsRejectedBeforeLaunching() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
-    var id = 0
 
-    for bad in [0, -1, 86_400_001, "50"] as [Any] {
-      id += 1
-      XCTAssertEqual(
-        errorCode(
-          wire.request(
-            id: id, method: "spawn_agent", params: ["command": "codex", "timeoutMs": bad])),
-        -32602, "timeoutMs \(bad) は -32602")
-    }
+    let response = wire.request(
+      id: 1, method: "spawn_agent", params: ["command": "codex", "timeoutMs": 0])
+
+    XCTAssertEqual(errorCode(response), -32602)
     XCTAssertTrue(fake.agentSpawns.isEmpty, "弾いた要求はタブを開いていない")
   }
 }

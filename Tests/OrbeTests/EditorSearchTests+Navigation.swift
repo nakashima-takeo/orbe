@@ -94,23 +94,6 @@ extension EditorSearchTests {
       document.surface.selectedRange, NSRange(location: 7, length: 1), "本文で動かしたキャレットから")
   }
 
-  /// 本文に焦点がある間の Esc（変換中でない）はバーを閉じる。VS Code と同じ。
-  func testEscapeInTheTextClosesTheBar() throws {
-    let hosted = try host("one two\n")
-    let pane = hosted.pane
-    pane.showSearch()
-    catchUp(pane)
-    hosted.window.makeFirstResponder(hosted.document.surface.responder)
-    let escape = try XCTUnwrap(
-      NSEvent.keyEvent(
-        with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
-        windowNumber: hosted.window.windowNumber, context: nil, characters: "\u{1b}",
-        charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
-    hosted.window.sendEvent(escape)
-    XCTAssertNil(pane.searchBar, "閉じる")
-    XCTAssertTrue(hosted.window.firstResponder === hosted.document.surface.responder, "焦点は本文のまま")
-  }
-
   /// 本文の Esc は VS Code の順——検索バーが開いていれば閉じ、次にカーソルを主の 1 本に戻し（主の選択は残す）、次に
   /// 選択を解く。
   func testEscapeInTheTextClosesTheBarBeforeCollapsingCursors() throws {
@@ -130,6 +113,7 @@ extension EditorSearchTests {
         charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
     hosted.window.sendEvent(escape)
     XCTAssertNil(pane.searchBar, "まずバーを閉じる")
+    XCTAssertTrue(hosted.window.firstResponder === surface.responder, "焦点は本文のまま")
     XCTAssertEqual(surface.cursorSelections.count, 3, "カーソルはそのまま")
     hosted.window.sendEvent(escape)
     XCTAssertEqual(surface.cursorSelections, [NSRange(location: 0, length: 3)], "主の 1 本")

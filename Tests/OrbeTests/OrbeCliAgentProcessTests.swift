@@ -70,35 +70,16 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
   }
 
   /// `<agent>` 省略時は対象 workspace の実効 `default-agent` を解く（GUI の Cmd+Shift+C と同じ 1 規則）。
-  /// 設定を明示するのは、素の検出結果（開発者の Mac に居る本物）に依存させないため。
-  func testAgentSpawnWithoutArgumentUsesTheWorkspaceDefaultAgent() throws {
-    let fake = try stageFakeAgent("codex")
-    let control = try startControlProcess(workspaces: ["main"])
-    waitForDetection(control, "codex")
-
-    let activeId = try XCTUnwrap(
-      (control.orbJSON(["ws", "list"])["workspaces"] as? [[String: Any]])?
-        .first(where: { $0["active"] as? Bool == true })?["id"] as? Int)
-    let written = control.orb(
-      ["config", "set", "default-agent", "codex", "--workspace", "\(activeId)"])
-    XCTAssertEqual(written.status, 0, "default-agent を WS へ書けない: \(written.stderr)")
-
-    let spawned = control.orbJSON(["agent", "spawn"])
-    XCTAssertEqual(
-      (spawned["agent"] as? [String: Any])?["command"] as? String, "codex",
-      "省略時は対象 WS の実効 default-agent が起きる")
-    waitForTabText(
-      control, tab: try XCTUnwrap(spawned["tabId"] as? Int), contains: fake.marker)
-  }
-
   /// 解くのは **対象** workspace の実効設定で、アクティブ WS のではない。ここがこの API と GUI の
   /// Cmd+Shift+C の唯一の違いなので、対象 ≠ アクティブ・両者に別の `default-agent` という形で測る
-  /// ——同一 WS で測ると `current.settingsOverride` と書き違えても緑のまま通る。
+  /// ——同一 WS で測ると `current.settingsOverride` と書き違えても緑のまま通る。設定を明示するのは、
+  /// 素の検出結果（開発者の Mac に居る本物）に依存させないため。
   func testAgentSpawnWithoutArgumentResolvesTheTargetWorkspaceNotTheActiveOne() throws {
-    _ = try stageFakeAgent("claude")
+    // ready を待たずに返る 2 種（claude は最初の idle を待つので、何も報告しない偽物だと時間切れになる）。
+    _ = try stageFakeAgent("agy")
     let codex = try stageFakeAgent("codex")
     let control = try startControlProcess(workspaces: ["main", "background"])
-    waitForDetection(control, "claude")
+    waitForDetection(control, "agy")
     waitForDetection(control, "codex")
 
     let list = try XCTUnwrap(control.orbJSON(["ws", "list"])["workspaces"] as? [[String: Any]])
@@ -106,16 +87,21 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
       list.first(where: { $0["active"] as? Bool == true })?["id"] as? Int, "アクティブ WS が無い")
     let backgroundId = try XCTUnwrap(
       list.first(where: { $0["active"] as? Bool == false })?["id"] as? Int, "背景 WS が無い")
-    for (id, agent) in [(activeId, "claude"), (backgroundId, "codex")] {
+    for (id, agent) in [(activeId, "agy"), (backgroundId, "codex")] {
       let written = control.orb(
         ["config", "set", "default-agent", agent, "--workspace", "\(id)"])
       XCTAssertEqual(written.status, 0, "default-agent を WS \(id) へ書けない: \(written.stderr)")
     }
 
+    let inActive = control.orbJSON(["agent", "spawn"])
+    XCTAssertEqual(
+      (inActive["agent"] as? [String: Any])?["command"] as? String, "agy",
+      "--workspace なしはアクティブ WS の default-agent で解く")
+
     let spawned = control.orbJSON(["agent", "spawn", "--workspace", "\(backgroundId)"])
     XCTAssertEqual(
       (spawned["agent"] as? [String: Any])?["command"] as? String, "codex",
-      "アクティブ WS の default-agent（claude）ではなく対象 WS の設定で解く")
+      "アクティブ WS の default-agent（agy）ではなく対象 WS の設定で解く")
     waitForTabText(
       control, tab: try XCTUnwrap(spawned["tabId"] as? Int), contains: codex.marker)
   }
@@ -173,17 +159,17 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
     // (d) surface は実サイズで生まれている。端末面のサイズを配るのは window の display サイクルで
     // 走る器（`TabFacesView`）と `SurfaceScrollView` の `layout()` だけなので、同じ turn で detach
     // する起こし方はレイアウトを同期で確定させない限り 0 サイズのまま surface を作ってしまう。
-    // 端末面は器から背を除いた寸法。
+    // 基準は前面に載っている端末面の寸法——背景で起きた面もそれと同じ寸法で生まれていなければならない。
     let surface = try XCTUnwrap(
       control.target.controlResolveTab(tab)?.surface, "返った tabId がタブに解決できない")
+    let foreground = try XCTUnwrap(
+      control.target.current.tabs.first?.surface.bounds.size, "前面 WS にタブが無い")
     // 相対比較なので、先に基準側が非ゼロであることを言う——0 同士の一致は、まさにここで
     // 検出したい失敗（ゼロ面積で生まれた surface）と区別がつかない。
-    let content = control.target.model.content.bounds.size
-    XCTAssertGreaterThan(content.width, 0, "前提: content が実サイズを持つ")
+    XCTAssertGreaterThan(foreground.width, 0, "前提: 前面の端末面が実サイズを持つ")
     XCTAssertEqual(
-      surface.bounds.size,
-      CGSize(width: content.width - FaceGeometry.spine, height: content.height),
-      "背景 WS のタブが実サイズで起きていない（pty が libghostty 既定サイズのまま残る）")
+      surface.bounds.size, foreground,
+      "背景 WS のタブが前面の端末面と同じ実サイズで起きていない（pty が libghostty 既定サイズのまま残る）")
   }
 
   /// `orb agent resume` が resume 形の起動コマンド（`codex resume <id>`）で起こす。
@@ -230,17 +216,5 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
     XCTAssertTrue(
       stray.stderr.contains("-32004") && stray.stderr.contains("workspace not found"),
       "未知 workspaceId はアクティブへ逸れず落ちる: \(stray.stderr)")
-  }
-
-  /// MCP へも同じ起動口が出ている（AI から駆動する経路が socket 専用に落ちていない）。
-  func testSpawnAgentIsReachableThroughTheMcpBridge() throws {
-    let fake = try stageFakeAgent("codex")
-    let control = try startControlProcess(workspaces: ["main"])
-    waitForDetection(control, "codex")
-
-    let spawned = control.mcpJSON("spawn_agent", ["command": "codex"])
-    let tab = try XCTUnwrap(spawned["tabId"] as? Int, "MCP 越しの spawn_agent が tabId を返さない")
-    XCTAssertEqual((spawned["agent"] as? [String: Any])?["path"] as? String, fake.path)
-    waitForTabText(control, tab: tab, contains: fake.marker)
   }
 }

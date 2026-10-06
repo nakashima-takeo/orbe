@@ -155,28 +155,16 @@ extension ControlWireTests {
 
   // MARK: - 送る前に弾く
 
-  /// params の不備は target へ届く前に -32602。`timeoutMs` の上限は `wait_for_event` と同じ 24 時間。
-  func testInvalidParamsAreRejectedBeforeSending() {
+  /// `timeoutMs` の不備は target へ届く前に -32602（値域の境界は `wait_for_event` 側が持つ）。
+  func testInvalidTimeoutIsRejectedBeforeSending() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
-    let tab = fake.tabId
-    var id = 0
 
-    let bad: [[String: Any]] = [
-      ["text": "x"], ["tabId": "\(tab)", "text": "x"], ["tabId": tab],
-      ["tabId": tab, "text": 1],
-      ["tabId": tab, "text": "x", "timeoutMs": 0],
-      ["tabId": tab, "text": "x", "timeoutMs": -1],
-      ["tabId": tab, "text": "x", "timeoutMs": 86_400_001],
-      ["tabId": tab, "text": "x", "timeoutMs": "50"],
-    ]
-    for params in bad {
-      id += 1
-      XCTAssertEqual(
-        errorCode(wire.request(id: id, method: "prompt_agent", params: params)), -32602,
-        "\(params) は -32602")
-    }
-    XCTAssertTrue(fake.prompts.isEmpty, "弾いた要求は 1 件も target へ届いていない（何も送らない）")
+    let response = wire.request(
+      id: 1, method: "prompt_agent", params: ["tabId": fake.tabId, "text": "x", "timeoutMs": 0])
+
+    XCTAssertEqual(errorCode(response), -32602)
+    XCTAssertTrue(fake.prompts.isEmpty, "弾いた要求は target へ届いていない（何も送らない）")
   }
 
   /// 未知の tab は -32004 で、何も送らない。

@@ -52,17 +52,13 @@ final class TaskDueTextTests: OrbeTestCase {
     XCTAssertEqual(TaskItem.DueDate.today(justAfterMidnightInTokyo, timeZone: tokyo), today)
   }
 
-  func testDateWithoutWeekdayAddsTheYearOnlyOutsideThisYearInTheSameFormAsTheDueLabel() {
-    let weekdays = TaskDueText.weekdays(.ja)
-
+  func testDateAddsTheYearOnlyOutsideThisYear() {
     XCTAssertEqual(TaskDueText.date(date(2025, 10, 3), today: today), "10/3")
     XCTAssertEqual(TaskDueText.date(date(2024, 10, 3), today: today), "2024/10/3")
-    XCTAssertEqual(
-      TaskDueText.label(date(2024, 10, 3), today: today, weekdays: weekdays),
-      "2024/10/3 木", "期限の札は同じ日付に曜日を足しただけ")
   }
 
-  func testLabelShowsMonthDayAndWeekdayAndAddsTheYearOnlyOutsideThisYear() {
+  /// 期限の札は、曜日なしの日付と同じ書式に曜日を足しただけ。
+  func testLabelIsTheDateFollowedByTheWeekday() {
     let weekdays = TaskDueText.weekdays(.ja)
 
     XCTAssertEqual(TaskDueText.label(date(2025, 10, 6), today: today, weekdays: weekdays), "10/6 月")

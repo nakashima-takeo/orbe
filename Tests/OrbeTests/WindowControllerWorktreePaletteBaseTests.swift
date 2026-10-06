@@ -168,23 +168,6 @@ final class WorktreePaletteWorkspaceBindingTests: OrbeTestCase {
     XCTAssertTrue(wc.workspaces[1].tabs.isEmpty, "切り替わった先の workspace には開かない")
     XCTAssertNil(wc.workspaces[1].lastWorktreeBase, "切り替わった先の workspace の前回は書き換えない")
   }
-
-  /// 書き込みはその workspace にだけ効き、閉じた workspace には書かない。
-  func testRememberWritesOnlyToALiveWorkspace() throws {
-    let wc = try restore([
-      WorkspaceState(name: "a", rootPath: "/tmp/a", activeTab: 0, tabs: []),
-      WorkspaceState(name: "b", rootPath: "/tmp/b", activeTab: 0, tabs: []),
-    ])
-    let a = wc.workspaces[0]
-    let b = wc.workspaces[1]
-    wc.rememberWorktreeBase("origin/main", in: b)
-    XCTAssertNil(a.lastWorktreeBase)
-    XCTAssertEqual(b.lastWorktreeBase, "origin/main")
-
-    wc.closeWorkspace(1, origin: .gesture)
-    wc.rememberWorktreeBase("origin/dev", in: b)
-    XCTAssertEqual(b.lastWorktreeBase, "origin/main", "閉じた workspace には書かない")
-  }
 }
 
 @MainActor

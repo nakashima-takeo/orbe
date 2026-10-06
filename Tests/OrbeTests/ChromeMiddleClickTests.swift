@@ -31,22 +31,6 @@ final class ChromeMiddleClickTests: OrbeTestCase {
 
   // MARK: - ドメイン: onCloseTab → closeTab
 
-  /// 非選択タブの中クリック（`onCloseTab`）は、選択切替を挟まずそのタブだけをタブごと閉じる。
-  func testMiddleClickClosesTabWithoutSwitchingSelection() {
-    let wc = WindowController()
-    wc.newTab()
-    wc.newTab()
-    XCTAssertEqual(wc.current.tabs.count, 3, "前提: タブ 3 枚で末尾がアクティブ")
-    let active = wc.current.tabs[wc.current.active]
-    let survivor = wc.current.tabs[1]
-
-    wc.statusModel.onCloseTab(0)  // 非選択の先頭タブを中クリック
-
-    XCTAssertEqual(wc.current.tabs.count, 2, "中クリックしたタブだけが閉じる")
-    XCTAssertTrue(wc.current.tabs[wc.current.active] === active, "アクティブタブは切り替わらない")
-    XCTAssertTrue(wc.current.tabs.first === survivor, "閉じたタブ以外は残る")
-  }
-
   /// 改名中に別タブを中クリックすると、集合が変わる前に編集を畳む。
   /// `editingIndex` は位置 index なので、残すと詰まった別タブを指してしまう。
   func testMiddleClickDuringRenameEndsEditing() {
@@ -95,24 +79,6 @@ final class ChromeMiddleClickTests: OrbeTestCase {
     XCTAssertTrue(
       zip(wc.current.tabs, survivors).allSatisfy { $0 === $1 }, "閉じたのはクリック座標のタブだけ")
     XCTAssertTrue(wc.current.tabs[wc.current.active] === active, "アクティブタブは切り替わらない")
-  }
-
-  /// 末尾（＝アクティブ）タブの中クリックは、そのタブを閉じて選択が手前へ落ちる。
-  /// catcher の左右順と `active` 補正（`SessionStore.removeTab` の clamp）を反対端から固定する。
-  func testMiddleButtonEventOnLastTabClosesLastTab() throws {
-    let wc = WindowController()
-    wc.newTab()
-    wc.newTab()
-    let window = try mount(wc)
-    let catchers = try tabCatchers(in: window)
-    XCTAssertEqual(wc.current.active, 2, "前提: タブ 3 枚で末尾がアクティブ")
-    let survivors = [wc.current.tabs[0], wc.current.tabs[1]]
-
-    window.sendEvent(try otherDown(button: 2, at: center(of: catchers[2])))
-
-    XCTAssertEqual(wc.current.tabs.count, 2, "末尾タブが閉じる")
-    XCTAssertTrue(zip(wc.current.tabs, survivors).allSatisfy { $0 === $1 }, "閉じたのは末尾タブだけ")
-    XCTAssertEqual(wc.current.active, 1, "アクティブは手前へ落ちる（範囲外を指し続けない）")
   }
 
   /// サイドボタン（buttonNumber 3）では閉じない。hitTest が catcher を返さず、

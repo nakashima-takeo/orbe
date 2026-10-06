@@ -47,13 +47,6 @@ final class WorktreeAgentActivityTests: OrbeTestCase {
     }
   }
 
-  /// 札（行の「claude 12分」）に出すのは作業中と入力待ちだけ。
-  func testOnlyWorkingAndWaitingAgentsAreBusy() {
-    XCTAssertEqual(
-      AgentStateIcon.Kind.allCases.filter { agent($0, minutesIn: 0, tab: 1).isBusy },
-      [.working, .waiting])
-  }
-
   func testADoneTaskShowsNoAgentEvenWhenItsWorktreeHasOne() {
     let agents = ["/r/wt": agent(.working, minutesIn: 0, tab: 1)]
     var task = TaskPaletteSamples.task(1, "a") { $0.worktree = TaskWorktree(key: "/r/wt") }

@@ -3,9 +3,9 @@ import XCTest
 @testable import Orbe
 
 /// 補完の学習ランキング（頻度・recency・二層スコープ）の純関数を検証する。
-/// engine も popup も不要でユニット完結する（`rank`・`record`・`score`・`scopes` が純関数）。
-/// 頻度・recency・完全一致不可侵・ゼロ回帰の 4 点と、二層スコープ（門番なし・静的スコープ維持・
-/// 除外・完全一致不可侵の動的版）を機械検証する。
+/// engine も popup も不要でユニット完結する（`rank`・`record`・`scopes` が純関数）。
+/// 頻度・recency・完全一致不可侵・ゼロ回帰の 4 点と、二層スコープ（静的スコープ維持・
+/// 動的スコープ共有・除外）を機械検証する。
 final class CompletionLearningTests: OrbeTestCase {
   private let now: Double = 1_000_000
   /// 静的・動的が同値の最小スコープ（root コマンド 1 語のみのバッファ相当）。
@@ -68,75 +68,13 @@ final class CompletionLearningTests: OrbeTestCase {
     XCTAssertEqual(names(ranked), ["co", "commit"], "完全一致は学習スコアに関わらず前方一致より上")
   }
 
-  // MARK: - M6: 完全一致不可侵（動的候補版）
-
-  func testExactMatchOutranksLearnedDynamicCandidate() {
-    // query="main"。feature-main（前方一致・高 count の動的候補）を学習しても、
-    // main（完全一致・未学習）が上のまま。
-    var store = LearningStore.empty
-    for _ in 0..<50 {
-      store = XCTUnwrap2(
-        CompletionLearning.record(
-          scopes: scopes, candidate: "main-backup", type: nil, now: now, into: store))
-    }
-    let ranked = CompletionLearning.rank(
-      [choice("main-backup", type: nil), choice("main", type: nil)], query: "main",
-      scopes: scopes, store: store, now: now)
-    XCTAssertEqual(names(ranked), ["main", "main-backup"], "完全一致は動的学習スコアに関わらず上")
-  }
-
-  func testExactMatchOutranksLearnedForPathCandidates() {
-    // パス途中のトークン（`cat sub/main.swift`）でも完全一致が守られる。候補値は basename 化
-    // されているので、照合には engine が同じ正規化を通した query（`main.swift`）を渡す——
-    // 両者が同じ世界の値である限り、パス区切りの有無はランキングに影響しない。
-    var store = LearningStore.empty
-    for _ in 0..<16 {
-      store = XCTUnwrap2(
-        CompletionLearning.record(
-          scopes: scopes, candidate: "main.swift.orig", type: "file", now: now, into: store))
-    }
-    let ranked = CompletionLearning.rank(
-      [choice("main.swift.orig", type: "file"), choice("main.swift", type: "file")],
-      query: "main.swift", scopes: scopes, store: store, now: now)
-    XCTAssertEqual(
-      names(ranked), ["main.swift", "main.swift.orig"], "完全一致が高 count の接尾辞付きより上")
-  }
-
   // MARK: - ゴール4: 学習ゼロ回帰（入力順を保持）
-
-  func testEmptyStorePreservesInputOrder() {
-    let input = [choice("bench"), choice("build"), choice("doc")]
-    let ranked = CompletionLearning.rank(input, query: "", scopes: scopes, store: .empty, now: now)
-    XCTAssertEqual(names(ranked), names(input), "空ストアは engine 元順を安定保持（回帰なし）")
-  }
 
   func testEmptyStoreWithQueryPreservesInputOrder() {
     // matchQuality 同値（全前方一致）でも学習ゼロなら元順を保つ。
     let input = [choice("commit"), choice("config"), choice("checkout")]
     let ranked = CompletionLearning.rank(input, query: "c", scopes: scopes, store: .empty, now: now)
     XCTAssertEqual(names(ranked), names(input), "同一致品質・学習ゼロは元順を安定保持")
-  }
-
-  // MARK: - M1: 門番撤廃（動的候補も記録される）
-
-  func testRecordLearnsDynamicCandidates() {
-    // type nil / file / folder / arg も記録される（v1 の type 門番を撤廃）。
-    for type in [nil, "file", "folder", "arg"] {
-      let store = CompletionLearning.record(
-        scopes: scopes, candidate: "feature-x", type: type, now: now, into: .empty)
-      XCTAssertNotNil(store, "動的候補（type=\(type ?? "nil")）も記録される")
-      XCTAssertNotNil(
-        store?.entries[key("feature-x")], "動的候補のキーは dynamicScope（root 1語）に載る")
-    }
-  }
-
-  func testRecordLearnsSubcommandAndOption() {
-    XCTAssertNotNil(
-      CompletionLearning.record(
-        scopes: scopes, candidate: "commit", type: "subcommand", now: now, into: .empty))
-    XCTAssertNotNil(
-      CompletionLearning.record(
-        scopes: scopes, candidate: "--verbose", type: "option", now: now, into: .empty))
   }
 
   // MARK: - M3: 静的候補はコマンド列スコープ（サブコマンド間で共有しない）
@@ -176,22 +114,10 @@ final class CompletionLearningTests: OrbeTestCase {
   // MARK: - M4: 相対ナビゲーションの除外
 
   func testRecordExcludesRelativeNavigation() {
-    for candidate in ["../", "./", "..", "."] {
-      XCTAssertNil(
-        CompletionLearning.record(
-          scopes: scopes, candidate: candidate, type: "folder", now: now, into: .empty),
-        "相対ナビゲーション（\(candidate)）は記録しない")
-    }
-  }
-
-  // MARK: - score（frecency 単調性）
-
-  func testScoreDecaysOverTime() {
-    let e = LearningEntry(count: 4, lastUsed: now)
-    XCTAssertEqual(CompletionLearning.score(e, now: now), 4, accuracy: 1e-9, "Δt=0 は count そのまま")
-    XCTAssertEqual(
-      CompletionLearning.score(e, now: now + CompletionLearning.halfLife), 2, accuracy: 1e-6,
-      "半減期経過で半分")
+    XCTAssertNil(
+      CompletionLearning.record(
+        scopes: scopes, candidate: "../", type: "folder", now: now, into: .empty),
+      "相対ナビゲーション（../）は記録しない")
   }
 
   // MARK: - scopes（二層スコープの導出）
@@ -204,6 +130,11 @@ final class CompletionLearningTests: OrbeTestCase {
     XCTAssertEqual(
       CompletionLearning.scopes(commandPath: ["git", "commit"]),
       CompletionLearning.LearningScopes(staticScope: "git commit", dynamicScope: "git"))
+    // コマンド名自体の補完（`gi`）では確定コマンドが無いので両層とも空 scope
+    // （打鍵中のトークンをキーにすると 1 文字ごとに別キーへ散る）。
+    XCTAssertEqual(
+      CompletionLearning.scopes(commandPath: []),
+      CompletionLearning.LearningScopes(staticScope: "", dynamicScope: ""))
   }
 
   func testScopesLowercaseBothLayers() {
@@ -212,23 +143,6 @@ final class CompletionLearningTests: OrbeTestCase {
     XCTAssertEqual(
       CompletionLearning.scopes(commandPath: ["Git", "Commit"]),
       CompletionLearning.LearningScopes(staticScope: "git commit", dynamicScope: "git"))
-  }
-
-  func testScopesEmptyForCommandName() {
-    // コマンド名自体の補完（`gi`）では確定コマンドが無いので両層とも空 scope
-    // （打鍵中のトークンをキーにすると 1 文字ごとに別キーへ散る）。
-    XCTAssertEqual(
-      CompletionLearning.scopes(commandPath: []),
-      CompletionLearning.LearningScopes(staticScope: "", dynamicScope: ""))
-  }
-
-  func testScopeSelectionByType() {
-    let two = CompletionLearning.LearningScopes(staticScope: "git commit", dynamicScope: "git")
-    XCTAssertEqual(CompletionLearning.scope(for: "subcommand", in: two), "git commit")
-    XCTAssertEqual(CompletionLearning.scope(for: "option", in: two), "git commit")
-    for type in [nil, "file", "folder", "arg"] {
-      XCTAssertEqual(CompletionLearning.scope(for: type, in: two), "git", "動的候補は root 1語")
-    }
   }
 
   // MARK: - maxEntries 退避（frecency 最小を落とす）

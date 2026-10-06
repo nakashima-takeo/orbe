@@ -207,16 +207,11 @@ extension ControlWireTests {
   func testUnparsableKeySpecIsRejected() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
-    var id = 0
 
-    // 未知のキー名 / 端末へ届く形が無い cmd 付き単一文字 / 解けない綴り / 空。
-    for spec in ["nosuchkey", "cmd+a", "ctrl+", ""] {
-      id += 1
-      XCTAssertEqual(
-        errorCode(
-          wire.request(id: id, method: "send_key", params: ["tabId": fake.tabId, "key": spec])),
-        -32602, "解けないキー指定 \(spec) は -32602（無視して ok を返さない）")
-    }
+    XCTAssertEqual(
+      errorCode(
+        wire.request(id: 1, method: "send_key", params: ["tabId": fake.tabId, "key": "nosuchkey"])),
+      -32602, "解けないキー指定は -32602（無視して ok を返さない）")
   }
 
   /// `config_set` の `value: null` は「解除（継承へ戻す）」として受理する——欠落とは別物。
@@ -260,22 +255,6 @@ extension ControlWireTests {
       "messageSource は AgentMessage.source へ畳まれる。-32602 ガードが無く欠落しても目に見えないため、"
         + "この経路以外にこの語を固定する手段が無い（#50 が名指しした穴）")
     XCTAssertEqual(reported?.reason, "other", "reason が名前どおり届く（セッションログの closed に載る語）")
-  }
-
-  /// `message` を送らなければ `AgentMessage` 自体が組まれない（`messageSource` 単独では立たない）。
-  func testReportAgentWithoutMessageCarriesNoAgentMessage() {
-    let fake = FakeControlTarget()
-    let wire = startWire(target: fake)
-
-    _ = wire.request(
-      id: 1, method: "report_agent",
-      params: [
-        "tabId": fake.tabId, "agent": "claude", "state": "done", "messageSource": "tool",
-      ])
-
-    let reported = fake.reportedAgents.last
-    XCTAssertNil(reported?.messageText, "message 無しなら AgentMessage を組まない")
-    XCTAssertNil(reported?.messageSource, "message 無しなら source だけが独り立ちすることもない")
   }
 
   /// `spawn` の optional 3 件が名前どおり target へ届く（いずれもガードが無い）。

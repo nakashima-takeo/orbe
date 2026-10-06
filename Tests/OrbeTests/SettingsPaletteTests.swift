@@ -9,8 +9,8 @@ import XCTest
 final class SettingsPaletteTests: OrbeTestCase {
   // model / captureApply は font 拡張（SettingsPaletteFontTests.swift）も使うため非 private。
   func model(
-    fontSize: Int = 12, backgroundOpacity: Int = 90, backgroundBlur: Bool = false,
-    cursorStyleBlink: Bool = false,
+    fontSize: Int? = nil, backgroundOpacity: Int? = nil, backgroundBlur: Bool? = nil,
+    cursorStyleBlink: Bool? = nil,
     fontFamily: String? = nil, theme: ThemeMode? = nil,
     defaultAgent: String? = nil, worktreeDir: String? = nil,
     menuBarNotificationDuration: Int? = nil,
@@ -64,17 +64,12 @@ final class SettingsPaletteTests: OrbeTestCase {
     XCTAssertTrue(p.render.rows[6].label.contains("codex"))
   }
 
-  /// 背景の不透明度行（index 2）は既定 90% を単位つきで出す。
-  func testRootShowsBackgroundOpacity() {
-    let p = model(backgroundOpacity: 90)
-    XCTAssertTrue(p.render.rows[2].label.contains("90%"))
-  }
-
-  /// 未設定の現在値は「実際に効いている値」へ解決して出す（テーマ＝Auto、エージェント＝解決済み
-  /// デフォルト＝検出先頭、フォント＝既定の実フォント名）。
+  /// 未設定の現在値は「実際に効いている値」へ解決して出す（テーマ＝Auto、ブラー＝オン、エージェント＝
+  /// 解決済みデフォルト＝検出先頭）。
   func testRootDefaultsWhenUnset() {
     let p = model()
     XCTAssertTrue(p.render.rows[5].label.contains("Auto"), "テーマ未設定は Auto（OS 追従）を表示")
+    XCTAssertTrue(p.render.rows[3].label.contains("オン"), "ブラー未設定は既定のオンを表示")
     XCTAssertTrue(
       p.render.rows[6].label.contains("claude"), "エージェント未設定は解決済みデフォルト（検出先頭）を表示")
     XCTAssertFalse(p.render.rows[6].label.contains("（未設定）"))
@@ -84,23 +79,6 @@ final class SettingsPaletteTests: OrbeTestCase {
   func testRootAgentUnsetPlaceholderWhenNoneDetected() {
     let p = model(agents: [])
     XCTAssertTrue(p.render.rows[6].label.contains("（未設定）"))
-  }
-
-  /// root 行の chevron は descriptor.isDrillIn を反映（先頭のスコープ行と stepper/toggle 行は無し、
-  /// drillIn 行は有り）。
-  func testRootRowChevronsReflectDrillIn() {
-    let p = model()
-    XCTAssertEqual(
-      p.render.rows.map(\.chevron),
-      [
-        false, false, false, false, false, true, true, true, true, true, true, true, true,
-        false, false, false, true,
-      ],
-      "スコープ/フォントサイズ/不透明度/ブラー/点滅/通知音の音量/通知音のオン・オフ/"
-        + "メニューバー通知の表示時間行は chevron 無し、"
-        + "テーマ/エージェント/フォント/タブタイトルのフォント/絵文字フォント/アイコン/worktree の作成場所/"
-        + "通知音/言語行は drillIn で chevron 有り"
-    )
   }
 
   // MARK: - font-size: ←→ 増減とクランプ
@@ -145,6 +123,50 @@ final class SettingsPaletteTests: OrbeTestCase {
     XCTAssertNil(applied())
   }
 
+  /// root での設定行の index（先頭のスコープ行の分 +1）。行の同一性から引く。
+  func rootRow(_ id: SettingID) -> Int {
+    SettingsRegistry.rootOrder.firstIndex { $0.id == id }! + 1
+  }
+
+  /// stepper の値域と刻みは spec の合意値（不透明度 20–100%、表示時間 5–180 秒・5 秒刻み）。
+  /// 1 押しで刻み幅だけ動き、端では書かない。フォントサイズは上の 4 本、音量は通知音のテストが持つ。
+  func testSteppersMoveByTheirStepAndStopAtTheSpecBounds() {
+    struct Stepper {
+      let id: SettingID
+      let key: DefaultedSettingKey<Int>
+      let low: Int
+      let high: Int
+      let step: Int
+    }
+    let steppers = [
+      Stepper(
+        id: .backgroundOpacity, key: SettingKeys.backgroundOpacity, low: 20, high: 100, step: 1),
+      Stepper(
+        id: .menuBarNotificationDuration, key: SettingKeys.menuBarNotificationDuration,
+        low: 5, high: 180, step: 5),
+    ]
+    for s in steppers {
+      func press(from value: Int, _ key: (SettingsPaletteModel) -> Void) -> Int? {
+        var global = SettingsLayer()
+        global[s.key] = value
+        let p = SettingsPaletteModel(
+          values: ScopedSettingsValues(scope: .global, global: global, override: SettingsLayer()),
+          fontNames: [], agents: [], localization: LocalizationStore(language: .ja))
+        let applied = captureApply(p)
+        p.render.selected = rootRow(s.id)
+        key(p)
+        return applied()?[s.key]
+      }
+      let right: (SettingsPaletteModel) -> Void = { _ = $0.render.onRight() }
+      let left: (SettingsPaletteModel) -> Void = { $0.render.onLeft() }
+      let mid = s.low + s.step
+      XCTAssertEqual(press(from: mid, right), mid + s.step, "\(s.id): → は刻み幅だけ増える")
+      XCTAssertEqual(press(from: mid, left), s.low, "\(s.id): ← は刻み幅だけ減る")
+      XCTAssertNil(press(from: s.high, right), "\(s.id): 上端で → は書かない")
+      XCTAssertNil(press(from: s.low, left), "\(s.id): 下端で ← は書かない")
+    }
+  }
+
   // MARK: - theme: Auto / Dark / Light の固定3択
 
   /// theme サブパレットは絞り込み欄なしの固定3行（見本 Settings 画面の Seg 順）で、
@@ -157,15 +179,6 @@ final class SettingsPaletteTests: OrbeTestCase {
     XCTAssertFalse(p.render.fieldVisible, "theme サブパレットに絞り込み入力欄は無い")
     XCTAssertEqual(p.render.rows.map(\.label), ["● Auto", "  Dark", "  Light"])
     XCTAssertEqual(p.render.selected, 0, "未設定（Auto）の行が初期ハイライト")
-  }
-
-  /// 設定済みの実効値（Dark）に ● が付き、初期ハイライトも同じ行に乗る。
-  func testThemeMarksCurrentEffectiveValue() {
-    let p = model(theme: .dark)
-    moveToThemeRow(p)
-    _ = p.render.onRight()  // → でも潜れる（Enter と同等）
-    XCTAssertEqual(p.render.rows.map(\.label), ["  Auto", "● Dark", "  Light"])
-    XCTAssertEqual(p.render.selected, 1, "現在値 Dark の行が初期ハイライト（先頭でない）")
   }
 
   /// 完了条件 1・2・5: theme=Light（global）で潜ると ● と初期ハイライトが Light 行（末尾）に揃って乗り、
@@ -221,29 +234,6 @@ final class SettingsPaletteTests: OrbeTestCase {
     XCTAssertNil(p.render.breadcrumb, "root に breadcrumb は無い")
     p.render.onEscape()  // root の Esc は閉じる
     XCTAssertTrue(dismissed)
-  }
-
-  func testLeftFromAgentReturnsToRoot() {
-    let p = model(defaultAgent: "claude")
-    p.render.onDown()
-    p.render.onDown()
-    p.render.onDown()
-    p.render.onDown()
-    p.render.onDown()  // エージェント行（index 6）
-    p.render.onActivate()  // agent へ
-    XCTAssertEqual(p.render.breadcrumb, "‹ デフォルトエージェント")
-    p.render.onLeft()  // ← で root へ
-    XCTAssertNil(p.render.breadcrumb)
-  }
-
-  /// theme は入力欄なしサブパレット（agent と同型）＝ ← で root へ戻る。
-  func testLeftFromThemeReturnsToRoot() {
-    let p = model()
-    moveToThemeRow(p)
-    p.render.onActivate()  // theme へ
-    XCTAssertEqual(p.render.breadcrumb, "‹ テーマ")
-    p.render.onLeft()  // ← で root へ
-    XCTAssertNil(p.render.breadcrumb)
   }
 
   /// theme → root（←）で選択が「テーマ」行へ復元され、root カードへ focus を取り戻す。

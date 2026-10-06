@@ -49,15 +49,6 @@ final class AgentPaletteTests: OrbeTestCase {
     XCTAssertEqual(launched, codex, "moveDown 後の Enter は 2 番目を起動")
   }
 
-  func testMoveWrapsAround() {
-    let p = palette([claude, codex])
-    var launched: AgentCLI?
-    p.onLaunch = { launched = $0 }
-    key(p, kUp)  // 先頭で上 → 末尾へラップ
-    key(p, kReturn)
-    XCTAssertEqual(launched, codex, "先頭で moveUp すると末尾へラップ")
-  }
-
   // MARK: - → で詳細メニューに潜る（デフォルトに設定）
 
   func testRightThenEnterSetsDefaultAndReturnsToList() {
@@ -74,7 +65,7 @@ final class AgentPaletteTests: OrbeTestCase {
     XCTAssertEqual(launched, claude, "設定後は一覧へ戻り Enter で起動できる")
   }
 
-  func testLeftReturnsFromSubmenuToList() {
+  func testLeftOrEscFromSubmenuReturnsToList() {
     let p = palette([claude, codex])
     var dismissed = false
     var launched: AgentCLI?
@@ -86,17 +77,12 @@ final class AgentPaletteTests: OrbeTestCase {
     key(p, kLeft)  // ← で一覧へ戻る（閉じない）
     XCTAssertFalse(dismissed, "← は詳細→一覧で、パレットは閉じない")
     XCTAssertNil(p.render.breadcrumb, "一覧へ戻ると breadcrumb なしに復帰")
+    key(p, kRight)
+    key(p, kEsc)  // Esc も詳細→一覧で、閉じない
+    XCTAssertFalse(dismissed, "詳細メニューの Esc は一覧へ戻るだけ")
+    XCTAssertNil(p.render.breadcrumb)
     key(p, kReturn)
     XCTAssertEqual(launched, claude, "一覧へ戻り Enter で起動")
-  }
-
-  func testEscFromSubmenuReturnsToListNotDismiss() {
-    let p = palette([claude])
-    var dismissed = false
-    p.onDismiss = { dismissed = true }
-    key(p, kRight)
-    key(p, kEsc)
-    XCTAssertFalse(dismissed, "詳細メニューの Esc は一覧へ戻るだけ")
   }
 
   func testEscFromListDismisses() {

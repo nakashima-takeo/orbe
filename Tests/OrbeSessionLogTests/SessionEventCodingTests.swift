@@ -94,11 +94,11 @@ final class SessionEventCodingTests: XCTestCase {
       "メモリの値と読み戻した値が等しい（ミリ秒未満は構築時に落ちる）")
   }
 
-  func testISO8601HelpersAgree() {
-    let date = Fixture.base.addingTimeInterval(12.345)
-    let text = SessionEvent.iso8601(date)
-    XCTAssertEqual(text, "2027-01-15T08:00:12.345Z")
-    XCTAssertEqual(SessionEvent.parseISO8601(text), date)
-    XCTAssertNil(SessionEvent.parseISO8601("yesterday"))
+  func testUnparsableTimestampIsUndecodable() {
+    let line = """
+      {"ts":"yesterday","event":"opened","workspace":{"name":"w","rootPath":"/r"},\
+      "cwd":"/r","agent":{"command":"claude","sessionId":"a"}}
+      """
+    XCTAssertThrowsError(try JSONDecoder().decode(SessionEvent.self, from: Data(line.utf8)))
   }
 }

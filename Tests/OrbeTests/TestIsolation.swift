@@ -78,6 +78,14 @@ enum TestIsolation {
     // プロセスの環境を土台にするので、`git init` を含む全 fixture の全呼び出しに効く。
     setenv("GIT_CONFIG_GLOBAL", "/dev/null", 1)
     setenv("GIT_CONFIG_SYSTEM", "/dev/null", 1)
+    // ghostty のリソース根（theme の探索先）。libghostty は `ghostty_init` で 1 度だけ読むので、どの
+    // テスト本体よりも前に張る。張らないと Orbe / Ghostty の端末から起動した `swift test` は親の
+    // インストール済み .app を読み、CI と違う結果になる。`app/` は .app の `Resources/ghostty` と同じ
+    // `themes/OrbeDark`・`OrbeLight` を持つ。
+    let appResources = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+      .appendingPathComponent("app", isDirectory: true)
+    setenv("GHOSTTY_RESOURCES_DIR", appResources.path, 1)
 
     // 3. 補完の学習ストア。`CompletionLearning.shared` は初回タッチ時の `fileURL` で in-memory
     //    ストアを焼くため、まだ誰も書いていないこの時点で固定して即タッチする。

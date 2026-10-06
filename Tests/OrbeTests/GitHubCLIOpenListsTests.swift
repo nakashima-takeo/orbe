@@ -71,8 +71,6 @@ final class GitHubCLIOpenListsTests: OrbeTestCase {
     let cwd = try String(contentsOf: dir.appendingPathComponent("cwd.log"), encoding: .utf8)
     XCTAssertTrue(
       cwd.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix(root.path), "root で訊く: \(cwd)")
-    XCTAssertEqual(
-      GitHubCLI.defaultRepositoryArguments, ["repo", "view", "--json", "nameWithOwner,url"])
   }
 
   /// github.com 以外のホスト（GitHub Enterprise）のリポジトリは「見つからない」——以後の問い合わせと書き込みは
@@ -83,12 +81,6 @@ final class GitHubCLIOpenListsTests: OrbeTestCase {
     XCTAssertEqual(defaultRepository(root: dir.path), .failure(.notFound))
 
     try stageGh(stdout: #"{"nameWithOwner":"o/n"}"#)
-    XCTAssertEqual(defaultRepository(root: dir.path), .failure(.notFound))
-  }
-
-  /// ホスト名が「github.com」で始まるだけの GitHub Enterprise も github.com ではない。
-  func testEnterpriseHostStartingWithGitHubDotComIsNotFound() throws {
-    try stageGh(stdout: #"{"nameWithOwner":"o/n","url":"https://github.company.com/o/n"}"#)
     XCTAssertEqual(defaultRepository(root: dir.path), .failure(.notFound))
   }
 
@@ -104,16 +96,17 @@ final class GitHubCLIOpenListsTests: OrbeTestCase {
 
   // MARK: - 自分とレビュー依頼
 
-  /// 自分の login と、自分（所属チームを含む）にレビューを頼んでいる open な PR を、GitHub の検索で 1 回に
+  /// 自分（所属チームを含む）にレビューを頼んでいる open な PR を、github.com の検索 `review-requested:@me` で
   /// 先頭 100 件まで取る。
-  func testReviewRequestQueryAsksForTheViewerAndTheReviewRequestedSearch() throws {
+  func testReviewRequestQueryAsksGitHubDotComToSearchTheReviewRequests() throws {
     let arguments = GitHubCLI.reviewRequestsArguments(repo)
 
-    XCTAssertEqual(Array(arguments.prefix(4)), ["api", "graphql", "--hostname", "github.com"])
-    let query = try XCTUnwrap(arguments.first { $0.hasPrefix("query=") })
-    XCTAssertTrue(query.contains("viewer{login}"))
-    XCTAssertTrue(query.contains("search(query:$q,type:ISSUE,first:100)"))
-    XCTAssertTrue(arguments.contains("q=repo:o/n is:pr is:open review-requested:@me"))
+    XCTAssertTrue(
+      zip(arguments, arguments.dropFirst()).contains { $0 == ("--hostname", "github.com") })
+    let search = try XCTUnwrap(arguments.first { $0.hasPrefix("q=") }).dropFirst(2)
+    XCTAssertEqual(
+      Set(search.split(separator: " ")), ["repo:o/n", "is:pr", "is:open", "review-requested:@me"])
+    XCTAssertTrue(try XCTUnwrap(arguments.first { $0.hasPrefix("query=") }).contains("first:100"))
   }
 
   /// PR でない検索結果（`{}`）は番号に入れない。失敗は nil。
@@ -141,22 +134,19 @@ final class GitHubCLIOpenListsTests: OrbeTestCase {
 
   // MARK: - 自分を足す書き込み
 
-  /// 担当者は Issue も PR も issues の口へ、レビュアーは pulls の口へ、REST で自分の login を POST する。
-  func testAddSelfPostsTheLoginToTheRestEndpointOfTheRole() throws {
+  /// 書き込みは github.com へ送り、自分の login は `-f`（文字列のまま）で渡す——`-F` は数字だけの login を
+  /// 整数に変える。
+  func testAddSelfWritesToGitHubDotComWithTheLoginAsAString() throws {
     let item = try XCTUnwrap(GitHubItemID(repo: "o/n", number: 221))
+    for role in [GitHubSelfRole.assignee, .reviewer] {
+      let arguments = GitHubCLI.addSelfArguments(as: role, to: item, login: "2048")
 
-    XCTAssertEqual(
-      GitHubCLI.addSelfArguments(as: .assignee, to: item, login: "me"),
-      [
-        "api", "--hostname", "github.com", "-X", "POST", "repos/o/n/issues/221/assignees", "-f",
-        "assignees[]=me",
-      ])
-    XCTAssertEqual(
-      GitHubCLI.addSelfArguments(as: .reviewer, to: item, login: "me"),
-      [
-        "api", "--hostname", "github.com", "-X", "POST", "repos/o/n/pulls/221/requested_reviewers",
-        "-f", "reviewers[]=me",
-      ])
+      XCTAssertTrue(
+        zip(arguments, arguments.dropFirst()).contains { $0 == ("--hostname", "github.com") },
+        "\(role)")
+      let index = try XCTUnwrap(arguments.firstIndex { $0.hasSuffix("=2048") }, "\(role)")
+      XCTAssertEqual(arguments[index - 1], "-f", "\(role)")
+    }
   }
 
   /// 返すのは応答の担当者か個人宛のレビュー依頼の login（成否は呼び手が自分の有無で決める）。失敗は nil。

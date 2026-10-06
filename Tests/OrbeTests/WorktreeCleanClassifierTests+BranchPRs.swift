@@ -7,21 +7,6 @@ import XCTest
 /// closed はチップと推定に、どちらも名指し結果から決まる。
 extension WorktreeCleanClassifierTests {
 
-  /// open PR は名指し結果から立ち、安全確認を落とす（窓落ちで素通りしない）。
-  func testOpenPRFromNamedFetchBlocksSafety() {
-    let r = branchPRRow([pr(139, "OPEN")])
-    XCTAssertEqual(r.group, .caution, "レビュー中のブランチは安全群に入れない")
-    XCTAssertEqual(r.chips.first, .openPR(139))
-  }
-
-  /// merged PR は名指し結果からチップ（マージ先つき）と推定に写る。
-  func testMergedPRFromNamedFetchRaisesChipWithItsBase() {
-    let r = branchPRRow(
-      [pr(113, "MERGED", base: "develop")], containment: .patchEquivalent(target: "main"))
-    XCTAssertEqual(r.group, .safe)
-    XCTAssertTrue(r.chips.contains(.mergedPR(113, base: "develop")))
-  }
-
   /// open と closed は独立に立つ（`--state all` の 1 往復が両方を運ぶ）。
   /// 再オープンや作り直しの並びでも、open は最新の OPEN・closed は最新の非 OPEN から決まる。
   func testOpenAndClosedFactsCoexistFromOneFetch() {
@@ -191,16 +176,13 @@ extension WorktreeCleanClassifierTests {
   }
 
   /// `feat/x` の worktree 1 本を、名指し取得の着地とともに `rows` へ通した行。
-  /// PR 以外の事実は安全確認を全部通る形（clean・操作なし・`[gone]`・取り込み済み）に固定する。
-  /// `track` を nil にすると `[gone]` の推定が消え、**推定が PR だけになる**行を作れる。
-  private func branchPRRow(
-    _ prs: [GitHubBranchPR], containment: GitBranchContainment? = .patchEquivalent(target: "main"),
-    track: GitUpstreamTrack? = .gone
-  ) -> CleanRow {
-    branchPRRow(state: .loaded(prs), containment: containment, track: track)
+  private func branchPRRow(_ prs: [GitHubBranchPR]) -> CleanRow {
+    branchPRRow(state: .loaded(prs))
   }
 
   /// head の取得状態そのものを渡す版（取得中／取得失敗の検証はこちらを使う）。
+  /// PR 以外の事実は安全確認を全部通る形（clean・操作なし・`[gone]`・取り込み済み）に固定する。
+  /// `track` を nil にすると `[gone]` の推定が消え、**推定が PR だけになる**行を作れる。
   private func branchPRRow(
     state: BranchPRState = .loaded([]),
     containment: GitBranchContainment? = .patchEquivalent(target: "main"),

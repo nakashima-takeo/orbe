@@ -4,8 +4,7 @@ import XCTest
 @testable import OrbeEditorCore
 
 /// 文書が面と配り先へ出すもの——インデント単位と改行の作法は文書が検出して面へ押す（開いたとき・丸ごと置き換え）、役割の
-/// 区間は役割の並びから窓ごとに答える、本文・選択・viewport の変化はそれぞれ 1 本の closure で届き（本文は写しの更新の
-/// 後）、裏から届いた役割の変化は面へ届く。
+/// 区間は役割の並びから窓ごとに答える、本文の変化は写しの更新の後に配り先へ届き、裏から届いた役割の変化は面へ届く。
 @MainActor
 final class EditorDocumentOverviewTests: XCTestCase {
   private let registry = LanguageRegistry(queriesRoot: Queries.root)
@@ -187,18 +186,5 @@ final class EditorDocumentOverviewTests: XCTestCase {
     XCTAssertEqual(
       document.word(at: NSRange(location: lineStart + 1800, length: 0)),
       NSRange(location: lineStart + 1301, length: 600), "窓（前 499）の端で切れる")
-  }
-
-  func testSelectionAndViewportChangesAreForwarded() throws {
-    let opened = try open("s.txt", "abc")
-    let (document, surface) = (opened.document, opened.surface)
-    var selections = 0
-    var viewports = 0
-    document.onSelectionChange = { selections += 1 }
-    document.onViewportChange = { viewports += 1 }
-    surface.selectedRange = NSRange(location: 1, length: 1)
-    surface.delegate?.surfaceDidChangeViewport(surface)
-    XCTAssertEqual(selections, 1)
-    XCTAssertEqual(viewports, 1)
   }
 }

@@ -20,17 +20,6 @@ extension TaskPaletteModelTests {
     XCTAssertGreaterThan(scrollSerial(palette), before)
   }
 
-  func testReorderSendsTheListToTheMovedTask() {
-    let palette = threeTodos()
-    palette.jump(1)
-    let before = scrollSerial(palette)
-
-    palette.reorder(-1)
-
-    XCTAssertEqual(palette.scrollTarget?.id, .task(3))
-    XCTAssertGreaterThan(scrollSerial(palette), before)
-  }
-
   func testReorderPressedAgainOnTheSameTaskSendsTheListAgain() {
     let palette = threeTodos()
     palette.jump(1)

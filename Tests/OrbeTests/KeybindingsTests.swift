@@ -3,8 +3,8 @@ import XCTest
 
 @testable import Orbe
 
-/// chrome キーマップ（Orbe が先取りし surface へ転送しない操作）の単一ソースを守る。
-/// libghostty 非依存。NSEvent をモックして全分岐を固定する。
+/// chrome が先取りするキー（surface へ転送しない操作）を守る。壊れると、ヘルプに載っているのに
+/// 押しても効かないショートカットや、ヘルプに無いまま端末から奪われるキーが生まれる。
 final class KeybindingsTests: OrbeTestCase {
   /// 矢印キーは specialKey の unicode（charactersIgnoringModifiers）から判定されるため、その文字で生成する。
   private func arrow(_ k: NSEvent.SpecialKey, _ flags: NSEvent.ModifierFlags = .command) -> NSEvent
@@ -12,112 +12,52 @@ final class KeybindingsTests: OrbeTestCase {
     .key(String(UnicodeScalar(k.rawValue)!), flags)
   }
 
-  func testFontSize() {
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("=")), .increaseFontSize)
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("+")), .increaseFontSize)
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("-")), .decreaseFontSize)
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("0")), .resetFontSize)
-  }
+  /// ヘルプの行のうち chrome ではなくメニュー・端末・修飾の素タップが担うもの。
+  /// chrome はこれらを奪ってはいけない（奪えば ⌘C のコピーや ⌘Q の終了が効かなくなる）。
+  private let handledOutsideChrome: Set = ["⌘Q", "⌘C", "⌘V", "⌘⌘"]
 
-  func testCloseTab() {
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("w")), .closeTab)
-    // ⌘D / ⌘⇧D は未割当（libghostty へ素通し）。
-    XCTAssertNil(Keybindings.chromeAction(for: .key("d")))
-    XCTAssertNil(Keybindings.chromeAction(for: .key("D", [.command, .shift])))
-  }
+  /// ヘルプが案内する ⌘ ショートカットと、chrome が実際に先取りする操作は一致する。
+  /// ヘルプ（人が読む掲載）と Keybindings（キーの振り分け）は別々に書かれた 2 つの正本で、
+  /// どちらか片方だけを変えると落ちる。
+  func testHelpListsExactlyTheOperationsChromeTakes() {
+    var advertised: Set<ChromeAction> = []
+    for row in HelpCatalog.all.flatMap(\.rows) {
+      let action = Keybindings.chromeAction(for: event(for: row))
+      if handledOutsideChrome.contains(row.key) {
+        XCTAssertNil(action, "\(row.key) は chrome 以外が担うので先取りしない")
+      } else if let action {
+        advertised.insert(action)
+      } else {
+        XCTFail("ヘルプの \(row.key) を押しても chrome が受けない")
+      }
+    }
 
-  func testTabsAndFind() {
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("t")), .showWorktreePalette)
-    // ⌘R はタブリネーム。content 依存の window コマンドとして
-    // `testChromeHostingViewInterceptsTabIndependentCommandsOnly` の素通し脚が乗るので、割当も固定する。
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("r")), .rename)
-    // ⇧⌘T は「閉じたエージェント」パレットを開く。
     XCTAssertEqual(
-      Keybindings.chromeAction(for: .key("T", [.command, .shift])), .showClosedAgentsPalette)
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("}", [.command, .shift])), .nextTab)
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("{", [.command, .shift])), .prevTab)
-    // 矢印は別名として次/前タブに割当（Cmd+Shift+→ / Cmd+Shift+←）。
-    XCTAssertEqual(Keybindings.chromeAction(for: arrow(.rightArrow, [.command, .shift])), .nextTab)
-    XCTAssertEqual(Keybindings.chromeAction(for: arrow(.leftArrow, [.command, .shift])), .prevTab)
-    // Shift なしの Cmd+→ / Cmd+← は奪わない（行末・行頭移動として surface へ通す）。
+      takenFromKeyboard(), advertised, "chrome が先取りするのに、ヘルプに載っていない操作がある")
+  }
+
+  /// 端末やエディターに届くべきキーは奪わない。⌘ の無いキー、Opt / Ctrl を併せたキーは奪わない
+  /// （surface 側の super+alt 系の keybind を遮蔽しない）。
+  func testKeysOwnedByTheFaceAreNotTaken() {
+    XCTAssertNil(Keybindings.chromeAction(for: .key("t", [])))
+    XCTAssertNil(Keybindings.chromeAction(for: .key("t", [.control])))
+    // ⌘← / ⌘→ は行頭・行末移動。
     XCTAssertNil(Keybindings.chromeAction(for: arrow(.rightArrow)))
     XCTAssertNil(Keybindings.chromeAction(for: arrow(.leftArrow)))
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("f")), .find)
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("F", [.command, .shift])), .findInProject)
-  }
-
-  /// ⌘S はエディターが所有する（端末焦点では ghostty へ素通しし、エディター焦点では保存）。
-  func testSaveDocument() {
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("s")), .saveDocument)
-    XCTAssertEqual(ChromeAction.saveDocument.owner, .editor)
-    XCTAssertNil(ChromeAction.saveDocument.windowCommand)
-  }
-
-  /// 所有面の分類: window コマンドを持つものは `.window`、フォントは端末固有、⌘F と ⌘↑↓ は両面。
-  func testOwnerClassification() {
-    for action in [
-      ChromeAction.closeTab, .toggleEditorFace, .rename, .switchWorkspace, .findInProject,
-    ] {
-      XCTAssertEqual(action.owner, .window, "\(action)")
-      XCTAssertNotNil(action.windowCommand, "\(action)")
-    }
-    for action in [ChromeAction.increaseFontSize, .decreaseFontSize, .resetFontSize] {
-      XCTAssertEqual(action.owner, .terminal, "\(action)")
-    }
-    for action in [ChromeAction.find, .scrollToTop, .scrollToBottom] {
-      XCTAssertEqual(action.owner, .eachFace, "\(action)")
-    }
-  }
-
-  func testScrollJump() {
-    // Shift なしの Cmd+↑ / Cmd+↓ でスクロールバックの先頭・末尾へジャンプ。
-    XCTAssertEqual(Keybindings.chromeAction(for: arrow(.upArrow)), .scrollToTop)
-    XCTAssertEqual(Keybindings.chromeAction(for: arrow(.downArrow)), .scrollToBottom)
-    // Cmd+Shift+↑/↓ は未割当（chrome が先取りせず surface へ通す）。
     XCTAssertNil(Keybindings.chromeAction(for: arrow(.upArrow, [.command, .shift])))
     XCTAssertNil(Keybindings.chromeAction(for: arrow(.downArrow, [.command, .shift])))
-  }
-
-  func testWorkspacePalette() {
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("S", [.command, .shift])), .switchWorkspace)
-    // Opt/Ctrl 併用は奪わない。
-    XCTAssertNil(Keybindings.chromeAction(for: .key("S", [.command, .shift, .option])))
-  }
-
-  func testShowSettings() {
-    XCTAssertEqual(Keybindings.chromeAction(for: .key(",")), .showSettings)  // Cmd+,
-    // Opt/Ctrl 併用は奪わない。
-    XCTAssertNil(Keybindings.chromeAction(for: .key(",", [.command, .option])))
-  }
-
-  func testAgentShortcuts() {
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("A", [.command, .shift])), .showAgentPalette)
-    XCTAssertEqual(
-      Keybindings.chromeAction(for: .key("C", [.command, .shift])), .launchDefaultAgent)
-    // Shift なしの Cmd+A / Cmd+C（全選択・コピー系）は奪わない。
-    XCTAssertNil(Keybindings.chromeAction(for: .key("a")))
-    XCTAssertNil(Keybindings.chromeAction(for: .key("c")))
-  }
-
-  func testToggleEditorFace() {
-    // ⌘E はエディター面 ⇄ 端末面（⌘⇧E の GUI エディタ起動とは別）。
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("e")), .toggleEditorFace)
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("E", [.command, .shift])), .openEditor)
-    XCTAssertNil(Keybindings.chromeAction(for: .key("e", [.command, .option])))
-  }
-
-  /// ⌘⇧X はタスク画面。Shift なしの Cmd+X（切り取り系）は奪わない。
-  func testTaskPalette() {
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("X", [.command, .shift])), .showTaskPalette)
-    XCTAssertNil(Keybindings.chromeAction(for: .key("x")))
-  }
-
-  func testHelpToggle() {
-    // ⌘H はヘルプオーバーレイのトグル（macOS Hide から奪取）。
-    XCTAssertEqual(Keybindings.chromeAction(for: .key("h")), .toggleHelp)
-    // ⌘⌥H（ほかを隠す）・⌘⇧H は奪わない。
-    XCTAssertNil(Keybindings.chromeAction(for: .key("h", [.command, .option])))
+    // 全選択・切り取り・分割など、mac と端末の慣習のキー。
+    for chars in ["a", "d"] {
+      XCTAssertNil(Keybindings.chromeAction(for: .key(chars)), "⌘\(chars)")
+    }
+    XCTAssertNil(Keybindings.chromeAction(for: .key("D", [.command, .shift])))
     XCTAssertNil(Keybindings.chromeAction(for: .key("H", [.command, .shift])))
+    // Opt / Ctrl 併用。⌘⌥H は macOS の「ほかを隠す」。
+    XCTAssertNil(Keybindings.chromeAction(for: .key("h", [.command, .option])))
+    XCTAssertNil(Keybindings.chromeAction(for: .key("e", [.command, .option])))
+    XCTAssertNil(Keybindings.chromeAction(for: .key(",", [.command, .option])))
+    XCTAssertNil(Keybindings.chromeAction(for: .key("S", [.command, .shift, .option])))
+    XCTAssertNil(Keybindings.chromeAction(for: .key("f", [.command, .control])))
   }
 
   /// ChromeHostingView は window レベルでタブ非依存 window コマンド（availableWithoutTabs）だけを
@@ -149,69 +89,45 @@ final class KeybindingsTests: OrbeTestCase {
       handled, [.showWorktreePalette], "⌘R（renameTab・content 依存）は横取りせず subtree へ流す")
   }
 
-  /// `ChromeAction.windowCommand`（面の経路・window レベル経路が共有する単一ソース mapping）を網羅固定する。
-  /// window 系15アクションは対応する WindowCommand へ、surface ローカル7アクションは nil へ写す。
-  /// この分類が回帰すると 0タブ配信の可否（availableWithoutTabs）とキー振り分け全体がズレる。
-  func testWindowCommandMappingIsExhaustive() {
-    let mapped: [(ChromeAction, WindowCommand)] = [
-      (.closeTab, .closeTab),
-      (.showClosedAgentsPalette, .showClosedAgentsPalette),
-      (.nextTab, .nextTab),
-      (.prevTab, .prevTab),
-      (.switchWorkspace, .switchWorkspace),
-      (.launchDefaultAgent, .launchDefaultAgent),
-      (.showAgentPalette, .showAgentPalette),
-      (.showWorktreePalette, .showWorktreePalette),
-      (.showTaskPalette, .showTaskPalette),
-      (.openEditor, .openEditor),
-      (.rename, .renameTab),
-      (.showSettings, .showSettings),
-      (.toggleHelp, .toggleHelp),
-      (.toggleEditorFace, .toggleEditorFace),
-      (.findInProject, .findInProject),
-    ]
-    for (action, command) in mapped {
-      XCTAssertEqual(action.windowCommand, command, "\(action) は window コマンド \(command) へ写す")
-    }
-    // surface ローカル操作（WindowController へ届けない）は nil。
-    let surfaceLocal: [ChromeAction] = [
-      .increaseFontSize, .decreaseFontSize, .resetFontSize, .find,
-      .scrollToTop, .scrollToBottom, .saveDocument,
-    ]
-    for action in surfaceLocal {
-      XCTAssertNil(action.windowCommand, "\(action) は surface ローカルゆえ windowCommand は nil")
+  // MARK: - 補助
+
+  /// US 配列で ⇧ を併せたときの文字（記号キー）。
+  private static let shiftedSymbols: [String: String] = [
+    "`": "~", "1": "!", "2": "@", "3": "#", "4": "$", "5": "%", "6": "^", "7": "&", "8": "*",
+    "9": "(", "0": ")", "-": "_", "=": "+", "[": "{", "]": "}", "\\": "|", ";": ":", "'": "\"",
+    ",": "<", ".": ">", "/": "?",
+  ]
+
+  /// 物理キー 1 つ（`HelpCatalog.keyboard` の id）を ⌘（＋⇧）で押した出来事。文字を持たないキーは nil。
+  private func event(key id: String, shift: Bool) -> [NSEvent] {
+    let flags: NSEvent.ModifierFlags = shift ? [.command, .shift] : .command
+    switch id {
+    case "left": return [arrow(.leftArrow, flags)]
+    case "right": return [arrow(.rightArrow, flags)]
+    case "ud": return [arrow(.upArrow, flags), arrow(.downArrow, flags)]
+    default:
+      guard id.count == 1 else { return [] }
+      guard shift else { return [.key(id, flags)] }
+      return [.key(Self.shiftedSymbols[id] ?? id.uppercased(), flags)]
     }
   }
 
-  /// `WindowCommand.availableWithoutTabs`（0タブでも window レベルで配信してよいか）の分類を網羅固定する。
-  /// タブ非依存8コマンドのみ true、content 依存7コマンドは false。この分類が回帰すると
-  /// 0タブで効くべきキーが死ぬ／効くべきでない content 依存キーが暴発する。
-  func testAvailableWithoutTabsClassification() {
-    let available: [WindowCommand] = [
-      .showClosedAgentsPalette, .switchWorkspace,
-      .launchDefaultAgent, .showAgentPalette, .showWorktreePalette, .showTaskPalette, .showSettings,
-      .toggleHelp,
-    ]
-    for command in available {
-      XCTAssertTrue(command.availableWithoutTabs, "\(command) はタブ非依存ゆえ 0タブでも配信する")
-    }
-    let requiresTabs: [WindowCommand] = [
-      .nextTab, .prevTab, .openEditor, .renameTab, .closeTab, .toggleEditorFace, .findInProject,
-    ]
-    for command in requiresTabs {
-      XCTAssertFalse(
-        command.availableWithoutTabs, "\(command) は content 依存ゆえ 0タブでは配信しない")
+  /// ヘルプの 1 行を押した出来事（⌘↑ / ⌘↓ は同じ物理キー `ud` を共有するので表示キーで分ける）。
+  private func event(for row: HelpCatalog.Row) -> NSEvent {
+    switch row.key {
+    case "⌘↑": return arrow(.upArrow)
+    case "⌘↓": return arrow(.downArrow)
+    case "⌘⌘": return .key("", .command)
+    default:
+      let main = row.combo.first { !HelpCatalog.modifierKeys.contains($0) } ?? ""
+      return event(key: main, shift: row.combo.contains("shift")).first ?? .key("", .command)
     }
   }
 
-  func testNonChromeKeysPassThrough() {
-    // Command 修飾が無ければ chrome は先取りしない（surface へ転送される）。
-    XCTAssertNil(Keybindings.chromeAction(for: .key("d", [])))
-    XCTAssertNil(Keybindings.chromeAction(for: .key("a", [.control])))
-    // 未割当の Command キーも先取りしない。
-    XCTAssertNil(Keybindings.chromeAction(for: .key("x")))
-    // Opt/Ctrl 併用も先取りしない（surface 側の super+alt 系 keybind を遮蔽しない）。
-    XCTAssertNil(Keybindings.chromeAction(for: .key("d", [.command, .option])))
-    XCTAssertNil(Keybindings.chromeAction(for: .key("f", [.command, .control])))
+  /// キーボードの全キーを ⌘ と ⌘⇧ で押して、chrome が先取りした操作の集合。
+  private func takenFromKeyboard() -> Set<ChromeAction> {
+    let keys = HelpCatalog.keyboard.flatMap { $0 }.map(\.id)
+    let events = keys.flatMap { event(key: $0, shift: false) + event(key: $0, shift: true) }
+    return Set(events.compactMap { Keybindings.chromeAction(for: $0) })
   }
 }

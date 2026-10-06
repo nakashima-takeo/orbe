@@ -31,15 +31,6 @@ final class AttentionSnapshotTests: OrbeTestCase {
 
   // MARK: builder
 
-  /// 休眠（未 activate）workspace のタブは出ない。
-  func testDormantWorkspaceExcluded() {
-    let ws = workspace(name: "dormant", activated: false)
-    setState(ws, state: "waiting", at: Date())
-    XCTAssertTrue(AttentionSnapshot.rows(of: [ws]).isEmpty)
-    XCTAssertTrue(ws.agentCounts().isEmpty)
-    XCTAssertTrue(AgentRollup.grandTotal(of: [ws]).isEmpty)
-  }
-
   /// workspace 内がlive/dormant混在でも、workspace全体の activated ではなく
   /// 発信元タブの現在状態で母集合を決める。
   func testMixedWorkspaceIncludesOnlyActivatedTab() {
@@ -69,35 +60,26 @@ final class AttentionSnapshotTests: OrbeTestCase {
       AgentRollup.grandTotal(of: [foreground, background]), ["waiting": 1, "done": 1])
   }
 
-  /// idle・nil（状態なし）は出ない。waiting/done/working だけが出る。
+  /// idle・nil（状態なし）・未知の状態は出ない。waiting/done/working だけが出て、ロールアップも同じ状態名で数える。
   func testIdleAndNilExcluded() {
     let idle = workspace(name: "idle")
     setState(idle, state: "idle", at: Date())
     let none = workspace(name: "none")
     setState(none, state: nil)
-    let waiting = workspace(name: "w")
-    setState(waiting, state: "waiting", at: Date())
     let unknown = workspace(name: "unknown")
     setState(unknown, state: "error", at: Date())
-    let rows = AttentionSnapshot.rows(of: [idle, none, unknown, waiting])
-    XCTAssertEqual(rows.map(\.workspaceName), ["w"])
-    XCTAssertEqual(
-      AgentRollup.grandTotal(of: [idle, none, unknown, waiting]),
-      ["idle": 1, "waiting": 1], "idle は live 集計だけ、nil/unknown は両面から除外")
-  }
-
-  func testActivatedAttentionStatesMatchLiveRollupStateNames() {
     let waiting = workspace(name: "waiting")
-    let done = workspace(name: "done")
-    let working = workspace(name: "working")
     setState(waiting, state: "waiting", at: Date())
+    let done = workspace(name: "done")
     setState(done, state: "done", at: Date())
+    let working = workspace(name: "working")
     setState(working, state: "working", at: Date())
-
-    let workspaces = [waiting, done, working]
+    let workspaces = [idle, none, unknown, waiting, done, working]
     XCTAssertEqual(
       Set(AttentionSnapshot.rows(of: workspaces).map(\.state)), ["waiting", "done", "working"])
-    XCTAssertEqual(AgentRollup.grandTotal(of: workspaces), ["waiting": 1, "done": 1, "working": 1])
+    XCTAssertEqual(
+      AgentRollup.grandTotal(of: workspaces),
+      ["idle": 1, "waiting": 1, "done": 1, "working": 1], "idle は live 集計だけ、nil/unknown は両面から除外")
   }
 
   /// stateChangedAt 降順で並び、同時刻は tabId 降順で安定化する。

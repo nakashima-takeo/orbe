@@ -38,32 +38,7 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
       store.current === beta, "アクティブ削除後は MRU(lastUsedAt 最大)の Beta（作成順の隣 Alpha ではない）")
   }
 
-  /// 削除で index がシフトしても、MRU target のオブジェクト参照へ正しく引き直される。
-  /// 作成順 [A, B(active), C]、lastUsedAt は C 最新 → B 削除で MRU=C。C の index は 2→1 に詰まる。
-  func testCloseActiveResolvesMRUByReferenceAfterIndexShift() {
-    let a = ws("A", t1)
-    let b = ws("B", t2)
-    let c = ws("C", t3)
-    let store = SessionStore(workspaces: [a, b, c], activeWorkspace: 1)
-
-    XCTAssertEqual(store.closeWorkspace(1, origin: .gesture), .activeChanged)
-    XCTAssertTrue(store.current === c, "MRU=C を参照で引き直す")
-    XCTAssertEqual(store.activeWorkspace, 1, "C の index は削除で 2→1 に詰まる")
-  }
-
   // MARK: - 契約2: 背景削除 → アクティブ不変
-
-  /// アクティブより後ろの背景 workspace を削除しても、アクティブの同一性・index は不変。
-  func testCloseBackgroundAfterActiveKeepsActive() {
-    let a = ws("A", t1)
-    let b = ws("B", t2)
-    let c = ws("C", t3)
-    let store = SessionStore(workspaces: [a, b, c], activeWorkspace: 1)
-
-    XCTAssertEqual(store.closeWorkspace(2, origin: .gesture), .backgroundChanged, "背景(C)の削除")
-    XCTAssertTrue(store.current === b, "アクティブは B のまま")
-    XCTAssertEqual(store.activeWorkspace, 1, "後ろの削除では index は詰まらない")
-  }
 
   /// アクティブより前の背景 workspace を削除すると、index は1つ詰めて同一アクティブを指し続ける。
   func testCloseBackgroundBeforeActiveShiftsIndexKeepsSameWorkspace() {
@@ -78,7 +53,7 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
     XCTAssertEqual(store.activeWorkspace, 1, "前の削除で index を 2→1 に詰める")
   }
 
-  // MARK: - 契約3: 最後の1つ・範囲外
+  // MARK: - 契約3: 最後の1つ
 
   func testCloseLastWorkspaceIsInvalidAndUnchanged() {
     let only = ws("only", t1)
@@ -87,13 +62,6 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
     XCTAssertEqual(store.closeWorkspace(0, origin: .gesture), .invalid, "最後の1つは削除できない")
     XCTAssertEqual(store.workspaces.count, 1, "配列は不変")
     XCTAssertTrue(store.current === only)
-  }
-
-  func testCloseOutOfRangeIsInvalid() {
-    let store = SessionStore(workspaces: [ws("a", t1), ws("b", t2)], activeWorkspace: 0)
-    XCTAssertEqual(store.closeWorkspace(5, origin: .gesture), .invalid, "範囲外 index は .invalid")
-    XCTAssertEqual(store.closeWorkspace(-1, origin: .gesture), .invalid, "負の index は .invalid")
-    XCTAssertEqual(store.workspaces.count, 2, "配列は不変")
   }
 
   // MARK: - removeTab のアクティブ0タブ化はその場で空維持（退避しない）

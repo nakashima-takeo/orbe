@@ -137,8 +137,21 @@ extension TaskPaletteCardKeyTests {
     XCTAssertNil(model.draft)
   }
 
-  /// 詳細の欄の編集中に ↵ を押し続けると、リピートも改行として入る。
-  func testEnterHeldInTheDescriptionTypesANewlinePerRepeat() {
+  /// ⌘↵ は 1 行の項目の確定のキーなので、文字の項目（編集していない状態）で押しても編集を始めない。
+  func testCommandEnterOnATextFieldDoesNotStartEditing() {
+    let model = model()
+    let window = mount(model)
+
+    for field in [TaskDetailField.title, .description] {
+      enterDetail(model, at: field, in: window)
+      press(Key.enter, "\r", .command, to: window)
+      XCTAssertNil(model.draft, "\(field)")
+    }
+  }
+
+  /// 詳細の欄は ↵ が改行で（押し続けたリピートも改行）、esc で確定して欄に居たまま編集を終える。もう一度の
+  /// esc で一覧へ戻る。
+  func testDescriptionTakesNewlinesWithEnterAndCommitsWithEscape() {
     let model = model()
     let window = mount(model)
     enterDetail(model, at: .description, in: window)
@@ -152,33 +165,6 @@ extension TaskPaletteCardKeyTests {
     press(Key.escape, "\u{1B}", to: window)
 
     XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.description, "1\n\n\n2")
-  }
-
-  /// ⌘↵ は 1 行の項目の確定のキーなので、文字の項目（編集していない状態）で押しても編集を始めない。
-  func testCommandEnterOnATextFieldDoesNotStartEditing() {
-    let model = model()
-    let window = mount(model)
-
-    for field in [TaskDetailField.title, .description] {
-      enterDetail(model, at: field, in: window)
-      press(Key.enter, "\r", .command, to: window)
-      XCTAssertNil(model.draft, "\(field)")
-    }
-  }
-
-  /// 詳細の欄は ↵ が改行で、esc で確定して欄に居たまま編集を終える。もう一度の esc で一覧へ戻る。
-  func testDescriptionTakesNewlinesWithEnterAndCommitsWithEscape() {
-    let model = model()
-    let window = mount(model)
-    enterDetail(model, at: .description, in: window)
-
-    press(Key.enter, "\r", to: window)
-    type("1", into: window)
-    press(Key.enter, "\r", to: window)
-    type("2", into: window)
-    press(Key.escape, "\u{1B}", to: window)
-
-    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.description, "1\n2")
     XCTAssertNil(model.draft)
     XCTAssertEqual(model.area, .detail(.field(.description)))
 

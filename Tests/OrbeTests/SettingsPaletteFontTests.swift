@@ -183,40 +183,4 @@ extension SettingsPaletteTests {
     XCTAssertEqual(p.render.selected, 0)
   }
 
-  /// font は filter 入力欄なので ← が onLeft に回り root へ戻る。
-  func testLeftFromFontReturnsToRoot() {
-    let p = model(fontNames: ["Menlo"])
-    moveToFontRow(p)
-    p.render.onActivate()  // font へ
-    XCTAssertEqual(p.render.breadcrumb, "‹ フォント")
-    XCTAssertTrue(p.render.fieldIsFilter, "font は filter 入力欄＝← を onLeft へ回す")
-    p.render.onLeft()  // ← で root へ
-    XCTAssertNil(p.render.breadcrumb)
-    XCTAssertTrue(p.render.fieldIsFilter, "root は絞り込み入力欄（filter）を保つ")
-    XCTAssertEqual(p.render.query, "", "root へ戻ると絞り込みクエリはクリアされる")
-  }
-
-  /// font → root（←）で選択が「フォント」行（index 7）へ復元され、focus を取り戻す。
-  func testReturnFromFontRestoresSelectionAndFocus() {
-    let p = model(fontNames: ["Menlo"])
-    moveToFontRow(p)
-    p.render.onActivate()  // font へ潜る
-    let tokenInFont = p.render.focusToken
-    p.render.onLeft()  // ← で root へ
-    XCTAssertEqual(p.render.selected, 7, "潜った「フォント」行へ選択を復元")
-    XCTAssertGreaterThan(p.render.focusToken, tokenInFont, "root カードへ focus を取り戻す")
-  }
-
-  /// 既定行表示中（query 空）に名前行（index 1）を Enter 適用する index offset 経路を踏み、
-  /// 適用後 root の「フォント」行（index 7）へ選択復元することを確認する。
-  func testReturnAfterFontApplyRestoresSelection() {
-    let p = model(fontNames: ["Menlo"])
-    moveToFontRow(p)
-    p.render.onActivate()  // font へ（rows: ［既定, Menlo］・未設定なので選択は既定行）
-    let applied = captureApply(p)
-    p.render.onDown()  // Menlo（index 1, fontDefaultRowVisible で offset=1 になる経路）
-    p.render.onActivate()  // Menlo を適用 → root へ
-    XCTAssertEqual(applied()?.fontFamily, "Menlo")
-    XCTAssertEqual(p.render.selected, 7, "適用後の戻りも「フォント」行へ復元")
-  }
 }

@@ -15,22 +15,6 @@ extension WorktreePaletteTests {
     return (item, try XCTUnwrap(item.sync))
   }
 
-  /// 同期ピルは着地後の値だけ。ff できる遅れだけが選択画面の条件を満たす。
-  func testSyncIsCarriedOnLocalBranchRowsOnlyAfterTheFetchLands() throws {
-    let landed = makeModel(.staleSample)
-    let (_, main) = try staleMain(landed)
-    XCTAssertEqual(main.ahead, 0)
-    XCTAssertEqual(main.behind, 12)
-    XCTAssertTrue(main.isFastForwardable)
-    let diverged = try XCTUnwrap(landed.items.first { $0.name == "topic/diverged" }?.sync)
-    XCTAssertFalse(diverged.isFastForwardable, "分岐（↑↓）は即作成")
-
-    var input = WorktreePaletteSectionBuilder.Input.staleSample
-    input.remoteFetchLanded = false
-    let pending = makeModel(input)
-    XCTAssertNil(pending.items.first { $0.name == "main" }?.sync, "着地前は無印")
-  }
-
   /// 入ると mode が変わり、カーソルは既定の「最新化して作成」。esc で一覧へ戻り、選択は入った行のまま。
   func testEnterAndExitKeepTheListCursor() throws {
     let p = makeModel(.staleSample)

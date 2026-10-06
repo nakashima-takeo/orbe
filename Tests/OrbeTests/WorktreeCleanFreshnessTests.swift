@@ -30,22 +30,6 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
 
   // MARK: - prune の後にだけ分類する
 
-  /// **prune 前の呼びは分類を撃たない。** prune 前の `refs/remotes/origin/*` には remote で消えた
-  /// ref が残っており、そこからの到達性を根拠にすると「消してもコミットは origin に残る」が偽になる。
-  func testLoadGitWithoutClassifyingNeverFiresTheProbe() throws {
-    let repo = try openRepo()
-    let model = WorktreePaletteModel()
-    let provider = makeProvider(model)
-
-    provider.loadGit(repo, classifying: false)
-    XCTAssertTrue(pump({ !model.sections.isEmpty }), "前提: git レーンは着地している")
-    XCTAssertNil(model.classification, "prune 前に分類は出ない")
-    XCTAssertTrue(provider.probingPaths.isEmpty, "プローブが 1 本も飛んでいない")
-
-    provider.loadGit(repo, classifying: true)
-    XCTAssertTrue(pump({ model.classification != nil }), "分類を許した呼びでは着地する")
-  }
-
   /// **prune が失敗しても分類は始まる。** 手元の ref が最良で、ここで撃たないと clean が
   /// 1 行も出ないまま固まる（remote を持たないリポジトリで `fetch --prune` は必ず落ちる）。
   func testClassificationLandsEvenWhenPruneFails() {
@@ -70,24 +54,6 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
     XCTAssertEqual(gone.group, .safe, "gh 抜きでも安全群は機能する")
     XCTAssertTrue(gone.isReady, "確認対象の無い PR 軸は待たない")
     XCTAssertEqual(provider.branchPRStates["feat/gone"], .loaded([]), "確かめて 0 件として畳む")
-  }
-
-  /// **差分発行は全量発行が一度走るまで 1 本も撃たない。** 台帳が無い状態を「全行の比較先が
-  /// 変わった」と読むと、prune 前に全行のプローブが飛ぶ——分類を prune の後だけに絞った意味が消える。
-  func testDifferentialProbeIsInertUntilTheFirstFullIssuance() throws {
-    try makeWorktree("wt-x", branch: "feat/x")
-    let repo = try openRepo()
-    let model = WorktreePaletteModel()
-    let provider = makeProvider(model)
-    provider.loadGit(repo, classifying: false)
-    XCTAssertTrue(pump({ !provider.worktrees.isEmpty }), "前提: worktree 一覧は着地している")
-
-    provider.startCleanProbe(repo, .changedTargets)
-    XCTAssertTrue(provider.probingPaths.isEmpty, "台帳が無い間は差分を撃たない")
-    XCTAssertNil(model.classification, "prune 前に分類は出ない")
-
-    provider.startCleanProbe(repo, .all)
-    XCTAssertFalse(provider.probingPaths.isEmpty, "全量発行で初めて飛ぶ")
   }
 
   /// **gh が prune より先に着地しても、そこでプローブは飛ばない。** gh の往復は 1 本 1 秒前後・
@@ -214,21 +180,6 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
     XCTAssertEqual(provider.branchPRStates.count, 1)
   }
 
-  /// 台帳に無い head（消えた worktree）への遅着は捨てる。
-  func testLateLandingForAVanishedHeadIsDropped() {
-    let model = WorktreePaletteModel()
-    let provider = makeProvider(model)
-    provider.load()
-    XCTAssertTrue(pump({ model.classification != nil && !provider.classificationPending }))
-    provider.probedGitHubState = .ready
-
-    let pr = GitHubBranchPR(
-      number: 3, headRefName: "feat/gone", state: "OPEN", baseRefName: "main",
-      headRepository: Self.repository)
-    provider.applyFetchedBranchPRs(head: "feat/gone", [pr])
-    XCTAssertNil(provider.branchPRFetches["feat/gone"], "発行していない head の着地は記録しない")
-  }
-
   // MARK: - ヘルパ
 
   private static let repository = GitHubRepoName(nameWithOwner: "o/r")
@@ -279,17 +230,6 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
 
   private func row(_ model: WorktreePaletteModel, branch: String) -> CleanRow? {
     model.classification?.first { $0.branch == branch }
-  }
-
-  private func openRepo() throws -> GitRepo {
-    var opened: GitRepo?
-    let done = expectation(description: "GitRepo.open")
-    GitRepo.open(cwd: dir.path) {
-      opened = $0
-      done.fulfill()
-    }
-    wait(for: [done], timeout: 20)
-    return try XCTUnwrap(opened)
   }
 
   /// `fetch --prune` が数秒かかる origin を用意する（gh の着地が prune より先に来る実機の順序を

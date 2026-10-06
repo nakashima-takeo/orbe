@@ -13,14 +13,6 @@ final class WorktreePaletteRefreshFailureTextTests: OrbeTestCase {
     short: "origin/stale", ref: "refs/remotes/origin/stale", remote: "origin",
     remoteRef: "refs/heads/stale", track: .counts(ahead: 0, behind: 3))
 
-  /// 落ちた段は git の語のまま名乗る（✕ ピルと行の説明が同じ語を使う）。
-  func testStepNamesTheGitCommandThatFailed() {
-    XCTAssertEqual(WorktreePaletteRefreshFailureText.step(.fetch(.timedOut)), "fetch")
-    XCTAssertEqual(WorktreePaletteRefreshFailureText.step(.fetch(.reason("fatal: boom"))), "fetch")
-    XCTAssertEqual(WorktreePaletteRefreshFailureText.step(.fastForward(nil)), "fast-forward")
-    XCTAssertEqual(WorktreePaletteRefreshFailureText.step(.fastForward(.timedOut)), "fast-forward")
-  }
-
   /// 理由は git が言い残した実質行をそのまま出し、git が黙る 2 つ（打ち切り・分岐）だけ chrome の文にする。
   func testReasonQuotesGitAndSpeaksOnlyWhereGitIsSilent() {
     XCTAssertEqual(

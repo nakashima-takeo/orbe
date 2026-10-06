@@ -34,8 +34,6 @@ final class ClosedAgentsSnapshotTests: OrbeTestCase {
     XCTAssertEqual(items.map(\.origin), [.gesture, .process, .process])
     XCTAssertEqual(
       items.map(\.title), ["release notes", nil, "deploy-api"], "closed の title をそのまま持つ")
-    XCTAssertEqual(items[2].rootPath, "/repo")
-    XCTAssertEqual(items[2].cwd, "/repo/src/a")
     XCTAssertEqual(
       ClosedAgentsSnapshot.items(events: events, present: ["b"], rootPath: "/repo").map(
         \.sessionId),

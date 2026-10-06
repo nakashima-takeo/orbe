@@ -11,12 +11,6 @@ import XCTest
 /// 重要: WindowController の構築は libghostty ランタイムを起動する（GhosttyKit 必須）。
 final class WindowControllerContentBackstopTests: OrbeTestCase {
 
-  /// 通常起動（タブあり）では backstop を出さない（surface が地を塗る＝二重 veil 回避）。
-  func testTabbedWorkspaceHasNoBackstop() {
-    let wc = WindowController()
-    XCTAssertFalse(wc.model.contentIsEmpty, "タブありでは backstop を出さない")
-  }
-
   /// 0タブへ切替で backstop が立ち、タブありへ戻ると下がる（両方向・冪等）。
   func testBackstopFollowsTabPresenceBothWays() throws {
     let file = WorkspacesFile(
