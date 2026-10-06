@@ -41,7 +41,10 @@ extension ControlServer {
         guard let tab = target.controlResolveTab(tabId) else {
           return .failure(ControlError(code: -32004, message: "tab not found"))
         }
-        return target.controlPromptAgent(tab: tab, text: text).map { .failure($0) } ?? .success(())
+        if let refusal = target.controlPromptAgent(tab: tab, text: text) {
+          return .failure(refusal)
+        }
+        return .success(())
       }
       self.queue.async {
         switch sent {
