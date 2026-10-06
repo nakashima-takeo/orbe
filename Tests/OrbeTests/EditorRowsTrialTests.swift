@@ -13,6 +13,9 @@ import XCTest
 /// はじき・端での弾み）を繰り返し流し（何度でも同じ動きで見返せる）、そうでなければ `ORBE_EDITOR_ROWS_SECONDS` 秒（既定
 /// 180）そのまま置いて、人がトラックパッドで触る。見るのは、区画の枠が本文の行から離れて見えないか・窓の幅を変えたとき区画の
 /// 高さが中身に合うか・区画の入力欄に日本語を打てるか。
+///
+/// テストは `NSApp.run` を回さないので、待つ間はアプリの出来事を配る（→ `runShownWindow`）。配らないと、窓が見えている
+/// 知らせも人の入力も面に届かず、面は本文を描かない。
 @MainActor
 final class EditorRowsTrialTests: OrbeTestCase {
   private var environment: [String: String] { ProcessInfo.processInfo.environment }
@@ -30,14 +33,14 @@ final class EditorRowsTrialTests: OrbeTestCase {
       for _ in 0..<3 {
         scroll(surface.view, drag: 2, speed: 2400)
         scroll(surface.view, flick: 6000)
-        RunLoop.main.run(until: Date().addingTimeInterval(1.5))
+        runShownWindow(for: 1.5)
         scroll(surface.view, drag: 2, speed: -2400)
         scroll(surface.view, flick: -6000)
-        RunLoop.main.run(until: Date().addingTimeInterval(1.5))
+        runShownWindow(for: 1.5)
       }
     } else {
       let seconds = Double(environment["ORBE_EDITOR_ROWS_SECONDS"] ?? "") ?? 180
-      RunLoop.main.run(until: Date().addingTimeInterval(seconds))
+      runShownWindow(for: seconds)
     }
   }
 
@@ -65,6 +68,8 @@ final class EditorRowsTrialTests: OrbeTestCase {
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
     window.makeFirstResponder(surface.responder)
+    runShownWindow(for: 0.5)
+    XCTAssertTrue(surface.material.read().visible, "前提: 窓が見えていると面が知っている")
     return (window, surface)
   }
 
@@ -127,9 +132,7 @@ final class EditorRowsTrialTests: OrbeTestCase {
   private func feed(_ view: NSView, _ events: [Planned]) {
     let start = CACurrentMediaTime()
     for planned in events {
-      while CACurrentMediaTime() < start + planned.at {
-        RunLoop.main.run(until: Date().addingTimeInterval(0.001))
-      }
+      while CACurrentMediaTime() < start + planned.at { runShownWindow(for: 0.001) }
       guard
         let event = CGEvent(
           scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 1, wheel1: Int32(planned.dy),

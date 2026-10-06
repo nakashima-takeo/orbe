@@ -56,6 +56,20 @@ extension OrbeTestCase {
     return document.isCaughtUp
   }
 
+  /// 画面に出した窓のために、アプリの出来事を配りながら `seconds` 秒待つ。テストは `NSApp.run` を回さないので、出来事を
+  /// 汲まないと、窓が画面に出た知らせ（見え方の変化）も人のトラックパッドやキーも窓に届かない——面は窓が見えていないと
+  /// 判定して描かない。出来事を待つ間も run loop は回るので、main の queue とタイマーも動く。
+  @MainActor
+  func runShownWindow(for seconds: TimeInterval) {
+    let deadline = Date().addingTimeInterval(seconds)
+    while Date() < deadline {
+      let event = NSApp.nextEvent(
+        matching: .any, until: min(deadline, Date().addingTimeInterval(0.001)), inMode: .default,
+        dequeue: true)
+      if let event { NSApp.sendEvent(event) }
+    }
+  }
+
   /// 中央値・p95・最大（ms。`digits` は小数の桁数）。
   func reportPerf(_ label: String, _ name: String, _ times: [Double], digits: Int = 1) {
     let sorted = times.sorted()
