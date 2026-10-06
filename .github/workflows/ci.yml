@@ -26,23 +26,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
-      - uses: jdx/mise-action@v4
-      - name: GhosttyKit cache key
-        id: ghostty
-        run: echo "sha=$(git ls-tree --object-only HEAD vendor/ghostty)" >> "$GITHUB_OUTPUT"
-      - name: GhosttyKit cache
-        id: ghosttykit
-        uses: actions/cache@v5
-        with:
-          path: vendor/ghostty/macos/GhosttyKit.xcframework
-          key: ghosttykit-${{ runner.arch }}-${{ steps.ghostty.outputs.sha }}
-      - name: GhosttyKit build (cache miss)
-        if: steps.ghosttykit.outputs.cache-hit != 'true'
-        run: |
-          git submodule update --init --depth 1 vendor/ghostty
-          sudo xcodebuild -downloadComponent MetalToolchain
-          cd vendor/ghostty
-          zig build -Demit-xcframework=true -Dxcframework-target=native -Demit-macos-app=false
       - name: build (incl. tests)
         run: swift build --build-tests
       - name: test

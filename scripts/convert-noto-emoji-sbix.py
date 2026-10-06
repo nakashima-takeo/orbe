@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""vendor の NotoColorEmoji.ttf（CBDT/CBLC）を macOS CoreText が読める sbix 形式へ変換する。
+"""ghostty の NotoColorEmoji.ttf（CBDT/CBLC）を macOS CoreText が読める sbix 形式へ変換する。
 
 CoreText は Google の CBDT ビットマップ絵文字を解釈できない（記述子の取得すら失敗する）。
 CBDT も sbix も実体は同じ PNG 群なので、ストライクを sbix テーブルへ詰め替え、
@@ -16,12 +16,13 @@ originOffset」に置く（実測で確定）ため、配置は bbox が一元�
 CBDT bearing を書くと二重適用で縦に半セル級ズレる。
 
 生成物 app/NotoColorEmoji-sbix.ttf はコミットする（ビルドに fonttools を要求しない）。
-vendor/ghostty の NotoColorEmoji.ttf 更新時に再実行する:
+ghostty の NotoColorEmoji.ttf 更新時に、ghostty の fork の clone（pin の SHA）を渡して再実行する:
 
   python3 -m venv .venv && .venv/bin/pip install fonttools
-  .venv/bin/python scripts/convert-noto-emoji-sbix.py
+  .venv/bin/python scripts/convert-noto-emoji-sbix.py <ghostty のソース>
 """
 
+import sys
 from pathlib import Path
 
 from fontTools.pens.ttGlyphPen import TTGlyphPen
@@ -31,7 +32,6 @@ from fontTools.ttLib.tables.sbixGlyph import Glyph as SbixGlyph
 from fontTools.ttLib.tables.sbixStrike import Strike
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "vendor/ghostty/src/font/res/NotoColorEmoji.ttf"
 DST = ROOT / "app/NotoColorEmoji-sbix.ttf"
 
 
@@ -51,9 +51,12 @@ def bbox_glyph(metrics, scale: float) -> GlyfGlyph:
 
 
 def main() -> None:
+    src = Path(sys.argv[1]) / "src/font/res/NotoColorEmoji.ttf" if len(sys.argv) == 2 else None
+    if src is None or not src.is_file():
+        sys.exit(f"使い方: {sys.argv[0]} <ghostty のソース>（その src/font/res/NotoColorEmoji.ttf を読む）")
     # recalcTimestamp=False: head.modified に保存時刻を焼き込まず生成物を決定的にする
     # （再実行しても byte 一致し、コミット済み生成物を照合で監査できる）。
-    font = TTFont(SRC, recalcTimestamp=False)
+    font = TTFont(src, recalcTimestamp=False)
     ppem = font["CBLC"].strikes[0].bitmapSizeTable.ppemX
     strike_data = font["CBDT"].strikeData[0]
     scale = font["head"].unitsPerEm / ppem

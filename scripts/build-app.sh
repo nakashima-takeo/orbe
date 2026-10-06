@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# Orbe.app を生成する（自己署名・自己完結）。エンジン(libghostty)のビルドも内包する。
+# Orbe.app を生成する（自己署名・自己完結）。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$ROOT/build/Orbe.app"
-SHARE="$ROOT/vendor/ghostty/zig-out/share"
 
 # --- チャネル: 唯一の入力を一度だけ解決し、identity・Swift 定義・アイコン・エージェントプラグイン名を
 # 全てここから導出する ---
@@ -22,102 +21,6 @@ if [ "$CHANNEL" != "release" ]; then
   PLUGIN_NAME="${SRC_PLUGIN_NAME}-dev"
 fi
 
-# --- エンジン実体の解決: 焼く vendor/ghostty の HEAD が、この checkout の pin（index の gitlink）と一致することを確かめる ---
-# 実体の有無と HEAD は `git submodule status` の prefix（' ' 一致 / '+' 不一致 / '-' 未取得）と SHA で読む。
-# '-' の SHA は pin であって HEAD ではない。ずれていれば zig を起こす前に、原因別の復旧コマンドを示して止める。
-PIN="$(git -C "$ROOT" rev-parse :vendor/ghostty 2>/dev/null)" || {
-  echo "エラー: vendor/ghostty の pin を解決できない。git checkout で submodule を持つ状態からビルドせよ" >&2
-  exit 1
-}
-# 前回のビルドが trap を通らず残した symlink を先に戻す（symlink 上では git submodule status も update も失敗する）。
-if [ -L "$ROOT/vendor/ghostty" ]; then
-  rm "$ROOT/vendor/ghostty"
-  mkdir "$ROOT/vendor/ghostty"
-fi
-ST="$(git -C "$ROOT" submodule status -- vendor/ghostty)"
-GIT_DIR_ABS="$(git -C "$ROOT" rev-parse --path-format=absolute --git-dir)"
-COMMON_DIR_ABS="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)"
-if [ "${ST:0:1}" = "-" ] && [ "$GIT_DIR_ABS" != "$COMMON_DIR_ABS" ]; then
-  # 未取得の linked worktree: main worktree の実 checkout が同じ pin なら symlink で共有する
-  # （zig-out・.zig-cache も共有され、zig は cache hit で実質 read-only）。
-  MAIN_WT="$(git -C "$ROOT" worktree list --porcelain | sed -n 's/^worktree //p' | head -1)"
-  MAIN_ST="$(git -C "$MAIN_WT" submodule status -- vendor/ghostty 2>/dev/null)" || MAIN_ST=""
-  MAIN_PIN="$(git -C "$MAIN_WT" rev-parse :vendor/ghostty)"
-  # worktree 内に実 checkout するコマンド。reference 先は main の checkout ではなく共通 git dir の
-  # module store（main が deinit 済みでも残り、git オブジェクトを alternates で借りられる）。
-  STORE="$COMMON_DIR_ABS/modules/vendor/ghostty"
-  if [ -d "$STORE/objects" ]; then
-    WT_CHECKOUT="git -C '$ROOT' submodule update --init --reference '$STORE' vendor/ghostty"
-  else
-    WT_CHECKOUT="git -C '$ROOT' submodule update --init vendor/ghostty"
-  fi
-  WT_NOTE="（zig の初回ビルドに数分・.zig-cache 約 1GB。以後この worktree の git worktree remove には --force が要る）"
-  case "${MAIN_ST:0:1}" in
-    " " | "+") MAIN_HEAD="${MAIN_ST:1:40}" ;;
-    *) MAIN_HEAD="" ;;
-  esac
-  if [ "$MAIN_HEAD" != "$PIN" ]; then
-    if [ -z "$MAIN_HEAD" ]; then
-      echo "エラー: main worktree ($MAIN_WT) に vendor/ghostty の実体が無く、共有できない" >&2
-    elif [ "$MAIN_PIN" = "$PIN" ]; then
-      echo "エラー: main worktree の vendor/ghostty の checkout が main の pin とずれていて、共有できない" >&2
-      echo "  main の vendor/ghostty HEAD: $MAIN_HEAD" >&2
-    else
-      echo "エラー: このブランチの vendor/ghostty の pin が main worktree の checkout と違い、共有できない" >&2
-      echo "  main の vendor/ghostty HEAD: $MAIN_HEAD" >&2
-    fi
-    echo "  main の pin:                 $MAIN_PIN" >&2
-    echo "  このブランチの pin:          $PIN" >&2
-    if [ "$MAIN_PIN" = "$PIN" ]; then
-      echo "main の submodule を pin に合わせる:" >&2
-      echo "  git -C '$MAIN_WT' submodule update --init vendor/ghostty" >&2
-      echo "main を触らないなら、この worktree 内に実 checkout する$WT_NOTE:" >&2
-    else
-      echo "この worktree 内に実 checkout する$WT_NOTE:" >&2
-    fi
-    echo "  $WT_CHECKOUT" >&2
-    exit 1
-  fi
-  echo "==> worktree 検出: vendor/ghostty を main worktree へ symlink ($MAIN_WT)"
-  rmdir "$ROOT/vendor/ghostty"
-  ln -s "$MAIN_WT/vendor/ghostty" "$ROOT/vendor/ghostty"
-  # ビルド後（EXIT/INT/TERM）に symlink を submodule 未 checkout（空ディレクトリ）へ戻す。
-  # symlink を残すと git status がエラーになり lefthook・確定コミット・worktree remove を壊す。
-  # .app には share/font をコピー済みで、vendor はビルド完了後は不要（次回ビルドで再 symlink）。
-  trap 'rm -f "$ROOT/vendor/ghostty"; mkdir "$ROOT/vendor/ghostty"' EXIT INT TERM
-elif [ "${ST:0:1}" = "-" ]; then
-  echo "エラー: vendor/ghostty が未取得" >&2
-  echo "  pin: $PIN" >&2
-  echo "取得する:" >&2
-  echo "  git -C '$ROOT' submodule update --init vendor/ghostty" >&2
-  exit 1
-elif [ "${ST:0:1}" != " " ]; then
-  echo "エラー: vendor/ghostty の checkout が pin とずれている" >&2
-  echo "  vendor/ghostty HEAD: ${ST:1:40}" >&2
-  echo "  pin:                 $PIN" >&2
-  echo "pin に合わせる:" >&2
-  echo "  git -C '$ROOT' submodule update --init vendor/ghostty" >&2
-  exit 1
-fi
-
-# zig は mise.toml が固定する版だけを使う（ghostty の build.zig が major.minor の一致を要求する）。
-# ROOT で解決するのは、worktree では vendor/ghostty が main worktree への symlink で、そこで mise を
-# 評価すると物理 cwd 側の mise.toml が読まれるため。
-command -v mise >/dev/null || {
-  echo "エラー: mise が未導入。導入は docs/guides/build.md の「前提ツール」を参照せよ（例: brew install mise）" >&2
-  exit 1
-}
-ZIG="$(cd "$ROOT" && mise which zig)" || {
-  echo "エラー: zig が未導入。'mise install' を実行せよ" >&2
-  exit 1
-}
-
-echo "==> エンジン(libghostty)を ReleaseFast でビルド"
-echo "    初回・submodule 更新時は数分かかる（以降は Zig キャッシュで一瞬）"
-# Orbe が使うのは xcframework と share リソースだけ。上流 Ghostty.app（xcodebuild・SwiftLint フェーズ）まで
-# 組むと Xcode の版に Orbe のビルドが従属するので、emit-macos-app は切る。
-(cd "$ROOT/vendor/ghostty" && "$ZIG" build -Demit-xcframework=true -Dxcframework-target=native -Doptimize=ReleaseFast -Demit-macos-app=false)
-
 echo "==> swift build -c release"
 # release チャネルだけが -DORBE_RELEASE を焼く（`OrbePaths.fallbackBundleId` と `UpdaterService` の SSOT）。
 # release 側をオプトインにするのは、素の `swift build`（scripts/orbe-mcp.sh が叩く）が
@@ -126,6 +29,12 @@ echo "==> swift build -c release"
 REL_DEFINE=()
 [ "$CHANNEL" = "release" ] && REL_DEFINE=(-Xswiftc -DORBE_RELEASE)
 swift build -c release ${REL_DEFINE[@]+"${REL_DEFINE[@]}"} --package-path "$ROOT"
+# GhosttyKit の zip（xcframework と、.app へ同梱する share・フォント）を SwiftPM が展開した先。root package の
+# identity はディレクトリ名を小文字にしたもので、上の --package-path に渡した $ROOT から決まる。
+GHOSTTYKIT="$ROOT/.build/artifacts/$(basename "$ROOT" | tr '[:upper:]' '[:lower:]')/GhosttyKit"
+for F in share/ghostty share/terminfo fonts/JetBrainsMonoNerdFont-{Regular,Bold,Italic,BoldItalic}.ttf; do
+  [ -e "$GHOSTTYKIT/$F" ] || { echo "エラー: GhosttyKit の $F が見つからない ($GHOSTTYKIT)。swift build 済みか確認せよ" >&2; exit 1; }
+done
 
 echo "==> バンドル生成: $APP"
 rm -rf "$APP"
@@ -156,7 +65,7 @@ if ! otool -l "$APP/Contents/MacOS/Orbe" | grep -q "@executable_path/../Framewor
 fi
 # git 短縮 SHA を build-id として刻む（検証インスタンスが鮮度を名乗るため。dirty なら +）。
 BUILD_ID="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
-git -C "$ROOT" diff --quiet -- . ':(exclude)vendor/ghostty' 2>/dev/null || BUILD_ID="$BUILD_ID+"
+git -C "$ROOT" diff --quiet 2>/dev/null || BUILD_ID="$BUILD_ID+"
 /usr/libexec/PlistBuddy -c "Add :OrbeBuildID string $BUILD_ID" "$APP/Contents/Info.plist"
 cp "$ROOT/app/orbe-defaults.conf" "$APP/Contents/Resources/orbe-defaults.conf"
 cp -R "$ROOT/app/zsh" "$APP/Contents/Resources/zsh"  # zsh 補完の ZDOTDIR shim（.zshenv + orbe-completion.zsh。GUI が ZDOTDIR をここへ向ける・署名対象）
@@ -215,14 +124,14 @@ xcrun actool "$ICON_SRC" \
   --output-partial-info-plist "$(mktemp -d)/orbe-icon-partial.plist" \
   --platform macosx --minimum-deployment-target 14.0 \
   --errors --warnings --output-format human-readable-text >/dev/null
-cp -R "$SHARE/ghostty" "$APP/Contents/Resources/ghostty"
+cp -R "$GHOSTTYKIT/share/ghostty" "$APP/Contents/Resources/ghostty"
 # themes は ghostty stock を同梱せず Orbe 自前の 2枚のみ（テーマは Auto/Dark/Light の外観スイッチで、
 # 端末色はこのペアに固定。ghostty の named theme 解決はこのディレクトリを見るため 2 枚は必須）。
 rm -rf "$APP/Contents/Resources/ghostty/themes"
 mkdir -p "$APP/Contents/Resources/ghostty/themes"
 cp "$ROOT/app/themes/OrbeDark"  "$APP/Contents/Resources/ghostty/themes/OrbeDark"   # Orbe 自前 named theme（dark）
 cp "$ROOT/app/themes/OrbeLight" "$APP/Contents/Resources/ghostty/themes/OrbeLight"  # Orbe 自前 named theme（light）
-cp -R "$SHARE/terminfo" "$APP/Contents/Resources/terminfo"
+cp -R "$GHOSTTYKIT/share/terminfo" "$APP/Contents/Resources/terminfo"
 cp -R "$ROOT/app/agent-plugin" "$APP/Contents/Resources/agent-plugin"  # エージェント状態追跡プラグイン（各 CLI へ自動導入する配布物）
 # プラグイン名（marketplace 名＝plugin 名＝plugins/<name>/ のディレクトリ名）を dev チャネルだけ焼き直す。
 # claude / codex / agy はどれも名前で 1 枠を取るため、名前を分けないと dev と release が枠を奪い合う
@@ -274,11 +183,11 @@ PY
   fi
 fi
 # 本文プライマリの JetBrains Mono を4スタイル同梱（bold/italic を設計字形で決定論解決）。Regular はタブの状態アイコンにも使う。
-cp "$ROOT/vendor/ghostty/src/font/res/JetBrainsMonoNerdFont-Regular.ttf" "$APP/Contents/Resources/JetBrainsMonoNerdFont-Regular.ttf"
-cp "$ROOT/vendor/ghostty/src/font/res/JetBrainsMonoNerdFont-Bold.ttf" "$APP/Contents/Resources/JetBrainsMonoNerdFont-Bold.ttf"
-cp "$ROOT/vendor/ghostty/src/font/res/JetBrainsMonoNerdFont-Italic.ttf" "$APP/Contents/Resources/JetBrainsMonoNerdFont-Italic.ttf"
-cp "$ROOT/vendor/ghostty/src/font/res/JetBrainsMonoNerdFont-BoldItalic.ttf" "$APP/Contents/Resources/JetBrainsMonoNerdFont-BoldItalic.ttf"
-cp "$ROOT/app/JuliaMono-Regular.ttf" "$APP/Contents/Resources/JuliaMono-Regular.ttf"  # 記号の広カバレッジ（v0.63.2。font-family には入れず起動時 .process 登録で discovery の候補にする。vendor の 0.055 は SVG テーブルでカラーフォント判定され discovery に拒否されるため使わない）
+cp "$GHOSTTYKIT/fonts/JetBrainsMonoNerdFont-Regular.ttf" "$APP/Contents/Resources/JetBrainsMonoNerdFont-Regular.ttf"
+cp "$GHOSTTYKIT/fonts/JetBrainsMonoNerdFont-Bold.ttf" "$APP/Contents/Resources/JetBrainsMonoNerdFont-Bold.ttf"
+cp "$GHOSTTYKIT/fonts/JetBrainsMonoNerdFont-Italic.ttf" "$APP/Contents/Resources/JetBrainsMonoNerdFont-Italic.ttf"
+cp "$GHOSTTYKIT/fonts/JetBrainsMonoNerdFont-BoldItalic.ttf" "$APP/Contents/Resources/JetBrainsMonoNerdFont-BoldItalic.ttf"
+cp "$ROOT/app/JuliaMono-Regular.ttf" "$APP/Contents/Resources/JuliaMono-Regular.ttf"  # 記号の広カバレッジ（v0.63.2。font-family には入れず起動時 .process 登録で discovery の候補にする。ghostty が持つ 0.055 は SVG テーブルでカラーフォント判定され discovery に拒否されるため使わない）
 cp "$ROOT/app/NotoColorEmoji-sbix.ttf" "$APP/Contents/Resources/NotoColorEmoji-sbix.ttf"  # タブタイトルのカラー絵文字（CBDT→sbix 変換済み・scripts/convert-noto-emoji-sbix.py で生成・TitleGlyphs がファイル直ロード）
 
 echo "==> 自己署名 (ad-hoc)"
