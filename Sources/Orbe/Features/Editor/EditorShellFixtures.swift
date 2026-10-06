@@ -3,7 +3,7 @@
   import OrbeEditorCore
   import SwiftUI
 
-  /// 骨込みのエディター面の gallery fixture。一時ディレクトリに実在のソース断片（このリポジトリのファイル）を
+  /// 骨込みのエディター面の gallery fixture。渡された置き場に実在のソース断片（このリポジトリのファイル）を
   /// 写して git リポジトリにし、M / A / U を 1 つずつ作り、文書を 3 つ開く（1 つは未保存、1 つは仮のタブ）。展示データは作らない。
   /// status は git の子プロセス後に、色とハンクは文書の裏の仕事の後に届くので、撮る側は `warmUp()` の後 `isReady`
   /// を待つ。プロジェクト検索はこのリポジトリを実際に探す（`search` の後 `isSearchDone` を待つ）。
@@ -19,7 +19,7 @@
 
     @MainActor final class Scene {
       let tab: TerminalTab
-      /// 一時リポジトリ（`cleanup()` で消す）。
+      /// fixture のリポジトリ（置き場の下。消すのは置き場の持ち主）。
       let directory: URL
       var pane: EditorPaneView { tab.view.editor }
       private var warmWindow: NSWindow?
@@ -29,11 +29,10 @@
         self.directory = directory
       }
 
-      /// 面を窓から外し、一時リポジトリを消す。
+      /// 面を窓から外す。
       func cleanup() {
         warmWindow = nil
         pane.removeFromSuperview()
-        try? FileManager.default.removeItem(at: directory)
       }
 
       /// 面を窓に付けてツリーに根のサービスを握らせる（status の取り直しが始まる）。撮った後は面が窓から
@@ -68,14 +67,13 @@
       var view: some View { ShellPane(pane: pane) }
     }
 
-    /// 骨込みの面。gallery が dark / light・広い幅・狭い幅（サイドバーが切り詰まる）を撮る。git が失敗すれば投げる
-    /// （→ `FixtureGit`）。
-    @MainActor static func scene(queriesRoot: URL) throws -> Scene {
+    /// 骨込みの面。gallery が dark / light・広い幅・狭い幅（サイドバーが切り詰まる）を撮る。リポジトリは `place` の下に
+    /// 作る。git が失敗すれば投げる（→ `FixtureGit`）。
+    @MainActor static func scene(queriesRoot: URL, in place: URL) throws -> Scene {
       let repoRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .deletingLastPathComponent().deletingLastPathComponent()
-      let dir = FileManager.default.temporaryDirectory
-        .appendingPathComponent("orbe-editor-shell-\(UUID().uuidString)")
+      let dir = place.appendingPathComponent("orbe-editor-shell-\(UUID().uuidString)")
       for relative in copied {
         let dest = dir.appendingPathComponent(relative)
         try FileManager.default.createDirectory(

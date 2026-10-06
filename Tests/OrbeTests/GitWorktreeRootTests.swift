@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -14,13 +15,9 @@ final class GitWorktreeRootTests: OrbeTestCase {
   private var dir: URL!
 
   override func setUpWithError() throws {
-    dir = FileManager.default.temporaryDirectory
+    dir = TestScratch.caseDir
       .appendingPathComponent("orbe-wtroot-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: dir)
   }
 
   /// `dir` 配下の相対パス（正準形＝symlink を解いて先頭の `/private` を畳んだ比較用の形）。

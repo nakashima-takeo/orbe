@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -14,7 +15,7 @@ import XCTest
 @MainActor
 final class EditorSessionTests: OrbeTestCase {
   private func file(_ name: String, _ text: String) throws -> URL {
-    let dir = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent(
+    let dir = TestScratch.caseDir.appendingPathComponent(
       "files", isDirectory: true)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let url = dir.appendingPathComponent(name)
@@ -72,7 +73,7 @@ final class EditorSessionTests: OrbeTestCase {
     XCTAssertEqual(count, 0)
     XCTAssertTrue(session.documents.isEmpty)
     XCTAssertNil(session.activeDocument)
-    let missing = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("missing.txt")
+    let missing = TestScratch.caseDir.appendingPathComponent("missing.txt")
     XCTAssertThrowsError(try session.open(missing, as: .pinned)) {
       XCTAssertNotNil($0 as? EditorDocumentError, "読めないファイルは読めないと返る")
     }

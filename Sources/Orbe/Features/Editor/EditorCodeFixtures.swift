@@ -3,8 +3,8 @@
   import OrbeEditorCore
   import SwiftUI
 
-  /// コードビューの gallery / flow fixture。凍結したコードの断片（行頭オフセットの索引を書いた Swift）を一時 git
-  /// リポジトリにコミットし、作業ツリーで行の挿入・書き換え・削除・行末スペースを起こしてから開く——追加＝緑・
+  /// コードビューの gallery / flow fixture。凍結したコードの断片（行頭オフセットの索引を書いた Swift）を渡された置き場の
+  /// git リポジトリにコミットし、作業ツリーで行の挿入・書き換え・削除・行末スペースを起こしてから開く——追加＝緑・
   /// 変更＝青・削除＝赤の三角、丸点が 1 枚に写る。中身が動く生きたファイルは写さない
   /// （絵が安定しない）。baseline は git の子プロセス後に、色とハンクは文書の裏の仕事の後に届くので、撮る側は `isReady`
   /// を待つ。
@@ -118,7 +118,7 @@
     @MainActor final class Scene {
       let tab: TerminalTab
       let document: EditorDocument
-      /// 一時リポジトリ（`cleanup()` で消す）。
+      /// fixture のリポジトリ（置き場の下。消すのは置き場の持ち主）。
       let directory: URL
       var pane: EditorPaneView { tab.view.editor }
 
@@ -136,14 +136,13 @@
 
       func cleanup() {
         pane.removeFromSuperview()
-        try? FileManager.default.removeItem(at: directory)
       }
     }
 
-    /// git が失敗すれば投げる（→ `FixtureGit`）。
-    @MainActor static func scene(queriesRoot: URL) throws -> Scene {
-      let dir = FileManager.default.temporaryDirectory
-        .appendingPathComponent("orbe-editor-code-\(UUID().uuidString)", isDirectory: true)
+    /// リポジトリは `place` の下に作る。git が失敗すれば投げる（→ `FixtureGit`）。
+    @MainActor static func scene(queriesRoot: URL, in place: URL) throws -> Scene {
+      let dir = place.appendingPathComponent(
+        "orbe-editor-code-\(UUID().uuidString)", isDirectory: true)
       try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
       let url = dir.appendingPathComponent("LineIndex.swift")
       try Data(sample.utf8).write(to: url)
@@ -178,7 +177,8 @@
     (try? EditorCodeFixtures.scene(
       queriesRoot: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .deletingLastPathComponent().appendingPathComponent(".build/debug")
+        .deletingLastPathComponent().appendingPathComponent(".build/debug"),
+      in: FileManager.default.temporaryDirectory
     ))?.view.frame(width: 1000, height: 480)
   }
 #endif

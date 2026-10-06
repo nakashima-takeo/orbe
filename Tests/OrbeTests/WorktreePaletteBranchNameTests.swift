@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -22,7 +23,7 @@ final class WorktreePaletteBranchNameTests: OrbeTestCase {
   /// `mine|x` は worktree を持たない。`tagged` は同名タグを持ち worktree で checkout 中。`solo` は
   /// 同名タグを持ち worktree を持たない。
   override func setUpWithError() throws {
-    dir = FileManager.default.temporaryDirectory
+    dir = TestScratch.caseDir
       .appendingPathComponent("orbe-branchname-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     origin = dir.appendingPathComponent("origin.git").path
@@ -51,10 +52,6 @@ final class WorktreePaletteBranchNameTests: OrbeTestCase {
     let taggedWorktree = dir.appendingPathComponent("wt-tagged").path
     XCTAssertTrue(run(["worktree", "add", "-q", taggedWorktree, "tagged"], cwd: local).isSuccess)
     XCTAssertEqual(checkedOutRef(at: taggedWorktree), "refs/heads/tagged", "前提: ブランチを checkout 中")
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: dir)
   }
 
   // MARK: - `|` を含む名前

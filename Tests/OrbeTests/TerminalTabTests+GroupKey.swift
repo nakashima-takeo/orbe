@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -8,8 +9,7 @@ import XCTest
 extension TerminalTabTests {
 
   private func gitRoot() throws -> URL {
-    let root = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-tab-key-\(UUID().uuidString)")
+    let root = TestScratch.caseDir.appendingPathComponent("orbe-tab-key")
     try FileManager.default.createDirectory(
       at: root.appendingPathComponent(".git"), withIntermediateDirectories: true)
     try FileManager.default.createDirectory(
@@ -20,7 +20,6 @@ extension TerminalTabTests {
   /// 復元したタブは保存 cwd から同じ規則で導く（キーは永続しない）。
   func testRestoredTabDerivesGroupKeyFromSavedCwd() throws {
     let root = try gitRoot()
-    defer { try? FileManager.default.removeItem(at: root) }
     let state = TabState(
       cwd: root.appendingPathComponent("src").path, agent: nil, explicitTitle: nil)
 
@@ -32,7 +31,6 @@ extension TerminalTabTests {
   /// cwd の報告（OSC 7）でキーが再計算され、`onPwdChange` が呼ばれる時点で既に新しいキーになっている。
   func testPwdChangeRecomputesGroupKeyBeforeNotifying() throws {
     let root = try gitRoot()
-    defer { try? FileManager.default.removeItem(at: root) }
     let tab = TerminalTab(cwd: "/tmp")
     var keyWhenNotified: String?
     tab.onPwdChange = { keyWhenNotified = tab.groupKey }

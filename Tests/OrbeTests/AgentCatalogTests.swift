@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -10,16 +11,12 @@ final class AgentCatalogTests: OrbeTestCase {
   private var dirB: URL!
 
   override func setUpWithError() throws {
-    base = URL(fileURLWithPath: NSTemporaryDirectory())
+    base = TestScratch.caseDir
       .appendingPathComponent("AgentCatalogTests-\(UUID().uuidString)")
     dirA = base.appendingPathComponent("a")
     dirB = base.appendingPathComponent("b")
     try FileManager.default.createDirectory(at: dirA, withIntermediateDirectories: true)
     try FileManager.default.createDirectory(at: dirB, withIntermediateDirectories: true)
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: base)
   }
 
   private func place(_ name: String, in dir: URL, executable: Bool = true) throws -> String {

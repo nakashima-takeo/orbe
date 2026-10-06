@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -24,7 +25,7 @@ final class OrbeReportWireTests: OrbeTestCase {
   override func setUpWithError() throws {
     // `sun_path` は 104 バイト上限。超えると bind が黙って落ち「接続が来ない」としか見えないので、
     // 長さ自体を先に測って失敗を可読にする。caseDir（`c<連番>` ぶん深い）ではなく隔離根の直下に置く。
-    socketPath = TestIsolation.root.appendingPathComponent("r.sock").path
+    socketPath = TestScratch.root.appendingPathComponent("r.sock").path
     XCTAssertLessThan(socketPath.utf8.count, 104, "listener の socket path が sun_path 上限を超える")
 
     unlink(socketPath)  // 隔離根は per-test で消えないため、前のテストの残骸を掃除してから bind する

@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -28,7 +29,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
   /// ——焦点が入ると先頭のキャレットで語の出現を取りに行くので、語の上から始めるとその語の地が残る。
   func host(_ text: String, clock: Clock) throws -> Hosted {
     let tab = TerminalTab(
-      cwd: try XCTUnwrap(TestIsolation.caseDir).path,
+      cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 700, height: 400)

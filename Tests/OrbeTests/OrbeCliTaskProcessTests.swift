@@ -1,4 +1,5 @@
 import Foundation
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -141,7 +142,7 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
   /// 別のタスクが持つ worktree は control が拒み、その文に相手の ID が出る。
   func testWorktreeIsReadFromTheCallersDirectoryAndShownInTheNinthColumn() throws {
     let control = try startControlProcess()
-    let repo = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("repo").path
+    let repo = TestScratch.caseDir.appendingPathComponent("repo").path
     let nested = (repo as NSString).appendingPathComponent("Sources/App")
     try FileManager.default.createDirectory(atPath: nested, withIntermediateDirectories: true)
     try FileManager.default.createDirectory(
@@ -168,7 +169,7 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
   /// のは workspace のパスだけ）。`a/../b` のような値は正規化して通る。
   func testWorktreeTildeIsNotExpandedAndDotDotIsNormalized() throws {
     let control = try startControlProcess()
-    let plain = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("plain").path
+    let plain = TestScratch.caseDir.appendingPathComponent("plain").path
     for sub in ["~/x", "a", "b"] {
       try FileManager.default.createDirectory(
         atPath: (plain as NSString).appendingPathComponent(sub), withIntermediateDirectories: true)

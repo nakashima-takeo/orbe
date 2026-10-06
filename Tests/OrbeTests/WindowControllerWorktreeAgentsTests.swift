@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -17,7 +18,7 @@ final class WindowControllerWorktreeAgentsTests: OrbeTestCase {
   /// caseDir に git の worktree を作り、その中のサブディレクトリで開いたタブと、git の外のタブを持つ窓。
   /// 前面のタブは git の外のタブ。
   private func launch() throws -> (WindowController, root: String) {
-    let root = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("repo").path
+    let root = TestScratch.caseDir.appendingPathComponent("repo").path
     let nested = (root as NSString).appendingPathComponent("Sources")
     try FileManager.default.createDirectory(atPath: nested, withIntermediateDirectories: true)
     XCTAssertTrue(GitRunner.shared.runSync(["init", "-q"], cwd: root).isSuccess)

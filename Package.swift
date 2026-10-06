@@ -153,45 +153,52 @@ let package = Package(
       dependencies: ["OrbeSound"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
+    // テストの作業ディレクトリとテストの境界（`TestScratch`）。全テストターゲットが共有する。SwiftPM にテスト専用の
+    // 非テストターゲットの種別は無いので通常ビルドにも入るが、製品にはリンクされない。
+    .target(
+      name: "OrbeTestSupport",
+      path: "Tests/OrbeTestSupport",
+      swiftSettings: [.swiftLanguageMode(.v5)]
+    ),
     .testTarget(
       name: "OrbeSoundTests",
-      dependencies: ["OrbeSound"],
+      dependencies: ["OrbeSound", "OrbeTestSupport"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
       name: "OrbeSoundCliTests",
-      dependencies: ["orbe-sound"],
+      dependencies: ["orbe-sound", "OrbeTestSupport"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
       name: "OrbePathsTests",
-      dependencies: ["OrbePaths"],
+      dependencies: ["OrbePaths", "OrbeTestSupport"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
       name: "OrbeSessionLogTests",
-      dependencies: ["OrbeSessionLog"],
+      dependencies: ["OrbeSessionLog", "OrbeTestSupport"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
       name: "OrbeEditorCoreTests",
-      dependencies: ["OrbeEditorCore"],
+      dependencies: ["OrbeEditorCore", "OrbeTestSupport"],
       resources: [.copy("Fixtures")],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
       name: "OrbeEditorEngineTests",
-      dependencies: ["OrbeEditorEngine", "OrbeEditorCore"],
+      dependencies: ["OrbeEditorEngine", "OrbeEditorCore", "OrbeTestSupport"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
       name: "OrbeTests",
-      dependencies: ["Orbe", "OrbeEditorCore", "OrbeEditorEngine"],
+      dependencies: ["Orbe", "OrbeEditorCore", "OrbeEditorEngine", "OrbeTestSupport"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
     .testTarget(
       name: "OrbeReportTests",
-      dependencies: ["orbe-report"],
+      dependencies: ["orbe-report", "OrbeTestSupport"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
   ]

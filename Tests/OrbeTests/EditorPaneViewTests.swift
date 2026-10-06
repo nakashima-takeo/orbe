@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -12,7 +13,7 @@ import XCTest
 @MainActor
 final class EditorPaneViewTests: OrbeTestCase {
   private func file(_ name: String, _ text: String) throws -> URL {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let url = dir.appendingPathComponent(name)
     try Data(text.utf8).write(to: url)
     return url

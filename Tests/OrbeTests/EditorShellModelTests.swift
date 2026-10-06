@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -10,7 +11,7 @@ import XCTest
 @MainActor
 final class EditorShellModelTests: OrbeTestCase {
   private func file(_ name: String, _ text: String = "x") throws -> URL {
-    let dir = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent(
+    let dir = TestScratch.caseDir.appendingPathComponent(
       "root/src", isDirectory: true)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let url = dir.appendingPathComponent(name)
@@ -55,7 +56,6 @@ final class EditorShellModelTests: OrbeTestCase {
   /// 未保存の文書が外で書き換えられると、写しは衝突（ドットが変更の黄）を持ち、外の内容に戻れば消える。
   func testConflictFollowsExternalWritesOnADirtyDocument() throws {
     let repo = try TempGitRepo()
-    defer { repo.cleanup() }
     let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
     let document = try session.open(repo.url("a.txt"), as: .pinned)
     document.surface.responder.perform(Selector(("insertText:")), with: "Z")

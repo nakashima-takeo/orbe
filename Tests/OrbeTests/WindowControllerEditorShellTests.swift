@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -29,7 +30,7 @@ final class WindowControllerEditorShellTests: OrbeTestCase {
   }
 
   private func caseDirectory(_ name: String) throws -> URL {
-    let url = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent(name, isDirectory: true)
+    let url = TestScratch.caseDir.appendingPathComponent(name, isDirectory: true)
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     return url
   }

@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -13,10 +14,6 @@ final class RootFilesTests: OrbeTestCase {
 
   override func setUpWithError() throws {
     repo = try TempGitRepo()
-  }
-
-  override func tearDownWithError() throws {
-    repo.cleanup()
   }
 
   /// 通知を記録する観測者。
@@ -47,10 +44,9 @@ final class RootFilesTests: OrbeTestCase {
     let plain = repo.dir.appendingPathComponent("plain", isDirectory: true)
     try FileManager.default.createDirectory(at: plain, withIntermediateDirectories: true)
     // 根は「.git を持つ最初の祖先」なので、管理外を作るには repo の外に置く。
-    let outside = FileManager.default.temporaryDirectory.appendingPathComponent(
+    let outside = TestScratch.caseDir.appendingPathComponent(
       "orbe-plain-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: outside) }
     let root = GitWorktreeRoot.normalizedPath(outside.path)
     let files = RootFiles(root: root)
     let recorder = Recorder()
@@ -82,10 +78,9 @@ final class RootFilesTests: OrbeTestCase {
 
   /// `.git` はあるが git が失敗する根（壊れた `.git` ファイル）も管理外。
   func testRootWithABrokenGitFileIsUnmanaged() throws {
-    let broken = FileManager.default.temporaryDirectory.appendingPathComponent(
+    let broken = TestScratch.caseDir.appendingPathComponent(
       "orbe-broken-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: broken, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: broken) }
     try "gitdir: /nonexistent/orbe/.git\n".write(
       to: broken.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
     let root = GitWorktreeRoot.normalizedPath(broken.path)

@@ -150,8 +150,6 @@ final class WorkspaceQuarantineTests: OrbeTestCase {
     // root で走ると権限が効かないので、プローブして効かない環境は skip する。
     let fm = FileManager.default
     try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dir.path)
-    // 0555 のままだと endCase() の removeItem が失敗して caseDir が残る。
-    defer { try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
     let probe = dir.appendingPathComponent("probe")
     if (try? Data().write(to: probe)) != nil {
       try? fm.removeItem(at: probe)
@@ -184,8 +182,6 @@ final class WorkspaceQuarantineTests: OrbeTestCase {
     // 1 回目: 退避（＝ディレクトリへの新しいエントリ作成）だけを失敗させ、ガードを立てる。
     let fm = FileManager.default
     try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dir.path)
-    // 0555 のままだと endCase() の removeItem が失敗して caseDir が残る。
-    defer { try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
     let probe = dir.appendingPathComponent("probe")
     if (try? Data().write(to: probe)) != nil {
       try? fm.removeItem(at: probe)

@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -14,16 +15,12 @@ final class GitHubCLIOpenListsTests: OrbeTestCase {
   private let repo = GitHubRepoName(nameWithOwner: "o/n")
 
   override func setUpWithError() throws {
-    dir = FileManager.default.temporaryDirectory
+    dir = TestScratch.caseDir
       .appendingPathComponent("orbe-gh-open-lists-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     // 戻さない——`OrbeTestCase` が毎テスト `ShellPATH.shared` を張り直す。
     let path = dir.path
     ShellPATH.shared = ShellPATH(probe: { path })
-  }
-
-  override func tearDownWithError() throws {
-    if let dir { try? FileManager.default.removeItem(at: dir) }
   }
 
   /// 偽 `gh`。`auth token` は `authExit` で終わり、それ以外は `stdout` を出して `exit` で終わる。受けた

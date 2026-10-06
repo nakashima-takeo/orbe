@@ -1,4 +1,5 @@
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -13,7 +14,7 @@ import XCTest
 @MainActor
 final class TerminalTabEditorTests: OrbeTestCase {
   private func file(_ name: String) throws -> URL {
-    let url = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent(name)
+    let url = TestScratch.caseDir.appendingPathComponent(name)
     try Data("x".utf8).write(to: url)
     return url.resolvingSymlinksInPath()
   }

@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -12,7 +13,7 @@ final class GitWorktreeOperationTests: OrbeTestCase {
   private var repo: GitRepo!
 
   override func setUpWithError() throws {
-    dir = FileManager.default.temporaryDirectory
+    dir = TestScratch.caseDir
       .appendingPathComponent("orbe-op-repo-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     XCTAssertTrue(git(["init", "-q", "-b", "main"]).isSuccess)
@@ -22,10 +23,6 @@ final class GitWorktreeOperationTests: OrbeTestCase {
     XCTAssertTrue(git(["add", "-A"]).isSuccess)
     XCTAssertTrue(git(["commit", "-qm", "init"]).isSuccess)
     repo = try open()
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: dir)
   }
 
   // MARK: - status の件数

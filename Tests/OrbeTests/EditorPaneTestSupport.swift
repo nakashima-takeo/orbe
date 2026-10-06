@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import SwiftUI
 import XCTest
 
@@ -9,7 +10,7 @@ import XCTest
 extension OrbeTestCase {
   /// このテストの隔離ディレクトリにファイルを作る。
   func caseFile(_ name: String, _ text: String) throws -> URL {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let url = dir.appendingPathComponent(name)
     try Data(text.utf8).write(to: url)
     return url

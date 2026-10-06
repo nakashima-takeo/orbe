@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -10,13 +11,9 @@ final class AgentPluginInstallerTests: OrbeTestCase {
   private var pkg: URL!
 
   override func setUpWithError() throws {
-    pkg = URL(fileURLWithPath: NSTemporaryDirectory())
+    pkg = TestScratch.caseDir
       .appendingPathComponent("AgentPluginInstallerTests-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: pkg, withIntermediateDirectories: true)
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: pkg)
   }
 
   private func makePluginsDir(subdirectories: [String] = []) throws {

@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -63,7 +64,7 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
   /// GitHub タブのリポジトリは ⌘T と同じ基点（アクティブタブの cwd）で解決する——workspace の root が別の場所
   /// （既定 workspace の ~ など）でも、タブがいるリポジトリの Issue・PR を出す。
   func testTheGitHubTabResolvesTheRepositoryFromTheActiveTabsDirectory() throws {
-    let caseDir = try XCTUnwrap(TestIsolation.caseDir)
+    let caseDir = TestScratch.caseDir
     let tabDirectory = caseDir.appendingPathComponent("repo-a").path
     let root = caseDir.appendingPathComponent("repo-b").path
     for path in [tabDirectory, root] {

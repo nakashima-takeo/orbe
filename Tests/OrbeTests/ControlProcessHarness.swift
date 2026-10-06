@@ -50,7 +50,7 @@ final class ControlProcess {
   /// **`WindowController()` より前に呼ぶ**——`OrbeRuntimeEnv.inject` はタブの materialize 開始の時点で
   /// `reportBinaryPath` / `bundledBinDir` を読むため、後から置いてもタブに注入済みの env には効かない。
   /// 置くのは `bin/` だけで、`completion-engine.js` も `zsh/` も置かない（不在時の graceful degradation を
-  /// 測る既存テストの前提を壊さない）。root は caseDir 配下なので、組んだ中身は `endCase` の削除に乗る。
+  /// 測る既存テストの前提を壊さない）。root は caseDir 配下なので、組んだ中身はテスト終了の削除に乗る。
   @discardableResult
   static func stageBundle() throws -> URL {
     let resources = try XCTUnwrap(BundledResources.root, "同梱リソースの探索根が張られていない")
@@ -75,7 +75,7 @@ final class ControlProcess {
   /// `ControlServer.shared` を実 `WindowController` へ載せ、隔離根の socket で待ち受ける。
   init(target: WindowController, file: StaticString = #filePath, line: UInt = #line) {
     self.target = target
-    let expected = TestIsolation.root.appendingPathComponent("control.sock").path
+    let expected = TestIsolation.stateDir.appendingPathComponent("control.sock").path
     // 空や別値だと `start` が no-op になり、子プロセス側は "Orbe not running" と区別できず緑に化ける。
     XCTAssertEqual(
       ControlServer.shared.socketPath, expected,
@@ -102,7 +102,7 @@ final class ControlProcess {
 
   /// 子プロセスへ渡す env。**明示辞書のみ**（親から継承しない）。
   static func childEnv(_ extra: [String: String] = [:]) -> [String: String] {
-    var env = ["PATH": "/usr/bin:/bin", OrbePaths.stateDirEnvVar: TestIsolation.root.path]
+    var env = ["PATH": "/usr/bin:/bin", OrbePaths.stateDirEnvVar: TestIsolation.stateDir.path]
     for (key, value) in extra { env[key] = value }
     return env
   }
@@ -201,7 +201,7 @@ final class ControlProcess {
   ) -> Outcome {
     XCTAssertFalse(
       FileManager.default.fileExists(
-        atPath: TestIsolation.root.appendingPathComponent("control.sock").path),
+        atPath: TestIsolation.stateDir.appendingPathComponent("control.sock").path),
       "サーバが生きている状態で orbWithoutServer を呼んでいる（socket 前に落ちたことを測れない）",
       file: file, line: line)
     return run(executable("orbe-cli"), args, env: childEnv(extra), file: file, line: line)

@@ -21,10 +21,6 @@ final class FileTreeTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["commit", "-qm", "tree"]).isSuccess)
   }
 
-  override func tearDownWithError() throws {
-    repo.cleanup()
-  }
-
   /// 名前を打って Enter。
   private func commit(_ tree: FileTree, _ name: String) -> Bool {
     tree.setNewName(name)

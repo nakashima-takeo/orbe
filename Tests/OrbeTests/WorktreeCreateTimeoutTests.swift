@@ -15,7 +15,6 @@ final class WorktreeCreateTimeoutTests: OrbeTestCase {
   /// 走るので（実測）、この形なら確実に打ち切りが失敗として返る。
   func testTimedOutWorktreeCreationShowsDedicatedMessage() throws {
     let fixture = try GitHangFixture()
-    addTeardownBlock { fixture.cleanup() }
     try fixture.installHook("reference-transaction", body: fixture.waitingBody)
 
     // CI は英語なので、`.en` だと既定ストアと文言が一致して写しの経路が測れない。

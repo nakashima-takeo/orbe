@@ -1,5 +1,6 @@
 import AppKit
 import OrbeSessionLog
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -145,7 +146,7 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
   }
 
   func testUnwritableLogDoesNotStopTabOperations() throws {
-    let dead = try XCTUnwrap(TestIsolation.caseDir)
+    let dead = TestScratch.caseDir
       .appendingPathComponent("missing", isDirectory: true)
       .appendingPathComponent("agent-sessions.jsonl")
     AgentSessionLog.fileURLOverride = dead
@@ -211,8 +212,6 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
     let dir = url.deletingLastPathComponent()
     let fm = FileManager.default
     try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dir.path)
-    // 0555 のままだと endCase() の removeItem が失敗して caseDir が残る。
-    defer { try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
     let probe = dir.appendingPathComponent("probe")
     if (try? Data().write(to: probe)) != nil {
       try? fm.removeItem(at: probe)

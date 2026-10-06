@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -22,7 +23,7 @@ final class EditorPaneViewPreviewTabTests: OrbeTestCase {
   private func host() throws -> Hosted {
     for name in ["a.txt", "b.txt", "c.txt"] { _ = try caseFile(name, name) }
     let tab = TerminalTab(
-      cwd: try XCTUnwrap(TestIsolation.caseDir).path,
+      cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900)
     window.appearance = NSAppearance(named: .darkAqua)

@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -58,10 +59,9 @@ final class GitWorktreeExcludeTests: OrbeTestCase {
   // MARK: - append（冪等な追記）
 
   private func makeCommonDir() throws -> URL {
-    let dir = FileManager.default.temporaryDirectory
+    let dir = TestScratch.caseDir
       .appendingPathComponent("orbe-exclude-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
     return dir
   }
 
@@ -111,7 +111,7 @@ final class GitWorktreeExcludeIntegrationTests: OrbeTestCase {
   private var repo: GitRepo!
 
   override func setUpWithError() throws {
-    dir = FileManager.default.temporaryDirectory
+    dir = TestScratch.caseDir
       .appendingPathComponent("orbe-exclude-repo-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     XCTAssertTrue(git(["init", "-q", "-b", "main"]).isSuccess)
@@ -123,10 +123,6 @@ final class GitWorktreeExcludeIntegrationTests: OrbeTestCase {
     XCTAssertTrue(git(["add", "-A"]).isSuccess)
     XCTAssertTrue(git(["commit", "-qm", "init"]).isSuccess)
     repo = try open()
-  }
-
-  override func tearDownWithError() throws {
-    try FileManager.default.removeItem(at: dir)
   }
 
   // MARK: - ヘルパ

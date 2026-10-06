@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -18,10 +19,10 @@ final class TestIsolationTests: OrbeTestCase {
 
   /// 同梱リソースの探索根は管理下の空ディレクトリ（既定の Xcode bin ではない）。
   ///
-  /// caseDir の下であることが要点——root 直下だと、テストが同梱物を組んだ中身が `endCase` の
+  /// caseDir の下であることが要点——根の直下だと、テストが同梱物を組んだ中身がテスト終了の
   /// 削除に乗らず以降の全テストへ残る（向き先だけ張り直しても中身は消えない）。
   func testBundledResourcesRootIsManaged() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let root = try XCTUnwrap(BundledResources.root)
     XCTAssertEqual(root.path, dir.appendingPathComponent("resources").path)
     XCTAssertEqual(
@@ -35,8 +36,8 @@ final class TestIsolationTests: OrbeTestCase {
   /// （`materializeStablePlugin`）が `ORBE_STATE_DIR` を見ずに実ホームの application support を
   /// 書き換える——テストは緑のまま開発機と CI のホームが汚れる。
   func testPerCaseOverridesPointIntoCaseDir() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
-    XCTAssertEqual(dir.deletingLastPathComponent().path, TestIsolation.root.path)
+    let dir = TestScratch.caseDir
+    XCTAssertEqual(dir.deletingLastPathComponent().path, TestIsolation.stateDir.path)
     for url in [
       WorkspacePersistence.fileURLOverride, SettingsPersistence.fileURLOverride,
       AppStatePersistence.fileURLOverride, GuiConfig.fileURLOverride,
@@ -58,8 +59,8 @@ final class TestIsolationTests: OrbeTestCase {
   /// 同じディレクトリを共有していても通ってしまう。配り直し（別パス）と後始末（前のパスが不在）は
   /// ここでしか測れない。両方が崩れると、前のテストが書いた永続を次のテストが読む。
   func testCaseDirIsFreshForEachTest() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
-    let previous = try XCTUnwrap(TestIsolation.previousCaseDir, "直前のテストへ配った記録が無い")
+    let dir = TestScratch.caseDir
+    let previous = try XCTUnwrap(TestScratch.previousCaseDir, "直前のテストへ配った記録が無い")
     XCTAssertNotEqual(dir.path, previous.path, "前のテストと同じディレクトリを使い回している")
     XCTAssertFalse(
       FileManager.default.fileExists(atPath: previous.path),

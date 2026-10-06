@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import orbe_sound
@@ -7,9 +8,8 @@ import XCTest
 final class WAVWriterTests: XCTestCase {
 
   private func write(_ samples: [Float], rate: Double) throws -> Data {
-    let url = FileManager.default.temporaryDirectory
+    let url = TestScratch.caseDir
       .appendingPathComponent("orbe-sound-wav-test-\(UUID().uuidString).wav")
-    defer { try? FileManager.default.removeItem(at: url) }
     try WAVWriter.write(samples: samples, sampleRate: rate, to: url)
     return try Data(contentsOf: url)
   }
