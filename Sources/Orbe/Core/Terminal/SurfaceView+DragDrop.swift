@@ -27,7 +27,7 @@ extension SurfaceView {
   /// シェルに渡せるようパスをバックスラッシュエスケープする（ターミナルのライブバッファへ
   /// `insertText` で挿入する用途。コマンド文字列をまるごとクォートする用途ではない）。
   /// 文字集合は upstream Ghostty 本家 `Ghostty.Shell.escape`
-  /// （vendor/ghostty/macos/Sources/Ghostty/Ghostty.Shell.swift）に合わせる。
+  /// （ghostty の macos/Sources/Ghostty/Ghostty.Shell.swift）に合わせる。
   ///
   /// ただし制御文字の除去だけは上流に上乗せしている。挿入先は pty へ生バイトを書くため、
   /// 制御文字はバックスラッシュを前置しても中和されない——`\` が self-insert された後、

@@ -1,7 +1,7 @@
 ---
 title: 全体構成
 description: 実行体と制御チャネル・state dir・Sources/ モジュール構成の一望図
-updated: 2026-09-18
+updated: 2026-10-06
 ---
 
 # 全体構成
@@ -96,7 +96,7 @@ Orbe が**読む**もの（利用者・スクリプトが立てる）:
 
 ## 外部依存
 
-- **libghostty** — `vendor/ghostty` submodule を固定 SHA に pin し、自前ビルドした xcframework を `binaryTarget` で取り込む。外部契約は [terminal/libghostty](spec/terminal/libghostty.md)。
+- **libghostty** — ghostty の fork（`nakashima-takeo/ghostty`）が固定 SHA で焼いた配布物（fork の Release）を、url と checksum の `binaryTarget` で取り込む。外部契約は [terminal/libghostty](spec/terminal/libghostty.md)。
 - **swift-markdown**（Apache-2.0） — リリースノート（appcast description）の markdown 描画。
 - **Sparkle**（MIT） — アプリ内アップデート（[platform/update](spec/platform/update.md)）。
 - **git / gh** — サブプロセスとして実行。gh は無くても劣化動作（[palette/worktree](spec/palette/worktree.md)）。

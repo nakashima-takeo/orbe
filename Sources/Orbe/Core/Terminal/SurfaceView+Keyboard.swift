@@ -7,7 +7,7 @@ import GhosttyKit
 /// 上流 Ghostty の keyDown データフローに準拠する: `key.mods` には生 event、`interpretKeyEvents` と
 /// text 生成・`consumed_mods` には `macos-option-as-alt` で翻訳した mods を使う。状態
 /// （markedText / keyTextAccumulator）は SurfaceView 本体が持つ。
-/// cf. vendor/ghostty/macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift（keyDown/keyAction）、
+/// cf. ghostty の macos/Sources/Ghostty/Surface View/SurfaceView_AppKit.swift（keyDown/keyAction）、
 /// NSEvent+Extension.swift（ghosttyKeyEvent/ghosttyCharacters）、Ghostty.Input.swift（eventModifierFlags）。
 extension SurfaceView {
   override func keyDown(with event: NSEvent) {

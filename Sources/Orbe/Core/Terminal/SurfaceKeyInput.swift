@@ -17,7 +17,7 @@ struct SurfaceKeyInput: Equatable {
   /// `text` を生成するために消費された修飾。libghostty は `mods` − `consumedMods`（effective mods）を
   /// 符号化の分岐判定に使う——無修飾扱いになると素の Enter/Tab/Backspace・テキスト直送へ落ち、
   /// alt の ESC 前置も消える。CSI に載る修飾値そのものは生 `mods` から作られる。`key.text` に
-  /// 載らない入力では参照されない。cf. vendor/ghostty src/input/key.zig（effectiveMods）
+  /// 載らない入力では参照されない。cf. ghostty の src/input/key.zig（effectiveMods）
   let consumedMods: ghostty_input_mods_e
 
   /// IME が keyDown の外で確定した文字——キーの無い（libghostty が `Key.unidentified` に落として文字から符号化する）、
@@ -30,7 +30,7 @@ struct SurfaceKeyInput: Equatable {
 
   /// text を `key.text` に載せてよいか。C0 制御文字（先頭 UTF-8 バイト < 0x20）と DEL（0x7F）は載せず
   /// keycode のみで送り、符号化を libghostty に委ねる。判定集合は libghostty の `isControl`（C0 と DEL）と
-  /// 同一。cf. vendor/ghostty src/input/key_encode.zig（isControl）
+  /// 同一。cf. ghostty の src/input/key_encode.zig（isControl）
   /// 載せると effectiveMods が consumed_mods を差し引き、Shift+Backspace の修飾が潰れる。
   /// 翻訳（`ghostty_surface_key_translation_mods`）が alt を落とさない構成では consumed に alt が残るので、
   /// Alt+Enter / Option+Backspace も同じ潰れ方をする

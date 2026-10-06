@@ -101,7 +101,7 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
   }
 
   /// **`--force` の根拠**。submodule を初期化した worktree は、作業ツリーが完全に clean でも
-  /// 素の `git worktree remove` に拒否される。Orbe 自身のリポジトリも submodule を持つため、
+  /// 素の `git worktree remove` に拒否される。Orbe が扱うリポジトリは submodule を持ちうるため、
   /// clean と unlocked を直前に検証したうえで `--force` を呼ぶのが唯一の道になる。
   func testSubmoduleWorktreeNeedsForce() throws {
     try addSubmodule()

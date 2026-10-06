@@ -25,9 +25,6 @@ let usage = """
   制作ループ: Sources/orbe-sound/Scratch.swift を編集 →
     swift build --product orbe-sound && .build/debug/orbe-sound board
   を回し、開きっぱなしのブラウザをリロードして聴く（1 音だけ耳で確かめるなら play でもよい）。
-  ビルドは manifest 解決に GhosttyKit（vendor/ghostty）の実在が要る。worktree の vendor は
-  build-app.sh がビルド中だけ main worktree へ symlink し、終了時に空へ戻す（symlink を残すと
-  git status が壊れるため。→ docs/guides/build.md）。制作ループは main checkout で回すこと。
 
   Exit codes: 0 success, 2 usage error, 1 実行エラー（書き込み・再生失敗等）。
   """

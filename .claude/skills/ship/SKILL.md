@@ -54,7 +54,7 @@ flowchart TD
 
 ### 実装・修正 — ビルドと spec を作業者へ渡す
 
-`auto:implement` には計画書パスまたは修正指示と `<wt>` を渡し、`docs/guides/build.md` を Read で読ませる。worktree の libghostty の準備は同文書と `scripts/build-app.sh` に従う。検証は「検証の分担」の範囲で回させ、結果もその形で返させる。
+`auto:implement` には計画書パスまたは修正指示と `<wt>` を渡し、`docs/guides/build.md` を Read で読ませる。検証は「検証の分担」の範囲で回させ、結果もその形で返させる。
 
 **`Sources/` を変更する作業者は、終了前に該当 spec も現状へ更新する。** spec はコードと別のコミットにまとめる。
 
