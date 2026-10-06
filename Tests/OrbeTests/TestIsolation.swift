@@ -68,7 +68,7 @@ enum TestIsolation {
     // 2. state dir（本番と同じ ORBE_STATE_DIR 経路）。永続ファイルは下の `beginCase` が caseDir へ
     //    張り直すので、この根の直下に出るのは `c<連番>` の caseDir 群と、パス長のために直下へ
     //    置かざるを得ない AF_UNIX socket（`control.sock` / `OrbeReportWireTests` の `r.sock`）と
-    //    補完の学習ストアだけ。
+    //    補完の学習ストアと、テストをまたぐ fixture（`GitWorktreeCleanIntegrationTests` の雛形）だけ。
     //    子プロセス（`ControlProcess.childEnv`）へ渡すのもこの根で、in-process 側の caseDir とは違う。
     setenv(OrbePaths.stateDirEnvVar, dir.path, 1)
     // git は開発者の global / system 設定（署名・hook・除外・fsmonitor 等）を読まない。`GitRunner` は

@@ -4,7 +4,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 隔離ハーネス（`TestIsolation`）が実際に何を立てたかを固定する。
+/// 隔離ハーネス（`TestScratch` と `TestIsolation`）が実際に何を立てたかを固定する。
 ///
 /// ここが崩れると、他の全テストが静かに開発者の実環境——実 `workspaces.json`・
 /// ghostty の user 設定・実 state dir——を読み書きし始める。テストは手元で緑のまま、
