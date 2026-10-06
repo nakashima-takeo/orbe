@@ -4,6 +4,10 @@ import AppKit
 /// 無い——面は編集の通知で置換後の文字列を渡し、Orbe の中で本文を読むのは文書の写し（ロープ）だけ。文書は面の delegate
 /// として編集を受け、役割が変わった区間と行の印を知らせる。面は本文を持たず、文書の写し（`surfaceContent`）を引いて
 /// 描く（役割→色だけを知る）。
+///
+/// 面の中で打てる文は本文と区画の入力欄（`ZoneTextField`）で、キーと IME はそのうち 1 つの「主」へ届く（区画の選べる文を
+/// 選んでいる間は、どちらにも届かない）。選択・キャレット・カーソル・続く問い・見えている範囲・強調の地・字下げと改行の
+/// 作法・丸ごとの置き換え・undo の区切り、と delegate への知らせは本文だけを指す。入力欄を指す口は名前で分ける。
 @MainActor
 public protocol TextSurface: AnyObject {
   /// 器へ載せる view（スクロールを含む全体）。
@@ -25,7 +29,8 @@ public protocol TextSurface: AnyObject {
   /// 行う。選択は動かさない。
   func reveal(_ range: NSRange, policy: TextReveal)
 
-  /// 選択（UTF-16）。置いても見せない——見せるのは `reveal`。
+  /// 選択（UTF-16）。置いても見せない——見せるのは `reveal`。置くと本文が主になる（区画の文の選択と入力欄から本文へ
+  /// 戻る。同じ値でも）。
   var selectedRange: NSRange { get set }
 
   /// キャレットのオフセット——選択の動く側の端（前へ伸ばした選択なら先頭、それ以外は終わり。選択が空ならその位置）。
@@ -53,8 +58,9 @@ public protocol TextSurface: AnyObject {
   /// （保存が呼ぶ——⌘Z が保存前の打鍵まで一緒に戻さないため）。
   func markUndoBoundary()
 
-  /// 変換中の IME の文字を確定する（変換中でなければ何もしない）。未確定の文字は既に本文にあるので、本文は変わらない
-  /// ——変換の状態と IME の状態を揃える。載せる側が、面の外へ焦点や読み取りが移るコマンドを走らせる前に呼ぶ。
+  /// 変換中の IME の文字を確定する（変換中でなければ何もしない。変換は面に 1 つで、主の場——本文か入力欄——のもの）。
+  /// 未確定の文字は既に文にあるので、文は変わらない——変換の状態と IME の状態を揃える。載せる側が、面の外へ焦点や
+  /// 読み取りが移るコマンドを走らせる前に呼ぶ。
   func commitMarkedText()
 
   /// 本文を丸ごと置き換える編集。通常の編集と同じく undo に載り、`didChange` を呼び出しから
@@ -69,16 +75,22 @@ public protocol TextSurface: AnyObject {
   /// 行の印（git ガター）。文書がハンクから作って押す（UTF-16 オフセット）。面は描くだけで規則を持たない。
   func setLineMarks(_ spans: LineMarkSpans)
 
-  /// 縦の並びに差し込むもの（文書に無い行・view を載せる区画）を丸ごと置く。同じ値の押し直しは何もしない。境は面が最後に
-  /// 引いた写しの行の範囲（`0...行数`）に収め、ミニマップを出していない面（→ `setPresentation`）にだけ置く——どちらを
-  /// 破っても呼び手の誤り。置いた後は、面自身の編集で境が行に付いて動く（編集より前の境はそのまま、後ろの境は行の増減の
-  /// 分だけずれ、置き換えた区間の中の境は区間の始まりの行へ寄る）。差し込みや区画の高さが変わっても、見えている先頭の
-  /// 文書の行は画面の同じ位置に残る。区画の view は面が保持し、面の中の本文の区画の幅で測って置き、本文と一緒に動かす
-  /// （置き直しで外れた view は面から外す）。
+  /// 縦の並びに差し込むもの（文書に無い行・区画）を丸ごと置く。同じ値の押し直しは何もしない。境は面が最後に引いた写しの
+  /// 行の範囲（`0...行数`）に収め、ミニマップを出していない面（→ `setPresentation`）にだけ置く——どちらを破っても呼び手の
+  /// 誤り。置いた後は、面自身の編集で境が行に付いて動く（編集より前の境はそのまま、後ろの境は行の増減の分だけずれ、置き
+  /// 換えた区間の中の境は区間の始まりの行へ寄る）。差し込みや区画の高さが変わっても、見えている先頭の文書の行は画面の
+  /// 同じ位置に残る。区画は面が保持し（置き直しで外れた区画は手放す）、面の中の本文の区画の幅で絵を問う。
   func setRows(_ rows: SurfaceRows)
 
-  /// 区画の view の中身が変わった——面が今の幅で測り直す（高さが変われば並びを組み直す）。置いていない view なら何もしない。
-  func remeasureZone(_ view: NSView)
+  /// 区画の中身や状態が変わった——面が今の幅で絵を問い直す（高さが変われば並びを組み直す）。取引の中（面の入力の処理の
+  /// 中・入力欄の知らせの中）で呼べば、その取引と同じコマに出る。置いていない区画なら何もしない。
+  func redrawZone(_ zone: SurfaceZone)
+
+  /// 入力欄の文を置き換える（送った後に空にするなど）。入力欄の場の丸ごとの置き換えで、前後に undo の区切りを置く。
+  func replaceText(of field: ZoneTextField, with text: String)
+
+  /// 入力欄を主（キーと IME の行き先）にする。確定するときに、どの区画の絵にもその入力欄が無ければ本文が主になる。
+  func focus(_ field: ZoneTextField)
 
   /// 表示の構成を置く。差し込みのある面でミニマップを出すのは呼び手の誤り。
   func setPresentation(_ presentation: SurfacePresentation)
@@ -110,6 +122,7 @@ public protocol TextSurfaceDelegate: AnyObject {
   /// 本文が変わった（置換後の文字列つき）。面の本文のすべての変更がここを通る。1 回の操作の編集を束で渡す——束は重ならない
   /// 昇順の列で、どの範囲も束の前の本文の座標で書く（VS Code の編集の適用と同じ）。
   func surface(_ surface: any TextSurface, didChange edits: [TextEdit])
+  /// 面の view が first responder になった・外れた（入力欄で打つ間も、面の view が first responder）。
   func surface(_ surface: any TextSurface, focusDidChange focused: Bool)
   /// `viewport` が変わった（スクロール・窓の高さ）。
   func surfaceDidChangeViewport(_ surface: any TextSurface)

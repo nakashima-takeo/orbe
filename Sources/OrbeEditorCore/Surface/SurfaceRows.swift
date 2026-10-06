@@ -1,4 +1,4 @@
-import AppKit
+import Foundation
 
 /// 面の縦の並びに、文書の行と行の間へ差し込むもの（→ `TextSurface.setRows`）。差し込みは行に数えない描画で、本文にも
 /// undo にも載らない——行番号・見えている範囲・選択・編集は、文書の行だけを見る。
@@ -20,8 +20,8 @@ public struct RowInsertion: Equatable {
   public enum Content: Equatable {
     /// 文書に無い行の列。面が本文と同じ字で描くが、選べず、写せず、当たらない。
     case lines([InsertedLine])
-    /// 載せる側の view を置く区画。高さは面が本文の区画の幅で view を測って決める（→ `TextSurface.remeasureZone`）。
-    case zone(NSView)
+    /// 区画。面が本文の区画の幅で区画の絵を問い、絵の高さで並べ、本文と同じコマに描く（→ `SurfaceZone`）。
+    case zone(SurfaceZone)
 
     public static func == (lhs: Content, rhs: Content) -> Bool {
       switch (lhs, rhs) {

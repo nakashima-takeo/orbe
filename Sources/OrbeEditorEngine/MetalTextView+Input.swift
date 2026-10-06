@@ -13,7 +13,7 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
     guard let surface, let site else { return }
     let plain = (string as? NSAttributedString)?.string ?? string as? String ?? ""
     surface.inputScope {
-      site.editor.insertText(surface.lineBreak.normalize(plain), replacement: replacementRange)
+      site.editor.insertText(site.lineBreak.normalize(plain), replacement: replacementRange)
     }
   }
 
@@ -22,7 +22,7 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
     let attributed =
       string as? NSAttributedString ?? NSAttributedString(string: string as? String ?? "")
     let (marked, selected) = Self.normalize(
-      attributed, selected: selectedRange, to: surface.lineBreak)
+      attributed, selected: selectedRange, to: site.lineBreak)
     surface.inputScope {
       site.editor.setMarkedText(
         marked.string, selected: selected, replacement: replacementRange,
@@ -85,13 +85,24 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
       convert(site.textRect(clipped, row: row, env, marked: site.markedLine), to: nil))
   }
 
-  /// 点を含む字の位置（字の上でなければ NSNotFound——行末より右・字の無い行・文の外。macOS 26 の NSTextView と同じ）。
+  /// 点を含む字の位置（点の下の場の文の座標。字の上でなければ NSNotFound——行末より右・字の無い行・文の外・区画の入力欄
+  /// でない所。macOS 26 の NSTextView と同じ）。
   func characterIndex(for point: NSPoint) -> Int {
-    guard let site, let window else { return NSNotFound }
+    guard let window else { return NSNotFound }
     let local = convert(window.convertPoint(fromScreen: point), from: nil)
-    guard bounds.contains(local) else { return NSNotFound }
+    guard bounds.contains(local), let site = site(at: local) else { return NSNotFound }
     if let marked = site.markedCharacter(at: local) { return marked }
     return site.character(at: local)?.location ?? NSNotFound
+  }
+
+  /// 点（view の座標）の下の編集の場（区画の入力欄でない区画の上なら nil）。
+  private func site(at point: CGPoint) -> EditingSite? {
+    guard let surface else { return nil }
+    switch surface.target(at: point) {
+    case .body: return surface.bodySite
+    case .field(let site): return site
+    case .button, .zoneText, .zoneSpace: return nil
+    }
   }
 
   func baselineDeltaForCharacter(at anIndex: Int) -> CGFloat {
@@ -107,9 +118,11 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
 
   /// 点を含む字（`characterIndex(for:)` と同じ字）の左端から右端までのうち、点までの割合。
   func fractionOfDistanceThroughGlyph(for point: NSPoint) -> CGFloat {
-    guard let site, let env = site.editingEnvironment(), let window else { return 0 }
+    guard let window else { return 0 }
     let local = convert(window.convertPoint(fromScreen: point), from: nil)
-    guard let cluster = site.character(at: local) else { return 0 }
+    guard let site = site(at: local), let env = site.editingEnvironment(),
+      let cluster = site.character(at: local)
+    else { return 0 }
     let text = env.text
     let row = text.row(containing: cluster.location)
     let start = text.lineStart(row)

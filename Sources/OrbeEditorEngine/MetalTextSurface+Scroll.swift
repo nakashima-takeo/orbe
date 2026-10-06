@@ -32,7 +32,6 @@ extension MetalTextSurface {
   /// 描画スレッドだけが変える位置と範囲（端への戻り・組んだ行で伸びた横の範囲）が変わった。
   func scrollDidAdvance() {
     refreshViewport()
-    zones?.startTicking()
   }
 
   /// 先頭に見えている所と見えている高さ（表示の単位。差し込みが無ければ行 + 隠れている割合と行数）——俯瞰の式の入力。
@@ -96,31 +95,25 @@ extension MetalTextSurface {
 
   // MARK: - 位置の計算
 
-  /// 取引の後に置く位置——頼まれた位置から、見せ方に従って区間（無ければ主のキャレット）の行を縦に置いた位置（横は描画
-  /// スレッドが行を組んで寄せる）。着地は縦の並びの表示の単位で決める。今の位置から動かなければ nil。
-  func position(after transaction: Transaction, cursors: CursorList, _ text: TextRope)
-    -> SIMD2<Double>?
-  {
+  /// 取引の後に置く位置——頼まれた位置から、見せ方に従って縦の範囲 `span`（見せ方を頼んだ場が出した、区間の行の縦の
+  /// 範囲。表示の単位）を縦に置いた位置（本文の横は描画スレッドが行を組んで寄せる）。ページ送りの量は本文の場だけが
+  /// 送る。今の位置から動かなければ nil。
+  func position(after transaction: Transaction, span: Range<Double>?) -> SIMD2<Double>? {
     let now = scrollPosition
     var p = transaction.scrollTo ?? now
+    let lineHeight = Double(config.lineHeight)
     let policy: TextReveal
     switch transaction.reveal {
     case .none: return p == now ? nil : p
     case .showing(let shown): policy = shown
     case .page(let lines):
-      p.y += Double(lines) * Double(config.lineHeight)
+      if transaction.revealSite?.isBody != false { p.y += Double(lines) * lineHeight }
       policy = .minimal
     }
-    let caret = NSRange(location: cursors.primary.position, length: 0)
-    let range = transaction.revealing ?? caret
-    let location = min(max(0, range.location), text.length)
-    let end = min(max(location, NSMaxRange(range)), text.length)
-    let lineHeight = Double(config.lineHeight)
+    guard let span else { return p == now ? nil : p }
     let current = p.y / lineHeight
-    let lines = text.rows(of: NSRange(location: location, length: end - location))
     let first = policy.firstLine(
-      showing: rows.unit(ofLine: lines.lowerBound)..<(rows.unit(ofLine: lines.upperBound) + 1),
-      first: current, visible: scrollState().limits.viewport.y / lineHeight)
+      showing: span, first: current, visible: scrollState().limits.viewport.y / lineHeight)
     // 方針が動かさないときは今の先頭をそのまま返すので、置き直さない（行高との往復で 1ulp ずれた位置を置くと、端を越えて
     // 見せている間の位置が端へ収められる）。
     if first != current { p.y = first * lineHeight }

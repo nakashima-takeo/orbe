@@ -28,6 +28,8 @@ final class SurfaceSlot {
   var minimapLayer: MTLTexture?
   let builder = FrameBuilder()
   let recorder = FrameRecorder()
+  /// 区画を描く持ち物。
+  let zones: ZoneResources
   /// 出したコマのうち、まだ画面に出ていない（present も破棄もされていない）数。
   var unpresented = 0
   /// 上限で飛ばしたコマがある（画面に出たら次の刻みを待たずに描く）。
@@ -49,10 +51,11 @@ final class SurfaceSlot {
   var revealed = 0
 
   init(
-    id: Int, boxes: SurfaceBoxes, config: SurfaceConfig,
+    id: Int, boxes: SurfaceBoxes, config: SurfaceConfig, device: MTLDevice,
     notify: @escaping @Sendable () -> Void
   ) {
     self.id = id
+    zones = ZoneResources(device: device)
     material = boxes.material
     scroll = boxes.scroll
     placement = boxes.placement
@@ -83,7 +86,7 @@ final class SurfaceSlot {
         caretVisible: moment.caretVisible, pixels: target.pixels, atlas: target.atlas,
         config: config,
         minimapCells: minimapCells, rulerRows: rulerRows, motion: motion, time: moment.time,
-        baselines: self.scroll.baselines, previousPlacement: minimapPlacement),
+        baselines: self.scroll.baselines, previousPlacement: minimapPlacement, zones: zones),
       cache: lines, fonts: fonts)
     if let previous = minimapPlacement, let placement = builder.minimap.placement {
       minimapMotion = placement.startLine - previous.startLine

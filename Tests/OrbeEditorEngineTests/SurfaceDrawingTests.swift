@@ -169,21 +169,21 @@ final class SurfaceDrawingTests: EngineTestCase {
       forMaterial: 7)
     box.place(SIMD2(0, 300), forMaterial: 7)
     box.place(SIMD2(0, 900), forMaterial: 8)
-    XCTAssertEqual(box.frame(at: 0, period: 1.0 / 120, material: 6).position.y, 50)
+    XCTAssertEqual(box.frame(at: 0, material: 6).position.y, 50)
     XCTAssertEqual(
-      box.frame(at: 0, period: 1.0 / 120, material: 6).limits.bottom, 999 * 10, "置く前の範囲")
+      box.frame(at: 0, material: 6).limits.bottom, 999 * 10, "置く前の範囲")
     XCTAssertEqual(
-      box.frame(at: 0, period: 1.0 / 120, material: 7).position.y, 300, "版 8 を置いた後も版 7 の位置")
-    XCTAssertEqual(box.frame(at: 0, period: 1.0 / 120, material: 7).limits.bottom, 1999 * 10)
-    XCTAssertEqual(box.frame(at: 0, period: 1.0 / 120, material: 8).position.y, 900)
+      box.frame(at: 0, material: 7).position.y, 300, "版 8 を置いた後も版 7 の位置")
+    XCTAssertEqual(box.frame(at: 0, material: 7).limits.bottom, 1999 * 10)
+    XCTAssertEqual(box.frame(at: 0, material: 8).position.y, 900)
     XCTAssertEqual(box.peek(at: 0).position.y, 900, "main は最新の位置を読む")
     XCTAssertEqual(
-      box.frame(at: 0, period: 1.0 / 120, material: 7).position.y, 900,
+      box.frame(at: 0, material: 7).position.y, 900,
       "一度追いついたら前の版の組は持たない")
     box.place(SIMD2(0, 400), forMaterial: 9)
     box.taken(material: 9)
     XCTAssertEqual(
-      box.frame(at: 0, period: 1.0 / 120, material: 8).position.y, 400, "引き取った版より前の組は手放す")
+      box.frame(at: 0, material: 8).position.y, 400, "引き取った版より前の組は手放す")
   }
 
   /// 打鍵で組み直すのは変わった行だけ——打鍵はその 1 行、Enter は分かれた 2 行、複数行の字下げは字下げした行で、見えて

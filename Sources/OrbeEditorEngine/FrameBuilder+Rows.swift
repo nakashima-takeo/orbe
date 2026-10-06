@@ -1,7 +1,7 @@
 import Foundation
 import OrbeEditorCore
 
-/// 見えている縦の並び——文書の行（本文・装備・選択・強調・行番号・印）と差し込んだ行の字。区画は描かない（view が載る）。
+/// 見えている縦の並び——文書の行（本文・装備・選択・強調・行番号・印）と差し込んだ行の字と区画（→ `FrameBuilder+Zones`）。
 extension FrameBuilder {
   /// 縦の並びで見えている項目を描く。
   func drawRows(
@@ -11,6 +11,7 @@ extension FrameBuilder {
     let g = c.g
     let rows = g.rows
     let bottom = g.scrollY + g.height - g.top
+    drawZones(source, c)
     drawInsertedLines(
       rows.blocks(from: g.scrollY, to: bottom, scale: g.scale), source, cache: cache, fonts: fonts,
       c)
@@ -26,7 +27,7 @@ extension FrameBuilder {
       let top = g.rowTop(item.row)
       let visible = visibleGlyphs(item.laid, c)
       drawDecor(item, rowTop: top, window: visible.offsets, c)
-      drawOverlays(item.overlay, item.laid, rowTop: top, c)
+      overlays.draw(item.overlay, item.laid, rowTop: top, c.pen)
       drawHighlights(item, source.material.highlights, rowTop: top, window: visible.offsets, c)
       let width = drawText(item, visible, baseline: top + baseline, roles: &roles, c)
       longestLine = max(longestLine, width)

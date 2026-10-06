@@ -132,16 +132,16 @@ struct RulerSpans {
 
 /// 縦横のスクロールバーと印・影。どれもこのコマの本文の位置（端を越えている間は端）から出す。
 extension FrameBuilder {
-  /// 上端の影（先頭の行が隠れている間。行番号の列から本文の区画の右端まで。区画のある面では区画の上の view が描くので
-  /// `top` が false）と、ミニマップの左の影（ミニマップがあり、本文が右に続くとき。本文の区画の上、影の帯の外側）。
-  /// 濃さは CSS のぼかし（σ 3 のガウスの縁）を 9 点で写した勾配で、画素の中心で引く。
+  /// 上端の影（先頭の行が隠れている間。行番号の列から本文の区画の右端まで。区画の上に重なる）と、ミニマップの左の影
+  /// （ミニマップがあり、本文が右に続くとき。本文の区画の上、影の帯の外側）。濃さは CSS のぼかし（σ 3 のガウスの縁）を
+  /// 9 点で写した勾配で、画素の中心で引く。
   func drawShadows(
-    _ layout: SurfaceLayout, lines: (first: CGFloat, visible: CGFloat), top: Bool,
-    clipsRight: Bool, _ c: Context
+    _ layout: SurfaceLayout, lines: (first: CGFloat, visible: CGFloat), clipsRight: Bool,
+    _ c: Context
   ) {
     let g = c.g
     let depth = 6.0
-    if top, lines.first > 0 {
+    if lines.first > 0 {
       let rows = Int((depth * g.scale).rounded())
       for y in 0..<rows {
         let strength = Self.shadowStrength((Double(y) + 0.5) / g.scale, length: depth)

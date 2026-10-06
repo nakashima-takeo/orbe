@@ -1,6 +1,6 @@
 import Foundation
 
-/// 面の縦の並び——文書の行と、行の境ごとの差し込みの塊（文書に無い行の列か、view を載せる区画）。行 ↔ y の式はここに
+/// 面の縦の並び——文書の行と、行の境ごとの差し込みの塊（文書に無い行の列か、区画）。行 ↔ y の式はここに
 /// だけあり、描画・スクロールの範囲・面のスクロール操作・当たり・IME の矩形・ドラッグ・俯瞰がどれもこれを呼ぶ。
 ///
 /// 文書の行 `r` の上端は `r × 行高 + （r より上の塊の高さの合計）`。塊は境の昇順に並び、高さの累積を持つので、行 ↔ y は
@@ -12,7 +12,7 @@ import Foundation
 ///
 /// y を返す式は `scale` を取り、装置の画素（pt × 倍率）でも同じ式で引ける（描画スレッドは px で、main は pt で引く）。
 struct RowLayout: Sendable {
-  /// 塊の中身。区画は載せる側の view の識別で、view そのものは main だけが持つ。
+  /// 塊の中身。区画は載せる側の区画の同一性で、区画そのものと絵は main だけが持つ（描く材料は材料の箱の `zones`）。
   enum Content: Sendable {
     case lines([String])
     case zone(ObjectIdentifier)
@@ -33,6 +33,8 @@ struct RowLayout: Sendable {
   private var prefix: [Double] = [0]
   /// 区画を持つか。
   private(set) var hasZones = false
+  /// 区画の同一性 → 塊の番号。
+  private var zoneBlocks: [ObjectIdentifier: Int] = [:]
   /// 作り変えるたびに進む（並びから作るキャッシュの鍵）。
   private(set) var version = 0
 
@@ -55,10 +57,11 @@ struct RowLayout: Sendable {
     prefix = [0]
     prefix.reserveCapacity(blocks.count + 1)
     for height in heights { prefix.append(prefix[prefix.count - 1] + height) }
-    hasZones = contents.contains {
-      if case .zone = $0 { return true }
-      return false
+    zoneBlocks = [:]
+    for (index, content) in contents.enumerated() {
+      if case .zone(let id) = content { zoneBlocks[id] = index }
     }
+    hasZones = !zoneBlocks.isEmpty
     version += 1
   }
 
@@ -224,10 +227,5 @@ struct RowLayout: Sendable {
   // MARK: - 区画
 
   /// 区画 `id` の塊の番号（無ければ nil）。
-  func block(ofZone id: ObjectIdentifier) -> Int? {
-    contents.firstIndex {
-      if case .zone(let zone) = $0 { return zone == id }
-      return false
-    }
-  }
+  func block(ofZone id: ObjectIdentifier) -> Int? { zoneBlocks[id] }
 }

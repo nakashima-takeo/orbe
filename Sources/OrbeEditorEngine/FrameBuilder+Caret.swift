@@ -46,18 +46,19 @@ struct CaretOverlays {
   private var markedNext = 0
   private let drop: (row: Int, offset: Int)?
 
-  /// 行頭 `start` の行から下へ引く。キャレットは点滅で見えているコマだけ。
-  init(_ material: FrameMaterial, caretVisible: Bool, text: TextRope, from start: Int) {
+  /// 場の選択とキャレット `caret`・落とす位置 `drop` を、行頭 `start` の行から下へ引く。キャレットは場が主で、点滅で
+  /// 見えているコマだけ。
+  init(_ caret: CaretMaterial, drop: Int?, caretVisible: Bool, text: TextRope, from start: Int) {
     self.text = text
-    selections = SelectionCursor(material.caret.selections, from: start)
-    carets = caretVisible ? material.caret.carets : []
+    selections = SelectionCursor(caret.selections, from: start)
+    carets = caretVisible && caret.focused ? caret.carets : []
     caretNext = Self.firstIndex(in: carets) { $0 >= start }
     lastRow = text.lineCount - 1
-    marked = material.caret.marked
+    marked = caret.marked
     if let ranges = marked?.ranges {
       markedNext = Self.firstIndex(in: ranges) { NSMaxRange($0) >= start }
     }
-    drop = material.drop.map { (row: text.row(containing: $0), offset: $0) }
+    self.drop = drop.map { (row: text.row(containing: $0), offset: $0) }
   }
 
   /// 行 `row`（行頭から次の行頭までの区間 `line`。最終行なら本文の終わりまで）に重ねるもの。
@@ -134,56 +135,90 @@ struct RowOverlays {
   }
 }
 
+/// 行に重ねるものを描く筆——場ごとの行頭の x と行の寸法、色。本文と入力欄が同じ描き方を使う。
+struct OverlayPen {
+  /// 行頭の x（px）。
+  var originX: Double
+  /// 行の高さと、行の上端から基線まで（px）。
+  var lineHeight: Double
+  var baseline: Double
+  var scale: Double
+  /// 改行を含む選択を行の右端から伸ばす幅（pt）。
+  var cell: Double
+  var caretSize: CGSize
+  /// 場が主で、面に焦点がある（選択の地の色）。
+  var focused: Bool
+  var selection: FrameColor
+  var inactiveSelection: FrameColor
+  var caret: FrameColor
+  /// IME が選んでいる文節の下線の色と、選んでいない文節の下線・属性の無い未確定の地。
+  var activeClause: FrameColor
+  var markedUnderline: FrameColor
+  var markedBackground: FrameColor
+}
+
+/// 行に重ねるものの図形——地（選択・未確定の文字の地。字の下）と、上（未確定の文字の下線・キャレット・落とす位置の印）。
+/// 本文と入力欄がそれぞれ持つ。
+struct OverlayShapes {
+  var under: [ShapeInstance] = []
+  var over: [ShapeInstance] = []
+
+  mutating func removeAll() {
+    under.removeAll(keepingCapacity: true)
+    over.removeAll(keepingCapacity: true)
+  }
+}
+
 /// 選択の地とキャレット。どちらの x も、字を描いた行の組版の位置と x の対応（`CaretMap`）から引くので、描いた字と食い違わ
 /// ない。
-extension FrameBuilder {
-  /// 行に重ねるものを描く（地は字の下、下線・キャレット・印は字の上の層へ積む）。
-  func drawOverlays(_ overlay: RowOverlays, _ line: LaidOutLine, rowTop: Double, _ c: Context) {
+extension OverlayShapes {
+  /// 行に重ねるものを積む。
+  mutating func draw(
+    _ overlay: RowOverlays, _ line: LaidOutLine, rowTop: Double, _ pen: OverlayPen
+  ) {
     if let content = overlay.content {
       for selection in overlay.selections {
-        drawSelection(selection, line, content: content, rowTop: rowTop, c)
+        drawSelection(selection, line, content: content, rowTop: rowTop, pen)
       }
       for range in overlay.marked {
-        drawMarked((range, overlay.appearance), line, content: content, rowTop: rowTop, c)
+        drawMarked((range, overlay.appearance), line, content: content, rowTop: rowTop, pen)
       }
     }
-    for column in overlay.carets { drawCaret(at: column, line, rowTop: rowTop, c) }
-    if let column = overlay.drop { drawDropIndicator(at: column, line, rowTop: rowTop, c) }
+    for column in overlay.carets { drawCaret(at: column, line, rowTop: rowTop, pen) }
+    if let column = overlay.drop { drawDropIndicator(at: column, line, rowTop: rowTop, pen) }
   }
 
   /// 選択と行の交わりを行の高さいっぱいの矩形で塗る。`content` は行の中身の区間（改行と行末の `\r` を除く）。右から左の
   /// 字を挟めば、論理の選択を見た目の区間ごとに分けて塗る。選択が行の改行を含めば、行の右端から半角 1 字ぶん伸ばす。
-  func drawSelection(
-    _ selection: NSRange, _ line: LaidOutLine, content: NSRange, rowTop: Double, _ c: Context
+  mutating func drawSelection(
+    _ selection: NSRange, _ line: LaidOutLine, content: NSRange, rowTop: Double, _ pen: OverlayPen
   ) {
     guard let carets = line.carets else { return }
-    let g = c.g
     let from = selection.location - content.location
     let to = NSMaxRange(selection) - content.location
     var segments = carets.segments(from: from, to: min(to, content.length))
-    if to > content.length { segments.append(line.width...(line.width + c.config.cell)) }
-    let originX = g.column - g.scrollX
-    let bottom = rowTop + g.lineHeight.rounded()
-    let ink = c.focused ? c.palette.selection : c.palette.inactiveSelection
+    if to > content.length { segments.append(line.width...(line.width + CGFloat(pen.cell))) }
+    let bottom = rowTop + pen.lineHeight.rounded()
+    let ink = pen.focused ? pen.selection : pen.inactiveSelection
     var painted: ClosedRange<Double>?
     for segment in segments.sorted(by: { $0.lowerBound < $1.lowerBound }) {
-      let left = (originX + Double(segment.lowerBound) * g.scale).rounded()
-      let right = (originX + Double(segment.upperBound) * g.scale).rounded()
+      let left = (pen.originX + Double(segment.lowerBound) * pen.scale).rounded()
+      let right = (pen.originX + Double(segment.upperBound) * pen.scale).rounded()
       if let last = painted, left <= last.upperBound {
         painted = last.lowerBound...max(last.upperBound, right)
         continue
       }
-      if let last = painted { paintSelection(last, rowTop: rowTop, bottom: bottom, ink) }
+      if let last = painted { paint(last, rowTop: rowTop, bottom: bottom, ink) }
       painted = left...right
     }
-    if let last = painted { paintSelection(last, rowTop: rowTop, bottom: bottom, ink) }
+    if let last = painted { paint(last, rowTop: rowTop, bottom: bottom, ink) }
   }
 
-  private func paintSelection(
+  private mutating func paint(
     _ x: ClosedRange<Double>, rowTop: Double, bottom: Double, _ ink: FrameColor
   ) {
     guard x.upperBound > x.lowerBound else { return }
-    underShapes.append(
+    under.append(
       ShapeInstance(
         rect: SIMD4(
           Float(x.lowerBound), Float(rowTop), Float(x.upperBound - x.lowerBound),
@@ -192,61 +227,59 @@ extension FrameBuilder {
   }
 
   /// キャレット——見え方の幅と高さで、行の中で縦に中央へ置き、x は装置の画素に揃える。
-  func drawCaret(at column: Int, _ line: LaidOutLine, rowTop: Double, _ c: Context) {
+  mutating func drawCaret(at column: Int, _ line: LaidOutLine, rowTop: Double, _ pen: OverlayPen) {
     guard let carets = line.carets else { return }
-    let g = c.g
-    let size = c.config.caretSize
-    let x = (g.column - g.scrollX + Double(carets.x(column)) * g.scale).rounded()
-    let width = max(1, (Double(size.width) * g.scale).rounded())
-    let height = (Double(size.height) * g.scale).rounded()
-    let top = (rowTop + (g.lineHeight - height) / 2).rounded()
-    overShapes.append(
+    let size = pen.caretSize
+    let x = (pen.originX + Double(carets.x(column)) * pen.scale).rounded()
+    let width = max(1, (Double(size.width) * pen.scale).rounded())
+    let height = (Double(size.height) * pen.scale).rounded()
+    let top = (rowTop + (pen.lineHeight - height) / 2).rounded()
+    over.append(
       ShapeInstance(
         rect: SIMD4(Float(x), Float(top), Float(width), Float(height)),
-        color: c.palette.caret.packed, radius: 0, kind: 0))
+        color: pen.caret.packed, radius: 0, kind: 0))
   }
 }
 
 /// 変換中の文字と落とす位置の印。どれも本文と同じ 1 コマに描く。
-extension FrameBuilder {
+extension OverlayShapes {
   /// 変換中の文字を行に描く。文節ごとに角の丸い下線（IME が選んでいる文節は本文の色、他は灰色。太さは同じで、文節の境を
   /// 少し空ける）。属性の無い文字列は既定の未確定の地で塗る。IME が下線や地の色を指定したら従う。
-  func drawMarked(
+  mutating func drawMarked(
     _ marked: (range: NSRange, appearance: MarkedAppearance), _ line: LaidOutLine,
-    content: NSRange, rowTop: Double, _ c: Context
+    content: NSRange, rowTop: Double, _ pen: OverlayPen
   ) {
     let (range, appearance) = marked
     guard let carets = line.carets else { return }
-    let g = c.g
-    let baseline = rowTop + (Double(c.config.baseline) * g.scale).rounded()
-    let bottom = rowTop + g.lineHeight.rounded()
+    let scale = pen.scale
+    let baseline = rowTop + pen.baseline
+    let bottom = rowTop + pen.lineHeight.rounded()
     if appearance.filled {
-      for (x0, x1) in extents(range, carets, content, c) {
-        underShapes.append(
+      for (x0, x1) in Self.extents(range, carets, content, pen) {
+        under.append(
           ShapeInstance(
             rect: SIMD4(Float(x0), Float(rowTop), Float(x1 - x0), Float(bottom - rowTop)),
-            color: c.palette.markedBackground.packed, radius: 0, kind: 0))
+            color: pen.markedBackground.packed, radius: 0, kind: 0))
       }
     }
-    let thickness = max(1, (1.5 * g.scale).rounded())
-    let inset = g.scale.rounded()
-    let top = (baseline + 1.5 * g.scale).rounded()
+    let thickness = max(1, (1.5 * scale).rounded())
+    let inset = scale.rounded()
+    let top = (baseline + 1.5 * scale).rounded()
     for clause in appearance.clauses {
       let ink =
-        clause.underline
-        ?? (clause.active ? c.palette.text.color : c.palette.markedUnderline).packed
+        clause.underline ?? (clause.active ? pen.activeClause : pen.markedUnderline).packed
       let clauseRange = NSRange(
         location: range.location + clause.range.location, length: clause.range.length)
-      for (x0, x1) in extents(clauseRange, carets, content, c) {
+      for (x0, x1) in Self.extents(clauseRange, carets, content, pen) {
         if let background = clause.background {
-          underShapes.append(
+          under.append(
             ShapeInstance(
               rect: SIMD4(Float(x0), Float(rowTop), Float(x1 - x0), Float(bottom - rowTop)),
               color: background, radius: 0, kind: 0))
         }
         let left = x0 + inset
         let right = max(left + thickness, x1 - inset)
-        overShapes.append(
+        over.append(
           ShapeInstance(
             rect: SIMD4(Float(left), Float(top), Float(right - left), Float(thickness)),
             color: ink, radius: Float(thickness / 2), kind: 0))
@@ -255,33 +288,33 @@ extension FrameBuilder {
   }
 
   /// 範囲と行の交わりの見た目の区間の左右の端（px。右から左の字を挟めば複数）。
-  private func extents(_ range: NSRange, _ carets: CaretMap, _ content: NSRange, _ c: Context)
-    -> [(Double, Double)]
-  {
+  private static func extents(
+    _ range: NSRange, _ carets: CaretMap, _ content: NSRange, _ pen: OverlayPen
+  ) -> [(Double, Double)] {
     let from = max(range.location, content.location) - content.location
     let to = min(NSMaxRange(range), NSMaxRange(content)) - content.location
     guard to > from else { return [] }
-    let originX = c.g.column - c.g.scrollX
     return carets.segments(from: from, to: to).map {
       (
-        (originX + Double($0.lowerBound) * c.g.scale).rounded(),
-        (originX + Double($0.upperBound) * c.g.scale).rounded()
+        (pen.originX + Double($0.lowerBound) * pen.scale).rounded(),
+        (pen.originX + Double($0.upperBound) * pen.scale).rounded()
       )
     }
   }
 
   /// 落とす位置の印——その位置に 2pt 幅の点線（VS Code の `dnd-target`）。色はキャレットの色。
-  func drawDropIndicator(at column: Int, _ line: LaidOutLine, rowTop: Double, _ c: Context) {
+  mutating func drawDropIndicator(
+    at column: Int, _ line: LaidOutLine, rowTop: Double, _ pen: OverlayPen
+  ) {
     guard let carets = line.carets else { return }
-    let g = c.g
-    let dot = max(1, (2 * g.scale).rounded())
-    let x = (g.column - g.scrollX + Double(carets.x(column)) * g.scale).rounded() - dot / 2
+    let dot = max(1, (2 * pen.scale).rounded())
+    let x = (pen.originX + Double(carets.x(column)) * pen.scale).rounded() - dot / 2
     var y = rowTop
-    while y < rowTop + g.lineHeight {
-      overShapes.append(
+    while y < rowTop + pen.lineHeight {
+      over.append(
         ShapeInstance(
-          rect: SIMD4(Float(x), Float(y), Float(dot), Float(min(dot, rowTop + g.lineHeight - y))),
-          color: c.palette.caret.packed, radius: 0, kind: 0))
+          rect: SIMD4(Float(x), Float(y), Float(dot), Float(min(dot, rowTop + pen.lineHeight - y))),
+          color: pen.caret.packed, radius: 0, kind: 0))
       y += dot * 2
     }
   }

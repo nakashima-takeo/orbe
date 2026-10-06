@@ -69,7 +69,11 @@ final class FakeTextSurface: TextSurface {
 
   func setRows(_ rows: SurfaceRows) {}
 
-  func remeasureZone(_ view: NSView) {}
+  func redrawZone(_ zone: SurfaceZone) {}
+
+  func replaceText(of field: ZoneTextField, with text: String) {}
+
+  func focus(_ field: ZoneTextField) {}
 
   func setPresentation(_ presentation: SurfacePresentation) {}
 

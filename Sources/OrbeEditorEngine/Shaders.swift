@@ -83,6 +83,75 @@ enum Shaders {
       return float4(in.color.rgb * a, a);
     }
 
+    // 区画の箱: 影 → 塗り → 枠線（内側）を 1 つの断片で重ねる。影は箱を縦に shadow_offset ずらした角丸の矩形を σ の
+    // ガウスでぼかした濃さ（直線の縁の erfc を角丸の距離に当てた近似）で、箱の内側には落とさない（CSS の box-shadow）。
+    struct Box {
+      float4 quad; float4 box; float radius; float stroke_width; float sigma; float shadow_offset;
+      uint fill; uint stroke; uint shadow; uint pad;
+    };
+    struct BoxOut {
+      float4 position [[position]];
+      float4 box [[flat]];
+      float4 params [[flat]];
+      float4 fill [[flat]];
+      float4 stroke [[flat]];
+      float4 shadow [[flat]];
+    };
+
+    vertex BoxOut box_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
+                             const device Box* boxes [[buffer(0)]],
+                             constant float2& viewport [[buffer(1)]]) {
+      Box b = boxes[iid];
+      float2 corner = float2(vid & 1, vid >> 1);
+      float2 px = b.quad.xy + corner * b.quad.zw;
+      BoxOut out;
+      out.position = float4(px.x / viewport.x * 2 - 1, 1 - px.y / viewport.y * 2, 0, 1);
+      out.box = b.box;
+      out.params = float4(b.radius, b.stroke_width, b.sigma, b.shadow_offset);
+      out.fill = unpack_unorm4x8_to_float(b.fill);
+      out.stroke = unpack_unorm4x8_to_float(b.stroke);
+      out.shadow = unpack_unorm4x8_to_float(b.shadow);
+      return out;
+    }
+
+    // Abramowitz–Stegun 7.1.26（誤差 1.5e-7）。
+    float erf_approx(float x) {
+      float s = sign(x);
+      float a = abs(x);
+      float t = 1.0 / (1.0 + 0.3275911 * a);
+      float y = 1.0 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t
+                        + 0.254829592) * t * exp(-a * a);
+      return s * y;
+    }
+
+    float round_box(float2 p, float2 center, float2 half_size, float r) {
+      float2 q = abs(p - center) - half_size + r;
+      return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+    }
+
+    fragment float4 box_fragment(BoxOut in [[stage_in]]) {
+      float2 p = in.position.xy;
+      float2 half_size = in.box.zw * 0.5;
+      float2 center = in.box.xy + half_size;
+      float r = min(in.params.x, min(half_size.x, half_size.y));
+      float d = round_box(p, center, half_size, r);
+      float inside = clamp(0.5 - d, 0.0, 1.0);
+      float4 color = float4(0.0);
+      if (in.params.z > 0.0 && in.shadow.a > 0.0) {
+        float ds = round_box(p, center + float2(0.0, in.params.w), half_size, r);
+        float a = 0.5 * (1.0 - erf_approx(ds / (in.params.z * 1.41421356))) * (1.0 - inside)
+          * in.shadow.a;
+        color = float4(in.shadow.rgb * a, a);
+      }
+      float fa = inside * in.fill.a;
+      color = float4(in.fill.rgb * fa, fa) + color * (1.0 - fa);
+      if (in.params.y > 0.0) {
+        float sa = inside * clamp(0.5 + d + in.params.y, 0.0, 1.0) * in.stroke.a;
+        color = float4(in.stroke.rgb * sa, sa) + color * (1.0 - sa);
+      }
+      return color;
+    }
+
     // ミニマップの字: 字形の表の明度 × 明るさの係数（切り捨て）を α にした役割の色、全体に不透明度。
     struct MinimapCell { uint packed; uint role; };
     struct MinimapUniforms { float2 origin; float2 cell; float2 glyph; float ratio; float opacity; };

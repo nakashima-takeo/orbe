@@ -19,29 +19,49 @@ import simd
 /// 中（両端を含む）なら、足さずにそのカーソルを外す（その後のドラッグは無い）。⌥ の押下は選択の上でも本文のドラッグの候補に
 /// しない。
 ///
-/// 押下・ドラッグ・離すは、押した点の行き先の編集の場（→ `SurfaceTarget`）で行う。
+/// 押下は、押した点の行き先（→ `SurfaceTarget`）で振り分ける。本文・行番号の列・区画の空きは本文の場、入力欄はその場で
+/// 選び（どちらも主をその場にする）、区画の選べる文は区画の文の選択（主を区画の文にする。ドラッグは同じ自動スクロールで
+/// 伸びる）、押せる場所は押下を数えて同じ押せる場所で離せば載せる側へ知らせる（主は変えない。選べる文に重なる押せる場所は、
+/// 4pt を越えてドラッグすれば選択になる）。
 @MainActor
 final class MouseSelection: NSObject {
   weak var surface: MetalTextSurface?
   /// 押して選んでいる場（押してから離すまで）。
-  private weak var site: EditingSite?
+  weak var site: EditingSite?
 
-  private enum Drag {
+  enum Drag {
     case text
     case numbers
     case link(URL, NSPoint)
     /// 選択の字の上を押した（本文のドラッグの候補）。離したらキャレットを置く位置と、押した位置（窓の座標）。
     case candidate(Int, NSPoint)
+    /// 区画の選べる文を選んでいる。
+    case zoneText
+    /// 押せる場所を押している。
+    case button(ZonePress)
   }
 
-  private enum Edge {
+  /// 押している押せる場所——区画・id・押した位置（窓の座標）と、重なる選べる文（まとまりと位置）。
+  struct ZonePress {
+    var zone: ObjectIdentifier
+    var id: AnyHashable
+    var down: NSPoint
+    var text: (AnyHashable, Int)?
+  }
+
+  enum Edge {
     case above(CGFloat)
     case below(CGFloat)
     case left(CGFloat)
     case right(CGFloat)
+
+    var isAbove: Bool {
+      if case .above = self { return true }
+      return false
+    }
   }
 
-  private var drag: Drag?
+  var drag: Drag?
   /// 押す前の他のカーソル（列の順）と、押して動かしている 1 本。
   private var others: [Cursor] = []
   private var moving: Cursor?
@@ -55,16 +75,56 @@ final class MouseSelection: NSObject {
   private var optionPress: OptionPress?
   /// 押したときの本文の版（押している間に本文が変われば、マウスの操作をそこで終える）。
   private var version: Int?
-  private var edge: Edge?
-  private var link: CADisplayLink?
-  private var lastFrame: CFTimeInterval?
+  var edge: Edge?
+  var link: CADisplayLink?
+  var lastFrame: CFTimeInterval?
   /// 最後のポインタの位置（view の座標）。
-  private var point = CGPoint.zero
-  private weak var view: NSView?
+  var point = CGPoint.zero
+  weak var view: NSView?
   /// 押してからこれ以上動けばドラッグ（URL を開かない・本文のドラッグを始める）。
   private static let clickSlop: CGFloat = 4
 
-  func mouseDown(_ event: NSEvent, in view: NSView, site: EditingSite) {
+  /// 押した。点の下の行き先 `target` で振り分ける（⌃ の押下は右クリックのメニューに任せる）。
+  func mouseDown(_ event: NSEvent, in view: NSView, target: SurfaceTarget) {
+    guard let surface else { return }
+    let control = event.modifierFlags.contains(.control)
+    switch target {
+    case .body, .zoneSpace:
+      if !control { surface.setPrimary(.body) }
+      mouseDown(event, in: view, site: surface.bodySite)
+    case .field(let site):
+      if !control, let field = site.field { surface.setPrimary(.field(field.id)) }
+      mouseDown(event, in: view, site: site)
+    case .zoneText(let entry, let text, let offset):
+      cancel()
+      optionPress = nil
+      guard !control else { return }
+      begin(event, in: view)
+      drag = .zoneText
+      surface.beginZoneSelection(
+        entry, text: text, offset: offset, clicks: event.clickCount,
+        extending: event.modifierFlags.contains(.shift))
+    case .button(let entry, let button):
+      cancel()
+      optionPress = nil
+      guard !control else { return }
+      begin(event, in: view)
+      let zone = ObjectIdentifier(entry.zone)
+      drag = .button(
+        ZonePress(
+          zone: zone, id: button.id, down: event.locationInWindow,
+          text: surface.zonePoint(point, in: zone).flatMap { entry.hits.text(at: $0) }))
+    }
+  }
+
+  /// 押下を受け始める（焦点を取る）。
+  private func begin(_ event: NSEvent, in view: NSView) {
+    point = view.convert(event.locationInWindow, from: nil)
+    self.view = view
+    view.window?.makeFirstResponder(view)
+  }
+
+  private func mouseDown(_ event: NSEvent, in view: NSView, site: EditingSite) {
     cancel()
     let previous = optionPress
     optionPress = nil
@@ -179,12 +239,24 @@ final class MouseSelection: NSObject {
 
   func mouseDragged(_ event: NSEvent, in view: NSView) {
     guard let drag, let surface else { return }
-    if case .link = drag { return }
-    if case .candidate(_, let down) = drag {
+    switch drag {
+    case .link: return
+    case .candidate(_, let down):
       guard Self.moved(event, from: down) > Self.clickSlop else { return }
       self.drag = nil
       surface.textView.beginTextDrag(with: event)
       return
+    case .button(let press):
+      guard Self.moved(event, from: press.down) > Self.clickSlop, let (text, offset) = press.text,
+        let entry = surface.zones[press.zone]
+      else { return }
+      self.drag = .zoneText
+      surface.beginZoneSelection(entry, text: text, offset: offset, clicks: 1, extending: false)
+      return dragZoneText(event, in: view)
+    case .zoneText:
+      return dragZoneText(event, in: view)
+    case .text, .numbers:
+      break
     }
     point = view.convert(event.locationInWindow, from: nil)
     let area = surface.surfaceLayout.text
@@ -208,11 +280,33 @@ final class MouseSelection: NSObject {
   /// 自動スクロールが回っているか。
   var isAutoscrolling: Bool { link != nil }
 
+  /// 区画の文の選択を点まで伸ばす。上下の外では自動スクロールする（区画は横に送らない）。
+  private func dragZoneText(_ event: NSEvent, in view: NSView) {
+    guard let surface else { return }
+    point = view.convert(event.locationInWindow, from: nil)
+    if point.y < surface.config.topInset {
+      autoscroll(.above(surface.config.topInset - point.y))
+    } else if point.y > view.bounds.height {
+      autoscroll(.below(point.y - view.bounds.height))
+    } else {
+      stopAutoscroll()
+      surface.extendZoneSelection(to: point)
+    }
+  }
+
   func mouseUp(_ event: NSEvent, in view: NSView) {
     stopAutoscroll()
     defer { drag = nil }
     if case .candidate(let offset, _) = drag {
       site?.editor.select(CursorList(Cursor(offset)), reveal: .minimal)
+      return
+    }
+    if case .button(let press) = drag, let surface {
+      let up = view.convert(event.locationInWindow, from: nil)
+      guard case .button(let entry, let button) = surface.target(at: up),
+        ObjectIdentifier(entry.zone) == press.zone, button.id == press.id
+      else { return }
+      surface.transact { entry.zone.zone(.pressed(press.id)) }
       return
     }
     guard case .link(let url, let down) = drag, let surface else { return }
@@ -235,25 +329,6 @@ final class MouseSelection: NSObject {
     moving = nil
   }
 
-  /// ポインタの形と URL の下線——行番号と印の列は矢印、本文は I ビーム、⌘ を押して URL の上なら指（面に焦点があるとき）。
-  /// ⌘ を押している間は本文の上のポインタの位置を面へ渡し、下線はその位置の下の URL に描画スレッドがそのコマの配置で
-  /// 引く。スクロールで URL の矩形が動くので、矩形は登録せずその場の当たりで決める。
-  func updatePointer(at windowPoint: NSPoint, flags: NSEvent.ModifierFlags, in view: NSView) {
-    guard let surface else { return }
-    let point = view.convert(windowPoint, from: nil)
-    let hit = view.bounds.contains(point) ? surface.hit(point) : nil
-    let armed = flags.contains(.command) && hit?.area == .text
-    surface.setLinkPointer(armed ? point : nil)
-    guard let hit else { return }
-    if hit.area != .text {
-      NSCursor.arrow.set()
-    } else if armed, surface.focused, surface.link(at: point) != nil {
-      NSCursor.pointingHand.set()
-    } else {
-      NSCursor.iBeam.set()
-    }
-  }
-
   // MARK: - 伸ばす
 
   /// 行を改行まで選ぶ（単位は行）。
@@ -273,7 +348,7 @@ final class MouseSelection: NSObject {
   }
 
   /// 点の下まで伸ばす。`lineEnd` を与えれば、点の行の行末（true）か行頭（false）まで。
-  private func extend(
+  func extend(
     to point: CGPoint, position: SIMD2<Double>? = nil, lineEnd: Bool? = nil, reveal: Reveal
   ) {
     guard let site, let drag, let moving, let content = site.currentContent,
@@ -291,80 +366,5 @@ final class MouseSelection: NSObject {
       self.moving = Self.extend(moving, to: hit, text)
     }
     place(reveal: reveal)
-  }
-
-  // MARK: - 自動スクロール
-
-  private func autoscroll(_ edge: Edge) {
-    self.edge = edge
-    guard link == nil, let view else { return }
-    lastFrame = nil
-    let link = view.displayLink(target: self, selector: #selector(step(_:)))
-    link.add(to: .main, forMode: .common)
-    self.link = link
-  }
-
-  private func stopAutoscroll() {
-    link?.invalidate()
-    link = nil
-    edge = nil
-  }
-
-  @objc private func step(_ link: CADisplayLink) {
-    frame(now: CACurrentMediaTime())
-  }
-
-  /// 前のコマからの経過時間ぶんスクロールし、上なら見えている上端の行の行頭、下なら見えている下端の行のポインタの桁（最終行が
-  /// 見えればその行末）、横ならポインタの行（左は行頭、右は行末）まで伸ばす。スクロールと選択は 1 つの取引で置く。
-  func frame(now: CFTimeInterval) {
-    guard let edge, let surface, let view else { return }
-    defer { lastFrame = now }
-    guard let lastFrame else { return }
-    let elapsed = CGFloat(now - lastFrame)
-    let (position, limits) = surface.scrollState(at: now)
-    var p = position
-    let lineHeight = surface.config.lineHeight
-    let fullWidth = 2 * surface.config.cell
-    let vertical = { (distance: CGFloat) in
-      let visible = view.bounds.height - surface.config.topInset
-      return Double(
-        DragScrollSpeed.speed(outside: distance / lineHeight, visible: visible / lineHeight)
-          * elapsed * lineHeight)
-    }
-    let horizontal = { (distance: CGFloat) in
-      Double(
-        DragScrollSpeed.speed(
-          outside: distance / fullWidth, visible: CGFloat(limits.viewport.x) / fullWidth)
-          * elapsed * fullWidth * 0.5)
-    }
-    switch edge {
-    case .above(let distance): p.y -= vertical(distance)
-    case .below(let distance): p.y += vertical(distance)
-    case .left(let distance): p.x -= horizontal(distance)
-    case .right(let distance): p.x += horizontal(distance)
-    }
-    p = simd_clamp(p, .zero, simd_max(limits.maximum, .zero))
-    let target: CGPoint
-    let lineEnd: Bool?
-    switch edge {
-    case .above:
-      target = CGPoint(x: point.x, y: surface.config.topInset)
-      lineEnd = false
-    case .below:
-      target = CGPoint(x: point.x, y: view.bounds.height - 0.5)
-      let lastRow = (site?.currentContent?.text.lineCount ?? 1) - 1
-      lineEnd = (site?.hit(target, position: p)?.row ?? lastRow) < lastRow ? nil : true
-    case .left:
-      target = point
-      lineEnd = false
-    case .right:
-      target = point
-      lineEnd = true
-    }
-    surface.inputScope {
-      surface.transact(scrollTo: p) {
-        extend(to: target, position: p, lineEnd: lineEnd, reveal: .none)
-      }
-    }
   }
 }

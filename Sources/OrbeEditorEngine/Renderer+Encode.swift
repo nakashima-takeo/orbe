@@ -7,6 +7,8 @@ import QuartzCore
 struct Pass {
   let pipelines: PipelineGate.Pipelines
   let atlas: GlyphAtlas
+  /// 区画の画像の地図の頁。
+  var images: [MTLTexture] = []
   /// 消す色。nil は透明（下の地を透かす）。
   var clear: MTLClearColor?
   var minimapSheet: MTLTexture?
@@ -51,6 +53,14 @@ final class InstanceWriter {
     }
   }
 
+  func boxes(_ items: [BoxInstance], _ encoder: MTLRenderCommandEncoder, _ pass: Pass) {
+    guard let start = upload(items) else { return }
+    encoder.setRenderPipelineState(pass.pipelines.box)
+    encoder.setVertexBuffer(buffer, offset: start, index: 0)
+    encoder.drawPrimitives(
+      type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: items.count)
+  }
+
   func shapes(_ items: [ShapeInstance], _ encoder: MTLRenderCommandEncoder, _ pass: Pass) {
     guard let start = upload(items) else { return }
     encoder.setRenderPipelineState(pass.pipelines.shape)
@@ -91,11 +101,13 @@ extension Renderer {
   }
 
   /// 1 コマの重ねる順（ここが唯一の置き場）。下から、本文の列に切り取って 選択の地・未確定の文字の地 → 強調の地 →
-  /// 行の装備（空白の丸点・URL の下線）→ 本文の字と長い行の「ほか N 字」→ 色付きの字（絵文字など）、行番号の列に
-  /// 切り取って 行番号 → git の印、本文の列に切り取って 未確定の文字の下線・キャレット・落とす位置の印、面の全体で 影（上端・
-  /// ミニマップの左）→ ミニマップ（字 → 装飾）→ 俯瞰の図形（縦スクロールバーの印 → 縁 → ミニマップの帯・縦横の
-  /// つまみ）。地は描かない（透明に消し、下の地を透かす）。ミニマップの装飾は先に画面外の 1 枚に描き、組として不透明度
-  /// .9 で重ねる（重なる装飾が組として 1 回だけ透ける）。
+  /// 行の装備（空白の丸点・URL の下線）→ 区画の箱（影 → 塗り → 枠線）→ 区画の画像 → 区画の文の選択の地 → 本文の字と
+  /// 長い行の「ほか N 字」と区画の字 → 色付きの字（絵文字など）、入力欄ごとにその矩形と本文の列の交わりに切り取って
+  /// 入力欄の選択と未確定の地 → 字 → 色付きの字 → 下線とキャレット、行番号の列に切り取って 行番号 → git の印、本文の
+  /// 列に切り取って 未確定の文字の下線・キャレット・落とす位置の印、面の全体で 影（上端・ミニマップの左）→ ミニマップ
+  /// （字 → 装飾）→ 俯瞰の図形（縦スクロールバーの印 → 縁 → ミニマップの帯・縦横のつまみ）。地は描かない（透明に消し、
+  /// 下の地を透かす）。ミニマップの装飾は先に画面外の 1 枚に描き、組として不透明度 .9 で重ねる（重なる装飾が組として
+  /// 1 回だけ透ける）。
   func encode(
     _ built: FrameBuilder, buffer: MTLBuffer, into texture: MTLTexture, _ pass: Pass,
     _ commands: MTLCommandBuffer
@@ -123,16 +135,26 @@ extension Renderer {
     var viewport = SIMD2<Float>(Float(texture.width), Float(texture.height))
     encoder.setVertexBytes(&viewport, length: MemoryLayout<SIMD2<Float>>.size, index: 1)
     encoder.setScissorRect(built.textScissor)
-    instances.shapes(built.underShapes, encoder, pass)
+    instances.shapes(built.overlays.under, encoder, pass)
     instances.shapes(built.highlightShapes, encoder, pass)
     instances.shapes(built.decorShapes, encoder, pass)
+    instances.boxes(built.zoneBoxes, encoder, pass)
+    instances.glyphs(built.zoneImages, pass.images, pass.pipelines.color, encoder)
+    instances.shapes(built.zoneSelectionShapes, encoder, pass)
     instances.glyphs(built.text, pass.atlas.monoPages, pass.pipelines.mono, encoder)
     instances.glyphs(built.color, pass.atlas.colorPages, pass.pipelines.color, encoder)
+    for field in built.fieldLayers {
+      encoder.setScissorRect(field.scissor)
+      instances.shapes(field.overlays.under, encoder, pass)
+      instances.glyphs(field.text, pass.atlas.monoPages, pass.pipelines.mono, encoder)
+      instances.glyphs(field.color, pass.atlas.colorPages, pass.pipelines.color, encoder)
+      instances.shapes(field.overlays.over, encoder, pass)
+    }
     encoder.setScissorRect(built.gutterScissor)
     instances.glyphs(built.gutter, pass.atlas.monoPages, pass.pipelines.mono, encoder)
     instances.shapes(built.shapes, encoder, pass)
     encoder.setScissorRect(built.textScissor)
-    instances.shapes(built.overShapes, encoder, pass)
+    instances.shapes(built.overlays.over, encoder, pass)
     let whole = MTLScissorRect(x: 0, y: 0, width: texture.width, height: texture.height)
     encoder.setScissorRect(whole)
     instances.shapes(built.shadowShapes, encoder, pass)
@@ -180,13 +202,14 @@ extension Renderer {
     }
   }
 
-  /// ミニマップを描く決まりごとを足す——字形の表（倍率ごとに 1 回作る）・装飾の 1 枚（ミニマップの大きさ。変われば作り
-  /// 直す）・字の色の表。
-  func minimapPass(_ slot: SurfaceSlot, _ material: FrameMaterial, _ pass: Pass) -> Pass {
+  /// 組んだコマを描く決まりごとを足す——区画の画像の地図の頁と、ミニマップの字形の表（倍率ごとに 1 回作る）・装飾の
+  /// 1 枚（ミニマップの大きさ。変われば作り直す）・字の色の表。
+  func framePass(_ slot: SurfaceSlot, _ material: FrameMaterial, _ pass: Pass) -> Pass {
+    var pass = pass
+    pass.images = slot.zones.images.pages
     let minimap = slot.builder.minimap
     guard !minimap.chunks.isEmpty || !minimap.decorations.isEmpty, let palette = material.palette
     else { return pass }
-    var pass = pass
     if slot.minimapSheet?.scale != minimap.scale {
       slot.minimapSheet = makeSheet(scale: minimap.scale, font: slot.config.font).map {
         (minimap.scale, $0)
@@ -260,7 +283,8 @@ extension Renderer {
     let built = slot.builder
     slot.build(
       material, scroll: slot.scroll.peek(at: CACurrentMediaTime()),
-      moment: (material.caret.showsCaret, CACurrentMediaTime()), target: ((width, height), atlas),
+      moment: (material.primaryCaret.showsCaret, CACurrentMediaTime()),
+      target: ((width, height), atlas),
       fonts: fonts)
     let widened = slot.scroll.measured(
       longestLine: built.longestLine, version: material.content?.version)
@@ -271,7 +295,7 @@ extension Renderer {
     else { return nil }
     encode(
       built, buffer: buffer, into: texture,
-      minimapPass(slot, material, Pass(pipelines: pipelines, atlas: atlas, clear: background)),
+      framePass(slot, material, Pass(pipelines: pipelines, atlas: atlas, clear: background)),
       commands)
     commands.commit()
     commands.waitUntilCompleted()

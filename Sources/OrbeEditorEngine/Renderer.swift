@@ -49,7 +49,7 @@ final class Renderer {
   func attach(
     id: Int, boxes: SurfaceBoxes, config: SurfaceConfig, notify: @escaping @Sendable () -> Void
   ) {
-    slots[id] = SurfaceSlot(id: id, boxes: boxes, config: config, notify: notify)
+    slots[id] = SurfaceSlot(id: id, boxes: boxes, config: config, device: device, notify: notify)
   }
 
   /// 面が閉じた。刻みを外し、組版のキャッシュと写しの最後の参照をここ（描画スレッド）で手放す。
@@ -130,7 +130,7 @@ final class Renderer {
       pause(slot, clock)
       return
     }
-    let caretVisible = material.caret.caretVisible(at: target)
+    let caretVisible = material.primaryCaret.caretVisible(at: target)
     let changed =
       material.revision != slot.drawnMaterial || slot.scroll.revision != slot.drawnScroll
       || slot.returning || slot.atlasDirty || slot.motion.due(at: target)
@@ -138,7 +138,9 @@ final class Renderer {
       slot.recorder.idle(at: CACurrentMediaTime())
       slot.idleTicks += 1
       if slot.idleTicks >= Self.idleTicksBeforePause {
-        pause(slot, clock, blinking: material.caret, after: target, fading: slot.motion.wakeAt)
+        pause(
+          slot, clock, blinking: material.primaryCaret, after: target,
+          fading: slot.motion.wakeAt)
       }
       return
     }
@@ -154,7 +156,8 @@ final class Renderer {
     }
     draw(slot, material, into: acquired, at: target, Pass(pipelines: pipelines, atlas: atlas))
     if !changed {
-      pause(slot, clock, blinking: material.caret, after: target, fading: slot.motion.wakeAt)
+      pause(
+        slot, clock, blinking: material.primaryCaret, after: target, fading: slot.motion.wakeAt)
     }
   }
 
@@ -164,10 +167,9 @@ final class Renderer {
     _ pass: Pass
   ) {
     let began = CACurrentMediaTime()
-    let caretVisible = material.caret.caretVisible(at: target)
+    let caretVisible = material.primaryCaret.caretVisible(at: target)
     let revealed = begin(slot, material)
-    let frame = slot.scroll.frame(
-      at: target, period: slot.clock?.period ?? 1.0 / 120, material: material.revision)
+    let frame = slot.scroll.frame(at: target, material: material.revision)
     let texture = acquired.texture
     slot.build(
       material, scroll: (frame.position, frame.limits), moment: (caretVisible, target),
@@ -176,7 +178,7 @@ final class Renderer {
       longestLine: slot.builder.longestLine, version: material.content?.version)
     guard let commands = queue.makeCommandBuffer(),
       let bufferIndex = encode(
-        slot.builder, into: texture, minimapPass(slot, material, pass), commands)
+        slot.builder, into: texture, framePass(slot, material, pass), commands)
     else {
       slot.owed = true
       return

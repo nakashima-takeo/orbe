@@ -32,7 +32,7 @@ final class SurfaceFlushTests: EngineTestCase {
     let material = surface.material.read()
     XCTAssertEqual(material.caret.selections, [NSRange(location: target, length: 3)])
     XCTAssertEqual(
-      surface.scroll.frame(at: 0, period: 1.0 / 120, material: material.revision).position.y,
+      surface.scroll.frame(at: 0, material: material.revision).position.y,
       Double(first) * Double(surface.config.lineHeight), accuracy: 1e-6, "同じ書き込みで位置も出る")
   }
 
@@ -93,7 +93,7 @@ final class SurfaceFlushTests: EngineTestCase {
     let surface = opened.surface
     let text = opened.document.text
     surface.flush()
-    let start = surface.scroll.frame(at: 0, period: 1.0 / 120, material: surface.material.revision)
+    let start = surface.scroll.frame(at: 0, material: surface.material.revision)
       .position.y
     func jump(to row: Int) -> Double {
       surface.selectedRange = NSRange(location: text.lineStart(row), length: 3)
@@ -108,14 +108,14 @@ final class SurfaceFlushTests: EngineTestCase {
     let second = jump(to: 400)
     XCTAssertNotEqual(first, second, "前提: 飛んだ先が違う")
     XCTAssertEqual(
-      surface.scroll.frame(at: 0, period: 1.0 / 120, material: taken.revision - 1).position.y,
+      surface.scroll.frame(at: 0, material: taken.revision - 1).position.y,
       start,
       "版 N より前の材料は飛ぶ前の位置")
     XCTAssertEqual(
-      surface.scroll.frame(at: 0, period: 1.0 / 120, material: taken.revision).position.y, first,
+      surface.scroll.frame(at: 0, material: taken.revision).position.y, first,
       "版 N の材料は 200 行を中央に見せる位置")
     XCTAssertEqual(
-      surface.scroll.frame(at: 0, period: 1.0 / 120, material: surface.material.revision).position
+      surface.scroll.frame(at: 0, material: surface.material.revision).position
         .y, second,
       "版 N+1 の材料は 400 行を中央に見せる位置")
   }

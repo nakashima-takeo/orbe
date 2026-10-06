@@ -187,7 +187,7 @@ struct CaretMaterial: Equatable, Sendable {
   var collapsed: [Int] = []
   /// 点滅の起点（`CACurrentMediaTime`）。キャレットが動くたびに置き直し、表示から始める。
   var epoch: Double = 0
-  /// 面に焦点がある（first responder で、窓が key）。無ければキャレットを描かず、選択の地は弱い色。
+  /// 場が主で、面に焦点がある（first responder で、窓が key）。無ければキャレットを描かず、選択の地は弱い色。
   var focused = false
   /// 点滅させるか（アクセシビリティの「点滅しない挿入ポイント」が有効なら、点滅せず描き続ける）。
   var blinks = true
@@ -212,6 +212,26 @@ struct CaretMaterial: Equatable, Sendable {
     let phase = (max(0, t - epoch) / Self.blinkInterval).rounded(.down) + 1
     return epoch + phase * Self.blinkInterval
   }
+}
+
+/// 入力欄の場の描く材料——写し・キャレットと選択・横の送り・見え方。main の取引が場の確定で置く。キャレットの `focused`
+/// は「入力欄が主で、面に焦点がある」。
+struct FieldMaterial: @unchecked Sendable {
+  var content: SurfaceContent
+  var caret: CaretMaterial
+  /// 横の送り（pt。入力欄の左端から隠れている幅）。
+  var scrollX: Double
+  var font: CTFont
+  var lineHeight: CGFloat
+  var palette: FieldPalette
+}
+
+/// 入力欄の外観で解いた色。
+struct FieldPalette: Equatable, Sendable {
+  var text: InkColor
+  var caret: FrameColor
+  var selection: FrameColor
+  var inactiveSelection: FrameColor
 }
 
 /// 取引が頼んだ横の「見えるところまで」。描画スレッドが区間の行を組んで x を引き、横の位置を寄せる——main は論理の位置
@@ -239,6 +259,13 @@ struct FrameMaterial: Sendable {
   var rows = RowLayout(lineHeight: 1)
   /// ミニマップを出すか（表示の構成）。
   var showsMinimap = true
+  /// 区画の描く材料（区画の同一性で引く。並びの塊の中身と同じ書き込みで置く）。
+  var zones: [ObjectIdentifier: ZoneMaterial] = [:]
+  /// 入力欄の場の描く材料（場の通し番号で引く）。
+  var fields: [Int: FieldMaterial] = [:]
+  /// 区画の文の選択の地（区画の文が主の間だけ）。
+  var zoneSelection: ZoneSelectionMaterial?
+  /// 本文の選択の地とキャレット。`focused` は「本文が主で、面に焦点がある」。
   var caret = CaretMaterial()
   /// まだ解いていないかもしれない横の「見えるところまで」（本文を変えて見せない取引は、古い区間を捨てる）。
   var reveal: HorizontalReveal?
@@ -264,6 +291,12 @@ struct FrameMaterial: Sendable {
   var revision = 0
 
   static let defaultSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+
+  /// 主の場のキャレット——点滅を決める（主が編集の場でなければ、焦点の無い本文のキャレット）。
+  var primaryCaret: CaretMaterial {
+    guard !caret.focused else { return caret }
+    return fields.values.first { $0.caret.focused }?.caret ?? caret
+  }
 
   /// 本文の編集を積む（描画スレッドが長く受け取らなければ、全部の行が変わったことにまとめる）。
   mutating func note(_ edit: RowEdit) {

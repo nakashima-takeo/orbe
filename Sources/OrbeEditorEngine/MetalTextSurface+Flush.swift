@@ -83,7 +83,6 @@ extension MetalTextSurface {
     }
     precondition(written == revision, "描く材料の箱を書くのは main の出す 1 か所だけ")
     wake()
-    zones?.placeViews()
   }
 
   /// main から見た今の位置と範囲——まだ出していないずらし・範囲・位置（取引の中で置いた位置を含む）を当てた値。

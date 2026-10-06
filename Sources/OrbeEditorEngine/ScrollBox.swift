@@ -8,11 +8,6 @@ import simd
 /// 前の材料に組む位置」として版ごとに残し、描画スレッドは引き取った材料の版に組む位置を描く——材料を引き取ってから位置を
 /// 読むまでに次の版が置かれても、引き取った版の位置で描く（新しい本文に古い位置・古い本文に新しい位置のコマを出さない）。
 /// 指の出来事は版を添えずにその場で当てる（いちばん新しい版の材料に組む位置が動く）。
-///
-/// 区画のある面（`sealing`）では、刻みごとの縦の位置と「戻りの途中か」を、刻みの番号（予定時刻を刻みの長さで丸めたもの）を
-/// 鍵にして、最初に読んだ側（描画スレッドのコマか、main の区画の view を動かす刻み）が封じる。同じ刻みでは両者が同じ値を
-/// 使い（区画の view が本文と同じ位置に置かれる）、封じた後に届いた指の出来事は次の刻みに出る。main が置く・ずらす・範囲を
-/// 変えると封じは解く（main はその周の終わりに view を置き直す）。
 final class ScrollBox: Sendable {
   /// 描画スレッドがコマの時刻で読んだもの。
   struct Frame: Sendable {
@@ -40,20 +35,7 @@ final class ScrollBox: Sendable {
     var baselines = 0
     /// 材料の版ごとに組む位置（版の昇順。描画スレッドがまだ引き取っていない版の分だけ）。
     var pairs: [Pair] = []
-    /// 刻みごとの位置を封じるか（区画のある面だけ）と、封じた刻み（新しい順に少しだけ）。
-    var sealing = false
-    var seals: [Seal] = []
   }
-
-  /// 刻み `tick` に封じた縦の位置と、戻りの途中か。
-  private struct Seal {
-    var tick: Int
-    var y: Double
-    var returning: Bool
-  }
-
-  /// 覚えておく封じの数。
-  private static let sealDepth = 4
 
   /// 版 `version` を置く直前に見せていた位置と範囲——`version` より前の材料に組む。
   private struct Pair {
@@ -84,7 +66,6 @@ final class ScrollBox: Sendable {
     state.withLock { s in
       Self.pair(&s, before: material)
       s.physics.place(p)
-      s.seals.removeAll()
       s.revision += 1
     }
   }
@@ -95,16 +76,7 @@ final class ScrollBox: Sendable {
     state.withLock { s in
       Self.pair(&s, before: material)
       s.physics.shift(by: dy)
-      s.seals.removeAll()
       s.revision += 1
-    }
-  }
-
-  /// 刻みごとの位置を封じるか（区画を持つ面だけ）。
-  func setSealing(_ sealing: Bool) {
-    state.withLock { s in
-      s.sealing = sealing
-      if !sealing { s.seals.removeAll() }
     }
   }
 
@@ -115,7 +87,6 @@ final class ScrollBox: Sendable {
       guard limits != s.physics.limits else { return }
       Self.pair(&s, before: material)
       s.physics.setLimits(limits)
-      s.seals.removeAll()
       s.revision += 1
     }
   }
@@ -192,52 +163,23 @@ final class ScrollBox: Sendable {
   /// 範囲の変化は、操作によるスクロールの状態の変化ではない（つまみを出さない）。
   var baselines: Int { state.withLock { $0.baselines } }
 
-  /// 描画スレッドがコマの時刻 `t`（刻みの長さ `period`）で読む。`material` はこのコマで描く材料の版。このコマで初めて
-  /// 入った出来事を引き取る。
-  func frame(at t: Double, period: Double, material: Int) -> Frame {
+  /// 描画スレッドがコマの時刻で読む。`material` はこのコマで描く材料の版。このコマで初めて入った出来事を引き取る。
+  func frame(at t: Double, material: Int) -> Frame {
     state.withLock { s in
-      let (position, returning) = Self.shown(&s, at: t, period: period)
+      s.physics.settle(at: t)
       let events = s.pendingEvents
       s.pendingEvents.removeAll(keepingCapacity: true)
       s.pairs.removeAll { $0.version <= material }
+      var position = s.physics.shown(at: t)
+      var limits = s.physics.limits
       if let pair = s.pairs.first {
-        return Frame(
-          position: pair.position, limits: pair.limits, returning: returning, events: events,
-          gesture: s.gesture, revision: s.revision)
+        position = pair.position
+        limits = pair.limits
       }
       return Frame(
-        position: position, limits: s.physics.limits, returning: returning, events: events,
+        position: position, limits: limits, returning: s.physics.isReturning, events: events,
         gesture: s.gesture, revision: s.revision)
     }
-  }
-
-  /// main が刻み `t`（刻みの長さ `period`）で読む——描画スレッドが同じ刻みのコマで描く縦の位置（区画の view を置く）。
-  /// 出来事は引き取らない（`events` は空）。
-  func sealed(at t: Double, period: Double) -> Frame {
-    state.withLock { s in
-      let (position, returning) = Self.shown(&s, at: t, period: period)
-      return Frame(
-        position: position, limits: s.physics.limits, returning: returning, events: [],
-        gesture: s.gesture, revision: s.revision)
-    }
-  }
-
-  /// 刻み `t` に見せる位置と戻りの途中か。封じる面では、その刻みに封じた縦の位置（無ければ今の値を封じる）。
-  private static func shown(_ s: inout State, at t: Double, period: Double) -> (
-    SIMD2<Double>, Bool
-  ) {
-    s.physics.settle(at: t)
-    var position = s.physics.shown(at: t)
-    guard s.sealing else { return (position, s.physics.isReturning) }
-    let tick = Int((t / period).rounded())
-    if let seal = s.seals.first(where: { $0.tick == tick }) {
-      position.y = seal.y
-      return (position, seal.returning)
-    }
-    let seal = Seal(tick: tick, y: position.y, returning: s.physics.isReturning)
-    s.seals.insert(seal, at: 0)
-    if s.seals.count > sealDepth { s.seals.removeLast() }
-    return (position, seal.returning)
   }
 
   /// 出来事を引き取らずに、今の位置を読む（撮影）。

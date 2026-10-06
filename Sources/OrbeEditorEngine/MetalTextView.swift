@@ -24,8 +24,6 @@ final class MetalTextView: TextSurfaceInputView {
   let pointer = MouseSelection()
   /// 俯瞰の押下・ドラッグ・ホバー。
   let overview = OverviewPointer()
-  /// 俯瞰の区画の押下を受ける子（区画の view の入れ物と影は、この下に置く）。
-  let overviewHits = OverviewHitView()
   /// 本文の場の入力の仕組みとの窓口。テストは偽の IME に差し替える。
   var textInputContext: NSTextInputContext? {
     get { surface?.bodySite.inputContext }
@@ -50,6 +48,7 @@ final class MetalTextView: TextSurfaceInputView {
     // ときの古い大きな drawable を面の外（隣のペイン）へはみ出させない。
     layerContentsPlacement = .topLeft
     clipsToBounds = true
+    let overviewHits = OverviewHitView()
     overviewHits.autoresizingMask = [.width, .height]
     addSubview(overviewHits)
     registerForDraggedTypes([.string, .fileURL])
@@ -250,9 +249,7 @@ final class MetalTextView: TextSurfaceInputView {
     guard let surface else { return }
     surface.input {
       if overview.mouseDown(at: point) { return }
-      switch surface.target(at: point) {
-      case .body: pointer.mouseDown(event, in: self, site: surface.bodySite)
-      }
+      pointer.mouseDown(event, in: self, target: surface.target(at: point))
     }
   }
 
@@ -307,9 +304,11 @@ final class MetalTextView: TextSurfaceInputView {
     hover(event, inside: false)
   }
 
+  /// 俯瞰の上のポインタと、区画の押せる場所のホバー。
   private func hover(_ event: NSEvent, inside: Bool) {
     let point = convert(event.locationInWindow, from: nil)
     surface?.inputScope { overview.pointerMoved(to: point, inside: inside) }
+    surface?.hover(at: inside ? point : nil)
   }
 
   /// 動きを減らす設定を俯瞰へ写す。

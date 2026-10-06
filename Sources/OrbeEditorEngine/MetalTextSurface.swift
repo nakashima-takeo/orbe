@@ -25,7 +25,7 @@ final class MetalTextSurface: TextSurface {
   let style: TextSurfaceStyle
   let textView = MetalTextView()
   /// 本文の場（文書）。
-  private(set) lazy var bodySite = EditingSite(surface: self, source: DocumentText(surface: self))
+  private(set) lazy var bodySite = EditingSite(surface: self, body: DocumentText(surface: self))
   let lineStops: LineStopsCache
 
   var view: NSView { textView }
@@ -37,7 +37,7 @@ final class MetalTextSurface: TextSurface {
   var viewport = TextViewport.empty
   /// 面の大きさ（pt）・倍率・描く色空間。
   var size = CGSize.zero
-  private var scale: CGFloat = 2
+  private(set) var scale: CGFloat = 2
   private(set) var space = FrameMaterial.defaultSpace
   private(set) var indentation = Indentation.fallback
   private(set) var lineBreak = LineBreak.lf
@@ -56,8 +56,18 @@ final class MetalTextSurface: TextSurface {
   var rows: RowLayout
   /// 表示の構成。
   var presentation = SurfacePresentation.code
-  /// 区画の view の置き場（区画のある間だけ）。
-  var zones: ZoneViews?
+  /// 置いている区画（区画の同一性で引く）と、絵を材料に写す係。
+  var zones: [ObjectIdentifier: ZoneEntry] = [:]
+  let painter = ZonePainter()
+  /// 入力欄の場（入力欄の id で引く）と、場に振る通し番号。
+  var fields: [AnyHashable: EditingSite] = [:]
+  var nextFieldSerial = 0
+  /// 主（→ `Primary`）と、主が区画の文の間の区画の選択。
+  var primary = Primary.body
+  var zoneSelection: ZoneTextSelection?
+  /// ポインタの下の押せる場所と、ホバーを知らせている最中か。
+  var hoveredButton: HoveredButton?
+  var hovering = false
   /// 面自身の入力の処理の入れ子の深さ（→ `inputScope`）。
   var inputDepth = 0
   /// 描画スレッドへ頼んだ横の「見えるところまで」の通し番号。
@@ -107,7 +117,12 @@ final class MetalTextSurface: TextSurface {
 
   var selectedRange: NSRange {
     get { editor.state.cursors.primary.selection }
-    set { editor.setSelection(newValue) }
+    set {
+      transact {
+        setPrimary(.body)
+        editor.setSelection(newValue)
+      }
+    }
   }
 
   var caretLocation: Int { editor.state.cursors.primary.position }
@@ -121,7 +136,7 @@ final class MetalTextSurface: TextSurface {
   }
 
   func commitMarkedText() {
-    editor.finishComposition(.commit)
+    primarySite?.editor.finishComposition(.commit)
   }
 
   /// 本文の丸ごとの置き換え（外部変更の差し替え）。通常の編集と同じく undo に載る。この面から始めた本文のドラッグの途中
@@ -211,6 +226,7 @@ final class MetalTextSurface: TextSurface {
     let palette = FramePalette(
       style: style, appearance: textView.effectiveAppearance, space: space, scale: scale)
     write { $0.palette = palette }
+    zonesAppearanceDidChange()
   }
 
   /// view の大きさ・倍率・描く色空間・見えているかが変わった。
@@ -252,7 +268,6 @@ final class MetalTextSurface: TextSurface {
   func wake() {
     let id = id
     RenderThread.shared.perform { $0.wake(id) }
-    zones?.startTicking()
   }
 
   // MARK: - 焦点と撮影
@@ -267,7 +282,10 @@ final class MetalTextSurface: TextSurface {
   /// 焦点（first responder で、窓が key）が変わりうる。変われば点滅を表示からやり直し、選択の地の色を替える。
   func updateFocus(_ focused: Bool) {
     guard focused != self.focused else { return }
-    transact { self.focused = focused }
+    transact {
+      self.focused = focused
+      zoneSelectionFocusDidChange()
+    }
   }
 
   /// キャレットを点滅させるか（アクセシビリティの「点滅しない挿入ポイント」の設定が変わった）。点滅しなければ、止まって

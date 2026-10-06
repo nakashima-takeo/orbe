@@ -215,7 +215,8 @@ final class SurfaceOverviewTests: EngineTestCase {
             caretVisible: false, pixels: Renderer.pixelSize(material),
             atlas: renderer.atlas(scale: material.scale, space: material.space),
             config: slot.config, minimapCells: slot.minimapCells, rulerRows: slot.rulerRows,
-            motion: OverviewMotion(), time: 0, baselines: 0, previousPlacement: nil),
+            motion: OverviewMotion(), time: 0, baselines: 0, previousPlacement: nil,
+            zones: slot.zones),
           cache: cache, fonts: renderer.fonts)
         let shapes = builder.overviewShapes + builder.shadowShapes
         return Built(

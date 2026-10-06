@@ -2,7 +2,8 @@ import AppKit
 
 /// 標準のセレクタ（NSStandardKeyBindingResponding）→ 編集のコマンドの表。割り当ては macOS のキー割り当てに任せ、意味は
 /// VS Code の同じ役のコマンドに合わせる（→ `EditCommands`）。`perform(#selector(...))` で呼ばれても効く。コマンドは主の
-/// 場の編集係が行う。スクロールだけのセレクタは編集の状態に触れず、面がスクロールの位置を置く。表に無いセレクタは AppKit の
+/// 場の編集係が行う。スクロールだけのセレクタは編集の状態に触れず、面がスクロールの位置を置く。主が区画の文の間は
+/// `copy:`・`selectAll:`・`cancelOperation:` だけが効き、ほかは何もしない（メニューでも無効）。表に無いセレクタは AppKit の
 /// 既定（responder chain で探し、無ければ警告音）。
 extension MetalTextView {
   /// コマンドは面自身の入力（打鍵の中で届けば打鍵の処理の終わり、メニューから届けばその場で出す）。
@@ -72,21 +73,31 @@ extension MetalTextView {
 
   // MARK: - スクロールだけ
 
-  override func scrollPageUp(_ sender: Any?) { surface?.inputScope { surface?.scrollPages(-1) } }
-  override func scrollPageDown(_ sender: Any?) { surface?.inputScope { surface?.scrollPages(1) } }
-  override func scrollLineUp(_ sender: Any?) { surface?.inputScope { surface?.scrollLines(-1) } }
-  override func scrollLineDown(_ sender: Any?) { surface?.inputScope { surface?.scrollLines(1) } }
+  /// スクロールだけのキー（主が区画の文の間は効かない）。
+  private func scroll(_ body: (MetalTextSurface) -> Void) {
+    guard let surface, surface.primary != .zoneText else { return }
+    surface.inputScope { body(surface) }
+  }
+
+  override func scrollPageUp(_ sender: Any?) { scroll { $0.scrollPages(-1) } }
+  override func scrollPageDown(_ sender: Any?) { scroll { $0.scrollPages(1) } }
+  override func scrollLineUp(_ sender: Any?) { scroll { $0.scrollLines(-1) } }
+  override func scrollLineDown(_ sender: Any?) { scroll { $0.scrollLines(1) } }
   override func scrollToBeginningOfDocument(_ sender: Any?) {
-    surface?.inputScope { surface?.scrollToDocumentEdge(end: false) }
+    scroll { $0.scrollToDocumentEdge(end: false) }
   }
   override func scrollToEndOfDocument(_ sender: Any?) {
-    surface?.inputScope { surface?.scrollToDocumentEdge(end: true) }
+    scroll { $0.scrollToDocumentEdge(end: true) }
   }
   override func centerSelectionInVisibleArea(_ sender: Any?) { run(.centerSelection) }
 
   // MARK: - 選択
 
-  override func selectAll(_ sender: Any?) { run(.selectAll) }
+  /// 全部を選ぶ（主が区画の文なら、そのまとまり全体）。
+  override func selectAll(_ sender: Any?) {
+    guard let surface, surface.primary == .zoneText else { return run(.selectAll) }
+    surface.inputScope { surface.selectAllZoneText() }
+  }
   override func selectLine(_ sender: Any?) { run(.selectLine) }
   override func selectParagraph(_ sender: Any?) { run(.selectLine) }
   override func selectWord(_ sender: Any?) { run(.selectWord) }
@@ -147,13 +158,14 @@ extension MetalTextView {
     surface?.inputScope { surface?.primarySite?.editor.undoCursors() }
   }
 
-  /// Esc——先に載せる側へ問い（検索バーを閉じる）、使われなければカーソルを 1 本に戻すか選択を解く。変換中（IME が
-  /// 使わなかった）は何もしない。
+  /// Esc——主が区画の文か入力欄なら本文を主にする。本文が主なら、先に載せる側へ問い（検索バーを閉じる）、使われなければ
+  /// カーソルを 1 本に戻すか選択を解く。変換中（IME が使わなかった）は何もしない。
   override func cancelOperation(_ sender: Any?) {
     guard !composing, let surface else { return }
     surface.inputScope {
+      guard surface.primary == .body else { return surface.setPrimary(.body) }
       if surface.host?.consumeEscape() == true { return }
-      surface.primarySite?.editor.perform(.cancel)
+      surface.editor.perform(.cancel)
     }
   }
 
@@ -197,8 +209,15 @@ extension MetalTextView {
 
 extension MetalTextView: NSMenuItemValidation {
   /// 変換中の取り消す・やり直すは、変換の取り消しとしていつも有効。コピー・カットはいつも有効（選択が空なら行を写す）。
-  /// ペーストは平文かファイルがあるときだけ。
+  /// ペーストは平文かファイルがあるときだけ。主が区画の文の間は、コピー（選択があるとき）と全部を選ぶだけが有効。
   func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+    if surface?.primary == .zoneText {
+      switch menuItem.action {
+      case #selector(copy(_:))?: return surface?.zoneSelectedText != nil
+      case #selector(selectAll(_:))?: return true
+      default: return false
+      }
+    }
     switch menuItem.action {
     case #selector(undo(_:))?: return composing || (undoManager?.canUndo ?? false)
     case #selector(redo(_:))?: return composing || (undoManager?.canRedo ?? false)

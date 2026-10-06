@@ -5,7 +5,8 @@ import simd
 
 /// 本文のドラッグ＆ドロップ（AppKit のドラッグ）。同じ面の中は移動（⌥ でコピー）、他の文書・他のアプリへはコピーで出し、
 /// 他のアプリの文字も受ける。Finder のファイルは載せる側へ「開く」を渡し、⇧ を押していればパスを入れる。落とす位置の印は
-/// 描く材料に置き、本文の上下の端の 1 行の帯の中では自動でスクロールする。
+/// 描く材料に置き、本文の上下の端の 1 行の帯の中では自動でスクロールする。区画の入力欄へ落とせば入力欄に入れ（コピー。
+/// 入力欄が主になる）、区画のほかの所（文・押せる場所・空き）へは落とせない。
 extension MetalTextView: NSDraggingSource {
   func draggingSession(
     _ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext
@@ -96,9 +97,17 @@ extension MetalTextView: NSDraggingSource {
         autoscrollDrop(at: point)
       }
       guard area == nil else { return showDrop(nil) }
-      let drop = dropPlan(sender)
-      showDrop(drop.indicator)
-      operation = drop.operation
+      switch surface.target(at: point) {
+      case .body:
+        let drop = dropPlan(sender, site: surface.bodySite)
+        showDrop(drop.indicator)
+        operation = drop.operation
+      case .field(let site):
+        showDrop(nil)
+        operation = dropPlan(sender, site: site).operation
+      case .button, .zoneText, .zoneSpace:
+        showDrop(nil)
+      }
     }
     return operation
   }
@@ -120,9 +129,20 @@ extension MetalTextView: NSDraggingSource {
   }
 
   private func performDrop(_ sender: NSDraggingInfo) -> Bool {
-    guard let surface, overview.area(at: convert(sender.draggingLocation, from: nil)) == nil,
-      let action = dropPlan(sender).action
-    else {
+    let point = convert(sender.draggingLocation, from: nil)
+    guard let surface, overview.area(at: point) == nil else {
+      showDrop(nil)
+      return false
+    }
+    let site: EditingSite
+    switch surface.target(at: point) {
+    case .body: site = surface.bodySite
+    case .field(let field): site = field
+    case .button, .zoneText, .zoneSpace:
+      showDrop(nil)
+      return false
+    }
+    guard let action = dropPlan(sender, site: site).action else {
       showDrop(nil)
       return false
     }
@@ -132,35 +152,39 @@ extension MetalTextView: NSDraggingSource {
       surface.host?.openFiles(urls)
     case .insertPaths(let urls, let offset):
       guard let host = surface.host else { return false }
-      insertDrop(host.insertionText(forFiles: urls), at: offset, moving: nil)
+      insertDrop(host.insertionText(forFiles: urls), at: offset, moving: nil, into: site)
     case .insert(let string, let offset, let moving):
-      insertDrop(string, at: offset, moving: moving)
+      insertDrop(string, at: offset, moving: moving, into: site)
     }
     return true
   }
 
-  /// 印を消す・焦点を取る・入れるを 1 つの取引で行う。
-  private func insertDrop(_ string: String, at offset: Int, moving: NSRange?) {
+  /// 印を消す・焦点を取る・落とした場を主にする・入れるを 1 つの取引で行う。
+  private func insertDrop(
+    _ string: String, at offset: Int, moving: NSRange?, into site: EditingSite
+  ) {
     guard let surface else { return }
     surface.input {
       showDrop(nil)
       window?.makeFirstResponder(self)
-      surface.bodySite.editor.perform(.drop(string, at: offset, moving: moving))
+      surface.setPrimary(site.field.map { .field($0.id) } ?? .body)
+      site.editor.perform(.drop(string, at: offset, moving: moving))
     }
   }
 
-  /// 板と修飾と当たりを読んで、落とすときの判断（`DropRules`）に渡す。
-  private func dropPlan(_ info: NSDraggingInfo) -> DropPlan {
+  /// 板と修飾と当たりを読んで、場 `site` へ落とすときの判断（`DropRules`）に渡す。運んでいる範囲は、本文の場へ落とす
+  /// ときだけ見る（入力欄へは写す）。
+  private func dropPlan(_ info: NSDraggingInfo, site: EditingSite) -> DropPlan {
     guard let surface else { return DropPlan() }
     let point = convert(info.draggingLocation, from: nil)
     let board = info.draggingPasteboard
-    let own = (info.draggingSource as? MetalTextView) === self
+    let own = (info.draggingSource as? MetalTextView) === self && site.isBody
     return DropRules.plan(
       DropSituation(
-        offset: surface.hit(point, position: surface.scrollPosition)?.offset,
+        offset: site.hit(point, position: surface.scrollPosition)?.offset,
         files: fileURLs(on: board), string: board.string(forType: .string),
         dragged: own ? draggedRange : nil,
-        copying: !info.draggingSourceOperationMask.contains(.move),
+        copying: !info.draggingSourceOperationMask.contains(.move) || !site.isBody,
         shift: NSEvent.modifierFlags.contains(.shift), opensFiles: surface.host != nil))
   }
 
