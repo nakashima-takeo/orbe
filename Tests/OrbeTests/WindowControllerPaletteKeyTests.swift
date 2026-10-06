@@ -119,9 +119,11 @@ final class WindowControllerPaletteKeyTests: OrbeTestCase {
     XCTAssertEqual(wc.presentedOverlay, .settingsPalette, "変換中の esc でパレットは閉じない")
   }
 
-  /// ⌫ は打った絞り込みの文字を先に消し、入力欄が空のときに押した ⌫ で、選んでいる行の上書きを外してグローバルの
-  /// 値に戻す。
-  func testBackspaceDeletesTheFilterTextFirstAndRevertsTheOverrideFromTheEmptyFilter() throws {
+  /// ⌫ は打った絞り込みの文字を先に消す。消し切ると選択はスコープ行へ戻るので、続く ⌫ は何も外さない。↑↓ で行を
+  /// 選び直し、入力欄が空のときに押した ⌫ で、その行の上書きを外してグローバルの値に戻す。
+  func testBackspaceDeletesTheFilterTextFirstAndRevertsTheOverrideOfTheRowChosenFromTheEmptyFilter()
+    throws
+  {
     let (wc, palette) = try openSettings()
     overrideFontSize(palette)
     press(0, "フ", to: wc)
@@ -134,8 +136,12 @@ final class WindowControllerPaletteKeyTests: OrbeTestCase {
     XCTAssertEqual(palette.render.query, "", "まず文字を消す")
     XCTAssertFalse(palette.render.rows[1].inherited, "文字を消した ⌫ では外さない")
 
-    palette.render.selected = 1
     backspace(wc)
-    XCTAssertTrue(palette.render.rows[1].inherited, "空の入力欄の ⌫ で外し、グローバルを継承する")
+    XCTAssertEqual(palette.render.selected, 0, "消し切ると選択はスコープ行へ戻る")
+    XCTAssertFalse(palette.render.rows[1].inherited, "消し切った直後の ⌫ は何も外さない")
+
+    down(wc)
+    backspace(wc)
+    XCTAssertTrue(palette.render.rows[1].inherited, "選び直した行の上書きを外し、グローバルを継承する")
   }
 }
