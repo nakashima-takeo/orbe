@@ -23,18 +23,31 @@ protocol ControlTaskTarget: AnyObject {
   func controlDeleteTask(taskId: Int) -> Result<Any, ControlError>
 }
 
-/// タスクの 5 動詞の dispatch。ここが見るのは params の在否と JSON の型（違反は -32602）だけで、値の検証と
+/// タスクの 5 動詞の解決。ハンドラが見るのは params の在否と JSON の型（違反は -32602）だけで、値の検証と
 /// 不変条件は `TaskStore`、workspace・呼び出し元タブ・worktree の解決は target が持つ。
 extension ControlServer {
-  func runTask(method: String, params: [String: Any], target: ControlTaskTarget)
-    -> Result<Any, ControlError>?
-  {
-    let p = TaskParams(params)
-    do throws(ControlError) {
-      switch method {
-      case "list_tasks":
-        return target.controlListTasks(workspaceId: try p.optionalInt("workspaceId"))
-      case "add_task":
+  /// 非該当は nil。target を `ControlTaskTarget` に絞っても `WindowedHandler` として渡せる。
+  func taskHandler(for method: String) -> (
+    (ControlTaskTarget, [String: Any]) -> Result<Any, ControlError>
+  )? {
+    guard let body = taskBody(for: method) else { return nil }
+    return { target, params in
+      do throws(ControlError) {
+        return try body(target, TaskParams(params))
+      } catch {
+        return .failure(error)
+      }
+    }
+  }
+
+  private func taskBody(for method: String) -> TaskBody? {
+    switch method {
+    case "list_tasks":
+      return { target, p throws(ControlError) in
+        target.controlListTasks(workspaceId: try p.optionalInt("workspaceId"))
+      }
+    case "add_task":
+      return { target, p throws(ControlError) in
         var draft = TaskDraft(title: try p.string("title"))
         if let status = try p.status() { draft.status = status }
         if let priority = try p.priority() { draft.priority = priority }
@@ -45,7 +58,9 @@ extension ControlServer {
         return target.controlAddTask(
           draft, workspaceId: try p.nullableInt("workspaceId"),
           callerTabId: try p.optionalInt("callerTabId"), worktree: try p.optionalString("worktree"))
-      case "update_task":
+      }
+    case "update_task":
+      return { target, p throws(ControlError) in
         let update = TaskUpdate(
           title: try p.optionalString("title"), status: try p.status(),
           priority: try p.priority(), due: try p.due(),
@@ -54,7 +69,9 @@ extension ControlServer {
         return target.controlUpdateTask(
           taskId: try p.int("taskId"), update, workspaceId: try p.nullableInt("workspaceId"),
           worktree: try p.nullableString("worktree"))
-      case "move_task":
+      }
+    case "move_task":
+      return { target, p throws(ControlError) in
         let taskId = try p.int("taskId")
         switch (try p.optionalInt("beforeTaskId"), try p.optionalInt("afterTaskId")) {
         case (let anchor?, nil):
@@ -65,16 +82,20 @@ extension ControlServer {
           throw ControlError(
             code: -32602, message: "pass exactly one of beforeTaskId / afterTaskId")
         }
-      case "delete_task":
-        return target.controlDeleteTask(taskId: try p.int("taskId"))
-      default:
-        return nil
       }
-    } catch {
-      return .failure(error)
+    case "delete_task":
+      return { target, p throws(ControlError) in
+        target.controlDeleteTask(taskId: try p.int("taskId"))
+      }
+    default:
+      return nil
     }
   }
 }
+
+private typealias TaskBody = (ControlTaskTarget, TaskParams) throws(ControlError) -> Result<
+  Any, ControlError
+>
 
 /// params の型検査。キーが無いことと `null` を区別する（`null` は「外す」）。
 private struct TaskParams {
