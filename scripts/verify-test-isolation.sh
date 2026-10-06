@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# `swift test` がユーザーの実環境（ghostty の user 設定・Orbe の state dir）へ書き込まないことを実証する。
-# CI には載せない。テスト隔離ハーネス（Tests/OrbeTests/TestIsolation.swift）を触る人が
+# `swift test` がユーザーの実環境（ghostty の user 設定・Orbe の state dir）へ書き込まず、ユーザーの一時ディレクトリと
+# /tmp に残骸を残さないことを実証する。
+# CI には載せない。テスト隔離ハーネス（Tests/OrbeTests/TestIsolation.swift・Tests/OrbeTestSupport/TestScratch.swift）を触る人が
 # 同じ検証を再発明しないために置く。
 #
 # 検出できるのは書き込み・新規作成だけ（atime は当てにならないので読み取りは測れない）。
@@ -32,6 +33,15 @@ WATCH=(
   "$HOME/.zshrc"
 )
 
+# ユーザーの一時ディレクトリ（Foundation の一時ディレクトリ。TMPDIR ではなく OS の設定から引かれる）と /tmp の直下。
+TMP_ROOTS=("$(getconf DARWIN_USER_TEMP_DIR)" /tmp/)
+
+tmp_snapshot() {  # -> stdout（直下の項目名）
+  for d in "${TMP_ROOTS[@]}"; do
+    ls -A "$d" | sed "s|^|$d|"
+  done | sort
+}
+
 snapshot() {  # -> stdout（パス・サイズ・mtime。不在ディレクトリは 1 行の印で表す）
   for d in "${WATCH[@]}"; do
     if [ -e "$d" ]; then
@@ -56,12 +66,15 @@ snapshot >"$WORK/before"
 echo "==> 実 HOME でビルド"
 swift build --package-path "$ROOT" --build-tests >/dev/null
 
+tmp_snapshot >"$WORK/tmp-before"
+
 echo "==> 偽ホームで swift test（1 回だけ）"
 set +e
 env HOME="$FAKE_HOME" XDG_CONFIG_HOME="$FAKE_HOME/.config" \
   swift test --package-path "$ROOT" --skip-build >"$WORK/test.log" 2>&1
 TEST_STATUS=$?
 set -e
+tmp_snapshot >"$WORK/tmp-after"
 if [ "$TEST_STATUS" -ne 0 ]; then
   cp "$WORK/test.log" "$KEPT_LOG"
   echo "NOTE: swift test は失敗した (exit $TEST_STATUS)。汚染判定は続行する。詳細: $KEPT_LOG"
@@ -90,7 +103,22 @@ else
   REAL_DIRT=1
 fi
 
-if [ "$FAKE_DIRT" != 0 ] || [ "$REAL_DIRT" != 0 ]; then
+# テストの作業ディレクトリはハーネス（TestScratch）が配って消す。増えた項目が残骸。
+# SwiftPM・コンパイラが自分で TMPDIR を読んで置く `TemporaryDirectory.*` と `*.lock` はテスト由来ではない。
+# 同時に走る他のプロセスが作ったものも混ざりうるので、DIRTY は名前で読み分ける。
+echo "==> 一時ディレクトリと /tmp の直下を突き合わせ"
+TMP_DIRT=0
+while IFS= read -r added; do
+  case "$(basename "$added")" in
+    TemporaryDirectory.* | *.lock) echo "NOTE: ツール由来（テスト由来ではない）: $added" ;;
+    *)
+      echo "DIRTY: 一時領域に残った: $added"
+      TMP_DIRT=1
+      ;;
+  esac
+done < <(comm -13 "$WORK/tmp-before" "$WORK/tmp-after")
+
+if [ "$FAKE_DIRT" != 0 ] || [ "$REAL_DIRT" != 0 ] || [ "$TMP_DIRT" != 0 ]; then
   echo "FAIL: swift test が実環境へ書き込んでいる"
   exit 1
 fi
@@ -105,5 +133,5 @@ if [ -z "$EXECUTED" ] || [ "$EXECUTED" -eq 0 ]; then
   exit 1
 fi
 
-echo "PASS: swift test（$EXECUTED 本）は ghostty の user 設定と Orbe の state dir を書き換えなかった"
+echo "PASS: swift test（$EXECUTED 本）は ghostty の user 設定と Orbe の state dir を書き換えず、一時領域に残骸を残さなかった"
 [ "$TEST_STATUS" -eq 0 ] || echo "（ただし swift test 自体は exit ${TEST_STATUS}。汚染判定とは独立）"
