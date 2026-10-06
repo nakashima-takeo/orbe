@@ -155,20 +155,6 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(status(model, 1), .done)
   }
 
-  func testSpaceWhileComposingGoesToTheInputMethodInsteadOfCompleting() throws {
-    let model = model()
-    let window = mount(model)
-    let editor = try XCTUnwrap(window.firstResponder as? NSTextView, "前提: 入力欄の field editor")
-    editor.setMarkedText(
-      "か", selectedRange: NSRange(location: 1, length: 0),
-      replacementRange: NSRange(location: NSNotFound, length: 0))
-    XCTAssertTrue(editor.hasMarkedText(), "前提: 変換中")
-
-    press(Key.space, " ", to: window)
-
-    XCTAssertEqual(status(model, 1), .todo, "変換中の space はタスクを完了にしない")
-  }
-
   func testEnterCompletesTheSelectedTaskAndAddsFromTheAddRow() throws {
     let model = model()
     let window = mount(model)

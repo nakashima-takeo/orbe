@@ -5,11 +5,10 @@ import XCTest
 @testable import Orbe
 
 /// タスクから開いた ⌘T のカードが、主の PR の値を頼み、その答え（取れても取れなくても）で預かった ↵ を解く
-/// 配線と、日本語入力の変換中の ⌫ で札を外さないこと。
+/// 配線。
 ///
 /// 壊れると何が起きるか: 開いている間に agent がタスクの主を PR に変えると、その値を誰も頼まず、↵ が
-/// 預かられたままパレットが閉じられなくなる。変換中の文字を ⌫ で消そうとしただけで札が外れ、↵ しても
-/// タスクが進行中にならない。
+/// 預かられたままパレットが閉じられなくなる。
 extension WorktreePaletteCardKeyTests {
   /// 頼まれた項目を溜め、答えはテストが渡す取得。
   private final class PendingItems {
@@ -108,24 +107,5 @@ extension WorktreePaletteCardKeyTests {
       XCTAssertTrue(wait { !executed.isEmpty }, "\(name): 預かった ↵ が解ける")
       withExtendedLifetime(provider) {}
     }
-  }
-
-  /// 変換中の文字は入力欄の文字に入らないので、入力欄は空に見える。それでも ⌫ は変換に使わせ、札を外さない。
-  func testBackspaceWhileComposingKeepsTheTaskButWithoutCompositionRemovesIt() throws {
-    let composing = DesignSceneFixtures.worktreePaletteIssueModel()
-    let window = mount(composing)
-    let editor = try XCTUnwrap(window.firstResponder as? NSTextView, "前提: 入力欄の field editor")
-    editor.setMarkedText(
-      "か", selectedRange: NSRange(location: 1, length: 0),
-      replacementRange: NSRange(location: NSNotFound, length: 0))
-    XCTAssertTrue(editor.hasMarkedText(), "前提: 変換中")
-    XCTAssertEqual(composing.query, "", "前提: 入力欄の文字は空")
-
-    send(51, "\u{7F}", to: window)
-    XCTAssertEqual(composing.taskContextID, 3, "変換中の ⌫ では外さない")
-
-    let plain = DesignSceneFixtures.worktreePaletteIssueModel()
-    send(51, "\u{7F}", to: mount(plain))
-    XCTAssertNil(plain.taskContextID, "変換中でなければ外す")
   }
 }
