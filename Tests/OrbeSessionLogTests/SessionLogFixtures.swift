@@ -1,4 +1,5 @@
 import Foundation
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeSessionLog
@@ -29,12 +30,10 @@ enum Fixture {
 }
 
 extension XCTestCase {
-  /// テスト専用ディレクトリの中のログファイル URL。ディレクトリはテスト終了時に消す。
+  /// 呼ぶたびに別のディレクトリに置くログファイル URL（テストの作業ディレクトリの下）。
   func tempLogFile(_ name: String = "agent-sessions.jsonl") throws -> URL {
-    let dir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-      .appendingPathComponent("orbe-sessionlog-\(UUID().uuidString)", isDirectory: true)
+    let dir = TestScratch.caseDir.appendingPathComponent(UUID().uuidString, isDirectory: true)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
     return dir.appendingPathComponent(name)
   }
 }

@@ -1,16 +1,17 @@
 import Foundation
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
 
-/// temp dir に作る実 git リポジトリ（初期コミット付き）。根のサービス・監視・観測のテストが共有する。
+/// テストの作業ディレクトリに作る実 git リポジトリ（初期コミット付き）。根のサービス・監視・観測のテストが共有する。
 /// `root` は根の正規形（`GitWorktreeRoot.normalizedPath`）で、タブの `groupKey` と同じ綴り。
 final class TempGitRepo {
   let dir: URL
   let root: String
 
   init(name: String = "orbe-repo") throws {
-    dir = FileManager.default.temporaryDirectory.appendingPathComponent(
+    dir = TestScratch.caseDir.appendingPathComponent(
       "\(name)-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     root = GitWorktreeRoot.normalizedPath(dir.path)
@@ -20,10 +21,6 @@ final class TempGitRepo {
     try write("a.txt", "one\n")
     XCTAssertTrue(git(["add", "-A"]).isSuccess)
     XCTAssertTrue(git(["commit", "-qm", "init"]).isSuccess)
-  }
-
-  func cleanup() {
-    try? FileManager.default.removeItem(at: dir)
   }
 
   @discardableResult

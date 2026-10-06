@@ -32,7 +32,6 @@ final class ProjectSearchArrowPerfTests: OrbeTestCase {
 
   private func host() throws -> Hosted {
     let repo = try TempGitRepo(name: "orbe-arrow-perf")
-    addTeardownBlock { repo.cleanup() }
     let body = EditorTypingPerfTests.swiftSource(bytes: 1_000_000)
     for index in 0..<Self.files {
       try repo.write(String(format: "f%02d.swift", index), "// needle\n" + body)

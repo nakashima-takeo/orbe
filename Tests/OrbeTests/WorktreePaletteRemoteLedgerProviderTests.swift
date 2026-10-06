@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -22,7 +23,7 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
   let mine = GitHubRepoName(nameWithOwner: "me/r")
 
   override func setUpWithError() throws {
-    let created = FileManager.default.temporaryDirectory
+    let created = TestScratch.caseDir
       .appendingPathComponent("orbe-ledger-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: created, withIntermediateDirectories: true)
     dir = URL(fileURLWithPath: String(cString: realpath(created.path, nil)))
@@ -37,10 +38,6 @@ final class WorktreePaletteRemoteLedgerProviderTests: OrbeTestCase {
     XCTAssertTrue(git(["add", "-A"]).isSuccess)
     XCTAssertTrue(git(["commit", "-qm", "init"]).isSuccess)
     try stageGh()
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: dir)
   }
 
   // MARK: - 正式名の問い合わせ

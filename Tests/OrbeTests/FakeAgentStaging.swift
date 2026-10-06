@@ -1,4 +1,5 @@
 import Foundation
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -19,7 +20,7 @@ extension OrbeTestCase {
   /// `AgentLauncher.init` が構築時に 1 回検出するので、**`startControlProcess()` より前に**呼ぶこと。
   /// `ShellPATH.shared` は `TestIsolation.beginCase` がテストごとに張り直すので戻しは要らない。
   func stageFakeAgent(_ command: String, body: String = "exec /bin/cat") throws -> FakeAgent {
-    let caseDir = try XCTUnwrap(TestIsolation.caseDir, "テスト専用ディレクトリが配られていない")
+    let caseDir = TestScratch.caseDir
     let dir = caseDir.appendingPathComponent("fake-bin", isDirectory: true)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let marker = "L4AGENT_" + String(format: "%08x", UInt32.random(in: 0...UInt32.max))

@@ -27,7 +27,6 @@ final class GitRunnerLaneTests: OrbeTestCase {
           pumpMainUntil({ self.hangReturned }, timeout: 60),
           "解放した hook の worktree add が返らないと、以後のテストが GitRunner.shared ごと詰まる")
       }
-      fixture.cleanup()
     }
   }
 

@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -12,7 +13,7 @@ final class GitHubCLIBranchFetchTests: OrbeTestCase {
   private var log: String!
 
   override func setUpWithError() throws {
-    dir = FileManager.default.temporaryDirectory
+    dir = TestScratch.caseDir
       .appendingPathComponent("orbe-gh-branch-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     log = dir.appendingPathComponent("lanes.log").path
@@ -40,10 +41,6 @@ final class GitHubCLIBranchFetchTests: OrbeTestCase {
     // 戻さない——`OrbeTestCase` が毎テスト `ShellPATH.shared` を張り直すので、申告制は残さない。
     let path = dir.path
     ShellPATH.shared = ShellPATH(probe: { path })
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: dir)
   }
 
   /// head ごとに 1 回ずつ `each` が返り、**失敗した head だけが `nil`** になる。

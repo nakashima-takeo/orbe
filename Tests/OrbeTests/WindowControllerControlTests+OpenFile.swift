@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -9,7 +10,7 @@ import XCTest
 /// 重要: 実 NSWindow に接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 extension WindowControllerControlTests {
   func testOpenFileShowsTheEditorAndFocusesTheTab() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let url = try caseFile("note.md", "# hi\n")
     let wc = try restore(
       activeWorkspace: 0,
@@ -42,7 +43,7 @@ extension WindowControllerControlTests {
   /// 一度も起きていない背景 workspace のタブ（前回開いていた文書を持つ）へ `open_file` すると、materialize の
   /// 復元に焦点を奪われず、要求したファイルが見える。
   func testOpenFileOnADormantTabKeepsTheRequestedDocumentActiveThroughRestore() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let a = try caseFile("a.txt", "a").resolvingSymlinksInPath()
     let c = try caseFile("c.txt", "c").resolvingSymlinksInPath()
     let wc = try restore(
@@ -89,7 +90,7 @@ extension WindowControllerControlTests {
     } else {
       XCTFail("開けないファイルは -32000")
     }
-    let binary = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("bin")
+    let binary = TestScratch.caseDir.appendingPathComponent("bin")
     try Data([0xff, 0xfe, 0xc3]).write(to: binary)
     if case .failure(let error) = wc.controlOpenFile(tabId: tabId, path: binary.path) {
       XCTAssertEqual(error.code, -32000)

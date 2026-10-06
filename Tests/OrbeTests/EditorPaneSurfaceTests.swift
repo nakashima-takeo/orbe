@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -18,7 +19,7 @@ final class EditorPaneSurfaceTests: OrbeTestCase {
   /// マウスのホイールの 1 目盛りで送る量が、NSScrollView の行送りと同じ。NSScrollView はアニメーションで送り、窓を
   /// 画面に出さないテストでは進み方が定まらないので、行送りの値で見る。
   func testWheelNotchMatchesNSScrollView() throws {
-    let tab = TerminalTab(cwd: try XCTUnwrap(TestIsolation.caseDir).path, editorSurfaces: surfaces)
+    let tab = TerminalTab(cwd: TestScratch.caseDir.path, editorSurfaces: surfaces)
     let window = hostEditor(tab, width: 900, height: 500)
     defer { window.contentView = nil }
     let document = try tab.editor.open(try caseFile("a.swift", lines(400)), as: .pinned)
@@ -41,7 +42,7 @@ final class EditorPaneSurfaceTests: OrbeTestCase {
   /// 面は 1 回の操作の編集を束で文書へ渡す。検索の一致は、その束（複数行の字下げ）とその undo を編集ごとに畳んで、
   /// 取り直しを待たずに本文の一致の位置に付いていく。壊れると、字下げや ⌘Z の後に一致の地が本文とずれて見える。
   func testSearchMatchesFollowTheBatchesOfTheSurface() throws {
-    let tab = TerminalTab(cwd: try XCTUnwrap(TestIsolation.caseDir).path, editorSurfaces: surfaces)
+    let tab = TerminalTab(cwd: TestScratch.caseDir.path, editorSurfaces: surfaces)
     let window = hostEditor(tab, width: 900, height: 500)
     defer { window.contentView = nil }
     let document = try tab.editor.open(try caseFile("a.swift", lines(30)), as: .pinned)

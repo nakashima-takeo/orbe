@@ -1,4 +1,5 @@
 import Foundation
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorCore
@@ -56,10 +57,9 @@ final class LineMarksTests: XCTestCase {
 
   /// 文書はハンクが届いたときと編集の後に印を面へ押し、同じ行の中の打鍵でも区間がその場で本文に追従する。
   func testDocumentPushesMarksToTheSurfaceAndKeepsThemInStepWithEdits() throws {
-    let dir = FileManager.default.temporaryDirectory
+    let dir = TestScratch.caseDir
       .appendingPathComponent("orbe-marks-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: dir) }
     let url = dir.appendingPathComponent("a.txt")
     try Data("a\nb\nc\n".utf8).write(to: url)
     let surface = FakeTextSurface(text: "a\nb\nc\n")

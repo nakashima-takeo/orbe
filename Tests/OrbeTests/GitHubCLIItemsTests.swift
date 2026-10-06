@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -12,12 +13,6 @@ import XCTest
 /// 応答は、問い合わせの別名を読んで GitHub と同じ形に組む（`respond`）。別名の付け方は実装の自由に残し、
 /// 「問い合わせたとおりに返ってきた応答を、その項目の値として読む」ことだけを固定する。
 final class GitHubCLIItemsTests: OrbeTestCase {
-  private var dir: URL?
-
-  override func tearDownWithError() throws {
-    if let dir { try? FileManager.default.removeItem(at: dir) }
-  }
-
   private func id(_ repo: String, _ number: Int) throws -> GitHubItemID {
     try XCTUnwrap(GitHubItemID(repo: repo, number: number))
   }
@@ -228,9 +223,8 @@ final class GitHubCLIItemsTests: OrbeTestCase {
 
   /// 決まった出力と終了コードを返す偽 `gh` を PATH に置き、呼ばれるたびに 1 行を記録させる。
   private func stageGh(stdout: Data, exit: Int32) throws -> URL {
-    let dir = FileManager.default.temporaryDirectory
+    let dir = TestScratch.caseDir
       .appendingPathComponent("orbe-gh-items-\(UUID().uuidString)")
-    self.dir = dir
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let body = dir.appendingPathComponent("body.json")
     try stdout.write(to: body)

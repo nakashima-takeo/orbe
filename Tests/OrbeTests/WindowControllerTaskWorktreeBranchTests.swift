@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -17,7 +18,7 @@ import XCTest
 final class WindowControllerTaskWorktreeBranchTests: OrbeTestCase {
   /// caseDir に 1 コミットのリポジトリを作り、そこで開いたタブを 1 枚持つ窓。
   private func launch(refFormat: String = "files") throws -> (WindowController, root: String) {
-    let root = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("repo").path
+    let root = TestScratch.caseDir.appendingPathComponent("repo").path
     try FileManager.default.createDirectory(atPath: root, withIntermediateDirectories: true)
     git(["init", "-q", "-b", "main", "--ref-format=\(refFormat)"], in: root)
     git(
@@ -112,8 +113,8 @@ final class WindowControllerTaskWorktreeBranchTests: OrbeTestCase {
     let (wc, root) = try launch()
     let task = try wc.taskStore.add(TaskDraft(title: "a", worktree: TaskWorktree(key: root)))
     git(["switch", "-q", "-c", "feat"], in: root)
-    let other = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("other").path
-    git(["init", "-q", "-b", "main", other], in: try XCTUnwrap(TestIsolation.caseDir).path)
+    let other = TestScratch.caseDir.appendingPathComponent("other").path
+    git(["init", "-q", "-b", "main", other], in: TestScratch.caseDir.path)
     git(
       [
         "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "--allow-empty",

@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import SwiftUI
 import XCTest
 
@@ -30,7 +31,7 @@ extension WorktreePaletteCardKeyTests {
 
   /// 1 コミットのリポジトリ（remote なし）を caseDir に作る。
   private func repository() throws -> String {
-    let dir = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("repo").path
+    let dir = TestScratch.caseDir.appendingPathComponent("repo").path
     try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
     for args in [
       ["init", "-q", "-b", "main"], ["config", "user.email", "t@example.com"],

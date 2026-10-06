@@ -85,6 +85,7 @@ NG の差し戻しは、期待・設計が変わるなら計画へ、承認済�
 `auto:implement-test` には、auto が定める差分・計画書（テスト自体が題材なら要求）に加え、`docs/testing/test-architecture.md` と `docs/testing/roadmap.md` を Read で読む指示を渡す。前者は層と横断方針、後者は実装済みの範囲を持つ。該当スライスの進捗が変われば作業者にロードマップも更新させる。
 
 - テストは XCTest を使い、`Tests/OrbeTests` では `OrbeTestCase` の隔離ハーネスを通す。
+- テストの作業ディレクトリは、どのターゲットでも `TestScratch.caseDir`（テストをまたぐものは `TestScratch.root` の下）。
 - ビルド・lint・format は `docs/guides/build.md` を Read で確かめる。`<wt>` の依存を用意してから `swift build --build-tests` を通し、書いたテストと変更に関係するクラスを「検証の分担」の形で回す。追加するテストは今回の振る舞いと既存の網から判断し、検分では仕様との対応と書かなかった理由を見る。
 
 テストの検分後、**完了条件を独立に確かめる Agent**（subagent_type=general-purpose、`model: opus`）を起動する。model は実行水準によらず opus に固定する。渡すのは完了条件・`<wt>`・検証に必要な上記文書の所在と「検証の分担」。実装者の成功申告や採用設計は渡さない。既存テスト・制御 API・ログ等から手段を選び（テストは完了条件が指すクラスを `--filter` で回す）、条件ごとに「合格 / 不合格 / 人の判定が必要」と、根拠・検証したコミットを返させる。検証用の使い捨てファイルは worktree 外の scratch に置かせ、成果物の修正は実装工程へ返す。

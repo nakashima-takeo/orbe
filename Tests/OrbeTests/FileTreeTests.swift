@@ -21,10 +21,6 @@ final class FileTreeTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["commit", "-qm", "tree"]).isSuccess)
   }
 
-  override func tearDownWithError() throws {
-    repo.cleanup()
-  }
-
   /// 名前を打って Enter。
   private func commit(_ tree: FileTree, _ name: String) -> Bool {
     tree.setNewName(name)
@@ -132,9 +128,6 @@ final class FileTreeTests: OrbeTestCase {
   func testUnreadableDirectoryStaysCollapsed() throws {
     let locked = repo.root + "/docs"
     try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked)
-    defer {
-      try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked)
-    }
     let tree = FileTree(root: repo.root)
     tree.isLive = true
 

@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -10,7 +11,7 @@ final class WorktreeCleanerTests: OrbeTestCase {
   private var cleaner: WorktreeCleaner!
 
   override func setUpWithError() throws {
-    dir = FileManager.default.temporaryDirectory
+    dir = TestScratch.caseDir
       .appendingPathComponent("orbe-cleaner-repo-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     XCTAssertTrue(git(["init", "-q", "-b", "main"]).isSuccess)
@@ -22,10 +23,6 @@ final class WorktreeCleanerTests: OrbeTestCase {
     repo = try open()
     cleaner = WorktreeCleaner(
       repo: repo, localization: LocalizationStore(language: .ja), prunablePaths: [])
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: dir)
   }
 
   /// **削除の直前に status をもう一度叩く。** 分類の後に汚れた worktree は消さず、

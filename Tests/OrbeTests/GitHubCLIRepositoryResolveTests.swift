@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -10,10 +11,6 @@ import XCTest
 /// 文字列で渡らないと、そのリポジトリでは問い合わせが失敗し続ける。
 final class GitHubCLIRepositoryResolveTests: OrbeTestCase {
   private var dir: URL?
-
-  override func tearDownWithError() throws {
-    if let dir { try? FileManager.default.removeItem(at: dir) }
-  }
 
   /// 実 gh の出力（2026-09 に実測）。
   private enum Output {
@@ -66,7 +63,7 @@ final class GitHubCLIRepositoryResolveTests: OrbeTestCase {
 
   /// 決まった出力と終了コードを返す偽 `gh` を PATH に置く。
   private func stageGh(stdout: String, exit: Int32) throws {
-    let dir = FileManager.default.temporaryDirectory
+    let dir = TestScratch.caseDir
       .appendingPathComponent("orbe-gh-resolve-\(UUID().uuidString)")
     self.dir = dir
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import SwiftUI
 import XCTest
 
@@ -18,7 +19,7 @@ extension DesignFlowSnapshotTests {
   func codeScene() throws -> EditorCodeFixtures.Scene {
     try XCTSkipIf(RenderThread.device == nil, "Metal の装置が無い環境では文書を開けない")
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
-    return try EditorCodeFixtures.scene(queriesRoot: queriesRoot)
+    return try EditorCodeFixtures.scene(queriesRoot: queriesRoot, in: TestScratch.caseDir)
   }
 
   /// 1 つの窓に載せたまま、手順ごとに撮る（名前と置き場は `flow` と同じ）。

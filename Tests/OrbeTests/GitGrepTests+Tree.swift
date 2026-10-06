@@ -1,4 +1,5 @@
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -62,7 +63,6 @@ extension GitGrepTests {
 
   func testAManagedRootSearchesTheWorkingTreeMinusWhatIsIgnoredOrExcluded() throws {
     let repo = try TempGitRepo()
-    addTeardownBlock { repo.cleanup() }
     let tree = try layTree(at: repo.root)
     try write(repo.root, "excluded.txt", "needle\n")
     try write(repo.root, ".git/info/exclude", "excluded.txt\n")
@@ -78,10 +78,9 @@ extension GitGrepTests {
 
   /// git 管理外の根でも同じ形で探し、`.gitignore` と既定の除外が効く。
   func testAnUnmanagedRootIsSearchedTheSameWay() throws {
-    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(
+    let dir = TestScratch.caseDir.appendingPathComponent(
       "orbe-plain-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
     let root = GitWorktreeRoot.normalizedPath(dir.path)
     let tree = try layTree(at: root)
 
@@ -91,7 +90,6 @@ extension GitGrepTests {
   /// 大小無視は ASCII の外にも効く——アプリの環境にロケールが無くても（Finder から起動したとき）。
   func testIgnoringCaseReachesBeyondAsciiWithoutALocaleInTheAppEnvironment() throws {
     let repo = try TempGitRepo()
-    addTeardownBlock { repo.cleanup() }
     try write(repo.root, "de.txt", "ÄRGER\n")
     let saved = ["LANG", "LC_ALL", "LC_CTYPE"].map { ($0, ProcessInfo.processInfo.environment[$0]) }
     for (key, _) in saved { unsetenv(key) }
@@ -107,7 +105,6 @@ extension GitGrepTests {
   /// 一致が無いのはエラーではない。ICU は通すが git（PCRE2）が断る式は、git の断った理由がエラーになる。
   func testNoMatchIsNotAnErrorButARefusedPatternIs() throws {
     let repo = try TempGitRepo()
-    addTeardownBlock { repo.cleanup() }
 
     let none = try grep(repo.root, SearchQuery(pattern: "absent"))
     XCTAssertEqual(none.paths, [])
@@ -123,7 +120,6 @@ extension GitGrepTests {
   /// ディスクの式も開いている文書（ICU）と同じく、単語の境界を Unicode で判定し、`$` を行末の `\r` の前で当てる。
   func testTheDiskMatchesWordBoundariesAndLineEndsLikeTheOpenDocuments() throws {
     let repo = try TempGitRepo()
-    addTeardownBlock { repo.cleanup() }
     try write(repo.root, "crlf.txt", "x foo\r\n")
     try write(repo.root, "accent.txt", "éfoo x\n")
     try write(repo.root, "plain.txt", "foo bar\n")

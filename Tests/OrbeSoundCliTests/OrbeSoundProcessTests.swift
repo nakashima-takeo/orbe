@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeSound
@@ -39,7 +40,7 @@ final class OrbeSoundProcessTests: XCTestCase {
   }
 
   private func tempPath(_ suffix: String) -> URL {
-    FileManager.default.temporaryDirectory
+    TestScratch.caseDir
       .appendingPathComponent("orbe-sound-cli-test-\(UUID().uuidString)\(suffix)")
   }
 
@@ -84,7 +85,6 @@ final class OrbeSoundProcessTests: XCTestCase {
   /// render はカタログ・scratch のどちらも WAV を書き、stdout にパスを出す（resolve の 2 経路）。
   func testRenderWritesAWavAndPrintsThePath() throws {
     let catalogOut = tempPath(".wav")
-    defer { try? FileManager.default.removeItem(at: catalogOut) }
     let catalog = try run(["render", "glass", "done", "--rate", "8000", "--out", catalogOut.path])
     XCTAssertEqual(catalog.status, 0)
     XCTAssertTrue(catalog.stdout.contains(catalogOut.path))
@@ -95,7 +95,6 @@ final class OrbeSoundProcessTests: XCTestCase {
       throw XCTSkip("scratch が空")
     }
     let scratchOut = tempPath(".wav")
-    defer { try? FileManager.default.removeItem(at: scratchOut) }
     let scratch = try run([
       "render", scratchName, "-", "--rate", "8000", "--out", scratchOut.path,
     ])
@@ -110,6 +109,8 @@ final class OrbeSoundProcessTests: XCTestCase {
     XCTAssertEqual(result.status, 0, result.stderr)
     let path = String(result.stdout.split(separator: " ").last ?? "")
       .trimmingCharacters(in: .whitespacesAndNewlines)
+    // 製品が選ぶ既定の置き場（ユーザーの一時ディレクトリ）を測るので、ハーネスの作業ディレクトリの外に
+    // 書かれる。ハーネスが消さないので自分で消す。
     defer { try? FileManager.default.removeItem(atPath: path) }
     XCTAssertTrue(path.hasSuffix("orbe-sound-glass-done.wav"), path)
     XCTAssertTrue(FileManager.default.fileExists(atPath: path), path)
@@ -136,7 +137,6 @@ final class OrbeSoundProcessTests: XCTestCase {
   /// board は引数を解釈して index.html のパスを出す（生成物の中身は BoardTests が持つ）。
   func testBoardParsesArgumentsAndPrintsTheIndexPath() throws {
     let dir = tempPath("")
-    defer { try? FileManager.default.removeItem(at: dir) }
     let result = try run(["board", "--out", dir.path, "--rate", "8000"])
     XCTAssertEqual(result.status, 0)
     XCTAssertTrue(

@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -95,7 +96,7 @@ final class FindInProjectTests: OrbeTestCase {
 
   private func hostWithDocument(_ text: String) throws -> Hosted {
     let tab = TerminalTab(
-      cwd: try XCTUnwrap(TestIsolation.caseDir).path,
+      cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900)
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }

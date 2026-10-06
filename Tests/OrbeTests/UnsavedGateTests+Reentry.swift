@@ -70,9 +70,6 @@ extension UnsavedGateTests {
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("s")))
     let sheet = try XCTUnwrap(window.attachedSheet)
     try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: repo.root)
-    defer {
-      try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: repo.root)
-    }
     window.endSheet(sheet, returnCode: .alertFirstButtonReturn)
 
     XCTAssertEqual(try String(contentsOf: repo.url("a.txt"), encoding: .utf8), "outside\n", "触れない")

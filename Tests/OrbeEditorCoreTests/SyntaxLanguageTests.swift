@@ -1,4 +1,5 @@
 import Foundation
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorCore
@@ -33,7 +34,7 @@ final class SyntaxLanguageTests: XCTestCase {
 
   func testMissingRootMeansNoColors() {
     XCTAssertNil(LanguageRegistry(queriesRoot: nil).rules(for: SyntaxLanguage.swift))
-    let empty = FileManager.default.temporaryDirectory.appendingPathComponent("orbe-no-queries")
+    let empty = TestScratch.caseDir.appendingPathComponent("orbe-no-queries")
     XCTAssertNil(LanguageRegistry(queriesRoot: empty).rules(for: SyntaxLanguage.swift))
   }
 }

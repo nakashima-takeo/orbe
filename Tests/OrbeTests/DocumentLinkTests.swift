@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -14,10 +15,6 @@ final class DocumentLinkTests: OrbeTestCase {
 
   override func setUpWithError() throws {
     repo = try TempGitRepo()
-  }
-
-  override func tearDownWithError() throws {
-    repo.cleanup()
   }
 
   private func session() -> EditorSession {
@@ -108,10 +105,9 @@ final class DocumentLinkTests: OrbeTestCase {
     weak var files = RootFiles.shared(for: repo.root)
     XCTAssertNotNil(files)
 
-    let outside = FileManager.default.temporaryDirectory.appendingPathComponent(
+    let outside = TestScratch.caseDir.appendingPathComponent(
       "orbe-outside-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: outside) }
     let other = outside.appendingPathComponent("n.txt")
     try Data("n\n".utf8).write(to: other)
     try session.open(other, as: .preview)
@@ -121,10 +117,9 @@ final class DocumentLinkTests: OrbeTestCase {
 
   /// 文書が属する根は文書の実体から解く（タブの根ではない）。管理外のファイルは baseline 無し。
   func testDocumentOutsideAnyRepositoryHasNoBaseline() throws {
-    let outside = FileManager.default.temporaryDirectory.appendingPathComponent(
+    let outside = TestScratch.caseDir.appendingPathComponent(
       "orbe-outside-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: outside) }
     let url = outside.appendingPathComponent("n.txt")
     try Data("n\n".utf8).write(to: url)
     let session = session()

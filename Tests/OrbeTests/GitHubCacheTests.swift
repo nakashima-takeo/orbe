@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -9,12 +10,6 @@ import XCTest
 /// 読む。疎通不能を未認証と読むと、PR を確かめないまま 0 件と読まれ、worktree の掃除が素通りする。
 @MainActor
 final class GitHubCacheTests: OrbeTestCase {
-  private var dir: URL?
-
-  override func tearDownWithError() throws {
-    if let dir { try? FileManager.default.removeItem(at: dir) }
-  }
-
   // MARK: - ブランチの PR の取得
 
   /// ブランチの PR は一覧の窓ではなく **worktree にあるブランチの名指し**で、open / closed の両方を、gh が
@@ -64,9 +59,8 @@ final class GitHubCacheTests: OrbeTestCase {
   /// 認証はネットに触らずに確かめる。GitHub に届かない（ネットを要する gh の呼び出しが落ちる）ときも、
   /// github.com の認証情報があれば使える。
   func testAuthProbeIsReadyOfflineWithGitHubDotComCredentials() throws {
-    let dir = FileManager.default.temporaryDirectory
+    let dir = TestScratch.caseDir
       .appendingPathComponent("orbe-gh-probe-\(UUID().uuidString)")
-    self.dir = dir
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     // オフラインの gh: github.com の認証情報を読むだけの呼び出しは通り、それ以外は落ちる。
     let script = """

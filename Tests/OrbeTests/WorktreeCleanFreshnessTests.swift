@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -8,10 +9,9 @@ import XCTest
 @MainActor
 final class WorktreeCleanFreshnessTests: OrbeTestCase {
   private var dir: URL!
-  private var remote: URL!
 
   override func setUpWithError() throws {
-    dir = FileManager.default.temporaryDirectory
+    dir = TestScratch.caseDir
       .appendingPathComponent("orbe-freshness-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     XCTAssertTrue(git(["init", "-q", "-b", "main"]).isSuccess)
@@ -21,11 +21,6 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
       toFile: dir.appendingPathComponent("a.txt").path, atomically: true, encoding: .utf8)
     XCTAssertTrue(git(["add", "-A"]).isSuccess)
     XCTAssertTrue(git(["commit", "-qm", "init"]).isSuccess)
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: dir)
-    if let remote { try? FileManager.default.removeItem(at: remote) }
   }
 
   // MARK: - prune の後にだけ分類する
@@ -201,7 +196,7 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
   /// `origin` を持ち、push 済みブランチの remote 側が消えている（prune で `[gone]` が立つ）形。
   /// origin は github.com ではないので gh レーンは `.notGitHub` に落ちる。
   private func makeGoneBranchWithRemote() throws {
-    remote = FileManager.default.temporaryDirectory
+    let remote = TestScratch.caseDir
       .appendingPathComponent("orbe-freshness-remote-\(UUID().uuidString)")
     XCTAssertTrue(
       GitRunner.shared.runSync(
@@ -236,7 +231,7 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
   /// 手元で再現するため）。`uploadpack` を眠るラッパーへ差し替えるだけなので、特別な transport も
   /// ネットワークも要らない。
   private func makeSlowRemote() throws {
-    remote = FileManager.default.temporaryDirectory
+    let remote = TestScratch.caseDir
       .appendingPathComponent("orbe-freshness-slow-\(UUID().uuidString)")
     XCTAssertTrue(
       GitRunner.shared.runSync(
