@@ -8,7 +8,7 @@ extension TaskPaletteModel {
   /// は確定の入口が捨てる——押し続けて次々に完了にする・タスクにしない）。
   func handleFieldKey(_ press: KeyPress, composing: Bool) -> KeyPress.Result {
     guard !composing else { return .ignored }
-    if Self.isBacktab(press) {
+    if press.key == .backtab {
       toggleTab()
       return .handled
     }
@@ -101,7 +101,7 @@ extension TaskPaletteModel {
   }
 
   private func handleDetailKey(_ press: KeyPress, _ stop: TaskDetailStop) -> KeyPress.Result {
-    if Self.isBacktab(press) { return .handled }
+    if press.key == .backtab { return .handled }
     switch press.key {
     case .upArrow: moveField(-1)
     case .downArrow: moveField(1)
@@ -137,7 +137,7 @@ extension TaskPaletteModel {
   /// 右の欄の項目。↵（期限の項目以外）・⌘L・⌘↵ は、行の「タスクにする」「結び付ける」「ブラウザで開く」と
   /// 同じ。
   private func handlePaneKey(_ press: KeyPress, _ stop: TaskGitHubPaneStop) -> KeyPress.Result {
-    if Self.isBacktab(press) { return .handled }
+    if press.key == .backtab { return .handled }
     switch press.key {
     case .upArrow: movePaneStop(-1)
     case .downArrow: movePaneStop(1)
@@ -169,7 +169,7 @@ extension TaskPaletteModel {
   /// 何もしない。
   func handleEditKey(_ press: KeyPress, composing: Bool) -> KeyPress.Result {
     guard !composing, let draft else { return .ignored }
-    if Self.isBacktab(press) { return .handled }
+    if press.key == .backtab { return .handled }
     switch press.key {
     case .escape: endEditing(commit: draft.isMultiline)
     case .return where press.modifiers.contains(.command):
@@ -186,9 +186,9 @@ extension TaskPaletteModel {
     press.modifiers.isDisjoint(with: [.command, .option, .control, .shift])
   }
 
-  /// ⌘⌫。⌫ は AppKit から DEL（U+007F）で届き、`KeyEquivalent.delete`（U+0008）とは一致しない。
+  /// ⌘⌫。
   private static func isCommandBackspace(_ press: KeyPress) -> Bool {
-    press.modifiers.contains(.command) && press.key.character == "\u{7F}"
+    press.modifiers.contains(.command) && press.key == .backspace
   }
 
   /// 結び付ける（⌘L）。
@@ -199,11 +199,6 @@ extension TaskPaletteModel {
 
   /// 修飾なしの ⌫。
   private static func isBackspace(_ press: KeyPress) -> Bool {
-    isUnmodified(press) && press.key.character == "\u{7F}"
-  }
-
-  /// ⇧⇥ は `.tab` ではなく AppKit の backtab 文字（U+0019）で届く。
-  private static func isBacktab(_ press: KeyPress) -> Bool {
-    press.key.character == "\u{19}"
+    isUnmodified(press) && press.key == .backspace
   }
 }

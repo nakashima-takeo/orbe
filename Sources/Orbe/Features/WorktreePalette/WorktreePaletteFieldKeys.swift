@@ -15,16 +15,11 @@ enum WorktreePaletteFieldKeys {
     }
   }
 
-  /// ⇧⇥ は `.tab` ではなく AppKit の backtab 文字（U+0019）で届く。拾わないと焦点が入力欄から逃げる。
-  private static func isBacktab(_ press: KeyPress) -> Bool {
-    press.key.character == "\u{19}"
-  }
-
   private static func list(_ press: KeyPress, _ model: WorktreePaletteModel, composing: Bool)
     -> KeyPress.Result
   {
     let locked = model.isLocked
-    if isBacktab(press) {
+    if press.key == .backtab {
       if !locked { model.cycleBase() }
       return .handled
     }
@@ -48,17 +43,16 @@ enum WorktreePaletteFieldKeys {
     return .handled
   }
 
-  /// 修飾なしの ⌫（AppKit から DEL（U+007F）で届く）。実機のキーは function 等の修飾を伴うことがあるので、
-  /// 修飾の集合が空かでは判定しない。
+  /// 修飾なしの ⌫。実機のキーは function 等の修飾を伴うことがあるので、修飾の集合が空かでは判定しない。
   private static func isBackspace(_ press: KeyPress) -> Bool {
-    press.key.character == "\u{7F}"
+    press.key == .backspace
       && press.modifiers.isDisjoint(with: [.command, .option, .control, .shift])
   }
 
   private static func basePicker(_ press: KeyPress, _ model: WorktreePaletteModel)
     -> KeyPress.Result
   {
-    if isBacktab(press) { return .handled }
+    if press.key == .backtab { return .handled }
     switch press.key {
     case .upArrow: model.basePicker?.move(-1)
     case .downArrow: model.basePicker?.move(1)
