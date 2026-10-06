@@ -76,7 +76,7 @@ public enum TestScratch {
     _ = fcntl(pipe.fileHandleForWriting.fileDescriptor, F_SETFD, FD_CLOEXEC)
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/bin/sh")
-    process.arguments = ["-c", #"read _; chmod -R u+w "$0" 2>/dev/null; rm -rf "$0""#, dir.path]
+    process.arguments = ["-c", #"read _; chmod -R u+rwx "$0" 2>/dev/null; rm -rf "$0""#, dir.path]
     process.standardInput = pipe
     process.standardOutput = FileHandle.nullDevice
     process.standardError = FileHandle.nullDevice
