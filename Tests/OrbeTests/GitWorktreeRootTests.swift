@@ -66,6 +66,15 @@ final class GitWorktreeRootTests: OrbeTestCase {
     XCTAssertNil(GitWorktreeRoot.locate(cwd: canonical("plain/sub")))
   }
 
+  /// 根の規則: git 管理外のパスの根は、そのパス自身の正準形。
+  func testRootOfAPathOutsideGitIsThePathItself() throws {
+    try mkdir("plain/sub")
+
+    XCTAssertEqual(
+      GitWorktreeRoot.root(of: dir.appendingPathComponent("plain/sub").path), canonical("plain/sub")
+    )
+  }
+
   /// 存在しないパス（消えた worktree のサブディレクトリ）は、存在する祖先まで上がって判定する。
   func testLocateClimbsThroughMissingPathComponents() throws {
     try mkdir("repo/.git")

@@ -17,19 +17,6 @@ extension TerminalTabTests {
     return root
   }
 
-  /// git 管理外は cwd 自身（正準形）。同じ場所を指す cwd の 2 枚は、書き方が違っても管理外でも連なる（Q1）。
-  func testGroupKeyFallsBackToCwdItselfOutsideGit() throws {
-    let plain = "/tmp/orbe-plain-\(UUID().uuidString)"
-    try FileManager.default.createDirectory(atPath: plain, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(atPath: plain) }
-
-    XCTAssertEqual(
-      TerminalTab(cwd: plain).groupKey, GitWorktreeRoot.normalizedPath(plain), "cwd 自身の正準形")
-    XCTAssertEqual(
-      TerminalTab(cwd: "/private" + plain).groupKey, TerminalTab(cwd: plain).groupKey,
-      "/private/tmp と /tmp は同じ場所＝同キー")
-  }
-
   /// 復元したタブは保存 cwd から同じ規則で導く（キーは永続しない）。
   func testRestoredTabDerivesGroupKeyFromSavedCwd() throws {
     let root = try gitRoot()
