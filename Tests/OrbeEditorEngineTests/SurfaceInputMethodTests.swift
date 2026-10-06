@@ -233,7 +233,8 @@ final class SurfaceInputMethodTests: EngineTestCase {
     let underline = Int((rowTop + (config.baseline * 2).rounded() + 3).rounded()) + 1
     let x = { (offset: Int) in
       Int(
-        ((column + opened.surface.editingEnvironment()!.geometry.x(ofColumn: offset, row: 0)) * 2)
+        ((column
+          + opened.surface.bodySite.editingEnvironment()!.geometry.x(ofColumn: offset, row: 0)) * 2)
           .rounded())
     }
     let image = try XCTUnwrap(opened.surface.snapshot())

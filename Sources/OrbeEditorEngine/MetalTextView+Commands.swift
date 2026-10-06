@@ -1,13 +1,13 @@
 import AppKit
 
 /// 標準のセレクタ（NSStandardKeyBindingResponding）→ 編集のコマンドの表。割り当ては macOS のキー割り当てに任せ、意味は
-/// VS Code の同じ役のコマンドに合わせる（→ `EditCommands`）。`perform(#selector(...))` で呼ばれても効く。スクロールだけの
-/// セレクタは編集の状態に触れず、面がスクロールの位置を置く。表に無いセレクタは AppKit の既定（responder chain で探し、
-/// 無ければ警告音）。
+/// VS Code の同じ役のコマンドに合わせる（→ `EditCommands`）。`perform(#selector(...))` で呼ばれても効く。コマンドは主の
+/// 場の編集係が行う。スクロールだけのセレクタは編集の状態に触れず、面がスクロールの位置を置く。表に無いセレクタは AppKit の
+/// 既定（responder chain で探し、無ければ警告音）。
 extension MetalTextView {
   /// コマンドは面自身の入力（打鍵の中で届けば打鍵の処理の終わり、メニューから届けばその場で出す）。
   private func run(_ command: EditCommand) {
-    surface?.inputScope { surface?.perform(command) }
+    surface?.inputScope { surface?.primarySite?.editor.perform(command) }
   }
 
   private func move(_ movement: Movement, _ extending: Bool = false) {
@@ -143,7 +143,9 @@ extension MetalTextView {
   @objc func selectHighlights(_ sender: Any?) { run(.selectAllOccurrences) }
   @objc func insertCursorAbove(_ sender: Any?) { run(.insertCursor(below: false)) }
   @objc func insertCursorBelow(_ sender: Any?) { run(.insertCursor(below: true)) }
-  @objc func cursorUndo(_ sender: Any?) { surface?.inputScope { surface?.editor.undoCursors() } }
+  @objc func cursorUndo(_ sender: Any?) {
+    surface?.inputScope { surface?.primarySite?.editor.undoCursors() }
+  }
 
   /// Esc——先に載せる側へ問い（検索バーを閉じる）、使われなければカーソルを 1 本に戻すか選択を解く。変換中（IME が
   /// 使わなかった）は何もしない。
@@ -151,7 +153,7 @@ extension MetalTextView {
     guard !composing, let surface else { return }
     surface.inputScope {
       if surface.host?.consumeEscape() == true { return }
-      surface.perform(.cancel)
+      surface.primarySite?.editor.perform(.cancel)
     }
   }
 
@@ -169,8 +171,8 @@ extension MetalTextView {
 
   // MARK: - undo
 
-  /// 面の undo の入れ物。Edit メニューの ⌘Z / ⌘⇧Z の有効・無効と、`undoManager` を読む部品がこれを見る。
-  override var undoManager: UndoManager? { surface?.editor.undoManager }
+  /// 主の場の undo の入れ物。Edit メニューの ⌘Z / ⌘⇧Z の有効・無効と、`undoManager` を読む部品がこれを見る。
+  override var undoManager: UndoManager? { surface?.primarySite?.editor.undoManager }
 
   /// Edit メニューの `undo:` が窓の既定の入れ物へ行かず面へ届くための中継。変換中（IME が ⌘Z を使わなかった）は変換を
   /// 取り消すだけで、undo の履歴に触れない。
@@ -189,7 +191,7 @@ extension MetalTextView {
   }
 
   private func cancelComposition() {
-    surface?.editor.finishComposition(.cancel)
+    surface?.primarySite?.editor.finishComposition(.cancel)
   }
 }
 

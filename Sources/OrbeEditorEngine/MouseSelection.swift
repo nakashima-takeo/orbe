@@ -18,9 +18,13 @@ import simd
 /// 1 回目の押下の前の列に、押した位置の語・行を足し直す。カーソルが 2 本以上で、足すはずのカーソルの動く端がどれかの選択の
 /// 中（両端を含む）なら、足さずにそのカーソルを外す（その後のドラッグは無い）。⌥ の押下は選択の上でも本文のドラッグの候補に
 /// しない。
+///
+/// 押下・ドラッグ・離すは、押した点の行き先の編集の場（→ `SurfaceTarget`）で行う。
 @MainActor
 final class MouseSelection: NSObject {
   weak var surface: MetalTextSurface?
+  /// 押して選んでいる場（押してから離すまで）。
+  private weak var site: EditingSite?
 
   private enum Drag {
     case text
@@ -60,7 +64,7 @@ final class MouseSelection: NSObject {
   /// 押してからこれ以上動けばドラッグ（URL を開かない・本文のドラッグを始める）。
   private static let clickSlop: CGFloat = 4
 
-  func mouseDown(_ event: NSEvent, in view: NSView) {
+  func mouseDown(_ event: NSEvent, in view: NSView, site: EditingSite) {
     cancel()
     let previous = optionPress
     optionPress = nil
@@ -68,9 +72,10 @@ final class MouseSelection: NSObject {
     let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
     guard !flags.contains(.control) else { return }
     point = view.convert(event.locationInWindow, from: nil)
-    guard let hit = surface.hit(point), hit.area != .marks, hit.area != .overview,
-      let text = surface.editingEnvironment()?.text
+    guard let hit = site.hit(point), hit.area != .marks, hit.area != .overview,
+      let text = site.editingEnvironment()?.text
     else { return }
+    self.site = site
     self.view = view
     view.window?.makeFirstResponder(view)
     if hit.area == .text, flags.intersection([.command, .shift, .option]) == .command,
@@ -79,7 +84,7 @@ final class MouseSelection: NSObject {
       drag = .link(url, event.locationInWindow)
       return
     }
-    let current = surface.editor.state.cursors
+    let current = site.editor.state.cursors
     let primary = current.primary
     let shift = flags.contains(.shift)
     let adds =
@@ -89,12 +94,12 @@ final class MouseSelection: NSObject {
     if hit.area == .text, event.clickCount == 1,
       flags.isDisjoint(with: [.shift, .command, .option]),
       selection.length > 0, hit.offset >= selection.location, hit.offset <= NSMaxRange(selection),
-      surface.character(at: point) != nil
+      site.character(at: point) != nil
     {
       drag = .candidate(hit.offset, event.locationInWindow)
       return
     }
-    version = surface.currentContent?.version
+    version = site.currentContent?.version
     let (cursor, reveal) = pressed(hit, clicks: event.clickCount, shift: shift, from: primary, text)
     guard adds else { return press(others: [], moving: cursor, reveal: reveal) }
     if event.clickCount == 1 || hit.area == .numbers {
@@ -155,7 +160,7 @@ final class MouseSelection: NSObject {
     drag = nil
     var remaining = cursors.all
     remaining.remove(at: index)
-    if let list = CursorList(remaining) { surface?.editor.select(list, reveal: .none) }
+    if let list = CursorList(remaining) { site?.editor.select(list, reveal: .none) }
     return true
   }
 
@@ -168,8 +173,8 @@ final class MouseSelection: NSObject {
 
   /// 他のカーソルと動かす 1 本を合わせて置く（重なればまとまる）。
   private func place(reveal: Reveal) {
-    guard let surface, let moving, let list = CursorList(others + [moving]) else { return }
-    surface.editor.select(list, reveal: reveal, of: NSRange(location: moving.position, length: 0))
+    guard let site, let moving, let list = CursorList(others + [moving]) else { return }
+    site.editor.select(list, reveal: reveal, of: NSRange(location: moving.position, length: 0))
   }
 
   func mouseDragged(_ event: NSEvent, in view: NSView) {
@@ -207,7 +212,7 @@ final class MouseSelection: NSObject {
     stopAutoscroll()
     defer { drag = nil }
     if case .candidate(let offset, _) = drag {
-      surface?.editor.select(CursorList(Cursor(offset)), reveal: .minimal)
+      site?.editor.select(CursorList(Cursor(offset)), reveal: .minimal)
       return
     }
     guard case .link(let url, let down) = drag, let surface else { return }
@@ -271,8 +276,8 @@ final class MouseSelection: NSObject {
   private func extend(
     to point: CGPoint, position: SIMD2<Double>? = nil, lineEnd: Bool? = nil, reveal: Reveal
   ) {
-    guard let surface, let drag, let moving, let content = surface.currentContent,
-      var hit = surface.hit(point, position: position)
+    guard let site, let drag, let moving, let content = site.currentContent,
+      var hit = site.hit(point, position: position)
     else { return }
     guard content.version == version else { return cancel() }
     let text = content.text
@@ -347,8 +352,8 @@ final class MouseSelection: NSObject {
       lineEnd = false
     case .below:
       target = CGPoint(x: point.x, y: view.bounds.height - 0.5)
-      let lastRow = (surface.currentContent?.text.lineCount ?? 1) - 1
-      lineEnd = (surface.hit(target, position: p)?.row ?? lastRow) < lastRow ? nil : true
+      let lastRow = (site?.currentContent?.text.lineCount ?? 1) - 1
+      lineEnd = (site?.hit(target, position: p)?.row ?? lastRow) < lastRow ? nil : true
     case .left:
       target = point
       lineEnd = false

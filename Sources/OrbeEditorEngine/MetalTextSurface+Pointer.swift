@@ -20,7 +20,7 @@ extension MetalTextSurface {
   /// 行・字に当たる。差し込んだ行と区画の上は次の文書の行の行頭（最終行の後の塊の上は本文の終わり）に当たる。`position` は
   /// スクロールの位置（省けば今の位置）。
   func hit(_ point: CGPoint, position: SIMD2<Double>? = nil) -> PointerHit? {
-    guard let env = editingEnvironment() else { return nil }
+    guard let env = bodySite.editingEnvironment() else { return nil }
     let text = env.text
     let p = position ?? scrollPosition
     let column = config.columnWidth(lineCount: text.lineCount)

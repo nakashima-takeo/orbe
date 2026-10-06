@@ -1,8 +1,8 @@
 import AppKit
 import OrbeEditorCore
 
-/// コピー・カット・ペースト（VS Code の既定）、サービス、右クリックのメニュー。どれも IME 以外の入口なので、先に変換を
-/// 確定してから動く。
+/// コピー・カット・ペースト（VS Code の既定）、サービス、右クリックのメニュー。どれも主の場で動き、IME 以外の入口なので、
+/// 先に変換を確定してから動く。
 extension MetalTextView {
   /// 行ごと写した印（Orbe の型。中身は空）。
   static let entireLineType = NSPasteboard.PasteboardType("dev.orbe.editor.line")
@@ -23,22 +23,22 @@ extension MetalTextView {
   @objc func cut(_ sender: Any?) {
     surface?.input {
       writeCopy()
-      surface?.perform(.cut)
+      surface?.primarySite?.editor.perform(.cut)
     }
   }
 
   /// 平文を貼る（Finder でコピーしたファイルならパス）。改行は文書の作法へ揃え、行ごと写した文字列は条件が揃えば行の上へ
   /// 入れ、写した断片か行の数がカーソルの数と同じなら 1 つずつ配る。RTF と HTML は読まない。
   @objc func paste(_ sender: Any?) {
-    guard let surface else { return }
+    guard let surface, let editor = surface.primarySite?.editor else { return }
     surface.input {
-      surface.editor.finishComposition(.commit)
+      editor.finishComposition(.commit)
       if let host = surface.host, let urls = fileURLs(on: pasteboard) {
-        surface.perform(.paste(host.insertionText(forFiles: urls), entireLine: false))
+        editor.perform(.paste(host.insertionText(forFiles: urls), entireLine: false))
         return
       }
       guard let string = pasteboard.string(forType: .string) else { return }
-      surface.perform(
+      editor.perform(
         .paste(
           string, entireLine: pasteboard.availableType(from: [Self.entireLineType]) != nil,
           pieces: pasteboard.propertyList(forType: Self.piecesType) as? [String]))
@@ -56,11 +56,11 @@ extension MetalTextView {
   }
 
   private func writeCopy() {
-    guard let surface else { return }
-    surface.editor.finishComposition(.commit)
-    guard let content = surface.currentContent else { return }
+    guard let surface, let site = surface.primarySite else { return }
+    site.editor.finishComposition(.commit)
+    guard let content = site.currentContent else { return }
     let copied = ClipboardText.copy(
-      surface.editor.state.cursors, content.text, lineBreak: surface.lineBreak)
+      site.editor.state.cursors, content.text, lineBreak: surface.lineBreak)
     let html = copied.range.flatMap {
       HTMLCopy.html(content.text, $0, roles: content.roles, style: surface.htmlStyle())
     }
@@ -92,7 +92,7 @@ extension MetalTextView {
     forSendType sendType: NSPasteboard.PasteboardType?,
     returnType: NSPasteboard.PasteboardType?
   ) -> Any? {
-    let selection = surface?.editor.state.cursors.primary.selection.length ?? 0
+    let selection = surface?.primarySite?.editor.state.cursors.primary.selection.length ?? 0
     let sends = sendType == nil || (sendType == .string && selection > 0)
     let returns = returnType == nil || returnType == .string
     guard sends, returns, sendType != nil || returnType != nil else {
@@ -110,15 +110,16 @@ extension MetalTextView {
       overview.area(at: convert(event.locationInWindow, from: nil)) == nil
     else { return nil }
     surface.input {
-      surface.editor.finishComposition(.commit)
+      surface.primarySite?.editor.finishComposition(.commit)
       window?.makeFirstResponder(self)
       let point = convert(event.locationInWindow, from: nil)
-      guard let hit = surface.hit(point), hit.area == .text else { return }
-      let selection = surface.editor.state.cursors.primary.selection
+      let site = surface.bodySite
+      guard let hit = site.hit(point), hit.area == .text else { return }
+      let selection = site.editor.state.cursors.primary.selection
       let inside =
         selection.length > 0 && hit.offset >= selection.location
         && hit.offset <= NSMaxRange(selection)
-      if !inside { surface.editor.select(CursorList(Cursor(hit.offset)), reveal: .none) }
+      if !inside { site.editor.select(CursorList(Cursor(hit.offset)), reveal: .none) }
     }
     let menu = host.contextMenu()
     if #available(macOS 15.2, *) { menu.automaticallyInsertsWritingToolsItems = false }
@@ -143,11 +144,11 @@ extension MetalTextView {
 extension MetalTextView: @preconcurrency NSServicesMenuRequestor {
   /// サービスへ選択の平文を渡す。
   func writeSelection(to pboard: NSPasteboard, types: [NSPasteboard.PasteboardType]) -> Bool {
-    guard let surface, types.contains(.string), let text = surface.currentContent?.text else {
-      return false
-    }
-    surface.inputScope { surface.editor.finishComposition(.commit) }
-    let selection = surface.editor.state.cursors.primary.selection
+    guard let surface, let site = surface.primarySite, types.contains(.string),
+      let text = site.currentContent?.text
+    else { return false }
+    surface.inputScope { site.editor.finishComposition(.commit) }
+    let selection = site.editor.state.cursors.primary.selection
     guard selection.length > 0 else { return false }
     pboard.declareTypes([.string], owner: nil)
     return pboard.setString(text.substring(selection), forType: .string)
@@ -155,8 +156,9 @@ extension MetalTextView: @preconcurrency NSServicesMenuRequestor {
 
   /// サービスが返した平文で選択を置き換える（前後で区切る）。
   func readSelection(from pboard: NSPasteboard) -> Bool {
-    guard let surface, let string = pboard.string(forType: .string) else { return false }
-    surface.inputScope { surface.perform(.paste(string, entireLine: false)) }
+    guard let surface, let site = surface.primarySite, let string = pboard.string(forType: .string)
+    else { return false }
+    surface.inputScope { site.editor.perform(.paste(string, entireLine: false)) }
     return true
   }
 }

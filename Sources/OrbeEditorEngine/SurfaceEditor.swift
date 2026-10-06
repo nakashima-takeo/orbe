@@ -2,9 +2,9 @@ import AppKit
 import OrbeEditorCore
 import os
 
-/// 面の編集係（main）。編集の状態（カーソルの列・マーク・直前がキルだったか）と面ごとの undo と変換中の状態を持ち、本文を
-/// 変える唯一の道——打鍵も変換も undo も丸ごと置き換えも、ここから面の取引を通って文書へ渡る。undo の履歴と変換の状態を
-/// 合わせれば本文のすべての変化を知っているので、undo の要素と本文は食い違わない。
+/// 編集の場の編集係（main）。編集の状態（カーソルの列・マーク・直前がキルだったか）と場ごとの undo と変換中の状態を持ち、
+/// 場の文を変える唯一の道——打鍵も変換も undo も丸ごと置き換えも、ここから面の取引を通って場の文の出どころ（本文の場なら
+/// 文書）へ渡る。undo の履歴と変換の状態を合わせれば文のすべての変化を知っているので、undo の要素と文は食い違わない。
 ///
 /// undo は NSUndoManager を入れ物にし（Edit メニューの有効・無効と `undoManager` を読む部品がそのまま効く）、要素 1 つを
 /// 1 回だけ登録する。まとめ方は純関数（`UndoCoalescing`）が決め、まとまりが続く間は開いている要素に束を合成していく。
@@ -33,10 +33,10 @@ final class SurfaceEditor {
   /// スクロールの位置。古いものから `cursorHistoryLimit` 段まで持ち、本文が変わると消える。
   private var cursorHistory: [(cursors: CursorList, scroll: SIMD2<Double>)] = []
   static let cursorHistoryLimit = 50
-  private unowned let surface: MetalTextSurface
+  private unowned let site: EditingSite
 
-  init(surface: MetalTextSurface) {
-    self.surface = surface
+  init(site: EditingSite) {
+    self.site = site
   }
 
   var isComposing: Bool { composition != nil }
@@ -45,12 +45,12 @@ final class SurfaceEditor {
 
   /// コマンド 1 回を 1 つの取引で行う（変換の確定も同じ取引に入る）。
   func perform(_ command: EditCommand) {
-    surface.transact {
+    site.transact {
       finishComposition(.commit)
-      guard let env = surface.editingEnvironment() else { return }
+      guard let env = site.editingEnvironment() else { return }
       let before = state
       let result = EditCommands.run(command, before, env)
-      surface.transact(reveal: result.reveal, of: result.revealing) {
+      site.transact(reveal: result.reveal, of: result.revealing) {
         record(
           result.edits, kind: result.undo, from: before.cursors, to: result.state.cursors, env.text)
         state = result.state
@@ -62,9 +62,9 @@ final class SurfaceEditor {
   /// カーソルの列を直接置く（マウス・行番号の列）。編集を伴わないので undo のまとまりを切る。`range` は見せる区間（nil なら
   /// 主のキャレット）。
   func select(_ cursors: CursorList, reveal: Reveal, of range: NSRange? = nil) {
-    surface.transact(reveal: reveal, of: range) {
+    site.transact(reveal: reveal, of: range) {
       finishComposition(.commit)
-      guard let length = surface.textLength else { return }
+      guard let length = site.textLength else { return }
       var cursors = cursors.map { $0.clamped(to: length) }
       cursors.normalize()
       if cursors != state.cursors { close() }
@@ -80,9 +80,9 @@ final class SurfaceEditor {
   /// 本文を丸ごと置き換える（外部変更の差し替え）。変わらない先頭と末尾を落とした 1 つの編集として undo に載り、前後で
   /// まとまりを切る。選択は解け、キャレットは同じオフセット（本文が短ければ末尾）。変換中なら先に取り消す。
   func replaceAll(with text: String) {
-    surface.transact(remeasure: true) {
+    site.transact(remeasure: true) {
       finishComposition(.cancel)
-      guard let current = surface.editingEnvironment()?.text else { return }
+      guard let current = site.editingEnvironment()?.text else { return }
       let whole = TextEdit(range: NSRange(location: 0, length: current.length), replacement: text)
       let edit = whole.narrowed(replacing: current.units(in: whole.range))
       let caret = min(state.cursors.primary.selection.location, whole.replacementLength)
@@ -104,7 +104,7 @@ final class SurfaceEditor {
   /// 焦点を失った。⌘D・⌘⇧L の続きを終える（VS Code と同じく、焦点が戻っても続かない）。
   func focusDidLeave() {
     guard state.continuation != nil else { return }
-    surface.transact { state.continuation = nil }
+    site.transact { state.continuation = nil }
   }
 
   // MARK: - カーソルの履歴（⌘U）
@@ -117,19 +117,19 @@ final class SurfaceEditor {
     guard !restored, !state.cursors.selects(like: before),
       cursorHistory.last.map({ !$0.cursors.selects(like: before) }) ?? true
     else { return }
-    cursorHistory.append((before, surface.scrollPosition))
+    cursorHistory.append((before, site.surface.scrollPosition))
     if cursorHistory.count > Self.cursorHistoryLimit { cursorHistory.removeFirst() }
   }
 
   /// ⌘U——最後に積んだカーソルの列とスクロールの位置へ戻す。
   func undoCursors() {
-    surface.transact {
+    site.transact {
       finishComposition(.commit)
       guard let last = cursorHistory.popLast() else { return }
-      surface.transact(scrollTo: last.scroll) {
+      site.transact(scrollTo: last.scroll) {
         close()
         state = EditState(cursors: last.cursors, mark: state.mark)
-        surface.transaction?.restoresCursors = true
+        site.markCursorsRestored()
       }
     }
   }
@@ -143,10 +143,10 @@ final class SurfaceEditor {
   func setMarkedText(
     _ string: String, selected: NSRange, replacement: NSRange, appearance: MarkedAppearance
   ) {
-    guard !discarding, let text = surface.editingEnvironment()?.text else { return }
+    guard !discarding, let text = site.editingEnvironment()?.text else { return }
     guard composition != nil || !string.isEmpty else { return }
     let units = ContiguousArray(string.utf16)
-    surface.transact(reveal: .minimal) {
+    site.transact(reveal: .minimal) {
       guard let placed = compose(replacement, units, text) else { return }
       if units.isEmpty { return end(.commit) }
       guard var current = composition else { return }
@@ -164,17 +164,17 @@ final class SurfaceEditor {
   func insertText(_ string: String, replacement: NSRange) {
     guard !discarding else { return }
     guard let composing = composition else {
-      guard let length = surface.textLength else { return }
+      guard let length = site.textLength else { return }
       guard let range = CompositionRules.replacement(replacement, length: length) else {
         if !string.isEmpty { perform(.insert(string)) }
         return
       }
       return perform(.replace(range, string))
     }
-    guard let text = surface.editingEnvironment()?.text else { return }
-    surface.transact(reveal: .minimal) {
+    guard let text = site.editingEnvironment()?.text else { return }
+    site.transact(reveal: .minimal) {
       if let placed = compose(replacement, ContiguousArray(string.utf16), text),
-        let marked = composition?.marked, let length = surface.textLength
+        let marked = composition?.marked, let length = site.textLength
       {
         let inner = CompositionRules.selection(composing.selection, after: placed.edit)
         let offset = inner.location - placed.edit.range.location
@@ -201,7 +201,7 @@ final class SurfaceEditor {
     guard composition != nil else { return }
     end(how)
     discarding = true
-    surface.textView.inputContext?.discardMarkedText()
+    site.inputContext?.discardMarkedText()
     discarding = false
   }
 
@@ -229,7 +229,7 @@ final class SurfaceEditor {
     }
     let batch = EditBatch(order.map { TextEdit(range: targets[$0], replacement: units) })
     let changed = EditBatch(batch.edits.filter { text.units(in: $0.range) != $0.replacement })
-    guard let result = changed.isEmpty ? text : surface.deliver(changed) else { return nil }
+    guard let result = changed.isEmpty ? text : site.deliver(changed) else { return nil }
     var placed = [NSRange?](repeating: nil, count: cursors.count)
     for (index, range) in zip(order, batch.newRanges) { placed[index] = range }
     guard let primary = placed[0] else { return nil }
@@ -266,7 +266,7 @@ final class SurfaceEditor {
   /// には触れない。
   private func end(_ how: CompositionEnd) {
     guard let finished = composition else { return }
-    surface.transact {
+    site.transact {
       composition = nil
       let net = CompositionRules.net(finished.changes, before: finished.textBefore)
       switch how {
@@ -278,7 +278,7 @@ final class SurfaceEditor {
           from: finished.cursorsBefore, to: state.cursors, base: finished.textBefore)
       case .cancel:
         let backward = net.inverse(of: finished.textBefore)
-        guard backward.isEmpty || surface.deliver(backward) != nil else { return }
+        guard backward.isEmpty || site.deliver(backward) != nil else { return }
         state = EditState(cursors: finished.cursorsBefore, mark: state.mark.map(backward.map))
       }
     }
@@ -297,7 +297,7 @@ final class SurfaceEditor {
       if after != before { close() }
       return
     }
-    guard surface.deliver(batch) != nil else { return }
+    guard site.deliver(batch) != nil else { return }
     register(batch, kind: kind, from: before, to: after, base: text)
   }
 
@@ -312,7 +312,7 @@ final class SurfaceEditor {
     let starts = UndoCoalescing.startsNewElement(after: open?.kind, kind, joinsLines: joins)
     if starts { close() }
     if let open, !starts {
-      guard let result = surface.currentContent?.text else { return }
+      guard let result = site.currentContent?.text else { return }
       open.append(batch, result: result, kind: kind, after: after)
     } else {
       let element = UndoElement(
@@ -355,7 +355,7 @@ final class SurfaceEditor {
   )
     -> Bool
   {
-    guard let text = surface.editingEnvironment()?.text else { return false }
+    guard let text = site.editingEnvironment()?.text else { return false }
     let matches =
       batch.edits.count == contents.count
       && zip(batch.edits, contents).allSatisfy { edit, content in
@@ -366,8 +366,8 @@ final class SurfaceEditor {
       DispatchQueue.main.async { [undoManager] in undoManager.removeAllActions() }
       return false
     }
-    surface.transact(reveal: .minimal) {
-      guard surface.deliver(batch) != nil else { return }
+    site.transact(reveal: .minimal) {
+      guard site.deliver(batch) != nil else { return }
       state = EditState(cursors: cursors, mark: state.mark.map(batch.map))
     }
     return true

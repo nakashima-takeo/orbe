@@ -9,8 +9,9 @@ import simd
 /// 1 か所（`flush`）で描く材料の箱に置く」だけで、組版も描画も描画スレッドが行う。写しは自分の欄に持たず、要るとき
 /// （`viewport` の計算・編集の規則・行の印の行への写像）は出す前の状態か箱から読む。
 ///
-/// 編集は面の編集係（`SurfaceEditor`）が持ち、1 回の操作を 1 つの取引にする（→ `transact`）。IME の変換も同じ道で文書に
-/// 入る。アクセシビリティは持たない。
+/// 編集は面の編集の場（`EditingSite`）の編集係（`SurfaceEditor`）が持ち、1 回の操作を 1 つの取引にする（→ `transact`）。
+/// IME の変換も同じ道で文書に入る。契約の選択・キャレット・undo の区切り・丸ごとの置き換えは、本文の場を指す。
+/// アクセシビリティは持たない。
 @MainActor
 final class MetalTextSurface: TextSurface {
   private static var nextID = 0
@@ -23,7 +24,8 @@ final class MetalTextSurface: TextSurface {
   let placementBox = MinimapPlacementBox()
   let style: TextSurfaceStyle
   let textView = MetalTextView()
-  private(set) lazy var editor = SurfaceEditor(surface: self)
+  /// 本文の場（文書）。
+  private(set) lazy var bodySite = EditingSite(surface: self, source: DocumentText(surface: self))
   let lineStops: LineStopsCache
 
   var view: NSView { textView }
@@ -100,6 +102,9 @@ final class MetalTextSurface: TextSurface {
 
   // MARK: - 選択と編集（契約）
 
+  /// 本文の場の編集係。
+  var editor: SurfaceEditor { bodySite.editor }
+
   var selectedRange: NSRange {
     get { editor.state.cursors.primary.selection }
     set { editor.setSelection(newValue) }
@@ -154,7 +159,7 @@ final class MetalTextSurface: TextSurface {
   private func pullContent(marks spans: LineMarkSpans? = nil) {
     guard let delegate else { return }
     transact {
-      transaction?.content = delegate.surfaceContent(self)
+      bodySite.change?.content = delegate.surfaceContent(self)
       if let spans { transaction?.marks = spans }
     }
   }
@@ -164,9 +169,9 @@ final class MetalTextSurface: TextSurface {
     guard let delegate else { return }
     transact {
       let content = delegate.surfaceContent(self)
-      transaction?.content = content
+      bodySite.change?.content = content
       let text = content.text
-      transaction?.rowEdits += ranges.rangeView.map { range in
+      bodySite.change?.rowEdits += ranges.rangeView.map { range in
         let rows = text.rows(of: NSRange(range))
         return RowEdit(
           rows: rows.lowerBound..<rows.upperBound + 1, inserted: rows.count,

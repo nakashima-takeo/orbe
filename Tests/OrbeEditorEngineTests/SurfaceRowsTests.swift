@@ -165,7 +165,7 @@ final class SurfaceRowsTests: EngineTestCase {
     let surface = opened.surface
     surface.setRows(SurfaceRows(insertions: [insert(["a", "b", "c", "d"], at: 5)]))
     surface.selectedRange = NSRange(location: 0, length: 0)
-    let pageLines = try XCTUnwrap(surface.editingEnvironment()).pageLines
+    let pageLines = try XCTUnwrap(surface.bodySite.editingEnvironment()).pageLines
     surface.perform(.move(.pageDown, extending: false))
     XCTAssertEqual(
       opened.document.text.row(containing: surface.caretLocation), pageLines - 4,

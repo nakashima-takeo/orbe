@@ -59,7 +59,7 @@ extension MetalTextSurface {
   /// 区間を方針どおりに見せる。縦の位置は取引の終わりに出す前の位置から決め、横は描画スレッドが区間の行を組んで寄せる
   /// （動けば見えている範囲を知らせ直す）。
   func reveal(_ range: NSRange, policy: TextReveal) {
-    transact(reveal: .showing(policy), of: range)
+    bodySite.transact(reveal: .showing(policy), of: range)
   }
 
   // MARK: - スクロールだけのキー（キャレットは動かない）
@@ -163,7 +163,9 @@ extension MetalTextSurface {
   private func inputMethodScrollDidChange(_ position: SIMD2<Double>) {
     guard position != inputMethodPosition else { return }
     inputMethodPosition = position
-    guard editor.isComposing, let context = textView.inputContext else { return }
+    guard primarySite?.editor.isComposing == true, let context = textView.inputContext else {
+      return
+    }
     context.invalidateCharacterCoordinates()
     if #available(macOS 15.4, *) { context.textInputClientDidScroll() }
   }

@@ -22,7 +22,7 @@ extension MetalTextView: NSDraggingSource {
   /// 選択の文字のドラッグを始める（選択の上を押して動かした）。像は選択の見えている行の文字。
   func beginTextDrag(with event: NSEvent) {
     guard let surface, let text = surface.currentContent?.text else { return }
-    let selection = surface.editor.state.cursors.primary.selection
+    let selection = surface.bodySite.editor.state.cursors.primary.selection
     guard selection.length > 0 else { return }
     draggedRange = selection
     let item = NSDraggingItem(pasteboardWriter: text.substring(selection) as NSString)
@@ -33,7 +33,9 @@ extension MetalTextView: NSDraggingSource {
 
   /// 選択の見えている行の文字を、本文と同じ位置に描いた像と、その矩形（view の座標）。
   private func dragImage(_ selection: NSRange, _ text: TextRope) -> (NSRect, NSImage) {
-    guard let surface, let env = surface.editingEnvironment() else { return (.zero, NSImage()) }
+    guard let surface, let env = surface.bodySite.editingEnvironment() else {
+      return (.zero, NSImage())
+    }
     let config = surface.config
     let p = surface.scrollPosition
     let column = config.columnWidth(lineCount: text.lineCount)
@@ -143,7 +145,7 @@ extension MetalTextView: NSDraggingSource {
     surface.input {
       showDrop(nil)
       window?.makeFirstResponder(self)
-      surface.perform(.drop(string, at: offset, moving: moving))
+      surface.bodySite.editor.perform(.drop(string, at: offset, moving: moving))
     }
   }
 
