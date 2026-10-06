@@ -1,35 +1,86 @@
 import Foundation
 import OrbeSessionLog
 
-/// 制御チャネルの「拡張」メソッド dispatch（タブ操作・config・workspace CRUD・セッション復元）と、
-/// エージェント起動の main 側・hook 報告の params 復号。中核の動詞（list/get/send/spawn 等）は
-/// `runWindowed` の switch が持ち、拡張は fall-through で引き受ける。param 検証（-32602）はここで
-/// 行い、ドメイン解決（-32004 等）は target 側が返す。
+/// 制御チャネルの windowed メソッドのうち、タブ宛て・config・workspace CRUD・セッション復元の解決と、
+/// エージェント起動の main 側・hook 報告の params 復号。中核の動詞（list/spawn/activate_workspace）は
+/// `windowedHandler(for:)` の switch が持ち、拡張は fall-through で引き受ける。param 検証（-32602）は
+/// ここのハンドラが行い、ドメイン解決（-32004 等）は target 側が返す。
 extension ControlServer {
-  /// タブ操作（focus_tab / close_tab / open_file）を dispatch する。
-  /// 非該当は nil で次のハンドラ（config / workspace）へ落とす。
-  func runTab(method: String, params: [String: Any], target: ControlTarget)
-    -> Result<Any, ControlError>?
-  {
+  /// サーバーがタブを解決してから触る動詞（読み書き・状態報告）を解決する。未解決のタブは -32004。
+  /// 非該当は nil で次の解決（タブ操作）へ落とす。
+  func resolvedTabHandler(for method: String) -> WindowedHandler? {
+    func tab(_ target: ControlTarget, _ params: [String: Any]) -> TerminalTab? {
+      (params["tabId"] as? Int).flatMap(target.controlResolveTab)
+    }
+    let notFound = ControlError(code: -32004, message: "tab not found")
+
+    switch method {
+    case "get_tab_text":
+      return { target, params in
+        guard let t = tab(target, params) else { return .failure(notFound) }
+        let scrollback = params["scrollback"] as? Bool ?? false
+        return .success(["text": t.surface.controlReadText(scrollback: scrollback) ?? ""])
+      }
+    case "send_text":
+      return { target, params in
+        guard let t = tab(target, params) else { return .failure(notFound) }
+        guard let text = params["text"] as? String else {
+          return .failure(ControlError(code: -32602, message: "missing text"))
+        }
+        t.surface.controlSendText(text)
+        return .success(["ok": true])
+      }
+    case "send_key":
+      return { target, params in
+        guard let t = tab(target, params) else { return .failure(notFound) }
+        guard let spec = params["key"] as? String, let key = ControlKey.parse(spec) else {
+          return .failure(ControlError(code: -32602, message: "invalid key"))
+        }
+        t.surface.controlSendKey(key)
+        return .success(["ok": true])
+      }
+    case "report_agent":
+      return { target, params in
+        guard let t = tab(target, params) else { return .failure(notFound) }
+        guard let report = self.hookReport(params) else {
+          return .failure(ControlError(code: -32602, message: "missing agent/state"))
+        }
+        target.controlReportAgent(tab: t, report: report)
+        return .success(["ok": true])
+      }
+    default:
+      return nil
+    }
+  }
+
+  /// タブ操作（focus_tab / close_tab / open_file）を解決する。タブの解決は target が持つ。
+  /// 非該当は nil で次の解決（config / workspace）へ落とす。
+  func tabHandler(for method: String) -> WindowedHandler? {
     switch method {
     case "focus_tab":
-      guard let tid = params["tabId"] as? Int else {
-        return .failure(ControlError(code: -32602, message: "missing tabId"))
+      return { target, params in
+        guard let tid = params["tabId"] as? Int else {
+          return .failure(ControlError(code: -32602, message: "missing tabId"))
+        }
+        return target.controlFocusTab(tabId: tid)
       }
-      return target.controlFocusTab(tabId: tid)
     case "close_tab":
-      guard let tid = params["tabId"] as? Int else {
-        return .failure(ControlError(code: -32602, message: "missing tabId"))
+      return { target, params in
+        guard let tid = params["tabId"] as? Int else {
+          return .failure(ControlError(code: -32602, message: "missing tabId"))
+        }
+        return target.controlCloseTab(tabId: tid)
       }
-      return target.controlCloseTab(tabId: tid)
     case "open_file":
-      guard let tid = params["tabId"] as? Int else {
-        return .failure(ControlError(code: -32602, message: "missing tabId"))
+      return { target, params in
+        guard let tid = params["tabId"] as? Int else {
+          return .failure(ControlError(code: -32602, message: "missing tabId"))
+        }
+        guard let path = params["path"] as? String, !path.isEmpty else {
+          return .failure(ControlError(code: -32602, message: "missing path"))
+        }
+        return target.controlOpenFile(tabId: tid, path: path)
       }
-      guard let path = params["path"] as? String, !path.isEmpty else {
-        return .failure(ControlError(code: -32602, message: "missing path"))
-      }
-      return target.controlOpenFile(tabId: tid, path: path)
     default:
       return nil
     }
@@ -88,68 +139,78 @@ extension ControlServer {
     return nil
   }
 
-  /// `restore_sessions` を dispatch する。params の検証（型・件数・安全文字集合）はここで、ログの照合と
-  /// 復元は target が行う。非該当は nil で未知メソッドへ落とす。
-  func runSession(method: String, params: [String: Any], target: ControlTarget)
-    -> Result<Any, ControlError>?
-  {
+  /// `restore_sessions` を解決する。params の検証（型・件数・安全文字集合）はハンドラで、ログの照合と
+  /// 復元は target が行う。非該当は nil で次の解決へ落とす。
+  func sessionHandler(for method: String) -> WindowedHandler? {
     guard method == "restore_sessions" else { return nil }
-    guard let ids = params["sessionIds"] as? [String] else {
-      return .failure(ControlError(code: -32602, message: "missing sessionIds"))
+    return { target, params in
+      guard let ids = params["sessionIds"] as? [String] else {
+        return .failure(ControlError(code: -32602, message: "missing sessionIds"))
+      }
+      guard !ids.isEmpty, ids.count <= SessionLogLimits.restoreMaxIds,
+        ids.allSatisfy(AgentCatalog.isSafeSessionId)
+      else {
+        return .failure(ControlError(code: -32602, message: "invalid sessionIds"))
+      }
+      return target.controlRestoreSessions(sessionIds: ids)
     }
-    guard !ids.isEmpty, ids.count <= SessionLogLimits.restoreMaxIds,
-      ids.allSatisfy(AgentCatalog.isSafeSessionId)
-    else {
-      return .failure(ControlError(code: -32602, message: "invalid sessionIds"))
-    }
-    return target.controlRestoreSessions(sessionIds: ids)
   }
 
-  /// config（列挙・設定）と workspace CRUD を実行する（config CLI 用）。非該当は nil で未知メソッドへ落とす。
-  func runConfigWorkspace(method: String, params: [String: Any], target: ControlTarget)
-    -> Result<Any, ControlError>?
-  {
+  /// config（列挙・設定）と workspace CRUD を解決する（config CLI 用）。非該当は nil で次の解決へ落とす。
+  func configWorkspaceHandler(for method: String) -> WindowedHandler? {
     switch method {
     case "config_list":
-      return target.controlConfigList(workspaceId: params["workspaceId"] as? Int)
+      return { target, params in
+        target.controlConfigList(workspaceId: params["workspaceId"] as? Int)
+      }
     case "config_set":
-      guard let key = params["key"] as? String else {
-        return .failure(ControlError(code: -32602, message: "missing key"))
+      return { target, params in
+        guard let key = params["key"] as? String else {
+          return .failure(ControlError(code: -32602, message: "missing key"))
+        }
+        guard let value = params["value"] else {
+          return .failure(ControlError(code: -32602, message: "missing value"))
+        }
+        guard let scope = params["scope"] as? String else {
+          return .failure(ControlError(code: -32602, message: "missing scope"))
+        }
+        return target.controlConfigSet(
+          key: key, value: value, scope: scope, workspaceId: params["workspaceId"] as? Int)
       }
-      guard let value = params["value"] else {
-        return .failure(ControlError(code: -32602, message: "missing value"))
-      }
-      guard let scope = params["scope"] as? String else {
-        return .failure(ControlError(code: -32602, message: "missing scope"))
-      }
-      return target.controlConfigSet(
-        key: key, value: value, scope: scope, workspaceId: params["workspaceId"] as? Int)
     case "create_workspace":
-      guard let name = params["name"] as? String else {
-        return .failure(ControlError(code: -32602, message: "missing name"))
+      return { target, params in
+        guard let name = params["name"] as? String else {
+          return .failure(ControlError(code: -32602, message: "missing name"))
+        }
+        return target.controlCreateWorkspace(name: name, rootPath: params["rootPath"] as? String)
       }
-      return target.controlCreateWorkspace(name: name, rootPath: params["rootPath"] as? String)
     case "rename_workspace":
-      guard let wid = params["workspaceId"] as? Int else {
-        return .failure(ControlError(code: -32602, message: "missing workspaceId"))
+      return { target, params in
+        guard let wid = params["workspaceId"] as? Int else {
+          return .failure(ControlError(code: -32602, message: "missing workspaceId"))
+        }
+        guard let name = params["name"] as? String else {
+          return .failure(ControlError(code: -32602, message: "missing name"))
+        }
+        return target.controlRenameWorkspace(workspaceId: wid, name: name)
       }
-      guard let name = params["name"] as? String else {
-        return .failure(ControlError(code: -32602, message: "missing name"))
-      }
-      return target.controlRenameWorkspace(workspaceId: wid, name: name)
     case "set_workspace_root":
-      guard let wid = params["workspaceId"] as? Int else {
-        return .failure(ControlError(code: -32602, message: "missing workspaceId"))
+      return { target, params in
+        guard let wid = params["workspaceId"] as? Int else {
+          return .failure(ControlError(code: -32602, message: "missing workspaceId"))
+        }
+        guard let rootPath = params["rootPath"] as? String else {
+          return .failure(ControlError(code: -32602, message: "missing rootPath"))
+        }
+        return target.controlSetWorkspaceRoot(workspaceId: wid, rootPath: rootPath)
       }
-      guard let rootPath = params["rootPath"] as? String else {
-        return .failure(ControlError(code: -32602, message: "missing rootPath"))
-      }
-      return target.controlSetWorkspaceRoot(workspaceId: wid, rootPath: rootPath)
     case "remove_workspace":
-      guard let wid = params["workspaceId"] as? Int else {
-        return .failure(ControlError(code: -32602, message: "missing workspaceId"))
+      return { target, params in
+        guard let wid = params["workspaceId"] as? Int else {
+          return .failure(ControlError(code: -32602, message: "missing workspaceId"))
+        }
+        return target.controlRemoveWorkspace(workspaceId: wid)
       }
-      return target.controlRemoveWorkspace(workspaceId: wid)
     default:
       return nil
     }

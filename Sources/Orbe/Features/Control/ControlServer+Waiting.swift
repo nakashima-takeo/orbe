@@ -37,20 +37,17 @@ extension ControlServer {
         id: id, result: .failure(ControlError(code: -32602, message: "invalid timeoutMs")))
     }
     DispatchQueue.main.async {
-      let refusal: ControlError?
-      if let target = self.target {
-        if let tab = target.controlResolveTab(tabId) {
-          refusal = target.controlPromptAgent(tab: tab, text: text)
-        } else {
-          refusal = ControlError(code: -32004, message: "tab not found")
+      let sent = self.onWindow { target -> Result<Void, ControlError> in
+        guard let tab = target.controlResolveTab(tabId) else {
+          return .failure(ControlError(code: -32004, message: "tab not found"))
         }
-      } else {
-        refusal = ControlError(code: -32000, message: "no window")
+        return target.controlPromptAgent(tab: tab, text: text).map { .failure($0) } ?? .success(())
       }
       self.queue.async {
-        if let refusal {
+        switch sent {
+        case .failure(let refusal):
           conn.respond(id: id, result: .failure(refusal))
-        } else {
+        case .success:
           conn.arm(id: id, purpose: .promptOutcome(tabId: tabId), timeoutMs: timeoutMs)
         }
       }
@@ -68,9 +65,7 @@ extension ControlServer {
         id: id, result: .failure(ControlError(code: -32602, message: "invalid timeoutMs")))
     }
     DispatchQueue.main.async {
-      let outcome =
-        self.target.map(launch)
-        ?? .failure(ControlError(code: -32000, message: "no window"))
+      let outcome = self.onWindow(launch)
       self.queue.async {
         switch outcome {
         case .failure(let error):

@@ -89,17 +89,15 @@ final class ControlWireTests: OrbeTestCase {
 
   // MARK: - method の解決
 
-  /// ウィンドウ未接続でも未知 method は -32601（spec の「未知の method」）。今は宛先解決の
-  /// ガードが先に立つため -32000 "no window" になり、`completion_*` だけが -32601 を返す。
+  /// ウィンドウ未接続でも未知 method は -32601（spec の「未知の method」）。method の認識はウィンドウの
+  /// 有無を見ない。
   func testUnknownMethodIsMethodNotFoundEvenWithoutWindow() {
     let wire = startWireWithoutTarget()
 
     wire.send(["jsonrpc": "2.0", "id": 15, "method": "teleport_tab"])
     let response = wire.nextResponse()
 
-    XCTExpectFailure("バグ疑い: ウィンドウが無いと未知 method が -32000 no window になる") {
-      XCTAssertEqual(errorCode(response), -32601, "ウィンドウの有無で未知 method の語彙を変えない")
-    }
+    XCTAssertEqual(errorCode(response), -32601, "ウィンドウの有無で未知 method の語彙を変えない")
   }
 
   // MARK: - target 不在

@@ -53,7 +53,7 @@ protocol ControlTarget: ControlTaskTarget {
   /// workspace を削除する（id 未発見 -32004・最後の 1 つは削除不可 -32000）。
   func controlRemoveWorkspace(workspaceId: Int) -> Result<Any, ControlError>
   /// 閉じたセッションを休眠チケットとして戻す（restore_sessions）。id ごとの status
-  /// （restored / already-present / unknown）を返す。窓は runOnMain が保証する。
+  /// （restored / already-present / unknown）を返す。窓は onWindow が保証する。
   func controlRestoreSessions(sessionIds: [String]) -> Result<Any, ControlError>
 }
 
@@ -263,92 +263,78 @@ final class ControlServer {
       break
     }
 
+    // 補完系は無応答契約（update/end は応答を書かない）を含むため、windowed の解決より先に分ける
+    // （target==nil 時や未知扱いで update/end が応答を書くと、打鍵ぶんの行が accept 応答の前に積む）。
+    if method.hasPrefix("completion_") {
+      DispatchQueue.main.async {
+        let surface = (params["tabId"] as? Int).flatMap {
+          self.target?.controlResolveTab($0)?.surface
+        }
+        guard let result = self.runCompletion(method: method, surface: surface, params: params)
+        else { return }
+        self.queue.async { conn.respond(id: id, result: result) }
+      }
+      return
+    }
+
+    guard let handler = windowedHandler(for: method) else {
+      conn.respond(
+        id: id,
+        result: .failure(ControlError(code: -32601, message: "method not found: \(method)")))
+      return
+    }
     DispatchQueue.main.async {
-      // nil は「無応答契約」のメソッド（completion_update / completion_end）。打鍵ごとに応答を
-      // 書くと、補完クライアントが accept 応答を読む前に fd へ行が積み、締切内に読めなくなる。
-      guard let result = self.runOnMain(method: method, params: params) else { return }
+      let result = self.onWindow { handler($0, params) }
       self.queue.async { conn.respond(id: id, result: result) }
     }
   }
 
-  /// main スレッドで domain 操作を実行する。nil を返すメソッドは応答を書かない（無応答契約）。
-  private func runOnMain(method: String, params: [String: Any]) -> Result<Any, ControlError>? {
-    // 補完系は無応答契約（update/end は nil）を含むため、target 有無に依らず最優先で分離する
-    // （target==nil 時に update/end が "no window" 応答を書くと、打鍵ぶんの行が accept 応答の前に積む）。
-    if method.hasPrefix("completion_") {
-      let surface = (params["tabId"] as? Int).flatMap { target?.controlResolveTab($0)?.surface }
-      return runCompletion(method: method, surface: surface, params: params)
-    }
-
-    guard let target = target else {
-      return .failure(ControlError(code: -32000, message: "no window"))
-    }
-    return runWindowed(method: method, params: params, target: target)
+  /// ウィンドウがあれば body を実行し、無ければ -32000 "no window"（main でのみ呼ぶ）。
+  func onWindow<T>(_ body: (ControlTarget) -> Result<T, ControlError>) -> Result<T, ControlError> {
+    dispatchPrecondition(condition: .onQueue(.main))
+    guard let target else { return .failure(ControlError(code: -32000, message: "no window")) }
+    return body(target)
   }
 
-  /// ウィンドウ（target）を要するタブ/workspace 操作を実行する。
-  private func runWindowed(method: String, params: [String: Any], target: ControlTarget)
-    -> Result<Any, ControlError>
-  {
-    func tab() -> TerminalTab? { (params["tabId"] as? Int).flatMap(target.controlResolveTab) }
-    let notFound = ControlError(code: -32004, message: "tab not found")
+  typealias WindowedHandler = (ControlTarget, [String: Any]) -> Result<Any, ControlError>
 
+  /// ウィンドウ（target）を要するタブ/workspace 操作を method 名だけから解決する。nil は未知メソッド。
+  private func windowedHandler(for method: String) -> WindowedHandler? {
     switch method {
     case "list_workspaces":
-      return .success(["workspaces": target.controlListWorkspaces()])
+      return { target, _ in .success(["workspaces": target.controlListWorkspaces()]) }
     case "list_tabs":
-      return .success(["tabs": target.controlListTabs()])
+      return { target, _ in .success(["tabs": target.controlListTabs()]) }
     case "list_agents":
-      return .success(["agents": target.controlListAgents()])
-    case "get_tab_text":
-      guard let t = tab() else { return .failure(notFound) }
-      let scrollback = params["scrollback"] as? Bool ?? false
-      return .success(["text": t.surface.controlReadText(scrollback: scrollback) ?? ""])
-    case "send_text":
-      guard let t = tab() else { return .failure(notFound) }
-      guard let text = params["text"] as? String else {
-        return .failure(ControlError(code: -32602, message: "missing text"))
-      }
-      t.surface.controlSendText(text)
-      return .success(["ok": true])
-    case "send_key":
-      guard let t = tab() else { return .failure(notFound) }
-      guard let spec = params["key"] as? String, let key = ControlKey.parse(spec) else {
-        return .failure(ControlError(code: -32602, message: "invalid key"))
-      }
-      t.surface.controlSendKey(key)
-      return .success(["ok": true])
+      return { target, _ in .success(["agents": target.controlListAgents()]) }
     case "spawn":
-      guard
-        let tid = target.controlSpawn(
-          workspaceId: params["workspaceId"] as? Int,
-          cwd: params["cwd"] as? String,
-          command: params["command"] as? String)
-      else { return .failure(ControlError(code: -32000, message: "spawn failed")) }
-      return .success(["tabId": tid])
+      return { target, params in
+        guard
+          let tid = target.controlSpawn(
+            workspaceId: params["workspaceId"] as? Int,
+            cwd: params["cwd"] as? String,
+            command: params["command"] as? String)
+        else { return .failure(ControlError(code: -32000, message: "spawn failed")) }
+        return .success(["tabId": tid])
+      }
     case "activate_workspace":
-      guard let wid = params["workspaceId"] as? Int else {
-        return .failure(ControlError(code: -32602, message: "missing workspaceId"))
+      return { target, params in
+        guard let wid = params["workspaceId"] as? Int else {
+          return .failure(ControlError(code: -32602, message: "missing workspaceId"))
+        }
+        guard let r = target.controlActivateWorkspace(workspaceId: wid) else {
+          return .failure(ControlError(code: -32004, message: "workspace not found"))
+        }
+        return .success(["activeWorkspaceId": r.activeWorkspaceId, "tabIds": r.tabIds])
       }
-      guard let r = target.controlActivateWorkspace(workspaceId: wid) else {
-        return .failure(ControlError(code: -32004, message: "workspace not found"))
-      }
-      return .success(["activeWorkspaceId": r.activeWorkspaceId, "tabIds": r.tabIds])
-    case "report_agent":
-      guard let t = tab() else { return .failure(notFound) }
-      guard let report = hookReport(params) else {
-        return .failure(ControlError(code: -32602, message: "missing agent/state"))
-      }
-      target.controlReportAgent(tab: t, report: report)
-      return .success(["ok": true])
     default:
-      // タブ操作・config / workspace CRUD・セッション復元・タスクは拡張の dispatch
+      // タブ宛て・config / workspace CRUD・セッション復元・タスクは拡張の解決
       // （ControlServer+Dispatch / +Task）へ。いずれも非該当なら未知メソッド。
-      return runTab(method: method, params: params, target: target)
-        ?? runConfigWorkspace(method: method, params: params, target: target)
-        ?? runSession(method: method, params: params, target: target)
-        ?? runTask(method: method, params: params, target: target)
-        ?? .failure(ControlError(code: -32601, message: "method not found: \(method)"))
+      return resolvedTabHandler(for: method)
+        ?? tabHandler(for: method)
+        ?? configWorkspaceHandler(for: method)
+        ?? sessionHandler(for: method)
+        ?? taskHandler(for: method)
     }
   }
 

@@ -118,7 +118,7 @@ final class OrbeReportWireTests: OrbeTestCase {
 
   // MARK: - 語の固定
 
-  /// `report_agent` の params キー全集合。受け側（`ControlServer.runWindowed`）が読むキーと 1 対 1 で、
+  /// `report_agent` の params キー全集合。受け側（`ControlServer.resolvedTabHandler(for:)`）が読むキーと 1 対 1 で、
   /// `sessionId` が stdin の `session_id` からの抽出であることも同時に踏む。
   func testReportAgentWireCarriesFullParameterSet() throws {
     let raw = report(
