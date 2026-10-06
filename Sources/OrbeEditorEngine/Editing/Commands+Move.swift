@@ -67,7 +67,8 @@ extension EditCommands {
   }
 
   /// ↑↓とページ送り（VS Code の `MoveOperations.vertical`）。横位置は覚えた x（無ければ今の位置の x）で、先頭の行より上は
-  /// 文書の先頭、最終行より下は文書の末尾。選択があって伸ばさないなら、↑は始まり・↓は終わりから動く。
+  /// 文書の先頭、最終行より下は文書の末尾。選択があって伸ばさないなら、↑は始まり・↓は終わりから動く。↑↓は文書の行を 1 つ、
+  /// ページ送りは縦の並びでページの高さだけ離れた所の文書の行（差し込みの上なら次の文書の行）へ。
   private static func vertical(
     _ cursor: Cursor, by lines: Int, extending: Bool, _ env: EditingEnvironment
   ) -> Cursor {
@@ -77,7 +78,10 @@ extension EditCommands {
       ? (lines < 0 ? cursor.selection.location : NSMaxRange(cursor.selection)) : cursor.position
     let row = text.row(containing: from)
     let x = cursor.desiredX ?? env.geometry.x(ofColumn: from - text.lineStart(row), row: row)
-    let target = row + lines
+    let target =
+      abs(lines) > 1
+      ? env.rows.line(atY: env.rows.y(ofLine: row) + Double(lines) * env.rows.lineHeight)
+      : row + lines
     if target < 0 {
       return cursor.moved(to: 0, extending: extending, desiredX: from == 0 ? nil : x)
     }

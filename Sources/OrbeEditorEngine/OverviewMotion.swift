@@ -48,7 +48,7 @@ struct Fade: Equatable {
 
 /// 帯とつまみの濃さの時間の動き（描画スレッドだけ。面ごと）。点滅と同じ扱いで、フェードの間だけ刻みを回し、終われば止める。
 /// 「スクロールが止まってから消え始める」は、その時刻に起きて刻みを回す（→ `wakeAt`）。つまみは本体の上にポインタがある
-/// 間とドラッグ中は見え、スクロールの状態（縦横の位置・見えている大きさ・行数・横の範囲）が変わると現れ、変わらなくなって
+/// 間とドラッグ中は見え、スクロールの状態（縦横の位置・見えている大きさ・縦の量・横の範囲）が変わると現れ、変わらなくなって
 /// から `hideDelay` 後に消え始める（ポインタが本体から出た・ドラッグを離したときは、すぐ消え始める）。面を結んだ最初の
 /// コマの状態と、横の範囲の基準を取り直した測定（最も長い行を初めて測った・測り直した）による横の範囲の変化は変化に
 /// 数えない。帯はミニマップの上にポインタがある間とドラッグ中に見える。
@@ -57,7 +57,8 @@ final class OverviewMotion {
   struct ScrollState: Equatable {
     var first: CGFloat
     var visible: CGFloat
-    var lineCount: Int
+    /// 縦の量（表示の単位。→ `RowLayout.contentLines`）。
+    var contentLines: CGFloat
     var x: Double
     var width: Double
     var range: Double

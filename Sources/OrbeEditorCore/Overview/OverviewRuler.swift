@@ -1,6 +1,6 @@
 import Foundation
 
-/// スクロールバーの上の印（overview ruler）の写像——行の区間を縦の区間へ比例で写し、短いものは最小の高さへ広げ、
+/// スクロールバーの上の印（overview ruler）の写像——表示の単位（→ `TextReveal`）の縦の区間を、ruler の縦の区間へ比例で写し、短いものは最小の高さへ広げ、
 /// 同じレーンで接するものを結ぶ。VS Code `DecorationsOverviewRuler._renderOneLane` とキャレットの描き方を移したもの。
 /// 座標はデバイス px の整数（VS Code は canvas に描く。切り捨てと結合の判定を画素で行うので、pt にすると結果が変わる）。
 public struct OverviewRuler: Equatable, Sendable {
@@ -30,14 +30,15 @@ public struct OverviewRuler: Equatable, Sendable {
 
   /// ruler の高さ（デバイス px）。
   public let canvasHeight: Int
-  /// スクロール全体の行数（`行数 + max(0, 表示行数 − 1)`）。
+  /// スクロール全体の量（表示の単位。`contentLines + max(0, 表示行数 − 1)`）。
   public let scrollLines: CGFloat
   public let scale: CGFloat
 
-  /// `height` は ruler の高さ（pt）、`scale` はデバイス倍率。
-  public init(lineCount: Int, visibleLines: CGFloat, height: CGFloat, scale: CGFloat) {
+  /// `contentLines` は最後の項目の上端 + 1（表示の単位。差し込みの無い面では行数）、`height` は ruler の高さ（pt）、
+  /// `scale` はデバイス倍率。
+  public init(contentLines: CGFloat, visibleLines: CGFloat, height: CGFloat, scale: CGFloat) {
     canvasHeight = Int(max(0, height * scale))
-    scrollLines = CGFloat(max(1, lineCount)) + max(0, visibleLines - 1)
+    scrollLines = max(1, contentLines) + max(0, visibleLines - 1)
     self.scale = scale
   }
 
@@ -54,15 +55,15 @@ public struct OverviewRuler: Equatable, Sendable {
     }
   }
 
-  /// 行の区間（0 始まり・両端を含む。昇順）を縦の区間へ写し、`y1 ≤ 直前の y2 + 1` なら結ぶ。
-  public func spans(_ rows: [ClosedRange<Int>]) -> [Span] {
+  /// 表示の単位の縦の区間（上端..<下端。昇順）を ruler の縦の区間へ写し、`y1 ≤ 直前の y2 + 1` なら結ぶ。
+  public func spans(_ ranges: [Range<CGFloat>]) -> [Span] {
     guard canvasHeight > 0 else { return [] }
     let minimum = Int(Self.minimumMarkHeight * scale)
     let half = minimum / 2
     var result: [Span] = []
-    for row in rows {
-      var y1 = y(ofRow: row.lowerBound)
-      var y2 = y(ofRow: row.upperBound + 1)
+    for range in ranges {
+      var y1 = y(at: range.lowerBound)
+      var y2 = y(at: range.upperBound)
       if y2 - y1 < minimum {
         var center = (y1 + y2) / 2
         if center < half {
@@ -82,11 +83,11 @@ public struct OverviewRuler: Equatable, Sendable {
     return result
   }
 
-  /// キャレットの印の列——行（昇順）ごとの印を、他の印と同じく `y1 ≤ 直前の y2 + 1` なら結ぶ。
-  public func carets(rows: some Sequence<Int>) -> [Span] {
+  /// キャレットの印の列——行の上端（表示の単位。昇順）ごとの印を、他の印と同じく `y1 ≤ 直前の y2 + 1` なら結ぶ。
+  public func carets(at tops: some Sequence<CGFloat>) -> [Span] {
     var result: [Span] = []
-    for row in rows {
-      let span = caret(row: row)
+    for top in tops {
+      let span = caret(at: top)
       if let last = result.last, span.y1 <= last.y2 + 1 {
         result[result.count - 1] = Span(y1: last.y1, y2: max(last.y2, span.y2))
       } else {
@@ -96,11 +97,11 @@ public struct OverviewRuler: Equatable, Sendable {
     return result
   }
 
-  /// キャレットの印（全幅・高 2pt、中心は行の上端）。
-  public func caret(row: Int) -> Span {
+  /// キャレットの印（全幅・高 2pt、中心は行の上端 `top`。表示の単位）。
+  public func caret(at top: CGFloat) -> Span {
     let height = Int(Self.caretHeight * scale)
     let half = height / 2
-    var center = y(ofRow: row)
+    var center = y(at: top)
     if center < half {
       center = half
     } else if center + half > canvasHeight {
@@ -109,8 +110,8 @@ public struct OverviewRuler: Equatable, Sendable {
     return Span(y1: center - half, y2: center - half + height)
   }
 
-  private func y(ofRow row: Int) -> Int {
-    Int(floor(CGFloat(row) * CGFloat(canvasHeight) / scrollLines))
+  private func y(at position: CGFloat) -> Int {
+    Int(floor(position * CGFloat(canvasHeight) / scrollLines))
   }
 
   /// 1000 件を超える検索の一致の近似——`mergeLinesDelta = max(2, ceil(3 / (高さ / 行数)))` 行以内に続く一致を 1 つの

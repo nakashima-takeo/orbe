@@ -21,6 +21,8 @@ final class MetalTextView: TextSurfaceInputView {
   let pointer = MouseSelection()
   /// 俯瞰の押下・ドラッグ・ホバー。
   let overview = OverviewPointer()
+  /// 俯瞰の区画の押下を受ける子（区画の view の入れ物と影は、この下に置く）。
+  let overviewHits = OverviewHitView()
   /// 入力の仕組みとの窓口（面が持つ）。テストは偽の IME に差し替える。
   lazy var textInputContext: NSTextInputContext? = NSTextInputContext(client: self)
   /// 写す・貼るペーストボード（既定は一般）。テストは名前つきの専用のものに差し替える。
@@ -42,7 +44,6 @@ final class MetalTextView: TextSurfaceInputView {
     // ときの古い大きな drawable を面の外（隣のペイン）へはみ出させない。
     layerContentsPlacement = .topLeft
     clipsToBounds = true
-    let overviewHits = OverviewHitView()
     overviewHits.autoresizingMask = [.width, .height]
     addSubview(overviewHits)
     registerForDraggedTypes([.string, .fileURL])

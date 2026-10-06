@@ -21,7 +21,7 @@ final class MetalTextSurface: TextSurface {
   let scroll: ScrollBox
   /// 最後に描いたミニマップの配置（描画スレッドが書く）。
   let placementBox = MinimapPlacementBox()
-  private let style: TextSurfaceStyle
+  let style: TextSurfaceStyle
   let textView = MetalTextView()
   private(set) lazy var editor = SurfaceEditor(surface: self)
   let lineStops: LineStopsCache
@@ -50,6 +50,12 @@ final class MetalTextSurface: TextSurface {
   var pending = Pending()
   /// 押された強調の地（同じ列の押し直しを書かない）。
   private var highlights = Highlights()
+  /// 縦の並び（main の最新。取引の中で置き・ずらし・測り直し、出すときに材料へ書く）。
+  var rows: RowLayout
+  /// 表示の構成。
+  var presentation = SurfacePresentation.code
+  /// 区画の view の置き場（区画のある間だけ）。
+  var zones: ZoneViews?
   /// 面自身の入力の処理の入れ子の深さ（→ `inputScope`）。
   var inputDepth = 0
   /// 描画スレッドへ頼んだ横の「見えるところまで」の通し番号。
@@ -63,6 +69,7 @@ final class MetalTextSurface: TextSurface {
     id = Self.nextID
     self.style = style
     config = SurfaceConfig(style: style, omittedLabel: omittedLabel)
+    rows = RowLayout(lineHeight: Double(style.lineHeight))
     scroll = ScrollBox()
     lineStops = LineStopsCache(font: config.font)
     textView.surface = self
@@ -82,6 +89,8 @@ final class MetalTextSurface: TextSurface {
         config: config, notify: notify)
     }
     appearanceDidChange()
+    let rows = rows
+    write { $0.rows = rows }
   }
 
   deinit {
@@ -238,6 +247,7 @@ final class MetalTextSurface: TextSurface {
   func wake() {
     let id = id
     RenderThread.shared.perform { $0.wake(id) }
+    zones?.startTicking()
   }
 
   // MARK: - 焦点と撮影

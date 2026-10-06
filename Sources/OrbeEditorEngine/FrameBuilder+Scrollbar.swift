@@ -89,6 +89,8 @@ struct RulerSpans {
     var word: Int
     var marks: RowMarks
     var lineCount: Int
+    /// 縦の並びの版（行を表示の単位へ写す）。
+    var rows: Int
     var visibleLines: CGFloat
     var height: CGFloat
     var scale: CGFloat
@@ -102,8 +104,9 @@ struct RulerSpans {
   /// キャレットの印の元（キャレットの列が同じなら、止まっている間の点滅のコマで作り直さない）。
   struct CaretKey: Equatable {
     var carets: [Int]
-    /// 本文の版（同じオフセットのキャレットでも、本文が変われば行が変わりうる）。
+    /// 本文の版（同じオフセットのキャレットでも、本文が変われば行が変わりうる）と縦の並びの版。
     var version: Int
+    var rows: Int
     var visibleLines: CGFloat
     var height: CGFloat
     var scale: CGFloat
@@ -129,16 +132,16 @@ struct RulerSpans {
 
 /// 縦横のスクロールバーと印・影。どれもこのコマの本文の位置（端を越えている間は端）から出す。
 extension FrameBuilder {
-  /// 上端の影（先頭の行が隠れている間。行番号の列から本文の区画の右端まで）と、ミニマップの左の影（本文が右に続く
-  /// とき。本文の区画の上、影の帯の外側）。濃さは CSS のぼかし（σ 3 のガウスの縁）を 9 点で写した勾配で、画素の中心で
-  /// 引く。
+  /// 上端の影（先頭の行が隠れている間。行番号の列から本文の区画の右端まで。区画のある面では区画の上の view が描くので
+  /// `top` が false）と、ミニマップの左の影（ミニマップがあり、本文が右に続くとき。本文の区画の上、影の帯の外側）。
+  /// 濃さは CSS のぼかし（σ 3 のガウスの縁）を 9 点で写した勾配で、画素の中心で引く。
   func drawShadows(
-    _ layout: SurfaceLayout, lines: (first: CGFloat, visible: CGFloat), clipsRight: Bool,
-    _ c: Context
+    _ layout: SurfaceLayout, lines: (first: CGFloat, visible: CGFloat), top: Bool,
+    clipsRight: Bool, _ c: Context
   ) {
     let g = c.g
     let depth = 6.0
-    if lines.first > 0 {
+    if top, lines.first > 0 {
       let rows = Int((depth * g.scale).rounded())
       for y in 0..<rows {
         let strength = Self.shadowStrength((Double(y) + 0.5) / g.scale, length: depth)
@@ -148,7 +151,7 @@ extension FrameBuilder {
             color: c.palette.overview.topShadow.scaled(alpha: strength), radius: 0, kind: 0))
       }
     }
-    guard clipsRight else { return }
+    guard clipsRight, layout.minimapWidth > 0 else { return }
     let band = (Double(layout.minimap.minX) - depth) * g.scale
     let columns = Int((2 * depth * g.scale).rounded())
     for step in 0..<columns {
@@ -182,9 +185,10 @@ extension FrameBuilder {
     let s = g.scale
     let x0 = (Double(area.minX) * s).rounded()
     let text = content.text
+    let rows = source.material.rows
     let ruler = OverviewRuler(
-      lineCount: text.lineCount, visibleLines: lines.visible, height: area.height,
-      scale: CGFloat(s))
+      contentLines: CGFloat(rows.contentLines(lineCount: text.lineCount)),
+      visibleLines: lines.visible, height: area.height, scale: CGFloat(s))
     let palette = c.palette.overview
     updateRulerSpans(ruler, area: area, lines: lines, source, text: text)
     for group in rulerSpans.groups {
@@ -230,14 +234,16 @@ extension FrameBuilder {
     _ source: Source, content: SurfaceContent
   ) {
     let carets = source.material.caret.carets
+    let rows = source.material.rows
     let key = RulerSpans.CaretKey(
-      carets: carets, version: content.version, visibleLines: lines.visible, height: area.height,
-      scale: ruler.scale)
+      carets: carets, version: content.version, rows: rows.version, visibleLines: lines.visible,
+      height: area.height, scale: ruler.scale)
     guard key != rulerSpans.caretKey else { return }
     rulerSpans.caretKey = key
     let text = content.text
     let points = carets.map { NSRange(location: min($0, text.length), length: 0) }
-    rulerSpans.caretSpans = ruler.carets(rows: text.rows(ofAscending: points).map(\.lowerBound))
+    rulerSpans.caretSpans = ruler.carets(
+      at: text.rows(ofAscending: points).map { CGFloat(rows.unit(ofLine: $0.lowerBound)) })
   }
 
   /// 印の縦の区間を、元が変わったときだけ作り直す。検索の一致が多いときは近い行をまとめ、現在の一致を加える。
@@ -249,9 +255,10 @@ extension FrameBuilder {
     let find = source.rulerRows.find(highlights, text: text)
     let word = source.rulerRows.word(highlights, text: text)
     let marks = source.material.marks
+    let rows = source.material.rows
     let key = RulerSpans.Key(
       find: find.generation, word: word.generation, marks: marks, lineCount: text.lineCount,
-      visibleLines: lines.visible, height: area.height, scale: ruler.scale,
+      rows: rows.version, visibleLines: lines.visible, height: area.height, scale: ruler.scale,
       current: highlights.crowded ? highlights.current.first : nil)
     guard key != rulerSpans.key else { return }
     rulerSpans.key = key
@@ -274,8 +281,18 @@ extension FrameBuilder {
       (.word, word.rows),
       (.find, findRows),
     ]
-    rulerSpans.groups = groups.compactMap { kind, rows in
-      rows.isEmpty ? nil : (kind, ruler.spans(rows))
+    rulerSpans.groups = groups.compactMap { kind, lines in
+      lines.isEmpty
+        ? nil
+        : (
+          kind,
+          ruler.spans(
+            lines.map {
+              CGFloat(
+                rows.unit(ofLine: $0.lowerBound))..<CGFloat(
+                  rows.unit(ofLine: $0.upperBound) + 1)
+            })
+        )
     }
   }
 }
@@ -285,7 +302,7 @@ extension FrameBuilder {
   /// 上かはこのコマの配置で決める。
   func drawSliders(
     _ layout: SurfaceLayout, lines: (first: CGFloat, visible: CGFloat), _ source: Source,
-    lineCount: Int, _ c: Context
+    contentLines: CGFloat, _ c: Context
   ) {
     let input = source.material.overview
     let motion = source.motion
@@ -295,7 +312,7 @@ extension FrameBuilder {
     let thumb = motion.thumbOpacity(
       at: source.time,
       state: OverviewMotion.ScrollState(
-        first: lines.first, visible: lines.visible, lineCount: lineCount, x: x,
+        first: lines.first, visible: lines.visible, contentLines: contentLines, x: x,
         width: limits.viewport.x, range: limits.maximum.x),
       baselines: source.baselines, input: input, motion: c.config.overview)
     let pointer = input.pointer
@@ -316,7 +333,7 @@ extension FrameBuilder {
     }
     let vertical = layout.verticalScrollbar
     let geometry = ScrollbarGeometry(
-      lineCount: lineCount, firstLine: lines.first, visibleLines: lines.visible,
+      contentLines: contentLines, firstLine: lines.first, visibleLines: lines.visible,
       height: vertical.height)
     if geometry.isNeeded {
       let hover = pointer.map { vertical.contains($0) && geometry.sliderContains($0.y) } ?? false

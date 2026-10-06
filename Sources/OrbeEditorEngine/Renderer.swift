@@ -166,7 +166,8 @@ final class Renderer {
     let began = CACurrentMediaTime()
     let caretVisible = material.caret.caretVisible(at: target)
     let revealed = begin(slot, material)
-    let frame = slot.scroll.frame(at: target, material: material.revision)
+    let frame = slot.scroll.frame(
+      at: target, period: slot.clock?.period ?? 1.0 / 120, material: material.revision)
     let texture = acquired.texture
     slot.build(
       material, scroll: (frame.position, frame.limits), moment: (caretVisible, target),

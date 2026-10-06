@@ -37,8 +37,9 @@ extension MetalTextView: NSDraggingSource {
     let config = surface.config
     let p = surface.scrollPosition
     let column = config.columnWidth(lineCount: text.lineCount)
-    let top = max(0, Int((p.y / Double(config.lineHeight)).rounded(.down)))
-    let bottom = top + Int((Double(bounds.height) / Double(config.lineHeight)).rounded(.up))
+    let layout = surface.rows
+    let top = max(0, layout.line(atY: p.y))
+    let bottom = layout.line(atY: p.y + Double(bounds.height))
     let rows = text.rows(of: selection).clamped(to: top...max(top, bottom))
     var pieces: [(String, CGPoint)] = []
     var frame = NSRect.null
@@ -50,7 +51,7 @@ extension MetalTextView: NSDraggingSource {
       let x1 = env.geometry.x(ofColumn: max(from, to) - start, row: row)
       let origin = CGPoint(
         x: column + x0 - CGFloat(p.x),
-        y: config.topInset + CGFloat(row) * config.lineHeight - CGFloat(p.y))
+        y: config.topInset + CGFloat(layout.y(ofLine: row) - p.y))
       pieces.append(
         (to > from ? text.substring(NSRange(location: from, length: to - from)) : "", origin))
       frame = frame.union(

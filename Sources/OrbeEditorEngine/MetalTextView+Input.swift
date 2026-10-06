@@ -127,8 +127,8 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
     let selection = selectedRange()
     let text = env.text
     let rows = text.rows(of: selection)
-    let top = Int((scrollPosition.y / Double(surface.config.lineHeight)).rounded(.down))
-    let bottom = top + Int((Double(bounds.height) / Double(surface.config.lineHeight)).rounded(.up))
+    let top = surface.rows.line(atY: scrollPosition.y)
+    let bottom = surface.rows.line(atY: scrollPosition.y + Double(bounds.height))
     let first = min(max(rows.lowerBound, top), rows.upperBound)
     let last = max(min(rows.upperBound, bottom), first)
     let marked = markedLine
@@ -185,7 +185,7 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
     let column = config.columnWidth(lineCount: text.lineCount)
     let y = Double(point.y - config.topInset) + p.y
     guard point.x >= column, point.y >= config.topInset,
-      Int((y / Double(config.lineHeight)).rounded(.down)) == marked.row,
+      surface.rows.item(atY: y) == .line(marked.row),
       let offset = marked.offset(containingX: point.x - column + CGFloat(p.x))
     else { return nil }
     return text.grapheme(containing: offset).location
@@ -207,7 +207,7 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
     let config = surface.config
     return NSRect(
       x: config.columnWidth(lineCount: env.text.lineCount) + x0 - CGFloat(p.x),
-      y: config.topInset + CGFloat(row) * config.lineHeight - CGFloat(p.y), width: x1 - x0,
+      y: config.topInset + CGFloat(surface.rows.y(ofLine: row) - p.y), width: x1 - x0,
       height: config.lineHeight)
   }
 

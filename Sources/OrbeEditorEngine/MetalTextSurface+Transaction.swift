@@ -25,6 +25,10 @@ struct Transaction {
   var remeasure = false
   /// 取引を起こした打鍵の出来事の時刻（打鍵→画面の遅れを、本文と同じ書き込みで材料へ添える）。
   var keystroke: Double?
+  /// 取引の中で差し込みや区画の高さを変える前の縦の並び（変えなければ nil。面自身の編集でずらすのは含めない）。
+  var anchor: RowLayout?
+  /// 取引の前の縦の並びの版。
+  let rowsVersion: Int
   /// 取引の前のカーソルの列と ⌘D の続きと焦点と、変換中だったか。
   let cursors: CursorList
   let continuation: SearchQuestion?
@@ -54,7 +58,7 @@ extension MetalTextSurface {
       text: text,
       geometry: ShapedLineGeometry(
         text: text, cache: lineStops, tabWidth: config.tabWidth(columns: indentation.unit)),
-      pageLines: max(1, lines - 2), indentation: indentation, lineBreak: lineBreak,
+      pageLines: max(1, lines - 2), rows: rows, indentation: indentation, lineBreak: lineBreak,
       killBuffer: KillBuffer.contents)
   }
 
@@ -69,8 +73,8 @@ extension MetalTextSurface {
     let opens = transaction == nil
     if opens {
       transaction = Transaction(
-        cursors: editor.state.cursors, continuation: editor.state.continuation, focused: focused,
-        composing: editor.isComposing)
+        rowsVersion: rows.version, cursors: editor.state.cursors,
+        continuation: editor.state.continuation, focused: focused, composing: editor.isComposing)
     }
     if reveal != .none {
       transaction?.reveal = reveal
@@ -100,15 +104,16 @@ extension MetalTextSurface {
     transaction?.content = content
     transaction?.edited = true
     // 文書は束を後ろから当てる。後ろの編集は前の行を動かさないので、どの編集の行も束の前の本文で数えられる。
-    transaction?.rowEdits += batch.edits.reversed().map {
-      RowEdit($0, in: before, version: content.version)
-    }
+    let edits = batch.edits.reversed().map { RowEdit($0, in: before, version: content.version) }
+    transaction?.rowEdits += edits
+    for edit in edits { rows.shift(edit) }
     return content.text
   }
 
-  /// 取引を確定する——行の数の上限・見せ方の縦の位置・材料の書き込み（写し・行の印・変わった行・カーソル・打鍵の時刻・
-  /// 横の「見えるところまで」）を出す前の状態に積み、選択と見えている範囲を知らせる。箱へは出す 1 か所（`flush`）が
-  /// 位置を先・材料を後の順で 1 回で書く。
+  /// 取引を確定する——縦の並びの差し込みと区画の高さ（見えている先頭の文書の行を保つずらし）・行の数の上限・見せ方の
+  /// 縦の位置・材料の書き込み（写し・行の印・変わった行・縦の並び・カーソル・打鍵の時刻・横の「見えるところまで」）を
+  /// 出す前の状態に積み、選択と見えている範囲を知らせる。箱へは出す 1 か所（`flush`）が位置を先・材料を後の順で 1 回で
+  /// 書く。
   private func commit(_ finished: Transaction) {
     editor.noteTransaction(
       from: finished.cursors, edited: finished.edited, restored: finished.restoresCursors)
@@ -130,7 +135,9 @@ extension MetalTextSurface {
       ? nil : HorizontalReveal(range: finished.revealing ?? caretRange, serial: revealSerial)
     let edited = finished.edited
     if finished.remeasure, let content { pending.remeasure = content.version }
-    pending.limits = limits(lineCount: text?.lineCount ?? 1)
+    let lineCount = text?.lineCount ?? 1
+    settleRows(finished, lineCount: lineCount)
+    pending.limits = limits(lineCount: lineCount)
     if let text, let p = position(after: finished, cursors: cursors, text) {
       pending.position = p
     }
@@ -151,6 +158,19 @@ extension MetalTextSurface {
       selectionChanged: cursors.selections != finished.cursors.selections
         || editor.state.continuation != finished.continuation,
       composing: composing)
+  }
+
+  /// 取引の中で変わった縦の並びを確定する——区画を今の幅で測り直し、差し込みや区画の高さが変わっていれば（位置を頼んだ
+  /// 取引でなければ）見えている先頭の文書の行を同じ位置に保ち、変わった並びを材料への書き込みに積む。
+  private func settleRows(_ finished: Transaction, lineCount: Int) {
+    let unfitted = rows
+    let refitted = refitZones(lineCount: lineCount)
+    if let before = finished.anchor ?? (refitted ? unfitted : nil), finished.scrollTo == nil {
+      keepFirstVisibleLine(from: before, lineCount: lineCount)
+    }
+    guard rows.version != finished.rowsVersion else { return }
+    let rows = rows
+    pending.writes.append { $0.rows = rows }
   }
 
   /// 確定した取引を知らせる——選択（変わったとき）・見えている範囲・変換中なら文字の座標。

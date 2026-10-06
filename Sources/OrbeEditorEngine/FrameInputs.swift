@@ -235,6 +235,10 @@ struct FrameMaterial: Sendable {
   /// 描画スレッドがまだ受け取っていない打鍵の時刻（その打鍵の取引が入ったコマで打鍵→画面の遅れを測る）。
   var keystrokes: [Double] = []
   var marks = RowMarks.empty
+  /// 縦の並び（写しと同じ書き込みで置く——描画スレッドは引き取った写しの行の並びで描く）。
+  var rows = RowLayout(lineHeight: 1)
+  /// ミニマップを出すか（表示の構成）。
+  var showsMinimap = true
   var caret = CaretMaterial()
   /// まだ解いていないかもしれない横の「見えるところまで」（本文を変えて見せない取引は、古い区間を捨てる）。
   var reveal: HorizontalReveal?

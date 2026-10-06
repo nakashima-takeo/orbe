@@ -69,6 +69,20 @@ public protocol TextSurface: AnyObject {
   /// 行の印（git ガター）。文書がハンクから作って押す（UTF-16 オフセット）。面は描くだけで規則を持たない。
   func setLineMarks(_ spans: LineMarkSpans)
 
+  /// 縦の並びに差し込むもの（文書に無い行・view を載せる区画）を丸ごと置く。同じ値の押し直しは何もしない。境は面が最後に
+  /// 引いた写しの行の範囲（`0...行数`）に収め、ミニマップを出していない面（→ `setPresentation`）にだけ置く——どちらを
+  /// 破っても呼び手の誤り。置いた後は、面自身の編集で境が行に付いて動く（編集より前の境はそのまま、後ろの境は行の増減の
+  /// 分だけずれ、置き換えた区間の中の境は区間の始まりの行へ寄る）。差し込みや区画の高さが変わっても、見えている先頭の
+  /// 文書の行は画面の同じ位置に残る。区画の view は面が保持し、面の中の本文の区画の幅で測って置き、本文と一緒に動かす
+  /// （置き直しで外れた view は面から外す）。
+  func setRows(_ rows: SurfaceRows)
+
+  /// 区画の view の中身が変わった——面が今の幅で測り直す（高さが変われば並びを組み直す）。置いていない view なら何もしない。
+  func remeasureZone(_ view: NSView)
+
+  /// 表示の構成を置く。差し込みのある面でミニマップを出すのは呼び手の誤り。
+  func setPresentation(_ presentation: SurfacePresentation)
+
   /// 面を載せる側（弱い参照）。面が本文の外のこと（ファイルを開く・パスの文字列・右クリックのメニュー・URL）を問う口。
   var host: TextSurfaceHost? { get set }
 

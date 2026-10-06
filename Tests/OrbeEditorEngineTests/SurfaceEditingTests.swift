@@ -253,7 +253,7 @@ final class SurfaceEditingTests: EngineTestCase {
       opened.surface.perform(.move(.documentEnd, extending: false))
       opened.surface.write { _ in
         let placed = scroll.peek(at: 0).position.y
-        let shown = scroll.frame(at: 0, material: revision).position.y
+        let shown = scroll.frame(at: 0, period: 1.0 / 120, material: revision).position.y
         seen.withLock { $0 = (placed, shown) }
       }
     }
@@ -263,7 +263,8 @@ final class SurfaceEditingTests: EngineTestCase {
     XCTAssertGreaterThan(placed, 0, "材料を書く前に、見せ方の位置は置いてある")
     XCTAssertEqual(shown, 0, "古い材料のコマは前の位置")
     XCTAssertEqual(opened.surface.material.revision, revision + 1)
-    XCTAssertEqual(scroll.frame(at: 0, material: revision + 1).position.y, placed)
+    XCTAssertEqual(
+      scroll.frame(at: 0, period: 1.0 / 120, material: revision + 1).position.y, placed)
   }
 
   /// 打鍵の後の横の「見えるところまで」は、行を組む描画スレッドが解く——main は論理の位置だけを材料に添え、描画スレッドが

@@ -37,20 +37,20 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     let shot = try pixelShot(opened)
     let bar = opened.surface.surfaceLayout.verticalScrollbar
     let ruler = OverviewRuler(
-      lineCount: rope.lineCount, visibleLines: opened.surface.viewportLines.visible,
+      contentLines: CGFloat(rope.lineCount), visibleLines: opened.surface.viewportLines.visible,
       height: bar.height, scale: 2)
     let at = { (lane: OverviewRuler.Lane, span: OverviewRuler.Span) -> [Int] in
       let x = OverviewRuler.lane(lane, width: bar.width, scale: 2)
       return shot.rgb(
         bar.minX + CGFloat(2 * x.x + x.width) / 4, bar.minY + CGFloat(span.y1 + span.y2) / 4)
     }
-    let row = { (row: Int) in ruler.spans([row...row])[0] }
+    let row = { (row: Int) in ruler.spans([CGFloat(row)..<CGFloat(row + 1)])[0] }
     XCTAssertEqual(at(.left, row(5)), [0, 255, 0], "追加は左のレーン")
     XCTAssertEqual(at(.center, row(5)), [0, 0, 0])
     XCTAssertEqual(at(.center, row(20)), [255, 0, 0], "検索の一致は中央のレーン")
     XCTAssertEqual(at(.left, row(20)), [0, 0, 0])
     XCTAssertEqual(at(.center, row(25)), [0, 0, 255], "語の出現は中央のレーン")
-    let caret = ruler.caret(row: 30)
+    let caret = ruler.caret(at: 30)
     XCTAssertEqual(at(.left, caret), [255, 255, 255], "キャレットは全幅")
     XCTAssertEqual(at(.center, caret), [255, 255, 255])
     XCTAssertEqual(at(.left, row(10)), [0, 0, 0], "印の無い行")
@@ -100,7 +100,8 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     let surface = opened.surface
     let bar = surface.surfaceLayout.verticalScrollbar
     let ruler = OverviewRuler(
-      lineCount: rope.lineCount, visibleLines: surface.viewportLines.visible, height: bar.height,
+      contentLines: CGFloat(rope.lineCount), visibleLines: surface.viewportLines.visible,
+      height: bar.height,
       scale: 2)
     surface.inputScope {
       surface.editor.select(
@@ -109,7 +110,7 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     }
     let shot = try pixelShot(opened)
     let marked = { (row: Int) -> Bool in
-      let span = ruler.caret(row: row)
+      let span = ruler.caret(at: CGFloat(row))
       return shot.rgb(bar.midX, bar.minY + CGFloat(span.y1 + span.y2) / 4) == [255, 255, 255]
     }
     XCTAssertTrue(marked(40), "主")
@@ -127,9 +128,9 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     let caret = opened.document.text.lineStart(150)
     surface.selectedRange = NSRange(location: caret, length: 0)
     let ruler = OverviewRuler(
-      lineCount: 200, visibleLines: surface.viewportLines.visible, height: bar.height, scale: 2)
+      contentLines: 200, visibleLines: surface.viewportLines.visible, height: bar.height, scale: 2)
     let marked = { (row: Int) throws -> Bool in
-      let span = ruler.caret(row: row)
+      let span = ruler.caret(at: CGFloat(row))
       return try self.pixelShot(opened).rgb(bar.midX, bar.minY + CGFloat(span.y1 + span.y2) / 4)
         == [255, 255, 255]
     }
@@ -153,10 +154,11 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     let surface = opened.surface
     let bar = surface.surfaceLayout.verticalScrollbar
     let ruler = OverviewRuler(
-      lineCount: rope.lineCount, visibleLines: surface.viewportLines.visible, height: bar.height,
+      contentLines: CGFloat(rope.lineCount), visibleLines: surface.viewportLines.visible,
+      height: bar.height,
       scale: 2)
     let marked = { (row: Int) throws -> Bool in
-      let span = ruler.caret(row: row)
+      let span = ruler.caret(at: CGFloat(row))
       return try self.pixelShot(opened).rgb(bar.midX, bar.minY + CGFloat(span.y1 + span.y2) / 4)
         == [255, 255, 255]
     }

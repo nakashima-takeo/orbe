@@ -22,7 +22,8 @@ struct ShapeInstance {
 
 /// 1 コマの中身を組み立てる（描画スレッドだけ。配列は面ごとに使い回す）。重ねる順は `Renderer.encode` が持つ。
 ///
-/// 行の位置は y = 上端の余白 + 行 × 行高で、折り返さない。見えている行だけその場で組版し（キャッシュする）、字の色は
+/// 行の位置は上端の余白 + 縦の並び（`RowLayout`。差し込みが無ければ行 × 行高）で、折り返さない。見えている行と差し込んだ
+/// 行だけその場で組版し（キャッシュする）、字の色は
 /// 行ごとに、横に見えている字の区間の役割を役割の並びから引いて決める（長い行でも行全体の役割は引かない）。スクロール量
 /// は装置の画素に揃える（字がにじまない）。
 final class FrameBuilder {
@@ -41,7 +42,7 @@ final class FrameBuilder {
   private(set) var textScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
   private(set) var gutterScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
   /// 組んだ行のうち最も長い幅（pt。末尾の「ほか N 字」を含む）。
-  private(set) var longestLine: CGFloat = 0
+  var longestLine: CGFloat = 0
   /// このコマのミニマップ。
   var minimap = MinimapFrame()
   /// 影（上端・ミニマップの左）と、俯瞰の図形（ミニマップの帯・縦横のスクロールバーと印）。
@@ -80,9 +81,24 @@ final class FrameBuilder {
     let column: Double
     /// 本文の区画の右端（ミニマップの左端）。
     let textRight: Double
+    /// 縦の並び（pt。px へは `scale` を掛けて引く）。
+    let rows: RowLayout
 
-    /// 行の上端の y。
-    func rowTop(_ row: Int) -> Double { top + (Double(row) * lineHeight).rounded() - scrollY }
+    /// 文書の行の上端の y。
+    func rowTop(_ row: Int) -> Double {
+      top + rows.y(ofLine: row, scale: scale).rounded() - scrollY
+    }
+
+    /// 文書の行の下端の y（その行の下の差し込みは含めない）。
+    func rowBottom(_ row: Int) -> Double {
+      top + (rows.y(ofLine: row, scale: scale) + lineHeight).rounded() - scrollY
+    }
+
+    /// 塊 `index` の中の `line` 行目の上端の y。
+    func insertedTop(block index: Int, line: Int) -> Double {
+      top + (rows.top(ofBlock: index, scale: scale) + Double(line) * lineHeight).rounded()
+        - scrollY
+    }
   }
 
   /// 1 コマの間だけ使う、描く先の座標系と色・アトラス・見え方。
@@ -144,13 +160,16 @@ final class FrameBuilder {
     }
     let s = Double(source.material.scale)
     let lineCount = content.text.lineCount
-    let layout = config.layout(size: source.material.size, lineCount: lineCount)
+    let rows = source.material.rows
+    let layout = config.layout(
+      size: source.material.size, lineCount: lineCount,
+      showsMinimap: source.material.showsMinimap)
     let g = Geometry(
       scale: s, width: Double(source.pixels.width), height: Double(source.pixels.height),
       scrollX: (source.position.x * s).rounded(), scrollY: (source.position.y * s).rounded(),
       top: (Double(config.topInset) * s).rounded(), lineHeight: Double(config.lineHeight) * s,
       column: (Double(layout.column) * s).rounded(),
-      textRight: (Double(layout.text.maxX) * s).rounded())
+      textRight: (Double(layout.text.maxX) * s).rounded(), rows: rows)
     let tabColumns = source.material.tabColumns
     let focused = source.material.caret.focused
     let c = Context(
@@ -160,36 +179,21 @@ final class FrameBuilder {
         ? source.material.linkPointer.map { SIMD2(Double($0.x) * s, Double($0.y) * s) } : nil)
     textScissor = Self.scissor(x: g.column, y: g.top, width: g.textRight - g.column, g)
     gutterScissor = Self.scissor(x: 0, y: g.top, width: g.column, g)
-    let lines = source.limits.viewportLines(at: source.position, lineCount: lineCount)
+    let lines = source.limits.viewportLines(at: source.position, rows: rows, lineCount: lineCount)
     buildMinimap(layout, lines: lines, source, content, c)
-    drawShadows(layout, lines: lines, clipsRight: Self.clipsRight(source), c)
+    drawShadows(
+      layout, lines: lines, top: !rows.hasZones, clipsRight: Self.clipsRight(source), c)
     drawVerticalScrollbar(layout, lines: lines, source, content, c)
-    drawSliders(layout, lines: lines, source, lineCount: lineCount, c)
+    drawSliders(
+      layout, lines: lines, source,
+      contentLines: CGFloat(rows.contentLines(lineCount: lineCount)), c)
     guard g.height > g.top else { return }
-    let first = max(0, Int((g.scrollY / g.lineHeight).rounded(.down)))
-    let last = min(
-      lineCount - 1, Int(((g.scrollY + g.height - g.top) / g.lineHeight).rounded(.down)))
-    guard first <= last else { return }
-    let baseline = (Double(config.baseline) * s).rounded()
-    let numberFont = fonts.id(config.gutterFont)
-    let rows = layRows(first...last, source, text: content.text, cache: cache, fonts: fonts)
-    var roles = content.roles.cursor(from: rows.first?.start ?? 0)
-    for item in rows {
-      let top = g.rowTop(item.row)
-      let visible = visibleGlyphs(item.laid, c)
-      drawDecor(item, rowTop: top, window: visible.offsets, c)
-      drawOverlays(item.overlay, item.laid, rowTop: top, c)
-      drawHighlights(item, source.material.highlights, rowTop: top, window: visible.offsets, c)
-      let width = drawText(item, visible, baseline: top + baseline, roles: &roles, c)
-      longestLine = max(longestLine, width)
-      drawNumber(item.row + 1, rowTop: top, font: numberFont, c)
-    }
-    drawMarks(source.material.marks, rows: first...last, c)
+    drawRows(source, content, cache: cache, fonts: fonts, c)
   }
 
   /// 見えている行を組む（組版のキャッシュのコマはここで終える）。行頭はロープを 1 度辿って引き、前のコマで描いていない
   /// 行だけ中身を読む。
-  private func layRows(
+  func layRows(
     _ rows: ClosedRange<Int>, _ source: Source, text: TextRope, cache: LineLayoutCache,
     fonts: FontRegistry
   ) -> [RowInFrame] {
@@ -258,7 +262,7 @@ final class FrameBuilder {
 
   /// 行の字を置き、行の幅（末尾の印を含む、pt）を返す。置くのは横に見えている字だけで、役割は見えている行を通して 1 つの
   /// 読み口で引き、色は役割の連なりを出たときだけ引く。
-  private func drawText(
+  func drawText(
     _ row: RowInFrame, _ visible: VisibleGlyphs, baseline: Double, roles: inout RoleRuns.Cursor,
     _ c: Context
   ) -> CGFloat {
@@ -282,16 +286,7 @@ final class FrameBuilder {
         place(glyph, ink, .text, c)
       }
     }
-    guard let mark = line.omittedMark else { return line.width }
-    let markX = originX + Double(line.width + c.config.cell) * g.scale
-    for j in mark.glyphs.indices {
-      let x = markX + Double(mark.xs[j]) * g.scale
-      if x > g.textRight { break }
-      place(
-        Glyph(font: mark.fonts[j], glyph: mark.glyphs[j], x: x, baseline: baseline),
-        c.palette.gutterText, .text, c)
-    }
-    return line.width + c.config.cell + mark.width
+    return drawOmittedMark(line, baseline: baseline, c)
   }
 
   /// 置くグリフ 1 つ（x・基線は px。基線は y が下向きの座標）。
