@@ -26,6 +26,11 @@ Terminal engine (Contents/MacOS/Orbe, Contents/Resources/{ghostty,terminfo})
   Contents/Resources. The shell integration scripts follow the license stated
   in each file's header; some are derived from kitty and are under
   GPL-3.0-or-later, whose full text is identical to Orbe's own LICENSE.
+  Orbe pins Ghostty at the commit named by the ghosttykit-<SHA> tag in the
+  GhosttyKit URL of Package.swift. The library and these resources are built
+  from that commit by the packaging in orbe/ of
+  https://github.com/nakashima-takeo/ghostty, whose release notes give the
+  Zig version used.
   https://github.com/ghostty-org/ghostty
   License: licenses/ghostty-LICENSE.txt, LICENSE (GPL-3.0 text)
 
@@ -79,7 +84,8 @@ Terminal engine (Contents/MacOS/Orbe, Contents/Resources/{ghostty,terminfo})
     https://github.com/mitchellh/libxev — License: licenses/libxev-LICENSE.txt
   - z2d — MPL-2.0, with parts under other licenses (see the license file)
     Used unmodified; its source is available from the upstream repository
-    at the revision pinned by vendor/ghostty/build.zig.zon.
+    at the revision pinned by the build.zig.zon of the pinned Ghostty commit
+    (see libghostty above).
     https://github.com/vancluever/z2d
     License: licenses/z2d-LICENSE.txt (notices),
     licenses/z2d-COPYING.txt (MPL-2.0 text)
@@ -94,13 +100,15 @@ Terminal engine (Contents/MacOS/Orbe, Contents/Resources/{ghostty,terminfo})
     https://github.com/ocornut/imgui, https://github.com/dearimgui/dear_bindings
     License: licenses/imgui-LICENSE.txt, licenses/dear_bindings-LICENSE.txt
   - GNU gettext (libintl) — LGPL-2.1-or-later
-    Built from the unmodified gettext source pinned by
-    vendor/ghostty/pkg/libintl. Orbe itself is GPL-3.0-or-later with full
-    source published, so relinking is possible from the sources named here.
+    Built from the unmodified gettext source pinned by Ghostty's pkg/libintl
+    in the pinned Ghostty commit (see libghostty above). Orbe itself is
+    GPL-3.0-or-later with full source published, so relinking is possible
+    from the sources named here.
     https://www.gnu.org/software/gettext/
     License: licenses/gettext-COPYING.LIB.txt
   - Zig standard library and compiler_rt — MIT License
-    Compiled in by the Zig toolchain pinned in mise.toml.
+    Compiled in by the Zig toolchain named in the release notes of the
+    pinned Ghostty build (see libghostty above).
     https://ziglang.org — License: licenses/zig-LICENSE.txt
 
 * bash-preexec — MIT License
@@ -288,13 +296,3 @@ regeneration procedure).
   Inlined into the bundle through the prebuilt @withfig/autocomplete specs.
   https://github.com/withfig/autocomplete-tools
   License: licenses/fig-autocomplete-generators-LICENSE.txt
-
---------------------------------------------------------------------------------
-Icons
---------------------------------------------------------------------------------
-
-* GitHub Octicons — MIT License
-  Octicon path data is ported into Orbe's SwiftUI code and compiled into
-  Contents/MacOS/Orbe.
-  https://github.com/primer/octicons
-  License: licenses/octicons-LICENSE.txt

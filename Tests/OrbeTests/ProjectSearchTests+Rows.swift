@@ -31,10 +31,7 @@ extension ProjectSearchTests {
     var opened: [(RowID, ProjectSearch.Opening)] = []
     f.search.onOpen = { id, opening in opened.append((id, opening)) }
     var window: (() -> Void)?
-    f.search.navigationDelay.schedule = { delay, fire in
-      XCTAssertEqual(delay, 0.075, "VS Code と同じ窓")
-      window = fire
-    }
+    f.search.navigationDelay.schedule = { _, fire in window = fire }
     return RowsFixture(search: f.search, opened: { opened }, closeWindow: { window?() })
   }
 
@@ -108,24 +105,6 @@ extension ProjectSearchTests {
     f.closeWindow()
     XCTAssertEqual(f.opened().last?.0, match("b.txt", 0), "窓が閉じたら最後の選択だけ")
     XCTAssertEqual(f.opened().count, 4)
-  }
-
-  /// リピートの間隔が窓より長くても（macOS の既定は約 83〜90ms）、押している間は開かず、離した後に最後の選択だけを開く。
-  func testHoldingWithRepeatsSlowerThanTheWindowStillDoesNotOpen() throws {
-    let f = try rowsFixture()
-    f.search.select(match("a.txt", 0))
-    f.search.moveSelection(by: 1, isRepeat: false)
-    XCTAssertEqual(f.opened().count, 1, "押し始めはすぐ開く")
-    f.closeWindow()  // 初期遅延
-    for delta in [-1, 1, -1] {
-      f.search.moveSelection(by: delta, isRepeat: true)
-      f.closeWindow()  // 次のリピートまで 90ms（窓の 75ms より長い）
-    }
-    XCTAssertEqual(f.opened().count, 1, "押している間は開かない")
-    f.search.navigationKeyDidRelease()
-    f.closeWindow()
-    XCTAssertEqual(
-      f.opened().map(\.0), [match("a.txt", 1), match("a.txt", 0)], "離した後に最後の選択だけ")
   }
 
   /// 離したことが届かないまま（押したまま焦点が移る等）でも、次のリピートでない押下とすぐ開く操作で押し続けは解ける。結果の

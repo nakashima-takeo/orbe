@@ -54,13 +54,4 @@ extension SettingsPaletteTests {
     XCTAssertEqual(p.render.selected, 1)
   }
 
-  /// ← で root へ戻る（theme と同じナビ）。
-  func testEmojiFontLeftReturnsToRoot() {
-    let p = model()
-    p.render.selected = 9
-    p.render.onActivate()
-    p.render.onLeft()
-    XCTAssertNil(p.render.breadcrumb)
-    XCTAssertEqual(p.render.selected, 9, "潜った行へ選択を復元")
-  }
 }

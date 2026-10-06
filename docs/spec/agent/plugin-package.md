@@ -1,7 +1,7 @@
 ---
 title: エージェント状態追跡プラグイン（配布物）
 description: claude / codex / agy 兼用プラグインパッケージ app/agent-plugin/ の構造・各 CLI の導入契約・チャネル別のプラグイン名・.app 同梱と毎起動の実体化
-updated: 2026-09-06
+updated: 2026-10-05
 ---
 
 # エージェント状態追跡プラグイン（配布物）
@@ -31,7 +31,7 @@ hook からシムを呼ぶ経路も CLI ごとに違う: claude / codex はそ�
 ## event→state 対応
 
 - **claude**: SessionStart→idle / UserPromptSubmit→working / Notification(permission_prompt|worker_permission_prompt)→waiting / PreToolUse(AskUserQuestion|ExitPlanMode)→waiting / PostToolUse(AskUserQuestion|ExitPlanMode)→working / PostToolBatch→working / Stop→done / SessionEnd→clear。Notification は matcher で permission 待ちの notification_type に絞る——絞らないと idle（無操作）等でも発火し waiting を誤認するため（matcher に外れた通知はフックコマンド自体が走らない）。待ちの解除は種類ごとに経路が分かれる——ツールの待ち（AskUserQuestion / ExitPlanMode）は待つツールが事前に確定するので同じ matcher の PostToolUse が応答の瞬間に解除し（matcher 無しにすると並列に走る無関係なツールの完了でも撃たれ waiting が潰れる）、permission の待ちはどのツールが承認されるか事前に分からないのでバッチ解決（PostToolBatch・matcher の概念を持たないイベント）で解除する。
-- **codex**: UserPromptSubmit→working / PermissionRequest→waiting / Stop→done
+- **codex**: UserPromptSubmit→working / PermissionRequest→waiting / Stop→done / Interrupt→idle。turn を中断（Esc）すると Stop は出ず Interrupt だけが出るので、これを受けないと中断後も working が残る。中断は人が目の前で止めた操作で応答を終えたのではないので、done（通知音が鳴る）でなく idle に写す。
 - **agy**: PreInvocation→working / Stop→done（agy のフックに SessionStart/Notification/PermissionRequest 相当が無く idle/waiting/clear は取得不可）
 
 ## `.app` 同梱と実体化

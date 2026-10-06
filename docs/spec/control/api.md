@@ -1,7 +1,7 @@
 ---
 title: 制御 API（外部 → Orbe）
-description: Unix socket 上の JSON-RPC でタブ/workspace/エージェントを操作する out-of-band 制御チャネルと、イベント履歴（seq）・待機・MCP ブリッジ・ツール群・mount 境界
-updated: 2026-10-04
+description: Unix socket 上の JSON-RPC でタブ/workspace/エージェント/タスクを操作する out-of-band 制御チャネルと、イベント履歴（seq）・待機・MCP ブリッジ・ツール群・mount 境界
+updated: 2026-10-05
 ---
 
 # 制御 API（外部 → Orbe）
@@ -22,7 +22,7 @@ Unix domain socket `control.sock`（workspaces.json と並置・パーミッシ�
 - `-32600` JSON だがリクエストオブジェクトでない（配列・`method` 欠落）。`id` は取れれば返す。
 - `-32601` 未知の method。
 - `-32602` params の欠落・型不一致・値域外。
-- `-32004` 宛先（tab / workspace）が見つからない。宛先 ID を解決へ直に渡すメソッド（`get_tab_text` / `send_text` / `send_key` / `report_agent` / `completion_accept`）は `tabId` の欠落・型不一致もここに落ちる（解決の前に検証を挟むメソッドは `-32602`）。
+- `-32004` 宛先（tab / workspace / タスク）が見つからない。宛先 ID を解決へ直に渡すメソッド（`get_tab_text` / `send_text` / `send_key` / `report_agent` / `completion_accept`）は `tabId` の欠落・型不一致もここに落ちる（解決の前に検証を挟むメソッドは `-32602`）。
 - `-32006` `wait_for_event` の `after` が履歴の保持範囲より古い（対処は seq を取り直す。呼び出し側のバグである `-32602` と分ける）。
 - `-32000` 実行できない（ウィンドウ未接続・spawn 失敗・最後の workspace 削除・`prompt_agent` の busy / 未 mount・ready 待ち中のエージェント消滅）。
 
@@ -31,6 +31,12 @@ Unix domain socket `control.sock`（workspaces.json と並置・パーミッシ�
 ## 宛先 ID
 
 workspace / tab にプロセス内単調増加 ID。型をまたいで一意。セッション内のみ有効（永続しない・再起動で振り直し）。配列インデックスでなく ID で指す。
+
+タスクの ID は別物で、永続する短い整数（[タスク](../platform/tasks.md)）。
+
+## 呼び出し元タブ（`callerTabId`）
+
+要求を出したプロセスがどのタブの中で動いているかを、params の `callerTabId` で伝えられる。宛先ではなく要求の出所の属性で、読むかどうかは動詞が決める（今読むのは `add_task` だけ）。読まない動詞は無視する。MCP ブリッジは、自分の環境に `ORBE_TAB` があれば転送する**すべての**呼び出しに添え、無ければ外す——ブリッジはどの動詞が読むかを知らない薄い転送層のままで、agent が自分のタブを名乗る手間も名乗り間違いも生まれない（ツールの引数には出さず、agent が書いた値は使わない）。したがって呼び出し元タブが分かるのは、ブリッジがタブの環境の `ORBE_TAB` を受け継いで起きたときだけ。MCP サーバーへ親の環境を渡さないクライアントから呼ぶと呼び出し元は不明になり、`add_task` で workspace を省いたタスクは「なし」に付く（登録時の対処は下の MCP ブリッジ）。`orb` は読む動詞を呼ぶサブコマンド（`task add`）だけが添える。
 
 ## イベントと履歴（seq）
 
@@ -54,7 +60,7 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 - `get_tab_text {tabId, scrollback?}` → `{text}` … 画面テキスト平文。scrollback 真で履歴全体、偽で可視範囲。
 - `send_text {tabId, text}` … ペースト相当で PTY へ書く。bracketed paste 下では改行を含めても**自己実行せず**プロンプトに留まる。コマンド実行は別途 `send_key` の enter。
 - `send_key {tabId, key}` … キー名（case-insensitive。修飾は `+` 連結）を合成キーイベント（press+release）へ解決して libghostty のキー経路へ送り、端末モード（legacy / kitty keyboard protocol / application cursor 等）に応じた符号化は libghostty に委ねる。Orbe は端末バイトを組まない——ペースト経路は制御文字を strip するため、キーはキー経路でしか届かない。名前付きキー（enter/tab/escape/space/backspace/delete/上下左右/home/end/pageup/pagedown）は実 keycode を持ち、修飾も渡す（`ctrl+enter`・`shift+tab` 等。端末自身の keybind に消費されタブへ届かないことがある）。単一文字（Unicode scalar 1 つ・制御文字以外）は keycode を持たず、生成文字・無修飾文字・修飾を添える——`ctrl+<char>` はレンジ制限なく libghostty が符号化し（`ctrl+1` は端末の標準どおり素の `1`）、`shift+<char>` は大文字化して送る（大文字化しない文字は shift を修飾のまま渡す）。キー名は小文字化して解決するので `A` は `a`、大文字は `shift+a` で指定する。`alt`/`meta`/`option+<char>` が legacy 端末で ESC 前置になるかは `macos-option-as-alt`（層 1 既定 true → [config](../platform/config.md)）に従い、kitty 下は設定に依らず Alt 修飾として届く。`cmd`/`super` 付き単一文字・未知修飾・`+`・複数 scalar の grapheme・制御文字の単一指定は `-32602`——修飾を黙殺して素の文字を注入しないため（grapheme と制御文字は `send_text` で送る）。
-- `spawn {workspaceId?, cwd?, command?}` … 新タブを開く。command 省略はシェル・指定はそれを直接起動。cwd 省略は GUI の新規タブと同じフォールバック（対象 workspace の選択中タブの cwd → その workspace の rootPath）。戻り値は `{tabId}`。workspaceId が未知ならエラーにせずアクティブ workspace へフォールバックする。
+- `spawn {workspaceId?, cwd?, command?}` … 新タブを開く。command 省略はシェル・指定はそれを直接起動。cwd 省略は [cwd を指定せずに起こすタブ](../chrome/layout.md#cwd-の確定)と同じフォールバック（対象 workspace の選択中タブの cwd → その workspace の rootPath）。戻り値は `{tabId}`。workspaceId が未知ならエラーにせずアクティブ workspace へフォールバックする。
 - `spawn_agent {command?, workspaceId?, cwd?, timeoutMs?}` / `resume_agent {command, sessionId, workspaceId?, cwd?, timeoutMs?}` → `{tabId, workspaceId, agent:{command, path}, ready, agentSessionId?, seq}` … 検出済みエージェントを新タブで起こし、**既定で「準備できた」まで待ってから返す**。`spawn` との違いは、**GUI の起動（⌘⇧A / ⌘⇧C）と同じ組成**——検出済みの絶対パスを使い、子プロセス PATH を注入する（[agent/launch](../agent/launch.md)）。`command` を渡さない `spawn_agent` は**対象 workspace の**実効 `default-agent` を解く（アクティブ WS ではない）。`resume_agent` はエージェント自身の再開コマンド形を組み立て、セッション ID の文字集合もそこで検証する。未検出 command は `-32602`、解決できるエージェントが無ければ `-32000`。**未知 workspaceId は `-32004`**——`spawn` のフォールバックを継がないのは、新しい入口が「指定と違う対象を黙って触る」振る舞いを引き継ぐ理由がないため。
   - 「準備できた」は、起動より後にそのタブへ届く最初の `agent_state=idle`。これを起動時に報告できるのは hook に SessionStart を配線した agent（claude）だけで、どの agent が報告できるかは Orbe が持つ（[agent/plugin-package](../agent/plugin-package.md)）——呼ぶ側に agent 差を意識させない。報告できる agent は idle を待って `ready:true` と `agentSessionId`（その報告が運んだ id）を返し、`seq` はその idle イベントの seq。報告できない agent（codex / agy）は待たず `ready:false` で即返す（`agentSessionId` 無し）。`ready:false` は「続けて `prompt_agent` を送れる保証が無い」の意味。
   - 時間切れ（`timeoutMs` 既定 30 秒・上限 24 時間・不正は起動前に `-32602`）は `{…, ready:false, timedOut:true, seq}`——spawn は成功しているので宛先を捨てない。`timedOut` の有無で「報告できない agent」と区別する。待機中にそのタブが消えたら `-32000 "agent exited"`。
@@ -75,6 +81,14 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
   - **入力欄が空いている状態にだけ届く動詞**。対象が `working` / `waiting` なら `-32000 "agent busy"` で何も送らない——`waiting`（permission ダイアログ・AskUserQuestion）へ text＋enter を打つと既定選択の確定＝ツール実行の承認を副作用として起こすため。waiting への応答は `send_key` が担う。このガードが効くのは waiting を報告する agent（[agent/plugin-package](../agent/plugin-package.md)）だけで、報告経路の無いタブでは承認確定を防げない。報告の無いタブへは送れる（codex / agy は起動時に報告しない）。
   - 未 mount（surface 無し）は `-32000 "tab not mounted"`——send が no-op なので黙って時間切れまで待つ形を作らない。未知 tab は `-32004`。待機中にそのタブが消えたら `-32004 "tab closed"`（タブ消滅はエージェントの状態ではないので `state` に混ぜない）。`timeoutMs` 既定 1 時間・上限 24 時間・不正は送る前に `-32602`。
 - `wait_for_event {tabId?, kinds?, value?, after?, timeoutMs?}` → `{event, seq}` / `{timedOut:true, seq}` … 状態変化を待つ低水準の口。`kinds` ⊆ {agent_state, title, pwd, tab_closed}、`value` は kind 固有値の完全一致、`after` は「この seq より後」（0 可）。`after` を渡すと保持中の履歴を seq 昇順に見て、フィルタ一致が既にあれば**待たずにそのイベント**（最初の一致）で返し、無ければ待つ——`list_tabs` や書き込み応答の `seq` を `after` に渡せば、snapshot と待機の隙間に済んだ変化を取りこぼさず、前ターンの古いイベントも掴まない。`after` を省くと登録後のイベントだけで起きる。1 接続に複数の待機を張れ、応答は各リクエストの `id` で返る。**params は待機を張る前に検証する**——未知 kind・空 kinds・型違いの tabId / after / value・値域外の timeoutMs は `-32602`、`after` が保持範囲より古ければ `-32006`、最新 seq より大きければ `-32602`（観測しえない値＝呼び出し側のバグ）。黙って通すと「永久に一致せずただ時間切れ」「絞り込みが外れて別タブのイベントを掴む」という、呼び出し側から何も起きなかったのと区別できない形になるため。timeoutMs に上限を置くのも同じ理由で、際限なく大きな値は待機の期限が事実上訪れなくなる。
+- `list_tasks {workspaceId?}` → `{tasks:[…], seq}` … [タスク](../platform/tasks.md)一覧を列の順で返す。各要素は `taskId`・`title`・`status`（`todo` / `in_progress` / `done`）・`priority`（`high` / `medium` / `low`）・`description`・`createdAt`（UTC・ミリ秒・`Z`）と、あれば `waiting{reason, since}`・`due`（`YYYY-MM-DD`）・`workspaceId` と `workspaceName`・`createdBy`・`links`・`worktree`（無い値はキーごと無い。結び付きの無いタスクは `links` を持たない。付き先の workspace を解決できないタスクも `workspaceId` を持たず、worktree のディレクトリが無いタスクも `worktree` を持たない）。`links` は結び付いた GitHub の Issue・PR の列 `[{kind: "issue" | "pr", repo: "owner/name", number}]` で、先頭が主、`repo` は小文字。`worktree` はタスクの作業の場所（worktree のルートの絶対パス）。人が外した項目の記録は出さない。`workspaceId` を渡すとその workspace のタスクだけ（未知は `-32004`）。
+- `add_task {title, status?, priority?, due?, waitingReason?, description?, workspaceId?, links?, worktree?, callerTabId?}` → `{task, seq}` … 列の末尾に足す。`workspaceId` は省略＝呼び出し元タブの workspace（タブが分からなければなし）、`null`＝なし、整数＝その workspace（未知は `-32004`）。「キーが無い」と `null` を区別するのは `config_set` の `value: null` と同じ流儀。追加の時点で `callerTabId` のタブの agent が `working` を報告していれば、その agent の名前を追加者として残す（それ以外——人がシェルから足した・終了を報告しない agent が去った後——は残さない）。呼び出し元タブが分かるのは `callerTabId` が届いたときだけ（上記。MCP 経由ではブリッジが `ORBE_TAB` を受け継いでいるとき）。`callerTabId` が未知のタブを指してもエラーにせず「呼び出し元不明」として足す——タブが閉じた直後の競合で追加そのものを落とさないため。
+- `update_task {taskId, title?, status?, priority?, due?, waitingReason?, description?, workspaceId?, links?, worktree?}` → `{task, seq}` … キーの無い項目は変えず、`due` / `waitingReason` / `workspaceId` / `worktree` は `null` で外す。完了は `status: "done"` で、待ちは自動で外れる（完了専用の動詞は無い）。変更項目が 1 つも無い・完了のタスクに待ちを入れる（同じ要求で `status` を戻さずに）・`status: "done"` と `waitingReason` の文字列を同時に渡す、はいずれも `-32602`。
+- `links`（`add_task` / `update_task`）は `list_tasks` と同じ形の配列だけを受け、`update_task` では**丸ごと置き換える**（`[]` で全部外す。`null` は型の違反）。配列で「外す」が表せるので、`null`＝外す の流儀は持ち込まない。配列でない・要素の型が違う・`kind` が `issue` / `pr` 以外・`repo` が `owner/name` の形でない・`number` が 1 未満、同じタスクの中で同じ項目（`repo` と `number` が同じもの。種別は問わない）が重なる、ほかのタスクがその項目を持っている（理由に相手の taskId が入る）、はいずれも `-32602` で、一覧は変わらない（[タスク](../platform/tasks.md)）。
+- `worktree`（`add_task` / `update_task`）は文字列のパスで、実在するディレクトリの絶対パスでなければ `-32602`。制御文字・改行類を含むパスも `-32602`（読み込みが拒む形の値を書かないため）。そのパスを含む worktree のルートに揃えて付ける（サブディレクトリを渡してもルートになる）。ほかのタスクが同じ worktree を持っていれば `-32602` で、理由に相手の taskId が入る（付け替えは相手から外してから）。相対パスは受けない——control は呼び出し側の作業ディレクトリを知らないので、解くのは呼び出し側（`orb` は自分の cwd から解いて送る）。
+- `move_task {taskId, beforeTaskId | afterTaskId}` → `{ok, seq}` … 別のタスクの前か後ろへ移す。ちょうど 1 つが必須で、自分自身を指すと `-32602`。
+- `delete_task {taskId}` → `{ok, seq}`。
+  - タスクの 5 動詞に共通して、params の欠落・型違い・値域外（空のタイトル・未知のステータス／優先度・暦に無い日付・JSON の真偽値を整数として渡した値など）は `-32602`、未知のタスクと未知の workspace は `-32004`。拒否したとき一覧は変わらない。タスクの変化はイベントにならない。
 - `completion_update` / `completion_end` / `completion_accept` … コマンド補完用（[completion](../palette/completion.md)）。前 2 つは**無応答**。`completion_` 系は宛先解決ガードより前で分岐し、無応答メソッドは宛先不在でも応答を出さない（打鍵ごとの update が accept fd に行を積まない）。読めない行にはこの分岐より前でエラー行を返すため、accept fd から読める行が accept 応答だけとは限らない——クライアントは `id` で自分の応答を選ぶ（[completion](../palette/completion.md)）。socket 専用。
 
 ## 境界
@@ -93,7 +107,7 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 
 `orbe-mcp` 実行ターゲット（GhosttyKit/AppKit 非依存）。MCP stdio を喋りツール定義を保持し、tools/call を control.sock へ転送する薄い層——ツールの反復に Orbe 本体の再ビルド/再起動が要らない。応答はそのまま本文に出し、control のエラーは code を落として `isError` の文言に畳む（ツール説明はコード番号でなく文言で案内する）。ツール説明が導線を持つ——エージェントに問うなら `prompt_agent`、生の入力は `send_text`＋`send_key`、特殊な待ちだけ `wait_for_event`。
 
-利用する MCP クライアントへ、[`scripts/orbe-mcp.sh`](../../../scripts/orbe-mcp.sh) の絶対パスを stdio サーバーの起動コマンドとして登録する。スクリプトは毎回 `swift build` を通してから exec する（stale バイナリが別チャネルの socket を掴まないため・[channel](../platform/channel.md)）。接続先 control.sock は app と同じ規則で `ORBE_STATE_DIR` を honor するため、隔離インスタンスと bridge を同じ `ORBE_STATE_DIR` で起こせば、その隔離インスタンスを MCP で駆動できる。
+利用する MCP クライアントへ、[`scripts/orbe-mcp.sh`](../../../scripts/orbe-mcp.sh) の絶対パスを stdio サーバーの起動コマンドとして登録する。スクリプトは毎回 `swift build` を通してから exec する（stale バイナリが別チャネルの socket を掴まないため・[channel](../platform/channel.md)）。接続先 control.sock は app と同じ規則で `ORBE_STATE_DIR` を honor するため、隔離インスタンスと bridge を同じ `ORBE_STATE_DIR` で起こせば、その隔離インスタンスを MCP で駆動できる。呼び出し元タブ（`callerTabId`）はブリッジが受け継いだ `ORBE_TAB` から取るので、MCP サーバーへ親の環境を渡さないクライアントに登録するときは、`ORBE_TAB` を渡す環境変数として設定に加えないと、`add_task` の既定の付き先と追加者が効かない。
 
 ## 開発検証
 

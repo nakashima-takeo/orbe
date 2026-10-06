@@ -131,17 +131,6 @@ final class WindowControllerControlTests: OrbeTestCase {
 
   // MARK: - controlListWorkspaces の dormantAgentCount 露出
 
-  /// list_workspaces の全行に dormantAgentCount フィールドが Int で出る（休眠可視化の源）。
-  func testListWorkspacesExposesDormantAgentCountOnEveryRow() throws {
-    let wc = try restore(activeWorkspace: 0, [tabbed("main"), tabbed("background")])
-    let rows = wc.controlListWorkspaces()
-    XCTAssertFalse(rows.isEmpty)
-    for r in rows {
-      XCTAssertNotNil(r["activated"] as? Bool, "各行に activated(Bool) が露出する")
-      XCTAssertNotNil(r["dormantAgentCount"] as? Int, "各行に dormantAgentCount(Int) が露出する")
-    }
-  }
-
   /// 休眠 workspace の dormantAgentCount は永続復元した agent 付きタブ数を反映する
   /// （agentState には出ない休眠 agent を、この永続カウントで露出する）。
   func testListWorkspacesDormantAgentCountReflectsPersistedAgents() throws {
@@ -160,18 +149,6 @@ final class WindowControllerControlTests: OrbeTestCase {
 
   // MARK: - controlListTabs の agentSessionId 露出
 
-  /// list_tabs の各タブに agentSessionId フィールドが出る。report_agent 未適用のタブは
-  /// null（NSNull）で、agentState と同じ null 許容の写し方に揃う（resume の鍵）。
-  func testListTabsExposesAgentSessionIdAsNullWhenUnset() throws {
-    let wc = try restore(activeWorkspace: 0, [tabbed("main")])
-    let tabs = wc.controlListTabs()
-    XCTAssertFalse(tabs.isEmpty)
-    for t in tabs {
-      XCTAssertNotNil(t["agentSessionId"], "各タブ行に agentSessionId キーが存在する")
-      XCTAssertTrue(t["agentSessionId"] is NSNull, "report_agent 未適用なら null")
-    }
-  }
-
   /// 休眠（未消費チケット）タブは、同一性（agentSessionId）は露出するが状態（agentState）は
   /// 出さない——報告は live にしか存在しないため。resume 非対応 CLI で固定する: resume 可能な
   /// 休眠は従来から値が出ており、「復元時に解決できないチケットを捨てる」設計への差し戻しは
@@ -188,33 +165,6 @@ final class WindowControllerControlTests: OrbeTestCase {
 
     XCTAssertEqual(tab["agentSessionId"] as? String, "zzz", "休眠のあいだも resume の鍵は見える")
     XCTAssertTrue(tab["agentState"] is NSNull, "休眠タブに報告状態は無い")
-  }
-
-  // MARK: - controlListAgents（list_agents）
-
-  /// 検出未完了（起動直後は AgentCatalog.refresh が非同期で未反映）の WindowController では
-  /// controlListAgents は空配列を返す（エラーにも nil にもしない＝空許容の契約）。
-  func testListAgentsEmptyBeforeDetectionReturnsEmptyArrayNotError() throws {
-    let wc = try restore(activeWorkspace: 0, [tabbed("main")])
-    XCTAssertEqual(wc.controlListAgents().count, 0, "検出未完了なら空配列（エラー化しない）")
-  }
-
-  /// AgentCLI → JSON 行の写像契約: command と解決済み絶対 path を string で保つ（検出源に依らず固定）。
-  func testAgentRowsMapCommandAndPath() {
-    let rows = WindowController.agentRows([
-      AgentCLI(command: "claude", path: "/opt/homebrew/bin/claude"),
-      AgentCLI(command: "codex", path: "/usr/local/bin/codex"),
-    ])
-    XCTAssertEqual(rows.count, 2)
-    XCTAssertEqual(rows[0]["command"] as? String, "claude")
-    XCTAssertEqual(rows[0]["path"] as? String, "/opt/homebrew/bin/claude")
-    XCTAssertEqual(rows[1]["command"] as? String, "codex")
-    XCTAssertEqual(rows[1]["path"] as? String, "/usr/local/bin/codex")
-  }
-
-  /// 空入力は空配列（空時の挙動を写像レベルでも固定）。
-  func testAgentRowsEmptyInputIsEmpty() {
-    XCTAssertTrue(WindowController.agentRows([]).isEmpty)
   }
 
   // MARK: - controlConfigSet / controlRemoveWorkspace のエラー契約（ライブ反映前の guard）

@@ -3,7 +3,7 @@ import Foundation
 
 /// 外部やエージェントが Orbe を操作するための domain 操作（main スレッドでのみ呼ぶ）。
 /// 実体は WindowController。ControlServer がリクエストを main へ hop して叩く。
-protocol ControlTarget: AnyObject {
+protocol ControlTarget: ControlTaskTarget {
   func controlListWorkspaces() -> [[String: Any]]
   func controlListTabs() -> [[String: Any]]
   /// 検出済みエージェント CLI を列挙する（読み取り専用）。
@@ -342,11 +342,12 @@ final class ControlServer {
       target.controlReportAgent(tab: t, report: report)
       return .success(["ok": true])
     default:
-      // タブ操作・config / workspace CRUD・セッション復元は拡張の dispatch（ControlServer+Dispatch）へ。
-      // いずれも非該当なら未知メソッド。
+      // タブ操作・config / workspace CRUD・セッション復元・タスクは拡張の dispatch
+      // （ControlServer+Dispatch / +Task）へ。いずれも非該当なら未知メソッド。
       return runTab(method: method, params: params, target: target)
         ?? runConfigWorkspace(method: method, params: params, target: target)
         ?? runSession(method: method, params: params, target: target)
+        ?? runTask(method: method, params: params, target: target)
         ?? .failure(ControlError(code: -32601, message: "method not found: \(method)"))
     }
   }

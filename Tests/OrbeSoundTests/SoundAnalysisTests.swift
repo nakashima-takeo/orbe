@@ -54,18 +54,6 @@ final class SoundAnalysisTests: XCTestCase {
       -.infinity)
   }
 
-  /// 純音のスペクトル最大ピークは DFT の分解能内でその周波数に一致する。
-  func testSpectralPeakFindsThePureToneFrequency() {
-    let frequency = 440.0
-    let samples = (0..<24000).map {
-      Float(0.4 * sin(2 * Double.pi * frequency * Double($0) / 48000))
-    }
-    let peaks = SoundAnalysis.spectralPeaks(samples, sampleRate: sampleRate, count: 3)
-    let resolution = sampleRate / 4096
-    XCTAssertEqual(peaks.first?.frequency ?? 0, frequency, accuracy: resolution)
-    XCTAssertEqual(peaks.first?.levelDB ?? -100, 0, accuracy: 1e-9, "最大ピークは 0 dB 基準")
-  }
-
   /// 2 音の混合では両方がピークに立ち、相対レベルが振幅比を反映する。
   func testSpectralPeaksRankByLevel() {
     let samples = (0..<24000).map { i -> Float in
@@ -76,6 +64,7 @@ final class SoundAnalysisTests: XCTestCase {
     let peaks = SoundAnalysis.spectralPeaks(samples, sampleRate: sampleRate, count: 3)
     let resolution = sampleRate / 4096
     XCTAssertEqual(peaks.first?.frequency ?? 0, 440, accuracy: resolution)
+    XCTAssertEqual(peaks.first?.levelDB ?? -100, 0, accuracy: 1e-9, "最大ピークは 0 dB 基準")
     guard let second = peaks.dropFirst().first else { return XCTFail("第 2 ピークが出ない") }
     XCTAssertEqual(second.frequency, 1320, accuracy: resolution)
     XCTAssertEqual(second.levelDB, 20 * log10(0.1 / 0.4), accuracy: 1.5, "振幅比 ≒ 相対レベル")

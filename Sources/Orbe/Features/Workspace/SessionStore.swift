@@ -102,7 +102,7 @@ final class SessionStore {
   }
 
   /// 指定 workspace での新規タブ起動の初期 cwd。GUI・エージェント起動・制御 API は `openTab` 越しに
-  /// ここを通り、Dispatch もリポジトリを探す基点として読む（Dispatch は workspace 内に新タブを開く面
+  /// ここを通り、worktree パレットもリポジトリを探す基点として読む（worktree パレットは workspace 内に新タブを開く面
   /// なので、新タブの開始地点を基点にする）。
   /// 当該 workspace のアクティブタブの cwd を継ぎ、タブ不在（0タブ）はその workspace の rootPath
   /// へ落とす——開くタブはその workspace のものだから（`defaultNewWorkspaceRoot()` とはここが違う）。

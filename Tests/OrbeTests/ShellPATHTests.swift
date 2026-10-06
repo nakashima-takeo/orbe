@@ -80,20 +80,7 @@ final class ShellPATHTests: OrbeTestCase {
     XCTAssertEqual(ShellPATH.sanitize("/usr/bin::/bin:"), "/usr/bin:/bin")
   }
 
-  /// 区切りを失った連結（`printf %s "$PATH"` が fish で返しうる形）は構造検査では弾けない。
-  /// 弾けなくても害が無いことを担保するのは union の側——既知パスは必ず載る。
-  func testUnseparatedGarbageStillYieldsUsablePath() {
-    let garbage = "/usr/bin/opt/homebrew/bin/usr/local/bin"
-    XCTAssertEqual(ShellPATH.sanitize(garbage), garbage, "1 要素として通る")
-    XCTAssertTrue(ShellPATH.compose(login: garbage).contains("/opt/homebrew/bin"))
-  }
-
   // MARK: - 組み立て（probe 差し替え）
-
-  func testIncompleteProbeResultIsCompletedByKnownPaths() {
-    let sut = ShellPATH(probe: { "/usr/bin:/bin" })
-    XCTAssertEqual(sut.value(), "/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin:/usr/sbin:/sbin")
-  }
 
   func testFailedProbeFallsBackToKnownPaths() {
     XCTAssertEqual(

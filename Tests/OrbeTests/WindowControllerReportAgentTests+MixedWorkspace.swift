@@ -68,24 +68,7 @@ extension WindowControllerReportAgentTests {
       "背景 workspace の live は横断 rollup には入るが、現在 workspace のタブ列には漏らさない")
     XCTAssertTrue(fixture.wc.current === activeBefore, "背景報告で前面 workspace を奪わない")
     XCTAssertEqual(fixture.workspace.lastUsedAt, stampBefore, "背景 materialize/report で MRU を動かさない")
-  }
-
-  func testBackgroundMixedDoneReachesAttentionTransientSoundAndTopBar() throws {
-    let fixture = try makeControllerAndMixedBackground()
-    let sound = try XCTUnwrap(fixture.wc.soundPlayer as? SoundPlayerFake)
-
-    fixture.wc.controlReportAgent(
-      tab: fixture.live,
-      report: AgentHookReport(
-        agent: "claude", state: "done", sessionId: nil,
-        message: AgentMessage(text: "finished")))
-    fixture.wc.flushChrome()
-
-    XCTAssertEqual(fixture.wc.attentionStore.rows.map(\.state), ["done"])
-    XCTAssertEqual(fixture.wc.attentionStore.transient?.row.state, "done")
-    XCTAssertEqual(sound.played.last?.event, .done)
-    XCTAssertEqual(fixture.wc.statusModel.rollup.map(\.state), ["done"])
-    XCTAssertEqual(fixture.workspace.dormantAgentCount(), 1)
+    XCTAssertEqual(fixture.workspace.dormantAgentCount(), 1, "既存の復元タブは休眠のまま")
   }
 
   func testDormantSiblingReportIsExcludedFromEveryLiveProjection() throws {

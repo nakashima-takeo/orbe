@@ -119,7 +119,7 @@ private func sessionClosed(_ rest: [String]) -> Never {
           [
             "", event.agent.command, event.sessionId, event.workspace.name, event.cwd,
             event.closeReason ?? "-",
-          ].map(cell).joined(separator: "\t"))
+          ].map(tsvCell).joined(separator: "\t"))
       }
     }
   }
@@ -237,15 +237,5 @@ private func eventLine(_ event: SessionEvent) -> String {
   return [
     SessionEvent.iso8601(event.ts), name, event.agent.command, event.sessionId,
     event.workspace.name, event.cwd, title, ending,
-  ].map(cell).joined(separator: "\t")
-}
-
-/// タブ区切りの行に載せるセル。タブは列を、改行は行を壊し、ESC 等は読み手の端末が解釈するため、
-/// 制御文字はまとめて空白にする（title / reason は hook 由来、cwd は OSC 7 由来の任意文字列）。
-private func cell(_ s: String) -> String {
-  var scalars = String.UnicodeScalarView()
-  for scalar in s.unicodeScalars {
-    scalars.append(CharacterSet.controlCharacters.contains(scalar) ? " " : scalar)
-  }
-  return String(scalars)
+  ].map(tsvCell).joined(separator: "\t")
 }

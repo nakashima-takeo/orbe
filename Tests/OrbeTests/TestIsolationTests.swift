@@ -1,5 +1,4 @@
 import AppKit
-import OrbePaths
 import XCTest
 
 @testable import Orbe
@@ -10,24 +9,6 @@ import XCTest
 /// ghostty の user 設定・実 state dir——を読み書きし始める。テストは手元で緑のまま、
 /// 中身は「開発者のマシンの状態」を測るものへ変質し、CI と挙動が食い違う。
 final class TestIsolationTests: OrbeTestCase {
-
-  /// state dir は temp 配下で、`<root>/control.sock` が AF_UNIX の上限に収まる長さ。
-  func testStateDirIsIsolatedAndShortEnough() throws {
-    let stateDir = try XCTUnwrap(ProcessInfo.processInfo.environment[OrbePaths.stateDirEnvVar])
-    XCTAssertEqual(stateDir, TestIsolation.root.path, "ORBE_STATE_DIR は隔離根を指す")
-    XCTAssertTrue(
-      stateDir.hasPrefix(NSTemporaryDirectory()), "隔離根は temp 配下（実 state dir ではない）")
-    XCTAssertLessThanOrEqual(
-      stateDir.utf8.count, TestIsolation.maxRootPathBytes, "sun_path 104 バイト上限に収まる長さ")
-  }
-
-  /// 制御ソケットは隔離根の下。空だと制御 API が無言で無効化するので、非空であることも見る。
-  func testControlSocketPointsIntoIsolatedRoot() {
-    let path = ControlServer.shared.socketPath
-    XCTAssertFalse(path.isEmpty, "空＝制御 API 無効。ハーネスがパス長を超えさせている")
-    XCTAssertEqual(path, TestIsolation.root.appendingPathComponent("control.sock").path)
-    XCTAssertLessThan(path.utf8.count, 104, "AF_UNIX の sun_path 上限")
-  }
 
   /// 端末のクリップボードはシステム全域の general ではなく、テストごとの一意名の pasteboard。
   /// 外れると `swift test` のたびに開発者のクリップボードが置き換わり、履歴アプリへ流れる。
@@ -60,20 +41,15 @@ final class TestIsolationTests: OrbeTestCase {
       WorkspacePersistence.fileURLOverride, SettingsPersistence.fileURLOverride,
       AppStatePersistence.fileURLOverride, GuiConfig.fileURLOverride,
       AgentPluginInstaller.stablePluginDirOverride, BundledResources.root,
-      CustomSoundStore.directoryURLOverride,
+      CustomSoundStore.directoryURLOverride, TaskPersistence.fileURLOverride,
+      AgentSessionLog.fileURLOverride, Config.userFileURLOverride,
     ] {
       let url = try XCTUnwrap(url, "per-test の override が張られていない")
       XCTAssertEqual(url.deletingLastPathComponent().path, dir.path)
     }
-  }
-
-  /// ghostty の user 層は caseDir 配下の不在ファイルへ向く＝実 user 設定は読まれない。
-  /// テストが層を立てるならここへ書くので、書いた中身が `endCase` の削除に乗る位置に居る必要がある。
-  func testGhosttyUserLayerIsAbsent() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
-    let url = try XCTUnwrap(Config.userFileURLOverride)
-    XCTAssertEqual(url.path, dir.appendingPathComponent("ghostty-user.conf").path)
-    XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), "user 層は不在＝読まれない")
+    // ghostty の user 層は不在ファイル＝開発者の実 user 設定は読まれない。
+    let ghosttyUser = try XCTUnwrap(Config.userFileURLOverride)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: ghosttyUser.path), "user 層は不在＝読まれない")
   }
 
   /// テスト 1 件ごとに別の作業ディレクトリが配られ、前のテストのものは消えている。
@@ -91,13 +67,5 @@ final class TestIsolationTests: OrbeTestCase {
     XCTAssertEqual(
       Set(try FileManager.default.contentsOfDirectory(atPath: dir.path)), ["resources"],
       "配られた直後のディレクトリは、ハーネスが用意する空の同梱リソース根だけを持つ")
-  }
-
-  /// 補完の学習ストアは root 直下に固定する（`shared` が初回タッチで焼くため per-test にできない）。
-  /// ＝この 1 種だけは学習状態がテスト間で持ち越される。
-  func testCompletionLearningIsProcessWide() throws {
-    let url = try XCTUnwrap(CompletionLearning.fileURLOverride)
-    XCTAssertEqual(
-      url.path, TestIsolation.root.appendingPathComponent("completion-learning.json").path)
   }
 }

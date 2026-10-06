@@ -54,13 +54,6 @@ final class SessionStoreTabGroupTests: OrbeTestCase {
     XCTAssertEqual(SessionStore.segments(of: []), [], "0 タブは連なし")
   }
 
-  /// `segment(containing:)` は index を含む連の範囲を返す。
-  func testSegmentContainingIndexSpansItsRun() {
-    let tabs = ["a", "b", "b", "b", "c"].map(tab)
-    XCTAssertEqual(SessionStore.segment(containing: 2, in: tabs), 1..<4, "連の中央から両端まで伸びる")
-    XCTAssertEqual(SessionStore.segment(containing: 0, in: tabs), 0..<1, "単独タブは自分だけ")
-  }
-
   // MARK: - 復元時の正規化（load）
 
   /// 非隣接の同キー（旧ファイルからの復元）は初出順で連へ寄せられ、active は同じタブを指し続ける。

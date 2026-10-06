@@ -120,7 +120,7 @@ struct ThemeFonts {
   let meta = Font(Theme.Typography.meta as CTFont)
   let sectionLabel = Font(Theme.Typography.sectionLabel as CTFont)
   let display = Font(Theme.Typography.display as CTFont)
-  // 情報密度優先の行タイポ（Dispatch clean）
+  // 情報密度優先の行タイポ（worktree パレットの clean）
   let paneRow = Font(Theme.Typography.paneRow as CTFont)
   let paneSegment = Font(Theme.Typography.paneSegment as CTFont)
   // Help（⌘H チートシート）

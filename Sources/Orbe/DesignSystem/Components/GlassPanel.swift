@@ -25,10 +25,10 @@ struct GlassPanel<Content: View>: View {
   var level: Theme.GlassLevel = .panel
   /// 角丸の上書き（nil で level 既定）。補完候補パネル（radius 8）等のコンポーネント個別値に使う。
   var cornerRadius: CGFloat?
-  /// blur material の上書き（nil で level 既定）。Dispatch は面/枠が popup 級（α.90・.10/.14）でも
+  /// blur material の上書き（nil で level 既定）。worktree パレットは面/枠が popup 級（α.90・.10/.14）でも
   /// blur は panel 級（24px）という組み合わせ。level だけでは表せないので明示ノブで寄せる。
   var materialOverride: NSVisualEffectView.Material?
-  /// 影の上書き（nil で level 既定）。上と同じく Dispatch の大型フローティング影（panel 級）を指定する。
+  /// 影の上書き（nil で level 既定）。上と同じく worktree パレットの大型フローティング影（panel 級）を指定する。
   var elevationOverride: Theme.ElevationLevel?
   /// 枠の上書き（nil で level 既定）。Attention パレットは面が popup 級（α.90）でも枠は panel 級（.08/.12）。
   var borderOverride: Theme.GlassLevel?

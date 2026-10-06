@@ -169,12 +169,17 @@ extension SurfaceInputMethodTests {
           at: view.convert(point(opened, row: 0, column: 0), to: nil), pasteboard: board,
           operations: .copy))
     }
+    let pressed = point(opened, row: 0, column: 1)
+    try once("クリックの押下") { try mouse(opened, .leftMouseDown, at: pressed) }
+    try mouse(opened, .leftMouseUp, at: pressed)
     once("外からの選択") { opened.surface.selectedRange = NSRange(location: 0, length: 0) }
     once("コマンド") { opened.surface.perform(.move(.right, extending: false)) }
+    try once("保存") { try opened.document.save() }
     once("丸ごと置き換え") { opened.surface.replaceAll(with: "cd\n") }
     once("IME の確定", notifies: false) { replay([.insert("か")], on: opened) }
     once("IME の unmarkText", notifies: false) { replay([.unmark], on: opened) }
     once("IME 自身の取り消し", notifies: false) { replay([.mark("")], on: opened) }
+    once("焦点の喪失") { window.makeFirstResponder(nil) }
   }
 
   /// 文書を切り替えて面が窓から外れると、変換を確定して IME に知らせる（変換は文書ごとに残さない）。

@@ -179,9 +179,9 @@ enum SettingsRegistry {
       // noto は「同梱 Noto のフラット字形で描く」という機能そのもの。emoji-presentation 全域を
       // 同梱 Noto（sbix・.process 登録済み）へ map する。codepoint-map は解決順の最上位で名前解決し、
       // map 先未保有 codepoint は libghostty が hasCodepoint 検証で通常解決へ落とすため tofu にならない
-      // （vendor CodepointResolver.getIndexCodepointOverride）。
+      // （ghostty の src/font/CodepointResolver.zig の getIndexCodepointOverride）。
       // apple は map を出さない。libghostty が macOS で Apple Color Emoji を必ず fallback へ挿すため
-      // （vendor SharedGridSet.zig）、放っておけばそれが色付きで描く。奪う側の font-family を
+      // （ghostty の src/font/SharedGridSet.zig）、放っておけばそれが色付きで描く。奪う側の font-family を
       // JetBrains 1 本に絞ってあるので、横取りを打ち消すための map はもう要らない。
       guiConf: { settings in
         switch settings[SettingKeys.emojiFont] {
@@ -261,7 +261,7 @@ enum SettingsRegistry {
       id: .worktreeDir, key: "worktree-dir", labelKey: .settingsWorktreeDir, activation: .drillIn,
       defaultValue: { .string(WorktreePathTemplate.defaultTemplate) },
       domain: .pathTemplate,
-      guiConf: nil,  // gui.conf 非経由（Dispatch の worktree 作成時に実効値を pull する）
+      guiConf: nil,  // gui.conf 非経由（worktree パレットの worktree 作成時に実効値を pull する）
       display: { v, _ in if case .string(let s) = v { return s } else { return "" } },
       unsetPlaceholderKey: nil),
     SettingDescriptor(

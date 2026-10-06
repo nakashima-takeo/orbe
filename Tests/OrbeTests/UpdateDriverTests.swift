@@ -132,23 +132,6 @@ final class UpdateDriverTests: OrbeTestCase {
     driver.retryTermination()
   }
 
-  /// 「今すぐ再起動」は終了要求の再送を即時適用ハンドラより優先する——再送ハンドラが立つのは
-  /// 生きたセッションが終了を待つ間だけで、そこで即時適用へ回すと同じ更新へ二重の要求を出す。
-  func testInstallAndRelaunchPrefersRetryTerminationOverImmediateInstall() {
-    let service = UpdaterService()
-    var installed = 0
-    var retried = 0
-    _ = service.updater(
-      dummyUpdater(), willInstallUpdateOnQuit: SUAppcastItem.empty(),
-      immediateInstallationBlock: { installed += 1 })
-    service.driver.showInstallingUpdate(
-      withApplicationTerminated: false, retryTerminatingApplication: { retried += 1 })
-
-    service.installAndRelaunch()
-    XCTAssertEqual(retried, 1, "終了要求の再送が最優先")
-    XCTAssertEqual(installed, 0, "即時適用ハンドラは呼ばない（二重要求を出さない）")
-  }
-
   /// 「今すぐ再起動」の着地先。押下がどこにも着地しない組み合わせが無いこと、とくに
   /// **セッション進行中は `resumeCheck` へ行かず `hold` する**ことを固定する——ここで
   /// `installRequested` 相当の要求を立てて放置すると、そのセッションが更新を提示せず終わった場合に

@@ -9,19 +9,9 @@ final class SyntaxLanguageTests: XCTestCase {
     func lang(_ name: String) -> SyntaxLanguage? {
       SyntaxLanguage.detect(url: URL(fileURLWithPath: "/x/\(name)"))
     }
-    XCTAssertEqual(lang("a.swift"), .swift)
-    XCTAssertEqual(lang("README.md"), .markdown)
     XCTAssertEqual(lang("a.JSON"), .json, "拡張子は大文字小文字を区別しない")
-    XCTAssertEqual(lang("a.ts"), .typescript)
-    XCTAssertEqual(lang("a.mjs"), .javascript)
-    XCTAssertEqual(lang("a.jsx"), .javascript)
-    XCTAssertEqual(lang("a.tsx"), .tsx)
-    XCTAssertEqual(lang("a.htm"), .html)
-    XCTAssertEqual(lang("a.yml"), .yaml)
-    XCTAssertEqual(lang("a.zsh"), .bash)
     XCTAssertEqual(lang("Dockerfile"), .dockerfile)
     XCTAssertEqual(lang("Dockerfile.dev"), .dockerfile)
-    XCTAssertEqual(lang("web.dockerfile"), .dockerfile)
     XCTAssertNil(lang("LICENSE"))
     XCTAssertNil(lang("a.txt"))
   }

@@ -30,6 +30,7 @@ extension OrbeTestCase {
   func settingsFile() throws -> URL { try XCTUnwrap(SettingsPersistence.fileURL) }
   func appStateFile() throws -> URL { try XCTUnwrap(AppStatePersistence.fileURL) }
   func guiConfFile() throws -> URL { try XCTUnwrap(GuiConfig.fileURL) }
+  func tasksFile() throws -> URL { try XCTUnwrap(TaskPersistence.fileURL) }
 }
 
 /// テストプロセス全体の隔離。`installOnce()` は冪等で、最初の 1 回だけ実際に張る。
@@ -77,6 +78,14 @@ enum TestIsolation {
     // プロセスの環境を土台にするので、`git init` を含む全 fixture の全呼び出しに効く。
     setenv("GIT_CONFIG_GLOBAL", "/dev/null", 1)
     setenv("GIT_CONFIG_SYSTEM", "/dev/null", 1)
+    // ghostty のリソース根（theme の探索先）。libghostty は `ghostty_init` で 1 度だけ読むので、どの
+    // テスト本体よりも前に張る。張らないと Orbe / Ghostty の端末から起動した `swift test` は親の
+    // インストール済み .app を読み、CI と違う結果になる。`app/` は .app の `Resources/ghostty` と同じ
+    // `themes/OrbeDark`・`OrbeLight` を持つ。
+    let appResources = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+      .appendingPathComponent("app", isDirectory: true)
+    setenv("GHOSTTY_RESOURCES_DIR", appResources.path, 1)
 
     // 3. 補完の学習ストア。`CompletionLearning.shared` は初回タッチ時の `fileURL` で in-memory
     //    ストアを焼くため、まだ誰も書いていないこの時点で固定して即タッチする。
@@ -102,7 +111,7 @@ enum TestIsolation {
 
   /// テスト 1 件へ専用ディレクトリを配り、隔離の seam をそこへ向け直す。
   ///
-  /// 値の素性（永続 5 種・同梱リソース根・プラグイン実体化先・ghostty user 層・通知音の再生層・
+  /// 値の素性（永続 6 種・同梱リソース根・プラグイン実体化先・ghostty user 層・通知音の再生層・
   /// 端末のクリップボード）に関わらず **毎テスト無条件に張り直す**。テストが自分で書き換えても
   /// 次のテストへ漏れず、戻し忘れが起きえない——申告制を残さないため。`CompletionLearning` だけは `shared` が in-memory へ
   /// 焼き付ける都合で per-test にできず、`installOnce` の固定のままにする。
@@ -123,6 +132,7 @@ enum TestIsolation {
     AppStatePersistence.fileURLOverride = dir.appendingPathComponent("app-state.json")
     GuiConfig.fileURLOverride = dir.appendingPathComponent("gui.conf")
     AgentSessionLog.fileURLOverride = dir.appendingPathComponent("agent-sessions.jsonl")
+    TaskPersistence.fileURLOverride = dir.appendingPathComponent("tasks.json")
 
     // 同梱リソースの探索根。既定は Xcode の bin を指しており空でも中立でもないため、管理下の
     // 空ディレクトリを用意する（層1 の `orbe-defaults.conf` は不在になる）。テストが同梱物を

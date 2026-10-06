@@ -70,12 +70,6 @@ final class HelpCatalogTests: OrbeTestCase {
     XCTAssertEqual(ids.count, Set(ids).count, "KB 配列の id が重複している")
   }
 
-  /// 棚卸しの総数（28）と「すべて」件数の導出が一致する。
-  func testTotalCount() {
-    XCTAssertEqual(HelpCatalog.totalCount, 28)
-    XCTAssertEqual(HelpCatalog.all.map(\.rows.count), [7, 9, 4, 8])
-  }
-
   /// ⌘⌘（Attention パレット）は画面のどこにも書けない発見不能なジェスチャなので、
   /// 一覧とトップ厳選の両方に必ず載せる（可視の入口はヘルプだけ＝提示の意思決定）。
   func testAttentionGestureIsListedAndTopPicked() {

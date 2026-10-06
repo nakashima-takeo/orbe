@@ -14,26 +14,6 @@ import XCTest
 /// **help を読んで組み立てる利用者と AI にとっての語彙**だけで、打てば通る機能が「無いもの」になる。
 /// どれもサーバ不要で出る経路なので、ここは `WindowController` を立てずに測る。
 extension OrbeCliProcessTests {
-  /// `orb --help` と `orb agent --help` の USAGE に `agent prompt` が載り、トップの Exit codes 行が
-  /// prompt 固有の 3 / 4 を言う。help から漏れると「打てば通るが無いもの」になり、終了コードが
-  /// 説明されなければ 3 / 4 を読む側が失敗と取り違える。
-  func testAgentPromptIsListedInUsageWithItsExitCodes() {
-    let top = ControlProcess.orbWithoutServer(["--help"])
-    XCTAssertEqual(top.status, 0, "--help は socket 不達でも exit 0: \(top.stderr)")
-    XCTAssertTrue(
-      top.stdout.contains("orb agent prompt <tab> (--text <text> | --stdin)"),
-      "トップ USAGE に agent prompt が無い: \(top.stdout)")
-    XCTAssertTrue(
-      top.stdout.contains("3 agent prompt") && top.stdout.contains("4 agent prompt"),
-      "Exit codes 行に 3 / 4 が無い: \(top.stdout)")
-
-    let agent = ControlProcess.orbWithoutServer(["agent", "--help"])
-    XCTAssertEqual(agent.status, 0, "agent --help は exit 0: \(agent.stderr)")
-    XCTAssertTrue(
-      agent.stdout.contains("orb agent prompt <tab> (--text <text> | --stdin)"),
-      "agent USAGE に prompt が無い: \(agent.stdout)")
-  }
-
   /// `orb agent --help` / `orb wait --help` が写す既定タイムアウトは control の `WaitTimeout` と同じ値。
   ///
   /// 既定を決めるのは control で、help は socket 不達でも出す必要があるため値を写している。写しが
@@ -71,6 +51,28 @@ extension OrbeCliProcessTests {
     XCTAssertEqual(
       Set(listed), Set(ControlKey.namedKeys.keys),
       "tab --help の KEYS が ControlKey と食い違っている")
+  }
+
+  /// `orb task --help` の `STATUSES:` / `PRIORITIES:` は control の `TaskItem.Status` / `Priority` と同じ集合。
+  ///
+  /// 弾くのは control（未知の値は -32602）だが、help は socket 不達でも出す必要があるため CLI に語彙を
+  /// 写している。写しが欠けると、打てば通るステータスが help を読む人と AI から見えなくなる。
+  func testTaskHelpListsEveryStatusAndPriority() throws {
+    let outcome = ControlProcess.orbWithoutServer(["task", "--help"])
+    XCTAssertEqual(outcome.status, 0, "task --help は socket 不達でも exit 0: \(outcome.stderr)")
+    func listed(_ prefix: String) throws -> Set<String> {
+      let line = try XCTUnwrap(
+        outcome.stdout.split(separator: "\n").first { $0.hasPrefix(prefix) },
+        "task --help に \(prefix) 行が無い: \(outcome.stdout)")
+      let words = line.dropFirst(prefix.count).split(separator: "(").first ?? ""
+      return Set(words.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+    }
+    XCTAssertEqual(
+      try listed("STATUSES: "), Set(TaskItem.Status.allCases.map(\.rawValue)),
+      "task --help の STATUSES が TaskItem.Status と食い違っている")
+    XCTAssertEqual(
+      try listed("PRIORITIES: "), Set(TaskItem.Priority.allCases.map(\.rawValue)),
+      "task --help の PRIORITIES が TaskItem.Priority と食い違っている")
   }
 
   /// `orb config --help` の `KEYS:` は `SettingsRegistry.all` と同じ集合。

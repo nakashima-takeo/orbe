@@ -34,9 +34,13 @@ let package = Package(
     .package(url: "https://github.com/tree-sitter-grammars/tree-sitter-yaml", exact: "0.7.0"),
   ],
   targets: [
+    // libghostty。URL のタグ ghosttykit-<SHA> が ghostty の pin（ghostty の fork の Release。タグは焼いたコミットを指す）。
+    // zip には build-app.sh が .app へ同梱する share とフォントも入っている。pin の更新と改造の手順は docs/guides/build.md。
     .binaryTarget(
       name: "GhosttyKit",
-      path: "vendor/ghostty/macos/GhosttyKit.xcframework"
+      url:
+        "https://github.com/nakashima-takeo/ghostty/releases/download/ghosttykit-f9a3f24a56bf05f70894e1a084809d4fffadf420/GhosttyKit.zip",
+      checksum: "6a46894d36d67a5d07a248d1f18542bbcfd8b46d04dbc5be65eb4b04480c39a2"
     ),
     // state dir / control.sock の解決を 3 実行体（本体・cli・mcp）で共有する薄い土台。
     // Foundation のみ・独立ライブラリ（重い本体モジュールへ結合させないため）。
@@ -132,7 +136,7 @@ let package = Package(
       dependencies: ["OrbePaths"],
       swiftSettings: [.swiftLanguageMode(.v5)]
     ),
-    // Orbe 自身を構成・操作する CLI（config / ws / tab / agent / session / wait）。control.sock へ JSON-RPC を
+    // Orbe 自身を構成・操作する CLI（config / ws / tab / agent / task / session / wait）。control.sock へ JSON-RPC を
     // 直接送る。.app 同梱時は Contents/Resources/bin/orb へ改名され、タブの PATH で bare `orb` に解決する。
     // GhosttyKit/AppKit に依存しない独立実行体（Foundation のみ）。
     .executableTarget(

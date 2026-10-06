@@ -46,13 +46,16 @@ extension SessionStoreTabGroupTests {
   }
 
   /// アクティブでない連の右端を閉じても active は同じタブを指し続ける（分岐は閉じたのが active のときだけ）。
+  /// 閉じる右端は active より後ろに置く——前に置くと index の繰り上げだけで緑になり、分岐の条件を見ない。
   func testClosingInactiveRightEndDoesNotMoveFocus() {
-    let store = makeStore(["a", "a", "b"], active: 2)
+    let store = makeStore(["b", "a", "a"], active: 0)
     let viewed = activeTab(store.current)
 
-    _ = store.removeTab(store.current.tabs[1], origin: .gesture)
+    guard
+      case .reselectActive(let index) = store.removeTab(store.current.tabs[2], origin: .gesture)
+    else { return XCTFail("reselectActive") }
 
+    XCTAssertEqual(index, 0)
     XCTAssertTrue(activeTab(store.current) === viewed, "active は同じタブ")
-    XCTAssertEqual(store.current.active, 1, "index だけ繰り上がる")
   }
 }

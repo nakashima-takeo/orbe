@@ -1,7 +1,7 @@
 ---
 title: エージェント通知の配管
 description: エージェント CLI の hook が状態とセッション ID を .app 同梱 CLI 経由で制御ソケットへ報告し、発信元タブに保持する配管
-updated: 2026-09-06
+updated: 2026-10-05
 ---
 
 # エージェント通知の配管
@@ -43,4 +43,4 @@ tab identity は env で運ぶ（tty 経路を要さない）。Orbe は全タ�
 
 ## 対象 CLI
 
-claude / codex / agy の hook 定義あり。取得できる状態は CLI のフック粒度に依存し、claude は全状態、codex は working/waiting/done、agy は working/done のみ（詳細は [plugin-package](plugin-package.md)）。状態の表示（chrome）は本配管の範囲外、セッション ID の永続/resume は [persistence](../platform/persistence.md)。
+claude / codex / agy の hook 定義あり。取得できる状態は CLI のフック粒度に依存し、claude は全状態、codex は idle（中断）/working/waiting/done、agy は working/done のみ（詳細は [plugin-package](plugin-package.md)）。状態の表示（chrome）は本配管の範囲外、セッション ID の永続/resume は [persistence](../platform/persistence.md)。

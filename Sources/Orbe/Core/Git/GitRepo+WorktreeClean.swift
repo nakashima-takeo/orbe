@@ -134,7 +134,7 @@ extension GitRepo {
   /// **`--force` は検証済みの前提のもとでの唯一正しい呼び方であって、未知の拒否を握り潰す逃げではない。**
   /// submodule を初期化した worktree を、git は作業ツリーが完全に clean でも
   /// `git worktree remove` で消させない（`submodule deinit` して実体を空にしても拒否は変わらない）。
-  /// Orbe 自身のリポジトリも submodule を持つため、`--force` 以外の道が無い。
+  /// Orbe が扱うリポジトリは submodule を持ちうるため、`--force` 以外の道が無い。
   /// `--force` 1 個が外すのは「dirty」と「submodule」の 2 つ。dirty は呼び出し側が削除の直前に
   /// status で検証済み。submodule は作業コピーと**その worktree 固有の submodule gitdir
   /// （`<common>/worktrees/<id>/modules/…`。common dir 直下ではなく、alternates も持たない独立の

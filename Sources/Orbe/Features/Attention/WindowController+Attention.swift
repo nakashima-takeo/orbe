@@ -24,7 +24,11 @@ extension WindowController {
       dismissPalette()
     case .languageSelect, .onboarding, .updateChanges, .help:
       return
-    case .none, .workspacePalette, .workspaceCreate, .agentPalette, .dispatchPalette,
+    case .taskPalette:
+      // タスク画面は畳まずに差し替わるので、打ちかけの編集をここで確定する。
+      settleTaskPaletteEditing()
+      showAttentionPalette()
+    case .none, .workspacePalette, .workspaceCreate, .agentPalette, .worktreePalette,
       .settingsPalette, .closedAgentsPalette:
       showAttentionPalette()
     }

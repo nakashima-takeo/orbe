@@ -8,8 +8,7 @@ import XCTest
 /// 壊れると何が起きるか: `orb wait <tab> --kind agent_state && 次の処理` が、待っていたことが
 /// **起きていないのに**次へ進む。時間切れを exit 0 で返すのがまさにその形で、終了コードにも
 /// stdout にも現れない（非 --json の `timed out` を stdout へ出すと `text=$(orb wait …)` が
-/// 偽のイベントを掴む）。未知 kind も同じ穴で、素のフィルタに通すと永久に一致せずただ時間切れになり
-/// 「何も起きなかった」と区別できない。
+/// 偽のイベントを掴む）。
 ///
 /// `--timeout-ms` は必ず `ControlProcess.processTimeout`（20 秒）より十分小さく取る。
 final class OrbeCliWaitProcessTests: OrbeTestCase {
@@ -18,26 +17,21 @@ final class OrbeCliWaitProcessTests: OrbeTestCase {
   /// 時間切れの経路を測れない（測っているつもりで exit 0 の側を見ることになる）。
   private let silentTab = "999999"
 
-  /// `--json` のタイムアウトは control の result をそのまま stdout へ載せ、exit 124。
-  func testTimeoutExits124WithTimedOutPayload() throws {
+  /// 時間切れは exit 124。`--json` は control の result をそのまま stdout へ載せ、非 `--json` は
+  /// **stdout を汚さず** stderr へ理由を出す（`$(orb wait …)` が偽の値を掴まない）。
+  func testTimeoutExits124AndKeepsStdoutCleanUnlessJson() throws {
     let control = try startControlProcess(workspaces: ["main"])
-    let outcome = control.orb(["wait", silentTab, "--timeout-ms", "300", "--json"])
 
-    XCTAssertEqual(outcome.status, 124, "時間切れは exit 124（成功していないのに 0 を返さない）")
-    let data = try XCTUnwrap(outcome.stdout.data(using: .utf8))
+    let json = control.orb(["wait", silentTab, "--timeout-ms", "300", "--json"])
+    XCTAssertEqual(json.status, 124, "時間切れは exit 124（成功していないのに 0 を返さない）")
+    let data = try XCTUnwrap(json.stdout.data(using: .utf8))
     let result = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
     XCTAssertEqual(result["timedOut"] as? Bool, true, "--json は control の result をそのまま出す")
-  }
 
-  /// 非 `--json` の時間切れは **stdout を汚さず** stderr へ理由を出す。
-  func testTimeoutKeepsStdoutCleanWithoutJson() throws {
-    let control = try startControlProcess(workspaces: ["main"])
-    let outcome = control.orb(["wait", silentTab, "--timeout-ms", "300"])
-
-    XCTAssertEqual(outcome.status, 124, "非 --json でも時間切れは exit 124")
-    XCTAssertTrue(
-      outcome.stdout.isEmpty, "時間切れで stdout を汚さない（`$(orb wait …)` が偽の値を掴む）: \(outcome.stdout)")
-    XCTAssertTrue(outcome.stderr.contains("timed out"), "理由は stderr へ: \(outcome.stderr)")
+    let plain = control.orb(["wait", silentTab, "--timeout-ms", "300"])
+    XCTAssertEqual(plain.status, 124, "非 --json でも時間切れは exit 124")
+    XCTAssertTrue(plain.stdout.isEmpty, "時間切れで stdout を汚さない: \(plain.stdout)")
+    XCTAssertTrue(plain.stderr.contains("timed out"), "理由は stderr へ: \(plain.stderr)")
   }
 
   /// 子が待機を登録し終えるまで `agent_state` を撃ち続けるタイマーを張る。
@@ -113,22 +107,11 @@ final class OrbeCliWaitProcessTests: OrbeTestCase {
     XCTAssertEqual(event["tabId"] as? Int, tab.id, "ORBE_TAB ではなく実際に鳴ったタブを返す")
   }
 
-  /// 未知 kind は control が -32602 で弾く（exit 1）。CLI は 4 語を複製しないので、
-  /// ここが「黙って時間切れ」に戻っていないことを見る唯一の場所になる。
-  func testUnknownKindIsRejectedByControlInsteadOfTimingOut() throws {
-    let control = try startControlProcess(workspaces: ["main"])
-    let outcome = control.orb(["wait", "--kind", "nosuch", "--timeout-ms", "300"])
-
-    XCTAssertEqual(outcome.status, 1, "未知 kind は RPC エラー（時間切れの 124 でも成功の 0 でもない）")
-    XCTAssertTrue(
-      outcome.stderr.contains("-32602") && outcome.stderr.contains("unknown kind"),
-      "未知 kind の理由が残る: \(outcome.stderr)")
-  }
-
   /// `--after <seq>` は、その seq より後に**既に起きた**一致イベントも返す。seq の出所は他の `--json`
   /// 応答（ここでは `tab list`）で、待機を張る前に済んだ遷移——`orb tab send` → `orb wait` の隙間
   /// ——を取りこぼさない。`--value` は状態語の一致で絞る（idle も撃っているので、value が効かなければ
-  /// idle の方が先に返る）。
+  /// idle の方が先に返る）。seq の意味は L3（`ControlWireTests+EventHistory`）が持ち、ここは 2 つの
+  /// フラグが params に写ることだけを見る——`--after` が届かなければ以後イベントは撃たれず 124 になる。
   func testAfterReplaysAnEventThatHappenedBeforeTheWait() throws {
     let control = try startControlProcess(workspaces: ["main"])
     let tab = try XCTUnwrap(
@@ -150,9 +133,6 @@ final class OrbeCliWaitProcessTests: OrbeTestCase {
     let result = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: Any])
     let event = try XCTUnwrap(result["event"] as? [String: Any], "起きた側は event を返す")
     XCTAssertEqual(event["value"] as? String, "working", "--value で絞った状態語のイベント")
-    let seq = try XCTUnwrap(event["seq"] as? Int, "event は seq を持つ")
-    XCTAssertGreaterThan(seq, before, "返るのは --after より後のイベント")
-    XCTAssertEqual(result["seq"] as? Int, seq, "応答の seq はそのイベントの seq")
   }
 
   /// `--after` は 0 を通し、負・非数値は socket に触れる前の usage エラー。

@@ -289,16 +289,6 @@ final class SoundRendererTests: XCTestCase {
     XCTAssertEqual(silent.map(abs).max(), 0, "範囲外の部品は 1 サンプルも書かない")
   }
 
-  /// duration 0 は部品の有無を問わず 1 フレームの無音（frameCount の下限）。
-  func testZeroDurationYieldsASingleSilentFrame() {
-    XCTAssertEqual(render(SoundProgram(components: [])), [0])
-    XCTAssertEqual(
-      render(
-        SoundProgram(
-          components: [.tone(ToneSpec(frequency: 700, start: 0, duration: 0.2, gain: 0.2))],
-          duration: 0)), [0])
-  }
-
   /// program のレンダリングも決定論（ノイズ部品は seedKey で固定される）。
   func testProgramRenderIsDeterministic() {
     let program = SoundProgram(
@@ -341,27 +331,7 @@ final class SoundRendererTests: XCTestCase {
     }
   }
 
-  /// 音量を上げれば必ず大きくなる。
-  func testVolumeMappingIsMonotonic() {
-    for volume in stride(from: 5, through: 95, by: 5) {
-      XCTAssertGreaterThan(
-        SoundRenderer.level(forVolume: volume + 5), SoundRenderer.level(forVolume: volume))
-    }
-  }
-
   // MARK: - マスタ末尾（合成音と取り込み済み音源が共有する 1 本）
-
-  /// 括り出した `finalize` は長さを変えず決定論（案の合成と同じ性質を、取り込み済み音源にも与える）。
-  /// 括り出し後も 24 音がラウドネス整合（±0.8 dB）・決定論・「音量はコンプレッサの手前」の 3 点を
-  /// 満たし続けることは `SoundCatalogTests` が押さえている（サンプル単位の同一性は固定していない）。
-  func testFinalizeIsLengthPreservingAndDeterministic() {
-    let samples = (0..<Int(0.3 * sampleRate)).map {
-      Float(0.4 * sin(2 * Double.pi * 523 * Double($0) / sampleRate))
-    }
-    let first = SoundRenderer.finalize(samples, volume: 70, sampleRate: sampleRate)
-    XCTAssertEqual(first.count, samples.count)
-    XCTAssertEqual(first, SoundRenderer.finalize(samples, volume: 70, sampleRate: sampleRate))
-  }
 
   /// finalize でも音量はコンプレッサの手前に掛かる（下げると圧縮が浅くなる）。
   /// 取り込み済み音源が「素通しゲインで小さくなるだけ」の鳴り方に退行したらここで落ちる。

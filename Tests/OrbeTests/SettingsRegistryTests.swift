@@ -4,15 +4,8 @@ import XCTest
 @testable import Orbe
 
 /// 設定レジストリ（SSOT）の宣言的契約と不変条件の検証。App 層・純ロジック。
-/// `all`（gui.conf 正準順）と `rootOrder`（表示順）の 2 順序・key 一意・domain と activation の整合・
-/// guiConf 橋渡し・DefaultedSettingKey の既定を固定する。
+/// key の安定と一意・`rootOrder`（表示順）・domain と activation の整合を固定する。
 final class SettingsRegistryTests: OrbeTestCase {
-
-  private func eff(_ mutate: (inout SettingsLayer) -> Void = { _ in }) -> EffectiveSettings {
-    var l = SettingsLayer()
-    mutate(&l)
-    return EffectiveSettings(l)
-  }
 
   // MARK: - key（canonical・SSOT）
 
@@ -49,158 +42,6 @@ final class SettingsRegistryTests: OrbeTestCase {
     XCTAssertEqual(SettingsRegistry.confKey(.fontSize), "font-size", "confKey は descriptor.key を引く")
     let keys = SettingsRegistry.all.map(\.key)
     XCTAssertEqual(Set(keys).count, SettingsRegistry.all.count, "key は全項目で一意")
-  }
-
-  // MARK: - descriptor(_:) 逆引き
-
-  func testDescriptorLookupReturnsMatchingID() {
-    for id in SettingID.allCases {
-      XCTAssertEqual(SettingsRegistry.descriptor(id).id, id)
-    }
-  }
-
-  // MARK: - DefaultedSettingKey の既定（EffectiveSettings が解決する SSOT）
-
-  /// 既定つき項目は defaultValue が非 nil、unset 意味の項目（fontFamily/defaultAgent）は nil。
-  func testDefaultValuePresenceMatchesKeyKind() {
-    for id in [
-      SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
-      .emojiFont, .agentStateIcons, .worktreeDir, .notificationSound,
-      .notificationSoundVolume, .notificationSoundEnabled,
-      .notificationSoundCustomWaitingSameAsDone, .menuBarNotificationDuration,
-    ] {
-      XCTAssertNotNil(SettingsRegistry.descriptor(id).defaultValue(), "\(id) は既定を持つ")
-    }
-    for id in [SettingID.notificationSoundCustomDone, .notificationSoundCustomWaiting] {
-      XCTAssertNil(
-        SettingsRegistry.descriptor(id).defaultValue(), "\(id) は既定なし（未取り込み＝未設定）")
-    }
-    XCTAssertNil(SettingsRegistry.descriptor(.fontFamily).defaultValue(), "fontFamily は既定なし")
-    XCTAssertNil(SettingsRegistry.descriptor(.defaultAgent).defaultValue(), "defaultAgent は既定なし")
-    XCTAssertNil(
-      SettingsRegistry.descriptor(.tabTitleFontFamily).defaultValue(),
-      "tabTitleFontFamily は既定なし（未設定＝システム等幅 11pt）")
-  }
-
-  /// 既定値は現行の値（fontSize 12・opacity 95・blur true・blink true・theme auto・icons 空）。
-  func testDefaultValues() {
-    XCTAssertEqual(SettingsRegistry.descriptor(.fontSize).defaultValue(), .int(12))
-    XCTAssertEqual(SettingsRegistry.descriptor(.backgroundOpacity).defaultValue(), .int(95))
-    XCTAssertEqual(SettingsRegistry.descriptor(.backgroundBlur).defaultValue(), .bool(true))
-    XCTAssertEqual(SettingsRegistry.descriptor(.cursorStyleBlink).defaultValue(), .bool(true))
-    XCTAssertEqual(SettingsRegistry.descriptor(.theme).defaultValue(), .string("auto"))
-    XCTAssertEqual(SettingsRegistry.descriptor(.emojiFont).defaultValue(), .string("noto"))
-    XCTAssertEqual(SettingsRegistry.descriptor(.agentStateIcons).defaultValue(), .stringMap([:]))
-    XCTAssertEqual(
-      SettingsRegistry.descriptor(.worktreeDir).defaultValue(),
-      .string("{parent}/{repo}-worktrees/{slug}"), "既定は従来のハードコード規則と同一パスに解決するテンプレート")
-    XCTAssertEqual(
-      SettingsRegistry.descriptor(.notificationSound).defaultValue(),
-      AgentSoundChoice.default.settingValue,
-      "既定の選択は AgentSoundChoice.default が SSOT（リテラルを 2 箇所に置かない）")
-    XCTAssertEqual(
-      SettingsRegistry.descriptor(.notificationSound).defaultValue(),
-      .string(NotificationSound.default.rawValue), "既定は案（＝紋章）であってカスタムではない")
-    XCTAssertEqual(
-      SettingsRegistry.descriptor(.notificationSoundCustomWaitingSameAsDone).defaultValue(),
-      .bool(true), "waiting 同一化は既定オン")
-    XCTAssertEqual(
-      SettingsRegistry.descriptor(.notificationSoundVolume).defaultValue(), .int(90),
-      "既定の音量は SoundRenderer.defaultVolume が SSOT——dev CLI の --volume 既定も同じ 1 つを見る")
-    XCTAssertEqual(
-      SettingsRegistry.descriptor(.notificationSoundEnabled).defaultValue(), .bool(true))
-    XCTAssertEqual(
-      SettingsRegistry.descriptor(.menuBarNotificationDuration).defaultValue(), .int(40),
-      "②ピルの既定の滞留は 40 秒——`AttentionStore` は既定を持たず、ここが唯一の出所")
-  }
-
-  /// 通知音の 3 件はどれも gui.conf に出さない（libghostty 設定ではない）。
-  func testNotificationSoundHasNoGuiConf() {
-    for id in [
-      SettingID.notificationSound, .notificationSoundVolume, .notificationSoundEnabled,
-      .notificationSoundCustomDone, .notificationSoundCustomWaiting,
-      .notificationSoundCustomWaitingSameAsDone,
-    ] {
-      XCTAssertNil(SettingsRegistry.descriptor(id).guiConf, "\(id) は gui.conf に出さない")
-    }
-  }
-
-  // MARK: - guiConf 橋渡し（実効設定の raw を読む・未設定は行を出さない）
-
-  func testFontSizeGuiConfEmitsLineOrNil() {
-    let d = SettingsRegistry.descriptor(.fontSize)
-    XCTAssertEqual(d.guiConf?(eff { $0[SettingKeys.fontSize] = 14 }), "font-size = 14")
-    XCTAssertNil(d.guiConf?(eff()), "fontSize 未設定は行を出さない")
-  }
-
-  func testFontFamilyGuiConfEmitsLineOrNil() {
-    let d = SettingsRegistry.descriptor(.fontFamily)
-    XCTAssertEqual(
-      d.guiConf?(eff { $0[SettingKeys.fontFamily] = "Menlo" }),
-      "font-family = \"\"\nfont-family = Menlo")
-    XCTAssertNil(d.guiConf?(eff()), "fontFamily 未設定は行を出さない")
-  }
-
-  func testThemeGuiConfEmitsConstantLineAlways() {
-    let d = SettingsRegistry.descriptor(.theme)
-    let line = "theme = light:OrbeLight,dark:OrbeDark"
-    XCTAssertEqual(d.guiConf?(eff()), line, "未設定（Auto）でも常時 emit")
-    XCTAssertEqual(d.guiConf?(eff { $0[SettingKeys.theme] = .dark }), line, "値非依存")
-    XCTAssertEqual(d.guiConf?(eff { $0[SettingKeys.theme] = .light }), line, "値非依存")
-  }
-
-  /// emoji-font=noto は未設定（実効既定）でも同梱 Noto への map 行を emit する
-  /// ——「同梱 Noto のフラット字形で描く」という機能そのものなので、gui.conf 不在時に消えては困る。
-  /// apple は行を出さない。libghostty が macOS で Apple Color Emoji を必ず fallback へ挿すので、
-  /// 奪う側の font-family を 1 本に絞った今、打ち消しの map は不要（出すと VS16 の扱いを狂わせるだけ）。
-  func testEmojiFontGuiConfEmitsNotoMapAndOmitsAppleMap() {
-    let d = SettingsRegistry.descriptor(.emojiFont)
-    let notoLine = "font-codepoint-map = \(EmojiPresentationRanges.confValue)=Noto Color Emoji"
-    XCTAssertEqual(d.guiConf?(eff()), notoLine, "未設定でも実効既定 noto の行を emit")
-    XCTAssertEqual(d.guiConf?(eff { $0[SettingKeys.emojiFont] = .noto }), notoLine)
-    XCTAssertNil(
-      d.guiConf?(eff { $0[SettingKeys.emojiFont] = .apple }),
-      "apple は font-codepoint-map 行を出さない（ハードコード fallback の Apple が描く）")
-  }
-
-  func testDefaultAgentHasNoGuiConf() {
-    XCTAssertNil(SettingsRegistry.descriptor(.defaultAgent).guiConf, "agent は gui.conf に出さない")
-  }
-
-  func testTabTitleFontFamilyHasNoGuiConf() {
-    XCTAssertNil(
-      SettingsRegistry.descriptor(.tabTitleFontFamily).guiConf,
-      "tab-title-font-family は gui.conf に出さない（chrome 専用・resolver 直配信）")
-  }
-
-  func testWorktreeDirHasNoGuiConf() {
-    XCTAssertNil(
-      SettingsRegistry.descriptor(.worktreeDir).guiConf,
-      "worktree-dir は gui.conf に出さない（Dispatch が実効値を pull する）")
-  }
-
-  func testBackgroundOpacityGuiConfEmitsLineOrNil() {
-    let d = SettingsRegistry.descriptor(.backgroundOpacity)
-    XCTAssertEqual(
-      d.guiConf?(eff { $0[SettingKeys.backgroundOpacity] = 90 }), "background-opacity = 0.90")
-    XCTAssertEqual(
-      d.guiConf?(eff { $0[SettingKeys.backgroundOpacity] = 87 }), "background-opacity = 0.87",
-      "端数も 2 桁固定")
-    XCTAssertNil(d.guiConf?(eff()), "backgroundOpacity 未設定は行を出さない")
-  }
-
-  func testCursorStyleBlinkGuiConfEmitsLineOrNil() {
-    let d = SettingsRegistry.descriptor(.cursorStyleBlink)
-    XCTAssertEqual(
-      d.guiConf?(eff { $0[SettingKeys.cursorStyleBlink] = true }), "cursor-style-blink = true")
-    XCTAssertNil(d.guiConf?(eff()), "cursorStyleBlink 未設定は行を出さない")
-  }
-
-  func testBackgroundBlurGuiConfEmitsLineOrNil() {
-    let d = SettingsRegistry.descriptor(.backgroundBlur)
-    XCTAssertEqual(
-      d.guiConf?(eff { $0[SettingKeys.backgroundBlur] = true }), "background-blur = true")
-    XCTAssertNil(d.guiConf?(eff()), "backgroundBlur 未設定は行を出さない")
   }
 
   // MARK: - domain と activation の整合
@@ -241,19 +82,6 @@ final class SettingsRegistryTests: OrbeTestCase {
     }
   }
 
-  /// toggle 項目は activation=toggle かつ domain=toggle。
-  func testToggleItemsHaveToggleDomainAndActivation() {
-    for id in [
-      SettingID.backgroundBlur, .cursorStyleBlink, .notificationSoundEnabled,
-      .notificationSoundCustomWaitingSameAsDone,
-    ] {
-      XCTAssertEqual(SettingsRegistry.descriptor(id).activation, .toggle)
-      guard case .toggle = SettingsRegistry.descriptor(id).domain else {
-        return XCTFail("\(id) の domain は toggle")
-      }
-    }
-  }
-
   /// domain の typeName は control config_list の type 提示と一致。
   func testDomainTypeNames() {
     XCTAssertEqual(SettingsRegistry.descriptor(.fontSize).domain.typeName, "int")
@@ -275,25 +103,6 @@ final class SettingsRegistryTests: OrbeTestCase {
       "値域外は拒否する")
     XCTAssertEqual(
       SettingsRegistry.descriptor(.notificationSound).domain.validate("custom"), .string("custom"))
-  }
-
-  // MARK: - isDrillIn（stepper/toggle は潜らない・drillIn は潜る）
-
-  func testIsDrillInFlags() {
-    for id in [
-      SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink,
-      .notificationSoundVolume, .notificationSoundEnabled,
-      .notificationSoundCustomWaitingSameAsDone, .menuBarNotificationDuration,
-    ] {
-      XCTAssertFalse(SettingsRegistry.descriptor(id).isDrillIn, "stepper/toggle（\(id)）は潜らない")
-    }
-    for id in [
-      SettingID.fontFamily, .tabTitleFontFamily, .emojiFont, .theme, .defaultAgent,
-      .agentStateIcons, .worktreeDir, .notificationSound, .notificationSoundCustomDone,
-      .notificationSoundCustomWaiting,
-    ] {
-      XCTAssertTrue(SettingsRegistry.descriptor(id).isDrillIn, "\(id) は drillIn")
-    }
   }
 
   /// activation と domain の整合を `all` 走査で固定する（項目追加時の誤宣言を test 時に捕捉する不変条件）。

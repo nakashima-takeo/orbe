@@ -104,22 +104,6 @@ final class WindowControllerActivationLifecycleTests: OrbeTestCase {
     XCTAssertGreaterThan(try XCTUnwrap(wc.current.lastUsedAt), old)
   }
 
-  func testActivationBitsAreNotPersisted() throws {
-    let wc = WindowController()
-    XCTAssertTrue(wc.current.activated)
-    wc.flushSave()
-
-    let data = try Data(contentsOf: workspacesFile())
-    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-    let workspaces = try XCTUnwrap(root["workspaces"] as? [[String: Any]])
-    XCTAssertFalse(workspaces.isEmpty)
-    for workspace in workspaces {
-      XCTAssertNil(workspace["activated"])
-      let tabs = try XCTUnwrap(workspace["tabs"] as? [[String: Any]])
-      for tab in tabs { XCTAssertNil(tab["activated"]) }
-    }
-  }
-
   /// 休眠チケットの消費（隠れタブの段階的 materialize）は、パレットを開いたままでも行チップへ届く。
   /// 届かないと「もう起きているのに休眠件数が残ったまま」の行を見て workspace を選ぶことになる。
   func testHiddenMountTicketConsumptionReachesOpenWorkspacePaletteRow() throws {

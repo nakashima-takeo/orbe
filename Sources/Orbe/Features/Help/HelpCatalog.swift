@@ -52,7 +52,7 @@ enum HelpCatalog {
       rows: [
         Row(key: "⌘⇧C", label: .helpShortcutLaunchDefaultAgent, combo: ["cmd", "shift", "c"]),
         Row(key: "⌘⇧A", label: .helpShortcutAgentPalette, combo: ["cmd", "shift", "a"]),
-        Row(key: "⌘⇧X", label: .helpShortcutDispatchPalette, combo: ["cmd", "shift", "x"]),
+        Row(key: "⌘⇧X", label: .helpShortcutTasks, combo: ["cmd", "shift", "x"]),
         // ⌘ の素タップ×2。画面のどこにも書けない発見不能なジェスチャなので、可視の入口である
         // ここに必ず載せる。combo は ⌘ 単独＝点灯する物理キーそのもの（唯一の修飾のみ combo）。
         Row(key: "⌘⌘", label: .helpShortcutAttentionPalette, combo: ["cmd"]),
@@ -75,7 +75,7 @@ enum HelpCatalog {
   static let topPicks: [L10nKey: [String]] = [
     .helpCatGeneral: ["⌘H", "⌘,", "⌘⇧E", "⌘Q"],
     .helpCatWorkspaceTabs: ["⌘⇧S", "⌘T", "⌘⇧→"],
-    .helpCatAgents: ["⌘⇧C", "⌘⇧A", "⌘⇧X", "⌘⌘"],
+    .helpCatAgents: ["⌘⇧C", "⌘⇧A", "⌘⌘"],
   ]
 
   /// トップビュー用グループ（`all` から combo を保持したまま導出。行ホバーのキーボード点灯に使う）。

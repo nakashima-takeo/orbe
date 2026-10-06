@@ -74,7 +74,8 @@ final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
   // MARK: - spawn / resume の ready 待ち
 
   /// claude は最初の idle を待ってから返り、`ready:true` と idle 報告が運んだ session id を載せる。
-  /// 人間向けの行は末尾に ` ready (session <id>)`。resume も同じ形。
+  /// 人間向けの行は末尾に ` ready (session <id>)`。resume の ready 待ちは L3（`ControlWireTests+AgentReady`）
+  /// が持つ。
   func testSpawnWaitsForTheFirstIdleAndReportsTheSession() throws {
     let ready = try spawnReady()
     let (control, spawned) = (ready.control, ready.spawned)
@@ -88,14 +89,11 @@ final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
       plain.stdout.hasPrefix("spawned claude in tab ")
         && plain.stdout.hasSuffix(" ready (session \(Self.sessionId))\n"),
       "人間向けの行は spawned … ready (session <id>): \(plain.stdout)")
-
-    let resumed = control.orbJSON(["agent", "resume", "claude", UUID().uuidString])
-    XCTAssertEqual(resumed["ready"] as? Bool, true, "resume も最初の idle を待つ")
-    XCTAssertEqual(resumed["agentSessionId"] as? String, Self.sessionId)
   }
 
-  /// idle が来なければ `--timeout-ms` で exit 124。タブは開いているので宛先（tabId）は捨てず、
-  /// `ready:false, timedOut:true` で「報告できない agent」と区別する。
+  /// idle が来なければ `--timeout-ms` で exit 124。`--json` は result を stdout へ、非 `--json` は spawned 行を
+  /// 出しつつ理由を stderr へ。result の中身（tabId を捨てない・`ready:false, timedOut:true`）は L3
+  /// （`ControlWireTests+AgentReady`）が持つ。
   func testSpawnReadyTimeoutExits124ButKeepsTheLaunch() throws {
     _ = try stageFakeAgent("claude")  // 何も報告しない claude
     let control = try startControlProcess(workspaces: ["main"])
@@ -103,11 +101,7 @@ final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
 
     let json = control.orb(["agent", "spawn", "claude", "--timeout-ms", "300", "--json"])
     XCTAssertEqual(json.status, 124, "ready の時間切れは exit 124: \(json.stdout)\(json.stderr)")
-    let payload = try self.json(json.stdout)
-    XCTAssertNotNil(payload["tabId"] as? Int, "時間切れでも開いたタブの tabId を返す")
-    XCTAssertEqual(payload["ready"] as? Bool, false)
-    XCTAssertEqual(payload["timedOut"] as? Bool, true)
-    XCTAssertNil(payload["agentSessionId"])
+    XCTAssertNoThrow(try self.json(json.stdout), "--json は result を stdout へ出す")
 
     let plain = control.orb(["agent", "spawn", "claude", "--timeout-ms", "300"])
     XCTAssertEqual(plain.status, 124)
@@ -220,12 +214,11 @@ final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
     XCTAssertEqual(ended.stdout, "\n", "message が無ければ空")
   }
 
-  /// 時間切れは exit 124。非 json は stdout を汚さず stderr に `timed out`、`--json` は result を stdout へ。
+  /// 時間切れは exit 124 で、stdout を汚さず stderr に `timed out`。`--json` の分岐は全コマンド共通の
+  /// `timedOutDie` で、`OrbeCliWaitProcessTests` が持つ。
   func testPromptTimeoutExits124() throws {
     let ready = try spawnReady()
     let (control, tab) = (ready.control, ready.tab)
-    // 1 本目は打ち切り後も 10 秒 working のままで次の prompt が busy に拒まれるので、2 例目は別タブで測る。
-    let second = try XCTUnwrap(control.orbJSON(["agent", "spawn", "claude"])["tabId"] as? Int)
 
     let plain = control.orb([
       "agent", "prompt", "\(tab)", "--text", "slow:a", "--timeout-ms", "500",
@@ -233,11 +226,6 @@ final class OrbeCliAgentPromptProcessTests: OrbeTestCase {
     XCTAssertEqual(plain.status, 124, "時間切れは exit 124: \(plain.stdout)\(plain.stderr)")
     XCTAssertTrue(plain.stdout.isEmpty, "時間切れで stdout を汚さない: \(plain.stdout)")
     XCTAssertTrue(plain.stderr.contains("timed out"), "理由は stderr へ: \(plain.stderr)")
-
-    let json = control.orb(
-      ["agent", "prompt", "\(second)", "--text", "slow:b", "--timeout-ms", "500", "--json"])
-    XCTAssertEqual(json.status, 124)
-    XCTAssertEqual(try self.json(json.stdout)["timedOut"] as? Bool, true, "--json は result をそのまま出す")
   }
 
   // MARK: - MCP

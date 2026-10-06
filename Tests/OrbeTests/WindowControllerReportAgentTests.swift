@@ -1,4 +1,5 @@
 import AppKit
+import OrbeSound
 import XCTest
 
 @testable import Orbe
@@ -151,22 +152,11 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
     XCTAssertEqual(tab.agentReport?.stateChangedAt, second, "実変化後の同値報告でも stateChangedAt は動かない")
   }
 
-  func testClearResetsAllAttentionFields() throws {
-    let (wc, tab) = try makeControllerAndTab()
-    wc.controlReportAgent(
-      tab: tab,
-      report: AgentHookReport(
-        agent: "claude", state: "done", sessionId: "s1",
-        message: AgentMessage(text: "done!", source: "tool")))
-    XCTAssertEqual(tab.agentReport?.message?.source, "tool", "前提: 消す対象が立っている")
-    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "clear"))
-    XCTAssertEqual(tab.agentSlot, .none, "clear で同一性ごと無へ戻る")
-  }
-
-  /// waiting / done への実変化だけが一過性イベント（メニューバー②）を立てる。
+  /// waiting / done への実変化だけが一過性イベント（メニューバー②）を立て、通知音を鳴らす。
   func testTransientFiresOnlyOnWaitingOrDoneChange() throws {
     let (wc, tab) = try makeControllerAndTab()
     XCTAssertFalse(wc.window.isKeyWindow, "前提: 背面（非 key）なので見ているタブの抑制は効かない")
+    let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
 
     wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "working"))
     XCTAssertNil(wc.attentionStore.transient, "working への変化では立てない")
@@ -194,6 +184,11 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
       report: AgentHookReport(
         agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d")))
     XCTAssertEqual(wc.attentionStore.transient?.row.state, "done")
+
+    wc.attentionStore.transient = nil
+    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "clear"))
+    XCTAssertNil(wc.attentionStore.transient, "clear では立てない")
+    XCTAssertEqual(sound.played.map(\.event), [.waiting, .done], "音もピルと同じ変化でだけ鳴る")
   }
 
   /// 見ているタブ（前面ウィンドウのアクティブ表示タブ）のタブでは②を立てない。
@@ -201,6 +196,7 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
   func testTransientSuppressedOnVisibleTab() throws {
     let (wc, tab) = try makeControllerAndTab()
     makeKey(wc)
+    let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
 
     wc.controlReportAgent(
       tab: tab,
@@ -222,6 +218,7 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
     wc.flushChrome()
     XCTAssertTrue(wc.attentionStore.rows.isEmpty)
     XCTAssertEqual(wc.statusModel.rollup.map(\.state), ["idle"])
+    XCTAssertTrue(sound.played.isEmpty, "見ているタブでは音も鳴らさない")
   }
 
   /// 前面のままでも、見ていない別タブなら②は立つ。
@@ -271,22 +268,5 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
     XCTAssertEqual(tab.agentState, "idle")
     XCTAssertEqual(tab.agentReport?.stateChangedAt, at)
     XCTAssertEqual(tab.agentReport?.message?.text, "d")
-  }
-
-  /// flushChrome が AttentionStore の snapshot を更新し、idle 化で一覧から消える。
-  func testFlushChromeProjectsAttentionRows() throws {
-    let (wc, tab) = try makeControllerAndTab()
-    wc.controlReportAgent(
-      tab: tab,
-      report: AgentHookReport(
-        agent: "claude", state: "waiting", sessionId: nil,
-        message: AgentMessage(text: "q")))
-    wc.flushChrome()
-    XCTAssertEqual(wc.attentionStore.rows.map(\.tabId), [tab.id])
-
-    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "clear"))
-    wc.refreshChrome()
-    wc.flushChrome()
-    XCTAssertTrue(wc.attentionStore.rows.isEmpty)
   }
 }

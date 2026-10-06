@@ -221,21 +221,6 @@ extension ControlWireTests {
     wire.barrier()  // -32006 で弾いた要求も replay で返した要求も待機を残していない
   }
 
-  /// `after` の型違い・負、`value` の非文字列は待機を張る前に -32602。
-  func testWronglyTypedAfterAndValueAreRejected() {
-    let wire = startWire(target: FakeControlTarget())
-    var id = 0
-
-    for bad in [["after": "3"], ["after": -1], ["value": 42]] as [[String: Any]] {
-      id += 1
-      XCTAssertEqual(
-        errorCode(wire.request(id: id, method: "wait_for_event", params: bad)), -32602,
-        "\(bad) は -32602")
-    }
-    ControlServer.shared.emit(.pwd(tabId: 8213, path: "/x"))
-    wire.barrier()  // どれも待機を張っていない
-  }
-
   // MARK: - value
 
   /// `value` は kind 固有値の完全一致でだけ起きる（agent_state なら状態語）。

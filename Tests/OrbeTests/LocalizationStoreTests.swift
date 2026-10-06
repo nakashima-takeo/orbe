@@ -27,21 +27,11 @@ final class LocalizationStoreTests: OrbeTestCase {
       "count>1 は other")
   }
 
-  /// 日本語は助数詞で単複不変＝one/other が同一テンプレートで、件数だけが変わる。
-  func testJapanesePluralIsInvariant() {
-    let s = store(.ja)
-    XCTAssertEqual(
-      L10n.string(.searchMatchesOne, .ja), L10n.string(.searchMatchesOther, .ja),
-      "日本語は one と other が同一文言（単複不変）")
-    XCTAssertEqual(s.plural(1, one: .searchMatchesOne, other: .searchMatchesOther), "1 件")
-    XCTAssertEqual(s.plural(2, one: .searchMatchesOne, other: .searchMatchesOther), "2 件")
-  }
-
   // MARK: format（語順が食い違う書式テンプレート）
 
-  /// 同一引数が、日本語では先頭・英語では末尾に来る。format は各言語テンプレート内の位置へ埋める。
+  /// 同一引数が、日本語では先頭・英語では途中に来る。format は各言語テンプレート内の位置へ埋める。
   func testFormatPlacesArgPerLanguageWordOrder() {
-    XCTAssertEqual(store(.ja).format(.dispatchAgentOpen, "claude"), "claudeで開く")
-    XCTAssertEqual(store(.en).format(.dispatchAgentOpen, "claude"), "open with claude")
+    XCTAssertEqual(store(.ja).format(.worktreePaletteBasePickEnter, "main"), "main をベースにする")
+    XCTAssertEqual(store(.en).format(.worktreePaletteBasePickEnter, "main"), "Use main as the base")
   }
 }

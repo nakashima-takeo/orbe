@@ -13,6 +13,20 @@ func strArrayProp(_ desc: String) -> [String: Any] {
   ["type": "array", "items": ["type": "string"], "description": desc]
 }
 
+/// タスクの結び付きの列（`add_task` / `update_task`）。
+func taskLinksProp(_ desc: String) -> [String: Any] {
+  [
+    "type": "array",
+    "items": schema(
+      [
+        "kind": strProp("issue / pr（指定どおりに保存し、GitHub に照合しない）"),
+        "repo": strProp("owner/name"),
+        "number": intProp("Issue・PR の番号"),
+      ], required: ["kind", "repo", "number"]),
+    "description": desc,
+  ]
+}
+
 func schema(_ props: [String: Any], required: [String] = []) -> [String: Any] {
   ["type": "object", "properties": props, "required": required]
 }
@@ -248,6 +262,109 @@ let tools: [[String: Any]] = [
         "timeoutMs": intProp("タイムアウト ミリ秒（既定 30000）"),
       ])
     ),
+  ]),
+  obj([
+    ("name", "list_tasks"),
+    (
+      "description",
+      "人と agent が共有するタスク一覧を、ユーザーが決めた列の順で返す。各要素は taskId・title・status"
+        + "（todo / in_progress / done）・priority（high / medium / low）・description・createdAt、あれば waiting"
+        + "{reason,since}・due（YYYY-MM-DD）・workspaceId と workspaceName・createdBy（追加した agent）・"
+        + "links（結び付いた GitHub の Issue・PR の列 [{kind: issue / pr, repo: owner/name, number}]。先頭が主）・"
+        + "worktree（このタスクの作業の場所＝worktree のルートの絶対パス。ディレクトリが無ければ出ない）。"
+        + "workspace に付いていないタスク（付き先が削除されたものを含む）は workspaceId を持たない。"
+        + "完了したタスクも削除されるまで残る。description は人も agent も読む前提の欄。"
+    ),
+    ("inputSchema", schema(["workspaceId": intProp("この workspace のタスクだけに絞る")])),
+  ]),
+  obj([
+    ("name", "add_task"),
+    (
+      "description",
+      "タスクを列の末尾に足し、足したタスクを返す（taskId は使い回されない短い整数）。workspaceId を省くと、"
+        + "呼び出し元タブ（この MCP を起こした agent のタブ）の workspace に付く。null で「workspace なし」。"
+        + "呼び出し元タブが分かるのは、この MCP サーバーが Orbe のタブの環境（ORBE_TAB）を受け継いでいるときだけで、"
+        + "受け継がない MCP クライアントからは workspace を省くと「workspace なし」になる。"
+        + "呼び出し元タブの agent が作業中（working）なら、その agent 名が追加者として記録される。"
+        + "links で GitHub の Issue・PR を結び付けられる（先頭が主）。1 つの Issue・PR（repo と number が同じもの）は"
+        + "1 つのタスクにだけ結び付き、ほかのタスクに付いている項目を渡すと、相手の taskId を添えて拒否される。"
+        + "worktree で作業の場所を付けられる（実在するディレクトリの絶対パス。それを含む worktree のルートに揃う）。"
+        + "1 つの worktree は 1 つのタスクにだけ付き、ほかのタスクに付いている worktree は相手の taskId を添えて拒否される。"
+    ),
+    (
+      "inputSchema",
+      schema(
+        [
+          "title": strProp("タイトル（1 行。前後の空白は除かれる）"),
+          "status": strProp("todo / in_progress / done（既定 todo）"),
+          "priority": strProp("high / medium / low（既定 medium）"),
+          "due": strProp("期限（YYYY-MM-DD）"),
+          "waitingReason": strProp("何を待っているか（待ちにする場合）"),
+          "description": strProp("詳細（複数行可。人も agent も読む）"),
+          "links": taskLinksProp("結び付ける GitHub の Issue・PR（先頭が主）"),
+          "worktree": strProp("このタスクの作業の場所（実在するディレクトリの絶対パス）"),
+          "workspaceId": [
+            "type": ["integer", "null"],
+            "description": "付ける workspace（省略で呼び出し元タブの workspace、null でなし）",
+          ],
+        ], required: ["title"])
+    ),
+  ]),
+  obj([
+    ("name", "update_task"),
+    (
+      "description",
+      "タスクの項目を変え、変えた後のタスクを返す。渡した項目だけが変わる。完了は status: \"done\""
+        + "（待ちは自動で外れる。完了のまま待ちは入れられない）。due / waitingReason / workspaceId は null で外す。"
+        + "links は渡した列で丸ごと置き換え、[] で全部外す。結び付きを足すときは、今の links を読み、"
+        + "主（先頭）を先頭に保ったまま末尾に足して渡す。ほかのタスクに付いている Issue・PR を付け替えるには、"
+        + "先にそのタスクの links から外してから、このタスクに付ける。worktree は null で外す。"
+        + "ほかのタスクに付いている worktree を付け替えるときも、先にそのタスクから外す。"
+    ),
+    (
+      "inputSchema",
+      schema(
+        [
+          "taskId": intProp("対象タスク"),
+          "title": strProp("新しいタイトル"),
+          "status": strProp("todo / in_progress / done"),
+          "priority": strProp("high / medium / low"),
+          "due": ["type": ["string", "null"], "description": "期限（YYYY-MM-DD。null で外す）"],
+          "waitingReason": [
+            "type": ["string", "null"], "description": "待ちの理由（null で待ちを外す）",
+          ],
+          "description": strProp("詳細（置き換え）"),
+          "links": taskLinksProp("結び付ける GitHub の Issue・PR（丸ごと置き換え。先頭が主。[] で全部外す）"),
+          "worktree": [
+            "type": ["string", "null"],
+            "description": "このタスクの作業の場所（実在するディレクトリの絶対パス。null で外す）",
+          ],
+          "workspaceId": [
+            "type": ["integer", "null"], "description": "付ける workspace（null でなし）",
+          ],
+        ], required: ["taskId"])
+    ),
+  ]),
+  obj([
+    ("name", "move_task"),
+    (
+      "description",
+      "タスクを、他のタスクの前（beforeTaskId）か後（afterTaskId）へ移す。どちらか 1 つを渡す。"
+    ),
+    (
+      "inputSchema",
+      schema(
+        [
+          "taskId": intProp("移すタスク"),
+          "beforeTaskId": intProp("このタスクの前へ"),
+          "afterTaskId": intProp("このタスクの後へ"),
+        ], required: ["taskId"])
+    ),
+  ]),
+  obj([
+    ("name", "delete_task"),
+    ("description", "タスクを一覧から消す（完了にするだけなら update_task の status: \"done\"）。"),
+    ("inputSchema", schema(["taskId": intProp("消すタスク")], required: ["taskId"])),
   ]),
 ]
 

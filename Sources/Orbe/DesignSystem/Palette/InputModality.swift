@@ -3,18 +3,21 @@ import SwiftUI
 
 /// パレットの入力モダリティ。`.keyboard` 中はホバー追従を抑制し、スクロールで行がカーソル下へ来ても
 /// 選択を奪わない。実マウス移動（`MouseMovedDetector`）でのみ `.pointer` へ移る。
-/// 汎用パレット（`PaletteModel`）と Dispatch（`DispatchPaletteModel`）が共有する。
+/// パレット共通（汎用パレット・worktree パレット・タスク画面）。
 enum InputModality { case keyboard, pointer }
 
-/// 選択インデックスと入力モダリティの束（ホバー追従ガードの本体・パレット共通）。
+/// 選択と入力モダリティの束（ホバー追従ガードの本体・パレット共通）。選択の型は画面が決める
+/// （行の番号か、行の同一性か）。
 /// **ホバー以外の代入（キー移動・絞り込みでのリセット・タップ）は必ず `.keyboard` へ戻す**——
 /// 選択を置いた側が意図を持っている以上、実マウス移動があるまでホバーに奪わせない。
-/// 代入経路が増えても取りこぼさないよう、ガードは `index` の setter に集約する。
+/// 代入経路が増えても取りこぼさないよう、ガードは `value` の setter に集約する。
 /// ホバー追従は代入でなく `hoverSelect(_:)` を通す（＝モダリティを維持する唯一の経路）。
-struct ModalSelection {
-  private var storage = 0
+struct ModalSelection<Value> {
+  private var storage: Value
 
-  var index: Int {
+  init(_ initial: Value) { storage = initial }
+
+  var value: Value {
     get { storage }
     set {
       storage = newValue
@@ -26,13 +29,13 @@ struct ModalSelection {
   var modality: InputModality = .keyboard
 
   /// ホバー開始による選択追従。`.pointer` のときだけ効き、モダリティは動かさない。
-  mutating func hoverSelect(_ i: Int) {
+  mutating func hoverSelect(_ v: Value) {
     guard modality == .pointer else { return }
-    storage = i
+    storage = v
   }
 
   /// 裏の再取得で行がずれたときの選択の追い直し。ユーザの意図ではないのでモダリティは動かさない。
-  mutating func restore(_ i: Int) { storage = i }
+  mutating func restore(_ v: Value) { storage = v }
 }
 
 /// 窓全面を覆う透明 NSView。`.mouseMoved` トラッキングエリアで実ポインタ移動のみ拾い、`onMove` を呼ぶ。

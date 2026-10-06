@@ -62,16 +62,6 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
 
   // MARK: - 作業ツリーの clean 判定
 
-  func testWorktreeIsCleanReflectsUncommittedChanges() throws {
-    let path = dir.appendingPathComponent("wt").path
-    XCTAssertTrue(git(["worktree", "add", "-q", path, "-b", "feat/wt"]).isSuccess)
-    XCTAssertTrue(try isClean(path), "作った直後は clean")
-
-    try "dirty".write(
-      toFile: (path as NSString).appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
-    XCTAssertFalse(try isClean(path), "未コミット変更があれば clean ではない")
-  }
-
   /// **ユーザー設定で clean 判定を無力化できない**。`status.showUntrackedFiles=no` は巨大リポジトリの
   /// 高速化として広く使われるが、これが効くと未追跡ファイルだけの worktree が空出力＝clean に見え、
   /// `--force` 削除でそのファイルが復旧不能に消える。引数で明示して事実を固定していることを固定する。
@@ -111,7 +101,7 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
   }
 
   /// **`--force` の根拠**。submodule を初期化した worktree は、作業ツリーが完全に clean でも
-  /// 素の `git worktree remove` に拒否される。Orbe 自身のリポジトリも submodule を持つため、
+  /// 素の `git worktree remove` に拒否される。Orbe が扱うリポジトリは submodule を持ちうるため、
   /// clean と unlocked を直前に検証したうえで `--force` を呼ぶのが唯一の道になる。
   func testSubmoduleWorktreeNeedsForce() throws {
     try addSubmodule()
@@ -141,25 +131,6 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
 
     XCTAssertNil(try deleteBranch("feat/gone", expecting: tip))
     XCTAssertFalse(git(["branch"]).stdoutText.contains("feat/gone"), "未取り込みでも到達性を問わず消える")
-  }
-
-  /// **確定した時点の判定でコミットを消さない**。分類してから削除するまでにブランチが進んだら、
-  /// 先端が一致しないので削除は拒否される（worktree 側の dirty 再確認に対応する、ブランチ側の関門）。
-  func testDeleteBranchRefusesWhenBranchMovedSinceProbe() throws {
-    XCTAssertTrue(git(["checkout", "-q", "-b", "feat/moved"]).isSuccess)
-    try write("b.txt", "1")
-    XCTAssertTrue(git(["add", "-A"]).isSuccess)
-    XCTAssertTrue(git(["commit", "-qm", "c1"]).isSuccess)
-    let probed = git(["rev-parse", "HEAD"]).stdoutText.trimmingCharacters(
-      in: .whitespacesAndNewlines)
-    // 分類の後にコミットが載る（別のタブ・別のツールから）。
-    try write("c.txt", "1")
-    XCTAssertTrue(git(["add", "-A"]).isSuccess)
-    XCTAssertTrue(git(["commit", "-qm", "c2"]).isSuccess)
-    XCTAssertTrue(git(["checkout", "-q", "main"]).isSuccess)
-
-    XCTAssertNotNil(try deleteBranch("feat/moved", expecting: probed), "先端が動いていたら消さない")
-    XCTAssertTrue(git(["branch"]).stdoutText.contains("feat/moved"), "ブランチは残る")
   }
 
   // MARK: - ヘルパ

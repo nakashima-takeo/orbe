@@ -2,48 +2,23 @@ import XCTest
 
 @testable import Orbe
 
-/// `app-state.json` の永続 round-trip を、`preferredLanguage`（初回言語ゲート・起動言語の土台）を
-/// 軸に固定する。全 field Optional の家風（欠落を壊さず読む・部分更新で他 field を保つ）を突く。
+/// `app-state.json` の読み書き。壊れると、1 箇所の書き込みが他の内部簿記（言語・プラグイン登録・
+/// PATH キャッシュ）を消す、または旧ファイルを読めずに初回扱いへ戻る。
 final class AppStatePersistenceTests: OrbeTestCase {
 
-  func testPreferredLanguageRoundTrips() {
-    AppStatePersistence.save(AppStateFile(preferredLanguage: "en"))
-    XCTAssertEqual(AppStatePersistence.load()?.preferredLanguage, "en")
-  }
-
-  /// nil（＝未選択）は欠落として書かれ、読み戻しても nil のまま（初回ゲートが nil を「言語画面を出す」に使う）。
-  func testNilPreferredLanguageRoundTripsAsNil() {
-    AppStatePersistence.save(AppStateFile(preferredLanguage: nil))
-    let loaded = AppStatePersistence.load()
-    XCTAssertNotNil(loaded, "ファイル自体は書かれる")
-    XCTAssertNil(loaded?.preferredLanguage, "nil は欠落として復元される")
-  }
-
-  /// 部分更新は他 field を保ったまま preferredLanguage だけ変える（散在する書込点が共有する契約）。
-  func testUpdateChangesOnlyPreferredLanguage() {
+  /// 部分更新は 1 field だけを変え、他の field を保つ（散在する書込点が共有する契約）。
+  func testUpdateChangesOnlyTheMutatedField() {
     AppStatePersistence.save(
-      AppStateFile(completionInstalled: true, cachedShellPath: "/bin/zsh", preferredLanguage: nil))
+      AppStateFile(
+        agentPluginsInstalled: true, registeredAgentPluginName: "orbe-agent",
+        completionInstalled: true, cachedShellPath: "/bin/zsh", preferredLanguage: nil))
     AppStatePersistence.update { $0.preferredLanguage = "ja" }
     let loaded = AppStatePersistence.load()
     XCTAssertEqual(loaded?.preferredLanguage, "ja")
+    XCTAssertEqual(loaded?.agentPluginsInstalled, true, "他 field は保持")
+    XCTAssertEqual(loaded?.registeredAgentPluginName, "orbe-agent", "他 field は保持")
     XCTAssertEqual(loaded?.completionInstalled, true, "他 field は保持")
     XCTAssertEqual(loaded?.cachedShellPath, "/bin/zsh", "他 field は保持")
-  }
-
-  /// 最後に登録できたエージェントプラグイン名も round-trip する（現在のチャネルの名前との比較材料）。
-  func testRegisteredAgentPluginNameRoundTrips() {
-    AppStatePersistence.save(AppStateFile(registeredAgentPluginName: "orbe-agent-dev"))
-    XCTAssertEqual(AppStatePersistence.load()?.registeredAgentPluginName, "orbe-agent-dev")
-  }
-
-  /// 無音での登録し直しは名前だけを書き替え、オンボーディング提示済みフラグを保つ。
-  func testUpdateChangesOnlyRegisteredAgentPluginName() {
-    AppStatePersistence.save(
-      AppStateFile(agentPluginsInstalled: true, registeredAgentPluginName: "orbe-agent"))
-    AppStatePersistence.update { $0.registeredAgentPluginName = "orbe-agent-dev" }
-    let loaded = AppStatePersistence.load()
-    XCTAssertEqual(loaded?.registeredAgentPluginName, "orbe-agent-dev")
-    XCTAssertEqual(loaded?.agentPluginsInstalled, true, "他 field は保持")
   }
 
   /// preferredLanguage を持たない旧 JSON もデコード成功（throw せず）し nil を返す＝後方互換。

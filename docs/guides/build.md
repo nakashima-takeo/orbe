@@ -1,21 +1,19 @@
 ---
 title: ビルド手順
-description: libghostty の自前ビルドから Orbe.app の生成・起動まで。前提ツール・チャネル・lint / format
-updated: 2026-10-04
+description: Orbe.app の生成・起動まで。前提ツール・ghostty の pin と改造・チャネル・lint / format
+updated: 2026-10-06
 ---
 
 # ビルド手順
 
-Orbe は libghostty を**自前ビルド**して使う（クリーン・MIT・自己完結）。
+libghostty は、ghostty の fork [`nakashima-takeo/ghostty`](https://github.com/nakashima-takeo/ghostty) が固定 SHA で焼いた配布物（Release の `GhosttyKit.zip`）を、SwiftPM が取得して使う。Orbe のビルドは ghostty を焼かない。
 
 ## 前提ツール
 
 | ツール | 要否 | 入手 |
 |---|---|---|
 | **フル Xcode（26 系以上）** | **必須** | App Store か Apple Developer から。Swift ツールチェーンと Icon Composer 形式のアイコンを扱う `actool` を使う。CLT だけでは不可。 |
-| Metal Toolchain | 必須 | `xcodebuild -downloadComponent MetalToolchain` で追加する（[CI](../../.github/workflows/ci.yml)でも導入）。 |
-| [mise](https://mise.jdx.dev/) | 必須 | `brew install mise`。[`mise.toml`](../../mise.toml) が固定する Zig・SwiftLint の版を導入・解決する台帳。`build-app.sh` は mise が無いと導入案内を出して止まる。 |
-| Zig 0.16.0 | 必須 | [`mise.toml`](../../mise.toml) で版を固定。導入は `mise install`（swiftlint と同じ台帳）。ghostty の `build.zig` は zig の major.minor の完全一致を要求するので、版は勝手に上げられない（ghostty の pin と対で上げる）。`build-app.sh` は `mise which zig` で実体を解決し、PATH の `zig` は見ない。 |
+| [mise](https://mise.jdx.dev/) | lint に必須 | `brew install mise`。[`mise.toml`](../../mise.toml) が固定する SwiftLint の版を導入・解決する台帳。導入は `mise install`。 |
 
 Xcode を導入して初回セットアップを済ませたら、使用中の開発ツールを確認する。
 
@@ -30,32 +28,23 @@ xcodebuild -version
 sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
 ```
 
-次に mise を入れ、Zig（と SwiftLint）を mise で、Metal Toolchain を Xcode で導入し、Metal コンパイラを確認する。
-
-```bash
-brew install mise
-mise install
-xcodebuild -downloadComponent MetalToolchain
-xcrun -sdk macosx metal --version
-```
-
-アイコンは [`app/Orbe.icon`](../../app/Orbe.icon/) の [Icon Composer 形式](https://developer.apple.com/documentation/xcode/creating-your-app-icon-using-icon-composer)を使い、[`build-app.sh`](../../scripts/build-app.sh) が `actool` でコンパイルする。
-
-### なぜフル Xcode が必須か（CLT では不可）
-
-実測で確定：
-
-1. CLT には **Metal コンパイラが無い**（`xcrun -sdk macosx metal` → `unable to find utility "metal"`）。ghostty の macOS レンダラは Metal シェーダのコンパイルが要る。
-2. それ以前に、CLT だけだと `zig build` が**構成段階で失敗**する（`error: DarwinSdkNotFound`）。ghostty のビルドグラフ生成に Darwin SDK が要る。
-
-→ Metal 描画のネイティブアプリを自前ビルドする以上、フル Xcode は回避不能。
+アイコンは [`app/Orbe.icon`](../../app/Orbe.icon/) の [Icon Composer 形式](https://developer.apple.com/documentation/xcode/creating-your-app-icon-using-icon-composer)を使い、[`build-app.sh`](../../scripts/build-app.sh) が `actool` でコンパイルする。CLT には `actool` が無い（実測）ので、フル Xcode は回避不能。
 
 ## バージョン pin
 
-- ghostty: `vendor/ghostty` submodule を `f9a3f24a56bf05f70894e1a084809d4fffadf420` に pin。
-  API の正はこのコミットの `vendor/ghostty/include/ghostty.h`（外部契約は [spec/terminal/libghostty.md](../spec/terminal/libghostty.md)）。
+- ghostty: [`Package.swift`](../../Package.swift) の GhosttyKit の url にあるタグ `ghosttykit-<SHA>` が pin。SHA を直書きするのはここだけ。タグはその SHA のコミットを指す。API の正はその SHA の `include/ghostty.h`（xcframework の `Headers/` にも入っている。外部契約は [spec/terminal/libghostty.md](../spec/terminal/libghostty.md)）。
 - libghostty は alpha・API 非安定のため、**main 追従ではなく固定 SHA で pin**。アップグレード時はヘッダの型差分を確認。
-- `build-app.sh` は焼く前に `vendor/ghostty` の checkout が pin と一致するか確かめ、未取得かずれていれば関係する SHA（checkout の HEAD・pin）と復旧コマンドを示して止める。共有経路（下の worktree の注意）へ進むのは、linked worktree で submodule が未取得のときだけ。pull・rebase で pin が動いたら `git submodule update --init vendor/ghostty`。
+- 配布物 `GhosttyKit.zip` の中身は `GhosttyKit.xcframework`（ReleaseFast・arm64）、`share/{ghostty,terminfo}`、`fonts/`（JetBrains Mono Nerd Font 4 本）、配布物自身の帰属表記（`NOTICE`・`licenses/`）。焼き方は fork の `orbe/build.sh` が持つ。
+- pin を進める:
+  1. 新しい SHA が fork に無ければ、上流の追従（fork の `orbe/README.md`）か、改造の push で fork のブランチに入れる。
+  2. 所有者のトークン（手元の `gh` の認証）で tag を打つ。workflow の GITHUB_TOKEN は、workflow ファイルが既定ブランチと違うコミットに tag を作れないため。
+     ```bash
+     gh api repos/nakashima-takeo/ghostty/git/refs -f ref=refs/tags/ghosttykit-<40 桁 SHA> -f sha=<40 桁 SHA>
+     ```
+  3. fork の workflow を `main` から起動する（`gh workflow run orbe-ghosttykit.yml --repo nakashima-takeo/ghostty --ref main -f ghostty_sha=<40 桁 SHA>`）。zig の版は焼くソースの `build.zig.zon`（`minimum_zig_version`）から決まる。workflow は zip を自己検証してから、その tag に Release `ghosttykit-<SHA>` を出し、`GhosttyKit.zip` と `GhosttyKit.zip.sha256` を置く。Release を出す前に失敗したら、同じ tag のまま起動し直せばよい。
+  4. `Package.swift` の url を新しい tag に、checksum を `.sha256` の中身に書き換える。
+- 依存の顔ぶれが変わったときは [licensing](../spec/platform/licensing.md) に従う。
+- 公開した Release は差し替えない（checksum を全員が固定しているため。fork は Immutable releases にしてある）。焼き直しが要るときは ghostty の SHA を変える。
 - tree-sitter 本体は `exact: "0.26.11"`（C API を `OrbeEditorCore` から直接呼ぶ）。0.26.12・0.26.13 はエラー回復が退行していて、Orbe のソースを連結した 1.2MB の Swift が文書全体で ERROR 1 つに崩れ、色がほぼ消える。退行は 2 つある——0.26.12 の 3ee7c639（master の 15ea3328）は UTF-16 の入力で、0.26.13 の f837fc98（master の 869638f6、上流 Issue #5910）は UTF-8 でも崩す。どちらも 0.27.0 にある。0.26.12〜13 で入った query の修正は、同梱の queries の結果を変えない（直ったのは量化子のすぐ隣に置いた anchor と `(MISSING)` の扱いで、どちらも使っていない）。
 - tree-sitter を上げるときに確かめること: 実在の大きなファイル（Orbe の `Sources` を連結した Swift など）を UTF-16 で解析して（Orbe の入力。tree-sitter の CLI は UTF-8 で解くので、UTF-16 だけの崩れを見逃す）全体 ERROR に崩れない／同梱の queries（highlights は連結、injections は単独）がすべて組める／誤りの無い見本（16 文法）の構文木と capture の列が前の版と一致する。
 - tree-sitter 0.27 以降は上流の `Package.swift` が無い。上げるときは `lib` の C ソースを取り込む自前の target に移る（sources は `lib/src/lib.c` の 1 本、公開ヘッダは `lib/include`——上流の CMake と同じ組み方。0.27.0 の `lib/src` には wasm 用の C（`src/wasm-stdlib`）があり、`lib/src` を丸ごと sources にするとそれまで拾ってネイティブでは組めない）。
@@ -65,17 +54,17 @@ xcrun -sdk macosx metal --version
 ## ビルド手順（Xcode 導入後）
 
 ```bash
-# 1. submodule 取得
-git submodule update --init --recursive
-
-# 2. Orbe.app を生成して起動
+git clone https://github.com/nakashima-takeo/orbe.git
+cd orbe
 ./scripts/build-app.sh
 open build/Orbe.app
 ```
 
+`git worktree add` で切った作業場でも、何も準備せずに同じコマンドで動く。`GhosttyKit.zip`（約 40MB）は初回の `swift build` で取得され、ユーザー単位のキャッシュ（`~/Library/Caches/org.swift.swiftpm`）に残るので、2 つ目以降の作業場では再ダウンロードしない。展開先は作業場ごとの `.build`。
+
 `build/Orbe.app` と `/Applications/Orbe Dev.app` は同じ bundle id なので、state も control.sock も共有する。`open` は既存インスタンスを前面化するだけでソケットの持ち主は入れ替わらないため、常用の Orbe Dev を起動したまま新ビルドを起こしても古い方が応答し続ける（症状は「新ビルドにしたのに直っていない」という遠い形で出る）。入れ替えるには先に常用を quit するか、本物に触らず確かめるなら `ORBE_STATE_DIR` で隔離する（`scripts/sandbox-run.sh start`。手順は `.claude/skills/sandbox-run`）。
 
-`build-app.sh` がエンジン(libghostty)を ReleaseFast で焼き（`zig build -Demit-xcframework=true -Dxcframework-target=native -Doptimize=ReleaseFast -Demit-macos-app=false`）、xcframework と share リソースを生成してから Orbe.app をバンドルする。`-Demit-macos-app=false` は上流 Ghostty.app（xcodebuild）を組まないための指定で、Orbe が使うのは xcframework と share リソースだけ。初回・submodule 更新時は数分かかるが、以降は Zig のキャッシュで実質一瞬。
+`build-app.sh` は `swift build -c release` の後、SwiftPM が `GhosttyKit.zip` を展開した先（`.build/artifacts/<作業場のディレクトリ名の小文字>/GhosttyKit/`）から share とフォントを Orbe.app に同梱する。見つからなければ止まる。
 
 ### ビルドチャネル（ORBE_CHANNEL）
 
@@ -95,8 +84,6 @@ open build/Orbe.app
 - release をオプトインにしてあるのは、素の `swift build`（`scripts/orbe-mcp.sh` 等）がフラグ差分で
   焼き直しても dev のままになるようにするため。逆にすると、そこで本番 identity へ静かに落ちる。
 
-> **worktree での注意**: `git worktree add` で切った作業場では submodule は未取得のまま。`build-app.sh` は、main worktree の `vendor/ghostty` の checkout がこの worktree の pin と一致するときだけ、そこへ symlink を張って共有する（ビルド後は空ディレクトリへ戻す）。ブランチが pin を進めている・main の submodule が pin とずれている・main に submodule の実体が無いときは止まり、案内のコマンド（main の module store を `--reference` にした `git submodule update`）でこの worktree 内に実 checkout する。git オブジェクトは main と共有されるが、zig の初回ビルド（数分）と `.zig-cache`（約 1GB）は worktree ごとに乗り、`git worktree remove` には `--force` が要る。ビルドが SIGKILL 等で中断して symlink が残っても、次の `build-app.sh` が冒頭で空ディレクトリへ戻すので、復旧コマンドより先に `build-app.sh` を再実行する。
-
 > 静的ライブラリのため Package.swift で Metal/CoreText/AppKit 等のシステムフレームワークを明示リンクしている。
 
 ### リソース解決（GHOSTTY_RESOURCES_DIR は不要）
@@ -107,8 +94,18 @@ ghostty は shell-integration / themes / terminfo を**実行体からの相対*
 
 `swift build` の **debug バイナリを単体起動する dev 時のみ**、リソースが実行体の隣に無いため env を渡す:
 ```bash
-GHOSTTY_RESOURCES_DIR="$PWD/vendor/ghostty/zig-out/share/ghostty" .build/debug/Orbe
+GHOSTTY_RESOURCES_DIR="$PWD/.build/artifacts/$(basename "$PWD" | tr '[:upper:]' '[:lower:]')/GhosttyKit/share/ghostty" .build/debug/Orbe
 ```
+
+## ghostty を改造して試す
+
+前提: Metal Toolchain（`xcodebuild -downloadComponent MetalToolchain`）と、焼くソースの `build.zig.zon` の `minimum_zig_version` に合う Zig（ghostty の build は major.minor の一致と、patch が最小値以上であることを要求する）。
+
+1. fork を `git clone --no-tags https://github.com/nakashima-takeo/ghostty.git` で取り、pin の SHA からブランチを切って改造する。タグを取らないのは、ghostty の build が HEAD に付いたタグをリリースの版とみなし、焼いたコミットに付く fork の Release タグで止まるため。
+2. fork の `main` の `orbe/build.sh <改造したソース> <zip>` で zip を作る。ソースが `orbe/` を含まないときは、`main` の checkout（または `git worktree`）から build.sh を実行する。
+3. Orbe の `Package.swift` の GhosttyKit を一時的に `.binaryTarget(name: "GhosttyKit", path: "<zip への相対パス>")` に差し替え、`swift build` か `build-app.sh` を実行する。zip を作り直せば次のビルドで再展開される。差し替えはコミットしない。
+
+改造を pin にするときは、ブランチを fork に push し、その SHA で「pin を進める」の 2 から従う。
 
 ## lint・format
 

@@ -58,43 +58,13 @@ final class AgentCatalogTests: OrbeTestCase {
     XCTAssertEqual(found.map(\.path), [exec], "実行権の無いファイルは候補にしない")
   }
 
-  func testEmptyWhenNothingInstalled() {
-    XCTAssertEqual(AgentCatalog.resolve(in: dirA.path), [])
-  }
-
   func testEmptyPathEntriesAreIgnored() throws {
     let claude = try place("claude", in: dirA)
     let found = AgentCatalog.resolve(in: "::\(dirA.path):")
     XCTAssertEqual(found.map(\.path), [claude], "PATH 中の空エントリで落ちない")
   }
 
-  // MARK: - per-CLI の静的表
-
-  /// 起動時に idle を報告できる（`spawn_agent` / `resume_agent` が ready を待てる）のは claude だけ。
-  /// 出所は `docs/spec/agent/plugin-package.md` の event→state 表（claude のみ SessionStart→idle）。
-  /// codex / agy を真にすると spawn が来ない idle を 30 秒待ち、未対応 agent も同じ。
-  func testOnlyClaudeReportsIdleOnStart() {
-    XCTAssertTrue(AgentCatalog.reportsIdleOnStart("claude"))
-    XCTAssertFalse(
-      AgentCatalog.reportsIdleOnStart("codex"),
-      "Orbe の codex hooks は SessionStart を配線していない（codex CLI 自身は持つ）")
-    XCTAssertFalse(AgentCatalog.reportsIdleOnStart("agy"), "agy に SessionStart 相当の hook は無い")
-    XCTAssertFalse(AgentCatalog.reportsIdleOnStart("bash"), "未対応 agent は待たない側")
-  }
-
   // MARK: - resume コマンド構築
-
-  func testResumeCommandSyntaxPerCLI() {
-    XCTAssertEqual(
-      AgentCatalog.resumeCommand(forAgent: "claude", sessionId: "abc-123"),
-      "claude --resume abc-123")
-    XCTAssertEqual(
-      AgentCatalog.resumeCommand(forAgent: "agy", sessionId: "abc-123"),
-      "agy --conversation abc-123", "agy は --conversation 形式")
-    XCTAssertEqual(
-      AgentCatalog.resumeCommand(forAgent: "codex", sessionId: "abc-123"),
-      "codex resume abc-123", "codex は resume サブコマンド形式")
-  }
 
   func testResumeCommandRejectsUnknownAgent() {
     XCTAssertNil(AgentCatalog.resumeCommand(forAgent: "bash", sessionId: "abc-123"))

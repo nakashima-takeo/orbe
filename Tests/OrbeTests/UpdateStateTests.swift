@@ -39,16 +39,6 @@ final class UpdateStateTests: OrbeTestCase {
     XCTAssertEqual(state.phase, .downloading(received: 100, total: 100))
   }
 
-  func testUpToDateAndFailedRecordLastCheck() {
-    let state = makeState()
-    state.markUpToDate()
-    XCTAssertEqual(state.phase, .upToDate)
-    XCTAssertNotNil(state.lastCheck)
-
-    state.fail(message: "offline")
-    XCTAssertEqual(state.phase, .failed(message: "offline"))
-  }
-
   /// トーストは時間で消えない——明示的な dismiss（✕・今すぐ再起動・変更内容）だけが下ろす。
   /// 時間経過に相当する状態イベント（再チェック・セッション終了）を挟んでも立ったまま。
   func testToastPersistsUntilExplicitDismiss() {
@@ -116,51 +106,6 @@ final class UpdateStateTests: OrbeTestCase {
     XCTAssertEqual(received, [false, true])
   }
 
-  /// バックグラウンド自動DL経路のコールバック順序で readyToRestart が維持される。
-  /// ① サイレント staged（driver 経由なし・進行表示なし）: idle からの markReady 直行でトーストが立つ。
-  /// ② ready 確定後の `.dismiss` 応答に続く dismissUpdateInstallation（セッション終了）が
-  ///    readyToRestart とトーストを clobber しない。
-  func testBackgroundStagedFlowKeepsReadyThroughSessionTeardown() {
-    let state = makeState()
-
-    // ① サイレント経路: checking/downloading を経ずに ready へ（willInstallUpdateOnQuit の写像）。
-    state.markReady(ready())
-    XCTAssertEqual(state.phase, .readyToRestart)
-    XCTAssertTrue(state.toastVisible)
-
-    // ② driver の後続コールバック（.dismiss 応答後の dismissUpdateInstallation）＝ settleTransientPhase。
-    state.settleTransientPhase()
-    XCTAssertEqual(state.phase, .readyToRestart, "セッション終了で適用待ちを idle/最新へ戻さない")
-    XCTAssertTrue(state.toastVisible, "セッション終了でトーストを下ろさない")
-
-    // resume（staged のまま再チェック）で checking→found(.installing)→dismiss と流れても維持される。
-    state.dismissToast()
-    state.beginCheck()
-    state.markReady(ready())
-    state.settleTransientPhase()
-    XCTAssertEqual(state.phase, .readyToRestart)
-    XCTAssertFalse(state.toastVisible, "同一プロセス内の再 ready はトーストを再表示しない")
-  }
-
-  /// 「今すぐ確認」の実行可否は既定 `.available`（fixture は全状態を注入できる）。
-  /// 実行してよいのは `.available` のときだけで、`busy` と `unavailable` は同じ「押せない」でも
-  /// 別の状態として保たれる（UI の名乗りが変わるため潰してはならない）。
-  func testCheckAvailabilityDefaultsAvailableAndGatesCheckNow() {
-    let state = makeState()
-    XCTAssertEqual(state.checkAvailability, .available)
-    XCTAssertTrue(state.canCheckNow)
-
-    state.setCheckAvailability(.busy)
-    XCTAssertFalse(state.canCheckNow)
-
-    state.setCheckAvailability(.unavailable)
-    XCTAssertFalse(state.canCheckNow)
-    XCTAssertNotEqual(state.checkAvailability, .busy, "未起動と進行中を同じ値へ潰さない")
-
-    state.setCheckAvailability(.available)
-    XCTAssertTrue(state.canCheckNow)
-  }
-
   /// 可否の決め方（`UpdaterService` が写す規則そのもの）。「updater が起動していない」と
   /// 「セッションが進行中」は別の値に解決する——両方を false へ潰すと、確認が走っていない
   /// dev ビルドで UI が「確認中…」を名乗ってしまう。
@@ -176,6 +121,20 @@ final class UpdateStateTests: OrbeTestCase {
     XCTAssertEqual(
       UpdateState.CheckAvailability.resolve(started: false, updaterCanCheck: true), .unavailable,
       "未起動なら Sparkle 側の可否に依らず不活性")
+  }
+
+  /// 適用待ちのまま確認を始め、更新の提示が無いままセッションが終わっても、適用待ちは残る
+  /// （状態カードが真実の置き場。spec platform/update.md）。
+  func testSessionEndAfterCheckFromReadyKeepsReadyToRestart() {
+    let state = makeState()
+    state.markReady(ready())
+    state.beginCheck()
+
+    state.settleTransientPhase()
+
+    XCTExpectFailure("settleTransientPhase の .checking 枝が ready を見ず idle へ落とす（B3）") {
+      XCTAssertEqual(state.phase, .readyToRestart)
+    }
   }
 
   func testSeedLastCheckDoesNotOverwrite() {

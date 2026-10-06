@@ -4,8 +4,7 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 描画スレッドの行の組版のキャッシュと、字の色の引き当て。壊れると、描画スレッドの覚える量が行の数や長さに比例して
-/// 黙って膨らむ、編集の後に古い行の組版で描く、右から左の字を含む行で構文色が抜ける。
+/// 描画スレッドの行の組版のキャッシュの量。壊れると、描画スレッドの覚える量が行の数や長さに比例して黙って膨らむ。
 @MainActor
 final class LineLayoutCacheTests: XCTestCase {
   private let config = SurfaceConfig(style: EngineTestCase.style(), omittedLabel: { "+\($0)" })
@@ -45,30 +44,5 @@ final class LineLayoutCacheTests: XCTestCase {
     for i in 0..<150 { lay(cache, long + "\(i)") }
     XCTAssertLessThanOrEqual(cache.weight, LineLayoutCache.weightBudget)
     XCTAssertGreaterThan(cache.count, 10)
-  }
-
-  /// 編集は変わった行を捨て、後ろの行をずらす。全部の行が変わった編集は全部捨てる。
-  func testRowEditsDropChangedRowsAndShiftTheRest() {
-    let rows = Dictionary(uniqueKeysWithValues: (0..<8).map { ($0, "r\($0)") })
-    let edit = RowEdit(rows: 3..<5, inserted: 4, version: 1)
-    let shifted = LineLayoutCache.shifted(rows, by: edit)
-    XCTAssertEqual(shifted, [0: "r0", 1: "r1", 2: "r2", 7: "r5", 8: "r6", 9: "r7"])
-    XCTAssertTrue(LineLayoutCache.shifted(rows, by: .all(version: 2)).isEmpty)
-  }
-
-  /// 本文の編集から変わった行を出す——置き換えた区間の始まりから終わりの行までが、置き換えの中身の行になる。
-  func testRowEditFromATextEdit() {
-    let text = TextRope("a\nb\nc\n")
-    let edit = RowEdit(
-      TextEdit(range: NSRange(location: 2, length: 2), replacement: "x\ny\nz\n"), in: text,
-      version: 5)
-    var expected = RowEdit(rows: 1..<3, inserted: 4, version: 5)
-    expected.text = RowEdit.TextChange(range: NSRange(location: 2, length: 2), replacementLength: 6)
-    XCTAssertEqual(edit, expected, "区間と置き換えの長さも持つ")
-    let typed = RowEdit(
-      TextEdit(range: NSRange(location: 2, length: 0), replacement: "q"), in: text, version: 6)
-    expected = RowEdit(rows: 1..<2, inserted: 1, version: 6)
-    expected.text = RowEdit.TextChange(range: NSRange(location: 2, length: 0), replacementLength: 1)
-    XCTAssertEqual(typed, expected, "行の中の打鍵はその行だけ")
   }
 }

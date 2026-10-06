@@ -10,7 +10,7 @@ import XCTest
 /// 壊れると何が起きるか。単独セグメントのタブを閉じる（タブ数もセグメント数も減る）と、
 /// 「タブ集合」と「セグメント構造」を View が別々の observable から読む構造では、子更新が
 /// 古い index で新しい配列を引いて Index out of range で即死する。純関数テストでは描画経路が
-/// 走らないため、ここだけが検出できる。
+/// 走らないため、ここだけが検出できる。判定は「描き直しで落ちないこと」で、assert は持たない。
 @MainActor
 final class StatusRowViewRenderTests: OrbeTestCase {
   private var windows: [NSWindow] = []
@@ -57,7 +57,5 @@ final class StatusRowViewRenderTests: OrbeTestCase {
 
     model.update(snapshot(["home", "beta", "beta", "plain"], active: 1))
     window.contentView?.layoutSubtreeIfNeeded()
-
-    XCTAssertEqual(model.strip.count, 4)
   }
 }

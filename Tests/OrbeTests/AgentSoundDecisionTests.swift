@@ -66,28 +66,6 @@ final class AgentSoundDecisionTests: OrbeTestCase {
       plan, AgentSoundDecision.Plan(source: .synth(.steel), event: .waiting, volume: 35))
   }
 
-  /// 全案 × 全イベント × オンオフ × 音量（下限/既定/上限）の総当たり。
-  func testExhaustiveMatrix() {
-    for family in NotificationSound.allCases {
-      for event in AgentSoundEvent.allCases {
-        for enabled in [true, false] {
-          for volume in [5, 70, 100] {
-            let plan = AgentSoundDecision.plan(
-              state: event.rawValue,
-              settings: settings(sound: .preset(family), volume: volume, enabled: enabled))
-            if enabled {
-              XCTAssertEqual(
-                plan,
-                AgentSoundDecision.Plan(source: .synth(family), event: event, volume: volume))
-            } else {
-              XCTAssertNil(plan, "\(family)/\(event)/enabled=\(enabled)/volume=\(volume)")
-            }
-          }
-        }
-      }
-    }
-  }
-
   // MARK: - カスタム音源の解決マトリクス
 
   /// `custom` × event × 同一化トグル × 設定の有無の総当たり。

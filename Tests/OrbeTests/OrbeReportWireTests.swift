@@ -135,6 +135,8 @@ final class OrbeReportWireTests: OrbeTestCase {
     XCTAssertEqual(params["state"] as? String, "waiting", "argv[2] が state")
     XCTAssertEqual(params["sessionId"] as? String, "s-1", "stdin の session_id が sessionId になる")
     XCTAssertEqual(params["message"] as? String, "許可しますか")
+    XCTAssertEqual(
+      params["messageSource"] as? String, "notification", "抽出した出所の語をそのまま載せる")
   }
 
   /// SessionEnd の `reason` は `reason` キーで運ぶ（受け側はセッションログの closed に載せる）。
@@ -146,22 +148,6 @@ final class OrbeReportWireTests: OrbeTestCase {
 
     let plain = try request(report(state: "clear", stdin: #"{"session_id":"s-1"}"#))
     XCTAssertNil(plain.params["reason"], "reason を持たない hook では載せない")
-  }
-
-  /// `messageSource` の値は受け側 `AgentMessage` のリテラルと 1 対 1。通知由来なら `notification`、
-  /// ツール由来（`AskUserQuestion` の質問文）なら `tool`。
-  func testMessageSourceLiteralsMatchReceiverVocabulary() throws {
-    let notification = try request(
-      report(state: "waiting", stdin: #"{"message":"許可しますか"}"#))
-    XCTAssertEqual(
-      notification.params["messageSource"] as? String, "notification", "Notification の message 由来")
-
-    let tool = try request(
-      report(
-        state: "waiting",
-        stdin: #"{"tool_input":{"questions":[{"question":"どちらにしますか"}]}}"#))
-    XCTAssertEqual(tool.params["messageSource"] as? String, "tool", "PreToolUse の質問文由来")
-    XCTAssertEqual(tool.params["message"] as? String, "どちらにしますか", "先頭の質問文を載せる")
   }
 
   /// `done` の裏で background_tasks が走っていれば、wire に載る `state` は `working` へ読み替わる

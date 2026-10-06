@@ -125,7 +125,7 @@ enum Theme {
       light: StateHue.waitingLight, lightA: 0.12, dark: StateHue.waitingDark, darkA: 0.12)
     static let tintDone = dynA(
       light: StateHue.doneLight, lightA: 0.12, dark: StateHue.doneDark, darkA: 0.12)
-    // git の緑チップ地（merged PR・issue/PR バッジ）。文字が diffAdded なので地も diffAdded 軸から取る
+    // git の緑チップ地（clean の merged PR 等）。文字が diffAdded なので地も diffAdded 軸から取る
     // （state.done とは dark で別値。この 2 軸は混ぜない）。
     static let tintDiffAdded = dynA(
       light: OrbePalette.Chrome.greenLight, lightA: 0.12,
@@ -202,7 +202,7 @@ enum Theme {
     static let display = NSFont.systemFont(ofSize: 26, weight: .regular)  // ページタイトル
 
     // 情報密度を優先する行タイポ（汎用 type スケールの4段丸めには寄せない）
-    // paneRow=Dispatch clean のアクションボタン / paneSegment=Dispatch clean の群見出し・チェック記号
+    // paneRow=worktree パレットの clean のアクションボタン / paneSegment=worktree パレットの clean の群見出し・チェック記号
     static let paneRow = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
     static let paneSegment = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
 

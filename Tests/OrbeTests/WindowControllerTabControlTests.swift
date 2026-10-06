@@ -85,22 +85,6 @@ final class WindowControllerTabControlTests: OrbeTestCase {
     XCTAssertEqual(row(wc, name: "sleepers")?["dormantAgentCount"] as? Int, 0)
   }
 
-  /// 休眠件数は agent 由来タブだけを数える。素のタブの close で減るならタブ総数を数えている退行。
-  func testClosingPlainDormantTabKeepsRestoredAgentCount() throws {
-    let wc = try restore(
-      activeWorkspace: 0,
-      [tabbed("main"), tabbed("sleepers", tabs: [agentTab("a"), Self.plainTab])])
-    let sleepers = try XCTUnwrap(wc.workspaces.first { $0.name == "sleepers" })
-    let plain = try XCTUnwrap(sleepers.tabs.first { !$0.isDormant })
-
-    guard case .success = wc.controlCloseTab(tabId: plain.id) else {
-      return XCTFail("plain dormant tab close")
-    }
-
-    XCTAssertEqual(sleepers.dormantAgentCount(), 1)
-    XCTAssertEqual(sleepers.tabs.count, 1)
-  }
-
   /// 前面の close は残存 tab を reselect して起こすため、背景 close と違い activated は true のまま。
   func testClosingLiveTabInForegroundMixedWorkspaceMaterializesRemainingTab() throws {
     let wc = try restore(

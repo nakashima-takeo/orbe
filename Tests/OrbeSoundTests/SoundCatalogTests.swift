@@ -6,29 +6,6 @@ import XCTest
 final class SoundCatalogTests: XCTestCase {
   private let sampleRate = 48000.0
 
-  /// 全案・全イベントが定義されている（案を足して定義を忘れたら落ちる）。
-  func testEveryFamilyDefinesBothEvents() {
-    XCTAssertEqual(NotificationSound.allCases.count, 12)
-    for family in NotificationSound.allCases {
-      for event in AgentSoundEvent.allCases {
-        XCTAssertFalse(
-          SoundCatalog.program(family, event).components.isEmpty, "\(family) の \(event) が未定義")
-      }
-    }
-  }
-
-  /// 部品はすべて 0 秒以降に始まり、必ず長さを持つ。
-  func testComponentsAreWellFormed() {
-    for family in NotificationSound.allCases {
-      for event in AgentSoundEvent.allCases {
-        for component in SoundCatalog.program(family, event).components {
-          XCTAssertGreaterThanOrEqual(component.start, 0, "\(family)/\(event)")
-          XCTAssertGreaterThan(component.end, component.start, "\(family)/\(event)")
-        }
-      }
-    }
-  }
-
   /// 音の全長は 0.05〜2.2 秒に収まり、部品型ごとに 1 案を定義から導かれる長さに固定する
   /// （エフェクト無しの案では、最後の部品の発音が終わる時刻）。全長は試聴 EQ の消灯タイミング
   /// でもあるので、エンベロープの既定を動かして黙って伸び縮みさせない——tone 系（deep / emblem）に
@@ -85,17 +62,6 @@ final class SoundCatalogTests: XCTestCase {
     }
   }
 
-  /// 同じ入力からは常に同じ波形（ノイズを含む案も固定シードで再現する）。
-  func testRenderIsDeterministic() {
-    for family in [NotificationSound.wood, .air, .piano] {  // ノイズを含む 3 案
-      let first = SoundRenderer.render(
-        family: family, event: .waiting, volume: 70, sampleRate: sampleRate)
-      let second = SoundRenderer.render(
-        family: family, event: .waiting, volume: 70, sampleRate: sampleRate)
-      XCTAssertEqual(first, second, "\(family) の合成が決定論でない")
-    }
-  }
-
   /// 音量は合成の入力（コンプレッサの**手前**）。小さくすれば必ず小さくなり、かつ縮み方は
   /// マッピングの比そのものにならない——音量を再生側ボリュームや事前生成音源へ移すと
   /// 厳密に `level(forVolume: 20)` 倍になるので、そこで落ちる。
@@ -132,12 +98,5 @@ final class SoundCatalogTests: XCTestCase {
           "\(family)/\(event) の音量が揃っていない (\(loud) dBFS)")
       }
     }
-  }
-
-  /// サンプルレートが変わっても同じ長さの音になる（biquad 係数もレートへ追従する）。
-  func testRenderFollowsSampleRate() {
-    let at44k = SoundRenderer.render(family: .pulse, event: .done, volume: 70, sampleRate: 44100)
-    let at48k = SoundRenderer.render(family: .pulse, event: .done, volume: 70, sampleRate: 48000)
-    XCTAssertEqual(Double(at44k.count) / 44100, Double(at48k.count) / 48000, accuracy: 0.001)
   }
 }

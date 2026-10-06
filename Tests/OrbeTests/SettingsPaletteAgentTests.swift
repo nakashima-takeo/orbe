@@ -64,13 +64,6 @@ extension SettingsPaletteTests {
 
   // MARK: - agent: 検出済みのみ列挙
 
-  func testAgentListsOnlyDetected() {
-    let p = model(defaultAgent: "claude", agents: ["claude", "codex"])  // agy 未検出
-    moveToAgentRow(p)
-    p.render.onActivate()  // agent へ
-    XCTAssertEqual(p.render.rows.map(\.label), ["● claude", "  codex"], "検出済みのみ・agy は出ない")
-  }
-
   func testAgentEmptyStateInfoRowAndNoSet() {
     let p = model(defaultAgent: "claude", agents: [])  // 検出ゼロ
     moveToAgentRow(p)

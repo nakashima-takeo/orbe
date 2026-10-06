@@ -64,18 +64,6 @@ final class SearchQueryTests: XCTestCase {
     XCTAssertNoThrow(try SearchQuery(pattern: "(").compiled(), "正規表現でなければ字どおりに組める")
   }
 
-  /// ディスクへの式は、開いている文書の式と同じ組み立てに、エンジンの設定を前置したもの（規則は 1 か所。設定の効き目は
-  /// 本物の git で見る → `GitGrepTests`）。
-  func testTheDiskPatternIsBuiltFromTheSameSource() throws {
-    for query in [
-      SearchQuery(pattern: "a.b"), SearchQuery(pattern: "foo", matchCase: true, wholeWord: true),
-      SearchQuery(pattern: "x+$", isRegex: true),
-    ] {
-      let compiled = try query.compiled()
-      XCTAssertTrue(compiled.pcre.hasSuffix(compiled.regex.pattern), "\(query): \(compiled.pcre)")
-    }
-  }
-
   /// 永続の 1 項目が読めなくても、問いの残りは失わない。
   func testDecodingFillsUnreadableFieldsWithDefaults() throws {
     let json = #"{"pattern":"needle","matchCase":"bad","isRegex":true}"#

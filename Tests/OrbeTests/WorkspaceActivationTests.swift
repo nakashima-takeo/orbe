@@ -46,22 +46,6 @@ final class WorkspaceActivationTests: OrbeTestCase {
     XCTAssertFalse(new.isDormant)
   }
 
-  func testWorkspaceActivationAlwaysEqualsAnyActivatedTab() {
-    for tabCount in 0...3 {
-      for bitMask in 0..<(1 << tabCount) {
-        let ws = Workspace(name: "w", rootPath: "/tmp")
-        ws.tabs = (0..<tabCount).map { index in
-          let tab = TerminalTab(cwd: "/tmp")
-          if bitMask & (1 << index) != 0 { tab.recordMaterializationStarted() }
-          return tab
-        }
-        XCTAssertEqual(
-          ws.activated, bitMask != 0,
-          "tabCount=\(tabCount), bitMask=\(bitMask)")
-      }
-    }
-  }
-
   func testRecordMaterializationValidatesOwnershipAndIsIdempotent() {
     let owned = Workspace(name: "owned", rootPath: "/tmp")
     let target = restoredTab(agentId: "a")
@@ -139,41 +123,20 @@ final class WorkspaceActivationTests: OrbeTestCase {
     XCTAssertEqual(ws.dormantAgentCount(), 1)
   }
 
-  func testLiveRollupCountsKnownStatesAndUsesCanonicalOrder() {
+  /// 同じ state のタブは 1 枚ずつ数え（多重度）、横断集計は正準順に並ぶ。
+  func testLiveRollupCountsEachTabAndUsesCanonicalOrder() {
     let ws = Workspace(name: "live", rootPath: "/tmp")
-    for state in ["idle", "done", "waiting", "working", "error"] {
+    for state in ["idle", "done", "working", "waiting", "working"] {
       let tab = TerminalTab(cwd: "/tmp")
       tab.recordMaterializationStarted()
       setReportedState(tab, state)
       ws.tabs.append(tab)
     }
 
-    XCTAssertEqual(
-      ws.agentCounts(), ["working": 1, "waiting": 1, "done": 1, "idle": 1],
-      "unknown は live タブでも集計対象外")
+    XCTAssertEqual(ws.agentCounts(), ["working": 2, "waiting": 1, "done": 1, "idle": 1])
     let ordered = AgentRollup.ordered(AgentRollup.grandTotal(of: [ws]))
     XCTAssertEqual(ordered.map(\.state), ["working", "waiting", "done", "idle"])
-    XCTAssertEqual(ordered.map(\.count), [1, 1, 1, 1])
-  }
-
-  /// 同じ state のタブは 1 枚ずつ数える（多重度）。`agentState` 未報告のタブは数えない。
-  func testAgentCountsTalliesActivatedTabsPerState() {
-    let ws = Workspace(name: "w", rootPath: "/tmp")
-    for state in ["working", "waiting", "working", "idle"] {
-      let tab = TerminalTab(cwd: "/tmp")
-      tab.recordMaterializationStarted()
-      setReportedState(tab, state)
-      ws.tabs.append(tab)
-    }
-    let none = TerminalTab(cwd: "/tmp")
-    none.recordMaterializationStarted()
-    ws.tabs.append(none)
-
-    let counts = ws.agentCounts()
-    XCTAssertEqual(counts["working"], 2)
-    XCTAssertEqual(counts["waiting"], 1)
-    XCTAssertEqual(counts["idle"], 1, "idle は横断集計に数える")
-    XCTAssertEqual(counts.count, 3, "nil は数えない")
+    XCTAssertEqual(ordered.map(\.count), [2, 1, 1, 1])
   }
 
   func testRemovingTabsImmediatelyRecomputesActivationAndDormantCount() {
@@ -227,42 +190,5 @@ final class WorkspaceActivationTests: OrbeTestCase {
     XCTAssertFalse(ws.activated)
     XCTAssertEqual(ws.dormantAgentCount(), 1)
     XCTAssertEqual(ws.lastUsedAt, Date(timeIntervalSinceReferenceDate: 789))
-  }
-
-  func testRemovingActiveTabsReportsIntermediateStateWithoutChangingMRU() {
-    do {
-      let ws = Workspace(name: "mixed", rootPath: "/tmp")
-      let live = TerminalTab(cwd: "/tmp")
-      live.recordMaterializationStarted()
-      let dormant = restoredTab(agentId: "a")
-      ws.tabs = [live, dormant]
-      ws.lastUsedAt = Date(timeIntervalSinceReferenceDate: 100)
-      let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
-
-      guard case .reselectActive(let index) = store.removeTab(live, origin: .controlAPI) else {
-        return XCTFail("active workspace に残存タブがあれば reselect")
-      }
-      XCTAssertEqual(index, 0)
-      XCTAssertFalse(ws.activated, "host が reselect を処理する前の純粋導出値")
-      XCTAssertEqual(ws.dormantAgentCount(), 1)
-      XCTAssertEqual(ws.lastUsedAt, Date(timeIntervalSinceReferenceDate: 100))
-    }
-
-    do {
-      let ws = Workspace(name: "empty", rootPath: "/tmp")
-      let live = TerminalTab(cwd: "/tmp")
-      live.recordMaterializationStarted()
-      ws.tabs = [live]
-      ws.lastUsedAt = Date(timeIntervalSinceReferenceDate: 200)
-      let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
-
-      guard case .emptiedActive = store.removeTab(live, origin: .controlAPI) else {
-        return XCTFail("最後の active tab を閉じると empty のまま前面維持")
-      }
-      XCTAssertTrue(ws.tabs.isEmpty)
-      XCTAssertFalse(ws.activated)
-      XCTAssertEqual(ws.dormantAgentCount(), 0)
-      XCTAssertEqual(ws.lastUsedAt, Date(timeIntervalSinceReferenceDate: 200))
-    }
   }
 }

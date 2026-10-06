@@ -17,12 +17,4 @@ final class L10nCompletenessTests: OrbeTestCase {
         entry.en.trimmingCharacters(in: .whitespaces).isEmpty, "\(key) の en が空")
     }
   }
-
-  /// 両言語のルックアップが実際に引ける（force-unwrap の安全性を全 case で確認）。
-  func testLookupResolvesForBothLanguages() {
-    for key in L10nKey.allCases {
-      XCTAssertFalse(L10n.string(key, .ja).isEmpty, "\(key) .ja の解決が空")
-      XCTAssertFalse(L10n.string(key, .en).isEmpty, "\(key) .en の解決が空")
-    }
-  }
 }

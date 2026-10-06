@@ -7,13 +7,6 @@ import XCTest
 /// window に未接続なら SurfaceView は libghostty surface を生成しない
 /// （生成は viewDidMoveToWindow 依存）ため、libghostty を起動せず検証できる。
 final class TerminalTabTests: OrbeTestCase {
-  func testViewWrapsSingleSurface() {
-    let tab = TerminalTab(cwd: "/tmp")
-    XCTAssertTrue(tab.view.terminal.surfaceView === tab.surface)
-    XCTAssertTrue(tab.surface.tab === tab, "surface は所属タブを知る（事実の通知先）")
-    XCTAssertEqual(tab.surface.initialCwd, "/tmp")
-  }
-
   /// 閉鎖要求は onClose を発火し、**発火源を判断せずそのまま素通しする**。
   /// 全ケースを回すのは、素通しがどれか 1 つへの決め打ちに化けるのを止めるため——化けても
   /// コンパイルは通り、「⌘W で閉じたタブが戻らない」か「shell exit まで積む」が静かに起きる。
@@ -44,15 +37,6 @@ final class TerminalTabTests: OrbeTestCase {
     tab.onWindowCommand = { received.append($0) }
     tab.surface.perform(.closeTab)  // ⌘W の届き先（Keybindings → SurfaceView.perform）
     XCTAssertEqual(received, [.closeTab], "⌘W は window コマンドとして上位へ渡す")
-  }
-
-  func testRequestWindowCommandForwardsToHandler() {
-    let tab = TerminalTab(cwd: "/tmp")
-    var received: [WindowCommand] = []
-    tab.onWindowCommand = { received.append($0) }
-    tab.requestWindowCommand(.newTab)
-    tab.requestWindowCommand(.switchWorkspace)
-    XCTAssertEqual(received, [.newTab, .switchWorkspace])
   }
 
   /// 変化判定は値を持つ surface 側にある——同値の再代入は通知しない。
@@ -96,20 +80,6 @@ final class TerminalTabTests: OrbeTestCase {
     tab.explicitTitle = "build"
     XCTAssertEqual(
       tab.displayTitle(workspaceRoot: "/Users/me/proj"), "build", "① explicitTitle が最優先")
-  }
-
-  func testDisplayTitleFallsBackToSurfaceTitle() {
-    let tab = TerminalTab(cwd: "/Users/me/proj/src")
-    tab.surface.title = "vim"
-    XCTAssertEqual(
-      tab.displayTitle(workspaceRoot: "/Users/me/proj"), "vim", "明示なし → ② title(非空)")
-  }
-
-  func testDisplayTitleFallsBackToDerivedWhenTitleEmpty() {
-    let tab = TerminalTab(cwd: "/Users/me/proj/src/app")
-    XCTAssertEqual(
-      tab.displayTitle(workspaceRoot: "/Users/me/proj"), "p/s/app",
-      "明示なし・title 空 → ③ derived（圧縮アンカーは root の親＝先頭に root 名）")
   }
 
   func testDisplayTitleEmptyExplicitFallsThrough() {

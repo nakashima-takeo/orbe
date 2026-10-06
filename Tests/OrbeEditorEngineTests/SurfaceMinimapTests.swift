@@ -68,7 +68,6 @@ final class SurfaceMinimapTests: EngineTestCase {
     let placement = try XCTUnwrap(opened.surface.placementBox.read())
     XCTAssertEqual(placement.lineCount, 401)
     XCTAssertEqual(placement.startLine, 0)
-    writePNG(try XCTUnwrap(opened.surface.snapshot()), previewURL("minimap.png"))
   }
 
   /// 打鍵で組み直すのは変わった行のチャンクだけ。行の数が増減した編集はその後ろのチャンクを全部捨てる。役割だけが変わった

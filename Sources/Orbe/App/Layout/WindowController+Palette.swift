@@ -100,157 +100,6 @@ extension WindowController {
     reconfirmFocusNextTick()  // 切替パレット→作成フォーム等の遷移で去りゆくカードの teardown に勝つ
   }
 
-  /// Cmd+Shift+X。Dispatch パレット（worktree/branch/issue/PR から起動）を開く。
-  /// git（即時）→gh（追従）のプログレッシブ表示・フィルタ・⇥ 起動先切替（agent/shell）・Enter 実行
-  /// （worktree 解決＋新タブ起動）・⌘↵ でブラウザ表示までを配線する。
-  func showDispatchPalette() {
-    if model.overlay == .dispatchPalette {
-      model.dispatchPalette?.focus()
-      return
-    }
-    let p = DispatchPaletteModel()
-    p.setTargets(
-      agents: agentLauncher.detectedAgents,
-      defaultCommand: agentLauncher.resolvedDefaultCommand)
-    p.onDismiss = { [weak self] in self?.dismissPalette() }
-
-    let provider = DispatchDataProvider(
-      cwd: store.newTabCwd(inWorkspaceAt: activeWorkspace), model: p, localization: localization,
-      worktreeTemplate: activeEffectiveSettings()[SettingKeys.worktreeDir],
-      tabOccupancies: tabOccupancies())
-
-    // クロージャは兄弟パレット同様 [weak self] のみとし、p/provider は self.model 経由で辿る
-    // （p が onExecute を保持するため、p を強参照すると開くたびに自己循環でリークする）。
-    p.onExecute = { [weak self] destination in
-      guard let self, let p = self.model.dispatchPalette,
-        let provider = self.model.dispatchProvider
-      else { return }
-      // 作成中の再入を弾く（Enter 連打で git worktree add が二重に走るのを防ぐ）。
-      guard !p.isPreparing else { return }
-      // targets は常に非空（shell が常在）のため実質常に成立。非同期 completion で使うため値で capture する。
-      guard let target = p.selectedTarget else { return }
-      p.errorMessage = nil
-      p.isPreparing = true  // 進捗表示 ON。非同期 worktree 作成の待機中だけフッターにスピナが出る。
-      provider.prepareDirectory(for: destination) { [weak self] outcome in
-        guard let self, let p = self.model.dispatchPalette else { return }
-        switch outcome {
-        case .resolved(let resolution):
-          self.settleDispatch(resolution, target: target)
-        case .staleBranch(let sync, let relativeDate):
-          // 作っていない。一覧の旗を下ろして最新化画面へ（以後の busy は画面の相が持つ）。
-          p.isPreparing = false
-          p.enterRefresh(sync: sync, relativeDate: relativeDate)
-        }
-      }
-    }
-    p.onOpenWeb = { [weak self] item in
-      guard let self, let provider = self.model.dispatchProvider else { return }
-      provider.openWeb(for: item)
-    }
-    p.onAwaitRemoteFetch = { [weak self] resume in
-      guard let provider = self?.model.dispatchProvider else { return }
-      provider.awaitRemoteFetchLanding(resume)
-    }
-    wireDispatchClean(p)
-    wireDispatchRefresh(p)
-
-    model.dispatchPalette = p
-    model.dispatchProvider = provider
-    model.overlay = .dispatchPalette
-    provider.load()
-    p.focus()
-    reconfirmFocusNextTick()  // 別 overlay からの遷移で去りゆくカードの teardown に勝つ
-  }
-
-  /// 解決済みディレクトリで新タブを起こす唯一の 1 本（Enter の実行と clean の `o タブで開く` が共に通る）。
-  /// `dismissPalette()` ＋次 tick の `focusActiveTab()` の 2 点セットは、DispatchOverlay
-  /// （focus を握る TextField 入り）の SwiftUI teardown が非同期で、同期のフォーカス確定の後に
-  /// first responder を奪いうるという既知の事情への手当てなので、2 箇所に複製しない。
-  private func openResolvedDirectory(_ dir: String, target: DispatchTarget) {
-    dismissPalette()
-    switch target {
-    case .agent(let agent):
-      openTab(
-        workspaceIndex: activeWorkspace, cwd: dir, command: agent.path,
-        env: agentLauncher.launchEnvironment)
-    case .shell:
-      // command を渡さない＝Cmd+T と同じ既定シェル起動。
-      openTab(workspaceIndex: activeWorkspace, cwd: dir)
-    }
-    DispatchQueue.main.async { [weak self] in self?.focusActiveTab() }
-  }
-
-  /// 解決の終端（一覧の Enter・最新化画面の 2 択が共に通る）。開けたら起動し、失敗はモデルが畳む。
-  private func settleDispatch(
-    _ resolution: DispatchDataProvider.DirectoryResolution, target: DispatchTarget
-  ) {
-    guard let p = model.dispatchPalette else { return }
-    switch resolution {
-    case .ready(let dir):
-      // 同期 .ready（既存 worktree 等）では true→dismiss が 1 tick で走り palette が破棄され無描画。
-      p.isPreparing = false
-      openResolvedDirectory(dir, target: target)
-    case .failed(let message):
-      p.failPreparation(message)
-    }
-  }
-
-  /// 最新化画面の 2 択を配線する。手順（fetch → fast-forward → 作成）は provider が持ち、ここは
-  /// 進行（作成が始まった）と終端をモデルへ流すだけ。
-  private func wireDispatchRefresh(_ p: DispatchPaletteModel) {
-    p.onSettleStale = { [weak self] choice, sync in
-      guard let self, let p = self.model.dispatchPalette,
-        let provider = self.model.dispatchProvider, let target = p.selectedTarget
-      else { return }
-      switch choice {
-      case .asIs:
-        provider.createLocalBranchWorktree(name: sync.name) { [weak self] resolution in
-          self?.settleDispatch(resolution, target: target)
-        }
-      case .refreshed:
-        provider.refreshAndCreate(
-          sync, creating: { [weak self] in self?.model.dispatchPalette?.refresh?.beginCreating() },
-          completion: { [weak self] result in
-            guard let self else { return }
-            switch result {
-            case .failure(let failure): self.model.dispatchPalette?.refresh?.fail(failure)
-            case .success(let resolution): self.settleDispatch(resolution, target: target)
-            }
-          })
-      }
-    }
-  }
-
-  /// clean の削除の駆動を配線する。1 件ごとの進捗をモデルへ流し、駆動が終わったら終端
-  /// （失敗が無ければ一覧へ戻り、あれば一部失敗画面に留まる）はモデルが決める。
-  private func wireDispatchClean(_ p: DispatchPaletteModel) {
-    p.onCleanExecute = { [weak self] requests, token in
-      guard let self, let provider = self.model.dispatchProvider else { return }
-      provider.deleteWorktrees(requests, token: token) { [weak self] progress in
-        guard let clean = self?.model.dispatchPalette?.clean else { return }
-        switch progress {
-        case .started(let path): clean.markRunning(path: path)
-        case .finished(let path, let outcome): clean.markFinished(path: path, outcome: outcome)
-        }
-      } completion: { [weak self] in
-        self?.model.dispatchPalette?.settleCleanRun()
-      }
-    }
-    // 失敗した worktree は解決済みのパスなので `prepareDirectory` を通さない。
-    p.onOpenWorktree = { [weak self] path in
-      guard let self, let p = self.model.dispatchPalette, let target = p.selectedTarget else {
-        return
-      }
-      self.openResolvedDirectory(path, target: target)
-    }
-  }
-
-  /// 全 workspace × 全タブが開いているディレクトリ（休眠 workspace も含む）。
-  /// 「そのパスをタブが開いている worktree は消せない」の判定材料。
-  private func tabOccupancies() -> [TabOccupancy] {
-    store.allTabs().map { TabOccupancy(cwd: $0.tab.cwd, agentState: $0.tab.agentState) }
-  }
-
   func reloadPalette() {
     let items = workspaces.enumerated().map { entry in
       WorkspacePaletteModel.Item(
@@ -304,12 +153,14 @@ extension WindowController {
   }
 
   func dismissPalette() {
+    settleTaskPaletteEditing()
     model.overlay = .none
     model.languageSelect = nil
     model.workspacePalette = nil
     model.workspaceCreate = nil
-    model.dispatchPalette = nil
-    model.dispatchProvider = nil
+    model.worktreePalette = nil
+    model.worktreePaletteProvider = nil
+    model.taskPalette = nil
     model.settingsPalette = nil
     model.attentionPalette = nil
     model.closedAgentsPalette = nil
@@ -341,9 +192,15 @@ extension WindowController {
     statusModel.editFocusToken &+= 1  // 描画後に field editor へ first responder
   }
 
-  /// インライン改名を畳み、アクティブタブへ first responder を戻す（パレット dismiss と同じ規則）。
+  /// インライン改名を畳み、焦点をその時点の前面へ戻す（`reconfirmFocusNextTick` と同じ分岐）。overlay が
+  /// 無ければアクティブタブへ、あればその入力欄へ——改名中に「＋」や Attention でパレットを開くと、改名欄の
+  /// blur がここへ来る。タブへ戻すとパレットが見えているのに打鍵が端末へ流れる。
   func endTabRename() {
     statusModel.editingIndex = nil
-    focusActiveTab()
+    if model.overlay == .none {
+      focusActiveTab()
+    } else {
+      model.focusCurrentOverlayField()
+    }
   }
 }

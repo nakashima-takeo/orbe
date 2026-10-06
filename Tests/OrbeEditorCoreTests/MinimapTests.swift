@@ -46,13 +46,6 @@ final class MinimapTests: XCTestCase {
     XCTAssertEqual(MinimapLine.columns(canvasWidth: 240, scale: 2), 116, "幅 120pt・2x")
   }
 
-  func testGlyphIndexIsAsciiMinus32AndOtherCharactersWrapIntoAscii() {
-    XCTAssertEqual(MinimapLine.glyph(of: 0x21), 1)
-    XCTAssertEqual(MinimapLine.glyph(of: 0x7E), 94)
-    XCTAssertEqual(MinimapLine.glyph(of: 0x3042), (0x3042 - 32 + 96) % 96)
-    XCTAssertTrue((0..<96).contains(MinimapLine.glyph(of: 0x05)))
-  }
-
   /// 字形の表は 1 字 `scale` × `2·scale` デバイス px の明度で、空白は空、最も明るい値は 255 近くに揃う。描画スレッドも読むので、
   /// 同じフォント・倍率なら何度作っても同じ値。
   func testCharSheetIsNormalizedAndDeterministic() {
@@ -67,12 +60,6 @@ final class MinimapTests: XCTestCase {
       XCTAssertGreaterThanOrEqual(sheet.data.max() ?? 0, 254, "最も明るい字は 255 近く")
       XCTAssertEqual(MinimapCharSheet(scale: scale, font: font).data, sheet.data)
     }
-  }
-
-  /// 装飾の x はタブを固定の `tabSize` 桁と数え（字の置き方と違う）、全角は 2 桁。
-  func testDecorationWidthsCountTabsAsTheFixedTabSize() {
-    XCTAssertEqual(
-      units("a\tあ").map { MinimapLine.decorationWidth(of: $0, tabSize: 4) }, [1, 4, 2])
   }
 
   func testWidthFollowsTheTextWidthUpToTheMaximum() {

@@ -198,21 +198,6 @@ final class RenderLoopTests: EngineTestCase {
     }
   }
 
-  /// 刻みで描いたコマが組んだ行で横の範囲を伸ばす——main の操作を待たずに、main から読む範囲に入る（本文が右に
-  /// まだ続く）。
-  func testAFrameWidensTheHorizontalRange() throws {
-    let opened = try open(String(repeating: "x", count: 300) + "\n")
-    let surface = opened.surface
-    XCTAssertFalse(surface.clipsRight, "前提: 行を組むまでは横の範囲に入らない")
-    surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: true)
-    driver.bind(surface.id)
-    let deadline = Date().addingTimeInterval(5)
-    while !surface.clipsRight, Date() < deadline {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-    }
-    XCTAssertTrue(surface.clipsRight)
-  }
-
   /// 描いた面の刻みに合わせて、描画スレッドは時間制約つきのスレッドになる——刻みごとに 1 コマの計算を、画面に出る予定の
   /// 刻みの余裕の前までに。
   func testTheRenderThreadRunsUnderTheFramesTimeConstraint() throws {
@@ -224,9 +209,9 @@ final class RenderLoopTests: EngineTestCase {
       RenderThread.shared.performAndWait { _ in Self.timeConstraint() }, "時間制約つき")
     XCTAssertEqual(policy.period, HeadlessDriver.period, accuracy: 1e-6)
     // 計算は、核が制約の半分まで引き上げて持つ。
-    XCTAssertGreaterThanOrEqual(policy.computation, RenderThread.frameComputation - 1e-6)
+    XCTAssertGreaterThanOrEqual(policy.computation, 0.002 - 1e-6, "刻みごとに 2ms の計算")
     XCTAssertEqual(
-      policy.constraint, HeadlessDriver.period - FrameRecorder.commitMargin, accuracy: 1e-6)
+      policy.constraint, HeadlessDriver.period - 0.001, accuracy: 1e-6, "起きてから刻み − 1ms 以内")
   }
 
   /// スレッドの時間制約（秒）。

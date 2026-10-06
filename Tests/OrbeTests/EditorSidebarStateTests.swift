@@ -10,14 +10,10 @@ import XCTest
 /// 消える。レールで検索を押してもファイルのパネルが閉じるだけ。
 @MainActor
 final class EditorSidebarStateTests: OrbeTestCase {
-  func testDefaultsWhenNothingIsStored() {
-    let state = EditorSidebarState.loaded()
-    XCTAssertEqual(state.width, 240)
-    XCTAssertTrue(state.isOpen)
-  }
-
   func testCommitAndToggleWriteBackAndLoadedReadsThem() {
     let state = EditorSidebarState.loaded()
+    XCTAssertEqual(state.width, 240, "記録が無ければ既定の幅")
+    XCTAssertTrue(state.isOpen, "記録が無ければ開")
     state.setWidth(300)
     XCTAssertEqual(AppStatePersistence.load()?.editorSidebar, nil, "ドラッグ中は書かない")
     state.commit()

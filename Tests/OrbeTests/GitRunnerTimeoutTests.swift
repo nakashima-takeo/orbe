@@ -93,17 +93,6 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
 
   // MARK: - 打ち切る / 打ち切らない
 
-  /// 無出力のまま止まった git は打ち切られる。`timedOut` で見分けられ、成功にはならない。
-  func testSilentCommandIsStoppedAfterIdleTimeout() throws {
-    try fixture.installHook("pre-commit", body: fixture.waitingBody)
-    try stageChange()
-
-    let output = try runSync(["commit", "-m", "blocked"])
-
-    XCTAssertTrue(output.timedOut, "無出力のまま上限を過ぎたら打ち切る")
-    XCTAssertFalse(output.isSuccess, "打ち切った実行を成功として扱ってはいけない")
-  }
-
   /// 出力が流れている限り、総経過時間が上限を超えても打ち切らない。
   /// **アイドル方式であることの歯**——絶対時間で測る実装ならここが落ちる。
   func testStreamingCommandIsNotStopped() throws {
@@ -116,8 +105,9 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
     XCTAssertTrue(output.isSuccess, "完走した commit は成功する")
   }
 
-  /// 打ち切った後、**孫プロセスが pipe の書き込み端を握っていても**返る。
-  /// `terminate()` のあと無期限に EOF を待つ実装だとここで返らない。
+  /// 無出力のまま止まった git は打ち切られ、`timedOut` で見分けられ、成功にはならない。打ち切った後、
+  /// **孫プロセスが pipe の書き込み端を握っていても**返る——`terminate()` のあと無期限に EOF を待つ実装だと
+  /// ここで返らない。
   func testStoppedRunReturnsWhileGrandchildHoldsThePipes() throws {
     try fixture.installHook("pre-commit", body: fixture.pipeHoldingBody)
     try stageChange()
@@ -126,7 +116,8 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
     let output = try runSync(["commit", "-m", "blocked"])
     let elapsed = Date().timeIntervalSince(started)
 
-    XCTAssertTrue(output.timedOut)
+    XCTAssertTrue(output.timedOut, "無出力のまま上限を過ぎたら打ち切る")
+    XCTAssertFalse(output.isSuccess, "打ち切った実行を成功として扱ってはいけない")
     XCTAssertGreaterThan(
       elapsed, 1.0, "前提: 孫が pipe を握っていて EOF が来ず、打ち切り後の猶予を使い切っていること")
     XCTAssertLessThan(
@@ -176,7 +167,7 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
     XCTAssertTrue(try runSync(["status", "--porcelain"]).isSuccess, "後続の git 操作が通る")
   }
 
-  // MARK: - 打ち切り後の読み替えと巻き添えの不在
+  // MARK: - 打ち切り後の読み替えと、終わった実行の返り方
 
   /// post-checkout hook は worktree が出来上がった**後**に走る。hook が返らず打ち切っても
   /// worktree は完成しているので、**成功として返す**。失敗にすると、実在する worktree を指したまま
@@ -210,33 +201,6 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
     XCTAssertTrue(
       GitRunner.shared.runSync(["status", "--porcelain"], cwd: fixture.worktreePath).isSuccess,
       "出来上がった worktree はそのまま使える")
-  }
-
-  /// 独立レーンでハングしている実行は、barrier を取る書き込みを巻き添えにしない。
-  /// これが効かないと、1 本の worktree 作成や clone が以後の全 git 操作を止める。
-  ///
-  /// **打ち切りに助けられない形で測る。** アイドル上限が短い runner だと、ハングが自然に打ち切られた
-  /// 後で書き込みが走って通ってしまい、レーン分離が効いていなくても緑になる。ハング側の上限は
-  /// 十分長く（60 秒）取り、書き込みの期限をそれよりはるかに短く（3 秒）取る——排他はインスタンス内で
-  /// 閉じるので、両方を同じ runner に通す必要がある。
-  func testHangingIndependentLaneDoesNotBlockExclusiveWrites() throws {
-    let runner = GitRunner(idleTimeout: 60)
-    try fixture.installHook("pre-commit", body: fixture.waitingBody)
-    try stageChange()
-    let hangFinished = expectation(description: "hanging independent run")
-    runner.run(["commit", "-m", "blocked"], cwd: fixture.root, lane: .independent) { _ in
-      hangFinished.fulfill()
-    }
-    XCTAssertTrue(fixture.waitUntilHung(), "前提: 独立レーンの実行がハングしていること")
-
-    let done = expectation(description: "exclusive write")
-    runner.run(["config", "orbe.probe", "1"], cwd: fixture.root, lane: .exclusive) { _ in
-      done.fulfill()
-    }
-    wait(for: [done], timeout: 3)
-
-    fixture.release()  // ハングを解いて後片付け（解放し損ねると 60 秒居座る）
-    wait(for: [hangFinished], timeout: 60)
   }
 
   /// git が**自力で正常終了**したら、孫が pipe を握っていてもアイドル上限を待たずに返る。

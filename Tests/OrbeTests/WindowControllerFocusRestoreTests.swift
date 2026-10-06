@@ -13,15 +13,6 @@ final class WindowControllerFocusRestoreTests: OrbeTestCase {
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
   }
 
-  func testTabSwitchRestoresActiveTabSurface() {
-    let wc = WindowController()
-    let first = wc.window.firstResponder as! SurfaceView
-    wc.newTab()  // タブ2 へ（フォーカスはタブ2 の surface）
-    XCTAssertFalse(wc.window.firstResponder === first, "新タブではフォーカスが移っている")
-    wc.prevTab()  // タブ1 へ戻る
-    XCTAssertTrue(wc.window.firstResponder === first, "タブ切替でそのタブの surface へ戻る")
-  }
-
   func testWorkspaceSwitchRestoresActiveTabSurface() {
     let wc = WindowController()
     let first = wc.window.firstResponder as! SurfaceView
@@ -36,11 +27,11 @@ final class WindowControllerFocusRestoreTests: OrbeTestCase {
   func testWindowCommandRoutesSurfaceToWindowController() {
     let wc = WindowController()
     let surface = wc.window.firstResponder as! SurfaceView
+    wc.newTab()
+    let second = wc.window.firstResponder as! SurfaceView
+    XCTAssertFalse(second === surface, "前提: 新タブの surface へフォーカスが移っている")
 
-    surface.perform(.newTab)
-    XCTAssertFalse(wc.window.firstResponder === surface, "newTab が届けば新タブの surface へフォーカスが移る")
-
-    surface.perform(.prevTab)
+    second.perform(.prevTab)
     XCTAssertTrue(wc.window.firstResponder === surface, "prevTab が届けば元タブの surface へ戻る")
 
     surface.perform(.nextTab)

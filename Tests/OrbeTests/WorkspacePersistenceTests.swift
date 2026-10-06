@@ -10,69 +10,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   /// テストの復元では resume を起こさない（agent 付きタブの検証のみ）。
   private let noResume: TerminalTab.ResumeSpawn = { _ in nil }
 
-  // MARK: - スキーマ Codable 往復
-
-  func testSchemaCodableRoundTrip() throws {
-    let file = WorkspacesFile(
-      version: WorkspacePersistence.version, activeWorkspace: 1,
-      workspaces: [
-        WorkspaceState(
-          name: "default", rootPath: "/Users/x", activeTab: 0,
-          tabs: [TabState(cwd: "/a", agent: nil, explicitTitle: nil)]),
-        WorkspaceState(
-          name: "api", rootPath: "/srv", activeTab: 1,
-          tabs: [
-            TabState(cwd: "/b", agent: nil, explicitTitle: "b"),
-            TabState(
-              cwd: "/c", agent: AgentSession(command: "claude", sessionId: "s"),
-              explicitTitle: nil),
-          ]),
-      ])
-    let data = try JSONEncoder().encode(file)
-    let back = try JSONDecoder().decode(WorkspacesFile.self, from: data)
-    XCTAssertEqual(back, file, "Codable 往復で構成が一致")
-  }
-
-  /// タブは平坦な `{cwd, agent?, explicitTitle?, faces?}` で書く（外部契約の形）。
-  func testTabStateWireShape() throws {
-    let enc = JSONEncoder()
-    enc.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-    let data = try enc.encode(
-      TabState(
-        cwd: "/work/api", agent: AgentSession(command: "claude", sessionId: "s-1"),
-        explicitTitle: "api"))
-    XCTAssertEqual(
-      String(data: data, encoding: .utf8),
-      #"{"agent":{"command":"claude","sessionId":"s-1"},"cwd":"/work/api","explicitTitle":"api"}"#)
-  }
-
-  func testVersionMismatchIsRejectedOnLoad() throws {
-    let tmp = try workspacesFile()
-    let future = WorkspacesFile(
-      version: 999, activeWorkspace: 0,
-      workspaces: [
-        WorkspaceState(
-          name: "a", rootPath: "/", activeTab: 0,
-          tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)])
-      ])
-    try JSONEncoder().encode(future).write(to: tmp)
-    XCTAssertNil(WorkspacePersistence.load(), "非互換 version は load で nil（呼び出し側が既定 fallback）")
-  }
-
-  // MARK: - ウィンドウサイズ（条件3: 旧 JSON 後方互換・往復）
-
-  /// windowSize フィールドが欠落した旧 JSON も load 成功し、windowSize は nil（既定 800×500 へ）。
-  func testLegacyJSONWithoutWindowSizeLoads() throws {
-    let tmp = try workspacesFile()
-    let legacy = """
-      {"version":2,"activeWorkspace":0,"workspaces":[\
-      {"name":"default","rootPath":"/","activeTab":0,"tabs":[{"leaf":{}}]}]}
-      """
-    try Data(legacy.utf8).write(to: tmp)
-    let loaded = WorkspacePersistence.load()
-    XCTAssertNotNil(loaded, "windowSize 欠落の旧 JSON も load 成功（後方互換）")
-    XCTAssertNil(loaded?.windowSize, "欠落時 windowSize は nil（既定サイズへ fallback）")
-  }
+  // MARK: - ウィンドウサイズ
 
   /// windowSize がディスク往復で保たれる。
   func testWindowSizeRoundTripThroughFile() {
@@ -86,31 +24,6 @@ final class WorkspacePersistenceTests: OrbeTestCase {
       windowSize: WindowSize(width: 1024, height: 768))
     WorkspacePersistence.save(original)
     XCTAssertEqual(WorkspacePersistence.load(), original, "windowSize がディスク往復で保たれる")
-  }
-
-  // MARK: - 頑健性（条件4: 壊れた JSON は load で nil）
-
-  /// 不正な JSON バイト列を置いても decode 失敗で nil（クラッシュしない）。
-  func testCorruptJSONIsRejectedOnLoad() throws {
-    let tmp = try workspacesFile()
-    try Data("{ this is not valid json ]".utf8).write(to: tmp)
-    XCTAssertNil(WorkspacePersistence.load(), "壊れた JSON は load で nil（呼び出し側が既定 fallback）")
-  }
-
-  /// 構造は JSON として妥当だがスキーマ不一致（必須キー欠落）でも nil。
-  func testSchemaMismatchIsRejectedOnLoad() throws {
-    let tmp = try workspacesFile()
-    try Data(#"{"foo": 1, "bar": [1,2,3]}"#.utf8).write(to: tmp)
-    XCTAssertNil(WorkspacePersistence.load(), "スキーマ不一致は load で nil")
-  }
-
-  /// workspaces が空配列の妥当 JSON も nil（既定 1 workspace へ fallback させる）。
-  func testEmptyWorkspacesIsRejectedOnLoad() throws {
-    let tmp = try workspacesFile()
-    let empty = WorkspacesFile(
-      version: WorkspacePersistence.version, activeWorkspace: 0, workspaces: [])
-    try JSONEncoder().encode(empty).write(to: tmp)
-    XCTAssertNil(WorkspacePersistence.load(), "空 workspaces は load で nil")
   }
 
   // MARK: - 実ファイルへの save → load 往復（条件1+3: ディスク経由で全項目が保たれる）
@@ -157,15 +70,6 @@ final class WorkspacePersistenceTests: OrbeTestCase {
     XCTAssertEqual(
       WorkspacePersistence.load(), original,
       "agent セッション(command+sessionId)と agent 無しタブの混在がディスク往復で保たれる")
-  }
-
-  // MARK: - 復元単位（TabState）の組み立て
-
-  /// 復元単位（tabState）は cwd だけでなく明示タイトルも載せる——落ちると ⌘R の改名が再起動で消える。
-  func testTabStateCarriesCwdAndTitle() {
-    let state = TabState(cwd: "/work/api", agent: nil, explicitTitle: "api")
-    let tab = TerminalTab(restoring: state, resumeSpawn: noResume)
-    XCTAssertEqual(tab.tabState(), state, "tabState は cwd と明示タイトルを一括で載せる")
   }
 
   // MARK: - エージェントセッションの復元

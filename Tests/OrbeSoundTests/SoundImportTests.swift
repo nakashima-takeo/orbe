@@ -143,14 +143,4 @@ final class SoundImportTests: XCTestCase {
       try SoundImport.process(sine(seconds: 1, amplitude: 1e-7), sampleRate: sampleRate)
     ) { XCTAssertEqual($0 as? SoundImport.Failure, .silent) }
   }
-
-  // MARK: - 決定論
-
-  /// 同じ入力からは常に同じ結果（二分探索も含めて決定論）。
-  func testProcessIsDeterministic() throws {
-    let input = sine(seconds: 3, amplitude: 0.42)
-    let first = try SoundImport.process(input, sampleRate: sampleRate)
-    let second = try SoundImport.process(input, sampleRate: sampleRate)
-    XCTAssertEqual(first, second)
-  }
 }

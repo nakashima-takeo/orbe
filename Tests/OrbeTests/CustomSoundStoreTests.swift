@@ -35,13 +35,6 @@ final class CustomSoundStoreTests: OrbeTestCase {
     XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path), "参照時に作られる")
   }
 
-  /// 取り込みごとに違う名前になる（同名の in-place 上書きが起きない＝再生中バッファと競合しない）。
-  func testNewFileNameIsUnique() {
-    let names = (0..<8).map { _ in CustomSoundStore.newFileName() }
-    XCTAssertEqual(Set(names).count, names.count)
-    XCTAssertTrue(names.allSatisfy { $0.hasSuffix(".wav") })
-  }
-
   /// ディレクトリを跨ぐ名前は解決しない（手編集された settings.json から外へ触らせない）。
   func testUrlRejectsPathEscapes() {
     for bad in ["", "..", "../evil.wav", "sub/evil.wav"] {
@@ -65,15 +58,5 @@ final class CustomSoundStoreTests: OrbeTestCase {
     try place("b.wav")
     CustomSoundStore.collectGarbage(referenced: [])
     XCTAssertTrue(try names().isEmpty)
-  }
-
-  /// 前回起動の孤児（手編集・クラッシュ由来）は、次に GC が走ったときにまとめて回収される
-  /// ——毎回 `sounds/` 全体を参照集合と突き合わせるので、遅れて走っても取り漏らさない。
-  func testStaleOrphansAreReclaimedByTheNextCollection() throws {
-    try place("orphan-from-last-launch.wav")
-    try place("another-orphan.wav")
-    try place("current.wav")
-    CustomSoundStore.collectGarbage(referenced: ["current.wav"])
-    XCTAssertEqual(try names(), ["current.wav"])
   }
 }

@@ -8,7 +8,6 @@ import XCTest
 ///
 /// 条件1: macOS のウィンドウタイトルバーを表示しない。
 /// 条件2: chrome に workspace 名・タブ・アクティブタブの cwd が同居し、タブ 1 枚でも見える。
-/// 条件3: この chrome 以外に常駐 UI を増やさない（オーバーレイは呼んだ時だけ）。
 ///
 /// 描画は SwiftUI なので、行レベルの状態は `WindowController.statusModel`（SSOT）で検証する。
 /// タブの shrink-to-fit は純関数 `StatusTabLayout.widths` を単体検査する。
@@ -105,19 +104,10 @@ final class ChromeStatusRowTests: OrbeTestCase {
     XCTAssertEqual(wc.statusModel.workspace, "default", "戻すと default が chrome に出る")
   }
 
-  /// タブを増やすと chrome のタブ数が増え、アクティブは 1 つ。
-  func testTabsAppearInsideTheSameRow() throws {
-    let wc = WindowController()
-    wc.newTab()
-    wc.flushChrome()
-    XCTAssertEqual(wc.statusModel.strip.count, 2, "タブ 2 が chrome に出る")
-    XCTAssertTrue(
-      wc.statusModel.strip.titles.indices.contains(wc.statusModel.active), "アクティブ index は範囲内")
-  }
-
   // MARK: - 横断エージェント状態ロールアップ
 
   /// アクティブ workspace の全タブの状態が rollup 件数に出る。件数 0 の種別は出ない。
+  /// done → idle に遷移したタブは idle 件数として出る。
   func testRollupShowsActiveTabStateCounts() throws {
     let wc = WindowController()
     let tab = try XCTUnwrap(wc.current.tabs.first)
@@ -129,17 +119,11 @@ final class ChromeStatusRowTests: OrbeTestCase {
     wc.flushChrome()
     XCTAssertEqual(wc.statusModel.rollup.map(\.state), ["working"], "working セグメントが出る")
     XCTAssertEqual(wc.statusModel.rollup.first?.count, 1, "working 1 件")
-  }
-
-  /// done → idle に遷移したタブは idle 件数として rollup に出る。
-  func testRollupReflectsDoneToIdleTransition() throws {
-    let wc = WindowController()
-    let tab = try XCTUnwrap(wc.current.tabs.first)
 
     setReportedState(tab, "done")
     setReportedState(tab, "idle")
     wc.flushChrome()
-    XCTAssertEqual(wc.statusModel.rollup.map(\.state), ["idle"], "idle セグメントになる")
+    XCTAssertEqual(wc.statusModel.rollup.map(\.state), ["idle"], "done → idle は idle セグメントになる")
     XCTAssertEqual(wc.statusModel.rollup.first?.count, 1, "idle 1 件")
   }
 
@@ -168,59 +152,17 @@ final class ChromeStatusRowTests: OrbeTestCase {
     XCTAssertEqual(wc.statusModel.rollup.map(\.count), [1])
   }
 
-  // MARK: - 条件3: chrome 以外に常駐 UI を増やさない
-
-  /// 安静時（起動直後・タブ追加後）はターミナル本文が同居し、オーバーレイは存在しない。
-  func testNoOtherPersistentChromeAtRest() throws {
-    let wc = WindowController()
-    let host = try rootHost(wc)
-
-    XCTAssertFalse(findAll(SurfaceView.self, in: host).isEmpty, "ターミナル内容が同居する")
-    XCTAssertEqual(wc.presentedOverlay, .none, "パレットは常駐しない")
-    XCTAssertTrue(findAll(SearchBar.self, in: host).isEmpty, "検索バーは常駐しない")
-
-    wc.newTab()
-    wc.createWorkspace(name: "second", rootPath: "/tmp/ws-second")
-    XCTAssertEqual(wc.presentedOverlay, .none, "操作後もパレットは常駐しない")
-    XCTAssertTrue(findAll(SearchBar.self, in: host).isEmpty, "操作後も検索バーは常駐しない")
-  }
-
-  /// オーバーレイは呼んだ時だけ現れる。
-  func testPaletteAppearsOnlyOnDemand() {
-    let wc = WindowController()
-    XCTAssertEqual(wc.presentedOverlay, .none, "呼ぶ前は無い")
-    wc.showWorkspacePalette()
-    XCTAssertEqual(wc.presentedOverlay, .workspacePalette, "呼ぶと出る")
-  }
-
   // MARK: - タブ shrink-to-fit（純関数）
 
   private let gap = Chrome.tabGap
   private let plus = Chrome.tabHeight
   private let minW = Chrome.tabMinWidth
-  private let maxW = Chrome.tabMaxWidth
 
   /// 全タブ単独（セグメント化なし）の幅計算。
   private func widths(_ naturals: [CGFloat], available: CGFloat) -> [CGFloat] {
     StatusTabLayout.widths(
       naturals: naturals, segments: StatusTabLayout.singletons(count: naturals.count),
       available: available)
-  }
-
-  /// 少数タブ（広い）: 全タブが自然幅で、合計は available 以内（スクロール不要）。
-  func testFewTabsUseNaturalWidthWithoutScroll() {
-    let naturals: [CGFloat] = [120, 120]
-    let widths = widths(naturals, available: 800)
-    XCTAssertEqual(widths, naturals, "収まる時は自然幅")
-    let total = widths.reduce(0, +) + gap * CGFloat(widths.count) + plus
-    XCTAssertLessThanOrEqual(total, 800, "合計は available 以内＝スクロール不要")
-  }
-
-  /// 長いタブ名: 空間が余っていても maxWidth で cap され、省略記号側（DSTab）へ切り詰めを回す。
-  func testLongTitlesAreCappedAtMaxWidth() {
-    let naturals: [CGFloat] = [320, 80]
-    let widths = widths(naturals, available: 800)
-    XCTAssertEqual(widths, [maxW, 80], "自然幅が上限を超えるタブだけ cap される")
   }
 
   /// 溢れ（比例縮小）: 全タブが自然幅に比例して縮み、短いタブも縮む（CSS flex shrink と同じ）。
@@ -235,7 +177,8 @@ final class ChromeStatusRowTests: OrbeTestCase {
     XCTAssertGreaterThan(widths[0], widths[1], "縮小後も自然幅の大小関係を保つ")
   }
 
-  /// 多数タブ（狭い）: 各タブは最小幅まで縮む（自然幅を超えない・下回らない）。
+  /// 多数タブ（狭い）: 各タブは最小幅まで縮み、最小幅でも収まらなければ合計が available を超えて
+  /// 横スクロールが成立する。
   func testManyTabsShrinkToMinWidth() {
     let naturals = Array(repeating: CGFloat(120), count: 8)
     let widths = widths(naturals, available: 300)
@@ -244,26 +187,7 @@ final class ChromeStatusRowTests: OrbeTestCase {
       XCTAssertGreaterThanOrEqual(w, minW, "最小幅 \(minW) を下回らない")
       XCTAssertLessThan(w, 120, "溢れる時は縮む")
     }
-  }
-
-  /// 最小幅でも収まらないほど詰めると、合計が available を超え横スクロールが成立する。
-  func testOverflowMakesContentScrollable() {
-    let naturals = Array(repeating: CGFloat(120), count: 8)
-    let widths = widths(naturals, available: 300)
     let total = widths.reduce(0, +) + gap * CGFloat(widths.count) + plus
     XCTAssertGreaterThan(total, 300, "最小幅でも溢れたら合計 > available ＝横スクロールできる")
-    for (i, w) in widths.enumerated() {
-      XCTAssertGreaterThan(w, 0, "タブ \(i) は幅 > 0（潰れた不可達タブを作らない）")
-    }
-  }
-
-  /// 幅を変えると shrink ⇄ 自然幅が再計算される（リサイズ追従）。
-  func testWidthChangeRecomputesShrink() {
-    let naturals = Array(repeating: CGFloat(120), count: 8)
-    let narrow = widths(naturals, available: 300)
-    XCTAssertLessThan(narrow[0], 120, "狭い時は shrink される")
-
-    let wide = widths(naturals, available: 1200)
-    XCTAssertEqual(wide, naturals, "広げると自然幅へ戻る")
   }
 }

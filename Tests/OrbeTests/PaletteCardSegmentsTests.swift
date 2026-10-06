@@ -36,18 +36,6 @@ final class PaletteCardSegmentsTests: PaletteCardWindowTestCase {
     return window
   }
 
-  /// 何も変えずに実 Esc で戻る。
-  func testEscapeFromNotificationSoundDoesNotCrash() {
-    let p = model()
-    let window = drillIntoSound(p)
-
-    send(53, "\u{1B}", to: window)  // esc
-    flush(window)
-
-    XCTAssertTrue(p.render.segments.isEmpty, "root ではセグメントが消える")
-    XCTAssertNil(p.render.breadcrumb, "root へ戻っている")
-  }
-
   /// ↓↓ で試聴してから ↵ で確定して戻る（ユーザー報告の手順そのもの）。
   func testActivateAfterPreviewingDoesNotCrash() {
     let p = model()
@@ -66,24 +54,5 @@ final class PaletteCardSegmentsTests: PaletteCardWindowTestCase {
 
     XCTAssertTrue(p.render.segments.isEmpty, "root ではセグメントが消える")
     XCTAssertNil(p.render.breadcrumb, "root へ戻っている")
-  }
-
-  /// ⇥ で試聴対象を往復させてから戻る。⇥ はそのつどセグメントを立て直す（`rebuild()`）ので、
-  /// 立て下げを繰り返した後の離脱経路をここで踏む。
-  func testTogglingPreviewTargetThenLeavingDoesNotCrash() {
-    let p = model()
-    let window = drillIntoSound(p)
-
-    for _ in 0..<3 {
-      send(48, "\t", to: window)  // ⇥
-      flush(window)
-    }
-    XCTAssertEqual(
-      p.render.segments.map(\.active), [false, true], "⇥ が届いて試聴対象が反転している")
-
-    send(123, "\u{F702}", to: window)  // ←（戻る）
-    flush(window)
-
-    XCTAssertTrue(p.render.segments.isEmpty, "root ではセグメントが消える")
   }
 }

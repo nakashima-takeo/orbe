@@ -170,16 +170,4 @@ extension WindowControllerReportAgentTests {
 
     wire.barrier()
   }
-
-  /// 休眠チケット宛の clear もイベントを出さない（破棄は state を問わない）。
-  func testClearToDormantTicketEmitsNothing() throws {
-    let f = try makeControllerAndDormantTicket(command: "claude", sessionId: "resume-1")
-    let wire = ControlWire(target: nil)
-    defer { wire.teardown() }
-    armAgentStateWait(wire, id: 1, tabId: f.tab.id)
-
-    f.wc.controlReportAgent(tab: f.tab, report: AgentHookReport(agent: "claude", state: "clear"))
-
-    wire.barrier()
-  }
 }

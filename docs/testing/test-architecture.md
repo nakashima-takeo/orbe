@@ -1,7 +1,7 @@
 ---
 title: テストアーキテクチャ
 description: Orbe のテストが従う層構成・横断方針・各層の責務
-updated: 2026-10-05
+updated: 2026-10-07
 ---
 
 # テストアーキテクチャ
@@ -109,6 +109,7 @@ updated: 2026-10-05
 - **データ**: `DesignSceneFixtures` と Sources 側の `*Fixtures.swift`。stub で外枠だけ描かず、本物のデータを本物のビューに流す
 - **実行**: CI 全量
 - **ツール**: 比較・許容差・記録モード・差分出力は swift-snapshot-testing（`precision` ＋ `perceptualPrecision`）
+- **撮影道具（テストではない）**: `Tests/OrbeTests/Shots/` の gallery（`DesignGallerySnapshotTests`）と flow（`DesignFlowSnapshotTests`）は PNG を書くだけで仕様を判定しない。`ORBE_GALLERY` / `ORBE_FLOWS` が無ければ skip し、CI では回らない。visual-check が `scripts/preview-gallery.sh` / `preview-flows.sh` から使う
 - **例外**: テキスト面（Metal）の字と git の印は、ゴールデン画像でなく別の方式で見る——`GlyphPixelTests` が、同じ行を Core Text で不透明な地に（font smoothing つきで）描いた基準と字のある画素で 1 段以内か（1x・2x）を、`MetalLineMarksTests` が撮影した画素で印の色と位置を確かめ、`ScrolledFrameTests` がスクロールの前後の絵を画素で突き合わせて本文・行番号・印がそろって動くことを確かめる（通常の `swift test`。Metal の装置が無ければ skip）。装備・強調の地・ミニマップ・スクロールバーは、規則の要所を撮影した画素で（`SurfaceDecorTests`・`SurfaceHighlightTests`・`SurfaceMinimapTests`・`SurfaceOverviewTests`）見る（端を越えて引っ張っている間の俯瞰が端の位置を表すことは、同じ材料から端の内外の位置で組んだコマの俯瞰の図形を比べ、引っ張った途中のコマを撮って確かめる）。役割だけが変わった行の描き直しは、同じ本文を開き直した絵と画素で一致するかで見る。差し込み（文書に無い行と区画）のある面は、下の行・行番号・印が差し込みの高さだけ下がることを撮影した画素で（`SurfaceRowsTests`）、区画の測り方・置き方・当たり・影と横スクロールバーとの重ね順と刻みごとの位置の封じを view の枠と画素で（`SurfaceZonesTests`）見る。見た目の全体は gallery の `editor_code` と flow の `editor_decor`・`editor_line_select`・`editor_overview`・`editor_find`・`editor_occurrences`・`editor_rows`（差し込みの位置・縦横に送った区画・最後の項目）を撮って人が見る（flow は面を 1 つの窓に載せたまま撮る）。差し込みの無い面が変わらないことは、変更の前後で gallery の `editor_code` と flow の `editor_*` を撮って画素で比べる。区画の view が本文と一緒に動くか（main の刻みで置く view と描画スレッドのコマのずれ）は撮影では見えないので、画面に出す試しの場 `scripts/preview-editor-rows.sh`（`EditorRowsTrialTests`。窓を前面に出して決めた秒数置き、人がトラックパッドで触る。合成の速いスクロールを流す型も持つ。通常の `swift test` と CI では skip）で人が判定する。手元で回し、CI では回さない
 
 ### L7 生成物

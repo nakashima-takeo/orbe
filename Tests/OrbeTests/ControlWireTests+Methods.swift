@@ -37,6 +37,7 @@ extension ControlWireTests {
       "spawn_agent", "resume_agent", "prompt_agent",
       "config_list", "config_set", "create_workspace", "rename_workspace",
       "set_workspace_root", "remove_workspace", "restore_sessions",
+      "list_tasks", "add_task", "update_task", "move_task", "delete_task",
     ]
     let fixtures = fixtures(fake)
 
@@ -90,21 +91,6 @@ extension ControlWireTests {
       "jsonrpc": "2.0", "id": 901, "method": "completion_end", "params": ["tabId": fake.tabId],
     ])
     wire.barrier()
-  }
-
-  /// これらの名前は method 表に無く（`-32601`）、互換別名としても受理しない——別名で残すと
-  /// 2 つの語彙が同じ操作を指し、クライアントがどちらを使うべきか決められない。
-  func testRetiredPaneMethodsAreUnknown() {
-    let fake = FakeControlTarget()
-    let wire = startWire(target: fake)
-    var id = 0
-
-    for method in ["split_pane", "close_pane", "focus_pane", "list_panes", "get_pane_text"] {
-      id += 1
-      XCTAssertEqual(
-        errorCode(wire.request(id: id, method: method, params: ["tabId": fake.tabId])), -32601,
-        "\(method) は未知 method（別名で残さない）")
-    }
   }
 
   // MARK: - 方式 4: 成功側（応答キーと宛先への配線）

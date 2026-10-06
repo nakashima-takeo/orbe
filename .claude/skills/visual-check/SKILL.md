@@ -38,6 +38,6 @@ flowchart TD
 ## Orbe の道具
 
 - **preview の足場（静止 fixture）**: `scripts/preview-gallery.sh`（出力は `.preview/gallery/`・gitignore 済）。fixture は `Sources/Orbe/.../*Fixtures.swift`（`#if DEBUG`・本物のデータを本物のビューに流す）。
-- **flow の足場（preview で出せない状態用）**: `scripts/preview-flows.sh <flow名>`（出力は `.preview/flows/`・gitignore 済）。本物のアクションを順に呼んで初めて現れる画面（drillIn 後のサブメニュー・query 絞り込み・導入の進行・scroll 追従・overflow 等）を撮る。引数なしで全画面、`<flow名>` でその1画面だけ。flow 定義は `Tests/OrbeTests/DesignFlowSnapshotTests.swift`。
+- **flow の足場（preview で出せない状態用）**: `scripts/preview-flows.sh <flow名>`（出力は `.preview/flows/`・gitignore 済）。本物のアクションを順に呼んで初めて現れる画面（drillIn 後のサブメニュー・query 絞り込み・導入の進行・scroll 追従・overflow 等）を撮る。引数なしで全画面、`<flow名>` でその1画面だけ。flow 定義は `Tests/OrbeTests/Shots/DesignFlowSnapshotTests.swift`。
 - **見本**: Claude Design プロジェクト（Design MCP）。「diff パネル 完成版」等の実 HTML が正。
 - **正の値**: `docs/design/design-system.md`（§2 トークン / §3 色規律 / §5 状態表）・`docs/design/tokens.json`（機械可読ミラー）。

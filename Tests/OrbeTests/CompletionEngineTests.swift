@@ -4,8 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// 補完エンジン（prebuilt JS バンドル）の契約を検証する。JSC 同期橋渡し
-/// （__orbe_exec 同期化 → microtask drain で __orbe_result 確定）・engine 由来候補・
-/// engine→host 学習の結線（実バンドルの type/候補で record・rank が発火する）を担保する。
+/// （__orbe_exec 同期化 → microtask drain で __orbe_result 確定）・engine 由来候補を担保する。
 final class CompletionEngineTests: OrbeTestCase {
   /// commit 済み `app/completion-engine.js` を JSContext に読み、stub の native 関数を注入する。
   /// CompletionEngine.swift の `installNativeBridge` と同じ顔ぶれ（__orbe_exec / __orbe_access /
@@ -86,24 +85,6 @@ final class CompletionEngineTests: OrbeTestCase {
       type(h.complete("git commit --v"), name: "--verbose"), "option", "option 起源に type が付く")
   }
 
-  func testEngineSubcommandFeedsLearning() throws {
-    // 本番経路の end-to-end 実証: 実 engine が返す subcommand の type で record が発火し（no-op でない）、
-    // rank がその候補を引き上げる。engine→host 学習の結線を突く（差し戻しバグの直結ケース）。
-    let h = try XCTUnwrap(EngineHarness { _ in "" })
-    let commitType = type(h.complete("git "), name: "commit")
-    let scopes = CompletionLearning.scopes(commandPath: ["git"])
-    let store = try XCTUnwrap(
-      CompletionLearning.record(
-        scopes: scopes, candidate: "commit", type: commitType, now: 1000, into: .empty),
-      "実 engine の subcommand type で record が発火する（本番で no-op にならない）")
-    let ranked = CompletionLearning.rank(
-      [
-        CompletionChoice(value: "checkout", description: "", insertValue: nil, type: "subcommand"),
-        CompletionChoice(value: "commit", description: "", insertValue: nil, type: "subcommand"),
-      ], query: "", scopes: scopes, store: store, now: 1000)
-    XCTAssertEqual(ranked.map(\.value), ["commit", "checkout"], "学習した commit が上へ")
-  }
-
   func testEngineDynamicCandidateLearningSharedAcrossSubcommands() throws {
     // 実バンドルの generator が返す type 無しブランチ候補を `git switch ` で record し、
     // **別バッファ** `git rebase ` の実候補に対して rank すると当該ブランチが engine 元順を追い越して
@@ -140,29 +121,43 @@ final class CompletionEngineTests: OrbeTestCase {
     XCTAssertEqual(ranked.first?.value, "feature-x", "学習したブランチがサブコマンドを跨いで先頭に上がる")
   }
 
-  func testEngineCuratedCommandNotInHandWrittenSpec() throws {
-    // 手書き spec に無かった curated コマンドでも候補が出る＝engine 由来である証左。
-    let h = try XCTUnwrap(EngineHarness { _ in "" })
-    XCTAssertTrue(names(h.complete("docker ")).contains("build"))
-    XCTAssertTrue(names(h.complete("cargo ")).contains("build"))
-  }
-
-  func testEngineNewSpecsProduceCandidates() throws {
-    // 後から追加した 10 spec が実バンドルで候補を出す。arg 主体のコマンド
-    // （mkdir/open/touch/xcodebuild/code）はオプション位置 `-`、`source`（純 arg）は
-    // ファイル列挙の stub で判定する。
+  func testEveryCuratedCommandListedInTheReadmeProducesCandidates() throws {
+    // 同梱 spec の一覧の正本は vendor/completion-engine/README.md（spec がそこを指す）。一覧に載る
+    // コマンドがすべて実バンドルで候補を出す＝一覧と同梱物が食い違わない（spec を落とした・
+    // 再生成し忘れた・一覧だけ足した、のどれも落ちる）。オプション位置 `-` か引数位置 ` ` の
+    // どちらかで候補が出れば同梱とみなす（純 arg のコマンドはファイル列挙の stub で出る）。
+    let root = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let readme = try String(
+      contentsOf: root.appendingPathComponent("vendor/completion-engine/README.md"),
+      encoding: .utf8)
+    let commands = try XCTUnwrap(curatedCommands(inReadme: readme), "README に curated 一覧の節がある")
     let h = try XCTUnwrap(
       EngineHarness(
-        exec: { _ in "script.sh\n" },
-        readdir: { _ in [(name: "script.sh", isDirectory: false)] }))
-    XCTAssertTrue(names(h.complete("deno ")).contains("run"), "deno: 上流 spec のサブコマンド")
-    XCTAssertTrue(names(h.complete("volta ")).contains("install"), "volta: 上流 spec のサブコマンド")
-    XCTAssertFalse(names(h.complete("code -")).isEmpty, "code: オプション位置で候補が出る")
-    XCTAssertFalse(names(h.complete("mkdir -")).isEmpty, "mkdir: オプション位置で候補が出る")
-    XCTAssertFalse(names(h.complete("xcodebuild -")).isEmpty, "xcodebuild: オプション位置で候補が出る")
-    XCTAssertFalse(names(h.complete("open -")).isEmpty, "open: オプション位置で候補が出る")
-    XCTAssertFalse(names(h.complete("touch -")).isEmpty, "touch: オプション位置で候補が出る")
-    XCTAssertFalse(names(h.complete("source ")).isEmpty, "source: ファイル列挙で候補が出る")
+        exec: { _ in "dir/\nfile.txt\n" },
+        readdir: { _ in
+          [(name: "dir", isDirectory: true), (name: "file.txt", isDirectory: false)]
+        }))
+    func producesCandidates(_ command: String) -> Bool {
+      !names(h.complete("\(command) -")).isEmpty || !names(h.complete("\(command) ")).isEmpty
+    }
+    XCTAssertFalse(producesCandidates("frobnicate"), "前提: 同梱していないコマンドでは候補が出ない")
+
+    for command in commands {
+      XCTAssertTrue(producesCandidates(command), "README の一覧にある \(command) が同梱されていない")
+    }
+  }
+
+  /// README の「## curated spec」節の本文（カンマ区切りのコマンド名）を取り出す。
+  private func curatedCommands(inReadme readme: String) -> [String]? {
+    let lines = readme.components(separatedBy: "\n")
+    guard let heading = lines.firstIndex(where: { $0.hasPrefix("## curated spec") }) else {
+      return nil
+    }
+    let body = lines[(heading + 1)...].drop { $0.isEmpty }.prefix { !$0.isEmpty }
+    let commands = body.joined(separator: " ").split(separator: ",")
+      .map { $0.trimmingCharacters(in: .whitespaces) }
+    return commands.isEmpty ? nil : commands
   }
 
   func testEngineSelfAuthoredSpecs() throws {

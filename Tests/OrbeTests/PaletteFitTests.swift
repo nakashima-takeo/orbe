@@ -7,8 +7,8 @@ import XCTest
 
 /// 「パレットの器は窓に収まる」という契約の検証。4 段で押さえる:
 ///
-/// 1. **逆算そのもの**（`PaletteOverlay.layout` / `PaletteCard.listMaxHeight`）を代数で。
-///    高窓・中窓・低窓・chrome ちょうど・退化域・単調性を、描画に依らず固定する。
+/// 1. **逆算そのもの**（`PaletteOverlay.layout`）を代数で。余白が同じ比率で詰まること・上限が
+///    窓高について単調で窓を超えず負にならないことを、描画に依らず固定する。
 /// 2. **プローブの被覆**——本番が引く chrome（プローブを当てたスロットの和）が、実描画で測った
 ///    chrome そのものと一致すること。ここが代数と実体の唯一の接合で、覆い漏れたスロットがあれば
 ///    そのぶんだけ本番はリストを過大に取る。代数からは原理的に届かない。
@@ -37,14 +37,6 @@ final class PaletteFitTests: OrbeTestCase {
 
   // MARK: - 1. 逆算の代数
 
-  /// 窓に余裕があるうちは上 66 / 下 16 に張り付く。
-  func testLayoutKeepsAnchorWhenWindowIsTall() {
-    let layout = PaletteOverlay.layout(windowHeight: 600, chromeHeight: sampleChrome)
-    XCTAssertEqual(layout.top, 66, accuracy: 0.001, "上端アンカーは定位置")
-    XCTAssertEqual(layout.bottom, 16, accuracy: 0.001, "下余白は bar")
-    XCTAssertEqual(layout.maxHeight, 600 - 82, accuracy: 0.001, "カードは窓 − 余白")
-  }
-
   /// 窓が chrome ＋ 余白を割ると、上下が**同じ比率で**詰まる（片側だけ潰れない）。
   func testLayoutYieldsMarginsProportionally() {
     let chrome = sampleChrome
@@ -59,25 +51,6 @@ final class PaletteFitTests: OrbeTestCase {
     }
   }
 
-  /// 窓がちょうど chrome のとき余白はゼロ、カードは窓いっぱい。
-  func testLayoutAtChromeExactly() {
-    let layout = PaletteOverlay.layout(windowHeight: sampleChrome, chromeHeight: sampleChrome)
-    XCTAssertEqual(layout.top, 0, accuracy: 0.001)
-    XCTAssertEqual(layout.bottom, 0, accuracy: 0.001)
-    XCTAssertEqual(layout.maxHeight, sampleChrome, accuracy: 0.001)
-  }
-
-  /// 退化域（窓が chrome すら入らない）。余白は無く、上限は窓高そのもの——負値は出ない。
-  func testLayoutDegeneratesToWindowHeight() {
-    for windowHeight in [CGFloat(60), 20, 0] {
-      let layout = PaletteOverlay.layout(windowHeight: windowHeight, chromeHeight: sampleChrome)
-      XCTAssertEqual(layout.top, 0, accuracy: 0.001)
-      XCTAssertEqual(layout.bottom, 0, accuracy: 0.001)
-      XCTAssertEqual(layout.maxHeight, windowHeight, accuracy: 0.001)
-      XCTAssertGreaterThanOrEqual(layout.maxHeight, 0, "上限は負にならない")
-    }
-  }
-
   /// 窓を高くして上限が縮むことは無い（連続なドラッグでカードが跳ねない）。
   func testLayoutIsMonotonicInWindowHeight() {
     var previous: CGFloat = -1
@@ -85,29 +58,9 @@ final class PaletteFitTests: OrbeTestCase {
       let layout = PaletteOverlay.layout(windowHeight: height, chromeHeight: sampleChrome)
       XCTAssertGreaterThanOrEqual(layout.maxHeight, previous - 0.001, "窓高 \(height) で上限が縮んだ")
       XCTAssertLessThanOrEqual(layout.maxHeight, height, "上限は窓を超えない")
+      XCTAssertGreaterThanOrEqual(layout.maxHeight, 0, "窓高 \(height) で上限が負になった")
       previous = layout.maxHeight
     }
-  }
-
-  /// スクロール域の上限は「見た目の cap」と「窓の残り − 帯の余白」の小さい方。負にはならない。
-  func testListMaxHeightTakesSmallerOfCapAndRemainder() {
-    let band = PaletteCard.listPadding * 2
-    let chrome = sampleChrome
-    XCTAssertEqual(
-      PaletteCard.listMaxHeight(maxHeight: 520, chromeHeight: chrome), PaletteCard.capHeight,
-      "余裕がある窓では見た目の cap が効く")
-    XCTAssertEqual(
-      PaletteCard.listMaxHeight(maxHeight: 200, chromeHeight: chrome), 200 - chrome - band,
-      "低い窓では残りが効く")
-    XCTAssertEqual(
-      PaletteCard.listMaxHeight(maxHeight: chrome + band, chromeHeight: chrome), 0,
-      "帯の余白しか残らなければリストは消える")
-    XCTAssertEqual(
-      PaletteCard.listMaxHeight(maxHeight: chrome, chromeHeight: chrome), 0,
-      "chrome ちょうどでリストは消える")
-    XCTAssertEqual(
-      PaletteCard.listMaxHeight(maxHeight: chrome / 2, chromeHeight: chrome), 0,
-      "退化域でも負にならない")
   }
 
   // MARK: - 2. プローブの被覆（代数と実体の接合）

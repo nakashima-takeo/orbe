@@ -54,135 +54,69 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     }
   }
 
-  /// `tools/list` の語彙。`prompt_agent` が出ており、`wait_for_event` の schema に `after` / `value`、
-  /// `spawn_agent` / `resume_agent` に `timeoutMs` がある。description は「問うなら prompt_agent、
-  /// 生の入力は send_text＋send_key」の導線と `ready:false` の意味を持つ——AI が読む唯一の説明なので、
-  /// ここが欠けると AI は `send_text` → `wait_for_event` の取りこぼす手順を組み続ける。
-  func testToolsListExposesPromptAgentAndTheHistoryCursor() throws {
+  /// `tools/list` の description が写す既定・上限は control の正本（`WaitTimeout` / `SessionLogLimits`）と
+  /// 同じ値。AI が timeoutMs・limit・一度に戻す件数を決める唯一の情報源なので、写しが古いと省略時の
+  /// 待ち時間を誤って見積もり、上限を超えた要求を組む。数字の直後の区切りまで含めて比べる——部分一致だと
+  /// 10000 → 1000 のような下げ方向のドリフトを取り逃す。
+  func testToolsListDescriptionsMatchTheControlLimits() throws {
     let tools = ControlProcess.mcpToolsList()
     func tool(_ name: String) throws -> [String: Any] {
       try XCTUnwrap(tools.first { $0["name"] as? String == name }, "\(name) が tools/list に無い")
     }
-    func properties(_ tool: [String: Any]) -> [String: Any] {
-      (tool["inputSchema"] as? [String: Any])?["properties"] as? [String: Any] ?? [:]
+    func description(_ tool: [String: Any], property: String? = nil) -> String {
+      guard let property else { return tool["description"] as? String ?? "" }
+      let properties = (tool["inputSchema"] as? [String: Any])?["properties"] as? [String: Any]
+      return (properties?[property] as? [String: Any])?["description"] as? String ?? ""
     }
 
-    let prompt = try tool("prompt_agent")
-    XCTAssertEqual(
-      Set((prompt["inputSchema"] as? [String: Any])?["required"] as? [String] ?? []),
-      ["tabId", "text"], "prompt_agent の必須は tabId と text")
-    XCTAssertNotNil(properties(prompt)["timeoutMs"], "prompt_agent は timeoutMs を受ける")
-    let promptDescription = prompt["description"] as? String ?? ""
     XCTAssertTrue(
-      promptDescription.contains("send_text") && promptDescription.contains("wait_for_event"),
-      "prompt_agent の description が send_text / wait_for_event との使い分けを導く: \(promptDescription)")
-
-    let wait = properties(try tool("wait_for_event"))
-    XCTAssertNotNil(wait["after"], "wait_for_event は after を受ける")
-    XCTAssertNotNil(wait["value"], "wait_for_event は value を受ける")
-
-    // description が写す既定タイムアウトは control の `WaitTimeout` と同じ値——AI が timeoutMs を
-    // 決める唯一の情報源なので、写しが古いと省略時の待ち時間を誤って見積もる（`KINDS:` と同じ守り方）。
-    func description(_ property: Any?) -> String {
-      (property as? [String: Any])?["description"] as? String ?? ""
-    }
-    XCTAssertTrue(
-      description(wait["timeoutMs"]).contains("既定 \(WaitTimeout.eventDefaultMs)"),
+      description(try tool("wait_for_event"), property: "timeoutMs")
+        .contains("既定 \(WaitTimeout.eventDefaultMs)"),
       "wait_for_event の timeoutMs が WaitTimeout.eventDefaultMs と食い違っている")
+    let prompt = try tool("prompt_agent")
     XCTAssertTrue(
-      promptDescription.contains("既定 \(WaitTimeout.promptDefaultMs) ms")
-        && description(properties(prompt)["timeoutMs"])
+      description(prompt).contains("既定 \(WaitTimeout.promptDefaultMs) ms")
+        && description(prompt, property: "timeoutMs")
           .contains("既定 \(WaitTimeout.promptDefaultMs)・上限 \(WaitTimeout.maxMs)"),
-      "prompt_agent の既定 / 上限が WaitTimeout と食い違っている: \(promptDescription)")
-
+      "prompt_agent の既定 / 上限が WaitTimeout と食い違っている: \(description(prompt))")
     for name in ["spawn_agent", "resume_agent"] {
-      let launch = try tool(name)
-      XCTAssertNotNil(properties(launch)["timeoutMs"], "\(name) は timeoutMs を受ける")
       XCTAssertTrue(
-        description(properties(launch)["timeoutMs"]).contains("既定 \(WaitTimeout.launchDefaultMs)"),
+        description(try tool(name), property: "timeoutMs")
+          .contains("既定 \(WaitTimeout.launchDefaultMs)"),
         "\(name) の timeoutMs が WaitTimeout.launchDefaultMs と食い違っている")
     }
-    XCTAssertTrue(
-      (try tool("spawn_agent")["description"] as? String ?? "").contains("ready:false"),
-      "spawn_agent の description が ready:false の意味を書く")
-  }
 
-  /// `session_log` / `restore_sessions` が tools/list に在り、AI が「閉じたまま戻っていないもの」を導く
-  /// 手順（closed の最後のイベント × list_tabs に居ない → restore_sessions）が description に書いてある。
-  /// この導線が無いと AI は生ログを前に何を戻せばよいか決められず、生きているセッションを二重に戻す。
-  func testToolsListExposesSessionLogAndRestoreWithTheDerivationRecipe() throws {
-    let tools = ControlProcess.mcpToolsList()
-    func tool(_ name: String) throws -> [String: Any] {
-      try XCTUnwrap(tools.first { $0["name"] as? String == name }, "\(name) が tools/list に無い")
-    }
-    let log = try tool("session_log")
-    let logDescription = log["description"] as? String ?? ""
-    for word in ["closed", "list_tabs", "restore_sessions"] {
-      XCTAssertTrue(logDescription.contains(word), "session_log の description に \(word) が無い")
-    }
-    XCTAssertEqual(
-      Set(
-        ((log["inputSchema"] as? [String: Any])?["properties"] as? [String: Any])?.keys ?? [:].keys),
-      ["since", "until", "limit", "sessionId"])
-    // 数字の直後の区切りまで含める——部分一致だと 10000 → 1000 のような下げ方向のドリフトを取り逃す。
+    let log = description(try tool("session_log"))
+    XCTAssertTrue(log.contains("既定 \(SessionLogLimits.defaultLimit)（"), "limit の既定を写す")
+    XCTAssertTrue(log.contains("上限 \(SessionLogLimits.maxLimit)。"), "limit の上限を写す")
     XCTAssertTrue(
-      logDescription.contains("既定 \(SessionLogLimits.defaultLimit)（"), "limit の既定を写す")
-    XCTAssertTrue(logDescription.contains("上限 \(SessionLogLimits.maxLimit)。"), "limit の上限を写す")
-
-    let restore = try tool("restore_sessions")
-    XCTAssertEqual(
-      (restore["inputSchema"] as? [String: Any])?["required"] as? [String], ["sessionIds"])
-    let restoreDescription = restore["description"] as? String ?? ""
-    XCTAssertTrue(restoreDescription.contains("resume_agent"), "resume_agent との違い（起動しない）を書く")
-    XCTAssertTrue(restoreDescription.contains("already-present"), "id ごとの status の語を書く")
-    XCTAssertTrue(
-      restoreDescription.contains("orb session restore"), "多数を一度に戻す入口がここだと書く（⇧⌘T は 1 件ずつ）")
-    let idsProp =
-      ((restore["inputSchema"] as? [String: Any])?["properties"] as? [String: Any])?["sessionIds"]
-      as? [String: Any]
-    XCTAssertTrue(
-      (idsProp?["description"] as? String ?? "").contains("\(SessionLogLimits.restoreMaxIds) 件"),
+      description(try tool("restore_sessions"), property: "sessionIds")
+        .contains("\(SessionLogLimits.restoreMaxIds) 件"),
       "sessionIds の上限を写す")
   }
 
-  /// `session_log` / `restore_sessions` の `tools/call` が control へ届く。ブリッジはツール名を method 名として
-  /// 総称転送するので、この 2 語が control 側の綴りと食い違えば tools/list は緑のまま呼び出しだけが死ぬ。
-  func testSessionLogAndRestoreSessionsReachControlThroughTheBridge() throws {
+  /// `tools/list` に出る全ツールが control の method として通る。ブリッジはツール名をそのまま method 名へ
+  /// 載せ替えるので、片側だけ綴りが変わると tools/list は緑のまま呼び出しだけが `method not found` で死ぬ。
+  /// 引数は実在しない宛先・最短の待ちに向ける（届いたかだけを見るので、成否は問わない）。
+  ///
+  /// control の拒否は MCP の `isError` へ畳まれ、本文に理由が残る——畳まれなければ AI は失敗を成功と読む。
+  func testEveryListedToolReachesControlAndRejectionsBecomeIsError() throws {
     let control = try startControlProcess()
-
-    let log = control.mcpJSON("session_log", ["limit": 5])
-    XCTAssertNotNil(log["events"] as? [[String: Any]], "session_log が events を返す: \(log)")
-    XCTAssertEqual(log["truncated"] as? Bool, false)
-
-    let restore = control.mcpJSON("restore_sessions", ["sessionIds": ["nope-1"]])
-    XCTAssertEqual(
-      (restore["results"] as? [[String: Any]])?.first?["status"] as? String, "unknown",
-      "配列の sessionIds がそのまま届き、id ごとの status が返る: \(restore)")
-  }
-
-  /// `send_text` ＋ `send_key enter` でタブのシェルが実際にコマンドを**実行**する
-  /// （`send_text` はペースト相当なので、enter を別送しなければプロンプトに留まったままになる）。
-  func testSendTextAndEnterExecutesInTab() throws {
-    let control = try startControlProcess()
-    let tab = try liveTabId(control)
-    let probe = executionProbe()
-
-    runInTab(control, tab: tab, command: probe.command)
-
-    XCTAssertTrue(
-      waitForExecution(control, tab: tab, marker: probe.marker),
-      "enter を送ってもコマンドが実行されていない: \(tabText(control, tab: tab, scrollback: true))")
-  }
-
-  /// `list_workspaces` の全行に `dormantAgentCount` が出る（休眠可視化の源）。
-  func testListWorkspacesExposesDormantAgentCount() throws {
-    let control = try startControlProcess()
-    let rows = try XCTUnwrap(control.mcpJSON("list_workspaces")["workspaces"] as? [[String: Any]])
-    XCTAssertFalse(rows.isEmpty, "workspace が 1 つも返らない")
-    for row in rows {
-      XCTAssertNotNil(
-        row["dormantAgentCount"] as? Int, "MCP 越しでも各行に dormantAgentCount(Int) が出る")
+    let names = ControlProcess.mcpToolsList().compactMap { $0["name"] as? String }
+    XCTAssertFalse(names.isEmpty, "tools/list が空")
+    let nowhere: [String: Any] = [
+      "tabId": 999_999, "workspaceId": 999_999, "taskId": 999_999, "timeoutMs": 1,
+    ]
+    for name in names {
+      let call = control.mcpCall(name, nowhere)
+      XCTAssertFalse(
+        call.text.hasPrefix("method not found"), "\(name) が control の method として通らない: \(call.text)")
     }
+
+    let rejected = control.mcpCall("activate_workspace", ["workspaceId": 999_999])
+    XCTAssertTrue(rejected.isError, "control の拒否は isError:true になる")
+    XCTAssertTrue(
+      rejected.text.contains("workspace not found"), "error 本文に理由が残る: \(rejected.text)")
   }
 
   /// 背景 workspace を `activate_workspace` すると、返る `tabIds` の先頭が実際に読めるタブになる
@@ -204,15 +138,6 @@ final class OrbeMcpProcessTests: OrbeTestCase {
         !tabText(control, tab: tab).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       },
       "activate したタブ \(tab) の画面が空のまま（surface が生成されていない）")
-  }
-
-  /// 未知の `workspaceId` は control のエラーが MCP の `isError` へ畳まれ、本文に理由が残る。
-  func testActivateUnknownWorkspaceIsReportedAsError() throws {
-    let control = try startControlProcess()
-    let call = control.mcpCall("activate_workspace", ["workspaceId": 999_999])
-    XCTAssertTrue(call.isError, "未知 workspaceId は isError:true になる")
-    XCTAssertTrue(
-      call.text.contains("workspace not found"), "error 本文に理由が残る: \(call.text)")
   }
 
   /// `get_tab_text` の `scrollback` が効く。可視範囲を溢れる出力を流すと、`true` の結果は

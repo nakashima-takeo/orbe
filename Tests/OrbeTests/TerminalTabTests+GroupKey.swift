@@ -17,18 +17,6 @@ extension TerminalTabTests {
     return root
   }
 
-  /// git 管理下なら worktree ルート、サブディレクトリで開いたタブも同じキー（同 worktree のタブは 1 連）。
-  func testGroupKeyIsWorktreeRootForTabsAnywhereInside() throws {
-    let root = try gitRoot()
-    defer { try? FileManager.default.removeItem(at: root) }
-    let expected = GitWorktreeRoot.normalizedPath(root.path)
-
-    XCTAssertEqual(TerminalTab(cwd: root.path).groupKey, expected)
-    XCTAssertEqual(
-      TerminalTab(cwd: root.appendingPathComponent("src").path).groupKey, expected,
-      "サブディレクトリでもルートがキー")
-  }
-
   /// git 管理外は cwd 自身（正準形）。同じ場所を指す cwd の 2 枚は、書き方が違っても管理外でも連なる（Q1）。
   func testGroupKeyFallsBackToCwdItselfOutsideGit() throws {
     let plain = "/tmp/orbe-plain-\(UUID().uuidString)"

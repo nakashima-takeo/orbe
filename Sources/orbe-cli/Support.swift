@@ -34,6 +34,20 @@ func writeRaw(_ text: String) {
   FileHandle.standardOutput.write(Data(text.utf8))
 }
 
+/// タブ区切りの行に載せるセル（hook・OSC 7・人や agent が書いた任意文字列が載る）。タブは列を、改行類は
+/// 行を壊し、ESC 等は読み手の端末が解釈し、向きを変える制御文字は後続の列の見た目を入れ替えるので、
+/// これらは空白にする。それ以外の書式文字（ZWJ 絵文字の U+200D など）は表示を壊さないので残す。
+func tsvCell(_ s: String) -> String {
+  var scalars = String.UnicodeScalarView()
+  for scalar in s.unicodeScalars {
+    let breaks =
+      scalar.properties.generalCategory == .control || CharacterSet.newlines.contains(scalar)
+      || (0x202A...0x202E).contains(scalar.value) || (0x2066...0x2069).contains(scalar.value)
+    scalars.append(breaks ? " " : scalar)
+  }
+  return String(scalars)
+}
+
 /// usage エラー（引数不正）。終了コード 2。
 func usageDie(_ message: String) -> Never {
   stderrLine("error: \(message)")
@@ -333,8 +347,8 @@ func usageBlock(_ lines: [String]) -> String {
 /// トップ help に載る全サーフェス。ドメインを 1 つ足すときに触るのは、そのドメインのファイルと、
 /// ここの 1 語と、`main.swift` のルーティング 1 行の 3 箇所。
 private let allUsageLines =
-  configUsageLines + wsUsageLines + tabUsageLines + agentUsageLines + sessionUsageLines
-  + waitUsageLines
+  configUsageLines + wsUsageLines + tabUsageLines + agentUsageLines + taskUsageLines
+  + sessionUsageLines + waitUsageLines
 
 let topUsage = """
   orb — configure and control the running Orbe instance

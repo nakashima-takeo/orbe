@@ -61,14 +61,11 @@ final class MessageExtractTests: XCTestCase {
     XCTAssertEqual(agentMessage(state: "waiting", stdin: obj)?.source, "notification")
   }
 
-  /// どちらも無い waiting（codex PermissionRequest 等）は nil＝文言なし。
-  func testWaitingWithoutKnownFieldsIsNil() {
+  /// どちらも無い waiting（codex PermissionRequest 等）・questions の構造崩れ（配列でない・
+  /// question 欠落）は nil＝文言なし。
+  func testWaitingWithoutUsableFieldsIsNil() {
     XCTAssertNil(agentMessage(state: "waiting", stdin: ["tool_name": "Bash"]))
     XCTAssertNil(agentMessage(state: "waiting", stdin: nil))
-  }
-
-  /// questions の構造崩れ（配列でない・question 欠落）は nil に落ちる。
-  func testWaitingMalformedQuestionsIsNil() {
     XCTAssertNil(agentMessage(state: "waiting", stdin: ["tool_input": ["questions": "x"]]))
     XCTAssertNil(
       agentMessage(state: "waiting", stdin: ["tool_input": ["questions": [[String: Any]()]]]))

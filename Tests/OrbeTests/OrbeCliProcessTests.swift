@@ -4,10 +4,11 @@ import XCTest
 
 @testable import Orbe
 
-/// 実 `orb`（`orbe-cli`）を子プロセスで起こし、全 25 サブコマンドのうち 22 が実 `WindowController`
-/// を 1 本のライフサイクルとして動かせることを固定する。残る `agent spawn` / `agent resume` は
-/// 検出の仕込み（偽実行体と `ShellPATH` の差し替え）が要るので `OrbeCliAgentProcessTests` が、
-/// `agent prompt` は `OrbeCliAgentPromptProcessTests` が持つ。
+/// 実 `orb`（`orbe-cli`）を子プロセスで起こし、全 30 サブコマンドのうち 21（ws・config・`agent list`・
+/// tab・session）が実 `WindowController` を 1 本のライフサイクルとして動かせることを固定する。残る
+/// `agent spawn` / `agent resume` は検出の仕込み（偽実行体と `ShellPATH` の差し替え）が要るので
+/// `OrbeCliAgentProcessTests` が、`agent prompt` は `OrbeCliAgentPromptProcessTests` が、`task` は
+/// `OrbeCliTaskProcessTests` が、`wait` は `OrbeCliWaitProcessTests` が持つ。
 ///
 /// 1 本に束ねているのは、`ws new → rename → dir → switch → rm` のように後段が前段の
 /// 状態を前提にする連鎖だから。割ると各テストが同じ fixture を組み直すことになり、測っている
@@ -103,7 +104,7 @@ final class OrbeCliProcessTests: OrbeTestCase {
     return scratchId
   }
 
-  /// 22 サブコマンドを 1 つの実 `WindowController` に対して順に叩く。
+  /// 21 サブコマンドを 1 つの実 `WindowController` に対して順に叩く。
   /// `ws rm` を最後に置くのは「最後の 1 つは削除不可（-32000）」を踏まないため。
   func testEverySubcommandDrivesOneLifecycle() throws {
     let control = try startControlProcess(workspaces: ["main"])
@@ -123,11 +124,6 @@ final class OrbeCliProcessTests: OrbeTestCase {
     XCTAssertNotNil(
       control.orbJSON(["agent", "list"])["agents"] as? [[String: Any]],
       "agent list: agents を返さない（検出ゼロは空配列で成功）")
-
-    // --- wait（1）: 何も起きなければ時間切れ（exit 124）。イベントで起きる側は専用ファイルが持つ。
-    // 宛先に実在しないタブを置くのは、fixture のシェルが OSC 7 で撃つ `pwd` で起きないため。
-    let waited = control.orb(["wait", "999999", "--timeout-ms", "200"])
-    XCTAssertEqual(waited.status, 124, "wait: 時間切れは exit 124: \(waited.stderr)")
 
     // --- tab（7）: tab list → tab new → tab text/send/key → tab focus → tab close
     let tabsBefore = try XCTUnwrap(
@@ -170,7 +166,7 @@ final class OrbeCliProcessTests: OrbeTestCase {
     // --- session（3）: log → closed → restore
     try driveSessionSubcommands(control, sessionId: "l4-sess-1")
 
-    // --- ws rm（22 本目）
+    // --- ws rm（21 本目）
     step(control, ["ws", "rm", "\(scratchId)"], expect: "removed workspace \(scratchId)")
     XCTAssertFalse(
       try workspaceRows(control).contains { $0["id"] as? Int == scratchId },

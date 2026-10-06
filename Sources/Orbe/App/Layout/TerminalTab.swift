@@ -94,17 +94,13 @@ final class TerminalTab {
   /// 新タブの cwd 継承はすべてこの 1 つの定義を読む。
   var cwd: String { surface.currentPwd ?? surface.initialCwd }
 
-  /// 所属セグメントのキー＝cwd が属する git worktree ルート（管理外は cwd 自身）の正準形パス。
+  /// 所属セグメントのキー＝cwd の根（`GitWorktreeRoot.root(of:)`。属する git worktree ルート、
+  /// 管理外は cwd 自身の正準形パス）。エディター面の根も同じ値。
   /// cwd が変わった時に 1 回だけ再計算し（`pwdChanged`）、永続しない（復元時に保存 cwd から同じ規則で
   /// 再計算する）。同キーのタブが配列上で隣接する不変条件は `SessionStore` が保証する。
   /// setter が internal なのは、不変条件の検証がキーの純配列ロジックで済むよう注入口を残すため
   /// （書くのは init・`pwdChanged`・テストだけ）。
   var groupKey: String
-
-  /// タブグループの規則は根の規則そのもの（`GitWorktreeRoot.root(of:)`）。
-  static func groupKey(cwd: String) -> String {
-    GitWorktreeRoot.root(of: cwd)
-  }
 
   /// このタブの表示タイトル。① explicitTitle ?? ② アプリ報告タイトル ?? ③ derived(cwd, root)。
   /// rootPath は所属 Workspace が持つため呼び出し側（WindowController）から渡す。
@@ -132,7 +128,7 @@ final class TerminalTab {
     resumeSpawn = nil
     faces = .terminalOnly
     editor = MainActor.assumeIsolated { EditorSession(surfaces: editorSurfaces) }
-    groupKey = Self.groupKey(cwd: cwd)
+    groupKey = GitWorktreeRoot.root(of: cwd)
     view = Self.makeView(cwd: cwd, root: groupKey, faces: faces)
     surface.initialCommand = command
     surface.initialEnv = env
@@ -156,7 +152,7 @@ final class TerminalTab {
     self.resumeSpawn = resumeSpawn
     faces = state.faces.normalized
     editor = MainActor.assumeIsolated { EditorSession(surfaces: editorSurfaces) }
-    groupKey = Self.groupKey(cwd: state.cwd)
+    groupKey = GitWorktreeRoot.root(of: state.cwd)
     view = Self.makeView(cwd: state.cwd, root: groupKey, faces: faces)
     explicitTitle = state.explicitTitle
     pendingDocuments = state.editor?.documents
@@ -352,7 +348,7 @@ final class TerminalTab {
   /// 根が変わればエディター面のツリーも作り直す。
   func pwdChanged() {
     ControlServer.shared.emit(.pwd(tabId: id, path: surface.currentPwd))
-    groupKey = Self.groupKey(cwd: cwd)
+    groupKey = GitWorktreeRoot.root(of: cwd)
     view.editor.setRoot(groupKey)
     onPwdChange?()
   }

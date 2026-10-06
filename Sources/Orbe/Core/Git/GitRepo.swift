@@ -3,8 +3,8 @@ import Foundation
 /// 1 つのチェックアウト（worktree 含む）に対する型付き git 操作。
 /// 全メソッドは背景実行し、completion をメインキューで返す。
 final class GitRepo {
-  /// worktree のルート（rev-parse --show-toplevel）。git の返す綴りのまま（`git worktree list` との
-  /// 等値比較に使うため正規化しない。正規形と比べる場では比べる側が両辺を揃える）。
+  /// worktree のルート（rev-parse --show-toplevel）。git の返す綴りのまま（正規化しない。
+  /// 正規形と比べる場では比べる側が両辺を揃える）。
   let root: String
   /// このチェックアウトの git dir（index・HEAD の在処）。linked worktree では本体側の `worktrees/<name>`。
   let gitDir: String

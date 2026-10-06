@@ -7,6 +7,12 @@ description: GitHub Issue や指示を、auto:ship に Orbe 固有の検証・sp
 
 共通の進行は `auto:ship` または `auto:ship-big` が持ち、このスキルは Orbe のビルド・見た目・実機確認・spec の扱いを重ねる。auto のスキル群はメンテナのプラグイン環境にある。
 
+## 検証の分担
+
+全件の `swift test` は、PR ごとに CI の `build-test`（`.github/workflows/ci.yml`）が 1 回回す。手元で全件を回しても CI と同じ結果を同じ時間待つだけで、検証は増えず、その待ちが工程の直列に乗る。作業者（実装・テスト・独立検証・レビュー修正）が手元で回すのは、変更に関係するクラスだけ——変更した型の `<型名>Tests`（`Tests/<ターゲット>/<型名>Tests*.swift`）と、完了条件が指すテスト。`swift build --build-tests` の後に `swift test --skip-build --filter 'OrbeTests.FooTests'` で回す（複数は `|` でつなぐ）。
+
+ship は作業者を起動するたびにこの分担を指示に含める。合否は、作業者に返させた実行コマンド・終了コード・XCTest の `Executed N tests, with M failures` の行で読む。全件の合否は PR 作成後に `gh pr checks <PR>` で読む。
+
 ## 受付と規模の選択
 
 1. リポジトリの `CLAUDE.md` / `CLAUDE.local.md` があれば Read で読み、`docs/spec/README.md` を Read で読む。
@@ -32,7 +38,7 @@ flowchart TD
 
 - **単一 PR**: `Skill` ツールで `auto:ship` を読み込む。
 - **複数 PR**: `references/multi-pr.md` を Read で読み、`Skill` ツールで `auto:ship-big` を読み込む。全体計画・統合時の Orbe の扱いはその reference に従う。
-- **Issue に積むだけ**: `auto:plan` の SKILL.md を Read で読み、その呼び出し規約でバックグラウンド Agent を起動する。題材・リポジトリのパス・関係する spec を読む指示を渡し、要件相談を人へ取り次ぐ。返った計画書を Read で読んで人と合意し、完了条件と設計を Issue に記録して終了する（既存 Issue なら本文を更新、直接指示なら新規作成）。この入口では実装用のブランチ・worktree を作らない。実装の計画承認時に「積むだけ」へ変わった場合も、合意内容を Issue に記録し、必要な計画を保存してから今回作った作業場を片付ける。
+- **Issue に積むだけ**: `auto:plan` の SKILL.md を Read で読み、その呼び出し規約でバックグラウンド Agent を起動する。題材・リポジトリのパス・関係する spec を読む指示を渡し、要件相談を人へ取り次ぐ。返った計画書を Read で読んで人と合意し、完了条件と設計を Issue に記録して終了する（既存 Issue なら本文を更新、直接指示なら新規作成）。実装の計画承認時に「積むだけ」へ変わった場合も、合意内容を Issue に記録し、必要な計画を保存してから今回作った作業場を片付ける。
 
 ## auto の工程へ重ねる Orbe 固有の手順
 
@@ -44,11 +50,11 @@ flowchart TD
 
 完了条件のうち、見た目・操作感など人が実物で判断するものを**人判定条件**として明示する。その確認手段には、`<wt>` のビルドを `sandbox-run` で隔離起動することと、条件ごとの触りどころを含める。
 
-計画書は `auto:plan` が返したパスを後続へ渡す。別の作業場からも読める絶対パスで保持し、ローカルの計画書はコミットしない。承認時の提示内容と実行水準は、選んだ auto スキルの計画承認手順に従う。
+計画書は `auto:plan` が返したパスを後続へ渡す。別の作業場からも読める絶対パスで保持する。承認時の提示内容と実行水準は、選んだ auto スキルの計画承認手順に従う。
 
 ### 実装・修正 — ビルドと spec を作業者へ渡す
 
-`auto:implement` には計画書パスまたは修正指示と `<wt>` を渡し、`docs/guides/build.md` を Read で読ませる。worktree の libghostty の準備は同文書と `scripts/build-app.sh` に従う。
+`auto:implement` には計画書パスまたは修正指示と `<wt>` を渡し、`docs/guides/build.md` を Read で読ませる。検証は「検証の分担」の範囲で回させ、結果もその形で返させる。
 
 **`Sources/` を変更する作業者は、終了前に該当 spec も現状へ更新する。** spec はコードと別のコミットにまとめる。
 
@@ -78,10 +84,10 @@ NG の差し戻しは、期待・設計が変わるなら計画へ、承認済�
 
 `auto:implement-test` には、auto が定める差分・計画書（テスト自体が題材なら要求）に加え、`docs/testing/test-architecture.md` と `docs/testing/roadmap.md` を Read で読む指示を渡す。前者は層と横断方針、後者は実装済みの範囲を持つ。該当スライスの進捗が変われば作業者にロードマップも更新させる。
 
-- テストは XCTest を使い、`Tests/OrbeTests` では `OrbeTestCase` の隔離ハーネスを通す。`swift test --parallel` は使わない。
-- ビルド・lint・format は `docs/guides/build.md`、CI の実行内容は `.github/workflows/ci.yml` を Read で確かめる。`<wt>` の依存を用意してから `swift build --build-tests` → `swift test --skip-build` を実行する。追加するテストは今回の振る舞いと既存の網から判断し、検分では仕様との対応と書かなかった理由を見る。
+- テストは XCTest を使い、`Tests/OrbeTests` では `OrbeTestCase` の隔離ハーネスを通す。
+- ビルド・lint・format は `docs/guides/build.md` を Read で確かめる。`<wt>` の依存を用意してから `swift build --build-tests` を通し、書いたテストと変更に関係するクラスを「検証の分担」の形で回す。追加するテストは今回の振る舞いと既存の網から判断し、検分では仕様との対応と書かなかった理由を見る。
 
-テストの検分後、**完了条件を独立に確かめる Agent**（subagent_type=general-purpose、`model: opus`）を起動する。model は実行水準によらず opus に固定する——検証は確認作業で、モデルの能力差が結果に出る工程ではない。渡すのは完了条件・`<wt>`・検証に必要な上記文書の所在。実装者の成功申告や採用設計は渡さない。既存テスト・制御 API・ログ等から手段を選び、条件ごとに「合格 / 不合格 / 人の判定が必要」と、根拠・検証したコミットを返させる。検証用の使い捨てファイルは worktree 外の scratch に置かせ、成果物の修正は実装工程へ返す。
+テストの検分後、**完了条件を独立に確かめる Agent**（subagent_type=general-purpose、`model: opus`）を起動する。model は実行水準によらず opus に固定する。渡すのは完了条件・`<wt>`・検証に必要な上記文書の所在と「検証の分担」。実装者の成功申告や採用設計は渡さない。既存テスト・制御 API・ログ等から手段を選び（テストは完了条件が指すクラスを `--filter` で回す）、条件ごとに「合格 / 不合格 / 人の判定が必要」と、根拠・検証したコミットを返させる。検証用の使い捨てファイルは worktree 外の scratch に置かせ、成果物の修正は実装工程へ返す。
 
 アプリの挙動・起動経路・同梱物を変えた場合は、この Agent に `.claude/skills/sandbox-run/SKILL.md` を Read させ、無人モードで煙探知を通させる。体験判定で対象ビルドの煙探知が済んでいれば、その結果を渡して省く。確認済みの挙動へ修正が入った場合は、影響する条件を再検証する。
 
@@ -91,7 +97,9 @@ NG の差し戻しは、期待・設計が変わるなら計画へ、承認済�
 
 PR 作成までに、必要な spec 更新を作業者が完了していることを確認する。PR 本文は `auto:pull-request` で ship が直接作成・更新し、完了条件・採用設計と判断理由・意味のある棄却案・検証の証拠・視覚確認と体験判定の結果を記す。題材の Issue を関連付け、解決するものには `Closes #N` を記す。
 
-レビューは `auto:review` の採否案を、要求・計画・体験判定の経緯と突き合わせて裁定する。採択した修正は auto の本線へ差し戻し、spec と PR 本文も追従させる。マージ承認時には、レビュー後の変更・裁定結果・検証結果と、作業ブランチおよびマージ先を提示する。
+PR を作ると CI が全件を回す。レビューの裁定と並行して `gh pr checks <PR> --watch` で待ち、失敗は実装へ差し戻して、落ちたクラスを `--filter` で再現させる。
+
+レビューは `auto:review` の採否案を、要求・計画・体験判定の経緯と突き合わせて裁定する。採択した修正は auto の本線へ差し戻し、spec と PR 本文も追従させる。マージは `build-test` が通ってから。マージ承認時には、レビュー後の変更・裁定結果・検証結果・CI の結果と、作業ブランチおよびマージ先を提示する。
 
 ### 源流へのマージ後 — ローカル反映
 

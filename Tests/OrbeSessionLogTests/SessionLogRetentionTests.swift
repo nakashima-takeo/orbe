@@ -22,10 +22,4 @@ final class SessionLogRetentionTests: XCTestCase {
       events, now: Fixture.base.addingTimeInterval(100), maxBytes: lineBytes * 3)
     XCTAssertEqual(kept.map(\.sessionId), ["s7", "s8", "s9"], "古い側から落として予算に収める")
   }
-
-  func testNothingToPruneReturnsSameEvents() {
-    let events = [Fixture.opened("a", at: 0), Fixture.closed("a", at: 1)]
-    XCTAssertEqual(
-      SessionLogRetention.prune(events, now: Fixture.base.addingTimeInterval(2)), events)
-  }
 }

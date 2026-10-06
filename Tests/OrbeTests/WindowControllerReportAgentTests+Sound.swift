@@ -4,67 +4,13 @@ import XCTest
 @testable import Orbe
 
 /// 再生層への配達経路（ファイル分割の拡張）。鳴らす**判断**そのものは `AgentSoundDecisionTests` が
-/// 純関数で総当たりするので、ここで測るのは `report_agent` 側の「発火点が正しいか（waiting / done への
-/// 実変化だけか）」「見ているタブ・休眠 workspace で抑制されるか」「どの workspace の設定を読むか」と、
-/// 設定パレット側の「試聴のコールバックが再生層へ繋がっているか」。
-/// 再生層は隔離ハーネスがフェイクへ差してある。
+/// 純関数で持つ。鳴らすかどうかの成立条件（waiting / done への実変化・見ているタブ・休眠 workspace）は
+/// ②ピルと同じ 1 つの通知（`agentNotification`）が解くので、本体ファイルと +Reprojection のピル側が測る。
+/// ここで測るのは「どの workspace の設定を読むか」「取り込み音源が化けずに届くか」と、設定パレット側の
+/// 「試聴のコールバックが再生層へ繋がっているか」。再生層は隔離ハーネスがフェイクへ差してある。
 extension WindowControllerReportAgentTests {
   private func recorder(_ wc: WindowController) throws -> SoundPlayerFake {
     try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake, "隔離ハーネスが再生層をフェイクへ差していない")
-  }
-
-  /// waiting / done への実変化だけが鳴る（②ピルと同じ条件）。
-  func testSoundFiresOnlyOnWaitingOrDoneChange() throws {
-    let (wc, tab) = try makeControllerAndTab()
-    XCTAssertFalse(wc.window.isKeyWindow, "前提: 背面（非 key）なので見ているタブの抑制は効かない")
-    let sound = try recorder(wc)
-
-    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "working"))
-    XCTAssertTrue(sound.played.isEmpty, "working への変化では鳴らさない")
-
-    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "waiting"))
-    XCTAssertEqual(
-      sound.played,
-      [
-        SoundPlayerFake.Played.synth(NotificationSound.default, event: .waiting, volume: 90)
-      ], "既定の案・既定の音量で入力待ちが鳴る")
-
-    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "waiting"))
-    XCTAssertEqual(sound.played.count, 1, "同値報告（変化なし）では鳴らさない")
-
-    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "done"))
-    XCTAssertEqual(sound.played.last?.event, .done)
-
-    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "clear"))
-    XCTAssertEqual(sound.played.count, 2, "clear では鳴らさない")
-  }
-
-  /// 見ているタブ（前面ウィンドウのアクティブ表示タブ）のタブでは鳴らさない。別タブなら鳴る
-  /// ——端末にその結果もプロンプトも出ている面で、注意を二重に奪わないため（②の抑制と同じ判定）。
-  func testSoundSuppressedOnVisibleTabOnly() throws {
-    let (wc, tabs) = try makeControllerAndTwoTabs()
-    makeKey(wc)
-    let sound = try recorder(wc)
-
-    wc.controlReportAgent(tab: tabs[0], report: AgentHookReport(agent: "claude", state: "waiting"))
-    XCTAssertTrue(sound.played.isEmpty, "見ているタブ（タブ0）では鳴らさない")
-
-    wc.controlReportAgent(tab: tabs[1], report: AgentHookReport(agent: "claude", state: "waiting"))
-    XCTAssertEqual(sound.played.count, 1, "見ていないタブ（タブ1）では鳴る")
-  }
-
-  /// 通知音がオフなら鳴らない（設定はライブに効く＝鳴らす直前に実効設定を読む）。
-  func testDisabledSettingSilencesTheReport() throws {
-    let (wc, tab) = try makeControllerAndTab()
-    let sound = try recorder(wc)
-    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.notificationSoundEnabled, false))
-
-    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "done"))
-    XCTAssertTrue(sound.played.isEmpty)
-
-    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.notificationSoundEnabled, true))
-    wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "waiting"))
-    XCTAssertEqual(sound.played.count, 1, "オンへ戻せば次の報告から鳴る")
   }
 
   /// 読むのは**発信元タブが属する workspace** の実効設定（「この workspace のエージェントはこの音」
@@ -129,16 +75,6 @@ extension WindowControllerReportAgentTests {
     wc.controlReportAgent(tab: tabs[1], report: AgentHookReport(agent: "claude", state: "waiting"))
     XCTAssertEqual(
       sound.played.last, .synth(NotificationSound.default, event: .waiting, volume: 90))
-  }
-
-  /// 休眠（未 activate）workspace のタブからの報告では鳴らさない——②が「幽霊ピルになる」として
-  /// 立てないのと同じ集合。一覧にもピルにも出ない音だけが鳴ると、ユーザは出所を辿れない。
-  func testDormantWorkspaceTabIsSilent() throws {
-    let (wc, dormant) = try makeControllerAndDormantTab()
-    let sound = try recorder(wc)
-
-    wc.controlReportAgent(tab: dormant, report: AgentHookReport(agent: "claude", state: "done"))
-    XCTAssertTrue(sound.played.isEmpty)
   }
 
   // MARK: - 参照集合 GC（実経路）

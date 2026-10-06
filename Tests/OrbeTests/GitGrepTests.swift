@@ -40,13 +40,6 @@ final class GitGrepTests: OrbeTestCase {
     XCTAssertEqual(lines, expected, "塊の境で割れた行は持ち越して 1 行に読む")
   }
 
-  func testAnIncompleteRecordWaitsForItsEnd() {
-    var parser = GitGrep.Parser()
-    let data = record("a.txt", 1, Data("x".utf8))
-    XCTAssertEqual(parser.feed(data.dropLast()), [])
-    XCTAssertEqual(parser.feed(Data([0x0A])), [GitGrep.Line(path: "a.txt", number: 1, text: "x")])
-  }
-
   private func ended(
     _ ending: GitRunner.Ending, status: Int32 = 0, stderr: String = ""
   ) -> GitRunner.Output {

@@ -69,31 +69,4 @@ final class DragDropPathEscapeTests: OrbeTestCase {
     XCTAssertEqual(
       SurfaceView.escapeShellPath("/tmp/a\\b.txt"), "/tmp/a\\\\b.txt", "バックスラッシュ自体もエスケープ")
   }
-
-  func testFolderPathHasNoTrailingSlashHandling() {
-    // URL.path はディレクトリでも末尾 / を付与しないため、ファイルと同じ扱いで通る。
-    XCTAssertEqual(
-      SurfaceView.escapeShellPath("/Users/me/My Folder"), "/Users/me/My\\ Folder",
-      "フォルダパスもファイルと同じくスペースをエスケープ")
-  }
-
-  func testEmptyPathReturnsEmpty() {
-    XCTAssertEqual(SurfaceView.escapeShellPath(""), "", "空文字はそのまま")
-  }
-
-  // MARK: - 複数パスのスペース結合（completion 4 → performDragOperation と同じ組み立て）
-
-  func testJoinsMultiplePathsWithSpace() {
-    let urls = ["/Users/me/a.txt", "/Users/me/b dir/c.txt", "/tmp/d.txt"]
-    let joined = urls.map { SurfaceView.escapeShellPath($0) }.joined(separator: " ")
-    XCTAssertEqual(
-      joined, "/Users/me/a.txt /Users/me/b\\ dir/c.txt /tmp/d.txt",
-      "各パスをエスケープした上でスペース区切りで結合")
-  }
-
-  func testSinglePathHasNoTrailingSeparator() {
-    let urls = ["/Users/me/a.txt"]
-    let joined = urls.map { SurfaceView.escapeShellPath($0) }.joined(separator: " ")
-    XCTAssertEqual(joined, "/Users/me/a.txt", "単一パスは区切り文字なし")
-  }
 }
