@@ -149,7 +149,7 @@ cd orbe
 open build/Orbe.app
 ```
 
-ビルドスクリプトは、SwiftPM が取得した焼き済みの libghostty をリンクし、そのリソースと合わせてアプリのバンドルを生成します。既定の成果物は **Orbe Dev** です。配布版 Orbe と共存し、設定・タブの保存先も分かれます。開発には SwiftPM を使い、Xcode プロジェクトファイルはありません。
+ビルドスクリプトは、SwiftPM が取得したビルド済みの libghostty をリンクし、そのリソースと合わせてアプリのバンドルを生成します。既定の成果物は **Orbe Dev** です。配布版 Orbe と共存し、設定・タブの保存先も分かれます。開発には SwiftPM を使い、Xcode プロジェクトファイルはありません。
 
 テストは次のコマンドで実行できます。lint・format の手順も[ビルドガイド](docs/guides/build.md)にあります。
 

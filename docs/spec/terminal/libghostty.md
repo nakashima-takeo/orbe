@@ -46,12 +46,12 @@ in-band の境界とは別に、host から能動的に画面テキストを取�
 ## フォント
 
 - 既定フォントは埋め込みの JetBrainsMono（NoNF 版、`src/font/embedded.zig`）。
-- **Symbols Nerd Font（symbols-only 版）も埋め込まれ、実行時に常時 fallback face として登録される**（`src/font/SharedGridSet.zig:324`、`fallback = true`）。このため Nerd Font の PUA グリフは、フォント設定もシステム導入もなしで surface 上に描画される。
-- この埋め込み・fallback 登録が効くのは surface（terminal 描画）側のみ。native AppKit（chrome）側で PUA グリフを描くには明示フォント指定が要る。同梱フォントの登録は `CTFontManagerRegisterFontsForURL` で行え、TTF は ghostty の `src/font/res/` にあり、配布物の `fonts/` に入っている。
+- **Symbols Nerd Font（symbols-only 版）も埋め込まれ、実行時に常時 fallback face として登録される**（`src/font/SharedGridSet.zig`、`fallback = true`）。このため Nerd Font の PUA グリフは、フォント設定もシステム導入もなしで surface 上に描画される。
+- この埋め込み・fallback 登録が効くのは surface（terminal 描画）側のみ。native AppKit（chrome）側で PUA グリフを描くには明示フォント指定が要る。同梱フォントの登録は `CTFontManagerRegisterFontsForURL` で行え、TTF は ghostty の `src/font/res/` にあり、そのうち JetBrains Mono Nerd Font の 4 本が配布物の `fonts/` に入っている。
 
 ## 所在
 
 - 上流: https://github.com/ghostty-org/ghostty
-- 配布と改造の場: fork https://github.com/nakashima-takeo/ghostty 。焼いた配布物（xcframework と、`.app` に同梱する share・フォント・帰属表記）を Release `ghosttykit-<SHA>` に置く。
+- 配布と改造の場: fork https://github.com/nakashima-takeo/ghostty 。焼いた配布物（xcframework と、`.app` に同梱する share・フォント、配布物自身の帰属表記）を Release `ghosttykit-<SHA>` に置く。
 - pin は `Package.swift` の url のタグ `ghosttykit-<SHA>` が持つ。タグはその SHA のコミットを指す。
 - ビルド手順は [guides/build](../../guides/build.md)。
