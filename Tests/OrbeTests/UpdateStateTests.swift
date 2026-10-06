@@ -71,7 +71,9 @@ final class UpdateStateTests: OrbeTestCase {
     XCTAssertTrue(state.toastVisible, "別バージョンなら再び一度だけ出る")
   }
 
-  /// セッション終了（dismissUpdateInstallation）は進行中の見かけだけを畳み、確定状態は残す。
+  /// セッション終了（dismissUpdateInstallation）は進行中の見かけ（確認中・DL中）だけを、適用待ちが
+  /// あれば readyToRestart、無ければ idle へ畳み、確定状態は残す——崩れると設定の状態カード（真実の
+  /// 置き場）が適用待ちのビルドを見失うか、確定した結果を消す。
   func testSettleTransientPhase() {
     let state = makeState()
     state.beginCheck()
@@ -83,9 +85,13 @@ final class UpdateStateTests: OrbeTestCase {
     XCTAssertEqual(state.phase, .idle, "ready 前の DL 中断も idle へ")
 
     state.markReady(ready())
+    state.beginCheck()  // 適用待ちのまま再確認し、更新の提示なしで終わる
+    state.settleTransientPhase()
+    XCTAssertEqual(state.phase, .readyToRestart, "適用待ちがあれば確認中からもそこへ戻す")
+
     state.beginDownload()  // resume 中の中断
     state.settleTransientPhase()
-    XCTAssertEqual(state.phase, .readyToRestart, "適用待ちが確定済みならそこへ戻す")
+    XCTAssertEqual(state.phase, .readyToRestart, "適用待ちがあれば DL 中からもそこへ戻す")
 
     state.markUpToDate()
     state.settleTransientPhase()
@@ -121,18 +127,6 @@ final class UpdateStateTests: OrbeTestCase {
     XCTAssertEqual(
       UpdateState.CheckAvailability.resolve(started: false, updaterCanCheck: true), .unavailable,
       "未起動なら Sparkle 側の可否に依らず不活性")
-  }
-
-  /// 適用待ちのまま確認を始め、更新の提示が無いままセッションが終わっても、適用待ちは残る
-  /// （状態カードが真実の置き場。spec platform/update.md）。
-  func testSessionEndAfterCheckFromReadyKeepsReadyToRestart() {
-    let state = makeState()
-    state.markReady(ready())
-    state.beginCheck()
-
-    state.settleTransientPhase()
-
-    XCTAssertEqual(state.phase, .readyToRestart)
   }
 
   func testSeedLastCheckDoesNotOverwrite() {
