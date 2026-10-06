@@ -99,7 +99,6 @@ extension TaskPaletteModel {
   }
 
   private func handleDetailKey(_ press: KeyPress, _ stop: TaskDetailStop) -> KeyPress.Result {
-    if press.key == .backtab { return .handled }
     switch press.key {
     case .upArrow: moveField(-1)
     case .downArrow: moveField(1)
@@ -126,7 +125,7 @@ extension TaskPaletteModel {
       guard case .link(let item) = stop else { return .ignored }
       if press.phase == .down { unlink(item) }
     case .escape: leaveDetail()
-    case .tab: break
+    case .tab, .backtab: break
     default: return .ignored
     }
     return .handled
@@ -135,7 +134,6 @@ extension TaskPaletteModel {
   /// 右の欄の項目。↵（期限の項目以外）・⌘L・⌘↵ は、行の「タスクにする」「結び付ける」「ブラウザで開く」と
   /// 同じ。
   private func handlePaneKey(_ press: KeyPress, _ stop: TaskGitHubPaneStop) -> KeyPress.Result {
-    if press.key == .backtab { return .handled }
     switch press.key {
     case .upArrow: movePaneStop(-1)
     case .downArrow: movePaneStop(1)
@@ -155,7 +153,7 @@ extension TaskPaletteModel {
     case _ where Self.isLinkKey(press):
       if press.phase == .down { linkSelectedGitHubItem() }
     case .escape: leavePane()
-    case .tab: break
+    case .tab, .backtab: break
     default: return .ignored
     }
     return .handled
@@ -167,12 +165,11 @@ extension TaskPaletteModel {
   /// 何もしない。
   func handleEditKey(_ press: KeyPress) -> KeyPress.Result {
     guard let draft else { return .ignored }
-    if press.key == .backtab { return .handled }
     switch press.key {
     case .escape: endEditing(commit: draft.isMultiline)
     case .return where press.modifiers.contains(.command):
       if !draft.isMultiline { endEditing(commit: true) }
-    case .tab: break
+    case .tab, .backtab: break
     default: return .ignored
     }
     return .handled

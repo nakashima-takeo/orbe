@@ -14,10 +14,6 @@ enum WorktreePaletteFieldKeys {
 
   private static func list(_ press: KeyPress, _ model: WorktreePaletteModel) -> KeyPress.Result {
     let locked = model.isLocked
-    if press.key == .backtab {
-      if !locked { model.cycleBase() }
-      return .handled
-    }
     switch press.key {
     case .upArrow, .downArrow:
       guard !locked else { return .handled }
@@ -25,6 +21,8 @@ enum WorktreePaletteFieldKeys {
       if press.modifiers.contains(.command) { model.jump(direction) } else { model.move(direction) }
     case .tab:
       if !locked { model.cycleTarget() }
+    case .backtab:
+      if !locked { model.cycleBase() }
     case .escape:
       if !locked { model.onDismiss() }
     case _ where isBackspace(press):
@@ -46,11 +44,10 @@ enum WorktreePaletteFieldKeys {
   private static func basePicker(_ press: KeyPress, _ model: WorktreePaletteModel)
     -> KeyPress.Result
   {
-    if press.key == .backtab { return .handled }
     switch press.key {
     case .upArrow: model.basePicker?.move(-1)
     case .downArrow: model.basePicker?.move(1)
-    case .tab: break
+    case .tab, .backtab: break
     case .escape: model.exitBasePicker()
     default: return .ignored
     }
