@@ -46,7 +46,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     return window
   }
 
-  private final class KeyWindow: NSWindow {
+  private final class KeyWindow: OrbeWindow {
     override var canBecomeKey: Bool { true }
   }
 
@@ -64,8 +64,8 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     super.tearDown()
   }
 
-  /// 実アプリと同じく、キューから取り出してから配る（`NSApp.currentEvent` がそのキーを指す）。変換中か・
-  /// キーリピートかの判定は、届いたキーをここから引く。
+  /// 実アプリと同じく、キューから取り出してから配る（`NSApp.currentEvent` がそのキーを指す）。キーリピートかの
+  /// 判定は、届いたキーをここから引く。
   func press(
     _ keyCode: UInt16, _ characters: String, _ flags: NSEvent.ModifierFlags = [],
     repeating: Bool = false, to window: NSWindow

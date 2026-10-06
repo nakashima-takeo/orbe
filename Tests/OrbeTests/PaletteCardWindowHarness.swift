@@ -21,11 +21,12 @@ class PaletteCardWindowTestCase: OrbeTestCase {
     super.tearDown()
   }
 
-  /// borderless の窓は既定で `canBecomeKey` が false で、`NSApp.sendEvent` は key になれない窓へ
-  /// keyDown を渡さない（窓の `sendEvent` すら呼ばれない）。配送を通すこの一点だけを開ける。
+  /// 主窓と同じ `OrbeWindow`（変換中のキーを入力欄へ渡す関所）に載せる。borderless の窓は既定で `canBecomeKey` が
+  /// false で、`NSApp.sendEvent` は key になれない窓へ keyDown を渡さない（窓の `sendEvent` すら呼ばれない）。配送を
+  /// 通すこの一点だけを開ける。
   /// 窓が実際に key になる必要はない——`.accessory` の非アクティブなテストでは
   /// `isKeyWindow` は最後まで false のまま、キーは first responder へ届く。
-  private final class KeyDeliveryWindow: NSWindow {
+  private final class KeyDeliveryWindow: OrbeWindow {
     override var canBecomeKey: Bool { true }
   }
 

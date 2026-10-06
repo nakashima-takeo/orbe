@@ -1,13 +1,11 @@
 import SwiftUI
 
 /// 焦点ごとのキーの意味。⇥・⇧⇥ はどの焦点でも握る（握らないと焦点がカードの外へ逃げ、以後のキーが
-/// 届かない）。矢印は単一の catch-all で修飾の有無を分ける。日本語入力の変換中（`composing`）は
-/// 入力欄のキーを一切握らず、変換に使わせる。
+/// 届かない）。矢印は単一の catch-all で修飾の有無を分ける。
 extension TaskPaletteModel {
   /// ヘッダーの入力欄（一覧）。↵ は `onSubmit` が受ける（変換確定の ↵ では発火しない。押し続けたキーリピート
   /// は確定の入口が捨てる——押し続けて次々に完了にする・タスクにしない）。
-  func handleFieldKey(_ press: KeyPress, composing: Bool) -> KeyPress.Result {
-    guard !composing else { return .ignored }
+  func handleFieldKey(_ press: KeyPress) -> KeyPress.Result {
     if press.key == .backtab {
       toggleTab()
       return .handled
@@ -167,8 +165,8 @@ extension TaskPaletteModel {
   /// 捨てる——押し続けて確定と編集の開始を繰り返さない）、esc で取り消す。⌘↵ も確定で、GitHub タブの右の欄の
   /// 期限ではブラウザを開かせない。複数行の項目は ↵ を改行に使う（リピートも改行）ので、esc で確定し、⌘↵ では
   /// 何もしない。
-  func handleEditKey(_ press: KeyPress, composing: Bool) -> KeyPress.Result {
-    guard !composing, let draft else { return .ignored }
+  func handleEditKey(_ press: KeyPress) -> KeyPress.Result {
+    guard let draft else { return .ignored }
     if press.key == .backtab { return .handled }
     switch press.key {
     case .escape: endEditing(commit: draft.isMultiline)

@@ -110,25 +110,6 @@ extension WorktreePaletteCardKeyTests {
     }
   }
 
-  private func pressThroughTheEventQueue(
-    _ keyCode: UInt16, _ characters: String, to window: NSWindow
-  ) {
-    guard
-      let event = NSEvent.keyEvent(
-        with: .keyDown, location: .zero, modifierFlags: [],
-        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-        context: nil, characters: characters, charactersIgnoringModifiers: characters,
-        isARepeat: false, keyCode: keyCode)
-    else { return XCTFail("キーイベントを作れない") }
-    NSApp.postEvent(event, atStart: true)
-    guard
-      let dequeued = NSApp.nextEvent(
-        matching: .keyDown, until: Date().addingTimeInterval(1), inMode: .default, dequeue: true)
-    else { return XCTFail("キーイベントがキューから取れない") }
-    NSApp.sendEvent(dequeued)
-    pump(0.15)
-  }
-
   /// 変換中の文字は入力欄の文字に入らないので、入力欄は空に見える。それでも ⌫ は変換に使わせ、札を外さない。
   func testBackspaceWhileComposingKeepsTheTaskButWithoutCompositionRemovesIt() throws {
     let composing = DesignSceneFixtures.worktreePaletteIssueModel()
@@ -140,11 +121,11 @@ extension WorktreePaletteCardKeyTests {
     XCTAssertTrue(editor.hasMarkedText(), "前提: 変換中")
     XCTAssertEqual(composing.query, "", "前提: 入力欄の文字は空")
 
-    pressThroughTheEventQueue(51, "\u{7F}", to: window)
+    send(51, "\u{7F}", to: window)
     XCTAssertEqual(composing.taskContextID, 3, "変換中の ⌫ では外さない")
 
     let plain = DesignSceneFixtures.worktreePaletteIssueModel()
-    pressThroughTheEventQueue(51, "\u{7F}", to: mount(plain))
+    send(51, "\u{7F}", to: mount(plain))
     XCTAssertNil(plain.taskContextID, "変換中でなければ外す")
   }
 }

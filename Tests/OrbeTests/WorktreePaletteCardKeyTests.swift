@@ -25,7 +25,7 @@ final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
     return window
   }
 
-  private final class KeyWindow: NSWindow {
+  private final class KeyWindow: OrbeWindow {
     override var canBecomeKey: Bool { true }
   }
 

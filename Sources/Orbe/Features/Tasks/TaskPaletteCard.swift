@@ -86,7 +86,7 @@ struct TaskPaletteCard: View {
           color: Color.theme.textMuted
         )
         .onSubmitIgnoringKeyRepeat { model.submit() }
-        .onKeyPress { model.handleFieldKey($0, composing: IMEComposition.isActive) }
+        .onKeyPress { model.handleFieldKey($0) }
         // 右の欄に居る間は入力欄自身にクリックを渡さず（渡すと焦点だけが入力欄へ移り、モデルの居場所と
         // 食い違う）、上に被せた面で受けて一覧へ戻る操作としてモデルに伝える。焦点はモデルから写る。
         .allowsHitTesting(model.focusTarget == .field)

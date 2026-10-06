@@ -114,8 +114,7 @@ private struct MarkedTextObserver: NSViewRepresentable {
 
     /// firstResponder（＝フォーカス欄の field editor）の marked text 有無を composing へ反映。
     private func evaluate() {
-      let editor = window?.firstResponder as? NSTextView
-      onComposingChange(editor?.hasMarkedText() ?? false)
+      onComposingChange(IMEComposition.composingTextView(in: window) != nil)
     }
   }
 }
