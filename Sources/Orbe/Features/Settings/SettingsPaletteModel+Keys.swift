@@ -1,6 +1,6 @@
 import Foundation
 
-/// キー意図の分岐（↵ / ← / → / delete / esc / 入力欄の編集）。本体（状態・配線・モード遷移）から分離する。
+/// キー意図の分岐（↵ / ← / → / ⌫ / esc / 入力欄の編集）。本体（状態・配線・モード遷移）から分離する。
 ///
 /// `PaletteModel` の `on*` クロージャとテストの両方がここを駆動する。値を書く操作（スコープ反転・
 /// stepper・toggle）は必ず `assign` の漏斗を通り、面ごとの確定は各サブパレットのファイルが持つ。
@@ -154,7 +154,7 @@ extension SettingsPaletteModel {
     return true
   }
 
-  /// delete＝workspace スコープの上書き行を解除して global 継承へ戻す（root のみ）。
+  /// ⌫＝workspace スコープの上書き行を解除して global 継承へ戻す（root のみ）。
   func deleteKey() {
     guard case .root = mode, values.scope == .workspace,
       visibleRootRows.indices.contains(render.selected),

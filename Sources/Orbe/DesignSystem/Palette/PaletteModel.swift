@@ -165,7 +165,7 @@ import SwiftUI
   /// → の意味。true を返すとキーを消費（ドリルイン）、false でカーソル移動に委ねる（改名）。
   var onRight: () -> Bool = { false }
   var onEscape: () -> Void = {}
-  /// delete＝設定パレット root で workspace 上書きを解除（global 継承へ戻す）。入力欄なしモードのみ届く。
+  /// filter 入力欄が空のときの ⌫ で届く。設定パレットが workspace の上書きの解除に結ぶ。
   var onDelete: () -> Void = {}
   /// ⇥ の意味。true を返すとキーを消費（通知音サブパレットの試聴対象の反転）。既定は非消費＝
   /// 他パレットは従来どおり ⇥ に反応しない。

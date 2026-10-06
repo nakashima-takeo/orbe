@@ -96,7 +96,7 @@ extension SettingsPaletteTests {
   }
 
   /// 絞り込み後の delete は「絞り込み後の選択行」の上書きを解除する（visibleRootRows の SSOT）。
-  /// クエリ空/非空でのキー振り分け（delete＝継承解除 or 文字削除）は queryField（SwiftUI）の責務で実機確認。
+  /// クエリ空/非空での ⌫ の振り分け（継承解除 or 文字削除）は `WindowControllerPaletteKeyTests` が実キーで見る。
   func testFilteredDeleteClearsVisibleRowOverride() {
     let p = model(fontSize: 12)
     p.render.selected = 0

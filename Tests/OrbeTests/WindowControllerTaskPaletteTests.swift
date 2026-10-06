@@ -94,37 +94,19 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
     let wc = try launchOnAnEmptyWorkspace()
     _ = try openTaskPalette(wc)
     let editor = NSTextView(frame: NSRect(x: 0, y: 0, width: 200, height: 40))
-    let window = NSWindow(
-      contentRect: NSRect(x: -20000, y: -20000, width: 200, height: 40), styleMask: [.borderless],
-      backing: .buffered, defer: false)
-    window.contentView = editor
-    window.makeFirstResponder(editor)
-    addTeardownBlock { @MainActor in window.contentView = nil }
+    wc.window.contentView?.addSubview(editor)
+    addTeardownBlock { @MainActor in editor.removeFromSuperview() }
+    XCTAssertTrue(wc.window.makeFirstResponder(editor), "前提: 主窓の焦点が入力欄")
     editor.setMarkedText(
       "か", selectedRange: NSRange(location: 1, length: 0),
       replacementRange: NSRange(location: NSNotFound, length: 0))
-    try receiveKey(in: window)
-    XCTAssertTrue(IMEComposition.isActive, "前提: キーの届いた窓で変換中")
+    XCTAssertNotNil(IMEComposition.composingTextView(in: wc.window), "前提: 主窓で変換中")
 
     XCTAssertFalse(wc.handleWindowKeyCommand(.showWorktreePalette))
     XCTAssertEqual(wc.presentedOverlay, .taskPalette, "⌘T の画面へ切り替わらない")
 
     editor.unmarkText()
     XCTAssertTrue(wc.handleWindowKeyCommand(.showWorktreePalette), "変換中でなければ握る")
-  }
-
-  /// `window` に届いたキーを、実アプリと同じくキューから取り出す（`NSApp.currentEvent` がそのキーを指す）。
-  private func receiveKey(in window: NSWindow) throws {
-    let event = try XCTUnwrap(
-      NSEvent.keyEvent(
-        with: .keyDown, location: .zero, modifierFlags: [.command],
-        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-        context: nil, characters: "t", charactersIgnoringModifiers: "t", isARepeat: false,
-        keyCode: 17))
-    NSApp.postEvent(event, atStart: true)
-    XCTAssertNotNil(
-      NSApp.nextEvent(
-        matching: .keyDown, until: Date().addingTimeInterval(1), inMode: .default, dequeue: true))
   }
 
   func testClosingTheScreenCommitsTheEditInProgress() throws {

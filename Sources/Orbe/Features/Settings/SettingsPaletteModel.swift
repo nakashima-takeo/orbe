@@ -5,8 +5,8 @@ import SwiftUI
 ///
 /// - root（絞り込み入力欄あり）: 先頭に「スコープ」行（グローバル ⇄ この workspace）、続いてレジストリの設定行を
 ///   現在値つきで出す。↑↓ で行選択、スコープ行は ←/→/↵ で反転、stepper 行は ←→ で増減、toggle 行は
-///   ←/→/↵ で反転、drillIn 行は ↵/→ で潜る、Esc で閉じる。workspace スコープでは行を delete で上書き解除
-///   （global 継承へ戻す）——絞り込み欄フォーカス中はクエリ空のときだけ delete が継承解除・非空なら文字削除。
+///   ←/→/↵ で反転、drillIn 行は ↵/→ で潜る、Esc で閉じる。workspace スコープでは行を ⌫ で上書き解除
+///   （global 継承へ戻す）——絞り込み欄フォーカス中はクエリ空のときだけ ⌫ が継承解除・非空なら文字削除。
 /// - font/tabTitleFont/emojiFont/theme/agent/agentStates/agentIcon/notificationSound: サブパレット
 ///   （`SettingsPaletteModel+Subpalette`）。通知音だけは行の移動がその場の試聴を伴う
 ///   （`SettingsPaletteModel+Sound`）。

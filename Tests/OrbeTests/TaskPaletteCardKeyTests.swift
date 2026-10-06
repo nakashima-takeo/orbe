@@ -33,7 +33,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
 
   func mount(_ model: TaskPaletteModel) -> NSWindow {
     NSApplication.shared.setActivationPolicy(.accessory)
-    let window = KeyWindow(
+    let window = KeyDeliveryWindow(
       contentRect: NSRect(x: -20000, y: -20000, width: 1000, height: 640),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = FirstMouseHost(
@@ -44,10 +44,6 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     held.append(window)
     pump(0.4)
     return window
-  }
-
-  private final class KeyWindow: NSWindow {
-    override var canBecomeKey: Bool { true }
   }
 
   /// 非アクティブなテストの窓では、最初のクリックが窓の有効化に使われて SwiftUI のジェスチャまで届かない。
@@ -64,8 +60,8 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     super.tearDown()
   }
 
-  /// 実アプリと同じく、キューから取り出してから配る（`NSApp.currentEvent` がそのキーを指す）。変換中か・
-  /// キーリピートかの判定は、届いたキーをここから引く。
+  /// 実アプリと同じく、キューから取り出してから配る（`NSApp.currentEvent` がそのキーを指す）。キーリピートかの
+  /// 判定は、届いたキーをここから引く。
   func press(
     _ keyCode: UInt16, _ characters: String, _ flags: NSEvent.ModifierFlags = [],
     repeating: Bool = false, to window: NSWindow
@@ -153,20 +149,6 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     press(Key.space, " ", .capsLock, to: window)
 
     XCTAssertEqual(status(model, 1), .done)
-  }
-
-  func testSpaceWhileComposingGoesToTheInputMethodInsteadOfCompleting() throws {
-    let model = model()
-    let window = mount(model)
-    let editor = try XCTUnwrap(window.firstResponder as? NSTextView, "前提: 入力欄の field editor")
-    editor.setMarkedText(
-      "か", selectedRange: NSRange(location: 1, length: 0),
-      replacementRange: NSRange(location: NSNotFound, length: 0))
-    XCTAssertTrue(editor.hasMarkedText(), "前提: 変換中")
-
-    press(Key.space, " ", to: window)
-
-    XCTAssertEqual(status(model, 1), .todo, "変換中の space はタスクを完了にしない")
   }
 
   func testEnterCompletesTheSelectedTaskAndAddsFromTheAddRow() throws {

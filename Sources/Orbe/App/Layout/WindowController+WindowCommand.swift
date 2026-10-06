@@ -53,7 +53,7 @@ extension WindowController {
     // タスク画面の ⌘T は、そのタスクのための ⌘T を開く（入力欄・右の欄・編集欄のどこに焦点があっても届く）。
     // 日本語入力の変換中は握らず変換に渡す（開くと未確定の文字が捨てられる）。
     if command == .showWorktreePalette, model.overlay == .taskPalette {
-      guard !IMEComposition.isActive else { return false }
+      guard IMEComposition.composingTextView(in: window) == nil else { return false }
       model.taskPalette?.openWorktreePalette()
       return true
     }
