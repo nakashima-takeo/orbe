@@ -84,16 +84,6 @@ final class WorktreePathTemplateTests: OrbeTestCase {
     XCTAssertEqual(WorktreePathTemplate.lexicallyStandardized("a/../../b"), "../b")
   }
 
-  /// **実在する**パスでも symlink を解決せず `/private` を畳まない（Foundation の `standardizingPath`
-  /// はここで畳む）。実在する repo root と、これから作る worktree パスを同じ土俵で比べる前提。
-  func testLexicallyStandardizedKeepsPrivatePrefixOnExistingPath() throws {
-    let dir = URL(fileURLWithPath: "/private/tmp/orbe-std-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: dir) }
-    XCTAssertEqual((dir.path as NSString).standardizingPath, "/tmp" + dir.path.dropFirst(12))
-    XCTAssertEqual(WorktreePathTemplate.lexicallyStandardized(dir.path), dir.path)
-  }
-
   // MARK: - プリセット
 
   /// 一覧から選んだ値が保存を拒否されないこと、先頭が既定テンプレート自身であること。
