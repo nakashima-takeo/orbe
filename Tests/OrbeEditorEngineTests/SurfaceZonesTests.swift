@@ -4,185 +4,165 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 区画（載せる側の view を置く差し込み）——面が本文の区画の幅で測った高さ・本文と同じ位置への置き方・幅や中身の変化での
-/// 測り直し・当たりの落ち方・上端の影と横スクロールバーとの重ね順、刻みごとの位置の封じ。壊れると、PR のスレッドが本文の
-/// 行に重なる・ずれて動く・幅を変えても高さが中身に合わない・スレッドの上でクリックやスクロールが効かない。
+/// 区画（載せる側の絵を本文と同じコマに描く差し込み）——絵を問う幅と高さ・本文と同じ位置への描き方・幅や中身の変化での
+/// 問い直し・上端の影と横スクロールバーとの重ね順・点の下の行き先（入力欄・押せる場所・選べる文・空き）・押せる場所の
+/// ホバーと押下。壊れると、PR のスレッドが本文の行に重なる・ずれて動く・幅を変えても高さが中身に合わない・ボタンが効かない。
 @MainActor
 final class SurfaceZonesTests: EngineTestCase {
   private let size = CGSize(width: 600, height: 400)
 
   /// ミニマップを出さない面を窓に載せる（`count` 行）。
-  private func hostedRows(_ count: Int = 80, long: Bool = false) throws -> Opened {
+  func hostedRows(_ count: Int = 80, long: Bool = false) throws -> Opened {
     let opened = try open(rows(count, width: long ? 400 : 10), size: size)
     opened.surface.setPresentation(SurfacePresentation(showsMinimap: false))
     _ = host(opened, size: size)
     return opened
   }
 
-  private func zone(_ view: NSView, at line: Int) -> SurfaceRows {
-    SurfaceRows(insertions: [RowInsertion(line: line, content: .zone(view))])
+  func zone(_ zone: SurfaceZone, at line: Int) -> SurfaceRows {
+    SurfaceRows(insertions: [RowInsertion(line: line, content: .zone(zone))])
   }
 
-  /// 区画の高さは view を本文の区画の幅で測った高さで、view は本文と同じ位置（並びの y − スクロールの位置）に、本文の区画の
-  /// 幅いっぱいで置かれる。下の文書の行はその高さだけ下がる。
-  func testAZoneIsMeasuredAndPlacedWithTheText() throws {
+  /// 区画の高さは本文の区画の幅で問うた絵の高さで、下の文書の行はその高さだけ下がる。区画の箱は並びの y − スクロールの
+  /// 位置に、本文と同じコマに描かれる。
+  func testAZoneIsAskedAtTheTextWidthAndDrawnWithTheText() throws {
     let opened = try hostedRows()
     let surface = opened.surface
-    let view = FixedZone(height: 50)
-    surface.setRows(zone(view, at: 4))
-    surface.flush()
+    let box = BoxZone(height: 50)
+    surface.setRows(zone(box, at: 4))
+    XCTAssertEqual(box.widths, [surface.surfaceLayout.text.width])
     XCTAssertEqual(surface.rows.heights, [50])
     XCTAssertEqual(surface.rows.y(ofLine: 4), 4 * 18 + 50)
-    XCTAssertFalse(view.isHidden)
-    XCTAssertEqual(view.frame.minY, surface.rows.top(ofBlock: 0))
-    XCTAssertEqual(view.frame.width, surface.surfaceLayout.text.width)
-    XCTAssertEqual(view.frame.height, 50)
-    let container = try XCTUnwrap(view.superview)
-    XCTAssertEqual(container.frame.minX, surface.surfaceLayout.text.minX)
-    XCTAssertEqual(container.frame.minY, surface.config.topInset)
+    let x = surface.surfaceLayout.text.minX + 30
+    let top = surface.config.topInset + CGFloat(surface.rows.top(ofBlock: 0))
+    var shot = try pixelShot(opened)
+    XCTAssertEqual(shot.rgb(x, top + 1), [255, 0, 0], "区画の上端の内側")
+    XCTAssertEqual(shot.rgb(x, top + 49), [255, 0, 0], "区画の下端の内側")
+    XCTAssertNotEqual(shot.rgb(x, top - 1), [255, 0, 0], "上の行は区画の外")
+    XCTAssertNotEqual(shot.rgb(x, top + 51), [255, 0, 0], "下の行は区画の外")
     surface.scroll(toFirstLine: 2.5)
-    surface.flush()
-    XCTAssertEqual(view.frame.minY, surface.rows.top(ofBlock: 0) - 2.5 * 18, accuracy: 1e-9)
-    surface.scroll(toFirstLine: 60)
-    surface.flush()
-    XCTAssertTrue(view.isHidden, "見えていない区画は隠す")
-    surface.setRows(SurfaceRows())
-    XCTAssertNil(view.superview, "外れた view は面から外す")
+    shot = try pixelShot(opened)
+    XCTAssertEqual(shot.rgb(x, top - 2.5 * 18 + 1), [255, 0, 0], "スクロールしても本文と同じ位置")
+    XCTAssertNotEqual(shot.rgb(x, top - 2.5 * 18 - 1), [255, 0, 0])
   }
 
-  /// 載せる側が測り直すと言えば測り直し、見えている先頭の文書の行より上の区画が伸びても、その行の画面上の位置は変わらない。
-  func testRemeasuringAZoneAboveKeepsTheFirstVisibleLine() throws {
+  /// 載せる側が描き直すと言えば絵を問い直し、見えている先頭の文書の行より上の区画が伸びても、その行の画面上の位置は
+  /// 変わらない。置いていない区画は何もしない。
+  func testRedrawingAZoneAboveKeepsTheFirstVisibleLine() throws {
     let opened = try hostedRows()
     let surface = opened.surface
-    let view = FixedZone(height: 40)
-    surface.setRows(zone(view, at: 5))
+    let box = BoxZone(height: 40)
+    surface.setRows(zone(box, at: 5))
     surface.scroll(toFirstLine: 20)
     surface.flush()
     let offset = surface.scrollPosition.y - surface.rows.y(ofLine: 20)
-    view.height = 90
-    surface.remeasureZone(view)
+    box.height = 90
+    surface.redrawZone(box)
     surface.flush()
     XCTAssertEqual(surface.rows.heights, [90])
     XCTAssertEqual(surface.scrollPosition.y - surface.rows.y(ofLine: 20), offset, accuracy: 1e-9)
-    surface.remeasureZone(FixedZone(height: 10))
-    XCTAssertEqual(surface.rows.heights, [90], "置いていない view は何もしない")
+    surface.redrawZone(BoxZone(height: 10))
+    XCTAssertEqual(surface.rows.heights, [90], "置いていない区画は何もしない")
   }
 
-  /// 本文の区画の幅が変われば（窓の大きさ・行番号の桁）測り直す。
-  func testAZoneIsRemeasuredWhenTheTextWidthChanges() throws {
+  /// 本文の区画の幅が変われば絵を問い直す（折り返しが変わり、高さが合う）。
+  func testAZoneIsAskedAgainWhenTheTextWidthChanges() throws {
     let opened = try hostedRows()
     let surface = opened.surface
-    let view = WrappingZone()
-    surface.setRows(zone(view, at: 3))
+    let thread = ThreadZone(
+      comment: String(repeating: "幅で折り返す本文。", count: 12))
+    surface.setRows(zone(thread, at: 3))
     let wide = surface.rows.heights[0]
-    XCTAssertEqual(wide, WrappingZone.height(width: surface.surfaceLayout.text.width))
-    surface.viewStateDidChange(size: CGSize(width: 300, height: 400), scale: 2, visible: false)
+    surface.viewStateDidChange(size: CGSize(width: 320, height: 400), scale: 2, visible: false)
+    XCTAssertEqual(thread.pictures, 2)
+    XCTAssertGreaterThan(surface.rows.heights[0], wide, "狭くなれば折り返しが増えて高くなる")
     XCTAssertEqual(
-      surface.rows.heights[0], WrappingZone.height(width: surface.surfaceLayout.text.width))
-    XCTAssertGreaterThan(surface.rows.heights[0], wide, "狭くなれば高くなる")
+      surface.zones[ObjectIdentifier(thread)]?.width, surface.surfaceLayout.text.width)
   }
 
-  /// 区画の view が受けない点は面へ落ち、次の文書の行の行頭に当たる。区画の外の入れ物の点は面が受ける。
-  func testPointsOverAZoneFallThroughToTheSurface() throws {
-    let opened = try hostedRows()
-    let surface = opened.surface
-    let view = FixedZone(height: 50)
-    surface.setRows(zone(view, at: 4))
-    surface.flush()
-    let face = surface.textView
-    let inside = CGPoint(
-      x: surface.surfaceLayout.text.minX + 20,
-      y: surface.config.topInset + CGFloat(surface.rows.top(ofBlock: 0)) + 10)
-    XCTAssertTrue(face.hitTest(face.convert(inside, to: face.superview)) === view)
-    let outside = CGPoint(x: inside.x, y: surface.config.topInset + 1.5 * 18)
-    XCTAssertTrue(face.hitTest(face.convert(outside, to: face.superview)) === face)
-    XCTAssertEqual(surface.hit(inside)?.offset, opened.document.text.lineStart(4))
-    XCTAssertNil(surface.character(at: inside))
-  }
-
-  /// 区画のある面では上端の影を Metal で描かず、区画の上の view が描く（区画が影を覆わない）。横スクロールバーが出ていれば、
-  /// 入れ物はその帯を除く。
+  /// 区画は上端の影と横スクロールバーの下に描かれる（区画のある面でも影は Metal が描く）。
   func testTheTopShadowAndTheHorizontalScrollbarStayAboveZones() throws {
     let opened = try hostedRows(long: true)
     let surface = opened.surface
+    let white = NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
+    surface.setRows(zone(BoxZone(height: 400, color: white), at: 2))
     surface.scroll(toFirstLine: 3)
-    _ = surface.snapshot()
-    let white = MTLClearColor(red: 1, green: 1, blue: 1, alpha: 1)
-    let plain = try pixelShot(opened, background: white)
+    let shot = try pixelShot(opened)
     let x = surface.surfaceLayout.text.minX + 100
-    XCTAssertLessThan(plain.rgb(x, 0.5)[0], 250, "前提: 区画の無い面は Metal が影を描く")
-    let view = FixedZone(height: 50)
-    surface.setRows(zone(view, at: 30))
-    surface.flush()
-    let zoned = try pixelShot(opened, background: white)
-    XCTAssertEqual(zoned.rgb(x, 0.5), [255, 255, 255], "区画のある面の Metal は影を描かない")
-    let container = try XCTUnwrap(view.superview)
-    let shadow = try XCTUnwrap(
-      surface.textView.subviews.first { $0 is ZoneShadowView })
-    XCTAssertFalse(shadow.isHidden, "影は区画の上の view が描く")
-    XCTAssertTrue(
-      surface.textView.subviews.firstIndex(of: shadow)! > surface.textView.subviews.firstIndex(
-        of: container)!, "影は入れ物の上")
+    XCTAssertEqual(shot.rgb(x, 30), [255, 255, 255], "前提: 区画の白")
+    XCTAssertLessThan(shot.rgb(x, 0.5)[0], 250, "上端の影が区画の上に出る")
     XCTAssertGreaterThan(surface.scrollState().limits.maximum.x, 0, "前提: 横に続く")
-    XCTAssertEqual(container.frame.maxY, surface.surfaceLayout.horizontalScrollbar.minY)
+    let bar = surface.surfaceLayout.horizontalScrollbar
+    XCTAssertNotEqual(shot.rgb(x, bar.maxY - 1), [255, 255, 255], "横スクロールバーの縁が区画の上に出る")
   }
 
-  /// 封じる面では、同じ刻みに描画スレッドと main が同じ縦の位置と「戻りの途中か」を読み、封じた後に届いた指の出来事は次の
-  /// 刻みに出る。main が置けば封じを解く。封じない面は、いつも今の位置。
-  func testTheSameTickReadsTheSamePosition() {
-    let box = ScrollBox()
-    box.updateLimits(
-      LimitsUpdate(bottom: 999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7))
-    let period = 1.0 / 120
-    let tick = 100 * period
-    box.setSealing(true)
-    let sealed = box.sealed(at: tick, period: period)
-    box.apply(ScrollInput(timestamp: tick, delta: .zero, precise: true, phase: .began))
-    box.apply(
-      ScrollInput(timestamp: tick + 0.001, delta: SIMD2(0, -40), precise: true, phase: .changed))
-    XCTAssertEqual(
-      box.frame(at: tick + 0.001, period: period, material: 0).position.y, sealed.position.y,
-      "同じ刻みは封じた位置")
-    XCTAssertEqual(box.frame(at: tick + period, period: period, material: 0).position.y, 40)
-    XCTAssertEqual(box.sealed(at: tick + period, period: period).position.y, 40, "main も同じ")
-    box.place(SIMD2(0, 70))
-    XCTAssertEqual(box.sealed(at: tick + period, period: period).position.y, 70, "置けば解く")
-    box.setSealing(false)
-    box.apply(
-      ScrollInput(timestamp: tick + 0.01, delta: SIMD2(0, -10), precise: true, phase: .changed))
-    XCTAssertEqual(box.frame(at: tick + period, period: period, material: 0).position.y, 80)
-  }
-}
-
-/// 高さの決まった区画の view（高さの制約）。
-private final class FixedZone: NSView {
-  private var constraint: NSLayoutConstraint?
-
-  var height: CGFloat {
-    get { constraint?.constant ?? 0 }
-    set { constraint?.constant = newValue }
+  /// 点の下の行き先——区画の上は、入力欄 → 押せる場所 → 選べる文 → 空き。区画の外は本文。区画の空きの当たりは次の文書の
+  /// 行の行頭で、区画の字には当たらない。
+  func testPointsOverAZoneTargetFieldsButtonsTextAndSpace() throws {
+    let opened = try hostedRows()
+    let surface = opened.surface
+    let field = ZoneTextField(id: "reply", style: ThreadZone.fieldStyle())
+    let thread = ThreadZone(comment: "選べる本文", field: field)
+    surface.setRows(zone(thread, at: 4))
+    let hits = try XCTUnwrap(surface.zones[ObjectIdentifier(thread)]?.hits)
+    let point = { (local: CGPoint) in self.viewPoint(surface, thread, local) }
+    guard case .field(let site) = surface.target(at: point(center(hits.fields[0].frame))) else {
+      return XCTFail("入力欄")
+    }
+    XCTAssertTrue(site.field === field)
+    guard case .button(_, let button) = surface.target(at: point(center(hits.buttons[0].frame)))
+    else { return XCTFail("押せる場所") }
+    XCTAssertEqual(button.id, ThreadZone.resolve)
+    let line = hits.lines[0]
+    guard
+      case .zoneText(_, let text, let offset) = surface.target(
+        at: point(CGPoint(x: line.origin.x + 1, y: line.origin.y - 3)))
+    else { return XCTFail("選べる文") }
+    XCTAssertEqual(text, ThreadZone.commentText)
+    XCTAssertEqual(offset, 0)
+    let space = point(CGPoint(x: 10, y: 10))
+    guard case .zoneSpace = surface.target(at: space) else { return XCTFail("区画の空き") }
+    XCTAssertEqual(surface.hit(space)?.offset, opened.document.text.lineStart(4))
+    XCTAssertNil(surface.character(at: space))
+    guard case .body = surface.target(at: point(CGPoint(x: 10, y: -5))) else {
+      return XCTFail("区画の外は本文")
+    }
   }
 
-  init(height: CGFloat) {
-    super.init(frame: .zero)
-    constraint = heightAnchor.constraint(equalToConstant: height)
-    constraint?.isActive = true
+  /// 押せる場所——ポインタが入る・出るを知らせ、押して同じ押せる場所で離せば押下を知らせる（ずらして離せば知らせない）。
+  /// 押下は主を変えない。
+  func testButtonsGetHoverAndPress() throws {
+    let opened = try hostedRows()
+    let surface = opened.surface
+    let field = ZoneTextField(id: "reply", style: ThreadZone.fieldStyle())
+    let thread = ThreadZone(comment: "本文", field: field)
+    surface.setRows(zone(thread, at: 4))
+    let hits = try XCTUnwrap(surface.zones[ObjectIdentifier(thread)]?.hits)
+    let resolve = viewPoint(surface, thread, center(hits.buttons[0].frame))
+    surface.focus(field)
+    surface.hover(at: resolve)
+    XCTAssertEqual(thread.events, [.entered(ThreadZone.resolve)])
+    surface.hover(at: viewPoint(surface, thread, CGPoint(x: 5, y: 5)))
+    XCTAssertEqual(thread.events.last, .exited(ThreadZone.resolve))
+    try mouse(opened, .leftMouseDown, at: resolve)
+    try mouse(opened, .leftMouseUp, at: resolve)
+    XCTAssertEqual(thread.events.last, .pressed(ThreadZone.resolve))
+    XCTAssertEqual(surface.primary, .field("reply"), "押下は主を変えない")
+    let count = thread.events.count
+    try mouse(opened, .leftMouseDown, at: resolve)
+    try mouse(opened, .leftMouseUp, at: viewPoint(surface, thread, CGPoint(x: 5, y: 5)))
+    XCTAssertEqual(thread.events.count, count, "外で離せば押下でない")
   }
 
-  required init?(coder: NSCoder) { fatalError("not supported") }
-}
-
-/// 幅で高さが変わる区画の view（折り返す文の代わり。高さ = 12000 / 幅）。
-private final class WrappingZone: NSView {
-  static func height(width: CGFloat) -> Double { Double((12_000 / width).rounded(.up)) }
-
-  override var intrinsicContentSize: NSSize {
-    NSSize(width: NSView.noIntrinsicMetric, height: CGFloat(Self.height(width: bounds.width)))
+  /// 区画の座標 `local` の、面の view の座標。
+  func viewPoint(_ surface: MetalTextSurface, _ zone: SurfaceZone, _ local: CGPoint) -> CGPoint {
+    let block = surface.rows.block(ofZone: ObjectIdentifier(zone)) ?? 0
+    return CGPoint(
+      x: surface.surfaceLayout.text.minX + local.x,
+      y: surface.config.topInset
+        + CGFloat(surface.rows.top(ofBlock: block) - surface.scrollPosition.y)
+        + local.y)
   }
 
-  override func setFrameSize(_ newSize: NSSize) {
-    let changed = newSize.width != frame.width
-    super.setFrameSize(newSize)
-    if changed { invalidateIntrinsicContentSize() }
-  }
+  func center(_ rect: CGRect) -> CGPoint { CGPoint(x: rect.midX, y: rect.midY) }
 }
