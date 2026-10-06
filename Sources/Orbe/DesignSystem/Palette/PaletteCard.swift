@@ -291,9 +291,9 @@ struct PaletteCard: View {
         model.onLeft()
         return .handled
       }
-      // filter 入力欄が空のときの ⌫ だけを onDelete へ回す（空の欄では ⌫ は何も消さない）。押し続けたリピートは
-      // phases で外す。それ以外は TextField の文字削除に委ねる。
-      .onKeyPress(.backspace, phases: .down) { press in
+      // filter 入力欄が空のときの ⌫ だけを onDelete へ回す（空の欄では ⌫ は何も消さない）。それ以外は
+      // TextField の文字削除に委ねる。
+      .onKeyPress(keys: [.backspace]) { press in
         guard model.fieldIsFilter, model.query.isEmpty,
           press.modifiers.isDisjoint(with: [.command, .option, .control, .shift])
         else { return .ignored }
