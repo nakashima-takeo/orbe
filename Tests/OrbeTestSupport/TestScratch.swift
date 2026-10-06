@@ -12,14 +12,14 @@ import XCTest
 /// プロセスがクラッシュ・SIGKILL で死んだ場合は、プロセス外の見張り（`/bin/sh`）が消す。
 public enum TestScratch {
   /// プロセスの隔離根。テスト 1 件より長い寿命で置くものだけをここへ直接置く（テスト終了では消えない）。
-  public static var root: URL { ignite(insideCase: false) }
+  public static var root: URL { ignite() }
 
   /// 実行中のテスト 1 件の作業ディレクトリ。
   public static var caseDir: URL {
-    let root = ignite(insideCase: true)
+    let root = ignite()
     guard insideCase else {
       preconditionFailure(
-        "TestScratch.caseDir をテストの外（class setUp・static 初期化・テスト終了後のクロージャ）で使った。"
+        "TestScratch.caseDir をテストの外（テスト終了後のクロージャ・class setUp など）で使った。"
           + "テストをまたいで使うものは TestScratch.root の下に置く")
     }
     if let current { return current }
@@ -38,7 +38,7 @@ public enum TestScratch {
   /// 境界は XCTest の observer が受けるので、`begin` はインスタンスの `setUp()` より前に必ず走る
   /// （`super.setUp()` の呼び忘れで無言に外れる経路が無い）。
   public static func addCaseHooks(begin: @escaping () -> Void, end: @escaping () -> Void) {
-    _ = ignite(insideCase: false)
+    _ = ignite()
     beginHooks.append(begin)
     endHooks.append(end)
   }
@@ -52,15 +52,16 @@ public enum TestScratch {
   private nonisolated(unsafe) static var observer: Observer?
   private nonisolated(unsafe) static var watchdogPipe: Pipe?
 
-  /// `insideCase` は、点火がテストの中からか。開始の通知より後に点火した場合、そのテストの境界は通知で知れない。
-  private static func ignite(insideCase: Bool) -> URL {
+  /// 点火はテストの中でも起きうる（開始の通知より後に点火したテストの境界は、通知で知れない）ので、点火時は
+  /// テストの中とみなす。テストの外（class setUp 等）で配ってしまった分は、次の `begin()` が落とす。
+  private static func ignite() -> URL {
     if let ignitedRoot { return ignitedRoot }
     // AF_UNIX の `sun_path`（104 バイト）へ置くソケットのため、UUID 全長ではなく 8 桁の hex に切る。
     let dir = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
       .appendingPathComponent(String(format: "orbe-t-%08x", UInt32.random(in: 0...UInt32.max)))
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     ignitedRoot = dir
-    self.insideCase = insideCase
+    insideCase = true
     startWatchdog(removing: dir)
     let obs = Observer()
     observer = obs
@@ -89,6 +90,10 @@ public enum TestScratch {
   }
 
   fileprivate static func begin() {
+    precondition(
+      current == nil,
+      "テストの開始前に TestScratch.caseDir が配られていた（class setUp・static 初期化などテストの外で触れた）。"
+        + "テストをまたいで使うものは TestScratch.root の下に置く")
     insideCase = true
     for hook in beginHooks { hook() }
   }
