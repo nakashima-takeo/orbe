@@ -33,7 +33,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
 
   func mount(_ model: TaskPaletteModel) -> NSWindow {
     NSApplication.shared.setActivationPolicy(.accessory)
-    let window = KeyWindow(
+    let window = KeyDeliveryWindow(
       contentRect: NSRect(x: -20000, y: -20000, width: 1000, height: 640),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = FirstMouseHost(
@@ -44,10 +44,6 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     held.append(window)
     pump(0.4)
     return window
-  }
-
-  private final class KeyWindow: OrbeWindow {
-    override var canBecomeKey: Bool { true }
   }
 
   /// 非アクティブなテストの窓では、最初のクリックが窓の有効化に使われて SwiftUI のジェスチャまで届かない。

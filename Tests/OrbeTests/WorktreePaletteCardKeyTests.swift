@@ -14,7 +14,7 @@ final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
 
   func mount(_ model: WorktreePaletteModel) -> NSWindow {
     NSApplication.shared.setActivationPolicy(.accessory)
-    let window = KeyWindow(
+    let window = KeyDeliveryWindow(
       contentRect: NSRect(x: -20000, y: -20000, width: 760, height: 520),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = NSHostingView(
@@ -23,10 +23,6 @@ final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
     hold(window)
     pump(0.4)
     return window
-  }
-
-  private final class KeyWindow: OrbeWindow {
-    override var canBecomeKey: Bool { true }
   }
 
   private var held: [NSWindow] = []

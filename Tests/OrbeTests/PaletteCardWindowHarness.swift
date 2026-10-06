@@ -26,7 +26,7 @@ class PaletteCardWindowTestCase: OrbeTestCase {
   /// 通すこの一点だけを開ける。
   /// 窓が実際に key になる必要はない——`.accessory` の非アクティブなテストでは
   /// `isKeyWindow` は最後まで false のまま、キーは first responder へ届く。
-  private final class KeyDeliveryWindow: OrbeWindow {
+  final class KeyDeliveryWindow: OrbeWindow {
     override var canBecomeKey: Bool { true }
   }
 
