@@ -157,21 +157,4 @@ extension EditingSite {
     return (top + Double(lines.lowerBound) * lineHeight)
       / unit..<(top + Double(lines.upperBound + 1) * lineHeight) / unit
   }
-
-  /// 入力欄の横の送りを、主のキャレットが入力欄の幅に見えるところまで最小限動かす（入力欄の場だけ）。
-  func revealCaretHorizontally() {
-    guard field != nil, let env = editingEnvironment() else { return }
-    let text = env.text
-    let caret = editor.state.cursors.primary.position
-    let row = text.row(containing: caret)
-    let x = Double(env.geometry.x(ofColumn: caret - text.lineStart(row), row: row))
-    let width = Double(frame.width)
-    let caretWidth = Double(surface.config.caretSize.width)
-    if x < scrollX {
-      scrollX = x
-    } else if x + caretWidth > scrollX + width {
-      scrollX = max(0, x + caretWidth - width)
-    }
-  }
-
 }

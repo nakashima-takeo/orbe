@@ -212,7 +212,9 @@ final class Renderer {
         shaped: slot.lines.shapedInFrame > 0, committed: committed, events: frame.events,
         keystrokes: keystrokes, moving: moving, gesture: frame.gesture,
         mismatch: texture.width != pixels.width || texture.height != pixels.height))
-    if frame.returning || wasReturning || widened || revealed { slot.notify() }
+    if frame.returning || wasReturning || widened || revealed || slot.builder.fieldRevealed {
+      slot.notify()
+    }
     if let last = keystrokes.max() { scheduleTypingFlush(slot.id, after: last) }
     slot.prefetchMinimap(material)
   }

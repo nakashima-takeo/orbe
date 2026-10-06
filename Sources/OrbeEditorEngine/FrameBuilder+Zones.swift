@@ -163,7 +163,10 @@ extension FrameBuilder {
     let cache = source.zones.lines(field: field.serial, font: material.font)
     let tabColumns = Indentation.fallback.unit
     cache.beginFrame(version: material.content.version, tabColumns: tabColumns)
-    let pen = Self.pen(material, originX: x0 - (material.scrollX * s).rounded(), c)
+    if let reveal = material.reveal {
+      revealField(reveal, material, width: Double(field.frame.width), cache: cache, c)
+    }
+    let pen = Self.pen(material, originX: x0 - (material.scroll.x * s).rounded(), c)
     var overlays = CaretOverlays(
       material.caret, drop: nil, caretVisible: source.caretVisible, text: text, from: 0)
     let lastRow = text.lineCount - 1
@@ -194,6 +197,30 @@ extension FrameBuilder {
     }
     cache.endFrame()
     fieldLayers.append(layer)
+  }
+
+  /// 取引が頼んだ「キャレットが見えるところまで」を、キャレットの行を組んだ x で入力欄の横の送りに解く（まだ解いていない
+  /// 頼みだけ。送りが動けば、このコマの後で main へ知らせる）。
+  private func revealField(
+    _ reveal: HorizontalReveal, _ material: FieldMaterial, width: Double, cache: LineLayoutCache,
+    _ c: Context
+  ) {
+    let text = material.content.text
+    let location = min(max(0, reveal.range.location), text.length)
+    let row = text.row(containing: location)
+    let start = text.lineStart(row)
+    let laid = cache.line(
+      row: row,
+      source: {
+        LineShaper.source(
+          start: start, next: row + 1 < text.lineCount ? text.lineStart(row + 1) : nil, in: text)
+      }, tabColumns: Indentation.fallback.unit, config: c.config, fonts: c.fonts, carets: true)
+    guard let carets = laid.carets else { return }
+    let x = Double(carets.x(location - start))
+    let caret = x...(x + Double(c.config.caretSize.width))
+    if material.scroll.reveal(serial: reveal.serial, caret: caret, width: width) {
+      fieldRevealed = true
+    }
   }
 
   /// 入力欄の行に重ねるものの筆——行頭の x が `originX`（px）、行の高さと基線は入力欄の見え方、色は入力欄の色（未確定の

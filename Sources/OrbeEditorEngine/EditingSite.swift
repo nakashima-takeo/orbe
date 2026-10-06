@@ -8,7 +8,7 @@ import simd
 /// マウスの選択は、面でなく場の口（取引・編集の環境・文への受け渡し・幾何・見せ方）に依存する。
 ///
 /// 入力欄の場は区画の絵の中の矩形に 1 行ずつ字を置き（折り返さない）、縦にはスクロールしない——縦に見せるのは面の縦の
-/// 位置で、長い行は場の横の送り（`scrollX`）でキャレットに追従する。
+/// 位置で、長い行は場の横の送り（`scrollX`。描画スレッドがキャレットの行を組んで寄せる）でキャレットに追従する。
 @MainActor
 final class EditingSite {
   enum Kind {
@@ -30,11 +30,15 @@ final class EditingSite {
   /// 入力欄の場を描いている区画と、区画の中の文を打つ矩形（入力欄の場だけ。どの区画の絵にも無ければ nil）。
   var zone: ObjectIdentifier?
   var frame = CGRect.zero
-  /// 横の送り（入力欄の場だけ。pt）。
-  var scrollX: Double = 0
+  /// 横の送り（入力欄の場だけ。描画スレッドが寄せる）と、頼んだ横の「見えるところまで」の通し番号。
+  let horizontal = FieldScroll()
+  var revealSerial = 0
+  var scrollX: Double { horizontal.x }
   /// 入力欄の場の外観で解いた色（外観が変われば解き直す）。
   var palette: FieldPalette?
   private let fieldStops: LineStopsCache?
+  /// 入力欄の場のタブの刻み（入力欄の字体の空白 4 つ）。
+  private let fieldTabWidth: CGFloat?
 
   init(surface: MetalTextSurface, body source: SiteText) {
     self.surface = surface
@@ -42,6 +46,7 @@ final class EditingSite {
     self.source = source
     serial = 0
     fieldStops = nil
+    fieldTabWidth = nil
   }
 
   init(surface: MetalTextSurface, field: ZoneTextField, serial: Int) {
@@ -50,6 +55,7 @@ final class EditingSite {
     source = field
     self.serial = serial
     fieldStops = LineStopsCache(font: field.style.font as CTFont)
+    fieldTabWidth = CGFloat(Indentation.fallback.unit) * Self.spaceWidth(field.style.font)
   }
 
   var isBody: Bool {
@@ -106,8 +112,7 @@ final class EditingSite {
 
   /// タブの刻み（pt）。
   var tabWidth: CGFloat {
-    guard let field else { return surface.config.tabWidth(columns: surface.indentation.unit) }
-    return CGFloat(Indentation.fallback.unit) * Self.spaceWidth(field.style.font)
+    fieldTabWidth ?? surface.config.tabWidth(columns: surface.indentation.unit)
   }
 
   /// 編集の規則が読む環境。入力欄はページ送りが 1 行で、縦の並びに差し込みは無い。

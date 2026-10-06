@@ -55,6 +55,8 @@ final class FrameBuilder {
   var zoneSelectionShapes: [ShapeInstance] = []
   /// 見えている入力欄の層。
   var fieldLayers: [FieldLayer] = []
+  /// このコマで入力欄の横の送りが動いた（main へ知らせる）。
+  var fieldRevealed = false
 
   /// GPU の buffer に要る大きさ（配列ごとに 256 バイトに揃える）。
   var byteCount: Int {
@@ -173,6 +175,7 @@ final class FrameBuilder {
     for i in zoneImages.indices { zoneImages[i].removeAll(keepingCapacity: true) }
     zoneSelectionShapes.removeAll(keepingCapacity: true)
     fieldLayers.removeAll(keepingCapacity: true)
+    fieldRevealed = false
     longestLine = 0
     minimap.reset()
     let config = source.config

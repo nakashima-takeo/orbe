@@ -80,6 +80,29 @@ extension SurfaceZonesTests {
     XCTAssertEqual(thread.field?.lineCount, 2)
   }
 
+  /// 入力欄の幅を越える行を打つと、描いたコマで入力欄の横の送りがキャレットの見えるところまで寄り、行頭へ戻れば戻る。
+  func testALongLineInAFieldScrollsToTheCaret() throws {
+    let setup = try threaded()
+    let (surface, field) = (setup.opened.surface, setup.field)
+    surface.focus(field)
+    let site = try XCTUnwrap(surface.fields["reply"])
+    surface.textView.insertText(String(repeating: "長い返信の行。", count: 40))
+    _ = surface.snapshot()
+    XCTAssertGreaterThan(site.scrollX, 0, "キャレットへ寄る")
+    let width = Double(site.frame.width)
+    let caretX =
+      Double(
+        site.textRect(
+          NSRange(location: field.text.length, length: 0), row: 0,
+          try XCTUnwrap(site.editingEnvironment()),
+          marked: nil
+        ).minX - (site.fieldOrigin()?.x ?? 0)) - site.scrollX
+    XCTAssertTrue((0...width).contains(caretX), "キャレットは入力欄の幅の中")
+    surface.textView.moveToBeginningOfLine(nil)
+    _ = surface.snapshot()
+    XCTAssertEqual(site.scrollX, 0, "行頭へ戻れば送りも戻る")
+  }
+
   /// 入力欄で変換すると未確定は入力欄の文に入り（本文は変わらない）、view の入力の文脈は入力欄の場のもの。確定の後の undo は
   /// 変換の正味を 1 回で戻す。
   func testComposingInAField() throws {

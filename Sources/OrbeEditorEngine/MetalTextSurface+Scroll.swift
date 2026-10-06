@@ -29,9 +29,13 @@ extension MetalTextSurface {
     }
   }
 
-  /// 描画スレッドだけが変える位置と範囲（端への戻り・組んだ行で伸びた横の範囲）が変わった。
+  /// 描画スレッドだけが変える位置と範囲（端への戻り・組んだ行で伸びた横の範囲・入力欄の横の送り）が変わった。入力欄で
+  /// 変換していれば、候補窓を新しい送りに付いてこさせる。
   func scrollDidAdvance() {
     refreshViewport()
+    if let site = primarySite, !site.isBody, site.editor.isComposing {
+      site.inputMethodCoordinatesDidChange()
+    }
   }
 
   /// 先頭に見えている所と見えている高さ（表示の単位。差し込みが無ければ行 + 隠れている割合と行数）——俯瞰の式の入力。

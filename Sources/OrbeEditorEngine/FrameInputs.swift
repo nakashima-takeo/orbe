@@ -214,16 +214,40 @@ struct CaretMaterial: Equatable, Sendable {
   }
 }
 
-/// 入力欄の場の描く材料——写し・キャレットと選択・横の送り・見え方。main の取引が場の確定で置く。キャレットの `focused`
-/// は「入力欄が主で、面に焦点がある」。
+/// 入力欄の場の描く材料——写し・キャレットと選択・横の送りの箱と頼まれた横の「見えるところまで」・見え方。main の取引が
+/// 場の確定で置く。キャレットの `focused` は「入力欄が主で、面に焦点がある」。
 struct FieldMaterial: @unchecked Sendable {
   var content: SurfaceContent
   var caret: CaretMaterial
-  /// 横の送り（pt。入力欄の左端から隠れている幅）。
-  var scrollX: Double
+  let scroll: FieldScroll
+  var reveal: HorizontalReveal?
   var font: CTFont
   var lineHeight: CGFloat
   var palette: FieldPalette
+}
+
+/// 入力欄の場の横の送り（pt。入力欄の左端から隠れている幅）。main が読み（当たり・IME の矩形）、描画スレッドだけが変える
+/// ——取引が頼んだ「キャレットが見えるところまで」を、描画スレッドがその行を組んだ x で解く（本文の横の寄せと同じく、
+/// main は打鍵のたびに行を組まない）。鍵の中では値の読み書きだけをする。
+final class FieldScroll: Sendable {
+  private let state = OSAllocatedUnfairLock(initialState: (x: 0.0, serial: 0))
+
+  var x: Double { state.withLock { $0.x } }
+
+  /// 通し番号 `serial` の頼みがまだなら、x 区間 `caret` が幅 `width` に見えるところまで最小限動かす。動いたら true。
+  func reveal(serial: Int, caret: ClosedRange<Double>, width: Double) -> Bool {
+    state.withLock { s in
+      guard serial > s.serial else { return false }
+      s.serial = serial
+      let before = s.x
+      if caret.lowerBound < s.x {
+        s.x = caret.lowerBound
+      } else if caret.upperBound > s.x + width {
+        s.x = max(0, caret.upperBound - width)
+      }
+      return s.x != before
+    }
+  }
 }
 
 /// 入力欄の外観で解いた色。

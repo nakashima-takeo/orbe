@@ -135,7 +135,8 @@ extension MetalTextSurface {
     }
   }
 
-  /// 入力欄の場の確定——触れた場（焦点か主が変わればすべての場）の ⌘U の履歴・横の送り・描く材料。
+  /// 入力欄の場の確定——触れた場（焦点か主が変わればすべての場）の ⌘U の履歴・描く材料と、文かカーソルが変われば横の
+  /// 「キャレットが見えるところまで」の頼み（描画スレッドが行を組んで解く）。
   private func commitFields(_ finished: Transaction, refocused: Bool) {
     let sites = refocused ? Array(fields.values) : finished.touched
     for site in sites {
@@ -146,10 +147,14 @@ extension MetalTextSurface {
       }
       site.editor.noteTransaction(
         from: change.cursors, edited: change.edited, restored: change.restoresCursors)
+      var reveal: HorizontalReveal?
       if finished.revealSite === site || change.edited
         || change.cursors != site.editor.state.cursors
       {
-        site.revealCaretHorizontally()
+        site.revealSerial += 1
+        let caret = site.editor.state.cursors.primary.position
+        reveal = HorizontalReveal(
+          range: NSRange(location: caret, length: 0), serial: site.revealSerial)
       }
       let primary = self.primary == .field(field.id)
       let restarts =
@@ -157,7 +162,8 @@ extension MetalTextSurface {
         || site.editor.isComposing || refocused
       let caret = site.caretMaterial(focused: focused && primary, blinks: caretBlinks)
       let fieldMaterial = FieldMaterial(
-        content: content, caret: caret, scrollX: site.scrollX, font: field.style.font as CTFont,
+        content: content, caret: caret, scroll: site.horizontal, reveal: reveal,
+        font: field.style.font as CTFont,
         lineHeight: field.style.lineHeight, palette: fieldPalette(site, field))
       let serial = site.serial
       pending.writes.append { material in
@@ -165,6 +171,7 @@ extension MetalTextSurface {
         if !restarts, let epoch = material.fields[serial]?.caret.epoch {
           written.caret.epoch = epoch
         }
+        if written.reveal == nil { written.reveal = material.fields[serial]?.reveal }
         material.fields[serial] = written
       }
     }

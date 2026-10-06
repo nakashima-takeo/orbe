@@ -288,7 +288,7 @@ extension Renderer {
       fonts: fonts)
     let widened = slot.scroll.measured(
       longestLine: built.longestLine, version: material.content?.version)
-    if widened || revealed { slot.notify() }
+    if widened || revealed || built.fieldRevealed { slot.notify() }
     guard
       let buffer = device.makeBuffer(
         length: max(built.byteCount, 256), options: .storageModeShared)
