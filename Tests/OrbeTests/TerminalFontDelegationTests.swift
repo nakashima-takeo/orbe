@@ -30,7 +30,7 @@ final class TerminalFontDelegationTests: OrbeTestCase {
   private let referenceSize: CGFloat = 12
 
   /// libghostty が「記号らしい」と見なし `.fit` 制約でセル枠に収めるブロック
-  /// （ghostty の `src/build/uucode_config.zig` の `computeIsSymbol` を写したもの）。
+  /// （ghostty の `src/build/uucode_config.zig` の `IsSymbolComponent` を写したもの）。
   private let symbolBlocks: [ClosedRange<UInt32>] = [
     0x2190...0x21FF,  // Arrows
     0x2460...0x24FF,  // Enclosed Alphanumerics
