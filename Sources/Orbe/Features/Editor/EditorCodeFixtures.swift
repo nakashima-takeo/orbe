@@ -178,6 +178,8 @@
       queriesRoot: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .deletingLastPathComponent().appendingPathComponent(".build/debug"),
+      // Xcode の preview はテストの外で走り、作業ディレクトリを配るハーネスが無い。
+      // swiftlint:disable:next test_scratch_harness
       in: FileManager.default.temporaryDirectory
     ))?.view.frame(width: 1000, height: 480)
   }

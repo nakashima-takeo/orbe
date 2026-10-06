@@ -57,6 +57,19 @@ custom_rules:
     message: "テストクラスは OrbeTestCase を継承する（隔離ハーネスの点火点）"
     severity: error
 
+  test_scratch_harness:
+    name: "テストの一時ディレクトリは TestScratch から"
+    included:
+      - ".*/Tests/.*\\.swift"
+      - ".*/Sources/.*Fixtures\\.swift"
+    excluded: ".*/Tests/OrbeTestSupport/.*"
+    # 自前で掘った一時ディレクトリは、テストが落ちる・クラッシュすると残る。配って消すのはハーネスだけにする。
+    # 文字列のダミーパス（`"/tmp/..."` を渡すだけで作らないもの）は対象外（実体が無く後始末の問題が無い）。
+    regex: "NSTemporaryDirectory\\s*\\(|\\.temporaryDirectory\\b|\\bmkdtemp\\b|itemReplacementDirectory"
+    match_kinds: [identifier]
+    message: "テストの作業ディレクトリは TestScratch.caseDir（テストをまたぐものは TestScratch.root の下）を使う"
+    severity: error
+
   xctest_only_runner:
     name: "ランナーは XCTest 一本"
     included: ".*/Tests/.*\\.swift"
