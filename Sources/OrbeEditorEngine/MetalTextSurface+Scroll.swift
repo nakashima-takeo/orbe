@@ -140,7 +140,7 @@ extension MetalTextSurface {
   }
 
   /// 見えている範囲を出し直し、変わっていれば文書へ知らせる（同期）。本文が動いていれば、変換中の IME にも知らせる
-  /// （候補窓が追従する）。
+  /// （候補窓が追従する）。区画の押せる場所がポインタの下を動いたかもしれないので、ホバーとポインタの形も引き直す。
   func refreshViewport() {
     let (position, limits) = scrollState()
     if let current = measureViewport(position: position, limits: limits), current != viewport {
@@ -148,6 +148,7 @@ extension MetalTextSurface {
       delegate?.surfaceDidChangeViewport(self)
     }
     inputMethodScrollDidChange(position)
+    refreshPointer()
   }
 
   /// 見せている位置（端を越えて見せている分を含む）が前回から動いたら、変換中の IME へ文字の座標が変わったと知らせる。

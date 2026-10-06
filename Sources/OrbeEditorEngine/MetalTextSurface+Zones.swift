@@ -75,6 +75,11 @@ extension MetalTextSurface {
     }
     orphanFields(of: entry, keeping: Set(hits.fields.map(\.field.id)), previous: previous)
     transaction?.writes.append { $0.zones[id] = material }
+    if let block = rows.block(ofZone: id),
+      rows.heights[block] != Double(max(0, entry.picture.height))
+    {
+      zoneHeightsChanged = true
+    }
     if zoneSelection?.zone == id { validateZoneSelection(entry) }
   }
 
@@ -110,7 +115,7 @@ extension MetalTextSurface {
       entry.picture = entry.zone.picture(width: width)
       paint(entry)
     }
-    applyZoneHeights()
+    if zoneHeightsChanged { applyZoneHeights() }
     for (id, site) in fields where site.zone == nil {
       if primary == .field(id) { setPrimary(.body) }
       site.editor.finishComposition(.commit)
@@ -120,8 +125,9 @@ extension MetalTextSurface {
     }
   }
 
-  /// 区画の絵の高さが並びの高さと違えば、並びを組み直す（見えている先頭の文書の行は確定で保つ）。
+  /// 区画の絵の高さで並びを組み直す（見えている先頭の文書の行は確定で保つ）。
   private func applyZoneHeights() {
+    zoneHeightsChanged = false
     let current = rows
     var changed = false
     let blocks = current.contents.indices.map { index -> RowLayout.Block in

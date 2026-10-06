@@ -68,6 +68,8 @@ final class MetalTextSurface: TextSurface {
   /// ポインタの下の押せる場所と、ホバーを知らせている最中か。
   var hoveredButton: HoveredButton?
   var hovering = false
+  /// 取引の中で、区画の絵の高さが並びの高さと違うものを写した（取引の終わりに並びを組み直す）。
+  var zoneHeightsChanged = false
   /// 面自身の入力の処理の入れ子の深さ（→ `inputScope`）。
   var inputDepth = 0
   /// 描画スレッドへ頼んだ横の「見えるところまで」の通し番号。
