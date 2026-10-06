@@ -7,7 +7,8 @@ import XCTest
 /// `WindowController` の窓で固定する。
 ///
 /// 壊れると何が起きるか: 日本語の変換中に ↓ で候補を選ぼうとするとパレットの行が動き、esc で変換を取り消そうと
-/// するとパレットが閉じて打った内容が消え、⌫ で未確定の文字を消そうとすると選んでいる行の上書きが外れる。
+/// するとパレットが閉じて打った内容が消え、⌫ で未確定の文字を消そうとすると選んでいる行の上書きが外れる。設定
+/// パレットの「この workspace」で ⌫ を押しても上書きが外れない。絞り込みの文字を消そうとした ⌫ で上書きが外れる。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerPaletteKeyTests: OrbeTestCase {
@@ -116,5 +117,25 @@ final class WindowControllerPaletteKeyTests: OrbeTestCase {
     compose(in: field)
     press(Key.escape, "\u{1B}", to: wc)
     XCTAssertEqual(wc.presentedOverlay, .settingsPalette, "変換中の esc でパレットは閉じない")
+  }
+
+  /// ⌫ は打った絞り込みの文字を先に消し、入力欄が空のときに押した ⌫ で、選んでいる行の上書きを外してグローバルの
+  /// 値に戻す。
+  func testBackspaceDeletesTheFilterTextFirstAndRevertsTheOverrideFromTheEmptyFilter() throws {
+    let (wc, palette) = try openSettings()
+    overrideFontSize(palette)
+    press(0, "フ", to: wc)
+    XCTAssertEqual(palette.render.query, "フ", "前提: 絞り込みの文字を打った")
+    XCTAssertTrue(
+      palette.render.rows[palette.render.selected].label.contains("フォントサイズ"),
+      "前提: 上書きした行を選んでいる")
+
+    backspace(wc)
+    XCTAssertEqual(palette.render.query, "", "まず文字を消す")
+    XCTAssertFalse(palette.render.rows[1].inherited, "文字を消した ⌫ では外さない")
+
+    palette.render.selected = 1
+    backspace(wc)
+    XCTAssertTrue(palette.render.rows[1].inherited, "空の入力欄の ⌫ で外し、グローバルを継承する")
   }
 }
