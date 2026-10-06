@@ -9,7 +9,6 @@ import XCTest
 @MainActor
 final class WorktreeCleanFreshnessTests: OrbeTestCase {
   private var dir: URL!
-  private var remote: URL!
 
   override func setUpWithError() throws {
     dir = TestScratch.caseDir
@@ -197,7 +196,7 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
   /// `origin` を持ち、push 済みブランチの remote 側が消えている（prune で `[gone]` が立つ）形。
   /// origin は github.com ではないので gh レーンは `.notGitHub` に落ちる。
   private func makeGoneBranchWithRemote() throws {
-    remote = TestScratch.caseDir
+    let remote = TestScratch.caseDir
       .appendingPathComponent("orbe-freshness-remote-\(UUID().uuidString)")
     XCTAssertTrue(
       GitRunner.shared.runSync(
@@ -232,7 +231,7 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
   /// 手元で再現するため）。`uploadpack` を眠るラッパーへ差し替えるだけなので、特別な transport も
   /// ネットワークも要らない。
   private func makeSlowRemote() throws {
-    remote = TestScratch.caseDir
+    let remote = TestScratch.caseDir
       .appendingPathComponent("orbe-freshness-slow-\(UUID().uuidString)")
     XCTAssertTrue(
       GitRunner.shared.runSync(

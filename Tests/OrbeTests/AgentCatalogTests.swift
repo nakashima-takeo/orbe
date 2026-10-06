@@ -6,12 +6,11 @@ import XCTest
 /// AgentCatalog.resolve（PATH 文字列からの実行ファイル解決・検出の純粋部分）の検証。
 /// 走査する PATH をどう得るかは `ShellPATH` の関心で、`ShellPATHTests` が持つ。
 final class AgentCatalogTests: OrbeTestCase {
-  private var base: URL!
   private var dirA: URL!
   private var dirB: URL!
 
   override func setUpWithError() throws {
-    base = TestScratch.caseDir
+    let base = TestScratch.caseDir
       .appendingPathComponent("AgentCatalogTests-\(UUID().uuidString)")
     dirA = base.appendingPathComponent("a")
     dirB = base.appendingPathComponent("b")

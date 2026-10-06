@@ -38,7 +38,6 @@ final class SurfaceClipboardTests: OrbeTestCase {
   private func useUserConfig(_ contents: String) throws {
     let userConfig = try XCTUnwrap(Config.userFileURLOverride)
     try contents.write(to: userConfig, atomically: true, encoding: .utf8)
-    addTeardownBlock { try? FileManager.default.removeItem(at: userConfig) }
     Ghostty.shared.reloadConfig()
   }
 

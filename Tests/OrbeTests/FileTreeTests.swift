@@ -128,9 +128,6 @@ final class FileTreeTests: OrbeTestCase {
   func testUnreadableDirectoryStaysCollapsed() throws {
     let locked = repo.root + "/docs"
     try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: locked)
-    defer {
-      try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: locked)
-    }
     let tree = FileTree(root: repo.root)
     tree.isLive = true
 
