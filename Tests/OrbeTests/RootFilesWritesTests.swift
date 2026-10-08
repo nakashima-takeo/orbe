@@ -120,9 +120,9 @@ final class RootFilesWritesTests: OrbeTestCase {
     XCTAssertEqual(try String(contentsOfFile: repo.root + "/a.txt", encoding: .utf8), "staged\n")
   }
 
-  /// 未追跡ファイルの破棄はゴミ箱へ移す（元の場所から消え、ゴミ箱にある）。
+  /// 未追跡ファイルの破棄はゴミ箱へ移す（元の場所から消え、ゴミ箱にある）。ゴミ箱は隔離ハーネスが caseDir の下へ張る。
   func testDiscardMovesAnUntrackedFileToTheTrash() throws {
-    let name = "untracked-\(UUID().uuidString).txt"
+    let name = "untracked.txt"
     try repo.write(name, "keep me recoverable\n")
     let files = repo.files()
     let trashed = try XCTUnwrap(GitRepo.trashDirectoryOverride).appendingPathComponent(name)
