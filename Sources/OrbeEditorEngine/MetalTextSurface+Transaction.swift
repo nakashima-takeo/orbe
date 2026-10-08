@@ -86,7 +86,11 @@ extension MetalTextSurface {
     let lineCount = text?.lineCount ?? 1
     settleRows(finished, lineCount: lineCount)
     pending.limits = limits(lineCount: lineCount)
-    if let p = position(after: finished, span: span) { pending.position = p }
+    if let p = position(after: finished, span: span) {
+      pending.position = p
+      Self.placementSerial += 1
+      pending.placement = Self.placementSerial
+    }
     if let content = change.content { pending.content = content }
     let refocused = focused != finished.focused || primary != finished.primary
     let restarts =

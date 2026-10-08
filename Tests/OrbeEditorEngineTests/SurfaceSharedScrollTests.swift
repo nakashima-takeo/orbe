@@ -215,6 +215,26 @@ final class SurfaceSharedScrollTests: EngineTestCase {
     let fresh = b.surface.scroll.frame(at: tick, period: period, material: versions.1 + 1)
     XCTAssertEqual(fresh.position.y, 90, "置き直した後の材料には新しい位置")
   }
+
+  /// 同じ周に一方の面が置いた位置は、その面の読み取りにはその場で、相手の面の読み取りには出したときに揃う。同じ周に両面が
+  /// 位置を置けば、後に置いた方を当てる。
+  func testPositionsPlacedInOneCycle() throws {
+    let (a, b) = try pair()
+    a.surface.scroll(toFirstLine: 10)
+    XCTAssertEqual(a.surface.scrollPosition.y, 10 * 18)
+    XCTAssertEqual(b.surface.scrollPosition.y, 0, "相手の面にはまだ出ていない")
+    a.surface.flush()
+    XCTAssertEqual(b.surface.scrollPosition.y, 10 * 18, "出せば揃う")
+    b.surface.scroll(toFirstLine: 20)
+    a.surface.scroll(toFirstLine: 30)
+    a.surface.flush()
+    XCTAssertEqual(b.surface.scrollPosition.y, 30 * 18, "後に置いた方")
+    a.surface.scroll(toFirstLine: 40)
+    b.surface.scroll(toFirstLine: 50)
+    a.surface.flush()
+    XCTAssertEqual(a.surface.scrollPosition.y, 50 * 18, "後に置いた方")
+    XCTAssertEqual(b.surface.scrollPosition, a.surface.scrollPosition)
+  }
 }
 
 /// 描画スレッドの 1 コマの順を決めて流す場——2 面の刻みを手で打ち、どちらの面が先に描くかを決める。

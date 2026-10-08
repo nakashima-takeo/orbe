@@ -15,6 +15,8 @@ import simd
 @MainActor
 final class MetalTextSurface: TextSurface {
   private static var nextID = 0
+  /// 置く位置を出す前の状態に置いた通し番号（→ `Pending.placement`）。
+  static var placementSerial = 0
 
   let id: Int
   let config: SurfaceConfig
