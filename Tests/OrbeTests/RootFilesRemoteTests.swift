@@ -53,6 +53,27 @@ final class RootFilesRemoteTests: OrbeTestCase {
     XCTAssertTrue(progress.contains { $0.contains("objects") }, "進捗の行: \(progress)")
   }
 
+  /// upstream の無いブランチは、利用者の push 先の設定（`remote.pushDefault`）の remote へ upstream を付けて出る。
+  func testPushingABranchWithoutUpstreamFollowsThePushDefault() throws {
+    let origin = repo.addOrigin()
+    let fork = repo.dir.path + "-fork.git"
+    XCTAssertTrue(repo.git(["init", "-q", "--bare", fork]).isSuccess)
+    XCTAssertTrue(repo.git(["remote", "add", "fork", fork]).isSuccess)
+    XCTAssertTrue(repo.git(["config", "remote.pushDefault", "fork"]).isSuccess)
+    XCTAssertTrue(repo.git(["checkout", "-q", "-b", "feat"]).isSuccess)
+    try commit("f.txt", "f\n")
+    let files = repo.files()
+
+    let pushed = finish(files) { files.push(onProgress: { _ in }, completion: $0) }
+    XCTAssertNil(pushed.failure)
+    XCTAssertEqual(pushed.statusAtCompletion?.branch?.upstream?.name, "fork/feat")
+    XCTAssertEqual(
+      repo.git(["rev-parse", "refs/heads/feat"], in: fork).stdoutText, repo.head() + "\n")
+    XCTAssertFalse(
+      repo.git(["rev-parse", "--verify", "-q", "refs/heads/feat"], in: origin).isSuccess,
+      "origin へは出ない")
+  }
+
   /// upstream があれば `git push` がユーザーの設定のまま送る。他から進んだリモートへの push は「拒否された」。
   func testPushingToAnAdvancedRemoteIsRejected() throws {
     repo.addOrigin()
@@ -81,6 +102,26 @@ final class RootFilesRemoteTests: OrbeTestCase {
       return XCTFail("「その他」の失敗: \(String(describing: pushed.failure))")
     }
     XCTAssertTrue(reason.contains("pre-receive hook declined"), reason)
+  }
+
+  /// 取り込んでも直らない拒否（送るタグがリモートに別の中身で在る）は「拒否された（先に取り込みが要る）」ではなく、
+  /// git の要約のままの「その他」。
+  func testARejectionThatPullingCannotFixKeepsItsReason() throws {
+    repo.addOrigin()
+    XCTAssertTrue(repo.git(["tag", "v1"]).isSuccess)
+    XCTAssertTrue(repo.git(["push", "-q", "origin", "v1"]).isSuccess)
+    try commit("b.txt", "b\n")
+    XCTAssertTrue(repo.git(["tag", "-f", "v1"]).isSuccess)
+    for refspec in ["refs/heads/main:refs/heads/main", "refs/tags/*:refs/tags/*"] {
+      XCTAssertTrue(repo.git(["config", "--add", "remote.origin.push", refspec]).isSuccess)
+    }
+    let files = repo.files()
+
+    let pushed = finish(files) { files.push(onProgress: { _ in }, completion: $0) }
+    guard case .reason(let reason) = pushed.failure else {
+      return XCTFail("「その他」の失敗: \(String(describing: pushed.failure))")
+    }
+    XCTAssertTrue(reason.contains("already exists"), reason)
   }
 
   // MARK: - pull・fetch
@@ -142,7 +183,7 @@ final class RootFilesRemoteTests: OrbeTestCase {
   // MARK: - 前提
 
   /// 前提が欠けた操作は、git を起こす前に分類された失敗で返る——upstream の無いブランチの pull・merge / rebase の途中の
-  /// pull・detached HEAD の push・push 先が無い push。
+  /// pull・detached HEAD の push と pull・push 先が無い push。
   func testMissingPreconditionsAreClassifiedUpFront() throws {
     let files = repo.files()
     XCTAssertEqual(
@@ -154,6 +195,8 @@ final class RootFilesRemoteTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["checkout", "-q", "--detach"]).isSuccess)
     XCTAssertEqual(
       finish(files) { files.push(onProgress: { _ in }, completion: $0) }.failure, .detached)
+    XCTAssertEqual(
+      finish(files) { files.pull(onProgress: { _ in }, completion: $0) }.failure, .detached)
     XCTAssertTrue(repo.git(["checkout", "-q", "main"]).isSuccess)
 
     repo.addOrigin()
