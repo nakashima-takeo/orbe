@@ -61,4 +61,13 @@ final class RowLayoutTests: XCTestCase {
     XCTAssertEqual(rows.item(atY: rows.lastTop(lineCount: 10) + 1), .block(2))
     XCTAssertEqual(rows.item(atY: rows.totalHeight(lineCount: 10)), .line(10), "最後の項目より下")
   }
+
+  /// 最終行の後の区画が行より高ければ、端はその下端の 1 行が最上段に来る所——区画の下側まで送れる。
+  func testTheEndReachesTheBottomOfATallTrailingZone() {
+    var rows = RowLayout(lineHeight: lineHeight)
+    rows.replace([.init(line: 10, height: 500, content: .zone(ObjectIdentifier(NSObject())))])
+    XCTAssertEqual(rows.lastTop(lineCount: 10), 10 * 18 + 500 - 18)
+    XCTAssertEqual(rows.contentLines(lineCount: 10), 10 + 500.0 / 18, accuracy: 1e-9)
+    XCTAssertEqual(rows.lastTop(lineCount: 10) + lineHeight, rows.totalHeight(lineCount: 10))
+  }
 }

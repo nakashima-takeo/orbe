@@ -67,10 +67,10 @@ extension ScrollInput.Phase {
 ///   指で動かせばその位置から動く。
 /// - マウスのホイールは 1 目盛り（量 1）を 10pt として、その場で当てる（NSScrollView の行送りと同じ）。
 struct ScrollPhysics: Sendable {
-  /// 範囲を決める値。縦は最後の項目（最後の文書の行か、最終行の後の差し込み）が最上段に来るまで、横は見たことのある最も
-  /// 長い行の右端から 5 桁先まで。
+  /// 範囲を決める値。縦は最後の項目（最後の文書の行か、最終行の後の差し込み）の終わりの 1 行が最上段に来るまで、横は見たこと
+  /// のある最も長い行の右端から 5 桁先まで。
   struct Limits: Equatable, Sendable {
-    /// 最後の項目の上端（縦の並び `RowLayout.lastTop`）。
+    /// 縦のスクロールの端（縦の並び `RowLayout.lastTop`）。
     var lastTop: Double = 0
     var lineHeight: Double = 1
     /// 本文の見えている大きさ（行番号の列と上端の余白を除く）。

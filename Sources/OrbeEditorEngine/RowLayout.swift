@@ -156,12 +156,13 @@ struct RowLayout: Sendable {
 
   // MARK: - 縦の端
 
-  /// 最後の項目（最後の文書の行か、最終行の後の塊の最後の行・区画）の上端——縦のスクロールの端。
+  /// 最後の項目の上端——縦のスクロールの端。最終行の後に塊があれば、その下端から 1 行の高さ上（文書に無い行なら最後の行の
+  /// 上端。区画なら、区画の下端の 1 行が画面の最上段に来る所で、行より高い区画の下側まで送れる）。
   func lastTop(lineCount: Int) -> Double {
     guard let index = trailingBlock(lineCount: lineCount) else {
       return y(ofLine: lineCount - 1)
     }
-    return top(ofBlock: index) + Double(lastRow(ofBlock: index)) * lineHeight
+    return top(ofBlock: index) + max(0, heights[index] - lineHeight)
   }
 
   /// 最後の項目の上端（表示の単位。差し込みが無ければ最終行）。
@@ -169,7 +170,7 @@ struct RowLayout: Sendable {
     guard let index = trailingBlock(lineCount: lineCount) else {
       return unit(ofLine: lineCount - 1)
     }
-    return unit(ofBlock: index) + Double(lastRow(ofBlock: index))
+    return unit(ofBlock: index) + max(0, heights[index] - lineHeight) / lineHeight
   }
 
   /// 最後の項目の上端 + 1（表示の単位。差し込みが無ければ行数）——スクロールバーと印の写像の入力。
@@ -184,12 +185,6 @@ struct RowLayout: Sendable {
   private func trailingBlock(lineCount: Int) -> Int? {
     guard let last = boundaries.last, last >= lineCount else { return nil }
     return boundaries.count - 1
-  }
-
-  /// 塊の最後の項目の、塊の中の行（区画なら 0）。
-  private func lastRow(ofBlock index: Int) -> Int {
-    if case .lines(let lines) = contents[index] { return max(0, lines.count - 1) }
-    return 0
   }
 
   // MARK: - 見えている範囲

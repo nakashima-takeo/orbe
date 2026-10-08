@@ -26,7 +26,7 @@ struct Pending {
 
 /// 取引が置く範囲の値（描画スレッドが組んだ行で伸ばす最も長い行の幅は含まない）。
 struct LimitsUpdate: Equatable, Sendable {
-  /// 最後の項目の上端（→ `ScrollPhysics.Limits.lastTop`）。
+  /// 縦のスクロールの端（→ `ScrollPhysics.Limits.lastTop`）。
   var lastTop: Double
   var lineHeight: Double
   var viewport: SIMD2<Double>
