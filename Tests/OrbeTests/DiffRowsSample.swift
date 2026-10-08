@@ -35,7 +35,7 @@ struct DiffRowsSample {
     var insertions: [RowInsertion] = []
     var spans: [LineSpan] = []
     var removed: [InsertedLine] = []
-    var (oldNext, newNext) = (1, 0)
+    var (oldNumber, newNext) = (1, 0)
     var last: Int?
     func open(_ style: Int, other: Int?) {
       guard last != style else { return }
@@ -51,16 +51,16 @@ struct DiffRowsSample {
     for row in rows {
       switch row {
       case .removed(let line):
-        removed.append(InsertedLine(line, style: Self.removed, number: oldNext))
-        oldNext += 1
+        removed.append(InsertedLine(line, style: Self.removed, number: oldNumber))
+        oldNumber += 1
       case .added:
         flush()
         open(Self.added, other: nil)
         newNext += 1
       case .same:
         flush()
-        open(Self.context, other: oldNext)
-        oldNext += 1
+        open(Self.context, other: oldNumber)
+        oldNumber += 1
         newNext += 1
       }
     }

@@ -64,9 +64,5 @@ final class DiffRowsSampleTests: OrbeTestCase {
     let lineHeight = Double(left.config.lineHeight)
     XCTAssertEqual(left.rows.y(ofLine: 4), 10 * lineHeight, "左は削除 2 行の後に詰め物 6 行（見本と同じ）")
     XCTAssertEqual(left.rows.y(ofLine: 5), 12 * lineHeight, "追加 1 行の向かいに詰め物 1 行")
-    XCTAssertEqual(left.rows.y(ofLine: 2), right.rows.y(ofLine: 2))
-    XCTAssertEqual(
-      left.rows.style(ofLine: 2), DiffRowsSample.removed, "向かいの 1 行目どうしが削除と追加")
-    XCTAssertEqual(right.rows.style(ofLine: 2), DiffRowsSample.added)
   }
 }

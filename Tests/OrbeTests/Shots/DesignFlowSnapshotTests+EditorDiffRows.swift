@@ -89,7 +89,7 @@ private final class DiffRowsFlow {
     }
   }
 
-  /// 面 `views` を窓に並べる（並列は 2 面の間に 1px の区切り）。
+  /// 面 `panes` を窓に並べる（並列は 2 面の間に 1px の区切り）。
   private func arrange(_ panes: [Pane]) {
     container.subviews.forEach { $0.removeFromSuperview() }
     let width = container.bounds.width
@@ -113,7 +113,7 @@ private final class DiffRowsFlow {
     arrange([inline])
   }
 
-  /// 読むだけの面に打鍵・改行・ペースト・IME の変換を送る（本文は変わらない）。
+  /// 読むだけの面に打鍵・改行・削除・IME の変換を送る（本文は変わらない）。
   func typeIntoReadOnly() {
     window.makeFirstResponder(inline.surface.responder)
     let view = inline.surface.textView

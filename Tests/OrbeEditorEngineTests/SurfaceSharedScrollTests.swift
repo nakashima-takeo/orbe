@@ -180,8 +180,6 @@ extension SurfaceSharedScrollTests {
     return RenderThread.shared.performAndWait { $0.slot(id)?.drawnPosition }
   }
 
-  /// マウスのホイール（段の無い出来事）が刻みの途中に届き、その刻みを先に描いた面と後で描く面に分かれても、後の面は次の
-  /// 刻みで追いつき、両面は同じ位置で止まる（後の面がその刻みの封じた位置を描いたまま、描いたつもりで止まらない）。
   /// 2 面を画面外の描き先と手で打つ時計に結ぶ。
   @discardableResult
   private func bindManually(_ pair: (Opened, Opened)) -> (ManualClock, ManualClock) {
@@ -198,6 +196,8 @@ extension SurfaceSharedScrollTests {
     return clocks
   }
 
+  /// マウスのホイール（段の無い出来事）が刻みの途中に届き、その刻みを先に描いた面と後で描く面に分かれても、後の面は次の
+  /// 刻みで追いつき、両面は同じ位置で止まる（後の面がその刻みの封じた位置を描いたまま、描いたつもりで止まらない）。
   func testAWheelBetweenTheTwoSurfacesOfATickStillMovesBoth() throws {
     let (a, b) = try pair()
     bindManually((a, b))
