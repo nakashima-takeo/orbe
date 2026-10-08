@@ -119,6 +119,31 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     XCTAssertEqual(outcome.failure, .cancelled)
   }
 
+  /// 書き込みが残っている間は、握る者が離れても根のサービスは生きていて（同じ根なら同じもの）完了を返し、走っていたものも
+  /// 止めた順番待ちも返り終われば離れる（監視が残らない）。
+  func testAServiceLivesUntilItsWritesReturn() throws {
+    try fixture.installHook("pre-commit", body: fixture.waitingBody)
+    try stageChange()
+    var held: RootFiles? = RootFiles.shared(for: root)
+    pumpMain(until: { held?.status != nil }, "status の初回取得")
+    weak let observed = held
+    let committed = WriteOutcome()
+    let queued = WriteOutcome()
+    held?.commit(message: "blocked", completion: committed.receive)
+    XCTAssertTrue(fixture.pumpUntilHung())
+    let stopped = held?.stage(
+      [GitStatus.Row(path: "a.txt", originalPath: nil)], completion: queued.receive)
+    held = nil
+
+    XCTAssertNotNil(observed, "書き込み中は生きている")
+    XCTAssertTrue(RootFiles.shared(for: root) === observed, "同じ根なら同じもの")
+    stopped?.cancel()
+    pumpMain(until: { queued.finished }, "止めた順番待ちが返る")
+    fixture.release()
+    pumpMain(until: { committed.finished }, timeout: 20, "握る者が離れても完了が返る")
+    pumpMain(until: { observed == nil }, "返り終われば離れる")
+  }
+
   /// 順番待ちの書き込みを止めると、前の書き込み（返らない hook）の終わりを待たずに「止めた」で返り、git を起こさない。
   func testStoppingAQueuedWriteReturnsAtOnceWithoutRunningGit() throws {
     try fixture.installHook("pre-commit", body: fixture.waitingBody)
