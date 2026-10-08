@@ -70,7 +70,9 @@ final class GitRepoVersionsTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
     XCTAssertTrue(repo.git(["commit", "-qm", "dir"]).isSuccess)
     XCTAssertEqual(version(git, "dir", .head), .absent, "ディレクトリは本文を持たない")
-    XCTAssertEqual(version(git, "a.txt", .commit(String(repeating: "0", count: 40))), .absent)
+    XCTAssertEqual(
+      version(git, "a.txt", .commit(String(repeating: "0", count: 40))), .failed,
+      "手元に無いコミットは「その版に無い」ではない")
 
     try repo.write(".gitattributes", "*.bad filter=bad\n")
     try repo.write("x.bad", "x\n")
