@@ -11,11 +11,12 @@ final class RowLayoutTests: XCTestCase {
   /// 境 2 に 2 行、境 5 に区画（30pt）、最終行（10 行）の後に 1 行。
   private func layout() -> RowLayout {
     var rows = RowLayout(lineHeight: lineHeight)
-    rows.replace([
-      .init(line: 2, height: 36, content: .lines([InsertedLine("a"), InsertedLine("b")])),
-      .init(line: 5, height: 30, content: .zone(ObjectIdentifier(NSObject()))),
-      .init(line: 10, height: 18, content: .lines([InsertedLine("tail")])),
-    ])
+    rows.replace(
+      [
+        .init(line: 2, height: 36, content: .lines([InsertedLine("a"), InsertedLine("b")])),
+        .init(line: 5, height: 30, content: .zone(ObjectIdentifier(NSObject()))),
+        .init(line: 10, height: 18, content: .lines([InsertedLine("tail")])),
+      ], spans: [])
     return rows
   }
 
@@ -66,9 +67,34 @@ final class RowLayoutTests: XCTestCase {
   /// 最終行の後の区画が行より高ければ、端はその下端の 1 行が最上段に来る所——区画の下側まで送れる。
   func testTheEndReachesTheBottomOfATallTrailingZone() {
     var rows = RowLayout(lineHeight: lineHeight)
-    rows.replace([.init(line: 10, height: 500, content: .zone(ObjectIdentifier(NSObject())))])
+    rows.replace(
+      [.init(line: 10, height: 500, content: .zone(ObjectIdentifier(NSObject())))], spans: [])
     XCTAssertEqual(rows.lastTop(lineCount: 10), 10 * 18 + 500 - 18)
     XCTAssertEqual(rows.contentLines(lineCount: 10), 10 + 500.0 / 18, accuracy: 1e-9)
     XCTAssertEqual(rows.lastTop(lineCount: 10) + lineHeight, rows.totalHeight(lineCount: 10))
+  }
+
+  /// 文書の行の区間は始まりの行から次の区間の前までを指し、もう一方の番号は区間の始まりからの差で数える。番号の最大は、
+  /// 差し込んだ行・途中の区間の終わり・最後の区間の最終行のどれからでも取る（2 列の面の左の列の幅になる）。
+  func testLineSpansIndexTheLinesAndTheLargestOtherNumber() {
+    var rows = RowLayout(lineHeight: lineHeight)
+    let inserted = RowLayout.Block(
+      line: 4, height: lineHeight, content: .lines([InsertedLine("gone", number: 100)]))
+    rows.replace(
+      [inserted],
+      spans: [
+        LineSpan(line: 2, style: 0, otherNumber: 10), LineSpan(line: 5, otherNumber: 300),
+        LineSpan(line: 9, style: 1, otherNumber: 20),
+      ])
+    XCTAssertEqual(
+      [1, 2, 4, 5, 8, 9, 30].map { rows.span(containing: $0) }, [nil, 0, 0, 1, 1, 2, 2])
+    XCTAssertEqual([1, 2, 4, 5, 9].map { rows.style(ofLine: $0) }, [nil, 0, 0, nil, 1])
+    XCTAssertEqual([1, 4, 8, 9, 12].map { rows.otherNumber(ofLine: $0) }, [nil, 12, 303, 20, 23])
+    XCTAssertEqual(rows.otherNumberMax(lineCount: 12), 303, "途中の区間の終わり")
+    XCTAssertEqual(rows.otherNumberMax(lineCount: 400), 410, "最後の区間の最終行")
+    rows.replace(
+      [inserted], spans: [LineSpan(line: 5, otherNumber: 30), LineSpan(line: 9, otherNumber: 20)])
+    XCTAssertEqual(rows.otherNumberMax(lineCount: 12), 100, "差し込んだ行")
+    XCTAssertEqual(rows.otherNumberMax(lineCount: 9), 100, "最後の区間に行が無い")
   }
 }
