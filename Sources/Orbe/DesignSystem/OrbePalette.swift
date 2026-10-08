@@ -55,9 +55,9 @@ enum OrbePalette {
     static let foregroundLight = terminalLight.foreground  // #3a3151
     static let accentDark = terminalDark.cursorColor  // #9068f0
     static let accentLight = terminalLight.cursorColor  // #6d43d8
-    static let greenDark = termAnsiDark[Slot.green]  // 追加/成功（端末緑と同値）
+    static let greenDark = termAnsiDark[Slot.green]  // 成功（端末緑と同値）
     static let greenLight = termAnsiLight[Slot.green]
-    static let redDark = termAnsiDark[Slot.red]  // 削除/エラー（端末赤と同値）
+    static let redDark = termAnsiDark[Slot.red]  // エラー（端末赤と同値）
     static let redLight = termAnsiLight[Slot.red]
     static let yellowDark = termAnsiDark[Slot.yellow]  // 競合/待機（端末黄と同値）
     static let yellowLight = termAnsiLight[Slot.yellow]

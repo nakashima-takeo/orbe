@@ -17,8 +17,16 @@ extension Theme.Color {
   static let editorText = editorDyn(light: 0x4d4368, dark: 0xcdc7e2)
   /// 三次の文字——レールの非選択・パンくずの区切り。`textTertiary` は `textMuted` の別名なので別値を持つ。
   static let editorTertiary = editorDyn(light: 0xaca4bd, dark: 0x6d667a)
-  /// 変更の黄——M バッジ・外部変更で衝突中のドット。dark は conflict と偶然同値だが light が違い、git 競合でもない。
-  static let editorModified = editorDyn(light: 0xa07f0c, dark: 0xe2cd6d)
+  /// 注意の黄——外部変更で衝突中のタブのドット・検索の一致の地。dark は conflict と偶然同値だが light が違い、git 競合でもない。
+  static let editorCaution = editorDyn(light: 0xa07f0c, dark: 0xe2cd6d)
+  /// git の変化の種類の色（追加＝青・削除＝オレンジ・変更＝黄）。赤と緑を見分けにくい人でも区別できるよう、成否の
+  /// success / danger（端末の緑・赤）とは別に持つ。diffModified は editorCaution と値だけ同じ独立トークン。
+  static let diffAdded = editorDyn(light: 0x0969da, dark: 0x5ea8ff)
+  static let diffRemoved = editorDyn(light: 0xbc4c00, dark: 0xf0883e)
+  static let diffModified = editorDyn(light: 0xa07f0c, dark: 0xe2cd6d)
+  /// diff の追加・削除の行の字。
+  static let diffAddedText = editorDyn(light: 0x0550ae, dark: 0xb3d4ff)
+  static let diffRemovedText = editorDyn(light: 0x953800, dark: 0xffc69a)
   /// ファイルタブの × にポインタがあるときの枠の地（VS Code の toolbar.hoverBackground に当たる）。
   static let editorTabCloseHover = editorDynAB(light: (0x3a3151, 0.10), dark: (0xffffff, 0.10))
   /// 仮のタブの地の斜線の基色（α は `Theme.Opacity.editorPreviewHatch*`）。dark は editorIcon と同じ色相。

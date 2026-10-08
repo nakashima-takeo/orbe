@@ -37,12 +37,25 @@ final class EditorStyleTests: OrbeTestCase {
       XCTAssertNotEqual(
         try XCTUnwrap(resolved(mark, .darkAqua)), try XCTUnwrap(resolved(mark, .aqua)))
     }
-    XCTAssertNotEqual(
-      try XCTUnwrap(resolved(style.marks.modified, .darkAqua)),
-      try XCTUnwrap(resolved(style.marks.added, .darkAqua)), "追加と変更は色で区別する")
     XCTAssertEqual(
       try XCTUnwrap(resolved(style.decorations.whitespaceColor, .darkAqua)).alphaComponent, 0.55,
       accuracy: 0.01)
+  }
+
+  /// git の 3 色は互いに違い、成否の緑（success）・赤（danger）のどれとも違う。
+  ///
+  /// 壊れると何が起きるか。git の色が成否の色の別名に戻ると、追加と削除が赤と緑だけで分かれ、赤と緑を見分けにくい人には
+  /// ガター・印・バッジの区別が消える。逆に成否の色を git の色に寄せると、成功の ✓ とエラーの文まで青とオレンジになる。
+  func testGitColorsAreDistinctFromEachOtherAndFromSuccessAndDanger() throws {
+    let git = [Theme.Color.diffAdded, Theme.Color.diffModified, Theme.Color.diffRemoved]
+    let outcome = [Theme.Color.success, Theme.Color.danger]
+    for appearance in [NSAppearance.Name.darkAqua, .aqua] {
+      let gitValues = try git.map { "\(try XCTUnwrap(resolved($0, appearance)))" }
+      let outcomeValues = try outcome.map { "\(try XCTUnwrap(resolved($0, appearance)))" }
+      XCTAssertEqual(Set(gitValues).count, git.count, "\(appearance) で追加・変更・削除が同じ色")
+      XCTAssertTrue(
+        Set(gitValues).isDisjoint(with: outcomeValues), "\(appearance) で git の色が成否の色と同じ")
+    }
   }
 
   /// 8 役割すべてに色があり、同じ外観の中で互いに違い、dark と light で解が変わる。
