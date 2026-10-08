@@ -295,12 +295,12 @@ final class MetalTextSurface: TextSurface {
     }
   }
 
-  /// スクロールの状態を `other` と共にする。位置はこの面のものを引き継ぐ。
+  /// スクロールの状態を `other` と共にする。位置はこの面のものを引き継ぎ、先に結んだ面はこの面だけになる。
   func shareScroll(with other: any TextSurface) {
     guard let other = other as? MetalTextSurface, other !== self else {
       preconditionFailure("スクロールを共にできるのは、同じエンジンの別の面だけ")
     }
-    precondition(partner == nil && other.partner == nil, "まだスクロールを共にしていない面どうしで結ぶ")
+    precondition(partner == nil && other.partner == nil, "いまスクロールを共にしていない面どうしで結ぶ")
     flush()
     other.flush()
     scroll.share(with: other.scroll)
