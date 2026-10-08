@@ -1,7 +1,7 @@
 import Foundation
 import OrbeEditorCore
 
-/// 根のサービスからの通知。(a) はデバウンス後すぐ、(b) は status が返った時点、(c) は取り直しジョブの完了後に届く。
+/// 根のサービスからの通知。(a) はデバウンス後すぐ、(b) は status が返った時点、(c) は baseline の取り直しの完了後に届く。
 @MainActor
 protocol RootFilesObserver: AnyObject {
   /// 根の下でファイルが変わった（git dir の中は含まない）。
@@ -12,18 +12,18 @@ protocol RootFilesObserver: AnyObject {
   func rootFiles(_ files: RootFiles, baselineDidChange url: URL)
 }
 
-/// 根（`GitWorktreeRoot.root(of:)` の値）1 つにつき 1 つの、監視・git 状態・一覧・新規作成・baseline を担う
-/// サービス。握る者（文書の結線・面のツリー・プロジェクト検索）がいる間だけ生き、離されれば監視が止まる。
+/// 根（`GitWorktreeRoot.root(of:)` の値）1 つにつき 1 つの、監視・git 状態・一覧・新規作成・baseline・git の書き込みを
+/// 担うサービス。握る者（文書の結線・面のツリー・プロジェクト検索）がいる間だけ生き、離されれば監視が止まる。
 ///
 /// git 管理下かどうかはここで決める: 根に `.git` があれば `GitRepo` を開き、git の綴りを正規形に揃えて根と
-/// 一致したときだけ管理下（status・baseline・git dir の監視を持つ）。`GitRepo.root` との突き合わせは
+/// 一致したときだけ管理下（status・baseline・git dir の監視・書き込みを持つ）。`GitRepo.root` との突き合わせは
 /// ここ 1 か所に閉じる。管理外なら監視と一覧・新規作成だけが働く。
 ///
-/// 観測（status → 関心のあるパスの index の OID → 変わった OID の blob）は根ごとに 1 本のジョブに直列化し、
-/// 実行中に来た要求は「終わったらもう 1 回」に畳む。古い結果が後から乗らない（index が動けば監視が取り直す。
-/// status と baseline は別々の git 起動で読むので同一時点の保証は無い）。status の通知は status が返った時点で
-/// 出す——baseline の取得は smudge filter（git-lfs のネットワーク等）で遅くなりうるので、その後ろにバッジを
-/// 並べない。
+/// 観測は 2 本の取り直しで成る——status と、baseline（関心のあるパスの index の OID → 変わった OID の blob）。両者に
+/// データの依存は無く、根ごとに別々に直列化し、どちらも実行中に来た要求は「終わったらもう 1 回」に畳む。古い結果が
+/// 後から乗らない（index が動けば監視が取り直す。status と baseline は別々の git 起動で読むので同一時点の保証は無い）。
+/// 別々にするのは、baseline の取得が smudge filter（git-lfs のネットワーク等）で遅くなりうるから——その後ろに
+/// バッジと書き込みの完了を並べない。
 @MainActor
 final class RootFiles {
   struct Entry: Equatable {
@@ -82,8 +82,27 @@ final class RootFiles {
   private var gitWatcher: RepoWatcher?
   /// 関心のある相対パス → index 版（作業ツリーに出したときの中身）。
   private var baselines: [String: Baseline] = [:]
-  private var isRefreshing = false
-  private var refreshAgain = false
+  private var statusJob = RefreshJob()
+  private var baselineJob = RefreshJob()
+  /// 次に始まる status の取り直しが済んだら呼ぶもの（書き込みの完了）。
+  private var statusWaiters: [() -> Void] = []
+  /// 実行中の status の取り直しが済んだら呼ぶもの。
+  private var runningStatusWaiters: [() -> Void] = []
+  /// 同じ worktree の index への書き込みの順番待ち（先頭から 1 つずつ走らせる）。
+  var queuedWrites: [QueuedWrite] = []
+  var isWriting = false
+  /// 完了をまだ返していない書き込みの数。0 でない間、自分を生かしておく——握る者が離れても、書き込みの完了は
+  /// 返り、レジストリの「根ごとに 1 つ」が崩れない。
+  var outstandingWrites = 0 {
+    didSet { keepAlive = outstandingWrites > 0 ? self : nil }
+  }
+  private var keepAlive: RootFiles?
+
+  /// 取り直し 1 本の直列化。実行中に来た要求は「終わったらもう 1 回」に畳む。
+  private struct RefreshJob {
+    var isRunning = false
+    var again = false
+  }
 
   private struct Observation {
     weak var observer: RootFilesObserver?
@@ -127,7 +146,8 @@ final class RootFiles {
       self.repo = repo
       let gitDirs = [repo.gitDir, repo.commonDir]
       gitWatcher = watch(roots: gitDirs, gitDirs: gitDirs)
-      requestRefresh()
+      requestStatusRefresh()
+      requestBaselineRefresh()
     }
   }
 
@@ -140,7 +160,7 @@ final class RootFiles {
     observations.append(
       Observation(
         observer: observer, interest: interest, relativePath: interest.flatMap(relativePath(of:))))
-    if interest != nil { requestRefresh() }
+    if interest != nil { requestBaselineRefresh() }
   }
 
   func removeObserver(_ observer: RootFilesObserver) {
@@ -198,48 +218,46 @@ final class RootFiles {
     } else if !batch.paths.isEmpty {
       notify { $0.rootFiles(self, filesDidChange: .paths(batch.paths)) }
     }
-    requestRefresh()
+    requestStatusRefresh()
+    requestBaselineRefresh()
   }
 
   private func notify(_ body: (RootFilesObserver) -> Void) {
     for observation in live { body(observation.observer) }
   }
 
-  // MARK: - 取り直しジョブ
+  // MARK: - status の取り直し
 
-  private func requestRefresh() {
-    guard repo != nil else { return }
-    if isRefreshing {
-      refreshAgain = true
+  /// status を取り直す。`then` は、この要求の後に始まる取り直しが済んだら（通知した・値が同じ・git の失敗のどれでも）
+  /// 呼ぶ——実行中の取り直しは要求より前の状態を読んでいるかもしれないので、それには付けない。
+  func requestStatusRefresh(then waiter: (() -> Void)? = nil) {
+    guard repo != nil else {
+      waiter?()
       return
     }
-    refresh()
+    if let waiter { statusWaiters.append(waiter) }
+    if statusJob.isRunning {
+      statusJob.again = true
+      return
+    }
+    refreshStatus()
   }
 
-  private func refresh() {
+  private func refreshStatus() {
     guard let repo else { return }
-    isRefreshing = true
-    let interests = self.interests
+    statusJob.isRunning = true
+    runningStatusWaiters = statusWaiters
+    statusWaiters = []
     repo.status { [weak self] status in
       guard let self else { return }
       publish(status)
-      repo.indexEntries(relativePaths: interests) { [weak self] oids in
-        guard let self else { return }
-        guard let oids else {
-          finish(changed: [])
-          return
-        }
-        var changed: [String] = []
-        var fetch: [(relativePath: String, oid: String)] = []
-        for relativePath in interests {
-          if let oid = oids[relativePath] {
-            if baselines[relativePath]?.oid != oid { fetch.append((relativePath, oid)) }
-          } else {
-            if baselines[relativePath]?.text != nil { changed.append(relativePath) }
-            baselines[relativePath] = Baseline(oid: nil, text: nil)
-          }
-        }
-        fetchBlobs(fetch[...], changed: changed)
+      let waiters = runningStatusWaiters
+      runningStatusWaiters = []
+      statusJob.isRunning = false
+      for waiter in waiters { waiter() }
+      if statusJob.again {
+        statusJob.again = false
+        refreshStatus()
       }
     }
   }
@@ -250,6 +268,41 @@ final class RootFiles {
     guard let status, status != self.status else { return }
     self.status = status
     notify { $0.rootFilesStatusDidChange(self) }
+  }
+
+  // MARK: - baseline の取り直し
+
+  private func requestBaselineRefresh() {
+    guard repo != nil else { return }
+    if baselineJob.isRunning {
+      baselineJob.again = true
+      return
+    }
+    refreshBaselines()
+  }
+
+  private func refreshBaselines() {
+    guard let repo else { return }
+    baselineJob.isRunning = true
+    let interests = self.interests
+    repo.indexEntries(relativePaths: interests) { [weak self] oids in
+      guard let self else { return }
+      guard let oids else {
+        finish(changed: [])
+        return
+      }
+      var changed: [String] = []
+      var fetch: [(relativePath: String, oid: String)] = []
+      for relativePath in interests {
+        if let oid = oids[relativePath] {
+          if baselines[relativePath]?.oid != oid { fetch.append((relativePath, oid)) }
+        } else {
+          if baselines[relativePath]?.text != nil { changed.append(relativePath) }
+          baselines[relativePath] = Baseline(oid: nil, text: nil)
+        }
+      }
+      fetchBlobs(fetch[...], changed: changed)
+    }
   }
 
   /// 変わった OID の blob を 1 つずつ取る（並列に投げない）。
@@ -293,10 +346,10 @@ final class RootFiles {
       else { continue }
       observation.observer.rootFiles(self, baselineDidChange: interest)
     }
-    isRefreshing = false
-    if refreshAgain {
-      refreshAgain = false
-      refresh()
+    baselineJob.isRunning = false
+    if baselineJob.again {
+      baselineJob.again = false
+      refreshBaselines()
     }
   }
 

@@ -104,3 +104,34 @@ func pumpMain(
   }
   XCTAssertTrue(condition(), "\(timeout) 秒以内に成立しない: \(message())", file: file, line: line)
 }
+
+/// 根のサービスの書き込みの完了を記録する。
+@MainActor
+final class WriteOutcome {
+  private(set) var finished = false
+  private(set) var failure: GitWriteFailure?
+  /// 完了が届いた時点の status（完了の時点で書き込み後の姿になっているかを見る）。
+  private(set) var statusAtCompletion: GitStatus?
+  private let files: RootFiles?
+
+  init(_ files: RootFiles? = nil) {
+    self.files = files
+  }
+
+  func receive(_ failure: GitWriteFailure?) {
+    XCTAssertFalse(finished, "完了は 1 度だけ届く")
+    finished = true
+    self.failure = failure
+    statusAtCompletion = files?.status
+  }
+}
+
+extension TempGitRepo {
+  /// 根のサービスを作り、管理下と分かって status を 1 度読むまで待つ。
+  @MainActor
+  func files(at root: String? = nil, runner: GitRunner = .shared) -> RootFiles {
+    let files = RootFiles(root: root ?? self.root, runner: runner)
+    pumpMain(until: { files.status != nil }, "status の初回取得")
+    return files
+  }
+}
