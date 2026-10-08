@@ -59,6 +59,22 @@ final class GitRepoObserveTests: OrbeTestCase {
     XCTAssertEqual(status.badge(of: "nested/n.txt"), .untracked)
   }
 
+  /// 前の値と比べて読む——同じなら「同じ」、違えば新しい値、git が失敗すれば「失敗」（前の値を変えさせない）。
+  func testStatusIsComparedWithThePreviousValue() throws {
+    let git = try repo.open()
+    let first = try XCTUnwrap(status(git))
+    XCTAssertEqual(read(git, comparedTo: first), .unchanged)
+
+    try repo.write("b.txt", "new\n")
+    guard case .changed(let second) = read(git, comparedTo: first) else {
+      return XCTFail("未追跡が増えたら変わる")
+    }
+    XCTAssertEqual(second.entries["b.txt"]?.unstaged, .untracked)
+
+    try FileManager.default.removeItem(atPath: repo.root + "/.git/HEAD")
+    XCTAssertEqual(read(git, comparedTo: second), .failed)
+  }
+
   /// status はブランチを読む——名前・HEAD・upstream と先行/遅れ・rename の元パス。ユーザーの `status.aheadBehind=false`・
   /// `status.renames=false` でも数と rename は出る。detached・初回コミット前・upstream が消えた（数は不明）を区別する。
   func testStatusReadsTheBranchRegardlessOfUserSettings() throws {
@@ -132,8 +148,8 @@ final class GitRepoObserveTests: OrbeTestCase {
     XCTAssertTrue(fixture.waitUntilHung(), "前提: 書き込みが hook でハングしていること")
 
     let done = expectation(description: "status / ls-files / cat-file")
-    git.status { status in
-      XCTAssertNotNil(status)
+    git.status(comparedTo: nil) { read in
+      XCTAssertNotEqual(read, .failed)
       git.indexEntries(relativePaths: ["a.txt"]) { entries in
         git.blob(oid: entries?["a.txt"] ?? "", relativePath: "a.txt") { data in
           XCTAssertEqual(data.flatMap { String(data: $0, encoding: .utf8) }, "x\n")
@@ -217,9 +233,14 @@ final class GitRepoObserveTests: OrbeTestCase {
   }
 
   private func status(_ git: GitRepo) -> GitStatus? {
-    var result: GitStatus?
+    guard case .changed(let status) = read(git, comparedTo: nil) else { return nil }
+    return status
+  }
+
+  private func read(_ git: GitRepo, comparedTo previous: GitStatus?) -> GitStatusRead? {
+    var result: GitStatusRead?
     let done = expectation(description: "status")
-    git.status {
+    git.status(comparedTo: previous) {
       result = $0
       done.fulfill()
     }

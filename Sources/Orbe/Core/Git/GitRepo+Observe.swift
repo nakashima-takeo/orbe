@@ -2,6 +2,15 @@ import Foundation
 
 // MARK: - 観測（status・index の読み）
 
+/// 前の値と比べた status の読み。
+enum GitStatusRead: Equatable {
+  case changed(GitStatus)
+  /// 前の値と同じ。
+  case unchanged
+  /// git が失敗した。
+  case failed
+}
+
 extension GitRepo {
   /// status の見え方を左右するユーザー設定を引数で封じる——`status.showUntrackedFiles`（未追跡はファイル単位）・
   /// `diff.ignoreSubmodules`・`status.aheadBehind`（先行/遅れは必ず数える）・`status.renames`（rename は必ず検出する）。
@@ -12,11 +21,19 @@ extension GitRepo {
     "--renames", "--untracked-files=all", "--ignore-submodules=none",
   ]
 
-  /// worktree の status。git が失敗したら nil。解析は裏のスレッドで行う（未追跡が多いと出力が大きい）。
-  func status(completion: @escaping (GitStatus?) -> Void) {
+  /// worktree の status を `previous` と比べて返す（nil と比べれば、成功は必ず `changed`）。未追跡が多いと出力も値も
+  /// 大きい（2 万件で約 0.4MB・2 万エントリ）ので、解析と比較は裏のスレッドで済ませ、main には変わったかと新しい値だけを
+  /// 渡す。同じだったときの新しい値も裏で捨てる。
+  func status(
+    comparedTo previous: GitStatus?, completion: @escaping (GitStatusRead) -> Void
+  ) {
     runner.run(
       Self.statusArguments, cwd: root,
-      transform: { $0.isSuccess ? GitStatus.parse($0.stdout) : nil }, completion: completion)
+      transform: { output -> GitStatusRead in
+        guard output.isSuccess else { return .failed }
+        let status = GitStatus.parse(output.stdout)
+        return status == previous ? .unchanged : .changed(status)
+      }, completion: completion)
   }
 
   /// index にある blob の OID（相対パス → OID。stage 0 だけ＝競合中のパスは含まない）。

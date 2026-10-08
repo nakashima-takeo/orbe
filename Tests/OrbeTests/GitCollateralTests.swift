@@ -132,8 +132,9 @@ final class GitCollateralTests: OrbeTestCase {
 
     let observed = expectation(description: "観測と読み取り")
     observed.expectedFulfillmentCount = 4
-    repo.status { status in
-      XCTAssertEqual(status?.entries["a.txt"]?.staged, .modified)
+    repo.status(comparedTo: nil) { read in
+      guard case .changed(let status) = read else { return XCTFail("status: \(read)") }
+      XCTAssertEqual(status.entries["a.txt"]?.staged, .modified)
       observed.fulfill()
     }
     repo.indexEntries(relativePaths: ["a.txt"]) { entries in

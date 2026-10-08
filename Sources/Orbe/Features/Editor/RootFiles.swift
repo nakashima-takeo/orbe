@@ -248,9 +248,9 @@ final class RootFiles {
     statusJob.isRunning = true
     runningStatusWaiters = statusWaiters
     statusWaiters = []
-    repo.status { [weak self] status in
+    repo.status(comparedTo: status) { [weak self] read in
       guard let self else { return }
-      publish(status)
+      publish(read)
       let waiters = runningStatusWaiters
       runningStatusWaiters = []
       statusJob.isRunning = false
@@ -262,12 +262,17 @@ final class RootFiles {
     }
   }
 
-  /// git の一時失敗（`status == nil`）では前の status を保つ——「最後に成功した取り直しの結果」が status の
-  /// 意味で、失敗のたびにバッジが消えて戻らないため。
-  private func publish(_ status: GitStatus?) {
-    guard let status, status != self.status else { return }
+  /// git の一時失敗では前の status を保つ——「最後に成功した取り直しの結果」が status の意味で、失敗のたびにバッジが
+  /// 消えて戻らないため。比べる相手は取り直しを始めたときの status で、取り直しは直列なので今の値と同じ。
+  ///
+  /// 置き換えた status は裏で手放す。観測者は通知の中で新しい値へ持ち替えるので、裏へ渡した参照が最後になる——未追跡が
+  /// 多いと数万の文字列の解放になり、main に載せない。
+  private func publish(_ read: GitStatusRead) {
+    guard case .changed(let status) = read else { return }
+    let replaced = self.status
     self.status = status
     notify { $0.rootFilesStatusDidChange(self) }
+    DispatchQueue.global(qos: .utility).async { withExtendedLifetime(replaced) {} }
   }
 
   // MARK: - baseline の取り直し
