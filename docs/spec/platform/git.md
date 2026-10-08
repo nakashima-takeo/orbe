@@ -52,7 +52,7 @@ hooks・署名がユーザーのシェル環境と同等に動くよう、全呼
 
 出力を全部溜めてから返す通常の実行とは別に、**出力を届いた塊ごとに渡し、外から止められる**実行を持つ（プロジェクト検索の grep が使う）。環境・EOF の猶予・止める手は通常の実行と共有する——第 2 の起動基盤を作ると環境の規則が割れるため。**無出力では打ち切らない**: grep は一致が無い間は何も出さないので、大きな根で珍しい語を探すと正当な実行が無出力のまま長く続く。寿命は呼び出し側が止めることで持つ（プロジェクト検索は上限・止める・打ち換え・タブを閉じる）。止めるときも SIGTERM。終わり方（完了・打ち切り・止めた・起動失敗）は終了コードと別の値で返り、止めた実行を失敗と読まない。呼び出し側は環境に変数を足せる（grep は UTF-8 のロケールを足す。無いと PCRE2 の大小無視が ASCII に落ちる）。git のプロセスの QoS も選べる（grep は main より低い utility——全コアで並走しても、画面の応答と CPU を取り合わない）。
 
-通常の実行も、stderr の行（`\r` と `\n` で割る）を届いた順に渡せる（push・pull・fetch の進捗。最後の行は完了より先に届く）。重い出力の解析は、結果を返す前に裏のスレッドで済ませられる（status の解析が使う）。
+通常の実行も、stderr の行（`\r` と `\n` で割る）を届いた順に渡せる（push・pull・fetch の進捗。最後の行は完了より先に届く）。重い出力の解析は、結果を返す前に裏のスレッドで済ませられる（status の解析と比較が使う）。
 
 ## 失敗の理由
 
@@ -100,6 +100,6 @@ git の実質的な理由は stderr の `fatal:`・`error:` の行（無けれ�
 
 worktree の状態を見る `status` には `--no-optional-locks` を渡す。ユーザーが作業中のリポジトリを観測するだけでロックを取らないため。
 
-エディターの根の観測（[editor/files](../editor/files.md)）は 3 つの読みで成る。status は porcelain v2 の NUL 区切り（パスは verbatim）で、ブランチのヘッダ（ブランチ名・HEAD・upstream と先行/遅れ）を必ず出す。見え方を左右するユーザー設定は引数で封じる——`status.showUntrackedFiles`（未追跡はファイル単位）・`diff.ignoreSubmodules`・`status.aheadBehind`（先行/遅れは必ず数える）・`status.renames`（rename は必ず検出する）。upstream が在って先行/遅れの行が無いのは upstream の ref が消えたときで、数は「不明」。未追跡を 1 件ずつ出すぶん出力が大きくなりうる（.gitignore されていない 2 万件の未追跡で約 0.4MB）ので、解析は git の実行と同じ裏のスレッドで済ませ、main は結果を受けるだけにする。index の版は `ls-files -s` の OID で引き、変わったときだけ `cat-file --filters --path=<相対パス>` で本文を取る——そのパスの属性で smudge filter と eol 変換を掛けた、作業ツリーに出したときの姿。smudge の実行コマンドは config 側にしか書けないので、信頼できないリポジトリのコードが実行される面は checkout と同じ（きっかけはファイルを開くこと）。textconv・外部 diff は通らず、diff driver は起動しない。無出力 120 秒の打ち切りは他の呼び出しと同じで、smudge が黙って止まれば git の失敗として扱う（前の baseline を保ち、同じ index 版を上限の回数まで取り直す → [editor/files](../editor/files.md)）。問い合わせるファイル名は pathspec として解釈させない（literal を前置し、それを覆す環境変数は全呼び出しから落とす）。
+エディターの根の観測（[editor/files](../editor/files.md)）は 3 つの読みで成る。status は porcelain v2 の NUL 区切り（パスは verbatim）で、ブランチのヘッダ（ブランチ名・HEAD・upstream と先行/遅れ）を必ず出す。見え方を左右するユーザー設定は引数で封じる——`status.showUntrackedFiles`（未追跡はファイル単位）・`diff.ignoreSubmodules`・`status.aheadBehind`（先行/遅れは必ず数える）・`status.renames`（rename は必ず検出する）。upstream が在って先行/遅れの行が無いのは upstream の ref が消えたときで、数は「不明」。未追跡を 1 件ずつ出すぶん出力も値も大きくなりうる（.gitignore されていない 2 万件の未追跡で約 0.4MB・2 万エントリ）ので、解析と前の値との比較は git の実行と同じ裏のスレッドで済ませ、main は「変わったか」と新しい値を受けるだけにする。index の版は `ls-files -s` の OID で引き、変わったときだけ `cat-file --filters --path=<相対パス>` で本文を取る——そのパスの属性で smudge filter と eol 変換を掛けた、作業ツリーに出したときの姿。smudge の実行コマンドは config 側にしか書けないので、信頼できないリポジトリのコードが実行される面は checkout と同じ（きっかけはファイルを開くこと）。textconv・外部 diff は通らず、diff driver は起動しない。無出力 120 秒の打ち切りは他の呼び出しと同じで、smudge が黙って止まれば git の失敗として扱う（前の baseline を保ち、同じ index 版を上限の回数まで取り直す → [editor/files](../editor/files.md)）。問い合わせるファイル名は pathspec として解釈させない（literal を前置し、それを覆す環境変数は全呼び出しから落とす）。
 
 チェックアウトの解決は toplevel・git dir・common dir の 3 値。linked worktree では git dir が本体側の `worktrees/<name>` を指し、index・HEAD はそこにある（監視の対象）。綴りは git の返すままにする——正準形と比べる場では比べる側が両辺を揃える。
