@@ -166,8 +166,13 @@ final class RootFilesWritesTests: OrbeTestCase {
     XCTAssertTrue(reason.contains("nothing to commit"), reason)
   }
 
-  /// amend はメッセージが空なら前のメッセージのまま中身だけ差し替え、あれば差し替える。
+  /// amend はメッセージが空なら前のメッセージのまま中身だけ差し替え、あれば差し替える。前のメッセージは、利用者の
+  /// `commit.cleanup=strip` の下でも `#` の行ごと一字も変わらない。
   func testAmendReplacesTheLastCommit() throws {
+    let message = "Title\n\n# not a comment\n"
+    XCTAssertTrue(
+      repo.git(["commit", "-q", "--amend", "--cleanup=verbatim", "-m", message]).isSuccess)
+    XCTAssertTrue(repo.git(["config", "commit.cleanup", "strip"]).isSuccess)
     let files = repo.files()
     let before = repo.head()
     try repo.write("a.txt", "amended\n")
@@ -176,7 +181,7 @@ final class RootFilesWritesTests: OrbeTestCase {
     let kept = finish(files) { files.commit(message: "  \n", amend: true, completion: $0) }
     XCTAssertNil(kept.failure)
     XCTAssertNotEqual(repo.head(), before)
-    XCTAssertEqual(repo.git(["log", "-1", "--format=%s"]).stdoutText, "init\n")
+    XCTAssertEqual(repo.git(["log", "-1", "--format=%B"]).stdoutText, message + "\n")
     XCTAssertEqual(repo.git(["rev-list", "--count", "HEAD"]).stdoutText, "1\n", "積まずに差し替える")
     XCTAssertEqual(repo.git(["show", "HEAD:a.txt"]).stdoutText, "amended\n")
 
