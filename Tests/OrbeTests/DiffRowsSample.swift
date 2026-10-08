@@ -5,8 +5,8 @@ import OrbeEditorCore
 @testable import OrbeEditorEngine
 
 /// 2 版の行を突き合わせた並び（文脈・削除・追加）から、diff の装備（行の型・番号・詰め物）を組む。diff の flow
-/// （`editor_diff_rows`）と、画面に出す試しの場の並列の型（`EditorRowsTrialTests`）が載せる。見え方は見本 D 節の寸法と
-/// 色で作ったテストだけの値で、製品の値は diff の画面を作る単位（d1）が持つ。
+/// （`editor_diff_rows`）と、画面に出す試しの場の並列の型（`EditorRowsTrialTests`）が載せる。見え方は見本 D 節の寸法で
+/// 作ったテストだけの値で、製品の値は diff の画面を作る単位（d1）が持つ。
 @MainActor
 struct DiffRowsSample {
   /// 突き合わせた行 1 つ。
@@ -161,17 +161,17 @@ struct DiffRowsSample {
   /// 並列の 2 面の区切り（hairline(0.07)）。
   static let hairline = dynamic(light: hex(0x6E5AAA, 0.098), dark: hex(0xC7B9EB, 0.07))
 
-  /// 行の型——追加・削除（地は diffAdded / diffRemoved の 0.12、記号は + / −）・文脈・詰め物（地は fill(0.02)）。字はどの行も
-  /// 本文の字の色（追加・削除は地と記号で見分ける）。
+  /// 行の型——追加・削除（地は diffAdded / diffRemoved の 0.12、記号は + / −）・文脈・詰め物（地は fill(0.02)）。字の色は
+  /// 持たない（文書の行は構文色、差し込んだ削除行は素の字。追加・削除は地と記号で見分ける）。
   static var styles: [LineStyle] {
     [
       LineStyle(
-        background: Theme.Color.diffAdded.withAlphaComponent(0.12), text: Theme.Color.editorText,
-        sign: "+", signColor: Theme.Color.diffAdded),
+        background: Theme.Color.diffAdded.withAlphaComponent(0.12), sign: "+",
+        signColor: Theme.Color.diffAdded),
       LineStyle(
-        background: Theme.Color.diffRemoved.withAlphaComponent(0.12), text: Theme.Color.editorText,
-        sign: "−", signColor: Theme.Color.diffRemoved),
-      LineStyle(text: Theme.Color.editorText),
+        background: Theme.Color.diffRemoved.withAlphaComponent(0.12), sign: "−",
+        signColor: Theme.Color.diffRemoved),
+      LineStyle(),
       LineStyle(background: dynamic(light: hex(0x3A3151, 0.012), dark: hex(0xFFFFFF, 0.02))),
     ]
   }

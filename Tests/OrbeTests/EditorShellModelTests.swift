@@ -53,7 +53,7 @@ final class EditorShellModelTests: OrbeTestCase {
     XCTAssertTrue(shell.crumbs.isEmpty)
   }
 
-  /// 未保存の文書が外で書き換えられると、写しは衝突（ドットが変更の黄）を持ち、外の内容に戻れば消える。
+  /// 未保存の文書が外で書き換えられると、写しは衝突（ドットが注意の黄）を持ち、外の内容に戻れば消える。
   func testConflictFollowsExternalWritesOnADirtyDocument() throws {
     let repo = try TempGitRepo()
     let session = EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
