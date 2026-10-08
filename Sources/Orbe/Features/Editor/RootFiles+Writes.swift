@@ -36,23 +36,24 @@ extension RootFiles {
     let completion: (GitWriteFailure?) -> Void
   }
 
-  /// 行をステージする（rename の行は元パスも）。
+  /// 行をステージする（rename の元パスは、呼んだ時点の index に在るときだけ含める）。
   @discardableResult
   func stage(_ rows: [GitStatus.Row], completion: @escaping (GitWriteFailure?) -> Void) -> Write {
-    enqueue({ $0.stage(paths: rows.flatMap(\.paths), handle: $1, completion: $2) }, completion)
+    enqueue({ $0.stage(rows: rows, handle: $1, completion: $2) }, completion)
   }
 
   /// 行のステージを解く（rename の行は元パスの削除の側も）。
   @discardableResult
   func unstage(_ rows: [GitStatus.Row], completion: @escaping (GitWriteFailure?) -> Void) -> Write {
-    enqueue({ $0.unstage(paths: rows.flatMap(\.paths), handle: $1, completion: $2) }, completion)
+    enqueue({ $0.unstage(rows: rows, handle: $1, completion: $2) }, completion)
   }
 
-  /// 行の変更を捨てる。追跡中は作業ツリーを index の版へ（ステージ済みは残る）、未追跡はゴミ箱へ。git とゴミ箱は
-  /// 1 枠で走り、後から投げた書き込みと入れ替わらない。
+  /// 行の変更を捨てる。追跡中は作業ツリーを index の版へ（ステージ済みは残る）、未追跡と intent-to-add はゴミ箱へ。
+  /// rename の元パスは、呼んだ時点の index に在るときだけ含める。git とゴミ箱は 1 枠で走り、後から投げた書き込みと
+  /// 入れ替わらない。
   @discardableResult
   func discard(_ rows: [GitStatus.Row], completion: @escaping (GitWriteFailure?) -> Void) -> Write {
-    enqueue({ $0.discard(paths: rows.flatMap(\.paths), handle: $1, completion: $2) }, completion)
+    enqueue({ $0.discard(rows: rows, handle: $1, completion: $2) }, completion)
   }
 
   /// ステージ済みの分をコミットする。`amend` でメッセージが空なら、前のメッセージのまま中身だけ差し替える。
