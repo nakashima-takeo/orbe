@@ -54,10 +54,7 @@ extension GitRepo {
       runner.run(
         ["push", "--porcelain", "--progress"] + extra, cwd: root, timesOut: false,
         onProgress: onProgress, handle: handle
-      ) { output in
-        guard !Self.pushWasRejected(output) else { return completion(.pushRejected) }
-        completion(.ofRemote(output))
-      }
+      ) { output in completion(Self.pushFailure(output)) }
     }
     guard let branch, branch.upstream == nil else { return run([]) }
     guard branch.name != nil else { return Self.fail(.detached, completion) }
@@ -70,13 +67,20 @@ extension GitRepo {
     }
   }
 
-  /// `--porcelain` の `!` 行（送れなかった ref）が `[rejected]`（fetch first・non-fast-forward）か。
-  /// `[remote rejected]`（サーバの hook 等）はその理由のまま「その他」。
-  static func pushWasRejected(_ output: GitRunner.Output) -> Bool {
-    !output.isSuccess
-      && output.stdoutText.split(separator: "\n").contains {
-        $0.hasPrefix("!") && $0.contains("\t[rejected]")
-      }
+  /// push の失敗。送れなかった ref は `--porcelain` の `!` 行（`!\t<from>:<to>\t<要約>`）に出る——`[rejected]`
+  /// （fetch first・non-fast-forward）は「拒否された」。それ以外（サーバの hook が断った `[remote rejected]` 等）は
+  /// 「その他」で、要約を理由の頭に置く。`--porcelain` では要約が stdout へ移り、stderr には「failed to push some refs」
+  /// しか残らないため。
+  static func pushFailure(_ output: GitRunner.Output) -> GitWriteFailure? {
+    let failure = GitWriteFailure.ofRemote(output)
+    guard case .reason(let reason) = failure else { return failure }
+    let refused = output.stdoutText.split(separator: "\n").compactMap { line -> (String, String)? in
+      let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
+      guard fields.count == 3, fields[0] == "!" else { return nil }
+      return (String(fields[1].split(separator: ":").last ?? fields[1]), String(fields[2]))
+    }
+    if refused.contains(where: { $0.1.hasPrefix("[rejected]") }) { return .pushRejected }
+    return .reason((refused.map { "\($0.0) \($0.1)" } + [reason]).joined(separator: "\n"))
   }
 
   private static func fail(

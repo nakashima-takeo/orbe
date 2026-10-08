@@ -80,9 +80,7 @@ final class RootFilesRemoteTests: OrbeTestCase {
     guard case .reason(let reason) = pushed.failure else {
       return XCTFail("「その他」の失敗: \(String(describing: pushed.failure))")
     }
-    XCTExpectFailure("`--porcelain` で `!` 行が stdout へ移り、理由が「failed to push some refs」だけになる") {
-      XCTAssertTrue(reason.contains("pre-receive hook declined"), reason)
-    }
+    XCTAssertTrue(reason.contains("pre-receive hook declined"), reason)
   }
 
   // MARK: - pull・fetch
