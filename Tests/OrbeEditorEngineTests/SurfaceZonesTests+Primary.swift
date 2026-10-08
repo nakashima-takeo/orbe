@@ -80,4 +80,41 @@ extension SurfaceZonesTests {
     XCTAssertEqual(site.editor.state.cursors.primary.selection, NSRange(location: 1, length: 5))
     try mouse(opened, .leftMouseUp, at: right)
   }
+
+  /// 入力欄は主になった・外れたを知らせる（押す → Esc → 主にする口 → 絵から消える）。絵から消えて外れた知らせの中で区画を
+  /// 描き直せば、その高さは同じ取引の並びに入る。
+  func testAFieldNoticesPrimaryChangesAndARedrawInTheLastNoticeSettlesTheRows() throws {
+    let opened = try hostedRows()
+    let surface = opened.surface
+    let field = ZoneTextField(id: "reply", style: ThreadZone.fieldStyle())
+    var showsField = true
+    var height: CGFloat = 60
+    let zone = PictureZone { _ in
+      ZonePicture(
+        height: height,
+        elements: showsField
+          ? [.field(ZoneField(frame: CGRect(x: 10, y: 10, width: 200, height: 20), field: field))]
+          : [])
+    }
+    var notices: [Bool] = []
+    field.didChangePrimary = { _, primary in
+      notices.append(primary)
+      if !primary, !showsField {
+        height = 200
+        surface.redrawZone(zone)
+      }
+    }
+    surface.setRows(self.zone(zone, at: 4))
+    let at = viewPoint(surface, zone, CGPoint(x: 100, y: 20))
+    try mouse(opened, .leftMouseDown, at: at)
+    try mouse(opened, .leftMouseUp, at: at)
+    surface.textView.cancelOperation(nil)
+    surface.focus(field)
+    showsField = false
+    surface.redrawZone(zone)
+    XCTAssertEqual(notices, [true, false, true, false])
+    XCTAssertEqual(surface.primary, .body)
+    XCTAssertEqual(surface.rows.heights, [200], "外れた知らせの中で描き直した高さ")
+    XCTAssertEqual(surface.drawn.rows.heights, [200], "同じ書き込みで材料にも")
+  }
 }

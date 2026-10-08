@@ -108,8 +108,9 @@ extension MetalTextSurface {
     return site
   }
 
-  /// 取引の終わりに、区画を今に合わせる（取引の中）——本文の区画の幅が変わっていれば絵を問い直し、高さが変わった区画で
-  /// 並びを組み直し、どの区画も描いていない入力欄の場を閉じ（主なら本文が主になる）、主の入力欄が無ければ本文を主にする。
+  /// 取引の終わりに、区画を今に合わせる（取引の中）——本文の区画の幅が変わっていれば絵を問い直し、どの区画も描いていない
+  /// 入力欄の場を閉じ（主なら本文が主になる）、高さが変わった区画で並びを組み直す（閉じた場の知らせの中で描き直した高さも
+  /// 同じ取引に入る）。
   /// 区画を写したか外したなら、どの区画の材料も指さない画像の覚えを手放す。
   func settleZones() {
     guard !zones.isEmpty || !fields.isEmpty || zonesRepainted else { return }
@@ -119,7 +120,6 @@ extension MetalTextSurface {
       entry.picture = entry.zone.picture(width: width)
       paint(entry)
     }
-    if zoneHeightsChanged { applyZoneHeights() }
     for (id, site) in fields where site.zone == nil {
       if primary == .field(id) { setPrimary(.body) }
       site.editor.finishComposition(.commit)
@@ -127,6 +127,7 @@ extension MetalTextSurface {
       let serial = site.serial
       transaction?.writes.append { $0.fields[serial] = nil }
     }
+    if zoneHeightsChanged { applyZoneHeights() }
     if zonesRepainted {
       zonesRepainted = false
       painter.keep(images: Set(zones.values.flatMap { $0.material.images.map(\.pixels.key) }))
