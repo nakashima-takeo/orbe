@@ -14,7 +14,7 @@ struct DiskSync {
 
   enum Dirtiness {
     case synced
-    /// 長さが違うと分かっている。
+    /// 違うと分かっている（長さが違う、または裏の比較が違うと答えた）。
     case differs
     /// 長さが同じで、今の版の比較を裏で待っている。
     case checking
