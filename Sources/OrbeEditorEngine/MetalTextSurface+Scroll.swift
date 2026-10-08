@@ -174,8 +174,7 @@ extension MetalTextSurface {
     -> TextViewport?
   {
     guard limits.viewport.y > 0, let text = currentContent?.text else { return nil }
-    let row = min(
-      max(0, rows.line(atY: limits.clampedY(position))), max(0, text.lineCount - 1))
+    let row = rows.firstVisibleLine(atY: limits.clampedY(position), lineCount: text.lineCount)
     return TextViewport(
       firstVisible: text.lineStart(row),
       visibleLines: CGFloat(limits.viewport.y / limits.lineHeight))

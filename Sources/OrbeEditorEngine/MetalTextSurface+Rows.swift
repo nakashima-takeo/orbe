@@ -68,7 +68,7 @@ extension MetalTextSurface {
   func keepFirstVisibleLine(from before: RowLayout, lineCount: Int) {
     let (position, limits) = scrollState()
     guard limits.viewport.y > 0 else { return }
-    let line = min(max(0, before.line(atY: limits.clampedY(position))), lineCount - 1)
+    let line = before.firstVisibleLine(atY: limits.clampedY(position), lineCount: lineCount)
     let dy = rows.y(ofLine: line) - before.y(ofLine: line)
     guard dy != 0 else { return }
     if let placed = pending.position {

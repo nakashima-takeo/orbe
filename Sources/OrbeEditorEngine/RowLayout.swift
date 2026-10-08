@@ -126,6 +126,11 @@ struct RowLayout: Sendable {
     }
   }
 
+  /// 縦の位置 `y` で先頭に見えている文書の行（塊の上なら次の文書の行。`lineCount` 行の文書の範囲に収める）。
+  func firstVisibleLine(atY y: Double, lineCount: Int) -> Int {
+    min(max(0, line(atY: y)), max(0, lineCount - 1))
+  }
+
   /// y の範囲 `from...to` に掛かる文書の行（行数 `lineCount` の文書。無ければ nil）。
   func lines(from: Double, to: Double, lineCount: Int, scale: Double = 1) -> ClosedRange<Int>? {
     let first = max(0, line(atY: from, scale: scale))
