@@ -74,20 +74,20 @@ extension MetalTextSurface {
     }
   }
 
-  /// 主を `next` にする（取引の中）。離れる場の変換を確定し、⌘D の続きを終え、入力の文脈を入れ替える。区画の文から離れれば
-  /// 区画の選択を解く。入力欄には主になった・外れたを知らせる。
+  /// 主を `next` にする（取引の中）。離れる場の変換を確定し、⌘D の続きを終え、AppKit に入力の文脈を取り直させる。区画の文
+  /// から離れれば区画の選択を解く。入力欄には主になった・外れたを知らせる。
   func setPrimary(_ next: Primary) {
     guard next != primary else { return }
     transact {
       let leaving = primarySite
       leaving?.editor.finishComposition(.commit)
       leaving?.editor.focusDidLeave()
-      let active = textView.window?.firstResponder === textView
-      if active { leaving?.inputContext?.deactivate() }
       let before = primary
       primary = next
       if next != .zoneText { clearZoneSelection() }
-      if active { primarySite?.inputContext?.activate() }
+      // AppKit は今の文脈を読まれたとき、first responder の inputContext と食い違えば前の文脈を deactivate・新しい
+      // 文脈を activate する。activate・deactivate はシステムが呼ぶ口なので直に呼ばない。
+      if textView.window?.firstResponder === textView { _ = NSTextInputContext.current }
       if case .field(let id) = before, let field = fields[id]?.field {
         field.didChangePrimary?(field, false)
       }
