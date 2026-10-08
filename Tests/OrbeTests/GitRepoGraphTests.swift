@@ -59,6 +59,7 @@ final class GitRepoGraphTests: OrbeTestCase {
   }
 
   /// 件数を区切って続きを読め、呼び出し側が範囲の ref を選べる。remote 追跡ブランチが無ければ全部「未 push」。
+  /// 初回コミット前は（失敗でなく）空。
   func testPagesAndChosenRefs() throws {
     let git = try repo.open()
     for index in 1...4 { commit("c\(index)") }
@@ -74,6 +75,9 @@ final class GitRepoGraphTests: OrbeTestCase {
 
     XCTAssertEqual(
       try XCTUnwrap(graph(git, refs: ["side"])).commits.map(\.subject), ["c2", "c1", "init"])
+
+    let fresh = try TempGitRepo(initialCommit: false)
+    XCTAssertEqual(graph(try fresh.open()), GitCommitGraph(commits: [], hasMore: false))
   }
 
   /// ユーザーの `log.showSignature`・色・出力の文字コードの設定で、出力が変わらない。
