@@ -125,8 +125,9 @@ final class SurfaceRowsTests: EngineTestCase {
       accuracy: 0.5, "離せば新しい端へ戻る")
   }
 
-  /// 面自身の編集で、差し込みの境が行に付いて動く——編集より前の境は残り、後ろの境は行の増減の分だけ動き、消した区間の中の
-  /// 境は始まりへ寄る。本文を丸ごと置き換えても、境は本文の行の範囲に収まる。
+  /// 面自身の編集で、差し込みの境が上の行に付いて動く——付き先（行 r−1 の中身の終わり）より後ろの編集では残り、前の編集の
+  /// 行の増減の分だけ動き、付き先を消した編集では消した区間の始まりの行の後へ寄る。本文を丸ごと置き換えても、境は本文の
+  /// 行の範囲に収まる。
   func testRowsFollowTheSurfaceEdits() throws {
     let opened = try openRows(20)
     let surface = opened.surface
@@ -139,7 +140,7 @@ final class SurfaceRowsTests: EngineTestCase {
     surface.selectedRange = NSRange(
       location: text.lineStart(4), length: text.lineStart(9) - text.lineStart(4))
     surface.perform(.insert(""))
-    XCTAssertEqual(surface.rows.boundaries, [4, 8], "消した区間の中の境は始まりへ")
+    XCTAssertEqual(surface.rows.boundaries, [5, 8], "付き先（行 4 の終わり）を消せば、消した区間の始まりの行 4 の後へ")
     surface.replaceAll(with: rows(3))
     let lineCount = opened.document.text.lineCount
     XCTAssertTrue(

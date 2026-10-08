@@ -135,21 +135,26 @@ final class EditingSite {
   }
 
   /// 編集の束を 1 回で文の出どころへ渡し、戻ったら写しを引く（取引の中だけ）。束を当てた後の文を返す（結ばれていなければ
-  /// nil）。本文の場の編集だけが、縦の並びの差し込みの境をずらす。
+  /// nil）。本文の場の編集だけが、縦の並びの差し込みの境をずらす——渡す前にずらすので、編集の知らせの中で載せる側が
+  /// 編集後の行で置き直した並びは、そのまま残る。
   func deliver(_ batch: EditBatch) -> TextRope? {
     precondition(change != nil, "場の文の変化は取引の中でだけ渡す")
     guard let before = currentContent?.text else { return nil }
+    if isBody { surface.rows.shift(batch.edits, in: before) }
     source.apply(batch.edits)
     guard let content = source.content else { return nil }
     change?.content = content
     change?.edited = true
     guard isBody else { return content.text }
     // 束は後ろから当たる。後ろの編集は前の行を動かさないので、どの編集の行も束の前の文で数えられる。
-    let edits = batch.edits.reversed().map { RowEdit($0, in: before, version: content.version) }
-    change?.rowEdits += edits
-    for edit in edits { surface.rows.shift(edit) }
+    change?.rowEdits += batch.edits.reversed().map {
+      RowEdit($0, in: before, version: content.version)
+    }
     return content.text
   }
+
+  /// 文の出どころの今の写し（編集の知らせの中なら、渡した編集の後）。
+  var sourceContent: SurfaceContent? { source.content }
 
   /// 取引の中で、カーソルの列を ⌘U で戻した（カーソルの履歴に積まない）。
   func markCursorsRestored() {

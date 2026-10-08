@@ -1,4 +1,5 @@
 import Foundation
+import OrbeEditorCore
 
 /// 面の縦の並び——文書の行と、行の境ごとの差し込みの塊（文書に無い行の列か、区画）。行 ↔ y の式はここに
 /// だけあり、描画・スクロールの範囲・面のスクロール操作・当たり・IME の矩形・ドラッグ・俯瞰がどれもこれを呼ぶ。
@@ -25,7 +26,7 @@ struct RowLayout: Sendable {
   }
 
   let lineHeight: Double
-  /// 塊の境（文書の行 `boundaries[i]` の前。昇順）・高さ（pt）・中身。
+  /// 塊の境（文書の行 `boundaries[i]` の前——行 `boundaries[i]`−1 の後。昇順）・高さ（pt）・中身。
   private(set) var boundaries: [Int] = []
   private(set) var heights: [Double] = []
   private(set) var contents: [Content] = []
@@ -207,21 +208,55 @@ struct RowLayout: Sendable {
 
   // MARK: - 面自身の編集
 
-  /// 編集 `edit` の後の行へ境をずらす——編集より前の境はそのまま、後ろの境は行の増減の分だけ、置き換えた区間の中の境は
-  /// 区間の始まりの行へ。役割だけの変化は行を動かさない。
-  mutating func shift(_ edit: RowEdit) {
-    guard !boundaries.isEmpty, !edit.rolesOnly else { return }
-    let first = edit.rows.lowerBound
-    let end = edit.rows.upperBound
-    let delta = edit.inserted - edit.rows.count
-    var index = blocks(above: first)
+  /// 面自身の編集の束 `edits`（どれも編集前の本文 `before` の座標で、重ならない）の後の行へ境をずらす。境 r（r ≥ 1）は
+  /// 「行 r−1 の後」で、行 r−1 の中身の終わり（改行の手前）に付く——付き先から始まる編集では動かず、付き先を消した編集
+  /// では消した区間の始まりの行の後へ寄り、付き先より前の編集の行の増減だけずれる。境 0（文書の先頭）は動かない。
+  mutating func shift(_ edits: [TextEdit], in before: TextRope) {
+    guard !boundaries.isEmpty, !edits.isEmpty else { return }
+    let changes = edits.map { edit in
+      let start = edit.range.location
+      let end = NSMaxRange(edit.range)
+      let removed = before.row(containing: end) - before.row(containing: start)
+      return (
+        start: start, end: end,
+        delta: edit.replacement.reduce(0) { $1 == 0x0A ? $0 + 1 : $0 } - removed
+      )
+    }.sorted { $0.start < $1.start }
+    let total = changes.reduce(0) { $0 + $1.delta }
+    let lastRow = before.row(containing: changes.map(\.end).max() ?? 0)
+    // 境 r ≤ 最初の編集の行 は、付き先が編集より前にある。
+    var index = blocks(above: before.row(containing: changes[0].start))
     guard index < boundaries.count else { return }
     while index < boundaries.count {
       let boundary = boundaries[index]
-      boundaries[index] = boundary >= end ? boundary + delta : first
+      if boundary - 1 > lastRow {
+        boundaries[index] = boundary + total
+      } else {
+        let anchor = Self.anchor(of: boundary, in: before)
+        var row = boundary - 1
+        var delta = 0
+        for change in changes {
+          guard change.start < anchor else { break }
+          if anchor < change.end {
+            row = before.row(containing: change.start)
+          } else {
+            delta += change.delta
+          }
+        }
+        boundaries[index] = row + delta + 1
+      }
       index += 1
     }
     version += 1
+  }
+
+  /// 境 `boundary`（≥ 1）の付き先——行 boundary−1 の中身の終わり（改行の手前。CRLF なら CR の手前）。
+  private static func anchor(of boundary: Int, in text: TextRope) -> Int {
+    guard boundary < text.lineCount else { return text.length }
+    let newline = text.lineStart(boundary) - 1
+    guard newline > 0, text.units(in: NSRange(location: newline - 1, length: 1)).first == 0x0D
+    else { return newline }
+    return newline - 1
   }
 
   // MARK: - 区画

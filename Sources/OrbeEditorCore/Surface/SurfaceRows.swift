@@ -13,7 +13,8 @@ public struct SurfaceRows: Equatable {
 
 /// 文書の行の境 1 つに置く差し込みの塊。
 public struct RowInsertion: Equatable {
-  /// 境——文書の行 `line` の前（行数なら最終行の後）。載せる側は、面が最後に引いた写しの行で書く（行の印と同じ規約）。
+  /// 境——文書の行 `line`−1 の後（行 `line` の前。0 は先頭、行数なら最終行の後）。置く時点の文書の写しの行で書く（行の
+  /// 印と同じ規約）。
   public var line: Int
   public var content: Content
 

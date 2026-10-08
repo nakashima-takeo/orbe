@@ -9,11 +9,11 @@ extension MetalTextSurface {
     guard !holds(insertions) else { return }
     precondition(
       insertions.isEmpty || !presentation.showsMinimap, "差し込みはミニマップを出していない面にだけ置く")
-    let lineCount = currentContent?.text.lineCount ?? 1
+    let lineCount = bodySite.sourceContent?.text.lineCount ?? 1
     precondition(
       zip(insertions, insertions.dropFirst()).allSatisfy { $0.line <= $1.line }
         && insertions.allSatisfy { (0...lineCount).contains($0.line) },
-      "差し込みの境は昇順で、写しの行の範囲（0...行数）に収める")
+      "差し込みの境は昇順で、置く時点の文書の写しの行の範囲（0...行数）に収める")
     transact {
       noteRowsChange()
       syncZones(
