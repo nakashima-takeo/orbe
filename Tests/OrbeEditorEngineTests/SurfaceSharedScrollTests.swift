@@ -197,6 +197,24 @@ final class SurfaceSharedScrollTests: EngineTestCase {
     let end = a.surface.rows.lastTop(lineCount: a.document.text.lineCount)
     XCTAssertEqual(drawn(a.surface)?.y, end, "自分の範囲に収めた位置を描く")
   }
+
+  /// 刻みの位置を封じた後に main が位置を置き直せば、封じた値は古くなる——同じ刻みを後で描く面は、置き直した後の材料には
+  /// 新しい位置を、置く前の材料には置く前の位置を描く。
+  func testPlacingAfterASealedTickIsDrawnOnThatTick() throws {
+    let (a, b) = try pair()
+    let period = 1.0 / 60
+    let tick = 100 * period
+    let versions = (a.surface.material.revision, b.surface.material.revision)
+    let sealed = a.surface.scroll.frame(at: tick, period: period, material: versions.0)
+    ScrollBox.commit([
+      (a.surface.scroll, ScrollBox.Commit(material: versions.0 + 1, position: SIMD2(0, 90))),
+      (b.surface.scroll, ScrollBox.Commit(material: versions.1 + 1)),
+    ])
+    let old = b.surface.scroll.frame(at: tick, period: period, material: versions.1)
+    XCTAssertEqual(old.position, sealed.position, "置く前の材料には置く前の位置")
+    let fresh = b.surface.scroll.frame(at: tick, period: period, material: versions.1 + 1)
+    XCTAssertEqual(fresh.position.y, 90, "置き直した後の材料には新しい位置")
+  }
 }
 
 /// 描画スレッドの 1 コマの順を決めて流す場——2 面の刻みを手で打ち、どちらの面が先に描くかを決める。
