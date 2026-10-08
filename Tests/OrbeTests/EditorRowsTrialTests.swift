@@ -54,9 +54,6 @@ final class EditorRowsTrialTests: OrbeTestCase {
     runShownWindow(for: Double(environment["ORBE_EDITOR_ROWS_SECONDS"] ?? "") ?? 180)
   }
 
-  /// 並列の型の文書（窓を出している間、面と一緒に保つ）。
-  var sideDocuments: [EditorDocument] = []
-
   // MARK: - 合成の型
 
   private func synthetic() throws {
@@ -90,10 +87,10 @@ final class EditorRowsTrialTests: OrbeTestCase {
     wait(for: [started], timeout: 10)
     if let failure { throw failure }
     runShownWindow(for: 0.3)
-    scroll(surface.view, flick: 6000)
+    let down = scroll(surface.view, flick: 6000)
     runShownWindow(for: 1.6)
     scroll(surface.view, drag: 0.4, speed: -9000)
-    scroll(surface.view, flick: -6000)
+    let bounce = scroll(surface.view, flick: -6000)
     runShownWindow(for: 1.6)
     let stopped = expectation(description: "コマを受け終える")
     Task {
@@ -102,11 +99,14 @@ final class EditorRowsTrialTests: OrbeTestCase {
     }
     wait(for: [stopped], timeout: 10)
     let report = recorder.finish()
+    print("[rows-trial] momentum events delivered: flick \(down), bounce \(bounce)")
     print("[rows-trial] frames \(report.frames), measured zones \(report.above.count)")
     print(
       "[rows-trial] gap above px \(report.range(report.above)), below px \(report.range(report.below))"
     )
     print("[rows-trial] wrote \(report.sheet?.path ?? "-")")
+    XCTAssertGreaterThan(down, 0, "前提: はじきの momentum が面に届いた")
+    XCTAssertGreaterThan(bounce, 0, "前提: 端の弾みの momentum が面に届いた")
     XCTAssertGreaterThan(report.frames, 30, "前提: スクロールの間のコマを受けた")
     XCTAssertGreaterThan(report.above.count, 30, "前提: 区画の枠線と上下の印の行を引けた")
     XCTAssertLessThanOrEqual(
@@ -213,8 +213,10 @@ final class EditorRowsTrialTests: OrbeTestCase {
     feed(view, events)
   }
 
-  /// はじく: 80ms で速さ `peak`（pt/秒）まで上げて離し、OS の momentum の出来事（0.95 倍ずつ落ちる列）が続く。
-  func scroll(_ view: NSView, flick peak: Double) {
+  /// はじく: 80ms で速さ `peak`（pt/秒）まで上げて離し、OS の momentum の出来事（0.95 倍ずつ落ちる列）が続く。届いた
+  /// momentum の出来事の数を返す。
+  @discardableResult
+  func scroll(_ view: NSView, flick peak: Double) -> Int {
     let step = 0.0057
     var events = [Planned(at: 0, phase: 1)]
     let ramp = Int(0.08 / step)
@@ -232,12 +234,20 @@ final class EditorRowsTrialTests: OrbeTestCase {
       events.append(Planned(at: t, momentum: 2, dy: d))
     }
     events.append(Planned(at: t + step, momentum: 3))
-    feed(view, events)
+    return feed(view, events)
   }
 
-  /// 合成のスクロールの出来事（`phase`・`momentum` は CGEvent の段の値）を実時間で面の入口へ流す。
-  private func feed(_ view: NSView, _ events: [Planned]) {
+  /// 合成のスクロールの出来事（`phase`・`momentum` は CGEvent の段の値）を実時間で `view` の上へ流し、届いた momentum の
+  /// 出来事の数を返す。段の出来事は窓の配り（`NSWindow.sendEvent`。点の下の view を引く——人の操作と同じ道）に通す。
+  /// momentum の出来事は始まりの段を受けた view へ直接渡す——窓の配りは合成の momentum の出来事を view へ届けない
+  /// （実測）。
+  @discardableResult
+  private func feed(_ view: NSView, _ events: [Planned]) -> Int {
+    guard let window = view.window, let content = window.contentView else { return 0 }
+    let point = view.centerInWindow
     let start = CACurrentMediaTime()
+    var receiver: NSView?
+    var momentum = 0
     for planned in events {
       while CACurrentMediaTime() < start + planned.at { runShownWindow(for: 0.001) }
       guard
@@ -251,13 +261,21 @@ final class EditorRowsTrialTests: OrbeTestCase {
       event.setDoubleValueField(.scrollWheelEventPointDeltaAxis1, value: planned.dy)
       event.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1, value: planned.dy)
       event.timestamp = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
-      guard let window = view.window else { continue }
-      // 窓を持たない出来事の locationInWindow は画面の座標（左下が原点）なので、窓の中の点がそのまま入るように置き、窓の
-      // 配りに通す。
-      let point = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
+      // 窓を持たない出来事の locationInWindow は画面の座標（左下が原点）なので、窓の中の点がそのまま入るように置く。
       event.location = CGPoint(x: point.x, y: (NSScreen.screens.first?.frame.height ?? 0) - point.y)
-      if let scroll = NSEvent(cgEvent: event) { window.sendEvent(scroll) }
+      guard let scroll = NSEvent(cgEvent: event) else { continue }
+      if planned.momentum == 0 {
+        if planned.phase == 1 {
+          receiver = content.hitTest(content.superview?.convert(point, from: nil) ?? point)
+          XCTAssertTrue(receiver === view, "前提: 窓は点の下のこの面へ配る")
+        }
+        window.sendEvent(scroll)
+      } else if let receiver {
+        receiver.scrollWheel(with: scroll)
+        momentum += 1
+      }
     }
+    return momentum
   }
 }
 

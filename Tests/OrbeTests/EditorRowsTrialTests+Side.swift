@@ -17,8 +17,8 @@ extension EditorRowsTrialTests {
   }
 
   /// 並列の合成の型: 右の面と左の面のそれぞれの上へ、窓の出来事の配り（`NSWindow.sendEvent`。点の下の view を引いて配る
-  /// ——人の操作と同じ道）でマウスのホイールとトラックパッドの指のドラッグとはじきを流し、両面の描画スレッドが最後に描いた
-  /// 位置を読み比べる。ホイールは、もう一方の面だけが刻みごとに描き直している（構文の色の到着・つまみの現れ消えと同じく、
+  /// ——人の操作と同じ道）でマウスのホイールとトラックパッドの指のドラッグとはじきを流し（はじきの momentum は始まりを
+  /// 受けた面へ直接渡す）、両面の描画スレッドが最後に描いた位置を読み比べる。ホイールは、もう一方の面だけが刻みごとに描き直している（構文の色の到着・つまみの現れ消えと同じく、
   /// その面の材料だけが変わる）間にも回す。`ORBE_EDITOR_ROWS_SCREEN` で窓を出す画面を選べる。
   func sideSynthetic() throws {
     let (window, surfaces) = try showSide()
@@ -26,7 +26,9 @@ extension EditorRowsTrialTests {
     let press = { (window.contentView as? SideBySideView)?.press() }
     let fling = { (index: Int) in
       self.scroll(surfaces[index].view, drag: 0.4, speed: 2000)
-      self.scroll(surfaces[index].view, flick: 3000)
+      let momentum = self.scroll(surfaces[index].view, flick: 3000)
+      print("[rows-trial] side momentum events delivered: \(momentum)")
+      XCTAssertGreaterThan(momentum, 0, "はじきの momentum が面に届いた")
     }
     let steps: [SideStep] = [
       SideStep(name: "wheel right") { self.wheel(surfaces[1].view, lines: -5, times: 6) },
@@ -87,7 +89,7 @@ extension EditorRowsTrialTests {
           scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: lines, wheel2: 0,
           wheel3: 0)
       else { continue }
-      let point = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
+      let point = view.centerInWindow
       event.location = CGPoint(x: point.x, y: (NSScreen.screens.first?.frame.height ?? 0) - point.y)
       event.timestamp = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
       if let scroll = NSEvent(cgEvent: event) { window.sendEvent(scroll) }
@@ -97,7 +99,7 @@ extension EditorRowsTrialTests {
 
   fileprivate func click(_ view: NSView) {
     guard let window = view.window else { return }
-    let point = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
+    let point = view.centerInWindow
     for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
       if let event = NSEvent.mouseEvent(
         with: type, location: point, modifierFlags: [], timestamp: CACurrentMediaTime(),
@@ -158,7 +160,8 @@ extension EditorRowsTrialTests {
     print(
       "[rows-trial] window \(window.frame) screen \(String(describing: window.screen?.localizedName))"
     )
-    sideDocuments = panes.map(\.document)
+    let documents = panes.map(\.document)
+    addTeardownBlock { _ = documents }
     return (window, panes.map(\.surface))
   }
 
