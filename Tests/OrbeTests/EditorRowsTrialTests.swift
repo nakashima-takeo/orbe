@@ -26,22 +26,16 @@ final class EditorRowsTrialTests: OrbeTestCase {
   private var environment: [String: String] { ProcessInfo.processInfo.environment }
   /// 試しのスレッドを置く間隔（行）。
   private static let zoneEvery = 30
-  /// 据える前のメインメニュー（据えたときだけ値がある）。
-  private var replacedMenu: NSMenu??
 
   override func setUpWithError() throws {
     try super.setUpWithError()
     try XCTSkipUnless(environment["ORBE_EDITOR_ROWS_TRIAL"] == "1", "ORBE_EDITOR_ROWS_TRIAL=1 で走る")
     NSApplication.shared.setActivationPolicy(.accessory)
-    replacedMenu = .some(NSApp.mainMenu)
+    let replaced = NSApp.mainMenu
+    addTeardownBlock { MainActor.assumeIsolated { NSApp.mainMenu = replaced } }
     let main = MainMenu.build(appName: "Orbe", language: .ja)
     NSApp.mainMenu = main
     NSApp.servicesMenu = MainMenu.servicesMenu(of: main)
-  }
-
-  override func tearDownWithError() throws {
-    if case .some(let menu) = replacedMenu { NSApp.mainMenu = menu }
-    try super.tearDownWithError()
   }
 
   func testTrial() throws {
@@ -160,7 +154,7 @@ final class EditorRowsTrialTests: OrbeTestCase {
     return Shown(window: window, surface: surface)
   }
 
-  /// 30 行ごとの試しのスレッドと、13 行ごとの文書に無い行 2 行（同じ境なら区画が下）。
+  /// 30 行ごとの試しのスレッドと、13 行ごとの文書に無い行 2 行（区画と同じ境には置かない）。
   private func insertions(lineCount: Int) -> ([RowInsertion], [SampleThreadZone]) {
     var result: [RowInsertion] = []
     var threads: [SampleThreadZone] = []

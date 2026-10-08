@@ -39,7 +39,7 @@ extension DesignFlowSnapshotTests {
 private struct RowsFlow {
   let surface: MetalTextSurface
   let document: EditorDocument
-  let thread = SampleThreadZone.sample(line: 41, id: "flow-reply")
+  let thread = SampleThreadZone.sample(line: 40, id: "flow-reply")
   let settleFades: () -> Void
 
   init(surface: MetalTextSurface, document: EditorDocument, settleFades: @escaping () -> Void) {

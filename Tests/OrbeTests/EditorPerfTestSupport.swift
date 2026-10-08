@@ -64,7 +64,7 @@ extension OrbeTestCase {
     let deadline = Date().addingTimeInterval(seconds)
     while Date() < deadline {
       let event = NSApp.nextEvent(
-        matching: .any, until: min(deadline, Date().addingTimeInterval(0.001)), inMode: .default,
+        matching: .any, until: deadline, inMode: .default,
         dequeue: true)
       if let event { NSApp.sendEvent(event) }
     }
