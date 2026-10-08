@@ -35,4 +35,38 @@ extension SurfaceRowsTests {
     surface.flush()
     XCTAssertEqual(surface.scrollPosition.y, 0, "伸ばしても")
   }
+
+  /// 見せた直後に、同じ回で上へ差し込みを置いても、見せた行は見せた位置に残る（まだ出していない置く位置をずらす）。
+  func testRowsPlacedRightAfterARevealKeepTheRevealedLine() throws {
+    let opened = try openRows()
+    let surface = opened.surface
+    surface.flush()
+    let text = opened.document.text
+    surface.reveal(NSRange(location: text.lineStart(40), length: 0), policy: .center)
+    let centered = surface.rows.y(ofLine: 40) - surface.scrollPosition.y
+    surface.setRows(SurfaceRows(insertions: [insert(["a", "b", "c"], at: 10)]))
+    surface.flush()
+    XCTAssertEqual(
+      surface.rows.y(ofLine: 40) - surface.scrollPosition.y, centered, accuracy: 1e-9,
+      "行 40 は見せた位置のまま")
+  }
+
+  /// 変更行が差し込みをまたぐと、git の印のバーは差し込みの境で切れ、差し込んだ行の印の列には描かれない。
+  func testTheGitBarBreaksAtTheBlockItSpans() throws {
+    let opened = try openRows(20)
+    var baseline = text(opened.document).components(separatedBy: "\n")
+    for row in [2, 3] { baseline[row] = "old \(row)" }
+    opened.document.baseline = baseline.joined(separator: "\n")
+    XCTAssertTrue(opened.document.waitUntilCaughtUp())
+    opened.surface.setRows(SurfaceRows(insertions: [insert(["- one", "- two"], at: 3)]))
+    let shot = try pixelShot(opened)
+    let config = opened.surface.config
+    let column = config.columnWidth(lineCount: opened.document.text.lineCount)
+    let marks = stride(from: column - config.marks.gutterWidth, to: column, by: 0.5)
+    let inked = { (y: CGFloat) in marks.contains { shot.hasInk($0, config.topInset + y) } }
+    XCTAssertTrue(inked(2.5 * config.lineHeight), "行 2 の印")
+    XCTAssertFalse(inked(3.5 * config.lineHeight), "差し込んだ行には印が無い")
+    XCTAssertFalse(inked(4.5 * config.lineHeight))
+    XCTAssertTrue(inked(5.5 * config.lineHeight), "差し込みの下へ下がった行 3 の印")
+  }
 }

@@ -216,6 +216,26 @@ final class ScrollPhysicsTests: XCTestCase {
     XCTAssertEqual(p.shown(at: 1.53).y, held + 40, accuracy: 1e-9, "動かし始めたジェスチャの momentum は当てる")
   }
 
+  /// 下端の外から戻っている途中で上の並びが伸びて位置をずらすと、はみ出しを保ったまま、ずらした先の新しい端へ戻る（戻りは
+  /// 打ち切らない）。
+  func testShiftWhileReturningKeepsTheOverscrollToTheNewEdge() {
+    var p = physics()
+    p.place(SIMD2(0, 99 * 18))
+    p.apply(finger(1.0, 0, .began))
+    p.apply(finger(1.01, -200))
+    p.apply(finger(1.02, 0, .ended))
+    XCTAssertTrue(p.isReturning, "前提: 下端の外から戻っている")
+    let overscroll = p.shown(at: 1.05).y - 99 * 18
+    var limits = p.limits
+    limits.lastTop = 99 * 18 + 50
+    p.setLimits(limits)
+    p.shift(by: 50)
+    XCTAssertTrue(p.isReturning, "戻りは続く")
+    XCTAssertEqual(p.shown(at: 1.05).y - (99 * 18 + 50), overscroll, accuracy: 1e-9)
+    p.settle(at: 2.0)
+    XCTAssertEqual(p.shown(at: 2.0).y, 99 * 18 + 50, "新しい端へ戻る")
+  }
+
   /// main の操作はその場で位置を置き（範囲に収める）、戻りを打ち切る。本文が縮めば範囲に収める。
   func testPlaceClampsAndCancelsReturn() {
     var p = physics()

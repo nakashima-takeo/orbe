@@ -179,6 +179,53 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     XCTAssertFalse(try marked(140))
   }
 
+  /// 上に差し込みを置くと、印とキャレットの印は縦の並びの位置（差し込みの高さを数えた位置）へ描き直される——撮った後の
+  /// 差し込みでも、前の位置に残らない。
+  func testMarksMoveDownWithTheRowsInsertedAboveThem() throws {
+    let opened = try open(
+      (0..<200).map { "line \($0)\n" }.joined(), size: CGSize(width: 800, height: 400),
+      style: style)
+    let surface = opened.surface
+    surface.setPresentation(SurfacePresentation(showsMinimap: false))
+    let rope = opened.document.text
+    surface.setHighlights([NSRange(location: rope.lineStart(100), length: 4)], for: .findMatch)
+    surface.selectedRange = NSRange(location: rope.lineStart(150), length: 0)
+    let bar = surface.surfaceLayout.verticalScrollbar
+    let ruler = {
+      OverviewRuler(
+        contentLines: CGFloat(surface.rows.contentLines(lineCount: rope.lineCount)),
+        visibleLines: surface.viewportLines.visible, height: bar.height, scale: 2)
+    }
+    let lane = OverviewRuler.lane(.center, width: bar.width, scale: 2)
+    let find = { (unit: Double) -> CGPoint in
+      let span = ruler().spans([CGFloat(unit)..<CGFloat(unit + 1)])[0]
+      return CGPoint(
+        x: bar.minX + CGFloat(2 * lane.x + lane.width) / 4,
+        y: bar.minY + CGFloat(span.y1 + span.y2) / 4)
+    }
+    let caret = { (unit: Double) -> CGPoint in
+      let span = ruler().caret(at: CGFloat(unit))
+      return CGPoint(x: bar.midX, y: bar.minY + CGFloat(span.y1 + span.y2) / 4)
+    }
+    let before = (find: find(100), caret: caret(150))
+    var shot = try pixelShot(opened)
+    XCTAssertEqual(shot.rgb(before.find.x, before.find.y), [255, 0, 0], "前提: 一致の印")
+    XCTAssertEqual(shot.rgb(before.caret.x, before.caret.y), [255, 255, 255], "前提: キャレットの印")
+    surface.setRows(
+      SurfaceRows(
+        insertions: [
+          RowInsertion(
+            line: 20, content: .lines((0..<60).map { InsertedLine("inserted \($0)") }))
+        ]))
+    shot = try pixelShot(opened)
+    let moved = (
+      find: find(surface.rows.unit(ofLine: 100)), caret: caret(surface.rows.unit(ofLine: 150))
+    )
+    XCTAssertEqual(shot.rgb(moved.find.x, moved.find.y), [255, 0, 0], "一致の印は差し込みの分下")
+    XCTAssertEqual(shot.rgb(moved.caret.x, moved.caret.y), [255, 255, 255], "キャレットの印も")
+    XCTAssertNotEqual(shot.rgb(before.caret.x, before.caret.y), [255, 255, 255], "前の位置には残らない")
+  }
+
   /// 縦スクロールバーの左端と上端に 1 デバイス px の縁が出る。
   func testTheRulerHasABorderOnItsLeftAndTopEdges() throws {
     var style = EngineTestCase.style()
