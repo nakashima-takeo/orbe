@@ -29,6 +29,7 @@ extension GitRepo {
     if case .inProgress(let operation) = before {
       return Self.fail(.operationInProgress(operation), completion)
     }
+    if let branch, branch.name == nil { return Self.fail(.detached, completion) }
     if let branch, branch.upstream == nil { return Self.fail(.noUpstream, completion) }
     runner.run(
       ["pull", "--progress"], cwd: root, timesOut: false, onProgress: onProgress, handle: handle
