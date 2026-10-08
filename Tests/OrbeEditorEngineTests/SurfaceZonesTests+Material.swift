@@ -142,4 +142,25 @@ extension SurfaceZonesTests {
     let x = surface.surfaceLayout.text.minX - 2
     XCTAssertLessThan(shot.rgb(x, top + 32)[0], 250, "箱の左下の外の行番号の列に影")
   }
+
+  /// 入力欄が主で面に焦点があれば入力欄のキャレットを描き、Esc で本文が主に戻れば消える。
+  func testTheFieldCaretIsDrawnOnlyWhileTheFieldIsPrimary() throws {
+    let opened = try hostedRows()
+    let surface = opened.surface
+    let field = ZoneTextField(id: "reply", style: ThreadZone.fieldStyle())
+    let thread = ThreadZone(comment: "本文", field: field)
+    thread.surface = surface
+    surface.setRows(zone(thread, at: 4))
+    surface.updateFocus(true)
+    surface.focus(field)
+    surface.textView.insertText("返信")
+    let site = try XCTUnwrap(surface.fields["reply"])
+    let caret = site.textRect(
+      NSRange(location: field.text.length, length: 0), row: 0,
+      try XCTUnwrap(site.editingEnvironment()), marked: nil)
+    let point = CGPoint(x: caret.minX + 0.5, y: caret.midY)
+    XCTAssertEqual(try pixelShot(opened).rgb(point.x, point.y), [255, 255, 255], "入力欄のキャレット")
+    surface.textView.cancelOperation(nil)
+    XCTAssertNotEqual(try pixelShot(opened).rgb(point.x, point.y), [255, 255, 255], "主でなければ描かない")
+  }
 }
