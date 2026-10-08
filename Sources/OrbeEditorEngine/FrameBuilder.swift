@@ -221,7 +221,7 @@ final class FrameBuilder {
       layout, lines: lines, source,
       contentLines: CGFloat(rows.contentLines(lineCount: lineCount)), c)
     guard g.height > g.top else { return }
-    drawRows(source, content, cache: cache, fonts: fonts, c)
+    drawRows(source, content, cache: cache, c)
   }
 
   /// 見えている行を組む（組版のキャッシュのコマはここで終える）。行頭はロープを 1 度辿って引き、前のコマで描いていない

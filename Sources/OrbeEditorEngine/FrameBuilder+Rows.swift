@@ -4,24 +4,20 @@ import OrbeEditorCore
 /// 見えている縦の並び——文書の行（本文・装備・選択・強調・行番号・印）と差し込んだ行の字と区画（→ `FrameBuilder+Zones`）。
 extension FrameBuilder {
   /// 縦の並びで見えている項目を描く。
-  func drawRows(
-    _ source: Source, _ content: SurfaceContent, cache: LineLayoutCache, fonts: FontRegistry,
-    _ c: Context
-  ) {
+  func drawRows(_ source: Source, _ content: SurfaceContent, cache: LineLayoutCache, _ c: Context) {
     let g = c.g
     let rows = g.rows
     let bottom = g.scrollY + g.height - g.top
     drawZones(source, c)
     drawInsertedLines(
-      rows.blocks(from: g.scrollY, to: bottom, scale: g.scale), source, cache: cache, fonts: fonts,
-      c)
+      rows.blocks(from: g.scrollY, to: bottom, scale: g.scale), source, cache: cache, c)
     guard
       let visibleRows = rows.lines(
         from: g.scrollY, to: bottom, lineCount: content.text.lineCount, scale: g.scale)
     else { return cache.endFrame() }
     let baseline = (Double(c.config.baseline) * g.scale).rounded()
-    let numberFont = fonts.id(c.config.gutterFont)
-    let laid = layRows(visibleRows, source, text: content.text, cache: cache, fonts: fonts)
+    let numberFont = c.fonts.id(c.config.gutterFont)
+    let laid = layRows(visibleRows, source, text: content.text, cache: cache, fonts: c.fonts)
     var roles = content.roles.cursor(from: laid.first?.start ?? 0)
     for item in laid {
       let top = g.rowTop(item.row)
@@ -39,8 +35,7 @@ extension FrameBuilder {
   /// 見えている塊 `blocks` のうち、差し込んだ行の字を置く（本文の色。役割・装備・強調の地・選択の地・キャレットは無い）。
   /// 組版は行の中身を鍵にした段で引く。
   private func drawInsertedLines(
-    _ blocks: Range<Int>, _ source: Source, cache: LineLayoutCache, fonts: FontRegistry,
-    _ c: Context
+    _ blocks: Range<Int>, _ source: Source, cache: LineLayoutCache, _ c: Context
   ) {
     let g = c.g
     let baseline = (Double(c.config.baseline) * g.scale).rounded()
@@ -53,7 +48,7 @@ extension FrameBuilder {
         guard top + g.lineHeight > g.top else { continue }
         let laid = cache.line(
           LineShaper.source(line), tabColumns: source.material.tabColumns, config: c.config,
-          fonts: fonts)
+          fonts: c.fonts)
         for i in visibleGlyphs(laid, c).glyphs {
           let y = laid.ys.isEmpty ? top + baseline : top + baseline - Double(laid.ys[i]) * g.scale
           place(
