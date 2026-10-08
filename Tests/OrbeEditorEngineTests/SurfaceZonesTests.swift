@@ -65,7 +65,7 @@ final class SurfaceZonesTests: EngineTestCase {
     XCTAssertEqual(surface.rows.heights, [90], "置いていない区画は何もしない")
   }
 
-  /// 本文の区画の幅が変われば絵を問い直す（折り返しが変わり、高さが合う）。
+  /// 本文の区画の幅が変われば（窓の幅・行番号の桁）絵を問い直す（折り返しが変わり、高さが合う）。
   func testAZoneIsAskedAgainWhenTheTextWidthChanges() throws {
     let opened = try hostedRows()
     let surface = opened.surface
@@ -74,10 +74,13 @@ final class SurfaceZonesTests: EngineTestCase {
     surface.setRows(zone(thread, at: 3))
     let wide = surface.rows.heights[0]
     surface.viewStateDidChange(size: CGSize(width: 320, height: 400), scale: 2, visible: false)
-    XCTAssertEqual(thread.pictures, 2)
+    XCTAssertEqual(thread.widths.count, 2)
+    XCTAssertEqual(thread.widths.last, surface.surfaceLayout.text.width)
     XCTAssertGreaterThan(surface.rows.heights[0], wide, "狭くなれば折り返しが増えて高くなる")
-    XCTAssertEqual(
-      surface.zones[ObjectIdentifier(thread)]?.width, surface.surfaceLayout.text.width)
+    let narrow = surface.surfaceLayout.text.width
+    surface.replaceAll(with: rows(10_000))
+    XCTAssertLessThan(surface.surfaceLayout.text.width, narrow, "前提: 行番号の桁が増えた")
+    XCTAssertEqual(thread.widths.last, surface.surfaceLayout.text.width, "桁が増えた幅で問い直す")
   }
 
   /// 区画は上端の影と横スクロールバーの下に描かれる（区画のある面でも影は Metal が描く）。

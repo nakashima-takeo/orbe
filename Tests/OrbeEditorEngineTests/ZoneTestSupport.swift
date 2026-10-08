@@ -54,7 +54,8 @@ final class ThreadZone: SurfaceZone {
   weak var surface: (any TextSurface)?
   private(set) var hovered: AnyHashable?
   private(set) var events: [ZoneEvent] = []
-  private(set) var pictures = 0
+  /// 絵を問われた幅（問われた順）。
+  private(set) var widths: [CGFloat] = []
   private var fieldLines = 0
 
   init(comment: String, field: ZoneTextField? = nil) {
@@ -74,7 +75,7 @@ final class ThreadZone: SurfaceZone {
   static let collapse: AnyHashable = "collapse"
 
   func picture(width: CGFloat) -> ZonePicture {
-    pictures += 1
+    widths.append(width)
     let frame = CGRect(
       x: Self.margin.width, y: Self.margin.height,
       width: max(80, width - Self.margin.width - 16), height: 0)
