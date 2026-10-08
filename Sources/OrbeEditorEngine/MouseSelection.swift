@@ -151,7 +151,7 @@ final class MouseSelection: NSObject {
       flags.contains(.option) && flags.isDisjoint(with: [.command, .shift])
       && (hit.area == .numbers || event.clickCount <= 3)
     let selection = primary.selection
-    if hit.area == .text, event.clickCount == 1,
+    if site.isBody, hit.area == .text, event.clickCount == 1,
       flags.isDisjoint(with: [.shift, .command, .option]),
       selection.length > 0, hit.offset >= selection.location, hit.offset <= NSMaxRange(selection),
       site.character(at: point) != nil

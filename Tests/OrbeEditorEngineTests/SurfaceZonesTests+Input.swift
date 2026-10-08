@@ -9,13 +9,13 @@ import XCTest
 /// 選んでいる間のキーで本文が変わる・入力欄が伸びるコマに字が遅れる。
 extension SurfaceZonesTests {
   /// 返信の入力欄つきのスレッドを行 4 の前に置いた面。
-  private struct Threaded {
+  struct Threaded {
     let opened: Opened
     let thread: ThreadZone
     let field: ZoneTextField
   }
 
-  private func threaded() throws -> Threaded {
+  func threaded() throws -> Threaded {
     let opened = try hostedRows()
     let field = ZoneTextField(id: "reply", style: ThreadZone.fieldStyle())
     let thread = ThreadZone(comment: "選べる本文の文。二行目まで続く長さの文にする。", field: field)
@@ -24,7 +24,7 @@ extension SurfaceZonesTests {
     return Threaded(opened: opened, thread: thread, field: field)
   }
 
-  private func fieldPoint(_ opened: Opened, _ thread: ThreadZone) throws -> CGPoint {
+  func fieldPoint(_ opened: Opened, _ thread: ThreadZone) throws -> CGPoint {
     let hits = try XCTUnwrap(opened.surface.zones[ObjectIdentifier(thread)]?.hits)
     return viewPoint(opened.surface, thread, center(hits.fields[0].frame))
   }
