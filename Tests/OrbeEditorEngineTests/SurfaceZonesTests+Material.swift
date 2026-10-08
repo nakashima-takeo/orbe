@@ -122,6 +122,43 @@ extension SurfaceZonesTests {
       try material(surface, zone).images.first?.pixels.key, key, "外した区画の画像の覚えは手放した")
   }
 
+  /// 画面の外の画像は地図に入れない——縦に長い区画の下だけが見えていれば、上の画面外の画像が地図を埋めて、見えている画像が
+  /// 欠けることはない（地図に収まる量を数えるのは見えている画像だけ）。
+  func testImagesOutsideTheViewDoNotTakeTheAtlas() throws {
+    let opened = try hostedRows()
+    let surface = opened.surface
+    let side = CGFloat(ImageAtlas.maximumSide) / surface.scale
+    let images = (0..<(2 * 4 * ImageAtlas.maximumPages)).map { _ in
+      NSImage(size: NSSize(width: 8, height: 8), flipped: false) { rect in
+        Self.red.setFill()
+        rect.fill()
+        return true
+      }
+    }
+    let zone = PictureZone { _ in
+      ZonePicture(
+        height: CGFloat(images.count) * (side + 4),
+        elements: images.enumerated().map { k, image in
+          .image(
+            ZoneImage(
+              frame: CGRect(x: 0, y: CGFloat(k) * (side + 4), width: side, height: side),
+              image: image))
+        })
+    }
+    surface.setRows(self.zone(zone, at: 0))
+    let visible = images.count - 2
+    surface.scroll(toFirstLine: Double(CGFloat(visible) * (side + 4) / surface.config.lineHeight))
+    let shot = try pixelShot(opened)
+    let top =
+      surface.config.topInset + CGFloat(surface.rows.top(ofBlock: 0) - surface.scrollPosition.y)
+    let center = CGPoint(
+      x: surface.surfaceLayout.text.minX + side / 2,
+      y: top + CGFloat(visible) * (side + 4) + side / 2)
+    XCTAssertGreaterThan(center.y, surface.config.topInset, "前提: 画像は見えている")
+    XCTAssertLessThan(center.y, surface.view.bounds.height)
+    XCTAssertEqual(shot.rgb(center.x, center.y), [255, 0, 0], "見えている画像を描く")
+  }
+
   /// 区画の箱の影は行番号の列にも落ちる（本文の区画の左端で切らない）。
   func testAZoneShadowFallsOnTheGutter() throws {
     let opened = try hostedRows()

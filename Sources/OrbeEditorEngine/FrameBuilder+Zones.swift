@@ -75,10 +75,15 @@ extension FrameBuilder {
     let s = c.g.scale
     let left = c.g.column
     for box in zone.boxes { zoneBoxes.append(Self.instance(box, left: left, top: top, scale: s)) }
+    let g = c.g
     for image in zone.images {
-      guard let entry = source.zones.images.entry(image.pixels) else { continue }
       let x = (left + Double(image.frame.minX) * s).rounded()
       let y = (top + Double(image.frame.minY) * s).rounded()
+      // 画像は本文の区画の切り取りの中に描く。その外の画像は地図に入れない（見えている画像の場所を取らない）。
+      guard x < g.textRight, x + Double(image.pixels.width) > g.column, y < g.height,
+        y + Double(image.pixels.height) > g.top,
+        let entry = source.zones.images.entry(image.pixels)
+      else { continue }
       Self.append(
         GlyphInstance(
           position: SIMD2(Float(x), Float(y)), size: SIMD2(Float(entry.width), Float(entry.height)),
