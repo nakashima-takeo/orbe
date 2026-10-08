@@ -140,4 +140,24 @@ final class SurfaceDiffGearTests: EngineTestCase {
     XCTAssertEqual(zone.widths.last, surface.surfaceLayout.text.width)
     XCTAssertLessThan(zone.widths.last ?? 0, zone.widths.first ?? 0)
   }
+
+  /// 区画の絵の高さが変わって並びを組み直しても、文書の行の区間（行の型・もう一方の番号）と行の地と番号の列の幅は残る。
+  func testRegrowingAZoneKeepsTheLineSpans() throws {
+    let opened = try open(rows(20), size: size)
+    let surface = opened.surface
+    surface.setPresentation(inline)
+    let zone = BoxZone(height: 40)
+    let spans = [LineSpan(line: 0, otherNumber: 123_456), LineSpan(line: 2, style: 0)]
+    surface.setRows(
+      SurfaceRows(insertions: [RowInsertion(line: 3, content: .zone(zone))], spans: spans))
+    let column = surface.surfaceLayout.column
+    zone.height = 80
+    surface.redrawZone(zone)
+    XCTAssertEqual(surface.rows.heights, [80], "前提: 並びが組み直された")
+    XCTAssertEqual(surface.rows.spans, spans)
+    XCTAssertEqual(surface.surfaceLayout.column, column, "番号の列は縮まない")
+    let shot = try pixelShot(opened)
+    let rgb = shot.rgb(0.5, surface.config.topInset + 2.5 * surface.config.lineHeight)
+    XCTAssertTrue(abs(rgb[0] - 128) <= 2 && rgb[1] < 4 && rgb[2] < 4, "行の地が残る")
+  }
 }

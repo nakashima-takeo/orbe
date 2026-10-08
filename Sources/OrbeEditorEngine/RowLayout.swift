@@ -59,7 +59,7 @@ struct RowLayout: Sendable {
   }
 
   /// 塊の列（境の昇順）と文書の行の区間（始まりの昇順）で並びを置き直す。
-  mutating func replace(_ blocks: [Block], spans: [LineSpan] = []) {
+  mutating func replace(_ blocks: [Block], spans: [LineSpan]) {
     self.spans = spans
     boundaries = blocks.map(\.line)
     heights = blocks.map(\.height)
