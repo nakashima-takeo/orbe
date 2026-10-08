@@ -269,6 +269,41 @@ final class RootFilesWritesTests: OrbeTestCase {
     XCTAssertEqual(entry(staged, "b.txt")?.staged, .added)
   }
 
+  /// 書き込みの前に始まった status の取り直し（書き込み前の index を読んでいる）が後から返っても、完了はそれに乗らず、
+  /// 書き込みの後に始まる取り直しを待つ。
+  func testACompletionDoesNotRideAStatusReadStartedBeforeTheWrite() throws {
+    let fixture = try GitHangFixture()
+    let clean = try fixture.installScript("clean.sh", body: fixture.waitingBody)
+    defer { fixture.release() }
+    try repo.write(".gitattributes", "*.slow filter=slow\n")
+    try repo.write("x.slow", "slow\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "slow"]).isSuccess)
+    // index の記録を index より古い時刻にしておく（racy clean だと、ステージが index を書くときにも clean filter を通る）。
+    try FileManager.default.setAttributes(
+      [.modificationDate: Date().addingTimeInterval(-3600)], ofItemAtPath: repo.root + "/x.slow")
+    XCTAssertTrue(repo.git(["update-index", "--refresh"]).isSuccess)
+    let files = repo.files()
+    XCTAssertTrue(repo.git(["config", "filter.slow.clean", clean]).isSuccess)
+    // 同じ大きさで書き直すと、status は中身を確かめに clean filter を通る——そこで止まる。
+    try repo.write("x.slow", "slow\n")
+    XCTAssertTrue(fixture.pumpUntilHung(), "前提: 書き込みの前に始まった status が止まっている")
+
+    try repo.write("b.txt", "b\n")
+    let outcome = WriteOutcome(files)
+    files.stage([GitStatus.Row(path: "b.txt", originalPath: nil)], completion: outcome.receive)
+    pumpMain(
+      until: { self.repo.git(["diff", "--cached", "--name-only"]).stdoutText == "b.txt\n" },
+      timeout: 10, "前提: ステージの git が済む")
+    // git の終わりが main へ届き、完了が status の取り直しを待ち始めてから、止まっていた status を返す。
+    RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+    fixture.release()
+
+    pumpMain(until: { outcome.finished }, timeout: 20, "書き込みの完了")
+    XCTAssertNil(outcome.failure)
+    XCTAssertEqual(outcome.statusAtCompletion?.entries["b.txt"]?.staged, .added)
+  }
+
   /// git 管理外の根では書き込めない。
   func testAnUnmanagedRootRefusesWrites() throws {
     let outside = TestScratch.caseDir.appendingPathComponent("plain-\(UUID().uuidString)")
