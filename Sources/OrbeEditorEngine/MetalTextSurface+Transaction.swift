@@ -195,6 +195,7 @@ extension MetalTextSurface {
   /// いる先頭の文書の行を同じ位置に保ち、変わった並びを材料への書き込みに積む。
   private func settleRows(_ finished: Transaction, lineCount: Int) {
     if let before = finished.anchor, finished.scrollTo == nil {
+      pending.anchored = true
       keepFirstVisibleLine(from: before, lineCount: lineCount)
     }
     guard rows.version != finished.rowsVersion else { return }

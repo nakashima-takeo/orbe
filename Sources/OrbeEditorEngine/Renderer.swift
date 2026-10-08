@@ -91,6 +91,16 @@ final class Renderer {
 
   func slot(_ id: Int) -> SurfaceSlot? { slots[id] }
 
+  /// このコマで描画スレッドがスクロールの状態を動かした（戻り・横の寄せ・範囲の伸び）。共にする面の止めていた刻みを再開
+  /// する（次の刻みで描く）。
+  private func wakePartners(_ slot: SurfaceSlot) {
+    for id in slot.scroll.partners {
+      guard let partner = slots[id], let clock = partner.clock, clock.isPaused else { continue }
+      partner.idleTicks = 0
+      clock.isPaused = false
+    }
+  }
+
   private func pipelinesDidBecomeReady() {
     for id in slots.keys { wake(id) }
   }
@@ -173,7 +183,8 @@ final class Renderer {
     let revealed = begin(slot, material)
     pass.atlas.beginFrame()
     slot.zones.images.beginFrame()
-    let frame = slot.scroll.frame(at: target, material: material.revision)
+    let frame = slot.scroll.frame(
+      at: target, period: slot.clock?.period, material: material.revision)
     let texture = acquired.texture
     slot.build(
       material, scroll: (frame.position, frame.limits), moment: (caretVisible, target),
@@ -219,6 +230,7 @@ final class Renderer {
     if frame.returning || wasReturning || widened || revealed || slot.builder.fieldRevealed {
       slot.notify()
     }
+    if frame.returning || widened || revealed { wakePartners(slot) }
     if let last = keystrokes.max() { scheduleTypingFlush(slot.id, after: last) }
     slot.prefetchMinimap(material)
   }

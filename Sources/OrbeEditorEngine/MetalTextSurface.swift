@@ -20,6 +20,9 @@ final class MetalTextSurface: TextSurface {
   let config: SurfaceConfig
   let material = MaterialBox()
   let scroll: ScrollBox
+  /// スクロールを共にする相手と、自分が先に結んだ面か（→ `shareScroll`）。
+  weak var partner: MetalTextSurface?
+  var leadsScroll = false
   /// 最後に描いたミニマップの配置（描画スレッドが書く）。
   let placementBox = MinimapPlacementBox()
   let style: TextSurfaceStyle
@@ -87,7 +90,7 @@ final class MetalTextSurface: TextSurface {
     self.style = style
     config = SurfaceConfig(style: style, omittedLabel: omittedLabel)
     rows = RowLayout(lineHeight: Double(style.lineHeight))
-    scroll = ScrollBox()
+    scroll = ScrollBox(surface: id)
     lineStops = LineStopsCache(font: config.font)
     textView.surface = self
     let id = id
@@ -112,6 +115,7 @@ final class MetalTextSurface: TextSurface {
 
   deinit {
     let id = id
+    scroll.leave()
     RenderThread.shared.perform { $0.detach(id) }
   }
 
@@ -280,9 +284,29 @@ final class MetalTextSurface: TextSurface {
 
   private var hasDisplayLink = false
 
+  /// 描画スレッドを起こす（スクロールを共にする相手も）。
   func wake() {
-    let id = id
-    RenderThread.shared.perform { $0.wake(id) }
+    let ids = scrollGroup.map(\.id)
+    RenderThread.shared.perform { renderer in
+      for id in ids { renderer.wake(id) }
+    }
+  }
+
+  /// スクロールの状態を `other` と共にする。位置はこの面のものを引き継ぐ。
+  func shareScroll(with other: any TextSurface) {
+    guard let other = other as? MetalTextSurface, other !== self else {
+      preconditionFailure("スクロールを共にできるのは、同じエンジンの別の面だけ")
+    }
+    precondition(partner == nil && other.partner == nil, "まだスクロールを共にしていない面どうしで結ぶ")
+    flush()
+    other.flush()
+    scroll.share(with: other.scroll)
+    partner = other
+    other.partner = self
+    leadsScroll = true
+    wake()
+    refreshViewport()
+    other.refreshViewport()
   }
 
   // MARK: - 焦点と撮影
