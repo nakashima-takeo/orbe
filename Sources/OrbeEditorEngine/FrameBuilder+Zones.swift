@@ -152,8 +152,12 @@ extension FrameBuilder {
     let frame = CGRect(
       x: x0, y: y0, width: (origin.x + Double(field.frame.maxX) * s).rounded() - x0,
       height: bottom - y0)
-    let clip = frame.intersection(
-      CGRect(x: g.column, y: g.top, width: g.textRight - g.column, height: g.height - g.top))
+    let clip =
+      frame
+      .intersection(
+        CGRect(x: g.column, y: g.top, width: g.textRight - g.column, height: g.height - g.top)
+      )
+      .intersection(CGRect(x: 0, y: 0, width: g.width, height: g.height))
     guard !clip.isEmpty else { return }
     var layer = FieldLayer(
       scissor: MTLScissorRect(
