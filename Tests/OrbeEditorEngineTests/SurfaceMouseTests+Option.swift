@@ -84,7 +84,7 @@ extension SurfaceMouseTests {
     _ = host(opened)
     try click(opened, row: 0, column: 1)
     try mouse(opened, .leftMouseDown, at: point(opened, row: 1, column: 2), flags: .option)
-    opened.surface.perform(.insert("Z"))
+    opened.surface.editor.perform(.insert("Z"))
     let typed = cursors(opened)
     try mouse(opened, .leftMouseDragged, at: point(opened, row: 1, column: 6), flags: .option)
     try mouse(opened, .leftMouseUp, at: point(opened, row: 1, column: 6), flags: .option)

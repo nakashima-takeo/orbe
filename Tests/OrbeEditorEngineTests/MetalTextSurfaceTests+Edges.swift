@@ -46,7 +46,7 @@ extension MetalTextSurfaceTests {
       lines.joined(separator: "\n") + "\n", size: CGSize(width: 400, height: 300))
     _ = try pixelShot(opened)
     opened.surface.selectedRange = NSRange(location: opened.document.text.lineStart(2), length: 0)
-    opened.surface.perform(.insert("/*"))
+    opened.surface.editor.perform(.insert("/*"))
     _ = try pixelShot(opened)
     XCTAssertTrue(opened.document.waitUntilCaughtUp())
     let untouched = NSRange(location: opened.document.text.lineStart(5), length: 3)
@@ -76,7 +76,7 @@ extension MetalTextSurfaceTests {
     XCTAssertEqual(opened.document.text.lineCount, count - 1)
     let narrow = opened.surface.surfaceLayout
     opened.surface.selectedRange = NSRange(location: opened.document.text.length, length: 0)
-    opened.surface.perform(.newline(indents: false))
+    opened.surface.editor.perform(.newline(indents: false))
     let wide = opened.surface.surfaceLayout
     XCTAssertGreaterThan(wide.column, narrow.column)
     XCTAssertEqual(wide.text.minX, wide.column, "本文の区画は列の右から")

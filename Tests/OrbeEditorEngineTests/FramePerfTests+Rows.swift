@@ -29,7 +29,7 @@ extension FramePerfTests {
     surface.reveal(NSRange(location: surface.caretLocation, length: 0), policy: .center)
     waitUntilIdle(surface)
     let main = typeKeys(surface, count: 60, interval: 0.05) { surface, _ in
-      surface.perform(.newline(indents: false))
+      surface.editor.perform(.newline(indents: false))
     }
     print(
       "PERF-FRAMES rows 1MB newline keystroke main CPU p50", Self.ms(Self.quantile(main.cpu, 0.5)),

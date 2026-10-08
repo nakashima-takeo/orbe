@@ -39,9 +39,6 @@ extension MetalTextSurface {
   /// 今の写し（本文の場の写し）。
   var currentContent: SurfaceContent? { bodySite.currentContent }
 
-  /// 今の写しの長さ。
-  var textLength: Int? { currentContent?.text.length }
-
   /// 取引の中で `body` を行う。取引の中から呼ばれれば同じ取引に入り（位置・打鍵の時刻は後から頼んだものが勝つ）、そうで
   /// なければ取引を開き、終わりに区画を今の幅に合わせ（→ `settleZones`）、1 回だけ確定して出す前の状態に積む。`body` の
   /// 間に文書から届く知らせ（行の印・役割の変化）と材料への書き込みは控えるだけにする。打鍵の中の IME の呼び出しは打鍵の

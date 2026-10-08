@@ -88,7 +88,7 @@ extension SurfaceRowsTests {
           }))
     }
     place(opened, row: 1, column: 0)
-    surface.perform(.insert("one\ntwo\n"))
+    surface.editor.perform(.insert("one\ntwo\n"))
     XCTAssertEqual(placed.last, 23, "前提: 編集後の写しの行数で置いた")
     XCTAssertEqual(surface.rows.boundaries, placed, "知らせの中で置いた並びは、もうずれない")
     XCTAssertEqual(surface.drawn.rows.boundaries, placed)

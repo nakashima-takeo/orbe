@@ -133,13 +133,13 @@ final class SurfaceRowsTests: EngineTestCase {
     let surface = opened.surface
     surface.setRows(SurfaceRows(insertions: [insert(["a"], at: 5), insert(["b"], at: 12)]))
     surface.selectedRange = NSRange(location: opened.document.text.lineStart(8), length: 0)
-    surface.perform(.insert("new\n"))
+    surface.editor.perform(.insert("new\n"))
     XCTAssertEqual(surface.rows.boundaries, [5, 13])
     XCTAssertEqual(surface.drawn.rows.boundaries, [5, 13], "描く材料も同じ並び")
     let text = opened.document.text
     surface.selectedRange = NSRange(
       location: text.lineStart(4), length: text.lineStart(9) - text.lineStart(4))
-    surface.perform(.insert(""))
+    surface.editor.perform(.insert(""))
     XCTAssertEqual(surface.rows.boundaries, [5, 8], "付き先（行 4 の終わり）を消せば、消した区間の始まりの行 4 の後へ")
     surface.replaceAll(with: rows(3))
     let lineCount = opened.document.text.lineCount
@@ -183,7 +183,7 @@ final class SurfaceRowsTests: EngineTestCase {
     surface.setRows(SurfaceRows(insertions: [insert(["a", "b", "c", "d"], at: 5)]))
     surface.selectedRange = NSRange(location: 0, length: 0)
     let pageLines = try XCTUnwrap(surface.bodySite.editingEnvironment()).pageLines
-    surface.perform(.move(.pageDown, extending: false))
+    surface.editor.perform(.move(.pageDown, extending: false))
     XCTAssertEqual(
       opened.document.text.row(containing: surface.caretLocation), pageLines - 4,
       "4 行の差し込みの分だけ手前の行")

@@ -76,7 +76,7 @@ final class SurfaceEditingTests: EngineTestCase {
     _ = host(opened)
     let undo = try XCTUnwrap(opened.surface.responder.undoManager)
     type(opened, "abc def")
-    opened.surface.perform(.newline(indents: true))
+    opened.surface.editor.perform(.newline(indents: true))
     type(opened, "gh")
     undo.undo()
     XCTAssertEqual(text(opened.document), "abc def")
@@ -100,7 +100,7 @@ final class SurfaceEditingTests: EngineTestCase {
     _ = host(opened)
     let undo = try XCTUnwrap(opened.surface.responder.undoManager)
     type(opened, "ab")
-    opened.surface.perform(.move(.left, extending: false))
+    opened.surface.editor.perform(.move(.left, extending: false))
     type(opened, "X")
     undo.undo()
     XCTAssertEqual(text(opened.document), "ab")
@@ -119,7 +119,7 @@ final class SurfaceEditingTests: EngineTestCase {
     let undo = try XCTUnwrap(opened.surface.responder.undoManager)
     let version = opened.document.version
     opened.surface.selectedRange = NSRange(location: 0, length: 3)
-    opened.surface.perform(.changeCase(.upper))
+    opened.surface.editor.perform(.changeCase(.upper))
     XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 0, length: 3), "変えた範囲を選ぶ")
     opened.surface.selectedRange = NSRange(location: 4, length: 1)
     type(opened, "a")
@@ -250,7 +250,7 @@ final class SurfaceEditingTests: EngineTestCase {
     let revision = opened.surface.drawn.revision
     let seen = OSAllocatedUnfairLock<(placed: Double, shown: Double)?>(initialState: nil)
     opened.surface.transact {
-      opened.surface.perform(.move(.documentEnd, extending: false))
+      opened.surface.editor.perform(.move(.documentEnd, extending: false))
       opened.surface.write { _ in
         let placed = scroll.peek(at: 0).position.y
         let shown = scroll.frame(at: 0, material: revision).position.y

@@ -173,7 +173,7 @@ extension SurfaceInputMethodTests {
     try once("クリックの押下") { try mouse(opened, .leftMouseDown, at: pressed) }
     try mouse(opened, .leftMouseUp, at: pressed)
     once("外からの選択") { opened.surface.selectedRange = NSRange(location: 0, length: 0) }
-    once("コマンド") { opened.surface.perform(.move(.right, extending: false)) }
+    once("コマンド") { opened.surface.editor.perform(.move(.right, extending: false)) }
     try once("保存") { try opened.document.save() }
     once("丸ごと置き換え") { opened.surface.replaceAll(with: "cd\n") }
     once("IME の確定", notifies: false) { replay([.insert("か")], on: opened) }

@@ -164,11 +164,6 @@ final class MetalTextSurface: TextSurface {
     self.lineBreak = lineBreak
   }
 
-  /// 標準のセレクタが写ったコマンドを、面の編集係で行う。
-  func perform(_ command: EditCommand) {
-    editor.perform(command)
-  }
-
   // MARK: - 写しと材料
 
   /// 文書の写しを引いて箱に置く（結ばれたとき・役割が変わったとき・行の印を受けたとき）。取引の中なら、その取引の終わりに

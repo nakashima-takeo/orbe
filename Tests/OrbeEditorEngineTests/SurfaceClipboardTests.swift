@@ -105,7 +105,7 @@ final class SurfaceClipboardTests: EngineTestCase {
     opened.surface.selectedRange = NSRange(location: 1, length: 0)
     opened.surface.textView.paste(nil)
     XCTAssertEqual(text(opened.document), "ax\r\ny\r\nz\r\nb\r\n")
-    opened.surface.perform(.newline(indents: true))
+    opened.surface.editor.perform(.newline(indents: true))
     XCTAssertEqual(text(opened.document), "ax\r\ny\r\nz\r\n\r\nb\r\n")
   }
 
@@ -196,12 +196,12 @@ final class SurfaceClipboardTests: EngineTestCase {
   func testMovingTextIsOneUndoAndSelectsTheDroppedText() throws {
     let opened = try open("abc def\n")
     _ = host(opened)
-    opened.surface.perform(.drop("abc", at: 7, moving: NSRange(location: 0, length: 3)))
+    opened.surface.editor.perform(.drop("abc", at: 7, moving: NSRange(location: 0, length: 3)))
     XCTAssertEqual(text(opened.document), " defabc\n")
     XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 4, length: 3))
     try XCTUnwrap(opened.surface.textView.undoManager).undo()
     XCTAssertEqual(text(opened.document), "abc def\n")
-    opened.surface.perform(.drop("x\ny", at: 0, moving: nil))
+    opened.surface.editor.perform(.drop("x\ny", at: 0, moving: nil))
     XCTAssertEqual(text(opened.document), "x\nyabc def\n")
     XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 0, length: 3))
   }

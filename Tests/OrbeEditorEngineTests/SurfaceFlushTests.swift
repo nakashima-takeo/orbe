@@ -151,7 +151,7 @@ final class SurfaceFlushTests: EngineTestCase {
       ScrollInput(timestamp: now + 0.01, delta: SIMD2(0, pull), precise: true, phase: .changed))
     let pulled = surface.scroll.peek(at: now + 0.01).position.y
     XCTAssertLessThan(pulled, 0, "前提: 先頭より上へ引っ張っている")
-    surface.perform(.insert("x"))
+    surface.editor.perform(.insert("x"))
     surface.flush()
     XCTAssertEqual(opened.document.text.length, rows(50).utf16.count + 1, "前提: 打った")
     XCTAssertEqual(surface.scroll.peek(at: now + 0.01).position.y, pulled, "引っ張っている位置のまま")

@@ -147,12 +147,12 @@ final class SurfaceDrawingTests: EngineTestCase {
     opened.surface.updateFocus(true)
     let epoch = { opened.surface.drawn.caret.epoch }
     let focused = epoch()
-    opened.surface.perform(.insert("x"))
+    opened.surface.editor.perform(.insert("x"))
     let typed = epoch()
     XCTAssertGreaterThan(typed, focused, "打鍵")
     opened.surface.scrollLines(3)
     XCTAssertEqual(epoch(), typed, "スクロールだけでは変わらない")
-    opened.surface.perform(.move(.right, extending: false))
+    opened.surface.editor.perform(.move(.right, extending: false))
     XCTAssertGreaterThan(epoch(), typed, "移動")
   }
 
@@ -218,13 +218,13 @@ final class SurfaceDrawingTests: EngineTestCase {
     surface.selectedRange = NSRange(location: opened.document.text.lineStart(5) + 3, length: 0)
     surface.flush()
     settle()
-    XCTAssertEqual(shaped { surface.perform(.insert("x")) }, 1, "打鍵した行だけ")
-    XCTAssertEqual(shaped { surface.perform(.newline(indents: true)) }, 2, "Enter で分かれた 2 行だけ")
+    XCTAssertEqual(shaped { surface.editor.perform(.insert("x")) }, 1, "打鍵した行だけ")
+    XCTAssertEqual(shaped { surface.editor.perform(.newline(indents: true)) }, 2, "Enter で分かれた 2 行だけ")
     let text = opened.document.text
     surface.selectedRange = NSRange(
       location: text.lineStart(10), length: text.lineStart(12) + 3 - text.lineStart(10))
     surface.flush()
     settle()
-    XCTAssertEqual(shaped { surface.perform(.tab) }, 3, "字下げした 3 行だけ")
+    XCTAssertEqual(shaped { surface.editor.perform(.tab) }, 3, "字下げした 3 行だけ")
   }
 }
