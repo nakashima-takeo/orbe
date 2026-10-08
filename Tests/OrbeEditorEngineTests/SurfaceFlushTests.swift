@@ -93,7 +93,8 @@ final class SurfaceFlushTests: EngineTestCase {
     let surface = opened.surface
     let text = opened.document.text
     surface.flush()
-    let start = surface.scroll.frame(at: 0, material: surface.material.revision).position.y
+    let start = surface.scroll.frame(at: 0, material: surface.material.revision)
+      .position.y
     func jump(to row: Int) -> Double {
       surface.selectedRange = NSRange(location: text.lineStart(row), length: 3)
       surface.reveal(NSRange(location: text.lineStart(row), length: 0), policy: .center)
@@ -107,13 +108,15 @@ final class SurfaceFlushTests: EngineTestCase {
     let second = jump(to: 400)
     XCTAssertNotEqual(first, second, "前提: 飛んだ先が違う")
     XCTAssertEqual(
-      surface.scroll.frame(at: 0, material: taken.revision - 1).position.y, start,
+      surface.scroll.frame(at: 0, material: taken.revision - 1).position.y,
+      start,
       "版 N より前の材料は飛ぶ前の位置")
     XCTAssertEqual(
       surface.scroll.frame(at: 0, material: taken.revision).position.y, first,
       "版 N の材料は 200 行を中央に見せる位置")
     XCTAssertEqual(
-      surface.scroll.frame(at: 0, material: surface.material.revision).position.y, second,
+      surface.scroll.frame(at: 0, material: surface.material.revision).position
+        .y, second,
       "版 N+1 の材料は 400 行を中央に見せる位置")
   }
 
@@ -148,7 +151,7 @@ final class SurfaceFlushTests: EngineTestCase {
       ScrollInput(timestamp: now + 0.01, delta: SIMD2(0, pull), precise: true, phase: .changed))
     let pulled = surface.scroll.peek(at: now + 0.01).position.y
     XCTAssertLessThan(pulled, 0, "前提: 先頭より上へ引っ張っている")
-    surface.perform(.insert("x"))
+    surface.editor.perform(.insert("x"))
     surface.flush()
     XCTAssertEqual(opened.document.text.length, rows(50).utf16.count + 1, "前提: 打った")
     XCTAssertEqual(surface.scroll.peek(at: now + 0.01).position.y, pulled, "引っ張っている位置のまま")

@@ -6,10 +6,14 @@ import QuartzCore
 /// `cacheDisplay`（gallery・flow の撮影）では `draw(_:)` が呼ばれるので、描画スレッドが同じ 1 コマを画面外に描いた絵を
 /// 描く——AppKit の view と同じ撮り方で面を撮れる。
 ///
-/// 出来事の入口。キーは `interpretKeyEvents` で IME と macOS のキー割り当て（利用者の DefaultKeyBinding を含む）に通し、
-/// IME の呼び出しは面の編集係の IME の入口へ（→ `MetalTextView+Input`）、届いた標準のセレクタは編集のコマンドへ写す
-/// （→ `MetalTextView+Commands`）。マウスは `MouseSelection` が持ち、変換中はまず IME へ渡す。クリップボード・サービス・
-/// 右クリックは `MetalTextView+Pasteboard`、ドラッグ＆ドロップは `MetalTextView+Drag`。
+/// 面の唯一の受け口（first responder）。出来事の入口はどれも、最初に行き先を決める 1 段（→ `SurfaceTarget`）を通る——
+/// 点を持つ入口（押す・右クリック・落とす・字の位置・ポインタの形）は点の下の行き先へ（字の位置は主の場の上だけ）、
+/// 点を持たない入口（キー・IME・コマンドのセレクタ・メニューの有効判定・undo の入れ物・サービス）は主の場へ。キーは
+/// `interpretKeyEvents` で IME と macOS のキー割り当て（利用者の DefaultKeyBinding を含む）に通し、IME の呼び出しは
+/// 場の編集係の IME の入口へ
+/// （→ `MetalTextView+Input`）、届いた標準のセレクタは編集のコマンドへ写す（→ `MetalTextView+Commands`）。マウスは
+/// `MouseSelection` が持ち、変換中はまず IME へ渡す。クリップボード・サービス・右クリックは `MetalTextView+Pasteboard`、
+/// ドラッグ＆ドロップは `MetalTextView+Drag`。
 final class MetalTextView: TextSurfaceInputView {
   weak var surface: MetalTextSurface? {
     didSet {
@@ -21,8 +25,11 @@ final class MetalTextView: TextSurfaceInputView {
   let pointer = MouseSelection()
   /// 俯瞰の押下・ドラッグ・ホバー。
   let overview = OverviewPointer()
-  /// 入力の仕組みとの窓口（面が持つ）。テストは偽の IME に差し替える。
-  lazy var textInputContext: NSTextInputContext? = NSTextInputContext(client: self)
+  /// 本文の場の入力の仕組みとの窓口。テストは偽の IME に差し替える。
+  var textInputContext: NSTextInputContext? {
+    get { surface?.bodySite.inputContext }
+    set { surface?.bodySite.inputContext = newValue }
+  }
   /// 写す・貼るペーストボード（既定は一般）。テストは名前つきの専用のものに差し替える。
   var pasteboard = NSPasteboard.general
   /// この面から始めた本文のドラッグで運んでいる範囲（ドラッグの間だけ）。
@@ -72,8 +79,9 @@ final class MetalTextView: TextSurfaceInputView {
   override var isFlipped: Bool { true }
   override var isOpaque: Bool { false }
   override var acceptsFirstResponder: Bool { true }
-  override var inputContext: NSTextInputContext? { textInputContext }
-  override var composing: Bool { surface?.editor.isComposing ?? false }
+  /// 主の場の入力の文脈（主が編集の場でなければ nil——キーはキー割り当てだけを通る）。
+  override var inputContext: NSTextInputContext? { surface?.primarySite?.inputContext }
+  override var composing: Bool { surface?.primarySite?.editor.isComposing ?? false }
 
   /// VS Code の複数カーソルのキー（macOS の標準のキー割り当てに無いもの）→ セレクタ。キーは修飾（⌘⇧⌥⌃）と、矢印か
   /// 修飾を除いた字で引く。
@@ -126,7 +134,7 @@ final class MetalTextView: TextSurfaceInputView {
     guard let newWindow else {
       pointer.cancel()
       surface?.inputScope { overview.cancel() }
-      surface?.editor.finishComposition(.commit)
+      surface?.primarySite?.editor.finishComposition(.commit)
       return
     }
     let names: [Notification.Name] = [
@@ -239,9 +247,10 @@ final class MetalTextView: TextSurfaceInputView {
   override func mouseDown(with event: NSEvent) {
     if composing, inputContext?.handleEvent(event) == true { return }
     let point = convert(event.locationInWindow, from: nil)
-    surface?.input {
+    guard let surface else { return }
+    surface.input {
       if overview.mouseDown(at: point) { return }
-      pointer.mouseDown(event, in: self)
+      pointer.mouseDown(event, in: self, target: surface.target(at: point))
     }
   }
 
@@ -296,9 +305,11 @@ final class MetalTextView: TextSurfaceInputView {
     hover(event, inside: false)
   }
 
+  /// 俯瞰の上のポインタと、区画の押せる場所のホバー。
   private func hover(_ event: NSEvent, inside: Bool) {
     let point = convert(event.locationInWindow, from: nil)
     surface?.inputScope { overview.pointerMoved(to: point, inside: inside) }
+    surface?.hover(at: inside ? point : nil)
   }
 
   /// 動きを減らす設定を俯瞰へ写す。
@@ -332,10 +343,10 @@ final class MetalTextView: TextSurfaceInputView {
 
   /// 焦点を失う前に変換を確定する（窓が key でなくなるだけなら変換は続く）。焦点を失えば ⌘D の続きも終わる。
   override func resignFirstResponder() -> Bool {
-    surface?.editor.finishComposition(.commit)
+    surface?.primarySite?.editor.finishComposition(.commit)
     let result = super.resignFirstResponder()
     if result {
-      surface?.inputScope { surface?.editor.focusDidLeave() }
+      surface?.inputScope { surface?.primarySite?.editor.focusDidLeave() }
       surface?.focusDidChange(false)
       surface?.updateFocus(false)
     }

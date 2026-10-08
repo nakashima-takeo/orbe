@@ -187,7 +187,7 @@ struct CaretMaterial: Equatable, Sendable {
   var collapsed: [Int] = []
   /// 点滅の起点（`CACurrentMediaTime`）。キャレットが動くたびに置き直し、表示から始める。
   var epoch: Double = 0
-  /// 面に焦点がある（first responder で、窓が key）。無ければキャレットを描かず、選択の地は弱い色。
+  /// 場が主で、面に焦点がある（first responder で、窓が key）。無ければキャレットを描かず、選択の地は弱い色。
   var focused = false
   /// 点滅させるか（アクセシビリティの「点滅しない挿入ポイント」が有効なら、点滅せず描き続ける）。
   var blinks = true
@@ -214,6 +214,54 @@ struct CaretMaterial: Equatable, Sendable {
   }
 }
 
+/// 入力欄の場の描く材料——写し・キャレットと選択・横の送りの箱と頼まれた横の「見えるところまで」・見え方。main の取引が
+/// 場の確定で置く。キャレットの `focused` は「入力欄が主で、面に焦点がある」。
+struct FieldMaterial: @unchecked Sendable {
+  var content: SurfaceContent
+  var caret: CaretMaterial
+  let scroll: FieldScroll
+  var reveal: HorizontalReveal?
+  var font: CTFont
+  var lineHeight: CGFloat
+  /// 行の上端から基線まで（pt）と、タブの桁と刻み（pt）——main の場の幾何と同じ値（→ `EditingSite`）。
+  var baseline: CGFloat
+  var tabColumns: Int
+  var tabWidth: CGFloat
+  var palette: FieldPalette
+}
+
+/// 入力欄の場の横の送り（pt。入力欄の左端から隠れている幅）。main が読み（当たり・IME の矩形）、描画スレッドだけが変える
+/// ——取引が頼んだ「キャレットが見えるところまで」を、描画スレッドがその行を組んだ x で解く（本文の横の寄せと同じく、
+/// main は打鍵のたびに行を組まない）。鍵の中では値の読み書きだけをする。
+final class FieldScroll: Sendable {
+  private let state = OSAllocatedUnfairLock(initialState: (x: 0.0, serial: 0))
+
+  var x: Double { state.withLock { $0.x } }
+
+  /// 通し番号 `serial` の頼みがまだなら、x 区間 `caret` が幅 `width` に見えるところまで最小限動かす。動いたら true。
+  func reveal(serial: Int, caret: ClosedRange<Double>, width: Double) -> Bool {
+    state.withLock { s in
+      guard serial > s.serial else { return false }
+      s.serial = serial
+      let before = s.x
+      if caret.lowerBound < s.x {
+        s.x = caret.lowerBound
+      } else if caret.upperBound > s.x + width {
+        s.x = max(0, caret.upperBound - width)
+      }
+      return s.x != before
+    }
+  }
+}
+
+/// 入力欄の外観で解いた色。
+struct FieldPalette: Equatable, Sendable {
+  var text: InkColor
+  var caret: FrameColor
+  var selection: FrameColor
+  var inactiveSelection: FrameColor
+}
+
 /// 取引が頼んだ横の「見えるところまで」。描画スレッドが区間の行を組んで x を引き、横の位置を寄せる——main は論理の位置
 /// だけを持ち、打鍵のたびに行を組まない。`serial` が進むたびに 1 回だけ解く。
 struct HorizontalReveal: Equatable, Sendable {
@@ -235,6 +283,17 @@ struct FrameMaterial: Sendable {
   /// 描画スレッドがまだ受け取っていない打鍵の時刻（その打鍵の取引が入ったコマで打鍵→画面の遅れを測る）。
   var keystrokes: [Double] = []
   var marks = RowMarks.empty
+  /// 縦の並び（写しと同じ書き込みで置く——描画スレッドは引き取った写しの行の並びで描く）。
+  var rows = RowLayout(lineHeight: 1)
+  /// ミニマップを出すか（表示の構成）。
+  var showsMinimap = true
+  /// 区画の描く材料（区画の同一性で引く。並びの塊の中身と同じ書き込みで置く）。
+  var zones: [ObjectIdentifier: ZoneMaterial] = [:]
+  /// 入力欄の場の描く材料（場の通し番号で引く）。
+  var fields: [Int: FieldMaterial] = [:]
+  /// 区画の文の選択の地（区画の文が主の間だけ）。
+  var zoneSelection: ZoneSelectionMaterial?
+  /// 本文の選択の地とキャレット。`focused` は「本文が主で、面に焦点がある」。
   var caret = CaretMaterial()
   /// まだ解いていないかもしれない横の「見えるところまで」（本文を変えて見せない取引は、古い区間を捨てる）。
   var reveal: HorizontalReveal?
@@ -260,6 +319,12 @@ struct FrameMaterial: Sendable {
   var revision = 0
 
   static let defaultSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+
+  /// 主の場のキャレット——点滅を決める（主が編集の場でなければ、焦点の無い本文のキャレット）。
+  var primaryCaret: CaretMaterial {
+    guard !caret.focused else { return caret }
+    return fields.values.first { $0.caret.focused }?.caret ?? caret
+  }
 
   /// 本文の編集を積む（描画スレッドが長く受け取らなければ、全部の行が変わったことにまとめる）。
   mutating func note(_ edit: RowEdit) {

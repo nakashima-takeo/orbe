@@ -22,7 +22,8 @@ struct ShapeInstance {
 
 /// 1 コマの中身を組み立てる（描画スレッドだけ。配列は面ごとに使い回す）。重ねる順は `Renderer.encode` が持つ。
 ///
-/// 行の位置は y = 上端の余白 + 行 × 行高で、折り返さない。見えている行だけその場で組版し（キャッシュする）、字の色は
+/// 行の位置は上端の余白 + 縦の並び（`RowLayout`。差し込みが無ければ行 × 行高）で、折り返さない。見えている行と差し込んだ
+/// 行だけその場で組版し（キャッシュする）、字の色は
 /// 行ごとに、横に見えている字の区間の役割を役割の並びから引いて決める（長い行でも行全体の役割は引かない）。スクロール量
 /// は装置の画素に揃える（字がにじまない）。
 final class FrameBuilder {
@@ -32,16 +33,17 @@ final class FrameBuilder {
   var shapes: [ShapeInstance] = []
   /// 行の装備（空白の丸点・URL の下線。本文の列に切り取る）。
   var decorShapes: [ShapeInstance] = []
-  /// 選択の地と未確定の文字の地（本文の列に切り取る）。
-  var underShapes: [ShapeInstance] = []
+  /// 本文の行に重ねるもの——選択の地と未確定の文字の地、未確定の文字の下線・キャレット・落とす位置の印（本文の列に
+  /// 切り取る）。
+  var overlays = OverlayShapes()
   /// 強調の地（本文の列に切り取る）。
   var highlightShapes: [ShapeInstance] = []
-  /// 未確定の文字の下線・キャレット・落とす位置の印（本文の列に切り取る）。
-  var overShapes: [ShapeInstance] = []
   private(set) var textScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
   private(set) var gutterScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
+  /// 区画の箱の切り取り——行番号の列と本文の区画（区画の影は行番号の列にも落ちる。行番号と印はその上に描く）。
+  private(set) var zoneScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
   /// 組んだ行のうち最も長い幅（pt。末尾の「ほか N 字」を含む）。
-  private(set) var longestLine: CGFloat = 0
+  var longestLine: CGFloat = 0
   /// このコマのミニマップ。
   var minimap = MinimapFrame()
   /// 影（上端・ミニマップの左）と、俯瞰の図形（ミニマップの帯・縦横のスクロールバーと印）。
@@ -49,23 +51,34 @@ final class FrameBuilder {
   var overviewShapes: [ShapeInstance] = []
   /// スクロールバーの印の縦の区間（元が変わったときだけ作り直す）。
   var rulerSpans = RulerSpans()
+  /// 区画の箱・画像（画像の地図の頁ごと）・区画の文の選択の地（本文の列に切り取る）。
+  var zoneBoxes: [BoxInstance] = []
+  var zoneImages: [[GlyphInstance]] = []
+  var zoneSelectionShapes: [ShapeInstance] = []
+  /// 見えている入力欄の層。
+  var fieldLayers: [FieldLayer] = []
+  /// このコマで入力欄の横の送りが動いた（main へ知らせる）。
+  var fieldRevealed = false
 
   /// GPU の buffer に要る大きさ（配列ごとに 256 バイトに揃える）。
   var byteCount: Int {
-    let glyphArrays = text + color + gutter
+    let fields = fieldLayers
+    let glyphArrays = text + color + gutter + zoneImages + fields.flatMap { $0.text + $0.color }
     let glyphs = glyphArrays.reduce(0) {
       $0 + (($1.count * MemoryLayout<GlyphInstance>.stride + 255) & ~255)
     }
+    let boxes = (zoneBoxes.count * MemoryLayout<BoxInstance>.stride + 255) & ~255
     let cells = minimap.chunks.reduce(0) {
       $0 + (($1.cells.count * MemoryLayout<MinimapCellInstance>.stride + 255) & ~255)
     }
-    return [
-      shapes, decorShapes, underShapes, highlightShapes, overShapes, minimap.decorations,
-      shadowShapes, overviewShapes,
-    ]
-    .reduce(glyphs + cells + ((MemoryLayout<GlyphInstance>.stride + 255) & ~255)) {
-      $0 + (($1.count * MemoryLayout<ShapeInstance>.stride + 255) & ~255)
-    }
+    return
+      ([
+        shapes, decorShapes, overlays.under, highlightShapes, overlays.over, minimap.decorations,
+        shadowShapes, overviewShapes, zoneSelectionShapes,
+      ] + fields.flatMap { [$0.overlays.under, $0.overlays.over] })
+      .reduce(boxes + glyphs + cells + ((MemoryLayout<GlyphInstance>.stride + 255) & ~255)) {
+        $0 + (($1.count * MemoryLayout<ShapeInstance>.stride + 255) & ~255)
+      }
   }
 
   /// px の座標系（左上が原点）。
@@ -80,9 +93,29 @@ final class FrameBuilder {
     let column: Double
     /// 本文の区画の右端（ミニマップの左端）。
     let textRight: Double
+    /// 縦の並び（pt。px へは `scale` を掛けて引く）。
+    let rows: RowLayout
 
-    /// 行の上端の y。
-    func rowTop(_ row: Int) -> Double { top + (Double(row) * lineHeight).rounded() - scrollY }
+    /// 文書の行の上端の y。
+    func rowTop(_ row: Int) -> Double {
+      top + rows.y(ofLine: row, scale: scale).rounded() - scrollY
+    }
+
+    /// 文書の行の下端の y（その行の下の差し込みは含めない）。
+    func rowBottom(_ row: Int) -> Double {
+      top + (rows.y(ofLine: row, scale: scale) + lineHeight).rounded() - scrollY
+    }
+
+    /// 塊 `index`（区画）の上端の y。
+    func blockTop(_ index: Int) -> Double {
+      top + rows.top(ofBlock: index, scale: scale).rounded() - scrollY
+    }
+
+    /// 塊 `index` の中の `line` 行目の上端の y。
+    func insertedTop(block index: Int, line: Int) -> Double {
+      top + (rows.top(ofBlock: index, scale: scale) + Double(line) * lineHeight).rounded()
+        - scrollY
+    }
   }
 
   /// 1 コマの間だけ使う、描く先の座標系と色・アトラス・見え方。
@@ -99,6 +132,9 @@ final class FrameBuilder {
     let roles: RoleRuns
     /// ⌘ を押している間の本文の上のポインタ（px）。焦点が無ければ nil。
     let linkPointer: SIMD2<Double>?
+    /// 本文の行に重ねるもの（選択・キャレット・未確定の文字・落とす位置）の筆。
+    let pen: OverlayPen
+    let fonts: FontRegistry
   }
 
   /// 1 コマを組む元。
@@ -122,6 +158,8 @@ final class FrameBuilder {
     let baselines: Int
     /// 前のコマのミニマップの配置（揺れ止め）。
     let previousPlacement: MinimapLayout?
+    /// 区画を描く持ち物（画像の地図・入力欄の組版のキャッシュ）。
+    let zones: ZoneResources
   }
 
   /// コマを組む（組版のキャッシュのコマは呼び手が始めてある——`Renderer.begin`）。
@@ -131,11 +169,15 @@ final class FrameBuilder {
     for i in gutter.indices { gutter[i].removeAll(keepingCapacity: true) }
     shapes.removeAll(keepingCapacity: true)
     decorShapes.removeAll(keepingCapacity: true)
-    underShapes.removeAll(keepingCapacity: true)
+    overlays.removeAll()
     highlightShapes.removeAll(keepingCapacity: true)
     shadowShapes.removeAll(keepingCapacity: true)
     overviewShapes.removeAll(keepingCapacity: true)
-    overShapes.removeAll(keepingCapacity: true)
+    zoneBoxes.removeAll(keepingCapacity: true)
+    for i in zoneImages.indices { zoneImages[i].removeAll(keepingCapacity: true) }
+    zoneSelectionShapes.removeAll(keepingCapacity: true)
+    fieldLayers.removeAll(keepingCapacity: true)
+    fieldRevealed = false
     longestLine = 0
     minimap.reset()
     let config = source.config
@@ -144,52 +186,47 @@ final class FrameBuilder {
     }
     let s = Double(source.material.scale)
     let lineCount = content.text.lineCount
-    let layout = config.layout(size: source.material.size, lineCount: lineCount)
+    let rows = source.material.rows
+    let layout = config.layout(
+      size: source.material.size, lineCount: lineCount,
+      showsMinimap: source.material.showsMinimap)
     let g = Geometry(
       scale: s, width: Double(source.pixels.width), height: Double(source.pixels.height),
       scrollX: (source.position.x * s).rounded(), scrollY: (source.position.y * s).rounded(),
       top: (Double(config.topInset) * s).rounded(), lineHeight: Double(config.lineHeight) * s,
       column: (Double(layout.column) * s).rounded(),
-      textRight: (Double(layout.text.maxX) * s).rounded())
+      textRight: (Double(layout.text.maxX) * s).rounded(), rows: rows)
     let tabColumns = source.material.tabColumns
     let focused = source.material.caret.focused
     let c = Context(
       g: g, palette: palette, focused: focused, atlas: source.atlas, config: config,
       tabColumns: tabColumns, roles: content.roles,
       linkPointer: focused
-        ? source.material.linkPointer.map { SIMD2(Double($0.x) * s, Double($0.y) * s) } : nil)
+        ? source.material.linkPointer.map { SIMD2(Double($0.x) * s, Double($0.y) * s) } : nil,
+      pen: OverlayPen(
+        originX: g.column - g.scrollX, lineHeight: g.lineHeight,
+        baseline: (Double(config.baseline) * s).rounded(), scale: s, cell: Double(config.cell),
+        caretSize: config.caretSize, focused: focused, selection: palette.selection,
+        inactiveSelection: palette.inactiveSelection, caret: palette.caret,
+        activeClause: palette.text.color, markedUnderline: palette.markedUnderline,
+        markedBackground: palette.markedBackground), fonts: fonts)
     textScissor = Self.scissor(x: g.column, y: g.top, width: g.textRight - g.column, g)
     gutterScissor = Self.scissor(x: 0, y: g.top, width: g.column, g)
-    let lines = source.limits.viewportLines(at: source.position, lineCount: lineCount)
+    zoneScissor = Self.scissor(x: 0, y: g.top, width: g.textRight, g)
+    let lines = source.limits.viewportLines(at: source.position, rows: rows, lineCount: lineCount)
     buildMinimap(layout, lines: lines, source, content, c)
     drawShadows(layout, lines: lines, clipsRight: Self.clipsRight(source), c)
     drawVerticalScrollbar(layout, lines: lines, source, content, c)
-    drawSliders(layout, lines: lines, source, lineCount: lineCount, c)
+    drawSliders(
+      layout, lines: lines, source,
+      contentLines: CGFloat(rows.contentLines(lineCount: lineCount)), c)
     guard g.height > g.top else { return }
-    let first = max(0, Int((g.scrollY / g.lineHeight).rounded(.down)))
-    let last = min(
-      lineCount - 1, Int(((g.scrollY + g.height - g.top) / g.lineHeight).rounded(.down)))
-    guard first <= last else { return }
-    let baseline = (Double(config.baseline) * s).rounded()
-    let numberFont = fonts.id(config.gutterFont)
-    let rows = layRows(first...last, source, text: content.text, cache: cache, fonts: fonts)
-    var roles = content.roles.cursor(from: rows.first?.start ?? 0)
-    for item in rows {
-      let top = g.rowTop(item.row)
-      let visible = visibleGlyphs(item.laid, c)
-      drawDecor(item, rowTop: top, window: visible.offsets, c)
-      drawOverlays(item.overlay, item.laid, rowTop: top, c)
-      drawHighlights(item, source.material.highlights, rowTop: top, window: visible.offsets, c)
-      let width = drawText(item, visible, baseline: top + baseline, roles: &roles, c)
-      longestLine = max(longestLine, width)
-      drawNumber(item.row + 1, rowTop: top, font: numberFont, c)
-    }
-    drawMarks(source.material.marks, rows: first...last, c)
+    drawRows(source, content, cache: cache, c)
   }
 
   /// 見えている行を組む（組版のキャッシュのコマはここで終える）。行頭はロープを 1 度辿って引き、前のコマで描いていない
   /// 行だけ中身を読む。
-  private func layRows(
+  func layRows(
     _ rows: ClosedRange<Int>, _ source: Source, text: TextRope, cache: LineLayoutCache,
     fonts: FontRegistry
   ) -> [RowInFrame] {
@@ -197,7 +234,8 @@ final class FrameBuilder {
     result.reserveCapacity(rows.count)
     let starts = text.lineStarts(rows.lowerBound..<(rows.upperBound + 1))
     var overlays = CaretOverlays(
-      source.material, caretVisible: source.caretVisible, text: text, from: starts[0])
+      source.material.caret, drop: source.material.drop, caretVisible: source.caretVisible,
+      text: text, from: starts[0])
     let highlights = source.material.highlights
     let lastRow = text.lineCount - 1
     for (index, row) in rows.enumerated() {
@@ -258,7 +296,7 @@ final class FrameBuilder {
 
   /// 行の字を置き、行の幅（末尾の印を含む、pt）を返す。置くのは横に見えている字だけで、役割は見えている行を通して 1 つの
   /// 読み口で引き、色は役割の連なりを出たときだけ引く。
-  private func drawText(
+  func drawText(
     _ row: RowInFrame, _ visible: VisibleGlyphs, baseline: Double, roles: inout RoleRuns.Cursor,
     _ c: Context
   ) -> CGFloat {
@@ -282,16 +320,7 @@ final class FrameBuilder {
         place(glyph, ink, .text, c)
       }
     }
-    guard let mark = line.omittedMark else { return line.width }
-    let markX = originX + Double(line.width + c.config.cell) * g.scale
-    for j in mark.glyphs.indices {
-      let x = markX + Double(mark.xs[j]) * g.scale
-      if x > g.textRight { break }
-      place(
-        Glyph(font: mark.fonts[j], glyph: mark.glyphs[j], x: x, baseline: baseline),
-        c.palette.gutterText, .text, c)
-    }
-    return line.width + c.config.cell + mark.width
+    return drawOmittedMark(line, baseline: baseline, c)
   }
 
   /// 置くグリフ 1 つ（x・基線は px。基線は y が下向きの座標）。
@@ -305,26 +334,38 @@ final class FrameBuilder {
   /// グリフを置く。横の置き方はアトラスが Core Graphics と同じに決める。縦は装置の画素に揃え、端数は Core Graphics と
   /// 同じく下向きへ切り上げる。
   func place(_ item: Glyph, _ ink: InkColor, _ layer: FrameBuilderLayer, _ c: Context) {
+    guard let placed = placed(item, ink, c) else { return }
+    if placed.isColor {
+      Self.append(placed.instance, to: &color, page: placed.page)
+    } else if layer == .gutter {
+      Self.append(placed.instance, to: &gutter, page: placed.page)
+    } else {
+      Self.append(placed.instance, to: &text, page: placed.page)
+    }
+  }
+
+  /// アトラスに置いたグリフ——instance と、アトラスの頁と、色付きの字か。
+  struct PlacedGlyph {
+    let instance: GlyphInstance
+    let page: Int
+    let isColor: Bool
+  }
+
+  /// グリフをアトラスに置く（頁が埋まって置けなければ nil）。
+  func placed(_ item: Glyph, _ ink: InkColor, _ c: Context) -> PlacedGlyph? {
     guard
       let (entry, pen) = c.atlas.glyph(
         font: item.font, glyph: item.glyph, x: item.x, dilation: ink.dilation)
-    else { return }
+    else { return nil }
     let instance = GlyphInstance(
       position: SIMD2(
         Float(pen) + Float(entry.left), Float(item.baseline.rounded(.up)) - Float(entry.top)),
       size: SIMD2(Float(entry.w), Float(entry.h)), uv: SIMD2(Float(entry.u), Float(entry.v)),
       color: entry.isColor ? 0xFFFF_FFFF : ink.color.packed)
-    let page = Int(entry.page)
-    if entry.isColor {
-      Self.append(instance, to: &color, page: page)
-    } else if layer == .gutter {
-      Self.append(instance, to: &gutter, page: page)
-    } else {
-      Self.append(instance, to: &text, page: page)
-    }
+    return PlacedGlyph(instance: instance, page: Int(entry.page), isColor: entry.isColor)
   }
 
-  private static func append(
+  static func append(
     _ instance: GlyphInstance, to pages: inout [[GlyphInstance]], page: Int
   ) {
     while pages.count <= page { pages.append([]) }

@@ -52,12 +52,13 @@ final class SurfaceOverviewTests: EngineTestCase {
     let bar = opened.surface.surfaceLayout.verticalScrollbar
     let lines = opened.surface.viewportLines
     let before = ScrollbarGeometry(
-      lineCount: 2001, firstLine: lines.first, visibleLines: lines.visible, height: bar.height)
+      contentLines: 2001, firstLine: lines.first, visibleLines: lines.visible, height: bar.height)
     try mouse(opened, .leftMouseDown, at: CGPoint(x: bar.midX, y: 250))
     XCTAssertEqual(
       opened.surface.viewportLines.first, before.position(centeringSliderAt: 250), accuracy: 1e-6)
     let jumped = ScrollbarGeometry(
-      lineCount: 2001, firstLine: opened.surface.viewportLines.first, visibleLines: lines.visible,
+      contentLines: 2001, firstLine: opened.surface.viewportLines.first,
+      visibleLines: lines.visible,
       height: bar.height)
     try mouse(opened, .leftMouseDragged, at: CGPoint(x: bar.midX, y: 210))
     XCTAssertEqual(
@@ -214,7 +215,8 @@ final class SurfaceOverviewTests: EngineTestCase {
             caretVisible: false, pixels: Renderer.pixelSize(material),
             atlas: renderer.atlas(scale: material.scale, space: material.space),
             config: slot.config, minimapCells: slot.minimapCells, rulerRows: slot.rulerRows,
-            motion: OverviewMotion(), time: 0, baselines: 0, previousPlacement: nil),
+            motion: OverviewMotion(), time: 0, baselines: 0, previousPlacement: nil,
+            zones: slot.zones),
           cache: cache, fonts: renderer.fonts)
         let shapes = builder.overviewShapes + builder.shadowShapes
         return Built(
@@ -300,7 +302,7 @@ final class OverviewMotionTests: XCTestCase {
 
   private func state(_ first: CGFloat) -> OverviewMotion.ScrollState {
     OverviewMotion.ScrollState(
-      first: first, visible: 20, lineCount: 100, x: 0, width: 500, range: 0)
+      first: first, visible: 20, contentLines: 100, x: 0, width: 500, range: 0)
   }
 
   func testTheThumbAppearsOnScrollAndFadesAfterTheDelay() {

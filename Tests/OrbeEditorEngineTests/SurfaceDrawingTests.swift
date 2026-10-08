@@ -147,12 +147,12 @@ final class SurfaceDrawingTests: EngineTestCase {
     opened.surface.updateFocus(true)
     let epoch = { opened.surface.drawn.caret.epoch }
     let focused = epoch()
-    opened.surface.perform(.insert("x"))
+    opened.surface.editor.perform(.insert("x"))
     let typed = epoch()
     XCTAssertGreaterThan(typed, focused, "打鍵")
     opened.surface.scrollLines(3)
     XCTAssertEqual(epoch(), typed, "スクロールだけでは変わらない")
-    opened.surface.perform(.move(.right, extending: false))
+    opened.surface.editor.perform(.move(.right, extending: false))
     XCTAssertGreaterThan(epoch(), typed, "移動")
   }
 
@@ -162,23 +162,28 @@ final class SurfaceDrawingTests: EngineTestCase {
   func testEachMaterialRevisionTakesThePositionPlacedWithIt() {
     let box = ScrollBox()
     box.updateLimits(
-      LimitsUpdate(lineCount: 1000, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7))
+      LimitsUpdate(lastTop: 999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7))
     box.place(SIMD2(0, 50))
     box.updateLimits(
-      LimitsUpdate(lineCount: 2000, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7),
+      LimitsUpdate(lastTop: 1999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7),
       forMaterial: 7)
     box.place(SIMD2(0, 300), forMaterial: 7)
     box.place(SIMD2(0, 900), forMaterial: 8)
     XCTAssertEqual(box.frame(at: 0, material: 6).position.y, 50)
-    XCTAssertEqual(box.frame(at: 0, material: 6).limits.lineCount, 1000, "置く前の範囲")
-    XCTAssertEqual(box.frame(at: 0, material: 7).position.y, 300, "版 8 を置いた後も版 7 の位置")
-    XCTAssertEqual(box.frame(at: 0, material: 7).limits.lineCount, 2000)
+    XCTAssertEqual(
+      box.frame(at: 0, material: 6).limits.lastTop, 999 * 10, "置く前の範囲")
+    XCTAssertEqual(
+      box.frame(at: 0, material: 7).position.y, 300, "版 8 を置いた後も版 7 の位置")
+    XCTAssertEqual(box.frame(at: 0, material: 7).limits.lastTop, 1999 * 10)
     XCTAssertEqual(box.frame(at: 0, material: 8).position.y, 900)
     XCTAssertEqual(box.peek(at: 0).position.y, 900, "main は最新の位置を読む")
-    XCTAssertEqual(box.frame(at: 0, material: 7).position.y, 900, "一度追いついたら前の版の組は持たない")
+    XCTAssertEqual(
+      box.frame(at: 0, material: 7).position.y, 900,
+      "一度追いついたら前の版の組は持たない")
     box.place(SIMD2(0, 400), forMaterial: 9)
     box.taken(material: 9)
-    XCTAssertEqual(box.frame(at: 0, material: 8).position.y, 400, "引き取った版より前の組は手放す")
+    XCTAssertEqual(
+      box.frame(at: 0, material: 8).position.y, 400, "引き取った版より前の組は手放す")
   }
 
   /// 打鍵で組み直すのは変わった行だけ——打鍵はその 1 行、Enter は分かれた 2 行、複数行の字下げは字下げした行で、見えて
@@ -213,13 +218,14 @@ final class SurfaceDrawingTests: EngineTestCase {
     surface.selectedRange = NSRange(location: opened.document.text.lineStart(5) + 3, length: 0)
     surface.flush()
     settle()
-    XCTAssertEqual(shaped { surface.perform(.insert("x")) }, 1, "打鍵した行だけ")
-    XCTAssertEqual(shaped { surface.perform(.newline(indents: true)) }, 2, "Enter で分かれた 2 行だけ")
+    XCTAssertEqual(shaped { surface.editor.perform(.insert("x")) }, 1, "打鍵した行だけ")
+    XCTAssertEqual(
+      shaped { surface.editor.perform(.newline(indents: true)) }, 2, "Enter で分かれた 2 行だけ")
     let text = opened.document.text
     surface.selectedRange = NSRange(
       location: text.lineStart(10), length: text.lineStart(12) + 3 - text.lineStart(10))
     surface.flush()
     settle()
-    XCTAssertEqual(shaped { surface.perform(.tab) }, 3, "字下げした 3 行だけ")
+    XCTAssertEqual(shaped { surface.editor.perform(.tab) }, 3, "字下げした 3 行だけ")
   }
 }

@@ -1,8 +1,8 @@
 import Foundation
 
 /// スクロールバーのつまみ——長さ・位置と、ドラッグ・トラックの押下から位置への写像。VS Code `ScrollbarState`（矢印なし）を
-/// 向きに依らない形で移したもの。量（見えている量・全体の量・位置）は同じ単位ならどの単位でもよく（縦は行、横は pt）、
-/// つまみの長さと位置はトラックの pt。
+/// 向きに依らない形で移したもの。量（見えている量・全体の量・位置）は同じ単位ならどの単位でもよく（縦は表示の単位、
+/// 横は pt）、つまみの長さと位置はトラックの pt。
 public struct ScrollbarGeometry: Equatable, Sendable {
   /// つまみの最小の長さ（pt。掴めるように）。
   public static let minimumSliderLength: CGFloat = 20
@@ -37,10 +37,11 @@ public struct ScrollbarGeometry: Equatable, Sendable {
     sliderPosition = (position * ratio).rounded()
   }
 
-  /// 縦——行の単位。スクロール全体は「最終行を最上段まで送れる」ぶんを含み `行数 + max(0, 表示行数 − 1)` 行。
-  public init(lineCount: Int, firstLine: CGFloat, visibleLines: CGFloat, height: CGFloat) {
+  /// 縦——表示の単位（行高を 1 とする縦の位置。→ `TextReveal`）。`contentLines` は最後の項目の上端 + 1（差し込みの
+  /// 無い面では行数）で、スクロール全体は「最後の項目を最上段まで送れる」ぶんを含み `contentLines + max(0, 表示行数 − 1)`。
+  public init(contentLines: CGFloat, firstLine: CGFloat, visibleLines: CGFloat, height: CGFloat) {
     self.init(
-      visible: visibleLines, total: CGFloat(max(1, lineCount)) + max(0, visibleLines - 1),
+      visible: visibleLines, total: max(1, contentLines) + max(0, visibleLines - 1),
       position: firstLine, trackLength: height)
   }
 

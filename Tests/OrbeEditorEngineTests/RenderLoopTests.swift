@@ -214,6 +214,24 @@ final class RenderLoopTests: EngineTestCase {
       policy.constraint, HeadlessDriver.period - 0.001, accuracy: 1e-6, "起きてから刻み − 1ms 以内")
   }
 
+  /// 見えている区画の画像が地図の頁に収まりきらなくても、描けるだけ描いたら刻みは止まる。
+  func testZoneImagesBeyondTheAtlasStillLetTheLoopStop() throws {
+    let opened = try open(text)
+    let surface = opened.surface
+    surface.setPresentation(SurfacePresentation(showsMinimap: false))
+    surface.viewStateDidChange(size: CGSize(width: 800, height: 600), scale: 2, visible: true)
+    // 上限に近い画像を、頁に収まる数より 1 枚多く（大きさを変えて、別々の画素にする）。
+    let images = (0...(4 * ImageAtlas.maximumPages)).map { i -> ZoneElement in
+      let side = CGFloat(ImageAtlas.maximumSide - 2 * i) / surface.scale
+      return .image(
+        ZoneImage(frame: CGRect(x: 0, y: 0, width: side, height: side), image: ThreadZone.glyph))
+    }
+    let zone = PictureZone { _ in ZonePicture(height: 300, elements: images) }
+    surface.setRows(SurfaceRows(insertions: [RowInsertion(line: 2, content: .zone(zone))]))
+    driver.bind(surface.id)
+    waitUntilPaused(surface)
+  }
+
   /// スレッドの時間制約（秒）。
   private struct TimeConstraint {
     var period: Double

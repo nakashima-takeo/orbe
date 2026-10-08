@@ -3,9 +3,9 @@ import OrbeEditorCore
 
 /// 面の区画の配置（VS Code の `EditorLayoutInfo`）——左から行番号の列（行番号と git の印の列）｜本文の区画｜ミニマップ｜
 /// 縦スクロールバー、本文の区画の下端に横スクロールバーが重なる。ミニマップの幅は VS Code の式（Core の
-/// `MinimapLayout.width`）に面の実の行番号の列の幅を入れて出す。当たり・自動スクロールの境・見せるところまで・見えて
-/// いる範囲・IME の文字の矩形・切り取りは、どれもこの 1 つの配置を使う（描いた位置と当たりが食い違わない）。座標は面の
-/// view の pt（左上が原点、y は下向き）。
+/// `MinimapLayout.width`）に面の実の行番号の列の幅を入れて出す。ミニマップを出さない構成では、右列は縦スクロールバー
+/// だけ。当たり・自動スクロールの境・見せるところまで・見えている範囲・IME の文字の矩形・切り取りは、どれもこの 1 つの
+/// 配置を使う（描いた位置と当たりが食い違わない）。座標は面の view の pt（左上が原点、y は下向き）。
 struct SurfaceLayout: Equatable, Sendable {
   let size: CGSize
   /// 行番号の列の幅（行番号と git の印の列）。
@@ -14,15 +14,23 @@ struct SurfaceLayout: Equatable, Sendable {
   let scrollbarWidth: CGFloat
   let horizontalScrollbarHeight: CGFloat
 
-  init(size: CGSize, column: CGFloat, cell: CGFloat, overview: SurfaceConfig.Overview) {
+  init(
+    size: CGSize, column: CGFloat, cell: CGFloat, overview: SurfaceConfig.Overview,
+    showsMinimap: Bool
+  ) {
     self.size = size
     self.column = column
     let scrollbar = min(overview.scrollbarWidth, max(0, size.width))
-    let minimap = MinimapLayout.width(
-      remaining: size.width - column, charWidth: cell, scrollbar: overview.scrollbarWidth,
-      maxWidth: overview.minimapMaxWidth)
     scrollbarWidth = scrollbar
-    minimapWidth = max(0, min(max(0, size.width), minimap + overview.scrollbarWidth) - scrollbar)
+    if showsMinimap {
+      let minimap = MinimapLayout.width(
+        remaining: size.width - column, charWidth: cell, scrollbar: overview.scrollbarWidth,
+        maxWidth: overview.minimapMaxWidth)
+      minimapWidth = max(
+        0, min(max(0, size.width), minimap + overview.scrollbarWidth) - scrollbar)
+    } else {
+      minimapWidth = 0
+    }
     horizontalScrollbarHeight = overview.horizontalScrollbarHeight
   }
 
@@ -74,10 +82,11 @@ extension SurfaceConfig {
     }
   }
 
-  /// 大きさ `size`・行の数 `lineCount` の面の区画の配置。
-  func layout(size: CGSize, lineCount: Int) -> SurfaceLayout {
+  /// 大きさ `size`・行の数 `lineCount`・ミニマップを出すか `showsMinimap` の面の区画の配置。
+  func layout(size: CGSize, lineCount: Int, showsMinimap: Bool) -> SurfaceLayout {
     SurfaceLayout(
-      size: size, column: columnWidth(lineCount: lineCount), cell: cell, overview: overview)
+      size: size, column: columnWidth(lineCount: lineCount), cell: cell, overview: overview,
+      showsMinimap: showsMinimap)
   }
 }
 

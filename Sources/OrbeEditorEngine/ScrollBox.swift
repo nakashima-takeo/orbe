@@ -70,6 +70,16 @@ final class ScrollBox: Sendable {
     }
   }
 
+  /// 縦の位置を `dy` だけずらす（縦の並びが見えている所より上で変わった。→ `ScrollPhysics.shift`）。`material` を添えれば、
+  /// それより前の版の材料のコマはずらす前の位置を描く。
+  func shift(by dy: Double, forMaterial material: Int) {
+    state.withLock { s in
+      Self.pair(&s, before: material)
+      s.physics.shift(by: dy)
+      s.revision += 1
+    }
+  }
+
   func updateLimits(_ update: LimitsUpdate, forMaterial material: Int? = nil) {
     state.withLock { s in
       var limits = s.physics.limits
@@ -177,12 +187,14 @@ final class ScrollBox: Sendable {
     state.withLock { s in (s.physics.shown(at: t), s.physics.limits) }
   }
 
-  /// まだ置いていない範囲 `update` と位置 `place` を当てたときに見せる位置と範囲（箱は書き換えない。main の読み取り）。
-  func peek(at t: Double, limits update: LimitsUpdate?, place: SIMD2<Double>?) -> (
+  /// まだ当てていないずらし `shift`・範囲 `update`・位置 `place` を当てたときに見せる位置と範囲（箱は書き換えない。main の
+  /// 読み取り）。
+  func peek(at t: Double, shift: Double, limits update: LimitsUpdate?, place: SIMD2<Double>?) -> (
     position: SIMD2<Double>, limits: ScrollPhysics.Limits
   ) {
     state.withLock { s in
       var physics = s.physics
+      if shift != 0 { physics.shift(by: shift) }
       if let update {
         var limits = physics.limits
         update.apply(to: &limits)

@@ -166,7 +166,7 @@ extension FramePerfTests {
       reset(surface)
       let main = typeKeys(surface, count: 60, interval: 0.1) { surface, k in
         let caret = surface.caretLocation
-        surface.perform(.insert(k % 7 == 6 ? " " : "x"))
+        surface.editor.perform(.insert(k % 7 == 6 ? " " : "x"))
         matches.ranges = TextEdit(range: NSRange(location: caret, length: 0), replacement: "x")
           .track(matches.ranges)
         surface.setHighlights(matches.ranges, for: .findMatch)

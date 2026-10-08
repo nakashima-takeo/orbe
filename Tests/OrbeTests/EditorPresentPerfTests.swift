@@ -4,12 +4,14 @@ import XCTest
 import os
 
 @testable import Orbe
+@testable import OrbeEditorEngine
 
 /// 画面に出す計測（朝の場で回し、その結果を正とする。関門にはしない）。`ORBE_EDITOR_PRESENT=1` のときだけ走り、
 /// `scripts/perf-editor-present.sh` が xctrace（Animation Hitches）の下で起こす。窓は画面に出すがアプリは activate
 /// しない。
 ///
-/// 1MB の文書に合成した指の出来事を実機の刻み（約 5.7ms）で流す。出来事→present と落ちたコマは面の記録係が OS のログ
+/// 1MB の文書に合成した指の出来事を実機の刻み（約 5.7ms）で流す。待つ間はアプリの出来事を配る（→ `runShownWindow`。
+/// 配らないと窓が見えている知らせが届かず、面は描かない）。出来事→present と落ちたコマは面の記録係が OS のログ
 /// （カテゴリ `editor-frames`）へジェスチャーごとに出す。合成の出来事を流している区間を os_signpost の interval
 /// `scrolling` で trace に記録し、スクリプトはその区間の hitches だけを区間の長さで割る。
 @MainActor
@@ -30,10 +32,10 @@ final class EditorPresentPerfTests: OrbeTestCase {
     let (window, document) = try show()
     defer { window.orderOut(nil) }
     drag(document.surface.view, seconds: 3, speed: 2400)
-    RunLoop.main.run(until: Date().addingTimeInterval(1))
+    runShownWindow(for: 1)
     for _ in 0..<3 {
       flick(document.surface.view, peak: 6000)
-      RunLoop.main.run(until: Date().addingTimeInterval(2.5))
+      runShownWindow(for: 2.5)
     }
   }
 
@@ -45,7 +47,9 @@ final class EditorPresentPerfTests: OrbeTestCase {
       try caseFile("big.swift", EditorTypingPerfTests.swiftSource(bytes: 1_000_000)), as: .pinned)
     host.pane.layoutSubtreeIfNeeded()
     XCTAssertTrue(document.waitUntilCaughtUp(timeout: 60))
-    RunLoop.main.run(until: Date().addingTimeInterval(1))
+    runShownWindow(for: 1)
+    let surface = try XCTUnwrap(document.surface as? MetalTextSurface)
+    XCTAssertTrue(surface.material.read().visible, "前提: 窓が見えていると面が知っている")
     return (host.window, document)
   }
 
@@ -122,9 +126,7 @@ final class EditorPresentPerfTests: OrbeTestCase {
     }
     thread.qualityOfService = .userInteractive
     thread.start()
-    while done.wait(timeout: .now()) == .timedOut {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.002))
-    }
+    while done.wait(timeout: .now()) == .timedOut { runShownWindow(for: 0.002) }
   }
 }
 

@@ -93,6 +93,8 @@ struct EditingEnvironment {
   let geometry: any LineGeometry
   /// ページ送りの行の数（VS Code の `pageSize`——見えている行の数 − 2、1 以上）。
   let pageLines: Int
+  /// 面の縦の並び（ページ送りはキャレットの行から縦にページの高さだけ離れた所の文書の行へ動く）。
+  let rows: RowLayout
   let indentation: Indentation
   let lineBreak: LineBreak
   let killBuffer: String

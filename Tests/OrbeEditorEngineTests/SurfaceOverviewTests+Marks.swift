@@ -37,20 +37,20 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     let shot = try pixelShot(opened)
     let bar = opened.surface.surfaceLayout.verticalScrollbar
     let ruler = OverviewRuler(
-      lineCount: rope.lineCount, visibleLines: opened.surface.viewportLines.visible,
+      contentLines: CGFloat(rope.lineCount), visibleLines: opened.surface.viewportLines.visible,
       height: bar.height, scale: 2)
     let at = { (lane: OverviewRuler.Lane, span: OverviewRuler.Span) -> [Int] in
       let x = OverviewRuler.lane(lane, width: bar.width, scale: 2)
       return shot.rgb(
         bar.minX + CGFloat(2 * x.x + x.width) / 4, bar.minY + CGFloat(span.y1 + span.y2) / 4)
     }
-    let row = { (row: Int) in ruler.spans([row...row])[0] }
+    let row = { (row: Int) in ruler.spans([CGFloat(row)..<CGFloat(row + 1)])[0] }
     XCTAssertEqual(at(.left, row(5)), [0, 255, 0], "追加は左のレーン")
     XCTAssertEqual(at(.center, row(5)), [0, 0, 0])
     XCTAssertEqual(at(.center, row(20)), [255, 0, 0], "検索の一致は中央のレーン")
     XCTAssertEqual(at(.left, row(20)), [0, 0, 0])
     XCTAssertEqual(at(.center, row(25)), [0, 0, 255], "語の出現は中央のレーン")
-    let caret = ruler.caret(row: 30)
+    let caret = ruler.caret(at: 30)
     XCTAssertEqual(at(.left, caret), [255, 255, 255], "キャレットは全幅")
     XCTAssertEqual(at(.center, caret), [255, 255, 255])
     XCTAssertEqual(at(.left, row(10)), [0, 0, 0], "印の無い行")
@@ -100,7 +100,8 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     let surface = opened.surface
     let bar = surface.surfaceLayout.verticalScrollbar
     let ruler = OverviewRuler(
-      lineCount: rope.lineCount, visibleLines: surface.viewportLines.visible, height: bar.height,
+      contentLines: CGFloat(rope.lineCount), visibleLines: surface.viewportLines.visible,
+      height: bar.height,
       scale: 2)
     surface.inputScope {
       surface.editor.select(
@@ -109,7 +110,7 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     }
     let shot = try pixelShot(opened)
     let marked = { (row: Int) -> Bool in
-      let span = ruler.caret(row: row)
+      let span = ruler.caret(at: CGFloat(row))
       return shot.rgb(bar.midX, bar.minY + CGFloat(span.y1 + span.y2) / 4) == [255, 255, 255]
     }
     XCTAssertTrue(marked(40), "主")
@@ -127,9 +128,9 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     let caret = opened.document.text.lineStart(150)
     surface.selectedRange = NSRange(location: caret, length: 0)
     let ruler = OverviewRuler(
-      lineCount: 200, visibleLines: surface.viewportLines.visible, height: bar.height, scale: 2)
+      contentLines: 200, visibleLines: surface.viewportLines.visible, height: bar.height, scale: 2)
     let marked = { (row: Int) throws -> Bool in
-      let span = ruler.caret(row: row)
+      let span = ruler.caret(at: CGFloat(row))
       return try self.pixelShot(opened).rgb(bar.midX, bar.minY + CGFloat(span.y1 + span.y2) / 4)
         == [255, 255, 255]
     }
@@ -153,10 +154,11 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     let surface = opened.surface
     let bar = surface.surfaceLayout.verticalScrollbar
     let ruler = OverviewRuler(
-      lineCount: rope.lineCount, visibleLines: surface.viewportLines.visible, height: bar.height,
+      contentLines: CGFloat(rope.lineCount), visibleLines: surface.viewportLines.visible,
+      height: bar.height,
       scale: 2)
     let marked = { (row: Int) throws -> Bool in
-      let span = ruler.caret(row: row)
+      let span = ruler.caret(at: CGFloat(row))
       return try self.pixelShot(opened).rgb(bar.midX, bar.minY + CGFloat(span.y1 + span.y2) / 4)
         == [255, 255, 255]
     }
@@ -175,6 +177,53 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
       "前提: 前へ伸ばした")
     XCTAssertTrue(try marked(60), "前へ伸ばした選択は先頭の行")
     XCTAssertFalse(try marked(140))
+  }
+
+  /// 上に差し込みを置くと、印とキャレットの印は縦の並びの位置（差し込みの高さを数えた位置）へ描き直される——撮った後の
+  /// 差し込みでも、前の位置に残らない。
+  func testMarksMoveDownWithTheRowsInsertedAboveThem() throws {
+    let opened = try open(
+      (0..<200).map { "line \($0)\n" }.joined(), size: CGSize(width: 800, height: 400),
+      style: style)
+    let surface = opened.surface
+    surface.setPresentation(SurfacePresentation(showsMinimap: false))
+    let rope = opened.document.text
+    surface.setHighlights([NSRange(location: rope.lineStart(100), length: 4)], for: .findMatch)
+    surface.selectedRange = NSRange(location: rope.lineStart(150), length: 0)
+    let bar = surface.surfaceLayout.verticalScrollbar
+    let ruler = {
+      OverviewRuler(
+        contentLines: CGFloat(surface.rows.contentLines(lineCount: rope.lineCount)),
+        visibleLines: surface.viewportLines.visible, height: bar.height, scale: 2)
+    }
+    let lane = OverviewRuler.lane(.center, width: bar.width, scale: 2)
+    let find = { (unit: Double) -> CGPoint in
+      let span = ruler().spans([CGFloat(unit)..<CGFloat(unit + 1)])[0]
+      return CGPoint(
+        x: bar.minX + CGFloat(2 * lane.x + lane.width) / 4,
+        y: bar.minY + CGFloat(span.y1 + span.y2) / 4)
+    }
+    let caret = { (unit: Double) -> CGPoint in
+      let span = ruler().caret(at: CGFloat(unit))
+      return CGPoint(x: bar.midX, y: bar.minY + CGFloat(span.y1 + span.y2) / 4)
+    }
+    let before = (find: find(100), caret: caret(150))
+    var shot = try pixelShot(opened)
+    XCTAssertEqual(shot.rgb(before.find.x, before.find.y), [255, 0, 0], "前提: 一致の印")
+    XCTAssertEqual(shot.rgb(before.caret.x, before.caret.y), [255, 255, 255], "前提: キャレットの印")
+    surface.setRows(
+      SurfaceRows(
+        insertions: [
+          RowInsertion(
+            line: 20, content: .lines((0..<60).map { InsertedLine("inserted \($0)") }))
+        ]))
+    shot = try pixelShot(opened)
+    let moved = (
+      find: find(surface.rows.unit(ofLine: 100)), caret: caret(surface.rows.unit(ofLine: 150))
+    )
+    XCTAssertEqual(shot.rgb(moved.find.x, moved.find.y), [255, 0, 0], "一致の印は差し込みの分下")
+    XCTAssertEqual(shot.rgb(moved.caret.x, moved.caret.y), [255, 255, 255], "キャレットの印も")
+    XCTAssertNotEqual(shot.rgb(before.caret.x, before.caret.y), [255, 255, 255], "前の位置には残らない")
   }
 
   /// 縦スクロールバーの左端と上端に 1 デバイス px の縁が出る。

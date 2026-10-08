@@ -49,7 +49,7 @@ final class Renderer {
   func attach(
     id: Int, boxes: SurfaceBoxes, config: SurfaceConfig, notify: @escaping @Sendable () -> Void
   ) {
-    slots[id] = SurfaceSlot(id: id, boxes: boxes, config: config, notify: notify)
+    slots[id] = SurfaceSlot(id: id, boxes: boxes, config: config, device: device, notify: notify)
   }
 
   /// 面が閉じた。刻みを外し、組版のキャッシュと写しの最後の参照をここ（描画スレッド）で手放す。
@@ -130,7 +130,7 @@ final class Renderer {
       pause(slot, clock)
       return
     }
-    let caretVisible = material.caret.caretVisible(at: target)
+    let caretVisible = material.primaryCaret.caretVisible(at: target)
     let changed =
       material.revision != slot.drawnMaterial || slot.scroll.revision != slot.drawnScroll
       || slot.returning || slot.atlasDirty || slot.motion.due(at: target)
@@ -138,15 +138,19 @@ final class Renderer {
       slot.recorder.idle(at: CACurrentMediaTime())
       slot.idleTicks += 1
       if slot.idleTicks >= Self.idleTicksBeforePause {
-        pause(slot, clock, blinking: material.caret, after: target, fading: slot.motion.wakeAt)
+        pause(
+          slot, clock, blinking: material.primaryCaret, after: target,
+          fading: slot.motion.wakeAt)
       }
       return
     }
     slot.idleTicks = 0
     let atlas = atlas(scale: material.scale, space: material.space)
+    let images = slot.zones.images
     if atlas.isFull, gpuInflight == 0 { atlas.reset() }
+    if images.isFull, gpuInflight == 0 { images.reset() }
     guard slot.unpresented < frameTarget.limit, gpuInflight < Self.gpuLimit, !atlas.isFull,
-      let acquired = frameTarget.acquire()
+      !images.isFull, let acquired = frameTarget.acquire()
     else {
       slot.owed = true
       slot.recorder.skipped()
@@ -154,7 +158,8 @@ final class Renderer {
     }
     draw(slot, material, into: acquired, at: target, Pass(pipelines: pipelines, atlas: atlas))
     if !changed {
-      pause(slot, clock, blinking: material.caret, after: target, fading: slot.motion.wakeAt)
+      pause(
+        slot, clock, blinking: material.primaryCaret, after: target, fading: slot.motion.wakeAt)
     }
   }
 
@@ -164,8 +169,10 @@ final class Renderer {
     _ pass: Pass
   ) {
     let began = CACurrentMediaTime()
-    let caretVisible = material.caret.caretVisible(at: target)
+    let caretVisible = material.primaryCaret.caretVisible(at: target)
     let revealed = begin(slot, material)
+    pass.atlas.beginFrame()
+    slot.zones.images.beginFrame()
     let frame = slot.scroll.frame(at: target, material: material.revision)
     let texture = acquired.texture
     slot.build(
@@ -175,7 +182,7 @@ final class Renderer {
       longestLine: slot.builder.longestLine, version: material.content?.version)
     guard let commands = queue.makeCommandBuffer(),
       let bufferIndex = encode(
-        slot.builder, into: texture, minimapPass(slot, material, pass), commands)
+        slot.builder, into: texture, framePass(slot, material, pass), commands)
     else {
       slot.owed = true
       return
@@ -193,7 +200,7 @@ final class Renderer {
     slot.keystrokes.removeAll(keepingCapacity: true)
     slot.drawnPosition = frame.position
     slot.returning = frame.returning
-    slot.atlasDirty = pass.atlas.isFull
+    slot.atlasDirty = pass.atlas.isFull || slot.zones.images.isFull
     commands.addCompletedHandler { _ in
       RenderThread.shared.perform { $0.commandsDidComplete(bufferIndex) }
     }
@@ -209,7 +216,9 @@ final class Renderer {
         shaped: slot.lines.shapedInFrame > 0, committed: committed, events: frame.events,
         keystrokes: keystrokes, moving: moving, gesture: frame.gesture,
         mismatch: texture.width != pixels.width || texture.height != pixels.height))
-    if frame.returning || wasReturning || widened || revealed { slot.notify() }
+    if frame.returning || wasReturning || widened || revealed || slot.builder.fieldRevealed {
+      slot.notify()
+    }
     if let last = keystrokes.max() { scheduleTypingFlush(slot.id, after: last) }
     slot.prefetchMinimap(material)
   }

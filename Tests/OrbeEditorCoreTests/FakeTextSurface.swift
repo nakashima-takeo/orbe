@@ -67,6 +67,16 @@ final class FakeTextSurface: TextSurface {
 
   func reveal(_ range: NSRange, policy: TextReveal) {}
 
+  func setRows(_ rows: SurfaceRows) {}
+
+  func redrawZone(_ zone: SurfaceZone) {}
+
+  func replaceText(of field: ZoneTextField, with text: String) {}
+
+  func focus(_ field: ZoneTextField) {}
+
+  func setPresentation(_ presentation: SurfacePresentation) {}
+
   func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind) {}
 
   func setIndentation(_ indentation: Indentation) { self.indentation = indentation }

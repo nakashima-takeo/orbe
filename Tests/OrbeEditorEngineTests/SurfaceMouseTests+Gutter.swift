@@ -68,8 +68,8 @@ extension SurfaceMouseTests {
 
     let end = line(3, opened).location + 4
     opened.surface.selectedRange = NSRange(location: end, length: 0)
-    opened.surface.perform(.move(.left, extending: true))
-    opened.surface.perform(.move(.left, extending: true))
+    opened.surface.editor.perform(.move(.left, extending: true))
+    opened.surface.editor.perform(.move(.left, extending: true))
     XCTAssertEqual(opened.surface.caretLocation, end - 2, "前提: 動く側は左端")
     try pressGutter(opened, 5, flags: .shift)
     XCTAssertEqual(

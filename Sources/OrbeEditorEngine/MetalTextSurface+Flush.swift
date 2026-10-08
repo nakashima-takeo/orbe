@@ -14,21 +14,26 @@ struct Pending {
   var limits: LimitsUpdate?
   /// 置く位置（取引が置いた位置と見せ方の位置）。
   var position: SIMD2<Double>?
+  /// 縦の位置のずらし（縦の並びが見えている所より上で変わった。範囲と位置より先に当てる）。
+  var shift: Double = 0
   /// 最も長い行をこの版以降の写しで測り直す。
   var remeasure: Int?
 
-  var isEmpty: Bool { writes.isEmpty && limits == nil && position == nil && remeasure == nil }
+  var isEmpty: Bool {
+    writes.isEmpty && limits == nil && position == nil && remeasure == nil && shift == 0
+  }
 }
 
 /// 取引が置く範囲の値（描画スレッドが組んだ行で伸ばす最も長い行の幅は含まない）。
 struct LimitsUpdate: Equatable, Sendable {
-  var lineCount: Int
+  /// 縦のスクロールの端（→ `ScrollPhysics.Limits.lastTop`）。
+  var lastTop: Double
   var lineHeight: Double
   var viewport: SIMD2<Double>
   var cell: Double
 
   func apply(to limits: inout ScrollPhysics.Limits) {
-    limits.lineCount = lineCount
+    limits.lastTop = lastTop
     limits.lineHeight = lineHeight
     limits.viewport = viewport
     limits.cell = cell
@@ -59,7 +64,7 @@ extension MetalTextSurface {
     FlushScheduler.shared.schedule(self)
   }
 
-  /// 出す。手順の順番は約束——① 版 N（今の材料の版 + 1）を先に決め、② 版 N を添えて位置と範囲をスクロールの箱へ置き
+  /// 出す。手順の順番は約束——① 版 N（今の材料の版 + 1）を先に決め、② 版 N を添えてずらし・範囲・位置をスクロールの箱へ置き
   /// （箱は置く前の位置を N より前の材料に組んで残す）、③ 材料の箱へ 1 回書き（版 N になる）、④ 描画スレッドを 1 回起こす。
   /// 描画スレッドは引き取った材料の版に組む位置を描くので、位置を先・材料を後の順でなければ「新しい位置に古い本文」の
   /// コマが出る。出す前の状態が空なら何もしない。
@@ -70,6 +75,7 @@ extension MetalTextSurface {
     pending = Pending()
     let revision = material.revision + 1
     if let from = out.remeasure { scroll.remeasure(from: from) }
+    if out.shift != 0 { scroll.shift(by: out.shift, forMaterial: revision) }
     if let limits = out.limits { scroll.updateLimits(limits, forMaterial: revision) }
     if let p = out.position { scroll.place(p, forMaterial: revision) }
     let written = material.update { material in
@@ -79,11 +85,13 @@ extension MetalTextSurface {
     wake()
   }
 
-  /// main から見た今の位置と範囲——まだ出していない範囲と位置（取引の中で置いた位置を含む）を当てた値。
+  /// main から見た今の位置と範囲——まだ出していないずらし・範囲・位置（取引の中で置いた位置を含む）を当てた値。
   func scrollState(at t: Double = CACurrentMediaTime()) -> (
     position: SIMD2<Double>, limits: ScrollPhysics.Limits
   ) {
-    scroll.peek(at: t, limits: pending.limits, place: transaction?.scrollTo ?? pending.position)
+    scroll.peek(
+      at: t, shift: pending.shift, limits: pending.limits,
+      place: transaction?.scrollTo ?? pending.position)
   }
 }
 

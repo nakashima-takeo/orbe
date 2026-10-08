@@ -5,6 +5,13 @@ import OrbeEditorCore
 struct FrameColor: Equatable, Sendable {
   var packed: UInt32
 
+  /// 透明。
+  static let clear = FrameColor(packed: 0)
+
+  init(packed: UInt32) {
+    self.packed = packed
+  }
+
   /// `color` を外観 `appearance` で面の色空間 `space` に解く。
   @MainActor
   init(_ color: NSColor, appearance: NSAppearance, space: CGColorSpace) {

@@ -63,7 +63,8 @@ struct LaidOutLine {
 /// - 前のコマで描いた行（写しの版と行 → 組んだ結果）: 定常のスクロールでは見えている行のほとんどがここで当たり、行の
 ///   中身を写さず・ハッシュしない。本文の編集は変わった行だけを捨て、後ろの行をずらす。版かタブの桁が知らない形で
 ///   変われば全部捨てる。
-/// - 行の中身とタブの桁を鍵にした結果（フォントは面ごとに固定）: 編集をまたいでも同じ中身の行は組み直さない。行の数か、
+/// - 行の中身とタブの桁を鍵にした結果（フォントはキャッシュごとに固定——本文は面のフォント、入力欄は入力欄のフォント）:
+///   編集をまたいでも同じ中身の行は組み直さない。行の数か、
 ///   持つ単位（行の中身とグリフ）の数が上限を越えたら、古く使われたものから半分を捨てる——長い行ばかりの文書でも覚える
 ///   量が行の長さに比例して膨らまない。
 final class LineLayoutCache {
@@ -97,6 +98,16 @@ final class LineLayoutCache {
   private var frameRows: [Int: LaidOutLine] = [:]
   private var rowsVersion: Int?
   private var rowsTabColumns: Int?
+  /// 組むフォントとタブの刻み（nil なら面のフォントと、桁から面の設定で出す刻み）。
+  private let face: (font: CTFont, tabWidth: CGFloat)?
+
+  init() {
+    face = nil
+  }
+
+  init(font: CTFont, tabWidth: CGFloat) {
+    face = (font, tabWidth)
+  }
 
   /// 本文の編集を受け取る（前のコマで描いた行のうち、変わった行を捨てて後ろをずらす）。
   func receive(_ edits: [RowEdit]) {
@@ -159,9 +170,9 @@ final class LineLayoutCache {
   ) -> LaidOutLine {
     clock += 1
     let key = Key(source: source, tabColumns: tabColumns)
-    let shape = {
-      LineShaper.shape(source, font: config.font, tabWidth: config.tabWidth(columns: tabColumns))
-    }
+    let font = face?.font ?? config.font
+    let tabWidth = face?.tabWidth ?? config.tabWidth(columns: tabColumns)
+    let shape = { LineShaper.shape(source, font: font, tabWidth: tabWidth) }
     if let index = entries.index(forKey: key) {
       entries.values[index].used = clock
       if carets, entries.values[index].line.carets == nil {
@@ -180,7 +191,7 @@ final class LineLayoutCache {
     if carets || line.decor.needsCarets { line.carets = shaped.carets }
     if line.omitted > 0 {
       line.omittedMark = LaidOutLine.OmittedMark(
-        LineShaper.shape(config.omittedLabel(line.omitted), font: config.font), fonts: fonts)
+        LineShaper.shape(config.omittedLabel(line.omitted), font: font), fonts: fonts)
     }
     let entry = Entry(
       line: line, used: clock,

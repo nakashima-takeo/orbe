@@ -57,6 +57,12 @@ enum LineShaper {
     return (source(start: start, next: next, in: text), start)
   }
 
+  /// 文書に無い行（改行を含まない字列）の中身。
+  static func source(_ line: String) -> Source {
+    let units = line.utf16
+    return Source(head: ContiguousArray(units.prefix(headLimit)), length: units.count)
+  }
+
   /// 行頭 `start` から次の行頭 `next`（最後の行なら nil）までの行の中身。読むのは描きうる先頭と、それより長い行だけ
   /// 行末の 1 単位（`\r` か）。
   static func source(start: Int, next: Int?, in text: TextRope) -> Source {

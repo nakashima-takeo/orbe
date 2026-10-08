@@ -60,7 +60,8 @@ enum Editing {
       text: text,
       geometry: ShapedLineGeometry(
         text: text, cache: cache, tabWidth: CGFloat(indentation.unit) * cell),
-      pageLines: pageLines, indentation: indentation, lineBreak: lineBreak, killBuffer: killBuffer)
+      pageLines: pageLines, rows: RowLayout(lineHeight: 18), indentation: indentation,
+      lineBreak: lineBreak, killBuffer: killBuffer)
   }
 
   /// コマンドを順に当て、最後の本文と状態を書いたもの。

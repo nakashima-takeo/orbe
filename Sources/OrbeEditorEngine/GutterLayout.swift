@@ -1,8 +1,8 @@
 import OrbeEditorCore
 
-/// 行番号の列と git の印の配置。行番号は右寄せで、字の見た目の中央（ascent と descent の中点）を行の
-/// 縦の中央に置く。git の印は行番号の右の印の列に、追加・変更は行の高さのバー（続く同じ印の行は 1 本に繋げる）、削除は
-/// その境に右向きの三角。
+/// 行番号の列と git の印の配置。行番号は文書の行ごとに右寄せで、字の見た目の中央（ascent と descent の中点）を行の
+/// 縦の中央に置く（差し込んだ行には描かない）。git の印は行番号の右の印の列に、追加・変更は行の高さのバー（続く同じ印の
+/// 行は 1 本に繋げ、差し込みの塊で区切る）、削除はその境（文書の行の上端か、本文の末尾の行の下端）に右向きの三角。
 extension FrameBuilder {
   func drawNumber(_ number: Int, rowTop: Double, font: UInt16, _ c: Context) {
     let g = c.g
@@ -45,13 +45,15 @@ extension FrameBuilder {
         bar.rows = bar.rows.lowerBound...marks.bars[index].rows.upperBound
         index += 1
       }
-      let top = g.rowTop(bar.rows.lowerBound)
-      let bottom = g.rowTop(bar.rows.upperBound + 1)
       let ink = bar.kind == .added ? palette.added : palette.modified
-      shapes.append(
-        ShapeInstance(
-          rect: SIMD4(Float(barX), Float(top), Float(barWidth), Float(bottom - top)),
-          color: ink.packed, radius: Float(Double(config.marks.barRadius) * g.scale), kind: 0))
+      for piece in Self.pieces(bar.rows, g.rows) {
+        let top = g.rowTop(piece.lowerBound)
+        let bottom = g.rowBottom(piece.upperBound)
+        shapes.append(
+          ShapeInstance(
+            rect: SIMD4(Float(barX), Float(top), Float(barWidth), Float(bottom - top)),
+            color: ink.packed, radius: Float(Double(config.marks.barRadius) * g.scale), kind: 0))
+      }
     }
     let size = Double(config.marks.triangleSize) * g.scale
     var deletion = Self.firstIndex(marks.deletions.count) {
@@ -60,13 +62,31 @@ extension FrameBuilder {
     while deletion < marks.deletions.count, marks.deletions[deletion].row <= rows.upperBound + 1 {
       let mark = marks.deletions[deletion]
       deletion += 1
-      let y = Double(mark.row + (mark.atBottom ? 1 : 0)) * g.lineHeight
+      let y =
+        mark.atBottom
+        ? g.rows.y(ofLine: mark.row, scale: g.scale) + g.lineHeight
+        : g.rows.y(ofLine: mark.row, scale: g.scale)
       let center = g.top + max(y.rounded(), size / 2) - g.scrollY
       shapes.append(
         ShapeInstance(
           rect: SIMD4(Float(barX), Float(center - size / 2), Float(size), Float(size)),
           color: palette.removed.packed, radius: 0, kind: 1))
     }
+  }
+
+  /// 行の区間 `rows` を、間にある差し込みの塊の境で区切った区間の列。
+  private static func pieces(_ rows: ClosedRange<Int>, _ layout: RowLayout) -> [ClosedRange<Int>] {
+    var result: [ClosedRange<Int>] = []
+    var start = rows.lowerBound
+    var index = layout.blocks(above: start)
+    while index < layout.count, layout.boundaries[index] <= rows.upperBound {
+      let boundary = layout.boundaries[index]
+      result.append(start...(boundary - 1))
+      start = boundary
+      index = layout.blocks(above: boundary)
+    }
+    result.append(start...rows.upperBound)
+    return result
   }
 
   /// `0..<count` の中で `isAtOrAfter` が成り立つ最初の位置（成り立つ位置は後ろに続く）。

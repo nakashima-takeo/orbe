@@ -10,7 +10,9 @@ import Metal
 /// - 太らせ（font smoothing 相当）の段は 0…5（0 は太らせ無し）。字の色と倍率からどの段にするかは `DilationProbe` が決める。
 /// - 色付きのグリフ（絵文字）は RGBA の別の頁に、面が描く色空間で描いて置く（別の色空間で描いてから写すと、Core Text が
 ///   その色空間へ直に描いた絵と色がずれる）。
-/// - 頁が埋まれば頁を足す。上限に当たれば全体を作り直す（追い出しはしない）。
+/// - 頁が埋まれば頁を足す。上限に当たって置けない字は、そのコマに描かない。前のコマまでの字が場所を取っていたなら埋まった
+///   ことを示し（`isFull`）、描画の口が GPU が頁を読み終えてから全体を作り直して（追い出しはしない）そのコマを描き直す。
+///   空のアトラスから始めたコマだけで埋まったなら、作り直しても同じ所で埋まるので示さない（描き直し続けない）。
 final class GlyphAtlas {
   struct Entry {
     var u: Int16
@@ -46,8 +48,11 @@ final class GlyphAtlas {
   /// 字ごとに辞書を引かない。
   private var entries: [Entry] = []
   private var tables: [[Int32]] = []
-  /// 頁が上限まで埋まった。次のコマの前に作り直す。
+  /// 前のコマまでの字が場所を取っていて、頁が上限まで埋まった。次のコマの前に作り直す。
   private(set) var isFull = false
+  /// 頁に置いた字の数と、このコマの始まりに前のコマまでの字が頁にあったか。
+  private var placed = 0
+  private var holdsEarlierFrames = false
 
   init(device: MTLDevice, scale: CGFloat, space: CGColorSpace, fonts: FontRegistry) {
     self.device = device
@@ -57,8 +62,14 @@ final class GlyphAtlas {
     variants = Self.subpixelVariants(scale: scale)
   }
 
+  /// コマを組み始める（アトラスを共有する面ごとのコマのたび）。
+  func beginFrame() {
+    holdsEarlierFrames = placed > 0
+  }
+
   /// 頁を空にして作り直す（頁の texture は使い回す）。
   func reset() {
+    placed = 0
     entries.removeAll()
     tables.removeAll()
     monoPackers = monoPackers.map { ShelfPacker(size: $0.size) }
@@ -159,6 +170,7 @@ final class GlyphAtlas {
       return true
     }
     guard drawn, let slot = place(w, h, color: isColor) else { return nil }
+    placed += 1
     let texture = isColor ? colorPages[slot.page] : monoPages[slot.page]
     texture.replace(
       region: MTLRegionMake2D(slot.x, slot.y, w, h), mipmapLevel: 0, withBytes: bytes,
@@ -182,7 +194,7 @@ final class GlyphAtlas {
       if let spot { return Slot(page: page, x: spot.x, y: spot.y) }
     }
     guard count < Self.maximumPages, addPage(color: color) else {
-      isFull = true
+      isFull = holdsEarlierFrames
       return nil
     }
     let spot = color ? colorPackers[count].place(w, h) : monoPackers[count].place(w, h)
@@ -207,8 +219,10 @@ final class GlyphAtlas {
   }
 }
 
-/// 棚詰め。高さの近い棚へ左から詰め、無ければ下に棚を足す。
+/// 棚詰め。高さの近い棚へ左から詰め、無ければ下に棚を足す。置いたものの右と下には `gap` の隙間を空ける。
 struct ShelfPacker {
+  static let gap = 1
+
   let size: Int
   private struct Shelf {
     var y: Int
@@ -224,8 +238,8 @@ struct ShelfPacker {
   }
 
   mutating func place(_ w: Int, _ h: Int) -> (x: Int, y: Int)? {
-    let pw = w + 1
-    let ph = h + 1
+    let pw = w + Self.gap
+    let ph = h + Self.gap
     for i in shelves.indices
     where shelves[i].h >= ph && shelves[i].h <= ph + ph / 3 && shelves[i].x + pw <= size {
       let x = shelves[i].x
