@@ -33,6 +33,7 @@ public enum AnalysisRequest: Equatable, Sendable {
 final class AnalysisInbox: Sendable {
   struct Contents: Sendable {
     var syntax: [SyntaxOutcome] = []
+    var comparison: ComparisonOutcome?
     var hunks: HunksOutcome?
     var ranges: [AnalysisRequest.Kind: RangesOutcome] = [:]
   }
@@ -78,6 +79,12 @@ final class AnalysisInbox: Sendable {
   }
 }
 
+/// 本文と保存時の本文が同じかの結果。
+struct ComparisonOutcome: Sendable {
+  let version: Int
+  let same: Bool
+}
+
 /// 行差分の結果。
 struct HunksOutcome: Sendable {
   let version: Int
@@ -93,11 +100,13 @@ struct RangesOutcome: Sendable {
   let ranges: [NSRange]
 }
 
-/// 文書 1 つの、行差分・検索・出現の裏の仕事。写しと問いを受け取り、規則（純関数）を写しに対して回して、結果を版と問い
-/// つきで受け取り箱へ置く。種類ごとに最新の依頼だけを持ち（古い依頼の結果は要らない）、出現を検索・行差分より先に
-/// 片付ける。本文の写しは依頼ごとに読み、何も覚えない（検索と出現は窓ごとに読み、行差分は取る間だけ連続した列に写す）。
+/// 文書 1 つの、保存時の本文との比較・行差分・検索・出現の裏の仕事。写しと問いを受け取り、規則（純関数）を写しに対して
+/// 回して、結果を版と問いつきで受け取り箱へ置く。種類ごとに最新の依頼だけを持ち（古い依頼の結果は要らない）、比較を
+/// 最初に（違いの所で打ち切れて、届くまで未保存に見える）、出現を検索・行差分より先に片付ける。本文の写しは依頼ごとに
+/// 読み、何も覚えない（検索と出現は窓ごとに読み、行差分は取る間だけ連続した列に写す）。
 actor DocumentAnalysis {
   private enum Work: Sendable {
+    case comparison(synced: TextRope)
     case hunks(baseline: String, generation: Int)
     case ranges(AnalysisRequest)
   }
@@ -109,12 +118,17 @@ actor DocumentAnalysis {
   }
 
   private struct Mail: Sendable {
+    var comparison: Job?
     var hunks: Job?
     var ranges: [AnalysisRequest.Kind: Job] = [:]
     var running = false
 
-    /// 次に片付ける依頼（語の出現・選択文字列の出現・検索・行差分の順）。
+    /// 次に片付ける依頼（比較・語の出現・選択文字列の出現・検索・行差分の順）。
     mutating func next() -> Job? {
+      if let job = comparison {
+        comparison = nil
+        return job
+      }
       for kind in [AnalysisRequest.Kind.wordOccurrences, .selectionOccurrences, .find] {
         if let job = ranges.removeValue(forKey: kind) { return job }
       }
@@ -130,6 +144,11 @@ actor DocumentAnalysis {
 
   init(inbox: AnalysisInbox) {
     self.inbox = inbox
+  }
+
+  /// 本文と保存時の本文が同じかを頼む（main）。
+  nonisolated func postComparison(text: TextRope, version: Int, synced: TextRope) {
+    post { $0.comparison = Job(text: text, version: version, work: .comparison(synced: synced)) }
   }
 
   /// 行差分を頼む（main）。
@@ -163,6 +182,10 @@ actor DocumentAnalysis {
       return job
     }) {
       switch job.work {
+      case .comparison(let synced):
+        let outcome = ComparisonOutcome(
+          version: job.version, same: job.text.hasSameContent(as: synced))
+        inbox.deposit { $0.comparison = outcome }
       case .hunks(let baseline, let generation):
         let hunks = LineDiff.hunks(base: baseline, current: job.text)
         let outcome = HunksOutcome(version: job.version, generation: generation, hunks: hunks)

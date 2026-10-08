@@ -94,7 +94,7 @@ final class SurfaceEditingTests: EngineTestCase {
     XCTAssertFalse(undo.canRedo, "新しい編集で redo は消える")
   }
 
-  /// カーソルの移動と保存は undo の区切り。未保存の印は ⌘Z で戻しても消えない。
+  /// カーソルの移動と保存は undo の区切り。保存の後の編集を ⌘Z で戻せば未保存が解ける。
   func testMovesAndSavesBreakTheUndoGroup() throws {
     let opened = try open("")
     _ = host(opened)
@@ -109,7 +109,8 @@ final class SurfaceEditingTests: EngineTestCase {
     type(opened, "Z")
     undo.undo()
     XCTAssertEqual(text(opened.document), "aYb")
-    XCTAssertTrue(opened.document.isDirty, "保存の後の編集を戻しても未保存のまま")
+    XCTAssertTrue(opened.document.waitUntilCaughtUp())
+    XCTAssertFalse(opened.document.isDirty, "保存の後の編集を戻せば未保存が解ける")
   }
 
   /// 中身を変えない編集（大文字の語の大文字化・同じ字での上書き）は文書へ渡さない——版も未保存の印も進まず、undo も積まない。
