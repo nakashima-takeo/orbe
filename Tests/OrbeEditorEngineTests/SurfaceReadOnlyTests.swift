@@ -96,16 +96,22 @@ final class SurfaceReadOnlyTests: EngineTestCase {
     XCTAssertFalse(opened.surface.editor.undoManager.canUndo)
   }
 
-  /// 字は落とせない（ファイルは開ける）。読むだけの本文から運ぶドラッグは写すだけ。
-  func testDropsInsertNothing() {
-    let situation = DropSituation(
-      offset: 3, files: nil, string: "x", dragged: nil, copying: true, inserts: false)
-    XCTAssertEqual(DropRules.plan(situation), DropPlan())
-    let files = [URL(fileURLWithPath: "/tmp/a.swift")]
-    var opening = situation
-    opening.files = files
-    XCTAssertEqual(DropRules.plan(opening).action, .open(files))
-    opening.shift = true
-    XCTAssertEqual(DropRules.plan(opening), DropPlan(), "パスも入れない")
+  /// 本文へ落とした字は入らない。Finder のファイルは載せる側に開かせる。
+  func testDropsInsertNothingButFilesStillOpen() throws {
+    let opened = try openReadOnly()
+    let hostSide = RecordingHost()
+    opened.surface.host = hostSide
+    let view = opened.surface.textView
+    let at = view.convert(point(opened, row: 0, column: 3), to: nil)
+    let board = privatePasteboard(opened)
+    board.clearContents()
+    board.setString("x", forType: .string)
+    XCTAssertFalse(view.performDragOperation(FakeDraggingInfo(at: at, pasteboard: board)))
+    let file = URL(fileURLWithPath: "/tmp/a.swift")
+    board.clearContents()
+    board.writeObjects([file as NSURL])
+    XCTAssertTrue(view.performDragOperation(FakeDraggingInfo(at: at, pasteboard: board)))
+    XCTAssertEqual(hostSide.openedFiles, [[file]])
+    XCTAssertEqual(text(opened.document), source)
   }
 }
