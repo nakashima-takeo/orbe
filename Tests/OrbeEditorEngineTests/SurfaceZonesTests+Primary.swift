@@ -118,6 +118,29 @@ extension SurfaceZonesTests {
     XCTAssertEqual(surface.drawn.rows.heights, [200], "同じ書き込みで材料にも")
   }
 
+  /// 面が焦点を失えば、区画の文の選択の地は焦点の無い色に、入力欄のキャレットは描かなくなる。
+  func testLosingFocusUnfocusesTheZoneSelectionAndTheFieldCaret() throws {
+    let setup = try threaded()
+    let (opened, thread, field) = (setup.opened, setup.thread, setup.field)
+    let surface = opened.surface
+    surface.updateFocus(true)
+    surface.focus(field)
+    let serial = try XCTUnwrap(surface.fields["reply"]).serial
+    XCTAssertEqual(surface.drawn.fields[serial]?.caret.focused, true)
+    surface.updateFocus(false)
+    XCTAssertEqual(surface.drawn.fields[serial]?.caret.focused, false, "入力欄のキャレットを描かない")
+    surface.updateFocus(true)
+    let line = try XCTUnwrap(surface.zones[ObjectIdentifier(thread)]?.hits.lines.first)
+    let from = viewPoint(surface, thread, CGPoint(x: line.x(of: 1) + 0.5, y: line.origin.y - 3))
+    let to = viewPoint(surface, thread, CGPoint(x: line.x(of: 4) + 0.5, y: line.origin.y - 3))
+    try mouse(opened, .leftMouseDown, at: from)
+    try mouse(opened, .leftMouseDragged, at: to)
+    try mouse(opened, .leftMouseUp, at: to)
+    XCTAssertEqual(surface.drawn.zoneSelection?.focused, true)
+    surface.updateFocus(false)
+    XCTAssertEqual(surface.drawn.zoneSelection?.focused, false, "焦点の無い選択の色")
+  }
+
   /// Finder のファイルは入力欄へ落とせない（開かず、パスも入れない）。入力欄は文字だけ受ける。
   func testFinderFilesAreRefusedOverAField() throws {
     let setup = try threaded()

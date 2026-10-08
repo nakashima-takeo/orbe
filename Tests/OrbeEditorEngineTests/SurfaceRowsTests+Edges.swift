@@ -69,4 +69,29 @@ extension SurfaceRowsTests {
     XCTAssertFalse(inked(4.5 * config.lineHeight))
     XCTAssertTrue(inked(5.5 * config.lineHeight), "差し込みの下へ下がった行 3 の印")
   }
+
+  /// 差し込みの下の行で変換すると、未確定の矩形と点の下の字は差し込みの高さを数えた行の位置で答える（候補窓が描いた行に
+  /// 出る）。
+  func testInputMethodGeometryBelowABlockCountsTheBlock() throws {
+    let opened = try openRows(20)
+    let window = host(opened, size: size)
+    fakeInputMethod(opened)
+    let surface = opened.surface
+    let view = surface.textView
+    surface.setRows(SurfaceRows(insertions: [insert(["a", "b", "c"], at: 3)]))
+    let text = opened.document.text
+    surface.selectedRange = NSRange(location: text.lineStart(5), length: 0)
+    replay([.mark("か")], on: opened)
+    let config = surface.config
+    let rect = view.convert(
+      window.convertFromScreen(
+        view.firstRect(forCharacterRange: view.markedRange(), actualRange: nil)), from: nil)
+    XCTAssertEqual(rect.minY, config.topInset + CGFloat(surface.rows.y(ofLine: 5)), accuracy: 0.5)
+    let below = CGPoint(
+      x: config.columnWidth(lineCount: text.lineCount) + 2.3 * config.cell,
+      y: config.topInset + CGFloat(surface.rows.y(ofLine: 7)) + config.lineHeight / 2)
+    XCTAssertEqual(
+      view.characterIndex(for: window.convertPoint(toScreen: view.convert(below, to: nil))),
+      opened.document.text.lineStart(7) + 2, "未確定を含む今の本文の位置")
+  }
 }
