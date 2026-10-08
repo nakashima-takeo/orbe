@@ -5,6 +5,8 @@ import os
 
 /// 窓が画面に出したコマを受け（ScreenCaptureKit）、コマごとに区画の枠線の行と上下の印の行の距離を引き、PNG に書き出す。
 /// 枠線は `strokeX` の列で紫の画素の行（試しのスレッドの枠線 tint(accent, 0.35)）、印の行は `markerX` の列で明るい画素の行。
+/// 区画の上端と下端は、枠線の行の間が枠の高さ `boxHeight`（画素）の組で決める——窓の上下で切れて片方の枠線しか見えない
+/// 区画は数えない（並びの順に組にすると、切れた区画の下端と次の区画の上端を 1 つの区画と取り違える）。
 final class WindowRecorder: NSObject, SCStreamOutput, @unchecked Sendable {
   struct Report {
     var frames = 0
@@ -21,16 +23,18 @@ final class WindowRecorder: NSObject, SCStreamOutput, @unchecked Sendable {
   private let strokeX: Int
   private let markerX: Int
   private let top: Int
+  private let boxHeight: Int
   private let output: URL
   private let state = OSAllocatedUnfairLock(initialState: Report())
   private let writer = DispatchQueue(label: "rows-trial.png")
   private var thumbnails: [CGImage] = []
   private var stream: SCStream?
 
-  init(strokeX: Int, markerX: Int, top: Int, output: URL) {
+  init(strokeX: Int, markerX: Int, top: Int, boxHeight: Int, output: URL) {
     self.strokeX = strokeX
     self.markerX = markerX
     self.top = top
+    self.boxHeight = boxHeight
     self.output = output
   }
 
@@ -93,7 +97,7 @@ final class WindowRecorder: NSObject, SCStreamOutput, @unchecked Sendable {
     return status == SCFrameStatus.complete.rawValue
   }
 
-  /// コマ 1 枚の、区画ごとの枠線と上下の印の行の距離（画素）。枠線の行は上から組にして、上端と下端とみる。
+  /// コマ 1 枚の、上端と下端の枠線がどちらも見えている区画ごとの、上下の印の行との距離（画素）。
   private func measure(_ frame: FrameBytes) -> (above: [Int], below: [Int]) {
     let purple = { (y: Int) -> Bool in
       let c = frame.rgb(self.strokeX, y)
@@ -115,9 +119,14 @@ final class WindowRecorder: NSObject, SCStreamOutput, @unchecked Sendable {
     }
     var above: [Int] = []
     var below: [Int] = []
-    for pair in stride(from: 0, to: strokes.count - 1, by: 2) {
-      let first = strokes[pair].lowerBound
-      let last = strokes[pair + 1].upperBound
+    for upper in strokes {
+      guard
+        let lower = strokes.first(where: {
+          abs($0.upperBound + 1 - upper.lowerBound - boxHeight) <= 2
+        })
+      else { continue }
+      let first = upper.lowerBound
+      let last = lower.upperBound
       var a = first - 1
       while a > top, !bright(a) { a -= 1 }
       var c = last + 1

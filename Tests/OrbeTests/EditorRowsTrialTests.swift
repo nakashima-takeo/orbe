@@ -19,17 +19,29 @@ import XCTest
 /// 連番の PNG と、並べた 1 枚に書き出す（`.preview/flows/rows-trial/`）。
 ///
 /// テストは `NSApp.run` を回さないので、待つ間はアプリの出来事を配る（→ `runShownWindow`）。配らないと、窓が見えている
-/// 知らせも人の入力も面に届かず、面は本文を描かない。
+/// 知らせも人の入力も面に届かず、面は本文を描かない。アプリと同じメインメニュー（`MainMenu`）を据える——⌘A ⌘C ⌘X ⌘V
+/// ⌘Z ⌘⇧Z は編集メニューの key equivalent が first responder へ配るので、無いと人がアプリと同じ操作を試せない。
 @MainActor
 final class EditorRowsTrialTests: OrbeTestCase {
   private var environment: [String: String] { ProcessInfo.processInfo.environment }
   /// 試しのスレッドを置く間隔（行）。
   private static let zoneEvery = 30
+  /// 据える前のメインメニュー（据えたときだけ値がある）。
+  private var replacedMenu: NSMenu??
 
   override func setUpWithError() throws {
     try super.setUpWithError()
     try XCTSkipUnless(environment["ORBE_EDITOR_ROWS_TRIAL"] == "1", "ORBE_EDITOR_ROWS_TRIAL=1 で走る")
     NSApplication.shared.setActivationPolicy(.accessory)
+    replacedMenu = .some(NSApp.mainMenu)
+    let main = MainMenu.build(appName: "Orbe", language: .ja)
+    NSApp.mainMenu = main
+    NSApp.servicesMenu = MainMenu.servicesMenu(of: main)
+  }
+
+  override func tearDownWithError() throws {
+    if case .some(let menu) = replacedMenu { NSApp.mainMenu = menu }
+    try super.tearDownWithError()
   }
 
   func testTrial() throws {
@@ -54,9 +66,15 @@ final class EditorRowsTrialTests: OrbeTestCase {
       let point = surface.view.convert(NSPoint(x: x, y: y), to: nil)
       return (Int(point.x * scale), Int((window.frame.height - point.y) * scale))
     }
+    let box = try XCTUnwrap(
+      surface.zones.values.first?.picture.elements.lazy.compactMap { element -> ZoneBox? in
+        guard case .box(let box) = element else { return nil }
+        return box
+      }.first, "前提: 試しのスレッドの枠の箱")
     let recorder = WindowRecorder(
       strokeX: image(left + 4, 0).0, markerX: image(left + 30, 0).0,
-      top: image(0, surface.config.topInset + 8).1, output: try outputDirectory())
+      top: image(0, surface.config.topInset + 8).1,
+      boxHeight: Int((box.frame.height * scale).rounded()), output: try outputDirectory())
     let started = expectation(description: "窓のコマを受け始める")
     var failure: Error?
     Task {
