@@ -71,6 +71,20 @@ enum EditCommand: Equatable, Sendable {
 
   /// ⌘D・⌘⇧L の続きを残すコマンドか。
   var continuesSearch: Bool { self == .addNextOccurrence || self == .selectAllOccurrences }
+
+  /// 文を変えうるコマンドか（読むだけの場では行わない）。
+  var edits: Bool {
+    switch self {
+    case .move, .selectAll, .selectLine, .selectWord, .setMark, .selectToMark, .swapWithMark,
+      .centerSelection, .addNextOccurrence, .selectAllOccurrences, .insertCursor, .cancel:
+      false
+    case .insert, .newline, .tab, .backtab, .indent, .literalTab, .deleteBackward, .deleteForward,
+      .deleteBackwardDecomposing, .deleteWordBackward, .deleteWordForward, .deleteSelection,
+      .deleteToLineStart, .deleteToLineEnd, .kill, .yank, .transpose, .transposeWords, .changeCase,
+      .deleteToMark, .replace, .paste, .cut, .drop:
+      true
+    }
+  }
 }
 
 /// 見せ方——取引の後にスクロールをどう置くか。

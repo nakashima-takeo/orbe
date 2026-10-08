@@ -77,6 +77,8 @@ final class FakeTextSurface: TextSurface {
 
   func setPresentation(_ presentation: SurfacePresentation) {}
 
+  var isEditable = true
+
   func setHighlights(_ ranges: [NSRange], for kind: TextHighlightKind) {}
 
   func setIndentation(_ indentation: Indentation) { self.indentation = indentation }

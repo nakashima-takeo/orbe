@@ -132,6 +132,20 @@ final class MetalTextSurface: TextSurface {
 
   var caretLocation: Int { editor.state.cursors.primary.position }
 
+  /// 本文の場を編集できるか。読むだけにするときは、本文の変換を確定し、AppKit に入力の文脈を取り直させる（読むだけの本文は
+  /// 文脈を返さない）。
+  var isEditable: Bool {
+    get { bodySite.isEditable }
+    set {
+      guard newValue != bodySite.isEditable else { return }
+      transact {
+        bodySite.editor.finishComposition(.commit)
+        bodySite.isEditable = newValue
+        if textView.window?.firstResponder === textView { _ = NSTextInputContext.current }
+      }
+    }
+  }
+
   var cursorSelections: [NSRange] { editor.state.cursors.selections }
 
   var searchContinuation: SearchQuestion? { editor.state.continuation }

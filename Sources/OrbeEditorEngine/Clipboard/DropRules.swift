@@ -33,6 +33,8 @@ struct DropSituation {
   var shift = false
   /// ファイルを受ける（本文の場で、開く・パスにする載せる側がいる）。受けなければファイルは拒む。
   var opensFiles = true
+  /// 字を入れられる（読むだけの場でない）。入れられなければ、ファイルを開くことだけを受ける。
+  var inserts = true
 }
 
 /// 本文へ落とすときの判断（純関数）。ファイルは開く（⇧ ならパスを入れる）。この面から始めたドラッグは移動（コピーの操作
@@ -44,9 +46,10 @@ enum DropRules {
     if let files = drop.files {
       guard drop.opensFiles else { return DropPlan() }
       guard drop.shift else { return DropPlan(operation: .copy, action: .open(files)) }
+      guard drop.inserts else { return DropPlan() }
       return DropPlan(operation: .copy, indicator: offset, action: .insertPaths(files, at: offset))
     }
-    guard let string = drop.string else { return DropPlan() }
+    guard drop.inserts, let string = drop.string else { return DropPlan() }
     guard let dragged = drop.dragged else {
       return DropPlan(
         operation: .copy, indicator: offset, action: .insert(string, at: offset, moving: nil))

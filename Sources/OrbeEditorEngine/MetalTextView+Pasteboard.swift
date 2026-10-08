@@ -25,8 +25,9 @@ extension MetalTextView {
     surface?.inputScope { writeCopy() }
   }
 
-  /// 写してから消す。選択が空なら行を消す。
+  /// 写してから消す。選択が空なら行を消す。主の場が読むだけなら何もしない。
   @objc func cut(_ sender: Any?) {
+    guard editable else { return }
     surface?.input {
       writeCopy()
       surface?.primarySite?.editor.perform(.cut)
@@ -105,7 +106,7 @@ extension MetalTextView {
       ? surface?.zoneSelectedText != nil
       : (surface?.primarySite?.editor.state.cursors.primary.selection.length ?? 0) > 0
     let sends = sendType == nil || (sendType == .string && selected)
-    let returns = returnType == nil || (returnType == .string && !zoneText)
+    let returns = returnType == nil || (returnType == .string && editable)
     guard sends, returns, sendType != nil || returnType != nil else {
       return super.validRequestor(forSendType: sendType, returnType: returnType)
     }
@@ -202,9 +203,10 @@ extension MetalTextView: @preconcurrency NSServicesMenuRequestor {
     return pboard.setString(text.substring(selection), forType: .string)
   }
 
-  /// サービスが返した平文で主の場の選択を置き換える（前後で区切る。主が区画の文なら受けない）。
+  /// サービスが返した平文で主の場の選択を置き換える（前後で区切る。主が区画の文か読むだけの場なら受けない）。
   func readSelection(from pboard: NSPasteboard) -> Bool {
-    guard let surface, let site = surface.primarySite, let string = pboard.string(forType: .string)
+    guard let surface, let site = surface.primarySite, site.isEditable,
+      let string = pboard.string(forType: .string)
     else { return false }
     surface.inputScope { site.editor.perform(.paste(string, entireLine: false)) }
     return true
