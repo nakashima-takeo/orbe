@@ -293,11 +293,8 @@ final class RootFilesWritesTests: OrbeTestCase {
     try repo.write("b.txt", "b\n")
     let outcome = WriteOutcome(files)
     files.stage([GitStatus.Row(path: "b.txt", originalPath: nil)], completion: outcome.receive)
-    pumpMain(
-      until: { self.repo.git(["diff", "--cached", "--name-only"]).stdoutText == "b.txt\n" },
-      timeout: 10, "前提: ステージの git が済む")
-    // git の終わりが main へ届き、完了が status の取り直しを待ち始めてから、止まっていた status を返す。
-    RunLoop.main.run(until: Date().addingTimeInterval(0.5))
+    // ステージの git が済み、完了が status の取り直しを待ち始めてから、止まっていた status を返す。
+    pumpMain(until: { !files.isWriting }, timeout: 10, "前提: 完了が status の取り直しを待ち始める")
     fixture.release()
 
     pumpMain(until: { outcome.finished }, timeout: 20, "書き込みの完了")
