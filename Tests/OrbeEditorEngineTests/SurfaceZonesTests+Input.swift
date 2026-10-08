@@ -228,4 +228,65 @@ extension SurfaceZonesTests {
     XCTAssertEqual(surface.primary, .body)
     XCTAssertTrue(surface.drawn.fields.isEmpty)
   }
+
+  /// 入力欄の下端の近くで改行して入力欄が伸び、キャレットが面の下端を越えれば、面がキャレットの見えるところまで送る。
+  func testANewlineBelowTheViewportScrollsTheFieldCaretIntoView() throws {
+    let opened = try hostedRows()
+    let surface = opened.surface
+    let view = surface.textView
+    let field = ZoneTextField(id: "reply", style: ThreadZone.fieldStyle())
+    let thread = ThreadZone(comment: "本文", field: field)
+    thread.surface = surface
+    surface.setRows(zone(thread, at: 16))
+    surface.focus(field)
+    let window = try XCTUnwrap(view.window)
+    let caret = { () -> NSRect in
+      let screen = view.firstRect(
+        forCharacterRange: NSRange(location: field.text.length, length: 0), actualRange: nil)
+      return view.convert(window.convertFromScreen(screen), from: nil)
+    }
+    XCTAssertLessThan(caret().maxY, view.bounds.height, "前提: 入力欄のキャレットは見えている")
+    for _ in 0..<6 { view.insertNewline(nil) }
+    XCTAssertGreaterThan(surface.scrollPosition.y, 0, "面が送られた")
+    let shown = caret()
+    XCTAssertGreaterThanOrEqual(shown.minY, 0)
+    XCTAssertLessThanOrEqual(shown.maxY, view.bounds.height, "キャレットが面の中に見える")
+  }
+
+  /// 字を落とせるのは区画の中では入力欄だけで、落とせば入力欄に入って主が入力欄になる。区画の文・押せる場所・空きへは
+  /// 落とせず、本文も入力欄も変わらない。
+  func testDroppingTextGoesIntoAFieldButNotElsewhereInAZone() throws {
+    let setup = try threaded()
+    let (opened, thread, field) = (setup.opened, setup.thread, setup.field)
+    let surface = opened.surface
+    let view = surface.textView
+    let board = NSPasteboard(name: NSPasteboard.Name("dev.orbe.test.\(UUID().uuidString)"))
+    addTeardownBlock { board.releaseGlobally() }
+    board.clearContents()
+    board.setString("落とす", forType: .string)
+    let hits = try XCTUnwrap(surface.zones[ObjectIdentifier(thread)]?.hits)
+    let line = hits.lines[0]
+    let refused = [
+      CGPoint(x: line.origin.x + 2, y: line.origin.y - 3), center(hits.buttons[0].frame),
+      CGPoint(x: 10, y: 10),
+    ]
+    let body = text(opened.document)
+    for local in refused {
+      let drag = FakeDraggingInfo(
+        at: view.convert(viewPoint(surface, thread, local), to: nil), pasteboard: board,
+        operations: .copy)
+      XCTAssertEqual(view.draggingUpdated(drag), [], "\(local) へは落とせない")
+      XCTAssertFalse(view.performDragOperation(drag))
+    }
+    XCTAssertEqual(text(opened.document), body)
+    XCTAssertEqual(field.string, "")
+    let drag = FakeDraggingInfo(
+      at: view.convert(try fieldPoint(opened, thread), to: nil), pasteboard: board,
+      operations: .copy)
+    XCTAssertEqual(view.draggingUpdated(drag), .copy)
+    XCTAssertTrue(view.performDragOperation(drag))
+    XCTAssertEqual(field.string, "落とす")
+    XCTAssertEqual(surface.primary, .field("reply"))
+    XCTAssertEqual(text(opened.document), body, "本文は変わらない")
+  }
 }
