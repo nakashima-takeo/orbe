@@ -63,9 +63,11 @@ final class GitRepoVersionsTests: OrbeTestCase {
   /// 「その版に無い」（新規・削除・初回コミット前・ディレクトリ）と「git の失敗」（smudge の失敗）は区別される。
   func testAbsenceIsNotAFailure() throws {
     let git = try repo.open()
+    let first = repo.head()
     try repo.write("new.txt", "n\n")
     XCTAssertEqual(version(git, "new.txt", .head), .absent)
     XCTAssertEqual(version(git, "new.txt", .index), .absent)
+    XCTAssertEqual(version(git, "new.txt", .commit(first)), .absent)
     try repo.write("dir/x.txt", "x\n")
     XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
     XCTAssertTrue(repo.git(["commit", "-qm", "dir"]).isSuccess)
