@@ -97,4 +97,12 @@ final class GitStatusTests: OrbeTestCase {
       GitStatus.Upstream(name: "origin/main", divergence: nil))
     XCTAssertNil(parse([ordinary(".M", "m.txt")]).branch, "ヘッダの無い出力")
   }
+
+  /// 同じパスが index 側の変化と未追跡の両方で出たら、行の順に依らず 1 つに併せる（`git rm --cached` の後）。
+  func testAStagedDeletionAndAnUntrackedLineForOnePathAreCombined() {
+    let combined = GitStatus.Entry(staged: .deleted, unstaged: .untracked)
+    XCTAssertEqual(parse([ordinary("D.", "a.txt"), "? a.txt"]).entries["a.txt"], combined)
+    XCTAssertEqual(parse(["? a.txt", ordinary("D.", "a.txt")]).entries["a.txt"], combined)
+    XCTAssertEqual(parse([ordinary("D.", "a.txt"), "? a.txt"]).badge(of: "a.txt"), .untracked)
+  }
 }

@@ -57,7 +57,8 @@ struct GitStatus: Equatable {
     case modified, added, untracked, conflicted
   }
 
-  /// 相対パス → 変化（rename・copy は新しいパスで引く）。未追跡はファイル 1 件ずつ。
+  /// 相対パス → 変化（rename・copy は新しいパスで引く）。未追跡はファイル 1 件ずつ。index から外して作業ツリーに残した
+  /// ファイル（`git rm --cached`）は、index 側の削除と作業ツリー側の未追跡を 1 つのエントリに併せ持つ。
   let entries: [String: Entry]
   /// 未追跡のディレクトリ（末尾 `/` 無し）。未追跡の入れ子のリポジトリだけが git にこの形で出る（中は個別に出ない
   /// ので前方一致で引く）。
@@ -110,13 +111,15 @@ struct GitStatus: Equatable {
       case "# ":
         headers.read(token)
       case "1 ":
-        if let (path, entry) = ordinary(token) { entries[path] = entry }
+        if let (path, entry) = ordinary(token) { entries[path] = merge(entries[path], entry) }
       case "2 ":
         // 元パスは次のトークン。無ければ丸ごと捨てる。
         guard index < tokens.count else { break }
         let original = tokens[index]
         index += 1
-        if let (path, entry) = renamed(token, from: original) { entries[path] = entry }
+        if let (path, entry) = renamed(token, from: original) {
+          entries[path] = merge(entries[path], entry)
+        }
       case "u ":
         if let path = unmerged(token) {
           entries[path] = Entry(staged: .unmerged, unstaged: .unmerged)
@@ -126,13 +129,25 @@ struct GitStatus: Equatable {
         if path.hasSuffix("/") {
           directories.append(String(path.dropLast()))
         } else {
-          entries[path] = Entry(staged: nil, unstaged: .untracked)
+          entries[path] = merge(entries[path], Entry(staged: nil, unstaged: .untracked))
         }
       default:
         break
       }
     }
     return GitStatus(entries: entries, untrackedDirectories: directories, branch: headers.branch)
+  }
+
+  /// 同じパスが index 側の変化の行と未追跡の行の両方で出たら（`git rm --cached` の後の `1 D.` と `?`）、行の順に依らず
+  /// 1 つに併せる——後の行で上書きすると、ステージ済みの削除が見えず解除もできない。
+  private static func merge(_ existing: Entry?, _ entry: Entry) -> Entry {
+    guard let existing else { return entry }
+    let isUntracked = { (entry: Entry) in entry.staged == nil && entry.unstaged == .untracked }
+    let (tracked, untracked) = isUntracked(entry) ? (existing, entry) : (entry, existing)
+    guard isUntracked(untracked) else { return entry }
+    return Entry(
+      staged: tracked.staged, unstaged: tracked.unstaged ?? .untracked,
+      originalPath: tracked.originalPath)
   }
 
   /// `# branch.oid <commit | (initial)>`・`# branch.head <name | (detached)>`・`# branch.upstream <name>`・

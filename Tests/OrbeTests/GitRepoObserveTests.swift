@@ -65,10 +65,9 @@ final class GitRepoObserveTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["rm", "-q", "--cached", "a.txt"]).isSuccess)
 
     let status = try XCTUnwrap(self.status(git))
-    XCTExpectFailure("同じパスの `1 D.` を後に来る `?` の行が上書きし、ステージ済みの削除が消える") {
-      XCTAssertEqual(
-        status.entries["a.txt"], GitStatus.Entry(staged: .deleted, unstaged: .untracked))
-    }
+    XCTAssertEqual(
+      status.entries["a.txt"], GitStatus.Entry(staged: .deleted, unstaged: .untracked))
+    XCTAssertEqual(status.badge(of: "a.txt"), .untracked, "ツリーの印は未追跡のまま")
   }
 
   /// 前の値と比べて読む——同じなら「同じ」、違えば新しい値、git が失敗すれば「失敗」（前の値を変えさせない）。
