@@ -160,8 +160,9 @@ extension MetalTextSurface {
       let caret = site.caretMaterial(focused: focused && primary, blinks: caretBlinks)
       let fieldMaterial = FieldMaterial(
         content: content, caret: caret, scroll: site.horizontal, reveal: reveal,
-        font: field.style.font as CTFont,
-        lineHeight: field.style.lineHeight, palette: fieldPalette(site, field))
+        font: field.style.font as CTFont, lineHeight: field.style.lineHeight,
+        baseline: site.baseline, tabColumns: site.tabColumns, tabWidth: site.tabWidth,
+        palette: fieldPalette(site, field))
       let serial = site.serial
       pending.writes.append { material in
         var written = fieldMaterial

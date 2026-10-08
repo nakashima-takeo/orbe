@@ -34,10 +34,10 @@ final class ZoneResources {
     images = ImageAtlas(device: device)
   }
 
-  /// 入力欄の場 `serial` の組版のキャッシュ。
-  func lines(field serial: Int, font: CTFont) -> LineLayoutCache {
+  /// 入力欄の場 `serial` の組版のキャッシュ（場の字体と刻みは場ごとに変わらない）。
+  func lines(field serial: Int, _ material: FieldMaterial) -> LineLayoutCache {
     if let cache = fieldLines[serial] { return cache }
-    let cache = LineLayoutCache(font: font)
+    let cache = LineLayoutCache(font: material.font, tabWidth: material.tabWidth)
     fieldLines[serial] = cache
     return cache
   }
@@ -159,8 +159,8 @@ extension FrameBuilder {
       scissor: MTLScissorRect(
         x: Int(clip.minX), y: Int(clip.minY), width: Int(clip.width), height: Int(clip.height)))
     let text = material.content.text
-    let cache = source.zones.lines(field: field.serial, font: material.font)
-    let tabColumns = Indentation.fallback.unit
+    let cache = source.zones.lines(field: field.serial, material)
+    let tabColumns = material.tabColumns
     cache.beginFrame(version: material.content.version, tabColumns: tabColumns)
     if let reveal = material.reveal {
       revealField(reveal, material, width: Double(field.frame.width), cache: cache, c)
@@ -213,7 +213,7 @@ extension FrameBuilder {
       source: {
         LineShaper.source(
           start: start, next: row + 1 < text.lineCount ? text.lineStart(row + 1) : nil, in: text)
-      }, tabColumns: Indentation.fallback.unit, config: c.config, fonts: c.fonts, carets: true)
+      }, tabColumns: material.tabColumns, config: c.config, fonts: c.fonts, carets: true)
     guard let carets = laid.carets else { return }
     let x = Double(carets.x(location - start))
     let caret = x...(x + Double(c.config.caretSize.width))
@@ -227,11 +227,9 @@ extension FrameBuilder {
   private static func pen(_ material: FieldMaterial, originX: Double, _ c: Context) -> OverlayPen {
     let s = c.g.scale
     let lineHeight = Double(material.lineHeight)
-    let ascent = Double(CTFontGetAscent(material.font))
-    let descent = Double(CTFontGetDescent(material.font))
     return OverlayPen(
       originX: originX, lineHeight: lineHeight * s,
-      baseline: (((lineHeight - (ascent + descent)) / 2 + ascent) * s).rounded(), scale: s,
+      baseline: (Double(material.baseline) * s).rounded(), scale: s,
       cell: Double(c.config.cell),
       caretSize: CGSize(
         width: c.config.caretSize.width, height: min(c.config.caretSize.height, lineHeight)),

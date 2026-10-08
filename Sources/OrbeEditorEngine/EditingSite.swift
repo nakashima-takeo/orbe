@@ -37,8 +37,8 @@ final class EditingSite {
   /// 入力欄の場の外観で解いた色（外観が変われば解き直す）。
   var palette: FieldPalette?
   private let fieldStops: LineStopsCache?
-  /// 入力欄の場のタブの刻み（入力欄の字体の空白 4 つ）。
-  private let fieldTabWidth: CGFloat?
+  /// 入力欄の場のタブの桁と刻み（既定の字下げの桁 × 入力欄の字体の空白）。
+  private let fieldTab: (columns: Int, width: CGFloat)?
 
   init(surface: MetalTextSurface, body source: SiteText) {
     self.surface = surface
@@ -46,7 +46,7 @@ final class EditingSite {
     self.source = source
     serial = 0
     fieldStops = nil
-    fieldTabWidth = nil
+    fieldTab = nil
   }
 
   init(surface: MetalTextSurface, field: ZoneTextField, serial: Int) {
@@ -55,7 +55,8 @@ final class EditingSite {
     source = field
     self.serial = serial
     fieldStops = LineStopsCache(font: field.style.font as CTFont)
-    fieldTabWidth = CGFloat(Indentation.fallback.unit) * Self.spaceWidth(field.style.font)
+    let columns = Indentation.fallback.unit
+    fieldTab = (columns, CGFloat(columns) * Self.spaceWidth(field.style.font))
   }
 
   var isBody: Bool {
@@ -110,9 +111,10 @@ final class EditingSite {
   /// 行の横位置を覚える入れ物。
   var lineStops: LineStopsCache { fieldStops ?? surface.lineStops }
 
-  /// タブの刻み（pt）。
+  /// タブの桁と刻み（pt）。入力欄の場の値は、描画スレッドも材料で受けて同じ値で組む。
+  var tabColumns: Int { fieldTab?.columns ?? surface.indentation.unit }
   var tabWidth: CGFloat {
-    fieldTabWidth ?? surface.config.tabWidth(columns: surface.indentation.unit)
+    fieldTab?.width ?? surface.config.tabWidth(columns: surface.indentation.unit)
   }
 
   /// 編集の規則が読む環境。入力欄はページ送りが 1 行で、縦の並びに差し込みは無い。

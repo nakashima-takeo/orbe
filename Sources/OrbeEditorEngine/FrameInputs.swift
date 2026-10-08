@@ -223,6 +223,10 @@ struct FieldMaterial: @unchecked Sendable {
   var reveal: HorizontalReveal?
   var font: CTFont
   var lineHeight: CGFloat
+  /// 行の上端から基線まで（pt）と、タブの桁と刻み（pt）——main の場の幾何と同じ値（→ `EditingSite`）。
+  var baseline: CGFloat
+  var tabColumns: Int
+  var tabWidth: CGFloat
   var palette: FieldPalette
 }
 
