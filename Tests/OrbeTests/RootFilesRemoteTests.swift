@@ -107,6 +107,25 @@ final class RootFilesRemoteTests: OrbeTestCase {
     XCTAssertEqual(try String(contentsOfFile: repo.root + "/o.txt", encoding: .utf8), "o\n")
   }
 
+  /// 前提を確かめている間に止めた pull の後ろに並んだ pull も、走って返る——前の完了の中で次の前提の確かめが始まっても、
+  /// その待ち手は失われない。
+  func testAPullQueuedBehindOneStoppedDuringItsPreconditionsStillRuns() throws {
+    repo.addOrigin()
+    try repo.advanceOrigin(writing: "o.txt", "o\n")
+    let files = repo.files()
+    let stopped = WriteOutcome()
+    let queued = WriteOutcome()
+
+    let write = files.pull(onProgress: { _ in }, completion: stopped.receive)
+    files.pull(onProgress: { _ in }, completion: queued.receive)
+    write.cancel()
+
+    pumpMain(until: { stopped.finished && queued.finished }, timeout: 20, "どちらも返る")
+    XCTAssertEqual(stopped.failure, .cancelled)
+    XCTAssertNil(queued.failure)
+    XCTAssertEqual(try String(contentsOfFile: repo.root + "/o.txt", encoding: .utf8), "o\n")
+  }
+
   /// pull が競合で止まると「競合で止まった」。
   func testAPullStoppedByAConflictIsClassified() throws {
     repo.addOrigin()
