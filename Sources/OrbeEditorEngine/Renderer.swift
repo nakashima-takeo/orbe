@@ -52,7 +52,8 @@ final class Renderer {
     slots[id] = SurfaceSlot(id: id, boxes: boxes, config: config, device: device, notify: notify)
   }
 
-  /// 面が閉じた。刻みを外し、組版のキャッシュと写しの最後の参照をここ（描画スレッド）で手放す。
+  /// 面が閉じた。刻みを外し、組版のキャッシュと写しの最後の参照をここ（描画スレッド）で手放す。スクロールを共にしていた
+  /// 相手は、狭まった範囲に収めた位置を描き直し、見えている範囲を main で出し直す（面は閉じる前に箱から寄与を外している）。
   func detach(_ id: Int) {
     guard let slot = slots.removeValue(forKey: id) else { return }
     slot.blinkTimer.map { CFRunLoopTimerInvalidate($0) }
@@ -60,6 +61,10 @@ final class Renderer {
     slot.recorder.flush()
     slot.recorder.flushTyping()
     _ = slot.material.clear()
+    for partner in slot.scroll.partners {
+      wake(partner)
+      slots[partner]?.notify()
+    }
   }
 
   func bind(_ id: Int, target: FrameTarget, clock: FrameClock) {

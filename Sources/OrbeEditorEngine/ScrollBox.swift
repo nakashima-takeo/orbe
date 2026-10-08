@@ -62,6 +62,7 @@ final class ScrollBox: Sendable {
   // MARK: - 共にする
 
   /// `other` とスクロールの状態を共にする。物理はこの箱のものを引き継ぎ、範囲の寄与と材料の版に組む位置は面ごとに残す。
+  /// 閉じた面の寄与は持ち越さない（閉じた相手と共にしていた面も結び直せる）。
   func share(with other: ScrollBox) {
     let mine = link.withLock { $0 }
     let theirs = other.link.withLock { $0 }
@@ -71,12 +72,12 @@ final class ScrollBox: Sendable {
     other.link.withLock { $0 = Link(core: core, member: 1) }
   }
 
-  /// 面が閉じた。範囲の寄与を外し、共にする相手を起こさなくする。
+  /// 面が閉じた。範囲の寄与を外し（残った面の位置は残った範囲に収める）、共にする相手を起こさなくする。
   func leave() {
     with { s, m in
       s.members[m].active = false
       s.syncLimits()
-      s.revision += 1
+      s.moved()
     }
   }
 

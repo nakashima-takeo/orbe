@@ -305,6 +305,7 @@ final class MetalTextSurface: TextSurface {
     partner = other
     other.partner = self
     leadsScroll = true
+    other.leadsScroll = false
     wake()
     refreshViewport()
     other.refreshViewport()

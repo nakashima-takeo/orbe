@@ -51,10 +51,13 @@ struct ScrollState: Sendable {
   /// 覚えておく封じの数。
   static let sealDepth = 4
 
+  /// 閉じていない面が 2 つある（スクロールを共にしている）。
+  var isShared: Bool { members.filter(\.active).count > 1 }
+
   /// 面 `m` から見た範囲——面の範囲に、共にする面の範囲の端を添えたもの。
   func view(_ m: Int) -> ScrollPhysics.Limits {
     var limits = members[m].limits
-    guard members.count > 1 else { return limits }
+    guard isShared else { return limits }
     for member in members where member.active {
       limits.shared = simd_max(limits.shared, member.limits.own)
     }
@@ -88,7 +91,7 @@ struct ScrollState: Sendable {
   mutating func shown(at t: Double, period: Double?) -> Shown {
     let position = physics.shown(at: t)
     let returning = physics.isReturning
-    guard members.count > 1, let period, period > 0 else {
+    guard isShared, let period, period > 0 else {
       return Shown(position: position, returning: returning, revision: revision)
     }
     // 同じ刻みかは予定時刻の近さで決める（2 面は同じ画面の同じ刻みを読む）。予定時刻を刻みの長さで丸めた番号で決めると、
@@ -160,10 +163,15 @@ final class ScrollCore: Sendable {
       initialState: ScrollState(members: [ScrollState.Member(id: surface)]))
   }
 
-  /// 2 つの状態を 1 つにする——物理は `lead` のものを引き継ぎ、面の寄与は両方を持つ。
+  /// 2 つの状態を 1 つにする——物理は `lead` のものを引き継ぎ、面の寄与は両方の閉じていない面のもの（`lead` の面が先）を
+  /// 持つ。どちらの状態も、閉じていない面を 1 つだけ持つこと。
   init(joining lead: ScrollState, _ other: ScrollState) {
+    let members = (lead.members + other.members).filter(\.active)
+    precondition(
+      lead.members.filter(\.active).count == 1 && members.count == 2,
+      "結ぶ状態は、どちらも閉じていない面を 1 つだけ持つ")
     var joined = lead
-    joined.members = lead.members + other.members
+    joined.members = members
     joined.revision = max(lead.revision, other.revision) + 1
     joined.seals = []
     joined.syncLimits()

@@ -131,6 +131,72 @@ final class SurfaceSharedScrollTests: EngineTestCase {
       a.surface.scrollState().limits.maximum.y,
       max(0, a.surface.rows.lastTop(lineCount: a.document.text.lineCount)))
   }
+
+  /// 相手が閉じた面は、別の面とどちら向きにも結び直せる——範囲は新しい相手と 2 面の大きい方（閉じた面の寄与は残らない）で、
+  /// 先に結んだ面は結び直す操作を呼んだ面だけ。
+  func testASurfaceLeftAloneSharesAgain() throws {
+    func surface(_ lines: Int) throws -> Opened {
+      let opened = try open(rows(lines), size: size)
+      opened.surface.setPresentation(SurfacePresentation(showsMinimap: false))
+      return opened
+    }
+    func end(_ opened: Opened) -> Double {
+      opened.surface.rows.lastTop(lineCount: opened.document.text.lineCount)
+    }
+    let a = try surface(30)
+    do {
+      let b = try surface(300)
+      a.surface.shareScroll(with: b.surface)
+    }
+    pump(until: { a.surface.partner == nil }, "前提: 相手が閉じれば外れる")
+    do {
+      let c = try surface(100)
+      a.surface.shareScroll(with: c.surface)
+      a.surface.flush()
+      XCTAssertEqual(c.surface.scrollState().limits.maximum.y, end(c), "閉じた面の範囲は残らない")
+      c.surface.setRows(
+        SurfaceRows(insertions: [
+          RowInsertion(line: 50, content: .lines((0..<40).map { InsertedLine("pad \($0)") }))
+        ]))
+      c.surface.flush()
+      XCTAssertEqual(a.surface.scrollState().limits.maximum.y, end(c), "新しい相手の範囲に従う")
+    }
+    pump(until: { a.surface.partner == nil }, "前提: 相手が閉じれば外れる")
+    let d = try surface(100)
+    d.surface.shareScroll(with: a.surface)
+    let order = { (opened: Opened) in opened.surface.scrollGroup.map(ObjectIdentifier.init) }
+    XCTAssertEqual(order(a), [ObjectIdentifier(d.surface), ObjectIdentifier(a.surface)])
+    XCTAssertEqual(order(d), order(a), "先に結んだ面は 1 つだけ")
+  }
+
+  /// 一方の面が閉じれば、刻みを止めていた残った面も起き、狭まった自分の範囲に収めた位置を描く。
+  func testClosingOneSurfaceRedrawsTheOther() throws {
+    let a = try open(rows(30), size: size)
+    a.surface.setPresentation(SurfacePresentation(showsMinimap: false))
+    let period = HeadlessDriver.period
+    var t = (CACurrentMediaTime() / period).rounded(.up) * period
+    let clock: ManualClock
+    do {
+      let b = try open(rows(300), size: size)
+      b.surface.setPresentation(SurfacePresentation(showsMinimap: false))
+      a.surface.shareScroll(with: b.surface)
+      clock = bindManually((a, b)).0
+      a.surface.scroll(toFirstLine: 250)
+      a.surface.flush()
+      for _ in 0..<10 where !clock.isPaused {
+        tick(a.surface, t)
+        t += period
+      }
+      XCTAssertEqual(drawn(a.surface)?.y, 250 * 18, "前提: 長い面の範囲で描いた")
+      XCTAssertTrue(clock.isPaused, "前提: 描くものが無く刻みを止めている")
+    }
+    pump(until: { a.surface.partner == nil }, "前提: 相手が閉じれば外れる")
+    RenderThread.shared.performAndWait { _ in 0 }
+    XCTAssertFalse(clock.isPaused, "残った面の刻みを再開する")
+    tick(a.surface, t)
+    let end = a.surface.rows.lastTop(lineCount: a.document.text.lineCount)
+    XCTAssertEqual(drawn(a.surface)?.y, end, "自分の範囲に収めた位置を描く")
+  }
 }
 
 /// 描画スレッドの 1 コマの順を決めて流す場——2 面の刻みを手で打ち、どちらの面が先に描くかを決める。
