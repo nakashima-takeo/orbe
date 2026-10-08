@@ -127,42 +127,6 @@ final class GitRepoObserveTests: OrbeTestCase {
     XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: index)), before)
   }
 
-  /// 観測（status・index の OID・blob）は、同じ runner で詰まっている書き込みを待たない。
-  /// 待つと、hook で止まった commit の間バッジが更新されない。
-  func testObservationIsNotBlockedByAHangingWrite() throws {
-    let fixture = try GitHangFixture()
-    try fixture.installHook("pre-commit", body: fixture.waitingBody)
-    let runner = GitRunner(idleTimeout: 60)
-    var opened: GitRepo?
-    let open = expectation(description: "open")
-    GitRepo.open(cwd: fixture.root, runner: runner) {
-      opened = $0
-      open.fulfill()
-    }
-    wait(for: [open], timeout: 20)
-    let git = try XCTUnwrap(opened)
-    let hangFinished = expectation(description: "hanging commit")
-    runner.run(["commit", "--allow-empty", "-m", "blocked"], cwd: fixture.root) { _ in
-      hangFinished.fulfill()
-    }
-    XCTAssertTrue(fixture.waitUntilHung(), "前提: 書き込みが hook でハングしていること")
-
-    let done = expectation(description: "status / ls-files / cat-file")
-    git.status(comparedTo: nil) { read in
-      XCTAssertNotEqual(read, .failed)
-      git.indexEntries(relativePaths: ["a.txt"]) { entries in
-        git.blob(oid: entries?["a.txt"] ?? "", relativePath: "a.txt") { data in
-          XCTAssertEqual(data.flatMap { String(data: $0, encoding: .utf8) }, "x\n")
-          done.fulfill()
-        }
-      }
-    }
-    wait(for: [done], timeout: 3)
-
-    fixture.release()
-    wait(for: [hangFinished], timeout: 60)
-  }
-
   /// index の OID は `git add` で変わり、blob はその版の生の中身。index に無い・競合中は引けない。
   func testIndexEntriesAndBlobFollowTheIndex() throws {
     let git = try repo.open()

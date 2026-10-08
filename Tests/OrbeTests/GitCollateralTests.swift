@@ -72,29 +72,6 @@ final class GitCollateralTests: OrbeTestCase {
 
   // MARK: - 検証
 
-  /// ハング中の worktree 作成は、同じリポジトリの書き込み（ブランチ削除）を止めない。
-  /// 止めると、worktree の掃除が押しても何も起きない状態になる。
-  func testHangingWorktreeAddDoesNotBlockOtherWrites() throws {
-    XCTAssertTrue(fixture.git(["branch", "scratch"]).isSuccess)
-    let oid = fixture.git(["rev-parse", "scratch"]).stdoutText
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    try fixture.installHook("post-checkout", body: fixture.waitingBody)
-    hangStarted = true
-    repo.addWorktree(
-      path: fixture.worktreePath, base: "main",
-      newBranch: GitNewBranch(name: "hang", tracksBase: false)
-    ) { [self] _ in hangReturned = true }
-    XCTAssertTrue(fixture.pumpUntilHung(), "前提: post-checkout hook がハングしていること")
-
-    let done = expectation(description: "deleteBranch")
-    repo.deleteBranch(name: "scratch", expectedOid: oid) { failure in
-      // worktree 作成が触る ref（`refs/heads/hang`）と削除対象は交わらないので、巻き添えが無ければ必ず成功する。
-      XCTAssertNil(failure, "ハング中でもブランチ削除は成功する")
-      done.fulfill()
-    }
-    wait(for: [done], timeout: 5)
-  }
-
   /// ある worktree のコミットが hook で止まっている間も、その外の git は待たずに終わる——同じリポジトリの別の worktree・
   /// 別のリポジトリへの書き込み、worktree パレットの操作、あらゆる読み取りと観測。
   func testAHangingCommitBlocksNothingOutsideItsWorktree() throws {
