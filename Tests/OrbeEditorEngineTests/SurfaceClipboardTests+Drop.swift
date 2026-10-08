@@ -91,12 +91,12 @@ extension SurfaceClipboardTests {
     let dragged = NSRange(location: 4, length: 3)
     func plan(
       _ offset: Int?, files: [URL]? = nil, string: String? = "s", dragged: NSRange? = nil,
-      copying: Bool = false, shift: Bool = false, opensFiles: Bool = true
+      copying: Bool = false, shift: Bool = false, opensFiles: Bool = true, inserts: Bool = true
     ) -> DropPlan {
       DropRules.plan(
         DropSituation(
           offset: offset, files: files, string: string, dragged: dragged, copying: copying,
-          shift: shift, opensFiles: opensFiles))
+          shift: shift, opensFiles: opensFiles, inserts: inserts))
     }
     XCTAssertEqual(plan(nil), DropPlan(), "本文の外")
     XCTAssertEqual(plan(2, files: files), DropPlan(operation: .copy, action: .open(files)))
@@ -104,6 +104,7 @@ extension SurfaceClipboardTests {
       plan(2, files: files, shift: true),
       DropPlan(operation: .copy, indicator: 2, action: .insertPaths(files, at: 2)))
     XCTAssertEqual(plan(2, files: files, opensFiles: false), DropPlan(), "載せる側がいなければ受けない")
+    XCTAssertEqual(plan(2, files: files, shift: true, inserts: false), DropPlan(), "読むだけならパスも入れない")
     XCTAssertEqual(plan(2, string: nil), DropPlan(), "平文もファイルも無い")
     XCTAssertEqual(
       plan(2), DropPlan(operation: .copy, indicator: 2, action: .insert("s", at: 2, moving: nil)),

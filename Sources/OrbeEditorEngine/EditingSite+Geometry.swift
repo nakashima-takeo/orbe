@@ -94,7 +94,7 @@ extension EditingSite {
     let p = surface.scrollPosition
     let config = surface.config
     return NSRect(
-      x: config.columnWidth(lineCount: env.text.lineCount) + x0 - CGFloat(p.x),
+      x: surface.surfaceLayout.column + x0 - CGFloat(p.x),
       y: config.topInset + CGFloat(surface.rows.y(ofLine: row) - p.y), width: x1 - x0,
       height: config.lineHeight)
   }
@@ -121,7 +121,7 @@ extension EditingSite {
     }
     let config = surface.config
     guard point.y >= config.topInset,
-      point.x >= config.columnWidth(lineCount: currentContent?.text.lineCount ?? 1),
+      point.x >= surface.surfaceLayout.column,
       case .line(let row) = surface.rows.item(
         atY: Double(point.y - config.topInset) + surface.scrollPosition.y)
     else { return nil }
@@ -131,9 +131,7 @@ extension EditingSite {
   /// 行頭からの点の x。
   func lineX(of point: CGPoint) -> CGFloat {
     guard isBody else { return point.x - (fieldOrigin()?.x ?? 0) }
-    let lineCount = currentContent?.text.lineCount ?? 1
-    return point.x - surface.config.columnWidth(lineCount: lineCount)
-      + CGFloat(surface.scrollPosition.x)
+    return point.x - surface.surfaceLayout.column + CGFloat(surface.scrollPosition.x)
   }
 
   // MARK: - 見せ方

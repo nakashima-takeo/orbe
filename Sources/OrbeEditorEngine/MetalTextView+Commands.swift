@@ -187,10 +187,11 @@ extension MetalTextView {
   override var undoManager: UndoManager? { surface?.primarySite?.editor.undoManager }
 
   /// Edit メニューの `undo:` が窓の既定の入れ物へ行かず面へ届くための中継。変換中（IME が ⌘Z を使わなかった）は変換を
-  /// 取り消すだけで、undo の履歴に触れない。
+  /// 取り消すだけで、undo の履歴に触れない。主の場が読むだけなら何もしない。
   @objc func undo(_ sender: Any?) {
     surface?.inputScope {
       guard !composing else { return cancelComposition() }
+      guard editable else { return }
       undoManager?.undo()
     }
   }
@@ -198,9 +199,20 @@ extension MetalTextView {
   @objc func redo(_ sender: Any?) {
     surface?.inputScope {
       guard !composing else { return cancelComposition() }
+      guard editable else { return }
       undoManager?.redo()
     }
   }
+
+  /// 主の場が文を編集できる（主が区画の文なら false）。
+  var editable: Bool { surface?.primarySite?.isEditable ?? false }
+
+  /// メニューに出る、文を変えるセレクタ（読むだけの主の場では無効。コマンドそのものは編集係が止める）。
+  static let editingSelectors: Set<Selector> = [
+    #selector(undo(_:)), #selector(redo(_:)), #selector(cut(_:)), #selector(paste(_:)),
+    #selector(pasteAsPlainText(_:)), #selector(delete(_:)), #selector(uppercaseWord(_:)),
+    #selector(lowercaseWord(_:)), #selector(capitalizeWord(_:)),
+  ]
 
   private func cancelComposition() {
     surface?.primarySite?.editor.finishComposition(.cancel)
@@ -209,7 +221,8 @@ extension MetalTextView {
 
 extension MetalTextView: NSMenuItemValidation {
   /// 変換中の取り消す・やり直すは、変換の取り消しとしていつも有効。コピー・カットはいつも有効（選択が空なら行を写す）。
-  /// ペーストは平文かファイルがあるときだけ。主が区画の文の間は、コピー（選択があるとき）と全部を選ぶだけが有効。
+  /// ペーストは平文かファイルがあるときだけ。主が区画の文の間は、コピー（選択があるとき）と全部を選ぶだけが有効。主の場が
+  /// 読むだけなら、文を変える項目は無効。
   func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
     if surface?.primary == .zoneText {
       switch menuItem.action {
@@ -217,6 +230,9 @@ extension MetalTextView: NSMenuItemValidation {
       case #selector(selectAll(_:))?: return true
       default: return false
       }
+    }
+    if let action = menuItem.action, !editable, Self.editingSelectors.contains(action) {
+      return false
     }
     switch menuItem.action {
     case #selector(undo(_:))?: return composing || (undoManager?.canUndo ?? false)

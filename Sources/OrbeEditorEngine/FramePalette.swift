@@ -80,16 +80,27 @@ struct FramePalette: Equatable, Sendable {
   var selectionOccurrenceInactive: FrameColor
   var wordOccurrence: FrameColor
   var overview: OverviewPalette
+  /// 行の型（表示の構成の `lineStyles` の番号で引く）。
+  var lineStyles: [LineInk]
 
   /// 役割 `role` の字の色（役割が無ければ本文の色）。
   func ink(_ role: SyntaxRole?) -> InkColor { role.map { roles[$0.rawValue] } ?? text }
+
+  /// 行の型 `style` の色（型が無いか、構成の型の外を指していれば nil）。
+  func lineStyle(_ style: Int?) -> LineInk? {
+    guard let style, lineStyles.indices.contains(style) else { return nil }
+    return lineStyles[style]
+  }
 
   /// NSTextView の既定の未確定の地（外観で解く動的な色）。
   @MainActor private static let markedBackgroundColor =
     NSTextView().markedTextAttributes?[.backgroundColor] as? NSColor ?? .systemYellow
 
   @MainActor
-  init(style: TextSurfaceStyle, appearance: NSAppearance, space: CGColorSpace, scale: CGFloat) {
+  init(
+    style: TextSurfaceStyle, lineStyles: [LineStyle], appearance: NSAppearance,
+    space: CGColorSpace, scale: CGFloat
+  ) {
     let resolve = { FrameColor($0, appearance: appearance, space: space) }
     let ink = { InkColor($0, appearance: appearance, space: space, scale: scale) }
     text = ink(style.textColor)
@@ -112,7 +123,21 @@ struct FramePalette: Equatable, Sendable {
     selectionOccurrenceInactive = resolve(style.highlights.selectionOccurrenceInactive)
     wordOccurrence = resolve(style.highlights.wordOccurrence)
     overview = OverviewPalette(style.overview, appearance: appearance, space: space)
+    let gutterText = gutterText
+    self.lineStyles = lineStyles.map { line in
+      LineInk(
+        background: line.background.map(resolve), text: line.text.map(ink), sign: line.sign,
+        signInk: line.signColor.map(ink) ?? gutterText)
+    }
   }
+}
+
+/// 行の型を外観で解いた色——行の地・字の色（あれば構文の色に代わる）・記号の字とその色。
+struct LineInk: Equatable, Sendable {
+  var background: FrameColor?
+  var text: InkColor?
+  var sign: String?
+  var signInk: InkColor
 }
 
 /// 俯瞰の色。α を半分にした色は、ミニマップの行の薄い地。

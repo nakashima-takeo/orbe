@@ -22,17 +22,19 @@ extension MetalTextSurface {
   /// まだ出していない位置と範囲があれば、出来事より前のことなので先に出す。
   func scroll(_ input: ScrollInput) {
     inputScope {
-      if pending.position != nil || pending.limits != nil { flush() }
+      if scrollGroup.contains(where: { $0.pending.position != nil || $0.pending.limits != nil }) {
+        flush()
+      }
       guard scroll.apply(input) else { return }
       wake()
-      refreshViewport()
+      for surface in scrollGroup { surface.refreshViewport() }
     }
   }
 
   /// 描画スレッドだけが変える位置と範囲（端への戻り・組んだ行で伸びた横の範囲・入力欄の横の送り）が変わった。入力欄で
   /// 変換していれば、候補窓を新しい送りに付いてこさせる。
   func scrollDidAdvance() {
-    refreshViewport()
+    for surface in scrollGroup { surface.refreshViewport() }
     if let site = primarySite, !site.isBody, site.editor.isComposing {
       site.inputMethodCoordinatesDidChange()
     }
@@ -47,10 +49,14 @@ extension MetalTextSurface {
     return limits.viewportLines(at: position, rows: rows, lineCount: text.lineCount)
   }
 
-  /// 先頭（表示の単位）の位置へ置く（`viewportLines` の逆。最後の項目の上端までに収める。横位置は動かさない）。
+  /// 先頭（表示の単位）の位置へ置く（`viewportLines` の逆。最後の項目の上端——スクロールを共にする面では、長い方の面の
+  /// 最後の項目の上端——までに収める。横位置は動かさない）。
   func scroll(toFirstLine line: CGFloat) {
-    guard let text = currentContent?.text else { return }
-    let clamped = min(max(0, Double(line)), rows.lastUnit(lineCount: text.lineCount))
+    let last = scrollGroup.compactMap { surface in
+      surface.currentContent.map { surface.rows.lastUnit(lineCount: $0.text.lineCount) }
+    }.max()
+    guard let last else { return }
+    let clamped = min(max(0, Double(line)), last)
     place(SIMD2(scrollPosition.x, clamped * Double(config.lineHeight)))
   }
 
@@ -77,10 +83,15 @@ extension MetalTextSurface {
     scrollBy(Double(lines) * Double(config.lineHeight))
   }
 
-  /// Home は先頭、End は最後の 1 画面（最後の項目を下端に）。
+  /// Home は先頭、End は最後の 1 画面（最後の項目を下端に。スクロールを共にする面では長い方の面の最後）。
   func scrollToDocumentEdge(end: Bool) {
-    guard let text = currentContent?.text else { return }
-    let bottom = rows.totalHeight(lineCount: text.lineCount) - scrollState().limits.viewport.y
+    let bottom = scrollGroup.compactMap { surface in
+      surface.currentContent.map {
+        surface.rows.totalHeight(lineCount: $0.text.lineCount)
+          - surface.scrollState().limits.viewport.y
+      }
+    }.max()
+    guard let bottom else { return }
     place(SIMD2(scrollPosition.x, end ? max(0, bottom) : 0))
   }
 
@@ -128,7 +139,7 @@ extension MetalTextSurface {
   /// 余白を除いたもの。
   func limits(lineCount: Int) -> LimitsUpdate {
     let text = config.layout(
-      size: size, lineCount: lineCount, showsMinimap: presentation.showsMinimap
+      size: size, lineCount: lineCount, rows: rows, arrangement: arrangement
     ).text
     return LimitsUpdate(
       lastTop: rows.lastTop(lineCount: lineCount), lineHeight: Double(config.lineHeight),
@@ -139,8 +150,8 @@ extension MetalTextSurface {
   /// 今の区画の配置（出す前の写しの行の数で）。
   var surfaceLayout: SurfaceLayout {
     config.layout(
-      size: size, lineCount: currentContent?.text.lineCount ?? 1,
-      showsMinimap: presentation.showsMinimap)
+      size: size, lineCount: currentContent?.text.lineCount ?? 1, rows: rows,
+      arrangement: arrangement)
   }
 
   /// 見えている範囲を出し直し、変わっていれば文書へ知らせる（同期）。本文が動いていれば、変換中の IME にも知らせる

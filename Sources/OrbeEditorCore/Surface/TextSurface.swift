@@ -63,9 +63,9 @@ public protocol TextSurface: AnyObject {
   /// 読み取りが移るコマンドを走らせる前に呼ぶ。
   func commitMarkedText()
 
-  /// 本文を丸ごと置き換える編集。通常の編集と同じく undo に載り、`didChange` を呼び出しから
-  /// 戻るまでに同期で 1 回通す（外部で書き換えられたファイルの差し替えが呼ぶ——文書の写し・構文・ハンクが
-  /// 打鍵と同じ経路で追従する）。変換中の IME セッションは置き換える前に畳む（その取り消しの `didChange`
+  /// 本文を丸ごと置き換える編集。通常の編集と同じく undo に載り（読むだけの面では載せず、それまでの取り消しも捨てる）、
+  /// `didChange` を呼び出しから戻るまでに同期で 1 回通す（外部で書き換えられたファイルの差し替えが呼ぶ——文書の写し・
+  /// 構文・ハンクが打鍵と同じ経路で追従する）。変換中の IME セッションは置き換える前に畳む（その取り消しの `didChange`
   /// が 1 回先に通る）。置き換え後の選択は解け、キャレットは同じオフセット（本文が短ければ末尾）。
   func replaceAll(with text: String)
 
@@ -75,12 +75,14 @@ public protocol TextSurface: AnyObject {
   /// 行の印（git ガター）。文書がハンクから作って押す（UTF-16 オフセット）。面は描くだけで規則を持たない。
   func setLineMarks(_ spans: LineMarkSpans)
 
-  /// 縦の並びに差し込むもの（文書に無い行・区画）を丸ごと置く。同じ値の押し直しは何もしない。境は置く時点の文書の写しの
-  /// 行で書き、その行の範囲（`0...行数`）に収め（編集の知らせの中なら編集後の写し。面はその編集の境のずらしを知らせの前
-  /// に済ませている）、ミニマップを出していない面（→ `setPresentation`）にだけ置く。同じ区画は並びに 1 度だけ置き、入力欄の
-  /// id は面の中で重ねない——どれを破っても呼び手の誤り。置いた後は、面自身の編集で境が上の行に付いて動く（境 `line` は
+  /// 縦の並びに差し込むもの（文書に無い行・区画）と文書の行の区間の見え方を丸ごと置く。同じ値の押し直しは何もしない。境と
+  /// 区間の始まりは置く時点の文書の写しの行で書き、その行の範囲（境は `0...行数`、区間の始まりは `0..<行数` で昇順・重ねない）
+  /// に収め（編集の知らせの中なら編集後の写し。面はその編集の境のずらしを知らせの前に済ませている）、差し込みはミニマップを
+  /// 出していない面（→ `setPresentation`）にだけ置く。同じ区画は並びに 1 度だけ置き、入力欄の
+  /// id は面の中で重ねない——どれを破っても呼び手の誤り。行の型の番号が表示の構成の `lineStyles` の外を指せば型なし。
+  /// 置いた後は、面自身の編集で境が上の行に付いて動く（境 `line` は
   /// 行 `line`−1 の中身の終わりに付き、そこから始まる編集では動かず、付き先を消した編集では消した区間の始まりの行の後へ
-  /// 寄り、付き先より前の編集の行の増減だけずれる。境 0 は動かない）。差し込みや区画の高さが変わっても、見えている先頭の
+  /// 寄り、付き先より前の編集の行の増減だけずれる。境 0 は動かない。区間の始まりも同じ規則で動き、もう一方の番号は変わらない）。差し込みや区画の高さが変わっても、見えている先頭の
   /// 文書の行は画面の同じ位置に残る。区画は面が保持し（置き直しで外れた区画は手放す）、面の中の本文の区画の幅で絵を問う。
   func setRows(_ rows: SurfaceRows)
 
@@ -94,8 +96,22 @@ public protocol TextSurface: AnyObject {
   /// 入力欄を主（キーと IME の行き先）にする。確定するときに、どの区画の絵にもその入力欄が無ければ本文が主になる。
   func focus(_ field: ZoneTextField)
 
-  /// 表示の構成を置く。差し込みのある面でミニマップを出すのは呼び手の誤り。
+  /// 表示の構成を置く。差し込みのある面でミニマップを出すのは呼び手の誤り。番号の列・記号の列・印の列で本文の区画の幅が
+  /// 変われば、区画の絵を新しい幅で問い直す。
   func setPresentation(_ presentation: SurfacePresentation)
+
+  /// 本文を編集できるか（既定は true）。false の面では、打鍵・削除・IME の変換・カット・ペースト・落とす・undo / redo・
+  /// サービスの書き込みが本文を変えず、編集のメニューの項目も無効になる——選択・コピー・検索・スクロールは効く。載せる側の
+  /// `replaceAll` は通るが、undo に載らず、それまでの取り消しも捨てる。区画の入力欄は、本文が読むだけでも打てる。
+  var isEditable: Bool { get set }
+
+  /// もう 1 枚の面 `other` とスクロールの状態を共にする（並列の diff の 2 面）。2 面は 1 枚の紙として動き、どちらで指を
+  /// 動かしても、同じ刻みに同じ縦横の位置を描く。範囲は 2 面の大きい方（縦は並びの高さ、横は最も長い行）。2 面の並びは同じ
+  /// 周に置く——同じ周に両面の並びが変われば、見えている先頭の文書の行の保持は先に結んだこの面を基準に 1 回だけ行う。
+  /// 同じ周に両面が位置を置けば、後に置いた方を当てる（一方が置いた位置は、出したときに相手の読み取りにも揃う）。いま
+  /// 共にしていない同じエンジンの面どうしでだけ結べ（相手が閉じた面は結び直せる）、どちらかの面が閉じれば外れ、残った面は
+  /// 自分の範囲に収めた位置を描き直す。
+  func shareScroll(with other: any TextSurface)
 
   /// 面を載せる側（弱い参照）。面が本文の外のこと（ファイルを開く・パスの文字列・右クリックのメニュー・URL）を問う口。
   var host: TextSurfaceHost? { get set }
@@ -171,227 +187,4 @@ public struct TextViewport: Equatable, Sendable {
   }
 
   public static let empty = TextViewport(firstVisible: 0, visibleLines: 0)
-}
-
-/// 面の見え方。色は名前付き（dynamic）の NSColor を渡し、外観は描画時に解く。装備と俯瞰の寸法と色もここで渡し、
-/// エンジンは値を持たない。
-public struct TextSurfaceStyle {
-  public var font: NSFont
-  /// 行の高さ（pt）。フォントの自然な行高に依らず固定する。
-  public var lineHeight: CGFloat
-  /// 本文の上端の余白。
-  public var topInset: CGFloat
-  /// 役割を持たない文字の色。
-  public var textColor: NSColor
-  /// 本文の地の不透明な色。面は地を描かず下を透かす。色付きで書き出す（コピーの HTML）ときの地に使う。
-  public var backgroundColor: NSColor
-  public var caretColor: NSColor
-  public var caretSize: CGSize
-  /// 選択の地の色。焦点が無い面では `inactiveSelectionColor`。
-  public var selectionColor: NSColor
-  public var inactiveSelectionColor: NSColor
-  public var gutterFont: NSFont
-  public var gutterTextColor: NSColor
-  /// 行番号の数字の部分の幅（右の印の列を除く）。最大の行番号と右の余白（`gutterTrailingInset`）がこの幅に収まる
-  /// 限り、列は広がらない。
-  public var gutterWidth: CGFloat
-  /// 行番号の右端と本文の間。
-  public var gutterTrailingInset: CGFloat
-  public var roleColors: [SyntaxRole: NSColor]
-  public var marks: Marks
-  public var decorations: Decorations
-  public var highlights: Highlights
-  public var overview: Overview
-
-  /// git ガター（行番号の右の列）の見え方。色は α 込み。
-  public struct Marks {
-    public var gutterWidth: CGFloat
-    public var barWidth: CGFloat
-    /// 列の左端からバーの左端まで。
-    public var barInset: CGFloat
-    public var barRadius: CGFloat
-    /// 削除の三角（右向き）の一辺。
-    public var triangleSize: CGFloat
-    public var added: NSColor
-    public var modified: NSColor
-    public var removed: NSColor
-
-    public init(
-      gutterWidth: CGFloat, barWidth: CGFloat, barInset: CGFloat, barRadius: CGFloat,
-      triangleSize: CGFloat, added: NSColor, modified: NSColor, removed: NSColor
-    ) {
-      self.gutterWidth = gutterWidth
-      self.barWidth = barWidth
-      self.barInset = barInset
-      self.barRadius = barRadius
-      self.triangleSize = triangleSize
-      self.added = added
-      self.modified = modified
-      self.removed = removed
-    }
-  }
-
-  /// 本文に重なる装備（空白の丸点・URL の下線）の見え方。
-  public struct Decorations {
-    public var whitespaceColor: NSColor
-    public var whitespaceDiameter: CGFloat
-    public var linkUnderlineThickness: CGFloat
-    /// ベースラインから下線の上端まで。
-    public var linkUnderlineOffset: CGFloat
-
-    public init(
-      whitespaceColor: NSColor, whitespaceDiameter: CGFloat, linkUnderlineThickness: CGFloat,
-      linkUnderlineOffset: CGFloat
-    ) {
-      self.whitespaceColor = whitespaceColor
-      self.whitespaceDiameter = whitespaceDiameter
-      self.linkUnderlineThickness = linkUnderlineThickness
-      self.linkUnderlineOffset = linkUnderlineOffset
-    }
-  }
-
-  /// 強調の地の色（α 込み。行の高さいっぱい・角なしで塗る）。選択文字列の出現は面に焦点が無いときだけ
-  /// `selectionOccurrenceInactive`。現在の一致の行全体は `currentFindLine`。
-  public struct Highlights {
-    public var findMatch: NSColor
-    public var currentFindMatch: NSColor
-    public var currentFindLine: NSColor
-    public var selectionOccurrence: NSColor
-    public var selectionOccurrenceInactive: NSColor
-    public var wordOccurrence: NSColor
-
-    public init(
-      findMatch: NSColor, currentFindMatch: NSColor, currentFindLine: NSColor,
-      selectionOccurrence: NSColor, selectionOccurrenceInactive: NSColor, wordOccurrence: NSColor
-    ) {
-      self.findMatch = findMatch
-      self.currentFindMatch = currentFindMatch
-      self.currentFindLine = currentFindLine
-      self.selectionOccurrence = selectionOccurrence
-      self.selectionOccurrenceInactive = selectionOccurrenceInactive
-      self.wordOccurrence = wordOccurrence
-    }
-  }
-
-  /// 俯瞰の見え方——寸法・色（α 込み）・帯とつまみの現れる・消える時間。字の明るさの係数と全体の不透明度は VS Code の
-  /// 規則で、見え方ではない（→ `MinimapCharSheet`）。
-  public struct Overview {
-    public var minimap: Minimap
-    public var scrollbar: Scrollbar
-    /// 先頭の行が上へ隠れている間の本文の上端の影と、本文が右に続くときのミニマップの左端の影の色。
-    public var topShadow: NSColor
-    public var minimapShadow: NSColor
-    /// 帯とつまみが現れる時間・つまみが消える時間・スクロールが止まってからつまみが消え始めるまで（秒）。
-    public var fadeIn: Double
-    public var fadeOut: Double
-    public var hideDelay: Double
-
-    public init(
-      minimap: Minimap, scrollbar: Scrollbar, topShadow: NSColor, minimapShadow: NSColor,
-      fadeIn: Double, fadeOut: Double, hideDelay: Double
-    ) {
-      self.minimap = minimap
-      self.scrollbar = scrollbar
-      self.topShadow = topShadow
-      self.minimapShadow = minimapShadow
-      self.fadeIn = fadeIn
-      self.fadeOut = fadeOut
-      self.hideDelay = hideDelay
-    }
-  }
-
-  /// ミニマップ——幅の上限と、帯（普段・帯の上・ドラッグ中）・選択・検索の一致・語の出現・git の印の色。
-  public struct Minimap {
-    public var maxWidth: CGFloat
-    public var slider: NSColor
-    public var sliderHover: NSColor
-    public var sliderActive: NSColor
-    public var selection: NSColor
-    public var findMatch: NSColor
-    public var wordOccurrence: NSColor
-    public var added: NSColor
-    public var modified: NSColor
-    public var removed: NSColor
-
-    public init(
-      maxWidth: CGFloat, slider: NSColor, sliderHover: NSColor, sliderActive: NSColor,
-      selection: NSColor, findMatch: NSColor, wordOccurrence: NSColor, added: NSColor,
-      modified: NSColor, removed: NSColor
-    ) {
-      self.maxWidth = maxWidth
-      self.slider = slider
-      self.sliderHover = sliderHover
-      self.sliderActive = sliderActive
-      self.selection = selection
-      self.findMatch = findMatch
-      self.wordOccurrence = wordOccurrence
-      self.added = added
-      self.modified = modified
-      self.removed = removed
-    }
-  }
-
-  /// スクロールバー——縦の幅・横の高さと、つまみ（普段・つまみの上・ドラッグ中）・印（縁・検索の一致・語の出現・git・
-  /// キャレット）の色。
-  public struct Scrollbar {
-    public var width: CGFloat
-    public var horizontalHeight: CGFloat
-    public var slider: NSColor
-    public var sliderHover: NSColor
-    public var sliderActive: NSColor
-    public var border: NSColor
-    public var findMatch: NSColor
-    public var wordOccurrence: NSColor
-    public var added: NSColor
-    public var modified: NSColor
-    public var removed: NSColor
-    public var caret: NSColor
-
-    public init(
-      width: CGFloat, horizontalHeight: CGFloat, slider: NSColor, sliderHover: NSColor,
-      sliderActive: NSColor, border: NSColor, findMatch: NSColor, wordOccurrence: NSColor,
-      added: NSColor, modified: NSColor, removed: NSColor, caret: NSColor
-    ) {
-      self.width = width
-      self.horizontalHeight = horizontalHeight
-      self.slider = slider
-      self.sliderHover = sliderHover
-      self.sliderActive = sliderActive
-      self.border = border
-      self.findMatch = findMatch
-      self.wordOccurrence = wordOccurrence
-      self.added = added
-      self.modified = modified
-      self.removed = removed
-      self.caret = caret
-    }
-  }
-
-  public init(
-    font: NSFont, lineHeight: CGFloat, topInset: CGFloat, textColor: NSColor,
-    backgroundColor: NSColor, caretColor: NSColor, caretSize: CGSize, selectionColor: NSColor,
-    inactiveSelectionColor: NSColor, gutterFont: NSFont, gutterTextColor: NSColor,
-    gutterWidth: CGFloat, gutterTrailingInset: CGFloat,
-    roleColors: [SyntaxRole: NSColor], marks: Marks, decorations: Decorations,
-    highlights: Highlights, overview: Overview
-  ) {
-    self.font = font
-    self.lineHeight = lineHeight
-    self.topInset = topInset
-    self.textColor = textColor
-    self.backgroundColor = backgroundColor
-    self.caretColor = caretColor
-    self.caretSize = caretSize
-    self.selectionColor = selectionColor
-    self.inactiveSelectionColor = inactiveSelectionColor
-    self.gutterFont = gutterFont
-    self.gutterTextColor = gutterTextColor
-    self.gutterWidth = gutterWidth
-    self.gutterTrailingInset = gutterTrailingInset
-    self.roleColors = roleColors
-    self.marks = marks
-    self.decorations = decorations
-    self.highlights = highlights
-    self.overview = overview
-  }
 }

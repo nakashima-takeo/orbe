@@ -19,7 +19,7 @@ final class SurfaceRowsTests: EngineTestCase {
   }
 
   func insert(_ lines: [String], at line: Int) -> RowInsertion {
-    RowInsertion(line: line, content: .lines(lines.map(InsertedLine.init)))
+    RowInsertion(line: line, content: .lines(lines.map { InsertedLine($0) }))
   }
 
   /// 文書に無い行は本文の色で描かれ、行番号を持たない。下の文書の行（本文・行番号・git の印・選択の地・強調の地）は差し込みの

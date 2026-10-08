@@ -79,8 +79,11 @@ final class MetalTextView: TextSurfaceInputView {
   override var isFlipped: Bool { true }
   override var isOpaque: Bool { false }
   override var acceptsFirstResponder: Bool { true }
-  /// 主の場の入力の文脈（主が編集の場でなければ nil——キーはキー割り当てだけを通る）。
-  override var inputContext: NSTextInputContext? { surface?.primarySite?.inputContext }
+  /// 主の場の入力の文脈（主が編集の場でないか、読むだけの場なら nil——キーはキー割り当てだけを通り、IME は変換を始めない）。
+  override var inputContext: NSTextInputContext? {
+    guard let site = surface?.primarySite, site.isEditable else { return nil }
+    return site.inputContext
+  }
   override var composing: Bool { surface?.primarySite?.editor.isComposing ?? false }
 
   /// VS Code の複数カーソルのキー（macOS の標準のキー割り当てに無いもの）→ セレクタ。キーは修飾（⌘⇧⌥⌃）と、矢印か

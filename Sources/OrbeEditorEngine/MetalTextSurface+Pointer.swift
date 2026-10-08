@@ -1,7 +1,7 @@
 import AppKit
 import OrbeEditorCore
 
-/// 面の上の場所——行番号の数字の列・git の印の列・本文（最終行より下の空き地を含む）・俯瞰（ミニマップと縦横の
+/// 面の上の場所——行番号の数字の列・git の印の列と記号の列・本文（最終行より下の空き地を含む）・俯瞰（ミニマップと縦横の
 /// スクロールバー）。
 enum PointerArea {
   case numbers, marks, text, overview
@@ -13,6 +13,8 @@ struct PointerHit {
   var row: Int
   /// いちばん近い書記素の境（最終行より下なら本文の終わり）。
   var offset: Int
+  /// 文書の行の上か（差し込んだ行と区画の上は、次の文書の行に当たるが文書の行の上ではない）。
+  var onLine = true
 }
 
 extension MetalTextSurface {
@@ -23,19 +25,20 @@ extension MetalTextSurface {
     guard let env = bodySite.editingEnvironment() else { return nil }
     let text = env.text
     let p = position ?? scrollPosition
-    let column = config.columnWidth(lineCount: text.lineCount)
+    let gutter = surfaceLayout.gutter
+    let column = gutter.width
     let area: PointerArea =
       textView.overview.area(at: point) != nil
       ? .overview
-      : point.x < column - config.marks.gutterWidth ? .numbers : point.x < column ? .marks : .text
+      : point.x < column - gutter.numbersInset ? .numbers : point.x < column ? .marks : .text
     let y = Double(point.y - config.topInset) + p.y
     let item = rows.item(atY: y)
     if case .block(let index) = item {
       let line = rows.boundaries[index]
       guard line < text.lineCount else {
-        return PointerHit(area: area, row: text.lineCount - 1, offset: text.length)
+        return PointerHit(area: area, row: text.lineCount - 1, offset: text.length, onLine: false)
       }
-      return PointerHit(area: area, row: line, offset: text.lineStart(line))
+      return PointerHit(area: area, row: line, offset: text.lineStart(line), onLine: false)
     }
     guard case .line(let line) = item, line < text.lineCount else {
       return PointerHit(area: area, row: text.lineCount - 1, offset: text.length)
@@ -52,7 +55,7 @@ extension MetalTextSurface {
   func character(at point: CGPoint, position: SIMD2<Double>? = nil) -> NSRange? {
     guard let text = currentContent?.text else { return nil }
     let p = position ?? scrollPosition
-    let column = config.columnWidth(lineCount: text.lineCount)
+    let column = surfaceLayout.column
     let y = Double(point.y - config.topInset) + p.y
     guard point.x >= column, point.y >= config.topInset,
       case .line(let row) = rows.item(atY: y), (0..<text.lineCount).contains(row)

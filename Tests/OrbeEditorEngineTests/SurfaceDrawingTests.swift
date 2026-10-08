@@ -161,14 +161,17 @@ final class SurfaceDrawingTests: EngineTestCase {
   /// ものを組む。main は最新の位置を読む。描画スレッドが読んだ・引き取った版より前の組は手放す。
   func testEachMaterialRevisionTakesThePositionPlacedWithIt() {
     let box = ScrollBox()
-    box.updateLimits(
-      LimitsUpdate(lastTop: 999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7))
-    box.place(SIMD2(0, 50))
-    box.updateLimits(
-      LimitsUpdate(lastTop: 1999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7),
-      forMaterial: 7)
-    box.place(SIMD2(0, 300), forMaterial: 7)
-    box.place(SIMD2(0, 900), forMaterial: 8)
+    box.commit(
+      ScrollBox.Commit(
+        limits: LimitsUpdate(lastTop: 999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7),
+        position: SIMD2(0, 50)))
+    box.commit(
+      ScrollBox.Commit(
+        material: 7,
+        limits: LimitsUpdate(
+          lastTop: 1999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7),
+        position: SIMD2(0, 300)))
+    box.commit(ScrollBox.Commit(material: 8, position: SIMD2(0, 900)))
     XCTAssertEqual(box.frame(at: 0, material: 6).position.y, 50)
     XCTAssertEqual(
       box.frame(at: 0, material: 6).limits.lastTop, 999 * 10, "置く前の範囲")
@@ -180,7 +183,7 @@ final class SurfaceDrawingTests: EngineTestCase {
     XCTAssertEqual(
       box.frame(at: 0, material: 7).position.y, 900,
       "一度追いついたら前の版の組は持たない")
-    box.place(SIMD2(0, 400), forMaterial: 9)
+    box.commit(ScrollBox.Commit(material: 9, position: SIMD2(0, 400)))
     box.taken(material: 9)
     XCTAssertEqual(
       box.frame(at: 0, material: 8).position.y, 400, "引き取った版より前の組は手放す")

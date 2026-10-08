@@ -66,7 +66,7 @@ private struct RowsFlow {
   }
 
   func insert() {
-    let removed = { (lines: [String]) in lines.map(InsertedLine.init) }
+    let removed = { (lines: [String]) in lines.map { InsertedLine($0) } }
     surface.setPresentation(SurfacePresentation(showsMinimap: false))
     surface.setRows(
       SurfaceRows(insertions: [

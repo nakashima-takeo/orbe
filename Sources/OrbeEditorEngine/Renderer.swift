@@ -52,7 +52,8 @@ final class Renderer {
     slots[id] = SurfaceSlot(id: id, boxes: boxes, config: config, device: device, notify: notify)
   }
 
-  /// 面が閉じた。刻みを外し、組版のキャッシュと写しの最後の参照をここ（描画スレッド）で手放す。
+  /// 面が閉じた。刻みを外し、組版のキャッシュと写しの最後の参照をここ（描画スレッド）で手放す。スクロールを共にしていた
+  /// 相手は、狭まった範囲に収めた位置を描き直し、見えている範囲を main で出し直す（面は閉じる前に箱から寄与を外している）。
   func detach(_ id: Int) {
     guard let slot = slots.removeValue(forKey: id) else { return }
     slot.blinkTimer.map { CFRunLoopTimerInvalidate($0) }
@@ -60,6 +61,10 @@ final class Renderer {
     slot.recorder.flush()
     slot.recorder.flushTyping()
     _ = slot.material.clear()
+    for partner in slot.scroll.partners {
+      wake(partner)
+      slots[partner]?.notify()
+    }
   }
 
   func bind(_ id: Int, target: FrameTarget, clock: FrameClock) {
@@ -90,6 +95,16 @@ final class Renderer {
   }
 
   func slot(_ id: Int) -> SurfaceSlot? { slots[id] }
+
+  /// このコマで描画スレッドがスクロールの状態を動かした（戻り・横の寄せ・範囲の伸び）。共にする面の止めていた刻みを再開
+  /// する（次の刻みで描く）。
+  private func wakePartners(_ slot: SurfaceSlot) {
+    for id in slot.scroll.partners {
+      guard let partner = slots[id], let clock = partner.clock, clock.isPaused else { continue }
+      partner.idleTicks = 0
+      clock.isPaused = false
+    }
+  }
 
   private func pipelinesDidBecomeReady() {
     for id in slots.keys { wake(id) }
@@ -173,7 +188,8 @@ final class Renderer {
     let revealed = begin(slot, material)
     pass.atlas.beginFrame()
     slot.zones.images.beginFrame()
-    let frame = slot.scroll.frame(at: target, material: material.revision)
+    let frame = slot.scroll.frame(
+      at: target, period: slot.clock?.period, material: material.revision)
     let texture = acquired.texture
     slot.build(
       material, scroll: (frame.position, frame.limits), moment: (caretVisible, target),
@@ -219,6 +235,7 @@ final class Renderer {
     if frame.returning || wasReturning || widened || revealed || slot.builder.fieldRevealed {
       slot.notify()
     }
+    if frame.returning || widened || revealed { wakePartners(slot) }
     if let last = keystrokes.max() { scheduleTypingFlush(slot.id, after: last) }
     slot.prefetchMinimap(material)
   }

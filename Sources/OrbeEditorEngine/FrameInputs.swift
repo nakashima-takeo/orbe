@@ -112,12 +112,6 @@ struct SurfaceConfig: @unchecked Sendable {
     return (glyphs, sizes.map(\.width))
   }
 
-  /// 行番号の列の幅——最小の幅か、最大の行番号が右の余白と印の列を残して収まる幅の広い方。
-  func columnWidth(lineCount: Int) -> CGFloat {
-    let digits = ceil(numberWidth(max(1, lineCount)))
-    return max(gutterWidth + marks.gutterWidth, digits + gutterTrailingInset + marks.gutterWidth)
-  }
-
   /// 行番号の数字の幅。
   func numberWidth(_ number: Int) -> CGFloat {
     var n = number
@@ -285,8 +279,8 @@ struct FrameMaterial: Sendable {
   var marks = RowMarks.empty
   /// 縦の並び（写しと同じ書き込みで置く——描画スレッドは引き取った写しの行の並びで描く）。
   var rows = RowLayout(lineHeight: 1)
-  /// ミニマップを出すか（表示の構成）。
-  var showsMinimap = true
+  /// 表示の構成のうち、配置と描き方に効くもの。
+  var arrangement = SurfaceArrangement()
   /// 区画の描く材料（区画の同一性で引く。並びの塊の中身と同じ書き込みで置く）。
   var zones: [ObjectIdentifier: ZoneMaterial] = [:]
   /// 入力欄の場の描く材料（場の通し番号で引く）。

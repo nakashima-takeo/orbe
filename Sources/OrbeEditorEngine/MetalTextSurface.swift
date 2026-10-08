@@ -15,11 +15,16 @@ import simd
 @MainActor
 final class MetalTextSurface: TextSurface {
   private static var nextID = 0
+  /// 置く位置を出す前の状態に置いた通し番号（→ `Pending.placement`）。
+  static var placementSerial = 0
 
   let id: Int
   let config: SurfaceConfig
   let material = MaterialBox()
   let scroll: ScrollBox
+  /// スクロールを共にする相手と、自分が先に結んだ面か（→ `shareScroll`）。
+  weak var partner: MetalTextSurface?
+  var leadsScroll = false
   /// 最後に描いたミニマップの配置（描画スレッドが書く）。
   let placementBox = MinimapPlacementBox()
   let style: TextSurfaceStyle
@@ -54,8 +59,9 @@ final class MetalTextSurface: TextSurface {
   private var highlights = Highlights()
   /// 縦の並び（main の最新。取引の中で置き・ずらし・測り直し、出すときに材料へ書く）。
   var rows: RowLayout
-  /// 表示の構成。
+  /// 表示の構成と、そのうち配置と描き方に効くもの。
   var presentation = SurfacePresentation.code
+  var arrangement = SurfaceArrangement()
   /// 置いている区画（区画の同一性で引く）と、絵を材料に写す係。
   var zones: [ObjectIdentifier: ZoneEntry] = [:]
   let painter = ZonePainter()
@@ -86,7 +92,7 @@ final class MetalTextSurface: TextSurface {
     self.style = style
     config = SurfaceConfig(style: style, omittedLabel: omittedLabel)
     rows = RowLayout(lineHeight: Double(style.lineHeight))
-    scroll = ScrollBox()
+    scroll = ScrollBox(surface: id)
     lineStops = LineStopsCache(font: config.font)
     textView.surface = self
     let id = id
@@ -111,6 +117,7 @@ final class MetalTextSurface: TextSurface {
 
   deinit {
     let id = id
+    scroll.leave()
     RenderThread.shared.perform { $0.detach(id) }
   }
 
@@ -131,6 +138,20 @@ final class MetalTextSurface: TextSurface {
 
   var caretLocation: Int { editor.state.cursors.primary.position }
 
+  /// 本文の場を編集できるか。読むだけにするときは、本文の変換を確定し、AppKit に入力の文脈を取り直させる（読むだけの本文は
+  /// 文脈を返さない）。
+  var isEditable: Bool {
+    get { bodySite.isEditable }
+    set {
+      guard newValue != bodySite.isEditable else { return }
+      transact {
+        bodySite.editor.finishComposition(.commit)
+        bodySite.isEditable = newValue
+        if textView.window?.firstResponder === textView { _ = NSTextInputContext.current }
+      }
+    }
+  }
+
   var cursorSelections: [NSRange] { editor.state.cursors.selections }
 
   var searchContinuation: SearchQuestion? { editor.state.continuation }
@@ -143,8 +164,9 @@ final class MetalTextSurface: TextSurface {
     primarySite?.editor.finishComposition(.commit)
   }
 
-  /// 本文の丸ごとの置き換え（外部変更の差し替え）。通常の編集と同じく undo に載る。この面から始めた本文のドラッグの途中
-  /// なら、運んでいる範囲は古い本文の位置なので手放し、以後はコピーとして落とす（元の字は消さない）。
+  /// 本文の丸ごとの置き換え（外部変更の差し替え）。通常の編集と同じく undo に載る（読むだけの面では載せず、それまでの
+  /// 取り消しも捨てる）。この面から始めた本文のドラッグの途中なら、運んでいる範囲は古い本文の位置なので手放し、以後は
+  /// コピーとして落とす（元の字は消さない）。
   func replaceAll(with text: String) {
     textView.draggedRange = nil
     editor.replaceAll(with: text)
@@ -223,7 +245,8 @@ final class MetalTextSurface: TextSurface {
   /// 外観・色空間・倍率で色を解き直して置く。
   func appearanceDidChange() {
     let palette = FramePalette(
-      style: style, appearance: textView.effectiveAppearance, space: space, scale: scale)
+      style: style, lineStyles: presentation.lineStyles, appearance: textView.effectiveAppearance,
+      space: space, scale: scale)
     write { $0.palette = palette }
     zonesAppearanceDidChange()
   }
@@ -264,9 +287,30 @@ final class MetalTextSurface: TextSurface {
 
   private var hasDisplayLink = false
 
+  /// 描画スレッドを起こす（スクロールを共にする相手も）。
   func wake() {
-    let id = id
-    RenderThread.shared.perform { $0.wake(id) }
+    let ids = scrollGroup.map(\.id)
+    RenderThread.shared.perform { renderer in
+      for id in ids { renderer.wake(id) }
+    }
+  }
+
+  /// スクロールの状態を `other` と共にする。位置はこの面のものを引き継ぎ、先に結んだ面はこの面だけになる。
+  func shareScroll(with other: any TextSurface) {
+    guard let other = other as? MetalTextSurface, other !== self else {
+      preconditionFailure("スクロールを共にできるのは、同じエンジンの別の面だけ")
+    }
+    precondition(partner == nil && other.partner == nil, "いまスクロールを共にしていない面どうしで結ぶ")
+    flush()
+    other.flush()
+    scroll.share(with: other.scroll)
+    partner = other
+    other.partner = self
+    leadsScroll = true
+    other.leadsScroll = false
+    wake()
+    refreshViewport()
+    other.refreshViewport()
   }
 
   // MARK: - 焦点と撮影

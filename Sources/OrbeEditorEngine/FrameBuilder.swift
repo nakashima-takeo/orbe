@@ -31,6 +31,8 @@ final class FrameBuilder {
   private(set) var color: [[GlyphInstance]] = []
   private(set) var gutter: [[GlyphInstance]] = []
   var shapes: [ShapeInstance] = []
+  /// 行の型の地（行番号の列の左端から本文の区画の右端まで。いちばん下の層）。
+  var lineBackgrounds: [ShapeInstance] = []
   /// 行の装備（空白の丸点・URL の下線。本文の列に切り取る）。
   var decorShapes: [ShapeInstance] = []
   /// 本文の行に重ねるもの——選択の地と未確定の文字の地、未確定の文字の下線・キャレット・落とす位置の印（本文の列に
@@ -40,7 +42,7 @@ final class FrameBuilder {
   var highlightShapes: [ShapeInstance] = []
   private(set) var textScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
   private(set) var gutterScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
-  /// 区画の箱の切り取り——行番号の列と本文の区画（区画の影は行番号の列にも落ちる。行番号と印はその上に描く）。
+  /// 区画の箱と行の型の地の切り取り——行番号の列と本文の区画（区画の影は行番号の列にも落ちる。行番号と印はその上に描く）。
   private(set) var zoneScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
   /// 組んだ行のうち最も長い幅（pt。末尾の「ほか N 字」を含む）。
   var longestLine: CGFloat = 0
@@ -73,7 +75,8 @@ final class FrameBuilder {
     }
     return
       ([
-        shapes, decorShapes, overlays.under, highlightShapes, overlays.over, minimap.decorations,
+        lineBackgrounds, shapes, decorShapes, overlays.under, highlightShapes, overlays.over,
+        minimap.decorations,
         shadowShapes, overviewShapes, zoneSelectionShapes,
       ] + fields.flatMap { [$0.overlays.under, $0.overlays.over] })
       .reduce(boxes + glyphs + cells + ((MemoryLayout<GlyphInstance>.stride + 255) & ~255)) {
@@ -135,6 +138,8 @@ final class FrameBuilder {
     /// 本文の行に重ねるもの（選択・キャレット・未確定の文字・落とす位置）の筆。
     let pen: OverlayPen
     let fonts: FontRegistry
+    /// 行番号の列の中の配置。
+    let gutter: GutterColumns
   }
 
   /// 1 コマを組む元。
@@ -168,6 +173,7 @@ final class FrameBuilder {
     for i in color.indices { color[i].removeAll(keepingCapacity: true) }
     for i in gutter.indices { gutter[i].removeAll(keepingCapacity: true) }
     shapes.removeAll(keepingCapacity: true)
+    lineBackgrounds.removeAll(keepingCapacity: true)
     decorShapes.removeAll(keepingCapacity: true)
     overlays.removeAll()
     highlightShapes.removeAll(keepingCapacity: true)
@@ -188,8 +194,8 @@ final class FrameBuilder {
     let lineCount = content.text.lineCount
     let rows = source.material.rows
     let layout = config.layout(
-      size: source.material.size, lineCount: lineCount,
-      showsMinimap: source.material.showsMinimap)
+      size: source.material.size, lineCount: lineCount, rows: rows,
+      arrangement: source.material.arrangement)
     let g = Geometry(
       scale: s, width: Double(source.pixels.width), height: Double(source.pixels.height),
       scrollX: (source.position.x * s).rounded(), scrollY: (source.position.y * s).rounded(),
@@ -209,7 +215,7 @@ final class FrameBuilder {
         caretSize: config.caretSize, focused: focused, selection: palette.selection,
         inactiveSelection: palette.inactiveSelection, caret: palette.caret,
         activeClause: palette.text.color, markedUnderline: palette.markedUnderline,
-        markedBackground: palette.markedBackground), fonts: fonts)
+        markedBackground: palette.markedBackground), fonts: fonts, gutter: layout.gutter)
     textScissor = Self.scissor(x: g.column, y: g.top, width: g.textRight - g.column, g)
     gutterScissor = Self.scissor(x: 0, y: g.top, width: g.column, g)
     zoneScissor = Self.scissor(x: 0, y: g.top, width: g.textRight, g)
@@ -292,35 +298,6 @@ final class FrameBuilder {
       to += 1
     }
     return VisibleGlyphs(glyphs: from..<to, offsets: from < to ? Int(low)...Int(high) : nil)
-  }
-
-  /// 行の字を置き、行の幅（末尾の印を含む、pt）を返す。置くのは横に見えている字だけで、役割は見えている行を通して 1 つの
-  /// 読み口で引き、色は役割の連なりを出たときだけ引く。
-  func drawText(
-    _ row: RowInFrame, _ visible: VisibleGlyphs, baseline: Double, roles: inout RoleRuns.Cursor,
-    _ c: Context
-  ) -> CGFloat {
-    let line = row.laid
-    let start = row.start
-    let g = c.g
-    let originX = g.column - g.scrollX
-    if let offsets = visible.offsets {
-      var run = 0..<0
-      var ink = c.palette.text
-      for i in visible.glyphs {
-        let offset = start + Int(line.offsets[i])
-        if !run.contains(offset) {
-          let found = roles.run(at: offset)
-          run = found.range
-          ink = c.palette.ink(found.role)
-        }
-        let x = originX + Double(line.xs[i]) * g.scale
-        let y = line.ys.isEmpty ? baseline : baseline - Double(line.ys[i]) * g.scale
-        let glyph = Glyph(font: line.fonts[i], glyph: line.glyphs[i], x: x, baseline: y)
-        place(glyph, ink, .text, c)
-      }
-    }
-    return drawOmittedMark(line, baseline: baseline, c)
   }
 
   /// 置くグリフ 1 つ（x・基線は px。基線は y が下向きの座標）。

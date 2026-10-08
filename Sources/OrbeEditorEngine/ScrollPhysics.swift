@@ -79,12 +79,17 @@ struct ScrollPhysics: Sendable {
     var longestLine: Double = 0
     /// 1 桁の幅。
     var cell: Double = 7
+    /// スクロールを共にする面の範囲の端（共にしていなければ 0）。範囲の端はこれより手前にならない。
+    var shared = SIMD2<Double>(0, 0)
 
-    var maximum: SIMD2<Double> {
+    /// この面の本文が決める範囲の端。
+    var own: SIMD2<Double> {
       SIMD2(
         max(0, longestLine + ScrollPhysics.trailingColumns * cell - viewport.x),
         max(0, lastTop))
     }
+
+    var maximum: SIMD2<Double> { simd_max(own, shared) }
 
     /// 位置 `position` の縦を端に収めたもの（俯瞰と見えている範囲は、端を越えて見せている間も端の位置を表す）。
     func clampedY(_ position: SIMD2<Double>) -> Double {

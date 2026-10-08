@@ -19,13 +19,18 @@ import XCTest
 /// 印の行の字の画素の距離を引く。区画が本文と同じコマに描かれていれば、距離はどのコマでも同じ（±1 画素）。受けたコマを
 /// 連番の PNG と、並べた 1 枚に書き出す（`.preview/flows/rows-trial/`）。
 ///
+/// 並列の型（`ORBE_EDITOR_ROWS_MODE=side`）: 200KB の文書の 2 版（行を書き換え・消し・足したもの）を、並列の
+/// diff の 2 面（番号 1 列・追加 / 削除の地と字・詰め物）に開き、スクロールを共にさせて窓に並べる。窓の下の「並びを置き
+/// 直す」は、両面の先頭に詰め物の行を同じ周で足す・外す。見るのは、どちらの面で速く・はじいて・端で弾ませても 2 面が
+/// 1 枚の紙として動くか・置き直しで跳ねないか。
+///
 /// テストは `NSApp.run` を回さないので、待つ間はアプリの出来事を配る（→ `runShownWindow`）。配らないと、窓が見えている
 /// 知らせも人の入力も面に届かず、面は本文を描かない。アプリと同じメインメニュー（`MainMenu`）を据える——⌘A ⌘C ⌘X ⌘V
 /// ⌘Z ⌘⇧Z は編集メニューの key equivalent が first responder へ配るので、無いと人がアプリと同じ操作を試せない。
 /// 窓は主窓と同じ `OrbeWindow` にし、キーが窓を通る道をアプリと揃える。
 @MainActor
 final class EditorRowsTrialTests: OrbeTestCase {
-  private var environment: [String: String] { ProcessInfo.processInfo.environment }
+  var environment: [String: String] { ProcessInfo.processInfo.environment }
   /// 試しのスレッドを置く間隔（行）。
   private static let zoneEvery = 30
 
@@ -42,6 +47,8 @@ final class EditorRowsTrialTests: OrbeTestCase {
 
   func testTrial() throws {
     if environment["ORBE_EDITOR_ROWS_MODE"] == "synthetic" { return try synthetic() }
+    if environment["ORBE_EDITOR_ROWS_MODE"] == "side" { return try sideBySide() }
+    if environment["ORBE_EDITOR_ROWS_MODE"] == "side-synthetic" { return try sideSynthetic() }
     let window = try show(Self.swiftSource()).window
     defer { window.orderOut(nil) }
     runShownWindow(for: Double(environment["ORBE_EDITOR_ROWS_SECONDS"] ?? "") ?? 180)
@@ -80,10 +87,10 @@ final class EditorRowsTrialTests: OrbeTestCase {
     wait(for: [started], timeout: 10)
     if let failure { throw failure }
     runShownWindow(for: 0.3)
-    scroll(surface.view, flick: 6000)
+    let down = scroll(surface.view, flick: 6000)
     runShownWindow(for: 1.6)
     scroll(surface.view, drag: 0.4, speed: -9000)
-    scroll(surface.view, flick: -6000)
+    let bounce = scroll(surface.view, flick: -6000)
     runShownWindow(for: 1.6)
     let stopped = expectation(description: "コマを受け終える")
     Task {
@@ -92,11 +99,14 @@ final class EditorRowsTrialTests: OrbeTestCase {
     }
     wait(for: [stopped], timeout: 10)
     let report = recorder.finish()
+    print("[rows-trial] momentum events delivered: flick \(down), bounce \(bounce)")
     print("[rows-trial] frames \(report.frames), measured zones \(report.above.count)")
     print(
       "[rows-trial] gap above px \(report.range(report.above)), below px \(report.range(report.below))"
     )
     print("[rows-trial] wrote \(report.sheet?.path ?? "-")")
+    XCTAssertGreaterThan(down, 0, "前提: はじきの momentum が面に届いた")
+    XCTAssertGreaterThan(bounce, 0, "前提: 端の弾みの momentum が面に届いた")
     XCTAssertGreaterThan(report.frames, 30, "前提: スクロールの間のコマを受けた")
     XCTAssertGreaterThan(report.above.count, 30, "前提: 区画の枠線と上下の印の行を引けた")
     XCTAssertLessThanOrEqual(
@@ -178,7 +188,7 @@ final class EditorRowsTrialTests: OrbeTestCase {
   }
 
   /// 200KB の Swift（人が触る型）。
-  private static func swiftSource() -> String {
+  static func swiftSource() -> String {
     EditorTypingPerfTests.swiftSource(bytes: 200_000)
   }
 
@@ -193,7 +203,7 @@ final class EditorRowsTrialTests: OrbeTestCase {
   // MARK: - 合成のスクロール
 
   /// 指を一定の速さ（pt/秒。正は下へ送る）で `seconds` 秒動かす。
-  private func scroll(_ view: NSView, drag seconds: Double, speed: Double) {
+  func scroll(_ view: NSView, drag seconds: Double, speed: Double) {
     let step = 0.0057
     var events = [Planned(at: 0, phase: 1)]
     for k in 1...Int(seconds / step) {
@@ -203,8 +213,10 @@ final class EditorRowsTrialTests: OrbeTestCase {
     feed(view, events)
   }
 
-  /// はじく: 80ms で速さ `peak`（pt/秒）まで上げて離し、OS の momentum の出来事（0.95 倍ずつ落ちる列）が続く。
-  private func scroll(_ view: NSView, flick peak: Double) {
+  /// はじく: 80ms で速さ `peak`（pt/秒）まで上げて離し、OS の momentum の出来事（0.95 倍ずつ落ちる列）が続く。届いた
+  /// momentum の出来事の数を返す。
+  @discardableResult
+  func scroll(_ view: NSView, flick peak: Double) -> Int {
     let step = 0.0057
     var events = [Planned(at: 0, phase: 1)]
     let ramp = Int(0.08 / step)
@@ -222,12 +234,20 @@ final class EditorRowsTrialTests: OrbeTestCase {
       events.append(Planned(at: t, momentum: 2, dy: d))
     }
     events.append(Planned(at: t + step, momentum: 3))
-    feed(view, events)
+    return feed(view, events)
   }
 
-  /// 合成のスクロールの出来事（`phase`・`momentum` は CGEvent の段の値）を実時間で面の入口へ流す。
-  private func feed(_ view: NSView, _ events: [Planned]) {
+  /// 合成のスクロールの出来事（`phase`・`momentum` は CGEvent の段の値）を実時間で `view` の上へ流し、届いた momentum の
+  /// 出来事の数を返す。段の出来事は窓の配り（`NSWindow.sendEvent`。点の下の view を引く——人の操作と同じ道）に通す。
+  /// momentum の出来事は始まりの段を受けた view へ直接渡す——窓の配りは合成の momentum の出来事を view へ届けない
+  /// （実測）。
+  @discardableResult
+  private func feed(_ view: NSView, _ events: [Planned]) -> Int {
+    guard let window = view.window, let content = window.contentView else { return 0 }
+    let point = view.centerInWindow
     let start = CACurrentMediaTime()
+    var receiver: NSView?
+    var momentum = 0
     for planned in events {
       while CACurrentMediaTime() < start + planned.at { runShownWindow(for: 0.001) }
       guard
@@ -241,8 +261,21 @@ final class EditorRowsTrialTests: OrbeTestCase {
       event.setDoubleValueField(.scrollWheelEventPointDeltaAxis1, value: planned.dy)
       event.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1, value: planned.dy)
       event.timestamp = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
-      if let scroll = NSEvent(cgEvent: event) { view.scrollWheel(with: scroll) }
+      // 窓を持たない出来事の locationInWindow は画面の座標（左下が原点）なので、窓の中の点がそのまま入るように置く。
+      event.location = CGPoint(x: point.x, y: (NSScreen.screens.first?.frame.height ?? 0) - point.y)
+      guard let scroll = NSEvent(cgEvent: event) else { continue }
+      if planned.momentum == 0 {
+        if planned.phase == 1 {
+          receiver = content.hitTest(content.superview?.convert(point, from: nil) ?? point)
+          XCTAssertTrue(receiver === view, "前提: 窓は点の下のこの面へ配る")
+        }
+        window.sendEvent(scroll)
+      } else if let receiver {
+        receiver.scrollWheel(with: scroll)
+        momentum += 1
+      }
     }
+    return momentum
   }
 }
 

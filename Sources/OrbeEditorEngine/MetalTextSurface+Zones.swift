@@ -153,7 +153,7 @@ extension MetalTextSurface {
     }
     guard changed else { return }
     noteRowsChange()
-    rows.replace(blocks)
+    rows.replace(blocks, spans: current.spans)
   }
 
   /// 取引の中で並びが変わる（取引の前の並びを、見えている先頭の文書の行を保つ起点として覚える）。

@@ -180,6 +180,7 @@ extension SurfaceInputMethodTests {
     once("IME の unmarkText", notifies: false) { replay([.unmark], on: opened) }
     once("IME 自身の取り消し", notifies: false) { replay([.mark("")], on: opened) }
     once("焦点の喪失") { window.makeFirstResponder(nil) }
+    once("読むだけにする") { opened.surface.isEditable = false }
   }
 
   /// 文書を切り替えて面が窓から外れると、変換を確定して IME に知らせる（変換は文書ごとに残さない）。

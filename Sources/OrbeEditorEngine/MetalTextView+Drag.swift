@@ -8,10 +8,11 @@ import simd
 /// 描く材料に置き、本文の上下の端の 1 行の帯の中では自動でスクロールする。区画の入力欄へ落とせば入力欄に入れ（コピー。
 /// 入力欄が主になる）、区画のほかの所（文・押せる場所・空き）へは落とせない。
 extension MetalTextView: NSDraggingSource {
+  /// 読むだけの本文からは写すだけ（運んだ字を消さない）。
   func draggingSession(
     _ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext
   ) -> NSDragOperation {
-    context == .withinApplication ? [.move, .copy] : .copy
+    context == .withinApplication && surface?.bodySite.isEditable != false ? [.move, .copy] : .copy
   }
 
   func draggingSession(
@@ -39,7 +40,7 @@ extension MetalTextView: NSDraggingSource {
     }
     let config = surface.config
     let p = surface.scrollPosition
-    let column = config.columnWidth(lineCount: text.lineCount)
+    let column = surface.surfaceLayout.column
     let layout = surface.rows
     let top = max(0, layout.line(atY: p.y))
     let bottom = layout.line(atY: p.y + Double(bounds.height))
@@ -186,7 +187,7 @@ extension MetalTextView: NSDraggingSource {
         dragged: own ? draggedRange : nil,
         copying: !info.draggingSourceOperationMask.contains(.move) || !site.isBody,
         shift: NSEvent.modifierFlags.contains(.shift),
-        opensFiles: site.isBody && surface.host != nil))
+        opensFiles: site.isBody && surface.host != nil, inserts: site.isEditable))
   }
 
   private func showDrop(_ offset: Int?) {

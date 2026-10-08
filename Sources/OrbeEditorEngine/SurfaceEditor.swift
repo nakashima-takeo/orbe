@@ -43,8 +43,9 @@ final class SurfaceEditor {
 
   // MARK: - 操作（IME 以外の入口）
 
-  /// コマンド 1 回を 1 つの取引で行う（変換の確定も同じ取引に入る）。
+  /// コマンド 1 回を 1 つの取引で行う（変換の確定も同じ取引に入る）。読むだけの場では、文を変えるコマンドは何もしない。
   func perform(_ command: EditCommand) {
+    guard site.isEditable || !command.edits else { return }
     site.transact {
       finishComposition(.commit)
       guard let env = site.editingEnvironment() else { return }
@@ -77,8 +78,9 @@ final class SurfaceEditor {
     select(CursorList(.selecting(range)), reveal: .none)
   }
 
-  /// 本文を丸ごと置き換える（外部変更の差し替え）。変わらない先頭と末尾を落とした 1 つの編集として undo に載り、前後で
-  /// まとまりを切る。選択は解け、キャレットは同じオフセット（本文が短ければ末尾）。変換中なら先に取り消す。
+  /// 本文を丸ごと置き換える（外部変更の差し替え）。変わらない先頭と末尾を落とした 1 つの編集として undo に載り（読むだけの
+  /// 場では載せず、それまでの取り消しも捨てる——undo の要素と文を食い違わせない）、前後でまとまりを切る。選択は解け、
+  /// キャレットは同じオフセット（本文が短ければ末尾）。変換中なら先に取り消す。
   func replaceAll(with text: String) {
     site.transact(remeasure: true) {
       finishComposition(.cancel)
@@ -86,9 +88,15 @@ final class SurfaceEditor {
       let whole = TextEdit(range: NSRange(location: 0, length: current.length), replacement: text)
       let edit = whole.narrowed(replacing: current.units(in: whole.range))
       let caret = min(state.cursors.primary.selection.location, whole.replacementLength)
-      record(
-        EditBatch([edit]), kind: .other, from: state.cursors, to: CursorList(Cursor(caret)), current
-      )
+      if site.isEditable {
+        record(
+          EditBatch([edit]), kind: .other, from: state.cursors, to: CursorList(Cursor(caret)),
+          current)
+      } else if current.units(in: edit.range) != edit.replacement {
+        close()
+        guard site.deliver(EditBatch([edit])) != nil else { return }
+        undoManager.removeAllActions()
+      }
       state = EditState(
         cursors: CursorList(Cursor(caret)),
         mark: state.mark.map { min($0, whole.replacementLength) })
@@ -143,7 +151,7 @@ final class SurfaceEditor {
   func setMarkedText(
     _ string: String, selected: NSRange, replacement: NSRange, appearance: MarkedAppearance
   ) {
-    guard !discarding, let text = site.editingEnvironment()?.text else { return }
+    guard !discarding, site.isEditable, let text = site.editingEnvironment()?.text else { return }
     guard composition != nil || !string.isEmpty else { return }
     let units = ContiguousArray(string.utf16)
     site.transact(reveal: .minimal) {
@@ -162,7 +170,7 @@ final class SurfaceEditor {
   /// NSTextView と同じ（`CompositionRules.selection`。変換中は IME の選択に当て、他のカーソルは自分の置き換えた範囲に
   /// 対して主と同じ相対の位置）。
   func insertText(_ string: String, replacement: NSRange) {
-    guard !discarding else { return }
+    guard !discarding, site.isEditable else { return }
     guard let composing = composition else {
       guard let length = site.textLength else { return }
       guard let range = CompositionRules.replacement(replacement, length: length) else {

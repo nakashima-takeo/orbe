@@ -86,7 +86,11 @@ extension MetalTextSurface {
     let lineCount = text?.lineCount ?? 1
     settleRows(finished, lineCount: lineCount)
     pending.limits = limits(lineCount: lineCount)
-    if let p = position(after: finished, span: span) { pending.position = p }
+    if let p = position(after: finished, span: span) {
+      pending.position = p
+      Self.placementSerial += 1
+      pending.placement = Self.placementSerial
+    }
     if let content = change.content { pending.content = content }
     let refocused = focused != finished.focused || primary != finished.primary
     let restarts =
@@ -195,6 +199,7 @@ extension MetalTextSurface {
   /// いる先頭の文書の行を同じ位置に保ち、変わった並びを材料への書き込みに積む。
   private func settleRows(_ finished: Transaction, lineCount: Int) {
     if let before = finished.anchor, finished.scrollTo == nil {
+      pending.anchored = true
       keepFirstVisibleLine(from: before, lineCount: lineCount)
     }
     guard rows.version != finished.rowsVersion else { return }
