@@ -76,15 +76,17 @@ extension GitRepo {
   }
 
   /// ステージ済みの分をコミットする。メッセージは書いたまま残る（`#` 始まりの行も。前後の空行・行末の空白・続く空行だけ
-  /// 整える）。`amend` は直前のコミットを差し替え、メッセージが空なら前のメッセージのまま中身だけ差し替える。
-  /// ユーザーの hook・署名の設定はそのまま効く。
+  /// 整える）。`amend` は直前のコミットを差し替え、メッセージが空なら前のメッセージを一字も変えずに中身だけ差し替える
+  /// ——整え方を明示しないと、利用者の `commit.cleanup=strip` が前のメッセージの `#` の行を消す。ユーザーの hook・署名の
+  /// 設定はそのまま効く。
   func commit(
     message: String, amend: Bool, handle: GitRunner.Handle,
     completion: @escaping (GitWriteFailure?) -> Void
   ) {
     let keepsMessage = amend && message.allSatisfy(\.isWhitespace)
     var args = ["commit"] + (amend ? ["--amend"] : [])
-    args += keepsMessage ? ["--no-edit"] : ["--cleanup=whitespace", "-F", "-"]
+    args +=
+      keepsMessage ? ["--no-edit", "--cleanup=verbatim"] : ["--cleanup=whitespace", "-F", "-"]
     runner.run(
       args, cwd: root, stdin: keepsMessage ? nil : Data(message.utf8), timesOut: false,
       handle: handle
