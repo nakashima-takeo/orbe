@@ -19,7 +19,7 @@ import XCTest
 /// 印の行の字の画素の距離を引く。区画が本文と同じコマに描かれていれば、距離はどのコマでも同じ（±1 画素）。受けたコマを
 /// 連番の PNG と、並べた 1 枚に書き出す（`.preview/flows/rows-trial/`）。
 ///
-/// 並列の型（`ORBE_EDITOR_ROWS_MODE=side`）: 200KB の文書の 2 版（旧版から行を消し、新版に行を足したもの）を、並列の
+/// 並列の型（`ORBE_EDITOR_ROWS_MODE=side`）: 200KB の文書の 2 版（行を書き換え・消し・足したもの）を、並列の
 /// diff の 2 面（番号 1 列・追加 / 削除の地と字・詰め物）に開き、スクロールを共にさせて窓に並べる。窓の下の「並びを置き
 /// 直す」は、両面の先頭に詰め物の行を同じ周で足す・外す。見るのは、どちらの面で速く・はじいて・端で弾ませても 2 面が
 /// 1 枚の紙として動くか・置き直しで跳ねないか。
@@ -90,12 +90,14 @@ final class EditorRowsTrialTests: OrbeTestCase {
     runShownWindow(for: Double(environment["ORBE_EDITOR_ROWS_SECONDS"] ?? "") ?? 180)
   }
 
-  /// 200KB の Swift の 2 版——17 行ごとに 2 行を消し、23 行ごとに 3 行を足したもの。
+  /// 200KB の Swift の 2 版——17 行ごとに 1 行を 2 行に書き換え、29 行ごとに 1 行を消し、23 行ごとに 3 行を足したもの。
   private static func sideSample() -> DiffRowsSample {
     let lines = swiftSource().components(separatedBy: "\n").dropLast()
     var rows: [DiffRowsSample.Row] = []
     for (index, line) in lines.enumerated() {
       if index % 17 == 5 {
+        rows += [.removed(line), .added(line + " // changed"), .added("    // split \(index)")]
+      } else if index % 29 == 7 {
         rows.append(.removed(line))
       } else {
         rows.append(.same(line))

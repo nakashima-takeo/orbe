@@ -68,35 +68,54 @@ struct DiffRowsSample {
     return SurfaceRows(insertions: insertions, spans: spans)
   }
 
-  /// 並列の片側——自分の側の変わった行に型を付け、相手の側だけにある行の数だけ詰め物の行を差し込む。
+  /// 並列の片側——変わった区間（続く削除と追加）は、削除と追加を上から同じ行に並べ、行の数の差の分だけ短い側の区間の後に
+  /// 詰め物の行を差し込む（見本の `diffLeft` / `diffRight` と VS Code の並列と同じ揃え方）。自分の側の変わった行に型を付ける。
   func side(_ side: Side) -> SurfaceRows {
     var insertions: [RowInsertion] = []
     var spans: [LineSpan] = []
-    var pads = 0
     var next = 0
     var last: Int?
-    func flush() {
-      guard pads > 0 else { return }
-      let lines = (0..<pads).map { _ in InsertedLine("", style: Self.pad) }
-      insertions.append(RowInsertion(line: next, content: .lines(lines)))
-      pads = 0
-    }
-    func own(_ style: Int) {
-      flush()
+    func own(_ count: Int, _ style: Int) {
+      guard count > 0 else { return }
       if last != style { spans.append(LineSpan(line: next, style: style)) }
       last = style
-      next += 1
+      next += count
     }
-    for row in rows {
-      switch (row, side) {
-      case (.removed, .old): own(Self.removed)
-      case (.added, .new): own(Self.added)
-      case (.removed, .new), (.added, .old): pads += 1
-      case (.same, _): own(Self.context)
+    for block in blocks {
+      switch block {
+      case .same(let count): own(count, Self.context)
+      case .changed(let removed, let added):
+        let (mine, theirs) = side == .old ? (removed, added) : (added, removed)
+        own(mine, side == .old ? Self.removed : Self.added)
+        guard theirs > mine else { continue }
+        let pads = (mine..<theirs).map { _ in InsertedLine("", style: Self.pad) }
+        insertions.append(RowInsertion(line: next, content: .lines(pads)))
       }
     }
-    flush()
     return SurfaceRows(insertions: insertions, spans: spans)
+  }
+
+  /// 並びの塊——続く同じ行の数か、変わった区間（続く削除と追加。どちらかは 0 でよい）の削除と追加の数。
+  enum Block: Equatable {
+    case same(Int)
+    case changed(removed: Int, added: Int)
+  }
+
+  var blocks: [Block] {
+    var result: [Block] = []
+    for row in rows {
+      switch (row, result.last) {
+      case (.same, .same(let count)?): result[result.count - 1] = .same(count + 1)
+      case (.same, _): result.append(.same(1))
+      case (.removed, .changed(let removed, let added)?):
+        result[result.count - 1] = .changed(removed: removed + 1, added: added)
+      case (.added, .changed(let removed, let added)?):
+        result[result.count - 1] = .changed(removed: removed, added: added + 1)
+      case (.removed, _): result.append(.changed(removed: 1, added: 0))
+      case (.added, _): result.append(.changed(removed: 0, added: 1))
+      }
+    }
+    return result
   }
 
   /// 旧版 `old` と新版 `new` を `LineDiff` で突き合わせた並び。
