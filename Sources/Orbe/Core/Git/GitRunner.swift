@@ -3,9 +3,11 @@ import Foundation
 /// git CLI の実行基盤。GUI アプリの貧弱な環境変数でも hooks・署名がユーザーの
 /// シェル環境と同等に動くよう、`ShellPATH` の PATH を全呼び出しへ引き継ぐ。
 ///
-/// 実行は並ばない——すべて 1 本の並行キューで走る。git が待たずに落ちるロックは index.lock と config.lock だけで
-/// （ref・packed-refs は git 自身が再試行する）、index を書くのはその worktree の根のサービスだけなので、順番は
-/// そこが持つ（`RootFiles`）。ここで並べると、長い hook 1 本が無関係なリポジトリの git まで止める。
+/// 実行は並ばない——すべて 1 本の並行キューで走る。ここで並べると、長い hook 1 本が無関係なリポジトリの git まで止める。
+/// 順番を作るのは同じ worktree の index への書き込みだけで、index を書くのはその worktree の根のサービスだけなので
+/// そこが持つ（`RootFiles`。git は index.lock を待たずに落ちる）。それ以外の並走は失敗しうるのを受け入れる——
+/// remote 追跡 ref を書く fetch・pull 同士は、先に更新した側と期待値（読んだ時点の値）が食い違った後の側が落ち、
+/// `.git/config` を書く操作同士は config.lock を待たずに落ちる。どれもやり直せば通る。
 final class GitRunner {
   static let shared = GitRunner()
 
@@ -31,28 +33,26 @@ final class GitRunner {
   /// git を背景で実行し、結果をメインキューへ返す。
   ///
   /// - `timesOut`: 無出力が `idleTimeout` 続いたら打ち切るか。止められる人が見ている実行（利用者が起こした書き込み）は
-  ///   打ち切らず、返る手で止めさせる——hook・filter・署名・ネットの沈黙は「何も起きていない」ことを意味しない。
+  ///   打ち切らず、`handle` で止めさせる——hook・filter・署名・ネットの沈黙は「何も起きていない」ことを意味しない。
   /// - `environment`: 共通の環境に足す変数。
   /// - `onProgress`: stderr の行（`\r` と `\n` で割る）を届いた順に main で渡す。最後の行は `completion` より先に届く。
   /// - `handle`: 止める手。同じ手を続けて渡せば、何段かの実行を 1 つの手で止められる（止めた後の実行は起こさない）。
-  @discardableResult
   func run(
     _ args: [String], cwd: String, stdin: Data? = nil, environment: [String: String] = [:],
     timesOut: Bool = true, onProgress: ((String) -> Void)? = nil, handle: Handle = Handle(),
     completion: @escaping (Output) -> Void
-  ) -> Handle {
+  ) {
     run(
       args, cwd: cwd, stdin: stdin, environment: environment, timesOut: timesOut,
       onProgress: onProgress, handle: handle, transform: { $0 }, completion: completion)
   }
 
   /// `run` の、結果を裏のスレッドで変換してから main へ返す形（大きな出力の解析を main に載せない）。
-  @discardableResult
-  func run<Result>(
+  func run<Value>(
     _ args: [String], cwd: String, stdin: Data? = nil, environment: [String: String] = [:],
     timesOut: Bool = true, onProgress: ((String) -> Void)? = nil, handle: Handle = Handle(),
-    transform: @escaping (Output) -> Result, completion: @escaping (Result) -> Void
-  ) -> Handle {
+    transform: @escaping (Output) -> Value, completion: @escaping (Value) -> Void
+  ) {
     let state = RunState(
       idleTimeout: timesOut ? idleTimeout : nil,
       onStderrLine: onProgress.map { deliver in
@@ -65,7 +65,6 @@ final class GitRunner {
           handle: handle))
       DispatchQueue.main.async { completion(result) }
     }
-    return handle
   }
 
   /// 同期実行。呼び出し元スレッドでブロックする（背景キュー・テスト用）。
@@ -104,8 +103,6 @@ final class GitRunner {
     private let lock = NSLock()
     private var cancelled = false
     private var running: [ObjectIdentifier: RunState] = [:]
-
-    init() {}
 
     var isCancelled: Bool { lock.withLock { cancelled } }
 
