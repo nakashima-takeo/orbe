@@ -283,6 +283,8 @@ extension Renderer {
     if atlas.isFull { atlas.reset() }
     if slot.zones.images.isFull { slot.zones.images.reset() }
     let revealed = begin(slot, material)
+    atlas.beginFrame()
+    slot.zones.images.beginFrame()
     let built = slot.builder
     slot.build(
       material, scroll: slot.scroll.peek(at: CACurrentMediaTime()),

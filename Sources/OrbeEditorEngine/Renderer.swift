@@ -171,6 +171,8 @@ final class Renderer {
     let began = CACurrentMediaTime()
     let caretVisible = material.primaryCaret.caretVisible(at: target)
     let revealed = begin(slot, material)
+    pass.atlas.beginFrame()
+    slot.zones.images.beginFrame()
     let frame = slot.scroll.frame(at: target, material: material.revision)
     let texture = acquired.texture
     slot.build(

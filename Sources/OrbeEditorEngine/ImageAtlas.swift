@@ -1,8 +1,15 @@
 import Metal
 
 /// 区画の画像の地図（面ごと。描画スレッドだけが触る）。main が倍率で描いた画素（`ZonePixels`）を、鍵ごとに 1 回だけ頁へ
-/// 写す。頁が上限まで埋まれば埋まったことを示し（`isFull`）、そのコマの残りの画像は描かない。作り直す（`reset`）のは描画の
-/// 口で、GPU が前のコマの頁を読み終えてから——読んでいる途中の場所へ別の画素を書かない（`GlyphAtlas` と同じ契約）。
+/// 写す。頁が上限まで埋まって置けない画像は、そのコマに描かない。
+///
+/// - 前のコマまでの画像が場所を取っていたなら、埋まったことを示す（`isFull`）。描画の口が、GPU が前のコマの頁を読み終えて
+///   から作り直し（`reset`。読んでいる途中の場所へ別の画素を書かない）、そのコマを描き直す。
+/// - 空の地図から始めたコマだけで埋まったなら、作り直しても同じ所で埋まるので示さない——置けた画像だけを描き、残りは
+///   描かずに終える（描き直し続けない）。1 コマに見えている画像が地図に収まる量（上限の大きさなら頁 × 4 枚）を超えると、
+///   超えた分は描かれない。
+///
+/// `GlyphAtlas` と同じ契約。
 final class ImageAtlas {
   struct Entry {
     var page: Int
@@ -21,11 +28,18 @@ final class ImageAtlas {
   private(set) var pages: [MTLTexture] = []
   private var packers: [ShelfPacker] = []
   private var entries: [Int: Entry] = [:]
-  /// 頁が上限まで埋まって置けない画像があった（作り直すまで新しい画像は置かない）。
+  /// 前のコマまでの画像が場所を取っていて置けない画像があった（作り直すまで新しい画像は置かない）。
   private(set) var isFull = false
+  /// このコマの始まりに、前のコマまでの画像が地図にあった。
+  private var holdsEarlierFrames = false
 
   init(device: MTLDevice) {
     self.device = device
+  }
+
+  /// コマを組み始める。
+  func beginFrame() {
+    holdsEarlierFrames = !entries.isEmpty
   }
 
   /// 頁を空にする（GPU が頁を読んでいない時だけ呼ぶ）。
@@ -35,12 +49,13 @@ final class ImageAtlas {
     isFull = false
   }
 
-  /// 画素 `pixels` の置き場所（無ければ写す）。置けなければ埋まったことを示して nil。
+  /// 画素 `pixels` の置き場所（無ければ写す）。置けなければ nil（前のコマまでの画像が場所を取っていたなら埋まったことを
+  /// 示す）。
   func entry(_ pixels: ZonePixels) -> Entry? {
     if let entry = entries[pixels.key] { return entry }
     guard !isFull else { return nil }
     guard let entry = place(pixels.width, pixels.height) else {
-      isFull = true
+      isFull = holdsEarlierFrames
       return nil
     }
     pages[entry.page].replace(

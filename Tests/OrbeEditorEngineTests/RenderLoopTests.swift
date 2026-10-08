@@ -229,9 +229,7 @@ final class RenderLoopTests: EngineTestCase {
     let zone = PictureZone { _ in ZonePicture(height: 300, elements: images) }
     surface.setRows(SurfaceRows(insertions: [RowInsertion(line: 2, content: .zone(zone))]))
     driver.bind(surface.id)
-    XCTExpectFailure("バグ疑い: 地図が埋まったコマを描き直す印が毎コマ立ち、描き続けて止まらない") {
-      waitUntilPaused(surface)
-    }
+    waitUntilPaused(surface)
   }
 
   /// スレッドの時間制約（秒）。
