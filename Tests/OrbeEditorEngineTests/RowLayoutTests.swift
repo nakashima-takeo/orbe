@@ -2,9 +2,8 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 縦の並びの式——文書の行と差し込みの塊の y、y にある項目、縦の端、面自身の編集での境のずれ。壊れると、差し込みのある面で
-/// 本文・行番号・キャレット・当たりが別の行の位置に出る、差し込みの無い面の位置が 1 画素でもずれる、打鍵で差し込みが別の行へ
-/// 飛ぶ。
+/// 縦の並びの式——文書の行と差し込みの塊の y、y にある項目、縦の端。壊れると、差し込みのある面で本文・行番号・キャレット・
+/// 当たりが別の行の位置に出る、差し込みの無い面の位置が 1 画素でもずれる。
 final class RowLayoutTests: XCTestCase {
   private let lineHeight = 18.0
 
@@ -61,21 +60,5 @@ final class RowLayoutTests: XCTestCase {
     XCTAssertEqual(rows.totalHeight(lineCount: 10), 10 * 18 + 36 + 30 + 18)
     XCTAssertEqual(rows.item(atY: rows.lastTop(lineCount: 10) + 1), .block(2))
     XCTAssertEqual(rows.item(atY: rows.totalHeight(lineCount: 10)), .line(10), "最後の項目より下")
-  }
-
-  /// 編集より前の境はそのまま、後ろの境は行の増減の分だけ、置き換えた区間の中の境は区間の始まりの行へ。
-  func testBoundariesFollowEditsOfTheSurface() {
-    var rows = layout()
-    rows.shift(RowEdit(rows: 1..<2, inserted: 3, version: 1))
-    XCTAssertEqual(rows.boundaries, [4, 7, 12], "行 1 の中の改行 2 つで後ろが 2 行下がる")
-    rows.shift(RowEdit(rows: 3..<8, inserted: 1, version: 2))
-    XCTAssertEqual(rows.boundaries, [3, 3, 8], "行 3〜7 を 1 行にした——中の境は始まりへ")
-    rows.shift(RowEdit(rows: 3..<8, inserted: 5, version: 3, rolesOnly: true))
-    XCTAssertEqual(rows.boundaries, [3, 3, 8], "役割だけの変化では動かない")
-    let version = rows.version
-    rows.shift(RowEdit(rows: 9..<10, inserted: 2, version: 4))
-    XCTAssertEqual(rows.boundaries, [3, 3, 8])
-    XCTAssertEqual(rows.version, version, "後ろに境の無い編集では作り変えない")
-    XCTAssertEqual(rows.y(ofLine: 3), 3 * 18 + 66, "高さはずれても変わらない")
   }
 }

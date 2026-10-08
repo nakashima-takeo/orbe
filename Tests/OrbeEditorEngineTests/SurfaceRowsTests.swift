@@ -22,10 +22,20 @@ final class SurfaceRowsTests: EngineTestCase {
     RowInsertion(line: line, content: .lines(lines.map(InsertedLine.init)))
   }
 
-  /// 文書に無い行は本文の色で描かれ、行番号を持たない。下の文書の行（本文・行番号）は差し込みの高さだけ下に描かれ、上の
-  /// 行は動かない。
+  /// 文書に無い行は本文の色で描かれ、行番号を持たない。下の文書の行（本文・行番号・git の印・選択の地・強調の地）は差し込みの
+  /// 高さだけ下に描かれ、上の行は動かない。
   func testInsertedLinesPushTheLinesBelowDown() throws {
     let opened = try openRows()
+    let text = opened.document.text
+    var baseline = self.text(opened.document).components(separatedBy: "\n")
+    for row in [1, 4, 6] { baseline[row] = "old \(row)" }
+    baseline.insert("gone", at: 8)
+    opened.document.baseline = baseline.joined(separator: "\n")
+    XCTAssertTrue(opened.document.waitUntilCaughtUp())
+    XCTAssertFalse(opened.surface.drawn.marks.bars.isEmpty, "前提: 上と下の印・削除の印が届いている")
+    opened.surface.selectedRange = NSRange(
+      location: text.lineStart(1) + 2, length: text.lineStart(6) + 4 - text.lineStart(1) - 2)
+    opened.surface.setHighlights([NSRange(location: text.lineStart(5), length: 3)], for: .findMatch)
     let before = try pixelShot(opened)
     opened.surface.setRows(
       SurfaceRows(insertions: [insert(["- removed one", "- removed two"], at: 3)]))
@@ -115,20 +125,26 @@ final class SurfaceRowsTests: EngineTestCase {
       accuracy: 0.5, "離せば新しい端へ戻る")
   }
 
-  /// 面自身の編集で、差し込みの境が行に付いて動く。
+  /// 面自身の編集で、差し込みの境が行に付いて動く——編集より前の境は残り、後ろの境は行の増減の分だけ動き、消した区間の中の
+  /// 境は始まりへ寄る。本文を丸ごと置き換えても、境は本文の行の範囲に収まる。
   func testRowsFollowTheSurfaceEdits() throws {
     let opened = try openRows(20)
     let surface = opened.surface
     surface.setRows(SurfaceRows(insertions: [insert(["a"], at: 5), insert(["b"], at: 12)]))
-    surface.selectedRange = NSRange(location: 0, length: 0)
+    surface.selectedRange = NSRange(location: opened.document.text.lineStart(8), length: 0)
     surface.perform(.insert("new\n"))
-    XCTAssertEqual(surface.rows.boundaries, [6, 13])
-    XCTAssertEqual(surface.drawn.rows.boundaries, [6, 13], "描く材料も同じ並び")
+    XCTAssertEqual(surface.rows.boundaries, [5, 13])
+    XCTAssertEqual(surface.drawn.rows.boundaries, [5, 13], "描く材料も同じ並び")
     let text = opened.document.text
     surface.selectedRange = NSRange(
       location: text.lineStart(4), length: text.lineStart(9) - text.lineStart(4))
     surface.perform(.insert(""))
     XCTAssertEqual(surface.rows.boundaries, [4, 8], "消した区間の中の境は始まりへ")
+    surface.replaceAll(with: rows(3))
+    let lineCount = opened.document.text.lineCount
+    XCTAssertTrue(
+      surface.drawn.rows.boundaries.allSatisfy { (0...lineCount).contains($0) },
+      "丸ごと置き換えた後も、境は本文の行の範囲")
   }
 
   /// スクロールの範囲と操作は並びの高さで決まる——最後の項目（最終行の後の差し込み）を最上段まで送れ、End は最後の 1 画面、
