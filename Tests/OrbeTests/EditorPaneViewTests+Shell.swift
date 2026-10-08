@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -15,7 +16,7 @@ final class EditorPaneViewShellTests: OrbeTestCase {
   /// Esc・焦点の移動だけでなく、すべて折りたたむ・根を畳む・作成先を畳む・レールで閉じる・cd でも落ち、入力欄に
   /// 居た焦点は面の行き先（文書のテキスト面）へ移る。
   func testInlineInputIsRecreatedPerRequestAndEndsWhenItsStateDrops() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 900)
@@ -67,7 +68,7 @@ final class EditorPaneViewShellTests: OrbeTestCase {
   /// 結線され、セッション・ツリー・焦点へ届く。閉包はどれも既定値持ちなので、結線が 1 本外れても
   /// コンパイルは通り、操作が無反応のまま緑になる——それをここで固定する。
   func testShellActionsReachTheSessionTreeAndFocus() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let sub = dir.appendingPathComponent("d")
     try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
     let a = try caseFile("a.swift", "a")
@@ -175,7 +176,7 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     let before = pane.tree
     XCTAssertEqual(before.root, GitWorktreeRoot.normalizedPath("/tmp"))
 
-    let other = try XCTUnwrap(TestIsolation.caseDir).path
+    let other = TestScratch.caseDir.path
     tab.surface.currentPwd = other
     XCTAssertFalse(pane.tree === before, "作り直す")
     XCTAssertEqual(pane.tree.root, GitWorktreeRoot.root(of: other))
@@ -188,7 +189,7 @@ final class EditorPaneViewShellTests: OrbeTestCase {
 
   /// 骨の写しはセッションに追従し、文書をアクティブにするとツリーがその行を選択する。
   func testShellMirrorsTheSessionAndRevealsTheActiveDocument() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 900)

@@ -283,36 +283,22 @@ struct PaletteCard: View {
       .frame(maxWidth: .infinity)
       // 確定＝onSubmit（IME 変換確定の Enter では発火しない＝誤爆しない）。
       .onSubmit { model.onActivate() }
-      // ↑↓＝一覧ナビ、⌘↑↓＝有効な先頭/末尾行へジャンプ、→＝ドリルイン（改名中はカーソルに委ねる）、Esc＝戻る。
+      // ↑↓・esc はカード器（祖先）が先に受ける。→＝ドリルイン（改名中はカーソルに委ねる）。
       // ←＝filter 入力欄では戻る（onLeft）、editor 入力欄（改名）ではカーソル移動。
-      // 矢印は単一の catch-all に集約し ⌘ 有無で分岐する（bare ハンドラが ⌘↑ を食う不確実性を構造で排除）。
-      .onKeyPress { press in
-        switch press.key {
-        case .upArrow:
-          if press.modifiers.contains(.command) { model.onJumpTop() } else { model.onUp() }
-          return .handled
-        case .downArrow:
-          if press.modifiers.contains(.command) { model.onJumpBottom() } else { model.onDown() }
-          return .handled
-        default:
-          return .ignored
-        }
-      }
       .onKeyPress(.rightArrow) { model.onRight() ? .handled : .ignored }
       .onKeyPress(.leftArrow) {
         guard model.fieldIsFilter else { return .ignored }
         model.onLeft()
         return .handled
       }
-      // filter 入力欄でクエリが空のときだけ delete を継承解除（onDelete）へ回す。空欄 backspace は元々
-      // no-op なので後退なく相乗りできる。非空・非 filter は TextField の backspace（文字削除）に委ねる。
-      .onKeyPress(.delete) {
-        guard model.fieldIsFilter, model.query.isEmpty else { return .ignored }
+      // filter 入力欄が空のときの ⌫ だけを onDelete へ回す（空の欄では ⌫ は何も消さない）。それ以外は
+      // TextField の文字削除に委ねる。
+      .onKeyPress(keys: [.backspace]) { press in
+        guard model.fieldIsFilter, model.query.isEmpty,
+          press.modifiers.isDisjoint(with: [.command, .option, .control, .shift])
+        else { return .ignored }
         model.onDelete()
         return .handled
-      }
-      .onKeyPress(.escape) {
-        model.onEscape(); return .handled
       }
   }
 

@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeSound
@@ -9,9 +10,8 @@ final class BoardTests: XCTestCase {
 
   /// 全エントリ（カタログ 24 + scratch）の WAV と、全エントリ名を含む index.html を書く。
   func testBoardWritesEveryEntryAndTheIndex() throws {
-    let dir = FileManager.default.temporaryDirectory
+    let dir = TestScratch.caseDir
       .appendingPathComponent("orbe-sound-board-test-\(UUID().uuidString)", isDirectory: true)
-    defer { try? FileManager.default.removeItem(at: dir) }
 
     // レートは検証に十分な最低域まで下げ、テストを軽く保つ（生成経路はレートに依らない）。
     let index = try generateBoard(to: dir, rate: 8000, volume: 70)
@@ -40,9 +40,8 @@ final class BoardTests: XCTestCase {
   /// ここが崩れても board は「それらしい」見た目のまま別の音を並べるので、人間は取り違えたまま
   /// 採否を決める——名前が全部載っているかだけでは捕まらない。
   func testCatalogRowsPairEachFamilysEventsInOrder() throws {
-    let dir = FileManager.default.temporaryDirectory
+    let dir = TestScratch.caseDir
       .appendingPathComponent("orbe-sound-board-test-\(UUID().uuidString)", isDirectory: true)
-    defer { try? FileManager.default.removeItem(at: dir) }
     let html = try String(
       contentsOf: generateBoard(to: dir, rate: 8000, volume: 70), encoding: .utf8)
 

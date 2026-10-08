@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -21,7 +22,7 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
 
   /// origin（bare）と、それを clone した手元。手元の `stale` は origin の `stale` を追跡し、1 コミット遅れる。
   override func setUpWithError() throws {
-    dir = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("git").path
+    dir = TestScratch.caseDir.appendingPathComponent("git").path
     try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
     let origin = (dir as NSString).appendingPathComponent("origin.git")
     local = (dir as NSString).appendingPathComponent("web")

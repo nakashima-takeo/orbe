@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -67,7 +68,7 @@ final class EditorPaneViewGutterTests: OrbeTestCase {
   /// ならない）で、行番号の列（行の中・上端の余白・文書の直下・文書より下）も本体の地と同じ濃度。
   func testGroundStaysSingleLayeredAsTheBodyRectMoves() throws {
     let tab = TerminalTab(
-      cwd: try XCTUnwrap(TestIsolation.caseDir).path,
+      cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     pane.configure(

@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -20,7 +21,7 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
   }
 
   func testTypedNameAndReturnCreateTheFileOpenItAndFocusTheTextSurface() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 900)
@@ -43,7 +44,7 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
   }
 
   func testEscapeCancelsTheInputAndReturnsTheFocusToThePane() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 900)
@@ -63,7 +64,7 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
 
   /// 入力欄は面の配下なので、入力中も chrome キーは面が先取りして上位へ届き、通常の打鍵は入力欄に入る。
   func testChromeKeysStillWorkWhileTheInputHasTheFocus() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 900)
@@ -82,7 +83,7 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
 
   /// 入力欄の外（端末）を押して抜ければ取り消しになるが、焦点はそこに居るので面へ引き戻さない。
   func testLeavingTheInputForAnotherViewCancelsWithoutPullingTheFocusBack() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 900)
@@ -111,7 +112,7 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
 
   /// 入力中に別種の「新規」を押すと、前の入力欄が焦点を手放し、新しい入力行が焦点を取って打鍵が入る。
   func testSwitchingTheKindWhileTypingFocusesTheNewInput() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 900)
@@ -133,7 +134,7 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
   /// 焦点が面の外にある状態で入力を出すと面自身が焦点を取る。行が焦点を取る前に入力が落ちれば（同じターンで
   /// すべて折りたたむ）、焦点は面に残らず文書のテキスト面へ移る。
   func testInputEndingBeforeTheRowTakesFocusHandsTheFocusToTheTextSurface() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 900)
@@ -153,7 +154,7 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
   /// 低い窓で深い文書をアクティブにするとツリーがその行まで送り、深い挿し先の入力行も可視位置へ送られて
   /// 焦点を取る。
   func testDeepRowsAndTheInputRowAreScrolledIntoView() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     for index in 0..<20 {
       try FileManager.default.createDirectory(
         at: dir.appendingPathComponent(String(format: "d%02d", index)),

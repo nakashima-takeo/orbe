@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -18,7 +19,7 @@ final class GitRepoWorktreesListingTests: OrbeTestCase {
   private var repo: GitRepo!
 
   override func setUpWithError() throws {
-    let created = FileManager.default.temporaryDirectory
+    let created = TestScratch.caseDir
       .appendingPathComponent("orbe-listing-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: created, withIntermediateDirectories: true)
     // git は worktree のパスを realpath で報告する（`/var` → `/private/var`）。
@@ -29,10 +30,6 @@ final class GitRepoWorktreesListingTests: OrbeTestCase {
     XCTAssertTrue(git(["config", "user.name", "t"]).isSuccess)
     try commit("a", in: root)
     repo = try open()
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: dir)
   }
 
   // MARK: - worktree 一覧

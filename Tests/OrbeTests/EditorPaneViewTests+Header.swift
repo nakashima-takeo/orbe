@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -11,7 +12,7 @@ import XCTest
 @MainActor
 final class EditorPaneViewHeaderTests: OrbeTestCase {
   func testColumnHeadContentFillsTheReservedHeightWithAndWithoutADocument() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 900)
@@ -33,7 +34,7 @@ final class EditorPaneViewHeaderTests: OrbeTestCase {
 
   /// ファイルタブ行は自然幅のタブを並べ、溢れれば横スクロールし、アクティブが変われば可視位置へ送る。
   func testFileTabsOverflowScrollsToTheActiveTab() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 400)

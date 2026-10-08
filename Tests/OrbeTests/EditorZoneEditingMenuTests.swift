@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -22,7 +23,7 @@ final class EditorZoneEditingMenuTests: OrbeTestCase {
 
   private func scene() throws -> Scene {
     let tab = TerminalTab(
-      cwd: try XCTUnwrap(TestIsolation.caseDir).path,
+      cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900, height: 600)
     let document = try tab.editor.open(try caseFile("menu.swift", Self.source), as: .pinned)

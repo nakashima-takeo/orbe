@@ -1,5 +1,6 @@
 import AppKit
 import OrbeSessionLog
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -289,13 +290,12 @@ final class WindowControllerFacesTests: OrbeTestCase {
 
   /// 上段の現在地は焦点の面に追従する——端末焦点は cwd、エディター焦点は worktree ルート。
   func testLocationFollowsTheFocusedFace() throws {
-    let root = FileManager.default.temporaryDirectory
+    let root = TestScratch.caseDir
       .appendingPathComponent("orbe-faces-\(UUID().uuidString)")
     let src = root.appendingPathComponent("src")
     try FileManager.default.createDirectory(
       at: root.appendingPathComponent(".git"), withIntermediateDirectories: true)
     try FileManager.default.createDirectory(at: src, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: root) }
     let wc = try restore(
       [TabState(cwd: src.path, agent: nil, explicitTitle: nil)], rootPath: root.path)
 
@@ -316,7 +316,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
       wc.statusModel.location, [.dim(normalizedRoot + "/"), .text("src/a.txt")],
       "根の下の文書は根（dim）＋相対パス（text）")
 
-    let outside = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("o.txt")
+    let outside = TestScratch.caseDir.appendingPathComponent("o.txt")
     try Data("x".utf8).write(to: outside)
     try XCTUnwrap(wc.activeTab).openFile(outside)
     wc.flushChrome()

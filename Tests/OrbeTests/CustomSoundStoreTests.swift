@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -27,10 +28,10 @@ final class CustomSoundStoreTests: OrbeTestCase {
   func testDirectoryIsIsolated() throws {
     let dir = try XCTUnwrap(CustomSoundStore.directoryURL())
     XCTAssertEqual(dir.lastPathComponent, "sounds")
-    // 隔離根の下、ではなく **caseDir 直下**を見る——根の直下は `endCase` の削除に乗らないので、
+    // 隔離根の下、ではなく **caseDir 直下**を見る——根の直下はテスト終了の削除に乗らないので、
     // override が外れて fallback（`StateDir.base()/sounds`）へ落ちても気づけなくなる。
     XCTAssertEqual(
-      dir.deletingLastPathComponent().path, try XCTUnwrap(TestIsolation.caseDir).path,
+      dir.deletingLastPathComponent().path, TestScratch.caseDir.path,
       "置き場が per-test ディレクトリの外にある: \(dir.path)")
     XCTAssertTrue(FileManager.default.fileExists(atPath: dir.path), "参照時に作られる")
   }

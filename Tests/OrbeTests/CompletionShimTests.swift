@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -22,7 +23,7 @@ final class CompletionShimTests: OrbeTestCase {
   private var savedOrbeUserZdotdir: String?
 
   override func setUpWithError() throws {
-    home = URL(fileURLWithPath: NSTemporaryDirectory())
+    home = TestScratch.caseDir
       .appendingPathComponent("CompletionShimTests-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
     log = home.appendingPathComponent("source-order.log")
@@ -32,7 +33,6 @@ final class CompletionShimTests: OrbeTestCase {
   }
 
   override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: home)
     for (key, saved) in [("ZDOTDIR", savedZdotdir), ("ORBE_USER_ZDOTDIR", savedOrbeUserZdotdir)] {
       if let saved { setenv(key, saved, 1) } else { unsetenv(key) }
     }

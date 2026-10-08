@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -12,7 +13,7 @@ import XCTest
 @MainActor
 final class EditorPaneViewSidebarTests: OrbeTestCase {
   func testSidebarStaysOpenInNarrowColumnsWithItsShownWidthTrimmed() throws {
-    let root = try XCTUnwrap(TestIsolation.caseDir).path  // 空の根（描画の標本がツリーに被らない）
+    let root = TestScratch.caseDir.path  // 空の根（描画の標本がツリーに被らない）
     let tab = TerminalTab(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 900)
@@ -68,7 +69,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
   /// 切り詰め中のドラッグ。起点は描かれている境で記憶ではなく、境が動かないドラッグと下限までも出せない列では
   /// 記憶に触れない。
   func testDraggingInATrimmedColumnStartsFromTheDrawnEdge() throws {
-    let root = try XCTUnwrap(TestIsolation.caseDir).path
+    let root = TestScratch.caseDir.path
     let tab = TerminalTab(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 360)
@@ -110,7 +111,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
   /// 離すと書き戻す。幅はアプリ全体で 1 つなので、同じ状態を配られた別の面も同じ幅になる。
   func testDraggingTheHandleResizesTheSidebarWithinBounds() throws {
     let state = EditorSidebarState()
-    let root = try XCTUnwrap(TestIsolation.caseDir).path  // 空の根（描画の標本がツリーに被らない）
+    let root = TestScratch.caseDir.path  // 空の根（描画の標本がツリーに被らない）
     let tab = TerminalTab(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let other = TerminalTab(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     for t in [tab, other] {
@@ -158,7 +159,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
   /// 無くなり、もう一度押せば地・境の線・選択印が戻る。pane の矩形が動いても中身が追随しなければ、閉じた後に
   /// エクスプローラーの地が本体に残る／開いた後に本体の地だけが見える。置き直しは観測の非同期ホップを待つ。
   func testRailToggleRemovesAndRestoresTheExplorerContentAndTheSelectionMark() throws {
-    let root = try XCTUnwrap(TestIsolation.caseDir).path
+    let root = TestScratch.caseDir.path
     let tab = TerminalTab(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 900)
@@ -206,7 +207,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
   /// 観測の非同期ホップ越し。自分でドラッグした面だけがその場で置き直す）。
   func testSharedSidebarStateMovesEveryHostedPane() throws {
     let state = EditorSidebarState()
-    let root = try XCTUnwrap(TestIsolation.caseDir).path
+    let root = TestScratch.caseDir.path
     let tab = TerminalTab(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let other = TerminalTab(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     for t in [tab, other] {

@@ -1,4 +1,5 @@
 import GhosttyKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -19,7 +20,7 @@ final class UntrustedLinkTests: OrbeTestCase {
 
   override func setUpWithError() throws {
     try super.setUpWithError()
-    dir = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("links", isDirectory: true)
+    dir = TestScratch.caseDir.appendingPathComponent("links", isDirectory: true)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
   }
 

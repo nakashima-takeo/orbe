@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -16,7 +17,7 @@ final class GitHubCLIOpenListFetchTests: OrbeTestCase {
   private func stageGh(available: Int, pageMax: Int = 100, failAt: Int = -1, sleep: Double = 0)
     throws
   {
-    dir = FileManager.default.temporaryDirectory
+    dir = TestScratch.caseDir
       .appendingPathComponent("orbe-gh-open-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     // 引数から first・endCursor・対象（--jq の connection）を拾って記録し、1 ページぶんの JSON を返す。
@@ -61,10 +62,6 @@ final class GitHubCLIOpenListFetchTests: OrbeTestCase {
     // 戻さない——`OrbeTestCase` が毎テスト `ShellPATH.shared` を張り直すので、申告制は残さない。
     let path = dir.path
     ShellPATH.shared = ShellPATH(probe: { path })
-  }
-
-  override func tearDownWithError() throws {
-    if let dir { try? FileManager.default.removeItem(at: dir) }
   }
 
   /// 偽 `gh` が受けた呼び出し（first・カーソル）を順に返す。

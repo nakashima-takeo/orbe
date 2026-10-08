@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -81,10 +82,9 @@ extension RootFilesTests {
   /// 同じ OID の取得が上限の回数失敗すれば諦めて取り直さず（恒久失敗で毎バッチ回さない）、index が別の OID へ
   /// 動けばまた挑む。
   func testRepeatedBlobFailuresGiveUpUntilTheOIDChanges() throws {
-    let outside = FileManager.default.temporaryDirectory.appendingPathComponent(
+    let outside = TestScratch.caseDir.appendingPathComponent(
       "orbe-smudge-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: outside) }
     let tries = outside.appendingPathComponent("tries").path
     try repo.write(".gitattributes", "*.txt filter=broken\n")
     XCTAssertTrue(

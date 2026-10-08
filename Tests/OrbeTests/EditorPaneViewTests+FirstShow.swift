@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -9,7 +10,7 @@ import XCTest
 extension EditorPaneViewTests {
   func testADocumentShownInAHiddenEditorFaceWaitsOnlyWhenTheFaceAppears() throws {
     let tab = TerminalTab(
-      cwd: try XCTUnwrap(TestIsolation.caseDir).path,
+      cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 600)
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
@@ -26,7 +27,7 @@ extension EditorPaneViewTests {
 
   func testADocumentShownInAPaneOutsideAWindowDoesNotWait() throws {
     let tab = TerminalTab(
-      cwd: try XCTUnwrap(TestIsolation.caseDir).path,
+      cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let document = try tab.editor.open(try caseFile("w.swift", "let a = 1\n"), as: .pinned)
     XCTAssertNil(tab.view.editor.window, "前提: 窓に無い")

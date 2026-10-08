@@ -1,4 +1,5 @@
 import Foundation
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorCore
@@ -8,22 +9,8 @@ import XCTest
 @MainActor
 final class EditorDocumentDiskTests: XCTestCase {
   private let registry = LanguageRegistry(queriesRoot: Queries.root)
-  private var root: URL!
-
-  override func setUpWithError() throws {
-    try super.setUpWithError()
-    root = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-disk-\(UUID().uuidString)", isDirectory: true)
-    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: root)
-    try super.tearDownWithError()
-  }
-
   private func temp(_ name: String, _ text: String) throws -> URL {
-    let url = root.appendingPathComponent(name)
+    let url = TestScratch.caseDir.appendingPathComponent(name)
     try Data(text.utf8).write(to: url)
     return url
   }

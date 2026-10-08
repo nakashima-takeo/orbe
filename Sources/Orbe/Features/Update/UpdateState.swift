@@ -146,13 +146,12 @@ import Observation
 
   func dismissToast() { toastVisible = false }
 
-  /// セッション終了（Sparkle の dismissUpdateInstallation）。進行中の見かけ（確認中・DL中）だけを畳む。
+  /// セッション終了（Sparkle の dismissUpdateInstallation）。進行中の見かけ（確認中・DL中）だけを、
+  /// 適用待ちがあれば readyToRestart、無ければ idle へ畳む。
   /// 確定状態（最新・失敗・適用待ち）は残す——設定の状態カードが「真実の置き場」（見本 2c）。
   func settleTransientPhase() {
     switch phase {
-    case .checking:
-      phase = .idle
-    case .downloading:
+    case .checking, .downloading:
       phase = ready != nil ? .readyToRestart : .idle
     case .idle, .upToDate, .failed, .readyToRestart:
       break

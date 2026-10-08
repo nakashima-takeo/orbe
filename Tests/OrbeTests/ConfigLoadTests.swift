@@ -1,5 +1,6 @@
 import Foundation
 import GhosttyKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -24,7 +25,7 @@ final class ConfigLoadTests: OrbeTestCase {
     // 層1・層2 の override はハーネスが毎テスト張り直すので、ここで退避する必要はない。
     // `XDG_CONFIG_HOME` はプロセス env なのでハーネスの管轄外＝自分で戻す。
     savedXdgConfigHome = ProcessInfo.processInfo.environment["XDG_CONFIG_HOME"]
-    dir = try XCTUnwrap(TestIsolation.caseDir)
+    dir = TestScratch.caseDir
   }
 
   override func tearDownWithError() throws {

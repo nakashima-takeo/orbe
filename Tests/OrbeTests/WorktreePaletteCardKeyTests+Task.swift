@@ -1,15 +1,15 @@
 import AppKit
+import OrbeTestSupport
 import SwiftUI
 import XCTest
 
 @testable import Orbe
 
 /// タスクから開いた ⌘T のカードが、主の PR の値を頼み、その答え（取れても取れなくても）で預かった ↵ を解く
-/// 配線と、日本語入力の変換中の ⌫ で札を外さないこと。
+/// 配線。
 ///
 /// 壊れると何が起きるか: 開いている間に agent がタスクの主を PR に変えると、その値を誰も頼まず、↵ が
-/// 預かられたままパレットが閉じられなくなる。変換中の文字を ⌫ で消そうとしただけで札が外れ、↵ しても
-/// タスクが進行中にならない。
+/// 預かられたままパレットが閉じられなくなる。
 extension WorktreePaletteCardKeyTests {
   /// 頼まれた項目を溜め、答えはテストが渡す取得。
   private final class PendingItems {
@@ -30,7 +30,7 @@ extension WorktreePaletteCardKeyTests {
 
   /// 1 コミットのリポジトリ（remote なし）を caseDir に作る。
   private func repository() throws -> String {
-    let dir = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("repo").path
+    let dir = TestScratch.caseDir.appendingPathComponent("repo").path
     try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
     for args in [
       ["init", "-q", "-b", "main"], ["config", "user.email", "t@example.com"],
@@ -108,43 +108,5 @@ extension WorktreePaletteCardKeyTests {
       XCTAssertTrue(wait { !executed.isEmpty }, "\(name): 預かった ↵ が解ける")
       withExtendedLifetime(provider) {}
     }
-  }
-
-  private func pressThroughTheEventQueue(
-    _ keyCode: UInt16, _ characters: String, to window: NSWindow
-  ) {
-    guard
-      let event = NSEvent.keyEvent(
-        with: .keyDown, location: .zero, modifierFlags: [],
-        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-        context: nil, characters: characters, charactersIgnoringModifiers: characters,
-        isARepeat: false, keyCode: keyCode)
-    else { return XCTFail("キーイベントを作れない") }
-    NSApp.postEvent(event, atStart: true)
-    guard
-      let dequeued = NSApp.nextEvent(
-        matching: .keyDown, until: Date().addingTimeInterval(1), inMode: .default, dequeue: true)
-    else { return XCTFail("キーイベントがキューから取れない") }
-    NSApp.sendEvent(dequeued)
-    pump(0.15)
-  }
-
-  /// 変換中の文字は入力欄の文字に入らないので、入力欄は空に見える。それでも ⌫ は変換に使わせ、札を外さない。
-  func testBackspaceWhileComposingKeepsTheTaskButWithoutCompositionRemovesIt() throws {
-    let composing = DesignSceneFixtures.worktreePaletteIssueModel()
-    let window = mount(composing)
-    let editor = try XCTUnwrap(window.firstResponder as? NSTextView, "前提: 入力欄の field editor")
-    editor.setMarkedText(
-      "か", selectedRange: NSRange(location: 1, length: 0),
-      replacementRange: NSRange(location: NSNotFound, length: 0))
-    XCTAssertTrue(editor.hasMarkedText(), "前提: 変換中")
-    XCTAssertEqual(composing.query, "", "前提: 入力欄の文字は空")
-
-    pressThroughTheEventQueue(51, "\u{7F}", to: window)
-    XCTAssertEqual(composing.taskContextID, 3, "変換中の ⌫ では外さない")
-
-    let plain = DesignSceneFixtures.worktreePaletteIssueModel()
-    pressThroughTheEventQueue(51, "\u{7F}", to: mount(plain))
-    XCTAssertNil(plain.taskContextID, "変換中でなければ外す")
   }
 }

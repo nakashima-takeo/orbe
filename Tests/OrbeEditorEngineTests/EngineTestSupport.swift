@@ -1,6 +1,7 @@
 import AppKit
 import Metal
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorEngine
@@ -8,20 +9,9 @@ import XCTest
 /// 面のテストの足場。本物の文書（`EditorDocument`）に面を結び、窓に載せずに大きさと倍率を与える。
 @MainActor
 class EngineTestCase: XCTestCase {
-  /// テスト 1 件の作業ディレクトリ。
-  private(set) var root: URL!
-
   override func setUpWithError() throws {
     try super.setUpWithError()
     try XCTSkipIf(RenderThread.device == nil, "Metal の装置が無い環境では面を作らない")
-    root = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-engine-\(UUID().uuidString)", isDirectory: true)
-    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-  }
-
-  override func tearDownWithError() throws {
-    if let root { try? FileManager.default.removeItem(at: root) }
-    try super.tearDownWithError()
   }
 
   /// 見本の見え方（Orbe の既定に近い値。色は外観に依らない固定値）。
@@ -99,7 +89,8 @@ class EngineTestCase: XCTestCase {
     _ text: String, name: String = "a.swift", size: CGSize = CGSize(width: 800, height: 600),
     scale: CGFloat = 2, style: TextSurfaceStyle? = nil, waitForColors: Bool = true
   ) throws -> Opened {
-    let url = root.appendingPathComponent(UUID().uuidString).appendingPathComponent(name)
+    let url = TestScratch.caseDir.appendingPathComponent(UUID().uuidString).appendingPathComponent(
+      name)
     try FileManager.default.createDirectory(
       at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     try Data(text.utf8).write(to: url)

@@ -24,7 +24,6 @@ final class ProjectSearchPaneTests: OrbeTestCase {
   /// 動かさない（検索は根に依る）。
   func host(_ files: [String: String]) throws -> Hosted {
     let repo = try TempGitRepo(name: "orbe-search-pane")
-    addTeardownBlock { repo.cleanup() }
     for (path, text) in files { try repo.write(path, text) }
     let tab = TerminalTab(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor

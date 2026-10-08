@@ -205,7 +205,6 @@ extension ProjectSearchPaneTests {
   func testChangingTheRootSearchesAgainOnlyWhileThePanelIsSeen() throws {
     let hosted = try host(["a.txt": "needle\n"])
     let other = try TempGitRepo(name: "orbe-search-pane-other")
-    addTeardownBlock { other.cleanup() }
     try other.write("m.txt", "needle\n")
     searchAll(hosted, "needle")
 

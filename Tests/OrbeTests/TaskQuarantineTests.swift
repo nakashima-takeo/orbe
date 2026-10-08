@@ -192,7 +192,6 @@ final class TaskQuarantineTests: OrbeTestCase {
     // 退避（＝ディレクトリへの新しいエントリ作成）だけを失敗させる。root では権限が効かないので skip する。
     let fm = FileManager.default
     try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dir.path)
-    defer { try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
     let probe = dir.appendingPathComponent("probe")
     if (try? Data().write(to: probe)) != nil {
       try? fm.removeItem(at: probe)

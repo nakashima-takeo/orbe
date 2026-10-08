@@ -1,4 +1,5 @@
 import Foundation
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorCore
@@ -8,24 +9,9 @@ import XCTest
 @MainActor
 final class EditorDocumentTests: XCTestCase {
   private let registry = LanguageRegistry(queriesRoot: Queries.root)
-  /// テスト 1 件の作業ディレクトリ。掘ったら消す（他ターゲットのテストと同じ流儀）。
-  private var root: URL!
-
-  override func setUpWithError() throws {
-    try super.setUpWithError()
-    root = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-doc-\(UUID().uuidString)", isDirectory: true)
-    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: root)
-    try super.tearDownWithError()
-  }
-
   /// 作業ディレクトリの中に、呼ぶたびに別の場所へファイルを置く。
   private func temp(_ name: String, _ text: String) throws -> URL {
-    let dir = root.appendingPathComponent(UUID().uuidString, isDirectory: true)
+    let dir = TestScratch.caseDir.appendingPathComponent(UUID().uuidString, isDirectory: true)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let url = dir.appendingPathComponent(name)
     try Data(text.utf8).write(to: url)

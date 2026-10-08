@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -53,7 +54,7 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
   // MARK: - 作成可否 / 作成
 
   func testCanCreateRequiresExistingDirectory() {
-    let existing = WorkspaceCreateModel(path: NSTemporaryDirectory())
+    let existing = WorkspaceCreateModel(path: TestScratch.caseDir.path)
     XCTAssertTrue(existing.pathExists)
     XCTAssertTrue(existing.canCreate, "実在ディレクトリ＋非空名で作成可")
 
@@ -63,18 +64,18 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
   }
 
   func testCanCreateFalseWhenNameEmpty() {
-    let m = WorkspaceCreateModel(path: NSTemporaryDirectory())
+    let m = WorkspaceCreateModel(path: TestScratch.caseDir.path)
     m.setName("   ")  // 空白のみ＝空名
     XCTAssertFalse(m.canCreate, "実在パスでも空名なら作成不可")
   }
 
   func testSubmitFiresOnCreateWhenValid() {
-    let m = WorkspaceCreateModel(path: NSTemporaryDirectory())
+    let m = WorkspaceCreateModel(path: TestScratch.caseDir.path)
     m.setName("infra")
     var created: (String, String)?
     m.onCreate = { created = ($0, $1) }
     m.submit()
-    XCTAssertEqual(created?.0, NSTemporaryDirectory(), "rootPath は入力パスそのまま（~ は store が展開）")
+    XCTAssertEqual(created?.0, TestScratch.caseDir.path, "rootPath は入力パスそのまま（~ は store が展開）")
     XCTAssertEqual(created?.1, "infra", "name は実効名")
   }
 
@@ -222,7 +223,7 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
   // MARK: - git clone: 作成可否
 
   func testCloneCanCreateRequiresUrlAndParent() {
-    let parent = NSTemporaryDirectory()
+    let parent = TestScratch.caseDir.path
     let m = WorkspaceCreateModel(path: parent)
     m.setSource(.clone)
     XCTAssertFalse(m.canCreate, "URL 空は作成不可")
@@ -235,7 +236,7 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
   // MARK: - git clone: 実行配線（runner 注入・実 git 非依存）
 
   func testCloneFailureSetsErrorAndSkipsOnCreate() {
-    let parent = NSTemporaryDirectory()
+    let parent = TestScratch.caseDir.path
     let m = WorkspaceCreateModel(path: parent)
     m.setSource(.clone)
     m.setCloneURL("https://github.com/no/such.git")
@@ -253,7 +254,7 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
   func testCloneTimeoutShowsDedicatedMessage() {
     // CI は英語なので、`.en` だと注入が外れて既定ストア（`.systemDefault`）へ落ちても緑になる。
     let localization = LocalizationStore(language: .ja)
-    let m = WorkspaceCreateModel(path: NSTemporaryDirectory(), localization: localization)
+    let m = WorkspaceCreateModel(path: TestScratch.caseDir.path, localization: localization)
     m.setSource(.clone)
     m.setCloneURL("https://github.com/you/repo.git")
     m.onClone = { _, _, done in done(.timedOut) }
@@ -265,7 +266,7 @@ final class WorkspaceCreateModelTests: OrbeTestCase {
   }
 
   func testCloneIgnoresReentrantSubmit() {
-    let parent = NSTemporaryDirectory()
+    let parent = TestScratch.caseDir.path
     let m = WorkspaceCreateModel(path: parent)
     m.setSource(.clone)
     m.setCloneURL("https://github.com/you/repo.git")

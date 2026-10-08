@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -21,6 +22,7 @@ import XCTest
 /// テストは `NSApp.run` を回さないので、待つ間はアプリの出来事を配る（→ `runShownWindow`）。配らないと、窓が見えている
 /// 知らせも人の入力も面に届かず、面は本文を描かない。アプリと同じメインメニュー（`MainMenu`）を据える——⌘A ⌘C ⌘X ⌘V
 /// ⌘Z ⌘⇧Z は編集メニューの key equivalent が first responder へ配るので、無いと人がアプリと同じ操作を試せない。
+/// 窓は主窓と同じ `OrbeWindow` にし、キーが窓を通る道をアプリと揃える。
 @MainActor
 final class EditorRowsTrialTests: OrbeTestCase {
   private var environment: [String: String] { ProcessInfo.processInfo.environment }
@@ -128,9 +130,9 @@ final class EditorRowsTrialTests: OrbeTestCase {
   private func show(_ text: String) throws -> Shown {
     let queries = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
     let tab = TerminalTab(
-      cwd: try XCTUnwrap(TestIsolation.caseDir).path,
+      cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: queries))
-    let window = NSWindow(
+    let window = OrbeWindow(
       contentRect: NSRect(x: 120, y: 120, width: 1200, height: 800),
       styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
     window.title = "区画の試しの場"

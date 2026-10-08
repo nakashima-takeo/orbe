@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -5,21 +6,16 @@ import XCTest
 /// AgentCatalog.resolve（PATH 文字列からの実行ファイル解決・検出の純粋部分）の検証。
 /// 走査する PATH をどう得るかは `ShellPATH` の関心で、`ShellPATHTests` が持つ。
 final class AgentCatalogTests: OrbeTestCase {
-  private var base: URL!
   private var dirA: URL!
   private var dirB: URL!
 
   override func setUpWithError() throws {
-    base = URL(fileURLWithPath: NSTemporaryDirectory())
+    let base = TestScratch.caseDir
       .appendingPathComponent("AgentCatalogTests-\(UUID().uuidString)")
     dirA = base.appendingPathComponent("a")
     dirB = base.appendingPathComponent("b")
     try FileManager.default.createDirectory(at: dirA, withIntermediateDirectories: true)
     try FileManager.default.createDirectory(at: dirB, withIntermediateDirectories: true)
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: base)
   }
 
   private func place(_ name: String, in dir: URL, executable: Bool = true) throws -> String {

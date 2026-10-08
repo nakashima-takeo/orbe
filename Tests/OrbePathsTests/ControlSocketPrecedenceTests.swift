@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbePaths
@@ -9,12 +10,8 @@ final class ControlSocketPrecedenceTests: XCTestCase {
   private var stateDir: URL!
 
   override func setUpWithError() throws {
-    stateDir = FileManager.default.temporaryDirectory
+    stateDir = TestScratch.caseDir
       .appendingPathComponent("orbe-paths-tests-\(UUID().uuidString)", isDirectory: true)
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: stateDir)
   }
 
   /// ORBE_STATE_DIR（明示）と ORBE_SOCK（暗黙）の両方があるとき、明示が勝つ。

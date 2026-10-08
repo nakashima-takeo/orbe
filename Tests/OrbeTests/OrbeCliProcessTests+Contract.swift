@@ -1,5 +1,6 @@
 import Foundation
 import OrbePaths
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -97,7 +98,7 @@ extension OrbeCliProcessTests {
   /// socket 不達（Orbe 未起動・タブ外）はクラッシュせず exit 1 と構造化メッセージ。
   /// `--json` ではそれも stdout の `{"error":{code,message}}` に載る。
   func testUnreachableSocketExitsOneWithStructuredMessage() throws {
-    let missing = TestIsolation.root.appendingPathComponent("no-orbe-here").path
+    let missing = TestScratch.caseDir.appendingPathComponent("no-orbe-here").path
     let plain = ControlProcess.orbWithoutServer(
       ["ws", "list"], env: [OrbePaths.stateDirEnvVar: missing])
     failure(plain, code: 1, message: "Orbe not running (cannot connect", "socket 不達")

@@ -20,7 +20,6 @@ final class GitHangFixtureTests: OrbeTestCase {
   /// min を取っても差が残る。
   func testInstalledExecutableCostsNoFirstExecEvaluation() throws {
     let fixture = try GitHangFixture()
-    addTeardownBlock { fixture.cleanup() }
 
     let marker = fixture.dir.appendingPathComponent("hook-ran").path
     var firsts: [TimeInterval] = []
