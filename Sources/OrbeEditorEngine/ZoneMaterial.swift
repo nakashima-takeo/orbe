@@ -272,6 +272,11 @@ final class ZonePainter {
     return font
   }
 
+  /// 鍵 `keys` の画素の覚えだけを残す（どの区画の材料も指さなくなった画像と画素を手放す）。
+  func keep(images keys: Set<Int>) {
+    images = images.filter { keys.contains($0.value.pixels.key) }
+  }
+
   /// 画像を矩形の大きさ × 倍率の画素に、外観で描く（覚えていれば使い回す。辺が地図に置ける上限を超えれば描かない）。
   private func pixels(_ image: ZoneImage, _ look: Look) -> ZonePixels? {
     let (appearance, space, scale) = (look.appearance, look.space, look.scale)

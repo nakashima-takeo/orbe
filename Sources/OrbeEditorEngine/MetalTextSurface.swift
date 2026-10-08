@@ -70,6 +70,8 @@ final class MetalTextSurface: TextSurface {
   var hovering = false
   /// 取引の中で、区画の絵の高さが並びの高さと違うものを写した（取引の終わりに並びを組み直す）。
   var zoneHeightsChanged = false
+  /// 取引の中で、区画を写したか外した（取引の終わりに、どの区画も指さない画像の覚えを手放す）。
+  var zonesRepainted = false
   /// 面自身の入力の処理の入れ子の深さ（→ `inputScope`）。
   var inputDepth = 0
   /// 描画スレッドへ頼んだ横の「見えるところまで」の通し番号。

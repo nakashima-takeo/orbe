@@ -35,6 +35,7 @@ extension MetalTextSurface {
     let ids = Set(list.map(ObjectIdentifier.init))
     for (id, entry) in zones where !ids.contains(id) {
       zones[id] = nil
+      zonesRepainted = true
       orphanFields(of: entry, keeping: [])
       transaction?.writes.append { $0.zones[id] = nil }
       if case .zoneText = primary, zoneSelection?.zone == id { setPrimary(.body) }
@@ -67,6 +68,7 @@ extension MetalTextSurface {
     let previous = entry.hits
     entry.material = material
     entry.hits = hits
+    zonesRepainted = true
     for field in hits.fields {
       guard let site = fields[field.field.id] else { continue }
       precondition(site.zone == nil || site.zone == id, "入力欄の id は面の中で一意（2 つの区画に置かない）")
@@ -108,8 +110,9 @@ extension MetalTextSurface {
 
   /// 取引の終わりに、区画を今に合わせる（取引の中）——本文の区画の幅が変わっていれば絵を問い直し、高さが変わった区画で
   /// 並びを組み直し、どの区画も描いていない入力欄の場を閉じ（主なら本文が主になる）、主の入力欄が無ければ本文を主にする。
+  /// 区画を写したか外したなら、どの区画の材料も指さない画像の覚えを手放す。
   func settleZones() {
-    guard !zones.isEmpty || !fields.isEmpty else { return }
+    guard !zones.isEmpty || !fields.isEmpty || zonesRepainted else { return }
     let width = zoneWidth
     for entry in zones.values where entry.width != width {
       entry.width = width
@@ -123,6 +126,10 @@ extension MetalTextSurface {
       fields[id] = nil
       let serial = site.serial
       transaction?.writes.append { $0.fields[serial] = nil }
+    }
+    if zonesRepainted {
+      zonesRepainted = false
+      painter.keep(images: Set(zones.values.flatMap { $0.material.images.map(\.pixels.key) }))
     }
   }
 

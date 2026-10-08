@@ -91,4 +91,34 @@ extension SurfaceZonesTests {
     let line = try XCTUnwrap(surface.zones[ObjectIdentifier(padded)]?.hits.lines.first)
     XCTAssertEqual(line.origin.x, 14, "当たりの行の左端も余白の分")
   }
+
+  /// 画像は辺が地図の上限（`ImageAtlas.maximumSide`）までなら描き、超えれば描かない。描き直しをまたいで同じ画像は同じ
+  /// 画素を使い回し、区画を外せば覚えを手放す（もう一度置けば描き直す）。
+  func testImagesUpToTheLimitAreDrawnAndForgottenWhenNoZoneUsesThem() throws {
+    let opened = try hostedRows()
+    let surface = opened.surface
+    let side = CGFloat(ImageAtlas.maximumSide) / surface.scale
+    let zone = PictureZone { _ in
+      ZonePicture(
+        height: 300,
+        elements: [
+          .image(
+            ZoneImage(frame: CGRect(x: 0, y: 0, width: side, height: side), image: ThreadZone.glyph)
+          ),
+          .image(
+            ZoneImage(
+              frame: CGRect(x: 0, y: 0, width: side + 1, height: 10), image: ThreadZone.glyph)),
+        ])
+    }
+    surface.setRows(self.zone(zone, at: 2))
+    let images = try material(surface, zone).images
+    XCTAssertEqual(images.map(\.pixels.width), [ImageAtlas.maximumSide], "上限を超える画像は描かない")
+    let key = images[0].pixels.key
+    surface.redrawZone(zone)
+    XCTAssertEqual(try material(surface, zone).images.first?.pixels.key, key, "同じ画像は使い回す")
+    surface.setRows(SurfaceRows())
+    surface.setRows(self.zone(zone, at: 2))
+    XCTAssertNotEqual(
+      try material(surface, zone).images.first?.pixels.key, key, "外した区画の画像の覚えは手放した")
+  }
 }
