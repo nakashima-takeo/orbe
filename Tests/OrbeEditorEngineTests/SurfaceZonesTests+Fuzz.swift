@@ -5,10 +5,11 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// 主が本文でない間に本文へ直接届く操作（view へのセレクタ・契約の口・IME の呼び出し）を、入力欄の打鍵・区画の文の選択・
-/// Esc・押下と混ぜて何千手流しても、本文の写し・カーソルが文書と一致し、入力欄の場の文・カーソル・変換中の文字が入力欄の
-/// 文と一致し、主と区画の選択が規則どおり（区画の文が主なら選択がまとまりの中にあり、そうでなければ選択は無い。変換中
-/// なのは主の場だけ）で、最後に本文と入力欄の undo を尽くすとそれぞれ元に戻る。壊れると「ある順の操作でだけ」返信の
-/// 字がソースへ入る・undo が別の場を戻す・変換中の字が場からずれる。
+/// Esc・押下と混ぜて何千手流しても、打鍵・削除・undo / redo は主の場にだけ効き、契約の選択の口は主を本文にし、本文の写し・
+/// カーソルが文書と一致し、入力欄の場の文・カーソル・変換中の文字が入力欄の文と一致し、主と区画の選択が規則どおり（区画の
+/// 文が主なら選択がまとまりの中にあり、そうでなければ選択は無い。変換中なのは主の場だけ）で、最後に本文と入力欄の undo を
+/// 尽くすとそれぞれ元に戻る。壊れると「ある順の操作でだけ」返信の字がソースへ入る・undo が別の場を戻す・変換中の字が場から
+/// ずれる。
 extension SurfaceZonesTests {
   func testRandomOperationsAcrossTheBodyFieldsAndZoneTextStayConsistent() throws {
     for seed: UInt64 in [0x20e, 3, 17] { try fuzz(seed: seed, steps: 2000) }
@@ -29,8 +30,24 @@ extension SurfaceZonesTests {
     surface.setRows(zone(thread, at: 3))
     var generator = SplitMix(seed: seed)
     for index in 0..<steps {
-      try step(Int.random(in: 0..<22, using: &generator), on: opened, thread, &generator)
-      try check(opened, field, "seed \(seed) step \(index)")
+      let kind = Int.random(in: 0..<22, using: &generator)
+      let before = (primary: surface.primary, body: text(opened.document), reply: field.string)
+      try step(kind, on: opened, thread, &generator)
+      let label = "seed \(seed) step \(index)"
+      try check(opened, field, label)
+      switch kind {
+      case 4...8:
+        // 打鍵・削除・undo / redo は主の場にだけ効く。
+        if before.primary != .body {
+          XCTAssertEqual(text(opened.document), before.body, "\(label): 主でない本文は変わらない")
+        }
+        if before.primary != .field("reply") {
+          XCTAssertEqual(field.string, before.reply, "\(label): 主でない入力欄は変わらない")
+        }
+      case 9:
+        XCTAssertEqual(surface.primary, .body, "\(label): 契約の選択の口は主を本文にする")
+      default: break
+      }
     }
     surface.setPrimary(.body)
     let body = try XCTUnwrap(view.undoManager)
