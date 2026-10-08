@@ -78,6 +78,9 @@ enum TestIsolation {
     // 開発者が launchd に配った GUI の askpass は、`GitRunner` がそのまま使う（対話の封じの例外）。テストの git に
     // ダイアログを出させず、封じの結果を手元の環境に依らせない。
     unsetenv("SSH_ASKPASS")
+    // 開発者の `GIT_EDITOR`（`true` 等のすぐ返るもの）を残すと、エディタの封じが外れてもテストの git が待たずに返り、
+    // 封じのテストが手元で落ちない。
+    unsetenv("GIT_EDITOR")
     // ghostty のリソース根（theme の探索先）。libghostty は `ghostty_init` で 1 度だけ読むので、どの
     // テスト本体よりも前に張る。張らないと Orbe / Ghostty の端末から起動した `swift test` は親の
     // インストール済み .app を読み、CI と違う結果になる。`app/` は .app の `Resources/ghostty` と同じ
