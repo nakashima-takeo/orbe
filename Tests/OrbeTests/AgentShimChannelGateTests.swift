@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 /// 状態報告シム（`app/agent-plugin/.../hooks/orbe-agent-status.sh`）のチャネルゲートを実 `/bin/sh` で
@@ -25,7 +26,7 @@ final class AgentShimChannelGateTests: OrbeTestCase {
   private var reportLog: URL!
 
   override func setUpWithError() throws {
-    work = URL(fileURLWithPath: NSTemporaryDirectory())
+    work = TestScratch.caseDir
       .appendingPathComponent("AgentShimChannelGateTests-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
     pluginRoot = work.appendingPathComponent("plugin")
@@ -39,10 +40,6 @@ final class AgentShimChannelGateTests: OrbeTestCase {
     try Data(script.utf8).write(to: reportBin)
     try FileManager.default.setAttributes(
       [.posixPermissions: 0o755], ofItemAtPath: reportBin.path)
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: work)
   }
 
   /// `hooks/channel`（実体化時に Orbe が刻む bundle ID）を置く。

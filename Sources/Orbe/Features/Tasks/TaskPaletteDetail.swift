@@ -140,7 +140,7 @@ struct TaskPaletteDetail: View {
         .tint(Color.theme.accentPrimary)
         .focused(focus, equals: .edit(field))
         .onSubmitIgnoringKeyRepeat { model.endEditing(commit: true) }
-        .onKeyPress { model.handleEditKey($0, composing: IMEComposition.isActive) }
+        .onKeyPress { model.handleEditKey($0) }
         .opacity(isEditing(field) ? 1 : 0)
         .allowsHitTesting(isEditing(field))
       if !isEditing(field) { display() }
@@ -266,7 +266,7 @@ struct TaskPaletteDetail: View {
         .tint(Color.theme.accentPrimary)
         .scrollContentBackground(.hidden)
         .focused(focus, equals: .edit(.description))
-        .onKeyPress { model.handleEditKey($0, composing: IMEComposition.isActive) }
+        .onKeyPress { model.handleEditKey($0) }
         .opacity(isEditing(.description) ? 1 : 0)
         .allowsHitTesting(isEditing(.description))
       if !isEditing(.description) {

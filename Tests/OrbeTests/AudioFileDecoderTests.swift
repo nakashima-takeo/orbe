@@ -1,5 +1,6 @@
 import AVFoundation
 import OrbeSound
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -25,7 +26,7 @@ final class AudioFileDecoderTests: OrbeTestCase {
   private func writeWAV(
     _ samples: [Float], sampleRate: Double, channels: AVAudioChannelCount = 1, named name: String
   ) throws -> URL {
-    let url = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent(name)
+    let url = TestScratch.caseDir.appendingPathComponent(name)
     let format = try XCTUnwrap(
       AVAudioFormat(
         commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: channels,
@@ -140,7 +141,7 @@ final class AudioFileDecoderTests: OrbeTestCase {
 
   /// 音声でないファイル・不在のファイルは nil（再生層はここで紋章の同 event 音へ退避する）。
   func testUnreadableFilesYieldNil() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let garbage = dir.appendingPathComponent("not-audio.wav")
     try Data("this is not audio".utf8).write(to: garbage)
     XCTAssertNil(

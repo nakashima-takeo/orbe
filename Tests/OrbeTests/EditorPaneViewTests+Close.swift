@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -12,7 +13,7 @@ import XCTest
 @MainActor
 final class EditorPaneViewCloseTests: OrbeTestCase {
   func testFileTabCloseDoesNotMoveTheFocus() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 900)
@@ -36,7 +37,6 @@ final class EditorPaneViewCloseTests: OrbeTestCase {
 
   func testClosingATabFreesItsPaneWhileAnotherTabKeepsTheRootService() throws {
     let repo = try TempGitRepo()
-    defer { repo.cleanup() }
     weak var pane: EditorPaneView?
     weak var tree: FileTree?
     weak var document: EditorDocument?

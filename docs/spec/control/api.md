@@ -1,7 +1,7 @@
 ---
 title: 制御 API（外部 → Orbe）
 description: Unix socket 上の JSON-RPC でタブ/workspace/エージェント/タスクを操作する out-of-band 制御チャネルと、イベント履歴（seq）・待機・MCP ブリッジ・ツール群・mount 境界
-updated: 2026-10-05
+updated: 2026-10-07
 ---
 
 # 制御 API（外部 → Orbe）
@@ -20,7 +20,7 @@ Unix domain socket `control.sock`（workspaces.json と並置・パーミッシ�
 
 - `-32700` 行が JSON テキストとして読めない（壊れた JSON・不正 UTF-8・最上位スカラ）。`id` は null。
 - `-32600` JSON だがリクエストオブジェクトでない（配列・`method` 欠落）。`id` は取れれば返す。
-- `-32601` 未知の method。
+- `-32601` 未知の method。method 名だけで決まり、ウィンドウの有無を見ない——「その動詞が無い」と「今は実行できない」をクライアントが状態に依らず区別できるように。
 - `-32602` params の欠落・型不一致・値域外。
 - `-32004` 宛先（tab / workspace / タスク）が見つからない。宛先 ID を解決へ直に渡すメソッド（`get_tab_text` / `send_text` / `send_key` / `report_agent` / `completion_accept`）は `tabId` の欠落・型不一致もここに落ちる（解決の前に検証を挟むメソッドは `-32602`）。
 - `-32006` `wait_for_event` の `after` が履歴の保持範囲より古い（対処は seq を取り直す。呼び出し側のバグである `-32602` と分ける）。

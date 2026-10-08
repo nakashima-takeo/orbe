@@ -86,7 +86,7 @@ final class WindowController: NSObject, NSWindowDelegate {
 
   override init() {
     let frame = NSRect(x: 0, y: 0, width: 800, height: 500)
-    window = NSWindow(
+    window = OrbeWindow(
       contentRect: frame,
       styleMask: [.titled, .closable, .resizable, .miniaturizable, .fullSizeContentView],
       backing: .buffered,

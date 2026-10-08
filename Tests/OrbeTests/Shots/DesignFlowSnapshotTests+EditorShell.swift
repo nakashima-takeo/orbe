@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import SwiftUI
 import XCTest
 
@@ -10,7 +11,7 @@ import XCTest
 extension DesignFlowSnapshotTests {
   private func editorScene() throws -> EditorShellFixtures.Scene {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
-    let scene = try EditorShellFixtures.scene(queriesRoot: queriesRoot)
+    let scene = try EditorShellFixtures.scene(queriesRoot: queriesRoot, in: TestScratch.caseDir)
     scene.warmUp()
     pumpMain(until: { scene.isReady }, "git バッジが揃う")
     return scene

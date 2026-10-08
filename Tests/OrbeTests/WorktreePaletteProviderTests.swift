@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -10,14 +11,10 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
   private var dir: URL!
 
   override func setUpWithError() throws {
-    let created = FileManager.default.temporaryDirectory
+    let created = TestScratch.caseDir
       .appendingPathComponent("orbe-wtprovider-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: created, withIntermediateDirectories: true)
     dir = URL(fileURLWithPath: String(cString: realpath(created.path, nil)))
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: dir)
   }
 
   /// ブランチ名の有効性は git が答える。古い問いの答えは model が捨てる（今の入力にだけ効く）。

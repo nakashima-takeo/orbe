@@ -17,10 +17,6 @@ final class UnsavedGateTests: OrbeTestCase {
     repo = try TempGitRepo()
   }
 
-  override func tearDownWithError() throws {
-    repo.cleanup()
-  }
-
   private func session() -> EditorSession {
     EditorSession(surfaces: EditorSurfaces(queriesRoot: nil))
   }

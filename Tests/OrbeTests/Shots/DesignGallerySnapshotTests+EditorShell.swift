@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import SwiftUI
 import XCTest
 
@@ -8,7 +9,7 @@ import XCTest
 extension DesignGallerySnapshotTests {
   func renderEditorShellSnapshots(dir: URL) throws {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
-    let scene = try EditorShellFixtures.scene(queriesRoot: queriesRoot)
+    let scene = try EditorShellFixtures.scene(queriesRoot: queriesRoot, in: TestScratch.caseDir)
     defer { scene.cleanup() }
     scene.warmUp()
     pumpMain(until: { scene.isReady }, "git バッジが揃う")

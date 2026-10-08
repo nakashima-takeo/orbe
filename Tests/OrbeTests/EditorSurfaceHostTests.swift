@@ -1,5 +1,6 @@
 import AppKit
 import OrbeEditorCore
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -10,7 +11,7 @@ import XCTest
 @MainActor
 final class EditorSurfaceHostTests: OrbeTestCase {
   func testThePaneAnswersTheSurface() throws {
-    let dir = try XCTUnwrap(TestIsolation.caseDir)
+    let dir = TestScratch.caseDir
     let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 700)
     defer { window.contentView = nil }
@@ -47,7 +48,7 @@ final class EditorSurfaceHostTests: OrbeTestCase {
   /// 文字は既に本文にある。
   func testChromeKeysCommitTheCompositionFirst() throws {
     let tab = TerminalTab(
-      cwd: try XCTUnwrap(TestIsolation.caseDir).path,
+      cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 700)
     defer { window.contentView = nil }

@@ -15,7 +15,6 @@ final class GitRunnerStreamTests: OrbeTestCase {
 
   override func setUpWithError() throws {
     fixture = try GitHangFixture()
-    addTeardownBlock { [fixture] in fixture?.cleanup() }
   }
 
   /// 塊の受け取りと終わりを記録する。受け手は裏のスレッドで呼ばれる。

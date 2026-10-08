@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -28,7 +29,7 @@ final class EditorPaneViewTabCloseTests: OrbeTestCase {
   /// （`sendEvent` は ordered-in の窓にしか配送しない）。
   private func row() throws -> Row {
     let tab = TerminalTab(
-      cwd: try XCTUnwrap(TestIsolation.caseDir).path,
+      cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.view.editor
     let window = hostEditor(tab, width: 900)

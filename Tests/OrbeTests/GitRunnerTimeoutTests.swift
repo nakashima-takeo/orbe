@@ -22,7 +22,6 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
 
   override func setUpWithError() throws {
     fixture = try GitHangFixture()
-    addTeardownBlock { [fixture] in fixture?.cleanup() }
   }
 
   // MARK: - ヘルパ

@@ -1,4 +1,5 @@
 import Foundation
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -10,13 +11,9 @@ final class ShellPATHTests: OrbeTestCase {
   private var stubDir: URL!
 
   override func setUpWithError() throws {
-    stubDir = URL(fileURLWithPath: NSTemporaryDirectory())
+    stubDir = TestScratch.caseDir
       .appendingPathComponent("ShellPATHTests-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: stubDir, withIntermediateDirectories: true)
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: stubDir)
   }
 
   /// 模したい出力を出す実行可能スクリプト（`#!/bin/sh`。受け取った引数は `$@` で見られる）。

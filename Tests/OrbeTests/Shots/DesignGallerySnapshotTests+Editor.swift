@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import SwiftUI
 import XCTest
 
@@ -12,7 +13,7 @@ extension DesignGallerySnapshotTests {
     try writePNG(EditorEmptyFixtures.gallery(), size: stage, name: "editor_empty.png", dir: dir)
     // queries はテスト実行体の隣（`.build/<config>`）の資源バンドルから解く。
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
-    let code = try EditorCodeFixtures.scene(queriesRoot: queriesRoot)
+    let code = try EditorCodeFixtures.scene(queriesRoot: queriesRoot, in: TestScratch.caseDir)
     defer { code.cleanup() }
     pumpMain(until: { code.isReady }, "index 版が届いて印が揃う")
     // サイドバー 240 ＋ レール 36 ＋ 行番号の列 69 の右、俯瞰（ミニマップとスクロールバー）の左に本文。最長行は右端で切れる。

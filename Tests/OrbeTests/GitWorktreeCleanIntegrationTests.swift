@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -6,15 +7,14 @@ import XCTest
 /// 取り込み判定（3 段構え）は `+Containment` が持つ。
 final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
   var dir: URL!
-  private var remoteRoots: [URL] = []
   /// 分冊（`+Containment`）も読む。
   var repo: GitRepo!
   /// init + 1 コミットの雛形。作るのはクラスで 1 回で、各テストは複製を `dir` に受け取る。
+  /// テストをまたいで使うので、テスト 1 件の作業ディレクトリではなく `TestScratch.root` の下に置く。
   private nonisolated(unsafe) static var template: URL?
 
   override func setUpWithError() throws {
-    dir = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-clean-repo-\(UUID().uuidString)")
+    dir = TestScratch.caseDir.appendingPathComponent("repo")
     let template = try Self.template ?? Self.makeTemplate()
     Self.template = template
     try FileManager.default.copyItem(at: template, to: dir)
@@ -31,11 +31,9 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
   private struct TemplateFailure: Error {}
 
   private static func makeTemplate() throws -> URL {
-    let url = FileManager.default.temporaryDirectory
+    let url = TestScratch.root
       .appendingPathComponent("orbe-clean-template-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-    var handedOff = false
-    defer { if !handedOff { try? FileManager.default.removeItem(at: url) } }
     func git(_ args: [String]) throws {
       guard GitRunner.shared.runSync(args, cwd: url.path).isSuccess else {
         XCTFail("雛形リポジトリを作れない: git \(args.joined(separator: " "))")
@@ -50,14 +48,7 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
       encoding: .utf8)
     try git(["add", "-A"])
     try git(["commit", "-qm", "init"])
-    handedOff = true
     return url
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: dir)
-    for root in remoteRoots { try? FileManager.default.removeItem(at: root) }
-    remoteRoots = []
   }
 
   // MARK: - 作業ツリーの clean 判定
@@ -191,12 +182,10 @@ final class GitWorktreeCleanIntegrationTests: OrbeTestCase {
     XCTAssertTrue(git(["fetch", "-q", name]).isSuccess)
   }
 
-  /// remote の置き場。`dir` の兄弟に作り、`tearDownWithError` で一緒に片付ける。
+  /// remote の置き場（`dir` の兄弟）。
   private func remoteDir(named name: String) throws -> URL {
-    let url = dir.deletingLastPathComponent()
-      .appendingPathComponent("\(dir.lastPathComponent)-\(name).git")
+    let url = TestScratch.caseDir.appendingPathComponent("\(name).git")
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-    remoteRoots.append(url)
     return url
   }
 

@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -11,7 +12,7 @@ import XCTest
 extension WindowControllerTaskControlTests {
   /// caseDir に置く git の worktree のルートと、その中のサブディレクトリ。
   private func repository() throws -> (root: String, nested: String) {
-    let root = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("repo").path
+    let root = TestScratch.caseDir.appendingPathComponent("repo").path
     let nested = (root as NSString).appendingPathComponent("Sources/App")
     try FileManager.default.createDirectory(atPath: nested, withIntermediateDirectories: true)
     try FileManager.default.createDirectory(
@@ -42,7 +43,7 @@ extension WindowControllerTaskControlTests {
   func testAWorktreeThatIsNotAnExistingDirectoryIsRejected() throws {
     let wc = try launch()
     let taskId = try XCTUnwrap(try added(wc)["taskId"] as? Int)
-    let gone = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("gone").path
+    let gone = TestScratch.caseDir.appendingPathComponent("gone").path
 
     XCTAssertEqual(code(addTask(wc, "b", worktree: gone)), -32602, "実在しない")
     XCTAssertEqual(
@@ -60,7 +61,7 @@ extension WindowControllerTaskControlTests {
     let before = try listed(wc).map { NSDictionary(dictionary: $0) }
 
     for name in ["a\nb", "a\u{7}b"] {
-      let path = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent(name).path
+      let path = TestScratch.caseDir.appendingPathComponent(name).path
       try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
 
       XCTAssertEqual(

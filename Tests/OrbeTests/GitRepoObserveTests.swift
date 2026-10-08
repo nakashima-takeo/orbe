@@ -11,10 +11,6 @@ final class GitRepoObserveTests: OrbeTestCase {
     repo = try TempGitRepo()
   }
 
-  override func tearDownWithError() throws {
-    repo.cleanup()
-  }
-
   /// 本体では `<root>/.git`、linked worktree では `<commonDir>/worktrees/<name>`。綴りは git のまま。
   func testGitDirResolvesForMainAndLinkedWorktrees() throws {
     let main = try repo.open()
@@ -72,7 +68,6 @@ final class GitRepoObserveTests: OrbeTestCase {
   /// 待つと、巨大リポジトリの status がある間だけでなく、hook で止まった commit の間もバッジが更新されない。
   func testObservationIsNotBlockedByAHangingExclusiveWrite() throws {
     let fixture = try GitHangFixture()
-    addTeardownBlock { fixture.cleanup() }
     try fixture.installHook("pre-commit", body: fixture.waitingBody)
     let runner = GitRunner(idleTimeout: 60)
     var opened: GitRepo?

@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -10,7 +11,7 @@ import XCTest
 /// 出ないのに、ほかのタスクへの付与を黙って拒む値が残る。
 final class TaskWorktreeTests: OrbeTestCase {
   private func directory(_ name: String) throws -> String {
-    let path = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent(name).path
+    let path = TestScratch.caseDir.appendingPathComponent(name).path
     try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
     return path
   }

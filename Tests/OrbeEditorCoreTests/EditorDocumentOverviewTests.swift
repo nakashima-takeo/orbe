@@ -1,4 +1,5 @@
 import Foundation
+import OrbeTestSupport
 import XCTest
 
 @testable import OrbeEditorCore
@@ -8,20 +9,6 @@ import XCTest
 @MainActor
 final class EditorDocumentOverviewTests: XCTestCase {
   private let registry = LanguageRegistry(queriesRoot: Queries.root)
-  private var root: URL!
-
-  override func setUpWithError() throws {
-    try super.setUpWithError()
-    root = FileManager.default.temporaryDirectory
-      .appendingPathComponent("orbe-overview-\(UUID().uuidString)", isDirectory: true)
-    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: root)
-    try super.tearDownWithError()
-  }
-
   private struct Opened {
     let document: EditorDocument
     let surface: FakeTextSurface
@@ -29,7 +16,7 @@ final class EditorDocumentOverviewTests: XCTestCase {
   }
 
   private func open(_ name: String, _ text: String) throws -> Opened {
-    let url = root.appendingPathComponent(name)
+    let url = TestScratch.caseDir.appendingPathComponent(name)
     try Data(text.utf8).write(to: url)
     let contents = try EditorDocument.read(url)
     let surface = FakeTextSurface(text: contents.text)

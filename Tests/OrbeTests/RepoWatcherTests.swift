@@ -28,7 +28,6 @@ final class RepoWatcherTests: OrbeTestCase {
 
   override func tearDownWithError() throws {
     watcher = nil
-    repo.cleanup()
   }
 
   func testWorktreeChangesArriveAsRootSpelledPaths() throws {

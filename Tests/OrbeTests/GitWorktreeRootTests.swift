@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -14,13 +15,9 @@ final class GitWorktreeRootTests: OrbeTestCase {
   private var dir: URL!
 
   override func setUpWithError() throws {
-    dir = FileManager.default.temporaryDirectory
+    dir = TestScratch.caseDir
       .appendingPathComponent("orbe-wtroot-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: dir)
   }
 
   /// `dir` 配下の相対パス（正準形＝symlink を解いて先頭の `/private` を畳んだ比較用の形）。
@@ -64,6 +61,18 @@ final class GitWorktreeRootTests: OrbeTestCase {
     try mkdir("plain/sub")
 
     XCTAssertNil(GitWorktreeRoot.locate(cwd: canonical("plain/sub")))
+  }
+
+  /// 根の規則: git 管理外のパスの根は、そのパス自身の正準形。同じ場所なら書き方が違っても同じ根。
+  func testRootOfAPathOutsideGitIsThePathItself() throws {
+    try mkdir("plain/sub")
+    try FileManager.default.createSymbolicLink(
+      at: dir.appendingPathComponent("link"),
+      withDestinationURL: dir.appendingPathComponent("plain"))
+
+    XCTAssertEqual(
+      GitWorktreeRoot.root(of: dir.appendingPathComponent("link/sub").path), canonical("plain/sub"),
+      "symlink 越しでも正準形")
   }
 
   /// 存在しないパス（消えた worktree のサブディレクトリ）は、存在する祖先まで上がって判定する。

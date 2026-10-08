@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -174,7 +175,7 @@ final class WorktreePaletteWorkspaceBindingTests: OrbeTestCase {
 private extension OrbeTestCase {
   /// root path に置く 1 コミットのリポジトリ（origin 無し＝gh へは問い合わせない）。
   func makeRepository() throws -> String {
-    let dir = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("repo").path
+    let dir = TestScratch.caseDir.appendingPathComponent("repo").path
     try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
     try "x".write(
       toFile: (dir as NSString).appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)

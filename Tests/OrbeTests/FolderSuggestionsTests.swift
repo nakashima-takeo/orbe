@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -10,15 +11,9 @@ final class FolderSuggestionsTests: OrbeTestCase {
 
   override func setUpWithError() throws {
     try super.setUpWithError()
-    root = URL(fileURLWithPath: NSTemporaryDirectory())
+    root = TestScratch.caseDir
       .appendingPathComponent("folder-suggestions-\(UUID().uuidString)")
     try fm.createDirectory(at: root, withIntermediateDirectories: true)
-  }
-
-  override func tearDownWithError() throws {
-    try? fm.removeItem(at: root)
-    root = nil
-    try super.tearDownWithError()
   }
 
   private func mkdir(_ name: String) throws {

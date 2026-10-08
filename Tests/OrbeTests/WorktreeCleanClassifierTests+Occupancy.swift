@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -26,18 +27,17 @@ extension WorktreeCleanClassifierTests {
     XCTAssertNotNil(map["/a/repo/wt/child"])
   }
 
-  /// symlink（macOS の `/tmp` → `/private/tmp`）を解決してから突き合わせる。
+  /// symlink（macOS の `/var` → `/private/var`）を解決してから突き合わせる。
   /// OSC 7 が報告する pwd と `git worktree list` のパスは素では一致しないことがある。
   func testOccupancyResolvesSymlinks() throws {
-    let name = "orbe-occupancy-\(UUID().uuidString)"
-    let path = "/tmp/\(name)"
-    try FileManager.default.createDirectory(
-      atPath: path, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(atPath: path) }
+    let dir = TestScratch.caseDir.appendingPathComponent("wt")
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let path = dir.path
+    let resolved = String(cString: realpath(path, nil))
+    XCTAssertNotEqual(resolved, path, "前提: 2 つの書き方が symlink 越しに同じ場所を指す")
 
     let map = WorktreeCleanClassifier.occupancies(
-      worktreePaths: [path],
-      tabs: [TabOccupancy(cwd: "/private/tmp/\(name)", agentState: nil)])
+      worktreePaths: [path], tabs: [TabOccupancy(cwd: resolved, agentState: nil)])
     XCTAssertNotNil(map[path])
   }
 

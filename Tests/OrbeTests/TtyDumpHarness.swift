@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import Foundation
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -87,7 +88,7 @@ final class TtyDumpTab {
     file: StaticString = #filePath, line: UInt = #line
   ) throws {
     self.controller = controller
-    let scriptURL = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("ttydump.py")
+    let scriptURL = TestScratch.caseDir.appendingPathComponent("ttydump.py")
     try Self.script.write(to: scriptURL, atomically: true, encoding: .utf8)
     let tabId = try XCTUnwrap(
       controller.controlSpawn(

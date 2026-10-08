@@ -207,7 +207,7 @@ struct TaskPaletteGitHubPane: View {
         .tint(Color.theme.accentPrimary)
         .focused(focus, equals: .paneDue)
         .onSubmitIgnoringKeyRepeat { model.endEditing(commit: true) }
-        .onKeyPress { model.handleEditKey($0, composing: IMEComposition.isActive) }
+        .onKeyPress { model.handleEditKey($0) }
         .opacity(isEditingDue ? 1 : 0)
         .allowsHitTesting(isEditingDue)
       if !isEditingDue {

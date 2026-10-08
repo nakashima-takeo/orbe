@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -107,8 +108,8 @@ extension TaskStoreTests {
   /// worktree を付けると（追加・変更・begin のどれでも）、その時そこで checkout していたブランチを記録し、
   /// 再起動しても残る。
   func testAttachingAWorktreeRecordsTheBranchCheckedOutThere() throws {
-    let main = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("repo").path
-    let linked = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("wt").path
+    let main = TestScratch.caseDir.appendingPathComponent("repo").path
+    let linked = TestScratch.caseDir.appendingPathComponent("wt").path
     let git = { (args: [String]) in
       XCTAssertTrue(
         GitRunner.shared.runSync(args, cwd: main).isSuccess, args.joined(separator: " "))

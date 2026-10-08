@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -17,7 +18,7 @@ final class BundledResourcesTests: OrbeTestCase {
   override func setUpWithError() throws {
     try super.setUpWithError()
     // `BundledResources.root` はハーネスが毎テスト張り直すので、ここで退避・復元はしない。
-    tmp = try XCTUnwrap(TestIsolation.caseDir).appendingPathComponent("bundles", isDirectory: true)
+    tmp = TestScratch.caseDir.appendingPathComponent("bundles", isDirectory: true)
     try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
   }
 

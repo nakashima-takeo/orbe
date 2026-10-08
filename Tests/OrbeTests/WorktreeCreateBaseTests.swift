@@ -1,3 +1,4 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -25,7 +26,7 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
   /// 古いまま**にする。`mine` は upstream の無い手元だけのローカルブランチ（着地を待たない題材）、
   /// `stale` は origin を追跡する手元のブランチ（分冊 `+Refresh` の題材）。
   override func setUpWithError() throws {
-    dir = FileManager.default.temporaryDirectory
+    dir = TestScratch.caseDir
       .appendingPathComponent("orbe-wtbase-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     origin = dir.appendingPathComponent("origin.git").path
@@ -65,10 +66,6 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
       XCTAssertNotEqual(
         originTip(branch), localRemoteTip(branch), "前提: 手元の origin/\(branch) は古い")
     }
-  }
-
-  override func tearDownWithError() throws {
-    try? FileManager.default.removeItem(at: dir)
   }
 
   // MARK: - fetch の着地を待ってから切る

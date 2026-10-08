@@ -104,8 +104,8 @@ extension ControlWireTests {
     XCTAssertTrue(fake.restoredSessionIds.isEmpty, "弾いた要求は target へ届かない")
   }
 
-  /// 正しい列挙はそのまま target へ届き、結果の `results` が返る。窓なしは -32000。
-  func testRestoreSessionsReachesTargetAndNeedsAWindow() {
+  /// 正しい列挙はそのまま target へ届き、結果の `results` が返る。
+  func testRestoreSessionsReachesTarget() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
 
@@ -114,11 +114,5 @@ extension ControlWireTests {
     XCTAssertEqual(fake.restoredSessionIds, [["s-1", "s-2"]])
     XCTAssertEqual(
       ((response?["result"] as? [String: Any])?["results"] as? [[String: Any]])?.count, 2)
-
-    wire.teardown()
-    let noWindow = startWireWithoutTarget()
-    XCTAssertEqual(
-      errorCode(noWindow.request(id: 2, method: "restore_sessions", params: ["sessionIds": ["s"]])),
-      -32000)
   }
 }

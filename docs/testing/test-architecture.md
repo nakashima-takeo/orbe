@@ -30,7 +30,12 @@ updated: 2026-10-08
 
 **ランナーは XCTest 一本。** Swift 6.3 では swift-testing との相互運用が `none` で、両者でアサーションヘルパを共有すると失敗が黙殺される。Swift 6.4 で相互運用が既定 `limited` になった時点で再検討する。
 
-**隔離は単一ハーネスが立てる。** state dir・全 override・ghostty の設定探索先を 1 箇所で立て、テストごとの申告制にしない（対象は `Tests/OrbeTests`。他 7 ターゲットは `Orbe` 以外のモジュール内部を測るだけで、隔離の要る対象を持たない）。申告制は張り忘れが 1 本でも残れば破れる（`GuiConfig` の override を張らないテストが 1 本あれば、`Config.load()` が前回実行の設定を読み戻す）。書き込まれうる先は全て per-test ディレクトリの下に置き、配り直しの削除に乗せる（向き先だけ張り直しても中身は消えない）。唯一 `CompletionLearning` だけは `shared` が初回タッチで in-memory へ焼くため per-test にできず、プロセス級固定＝学習状態がテスト間で持ち越されるので、書いたテストが自分で消す。実環境を汚さないことは `scripts/verify-test-isolation.sh`（手動・CI 非搭載）で実証する。
+**隔離は単一ハーネスが立てる。** 2 段で立てる。
+
+- **作業ディレクトリとテストの境界**は、全テストターゲット共通の `TestScratch`（`Tests/OrbeTestSupport`）が持つ。テストが使う一時ディレクトリは `TestScratch.caseDir`（テスト 1 件ごとに配り、成否を問わずテスト終了で消す）だけで、テストをまたぐものは `TestScratch.root` の下に置く。クラッシュ・強制終了でも、プロセス外の見張りが根ごと消す。自前の一時ディレクトリは lint（`test_scratch_harness`）が落とす。テストの外で `caseDir` に触れると、触れたその場か、遅くとも次のテストの開始時に落ちる。
+- **Orbe の seam**（state dir・全 override・ghostty の設定探索先）は、`Tests/OrbeTests` の `TestIsolation` が `TestScratch` の境界に口を登録して、作業ディレクトリの下へ張る。他 7 ターゲットは `Orbe` 以外のモジュール内部を測るだけで、Orbe の seam を必要としない。
+
+テストごとの申告制にしない。申告制は張り忘れが 1 本でも残れば破れる（`GuiConfig` の override を張らないテストが 1 本あれば、`Config.load()` が前回実行の設定を読み戻す）。書き込まれうる先は全て作業ディレクトリの下に置き、テスト終了の削除に乗せる（向き先だけ張り直しても中身は消えない）。唯一 `CompletionLearning` だけは `shared` が初回タッチで in-memory へ焼くため per-test にできず、プロセス級固定＝学習状態がテスト間で持ち越されるので、書いたテストが自分で消す。実環境と一時領域を汚さないことは `scripts/verify-test-isolation.sh`（手動・CI 非搭載）で実証する。
 
 **テストクラスの doc は「壊れると何が起きるか」を書く。** 何を測るかはテスト名が言う。doc が言うのは、その assert が落ちたとき利用者に何が起きるか——それが無いと、後から読む人はテストを弱めてよいか判断できず、直すより消す方へ倒れる。
 
