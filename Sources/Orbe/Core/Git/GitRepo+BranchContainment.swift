@@ -78,7 +78,7 @@ extension GitRepo {
     branchOrCommit: String, targets: [String],
     completion: @escaping (GitBranchContainment?) -> Void
   ) {
-    GitRunner.shared.run(
+    runner.run(
       ["rev-list", "--count", branchOrCommit, "--not", "--remotes=origin", "--"], cwd: root
     ) { output in
       // 第0段の失敗は nil に直結させない（到達性を諦めて従来の cherry 経路へ倒す）。
@@ -109,7 +109,7 @@ extension GitRepo {
       completion(nil)
       return
     }
-    GitRunner.shared.run(
+    runner.run(
       ["merge-base", "--is-ancestor", probe.branchOrCommit, target], cwd: root
     ) { output in
       guard output.isSuccess else {
@@ -141,7 +141,7 @@ extension GitRepo {
         probe, targets: succeeded.map(\.target)[...], count: count, completion: completion)
       return
     }
-    GitRunner.shared.run(
+    runner.run(
       ["cherry", target, probe.branchOrCommit], cwd: root
     ) { output in
       guard output.isSuccess else {
@@ -196,7 +196,7 @@ extension GitRepo {
   private func squashMergedCheck(
     _ probe: ContainmentProbe, target: String, completion: @escaping (Bool?) -> Void
   ) {
-    GitRunner.shared.run(
+    runner.run(
       ["merge-base", target, probe.branchOrCommit], cwd: root
     ) { base in
       guard base.isSuccess else {
@@ -204,7 +204,7 @@ extension GitRepo {
         return
       }
       let mergeBase = base.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
-      GitRunner.shared.run(
+      self.runner.run(
         ["rev-parse", "\(probe.branchOrCommit)^{tree}"], cwd: self.root
       ) { tree in
         guard tree.isSuccess else {
@@ -212,7 +212,7 @@ extension GitRepo {
           return
         }
         let treeOid = tree.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
-        GitRunner.shared.run(
+        self.runner.run(
           [
             "-c", "user.name=orbe", "-c", "user.email=orbe@localhost",
             "commit-tree", treeOid, "-p", mergeBase, "-m", "_",
@@ -223,7 +223,7 @@ extension GitRepo {
             return
           }
           let oid = synthesized.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
-          GitRunner.shared.run(
+          self.runner.run(
             ["cherry", target, oid], cwd: self.root
           ) { cherry in
             guard cherry.isSuccess else {

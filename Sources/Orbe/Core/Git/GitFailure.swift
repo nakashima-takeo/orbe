@@ -18,9 +18,9 @@ enum GitRefreshFailure: Error, Equatable {
   case fastForward(GitFailure?)
 }
 
-/// 利用者が起こした書き込み（ステージ・解除・破棄・コミット・pull・push・fetch）の失敗。**文言は持たない**。
-/// 書き込みは無出力で打ち切らない（止めるのは利用者）ので、打ち切りは無い。リモートの操作の失敗だけが分類を持ち、
-/// 分類できない失敗は「その他」（`reason`）に倒す——誤分類より安全。
+/// 利用者が起こした書き込み（ステージ・解除・破棄・コミット・取り消し・pull・push・fetch）の失敗。**文言は持たない**。
+/// 書き込みは無出力で打ち切らない（止めるのは利用者）ので、打ち切りは無い。分類できない失敗は「その他」（`reason`）に
+/// 倒す——誤分類より安全。
 enum GitWriteFailure: Error, Equatable {
   /// 止めた。
   case cancelled

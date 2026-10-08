@@ -110,8 +110,8 @@ extension GitRepo {
       var local: [String: [String]] = [:]
       var remote: [String: [String]] = [:]
       for line in output.stdoutText.split(separator: "\n") {
-        let fields = line.split(separator: " ")
-        guard fields.count == 2 else { continue }
+        let fields = line.split(separator: " ", omittingEmptySubsequences: false)
+        guard fields.count == 3, fields[2].isEmpty else { continue }
         let oid = String(fields[0])
         let ref = fields[1]
         if ref.hasPrefix("refs/heads/") {

@@ -66,12 +66,6 @@ struct GitStatus: Equatable {
   /// ブランチのヘッダが無い出力なら nil。
   let branch: Branch?
 
-  init(entries: [String: Entry], untrackedDirectories: [String], branch: Branch? = nil) {
-    self.entries = entries
-    self.untrackedDirectories = untrackedDirectories
-    self.branch = branch
-  }
-
   /// その相対パスの行（rename・copy なら元パスも）。
   func row(_ path: String) -> Row {
     Row(path: path, originalPath: entries[path]?.originalPath)

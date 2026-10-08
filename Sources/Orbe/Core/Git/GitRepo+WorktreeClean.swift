@@ -104,7 +104,7 @@ extension GitRepo {
     at path: String, completion: @escaping (GitWorktreeStatusCounts?) -> Void
   ) {
     // 実体が消えた worktree でも起動できるよう、cwd は main worktree に置いて `-C` で対象を指す。
-    GitRunner.shared.run(
+    runner.run(
       [
         "--no-optional-locks", "-C", path, "status", "--porcelain",
         "--untracked-files=normal", "--ignore-submodules=none",
@@ -137,7 +137,7 @@ extension GitRepo {
   /// その前提のもとで submodule 側にだけ未 push が残る状態は成立しない。
   /// locked は `-f` 1 個では外れないため、locked な worktree はそもそも安全確認を通さない。
   func removeWorktree(path: String, completion: @escaping (GitWorktreeCleanFailure?) -> Void) {
-    GitRunner.shared.run(
+    runner.run(
       ["worktree", "remove", "--force", path], cwd: root
     ) { output in
       completion(GitRepo.cleanFailure(output))
@@ -163,7 +163,7 @@ extension GitRepo {
   func deleteBranch(
     name: String, expectedOid: String, completion: @escaping (GitWorktreeCleanFailure?) -> Void
   ) {
-    GitRunner.shared.run(
+    runner.run(
       ["update-ref", "-d", "refs/heads/\(name)", expectedOid], cwd: root
     ) { output in
       completion(GitRepo.cleanFailure(output))

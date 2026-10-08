@@ -15,7 +15,7 @@ extension RootFiles {
   /// git を起こさない）。走っていれば git を SIGTERM で止める。何度呼んでもよい。
   @MainActor
   final class Write {
-    let handle = GitRunner.Handle()
+    fileprivate let handle = GitRunner.Handle()
     fileprivate var dequeue: (() -> Void)?
 
     func cancel() {

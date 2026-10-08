@@ -6,8 +6,8 @@ import Foundation
 /// 届いた順に渡す。ユーザーの設定（既定の remote・prune・`pull.rebase`・`push.default`・`pushRemote`・
 /// `core.sshCommand`・credential helper）はそのまま効く。completion は main で返る。
 ///
-/// 前提（upstream・detached・origin・止まった操作）は git を起こす前に型で判定する。`branch` は呼んだ時点の status の
-/// ブランチで、nil（分からない）なら判定を飛ばして git に任せる。
+/// 前提（upstream・detached・push 先・止まった操作）は本体の git を起こす前に判定する。`branch` は呼んだ時点の status の
+/// ブランチで、nil（分からない）ならブランチに依る判定を飛ばして git に任せる。
 extension GitRepo {
   func fetch(
     onProgress: @escaping (String) -> Void, handle: GitRunner.Handle,
