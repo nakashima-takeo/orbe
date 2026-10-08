@@ -40,6 +40,8 @@ final class FrameBuilder {
   var highlightShapes: [ShapeInstance] = []
   private(set) var textScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
   private(set) var gutterScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
+  /// 区画の箱の切り取り——行番号の列と本文の区画（区画の影は行番号の列にも落ちる。行番号と印はその上に描く）。
+  private(set) var zoneScissor = MTLScissorRect(x: 0, y: 0, width: 0, height: 0)
   /// 組んだ行のうち最も長い幅（pt。末尾の「ほか N 字」を含む）。
   var longestLine: CGFloat = 0
   /// このコマのミニマップ。
@@ -210,6 +212,7 @@ final class FrameBuilder {
         markedBackground: palette.markedBackground), fonts: fonts)
     textScissor = Self.scissor(x: g.column, y: g.top, width: g.textRight - g.column, g)
     gutterScissor = Self.scissor(x: 0, y: g.top, width: g.column, g)
+    zoneScissor = Self.scissor(x: 0, y: g.top, width: g.textRight, g)
     let lines = source.limits.viewportLines(at: source.position, rows: rows, lineCount: lineCount)
     buildMinimap(layout, lines: lines, source, content, c)
     drawShadows(layout, lines: lines, clipsRight: Self.clipsRight(source), c)

@@ -121,4 +121,25 @@ extension SurfaceZonesTests {
     XCTAssertNotEqual(
       try material(surface, zone).images.first?.pixels.key, key, "外した区画の画像の覚えは手放した")
   }
+
+  /// 区画の箱の影は行番号の列にも落ちる（本文の区画の左端で切らない）。
+  func testAZoneShadowFallsOnTheGutter() throws {
+    let opened = try hostedRows()
+    let surface = opened.surface
+    let zone = PictureZone { width in
+      ZonePicture(
+        height: 40,
+        elements: [
+          .box(
+            ZoneBox(
+              frame: CGRect(x: 0, y: 0, width: width, height: 30), fill: Self.red,
+              shadow: .init(color: .black, offset: 10, blur: 30)))
+        ])
+    }
+    surface.setRows(self.zone(zone, at: 2))
+    let shot = try pixelShot(opened, background: MTLClearColor(red: 1, green: 1, blue: 1, alpha: 1))
+    let top = surface.config.topInset + CGFloat(surface.rows.top(ofBlock: 0))
+    let x = surface.surfaceLayout.text.minX - 2
+    XCTAssertLessThan(shot.rgb(x, top + 32)[0], 250, "箱の左下の外の行番号の列に影")
+  }
 }
