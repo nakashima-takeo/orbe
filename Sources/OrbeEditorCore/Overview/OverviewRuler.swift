@@ -1,7 +1,8 @@
 import Foundation
 
-/// スクロールバーの上の印（overview ruler）の写像——表示の単位（→ `TextReveal`）の縦の区間を、ruler の縦の区間へ比例で写し、短いものは最小の高さへ広げ、
-/// 同じレーンで接するものを結ぶ。VS Code `DecorationsOverviewRuler._renderOneLane` とキャレットの描き方を移したもの。
+/// スクロールバーの上の印（overview ruler）の写像——表示の単位（→ `TextReveal`）の縦の区間を、ruler の縦の区間へ
+/// 比例で写し、短いものは最小の高さへ広げ、同じレーンで接するものを結ぶ。
+/// VS Code `DecorationsOverviewRuler._renderOneLane` とキャレットの描き方を移したもの。
 /// 座標はデバイス px の整数（VS Code は canvas に描く。切り捨てと結合の判定を画素で行うので、pt にすると結果が変わる）。
 public struct OverviewRuler: Equatable, Sendable {
   /// 印の最小の高さ（pt）。

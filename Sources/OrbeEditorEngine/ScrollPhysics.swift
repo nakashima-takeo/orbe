@@ -71,7 +71,7 @@ struct ScrollPhysics: Sendable {
   /// 長い行の右端から 5 桁先まで。
   struct Limits: Equatable, Sendable {
     /// 最後の項目の上端（縦の並び `RowLayout.lastTop`）。
-    var bottom: Double = 0
+    var lastTop: Double = 0
     var lineHeight: Double = 1
     /// 本文の見えている大きさ（行番号の列と上端の余白を除く）。
     var viewport = SIMD2<Double>(0, 0)
@@ -83,7 +83,7 @@ struct ScrollPhysics: Sendable {
     var maximum: SIMD2<Double> {
       SIMD2(
         max(0, longestLine + ScrollPhysics.trailingColumns * cell - viewport.x),
-        max(0, bottom))
+        max(0, lastTop))
     }
 
     /// 位置 `position` の縦を端に収めたもの（俯瞰と見えている範囲は、端を越えて見せている間も端の位置を表す）。

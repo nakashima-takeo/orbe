@@ -131,7 +131,7 @@ extension MetalTextSurface {
       size: size, lineCount: lineCount, showsMinimap: presentation.showsMinimap
     ).text
     return LimitsUpdate(
-      bottom: rows.lastTop(lineCount: lineCount), lineHeight: Double(config.lineHeight),
+      lastTop: rows.lastTop(lineCount: lineCount), lineHeight: Double(config.lineHeight),
       viewport: SIMD2(Double(text.width), Double(max(0, text.height - config.topInset))),
       cell: Double(config.cell))
   }

@@ -11,7 +11,7 @@ final class ScrollPhysicsTests: XCTestCase {
     var physics = ScrollPhysics()
     physics.setLimits(
       ScrollPhysics.Limits(
-        bottom: 99 * 18, lineHeight: 18, viewport: SIMD2(400, 300), longestLine: 1000, cell: 7))
+        lastTop: 99 * 18, lineHeight: 18, viewport: SIMD2(400, 300), longestLine: 1000, cell: 7))
     return physics
   }
 
@@ -226,7 +226,7 @@ final class ScrollPhysicsTests: XCTestCase {
     XCTAssertFalse(p.isActive)
     XCTAssertEqual(p.shown(at: 1.03).y, 99 * 18)
     var limits = p.limits
-    limits.bottom = 9 * 18
+    limits.lastTop = 9 * 18
     p.setLimits(limits)
     XCTAssertEqual(p.shown(at: 1.04).y, 9 * 18)
   }

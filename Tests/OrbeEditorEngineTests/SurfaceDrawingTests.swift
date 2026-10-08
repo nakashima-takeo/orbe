@@ -162,19 +162,19 @@ final class SurfaceDrawingTests: EngineTestCase {
   func testEachMaterialRevisionTakesThePositionPlacedWithIt() {
     let box = ScrollBox()
     box.updateLimits(
-      LimitsUpdate(bottom: 999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7))
+      LimitsUpdate(lastTop: 999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7))
     box.place(SIMD2(0, 50))
     box.updateLimits(
-      LimitsUpdate(bottom: 1999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7),
+      LimitsUpdate(lastTop: 1999 * 10, lineHeight: 10, viewport: SIMD2(100, 100), cell: 7),
       forMaterial: 7)
     box.place(SIMD2(0, 300), forMaterial: 7)
     box.place(SIMD2(0, 900), forMaterial: 8)
     XCTAssertEqual(box.frame(at: 0, material: 6).position.y, 50)
     XCTAssertEqual(
-      box.frame(at: 0, material: 6).limits.bottom, 999 * 10, "置く前の範囲")
+      box.frame(at: 0, material: 6).limits.lastTop, 999 * 10, "置く前の範囲")
     XCTAssertEqual(
       box.frame(at: 0, material: 7).position.y, 300, "版 8 を置いた後も版 7 の位置")
-    XCTAssertEqual(box.frame(at: 0, material: 7).limits.bottom, 1999 * 10)
+    XCTAssertEqual(box.frame(at: 0, material: 7).limits.lastTop, 1999 * 10)
     XCTAssertEqual(box.frame(at: 0, material: 8).position.y, 900)
     XCTAssertEqual(box.peek(at: 0).position.y, 900, "main は最新の位置を読む")
     XCTAssertEqual(
@@ -219,7 +219,8 @@ final class SurfaceDrawingTests: EngineTestCase {
     surface.flush()
     settle()
     XCTAssertEqual(shaped { surface.editor.perform(.insert("x")) }, 1, "打鍵した行だけ")
-    XCTAssertEqual(shaped { surface.editor.perform(.newline(indents: true)) }, 2, "Enter で分かれた 2 行だけ")
+    XCTAssertEqual(
+      shaped { surface.editor.perform(.newline(indents: true)) }, 2, "Enter で分かれた 2 行だけ")
     let text = opened.document.text
     surface.selectedRange = NSRange(
       location: text.lineStart(10), length: text.lineStart(12) + 3 - text.lineStart(10))

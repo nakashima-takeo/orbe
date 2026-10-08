@@ -1,8 +1,8 @@
 import Foundation
 
 /// スクロールバーのつまみ——長さ・位置と、ドラッグ・トラックの押下から位置への写像。VS Code `ScrollbarState`（矢印なし）を
-/// 向きに依らない形で移したもの。量（見えている量・全体の量・位置）は同じ単位ならどの単位でもよく（縦は表示の単位、横は pt）、
-/// つまみの長さと位置はトラックの pt。
+/// 向きに依らない形で移したもの。量（見えている量・全体の量・位置）は同じ単位ならどの単位でもよく（縦は表示の単位、
+/// 横は pt）、つまみの長さと位置はトラックの pt。
 public struct ScrollbarGeometry: Equatable, Sendable {
   /// つまみの最小の長さ（pt。掴めるように）。
   public static let minimumSliderLength: CGFloat = 20
