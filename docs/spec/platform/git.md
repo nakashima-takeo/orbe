@@ -66,7 +66,7 @@ git の実質的な理由は stderr の `fatal:`・`error:` の行（無けれ�
 - **解除**: index を HEAD の版へ。初回コミット前でも効く（index から外す）。
 - **破棄**: 追跡中のパスは作業ツリーを index の版へ戻す——ステージ済みの分は残る。未追跡のパスはゴミ箱へ移す（元に戻せる。移せなければ失敗で返し、消さない）。追跡中かは呼んだ時点の index で決める——観測の status は古いことがあり、それを信じて追跡中のファイルをゴミ箱へ送らない。どちらでもなく実体も無いパス（rename の元パス）は何もしない。
 - **コミット**: ステージ済みの分だけ。メッセージは書いたまま残る——`#` 始まりの行もコメントとして消さず、前後の空行・行末の空白・続く空行だけを整える。
-- **amend**: 直前のコミットを差し替える。メッセージが空なら前のメッセージのまま中身だけ差し替える。
+- **amend**: 直前のコミットを差し替える。メッセージが空なら前のメッセージを一字も変えずに（利用者の `commit.cleanup` に関わらず）中身だけ差し替える。
 - **最後のコミットの取り消し**: HEAD が 1 つ戻り、中身はステージ済みに残る。初回コミットなら、HEAD のブランチの ref を消して初回コミット前へ戻す（中身は全部ステージ済み）。detached の初回コミットは取り消せない。
 
 ユーザーの hook と署名の設定はそのまま効く。force push・「すべてコミット」・ブランチの切り替えと作成（ブランチ＝worktree で、移るのは Dispatch の役割）・ハンク単位のステージは持たない。
@@ -79,14 +79,14 @@ git の実質的な理由は stderr の `fatal:`・`error:` の行（無けれ�
 
 どれも進捗の行（git の語のまま。割合への換算や訳はしない）を届いた順に渡す。失敗は分類を持ち、分類できない失敗は「その他」（git の実質の理由）に倒す——誤分類より安全。
 
-- **前提は git を起こす前に型で判定する**: upstream の無いブランチの pull →「upstream が無い」、merge・rebase 等が止まっている worktree の pull →「操作の途中」、detached HEAD の push →「ブランチに居ない」、upstream も origin も無いブランチの push →「push 先が無い」。材料は直前に取り直した status と remote の一覧と、止まった操作の管理エントリ。
+- **前提は git を起こす前に型で判定する**: upstream の無いブランチの pull →「upstream が無い」、merge・rebase 等が止まっている worktree の pull →「操作の途中」、detached HEAD の push →「ブランチに居ない」、upstream も origin も無いブランチの push →「push 先が無い」。材料は直前に取り直した status と remote の一覧と、止まった操作の管理エントリ。pull は止まった操作を先に見る——rebase の途中は HEAD が detached で upstream も無いので、逆の順では「upstream が無い」に化ける。
 - **push の拒否**は `--porcelain` の機械向けの行で読む——`[rejected]`（fetch first・non-fast-forward）は「拒否された（先に取り込みが要る）」。サーバの hook が拒んだ `[remote rejected]` などは「その他」で、送れなかった ref とその要約（`(pre-receive hook declined)` 等）を理由の頭に置く——`--porcelain` では要約が機械向けの行へ移り、stderr には「送れなかった」としか残らないため。
 - **競合**は「pull の前に無かった止まった操作が、後に在る」で読む（stderr の字面で読まない）。
 - **認証**（ssh の `Permission denied (publickey`、https の `Authentication failed`・`could not read Username`・`terminal prompts disabled`）と**ホスト鍵**（`Host key verification failed`）だけは stderr の字面で読む。git も ssh もそれを機械向けの形で出さない。
 
 ## 版の本文
 
-あるパスの HEAD 版・index 版・任意のコミットの版を、baseline と同じ姿——そのパスの属性で smudge filter と eol 変換を掛けた、作業ツリーに出したときの姿（textconv・外部 diff は通らない）——で取る。diff の差分は git diff の出力でなくプロセス内で計算するので、git は版の本文だけを渡す（作業ツリー側は打鍵中の文書で、git diff の出力では追従できない）。在るかを先に確かめてから本文を取り、「その版に無い」（新規・削除・初回コミット前の HEAD・ディレクトリ）と「取れなかった」（git の失敗。smudge の失敗を含む）を区別する。
+あるパスの HEAD 版・index 版・任意のコミットの版を、baseline と同じ姿——そのパスの属性で smudge filter と eol 変換を掛けた、作業ツリーに出したときの姿（textconv・外部 diff は通らない）——で取る。diff の差分は git diff の出力でなくプロセス内で計算するので、git は版の本文だけを渡す（作業ツリー側は打鍵中の文書で、git diff の出力では追従できない）。在るかを先に確かめてから本文を取り、「その版に無い」（新規・削除・初回コミット前の HEAD・ディレクトリ）と「取れなかった」（git の失敗。smudge の失敗と、手元に無いコミットを含む）を区別する。無いコミットを「その版に無い」と答えると、呼び出し側がそのコミットを取りに行く合図を失う。
 
 ## コミットグラフ
 
