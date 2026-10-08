@@ -104,10 +104,10 @@ extension GitRepo {
     return nil
   }
 
-  /// push の失敗。送れなかった ref は `--porcelain` の `!` 行（`!\t<from>:<to>\t<要約>`）に出る——`[rejected]`
-  /// （fetch first・non-fast-forward）は「拒否された」。それ以外（サーバの hook が断った `[remote rejected]` 等）は
-  /// 「その他」で、要約を理由の頭に置く。`--porcelain` では要約が stdout へ移り、stderr には「failed to push some refs」
-  /// しか残らないため。
+  /// push の失敗。送れなかった ref は `--porcelain` の `!` 行（`!\t<from>:<to>\t<要約>`）に出る——どれも
+  /// `[rejected] (fetch first)`・`[rejected] (non-fast-forward)` なら「拒否された（先に取り込みが要る）」。それ以外
+  /// （サーバの hook が断った `[remote rejected]`・取り込んでも直らない `[rejected] (already exists)` 等）は「その他」で、
+  /// 要約を理由の頭に置く。`--porcelain` では要約が stdout へ移り、stderr には「failed to push some refs」しか残らないため。
   static func pushFailure(_ output: GitRunner.Output) -> GitWriteFailure? {
     let failure = GitWriteFailure.ofRemote(output)
     guard case .reason(let reason) = failure else { return failure }
@@ -116,7 +116,10 @@ extension GitRepo {
       guard fields.count == 3, fields[0] == "!" else { return nil }
       return (String(fields[1].split(separator: ":").last ?? fields[1]), String(fields[2]))
     }
-    if refused.contains(where: { $0.1.hasPrefix("[rejected]") }) { return .pushRejected }
+    let needsIntegration = ["[rejected] (fetch first)", "[rejected] (non-fast-forward)"]
+    if !refused.isEmpty, refused.allSatisfy({ needsIntegration.contains($0.1) }) {
+      return .pushRejected
+    }
     return .reason((refused.map { "\($0.0) \($0.1)" } + [reason]).joined(separator: "\n"))
   }
 
