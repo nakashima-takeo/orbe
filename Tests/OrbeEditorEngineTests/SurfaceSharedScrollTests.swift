@@ -44,14 +44,22 @@ final class SurfaceSharedScrollTests: EngineTestCase {
       "動かしていない面の見えている範囲も知らせ直す")
   }
 
-  /// 縦の範囲は長い方の面の端まで——短い面も長い面の最後の行まで送れる。横の範囲は長い行の面の端まで。
+  /// 縦の範囲は長い方の面の端まで——短い面も長い面の最後の行まで送れ、End も長い面の End と同じ所へ行く。横の範囲は長い
+  /// 行の面の端まで。
   func testTheRangeIsTheLargerOfTheTwo() throws {
     let (a, b) = try pair()
     _ = a.surface.snapshot()
     _ = b.surface.snapshot()
     let longest = a.surface.rows.lastTop(lineCount: a.document.text.lineCount)
     XCTAssertEqual(b.surface.scrollState().limits.maximum.y, longest)
+    a.surface.scrollToDocumentEdge(end: true)
+    a.surface.flush()
+    let end = a.surface.scrollPosition
+    a.surface.scrollToDocumentEdge(end: false)
+    a.surface.flush()
     b.surface.scrollToDocumentEdge(end: true)
+    b.surface.flush()
+    XCTAssertEqual(b.surface.scrollPosition, end, "短い面の End は長い面の End")
     b.surface.scroll(toFirstLine: 1e9)
     b.surface.flush()
     XCTAssertEqual(a.surface.scrollPosition.y, longest, "短い面から長い面の最後まで送れる")
