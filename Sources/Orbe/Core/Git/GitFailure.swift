@@ -42,6 +42,9 @@ enum GitWriteFailure: Error, Equatable {
   case noPushDestination
   /// ブランチに居ない（detached HEAD）。push と、初回コミットの取り消しが要る。
   case detached
+  /// 最後のコミットの親が手元に無い（shallow clone の境界）。取り消すと、ブランチを消して履歴とつながらない初回コミット前に
+  /// 化けるので取り消さない。
+  case shallowBoundary
   /// その他。git の実質的な理由をそのまま。
   case reason(String)
 

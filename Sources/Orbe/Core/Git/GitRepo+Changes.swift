@@ -152,7 +152,7 @@ extension GitRepo {
   }
 
   /// 最後のコミットを取り消す。HEAD が 1 つ戻り、中身はステージ済みに残る。初回コミットなら、HEAD のブランチの ref を
-  /// 消して初回コミット前へ戻す（index はそのまま＝全部ステージ済み）。
+  /// 消して初回コミット前へ戻す（index はそのまま＝全部ステージ済み）。shallow clone の境界のコミットは取り消さない。
   func undoLastCommit(handle: GitRunner.Handle, completion: @escaping (GitWriteFailure?) -> Void) {
     let parents = ["rev-list", "--parents", "-n", "1", "HEAD"]
     runner.run(parents, cwd: root, handle: handle) { listed in
@@ -171,6 +171,8 @@ extension GitRepo {
         ) { completion(.of($0)) }
         return
       }
+      // shallow clone の境界のコミットも親を返さない。初回コミットとして ref を消すと、履歴とつながらなくなる。
+      guard !self.isShallowBoundary(head) else { return completion(.shallowBoundary) }
       self.runner.run(["symbolic-ref", "-q", "HEAD"], cwd: self.root, handle: handle) { ref in
         guard ref.isSuccess else {
           completion(ref.exited && ref.status == 1 ? .detached : .of(ref))
@@ -219,6 +221,13 @@ extension GitRepo {
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     try FileManager.default.moveItem(
       at: url, to: directory.appendingPathComponent(url.lastPathComponent))
+  }
+
+  /// HEAD が shallow clone の境界（親が手元に無い）か。境界は共有 git dir の `shallow` に 1 行ずつ載る。
+  private func isShallowBoundary(_ commit: String) -> Bool {
+    let shallow = (commonDir as NSString).appendingPathComponent("shallow")
+    guard let text = try? String(contentsOfFile: shallow, encoding: .utf8) else { return false }
+    return text.split(separator: "\n").contains { $0 == commit }
   }
 
   /// パスの操作。空なら git を起こさずに成功で返す——パスの無い `add -A`・`reset`・`restore`・`rm` は全体に効く。
