@@ -149,6 +149,32 @@ final class SurfaceEditingTests: EngineTestCase {
     XCTAssertEqual(text(opened.document), "one\ntwo\n")
   }
 
+  /// 印の立った文書を ⌘Z で保存時の本文まで戻すと、比べ終わった時点で外の版に差し替わる。差し替えは ⌘Z で戻せるが、
+  /// redo は消える（redo の要素は差し替えた本文に当てられない）。
+  func testUndoingToTheSavedTextTakesTheExternalChangeAndDropsRedo() throws {
+    let opened = try open("one\n")
+    _ = host(opened)
+    let undo = try XCTUnwrap(opened.surface.responder.undoManager)
+    opened.surface.selectedRange = NSRange(location: 3, length: 0)
+    type(opened, "!")
+    try Data("theirs\n".utf8).write(to: opened.document.url)
+    opened.document.reconcileWithDisk()
+    XCTAssertTrue(opened.document.isDiskChanged, "前提: 未保存なので印が立つ")
+
+    undo.undo()
+    XCTAssertEqual(text(opened.document), "one\n")
+    XCTAssertTrue(undo.canRedo, "比べ終わるまでは redo が残る")
+    XCTAssertTrue(opened.document.waitUntilCaughtUp())
+    XCTAssertEqual(text(opened.document), "theirs\n", "未保存が解けた時点で外の版に差し替わる")
+    XCTAssertFalse(opened.document.isDiskChanged)
+    XCTAssertFalse(opened.document.isDirty)
+    XCTAssertFalse(undo.canRedo, "redo は消える")
+
+    undo.undo()
+    XCTAssertEqual(text(opened.document), "one\n", "差し替えは ⌘Z で戻せる")
+    XCTAssertTrue(opened.document.isDirty)
+  }
+
   /// 遠くの行を編集した後にスクロールして戻り undo しても、本文は空にならず、その編集だけが戻る。
   func testUndoFarAwayRestoresOnlyThatEdit() throws {
     let original = (0..<3000).map { "line \($0)" }.joined(separator: "\n") + "\n"
