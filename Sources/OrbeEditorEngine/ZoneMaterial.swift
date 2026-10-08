@@ -227,6 +227,11 @@ final class ZonePainter {
         material.fields.append(ZoneMaterial.Field(serial: serial(field.field), frame: field.frame))
       }
     }
+    precondition(hits.texts.count == picture.texts.count, "選べる文のまとまりの id は区画の中で一意")
+    precondition(
+      Set(hits.buttons.map(\.id)).count == hits.buttons.count, "押せる場所の id は区画の中で一意")
+    precondition(
+      Set(hits.fields.map(\.field.id)).count == hits.fields.count, "入力欄の id は区画の中で一意")
     return (material, hits)
   }
 

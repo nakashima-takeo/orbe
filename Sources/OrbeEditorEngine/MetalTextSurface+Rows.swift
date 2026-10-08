@@ -14,13 +14,15 @@ extension MetalTextSurface {
       zip(insertions, insertions.dropFirst()).allSatisfy { $0.line <= $1.line }
         && insertions.allSatisfy { (0...lineCount).contains($0.line) },
       "差し込みの境は昇順で、置く時点の文書の写しの行の範囲（0...行数）に収める")
+    let zoneList = insertions.compactMap { insertion -> SurfaceZone? in
+      if case .zone(let zone) = insertion.content { return zone }
+      return nil
+    }
+    precondition(
+      Set(zoneList.map(ObjectIdentifier.init)).count == zoneList.count, "同じ区画は並びに 1 度だけ置く")
     transact {
       noteRowsChange()
-      syncZones(
-        insertions.compactMap {
-          if case .zone(let zone) = $0.content { return zone }
-          return nil
-        })
+      syncZones(zoneList)
       let lineHeight = Double(config.lineHeight)
       self.rows.replace(
         insertions.map { insertion in

@@ -115,7 +115,7 @@ public struct ZoneTextLine {
   }
 }
 
-/// 選べる文のまとまり——id（描き直しをまたいで載せる側が安定に保つ値）と文。
+/// 選べる文のまとまり——id（描き直しをまたいで載せる側が安定に保つ値。区画の中で一意）と文。
 public struct ZoneText {
   public var id: AnyHashable
   public var string: String
@@ -166,7 +166,7 @@ public struct ZoneImage {
   }
 }
 
-/// 押せる場所——id（描き直しをまたいで安定）・矩形・上にあるときのポインタの形。
+/// 押せる場所——id（描き直しをまたいで安定。区画の中で一意）・矩形・上にあるときのポインタの形。
 public struct ZoneButton {
   public var id: AnyHashable
   public var frame: CGRect

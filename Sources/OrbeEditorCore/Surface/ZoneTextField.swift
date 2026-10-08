@@ -5,7 +5,7 @@ import AppKit
 /// が同じコマに出る。入力欄は折り返さない（改行で行が増え、載せる側が入力欄を高くする。長い行は横に送る）。
 @MainActor
 public final class ZoneTextField: SiteText {
-  /// 面の中で入力欄を指す id（区画の絵の `ZoneField` はこの型を渡す）。
+  /// 面の中で入力欄を指す id（面の中で一意。区画の絵の `ZoneField` はこの型を渡す）。
   public let id: AnyHashable
   public let style: Style
   public private(set) var text: TextRope

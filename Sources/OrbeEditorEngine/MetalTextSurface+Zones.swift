@@ -69,6 +69,7 @@ extension MetalTextSurface {
     entry.hits = hits
     for field in hits.fields {
       guard let site = fields[field.field.id] else { continue }
+      precondition(site.zone == nil || site.zone == id, "入力欄の id は面の中で一意（2 つの区画に置かない）")
       site.zone = id
       site.frame = field.frame
       site.touch()
