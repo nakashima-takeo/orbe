@@ -80,7 +80,7 @@ git の実質的な理由は stderr の `fatal:`・`error:` の行（無けれ�
 どれも進捗の行（git の語のまま。割合への換算や訳はしない）を届いた順に渡す。失敗は分類を持ち、分類できない失敗は「その他」（git の実質の理由）に倒す——誤分類より安全。
 
 - **前提は git を起こす前に型で判定する**: upstream の無いブランチの pull →「upstream が無い」、merge・rebase 等が止まっている worktree の pull →「操作の途中」、detached HEAD の push →「ブランチに居ない」、upstream も origin も無いブランチの push →「push 先が無い」。材料は直前に取り直した status と remote の一覧と、止まった操作の管理エントリ。
-- **push の拒否**は `--porcelain` の機械向けの行で読む——`[rejected]`（fetch first・non-fast-forward）は「拒否された（先に取り込みが要る）」。サーバの hook が拒んだ `[remote rejected]` は、その理由のまま「その他」。
+- **push の拒否**は `--porcelain` の機械向けの行で読む——`[rejected]`（fetch first・non-fast-forward）は「拒否された（先に取り込みが要る）」。サーバの hook が拒んだ `[remote rejected]` などは「その他」で、送れなかった ref とその要約（`(pre-receive hook declined)` 等）を理由の頭に置く——`--porcelain` では要約が機械向けの行へ移り、stderr には「送れなかった」としか残らないため。
 - **競合**は「pull の前に無かった止まった操作が、後に在る」で読む（stderr の字面で読まない）。
 - **認証**（ssh の `Permission denied (publickey`、https の `Authentication failed`・`could not read Username`・`terminal prompts disabled`）と**ホスト鍵**（`Host key verification failed`）だけは stderr の字面で読む。git も ssh もそれを機械向けの形で出さない。
 
