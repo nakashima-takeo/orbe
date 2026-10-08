@@ -1,15 +1,15 @@
 ---
 title: Orbe デザインシステム
 description: 外観の思想・契約を記す自由記述ドキュメント。値の正は DesignSystem/ の Swift、思想・契約の正は本書
-updated: 2026-10-04
+updated: 2026-10-09
 ---
 
 # Orbe デザインシステム
 
-> ステータス: v0.12.0 · 2026-09-24
+> ステータス: v0.13.0 · 2026-10-09
 > 値の正（SSOT）: chrome/semantic は `Sources/Orbe/DesignSystem/DesignTokens.swift`（機械可読ミラー `docs/design/tokens.json`）／ 識別色（端末 ANSI 16 色・chrome 共有アンカー）は `Sources/Orbe/DesignSystem/OrbePalette.swift`（端末 conf を生成し、chrome アンカーへ定数を供給）／ worktree 識別色 48 色（24 色相 × 2 トーン）を dark / light 別に持つ表は `Sources/Orbe/DesignSystem/WorktreePalette.swift`（`scripts/gen-worktree-palette.py` が oklch から生成・手で編集しない）。
 > ガラス質感・elevation・glow は `Sources/Orbe/DesignSystem/DesignTokens+Glass.swift` が所有（本書は再定義しない）。
-> エディター面のトークン（`face.*` / `editor.*` / `syntax.*` / `type.editor*` / `layout.editor*` / `opacity.editor*` / `stroke.editor*` / `faceSlide` `spineLook` `faceDot` `editorSlider*` `editorScrollbar*`）は `Sources/Orbe/DesignSystem/DesignTokens+Editor.swift` が所有。
+> エディター面のトークン（`face.*` / `editor.*` / `diff.*` / `syntax.*` / `type.editor*` / `layout.editor*` / `opacity.editor*` / `stroke.editor*` / `faceSlide` `spineLook` `faceDot` `editorSlider*` `editorScrollbar*`）は `Sources/Orbe/DesignSystem/DesignTokens+Editor.swift` が所有。
 > 本書は思想・契約を記す自由記述ドキュメントで、**思想・契約の正は本書、値の正は上記 Swift**。Orbe の外観の**正**はこのリポジトリの中で閉じている。ただしコード中の一部コメントは、値が決まった経緯の記録として設計見本（リポジトリ外）を引用する——それは出所の記録であって、正ではない。
 
 Orbe は AI コーディングエージェントのためのネイティブ macOS ターミナル。外観は
@@ -50,9 +50,8 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `accent.focus` | フォーカス | `#9068f0` | `#6d43d8` |
 | `accent.bright` | accent の明色変種（tint(accent) 面上の強調文字・タブ行の挿入キャレット） | `#b18aff` | `#6d43d8` |
 | `on.accent` | accent 塗り上のインク＝地色 | `#1a1721` | `#fcfbfe` |
-| `diff.added` / `success` | 追加・成功（green） | `#81b88b` | `#279a4d` |
-| `diff.removed` / `danger` | 削除・エラー（red） | `#d16969` | `#e02d33` |
-| `diff.modified` | 変更（blue）——git ガターの変更行 | `#85adff` | `#3f6fd6` |
+| `success` | 成功（green・端末の緑と同値） | `#81b88b` | `#279a4d` |
+| `danger` | エラー（red・端末の赤と同値） | `#d16969` | `#e02d33` |
 | `conflict` | 競合＝注意色（黄・ANSI黄） | `#e2cd6d` | `#b17b00` |
 | `state.working` | エージェント実行中 | `#85adff` | `#1f66c9` |
 | `state.waiting` | 要応答 | `#eec25a` | `#b17b00` |
@@ -80,7 +79,12 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `editor.icon` | エディター面のアイコン・kbd の文字（dark / light とも `kbKeyText` と偶然同値だが別トークン） | `#a99fb8` | `#766e8d` |
 | `editor.text` | エディター面の 2 段目の文字——コードの素文字・ファイル名・タブ題・パンくずの末尾（dark / light とも `statusText` と偶然同値だが別トークン） | `#cdc7e2` | `#4d4368` |
 | `editor.tertiary` | エディター面の三次の文字——レールの非選択・パンくずの区切り（`text.tertiary` は `text.muted` の別名なので別値） | `#6d667a` | `#aca4bd` |
-| `editor.modified` | 変更の黄——M バッジ・外部変更で衝突中のドット（dark は `conflict` と偶然同値だが light が違い、git 競合でもない） | `#e2cd6d` | `#a07f0c` |
+| `editor.caution` | 注意の黄——外部変更で衝突中のタブのドット・検索の一致の地（dark は `conflict` と偶然同値だが light が違い、git 競合でもない） | `#e2cd6d` | `#a07f0c` |
+| `diff.added` | git の追加（青）——ガター・A / U のバッジと名前・印・diff の記号と行の地の基 | `#5ea8ff` | `#0969da` |
+| `diff.removed` | git の削除（オレンジ）——ガターの三角・印・diff の記号と行の地の基 | `#f0883e` | `#bc4c00` |
+| `diff.modified` | git の変更（黄）——ガター・M のバッジと名前・印 | `#e2cd6d` | `#a07f0c` |
+| `diff.addedText` | diff の追加の行の字 | `#b3d4ff` | `#0550ae` |
+| `diff.removedText` | diff の削除の行の字 | `#ffc69a` | `#953800` |
 | `editor.tabCloseHover` | ファイルタブの × にポインタがあるときの枠の地（VS Code `toolbar.hoverBackground` の役。§5 File tabs） | `rgba(255,255,255,.10)` | `rgba(58,49,81,.10)` |
 | `editor.previewHatch` | 仮のタブの地の斜線の基色（view 側で `opacity.editorPreviewHatch*` を掛ける。§5 File tabs） | `#a99fb8` | `#3a3151` |
 | `editor.hue.{orange,blue,yellow,sky,violet,cyan,red,green,teal}` | 種別チップの色相（文字と α .16 の地）。種別 → 色相の表は `FileChip` が持つ | `DesignTokens+Editor.swift` の `editorHue*`（`tokens.json` の `editor.hue.*`） | 同 |
@@ -112,10 +116,9 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 
 **意図的な同値収束（事故ではない）**: Orbe の配色は色階層が少なく、複数の semantic 名が同一値へ収束する。SSOT では別名で表現している。
 `accent.focus` ＝ `accent.primary`／ `text.tertiary` ＝ `text.muted`／
-`success` ＝ `diff.added`（green）／ `danger` ＝ `diff.removed`（red）／
 `state.dormant` ＝ `text.muted`／ `surface.0` ＝ `bg.sunken`。
-**値だけが一致する独立トークン**: `face.terminal` ＝ `text.secondary`／ `editor.icon` ＝ `kbKeyText`／ `editor.text` ＝ `statusText`／ `editor.modified` ＝ `editor.hue.yellow`／ `diff.modified` ＝ `editor.hue.blue`／ `editor.whitespace` ＝ `editor.lineNumber`／ `editor.hue.sky` ＝ `syntax.variable`（上の収束と違い SSOT でも互いを参照せず、片方の値が動いてももう片方は追随しない）。`syntax.*` の dark は VSCode Dark Modern の実在トークン色で、5 色が端末の ANSI（§8）と偶然同値だが、端末色は別レイヤーなので参照しない。選択・俯瞰・強調の `editor.*`（selection〜minimapShadow）は VS Code Dark Modern / Light Modern の値（上書きの無いものは VS Code の既定）で、エディターの使い勝手を VS Code に揃えるために借りる。同じ意味の Orbe トークンがあるもの（git の印・キャレット・縁）はそれを使い、git の印とキャレットには VS Code の α を掛ける。
-`state.done`（完了・緑）と `diff.added`（green）、`state.waiting`（要応答・黄）と `conflict`（ANSI黄）は**別トークンとして分離**（light では偶々同値だが dark では異なる。SSOT は状態色を `StateHue`、ANSI 系を端末アンカーから別々に導く）。
+**値だけが一致する独立トークン**: `face.terminal` ＝ `text.secondary`／ `editor.icon` ＝ `kbKeyText`／ `editor.text` ＝ `statusText`／ `editor.caution` ＝ `diff.modified` ＝ `editor.hue.yellow`／ `editor.whitespace` ＝ `editor.lineNumber`／ `editor.hue.sky` ＝ `syntax.variable`（上の収束と違い SSOT でも互いを参照せず、片方の値が動いてももう片方は追随しない）。`syntax.*` の dark は VSCode Dark Modern の実在トークン色で、5 色が端末の ANSI（§8）と偶然同値だが、端末色は別レイヤーなので参照しない。選択・俯瞰・強調の `editor.*`（selection〜minimapShadow）は VS Code Dark Modern / Light Modern の値（上書きの無いものは VS Code の既定）で、エディターの使い勝手を VS Code に揃えるために借りる。同じ意味の Orbe トークンがあるもの（git の印・キャレット・縁）はそれを使い、git の印とキャレットには VS Code の α を掛ける。
+`state.done`（完了・緑）と `success`（green）、`state.waiting`（要応答・黄）と `conflict`（ANSI黄）は**別トークンとして分離**（light では偶々同値だが dark では異なる。SSOT は状態色を `StateHue`、ANSI 系を端末アンカーから別々に導く）。
 **反転色（`state.*Inverse`）は対テーマの状態色**＝dark/light の値を入れ替えただけ（選択タブの反転面上でコントラストを確保する仕組み）。
 **light の `tab.activeText` `#f3f0fa` は `bg.base` `#fcfbfe` と別値**（on.accent の流用不可）。
 
@@ -129,8 +132,8 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `tint.working` | `rgba(133,173,255,.12)` | `rgba(31,102,201,.12)` | working 件数ピル |
 | `tint.waiting` | `rgba(238,194,90,.12)` | `rgba(177,123,0,.12)` | waiting |
 | `tint.done` | `rgba(130,216,148,.12)` | `rgba(39,154,77,.12)` | done |
-| `tint.diffAdded` | `rgba(129,184,139,.12)` | `rgba(39,154,77,.12)` | git の緑チップ地（clean の merged PR 等。文字が `diff.added` なので地も同軸） |
-| `tint.red` | `rgba(209,105,105,.14)` | `rgba(224,45,51,.14)` | エラー・削除件数 |
+| `tint.success` | `rgba(129,184,139,.12)` | `rgba(39,154,77,.12)` | 成功の緑チップ地（clean の merged PR 等。文字が `success` なので地も同軸） |
+| `tint.red` | `rgba(209,105,105,.14)` | `rgba(224,45,51,.14)` | エラー |
 | `smallPillFill` | `rgba(255,255,255,.04)` | `rgba(58,49,81,.06)` | ⌘⇧S 等のキーバッジ地 |
 | `plainPillFill` | `rgba(255,255,255,.06)` | `rgba(58,49,81,.08)` | 事実だけを述べる無色チップ地（clean の `[gone]` / `prunable`） |
 | `scrim` | `rgba(10,8,14,.35)` | `rgba(58,49,81,.18)` | Workspace 等の通常暗幕 |
@@ -214,6 +217,8 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 **色だけに意味を持たせない。** 意味は必ず 形・記号・位置・文字 のいずれかでも伝え、色は補強に回す。
 
 - **成功＝green（`success`）＋ `✓`／エラー＝red（`danger`）＋ `⚠`。**
+- **git の色は赤と緑に頼らない**: 追加＝青（`diff.added`）・削除＝オレンジ（`diff.removed`）・変更＝黄（`diff.modified`）。赤と緑を見分けにくい人でも区別できるため。形（記号 ＋ / −・削除の三角・バッジの字）でも区別する。
+  - 見本の色名からの訳し方: 見本の `diffAdd` / `diffDel` は、git の変化の種類（ガター・バッジ・diff の行・印・件数）なら `diff.*`、成否・CI・PR の状態・診断なら `success` / `danger`。見本の `modified` は、git の M とガターの変更なら `diff.modified`、それ以外は `editor.caution`。
 - **エージェント状態はグリフ形＋動きが一次情報。** 4状態すべてが固有の形（円弧・吹き出し・チェック・zzz）を持ち、色情報を除いても判別できる。横断ロールアップは常に件数（数字）を併記。
 - **コントラスト**: テキスト階層は背景に対し WCAG AA（本文 4.5:1 / 大字 3:1）。`text.muted` は補助情報専用、本文に使わない。
 
@@ -261,9 +266,9 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
   - **上端の影**: 先頭の行が上へ隠れている間、本文の上端（本文の幅。ミニマップには掛けない）に `editor.scrollShadow` の内側の影（CSS の `0 6px 6px -6px inset`）。
   - **強調の地**: 行の高さいっぱい・角なし、選択の地の上・文字の下。下から 現在の一致の行全体 `editor.findLine` → 選択文字列の出現 `editor.selectionOccurrence` → 語の出現 `editor.wordOccurrence` → 検索の一致 `editor.findMatch` → 現在の一致 `editor.findMatchCurrent`（不透明）。一致が 1000 件を超えると検索の一致は現在の一致の行の直上へ回る。バーは Search field（§5）そのもので、本文の右上（上・右 12、ミニマップの左）。
 - **Rail**（エディター面の左端 36）: 地 `sunkInk` .22・右 1px `borderInk` .07（light ×1.4）。項目は「ファイル」「検索」の 2 つで 36 角・グリフ 20px stroke 1.5（検索は 1.6。見本 SearchIcon）。選択は上の例外（サイドバーを閉じている間は無い）、非選択の文字は `editor.tertiary`。
-- **Explorer**（サイドバー。既定 240・ドラッグで可変）: 地 `sunkInk` .45・右 1px `borderInk` .07。ぼかしは持たない（面内の in-flow 面は窓のブラーに委ねる。§1-6）。パネルヘッダー 28（題 `type.editorPanelTitle`・`text.muted`、右端に 22 角のアイコンボタン: radius 4・hover 地 `surfaceInk` .08 ＋ 文字 `editor.text`、既定の文字 `text.muted`）。ルート行 20（`type.editorRootLabel`・`editor.text`・根の basename を大文字）。ツリー行 20・`type.editorTreeRow`・深さぶんのガイド（幅 8 ＋ 右 1px `borderInk` .08）・ディレクトリはシェブロン 16（`editor.icon`）、ファイルは種別チップ 14。名前の色は git バッジに従う（M `editor.modified` / A・U `diff.added` / C `conflict`、無印は `editor.text`）。バッジは右端 `type.editorBadge`。hover 地 `surfaceInk` .045、選択 `selectionFill`。ディレクトリ行はバッジを持たない。
-- **Search panel**（サイドバーのもう 1 つのパネル。器とパネルヘッダーは Explorer と同じ部品）: ヘッダーの右端に 更新（2 秒を超えた検索では停止）・クリア・すべて折りたたむ／すべて展開。検索中はヘッダーの下端に `accent.primary` の細い帯が左から右へ流れる。入力欄 28（外側 padding 0 12 10、内側 padding 0 8・`type.editorSearchField`・地 `sunkInk` .35・枠 1px `borderInk` .10 radius 3、焦点で枠 `accent.primary` .55 radius 5、プレースホルダ `editor.tertiary`）。右端のオプション 20 角 radius 3・`type.editorSearchOption`・`text.muted`（ab は下線）、hover 地 `surfaceInk` .08、有効は地 `accent.primary` .25・枠 `accent.primary` .55・文字 `accent.bright`。エラーの文は入力欄の下に `danger`。まとまりの見出し 20（padding 0 12・gap 6: シェブロン 10 `text.muted`〔畳むと右向き〕・種別チップ 14・名前 `type.editorSearchFile` `text.primary`・ディレクトリ `type.editorSearchDirectory` `editor.tertiary`〔長ければ頭を省略〕・右端の件数バッジ 最小 18×16 capsule・地 `surfaceInk` .10・`type.editorSearchCount` `text.secondary`）。一致の行 20（左 40・右 12・`type.editorSearchMatch`: 前 `editor.tertiary`・一致は地 `editor.modified` .30 radius 2 ＋ `text.primary`・後ろ `text.muted`。狭ければ後ろ → 前の頭 → 一致の順に省略し、前と後ろには省略記号 1 つぶんを残す——見本は行全体の末尾を省略するだけ）。選択は `selectionFill`。結果の列は、見えている行だけを持って使い回す自前の列（AppKit）で描く——行は最大 2 万になり、行の数が変わっても手間が行の総数に依らないようにするため（行の少ないエクスプローラーのツリーは SwiftUI のまま）。行の高さは見出しも一致も 1 つ（VS Code の検索の結果と同じ）。件数の文はパネルの下に固定（padding 10 12・`type.editorSearchNote`・`editor.tertiary`）。寸法は見本 SearchPanel を u4 で詰めた比率（12.5→12・チップ 16→14・ディレクトリ 11→10.5、一致の行 21→20・mono 11.5→11・左 44→40）で、見出しの高さは見本の 24 から一致の行と同じ 20 にそろえる。
-- **File tabs**（列の頭 28）: 地 `sunkInk` .22・下 1px `borderInk` .07。タブは padding 左 10 右 6・gap 6・`type.editorFileTab`・右 1px `borderInk` .07。チップ 14 ＋ 名前 ＋ 右端の枠 20 角（radius 6。押せる範囲で、幅は常に確保）。枠の中は × 12（`editor.icon`）か未保存ドット 8（`text.primary`。外部変更で衝突中は `editor.modified`）: アクティブは × を常に、非アクティブはタブ hover のときだけ出し、未保存は × 自体の hover のときのほかは × の代わりにドット（タブに乗っただけではドットのまま）。× の hover で枠に地 `editor.tabCloseHover` が付き、× は `text.primary` へ上がる。選択は上の例外・文字 `text.primary`、非選択は `text.muted`。溢れは横スクロール（スクローラー非表示）。枠の寸法・角・出し分けは VS Code 1.140 のタブに揃える（`multieditortabscontrol.css` の tab-actions の action-label: 16 ＋ padding 2 で 20 角・未保存は `.action-label:not(:hover)` の間だけドット、`actionbar.css` の角 `cornerRadius.medium` 6）。hover の地は VS Code の `toolbar.hoverBackground`（dark `#5a5d5e50` / light `#b8b8b850`）の中立の灰を、Orbe の hover 地と同じ面の基色（dark 白・light `#3a3151`、`surfaceInk` と同じ）の α .10 に置き換える——温かい炭・藤紙の上に中立の灰を置くと面から浮くため。地との明度差は VS Code と同程度に保つ。**仮のタブ**（→ [editor/shell](../spec/editor/shell.md)）は名前を斜体にし、地に 135° の斜線（線 1・周期 6・`editor.previewHatch` の α .06／見ていないとき .039）を敷く。見ているときは普通のアクティブの地の上に重ね、上縁の accent・右の境の線・チップ・× と未保存の枠は普通のタブと同じ。斜線はタブの左上から数えるので、タブの幅に依らず揃い、横スクロールでタブと一緒に動く。VS Code の preview editor は斜体だけで普通のタブと見分けにくく、日本語名・絵文字では斜体が効かない字もあるので、斜線を足す（デザインキャンバス『7 · 斜線の地』）。light の基色は面の基色（`surfaceInk` と同じ紫の墨）で、地との明度差（L*）が dark に近い（dark の 8〜9 割）——dark の基色はアイコンの色相（`editor.icon` と同値）。
+- **Explorer**（サイドバー。既定 240・ドラッグで可変）: 地 `sunkInk` .45・右 1px `borderInk` .07。ぼかしは持たない（面内の in-flow 面は窓のブラーに委ねる。§1-6）。パネルヘッダー 28（題 `type.editorPanelTitle`・`text.muted`、右端に 22 角のアイコンボタン: radius 4・hover 地 `surfaceInk` .08 ＋ 文字 `editor.text`、既定の文字 `text.muted`）。ルート行 20（`type.editorRootLabel`・`editor.text`・根の basename を大文字）。ツリー行 20・`type.editorTreeRow`・深さぶんのガイド（幅 8 ＋ 右 1px `borderInk` .08）・ディレクトリはシェブロン 16（`editor.icon`）、ファイルは種別チップ 14。名前の色は git バッジに従う（M `diff.modified` / A・U `diff.added` / C `conflict`、無印は `editor.text`）。バッジは右端 `type.editorBadge`。hover 地 `surfaceInk` .045、選択 `selectionFill`。ディレクトリ行はバッジを持たない。
+- **Search panel**（サイドバーのもう 1 つのパネル。器とパネルヘッダーは Explorer と同じ部品）: ヘッダーの右端に 更新（2 秒を超えた検索では停止）・クリア・すべて折りたたむ／すべて展開。検索中はヘッダーの下端に `accent.primary` の細い帯が左から右へ流れる。入力欄 28（外側 padding 0 12 10、内側 padding 0 8・`type.editorSearchField`・地 `sunkInk` .35・枠 1px `borderInk` .10 radius 3、焦点で枠 `accent.primary` .55 radius 5、プレースホルダ `editor.tertiary`）。右端のオプション 20 角 radius 3・`type.editorSearchOption`・`text.muted`（ab は下線）、hover 地 `surfaceInk` .08、有効は地 `accent.primary` .25・枠 `accent.primary` .55・文字 `accent.bright`。エラーの文は入力欄の下に `danger`。まとまりの見出し 20（padding 0 12・gap 6: シェブロン 10 `text.muted`〔畳むと右向き〕・種別チップ 14・名前 `type.editorSearchFile` `text.primary`・ディレクトリ `type.editorSearchDirectory` `editor.tertiary`〔長ければ頭を省略〕・右端の件数バッジ 最小 18×16 capsule・地 `surfaceInk` .10・`type.editorSearchCount` `text.secondary`）。一致の行 20（左 40・右 12・`type.editorSearchMatch`: 前 `editor.tertiary`・一致は地 `editor.caution` .30 radius 2 ＋ `text.primary`・後ろ `text.muted`。狭ければ後ろ → 前の頭 → 一致の順に省略し、前と後ろには省略記号 1 つぶんを残す——見本は行全体の末尾を省略するだけ）。選択は `selectionFill`。結果の列は、見えている行だけを持って使い回す自前の列（AppKit）で描く——行は最大 2 万になり、行の数が変わっても手間が行の総数に依らないようにするため（行の少ないエクスプローラーのツリーは SwiftUI のまま）。行の高さは見出しも一致も 1 つ（VS Code の検索の結果と同じ）。件数の文はパネルの下に固定（padding 10 12・`type.editorSearchNote`・`editor.tertiary`）。寸法は見本 SearchPanel を u4 で詰めた比率（12.5→12・チップ 16→14・ディレクトリ 11→10.5、一致の行 21→20・mono 11.5→11・左 44→40）で、見出しの高さは見本の 24 から一致の行と同じ 20 にそろえる。
+- **File tabs**（列の頭 28）: 地 `sunkInk` .22・下 1px `borderInk` .07。タブは padding 左 10 右 6・gap 6・`type.editorFileTab`・右 1px `borderInk` .07。チップ 14 ＋ 名前 ＋ 右端の枠 20 角（radius 6。押せる範囲で、幅は常に確保）。枠の中は × 12（`editor.icon`）か未保存ドット 8（`text.primary`。外部変更で衝突中は `editor.caution`）: アクティブは × を常に、非アクティブはタブ hover のときだけ出し、未保存は × 自体の hover のときのほかは × の代わりにドット（タブに乗っただけではドットのまま）。× の hover で枠に地 `editor.tabCloseHover` が付き、× は `text.primary` へ上がる。選択は上の例外・文字 `text.primary`、非選択は `text.muted`。溢れは横スクロール（スクローラー非表示）。枠の寸法・角・出し分けは VS Code 1.140 のタブに揃える（`multieditortabscontrol.css` の tab-actions の action-label: 16 ＋ padding 2 で 20 角・未保存は `.action-label:not(:hover)` の間だけドット、`actionbar.css` の角 `cornerRadius.medium` 6）。hover の地は VS Code の `toolbar.hoverBackground`（dark `#5a5d5e50` / light `#b8b8b850`）の中立の灰を、Orbe の hover 地と同じ面の基色（dark 白・light `#3a3151`、`surfaceInk` と同じ）の α .10 に置き換える——温かい炭・藤紙の上に中立の灰を置くと面から浮くため。地との明度差は VS Code と同程度に保つ。**仮のタブ**（→ [editor/shell](../spec/editor/shell.md)）は名前を斜体にし、地に 135° の斜線（線 1・周期 6・`editor.previewHatch` の α .06／見ていないとき .039）を敷く。見ているときは普通のアクティブの地の上に重ね、上縁の accent・右の境の線・チップ・× と未保存の枠は普通のタブと同じ。斜線はタブの左上から数えるので、タブの幅に依らず揃い、横スクロールでタブと一緒に動く。VS Code の preview editor は斜体だけで普通のタブと見分けにくく、日本語名・絵文字では斜体が効かない字もあるので、斜線を足す（デザインキャンバス『7 · 斜線の地』）。light の基色は面の基色（`surfaceInk` と同じ紫の墨）で、地との明度差（L*）が dark に近い（dark の 8〜9 割）——dark の基色はアイコンの色相（`editor.icon` と同値）。
 - **Breadcrumb**（列の頭 20）: padding 左 16 右 12・`type.editorBreadcrumb`・`text.muted`・gap 4。区切りはシェブロン 10（`editor.tertiary`）。ディレクトリは hover で `editor.text`。末尾はチップ 12（radius 2）＋ ファイル名 `editor.text`。
 - **Empty state**: 中央・`type.body`・`text.muted` の一文＋必要なら `type.meta` ヒント。装飾なし。**エディター面**の空状態は見本の値をそのまま持つ: ◐（`OrbeMarkGlyph` 44・`editor.ghost`）・その 18 下に `type.editorLead`・`text.muted` の一文・22 下にショートカット行（gap 8。ラベル `type.editorHint`・`text.muted`・幅 170 右寄せ ＋ gap 12 ＋ kbd）。kbd＝`type.editorHint`・文字 `editor.icon`・枠 hairline `borderInk` .14（light ×1.4）・radius `sm`・padding 1×7・地 `surfaceInk` .05（light ×0.6）。
 
@@ -302,7 +307,7 @@ SwiftUI は `Color.theme.x` / `Font.theme.x`（`DesignTokens+SwiftUI.swift` の�
 
 中央ターミナル（Ghostty が描く Metal レイヤー）も chrome の外観に寄せる。色は chrome のトークンとは別レイヤー（Ghostty の named theme）で持ち、`theme = light:OrbeLight,dark:OrbeDark`（バンドル `Contents/Resources/ghostty/themes/` はこの2枚のみ・出所 `app/themes/`）に固定。
 
-- **配色**: ANSI 16 色＋端末 bg/fg/cursor/selection は識別色 SSOT `OrbePalette.swift` が持ち、`renderConf` が conf 2枚（`app/themes/OrbeDark` / `OrbeLight`）を生成する（手写しの転写なし）。16 色は確定配色値。dark は **VS Code Dark+ のシンタックストークン色**を ANSI スロットへ再配置したもの（VS Code の `terminal.ansi*` とは別物）、light は無彩色ランプ 0/7/15 が **Catppuccin Latte** 由来（8 のみ AA 是正）で有彩色 1–6 は light 背景向けに決めた値。chrome と共有するアンカーは 背景 `chromeBg`（`#171420`/light `#fcfbfe`）・前景 `chromeText`（`#e6e1f0`/`#3a3151`）・カーソル `accent`（`#9068f0`/`#6d43d8`）・赤 `diffDel`（1・9）・緑 `diffAdded`（2・10）・黄 `conflict`（3・11）で、dark/light とも端末 ink と同値。light の bright 赤/緑/黄（9–14）は normal（1–6）のミラー。ink スロット {1-6,8-14} は原則 各モードの背景に対し WCAG AA 4.5 以上（構造色 0/7/15 は最暗/最明淡色として ANSI 慣習で対象外）。ただし確定値の一部は 4.5 に満たず、人が承認済みの確定値を優先してゲートから除外する（`OrbePalette.aaExemptDark/Light`＝dark 8・light 1/2/3/9/10/11）。`swift test`（`OrbePaletteTests`）が除外外の ink のコントラストと conf の drift（SSOT からの再生成＝コミット済み）を検証し、回帰と転写ドリフトをコミット不能にする。
+- **配色**: ANSI 16 色＋端末 bg/fg/cursor/selection は識別色 SSOT `OrbePalette.swift` が持ち、`renderConf` が conf 2枚（`app/themes/OrbeDark` / `OrbeLight`）を生成する（手写しの転写なし）。16 色は確定配色値。dark は **VS Code Dark+ のシンタックストークン色**を ANSI スロットへ再配置したもの（VS Code の `terminal.ansi*` とは別物）、light は無彩色ランプ 0/7/15 が **Catppuccin Latte** 由来（8 のみ AA 是正）で有彩色 1–6 は light 背景向けに決めた値。chrome と共有するアンカーは 背景 `chromeBg`（`#171420`/light `#fcfbfe`）・前景 `chromeText`（`#e6e1f0`/`#3a3151`）・カーソル `accent`（`#9068f0`/`#6d43d8`）・赤 `danger`（1・9）・緑 `success`（2・10）・黄 `conflict`（3・11）で、dark/light とも端末 ink と同値。light の bright 赤/緑/黄（9–14）は normal（1–6）のミラー。ink スロット {1-6,8-14} は原則 各モードの背景に対し WCAG AA 4.5 以上（構造色 0/7/15 は最暗/最明淡色として ANSI 慣習で対象外）。ただし確定値の一部は 4.5 に満たず、人が承認済みの確定値を優先してゲートから除外する（`OrbePalette.aaExemptDark/Light`＝dark 8・light 1/2/3/9/10/11）。`swift test`（`OrbePaletteTests`）が除外外の ink のコントラストと conf の drift（SSOT からの再生成＝コミット済み）を検証し、回帰と転写ドリフトをコミット不能にする。
 - **テーマ選択**: ユーザーが選べるのは **Auto / Dark / Light の外観スイッチ**（`ThemeMode`・`NSApp.appearance` 経由で chrome とターミナルが揃って切替）だけで、ターミナル配色自体は選べない。gui.conf が上記 theme 行を常時吐き、`~/.config/ghostty` の theme 指定を無効化する。
 - **カーソル**: 電紫のブロック（`cursor-style = block`＋テーマの `cursor-color`＝accent）＋点滅 ON/OFF は設定パレット。点滅周期は Ghostty ハードコードの標準 600ms（chrome の `blink` 1.1s（§2.5）とは周期が異なるが、エンジンを fork しない方針で受容）。
 - **背景透過**: 既定 `background-opacity = 0.9`。半透明の端末越しに AppShell 最背面の accent＋working glow が中央へ滲む。ユーザーが設定パレットで不透明度を明示すると層3（`gui.conf`）が後勝ちする。
