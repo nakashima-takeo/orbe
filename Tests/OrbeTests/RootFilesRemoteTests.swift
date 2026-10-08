@@ -122,8 +122,8 @@ final class RootFilesRemoteTests: OrbeTestCase {
 
   // MARK: - 前提
 
-  /// 前提が欠けた操作は、git を起こす前に分類された失敗で返る——upstream の無いブランチの pull・merge の途中の pull・
-  /// detached HEAD の push・push 先が無い push。
+  /// 前提が欠けた操作は、git を起こす前に分類された失敗で返る——upstream の無いブランチの pull・merge / rebase の途中の
+  /// pull・detached HEAD の push・push 先が無い push。
   func testMissingPreconditionsAreClassifiedUpFront() throws {
     let files = repo.files()
     XCTAssertEqual(
@@ -146,5 +146,12 @@ final class RootFilesRemoteTests: OrbeTestCase {
     XCTAssertEqual(
       finish(files) { files.pull(onProgress: { _ in }, completion: $0) }.failure,
       .operationInProgress(.merge))
+
+    // rebase の途中は HEAD が detached で upstream も無いが、「upstream が無い」ではない。
+    XCTAssertTrue(repo.git(["merge", "--abort"]).isSuccess)
+    XCTAssertFalse(repo.git(["rebase", "side"]).isSuccess, "前提: rebase が競合で止まる")
+    XCTAssertEqual(
+      finish(files) { files.pull(onProgress: { _ in }, completion: $0) }.failure,
+      .operationInProgress(.rebase))
   }
 }
