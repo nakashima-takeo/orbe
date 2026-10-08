@@ -81,12 +81,20 @@ extension GitRepo {
   /// `-z` と `%H%x00%P%x00%s`: 1 コミット 3 欄が NUL で続く。
   private static func parseLog(_ data: Data) -> [LoggedCommit] {
     let fields = data.split(separator: 0, omittingEmptySubsequences: false)
-      .map { String(bytes: $0, encoding: .utf8) ?? "" }
     return stride(from: 0, to: fields.count - 2, by: 3).map {
       LoggedCommit(
-        oid: fields[$0], parents: fields[$0 + 1].split(separator: " ").map(String.init),
-        subject: fields[$0 + 2])
+        oid: String(bytes: fields[$0], encoding: .utf8) ?? "",
+        parents: (String(bytes: fields[$0 + 1], encoding: .utf8) ?? "").split(separator: " ")
+          .map(String.init),
+        subject: subject(fields[$0 + 2]))
     }
+  }
+
+  /// 題は不正なバイトを U+FFFD へ落として読む。encoding ヘッダの無い非 UTF-8 の題（古い git・他の VCS から取り込んだ
+  /// 履歴）は `--encoding=UTF-8` でも変換されずに出るので、厳密に読むと無題になる。
+  private static func subject(_ bytes: Data) -> String {
+    // swiftlint:disable:next optional_data_string_conversion
+    String(decoding: bytes, as: UTF8.self)
   }
 
   /// コミット → それを指すローカル / remote 追跡ブランチの名前。symref（`origin/HEAD`）は除く。
