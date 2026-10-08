@@ -125,11 +125,7 @@ final class RootFilesWritesTests: OrbeTestCase {
     let name = "untracked-\(UUID().uuidString).txt"
     try repo.write(name, "keep me recoverable\n")
     let files = repo.files()
-    let trash = try FileManager.default.url(
-      for: .trashDirectory, in: .userDomainMask, appropriateFor: URL(fileURLWithPath: repo.root),
-      create: false)
-    let trashed = trash.appendingPathComponent(name)
-    defer { try? FileManager.default.removeItem(at: trashed) }
+    let trashed = try XCTUnwrap(GitRepo.trashDirectoryOverride).appendingPathComponent(name)
 
     let discarded = finish(files) { files.discard([files.status!.row(name)], completion: $0) }
     XCTAssertNil(discarded.failure)

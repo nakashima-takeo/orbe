@@ -54,7 +54,7 @@ extension GitRepo {
         let moveToTrash = {
           do {
             for path in trash {
-              try FileManager.default.trashItem(at: self.url(of: path), resultingItemURL: nil)
+              try Self.moveToTrash(self.url(of: path))
             }
             completion(nil)
           } catch {
@@ -122,6 +122,19 @@ extension GitRepo {
         ) { completion(.of($0)) }
       }
     }
+  }
+
+  /// ゴミ箱の行き先の差し替え（テスト用。隔離ハーネスが毎テスト caseDir の下へ張る）。nil なら利用者のゴミ箱。
+  nonisolated(unsafe) static var trashDirectoryOverride: URL?
+
+  private static func moveToTrash(_ url: URL) throws {
+    guard let directory = trashDirectoryOverride else {
+      try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+      return
+    }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try FileManager.default.moveItem(
+      at: url, to: directory.appendingPathComponent(url.lastPathComponent))
   }
 
   /// 空のパスの操作は git を起こさずに成功で返す——パスの無い `add -A`・`reset` は全体に効いてしまう。
