@@ -9,16 +9,16 @@ import XCTest
 /// diff を取り直すたびに画面が跳ねる、打鍵で差し込みが別の行へずれる。
 @MainActor
 final class SurfaceRowsTests: EngineTestCase {
-  private let size = CGSize(width: 600, height: 400)
+  let size = CGSize(width: 600, height: 400)
 
   /// ミニマップを出さない面に `count` 行（行 i は「row i 」と x の並び）。
-  private func openRows(_ count: Int = 80) throws -> Opened {
+  func openRows(_ count: Int = 80) throws -> Opened {
     let opened = try open(rows(count), size: size)
     opened.surface.setPresentation(SurfacePresentation(showsMinimap: false))
     return opened
   }
 
-  private func insert(_ lines: [String], at line: Int) -> RowInsertion {
+  func insert(_ lines: [String], at line: Int) -> RowInsertion {
     RowInsertion(line: line, content: .lines(lines.map(InsertedLine.init)))
   }
 

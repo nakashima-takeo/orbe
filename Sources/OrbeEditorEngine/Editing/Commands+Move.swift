@@ -68,7 +68,7 @@ extension EditCommands {
 
   /// ↑↓とページ送り（VS Code の `MoveOperations.vertical`）。横位置は覚えた x（無ければ今の位置の x）で、先頭の行より上は
   /// 文書の先頭、最終行より下は文書の末尾。選択があって伸ばさないなら、↑は始まり・↓は終わりから動く。↑↓は文書の行を 1 つ、
-  /// ページ送りは縦の並びでページの高さだけ離れた所の文書の行（差し込みの上なら次の文書の行）へ。
+  /// ページ送りは縦の並びでページの高さだけ離れた所の文書の行（差し込みの上なら、進む向きの先の文書の行）へ。
   private static func vertical(
     _ cursor: Cursor, by lines: Int, extending: Bool, _ env: EditingEnvironment
   ) -> Cursor {
@@ -78,10 +78,7 @@ extension EditCommands {
       ? (lines < 0 ? cursor.selection.location : NSMaxRange(cursor.selection)) : cursor.position
     let row = text.row(containing: from)
     let x = cursor.desiredX ?? env.geometry.x(ofColumn: from - text.lineStart(row), row: row)
-    let target =
-      abs(lines) > 1
-      ? env.rows.line(atY: env.rows.y(ofLine: row) + Double(lines) * env.rows.lineHeight)
-      : row + lines
+    let target = abs(lines) > 1 ? paged(from: row, by: lines, env.rows) : row + lines
     if target < 0 {
       return cursor.moved(to: 0, extending: extending, desiredX: from == 0 ? nil : x)
     }
@@ -91,6 +88,15 @@ extension EditCommands {
     }
     let column = env.geometry.column(atX: x, row: target)
     return cursor.moved(to: text.lineStart(target) + column, extending: extending, desiredX: x)
+  }
+
+  /// 文書の行 `row` から縦の並びで `lines` 行の高さだけ離れた所の文書の行。差し込みの上なら進む向きの先の文書の行
+  /// （ページより高い塊を飛び越える）。
+  private static func paged(from row: Int, by lines: Int, _ rows: RowLayout) -> Int {
+    switch rows.item(atY: rows.y(ofLine: row) + Double(lines) * rows.lineHeight) {
+    case .line(let line): line
+    case .block(let index): lines < 0 ? rows.boundaries[index] - 1 : rows.boundaries[index]
+    }
   }
 
   /// ⌥←（VS Code の `cursorWordLeft`、`WordStartFast`）——前の語の始まりへ。カーソルが 1 本（`alone`）なら、1 字の区切りの
