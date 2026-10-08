@@ -36,4 +36,27 @@ extension SurfaceZonesTests {
     XCTAssertEqual(text(opened.document), body, "本文は変わらない")
     XCTAssertEqual(surface.editor.state.cursors.primary.selection, NSRange(location: 0, length: 5))
   }
+
+  /// 入力欄の選択を本文の区画の左右の外へドラッグしても、自動スクロールせず本文を横に送らない（行末・行頭まで伸ばす）。
+  func testDraggingAFieldSelectionSidewaysDoesNotScrollTheBody() throws {
+    let opened = try hostedRows(long: true)
+    let surface = opened.surface
+    let field = ZoneTextField(id: "reply", style: ThreadZone.fieldStyle())
+    let thread = ThreadZone(comment: "本文", field: field)
+    thread.surface = surface
+    surface.setRows(zone(thread, at: 4))
+    _ = surface.snapshot()
+    XCTAssertGreaterThan(surface.scrollState().limits.maximum.x, 0, "前提: 本文は横に続く")
+    surface.focus(field)
+    surface.textView.insertText("abcdef")
+    let site = try XCTUnwrap(surface.fields["reply"])
+    let from = try fieldPoint(site, 1)
+    let right = CGPoint(x: surface.view.bounds.width + 20, y: from.y)
+    try mouse(opened, .leftMouseDown, at: from)
+    try mouse(opened, .leftMouseDragged, at: right)
+    XCTAssertFalse(surface.textView.pointer.isAutoscrolling)
+    XCTAssertEqual(surface.scrollPosition.x, 0, "本文は横に送らない")
+    XCTAssertEqual(site.editor.state.cursors.primary.selection, NSRange(location: 1, length: 5))
+    try mouse(opened, .leftMouseUp, at: right)
+  }
 }

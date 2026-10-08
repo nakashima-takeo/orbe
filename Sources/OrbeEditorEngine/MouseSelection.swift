@@ -265,12 +265,14 @@ final class MouseSelection: NSObject {
       autoscroll(.above(surface.config.topInset - point.y))
     } else if point.y > view.bounds.height {
       autoscroll(.below(point.y - view.bounds.height))
-    } else if point.x < column {
-      autoscroll(.left(column - point.x))
-      extend(to: point, lineEnd: false, reveal: .none)
-    } else if point.x > area.maxX {
-      autoscroll(.right(point.x - area.maxX))
-      extend(to: point, lineEnd: true, reveal: .none)
+    } else if point.x < column || point.x > area.maxX {
+      let lineEnd = point.x > area.maxX
+      guard site?.isBody == true else {
+        stopAutoscroll()
+        return extend(to: point, lineEnd: lineEnd, reveal: .minimal)
+      }
+      autoscroll(lineEnd ? .right(point.x - area.maxX) : .left(column - point.x))
+      extend(to: point, lineEnd: lineEnd, reveal: .none)
     } else {
       stopAutoscroll()
       extend(to: point, reveal: .minimal)
