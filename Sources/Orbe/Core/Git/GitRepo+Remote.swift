@@ -45,9 +45,11 @@ extension GitRepo {
     }
   }
 
-  /// 送る。upstream があれば `git push` をユーザーの設定のまま走らせ、無ければ origin へ upstream を付けて出す
-  /// （`-u origin HEAD`——名前と付け先は実行時の HEAD から git が決めるので、status が古くても別のブランチを送らない）。
-  /// 拒否は `--porcelain` の機械向けの行で読む。
+  /// 送る。upstream があれば `git push` をユーザーの設定のまま走らせる。無ければ利用者の push 先の設定
+  /// （`branch.<name>.pushRemote` → `remote.pushDefault` → `branch.<name>.remote` の順に git が解決する）の remote へ、
+  /// どれも無ければ origin へ、upstream を付けて出す（`-u <remote> HEAD`）。upstream を付けるのは先行/遅れを読むため
+  /// （Dispatch の「push 先の無いブランチは origin とみなす」と同じ解決）。名前と付け先は実行時の HEAD から git が
+  /// 決めるので、status が古くても別のブランチを送らない。拒否は `--porcelain` の機械向けの行で読む。
   func push(
     branch: GitStatus.Branch?, onProgress: @escaping (String) -> Void, handle: GitRunner.Handle,
     completion: @escaping (GitWriteFailure?) -> Void
@@ -59,14 +61,47 @@ extension GitRepo {
       ) { output in completion(Self.pushFailure(output)) }
     }
     guard let branch, branch.upstream == nil else { return run([]) }
-    guard branch.name != nil else { return Self.fail(.detached, completion) }
-    runner.run(["remote"], cwd: root, handle: handle) { listed in
-      if let failure = GitWriteFailure.of(listed) { return completion(failure) }
-      guard listed.stdoutText.split(separator: "\n").contains("origin") else {
-        return completion(.noPushDestination)
+    guard let name = branch.name else { return Self.fail(.detached, completion) }
+    pushRemote(ofBranch: name, handle: handle) { remote in
+      switch remote {
+      case .success(let remote?): run(["-u", remote, "HEAD"])
+      case .success(nil): completion(.noPushDestination)
+      case .failure(let failure): completion(failure)
       }
-      run(["-u", "origin", "HEAD"])
     }
+  }
+
+  /// upstream の無いブランチの push 先の remote。設定が無ければ origin、origin も無ければ nil。git が解決する
+  /// `%(push:remotename)` を読む（`GitHubRemoteLedger` と同じ。空か `.` は設定が無い）。ブランチ名は glob の文字を
+  /// 持てないので、パターンは自分自身と、その下の階層にだけ当たる——完全一致の行を採る。
+  private func pushRemote(
+    ofBranch name: String, handle: GitRunner.Handle,
+    completion: @escaping (Result<String?, GitWriteFailure>) -> Void
+  ) {
+    let ref = "refs/heads/" + name
+    runner.run(
+      ["for-each-ref", "--format=%(refname)%00%(push:remotename)", ref], cwd: root, handle: handle
+    ) { listed in
+      if let failure = GitWriteFailure.of(listed) { return completion(.failure(failure)) }
+      let configured = Self.configuredPushRemote(listed.stdoutText, ref: ref)
+      if let configured, !configured.isEmpty, configured != "." {
+        return completion(.success(configured))
+      }
+      self.runner.run(["remote"], cwd: self.root, handle: handle) { remotes in
+        if let failure = GitWriteFailure.of(remotes) { return completion(.failure(failure)) }
+        let hasOrigin = remotes.stdoutText.split(separator: "\n").contains("origin")
+        completion(.success(hasOrigin ? "origin" : nil))
+      }
+    }
+  }
+
+  /// `%(refname)%00%(push:remotename)` の出力から、`ref` の行の push 先。
+  private static func configuredPushRemote(_ listed: String, ref: String) -> String? {
+    for line in listed.split(separator: "\n") {
+      let fields = line.split(separator: "\0", omittingEmptySubsequences: false)
+      if fields.count == 2, fields[0] == ref { return String(fields[1]) }
+    }
+    return nil
   }
 
   /// push の失敗。送れなかった ref は `--porcelain` の `!` 行（`!\t<from>:<to>\t<要約>`）に出る——`[rejected]`

@@ -38,7 +38,7 @@ enum GitWriteFailure: Error, Equatable {
   case operationInProgress(GitWorktreeOperation)
   /// upstream の無いブランチを pull しようとした。
   case noUpstream
-  /// upstream も origin も無いブランチを push しようとした。
+  /// upstream も push 先の設定も origin も無いブランチを push しようとした。
   case noPushDestination
   /// ブランチに居ない（detached HEAD）。push・pull と、初回コミットの取り消しが要る。
   case detached
