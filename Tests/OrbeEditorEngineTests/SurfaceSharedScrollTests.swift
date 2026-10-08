@@ -136,14 +136,12 @@ final class SurfaceSharedScrollTests: EngineTestCase {
 /// 描画スレッドの 1 コマの順を決めて流す場——2 面の刻みを手で打ち、どちらの面が先に描くかを決める。
 @MainActor
 extension SurfaceSharedScrollTests {
-  /// 刻みを手で打つ時計（止めても止まらない——起こされてその場で描くことをさせず、刻みの順をテストが決める）。
+  /// 刻みを手で打つ時計（止める・再開するは描画スレッドが書き、刻みの順はテストが決める。次の刻みはいつも今なので、起こされて
+  /// その場で描くことはしない）。
   private final class ManualClock: FrameClock {
-    var isPaused: Bool {
-      get { false }
-      set { _ = newValue }
-    }
+    var isPaused = false
     var period: Double { HeadlessDriver.period }
-    func nextTarget(after now: Double) -> Double { ((now / period).rounded(.down) + 1) * period }
+    func nextTarget(after now: Double) -> Double { now }
     func invalidate() {}
   }
 
@@ -184,18 +182,25 @@ extension SurfaceSharedScrollTests {
 
   /// マウスのホイール（段の無い出来事）が刻みの途中に届き、その刻みを先に描いた面と後で描く面に分かれても、後の面は次の
   /// 刻みで追いつき、両面は同じ位置で止まる（後の面がその刻みの封じた位置を描いたまま、描いたつもりで止まらない）。
-  func testAWheelBetweenTheTwoSurfacesOfATickStillMovesBoth() throws {
-    let (a, b) = try pair()
-    for opened in [a, b] {
+  /// 2 面を画面外の描き先と手で打つ時計に結ぶ。
+  @discardableResult
+  private func bindManually(_ pair: (Opened, Opened)) -> (ManualClock, ManualClock) {
+    let clocks = (ManualClock(), ManualClock())
+    for (opened, clock) in [(pair.0, clocks.0), (pair.1, clocks.1)] {
       opened.surface.viewStateDidChange(size: size, scale: 2, visible: true)
       let id = opened.surface.id
       let target = SinkTarget()
-      let clock = ManualClock()
       RenderThread.shared.perform { $0.bind(id, target: target, clock: clock) }
     }
     _ = RenderThread.shared.performAndWait { $0.gate.wait() != nil }
-    a.surface.flush()
-    b.surface.flush()
+    pair.0.surface.flush()
+    pair.1.surface.flush()
+    return clocks
+  }
+
+  func testAWheelBetweenTheTwoSurfacesOfATickStillMovesBoth() throws {
+    let (a, b) = try pair()
+    bindManually((a, b))
     let period = HeadlessDriver.period
     var t = (CACurrentMediaTime() / period).rounded(.up) * period
     for surface in [a.surface, b.surface] { tick(surface, t) }
@@ -210,6 +215,26 @@ extension SurfaceSharedScrollTests {
     }
     XCTAssertEqual(drawn(b.surface)?.y, 30, "先に描いた面はホイールの量だけ動く")
     XCTAssertEqual(drawn(a.surface), drawn(b.surface), "後に描いた面も次の刻みで追いつく")
+  }
+
+  /// キャレットへの横の寄せ（描画スレッドが行を組んで決める位置）は、刻みを止めていた相手の面も起こす——相手が古い横の位置
+  /// のまま止まらない。
+  func testAHorizontalRevealWakesThePausedPartner() throws {
+    let (a, b) = try pair()
+    let clocks = bindManually((a, b))
+    let period = HeadlessDriver.period
+    var t = (CACurrentMediaTime() / period).rounded(.up) * period
+    let text = b.document.text
+    b.surface.reveal(NSRange(location: text.lineStart(1) - 1, length: 0), policy: .center)
+    b.surface.flush()
+    for _ in 0..<10 where !clocks.0.isPaused {
+      tick(a.surface, t)
+      t += period
+    }
+    XCTAssertTrue(clocks.0.isPaused, "前提: 相手の面は描くものが無く刻みを止めている")
+    tick(b.surface, t)
+    XCTAssertGreaterThan(try XCTUnwrap(drawn(b.surface)).x, 0, "前提: 寄せた面は横に動く")
+    XCTAssertFalse(clocks.0.isPaused, "相手の面の刻みを再開する")
   }
 }
 
