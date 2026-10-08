@@ -4,7 +4,8 @@ import ScreenCaptureKit
 import os
 
 /// 窓が画面に出したコマを受け（ScreenCaptureKit）、コマごとに区画の枠線の行と上下の印の行の距離を引き、PNG に書き出す。
-/// 枠線は `strokeX` の列で紫の画素の行（試しのスレッドの枠線 tint(accent, 0.35)）、印の行は `markerX` の列で明るい画素の行。
+/// 枠線は `strokeX` の列で紫の画素の行（試しのスレッドの枠線 tint(accent, 0.35)。青が緑より強く、赤も緑より強い——本文の
+/// キーワードの青は赤が緑より弱いので、字が列に掛かっても枠線と取り違えない）、印の行は `markerX` の列で明るい画素の行。
 /// 区画の上端と下端は、枠線の行の間が枠の高さ `boxHeight`（画素）の組で決める——窓の上下で切れて片方の枠線しか見えない
 /// 区画は数えない（並びの順に組にすると、切れた区画の下端と次の区画の上端を 1 つの区画と取り違える）。
 final class WindowRecorder: NSObject, SCStreamOutput, @unchecked Sendable {
@@ -97,7 +98,7 @@ final class WindowRecorder: NSObject, SCStreamOutput, @unchecked Sendable {
   private func measure(_ frame: FrameBytes) -> (above: [Int], below: [Int]) {
     let purple = { (y: Int) -> Bool in
       let c = frame.rgb(self.strokeX, y)
-      return c.b - c.g > 35 && c.b > 70
+      return c.b - c.g > 35 && c.b > 70 && c.r > c.g
     }
     let bright = { (y: Int) -> Bool in
       let c = frame.rgb(self.markerX, y)
