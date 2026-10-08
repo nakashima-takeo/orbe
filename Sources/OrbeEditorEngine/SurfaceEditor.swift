@@ -79,8 +79,8 @@ final class SurfaceEditor {
   }
 
   /// 本文を丸ごと置き換える（外部変更の差し替え）。変わらない先頭と末尾を落とした 1 つの編集として undo に載り（読むだけの
-  /// 場では載せない）、前後でまとまりを切る。選択は解け、キャレットは同じオフセット（本文が短ければ末尾）。変換中なら先に
-  /// 取り消す。
+  /// 場では載せず、それまでの取り消しも捨てる——undo の要素と文を食い違わせない）、前後でまとまりを切る。選択は解け、
+  /// キャレットは同じオフセット（本文が短ければ末尾）。変換中なら先に取り消す。
   func replaceAll(with text: String) {
     site.transact(remeasure: true) {
       finishComposition(.cancel)
@@ -95,6 +95,7 @@ final class SurfaceEditor {
       } else if current.units(in: edit.range) != edit.replacement {
         close()
         guard site.deliver(EditBatch([edit])) != nil else { return }
+        undoManager.removeAllActions()
       }
       state = EditState(
         cursors: CursorList(Cursor(caret)),

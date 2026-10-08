@@ -36,8 +36,8 @@ final class EditingSite {
   var scrollX: Double { horizontal.x }
   /// 入力欄の場の外観で解いた色（外観が変われば解き直す）。
   var palette: FieldPalette?
-  /// 文を編集できるか（本文の場だけが読むだけになれる——入力欄の場はいつも編集できる）。読むだけの場では、編集係が文を
-  /// 変える入口（コマンドの編集・IME・undo / redo）で止め、文の丸ごとの置き換えは undo に載せない。
+  /// 文を編集できるか（本文の場だけが読むだけになれる——入力欄の場はいつも編集できる）。読むだけの場では、文を変える
+  /// コマンドと IME は編集係の入口で、undo / redo は面の view の入口で止め、文の丸ごとの置き換えは undo に載せない。
   var isEditable = true
   private let fieldStops: LineStopsCache?
   /// 入力欄の場のタブの桁と刻み（既定の字下げの桁 × 入力欄の字体の空白）。

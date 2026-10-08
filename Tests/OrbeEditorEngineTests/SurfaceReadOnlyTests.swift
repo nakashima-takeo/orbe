@@ -96,6 +96,21 @@ final class SurfaceReadOnlyTests: EngineTestCase {
     XCTAssertFalse(opened.surface.editor.undoManager.canUndo)
   }
 
+  /// 編集できた頃の取り消しは、読むだけの面の差し替えで捨てる——編集できる面に戻して ⌘Z しても、差し替えた本文に古い
+  /// 取り消しが当たらない。
+  func testReplacingTheWholeTextDropsEarlierUndo() throws {
+    let opened = try open(source)
+    _ = host(opened)
+    type(opened, "z")
+    XCTAssertTrue(opened.surface.editor.undoManager.canUndo, "前提: 取り消せる")
+    opened.surface.isEditable = false
+    opened.surface.replaceAll(with: "zQQ\n")
+    opened.surface.isEditable = true
+    XCTAssertFalse(opened.surface.editor.undoManager.canUndo)
+    opened.surface.textView.undo(nil)
+    XCTAssertEqual(text(opened.document), "zQQ\n")
+  }
+
   /// 本文へ落とした字は入らない。Finder のファイルは載せる側に開かせる。
   func testDropsInsertNothingButFilesStillOpen() throws {
     let opened = try openReadOnly()
