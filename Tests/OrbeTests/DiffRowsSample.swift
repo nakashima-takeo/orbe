@@ -161,17 +161,17 @@ struct DiffRowsSample {
   /// 並列の 2 面の区切り（hairline(0.07)）。
   static let hairline = dynamic(light: hex(0x6E5AAA, 0.098), dark: hex(0xC7B9EB, 0.07))
 
-  /// 行の型——追加・削除（地は diffAdded / diffRemoved の 0.12、字は diffAddedText / diffRemovedText、記号は + / −）・文脈
-  /// （字は muted）・詰め物（地は fill(0.02)）。
+  /// 行の型——追加・削除（地は diffAdded / diffRemoved の 0.12、記号は + / −）・文脈・詰め物（地は fill(0.02)）。字はどの行も
+  /// 本文の字の色（追加・削除は地と記号で見分ける）。
   static var styles: [LineStyle] {
     [
       LineStyle(
-        background: Theme.Color.diffAdded.withAlphaComponent(0.12),
-        text: Theme.Color.diffAddedText, sign: "+", signColor: Theme.Color.diffAdded),
+        background: Theme.Color.diffAdded.withAlphaComponent(0.12), text: Theme.Color.editorText,
+        sign: "+", signColor: Theme.Color.diffAdded),
       LineStyle(
-        background: Theme.Color.diffRemoved.withAlphaComponent(0.12),
-        text: Theme.Color.diffRemovedText, sign: "−", signColor: Theme.Color.diffRemoved),
-      LineStyle(text: Theme.Color.textMuted),
+        background: Theme.Color.diffRemoved.withAlphaComponent(0.12), text: Theme.Color.editorText,
+        sign: "−", signColor: Theme.Color.diffRemoved),
+      LineStyle(text: Theme.Color.editorText),
       LineStyle(background: dynamic(light: hex(0x3A3151, 0.012), dark: hex(0xFFFFFF, 0.02))),
     ]
   }

@@ -24,9 +24,6 @@ extension Theme.Color {
   static let diffAdded = editorDyn(light: 0x0969da, dark: 0x5ea8ff)
   static let diffRemoved = editorDyn(light: 0xbc4c00, dark: 0xf0883e)
   static let diffModified = editorDyn(light: 0xa07f0c, dark: 0xe2cd6d)
-  /// diff の追加・削除の行の字。
-  static let diffAddedText = editorDyn(light: 0x0550ae, dark: 0xb3d4ff)
-  static let diffRemovedText = editorDyn(light: 0x953800, dark: 0xffc69a)
   /// ファイルタブの × にポインタがあるときの枠の地（VS Code の toolbar.hoverBackground に当たる）。
   static let editorTabCloseHover = editorDynAB(light: (0x3a3151, 0.10), dark: (0xffffff, 0.10))
   /// 仮のタブの地の斜線の基色（α は `Theme.Opacity.editorPreviewHatch*`）。dark は editorIcon と同じ色相。
