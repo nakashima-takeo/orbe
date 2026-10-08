@@ -135,6 +135,54 @@ final class RootFilesWritesTests: OrbeTestCase {
       try String(contentsOf: trashed, encoding: .utf8), "keep me recoverable\n", "ゴミ箱にある")
   }
 
+  /// ステージ済みの rename を編集した行（`RM`）もステージでき、ステージ・破棄は、元パスに置き直した別の未追跡ファイルを
+  /// 巻き込まない。
+  func testRenameRowsLeaveAFileRecreatedAtTheOriginalPathAlone() throws {
+    let body = (1...10).map { "line \($0)\n" }.joined()
+    try repo.write("old.txt", body)
+    XCTAssertTrue(repo.git(["add", "old.txt"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "old"]).isSuccess)
+    XCTAssertTrue(repo.git(["mv", "old.txt", "moved.txt"]).isSuccess)
+    try repo.write("moved.txt", body + "edited\n")
+    try repo.write("old.txt", "someone else\n")
+    let files = repo.files()
+
+    let staged = finish(files) { files.stage([files.status!.row("moved.txt")], completion: $0) }
+    XCTAssertNil(staged.failure)
+    XCTAssertEqual(
+      entry(staged, "moved.txt"),
+      GitStatus.Entry(staged: .renamed, unstaged: nil, originalPath: "old.txt"))
+    XCTAssertEqual(entry(staged, "old.txt"), GitStatus.Entry(staged: nil, unstaged: .untracked))
+
+    try repo.write("moved.txt", body + "edited again\n")
+    let discarded = finish(files) {
+      files.discard([files.status!.row("moved.txt")], completion: $0)
+    }
+    XCTAssertNil(discarded.failure)
+    XCTAssertEqual(
+      try String(contentsOfFile: repo.root + "/moved.txt", encoding: .utf8), body + "edited\n")
+    XCTAssertEqual(
+      try String(contentsOfFile: repo.root + "/old.txt", encoding: .utf8), "someone else\n",
+      "元パスの別のファイルはゴミ箱へ行かない")
+  }
+
+  /// intent-to-add（`git add -N`）のファイルの破棄は、中身ごとゴミ箱へ移す（index の版は空なので、戻すと中身を失う）。
+  func testDiscardingAnIntentToAddFileMovesItToTheTrash() throws {
+    try repo.write("intended.txt", "keep me\n")
+    XCTAssertTrue(repo.git(["add", "-N", "intended.txt"]).isSuccess)
+    let files = repo.files()
+    let trashed = try XCTUnwrap(GitRepo.trashDirectoryOverride)
+      .appendingPathComponent("intended.txt")
+
+    let discarded = finish(files) {
+      files.discard([files.status!.row("intended.txt")], completion: $0)
+    }
+    XCTAssertNil(discarded.failure)
+    XCTAssertNil(entry(discarded, "intended.txt"), "index からも外れる")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: repo.root + "/intended.txt"))
+    XCTAssertEqual(try String(contentsOf: trashed, encoding: .utf8), "keep me\n")
+  }
+
   // MARK: - コミット・amend・取り消し
 
   /// ステージ済みの分だけがコミットされ、メッセージは `#` の行も含め書いたまま残る（前後の空行と行末の空白だけ落ちる）。
@@ -212,6 +260,20 @@ final class RootFilesWritesTests: OrbeTestCase {
       root.statusAtCompletion?.branch, GitStatus.Branch(name: "main", commit: nil, upstream: nil),
       "初回コミット前に戻る")
     XCTAssertEqual(entry(root, "a.txt"), GitStatus.Entry(staged: .added, unstaged: nil))
+  }
+
+  /// shallow clone の境界のコミットは、初回コミットと取り違えて取り消さない（ブランチを消すと履歴とつながらなくなる）。
+  func testTheShallowBoundaryIsNotUndone() throws {
+    XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "second"]).isSuccess)
+    let shallow = TestScratch.caseDir.appendingPathComponent("shallow").path
+    XCTAssertTrue(
+      repo.git(["clone", "-q", "--depth", "1", "file://" + repo.root, shallow]).isSuccess)
+    let boundary = repo.git(["rev-parse", "HEAD"], in: shallow).stdoutText
+    let files = repo.files(at: GitWorktreeRoot.normalizedPath(shallow))
+
+    let undone = finish(files) { files.undoLastCommit(completion: $0) }
+    XCTAssertEqual(undone.failure, .shallowBoundary)
+    XCTAssertEqual(repo.git(["rev-parse", "HEAD"], in: shallow).stdoutText, boundary)
   }
 
   /// ユーザーの hook（pre-commit）と署名の設定はそのまま効く。
