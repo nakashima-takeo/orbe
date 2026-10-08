@@ -10,7 +10,7 @@ final class EditorShellModel {
     let name: String
     let chip: FileChip
     let isDirty: Bool
-    /// 外部変更で衝突中（ドットを modified 黄で描く）。
+    /// 外部変更で衝突中（ドットを注意の黄で描く）。
     let isConflicted: Bool
     let isActive: Bool
     /// 仮のタブ（名前を斜体、地に斜線）。

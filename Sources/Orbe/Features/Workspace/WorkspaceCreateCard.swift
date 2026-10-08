@@ -237,10 +237,10 @@ struct WorkspaceCreateCard: View {
         .truncationMode(.tail)
       Spacer(minLength: Theme.Space.tick)
       if suggestion.isRepo {
-        // 見本: 素の green テキスト（ピル塗りにしない）。
+        // 見本: 素の完了の緑テキスト（ピル塗りにしない）。
         Text("git")
           .font(Font.theme.meta)
-          .foregroundStyle(Color.theme.diffAdded)
+          .foregroundStyle(Color.theme.stateDone)
       }
     }
     .padding(.horizontal, Theme.Space.beat)

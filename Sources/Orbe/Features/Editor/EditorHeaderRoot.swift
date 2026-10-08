@@ -160,7 +160,7 @@ private struct FileTabCloseSlot: View {
       case .none: EmptyView()
       case .dirty:
         Circle()
-          .fill(tab.isConflicted ? Color.theme.editorModified : Color.theme.textPrimary)
+          .fill(tab.isConflicted ? Color.theme.editorCaution : Color.theme.textPrimary)
           .frame(width: dotSize, height: dotSize)
       case .close:
         EditorGlyphView(

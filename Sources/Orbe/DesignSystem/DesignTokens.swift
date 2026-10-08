@@ -44,17 +44,13 @@ enum Theme {
       light: OrbePalette.Chrome.backgroundLight,
       dark: OrbePalette.Chrome.backgroundDark)  // accent 塗り上のインク＝地色（SSOT）
 
-    // diff / 成功・エラー・競合（Orbe は追加=green / 削除=red）
-    static let diffAdded = dyn(
+    // 成功・エラー・競合（端末の緑・赤・黄と同じ値。git の色は DesignTokens+Editor.swift の diff*）
+    static let success = dyn(
       light: OrbePalette.Chrome.greenLight,
-      dark: OrbePalette.Chrome.greenDark)  // 追加（green・SSOT）
-    static let diffRemoved = dyn(
+      dark: OrbePalette.Chrome.greenDark)  // 成功（green・SSOT）
+    static let danger = dyn(
       light: OrbePalette.Chrome.redLight,
-      dark: OrbePalette.Chrome.redDark)  // 削除（red・SSOT）
-    // 変更（blue）。editorHueBlue と値だけ同じ独立トークン（片方が動いてももう片方は追随しない）
-    static let diffModified = dyn(light: 0x3f6fd6, dark: 0x85adff)
-    static let success = diffAdded  // 成功（green・diffAdded へ収束）
-    static let danger = diffRemoved  // エラー（red・diffRemoved へ収束）
+      dark: OrbePalette.Chrome.redDark)  // エラー（red・SSOT）
     static let conflict = dyn(
       light: OrbePalette.Chrome.yellowLight,
       dark: OrbePalette.Chrome.yellowDark)  // 競合＝注意色（黄・accent-2・SSOT）
@@ -125,9 +121,9 @@ enum Theme {
       light: StateHue.waitingLight, lightA: 0.12, dark: StateHue.waitingDark, darkA: 0.12)
     static let tintDone = dynA(
       light: StateHue.doneLight, lightA: 0.12, dark: StateHue.doneDark, darkA: 0.12)
-    // git の緑チップ地（clean の merged PR 等）。文字が diffAdded なので地も diffAdded 軸から取る
+    // 成功の緑チップ地（clean の merged PR 等）。文字が success なので地も success 軸から取る
     // （state.done とは dark で別値。この 2 軸は混ぜない）。
-    static let tintDiffAdded = dynA(
+    static let tintSuccess = dynA(
       light: OrbePalette.Chrome.greenLight, lightA: 0.12,
       dark: OrbePalette.Chrome.greenDark, darkA: 0.12)
     static let tintRed = dynA(
@@ -297,7 +293,7 @@ enum Theme {
 
 /// エージェント状態色の唯一の起点（chrome 専用・file-private）。
 /// `Theme.Color` の state / stateInverse / tint がここから導出し、hex の三重複を防ぐ。
-/// conflict（＝ANSI黄）・diffAdded（＝ANSI緑）とは別軸なので混ぜない（dark では waiting≠conflict / done≠diffAdd、light は同値だが別トークンとして分離保持）。
+/// conflict（＝ANSI黄）・success（＝ANSI緑）とは別軸なので混ぜない（dark では waiting≠conflict / done≠success、light は同値だが別トークンとして分離保持）。
 private enum StateHue {
   static let workingLight = 0x1f66c9
   static let workingDark = 0x85adff
