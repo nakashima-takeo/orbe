@@ -146,9 +146,11 @@ final class Renderer {
     }
     slot.idleTicks = 0
     let atlas = atlas(scale: material.scale, space: material.space)
+    let images = slot.zones.images
     if atlas.isFull, gpuInflight == 0 { atlas.reset() }
+    if images.isFull, gpuInflight == 0 { images.reset() }
     guard slot.unpresented < frameTarget.limit, gpuInflight < Self.gpuLimit, !atlas.isFull,
-      let acquired = frameTarget.acquire()
+      !images.isFull, let acquired = frameTarget.acquire()
     else {
       slot.owed = true
       slot.recorder.skipped()
@@ -196,7 +198,7 @@ final class Renderer {
     slot.keystrokes.removeAll(keepingCapacity: true)
     slot.drawnPosition = frame.position
     slot.returning = frame.returning
-    slot.atlasDirty = pass.atlas.isFull
+    slot.atlasDirty = pass.atlas.isFull || slot.zones.images.isFull
     commands.addCompletedHandler { _ in
       RenderThread.shared.perform { $0.commandsDidComplete(bufferIndex) }
     }

@@ -207,8 +207,10 @@ final class GlyphAtlas {
   }
 }
 
-/// 棚詰め。高さの近い棚へ左から詰め、無ければ下に棚を足す。
+/// 棚詰め。高さの近い棚へ左から詰め、無ければ下に棚を足す。置いたものの右と下には `gap` の隙間を空ける。
 struct ShelfPacker {
+  static let gap = 1
+
   let size: Int
   private struct Shelf {
     var y: Int
@@ -224,8 +226,8 @@ struct ShelfPacker {
   }
 
   mutating func place(_ w: Int, _ h: Int) -> (x: Int, y: Int)? {
-    let pw = w + 1
-    let ph = h + 1
+    let pw = w + Self.gap
+    let ph = h + Self.gap
     for i in shelves.indices
     where shelves[i].h >= ph && shelves[i].h <= ph + ph / 3 && shelves[i].x + pw <= size {
       let x = shelves[i].x

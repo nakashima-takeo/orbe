@@ -1,8 +1,8 @@
 import Metal
 
 /// 区画の画像の地図（面ごと。描画スレッドだけが触る）。main が倍率で描いた画素（`ZonePixels`）を、鍵ごとに 1 回だけ頁へ
-/// 写す。頁が上限まで埋まれば全体を作り直す（作り直したコマの残りの画像は描かず、次のコマで置き直す——同じコマで先に
-/// 置いた画像の場所を上書きしない）。
+/// 写す。頁が上限まで埋まれば埋まったことを示し（`isFull`）、そのコマの残りの画像は描かない。作り直す（`reset`）のは描画の
+/// 口で、GPU が前のコマの頁を読み終えてから——読んでいる途中の場所へ別の画素を書かない（`GlyphAtlas` と同じ契約）。
 final class ImageAtlas {
   struct Entry {
     var page: Int
@@ -14,31 +14,33 @@ final class ImageAtlas {
 
   static let pageSize = 1024
   static let maximumPages = 4
+  /// 画像の辺の上限（px）——上限の大きさの画像が、棚詰めの隙間を含めて 1 頁に 4 枚入る。
+  static let maximumSide = pageSize / 2 - ShelfPacker.gap
 
   private let device: MTLDevice
   private(set) var pages: [MTLTexture] = []
   private var packers: [ShelfPacker] = []
   private var entries: [Int: Entry] = [:]
-  /// このコマで作り直した。
-  private var exhausted = false
+  /// 頁が上限まで埋まって置けない画像があった（作り直すまで新しい画像は置かない）。
+  private(set) var isFull = false
 
   init(device: MTLDevice) {
     self.device = device
   }
 
-  /// コマを組み始める。
-  func beginFrame() {
-    exhausted = false
+  /// 頁を空にする（GPU が頁を読んでいない時だけ呼ぶ）。
+  func reset() {
+    entries.removeAll()
+    packers = packers.map { ShelfPacker(size: $0.size) }
+    isFull = false
   }
 
-  /// 画素 `pixels` の置き場所（無ければ写す）。置けなければ地図を空にして nil。
+  /// 画素 `pixels` の置き場所（無ければ写す）。置けなければ埋まったことを示して nil。
   func entry(_ pixels: ZonePixels) -> Entry? {
     if let entry = entries[pixels.key] { return entry }
-    guard !exhausted else { return nil }
+    guard !isFull else { return nil }
     guard let entry = place(pixels.width, pixels.height) else {
-      exhausted = true
-      entries.removeAll()
-      packers = packers.map { ShelfPacker(size: $0.size) }
+      isFull = true
       return nil
     }
     pages[entry.page].replace(

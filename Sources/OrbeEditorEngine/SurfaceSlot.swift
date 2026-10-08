@@ -41,7 +41,7 @@ final class SurfaceSlot {
   var drawnPosition: SIMD2<Double>?
   var returning = false
   var drawnCaretVisible = false
-  /// アトラスが埋まって字を落としたコマを描いた（作り直してもう一度描く）。
+  /// 字のアトラスか区画の画像の地図が埋まって、字か画像を落としたコマを描いた（作り直してもう一度描く）。
   var atlasDirty = false
   /// 読んだ材料に入っていて、まだ描いていない打鍵の時刻。
   var keystrokes: [Double] = []

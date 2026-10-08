@@ -279,6 +279,7 @@ extension Renderer {
     else { return nil }
     let atlas = atlas(scale: material.scale, space: material.space)
     if atlas.isFull { atlas.reset() }
+    if slot.zones.images.isFull { slot.zones.images.reset() }
     let revealed = begin(slot, material)
     let built = slot.builder
     slot.build(

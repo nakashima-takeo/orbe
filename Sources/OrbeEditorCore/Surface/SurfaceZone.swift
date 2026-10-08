@@ -161,7 +161,7 @@ public struct ZoneSelectableLine {
   }
 }
 
-/// 画像（矩形に合わせて、画面の倍率で描く）。
+/// 画像（矩形に合わせて、画面の倍率で描く）。描く画素の辺は 511px まで（2x の画面で 255.5pt。超えれば描かない）。
 public struct ZoneImage {
   public var frame: CGRect
   public var image: NSImage

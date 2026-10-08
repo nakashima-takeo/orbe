@@ -60,7 +60,6 @@ extension FrameBuilder {
     let rows = g.rows
     source.zones.keep(fields: source.material.fields.keys)
     guard rows.hasZones else { return }
-    source.zones.images.beginFrame()
     let margin = Self.zoneOverhang * g.scale
     let bottom = g.scrollY + g.height - g.top
     for index in rows.blocks(from: g.scrollY - margin, to: bottom + margin, scale: g.scale) {

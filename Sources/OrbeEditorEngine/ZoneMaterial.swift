@@ -272,12 +272,13 @@ final class ZonePainter {
     return font
   }
 
-  /// 画像を矩形の大きさ × 倍率の画素に、外観で描く（覚えていれば使い回す）。
+  /// 画像を矩形の大きさ × 倍率の画素に、外観で描く（覚えていれば使い回す。辺が地図に置ける上限を超えれば描かない）。
   private func pixels(_ image: ZoneImage, _ look: Look) -> ZonePixels? {
     let (appearance, space, scale) = (look.appearance, look.space, look.scale)
     let width = Int((image.frame.width * scale).rounded())
     let height = Int((image.frame.height * scale).rounded())
-    guard width > 0, height > 0, width <= 512, height <= 512 else { return nil }
+    guard width > 0, height > 0, width <= ImageAtlas.maximumSide, height <= ImageAtlas.maximumSide
+    else { return nil }
     let key = ImageKey(
       image: ObjectIdentifier(image.image), width: width, height: height,
       appearance: appearance.name)
