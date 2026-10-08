@@ -66,6 +66,25 @@ final class RootFilesRemoteTests: OrbeTestCase {
       finish(files) { files.push(onProgress: { _ in }, completion: $0) }.failure, .pushRejected)
   }
 
+  /// サーバの hook が断った push は「拒否された（先に取り込みが要る）」ではなく、サーバの理由のままの「その他」。
+  func testAPushDeclinedByTheServerKeepsItsReason() throws {
+    let bare = repo.addOrigin()
+    try repo.write(
+      "hooks/pre-receive", "#!/bin/sh\necho 'protected branch' >&2\nexit 1\n", in: bare)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o755], ofItemAtPath: bare + "/hooks/pre-receive")
+    try commit("b.txt", "b\n")
+    let files = repo.files()
+
+    let pushed = finish(files) { files.push(onProgress: { _ in }, completion: $0) }
+    guard case .reason(let reason) = pushed.failure else {
+      return XCTFail("「その他」の失敗: \(String(describing: pushed.failure))")
+    }
+    XCTExpectFailure("`--porcelain` で `!` 行が stdout へ移り、理由が「failed to push some refs」だけになる") {
+      XCTAssertTrue(reason.contains("pre-receive hook declined"), reason)
+    }
+  }
+
   // MARK: - pull・fetch
 
   /// fetch で遅れの数が増え、pull で取り込める。
