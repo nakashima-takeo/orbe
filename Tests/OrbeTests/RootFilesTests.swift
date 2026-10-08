@@ -35,6 +35,7 @@ final class RootFilesTests: OrbeTestCase {
     let recorder = Recorder()
     files.addObserver(recorder)
     pumpMain(until: { files.status != nil }, "status の初回取得")
+    XCTAssertTrue(files.isResolved)
     XCTAssertNotNil(files.repo)
     XCTAssertEqual(recorder.statusChanges, 1)
     XCTAssertNil(files.status?.badge(of: "a.txt"), "clean")
@@ -65,13 +66,8 @@ final class RootFilesTests: OrbeTestCase {
     let inside = repo.root + "/.git"
     try FileManager.default.createDirectory(
       atPath: inside + "/.git", withIntermediateDirectories: true)
-    // 解決の完了は、同じ runner の barrier（先に積んだ読み取りの完了を待つ）が返ることで知る——
-    // `GitRepo.open` が `.read` レーンに載っていることに依存する（`.independent` へ移すとここは待たない）。
-    let runner = GitRunner()
-    let files = RootFiles(root: inside, runner: runner)
-    let settled = expectation(description: "rev-parse が返った")
-    runner.run(["version"], cwd: inside, lane: .exclusive) { _ in settled.fulfill() }
-    wait(for: [settled], timeout: 20)
+    let files = RootFiles(root: inside)
+    pumpMain(until: { files.isResolved }, "管理下かの判定")
     XCTAssertNil(files.repo, "git の toplevel は repo 自身で、根と一致しない")
     XCTAssertNil(files.status)
   }
@@ -85,11 +81,8 @@ final class RootFilesTests: OrbeTestCase {
       to: broken.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
     let root = GitWorktreeRoot.normalizedPath(broken.path)
     XCTAssertEqual(GitWorktreeRoot.root(of: root), root, "前提: 根の規則はこの `.git` を根と見る")
-    let runner = GitRunner()
-    let files = RootFiles(root: root, runner: runner)
-    let settled = expectation(description: "rev-parse が返った")
-    runner.run(["version"], cwd: root, lane: .exclusive) { _ in settled.fulfill() }
-    wait(for: [settled], timeout: 20)
+    let files = RootFiles(root: root)
+    pumpMain(until: { files.isResolved }, "管理下かの判定")
     XCTAssertNil(files.repo)
     XCTAssertNil(files.status)
   }

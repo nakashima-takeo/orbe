@@ -2,8 +2,6 @@ import Foundation
 
 // MARK: - 観測（status・index の読み）
 
-/// 結果が古くても監視が取り直す観測。`.independent` で走らせ、巨大リポジトリの status が
-/// `.exclusive`（worktree remove・update-ref）を待たせないようにする。
 extension GitRepo {
   /// status の見え方を左右するユーザー設定（`status.showUntrackedFiles`・`diff.ignoreSubmodules`）を
   /// 引数で封じ、`--no-optional-locks` で index を書き換えない。パスは `-z` で verbatim に出る
@@ -15,7 +13,7 @@ extension GitRepo {
 
   /// worktree の status。git が失敗したら nil。
   func status(completion: @escaping (GitStatus?) -> Void) {
-    runner.run(Self.statusArguments, cwd: root, lane: .independent) { output in
+    runner.run(Self.statusArguments, cwd: root) { output in
       completion(output.isSuccess ? GitStatus.parse(output.stdout) : nil)
     }
   }
@@ -32,8 +30,7 @@ extension GitRepo {
       return
     }
     runner.run(
-      ["ls-files", "-s", "-z", "--"] + relativePaths.map { ":(literal)" + $0 }, cwd: root,
-      lane: .independent
+      ["ls-files", "-s", "-z", "--"] + relativePaths.map { ":(literal)" + $0 }, cwd: root
     ) { output in
       guard output.isSuccess else {
         completion(nil)
@@ -59,7 +56,7 @@ extension GitRepo {
   /// 外部 diff は通らない。git が失敗したら nil。
   func blob(oid: String, relativePath: String, completion: @escaping (Data?) -> Void) {
     runner.run(
-      ["cat-file", "--filters", "--path=" + relativePath, oid], cwd: root, lane: .independent
+      ["cat-file", "--filters", "--path=" + relativePath, oid], cwd: root
     ) { output in
       completion(output.isSuccess ? output.stdout : nil)
     }

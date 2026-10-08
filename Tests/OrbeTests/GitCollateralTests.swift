@@ -2,13 +2,12 @@ import XCTest
 
 @testable import Orbe
 
-/// 詰まりの構造の検証。`git worktree add` は post-checkout hook（ユーザーのコード＝所要時間に上限が無い）
-/// を踏むので、これを共有 queue の barrier に載せると **1 本の遅い操作が以後の全 git 操作を止める**。
-/// しかも barrier はプロセス単位でリポジトリ単位ですらないため、巻き添えは別リポジトリにまで及ぶ。
+/// 巻き添えが無いことの検証。git は並ばずに走り、順番が付くのは同じ worktree の index への根のサービスの書き込みだけ。
+/// hook（ユーザーのコード＝所要時間に上限が無い）で止まった git が、その外の git を止めない。
 ///
-/// ここが壊れると、worktree 作成 1 本のハングで worktree の掃除もワークスペース作成も返らなくなる
+/// ここが壊れると、1 本の返らない hook で worktree の掃除もワークスペース作成も別リポジトリのステージも返らなくなる
 /// ——UI が丸ごと固まったように見え、ユーザーには原因が一切見えない。
-final class GitRunnerLaneTests: OrbeTestCase {
+final class GitCollateralTests: OrbeTestCase {
   private var fixture: GitHangFixture!
   private var repo: GitRepo!
   /// ハングさせた `addWorktree` を投げたか／返ったか（どちらも main queue でのみ触る）。
@@ -19,13 +18,13 @@ final class GitRunnerLaneTests: OrbeTestCase {
     fixture = try GitHangFixture()
     try fixture.installHook("post-checkout", body: fixture.waitingBody)
     repo = try open(fixture)
-    // 失敗経路でも必ず解放する（解放し損ねると GitRunner.shared が詰まったまま後続の全テストが死ぬ）。
+    // 失敗経路でも必ず解放する（解放し損ねると止まった git が後続のテストまで残る）。
     addTeardownBlock { [self] in
       fixture.release()
       if hangStarted {
         XCTAssertTrue(
           pumpMainUntil({ self.hangReturned }, timeout: 60),
-          "解放した hook の worktree add が返らないと、以後のテストが GitRunner.shared ごと詰まる")
+          "解放した hook の worktree add が返る")
       }
     }
   }
@@ -87,9 +86,7 @@ final class GitRunnerLaneTests: OrbeTestCase {
 
     let done = expectation(description: "deleteBranch")
     repo.deleteBranch(name: "scratch", expectedOid: oid) { failure in
-      // 巻き添えを免れるだけでなく、削除自体が通ること。worktree 作成が触る ref（`refs/heads/hang`）と
-      // 削除対象は交わらないので、レーンが正しければ必ず成功する。barrier へ戻すと `.exclusive` の
-      // ここが in-flight のハングを待たされ、5 秒のタイムアウトで落ちる。
+      // worktree 作成が触る ref（`refs/heads/hang`）と削除対象は交わらないので、巻き添えが無ければ必ず成功する。
       XCTAssertNil(failure, "ハング中でもブランチ削除は成功する")
       done.fulfill()
     }

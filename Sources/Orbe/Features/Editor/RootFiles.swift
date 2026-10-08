@@ -71,6 +71,8 @@ final class RootFiles {
   private let runner: GitRunner
   /// nil = 管理外（または解決前）。
   private(set) var repo: GitRepo?
+  /// git 管理下かの判定が済んだか。
+  private(set) var isResolved = false
   /// 最後に成功した取り直しの結果（git 管理下のみ。失敗では変わらない）。
   private(set) var status: GitStatus?
   private var observations: [Observation] = []
@@ -114,11 +116,14 @@ final class RootFiles {
     self.runner = runner
     rootWatcher = watch(roots: [root], gitDirs: [])
     guard FileManager.default.fileExists(atPath: (root as NSString).appendingPathComponent(".git"))
-    else { return }
+    else {
+      isResolved = true
+      return
+    }
     GitRepo.open(cwd: root, runner: runner) { [weak self] repo in
-      guard let self, let repo, GitWorktreeRoot.normalizedPath(repo.root) == self.root else {
-        return
-      }
+      guard let self else { return }
+      isResolved = true
+      guard let repo, GitWorktreeRoot.normalizedPath(repo.root) == self.root else { return }
       self.repo = repo
       let gitDirs = [repo.gitDir, repo.commonDir]
       gitWatcher = watch(roots: gitDirs, gitDirs: gitDirs)

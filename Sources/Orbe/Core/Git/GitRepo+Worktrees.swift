@@ -25,11 +25,7 @@ extension GitRepo {
   /// ローカルブランチを upstream の tip まで fast-forward する（fetch → 祖先判定 → ローカル ref の前進）。
   /// 成功なら nil、失敗なら落ちた段と理由。
   ///
-  /// 3 段に分けるのは、段ごとに競合相手が違うから。remote からの fetch は `fetchPrune` と同じ領域
-  /// （`refs/remotes/*`）だけを書く独立レーン——ネット待ちのプロセスを直列レーンに置くと、その間の
-  /// 全 git 読み取りが止まる。祖先判定は読み取りで、「分岐している」を stderr の字面ではなく終了コードで
-  /// 知るために残す。ローカル ref を進める `fetch .` は `refs/heads/*` を書くので直列レーンに置くが、
-  /// ネットに触らず実質即時。
+  /// 祖先判定を挟むのは、「分岐している」を stderr の字面ではなく終了コードで知るため。
   ///
   /// ローカル ref の書き込みを `update-ref` や `branch -f` でなく `fetch .` にするのは、**git 自身が書き込みの
   /// 瞬間に「非 fast-forward」と「どこかの worktree で checkout 中」を検査して拒む**から——祖先判定と
@@ -41,7 +37,7 @@ extension GitRepo {
   ) {
     let local = "refs/heads/\(name)"
     runner.run(
-      ["fetch", "--progress", upstream.remote, upstream.remoteRef], cwd: root, lane: .independent
+      ["fetch", "--progress", upstream.remote, upstream.remoteRef], cwd: root
     ) { fetched in
       guard fetched.isSuccess else {
         completion(.fetch(GitRepo.failure(from: fetched)))
@@ -58,8 +54,7 @@ extension GitRepo {
           return
         }
         self.runner.run(
-          ["fetch", "--no-write-fetch-head", ".", "\(upstream.ref):\(local)"], cwd: self.root,
-          lane: .exclusive
+          ["fetch", "--no-write-fetch-head", ".", "\(upstream.ref):\(local)"], cwd: self.root
         ) { advanced in
           completion(advanced.isSuccess ? nil : .fastForward(GitRepo.failure(from: advanced)))
         }
@@ -80,19 +75,14 @@ extension GitRepo {
   }
 
   /// origin から fetch し、削除された remote 追跡ブランチを prune する（`refs/remotes/origin/*` のみ更新）。
-  /// 独立レーン（`.independent`）で走らせる: 数秒かかりうる fetch を GitRunner 共有 queue の barrier
-  /// チェーンから切り離し、後続の `.exclusive`（worktree 削除・ブランチ削除）が in-flight fetch を
-  /// 待たないようにする（GCD barrier は submit 済み全ブロックの完了を待つため、共有 queue で走らせると
-  /// `.read` でも後続の書き込みが数秒ブロックされる）。並行安全: fetch が触るのは `refs/remotes/origin/*`
-  /// だけで、`.exclusive` が守る ref・作業ツリーとは領域が交わらない。
-  /// `GIT_TERMINAL_PROMPT=0`（GitRunner 既定）で認証プロンプトはハングせず失敗に落ちる。
+  /// 認証の対話は `GitRunner` の環境が封じるので、ハングせず失敗に落ちる。
   ///
   /// `--progress`: clone と同じ理由。非 tty の `git fetch` は転送中 1 バイトも書かないため、
   /// 明示しないと転送に時間のかかる健全な fetch が「無出力＝ハング」と読まれて打ち切られる。
   /// 戻り値は `Bool` なので進捗 stderr はそのまま捨てられる。
   func fetchPrune(completion: @escaping (Bool) -> Void) {
     let args = ["fetch", "--progress", "--prune", "origin"]
-    runner.run(args, cwd: root, lane: .independent) { output in
+    runner.run(args, cwd: root) { output in
       completion(output.isSuccess)
     }
   }
@@ -121,7 +111,7 @@ extension GitRepo {
   /// 名前は `git remote`（引数なしは名前だけを 1 行ずつ出す）、URL は remote ごとの
   /// `git remote get-url`（fetch の最初の URL。`insteadOf` を展開する）で読む。`git remote -v` は人が
   /// 読む表示で、行末に装飾が付く（部分クローンではフィルタ名 `[blob:none]` が足される）ので、行の
-  /// 形では読まない。remote は通常 1〜3 本で、プロセスが本数ぶん増えても読み取りレーンの数 ms で済む。
+  /// 形では読まない。remote は通常 1〜3 本で、プロセスが本数ぶん増えても数 ms で済む。
   func remotes(completion: @escaping ([String: String]?) -> Void) {
     runner.run(["remote"], cwd: root) { listed in
       guard listed.isSuccess else { return completion(nil) }
@@ -143,23 +133,19 @@ extension GitRepo {
 
   /// URL からリポジトリを clone する。clone 前はリポジトリが無いため（`root` を持てず）static で持つ。
   /// `git clone --progress -- <url> <dest>`（cwd は dest の親）。成功なら nil、失敗なら理由。
-  /// URL は正規化せず素通し（git が https / ssh / scp-like を native 解釈。`GIT_TERMINAL_PROMPT=0` で
-  /// 資格情報プロンプトはハングせず stderr へ落ちる）。`--` は本ファイル他所と同じくオプション
+  /// URL は正規化せず素通し（git が https / ssh / scp-like を native 解釈。`GitRunner` の環境の封じで
+  /// 資格情報の対話はハングせず stderr へ落ちる）。`--` は本ファイル他所と同じくオプション
   /// 終端の明示で、`-` 始まりの URL がフラグとして解釈される事故を塞ぐ。
   ///
   /// `--progress`: GUI から起動した git は stderr が tty でないため既定で進捗を出さない。進捗が
   /// 出ないと「無出力＝ハング」と読まれて正常な大規模 clone が打ち切られるので、明示的に出させる。
-  ///
-  /// 独立レーン: 新規ディレクトリを作るだけで既存リポジトリの index・作業ツリー・ref に一切
-  /// 触れない（共有状態はゼロ）。所要時間はネットワークとリポジトリ規模しだいで分単位になり得るので、
-  /// barrier に置くと無関係な操作まで巻き添えにする。
   static func clone(
     url: String, dest: String, runner: GitRunner = .shared,
     completion: @escaping (GitFailure?) -> Void
   ) {
     let parent = (dest as NSString).deletingLastPathComponent
     let args = ["clone", "--progress", "--", url, dest]
-    runner.run(args, cwd: parent, lane: .independent) { output in
+    runner.run(args, cwd: parent) { output in
       guard !output.isSuccess else {
         completion(nil)
         return
@@ -172,14 +158,12 @@ extension GitRepo {
   /// 出力が入力と完全に一致するときだけ有効とする。規則を手元へ写さず git に問うのは、写すと git の版の
   /// 違いでずれるため。出力まで見るのは、リポジトリの中では `@{-N}` などの展開形が別のブランチ名へ
   /// 展開されて成功するから——終了コードだけで有効とすると、表示した名前と別名のブランチを作る。
-  ///
-  /// 独立レーン: 軽い問いで、打鍵ごとに撃つ。共有 queue に載せると、作成や削除の barrier の後ろで
-  /// 待たされる。リポジトリの外でも答える（展開形は展開できずに失敗する）。
+  /// リポジトリの外でも答える（展開形は展開できずに失敗する）。
   static func checkBranchName(
     _ name: String, cwd: String, runner: GitRunner = .shared,
     completion: @escaping (Bool) -> Void
   ) {
-    runner.run(["check-ref-format", "--branch", name], cwd: cwd, lane: .independent) {
+    runner.run(["check-ref-format", "--branch", name], cwd: cwd) {
       completion($0.isSuccess && $0.stdoutText.trimmingCharacters(in: .newlines) == name)
     }
   }
@@ -189,15 +173,11 @@ extension GitRepo {
   /// 新規ブランチを切るときは追跡を**常に明示する**——省くとユーザーの `branch.autoSetupMerge` 次第で
   /// upstream が付いたり付かなかったりし、呼び手が期待する契約が環境で揺れる。
   ///
-  /// 独立レーン: 触るのは新規ディレクトリ・`$GIT_COMMON_DIR/worktrees/<名前>`・`-b` 指定時の
-  /// `refs/heads/<新ブランチ>`・`--track` 指定時の `.git/config`（`branch.<新ブランチ>.remote/merge`）で、
-  /// **呼び出し元チェックアウトの作業ツリーにも既存 ref にも触らない**（作るのは新規 ref だけ）。barrier が
-  /// 守る不変条件（`.exclusive` の ref・作業ツリー書き込みと領域を奪い合わない）は壊れない。ref は git 自身が
-  /// `<ref>.lock`、config は `config.lock`
-  /// で守る（どちらもリトライせず即失敗し、`-b` 指定なら作成済みブランチが残る）。Orbe で `.git/config` を
-  /// 書く git 呼び出しはこれだけなので、競合相手は同時実行の `addWorktree` に限られる。
-  /// post-checkout hook はユーザーのコードで所要時間に上限が無いため、barrier に置くと 1 本のハングが
-  /// 以後の全 git 操作を止める。
+  /// 触るのは新規ディレクトリ・`$GIT_COMMON_DIR/worktrees/<名前>`・`-b` 指定時の `refs/heads/<新ブランチ>`・
+  /// `--track` 指定時の `.git/config`（`branch.<新ブランチ>.remote/merge`）で、呼び出し元チェックアウトの作業ツリーにも
+  /// 既存 ref にも触らない。config は `config.lock` で守られ、git はこれを再試行しない——同じリポジトリで config を書く
+  /// 操作（同時の `addWorktree`・upstream を付ける push）と重なると片方が理由つきで失敗し、`-b` 指定なら作成済みの
+  /// ブランチが残る。
   func addWorktree(
     path: String, base: String, newBranch: GitNewBranch?,
     completion: @escaping (GitFailure?) -> Void
@@ -207,7 +187,7 @@ extension GitRepo {
       args += ["-b", newBranch.name, newBranch.tracksBase ? "--track" : "--no-track"]
     }
     args += [path, base]
-    runner.run(args, cwd: root, lane: .independent) { output in
+    runner.run(args, cwd: root) { output in
       guard !output.isSuccess else {
         completion(nil)
         return
@@ -234,7 +214,14 @@ extension GitRepo {
 
   /// 失敗した実行を理由へ写す。打ち切りは git が何も言い残していないので、stderr でなく `.timedOut`。
   private static func failure(from output: GitRunner.Output) -> GitFailure {
-    output.timedOut ? .timedOut : .reason(essentialFailureReason(output.stderrText))
+    output.timedOut ? .timedOut : .reason(failureReason(of: output))
+  }
+
+  /// 失敗した実行の実質的な理由。stderr に何も無ければ stdout から取る（`nothing to commit` は stdout に出る）。
+  static func failureReason(of output: GitRunner.Output) -> String {
+    let stderr = output.stderrText
+    guard stderr.allSatisfy(\.isWhitespace) else { return essentialFailureReason(stderr) }
+    return essentialFailureReason(output.stdoutText)
   }
 
   /// git の stderr から実質的な失敗理由を取り出す。成功・失敗どちらでも出る進捗風の行

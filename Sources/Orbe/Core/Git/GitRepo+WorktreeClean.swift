@@ -89,10 +89,8 @@ extension GitRepo {
   /// **確認できなかったら clean でない側に倒す**契約はここが持つ。
   ///
   /// この bool は `--force` 削除を止める唯一の関門である。
-  func worktreeIsClean(
-    at path: String, isolated: Bool = false, completion: @escaping (Bool) -> Void
-  ) {
-    worktreeStatusCounts(at: path, isolated: isolated) { completion($0?.isClean ?? false) }
+  func worktreeIsClean(at path: String, completion: @escaping (Bool) -> Void) {
+    worktreeStatusCounts(at: path) { completion($0?.isClean ?? false) }
   }
 
   /// `status --porcelain` の件数。判定できなかったら nil。
@@ -102,19 +100,15 @@ extension GitRepo {
   /// `status.showUntrackedFiles`（巨大リポの高速化として広く使われ、`no` だと未追跡ファイルだけの
   /// worktree が空出力＝clean に見える）を封じる。`--no-optional-locks` は観測でユーザーが作業中の
   /// worktree の index を書き換えないため。
-  ///
-  /// `isolated` は呼び出し側が決める: 分類のプローブは共有 read-write lock の外へ逃がして直後の
-  /// Enter(barrier) を待たせないが、削除直前のゲートは lock の中に置き実行と同じレーンで直列させる。
   func worktreeStatusCounts(
-    at path: String, isolated: Bool = false,
-    completion: @escaping (GitWorktreeStatusCounts?) -> Void
+    at path: String, completion: @escaping (GitWorktreeStatusCounts?) -> Void
   ) {
     // 実体が消えた worktree でも起動できるよう、cwd は main worktree に置いて `-C` で対象を指す。
     GitRunner.shared.run(
       [
         "--no-optional-locks", "-C", path, "status", "--porcelain",
         "--untracked-files=normal", "--ignore-submodules=none",
-      ], cwd: root, lane: isolated ? .independent : .read
+      ], cwd: root
     ) { output in
       guard output.isSuccess else {
         completion(nil)
@@ -144,7 +138,7 @@ extension GitRepo {
   /// locked は `-f` 1 個では外れないため、locked な worktree はそもそも安全確認を通さない。
   func removeWorktree(path: String, completion: @escaping (GitWorktreeCleanFailure?) -> Void) {
     GitRunner.shared.run(
-      ["worktree", "remove", "--force", path], cwd: root, lane: .exclusive
+      ["worktree", "remove", "--force", path], cwd: root
     ) { output in
       completion(GitRepo.cleanFailure(output))
     }
@@ -170,7 +164,7 @@ extension GitRepo {
     name: String, expectedOid: String, completion: @escaping (GitWorktreeCleanFailure?) -> Void
   ) {
     GitRunner.shared.run(
-      ["update-ref", "-d", "refs/heads/\(name)", expectedOid], cwd: root, lane: .exclusive
+      ["update-ref", "-d", "refs/heads/\(name)", expectedOid], cwd: root
     ) { output in
       completion(GitRepo.cleanFailure(output))
     }

@@ -64,9 +64,9 @@ final class GitRepoObserveTests: OrbeTestCase {
     XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: index)), before)
   }
 
-  /// 観測（status・index の OID・blob）は、同じ runner で詰まっている `.exclusive` の書き込みを待たない。
-  /// 待つと、巨大リポジトリの status がある間だけでなく、hook で止まった commit の間もバッジが更新されない。
-  func testObservationIsNotBlockedByAHangingExclusiveWrite() throws {
+  /// 観測（status・index の OID・blob）は、同じ runner で詰まっている書き込みを待たない。
+  /// 待つと、hook で止まった commit の間バッジが更新されない。
+  func testObservationIsNotBlockedByAHangingWrite() throws {
     let fixture = try GitHangFixture()
     try fixture.installHook("pre-commit", body: fixture.waitingBody)
     let runner = GitRunner(idleTimeout: 60)
@@ -78,10 +78,10 @@ final class GitRepoObserveTests: OrbeTestCase {
     }
     wait(for: [open], timeout: 20)
     let git = try XCTUnwrap(opened)
-    let hangFinished = expectation(description: "hanging exclusive commit")
-    runner.run(
-      ["commit", "--allow-empty", "-m", "blocked"], cwd: fixture.root, lane: .exclusive
-    ) { _ in hangFinished.fulfill() }
+    let hangFinished = expectation(description: "hanging commit")
+    runner.run(["commit", "--allow-empty", "-m", "blocked"], cwd: fixture.root) { _ in
+      hangFinished.fulfill()
+    }
     XCTAssertTrue(fixture.waitUntilHung(), "前提: 書き込みが hook でハングしていること")
 
     let done = expectation(description: "status / ls-files / cat-file")
