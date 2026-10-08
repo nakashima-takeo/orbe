@@ -43,23 +43,17 @@ extension FramePerfTests {
   /// main の仕事（区画 1 つと、幅を変えたときの全部の区画）は記録して示す。
   func testTypingIntoAZoneField() throws {
     let opened = try attach(Self.swiftSource(bytes: 1_000_000))
-    Self.insertRows(opened)
     let surface = opened.surface
     let field = ZoneTextField(id: "perf-reply", style: ThreadZone.fieldStyle())
     let thread = ThreadZone(comment: "打つ区画。", field: field)
     thread.surface = surface
-    let middle = opened.document.text.lineCount / 2 / 10 * 10 + 5
-    var insertions = surface.rows.boundaries.indices.map { index -> RowInsertion in
-      let line = surface.rows.boundaries[index]
-      switch surface.rows.contents[index] {
-      case .lines(let lines):
-        return RowInsertion(line: line, content: .lines(lines.map(InsertedLine.init)))
-      case .zone(let id): return RowInsertion(line: line, content: .zone(surface.zones[id]!.zone))
-      }
-    }
+    let lineCount = opened.document.text.lineCount
+    let middle = lineCount / 2 / 10 * 10 + 5
+    var insertions = Self.rowInsertions(lineCount: lineCount)
     insertions.insert(
       RowInsertion(line: middle, content: .zone(thread)),
       at: insertions.firstIndex { $0.line > middle } ?? insertions.count)
+    surface.setPresentation(SurfacePresentation(showsMinimap: false))
     surface.setRows(SurfaceRows(insertions: insertions))
     surface.updateFocus(true)
     surface.focus(field)
@@ -96,12 +90,18 @@ extension FramePerfTests {
       surface.zones.count, "zones", Self.ms(all * 1000))
   }
 
-  /// ミニマップを出さない構成にし、10 行ごとに文書に無い行 2 行とスレッドの形の区画を交互に差し込む。
+  /// ミニマップを出さない構成にし、差し込みの列（→ `rowInsertions`）を置く。
   static func insertRows(_ opened: Opened) {
     let surface = opened.surface
     surface.setPresentation(SurfacePresentation(showsMinimap: false))
-    let lineCount = opened.document.text.lineCount
-    let insertions = stride(from: 10, to: lineCount, by: 10).enumerated().map { k, line in
+    surface.setRows(
+      SurfaceRows(insertions: rowInsertions(lineCount: opened.document.text.lineCount)))
+    surface.flush()
+  }
+
+  /// `lineCount` 行の文書に、10 行ごとに文書に無い行 2 行とスレッドの形の区画を交互に差し込む列。
+  static func rowInsertions(lineCount: Int) -> [RowInsertion] {
+    stride(from: 10, to: lineCount, by: 10).enumerated().map { k, line in
       k % 2 == 0
         ? RowInsertion(
           line: line,
@@ -112,7 +112,5 @@ extension FramePerfTests {
             ThreadZone(
               comment: "スクロールしても、この枠は本文の行の境から離れない。区画 \(k) の本文は幅で折り返す。")))
     }
-    surface.setRows(SurfaceRows(insertions: insertions))
-    surface.flush()
   }
 }
