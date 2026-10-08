@@ -27,7 +27,6 @@ final class WindowRecorder: NSObject, SCStreamOutput, @unchecked Sendable {
   private let output: URL
   private let state = OSAllocatedUnfairLock(initialState: Report())
   private let writer = DispatchQueue(label: "rows-trial.png")
-  private var thumbnails: [CGImage] = []
   private var stream: SCStream?
 
   init(strokeX: Int, markerX: Int, top: Int, boxHeight: Int, output: URL) {
@@ -81,11 +80,8 @@ final class WindowRecorder: NSObject, SCStreamOutput, @unchecked Sendable {
       return report.frames
     }
     guard let image = frame.image() else { return }
-    let url = output.appendingPathComponent(String(format: "frame_%03d.png", count))
-    writer.async { [weak self] in
-      Self.write(image, to: url)
-      if count % 6 == 1 { self?.thumbnails.append(image) }
-    }
+    let url = frameURL(count)
+    writer.async { Self.write(image, to: url) }
   }
 
   private static func isComplete(_ buffer: CMSampleBuffer) -> Bool {
@@ -138,11 +134,23 @@ final class WindowRecorder: NSObject, SCStreamOutput, @unchecked Sendable {
     return (above, below)
   }
 
-  /// 受け終えた——書き出しを待ち、並べた 1 枚（6 コマおき）を書いて、引いた距離を返す。
+  private func frameURL(_ number: Int) -> URL {
+    output.appendingPathComponent(String(format: "frame_%03d.png", number))
+  }
+
+  /// 受け終えた——書き出しを待ち、並べた 1 枚（書き出したコマから先頭から末尾まで等間隔に 24 枚）を書いて、引いた距離を
+  /// 返す。
   func finish() -> Report {
     writer.sync {}
     var report = state.withLock { $0 }
-    let shots = Array(thumbnails.prefix(24))
+    let count = min(24, report.frames)
+    let shots = (0..<count).compactMap { index -> CGImage? in
+      let number = 1 + index * (report.frames - 1) / max(1, count - 1)
+      guard let source = CGImageSourceCreateWithURL(frameURL(number) as CFURL, nil) else {
+        return nil
+      }
+      return CGImageSourceCreateImageAtIndex(source, 0, nil)
+    }
     guard let first = shots.first else { return report }
     let cell = (width: first.width / 4, height: first.height / 4)
     let columns = 8
