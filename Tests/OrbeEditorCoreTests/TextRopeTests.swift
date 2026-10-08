@@ -131,6 +131,28 @@ final class TextRopeTests: XCTestCase {
     XCTAssertEqual(snapshot.lineCount, 5001)
   }
 
+  /// 中身が同じかは塊の切れ目に依らない——打って消した後は、中身が同じでも塊の切れ目が元と違う。違いが末尾 1 字でも、
+  /// 長さだけが違っても見分ける。
+  func testSameContentIgnoresChunkBoundaries() {
+    let text = String(repeating: "abcdefg\n", count: 3000)
+    let original = TextRope(text)
+    var edited = original
+    edited.replace(NSRange(location: 700, length: 0), with: String(repeating: "x", count: 300))
+    edited.replace(NSRange(location: 700, length: 300), with: "")
+    edited.replace(NSRange(location: 5000, length: 1), with: "")
+    edited.replace(NSRange(location: 5000, length: 0), with: "a")
+    XCTAssertEqual(edited.substring(NSRange(location: 0, length: edited.length)), text, "前提: 中身は同じ")
+    XCTAssertNotEqual(
+      chunks(of: edited).map(\.count), chunks(of: original).map(\.count), "前提: 切れ目が違う")
+    XCTAssertTrue(edited.hasSameContent(as: original))
+    XCTAssertTrue(TextRope().hasSameContent(as: TextRope("")))
+
+    var last = original
+    last.replace(NSRange(location: last.length - 1, length: 1), with: "!")
+    XCTAssertFalse(last.hasSameContent(as: original))
+    XCTAssertFalse(TextRope(text + "x").hasSameContent(as: original))
+  }
+
   /// 行は `\n` だけで割る——CRLF の `\r` は行の中身、単独の `\r` と U+2028 は行を割らない。末尾の改行の後は空行が 1 つ。
   func testLinesSplitOnlyOnLineFeed() {
     let rope = TextRope("a\r\nb\rc\u{2028}d\n")

@@ -86,6 +86,40 @@ final class EditorDocumentTests: XCTestCase {
     XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "# one!\r\ntwo\n")
   }
 
+  /// 未保存は本文が保存時の本文と違うかで決まる——打って消す・同じ長さの打ち換えを戻す・保存した後に戻すのどれでも、
+  /// 保存時の本文に戻れば解ける。長さが同じ編集の直後は裏で比べ終わるまで未保存に見える（安全側）。
+  func testDirtyFollowsWhetherTheTextDiffersFromTheSavedText() throws {
+    let url = try temp("a.txt", "abc\n")
+    let (document, surface) = try open(url)
+    var dirtyChanges: [Bool] = []
+    document.onDirtyChange = { dirtyChanges.append($0) }
+
+    surface.replace(NSRange(location: 1, length: 0), with: "x")
+    XCTAssertTrue(document.isDirty)
+    surface.replace(NSRange(location: 1, length: 1), with: "")
+    XCTAssertTrue(document.isDirty, "比べ終わるまでは未保存に見える")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertFalse(document.isDirty, "打って消せば解ける")
+    XCTAssertEqual(dirtyChanges, [true, false])
+
+    surface.replace(NSRange(location: 0, length: 1), with: "z")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertTrue(document.isDirty, "長さが同じでも中身が違えば未保存")
+    surface.replace(NSRange(location: 0, length: 1), with: "a")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertFalse(document.isDirty, "打ち換えを戻せば解ける")
+
+    surface.replace(NSRange(location: 3, length: 0), with: "!")
+    try document.save()
+    surface.replace(NSRange(location: 3, length: 1), with: "")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertTrue(document.isDirty, "比べるのは最後に保存した本文")
+    surface.replace(NSRange(location: 3, length: 0), with: "!")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertFalse(document.isDirty)
+    XCTAssertEqual(dirtyChanges, [true, false, true, false, true, false, true, false])
+  }
+
   // MARK: - 色付け
 
   /// 見本ファイルの中で、この役割にこの文字列が塗られているはず、という 1 件。

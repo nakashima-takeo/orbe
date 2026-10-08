@@ -94,7 +94,7 @@ final class SurfaceEditingTests: EngineTestCase {
     XCTAssertFalse(undo.canRedo, "新しい編集で redo は消える")
   }
 
-  /// カーソルの移動と保存は undo の区切り。未保存の印は ⌘Z で戻しても消えない。
+  /// カーソルの移動と保存は undo の区切り。保存の後の編集を ⌘Z で戻せば未保存が解ける。
   func testMovesAndSavesBreakTheUndoGroup() throws {
     let opened = try open("")
     _ = host(opened)
@@ -109,7 +109,8 @@ final class SurfaceEditingTests: EngineTestCase {
     type(opened, "Z")
     undo.undo()
     XCTAssertEqual(text(opened.document), "aYb")
-    XCTAssertTrue(opened.document.isDirty, "保存の後の編集を戻しても未保存のまま")
+    XCTAssertTrue(opened.document.waitUntilCaughtUp())
+    XCTAssertFalse(opened.document.isDirty, "保存の後の編集を戻せば未保存が解ける")
   }
 
   /// 中身を変えない編集（大文字の語の大文字化・同じ字での上書き）は文書へ渡さない——版も未保存の印も進まず、undo も積まない。
@@ -146,6 +147,32 @@ final class SurfaceEditingTests: EngineTestCase {
     XCTAssertEqual(text(opened.document), "one!\ntwo\n", "差し替えだけが戻る")
     undo.undo()
     XCTAssertEqual(text(opened.document), "one\ntwo\n")
+  }
+
+  /// 印の立った文書を ⌘Z で保存時の本文まで戻すと、比べ終わった時点で外の版に差し替わる。差し替えは ⌘Z で戻せるが、
+  /// redo は消える（redo の要素は差し替えた本文に当てられない）。
+  func testUndoingToTheSavedTextTakesTheExternalChangeAndDropsRedo() throws {
+    let opened = try open("one\n")
+    _ = host(opened)
+    let undo = try XCTUnwrap(opened.surface.responder.undoManager)
+    opened.surface.selectedRange = NSRange(location: 3, length: 0)
+    type(opened, "!")
+    try Data("theirs\n".utf8).write(to: opened.document.url)
+    opened.document.reconcileWithDisk()
+    XCTAssertTrue(opened.document.isDiskChanged, "前提: 未保存なので印が立つ")
+
+    undo.undo()
+    XCTAssertEqual(text(opened.document), "one\n")
+    XCTAssertTrue(undo.canRedo, "比べ終わるまでは redo が残る")
+    XCTAssertTrue(opened.document.waitUntilCaughtUp())
+    XCTAssertEqual(text(opened.document), "theirs\n", "未保存が解けた時点で外の版に差し替わる")
+    XCTAssertFalse(opened.document.isDiskChanged)
+    XCTAssertFalse(opened.document.isDirty)
+    XCTAssertFalse(undo.canRedo, "redo は消える")
+
+    undo.undo()
+    XCTAssertEqual(text(opened.document), "one\n", "差し替えは ⌘Z で戻せる")
+    XCTAssertTrue(opened.document.isDirty)
   }
 
   /// 遠くの行を編集した後にスクロールして戻り undo しても、本文は空にならず、その編集だけが戻る。

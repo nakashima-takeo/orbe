@@ -264,6 +264,31 @@ public struct TextRope: Sendable {
     Data(String(decoding: contiguousUnits(), as: UTF16.self).utf8)
   }
 
+  /// 中身（UTF-16 の列）が同じか。塊の切れ目に依らず比べ、最初の違いで打ち切る。
+  public func hasSameContent(as other: TextRope) -> Bool {
+    guard length == other.length else { return false }
+    var mine = chunks.elements(from: 0)
+    var theirs = other.chunks.elements(from: 0)
+    var left = ArraySlice<UInt16>()
+    var right = ArraySlice<UInt16>()
+    var remaining = length
+    while remaining > 0 {
+      if left.isEmpty, let next = mine.next() { left = next.units[...] }
+      if right.isEmpty, let next = theirs.next() { right = next.units[...] }
+      let count = min(left.count, right.count)
+      let same = left.withUnsafeBytes { lhs in
+        right.withUnsafeBytes { rhs in
+          memcmp(lhs.baseAddress!, rhs.baseAddress!, count * MemoryLayout<UInt16>.stride) == 0
+        }
+      }
+      guard same else { return false }
+      left = left.dropFirst(count)
+      right = right.dropFirst(count)
+      remaining -= count
+    }
+    return true
+  }
+
   /// 本文の UTF-16 単位を先頭から読む（塊を順に辿る）。
   public var utf16: UTF16View { UTF16View(chunks: chunks.elements(from: 0)) }
 

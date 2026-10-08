@@ -25,17 +25,21 @@ final class EditorDocumentDiskTests: XCTestCase {
 
   // MARK: - 外部変更
 
-  /// 未保存でない文書は、外で書き換えられた内容に本文が差し替わる——未保存にならず、⌘Z で戻せる区切りになる。
+  /// 未保存でない文書は、外で書き換えられた内容に本文が差し替わる——未保存にならず（途中でも立たない。立てば仮のタブが
+  /// 普通になる）、⌘Z で戻せる区切りになり、差し替えた本文が保存時の本文になる。
   func testExternalChangeReplacesACleanDocument() throws {
     let url = try temp("a.txt", "old\n")
     let (document, surface) = try open(url)
     var diskChanges: [Bool] = []
     document.onDiskChange = { diskChanges.append($0) }
+    var dirtyChanges: [Bool] = []
+    document.onDirtyChange = { dirtyChanges.append($0) }
 
     try Data("new\n".utf8).write(to: url)
     document.reconcileWithDisk()
     XCTAssertEqual(surface.text, "new\n")
     XCTAssertFalse(document.isDirty, "差し替えは未保存にしない")
+    XCTAssertEqual(dirtyChanges, [], "差し替えの途中でも未保存は立たない")
     XCTAssertFalse(document.isDiskChanged)
     XCTAssertEqual(diskChanges, [], "印は立たない")
     XCTAssertEqual(surface.undoBoundaries, 1, "差し替えは undo の区切り")
@@ -45,6 +49,13 @@ final class EditorDocumentDiskTests: XCTestCase {
 
     document.reconcileWithDisk()
     XCTAssertEqual(surface.undoBoundaries, 1, "同じ内容なら何もしない")
+
+    surface.replace(NSRange(location: 0, length: 3), with: "old")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertTrue(document.isDirty, "差し替える前の本文へ戻すと未保存")
+    surface.replace(NSRange(location: 0, length: 3), with: "new")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertFalse(document.isDirty, "差し替えた本文に戻れば解ける")
   }
 
   /// 未保存の文書は本文を保って印を立て、⌘S は失敗してディスクに触れない。force だけが上書きする。
@@ -72,6 +83,62 @@ final class EditorDocumentDiskTests: XCTestCase {
     XCTAssertFalse(document.isDiskChanged)
     XCTAssertFalse(document.isDirty)
     XCTAssertEqual(diskChanges, [true, false])
+  }
+
+  /// 編集を戻して未保存が解けた文書は、外の書き換えに本文が差し替わり、印は立たない。
+  func testARevertedDocumentTakesTheExternalChange() throws {
+    let url = try temp("g.txt", "old\n")
+    let (document, surface) = try open(url)
+    surface.replace(NSRange(location: 0, length: 0), with: "x")
+    surface.replace(NSRange(location: 0, length: 1), with: "")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+
+    try Data("new\n".utf8).write(to: url)
+    document.reconcileWithDisk()
+    XCTAssertEqual(surface.text, "new\n")
+    XCTAssertFalse(document.isDiskChanged)
+    XCTAssertFalse(document.isDirty)
+  }
+
+  /// 印が立った未保存の文書を保存時の本文まで戻すと、未保存が解けた時点で照合し直し、外の内容に差し替わる——印が立って
+  /// いれば失うと困る未保存がある。
+  func testRevertingAMarkedDocumentTakesTheExternalChange() throws {
+    let url = try temp("h.txt", "old\n")
+    let (document, surface) = try open(url)
+    surface.replace(NSRange(location: 0, length: 0), with: "x")
+    try Data("theirs\n".utf8).write(to: url)
+    document.reconcileWithDisk()
+    XCTAssertTrue(document.isDiskChanged, "前提: 未保存なので印が立つ")
+
+    surface.replace(NSRange(location: 0, length: 1), with: "")
+    XCTAssertTrue(document.isDiskChanged, "比べ終わるまでは未保存のまま")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertEqual(surface.text, "theirs\n")
+    XCTAssertFalse(document.isDiskChanged)
+    XCTAssertFalse(document.isDirty)
+  }
+
+  /// 外のツールが未保存の本文と同じ内容を書いたら、衝突にせずそれを読んだ内容として受け入れる——本文も undo も触らず、
+  /// 未保存も印も消え、次の照合は同じ内容として扱う。
+  func testAnExternalWriteOfTheEditedTextIsAccepted() throws {
+    let url = try temp("i.txt", "old\n")
+    let (document, surface) = try open(url)
+    surface.replace(NSRange(location: 0, length: 0), with: "x")
+    var diskChanges: [Bool] = []
+    document.onDiskChange = { diskChanges.append($0) }
+
+    try Data("xold\n".utf8).write(to: url)
+    document.reconcileWithDisk()
+    XCTAssertEqual(surface.text, "xold\n")
+    XCTAssertFalse(document.isDirty)
+    XCTAssertFalse(document.isDiskChanged)
+    XCTAssertEqual(diskChanges, [])
+    XCTAssertEqual(surface.undoBoundaries, 0, "本文に触れない")
+
+    surface.replace(NSRange(location: 0, length: 1), with: "")
+    try Data("theirs\n".utf8).write(to: url)
+    document.reconcileWithDisk()
+    XCTAssertTrue(document.isDiskChanged, "受け入れた内容が比べる底になる")
   }
 
   /// 監視が届く前の ⌘S でも同じ判定——未編集の文書は差し替えてから書き（外の編集は失われない）、
@@ -180,7 +247,7 @@ final class EditorDocumentDiskTests: XCTestCase {
     XCTAssertEqual(try Data(contentsOf: plain), Data("hi\n".utf8), "無かった BOM は足さない")
     try (bom + Data("hi\n".utf8)).write(to: plain)
     plainDocument.reconcileWithDisk()
-    XCTAssertFalse(plainDocument.isDiskChanged, "BOM だけの変化も差し替え（本文は同じ）")
+    XCTAssertFalse(plainDocument.isDiskChanged, "BOM だけの変化も受け入れる（本文は同じ）")
     try plainDocument.save()
     XCTAssertEqual(try Data(contentsOf: plain), bom + Data("hi\n".utf8), "外のツールが足した BOM に倣う")
   }
