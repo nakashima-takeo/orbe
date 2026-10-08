@@ -92,7 +92,7 @@ final class WorktreePaletteDataProvider {
   /// （`CleanProbeScope.changedTargets`）はこの間 1 本も撃たない。空辞書へ丸めてはならない
   /// ——丸めると「台帳に無い＝比較先が変わった」と読んで prune 前に全行が飛ぶ。
   var issuedProbeTargets: [String: [String]]?
-  /// 全量発行の世代。独立レーン（concurrent）は順序保証が無いので、**比較先が同じまま**撃たれる
+  /// 全量発行の世代。git の実行（concurrent）は順序保証が無いので、**比較先が同じまま**撃たれる
   /// 全量発行どうし（初回・`fetch --prune` 後・削除後）の遅着を、比較先の照合だけでは弾けない。
   /// prune 前の結果が prune 後の結果を上書きすると「マージ直後の行が未取り込みのまま」という
   /// この機能の主用途そのものの失敗になるので、世代で切る。
