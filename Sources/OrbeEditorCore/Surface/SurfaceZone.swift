@@ -126,16 +126,22 @@ public struct ZoneText {
   }
 }
 
-/// 字の見え方を、文の範囲の先頭から順に `length` 単位（UTF-16）ずつ当てたもの。
+/// 字の見え方を、文の範囲の先頭から順に `length` 単位（UTF-16）ずつ当てたもの。余白（pt）は連なりの前後の字をその幅ずつ
+/// 押し出す（CSS のインラインの左右の padding。地は連なりの字の x 範囲をこの幅ずつ広げて置く）。折り返しで割れた側には
+/// 付かない（→ `ZoneTextLayout.styles(_:in:)`）。
 public struct ZoneTextStyle: Equatable {
   public var length: Int
   public var font: NSFont
   public var color: NSColor
+  public var leadingPadding: CGFloat
+  public var trailingPadding: CGFloat
 
-  public init(length: Int, font: NSFont, color: NSColor) {
+  public init(length: Int, font: NSFont, color: NSColor, padding: CGFloat = 0) {
     self.length = length
     self.font = font
     self.color = color
+    self.leadingPadding = padding
+    self.trailingPadding = padding
   }
 }
 

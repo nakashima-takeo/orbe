@@ -252,7 +252,11 @@ final class SampleThreadZone: SurfaceZone {
     return max(20, y - top)
   }
 
-  /// 本文（12px・行高 1.6・text2。インラインコードは等幅・accentBright・地 tint(accent, 0.12)）を幅で折り返して置く。
+  /// インラインコードの左右の余白（見本の padding 0 4px）。
+  private static let codePadding: CGFloat = 4
+
+  /// 本文（12px・行高 1.6・text2。インラインコードは等幅・accentBright・地 tint(accent, 0.12)・左右の余白 4）を幅で
+  /// 折り返して置く。
   /// 高さを返す。
   private func body(
     _ parts: [Part], id: String, in area: CGRect, into canvas: inout Canvas
@@ -269,33 +273,27 @@ final class SampleThreadZone: SurfaceZone {
         styles.append(ZoneTextStyle(length: text.utf16.count, font: sans, color: Self.text2))
       case .code(let code):
         string += code
-        styles.append(ZoneTextStyle(length: code.utf16.count, font: mono, color: Self.accentBright))
+        styles.append(
+          ZoneTextStyle(
+            length: code.utf16.count, font: mono, color: Self.accentBright,
+            padding: Self.codePadding))
       }
     }
     canvas.texts.append(ZoneText(id: id, string: string))
     let lineHeight: CGFloat = 12 * 1.6
     let lines = ZoneTextLayout.lines(string, styles: styles, width: width)
-    let units = Array(string.utf16)
     for (index, line) in lines.enumerated() {
       let lineTop = top + CGFloat(index) * lineHeight
       let baseline = Self.baseline(top: lineTop, height: lineHeight, font: sans)
-      var x = left
-      var offset = line.range.location
-      for style in line.styles {
-        let piece = String(
-          utf16CodeUnits: Array(units[offset..<offset + style.length]), count: style.length)
-        let pieceWidth = Self.width(piece, style.font)
-        if style.font == mono {
-          canvas.elements.append(
-            .box(
-              ZoneBox(
-                frame: CGRect(
-                  x: x - 3, y: baseline - mono.ascender - 1, width: pieceWidth + 6,
-                  height: mono.ascender - mono.descender + 2), radius: 3,
-                fill: Self.tint(Self.accent, 0.12))))
-        }
-        x += pieceWidth
-        offset += style.length
+      for (style, span) in zip(line.styles, line.spans) where style.font == mono {
+        canvas.elements.append(
+          .box(
+            ZoneBox(
+              frame: CGRect(
+                x: left + span.lowerBound - Self.codePadding, y: baseline - mono.ascender - 1,
+                width: span.upperBound - span.lowerBound + 2 * Self.codePadding,
+                height: mono.ascender - mono.descender + 2), radius: 3,
+              fill: Self.tint(Self.accent, 0.12))))
       }
       canvas.elements.append(
         .selectable(

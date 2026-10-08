@@ -197,24 +197,23 @@ final class ZonePainter {
         let styles = line.runs.map {
           ZoneTextStyle(length: $0.string.utf16.count, font: $0.font, color: $0.color)
         }
-        let shaped = Self.shape(line.runs.map(\.string).joined(), styles: styles)
-        material.runs += runs(shaped, styles: styles, origin: line.origin, look)
+        let set = ZoneTextLayout.typeset(line.runs.map(\.string).joined(), styles: styles)
+        material.runs += runs(set.line, styles: styles, origin: line.origin, look)
       case .selectable(let line):
         let whole = hits.texts[line.text] ?? TextRope()
         let lower = min(max(0, line.range.location), whole.length)
         let upper = min(max(lower, NSMaxRange(line.range)), whole.length)
         let string = whole.substring(NSRange(location: lower, length: upper - lower))
-        let shaped = Self.shape(string, styles: line.styles)
-        material.runs += runs(shaped, styles: line.styles, origin: line.origin, look)
+        let set = ZoneTextLayout.typeset(string, styles: line.styles)
+        let origin = CGPoint(x: line.origin.x + set.inset, y: line.origin.y)
+        material.runs += runs(set.line, styles: line.styles, origin: origin, look)
         let font = line.styles.first?.font ?? .systemFont(ofSize: 12)
+        let width = CGFloat(CTLineGetTypographicBounds(set.line, nil, nil, nil))
         hits.lines.append(
           ZoneHits.Line(
             text: line.text, range: NSRange(location: lower, length: upper - lower),
-            origin: line.origin, ascent: font.ascender, descent: -font.descender,
-            width: CGFloat(CTLineGetTypographicBounds(shaped, nil, nil, nil)), line: shaped,
-            carets: CaretMap(
-              shaped, width: CGFloat(CTLineGetTypographicBounds(shaped, nil, nil, nil)))
-          ))
+            origin: origin, ascent: font.ascender, descent: -font.descender,
+            width: width, line: set.line, carets: CaretMap(set.line, width: width)))
       case .image(let image):
         if let pixels = pixels(image, look) {
           material.images.append(ZoneMaterial.Image(frame: image.frame, pixels: pixels))
@@ -235,30 +234,10 @@ final class ZonePainter {
     return (material, hits)
   }
 
-  /// 文字列を見え方の列で 1 行に組む。
-  private static func shape(_ string: String, styles: [ZoneTextStyle]) -> CTLine {
-    let attributed = NSMutableAttributedString(string: string)
-    var offset = 0
-    let length = attributed.length
-    for style in styles where offset < length {
-      let count = min(style.length, length - offset)
-      attributed.addAttribute(
-        .font, value: style.font, range: NSRange(location: offset, length: count))
-      offset += count
-    }
-    return CTLineCreateWithAttributedString(attributed)
-  }
-
-  /// 組んだ行を、字の連なり（フォントと色ごと）に写す。色は位置の見え方から引く。
+  /// `ZoneTextLayout.typeset` で組んだ行を、字の連なり（フォントと色ごと）に写す。色は連なりの見え方から引く。
   private func runs(
     _ line: CTLine, styles: [ZoneTextStyle], origin: CGPoint, _ look: Look
   ) -> [ZoneMaterial.Run] {
-    var bounds: [Int] = []
-    var offset = 0
-    for style in styles {
-      offset += style.length
-      bounds.append(offset)
-    }
     var result: [ZoneMaterial.Run] = []
     for run in CTLineGetGlyphRuns(line) as? [CTRun] ?? [] {
       let count = CTRunGetGlyphCount(run)
@@ -268,14 +247,13 @@ final class ZonePainter {
       let font = canonical(value as! CTFont)  // swiftlint:disable:this force_cast
       var glyphs = [CGGlyph](repeating: 0, count: count)
       var positions = [CGPoint](repeating: .zero, count: count)
-      var indices = [CFIndex](repeating: 0, count: count)
       let all = CFRange(location: 0, length: count)
       CTRunGetGlyphs(run, all, &glyphs)
       CTRunGetPositions(run, all, &positions)
-      CTRunGetStringIndices(run, all, &indices)
-      let index = indices.first ?? 0
-      let style = bounds.firstIndex { index < $0 }.map { styles[$0] } ?? styles.last
-      guard let style else { continue }
+      guard let index = ZoneTextLayout.style(of: run), styles.indices.contains(index) else {
+        continue
+      }
+      let style = styles[index]
       let raised = positions.contains { $0.y != 0 }
       result.append(
         ZoneMaterial.Run(

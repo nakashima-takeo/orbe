@@ -25,6 +25,20 @@ final class BoxZone: SurfaceZone {
   func zone(_ event: ZoneEvent) {}
 }
 
+/// 絵を渡された関数で組む区画（要素を直に並べて確かめる）。
+@MainActor
+final class PictureZone: SurfaceZone {
+  var draw: (CGFloat) -> ZonePicture
+
+  init(_ draw: @escaping (CGFloat) -> ZonePicture) {
+    self.draw = draw
+  }
+
+  func picture(width: CGFloat) -> ZonePicture { draw(width) }
+
+  func zone(_ event: ZoneEvent) {}
+}
+
 /// スレッドの形の区画（テストと性能の場面の区画）——影と枠線の付いた角丸の枠・頭の帯と字・アバターの円と頭文字と画像・
 /// 幅で折り返す選べる本文・押せる場所 2 つ・入力欄（`field` があれば。行の数だけ高くなる）。
 /// 押せる場所はホバーで地の色を変え、押下を `events` に残す。
