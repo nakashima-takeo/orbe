@@ -128,7 +128,7 @@ extension MetalTextSurface {
   /// 余白を除いたもの。
   func limits(lineCount: Int) -> LimitsUpdate {
     let text = config.layout(
-      size: size, lineCount: lineCount, showsMinimap: presentation.showsMinimap
+      size: size, lineCount: lineCount, rows: rows, arrangement: arrangement
     ).text
     return LimitsUpdate(
       lastTop: rows.lastTop(lineCount: lineCount), lineHeight: Double(config.lineHeight),
@@ -139,8 +139,8 @@ extension MetalTextSurface {
   /// 今の区画の配置（出す前の写しの行の数で）。
   var surfaceLayout: SurfaceLayout {
     config.layout(
-      size: size, lineCount: currentContent?.text.lineCount ?? 1,
-      showsMinimap: presentation.showsMinimap)
+      size: size, lineCount: currentContent?.text.lineCount ?? 1, rows: rows,
+      arrangement: arrangement)
   }
 
   /// 見えている範囲を出し直し、変わっていれば文書へ知らせる（同期）。本文が動いていれば、変換中の IME にも知らせる

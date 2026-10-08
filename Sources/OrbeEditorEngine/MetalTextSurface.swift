@@ -54,8 +54,9 @@ final class MetalTextSurface: TextSurface {
   private var highlights = Highlights()
   /// 縦の並び（main の最新。取引の中で置き・ずらし・測り直し、出すときに材料へ書く）。
   var rows: RowLayout
-  /// 表示の構成。
+  /// 表示の構成と、そのうち配置と描き方に効くもの。
   var presentation = SurfacePresentation.code
+  var arrangement = SurfaceArrangement()
   /// 置いている区画（区画の同一性で引く）と、絵を材料に写す係。
   var zones: [ObjectIdentifier: ZoneEntry] = [:]
   let painter = ZonePainter()
@@ -223,7 +224,8 @@ final class MetalTextSurface: TextSurface {
   /// 外観・色空間・倍率で色を解き直して置く。
   func appearanceDidChange() {
     let palette = FramePalette(
-      style: style, appearance: textView.effectiveAppearance, space: space, scale: scale)
+      style: style, lineStyles: presentation.lineStyles, appearance: textView.effectiveAppearance,
+      space: space, scale: scale)
     write { $0.palette = palette }
     zonesAppearanceDidChange()
   }

@@ -169,3 +169,13 @@ extension MetalTextSurface {
     return min(max(0, position.x), limits.maximum.x) < limits.maximum.x - 0.25
   }
 }
+
+extension SurfaceConfig {
+  /// コードの面の構成（番号 1 列・印の列あり・差し込みなし）で `lineCount` 行の文書の行番号の列の幅。
+  func columnWidth(lineCount: Int) -> CGFloat {
+    gutter(
+      lineCount: lineCount, rows: RowLayout(lineHeight: Double(lineHeight)),
+      arrangement: SurfaceArrangement()
+    ).width
+  }
+}

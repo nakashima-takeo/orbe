@@ -1,3 +1,4 @@
+import OrbeEditorCore
 import XCTest
 
 @testable import OrbeEditorEngine
@@ -11,9 +12,9 @@ final class RowLayoutTests: XCTestCase {
   private func layout() -> RowLayout {
     var rows = RowLayout(lineHeight: lineHeight)
     rows.replace([
-      .init(line: 2, height: 36, content: .lines(["a", "b"])),
+      .init(line: 2, height: 36, content: .lines([InsertedLine("a"), InsertedLine("b")])),
       .init(line: 5, height: 30, content: .zone(ObjectIdentifier(NSObject()))),
-      .init(line: 10, height: 18, content: .lines(["tail"])),
+      .init(line: 10, height: 18, content: .lines([InsertedLine("tail")])),
     ])
     return rows
   }

@@ -1,12 +1,12 @@
 import AppKit
 import OrbeEditorCore
 
-/// 縦の並びの差し込みと表示の構成（契約）。並びを変えるのは取引の中だけで、確定するときに見えている先頭の文書の行を画面の
-/// 同じ位置に保ち（→ `keepFirstVisibleLine`）、出すときに材料へ書く。
+/// 縦の並びの差し込みと文書の行の見え方と表示の構成（契約）。並びを変えるのは取引の中だけで、確定するときに見えている先頭の
+/// 文書の行を画面の同じ位置に保ち（→ `keepFirstVisibleLine`）、出すときに材料へ書く。
 extension MetalTextSurface {
   func setRows(_ rows: SurfaceRows) {
     let insertions = rows.insertions
-    guard !holds(insertions) else { return }
+    guard !holds(insertions) || rows.spans != self.rows.spans else { return }
     precondition(
       insertions.isEmpty || !presentation.showsMinimap, "差し込みはミニマップを出していない面にだけ置く")
     let lineCount = bodySite.sourceContent?.text.lineCount ?? 1
@@ -14,6 +14,10 @@ extension MetalTextSurface {
       zip(insertions, insertions.dropFirst()).allSatisfy { $0.line <= $1.line }
         && insertions.allSatisfy { (0...lineCount).contains($0.line) },
       "差し込みの境は昇順で、置く時点の文書の写しの行の範囲（0...行数）に収める")
+    precondition(
+      zip(rows.spans, rows.spans.dropFirst()).allSatisfy { $0.line < $1.line }
+        && rows.spans.allSatisfy { (0..<lineCount).contains($0.line) },
+      "区間の始まりは重ならない昇順で、置く時点の文書の写しの行の範囲（0..<行数）に収める")
     let zoneList = insertions.compactMap { insertion -> SurfaceZone? in
       if case .zone(let zone) = insertion.content { return zone }
       return nil
@@ -30,23 +34,27 @@ extension MetalTextSurface {
           case .lines(let lines):
             RowLayout.Block(
               line: insertion.line, height: Double(lines.count) * lineHeight,
-              content: .lines(lines.map(\.text)))
+              content: .lines(lines))
           case .zone(let zone):
             RowLayout.Block(
               line: insertion.line,
               height: Double(max(0, zones[ObjectIdentifier(zone)]?.picture.height ?? 0)),
               content: .zone(ObjectIdentifier(zone)))
           }
-        })
+        }, spans: rows.spans)
     }
   }
 
   func setPresentation(_ presentation: SurfacePresentation) {
     guard presentation != self.presentation else { return }
     precondition(!presentation.showsMinimap || rows.isEmpty, "差し込みのある面ではミニマップを出さない")
+    let restyles = presentation.lineStyles != self.presentation.lineStyles
     transact {
       self.presentation = presentation
-      write { $0.showsMinimap = presentation.showsMinimap }
+      let arrangement = SurfaceArrangement(presentation)
+      self.arrangement = arrangement
+      write { $0.arrangement = arrangement }
+      if restyles { appearanceDidChange() }
     }
   }
 
@@ -55,7 +63,7 @@ extension MetalTextSurface {
     guard insertions.map(\.line) == rows.boundaries else { return false }
     return zip(insertions, rows.contents).allSatisfy { insertion, content in
       switch (insertion.content, content) {
-      case (.lines(let lines), .lines(let texts)): lines.map(\.text) == texts
+      case (.lines(let lines), .lines(let laid)): lines == laid
       case (.zone(let zone), .zone(let id)): ObjectIdentifier(zone) == id
       default: false
       }

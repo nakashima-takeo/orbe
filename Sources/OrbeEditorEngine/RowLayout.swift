@@ -8,6 +8,9 @@ import OrbeEditorCore
 /// 塊の数の対数で引ける。差し込みが無ければどの式も `行 × 行高` と同じ浮動小数の計算になる（差し込みの無い面の位置と
 /// 画素は変わらない）。
 ///
+/// 文書の行の区間の見え方（行の型と、2 列の面の左の列の「もう一方の番号」）も並びと一緒に持ち、差し込みの境と同じ規則で
+/// 面自身の編集に追従させる。
+///
 /// 値は main だけが作り変え（置く・面自身の編集でずらす・区画を測り直す）、描く材料と一緒に描画スレッドへ渡す。描画スレッド
 /// は引き取った材料の版の並びで描く。
 ///
@@ -15,7 +18,7 @@ import OrbeEditorCore
 struct RowLayout: Sendable {
   /// 塊の中身。区画は載せる側の区画の同一性で、区画そのものと絵は main だけが持つ（描く材料は材料の箱の `zones`）。
   enum Content: Sendable {
-    case lines([String])
+    case lines([InsertedLine])
     case zone(ObjectIdentifier)
   }
 
@@ -36,6 +39,11 @@ struct RowLayout: Sendable {
   private(set) var hasZones = false
   /// 区画の同一性 → 塊の番号。
   private var zoneBlocks: [ObjectIdentifier: Int] = [:]
+  /// 文書の行の区間（始まりの行の昇順）。
+  private(set) var spans: [LineSpan] = []
+  /// 差し込んだ行の番号と、最後の区間より前の区間の行のもう一方の番号の、最も大きいもの（無ければ 0）。最後の区間は
+  /// 行数で決まるので、問われたときに足す（→ `otherNumberMax`）。
+  private var settledNumberMax = 0
   /// 作り変えるたびに進む（並びから作るキャッシュの鍵）。
   private(set) var version = 0
 
@@ -50,8 +58,9 @@ struct RowLayout: Sendable {
     var content: Content
   }
 
-  /// 塊の列（境の昇順）で並びを置き直す。
-  mutating func replace(_ blocks: [Block]) {
+  /// 塊の列（境の昇順）と文書の行の区間（始まりの昇順）で並びを置き直す。
+  mutating func replace(_ blocks: [Block], spans: [LineSpan] = []) {
+    self.spans = spans
     boundaries = blocks.map(\.line)
     heights = blocks.map(\.height)
     contents = blocks.map(\.content)
@@ -63,6 +72,7 @@ struct RowLayout: Sendable {
       if case .zone(let id) = content { zoneBlocks[id] = index }
     }
     hasZones = !zoneBlocks.isEmpty
+    settleNumbers()
     version += 1
   }
 
@@ -74,15 +84,7 @@ struct RowLayout: Sendable {
   // MARK: - 行 ↔ y
 
   /// 境が `line` 以下の塊の数（文書の行 `line` より上にある塊の数）。
-  func blocks(above line: Int) -> Int {
-    var low = 0
-    var high = boundaries.count
-    while low < high {
-      let mid = (low + high) / 2
-      if boundaries[mid] <= line { low = mid + 1 } else { high = mid }
-    }
-    return low
-  }
+  func blocks(above line: Int) -> Int { Self.count(boundaries, atOrBelow: line) }
 
   /// 文書の行 `line` の上端。
   func y(ofLine line: Int, scale: Double = 1) -> Double {
@@ -208,50 +210,95 @@ struct RowLayout: Sendable {
 
   // MARK: - 面自身の編集
 
-  /// 面自身の編集の束 `edits`（どれも編集前の本文 `before` の座標で、重ならない）の後の行へ境をずらす。境 r（r ≥ 1）は
-  /// 「行 r−1 の後」で、行 r−1 の中身の終わり（改行の手前）に付く——付き先から始まる編集では動かず、付き先を消した編集
-  /// では消した区間の始まりの行の後へ寄り、付き先より前の編集の行の増減だけずれる。境 0（文書の先頭）は動かない。
+  /// 面自身の編集の束 `edits`（どれも編集前の本文 `before` の座標で、重ならない）の後の行へ、境と区間の始まりをずらす。境 r
+  /// （r ≥ 1）は「行 r−1 の後」で、行 r−1 の中身の終わり（改行の手前）に付く——付き先から始まる編集では動かず、付き先を消した
+  /// 編集では消した区間の始まりの行の後へ寄り、付き先より前の編集の行の増減だけずれる。境 0（文書の先頭）は動かない。区間の
+  /// 始まり r も「行 r−1 の後」の境として同じに動く。
   mutating func shift(_ edits: [TextEdit], in before: TextRope) {
-    guard !boundaries.isEmpty, !edits.isEmpty else { return }
+    guard !boundaries.isEmpty || !spans.isEmpty, !edits.isEmpty else { return }
     let changes = edits.map { edit in
       let start = edit.range.location
       let end = NSMaxRange(edit.range)
       let removed = before.row(containing: end) - before.row(containing: start)
-      return (
+      return LineChange(
         start: start, end: end,
-        delta: edit.replacement.reduce(0) { $1 == 0x0A ? $0 + 1 : $0 } - removed
-      )
+        delta: edit.replacement.reduce(0) { $1 == 0x0A ? $0 + 1 : $0 } - removed)
     }.sorted { $0.start < $1.start }
-    let total = changes.reduce(0) { $0 + $1.delta }
-    let lastRow = before.row(containing: changes.map(\.end).max() ?? 0)
-    // 境 r ≤ 最初の編集の行 は、付き先が編集より前にある。
-    var index = blocks(above: before.row(containing: changes[0].start))
-    guard index < boundaries.count else { return }
-    while index < boundaries.count {
-      let boundary = boundaries[index]
-      if boundary - 1 > lastRow {
-        boundaries[index] = boundary + total
-      } else {
-        let anchor = Self.anchor(of: boundary, in: before)
-        var row = boundary - 1
-        var delta = 0
-        for change in changes {
-          guard change.start < anchor else { break }
-          if anchor < change.end {
-            row = before.row(containing: change.start)
-          } else {
-            delta += change.delta
-          }
-        }
-        boundaries[index] = row + delta + 1
-      }
-      index += 1
+    let shift = LineShift(changes: changes, before: before)
+    var moved = shift.apply(to: &boundaries)
+    var starts = spans.map(\.line)
+    if shift.apply(to: &starts) {
+      for index in spans.indices { spans[index].line = starts[index] }
+      settleNumbers()
+      moved = true
     }
-    version += 1
+    if moved { version += 1 }
+  }
+
+  /// 束の行の増減（編集前の本文の座標の区間と、行の数の差）。
+  private struct LineChange {
+    var start: Int
+    var end: Int
+    var delta: Int
+  }
+
+  /// 編集の束で、境の昇順の列をずらす規則。
+  private struct LineShift {
+    let changes: [LineChange]
+    let before: TextRope
+    let total: Int
+    let firstRow: Int
+    let lastRow: Int
+
+    init(changes: [LineChange], before: TextRope) {
+      self.changes = changes
+      self.before = before
+      total = changes.reduce(0) { $0 + $1.delta }
+      firstRow = before.row(containing: changes[0].start)
+      lastRow = before.row(containing: changes.map(\.end).max() ?? 0)
+    }
+
+    /// 昇順の境の列 `lines` をずらす（境 r ≤ 最初の編集の行 は、付き先が編集より前にある）。動いたら true。
+    func apply(to lines: inout [Int]) -> Bool {
+      var index = RowLayout.count(lines, atOrBelow: firstRow)
+      guard index < lines.count else { return false }
+      while index < lines.count {
+        let boundary = lines[index]
+        if boundary - 1 > lastRow {
+          lines[index] = boundary + total
+        } else {
+          let anchor = RowLayout.anchor(of: boundary, in: before)
+          var row = boundary - 1
+          var delta = 0
+          for change in changes {
+            guard change.start < anchor else { break }
+            if anchor < change.end {
+              row = before.row(containing: change.start)
+            } else {
+              delta += change.delta
+            }
+          }
+          lines[index] = row + delta + 1
+        }
+        index += 1
+      }
+      return true
+    }
+  }
+
+  /// 昇順の列 `lines` の中で `line` 以下のものの数。
+  fileprivate static func count(_ lines: [Int], atOrBelow line: Int) -> Int {
+    var low = 0
+    var high = lines.count
+    while low < high {
+      let mid = (low + high) / 2
+      if lines[mid] <= line { low = mid + 1 } else { high = mid }
+    }
+    return low
   }
 
   /// 境 `boundary`（≥ 1）の付き先——行 boundary−1 の中身の終わり（改行の手前。CRLF なら CR の手前）。
-  private static func anchor(of boundary: Int, in text: TextRope) -> Int {
+  fileprivate static func anchor(of boundary: Int, in text: TextRope) -> Int {
     guard boundary < text.lineCount else { return text.length }
     let newline = text.lineStart(boundary) - 1
     guard newline > 0, text.units(in: NSRange(location: newline - 1, length: 1)).first == 0x0D
@@ -263,4 +310,50 @@ struct RowLayout: Sendable {
 
   /// 区画 `id` の塊の番号（無ければ nil）。
   func block(ofZone id: ObjectIdentifier) -> Int? { zoneBlocks[id] }
+
+  // MARK: - 文書の行の見え方
+
+  /// 文書の行 `line` を含む区間の番号（最初の区間より上なら nil）。
+  func span(containing line: Int) -> Int? {
+    var low = 0
+    var high = spans.count
+    while low < high {
+      let mid = (low + high) / 2
+      if spans[mid].line <= line { low = mid + 1 } else { high = mid }
+    }
+    return low > 0 ? low - 1 : nil
+  }
+
+  /// 文書の行 `line` の行の型の番号。
+  func style(ofLine line: Int) -> Int? { span(containing: line).flatMap { spans[$0].style } }
+
+  /// 文書の行 `line` のもう一方の番号。
+  func otherNumber(ofLine line: Int) -> Int? {
+    guard let index = span(containing: line), let number = spans[index].otherNumber else {
+      return nil
+    }
+    return number + line - spans[index].line
+  }
+
+  /// 2 列の面の左の列に描く番号の最も大きいもの（`lineCount` 行の文書。無ければ 0）。
+  func otherNumberMax(lineCount: Int) -> Int {
+    guard let last = spans.last, let number = last.otherNumber, lineCount > last.line else {
+      return settledNumberMax
+    }
+    return max(settledNumberMax, number + lineCount - 1 - last.line)
+  }
+
+  /// 最後の区間を除く区間と差し込んだ行の番号の最大を出し直す。
+  private mutating func settleNumbers() {
+    var result = 0
+    for content in contents {
+      guard case .lines(let lines) = content else { continue }
+      for line in lines { result = max(result, line.number ?? 0) }
+    }
+    for (span, next) in zip(spans, spans.dropFirst()) {
+      guard let number = span.otherNumber, next.line > span.line else { continue }
+      result = max(result, number + next.line - 1 - span.line)
+    }
+    settledNumberMax = result
+  }
 }

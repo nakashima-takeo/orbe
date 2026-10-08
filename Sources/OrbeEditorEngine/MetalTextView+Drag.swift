@@ -39,7 +39,7 @@ extension MetalTextView: NSDraggingSource {
     }
     let config = surface.config
     let p = surface.scrollPosition
-    let column = config.columnWidth(lineCount: text.lineCount)
+    let column = surface.surfaceLayout.column
     let layout = surface.rows
     let top = max(0, layout.line(atY: p.y))
     let bottom = layout.line(atY: p.y + Double(bounds.height))

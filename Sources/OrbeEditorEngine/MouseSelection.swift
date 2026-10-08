@@ -133,7 +133,7 @@ final class MouseSelection: NSObject {
     guard !flags.contains(.control) else { return }
     point = view.convert(event.locationInWindow, from: nil)
     guard let hit = site.hit(point), hit.area != .marks, hit.area != .overview,
-      let text = site.editingEnvironment()?.text
+      hit.area != .numbers || hit.onLine, let text = site.editingEnvironment()?.text
     else { return }
     self.site = site
     self.view = view
