@@ -57,6 +57,29 @@ extension SurfaceZonesTests {
     XCTAssertNotEqual(text(opened.document), body, "続きは本文に入る")
   }
 
+  /// 本文が読むだけでも、入力欄は打て（IME の文脈もある）、undo できる。本文は変わらない。
+  func testAFieldTakesTypingOnAReadOnlySurface() throws {
+    let setup = try threaded()
+    let (opened, thread, field) = (setup.opened, setup.thread, setup.field)
+    let view = opened.surface.textView
+    opened.surface.isEditable = false
+    let at = try fieldPoint(opened, thread)
+    try mouse(opened, .leftMouseDown, at: at)
+    try mouse(opened, .leftMouseUp, at: at)
+    XCTAssertNotNil(view.inputContext, "入力欄は文脈を返す")
+    let body = text(opened.document)
+    view.insertText("返信")
+    XCTAssertEqual(field.string, "返信")
+    XCTAssertTrue(
+      view.validateMenuItem(
+        NSMenuItem(title: "", action: #selector(MetalTextView.undo(_:)), keyEquivalent: "")))
+    view.undo(nil)
+    XCTAssertEqual(field.string, "")
+    view.cancelOperation(nil)
+    view.insertText("z")
+    XCTAssertEqual(text(opened.document), body, "本文は変わらない")
+  }
+
   /// 改行で入力欄が伸びるとき、伸びた区画（並びの高さ）と打った字は同じ書き込みで材料に入る。入力欄のキャレットは主の
   /// 間だけ描き、本文のキャレットは描かない。
   func testAFieldGrowsInTheSameWriteAsTheKeystroke() throws {
