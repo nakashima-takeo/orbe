@@ -16,17 +16,17 @@ hooks・署名がユーザーのシェル環境と同等に動くよう、全呼
 
 - 資格情報の端末プロンプトを出させない（`GIT_TERMINAL_PROMPT=0`）。
 - エディタ（メッセージ無しの commit・rebase の todo）は、すぐ失敗するコマンドへ向ける。merge の自動編集は無効。
-- ssh には askpass を必ず使わせ（使うかを `DISPLAY` の有無で揺らさない）、その askpass をすぐ失敗するコマンドにする。パスフレーズと未知のホスト鍵の確かめは、待たずに失敗する。
+- ssh には askpass を必ず使わせ（使うかを `DISPLAY` の有無で揺らさない）、その askpass をすぐ失敗するコマンドにする。パスフレーズと未知のホスト鍵の確かめは、待たずに失敗する。ただし利用者が GUI の askpass を配っていれば（launchd に `SSH_ASKPASS` を置く形）、それを使う——ダイアログで答えられるので待ちにならない。
 
-ユーザーの設定はそのまま効く——`core.sshCommand`・ssh-agent・credential helper・hook・署名・`pull.rebase` など。封じが変えるのは「失敗が速く、分類できる」ことだけ。FIDO 鍵の「触れて」の知らせも askpass を通るので出ない（認証は進む）。
+ユーザーの設定はそのまま効く——`core.sshCommand`・ssh-agent・credential helper・GUI の askpass・hook・署名・`pull.rebase` など。封じが変えるのは「失敗が速く、分類できる」ことだけ。FIDO 鍵の「触れて」の知らせも askpass を通るので出ない（認証は進む）。
 
 ## 並ばない実行
 
 **git の実行は並ばない。** すべて 1 本の並行キューで走り、ある git が別の git の終わりを待つことは基盤の側では起きない。長い hook 1 本が、無関係なリポジトリや別の worktree の git を止めないため。
 
-順番が本当に要るのは、git が待たずに落ちるロックを取り合うときだけ。そのロックは `index.lock` と `config.lock` で、ref と packed-refs のロックは git 自身が短い間再試行する。index を書くのはその worktree の根のサービスだけなので、**同じ worktree の index への書き込みの順番は根のサービスが持つ**（→ [editor/files](../editor/files.md)）。worktree パレットの書き込み（worktree 削除・ブランチ削除・ローカル ref の前進）は他の worktree の index を書かず、順序はコールバックの連鎖で付いている。
+順番を作るのは、同じ worktree の index への Orbe 自身の書き込みだけ——git は `index.lock` を待たずに落ち、index を書くのはその worktree の根のサービスだけなので、**同じ worktree の index への書き込みの順番は根のサービスが持つ**（→ [editor/files](../editor/files.md)）。worktree パレットの書き込み（worktree 削除・ブランチ削除・ローカル ref の前進）は他の worktree の index を書かず、順序はコールバックの連鎖で付いている。
 
-並ばないので、同じリポジトリで同時に走った書き込みが片方失敗しうる——remote 追跡 ref のロックの取り合い（fetch 同士）と、`.git/config` の取り合い（upstream を付ける push と、worktree 作成の追跡設定）。失敗は理由つきで返り、やり直せば通る。同じ worktree の push・pull・fetch を 1 つずつにするのは面の側の役目。
+それ以外は並ばないので、同じリポジトリで同時に走った書き込みが片方失敗しうるのを受け入れる。remote 追跡 ref を書く fetch・pull 同士は、先に更新した側と期待値（読んだ時点の値）が食い違い、後の側が落ちる（ref のロック待ちの再試行では救われない）。`.git/config` を書く操作同士（upstream を付ける push と、worktree 作成の追跡設定）は `config.lock` を待たずに落ちる。どれもやり直せば通る。同じ worktree の push・pull・fetch を 1 つずつにするのは面の側の役目。
 
 ## 無応答の打ち切り
 
@@ -42,7 +42,7 @@ hooks・署名がユーザーのシェル環境と同等に動くよう、全呼
 
 ## 止める手
 
-実行は止める手を返す。止めると、走っている git は SIGTERM で切り（打ち切りと同じく git に後始末をさせ、`index.lock` を残さない）、まだ起こしていない git は起こさずに「止めた」で返る。1 つの手を何段かの実行に渡せば、1 回で全段を止められる——止めた後の段は起こさない。止めた実行は終わり方の値で「止めた」と分かり、失敗とも打ち切りとも読まない。
+実行は止める手で止められる。止めると、走っている git は SIGTERM で切り（打ち切りと同じく git に後始末をさせ、`index.lock` を残さない）、まだ起こしていない git は起こさずに「止めた」で返る。1 つの手を何段かの実行に渡せば、1 回で全段を止められる——止めた後の段は起こさない。止めた実行は終わり方の値で「止めた」と分かり、失敗とも打ち切りとも読まない。
 
 ## 出力の読み方
 
@@ -60,14 +60,16 @@ git の実質的な理由は stderr の `fatal:`・`error:` の行（無けれ�
 
 ## 利用者の書き込み
 
-根のサービスが入口になる書き込み（→ [editor/files](../editor/files.md)）。パスはファイル名そのものなので、NUL 区切りの標準入力で渡し、その呼び出しだけ pathspec を literal にする——`*` `:` を含む名前で別のファイルに当たらず、引数の長さの上限も越えない。パスの無いステージ・解除は全体に効いてしまうので、空の操作は git を起こさない。
+根のサービスが入口になる書き込み（→ [editor/files](../editor/files.md)）。パスはファイル名そのものなので、NUL 区切りの標準入力で渡し、その呼び出しだけ pathspec を literal にする——`*` `:` を含む名前で別のファイルに当たらず、引数の長さの上限も越えない。パスの無いステージ・解除・破棄は全体に効いてしまうので、空の操作は git を起こさない。
+
+ステージ・破棄に含めるパスは、呼んだ時点の index と作業ツリーで選び直す——行のパスは index か作業ツリーに在るときだけ（status を読んだ後に消えた未追跡で全体が落ちない）、rename の元パスは index に在るときだけ。作業ツリー側の rename では元パスは index に在り、その削除が含まれる。ステージ済みの rename では元パスは index に無く、そこへ置き直された別の未追跡ファイルを巻き込まない。解除には rename の元パスを常に含める（index 側で両側を揃えて戻す）。
 
 - **ステージ**: 作業ツリーの姿を index へ（変更・削除・未追跡のどれでも）。
 - **解除**: index を HEAD の版へ。初回コミット前でも効く（index から外す）。
-- **破棄**: 追跡中のパスは作業ツリーを index の版へ戻す——ステージ済みの分は残る。未追跡のパスはゴミ箱へ移す（元に戻せる。移せなければ失敗で返し、消さない）。追跡中かは呼んだ時点の index で決める——観測の status は古いことがあり、それを信じて追跡中のファイルをゴミ箱へ送らない。どちらでもなく実体も無いパス（rename の元パス）は何もしない。
+- **破棄**: 追跡中のパスは作業ツリーを index の版へ戻す——ステージ済みの分は残る。未追跡のパスはゴミ箱へ移す（元に戻せる。移せなければ失敗で返し、消さない）。intent-to-add（`git add -N`）のパスは index から外してからゴミ箱へ——index の版は空なので、戻すと中身を失う。追跡中かは呼んだ時点の index で決める——観測の status は古いことがあり、それを信じて追跡中のファイルをゴミ箱へ送らない。ゴミ箱へは裏のスレッドで 1 件ずつ移し、その都度止められたかを見る（件数が多くても main を止めず、途中で止められる）。
 - **コミット**: ステージ済みの分だけ。メッセージは書いたまま残る——`#` 始まりの行もコメントとして消さず、前後の空行・行末の空白・続く空行だけを整える。
 - **amend**: 直前のコミットを差し替える。メッセージが空なら前のメッセージを一字も変えずに（利用者の `commit.cleanup` に関わらず）中身だけ差し替える。
-- **最後のコミットの取り消し**: HEAD が 1 つ戻り、中身はステージ済みに残る。初回コミットなら、HEAD のブランチの ref を消して初回コミット前へ戻す（中身は全部ステージ済み）。detached の初回コミットは取り消せない。
+- **最後のコミットの取り消し**: HEAD が 1 つ戻り、中身はステージ済みに残る。初回コミットなら、HEAD のブランチの ref を消して初回コミット前へ戻す（中身は全部ステージ済み）。detached の初回コミットは取り消せない。shallow clone の境界のコミット（親が手元に無い）も取り消さない——初回コミットとして ref を消すと、履歴とつながらない初回コミット前に化ける。
 
 ユーザーの hook と署名の設定はそのまま効く。force push・「すべてコミット」・ブランチの切り替えと作成（ブランチ＝worktree で、移るのは Dispatch の役割）・ハンク単位のステージは持たない。
 
@@ -75,12 +77,12 @@ git の実質的な理由は stderr の `fatal:`・`error:` の行（無けれ�
 
 - **fetch**: ユーザーの既定の remote・prune の設定のまま。
 - **pull**: merge か rebase かはユーザーの設定（`pull.rebase`・`pull.ff`・`branch.<name>.rebase`）のまま。fetch と merge / rebase に割らない——割ると、その解決を自前で再現することになる。
-- **push**: upstream があれば `git push` をユーザーの設定（`push.default`・`pushRemote`）のまま。無ければ origin へ upstream を付けて出す（Dispatch の「push 先の無いブランチは origin とみなす」と同じ扱い）。付ける名前と付け先は実行時の HEAD から git が決めるので、観測の status が古くても別のブランチを送らない。
+- **push**: upstream があれば `git push` をユーザーの設定（`push.default`・`pushRemote`）のまま。無ければ利用者の push 先の設定（`branch.<name>.pushRemote` → `remote.pushDefault` → `branch.<name>.remote` の順に git が解決する）の remote へ、どれも無ければ origin へ、upstream を付けて出す（Dispatch の「push 先の無いブランチは origin とみなす」と同じ解決）。upstream を付けるのは先行/遅れを読むため。付ける名前と付け先は実行時の HEAD から git が決めるので、観測の status が古くても別のブランチを送らない。
 
 どれも進捗の行（git の語のまま。割合への換算や訳はしない）を届いた順に渡す。失敗は分類を持ち、分類できない失敗は「その他」（git の実質の理由）に倒す——誤分類より安全。
 
-- **前提は git を起こす前に型で判定する**: upstream の無いブランチの pull →「upstream が無い」、merge・rebase 等が止まっている worktree の pull →「操作の途中」、detached HEAD の push →「ブランチに居ない」、upstream も origin も無いブランチの push →「push 先が無い」。材料は直前に取り直した status と remote の一覧と、止まった操作の管理エントリ。pull は止まった操作を先に見る——rebase の途中は HEAD が detached で upstream も無いので、逆の順では「upstream が無い」に化ける。
-- **push の拒否**は `--porcelain` の機械向けの行で読む——`[rejected]`（fetch first・non-fast-forward）は「拒否された（先に取り込みが要る）」。サーバの hook が拒んだ `[remote rejected]` などは「その他」で、送れなかった ref とその要約（`(pre-receive hook declined)` 等）を理由の頭に置く——`--porcelain` では要約が機械向けの行へ移り、stderr には「送れなかった」としか残らないため。
+- **前提は本体の git を起こす前に判定する**: merge・rebase 等が止まっている worktree の pull →「操作の途中」、detached HEAD の pull・push →「ブランチに居ない」、upstream の無いブランチの pull →「upstream が無い」、upstream も push 先の設定も origin も無いブランチの push →「push 先が無い」。材料は直前に取り直した status と、push 先の解決と remote の一覧と、止まった操作の管理エントリ。pull は止まった操作を先に見る——rebase の途中は HEAD が detached で upstream も無いので、逆の順では「ブランチに居ない」「upstream が無い」に化ける。
+- **push の拒否**は `--porcelain` の機械向けの行で読む——送れなかった ref がどれも `[rejected] (fetch first)`・`[rejected] (non-fast-forward)` なら「拒否された（先に取り込みが要る）」。サーバの hook が拒んだ `[remote rejected]`・取り込んでも直らない `[rejected] (already exists)` などは「その他」で、送れなかった ref とその要約（`(pre-receive hook declined)` 等）を理由の頭に置く——`--porcelain` では要約が機械向けの行へ移り、stderr には「送れなかった」としか残らないため。
 - **競合**は「pull の前に無かった止まった操作が、後に在る」で読む（stderr の字面で読まない）。
 - **認証**（ssh の `Permission denied (publickey`、https の `Authentication failed`・`could not read Username`・`terminal prompts disabled`）と**ホスト鍵**（`Host key verification failed`）だけは stderr の字面で読む。git も ssh もそれを機械向けの形で出さない。
 
@@ -90,7 +92,7 @@ git の実質的な理由は stderr の `fatal:`・`error:` の行（無けれ�
 
 ## コミットグラフ
 
-既定の範囲は HEAD と、在れば upstream。呼び出し側が範囲の ref を選べ、件数を区切って続きを読める（続きがあるかも返す）。各コミットについて親・題・指している local / remote 追跡のブランチ名（`<remote>/HEAD` は含まない）・push 済みか（どれかの remote 追跡ブランチから届くか）が読める。書式は明示し、署名の表示・色・出力の文字コードを封じる（`log.showSignature` 等で出力が変わらない）。ブランチ名は装飾の文字列を割らずに ref から別に引く。push 済みかは、表示する分から remote 追跡ブランチに届かない分を引いて決める——手間は表示する分と未 push の分に比例し、履歴全体を歩かない。remote 追跡ブランチが 1 本も無ければ git を起こさず全部「未 push」。
+既定の範囲は HEAD と、在れば upstream。呼び出し側が範囲の ref を選べ、件数を区切って続きを読める（続きがあるかも返す）。各コミットについて親・題（UTF-8 として読めないバイトは置き換えて読む——encoding ヘッダの無い古い非 UTF-8 の題を無題にしない）・指している local / remote 追跡のブランチ名（`<remote>/HEAD` は含まない）・push 済みか（どれかの remote 追跡ブランチから届くか）が読める。書式は明示し、署名の表示・色・出力の文字コードを封じる（`log.showSignature` 等で出力が変わらない）。ブランチ名は装飾の文字列を割らずに ref から別に引く。push 済みかは、表示する分から remote 追跡ブランチに届かない分を引いて決める——手間は表示する分と未 push の分に比例し、履歴全体を歩かない。remote 追跡ブランチが 1 本も無ければ git を起こさず全部「未 push」。
 
 ## プロジェクト検索の grep
 
