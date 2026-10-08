@@ -24,11 +24,12 @@ extension GitRepo {
     branch: GitStatus.Branch?, onProgress: @escaping (String) -> Void, handle: GitRunner.Handle,
     completion: @escaping (GitWriteFailure?) -> Void
   ) {
-    if let branch, branch.upstream == nil { return Self.fail(.noUpstream, completion) }
+    // 止まった操作を先に見る——rebase の途中は HEAD が detached で upstream も無いので、逆の順では「upstream が無い」に化ける。
     let before = GitWorktreeOperationProbe.detect(worktreeAt: root)
     if case .inProgress(let operation) = before {
       return Self.fail(.operationInProgress(operation), completion)
     }
+    if let branch, branch.upstream == nil { return Self.fail(.noUpstream, completion) }
     runner.run(
       ["pull", "--progress"], cwd: root, timesOut: false, onProgress: onProgress, handle: handle
     ) { output in
