@@ -1,4 +1,5 @@
 import AppKit
+import Metal
 import OrbeEditorCore
 import XCTest
 
@@ -12,7 +13,7 @@ final class SurfaceSharedScrollTests: EngineTestCase {
   private let size = CGSize(width: 400, height: 300)
 
   /// 行数の違う 2 面（左が長い）を結んだもの。
-  private func pair(left: Int = 200, right: Int = 120) throws -> (Opened, Opened) {
+  func pair(left: Int = 200, right: Int = 120) throws -> (Opened, Opened) {
     let a = try open(rows(left), size: size)
     let b = try open(rows(right, width: 60), size: size)
     for opened in [a, b] {
@@ -22,7 +23,7 @@ final class SurfaceSharedScrollTests: EngineTestCase {
     return (a, b)
   }
 
-  private func finger(
+  func finger(
     _ surface: MetalTextSurface, _ t: Double, _ dy: Double, _ phase: ScrollInput.Phase
   ) {
     surface.scroll(ScrollInput(timestamp: t, delta: SIMD2(0, dy), precise: true, phase: phase))
@@ -121,5 +122,102 @@ final class SurfaceSharedScrollTests: EngineTestCase {
     XCTAssertEqual(
       a.surface.scrollState().limits.maximum.y,
       max(0, a.surface.rows.lastTop(lineCount: a.document.text.lineCount)))
+  }
+}
+
+/// 描画スレッドの 1 コマの順を決めて流す場——2 面の刻みを手で打ち、どちらの面が先に描くかを決める。
+@MainActor
+extension SurfaceSharedScrollTests {
+  /// 刻みを手で打つ時計（止めても止まらない——起こされてその場で描くことをさせず、刻みの順をテストが決める）。
+  private final class ManualClock: FrameClock {
+    var isPaused: Bool {
+      get { false }
+      set { _ = newValue }
+    }
+    var period: Double { HeadlessDriver.period }
+    func nextTarget(after now: Double) -> Double { ((now / period).rounded(.down) + 1) * period }
+    func invalidate() {}
+  }
+
+  /// 画面外の 1 枚へ描き、画面に出た知らせを出さない（上限に当たらないよう、出ていないコマの上限を大きくする）。
+  private final class SinkTarget: FrameTarget, @unchecked Sendable {
+    private let texture: MTLTexture
+
+    init() {
+      let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+        pixelFormat: .bgra8Unorm, width: 800, height: 600, mipmapped: false)
+      descriptor.usage = .renderTarget
+      descriptor.storageMode = .private
+      texture = RenderThread.device!.makeTexture(descriptor: descriptor)!
+    }
+
+    var limit: Int { 1_000 }
+
+    func acquire() -> AcquiredFrame? {
+      AcquiredFrame(texture: texture) { _, _ in }
+    }
+  }
+
+  private func tick(_ surface: MetalTextSurface, _ target: Double) {
+    let id = surface.id
+    RenderThread.shared.performAndWait { renderer in
+      renderer.tick(id, target: target)
+      return 0
+    }
+    // GPU に出した命令の列が終わるのを待つ（上限 3 に当たって飛ばさない）。
+    RenderThread.shared.performAndWait { _ in 0 }
+    Thread.sleep(forTimeInterval: 0.01)
+  }
+
+  private func drawn(_ surface: MetalTextSurface) -> SIMD2<Double>? {
+    let id = surface.id
+    return RenderThread.shared.performAndWait { $0.slot(id)?.drawnPosition }
+  }
+
+  /// マウスのホイール（段の無い出来事）が刻みの途中に届き、その刻みを先に描いた面と後で描く面に分かれても、後の面は次の
+  /// 刻みで追いつき、両面は同じ位置で止まる（後の面がその刻みの封じた位置を描いたまま、描いたつもりで止まらない）。
+  func testAWheelBetweenTheTwoSurfacesOfATickStillMovesBoth() throws {
+    let (a, b) = try pair()
+    for opened in [a, b] {
+      opened.surface.viewStateDidChange(size: size, scale: 2, visible: true)
+      let id = opened.surface.id
+      let target = SinkTarget()
+      let clock = ManualClock()
+      RenderThread.shared.perform { $0.bind(id, target: target, clock: clock) }
+    }
+    _ = RenderThread.shared.performAndWait { $0.gate.wait() != nil }
+    a.surface.flush()
+    b.surface.flush()
+    let period = HeadlessDriver.period
+    var t = (CACurrentMediaTime() / period).rounded(.up) * period
+    for surface in [a.surface, b.surface] { tick(surface, t) }
+    t += period
+    tick(b.surface, t)
+    a.surface.scroll(
+      ScrollInput(timestamp: CACurrentMediaTime(), delta: SIMD2(0, -3), precise: false))
+    tick(a.surface, t)
+    for _ in 0..<3 {
+      t += period
+      for surface in [b.surface, a.surface] { tick(surface, t) }
+    }
+    XCTAssertEqual(drawn(b.surface)?.y, 30, "先に描いた面はホイールの量だけ動く")
+    XCTAssertEqual(drawn(a.surface), drawn(b.surface), "後に描いた面も次の刻みで追いつく")
+  }
+}
+
+extension SurfaceSharedScrollTests {
+  /// 刻みの予定時刻が刻みの長さの格子から半刻みずれている画面（表示の位相は画面ごとに違う）でも、続く 2 つの刻みを同じ
+  /// 刻みとして封じない——前の刻みの位置を次の刻みに描き続けない。
+  func testConsecutiveTicksAtHalfPhaseAreSealedApart() throws {
+    let (a, _) = try pair()
+    let period = 1.0 / 120
+    let n = (CACurrentMediaTime() / period).rounded(.down) + 100
+    let revision = a.surface.drawn.revision
+    let first = a.surface.scroll.frame(at: (n + 0.51) * period, period: period, material: revision)
+    finger(a.surface, 1, 0, .began)
+    finger(a.surface, 1.01, -90, .changed)
+    let next = a.surface.scroll.frame(at: (n + 1.49) * period, period: period, material: revision)
+    XCTAssertEqual(first.position.y, 0)
+    XCTAssertEqual(next.position.y, 90, "次の刻みは新しい位置を描く")
   }
 }

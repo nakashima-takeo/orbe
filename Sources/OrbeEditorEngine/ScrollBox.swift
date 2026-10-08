@@ -12,9 +12,10 @@ import simd
 ///
 /// スクロールを共にする面（→ `share`）は、物理（位置・端の戻り・軸の判定）を 1 つの状態として共有し、範囲は面ごとの寄与の
 /// 大きい方になる。面ごとに残すのは、範囲の寄与（見えている大きさ・最も長い行・縦の端）・材料の版に組む位置・出来事の
-/// 引き取り・最も長い行の測り直し。結んだ面は、刻みごとの位置を刻みの番号（予定時刻を刻みの長さで丸めたもの）を鍵に
-/// 最初に読んだ面が封じ、同じ刻みのもう一方の面は同じ位置を描く——封じた後に届いた指の出来事は次の刻みに出る。main か
-/// 描画スレッドが位置か範囲を置き直せば、封じた値は古くなる（次に読んだ面が封じ直す）。
+/// 引き取り・最も長い行の測り直し。結んだ面は、刻みごとの位置を刻みの予定時刻を鍵に最初に読んだ面が封じ、同じ刻みの
+/// もう一方の面は同じ位置を描く——封じた後に届いた出来事は次の刻みに出る（後で描く面は、描いた位置の版が今の版に届いて
+/// いないことを知り、次の刻みで描き直す）。main か描画スレッドが位置か範囲を置き直せば、封じた値は古くなる（次に読んだ
+/// 面が封じ直す）。
 final class ScrollBox: Sendable {
   /// 描画スレッドがコマの時刻で読んだもの。
   struct Frame: Sendable {
@@ -222,16 +223,18 @@ final class ScrollBox: Sendable {
       var position: SIMD2<Double>
       var limits: ScrollPhysics.Limits
       var returning = s.physics.isReturning
+      var revision = s.revision
       if let pair = s.members[m].pairs.first {
         position = pair.position
         limits = pair.limits
       } else {
-        (position, returning) = s.shown(at: t, period: period)
+        let shown = s.shown(at: t, period: period)
+        (position, returning, revision) = (shown.position, shown.returning, shown.revision)
         limits = s.view(m)
       }
       return Frame(
         position: position, limits: limits, returning: returning, events: events,
-        gesture: s.gesture, revision: s.revision)
+        gesture: s.gesture, revision: revision)
     }
   }
 
@@ -242,156 +245,4 @@ final class ScrollBox: Sendable {
 
   /// 描くものが変わったかを、出来事を引き取らずに見る。
   var revision: Int { with { s, _ in s.revision } }
-}
-
-/// スクロールの状態——物理と、それを共にする面ごとの寄与。共にしていない面は面 1 つだけを持つ。
-struct ScrollState: Sendable {
-  var physics = ScrollPhysics()
-  var revision = 0
-  var gesture = 0
-  var members: [Member]
-  /// main か描画スレッドが位置か範囲を置き直すたびに進む（封じた刻みの値が古いかを見分ける）。
-  var generation = 0
-  /// 刻みごとに封じた位置（共にする面だけ。新しい順に少しだけ）。
-  var seals: [Seal] = []
-
-  /// 面 1 つの寄与。
-  struct Member: Sendable {
-    let id: Int
-    /// この面の範囲（見えている大きさ・最も長い行・縦の端。`shared` は持たない）。
-    var limits = ScrollPhysics.Limits()
-    var pendingEvents: [Double] = []
-    /// 最も長い行を測り直す（この版以降の写しを描いたコマの幅で置き直す）。
-    var remeasureFrom: Int?
-    /// 最も長い行をまだ一度も測っていない。
-    var unmeasured = true
-    /// 横の範囲の基準を取り直した測定の回数。
-    var baselines = 0
-    /// 材料の版ごとに組む位置（版の昇順。描画スレッドがまだ引き取っていない版の分だけ）。
-    var pairs: [Pair] = []
-    /// 面が閉じていない。
-    var active = true
-  }
-
-  /// 版 `version` を置く直前に見せていた位置と範囲——`version` より前の材料に組む。
-  struct Pair: Sendable {
-    var position: SIMD2<Double>
-    var limits: ScrollPhysics.Limits
-    var version: Int
-  }
-
-  /// 刻み `tick` に封じた位置と、戻りの途中か。`generation` は封じたときの置き直しの回数。
-  struct Seal: Sendable {
-    var tick: Int
-    var generation: Int
-    var position: SIMD2<Double>
-    var returning: Bool
-  }
-
-  /// 覚えておく封じの数。
-  static let sealDepth = 4
-
-  /// 面 `m` から見た範囲——面の範囲に、共にする面の範囲の端を添えたもの。
-  func view(_ m: Int) -> ScrollPhysics.Limits {
-    var limits = members[m].limits
-    guard members.count > 1 else { return limits }
-    for member in members where member.active {
-      limits.shared = simd_max(limits.shared, member.limits.own)
-    }
-    return limits
-  }
-
-  /// 面の範囲が変わった。物理の範囲を、共にする面の範囲の端に合わせる（止まっていれば範囲に収める）。
-  mutating func syncLimits() {
-    let lead = members.firstIndex(where: \.active) ?? 0
-    let limits = view(lead)
-    if limits != physics.limits { physics.setLimits(limits) }
-  }
-
-  /// main か描画スレッドが位置か範囲を置き直した。
-  mutating func moved() {
-    revision += 1
-    generation += 1
-  }
-
-  /// 面 `m` の版 `material` を置く直前の位置と範囲を、その版より前の材料に組む位置として残す（同じ版で続けて置けば、
-  /// 最初に置く前のものだけ）。
-  mutating func pair(_ m: Int, before material: Int, at t: Double) {
-    guard members[m].pairs.last?.version != material else { return }
-    members[m].pairs.append(
-      Pair(position: physics.shown(at: t), limits: view(m), version: material))
-  }
-
-  /// 時刻 `t` に見せる位置と戻りの途中か。共にする面では、その刻みに封じた値（無いか古ければ今の値を封じる）。
-  mutating func shown(at t: Double, period: Double?) -> (SIMD2<Double>, Bool) {
-    let position = physics.shown(at: t)
-    let returning = physics.isReturning
-    guard members.count > 1, let period, period > 0 else { return (position, returning) }
-    let tick = Int((t / period).rounded())
-    if let seal = seals.first(where: { $0.tick == tick }), seal.generation == generation {
-      return (seal.position, seal.returning)
-    }
-    seals.removeAll { $0.tick == tick }
-    seals.insert(
-      Seal(tick: tick, generation: generation, position: position, returning: returning), at: 0)
-    if seals.count > Self.sealDepth { seals.removeLast() }
-    return (position, returning)
-  }
-
-  /// 出す 1 か所の置くもの（面ごと）を 1 回で置く。位置か範囲が変われば、材料を書く面の版より前の材料に組む位置として前の
-  /// 位置を残す。
-  mutating func commit(_ entries: [(member: Int, commit: ScrollBox.Commit)]) {
-    for (member, commit) in entries {
-      if let from = commit.remeasure { members[member].remeasureFrom = from }
-    }
-    guard entries.contains(where: { changes($0.member, $0.commit) }) else { return }
-    let t = CACurrentMediaTime()
-    for (member, commit) in entries {
-      if let material = commit.material { pair(member, before: material, at: t) }
-    }
-    move(entries)
-  }
-
-  /// ずらし・範囲・位置の順に当てる（範囲は止まっていれば位置を収め、置く位置はその後）。
-  private mutating func move(_ entries: [(member: Int, commit: ScrollBox.Commit)]) {
-    for (_, commit) in entries where commit.shift != 0 { physics.shift(by: commit.shift) }
-    for (member, commit) in entries {
-      guard let update = commit.limits else { continue }
-      update.apply(to: &members[member].limits)
-    }
-    syncLimits()
-    for (_, commit) in entries {
-      if let p = commit.position { physics.place(p) }
-    }
-    moved()
-  }
-
-  /// `commit` が面 `m` のずらし・範囲・位置を変えるか。
-  private func changes(_ m: Int, _ commit: ScrollBox.Commit) -> Bool {
-    guard commit.shift == 0, commit.position == nil else { return true }
-    guard let update = commit.limits else { return false }
-    var limits = members[m].limits
-    update.apply(to: &limits)
-    return limits != members[m].limits
-  }
-}
-
-/// スクロールの状態の入れ物（共にする面の箱が同じものを指す）。
-final class ScrollCore: Sendable {
-  let state: OSAllocatedUnfairLock<ScrollState>
-
-  init(surface: Int) {
-    state = OSAllocatedUnfairLock(
-      initialState: ScrollState(members: [ScrollState.Member(id: surface)]))
-  }
-
-  /// 2 つの状態を 1 つにする——物理は `lead` のものを引き継ぎ、面の寄与は両方を持つ。
-  init(joining lead: ScrollState, _ other: ScrollState) {
-    var joined = lead
-    joined.members = lead.members + other.members
-    joined.revision = max(lead.revision, other.revision) + 1
-    joined.seals = []
-    joined.syncLimits()
-    state = OSAllocatedUnfairLock(initialState: joined)
-  }
 }
