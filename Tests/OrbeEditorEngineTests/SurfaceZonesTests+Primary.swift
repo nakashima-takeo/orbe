@@ -117,4 +117,25 @@ extension SurfaceZonesTests {
     XCTAssertEqual(surface.rows.heights, [200], "外れた知らせの中で描き直した高さ")
     XCTAssertEqual(surface.drawn.rows.heights, [200], "同じ書き込みで材料にも")
   }
+
+  /// Finder のファイルは入力欄へ落とせない（開かず、パスも入れない）。入力欄は文字だけ受ける。
+  func testFinderFilesAreRefusedOverAField() throws {
+    let setup = try threaded()
+    let (opened, thread, field) = (setup.opened, setup.thread, setup.field)
+    let surface = opened.surface
+    let hostSide = RecordingHost()
+    surface.host = hostSide
+    let view = surface.textView
+    let board = NSPasteboard(name: NSPasteboard.Name("dev.orbe.test.\(UUID().uuidString)"))
+    addTeardownBlock { board.releaseGlobally() }
+    board.clearContents()
+    board.writeObjects([URL(fileURLWithPath: "/tmp/a.txt") as NSURL])
+    let drag = FakeDraggingInfo(
+      at: view.convert(try fieldPoint(opened, thread), to: nil), pasteboard: board,
+      operations: .copy)
+    XCTAssertEqual(view.draggingUpdated(drag), [])
+    XCTAssertFalse(view.performDragOperation(drag))
+    XCTAssertTrue(hostSide.openedFiles.isEmpty, "開かない")
+    XCTAssertEqual(field.string, "", "パスも入れない")
+  }
 }

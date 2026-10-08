@@ -31,7 +31,7 @@ struct DropSituation {
   var copying = false
   /// ⇧ を押している。
   var shift = false
-  /// ファイルを開く・パスにする載せる側がいる。
+  /// ファイルを受ける（本文の場で、開く・パスにする載せる側がいる）。受けなければファイルは拒む。
   var opensFiles = true
 }
 

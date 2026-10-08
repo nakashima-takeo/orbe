@@ -173,7 +173,7 @@ extension MetalTextView: NSDraggingSource {
   }
 
   /// 板と修飾と当たりを読んで、場 `site` へ落とすときの判断（`DropRules`）に渡す。運んでいる範囲は、本文の場へ落とす
-  /// ときだけ見る（入力欄へは写す）。
+  /// ときだけ見る（入力欄へは写す）。ファイルは本文の場だけが受ける（入力欄は文字だけ受ける）。
   private func dropPlan(_ info: NSDraggingInfo, site: EditingSite) -> DropPlan {
     guard let surface else { return DropPlan() }
     let point = convert(info.draggingLocation, from: nil)
@@ -185,7 +185,8 @@ extension MetalTextView: NSDraggingSource {
         files: fileURLs(on: board), string: board.string(forType: .string),
         dragged: own ? draggedRange : nil,
         copying: !info.draggingSourceOperationMask.contains(.move) || !site.isBody,
-        shift: NSEvent.modifierFlags.contains(.shift), opensFiles: surface.host != nil))
+        shift: NSEvent.modifierFlags.contains(.shift),
+        opensFiles: site.isBody && surface.host != nil))
   }
 
   private func showDrop(_ offset: Int?) {
