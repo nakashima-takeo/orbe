@@ -64,11 +64,12 @@ extension MetalTextSurface {
 
   /// 並びが `before` から今の並びに変わった——`before` で見えていた先頭の文書の行（塊の上なら次の文書の行）が画面の同じ
   /// 位置に残るよう、縦の位置を差の分だけずらす（まだ出していない置く位置があればそれを、無ければ箱の位置をずらす）。
-  /// 見えている高さが無ければ何もしない。
+  /// 見えている高さが無いか、文書の先頭（位置 0）にいれば何もしない——先頭では、文書の先頭に置いた塊をそのまま見せる。
   func keepFirstVisibleLine(from before: RowLayout, lineCount: Int) {
     let (position, limits) = scrollState()
-    guard limits.viewport.y > 0 else { return }
-    let line = before.firstVisibleLine(atY: limits.clampedY(position), lineCount: lineCount)
+    let top = limits.clampedY(position)
+    guard limits.viewport.y > 0, top > 0 else { return }
+    let line = before.firstVisibleLine(atY: top, lineCount: lineCount)
     let dy = rows.y(ofLine: line) - before.y(ofLine: line)
     guard dy != 0 else { return }
     if let placed = pending.position {

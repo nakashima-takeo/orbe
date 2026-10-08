@@ -21,4 +21,18 @@ extension SurfaceRowsTests {
     surface.editor.perform(.move(.pageUp, extending: false))
     XCTAssertEqual(text.row(containing: surface.caretLocation), 9, "差し込みの上の文書の行")
   }
+
+  /// 文書の先頭（位置 0）で境 0 に塊を置いても伸ばしても、位置 0 のまま（塊が画面の上に隠れない）。
+  func testABlockAtTheTopOfTheDocumentStaysInViewAtPositionZero() throws {
+    let opened = try openRows()
+    let surface = opened.surface
+    surface.flush()
+    XCTAssertEqual(surface.scrollPosition.y, 0, "前提: 先頭")
+    surface.setRows(SurfaceRows(insertions: [insert(["a", "b", "c"], at: 0)]))
+    surface.flush()
+    XCTAssertEqual(surface.scrollPosition.y, 0)
+    surface.setRows(SurfaceRows(insertions: [insert(["a", "b", "c", "d", "e"], at: 0)]))
+    surface.flush()
+    XCTAssertEqual(surface.scrollPosition.y, 0, "伸ばしても")
+  }
 }
