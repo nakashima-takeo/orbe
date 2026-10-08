@@ -13,8 +13,12 @@ final class GitRunnerSealTests: OrbeTestCase {
     repo = try TempGitRepo()
   }
 
-  /// エディタが要る経路（メッセージ無しの commit）は待たずに失敗する。
+  /// エディタが要る経路（メッセージ無しの commit）は、ユーザーのエディタが返らないものでも待たずに失敗する。
   func testAnEditorIsNeverWaitedFor() throws {
+    let fixture = try GitHangFixture()
+    defer { fixture.release() }
+    let editor = try fixture.installScript("editor.sh", body: fixture.waitingBody)
+    XCTAssertTrue(repo.git(["config", "core.editor", editor]).isSuccess)
     try repo.write("a.txt", "changed\n")
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     var output: GitRunner.Output?

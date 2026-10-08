@@ -19,6 +19,9 @@ final class RootFilesWriteStopTests: OrbeTestCase {
 
   private var root: String { GitWorktreeRoot.normalizedPath(fixture.root) }
 
+  /// 書き込みが打ち切られないことを、待てる長さで確かめるための上限。
+  private let shortIdleTimeout: TimeInterval = 0.6
+
   private var indexLock: String { root + "/.git/index.lock" }
 
   private func managed(runner: GitRunner = .shared) -> RootFiles {
@@ -38,7 +41,8 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     line: UInt = #line
   ) {
     XCTAssertTrue(fixture.pumpUntilHung(), "前提: 止まっている", file: file, line: line)
-    XCTAssertFalse(outcome.finished, "前提: 止めるまでは返らない", file: file, line: line)
+    RunLoop.main.run(until: Date().addingTimeInterval(shortIdleTimeout * 2))
+    XCTAssertFalse(outcome.finished, "打ち切りの上限を過ぎても、止めるまでは返らない", file: file, line: line)
     let started = Date()
     write.cancel()
     write.cancel()
@@ -67,21 +71,25 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     try "*.big filter=hang\n".write(
       toFile: root + "/.gitattributes", atomically: true, encoding: .utf8)
     try "payload\n".write(toFile: root + "/big.big", atomically: true, encoding: .utf8)
-    let files = managed()
+    let files = managed(runner: GitRunner(idleTimeout: shortIdleTimeout))
     let outcome = WriteOutcome()
     let write = files.stage(
       [GitStatus.Row(path: "big.big", originalPath: nil)], completion: outcome.receive)
     assertStopped(write, outcome)
   }
 
+  /// 進捗の行は、push が終わるのを待たずに届く。
   func testStoppingAHangingPush() throws {
     let bare = fixture.dir.appendingPathComponent("origin.git").path
     XCTAssertTrue(fixture.git(["init", "-q", "--bare", bare]).isSuccess)
     XCTAssertTrue(fixture.git(["remote", "add", "origin", bare]).isSuccess)
-    try fixture.installHook("pre-push", body: fixture.waitingBody)
-    let files = managed()
+    try fixture.installHook(
+      "pre-push", body: "echo 'checking before push' >&2\n" + fixture.waitingBody)
+    let files = managed(runner: GitRunner(idleTimeout: shortIdleTimeout))
     let outcome = WriteOutcome()
-    let write = files.push(onProgress: { _ in }, completion: outcome.receive)
+    var progress: [String] = []
+    let write = files.push(onProgress: { progress.append($0) }, completion: outcome.receive)
+    pumpMain(until: { progress.contains("checking before push") }, "進捗の行が途中で届く")
     assertStopped(write, outcome)
   }
 
@@ -90,7 +98,7 @@ final class RootFilesWriteStopTests: OrbeTestCase {
   func testWritesAreNotTimedOutButObservationIs() throws {
     try fixture.installHook("pre-commit", body: fixture.waitingBody)
     try stageChange()
-    let runner = GitRunner(idleTimeout: 0.6)
+    let runner = GitRunner(idleTimeout: shortIdleTimeout)
     let files = managed(runner: runner)
     let outcome = WriteOutcome()
     let write = files.commit(message: "slow hook", completion: outcome.receive)
