@@ -83,8 +83,6 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `diff.added` | git の追加（青）——ガター・A / U のバッジと名前・印・diff の記号と行の地の基 | `#5ea8ff` | `#0969da` |
 | `diff.removed` | git の削除（オレンジ）——ガターの三角・印・diff の記号と行の地の基 | `#f0883e` | `#bc4c00` |
 | `diff.modified` | git の変更（黄）——ガター・M のバッジと名前・印 | `#e2cd6d` | `#a07f0c` |
-| `diff.addedText` | diff の追加の行の字 | `#b3d4ff` | `#0550ae` |
-| `diff.removedText` | diff の削除の行の字 | `#ffc69a` | `#953800` |
 | `editor.tabCloseHover` | ファイルタブの × にポインタがあるときの枠の地（VS Code `toolbar.hoverBackground` の役。§5 File tabs） | `rgba(255,255,255,.10)` | `rgba(58,49,81,.10)` |
 | `editor.previewHatch` | 仮のタブの地の斜線の基色（view 側で `opacity.editorPreviewHatch*` を掛ける。§5 File tabs） | `#a99fb8` | `#3a3151` |
 | `editor.hue.{orange,blue,yellow,sky,violet,cyan,red,green,teal}` | 種別チップの色相（文字と α .16 の地）。種別 → 色相の表は `FileChip` が持つ | `DesignTokens+Editor.swift` の `editorHue*`（`tokens.json` の `editor.hue.*`） | 同 |
@@ -218,7 +216,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 
 - **成功＝green（`success`）＋ `✓`／エラー＝red（`danger`）＋ `⚠`。**
 - **git の色は赤と緑に頼らない**: 追加＝青（`diff.added`）・削除＝オレンジ（`diff.removed`）・変更＝黄（`diff.modified`）。赤と緑を見分けにくい人でも区別できるため。形（記号 ＋ / −・削除の三角・バッジの字）でも区別する。
-  - 見本の色名からの訳し方: 見本の `diffAdd` / `diffDel` は、git の変化の種類（ガター・バッジ・diff の行・印・件数）なら `diff.*`、成否・CI・PR の状態・診断なら `success` / `danger`。見本の `modified` は、git の M とガターの変更なら `diff.modified`、それ以外は `editor.caution`。
+  - 見本の色名からの訳し方: 見本の `diffAdd` / `diffDel` は、git の変化の種類（ガター・バッジ・diff の行・印・件数）なら `diff.*`、成否・CI・PR の状態・診断なら `success` / `danger`。見本の `modified` は、git の M とガターの変更なら `diff.modified`、それ以外は `editor.caution`。見本の `diffText`（diff の行の字の色）は訳さない——Orbe は diff の字に専用の色を持たず、どの行も普通のファイルと同じ構文色で描き、追加・削除は行の地と先頭の ＋ / − で見分ける（VS Code と同じ）。
 - **エージェント状態はグリフ形＋動きが一次情報。** 4状態すべてが固有の形（円弧・吹き出し・チェック・zzz）を持ち、色情報を除いても判別できる。横断ロールアップは常に件数（数字）を併記。
 - **コントラスト**: テキスト階層は背景に対し WCAG AA（本文 4.5:1 / 大字 3:1）。`text.muted` は補助情報専用、本文に使わない。
 
