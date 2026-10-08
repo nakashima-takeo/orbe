@@ -3,19 +3,20 @@ import Foundation
 // MARK: - 観測（status・index の読み）
 
 extension GitRepo {
-  /// status の見え方を左右するユーザー設定（`status.showUntrackedFiles`・`diff.ignoreSubmodules`）を
-  /// 引数で封じ、`--no-optional-locks` で index を書き換えない。パスは `-z` で verbatim に出る
+  /// status の見え方を左右するユーザー設定を引数で封じる——`status.showUntrackedFiles`（未追跡はファイル単位）・
+  /// `diff.ignoreSubmodules`・`status.aheadBehind`（先行/遅れは必ず数える）・`status.renames`（rename は必ず検出する）。
+  /// ブランチのヘッダを必ず出す。`--no-optional-locks` で index を書き換えない。パスは `-z` で verbatim に出る
   /// （`core.quotepath` は参照されない）。
   static let statusArguments = [
-    "--no-optional-locks", "status", "--porcelain=v2", "-z", "--untracked-files=normal",
-    "--ignore-submodules=none",
+    "--no-optional-locks", "status", "--porcelain=v2", "-z", "--branch", "--ahead-behind",
+    "--renames", "--untracked-files=all", "--ignore-submodules=none",
   ]
 
-  /// worktree の status。git が失敗したら nil。
+  /// worktree の status。git が失敗したら nil。解析は裏のスレッドで行う（未追跡が多いと出力が大きい）。
   func status(completion: @escaping (GitStatus?) -> Void) {
-    runner.run(Self.statusArguments, cwd: root) { output in
-      completion(output.isSuccess ? GitStatus.parse(output.stdout) : nil)
-    }
+    runner.run(
+      Self.statusArguments, cwd: root,
+      transform: { $0.isSuccess ? GitStatus.parse($0.stdout) : nil }, completion: completion)
   }
 
   /// index にある blob の OID（相対パス → OID。stage 0 だけ＝競合中のパスは含まない）。

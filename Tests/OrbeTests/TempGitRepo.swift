@@ -10,7 +10,8 @@ final class TempGitRepo {
   let dir: URL
   let root: String
 
-  init(name: String = "orbe-repo") throws {
+  /// `initialCommit` が false なら、初回コミット前（`a.txt` も作らない）。
+  init(name: String = "orbe-repo", initialCommit: Bool = true) throws {
     dir = TestScratch.caseDir.appendingPathComponent(
       "\(name)-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -18,9 +19,40 @@ final class TempGitRepo {
     XCTAssertTrue(git(["init", "-q", "-b", "main"]).isSuccess)
     XCTAssertTrue(git(["config", "user.email", "t@example.com"]).isSuccess)
     XCTAssertTrue(git(["config", "user.name", "t"]).isSuccess)
+    guard initialCommit else { return }
     try write("a.txt", "one\n")
     XCTAssertTrue(git(["add", "-A"]).isSuccess)
     XCTAssertTrue(git(["commit", "-qm", "init"]).isSuccess)
+  }
+
+  /// ローカルの bare リポジトリを `origin` として足し、main を upstream 付きで送る。bare のパスを返す。
+  @discardableResult
+  func addOrigin() -> String {
+    let bare = dir.path + "-origin.git"
+    XCTAssertTrue(git(["init", "-q", "--bare", "-b", "main", bare]).isSuccess)
+    XCTAssertTrue(git(["remote", "add", "origin", bare]).isSuccess)
+    XCTAssertTrue(git(["push", "-q", "-u", "origin", "main"]).isSuccess)
+    return bare
+  }
+
+  /// 別の clone から origin の main を 1 コミット進める（このリポジトリには取り込まない）。
+  func advanceOrigin(writing relativePath: String, _ text: String) throws {
+    let other = dir.path + "-other-\(UUID().uuidString)"
+    XCTAssertTrue(git(["clone", "-q", dir.path + "-origin.git", other]).isSuccess)
+    for args in [
+      ["config", "user.email", "o@example.com"], ["config", "user.name", "o"],
+    ] {
+      XCTAssertTrue(git(args, in: other).isSuccess)
+    }
+    try write(relativePath, text, in: other)
+    XCTAssertTrue(git(["add", "-A"], in: other).isSuccess)
+    XCTAssertTrue(git(["commit", "-qm", "from other"], in: other).isSuccess)
+    XCTAssertTrue(git(["push", "-q", "origin", "main"], in: other).isSuccess)
+  }
+
+  /// HEAD のコミット。
+  func head() -> String {
+    git(["rev-parse", "HEAD"]).stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   @discardableResult

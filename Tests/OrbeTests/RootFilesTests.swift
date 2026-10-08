@@ -137,6 +137,25 @@ final class RootFilesTests: OrbeTestCase {
     XCTAssertEqual(recorder.statusChanges, 4, "M のままの書き直しでは鳴らない（M → U → A の 3 回だけ）")
   }
 
+  /// HEAD や upstream が動くと（作業ツリーが変わらなくても）「status が変わった」が届く。
+  func testMovingHeadOrUpstreamChangesTheStatus() throws {
+    repo.addOrigin()
+    let files = RootFiles(root: repo.root)
+    let recorder = Recorder()
+    files.addObserver(recorder)
+    pumpMain(until: { files.status != nil })
+    let seen = recorder.statusChanges
+
+    XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "moved"]).isSuccess)
+    pumpMain(until: { files.status?.branch?.commit == self.repo.head() }, "HEAD の移動")
+    XCTAssertEqual(files.status?.branch?.upstream?.divergence?.ahead, 1)
+    XCTAssertGreaterThan(recorder.statusChanges, seen)
+    let moved = recorder.statusChanges
+    XCTAssertTrue(repo.git(["push", "-q"]).isSuccess)
+    pumpMain(until: { files.status?.branch?.upstream?.divergence?.ahead == 0 }, "upstream の移動")
+    XCTAssertGreaterThan(recorder.statusChanges, moved)
+  }
+
   /// 根が git 管理下と分かる前（解決は非同期）に起きた変化も落とさない。
   func testChangesDuringRootResolutionAreNotLost() throws {
     let files = RootFiles(root: repo.root)
