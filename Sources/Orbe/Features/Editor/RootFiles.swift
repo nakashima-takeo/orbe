@@ -86,8 +86,6 @@ final class RootFiles {
   private var baselineJob = RefreshJob()
   /// 次に始まる status の取り直しが済んだら呼ぶもの（書き込みの完了）。
   private var statusWaiters: [() -> Void] = []
-  /// 実行中の status の取り直しが済んだら呼ぶもの。
-  private var runningStatusWaiters: [() -> Void] = []
   /// 同じ worktree の index への書き込みの順番待ち（先頭から 1 つずつ走らせる）。
   var queuedWrites: [QueuedWrite] = []
   var isWriting = false
@@ -246,15 +244,15 @@ final class RootFiles {
   private func refreshStatus() {
     guard let repo else { return }
     statusJob.isRunning = true
-    runningStatusWaiters = statusWaiters
+    let waiters = statusWaiters
     statusWaiters = []
     repo.status(comparedTo: status) { [weak self] read in
       guard let self else { return }
       publish(read)
-      let waiters = runningStatusWaiters
-      runningStatusWaiters = []
-      statusJob.isRunning = false
+      // 通知と待ち手を呼ぶ間も「実行中」を保つ——その中から取り直しを求められても（書き込みの完了の中で次の書き込みを
+      // 始める等）、ここで 2 本目を並走させず「もう 1 回」に畳む。
       for waiter in waiters { waiter() }
+      statusJob.isRunning = false
       if statusJob.again {
         statusJob.again = false
         refreshStatus()
