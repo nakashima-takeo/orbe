@@ -59,6 +59,18 @@ final class GitRepoObserveTests: OrbeTestCase {
     XCTAssertEqual(status.badge(of: "nested/n.txt"), .untracked)
   }
 
+  /// index から外して作業ツリーに残したファイル（`git rm --cached`）は、ステージ済みの削除と未追跡の両方を持つ。
+  func testAFileRemovedOnlyFromTheIndexIsBothAStagedDeletionAndUntracked() throws {
+    let git = try repo.open()
+    XCTAssertTrue(repo.git(["rm", "-q", "--cached", "a.txt"]).isSuccess)
+
+    let status = try XCTUnwrap(self.status(git))
+    XCTExpectFailure("同じパスの `1 D.` を後に来る `?` の行が上書きし、ステージ済みの削除が消える") {
+      XCTAssertEqual(
+        status.entries["a.txt"], GitStatus.Entry(staged: .deleted, unstaged: .untracked))
+    }
+  }
+
   /// 前の値と比べて読む——同じなら「同じ」、違えば新しい値、git が失敗すれば「失敗」（前の値を変えさせない）。
   func testStatusIsComparedWithThePreviousValue() throws {
     let git = try repo.open()
