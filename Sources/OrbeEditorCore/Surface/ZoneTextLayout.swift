@@ -113,11 +113,16 @@ public enum ZoneTextLayout {
     return 0
   }
 
-  /// 1 行に組んだ行・行頭の余白・幅（行頭の余白を含み、行末の空白を除く）・見え方ごとの字の x 範囲（字の位置と送りから。
-  /// 位置の境は余白の真ん中に来るので使わない）。
-  private static func laid(_ units: [UInt16], styles: [ZoneTextStyle]) -> (
-    line: CTLine, inset: CGFloat, width: CGFloat, spans: [Range<CGFloat>]
-  ) {
+  /// 1 行に組んだ行・行頭の余白・幅（行頭の余白を含み、行末の空白を除く）・見え方ごとの字の x 範囲。
+  private struct Laid {
+    let line: CTLine
+    let inset: CGFloat
+    let width: CGFloat
+    let spans: [Range<CGFloat>]
+  }
+
+  /// 1 行に組む。字の x 範囲は字の位置と送りから引く（位置の境は余白の真ん中に来るので使わない）。
+  private static func laid(_ units: [UInt16], styles: [ZoneTextStyle]) -> Laid {
     let (string, kerns) = attributed(units, styles: styles)
     let line = CTLineCreateWithAttributedString(string)
     let inset = styles.first { $0.length > 0 }?.leadingPadding ?? 0
@@ -147,7 +152,7 @@ public enum ZoneTextLayout {
       let end = spans.last?.upperBound ?? inset
       spans.append(span ?? end..<end)
     }
-    return (line, inset, inset + max(0, width), spans)
+    return Laid(line: line, inset: inset, width: inset + max(0, width), spans: spans)
   }
 
   /// 見え方を当てた属性文字列と、字ごとに足した送り（余白。字の後ろに足す）。前の余白は手前の字の後ろに足す（行頭の見え方
