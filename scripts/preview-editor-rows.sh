@@ -10,6 +10,10 @@
 #   scripts/preview-editor-rows.sh --side [秒数] → 並列の diff の 2 面（スクロールを共にする）を秒数（既定 180）置き、人が
 #                                                 どちらの面でもトラックパッドで速く・はじいて・端で弾ませて動かし、窓の下の
 #                                                 「並びを置き直す」で両面の並びを同じ周で置き直す
+#   scripts/preview-editor-rows.sh --side-synthetic [画面の番号]
+#                                              → 並列の 2 面の左右それぞれの上へ、マウスのホイールとトラックパッドの
+#                                                ドラッグとはじきを窓の配りに通して流し、両面が同じ位置まで動くかを確かめる
+#                                                （画面の番号は NSScreen.screens の添字。外部ディスプレイなら 1）
 #   scripts/preview-editor-rows.sh --synthetic  → 合成のはじき（6000pt/s）と端の弾みを流しながら、窓が画面に出したコマを
 #                                                 受けて（ScreenCaptureKit。画面収録の許可が要る）区画の枠線と上下の行の
 #                                                 距離がどのコマでも同じかを確かめ、連番の PNG と並べた 1 枚を
@@ -24,6 +28,10 @@ case "${1:-}" in
   --side)
     mode=side
     seconds="${2:-$seconds}"
+    ;;
+  --side-synthetic)
+    mode=side-synthetic
+    export ORBE_EDITOR_ROWS_SCREEN="${2:-}"
     ;;
   "") ;;
   *) seconds="$1" ;;

@@ -30,7 +30,7 @@ import XCTest
 /// 窓は主窓と同じ `OrbeWindow` にし、キーが窓を通る道をアプリと揃える。
 @MainActor
 final class EditorRowsTrialTests: OrbeTestCase {
-  private var environment: [String: String] { ProcessInfo.processInfo.environment }
+  var environment: [String: String] { ProcessInfo.processInfo.environment }
   /// 試しのスレッドを置く間隔（行）。
   private static let zoneEvery = 30
 
@@ -48,66 +48,14 @@ final class EditorRowsTrialTests: OrbeTestCase {
   func testTrial() throws {
     if environment["ORBE_EDITOR_ROWS_MODE"] == "synthetic" { return try synthetic() }
     if environment["ORBE_EDITOR_ROWS_MODE"] == "side" { return try sideBySide() }
+    if environment["ORBE_EDITOR_ROWS_MODE"] == "side-synthetic" { return try sideSynthetic() }
     let window = try show(Self.swiftSource()).window
     defer { window.orderOut(nil) }
     runShownWindow(for: Double(environment["ORBE_EDITOR_ROWS_SECONDS"] ?? "") ?? 180)
   }
 
-  // MARK: - 並列の型
-
-  private func sideBySide() throws {
-    let sample = Self.sideSample()
-    let registry = LanguageRegistry(
-      queriesRoot: Bundle(for: Self.self).bundleURL.deletingLastPathComponent())
-    let panes = try [("old.swift", sample.old), ("new.swift", sample.new)].map { name, text in
-      let url = try caseFile(name, text)
-      let surface = MetalTextSurface(
-        style: DiffRowsSample.style(trailing: 8), omittedLabel: { "+\($0)" })
-      let document = EditorDocument(
-        url: url, contents: try EditorDocument.read(url), surface: surface, registry: registry)
-      XCTAssertTrue(document.waitUntilCaughtUp(timeout: 60))
-      return (surface: surface, document: document)
-    }
-    let window = OrbeWindow(
-      contentRect: NSRect(x: 120, y: 120, width: 1200, height: 800),
-      styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-    window.title = "並列の試しの場"
-    window.isReleasedWhenClosed = false
-    window.appearance = NSAppearance(named: .darkAqua)
-    let rows = [sample.side(.old), sample.side(.new)]
-    let toggle = SideRowsToggle(surfaces: panes.map(\.surface), rows: rows)
-    window.contentView = SideBySideView(surfaces: panes.map(\.surface), toggle: toggle)
-    for (pane, rows) in zip(panes, rows) {
-      pane.surface.setPresentation(DiffRowsSample.sidePresentation)
-      pane.surface.setRows(rows)
-      pane.surface.isEditable = false
-    }
-    panes[0].surface.shareScroll(with: panes[1].surface)
-    window.makeKeyAndOrderFront(nil)
-    NSApp.activate(ignoringOtherApps: true)
-    window.makeFirstResponder(panes[1].surface.responder)
-    defer { window.orderOut(nil) }
-    runShownWindow(for: Double(environment["ORBE_EDITOR_ROWS_SECONDS"] ?? "") ?? 180)
-  }
-
-  /// 200KB の Swift の 2 版——17 行ごとに 1 行を 2 行に書き換え、29 行ごとに 1 行を消し、23 行ごとに 3 行を足したもの。
-  private static func sideSample() -> DiffRowsSample {
-    let lines = swiftSource().components(separatedBy: "\n").dropLast()
-    var rows: [DiffRowsSample.Row] = []
-    for (index, line) in lines.enumerated() {
-      if index % 17 == 5 {
-        rows += [.removed(line), .added(line + " // changed"), .added("    // split \(index)")]
-      } else if index % 29 == 7 {
-        rows.append(.removed(line))
-      } else {
-        rows.append(.same(line))
-      }
-      if index % 23 == 11 {
-        rows += (0..<3).map { .added("    // added \(index)-\($0)") }
-      }
-    }
-    return DiffRowsSample(rows: rows)
-  }
+  /// 並列の型の文書（窓を出している間、面と一緒に保つ）。
+  var sideDocuments: [EditorDocument] = []
 
   // MARK: - 合成の型
 
@@ -240,7 +188,7 @@ final class EditorRowsTrialTests: OrbeTestCase {
   }
 
   /// 200KB の Swift（人が触る型）。
-  private static func swiftSource() -> String {
+  static func swiftSource() -> String {
     EditorTypingPerfTests.swiftSource(bytes: 200_000)
   }
 
@@ -255,7 +203,7 @@ final class EditorRowsTrialTests: OrbeTestCase {
   // MARK: - 合成のスクロール
 
   /// 指を一定の速さ（pt/秒。正は下へ送る）で `seconds` 秒動かす。
-  private func scroll(_ view: NSView, drag seconds: Double, speed: Double) {
+  func scroll(_ view: NSView, drag seconds: Double, speed: Double) {
     let step = 0.0057
     var events = [Planned(at: 0, phase: 1)]
     for k in 1...Int(seconds / step) {
@@ -266,7 +214,7 @@ final class EditorRowsTrialTests: OrbeTestCase {
   }
 
   /// はじく: 80ms で速さ `peak`（pt/秒）まで上げて離し、OS の momentum の出来事（0.95 倍ずつ落ちる列）が続く。
-  private func scroll(_ view: NSView, flick peak: Double) {
+  func scroll(_ view: NSView, flick peak: Double) {
     let step = 0.0057
     var events = [Planned(at: 0, phase: 1)]
     let ramp = Int(0.08 / step)
@@ -303,7 +251,12 @@ final class EditorRowsTrialTests: OrbeTestCase {
       event.setDoubleValueField(.scrollWheelEventPointDeltaAxis1, value: planned.dy)
       event.setDoubleValueField(.scrollWheelEventFixedPtDeltaAxis1, value: planned.dy)
       event.timestamp = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
-      if let scroll = NSEvent(cgEvent: event) { view.scrollWheel(with: scroll) }
+      guard let window = view.window else { continue }
+      // 窓を持たない出来事の locationInWindow は画面の座標（左下が原点）なので、窓の中の点がそのまま入るように置き、窓の
+      // 配りに通す。
+      let point = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
+      event.location = CGPoint(x: point.x, y: (NSScreen.screens.first?.frame.height ?? 0) - point.y)
+      if let scroll = NSEvent(cgEvent: event) { window.sendEvent(scroll) }
     }
   }
 }
@@ -314,69 +267,4 @@ private struct Planned {
   var phase: Int64 = 0
   var momentum: Int64 = 0
   var dy: Double = 0
-}
-
-/// 並列の型の窓の中身——2 面を左右に並べ（間に 1px の区切り）、下に「並びを置き直す」を置く。
-@MainActor
-private final class SideBySideView: NSView {
-  private let surfaces: [MetalTextSurface]
-  private let separator = NSView()
-  private let button: NSButton
-  private let toggle: SideRowsToggle
-  private static let strip: CGFloat = 36
-
-  init(surfaces: [MetalTextSurface], toggle: SideRowsToggle) {
-    self.surfaces = surfaces
-    self.toggle = toggle
-    button = NSButton(title: "並びを置き直す", target: toggle, action: #selector(SideRowsToggle.toggle))
-    super.init(frame: .zero)
-    wantsLayer = true
-    separator.wantsLayer = true
-    for surface in surfaces { addSubview(surface.view) }
-    addSubview(separator)
-    addSubview(button)
-  }
-
-  required init?(coder: NSCoder) { fatalError("not supported") }
-
-  override var isFlipped: Bool { true }
-
-  override func layout() {
-    super.layout()
-    effectiveAppearance.performAsCurrentDrawingAppearance {
-      layer?.backgroundColor = Theme.Color.bgBase.cgColor
-      separator.layer?.backgroundColor = DiffRowsSample.hairline.cgColor
-    }
-    let height = max(0, bounds.height - Self.strip)
-    let each = (bounds.width - 1) / 2
-    for (index, surface) in surfaces.enumerated() {
-      surface.view.frame = NSRect(x: CGFloat(index) * (each + 1), y: 0, width: each, height: height)
-    }
-    separator.frame = NSRect(x: each, y: 0, width: 1, height: height)
-    button.sizeToFit()
-    button.frame.origin = NSPoint(x: 12, y: height + (Self.strip - button.frame.height) / 2)
-  }
-}
-
-/// 両面の先頭（行 1 の前）に詰め物の行を 6 行、同じ周で足す・外す。
-@MainActor
-private final class SideRowsToggle: NSObject {
-  private let surfaces: [MetalTextSurface]
-  private let rows: [SurfaceRows]
-  private var padded = false
-
-  init(surfaces: [MetalTextSurface], rows: [SurfaceRows]) {
-    self.surfaces = surfaces
-    self.rows = rows
-  }
-
-  @objc func toggle() {
-    padded.toggle()
-    let pads = (0..<6).map { _ in InsertedLine("", style: DiffRowsSample.pad) }
-    for (surface, base) in zip(surfaces, rows) {
-      var next = base
-      if padded { next.insertions.insert(RowInsertion(line: 1, content: .lines(pads)), at: 0) }
-      surface.setRows(next)
-    }
-  }
 }
