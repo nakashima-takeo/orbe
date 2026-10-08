@@ -20,11 +20,9 @@ extension FrameBuilder {
     let numberFont = c.fonts.id(c.config.gutterFont)
     let laid = layRows(visibleRows, source, text: content.text, cache: cache, fonts: c.fonts)
     var roles = content.roles.cursor(from: laid.first?.start ?? 0)
-    let styled = !rows.spans.isEmpty
-    for var item in laid {
+    for item in laid {
       let top = g.rowTop(item.row)
-      let style = styled ? c.palette.lineStyle(rows.style(ofLine: item.row)) : nil
-      item.ink = style?.text
+      let style = c.palette.lineStyle(rows.style(ofLine: item.row))
       if let style {
         drawLineBackground(style, top: top, bottom: g.rowBottom(item.row), c)
         drawSign(style, baseline: top + baseline, cache: cache, source, c)
@@ -33,10 +31,10 @@ extension FrameBuilder {
       drawDecor(item, rowTop: top, window: visible.offsets, c)
       overlays.draw(item.overlay, item.laid, rowTop: top, c.pen)
       drawHighlights(item, source.material.highlights, rowTop: top, window: visible.offsets, c)
-      let width = drawText(item, visible, baseline: top + baseline, roles: &roles, c)
+      let width = drawText(item, visible, ink: style?.text, roles: &roles, c)
       longestLine = max(longestLine, width)
       drawNumber(item.row + 1, rowTop: top, inset: c.gutter.ownInset, font: numberFont, c)
-      if c.numberColumns == 2, let other = rows.otherNumber(ofLine: item.row) {
+      if c.gutter.other != nil, let other = rows.otherNumber(ofLine: item.row) {
         drawNumber(other, rowTop: top, inset: c.gutter.otherInset, font: numberFont, c)
       }
     }
@@ -93,7 +91,7 @@ extension FrameBuilder {
             style, top: top, bottom: g.insertedTop(block: index, line: offset + 1), c)
           drawSign(style, baseline: top + baseline, cache: cache, source, c)
         }
-        if c.numberColumns == 2, let number = line.number {
+        if c.gutter.other != nil, let number = line.number {
           drawNumber(number, rowTop: top, inset: c.gutter.otherInset, font: numberFont, c)
         }
         let laid = cache.line(
@@ -115,13 +113,13 @@ extension FrameBuilder {
   /// 行の字を置き、行の幅（末尾の印を含む、pt）を返す。置くのは横に見えている字だけで、役割は見えている行を通して 1 つの
   /// 読み口で引き、色は役割の連なりを出たときだけ引く。行の型が字の色を持てば、行の字をすべてその色で描く。
   func drawText(
-    _ row: RowInFrame, _ visible: VisibleGlyphs, baseline: Double, roles: inout RoleRuns.Cursor,
-    _ c: Context
+    _ row: RowInFrame, _ visible: VisibleGlyphs, ink override: InkColor?,
+    roles: inout RoleRuns.Cursor, _ c: Context
   ) -> CGFloat {
-    let override = row.ink
     let line = row.laid
     let start = row.start
     let g = c.g
+    let baseline = g.rowTop(row.row) + c.pen.baseline
     let originX = g.column - g.scrollX
     if let offsets = visible.offsets {
       var run = 0..<0

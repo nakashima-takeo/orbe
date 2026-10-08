@@ -138,9 +138,8 @@ final class FrameBuilder {
     /// 本文の行に重ねるもの（選択・キャレット・未確定の文字・落とす位置）の筆。
     let pen: OverlayPen
     let fonts: FontRegistry
-    /// 行番号の列の中の配置と、番号の列の数。
+    /// 行番号の列の中の配置。
     let gutter: GutterColumns
-    let numberColumns: Int
   }
 
   /// 1 コマを組む元。
@@ -216,8 +215,7 @@ final class FrameBuilder {
         caretSize: config.caretSize, focused: focused, selection: palette.selection,
         inactiveSelection: palette.inactiveSelection, caret: palette.caret,
         activeClause: palette.text.color, markedUnderline: palette.markedUnderline,
-        markedBackground: palette.markedBackground), fonts: fonts, gutter: layout.gutter,
-      numberColumns: source.material.arrangement.numberColumns)
+        markedBackground: palette.markedBackground), fonts: fonts, gutter: layout.gutter)
     textScissor = Self.scissor(x: g.column, y: g.top, width: g.textRight - g.column, g)
     gutterScissor = Self.scissor(x: 0, y: g.top, width: g.column, g)
     zoneScissor = Self.scissor(x: 0, y: g.top, width: g.textRight, g)
@@ -276,8 +274,6 @@ final class FrameBuilder {
     let end: Int
     let laid: LaidOutLine
     let overlay: RowOverlays
-    /// 行の型の字の色（あれば構文の色に代わる）。
-    var ink: InkColor?
   }
 
   /// 横に見えている字——グリフの番号の区間と、その字の行内の位置の範囲（見えている字が無ければ nil）。行番号の列の下に

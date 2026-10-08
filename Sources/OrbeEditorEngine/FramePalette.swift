@@ -98,7 +98,7 @@ struct FramePalette: Equatable, Sendable {
 
   @MainActor
   init(
-    style: TextSurfaceStyle, lineStyles: [LineStyle] = [], appearance: NSAppearance,
+    style: TextSurfaceStyle, lineStyles: [LineStyle], appearance: NSAppearance,
     space: CGColorSpace, scale: CGFloat
   ) {
     let resolve = { FrameColor($0, appearance: appearance, space: space) }
