@@ -85,24 +85,28 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
       convert(site.textRect(clipped, row: row, env, marked: site.markedLine), to: nil))
   }
 
-  /// 点を含む字の位置（点の下の場の文の座標。字の上でなければ NSNotFound——行末より右・字の無い行・文の外・区画の入力欄
-  /// でない所。macOS 26 の NSTextView と同じ）。
+  /// 点を含む字の位置（主の場の文の座標。主の場の字の上でなければ NSNotFound——行末より右・字の無い行・文の外・主でない場
+  /// や区画の上。macOS 26 の NSTextView と同じ）。
   func characterIndex(for point: NSPoint) -> Int {
     guard let window else { return NSNotFound }
     let local = convert(window.convertPoint(fromScreen: point), from: nil)
-    guard bounds.contains(local), let site = site(at: local) else { return NSNotFound }
+    guard bounds.contains(local), let site = primarySite(at: local) else { return NSNotFound }
     if let marked = site.markedCharacter(at: local) { return marked }
     return site.character(at: local)?.location ?? NSNotFound
   }
 
-  /// 点（view の座標）の下の編集の場（区画の入力欄でない区画の上なら nil）。
-  private func site(at point: CGPoint) -> EditingSite? {
-    guard let surface else { return nil }
-    switch surface.target(at: point) {
-    case .body: return surface.bodySite
-    case .field(let site): return site
-    case .button, .zoneText, .zoneSpace: return nil
-    }
+  /// 点（view の座標）の下の編集の場が主の場ならそれ（主でない場・区画の入力欄でない区画の上なら nil）。IME は答えの位置を
+  /// 他の口と同じ主の場の座標として読むので、主でない場の位置は答えない——変換中に別の場の字を押したとき、その位置が変換中
+  /// の範囲と数の上で重なって IME に押下を取られない。
+  private func primarySite(at point: CGPoint) -> EditingSite? {
+    guard let surface, let primary = surface.primarySite else { return nil }
+    let site: EditingSite? =
+      switch surface.target(at: point) {
+      case .body: surface.bodySite
+      case .field(let site): site
+      case .button, .zoneText, .zoneSpace: nil
+      }
+    return site === primary ? site : nil
   }
 
   func baselineDeltaForCharacter(at anIndex: Int) -> CGFloat {
@@ -120,7 +124,7 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
   func fractionOfDistanceThroughGlyph(for point: NSPoint) -> CGFloat {
     guard let window else { return 0 }
     let local = convert(window.convertPoint(fromScreen: point), from: nil)
-    guard let site = site(at: local), let env = site.editingEnvironment(),
+    guard let site = primarySite(at: local), let env = site.editingEnvironment(),
       let cluster = site.character(at: local)
     else { return 0 }
     let text = env.text

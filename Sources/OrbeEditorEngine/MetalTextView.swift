@@ -7,9 +7,10 @@ import QuartzCore
 /// 描く——AppKit の view と同じ撮り方で面を撮れる。
 ///
 /// 面の唯一の受け口（first responder）。出来事の入口はどれも、最初に行き先を決める 1 段（→ `SurfaceTarget`）を通る——
-/// 点を持つ入口（押す・右クリック・落とす・字の位置・ポインタの形）は点の下の行き先へ、点を持たない入口（キー・IME・
-/// コマンドのセレクタ・メニューの有効判定・undo の入れ物・サービス）は主の場へ。キーは `interpretKeyEvents` で IME と
-/// macOS のキー割り当て（利用者の DefaultKeyBinding を含む）に通し、IME の呼び出しは場の編集係の IME の入口へ
+/// 点を持つ入口（押す・右クリック・落とす・字の位置・ポインタの形）は点の下の行き先へ（字の位置は主の場の上だけ）、
+/// 点を持たない入口（キー・IME・コマンドのセレクタ・メニューの有効判定・undo の入れ物・サービス）は主の場へ。キーは
+/// `interpretKeyEvents` で IME と macOS のキー割り当て（利用者の DefaultKeyBinding を含む）に通し、IME の呼び出しは
+/// 場の編集係の IME の入口へ
 /// （→ `MetalTextView+Input`）、届いた標準のセレクタは編集のコマンドへ写す（→ `MetalTextView+Commands`）。マウスは
 /// `MouseSelection` が持ち、変換中はまず IME へ渡す。クリップボード・サービス・右クリックは `MetalTextView+Pasteboard`、
 /// ドラッグ＆ドロップは `MetalTextView+Drag`。

@@ -37,6 +37,27 @@ extension SurfaceZonesTests {
     XCTAssertEqual(surface.editor.state.cursors.primary.selection, NSRange(location: 0, length: 5))
   }
 
+  /// 字の位置の問いは、点の下が主の場のときだけ答える（主でない場の字には NSNotFound）。
+  func testCharacterIndexAnswersOnlyOverThePrimarySite() throws {
+    let setup = try threaded()
+    let (opened, field) = (setup.opened, setup.field)
+    let surface = opened.surface
+    let view = surface.textView
+    let window = try XCTUnwrap(view.window)
+    let screen = { (point: CGPoint) in window.convertPoint(toScreen: view.convert(point, to: nil)) }
+    surface.focus(field)
+    surface.textView.insertText("abcdef")
+    let site = try XCTUnwrap(surface.fields["reply"])
+    let inField = screen(try fieldPoint(site, 2))
+    let inBody = screen(point(opened, row: 1, column: 2))
+    XCTAssertEqual(view.characterIndex(for: inField), 2)
+    XCTAssertEqual(view.characterIndex(for: inBody), NSNotFound, "主でない本文の字")
+    XCTAssertEqual(view.fractionOfDistanceThroughGlyph(for: inBody), 0)
+    view.cancelOperation(nil)
+    XCTAssertEqual(view.characterIndex(for: inField), NSNotFound, "主でない入力欄の字")
+    XCTAssertEqual(view.characterIndex(for: inBody), opened.document.text.lineStart(1) + 2)
+  }
+
   /// 入力欄の選択を本文の区画の左右の外へドラッグしても、自動スクロールせず本文を横に送らない（行末・行頭まで伸ばす）。
   func testDraggingAFieldSelectionSidewaysDoesNotScrollTheBody() throws {
     let opened = try hostedRows(long: true)
