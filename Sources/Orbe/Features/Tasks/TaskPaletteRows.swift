@@ -56,6 +56,13 @@ struct TaskPaletteTaskRow: Equatable {
     let days: Int
   }
 
+  /// 解けた待ちの札（「レビューが付いた 2分前」）。
+  struct Resolved: Equatable {
+    /// 起きたこと（`WaitResolution.headline`）。期限が来たなら nil。
+    let headline: String?
+    let at: Date
+  }
+
   /// 期限の札。曜日名は言語に依るので表示側が引く。
   struct Due: Equatable {
     let date: TaskItem.DueDate
@@ -72,6 +79,7 @@ struct TaskPaletteTaskRow: Equatable {
   let due: Due?
   let createdBy: String?
   let waiting: Waiting?
+  let resolved: Resolved?
   let workspace: WorkspaceBadge?
   let isDone: Bool
   /// 掴んで同じ欄の中で動かせるか（未完了で、タスクを選ぶ状態でない）。
@@ -242,6 +250,9 @@ enum TaskPaletteRows {
         TaskPaletteTaskRow.Waiting(
           reason: $0.reason,
           days: TaskItem.DueDate($0.since, timeZone: input.timeZone).days(to: input.today))
+      },
+      resolved: task.waitResolution.map {
+        TaskPaletteTaskRow.Resolved(headline: $0.headline, at: $0.at)
       },
       workspace: workspace, isDone: task.status == .done,
       reorderable: !input.picking && task.status != .done,

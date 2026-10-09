@@ -192,7 +192,7 @@ private struct TaskPaletteGrip: View {
 }
 
 /// タスクの行。アイコン（クリックで完了 ⇄ 未着手）・主の結び付きの印と番号・タイトル・札（「レビュー」・
-/// PR・優先度・期限・追加者）、右寄せで agent の札・待ちの札と workspace。縮むのはタイトルが先。詳細があれば
+/// PR・優先度・期限・追加者）、右寄せで agent の札・待ちの札（解けた待ちは起きたことの札）と workspace。縮むのはタイトルが先。詳細があれば
 /// タイトルの下に先頭を 1 行出す（書き出しはタイトルにそろえ、右寄せの札は 1 行目に残す）。
 struct TaskPaletteTaskRowView: View {
   let row: TaskPaletteTaskRow
@@ -288,7 +288,7 @@ struct TaskPaletteTaskRowView: View {
     if let agent = row.agent {
       TaskAgentBadge(agent: agent)
         .layoutPriority(2)
-        .padding(.trailing, row.waiting == nil ? 0 : Theme.Space.note)
+        .padding(.trailing, row.waiting == nil && row.resolved == nil ? 0 : Theme.Space.note)
     }
     if let waiting = row.waiting {
       TaskPaletteBadge(
@@ -297,6 +297,10 @@ struct TaskPaletteTaskRowView: View {
         foreground: Color.theme.textSecondary, fill: Color.theme.plainPillFill, capsule: true
       )
       .layoutPriority(2)
+    }
+    if let resolved = row.resolved {
+      TaskResolvedBadge(resolved: resolved)
+        .layoutPriority(2)
     }
     workspace
       .layoutPriority(2)

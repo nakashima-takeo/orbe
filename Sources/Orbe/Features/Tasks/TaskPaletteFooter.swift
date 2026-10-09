@@ -46,6 +46,13 @@ struct TaskPaletteFooter: View {
         PaletteActionLine(
           key: field.isText ? "↵" : "←→", template: l10n.string(fieldActionKey(field)), slots: [])
       }
+    } else if model.area == .detail(.conversation) {
+      if let task = model.selectedTask, let tab = model.conversationTab(of: task) {
+        PaletteActionLine(
+          key: "↵", template: l10n.string(.taskPaletteActionGoToTab), slots: [.emphasis(tab.title)])
+      }
+    } else if case .detail(.condition(let part)) = model.area {
+      PaletteActionLine(key: "↵", template: l10n.string(conditionActionKey(part)), slots: [])
     } else if model.area == .detail(.agent) {
       if let task = model.selectedTask, let agent = model.agent(of: task) {
         PaletteActionLine(
@@ -68,7 +75,11 @@ struct TaskPaletteFooter: View {
           key: "↵", template: l10n.string(.taskPaletteAdd),
           slots: [.emphasis(model.query.trimmingCharacters(in: .whitespacesAndNewlines))])
       case .task:
-        if let task = model.selectedTask {
+        if let task = model.selectedTask, let conversation = model.continuation(of: task) {
+          PaletteActionLine(
+            key: "⌘T", template: l10n.string(.taskPaletteActionContinue),
+            slots: [.emphasis(task.title), .emphasis(conversation.command)])
+        } else if let task = model.selectedTask {
           PaletteActionLine(
             key: model.query.isEmpty ? "space" : "↵",
             template: l10n.string(
@@ -128,6 +139,14 @@ struct TaskPaletteFooter: View {
     }
   }
 
+  private func conditionActionKey(_ part: TaskConditionPart) -> L10nKey {
+    let open = model.isConditionPartOpen(part)
+    switch part {
+    case .command: return open ? .taskPaletteActionHideCommand : .taskPaletteActionShowCommand
+    case .log: return open ? .taskPaletteActionHideLog : .taskPaletteActionShowLog
+    }
+  }
+
   private func errorKey(_ error: TaskPaletteError) -> L10nKey {
     switch error {
     case .title: .taskPaletteErrTitle
@@ -136,6 +155,8 @@ struct TaskPaletteFooter: View {
     case .failed: .taskPaletteErrFailed
     case .assign: .taskPaletteErrAssign
     case .link: .taskPaletteErrLink
+    case .agentMissing: .taskPaletteErrAgentMissing
+    case .directoryMissing: .taskPaletteErrDirectoryMissing
     }
   }
 }

@@ -143,5 +143,48 @@ extension L10n {
     .taskPaletteAddLink: ("結び付ける", "Link"),
     .taskPaletteBranchPRAuto: ("ブランチの PR は自動", "Branch PRs link automatically"),
     .taskPaletteActionAddLink: ("Issue・PR を選んで結び付ける", "Choose an issue or PR to link"),
+    .taskPaletteErrAgentMissing: ("会話の CLI が見つかりません", "The conversation’s CLI isn’t installed"),
+    .taskPaletteErrDirectoryMissing: (
+      "会話の作業ディレクトリがありません", "The conversation’s working directory is gone"
+    ),
+    .taskPaletteActionContinue: ("%1$@ を %2$@ で続きから", "Continue %1$@ in %2$@"),
+    .taskPaletteActionShowCommand: ("確認のコマンドを開く", "Show the check command"),
+    .taskPaletteActionHideCommand: ("確認のコマンドを閉じる", "Hide the check command"),
+    .taskPaletteActionShowLog: ("実行の記録を開く", "Show the run log"),
+    .taskPaletteActionHideLog: ("実行の記録を閉じる", "Hide the run log"),
+    .taskWaitConditionLabel: ("条件", "Condition"),
+    .taskWaitCheckLabel: ("確認", "Check"),
+    .taskWaitDeadlineLabel: ("期限", "Deadline"),
+    .taskWaitEvery: ("%1$lld 分ごと · 次は %2$@", "every %1$lld min · next %2$@"),
+    .taskWaitNextIn: ("%lld 分後", "in %lld min"),
+    .taskWaitSoon: ("まもなく", "soon"),
+    .taskWaitDeadline: ("%1$@（%2$@）%3$@ には必ず解く", "resolves by %2$@ %1$@ %3$@"),
+    .taskWaitCommand: ("確認のコマンド", "Check command"),
+    .taskWaitLog: ("実行の記録", "Run log"),
+    .taskWaitLogEmpty: ("まだ確かめていない", "Not checked yet"),
+    .taskWaitResolvedChecks: ("%1$@ · 確認 %2$lld 回目", "%1$@ · check #%2$lld"),
+    .taskWaitContinue: ("%@ で続きから", "Continue in %@"),
+    .taskWaitContinueNote: ("%@に、起きたことを添えて", "%@, with what happened"),
+    .taskWaitSatisfied: ("条件を満たした", "Condition met"),
+    .taskWaitExpired: ("期限が来た", "Deadline reached"),
+    .taskWaitJustNow: ("たった今", "just now"),
+    .taskWaitAgo: ("%@前", "%@ ago"),
+    .taskWaitConversationToday: ("今日の会話", "Today’s conversation"),
+    .taskWaitConversationDays: ("%lld日前の会話", "Conversation from %lldd ago"),
+    .taskWaitResultSuccess: ("成功", "succeeded"),
+    .taskWaitResultExited: ("終了コード %lld", "exit %lld"),
+    .taskWaitResultSignaled: ("シグナル %lld", "signal %lld"),
+    .taskWaitResultLimited: ("上限で打ち切り", "hit a limit"),
+    .taskWaitResultStopped: ("止めた", "stopped"),
+    .taskWaitResultNotStarted: ("始められなかった", "couldn’t start"),
+    .waitContinueSatisfied: (
+      "待ちの条件「%1$@」が解けました（%2$@ · 確認 %3$lld 回目）。",
+      "The waiting condition “%1$@” was met (%2$@ · check #%3$lld)."
+    ),
+    .waitContinueOutput: ("確認の出力:", "Check output:"),
+    .waitContinueExpired: (
+      "待ちの条件「%1$@」は満たされないまま期限（%2$@）が来ました（確認 %3$lld 回目）。",
+      "The waiting condition “%1$@” reached its deadline (%2$@) without being met (check #%3$lld)."
+    ),
   ]
 }

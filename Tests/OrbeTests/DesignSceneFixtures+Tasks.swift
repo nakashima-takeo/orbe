@@ -188,13 +188,74 @@ extension DesignSceneFixtures {
   }
 
   static func taskPaletteModel(
-    _ file: TasksFile? = nil, openLists: ((GitHubViewer) -> GitHubOpenLists)? = nil
+    _ file: TasksFile? = nil, openLists: ((GitHubViewer) -> GitHubOpenLists)? = nil,
+    sessionTabs: AgentSessionTabs = AgentSessionTabs()
   ) -> TaskPaletteModel {
     let items = taskGitHubItems()
     return TaskPaletteModel(
       store: TaskStore(file: file ?? taskDesignFile()), githubItems: items, viewer: items.viewer,
       openLists: (openLists ?? taskOpenLists)(items.viewer), root: taskRoot,
-      agents: taskAgents(),
+      agents: taskAgents(), sessionTabs: sessionTabs,
       workspaces: taskWorkspaces, now: taskToday, timeZone: taskCalendar.timeZone)
+  }
+
+  /// 見本 SlWait.png・SlResolved.png の待ちの条件（#214「設定の検索を速くする」）。claude が 2 日前に付け、10 分ごとに
+  /// 確かめて 17 回失敗している（最後は 3 分前）。確認は今の時計で数えるので、期限も今から 2 日後の 9:00 に置く
+  /// （見本の日付に置くと、期限が過ぎていて「次は まもなく」になる）。
+  static func taskWaitCondition(conversation: Bool = true) -> WaitCondition {
+    let now = Date()
+    var condition = WaitCondition(
+      WaitConditionRequest(
+        description: "PR #214 にレビューが付いたら",
+        command:
+          "gh pr view 214 --json reviews --jq '.reviews[-1] | [.author.login, .state] | join(\" · \")'",
+        intervalMinutes: 10,
+        deadline: taskCalendar.date(
+          bySettingHour: 9, minute: 0, second: 0,
+          of: taskCalendar.date(byAdding: .day, value: 2, to: now)!)!,
+        directory: "\(NSHomeDirectory())/wt/pr-214",
+        conversation: conversation
+          ? WaitConversation(command: "claude", sessionId: taskConversationId, workspace: nil) : nil
+      ),
+      setAt: taskCalendar.date(byAdding: .day, value: -2, to: taskToday)!)
+    for minutes in stride(from: 163, through: 3, by: -10) {
+      let at = now.addingTimeInterval(-Double(minutes) * 60)
+      condition.record(
+        WaitCheck(
+          startedAt: at, endedAt: at.addingTimeInterval(2), result: .exited(1),
+          stderr: minutes == 163 ? "gh: Not Found (HTTP 404)" : ""))
+    }
+    return condition
+  }
+
+  static let taskConversationId = "5f0c2a6e-214"
+
+  /// #214 の待ちに条件を付けた一覧（`how` を渡すと、その解け方で解けた後。期限が来たのは 2 時間前とする）。
+  static func taskWaitConditionFile(resolved how: WaitResolution.How? = nil) -> TasksFile {
+    var file = taskDesignFile()
+    let index = file.tasks.firstIndex { $0.id == 3 }!
+    var waiting = file.tasks[index].waiting!
+    waiting.condition = taskWaitCondition()
+    if let how {
+      var condition = waiting.condition!
+      let at = Date().addingTimeInterval(-2 * 60)
+      condition.record(WaitCheck(startedAt: at, endedAt: at, result: .success))
+      waiting.condition = condition
+      file.tasks[index].wait = .resolved(
+        WaitResolution(
+          waiting: waiting, how: how,
+          at: how == .expired ? Date().addingTimeInterval(-2 * 3600) : at))
+    } else {
+      file.tasks[index].wait = .waiting(waiting)
+    }
+    return file
+  }
+
+  /// 見本の解けた後の確認の出力。
+  static let taskWaitOutput = "レビューが付いた\n@sato · CHANGES_REQUESTED · コメント 2\n"
+
+  /// 条件を付けた claude の会話のタブ（pr-214）。
+  static func taskSessionTabs() -> AgentSessionTabs {
+    AgentSessionTabs(tabs: [taskConversationId: .init(tabId: 5, title: "pr-214")])
   }
 }

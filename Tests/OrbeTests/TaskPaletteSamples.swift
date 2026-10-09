@@ -26,14 +26,15 @@ enum TaskPaletteSamples {
   /// GitHub の値の置き場は、既定では何も取りに行かない。
   static func model(
     _ tasks: [TaskItem], githubItems: GitHubItemCache = GitHubItemCache(fetch: { _, _ in }),
-    openLists: GitHubOpenLists? = nil, agents: WorktreeAgentActivity = WorktreeAgentActivity()
+    openLists: GitHubOpenLists? = nil, agents: WorktreeAgentActivity = WorktreeAgentActivity(),
+    sessionTabs: AgentSessionTabs = AgentSessionTabs()
   ) -> TaskPaletteModel {
     let file = TasksFile(
       version: TaskPersistence.version, nextId: (tasks.map(\.id).max() ?? 0) + 1, tasks: tasks)
     return TaskPaletteModel(
       store: TaskStore(file: file), githubItems: githubItems, viewer: githubItems.viewer,
       openLists: openLists ?? GitHubOpenLists(source: .idle, viewer: githubItems.viewer),
-      root: root, agents: agents,
+      root: root, agents: agents, sessionTabs: sessionTabs,
       workspaces: TaskPaletteWorkspaces(opened: opened, all: [opened, other]),
       now: DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone)
   }

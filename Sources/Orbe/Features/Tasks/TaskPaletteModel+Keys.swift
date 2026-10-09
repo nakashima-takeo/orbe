@@ -104,18 +104,7 @@ extension TaskPaletteModel {
     case .downArrow: moveField(1)
     case .leftArrow: if !changeValue(-1) { leaveDetail() }
     case .rightArrow: changeValue(1)
-    case .return:
-      switch stop {
-      // ⌘↵ は 1 行の項目の確定のキーなので編集を始めない（確定した直後の ⌘↵ で、また編集に入らない）。
-      case .field(let field):
-        if field.isText, press.phase == .down, !press.modifiers.contains(.command) {
-          beginEditing()
-        }
-      case .agent: if press.phase == .down { focusAgentTab() }
-      // 押し続けたキーリピートで、同じページを何度も開かない。
-      case .link(let item): if press.phase == .down { openLink(item) }
-      case .addLink: if press.phase == .down { beginPickingItem() }
-      }
+    case .return: activate(stop, press)
     case .space:
       if press.phase == .down, let task = selectedTask { toggleDone(task.id) }
     case _ where Self.isCommandBackspace(press):
@@ -129,6 +118,21 @@ extension TaskPaletteModel {
     default: return .ignored
     }
     return .handled
+  }
+
+  /// 右の欄の止まる場所の ↵。押し続けたキーリピートでは繰り返さない（同じページを何度も開かない・開閉を繰り返さない）。
+  private func activate(_ stop: TaskDetailStop, _ press: KeyPress) {
+    guard press.phase == .down else { return }
+    switch stop {
+    // ⌘↵ は 1 行の項目の確定のキーなので編集を始めない（確定した直後の ⌘↵ で、また編集に入らない）。
+    case .field(let field):
+      if field.isText, !press.modifiers.contains(.command) { beginEditing() }
+    case .conversation: focusConversationTab()
+    case .agent: focusAgentTab()
+    case .condition(let part): toggleConditionPart(part)
+    case .link(let item): openLink(item)
+    case .addLink: beginPickingItem()
+    }
   }
 
   /// 右の欄の項目。↵（期限の項目以外）・⌘L・⌘↵ は、行の「タスクにする」「結び付ける」「ブラウザで開く」と
