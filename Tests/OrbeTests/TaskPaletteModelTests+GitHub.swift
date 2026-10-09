@@ -240,10 +240,10 @@ extension TaskPaletteModelTests {
           $0.links = [GitHub.link(5)]
         },
       ], issues: [GitHub.issue(5)])
-    palette.toggleTab()
+    palette.setTab(.tasks)
     palette.setScope(.opened)
     palette.query = "zzz"
-    palette.toggleTab()
+    palette.setTab(.github)
 
     palette.submit()
 
@@ -339,14 +339,14 @@ extension TaskPaletteModelTests {
     let palette = GitHub.model(
       [task(1, "a"), task(2, "b")], issues: [GitHub.issue(6), GitHub.issue(5)])
     palette.query = "5"
-    palette.toggleTab()
+    palette.setTab(.tasks)
     palette.move(1)
 
-    palette.toggleTab()
+    palette.setTab(.github)
     XCTAssertEqual(palette.query, "5")
     XCTAssertEqual(palette.selectedGitHubID, .item(GitHub.id(5)))
 
-    palette.toggleTab()
+    palette.setTab(.tasks)
     XCTAssertEqual(palette.query, "")
     XCTAssertEqual(palette.selectedID, .task(2))
   }

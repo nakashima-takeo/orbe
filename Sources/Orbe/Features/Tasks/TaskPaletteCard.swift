@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// タスク画面のカード本体。ヘッダー（❯＋入力欄・タブ・範囲）＋選ぶ状態の帯＋本体（左に一覧・右の欄にタスク。
-/// GitHub タブは左に open な Issue・PR、右の欄に項目）＋フッター（主な操作の 1 行・キーヒント）。焦点の行き先（入力欄 / 右の欄の項目 / 右の欄の編集欄）はモデルの
+/// GitHub タブは左に open な Issue・PR、右の欄に項目。受信タブは棚・提案・詳細の 3 列）＋フッター（主な操作の 1 行・キーヒント）。焦点の行き先（入力欄 / 右の欄の項目 / 右の欄の編集欄）はモデルの
 /// `focusTarget` から一方向に写し、カード内のクリックでも当て直す（⌘T 画面と同じ契約）。
 struct TaskPaletteCard: View {
   @Bindable var model: TaskPaletteModel
@@ -39,6 +39,8 @@ struct TaskPaletteCard: View {
               TaskPaletteGitHubPane(model: model, focus: $focus)
                 .frame(width: detailWidth)
             }
+          case .intake:
+            TaskPaletteIntakeBody(model: model.intake, detailWidth: detailWidth)
           }
         }
         .frame(maxHeight: .infinity)
@@ -62,6 +64,9 @@ struct TaskPaletteCard: View {
     .onChange(of: model.gitHubRows) { model.reconcile() }
     // 出ている行の結び付きが増えたら（agent の変更・完了の欄の開閉・範囲・入力）、その値を取りに行く。
     .onChange(of: model.visibleLinkIDs) { model.ensureVisibleItems() }
+    // 裏の回の確定や AI の変更で受信と提案が変わったら、受信タブの選択と居場所を付け直す。
+    .onChange(of: model.intake.store.intakes) { model.intake.reconcile() }
+    .onChange(of: model.intake.store.proposals) { model.intake.reconcile() }
   }
 
   private var divider: some View {
@@ -80,8 +85,7 @@ struct TaskPaletteCard: View {
         .tint(Color.theme.accentPrimary)
         .focused($focus, equals: .field)
         .imePlaceholder(
-          l10n.string(
-            model.visibleTab == .tasks ? .taskPalettePlaceholder : .taskPaletteGitHubPlaceholder),
+          l10n.string(placeholderKey),
           showWhenEmpty: model.query.isEmpty, focused: focus == .field, font: Font.theme.title,
           color: Color.theme.textMuted
         )
@@ -94,7 +98,7 @@ struct TaskPaletteCard: View {
           if model.focusTarget != .field {
             Color.clear
               .contentShape(Rectangle())
-              .onTapGesture { model.leaveDetail() }
+              .onTapGesture { model.returnToField() }
           }
         }
         .padding(.leading, Theme.Space.step + Theme.Space.hair)
@@ -108,22 +112,38 @@ struct TaskPaletteCard: View {
             .init(
               title: "GitHub", count: model.gitHubCount, selected: model.visibleTab == .github,
               action: { model.setTab(.github) }),
+            .init(
+              title: l10n.string(.taskPaletteTabIntake), count: model.intake.openCount,
+              selected: model.visibleTab == .intake, action: { model.setTab(.intake) }),
           ], font: Font.theme.chrome, height: 20, selectedFill: Color.theme.surfaceInk.opacity(0.08)
         )
-        TaskPaletteSegments(
-          segments: [
-            .init(
-              title: l10n.string(.taskPaletteScopeAll), count: model.counts.all,
-              selected: model.scope == .all, action: { model.setScope(.all) }),
-            .init(
-              title: model.workspaces.opened.name, count: model.counts.opened,
-              selected: model.scope == .opened, action: { model.setScope(.opened) }),
-          ], font: Font.theme.chrome, height: 20, selectedFill: Color.theme.tintAccent)
+        // 範囲は受信に効かないので、受信タブでは出さない。
+        if model.visibleTab != .intake { scopeSegments }
       }
       .fixedSize()
     }
     .padding(.horizontal, Theme.Space.span)
     .frame(height: Self.headerHeight)
+  }
+
+  private var placeholderKey: L10nKey {
+    switch model.visibleTab {
+    case .tasks: .taskPalettePlaceholder
+    case .github: .taskPaletteGitHubPlaceholder
+    case .intake: .taskPaletteIntakePlaceholder
+    }
+  }
+
+  private var scopeSegments: some View {
+    TaskPaletteSegments(
+      segments: [
+        .init(
+          title: l10n.string(.taskPaletteScopeAll), count: model.counts.all,
+          selected: model.scope == .all, action: { model.setScope(.all) }),
+        .init(
+          title: model.workspaces.opened.name, count: model.counts.opened,
+          selected: model.scope == .opened, action: { model.setScope(.opened) }),
+      ], font: Font.theme.chrome, height: 20, selectedFill: Color.theme.tintAccent)
   }
 
   /// ヘッダーの高さ。⌘⇧S のヘッダー（上下 16 ＋ 14pt の 1 行）と同じ。札の組はこの中に収まる。

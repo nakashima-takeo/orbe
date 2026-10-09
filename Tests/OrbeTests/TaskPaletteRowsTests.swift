@@ -14,7 +14,7 @@ final class TaskPaletteRowsTests: OrbeTestCase {
   private let opened = TaskPaletteWorkspaces.Entry(id: UUID(), name: "orbe")
   private let other = TaskPaletteWorkspaces.Entry(id: UUID(), name: "web-app")
   private var workspaces: TaskPaletteWorkspaces {
-    TaskPaletteWorkspaces(opened: opened, all: [opened, other])
+    TaskPaletteWorkspaces(opened: opened, all: [opened, other], home: nil)
   }
   private let today = TaskItem.DueDate(year: 2025, month: 10, day: 4)!
   private var now: Date {

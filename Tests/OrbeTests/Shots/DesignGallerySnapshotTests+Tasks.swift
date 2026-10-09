@@ -60,6 +60,7 @@ extension DesignGallerySnapshotTests {
 
     try renderTaskWaitConditionSnapshots(write)
     try renderTaskPaletteGitHubSnapshots(write)
+    try renderTaskPaletteIntakeSnapshots(write)
 
     try write(
       "tasks_empty.png",
