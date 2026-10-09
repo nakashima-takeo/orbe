@@ -110,6 +110,13 @@ final class FakeControlTarget: ControlTarget {
   private(set) var activatedWorkspaceIds: [Int] = []
   private(set) var focusedTabIds: [Int] = []
   private(set) var openedFiles: [(tabId: Int, path: String)] = []
+  /// `open_diff` で受けたもの。
+  struct OpenedDiff {
+    let tabId: Int
+    let path: String
+    let kind: EditorDiff.Kind
+  }
+  private(set) var openedDiffs: [OpenedDiff] = []
   private(set) var closedTabIds: [Int] = []
   private(set) var restoredSessionIds: [[String]] = []
   private(set) var taskLists: [Int?] = []
@@ -205,6 +212,12 @@ final class FakeControlTarget: ControlTarget {
 
   func controlOpenFile(tabId: Int, path: String) -> Result<Any, ControlError> {
     openedFiles.append((tabId, path))
+    return outcome(["ok": true])
+  }
+
+  func controlOpenDiff(tabId: Int, path: String, kind: EditorDiff.Kind) -> Result<Any, ControlError>
+  {
+    openedDiffs.append(OpenedDiff(tabId: tabId, path: path, kind: kind))
     return outcome(["ok": true])
   }
 

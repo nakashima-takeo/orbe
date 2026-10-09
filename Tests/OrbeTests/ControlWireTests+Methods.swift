@@ -33,7 +33,7 @@ extension ControlWireTests {
     var id = 0
 
     let resultReturning = [
-      "focus_tab", "close_tab", "open_file",
+      "focus_tab", "close_tab", "open_file", "open_diff",
       "spawn_agent", "resume_agent", "prompt_agent",
       "config_list", "config_set", "create_workspace", "rename_workspace",
       "set_workspace_root", "remove_workspace", "restore_sessions",
@@ -167,6 +167,8 @@ extension ControlWireTests {
     _ = wire.request(id: 2, method: "focus_tab", params: ["tabId": 82])
     _ = wire.request(id: 3, method: "close_tab", params: ["tabId": 83])
     _ = wire.request(id: 9, method: "open_file", params: ["tabId": 89, "path": "a.swift"])
+    _ = wire.request(
+      id: 10, method: "open_diff", params: ["tabId": 90, "path": "b.swift", "kind": "staged"])
     _ = wire.request(id: 4, method: "rename_workspace", params: ["workspaceId": 84, "name": "r"])
     _ = wire.request(
       id: 5, method: "set_workspace_root", params: ["workspaceId": 85, "rootPath": "/tmp/r"])
@@ -179,6 +181,9 @@ extension ControlWireTests {
     XCTAssertEqual(fake.closedTabIds, [83], "close_tab は controlCloseTab へ tabId を渡す")
     XCTAssertEqual(fake.openedFiles.last?.tabId, 89, "open_file は controlOpenFile へ tabId を渡す")
     XCTAssertEqual(fake.openedFiles.last?.path, "a.swift", "open_file は path をそのまま渡す")
+    XCTAssertEqual(fake.openedDiffs.last?.tabId, 90, "open_diff は controlOpenDiff へ tabId を渡す")
+    XCTAssertEqual(fake.openedDiffs.last?.path, "b.swift")
+    XCTAssertEqual(fake.openedDiffs.last?.kind, .staged)
     XCTAssertEqual(
       fake.renamedWorkspaces.last?.workspaceId, 84, "rename_workspace は workspaceId を渡す")
     XCTAssertEqual(fake.renamedWorkspaces.last?.name, "r", "rename_workspace は name を渡す")

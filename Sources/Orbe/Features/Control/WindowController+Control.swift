@@ -136,11 +136,7 @@ extension WindowController: ControlTarget {
     guard let tab = controlResolveTab(tabId) else {
       return .failure(ControlError(code: -32004, message: "tab not found"))
     }
-    let expanded = (path as NSString).expandingTildeInPath
-    let url =
-      expanded.hasPrefix("/")
-      ? URL(fileURLWithPath: expanded)
-      : URL(fileURLWithPath: expanded, relativeTo: URL(fileURLWithPath: tab.cwd, isDirectory: true))
+    let url = Self.controlURL(path, cwd: tab.cwd)
     do {
       try tab.openFile(url)
     } catch EditorDocumentError.notUTF8 {
@@ -153,6 +149,40 @@ extension WindowController: ControlTarget {
     let ratio = tab.faces.editorRatio == 0 ? 1 : tab.faces.editorRatio
     tab.setFaces(FaceLayout(editorRatio: ratio, focus: .editor), animated: true)
     return controlFocusTab(tabId: tabId)
+  }
+
+  /// 指定タブのエディターで diff を開く（open_diff）。`path` は `open_file` と同じ解き方で、それを含む worktree の根と根から
+  /// の相対パスにする（ファイル自体の symlink は解かない——diff は git の座標の上のもの）。開けたら `open_file` と同じく
+  /// エディターを見える配置にし、タブを選んで本体へ焦点を移す。
+  func controlOpenDiff(tabId: Int, path: String, kind: EditorDiff.Kind) -> Result<Any, ControlError>
+  {
+    guard let tab = controlResolveTab(tabId) else {
+      return .failure(ControlError(code: -32004, message: "tab not found"))
+    }
+    let url = Self.controlURL(path, cwd: tab.cwd).standardizedFileURL
+    let directory = GitWorktreeRoot.normalizedPath(url.deletingLastPathComponent().path)
+    guard let root = GitWorktreeRoot.locate(cwd: directory),
+      directory == root || directory.hasPrefix(root + "/")
+    else {
+      return .failure(ControlError(code: -32000, message: "not in a git worktree: \(url.path)"))
+    }
+    let relative = String((directory + "/" + url.lastPathComponent).dropFirst(root.count + 1))
+    do {
+      try tab.openDiff(EditorDiff.Key(root: root, path: relative, kind: kind))
+    } catch {
+      return .failure(ControlError(code: -32000, message: "no Metal device: \(url.path)"))
+    }
+    let ratio = tab.faces.editorRatio == 0 ? 1 : tab.faces.editorRatio
+    tab.setFaces(FaceLayout(editorRatio: ratio, focus: .editor), animated: true)
+    return controlFocusTab(tabId: tabId)
+  }
+
+  /// 制御 API のパス——絶対か、`~` 展開の上でタブの実効 cwd からの相対。
+  private static func controlURL(_ path: String, cwd: String) -> URL {
+    let expanded = (path as NSString).expandingTildeInPath
+    return expanded.hasPrefix("/")
+      ? URL(fileURLWithPath: expanded)
+      : URL(fileURLWithPath: expanded, relativeTo: URL(fileURLWithPath: cwd, isDirectory: true))
   }
 
   // MARK: - config（設定の列挙・設定）
