@@ -144,6 +144,26 @@ final class EditorDiffTests: OrbeTestCase {
     waitRows(diff, "足した行が追加に出る") { $0.style(ofLine: 0) == DiffStyle.added }
   }
 
+  /// index の版が変わって底を置き直し、その行差分が届く前に外の書き換えで本文が縮んでも、並びは今の本文の外を指さない。
+  /// 届けば新しい底との差分に置き直す。
+  func testTheRowsStayOnTheTextWhenItShrinksBeforeTheNewBaseArrives() throws {
+    try repo.write("a.txt", "one\nTWO\nthree\nfour\nfive\nsix\nseven\n")
+    let (tab, _) = tab()
+    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    waitRows(diff, "変更が出る") { !$0.isEmpty }
+    let document = try XCTUnwrap(diff.document)
+    document.baseline = "zero\n"
+    try repo.write("a.txt", "one\n")
+    document.reconcileWithDisk()
+    XCTAssertEqual(document.text.lineCount, 2, "前提: 結果が届く前に本文が縮んだ")
+    let rows = try engine(diff.newSurface).rows
+    XCTAssertTrue(rows.boundaries.allSatisfy { $0 <= 1 }, "差し込みは今の本文の中")
+
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertEqual(diff.old?.text.contiguousUnits().count, "zero\n".utf16.count, "古い側は新しい底")
+    XCTAssertEqual(removedLines(try engine(diff.newSurface).rows), [0])
+  }
+
   /// 未追跡のファイルは全部の行が追加、作業ツリーで消したファイルは全部の行が削除になる。
   func testOneSidedWorkingTreeDiffs() throws {
     try repo.write("new.txt", "x\ny\n")
