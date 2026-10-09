@@ -2,7 +2,7 @@
 # Orbe のエージェントプラグインを、検出された各 CLI が読む中身へそろえる。
 # Orbe が実体化先のパスとプラグイン名を引数にバックグラウンドで呼ぶ（中身が変わった起動とオンボーディング）。
 # claude は登録した実体化先をそのまま読むので、未導入のときだけ導入する。codex / agy は導入時の
-# コピーを読むので、毎回入れ直してコピーを今の中身へ置き換える。
+# コピーを読むので、入れ直してコピーを今の中身へ置き換える。利用者がプラグインを無効にした設定は残す。
 #
 # 使い方: install.sh <plugin_dir> <plugin_name>
 # プラグイン名はチャネルごとに違う（dev / release が別枠で共存する）ので焼き付けず引数で受ける。
@@ -42,9 +42,17 @@ fi
 
 echo "start codex"
 if command -v codex >/dev/null 2>&1; then
-  # marketplace add は冪等。plugin add の再実行はキャッシュのコピーを丸ごと置き換える。
+  # marketplace add は冪等。plugin add の再実行はキャッシュのコピーを丸ごと置き換えるが、同時に必ず
+  # 有効へ戻すので、利用者が無効にしていれば入れ直さない（次に中身が変わって有効なら入れ直す）。
   tmo 30 codex plugin marketplace add "$DIR" >/dev/null
-  if tmo 60 codex plugin add "${NAME}@${NAME}" >/dev/null; then
+  tmo 15 codex plugin list --json --marketplace "$NAME" >"$LIST"
+  if perl -MJSON::PP -0777 -e '
+      my $id = shift;
+      my $list = eval { decode_json(<STDIN>) } or exit 1;
+      exit((grep { $_->{pluginId} eq $id && !$_->{enabled} } @{ $list->{installed} || [] }) ? 0 : 1);
+    ' "${NAME}@${NAME}" <"$LIST" 2>/dev/null; then
+    echo "unchanged codex"
+  elif tmo 60 codex plugin add "${NAME}@${NAME}" >/dev/null; then
     echo "installed codex"
   else
     echo "error codex"
@@ -56,13 +64,8 @@ fi
 echo "start agy"
 if command -v agy >/dev/null 2>&1; then
   # agy はローカルパス導入＝プラグイン本体の subdir（plugin.json のあるルート）を指す。
-  # install し直すだけでは消したファイルがステージ先に残るので、導入済みなら外してから入れる。
-  # list は JSON（`"name": "<name>"`）なので引用符込みの完全一致で判定する（claude と同じ理由）。
-  # 外せなければ入れない（中途半端な状態を installed と名乗らない）。
-  tmo 15 agy plugin list >"$LIST"
-  if grep -qF "\"${NAME}\"" "$LIST" && ! tmo 30 agy plugin uninstall "$NAME" >/dev/null; then
-    echo "error agy"
-  elif tmo 60 agy plugin install "$DIR/plugins/$NAME" >/dev/null; then
+  # install の再実行はステージ先を中身どおりに置き換え、有効/無効の設定は残す。
+  if tmo 60 agy plugin install "$DIR/plugins/$NAME" >/dev/null; then
     echo "installed agy"
   else
     echo "error agy"
