@@ -6,8 +6,8 @@ import XCTest
 /// こと、Home と最後の通常 workspace は消せず、Home はディレクトリも変えられないこと。
 ///
 /// 壊れると何が起きるか: 起動のたびに Home が増える、または既存利用者の active がずれる。
-/// Home が消えたり root が専用フォルダから外れたりすると、秘書が指示の無い場所で起きる。
-/// 通常の workspace を全部消せると、⌘T 等で起こすタブが秘書への指示のある root で起きる。
+/// Home が消えたり root が専用フォルダから外れたりすると、Home のタスクの作業場と秘書が Orbe の操作の指示の無い場所で起きる。
+/// 通常の workspace を全部消せると、⌘T 等で起こすタブがリポジトリに属さない Home の root で起きる。
 final class SessionStoreHomeTests: OrbeTestCase {
   private let root = "/state/home"
 

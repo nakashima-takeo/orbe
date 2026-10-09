@@ -1,6 +1,7 @@
 /// Home の root に置くファイルの雛形。画面の文言ではなくファイルの中身なので、UI 文言の辞書には載せない。
 enum HomeTemplate {
-  /// 秘書への指示（Orbe が持ち、起動のたびに書き直す）。
+  /// Orbe の MCP の使い方（Orbe が持ち、起動のたびに書き直す）。Home で動く全員——秘書もタスクの作業場で動く agent も
+  /// ——が読むので、秘書の役割は書かない（秘書の役割は秘書の会話を起こすときにだけ渡す）。
   static func rules(_ language: Language) -> String {
     switch language {
     case .ja: return rulesJa
@@ -17,38 +18,72 @@ enum HomeTemplate {
   }
 
   private static let rulesJa = """
-    # Orbe の秘書
+    # Orbe の操作
 
-    このフォルダは Home の root です。ここで起動した claude は Orbe の秘書として働きます。
+    このフォルダの上は Orbe の Home（workspace の 1 つで、リポジトリに属さないタスクの居場所）です。自分の作業ディレクトリかその祖先が root の workspace が Home \
+    です。`tasks/<ID>-…/` は Home のタスクの作業場です。
 
-    ## 役割
+    ## タスク
 
-    - 人から頼まれたことをする。頼まれていない間は何もしない。
-    - 新しいタスク・並び順・期限の判断は提案にとどめ、人が決める。
+    - 読み書きは Orbe の MCP ツール `list_tasks`・`add_task`・`update_task`・`move_task` で行う。
+    - `add_task` は workspaceId を省くと、呼び出し元タブの workspace（ここなら Home）に付く。
 
-    ## Orbe の操作
+    ## 作業を始める
 
-    - タスクの読み書き、タブや agent の操作は Orbe の MCP ツールで行う。
-    - MCP が使えなければ `orb` CLI を使う（`orb --help`）。
+    - `start_task`（MCP だけ。orb には無い）。リポジトリの workspace のタスクは worktree を、Home のタスクは `tasks/` の下のフォルダを用意し、そこで \
+    agent を開く。
+    - workspace の無いタスクには、先に `update_task` で workspaceId を付ける。
+
+    ## 待ちの条件と受信
+
+    - 待っているタスクが解ける条件（説明・確認のコマンド・間隔・期限）は `update_task` の waitingCondition で付ける。Orbe が裏で確かめ、満たすか期限が来たら待ちを外す。
+    - 外の出どころから定期的に拾って提案にするのは受信（`set_intake`・`list_intakes`・`run_intake`・\
+    `pause_intake`・`delete_intake`・`list_intake_proposals`）。
+
+    ## タブと agent
+
+    - `list_tabs`・`get_tab_text`・`prompt_agent`・`wait_for_event`。
+    - `spawn_agent`・`spawn` は workspaceId を省くとアクティブな workspace に開く。
+
+    MCP が使えなければ `orb` CLI を使う（`orb --help`。`start_task` は無い）。
 
     このファイルは Orbe が起動のたびに書き直す。書き足したいことは CLAUDE.md に書く。
 
     """
 
   private static let rulesEn = """
-    # Orbe secretary
+    # Operating Orbe
 
-    This folder is the root of Home. A claude started here works as Orbe's secretary.
+    The folder above is Orbe's Home (one of the workspaces; the place for tasks that belong to no \
+    repository). The workspace whose root is your working directory or one of its ancestors is Home. \
+    `tasks/<ID>-…/` are the workplaces of Home's tasks.
 
-    ## Role
+    ## Tasks
 
-    - Do what the user asks. Do nothing while nothing is asked.
-    - Only propose new tasks, ordering, and deadlines; the user decides.
+    - Read and write tasks with Orbe's MCP tools `list_tasks`, `add_task`, `update_task`, and `move_task`.
+    - Without workspaceId, `add_task` attaches the task to the calling tab's workspace (Home, when called \
+    from here).
 
-    ## Operating Orbe
+    ## Starting work
 
-    - Read and write tasks, and operate tabs and agents, with Orbe's MCP tools.
-    - If MCP is unavailable, use the `orb` CLI (`orb --help`).
+    - `start_task` (MCP only; not in orb). For a task in a repository workspace it prepares a worktree; for \
+    a Home task it prepares a folder under `tasks/`; then it opens an agent there.
+    - For a task without a workspace, attach one first with `update_task` (workspaceId).
+
+    ## Waiting conditions and intakes
+
+    - Attach the condition that ends a wait (description, check command, interval, deadline) with \
+    `update_task`'s waitingCondition. Orbe checks it in the background and clears the wait when it holds or \
+    the deadline comes.
+    - To pick things up from outside sources on a schedule and turn them into proposals, use intakes \
+    (`set_intake`, `list_intakes`, `run_intake`, `pause_intake`, `delete_intake`, `list_intake_proposals`).
+
+    ## Tabs and agents
+
+    - `list_tabs`, `get_tab_text`, `prompt_agent`, `wait_for_event`.
+    - Without workspaceId, `spawn_agent` and `spawn` open in the active workspace.
+
+    If MCP is unavailable, use the `orb` CLI (`orb --help`; it has no `start_task`).
 
     Orbe rewrites this file at every launch. Put your own additions in CLAUDE.md.
 
@@ -57,7 +92,7 @@ enum HomeTemplate {
   private static let claudeMdJa = """
     # Home
 
-    秘書の役割と Orbe の操作は `.claude/rules/orbe.md` にあり、Orbe が起動のたびに更新する。
+    Orbe の操作は `.claude/rules/orbe.md` にあり、Orbe が起動のたびに更新する。
 
     このファイルは人も AI も自由に書き換えてよい。Orbe は上書きしない。
 
@@ -66,7 +101,7 @@ enum HomeTemplate {
   private static let claudeMdEn = """
     # Home
 
-    The secretary's role and how to operate Orbe live in `.claude/rules/orbe.md`, which Orbe updates at every launch.
+    How to operate Orbe lives in `.claude/rules/orbe.md`, which Orbe updates at every launch.
 
     Both the user and AI may edit this file freely. Orbe never overwrites it.
 

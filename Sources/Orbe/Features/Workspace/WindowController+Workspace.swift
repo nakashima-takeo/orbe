@@ -14,7 +14,7 @@ extension WindowController {
     scheduleSave()
   }
 
-  /// Home のフォルダを現在の UI 言語の雛形で用意する（秘書への指示は書き直し、CLAUDE.md は無ければ作る）。
+  /// Home のフォルダを現在の UI 言語の雛形で用意する（Orbe の操作の指示は書き直し、CLAUDE.md は無ければ作る）。
   func prepareHomeFolder() {
     HomeFolder.prepare(language: localization.language)
   }

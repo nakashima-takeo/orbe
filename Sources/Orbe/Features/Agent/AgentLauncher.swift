@@ -17,6 +17,8 @@ final class AgentLauncher {
   var configuredDefault: (() -> String?)?
   /// default agent を global スコープの設定変更として書く窓口。WindowController が注入（store 経由に一本化）。
   var onSetDefault: ((String) -> Void)?
+  /// 検出が済んだ知らせ（検出のたびに呼ぶ）。
+  var onResolved: (() -> Void)?
 
   private let catalog = AgentCatalog()
   private var installProc: Process?  // 導入中の install.sh を寿命つなぎで保持
@@ -223,8 +225,9 @@ final class AgentLauncher {
     return (command, launchEnvironment)
   }
 
-  /// 検出完了の単一窓口。提示中の onboarding／palette 双方の detecting を解いて結果へ差し替える。
+  /// 検出完了の単一窓口。提示中の onboarding／palette 双方の detecting を解いて結果へ差し替え、知らせる。
   private func handleResolved() {
+    onResolved?()
     if let m = appModel?.onboarding {
       m.setCommands(catalog.agents.map(\.command))
       m.detecting = false

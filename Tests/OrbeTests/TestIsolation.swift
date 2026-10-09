@@ -127,6 +127,7 @@ enum TestIsolation {
     AgentSessionLog.fileURLOverride = dir.appendingPathComponent("agent-sessions.jsonl")
     TaskPersistence.fileURLOverride = dir.appendingPathComponent("tasks.json")
     IntakePersistence.fileURLOverride = dir.appendingPathComponent("intakes.json")
+    SecretaryPersistence.fileURLOverride = dir.appendingPathComponent("secretary.json")
 
     // 同梱リソースの探索根。既定は Xcode の bin を指しており空でも中立でもないため、管理下の
     // 空ディレクトリを用意する（層1 の `orbe-defaults.conf` は不在になる）。テストが同梱物を

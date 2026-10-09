@@ -5,7 +5,7 @@ enum HomeFolder {
   /// テスト用にフォルダを差し替える（他の永続ファイルと同じく隔離ハーネスが張る）。
   nonisolated(unsafe) static var urlOverride: URL?
 
-  /// 秘書への指示の置き場（root からの相対）。claude は `.claude/rules/` の下を指示として読む。
+  /// Orbe の操作の指示の置き場（root からの相対）。claude は `.claude/rules/` の下を指示として読む。
   static let rulesPath = ".claude/rules/orbe.md"
 
   /// フォルダの場所。解決できなければ nil。フォルダの有無は問わない。
@@ -13,7 +13,7 @@ enum HomeFolder {
     urlOverride ?? StateDir.base()?.appendingPathComponent("home", isDirectory: true)
   }
 
-  /// `language` で用意する。秘書への指示は Orbe が持つので毎回今の雛形へ書き直す。CLAUDE.md は人と AI の欄なので、
+  /// `language` で用意する。Orbe の操作の指示は Orbe が持つので毎回今の雛形へ書き直す。CLAUDE.md は人と AI の欄なので、
   /// フォルダを作るときに 1 回だけ置き、以後は中身を見ない。失敗はログに残し、次の起動で再挑戦する。
   static func prepare(language: Language) {
     guard let url else {

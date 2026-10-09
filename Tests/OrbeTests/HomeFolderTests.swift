@@ -3,10 +3,10 @@ import XCTest
 
 @testable import Orbe
 
-/// Home のフォルダの用意を固定する。秘書への指示は UI 言語の雛形へ毎回書き直し、CLAUDE.md は無いフォルダを
+/// Home のフォルダの用意を固定する。Orbe の操作の指示は UI 言語の雛形へ毎回書き直し、CLAUDE.md は無いフォルダを
 /// 作るときだけ置いて以後は触らない。用意は UI 言語が確定した時点——新規利用者は初回の言語選択を確定するまで作らない。
 ///
-/// 壊れると何が起きるか: 人や AI が書き換えた CLAUDE.md が起動のたびに雛形へ戻される。秘書への指示の改版が既存の
+/// 壊れると何が起きるか: 人や AI が書き換えた CLAUDE.md が起動のたびに雛形へ戻される。Orbe の操作の指示の改版が既存の
 /// 利用者に届かない。言語選択の前に作ると、選んだ言語と違う雛形が置かれる。
 final class HomeFolderTests: OrbeTestCase {
   private func folder() throws -> URL { try XCTUnwrap(HomeFolder.url) }
@@ -19,7 +19,7 @@ final class HomeFolderTests: OrbeTestCase {
     try String(contentsOf: url, encoding: .utf8)
   }
 
-  /// 秘書への指示は毎回今の雛形へ戻し、CLAUDE.md は書き換えを上書きせず、消しても戻さない。
+  /// Orbe の操作の指示は毎回今の雛形へ戻し、CLAUDE.md は書き換えを上書きせず、消しても戻さない。
   func testPrepareRewritesRulesButLeavesClaudeMdToPeople() throws {
     HomeFolder.prepare(language: .ja)
     try "edited".write(to: claudeMd(), atomically: true, encoding: .utf8)
