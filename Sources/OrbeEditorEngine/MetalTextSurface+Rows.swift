@@ -6,7 +6,9 @@ import OrbeEditorCore
 extension MetalTextSurface {
   func setRows(_ rows: SurfaceRows) {
     let insertions = rows.insertions
-    guard !holds(insertions) || rows.spans != self.rows.spans else { return }
+    guard !holds(insertions) || rows.spans != self.rows.spans || rows.source !== rowSource else {
+      return
+    }
     precondition(
       insertions.isEmpty || !presentation.showsMinimap, "差し込みはミニマップを出していない面にだけ置く")
     let lineCount = bodySite.sourceContent?.text.lineCount ?? 1
@@ -18,6 +20,13 @@ extension MetalTextSurface {
       zip(rows.spans, rows.spans.dropFirst()).allSatisfy { $0.line < $1.line }
         && rows.spans.allSatisfy { (0..<lineCount).contains($0.line) },
       "区間の始まりは重ならない昇順で、置く時点の文書の写しの行の範囲（0..<行数）に収める")
+    let sourceContent = rows.source?.rowSourceContent
+    let sourceLines = sourceContent?.text.lineCount ?? 0
+    precondition(
+      insertions.allSatisfy { insertion in
+        guard case .lines(let lines) = insertion.content else { return true }
+        return lines.allSatisfy { $0.line.map { (0..<sourceLines).contains($0) } ?? true }
+      }, "差し込んだ行が指す行は、出どころの写しの行の範囲（0..<行数）に収める")
     let zoneList = insertions.compactMap { insertion -> SurfaceZone? in
       if case .zone(let zone) = insertion.content { return zone }
       return nil
@@ -26,6 +35,8 @@ extension MetalTextSurface {
       Set(zoneList.map(ObjectIdentifier.init)).count == zoneList.count, "同じ区画は並びに 1 度だけ置く")
     transact {
       noteRowsChange()
+      rowSource = rows.source
+      write { $0.rowSource = sourceContent }
       syncZones(zoneList)
       let lineHeight = Double(config.lineHeight)
       self.rows.replace(
@@ -43,6 +54,12 @@ extension MetalTextSurface {
           }
         }, spans: rows.spans)
     }
+  }
+
+  /// 出どころの役割が変わった。写しを引き直して材料に置く（差し込んだ行の色は描くたびに写しから引くので、置けば描き直る）。
+  func rowSourceRolesDidChange(_ ranges: IndexSet) {
+    guard let content = rowSource?.rowSourceContent else { return }
+    write { $0.rowSource = content }
   }
 
   func setPresentation(_ presentation: SurfacePresentation) {

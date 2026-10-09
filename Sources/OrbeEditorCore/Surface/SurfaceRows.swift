@@ -7,11 +7,28 @@ public struct SurfaceRows: Equatable {
   public var insertions: [RowInsertion]
   /// 文書の行の区間の見え方（始まりの行の昇順）。最初の区間より上の行は、型も「もう一方の番号」も持たない。
   public var spans: [LineSpan]
+  /// 差し込んだ行が指す行の出どころ（行を指す差し込んだ行が無ければ nil でよい）。
+  public var source: (any SurfaceRowSource)?
 
-  public init(insertions: [RowInsertion] = [], spans: [LineSpan] = []) {
+  public init(
+    insertions: [RowInsertion] = [], spans: [LineSpan] = [], source: (any SurfaceRowSource)? = nil
+  ) {
     self.insertions = insertions
     self.spans = spans
+    self.source = source
   }
+
+  public static func == (lhs: SurfaceRows, rhs: SurfaceRows) -> Bool {
+    lhs.insertions == rhs.insertions && lhs.spans == rhs.spans && lhs.source === rhs.source
+  }
+}
+
+/// 差し込んだ行の出どころ——差し込んだ行が指す行の本文と役割の写しを持つもの（diff の古い側の版）。面は並びを置いたときと、
+/// 出どころの役割が変わったと知らされたとき（`TextSurface.rowSourceRolesDidChange`）に写しを引いて描く。写しの本文は
+/// 並びを置いてから置き直すまで変わらない（変わるなら、新しい出どころで並びを置き直す）。
+@MainActor
+public protocol SurfaceRowSource: AnyObject {
+  var rowSourceContent: SurfaceContent { get }
 }
 
 /// 文書の行の区間 1 つの見え方——行 `line` から次の区間の始まりの前まで（最後の区間は最終行まで）。区間の始まりは差し込みの
@@ -39,7 +56,7 @@ public struct RowInsertion: Equatable {
   public var content: Content
 
   public enum Content: Equatable {
-    /// 文書に無い行の列。面が本文と同じ字で描くが、選べず、写せず、当たらない。
+    /// 文書に無い行の列。面が出どころの行を本文と同じ字・出どころの役割の色・空白の点で描くが、選べず、写せず、当たらない。
     case lines([InsertedLine])
     /// 区画。面が本文の区画の幅で区画の絵を問い、絵の高さで並べ、本文と同じコマに描く（→ `SurfaceZone`）。
     case zone(SurfaceZone)
@@ -59,18 +76,16 @@ public struct RowInsertion: Equatable {
   }
 }
 
-/// 文書に無い行 1 つ。
+/// 文書に無い行 1 つ——出どころ（`SurfaceRows.source`）の行を指すか、何も指さない（字の無い詰め物）。2 列の面では、出どころの
+/// 行を指す行の左の列に、その行の番号（1 始まり）を描く。
 public struct InsertedLine: Equatable, Sendable {
-  /// 行の中身（改行を含まない）。
-  public var text: String
+  /// 指す出どころの行（0 始まり。nil なら何も指さない）。
+  public var line: Int?
   /// 行の型（`SurfacePresentation.lineStyles` の番号。nil なら型なし）。
   public var style: Int?
-  /// 2 列の面の左の列に描く番号（nil なら描かない）。
-  public var number: Int?
 
-  public init(_ text: String, style: Int? = nil, number: Int? = nil) {
-    self.text = text
+  public init(line: Int? = nil, style: Int? = nil) {
+    self.line = line
     self.style = style
-    self.number = number
   }
 }

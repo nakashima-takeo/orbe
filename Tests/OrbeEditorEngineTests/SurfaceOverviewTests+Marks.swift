@@ -215,7 +215,7 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
       SurfaceRows(
         insertions: [
           RowInsertion(
-            line: 20, content: .lines((0..<60).map { InsertedLine("inserted \($0)") }))
+            line: 20, content: .lines((0..<60).map { _ in InsertedLine() }))
         ]))
     shot = try pixelShot(opened)
     let moved = (

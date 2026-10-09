@@ -279,6 +279,8 @@ struct FrameMaterial: Sendable {
   var marks = RowMarks.empty
   /// 縦の並び（写しと同じ書き込みで置く——描画スレッドは引き取った写しの行の並びで描く）。
   var rows = RowLayout(lineHeight: 1)
+  /// 差し込んだ行の出どころの写し（並びと同じ書き込みで置き、出どころの役割が変われば置き直す）。
+  var rowSource: SurfaceContent?
   /// 表示の構成のうち、配置と描き方に効くもの。
   var arrangement = SurfaceArrangement()
   /// 区画の描く材料（区画の同一性で引く。並びの塊の中身と同じ書き込みで置く）。
@@ -334,18 +336,18 @@ final class MaterialBox: Sendable {
   /// 今の版。
   var revision: Int { state.withLock { $0.revision } }
 
-  /// 書き換えて版を進め、進めた後の版を返す。書き換える前の写しは裏で手放す——文書が役割の並びを丸ごと差し替えた後は、
-  /// 箱が古い並びの最後の持ち主になりうる（大きな木の解放を main で行わない）。
+  /// 書き換えて版を進め、進めた後の版を返す。書き換える前の写し（本文と差し込んだ行の出どころ）は裏で手放す——文書が役割の
+  /// 並びを丸ごと差し替えた後は、箱が古い並びの最後の持ち主になりうる（大きな木の解放を main で行わない）。
   @discardableResult
   func update(_ body: @Sendable (inout FrameMaterial) -> Void) -> Int {
     let (revision, before) = state.withLock { material in
-      let before = material.content
+      let before = [material.content, material.rowSource]
       body(&material)
       material.revision += 1
       return (material.revision, before)
     }
     let parcel = OSAllocatedUnfairLock(initialState: consume before)
-    DispatchQueue.global(qos: .utility).async { parcel.withLock { $0 = nil } }
+    DispatchQueue.global(qos: .utility).async { parcel.withLock { $0 = [] } }
     return revision
   }
 

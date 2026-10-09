@@ -1,8 +1,8 @@
 import Foundation
 import OrbeEditorCore
 
-/// 見えている縦の並び——文書の行（行の型の地・本文・装備・選択・強調・行番号・記号・印）と差し込んだ行（行の型の地・字・
-/// 番号・記号）と区画（→ `FrameBuilder+Zones`）。
+/// 見えている縦の並び——文書の行（行の型の地・本文・装備・選択・強調・行番号・記号・印）と差し込んだ行（行の型の地・
+/// 出どころの行の字と空白の点・番号・記号）と区画（→ `FrameBuilder+Zones`）。
 extension FrameBuilder {
   /// 縦の並びで見えている項目を描く。
   func drawRows(_ source: Source, _ content: SurfaceContent, cache: LineLayoutCache, _ c: Context) {
@@ -22,16 +22,16 @@ extension FrameBuilder {
     var roles = content.roles.cursor(from: laid.first?.start ?? 0)
     for item in laid {
       let top = g.rowTop(item.row)
-      let style = c.palette.lineStyle(rows.style(ofLine: item.row))
-      if let style {
+      if let style = c.palette.lineStyle(rows.style(ofLine: item.row)) {
         drawLineBackground(style, top: top, bottom: g.rowBottom(item.row), c)
         drawSign(style, baseline: top + baseline, cache: cache, source, c)
       }
       let visible = visibleGlyphs(item.laid, c)
-      drawDecor(item, rowTop: top, window: visible.offsets, c)
+      drawWhitespace(item.laid, rowTop: top, window: visible.offsets, c)
+      drawLinkUnderline(item, rowTop: top, window: visible.offsets, c)
       overlays.draw(item.overlay, item.laid, rowTop: top, c.pen)
       drawHighlights(item, source.material.highlights, rowTop: top, window: visible.offsets, c)
-      let width = drawText(item, visible, ink: style?.text, roles: &roles, c)
+      let width = drawText(item.laid, at: (item.start, top), visible, roles: &roles, c)
       longestLine = max(longestLine, width)
       drawNumber(item.row + 1, rowTop: top, inset: c.gutter.ownInset, font: numberFont, c)
       if c.gutter.other != nil, let other = rows.otherNumber(ofLine: item.row) {
@@ -41,12 +41,12 @@ extension FrameBuilder {
     if c.gutter.marks > 0 { drawMarks(source.material.marks, rows: visibleRows, c) }
   }
 
-  /// 行の型の地を、行番号の列の左端から本文の区画の右端まで塗る（切り取りは上端の余白の下）。
+  /// 行の型の地を、行番号の列の左端から面の右端（縦スクロールバーの列の下）まで塗る（切り取りは上端の余白の下）。
   func drawLineBackground(_ style: LineInk, top: Double, bottom: Double, _ c: Context) {
     guard let color = style.background else { return }
     lineBackgrounds.append(
       ShapeInstance(
-        rect: SIMD4(0, Float(top), Float(c.g.textRight), Float(bottom - top)), color: color.packed,
+        rect: SIMD4(0, Float(top), Float(c.g.width), Float(bottom - top)), color: color.packed,
         radius: 0, kind: 0))
   }
 
@@ -70,63 +70,62 @@ extension FrameBuilder {
     }
   }
 
-  /// 見えている塊 `blocks` のうち、差し込んだ行の字（行の型の字の色か本文の色。役割・装備・強調の地・選択の地・キャレット
-  /// は無い）と、行の型の地と記号と、2 列の面の左の列の番号を置く。組版は行の中身を鍵にした段で引く。
+  /// 見えている塊 `blocks` のうち、差し込んだ行の行の型の地と記号と、出どころの行の字（出どころの役割の色）と空白の点と、
+  /// 2 列の面の左の列の番号を置く（強調の地・選択の地・キャレット・URL の下線は無い——選べない行だから）。組版は行の中身を
+  /// 鍵にした段で引く。
   private func drawInsertedLines(
     _ blocks: Range<Int>, _ source: Source, cache: LineLayoutCache, _ c: Context
   ) {
     let g = c.g
     let baseline = (Double(c.config.baseline) * g.scale).rounded()
-    let originX = g.column - g.scrollX
     let numberFont = c.fonts.id(c.config.gutterFont)
+    let origin = source.material.rowSource
     for index in blocks {
       guard case .lines(let lines) = g.rows.contents[index] else { continue }
       for (offset, line) in lines.enumerated() {
         let top = g.insertedTop(block: index, line: offset)
         if top >= g.height { break }
         guard top + g.lineHeight > g.top else { continue }
-        let style = c.palette.lineStyle(line.style)
-        if let style {
+        if let style = c.palette.lineStyle(line.style) {
           drawLineBackground(
             style, top: top, bottom: g.insertedTop(block: index, line: offset + 1), c)
           drawSign(style, baseline: top + baseline, cache: cache, source, c)
         }
-        if c.gutter.other != nil, let number = line.number {
-          drawNumber(number, rowTop: top, inset: c.gutter.otherInset, font: numberFont, c)
+        guard let row = line.line, let origin, row < origin.text.lineCount else { continue }
+        if c.gutter.other != nil {
+          drawNumber(row + 1, rowTop: top, inset: c.gutter.otherInset, font: numberFont, c)
         }
+        let text = origin.text
+        let start = text.lineStart(row)
+        let next = row + 1 < text.lineCount ? text.lineStart(row + 1) : nil
         let laid = cache.line(
-          LineShaper.source(line.text), tabColumns: source.material.tabColumns, config: c.config,
-          fonts: c.fonts)
-        let ink = style?.text ?? c.palette.text
-        for i in visibleGlyphs(laid, c).glyphs {
-          let y = laid.ys.isEmpty ? top + baseline : top + baseline - Double(laid.ys[i]) * g.scale
-          place(
-            Glyph(
-              font: laid.fonts[i], glyph: laid.glyphs[i],
-              x: originX + Double(laid.xs[i]) * g.scale, baseline: y), ink, .text, c)
-        }
-        longestLine = max(longestLine, drawOmittedMark(laid, baseline: top + baseline, c))
+          LineShaper.source(start: start, next: next, in: text),
+          tabColumns: source.material.tabColumns, config: c.config, fonts: c.fonts)
+        let visible = visibleGlyphs(laid, c)
+        drawWhitespace(laid, rowTop: top, window: visible.offsets, c)
+        var roles = origin.roles.cursor(from: start)
+        let width = drawText(laid, at: (start, top), visible, roles: &roles, c)
+        longestLine = max(longestLine, width)
       }
     }
   }
 
-  /// 行の字を置き、行の幅（末尾の印を含む、pt）を返す。置くのは横に見えている字だけで、役割は見えている行を通して 1 つの
-  /// 読み口で引き、色は役割の連なりを出たときだけ引く。行の型が字の色を持てば、行の字をすべてその色で描く。
+  /// 行の字を置き、行の幅（末尾の印を含む、pt）を返す。`at` は行頭の `roles` の座標のオフセットと行の上端の y。置くのは
+  /// 横に見えている字だけで、役割は 1 つの読み口で引き、色は役割の連なりを出たときだけ引く。
   func drawText(
-    _ row: RowInFrame, _ visible: VisibleGlyphs, ink override: InkColor?,
+    _ line: LaidOutLine, at row: (start: Int, top: Double), _ visible: VisibleGlyphs,
     roles: inout RoleRuns.Cursor, _ c: Context
   ) -> CGFloat {
-    let line = row.laid
-    let start = row.start
     let g = c.g
-    let baseline = g.rowTop(row.row) + c.pen.baseline
+    let start = row.start
+    let baseline = row.top + c.pen.baseline
     let originX = g.column - g.scrollX
-    if let offsets = visible.offsets {
+    if visible.offsets != nil {
       var run = 0..<0
-      var ink = override ?? c.palette.text
+      var ink = c.palette.text
       for i in visible.glyphs {
         let offset = start + Int(line.offsets[i])
-        if override == nil, !run.contains(offset) {
+        if !run.contains(offset) {
           let found = roles.run(at: offset)
           run = found.range
           ink = c.palette.ink(found.role)

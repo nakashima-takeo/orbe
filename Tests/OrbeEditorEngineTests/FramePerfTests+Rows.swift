@@ -49,12 +49,13 @@ extension FramePerfTests {
     thread.surface = surface
     let lineCount = opened.document.text.lineCount
     let middle = lineCount / 2 / 10 * 10 + 5
-    var insertions = Self.rowInsertions(lineCount: lineCount)
+    let source = InsertedText()
+    var insertions = Self.rowInsertions(lineCount: lineCount, source: source)
     insertions.insert(
       RowInsertion(line: middle, content: .zone(thread)),
       at: insertions.firstIndex { $0.line > middle } ?? insertions.count)
     surface.setPresentation(SurfacePresentation(showsMinimap: false))
-    surface.setRows(SurfaceRows(insertions: insertions))
+    surface.setRows(SurfaceRows(insertions: insertions, source: source))
     surface.updateFocus(true)
     surface.focus(field)
     surface.reveal(
@@ -94,18 +95,20 @@ extension FramePerfTests {
   static func insertRows(_ opened: Opened) {
     let surface = opened.surface
     surface.setPresentation(SurfacePresentation(showsMinimap: false))
+    let source = InsertedText()
     surface.setRows(
-      SurfaceRows(insertions: rowInsertions(lineCount: opened.document.text.lineCount)))
+      SurfaceRows(
+        insertions: Self.rowInsertions(lineCount: opened.document.text.lineCount, source: source),
+        source: source))
     surface.flush()
   }
 
-  /// `lineCount` 行の文書に、10 行ごとに文書に無い行 2 行とスレッドの形の区画を交互に差し込む列。
-  static func rowInsertions(lineCount: Int) -> [RowInsertion] {
+  /// `lineCount` 行の文書に、10 行ごとに文書に無い行 2 行（字は `source` に足す）とスレッドの形の区画を交互に差し込む列。
+  static func rowInsertions(lineCount: Int, source: InsertedText) -> [RowInsertion] {
     stride(from: 10, to: lineCount, by: 10).enumerated().map { k, line in
       k % 2 == 0
         ? RowInsertion(
-          line: line,
-          content: .lines([InsertedLine("- removed \(k) a"), InsertedLine("- removed \(k) b")]))
+          line: line, content: .lines(source.lines(["- removed \(k) a", "- removed \(k) b"])))
         : RowInsertion(
           line: line,
           content: .zone(

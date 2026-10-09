@@ -69,6 +69,8 @@ final class FakeTextSurface: TextSurface {
 
   func setRows(_ rows: SurfaceRows) {}
 
+  func rowSourceRolesDidChange(_ ranges: IndexSet) {}
+
   func redrawZone(_ zone: SurfaceZone) {}
 
   func replaceText(of field: ZoneTextField, with text: String) {}

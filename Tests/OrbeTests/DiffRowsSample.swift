@@ -50,8 +50,8 @@ struct DiffRowsSample {
     }
     for row in rows {
       switch row {
-      case .removed(let line):
-        removed.append(InsertedLine(line, style: Self.removed, number: oldNumber))
+      case .removed:
+        removed.append(InsertedLine(line: oldNumber - 1, style: Self.removed))
         oldNumber += 1
       case .added:
         flush()
@@ -65,7 +65,7 @@ struct DiffRowsSample {
       }
     }
     flush()
-    return SurfaceRows(insertions: insertions, spans: spans)
+    return SurfaceRows(insertions: insertions, spans: spans, source: TextRowSource(old))
   }
 
   /// 並列の片側——変わった区間（続く削除と追加）は、削除と追加を上から同じ行に並べ、行の数の差の分だけ短い側の区間の後に
@@ -88,7 +88,7 @@ struct DiffRowsSample {
         let (mine, theirs) = side == .old ? (removed, added) : (added, removed)
         own(mine, side == .old ? Self.removed : Self.added)
         guard theirs > mine else { continue }
-        let pads = (mine..<theirs).map { _ in InsertedLine("", style: Self.pad) }
+        let pads = (mine..<theirs).map { _ in InsertedLine(style: Self.pad) }
         insertions.append(RowInsertion(line: next, content: .lines(pads)))
       }
     }
@@ -200,5 +200,16 @@ extension DiffRowsSample.Row {
     switch self {
     case .same(let line), .removed(let line), .added(let line): line
     }
+  }
+}
+
+/// 差し込んだ行の出どころ（テスト）——本文 `text` の写し（役割なし）。
+@MainActor
+final class TextRowSource: SurfaceRowSource {
+  let rowSourceContent: SurfaceContent
+
+  init(_ text: String) {
+    let rope = TextRope(text)
+    rowSourceContent = SurfaceContent(text: rope, roles: RoleRuns(length: rope.length), version: 0)
   }
 }

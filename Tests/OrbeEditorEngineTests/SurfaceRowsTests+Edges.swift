@@ -13,7 +13,7 @@ extension SurfaceRowsTests {
   func testPagingUpJumpsOverABlockTallerThanThePage() throws {
     let opened = try openRows()
     let surface = opened.surface
-    surface.setRows(SurfaceRows(insertions: [insert((0..<50).map { "inserted \($0)" }, at: 10)]))
+    surface.setRows(placed([insert((0..<50).map { "inserted \($0)" }, at: 10)]))
     let text = opened.document.text
     surface.selectedRange = NSRange(location: text.lineStart(10), length: 0)
     let pageLines = try XCTUnwrap(surface.bodySite.editingEnvironment()).pageLines
@@ -28,10 +28,10 @@ extension SurfaceRowsTests {
     let surface = opened.surface
     surface.flush()
     XCTAssertEqual(surface.scrollPosition.y, 0, "前提: 先頭")
-    surface.setRows(SurfaceRows(insertions: [insert(["a", "b", "c"], at: 0)]))
+    surface.setRows(placed([insert(["a", "b", "c"], at: 0)]))
     surface.flush()
     XCTAssertEqual(surface.scrollPosition.y, 0)
-    surface.setRows(SurfaceRows(insertions: [insert(["a", "b", "c", "d", "e"], at: 0)]))
+    surface.setRows(placed([insert(["a", "b", "c", "d", "e"], at: 0)]))
     surface.flush()
     XCTAssertEqual(surface.scrollPosition.y, 0, "伸ばしても")
   }
@@ -44,7 +44,7 @@ extension SurfaceRowsTests {
     let text = opened.document.text
     surface.reveal(NSRange(location: text.lineStart(40), length: 0), policy: .center)
     let centered = surface.rows.y(ofLine: 40) - surface.scrollPosition.y
-    surface.setRows(SurfaceRows(insertions: [insert(["a", "b", "c"], at: 10)]))
+    surface.setRows(placed([insert(["a", "b", "c"], at: 10)]))
     surface.flush()
     XCTAssertEqual(
       surface.rows.y(ofLine: 40) - surface.scrollPosition.y, centered, accuracy: 1e-9,
@@ -58,7 +58,7 @@ extension SurfaceRowsTests {
     for row in [2, 3] { baseline[row] = "old \(row)" }
     opened.document.baseline = baseline.joined(separator: "\n")
     XCTAssertTrue(opened.document.waitUntilCaughtUp())
-    opened.surface.setRows(SurfaceRows(insertions: [insert(["- one", "- two"], at: 3)]))
+    opened.surface.setRows(placed([insert(["- one", "- two"], at: 3)]))
     let shot = try pixelShot(opened)
     let config = opened.surface.config
     let column = config.columnWidth(lineCount: opened.document.text.lineCount)
@@ -78,7 +78,7 @@ extension SurfaceRowsTests {
     fakeInputMethod(opened)
     let surface = opened.surface
     let view = surface.textView
-    surface.setRows(SurfaceRows(insertions: [insert(["a", "b", "c"], at: 3)]))
+    surface.setRows(placed([insert(["a", "b", "c"], at: 3)]))
     let text = opened.document.text
     surface.selectedRange = NSRange(location: text.lineStart(5), length: 0)
     replay([.mark("か")], on: opened)

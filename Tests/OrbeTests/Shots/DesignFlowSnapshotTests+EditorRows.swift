@@ -66,18 +66,18 @@ private struct RowsFlow {
   }
 
   func insert() {
-    let removed = { (lines: [String]) in lines.map { InsertedLine($0) } }
+    let source = TextRowSource(
+      "// removed header\n  private var cache: [Int: Int] = [:]\n  // removed\n// removed footer")
+    let removed = { (lines: [Int]) in lines.map { InsertedLine(line: $0) } }
     surface.setPresentation(SurfacePresentation(showsMinimap: false))
     surface.setRows(
-      SurfaceRows(insertions: [
-        RowInsertion(line: 0, content: .lines(removed(["// removed header"]))),
-        RowInsertion(
-          line: 6,
-          content: .lines(removed(["  private var cache: [Int: Int] = [:]", "  // removed"]))),
-        RowInsertion(line: 40, content: .zone(thread)),
-        RowInsertion(
-          line: document.text.lineCount, content: .lines(removed(["// removed footer"]))),
-      ]))
+      SurfaceRows(
+        insertions: [
+          RowInsertion(line: 0, content: .lines(removed([0]))),
+          RowInsertion(line: 6, content: .lines(removed([1, 2]))),
+          RowInsertion(line: 40, content: .zone(thread)),
+          RowInsertion(line: document.text.lineCount, content: .lines(removed([3]))),
+        ], source: source))
     settle()
   }
 

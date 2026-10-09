@@ -96,20 +96,20 @@ extension SurfaceConfig {
       cell: cell, overview: overview, showsMinimap: arrangement.showsMinimap)
   }
 
-  /// 行番号の列の配置。番号の列はどれも、最小の幅か、列の最大の番号が右の余白を残して収まる幅の広い方。
+  /// 行番号の列の配置。番号の列はどれも、最小の幅か、列の最大の番号が右の余白を残して収まる幅の広い方（最小の幅と余白は
+  /// 構成が持てば構成の、無ければ見え方の値）。
   func gutter(lineCount: Int, rows: RowLayout, arrangement: SurfaceArrangement) -> GutterColumns {
-    let own = numberColumnWidth(lineCount)
+    let minimum = arrangement.numberWidth ?? gutterWidth
+    let trailing = arrangement.numberTrailing ?? gutterTrailingInset
+    let width = { (number: Int) in
+      max(minimum, ceil(self.numberWidth(max(1, number))) + trailing)
+    }
     return GutterColumns(
-      own: own,
+      own: width(lineCount),
       other: arrangement.numberColumns == 2
-        ? numberColumnWidth(rows.otherNumberMax(lineCount: lineCount)) : nil,
+        ? width(rows.otherNumberMax(lineCount: lineCount)) : nil,
       marks: arrangement.showsMarks ? marks.gutterWidth : 0, sign: arrangement.signWidth,
-      trailing: gutterTrailingInset)
-  }
-
-  /// 最大の番号が `number` の番号の列の幅。
-  private func numberColumnWidth(_ number: Int) -> CGFloat {
-    max(gutterWidth, ceil(numberWidth(max(1, number))) + gutterTrailingInset)
+      trailing: trailing)
   }
 }
 
@@ -117,6 +117,8 @@ extension SurfaceConfig {
 struct SurfaceArrangement: Equatable, Sendable {
   var showsMinimap = true
   var numberColumns = 1
+  var numberWidth: CGFloat?
+  var numberTrailing: CGFloat?
   var signWidth: CGFloat = 0
   var showsMarks = true
 
@@ -125,6 +127,8 @@ struct SurfaceArrangement: Equatable, Sendable {
   init(_ presentation: SurfacePresentation) {
     showsMinimap = presentation.showsMinimap
     numberColumns = presentation.numberColumns
+    numberWidth = presentation.numberWidth
+    numberTrailing = presentation.numberTrailing
     signWidth = presentation.signWidth
     showsMarks = presentation.showsMarks
   }

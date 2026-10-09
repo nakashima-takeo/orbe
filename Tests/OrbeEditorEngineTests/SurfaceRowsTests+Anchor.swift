@@ -15,7 +15,7 @@ extension SurfaceRowsTests {
     opened.surface.setRows(
       SurfaceRows(
         insertions: boundaries.map {
-          RowInsertion(line: $0, content: .lines([InsertedLine("inserted \($0)")]))
+          RowInsertion(line: $0, content: .lines([InsertedLine()]))
         }))
     return opened
   }
@@ -84,7 +84,7 @@ extension SurfaceRowsTests {
       surface.setRows(
         SurfaceRows(
           insertions: placed.map {
-            RowInsertion(line: $0, content: .lines([InsertedLine("again \($0)")]))
+            RowInsertion(line: $0, content: .lines([InsertedLine()]))
           }))
     }
     place(opened, row: 1, column: 0)

@@ -250,7 +250,7 @@ private final class SideRowsToggle: NSObject {
 
   @objc func toggle() {
     padded.toggle()
-    let pads = (0..<6).map { _ in InsertedLine("", style: DiffRowsSample.pad) }
+    let pads = (0..<6).map { _ in InsertedLine(style: DiffRowsSample.pad) }
     for (surface, base) in zip(surfaces, rows) {
       var next = base
       if padded { next.insertions.insert(RowInsertion(line: 1, content: .lines(pads)), at: 0) }

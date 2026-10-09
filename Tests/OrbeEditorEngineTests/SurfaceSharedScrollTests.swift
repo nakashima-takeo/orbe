@@ -103,7 +103,7 @@ final class SurfaceSharedScrollTests: EngineTestCase {
     a.surface.scroll(toFirstLine: 50)
     a.surface.flush()
     let before = a.surface.scrollPosition.y
-    let lines = (0..<3).map { InsertedLine("pad \($0)") }
+    let lines = (0..<3).map { _ in InsertedLine() }
     for surface in [a.surface, b.surface] {
       surface.setRows(SurfaceRows(insertions: [RowInsertion(line: 10, content: .lines(lines))]))
     }
@@ -156,7 +156,7 @@ final class SurfaceSharedScrollTests: EngineTestCase {
       XCTAssertEqual(c.surface.scrollState().limits.maximum.y, end(c), "閉じた面の範囲は残らない")
       c.surface.setRows(
         SurfaceRows(insertions: [
-          RowInsertion(line: 50, content: .lines((0..<40).map { InsertedLine("pad \($0)") }))
+          RowInsertion(line: 50, content: .lines((0..<40).map { _ in InsertedLine() }))
         ]))
       c.surface.flush()
       XCTAssertEqual(a.surface.scrollState().limits.maximum.y, end(c), "新しい相手の範囲に従う")
