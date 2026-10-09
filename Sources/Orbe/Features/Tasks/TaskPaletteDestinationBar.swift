@@ -40,7 +40,7 @@ struct TaskPaletteDestinationBar: View {
     .frame(height: Self.height)
   }
 
-  /// 段の高さ（ボタン 28 ＋ 上下の余白）。
+  /// 段の高さ（ボタン 30 ＋ 上下の余白）。
   static let height: CGFloat = 48
 
   private func button<Label: View>(
@@ -52,8 +52,8 @@ struct TaskPaletteDestinationBar: View {
         .font(Font.theme.workspaceName)
         .lineLimit(1)
         .fixedSize()
-        .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
-        .frame(height: 28)
+        .padding(.horizontal, Theme.Space.beat)
+        .frame(height: 30)
         .background(shape.fill(lit ? Color.theme.tintAccent : .clear))
         .overlay(
           shape.strokeBorder(

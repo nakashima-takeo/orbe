@@ -5,8 +5,8 @@ import XCTest
 
 extension DesignFlowSnapshotTests {
   /// Home: 最上段の Home 行（休眠で減光・state フォルダの下の長いパス）→ 2 段目の default → 他、の一覧と、
-  /// 行ごとに出し分ける詳細メニュー（Orbe 行は改名だけ・通常行は改名／ディレクトリ／削除）を撮る。
-  func testWorkspaceOrbe() throws {
+  /// 行ごとに出し分ける詳細メニュー（Home 行は改名だけ・通常行は改名／ディレクトリ／削除）を撮る。
+  func testWorkspaceHome() throws {
     let size = NSSize(width: 500, height: 320)
     let workspace = WorkspacePaletteModel(localization: LocalizationStore(language: .ja))
     let stateDir = NSHomeDirectory() + "/Library/Application Support/dev.orbe.app.dev"
@@ -33,9 +33,9 @@ extension DesignFlowSnapshotTests {
           }
         ),
         (
-          "orbe_submenu",
+          "home_submenu",
           {
-            workspace.render.selected = 0  // Orbe 行へ
+            workspace.render.selected = 0  // Home 行へ
             _ = workspace.render.onRight()
           }
         ),

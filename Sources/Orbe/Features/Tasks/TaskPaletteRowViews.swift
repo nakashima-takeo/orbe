@@ -18,7 +18,12 @@ struct TaskPaletteList: View {
       }
       .scrollIndicators(.automatic)
       .onChange(of: model.scrollTarget) { scroll(proxy, to: model.scrollTarget?.id) }
-      .onAppear { scroll(proxy, to: model.selectedID) }
+      // 行の直下に開いた頼む欄が見えるように送る（行だけを見せると、狭い窓で欄が下に切れる）。
+      .onChange(of: model.askingTaskID) { revealAsk(proxy) }
+      .onAppear {
+        scroll(proxy, to: model.selectedID)
+        revealAsk(proxy)
+      }
     }
   }
 
@@ -30,6 +35,10 @@ struct TaskPaletteList: View {
   /// 最小の量だけ送る（見えていれば動かない）。
   private func scroll(_ proxy: ScrollViewProxy, to id: TaskPaletteRowID?) {
     if let id { proxy.scrollTo(TaskPaletteRow.Identity.selectable(id)) }
+  }
+
+  private func revealAsk(_ proxy: ScrollViewProxy) {
+    if let id = model.askingTaskID { proxy.scrollTo(TaskPaletteRow.Identity.ask(id)) }
   }
 
   @ViewBuilder private func row(_ row: TaskPaletteRow) -> some View {

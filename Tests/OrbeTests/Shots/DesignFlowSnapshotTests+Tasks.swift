@@ -308,7 +308,7 @@ extension DesignFlowSnapshotTests {
 
   /// タスク画面を 1 つの窓に載せたまま、手順ごとに撮る（名前と置き場は `flow` と同じ）。撮るたびに載せ直すと、
   /// キーで移った場所へ送ったスクロールが消える。
-  private func hostedTaskPaletteFlow(
+  func hostedTaskPaletteFlow(
     _ name: String, _ palette: TaskPaletteModel, size: NSSize,
     steps: [(label: String, action: (NSView) -> Void)]
   ) throws {

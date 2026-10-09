@@ -19,9 +19,9 @@ extension L10n {
     .taskPaletteDestinationPlace: ("%1$@ · %2$@の先頭 · %3$@", "%1$@ · top of %2$@ · %3$@"),
     .taskPaletteDestinationNoWorkspace: ("workspace なし", "no workspace"),
     .taskPaletteMatchingTasks: ("一致するタスク", "Matching tasks"),
-    .taskPaletteActionAddTodo: ("%@ を未着手に足す", "Add %@ to To do"),
+    .taskPaletteActionAddTodo: ("%1$@ を未着手に足す", "Add %1$@ to To do"),
     .taskPaletteHintToMatches: ("一致する項目へ", "Matches"),
-    .taskPaletteAskTitle: ("%@ を秘書に頼む", "Ask the secretary about %@"),
+    .taskPaletteAskTitle: ("%1$@ を秘書に頼む", "Ask the secretary about %1$@"),
     .taskPaletteAskOptional: ("補足は無くてもよい", "A note is optional"),
     .taskPaletteAskScope: (
       "秘書はこのタスクを対象に動く。新しいタスクは作らない", "The secretary works on this task and won’t create a new one"
