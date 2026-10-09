@@ -36,7 +36,7 @@ final class WorktreePaletteOccupancyWiringTests: OrbeTestCase {
     let viewed = try XCTUnwrap(wc.current.tabs.first)
     viewed.surface.currentPwd = "/tmp/wt/a/reported"
     setReportedState(viewed, "working")
-    XCTAssertFalse(try XCTUnwrap(wc.workspaces.last).activated, "前提: 背景 workspace は休眠")
+    XCTAssertFalse(try XCTUnwrap(wc.regularWorkspaces.last).activated, "前提: 背景 workspace は休眠")
 
     wc.showWorktreePalette()
     defer { wc.dismissPalette() }
