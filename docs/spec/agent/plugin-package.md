@@ -33,7 +33,7 @@ hook からシムを呼ぶ経路も CLI ごとに違う: claude / codex はそ�
 プラグインは状態追跡の hook に加えて MCP サーバーを 1 つ持つ。**サーバー名はプラグイン名と同じ**（[channel](../platform/channel.md)）——codex はサーバー名がプラグインをまたいで共通なので、dev と release で分けないと片方しか起動しない。宣言は hooks と同じく各 CLI のマニフェストが自分の定義だけを指し、どれも `mcp/orbe-mcp.sh`（MCP シム）を起動する。
 
 - **claude**: `.claude-plugin/plugin.json` の `mcpServers`。プラグインルート変数を展開した絶対パスで呼ぶ（相対パスでは起動に失敗する）。
-- **codex**: `.codex-plugin/plugin.json` の `mcpServers`。cwd をプラグインルートにした相対パスで呼ぶ。codex は MCP サーバーへ親の環境を渡さないので、シムとブリッジが読む変数（`ORBE_MCP_BIN`・`ORBE_BUNDLE_ID`・`ORBE_TAB`・`ORBE_SOCK`）を `env_vars` で名指しして通す。
+- **codex**: `.codex-plugin/plugin.json` の `mcpServers`。cwd をプラグインルートにした相対パスで呼ぶ。codex は MCP サーバーへ親の環境のうち既定の数個（`HOME`・`PATH` など）と名指しされた変数しか渡さないので、シムとブリッジが読む変数（`ORBE_MCP_BIN`・`ORBE_BUNDLE_ID`・`ORBE_TAB`・`ORBE_SOCK`）を `env_vars` で名指しして通す。
 - **agy**: プラグインのルートの `mcp_config.json`。相対パスで呼ぶ。
 
 プラグインのルートに `.mcp.json`（claude も codex も既定の置き場として読む）は置かない。
