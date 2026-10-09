@@ -1,12 +1,14 @@
 import Foundation
 
 /// Orbe runtime 契約の環境変数。タブが materialize 開始時に surface の起動 env へ注入し、
-/// 同梱 CLI（bare `orb`）・エージェント hook（シム → orbe-report）・zsh 補完が読む。
+/// 同梱 CLI（bare `orb`）・エージェント hook（シム → orbe-report）・MCP シム（→ orbe-mcp）・zsh 補完が読む。
 /// hook はこれらが無ければ no-op。
 /// - ORBE_TAB: 報告元のタブ。
 /// - ORBE_BUNDLE_ID: このインスタンスのチャネル identity。シムが他チャネルの plugin から来た
 ///   呼び出しを落とすのに使う（`.app` でなくても常に名乗る。同梱 binary が無ければシムが先に no-op）。
-/// - ORBE_REPORT_BIN: 同梱 binary の絶対パス（`swift run` では未解決→未設定＝no-op）。
+/// - ORBE_REPORT_BIN: 同梱の状態報告 binary（`orbe-report`）の絶対パス（`swift run` では未解決→未設定＝no-op）。
+/// - ORBE_MCP_BIN: 同梱 MCP ブリッジ（`orbe-mcp`）の絶対パス。プラグインの MCP シムが exec する
+///   （`swift run` では未設定＝シムは空サーバーになる）。
 /// - ORBE_SOCK: このインスタンスの制御 socket。
 /// - PATH: 同梱 CLI（bare `orb`）の bin/ を前置。衝突は改名で解消済みゆえ順序非依存で解決する。
 ///
@@ -18,6 +20,7 @@ enum OrbeRuntimeEnv {
     case tab = "ORBE_TAB"
     case bundleId = "ORBE_BUNDLE_ID"
     case reportBin = "ORBE_REPORT_BIN"
+    case mcpBin = "ORBE_MCP_BIN"
     case sock = "ORBE_SOCK"
   }
 
@@ -25,9 +28,15 @@ enum OrbeRuntimeEnv {
 
   /// `.app` 同梱の状態報告 binary（`<bundle>/Contents/Resources/bin/orbe-report`）の絶対パス。
   /// `swift run`（バンドル無し）では nil → env 未注入で hook が no-op。
-  static var reportBinaryPath: String? {
+  static var reportBinaryPath: String? { bundledExecutable("orbe-report") }
+
+  /// `.app` 同梱の MCP ブリッジ（`<bundle>/Contents/Resources/bin/orbe-mcp`）の絶対パス。
+  /// `swift run`（バンドル無し）では nil → env 未注入でシムが空サーバーになる。
+  static var mcpBinaryPath: String? { bundledExecutable("orbe-mcp") }
+
+  private static func bundledExecutable(_ name: String) -> String? {
     guard let resources = BundledResources.root else { return nil }
-    let path = resources.appendingPathComponent("bin/orbe-report").path
+    let path = resources.appendingPathComponent("bin/\(name)").path
     return FileManager.default.isExecutableFile(atPath: path) ? path : nil
   }
 
@@ -57,10 +66,11 @@ enum OrbeRuntimeEnv {
     for (marker, value) in markers(tabId: tabId) { env[marker.rawValue] = value }
   }
 
-  /// タブ `tabId` へ注入する印。値の無いもの（`swift run` の報告 binary 等）は含めない。
+  /// タブ `tabId` へ注入する印。値の無いもの（`swift run` の同梱 binary 等）は含めない。
   private static func markers(tabId: Int) -> [Marker: String] {
     var markers: [Marker: String] = [.tab: String(tabId), .bundleId: StateDir.bundleId]
     if let bin = reportBinaryPath { markers[.reportBin] = bin }
+    if let bin = mcpBinaryPath { markers[.mcpBin] = bin }
     let sock = ControlServer.shared.socketPath
     if !sock.isEmpty { markers[.sock] = sock }
     return markers

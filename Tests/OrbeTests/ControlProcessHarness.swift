@@ -48,7 +48,7 @@ final class ControlProcess {
   /// `.app` 同梱物のレイアウトを `BundledResources.root`（＝ハーネスが配る `caseDir/resources/`）へ組む。
   ///
   /// **`WindowController()` より前に呼ぶ**——`OrbeRuntimeEnv.inject` はタブの materialize 開始の時点で
-  /// `reportBinaryPath` / `bundledBinDir` を読むため、後から置いてもタブに注入済みの env には効かない。
+  /// `reportBinaryPath` / `mcpBinaryPath` / `bundledBinDir` を読むため、後から置いてもタブに注入済みの env には効かない。
   /// 置くのは `bin/` だけで、`completion-engine.js` も `zsh/` も置かない（不在時の graceful degradation を
   /// 測る既存テストの前提を壊さない）。root は caseDir 配下なので、組んだ中身はテスト終了の削除に乗る。
   @discardableResult
@@ -59,6 +59,7 @@ final class ControlProcess {
     // `.app` 同梱時の改名（orbe-cli → orb）をここでも再現する。bare `orb` の PATH 解決はこの名前に依る。
     try stage(executable("orbe-cli"), as: bin.appendingPathComponent("orb"))
     try stage(executable("orbe-report"), as: bin.appendingPathComponent("orbe-report"))
+    try stage(executable("orbe-mcp"), as: bin.appendingPathComponent("orbe-mcp"))
     return resources
   }
 
