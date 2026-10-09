@@ -21,7 +21,7 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["commit", "-qm", "four lines"]).isSuccess)
   }
 
-  private func tab() -> (TerminalTab, NSWindow) {
+  func tab() -> (TerminalTab, NSWindow) {
     let tab = TerminalTab(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900)
     tab.view.editor.configure(
@@ -32,16 +32,16 @@ final class EditorDiffTests: OrbeTestCase {
     return (tab, window)
   }
 
-  private func id(_ path: String, _ kind: EditorDiff.Kind) -> EditorDiff.Key {
+  func id(_ path: String, _ kind: EditorDiff.Kind) -> EditorDiff.Key {
     EditorDiff.Key(root: repo.root, path: path, kind: kind)
   }
 
-  private func engine(_ surface: (any TextSurface)?) throws -> MetalTextSurface {
+  func engine(_ surface: (any TextSurface)?) throws -> MetalTextSurface {
     try XCTUnwrap(surface as? MetalTextSurface)
   }
 
   /// 見せている diff の並びが `ready` を満たすまで待つ。
-  private func waitRows(
+  func waitRows(
     _ diff: EditorDiff, _ message: String, file: StaticString = #filePath, line: UInt = #line,
     _ ready: (RowLayout) -> Bool
   ) {
@@ -52,7 +52,7 @@ final class EditorDiffTests: OrbeTestCase {
       }, message, file: file, line: line)
   }
 
-  private func removedLines(_ rows: RowLayout) -> [Int] {
+  func removedLines(_ rows: RowLayout) -> [Int] {
     rows.contents.flatMap { content -> [Int] in
       guard case .lines(let lines) = content else { return [] }
       return lines.compactMap(\.line)
@@ -108,62 +108,6 @@ final class EditorDiffTests: OrbeTestCase {
     pumpMain(until: { window.firstResponder === diff.newSurface?.responder }, "焦点は面へ")
   }
 
-  /// diff を開いたまま git add すれば作業ツリー diff は変化なしになり、外のツールが書けば追従する。並びの差し込みは古い側の
-  /// 本文とずれない（底と並びを一緒に入れ替える）。
-  func testAWorkingTreeDiffFollowsTheIndexAndExternalWrites() throws {
-    try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
-    let (tab, _) = tab()
-    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
-    waitRows(diff, "変更が出る") { !$0.isEmpty }
-    XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
-    waitRows(diff, "ステージすれば作業ツリーの変更は無い") { $0.isEmpty && $0.spans.allSatisfy { $0.style == nil } }
-    try repo.write("a.txt", "one\nTWO\nthree\n")
-    waitRows(diff, "外の書き換えで消えた行が削除行になる") { self.removedLines($0) == [3] }
-    let old = try XCTUnwrap(diff.old)
-    XCTAssertEqual(old.text.lineCount, 5, "古い側はステージした本文")
-  }
-
-  /// ファイルタブで編集してから diff タブへ戻ると、戻ったその時から削除行は編集で動いた本文の行に付いていて（離れていた
-  /// 間の古い並びを置かない）、編集は diff に出る。
-  func testEditsInTheFileTabShowInTheDiffOnComingBack() throws {
-    try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
-    let (tab, _) = tab()
-    let document = try tab.editor.open(repo.url("a.txt"), as: .pinned)
-    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
-    waitRows(diff, "変更が出る") { $0.boundaries == [1] }
-    tab.editor.activate(document)
-    let responder = document.surface.responder
-    responder.perform(#selector(NSResponder.moveToBeginningOfDocument(_:)), with: nil)
-    responder.perform(Selector(("insertText:")), with: "zero\n")
-    XCTAssertEqual(document.text.lineCount, 6, "前提: 先頭に 1 行足した")
-
-    tab.editor.activate(.diff(id("a.txt", .workingTree)))
-    let rows = try engine(diff.newSurface).rows
-    XCTAssertEqual(rows.boundaries, [2], "削除行は 1 行下がった TWO の前")
-    XCTAssertEqual(removedLines(rows), [1])
-    waitRows(diff, "足した行が追加に出る") { $0.style(ofLine: 0) == DiffStyle.added }
-  }
-
-  /// index の版が変わって底を置き直し、その行差分が届く前に外の書き換えで本文が縮んでも、並びは今の本文の外を指さない。
-  /// 届けば新しい底との差分に置き直す。
-  func testTheRowsStayOnTheTextWhenItShrinksBeforeTheNewBaseArrives() throws {
-    try repo.write("a.txt", "one\nTWO\nthree\nfour\nfive\nsix\nseven\n")
-    let (tab, _) = tab()
-    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
-    waitRows(diff, "変更が出る") { !$0.isEmpty }
-    let document = try XCTUnwrap(diff.document)
-    document.baseline = "zero\n"
-    try repo.write("a.txt", "one\n")
-    document.reconcileWithDisk()
-    XCTAssertEqual(document.text.lineCount, 2, "前提: 結果が届く前に本文が縮んだ")
-    let rows = try engine(diff.newSurface).rows
-    XCTAssertTrue(rows.boundaries.allSatisfy { $0 <= 1 }, "差し込みは今の本文の中")
-
-    XCTAssertTrue(document.waitUntilCaughtUp())
-    XCTAssertEqual(diff.old?.text.contiguousUnits().count, "zero\n".utf16.count, "古い側は新しい底")
-    XCTAssertEqual(removedLines(try engine(diff.newSurface).rows), [0])
-  }
-
   /// 未追跡のファイルは全部の行が追加、作業ツリーで消したファイルは全部の行が削除になる。
   func testOneSidedWorkingTreeDiffs() throws {
     try repo.write("new.txt", "x\ny\n")
@@ -203,21 +147,6 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertFalse(repo.git(["merge", "other"]).isSuccess, "前提: 競合する")
     let conflicted = try tab.editor.openDiff(id("a.txt", .staged), as: .pinned)
     pumpMain(until: { conflicted.content == .unavailable(.conflicted) }, "競合中")
-  }
-
-  /// 見せている diff が表示できなくなれば（index の版がバイナリになった）、面は本体から外れ、理由の一文が見える。
-  func testADiffThatBecomesUnavailableShowsTheReasonInsteadOfTheSurface() throws {
-    try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
-    let (tab, _) = tab()
-    let pane = tab.view.editor
-    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
-    waitRows(diff, "変更が出る") { !$0.isEmpty }
-    let surface = try engine(diff.newSurface)
-    try Data([0xFF, 0xFE, 0x00, 0x01]).write(to: repo.url("a.txt"))
-    XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
-    pumpMain(until: { diff.content == .unavailable(.notText) }, "表示できなくなる")
-    XCTAssertFalse(pane.emptyHost.isHidden)
-    XCTAssertNil(surface.view.superview, "面は本体から外れる")
   }
 
   // MARK: - ステージ済み
