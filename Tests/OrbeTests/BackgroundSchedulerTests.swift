@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 @testable import Orbe
@@ -108,6 +109,16 @@ final class BackgroundSchedulerTests: OrbeTestCase {
     now = start.addingTimeInterval(120)
 
     NotificationCenter.default.post(name: .NSSystemClockDidChange, object: nil)
+
+    XCTAssertEqual(runner.calls.count, 1)
+  }
+
+  /// スリープ明けも、予約の発火を待たずに数え直し、眠っている間に過ぎた予定を走らせる。
+  func testWakeRecounts() throws {
+    try register()
+    now = start.addingTimeInterval(120)
+
+    NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.didWakeNotification, object: nil)
 
     XCTAssertEqual(runner.calls.count, 1)
   }
