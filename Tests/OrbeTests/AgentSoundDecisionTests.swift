@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 「鳴らすか・何を鳴らすか」の判断（純関数）。状態 × 選択 × イベント × 同一化トグル ×
+/// 「鳴らすか・何を鳴らすか」の判断（純関数）。選択 × イベント × 同一化トグル ×
 /// カスタム音源の有無 × オンオフ × 音量の全組み合わせを固定する。
 final class AgentSoundDecisionTests: OrbeTestCase {
 
@@ -26,18 +26,29 @@ final class AgentSoundDecisionTests: OrbeTestCase {
     return EffectiveSettings(layer)
   }
 
-  /// waiting / done だけが鳴る。working / idle / clear・未知の状態は鳴らさない。
-  func testOnlyWaitingAndDoneSound() {
-    XCTAssertEqual(AgentSoundDecision.plan(state: "done", settings: settings())?.event, .done)
-    XCTAssertEqual(AgentSoundDecision.plan(state: "waiting", settings: settings())?.event, .waiting)
-    for state in ["working", "idle", "clear", "dormant", ""] {
-      XCTAssertNil(AgentSoundDecision.plan(state: state, settings: settings()), state)
+  /// 鳴らす音は知らせの中身から導く。agent は waiting / done だけが鳴り（working / idle / clear・未知の状態は
+  /// 鳴らさない）、待ちが解けたタスクの知らせは完了の音。
+  func testSoundEventFollowsTheNotice() {
+    func agent(_ state: String) -> WindowController.ChromeNotification {
+      let row = AttentionRow(
+        tabId: 1, workspaceName: "ws", tabTitle: "tab", state: state, message: nil,
+        stateChangedAt: Date())
+      return .init(notice: .agent(row), settings: settings())
     }
+    XCTAssertEqual(agent("done").soundEvent, .done)
+    XCTAssertEqual(agent("waiting").soundEvent, .waiting)
+    for state in ["working", "idle", "clear", "dormant", ""] {
+      XCTAssertNil(agent(state).soundEvent, state)
+    }
+    let task = TaskNotice(taskId: 1, workspaceName: nil, text: "#214 レビューが付いた")
+    XCTAssertEqual(
+      WindowController.ChromeNotification(notice: .task(task), settings: settings()).soundEvent,
+      .done)
   }
 
   /// 未設定は既定（案は `NotificationSound.default`・音量 90・オン）で鳴る。
   func testDefaultsSound() {
-    let plan = AgentSoundDecision.plan(state: "done", settings: settings())
+    let plan = AgentSoundDecision.plan(event: .done, settings: settings())
     XCTAssertEqual(
       plan,
       AgentSoundDecision.Plan(source: .synth(NotificationSound.default), event: .done, volume: 90))
@@ -45,8 +56,9 @@ final class AgentSoundDecisionTests: OrbeTestCase {
 
   /// 通知音オフは、状態にかかわらず鳴らさない。
   func testDisabledNeverSounds() {
-    for state in ["done", "waiting"] {
-      XCTAssertNil(AgentSoundDecision.plan(state: state, settings: settings(enabled: false)), state)
+    for event in AgentSoundEvent.allCases {
+      XCTAssertNil(
+        AgentSoundDecision.plan(event: event, settings: settings(enabled: false)), "\(event)")
     }
   }
 
@@ -54,14 +66,14 @@ final class AgentSoundDecisionTests: OrbeTestCase {
   func testVolumeNeverSuppressesSound() {
     for volume in [5, 100] {
       XCTAssertEqual(
-        AgentSoundDecision.plan(state: "done", settings: settings(volume: volume))?.volume, volume)
+        AgentSoundDecision.plan(event: .done, settings: settings(volume: volume))?.volume, volume)
     }
   }
 
   /// 設定した案と音量がそのまま計画に載る。
   func testPlanCarriesConfiguredFamilyAndVolume() {
     let plan = AgentSoundDecision.plan(
-      state: "waiting", settings: settings(sound: .preset(.steel), volume: 35, enabled: true))
+      event: .waiting, settings: settings(sound: .preset(.steel), volume: 35, enabled: true))
     XCTAssertEqual(
       plan, AgentSoundDecision.Plan(source: .synth(.steel), event: .waiting, volume: 35))
   }
@@ -78,7 +90,7 @@ final class AgentSoundDecisionTests: OrbeTestCase {
         for hasDone in [true, false] {
           for hasWaiting in [true, false] {
             let plan = AgentSoundDecision.plan(
-              state: event.rawValue,
+              event: event,
               settings: settings(
                 sound: .custom, customDone: hasDone ? done : nil,
                 customWaiting: hasWaiting ? waiting : nil, waitingSameAsDone: sameAsDone))
@@ -101,7 +113,7 @@ final class AgentSoundDecisionTests: OrbeTestCase {
   /// 紋章の **waiting** 音で鳴る（「done を代わりに鳴らす」ではない）。
   func testFallbackAlwaysStaysOnTheSameEvent() {
     let plan = AgentSoundDecision.plan(
-      state: "waiting",
+      event: .waiting,
       settings: settings(sound: .custom, customWaiting: source("w.wav"), waitingSameAsDone: true))
     XCTAssertEqual(plan?.source, .synth(NotificationSound.default))
     XCTAssertEqual(plan?.event, .waiting, "落ちても event は waiting のまま")
@@ -110,7 +122,7 @@ final class AgentSoundDecisionTests: OrbeTestCase {
   /// 同一化トグルの既定はオン（waiting は done の音源を使う）。
   func testWaitingSameAsDoneDefaultsOn() {
     let plan = AgentSoundDecision.plan(
-      state: "waiting",
+      event: .waiting,
       settings: settings(
         sound: .custom, customDone: source("done.wav"), customWaiting: source("waiting.wav")))
     XCTAssertEqual(plan?.source, .imported(file: "done.wav"), "既定オンなので done の音源")
@@ -118,8 +130,8 @@ final class AgentSoundDecisionTests: OrbeTestCase {
 
   /// カスタム選択でも「鳴らない」の担体はオン/オフだけ（未設定でも鳴る・オフなら鳴らない）。
   func testCustomStillObeysTheOnOffSwitch() {
-    XCTAssertNotNil(AgentSoundDecision.plan(state: "done", settings: settings(sound: .custom)))
+    XCTAssertNotNil(AgentSoundDecision.plan(event: .done, settings: settings(sound: .custom)))
     XCTAssertNil(
-      AgentSoundDecision.plan(state: "done", settings: settings(sound: .custom, enabled: false)))
+      AgentSoundDecision.plan(event: .done, settings: settings(sound: .custom, enabled: false)))
   }
 }

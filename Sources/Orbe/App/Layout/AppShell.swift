@@ -15,6 +15,19 @@ import SwiftUI
     case none, languageSelect, workspacePalette, workspaceCreate, agentPalette, worktreePalette,
       taskPalette, settingsPalette, onboarding, updateChanges, attentionPalette,
       closedAgentsPalette, help
+
+    /// 外からの入口（メニューバーのピル・ドロップダウン・⌘⌘）が差し替えてはならない画面。言語選択・
+    /// オンボーディング・更新内容は、応えるまで前面に居続ける真のモーダル。ピルやドロップダウンの
+    /// クリックはキー操作と違い、その画面が焦点を握っていても届くので、入口は必ずこれを読む。
+    var isModal: Bool {
+      switch self {
+      case .languageSelect, .onboarding, .updateChanges:
+        true
+      case .none, .workspacePalette, .workspaceCreate, .agentPalette, .worktreePalette,
+        .taskPalette, .settingsPalette, .attentionPalette, .closedAgentsPalette, .help:
+        false
+      }
+    }
   }
 
   /// 上段 chrome（ネイティブ SwiftUI `StatusRowView` の状態）。

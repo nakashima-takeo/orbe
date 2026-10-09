@@ -54,7 +54,7 @@ final class MenuBarStatusViewTests: OrbeTestCase {
       tabId: 1, workspaceName: workspace, tabTitle: "tab", state: "waiting", message: message,
       stateChangedAt: Date())
     store.apply(rows: [row])
-    store.noteTransient(row, dwell: anyDwell)
+    store.noteTransient(.agent(row), dwell: anyDwell)
     return store
   }
 
@@ -78,12 +78,36 @@ final class MenuBarStatusViewTests: OrbeTestCase {
       tabTitle: "tab", state: "waiting",
       message: String(repeating: "とても長い文言 ", count: 40), stateChangedAt: Date())
     store.apply(rows: [longRow])
-    store.noteTransient(longRow, dwell: anyDwell)
+    store.noteTransient(.agent(longRow), dwell: anyDwell)
     let size = fittingSize(store: store, phase: .open)
     // 上限＝ピル cap ＋ 外側の水平 padding（hair×2）。
     XCTAssertLessThanOrEqual(
       size.width, MenuBarStatusView.transientMaxWidth + Theme.Space.hair * 2)
     XCTAssertLessThanOrEqual(size.height, 22)
+  }
+
+  /// タスクの知らせも同じ幅上限に収まる。workspace の無い長いタイトルでは名前の欄が無いぶん本文が予算を吸い、
+  /// 名前の欄を出す場合より広く出る。
+  func testTaskNoticePillCapsOverallWidthWithoutWorkspace() {
+    let agent = AttentionRow(
+      tabId: 1, workspaceName: "ws", tabTitle: "tab", state: "waiting", message: "q",
+      stateChangedAt: Date())
+    func store(workspace: String?) -> AttentionStore {
+      let store = AttentionStore()
+      store.apply(rows: [agent])
+      store.noteTransient(
+        .task(
+          TaskNotice(
+            taskId: 1, workspaceName: workspace,
+            text: String(repeating: "見積もりの数字を確認する ", count: 20))),
+        dwell: anyDwell)
+      return store
+    }
+    let bare = fittingSize(store: store(workspace: nil), phase: .open)
+    XCTAssertLessThanOrEqual(
+      bare.width, MenuBarStatusView.transientMaxWidth + Theme.Space.hair * 2)
+    XCTAssertLessThanOrEqual(
+      fittingSize(store: store(workspace: "orbe"), phase: .open).width, bare.width)
   }
 
   /// ② 滲み出しピルは**提案幅に依存しない**。intrinsic より十分広い提案を与えても取る幅が
@@ -191,7 +215,7 @@ final class MenuBarStatusViewTests: OrbeTestCase {
   func testWidthGrowsStrictlyWithOpenness() {
     let store = AttentionStore()
     store.apply(rows: [row(state: "waiting"), row(tabId: 2, state: "done")])
-    store.noteTransient(row(state: "waiting", message: longMessage), dwell: anyDwell)
+    store.noteTransient(.agent(row(state: "waiting", message: longMessage)), dwell: anyDwell)
     for closing in [false, true] {
       var previous: CGFloat = 0
       for openness in [0.0, 0.25, 0.5, 0.75, 1.0] {
@@ -216,7 +240,7 @@ final class MenuBarStatusViewTests: OrbeTestCase {
       let store = AttentionStore()
       let rows = (1...count).map { row(tabId: $0, state: "waiting") }
       store.apply(rows: rows)
-      store.noteTransient(row(state: "waiting", message: message), dwell: anyDwell)
+      store.noteTransient(.agent(row(state: "waiting", message: message)), dwell: anyDwell)
       return fittingSize(store: store, phase: phase).width
     }
     for (label, message) in [("短文", shortMessage), ("長文（切り詰めあり）", longMessage)] {
@@ -238,10 +262,10 @@ final class MenuBarStatusViewTests: OrbeTestCase {
     let arriving = row(state: "waiting", message: shortMessage)
     /// 一覧が到来に追いついた store と、まだ追いついていない store。
     let live = AttentionStore()
-    live.noteTransient(arriving, dwell: anyDwell)
+    live.noteTransient(.agent(arriving), dwell: anyDwell)
     live.apply(rows: [arriving])
     let pending = AttentionStore()
-    pending.noteTransient(arriving, dwell: anyDwell)
+    pending.noteTransient(.agent(arriving), dwell: anyDwell)
 
     XCTAssertEqual(live.count, 1)
     XCTAssertEqual(pending.count, 0)
@@ -266,7 +290,8 @@ final class MenuBarStatusViewTests: OrbeTestCase {
     bare.apply(rows: rows)
     let withTransient = AttentionStore()
     withTransient.apply(rows: rows)
-    withTransient.noteTransient(row(state: "waiting", message: longMessage), dwell: anyDwell)
+    withTransient.noteTransient(
+      .agent(row(state: "waiting", message: longMessage)), dwell: anyDwell)
     XCTAssertEqual(
       fittingSize(store: withTransient, phase: .closed).width,
       fittingSize(store: bare, phase: .closed).width, accuracy: 0.5)

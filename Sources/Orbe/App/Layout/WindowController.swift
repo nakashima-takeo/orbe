@@ -63,7 +63,9 @@ final class WindowController: NSObject, NSWindowDelegate {
   // worktree ごとに動いている agent の索引。flushChrome が作り直し、タスク画面と ⌘T が読む。
   let worktreeAgents = WorktreeAgentActivity()
   let agentSessionTabs = AgentSessionTabs()
-  private(set) lazy var waitConditions = WaitConditionWatcher(store: taskStore)
+  private(set) lazy var waitConditions = WaitConditionWatcher(store: taskStore) { [weak self] in
+    self?.notifyWaitResolved(task: $0, $1)
+  }
   // 秘書の係。復元の再開の組み立てが秘書の記録を引くので、復元より前に窓へ繋ぐ（init）。
   private(set) lazy var secretary = Secretary(tasks: taskStore, localization: localization)
   // パレット提示の拡張（WindowController+Palette）が設定パレットの defaultAgent 配線で触るため internal。

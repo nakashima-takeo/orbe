@@ -44,7 +44,7 @@ extension DesignFlowSnapshotTests {
         (
           "arrive",
           {
-            store.noteTransient(arriving, dwell: 22, now: t0)
+            store.noteTransient(.agent(arriving), dwell: 22, now: t0)
             driver.arrived(at: t0)
           }
         ),
@@ -97,7 +97,7 @@ extension DesignFlowSnapshotTests {
         (
           "arrive",
           {
-            store.noteTransient(arriving, dwell: 22, now: t0)  // 到来時の件数は 0
+            store.noteTransient(.agent(arriving), dwell: 22, now: t0)  // 到来時の件数は 0
             driver.arrived(at: t0)
           }
         ),
@@ -144,7 +144,7 @@ extension DesignFlowSnapshotTests {
         (
           "open",
           {
-            store.noteTransient(arriving, dwell: 22, now: t0)
+            store.noteTransient(.agent(arriving), dwell: 22, now: t0)
             store.apply(rows: [arriving])
             driver.arrived(at: t0)
             driver.tick(now: t0.addingTimeInterval(0.84))
@@ -161,6 +161,82 @@ extension DesignFlowSnapshotTests {
         ),
       ])
   }
+
+  /// タスク由来の知らせ（待ちの条件が解けた瞬間）。印が丸に ✓・workspace 名・「#214 レビューが付いた」の
+  /// ピルが agent と同じ開き方で開く。03 は開いた直後の chrome の再投影（一覧の差し替え）で、ピルは取り下げ
+  /// られずに開いたまま滞留する——取り下げなら `MenuBarController` と同じく速い収縮を撃つので、03・04 が
+  /// 閉じかけていれば分岐漏れ。閉じた 06 の件数は agent の 1 件だけで、タスクの知らせは数えない。07〜08 は
+  /// workspace の無いタスク（名前の欄なし・タイトル＋「期限が来た」）。
+  func testMenubarTaskNotice() throws {
+    let t0 = Date()
+    let store = AttentionStore()
+    let driver = MenuBarArrivalDriver()
+    let agent = AttentionRow(
+      tabId: 9301, workspaceName: "api-gateway", tabTitle: "deploy スクリプト整理", state: "waiting",
+      message: "ビルド成果物の掃除方法を選んでください。", stateChangedAt: t0.addingTimeInterval(-45))
+    let reviewed = TaskNotice(taskId: 214, workspaceName: "orbe", text: "#214 レビューが付いた")
+    let bare = TaskNotice(
+      taskId: 215, workspaceName: nil, text: "見積もりの数字を経理に確認する 期限が来た")
+    try flow(
+      "menubar_task_notice", size: NSSize(width: 420, height: 64),
+      render: { menuBarSnapshot(store: store, phase: driver.phase) },
+      steps: [
+        ("quiet", {}),
+        (
+          "arrive",
+          {
+            store.noteTransient(.task(reviewed), dwell: 22, now: t0)
+            driver.arrived(at: t0)
+          }
+        ),
+        ("expand_half", { driver.tick(now: t0.addingTimeInterval(0.42)) }),
+        (
+          "reprojected",
+          {
+            reproject(store, driver, [agent], at: t0.addingTimeInterval(0.5))
+            driver.tick(now: t0.addingTimeInterval(0.84))
+          }
+        ),
+        ("dwell", { driver.tick(now: t0.addingTimeInterval(5)) }),
+        (
+          "collapse_half",
+          {
+            driver.expired(at: t0.addingTimeInterval(22))
+            driver.tick(now: t0.addingTimeInterval(22.3))
+          }
+        ),
+        (
+          "closed",
+          {
+            if driver.tick(now: t0.addingTimeInterval(22.6)) { store.transient = nil }
+          }
+        ),
+        (
+          "bare_arrive",
+          {
+            store.noteTransient(.task(bare), dwell: 22, now: t0.addingTimeInterval(30))
+            driver.arrived(at: t0.addingTimeInterval(30))
+            driver.tick(now: t0.addingTimeInterval(30.42))
+          }
+        ),
+        (
+          "bare_open",
+          {
+            reproject(store, driver, [agent], at: t0.addingTimeInterval(30.5))
+            driver.tick(now: t0.addingTimeInterval(35))
+          }
+        ),
+      ])
+  }
+}
+
+/// chrome の再投影（一覧の差し替え）。`MenuBarController.syncTransient` と同じく、取り下げが決まったら
+/// 速い収縮を撃つ。
+private func reproject(
+  _ store: AttentionStore, _ driver: MenuBarArrivalDriver, _ rows: [AttentionRow], at time: Date
+) {
+  store.apply(rows: rows)
+  if store.transient?.retracted == true, !driver.isCollapsing { driver.dismissed(at: time) }
 }
 
 /// メニューバーアイテムを bar 相当の地へ右寄せで置いたスナップショット用ビュー。
