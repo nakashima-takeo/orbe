@@ -89,8 +89,9 @@ extension GitRepo {
       }
       self.runner.run(["remote"], cwd: self.root, handle: handle) { remotes in
         if let failure = GitWriteFailure.of(remotes) { return completion(.failure(failure)) }
-        let hasOrigin = remotes.stdoutText.split(separator: "\n").contains("origin")
-        completion(.success(hasOrigin ? "origin" : nil))
+        let origin = GitHubRemoteLedger.Resolved.defaultRemote
+        let hasOrigin = remotes.stdoutText.split(separator: "\n").contains { $0 == origin }
+        completion(.success(hasOrigin ? origin : nil))
       }
     }
   }
