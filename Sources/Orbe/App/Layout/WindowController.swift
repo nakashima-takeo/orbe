@@ -117,6 +117,9 @@ final class WindowController: NSObject, NSWindowDelegate {
     hostingView.layoutSubtreeIfNeeded()
     wireChromeCallbacks()
 
+    // 言語が決まっていれば、復元が Orbe の workspace のタブを起こすより前にフォルダを用意する
+    // （無いままだと、そのタブだけ秘書の場所の外で起きる）。初回は言語選択の確定を待つ（showFirstRunFlow）。
+    if AppStatePersistence.load()?.preferredLanguage != nil { prepareOrbeWorkspaceFolder() }
     if let file = WorkspacePersistence.load() {
       restore(from: file)  // activateCurrent 経由で applyActiveWorkspaceConfig（外観＋gui.conf）が走る
     } else {

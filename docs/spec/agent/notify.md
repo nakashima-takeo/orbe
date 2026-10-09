@@ -17,6 +17,7 @@ tab identity は env で運ぶ（tty 経路を要さない）。Orbe は全タ�
 - `ORBE_TAB`（このタブの id）。
 - `ORBE_SOCK`（このインスタンスの socket パス・隔離インスタンスは `ORBE_STATE_DIR` 解決ぶん）。
 - `ORBE_REPORT_BIN`（`.app` 内 `orbe-report` の絶対パス）。`swift run`（バンドル無し）では未解決→未注入で hook は no-op。binary は走っている `.app` 自身のものを指すため、プロトコル skew が起きない。
+- `ORBE_MCP_BIN`（`.app` 内 `orbe-mcp` の絶対パス）。`swift run`（バンドル無し）では未解決→未注入で、プラグインの MCP シムは空サーバーになる（[plugin-package](plugin-package.md)）。
 - `ORBE_BUNDLE_ID`（このインスタンスのチャネル identity）。dev / release のプラグインは別枠として両方 enabled になるため、シムが自チャネル以外の呼び出しを落とすのに使う（[plugin-package](plugin-package.md)）。
 
 これらの印はタブに属する。Orbe 自身は読まないので、別の Orbe のタブから起動されたときは、注入するのと同じ定義の集合を起動時に自分の環境から外す。残すと git の hook・エディタ・裏で回す agent（[background](../platform/background.md)）など全ての子が親のタブを名乗り、親の Orbe のタブの状態として報告してしまう。注入しない変数（`ORBE_STATE_DIR` など）は外さない。

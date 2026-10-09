@@ -26,8 +26,10 @@ final class AgentCatalog {
   static let profiles = [
     AgentProfile(
       command: "claude", resumeFlag: "--resume", reportsIdleOnStart: true,
-      headless: .runs(HeadlessCLI(arguments: ClaudeHeadless.arguments, reply: ClaudeHeadless.reply))
-    ),
+      headless: .runs(
+        HeadlessCLI(
+          arguments: ClaudeHeadless.arguments, environment: ClaudeHeadless.environment,
+          reply: ClaudeHeadless.reply))),
     AgentProfile(
       command: "codex", resumeFlag: "resume", reportsIdleOnStart: false,
       headless: .refuses(.toolsNotAllowListable)),
@@ -117,9 +119,11 @@ enum HeadlessSupport {
   case refuses(HeadlessRefusal)
 }
 
-/// 非対話の 1 回の起こし方。依頼文は標準入力で渡す。`reply` は標準出力の 1 行から最終応答を取り出す（最終応答の行でなければ nil）。
+/// 非対話の 1 回の起こし方。依頼文は標準入力で渡す。`environment` は子の環境に上書きする変数。`reply` は標準出力の 1 行から
+/// 最終応答を取り出す（最終応答の行でなければ nil）。
 struct HeadlessCLI {
   let arguments: (_ model: String, _ tools: [String]) -> [String]
+  let environment: [String: String]
   let reply: (Data) -> BackgroundAgentReply?
 }
 
@@ -148,13 +152,21 @@ enum ClaudeHeadless {
     return args
   }
 
-  /// 出来事の流れのうち、最後の `result` が最終応答。
+  /// どちらの呼び出しでも、利用者の CLAUDE.md と auto memory を読まない。`--setting-sources` は auto memory を止めず、
+  /// 設定を読む呼び出しでは CLAUDE.md も読むため、環境で止める。
+  static let environment = [
+    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
+  ]
+
+  /// 出来事の流れのうち、最後の `result` が最終応答。失敗で終わった回は本文を持たず、理由を `errors` に入れる。
   static func reply(_ line: Data) -> BackgroundAgentReply? {
     guard
       let event = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
       event["type"] as? String == "result"
     else { return nil }
-    return BackgroundAgentReply(
-      text: event["result"] as? String ?? "", isError: event["is_error"] as? Bool ?? false)
+    let text =
+      event["result"] as? String ?? (event["errors"] as? [String] ?? []).joined(separator: "\n")
+    return BackgroundAgentReply(text: text, isError: event["is_error"] as? Bool ?? false)
   }
 }

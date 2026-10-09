@@ -39,14 +39,23 @@ final class ClaudeHeadlessTests: OrbeTestCase {
     XCTAssertTrue(args.contains("--no-session-persistence"))
   }
 
+  /// 利用者の CLAUDE.md と auto memory は、設定を読む呼び出しでも混ぜない（外部の文面を判定する役の判断が揺れる）。
+  func testUserMemoryIsNeverLoaded() {
+    XCTAssertEqual(
+      ClaudeHeadless.environment,
+      ["CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"])
+  }
+
   func testReplyComesFromTheResultEvent() {
     XCTAssertEqual(
       ClaudeHeadless.reply(Data(#"{"is_error":false,"result":"done","type":"result"}"#.utf8)),
       BackgroundAgentReply(text: "done", isError: false))
     XCTAssertEqual(
       ClaudeHeadless.reply(
-        Data(#"{"type":"result","subtype":"error_max_turns","is_error":true}"#.utf8)),
-      BackgroundAgentReply(text: "", isError: true))
+        Data(
+          #"{"type":"result","subtype":"error_during_execution","is_error":true,"errors":["a","b"]}"#
+            .utf8)),
+      BackgroundAgentReply(text: "a\nb", isError: true), "失敗の回は errors を理由として返す")
     XCTAssertNil(ClaudeHeadless.reply(Data(#"{"type":"assistant","result":"x"}"#.utf8)))
     XCTAssertNil(ClaudeHeadless.reply(Data("not json".utf8)))
   }

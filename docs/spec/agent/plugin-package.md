@@ -20,7 +20,12 @@ updated: 2026-10-10
 - **codex**: ルートの `.agents/plugins/marketplace.json` を読み、プラグインは `plugins/<name>/` サブディレクトリに置く規約（`source.path` がルート自身だと取り込まれない）。`plugin marketplace add <dir>` ＋ `plugin add`。**導入時のキャッシュコピーを読む**ので、登録先を書き換えても再導入まで新しい定義は届かない（`plugin list` の PATH 列は登録先を表示するため見分けにくい）。
 - **agy**: marketplace 不要。本体 subdir を直接指す `plugin install`。導入はステージ先へコピーされ、フック実行 cwd はこのステージ済みプラグインルートになる。**ステージ済みコピーを読む**ので、codex と同じく再導入まで新しい定義は届かない。
 
-`install.sh` はプラグインディレクトリとプラグイン名を引数で受け、「渡したディレクトリの中身を、各 CLI が読むものにそろえる」。claude は登録先をライブ参照するので、未導入のときだけ導入する（導入済みなら unchanged）。codex と agy はコピーを読むので毎回入れ直す——codex は marketplace の追加（冪等）のあと毎回 `plugin add` し、キャッシュのコピーを丸ごと置き換える。agy は入れ直すだけだと消したファイルがステージ先に残るので、導入済みなら外してから入れる（外せなければ入れずに error）。導入済み判定は名前の**完全一致**で見る——前方一致だと別チャネルの枠を自分のものと誤認する（claude は `<name>@<name>`、agy は JSON 出力中の引用符込みの名前）。
+`install.sh` はプラグインディレクトリとプラグイン名を引数で受け、「渡したディレクトリの中身を、各 CLI が読むものにそろえる」。claude は登録先をライブ参照するので、未導入のときだけ導入する（導入済みなら unchanged）。codex と agy はコピーを読むので入れ直す。利用者がプラグインを無効にした設定は、どの CLI でも残す。
+
+- codex は marketplace の追加（冪等）のあと `plugin add` し、キャッシュのコピーを丸ごと置き換える。`plugin add` は必ず有効へ戻すので、利用者が無効にしていれば入れ直さない（unchanged）。有効に戻したあとは、次に中身が変わるまで古いコピーのまま。
+- agy は `plugin install` し直す。ステージ先は中身どおりに置き換わり（消したファイルも消える）、有効/無効の設定は残る。
+
+自分の枠かどうか（claude の導入済み・codex の無効）は名前の**完全一致**で見る——前方一致だと別チャネルの枠を自分のものと誤認する（claude は `<name>@<name>`、codex は JSON 出力の plugin ID）。
 
 hook からシムを呼ぶ経路も CLI ごとに違う: claude / codex はそれぞれのプラグインルート env 変数を展開して絶対パスで呼ぶ。agy は変数置換が効かないため相対パスで呼ぶ（cwd がステージ済みプラグインルートである契約に依存）。
 
@@ -33,7 +38,7 @@ hook からシムを呼ぶ経路も CLI ごとに違う: claude / codex はそ�
 プラグインは状態追跡の hook に加えて MCP サーバーを 1 つ持つ。**サーバー名はプラグイン名と同じ**（[channel](../platform/channel.md)）——codex はサーバー名がプラグインをまたいで共通なので、dev と release で分けないと片方しか起動しない。宣言は hooks と同じく各 CLI のマニフェストが自分の定義だけを指し、どれも `mcp/orbe-mcp.sh`（MCP シム）を起動する。
 
 - **claude**: `.claude-plugin/plugin.json` の `mcpServers`。プラグインルート変数を展開した絶対パスで呼ぶ（相対パスでは起動に失敗する）。
-- **codex**: `.codex-plugin/plugin.json` の `mcpServers`。cwd をプラグインルートにした相対パスで呼ぶ。codex は MCP サーバーへ親の環境を渡さないので、シムとブリッジが読む変数（`ORBE_MCP_BIN`・`ORBE_BUNDLE_ID`・`ORBE_TAB`・`ORBE_SOCK`）を `env_vars` で名指しして通す。
+- **codex**: `.codex-plugin/plugin.json` の `mcpServers`。cwd をプラグインルートにした相対パスで呼ぶ。codex は MCP サーバーへ親の環境のうち既定の数個（`HOME`・`PATH` など）と名指しされた変数しか渡さないので、シムとブリッジが読む変数（`ORBE_MCP_BIN`・`ORBE_BUNDLE_ID`・`ORBE_TAB`・`ORBE_SOCK`）を `env_vars` で名指しして通す。
 - **agy**: プラグインのルートの `mcp_config.json`。相対パスで呼ぶ。
 
 プラグインのルートに `.mcp.json`（claude も codex も既定の置き場として読む）は置かない。

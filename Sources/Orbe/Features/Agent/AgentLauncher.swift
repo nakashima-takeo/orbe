@@ -134,7 +134,7 @@ final class AgentLauncher {
       })
   }
 
-  /// 初回起動オンボーディングを出す。検出 CLI を見せてデフォルトを選ばせ、状態追跡
+  /// 初回起動オンボーディングを出す。検出 CLI を見せてデフォルトを選ばせ、エージェント
   /// プラグインを per-CLI 進捗付きで導入する。`.app` 同梱が無い（`swift run` 等）か
   /// 既に導入し切っている（フラグ）なら何もしない。
   func showOnboardingIfNeeded() {

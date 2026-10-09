@@ -21,12 +21,13 @@ final class BackgroundRunsTests: OrbeTestCase {
     return BackgroundRuns(slots: [.agent: agents, .command: commands]) { path }
   }
 
-  /// 偽の claude を置く。受けた引数（NUL 区切り）と標準入力を隣へ書き、`body` を実行する。
+  /// 偽の claude を置く。受けた引数（NUL 区切り）・環境・標準入力を隣へ書き、`body` を実行する。
   private func placeClaude(_ body: String) throws {
     let script = """
       #!/bin/sh
       dir=$(dirname "$0")
       for a in "$@"; do printf '%s\\0' "$a"; done > "$dir/args"
+      env > "$dir/env"
       cat > "$dir/stdin"
       \(body)
       """
@@ -216,6 +217,11 @@ final class BackgroundRunsTests: OrbeTestCase {
     XCTAssertEqual(reply(result), BackgroundAgentReply(text: #"{"ok":true}"#, isError: false))
     XCTAssertEqual(
       try receivedArguments(), ClaudeHeadless.arguments(model: "haiku", tools: ["Read"]))
+    let env = try String(contentsOf: bin.appendingPathComponent("env"), encoding: .utf8)
+      .split(separator: "\n").map(String.init)
+    for (key, value) in ClaudeHeadless.environment {
+      XCTAssertTrue(env.contains("\(key)=\(value)"), "子の環境に \(key)=\(value)")
+    }
     XCTAssertEqual(
       try String(contentsOf: bin.appendingPathComponent("stdin"), encoding: .utf8), "判定して")
     XCTAssertTrue(

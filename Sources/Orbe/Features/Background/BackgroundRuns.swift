@@ -256,8 +256,9 @@ private struct Prepared {
     let commandLine = ([executable] + arguments).map(shellQuoted).joined(separator: " ")
     let box = ReplyBox()
     let spec = BackgroundProcess.Spec(
-      executable: executable, arguments: arguments, environment: env,
-      directory: NSHomeDirectory(), stdin: Data(call.prompt.utf8), elapsedLimit: limits.elapsed,
+      executable: executable, arguments: arguments,
+      environment: env.merging(cli.environment) { $1 }, directory: NSHomeDirectory(),
+      stdin: Data(call.prompt.utf8), elapsedLimit: limits.elapsed,
       idleLimit: limits.idle,
       stdout: .lines(maxLength: BackgroundRuns.eventLineLimit) { line in
         guard let reply = cli.reply(line) else { return true }

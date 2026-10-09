@@ -68,8 +68,8 @@ enum L10n {
     .onboardingBegin: ("始める", "Get started"),
     .onboardingDetecting: ("CLI を検出中…", "Detecting CLIs…"),
     .onboardingIntro: (
-      "状態追跡プラグインを各 CLI に導入して始めます",
-      "We'll install the status-tracking plugin into each CLI to begin"
+      "エージェントプラグイン（状態の通知と、Orbe を操作する MCP サーバー）を各 CLI に導入して始めます",
+      "We'll install the agent plugin (status hooks and an MCP server that controls Orbe) into each CLI to begin"
     ),
     .onboardingWelcome: ("Orbe へようこそ", "Welcome to Orbe"),
     .onboardingInstalling: ("プラグインを導入中 · %lld/%lld 完了", "Installing plugins · %lld/%lld done"),

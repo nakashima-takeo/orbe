@@ -201,7 +201,7 @@ final class WindowControllerControlTests: OrbeTestCase {
       return XCTFail("最後の通常 workspace の削除は failure")
     }
     XCTAssertEqual(err.code, -32000)
-    XCTAssertEqual(err.message, "cannot remove last workspace")
+    XCTAssertEqual(err.message, "cannot remove the last regular workspace")
     XCTAssertEqual(wc.regularWorkspaces.map(\.name), ["solo"])
   }
 
