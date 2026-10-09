@@ -123,6 +123,27 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertEqual(old.text.lineCount, 5, "古い側はステージした本文")
   }
 
+  /// ファイルタブで編集してから diff タブへ戻ると、戻ったその時から削除行は編集で動いた本文の行に付いていて（離れていた
+  /// 間の古い並びを置かない）、編集は diff に出る。
+  func testEditsInTheFileTabShowInTheDiffOnComingBack() throws {
+    try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
+    let (tab, _) = tab()
+    let document = try tab.editor.open(repo.url("a.txt"), as: .pinned)
+    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    waitRows(diff, "変更が出る") { $0.boundaries == [1] }
+    tab.editor.activate(document)
+    let responder = document.surface.responder
+    responder.perform(#selector(NSResponder.moveToBeginningOfDocument(_:)), with: nil)
+    responder.perform(Selector(("insertText:")), with: "zero\n")
+    XCTAssertEqual(document.text.lineCount, 6, "前提: 先頭に 1 行足した")
+
+    tab.editor.activate(.diff(id("a.txt", .workingTree)))
+    let rows = try engine(diff.newSurface).rows
+    XCTAssertEqual(rows.boundaries, [2], "削除行は 1 行下がった TWO の前")
+    XCTAssertEqual(removedLines(rows), [1])
+    waitRows(diff, "足した行が追加に出る") { $0.style(ofLine: 0) == DiffStyle.added }
+  }
+
   /// 未追跡のファイルは全部の行が追加、作業ツリーで消したファイルは全部の行が削除になる。
   func testOneSidedWorkingTreeDiffs() throws {
     try repo.write("new.txt", "x\ny\n")
@@ -162,6 +183,23 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertFalse(repo.git(["merge", "other"]).isSuccess, "前提: 競合する")
     let conflicted = try tab.editor.openDiff(id("a.txt", .staged), as: .pinned)
     pumpMain(until: { conflicted.content == .unavailable(.conflicted) }, "競合中")
+  }
+
+  /// 見せている diff が表示できなくなれば（index の版がバイナリになった）、面は本体から外れ、理由の一文が見える。
+  func testADiffThatBecomesUnavailableShowsTheReasonInsteadOfTheSurface() throws {
+    try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
+    let (tab, _) = tab()
+    let pane = tab.view.editor
+    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    waitRows(diff, "変更が出る") { !$0.isEmpty }
+    let surface = try engine(diff.newSurface)
+    try Data([0xFF, 0xFE, 0x00, 0x01]).write(to: repo.url("a.txt"))
+    XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
+    pumpMain(until: { diff.content == .unavailable(.notText) }, "表示できなくなる")
+    XCTAssertFalse(pane.emptyHost.isHidden)
+    XCTExpectFailure("ready から表示できないへ移っても、面の view を本体から外さない（理由の一文を面が覆う）") {
+      XCTAssertNil(surface.view.superview, "面は本体から外れる")
+    }
   }
 
   // MARK: - ステージ済み
