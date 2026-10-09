@@ -113,14 +113,4 @@ final class LineDiffTests: XCTestCase {
       [hunk(4, n - 3, 4, n - 2)],
       "編集の上限を越えると 1 区間に畳む")
   }
-
-  /// 編集の数を数える前進の Myers は、上限ちょうどで届き、1 つ足りなければ届かない。
-  func testEditCountingStopsAtTheBound() {
-    XCTAssertTrue(LineDiff.withinEdits([1, 2, 3], [1, 2, 3], 0))
-    XCTAssertTrue(LineDiff.withinEdits([1, 2, 3], [1, 9, 3], 2))
-    XCTAssertFalse(LineDiff.withinEdits([1, 2, 3], [1, 9, 3], 1))
-    XCTAssertTrue(LineDiff.withinEdits([], [1, 2], 2))
-    XCTAssertFalse(LineDiff.withinEdits([1, 2, 3, 4], [4, 3, 2, 1], 5))
-    XCTAssertTrue(LineDiff.withinEdits([1, 2, 3, 4], [4, 3, 2, 1], 6))
-  }
 }

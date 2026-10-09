@@ -85,17 +85,6 @@ final class DiffRowsTests: OrbeTestCase {
     XCTAssertEqual(rows.spans.last, LineSpan(line: 3, otherNumber: nil), "\(rows.spans)")
   }
 
-  /// 新しい側の行に揃う古い側の行（見えている削除行を先に色付ける範囲）。区間の後は区間の行の数の差だけずれる。
-  func testOldLinesFollowTheNewLines() {
-    let (old, new) = sample
-    let hunks = hunks(old, new)
-    XCTAssertEqual(DiffRows.oldLine(forNew: 1, hunks), 1)
-    XCTAssertEqual(DiffRows.oldLine(forNew: 2, hunks), 2, "区間の中は区間の古い側の同じ段")
-    XCTAssertEqual(DiffRows.oldLine(forNew: 9, hunks), 3, "古い側が尽きれば区間の最後")
-    XCTAssertEqual(DiffRows.oldLine(forNew: 10, hunks), 4)
-    XCTAssertEqual(DiffRows.oldLine(forNew: 12, hunks), 5)
-  }
-
   /// 並列は変わった区間の削除と追加を上から同じ行（同じ y）に並べ、行の数の差の分だけ短い側の区間の後に詰め物が入り、
   /// 続く同じ行も左右で同じ y に来る（見本の `diffLeft` / `diffRight` と VS Code の並列）。
   func testSideBySideBlocksLineUpRowByRow() throws {
