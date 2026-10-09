@@ -95,39 +95,29 @@ final class EditorSession {
   }
 
   /// diff `id` を `mode` の diff タブで開いて焦点にする（既に開いていれば焦点を移すだけ）。作業ツリー diff の新しい側は
-  /// その実体の文書——開いていればそれを使い、無ければ開いて持つ（タブには出ない）。作業ツリーのパスがシンボリック
-  /// リンク・UTF-8 でない・読めないなら、文書を開かず「表示できない」の diff になる。テキスト面を作れなければ
-  /// `EditorSurfaceError.noMetalDevice` で失敗する。
+  /// その実体の文書——開いていればそれを使い、無ければ開いて持つ（タブには出ない）。どの文書を使うかは diff が作業ツリーの
+  /// 姿から決め直す。テキスト面を作れなければ `EditorSurfaceError.noMetalDevice` で失敗する。
   @discardableResult
   func openDiff(_ id: EditorDiff.Key, as mode: OpenMode) throws -> EditorDiff {
     if case .diff(let existing)? = tab(.diff(id)) {
       focus(.diff(id), as: mode)
       return existing
     }
-    let working = try id.kind == .workingTree ? workingSide(of: id) : nil
-    let diff = EditorDiff(id: id, working: working, surfaces: surfaces)
+    let documents = EditorDiff.Documents(
+      open: { [unowned self] url in try document(for: url) },
+      release: { [weak self] document in self?.documentLeft(document) })
+    let diff = try EditorDiff(id: id, documents: documents, surfaces: surfaces)
     place(.diff(diff), as: mode)
     return diff
   }
 
-  /// 作業ツリー diff の新しい側。
-  private func workingSide(of id: EditorDiff.Key) throws -> EditorDiff.WorkingSide {
-    let url = id.url
-    guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else {
-      return .missing
+  /// diff が使わなくなった文書——ほかに使うタブが無ければ閉じる。
+  private func documentLeft(_ document: EditorDocument) {
+    if !tabs.contains(where: { $0.document === document }) {
+      links[ObjectIdentifier(document)] = nil
     }
-    if attributes[.type] as? FileAttributeType == .typeSymbolicLink {
-      return .unavailable(.symlink)
-    }
-    do {
-      return .document(try document(for: url.resolvingSymlinksInPath()))
-    } catch EditorSurfaceError.noMetalDevice {
-      throw EditorSurfaceError.noMetalDevice
-    } catch EditorDocumentError.notUTF8 {
-      return .unavailable(.notText)
-    } catch {
-      return .unavailable(.failed)
-    }
+    settlePreview()
+    onChange?()
   }
 
   /// 開いているタブ `id` へ焦点を移す（`.pinned` なら仮のタブを普通に変える）。

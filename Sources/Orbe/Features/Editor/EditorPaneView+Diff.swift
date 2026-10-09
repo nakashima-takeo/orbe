@@ -87,10 +87,16 @@ extension EditorPaneView {
   }
 
   /// diff の知らせを結ぶ——新しい側の文書の見えている範囲と本文の変化（文書の閉包 1 本を通して配る）と、面の焦点。
+  /// 新しい側の文書は作業ツリーの姿で替わるので、前に結んだ文書の知らせを解いてから今の文書に結ぶ。
   private func observeDiff(_ diff: EditorDiff, _ on: Bool) {
-    if let document = diff.document {
-      document.onViewportChange = on ? { [weak diff] in diff?.viewportDidChange() } : nil
-      document.onTextChange = on ? { [weak diff] _ in diff?.documentTextDidChange() } : nil
+    if let previous = diffDocument, previous !== diff.document || !on {
+      previous.onViewportChange = nil
+      previous.onTextChange = nil
+    }
+    diffDocument = on ? diff.document : nil
+    if on, let document = diff.document {
+      document.onViewportChange = { [weak diff] in diff?.viewportDidChange() }
+      document.onTextChange = { [weak diff] _ in diff?.documentTextDidChange() }
     }
     diff.onFocusChange = on ? { [weak self] _ in self?.focusDidChange() } : nil
   }

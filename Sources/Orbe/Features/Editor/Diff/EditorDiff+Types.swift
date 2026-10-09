@@ -43,6 +43,13 @@ extension EditorDiff {
     case ready
   }
 
+  /// 作業ツリー diff が新しい側の文書を引く口と手放す口（文書は実体ごとに 1 つで、セッションが持ち主を数える）。
+  struct Documents {
+    let open: (URL) throws -> EditorDocument
+    /// diff が使わなくなった文書（ほかに使うタブが無ければ閉じる）。
+    let release: (EditorDocument) -> Void
+  }
+
   /// 作業ツリー diff の新しい側。
   enum WorkingSide {
     /// 開いた文書（ファイルタブと共有する）。

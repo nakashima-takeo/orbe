@@ -39,6 +39,8 @@ final class EditorPaneView: NSView {
   let diffDivider = NSView()
   /// 本体に置いている diff の面の view（左から）。
   var diffViews: [NSView] = []
+  /// 知らせを結んでいる、diff の新しい側の文書。
+  weak var diffDocument: EditorDocument?
   /// ファイル内検索の状態（pane ごと）。バーは開いている間だけある。
   let search = EditorSearch()
   var searchBar: SearchBar?
