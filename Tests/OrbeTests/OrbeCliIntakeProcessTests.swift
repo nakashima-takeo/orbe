@@ -4,11 +4,11 @@ import XCTest
 @testable import Orbe
 
 /// 実 `orb intake`（`orbe-cli`）を子プロセスで起こし、実 `WindowController` の受信を set（標準入力の JSON）→ list →
-/// pause → run → resume → rm のライフサイクルで動かせることを固定する。取得は何も出さないコマンドなので、判定の agent は
-/// 起きない。
+/// pause → run → resume → rm のライフサイクルで動かせること、proposals が受信の棚の提案を出すことを固定する。取得は
+/// 何も出さないコマンドで、提案はストアへ直に確定するので、判定の agent は起きない。
 ///
-/// 壊れると何が起きるか: CLI が組み立てる control メソッド名・params の語（`pause` / `resume` の `paused`、`set` の
-/// `intakeId`）はここでしか測れない。`resume` が `paused:true` を送ると、exit 0 を返しながら止まったままになる。
+/// 壊れると何が起きるか: CLI が組み立てる control メソッド名・params の語（`pause` / `resume` の `paused`、`set` と
+/// `proposals` の `intakeId`）はここでしか測れない。`resume` が `paused:true` を送ると、exit 0 を返しながら止まったままになる。
 ///
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliIntakeProcessTests: OrbeTestCase {
@@ -63,6 +63,36 @@ final class OrbeCliIntakeProcessTests: OrbeTestCase {
 
     XCTAssertEqual(run(control, ["rm", id]), "removed intake \(id)")
     XCTAssertEqual(run(control, ["list"]), "")
+  }
+
+  /// `proposals <id>` はその受信の棚の提案だけを、`proposals` は全部を 1 行 1 提案で出す。
+  func testProposalsListsTheShelfOfTheGivenIntake() throws {
+    let control = try startControlProcess()
+    let store = control.target.intakeStore
+    let first = try XCTUnwrap(Int(run(control, ["set"], stdin: definition)))
+    let second = try XCTUnwrap(Int(run(control, ["set"], stdin: definition)))
+    for (id, item) in [(first, IntakeStoreTests.item("a")), (second, IntakeStoreTests.item("b"))] {
+      let now = Date()
+      store.commit(
+        id,
+        IntakeRun(
+          startedAt: now, endedAt: now, trigger: .now,
+          fetch: IntakeFetchReport(
+            commandLine: "fetch", ending: "exited 0", items: 1, rejected: IntakeRejections()),
+          newItems: 1,
+          judge: IntakeJudgeReport(
+            commandLine: "claude", ending: "exited 0", proposed: 0, resolved: 0,
+            rejected: IntakeRejections()),
+          withdrawn: 0, failure: nil),
+        fetched: [item], judged: [item],
+        decisions: [.propose(itemId: item.id, title: "対応: \(item.id)", due: nil)])
+    }
+    let b = try XCTUnwrap(store.proposals.first { $0.item.id == "b" })
+
+    XCTAssertEqual(
+      run(control, ["proposals", String(second)]),
+      ["\(b.id)", "open", "\(second)", "-", "対応: b", b.item.link].joined(separator: "\t"))
+    XCTAssertEqual(run(control, ["proposals"]).split(separator: "\n").count, 2)
   }
 
   /// 定義の検証は control が持つ。標準入力が JSON オブジェクトでないのは usage エラー（2）、形の欠けは RPC エラー（1）。
