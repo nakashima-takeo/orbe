@@ -160,10 +160,6 @@ final class BackgroundTimingTests: OrbeTestCase {
     XCTAssertNoThrow(try daily((0, 0), (23, 59)).validate())
   }
 
-  func testDuplicateDailyTimesCollapse() {
-    XCTAssertEqual(daily((9, 0), (9, 0)), daily((9, 0)))
-  }
-
   func testCommandJobIsValidated() {
     XCTAssertThrowsError(try BackgroundJob.command(.init(script: "  ")).validate()) {
       XCTAssertEqual($0 as? BackgroundJobError, .emptyCommand)

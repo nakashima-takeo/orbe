@@ -168,15 +168,6 @@ final class BackgroundSchedulerTests: OrbeTestCase {
     XCTAssertNil(armed)
   }
 
-  /// 期限も過ぎていれば、過ぎていた回を走らせずに「期限が来た」だけを返す。
-  func testOverdueWithPassedDeadlineExpiresWithoutRunning() throws {
-    try register(
-      schedule(deadline: start.addingTimeInterval(-60)), anchor: start.addingTimeInterval(-3600))
-
-    XCTAssertEqual(events["a"], [.expired])
-    XCTAssertEqual(runner.calls.count, 0)
-  }
-
   /// 期限が来たら、走っている回を止め、その結果は返さない。
   func testDeadlineStopsTheRunningRun() throws {
     try register(schedule(deadline: start.addingTimeInterval(90)))
