@@ -20,7 +20,7 @@ extension WindowController {
 
   /// 起動時の初回フロー。preferredLanguage 未設定なら言語選択を Onboarding の前段に出し、確定後に
   /// 既存 Onboarding へ進む。言語ゲートは Onboarding ゲート（導入済みフラグ ＋ 同梱プラグイン有無）とは独立。
-  /// Orbe の workspace のフォルダは雛形の言語が要るので、UI 言語が確定した時点で用意する。
+  /// Orbe の workspace のフォルダは雛形の言語が要るので、言語選択の確定時に用意する（選択済みなら init が用意済み）。
   func showFirstRunFlow() {
     if AppStatePersistence.load()?.preferredLanguage == nil {
       showLanguageSelect { [weak self] in
@@ -28,7 +28,6 @@ extension WindowController {
         self?.agentLauncher.showOnboardingIfNeeded()
       }
     } else {
-      prepareOrbeWorkspaceFolder()
       agentLauncher.showOnboardingIfNeeded()  // 初回のみ・オンボーディングで各 CLI へ導入
     }
   }
