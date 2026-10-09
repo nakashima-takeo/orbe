@@ -9,11 +9,14 @@ let taskUsageLines = [
   "orb task list [--workspace <id|current>] [--json]",
   "orb task add <title> [--status <s>] [--priority <p>] [--due <YYYY-MM-DD>]"
     + " [--workspace <id|current> | --no-workspace] [--waiting <reason>] [--description <text>]"
-    + " [--issue <owner/name#N>]... [--pr <owner/name#N>]... [--worktree <path>] [--json]",
+    + " [--issue <owner/name#N>]... [--pr <owner/name#N>]... [--worktree <path>]"
+    + " [--condition <text> --check <command> --every <minutes> --deadline <date-time>] [--json]",
   "orb task set <id> [--title <t>] [--status <s>] [--priority <p>] [--due <date> | --no-due]"
     + " [--workspace <id|current> | --no-workspace] [--waiting <reason> | --no-waiting]"
     + " [--description <text> | --no-description] [--issue <owner/name#N>]... [--pr <owner/name#N>]..."
-    + " [--no-links] [--worktree <path> | --no-worktree] [--json]",
+    + " [--no-links] [--worktree <path> | --no-worktree]"
+    + " [--condition <text> --check <command> --every <minutes> --deadline <date-time>"
+    + " | --no-condition] [--json]",
   "orb task move <id> (--before <id> | --after <id>) [--json]",
   "orb task rm <id> [--json]",
 ]
@@ -47,6 +50,14 @@ let taskUsage = """
   paths are read from your current directory; a subdirectory is lifted to the
   worktree root). The directory must exist. A worktree belongs to only one
   task (detach it from the other task first); --no-worktree detaches it.
+  --condition / --check / --every / --deadline (all four together) give the
+  wait a condition that resolves it: Orbe runs <command> with /bin/sh right
+  away and then every <minutes>, in the directory of the tab you run it in,
+  without asking. Exit code 0 resolves the wait; print what happened as the
+  first line of stdout. <date-time> is ISO 8601 (2026-10-13T09:00 is local
+  time) and must be in the future; the wait resolves then even if the check
+  never succeeds. A condition needs --waiting (or an existing wait).
+  --no-condition removes the condition and keeps the wait.
   list prints one task per line: id, status, priority, due, workspace, title,
   waiting reason, links, worktree (`-` when absent; links read
   issue:owner/name#221,pr:…).
@@ -133,6 +144,8 @@ private func taskSet(_ rest: [String]) -> Never {
   let id = taskIdArg(args, verb: "set")
   guard !params.isEmpty else { usageDie("task set requires at least one field to change") }
   params["taskId"] = id
+  // 呼び出し元タブは、待ちの条件に作業ディレクトリと agent の会話を入れるのに control が使う。
+  if let tab = resolveCurrentTab() { params["callerTabId"] = tab }
   let result = callOrExit("update_task", params)
   if wantJSON { printJSON(result) } else { print("updated task \(id)") }
   exit(0)
@@ -206,6 +219,13 @@ private func takeFields(_ args: inout [String], update: Bool) -> [String: Any] {
     takeOption(&args, "--worktree", requires: "a <path>").map(absolutePath)
   }
   params["worktree"] = update ? takeClearable(&args, "--worktree", take: worktree) : worktree(&args)
+  let condition = takeCondition(&args)
+  if update, takeFlag(&args, "--no-condition") {
+    guard condition == nil else { usageDie("pass only one of --condition / --no-condition") }
+    params["waitingCondition"] = NSNull()
+  } else if let condition {
+    params["waitingCondition"] = condition
+  }
   let links = takeLinks(&args)
   if update, takeFlag(&args, "--no-links") {
     guard links.isEmpty else { usageDie("pass only one of --issue / --pr / --no-links") }
@@ -214,6 +234,24 @@ private func takeFields(_ args: inout [String], update: Bool) -> [String: Any] {
     params["links"] = links
   }
   return params
+}
+
+/// 待ちの条件の 4 つのフラグ。どれも無ければ nil、一部だけなら usage エラー。値の規則（空・間隔の下限・過ぎた期限・
+/// 日時の形）は control が確かめる。
+private func takeCondition(_ args: inout [String]) -> [String: Any]? {
+  let description = takeOption(&args, "--condition", requires: "a <text>")
+  let command = takeOption(&args, "--check", requires: "a <command>")
+  let every = takeOption(&args, "--every", requires: "<minutes>")
+  let deadline = takeOption(&args, "--deadline", requires: "a <date-time>")
+  if description == nil, command == nil, every == nil, deadline == nil { return nil }
+  guard let description, let command, let every, let deadline else {
+    usageDie("pass --condition, --check, --every and --deadline together")
+  }
+  guard let minutes = Int(every) else { usageDie("--every requires <minutes>: \(every)") }
+  return [
+    "description": description, "command": command, "intervalMinutes": minutes,
+    "deadline": deadline,
+  ]
 }
 
 /// `--issue` と `--pr` を、引数に現れた順のまま抜き取る（先頭が主になるので、種別ごとに抜き出して
