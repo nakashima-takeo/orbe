@@ -16,7 +16,7 @@ enum TaskPaletteSamples {
     _ mutate: (inout TaskItem) -> Void = { _ in }
   ) -> TaskItem {
     var item = TaskItem(
-      id: id, title: title, status: status, waiting: nil, priority: .medium, due: nil,
+      id: id, title: title, status: status, wait: nil, priority: .medium, due: nil,
       workspace: nil, description: "", createdAt: DesignSceneFixtures.taskToday, createdBy: nil)
     mutate(&item)
     return item

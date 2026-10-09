@@ -26,7 +26,7 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     _ mutate: (inout TaskItem) -> Void = { _ in }
   ) -> TaskItem {
     var item = TaskItem(
-      id: id, title: title, status: status, waiting: nil, priority: .medium, due: nil,
+      id: id, title: title, status: status, wait: nil, priority: .medium, due: nil,
       workspace: nil, description: "", createdAt: now, createdBy: nil)
     mutate(&item)
     return item
@@ -157,8 +157,9 @@ final class TaskPaletteRowsTests: OrbeTestCase {
 
     XCTAssertEqual(try taskRow(task(1, "a", .todo)).glyph, .todo)
     XCTAssertEqual(try taskRow(task(1, "a", .inProgress)).glyph, .inProgress)
-    XCTAssertEqual(try taskRow(task(1, "a", .inProgress) { $0.waiting = waiting }).glyph, .waiting)
-    XCTAssertEqual(try taskRow(task(1, "a", .todo) { $0.waiting = waiting }).glyph, .waiting)
+    XCTAssertEqual(
+      try taskRow(task(1, "a", .inProgress) { $0.wait = .waiting(waiting) }).glyph, .waiting)
+    XCTAssertEqual(try taskRow(task(1, "a", .todo) { $0.wait = .waiting(waiting) }).glyph, .waiting)
     XCTAssertEqual(try taskRow(task(1, "a", .done)).glyph, .done)
     XCTAssertTrue(try taskRow(task(1, "a", .done)).isDone)
   }
@@ -175,7 +176,7 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     let earlyThisMorning = calendar.date(from: DateComponents(year: 2025, month: 10, day: 4))!
     let row = { (since: Date) in
       try self.taskRow(
-        self.task(1) { $0.waiting = TaskItem.Waiting(reason: "経理の返事", since: since) })
+        self.task(1) { $0.wait = .waiting(TaskItem.Waiting(reason: "経理の返事", since: since)) })
     }
 
     XCTAssertEqual(

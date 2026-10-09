@@ -205,4 +205,44 @@ final class TaskQuarantineTests: OrbeTestCase {
 
     XCTAssertEqual(try Data(contentsOf: url), Data(corruptJSON.utf8), "退避できなかった原本は潰さない")
   }
+
+  private func waitingJSON(minutes: Int = 10, deadline: String = "2020-01-01T00:00:00.000Z")
+    -> String
+  {
+    #"{"reason":"レビュー待ち","since":"2019-12-30T00:00:00.000Z","condition":{"#
+      + #""id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","description":"レビューが付いたら","#
+      + #""command":"gh pr view 214","intervalMinutes":\#(minutes),"deadline":"\#(deadline)","#
+      + #""setAt":"2019-12-30T00:00:00.000Z","checks":0,"log":[]}}"#
+  }
+
+  private func taskJSON(id: Int, extra: String) -> String {
+    String(taskJSON(id: id).dropLast()) + "," + extra + "}"
+  }
+
+  /// 期限の過ぎた条件も読む（起動の後に「期限が来た」で解けるだけ）。
+  func testAConditionPastItsDeadlineStillLoads() throws {
+    try Data(file([taskJSON(id: 1, extra: #""waiting":\#(waitingJSON())"#)]).utf8)
+      .write(to: tasksFile())
+
+    let loaded = try XCTUnwrap(TaskPersistence.load())
+
+    XCTAssertTrue(try quarantineFiles().isEmpty)
+    XCTAssertEqual(loaded.tasks.first?.waiting?.condition?.intervalMinutes, 10)
+  }
+
+  /// 付けるときと同じ値の規則に反する条件（1 分未満の間隔）は、裏で回せないので退避する。
+  func testAConditionBreakingTheScheduleRulesIsQuarantined() throws {
+    try assertQuarantined(
+      file([taskJSON(id: 1, extra: #""waiting":\#(waitingJSON(minutes: 0))"#)]), "1 分未満の間隔")
+  }
+
+  /// 待っているのと解けたのを両方持つ席は、型で表せないので退避する。
+  func testWaitingAndResolvedTogetherAreQuarantined() throws {
+    let resolved =
+      #""waitResolved":{"how":"expired","at":"2020-01-01T00:00:00.000Z","waiting":"#
+      + waitingJSON() + "}"
+    try assertQuarantined(
+      file([taskJSON(id: 1, extra: #""waiting":\#(waitingJSON()),\#(resolved)"#)]),
+      "待っているのと解けたの両方")
+  }
 }
