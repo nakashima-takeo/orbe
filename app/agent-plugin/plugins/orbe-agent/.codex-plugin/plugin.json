@@ -12,8 +12,8 @@
     }
   },
   "interface": {
-    "displayName": "Orbe agent status",
-    "shortDescription": "Orbe にエージェント状態と session_id を通知する",
+    "displayName": "Orbe agent",
+    "shortDescription": "Orbe にエージェント状態と session_id を通知する状態追跡 hooks と、Orbe を操作する MCP サーバー",
     "category": "Productivity",
     "capabilities": []
   }
