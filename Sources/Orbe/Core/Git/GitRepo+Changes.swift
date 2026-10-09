@@ -64,9 +64,10 @@ extension GitRepo {
         if case .failure(let failure) = found { completion(failure) }
         return
       }
-      let restore = Array(selection.indexed.subtracting(intended))
+      let restore = selection.indexed.subtracting(intended)
       let trash = selection.paths.filter { !restore.contains($0) }
-      self.runOnPaths(["restore", "--worktree"], paths: restore, handle: handle) { restored in
+      let checkout = ["restore", "--worktree"]
+      self.runOnPaths(checkout, paths: Array(restore), handle: handle) { restored in
         if let restored { return completion(restored) }
         let unindex = ["rm", "--cached", "-q"]
         self.runOnPaths(unindex, paths: Array(intended), handle: handle) { removed in
