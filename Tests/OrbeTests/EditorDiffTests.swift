@@ -94,7 +94,7 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertTrue(surface.isEditable, "ファイルタブではコードの見え方")
     XCTAssertTrue(surface.rows.isEmpty)
     XCTAssertEqual(surface.presentation, .code)
-    XCTAssertEqual(document.hunkLimit, LineDiff.maximumComparedLines, "ガターの上限に戻る")
+    XCTAssertEqual(document.hunkLimit, LineDiff.gutter, "ガターの上限に戻る")
   }
 
   /// 中身が届く前に本体（pane）にあった焦点は、面ができたときに面へ移る。

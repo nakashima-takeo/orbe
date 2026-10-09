@@ -64,8 +64,9 @@ final class EditorDiff: RootFilesObserver {
     case unavailable(Unavailable)
   }
 
-  /// diff の上限——diff を出している間の行差分の上限（大きな書き換えも行ごとに取る。裏で 1 秒未満に収まる値）。
-  static let hunkLimit = 10_000
+  /// diff の上限——diff を出している間の行差分の上限。編集の数で切るので、大きなファイルの離れた変更も行ごとに取り、
+  /// 裏の時間は 1MB 級でも 1 秒未満に収まる。
+  static let hunkLimit = LineDiff.Limit.edits(10_000)
 
   let id: Key
   let files: RootFiles

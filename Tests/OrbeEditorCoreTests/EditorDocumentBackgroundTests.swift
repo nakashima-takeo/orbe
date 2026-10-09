@@ -41,7 +41,7 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     XCTAssertEqual(document.hunks.count, 1, "前提: 既定の上限では 1 区間に畳む")
     var notified = 0
     document.onHunksChange = { notified += 1 }
-    document.hunkLimit = 4 * n
+    document.hunkLimit = .edits(n)
     XCTAssertTrue(document.hunksAreCurrent, "上限だけを変えた間は、前の上限の結果のまま今の底のハンク")
     XCTAssertTrue(document.waitUntilCaughtUp())
     XCTAssertEqual(document.hunks.count, n / 100, "変えた上限で行ごとに取り直す")
@@ -51,7 +51,7 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     XCTAssertTrue(document.waitUntilCaughtUp())
     XCTAssertTrue(document.hunksAreCurrent)
     document.baseline = old
-    document.hunkLimit = LineDiff.maximumComparedLines
+    document.hunkLimit = LineDiff.gutter
     XCTAssertTrue(document.waitUntilCaughtUp())
     XCTAssertEqual(document.hunks.count, 1)
   }

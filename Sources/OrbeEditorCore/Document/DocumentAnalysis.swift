@@ -107,7 +107,7 @@ struct RangesOutcome: Sendable {
 actor DocumentAnalysis {
   private enum Work: Sendable {
     case comparison(synced: TextRope)
-    case hunks(baseline: String, limit: Int, generation: Int)
+    case hunks(baseline: String, limit: LineDiff.Limit, generation: Int)
     case ranges(AnalysisRequest)
   }
 
@@ -153,7 +153,7 @@ actor DocumentAnalysis {
 
   /// 行差分を頼む（main）。
   nonisolated func postHunks(
-    text: TextRope, version: Int, baseline: String, limit: Int, generation: Int
+    text: TextRope, version: Int, baseline: String, limit: LineDiff.Limit, generation: Int
   ) {
     post {
       $0.hunks = Job(

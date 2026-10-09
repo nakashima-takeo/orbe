@@ -93,16 +93,34 @@ final class LineDiffTests: XCTestCase {
     XCTAssertEqual(LineDiff.hunks(base: "", current: TextRope(block)), [hunk(0, 0, 1, n)])
   }
 
-  /// 上限は呼び手が渡せる（diff は大きな値を渡し、大きな書き換えも行ごとに取る）。2 つの写しどうしでも同じ規則。
-  func testTheLimitIsTheCallersAndRopesCompareTheSame() {
+  /// 上限は呼び手が渡せる。残りの行数で切る上限は、離れた 2 か所の変更でも残りが大きければ 1 区間に畳む。編集の数で切る
+  /// 上限は、残りが大きくても編集が上限以下なら行ごとに取り、越えれば 1 区間に畳む（上限ちょうどは取る）。2 つの写しどうし
+  /// でも同じ規則。
+  func testTheLimitIsTheCallersAndEditsBoundTheWork() {
     let n = LineDiff.maximumComparedLines
     let old = (0..<n).map { "old \($0)\n" }.joined()
     let new = (0..<n).map { $0 == 3 ? "new \($0)\n" : "old \($0)\n" }.joined() + "added\n"
     XCTAssertEqual(
-      LineDiff.hunks(base: old, current: TextRope(new), limit: n), [hunk(4, n - 3, 4, n - 2)],
-      "既定の上限では 1 区間に畳む")
+      LineDiff.hunks(base: old, current: TextRope(new), limit: .lines(n)),
+      [hunk(4, n - 3, 4, n - 2)],
+      "残りの行数の上限を越えると 1 区間に畳む")
     let wide = [hunk(4, 1, 4, 1), hunk(n, 0, n + 1, 1)]
-    XCTAssertEqual(LineDiff.hunks(base: old, current: TextRope(new), limit: 2 * n + 1), wide)
-    XCTAssertEqual(LineDiff.hunks(old: TextRope(old), new: TextRope(new), limit: 2 * n + 1), wide)
+    XCTAssertEqual(
+      LineDiff.hunks(base: old, current: TextRope(new), limit: .edits(3)), wide, "編集 3 つ")
+    XCTAssertEqual(LineDiff.hunks(old: TextRope(old), new: TextRope(new), limit: .edits(3)), wide)
+    XCTAssertEqual(
+      LineDiff.hunks(base: old, current: TextRope(new), limit: .edits(2)),
+      [hunk(4, n - 3, 4, n - 2)],
+      "編集の上限を越えると 1 区間に畳む")
+  }
+
+  /// 編集の数を数える前進の Myers は、上限ちょうどで届き、1 つ足りなければ届かない。
+  func testEditCountingStopsAtTheBound() {
+    XCTAssertTrue(LineDiff.withinEdits([1, 2, 3], [1, 2, 3], 0))
+    XCTAssertTrue(LineDiff.withinEdits([1, 2, 3], [1, 9, 3], 2))
+    XCTAssertFalse(LineDiff.withinEdits([1, 2, 3], [1, 9, 3], 1))
+    XCTAssertTrue(LineDiff.withinEdits([], [1, 2], 2))
+    XCTAssertFalse(LineDiff.withinEdits([1, 2, 3, 4], [4, 3, 2, 1], 5))
+    XCTAssertTrue(LineDiff.withinEdits([1, 2, 3, 4], [4, 3, 2, 1], 6))
   }
 }

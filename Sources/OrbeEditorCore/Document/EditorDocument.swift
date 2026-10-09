@@ -54,9 +54,9 @@ public final class EditorDocument {
       requestHunks()
     }
   }
-  /// 行差分の上限（共通の先頭・末尾を落とした残りの行数の和。越えれば残り全体を 1 つの区間にする——`LineDiff`）。既定は
-  /// ガターの値。変えると裏へ行差分を頼み直す。
-  public var hunkLimit = LineDiff.maximumComparedLines {
+  /// 行差分の上限（越えれば共通の先頭・末尾を落とした残り全体を 1 つの区間にする——`LineDiff.Limit`）。既定はガターの
+  /// 値。変えると裏へ行差分を頼み直す。
+  public var hunkLimit = LineDiff.gutter {
     didSet {
       guard hunkLimit != oldValue else { return }
       hunkRequest += 1

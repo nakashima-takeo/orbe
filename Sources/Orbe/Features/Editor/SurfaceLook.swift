@@ -7,12 +7,12 @@ struct SurfaceLook {
   var presentation: SurfacePresentation
   var rows: SurfaceRows
   var isEditable: Bool
-  var hunkLimit: Int
+  var hunkLimit: LineDiff.Limit
 
   /// ファイルタブの見え方——コードの構成・並びなし・編集できる・ガターの上限。
   static let code = SurfaceLook(
     presentation: .code, rows: SurfaceRows(), isEditable: true,
-    hunkLimit: LineDiff.maximumComparedLines)
+    hunkLimit: LineDiff.gutter)
 
   /// 面 `surface`（と、それを持つ文書 `document`）に載せる。同じ値の押し直しは面と文書が何もしない。並びは構成の後に置く
   /// （差し込みはミニマップを出さない構成の面にだけ置ける）。外すときは逆に並びを先に外す。
