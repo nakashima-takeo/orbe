@@ -84,7 +84,7 @@ extension WindowController {
     guard
       let opened = openTab(
         workspaceIndex: target.workspaceIndex, cwd: cwd, command: command,
-        env: agentLauncher.launchEnvironment)
+        env: agentLauncher.launchEnvironment, agent: target.agent.command)
     else {
       return .failure(ControlError(code: -32000, message: "spawn failed"))
     }

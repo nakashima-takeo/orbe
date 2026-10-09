@@ -23,7 +23,7 @@ extension TerminalTabTests {
     let state = TabState(
       cwd: root.appendingPathComponent("src").path, agent: nil, explicitTitle: nil)
 
-    let tab = TerminalTab(restoring: state) { _ in nil }
+    let tab = TerminalTab(restoring: state) { _, _ in nil }
 
     XCTAssertEqual(tab.groupKey, GitWorktreeRoot.normalizedPath(root.path))
   }

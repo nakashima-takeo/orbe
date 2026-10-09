@@ -101,7 +101,7 @@ extension TerminalTabTests {
     let state = TabState(cwd: "/tmp", agent: ticket, explicitTitle: nil)
     let tabs = [
       TerminalTab(cwd: "/tmp"),
-      TerminalTab(restoring: state, resumeSpawn: { _ in nil }),
+      TerminalTab(restoring: state, resumeSpawn: { _, _ in nil }),
       liveUnreportedTab(session: ticket),
     ]
     for tab in tabs {

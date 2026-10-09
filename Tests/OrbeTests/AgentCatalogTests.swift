@@ -77,4 +77,42 @@ final class AgentCatalogTests: OrbeTestCase {
         forAgent: "claude", sessionId: "27d05777-57b4-4baa-9532-bc4cac1375cb"),
       "claude --resume 27d05777-57b4-4baa-9532-bc4cac1375cb", "UUID は許可")
   }
+
+  /// 会話の最初の入力は、その CLI の席に 1 つのシェルの単語として添える（再開の後ろか、agy は `-i` の値）。
+  func testResumeCommandAddsTheFirstInputAtEachCLIsSeat() {
+    XCTAssertEqual(
+      AgentCatalog.resumeCommand(forAgent: "claude", sessionId: "s-1", firstInput: "解けた"),
+      "claude --resume s-1 '解けた'")
+    XCTAssertEqual(
+      AgentCatalog.resumeCommand(forAgent: "codex", sessionId: "s-1", firstInput: "done"),
+      "codex resume s-1 done")
+    XCTAssertEqual(
+      AgentCatalog.resumeCommand(forAgent: "agy", sessionId: "s-1", firstInput: "done"),
+      "agy --conversation s-1 -i done")
+  }
+
+  /// 外の人が書いた文面（確認の出力）を含む入力でも、シェルは 1 語として読み、何も実行しない。
+  func testFirstInputReachesTheCLIAsOneWordWithoutRunningAnything() throws {
+    let input = "レビューが付いた\n@sato: it's $(touch pwned) `touch pwned2`; \"x\""
+    let command = try XCTUnwrap(
+      AgentCatalog.resumeCommand(forAgent: "codex", sessionId: "s-1", firstInput: input))
+    let dir = TestScratch.caseDir.appendingPathComponent("run")
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/sh")
+    process.arguments = [
+      "-c", "set -- " + command.dropFirst("codex ".count) + "; printf %s \"$3\"",
+    ]
+    process.currentDirectoryURL = dir
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    try process.run()
+    process.waitUntilExit()
+
+    XCTAssertEqual(
+      String(bytes: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8), input)
+    XCTAssertEqual(
+      try FileManager.default.contentsOfDirectory(atPath: dir.path), [],
+      "入力の中のコマンドは走らない")
+  }
 }

@@ -112,7 +112,7 @@ extension TerminalTabTests {
     let restored = TerminalTab(
       restoring: TabState(
         cwd: "/tmp", agent: nil, explicitTitle: nil,
-        faces: FaceLayout(editorRatio: 1.5, focus: .terminal)), resumeSpawn: { _ in nil })
+        faces: FaceLayout(editorRatio: 1.5, focus: .terminal)), resumeSpawn: { _, _ in nil })
     XCTAssertEqual(restored.faces, FaceLayout(editorRatio: 1, focus: .editor), "範囲外は正規形へ")
   }
 }

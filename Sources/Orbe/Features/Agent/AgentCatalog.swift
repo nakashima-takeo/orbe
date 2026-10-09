@@ -14,27 +14,42 @@ final class AgentCatalog {
   /// `reportsIdleOnStart` は Orbe のプラグインがその CLI の起動時 hook に idle を配線しているか
   /// （claude の SessionStart→idle。codex CLI 自身も SessionStart を持つが `codex-hooks.json` は
   /// 配線していない）——出所は `docs/spec/agent/plugin-package.md` の event→state 表。
+  /// `reportsExit` は CLI の終了を報告するか（claude の SessionEnd→clear。同じ表の出所）——報告する CLI のタブでは、
+  /// 状態が残っている間は会話が今も前面にいる。`firstInput` は再開の起動に最初の入力を添える席。
   /// `headless` は裏で非対話に回す能力。
   struct AgentProfile {
     let command: String
     let resumeFlag: String
     let reportsIdleOnStart: Bool
+    let reportsExit: Bool
+    let firstInput: FirstInputSeat
     let headless: HeadlessSupport
+  }
+
+  /// 再開の起動に最初の入力を添える席。
+  enum FirstInputSeat {
+    /// 再開の後ろに置く（`claude --resume <id> <入力>`）。
+    case trailing
+    /// フラグの値として渡す（`agy --conversation <id> -i <入力>`）。
+    case flag(String)
   }
 
   /// 一級サポートの全体。並び＝デフォルト未設定時の優先順。
   static let profiles = [
     AgentProfile(
-      command: "claude", resumeFlag: "--resume", reportsIdleOnStart: true,
+      command: "claude", resumeFlag: "--resume", reportsIdleOnStart: true, reportsExit: true,
+      firstInput: .trailing,
       headless: .runs(
         HeadlessCLI(
           arguments: ClaudeHeadless.arguments, environment: ClaudeHeadless.environment,
           reply: ClaudeHeadless.reply, availableTools: ClaudeHeadless.availableTools))),
     AgentProfile(
-      command: "codex", resumeFlag: "resume", reportsIdleOnStart: false,
+      command: "codex", resumeFlag: "resume", reportsIdleOnStart: false, reportsExit: false,
+      firstInput: .trailing,
       headless: .refuses(.toolsNotAllowListable)),
     AgentProfile(
-      command: "agy", resumeFlag: "--conversation", reportsIdleOnStart: false,
+      command: "agy", resumeFlag: "--conversation", reportsIdleOnStart: false, reportsExit: false,
+      firstInput: .flag("-i"),
       headless: .refuses(.noToolOrSessionControl)),
   ]
 
@@ -90,12 +105,20 @@ final class AgentCatalog {
       && sessionId.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." }
   }
 
-  /// 各 CLI の resume コマンド文字列（`/bin/sh -c` 経由で実行される前提）。
-  /// 未対応 agent・安全な文字集合（UUID 等）外の sessionId は nil（呼び出し側が素のシェルへ fallback）。
-  /// command は表のリテラルでのみ一致し、sessionId は文字集合検証するため shell インジェクションを防ぐ。
-  static func resumeCommand(forAgent command: String, sessionId: String) -> String? {
+  /// 各 CLI の resume コマンド文字列（`/bin/sh -c` 経由で実行される前提）。`firstInput` があれば、会話の最初の入力として
+  /// その CLI の席に添える。未対応 agent・安全な文字集合（UUID 等）外の sessionId は nil（呼び出し側が素のシェルへ
+  /// fallback）。command は表のリテラルでのみ一致し、sessionId は文字集合検証し、入力はシェルの単語として引用するため
+  /// shell インジェクションを防ぐ。
+  static func resumeCommand(forAgent command: String, sessionId: String, firstInput: String? = nil)
+    -> String?
+  {
     guard isSafeSessionId(sessionId), let profile = profile(command) else { return nil }
-    return "\(profile.command) \(profile.resumeFlag) \(sessionId)"
+    var words = [profile.command, profile.resumeFlag, sessionId]
+    if let firstInput {
+      if case .flag(let flag) = profile.firstInput { words.append(flag) }
+      words.append(ShellWord.quoted(firstInput))
+    }
+    return words.joined(separator: " ")
   }
 
   /// PATH 文字列から supported の実行ファイルを解決する（検出の純粋部分）。

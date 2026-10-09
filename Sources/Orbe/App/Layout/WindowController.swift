@@ -62,6 +62,8 @@ final class WindowController: NSObject, NSWindowDelegate {
   var intakeStore: IntakeStore { intakeRunner.store }
   // worktree ごとに動いている agent の索引。flushChrome が作り直し、タスク画面と ⌘T が読む。
   let worktreeAgents = WorktreeAgentActivity()
+  let agentSessionTabs = AgentSessionTabs()
+  private(set) lazy var waitConditions = WaitConditionWatcher(store: taskStore)
   // パレット提示の拡張（WindowController+Palette）が設定パレットの defaultAgent 配線で触るため internal。
   let agentLauncher = AgentLauncher()
   // アップデート面。状態（UI 唯一の情報源）は updaterService が生成・所有し、提示配線は WindowController+Update。
@@ -141,7 +143,8 @@ final class WindowController: NSObject, NSWindowDelegate {
     agentLauncher.onLaunch = { [weak self] agent, env in
       guard let self else { return }
       self.openTab(
-        workspaceIndex: self.activeWorkspace, cwd: nil, command: agent.path, env: env)
+        workspaceIndex: self.activeWorkspace, cwd: nil, command: agent.path, env: env,
+        agent: agent.command)
     }
     // 起動/オンボーディング overlay の畳み込みも、他 overlay と同じく teardown 後の次 tick で focus を再確定する。
     agentLauncher.onDismissPalette = { [weak self] in
@@ -155,6 +158,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     cleanupLegacyCompletionIfNeeded()  // 旧方式が zshrc へ書いた managed block を一度だけ除去
     wireUpdateUI()  // アップデート提示導線を配線し、ゲートを通れば update サイクル開始
     intakeRunner.start()  // 全受信を番人へ載せる（過ぎていた回はここで 1 回だけ走る）
+    waitConditions.start()
     window.center()
   }
 
@@ -353,21 +357,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     refreshClosedAgentsPalette()  // ⇧⌘T の一覧も同じ契機で追従（WindowController+ClosedAgents）
     refreshWorkspacePaletteLiveStates()  // 表示中の workspace パレットの行チップも同じ契機で追従
     refreshWorktreeAgents()  // タスク画面と ⌘T の agent の札も同じ契機で追従
-  }
-
-  /// タブ行の投影。連の分割は `SessionStore.segments(of:)`、色番号は連の先頭タブのキーから。
-  private func tabStrip(of ws: Workspace) -> TabStrip {
-    TabStrip(
-      segments: SessionStore.segments(of: ws.tabs).map { r in
-        TabStrip.Segment(
-          cells: r.map { i in
-            let tab = ws.tabs[i]
-            return TabStrip.Cell(
-              index: i, title: tab.displayTitle(workspaceRoot: ws.rootPath),
-              glyph: tab.activated ? tab.agentStateKind : nil, tabId: tab.id)
-          },
-          colorIndex: WorktreeColor.index(forKey: ws.tabs[r.lowerBound].groupKey))
-      })
+    refreshAgentSessionTabs()  // タスク画面の会話の行と解けた待ちの ⌘T も同じ契機で追従
   }
 
   /// アクティブタブの焦点の面（端末 surface かエディター pane）へフォーカスを戻す

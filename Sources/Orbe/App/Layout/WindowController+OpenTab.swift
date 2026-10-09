@@ -15,15 +15,18 @@ extension WindowController {
   ///
   /// `cwd` に nil を渡すと対象 workspace のアクティブタブの cwd → その workspace の rootPath へ落ちる
   /// （`newTabCwd(inWorkspaceAt:)`）。戻り値は生えたタブ・workspace の id で、
-  /// workspaceIndex が範囲外ならタブを作らず nil。
+  /// workspaceIndex が範囲外ならタブを作らず nil。`agent` は `command` が起こす agent の command 名（agent を
+  /// タブのコマンドとして起こすとき）。
   @discardableResult
   func openTab(
-    workspaceIndex: Int, cwd: String?, command: String? = nil, env: [String: String] = [:]
+    workspaceIndex: Int, cwd: String?, command: String? = nil, env: [String: String] = [:],
+    agent: String? = nil
   ) -> OpenedTab? {
     guard workspaces.indices.contains(workspaceIndex) else { return nil }
     let initialCwd = cwd ?? store.newTabCwd(inWorkspaceAt: workspaceIndex)
     let tab = wire(
-      TerminalTab(cwd: initialCwd, command: command, env: env, editorSurfaces: editorSurfaces))
+      TerminalTab(
+        cwd: initialCwd, command: command, env: env, agent: agent, editorSurfaces: editorSurfaces))
     let index = store.insertTab(tab, intoWorkspaceAt: workspaceIndex)  // 背景 WS はここで active も新タブへ
     if workspaceIndex == activeWorkspace {
       select(index)  // surface を起こす（mount）

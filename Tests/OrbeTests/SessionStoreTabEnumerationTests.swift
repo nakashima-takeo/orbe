@@ -20,7 +20,7 @@ final class SessionStoreTabEnumerationTests: OrbeTestCase {
       TerminalTab(
         restoring: TabState(
           cwd: "/tmp", agent: AgentSession(command: "codex", sessionId: "d-1"), explicitTitle: nil),
-        resumeSpawn: { _ in nil })
+        resumeSpawn: { _, _ in nil })
     ]
 
     let store = SessionStore(workspaces: [live, dormant], activeWorkspace: 0)
