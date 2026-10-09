@@ -253,7 +253,7 @@ private struct Prepared {
     env: [String: String]
   ) -> Prepared {
     let arguments = cli.arguments(call.model, call.tools)
-    let commandLine = ([executable] + arguments).map(shellQuoted).joined(separator: " ")
+    let commandLine = ([executable] + arguments).map(ShellWord.quoted).joined(separator: " ")
     let box = ReplyBox()
     let watched = call.tools.filter { $0.hasPrefix("mcp__") }
     let spec = BackgroundProcess.Spec(
@@ -305,13 +305,6 @@ private struct Prepared {
     case .stopped: .stopped
     case .launchFailed(let errno): .notStarted(.launchFailed(errno))
     }
-  }
-
-  private static func shellQuoted(_ word: String) -> String {
-    let safe = CharacterSet(
-      charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./=:,@+%")
-    if !word.isEmpty, word.unicodeScalars.allSatisfy(safe.contains) { return word }
-    return "'" + word.replacingOccurrences(of: "'", with: "'\\''") + "'"
   }
 
   /// 裏の直列キューで書き、プロセスの終了後に読む。

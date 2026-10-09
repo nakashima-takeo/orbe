@@ -48,6 +48,16 @@ final class BackgroundTimingTests: OrbeTestCase {
     XCTAssertEqual(next, .run(anchor.addingTimeInterval(60)))
   }
 
+  /// 時計が戻って数え始めが未来にあれば、今から数える（画面の「次は」も番人と同じ答えになる）。
+  func testAnchorInTheFutureCountsFromNow() {
+    let now = Date(timeIntervalSince1970: 1_000_000)
+
+    let next = BackgroundTiming.every(600).next(
+      after: now.addingTimeInterval(86400), deadline: nil, now: now, calendar: .current)
+
+    XCTAssertEqual(next, .run(now.addingTimeInterval(600)))
+  }
+
   // MARK: - 毎日の時刻
 
   func testDailyPicksTheFirstTimeAfterAnchor() throws {
