@@ -73,9 +73,9 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
     let wc = WindowController()
-    _ = wc.controlActivateWorkspace(workspaceId: try XCTUnwrap(wc.workspaces.last).id)
-    XCTAssertTrue(wc.workspaces.allSatisfy(\.activated), "前提: どちらも activate 済み")
-    let tabs = try wc.workspaces.map {
+    _ = wc.controlActivateWorkspace(workspaceId: try XCTUnwrap(wc.regularWorkspaces.last).id)
+    XCTAssertTrue(wc.regularWorkspaces.allSatisfy(\.activated), "前提: どちらも activate 済み")
+    let tabs = try wc.regularWorkspaces.map {
       try XCTUnwrap($0.tabs.first)
     }
     return (wc, tabs)
@@ -94,7 +94,7 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
     let wc = WindowController()
-    let dormant = try XCTUnwrap(wc.workspaces.last)
+    let dormant = try XCTUnwrap(wc.regularWorkspaces.last)
     XCTAssertFalse(dormant.activated, "前提: 復元直後の未切替 workspace は休眠")
     return (wc, try XCTUnwrap(dormant.tabs.first))
   }

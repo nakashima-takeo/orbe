@@ -192,14 +192,41 @@ final class WindowControllerControlTests: OrbeTestCase {
     XCTAssertEqual(err.code, -32602, "invalid scope の invalid params")
   }
 
-  /// remove_workspace は最後の 1 つを -32000 で弾く（closeWorkspace の no-op を CLI へ明示エラー化）。
-  func testRemoveLastWorkspaceIsRejected() throws {
+  /// remove_workspace は最後の通常 workspace を -32000 で弾く（closeWorkspace の no-op を CLI へ明示エラー化）。
+  /// Orbe の workspace が残っていても数に入れない。
+  func testRemoveLastRegularWorkspaceIsRejected() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("solo")])
     let id = try XCTUnwrap(row(wc, name: "solo")?["id"] as? Int)
     guard case .failure(let err) = wc.controlRemoveWorkspace(workspaceId: id) else {
-      return XCTFail("最後の 1 つの削除は failure")
+      return XCTFail("最後の通常 workspace の削除は failure")
     }
-    XCTAssertEqual(err.code, -32000, "cannot remove last workspace")
+    XCTAssertEqual(err.code, -32000)
+    XCTAssertEqual(err.message, "cannot remove last workspace")
+    XCTAssertEqual(wc.regularWorkspaces.map(\.name), ["solo"])
+  }
+
+  /// Orbe の workspace は remove_workspace も set_workspace_root も -32000 で弾き、一覧も root も変えない。改名は通る。
+  func testOrbeWorkspaceRejectsRemoveAndSetRootButAcceptsRename() throws {
+    let wc = try restore(activeWorkspace: 0, [tabbed("main"), tabbed("other")])
+    let orbe = try XCTUnwrap(wc.workspaces.last)
+    let root = orbe.rootPath
+
+    guard case .failure(let removal) = wc.controlRemoveWorkspace(workspaceId: orbe.id) else {
+      return XCTFail("Orbe の workspace の削除は failure")
+    }
+    XCTAssertEqual(removal.code, -32000)
+    XCTAssertEqual(removal.message, "cannot remove the Orbe workspace")
+    guard
+      case .failure(let reroot) = wc.controlSetWorkspaceRoot(workspaceId: orbe.id, rootPath: "/tmp")
+    else { return XCTFail("Orbe の workspace の root 変更は failure") }
+    XCTAssertEqual(reroot.code, -32000)
+    XCTAssertTrue(wc.workspaces.contains { $0 === orbe })
+    XCTAssertEqual(orbe.rootPath, root)
+
+    guard case .success = wc.controlRenameWorkspace(workspaceId: orbe.id, name: "secretary") else {
+      return XCTFail("Orbe の workspace の改名は通る")
+    }
+    XCTAssertEqual(orbe.name, "secretary")
   }
 
   /// remove_workspace は未知 id を -32004 で弾く（workspace not found）。

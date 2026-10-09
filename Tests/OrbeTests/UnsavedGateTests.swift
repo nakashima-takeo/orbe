@@ -129,15 +129,15 @@ final class UnsavedGateTests: OrbeTestCase {
     edit(try tab.editor.open(repo.url("a.txt"), as: .pinned))
 
     wc.closeWorkspace(index, origin: .gesture)
-    XCTAssertEqual(wc.workspaces.count, 2)
+    XCTAssertEqual(wc.regularWorkspaces.count, 2)
     wc.window.endSheet(try XCTUnwrap(wc.window.attachedSheet), returnCode: .alertSecondButtonReturn)
-    XCTAssertEqual(wc.workspaces.count, 1, "保存しないで閉じる")
+    XCTAssertEqual(wc.regularWorkspaces.count, 1, "保存しないで閉じる")
 
     wc.createWorkspace(name: "third", rootPath: repo.root)
     edit(try XCTUnwrap(wc.activeTab).editor.open(repo.url("a.txt"), as: .pinned))
     wc.closeWorkspace(wc.activeWorkspace, origin: .controlAPI)
     XCTAssertNil(wc.window.attachedSheet)
-    XCTAssertEqual(wc.workspaces.count, 1, "制御 API は黙って捨てる")
+    XCTAssertEqual(wc.regularWorkspaces.count, 1, "制御 API は黙って捨てる")
   }
 
   /// 終了の関門が集める未保存は全 workspace の全タブ。

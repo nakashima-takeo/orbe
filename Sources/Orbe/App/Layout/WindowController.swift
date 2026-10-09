@@ -127,6 +127,7 @@ final class WindowController: NSObject, NSWindowDelegate {
       // 無いと、ユーザー ~/.config/ghostty の theme 指定が初回起動に限り勝ってしまう。
       applyActiveWorkspaceConfig()
     }
+    ensureOrbeWorkspace()  // 復元・新規のどちらの後にも 1 回（先に置くと復元の配列で上書きされる）
     agentLauncher.appModel = model
     agentLauncher.localization = localization  // 起動パレット・オンボーディングの文言引き用
     configureAgentDefaults()

@@ -13,13 +13,13 @@ extension WorkspacePaletteTests {
   private func liveItems() -> [WorkspacePaletteModel.Item] {
     [
       WorkspacePaletteModel.Item(
-        index: 0, name: "api", isActive: true, dir: "/",
+        index: 0, name: "api", isActive: true, dir: "/", canSetDir: true, canClose: true,
         live: .init(rollup: [], dormant: false)),
       WorkspacePaletteModel.Item(
-        index: 2, name: "api-infra", isActive: false, dir: "/",
+        index: 2, name: "api-infra", isActive: false, dir: "/", canSetDir: true, canClose: true,
         live: .init(rollup: [(state: "dormant", count: 2)], dormant: true)),
       WorkspacePaletteModel.Item(
-        index: 1, name: "docs", isActive: false, dir: "/",
+        index: 1, name: "docs", isActive: false, dir: "/", canSetDir: true, canClose: true,
         live: .init(rollup: [], dormant: false)),
     ]
   }

@@ -44,7 +44,7 @@ extension WindowControllerWorkspaceTests {
     let wc = restoreTabbedWorkspace()
     wc.showWorkspacePalette()
     let palette = try XCTUnwrap(wc.model.workspacePalette)
-    palette.render.onUp()  // 先頭で上 → 末尾の作成導線行へラップ
+    palette.render.onJumpBottom()  // 末尾の作成導線行へ
     palette.render.onActivate()
 
     XCTAssertEqual(wc.presentedOverlay, .workspaceCreate, "作成フォームへ遷移する")
