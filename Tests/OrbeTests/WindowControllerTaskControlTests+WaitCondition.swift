@@ -3,10 +3,12 @@ import XCTest
 
 @testable import Orbe
 
-/// 待ちの条件の制御 API 側（呼び出し元タブから作業ディレクトリと会話を入れる・一覧の形）。
+/// 待ちの条件の制御 API 側（呼び出し元タブから作業ディレクトリと会話を入れる・一覧の形）と、付けた条件を窓が裏で
+/// 確かめること。
 ///
 /// 壊れると何が起きるか: 人がシェルから付けた条件が、たまたまそのタブにいた agent の会話のものとして残り、⌘T が別の
-/// 会話を再開する。条件と経過が一覧に出ず、AI が同じ条件で付け直せない。
+/// 会話を再開する。条件と経過が一覧に出ず、AI が同じ条件で付け直せない。付けた条件が一度も確かめられず、いつまでも
+/// 解けない。
 extension WindowControllerTaskControlTests {
   private func condition(deadlineIn: TimeInterval = 3600) -> WaitConditionRequest {
     WaitConditionRequest(
@@ -91,6 +93,21 @@ extension WindowControllerTaskControlTests {
     XCTAssertEqual(
       try listedCondition(wc)["agent"] as? [String: String],
       ["command": "claude", "sessionId": "s-1"])
+  }
+
+  // MARK: - 確かめる
+
+  func testWindowChecksTheConditionInTheBackgroundAndResolvesTheWait() throws {
+    let wc = try launch()
+    var draft = TaskDraft(title: "設定の検索を速くする")
+    draft.waitingReason = "レビュー待ち"
+    draft.waitingCondition = condition()
+    draft.waitingCondition?.command = "echo レビューが付いた"
+    _ = try success(wc.controlAddTask(draft, workspaceId: nil, callerTabId: nil))
+
+    XCTAssertTrue(
+      waitUntil { wc.taskStore.tasks.first?.waitResolution != nil }, "付けた直後に確かめて解ける")
+    XCTAssertEqual(wc.taskStore.tasks.first?.waitResolution?.headline, "レビューが付いた")
   }
 
   func testResolvedWaitIsListedWithItsConditionInsteadOfTheWait() throws {
