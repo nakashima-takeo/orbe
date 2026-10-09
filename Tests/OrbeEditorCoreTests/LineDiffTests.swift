@@ -92,4 +92,17 @@ final class LineDiffTests: XCTestCase {
       LineDiff.hunks(base: "keep\n" + block, current: TextRope("keep\n")), [hunk(2, n, 1, 0)])
     XCTAssertEqual(LineDiff.hunks(base: "", current: TextRope(block)), [hunk(0, 0, 1, n)])
   }
+
+  /// 上限は呼び手が渡せる（diff は大きな値を渡し、大きな書き換えも行ごとに取る）。2 つの写しどうしでも同じ規則。
+  func testTheLimitIsTheCallersAndRopesCompareTheSame() {
+    let n = LineDiff.maximumComparedLines
+    let old = (0..<n).map { "old \($0)\n" }.joined()
+    let new = (0..<n).map { $0 == 3 ? "new \($0)\n" : "old \($0)\n" }.joined() + "added\n"
+    XCTAssertEqual(
+      LineDiff.hunks(base: old, current: TextRope(new), limit: n), [hunk(4, n - 3, 4, n - 2)],
+      "既定の上限では 1 区間に畳む")
+    let wide = [hunk(4, 1, 4, 1), hunk(n, 0, n + 1, 1)]
+    XCTAssertEqual(LineDiff.hunks(base: old, current: TextRope(new), limit: 2 * n + 1), wide)
+    XCTAssertEqual(LineDiff.hunks(old: TextRope(old), new: TextRope(new), limit: 2 * n + 1), wide)
+  }
 }

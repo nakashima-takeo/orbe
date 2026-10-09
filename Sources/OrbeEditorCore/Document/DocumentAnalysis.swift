@@ -88,7 +88,7 @@ struct ComparisonOutcome: Sendable {
 /// 行差分の結果。
 struct HunksOutcome: Sendable {
   let version: Int
-  /// どの baseline に対する差分か（baseline を置き直すたびに進む番号）。
+  /// どの baseline と上限に対する差分か（baseline か上限を置き直すたびに進む番号）。
   let generation: Int
   let hunks: [LineHunk]
 }
@@ -107,7 +107,7 @@ struct RangesOutcome: Sendable {
 actor DocumentAnalysis {
   private enum Work: Sendable {
     case comparison(synced: TextRope)
-    case hunks(baseline: String, generation: Int)
+    case hunks(baseline: String, limit: Int, generation: Int)
     case ranges(AnalysisRequest)
   }
 
@@ -152,10 +152,13 @@ actor DocumentAnalysis {
   }
 
   /// 行差分を頼む（main）。
-  nonisolated func postHunks(text: TextRope, version: Int, baseline: String, generation: Int) {
+  nonisolated func postHunks(
+    text: TextRope, version: Int, baseline: String, limit: Int, generation: Int
+  ) {
     post {
       $0.hunks = Job(
-        text: text, version: version, work: .hunks(baseline: baseline, generation: generation))
+        text: text, version: version,
+        work: .hunks(baseline: baseline, limit: limit, generation: generation))
     }
   }
 
@@ -186,8 +189,8 @@ actor DocumentAnalysis {
         let outcome = ComparisonOutcome(
           version: job.version, same: job.text.hasSameContent(as: synced))
         inbox.deposit { $0.comparison = outcome }
-      case .hunks(let baseline, let generation):
-        let hunks = LineDiff.hunks(base: baseline, current: job.text)
+      case .hunks(let baseline, let limit, let generation):
+        let hunks = LineDiff.hunks(base: baseline, current: job.text, limit: limit)
         let outcome = HunksOutcome(version: job.version, generation: generation, hunks: hunks)
         inbox.deposit { $0.hunks = outcome }
       case .ranges(let request):

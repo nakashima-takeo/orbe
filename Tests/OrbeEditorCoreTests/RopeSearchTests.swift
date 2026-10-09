@@ -67,7 +67,8 @@ final class RopeSearchTests: XCTestCase {
     let inbox = AnalysisInbox()
     let analysis = DocumentAnalysis(inbox: inbox)
     let text = TextRope(String(repeating: "let value = compute(offset)\n", count: 2_000))
-    analysis.postHunks(text: text, version: 1, baseline: "", generation: 1)
+    analysis.postHunks(
+      text: text, version: 1, baseline: "", limit: LineDiff.maximumComparedLines, generation: 1)
     analysis.post(.find("value"), text: text, version: 1)
     analysis.post(.wordOccurrences(NSRange(location: 4, length: 5)), text: text, version: 1)
     var received = (hunks: false, ranges: 0)

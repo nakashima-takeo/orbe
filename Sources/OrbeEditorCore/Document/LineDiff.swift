@@ -19,21 +19,33 @@ public struct LineHunk: Equatable, Sendable {
 
 /// 行差分の純関数。行は `\n` で割り（`\r` は行の中身に残す）、末尾の改行の有無も行の違いとして扱う。
 public enum LineDiff {
-  /// 共通の先頭・末尾を落とした後、差分を取る残りの行数（両側の和）の上限。超える大きな入れ替えは
+  /// 共通の先頭・末尾を落とした後、差分を取る残りの行数（両側の和）の上限の既定（ガター）。超える大きな入れ替えは
   /// 残り全体を 1 つの変更区間にする（Myers は差分の大きさに二乗で効くため、上限で時間を有界にする）。
   public static let maximumComparedLines = 1_000
 
   /// 本文の写しは、差分を取る間だけ連続した UTF-16 の列に写す（Myers が行を任意の順に引くため。取り終えたら手放す）。
-  public static func hunks(base: String, current: TextRope) -> [LineHunk] {
-    let baseUnits = ContiguousArray(base.utf16)
-    let currentUnits = current.contiguousUnits()
+  /// `limit` は残りの行数の上限（→ `maximumComparedLines`）。
+  public static func hunks(
+    base: String, current: TextRope, limit: Int = maximumComparedLines
+  ) -> [LineHunk] {
+    hunks(ContiguousArray(base.utf16), current.contiguousUnits(), limit: limit)
+  }
+
+  /// 2 つの写しの行差分（`old` が底）。
+  public static func hunks(old: TextRope, new: TextRope, limit: Int) -> [LineHunk] {
+    hunks(old.contiguousUnits(), new.contiguousUnits(), limit: limit)
+  }
+
+  private static func hunks(
+    _ baseUnits: ContiguousArray<UInt16>, _ currentUnits: ContiguousArray<UInt16>, limit: Int
+  ) -> [LineHunk] {
     let old = lines(of: baseUnits)
     let new = lines(of: currentUnits)
     let (prefix, suffix) = commonEnds(old, new)
     let oldRest = old[prefix..<(old.count - suffix)]
     let newRest = new[prefix..<(new.count - suffix)]
     guard !oldRest.isEmpty || !newRest.isEmpty else { return [] }
-    guard oldRest.count + newRest.count <= maximumComparedLines else {
+    guard oldRest.count + newRest.count <= limit else {
       return [
         hunk(oldStart: prefix, oldCount: oldRest.count, newStart: prefix, newCount: newRest.count)
       ]

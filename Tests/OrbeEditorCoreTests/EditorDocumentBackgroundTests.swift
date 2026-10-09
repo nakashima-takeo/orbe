@@ -29,6 +29,24 @@ final class EditorDocumentBackgroundTests: XCTestCase {
 
   // MARK: - 古い版の結果
 
+  /// 行差分の上限は文書が受け取る値で、変えると裏へ頼み直し、既定（ガター）では 1 区間に畳む大きな書き換えも行ごとの区間に
+  /// なる。上限を戻せば畳んだ区間に戻る。
+  func testTheHunkLimitIsTheDocumentsAndRequestsAgain() throws {
+    let n = LineDiff.maximumComparedLines
+    let old = (0..<n).map { "old \($0)\n" }.joined()
+    let new = (0..<n).map { $0 % 100 == 0 ? "new \($0)\n" : "old \($0)\n" }.joined()
+    let (document, _) = try open("big.txt", new)
+    document.baseline = old
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertEqual(document.hunks.count, 1, "前提: 既定の上限では 1 区間に畳む")
+    document.hunkLimit = 4 * n
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertEqual(document.hunks.count, n / 100, "変えた上限で行ごとに取り直す")
+    document.hunkLimit = LineDiff.maximumComparedLines
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertEqual(document.hunks.count, 1)
+  }
+
   /// 問いを頼んでから結果が届くまでに本文が変われば、結果はその後の編集に合わせてずらして届く——編集より後ろの一致は
   /// 動いた字に付いていき、編集に掛かった一致は落ちる。
   func testAnAnswerReachesTheTextAsEditedAfterItWasAsked() throws {
