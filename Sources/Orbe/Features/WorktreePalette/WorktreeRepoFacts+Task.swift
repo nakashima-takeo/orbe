@@ -1,8 +1,16 @@
 import Foundation
 
-/// タスクから開いたときの先頭の欄の解決。文脈の入力（タスクの worktree・主の結び付き・PR の head）と、
-/// git の一覧・remote の台帳の事実から、rebuild のたびに 1 つの値を導く。
-extension WorktreePaletteDataProvider {
+/// タスクの行き先から決まる用意の仕方。
+enum WorktreeTaskPlan: Equatable {
+  /// 今ある行き先を開く（worktree・ローカルブランチ・リモートブランチ）。
+  case open(WorktreePaletteDestination)
+  /// 名前のブランチをベースから新しく作る。
+  case create(name: String)
+}
+
+/// タスクの行き先の決定。文脈の入力（タスクの worktree・主の結び付き・PR の head、または渡されたブランチ名）と、
+/// git の一覧・remote の台帳の事実から 1 つの値を導く。⌘T の先頭の欄と `start_task` が同じ規則を通る。
+extension WorktreeRepoFacts {
   /// remote の台帳の中で、あるリポジトリを指す remote。
   private enum RemoteMatch {
     case matched([String])
@@ -21,13 +29,64 @@ extension WorktreePaletteDataProvider {
   /// 先頭の欄の行き先。決まる順は、文脈 → タスクの worktree が今の一覧にあるか → 主の Issue・PR が手元の
   /// リポジトリから扱えるか → そのブランチが手元にあるか（無ければ fetch の着地まで決めない）。
   func taskTarget(_ inputs: WorktreePaletteTaskInputs) -> WorktreePaletteTaskTarget {
-    let target = resolvedTaskTarget(inputs)
-    // 提示時の fetch がまだ着地していなければ、手元に無いブランチは fetch で現れうる。今決めると、PR は欄なしで
-    // 今の worktree に、Issue は push 済みのブランチと分岐した作成行に決まってしまう。
+    awaitingFetch(resolvedTaskTarget(inputs))
+  }
+
+  /// 渡されたブランチ名の行き先。主の結び付きがあれば、そのリポジトリを指す remote のブランチを探し（無ければ欄を
+  /// 出さない）、無ければ origin のブランチを探す。
+  func taskTarget(branch name: String, primary: GitHubRepoName?) -> WorktreePaletteTaskTarget {
+    guard repo != nil else { return .none }
+    guard let primary else {
+      return awaitingFetch(
+        .branch(
+          name: name, pullRequest: nil, remotes: [GitHubRemoteLedger.Resolved.defaultRemote]))
+    }
+    return awaitingFetch(branchTarget(name, in: primary, pullRequest: nil))
+  }
+
+  /// `repo` を指す remote が手元にあるか。まだ分からなければ nil。
+  func hasRemote(for repo: GitHubRepoName) -> Bool? {
+    switch remotes(of: repo) {
+    case .matched: true
+    case .none: false
+    case .pending: nil
+    }
+  }
+
+  /// 提示時の fetch がまだ着地していなければ、手元に無いブランチは fetch で現れうる。今決めると、PR は欄なしで
+  /// 今の worktree に、Issue は push 済みのブランチと分岐した作成行に決まってしまう。
+  private func awaitingFetch(_ target: WorktreePaletteTaskTarget) -> WorktreePaletteTaskTarget {
     guard case .branch(let name, _, let remotes) = target, !remoteFetchLanded,
       !hasBranch(name, on: remotes)
     else { return target }
     return .pending
+  }
+
+  /// 行き先 → 用意の仕方。worktree → ローカルブランチ → そのリポジトリの remote のブランチの順に、今の列挙から
+  /// 探す。どれも無く、PR でなく、作成行の規則が名前を許すなら作る。どれでもなければ nil。
+  static func plan(
+    for target: WorktreePaletteTaskTarget, worktrees: [GitWorktree], localBranches: [GitBranch],
+    remoteBranches: [GitBranch], newBranchRules: WorktreeNewBranchRules?
+  ) -> WorktreeTaskPlan? {
+    switch target {
+    case .none, .pending:
+      return nil
+    case .worktree(let path):
+      return .open(.directory(path: path))
+    case .branch(let name, let pullRequest, let remotes):
+      if let worktree = worktrees.first(where: { $0.branch == name }) {
+        return .open(.directory(path: worktree.path))
+      }
+      if localBranches.contains(where: { $0.name == name }) {
+        return .open(.localBranch(name: name))
+      }
+      let remote = remotes.lazy.map { "\($0)/\(name)" }.first { remote in
+        remoteBranches.contains { $0.name == remote }
+      }
+      if let remote { return .open(.remoteBranch(name: remote, existingWorktree: nil)) }
+      guard pullRequest == nil, newBranchRules?.allows(name) == true else { return nil }
+      return .create(name: name)
+    }
   }
 
   /// 名前のブランチが、ローカルブランチ（worktree のブランチを含む）か `remotes` のリモートブランチとして手元にあるか。

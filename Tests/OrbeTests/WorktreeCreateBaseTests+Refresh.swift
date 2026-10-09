@@ -36,7 +36,7 @@ extension WorktreeCreateBaseTests {
   func testDivergedLocalBranchIsCreatedAsIs() throws {
     let localTip = advanceLocally("stale")
     let provider = try start()
-    XCTAssertTrue(pump({ provider.remoteFetchLanded }), "前提: 着地している")
+    XCTAssertTrue(pump({ provider.facts.remoteFetchLanded }), "前提: 着地している")
     let path = try resolve(provider, .localBranch(name: "stale"))
     XCTAssertEqual(head(of: path), localTip)
   }
@@ -47,8 +47,9 @@ extension WorktreeCreateBaseTests {
     let provider = try start()
     let sync = try staleSync(provider)
     var creatingCalls = 0
-    var result: Result<WorktreePaletteDataProvider.DirectoryResolution, GitRefreshFailure>?
-    provider.refreshAndCreate(sync, creating: { creatingCalls += 1 }, completion: { result = $0 })
+    var result: Result<WorktreeRepoFacts.DirectoryResolution, GitRefreshFailure>?
+    provider.facts.refreshAndCreate(
+      sync, creating: { creatingCalls += 1 }, completion: { result = $0 })
     XCTAssertTrue(pump({ result != nil }, timeout: 30))
     guard case .success(.ready(let path)) = try XCTUnwrap(result) else {
       return XCTFail("\(String(describing: result))")
@@ -71,8 +72,8 @@ extension WorktreeCreateBaseTests {
     XCTAssertTrue(run(["push", "-q", "-f", "origin", "stale"], cwd: other).isSuccess)
     let before = oid(["rev-parse", "stale"], cwd: local)
 
-    var result: Result<WorktreePaletteDataProvider.DirectoryResolution, GitRefreshFailure>?
-    provider.refreshAndCreate(
+    var result: Result<WorktreeRepoFacts.DirectoryResolution, GitRefreshFailure>?
+    provider.facts.refreshAndCreate(
       sync, creating: { XCTFail("作成に進まない") }, completion: { result = $0 })
     XCTAssertTrue(pump({ result != nil }, timeout: 30))
     guard case .failure(.fastForward(nil)) = try XCTUnwrap(result) else {
@@ -90,8 +91,8 @@ extension WorktreeCreateBaseTests {
     XCTAssertTrue(run(["worktree", "add", "-q", elsewhere, "stale"], cwd: local).isSuccess)
     let before = oid(["rev-parse", "stale"], cwd: local)
 
-    var result: Result<WorktreePaletteDataProvider.DirectoryResolution, GitRefreshFailure>?
-    provider.refreshAndCreate(sync, creating: {}, completion: { result = $0 })
+    var result: Result<WorktreeRepoFacts.DirectoryResolution, GitRefreshFailure>?
+    provider.facts.refreshAndCreate(sync, creating: {}, completion: { result = $0 })
     XCTAssertTrue(pump({ result != nil }, timeout: 30))
     guard case .failure(.fastForward(.some(.reason(let reason)))) = try XCTUnwrap(result) else {
       return XCTFail("\(String(describing: result))")
@@ -108,8 +109,8 @@ extension WorktreeCreateBaseTests {
     let before = oid(["rev-parse", "stale"], cwd: local)
     XCTAssertNotEqual(before, originTip("stale"), "前提: 遅れている")
 
-    var resolution: WorktreePaletteDataProvider.DirectoryResolution?
-    provider.createLocalBranchWorktree(name: sync.name) { resolution = $0 }
+    var resolution: WorktreeRepoFacts.DirectoryResolution?
+    provider.facts.createLocalBranchWorktree(name: sync.name) { resolution = $0 }
     XCTAssertTrue(pump({ resolution != nil }, timeout: 30))
     guard case .ready(let path) = try XCTUnwrap(resolution) else {
       return XCTFail("\(String(describing: resolution))")
@@ -125,8 +126,8 @@ extension WorktreeCreateBaseTests {
     XCTAssertTrue(
       run(["remote", "set-url", "origin", dir.appendingPathComponent("gone.git").path], cwd: local)
         .isSuccess)
-    var result: Result<WorktreePaletteDataProvider.DirectoryResolution, GitRefreshFailure>?
-    provider.refreshAndCreate(sync, creating: {}, completion: { result = $0 })
+    var result: Result<WorktreeRepoFacts.DirectoryResolution, GitRefreshFailure>?
+    provider.facts.refreshAndCreate(sync, creating: {}, completion: { result = $0 })
     XCTAssertTrue(pump({ result != nil }, timeout: 30))
     guard case .failure(.fetch(.reason(let reason))) = try XCTUnwrap(result) else {
       return XCTFail("\(String(describing: result))")
@@ -138,7 +139,7 @@ extension WorktreeCreateBaseTests {
   private func staleSync(_ provider: WorktreePaletteDataProvider) throws
     -> WorktreePaletteBranchSync
   {
-    XCTAssertTrue(pump({ provider.remoteFetchLanded }), "前提: 着地している")
+    XCTAssertTrue(pump({ provider.facts.remoteFetchLanded }), "前提: 着地している")
     let sync = try XCTUnwrap(palette.items.first { $0.name == "stale" }?.sync)
     XCTAssertTrue(sync.isFastForwardable)
     return sync

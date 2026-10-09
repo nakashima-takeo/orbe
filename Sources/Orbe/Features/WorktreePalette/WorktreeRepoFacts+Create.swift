@@ -1,8 +1,8 @@
 import Foundation
 
-/// Enter の実行先の解決（`WorktreePaletteDataProvider` の分冊）。行種別から対象ディレクトリを決め、
+/// 行き先の用意（`WorktreeRepoFacts` の分冊）。行種別から対象ディレクトリを決め、
 /// 無ければ worktree を作る——作成は追加のみで、呼び出し元のチェックアウトには触らない。
-extension WorktreePaletteDataProvider {
+extension WorktreeRepoFacts {
   /// 解決結果。`ready` は起動先パス、`failed` はエラーメッセージ（palette に表示）。
   enum DirectoryResolution {
     case ready(String)

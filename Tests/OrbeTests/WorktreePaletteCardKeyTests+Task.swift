@@ -99,7 +99,7 @@ extension WorktreePaletteCardKeyTests {
       model.onExecute = { executed.append($0) }
       _ = mount(model)
       provider.load()
-      XCTAssertTrue(wait { model.hasLoadedOnce && provider.remoteFetchLanded }, "\(name): 前提")
+      XCTAssertTrue(wait { model.hasLoadedOnce && provider.facts.remoteFetchLanded }, "\(name): 前提")
       model.activate()
       XCTAssertTrue(model.hasPendingActivation, "\(name): 値が届くまで ↵ を預かる")
 

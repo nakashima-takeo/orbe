@@ -50,7 +50,7 @@ extension WindowController {
       let launch = WorktreePaletteLaunch(target: target, task: p.task?.id, binding: binding)
       p.errorMessage = nil
       p.isPreparing = true  // 進捗表示 ON。非同期 worktree 作成の待機中だけフッターにスピナが出る。
-      provider.prepareDirectory(for: destination) { [weak self] outcome in
+      provider.facts.prepareDirectory(for: destination) { [weak self] outcome in
         guard let self, let p = self.model.worktreePalette else { return }
         switch outcome {
         case .resolved(let resolution):
@@ -143,7 +143,7 @@ extension WindowController {
   /// その worktree を付けてから（タスクが消えていたら何もしない）起動し、失敗はモデルが畳む——失敗の経路は
   /// タスクを変えない。
   private func settleWorktreePalette(
-    _ resolution: WorktreePaletteDataProvider.DirectoryResolution, _ launch: WorktreePaletteLaunch
+    _ resolution: WorktreeRepoFacts.DirectoryResolution, _ launch: WorktreePaletteLaunch
   ) {
     guard let p = model.worktreePalette else { return }
     switch resolution {
@@ -161,7 +161,7 @@ extension WindowController {
     }
   }
 
-  /// 最新化画面の 2 択を配線する。手順（fetch → fast-forward → 作成）は provider が持ち、ここは
+  /// 最新化画面の 2 択を配線する。手順（fetch → fast-forward → 作成）はリポジトリの事実の層が持ち、ここは
   /// 進行（作成が始まった）と終端をモデルへ流すだけ。
   private func wireWorktreePaletteRefresh(
     _ p: WorktreePaletteModel, _ binding: WorktreePaletteBinding
@@ -173,11 +173,11 @@ extension WindowController {
       let launch = WorktreePaletteLaunch(target: target, task: p.task?.id, binding: binding)
       switch choice {
       case .asIs:
-        provider.createLocalBranchWorktree(name: sync.name) { [weak self] resolution in
+        provider.facts.createLocalBranchWorktree(name: sync.name) { [weak self] resolution in
           self?.settleWorktreePalette(resolution, launch)
         }
       case .refreshed:
-        provider.refreshAndCreate(
+        provider.facts.refreshAndCreate(
           sync, creating: { [weak self] in self?.model.worktreePalette?.refresh?.beginCreating() },
           completion: { [weak self] result in
             guard let self else { return }

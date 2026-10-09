@@ -15,9 +15,9 @@ extension WorktreePaletteRemoteLedgerProviderTests {
     _ = try addWorktree("wt-feat", branch: "feat")
     let (_, provider) = makeProvider()
     provider.load()
-    XCTAssertTrue(pump({ provider.remoteLedger != .pending }), "前提: 読めた一覧で台帳が確定する")
+    XCTAssertTrue(pump({ provider.facts.remoteLedger != .pending }), "前提: 読めた一覧で台帳が確定する")
 
-    provider.remoteListing = .unreadable
+    provider.facts.remoteListing = .unreadable
 
     XCTAssertTrue(originUnverified(provider))
     XCTAssertEqual(provider.branchPRStates["feat"], .failed, "安全群に入らない側に倒れる")

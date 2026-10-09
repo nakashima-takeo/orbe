@@ -104,7 +104,7 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
     let (wc, task) = try launch()
     let row = WorktreePaletteAction.open(.directory(path: toplevel))
     let palette = try open(wc, for: task, row: row)
-    XCTAssertEqual(wc.model.worktreePaletteProvider?.cwd, local, "タスクの workspace から探す")
+    XCTAssertEqual(wc.model.worktreePaletteProvider?.facts.cwd, local, "タスクの workspace から探す")
     XCTAssertEqual(wc.current.name, "main", "前提: 前面は別の workspace")
 
     palette.activate(at: try XCTUnwrap(palette.items.firstIndex { $0.action == row }))
@@ -168,13 +168,13 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
     let repositoryRow = WorktreePaletteAction.open(.directory(path: toplevel))
     let palette = try open(wc, for: task, row: repositoryRow)
     let taskProvider = try XCTUnwrap(wc.model.worktreePaletteProvider)
-    XCTAssertFalse(taskProvider.remoteFetchLanded, "前提: タスクのリポジトリの fetch はまだ着地していない")
+    XCTAssertFalse(taskProvider.facts.remoteFetchLanded, "前提: タスクのリポジトリの fetch はまだ着地していない")
 
     palette.clearTaskContext()
     XCTAssertTrue(pump { palette.items.contains { $0.glyph == .directory } })
     try FileManager.default.removeItem(atPath: gate)
 
-    XCTAssertTrue(pump { taskProvider.remoteFetchLanded }, "前提: タスクのリポジトリの fetch が着地した")
+    XCTAssertTrue(pump { taskProvider.facts.remoteFetchLanded }, "前提: タスクのリポジトリの fetch が着地した")
     XCTAssertFalse(
       pump({ palette.items.contains { $0.action == repositoryRow } }, timeout: 1),
       "タスクのリポジトリの行は戻らない")
@@ -218,7 +218,7 @@ final class WindowControllerTaskWorktreeEnterTests: OrbeTestCase {
     palette.clearTaskContext()
 
     XCTAssertTrue(
-      pump { wc.model.worktreePaletteProvider?.cwd == home && palette.newBranchRules != nil },
+      pump { wc.model.worktreePaletteProvider?.facts.cwd == home && palette.newBranchRules != nil },
       "前提: 開いた時点の workspace のリポジトリを読み直した")
     XCTAssertFalse(palette.isAwaitingBranchNameAnswer, "名前の答えは残る")
     palette.activate()
