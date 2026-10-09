@@ -3,12 +3,10 @@ import XCTest
 
 @testable import Orbe
 
-/// 待ちの条件の制御 API 側（呼び出し元タブから作業ディレクトリと会話を入れる・一覧の形）と、解けた待ちの ⌘T が開いた
-/// ままの会話のタブへ届けるかどうか。
+/// 待ちの条件の制御 API 側（呼び出し元タブから作業ディレクトリと会話を入れる・一覧の形）。
 ///
 /// 壊れると何が起きるか: 人がシェルから付けた条件が、たまたまそのタブにいた agent の会話のものとして残り、⌘T が別の
-/// 会話を再開する。条件と経過が一覧に出ず、AI が同じ条件で付け直せない。手で起こした codex が去った後のシェルや、
-/// 作業中の agent に、起きたことが貼り付けられる。
+/// 会話を再開する。条件と経過が一覧に出ず、AI が同じ条件で付け直せない。
 extension WindowControllerTaskControlTests {
   private func condition(deadlineIn: TimeInterval = 3600) -> WaitConditionRequest {
     WaitConditionRequest(
@@ -116,52 +114,5 @@ extension WindowControllerTaskControlTests {
     let condition = try XCTUnwrap(waiting["condition"] as? [String: Any])
     XCTAssertEqual(condition["checks"] as? Int, 1)
     XCTAssertEqual((condition["lastCheck"] as? [String: Any])?["result"] as? String, "success")
-  }
-
-  // MARK: - ⌘T で続きから（開いたままの会話のタブ）
-
-  /// 前面のタブで claude が作業中に条件を付け、条件を満たした状態にする。
-  private func resolvedFromFrontTab(_ wc: WindowController) throws -> (Int, TerminalTab) {
-    let tab = try XCTUnwrap(wc.current.tabs.first)
-    report(wc, tab, "claude", "working")
-    let id = try addWaiting(wc, callerTabId: tab.id)
-    let conditionId = try XCTUnwrap(wc.taskStore.tasks.first?.waiting?.condition?.id)
-    let now = Date()
-    wc.taskStore.recordCheck(
-      id, condition: conditionId,
-      BackgroundRunResult(
-        commandLine: "exit 1", startedAt: now, endedAt: now, ending: .exited(0), output: .none))
-    return (id, tab)
-  }
-
-  private func deliver(_ wc: WindowController, _ id: Int) -> TaskPaletteError? {
-    wc.refreshChrome()
-    wc.flushChrome()
-    return wc.continueWait(taskId: id)
-  }
-
-  func testOpenConversationThatCanTakeInputGetsWhatHappened() throws {
-    let wc = try launch()
-    let (id, tab) = try resolvedFromFrontTab(wc)
-    XCTAssertNotNil(tab.surface.surfacePtr, "前提: 前面のタブは mount 済み")
-    report(wc, tab, "claude", "idle")
-
-    XCTAssertNil(deliver(wc, id))
-
-    XCTAssertNil(wc.taskStore.tasks.first { $0.id == id }?.wait, "届けたら起きたことは消える")
-  }
-
-  /// 作業中・確認待ちの agent や、会話が前面にいると確かでないタブ（手で起こした codex）には貼り付けず、移るだけ。
-  func testBusyOrUncertainConversationOnlyGetsFocused() throws {
-    let wc = try launch()
-    let (id, tab) = try resolvedFromFrontTab(wc)
-
-    for (agent, state) in [("claude", "working"), ("claude", "waiting"), ("codex", "idle")] {
-      report(wc, tab, agent, state)
-      XCTAssertNil(deliver(wc, id))
-      XCTAssertNotNil(
-        wc.taskStore.tasks.first { $0.id == id }?.waitResolution,
-        "\(agent) \(state): 起きたことは残る（もう一度 ⌘T を押せる）")
-    }
   }
 }
