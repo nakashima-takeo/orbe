@@ -322,8 +322,15 @@ final class RootFiles {
           $0.path != $1.path ? $0.path < $1.path : $0.revision == .index
         }
         for version in ordered {
-          let oids = version.revision == .index ? indexOIDs : headOIDs
-          guard let oids else { continue }
+          // OID の一覧を git から取れなければ、状態を持っている版は前を保ち（一時失敗で消さない）、まだ状態の無い版は
+          // 「取れない」にする——関心を申告した者が、決まらない状態のまま待ち続けない。次の取り直しで取れれば置き換わる。
+          guard let oids = version.revision == .index ? indexOIDs : headOIDs else {
+            if versions[version] == nil {
+              versions[version] = Settled(oid: nil, state: .failed)
+              changed.append(version)
+            }
+            continue
+          }
           if let oid = oids[version.path] {
             if versions[version]?.oid != oid { fetch.append((version, oid)) }
           } else {
