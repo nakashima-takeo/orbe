@@ -129,7 +129,11 @@ extension EditorDiffTests {
     let (other, _) = self.tab()
     let fresh = try other.editor.openDiff(id("long.txt", .staged), as: .pinned)
     waitRows(fresh, "開き直した diff") { !$0.isEmpty }
-    let expected = try textPixels(try engine(fresh.newSurface))
+    let freshSurface = try engine(fresh.newSurface)
+    pumpMain(until: { freshSurface.viewport.firstVisible > 0 }, "面が大きさを持ち、最初の変更区間へ送られる")
+    // 絵は同じ位置で比べる（送られる位置の端数は、開き方——最初の変更区間へ送るか、前の面の先頭の行を引き継ぐか——で違う）。
+    for surface in [after, freshSurface] { surface.scroll(toFirstLine: CGFloat(top)) }
+    let expected = try textPixels(freshSurface)
     XCTAssertTrue(stale != expected, "前提: 前の本文の絵とは違う")
     XCTAssertTrue(try textPixels(after) == expected, "開き直した diff と同じ絵")
   }

@@ -196,7 +196,9 @@ final class EditorDiff: RootFilesObserver {
 
   /// 新しい側の面の見えている範囲が変わった（インラインでは古い側の見えている削除行を先に色付けする）。
   func viewportDidChange() {
-    guard presented == .inline, let old, let surface = newSurface else { return }
+    guard presented != nil, let surface = newSurface else { return }
+    if !revealed || carriedTop != nil { placeFirstView(on: surface) }
+    guard presented == .inline, let old else { return }
     let text = document?.text ?? newRevision?.text ?? TextRope()
     guard let hunks = currentRows?.hunks else { return }
     let viewport = surface.viewport

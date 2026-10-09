@@ -26,6 +26,14 @@ extension EditorDiff {
         surfacesChanged = true
       }
     }
+    placeFirstView(on: surface)
+  }
+
+  /// 面に初めて見せる位置へ送る——作り直した面なら前の面の先頭の行、初めてなら最初の変更区間。どちらも見えている高さで
+  /// 決まる位置なので、面がまだ大きさを持たない（本体に置いた直後の配置の前）なら送らず、大きさが決まって見えている範囲が
+  /// 変わったとき（`viewportDidChange`）に送る。
+  func placeFirstView(on surface: any TextSurface) {
+    guard surface.viewport.visibleLines > 0 else { return }
     carryTop(to: surface)
     revealFirstChange(on: surface)
   }
@@ -67,7 +75,8 @@ extension EditorDiff {
   }
 
   /// 初めて並びを置いたときに、最初の変更区間が見える位置へ送る——区間の上の文脈の行から区間の終わりまで（インラインの
-  /// 削除行はその間に差し込まれる）を、中央から、収まらなければ上端から見せる。
+  /// 削除行はその間に差し込まれる）を、中央から、収まらなければ上端から見せる。区間が先頭の行から始まるなら上の文脈の行は
+  /// 無く、削除行は文書の先頭の前に差し込まれる——中央へ送る位置は端の手前に収まり、先頭の差し込みごと見える。
   private func revealFirstChange(on surface: any TextSurface) {
     guard !revealed, let first = currentRows?.hunks.first else { return }
     revealed = true
