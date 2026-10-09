@@ -38,7 +38,8 @@ extension GitRepo {
   /// 行の変更を捨てる。含めるパスは呼んだ時点の index と作業ツリーで選び直す（`selection`）。
   /// - 追跡中のパスは作業ツリーを index の版へ戻す（ステージ済みの分は残る）。
   /// - 未追跡のパスはゴミ箱へ移す（元に戻せる）。
-  /// - intent-to-add（`git add -N`）のパスは index から外してからゴミ箱へ——index の版は空なので、戻すと中身を失う。
+  /// - intent-to-add（`git add -N`）のパスは、作業ツリーに在れば index から外してからゴミ箱へ——index の版は空なので、
+  ///   戻すと中身を失う。作業ツリーから消えたものは index の版（空）へ戻る。
   ///
   /// 追跡中かは観測の status でなく呼んだ時点の index で決める（status が古いとき、追跡中のファイルをゴミ箱へ送らない）。
   /// ゴミ箱へは裏のスレッドで 1 件ずつ移し、その都度止められたかを見る（件数が多いと main を止めるため）。移せなければ
@@ -197,7 +198,7 @@ extension GitRepo {
     let urls = paths.map(url(of:))
     DispatchQueue.global(qos: .userInitiated).async {
       var failure: GitWriteFailure?
-      // 選んだ後に消えたパス（intent-to-add のまま作業ツリーから消えたもの等）は、捨てるものが無いので飛ばす。
+      // 選んだ後に消えたパスは、捨てるものが無いので飛ばす。
       for url in urls where Self.exists(url) {
         guard !handle.isCancelled else {
           failure = .cancelled

@@ -48,7 +48,8 @@ extension RootFiles {
     enqueue({ $0.unstage(rows: rows, handle: $1, completion: $2) }, completion)
   }
 
-  /// 行の変更を捨てる。追跡中は作業ツリーを index の版へ（ステージ済みは残る）、未追跡と intent-to-add はゴミ箱へ。
+  /// 行の変更を捨てる。追跡中は作業ツリーを index の版へ（ステージ済みは残る）、未追跡と作業ツリーに在る intent-to-add は
+  /// ゴミ箱へ。
   /// rename の元パスは、呼んだ時点の index に在るときだけ含める。git とゴミ箱は 1 枠で走り、後から投げた書き込みと
   /// 入れ替わらない。
   @discardableResult
