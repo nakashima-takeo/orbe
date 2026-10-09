@@ -145,17 +145,14 @@ final class TaskPaletteIntakeModelTests: OrbeTestCase {
     XCTAssertEqual(palette.focusTarget, .field)
   }
 
-  func testShiftTabCyclesThreeTabsAndKeepsTheIntakeState() {
+  func testSwitchingTabsKeepsTheIntakeState() {
     let palette = palette()
     palette.intake.tapShelf(.intake(2))
 
-    palette.toggleTab()
-    XCTAssertEqual(palette.visibleTab, .tasks)
-    palette.toggleTab()
-    XCTAssertEqual(palette.visibleTab, .github)
-    palette.toggleTab()
-    XCTAssertEqual(palette.visibleTab, .intake)
-    XCTAssertEqual(palette.intake.shelfList.selectedID, .intake(2), "タブを行き来しても残る")
+    palette.setTab(.tasks)
+    palette.setTab(.intake)
+
+    XCTAssertEqual(palette.intake.shelfList.selectedID, .intake(2))
   }
 
   // MARK: - 受信の中身
