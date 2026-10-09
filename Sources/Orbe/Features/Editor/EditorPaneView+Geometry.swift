@@ -55,13 +55,14 @@ extension EditorPaneView {
     }
   }
 
-  /// 列の頭の高さ（ファイルタブ行 ＋ 下の hairline、文書があればパンくずも）。
+  /// 列の頭の高さ（タブ行 ＋ 下の hairline、本体がパンくずを持てばパンくずも——空状態だけ持たない）。SwiftUI 側の
+  /// パンくずの出し分けも同じ事実（`EditorShellModel.activeName`、本体の種類から作る）で決まる。
   var headerHeight: CGFloat {
     Theme.Layout.editorFileTabs + Theme.Stroke.hairline
-      + (document != nil ? Theme.Layout.editorBreadcrumb : 0)
+      + (body.hasBreadcrumb ? Theme.Layout.editorBreadcrumb : 0)
   }
 
-  /// 本体（文書があればテキスト面、無ければ空状態）の矩形。
+  /// 本体（文書の面・diff の面・文字だけの器）の矩形。
   var bodyRect: NSRect {
     NSRect(
       x: sideWidth, y: headerHeight, width: max(0, bounds.width - sideWidth),
@@ -82,6 +83,7 @@ extension EditorPaneView {
   override func layout() {
     // 面の大きさが右列の幅を決め、検索バーの制約はその幅から置く——制約は super.layout() が当てるので、その前に置く。
     document?.surface.view.frame = bodyRect
+    if let diff { layoutDiff(diff) }
     placeSearchBar()
     super.layout()
     let sideWidth = self.sideWidth

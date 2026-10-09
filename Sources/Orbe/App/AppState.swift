@@ -20,6 +20,8 @@ struct AppStateFile: Codable, Equatable {
   var preferredLanguage: String?
   /// エディター面のサイドバーの幅・開閉・パネル（アプリ全体で 1 つ）。
   var editorSidebar: EditorSidebarRecord?
+  /// diff の見せ方（`EditorDiff.Mode` の rawValue。アプリ全体で 1 つ）。
+  var editorDiffMode: String?
 }
 
 /// エディター面のサイドバーの永続表現。「あるが読めない」（形が違う・値の型が違う）は全 field nil に読む——

@@ -1,13 +1,16 @@
 import Foundation
 
-/// 骨（ファイルタブ行・パンくず）の写し。pane が所有し、セッションの変化のたびに
+/// 骨（タブ行・パンくず）の写し。pane が所有し、セッションの変化のたびに
 /// `update` で無条件に組み直す。SwiftUI はこの写しだけを読み、`EditorSession` / `EditorDocument` を
 /// 直接観測しない。操作は閉包で pane へ戻り、pane がタブ経由でセッションに書く。
 @MainActor @Observable
 final class EditorShellModel {
+  /// タブ行のタブ 1 枚（文書のタブか diff のタブ）。
   struct FileTab: Identifiable, Equatable {
-    let id: URL
+    let id: EditorTab.Key
     let name: String
+    /// diff のタブなら、その種類（名前の後に注記を出す）。
+    let diffKind: EditorDiff.Kind?
     let chip: FileChip
     let isDirty: Bool
     /// 外部変更で衝突中（ドットを注意の黄で描く）。
@@ -25,17 +28,22 @@ final class EditorShellModel {
   }
 
   var tabs: [FileTab] = []
-  var activeID: URL?
+  var activeID: EditorTab.Key?
+  /// 焦点のタブが diff のタブか（タブ行の右端に見せ方の切り替えを出す）と、今の見せ方。
+  var showsDiffModes = false
+  var diffMode = EditorDiff.Mode.inline
   /// 焦点の文書のディレクトリの断片（末尾のファイルは `activeName` / `activeChip`）。
   var crumbs: [Crumb] = []
   var activeName: String?
   var activeChip: FileChip?
 
   @ObservationIgnored var open: (URL, EditorSession.OpenMode) -> Void = { _, _ in }
-  @ObservationIgnored var activate: (URL) -> Void = { _ in }
-  /// 仮のタブを普通のタブにする（ファイルタブのダブルクリック）。
-  @ObservationIgnored var pin: (URL) -> Void = { _ in }
-  @ObservationIgnored var requestClose: (URL) -> Void = { _ in }
+  @ObservationIgnored var activate: (EditorTab.Key) -> Void = { _ in }
+  /// 仮のタブを普通のタブにする（タブのダブルクリック）。
+  @ObservationIgnored var pin: (EditorTab.Key) -> Void = { _ in }
+  @ObservationIgnored var requestClose: (EditorTab.Key) -> Void = { _ in }
+  /// diff の見せ方を選んだ（タブ行の右端）。
+  @ObservationIgnored var selectDiffMode: (EditorDiff.Mode) -> Void = { _ in }
   @ObservationIgnored var revealDirectory: (URL) -> Void = { _ in }
   @ObservationIgnored var createFile: () -> Void = {}
   @ObservationIgnored var createDirectory: () -> Void = {}
@@ -49,31 +57,45 @@ final class EditorShellModel {
   /// 奪わない）。
   @ObservationIgnored var inlineInputMayTakeFocus: () -> Bool = { true }
 
-  func update(from session: EditorSession, root: String) {
-    let active = session.activeDocument
-    let preview = session.preview
-    tabs = session.documents.map { document in
-      FileTab(
-        id: document.url, name: document.url.lastPathComponent,
-        chip: FileChip.resolve(document.url), isDirty: document.isDirty,
-        isConflicted: document.isDiskChanged, isActive: document === active,
-        isPreview: document === preview)
+  func update(from session: EditorSession, root: String, diffMode: EditorDiff.Mode) {
+    tabs = session.tabs.map { tab in
+      let document = tab.document
+      var diffKind: EditorDiff.Kind?
+      if case .diff(let diff) = tab { diffKind = diff.id.kind }
+      return FileTab(
+        id: tab.id, name: tab.url.lastPathComponent, diffKind: diffKind,
+        chip: FileChip.resolve(tab.url), isDirty: document?.isDirty == true,
+        isConflicted: document?.isDiskChanged == true, isActive: tab.id == session.activeID,
+        isPreview: tab.id == session.previewID)
     }
-    activeID = active?.url
+    activeID = session.activeID
+    self.diffMode = diffMode
+    let active = session.activeTab
     activeName = active?.url.lastPathComponent
     activeChip = active.map { FileChip.resolve($0.url) }
-    crumbs = active.map { Self.crumbs(of: $0.url, root: root) } ?? []
+    switch active {
+    case .diff(let diff)?:
+      showsDiffModes = true
+      crumbs = Self.crumbs(of: diff.id.url, root: diff.id.root, pressable: diff.id.root == root)
+    case .document(let document)?:
+      showsDiffModes = false
+      crumbs = Self.crumbs(of: document.url, root: root, pressable: true)
+    case nil:
+      showsDiffModes = false
+      crumbs = []
+    }
   }
 
-  /// 根の下ならその相対パスの構成要素、根の外なら絶対パスの構成要素（`/` を除く）。末尾のファイルは含まない。
-  private static func crumbs(of url: URL, root: String) -> [Crumb] {
+  /// 根の下ならその相対パスの構成要素（`pressable` なら押せる）、根の外なら絶対パスの構成要素（`/` を除く）。末尾の
+  /// ファイルは含まない。
+  private static func crumbs(of url: URL, root: String, pressable: Bool) -> [Crumb] {
     let path = url.path
     if path.hasPrefix(root + "/") {
       let components = path.dropFirst(root.count + 1).split(separator: "/").map(String.init)
       var directory = URL(fileURLWithPath: root, isDirectory: true)
       return components.dropLast().enumerated().map { index, name in
         directory.appendPathComponent(name, isDirectory: true)
-        return Crumb(id: index, name: name, directory: directory)
+        return Crumb(id: index, name: name, directory: pressable ? directory : nil)
       }
     }
     return url.pathComponents.dropFirst().dropLast().enumerated().map { index, name in

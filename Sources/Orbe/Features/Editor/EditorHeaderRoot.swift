@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 列の頭（ファイルタブ行 28 → 文書があればパンくず 20）の SwiftUI ルート。器の中の別 root なので環境は
-/// 明示注入する。文書が無いときはタブ行の帯だけ。
+/// 列の頭（タブ行 28 → タブがあればパンくず 20）の SwiftUI ルート。器の中の別 root なので環境は
+/// 明示注入する。タブが無いときはタブ行の帯だけ。
 struct EditorHeaderRoot: View {
   let shell: EditorShellModel
   let localization: LocalizationStore
@@ -21,7 +21,8 @@ struct EditorHeaderRoot: View {
   }
 }
 
-/// ファイルタブ行: 自然幅のタブを横に並べ、溢れは横スクロール（スクローラー非表示・アクティブを可視位置へ）。
+/// タブ行: 自然幅のタブ（文書のタブと diff のタブ）を横に並べ、溢れは横スクロール（スクローラー非表示・アクティブを
+/// 可視位置へ）。焦点が diff のタブなら右端に見せ方の切り替え。
 struct FileTabsView: View {
   let shell: EditorShellModel
   @Environment(\.colorScheme) private var scheme
@@ -33,19 +34,22 @@ struct FileTabsView: View {
   var body: some View {
     let ink = EditorInk(scheme)
     VStack(spacing: 0) {
-      ScrollViewReader { proxy in
-        ScrollView(.horizontal, showsIndicators: false) {
-          HStack(spacing: 0) {
-            ForEach(shell.tabs) { tab in
-              FileTabView(tab: tab, shell: shell).id(tab.id)
+      HStack(spacing: 0) {
+        ScrollViewReader { proxy in
+          ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 0) {
+              ForEach(shell.tabs) { tab in
+                FileTabView(tab: tab, shell: shell).id(tab.id)
+              }
             }
           }
+          .onChange(of: shell.activeID) { _, id in
+            if let id { proxy.scrollTo(id) }
+          }
         }
-        .onChange(of: shell.activeID) { _, id in
-          if let id { proxy.scrollTo(id) }
-        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        if shell.showsDiffModes { DiffModesView(shell: shell) }
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
       .frame(height: Theme.Layout.editorFileTabs)
       Rectangle().fill(ink.hairline(Self.hairlineAlpha)).frame(height: Theme.Stroke.hairline)
     }
@@ -53,15 +57,17 @@ struct FileTabsView: View {
   }
 }
 
-/// タブ 1 枚: チップ ＋ 名前 ＋ 右端の枠（未保存の ● か ×）。アクティブは淡い地と上縁 1.5px の accent
-/// （design-system §5 のエディター面の例外）。仮のタブは名前を斜体にし、地に斜線を敷く（アクティブなら淡い地の上）。
-/// 押すと切り替え、2 回目の押下（ダブルクリック）で普通のタブにする——1 回目をダブルクリックの判定で待たせない。
+/// タブ 1 枚: チップ ＋ 名前（diff のタブは ＋ 種類の注記）＋ 右端の枠（未保存の ● か ×）。アクティブは淡い地と上縁
+/// 1.5px——文書のタブは accent、diff のタブは注意の黄（design-system §5 のエディター面の例外）。仮のタブは名前を斜体に
+/// し、地に斜線を敷く（アクティブなら淡い地の上）。押すと切り替え、2 回目の押下（ダブルクリック）で普通のタブにする——
+/// 1 回目をダブルクリックの判定で待たせない。
 struct FileTabView: View {
   let tab: EditorShellModel.FileTab
   let shell: EditorShellModel
   @State private var hovering = false
   @Environment(\.colorScheme) private var scheme
   @Environment(\.chromeFontResolver) private var fontResolver
+  @Environment(\.localization) private var l10n
 
   // 見本 CodeView.tsx（FileTabs）の値。
   private static let activeFillAlpha = 0.045
@@ -78,6 +84,13 @@ struct FileTabView: View {
         .font(Font.theme.editorFileTab)
         .foregroundStyle(tab.isActive ? Color.theme.textPrimary : Color.theme.textMuted)
         .lineLimit(1)
+      if let kind = tab.diffKind {
+        Text(l10n.string(kind == .workingTree ? .editorDiffWorkingTree : .editorDiffStaged))
+          .italic(tab.isPreview)
+          .font(Font.theme.editorDiffNote)
+          .foregroundStyle(Color.theme.editorCaution)
+          .lineLimit(1)
+      }
       FileTabCloseSlot(tab: tab, tabHovered: hovering, shell: shell)
     }
     .padding(.leading, padLeading)
@@ -90,7 +103,11 @@ struct FileTabView: View {
       }
     }
     .overlay(alignment: .top) {
-      if tab.isActive { Rectangle().fill(Color.theme.accentPrimary).frame(height: accentBar) }
+      if tab.isActive {
+        Rectangle()
+          .fill(tab.diffKind == nil ? Color.theme.accentPrimary : Color.theme.editorCaution)
+          .frame(height: accentBar)
+      }
     }
     .overlay(alignment: .trailing) {
       Rectangle().fill(ink.hairline(Self.hairlineAlpha)).frame(width: Theme.Stroke.hairline)
@@ -99,6 +116,40 @@ struct FileTabView: View {
     .onHover { hovering = $0 }
     .onTapGesture { shell.activate(tab.id) }
     .simultaneousGesture(TapGesture(count: 2).onEnded { shell.pin(tab.id) })
+  }
+}
+
+/// タブ行の右端の「インライン / 並列」。選んでいる項目は地を濃い字の色、字をアクティブのタブの字の色に反転する。
+private struct DiffModesView: View {
+  let shell: EditorShellModel
+  @Environment(\.colorScheme) private var scheme
+  @Environment(\.localization) private var l10n
+
+  var body: some View {
+    HStack(spacing: Theme.Layout.editorDiffSegmentGap) {
+      segment(.inline, .editorDiffInline)
+      segment(.side, .editorDiffSide)
+    }
+    .padding(.horizontal, Theme.Layout.editorDiffSegmentInset)
+  }
+
+  private func segment(_ mode: EditorDiff.Mode, _ label: L10nKey) -> some View {
+    let selected = shell.diffMode == mode
+    return Text(l10n.string(label))
+      .font(Font.theme.editorDiffSegment)
+      .foregroundStyle(selected ? Color.theme.tabActiveText : Color.theme.textSecondary)
+      .lineLimit(1)
+      .padding(.horizontal, Theme.Layout.editorDiffSegmentPadX)
+      .padding(.vertical, Theme.Layout.editorDiffSegmentPadY)
+      .background(
+        RoundedRectangle(cornerRadius: Theme.Radius.editorDiffSegment)
+          .fill(
+            selected
+              ? Color.theme.textPrimary
+              : EditorInk(scheme).fill(Theme.Opacity.editorDiffSegmentIdle))
+      )
+      .contentShape(Rectangle())
+      .onTapGesture { shell.selectDiffMode(mode) }
   }
 }
 

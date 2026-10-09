@@ -165,12 +165,12 @@ final class UnsavedGateTests: OrbeTestCase {
     let a = try tab.editor.open(repo.url("a.txt"), as: .pinned)
     let b = try tab.editor.open(repo.url("b.txt"), as: .pinned)
 
-    pane.shell.requestClose(b.url)
+    pane.shell.requestClose(.document(b.url))
     XCTAssertEqual(tab.editor.documents.count, 1, "未保存でなければそのまま閉じる")
     XCTAssertNil(window.attachedSheet)
 
     edit(a)
-    pane.shell.requestClose(a.url)
+    pane.shell.requestClose(.document(a.url))
     XCTAssertEqual(tab.editor.documents.count, 1, "未保存なら確認")
     window.endSheet(try XCTUnwrap(window.attachedSheet), returnCode: .alertFirstButtonReturn)
     XCTAssertTrue(tab.editor.documents.isEmpty, "保存して閉じる")

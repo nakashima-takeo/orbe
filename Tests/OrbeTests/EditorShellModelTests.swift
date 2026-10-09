@@ -30,7 +30,7 @@ final class EditorShellModelTests: OrbeTestCase {
     XCTAssertEqual(shell.tabs.map(\.name), ["a.swift", "b.md"])
     XCTAssertEqual(shell.tabs.map(\.isActive), [false, true])
     XCTAssertEqual(shell.tabs[0].chip, FileChip(glyph: "S", hue: .orange))
-    XCTAssertEqual(shell.activeID, b.url)
+    XCTAssertEqual(shell.activeID, .document(b.url))
     XCTAssertEqual(shell.activeName, "b.md")
     XCTAssertEqual(shell.crumbs.map(\.name), ["src"])
     XCTAssertEqual(shell.crumbs.first?.directory?.path, root + "/src", "根の下は祖先の URL を持つ")

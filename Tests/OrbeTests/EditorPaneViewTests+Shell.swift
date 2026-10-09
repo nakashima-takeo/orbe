@@ -95,9 +95,9 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     pane.shell.open(b, .preview)
     let preview = try XCTUnwrap(tab.editor.preview)
     window.makeFirstResponder(nil)
-    pane.shell.pin(preview.url)
+    pane.shell.pin(.document(preview.url))
     XCTAssertNil(tab.editor.preview, "ファイルタブのダブルクリックで普通のタブ")
-    pane.shell.activate(a)
+    pane.shell.activate(.document(a))
     XCTAssertEqual(pane.document?.url.lastPathComponent, "a.swift", "ファイルタブで切り替える")
     XCTAssertTrue(window.firstResponder === pane.document?.surface.responder, "切り替えても焦点はテキスト面へ")
 
@@ -211,7 +211,7 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     pane.shell.open(b.url, .preview)
     XCTAssertEqual(pane.tree.selected, "b.md", "既に焦点の文書の行を押しても選択はそこへ移る")
     pane.tree.toggle("docs")
-    pane.shell.activate(b.url)
+    pane.shell.activate(.document(b.url))
     XCTAssertEqual(pane.tree.selected, "b.md", "既に焦点の文書のファイルタブでも同じ")
 
     tab.editor.close(b)
