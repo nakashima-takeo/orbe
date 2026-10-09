@@ -148,6 +148,37 @@ final class IntakeRunnerTests: OrbeTestCase {
     XCTAssertEqual(jobs.calls.count, 1)
   }
 
+  /// 長く止めていた受信を再開すると、数え始め（最後に回った時刻）は動かないので、過ぎた回として 1 回すぐ回る。
+  func testResumingALongPausedIntakeRunsOnceRightAway() throws {
+    let intake = try create()
+    try runner.runNow(intake.id)
+    jobs.finish(0, fetched([]))
+    _ = try runner.pause(intake.id, true)
+    advance(to: start.addingTimeInterval(86400))
+    XCTAssertEqual(jobs.calls.count, 1, "止めている間は回らない")
+
+    _ = try runner.pause(intake.id, false)
+
+    XCTAssertEqual(jobs.calls.count, 2, "再開したらまず最新を取る")
+    guard jobs.calls.count == 2 else { return }
+    XCTAssertTrue(runner.isRunning(intake.id))
+    jobs.finish(1, fetched([]))
+    XCTAssertEqual(store.intake(intake.id)?.runs.first?.trigger, .schedule)
+    XCTAssertEqual(jobs.calls.count, 2, "過ぎた回は何回分でも 1 回だけ")
+  }
+
+  /// 番人の予定に載ったまま受信がストアから消えていても、回はすぐ終わり、「走っている」が残らない。
+  func testMissingIntakeEndsTheRunAtOnce() throws {
+    let intake = try create()
+    try store.delete(intake.id)
+
+    advance(to: start.addingTimeInterval(1800))
+
+    XCTAssertFalse(runner.isRunning(intake.id))
+    XCTAssertEqual(jobs.calls.count, 0)
+    XCTAssertEqual(armed?.date, now.addingTimeInterval(1800), "終わりを受けて数え直している")
+  }
+
   // MARK: - 書き換えと競合
 
   /// 取得か判定の書き換えは、走っている段を止め、その結果を新しい定義の回として確定しない。

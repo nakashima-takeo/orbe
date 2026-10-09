@@ -106,7 +106,11 @@ final class IntakeRunner {
   // MARK: - 1 回
 
   private func begin(_ id: Int, finish: @escaping (Date) -> Void) -> BackgroundRunHandle {
-    guard let intake = store.intake(id) else { return BackgroundRunHandle {} }
+    // 番人の上に「走っている」を残さないよう、受信が無ければ回はすぐ終わったものとして知らせる。
+    guard let intake = store.intake(id) else {
+      finish(now())
+      return BackgroundRunHandle {}
+    }
     let attempt = Attempt(
       intakeId: id, definition: intake.definition,
       trigger: startingNow == id ? .now : .schedule, finish: finish)
