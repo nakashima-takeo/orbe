@@ -211,7 +211,7 @@ final class TaskQuarantineTests: OrbeTestCase {
   {
     #"{"reason":"レビュー待ち","since":"2019-12-30T00:00:00.000Z","condition":{"#
       + #""id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","description":"レビューが付いたら","#
-      + #""command":"gh pr view 214","intervalMinutes":\#(minutes),"deadline":"\#(deadline)","#
+      + #""command":"gh pr view 214","everyMinutes":\#(minutes),"deadline":"\#(deadline)","#
       + #""setAt":"2019-12-30T00:00:00.000Z","checks":0,"log":[]}}"#
   }
 
@@ -227,7 +227,7 @@ final class TaskQuarantineTests: OrbeTestCase {
     let loaded = try XCTUnwrap(TaskPersistence.load())
 
     XCTAssertTrue(try quarantineFiles().isEmpty)
-    XCTAssertEqual(loaded.tasks.first?.waiting?.condition?.intervalMinutes, 10)
+    XCTAssertEqual(loaded.tasks.first?.waiting?.condition?.everyMinutes, 10)
   }
 
   /// 付けるときと同じ値の規則に反する条件（1 分未満の間隔）は、裏で回せないので退避する。

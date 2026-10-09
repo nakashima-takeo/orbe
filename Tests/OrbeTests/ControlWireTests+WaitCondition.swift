@@ -12,7 +12,7 @@ import XCTest
 extension ControlWireTests {
   private var condition: [String: Any] {
     [
-      "description": "レビューが付いたら", "command": "gh pr view 214", "intervalMinutes": 10,
+      "description": "レビューが付いたら", "command": "gh pr view 214", "everyMinutes": 10,
       "deadline": "2026-10-13T09:00:00+09:00",
     ]
   }
@@ -32,7 +32,7 @@ extension ControlWireTests {
     }
     XCTAssertEqual(request.description, "レビューが付いたら")
     XCTAssertEqual(request.command, "gh pr view 214")
-    XCTAssertEqual(request.intervalMinutes, 10)
+    XCTAssertEqual(request.everyMinutes, 10)
     XCTAssertEqual(request.deadline, Date(timeIntervalSince1970: 1_791_849_600))
     XCTAssertNil(request.directory, "作業ディレクトリと会話は target が呼び出し元タブから入れる")
     XCTAssertNil(request.conversation)
@@ -65,8 +65,8 @@ extension ControlWireTests {
     let wire = startWire(target: fake)
     var rejected: [Any] = ["PR が付いたら", ["description": "a"]]
     for (key, bad) in [
-      ("description", 1), ("command", NSNull()), ("intervalMinutes", "10"),
-      ("intervalMinutes", true), ("deadline", "来週"), ("deadline", "2026-10-13"),
+      ("description", 1), ("command", NSNull()), ("everyMinutes", "10"),
+      ("everyMinutes", true), ("deadline", "来週"), ("deadline", "2026-10-13"),
     ] as [(String, Any)] {
       var value = condition
       value[key] = bad

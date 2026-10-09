@@ -6,7 +6,7 @@ struct WaitCondition: Codable, Equatable {
   let id: UUID
   let description: String
   let command: String
-  let intervalMinutes: Int
+  let everyMinutes: Int
   let deadline: Date
   /// 確認のコマンドが走る場所（絶対パス）。nil はホーム。
   let directory: String?
@@ -22,7 +22,7 @@ struct WaitCondition: Codable, Equatable {
   static let logLimit = 20
 
   private enum CodingKeys: String, CodingKey {
-    case id, description, command, intervalMinutes, deadline, directory, setAt, checks, log
+    case id, description, command, everyMinutes, deadline, directory, setAt, checks, log
     case conversation = "agent"
   }
 
@@ -30,7 +30,7 @@ struct WaitCondition: Codable, Equatable {
     id = UUID()
     description = request.description
     command = request.command
-    intervalMinutes = request.intervalMinutes
+    everyMinutes = request.everyMinutes
     deadline = request.deadline
     directory = request.directory
     conversation = request.conversation
@@ -43,7 +43,7 @@ struct WaitCondition: Codable, Equatable {
   var schedule: BackgroundSchedule {
     BackgroundSchedule(
       job: .command(BackgroundCommand(script: command, directory: directory)),
-      timing: .every(TimeInterval(intervalMinutes) * 60), deadline: deadline)
+      timing: .every(TimeInterval(everyMinutes) * 60), deadline: deadline)
   }
 
   /// 番人の数え始め（最後の確認の始まり、まだなら付けた日時）。保存はしない。
@@ -77,7 +77,7 @@ struct WaitConversation: Codable, Equatable {
 struct WaitConditionRequest: Equatable {
   var description: String
   var command: String
-  var intervalMinutes: Int
+  var everyMinutes: Int
   var deadline: Date
   var directory: String?
   var conversation: WaitConversation?

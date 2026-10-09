@@ -235,7 +235,7 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
     let waiting = try XCTUnwrap(try tasks(control).first?["waiting"] as? [String: Any])
     let condition = try XCTUnwrap(waiting["condition"] as? [String: Any])
     XCTAssertEqual(condition["description"] as? String, "レビューが付いたら")
-    XCTAssertEqual(condition["intervalMinutes"] as? Int, 10)
+    XCTAssertEqual(condition["everyMinutes"] as? Int, 10)
     XCTAssertEqual(
       condition["agent"] as? [String: String], ["command": "claude", "sessionId": "s-1"])
     XCTAssertEqual(condition["directory"] as? String, tab.cwd)

@@ -273,7 +273,7 @@ let tools: [[String: Any]] =
           + "{reason,since}・due（YYYY-MM-DD）・workspaceId と workspaceName・createdBy（追加した agent）・"
           + "links（結び付いた GitHub の Issue・PR の列 [{kind: issue / pr, repo: owner/name, number}]。先頭が主）・"
           + "worktree（このタスクの作業の場所＝worktree のルートの絶対パス。ディレクトリが無ければ出ない）。"
-          + "待ちに条件があれば waiting.condition{description,command,intervalMinutes,deadline,directory?,"
+          + "待ちに条件があれば waiting.condition{description,command,everyMinutes,deadline,directory?,"
           + "agent?{command,sessionId},setAt,checks（確認の回数）,lastCheck?{startedAt,result（success / exited / "
           + "signaled / limited / stopped / notStarted）,stdout?,stderr?}}。条件で解けた待ちは waiting の代わりに "
           + "waitResolved{how（satisfied / expired）,at,output?（確認の標準出力）,waiting（解けた待ちと条件。同じ形）}。"

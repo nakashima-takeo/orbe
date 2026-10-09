@@ -191,7 +191,7 @@ private struct TaskParams {
     return links
   }
 
-  /// 待ちの条件（`{description, command, intervalMinutes, deadline}`。4 つとも必須）。`null` は条件だけを外す。
+  /// 待ちの条件（`{description, command, everyMinutes, deadline}`。4 つとも必須）。`null` は条件だけを外す。
   /// 値の規則（空・間隔の下限・過ぎた期限）はストアが確かめる。
   func waitingCondition() throws(ControlError) -> ClearableValue<WaitConditionRequest>? {
     guard let raw = params["waitingCondition"] else { return nil }
@@ -204,7 +204,7 @@ private struct TaskParams {
     return .set(
       WaitConditionRequest(
         description: try fields.string("description"), command: try fields.string("command"),
-        intervalMinutes: try fields.int("intervalMinutes"), deadline: deadline))
+        everyMinutes: try fields.int("everyMinutes"), deadline: deadline))
   }
 
   /// ISO 8601 の日時。時差の無い形（`2026-10-13T09:00`）は Mac のタイムゾーンの時刻として読む。

@@ -46,7 +46,7 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
     var draft = TaskDraft(title: "設定の検索を速くする")
     draft.waitingReason = "レビュー待ち"
     draft.waitingCondition = WaitConditionRequest(
-      description: "PR-214-reviewed", command: "exit 1", intervalMinutes: 10,
+      description: "PR-214-reviewed", command: "exit 1", everyMinutes: 10,
       deadline: Date().addingTimeInterval(3600), directory: directory,
       conversation: WaitConversation(command: "claude", sessionId: "s-1", workspace: workspace))
     let task = try wc.taskStore.add(draft)

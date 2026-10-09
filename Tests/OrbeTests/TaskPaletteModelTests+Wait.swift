@@ -12,7 +12,7 @@ extension TaskPaletteModelTests {
   private func waitCondition(conversation: WaitConversation? = nil) -> WaitCondition {
     WaitCondition(
       WaitConditionRequest(
-        description: "レビューが付いたら", command: "gh pr view 214", intervalMinutes: 10,
+        description: "レビューが付いたら", command: "gh pr view 214", everyMinutes: 10,
         deadline: DesignSceneFixtures.taskToday.addingTimeInterval(86400),
         conversation: conversation),
       setAt: DesignSceneFixtures.taskToday)

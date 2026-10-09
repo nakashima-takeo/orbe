@@ -249,7 +249,7 @@ private func takeCondition(_ args: inout [String]) -> [String: Any]? {
   }
   guard let minutes = Int(every) else { usageDie("--every requires <minutes>: \(every)") }
   return [
-    "description": description, "command": command, "intervalMinutes": minutes,
+    "description": description, "command": command, "everyMinutes": minutes,
     "deadline": deadline,
   ]
 }

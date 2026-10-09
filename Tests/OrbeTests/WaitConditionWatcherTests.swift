@@ -49,7 +49,7 @@ final class WaitConditionWatcherTests: OrbeTestCase {
     -> WaitConditionRequest
   {
     WaitConditionRequest(
-      description: description, command: "gh pr view 214", intervalMinutes: 10,
+      description: description, command: "gh pr view 214", everyMinutes: 10,
       deadline: Date().addingTimeInterval(deadlineIn))
   }
 

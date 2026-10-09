@@ -209,7 +209,7 @@ extension DesignSceneFixtures {
         description: "PR #214 にレビューが付いたら",
         command:
           "gh pr view 214 --json reviews --jq '.reviews[-1] | [.author.login, .state] | join(\" · \")'",
-        intervalMinutes: 10,
+        everyMinutes: 10,
         deadline: taskCalendar.date(
           bySettingHour: 9, minute: 0, second: 0,
           of: taskCalendar.date(byAdding: .day, value: 2, to: now)!)!,

@@ -192,7 +192,7 @@ extension WindowController {
     guard let condition = waiting.condition else { return json }
     var wire: [String: Any] = [
       "description": condition.description, "command": condition.command,
-      "intervalMinutes": condition.intervalMinutes,
+      "everyMinutes": condition.everyMinutes,
       "deadline": SessionEvent.iso8601(condition.deadline),
       "setAt": SessionEvent.iso8601(condition.setAt), "checks": condition.checks,
     ]

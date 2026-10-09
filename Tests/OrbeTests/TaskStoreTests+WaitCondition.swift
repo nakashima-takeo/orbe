@@ -14,7 +14,7 @@ extension TaskStoreTests {
     minutes: Int = 10, deadline: Date = Date().addingTimeInterval(3 * 86400)
   ) -> WaitConditionRequest {
     WaitConditionRequest(
-      description: description, command: command, intervalMinutes: minutes, deadline: deadline)
+      description: description, command: command, everyMinutes: minutes, deadline: deadline)
   }
 
   private func waitingTask(_ store: TaskStore) throws -> (TaskItem, WaitCondition) {

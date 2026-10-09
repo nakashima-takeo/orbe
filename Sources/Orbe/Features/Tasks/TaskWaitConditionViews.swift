@@ -138,7 +138,7 @@ struct TaskConditionBox: View {
     let next = condition.nextCheck(now: now, calendar: .current)
     let minutes = next.map { Int(($0.timeIntervalSince(now) / 60).rounded(.up)) } ?? 0
     return l10n.format(
-      .taskWaitEvery, condition.intervalMinutes,
+      .taskWaitEvery, condition.everyMinutes,
       minutes > 0 ? l10n.format(.taskWaitNextIn, minutes) : l10n.string(.taskWaitSoon))
   }
 

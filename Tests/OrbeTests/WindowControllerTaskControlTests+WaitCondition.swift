@@ -12,7 +12,7 @@ import XCTest
 extension WindowControllerTaskControlTests {
   private func condition(deadlineIn: TimeInterval = 3600) -> WaitConditionRequest {
     WaitConditionRequest(
-      description: "レビューが付いたら", command: "exit 1", intervalMinutes: 10,
+      description: "レビューが付いたら", command: "exit 1", everyMinutes: 10,
       deadline: Date().addingTimeInterval(deadlineIn))
   }
 
@@ -48,7 +48,7 @@ extension WindowControllerTaskControlTests {
     let listed = try listedCondition(wc)
     XCTAssertEqual(listed["description"] as? String, "レビューが付いたら")
     XCTAssertEqual(listed["command"] as? String, "exit 1")
-    XCTAssertEqual(listed["intervalMinutes"] as? Int, 10)
+    XCTAssertEqual(listed["everyMinutes"] as? Int, 10)
     XCTAssertEqual(listed["directory"] as? String, tab.cwd, "呼び出し元タブの作業ディレクトリで走る")
     XCTAssertEqual(
       listed["agent"] as? [String: String], ["command": "claude", "sessionId": "s-1"])
