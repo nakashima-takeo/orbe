@@ -1,7 +1,7 @@
 ---
 title: エージェント起動
 description: claude / codex / agy の自動検出と、⌘⇧A 選択パレット / ⌘⇧C デフォルト起動 / 制御 API による新タブでの直接起動
-updated: 2026-10-04
+updated: 2026-10-10
 ---
 
 # エージェント起動
@@ -41,3 +41,7 @@ resume 起動は永続復元だけでなく `orb agent resume` からも走る�
 ## デフォルトの永続
 
 `default-agent` は他設定と同じ均一レイヤに載り、global は settings、workspace は当該 WS の上書き層に保存する。起動パレット ⌘⇧A・オンボーディングの「デフォルトに設定」は WS 文脈を持たないため、**global スコープの設定変更**へ一本化する。設定パレットの agent サブパレットは他項目と同じ経路で、workspace スコープなら上書きを書ける（→ [settings](../palette/settings.md)）。
+
+## 裏で回す
+
+タブを開かずに非対話で回せるのは claude だけで、codex・agy は理由付きで断る。引数の契約・使えるツールの絞り方・最終応答の取り出しは [裏で回す仕組み](../platform/background.md)。

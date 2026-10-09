@@ -9,7 +9,20 @@ import Foundation
 /// - ORBE_REPORT_BIN: 同梱 binary の絶対パス（`swift run` では未解決→未設定＝no-op）。
 /// - ORBE_SOCK: このインスタンスの制御 socket。
 /// - PATH: 同梱 CLI（bare `orb`）の bin/ を前置。衝突は改名で解消済みゆえ順序非依存で解決する。
+///
+/// PATH 以外の注入（`Marker`）はタブの印で、注入する集合と起動時に外す集合（`markerNames`）は同じ定義から出る。
+/// Orbe 自身はこれらを読まないので、別の Orbe のタブから起動されたときは自分の環境から外す（`main.swift`）——
+/// 残すと git の hook・エディタ・裏の agent など全ての子が親のタブを名乗る。
 enum OrbeRuntimeEnv {
+  enum Marker: String, CaseIterable {
+    case tab = "ORBE_TAB"
+    case bundleId = "ORBE_BUNDLE_ID"
+    case reportBin = "ORBE_REPORT_BIN"
+    case sock = "ORBE_SOCK"
+  }
+
+  static var markerNames: [String] { Marker.allCases.map(\.rawValue) }
+
   /// `.app` 同梱の状態報告 binary（`<bundle>/Contents/Resources/bin/orbe-report`）の絶対パス。
   /// `swift run`（バンドル無し）では nil → env 未注入で hook が no-op。
   static var reportBinaryPath: String? {
@@ -41,10 +54,15 @@ enum OrbeRuntimeEnv {
 
   static func inject(into env: inout [String: String], tabId: Int) {
     prependBundledBin(to: &env)
-    env["ORBE_TAB"] = String(tabId)
-    env["ORBE_BUNDLE_ID"] = StateDir.bundleId
-    if let bin = reportBinaryPath { env["ORBE_REPORT_BIN"] = bin }
+    for (marker, value) in markers(tabId: tabId) { env[marker.rawValue] = value }
+  }
+
+  /// タブ `tabId` へ注入する印。値の無いもの（`swift run` の報告 binary 等）は含めない。
+  private static func markers(tabId: Int) -> [Marker: String] {
+    var markers: [Marker: String] = [.tab: String(tabId), .bundleId: StateDir.bundleId]
+    if let bin = reportBinaryPath { markers[.reportBin] = bin }
     let sock = ControlServer.shared.socketPath
-    if !sock.isEmpty { env["ORBE_SOCK"] = sock }
+    if !sock.isEmpty { markers[.sock] = sock }
+    return markers
   }
 }

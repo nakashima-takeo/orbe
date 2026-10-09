@@ -14,17 +14,26 @@ final class AgentCatalog {
   /// `reportsIdleOnStart` は Orbe のプラグインがその CLI の起動時 hook に idle を配線しているか
   /// （claude の SessionStart→idle。codex CLI 自身も SessionStart を持つが `codex-hooks.json` は
   /// 配線していない）——出所は `docs/spec/agent/plugin-package.md` の event→state 表。
+  /// `headless` は裏で非対話に回す能力。
   struct AgentProfile {
     let command: String
     let resumeFlag: String
     let reportsIdleOnStart: Bool
+    let headless: HeadlessSupport
   }
 
   /// 一級サポートの全体。並び＝デフォルト未設定時の優先順。
   static let profiles = [
-    AgentProfile(command: "claude", resumeFlag: "--resume", reportsIdleOnStart: true),
-    AgentProfile(command: "codex", resumeFlag: "resume", reportsIdleOnStart: false),
-    AgentProfile(command: "agy", resumeFlag: "--conversation", reportsIdleOnStart: false),
+    AgentProfile(
+      command: "claude", resumeFlag: "--resume", reportsIdleOnStart: true,
+      headless: .runs(HeadlessCLI(arguments: ClaudeHeadless.arguments, reply: ClaudeHeadless.reply))
+    ),
+    AgentProfile(
+      command: "codex", resumeFlag: "resume", reportsIdleOnStart: false,
+      headless: .refuses(.toolsNotAllowListable)),
+    AgentProfile(
+      command: "agy", resumeFlag: "--conversation", reportsIdleOnStart: false,
+      headless: .refuses(.noToolOrSessionControl)),
   ]
 
   static var supported: [String] { profiles.map(\.command) }
@@ -99,5 +108,53 @@ final class AgentCatalog {
       }
       return nil
     }
+  }
+}
+
+/// 裏で非対話に回す能力。
+enum HeadlessSupport {
+  case runs(HeadlessCLI)
+  case refuses(HeadlessRefusal)
+}
+
+/// 非対話の 1 回の起こし方。依頼文は標準入力で渡す。`reply` は標準出力の 1 行から最終応答を取り出す（最終応答の行でなければ nil）。
+struct HeadlessCLI {
+  let arguments: (_ model: String, _ tools: [String]) -> [String]
+  let reply: (Data) -> BackgroundAgentReply?
+}
+
+/// 裏で回せない理由。
+enum HeadlessRefusal: Equatable {
+  /// 組み込みツールを「これだけ許可」と指定する手段が無い。禁止の列挙では、版が上がって増えたツールが漏れる。
+  case toolsNotAllowListable
+  /// 使えるツールの指定も、会話を残さない指定も無い。
+  case noToolOrSessionControl
+}
+
+/// claude の非対話の契約。
+enum ClaudeHeadless {
+  /// MCP のツール（`mcp__` で始まる名前）を指定しない呼び出しは、利用者の設定・プラグイン・hook・MCP サーバーを一切読まず、
+  /// 指定した組み込みツールだけで閉じる。MCP のツールを指定した呼び出しは、利用者が登録した MCP サーバーを名前で使うため
+  /// 設定を読み、指定したもの以外は問わずに拒否する（`dontAsk`。利用者の bypassPermissions もこれで上書きする）。
+  static func arguments(model: String, tools: [String]) -> [String] {
+    let builtins = tools.filter { !$0.hasPrefix("mcp__") }
+    var args = ["-p", "--model", model, "--tools", builtins.joined(separator: ",")]
+    if !tools.isEmpty { args += ["--allowedTools", tools.joined(separator: ",")] }
+    args += [
+      "--permission-mode", "dontAsk", "--no-session-persistence",
+      "--output-format", "stream-json", "--verbose",
+    ]
+    if builtins.count == tools.count { args += ["--setting-sources", "", "--strict-mcp-config"] }
+    return args
+  }
+
+  /// 出来事の流れのうち、最後の `result` が最終応答。
+  static func reply(_ line: Data) -> BackgroundAgentReply? {
+    guard
+      let event = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
+      event["type"] as? String == "result"
+    else { return nil }
+    return BackgroundAgentReply(
+      text: event["result"] as? String ?? "", isError: event["is_error"] as? Bool ?? false)
   }
 }
