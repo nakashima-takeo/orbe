@@ -248,6 +248,87 @@ final class BackgroundSchedulerTests: OrbeTestCase {
 
     XCTAssertEqual(armed?.date, start.addingTimeInterval(90), "登録し直した予定の時刻で張り直す")
   }
+
+  // MARK: - 始め方の登録
+
+  /// 始め方の登録は、番人が時刻に関数を呼び、使い手が知らせた数え始めから数え直す。
+  private func registerStart(
+    id: String = "s", timing: BackgroundTiming? = .every(60), anchor: Date? = nil
+  ) throws -> StartRecorder {
+    let recorder = StartRecorder()
+    try scheduler.register(id: id, timing: timing, anchor: anchor ?? now, start: recorder.start)
+    return recorder
+  }
+
+  func testStartFormRunsOnScheduleAndCountsFromTheReportedAnchor() throws {
+    let recorder = try registerStart()
+
+    advance(to: start.addingTimeInterval(60))
+    XCTAssertEqual(recorder.finishes.count, 1)
+    XCTAssertTrue(scheduler.isRunning(id: "s"))
+    recorder.finishes[0](start.addingTimeInterval(55))
+
+    XCTAssertFalse(scheduler.isRunning(id: "s"))
+    XCTAssertEqual(armed?.date, start.addingTimeInterval(115), "知らせた数え始めから 1 間隔後")
+  }
+
+  /// いつを持たない予定は、自分では走らず、「今すぐ」でだけ走る。
+  func testUnscheduledEntryRunsOnlyWhenAskedNow() throws {
+    let recorder = try registerStart(timing: nil, anchor: start.addingTimeInterval(-86400))
+    advance(to: start.addingTimeInterval(86400))
+    XCTAssertEqual(recorder.finishes.count, 0)
+    XCTAssertNil(armed)
+
+    scheduler.runNow(id: "s")
+    scheduler.runNow(id: "s")
+
+    XCTAssertEqual(recorder.finishes.count, 1, "走っている間の「今すぐ」は何もしない")
+  }
+
+  /// いつだけの差し替えは走っている回を止めない。回の終わりは受け、新しいいつで数え直す。
+  func testRetimeKeepsTheRunningRunAndCountsWithTheNewTiming() throws {
+    let recorder = try registerStart()
+    scheduler.runNow(id: "s")
+
+    try scheduler.retime(id: "s", timing: .every(300))
+    XCTAssertEqual(recorder.stopped, 0, "走っている回は止めない")
+    XCTAssertTrue(scheduler.isRunning(id: "s"))
+    recorder.finishes[0](now)
+
+    XCTAssertEqual(armed?.date, now.addingTimeInterval(300))
+  }
+
+  func testRetimeToNoTimingStopsCounting() throws {
+    _ = try registerStart()
+
+    try scheduler.retime(id: "s", timing: nil)
+
+    XCTAssertNil(armed)
+  }
+
+  /// 外した回の終わりの知らせは捨てる（外した後に登録し直した予定の数え始めを動かさない）。
+  func testFinishFromARemovedRunIsIgnored() throws {
+    let recorder = try registerStart()
+    scheduler.runNow(id: "s")
+    let again = try registerStart(anchor: start.addingTimeInterval(-30))
+
+    recorder.finishes[0](start.addingTimeInterval(1000))
+
+    XCTAssertEqual(recorder.stopped, 1, "登録し直しは走っている回を止める")
+    XCTAssertEqual(again.finishes.count, 0)
+    XCTAssertEqual(armed?.date, start.addingTimeInterval(30))
+  }
+}
+
+/// 始め方の代役。呼ばれるたびに終わりを知らせる口を貯め、止められた回数を数える。
+private final class StartRecorder {
+  private(set) var finishes: [(Date) -> Void] = []
+  private(set) var stopped = 0
+
+  func start(_ finish: @escaping (Date) -> Void) -> BackgroundRunHandle {
+    finishes.append(finish)
+    return BackgroundRunHandle { [unowned self] in stopped += 1 }
+  }
 }
 
 /// 実行の係の代役。呼ばれた順に番号を振り、止める手と終わらせる口を持つ。
