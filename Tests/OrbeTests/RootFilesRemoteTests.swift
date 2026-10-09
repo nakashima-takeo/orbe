@@ -85,6 +85,11 @@ final class RootFilesRemoteTests: OrbeTestCase {
     try commit("c.txt", "c\n")
     XCTAssertEqual(
       finish(files) { files.push(onProgress: { _ in }, completion: $0) }.failure, .pushRejected)
+
+    // 取ってきた後の拒否は non-fast-forward。
+    XCTAssertNil(finish(files) { files.fetch(onProgress: { _ in }, completion: $0) }.failure)
+    XCTAssertEqual(
+      finish(files) { files.push(onProgress: { _ in }, completion: $0) }.failure, .pushRejected)
   }
 
   /// サーバの hook が断った push は「拒否された（先に取り込みが要る）」ではなく、サーバの理由のままの「その他」。
@@ -104,14 +109,15 @@ final class RootFilesRemoteTests: OrbeTestCase {
     XCTAssertTrue(reason.contains("pre-receive hook declined"), reason)
   }
 
-  /// 取り込んでも直らない拒否（送るタグがリモートに別の中身で在る）は「拒否された（先に取り込みが要る）」ではなく、
-  /// git の要約のままの「その他」。
+  /// 取り込んでも直らない拒否（送るタグがリモートに別の中身で在る）は、取り込めば直る拒否（fetch first）が混ざっても
+  /// 「拒否された（先に取り込みが要る）」ではなく、git の要約のままの「その他」。
   func testARejectionThatPullingCannotFixKeepsItsReason() throws {
     repo.addOrigin()
     XCTAssertTrue(repo.git(["tag", "v1"]).isSuccess)
     XCTAssertTrue(repo.git(["push", "-q", "origin", "v1"]).isSuccess)
     try commit("b.txt", "b\n")
     XCTAssertTrue(repo.git(["tag", "-f", "v1"]).isSuccess)
+    try repo.advanceOrigin(writing: "o.txt", "o\n")
     for refspec in ["refs/heads/main:refs/heads/main", "refs/tags/*:refs/tags/*"] {
       XCTAssertTrue(repo.git(["config", "--add", "remote.origin.push", refspec]).isSuccess)
     }
