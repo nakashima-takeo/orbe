@@ -4,10 +4,11 @@ import XCTest
 
 /// SessionStore.closeWorkspace(_:origin:) の純ドメイン契約を固定する。
 ///
-/// 契約は3つ。①アクティブ workspace を削除したら MRU（`lastUsedAt` 最大の他 workspace）を次のアクティブに
+/// 契約は2つ。①アクティブ workspace を削除したら MRU（`lastUsedAt` 最大の他 workspace）を次のアクティブに
 /// する（作成順の隣ではない）。②背景 workspace を削除してもアクティブ workspace の同一性は保つ。
-/// ③最後の1つは削除しない（`.invalid`・配列不変）。併せて、アクティブ workspace の最後のタブを閉じても
-/// `removeTab` は退避せずその場で空を維持する（`.emptiedActive`）ことを固定する。
+/// 消せない workspace（Orbe の workspace・最後の通常 workspace）は `SessionStoreOrbeWorkspaceTests` が持つ。
+/// 併せて、アクティブ workspace の最後のタブを閉じても `removeTab` は退避せずその場で空を維持する
+/// （`.emptiedActive`）ことを固定する。
 /// Workspace は参照型のため、アクティブの同一性は index ではなくオブジェクト参照で照合する。
 final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
 
@@ -51,17 +52,6 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
       store.closeWorkspace(0, origin: .gesture), .backgroundChanged, "背景(A・アクティブより前)の削除")
     XCTAssertTrue(store.current === c, "アクティブは同一 C を指し続ける")
     XCTAssertEqual(store.activeWorkspace, 1, "前の削除で index を 2→1 に詰める")
-  }
-
-  // MARK: - 契約3: 最後の1つ
-
-  func testCloseLastWorkspaceIsInvalidAndUnchanged() {
-    let only = ws("only", t1)
-    let store = SessionStore(workspaces: [only], activeWorkspace: 0)
-
-    XCTAssertEqual(store.closeWorkspace(0, origin: .gesture), .invalid, "最後の1つは削除できない")
-    XCTAssertEqual(store.workspaces.count, 1, "配列は不変")
-    XCTAssertTrue(store.current === only)
   }
 
   // MARK: - removeTab のアクティブ0タブ化はその場で空維持（退避しない）

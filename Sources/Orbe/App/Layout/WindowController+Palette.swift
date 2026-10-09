@@ -20,10 +20,15 @@ extension WindowController {
 
   /// 起動時の初回フロー。preferredLanguage 未設定なら言語選択を Onboarding の前段に出し、確定後に
   /// 既存 Onboarding へ進む。言語ゲートは Onboarding ゲート（導入済みフラグ ＋ 同梱プラグイン有無）とは独立。
+  /// Orbe の workspace のフォルダは雛形の言語が要るので、UI 言語が確定した時点で用意する。
   func showFirstRunFlow() {
     if AppStatePersistence.load()?.preferredLanguage == nil {
-      showLanguageSelect { [weak self] in self?.agentLauncher.showOnboardingIfNeeded() }
+      showLanguageSelect { [weak self] in
+        self?.prepareOrbeWorkspaceFolder()
+        self?.agentLauncher.showOnboardingIfNeeded()
+      }
     } else {
+      prepareOrbeWorkspaceFolder()
       agentLauncher.showOnboardingIfNeeded()  // 初回のみ・オンボーディングで各 CLI へ導入
     }
   }
@@ -105,14 +110,19 @@ extension WindowController {
       WorkspacePaletteModel.Item(
         index: entry.offset, name: entry.element.name,
         isActive: entry.offset == activeWorkspace, dir: entry.element.rootPath,
+        canSetDir: store.canChangeDir(entry.offset),
+        canClose: store.removalBlocker(entry.offset) == nil,
         live: entry.element.paletteLiveState())
     }
-    // 起源 workspace（配列先頭 offset 0＝起動時の default WS）を MRU より優先して常に最上位へ固定する
-    // （改名しても最上位。第一キー）。残りは最近使った順（MRU）: lastUsedAt 降順、同時刻・未設定
+    // Orbe の workspace を最上段、起源 workspace（配列で最初の通常 workspace）を 2 段目に MRU より優先して
+    // 固定する（改名しても位置は同じ）。残りは最近使った順（MRU）: lastUsedAt 降順、同時刻・未設定
     // （旧データは全 nil）は元 offset 昇順で安定化し作成順を保つ（sorted は安定保証なしのため offset を
     // タイブレークに使う）。休眠（dormant）は位置のまま行ごと減光する別軸信号——末尾固定はしない。
+    let origin = store.originWorkspaceIndex
     let order = workspaces.enumerated().sorted { a, b in
-      if (a.offset == 0) != (b.offset == 0) { return a.offset == 0 }  // 起源を最上位に固定
+      let orbeA = store.isOrbeWorkspace(a.offset)
+      if orbeA != store.isOrbeWorkspace(b.offset) { return orbeA }
+      if (a.offset == origin) != (b.offset == origin) { return a.offset == origin }
       let ta = a.element.lastUsedAt ?? .distantPast
       let tb = b.element.lastUsedAt ?? .distantPast
       if ta != tb { return ta > tb }

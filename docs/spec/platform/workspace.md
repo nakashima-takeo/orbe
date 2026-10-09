@@ -1,16 +1,16 @@
 ---
 title: workspace
 description: 名前付きコンテナの保持・切替・keep-alive と、workspace 毎の設定上書き。切替・作成の UI は palette/workspace が持つ
-updated: 2026-10-04
+updated: 2026-10-10
 ---
 
 # workspace
 
 プロジェクトごとにタブ・作業ディレクトリ・設定を分けて持つ、名前付きコンテナ。1 ウィンドウが複数の workspace を束ね、画面に載るのは常にアクティブな 1 つだけ。切替・作成・改名などの UI は [workspace パレット](../palette/workspace.md) が持ち、この文書はコンテナとしての意味論を持つ。
 
-host 所有。ドメイン状態（workspace 配列とアクティブ index）の実体は Foundation 純粋型 `SessionStore` が所有し、配列 CRUD・active index 補正・MRU 退避先選定はその純メソッド経由で行う。`WindowController` は store を持つ薄いコーディネータで、ビュー mount/reparent・focus・chrome 投影・永続・制御チャネルを担う。タブ閉鎖・選択のような危険な操作は store が「決定（outcome）」を返し、controller がビュー副作用を実行する——判断と副作用を分けてテスト可能に保つ形。
+host 所有。ドメイン状態（workspace 配列とアクティブ index と Orbe の workspace を指す値）の実体は Foundation 純粋型 `SessionStore` が所有し、配列 CRUD・active index 補正・MRU 退避先選定はその純メソッド経由で行う。`WindowController` は store を持つ薄いコーディネータで、ビュー mount/reparent・focus・chrome 投影・永続・制御チャネルを担う。タブ閉鎖・選択のような危険な操作は store が「決定（outcome）」を返し、controller がビュー副作用を実行する——判断と副作用を分けてテスト可能に保つ形。
 
-起動時は既定 workspace 1 つ、または永続からの復元（→ [persistence](persistence.md)）。workspace は root path を持つ。worktree パレットで新しいブランチを作れたときのベースを「前回」として workspace ごとに覚え、次の作成で最初に選ぶ（→ [worktree](../palette/worktree.md)）。書くのはウィンドウだけで、パレットは読むだけ。
+起動時は default（root はホーム）と [Orbe の workspace](#orbe-の-workspace) の 2 つ、または永続からの復元に Orbe の workspace を保証したもの（→ [persistence](persistence.md)）。workspace は root path を持つ。worktree パレットで新しいブランチを作れたときのベースを「前回」として workspace ごとに覚え、次の作成で最初に選ぶ（→ [worktree](../palette/worktree.md)）。書くのはウィンドウだけで、パレットは読むだけ。
 
 ## 保持・切替
 
@@ -24,7 +24,18 @@ host 所有。ドメイン状態（workspace 配列とアクティブ index）�
 - workspaceの `active`（現在前面にあるか）と `activated`（起動済みタブがあるか）、`lastUsedAt`（前面で利用したMRU）は別の事実である。0タブworkspaceを前面化すると `active: true / activated: false` のままMRUだけを更新する。背景でのmaterialize、背景workspaceのtab close、前面workspaceを0tab化するcloseではMRUを動かさない。一方、前面workspaceでtab close後も残存tabを実際にreselectして表示し続ける場合は、新たなforeground useとしてMRUを更新する。
 - 新規 workspace の root path は、作成フォーム経由では入力パス（clone なら clone 先）。制御 API `create_workspace` で rootPath を省略したときはアクティブタブの cwd 由来（不明時はホーム）。
 - アクティブ workspace の最後のタブを閉じても、その workspace は 0 タブの空状態でアクティブに残る（単一・複数 workspace 問わず。ウィンドウは閉じない）。背景 workspace の最後のタブが閉じても 0 タブのまま残す。
-- パレットの詳細メニューからの削除は、アクティブ workspace なら最近使った他 workspace（MRU）を次のアクティブにし、背景 workspace なら現アクティブは不変（workspace が 1 つだけなら削除不可）。
+- パレットの詳細メニューからの削除は、アクティブ workspace なら最近使った他 workspace（MRU）を次のアクティブにし、背景 workspace なら現アクティブは不変。Orbe の workspace と最後の通常 workspace は消せない（下記）。
+
+## Orbe の workspace
+
+Orbe 自身の窓口として、通常の workspace とは別に必ず 1 つある workspace。root は専用フォルダで、そこに置く CLAUDE.md が、ここで起こした claude を Orbe の秘書として振る舞わせる。それ以外の workspace を「通常の workspace」と呼ぶ。
+
+- **一覧の側が 1 つを指す。** どれが Orbe の workspace かは、アクティブ workspace と同じく一覧が持つ 1 つの値（対象の永続 ID）で表し、workspace 自身は自分の役割を知らない——「ちょうど 1 つ」を要素ごとの印で表すと 0 個や 2 個も表せてしまうため。
+- **起動時の保証。** 復元（または新規の default 作成）の後に 1 回、「Orbe の workspace がちょうど 1 つあり、root が専用フォルダ」へそろえる。指している workspace があれば root だけを専用フォルダへ上書きし（名前・位置・タブは保つ）、無い・指す先が見つからなければ「Orbe」という名前の workspace を末尾に足して指す。active は動かさず、タブも起こさない（作っただけではタブは起きない）。指す先が見つからず足し直したとき、同じフォルダを root に持つ既存の workspace は通常の workspace のまま残る——root の一致では、同じフォルダで作った通常の workspace と区別できないため。
+- **専用フォルダ。** state フォルダ（[persistence](persistence.md)。`ORBE_STATE_DIR` があればその下）の `orbe-workspace/`。root は永続値ではなく state フォルダから毎起動導く値で、隔離起動でも本物のフォルダに触れない。state フォルダが決まらなければ保証もフォルダの用意もしない。
+- **CLAUDE.md は UI 言語が確定した時点で用意する。** 言語選択済みなら起動時、初回なら言語選択の確定時に、フォルダが無ければその言語（日本語／英語）の雛形入りで作り、あれば中身を一切見ない——人や AI が書き換えた CLAUDE.md を上書きしないため。CLAUDE.md だけを消しても戻さず、フォルダごと消すと次の起動で雛形ごと作り直す。作成は作りかけを残さない（一時領域で組んでから置く）。失敗してもフォルダが無いままなので次の起動で再挑戦する。
+- **消せない・ディレクトリを変えられない・改名はできる。** 削除とディレクトリ変更の可否は SessionStore の判断 1 か所が決め、パレットの詳細メニュー・ウィンドウの操作・[制御 API](../control/api.md) はそれに従う。削除を妨げる理由は 2 つ——Orbe の workspace であること、最後の通常 workspace であること（Orbe の workspace は数に入れない）。通常の workspace をすべて消して Orbe の workspace だけが残ると、新しく起こすタブが秘書向けの CLAUDE.md のある場所で起きてしまうため。
+- 他は通常の workspace と同じ——切替・タブ・設定上書き・タスクの付き先として普通に使える。
 
 ## 設定上書き（workspace 毎プロファイル）
 

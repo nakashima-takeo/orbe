@@ -57,7 +57,7 @@ extension WindowControllerWorkspaceTests {
         ]))
     let wc = WindowController()
     wc.showWorkspacePalette()
-    let item = try XCTUnwrap(wc.model.workspacePalette?.items.first)
+    let item = try XCTUnwrap(wc.model.workspacePalette?.items.first { $0.name == "empty" })
     XCTAssertTrue(item.isActive, "現在前面である")
     XCTAssertTrue(item.live.dormant, "起床済みタブは 0")
     XCTAssertTrue(item.live.rollup.isEmpty, "復元 agent も 0 なので chip は出さない")

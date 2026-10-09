@@ -51,6 +51,13 @@ final class WindowControllerRestoreTests: OrbeTestCase {
     return layer
   }
 
+  /// 保存済みの Orbe の workspace（root は起動時にそろえる先と同じ）。ラウンドトリップを等値で見る
+  /// fixture に入れておくと、起動時の保証が何も足さない。
+  private func orbeWorkspace() throws -> WorkspaceState {
+    WorkspaceState(
+      name: "Orbe", rootPath: try XCTUnwrap(OrbeWorkspaceFolder.url).path, activeTab: 0, tabs: [])
+  }
+
   /// ディスクへ書いてから復元済み `WindowController` を返す。
   private func launch(
     activeWorkspace: Int, _ workspaces: [WorkspaceState], windowSize: WindowSize? = nil
@@ -74,11 +81,12 @@ final class WindowControllerRestoreTests: OrbeTestCase {
 
   /// アクティブが 0 タブ（休眠）なら surface が 1 つも起きず、`WorkspacesFile` が**完全に等値**で戻る。
   /// 分割比・cwd・エージェントセッション・明示タイトル・上書き設定・最終使用時刻・前回のベース・
-  /// ウィンドウサイズを 1 本で通す——どれか 1 つを復元が落とせばここで落ちる。
+  /// ウィンドウサイズ・Orbe の workspace を 1 本で通す——どれか 1 つを復元が落とせばここで落ちる。
   ///
   /// 0 タブでも前面 workspace として利用した時刻は進む。一方、タブの起床状態は
   /// 永続化しないため、再保存で変わるのはアクティブ側の `lastUsedAt` だけ。
   func testRoundTripForEmptyActiveWorkspaceAdvancesOnlyLastUsedAt() throws {
+    let orbe = try orbeWorkspace()
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
@@ -98,8 +106,9 @@ final class WindowControllerRestoreTests: OrbeTestCase {
           ],
           lastUsedAt: stampFront, settingsOverride: overrideLayer(),
           lastWorktreeBase: "origin/release/0.8"),
+        orbe,
       ],
-      windowSize: WindowSize(width: 700, height: 400))
+      windowSize: WindowSize(width: 700, height: 400), orbeWorkspaceId: orbe.persistentId)
     WorkspacePersistence.save(original)
 
     let before = Date()
@@ -121,6 +130,7 @@ final class WindowControllerRestoreTests: OrbeTestCase {
   /// 背景 workspace も含めて保存値のまま等値で見る。
   func testRoundTripWithMountedTabOnlyAdvancesActiveLastUsedAt() throws {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
+    let orbe = try orbeWorkspace()
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 1,
       workspaces: [
@@ -134,8 +144,9 @@ final class WindowControllerRestoreTests: OrbeTestCase {
             TabState(cwd: home, agent: nil, explicitTitle: "front")
           ],
           lastUsedAt: stampFront, settingsOverride: overrideLayer()),
+        orbe,
       ],
-      windowSize: WindowSize(width: 700, height: 400))
+      windowSize: WindowSize(width: 700, height: 400), orbeWorkspaceId: orbe.persistentId)
     WorkspacePersistence.save(original)
     let before = Date()
 

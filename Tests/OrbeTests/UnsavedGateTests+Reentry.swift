@@ -105,14 +105,14 @@ extension UnsavedGateTests {
     let other = wc.activeWorkspace
     edit(try XCTUnwrap(wc.activeTab).editor.open(repo.url("a.txt"), as: .pinned))
     wc.createWorkspace(name: "third", rootPath: repo.root)
-    XCTAssertEqual(wc.workspaces.map(\.name), ["main", "other", "third"])
+    XCTAssertEqual(wc.regularWorkspaces.map(\.name), ["main", "other", "third"])
 
     wc.closeWorkspace(other, origin: .gesture)
     let sheet = try XCTUnwrap(wc.window.attachedSheet)
     wc.closeWorkspace(0, origin: .controlAPI)
-    XCTAssertEqual(wc.workspaces.map(\.name), ["other", "third"], "先頭が消えて位置がずれる")
+    XCTAssertEqual(wc.regularWorkspaces.map(\.name), ["other", "third"], "先頭が消えて位置がずれる")
     wc.window.endSheet(sheet, returnCode: .alertSecondButtonReturn)
 
-    XCTAssertEqual(wc.workspaces.map(\.name), ["third"], "確認した workspace だけが消える")
+    XCTAssertEqual(wc.regularWorkspaces.map(\.name), ["third"], "確認した workspace だけが消える")
   }
 }

@@ -3,6 +3,22 @@ import AppKit
 /// workspace の切替・作成・改名・ディレクトリ設定・削除と、空（0タブ）workspace のアクティブ化。
 /// WindowController 本体からタブ管理・復元・chrome 更新と関心を分離する。
 extension WindowController {
+  /// Orbe の workspace がちょうど 1 つあり、root が専用フォルダを指す状態へそろえ、保存を予約する。
+  /// フォルダそのものの用意は UI 言語の確定を待つ（`prepareOrbeWorkspaceFolder`）。
+  func ensureOrbeWorkspace() {
+    guard let root = OrbeWorkspaceFolder.url else {
+      NSLog("[orbe-workspace] state dir unresolved, Orbe workspace not ensured")
+      return
+    }
+    store.ensureOrbeWorkspace(rootPath: root.path)
+    scheduleSave()
+  }
+
+  /// Orbe の workspace のフォルダを現在の UI 言語の雛形で用意する（無ければ作る・あれば触らない）。
+  func prepareOrbeWorkspaceFolder() {
+    OrbeWorkspaceFolder.prepare(language: localization.language)
+  }
+
   func switchWorkspace(to index: Int) {
     guard store.setActiveWorkspace(index) else { return }
     activateCurrent()
@@ -62,12 +78,12 @@ extension WindowController {
     scheduleSave()
   }
 
-  /// workspace を閉じる。最後の 1 つは残す。`origin` は呼び手が名乗る（WorkspacePalette の削除は
+  /// workspace を閉じる。`SessionStore.removalBlocker` があれば閉じない。`origin` は呼び手が名乗る（WorkspacePalette の削除は
   /// `.gesture`・`remove_workspace` は `.controlAPI`）——配下のタブが同一性の終わり方として写す。
   /// 人の操作で、配下のタブのエディターに未保存の文書があれば合計で 1 回 sheet で確認する（`closeTab` と
   /// 同じ関門。`store.closeWorkspace` はタブを直接外し `closeTab` を通らない）。
   func closeWorkspace(_ index: Int, origin: TabCloseOrigin) {
-    guard workspaces.indices.contains(index) else { return }
+    guard workspaces.indices.contains(index), store.removalBlocker(index) == nil else { return }
     let unsaved = origin == .gesture ? workspaces[index].tabs.flatMap { $0.unsavedDocuments() } : []
     guard !unsaved.isEmpty else {
       performCloseWorkspace(index, origin: origin)

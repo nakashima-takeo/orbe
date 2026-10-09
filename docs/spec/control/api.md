@@ -1,7 +1,7 @@
 ---
 title: 制御 API（外部 → Orbe）
 description: Unix socket 上の JSON-RPC でタブ/workspace/エージェント/タスクを操作する out-of-band 制御チャネルと、イベント履歴（seq）・待機・MCP ブリッジ・ツール群・mount 境界
-updated: 2026-10-07
+updated: 2026-10-10
 ---
 
 # 制御 API（外部 → Orbe）
@@ -24,7 +24,7 @@ Unix domain socket `control.sock`（workspaces.json と並置・パーミッシ�
 - `-32602` params の欠落・型不一致・値域外。
 - `-32004` 宛先（tab / workspace / タスク）が見つからない。宛先 ID を解決へ直に渡すメソッド（`get_tab_text` / `send_text` / `send_key` / `report_agent` / `completion_accept`）は `tabId` の欠落・型不一致もここに落ちる（解決の前に検証を挟むメソッドは `-32602`）。
 - `-32006` `wait_for_event` の `after` が履歴の保持範囲より古い（対処は seq を取り直す。呼び出し側のバグである `-32602` と分ける）。
-- `-32000` 実行できない（ウィンドウ未接続・spawn 失敗・最後の workspace 削除・`prompt_agent` の busy / 未 mount・ready 待ち中のエージェント消滅）。
+- `-32000` 実行できない（ウィンドウ未接続・spawn 失敗・消せない workspace の削除・Orbe の workspace の root 変更・`prompt_agent` の busy / 未 mount・ready 待ち中のエージェント消滅）。
 
 無応答契約を持つのは `completion_update` / `completion_end` の 2 つだけで、他は必ず 1 行応答を返す——読めない行にも返すことで、クライアントが応答待ちでハングしない。
 
@@ -69,8 +69,8 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 - `config_set {key, value, scope, workspaceId?}` → `{ok, key, value, scope}` … 設定を適用する（設定パレットと同一経路）。**全設定**が `scope` ∈ {global, workspace}。workspace は `workspaceId` 省略でアクティブ WS、指定でその WS（非アクティブ可・未知 id は `-32004`）の上書き層へ書く。**保存は常に、ライブ反映は global か対象がアクティブ WS の時だけ**（非アクティブ WS 上書きは次回 activate 時に効く）。値検証はレジストリの domain 駆動＝唯一の検証点で、`value: null` は「解除（継承へ戻す）」として受理する。未知 key・型不一致・値域外・不正 enum は `-32602`。socket 専用。
 - `create_workspace {name, rootPath?}` → `{workspaceId, name, rootPath}` … `name` 空（trim 後）は `-32602`。`rootPath` を渡してそれが空（trim 後）も `-32602`（省略はアクティブタブ cwd → ホーム導出。`~` 展開あり）。socket 専用。
 - `rename_workspace {workspaceId, name}` … 未知 id は `-32004`、`name` 空は `-32602`。socket 専用。
-- `set_workspace_root {workspaceId, rootPath}` … GUI パレットのディレクトリ変更と同一経路（trim・`~` 展開・実在チェックなし・アクティブなら chrome 即時更新・永続化）。未知 id は `-32004`、空は `-32602`。socket 専用。
-- `remove_workspace {workspaceId}` … 未知 id は `-32004`。最後の 1 つは削除不可で `-32000`（[workspace](../platform/workspace.md) の「最低 1 枚を残す」規律）。socket 専用。
+- `set_workspace_root {workspaceId, rootPath}` … GUI パレットのディレクトリ変更と同一経路（trim・`~` 展開・実在チェックなし・アクティブなら chrome 即時更新・永続化）。未知 id は `-32004`、[Orbe の workspace](../platform/workspace.md#orbe-の-workspace) は `-32000`、空は `-32602`。socket 専用。
+- `remove_workspace {workspaceId}` … 未知 id は `-32004`。Orbe の workspace と最後の通常 workspace は削除不可で `-32000`（理由はメッセージで分かる。可否は [workspace](../platform/workspace.md#orbe-の-workspace) の判断に従う）。socket 専用。
 - `focus_tab {tabId}` … そのタブを選択して焦点の面へフォーカスを移す（→ [chrome/layout](../chrome/layout.md) のフォーカス）。別 workspace のタブなら activate を伴う（手元 Mac のアクティブ workspace も切り替わる）。冪等。未知 tab は `-32004`。socket 専用。
 - `open_file {tabId, path}` … そのタブのエディターでファイルを開き（→ [editor/code](../editor/code.md)）、エディター面が見える配置にして（隠れていれば全面、分割中は焦点だけ）、`focus_tab` と同じくタブを選んでテキスト面へフォーカスを移す。`path` は絶対か、`~` 展開の上でタブの実効 cwd からの相対——symlink は実体へ解く（別の綴りで開いても同じ文書、保存も実体へ届く）。既に開いているファイルは焦点を移すだけ。開いた文書はファイルタブ行に普通のタブとして並び（既に仮のタブで開いていれば普通のタブに変わる——人の次のクリックが入れ替えない）、タブの根の下ならエクスプローラーがその祖先を開いて選択表示する（→ [editor/shell](../editor/shell.md)）。未知 tab は `-32004`、`path` 欠落・空は `-32602`、読めない・UTF-8 でないファイルと、Metal の装置が取れずテキスト面を作れない環境では `-32000`（それぞれ `cannot read: <path>`・`not UTF-8: <path>`・`no Metal device: <path>`。面は変わらない）。socket 専用。
 - `close_tab {tabId}` … GUI（Cmd+W）と同一のカスケード——アクティブ workspace の最後のタブを閉じても 0 タブの空状態でアクティブに残る（ウィンドウは閉じない）。ただしエディターの未保存の文書は確認せず黙って捨てる（無人の操作に確認は出せない → [editor/shell](../editor/shell.md)）。`remove_workspace` も同じ。応答の `seq` より前にタブが消える（応答直後の `list_tabs` に出ない）。未知 tab は `-32004`。socket 専用。

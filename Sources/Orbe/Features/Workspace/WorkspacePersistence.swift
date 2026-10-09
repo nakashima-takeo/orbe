@@ -11,15 +11,32 @@ struct WorkspacesFile: Codable, Equatable {
   /// 終了時のウィンドウサイズ（幅・高さ）。位置は記憶しない。
   /// optional——一度もリサイズしていない起動では書かれない。無ければ既定 800×500。
   var windowSize: WindowSize?
+  /// Orbe の workspace の `persistentId`（`SessionStore.orbeWorkspaceId`）。無いか読めなければ nil——
+  /// 後から足したフィールドの異常でファイル全体を落とさない。
+  var orbeWorkspaceId: UUID?
+
+  enum CodingKeys: String, CodingKey {
+    case version, activeWorkspace, workspaces, windowSize, orbeWorkspaceId
+  }
 
   init(
     version: Int, activeWorkspace: Int, workspaces: [WorkspaceState],
-    windowSize: WindowSize? = nil
+    windowSize: WindowSize? = nil, orbeWorkspaceId: UUID? = nil
   ) {
     self.version = version
     self.activeWorkspace = activeWorkspace
     self.workspaces = workspaces
     self.windowSize = windowSize
+    self.orbeWorkspaceId = orbeWorkspaceId
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    version = try c.decode(Int.self, forKey: .version)
+    activeWorkspace = try c.decode(Int.self, forKey: .activeWorkspace)
+    workspaces = try c.decode([WorkspaceState].self, forKey: .workspaces)
+    windowSize = try c.decodeIfPresent(WindowSize.self, forKey: .windowSize)
+    orbeWorkspaceId = try? c.decodeIfPresent(UUID.self, forKey: .orbeWorkspaceId)
   }
 }
 

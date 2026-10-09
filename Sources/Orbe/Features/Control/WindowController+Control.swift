@@ -289,11 +289,15 @@ extension WindowController: ControlTarget {
     return .success(["ok": true])
   }
 
-  /// workspace の rootPath を変更する（`ws dir`）。id 未発見 -32004・rootPath 空 -32602。
+  /// workspace の rootPath を変更する（`ws dir`）。id 未発見 -32004・Orbe の workspace -32000・rootPath 空 -32602。
   /// 意味論は GUI（パレットのディレクトリ変更）と同一: trim・`~` ホーム展開・実在チェックなし。
   func controlSetWorkspaceRoot(workspaceId: Int, rootPath: String) -> Result<Any, ControlError> {
     guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else {
       return .failure(ControlError(code: -32004, message: "workspace not found"))
+    }
+    guard store.canChangeDir(index) else {
+      return .failure(
+        ControlError(code: -32000, message: "cannot change the Orbe workspace directory"))
     }
     guard !rootPath.trimmingCharacters(in: .whitespaces).isEmpty else {
       return .failure(ControlError(code: -32602, message: "workspace rootPath is empty"))
@@ -302,14 +306,19 @@ extension WindowController: ControlTarget {
     return .success(["ok": true])
   }
 
-  /// workspace を削除する（`ws rm`）。id 未発見 -32004・最後の 1 つは削除不可 -32000。
+  /// workspace を削除する（`ws rm`）。id 未発見 -32004・消せない workspace -32000（理由はメッセージ）。
   func controlRemoveWorkspace(workspaceId: Int) -> Result<Any, ControlError> {
     guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else {
       return .failure(ControlError(code: -32004, message: "workspace not found"))
     }
-    // closeWorkspace は最後の 1 つ（.invalid）を no-op で握るため、CLI へ明示エラーを返すべく事前判定する。
-    guard workspaces.count > 1 else {
+    // closeWorkspace は消せない workspace を no-op で握るため、CLI へ明示エラーを返すべく事前に理由を引く。
+    switch store.removalBlocker(index) {
+    case .orbeWorkspace:
+      return .failure(ControlError(code: -32000, message: "cannot remove the Orbe workspace"))
+    case .lastRegularWorkspace:
       return .failure(ControlError(code: -32000, message: "cannot remove last workspace"))
+    case nil:
+      break
     }
     closeWorkspace(index, origin: .controlAPI)
     return .success(["ok": true])
