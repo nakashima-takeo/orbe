@@ -305,6 +305,49 @@ final class IntakeStoreTests: OrbeTestCase {
     XCTAssertEqual(try reloaded.create(Self.definition(), now: t0).id, 2, "採番位置も戻る")
   }
 
+  /// 以前の Orbe が書いた intakes.json を読み戻せる。この fixture はこの形で凍結しておく（型の変更に合わせて書き換えない）。
+  ///
+  /// 壊れると何が起きるか: 回の記録や提案の Swift の名前を変える・既定値付きの必須フィールドを足すと、保存の語が黙って
+  /// 変わり、更新した利用者の intakes.json が初回起動で丸ごと退避されて、AI と人が作った受信と提案が消える。
+  func testFileWrittenByThisVersionLoads() throws {
+    let saved = """
+      {"version":1,"nextIntakeId":3,"nextProposalId":2,"intakes":[{"id":2,"definition":{\
+      "name":"Slack: 自分宛","fetch":{"agent":"claude","model":"haiku","tools":["mcp__slack__search"],\
+      "request":"DM"},"judge":{"agent":"claude","model":"sonnet","instruction":"自分がやること"},\
+      "when":{"dailyAt":["09:00"]}},"paused":true,"createdAt":"2027-01-15T08:00:00.000Z",\
+      "lastFetched":[{"id":"m1","link":"https://example.com/m1"}],"reviewAll":false,\
+      "lastRunAt":"2027-01-15T09:00:00.000Z","runs":[{"startedAt":"2027-01-15T09:00:00.000Z",\
+      "endedAt":"2027-01-15T09:01:00.000Z","trigger":"schedule","fetch":{"commandLine":"claude -p",\
+      "ending":"exited 0","items":1,"rejected":{"count":0,"reasons":[]}},"newItems":1,\
+      "judge":{"commandLine":"claude -p","ending":"exited 0","proposed":1,"resolved":0,\
+      "rejected":{"count":1,"reasons":["line 2: not JSON"]}},"withdrawn":0}]}],\
+      "proposals":[{"id":1,"intakeId":2,"item":{"id":"m1","link":"https://example.com/m1",\
+      "body":"返信ください","time":"2027-01-15T08:30:00.000Z"},"title":"返信する","due":"2027-01-16",\
+      "proposedAt":"2027-01-15T09:01:00.000Z","state":"accepted","taskId":7}]}
+      """
+    try Data(saved.utf8).write(to: try intakesFile())
+
+    let store = IntakeStore()
+
+    let intake = try XCTUnwrap(store.intake(2), "退避せずに読む")
+    XCTAssertEqual(
+      intake.definition,
+      IntakeDefinition(
+        name: "Slack: 自分宛",
+        fetch: .agent(
+          IntakeAgentFetch(
+            cli: "claude", model: "haiku", tools: ["mcp__slack__search"], request: "DM")),
+        judge: IntakeJudge(cli: "claude", model: "sonnet", instruction: "自分がやること"),
+        when: .daily([.init(hour: 9, minute: 0)])))
+    XCTAssertTrue(intake.paused)
+    XCTAssertEqual(intake.lastFetched, [IntakeSeen(id: "m1", link: "https://example.com/m1")])
+    XCTAssertEqual(intake.runs.first?.newItems, 1)
+    XCTAssertEqual(intake.runs.first?.judge?.rejected.reasons, ["line 2: not JSON"])
+    XCTAssertEqual(store.proposals.first?.state, .accepted(taskId: 7))
+    XCTAssertEqual(store.proposals.first?.due?.text, "2027-01-16")
+    XCTAssertEqual(try store.create(Self.definition(), now: t0).id, 3, "採番位置も読む")
+  }
+
   func testBrokenFileIsQuarantinedAndStartsEmpty() throws {
     let url = try intakesFile()
     try Data("{\"version\":1}".utf8).write(to: url)
