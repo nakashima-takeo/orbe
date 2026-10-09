@@ -10,6 +10,10 @@ import Foundation
 /// どの書き込みも無出力で打ち切らず、止める手（`Write`）を返す。完了は「書き込みの後に始まった status の取り直し」が
 /// 済んでから main で返る——完了が届いた時点で `status` はもう書き込み後の姿になっている（監視の到着を待たない）。
 /// baseline の取り直しは待たない（smudge が詰まっても完了は遅れない）。git 管理外の根では呼べない（`notManaged`）。
+///
+/// 完了を返すまでは、返りを待つ処理がサービスを強く握る——順番待ちは止める手（行列との輪）、走っている間は git の完了の
+/// 閉包、完了の前の status の取り直しは待ち手。握る者が離れても書き込みの完了は返り、レジストリの「根ごとに 1 つ」も
+/// 崩れない（同じ根を握り直せば、まだ生きているこのサービスが返る）。返り終われば手放す。
 extension RootFiles {
   /// 書き込み 1 つの止める手。順番待ちなら、その場で行列から外して「止めた」で返す（前の書き込みの終わりを待たず、
   /// git を起こさない）。走っていれば git を SIGTERM で止める。何度呼んでもよい。
@@ -112,13 +116,9 @@ extension RootFiles {
   ) -> Write {
     let write = Write()
     guard repo != nil else { return reject(write, completion) }
-    outstandingWrites += 1
     write.dequeue = { [self] in
       queuedWrites.removeAll { $0.write === write }
-      DispatchQueue.main.async { [self] in
-        completion(.cancelled)
-        outstandingWrites -= 1
-      }
+      DispatchQueue.main.async { completion(.cancelled) }
     }
     queuedWrites.append(QueuedWrite(write: write, body: body, completion: completion))
     startNextWrite()
@@ -142,7 +142,6 @@ extension RootFiles {
   ) -> Write {
     let write = Write()
     guard let repo else { return reject(write, completion) }
-    outstandingWrites += 1
     body(repo, write.handle) { [self] failure in complete(failure, completion) }
     return write
   }
@@ -155,10 +154,7 @@ extension RootFiles {
   private func complete(
     _ failure: GitWriteFailure?, _ completion: @escaping (GitWriteFailure?) -> Void
   ) {
-    requestStatusRefresh { [self] in
-      completion(failure)
-      outstandingWrites -= 1
-    }
+    requestStatusRefresh { [self] in withExtendedLifetime(self) { completion(failure) } }
   }
 
   /// 前提（upstream・detached）の判定は、取り直した status のブランチで行う（打ってすぐの外の変化を読み落とさない）。

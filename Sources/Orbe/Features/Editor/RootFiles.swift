@@ -13,7 +13,8 @@ protocol RootFilesObserver: AnyObject {
 }
 
 /// 根（`GitWorktreeRoot.root(of:)` の値）1 つにつき 1 つの、監視・git 状態・一覧・新規作成・baseline・git の書き込みを
-/// 担うサービス。握る者（文書の結線・面のツリー・プロジェクト検索）がいる間だけ生き、離されれば監視が止まる。
+/// 担うサービス。握る者（文書の結線・面のツリー・プロジェクト検索）がいる間だけ生き、離されれば監視が止まる。書き込みが
+/// 完了を返すまでは、その返りを待つ処理も握る（→ `RootFiles+Writes`）。
 ///
 /// git 管理下かどうかはここで決める: 根に `.git` があれば `GitRepo` を開き、git の綴りを正規形に揃えて根と
 /// 一致したときだけ管理下（status・baseline・git dir の監視・書き込みを持つ）。`GitRepo.root` との突き合わせは
@@ -89,12 +90,6 @@ final class RootFiles {
   /// 同じ worktree の index への書き込みの順番待ち（先頭から 1 つずつ走らせる）。
   var queuedWrites: [QueuedWrite] = []
   var isWriting = false
-  /// 完了をまだ返していない書き込みの数。0 でない間、自分を生かしておく——握る者が離れても、書き込みの完了は
-  /// 返り、レジストリの「根ごとに 1 つ」が崩れない。
-  var outstandingWrites = 0 {
-    didSet { keepAlive = outstandingWrites > 0 ? self : nil }
-  }
-  private var keepAlive: RootFiles?
 
   /// 取り直し 1 本の直列化。実行中に来た要求は「終わったらもう 1 回」に畳む。
   private struct RefreshJob {
