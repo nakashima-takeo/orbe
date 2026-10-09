@@ -175,12 +175,15 @@ import Observation
 
   // MARK: - 提案をさばく
 
-  /// 出ている提案をタスク一覧の末尾へ未着手で足す。追加が拒否されたら提案は変わらない。
-  func accept(_ proposalId: Int, into tasks: TaskStore) throws(IntakeError) -> TaskItem {
+  /// 出ている提案を、`workspace` に付けてタスク一覧の末尾へ未着手で足す。追加が拒否されたら提案は変わらない。
+  func accept(_ proposalId: Int, into tasks: TaskStore, workspace: UUID?) throws(IntakeError)
+    -> TaskItem
+  {
     let index = try openIndex(proposalId)
     let proposal = proposals[index]
     var draft = TaskDraft(title: proposal.title)
     draft.due = proposal.due
+    draft.workspace = workspace
     draft.description = proposal.item.link + "\n\n" + proposal.item.body
     let task: TaskItem
     do {
@@ -206,9 +209,7 @@ import Observation
     guard let index = proposals.firstIndex(where: { $0.id == proposalId }) else {
       throw .proposalNotFound(proposalId)
     }
-    guard proposals[index].state == .open else {
-      throw .invalid("proposal \(proposalId) is not open")
-    }
+    guard proposals[index].state == .open else { throw .proposalNotOpen(proposalId) }
     return index
   }
 

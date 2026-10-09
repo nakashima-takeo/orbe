@@ -270,7 +270,7 @@ final class IntakeStoreTests: OrbeTestCase {
 
   // MARK: - 提案をさばく
 
-  func testAcceptAppendsATodoTaskAndMarksTheProposal() throws {
+  func testAcceptAppendsATodoTaskOnTheGivenWorkspaceAndMarksTheProposal() throws {
     let store = try store()
     let tasks = TaskStore(file: nil)
     let a = Self.item("a", body: "レビューをお願いします")
@@ -278,16 +278,24 @@ final class IntakeStoreTests: OrbeTestCase {
       1, runRecord(), fetched: [a], judged: [a],
       decisions: [.propose(itemId: "a", title: "レビューする", due: TaskItem.DueDate("2026-10-12"))])
 
-    let task = try store.accept(store.proposals[0].id, into: tasks)
+    let home = UUID()
+    let task = try store.accept(store.proposals[0].id, into: tasks, workspace: home)
 
     XCTAssertEqual(tasks.tasks.last, task)
     XCTAssertEqual(task.title, "レビューする")
     XCTAssertEqual(task.status, .todo)
     XCTAssertEqual(task.due?.text, "2026-10-12")
-    XCTAssertNil(task.workspace)
+    XCTAssertEqual(task.workspace, home)
     XCTAssertEqual(task.description, "https://example.com/a\n\nレビューをお願いします")
     XCTAssertEqual(store.proposals[0].state, .accepted(taskId: task.id))
-    XCTAssertThrowsError(try store.dismiss(store.proposals[0].id), "さばいた提案はもうさばけない")
+    let id = store.proposals[0].id
+    XCTAssertThrowsError(try store.dismiss(id), "さばいた提案はもうさばけない") {
+      XCTAssertEqual($0 as? IntakeError, .proposalNotOpen(id), "値の不正とは分けて断る")
+    }
+    XCTAssertThrowsError(try store.accept(id, into: tasks, workspace: home)) {
+      XCTAssertEqual($0 as? IntakeError, .proposalNotOpen(id))
+    }
+    XCTAssertEqual(tasks.tasks.count, 1, "断った「タスクにする」はタスクを足さない")
   }
 
   // MARK: - 永続
