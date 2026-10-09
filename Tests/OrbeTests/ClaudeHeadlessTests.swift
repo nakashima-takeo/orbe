@@ -42,8 +42,37 @@ final class ClaudeHeadlessTests: OrbeTestCase {
   /// 利用者の CLAUDE.md と auto memory は、設定を読む呼び出しでも混ぜない（外部の文面を判定する役の判断が揺れる）。
   func testUserMemoryIsNeverLoaded() {
     XCTAssertEqual(
-      ClaudeHeadless.environment,
+      ClaudeHeadless.environment(tools: ["Read"]),
       ["CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1", "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1"])
+  }
+
+  /// MCP のツールを指定した呼び出しだけ、MCP サーバーの接続を待ってから始める（起動に数秒かかるサーバーのツールを失わない）。
+  /// 待ちは無出力の上限より短い（待っている間に無出力で打ち切られない）。
+  func testMCPToolCallWaitsForServersWithinTheIdleLimit() {
+    let env = ClaudeHeadless.environment(tools: ["mcp__slack__search"])
+
+    XCTAssertEqual(env["CLAUDE_CODE_MCP_STARTUP_WAIT_MS"], "60000")
+    XCTAssertEqual(env["CLAUDE_CODE_DISABLE_CLAUDE_MDS"], "1")
+    XCTAssertLessThan(ClaudeHeadless.mcpStartupWait, BackgroundLimits.agent.idle)
+  }
+
+  func testAvailableToolsComeFromTheInitEvent() {
+    XCTAssertEqual(
+      ClaudeHeadless.availableTools(
+        Data(#"{"type":"system","subtype":"init","tools":["Read","mcp__slack__search"]}"#.utf8)),
+      ["Read", "mcp__slack__search"])
+    XCTAssertNil(
+      ClaudeHeadless.availableTools(Data(#"{"type":"system","subtype":"status"}"#.utf8)))
+    XCTAssertNil(ClaudeHeadless.availableTools(Data(#"{"type":"result","result":"x"}"#.utf8)))
+  }
+
+  /// 揃っているかを見るのは MCP のツールだけ。`mcp__<サーバー>` はそのサーバーのツールが 1 つでもあれば揃っている。
+  func testMissingToolsAreTheRequestedMCPToolsNotInTheSession() {
+    XCTAssertEqual(
+      HeadlessCLI.missingTools(
+        ["Read", "mcp__slack__search", "mcp__github", "mcp__linear"],
+        available: ["mcp__slack__search", "mcp__github__issues"]),
+      ["mcp__linear"])
   }
 
   func testReplyComesFromTheResultEvent() {

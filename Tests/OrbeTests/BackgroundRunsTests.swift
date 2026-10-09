@@ -219,7 +219,7 @@ final class BackgroundRunsTests: OrbeTestCase {
       try receivedArguments(), ClaudeHeadless.arguments(model: "haiku", tools: ["Read"]))
     let env = try String(contentsOf: bin.appendingPathComponent("env"), encoding: .utf8)
       .split(separator: "\n").map(String.init)
-    for (key, value) in ClaudeHeadless.environment {
+    for (key, value) in ClaudeHeadless.environment(tools: ["Read"]) {
       XCTAssertTrue(env.contains("\(key)=\(value)"), "子の環境に \(key)=\(value)")
     }
     XCTAssertEqual(
@@ -228,6 +228,39 @@ final class BackgroundRunsTests: OrbeTestCase {
       result.commandLine.hasPrefix(bin.appendingPathComponent("claude").path + " -p --model haiku"),
       result.commandLine)
     XCTAssertTrue(result.commandLine.contains("--setting-sources '' "), result.commandLine)
+  }
+
+  /// 指定した MCP のツールが始まりの時点で揃っていなければ、モデルを呼ぶ前に止め、揃わなかった名前を返す。
+  func testMissingMCPToolStopsBeforeTheModelRuns() throws {
+    let replied = bin.appendingPathComponent("replied").path
+    try placeClaude(
+      #"""
+      echo '{"type":"system","subtype":"init","tools":["mcp__slack__search"]}'
+      sleep 5
+      touch \#(replied)
+      echo '{"is_error":false,"result":"[]","type":"result"}'
+      """#)
+
+    let result = try run(runs(), agent(tools: ["mcp__slack__search", "mcp__linear__issues"]))
+
+    XCTAssertEqual(result.ending, .toolsUnavailable(["mcp__linear__issues"]))
+    XCTAssertNil(reply(result))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: replied), "止めた後に続きを走らせない")
+    let env = try String(contentsOf: bin.appendingPathComponent("env"), encoding: .utf8)
+    XCTAssertTrue(env.contains("CLAUDE_CODE_MCP_STARTUP_WAIT_MS=60000"), "MCP の接続を待たせる")
+  }
+
+  func testPresentMCPToolsRunToTheReply() throws {
+    try placeClaude(
+      #"""
+      echo '{"type":"system","subtype":"init","tools":["mcp__slack__search"]}'
+      echo '{"is_error":false,"result":"[]","type":"result"}'
+      """#)
+
+    let result = try run(runs(), agent(tools: ["mcp__slack__search"]))
+
+    XCTAssertEqual(result.ending, .exited(0))
+    XCTAssertEqual(reply(result), BackgroundAgentReply(text: "[]", isError: false))
   }
 
   func testClaudeFailureIsReported() throws {

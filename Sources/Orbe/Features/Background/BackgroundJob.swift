@@ -177,6 +177,8 @@ enum BackgroundEnding: Equatable {
   case limited(BackgroundProcess.Limit)
   case stopped
   case notStarted(BackgroundStartFailure)
+  /// 指定した MCP のツールが始まりの時点で揃わず、モデルを呼ぶ前に止めた（揃わなかった名前）。
+  case toolsUnavailable([String])
 }
 
 enum BackgroundStartFailure: Error, Equatable {

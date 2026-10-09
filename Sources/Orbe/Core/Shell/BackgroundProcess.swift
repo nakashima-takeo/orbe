@@ -239,9 +239,20 @@ final class BackgroundProcess {
     }
     switch spec.stdout {
     case .collect(let rule): capture(data, into: &stdoutCaptured, rule)
-    case .lines(_, let onLine):
-      if lines?.feed(data, onLine: onLine) == false { terminate(.limited(.output)) }
+    case .lines: deliverLines { $0.feed(data, onLine: $1) }
     }
+  }
+
+  /// 行を受け手へ渡し、受け手が終わり方を返したらそれで打ち切る。
+  private func deliverLines(_ body: (inout LineSplitter, (Data) -> Bool) -> Bool) {
+    guard case .lines(_, let onLine) = spec.stdout, var splitter = lines else { return }
+    var cut: Ending?
+    let proceeds = body(&splitter) { line in
+      cut = onLine(line)
+      return cut == nil
+    }
+    lines = splitter
+    if !proceeds, let cut { terminate(cut) }
   }
 
   private func capture(_ data: Data, into captured: inout Captured, _ rule: Capture) {
@@ -259,9 +270,7 @@ final class BackgroundProcess {
   private func noteEOF(isStdout: Bool) {
     if isStdout {
       stdoutEOF = true
-      if case .lines(_, let onLine) = spec.stdout, lines?.finish(onLine: onLine) == false {
-        terminate(.limited(.output))
-      }
+      deliverLines { $0.finish(onLine: $1) }
     } else {
       stderrEOF = true
     }
@@ -352,8 +361,8 @@ extension BackgroundProcess {
     /// 上限まで貯める。
     case collect(Capture)
     /// 1 行ずつ渡し、貯めない。`maxLength` を超えた行は渡さずに捨て、`Outcome.droppedLines` に数える。
-    /// `onLine` が偽を返したら出力量の上限で打ち切る。呼ばれるのは裏の直列キュー。
-    case lines(maxLength: Int, onLine: (Data) -> Bool)
+    /// `onLine` が終わり方（出力量の上限・止めた）を返したら、それで打ち切る。nil なら続ける。呼ばれるのは裏の直列キュー。
+    case lines(maxLength: Int, onLine: (Data) -> Ending?)
   }
 
   /// 貯める出力の上限。`overflowStops` が偽なら、超えた分を捨てて走らせ続ける。
