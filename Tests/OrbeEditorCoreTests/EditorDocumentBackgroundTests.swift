@@ -42,14 +42,14 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     var notified = 0
     document.onHunksChange = { notified += 1 }
     document.hunkLimit = .edits(n)
-    XCTAssertTrue(document.hunksAreCurrent, "上限だけを変えた間は、前の上限の結果のまま今の底のハンク")
+    XCTAssertEqual(document.hunksBase, old, "上限だけを変えた間は、前の上限の結果のまま今の底のハンク")
     XCTAssertTrue(document.waitUntilCaughtUp())
     XCTAssertEqual(document.hunks.count, n / 100, "変えた上限で行ごとに取り直す")
     XCTAssertGreaterThan(notified, 0, "結果が届けば知らせる")
     document.baseline = old + "tail\n"
-    XCTAssertFalse(document.hunksAreCurrent, "底を変えたら、届くまで前の底のハンク")
+    XCTAssertEqual(document.hunksBase, old, "底を変えたら、届くまで前の底とそのハンク")
     XCTAssertTrue(document.waitUntilCaughtUp())
-    XCTAssertTrue(document.hunksAreCurrent)
+    XCTAssertEqual(document.hunksBase, old + "tail\n")
     document.baseline = old
     document.hunkLimit = LineDiff.gutter
     XCTAssertTrue(document.waitUntilCaughtUp())

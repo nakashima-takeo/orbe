@@ -37,6 +37,8 @@ final class EditorPaneView: NSView {
   var diffFocusesLeft = false
   /// 並列の diff の 2 面の境。
   let diffDivider = NSView()
+  /// 本体に置いている diff の面の view（左から）。
+  var diffViews: [NSView] = []
   /// ファイル内検索の状態（pane ごと）。バーは開いている間だけある。
   let search = EditorSearch()
   var searchBar: SearchBar?

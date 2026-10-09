@@ -49,7 +49,6 @@ public final class EditorDocument {
   public var baseline: String? {
     didSet {
       guard baseline != oldValue else { return }
-      baselineGeneration += 1
       hunkRequest += 1
       requestHunks()
     }
@@ -65,9 +64,10 @@ public final class EditorDocument {
   }
   /// baseline と本文の行差分。編集の直後はずらした前のハンクで、裏の結果が届くと置き換わる。
   public private(set) var hunks: [LineHunk] = []
-  /// ハンクが今の baseline に対する結果（をその後の編集でずらしたもの）か。baseline を置き直してから結果が届くまでは、
-  /// 前の baseline に対するハンクを持ったまま false（上限だけを置き直した間は、前の上限の結果のまま true）。
-  public var hunksAreCurrent: Bool { hunksBaseline == baselineGeneration }
+  /// ハンクがどの baseline に対する差分か（ハンクと組で変わる。差分がまだ無い・baseline が無ければ nil）。baseline を置き
+  /// 直してから結果が届くまでは、前の baseline とそれに対するハンク（その後の編集でずらしたもの）の組のまま——この組と
+  /// 今の本文は、いつでも互いに食い違わない。
+  public private(set) var hunksBase: String?
   /// ハンクが変わった（結果が届いた・編集でずらした・baseline が無くなった）。行の印と同じ時機に、印の後で届く。
   public var onHunksChange: (() -> Void)?
   /// 字下げの作法（単位とタブか）。開いたとき、および本文を丸ごと置き換えたときに本文から検出し直し、面へ押す。
@@ -85,11 +85,8 @@ public final class EditorDocument {
   private let inbox: AnalysisInbox
   private var reception: SyntaxReception
   private let analysis: DocumentAnalysis
-  /// baseline を置き直すたびに進む番号と、行差分の依頼を置き直す（baseline か上限が変わる）たびに進む番号。
-  private var baselineGeneration = 0
+  /// 行差分の依頼を置き直す（baseline か上限が変わる）たびに進む番号。
   private var hunkRequest = 0
-  /// 今のハンクがどの baseline に対する結果か（`baselineGeneration` の値）。
-  private var hunksBaseline = 0
   /// 行差分を頼んで、まだその結果を受け取っていない版。
   private var pendingHunks: Int?
   /// 区間の列の問いのうち、まだ結果を受け取っていないもの（種類ごとに最新の問いと版）。
@@ -258,7 +255,7 @@ public final class EditorDocument {
     guard let baseline else {
       pendingHunks = nil
       hunks = []
-      hunksBaseline = baselineGeneration
+      hunksBase = nil
       pushLineMarks()
       return
     }
@@ -285,7 +282,7 @@ public final class EditorDocument {
       let edits = log.edits(since: outcome.version)
     {
       hunks = edits.reduce(outcome.hunks) { $1.track($0) }
-      hunksBaseline = baselineGeneration
+      hunksBase = baseline
       if pendingHunks == outcome.version { pendingHunks = nil }
       pushLineMarks()
     }

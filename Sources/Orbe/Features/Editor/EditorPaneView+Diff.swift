@@ -21,7 +21,8 @@ extension EditorPaneView {
   func hideDiff(_ diff: EditorDiff) {
     diff.onPresentationChange = nil
     observeDiff(diff, false)
-    for view in diffViews(diff) { view.removeFromSuperview() }
+    for view in diffViews { view.removeFromSuperview() }
+    diffViews = []
     diffDivider.removeFromSuperview()
     diff.dismiss()
   }
@@ -33,15 +34,19 @@ extension EditorPaneView {
     return [left, right]
   }
 
-  private func diffViews(_ diff: EditorDiff) -> [NSView] {
-    [diff.newSurface?.view, diff.oldSurface?.view].compactMap { $0 }
-  }
-
-  /// diff の面を本体に置き直す（並列の古い側の面ができた・中身が見せられるようになった）。
+  /// diff の面を本体に置き直す（並列の古い側の面ができた・中身が見せられるようになった・表示できなくなった）。本体に
+  /// 置いている面の view を覚えておき、今見せる面に無いものを外す——表示できなくなった diff は面を出さないので、理由の
+  /// 一文を面が覆わない。
   func installDiffSurfaces(_ diff: EditorDiff) {
     observeDiff(diff, true)
     let surfaces = diffSurfaces(diff)
+    let views = surfaces.map(\.view)
+    let hadFocus = focusIsInside && !focusIsInSidebar
+    for view in diffViews where !views.contains(where: { $0 === view }) {
+      view.removeFromSuperview()
+    }
     for surface in surfaces where surface.view.superview !== self { install(surface) }
+    diffViews = views
     if surfaces.count == 2 {
       if diffDivider.superview !== self {
         addSubview(diffDivider, positioned: .below, relativeTo: sidebarHandle)
@@ -50,7 +55,10 @@ extension EditorPaneView {
       diffDivider.removeFromSuperview()
     }
     paintDiffDivider()
-    if window?.firstResponder === self { window?.makeFirstResponder(focusTarget) }
+    let responder = window?.firstResponder
+    if hadFocus || responder === self, responder !== focusTarget {
+      window?.makeFirstResponder(focusTarget)
+    }
   }
 
   /// 境の線の色を今の外観で塗る（見本 hairline(.07)）。
@@ -78,16 +86,13 @@ extension EditorPaneView {
       height: rect.height)
   }
 
-  /// diff の知らせを結ぶ——新しい側の面の見えている範囲と本文の変化（文書なら pane の閉包 1 本を通して配る）、各面の焦点。
+  /// diff の知らせを結ぶ——新しい側の文書の見えている範囲と本文の変化（文書の閉包 1 本を通して配る）と、面の焦点。
   private func observeDiff(_ diff: EditorDiff, _ on: Bool) {
     if let document = diff.document {
       document.onViewportChange = on ? { [weak diff] in diff?.viewportDidChange() } : nil
       document.onTextChange = on ? { [weak diff] _ in diff?.documentTextDidChange() } : nil
     }
-    diff.newRevision?.onViewportChange = on ? { [weak diff] in diff?.viewportDidChange() } : nil
-    for revision in [diff.newRevision, diff.old] {
-      revision?.onFocusChange = on ? { [weak self] _ in self?.focusDidChange() } : nil
-    }
+    diff.onFocusChange = on ? { [weak self] _ in self?.focusDidChange() } : nil
   }
 
   /// 本体に文字だけを出す器（空状態・表示できない diff の一文・読み込み中の diff）の見え隠れと中身。

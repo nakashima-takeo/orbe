@@ -197,9 +197,7 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     pumpMain(until: { diff.content == .unavailable(.notText) }, "表示できなくなる")
     XCTAssertFalse(pane.emptyHost.isHidden)
-    XCTExpectFailure("ready から表示できないへ移っても、面の view を本体から外さない（理由の一文を面が覆う）") {
-      XCTAssertNil(surface.view.superview, "面は本体から外れる")
-    }
+    XCTAssertNil(surface.view.superview, "面は本体から外れる")
   }
 
   // MARK: - ステージ済み

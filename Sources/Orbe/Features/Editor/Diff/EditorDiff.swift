@@ -5,8 +5,8 @@ import OrbeEditorCore
 /// （ファイルタブと同じ文書。開いていれば未保存を含む今の本文）／ステージ済み: HEAD の版（rename なら元のパス）↔ index の版。
 ///
 /// 版の本文は根のサービスが 1 か所で持ち（→ `RootFiles.Version`）、diff はその状態から読むだけのリビジョンの文書を作る。
-/// 作業ツリー diff の差分は文書のハンク（裏・版つき・編集でずらす）そのもので、古い側は文書の底（index の版の本文）から
-/// 作る——ハンクが今の底に対する結果になったときに底と並びを一緒に入れ替えるので、差し込みが古い側の本文とずれない。
+/// 作業ツリー diff の差分は文書のハンク（裏・版つき・編集でずらす）そのもので、古い側はそのハンクが比べた底から作る——
+/// 底とハンクと今の本文の組は文書の中で食い違わないので、差し込みが古い側の本文とも今の本文ともずれない。
 /// ステージ済み diff は両側とも変わらない版の本文なので、どちらかが変わったときに 1 回、裏で行差分を取る。
 ///
 /// 見せ方（インライン / 並列）と見え方の付け外しは `present` / `dismiss` の 2 つの口だけで行い、pane が本体を置き換える
@@ -14,56 +14,6 @@ import OrbeEditorCore
 /// 起こさない）。
 @MainActor
 final class EditorDiff: RootFilesObserver {
-  /// 識別——根・根からの相対パス・種類。
-  struct Key: Hashable {
-    let root: String
-    let path: String
-    let kind: Kind
-
-    /// 作業ツリーのファイルの実体のパス。
-    var url: URL { URL(fileURLWithPath: root).appendingPathComponent(path) }
-  }
-
-  enum Kind: Hashable {
-    case workingTree
-    case staged
-  }
-
-  /// 見せ方（アプリ全体で 1 つ。→ `AppState.diffMode`）。
-  enum Mode: String, Codable {
-    case inline
-    case side
-  }
-
-  /// 表示できない理由。
-  enum Unavailable: Equatable {
-    /// UTF-8 として読めない（バイナリ・別の符号化）。
-    case notText
-    /// 作業ツリーのパスがシンボリックリンク。
-    case symlink
-    /// 競合中。
-    case conflicted
-    /// git から取れない。
-    case failed
-  }
-
-  /// 見せられる中身。
-  enum Content: Equatable {
-    /// 版の本文がまだ届いていない。
-    case loading
-    case unavailable(Unavailable)
-    case ready
-  }
-
-  /// 作業ツリー diff の新しい側。
-  enum WorkingSide {
-    /// 開いた文書（ファイルタブと共有する）。
-    case document(EditorDocument)
-    /// 作業ツリーに無い（消した）。
-    case missing
-    case unavailable(Unavailable)
-  }
-
   /// diff の上限——diff を出している間の行差分の上限。編集の数で切るので、大きなファイルの離れた変更も行ごとに取り、
   /// 裏の時間は 1MB 級でも 1 秒未満に収まる。
   static let hunkLimit = LineDiff.Limit.edits(10_000)
@@ -80,8 +30,12 @@ final class EditorDiff: RootFilesObserver {
   private var newRevisionSurface: (any TextSurface)?
   /// 並列の古い側の面（並列で見せている間だけ）。
   private(set) var oldSurface: (any TextSurface)?
-  private(set) var hunks: [LineHunk] = []
+  /// 版の本文どうしの行差分（ステージ済み・作業ツリーで消したファイル。新しい側が文書の作業ツリー diff は、文書のハンクを
+  /// 直に使う——`currentRows`）。
+  private var revisionHunks: [LineHunk] = []
   private(set) var content: Content = .loading
+  /// 面の焦点が変わった（古い側・新しい側の版の本文の面。作り直した文書にも結び直す）。
+  var onFocusChange: ((Bool) -> Void)?
   /// 見せている見せ方（見せていなければ nil）。
   private(set) var presented: Mode?
   /// 中身・面・並びが変わった（見せている間だけ。pane が本体を置き直す）。
@@ -184,6 +138,7 @@ final class EditorDiff: RootFilesObserver {
   func viewportDidChange() {
     guard presented == .inline, let old, let surface = newSurface else { return }
     let text = document?.text ?? newRevision?.text ?? TextRope()
+    guard let hunks = currentRows?.hunks else { return }
     let viewport = surface.viewport
     let first = text.row(containing: viewport.firstVisible)
     let last = first + Int(viewport.visibleLines.rounded(.up))
@@ -252,20 +207,16 @@ final class EditorDiff: RootFilesObserver {
     case .absent?: setOld(nil)
     case .text(let text)?:
       if let document {
-        // 底と並びを一緒に入れ替える——ハンクが今の底に対する結果になるまでは、前の底と前の並びのまま。
-        guard document.hunksAreCurrent, let baseline = document.baseline else { return pending }
-        setOld(baseline)
+        // 古い側は文書のハンクが比べた底——ハンクが新しい底に対する結果になるまでは、前の底とそのハンクの組のまま。
+        guard let base = document.hunksBase else { return pending }
+        setOld(base)
       } else {
         setOld(text)
       }
     }
-    if let document {
-      newSide = DiffRows.Side(document.text)
-      hunks =
-        oldSource == .some(nil) ? DiffRows.wholeHunks(old: .absent, new: newSide) : document.hunks
-    } else {
+    if document == nil {
       setNewRevision(nil)
-      hunks = DiffRows.wholeHunks(old: oldSide, new: .absent)
+      revisionHunks = DiffRows.wholeHunks(old: oldSide, new: .absent)
     }
     return .ready
   }
@@ -296,7 +247,7 @@ final class EditorDiff: RootFilesObserver {
         guard let self, request == stagedRequest else { return }
         setOld(oldText)
         setNewRevision(newText)
-        self.hunks = hunks
+        revisionHunks = hunks
         if content != .ready {
           content = .ready
           onPresentationChange?()
@@ -317,6 +268,7 @@ final class EditorDiff: RootFilesObserver {
       guard let self, presented == .inline, let surface = newSurface else { return }
       surface.rowSourceRolesDidChange(ranges)
     }
+    revision.onFocusChange = { [weak self] focused in self?.onFocusChange?(focused) }
     old = revision
     oldSide = text == nil ? .absent : DiffRows.Side(revision.text)
   }
@@ -328,6 +280,8 @@ final class EditorDiff: RootFilesObserver {
     newSource = .some(text)
     let revision = RevisionDocument(text: text ?? "", name: id.url, registry: surfaces.registry)
     newRevision?.detach()
+    revision.onViewportChange = { [weak self] in self?.viewportDidChange() }
+    revision.onFocusChange = { [weak self] focused in self?.onFocusChange?(focused) }
     newRevision = revision
     newSide = text == nil ? .absent : DiffRows.Side(revision.text)
     if newRevisionSurface == nil { newRevisionSurface = surfaces.make() }
@@ -339,7 +293,9 @@ final class EditorDiff: RootFilesObserver {
   /// 見せている見せ方の見え方を面に載せる（並列なら古い側の面を用意して結ぶ）。新しい側は読むだけで、作業ツリーの文書は
   /// diff の上限で行差分を取る。
   private func applyRows() {
-    guard let mode = presented, content == .ready, let surface = newSurface, let old else { return }
+    guard let mode = presented, content == .ready, let surface = newSurface, let old,
+      let (hunks, newSide) = currentRows
+    else { return }
     switch mode {
     case .inline:
       var rows = DiffRows.inline(hunks, old: oldSide, new: newSide)
@@ -359,6 +315,19 @@ final class EditorDiff: RootFilesObserver {
     revealFirstChange(on: surface)
   }
 
+  /// 今の古い側と新しい側の本文に対して正しいと分かっている行差分と、新しい側の大きさ。作業ツリー diff の新しい側の文書は
+  /// 外の書き換えでいつでも変わるので、文書の今の本文と、文書のハンク（今の本文へずらしてある）を直に使い、ハンクが比べた底
+  /// が今の古い側でなければ（古い側を入れ替える前）並べない——面に残っている並びは面自身の編集に付いて動くので、今の本文と
+  /// 食い違わない。
+  private var currentRows: (hunks: [LineHunk], newSide: DiffRows.Side)? {
+    guard let document else { return (revisionHunks, newSide) }
+    let side = DiffRows.Side(document.text)
+    guard let oldSource else { return nil }
+    guard let base = oldSource else { return (DiffRows.wholeHunks(old: .absent, new: side), side) }
+    guard document.hunksBase == base else { return nil }
+    return (document.hunks, side)
+  }
+
   private func look(_ presentation: SurfacePresentation, _ rows: SurfaceRows) -> SurfaceLook {
     SurfaceLook(
       presentation: presentation, rows: rows, isEditable: false, hunkLimit: Self.hunkLimit)
@@ -373,7 +342,7 @@ final class EditorDiff: RootFilesObserver {
   /// 初めて並びを置いたときに、最初の変更区間が見える位置へ送る——区間の上の文脈の行から区間の終わりまで（インラインの
   /// 削除行はその間に差し込まれる）を、中央から、収まらなければ上端から見せる。
   private func revealFirstChange(on surface: any TextSurface) {
-    guard !revealed, let first = hunks.first else { return }
+    guard !revealed, let first = currentRows?.hunks.first else { return }
     revealed = true
     let text = document?.text ?? newRevision?.text ?? TextRope()
     let start = first.newCount > 0 ? first.newStart - 1 : first.newStart
