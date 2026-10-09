@@ -120,13 +120,12 @@ extension EditorRowsTrialTests {
 
   /// 並列の 2 面の窓を前面に出す。
   fileprivate func showSide() throws -> (NSWindow, [MetalTextSurface]) {
-    let sample = Self.sideSample()
+    let (old, new) = Self.sideSample()
     let registry = LanguageRegistry(
       queriesRoot: Bundle(for: Self.self).bundleURL.deletingLastPathComponent())
-    let panes = try [("old.swift", sample.old), ("new.swift", sample.new)].map { name, text in
+    let panes = try [("old.swift", old), ("new.swift", new)].map { name, text in
       let url = try caseFile(name, text)
-      let surface = MetalTextSurface(
-        style: DiffRowsSample.style(trailing: 8), omittedLabel: { "+\($0)" })
+      let surface = MetalTextSurface(style: EditorStyle.make(), omittedLabel: { "+\($0)" })
       let document = EditorDocument(
         url: url, contents: try EditorDocument.read(url), surface: surface, registry: registry)
       XCTAssertTrue(document.waitUntilCaughtUp(timeout: 60))
@@ -144,11 +143,14 @@ extension EditorRowsTrialTests {
     }
     window.isReleasedWhenClosed = false
     window.appearance = NSAppearance(named: .darkAqua)
-    let rows = [sample.side(.old), sample.side(.new)]
+    let side = DiffRows.side(
+      LineDiff.hunks(base: old, current: TextRope(new), limit: EditorDiff.hunkLimit),
+      old: DiffRows.Side(TextRope(old)), new: DiffRows.Side(TextRope(new)))
+    let rows = [side.left, side.right]
     let toggle = SideRowsToggle(surfaces: panes.map(\.surface), rows: rows)
     window.contentView = SideBySideView(surfaces: panes.map(\.surface), toggle: toggle)
     for (pane, rows) in zip(panes, rows) {
-      pane.surface.setPresentation(DiffRowsSample.sidePresentation)
+      pane.surface.setPresentation(DiffStyle.side)
       pane.surface.setRows(rows)
       pane.surface.isEditable = false
     }
@@ -166,22 +168,22 @@ extension EditorRowsTrialTests {
   }
 
   /// 200KB の Swift の 2 版——17 行ごとに 1 行を 2 行に書き換え、29 行ごとに 1 行を消し、23 行ごとに 3 行を足したもの。
-  fileprivate static func sideSample() -> DiffRowsSample {
+  fileprivate static func sideSample() -> (old: String, new: String) {
     let lines = swiftSource().components(separatedBy: "\n").dropLast()
-    var rows: [DiffRowsSample.Row] = []
+    var old: [String] = []
+    var new: [String] = []
     for (index, line) in lines.enumerated() {
+      old.append(line)
       if index % 17 == 5 {
-        rows += [.removed(line), .added(line + " // changed"), .added("    // split \(index)")]
-      } else if index % 29 == 7 {
-        rows.append(.removed(line))
-      } else {
-        rows.append(.same(line))
+        new += [line + " // changed", "    // split \(index)"]
+      } else if index % 29 != 7 {
+        new.append(line)
       }
       if index % 23 == 11 {
-        rows += (0..<3).map { .added("    // added \(index)-\($0)") }
+        new += (0..<3).map { "    // added \(index)-\($0)" }
       }
     }
-    return DiffRowsSample(rows: rows)
+    return (old.map { $0 + "\n" }.joined(), new.map { $0 + "\n" }.joined())
   }
 }
 
@@ -223,7 +225,8 @@ private final class SideBySideView: NSView {
     super.layout()
     effectiveAppearance.performAsCurrentDrawingAppearance {
       layer?.backgroundColor = Theme.Color.bgBase.cgColor
-      separator.layer?.backgroundColor = DiffRowsSample.hairline.cgColor
+      separator.layer?.backgroundColor =
+        EditorStyle.hairline(Theme.Opacity.editorDiffDivider).cgColor
     }
     let height = max(0, bounds.height - Self.strip)
     let each = (bounds.width - 1) / 2
@@ -250,7 +253,7 @@ private final class SideRowsToggle: NSObject {
 
   @objc func toggle() {
     padded.toggle()
-    let pads = (0..<6).map { _ in InsertedLine(style: DiffRowsSample.pad) }
+    let pads = (0..<6).map { _ in InsertedLine(style: DiffStyle.pad) }
     for (surface, base) in zip(surfaces, rows) {
       var next = base
       if padded { next.insertions.insert(RowInsertion(line: 1, content: .lines(pads)), at: 0) }

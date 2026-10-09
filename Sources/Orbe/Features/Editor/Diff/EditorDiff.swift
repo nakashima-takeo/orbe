@@ -370,13 +370,17 @@ final class EditorDiff: RootFilesObserver {
     return surface
   }
 
-  /// 初めて並びを置いたときに、最初の変更区間が見える位置へ送る。
+  /// 初めて並びを置いたときに、最初の変更区間が見える位置へ送る——区間の上の文脈の行から区間の終わりまで（インラインの
+  /// 削除行はその間に差し込まれる）を、中央から、収まらなければ上端から見せる。
   private func revealFirstChange(on surface: any TextSurface) {
     guard !revealed, let first = hunks.first else { return }
     revealed = true
     let text = document?.text ?? newRevision?.text ?? TextRope()
-    let line = min(
-      max(0, first.newCount > 0 ? first.newStart - 1 : first.newStart), text.lineCount - 1)
-    surface.reveal(NSRange(location: text.lineStart(line), length: 0), policy: .center)
+    let start = first.newCount > 0 ? first.newStart - 1 : first.newStart
+    let from = min(max(0, start - 1), text.lineCount - 1)
+    let to = min(max(from, start + first.newCount - 1), text.lineCount - 1)
+    surface.reveal(
+      NSRange(location: text.lineStart(from), length: text.lineEnd(to) - text.lineStart(from)),
+      policy: .center)
   }
 }
