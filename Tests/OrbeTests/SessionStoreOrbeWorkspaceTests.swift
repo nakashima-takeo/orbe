@@ -4,6 +4,10 @@ import XCTest
 
 /// SessionStore が持つ「Orbe の workspace」の契約を固定する。起動時の保証が Orbe の workspace をちょうど 1 つにそろえる
 /// こと、Orbe の workspace と最後の通常 workspace は消せず、Orbe の workspace はディレクトリも変えられないこと。
+///
+/// 壊れると何が起きるか: 起動のたびに Orbe の workspace が増える、または既存利用者の active がずれる。
+/// Orbe の workspace が消えたり root が専用フォルダから外れたりすると、秘書が CLAUDE.md の無い場所で起きる。
+/// 通常の workspace を全部消せると、⌘T 等で起こすタブが秘書向けの CLAUDE.md のある root で起きる。
 final class SessionStoreOrbeWorkspaceTests: OrbeTestCase {
   private let root = "/state/orbe-workspace"
 
@@ -83,6 +87,7 @@ final class SessionStoreOrbeWorkspaceTests: OrbeTestCase {
     XCTAssertEqual(store.workspaces.map(\.name), ["b", "Orbe"])
     XCTAssertEqual(store.removalBlocker(0), .lastRegularWorkspace)
     XCTAssertEqual(store.closeWorkspace(0, origin: .gesture), .invalid)
+    XCTAssertEqual(store.workspaces.map(\.name), ["b", "Orbe"], "消せないときは一覧を変えない")
     XCTAssertEqual(store.originWorkspaceIndex, 0)
   }
 }
