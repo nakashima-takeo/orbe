@@ -37,9 +37,12 @@ final class GitStatusTests: OrbeTestCase {
     XCTAssertEqual(status.entries["src/new.swift"], GitStatus.Entry(staged: .added, unstaged: nil))
     XCTAssertEqual(status.entries["gone.txt"], GitStatus.Entry(staged: nil, unstaged: .deleted))
     XCTAssertEqual(
-      status.entries["new name.txt"], GitStatus.Entry(staged: .renamed, unstaged: nil),
-      "rename は新しいパスで引ける（空白入りでも）")
+      status.entries["new name.txt"],
+      GitStatus.Entry(staged: .renamed, unstaged: nil, originalPath: "old name.txt"),
+      "rename は新しいパスで引け（空白入りでも）、元パスを持つ")
     XCTAssertNil(status.entries["old name.txt"], "元パスのトークンはエントリにしない")
+    XCTAssertEqual(status.row("new name.txt").paths, ["new name.txt", "old name.txt"])
+    XCTAssertEqual(status.row("src/mod.swift").paths, ["src/mod.swift"])
     XCTAssertEqual(
       status.entries["conflict.txt"], GitStatus.Entry(staged: .unmerged, unstaged: .unmerged))
     XCTAssertEqual(status.entries["notes.txt"], GitStatus.Entry(staged: nil, unstaged: .untracked))
@@ -68,5 +71,30 @@ final class GitStatusTests: OrbeTestCase {
     XCTAssertEqual(status.badge(of: "dir/inner/x.txt"), .untracked, "未追跡ディレクトリの中")
     XCTAssertNil(status.badge(of: "directory.txt"), "前方一致は構成要素単位")
     XCTAssertNil(status.badge(of: "clean.txt"))
+  }
+
+  /// ブランチのヘッダ: 名前・HEAD・upstream と先行/遅れ。detached と初回コミット前を区別し、upstream が在って
+  /// `branch.ab` が無ければ数は不明（upstream の ref が消えた）。
+  func testParsesTheBranchHeaders() {
+    XCTAssertEqual(
+      parse([
+        "# branch.oid \(zero)", "# branch.head feat/x", "# branch.upstream origin/feat/x",
+        "# branch.ab +2 -3",
+      ]).branch,
+      GitStatus.Branch(
+        name: "feat/x", commit: zero,
+        upstream: GitStatus.Upstream(
+          name: "origin/feat/x", divergence: GitStatus.Divergence(ahead: 2, behind: 3))))
+    XCTAssertEqual(
+      parse(["# branch.oid \(zero)", "# branch.head (detached)"]).branch,
+      GitStatus.Branch(name: nil, commit: zero, upstream: nil))
+    XCTAssertEqual(
+      parse(["# branch.oid (initial)", "# branch.head main"]).branch,
+      GitStatus.Branch(name: "main", commit: nil, upstream: nil))
+    XCTAssertEqual(
+      parse(["# branch.oid \(zero)", "# branch.head main", "# branch.upstream origin/main"])
+        .branch?.upstream,
+      GitStatus.Upstream(name: "origin/main", divergence: nil))
+    XCTAssertNil(parse([ordinary(".M", "m.txt")]).branch, "ヘッダの無い出力")
   }
 }

@@ -28,7 +28,6 @@ extension GitRepo {
     let branchOrCommit: String
     /// 第0段の到達不能数（第0段が失敗したら nil。count の min に使う）。
     let reachCount: Int?
-    let lane: GitRunner.Lane
   }
 
   /// ブランチを消して「コミットが世界に残るか」の判定。判定できなければ nil（安全と読まない）。
@@ -75,26 +74,19 @@ extension GitRepo {
   /// どちらも「真に失われる数」の過大評価なので、min は厳密により良い過大評価（統合先が既定ブランチ
   /// でないリポジトリで「独自コミット +106」型の巨大数が実数へ縮む）。cherry が 1 本も成功しなければ
   /// nil——count を正直に言えないものを数値で語らない。
-  ///
-  /// `isolated` は呼び出し側が決める（`worktreeIsClean` と同じ理由）。この判定は比較先 T 本のとき
-  /// worktree 1 本あたり最大 `1 + T×5` 本の git を撒く（到達性 1 本＋unmerged 経路は target ごとに
-  /// cherry 系最大 5 本。merged 経路は is-ancestor 最大 T 本）ので、共有 read レーンに置くと直後の
-  /// `.exclusive`（worktree 削除・ブランチ削除）が barrier で全部の完了を待つ。
   func branchContainment(
-    branchOrCommit: String, targets: [String], isolated: Bool = false,
+    branchOrCommit: String, targets: [String],
     completion: @escaping (GitBranchContainment?) -> Void
   ) {
-    let lane: GitRunner.Lane = isolated ? .independent : .read
-    GitRunner.shared.run(
-      ["rev-list", "--count", branchOrCommit, "--not", "--remotes=origin", "--"], cwd: root,
-      lane: lane
+    runner.run(
+      ["rev-list", "--count", branchOrCommit, "--not", "--remotes=origin", "--"], cwd: root
     ) { output in
       // 第0段の失敗は nil に直結させない（到達性を諦めて従来の cherry 経路へ倒す）。
       let reachCount =
         output.isSuccess
         ? Int(output.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)) : nil
       let probe = ContainmentProbe(
-        branchOrCommit: branchOrCommit, reachCount: reachCount, lane: lane)
+        branchOrCommit: branchOrCommit, reachCount: reachCount)
       if reachCount == 0 {
         // 安全事実（reachable）は証明済み。is-ancestor は「merged → <X>」を名乗れるかの
         // ラベルだけを決めるので、exit 1（非祖先）と異常失敗を区別せず汎用ラベル側へ倒してよい。
@@ -117,8 +109,8 @@ extension GitRepo {
       completion(nil)
       return
     }
-    GitRunner.shared.run(
-      ["merge-base", "--is-ancestor", probe.branchOrCommit, target], cwd: root, lane: probe.lane
+    runner.run(
+      ["merge-base", "--is-ancestor", probe.branchOrCommit, target], cwd: root
     ) { output in
       guard output.isSuccess else {
         self.firstAncestorTarget(probe, targets: targets.dropFirst(), completion: completion)
@@ -149,8 +141,8 @@ extension GitRepo {
         probe, targets: succeeded.map(\.target)[...], count: count, completion: completion)
       return
     }
-    GitRunner.shared.run(
-      ["cherry", target, probe.branchOrCommit], cwd: root, lane: probe.lane
+    runner.run(
+      ["cherry", target, probe.branchOrCommit], cwd: root
     ) { output in
       guard output.isSuccess else {
         self.cherryStage(
@@ -198,41 +190,41 @@ extension GitRepo {
   /// 判定できなければ nil。
   ///
   /// `commit-tree` は到達不可能なコミットオブジェクトを 1 個書くだけ（ref は触らず、いずれ gc で消える）。
-  /// オブジェクトストアへの書き込みは git 自身が並行安全なので barrier に載せない。
+  /// オブジェクトストアへの書き込みは git 自身が並行安全。
   /// `-c user.name` / `-c user.email` は identity 自動推定が失敗する環境で `commit-tree` が落ちるのを
   /// 塞ぐためで、patch-id は内容だけから決まるため判定には影響しない。
   private func squashMergedCheck(
     _ probe: ContainmentProbe, target: String, completion: @escaping (Bool?) -> Void
   ) {
-    GitRunner.shared.run(
-      ["merge-base", target, probe.branchOrCommit], cwd: root, lane: probe.lane
+    runner.run(
+      ["merge-base", target, probe.branchOrCommit], cwd: root
     ) { base in
       guard base.isSuccess else {
         completion(nil)
         return
       }
       let mergeBase = base.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
-      GitRunner.shared.run(
-        ["rev-parse", "\(probe.branchOrCommit)^{tree}"], cwd: self.root, lane: probe.lane
+      self.runner.run(
+        ["rev-parse", "\(probe.branchOrCommit)^{tree}"], cwd: self.root
       ) { tree in
         guard tree.isSuccess else {
           completion(nil)
           return
         }
         let treeOid = tree.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
-        GitRunner.shared.run(
+        self.runner.run(
           [
             "-c", "user.name=orbe", "-c", "user.email=orbe@localhost",
             "commit-tree", treeOid, "-p", mergeBase, "-m", "_",
-          ], cwd: self.root, lane: probe.lane
+          ], cwd: self.root
         ) { synthesized in
           guard synthesized.isSuccess else {
             completion(nil)
             return
           }
           let oid = synthesized.stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
-          GitRunner.shared.run(
-            ["cherry", target, oid], cwd: self.root, lane: probe.lane
+          self.runner.run(
+            ["cherry", target, oid], cwd: self.root
           ) { cherry in
             guard cherry.isSuccess else {
               completion(nil)

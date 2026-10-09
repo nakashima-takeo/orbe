@@ -75,6 +75,12 @@ enum TestIsolation {
     // プロセスの環境を土台にするので、`git init` を含む全 fixture の全呼び出しに効く。
     setenv("GIT_CONFIG_GLOBAL", "/dev/null", 1)
     setenv("GIT_CONFIG_SYSTEM", "/dev/null", 1)
+    // 開発者が launchd に配った GUI の askpass は、`GitRunner` がそのまま使う（対話の封じの例外）。テストの git に
+    // ダイアログを出させず、封じの結果を手元の環境に依らせない。
+    unsetenv("SSH_ASKPASS")
+    // 開発者の `GIT_EDITOR`（`true` 等のすぐ返るもの）を残すと、エディタの封じが外れてもテストの git が待たずに返り、
+    // 封じのテストが手元で落ちない。
+    unsetenv("GIT_EDITOR")
     // ghostty のリソース根（theme の探索先）。libghostty は `ghostty_init` で 1 度だけ読むので、どの
     // テスト本体よりも前に張る。張らないと Orbe / Ghostty の端末から起動した `swift test` は親の
     // インストール済み .app を読み、CI と違う結果になる。`app/` は .app の `Resources/ghostty` と同じ
@@ -107,7 +113,7 @@ enum TestIsolation {
   /// テスト 1 件の作業ディレクトリ（`TestScratch.caseDir`）の下へ、隔離の seam を向け直す。
   ///
   /// 値の素性（永続 6 種・同梱リソース根・プラグイン実体化先・ghostty user 層・通知音の再生層・
-  /// 端末のクリップボード）に関わらず **毎テスト無条件に張り直す**。テストが自分で書き換えても
+  /// 端末のクリップボード・ゴミ箱）に関わらず **毎テスト無条件に張り直す**。テストが自分で書き換えても
   /// 次のテストへ漏れず、戻し忘れが起きえない——申告制を残さないため。`CompletionLearning` だけは `shared` が in-memory へ
   /// 焼き付ける都合で per-test にできず、`installOnce` の固定のままにする。
   ///
@@ -149,6 +155,9 @@ enum TestIsolation {
     // 取り込んだカスタム音源の置き場。既定は `ORBE_STATE_DIR` 直下＝テスト間で共有される根なので、
     // 書いたファイルが次のテストへ残る。他の永続と同じく caseDir の下へ張り直す。
     CustomSoundStore.directoryURLOverride = dir.appendingPathComponent("sounds", isDirectory: true)
+
+    // 未追跡の破棄の行き先。既定は利用者の実ゴミ箱で、落ちたテストは移したファイルを戻せない。
+    GitRepo.trashDirectoryOverride = dir.appendingPathComponent("trash", isDirectory: true)
 
     // 子プロセス PATH の probe。張らないと `WindowController` を立てる多数のテストが開発者の
     // 実ログインシェルを起こし、手元の dotfiles で結果が変わる（CI と手元で違う PATH を見る）。

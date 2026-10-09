@@ -35,6 +35,7 @@ final class RootFilesTests: OrbeTestCase {
     let recorder = Recorder()
     files.addObserver(recorder)
     pumpMain(until: { files.status != nil }, "status の初回取得")
+    XCTAssertTrue(files.isResolved)
     XCTAssertNotNil(files.repo)
     XCTAssertEqual(recorder.statusChanges, 1)
     XCTAssertNil(files.status?.badge(of: "a.txt"), "clean")
@@ -65,13 +66,8 @@ final class RootFilesTests: OrbeTestCase {
     let inside = repo.root + "/.git"
     try FileManager.default.createDirectory(
       atPath: inside + "/.git", withIntermediateDirectories: true)
-    // 解決の完了は、同じ runner の barrier（先に積んだ読み取りの完了を待つ）が返ることで知る——
-    // `GitRepo.open` が `.read` レーンに載っていることに依存する（`.independent` へ移すとここは待たない）。
-    let runner = GitRunner()
-    let files = RootFiles(root: inside, runner: runner)
-    let settled = expectation(description: "rev-parse が返った")
-    runner.run(["version"], cwd: inside, lane: .exclusive) { _ in settled.fulfill() }
-    wait(for: [settled], timeout: 20)
+    let files = RootFiles(root: inside)
+    pumpMain(until: { files.isResolved }, "管理下かの判定")
     XCTAssertNil(files.repo, "git の toplevel は repo 自身で、根と一致しない")
     XCTAssertNil(files.status)
   }
@@ -85,11 +81,8 @@ final class RootFilesTests: OrbeTestCase {
       to: broken.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
     let root = GitWorktreeRoot.normalizedPath(broken.path)
     XCTAssertEqual(GitWorktreeRoot.root(of: root), root, "前提: 根の規則はこの `.git` を根と見る")
-    let runner = GitRunner()
-    let files = RootFiles(root: root, runner: runner)
-    let settled = expectation(description: "rev-parse が返った")
-    runner.run(["version"], cwd: root, lane: .exclusive) { _ in settled.fulfill() }
-    wait(for: [settled], timeout: 20)
+    let files = RootFiles(root: root)
+    pumpMain(until: { files.isResolved }, "管理下かの判定")
     XCTAssertNil(files.repo)
     XCTAssertNil(files.status)
   }
@@ -142,6 +135,25 @@ final class RootFilesTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["add", "b.txt"]).isSuccess)
     pumpMain(until: { files.status?.badge(of: "b.txt") == .added })
     XCTAssertEqual(recorder.statusChanges, 4, "M のままの書き直しでは鳴らない（M → U → A の 3 回だけ）")
+  }
+
+  /// HEAD や upstream が動くと（作業ツリーが変わらなくても）「status が変わった」が届く。
+  func testMovingHeadOrUpstreamChangesTheStatus() throws {
+    repo.addOrigin()
+    let files = RootFiles(root: repo.root)
+    let recorder = Recorder()
+    files.addObserver(recorder)
+    pumpMain(until: { files.status != nil })
+    let seen = recorder.statusChanges
+
+    XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "moved"]).isSuccess)
+    pumpMain(until: { files.status?.branch?.commit == self.repo.head() }, "HEAD の移動")
+    XCTAssertEqual(files.status?.branch?.upstream?.divergence?.ahead, 1)
+    XCTAssertGreaterThan(recorder.statusChanges, seen)
+    let moved = recorder.statusChanges
+    XCTAssertTrue(repo.git(["push", "-q"]).isSuccess)
+    pumpMain(until: { files.status?.branch?.upstream?.divergence?.ahead == 0 }, "upstream の移動")
+    XCTAssertGreaterThan(recorder.statusChanges, moved)
   }
 
   /// 根が git 管理下と分かる前（解決は非同期）に起きた変化も落とさない。

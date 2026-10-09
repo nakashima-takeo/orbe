@@ -10,8 +10,7 @@ final class GitRepo {
   let gitDir: String
   /// 共有 git dir（refs・objects の在処）。linked worktree でも本体側の同じ場所を指す。
   let commonDir: String
-  /// この repo の全操作を通す git 実行基盤。本番は常に `.shared`（排他はインスタンス内で
-  /// 閉じるため、同じリポジトリを書く者は全員同じインスタンスを通る必要がある）。
+  /// この repo の全操作を通す git 実行基盤（本番は `.shared`。テストは打ち切りの短い runner を渡す）。
   let runner: GitRunner
 
   private init(root: String, gitDir: String, commonDir: String, runner: GitRunner) {

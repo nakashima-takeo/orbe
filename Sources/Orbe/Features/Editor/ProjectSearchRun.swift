@@ -42,7 +42,7 @@ final class ProjectSearchRun: @unchecked Sendable {
   private let runner: GitRunner
   private let deliver: @MainActor @Sendable (Batch) -> Void
   private let state = OSAllocatedUnfairLock(initialState: State())
-  private let stream = OSAllocatedUnfairLock<GitRunner.Stream?>(initialState: nil)
+  private let stream = OSAllocatedUnfairLock<GitRunner.Handle?>(initialState: nil)
 
   init(
     query: CompiledSearchQuery, root: String, documents: [Document], runner: GitRunner,

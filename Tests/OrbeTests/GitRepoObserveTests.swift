@@ -32,8 +32,9 @@ final class GitRepoObserveTests: OrbeTestCase {
     XCTAssertEqual(GitWorktreeRoot.normalizedPath(opened.commonDir), repo.root + "/.git")
   }
 
-  /// status は M / A / 未追跡（ファイルとディレクトリ）を相対パスで返し、未追跡ディレクトリは前方一致で引ける。
-  /// ユーザーの `status.showUntrackedFiles=no` があっても未追跡は出る。
+  /// status は M / A / 未追跡を相対パスで返す。未追跡は新しいフォルダの中もファイル 1 件ずつで、ディレクトリの形で
+  /// 出るのは未追跡の入れ子のリポジトリだけ（前方一致で引ける）。ユーザーの `status.showUntrackedFiles=no` が
+  /// あっても未追跡は出る。
   func testStatusReflectsTheWorktreeRegardlessOfUserSettings() throws {
     let git = try repo.open()
     XCTAssertTrue(repo.git(["config", "status.showUntrackedFiles", "no"]).isSuccess)
@@ -42,13 +43,86 @@ final class GitRepoObserveTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["add", "b.txt"]).isSuccess)
     try repo.write("notes.txt", "n\n")
     try repo.write("dir/inner.txt", "i\n")
+    try repo.write("dir/deeper/x.txt", "x\n")
+    try FileManager.default.createDirectory(
+      atPath: repo.root + "/nested", withIntermediateDirectories: true)
+    XCTAssertTrue(repo.git(["init", "-q"], in: repo.root + "/nested").isSuccess)
+    try repo.write("nested/n.txt", "n\n")
 
     let status = try XCTUnwrap(self.status(git))
     XCTAssertEqual(status.badge(of: "a.txt"), .modified)
     XCTAssertEqual(status.badge(of: "b.txt"), .added)
     XCTAssertEqual(status.badge(of: "notes.txt"), .untracked)
-    XCTAssertEqual(status.badge(of: "dir/inner.txt"), .untracked, "未追跡ディレクトリの中")
-    XCTAssertEqual(status.untrackedDirectories, ["dir"])
+    XCTAssertEqual(status.entries["dir/inner.txt"]?.unstaged, .untracked, "フォルダの中も 1 件ずつ")
+    XCTAssertEqual(status.entries["dir/deeper/x.txt"]?.unstaged, .untracked)
+    XCTAssertEqual(status.untrackedDirectories, ["nested"], "入れ子のリポジトリだけがディレクトリの形")
+    XCTAssertEqual(status.badge(of: "nested/n.txt"), .untracked)
+  }
+
+  /// index から外して作業ツリーに残したファイル（`git rm --cached`）は、ステージ済みの削除と未追跡の両方を持つ。
+  func testAFileRemovedOnlyFromTheIndexIsBothAStagedDeletionAndUntracked() throws {
+    let git = try repo.open()
+    XCTAssertTrue(repo.git(["rm", "-q", "--cached", "a.txt"]).isSuccess)
+
+    let status = try XCTUnwrap(self.status(git))
+    XCTAssertEqual(
+      status.entries["a.txt"], GitStatus.Entry(staged: .deleted, unstaged: .untracked))
+    XCTAssertEqual(status.badge(of: "a.txt"), .untracked, "ツリーの印は未追跡のまま")
+  }
+
+  /// 前の値と比べて読む——同じなら「同じ」、違えば新しい値、git が失敗すれば「失敗」（前の値を変えさせない）。
+  func testStatusIsComparedWithThePreviousValue() throws {
+    let git = try repo.open()
+    let first = try XCTUnwrap(status(git))
+    XCTAssertEqual(read(git, comparedTo: first), .unchanged)
+
+    try repo.write("b.txt", "new\n")
+    guard case .changed(let second) = read(git, comparedTo: first) else {
+      return XCTFail("未追跡が増えたら変わる")
+    }
+    XCTAssertEqual(second.entries["b.txt"]?.unstaged, .untracked)
+
+    try FileManager.default.removeItem(atPath: repo.root + "/.git/HEAD")
+    XCTAssertEqual(read(git, comparedTo: second), .failed)
+  }
+
+  /// status はブランチを読む——名前・HEAD・upstream と先行/遅れ・rename の元パス。ユーザーの `status.aheadBehind=false`・
+  /// `status.renames=false` でも数と rename は出る。detached・初回コミット前・upstream が消えた（数は不明）を区別する。
+  func testStatusReadsTheBranchRegardlessOfUserSettings() throws {
+    let git = try repo.open()
+    XCTAssertTrue(repo.git(["config", "status.aheadBehind", "false"]).isSuccess)
+    XCTAssertTrue(repo.git(["config", "status.renames", "false"]).isSuccess)
+    repo.addOrigin()
+    try repo.advanceOrigin(writing: "o.txt", "o\n")
+    XCTAssertTrue(repo.git(["fetch", "-q"]).isSuccess)
+    try repo.write("b.txt", "b\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "local"]).isSuccess)
+    XCTAssertTrue(repo.git(["mv", "a.txt", "moved.txt"]).isSuccess)
+
+    let status = try XCTUnwrap(self.status(git))
+    XCTAssertEqual(
+      status.branch,
+      GitStatus.Branch(
+        name: "main", commit: repo.head(),
+        upstream: GitStatus.Upstream(
+          name: "origin/main", divergence: GitStatus.Divergence(ahead: 1, behind: 1))))
+    XCTAssertEqual(status.entries["moved.txt"]?.staged, .renamed)
+    XCTAssertEqual(status.entries["moved.txt"]?.originalPath, "a.txt")
+
+    XCTAssertTrue(repo.git(["update-ref", "-d", "refs/remotes/origin/main"]).isSuccess)
+    XCTAssertEqual(
+      self.status(git)?.branch?.upstream, GitStatus.Upstream(name: "origin/main", divergence: nil),
+      "upstream が消えたら数は不明")
+
+    XCTAssertTrue(repo.git(["checkout", "-q", "--detach"]).isSuccess)
+    XCTAssertEqual(
+      self.status(git)?.branch, GitStatus.Branch(name: nil, commit: repo.head(), upstream: nil))
+
+    let fresh = try TempGitRepo(initialCommit: false)
+    XCTAssertEqual(
+      self.status(try fresh.open())?.branch,
+      GitStatus.Branch(name: "main", commit: nil, upstream: nil))
   }
 
   /// 観測は index を書き換えない。stat だけ変わったファイル（同じ内容で mtime が違う）を見ても、
@@ -62,42 +136,6 @@ final class GitRepoObserveTests: OrbeTestCase {
 
     XCTAssertNotNil(status(git))
     XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: index)), before)
-  }
-
-  /// 観測（status・index の OID・blob）は、同じ runner で詰まっている `.exclusive` の書き込みを待たない。
-  /// 待つと、巨大リポジトリの status がある間だけでなく、hook で止まった commit の間もバッジが更新されない。
-  func testObservationIsNotBlockedByAHangingExclusiveWrite() throws {
-    let fixture = try GitHangFixture()
-    try fixture.installHook("pre-commit", body: fixture.waitingBody)
-    let runner = GitRunner(idleTimeout: 60)
-    var opened: GitRepo?
-    let open = expectation(description: "open")
-    GitRepo.open(cwd: fixture.root, runner: runner) {
-      opened = $0
-      open.fulfill()
-    }
-    wait(for: [open], timeout: 20)
-    let git = try XCTUnwrap(opened)
-    let hangFinished = expectation(description: "hanging exclusive commit")
-    runner.run(
-      ["commit", "--allow-empty", "-m", "blocked"], cwd: fixture.root, lane: .exclusive
-    ) { _ in hangFinished.fulfill() }
-    XCTAssertTrue(fixture.waitUntilHung(), "前提: 書き込みが hook でハングしていること")
-
-    let done = expectation(description: "status / ls-files / cat-file")
-    git.status { status in
-      XCTAssertNotNil(status)
-      git.indexEntries(relativePaths: ["a.txt"]) { entries in
-        git.blob(oid: entries?["a.txt"] ?? "", relativePath: "a.txt") { data in
-          XCTAssertEqual(data.flatMap { String(data: $0, encoding: .utf8) }, "x\n")
-          done.fulfill()
-        }
-      }
-    }
-    wait(for: [done], timeout: 3)
-
-    fixture.release()
-    wait(for: [hangFinished], timeout: 60)
   }
 
   /// index の OID は `git add` で変わり、blob はその版の生の中身。index に無い・競合中は引けない。
@@ -170,9 +208,14 @@ final class GitRepoObserveTests: OrbeTestCase {
   }
 
   private func status(_ git: GitRepo) -> GitStatus? {
-    var result: GitStatus?
+    guard case .changed(let status) = read(git, comparedTo: nil) else { return nil }
+    return status
+  }
+
+  private func read(_ git: GitRepo, comparedTo previous: GitStatus?) -> GitStatusRead? {
+    var result: GitStatusRead?
     let done = expectation(description: "status")
-    git.status {
+    git.status(comparedTo: previous) {
       result = $0
       done.fulfill()
     }
