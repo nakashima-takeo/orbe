@@ -148,13 +148,14 @@ enum ClaudeHeadless {
     return args
   }
 
-  /// 出来事の流れのうち、最後の `result` が最終応答。
+  /// 出来事の流れのうち、最後の `result` が最終応答。失敗で終わった回は本文を持たず、理由を `errors` に入れる。
   static func reply(_ line: Data) -> BackgroundAgentReply? {
     guard
       let event = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
       event["type"] as? String == "result"
     else { return nil }
-    return BackgroundAgentReply(
-      text: event["result"] as? String ?? "", isError: event["is_error"] as? Bool ?? false)
+    let text =
+      event["result"] as? String ?? (event["errors"] as? [String] ?? []).joined(separator: "\n")
+    return BackgroundAgentReply(text: text, isError: event["is_error"] as? Bool ?? false)
   }
 }

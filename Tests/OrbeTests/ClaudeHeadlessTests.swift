@@ -45,8 +45,10 @@ final class ClaudeHeadlessTests: OrbeTestCase {
       BackgroundAgentReply(text: "done", isError: false))
     XCTAssertEqual(
       ClaudeHeadless.reply(
-        Data(#"{"type":"result","subtype":"error_max_turns","is_error":true}"#.utf8)),
-      BackgroundAgentReply(text: "", isError: true))
+        Data(
+          #"{"type":"result","subtype":"error_during_execution","is_error":true,"errors":["a","b"]}"#
+            .utf8)),
+      BackgroundAgentReply(text: "a\nb", isError: true), "失敗の回は errors を理由として返す")
     XCTAssertNil(ClaudeHeadless.reply(Data(#"{"type":"assistant","result":"x"}"#.utf8)))
     XCTAssertNil(ClaudeHeadless.reply(Data("not json".utf8)))
   }
