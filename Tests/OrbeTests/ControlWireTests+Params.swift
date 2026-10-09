@@ -86,7 +86,7 @@ extension ControlWireTests {
       ("update_task", ["taskId": 7, "title": "改題"]),
       ("move_task", ["taskId": 7, "beforeTaskId": 8]),
       ("delete_task", ["taskId": 7]),
-    ]
+    ] + intakeRequests
   }
 
   /// `validRequests` を method 引きにしたもの。
@@ -137,6 +137,14 @@ extension ControlWireTests {
       RequiredParam(method: "update_task", key: "taskId", code: -32602),
       RequiredParam(method: "move_task", key: "taskId", code: -32602),
       RequiredParam(method: "delete_task", key: "taskId", code: -32602),
+      RequiredParam(method: "set_intake", key: "name", code: -32602),
+      RequiredParam(method: "set_intake", key: "fetch", code: -32602),
+      RequiredParam(method: "set_intake", key: "judge", code: -32602),
+      RequiredParam(method: "set_intake", key: "when", code: -32602),
+      RequiredParam(method: "run_intake", key: "intakeId", code: -32602),
+      RequiredParam(method: "pause_intake", key: "intakeId", code: -32602),
+      RequiredParam(method: "pause_intake", key: "paused", code: -32602),
+      RequiredParam(method: "delete_intake", key: "intakeId", code: -32602),
     ]
   }
 

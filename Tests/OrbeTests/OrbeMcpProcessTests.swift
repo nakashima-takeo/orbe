@@ -93,6 +93,9 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       description(try tool("restore_sessions"), property: "sessionIds")
         .contains("\(SessionLogLimits.restoreMaxIds) 件"),
       "sessionIds の上限を写す")
+    XCTAssertTrue(
+      description(try tool("list_intakes")).contains("新しい順に \(Intake.retainedRuns) 件まで。"),
+      "回の記録を残す件数を写す")
   }
 
   /// `tools/list` に出る全ツールが control の method として通る。ブリッジはツール名をそのまま method 名へ
