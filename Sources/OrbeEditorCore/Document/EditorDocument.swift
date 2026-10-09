@@ -50,6 +50,7 @@ public final class EditorDocument {
     didSet {
       guard baseline != oldValue else { return }
       baselineGeneration += 1
+      hunkRequest += 1
       requestHunks()
     }
   }
@@ -58,12 +59,17 @@ public final class EditorDocument {
   public var hunkLimit = LineDiff.maximumComparedLines {
     didSet {
       guard hunkLimit != oldValue else { return }
-      baselineGeneration += 1
+      hunkRequest += 1
       requestHunks()
     }
   }
   /// baseline と本文の行差分。編集の直後はずらした前のハンクで、裏の結果が届くと置き換わる。
   public private(set) var hunks: [LineHunk] = []
+  /// ハンクが今の baseline に対する結果（をその後の編集でずらしたもの）か。baseline を置き直してから結果が届くまでは、
+  /// 前の baseline に対するハンクを持ったまま false（上限だけを置き直した間は、前の上限の結果のまま true）。
+  public var hunksAreCurrent: Bool { hunksBaseline == baselineGeneration }
+  /// ハンクが変わった（結果が届いた・編集でずらした・baseline が無くなった）。行の印と同じ時機に、印の後で届く。
+  public var onHunksChange: (() -> Void)?
   /// 字下げの作法（単位とタブか）。開いたとき、および本文を丸ごと置き換えたときに本文から検出し直し、面へ押す。
   public private(set) var indentation = Indentation.fallback
   /// 面の見えている範囲が変わった（スクロール・窓の高さ）。
@@ -79,7 +85,11 @@ public final class EditorDocument {
   private let inbox: AnalysisInbox
   private var reception: SyntaxReception
   private let analysis: DocumentAnalysis
+  /// baseline を置き直すたびに進む番号と、行差分の依頼を置き直す（baseline か上限が変わる）たびに進む番号。
   private var baselineGeneration = 0
+  private var hunkRequest = 0
+  /// 今のハンクがどの baseline に対する結果か（`baselineGeneration` の値）。
+  private var hunksBaseline = 0
   /// 行差分を頼んで、まだその結果を受け取っていない版。
   private var pendingHunks: Int?
   /// 区間の列の問いのうち、まだ結果を受け取っていないもの（種類ごとに最新の問いと版）。
@@ -248,18 +258,20 @@ public final class EditorDocument {
     guard let baseline else {
       pendingHunks = nil
       hunks = []
+      hunksBaseline = baselineGeneration
       pushLineMarks()
       return
     }
     pendingHunks = version
     analysis.postHunks(
       text: text, version: version, baseline: baseline, limit: hunkLimit,
-      generation: baselineGeneration)
+      generation: hunkRequest)
   }
 
   /// 行の印を面へ押す。印はハンクが同じでも押す——同じ行の中の打鍵でハンクは変わらず区間のオフセットだけが動く。
   private func pushLineMarks() {
     surface.setLineMarks(LineMarks(hunks: hunks).spans(in: text))
+    onHunksChange?()
   }
 
   /// 受け取り箱の結果を取り、今の版へ写して置く。比較が未保存を下ろしたとき外部変更の印が立っていれば、最後に照合し
@@ -269,10 +281,11 @@ public final class EditorDocument {
     let contents = inbox.take()
     let synced = contents.comparison.map { diskSync.settle($0, version: version) } ?? false
     let changedRoles = reception.receive(contents.syntax, roles: &roles) { log.edits(since: $0) }
-    if let outcome = contents.hunks, outcome.generation == baselineGeneration,
+    if let outcome = contents.hunks, outcome.generation == hunkRequest,
       let edits = log.edits(since: outcome.version)
     {
       hunks = edits.reduce(outcome.hunks) { $1.track($0) }
+      hunksBaseline = baselineGeneration
       if pendingHunks == outcome.version { pendingHunks = nil }
       pushLineMarks()
     }

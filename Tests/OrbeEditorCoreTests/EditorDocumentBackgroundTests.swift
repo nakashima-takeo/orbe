@@ -30,7 +30,7 @@ final class EditorDocumentBackgroundTests: XCTestCase {
   // MARK: - 古い版の結果
 
   /// 行差分の上限は文書が受け取る値で、変えると裏へ頼み直し、既定（ガター）では 1 区間に畳む大きな書き換えも行ごとの区間に
-  /// なる。上限を戻せば畳んだ区間に戻る。
+  /// なる。上限を戻せば畳んだ区間に戻る。ハンクが今の底に対する結果かは、底を置き直したときだけ届くまで偽になる。
   func testTheHunkLimitIsTheDocumentsAndRequestsAgain() throws {
     let n = LineDiff.maximumComparedLines
     let old = (0..<n).map { "old \($0)\n" }.joined()
@@ -39,9 +39,18 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     document.baseline = old
     XCTAssertTrue(document.waitUntilCaughtUp())
     XCTAssertEqual(document.hunks.count, 1, "前提: 既定の上限では 1 区間に畳む")
+    var notified = 0
+    document.onHunksChange = { notified += 1 }
     document.hunkLimit = 4 * n
+    XCTAssertTrue(document.hunksAreCurrent, "上限だけを変えた間は、前の上限の結果のまま今の底のハンク")
     XCTAssertTrue(document.waitUntilCaughtUp())
     XCTAssertEqual(document.hunks.count, n / 100, "変えた上限で行ごとに取り直す")
+    XCTAssertGreaterThan(notified, 0, "結果が届けば知らせる")
+    document.baseline = old + "tail\n"
+    XCTAssertFalse(document.hunksAreCurrent, "底を変えたら、届くまで前の底のハンク")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertTrue(document.hunksAreCurrent)
+    document.baseline = old
     document.hunkLimit = LineDiff.maximumComparedLines
     XCTAssertTrue(document.waitUntilCaughtUp())
     XCTAssertEqual(document.hunks.count, 1)
