@@ -312,7 +312,7 @@ final class EditorDiffTests: OrbeTestCase {
 
   // MARK: - 永続と現在地
 
-  /// diff タブは永続に書かない。焦点が diff タブなら、diff タブを除いた列でその位置に最も近い文書のタブ（左を優先）を
+  /// diff タブは永続に書かない。焦点が diff タブなら、diff タブを除いた列でその位置にある文書のタブ（右隣、無ければ左隣。閉じたときと同じ）を
   /// 焦点として書く。現在地は diff タブでもファイルと同じ（根と相対パス）。
   func testDiffTabsAreNotPersistedAndTheLocationIsTheFile() throws {
     try repo.write("b.txt", "b\n")
@@ -323,7 +323,7 @@ final class EditorDiffTests: OrbeTestCase {
     tab.editor.activate(.diff(id("a.txt", .workingTree)))
     let documents = try XCTUnwrap(tab.tabState().editor?.documents)
     XCTAssertEqual(documents.open, [repo.url("b.txt").path, repo.url("a.txt").path])
-    XCTAssertEqual(documents.active, repo.url("b.txt").path, "左の文書のタブ")
+    XCTAssertEqual(documents.active, repo.url("a.txt").path, "閉じたときと同じく右隣の文書のタブ")
     XCTAssertEqual(tab.location, .file(root: repo.root, relative: "a.txt"))
   }
 }

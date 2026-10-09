@@ -20,8 +20,8 @@ extension TerminalTab {
     _ = try MainActor.assumeIsolated { try editor.openDiff(id, as: .pinned) }
   }
 
-  /// 書くのは文書のタブだけ（diff のタブは戻さない）。焦点が diff のタブなら、diff のタブを除いた列でその位置に最も近い
-  /// 文書のタブ（左を優先）——タブを閉じたときに隣へ焦点が移る規則と同じ。
+  /// 書くのは文書のタブだけ（diff のタブは戻さない）。焦点が diff のタブなら、diff のタブを除いた列でその位置にある文書の
+  /// タブ——右隣、無ければ左隣。焦点のタブを閉じたときに焦点が移る規則（`EditorSession.close`）と同じ。
   func editorState() -> EditorState? {
     MainActor.assumeIsolated {
       let tabs = editor.tabs
@@ -30,10 +30,11 @@ extension TerminalTab {
         return nil
       }
       let open =
-        files.first.map { first in
+        files.first.map { _ in
           let index = tabs.firstIndex { $0.id == editor.activeID } ?? 0
           let before = tabs[..<index].filter { if case .document = $0 { true } else { false } }
-          let active = editor.activeDocument ?? before.last?.document ?? first
+            .count
+          let active = editor.activeDocument ?? files[min(before, files.count - 1)]
           let preview = editor.previewID.flatMap { id -> String? in
             guard case .document(let url) = id else { return nil }
             return url.path
