@@ -104,7 +104,7 @@ final class SessionStore {
 
   /// 指定 workspace を消せない理由。消せるなら nil。workspace index の妥当性は呼び出し側が保証する。
   /// 通常の workspace を 1 つは残す——Orbe の workspace だけになると、新しく起こすタブが Orbe の workspace の
-  /// root（秘書向けの CLAUDE.md がある場所）で起きる。
+  /// root（秘書への指示がある場所）で起きる。
   func removalBlocker(_ index: Int) -> RemovalBlocker? {
     if isOrbeWorkspace(index) { return .orbeWorkspace }
     let regularCount = workspaces.count - (orbeWorkspaceIndex == nil ? 0 : 1)

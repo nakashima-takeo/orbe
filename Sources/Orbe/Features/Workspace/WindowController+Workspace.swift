@@ -14,7 +14,7 @@ extension WindowController {
     scheduleSave()
   }
 
-  /// Orbe の workspace のフォルダを現在の UI 言語の雛形で用意する（無ければ作る・あれば触らない）。
+  /// Orbe の workspace のフォルダを現在の UI 言語の雛形で用意する（秘書への指示は書き直し、CLAUDE.md は無ければ作る）。
   func prepareOrbeWorkspaceFolder() {
     OrbeWorkspaceFolder.prepare(language: localization.language)
   }
