@@ -341,14 +341,20 @@ final class MaterialBox: Sendable {
   @discardableResult
   func update(_ body: @Sendable (inout FrameMaterial) -> Void) -> Int {
     let (revision, before) = state.withLock { material in
-      let before = [material.content, material.rowSource]
+      let before = Copies(content: material.content, rowSource: material.rowSource)
       body(&material)
       material.revision += 1
       return (material.revision, before)
     }
-    let parcel = OSAllocatedUnfairLock(initialState: consume before)
-    DispatchQueue.global(qos: .utility).async { parcel.withLock { $0 = [] } }
+    let parcel = OSAllocatedUnfairLock<Copies?>(initialState: before)
+    DispatchQueue.global(qos: .utility).async { parcel.withLock { $0 = nil } }
     return revision
+  }
+
+  /// 書き換える前の写し（裏で手放す。配列にしない——打鍵ごとの書き換えで main に確保を足さない）。
+  private struct Copies: Sendable {
+    let content: SurfaceContent?
+    let rowSource: SurfaceContent?
   }
 
   func read() -> FrameMaterial { state.withLock { $0 } }
