@@ -112,6 +112,16 @@ final class BackgroundSchedulerTests: OrbeTestCase {
     XCTAssertEqual(runner.calls.count, 1)
   }
 
+  /// 時計が大きく戻って数え始めが未来になったら、数え始めを今にそろえて数え直す（戻った分だけ予定が止まらない）。
+  func testClockMovedBackBeforeAnchorRecountsFromNow() throws {
+    try register()
+    now = start.addingTimeInterval(-86400)
+
+    NotificationCenter.default.post(name: .NSSystemClockDidChange, object: nil)
+
+    XCTAssertEqual(armed?.date, now.addingTimeInterval(60))
+  }
+
   /// タイムゾーンが変わったら、毎日の時刻を新しいタイムゾーンで数え直す（予約の発火を待たない）。
   func testTimeZoneChangeRecountsDailyTimesInTheNewZone() throws {
     var zone = try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo"))
@@ -164,12 +174,12 @@ final class BackgroundSchedulerTests: OrbeTestCase {
     try register()
     scheduler.runNow(id: "a")
 
-    try register(anchor: start.addingTimeInterval(30))
+    try register(anchor: start.addingTimeInterval(-30))
     runner.finish(0, with: result(startedAt: now))
 
     XCTAssertEqual(runner.stopped, [0])
     XCTAssertNil(events["a"], "外した回の結果は返さない")
-    XCTAssertEqual(armed?.date, start.addingTimeInterval(90), "新しい数え始めで数え直す")
+    XCTAssertEqual(armed?.date, start.addingTimeInterval(30), "新しい数え始めで数え直す")
   }
 
   func testRemoveStopsTheRunningRunAndForgetsTheSchedule() throws {

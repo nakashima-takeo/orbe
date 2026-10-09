@@ -94,6 +94,8 @@ final class BackgroundScheduler {
         if deadline <= now { expire(id, entry) } else { wake(at: deadline) }
         continue
       }
+      // 時計が戻って数え始めが未来になったら、今にそろえる（そのままでは次の回が戻った分だけ遠のき、予定が止まる）。
+      if entry.anchor > now { entry.anchor = now }
       switch entry.schedule.timing.next(
         after: entry.anchor, deadline: deadline, now: now, calendar: calendar)
       {
