@@ -106,15 +106,7 @@ final class BackgroundProcess {
     var attr: posix_spawnattr_t?
     posix_spawnattr_init(&attr)
     defer { posix_spawnattr_destroy(&attr) }
-    // CLOEXEC_DEFAULT: Orbe が持つソケット・pty・他の実行の pipe を子に漏らさない（上で dup2 した 0〜2 だけが渡る）。
-    posix_spawnattr_setflags(
-      &attr, Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGDEF))
-    posix_spawnattr_setpgroup(&attr, 0)
-    // Orbe は SIGPIPE を無視している。無視は exec を越えて継がれるので、子では既定に戻す。
-    var defaults = sigset_t()
-    sigemptyset(&defaults)
-    sigaddset(&defaults, SIGPIPE)
-    posix_spawnattr_setsigdefault(&attr, &defaults)
+    Self.configure(&attr)
 
     let argv = ([spec.executable] + spec.arguments).map { strdup($0) } + [nil]
     let envp = spec.environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
@@ -144,6 +136,26 @@ final class BackgroundProcess {
     if let input, let data = spec.stdin { write(data, to: input.write) }
     armLimitTimer()
     return nil
+  }
+
+  /// 子は専用のグループで起こし、fd を漏らさず、Orbe から継ぐシグナルの扱いを素に戻す。
+  private static func configure(_ attr: inout posix_spawnattr_t?) {
+    // CLOEXEC_DEFAULT: Orbe が持つソケット・pty・他の実行の pipe を子に漏らさない（file actions で dup2 した 0〜2 だけが渡る）。
+    posix_spawnattr_setflags(
+      &attr,
+      Int16(
+        POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGDEF
+          | POSIX_SPAWN_SETSIGMASK))
+    posix_spawnattr_setpgroup(&attr, 0)
+    // Orbe は SIGPIPE を無視している。無視は exec を越えて継がれるので、子では既定に戻す。
+    var defaults = sigset_t()
+    sigemptyset(&defaults)
+    sigaddset(&defaults, SIGPIPE)
+    posix_spawnattr_setsigdefault(&attr, &defaults)
+    // シグナルマスクも exec を越えて継がれる。起こすのは GCD のワーカーで、そのマスクを継ぐと SIGTERM が届かない。
+    var unblocked = sigset_t()
+    sigemptyset(&unblocked)
+    posix_spawnattr_setsigmask(&attr, &unblocked)
   }
 
   private static func makePipe() -> (read: Int32, write: Int32)? {

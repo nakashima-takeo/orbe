@@ -220,6 +220,17 @@ final class BackgroundProcessTests: OrbeTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: pidFile))
   }
 
+  /// 止めると、子は SIGTERM を受けて後始末できる。GCD のワーカーから起こしても、そのスレッドのシグナルマスクを継がない。
+  func testStoppedChildReceivesTerm() throws {
+    let marker = TestScratch.caseDir.appendingPathComponent("term").path
+    let process = BackgroundProcess(
+      spec("trap 'echo got > \(marker); exit 0' TERM; sleep 30 & wait"))
+    DispatchQueue.global().asyncAfter(deadline: .now() + 0.3) { process.stop() }
+
+    XCTAssertEqual(try run(process).outcome.ending, .stopped)
+    XCTAssertTrue(FileManager.default.fileExists(atPath: marker), "SIGKILL を待たずに trap が走る")
+  }
+
   /// SIGTERM を無視する子も、猶予の後に SIGKILL で止まる。
   func testChildIgnoringTermIsKilled() throws {
     let process = BackgroundProcess(spec("trap '' TERM; sleep 30"))
