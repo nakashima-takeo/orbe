@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// `.app` 同梱のエージェントプラグイン（状態追跡 hooks と MCP サーバー）を、検出された各 CLI へ
@@ -83,13 +84,55 @@ enum AgentPluginInstaller {
     }
   }
 
+  /// 実体化したパッケージの中身の指紋（全ファイルの相対パスと中身から作る SHA-256）。
+  /// 名前も刻印もパッケージの中にあるので、CLI に登録するものが変わればこれも変わる。読めなければ nil。
+  static func digest(of packageDir: URL) -> String? {
+    let fm = FileManager.default
+    guard let walker = fm.enumerator(atPath: packageDir.path) else { return nil }
+    var entries: [(path: String, hash: String)] = []
+    while let rel = walker.nextObject() as? String {
+      guard walker.fileAttributes?[.type] as? FileAttributeType == .typeRegular else { continue }
+      guard let data = fm.contents(atPath: packageDir.appendingPathComponent(rel).path) else {
+        return nil
+      }
+      entries.append((rel, hex(SHA256.hash(data: data))))
+    }
+    guard !entries.isEmpty else { return nil }
+    let manifest = entries.sorted { $0.path < $1.path }.map { "\($0.path)\0\($0.hash)\n" }.joined()
+    return hex(SHA256.hash(data: Data(manifest.utf8)))
+  }
+
+  private static func hex(_ digest: SHA256Digest) -> String {
+    digest.map { String(format: "%02x", $0) }.joined()
+  }
+
+  /// 最後に各 CLI へ登録できたパッケージの指紋の置き場。CLI への登録は「利用者 × チャネル」に 1 つ
+  /// なので、実体化先と同じく `ORBE_STATE_DIR` を見ない application support 直下に置く（隔離
+  /// インスタンスが入れ直したことを常用側も知る）。実体化の原子的な差し替えに巻き込まれないよう
+  /// 実体化先の中ではなく隣に置く。
+  private static var registeredDigestFile: URL? {
+    stablePluginDir?.deletingLastPathComponent().appendingPathComponent("agent-plugin.digest")
+  }
+
+  static var registeredDigest: String? {
+    guard let url = registeredDigestFile,
+      let text = try? String(contentsOf: url, encoding: .utf8)
+    else { return nil }
+    return text.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  static func recordRegistered(digest: String) {
+    guard let url = registeredDigestFile else { return }
+    try? Data("\(digest)\n".utf8).write(to: url, options: .atomic)
+  }
+
   /// 同梱 `install.sh <pluginDir> <pluginName>` をバックグラウンド実行し、stdout の各行を Event として
   /// メインスレッドで `onEvent` に、読み切りを `onComplete` に流す。子プロセスは呼び出し側が
   /// 戻り値で保持する（実行中の Process 寿命を UI に紐付ける）。
   ///
   /// 完了は stdout の EOF で発火する: 全行を読み切ってから同じ読み取りキューで `onComplete` を
   /// main へ投入するので、`onComplete` は必ず最後の `onEvent` の後に届く。呼び出し側はこの順序に
-  /// 依って完了時点で失敗の有無を判定する（`AgentLauncher` は 1 つでも失敗すれば名前を記録しない）。
+  /// 依って完了時点で失敗の有無を判定する（`AgentLauncher` は 1 つでも失敗すれば指紋を記録しない）。
   @discardableResult
   static func run(
     pluginDir: URL, pluginName: String, shellPATH: String,
