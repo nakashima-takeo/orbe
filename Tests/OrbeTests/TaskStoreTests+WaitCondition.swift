@@ -225,12 +225,20 @@ extension TaskStoreTests {
 
   // MARK: - 保存
 
+  /// 記録はどの結果でも読み戻せる（1 件でも読めなければ、タスク一覧ごと退避される）。
   func testConditionProgressAndResolutionSurviveRelaunch() throws {
     let store = TaskStore()
     let (waiting, condition) = try waitingTask(store)
-    store.recordCheck(waiting.id, condition: condition.id, run(.exited(1), stdout: "まだ"))
+    for ending in [
+      BackgroundEnding.exited(1), .signaled(15), .limited(.output), .stopped,
+      .notStarted(.directoryMissing("/gone")),
+    ] {
+      store.recordCheck(waiting.id, condition: condition.id, run(ending, stdout: "まだ"))
+    }
     let (resolved, other) = try waitingTask(store)
     store.recordCheck(resolved.id, condition: other.id, run(.exited(0), stdout: "付いた"))
+    let (expired, third) = try waitingTask(store)
+    store.expire(expired.id, condition: third.id)
 
     XCTAssertEqual(relaunched().tasks, store.tasks)
   }
