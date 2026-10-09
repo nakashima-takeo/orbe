@@ -4,7 +4,8 @@ import XCTest
 @testable import Orbe
 
 /// 対話の封じ: 全 git 呼び出しで、エディタと ssh の対話（パスフレーズ・未知のホスト鍵）は待たずに失敗する。対話は GUI
-/// から見えず、書き込みは打ち切らないので、封じが外れると止める手を押すまで返らない。リモートの失敗の分類も持つ。
+/// から見えず、書き込みは打ち切らないので、封じが外れると止める手を押すまで返らない。ただし利用者が配った GUI の askpass は
+/// そのまま使う（外すと、それで通っていた ssh の認証・ホスト鍵の確かめが失敗する）。リモートの失敗の分類も持つ。
 @MainActor
 final class GitRunnerSealTests: OrbeTestCase {
   var repo: TempGitRepo!
@@ -29,8 +30,8 @@ final class GitRunnerSealTests: OrbeTestCase {
     XCTAssertEqual(output?.isSuccess, false)
   }
 
-  /// ssh を起こす経路で、ssh に「対話できない」設定が届く（`core.sshCommand` に置いた記録用のスクリプトで観察する）。
-  func testSshIsToldItCannotAsk() throws {
+  /// ssh を起こす経路で fetch し、記録用の `core.sshCommand` が受け取った `SSH_ASKPASS_REQUIRE` と `SSH_ASKPASS` を返す。
+  private func fetchRecordingSsh() throws -> (askpass: String, failure: GitWriteFailure?) {
     let record = TestScratch.caseDir.appendingPathComponent("ssh-env").path
     let script = TestScratch.caseDir.appendingPathComponent("record-ssh.sh").path
     try """
@@ -48,12 +49,24 @@ final class GitRunnerSealTests: OrbeTestCase {
 
     files.fetch(onProgress: { _ in }, completion: outcome.receive)
     pumpMain(until: { outcome.finished }, timeout: 20)
+    return (try String(contentsOfFile: record, encoding: .utf8), outcome.failure)
+  }
+
+  /// ssh を起こす経路で、ssh に「対話できない」設定が届く（`core.sshCommand` に置いた記録用のスクリプトで観察する）。
+  func testSshIsToldItCannotAsk() throws {
+    let fetched = try fetchRecordingSsh()
     XCTAssertEqual(
-      try String(contentsOfFile: record, encoding: .utf8), "force\n/usr/bin/false\n",
-      "askpass を必ず使い、その askpass はすぐ失敗する")
-    guard case .reason = outcome.failure else {
-      return XCTFail("分類できない失敗は「その他」: \(String(describing: outcome.failure))")
+      fetched.askpass, "force\n/usr/bin/false\n", "askpass を必ず使い、その askpass はすぐ失敗する")
+    guard case .reason = fetched.failure else {
+      return XCTFail("分類できない失敗は「その他」: \(String(describing: fetched.failure))")
     }
+  }
+
+  /// 利用者が配った GUI の askpass はそのまま使う（ダイアログで答えられるので待ちにならない）。
+  func testTheUsersGuiAskpassIsKept() throws {
+    setenv("SSH_ASKPASS", "/opt/gui-askpass", 1)
+    defer { unsetenv("SSH_ASKPASS") }
+    XCTAssertEqual(try fetchRecordingSsh().askpass, "force\n/opt/gui-askpass\n")
   }
 
   // MARK: - リモートの失敗の分類（stderr の字面で読むのは認証とホスト鍵だけ）
