@@ -32,6 +32,7 @@ extension WindowController {
     if let caller, caller.agentState == "working", let session = caller.agentSlot.session {
       draft.createdBy = session.command
     }
+    draft.waitingCondition = draft.waitingCondition.map { locate($0, caller: caller) }
     switch workspaceId {
     case nil:
       draft.workspace = caller.flatMap { tab in
@@ -50,9 +51,13 @@ extension WindowController {
 
   func controlUpdateTask(
     taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<Int>?,
-    worktree: ClearableValue<String>? = nil
+    worktree: ClearableValue<String>? = nil, callerTabId: Int? = nil
   ) -> Result<Any, ControlError> {
     var update = update
+    if case .set(let request) = update.waitingCondition {
+      update.waitingCondition = .set(
+        locate(request, caller: callerTabId.flatMap(controlResolveTab)))
+    }
     switch worktree {
     case nil:
       break
@@ -96,6 +101,26 @@ extension WindowController {
     }
   }
 
+  /// 待ちの条件に、呼び出し元タブの作業ディレクトリ（タブの今の cwd）と、会話を入れる。会話を残すのは、そのタブの
+  /// agent が作業中を報告しているとき（agent が自分のターンの中で付けた）だけ——人がシェルから打った条件や、終了を報告
+  /// しない agent が去った後のタブからの条件を、その会話のものとして残さない（追加者と同じ規則）。agent が自分で書いた
+  /// 値は使わない。
+  private func locate(_ request: WaitConditionRequest, caller: TerminalTab?)
+    -> WaitConditionRequest
+  {
+    var request = request
+    guard let caller else { return request }
+    request.directory = caller.cwd
+    if caller.agentState == "working", let session = caller.agentSlot.session,
+      let sessionId = session.sessionId, AgentCatalog.isSafeSessionId(sessionId)
+    {
+      request.conversation = WaitConversation(
+        command: session.command, sessionId: sessionId,
+        workspace: workspaces.first { $0.tabs.contains { $0 === caller } }?.persistentId)
+    }
+    return request
+  }
+
   private static let workspaceNotFound = ControlError(code: -32004, message: "workspace not found")
 
   private static func notADirectory(_ path: String) -> ControlError {
@@ -127,8 +152,19 @@ extension WindowController {
       "priority": task.priority.rawValue, "description": task.description,
       "createdAt": SessionEvent.iso8601(task.createdAt),
     ]
-    if let waiting = task.waiting {
-      json["waiting"] = ["reason": waiting.reason, "since": SessionEvent.iso8601(waiting.since)]
+    if let waiting = task.waiting { json["waiting"] = Self.waitingJSON(waiting) }
+    if let resolution = task.waitResolution {
+      var resolved: [String: Any] = [
+        "at": SessionEvent.iso8601(resolution.at), "waiting": Self.waitingJSON(resolution.waiting),
+      ]
+      switch resolution.how {
+      case .satisfied(let output):
+        resolved["how"] = "satisfied"
+        resolved["output"] = output
+      case .expired:
+        resolved["how"] = "expired"
+      }
+      json["waitResolved"] = resolved
     }
     if let due = task.due { json["due"] = due.text }
     if let ws = task.workspace.flatMap({ id in workspaces.first { $0.persistentId == id } }) {
@@ -143,6 +179,36 @@ extension WindowController {
           as [String: Any]
       }
     }
+    return json
+  }
+}
+
+extension WindowController {
+  /// 待ち（と、あれば条件と確認の経過）のワイヤの形。解けた待ちも同じ形で読める（同じ条件で付け直せる）。
+  fileprivate static func waitingJSON(_ waiting: TaskItem.Waiting) -> [String: Any] {
+    var json: [String: Any] = [
+      "reason": waiting.reason, "since": SessionEvent.iso8601(waiting.since),
+    ]
+    guard let condition = waiting.condition else { return json }
+    var wire: [String: Any] = [
+      "description": condition.description, "command": condition.command,
+      "everyMinutes": condition.everyMinutes,
+      "deadline": SessionEvent.iso8601(condition.deadline),
+      "setAt": SessionEvent.iso8601(condition.setAt), "checks": condition.checks,
+    ]
+    if let directory = condition.directory { wire["directory"] = directory }
+    if let conversation = condition.conversation {
+      wire["agent"] = ["command": conversation.command, "sessionId": conversation.sessionId]
+    }
+    if let last = condition.log.last {
+      var check: [String: Any] = [
+        "startedAt": SessionEvent.iso8601(last.startedAt), "result": last.result.name,
+      ]
+      if !last.stdout.isEmpty { check["stdout"] = last.stdout }
+      if !last.stderr.isEmpty { check["stderr"] = last.stderr }
+      wire["lastCheck"] = check
+    }
+    json["condition"] = wire
     return json
   }
 }

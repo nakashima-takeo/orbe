@@ -17,7 +17,7 @@ extension WindowController {
     }
     let p = TaskPaletteModel(
       store: taskStore, githubItems: .shared, viewer: .shared, openLists: .shared,
-      root: base, agents: worktreeAgents,
+      root: base, agents: worktreeAgents, sessionTabs: agentSessionTabs,
       workspaces: TaskPaletteWorkspaces(opened: entry(current), all: workspaces.map(entry)),
       now: Date(), timeZone: .current)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
@@ -27,6 +27,7 @@ extension WindowController {
       self?.dismissPalette()
       _ = self?.controlFocusTab(tabId: tabId)
     }
+    p.onContinueWait = { [weak self] id in self?.continueWait(taskId: id) }
     model.taskPalette = p
     model.overlay = .taskPalette
     p.focus()

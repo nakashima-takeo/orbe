@@ -61,6 +61,78 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
+  /// 待ちの条件: #214（待っている）を選ぶ → → で右の欄 → ↓ で確認のコマンド → ↵ で開く → ↓ で実行の記録 → ↵ で開く →
+  /// 一覧へ戻り、確認が成功して解けた #214 を選んだまま（フッターの「⌘T … を claude で続きから」）、までを撮る。
+  func testTaskWaitCondition() throws {
+    let palette = DesignSceneFixtures.taskPaletteModel(
+      DesignSceneFixtures.taskWaitConditionFile(),
+      sessionTabs: DesignSceneFixtures.taskSessionTabs())
+    try flow(
+      "task_wait_condition", size: NSSize(width: 1440, height: 900),
+      render: {
+        ZStack {
+          BackgroundGlow()
+          TaskPaletteOverlay(model: palette)
+        }
+        .environment(\.localization, LocalizationStore(language: .ja))
+      },
+      steps: [
+        (
+          "selected",
+          {
+            palette.move(1); palette.move(1)
+          }
+        ),
+        ("detail", { palette.enterDetail() }),
+        (
+          "command",
+          {
+            palette.moveField(1); palette.moveField(1)
+          }
+        ),
+        ("command_open", { palette.toggleConditionPart(.command) }),
+        ("log", { palette.moveField(1) }),
+        ("log_open", { palette.toggleConditionPart(.log) }),
+        (
+          "resolved",
+          {
+            palette.leaveDetail()
+            let condition = palette.selectedTask!.waiting!.condition!
+            let now = Date()
+            palette.store.recordCheck(
+              3, condition: condition.id,
+              BackgroundRunResult(
+                commandLine: condition.command, startedAt: now, endedAt: now, ending: .exited(0),
+                output: .command(
+                  stdout: .init(data: Data(DesignSceneFixtures.taskWaitOutput.utf8)),
+                  stderr: .init())))
+            palette.reconcile()
+          }
+        ),
+      ])
+  }
+
+  /// 狭い窓（tasks_small と同じ 800×560）で、待ちの条件の箱と開いた実行の記録が欄に収まる。
+  func testTaskWaitConditionSmall() throws {
+    let palette = DesignSceneFixtures.taskPaletteModel(
+      DesignSceneFixtures.taskWaitConditionFile(),
+      sessionTabs: DesignSceneFixtures.taskSessionTabs())
+    try hostedTaskPaletteFlow(
+      "task_wait_condition_small", palette, size: NSSize(width: 800, height: 560),
+      steps: [
+        (
+          "command",
+          { _ in
+            palette.move(1); palette.move(1); palette.enterDetail()
+            palette.moveField(1); palette.moveField(1)
+          }
+        ),
+        ("command_open", { _ in palette.toggleConditionPart(.command) }),
+        ("log", { _ in palette.moveField(1) }),
+        ("log_open", { _ in palette.toggleConditionPart(.log) }),
+      ])
+  }
+
   /// 右の欄の Issue・PR の欄: 行に入る・⌫ で外すと焦点が同じ位置へ移る・agent が結び付けると番号だけで
   /// 現れる（値はまだ届いていない）、までを撮る。
   func testTaskPaletteLinks() throws {

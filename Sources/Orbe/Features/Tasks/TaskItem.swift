@@ -2,14 +2,15 @@ import Foundation
 import OrbeSessionLog
 
 /// タスク 1 件。一覧（`TaskStore.tasks`）は人と agent が共有する 1 本の列で、この値はその要素。
-/// 不変条件（ID の一意・タイトルと待ちの理由が空でない・完了は待ちを持たない・結び付きの項目と worktree は
-/// それぞれ 1 つのタスクにだけ現れる）は `TaskStore` が保証する。
+/// 不変条件（ID の一意・タイトルと待ちの理由が空でない・完了は待ちの席が空・待ちの条件は待っている間だけ・
+/// 結び付きの項目と worktree はそれぞれ 1 つのタスクにだけ現れる）は `TaskStore` が保証する。
 struct TaskItem: Codable, Equatable, Identifiable {
   /// 永続の短い整数。使い回さない（採番位置は `TasksFile.nextId` が持つ）。
   let id: Int
   var title: String
   var status: Status
-  var waiting: Waiting?
+  /// 待ちの席。待っているか、解けたか（無しも可）。書くのは `TaskStore` だけ。
+  var wait: Wait?
   var priority: Priority
   var due: DueDate?
   /// 付き先の `Workspace.persistentId`。解決できない参照は「なし」と同じに扱う（削除された workspace を
@@ -45,11 +46,32 @@ struct TaskItem: Codable, Equatable, Identifiable {
     case high, medium, low
   }
 
+  /// 待ちの段階。両方を同時に持つことは型で表せない。
+  enum Wait: Equatable {
+    case waiting(Waiting)
+    /// 待ちの条件で解けた（起きたことを持つ）。
+    case resolved(WaitResolution)
+  }
+
   /// 待ち。ステータスとは独立した属性で、完了にすると外れる。
   struct Waiting: Codable, Equatable {
     var reason: String
     /// 待ち始めた日時。理由だけを変えても動かない。
     var since: Date
+    /// 解ける条件。理由だけを変えても変わらない。
+    var condition: WaitCondition?
+  }
+
+  /// 待っている段階（解けた待ちは含まない）。
+  var waiting: Waiting? {
+    if case .waiting(let waiting) = wait { return waiting }
+    return nil
+  }
+
+  /// 解けた待ち（起きたこと）。
+  var waitResolution: WaitResolution? {
+    if case .resolved(let resolution) = wait { return resolution }
+    return nil
   }
 
   /// 期限。時刻とタイムゾーンを持たない暦日。
@@ -95,17 +117,28 @@ struct TaskItem: Codable, Equatable, Identifiable {
 
 extension TaskItem {
   private enum CodingKeys: String, CodingKey {
-    case id, title, status, waiting, priority, due, workspace, description, createdAt, createdBy,
-      links, worktree, worktreeBranch, unlinked
+    case id, title, status, waiting, waitResolved, priority, due, workspace, description, createdAt,
+      createdBy, links, worktree, worktreeBranch, unlinked
   }
 
-  /// `links`・`worktree`・`worktreeBranch`・`unlinked` は、欠けていれば空として読む。
+  /// `links`・`worktree`・`worktreeBranch`・`unlinked` は、欠けていれば空として読む。待ちの席は `waiting` か
+  /// `waitResolved` のどちらか 1 つ（両方あるものは読めない）。
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     id = try c.decode(Int.self, forKey: .id)
     title = try c.decode(String.self, forKey: .title)
     status = try c.decode(Status.self, forKey: .status)
-    waiting = try c.decodeIfPresent(Waiting.self, forKey: .waiting)
+    switch (
+      try c.decodeIfPresent(Waiting.self, forKey: .waiting),
+      try c.decodeIfPresent(WaitResolution.self, forKey: .waitResolved)
+    ) {
+    case (let waiting?, nil): wait = .waiting(waiting)
+    case (nil, let resolution?): wait = .resolved(resolution)
+    case (nil, nil): wait = nil
+    case (.some, .some):
+      throw DecodingError.dataCorruptedError(
+        forKey: .waitResolved, in: c, debugDescription: "both waiting and waitResolved")
+    }
     priority = try c.decode(Priority.self, forKey: .priority)
     due = try c.decodeIfPresent(DueDate.self, forKey: .due)
     workspace = try c.decodeIfPresent(UUID.self, forKey: .workspace)
@@ -125,6 +158,7 @@ extension TaskItem {
     try c.encode(title, forKey: .title)
     try c.encode(status, forKey: .status)
     try c.encodeIfPresent(waiting, forKey: .waiting)
+    try c.encodeIfPresent(waitResolution, forKey: .waitResolved)
     try c.encode(priority, forKey: .priority)
     try c.encodeIfPresent(due, forKey: .due)
     try c.encodeIfPresent(workspace, forKey: .workspace)
@@ -227,6 +261,7 @@ struct TaskDraft {
   var priority: TaskItem.Priority = .medium
   var due: TaskItem.DueDate?
   var waitingReason: String?
+  var waitingCondition: WaitConditionRequest?
   var description = ""
   var workspace: UUID?
   var createdBy: String?
@@ -252,6 +287,8 @@ struct TaskUpdate {
   var priority: TaskItem.Priority?
   var due: ClearableValue<TaskItem.DueDate>?
   var waitingReason: ClearableValue<String>?
+  /// `.clear` は条件だけを外す（待ちは残る）。
+  var waitingCondition: ClearableValue<WaitConditionRequest>?
   var description: String?
   var workspace: ClearableValue<UUID>?
   /// 丸ごと置き換える。`[]` で全部外す。
@@ -260,6 +297,7 @@ struct TaskUpdate {
 
   var isEmpty: Bool {
     title == nil && status == nil && priority == nil && due == nil && waitingReason == nil
-      && description == nil && workspace == nil && links == nil && worktree == nil
+      && waitingCondition == nil && description == nil && workspace == nil && links == nil
+      && worktree == nil
   }
 }

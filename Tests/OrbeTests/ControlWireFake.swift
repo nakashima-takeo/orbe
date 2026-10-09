@@ -90,6 +90,7 @@ final class FakeControlTarget: ControlTarget {
     let update: TaskUpdate
     let workspaceId: ClearableValue<Int>?
     let worktree: ClearableValue<String>?
+    let callerTabId: Int?
   }
   struct MovedTask {
     let taskId: Int
@@ -266,10 +267,12 @@ final class FakeControlTarget: ControlTarget {
 
   func controlUpdateTask(
     taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<Int>?,
-    worktree: ClearableValue<String>?
+    worktree: ClearableValue<String>?, callerTabId: Int?
   ) -> Result<Any, ControlError> {
     updatedTasks.append(
-      UpdatedTask(taskId: taskId, update: update, workspaceId: workspaceId, worktree: worktree))
+      UpdatedTask(
+        taskId: taskId, update: update, workspaceId: workspaceId, worktree: worktree,
+        callerTabId: callerTabId))
     return outcome(["task": ["taskId": taskId]])
   }
 

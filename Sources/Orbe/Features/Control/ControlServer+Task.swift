@@ -7,14 +7,16 @@ protocol ControlTaskTarget: AnyObject {
   /// タスクを列の末尾へ足す（add_task）。workspaceId は省略＝呼び出し元タブの workspace（タブが分からなければ
   /// なし）・`.clear`＝なし・`.set`＝その workspace（未知は -32004）。callerTabId は追加者の agent 名と
   /// 既定の付き先を引くためだけに読み、未知のタブでもエラーにしない。worktree は実在するディレクトリの
-  /// 絶対パス（それ以外は -32602）で、それを含む worktree のルートに揃えて付ける。
+  /// 絶対パス（それ以外は -32602）で、それを含む worktree のルートに揃えて付ける。待ちの条件には、呼び出し元タブの
+  /// 作業ディレクトリ・workspace・会話を入れる。
   func controlAddTask(
     _ draft: TaskDraft, workspaceId: ClearableValue<Int>?, callerTabId: Int?, worktree: String?
   ) -> Result<Any, ControlError>
   /// タスクを変える（update_task）。workspaceId・worktree は省略＝変えない・`.clear`＝なし・`.set`＝付ける。
+  /// callerTabId は待ちの条件に呼び出し元タブの作業ディレクトリ・workspace・会話を入れるためだけに読む。
   func controlUpdateTask(
     taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<Int>?,
-    worktree: ClearableValue<String>?
+    worktree: ClearableValue<String>?, callerTabId: Int?
   ) -> Result<Any, ControlError>
   /// タスクを別のタスクの前か後ろへ移す（move_task）。
   func controlMoveTask(taskId: Int, _ placement: TaskStore.Placement, anchorTaskId: Int)
@@ -53,6 +55,7 @@ extension ControlServer {
         if let priority = try p.priority() { draft.priority = priority }
         draft.due = try p.due()?.value
         draft.waitingReason = try p.nullableString("waitingReason")?.value
+        draft.waitingCondition = try p.waitingCondition()?.value
         if let description = try p.optionalString("description") { draft.description = description }
         if let links = try p.links() { draft.links = links }
         return target.controlAddTask(
@@ -65,10 +68,11 @@ extension ControlServer {
           title: try p.optionalString("title"), status: try p.status(),
           priority: try p.priority(), due: try p.due(),
           waitingReason: try p.nullableString("waitingReason"),
+          waitingCondition: try p.waitingCondition(),
           description: try p.optionalString("description"), links: try p.links())
         return target.controlUpdateTask(
           taskId: try p.int("taskId"), update, workspaceId: try p.nullableInt("workspaceId"),
-          worktree: try p.nullableString("worktree"))
+          worktree: try p.nullableString("worktree"), callerTabId: try p.optionalInt("callerTabId"))
       }
     case "move_task":
       return { target, p throws(ControlError) in
@@ -100,11 +104,16 @@ private typealias TaskBody = (ControlTaskTarget, TaskParams) throws(ControlError
 /// params の型検査。キーが無いことと `null` を区別する（`null` は「外す」）。
 private struct TaskParams {
   let params: [String: Any]
+  /// 入れ子の値のキーに付ける、拒否の文の前置き（`waitingCondition.`）。
+  let prefix: String
 
-  init(_ params: [String: Any]) { self.params = params }
+  init(_ params: [String: Any], prefix: String = "") {
+    self.params = params
+    self.prefix = prefix
+  }
 
-  private func invalid(_ key: String) -> ControlError {
-    ControlError(code: -32602, message: "invalid \(key)")
+  func invalid(_ key: String) -> ControlError {
+    ControlError(code: -32602, message: "invalid \(prefix)\(key)")
   }
 
   /// JSONSerialization は true / false も NSNumber に載せ `as? Int` を通すので、真偽値を整数として受けない。
@@ -115,7 +124,9 @@ private struct TaskParams {
   }
 
   func int(_ key: String) throws(ControlError) -> Int {
-    guard let raw = params[key] else { throw ControlError(code: -32602, message: "missing \(key)") }
+    guard let raw = params[key] else {
+      throw ControlError(code: -32602, message: "missing \(prefix)\(key)")
+    }
     return try intValue(raw, key)
   }
 
@@ -131,7 +142,9 @@ private struct TaskParams {
   }
 
   func string(_ key: String) throws(ControlError) -> String {
-    guard let raw = params[key] else { throw ControlError(code: -32602, message: "missing \(key)") }
+    guard let raw = params[key] else {
+      throw ControlError(code: -32602, message: "missing \(prefix)\(key)")
+    }
     guard let text = raw as? String else { throw invalid(key) }
     return text
   }
@@ -176,6 +189,41 @@ private struct TaskParams {
       links.append(TaskLink(item: item, kind: kind))
     }
     return links
+  }
+
+  /// 待ちの条件（`{description, command, everyMinutes, deadline}`。4 つとも必須）。`null` は条件だけを外す。
+  /// 値の規則（空・間隔の下限・過ぎた期限）はストアが確かめる。
+  func waitingCondition() throws(ControlError) -> ClearableValue<WaitConditionRequest>? {
+    guard let raw = params["waitingCondition"] else { return nil }
+    if raw is NSNull { return .clear }
+    guard let object = raw as? [String: Any] else { throw invalid("waitingCondition") }
+    let fields = TaskParams(object, prefix: "waitingCondition.")
+    guard let deadline = Self.deadline(try fields.string("deadline")) else {
+      throw fields.invalid("deadline")
+    }
+    return .set(
+      WaitConditionRequest(
+        description: try fields.string("description"), command: try fields.string("command"),
+        everyMinutes: try fields.int("everyMinutes"), deadline: deadline))
+  }
+
+  /// ISO 8601 の日時。時差の無い形（`2026-10-13T09:00`）は Mac のタイムゾーンの時刻として読む。
+  static func deadline(_ text: String) -> Date? {
+    for options: ISO8601DateFormatter.Options in [
+      [.withInternetDateTime], [.withInternetDateTime, .withFractionalSeconds],
+    ] {
+      let formatter = ISO8601DateFormatter()
+      formatter.formatOptions = options
+      if let date = formatter.date(from: text) { return date }
+    }
+    let local = DateFormatter()
+    local.locale = Locale(identifier: "en_US_POSIX")
+    local.timeZone = .current
+    for format in ["yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd'T'HH:mm:ss"] {
+      local.dateFormat = format
+      if let date = local.date(from: text) { return date }
+    }
+    return nil
   }
 
   func due() throws(ControlError) -> ClearableValue<TaskItem.DueDate>? {

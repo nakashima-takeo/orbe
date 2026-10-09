@@ -31,7 +31,9 @@ extension WindowController {
   /// ——agent 付きは休眠チケットのまま起こし、resume 解決（と解決不能時の素シェル化）は
   /// タブ起床時に走る（`TerminalTab.recordMaterializationStarted`）。ここは resolver を渡すだけ。
   private func makeTab(from state: TabState) -> TerminalTab {
-    let resume: TerminalTab.ResumeSpawn = { [agentLauncher] in agentLauncher.resumeSpawn(for: $0) }
+    let resume: TerminalTab.ResumeSpawn = { [agentLauncher] in
+      agentLauncher.resumeSpawn(for: $0, firstInput: $1)
+    }
     return wire(TerminalTab(restoring: state, resumeSpawn: resume, editorSurfaces: editorSurfaces))
   }
 

@@ -1,6 +1,6 @@
 ---
 title: エージェント起動
-description: claude / codex / agy の自動検出と、⌘⇧A 選択パレット / ⌘⇧C デフォルト起動 / 制御 API による新タブでの直接起動
+description: claude / codex / agy の自動検出と、⌘⇧A 選択パレット / ⌘⇧C デフォルト起動 / 制御 API による新タブでの直接起動・最初の入力を添えた再開・会話が前面にいると確かなタブ
 updated: 2026-10-10
 ---
 
@@ -37,6 +37,19 @@ updated: 2026-10-10
 外部起動だけが持つのは対象 workspace の指定で、**指定しても前面化しない**（[control/api](../control/api.md) の mount 境界）。このとき解くデフォルトは**対象 workspace の**実効 `default-agent` で、⌘⇧C がアクティブ workspace のそれを読むのと同じ規則を、入力だけ変えて使う。
 
 resume 起動は永続復元だけでなく `orb agent resume` からも走る。セッション ID は `orb tab list --json` の `agentSessionId`（hook 報告が入ってから値を持つ）から取る。
+
+## 会話の最初の入力を添えた再開
+
+resume 起動には、会話の最初の入力を添えられる（[タスク画面](../palette/tasks.md)の解けた待ちの ⌘T が、起きたことを届けるのに使う。新しいタブの再開にも、休眠のタブを起こすときの再開にも 1 度だけ添える）。席は CLI ごとに決まっていて、claude・codex は再開の後ろ（`claude --resume <id> <入力>`・`codex resume <id> <入力>`）、agy は `-i` の値（`agy --conversation <id> -i <入力>`）。入力はシェルの単語として引用して組むので、外の人が書いた文面を含んでも実行されない。起動の引数で渡すため、入力はプロセス一覧に見える。agy の組み合わせは help で確かめた形で、実際の会話の再開では確かめていない。
+
+## 会話がタブの前面にいると確かなタブ
+
+タブが報告している会話が今もそのタブの前面にいると言えるのは、次のどちらかのときだけ。どちらも、agent が去れば同一性が残らない。
+
+- agent を**タブのコマンドとして起こした**タブ（起動パレット・⌘⇧C・worktree パレット・制御 API の `spawn_agent` / `resume_agent`・復元の再開・解けた待ちの ⌘T）。agent が終わるとタブも閉じる。`spawn` で任意のコマンドを渡したタブは当たらない。
+- **終了を報告する CLI**（claude の SessionEnd→clear。[plugin-package](plugin-package.md)の event→state 表）のタブ。シェルで手で起こしても、終われば同一性が消える。
+
+終了を報告しない CLI（codex・agy）をシェルで手で起こしたタブでは、agent が終わった後も状態が残り、前面にはシェルがいうる。人の 1 キーで自動の入力につながる経路（解けた待ちの ⌘T）は、確かなタブにだけ貼り付けて Enter を押す。AI が判断して呼ぶ `prompt_agent` はこの判定を使わない。
 
 ## デフォルトの永続
 

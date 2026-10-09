@@ -175,7 +175,7 @@ final class TaskStoreTests: OrbeTestCase {
 
   func testChangingOnlyTheWaitingReasonKeepsWhenTheWaitStarted() throws {
     let waiting = TaskItem(
-      id: 1, title: "a", status: .todo, waiting: .init(reason: "返事", since: past),
+      id: 1, title: "a", status: .todo, wait: .waiting(.init(reason: "返事", since: past)),
       priority: .medium, due: nil, workspace: nil, description: "", createdAt: past, createdBy: nil)
     let store = TaskStore(
       file: TasksFile(version: TaskPersistence.version, nextId: 2, tasks: [waiting]))

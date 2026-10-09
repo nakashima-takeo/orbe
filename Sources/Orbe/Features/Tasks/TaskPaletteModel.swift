@@ -6,18 +6,9 @@ enum TaskPaletteTab: Equatable {
   case tasks, github
 }
 
-/// フッターに赤で出す失敗。画面が「何をしようとしたか」から選ぶ（ストアのエラーの文は読まない）。
-enum TaskPaletteError: Error, Equatable {
-  case title, waiting, due, failed
-  /// GitHub に自分をアサイン・レビュアーにする書き込みが失敗した。
-  case assign
-  /// タスクにするを、ストアが受け付けなかった（間に agent がその項目を結び付けていた）。
-  case link
-}
-
 /// ⌘⇧X タスク画面の状態（@Observable）。タスクの値は写さずストア（唯一の正）を直接読み書きし、GitHub の値も
 /// 写さず置き場（結び付いた項目は `GitHubItemCache`、open 一覧は `GitHubOpenLists`、自分は `GitHubViewer`）
-/// から、agent の状態も写さず窓の索引（`WorktreeAgentActivity`）から引く。ここは一覧ごとの状態（入力・選択・
+/// から、agent の状態も写さず窓の索引（`WorktreeAgentActivity`・`AgentSessionTabs`）から引く。ここは一覧ごとの状態（入力・選択・
 /// 送り先）・範囲・タブ・絞り込み・焦点・編集中の下書き・右の欄の値・行の掴みだけを持つ。一覧の行は
 /// `TaskPaletteRows` と `TaskPaletteGitHubRows` が毎回組む。
 /// 列か一覧が変わったとき（agent の変更を含む）は `reconcile()` 1 本で選択・焦点・下書き・掴みを付け直す。
@@ -30,6 +21,8 @@ enum TaskPaletteError: Error, Equatable {
   /// workspace の root）。
   let root: String
   let agents: WorktreeAgentActivity
+  /// 会話ごとのタブ（待ちの条件の会話の行）。
+  let sessionTabs: AgentSessionTabs
   let workspaces: TaskPaletteWorkspaces
   let today: TaskItem.DueDate
   /// 時刻を暦日へ落とすためのタイムゾーン。
@@ -37,7 +30,9 @@ enum TaskPaletteError: Error, Equatable {
 
   /// タスクのタブが持つ一覧の状態。読み書きは選ぶ状態を振り分ける `taskList` を通す（選ぶ状態の間に
   /// 隠れたタブの一覧を書き換えないため、ここ以外から触れないようにしておく）。
-  private var tabTaskList = TaskPaletteListState<TaskPaletteRowID>()
+  private var tabTaskList = TaskPaletteListState<TaskPaletteRowID>() {
+    didSet { if tabTaskList.selectedID != oldValue.selectedID { openedConditionParts = [] } }
+  }
   /// GitHub タブが持つ一覧の状態。読み書きは `gitHubList` を通す。選択の同一性が変わると右の欄の値を既定に
   /// 戻す。
   private var tabGitHubList = TaskPaletteListState<TaskPaletteGitHubRowID>() {
@@ -83,6 +78,8 @@ enum TaskPaletteError: Error, Equatable {
   var error: TaskPaletteError?
   /// 一覧の行の掴み。書くのはモデル（拡張を含む）だけ。
   var drag: TaskPaletteDrag = .idle
+  /// 右の欄の待ちの条件の箱で開いている部分。画面が持ち、別のタスクを選ぶと閉じる。書くのはモデル（拡張を含む）だけ。
+  var openedConditionParts: Set<TaskConditionPart> = []
   /// 右の欄で居る場所が最後に居た位置（そのタスクの止まる場所の並びでの番号）。
   private var detailPosition = 0
   /// focus トリガ。進めると SwiftUI が `focusTarget` を `@FocusState` へ写す。
@@ -95,13 +92,16 @@ enum TaskPaletteError: Error, Equatable {
   var onOpenWorktreePalette: (Int) -> Void = { _ in }
   /// agent のタブへ移る（タブの ID）。
   var onFocusTab: (Int) -> Void = { _ in }
+  /// 解けた待ちの会話を続きから始める（タスクの ID）。届けられなかった理由を返す。
+  var onContinueWait: (Int) -> TaskPaletteError? = { _ in nil }
 
   /// 開いた時点で、出ている行の結び付きの値を取り直す（届くまでは前回の答えで描く）。GitHub タブの一覧の
   /// 取り直し（`openLists.open(root:)`）は開く側が呼ぶ。
   init(
     store: TaskStore, githubItems: GitHubItemCache, viewer: GitHubViewer,
     openLists: GitHubOpenLists, root: String, agents: WorktreeAgentActivity,
-    workspaces: TaskPaletteWorkspaces, now: Date, timeZone: TimeZone
+    sessionTabs: AgentSessionTabs = AgentSessionTabs(), workspaces: TaskPaletteWorkspaces,
+    now: Date, timeZone: TimeZone
   ) {
     self.store = store
     self.githubItems = githubItems
@@ -109,6 +109,7 @@ enum TaskPaletteError: Error, Equatable {
     self.openLists = openLists
     self.root = root
     self.agents = agents
+    self.sessionTabs = sessionTabs
     self.workspaces = workspaces
     self.timeZone = timeZone
     today = .today(now, timeZone: timeZone)

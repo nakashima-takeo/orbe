@@ -89,6 +89,9 @@ final class TerminalTab {
   var agentState: String? { agentReport?.state }
   /// 未消費の復元チケット（休眠 agent）を持つか。
   var isDormant: Bool { agentSlot.isDormant }
+  /// タブのコマンドとして起こした agent の command 名（起動パレット・制御 API・⌘T・復元の再開。終われば閉じるタブ）。
+  private(set) var launchedAgent: String?
+  private var wakeInput: String?
 
   /// 実効 cwd（OSC 7 報告前は起動時 cwd＝復元値）。永続・列挙・占有判定・タイトル導出・
   /// 新タブの cwd 継承はすべてこの 1 つの定義を読む。
@@ -120,12 +123,13 @@ final class TerminalTab {
     return TabTitle.derive(pwd: cwd, root: workspaceRoot)
   }
 
-  /// 通常タブは cwd だけ。エージェント起動タブは起動コマンド・追加環境変数も指定して起こす。
+  /// 通常タブは cwd だけ。エージェント起動タブは起動コマンド・追加環境変数と、起こす agent の command 名も指定する。
   init(
-    cwd: String, command: String? = nil, env: [String: String] = [:],
+    cwd: String, command: String? = nil, env: [String: String] = [:], agent: String? = nil,
     editorSurfaces: EditorSurfaces = .shared
   ) {
     resumeSpawn = nil
+    launchedAgent = agent
     faces = .terminalOnly
     editor = MainActor.assumeIsolated { EditorSession(surfaces: editorSurfaces) }
     groupKey = GitWorktreeRoot.root(of: cwd)
@@ -135,9 +139,9 @@ final class TerminalTab {
     wireView()
   }
 
-  /// 永続から復元した agent セッションを resume 起動の (command, env) に解決する。
+  /// 永続から復元した agent セッションを resume 起動の (command, env) に解決する（2 つ目は会話の最初の入力）。
   /// 解決できなければ nil（呼び出し側は素のシェルで復元）。
-  typealias ResumeSpawn = (AgentSession) -> (command: String, env: [String: String])?
+  typealias ResumeSpawn = (AgentSession, String?) -> (command: String, env: [String: String])?
 
   /// 休眠チケットの消費（materialize 開始）時に resume を解決する resolver。
   /// 復元時ではなく消費時に解決するため保持する（通常タブは nil）。
@@ -199,9 +203,10 @@ final class TerminalTab {
     activated = true
     if case .dormant(let session) = agentSlot {
       let identity = identity(of: agentSlot)
-      if let spawn = resumeSpawn?(session) {
+      if let spawn = resumeSpawn?(session, wakeInput.take()) {
         surface.initialCommand = spawn.command
         surface.initialEnv = spawn.env
+        launchedAgent = session.command
         agentSlot = .live(session: session, report: nil)
         if let identity { onIdentityTransition?(.opened(identity)) }
       } else {
@@ -218,6 +223,11 @@ final class TerminalTab {
         editor.restore(paths: pending.open, active: pending.active, preview: pending.preview)
       }
     }
+  }
+
+  /// 休眠チケットを起こすとき、再開に会話の最初の入力を 1 度だけ添える（起こす前だけ効く）。
+  func addWakeInput(_ input: String) {
+    if isDormant { wakeInput = input }
   }
 
   /// エージェント hook の状態報告を slot へ適用する（`report_agent`）。戻り値は state の実変化

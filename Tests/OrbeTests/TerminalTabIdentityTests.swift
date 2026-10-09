@@ -65,7 +65,7 @@ final class TerminalTabIdentityTests: OrbeTestCase {
     let tab = TerminalTab(
       restoring: TabState(
         cwd: "/tmp", agent: AgentSession(command: "claude", sessionId: "s-1"), explicitTitle: nil),
-      resumeSpawn: { _ in nil })
+      resumeSpawn: { _, _ in nil })
     let log = recording(tab)
     XCTAssertFalse(
       tab.applyReport(AgentHookReport(agent: "claude", state: "idle", sessionId: "s-9")))
@@ -94,7 +94,7 @@ final class TerminalTabIdentityTests: OrbeTestCase {
     let tab = TerminalTab(
       restoring: TabState(
         cwd: "/tmp", agent: AgentSession(command: "claude", sessionId: "s-1"), explicitTitle: nil),
-      resumeSpawn: { _ in ("claude --resume s-1", [:]) })
+      resumeSpawn: { _, _ in ("claude --resume s-1", [:]) })
     let log = recording(tab)
     tab.recordMaterializationStarted()
     XCTAssertEqual(log(), [.opened(claude)])
@@ -106,7 +106,7 @@ final class TerminalTabIdentityTests: OrbeTestCase {
     let tab = TerminalTab(
       restoring: TabState(
         cwd: "/tmp", agent: AgentSession(command: "claude", sessionId: "s-1"), explicitTitle: nil),
-      resumeSpawn: { _ in nil })
+      resumeSpawn: { _, _ in nil })
     let log = recording(tab)
     tab.recordMaterializationStarted()
     XCTAssertEqual(log(), [.closed(claude, origin: .unresolved, reason: nil)])

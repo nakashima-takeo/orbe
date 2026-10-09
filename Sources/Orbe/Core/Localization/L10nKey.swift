@@ -301,6 +301,41 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAddLink
   case taskPaletteBranchPRAuto
   case taskPaletteActionAddLink
+  case taskPaletteErrAgentMissing
+  case taskPaletteErrDirectoryMissing
+  case taskPaletteActionContinue
+  case taskPaletteActionShowCommand
+  case taskPaletteActionHideCommand
+  case taskPaletteActionShowLog
+  case taskPaletteActionHideLog
+  case taskWaitConditionLabel
+  case taskWaitCheckLabel
+  case taskWaitDeadlineLabel
+  case taskWaitEvery
+  case taskWaitNextIn
+  case taskWaitSoon
+  case taskWaitDeadline
+  case taskWaitCommand
+  case taskWaitLog
+  case taskWaitLogEmpty
+  case taskWaitResolvedChecks
+  case taskWaitContinue
+  case taskWaitContinueNote
+  case taskWaitSatisfied
+  case taskWaitExpired
+  case taskWaitJustNow
+  case taskWaitAgo
+  case taskWaitConversationToday
+  case taskWaitConversationDays
+  case taskWaitResultSuccess
+  case taskWaitResultExited
+  case taskWaitResultSignaled
+  case taskWaitResultLimited
+  case taskWaitResultStopped
+  case taskWaitResultNotStarted
+  case waitContinueSatisfied
+  case waitContinueOutput
+  case waitContinueExpired
 
   // MARK: - Onboarding
   case onboardingBegin

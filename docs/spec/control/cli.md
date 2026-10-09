@@ -55,10 +55,11 @@ updated: 2026-10-10
 人と agent が共有する[タスク](../platform/tasks.md)一覧を読み書きする。
 
 - `orb task list [--workspace <id|current>] [--json]` … 列の順に 1 行 1 タスク（`id status priority due workspace title 待ちの理由 結び付き worktree` のタブ区切り。worktree はパス。結び付きは `issue:owner/name#221,pr:owner/name#214` の形で先頭が主。無い値は `-`。制御文字は `session log` と同じく空白に置き換える）。`--workspace` でその workspace のタスクだけ。
-- `orb task add <title> [--status <s>] [--priority <p>] [--due <YYYY-MM-DD>] [--workspace <id|current> | --no-workspace] [--waiting <reason>] [--description <text>] [--issue <owner/name#N>]... [--pr <owner/name#N>]... [--worktree <path>] [--json]` … 列の末尾に足し、新しい ID だけを出す（`id=$(orb task add …)` で受けられる）。
-- `orb task set <id> [--title <t>] [--status <s>] [--priority <p>] [--due <date> | --no-due] [--workspace <id|current> | --no-workspace] [--waiting <reason> | --no-waiting] [--description <text> | --no-description] [--issue <owner/name#N>]... [--pr <owner/name#N>]... [--no-links] [--worktree <path> | --no-worktree] [--json]` … 渡した項目だけを変える。`--no-*` は値を外す。完了は `--status done`（待ちは外れる）。変更フラグが 1 つも無い、または `--x` と `--no-x` を同時に渡すと usage エラー（exit 2）。
+- `orb task add <title> [--status <s>] [--priority <p>] [--due <YYYY-MM-DD>] [--workspace <id|current> | --no-workspace] [--waiting <reason>] [--description <text>] [--issue <owner/name#N>]... [--pr <owner/name#N>]... [--worktree <path>] [--condition <text> --check <command> --every <minutes> --deadline <date-time>] [--json]` … 列の末尾に足し、新しい ID だけを出す（`id=$(orb task add …)` で受けられる）。
+- `orb task set <id> [--title <t>] [--status <s>] [--priority <p>] [--due <date> | --no-due] [--workspace <id|current> | --no-workspace] [--waiting <reason> | --no-waiting] [--description <text> | --no-description] [--issue <owner/name#N>]... [--pr <owner/name#N>]... [--no-links] [--worktree <path> | --no-worktree] [--condition <text> --check <command> --every <minutes> --deadline <date-time> | --no-condition] [--json]` … 渡した項目だけを変える。`--no-*` は値を外す。完了は `--status done`（待ちは外れる）。変更フラグが 1 つも無い、または `--x` と `--no-x` を同時に渡すと usage エラー（exit 2）。
 - `--issue` / `--pr` は GitHub の Issue・PR を結び付ける（くり返し可）。**引数に現れた順を保ち、先頭が主**になる。`set` では渡した結び付きで丸ごと置き換え、`--no-links` で全部外す（`--issue` / `--pr` と同時なら usage エラー）。1 つの Issue・PR は 1 つのタスクにだけ付き、ほかのタスクに付いているものは拒否される（[タスク](../platform/tasks.md)）。`owner/name#N` は最後の `#` で割り、後ろが正の整数でなければ usage エラー（exit 2）。`owner/name` の形は control が確かめる。
 - `--worktree` はタスクに作業の場所を付ける（`orb task set 12 --worktree .`）。**相対パスは呼び出し元の作業ディレクトリから解いて**絶対パスで送り、control が実在するディレクトリか確かめて、それを含む worktree のルートに揃える（worktree の中のどこで打ってもルートが付く）。1 つの worktree は 1 つのタスクにだけ付き、ほかのタスクが持つ worktree は相手の ID を添えて拒否される。`set --no-worktree` で外す。
+- `--condition` / `--check` / `--every` / `--deadline` は待ちに解ける条件を付ける（[待ちの条件](../platform/tasks.md)。説明・確認のコマンド・間隔〔分〕・期限）。4 つは揃えて渡し、欠ければ usage エラー（exit 2）。`--every` は整数でなければ usage エラー。期限は ISO 8601 の日時をそのまま送り、読むのは control（時差の無い形は Mac のタイムゾーンの時刻）。値の規則は control が確かめる。待っていないタスクには `--waiting` と一緒に渡す。`set --no-condition` は条件だけを外す（待ちは残る。`--condition` と同時なら usage エラー）。TSV の一覧は変えない（条件と経過は `--json` で見える）。
 - `orb task move <id> (--before <id> | --after <id>) [--json]` / `orb task rm <id> [--json]`
 
 **`add` で `--workspace` を省くと、呼び出し元タブ（`ORBE_TAB`）の workspace に付く**——タブの外なら「なし」。`tab new` / `agent spawn` の省略が前面の workspace に落ちるのと違うのは、タブ内の agent が背景で足したタスクを、人が見ている別の workspace に付けないため。同じ理由で、`--workspace current` は**前面の** workspace であって自分のタブの workspace ではない。`add` は `ORBE_TAB` を control へ伝え、タブ内の agent が足したタスクにはその agent の名前が追加者として残る。
@@ -104,7 +105,7 @@ kind の語彙と値域の検証は control が持つ（未知 kind は CLI を�
 
 ## 文脈解決
 
-control.sock の解決順は `ORBE_STATE_DIR`（非空の明示指定・最優先。`$ORBE_STATE_DIR/control.sock` を使い `ORBE_SOCK` は見ない）→ `ORBE_SOCK`（タブ注入の絶対パス）→ 既定の Application Support 直下（自ビルドのチャネルが焼いた bundle id・[channel](../platform/channel.md)）。tab は現タブ既定に `ORBE_TAB`（タブ注入の自 tab id）を読む。`task add` は呼び出し元タブとして `ORBE_TAB` を control へ伝える。config/ws はインスタンス/WS 単位なので `ORBE_TAB` を読まない。外部（`ORBE_TAB` 無し）で tab の対象を省略すると usage エラー（exit 2）。
+control.sock の解決順は `ORBE_STATE_DIR`（非空の明示指定・最優先。`$ORBE_STATE_DIR/control.sock` を使い `ORBE_SOCK` は見ない）→ `ORBE_SOCK`（タブ注入の絶対パス）→ 既定の Application Support 直下（自ビルドのチャネルが焼いた bundle id・[channel](../platform/channel.md)）。tab は現タブ既定に `ORBE_TAB`（タブ注入の自 tab id）を読む。`task add` と `task set` は呼び出し元タブとして `ORBE_TAB` を control へ伝える（追加者と既定の付き先、待ちの条件の作業ディレクトリと会話に使う）。config/ws はインスタンス/WS 単位なので `ORBE_TAB` を読まない。外部（`ORBE_TAB` 無し）で tab の対象を省略すると usage エラー（exit 2）。
 
 ## 終了コード・エラー
 

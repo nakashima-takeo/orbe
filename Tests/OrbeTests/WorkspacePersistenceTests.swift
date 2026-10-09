@@ -8,7 +8,7 @@ import XCTest
 final class WorkspacePersistenceTests: OrbeTestCase {
 
   /// テストの復元では resume を起こさない（agent 付きタブの検証のみ）。
-  private let noResume: TerminalTab.ResumeSpawn = { _ in nil }
+  private let noResume: TerminalTab.ResumeSpawn = { _, _ in nil }
 
   // MARK: - ウィンドウサイズ
 
@@ -82,7 +82,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
       cwd: "/w", agent: AgentSession(command: "claude", sessionId: "abc-123"), explicitTitle: nil)
     let tab = TerminalTab(
       restoring: state,
-      resumeSpawn: { session in
+      resumeSpawn: { session, _ in
         captured = session
         return ("claude --resume abc-123", ["PATH": "/usr/bin"])
       })

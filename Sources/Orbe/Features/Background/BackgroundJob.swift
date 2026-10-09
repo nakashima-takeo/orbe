@@ -117,8 +117,9 @@ enum BackgroundTiming: Equatable {
 
   /// 次の出来事。規則は「数え始め（`anchor`）より後の最初の回」1 つで、初回・スリープ明け・再起動・時計の変更を同じに扱う。
   /// 返る回は今以前（過ぎている）でありうる。期限がその回以前、または期限が今以前なら「期限が来た」になる。
+  /// 時計が戻って数え始めが未来になっていたら、今から数える（そのままでは次の回が戻った分だけ遠のき、予定が止まる）。
   func next(after anchor: Date, deadline: Date?, now: Date, calendar: Calendar) -> BackgroundNext {
-    let occurrence = firstOccurrence(after: anchor, calendar: calendar)
+    let occurrence = firstOccurrence(after: min(anchor, now), calendar: calendar)
     if let deadline, deadline <= max(occurrence, now) { return .expire(deadline) }
     return .run(occurrence)
   }

@@ -58,6 +58,7 @@ extension DesignGallerySnapshotTests {
     addLink.moveField(-1)
     try write("tasks_detail_add_link.png", addLink)
 
+    try renderTaskWaitConditionSnapshots(write)
     try renderTaskPaletteGitHubSnapshots(write)
 
     try write(
@@ -137,5 +138,40 @@ extension DesignGallerySnapshotTests {
     })
     missing.toggleTab()
     try write("tasks_github_unavailable.png", missing, 1440, 900)
+  }
+}
+
+extension DesignGallerySnapshotTests {
+  /// 待ちの条件（見本 SlWait.png・SlResolved.png）。#214 を選ぶ。
+  func renderTaskWaitConditionSnapshots(
+    _ write: (String, TaskPaletteModel, CGFloat, CGFloat) throws -> Void
+  ) throws {
+    func model(_ file: TasksFile, tabs: AgentSessionTabs? = nil) -> TaskPaletteModel {
+      let palette = DesignSceneFixtures.taskPaletteModel(
+        file, sessionTabs: tabs ?? DesignSceneFixtures.taskSessionTabs())
+      palette.move(1)
+      palette.move(1)
+      return palette
+    }
+    // SlWait: 待っている間（会話のタブ pr-214 がある）。
+    try write(
+      "tasks_wait_condition.png", model(DesignSceneFixtures.taskWaitConditionFile()), 1440, 900)
+
+    // 会話のタブが無い（「claude 2日前の会話」だけ）。実行の記録を開いている。
+    let noTab = model(DesignSceneFixtures.taskWaitConditionFile(), tabs: AgentSessionTabs())
+    noTab.toggleConditionPart(.log)
+    try write("tasks_wait_condition_log.png", noTab, 1440, 900)
+
+    // SlResolved: 解けた後。
+    try write(
+      "tasks_wait_resolved.png",
+      model(
+        DesignSceneFixtures.taskWaitConditionFile(
+          resolved: .satisfied(output: DesignSceneFixtures.taskWaitOutput))), 1440, 900)
+
+    // 期限が来た後。
+    try write(
+      "tasks_wait_expired.png",
+      model(DesignSceneFixtures.taskWaitConditionFile(resolved: .expired)), 1440, 900)
   }
 }

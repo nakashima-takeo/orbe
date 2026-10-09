@@ -131,7 +131,7 @@ final class TerminalTabTests: OrbeTestCase {
   func testRestoringStateSeedsDormantSlotAndTitle() {
     let state = TabState(
       cwd: "/work", agent: AgentSession(command: "claude", sessionId: "s-1"), explicitTitle: "api")
-    let tab = TerminalTab(restoring: state, resumeSpawn: { _ in nil })
+    let tab = TerminalTab(restoring: state, resumeSpawn: { _, _ in nil })
     XCTAssertEqual(tab.surface.initialCwd, "/work")
     XCTAssertEqual(tab.explicitTitle, "api")
     XCTAssertTrue(tab.isDormant)

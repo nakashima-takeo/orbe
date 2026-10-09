@@ -134,7 +134,7 @@ final class BackgroundScheduler {
         continue
       }
       guard let timing = entry.timing else { continue }
-      // 時計が戻って数え始めが未来になったら、今にそろえる（そのままでは次の回が戻った分だけ遠のき、予定が止まる）。
+      // 時計が戻って未来になった数え始めは、今にそろえて覚える（次の時刻の関数も今から数えるが、覚えないと時計が戻っている間は次の回が今に連れて遠のき続ける）。
       if entry.anchor > now { entry.anchor = now }
       switch timing.next(after: entry.anchor, deadline: deadline, now: now, calendar: calendar) {
       case .expire(let date):

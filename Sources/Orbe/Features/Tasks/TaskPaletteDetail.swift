@@ -23,7 +23,22 @@ struct TaskPaletteDetail: View {
             titleField(task)
               .id(TaskDetailStop.field(.title))
               .padding(.bottom, Theme.Space.beat)
-            if let agent = model.agent(of: task) {
+            if let resolution = task.waitResolution {
+              TaskResolvedBox(
+                model: model, resolution: resolution, continuation: model.continuation(of: task)
+              )
+              .padding(.bottom, Theme.Space.beat)
+            } else if let conversation = model.conversation(of: task) {
+              TaskConversationRow(
+                conversation: conversation, tab: model.conversationTab(of: task),
+                days: model.days(since: task.waiting?.condition?.setAt ?? task.createdAt),
+                focused: model.area == .detail(.conversation),
+                onGoToTab: { model.focusConversationTab() }
+              )
+              .id(TaskDetailStop.conversation)
+              .padding(.bottom, Theme.Space.beat)
+            }
+            if let agent = model.detailAgent(of: task) {
               TaskAgentDetail(
                 agent: agent, focused: model.area == .detail(.agent),
                 onGoToTab: { model.focusAgentTab() }
@@ -37,6 +52,10 @@ struct TaskPaletteDetail: View {
             fieldRow(.status, label: .taskPaletteFieldStatus) { statusValue(task) }
             divider
             fieldRow(.waiting, label: .taskPaletteFieldWaiting) { waitingValue(task) }
+            if let condition = task.waiting?.condition {
+              TaskConditionBox(model: model, condition: condition)
+                .padding(.bottom, Theme.Space.step)
+            }
             divider
             fieldRow(.priority, label: .taskPaletteFieldPriority) { priorityValue(task) }
             divider

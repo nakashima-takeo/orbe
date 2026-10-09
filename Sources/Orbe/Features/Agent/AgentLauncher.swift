@@ -209,11 +209,14 @@ final class AgentLauncher {
     onDismissPalette?()
   }
 
-  /// 永続から復元した agent セッションを resume 起動の (command, env) に解決する。
+  /// 永続から復元した agent セッションを resume 起動の (command, env) に解決する（`firstInput` は会話の最初の入力）。
   /// 起動と同じ PATH を渡す。未対応 agent は nil（呼び出し側は素のシェルで復元）。
-  func resumeSpawn(for session: AgentSession) -> (command: String, env: [String: String])? {
+  func resumeSpawn(for session: AgentSession, firstInput: String? = nil) -> (
+    command: String, env: [String: String]
+  )? {
     guard let sessionId = session.sessionId,
-      let command = AgentCatalog.resumeCommand(forAgent: session.command, sessionId: sessionId)
+      let command = AgentCatalog.resumeCommand(
+        forAgent: session.command, sessionId: sessionId, firstInput: firstInput)
     else { return nil }
     return (command, launchEnvironment)
   }
