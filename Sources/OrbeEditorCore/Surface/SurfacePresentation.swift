@@ -17,7 +17,7 @@ public struct SurfacePresentation: Equatable {
   public var numberTrailing: CGFloat?
   /// 記号の列の幅（pt。0 なら列を持たない）。行の型の記号（`LineStyle.sign`）をここに描く。
   public var signWidth: CGFloat
-  /// git の印の列を持つか。持たない面は列の幅が 0 で、印を描かない。
+  /// git の印の列を持つか。持たない面は列の幅が 0 で、印を描かない（スクロールバーにも描かない）。
   public var showsMarks: Bool
   /// 行の型。文書の行の区間（`LineSpan.style`）と差し込んだ行（`InsertedLine.style`）が番号で指す。
   public var lineStyles: [LineStyle]

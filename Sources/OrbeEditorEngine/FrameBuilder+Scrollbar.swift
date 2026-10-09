@@ -254,7 +254,8 @@ extension FrameBuilder {
     let highlights = source.material.highlights
     let find = source.rulerRows.find(highlights, text: text)
     let word = source.rulerRows.word(highlights, text: text)
-    let marks = source.material.marks
+    // 印の列を持たない構成の面（diff）は、スクロールバーにも git の印を描かない。
+    let marks = source.material.arrangement.showsMarks ? source.material.marks : .empty
     let rows = source.material.rows
     let key = RulerSpans.Key(
       find: find.generation, word: word.generation, marks: marks, lineCount: text.lineCount,
