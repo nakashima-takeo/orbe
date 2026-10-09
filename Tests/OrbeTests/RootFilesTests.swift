@@ -20,12 +20,14 @@ final class RootFilesTests: OrbeTestCase {
   final class Recorder: RootFilesObserver {
     var changes: [RootFiles.Change] = []
     var statusChanges = 0
-    var baselineChanges: [URL] = []
+    var versionChanges: [RootFiles.Version] = []
     func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change) {
       changes.append(change)
     }
     func rootFilesStatusDidChange(_ files: RootFiles) { statusChanges += 1 }
-    func rootFiles(_ files: RootFiles, baselineDidChange url: URL) { baselineChanges.append(url) }
+    func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version) {
+      versionChanges.append(version)
+    }
   }
 
   // MARK: - 根の判定
@@ -180,7 +182,7 @@ final class RootFilesTests: OrbeTestCase {
     pumpMain(
       until: { files.baseline(for: URL(fileURLWithPath: linkedRoot + "/a.txt")) == "two\n" },
       "本体側の index の変化")
-    XCTAssertEqual(recorder.baselineChanges.count, 2)
+    XCTAssertEqual(recorder.versionChanges.count, 2)
   }
 
   // MARK: - 一覧と新規作成
@@ -239,5 +241,22 @@ final class RootFilesTests: OrbeTestCase {
     XCTAssertNil(observed, "離せば消える（監視も止まる）")
     let again = RootFiles.shared(for: repo.root)
     XCTAssertTrue(RootFiles.shared(for: repo.root) === again, "解放後は登録簿に載り直す")
+  }
+}
+
+extension RootFiles {
+  /// 実体のパス `url` の index の版（根の外なら関心なし）を関心にして観測者を足す（テストの略記）。
+  func addObserver(_ observer: RootFilesObserver, interest url: URL) {
+    addObserver(observer, versions: Set(version(of: url, at: .index).map { [$0] } ?? []))
+  }
+
+  /// 実体のパス `url` の版 `revision`（根の外なら nil）。
+  func version(of url: URL, at revision: GitRevision) -> Version? {
+    relativePath(of: url).map { Version(path: $0, revision: revision) }
+  }
+
+  /// 実体のパス `url` の index の版の本文（取れていない・本文でなければ nil。文書の底と同じ導き方）。
+  func baseline(for url: URL) -> String? {
+    version(of: url, at: .index).flatMap { state(of: $0)?.text }
   }
 }

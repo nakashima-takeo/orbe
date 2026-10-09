@@ -68,6 +68,49 @@ extension GitRepo {
     }
   }
 
+  /// HEAD のツリーにある blob の OID（相対パス → OID。無いもの・ファイルでないもの（submodule・ディレクトリ）は含まない。
+  /// 初回コミット前は空）。空の問い合わせは git を起こさない。git が失敗したら nil。
+  ///
+  /// 名前は `HEAD:<パス>` で cat-file に問う——pathspec を通らないので、パスが magic・glob に解釈されない。答えは問いの順に
+  /// 1 行ずつで、無ければ `<名前> missing`。パスは改行を含みうるので、行で割らず問いの名前で前から読む。
+  func headEntries(relativePaths: [String], completion: @escaping ([String: String]?) -> Void) {
+    guard !relativePaths.isEmpty else {
+      completion([:])
+      return
+    }
+    let names = relativePaths.map { "HEAD:" + $0 }
+    runner.run(
+      ["cat-file", "-z", "--batch-check=%(objectname) %(objecttype)"], cwd: root,
+      stdin: Data(names.map { $0 + "\0" }.joined().utf8)
+    ) { output in
+      guard output.isSuccess else { return completion(nil) }
+      completion(Self.blobAnswers(output.stdout, names: names, paths: relativePaths))
+    }
+  }
+
+  /// `cat-file --batch-check=%(objectname) %(objecttype)` の答えを問いの順に読む（blob だけ）。形が崩れていれば nil。
+  static func blobAnswers(_ data: Data, names: [String], paths: [String]) -> [String: String]? {
+    let bytes = [UInt8](data)
+    var at = 0
+    var entries: [String: String] = [:]
+    for (name, path) in zip(names, paths) {
+      let missing = Array((name + " missing\n").utf8)
+      if bytes.count - at >= missing.count, bytes[at..<(at + missing.count)].elementsEqual(missing)
+      {
+        at += missing.count
+        continue
+      }
+      guard let end = bytes[at...].firstIndex(of: 0x0A),
+        let line = String(bytes: bytes[at..<end], encoding: .utf8)
+      else { return nil }
+      at = end + 1
+      let fields = line.split(separator: " ")
+      guard fields.count == 2, fields[0].allSatisfy(\.isHexDigit) else { return nil }
+      if fields[1] == "blob" { entries[path] = String(fields[0]) }
+    }
+    return entries
+  }
+
   /// blob を作業ツリーに出したときの中身——`relativePath` の属性で smudge filter と eol 変換を掛けた
   /// バイト列（clean と smudge が往復する filter なら、git が clean と言う姿と同じ底）。smudge の実行コマンドは
   /// config 側にしか書けないので、信頼できないリポジトリのコードが実行される面は checkout と同じ。textconv・

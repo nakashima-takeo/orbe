@@ -1,30 +1,30 @@
 import Foundation
 import OrbeEditorCore
 
-/// 根のサービスからの通知。(a) はデバウンス後すぐ、(b) は status が返った時点、(c) は baseline の取り直しの完了後に届く。
+/// 根のサービスからの通知。(a) はデバウンス後すぐ、(b) は status が返った時点、(c) は版の本文の取り直しの完了後に届く。
 @MainActor
 protocol RootFilesObserver: AnyObject {
   /// 根の下でファイルが変わった（git dir の中は含まない）。
   func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change)
   /// status が新しくなった（git 管理下のみ）。
   func rootFilesStatusDidChange(_ files: RootFiles)
-  /// 関心を申告したファイルの baseline が変わった（index に無くなった → nil も含む）。
-  func rootFiles(_ files: RootFiles, baselineDidChange url: URL)
+  /// 関心を申告した版の本文の状態が変わった（その版に無くなった・取れなくなったも含む）。
+  func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version)
 }
 
-/// 根（`GitWorktreeRoot.root(of:)` の値）1 つにつき 1 つの、監視・git 状態・一覧・新規作成・baseline・git の書き込みを
+/// 根（`GitWorktreeRoot.root(of:)` の値）1 つにつき 1 つの、監視・git 状態・一覧・新規作成・版の本文・git の書き込みを
 /// 担うサービス。握る者（文書の結線・面のツリー・プロジェクト検索）がいる間だけ生き、離されれば監視が止まる。書き込みが
 /// 完了を返すまでは、その返りを待つ処理も握る（→ `RootFiles+Writes`）。
 ///
 /// git 管理下かどうかはここで決める: 根に `.git` があれば `GitRepo` を開き、git の綴りを正規形に揃えて根と
-/// 一致したときだけ管理下（status・baseline・git dir の監視・書き込みを持つ）。`GitRepo.root` との突き合わせは
+/// 一致したときだけ管理下（status・版の本文・git dir の監視・書き込みを持つ）。`GitRepo.root` との突き合わせは
 /// ここ 1 か所に閉じる。管理外なら監視と一覧・新規作成だけが働く。
 ///
-/// 観測は 2 本の取り直しで成る——status と、baseline（関心のあるパスの index の OID → 変わった OID の blob）。両者に
-/// データの依存は無く、根ごとに別々に直列化し、どちらも実行中に来た要求は「終わったらもう 1 回」に畳む。古い結果が
-/// 後から乗らない（index が動けば監視が取り直す。status と baseline は別々の git 起動で読むので同一時点の保証は無い）。
-/// 別々にするのは、baseline の取得が smudge filter（git-lfs のネットワーク等）で遅くなりうるから——その後ろに
-/// バッジと書き込みの完了を並べない。
+/// 観測は 2 本の取り直しで成る——status と、版の本文（関心のある（パス, 版）ごとの OID → 変わった OID の blob）。版は
+/// index と HEAD で、文書の底（baseline）と diff の両側が同じ 1 か所の本文を引く。両者にデータの依存は無く、根ごとに
+/// 別々に直列化し、どちらも実行中に来た要求は「終わったらもう 1 回」に畳む。古い結果が後から乗らない（index や HEAD が
+/// 動けば監視が取り直す。status と版の本文は別々の git 起動で読むので同一時点の保証は無い）。別々にするのは、版の本文の
+/// 取得が smudge filter（git-lfs のネットワーク等）で遅くなりうるから——その後ろにバッジと書き込みの完了を並べない。
 @MainActor
 final class RootFiles {
   struct Entry: Equatable {
@@ -50,6 +50,29 @@ final class RootFiles {
 
   enum Error: Swift.Error, Equatable {
     case alreadyExists(URL)
+  }
+
+  /// 関心の単位——根からの相対パスと版。
+  struct Version: Hashable {
+    let path: String
+    let revision: GitRevision
+  }
+
+  /// 版の本文の状態（OID ごとに決まる）。
+  enum VersionState: Equatable {
+    /// 本文（作業ツリーに出したときの姿）。
+    case text(String)
+    /// その版に無い（index に無い・競合中・初回コミット前の HEAD を含む。ファイルでないものも）。
+    case absent
+    /// UTF-8 として読めない。
+    case notText
+    /// git から取れない（取り直しの上限に達した）。
+    case failed
+
+    var text: String? {
+      if case .text(let text) = self { return text }
+      return nil
+    }
   }
 
   private final class WeakRef {
@@ -81,10 +104,10 @@ final class RootFiles {
   private var rootWatcher: RepoWatcher?
   /// git dir（gitDir・commonDir）の監視。管理下と分かったときに足す。
   private var gitWatcher: RepoWatcher?
-  /// 関心のある相対パス → index 版（作業ツリーに出したときの中身）。
-  private var baselines: [String: Baseline] = [:]
+  /// 関心のある版 → OID と本文の状態。
+  private var versions: [Version: Settled] = [:]
   private var statusJob = RefreshJob()
-  private var baselineJob = RefreshJob()
+  private var versionJob = RefreshJob()
   /// 次に始まる status の取り直しが済んだら呼ぶもの（書き込みの完了）。
   private var statusWaiters: [() -> Void] = []
   /// 同じ worktree の index への書き込みの順番待ち（先頭から 1 つずつ走らせる）。
@@ -99,8 +122,7 @@ final class RootFiles {
 
   private struct Observation {
     weak var observer: RootFilesObserver?
-    let interest: URL?
-    let relativePath: String?
+    var versions: Set<Version>
 
     var isLive: Bool { observer != nil }
   }
@@ -108,17 +130,17 @@ final class RootFiles {
   /// 生きている観測者（`observer` が解けた `Observation`）。
   private struct LiveObservation {
     let observer: RootFilesObserver
-    let interest: URL?
-    let relativePath: String?
+    let versions: Set<Version>
   }
 
-  private struct Baseline {
+  /// 取り終えた版——OID（その版に無ければ nil）と本文の状態。
+  private struct Settled {
     let oid: String?
-    let text: String?
+    let state: VersionState
   }
 
-  /// blob の取得が git の失敗で落ちた回数（相対パス → その OID と回数）。`blobFailureBudget` 回で諦める。
-  private var blobFailures: [String: (oid: String, count: Int)] = [:]
+  /// blob の取得が git の失敗で落ちた回数（版 → その OID と回数）。`blobFailureBudget` 回で諦める。
+  private var blobFailures: [Version: (oid: String, count: Int)] = [:]
   /// 同じ OID を取り直す上限。一時失敗（LFS のネットワーク等）は次の取り直しで回復させ、恒久失敗
   /// （必須 filter の欠落・打ち切り）を毎バッチ回さない——smudge が監視対象へ書く自走ループも閉じる。
   static let blobFailureBudget = 3
@@ -140,63 +162,68 @@ final class RootFiles {
       let gitDirs = [repo.gitDir, repo.commonDir]
       gitWatcher = watch(roots: gitDirs, gitDirs: gitDirs)
       requestStatusRefresh()
-      requestBaselineRefresh()
+      requestVersionRefresh()
     }
   }
 
   // MARK: - 観測者
 
-  /// weak に持つ。`interest` は baseline を追うファイル（実体のパス）。追う集合は生きている観測者の関心の
-  /// 和集合で、観測者が消えれば関心も消える。既に取れている baseline は `baseline(for:)` で同期に引ける。
-  func addObserver(_ observer: RootFilesObserver, interest: URL? = nil) {
+  /// weak に持つ。`versions` は本文を追う版。追う集合は生きている観測者の関心の和集合で、観測者が消えれば関心も
+  /// 消える。既に取れている版の状態は `state(of:)` で同期に引ける。
+  func addObserver(_ observer: RootFilesObserver, versions: Set<Version> = []) {
     prune()
-    observations.append(
-      Observation(
-        observer: observer, interest: interest, relativePath: interest.flatMap(relativePath(of:))))
-    if interest != nil { requestBaselineRefresh() }
+    observations.append(Observation(observer: observer, versions: versions))
+    if !versions.isEmpty { requestVersionRefresh() }
+  }
+
+  /// 観測者の関心を置き換える（diff の rename の元パスが変わったときなど）。増えた版があれば取り直す。
+  func setVersions(_ versions: Set<Version>, for observer: RootFilesObserver) {
+    guard let index = observations.firstIndex(where: { $0.observer === observer }) else { return }
+    let added = !versions.subtracting(observations[index].versions).isEmpty
+    observations[index].versions = versions
+    dropUnwantedVersions()
+    if added { requestVersionRefresh() }
   }
 
   func removeObserver(_ observer: RootFilesObserver) {
     observations.removeAll { !$0.isLive || $0.observer === observer }
-    dropUnwantedBaselines()
+    dropUnwantedVersions()
   }
 
   private func prune() {
     guard observations.contains(where: { !$0.isLive }) else { return }
     observations.removeAll { !$0.isLive }
-    dropUnwantedBaselines()
+    dropUnwantedVersions()
   }
 
   /// 生きている観測者だけ（死んだ要素は次の観測者の出入りで `prune` が捨てる）。読む側は必ずここを通る。
   private var live: [LiveObservation] {
     observations.compactMap { observation in
-      observation.observer.map {
-        LiveObservation(
-          observer: $0, interest: observation.interest, relativePath: observation.relativePath)
-      }
+      observation.observer.map { LiveObservation(observer: $0, versions: observation.versions) }
     }
   }
 
   /// 生きている観測者の関心の和集合。
-  private var interests: [String] {
-    Array(Set(live.compactMap(\.relativePath))).sorted()
+  private var interests: Set<Version> {
+    live.reduce(into: Set<Version>()) { $0.formUnion($1.versions) }
   }
 
-  private func dropUnwantedBaselines() {
-    let wanted = Set(interests)
-    baselines = baselines.filter { wanted.contains($0.key) }
+  private func dropUnwantedVersions() {
+    let wanted = interests
+    versions = versions.filter { wanted.contains($0.key) }
     blobFailures = blobFailures.filter { wanted.contains($0.key) }
   }
 
-  private func relativePath(of url: URL) -> String? {
+  /// 実体のパス `url` の根からの相対パス（根の外なら nil）。
+  func relativePath(of url: URL) -> String? {
     let path = GitWorktreeRoot.normalizedPath(url.path)
     guard path.hasPrefix(root + "/") else { return nil }
     return String(path.dropFirst(root.count + 1))
   }
 
-  /// 関心を申告したファイルの index 版（取れていなければ・index に無ければ nil）。
-  func baseline(for url: URL) -> String? {
-    relativePath(of: url).flatMap { baselines[$0]?.text }
+  /// 関心を申告した版の本文の状態（まだ取れていなければ nil）。
+  func state(of version: Version) -> VersionState? {
+    versions[version]?.state
   }
 
   // MARK: - 監視
@@ -212,7 +239,7 @@ final class RootFiles {
       notify { $0.rootFiles(self, filesDidChange: .paths(batch.paths)) }
     }
     requestStatusRefresh()
-    requestBaselineRefresh()
+    requestVersionRefresh()
   }
 
   private func notify(_ body: (RootFilesObserver) -> Void) {
@@ -268,126 +295,94 @@ final class RootFiles {
     DispatchQueue.global(qos: .utility).async { withExtendedLifetime(replaced) {} }
   }
 
-  // MARK: - baseline の取り直し
+  // MARK: - 版の本文の取り直し
 
-  private func requestBaselineRefresh() {
+  private func requestVersionRefresh() {
     guard repo != nil else { return }
-    if baselineJob.isRunning {
-      baselineJob.again = true
+    if versionJob.isRunning {
+      versionJob.again = true
       return
     }
-    refreshBaselines()
+    refreshVersions()
   }
 
-  private func refreshBaselines() {
+  /// 関心のある版の OID を版ごとに 1 回で引き、OID が変わったものだけ本文を取る。
+  private func refreshVersions() {
     guard let repo else { return }
-    baselineJob.isRunning = true
+    versionJob.isRunning = true
     let interests = self.interests
-    repo.indexEntries(relativePaths: interests) { [weak self] oids in
-      guard let self else { return }
-      guard let oids else {
-        finish(changed: [])
-        return
-      }
-      var changed: [String] = []
-      var fetch: [(relativePath: String, oid: String)] = []
-      for relativePath in interests {
-        if let oid = oids[relativePath] {
-          if baselines[relativePath]?.oid != oid { fetch.append((relativePath, oid)) }
-        } else {
-          if baselines[relativePath]?.text != nil { changed.append(relativePath) }
-          baselines[relativePath] = Baseline(oid: nil, text: nil)
+    let index = interests.filter { $0.revision == .index }.map(\.path).sorted()
+    let head = interests.filter { $0.revision == .head }.map(\.path).sorted()
+    repo.indexEntries(relativePaths: index) { [weak self] indexOIDs in
+      repo.headEntries(relativePaths: head) { [weak self] headOIDs in
+        guard let self else { return }
+        var changed: [Version] = []
+        var fetch: [(version: Version, oid: String)] = []
+        let ordered = interests.sorted {
+          $0.path != $1.path ? $0.path < $1.path : $0.revision == .index
         }
+        for version in ordered {
+          let oids = version.revision == .index ? indexOIDs : headOIDs
+          guard let oids else { continue }
+          if let oid = oids[version.path] {
+            if versions[version]?.oid != oid { fetch.append((version, oid)) }
+          } else {
+            if versions[version]?.state != .absent { changed.append(version) }
+            versions[version] = Settled(oid: nil, state: .absent)
+          }
+        }
+        fetchBlobs(fetch[...], changed: changed)
       }
-      fetchBlobs(fetch[...], changed: changed)
     }
   }
 
   /// 変わった OID の blob を 1 つずつ取る（並列に投げない）。
   private func fetchBlobs(
-    _ pending: ArraySlice<(relativePath: String, oid: String)>, changed: [String]
+    _ pending: ArraySlice<(version: Version, oid: String)>, changed: [Version]
   ) {
     guard let repo, let next = pending.first else {
       finish(changed: changed)
       return
     }
-    repo.blob(oid: next.oid, relativePath: next.relativePath) { [weak self] data in
+    repo.blob(oid: next.oid, relativePath: next.version.path) { [weak self] data in
       guard let self else { return }
       var changed = changed
-      let path = next.relativePath
+      let version = next.version
       // git の失敗（smudge の失敗・打ち切り。一時的でありうる）は上限までは記録せず、次の取り直しで同じ OID を
-      // 取り直す。上限に達したら OID ごと「baseline 無し」を焼き、OID が変わるまで諦める。UTF-8 でない中身は
-      // 恒久なので即座に OID ごと「baseline 無し」を記録する。
-      let settled: Baseline?
+      // 取り直す。上限に達したら OID ごと「取れない」を焼き、OID が変わるまで諦める。UTF-8 でない中身は
+      // 恒久なので即座に OID ごと「読めない」を記録する。
+      let settled: Settled?
       if let data {
-        blobFailures[path] = nil
-        settled = Baseline(oid: next.oid, text: String(data: data, encoding: .utf8))
+        blobFailures[version] = nil
+        settled = Settled(
+          oid: next.oid,
+          state: String(data: data, encoding: .utf8).map(VersionState.text) ?? .notText)
       } else {
-        let count = (blobFailures[path]?.oid == next.oid ? blobFailures[path]?.count ?? 0 : 0) + 1
-        blobFailures[path] = (next.oid, count)
-        settled = count >= Self.blobFailureBudget ? Baseline(oid: next.oid, text: nil) : nil
+        let previous = blobFailures[version]
+        let count = (previous?.oid == next.oid ? previous?.count ?? 0 : 0) + 1
+        blobFailures[version] = (next.oid, count)
+        settled = count >= Self.blobFailureBudget ? Settled(oid: next.oid, state: .failed) : nil
       }
       if let settled {
-        if baselines[path]?.text != settled.text { changed.append(path) }
-        baselines[path] = settled
+        if versions[version]?.state != settled.state { changed.append(version) }
+        versions[version] = settled
       }
       fetchBlobs(pending.dropFirst(), changed: changed)
     }
   }
 
-  private func finish(changed: [String]) {
-    // 連鎖の最中に関心が消えたパス（取り始めたときの集合で走り切る）を書き戻さない。
-    dropUnwantedBaselines()
+  private func finish(changed: [Version]) {
+    // 連鎖の最中に関心が消えた版（取り始めたときの集合で走り切る）を書き戻さない。
+    dropUnwantedVersions()
     for observation in live {
-      guard let interest = observation.interest, let relativePath = observation.relativePath,
-        changed.contains(relativePath)
-      else { continue }
-      observation.observer.rootFiles(self, baselineDidChange: interest)
+      for version in changed where observation.versions.contains(version) {
+        observation.observer.rootFiles(self, versionDidChange: version)
+      }
     }
-    baselineJob.isRunning = false
-    if baselineJob.again {
-      baselineJob.again = false
-      refreshBaselines()
+    versionJob.isRunning = false
+    if versionJob.again {
+      versionJob.again = false
+      refreshVersions()
     }
-  }
-
-  // MARK: - 一覧と新規作成
-
-  /// ディレクトリの中身（`.git` を除く。ドットファイルは含む）。名前順（`FileNameOrder`——検索結果と同じ比べ方）。
-  /// 種別は 1 件ずつ属性辞書（`attributesOfItem`。owner / group の名前解決まで走る）で取ると数千件で
-  /// main が止まるので、resource value で取る。URL は呼び手の綴り（正準形）で組み直す——一覧が返す URL は
-  /// 実パス（`/private/…`）になる。
-  func entries(of directory: URL) throws -> [Entry] {
-    try FileManager.default.contentsOfDirectory(
-      at: directory, includingPropertiesForKeys: [.isDirectoryKey], options: []
-    )
-    .filter { $0.lastPathComponent != ".git" }
-    .map { found in
-      let name = found.lastPathComponent
-      let isDirectory =
-        (try? found.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-      return Entry(
-        name: name, url: directory.appendingPathComponent(name, isDirectory: isDirectory),
-        isDirectory: isDirectory)
-    }
-    .sorted { FileNameOrder.precedes($0.name, $1.name) }
-  }
-
-  /// 空ファイルを作る。既に在れば失敗。中間ディレクトリは作らない。
-  func createFile(at url: URL) throws {
-    guard !Self.exists(url) else { throw Error.alreadyExists(url) }
-    try Data().write(to: url)
-  }
-
-  /// フォルダを作る。既に在れば失敗。中間ディレクトリは作らない。
-  func createDirectory(at url: URL) throws {
-    guard !Self.exists(url) else { throw Error.alreadyExists(url) }
-    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
-  }
-
-  /// 一覧と同じ土俵（symlink を辿らない）。`fileExists` は辿るので、壊れた symlink を「無い」と見て
-  /// リンク先（根の外もありうる）へ書いてしまう。
-  private static func exists(_ url: URL) -> Bool {
-    (try? FileManager.default.attributesOfItem(atPath: url.path)) != nil
   }
 }

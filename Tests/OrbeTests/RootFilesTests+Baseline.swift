@@ -12,18 +12,18 @@ extension RootFilesTests {
     let url = repo.url("a.txt")
     files.addObserver(recorder, interest: url)
     pumpMain(until: { files.baseline(for: url) == "one\n" }, "初回取得")
-    XCTAssertEqual(recorder.baselineChanges, [url])
+    XCTAssertEqual(recorder.versionChanges, [files.version(of: url, at: .index)])
 
     try repo.write("a.txt", "two\n")
     pumpMain(until: { files.status?.badge(of: "a.txt") == .modified })
     XCTAssertEqual(files.baseline(for: url), "one\n", "作業ツリーの編集では index 版は変わらない")
-    XCTAssertEqual(recorder.baselineChanges.count, 1, "OID が同じなら取り直さない")
+    XCTAssertEqual(recorder.versionChanges.count, 1, "OID が同じなら取り直さない")
 
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     pumpMain(until: { files.baseline(for: url) == "two\n" }, "git add で追従")
     XCTAssertTrue(repo.git(["rm", "--cached", "-q", "a.txt"]).isSuccess)
     pumpMain(until: { files.baseline(for: url) == nil }, "index から消えれば nil")
-    XCTAssertEqual(recorder.baselineChanges.count, 3)
+    XCTAssertEqual(recorder.versionChanges.count, 3)
 
     let untracked = repo.url("nope.txt")
     try repo.write("nope.txt", "u\n")
@@ -70,13 +70,13 @@ extension RootFilesTests {
     files.addObserver(recorder, interest: url)
     pumpMain(until: { FileManager.default.fileExists(atPath: tried) }, "smudge が 1 回失敗した")
     pumpMain(until: { files.status != nil })
-    XCTAssertNil(files.baseline(for: url))
-    XCTAssertEqual(recorder.baselineChanges, [])
+    XCTAssertNil(files.state(of: try XCTUnwrap(files.version(of: url, at: .index))), "一時失敗は焼かない")
+    XCTAssertEqual(recorder.versionChanges, [])
 
     try Data().write(to: URL(fileURLWithPath: allow))
     try repo.write("b.txt", "b\n")
     pumpMain(until: { files.baseline(for: url) == "one\n" }, timeout: 20, "次の取り直しで取り直す")
-    XCTAssertEqual(recorder.baselineChanges, [url])
+    XCTAssertEqual(recorder.versionChanges, [files.version(of: url, at: .index)])
   }
 
   /// 同じ OID の取得が上限の回数失敗すれば諦めて取り直さず（恒久失敗で毎バッチ回さない）、index が別の OID へ
@@ -108,7 +108,9 @@ extension RootFilesTests {
     try repo.write("after.txt", "a\n")
     pumpMain(until: { files.status?.badge(of: "after.txt") == .untracked }, timeout: 20, "その後の取り直し")
     XCTAssertEqual(count(), RootFiles.blobFailureBudget, "上限に達した OID は取り直さない")
-    XCTAssertEqual(recorder.baselineChanges, [], "無いものの初回は通知しない")
+    let version = try XCTUnwrap(files.version(of: url, at: .index))
+    XCTAssertEqual(files.state(of: version), .failed)
+    XCTAssertEqual(recorder.versionChanges, [version], "取れないと決まったときに 1 回知らせる")
 
     try repo.write("a.txt", "two\n")
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
@@ -126,7 +128,7 @@ extension RootFilesTests {
     files.addObserver(recorder, interest: url)
     pumpMain(until: { files.status != nil }, "status")
     XCTAssertNil(files.baseline(for: url), "smudge が終わる前に status が届く")
-    XCTAssertEqual(recorder.baselineChanges, [])
+    XCTAssertEqual(recorder.versionChanges, [])
     pumpMain(until: { files.baseline(for: url) == "one\n" }, timeout: 20, "その後 baseline が届く")
   }
 
@@ -151,7 +153,8 @@ extension RootFilesTests {
     pumpMain(until: { files.baseline(for: url) == nil }, "観測者の出入りが無くても、次の取り直しで消える")
   }
 
-  /// 競合中（stage 0 が無い）と UTF-8 でない index 版は baseline 無し。status には競合・A として出る。
+  /// 競合中（stage 0 が無い）の index 版は「無い」、UTF-8 でない index 版は「読めない」で、どちらも baseline 無し。状態が
+  /// 決まったときに知らせる。status には競合・A として出る。
   func testConflictedAndNonUTF8FilesHaveNoBaseline() throws {
     XCTAssertTrue(repo.git(["checkout", "-qb", "other"]).isSuccess)
     try repo.write("a.txt", "other\n")
@@ -170,9 +173,15 @@ extension RootFilesTests {
     pumpMain(until: { files.status != nil })
     XCTAssertEqual(files.status?.badge(of: "a.txt"), .conflicted)
     XCTAssertEqual(files.status?.badge(of: "bin.dat"), .added)
-    XCTAssertNil(files.baseline(for: repo.url("a.txt")), "競合中は index 版が定まらない")
-    XCTAssertNil(files.baseline(for: repo.url("bin.dat")), "UTF-8 でない版は使わない")
-    XCTAssertEqual(recorder.baselineChanges, [], "無いものの初回取得は通知しない")
+    let conflicted = try XCTUnwrap(files.version(of: repo.url("a.txt"), at: .index))
+    let binary = try XCTUnwrap(files.version(of: repo.url("bin.dat"), at: .index))
+    pumpMain(until: { files.state(of: binary) != nil && files.state(of: conflicted) != nil })
+    XCTAssertEqual(files.state(of: conflicted), .absent, "競合中は index 版が定まらない")
+    XCTAssertEqual(files.state(of: binary), .notText, "UTF-8 でない版は本文にしない")
+    XCTAssertNil(files.baseline(for: repo.url("a.txt")))
+    XCTAssertNil(files.baseline(for: repo.url("bin.dat")))
+    XCTAssertEqual(Set(recorder.versionChanges), [conflicted, binary], "状態が決まったときに知らせる")
+    XCTAssertEqual(recorder.versionChanges.count, 2)
   }
 
   /// 関心は観測者に紐づく——同じファイルを 2 つが追い、片方が消えても残った方の baseline は追従し続ける。
@@ -184,16 +193,49 @@ extension RootFilesTests {
     files.addObserver(first!, interest: url)
     files.addObserver(second, interest: url)
     pumpMain(until: { files.baseline(for: url) == "one\n" })
-    XCTAssertEqual(second.baselineChanges, [url], "両方に届く")
+    XCTAssertEqual(second.versionChanges, [files.version(of: url, at: .index)], "両方に届く")
 
     first = nil
     try repo.write("a.txt", "two\n")
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     pumpMain(until: { files.baseline(for: url) == "two\n" }, "残った観測者の関心で追従する")
-    XCTAssertEqual(second.baselineChanges.count, 2)
+    XCTAssertEqual(second.versionChanges.count, 2)
 
     files.removeObserver(second)
     XCTAssertNil(files.baseline(for: url), "関心が無くなればキャッシュを捨てる")
   }
 
+  /// HEAD の版も同じ 1 か所で取る——コミットで追従し、index の版とは別の関心。初回コミット前の HEAD・HEAD に無いパスは
+  /// 「無い」。関心を置き換えれば、増えた版を取り直し、消えた版を捨てる。
+  func testHeadVersionsFollowCommitsAndInterestsCanBeReplaced() throws {
+    let files = RootFiles(root: repo.root)
+    let recorder = Recorder()
+    let head = RootFiles.Version(path: "a.txt", revision: .head)
+    let index = RootFiles.Version(path: "a.txt", revision: .index)
+    let missing = RootFiles.Version(path: "dir/new line\n.txt", revision: .head)
+    files.addObserver(recorder, versions: [head, missing])
+    pumpMain(until: { files.state(of: head) == .text("one\n") }, "初回取得")
+    XCTAssertEqual(files.state(of: missing), .absent, "HEAD に無いパス（改行を含む名前でも）")
+    XCTAssertNil(files.state(of: index), "関心の無い版は取らない")
+
+    try repo.write("a.txt", "two\n")
+    XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
+    files.setVersions([head, index], for: recorder)
+    pumpMain(until: { files.state(of: index) == .text("two\n") }, "増えた関心を取る")
+    XCTAssertEqual(files.state(of: head), .text("one\n"), "ステージしても HEAD の版は変わらない")
+    XCTAssertNil(files.state(of: missing), "消えた関心は捨てる")
+    XCTAssertTrue(repo.git(["commit", "-qm", "two"]).isSuccess)
+    pumpMain(until: { files.state(of: head) == .text("two\n") }, "コミットで追従")
+  }
+
+  /// 初回コミット前の HEAD は、どのパスも「無い」（git の失敗にしない）。
+  func testAnUnbornHeadHasNoVersions() throws {
+    let empty = try TempGitRepo(initialCommit: false)
+    let files = RootFiles(root: empty.root)
+    let recorder = Recorder()
+    let head = RootFiles.Version(path: "a.txt", revision: .head)
+    files.addObserver(recorder, versions: [head])
+    pumpMain(until: { files.state(of: head) != nil }, "状態が決まる")
+    XCTAssertEqual(files.state(of: head), .absent)
+  }
 }

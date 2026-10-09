@@ -3,7 +3,7 @@ import Foundation
 // MARK: - 版の本文
 
 /// どの版か。
-enum GitRevision: Equatable {
+enum GitRevision: Hashable {
   case head
   case index
   case commit(String)
