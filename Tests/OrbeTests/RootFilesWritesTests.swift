@@ -34,6 +34,7 @@ final class RootFilesWritesTests: OrbeTestCase {
   // MARK: - ステージ・解除
 
   /// 変更・削除・未追跡・rename（元パスごと）・`*` `:` を含む名前のどれでも、行に対する操作で status がその通りに変わる。
+  /// status を読んだ後に消えた行が混じっても、残りはステージされる。
   /// 完了が届いた時点で status は書き込み後の姿（監視の到着を待たない）。
   func testStageAndUnstageFollowEveryKindOfRow() throws {
     try repo.write("gone.txt", "g\n")
@@ -53,6 +54,7 @@ final class RootFilesWritesTests: OrbeTestCase {
     let files = repo.files()
     let rows = [
       "a.txt", "gone.txt", "new/inner.txt", ":colon.txt", "moved.txt", "old.txt", "star*.txt",
+      "vanished.txt",
     ]
     .map { GitStatus.Row(path: $0, originalPath: nil) }
 
