@@ -14,7 +14,8 @@ final class EditorDiffModeState {
   /// app-state から起こす（以後の変更は書き戻す）。読めない値・欠落はインライン。
   static func loaded() -> EditorDiffModeState {
     EditorDiffModeState(
-      mode: AppStatePersistence.load()?.editorDiffMode.flatMap(EditorDiff.Mode.init) ?? .inline,
+      mode: AppStatePersistence.load()?.editorDiffMode?.mode.flatMap(EditorDiff.Mode.init)
+        ?? .inline,
       persists: true)
   }
 
@@ -22,6 +23,6 @@ final class EditorDiffModeState {
     guard mode != self.mode else { return }
     self.mode = mode
     guard persists else { return }
-    AppStatePersistence.update { $0.editorDiffMode = mode.rawValue }
+    AppStatePersistence.update { $0.editorDiffMode = EditorDiffModeRecord(mode: mode.rawValue) }
   }
 }
