@@ -53,6 +53,7 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
     let wc = try launchOnAnEmptyWorkspace()
 
     let palette = try openTaskPalette(wc)
+    palette.setScope(.opened)
     palette.query = "見積もりを出す"
     palette.submit()
 
@@ -60,7 +61,9 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
     XCTAssertEqual(
       palette.workspaces.all.map(\.id), [mainId, emptyId, try XCTUnwrap(wc.store.homeWorkspaceId)],
       "サイドバーの順（Home も選べる）")
-    XCTAssertEqual(wc.taskStore.tasks.last?.workspace, emptyId, "画面を開いた workspace に付く")
+    XCTAssertEqual(
+      wc.taskStore.tasks.first { $0.title == "見積もりを出す" }?.workspace, emptyId,
+      "範囲が開いた workspace なら、その workspace に付く")
   }
 
   /// GitHub タブのリポジトリは ⌘T と同じ基点（アクティブタブの cwd）で解決する——workspace の root が別の場所

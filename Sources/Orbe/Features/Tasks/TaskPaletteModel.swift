@@ -61,6 +61,8 @@ import Observation
   }
   /// 書くのはモデル（拡張を含む）だけ。
   var error: TaskPaletteError?
+  /// 画面を開いている間に入力欄から最後に足したタスク（「今足した」の印）。書くのはモデル（拡張を含む）だけ。
+  var justAdded: Int?
   /// 一覧の行の掴み。書くのはモデル（拡張を含む）だけ。
   var drag: TaskPaletteDrag = .idle
   /// 右の欄の待ちの条件の箱で開いている部分。画面が持ち、別のタスクを選ぶと閉じる。書くのはモデル（拡張を含む）だけ。
@@ -344,22 +346,5 @@ import Observation
     }
     reconcile()
     taskList.select(.task(id), in: selectableIDs)
-  }
-
-  /// 画面からのストアの変異を呼び、付け直して今見えている一覧の選択へ送る。消えていたタスクは表に出さず
-  /// 付け直しに任せる。
-  func mutate(_ failure: TaskPaletteError, _ body: () throws(TaskStoreError) -> Void) {
-    do throws(TaskStoreError) {
-      try body()
-    } catch .invalid {
-      error = failure
-    } catch {
-    }
-    reconcile()
-    switch visibleTab {
-    case .tasks: taskList.follow()
-    case .github: gitHubList.follow()
-    case .intake: break
-    }
   }
 }

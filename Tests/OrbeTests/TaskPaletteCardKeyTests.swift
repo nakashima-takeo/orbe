@@ -160,7 +160,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
 
     type("新しい", into: window)
     press(Key.enter, "\r", to: window)
-    XCTAssertEqual(model.store.tasks.last?.title, "新しい")
+    XCTAssertTrue(model.store.tasks.contains { $0.title == "新しい" })
     XCTAssertEqual(model.query, "")
   }
 

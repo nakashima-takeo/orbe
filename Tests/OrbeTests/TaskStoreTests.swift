@@ -62,6 +62,29 @@ final class TaskStoreTests: OrbeTestCase {
     XCTAssertEqual(second.description, "")
   }
 
+  /// 「その優先度の未着手の先頭」は、未着手の欄で同じか低い優先度の最初のタスクの直前。進行中・完了・高い優先度の
+  /// 未着手は越える。該当が無ければ列の末尾。1 回の変異で入る（保存も 1 回）。
+  func testPriorityHeadGoesBeforeTheFirstTodoOfTheSameOrLowerPriority() throws {
+    let store = TaskStore()
+    let progress = try store.add(draft("進行中") { $0.status = .inProgress })
+    let high = try store.add(draft("高") { $0.priority = .high })
+    let low = try store.add(draft("低") { $0.priority = .low })
+    let done = try store.add(draft("完了") { $0.status = .done })
+
+    let medium = try store.add(draft("中"), at: .priorityHead)
+    let urgent = try store.add(draft("急ぎ") { $0.priority = .high }, at: .priorityHead)
+    let later = try store.add(draft("後で") { $0.priority = .low }, at: .priorityHead)
+
+    XCTAssertEqual(
+      store.tasks.map(\.id),
+      [progress.id, urgent.id, high.id, medium.id, later.id, low.id, done.id])
+    XCTAssertEqual(TaskPersistence.load()?.tasks.map(\.id), store.tasks.map(\.id), "保存も同じ並び")
+
+    let empty = TaskStore(file: nil)
+    let only = try empty.add(draft("ひとつ"), at: .priorityHead)
+    XCTAssertEqual(empty.tasks.map(\.id), [only.id], "該当が無ければ末尾")
+  }
+
   func testAddWithWaitingReasonStartsWaiting() throws {
     let store = TaskStore()
 

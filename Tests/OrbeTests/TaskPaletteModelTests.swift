@@ -55,19 +55,36 @@ final class TaskPaletteModelTests: OrbeTestCase {
     XCTAssertEqual(palette.selectedID, .task(1))
   }
 
-  func testEnterOnTheAddRowAppendsATodoTaskOnTheOpenedWorkspaceClearsTheQueryAndSelectsIt() throws {
-    let palette = model([task(1, "a") { $0.workspace = self.otherWorkspace.id }])
+  /// 足したタスクは未着手の中の優先度の先頭（中か低の最初の未着手の直前）に入り、「今足した」の印で選ばれる。
+  func testEnterOnTheAddRowPutsATodoTaskAtTheHeadOfMediumClearsTheQueryAndMarksIt() throws {
+    let palette = model([
+      task(1, "進行中", .inProgress), task(2, "高") { $0.priority = .high },
+      task(3, "中"), task(4, "低") { $0.priority = .low },
+    ])
     palette.query = "  PR の説明を書く "
 
     palette.submit()
 
-    let added = try XCTUnwrap(palette.store.tasks.last)
-    XCTAssertEqual(palette.store.tasks.map(\.id), [1, added.id], "列の末尾に足す")
-    XCTAssertEqual(added.title, "PR の説明を書く")
+    let added = try XCTUnwrap(palette.store.tasks.first { $0.title == "PR の説明を書く" })
+    XCTAssertEqual(palette.store.tasks.map(\.id), [1, 2, added.id, 3, 4], "未着手の中の先頭")
     XCTAssertEqual(added.status, .todo)
-    XCTAssertEqual(added.workspace, openedWorkspace.id, "開いた workspace に付く")
     XCTAssertEqual(palette.query, "")
     XCTAssertEqual(palette.selectedID, .task(added.id))
+    XCTAssertEqual(palette.justAdded, added.id, "今足した")
+  }
+
+  /// 足すタスクの workspace は範囲で決まる——「すべて」ならなし、開いた workspace ならその workspace。
+  func testTheAddedTasksWorkspaceFollowsTheScope() throws {
+    let palette = model([])
+    palette.query = "すべてで足す"
+    palette.submit()
+    palette.setScope(.opened)
+    palette.query = "開いた workspace で足す"
+    palette.submit()
+
+    let byTitle = Dictionary(uniqueKeysWithValues: palette.store.tasks.map { ($0.title, $0) })
+    XCTAssertNil(try XCTUnwrap(byTitle["すべてで足す"]).workspace, "範囲が「すべて」ならなし")
+    XCTAssertEqual(try XCTUnwrap(byTitle["開いた workspace で足す"]).workspace, openedWorkspace.id)
   }
 
   /// 入力に文字があっても、↵ は選ばれている行の操作（↓ で一致したタスクを選べば、そのタスクを完了）。
