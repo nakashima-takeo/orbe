@@ -131,13 +131,13 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     let queued = WriteOutcome()
     held?.commit(message: "blocked", completion: committed.receive)
     XCTAssertTrue(fixture.pumpUntilHung())
-    let stopped = held?.stage(
+    let write = held?.stage(
       [GitStatus.Row(path: "a.txt", originalPath: nil)], completion: queued.receive)
     held = nil
 
     XCTAssertNotNil(observed, "書き込み中は生きている")
     XCTAssertTrue(RootFiles.shared(for: root) === observed, "同じ根なら同じもの")
-    stopped?.cancel()
+    write?.cancel()
     pumpMain(until: { queued.finished }, "止めた順番待ちが返る")
     fixture.release()
     pumpMain(until: { committed.finished }, timeout: 20, "握る者が離れても完了が返る")
