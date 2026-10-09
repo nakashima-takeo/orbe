@@ -56,6 +56,29 @@ final class SurfaceOverviewMarksTests: EngineTestCase {
     XCTAssertEqual(at(.left, row(10)), [0, 0, 0], "印の無い行")
   }
 
+  /// 印の列を持たない構成の面は、スクロールバーにも git の印を出さない。
+  func testASurfaceWithoutTheMarkColumnShowsNoGitMarksOnTheRuler() throws {
+    let lines = (0..<40).map { "line \($0)\n" }.joined()
+    let opened = try open(
+      lines, size: CGSize(width: 800, height: 400), style: style, waitForColors: false)
+    var presentation = SurfacePresentation.code
+    presentation.showsMarks = false
+    opened.surface.setPresentation(presentation)
+    opened.document.baseline = lines.replacingOccurrences(of: "line 5\n", with: "")
+    XCTAssertTrue(opened.document.waitUntilCaughtUp())
+    let shot = try pixelShot(opened)
+    let bar = opened.surface.surfaceLayout.verticalScrollbar
+    let ruler = OverviewRuler(
+      contentLines: CGFloat(opened.document.text.lineCount),
+      visibleLines: opened.surface.viewportLines.visible, height: bar.height, scale: 2)
+    let span = ruler.spans([5..<6])[0]
+    let x = OverviewRuler.lane(.left, width: bar.width, scale: 2)
+    XCTAssertEqual(
+      shot.rgb(
+        bar.minX + CGFloat(2 * x.x + x.width) / 4, bar.minY + CGFloat(span.y1 + span.y2) / 4),
+      [0, 0, 0], "追加の行に印が出ない")
+  }
+
   /// 上端の影は先頭の行が隠れている間だけ、本文の上端に出る。
   func testTheTopShadowShowsOnlyWhileTheFirstLineIsHidden() throws {
     let opened = try open(
