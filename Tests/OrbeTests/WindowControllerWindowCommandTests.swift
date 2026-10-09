@@ -105,11 +105,18 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
     XCTAssertEqual(wc.presentedOverlay, .none, "⌘T は dispatch されない（暴発防止）")
   }
 
-  /// ⌘⌘（Attention パレット）はヘルプ表示中だけ no-op。ヘルプは押下を点灯・行ハイライトにしか
-  /// 使わない場で、そこに ⌘⌘ が載る以上必ず試し押しされる——効いてしまうとヘルプ自体が消える。
-  /// 他パレット表示中は従来どおり差し替える（パレット同士の遷移規約）。
-  func testAttentionToggleInertOnlyWhileHelpShowing() throws {
+  /// ⌘⌘（Attention パレット）はヘルプと、差し替えてはならない画面（言語選択・オンボーディング・更新内容）の間は
+  /// no-op。ヘルプは押下を点灯・行ハイライトにしか使わない場で、そこに ⌘⌘ が載る以上必ず試し押しされる——効いて
+  /// しまうとヘルプ自体が消える。他パレット表示中は従来どおり差し替える（パレット同士の遷移規約）。
+  func testAttentionToggleInertWhileHelpOrModalShowing() throws {
     let wc = try restoreSingleTab()
+    for overlay in [AppShellModel.Overlay.languageSelect, .onboarding, .updateChanges] {
+      wc.model.overlay = overlay
+      wc.toggleAttentionPalette()
+      XCTAssertEqual(wc.presentedOverlay, overlay, "\(overlay) の間の ⌘⌘ は no-op")
+    }
+    wc.model.overlay = .none
+
     wc.showHelp()
     XCTAssertEqual(wc.presentedOverlay, .help, "前提: ヘルプ表示中")
     wc.toggleAttentionPalette()
