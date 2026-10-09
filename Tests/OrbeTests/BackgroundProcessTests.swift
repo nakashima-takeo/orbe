@@ -231,6 +231,14 @@ final class BackgroundProcessTests: OrbeTestCase {
     XCTAssertTrue(FileManager.default.fileExists(atPath: marker), "SIGKILL を待たずに trap が走る")
   }
 
+  /// Orbe は SIGPIPE を無視しているが、子では既定に戻す。無視を継ぐと、読み手の消えた pipe へ書き続ける。
+  func testChildDoesNotInheritIgnoredSigpipe() throws {
+    let previous = signal(SIGPIPE, SIG_IGN)
+    defer { signal(SIGPIPE, previous) }
+
+    XCTAssertEqual(try run(spec("kill -PIPE $$; exit 0")).outcome.ending, .signaled(SIGPIPE))
+  }
+
   /// SIGTERM を無視する子も、猶予の後に SIGKILL で止まる。
   func testChildIgnoringTermIsKilled() throws {
     let process = BackgroundProcess(spec("trap '' TERM; sleep 30"))
