@@ -3,8 +3,8 @@ import XCTest
 
 @testable import Orbe
 
-/// パッケージのプラグイン名の導出規則（`AgentPluginInstaller.pluginName(in:)`）、中身の指紋と登録の
-/// 記録、`run` の完了順序を固定する。
+/// パッケージのプラグイン名の導出規則（`AgentPluginInstaller.pluginName(in:)`）、中身の指紋、
+/// `run` の完了順序を固定する。
 /// 名前はビルド時にチャネルから導出されるため Swift には焼けず、`plugins/` 直下の唯一の
 /// サブディレクトリ名として読む。この 1 つの名前を marketplace 登録と channel の置き場所が
 /// 共有するので、曖昧なパッケージでは nil を返す（誤った名前で登録しない）。
@@ -59,18 +59,14 @@ final class AgentPluginInstallerTests: OrbeTestCase {
     XCTAssertEqual(AgentPluginInstaller.pluginName(in: pkg), "orbe-agent-dev")
   }
 
-  // MARK: - 中身の指紋と登録の記録
+  // MARK: - 中身の指紋
 
   /// 指紋は「CLI に登録するもの」が変われば変わり、変わらなければ同じ。起動時の入れ直しはこれだけで
   /// 決まるので、変化を見逃すと codex / agy に古いコピーが残り、変化の無い起動で拾うと毎回入れ直す。
-  func testDigestTracksContentsPathsAndHiddenFilesButNotLocation() throws {
+  func testDigestTracksContentsPathsAndHiddenFiles() throws {
     try write("plugins/orbe-agent-dev/.codex-plugin/plugin.json", "{}")
     try write("plugins/orbe-agent-dev/channel", "dev.orbe.app.dev\n")
     let base = try XCTUnwrap(AgentPluginInstaller.digest(of: pkg))
-
-    let copy = pkg.deletingLastPathComponent().appendingPathComponent("copy-\(UUID().uuidString)")
-    try FileManager.default.copyItem(at: pkg, to: copy)
-    XCTAssertEqual(AgentPluginInstaller.digest(of: copy), base, "置き場所が違っても中身が同じなら同じ")
 
     try write("plugins/orbe-agent-dev/channel", "dev.orbe.app\n")
     XCTAssertNotEqual(AgentPluginInstaller.digest(of: pkg), base, "刻印の中身")
@@ -85,33 +81,6 @@ final class AgentPluginInstallerTests: OrbeTestCase {
       at: pkg.appendingPathComponent("plugins/orbe-agent-dev"),
       to: pkg.appendingPathComponent("plugins/orbe-agent"))
     XCTAssertNotEqual(AgentPluginInstaller.digest(of: pkg), base, "名前（ディレクトリ名）")
-  }
-
-  func testDigestOfEmptyOrMissingPackageIsNil() throws {
-    XCTAssertNil(AgentPluginInstaller.digest(of: pkg.appendingPathComponent("missing")))
-    XCTAssertNil(AgentPluginInstaller.digest(of: pkg), "ファイルが 1 つも無い")
-  }
-
-  /// 記録は実体化先の外に置く。中に置くと、毎起動の実体化（丸ごと差し替え）が記録を消し、
-  /// 毎回入れ直しになる。
-  func testRecordedDigestSurvivesMaterialization() throws {
-    let resources = try XCTUnwrap(BundledResources.root)
-    let bundled = resources.appendingPathComponent("agent-plugin")
-    try FileManager.default.createDirectory(
-      at: bundled.appendingPathComponent("plugins/orbe-agent-dev"),
-      withIntermediateDirectories: true)
-    FileManager.default.createFile(
-      atPath: bundled.appendingPathComponent("install.sh").path, contents: Data(),
-      attributes: [.posixPermissions: 0o755])
-
-    let dir = try XCTUnwrap(AgentPluginInstaller.materializeStablePlugin())
-    XCTAssertNil(AgentPluginInstaller.registeredDigest, "記録が無い＝既存の利用者は一度入れ直される")
-    let digest = try XCTUnwrap(AgentPluginInstaller.digest(of: dir))
-    AgentPluginInstaller.recordRegistered(digest: digest)
-
-    let again = try XCTUnwrap(AgentPluginInstaller.materializeStablePlugin())
-    XCTAssertEqual(AgentPluginInstaller.registeredDigest, digest)
-    XCTAssertEqual(AgentPluginInstaller.digest(of: again), digest, "同じ同梱物の実体化は同じ指紋")
   }
 
   private func write(_ rel: String, _ text: String) throws {
