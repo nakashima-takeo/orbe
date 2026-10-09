@@ -56,6 +56,20 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     XCTAssertEqual(document.hunks.count, 1)
   }
 
+  /// 同じ上限を置き直しても頼み直さない——見え方を載せ直すたびに上限を押す呼び手が、届いた結果の知らせでまた載せ直しても、
+  /// 裏の行差分が回り続けない。
+  func testSettingTheSameHunkLimitAgainRequestsNothing() throws {
+    let (document, _) = try open("same.txt", "a\nb\n")
+    document.baseline = "a\n"
+    document.hunkLimit = .edits(10)
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    var notified = 0
+    document.onHunksChange = { notified += 1 }
+    document.hunkLimit = .edits(10)
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertEqual(notified, 0, "同じ上限では結果が届かない")
+  }
+
   /// 問いを頼んでから結果が届くまでに本文が変われば、結果はその後の編集に合わせてずらして届く——編集より後ろの一致は
   /// 動いた字に付いていき、編集に掛かった一致は落ちる。
   func testAnAnswerReachesTheTextAsEditedAfterItWasAsked() throws {

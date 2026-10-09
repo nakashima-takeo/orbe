@@ -174,6 +174,32 @@ final class SurfaceDiffGearTests: EngineTestCase {
     XCTAssertTrue(keyword(try pixelShot(opened)), "知らせを受けて出どころの写しを引き直す")
   }
 
+  /// 差し込みの形が同じでも出どころを替えて置き直せば、差し込んだ行は新しい出どころの字と色で描かれる（版が変わって削除行の
+  /// 数が同じでも、古い版の字が残らない）。
+  func testReplacingTheSourceRedrawsTheInsertedLines() throws {
+    let opened = try open(rows(20), size: size)
+    let surface = opened.surface
+    surface.setPresentation(inline)
+    let colored = InsertedText()
+    let lines = colored.lines(["let gone = 1"])
+    _ = colored.setRole(.keyword, line: 0)
+    let plain = InsertedText()
+    _ = plain.lines(["let gone = 1"])
+    let insertions = [RowInsertion(line: 2, content: .lines(lines))]
+    surface.setRows(SurfaceRows(insertions: insertions, source: colored))
+    let config = surface.config
+    let layout = surface.surfaceLayout
+    let y = config.topInset + 2.5 * config.lineHeight
+    func keyword(_ shot: PixelShot) -> Bool {
+      stride(from: layout.text.minX + 1, to: layout.text.minX + 60, by: 0.5).contains {
+        isKeyword(shot.rgb($0, y))
+      }
+    }
+    XCTAssertTrue(keyword(try pixelShot(opened)), "前提: 前の出どころの役割の色")
+    surface.setRows(SurfaceRows(insertions: insertions, source: plain))
+    XCTAssertFalse(keyword(try pixelShot(opened)), "新しい出どころの写しで描く")
+  }
+
   /// 差し込んだ行の番号を押しても行は選ばれない（行番号の列での行の選択は文書の行だけ）。
   func testClickingTheNumbersOfAnInsertedLineSelectsNothing() throws {
     let opened = try hosted(rows(20), size: size)
