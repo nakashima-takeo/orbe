@@ -1,18 +1,16 @@
 import OrbeTestSupport
 import XCTest
 
+@testable import Orbe
+
 /// 状態報告シム（`app/agent-plugin/.../hooks/orbe-agent-status.sh`）のチャネルゲートを実 `/bin/sh` で
 /// 機械検証する。dev / release の plugin は別名の別枠として両方 enabled になるため、シムは自分の
 /// 実体化コピーに刻まれた bundle ID とタブが名乗る `ORBE_BUNDLE_ID` が一致する呼び出しにだけ応える。
-/// テストは同梱物でなくリポジトリ実体のプラグインを temp へ複製して走らせる（`CompletionShimTests` と同じ形）。
+/// テストはリポジトリ実体のプラグインを本番の実体化に通して走らせる（刻印は実体化が書いたもの）。
 /// 呼び方は claude / codex の絶対パス呼びと agy の相対呼び（cwd＝プラグインルート）の両方を突く。
 final class AgentShimChannelGateTests: OrbeTestCase {
-  /// リポジトリ実体のプラグインルート。このファイル: <repo>/Tests/OrbeTests/...swift → 3 階層上が repo root。
-  private static let sourcePluginRoot = URL(fileURLWithPath: #filePath)
-    .deletingLastPathComponent()  // OrbeTests
-    .deletingLastPathComponent()  // Tests
-    .deletingLastPathComponent()  // repo root
-    .appendingPathComponent("app/agent-plugin/plugins/orbe-agent")
+  /// 実体化が刻むのとは別のチャネル。
+  private static let otherChannel = "dev.orbe.app.other"
 
   /// シムが委譲したかどうかと、委譲先へ渡った引数・stdin。
   private struct Result {
@@ -21,7 +19,7 @@ final class AgentShimChannelGateTests: OrbeTestCase {
   }
 
   private var work: URL!  // このテスト専用の作業ディレクトリ
-  private var pluginRoot: URL!  // 複製したプラグインルート（channel を置く先）
+  private var pluginRoot: URL!  // 実体化したプラグインルート
   private var reportBin: URL!  // 引数と stdin を記録する fake orbe-report
   private var reportLog: URL!
 
@@ -29,8 +27,7 @@ final class AgentShimChannelGateTests: OrbeTestCase {
     work = TestScratch.caseDir
       .appendingPathComponent("AgentShimChannelGateTests-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
-    pluginRoot = work.appendingPathComponent("plugin")
-    try FileManager.default.copyItem(at: Self.sourcePluginRoot, to: pluginRoot)
+    pluginRoot = try ControlProcess.stagePlugin()
     reportLog = work.appendingPathComponent("report.log")
     reportBin = work.appendingPathComponent("orbe-report")
     let script = """
@@ -40,12 +37,6 @@ final class AgentShimChannelGateTests: OrbeTestCase {
     try Data(script.utf8).write(to: reportBin)
     try FileManager.default.setAttributes(
       [.posixPermissions: 0o755], ofItemAtPath: reportBin.path)
-  }
-
-  /// `channel`（実体化時に Orbe がプラグインのルートへ刻む bundle ID）を置く。
-  private func writeChannel(_ bundleId: String) throws {
-    try Data("\(bundleId)\n".utf8)
-      .write(to: pluginRoot.appendingPathComponent("channel"))
   }
 
   /// シムを実 `/bin/sh` で起こす。`relative` は agy 形式（cwd＝プラグインルートからの相対呼び）。
@@ -86,16 +77,14 @@ final class AgentShimChannelGateTests: OrbeTestCase {
 
   /// Orbe 外の端末（`ORBE_REPORT_BIN` 無し）では何もしない。
   func testWithoutReportBinaryDoesNotDelegate() throws {
-    try writeChannel("dev.orbe.app.dev")
-    let result = try runShim(bundleId: "dev.orbe.app.dev", withReportBin: false)
+    let result = try runShim(bundleId: StateDir.bundleId, withReportBin: false)
     XCTAssertNil(result.delegated)
     XCTAssertEqual(result.exitCode, 0)
   }
 
   /// 自チャネルのタブからの呼び出しは委譲し、引数と stdin（hook JSON）が透過する。
   func testMatchingChannelDelegatesWithArgumentsAndStdin() throws {
-    try writeChannel("dev.orbe.app.dev")
-    let result = try runShim(bundleId: "dev.orbe.app.dev")
+    let result = try runShim(bundleId: StateDir.bundleId)
     XCTAssertEqual(result.exitCode, 0)
     let delegated = try XCTUnwrap(result.delegated)
     XCTAssertTrue(delegated.contains("args:claude working"), delegated)
@@ -104,36 +93,33 @@ final class AgentShimChannelGateTests: OrbeTestCase {
 
   /// 他チャネルのタブからの呼び出しは黙って落とす（release の枠が dev のタブを追わない）。
   func testMismatchedChannelDoesNotDelegate() throws {
-    try writeChannel("dev.orbe.app")
-    let result = try runShim(bundleId: "dev.orbe.app.dev")
+    let result = try runShim(bundleId: Self.otherChannel)
     XCTAssertNil(result.delegated)
     XCTAssertEqual(result.exitCode, 0)
   }
 
   /// agy 形式（cwd＝ステージ済みプラグインルートからの相対呼び）でも channel に届く。
   func testMatchingChannelDelegatesOnRelativeInvocation() throws {
-    try writeChannel("dev.orbe.app.dev")
-    let result = try runShim(bundleId: "dev.orbe.app.dev", relative: true)
+    let result = try runShim(bundleId: StateDir.bundleId, relative: true)
     XCTAssertEqual(result.exitCode, 0)
     XCTAssertNotNil(result.delegated)
   }
 
   func testMismatchedChannelDoesNotDelegateOnRelativeInvocation() throws {
-    try writeChannel("dev.orbe.app")
-    let result = try runShim(bundleId: "dev.orbe.app.dev", relative: true)
+    let result = try runShim(bundleId: Self.otherChannel, relative: true)
     XCTAssertNil(result.delegated)
     XCTAssertEqual(result.exitCode, 0)
   }
 
   /// channel が無い（実体化を通っていないコピー）なら通す＝状態追跡を黙って殺さない。
   func testMissingChannelDelegates() throws {
-    let result = try runShim(bundleId: "dev.orbe.app.dev")
+    try FileManager.default.removeItem(at: pluginRoot.appendingPathComponent("channel"))
+    let result = try runShim(bundleId: Self.otherChannel)
     XCTAssertNotNil(result.delegated)
   }
 
   /// タブが `ORBE_BUNDLE_ID` を名乗らない（旧リリース版の Orbe）なら通す＝同じく fail-open。
   func testMissingBundleIdDelegates() throws {
-    try writeChannel("dev.orbe.app.dev")
     let result = try runShim(bundleId: nil)
     XCTAssertNotNil(result.delegated)
   }

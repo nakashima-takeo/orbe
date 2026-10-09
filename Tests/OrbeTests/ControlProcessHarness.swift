@@ -70,19 +70,18 @@ final class ControlProcess {
     .deletingLastPathComponent()  // repo root
     .appendingPathComponent("app/agent-plugin")
 
-  /// 同梱物レイアウトへプラグインを実体化し、プラグインのルートを返す。
-  /// `channel` は `materializeStablePlugin()` がプラグインのルートへ書くのと同じ 1 行（自分の bundle ID）。
+  /// リポジトリ実体のプラグインを同梱物レイアウトへ置き、本番と同じ `materializeStablePlugin()` で
+  /// 実体化して、実体化先のプラグインのルートを返す（チャネルの刻印も本番の実体化が書く）。
   static func stagePlugin() throws -> URL {
     let resources = try XCTUnwrap(BundledResources.root, "同梱物の探索根がステージされていない")
-    let package = resources.appendingPathComponent("agent-plugin", isDirectory: true)
-    try? FileManager.default.removeItem(at: package)
-    // copyItem は POSIX permission を保つ（実体化と同じ性質）。
-    try FileManager.default.copyItem(at: sourcePluginPackage, to: package)
+    let bundled = resources.appendingPathComponent("agent-plugin", isDirectory: true)
+    try? FileManager.default.removeItem(at: bundled)
+    // copyItem は POSIX permission を保つ（.app へのコピーと同じ性質）。
+    try FileManager.default.copyItem(at: sourcePluginPackage, to: bundled)
+    let package = try XCTUnwrap(AgentPluginInstaller.materializeStablePlugin(), "実体化できない")
     let name = try XCTUnwrap(
       AgentPluginInstaller.pluginName(in: package), "プラグイン名を読めない（パッケージが壊れている）")
-    let root = package.appendingPathComponent("plugins/\(name)", isDirectory: true)
-    try Data("\(StateDir.bundleId)\n".utf8).write(to: root.appendingPathComponent("channel"))
-    return root
+    return package.appendingPathComponent("plugins/\(name)", isDirectory: true)
   }
 
   private static func stage(_ source: URL, as destination: URL) throws {

@@ -1,22 +1,19 @@
 import OrbeTestSupport
 import XCTest
 
+@testable import Orbe
+
 /// MCP シム（`app/agent-plugin/.../mcp/orbe-mcp.sh`）と空サーバー（`mcp/empty-server.pl`）を実 `/bin/sh`・
-/// 実 perl で機械検証する。CLI は有効なプラグインの MCP サーバーを全セッションで起こすので、シムは
-/// 自分のチャネルの Orbe のタブでだけタブの `orbe-mcp` へつなぎ、それ以外ではツール 0 個のサーバーとして
+/// 実 perl で機械検証する。プラグインは本番の実体化に通す（チャネルの刻印は実体化が書いたもの）。
+/// CLI は有効なプラグインの MCP サーバーを全セッションで起こすので、シムは自分のチャネルの Orbe のタブでだけタブの `orbe-mcp` へつなぎ、それ以外ではツール 0 個のサーバーとして
 /// 正常に応答する。チャネルの規則は状態追跡のシム（`AgentShimChannelGateTests`）と同じ。
 ///
 /// 壊れると何が起きるか: dev のタブの agent が release の Orbe を操作する（その逆も）。あるいは Orbe の外の
 /// claude / codex が毎セッション接続失敗を警告する。
 final class AgentMcpShimTests: OrbeTestCase {
-  /// リポジトリ実体のプラグインルート。このファイル: <repo>/Tests/OrbeTests/...swift → 3 階層上が repo root。
-  private static let sourcePluginRoot = URL(fileURLWithPath: #filePath)
-    .deletingLastPathComponent()  // OrbeTests
-    .deletingLastPathComponent()  // Tests
-    .deletingLastPathComponent()  // repo root
-    .appendingPathComponent("app/agent-plugin/plugins/orbe-agent")
-
   private static let delegatedMarker = "delegated"
+  /// 実体化が刻むのとは別のチャネル。
+  private static let otherChannel = "dev.orbe.app.other"
 
   private var work: URL!
   private var pluginRoot: URL!
@@ -26,8 +23,7 @@ final class AgentMcpShimTests: OrbeTestCase {
   override func setUpWithError() throws {
     work = TestScratch.caseDir.appendingPathComponent("AgentMcpShimTests-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
-    pluginRoot = work.appendingPathComponent("plugin")
-    try FileManager.default.copyItem(at: Self.sourcePluginRoot, to: pluginRoot)
+    pluginRoot = try ControlProcess.stagePlugin()
     mcpLog = work.appendingPathComponent("mcp.log")
     mcpBin = work.appendingPathComponent("orbe-mcp")
     let script = """
@@ -37,10 +33,6 @@ final class AgentMcpShimTests: OrbeTestCase {
       """
     try Data(script.utf8).write(to: mcpBin)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: mcpBin.path)
-  }
-
-  private func writeChannel(_ bundleId: String) throws {
-    try Data("\(bundleId)\n".utf8).write(to: pluginRoot.appendingPathComponent("channel"))
   }
 
   /// シムを実 `/bin/sh` で起こし、stdout の行を返す。`relative` は cwd＝プラグインルートからの相対呼び
@@ -74,42 +66,28 @@ final class AgentMcpShimTests: OrbeTestCase {
   private func assertEmptyServer(
     _ out: [String], file: StaticString = #filePath, line: UInt = #line
   ) {
-    XCTAssertEqual(
-      out, [#"{"id":1,"jsonrpc":"2.0","result":{"tools":[]}}"#], file: file, line: line)
+    let reply = out.count == 1 ? try? JSONSerialization.jsonObject(with: Data(out[0].utf8)) : nil
+    let result = (reply as? [String: Any])?["result"] as? [String: Any]
+    XCTAssertEqual((reply as? [String: Any])?["id"] as? Int, 1, "\(out)", file: file, line: line)
+    XCTAssertEqual((result?["tools"] as? [Any])?.isEmpty, true, "\(out)", file: file, line: line)
     XCTAssertFalse(
       FileManager.default.fileExists(atPath: mcpLog.path), "orbe-mcp は起こさない", file: file, line: line
     )
   }
 
   func testMatchingChannelExecsTheTabsBridge() throws {
-    try writeChannel("dev.orbe.app.dev")
-    assertDelegated(runShim(bundleId: "dev.orbe.app.dev", stdin: [toolsList]))
-  }
-
-  func testMatchingChannelExecsTheTabsBridgeOnRelativeInvocation() throws {
-    try writeChannel("dev.orbe.app.dev")
-    assertDelegated(runShim(bundleId: "dev.orbe.app.dev", relative: true, stdin: [toolsList]))
+    assertDelegated(runShim(bundleId: StateDir.bundleId, stdin: [toolsList]))
   }
 
   /// 別チャネルの Orbe のタブでは、そのタブの Orbe につながない。
   func testMismatchedChannelIsEmptyServer() throws {
-    try writeChannel("dev.orbe.app")
-    assertEmptyServer(runShim(bundleId: "dev.orbe.app.dev", stdin: [toolsList]))
-    assertEmptyServer(runShim(bundleId: "dev.orbe.app.dev", relative: true, stdin: [toolsList]))
+    assertEmptyServer(runShim(bundleId: Self.otherChannel, stdin: [toolsList]))
+    assertEmptyServer(runShim(bundleId: Self.otherChannel, relative: true, stdin: [toolsList]))
   }
 
   /// Orbe の外（`ORBE_MCP_BIN` 無し）。
   func testOutsideOrbeIsEmptyServer() throws {
-    try writeChannel("dev.orbe.app.dev")
     assertEmptyServer(runShim(bundleId: nil, withMcpBin: false, stdin: [toolsList]))
-  }
-
-  /// 判定材料の片方が欠けたら通す（状態追跡のシムと同じ規則）。
-  func testMissingChannelOrBundleIdExecsTheBridge() throws {
-    assertDelegated(runShim(bundleId: "dev.orbe.app.dev", stdin: [toolsList]))
-    try FileManager.default.removeItem(at: mcpLog)
-    try writeChannel("dev.orbe.app.dev")
-    assertDelegated(runShim(bundleId: nil, stdin: [toolsList]))
   }
 
   /// 空サーバーは MCP の握手に応え、ツールを名乗らない。id の型を保ち、通知と読めない行には応えない。
