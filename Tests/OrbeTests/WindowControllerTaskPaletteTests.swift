@@ -58,8 +58,8 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
 
     XCTAssertEqual(palette.workspaces.opened, .init(id: emptyId, name: "empty"))
     XCTAssertEqual(
-      palette.workspaces.all.map(\.id), [mainId, emptyId, try XCTUnwrap(wc.store.orbeWorkspaceId)],
-      "サイドバーの順（Orbe の workspace も選べる）")
+      palette.workspaces.all.map(\.id), [mainId, emptyId, try XCTUnwrap(wc.store.homeWorkspaceId)],
+      "サイドバーの順（Home も選べる）")
     XCTAssertEqual(wc.taskStore.tasks.last?.workspace, emptyId, "画面を開いた workspace に付く")
   }
 

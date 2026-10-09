@@ -1,5 +1,5 @@
-/// Orbe の workspace の root に置くファイルの雛形。画面の文言ではなくファイルの中身なので、UI 文言の辞書には載せない。
-enum OrbeWorkspaceTemplate {
+/// Home の root に置くファイルの雛形。画面の文言ではなくファイルの中身なので、UI 文言の辞書には載せない。
+enum HomeTemplate {
   /// 秘書への指示（Orbe が持ち、起動のたびに書き直す）。
   static func rules(_ language: Language) -> String {
     switch language {
@@ -19,7 +19,7 @@ enum OrbeWorkspaceTemplate {
   private static let rulesJa = """
     # Orbe の秘書
 
-    このフォルダは Orbe の workspace の root です。ここで起動した claude は Orbe の秘書として働きます。
+    このフォルダは Home の root です。ここで起動した claude は Orbe の秘書として働きます。
 
     ## 役割
 
@@ -38,7 +38,7 @@ enum OrbeWorkspaceTemplate {
   private static let rulesEn = """
     # Orbe secretary
 
-    This folder is the root of the Orbe workspace. A claude started here works as Orbe's secretary.
+    This folder is the root of Home. A claude started here works as Orbe's secretary.
 
     ## Role
 
@@ -55,7 +55,7 @@ enum OrbeWorkspaceTemplate {
     """
 
   private static let claudeMdJa = """
-    # Orbe の workspace
+    # Home
 
     秘書の役割と Orbe の操作は `.claude/rules/orbe.md` にあり、Orbe が起動のたびに更新する。
 
@@ -64,7 +64,7 @@ enum OrbeWorkspaceTemplate {
     """
 
   private static let claudeMdEn = """
-    # Orbe workspace
+    # Home
 
     The secretary's role and how to operate Orbe live in `.claude/rules/orbe.md`, which Orbe updates at every launch.
 

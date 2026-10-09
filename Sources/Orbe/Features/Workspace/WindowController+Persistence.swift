@@ -23,7 +23,7 @@ extension WindowController {
     store.load(
       workspaces: restored,
       activeWorkspace: min(max(0, file.activeWorkspace), restored.count - 1),
-      orbeWorkspaceId: file.orbeWorkspaceId)
+      homeWorkspaceId: file.homeWorkspaceId)
     activateCurrent()  // 復元アクティブが0タブ（休眠保存）なら空表示（シェルは起こさない）
   }
 
@@ -114,6 +114,6 @@ extension WindowController {
           lastUsedAt: ws.lastUsedAt, settingsOverride: ws.settingsOverride,
           lastWorktreeBase: ws.lastWorktreeBase, persistentId: ws.persistentId)
       },
-      windowSize: rememberedWindowSize, orbeWorkspaceId: store.orbeWorkspaceId)
+      windowSize: rememberedWindowSize, homeWorkspaceId: store.homeWorkspaceId)
   }
 }

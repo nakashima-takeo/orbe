@@ -13,7 +13,7 @@ struct TaskPaletteWorkspaces: Equatable {
   let opened: Entry
   /// 全 workspace（サイドバーの順）。
   let all: [Entry]
-  /// Orbe の workspace の永続 ID（受信の提案をタスクにすると、ここに付く）。
+  /// Home の永続 ID（受信の提案をタスクにすると、ここに付く）。
   let home: UUID?
 
   /// 解決できない参照（削除された workspace）は nil＝「なし」。

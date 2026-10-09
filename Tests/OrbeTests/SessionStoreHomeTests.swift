@@ -2,46 +2,46 @@ import XCTest
 
 @testable import Orbe
 
-/// SessionStore が持つ「Orbe の workspace」の契約を固定する。起動時の保証が Orbe の workspace をちょうど 1 つにそろえる
-/// こと、Orbe の workspace と最後の通常 workspace は消せず、Orbe の workspace はディレクトリも変えられないこと。
+/// SessionStore が持つ「Home」の契約を固定する。起動時の保証が Home をちょうど 1 つにそろえる
+/// こと、Home と最後の通常 workspace は消せず、Home はディレクトリも変えられないこと。
 ///
-/// 壊れると何が起きるか: 起動のたびに Orbe の workspace が増える、または既存利用者の active がずれる。
-/// Orbe の workspace が消えたり root が専用フォルダから外れたりすると、秘書が指示の無い場所で起きる。
+/// 壊れると何が起きるか: 起動のたびに Home が増える、または既存利用者の active がずれる。
+/// Home が消えたり root が専用フォルダから外れたりすると、秘書が指示の無い場所で起きる。
 /// 通常の workspace を全部消せると、⌘T 等で起こすタブが秘書への指示のある root で起きる。
-final class SessionStoreOrbeWorkspaceTests: OrbeTestCase {
-  private let root = "/state/orbe-workspace"
+final class SessionStoreHomeTests: OrbeTestCase {
+  private let root = "/state/home"
 
-  func testEnsureAppendsOrbeWorkspaceWithoutMovingActiveOrAddingTabs() {
+  func testEnsureAppendsHomeWithoutMovingActiveOrAddingTabs() {
     let a = Workspace(name: "a", rootPath: "/a")
     let b = Workspace(name: "b", rootPath: "/b")
     let store = SessionStore()
     store.load(workspaces: [a, b], activeWorkspace: 1)
 
-    store.ensureOrbeWorkspace(rootPath: root)
+    store.ensureHome(rootPath: root)
 
     XCTAssertEqual(store.workspaces.count, 3)
-    let orbe = store.workspaces[2]
-    XCTAssertEqual(orbe.name, "Orbe")
-    XCTAssertEqual(orbe.rootPath, root)
-    XCTAssertTrue(orbe.tabs.isEmpty)
-    XCTAssertEqual(store.orbeWorkspaceId, orbe.persistentId)
+    let home = store.workspaces[2]
+    XCTAssertEqual(home.name, "Home")
+    XCTAssertEqual(home.rootPath, root)
+    XCTAssertTrue(home.tabs.isEmpty)
+    XCTAssertEqual(store.homeWorkspaceId, home.persistentId)
     XCTAssertTrue(store.current === b, "active は動かない")
   }
 
   /// 指している workspace があれば足さず、root だけを専用フォルダへそろえる（名前・位置は保つ）。
   func testEnsureKeepsThePointedWorkspaceAndRealignsItsRoot() {
-    let orbe = Workspace(name: "secretary", rootPath: "/old/state/orbe-workspace")
+    let home = Workspace(name: "secretary", rootPath: "/old/state/home")
     let store = SessionStore()
     store.load(
-      workspaces: [orbe, Workspace(name: "a", rootPath: "/a")], activeWorkspace: 1,
-      orbeWorkspaceId: orbe.persistentId)
+      workspaces: [home, Workspace(name: "a", rootPath: "/a")], activeWorkspace: 1,
+      homeWorkspaceId: home.persistentId)
 
-    store.ensureOrbeWorkspace(rootPath: root)
-    store.ensureOrbeWorkspace(rootPath: root)
+    store.ensureHome(rootPath: root)
+    store.ensureHome(rootPath: root)
 
     XCTAssertEqual(store.workspaces.map(\.name), ["secretary", "a"], "何度呼んでも増えない")
-    XCTAssertEqual(orbe.rootPath, root)
-    XCTAssertTrue(store.isOrbeWorkspace(0))
+    XCTAssertEqual(home.rootPath, root)
+    XCTAssertTrue(store.isHome(0))
     XCTAssertEqual(store.originWorkspaceIndex, 1, "起源は配列で最初の通常 workspace")
   }
 
@@ -49,23 +49,23 @@ final class SessionStoreOrbeWorkspaceTests: OrbeTestCase {
   func testEnsureAppendsWhenThePointedWorkspaceIsMissing() {
     let sameRoot = Workspace(name: "same-root", rootPath: root)
     let store = SessionStore()
-    store.load(workspaces: [sameRoot], activeWorkspace: 0, orbeWorkspaceId: UUID())
+    store.load(workspaces: [sameRoot], activeWorkspace: 0, homeWorkspaceId: UUID())
 
-    store.ensureOrbeWorkspace(rootPath: root)
+    store.ensureHome(rootPath: root)
 
-    XCTAssertEqual(store.workspaces.map(\.name), ["same-root", "Orbe"])
-    XCTAssertFalse(store.isOrbeWorkspace(0))
-    XCTAssertTrue(store.isOrbeWorkspace(1))
+    XCTAssertEqual(store.workspaces.map(\.name), ["same-root", "Home"])
+    XCTAssertFalse(store.isHome(0))
+    XCTAssertTrue(store.isHome(1))
   }
 
-  func testOrbeWorkspaceCannotBeRemovedOrReRootedButCanBeRenamed() {
+  func testHomeCannotBeRemovedOrReRootedButCanBeRenamed() {
     let store = SessionStore()
     store.load(
       workspaces: [Workspace(name: "a", rootPath: "/a"), Workspace(name: "b", rootPath: "/b")],
       activeWorkspace: 0)
-    store.ensureOrbeWorkspace(rootPath: root)
+    store.ensureHome(rootPath: root)
 
-    XCTAssertEqual(store.removalBlocker(2), .orbeWorkspace)
+    XCTAssertEqual(store.removalBlocker(2), .home)
     XCTAssertEqual(store.closeWorkspace(2, origin: .gesture), .invalid)
     XCTAssertFalse(store.canChangeDir(2))
     XCTAssertFalse(store.setWorkspaceDir(2, to: "/elsewhere"))
@@ -74,20 +74,20 @@ final class SessionStoreOrbeWorkspaceTests: OrbeTestCase {
     XCTAssertTrue(store.canChangeDir(0))
   }
 
-  /// 通常の workspace は 2 つ以上あれば消せ、1 つだけなら消せない（Orbe の workspace は数に入れない）。
+  /// 通常の workspace は 2 つ以上あれば消せ、1 つだけなら消せない（Home は数に入れない）。
   func testLastRegularWorkspaceCannotBeRemoved() {
     let store = SessionStore()
     store.load(
       workspaces: [Workspace(name: "a", rootPath: "/a"), Workspace(name: "b", rootPath: "/b")],
       activeWorkspace: 0)
-    store.ensureOrbeWorkspace(rootPath: root)
+    store.ensureHome(rootPath: root)
 
     XCTAssertNil(store.removalBlocker(0))
     XCTAssertEqual(store.closeWorkspace(0, origin: .gesture), .activeChanged)
-    XCTAssertEqual(store.workspaces.map(\.name), ["b", "Orbe"])
+    XCTAssertEqual(store.workspaces.map(\.name), ["b", "Home"])
     XCTAssertEqual(store.removalBlocker(0), .lastRegularWorkspace)
     XCTAssertEqual(store.closeWorkspace(0, origin: .gesture), .invalid)
-    XCTAssertEqual(store.workspaces.map(\.name), ["b", "Orbe"], "消せないときは一覧を変えない")
+    XCTAssertEqual(store.workspaces.map(\.name), ["b", "Home"], "消せないときは一覧を変えない")
     XCTAssertEqual(store.originWorkspaceIndex, 0)
   }
 }

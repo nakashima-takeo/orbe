@@ -20,11 +20,11 @@ extension WindowController {
 
   /// 起動時の初回フロー。preferredLanguage 未設定なら言語選択を Onboarding の前段に出し、確定後に
   /// 既存 Onboarding へ進む。言語ゲートは Onboarding ゲート（導入済みフラグ ＋ 同梱プラグイン有無）とは独立。
-  /// Orbe の workspace のフォルダは雛形の言語が要るので、言語選択の確定時に用意する（選択済みなら init が用意済み）。
+  /// Home のフォルダは雛形の言語が要るので、言語選択の確定時に用意する（選択済みなら init が用意済み）。
   func showFirstRunFlow() {
     if AppStatePersistence.load()?.preferredLanguage == nil {
       showLanguageSelect { [weak self] in
-        self?.prepareOrbeWorkspaceFolder()
+        self?.prepareHomeFolder()
         self?.agentLauncher.showOnboardingIfNeeded()
       }
     } else {
@@ -113,14 +113,14 @@ extension WindowController {
         canClose: store.removalBlocker(entry.offset) == nil,
         live: entry.element.paletteLiveState())
     }
-    // Orbe の workspace を最上段、起源 workspace（配列で最初の通常 workspace）を 2 段目に MRU より優先して
+    // Home を最上段、起源 workspace（配列で最初の通常 workspace）を 2 段目に MRU より優先して
     // 固定する（改名しても位置は同じ）。残りは最近使った順（MRU）: lastUsedAt 降順、同時刻・未設定
     // （旧データは全 nil）は元 offset 昇順で安定化し作成順を保つ（sorted は安定保証なしのため offset を
     // タイブレークに使う）。休眠（dormant）は位置のまま行ごと減光する別軸信号——末尾固定はしない。
     let origin = store.originWorkspaceIndex
     let order = workspaces.enumerated().sorted { a, b in
-      let orbeA = store.isOrbeWorkspace(a.offset)
-      if orbeA != store.isOrbeWorkspace(b.offset) { return orbeA }
+      let homeA = store.isHome(a.offset)
+      if homeA != store.isHome(b.offset) { return homeA }
       if (a.offset == origin) != (b.offset == origin) { return a.offset == origin }
       let ta = a.element.lastUsedAt ?? .distantPast
       let tb = b.element.lastUsedAt ?? .distantPast

@@ -6,7 +6,7 @@ import XCTest
 /// 今すぐ受信・止める・消す。本物の `IntakeStore`・`IntakeRunner`・`TaskStore` を読み書きする（取得は始まっても終わらない）。
 ///
 /// 壊れると何が起きるか。↵ や ⌘⌫ が光っている行とは別の提案に当たる（タスクにした・捨てた直後や、裏の回が確定した直後）。
-/// タスクにした提案が Orbe の workspace に付かず、期限やリンクを失う。消えた受信の中身が残り、⌘⌫ が別の受信を消す。
+/// タスクにした提案が Home に付かず、期限やリンクを失う。消えた受信の中身が残り、⌘⌫ が別の受信を消す。
 /// 走っている受信の今すぐ受信が黙って無視される。
 @MainActor
 final class TaskPaletteIntakeModelTests: OrbeTestCase {
@@ -81,7 +81,7 @@ final class TaskPaletteIntakeModelTests: OrbeTestCase {
     XCTAssertEqual(task.title, "見積もりを山田さんに送る")
     XCTAssertEqual(task.status, .todo)
     XCTAssertEqual(task.due, TaskItem.DueDate("2025-10-10"))
-    XCTAssertEqual(task.workspace, TaskPaletteSamples.home, "Orbe の workspace に付く")
+    XCTAssertEqual(task.workspace, TaskPaletteSamples.home, "Home に付く")
     XCTAssertTrue(task.description.hasPrefix("https://example.slack.com/archives/D01-1\n\n"))
     XCTAssertEqual(palette.intake.store.proposals[0].state, .accepted(taskId: task.id))
     XCTAssertEqual(palette.intake.proposalIDs, [2, 3])

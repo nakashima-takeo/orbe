@@ -44,15 +44,15 @@ final class WorkspacePersistentIdTests: OrbeTestCase {
     XCTAssertNotEqual(loaded.workspaces[0].persistentId, kept)
   }
 
-  /// Orbe の workspace を指す値も同じく寛容に読む。読めなければ「無し」へ落ち、ファイル全体は失わない。
-  func testOrbeWorkspaceIdIsReadAndAnUnreadableOneFallsBackToNone() throws {
-    let orbe = UUID()
-    try write([workspace("alpha")], top: #","orbeWorkspaceId":"\#(orbe.uuidString)""#)
-    XCTAssertEqual(try XCTUnwrap(WorkspacePersistence.load()).orbeWorkspaceId, orbe)
+  /// Home を指す値も同じく寛容に読む。読めなければ「無し」へ落ち、ファイル全体は失わない。
+  func testHomeIdIsReadAndAnUnreadableOneFallsBackToNone() throws {
+    let home = UUID()
+    try write([workspace("alpha")], top: #","homeWorkspaceId":"\#(home.uuidString)""#)
+    XCTAssertEqual(try XCTUnwrap(WorkspacePersistence.load()).homeWorkspaceId, home)
 
-    try write([workspace("alpha")], top: #","orbeWorkspaceId":42"#)
+    try write([workspace("alpha")], top: #","homeWorkspaceId":42"#)
     let loaded = try XCTUnwrap(WorkspacePersistence.load(), "読めない値でもファイルは読める")
-    XCTAssertNil(loaded.orbeWorkspaceId)
+    XCTAssertNil(loaded.homeWorkspaceId)
     XCTAssertEqual(loaded.workspaces.map(\.name), ["alpha"])
   }
 }

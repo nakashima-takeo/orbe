@@ -6,7 +6,7 @@ import XCTest
 ///
 /// 契約は2つ。①アクティブ workspace を削除したら MRU（`lastUsedAt` 最大の他 workspace）を次のアクティブに
 /// する（作成順の隣ではない）。②背景 workspace を削除してもアクティブ workspace の同一性は保つ。
-/// 消せない workspace（Orbe の workspace・最後の通常 workspace）は `SessionStoreOrbeWorkspaceTests` が持つ。
+/// 消せない workspace（Home・最後の通常 workspace）は `SessionStoreHomeTests` が持つ。
 /// 併せて、アクティブ workspace の最後のタブを閉じても `removeTab` は退避せずその場で空を維持する
 /// （`.emptiedActive`）ことを固定する。
 /// Workspace は参照型のため、アクティブの同一性は index ではなくオブジェクト参照で照合する。

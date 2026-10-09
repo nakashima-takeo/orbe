@@ -122,9 +122,9 @@ final class WindowController: NSObject, NSWindowDelegate {
     hostingView.layoutSubtreeIfNeeded()
     wireChromeCallbacks()
 
-    // 言語が決まっていれば、復元が Orbe の workspace のタブを起こすより前にフォルダを用意する
+    // 言語が決まっていれば、復元が Home のタブを起こすより前にフォルダを用意する
     // （無いままだと、そのタブだけ秘書の場所の外で起きる）。初回は言語選択の確定を待つ（showFirstRunFlow）。
-    if AppStatePersistence.load()?.preferredLanguage != nil { prepareOrbeWorkspaceFolder() }
+    if AppStatePersistence.load()?.preferredLanguage != nil { prepareHomeFolder() }
     if let file = WorkspacePersistence.load() {
       restore(from: file)  // activateCurrent 経由で applyActiveWorkspaceConfig（外観＋gui.conf）が走る
     } else {
@@ -135,7 +135,7 @@ final class WindowController: NSObject, NSWindowDelegate {
       // 無いと、ユーザー ~/.config/ghostty の theme 指定が初回起動に限り勝ってしまう。
       applyActiveWorkspaceConfig()
     }
-    ensureOrbeWorkspace()  // 復元・新規のどちらの後にも 1 回（先に置くと復元の配列で上書きされる）
+    ensureHome()  // 復元・新規のどちらの後にも 1 回（先に置くと復元の配列で上書きされる）
     agentLauncher.appModel = model
     agentLauncher.localization = localization  // 起動パレット・オンボーディングの文言引き用
     configureAgentDefaults()

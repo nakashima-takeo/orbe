@@ -1,7 +1,7 @@
 import Foundation
 
-/// Orbe の workspace の root（`StateDir.base()/orbe-workspace/`）と、その用意。
-enum OrbeWorkspaceFolder {
+/// Home の root（`StateDir.base()/home/`）と、その用意。
+enum HomeFolder {
   /// テスト用にフォルダを差し替える（他の永続ファイルと同じく隔離ハーネスが張る）。
   nonisolated(unsafe) static var urlOverride: URL?
 
@@ -10,14 +10,14 @@ enum OrbeWorkspaceFolder {
 
   /// フォルダの場所。解決できなければ nil。フォルダの有無は問わない。
   static var url: URL? {
-    urlOverride ?? StateDir.base()?.appendingPathComponent("orbe-workspace", isDirectory: true)
+    urlOverride ?? StateDir.base()?.appendingPathComponent("home", isDirectory: true)
   }
 
   /// `language` で用意する。秘書への指示は Orbe が持つので毎回今の雛形へ書き直す。CLAUDE.md は人と AI の欄なので、
   /// フォルダを作るときに 1 回だけ置き、以後は中身を見ない。失敗はログに残し、次の起動で再挑戦する。
   static func prepare(language: Language) {
     guard let url else {
-      NSLog("[orbe-workspace] state dir unresolved, folder not prepared")
+      NSLog("[home] state dir unresolved, folder not prepared")
       return
     }
     create(url, language: language)
@@ -26,9 +26,9 @@ enum OrbeWorkspaceFolder {
       let rules = url.appendingPathComponent(rulesPath)
       try FileManager.default.createDirectory(
         at: rules.deletingLastPathComponent(), withIntermediateDirectories: true)
-      try OrbeWorkspaceTemplate.rules(language).write(to: rules, atomically: true, encoding: .utf8)
+      try HomeTemplate.rules(language).write(to: rules, atomically: true, encoding: .utf8)
     } catch {
-      NSLog("[orbe-workspace] rules not written: \(error)")
+      NSLog("[home] rules not written: \(error)")
     }
   }
 
@@ -45,12 +45,12 @@ enum OrbeWorkspaceFolder {
       defer { try? fm.removeItem(at: scratch) }
       let staged = scratch.appendingPathComponent(url.lastPathComponent, isDirectory: true)
       try fm.createDirectory(at: staged, withIntermediateDirectories: false)
-      try OrbeWorkspaceTemplate.claudeMd(language).write(
+      try HomeTemplate.claudeMd(language).write(
         to: staged.appendingPathComponent("CLAUDE.md"), atomically: false, encoding: .utf8)
       guard !fm.fileExists(atPath: url.path) else { return }
       try fm.moveItem(at: staged, to: url)
     } catch {
-      NSLog("[orbe-workspace] prepare failed: \(error)")
+      NSLog("[home] prepare failed: \(error)")
     }
   }
 }

@@ -39,7 +39,7 @@ enum TaskPaletteIntakeError: Equatable {
 @Observable final class TaskPaletteIntakeModel {
   let runner: IntakeRunner
   let tasks: TaskStore
-  /// 提案をタスクにすると付く workspace（開いた時点の Orbe の workspace）。
+  /// 提案をタスクにすると付く workspace（開いた時点の Home）。
   let home: UUID?
   let today: TaskItem.DueDate
   let timeZone: TimeZone
@@ -229,7 +229,7 @@ enum TaskPaletteIntakeError: Equatable {
 
   // MARK: - 提案をさばく
 
-  /// ↵。選んでいる提案を Orbe の workspace のタスクにする。判定の確定や下げと行き違っただけなら何も出さず、付け直しに任せる。
+  /// ↵。選んでいる提案を Home のタスクにする。判定の確定や下げと行き違っただけなら何も出さず、付け直しに任せる。
   func accept() {
     guard let proposal = selectedProposal else { return }
     error = nil

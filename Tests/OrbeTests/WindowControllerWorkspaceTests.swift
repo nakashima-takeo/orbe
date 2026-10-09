@@ -113,7 +113,7 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
       "壊れた JSON のときはクラッシュせず既定 workspace(default) で起動")
   }
 
-  /// workspace パレットが行を MRU（lastUsedAt 降順）で並べる。最上段の Orbe の workspace と 2 段目の起源の後は、
+  /// workspace パレットが行を MRU（lastUsedAt 降順）で並べる。最上段の Home と 2 段目の起源の後は、
   /// 永続 lastUsedAt の降順、nil（未使用）は最古で末尾。
   /// 並べ替えは host 側 reloadPalette が担うため、観測は model.workspacePalette.render.rows で行う。
   func testPaletteOrdersByMRU() throws {
@@ -138,14 +138,14 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
     let rows = try XCTUnwrap(wc.model.workspacePalette?.render.rows)
     let names = rows.dropLast().map(\.label)
     XCTAssertEqual(
-      names, ["Orbe", "alpha", "newer", "older", "never"],
-      "Orbe → 起源 → lastUsedAt 降順 → nil 末尾（MRU 並び）")
+      names, ["Home", "alpha", "newer", "older", "never"],
+      "Home → 起源 → lastUsedAt 降順 → nil 末尾（MRU 並び）")
   }
 
-  /// Orbe の workspace が最上段、起源 workspace（配列で最初の通常 workspace）が 2 段目に MRU より優先して固定される。
-  /// Orbe の workspace が配列先頭にあっても起源にはならず、起源を最近使わず（最古）他を新しく使っても 2 段目のまま。
+  /// Home が最上段、起源 workspace（配列で最初の通常 workspace）が 2 段目に MRU より優先して固定される。
+  /// Home が配列先頭にあっても起源にはならず、起源を最近使わず（最古）他を新しく使っても 2 段目のまま。
   /// 残りは MRU 順。
-  func testPalettePinsOrbeThenOriginWorkspace() throws {
+  func testPalettePinsHomeThenOriginWorkspace() throws {
     let t1 = Date(timeIntervalSinceReferenceDate: 1_000)
     let t2 = Date(timeIntervalSinceReferenceDate: 2_000)
     let t3 = Date(timeIntervalSinceReferenceDate: 3_000)
@@ -156,34 +156,34 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
         lastUsedAt: stamp)
     }
     // activeWorkspace=3（newer）が復元時 now 再刻印で最新。origin は最古 t1 だが固定で 2 段目。
-    let orbe = WorkspaceState(name: "Orbe", rootPath: "/", activeTab: 0, tabs: [])
+    let home = WorkspaceState(name: "Home", rootPath: "/", activeTab: 0, tabs: [])
     WorkspacePersistence.save(
       WorkspacesFile(
         version: WorkspacePersistence.version, activeWorkspace: 3,
         workspaces: [
-          orbe, state("origin", t1), state("older", t2), state("newer", t3),
-        ], orbeWorkspaceId: orbe.persistentId))
+          home, state("origin", t1), state("older", t2), state("newer", t3),
+        ], homeWorkspaceId: home.persistentId))
 
     let wc = WindowController()  // 上記をディスクから復元
     wc.showWorkspacePalette()
     let rows = try XCTUnwrap(wc.model.workspacePalette?.render.rows)
     let names = rows.dropLast().map(\.label)
     XCTAssertEqual(
-      names, ["Orbe", "origin", "newer", "older"],
-      "Orbe → 最初の通常 workspace（最古でも固定）→ 残りは MRU（now 再刻印の newer → older）")
+      names, ["Home", "origin", "newer", "older"],
+      "Home → 最初の通常 workspace（最古でも固定）→ 残りは MRU（now 再刻印の newer → older）")
   }
 
-  /// 新規の state では default（active・タブ 1 枚）と Orbe の workspace（0 タブ）の 2 つで起動し、パレットの行は
-  /// SessionStore の判断どおりに詳細メニューを出し分ける——Orbe の行は改名だけ、通常が 1 つだけの default は削除なし。
-  func testFreshLaunchHasDefaultAndOrbeWorkspaceWithPaletteActionsFromTheStore() throws {
+  /// 新規の state では default（active・タブ 1 枚）と Home（0 タブ）の 2 つで起動し、パレットの行は
+  /// SessionStore の判断どおりに詳細メニューを出し分ける——Home の行は改名だけ、通常が 1 つだけの default は削除なし。
+  func testFreshLaunchHasDefaultAndHomeWithPaletteActionsFromTheStore() throws {
     let wc = WindowController()
-    XCTAssertEqual(wc.workspaces.map(\.name), ["default", "Orbe"])
+    XCTAssertEqual(wc.workspaces.map(\.name), ["default", "Home"])
     XCTAssertEqual(wc.activeWorkspace, 0)
     XCTAssertEqual(wc.workspaces.map(\.tabs.count), [1, 0])
 
     wc.showWorkspacePalette()
     let items = try XCTUnwrap(wc.model.workspacePalette?.items)
-    XCTAssertEqual(items.map(\.name), ["Orbe", "default"])
+    XCTAssertEqual(items.map(\.name), ["Home", "default"])
     XCTAssertEqual(items.map(\.canSetDir), [false, true])
     XCTAssertEqual(items.map(\.canClose), [false, false])
 
@@ -193,6 +193,6 @@ final class WindowControllerWorkspaceTests: OrbeTestCase {
     let after = try XCTUnwrap(wc.model.workspacePalette?.items)
     XCTAssertEqual(
       Dictionary(uniqueKeysWithValues: after.map { ($0.name, $0.canClose) }),
-      ["Orbe": false, "default": true, "second": true], "通常が 2 つ以上なら default も消せる")
+      ["Home": false, "default": true, "second": true], "通常が 2 つ以上なら default も消せる")
   }
 }
