@@ -79,6 +79,23 @@ extension RootFilesTests {
     XCTAssertEqual(recorder.versionChanges, [files.version(of: url, at: .index)])
   }
 
+  /// 版の OID の一覧を git から取れなければ、まだ状態の無い版は「取れない」に決まって知らせが届く（関心を申告した者が、
+  /// 決まらない状態のまま待ち続けない）。
+  func testAVersionWhoseOIDsCannotBeListedIsSettledAsFailed() throws {
+    let index = repo.dir.appendingPathComponent(".git/index").path
+    try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: index)
+    addTeardownBlock {
+      try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: index)
+    }
+    let files = RootFiles(root: repo.root)
+    let recorder = Recorder()
+    let url = repo.url("a.txt")
+    files.addObserver(recorder, interest: url)
+    let version = try XCTUnwrap(files.version(of: url, at: .index))
+    pumpMain(until: { files.state(of: version) == .failed }, "取れないに決まる")
+    XCTAssertEqual(recorder.versionChanges, [version])
+  }
+
   /// 同じ OID の取得が上限の回数失敗すれば諦めて取り直さず（恒久失敗で毎バッチ回さない）、index が別の OID へ
   /// 動けばまた挑む。
   func testRepeatedBlobFailuresGiveUpUntilTheOIDChanges() throws {
