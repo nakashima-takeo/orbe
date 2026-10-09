@@ -80,7 +80,7 @@ extension GitRepo {
   }
 
   /// ステージ・破棄に含めるパスと、そのうち呼んだ時点の index に載っているもの。
-  struct Selection {
+  private struct Selection {
     let paths: [String]
     let indexed: Set<String>
   }
