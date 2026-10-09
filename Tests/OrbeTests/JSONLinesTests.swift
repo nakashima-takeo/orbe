@@ -59,9 +59,8 @@ final class JSONLinesTests: OrbeTestCase {
   func testCRLFLinesAreReadOneByOne() {
     let lines = JSONLines<Item>("{\"id\":1,\"title\":\"a\"}\r\n{\"id\":2,\"title\":\"b\"}\r\n")
 
-    XCTExpectFailure("String の split は \\r\\n を 1 文字として扱い、\\n で割れない（バグ疑い）") {
-      XCTAssertEqual(lines.items.map(\.id), [1, 2])
-    }
+    XCTAssertEqual(lines.items.map(\.id), [1, 2])
+    XCTAssertEqual(lines.rejected, [])
   }
 
   /// 上限で切れた出力の最後の行は、形に合っても受けない。

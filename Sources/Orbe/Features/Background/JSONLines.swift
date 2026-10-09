@@ -25,7 +25,8 @@ struct JSONLines<Item: Decodable> {
 
   /// `truncated` は出力が上限で切られたか。改行で終わっていない最後の行を、切れた行として捨てる。
   init(_ text: String, truncated: Bool = false, decoder: JSONDecoder = JSONDecoder()) {
-    var lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+    // CRLF は 1 つの Character なので、LF と並べて区切りに数える。
+    var lines = text.split(omittingEmptySubsequences: false) { $0 == "\n" || $0 == "\r\n" }
     let cutLine = truncated && lines.last?.isEmpty == false ? lines.count : nil
     if lines.last?.isEmpty == true { lines.removeLast() }
     var items: [Item] = []
