@@ -21,7 +21,7 @@ final class AgentShimChannelGateTests: OrbeTestCase {
   }
 
   private var work: URL!  // このテスト専用の作業ディレクトリ
-  private var pluginRoot: URL!  // 複製したプラグインルート（hooks/channel を置く先）
+  private var pluginRoot: URL!  // 複製したプラグインルート（channel を置く先）
   private var reportBin: URL!  // 引数と stdin を記録する fake orbe-report
   private var reportLog: URL!
 
@@ -42,10 +42,10 @@ final class AgentShimChannelGateTests: OrbeTestCase {
       [.posixPermissions: 0o755], ofItemAtPath: reportBin.path)
   }
 
-  /// `hooks/channel`（実体化時に Orbe が刻む bundle ID）を置く。
+  /// `channel`（実体化時に Orbe がプラグインのルートへ刻む bundle ID）を置く。
   private func writeChannel(_ bundleId: String) throws {
     try Data("\(bundleId)\n".utf8)
-      .write(to: pluginRoot.appendingPathComponent("hooks/channel"))
+      .write(to: pluginRoot.appendingPathComponent("channel"))
   }
 
   /// シムを実 `/bin/sh` で起こす。`relative` は agy 形式（cwd＝プラグインルートからの相対呼び）。

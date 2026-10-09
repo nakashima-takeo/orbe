@@ -1,6 +1,6 @@
 import Foundation
 
-/// `.app` 同梱の状態追跡プラグインを、検出された各 CLI へ
+/// `.app` 同梱のエージェントプラグイン（状態追跡 hooks と MCP サーバー）を、検出された各 CLI へ
 /// 同梱の `install.sh` 経由で導入する。導入機構は各 CLI のプラグイン機構に委ね、ユーザー設定
 /// ファイルは直接書き換えない。`install.sh` が CLI ごとに出す 1 行を Event として流す。
 enum AgentPluginInstaller {
@@ -62,15 +62,15 @@ enum AgentPluginInstaller {
       .appendingPathComponent("agent-plugin.tmp-\(UUID().uuidString)", isDirectory: true)
     do {
       try fm.copyItem(at: src, to: tmp)
-      // 自分のチャネル（bundle ID）をシムの隣へ刻む。シムがこれとタブの ORBE_BUNDLE_ID を
-      // 突き合わせ、他チャネルの Orbe から来た呼び出しを落とす。差し替えの前に書くので、
-      // 実体化先が channel を持たない瞬間は生じない。
+      // 自分のチャネル（bundle ID）をプラグインのルートへ刻む。状態追跡と MCP の両シムがこれと
+      // タブの ORBE_BUNDLE_ID を突き合わせ、他チャネルの Orbe から来た呼び出しを通さない。
+      // 差し替えの前に書くので、実体化先が channel を持たない瞬間は生じない。
       guard let name = pluginName(in: tmp) else {
         try? fm.removeItem(at: tmp)
         return nil
       }
       try Data("\(StateDir.bundleId)\n".utf8).write(
-        to: tmp.appendingPathComponent("plugins/\(name)/hooks/channel"))
+        to: tmp.appendingPathComponent("plugins/\(name)/channel"))
       if fm.fileExists(atPath: dst.path) {
         _ = try fm.replaceItemAt(dst, withItemAt: tmp)
       } else {

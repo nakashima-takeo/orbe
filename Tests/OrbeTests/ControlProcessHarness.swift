@@ -63,6 +63,28 @@ final class ControlProcess {
     return resources
   }
 
+  /// リポジトリ実体のプラグインパッケージ。このファイル: <repo>/Tests/OrbeTests/...swift → 3 階層上が repo root。
+  private static let sourcePluginPackage = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent()  // OrbeTests
+    .deletingLastPathComponent()  // Tests
+    .deletingLastPathComponent()  // repo root
+    .appendingPathComponent("app/agent-plugin")
+
+  /// 同梱物レイアウトへプラグインを実体化し、プラグインのルートを返す。
+  /// `channel` は `materializeStablePlugin()` がプラグインのルートへ書くのと同じ 1 行（自分の bundle ID）。
+  static func stagePlugin() throws -> URL {
+    let resources = try XCTUnwrap(BundledResources.root, "同梱物の探索根がステージされていない")
+    let package = resources.appendingPathComponent("agent-plugin", isDirectory: true)
+    try? FileManager.default.removeItem(at: package)
+    // copyItem は POSIX permission を保つ（実体化と同じ性質）。
+    try FileManager.default.copyItem(at: sourcePluginPackage, to: package)
+    let name = try XCTUnwrap(
+      AgentPluginInstaller.pluginName(in: package), "プラグイン名を読めない（パッケージが壊れている）")
+    let root = package.appendingPathComponent("plugins/\(name)", isDirectory: true)
+    try Data("\(StateDir.bundleId)\n".utf8).write(to: root.appendingPathComponent("channel"))
+    return root
+  }
+
   private static func stage(_ source: URL, as destination: URL) throws {
     try? FileManager.default.removeItem(at: destination)
     try FileManager.default.createSymbolicLink(at: destination, withDestinationURL: source)
