@@ -48,9 +48,9 @@ protocol ControlTarget: ControlTaskTarget {
   func controlCreateWorkspace(name: String, rootPath: String?) -> Result<Any, ControlError>
   /// workspace を改名する（id 未発見 -32004・name 空 -32602）。
   func controlRenameWorkspace(workspaceId: Int, name: String) -> Result<Any, ControlError>
-  /// workspace の rootPath を変更する（id 未発見 -32004・rootPath 空 -32602）。
+  /// workspace の rootPath を変更する（id 未発見 -32004・Orbe の workspace -32000・rootPath 空 -32602）。
   func controlSetWorkspaceRoot(workspaceId: Int, rootPath: String) -> Result<Any, ControlError>
-  /// workspace を削除する（id 未発見 -32004・最後の 1 つは削除不可 -32000）。
+  /// workspace を削除する（id 未発見 -32004・Orbe の workspace と最後の通常 workspace は削除不可 -32000）。
   func controlRemoveWorkspace(workspaceId: Int) -> Result<Any, ControlError>
   /// 閉じたセッションを休眠チケットとして戻す（restore_sessions）。id ごとの status
   /// （restored / already-present / unknown）を返す。窓は onWindow が保証する。

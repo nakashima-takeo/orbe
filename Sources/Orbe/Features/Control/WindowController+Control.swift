@@ -316,7 +316,8 @@ extension WindowController: ControlTarget {
     case .orbeWorkspace:
       return .failure(ControlError(code: -32000, message: "cannot remove the Orbe workspace"))
     case .lastRegularWorkspace:
-      return .failure(ControlError(code: -32000, message: "cannot remove last workspace"))
+      return .failure(
+        ControlError(code: -32000, message: "cannot remove the last regular workspace"))
     case nil:
       break
     }
