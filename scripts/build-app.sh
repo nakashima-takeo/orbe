@@ -133,7 +133,7 @@ mkdir -p "$APP/Contents/Resources/ghostty/themes"
 cp "$ROOT/app/themes/OrbeDark"  "$APP/Contents/Resources/ghostty/themes/OrbeDark"   # Orbe 自前 named theme（dark）
 cp "$ROOT/app/themes/OrbeLight" "$APP/Contents/Resources/ghostty/themes/OrbeLight"  # Orbe 自前 named theme（light）
 cp -R "$GHOSTTYKIT/share/terminfo" "$APP/Contents/Resources/terminfo"
-cp -R "$ROOT/app/agent-plugin" "$APP/Contents/Resources/agent-plugin"  # エージェント状態追跡プラグイン（各 CLI へ自動導入する配布物）
+cp -R "$ROOT/app/agent-plugin" "$APP/Contents/Resources/agent-plugin"  # エージェントプラグイン（各 CLI へ自動導入する配布物）
 # プラグイン名（marketplace 名＝plugin 名＝MCP サーバー名＝plugins/<name>/ のディレクトリ名）を dev チャネルだけ焼き直す。
 # claude / codex / agy はどれも名前で 1 枠を取るため、名前を分けないと dev と release が枠を奪い合う
 # （agy は marketplace を持たず plugin.json の name だけで枠とステージ先が決まる）。1 つの名前を

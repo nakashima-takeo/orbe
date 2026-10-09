@@ -8,7 +8,8 @@ import XCTest
 /// つながり、呼び出し元のタブとして扱われるまで。
 ///
 /// サーバーは codex の MCP 定義（`.codex-plugin/plugin.json`）どおりに起こす。codex は MCP サーバーへ
-/// 親の環境を渡さず、定義が名指しした変数だけを通す——3 CLI で最も狭いので、これで足りれば他の CLI でも足りる。
+/// 親の環境のうち既定の数個（`HOME`・`PATH` など）と定義が名指しした変数しか渡さない——3 CLI で最も狭いので、
+/// これで足りれば他の CLI でも足りる。
 ///
 /// 区間ごとの検証は別に在る（シムのチャネル判定と空サーバーは `AgentMcpShimTests`、ブリッジが
 /// `ORBE_TAB` を呼び出し元に添えることは `OrbeMcpTaskProcessTests`）。
