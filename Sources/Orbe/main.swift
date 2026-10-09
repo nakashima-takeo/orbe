@@ -19,7 +19,8 @@ let inheritedSessionMarkers = [
   "CLAUDE_EFFORT",
   "AI_AGENT",
 ]
-for key in inheritedSessionMarkers {
+// 親の Orbe がタブへ注入した印も同じく外す（`OrbeRuntimeEnv.markerNames`）。
+for key in inheritedSessionMarkers + OrbeRuntimeEnv.markerNames {
   unsetenv(key)
 }
 
