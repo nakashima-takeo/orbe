@@ -262,6 +262,21 @@ final class IntakeRunnerTests: OrbeTestCase {
     XCTAssertEqual(jobs.calls.count, 1)
   }
 
+  /// 取得役の agent は、最終応答の行を項目として読み、新しい項目を判定へ回す。
+  func testAgentFetchReadsItemsFromItsReply() throws {
+    var definition = IntakeStoreTests.definition()
+    definition.fetch = .agent(
+      IntakeAgentFetch(
+        cli: "claude", model: "haiku", tools: ["mcp__slack__search"], request: "自分宛の DM"))
+    let intake = try create(definition)
+    try runner.runNow(intake.id)
+
+    jobs.finish(0, replied(line("a")))
+
+    guard jobs.calls.count == 2 else { return XCTFail("取れた項目を判定に回す: \(jobs.calls.count)") }
+    XCTAssertTrue(prompt(1).contains(#""id":"a""#))
+  }
+
   // MARK: - 起動
 
   /// 起動時に、保存された受信を最後に回った時刻から数えて載せ直す。過ぎていれば 1 回だけすぐ回る。
