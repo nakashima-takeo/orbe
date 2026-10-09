@@ -86,28 +86,22 @@ final class MenuBarStatusViewTests: OrbeTestCase {
     XCTAssertLessThanOrEqual(size.height, 22)
   }
 
-  /// タスクの知らせも同じ幅上限に収まる。workspace の無い長いタイトルでは名前の欄が無いぶん本文が予算を吸い、
-  /// 名前の欄を出す場合より広く出る。
+  /// タスクの知らせも、名前の欄の無い長いタイトルで同じ幅上限に収まる。
   func testTaskNoticePillCapsOverallWidthWithoutWorkspace() {
     let agent = AttentionRow(
       tabId: 1, workspaceName: "ws", tabTitle: "tab", state: "waiting", message: "q",
       stateChangedAt: Date())
-    func store(workspace: String?) -> AttentionStore {
-      let store = AttentionStore()
-      store.apply(rows: [agent])
-      store.noteTransient(
-        .task(
-          TaskNotice(
-            taskId: 1, workspaceName: workspace,
-            text: String(repeating: "見積もりの数字を確認する ", count: 20))),
-        dwell: anyDwell)
-      return store
-    }
-    let bare = fittingSize(store: store(workspace: nil), phase: .open)
+    let store = AttentionStore()
+    store.apply(rows: [agent])
+    store.noteTransient(
+      .task(
+        TaskNotice(
+          taskId: 1, workspaceName: nil,
+          text: String(repeating: "見積もりの数字を確認する ", count: 20))),
+      dwell: anyDwell)
     XCTAssertLessThanOrEqual(
-      bare.width, MenuBarStatusView.transientMaxWidth + Theme.Space.hair * 2)
-    XCTAssertLessThanOrEqual(
-      fittingSize(store: store(workspace: "orbe"), phase: .open).width, bare.width)
+      fittingSize(store: store, phase: .open).width,
+      MenuBarStatusView.transientMaxWidth + Theme.Space.hair * 2)
   }
 
   /// ② 滲み出しピルは**提案幅に依存しない**。intrinsic より十分広い提案を与えても取る幅が

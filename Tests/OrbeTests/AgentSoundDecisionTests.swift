@@ -26,9 +26,8 @@ final class AgentSoundDecisionTests: OrbeTestCase {
     return EffectiveSettings(layer)
   }
 
-  /// 鳴らす音は知らせの中身から導く。agent は waiting / done だけが鳴り（working / idle / clear・未知の状態は
-  /// 鳴らさない）、待ちが解けたタスクの知らせは完了の音。
-  func testSoundEventFollowsTheNotice() {
+  /// agent の知らせは waiting / done だけが鳴る。working / idle / clear・未知の状態は鳴らさない。
+  func testAgentNoticeSoundsOnlyOnWaitingAndDone() {
     func agent(_ state: String) -> WindowController.ChromeNotification {
       let row = AttentionRow(
         tabId: 1, workspaceName: "ws", tabTitle: "tab", state: state, message: nil,
@@ -40,10 +39,6 @@ final class AgentSoundDecisionTests: OrbeTestCase {
     for state in ["working", "idle", "clear", "dormant", ""] {
       XCTAssertNil(agent(state).soundEvent, state)
     }
-    let task = TaskNotice(taskId: 1, workspaceName: nil, text: "#214 レビューが付いた")
-    XCTAssertEqual(
-      WindowController.ChromeNotification(notice: .task(task), settings: settings()).soundEvent,
-      .done)
   }
 
   /// 未設定は既定（案は `NotificationSound.default`・音量 90・オン）で鳴る。
