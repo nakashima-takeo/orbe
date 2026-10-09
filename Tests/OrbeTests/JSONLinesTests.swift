@@ -55,6 +55,15 @@ final class JSONLinesTests: OrbeTestCase {
       ], "空行は項目にも捨てた行にもならないが、行番号は数える")
   }
 
+  /// 改行が CRLF でも 1 行 1 件として読む（JSON Lines は値の前後の空白を無視するので、`\r\n` も行の区切り）。
+  func testCRLFLinesAreReadOneByOne() {
+    let lines = JSONLines<Item>("{\"id\":1,\"title\":\"a\"}\r\n{\"id\":2,\"title\":\"b\"}\r\n")
+
+    XCTExpectFailure("String の split は \\r\\n を 1 文字として扱い、\\n で割れない（バグ疑い）") {
+      XCTAssertEqual(lines.items.map(\.id), [1, 2])
+    }
+  }
+
   /// 上限で切れた出力の最後の行は、形に合っても受けない。
   func testLastLineOfTruncatedOutputIsRejected() {
     let lines = JSONLines<Item>(
