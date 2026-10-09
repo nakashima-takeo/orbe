@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 import XCTest
 
 @testable import Orbe
@@ -317,6 +318,40 @@ final class BackgroundSchedulerTests: OrbeTestCase {
     XCTAssertEqual(recorder.stopped, 1, "登録し直しは走っている回を止める")
     XCTAssertEqual(again.finishes.count, 0)
     XCTAssertEqual(armed?.date, start.addingTimeInterval(30))
+  }
+
+  // MARK: - 観測
+
+  /// 走っているかを読んだ側に、変化が届くか（届いたら true）。
+  @MainActor private func runningChanges(_ id: String = "s", _ change: () throws -> Void) rethrows
+    -> Bool
+  {
+    var changed = false
+    withObservationTracking {
+      _ = scheduler.isRunning(id: id)
+    } onChange: {
+      changed = true
+    }
+    try change()
+    return changed
+  }
+
+  /// 画面の「受信中…」は走っているかを観測して描く。今すぐ・予定で始まる・終わる・外して止めるのどれでも変化が届き、
+  /// 数え直しや予約の張り直し（いつの差し替え）だけでは届かない。
+  ///
+  /// 壊れると何が起きるか。受信中…が出ない・終わっても消えない。予約を張り直すたびに画面が無駄に描き直される。
+  @MainActor func testRunningIsObservableAndRecountsAreNot() throws {
+    let recorder = try registerStart()
+
+    XCTAssertTrue(runningChanges { scheduler.runNow(id: "s") }, "今すぐで始まる")
+    XCTAssertTrue(runningChanges { recorder.finishes[0](now) }, "終わる")
+    XCTAssertTrue(runningChanges { advance(to: armed!.date) }, "予定で始まる")
+    XCTAssertFalse(
+      try runningChanges { try scheduler.retime(id: "s", timing: .every(300)) },
+      "走っている間の差し替えは、走っているかを変えない")
+    XCTAssertFalse(runningChanges { scheduler.recount() }, "数え直しだけでは届かない")
+    XCTAssertTrue(runningChanges { scheduler.remove(id: "s") }, "外して止める")
+    XCTAssertFalse(scheduler.isRunning(id: "s"))
   }
 }
 

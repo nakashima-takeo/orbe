@@ -237,6 +237,9 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.tab, .github)
 
     press(Key.tab, "\u{19}", .shift, to: window)
+    XCTAssertEqual(model.tab, .intake, "3 つのタブを巡る")
+
+    press(Key.tab, "\u{19}", .shift, to: window)
     type("x", into: window)
     XCTAssertEqual(model.tab, .tasks)
     XCTAssertEqual(model.query, "x", "焦点は入力欄に残り、続けて打てる")

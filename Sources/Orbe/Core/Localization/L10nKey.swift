@@ -337,6 +337,53 @@ enum L10nKey: String, CaseIterable, Sendable {
   case waitContinueOutput
   case waitContinueExpired
 
+  // MARK: - タスク画面の受信タブ
+  case taskPaletteTabIntake
+  case taskPaletteIntakePlaceholder
+  case taskPaletteIntakeAskSecretary
+  case taskPaletteIntakeNext
+  case taskPaletteIntakePaused
+  case taskPaletteIntakeRunning
+  case taskPaletteIntakeNoProposals
+  case taskPaletteIntakeLastFailed
+  case taskPaletteIntakeContents
+  case taskPaletteIntakeRunAt
+  case taskPaletteIntakeFetched
+  case taskPaletteIntakeJudged
+  case taskPaletteIntakeProposedShort
+  case taskPaletteIntakeProposedLong
+  case taskPaletteIntakeNothingNew
+  case taskPaletteIntakeFailed
+  case taskPaletteIntakeNeverRan
+  case taskPaletteIntakeEmpty
+  case taskPaletteIntakeOpenLink
+  case taskPaletteIntakeAsTask
+  case taskPaletteIntakeDue
+  case taskPaletteIntakeDismiss
+  case taskPaletteIntakeActionAccept
+  case taskPaletteIntakeActionProposals
+  case taskPaletteIntakeActionRunNow
+  case taskPaletteIntakeHintShelf
+  case taskPaletteIntakeHintPick
+  case taskPaletteIntakeHintBack
+  case taskPaletteIntakeFetch
+  case taskPaletteIntakeJudge
+  case taskPaletteIntakeLast
+  case taskPaletteIntakeOverlaps
+  case taskPaletteIntakeAgentFetch
+  case taskPaletteIntakeCommandFetch
+  case taskPaletteIntakeTools
+  case taskPaletteIntakeDirectory
+  case taskPaletteIntakeEvery
+  case taskPaletteIntakeDaily
+  case taskPaletteIntakeOverlapCount
+  case taskPaletteIntakeRewriteNote
+  case taskPaletteIntakeRunNow
+  case taskPaletteIntakePause
+  case taskPaletteIntakeResume
+  case taskPaletteIntakeErrAccept
+  case taskPaletteIntakeErrRunning
+
   // MARK: - Onboarding
   case onboardingBegin
   case onboardingDetecting

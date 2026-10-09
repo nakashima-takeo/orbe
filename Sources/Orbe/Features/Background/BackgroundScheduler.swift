@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 
 /// 予定の番人。次の時刻を数え、時刻が来た予定の 1 回を始める。保存は持たない——使い手が自分の保存先から登録し、
 /// 結果を受けて「最後に走った時刻」を自分で保存する。共有の資源（同時数・終了時の回収）は実行の係が持つので、
@@ -15,7 +16,10 @@ import AppKit
 ///   止めた回は保存上「まだ走っていない」になり、番人の記憶と食い違わない）。
 /// - 期限が来たら走っている回を止め（結果は返さない）、「期限が来た」を 1 度だけ返して予定を外す。
 /// - いつを持たない予定は「今すぐ」でだけ走る。
-final class BackgroundScheduler {
+///
+/// 観測できるのは予定の有無と、各予定が走っているかだけ（画面が「受信中…」を描く）。時計・予約・数え直しの印は
+/// 観測に乗せない——乗せると、予約の張り直しのたびに無関係な描き直しが走る。
+@Observable final class BackgroundScheduler {
   enum Event: Equatable {
     case ran(BackgroundRunResult)
     case expired
@@ -25,18 +29,19 @@ final class BackgroundScheduler {
   /// 1 回を始め、止める手を返す。終わったら `finish` に数え始め（その回の開始時刻）を渡す。
   typealias Start = (_ finish: @escaping (Date) -> Void) -> BackgroundRunHandle
 
-  var now: () -> Date = Date.init
-  var calendar: () -> Calendar = { Calendar.current }
+  @ObservationIgnored var now: () -> Date = Date.init
+  @ObservationIgnored var calendar: () -> Calendar = { Calendar.current }
   /// 壁時計の時刻に 1 度だけ発火する予約を張り、取り消す手を返す。
-  var arm: (Date, @escaping () -> Void) -> () -> Void = BackgroundScheduler.wallTimer
+  @ObservationIgnored var arm: (Date, @escaping () -> Void) -> () -> Void =
+    BackgroundScheduler.wallTimer
 
   private let run: Run
   private var entries: [String: Entry] = [:]
-  private var nextToken = 0
-  private var disarm: (() -> Void)?
-  private var recounting = false
-  private var recountAgain = false
-  private var observers: [(NotificationCenter, NSObjectProtocol)] = []
+  @ObservationIgnored private var nextToken = 0
+  @ObservationIgnored private var disarm: (() -> Void)?
+  @ObservationIgnored private var recounting = false
+  @ObservationIgnored private var recountAgain = false
+  @ObservationIgnored private var observers: [(NotificationCenter, NSObjectProtocol)] = []
 
   init(run: @escaping Run = { BackgroundRuns.shared.run($0, completion: $1) }) {
     self.run = run
@@ -211,17 +216,17 @@ final class BackgroundScheduler {
   }
 
   /// 番人の中での始め方。終わりの知らせは、数え直しより先に使い手へ渡す知らせを添える。
-  private typealias EntryStart = (_ finish: @escaping (Date, () -> Void) -> Void) ->
+  fileprivate typealias EntryStart = (_ finish: @escaping (Date, () -> Void) -> Void) ->
     BackgroundRunHandle
 
-  private final class Entry {
-    var timing: BackgroundTiming?
+  @Observable fileprivate final class Entry {
+    @ObservationIgnored var timing: BackgroundTiming?
     let deadline: Date?
-    var anchor: Date
+    @ObservationIgnored var anchor: Date
     let start: EntryStart
     let onExpire: () -> Void
     var runToken: Int?
-    var handle: BackgroundRunHandle?
+    @ObservationIgnored var handle: BackgroundRunHandle?
 
     init(
       timing: BackgroundTiming?, deadline: Date?, anchor: Date, start: @escaping EntryStart,

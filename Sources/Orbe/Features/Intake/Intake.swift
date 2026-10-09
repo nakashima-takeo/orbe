@@ -162,6 +162,8 @@ struct IntakeRejections: Codable, Equatable {
 enum IntakeError: Error, Equatable {
   case intakeNotFound(Int)
   case proposalNotFound(Int)
+  /// 人の判断待ちでない提案をさばこうとした（判定の確定や、別の口のさばきと行き違った）。
+  case proposalNotOpen(Int)
   /// 値か組み合わせが不変条件に反する。
   case invalid(String)
   /// 走っている回がある。

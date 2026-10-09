@@ -8,6 +8,8 @@ import Foundation
 enum TaskPaletteSamples {
   static let opened = TaskPaletteWorkspaces.Entry(id: UUID(), name: "orbe")
   static let other = TaskPaletteWorkspaces.Entry(id: UUID(), name: "web-app")
+  /// Orbe の workspace（受信の提案をタスクにすると付く）。
+  static let home = UUID()
   /// 開いた workspace の root。
   static let root = "/work/orbe"
 
@@ -27,7 +29,7 @@ enum TaskPaletteSamples {
   static func model(
     _ tasks: [TaskItem], githubItems: GitHubItemCache = GitHubItemCache(fetch: { _, _ in }),
     openLists: GitHubOpenLists? = nil, agents: WorktreeAgentActivity = WorktreeAgentActivity(),
-    sessionTabs: AgentSessionTabs = AgentSessionTabs()
+    sessionTabs: AgentSessionTabs = AgentSessionTabs(), intakes: IntakeRunner? = nil
   ) -> TaskPaletteModel {
     let file = TasksFile(
       version: TaskPersistence.version, nextId: (tasks.map(\.id).max() ?? 0) + 1, tasks: tasks)
@@ -35,7 +37,8 @@ enum TaskPaletteSamples {
       store: TaskStore(file: file), githubItems: githubItems, viewer: githubItems.viewer,
       openLists: openLists ?? GitHubOpenLists(source: .idle, viewer: githubItems.viewer),
       root: root, agents: agents, sessionTabs: sessionTabs,
-      workspaces: TaskPaletteWorkspaces(opened: opened, all: [opened, other]),
+      intakes: intakes ?? DesignSceneFixtures.intakeRunner(nil),
+      workspaces: TaskPaletteWorkspaces(opened: opened, all: [opened, other], home: home),
       now: DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone)
   }
 

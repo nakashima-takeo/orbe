@@ -1,17 +1,13 @@
 import Foundation
 import Observation
 
-/// ヘッダーのタブ。
-enum TaskPaletteTab: Equatable {
-  case tasks, github
-}
-
 /// ⌘⇧X タスク画面の状態（@Observable）。タスクの値は写さずストア（唯一の正）を直接読み書きし、GitHub の値も
 /// 写さず置き場（結び付いた項目は `GitHubItemCache`、open 一覧は `GitHubOpenLists`、自分は `GitHubViewer`）
 /// から、agent の状態も写さず窓の索引（`WorktreeAgentActivity`・`AgentSessionTabs`）から引く。ここは一覧ごとの状態（入力・選択・
 /// 送り先）・範囲・タブ・絞り込み・焦点・編集中の下書き・右の欄の値・行の掴みだけを持つ。一覧の行は
 /// `TaskPaletteRows` と `TaskPaletteGitHubRows` が毎回組む。
 /// 列か一覧が変わったとき（agent の変更を含む）は `reconcile()` 1 本で選択・焦点・下書き・掴みを付け直す。
+/// 受信タブの状態と手続きは `intake` が持ち、見えているタブが受信のときだけ、入力・キー・焦点をそこへ振り分ける。
 @Observable final class TaskPaletteModel {
   let store: TaskStore
   let githubItems: GitHubItemCache
@@ -24,6 +20,7 @@ enum TaskPaletteTab: Equatable {
   /// 会話ごとのタブ（待ちの条件の会話の行）。
   let sessionTabs: AgentSessionTabs
   let workspaces: TaskPaletteWorkspaces
+  let intake: TaskPaletteIntakeModel
   let today: TaskItem.DueDate
   /// 時刻を暦日へ落とすためのタイムゾーン。
   let timeZone: TimeZone
@@ -39,18 +36,6 @@ enum TaskPaletteTab: Equatable {
     didSet { resetPaneIfMoved(to: tabGitHubList.selectedID) }
   }
 
-  /// ヘッダーの入力（今見えている一覧の絞り込み。タスクのタブでは追加するタイトルも兼ねる）。
-  var query: String {
-    get { visibleTab == .tasks ? taskList.query : gitHubList.query }
-    set {
-      guard newValue != query else { return }
-      switch visibleTab {
-      case .tasks: taskList.query = newValue
-      case .github: gitHubList.query = newValue
-      }
-      queryChanged()
-    }
-  }
   private(set) var scope: TaskPaletteScope = .all
   /// 保存したタブ。今見えているタブは `visibleTab`。
   private(set) var tab: TaskPaletteTab = .tasks
@@ -100,8 +85,8 @@ enum TaskPaletteTab: Equatable {
   init(
     store: TaskStore, githubItems: GitHubItemCache, viewer: GitHubViewer,
     openLists: GitHubOpenLists, root: String, agents: WorktreeAgentActivity,
-    sessionTabs: AgentSessionTabs = AgentSessionTabs(), workspaces: TaskPaletteWorkspaces,
-    now: Date, timeZone: TimeZone
+    sessionTabs: AgentSessionTabs = AgentSessionTabs(), intakes: IntakeRunner,
+    workspaces: TaskPaletteWorkspaces, now: Date, timeZone: TimeZone
   ) {
     self.store = store
     self.githubItems = githubItems
@@ -112,19 +97,14 @@ enum TaskPaletteTab: Equatable {
     self.sessionTabs = sessionTabs
     self.workspaces = workspaces
     self.timeZone = timeZone
-    today = .today(now, timeZone: timeZone)
+    let today = TaskItem.DueDate.today(now, timeZone: timeZone)
+    self.today = today
+    intake = TaskPaletteIntakeModel(
+      runner: intakes, tasks: store, home: workspaces.home, today: today, timeZone: timeZone)
+    intake.onPlaceChange = { [weak self] in self?.focus() }
+    intake.onOpenURL = { [weak self] in self?.onOpenURL($0) }
     reconcile()
     githubItems.refresh(visibleLinkIDs)
-  }
-
-  /// 今見えているタブ。選ぶ状態ならその方向で、無ければ保存したタブ。行・キー・フッター・本体の切り替えは
-  /// すべてこれを見る。
-  var visibleTab: TaskPaletteTab {
-    switch pick {
-    case .task: .tasks
-    case .item: .github
-    case nil: tab
-    }
   }
 
   /// タスクのタブの行（見えていなくても組む——タブを行き来しても選んだ行が残るよう、付け直しは自分の行で行う）。
@@ -198,6 +178,7 @@ enum TaskPaletteTab: Equatable {
   }
 
   var focusTarget: TaskPaletteFocusTarget {
+    if visibleTab == .intake { return intake.place == .proposals ? .field : .card }
     switch draft?.target {
     case .task(_, let field): return .edit(field)
     case .paneDue: return .paneDue
@@ -209,17 +190,6 @@ enum TaskPaletteTab: Equatable {
   var draftText: String {
     get { draft?.text ?? "" }
     set { draft?.text = newValue }
-  }
-
-  /// 実マウス移動（`MouseMovedDetector`）が `.pointer` へ落とす。
-  var inputModality: InputModality {
-    get { visibleTab == .tasks ? taskList.modality : gitHubList.modality }
-    set {
-      switch visibleTab {
-      case .tasks: taskList.modality = newValue
-      case .github: gitHubList.modality = newValue
-      }
-    }
   }
 
   func focus() { focusToken &+= 1 }
@@ -263,6 +233,7 @@ enum TaskPaletteTab: Equatable {
     switch visibleTab {
     case .tasks: taskList.move(direction, in: selectableIDs)
     case .github: gitHubList.move(direction, in: gitHubSelectableIDs)
+    case .intake: intake.moveProposal(direction)
     }
   }
 
@@ -272,6 +243,7 @@ enum TaskPaletteTab: Equatable {
     switch visibleTab {
     case .tasks: taskList.jump(direction, in: selectableIDs)
     case .github: gitHubList.jump(direction, in: gitHubSelectableIDs)
+    case .intake: intake.jumpProposal(direction)
     }
   }
 
@@ -294,20 +266,11 @@ enum TaskPaletteTab: Equatable {
     taskList.hoverSelect(id, in: selectableIDs)
   }
 
-  /// 入力が変わったら、先頭の行（タスクのタブで入力があれば追加の行）を選ぶ。
-  private func queryChanged() {
-    error = nil
-    switch visibleTab {
-    case .tasks: taskList.selectFirst(in: selectableIDs)
-    case .github: gitHubList.selectFirst(in: gitHubSelectableIDs)
-    }
-    discardStaleDrag()
-  }
-
   /// ↵。選んでいる行の操作（タスクのタブは追加 / 完了 ⇄ 未着手 / 完了の欄の開閉、GitHub タブは
-  /// `submitGitHub`、選ぶ状態は `confirmPick`）。
+  /// `submitGitHub`、受信タブはタスクにする、選ぶ状態は `confirmPick`）。
   func submit() {
     guard pick == nil else { return confirmPick() }
+    if visibleTab == .intake { return intake.accept() }
     guard visibleTab == .tasks else { return submitGitHub() }
     switch selectedID {
     case .add: addFromQuery()
@@ -349,18 +312,19 @@ enum TaskPaletteTab: Equatable {
     toggleScope()
   }
 
-  /// ⇧⇥・タブのクリック。選ぶ状態の間は切り替えない。
+  /// ⇧⇥。次のタブへ巡る。
   func toggleTab() {
-    guard pick == nil else { return }
-    leaveEditingForAction()
-    area = .list
-    tab = tab == .tasks ? .github : .tasks
-    reconcile()
+    setTab(tab.next)
   }
 
+  /// タブのクリック。選ぶ状態の間は切り替えない。
   func setTab(_ tab: TaskPaletteTab) {
-    guard tab != self.tab else { return }
-    toggleTab()
+    guard pick == nil, tab != self.tab else { return }
+    leaveEditingForAction()
+    area = .list
+    self.tab = tab
+    reconcile()
+    focus()
   }
 
   /// 結び付いている行の ↵。タスクのタブへ移り、そのタスクを選ぶ。範囲・入力・完了の欄で隠れていれば、
@@ -395,6 +359,7 @@ enum TaskPaletteTab: Equatable {
     switch visibleTab {
     case .tasks: taskList.follow()
     case .github: gitHubList.follow()
+    case .intake: break
     }
   }
 }

@@ -15,12 +15,13 @@ extension DesignSceneFixtures {
     taskCalendar.date(from: DateComponents(year: 2025, month: 10, day: 4, hour: 10))!
   }
 
+  /// 開いたのは orbe。末尾が Orbe の workspace（受信の提案をタスクにすると付く）。
   static let taskWorkspaces: TaskPaletteWorkspaces = {
-    let ids = (0..<3).map { _ in UUID() }
-    let all = zip(ids, ["orbe", "web-app", "api"]).map {
+    let ids = (0..<4).map { _ in UUID() }
+    let all = zip(ids, ["orbe", "web-app", "api", "Orbe"]).map {
       TaskPaletteWorkspaces.Entry(id: $0, name: $1)
     }
-    return TaskPaletteWorkspaces(opened: all[0], all: all)
+    return TaskPaletteWorkspaces(opened: all[0], all: all, home: all[3].id)
   }()
 
   /// 見本の 11 件（進行中 4・未着手 7）と完了 3 件。
@@ -189,13 +190,14 @@ extension DesignSceneFixtures {
 
   static func taskPaletteModel(
     _ file: TasksFile? = nil, openLists: ((GitHubViewer) -> GitHubOpenLists)? = nil,
-    sessionTabs: AgentSessionTabs = AgentSessionTabs()
+    sessionTabs: AgentSessionTabs = AgentSessionTabs(), intakes: IntakesFile? = nil
   ) -> TaskPaletteModel {
     let items = taskGitHubItems()
     return TaskPaletteModel(
       store: TaskStore(file: file ?? taskDesignFile()), githubItems: items, viewer: items.viewer,
       openLists: (openLists ?? taskOpenLists)(items.viewer), root: taskRoot,
       agents: taskAgents(), sessionTabs: sessionTabs,
+      intakes: intakeRunner(intakes ?? intakeDesignFile()),
       workspaces: taskWorkspaces, now: taskToday, timeZone: taskCalendar.timeZone)
   }
 

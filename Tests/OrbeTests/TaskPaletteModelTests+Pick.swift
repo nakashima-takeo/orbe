@@ -73,9 +73,9 @@ extension TaskPaletteModelTests {
   /// esc は何も変えずに GitHub タブへ戻る。タスクのタブの入力と選択は、選ぶ状態に入る前のまま。
   func testCancellingATaskPickRestoresBothLists() throws {
     let palette = pickingFromIssueFive()
-    palette.toggleTab()
+    palette.setTab(.tasks)
     palette.move(1)
-    palette.toggleTab()
+    palette.setTab(.github)
 
     palette.linkSelectedGitHubItem()
     palette.query = "a"
@@ -84,7 +84,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.store.tasks.map(\.links), [[], []])
     XCTAssertEqual(palette.visibleTab, .github)
     XCTAssertEqual(palette.selectedGitHubID, .item(GitHub.id(5)))
-    palette.toggleTab()
+    palette.setTab(.tasks)
     XCTAssertEqual(palette.query, "")
     XCTAssertEqual(palette.selectedID, .task(2))
   }
@@ -160,7 +160,7 @@ extension TaskPaletteModelTests {
     let palette = GitHub.model(
       [task(1, "a"), task(2, "b") { $0.links = [GitHub.link(6)] }],
       issues: [GitHub.issue(6), GitHub.issue(5)])
-    palette.toggleTab()
+    palette.setTab(.tasks)
     palette.area = .detail(.addLink)
     return palette
   }
@@ -210,9 +210,9 @@ extension TaskPaletteModelTests {
   /// esc は何も変えずに「＋ 結び付ける」へ戻る。GitHub タブの入力と選択は、入る前のまま。
   func testCancellingAnItemPickReturnsToTheAddLinkStop() throws {
     let palette = atAddLink()
-    palette.toggleTab()
+    palette.setTab(.github)
     palette.tapGitHubRow(.item(GitHub.id(5)))
-    palette.toggleTab()
+    palette.setTab(.tasks)
     palette.area = .detail(.addLink)
 
     palette.beginPickingItem()
@@ -221,7 +221,7 @@ extension TaskPaletteModelTests {
 
     XCTAssertEqual(palette.store.tasks.map(\.links), [[], [GitHub.link(6)]])
     XCTAssertEqual(palette.area, .detail(.addLink))
-    palette.toggleTab()
+    palette.setTab(.github)
     XCTAssertEqual(palette.query, "")
     XCTAssertEqual(palette.selectedGitHubID, .item(GitHub.id(5)))
   }

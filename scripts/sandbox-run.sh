@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # 隔離した使い捨て Orbe を起こす・叩く・片付ける（.claude/skills/sandbox-run の実体）。
 #
-#   sandbox-run.sh start [<app>]                      隔離起動 → 煙探知 → state_dir / sock / pid / build_id を出す
+#   sandbox-run.sh start [<app>] [--seed <dir>]       隔離起動 → 煙探知 → state_dir / sock / pid / build_id を出す
+#                                                     （--seed: 起こす前に <dir> の中身を state dir へ写す）
 #   sandbox-run.sh rpc <state_dir> <method> [<params-json>] [<timeout-sec>]
 #                                                     隔離インスタンスの control.sock へ JSON-RPC を 1 本投げ result を出す
 #   sandbox-run.sh stop <state_dir>                   インスタンスを止め、state dir を消す
@@ -23,7 +24,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TTL_SEC=3600  # 片付けが走らなかったときの自壊時限（孤児化した GUI が CPU を食い続けないため）
 
 usage() {
-  sed -n '2,8p' "$0" >&2
+  sed -n '2,9p' "$0" >&2
   exit 2
 }
 
@@ -98,7 +99,15 @@ do_stop() {
 }
 
 do_start() {
-  local app="${1:-$ROOT/build/Orbe.app}"
+  local app="" seed=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --seed) [ $# -ge 2 ] || usage; seed="$2"; shift 2 ;;
+      *) [ -z "$app" ] || usage; app="$1"; shift ;;
+    esac
+  done
+  app="${app:-$ROOT/build/Orbe.app}"
+  [ -z "$seed" ] || [ -d "$seed" ] || { echo "エラー: --seed のディレクトリ $seed が無い" >&2; exit 1; }
   local bin="$app/Contents/MacOS/Orbe"
   [ -x "$bin" ] || { echo "エラー: $bin が無い。./scripts/build-app.sh でビルドするか、起こす .app を渡せ" >&2; exit 1; }
   local build_id bundle_id
@@ -107,6 +116,8 @@ do_start() {
 
   local state_dir; state_dir="$(mktemp -d)"
   local sock="$state_dir/control.sock" log="$state_dir/orbe.log"
+  # 見本の state（intakes.json など）は起こす前に置く。起動時に読まれる。
+  [ -z "$seed" ] || cp -R "$seed/." "$state_dir/"
   backup_plugin "$state_dir" "$HOME/Library/Application Support/$bundle_id"
 
   local scrub=(env

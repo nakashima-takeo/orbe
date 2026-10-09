@@ -93,6 +93,8 @@ extension WindowController {
       case .intakeNotFound(let id): return .failure(Self.intakeNotFound(id))
       case .proposalNotFound(let id):
         return .failure(ControlError(code: -32004, message: "proposal not found: \(id)"))
+      case .proposalNotOpen(let id):
+        return .failure(ControlError(code: -32602, message: "proposal \(id) is not open"))
       case .invalid(let message): return .failure(ControlError(code: -32602, message: message))
       case .running(let id):
         return .failure(ControlError(code: -32000, message: "intake \(id) is running"))
