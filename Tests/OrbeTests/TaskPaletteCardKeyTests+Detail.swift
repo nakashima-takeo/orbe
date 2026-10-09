@@ -137,15 +137,19 @@ extension TaskPaletteCardKeyTests {
     XCTAssertNil(model.draft)
   }
 
-  /// ⌘↵ は 1 行の項目の確定のキーなので、文字の項目（編集していない状態）で押しても編集を始めない。
-  func testCommandEnterOnATextFieldDoesNotStartEditing() {
+  /// ⌘↵ は 1 行の項目の確定のキーなので、文字の項目（編集していない状態）で押しても編集を始めない。秘書に頼む
+  /// キーとして、そのタスクの行の直下に頼む欄を開く。
+  func testCommandEnterOnATextFieldOpensTheAskInsteadOfEditing() {
     let model = model()
     let window = mount(model)
 
     for field in [TaskDetailField.title, .description] {
       enterDetail(model, at: field, in: window)
       press(Key.enter, "\r", .command, to: window)
-      XCTAssertNil(model.draft, "\(field)")
+      XCTAssertNil(model.draft?.field, "\(field): 編集は始めない")
+      XCTAssertEqual(model.askingTaskID, model.selectedTask?.id, "\(field): 頼む欄を開く")
+      press(Key.escape, "\u{1b}", to: window)
+      XCTAssertNil(model.draft, "esc で何も送らずに閉じる")
     }
   }
 

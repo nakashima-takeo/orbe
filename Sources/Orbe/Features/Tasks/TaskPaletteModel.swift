@@ -59,8 +59,12 @@ import Observation
   var draft: TaskEditDraft? {
     didSet { if draft?.target != oldValue?.target { focus() } }
   }
-  /// 書くのはモデル（拡張を含む）だけ。
-  var error: TaskPaletteError?
+  /// 書くのはモデル（拡張を含む）だけ。失敗を消す点が操作の境目なので、通知も一緒に消える。
+  var error: TaskPaletteError? {
+    didSet { notice = nil }
+  }
+  /// フッターの左に次の操作まで出す知らせ（秘書に頼んだ）。書くのはモデル（拡張を含む）だけ。
+  var notice: TaskPaletteNotice?
   /// 画面を開いている間に入力欄から最後に足したタスク（「今足した」の印）。書くのはモデル（拡張を含む）だけ。
   var justAdded: Int?
   /// 一覧の行の掴み。書くのはモデル（拡張を含む）だけ。
@@ -81,6 +85,10 @@ import Observation
   var onFocusTab: (Int) -> Void = { _ in }
   /// 解けた待ちの会話を続きから始める（タスクの ID）。届けられなかった理由を返す。
   var onContinueWait: (Int) -> TaskPaletteError? = { _ in nil }
+  /// 秘書に頼む。
+  var onAskSecretary: (SecretaryAsk) -> Result<Secretary.Acceptance, Secretary.Refusal> = { _ in
+    .failure(.claudeMissing)
+  }
 
   /// 開いた時点で、出ている行の結び付きの値を取り直す（届くまでは前回の答えで描く）。GitHub タブの一覧の
   /// 取り直し（`openLists.open(root:)`）は開く側が呼ぶ。
@@ -144,10 +152,10 @@ import Observation
 
   var counts: TaskPaletteCounts { TaskPaletteRows.counts(rowsInput) }
 
-  private var rowsInput: TaskPaletteRows.Input {
+  var rowsInput: TaskPaletteRows.Input {
     TaskPaletteRows.Input(
-      tasks: store.tasks, query: taskList.query, picking: pick != nil, scope: scope,
-      doneExpanded: doneExpanded,
+      tasks: store.tasks, query: taskList.query, picking: pick != nil, asking: askingTaskID,
+      justAdded: justAdded, scope: scope, doneExpanded: doneExpanded,
       workspaces: workspaces, today: today, timeZone: timeZone, items: githubItems.answers,
       viewerLogin: viewer.login, agents: agents.agents)
   }
@@ -166,7 +174,10 @@ import Observation
     githubItems.ensure(visibleLinkIDs)
   }
 
-  var selectableIDs: [TaskPaletteRowID] { rows.compactMap(\.selectableID) }
+  /// 選べる行（入力があれば先頭に入力の行き先、続いて一覧の選べる行）。
+  var selectableIDs: [TaskPaletteRowID] {
+    (TaskPaletteRows.addTitle(rowsInput) == nil ? [] : [.add]) + rows.compactMap(\.selectableID)
+  }
 
   var selectedID: TaskPaletteRowID? { taskList.selectedID }
 
@@ -184,6 +195,7 @@ import Observation
     switch draft?.target {
     case .task(_, let field): return .edit(field)
     case .paneDue: return .paneDue
+    case .ask: return .ask
     case nil: return area == .list ? .field : .card
     }
   }
@@ -206,7 +218,7 @@ import Observation
     taskList.reconcile(selectableIDs)
     revealHiddenGitHubSelection()
     gitHubList.reconcile(gitHubSelectableIDs)
-    if case .task(let id, _) = draft?.target, !store.tasks.contains(where: { $0.id == id }) {
+    if let id = draft?.taskID, !store.tasks.contains(where: { $0.id == id }) {
       draft = nil
     }
     reconcilePane()

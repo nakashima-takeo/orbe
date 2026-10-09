@@ -241,12 +241,12 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(order(palette), [1, 2, 3, added.id])
   }
 
-  /// 入力で追加の行が出て、掴んだ行の位置がずれたら捨てる。
+  /// 入力で一覧が絞られ、掴んだ行の位置がずれたら捨てる。
   func testTypingWhileGrabbingDiscardsTheGrab() {
     let palette = model([task(1, "PR a"), task(2, "PR b"), task(3, "PR c")])
     palette.dragChanged(3, start: grabPoint, translation: -2 * rowHeight)
 
-    palette.query = "PR"
+    palette.query = "c"
     XCTAssertNil(palette.drag.session)
 
     palette.dragEnded()

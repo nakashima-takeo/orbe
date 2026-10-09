@@ -49,6 +49,8 @@ enum TaskPaletteFocusTarget: Hashable {
   case edit(TaskDetailField)
   /// GitHub タブの右の欄の期限の入力欄。
   case paneDue
+  /// 秘書に頼む欄の補足の入力欄。
+  case ask
 }
 
 /// 文字の項目の下書き。編集を始めたときの書き戻し先に結び付き、確定はそこへ書く。焦点・キー・変換中・確定の
@@ -59,6 +61,8 @@ struct TaskEditDraft: Equatable {
     case task(id: Int, field: TaskDetailField)
     /// GitHub タブの右の欄の期限（画面の値へ書く。ストアには「タスクにする」で初めて書く）。
     case paneDue
+    /// そのタスクを秘書に頼む欄の補足。書き戻し先は無く、↵ でだけ秘書へ出る（欄を離れたら送らずに捨てる）。
+    case ask(Int)
   }
 
   let target: Target
@@ -75,6 +79,14 @@ struct TaskEditDraft: Equatable {
 
   /// 複数行の項目の下書きか（esc で確定する）。
   var isMultiline: Bool { field?.isMultiline == true }
+
+  /// 対象のタスク（右の欄の項目・秘書に頼む欄）。
+  var taskID: Int? {
+    switch target {
+    case .task(let id, _), .ask(let id): id
+    case .paneDue: nil
+    }
+  }
 }
 
 /// 右の欄の操作（項目の移動・選択式の値・文字の項目の編集と確定・結び付きを開く / 外す）。変異はすべて
@@ -246,8 +258,16 @@ extension TaskPaletteModel {
   /// 編集を抜ける唯一の 1 本。確定は下書きの書き戻し先へ書き、空のタイトルは取り消しとして扱う。
   private func finishDraft(commit: Bool) -> Bool {
     guard let draft else { return true }
-    guard case .task(let id, let field) = draft.target else {
+    let id: Int
+    let field: TaskDetailField
+    switch draft.target {
+    case .task(let taskID, let taskField):
+      (id, field) = (taskID, taskField)
+    case .paneDue:
       return finishPaneDue(draft, commit: commit)
+    case .ask:
+      self.draft = nil
+      return true
     }
     guard commit, let task = store.tasks.first(where: { $0.id == id }),
       let pending = pendingUpdate(draft.text, draft.original, field, task)

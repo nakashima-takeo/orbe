@@ -12,5 +12,36 @@ extension L10n {
       "タスク %1$@「%2$@」(%3$@) を頼む。", "Task %1$@ “%2$@” (%3$@): please take it on."
     ),
     .secretaryLineNote: ("補足: %@", " Note: %@"),
+    .taskPaletteDestination: ("行き先", "Destination"),
+    .taskPaletteDestinationTask: ("タスクに書く", "Write a task"),
+    .taskPaletteDestinationDefault: ("既定", "default"),
+    .taskPaletteAskSecretary: ("秘書に頼む", "Ask the secretary"),
+    .taskPaletteDestinationPlace: ("%1$@ · %2$@の先頭 · %3$@", "%1$@ · top of %2$@ · %3$@"),
+    .taskPaletteDestinationNoWorkspace: ("workspace なし", "no workspace"),
+    .taskPaletteMatchingTasks: ("一致するタスク", "Matching tasks"),
+    .taskPaletteActionAddTodo: ("%@ を未着手に足す", "Add %@ to To do"),
+    .taskPaletteHintToMatches: ("一致する項目へ", "Matches"),
+    .taskPaletteAskTitle: ("%@ を秘書に頼む", "Ask the secretary about %@"),
+    .taskPaletteAskOptional: ("補足は無くてもよい", "A note is optional"),
+    .taskPaletteAskScope: (
+      "秘書はこのタスクを対象に動く。新しいタスクは作らない", "The secretary works on this task and won’t create a new one"
+    ),
+    .taskPaletteAskAfter: (
+      "頼んだ後は、秘書が起こした agent がこの行に出る", "Once asked, the agent the secretary starts shows on this row"
+    ),
+    .taskPaletteHintStopAsking: ("やめる", "Cancel"),
+    .taskPaletteAsked: ("秘書に頼んだ", "Asked the secretary"),
+    .taskPaletteAskedQueued: (
+      "秘書に頼んだ — 手が空いたら届く", "Asked the secretary — it arrives when the secretary is free"
+    ),
+    .taskPaletteErrSecretaryClaude: (
+      "claude が見つからないので秘書に頼めない", "Can’t ask the secretary: claude was not found"
+    ),
+    .taskPaletteJustAdded: ("今足した", "Just added"),
+    .taskPaletteAddedHeading: ("今 ⌘⇧X から足した", "just added from ⌘⇧X"),
+    .taskPaletteHeadingTask: ("タスク", "Task"),
+    .taskPaletteScopeWasAll: ("範囲が「すべて」だった", "the scope was “All”"),
+    .taskPaletteAskHandOver: ("このタスクを渡す", "Hand this task over"),
+    .taskPaletteActionRefine: ("期限などを詰める", "Set the due date and more"),
   ]
 }

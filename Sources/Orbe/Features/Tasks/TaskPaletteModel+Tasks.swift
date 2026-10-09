@@ -54,7 +54,8 @@ extension TaskPaletteModel {
   /// ⌥↑↓。選んだタスクを、同じ欄の見えている隣のタスクと入れ替える。欄の端と完了のタスクでは何もしない。
   func reorder(_ direction: Int) {
     error = nil
-    guard pick == nil, let task = selectedTask, let siblings = visibleSiblings(of: task.id),
+    guard pick == nil, askingTaskID == nil, let task = selectedTask,
+      let siblings = visibleSiblings(of: task.id),
       let index = siblings.firstIndex(of: task.id), siblings.indices.contains(index + direction)
     else { return }
     place(from: index, to: index + direction, among: siblings)

@@ -29,6 +29,14 @@ extension WindowController {
       _ = self?.controlFocusTab(tabId: tabId)
     }
     p.onContinueWait = { [weak self] id in self?.continueWait(taskId: id) }
+    p.onAskSecretary = { [weak self] ask in
+      guard let self else { return .failure(.claudeMissing) }
+      do throws(Secretary.Refusal) {
+        return .success(try self.secretary.ask(ask))
+      } catch {
+        return .failure(error)
+      }
+    }
     model.taskPalette = p
     model.overlay = .taskPalette
     p.focus()

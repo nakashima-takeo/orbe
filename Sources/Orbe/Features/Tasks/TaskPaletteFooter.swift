@@ -28,6 +28,12 @@ struct TaskPaletteFooter: View {
       TaskPaletteIntakeAction(model: model.intake)
     } else if let error = model.error {
       Text(l10n.string(errorKey(error))).foregroundStyle(Color.theme.danger)
+    } else if let notice = model.notice {
+      Text(l10n.string(notice == .askedQueued ? .taskPaletteAskedQueued : .taskPaletteAsked))
+        .foregroundStyle(Color.theme.textPrimary)
+    } else if let label = askLabel {
+      PaletteActionLine(
+        key: "↵", template: l10n.string(.taskPaletteAskTitle), slots: [.emphasis(label)])
     } else if let draft = model.draft {
       PaletteActionLine(
         key: draft.isMultiline ? "esc" : "↵", template: l10n.string(.taskPaletteActionCommit),
@@ -74,8 +80,10 @@ struct TaskPaletteFooter: View {
       switch model.selectedID {
       case .add:
         PaletteActionLine(
-          key: "↵", template: l10n.string(.taskPaletteAdd),
-          slots: [.emphasis(model.query.trimmingCharacters(in: .whitespacesAndNewlines))])
+          key: "↵", template: l10n.string(.taskPaletteActionAddTodo),
+          slots: [.emphasis(model.addTitle ?? "")])
+      case .task(let id) where id == model.justAdded:
+        PaletteActionLine(key: "→", template: l10n.string(.taskPaletteActionRefine), slots: [])
       case .task:
         if let task = model.selectedTask, let conversation = model.continuation(of: task) {
           PaletteActionLine(
@@ -96,10 +104,20 @@ struct TaskPaletteFooter: View {
     }
   }
 
+  /// 開いている秘書に頼む欄のタスクの名前。
+  private var askLabel: String? {
+    model.rows.lazy.compactMap { row -> String? in
+      if case .ask(let ask) = row { return ask.label }
+      return nil
+    }.first
+  }
+
   private var hints: some View {
     HStack(spacing: Theme.Space.beat + Theme.Space.hair) {
       if model.visibleTab == .intake {
         TaskPaletteIntakeHints(model: model.intake)
+      } else if askLabel != nil {
+        PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintStopAsking))
       } else if let draft = model.draft {
         // 複数行の項目は esc が確定（左の 1 行が言う）で、取り消しのキーは無い。
         if !draft.isMultiline {
@@ -120,7 +138,14 @@ struct TaskPaletteFooter: View {
         }
         PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteHintField))
         PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintBack))
+      } else if model.selectedID == .add {
+        PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteAskSecretary))
+        if model.selectableIDs.count > 1 {
+          PaletteKeyHint(key: "↓", label: l10n.string(.taskPaletteHintToMatches))
+        }
+        PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintClose))
       } else {
+        PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteAskSecretary))
         PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteHintOpenWorktree))
         PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintEdit))
         PaletteKeyHint(key: "⌥↑↓", label: l10n.string(.taskPaletteHintReorder))
@@ -159,6 +184,7 @@ struct TaskPaletteFooter: View {
     case .failed: .taskPaletteErrFailed
     case .assign: .taskPaletteErrAssign
     case .link: .taskPaletteErrLink
+    case .secretaryClaude: .taskPaletteErrSecretaryClaude
     case .agentMissing: .taskPaletteErrAgentMissing
     case .directoryMissing: .taskPaletteErrDirectoryMissing
     }
@@ -311,70 +337,5 @@ private struct TaskPaletteDoneHeaderAction: View {
       template: l10n.string(
         model.doneExpanded ? .taskPaletteActionHideDone : .taskPaletteActionShowDone),
       slots: [])
-  }
-}
-
-/// 受信タブのフッターの左（居場所と選択で、↵ が何をするか。失敗は赤で置き換える）。
-private struct TaskPaletteIntakeAction: View {
-  @Bindable var model: TaskPaletteIntakeModel
-  @Environment(\.localization) private var l10n
-
-  var body: some View {
-    if let error = model.error {
-      Text(
-        l10n.string(error == .accept ? .taskPaletteIntakeErrAccept : .taskPaletteIntakeErrRunning)
-      )
-      .foregroundStyle(Color.theme.danger)
-    } else {
-      switch model.place {
-      case .proposals:
-        if let proposal = model.selectedProposal {
-          PaletteActionLine(
-            key: "↵", template: l10n.string(.taskPaletteIntakeActionAccept),
-            slots: [.emphasis(proposal.title)])
-        }
-      case .shelf:
-        PaletteActionLine(
-          key: "→", template: l10n.string(.taskPaletteIntakeActionProposals), slots: [])
-      case .contents:
-        if let intake = model.selectedIntake {
-          PaletteActionLine(
-            key: "↵", template: l10n.string(.taskPaletteIntakeActionRunNow),
-            slots: [.emphasis(intake.definition.name)])
-        }
-      }
-    }
-  }
-}
-
-/// 受信タブのフッターの右のヒント。
-private struct TaskPaletteIntakeHints: View {
-  @Bindable var model: TaskPaletteIntakeModel
-  @Environment(\.localization) private var l10n
-
-  var body: some View {
-    switch model.place {
-    case .proposals:
-      if model.selectedProposal != nil {
-        PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteIntakeDismiss))
-        PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteHintOpenInBrowser))
-      }
-      if model.selectedIntake != nil {
-        PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteIntakeContents))
-      }
-      PaletteKeyHint(key: "←", label: l10n.string(.taskPaletteIntakeHintShelf))
-      PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintClose))
-    case .shelf:
-      PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteIntakeHintPick))
-      PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteIntakeHintBack))
-    case .contents:
-      if let intake = model.selectedIntake {
-        PaletteKeyHint(
-          key: "space",
-          label: l10n.string(intake.paused ? .taskPaletteIntakeResume : .taskPaletteIntakePause))
-      }
-      PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteDelete))
-      PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteIntakeHintBack))
-    }
   }
 }
