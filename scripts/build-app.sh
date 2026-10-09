@@ -43,6 +43,7 @@ cp "$ROOT/.build/release/Orbe" "$APP/Contents/MacOS/Orbe"
 mkdir -p "$APP/Contents/Resources/bin"
 cp "$ROOT/.build/release/orbe-report" "$APP/Contents/Resources/bin/orbe-report"  # エージェント hook が env パスで指す状態報告 CLI（署名対象）
 cp "$ROOT/.build/release/orbe-cli" "$APP/Contents/Resources/bin/orb"  # Orbe 構成 CLI（bare `orb` へ改名・タブの PATH で解決・署名対象）
+cp "$ROOT/.build/release/orbe-mcp" "$APP/Contents/Resources/bin/orbe-mcp"  # MCP ブリッジ（プラグインの MCP シムが env パスで指す・署名対象）
 cp "$ROOT/app/Info.plist" "$APP/Contents/Info.plist"
 # identity は app/Info.plist が SSOT（＝release の値）。dev チャネルのときだけ導出値で上書きし、
 # 別アプリとして共存させる。CFBundleExecutable は Orbe のまま（実行体名を変えるとバイナリ配置と
@@ -133,7 +134,7 @@ cp "$ROOT/app/themes/OrbeDark"  "$APP/Contents/Resources/ghostty/themes/OrbeDark
 cp "$ROOT/app/themes/OrbeLight" "$APP/Contents/Resources/ghostty/themes/OrbeLight"  # Orbe 自前 named theme（light）
 cp -R "$GHOSTTYKIT/share/terminfo" "$APP/Contents/Resources/terminfo"
 cp -R "$ROOT/app/agent-plugin" "$APP/Contents/Resources/agent-plugin"  # エージェント状態追跡プラグイン（各 CLI へ自動導入する配布物）
-# プラグイン名（marketplace 名＝plugin 名＝plugins/<name>/ のディレクトリ名）を dev チャネルだけ焼き直す。
+# プラグイン名（marketplace 名＝plugin 名＝MCP サーバー名＝plugins/<name>/ のディレクトリ名）を dev チャネルだけ焼き直す。
 # claude / codex / agy はどれも名前で 1 枠を取るため、名前を分けないと dev と release が枠を奪い合う
 # （agy は marketplace を持たず plugin.json の name だけで枠とステージ先が決まる）。1 つの名前を
 # パッケージの全出現箇所へ通し、3 CLI が同一の規則で分かれるようにする。
@@ -167,10 +168,17 @@ def codex_marketplace(d):
     return d
 
 
+def rename_mcp_server(d):
+    d["mcpServers"] = {name: d["mcpServers"][old]}
+    return d
+
+
 edit(".claude-plugin/marketplace.json", claude_marketplace)
 edit(".agents/plugins/marketplace.json", codex_marketplace)
-for rel in ("plugin.json", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
-    edit(f"plugins/{name}/{rel}", lambda d: {**d, "name": name})
+edit(f"plugins/{name}/plugin.json", lambda d: {**d, "name": name})
+for rel in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
+    edit(f"plugins/{name}/{rel}", lambda d: rename_mcp_server({**d, "name": name}))
+edit(f"plugins/{name}/mcp_config.json", rename_mcp_server)
 edit(f"plugins/{name}/hooks.json", lambda d: {name: d[old]})
 PY
   # 焼き漏れガード: 旧名トークンが 1 つでも残っていたら build を落とす。名前を持つ field を後から

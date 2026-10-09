@@ -134,9 +134,9 @@ orb --help                      # コマンド一覧
 
 `orb agent prompt` で別タブのエージェントへ指示して応答を待ち、`orb tab text` で端末の表示内容を取得できます。引数・終了コードは [CLI リファレンス](docs/spec/control/cli.md)を参照してください。
 
-MCP クライアントからも **`orbe-mcp`** を介してタブの起動・テキスト取得・入力・エージェントへの指示を行えます。ブリッジは配布アプリには同梱されず、リポジトリの [`scripts/orbe-mcp.sh`](scripts/orbe-mcp.sh) がソースからビルドして起動します。
+Orbe のタブで起こした claude / codex / agy からは、MCP ツールでタブの起動・テキスト取得・入力・エージェントへの指示・タスクの操作を行えます。設定は不要です。オンボーディングで導入するエージェントプラグインが MCP サーバー（`orbe-agent`）を持ち、アプリに同梱の MCP ブリッジ **`orbe-mcp`** へつなぎます。Orbe の外のターミナルでは、このサーバーはツールを出しません。公開ツールは [制御 API・MCP の仕様](docs/spec/control/api.md)にあります。
 
-利用する場合は、このスクリプトの絶対パスを MCP クライアントに stdio サーバーの起動コマンドとして登録してください。既定の接続先は **Orbe Dev**。配布版へ接続する場合は、MCP クライアントから `ORBE_SOCK` に配布版の `control.sock` の絶対パスを渡します。接続先の解決規則と公開ツールは [制御 API・MCP の仕様](docs/spec/control/api.md)にあります。
+開発中は、リポジトリの [`scripts/orbe-mcp.sh`](scripts/orbe-mcp.sh) を MCP クライアントに stdio サーバーの起動コマンドとして登録すると、Orbe を再起動せずにソースからビルドしたブリッジを試せます。既定の接続先は **Orbe Dev** です。
 
 ## ソースからビルド
 

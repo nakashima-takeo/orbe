@@ -15,26 +15,8 @@ import XCTest
 /// 壊れると何が起きるか: エージェントの状態がタブに一切出なくなる。しかもどの実行体も
 /// エラーを出さない——シムは env が欠ければ黙って exit 0、`orbe-report` は接続できなくても exit 0。
 final class AgentHookPathTests: OrbeTestCase {
-  /// リポジトリ実体のプラグインパッケージ。このファイル: <repo>/Tests/OrbeTests/...swift → 3 階層上が repo root。
-  private static let sourcePackage = URL(fileURLWithPath: #filePath)
-    .deletingLastPathComponent()  // OrbeTests
-    .deletingLastPathComponent()  // Tests
-    .deletingLastPathComponent()  // repo root
-    .appendingPathComponent("app/agent-plugin")
-
-  /// 同梱物レイアウトへプラグインを実体化し、シムの絶対パスを返す。
-  /// `hooks/channel` は `materializeStablePlugin()` が書くのと同じ 1 行（自分の bundle ID）。
   private func stagePlugin() throws -> URL {
-    let resources = try XCTUnwrap(BundledResources.root, "同梱物の探索根がステージされていない")
-    let package = resources.appendingPathComponent("agent-plugin", isDirectory: true)
-    try? FileManager.default.removeItem(at: package)
-    // copyItem は POSIX permission を保つ（実体化と同じ性質）。
-    try FileManager.default.copyItem(at: Self.sourcePackage, to: package)
-    let name = try XCTUnwrap(
-      AgentPluginInstaller.pluginName(in: package), "プラグイン名を読めない（パッケージが壊れている）")
-    let hooks = package.appendingPathComponent("plugins/\(name)/hooks", isDirectory: true)
-    try Data("\(StateDir.bundleId)\n".utf8).write(to: hooks.appendingPathComponent("channel"))
-    return hooks.appendingPathComponent("orbe-agent-status.sh")
+    try ControlProcess.stagePlugin().appendingPathComponent("hooks/orbe-agent-status.sh")
   }
 
   /// 同梱シムを実 `/bin/sh` で起こす。env はタブから受け取った実値そのままで、親からは継承しない。

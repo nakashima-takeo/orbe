@@ -48,7 +48,7 @@ final class ControlProcess {
   /// `.app` 同梱物のレイアウトを `BundledResources.root`（＝ハーネスが配る `caseDir/resources/`）へ組む。
   ///
   /// **`WindowController()` より前に呼ぶ**——`OrbeRuntimeEnv.inject` はタブの materialize 開始の時点で
-  /// `reportBinaryPath` / `bundledBinDir` を読むため、後から置いてもタブに注入済みの env には効かない。
+  /// `reportBinaryPath` / `mcpBinaryPath` / `bundledBinDir` を読むため、後から置いてもタブに注入済みの env には効かない。
   /// 置くのは `bin/` だけで、`completion-engine.js` も `zsh/` も置かない（不在時の graceful degradation を
   /// 測る既存テストの前提を壊さない）。root は caseDir 配下なので、組んだ中身はテスト終了の削除に乗る。
   @discardableResult
@@ -59,7 +59,29 @@ final class ControlProcess {
     // `.app` 同梱時の改名（orbe-cli → orb）をここでも再現する。bare `orb` の PATH 解決はこの名前に依る。
     try stage(executable("orbe-cli"), as: bin.appendingPathComponent("orb"))
     try stage(executable("orbe-report"), as: bin.appendingPathComponent("orbe-report"))
+    try stage(executable("orbe-mcp"), as: bin.appendingPathComponent("orbe-mcp"))
     return resources
+  }
+
+  /// リポジトリ実体のプラグインパッケージ。このファイル: <repo>/Tests/OrbeTests/...swift → 3 階層上が repo root。
+  private static let sourcePluginPackage = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent()  // OrbeTests
+    .deletingLastPathComponent()  // Tests
+    .deletingLastPathComponent()  // repo root
+    .appendingPathComponent("app/agent-plugin")
+
+  /// リポジトリ実体のプラグインを同梱物レイアウトへ置き、本番と同じ `materializeStablePlugin()` で
+  /// 実体化して、実体化先のプラグインのルートを返す（チャネルの刻印も本番の実体化が書く）。
+  static func stagePlugin() throws -> URL {
+    let resources = try XCTUnwrap(BundledResources.root, "同梱物の探索根がステージされていない")
+    let bundled = resources.appendingPathComponent("agent-plugin", isDirectory: true)
+    try? FileManager.default.removeItem(at: bundled)
+    // copyItem は POSIX permission を保つ（.app へのコピーと同じ性質）。
+    try FileManager.default.copyItem(at: sourcePluginPackage, to: bundled)
+    let package = try XCTUnwrap(AgentPluginInstaller.materializeStablePlugin(), "実体化できない")
+    let name = try XCTUnwrap(
+      AgentPluginInstaller.pluginName(in: package), "プラグイン名を読めない（パッケージが壊れている）")
+    return package.appendingPathComponent("plugins/\(name)", isDirectory: true)
   }
 
   private static func stage(_ source: URL, as destination: URL) throws {
