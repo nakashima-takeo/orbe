@@ -48,6 +48,7 @@ final class BackgroundRunsTests: OrbeTestCase {
     var result: BackgroundRunResult?
     let done = expectation(description: "run")
     _ = runs.run(job) {
+      XCTAssertTrue(Thread.isMainThread, "結果は main で届く（番人は main だけで動く）")
       result = $0
       done.fulfill()
     }
@@ -255,6 +256,19 @@ final class BackgroundRunsTests: OrbeTestCase {
 
     XCTAssertEqual(result.ending, .limited(.output))
     XCTAssertNil(reply(result))
+  }
+
+  /// agent の標準エラーは成果ではない。上限を超えても打ち切らず、最終応答を受け取る。
+  func testAgentStderrOverTheLimitDoesNotCutTheRun() throws {
+    try placeClaude(
+      #"head -c 5000 /dev/zero >&2; echo '{"type":"result","is_error":false,"result":"ok"}'"#)
+    var job = agent()
+    job.limits.stderr = 100
+
+    let result = try run(runs(), job)
+
+    XCTAssertEqual(result.ending, .exited(0))
+    XCTAssertEqual(reply(result), BackgroundAgentReply(text: "ok", isError: false))
   }
 
   func testCodexAndAgyAreRefusedWithReasons() throws {

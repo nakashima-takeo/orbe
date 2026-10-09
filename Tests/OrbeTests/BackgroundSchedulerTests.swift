@@ -112,6 +112,38 @@ final class BackgroundSchedulerTests: OrbeTestCase {
     XCTAssertEqual(runner.calls.count, 1)
   }
 
+  /// タイムゾーンが変わったら、毎日の時刻を新しいタイムゾーンで数え直す（予約の発火を待たない）。
+  func testTimeZoneChangeRecountsDailyTimesInTheNewZone() throws {
+    var zone = try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo"))
+    scheduler.calendar = {
+      var calendar = Calendar(identifier: .gregorian)
+      calendar.timeZone = zone
+      return calendar
+    }
+    // start は 08:00 UTC（17:00 JST）。
+    try register(
+      BackgroundSchedule(
+        job: .command(.init(script: "true")),
+        timing: .daily([BackgroundTimeOfDay(hour: 9, minute: 0)]), deadline: nil))
+    XCTAssertEqual(armed?.date, start.addingTimeInterval(16 * 3600), "前提: 翌日 9:00 JST")
+
+    zone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+    NotificationCenter.default.post(name: .NSSystemTimeZoneDidChange, object: nil)
+
+    XCTAssertEqual(armed?.date, start.addingTimeInterval(1 * 3600), "当日 9:00 UTC")
+  }
+
+  /// 予定が複数あれば、最も早い回に合わせて待つ。
+  func testWaitsForTheEarliestOfSeveralSchedules() throws {
+    try register(schedule(every: 60), id: "fast")
+    try register(schedule(every: 300), id: "slow")
+
+    XCTAssertEqual(armed?.date, start.addingTimeInterval(60))
+    advance(to: start.addingTimeInterval(60))
+
+    XCTAssertEqual(runner.calls.count, 1, "早い予定の時刻に、早い予定だけが走る")
+  }
+
   func testRunNowStartsImmediately() throws {
     try register()
 
