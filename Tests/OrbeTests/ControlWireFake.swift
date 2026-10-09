@@ -118,6 +118,7 @@ final class FakeControlTarget: ControlTarget {
   private(set) var updatedTasks: [UpdatedTask] = []
   private(set) var movedTasks: [MovedTask] = []
   private(set) var deletedTaskIds: [Int] = []
+  private(set) var startedTasks: [TaskStartRequest] = []
   private(set) var setIntakes: [(intakeId: Int?, definition: IntakeDefinition)] = []
   private(set) var ranIntakeIds: [Int] = []
   private(set) var pausedIntakes: [(intakeId: Int, paused: Bool)] = []
@@ -286,6 +287,13 @@ final class FakeControlTarget: ControlTarget {
   func controlDeleteTask(taskId: Int) -> Result<Any, ControlError> {
     deletedTaskIds.append(taskId)
     return outcome(["ok": true])
+  }
+
+  func controlStartTask(
+    _ request: TaskStartRequest, completion: @escaping (Result<Any, ControlError>) -> Void
+  ) {
+    startedTasks.append(request)
+    completion(outcome(["workdir": "/w"]))
   }
 
   func controlListIntakes() -> Result<Any, ControlError> {

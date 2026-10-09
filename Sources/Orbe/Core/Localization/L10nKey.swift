@@ -383,6 +383,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteIntakeResume
   case taskPaletteIntakeErrAccept
   case taskPaletteIntakeErrRunning
+  // MARK: - 秘書・作業を始める（L10nTable+Secretary）
+  case taskStartHomeTask
+  case taskStartHomeDescription
 
   // MARK: - Onboarding
   case onboardingBegin

@@ -43,7 +43,7 @@ extension WindowController {
   /// 選択・mount はしない（起床は既存の mount 規律に従う）。
   func restoreDormantTab(_ state: TabState, intoWorkspaceAt index: Int) -> TabRef {
     let tab = makeTab(from: state)
-    let tabIndex = store.insertRestoredTab(tab, intoWorkspaceAt: index)
+    let tabIndex = store.insertTabUnselected(tab, intoWorkspaceAt: index)
     refreshChrome()
     scheduleSave()
     return TabRef(workspaceIndex: index, tabIndex: tabIndex, tab: tab)

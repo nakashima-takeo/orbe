@@ -217,11 +217,11 @@ final class SessionStore {
     return dest
   }
 
-  /// 復元した休眠チケットを、指定 workspace の同キー連の右端（無ければ末尾）へ挿し、実挿入 index を返す。
-  /// `active` は挿す前と同じタブを指し続ける——復元は「見せる先を変えない」ので、背景 workspace で
-  /// active を挿したタブへ動かす `insertTab` を継がない（0 タブだった workspace は `active == 0` のままで
-  /// 新タブがそれになる）。workspace index の妥当性は呼び出し側が保証する。
-  func insertRestoredTab(_ tab: TerminalTab, intoWorkspaceAt i: Int) -> Int {
+  /// 選ばずに足すタブ（復元した休眠チケット・選ばずに起こすタブ）を、指定 workspace の同キー連の右端（無ければ
+  /// 末尾）へ挿し、実挿入 index を返す。`active` は挿す前と同じタブを指し続ける——どちらも「見せる先を変えない」ので、
+  /// 背景 workspace で active を挿したタブへ動かす `insertTab` を継がない（0 タブだった workspace は `active == 0` の
+  /// ままで新タブがそれになる）。workspace index の妥当性は呼び出し側が保証する。
+  func insertTabUnselected(_ tab: TerminalTab, intoWorkspaceAt i: Int) -> Int {
     insert(tab, intoWorkspaceAt: i)
   }
 

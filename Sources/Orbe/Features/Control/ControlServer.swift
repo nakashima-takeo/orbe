@@ -259,6 +259,9 @@ final class ControlServer {
         self.resumeAgent(params: params, target: $0)
       }
       return
+    case "start_task":
+      startTask(id: id, params: params, conn: conn)
+      return
     default:
       break
     }

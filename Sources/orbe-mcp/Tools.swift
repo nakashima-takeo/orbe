@@ -374,6 +374,6 @@ let tools: [[String: Any]] =
       ("description", "タスクを一覧から消す（完了にするだけなら update_task の status: \"done\"）。"),
       ("inputSchema", schema(["taskId": intProp("消すタスク")], required: ["taskId"])),
     ]),
-  ] + intakeTools
+  ] + startTaskTools + intakeTools
 
 let toolNames = Set(tools.compactMap { $0["name"] as? String })
