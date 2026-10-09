@@ -6,7 +6,8 @@ import XCTest
 /// MCP シム（`app/agent-plugin/.../mcp/orbe-mcp.sh`）と空サーバー（`mcp/empty-server.pl`）を実 `/bin/sh`・
 /// 実 perl で機械検証する。プラグインは本番の実体化に通す（チャネルの刻印は実体化が書いたもの）。
 /// CLI は有効なプラグインの MCP サーバーを全セッションで起こすので、シムは自分のチャネルの Orbe のタブでだけタブの `orbe-mcp` へつなぎ、それ以外ではツール 0 個のサーバーとして
-/// 正常に応答する。チャネルの規則は状態追跡のシム（`AgentShimChannelGateTests`）と同じ。
+/// 正常に応答する。チャネルの規則は状態追跡のシム（`AgentShimChannelGateTests`）と同じ。シムは claude と agy の
+/// MCP 定義から起こし方を取る（codex の定義は `AgentMcpPathTests` が通す）。
 ///
 /// 壊れると何が起きるか: dev のタブの agent が release の Orbe を操作する（その逆も）。あるいは Orbe の外の
 /// claude / codex が毎セッション接続失敗を警告する。
@@ -35,21 +36,45 @@ final class AgentMcpShimTests: OrbeTestCase {
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: mcpBin.path)
   }
 
-  /// シムを実 `/bin/sh` で起こし、stdout の行を返す。`relative` は cwd＝プラグインルートからの相対呼び
-  /// （agy・codex の形）。絶対パス呼び（claude）は別ディレクトリから起こし、`$0` 相対の解決を突く。
+  /// シムを起こす MCP 定義。
+  private enum Definition: CaseIterable {
+    /// プラグインルート変数を展開した絶対パスで呼ぶ。プラグインの外から起こし、`$0` 相対の解決を突く。
+    case claude
+    /// cwd＝ステージ済みプラグインルートからの相対で呼ぶ。
+    case agy
+  }
+
+  /// 定義ファイルから、サーバー名＝プラグイン名のサーバーの起こし方（コマンドと cwd）を取る。
+  private func launch(_ definition: Definition) throws -> (command: String, cwd: String) {
+    let file = definition == .claude ? ".claude-plugin/plugin.json" : "mcp_config.json"
+    let manifest = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: Data(contentsOf: pluginRoot.appendingPathComponent(file)))
+        as? [String: Any])
+    let servers = try XCTUnwrap(manifest["mcpServers"] as? [String: [String: Any]], file)
+    let command = try XCTUnwrap(
+      servers[pluginRoot.lastPathComponent]?["command"] as? String, "\(file): サーバー名＝プラグイン名")
+    switch definition {
+    case .claude:
+      return (
+        command.replacingOccurrences(of: "${CLAUDE_PLUGIN_ROOT}", with: pluginRoot.path), work.path
+      )
+    case .agy:
+      return (command, pluginRoot.path)
+    }
+  }
+
+  /// シムを定義どおりに実 `/bin/sh` で起こし、stdout の行を返す。
   private func runShim(
-    bundleId: String?, withMcpBin: Bool = true, relative: Bool = false, stdin: [String]
-  ) -> [String] {
+    _ definition: Definition, bundleId: String?, withMcpBin: Bool = true, stdin: [String]
+  ) throws -> [String] {
     var env = ["PATH": "/usr/bin:/bin"]
     if withMcpBin { env["ORBE_MCP_BIN"] = mcpBin.path }
     if let bundleId { env["ORBE_BUNDLE_ID"] = bundleId }
-    let shim =
-      relative ? "./mcp/orbe-mcp.sh" : pluginRoot.appendingPathComponent("mcp/orbe-mcp.sh").path
+    let (command, cwd) = try launch(definition)
     let outcome = ControlProcess.run(
-      URL(fileURLWithPath: "/bin/sh"), [shim], env: env,
-      stdin: stdin.joined(separator: "\n") + "\n",
-      cwd: relative ? pluginRoot.path : work.path)
-    XCTAssertEqual(outcome.status, 0, outcome.stderr)
+      URL(fileURLWithPath: "/bin/sh"), [command], env: env,
+      stdin: stdin.joined(separator: "\n") + "\n", cwd: cwd)
+    XCTAssertEqual(outcome.status, 0, "\(definition): \(outcome.stderr)")
     return outcome.stdout.split(separator: "\n").map(String.init)
   }
 
@@ -76,24 +101,31 @@ final class AgentMcpShimTests: OrbeTestCase {
   }
 
   func testMatchingChannelExecsTheTabsBridge() throws {
-    assertDelegated(runShim(bundleId: StateDir.bundleId, stdin: [toolsList]))
+    for definition in Definition.allCases {
+      try? FileManager.default.removeItem(at: mcpLog)
+      assertDelegated(try runShim(definition, bundleId: StateDir.bundleId, stdin: [toolsList]))
+    }
   }
 
   /// 別チャネルの Orbe のタブでは、そのタブの Orbe につながない。
   func testMismatchedChannelIsEmptyServer() throws {
-    assertEmptyServer(runShim(bundleId: Self.otherChannel, stdin: [toolsList]))
-    assertEmptyServer(runShim(bundleId: Self.otherChannel, relative: true, stdin: [toolsList]))
+    for definition in Definition.allCases {
+      assertEmptyServer(try runShim(definition, bundleId: Self.otherChannel, stdin: [toolsList]))
+    }
   }
 
   /// Orbe の外（`ORBE_MCP_BIN` 無し）。
   func testOutsideOrbeIsEmptyServer() throws {
-    assertEmptyServer(runShim(bundleId: nil, withMcpBin: false, stdin: [toolsList]))
+    for definition in Definition.allCases {
+      assertEmptyServer(
+        try runShim(definition, bundleId: nil, withMcpBin: false, stdin: [toolsList]))
+    }
   }
 
   /// 空サーバーは MCP の握手に応え、ツールを名乗らない。id の型を保ち、通知と読めない行には応えない。
   func testEmptyServerAnswersHandshakeWithoutTools() throws {
-    let out = runShim(
-      bundleId: nil, withMcpBin: false,
+    let out = try runShim(
+      .claude, bundleId: nil, withMcpBin: false,
       stdin: [
         #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26"}}"#,
         #"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
