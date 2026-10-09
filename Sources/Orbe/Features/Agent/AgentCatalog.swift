@@ -29,7 +29,7 @@ final class AgentCatalog {
       headless: .runs(
         HeadlessCLI(
           arguments: ClaudeHeadless.arguments, environment: ClaudeHeadless.environment,
-          reply: ClaudeHeadless.reply))),
+          reply: ClaudeHeadless.reply, availableTools: ClaudeHeadless.availableTools))),
     AgentProfile(
       command: "codex", resumeFlag: "resume", reportsIdleOnStart: false,
       headless: .refuses(.toolsNotAllowListable)),
@@ -120,11 +120,21 @@ enum HeadlessSupport {
 }
 
 /// 非対話の 1 回の起こし方。依頼文は標準入力で渡す。`environment` は子の環境に上書きする変数。`reply` は標準出力の 1 行から
-/// 最終応答を取り出す（最終応答の行でなければ nil）。
+/// 最終応答を取り出す（最終応答の行でなければ nil）。`availableTools` は始まりの出来事の行から、その回で使えるツールの名前を
+/// 取り出す（始まりの行でなければ nil）。
 struct HeadlessCLI {
   let arguments: (_ model: String, _ tools: [String]) -> [String]
-  let environment: [String: String]
+  let environment: (_ tools: [String]) -> [String: String]
   let reply: (Data) -> BackgroundAgentReply?
+  let availableTools: (Data) -> [String]?
+
+  /// 指定した MCP のツールのうち、`available` に無いもの。`mcp__<サーバー>` はそのサーバーのツールが 1 つでもあれば揃っている。
+  static func missingTools(_ requested: [String], available: [String]) -> [String] {
+    requested.filter { name in
+      name.hasPrefix("mcp__")
+        && !available.contains { $0 == name || $0.hasPrefix(name + "__") }
+    }
+  }
 }
 
 /// 裏で回せない理由。
@@ -153,11 +163,29 @@ enum ClaudeHeadless {
   }
 
   /// どちらの呼び出しでも、利用者の CLAUDE.md と auto memory を読まない。`--setting-sources` は auto memory を止めず、
-  /// 設定を読む呼び出しでは CLAUDE.md も読むため、環境で止める。
-  static let environment = [
-    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
-    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
-  ]
+  /// 設定を読む呼び出しでは CLAUDE.md も読むため、環境で止める。MCP のツールを指定した呼び出しは、MCP サーバーの接続を
+  /// 待ってから始める——待たないと、起動に数秒かかるサーバーのツールが無いまま始まる。待ちは agent の無出力の上限より短い。
+  static func environment(tools: [String]) -> [String: String] {
+    var env = [
+      "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+      "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
+    ]
+    if tools.contains(where: { $0.hasPrefix("mcp__") }) {
+      env["CLAUDE_CODE_MCP_STARTUP_WAIT_MS"] = String(Int(mcpStartupWait * 1000))
+    }
+    return env
+  }
+
+  static let mcpStartupWait: TimeInterval = 60
+
+  /// 出来事の流れの最初の `system`/`init` が、その回で使えるツールの名前を持つ。
+  static func availableTools(_ line: Data) -> [String]? {
+    guard
+      let event = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
+      event["type"] as? String == "system", event["subtype"] as? String == "init"
+    else { return nil }
+    return event["tools"] as? [String] ?? []
+  }
 
   /// 出来事の流れのうち、最後の `result` が最終応答。失敗で終わった回は本文を持たず、理由を `errors` に入れる。
   static func reply(_ line: Data) -> BackgroundAgentReply? {

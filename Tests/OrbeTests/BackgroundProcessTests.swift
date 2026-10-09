@@ -200,6 +200,16 @@ final class BackgroundProcessTests: OrbeTestCase {
     XCTAssertLessThan(result.elapsed, 5)
   }
 
+  /// 読み手が続ける意味を失った行では、出力の上限ではなく「止めた」で終わる。
+  func testLineThatStopsTheRunEndsAsStopped() throws {
+    let lines = LinesRecorder(refusing: "stop", with: .stopped)
+    let result = try run(
+      spec("echo ok; echo stop; sleep 30", stdout: .lines(maxLength: 100, onLine: lines.receive)))
+
+    XCTAssertEqual(result.outcome.ending, .stopped)
+    XCTAssertLessThan(result.elapsed, 5)
+  }
+
   // MARK: - 停止と片付け
 
   func testStopEndsTheRun() throws {
@@ -293,16 +303,18 @@ private final class LinesRecorder: @unchecked Sendable {
   private let lock = NSLock()
   private var lines: [String] = []
   private let refusing: String?
+  private let cut: BackgroundProcess.Ending
 
-  init(refusing: String? = nil) {
+  init(refusing: String? = nil, with cut: BackgroundProcess.Ending = .limited(.output)) {
     self.refusing = refusing
+    self.cut = cut
   }
 
   var received: [String] { lock.withLock { lines } }
 
-  func receive(_ line: Data) -> Bool {
+  func receive(_ line: Data) -> BackgroundProcess.Ending? {
     let text = String(bytes: line, encoding: .utf8) ?? ""
     lock.withLock { lines.append(text) }
-    return text != refusing
+    return text == refusing ? cut : nil
   }
 }

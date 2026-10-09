@@ -1,6 +1,6 @@
 ---
 title: 制御 API（外部 → Orbe）
-description: Unix socket 上の JSON-RPC でタブ/workspace/エージェント/タスクを操作する out-of-band 制御チャネルと、イベント履歴（seq）・待機・MCP ブリッジ・ツール群・mount 境界
+description: Unix socket 上の JSON-RPC でタブ/workspace/エージェント/タスク/受信を操作する out-of-band 制御チャネルと、イベント履歴（seq）・待機・MCP ブリッジ・ツール群・mount 境界
 updated: 2026-10-10
 ---
 
@@ -22,9 +22,9 @@ Unix domain socket `control.sock`（workspaces.json と並置・パーミッシ�
 - `-32600` JSON だがリクエストオブジェクトでない（配列・`method` 欠落）。`id` は取れれば返す。
 - `-32601` 未知の method。method 名だけで決まり、ウィンドウの有無を見ない——「その動詞が無い」と「今は実行できない」をクライアントが状態に依らず区別できるように。
 - `-32602` params の欠落・型不一致・値域外。
-- `-32004` 宛先（tab / workspace / タスク）が見つからない。宛先 ID を解決へ直に渡すメソッド（`get_tab_text` / `send_text` / `send_key` / `report_agent` / `completion_accept`）は `tabId` の欠落・型不一致もここに落ちる（解決の前に検証を挟むメソッドは `-32602`）。
+- `-32004` 宛先（tab / workspace / タスク / 受信）が見つからない。宛先 ID を解決へ直に渡すメソッド（`get_tab_text` / `send_text` / `send_key` / `report_agent` / `completion_accept`）は `tabId` の欠落・型不一致もここに落ちる（解決の前に検証を挟むメソッドは `-32602`）。
 - `-32006` `wait_for_event` の `after` が履歴の保持範囲より古い（対処は seq を取り直す。呼び出し側のバグである `-32602` と分ける）。
-- `-32000` 実行できない（ウィンドウ未接続・spawn 失敗・消せない workspace の削除・Orbe の workspace の root 変更・`prompt_agent` の busy / 未 mount・ready 待ち中のエージェント消滅）。
+- `-32000` 実行できない（ウィンドウ未接続・spawn 失敗・消せない workspace の削除・Orbe の workspace の root 変更・`prompt_agent` の busy / 未 mount・ready 待ち中のエージェント消滅・回が走っている受信の `run_intake`）。
 
 無応答契約を持つのは `completion_update` / `completion_end` の 2 つだけで、他は必ず 1 行応答を返す——読めない行にも返すことで、クライアントが応答待ちでハングしない。
 
@@ -32,7 +32,7 @@ Unix domain socket `control.sock`（workspaces.json と並置・パーミッシ�
 
 workspace / tab にプロセス内単調増加 ID。型をまたいで一意。セッション内のみ有効（永続しない・再起動で振り直し）。配列インデックスでなく ID で指す。
 
-タスクの ID は別物で、永続する短い整数（[タスク](../platform/tasks.md)）。
+タスクと[受信](../platform/intake.md)（とその提案）の ID は別物で、永続する短い整数（[タスク](../platform/tasks.md)）。
 
 ## 呼び出し元タブ（`callerTabId`）
 
@@ -89,6 +89,13 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 - `move_task {taskId, beforeTaskId | afterTaskId}` → `{ok, seq}` … 別のタスクの前か後ろへ移す。ちょうど 1 つが必須で、自分自身を指すと `-32602`。
 - `delete_task {taskId}` → `{ok, seq}`。
   - タスクの 5 動詞に共通して、params の欠落・型違い・値域外（空のタイトル・未知のステータス／優先度・暦に無い日付・JSON の真偽値を整数として渡した値など）は `-32602`、未知のタスクと未知の workspace は `-32004`。拒否したとき一覧は変わらない。タスクの変化はイベントにならない。
+- `list_intakes` → `{intakes:[…], seq}` … [受信](../platform/intake.md)を ID 順に返す。各要素は `intakeId` と `set_intake` と同じ定義（`name`・`fetch`・`judge`・`when`。`agent` は省略時の既定も埋めて返す）に加え、`paused`・`running`（回が走っているか）・`nextRunAt`（次に予定で回る時刻。止めていれば無い。過ぎていれば今以前）・`lastRunAt`（まだ回っていなければ無い）・`openProposals`（この受信の棚にある人の判断待ちの提案の数）・`overlaps`（前回の取得結果のリンクが重なる他の受信 `[{intakeId, name, count}]`）・`runs`（回の記録。新しい順に 20 件まで。各回は `startedAt`・`endedAt`・`trigger`〔`schedule` / `now`〕・`fetch{commandLine, ending, items, rejected{count, reasons}}`・`newItems`・`judge{commandLine, ending, proposed, resolved, rejected}`〔判定を起こさなかった回は無い〕・`withdrawn`・`failure`〔失敗した回だけ〕）。時刻は UTC・ミリ秒・`Z`。
+- `set_intake {intakeId?, name, fetch, judge, when}` → `{intake, seq}` … `intakeId` が無ければ作り、あれば定義を丸ごと置き換える（止めているかは変えない）。`fetch` は `{command, directory?}` か `{agent?, model, tools, request}`（`command` と `request` のどちらを持つかで決まり、両方・どちらも無いは `-32602`）、`judge` は `{agent?, model, instruction}`、`agent` の既定は `claude`。`when` は `{everyMinutes}` か `{dailyAt: ["HH:MM", …]}`。4 つのどれかの欠落・型違い、名前が 1 行でない・コマンドが空・作業ディレクトリが絶対パスでない・裏で回せない agent（理由付き）・モデルや依頼文や指示文が空・取得役のツールが 0 個か空の名前を含む・間隔が 1 分未満・`HH:MM` でない・時刻が範囲外、はいずれも `-32602` で、受信は変わらない。未知の `intakeId` は `-32004`。取得か判定が前と違えば走っている回を止め、名前といつだけなら止めない。新しく作った受信はすぐには回らない。
+- `run_intake {intakeId}` → `{ok, seq}` … 今すぐ 1 回回し、回の終わりを待たずに返る（結果は `list_intakes` の `runs`）。止めた受信も受ける。回が走っていれば `-32000`。
+- `pause_intake {intakeId, paused}` → `{intake, seq}` … 予定を止める（`true`）・再開する（`false`）。走っている回は止めない。`paused` は JSON の真偽値だけを受ける。
+- `delete_intake {intakeId}` → `{ok, seq}` … 走っている回を止め、結果は捨てる。その受信だけが取っていたリンクの提案は忘れる。
+- `list_intake_proposals {intakeId?}` → `{proposals:[…], seq}` … 覚えている提案を全状態で返す。各要素は `proposalId`・`state`（`open` / `accepted` / `dismissed` / `resolved`）・`title`・`due?`・`link`・`body`・`time`・`proposedAt`・`taskId`（`accepted` だけ）・`intakeId` と `intakeName`（棚に出す受信）。`intakeId` を渡すとその受信の棚の分だけ（未知は `-32004`）。
+  - 受信の 6 動詞はいずれも MCP に出す。提案をタスクにする・捨てるは人の判断なので制御 API に無い。受信の変化はイベントにならない。
 - `completion_update` / `completion_end` / `completion_accept` … コマンド補完用（[completion](../palette/completion.md)）。前 2 つは**無応答**。`completion_` 系は宛先解決ガードより前で分岐し、無応答メソッドは宛先不在でも応答を出さない（打鍵ごとの update が accept fd に行を積まない）。読めない行にはこの分岐より前でエラー行を返すため、accept fd から読める行が accept 応答だけとは限らない——クライアントは `id` で自分の応答を選ぶ（[completion](../palette/completion.md)）。socket 専用。
 
 ## 境界

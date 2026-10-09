@@ -1,6 +1,6 @@
 ---
 title: Orbe CLI（orb）
-description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/session/wait サブコマンド・socket 文脈解決・終了コード契約
+description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/受信/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/intake/session/wait サブコマンド・socket 文脈解決・終了コード契約
 updated: 2026-10-10
 ---
 
@@ -65,6 +65,17 @@ updated: 2026-10-10
 
 ステータスと優先度の語彙と日付の妥当性は control が持ち、CLI は素通しする（`--help` の一覧は人が読むための写し）。詳細の `-` 始まりや空文字は値必須フラグの規約で渡せず、詳細を外すのは `--no-description`。
 
+### intake（受信）
+
+[受信](../platform/intake.md)を作り・直し・回し・結果を読む。各サブコマンドは同名の制御 API の動詞へそのまま乗る。
+
+- `orb intake list [--json]` … ID 順に 1 行 1 受信（`id 状態 名前 いつ 次の時刻 前回` のタブ区切り。状態は `active` / `paused` / `running`、いつは `every 30m` / `daily 09:00,13:00`、前回は `<開始> 12 fetched, 3 new, 1 proposed` か `<開始> failed: <理由>`。無い値は `-`。制御文字の扱いは `task list` と同じ）。
+- `orb intake proposals [<id>] [--json]` … 覚えている提案を 1 行 1 つ（`id 状態 受信の id 期限 タイトル リンク`）。`<id>` でその受信の棚の分だけ。
+- `orb intake set [<id>] [--json]` … 標準入力の JSON（MCP の `set_intake` と同じ形の `name`・`fetch`・`judge`・`when`）で、`<id>` が無ければ作って新しい ID だけを出し、あれば丸ごと置き換える。定義をフラグに割らないのは、取得がコマンドか agent かで項目が入れ子になり、検証が CLI と control の 2 か所に割れるため。標準入力が空・JSON オブジェクトでないは usage エラー（exit 2）、定義の検証は control が持つ（違反は exit 1）。
+- `orb intake run <id> [--json]` … 今すぐ回す（止めた受信も受ける）。回の終わりを待たずに返る。
+- `orb intake pause <id> [--json]` / `orb intake resume <id> [--json]` … 予定を止める・再開する。
+- `orb intake rm <id> [--json]`
+
 ### session（閉じたエージェントセッションの記録と復元）
 
 [寿命ログ](../platform/session-log.md)を読み、閉じたまま戻っていないセッションを戻す。全 workspace 横断。
@@ -85,7 +96,7 @@ kind の語彙と値域の検証は control が持つ（未知 kind は CLI を�
 
 ### 共通
 
-各サブコマンドは対応する [制御 API](api.md) メソッドへそのまま乗る。`--json` は全サブコマンドで効き、control の result をそのまま出す——成功応答に載る `seq`（[api](api.md)）もそのまま出る（例外は 3 つ——`config get` は `config_list` から抽出した 1 行で `seq` を持たない、`session closed` は `session_log` と `list_tabs` から CLI が組む派生ビューで `seq` を持たない、`tab list` は `--workspace` で絞った後の `{"tabs":[…], "seq": N}`）。write が採番した id（`ws new` の workspaceId・`tab new` の tabId・`task add` の taskId）は人間向け出力にも載るが、書式が割れずに読めるのは `--json` だけ。`--help`（`-h` も同じ）は全階層で効き、固有 usage を持つのは `config set` だけで、他はドメインの usage を出す。`<id|current>` の `current` はアクティブ WS。
+各サブコマンドは対応する [制御 API](api.md) メソッドへそのまま乗る。`--json` は全サブコマンドで効き、control の result をそのまま出す——成功応答に載る `seq`（[api](api.md)）もそのまま出る（例外は 3 つ——`config get` は `config_list` から抽出した 1 行で `seq` を持たない、`session closed` は `session_log` と `list_tabs` から CLI が組む派生ビューで `seq` を持たない、`tab list` は `--workspace` で絞った後の `{"tabs":[…], "seq": N}`）。write が採番した id（`ws new` の workspaceId・`tab new` の tabId・`task add` の taskId・`intake set` の intakeId）は人間向け出力にも載るが、書式が割れずに読めるのは `--json` だけ。`--help`（`-h` も同じ）は全階層で効き、固有 usage を持つのは `config set` だけで、他はドメインの usage を出す。`<id|current>` の `current` はアクティブ WS。
 
 値必須フラグ（`--workspace <id>` / `--dir <path>` / `--cmd "…"` / `--text <text>` / `--key <key>` / `--kind <kind>` / `--value <value>` / `--after <seq>` / `--timeout-ms <ms>` / task の項目フラグ）の値は `-` 始まりも空（空白だけの形も含む）も取らない（usage エラー、exit 2）。`orb tab new --dir "$DIR" --cmd "$CMD"` の `$DIR` が空になる形が両方ここで落ちる——引用符が無ければトークンごと消えて `--cmd` が cwd に化け、引用符があれば空文字が cwd として通ってしまうため。パスは絶対パスで渡す（`-` 始まりのディレクトリは `./-foo` の形）——相対パスは CLI も control も解決せずそのまま格納するので、利用者のシェルの cwd 基準にはならない（例外は `task` の `--worktree` で、CLI が呼び出し元の cwd から解く）。`~` 始まりを展開するのは workspace のパス（`ws new --dir` / `ws dir`）だけで、`tab new --dir` は展開せずそのまま cwd にする。
 

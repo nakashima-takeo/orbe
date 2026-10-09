@@ -348,7 +348,7 @@ func usageBlock(_ lines: [String]) -> String {
 /// ここの 1 語と、`main.swift` のルーティング 1 行の 3 箇所。
 private let allUsageLines =
   configUsageLines + wsUsageLines + tabUsageLines + agentUsageLines + taskUsageLines
-  + sessionUsageLines + waitUsageLines
+  + intakeUsageLines + sessionUsageLines + waitUsageLines
 
 let topUsage = """
   orb — configure and control the running Orbe instance

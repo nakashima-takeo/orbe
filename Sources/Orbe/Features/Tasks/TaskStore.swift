@@ -187,7 +187,7 @@ enum TaskStoreError: Error, Equatable {
 
   /// 前後の空白を除いて空でなく、制御文字（Cc）と改行類（U+2028 / U+2029 を含む）を含まない 1 行。
   /// 書式文字（ZWJ 絵文字の U+200D など）は行を壊さないので通す。
-  private static func validTitle(_ raw: String) throws(TaskStoreError) -> String {
+  static func validTitle(_ raw: String) throws(TaskStoreError) -> String {
     let title = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !title.isEmpty else { throw .invalid("title is empty") }
     guard

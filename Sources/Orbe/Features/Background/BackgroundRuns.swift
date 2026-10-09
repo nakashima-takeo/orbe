@@ -255,23 +255,35 @@ private struct Prepared {
     let arguments = cli.arguments(call.model, call.tools)
     let commandLine = ([executable] + arguments).map(shellQuoted).joined(separator: " ")
     let box = ReplyBox()
+    let watched = call.tools.filter { $0.hasPrefix("mcp__") }
     let spec = BackgroundProcess.Spec(
       executable: executable, arguments: arguments,
-      environment: env.merging(cli.environment) { $1 }, directory: NSHomeDirectory(),
+      environment: env.merging(cli.environment(call.tools)) { $1 }, directory: NSHomeDirectory(),
       stdin: Data(call.prompt.utf8), elapsedLimit: limits.elapsed,
       idleLimit: limits.idle,
       stdout: .lines(maxLength: BackgroundRuns.eventLineLimit) { line in
-        guard let reply = cli.reply(line) else { return true }
-        guard reply.text.utf8.count <= limits.output else { return false }
+        // 指定した MCP のツールが揃わないまま始まったら、モデルを呼ぶ前に止める（ツール無しで別の答えを作らせない）。
+        if !watched.isEmpty, !box.checkedTools, let available = cli.availableTools(line) {
+          box.checkedTools = true
+          let missing = HeadlessCLI.missingTools(watched, available: available)
+          if !missing.isEmpty {
+            box.missingTools = missing
+            return .stopped
+          }
+        }
+        guard let reply = cli.reply(line) else { return nil }
+        guard reply.text.utf8.count <= limits.output else { return .limited(.output) }
         box.reply = reply
-        return true
+        return nil
       },
       // agent の標準エラーは成果ではない。上限は貯める量だけを抑え、走らせ続ける。
       stderr: .init(limit: limits.stderr, overflowStops: false))
     return Prepared(commandLine: commandLine, spec: spec) { outcome, startedAt, endedAt in
       var result = ending(outcome.ending)
-      // 捨てた行が最終応答だった——応答を失ったのは出力の上限による。
-      if box.reply == nil, outcome.droppedLines > 0, result.isProcessExit {
+      if let missing = box.missingTools {
+        result = .toolsUnavailable(missing)
+      } else if box.reply == nil, outcome.droppedLines > 0, result.isProcessExit {
+        // 捨てた行が最終応答だった——応答を失ったのは出力の上限による。
         result = .limited(.output)
       }
       return BackgroundRunResult(
@@ -305,6 +317,8 @@ private struct Prepared {
   /// 裏の直列キューで書き、プロセスの終了後に読む。
   private final class ReplyBox: @unchecked Sendable {
     var reply: BackgroundAgentReply?
+    var checkedTools = false
+    var missingTools: [String]?
   }
 }
 
