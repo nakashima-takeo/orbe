@@ -57,6 +57,9 @@ final class WindowController: NSObject, NSWindowDelegate {
   // タスク一覧の唯一の正。制御 API と画面が同じ変異メソッドを呼び、変異ごとに tasks.json へ即時保存される。
   // workspace の参照は表示・応答のときに解くので、workspace の復元との順序の依存は無い。
   let taskStore = TaskStore()
+  // 受信の走らせ役。定義の変異はここを通して番人の登録を合わせ、読みと提案のさばきは `intakeStore` が持つ。
+  let intakeRunner = IntakeRunner(store: IntakeStore())
+  var intakeStore: IntakeStore { intakeRunner.store }
   // worktree ごとに動いている agent の索引。flushChrome が作り直し、タスク画面と ⌘T が読む。
   let worktreeAgents = WorktreeAgentActivity()
   // パレット提示の拡張（WindowController+Palette）が設定パレットの defaultAgent 配線で触るため internal。
@@ -151,6 +154,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     showFirstRunFlow()  // 初回言語選択（preferredLanguage 未設定時）→ 既存 Onboarding（各 CLI へ導入）
     cleanupLegacyCompletionIfNeeded()  // 旧方式が zshrc へ書いた managed block を一度だけ除去
     wireUpdateUI()  // アップデート提示導線を配線し、ゲートを通れば update サイクル開始
+    intakeRunner.start()  // 全受信を番人へ載せる（過ぎていた回はここで 1 回だけ走る）
     window.center()
   }
 
