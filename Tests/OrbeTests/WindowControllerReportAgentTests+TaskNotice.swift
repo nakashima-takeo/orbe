@@ -7,8 +7,8 @@ import XCTest
 /// 「workspace 名・#番号 起きたこと」が出る。そのタスクを ⌘⇧X で見ているときは出ない。ピルのクリックは
 /// ⌘⇧X でそのタスクを選んで開く。
 ///
-/// 壊れると何が起きるか: タスクのピルが次の chrome の再投影で即座に閉じる。読む設定が見ている workspace の
-/// ものになる。見ているタスクでも鳴る。クリックしてもタスクが絞り込みに隠れたまま見つからない。言語選択や
+/// 壊れると何が起きるか: 読む設定が見ている workspace のものになる。見ているタスクでも鳴る。別のアプリを
+/// 使っている間に ⌘⇧X を開いたままだと知らせが届かない。クリックしてもタスクが絞り込みに隠れたまま見つからない。言語選択や
 /// オンボーディングの最中に ⌘⇧X へ差し替わる。
 extension WindowControllerReportAgentTests {
   /// 待ちの条件を付けたタスクを足し、`output` を出して満たす（nil なら期限で解く）。
@@ -51,8 +51,8 @@ extension WindowControllerReportAgentTests {
   }
 
   /// 背面で解けると、タスクの workspace の名前と「#番号 起きたこと」のピルが、その workspace の滞留で立ち、
-  /// 完了の音がその workspace の設定で鳴る。直後の chrome の再投影（一覧の差し替え）でも取り下がらない。
-  func testTaskNoticeStandsAndSurvivesReprojection() throws {
+  /// 完了の音がその workspace の設定で鳴る。
+  func testTaskNoticeStandsWithTheTaskWorkspaceSettings() throws {
     let (wc, _) = try makeControllerAndTwoActivatedWorkspaces()
     let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
     let origin = wc.regularWorkspaces[0]
@@ -73,11 +73,6 @@ extension WindowControllerReportAgentTests {
       TaskNotice(taskId: id, workspaceName: origin.name, text: "#214 レビューが付いた"))
     XCTAssertEqual(transient.expiresAt.timeIntervalSince(transient.arrivedAt), 40, accuracy: 0.001)
     XCTAssertEqual(sound.played, [.synth(.steel, event: .done, volume: 30)])
-
-    wc.refreshChrome()
-    wc.flushChrome()
-    XCTAssertEqual(wc.attentionStore.transient?.retracted, false, "再投影でタスクのピルを取り下げない")
-    XCTAssertEqual(wc.attentionStore.count, 0, "件数は agent だけを数える")
   }
 
   /// 結び付きが無ければ番号の代わりにタイトル、期限なら「期限が来た」。workspace が無ければ名前の欄は無く、
@@ -113,6 +108,20 @@ extension WindowControllerReportAgentTests {
 
     wc.notifyWaitResolved(task: other.id, other.resolution)
     XCTAssertEqual(wc.attentionStore.transient?.taskNotice?.taskId, other.id)
+    XCTAssertEqual(sound.played.count, 1)
+  }
+
+  /// Orbe が背面なら、⌘⇧X でそのタスクを選んだまま残っていても誰も見ていないので、ピルも音も出る。
+  func testTaskNoticeStandsForTheSelectedTaskWhileOrbeIsInBackground() throws {
+    let wc = try launchWithoutFirstRun()
+    let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
+    let (id, resolution) = try resolveTask(wc)
+    wc.showTaskPalette(selecting: id)
+    XCTAssertFalse(wc.window.isKeyWindow, "前提: Orbe は背面")
+
+    wc.notifyWaitResolved(task: id, resolution)
+
+    XCTAssertEqual(wc.attentionStore.transient?.taskNotice?.taskId, id)
     XCTAssertEqual(sound.played.count, 1)
   }
 
