@@ -233,3 +233,12 @@ enum ClaudeHeadless {
     return BackgroundAgentReply(text: text, isError: event["is_error"] as? Bool ?? false)
   }
 }
+
+extension HeadlessRefusal {
+  var message: String {
+    switch self {
+    case .toolsNotAllowListable: "its built-in tools cannot be allow-listed"
+    case .noToolOrSessionControl: "it cannot limit tools or skip saving the session"
+    }
+  }
+}

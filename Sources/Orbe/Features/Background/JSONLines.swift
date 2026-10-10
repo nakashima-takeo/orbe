@@ -70,3 +70,17 @@ struct JSONLines<Item: Decodable> {
     }
   }
 }
+
+extension JSONLines.Reason {
+  /// 回の記録に残す理由。
+  var text: String {
+    switch self {
+    case .notJSON: "not JSON"
+    case .notObject: "not a JSON object"
+    case .missingKey(let key): "missing \(key)"
+    case .nullValue(let key): "\(key) is null"
+    case .typeMismatch(let key): "\(key) has the wrong type"
+    case .invalidValue(let key): key.isEmpty ? "invalid value" : "invalid \(key)"
+    }
+  }
+}

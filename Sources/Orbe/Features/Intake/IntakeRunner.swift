@@ -284,32 +284,3 @@ final class IntakeRunner {
     }
   }
 }
-
-extension BackgroundEnding {
-  /// 回の記録に残す終わり方。
-  var text: String {
-    switch self {
-    case .exited(let code): "exited \(code)"
-    case .signaled(let signal): "killed by signal \(signal)"
-    case .limited(.elapsed): "stopped at the time limit"
-    case .limited(.idle): "stopped after producing no output for too long"
-    case .limited(.output): "stopped at the output limit"
-    case .stopped: "stopped"
-    case .notStarted(let failure): "not started (\(failure.text))"
-    case .toolsUnavailable(let tools): "tools unavailable: \(tools.joined(separator: ", "))"
-    }
-  }
-}
-
-extension BackgroundStartFailure {
-  var text: String {
-    switch self {
-    case .invalid(let error): error.message
-    case .agentUnsupported(let cli, let reason):
-      "\(cli) cannot run in the background: \(reason.message)"
-    case .agentNotFound(let cli): "\(cli) is not installed"
-    case .directoryMissing(let directory): "directory missing: \(directory)"
-    case .launchFailed(let code): "launch failed: \(String(cString: strerror(code)))"
-    }
-  }
-}

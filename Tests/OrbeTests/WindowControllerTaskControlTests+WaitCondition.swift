@@ -164,6 +164,6 @@ extension WindowControllerTaskControlTests {
     XCTAssertEqual(try record(.limited(.idle))["limit"] as? String, "idle")
     XCTAssertEqual(
       try record(.notStarted(.directoryMissing("/gone")))["reason"] as? String,
-      "directory not found: /gone")
+      "directory missing: /gone")
   }
 }

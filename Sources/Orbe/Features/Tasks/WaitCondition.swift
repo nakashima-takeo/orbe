@@ -204,19 +204,8 @@ extension WaitCheck.Result {
     case .signaled(let signal): self = .signaled(signal)
     case .limited(let limit): self = .limited(limit)
     case .stopped: self = .stopped
-    case .notStarted(let failure): self = .notStarted(Self.reason(failure))
-    case .toolsUnavailable(let tools):
-      self = .notStarted("tools unavailable: \(tools.joined(separator: ", "))")
-    }
-  }
-
-  private static func reason(_ failure: BackgroundStartFailure) -> String {
-    switch failure {
-    case .directoryMissing(let path): "directory not found: \(path)"
-    case .launchFailed(let errno): "launch failed: \(String(cString: strerror(errno)))"
-    case .invalid(let error): "invalid: \(error)"
-    case .agentNotFound(let cli): "agent not found: \(cli)"
-    case .agentUnsupported(let cli, _): "agent unsupported: \(cli)"
+    case .notStarted(let failure): self = .notStarted(failure.text)
+    case .toolsUnavailable: self = .notStarted(ending.text)
     }
   }
 }

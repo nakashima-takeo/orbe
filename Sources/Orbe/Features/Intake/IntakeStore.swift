@@ -311,29 +311,3 @@ enum IntakeDecision: Equatable {
   case propose(itemId: String, title: String, due: TaskItem.DueDate?)
   case resolve(link: String)
 }
-
-extension BackgroundJobError {
-  var message: String {
-    switch self {
-    case .intervalTooShort: "the interval must be at least 1 minute"
-    case .intervalTooLong: "the interval must be at most 10080 minutes (7 days)"
-    case .noTimesOfDay: "no times of day"
-    case .invalidTimeOfDay: "a time of day is out of range"
-    case .emptyCommand: "command is empty"
-    case .relativeDirectory: "directory is not an absolute path"
-    case .unknownAgent(let cli): "agent \(cli) is not supported"
-    case .emptyModel: "model is empty"
-    case .emptyPrompt: "prompt is empty"
-    case .emptyToolName: "a tool name is empty"
-    }
-  }
-}
-
-extension HeadlessRefusal {
-  var message: String {
-    switch self {
-    case .toolsNotAllowListable: "its built-in tools cannot be allow-listed"
-    case .noToolOrSessionControl: "it cannot limit tools or skip saving the session"
-    }
-  }
-}
