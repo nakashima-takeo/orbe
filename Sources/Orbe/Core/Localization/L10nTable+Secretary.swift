@@ -4,8 +4,10 @@ import Foundation
 /// 本体 `L10n.table` が結合する。
 extension L10n {
   static let secretaryTable: [L10nKey: (ja: String, en: String)] = [
-    .taskStartHomeTask: ("タスク %1$@「%2$@」に取り掛かってください。", "Work on task %1$@ “%2$@”."),
-    .taskStartHomeDescription: ("詳細:", "Details:"),
+    .taskStartHomeTask: (
+      "タスク %1$@「%2$@」に取り掛かってください。詳細は Orbe の MCP（list_tasks）で読む。",
+      "Work on task %1$@ “%2$@”. Read its details with Orbe’s MCP (list_tasks)."
+    ),
     .secretaryLineOrigin: ("⌘⇧X から · %@", "From ⌘⇧X · %@"),
     .secretaryLineWaitOrigin: ("待ちの条件 · %@", "Wait condition · %@"),
     .secretaryLineTask: ("タスク %1$@「%2$@」を頼む。", "Task %1$@ “%2$@”: please take it on."),
