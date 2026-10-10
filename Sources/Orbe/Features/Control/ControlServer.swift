@@ -10,8 +10,8 @@ protocol ControlTarget: ControlTaskTarget, ControlIntakeTarget {
   /// 検出未完了なら空配列（エラーにしない）。
   func controlListAgents() -> [[String: Any]]
   func controlResolveTab(_ id: Int) -> TerminalTab?
-  /// 新タブをアクティブ workspace（または指定 workspace）に開く。戻り値は新タブ ID。
-  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?) -> Int?
+  /// 新タブをアクティブ workspace（または指定 workspace）に開く。`selects` が偽なら選ばずに起こす。戻り値は新タブ ID。
+  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?, selects: Bool) -> Int?
   /// 検出済みエージェントを新タブで起こす（spawn_agent）。command 省略時は対象 workspace の
   /// 実効 default-agent を解く。未知 workspaceId は -32004・未検出 command は -32602・
   /// 検出ゼロは -32000。
@@ -322,11 +322,18 @@ final class ControlServer {
       return { target, _ in .success(["agents": target.controlListAgents()]) }
     case "spawn":
       return { target, params in
+        let select = params["select"]
+        if let select,
+          (select as? NSNumber).map({ CFGetTypeID($0) == CFBooleanGetTypeID() }) != true
+        {
+          return .failure(ControlError(code: -32602, message: "invalid select"))
+        }
         guard
           let tid = target.controlSpawn(
             workspaceId: params["workspaceId"] as? Int,
             cwd: params["cwd"] as? String,
-            command: params["command"] as? String)
+            command: params["command"] as? String,
+            selects: select as? Bool ?? true)
         else { return .failure(ControlError(code: -32000, message: "spawn failed")) }
         return .success(["tabId": tid])
       }

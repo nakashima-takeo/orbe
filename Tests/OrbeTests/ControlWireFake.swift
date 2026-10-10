@@ -51,6 +51,7 @@ final class FakeControlTarget: ControlTarget {
     let workspaceId: Int?
     let cwd: String?
     let command: String?
+    let selects: Bool
   }
   struct AgentSpawn {
     let command: String?
@@ -147,8 +148,8 @@ final class FakeControlTarget: ControlTarget {
   func controlListTabs() -> [[String: Any]] { tabs }
   func controlListAgents() -> [[String: Any]] { agents }
 
-  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?) -> Int? {
-    spawns.append(Spawn(workspaceId: workspaceId, cwd: cwd, command: command))
+  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?, selects: Bool) -> Int? {
+    spawns.append(Spawn(workspaceId: workspaceId, cwd: cwd, command: command, selects: selects))
     return spawnedTabId
   }
 

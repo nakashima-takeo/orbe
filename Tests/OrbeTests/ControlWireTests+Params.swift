@@ -45,7 +45,7 @@ extension ControlWireTests {
       ("get_tab_text", ["tabId": tab]),
       ("send_text", ["tabId": tab, "text": "hello"]),
       ("send_key", ["tabId": tab, "key": "ctrl+c"]),
-      ("spawn", ["workspaceId": 3, "cwd": "/tmp/cwd", "command": "zsh -l"]),
+      ("spawn", ["workspaceId": 3, "cwd": "/tmp/cwd", "command": "zsh -l", "select": false]),
       ("spawn_agent", ["command": "codex", "workspaceId": 3, "cwd": "/tmp/cwd"]),
       (
         "resume_agent",
@@ -270,14 +270,14 @@ extension ControlWireTests {
       "報告者は params でなく接続の向こうのプロセス（ここではテスト自身）から辿る")
   }
 
-  /// `spawn` の optional 3 件が名前どおり target へ届く（いずれもガードが無い）。
+  /// `spawn` の optional 4 件が名前どおり target へ届く（`select` 以外はガードが無い）。
   func testSpawnOptionalParamsReachTarget() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
 
     let response = wire.request(
       id: 1, method: "spawn",
-      params: ["workspaceId": 3, "cwd": "/tmp/cwd", "command": "zsh -l"])
+      params: ["workspaceId": 3, "cwd": "/tmp/cwd", "command": "zsh -l", "select": false])
 
     XCTAssertEqual(
       (response?["result"] as? [String: Any])?["tabId"] as? Int, fake.spawnedTabId,
@@ -286,6 +286,21 @@ extension ControlWireTests {
     XCTAssertEqual(spawn?.workspaceId, 3, "workspaceId が名前どおり届く")
     XCTAssertEqual(spawn?.cwd, "/tmp/cwd", "cwd が名前どおり届く")
     XCTAssertEqual(spawn?.command, "zsh -l", "command が名前どおり届く")
+    XCTAssertEqual(spawn?.selects, false, "select が名前どおり届く")
+  }
+
+  /// `spawn` の `select` は省略で選び、真偽値以外は -32602 で何も開かない——数の 0 を偽と読むと、
+  /// 呼び出し側の型の取り違えが「人が見ているタブを奪う／奪わない」の差へ黙って化ける。
+  func testSpawnSelectDefaultsToTrueAndRejectsNonBool() {
+    let fake = FakeControlTarget()
+    let wire = startWire(target: fake)
+
+    XCTAssertNil(errorCode(wire.request(id: 1, method: "spawn")), "select 省略で成功する")
+    XCTAssertEqual(fake.spawns.last?.selects, true, "select 省略は選ぶ")
+    XCTAssertEqual(
+      errorCode(wire.request(id: 2, method: "spawn", params: ["select": 0])), -32602,
+      "数は真偽値として受けない")
+    XCTAssertEqual(fake.spawns.count, 1, "弾いた spawn は target へ届かない")
   }
 
   /// `spawn` が失敗（target が nil を返す）したら -32000。

@@ -87,10 +87,11 @@ extension WindowController: ControlTarget {
 
   /// 指定 workspace に新タブを開き、新タブ ID を返す（制御 API の spawn）。未知 workspaceId は
   /// アクティブへフォールバックする（`spawn_agent` / `resume_agent` は同じ形を継がず -32004 で弾く）。
-  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?) -> Int? {
+  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?, selects: Bool = true) -> Int?
+  {
     let index =
       workspaceId.flatMap { wid in workspaces.firstIndex { $0.id == wid } } ?? activeWorkspace
-    return openTab(workspaceIndex: index, cwd: cwd, command: command)?.tabId
+    return openTab(workspaceIndex: index, cwd: cwd, command: command, selects: selects)?.tabId
   }
 
   /// 背景/休眠 workspace を前面化し全タブを mount する（制御 API の activate_workspace）。
