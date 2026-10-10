@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// 受信タブのキー。↵（提案の一覧）は入力欄の `onSubmit`、esc（提案の一覧）と ⇧⇥ は画面のモデルが受ける。取り消せない操作
-/// （捨てる・削除）とブラウザで開くは押した瞬間だけを操作にし、押し続けたキーリピートは捨てる。
+/// 受信タブのキー。↵（提案の一覧）は入力欄の `onSubmit`、esc（提案の一覧）と ⇧⇥ は画面のモデルが受ける。中身のキーは
+/// `IntakeHand` の写し（ボードと同じ）。取り消せない操作（捨てる・削除）とブラウザで開くは押した瞬間だけを操作にし、押し続けた
+/// キーリピートは捨てる。
 extension TaskPaletteIntakeModel {
   /// 入力欄（提案の一覧）。捨てるは ⌘⌫ で、入力欄が空のときだけ効く（文字があれば行頭まで消す）——焦点が絞り込み欄に
   /// あるので、単キーにすると絞り込みのつもりで打った 1 文字で提案が消える。
@@ -55,15 +56,13 @@ extension TaskPaletteIntakeModel {
   }
 
   private func handleContentsKey(_ press: KeyPress) -> KeyPress.Result {
+    if let stroke = IntakeHand.stroke(press) {
+      if case .press(let operation) = stroke { perform(operation) }
+      return .handled
+    }
     switch press.key {
-    case .return:
-      if press.phase == .down { runNow() }
-    case .space:
-      if press.phase == .down { togglePause() }
-    case _ where TaskPaletteModel.isCommandBackspace(press):
-      if press.phase == .down { deleteIntake() }
     case .leftArrow, .escape: showProposals()
-    case .tab, .backtab: break
+    case .return, .tab, .backtab: break
     default: return .ignored
     }
     return .handled

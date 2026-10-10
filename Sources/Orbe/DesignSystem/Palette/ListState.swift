@@ -2,14 +2,14 @@ import Foundation
 
 /// 一覧を見える所まで送る先。同じ行へ続けて送るとき（⌥↑↓ を続けて押す）も変化として届くよう、決めるたびに
 /// 進む番号を持つ。
-struct TaskPaletteScrollTarget<ID: Hashable>: Equatable {
+struct ListScrollTarget<ID: Hashable>: Equatable {
   let id: ID
   let serial: Int
 }
 
-/// 一覧 1 つの状態（入力・選択・最後の位置・送り先）と、それを動かす手続き。選択は行の同一性で持ち、位置は
-/// 付け直しのときだけ使う。選べる行の並びは、呼び出し側がその時点の行から渡す。
-struct TaskPaletteListState<ID: Hashable> {
+/// 一覧 1 つの状態（絞り込みの文字・同一性での選択・最後の位置・送り先）と、それを動かす手続き。絞り込まない一覧は文字を
+/// 使わない。選択は行の同一性で持ち、位置は付け直しのときだけ使う。選べる行の並びは、呼び出し側がその時点の行から渡す。
+struct ListState<ID: Hashable> {
   /// 入力欄の文字（その一覧の絞り込み）。
   var query = ""
   private var selection = ModalSelection<ID?>(nil)
@@ -17,7 +17,7 @@ struct TaskPaletteListState<ID: Hashable> {
   private var position = 0
   /// 一覧を送る先。人の操作のたびに今の選択で決め直す。付け直し（agent の変更）では決めない——人が流して
   /// 読んでいる一覧を、選んだ行の位置がずれただけで引き戻さないため。
-  private(set) var scrollTarget: TaskPaletteScrollTarget<ID>?
+  private(set) var scrollTarget: ListScrollTarget<ID>?
 
   var selectedID: ID? { selection.value }
 
@@ -87,7 +87,7 @@ struct TaskPaletteListState<ID: Hashable> {
   /// 今の選択を送り先にする。
   mutating func follow() {
     guard let id = selection.value else { return }
-    scrollTarget = TaskPaletteScrollTarget(id: id, serial: (scrollTarget?.serial ?? 0) &+ 1)
+    scrollTarget = ListScrollTarget(id: id, serial: (scrollTarget?.serial ?? 0) &+ 1)
   }
 
   private mutating func select(at index: Int, in ids: [ID]) {

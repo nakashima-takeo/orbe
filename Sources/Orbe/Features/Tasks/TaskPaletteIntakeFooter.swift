@@ -23,7 +23,8 @@ struct TaskPaletteIntakeAction: View {
       case .contents:
         if let intake = model.selectedIntake {
           PaletteActionLine(
-            key: "↵", template: l10n.string(.taskPaletteIntakeActionRunNow),
+            key: IntakeHand.Operation.runNow.key,
+            template: l10n.string(.taskPaletteIntakeActionRunNow),
             slots: [.emphasis(intake.definition.name)])
         }
       }
@@ -53,11 +54,11 @@ struct TaskPaletteIntakeHints: View {
       PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteIntakeHintBack))
     case .contents:
       if let intake = model.selectedIntake {
-        PaletteKeyHint(
-          key: "space",
-          label: l10n.string(intake.paused ? .taskPaletteIntakeResume : .taskPaletteIntakePause))
+        ForEach([IntakeHand.Operation.togglePause, .delete], id: \.self) { operation in
+          PaletteKeyHint(
+            key: operation.key, label: l10n.string(operation.title(paused: intake.paused)))
+        }
       }
-      PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteDelete))
       PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteIntakeHintBack))
     }
   }

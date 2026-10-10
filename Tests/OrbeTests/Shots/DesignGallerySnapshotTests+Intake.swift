@@ -52,8 +52,8 @@ extension DesignGallerySnapshotTests {
     let refused = model()
     refused.intake.tapShelf(.intake(1))
     refused.intake.enterContents()
-    refused.intake.runNow()
-    refused.intake.runNow()
+    refused.intake.perform(.runNow)
+    refused.intake.perform(.runNow)
     try write("intake_contents_running.png", refused, 1440, 900)
 
     let crowded = model(DesignSceneFixtures.intakeCrowdedFile())

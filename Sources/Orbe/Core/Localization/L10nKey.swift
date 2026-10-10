@@ -350,26 +350,12 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteTabIntake
   case taskPaletteIntakePlaceholder
   case taskPaletteIntakeAskSecretary
-  case taskPaletteIntakeNext
-  case taskPaletteIntakePaused
-  case taskPaletteIntakeRunning
   case taskPaletteIntakeNoProposals
   case taskPaletteIntakeLastFailed
   case taskPaletteIntakeContents
-  case taskPaletteIntakeRunAt
-  case taskPaletteIntakeFetched
-  case taskPaletteIntakeJudged
-  case taskPaletteIntakeProposedShortOne
-  case taskPaletteIntakeProposedShortOther
-  case taskPaletteIntakeProposedLongOne
-  case taskPaletteIntakeProposedLongOther
-  case taskPaletteIntakeNothingNew
-  case taskPaletteIntakeFailed
-  case taskPaletteIntakeNeverRan
   case taskPaletteIntakeEmpty
   case taskPaletteIntakeOpenLink
   case taskPaletteIntakeAsTask
-  case taskPaletteIntakeDue
   case taskPaletteIntakeDismiss
   case taskPaletteIntakeActionAccept
   case taskPaletteIntakeActionProposals
@@ -377,25 +363,44 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteIntakeHintShelf
   case taskPaletteIntakeHintPick
   case taskPaletteIntakeHintBack
-  case taskPaletteIntakeFetch
-  case taskPaletteIntakeCurrentSet
-  case taskPaletteIntakeNewArrivals
   case taskPaletteIntakeJudge
   case taskPaletteIntakeLast
   case taskPaletteIntakeOverlaps
-  case taskPaletteIntakeAgentFetch
-  case taskPaletteIntakeCommandFetch
-  case taskPaletteIntakeTools
-  case taskPaletteIntakeDirectory
-  case taskPaletteIntakeEvery
-  case taskPaletteIntakeDaily
   case taskPaletteIntakeOverlapCount
   case taskPaletteIntakeRewriteNote
-  case taskPaletteIntakeRunNow
-  case taskPaletteIntakePause
-  case taskPaletteIntakeResume
   case taskPaletteIntakeErrAccept
-  case taskPaletteIntakeErrRunning
+  // MARK: - 自動追加の共有の文（IntakeText・IntakeHand。L10nTable+Intake）
+  case intakeFetch
+  case intakeNext
+  case intakePaused
+  case intakeRunning
+  case intakeRunAt
+  case intakeFetched
+  case intakeJudged
+  case intakeProposedShortOne
+  case intakeProposedShortOther
+  case intakeProposedLongOne
+  case intakeProposedLongOther
+  case intakeNothingNew
+  case intakeFailed
+  case intakeFailedShort
+  case intakeNeverRan
+  case intakeNowMark
+  case intakeToday
+  case intakeDue
+  case intakeCurrentSet
+  case intakeNewArrivals
+  case intakeAgentFetch
+  case intakeCommandFetch
+  case intakeTools
+  case intakeDirectory
+  case intakeEvery
+  case intakeDaily
+  case intakeRunNow
+  case intakePause
+  case intakeResume
+  case intakeDelete
+  case intakeErrRunning
   // MARK: - 秘書・作業を始める（L10nTable+Secretary）
   case taskStartHomeTask
   case secretaryLineOrigin
