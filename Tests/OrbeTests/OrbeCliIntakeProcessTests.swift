@@ -108,4 +108,22 @@ final class OrbeCliIntakeProcessTests: OrbeTestCase {
     XCTAssertTrue(missing.stderr.contains("error -32602: missing fetch"), missing.stderr)
     XCTAssertTrue(control.target.intakeStore.intakes.isEmpty)
   }
+
+  /// 各サブコマンドは受ける数より多い位置引数を、socket に触れる前に usage エラー（2）で断る。
+  ///
+  /// 壊れると何が起きるか: `orb intake rm 3 4` が 3 だけを消して exit 0 を返し、4 も消したつもりの AI が食い違う。
+  /// `orb intake list 3` が絞り込みのつもりの 3 を黙って捨てて全件を返す。
+  func testSubcommandsRejectExtraPositionals() {
+    for args in [
+      ["list", "1"], ["proposals", "1", "2"], ["set", "1", "2"], ["run", "1", "2"],
+      ["pause", "1", "2"], ["resume", "1", "2"], ["rm", "1", "2"],
+    ] {
+      let outcome = ControlProcess.orbWithoutServer(["intake"] + args)
+      let label = "orb intake \(args.joined(separator: " "))"
+      XCTAssertEqual(outcome.status, 2, "\(label): \(outcome.stderr)")
+      XCTAssertTrue(
+        outcome.stderr.contains("unexpected argument: \(args.last!)"), "\(label): \(outcome.stderr)"
+      )
+    }
+  }
 }
