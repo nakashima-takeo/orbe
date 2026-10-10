@@ -59,8 +59,7 @@ extension WindowController: ControlTarget {
     guard tab.applyReport(report), report.state == "waiting" || report.state == "done",
       let notification = agentNotification(for: tab)
     else { return }
-    noteAttentionTransient(notification)
-    noteAgentSound(notification)
+    deliver(notification)
   }
 
   /// タブのエージェントへ text を送って Enter を押す（制御 API の prompt_agent）。届くのは入力欄が

@@ -49,34 +49,45 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
   /// タブ名の変更中に「＋」や Attention ストリップでパレットを開くと、改名欄の blur（改名の取消）が
   /// パレットより後に届きうる。そのときも焦点は、改名していないときに開いたのと同じパレットの受け手に
   /// 残り、打鍵が端末へ流れない。
+  ///
+  /// 焦点は SwiftUI の描画を経て次の回以降に移るので、各段は経過時間ではなく焦点が移ったことを待つ。
   func testRenameBlurAfterOpeningAPaletteLeavesFocusOnThePalette() throws {
     let openers = [
-      PaletteOpener(name: "＋", overlay: .worktreePalette) { $0.statusModel.onNewTab() },
-      PaletteOpener(name: "Attention", overlay: .attentionPalette) {
-        $0.statusModel.onAttentionTap()
-      },
+      PaletteOpener(
+        name: "＋", overlay: .worktreePalette, receiver: { $0 is NSTextView },
+        open: { $0.statusModel.onNewTab() }),
+      PaletteOpener(
+        name: "Attention", overlay: .attentionPalette, receiver: { $0 is ChromeHostingView },
+        open: { $0.statusModel.onAttentionTap() }),
     ]
     for opener in openers {
-      let (name, overlay, open) = (opener.name, opener.overlay, opener.open)
+      let name = opener.name
       let wc = try restoreSingleTab()
-      open(wc)
-      spin(0.3)
-      let receiver = wc.window.firstResponder.map { ObjectIdentifier(type(of: $0)) }
+      let responder = { wc.window.firstResponder }
+      XCTAssertTrue(waitUntil { responder() is SurfaceView }, "前提: \(name) 起動直後は端末が焦点を持つ")
+      opener.open(wc)
+      XCTAssertTrue(
+        waitUntil { opener.receiver(responder()) },
+        "前提: \(name) 改名していないときは、パレットの受け手が焦点を持つ（実際: \(String(describing: responder()))）")
       wc.dismissPalette()
-      spin(0.3)
+      XCTAssertTrue(waitUntil { responder() is SurfaceView }, "前提: \(name) 閉じると端末へ戻る")
 
       wc.beginTabRename()
-      spin(0.3)
-      open(wc)
-      spin(0.3)
-      XCTAssertEqual(wc.presentedOverlay, overlay, "前提: \(name) でパレットが開いた")
+      XCTAssertTrue(waitUntil { responder() is NSTextView }, "前提: \(name) 改名欄が焦点を持つ")
+      let renameField = (responder() as? NSTextView)?.delegate.map(ObjectIdentifier.init)
+      opener.open(wc)
+      XCTAssertEqual(wc.presentedOverlay, opener.overlay, "前提: \(name) でパレットが開いた")
+      let onPalette = {
+        opener.receiver(responder())
+          && (responder() as? NSTextView)?.delegate.map(ObjectIdentifier.init) != renameField
+      }
+      XCTAssertTrue(waitUntil { onPalette() }, "前提: \(name) パレットが焦点を取った")
       wc.statusModel.onCancelRename()
-      spin(0.3)
 
-      XCTAssertFalse(wc.window.firstResponder is SurfaceView, "\(name): 焦点が端末へ戻らない")
-      XCTAssertEqual(
-        wc.window.firstResponder.map { ObjectIdentifier(type(of: $0)) }, receiver,
-        "\(name): 改名していないときと同じパレットの受け手が焦点を持つ")
+      XCTAssertTrue(
+        waitUntil { onPalette() },
+        "\(name): 改名していないときと同じパレットの受け手が焦点を持つ（実際: \(String(describing: responder()))）")
+      XCTAssertFalse(responder() is SurfaceView, "\(name): 焦点が端末へ戻らない")
       wc.dismissPalette()
     }
   }
@@ -105,11 +116,18 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
     XCTAssertEqual(wc.presentedOverlay, .none, "⌘T は dispatch されない（暴発防止）")
   }
 
-  /// ⌘⌘（Attention パレット）はヘルプ表示中だけ no-op。ヘルプは押下を点灯・行ハイライトにしか
-  /// 使わない場で、そこに ⌘⌘ が載る以上必ず試し押しされる——効いてしまうとヘルプ自体が消える。
-  /// 他パレット表示中は従来どおり差し替える（パレット同士の遷移規約）。
-  func testAttentionToggleInertOnlyWhileHelpShowing() throws {
+  /// ⌘⌘（Attention パレット）はヘルプと、差し替えてはならない画面（言語選択・オンボーディング・更新内容）の間は
+  /// no-op。ヘルプは押下を点灯・行ハイライトにしか使わない場で、そこに ⌘⌘ が載る以上必ず試し押しされる——効いて
+  /// しまうとヘルプ自体が消える。他パレット表示中は従来どおり差し替える（パレット同士の遷移規約）。
+  func testAttentionToggleInertWhileHelpOrModalShowing() throws {
     let wc = try restoreSingleTab()
+    for overlay in [AppShellModel.Overlay.languageSelect, .onboarding, .updateChanges] {
+      wc.model.overlay = overlay
+      wc.toggleAttentionPalette()
+      XCTAssertEqual(wc.presentedOverlay, overlay, "\(overlay) の間の ⌘⌘ は no-op")
+    }
+    wc.model.overlay = .none
+
     wc.showHelp()
     XCTAssertEqual(wc.presentedOverlay, .help, "前提: ヘルプ表示中")
     wc.toggleAttentionPalette()
@@ -167,13 +185,8 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
   private struct PaletteOpener {
     let name: String
     let overlay: AppShellModel.Overlay
+    /// 開いたパレットが焦点を渡す受け手（入力欄を持つパレットは field editor、持たないものは SwiftUI の器）。
+    let receiver: (NSResponder?) -> Bool
     let open: (WindowController) -> Void
-  }
-
-  private func spin(_ seconds: TimeInterval) {
-    let end = Date().addingTimeInterval(seconds)
-    while Date() < end {
-      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01))
-    }
   }
 }

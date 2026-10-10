@@ -5,9 +5,9 @@ import SwiftUI
 /// メニューバー投影（NSStatusItem）の所有者。AppDelegate が起動時に生成し、
 /// `AttentionStore`（単一情報源）を SwiftUI（`MenuBarStatusView`）へ橋渡しする。
 ///
-/// 4 態: ①要対応 0＝減光 ◐ ②状態変化の瞬間（`store.transient` が生きている間）＝滲み出しピル
+/// 4 態: ①要対応 0＝減光 ◐ ②状態変化・待ちが解けた瞬間（`store.transient` が生きている間）＝滲み出しピル
 /// ③収縮後＝◐＋件数（waiting+done のみ） ④クリック＝ドロップダウン（`MenuBarDropdown`）。
-/// ②の間のクリックだけは該当タブへ直行する（前面化＋focus）。main スレッド規律
+/// ②の間のクリックだけは前面化して行き先へ直行する（agent はそのタブ、タスクは ⌘⇧X でそのタスク）。main スレッド規律
 /// （AppKit・AttentionStore と同じ）で、monitor / timer / target-action はすべて main で届く。
 ///
 /// ②の開閉は `MenuBarArrivalDriver` が位相として持ち、controller が tween 中だけ 1/60s の
@@ -117,7 +117,7 @@ final class MenuBarController: NSObject {
   // MARK: - クリック分岐
 
   @objc private func statusItemClicked() {
-    // ②の間のクリック＝該当タブへ直行（前面化＋focus）。ドロップダウンは開かない。
+    // ②の間のクリック＝前面化して行き先へ直行。ドロップダウンは開かない。
     // 閉じ方は滞留満了と同じ収縮で、尺だけが速い（②を落とすのは閉じ切った `advance`）。
     // 取り下げ済み（閉じかけ）のピルは②としてもう生きていないので、通常のクリックへ落とす。
     if let transient = store.transient, !transient.retracted {
@@ -125,7 +125,10 @@ final class MenuBarController: NSObject {
       advance()
       NSApp.activate(ignoringOtherApps: true)
       windowController.window.makeKeyAndOrderFront(nil)
-      windowController.focusAttentionTab(tabId: transient.row.tabId)
+      switch transient.notice {
+      case .agent(let row): windowController.focusAttentionTab(tabId: row.tabId)
+      case .task(let notice): windowController.showTaskPalette(selecting: notice.taskId)
+      }
       closeDropdown()
       return
     }
@@ -166,6 +169,7 @@ final class MenuBarController: NSObject {
       self.closeDropdown()
       NSApp.activate(ignoringOtherApps: true)
       self.windowController.window.makeKeyAndOrderFront(nil)
+      guard !self.windowController.model.overlay.isModal else { return }
       self.windowController.showSettingsPalette()  // 権限状態行は設定パレット root にある
     }
     d.onClose = { [weak self] in

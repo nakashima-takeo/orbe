@@ -4,15 +4,18 @@ import XCTest
 
 /// 待ちの条件の係——付けた直後に 1 回確かめ、以後は間隔ごと。成功か期限で待ちが解け、以後は走らない。付け直し・解除は
 /// 走っている回を止め、競って届いた古い結果を新しい条件に混ぜない。Orbe を終了したまま期限を過ぎた条件は、起動で解ける。
+/// 解けたときだけ、解けたタスクと起きたことを知らせる。
 ///
 /// 壊れると何が起きるか: コマンドの書き間違いが間隔の分だけ見えない。解けた・外した条件のコマンドが裏で走り続ける。
-/// 付け直した条件が、前の条件の成功で解けてしまう。終了している間に過ぎた期限が、いつまでも解けない。
+/// 付け直した条件が、前の条件の成功で解けてしまう。終了している間に過ぎた期限が、いつまでも解けない。解けても
+/// 知らせが届かない、または確かめるたびに知らせが鳴る。
 final class WaitConditionWatcherTests: OrbeTestCase {
   private var now = Date()
   private var armed: (date: Date, fire: () -> Void)?
   private var runner: WatcherFakeRunner!
   private var scheduler: BackgroundScheduler!
   private var watcher: WaitConditionWatcher?
+  private var resolved: [(task: Int, resolution: WaitResolution)] = []
 
   override func setUp() {
     now = Date()
@@ -31,7 +34,9 @@ final class WaitConditionWatcherTests: OrbeTestCase {
   }
 
   private func start(_ store: TaskStore) {
-    let watcher = WaitConditionWatcher(store: store, scheduler: scheduler)
+    let watcher = WaitConditionWatcher(store: store, scheduler: scheduler) { [unowned self] in
+      resolved.append(($0, $1))
+    }
     watcher.start()
     self.watcher = watcher
   }
@@ -81,6 +86,7 @@ final class WaitConditionWatcherTests: OrbeTestCase {
 
     XCTAssertEqual(store.tasks.first { $0.id == task.id }?.waiting?.condition?.checks, 1)
     XCTAssertEqual(armed?.date, now.addingTimeInterval(600), "次は確かめた時刻から間隔の後")
+    XCTAssertTrue(resolved.isEmpty, "解けていない確認は知らせない")
   }
 
   func testSuccessResolvesTheWaitAndStopsChecking() throws {
@@ -95,6 +101,8 @@ final class WaitConditionWatcherTests: OrbeTestCase {
 
     XCTAssertEqual(store.tasks.first { $0.id == task.id }?.waitResolution?.headline, "レビューが付いた")
     XCTAssertEqual(runner.calls.count, 1, "解けた条件はもう走らない")
+    XCTAssertEqual(resolved.map(\.task), [task.id])
+    XCTAssertEqual(resolved.first?.resolution.headline, "レビューが付いた")
   }
 
   /// 付け直しは走っている回を止め、付け直しの後に届いた前の条件の成功は新しい条件を解かない。
@@ -146,6 +154,8 @@ final class WaitConditionWatcherTests: OrbeTestCase {
     XCTAssertEqual(resolution.how, .expired)
     XCTAssertEqual(resolution.at, condition.deadline)
     XCTAssertEqual(runner.calls.count, 0, "期限を過ぎた条件は確かめずに解ける")
+    XCTAssertEqual(resolved.map(\.task), [task.id], "起動直後に解けたものも知らせる")
+    XCTAssertEqual(resolved.first?.resolution.how, .expired)
   }
 }
 

@@ -55,6 +55,9 @@ enum TestIsolation {
 
   private nonisolated(unsafe) static var installed = false
 
+  /// テストを始める前のアプリの activation policy（xctest は前面化しない `prohibited`）。
+  private nonisolated(unsafe) static var initialActivationPolicy: NSApplication.ActivationPolicy!
+
   static func installOnce() {
     guard !installed else { return }
     installed = true
@@ -101,7 +104,10 @@ enum TestIsolation {
           + "テスト本体より前に ORBE_STATE_DIR を張れていない")
     }
 
-    // 5. 毎テストの隔離。以降の全テストへ効く。
+    // 5. アプリの前面化の状態。どのテストにも触られる前の値を、各テストの終わりに戻す先として控える。
+    initialActivationPolicy = NSApplication.shared.activationPolicy()
+
+    // 6. 毎テストの隔離。以降の全テストへ効く。
     TestScratch.addCaseHooks(begin: beginCase, end: endCase)
   }
 
@@ -169,7 +175,31 @@ enum TestIsolation {
         "dev.orbe.tests.\(stateDir.lastPathComponent).\(dir.lastPathComponent)"))
   }
 
+  /// テスト 1 件の終わり（`tearDown` の後）。
+  ///
+  /// 窓を key にするテストは、アプリの activation policy を変えて前面化する。どちらもプロセス全体の状態で、戻さなければ
+  /// 後続の全テストが「前面のアプリ」で走り、焦点の振る舞いの前提が変わる。窓を下ろすのは窓を上げたテストの責務だが、
+  /// アプリの状態は誰が変えたかに依らずここで必ず戻す——申告制だと戻し忘れが起きる。
+  ///
+  /// policy を先に戻す（前面化を許す policy のままでは `deactivate` が効かない）。前面を降りたことはウィンドウサーバーの
+  /// イベントとして届き、NSApp が捌いて初めて成立するので、降りるまでイベントを配送する。
   static func endCase() {
     Ghostty.pasteboard.releaseGlobally()
+    let app = NSApplication.shared
+    if app.activationPolicy() != initialActivationPolicy {
+      app.setActivationPolicy(initialActivationPolicy)
+    }
+    if app.isActive {
+      app.deactivate()
+      let deadline = Date().addingTimeInterval(5)
+      while app.isActive, Date() < deadline {
+        if let event = app.nextEvent(
+          matching: .any, until: Date().addingTimeInterval(0.01), inMode: .default, dequeue: true)
+        {
+          app.sendEvent(event)
+        }
+      }
+    }
   }
+
 }
