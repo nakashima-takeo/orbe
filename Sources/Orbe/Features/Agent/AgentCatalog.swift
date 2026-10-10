@@ -14,7 +14,7 @@ final class AgentCatalog {
   /// `reportsIdleOnStart` は Orbe のプラグインがその CLI の起動時 hook に idle を配線しているか
   /// （claude の SessionStart→idle。codex CLI 自身も SessionStart を持つが `codex-hooks.json` は
   /// 配線していない）——出所は `docs/spec/agent/plugin-package.md` の event→state 表。
-  /// `firstInput` は再開の起動に最初の入力を添える席。`headless` は裏で非対話に回す能力。
+  /// `firstInput` は起動（新規・再開）に最初の入力を添える席。`headless` は裏で非対話に回す能力。
   struct AgentProfile {
     let command: String
     let resumeFlag: String
@@ -23,11 +23,12 @@ final class AgentCatalog {
     let headless: HeadlessSupport
   }
 
-  /// 再開の起動に最初の入力を添える席。
+  /// 起動（新規・再開）に最初の入力を添える席。
   enum FirstInputSeat {
-    /// 再開の後ろに置く（`claude --resume <id> <入力>`）。
+    /// 末尾に位置引数として置く。前にオプションの終わり（`--`）を置き、`-` で始まる入力をオプションと読ませない
+    /// （`claude --resume <id> -- <入力>`）。
     case trailing
-    /// フラグの値として渡す（`agy --conversation <id> -i <入力>`）。
+    /// フラグの値として渡す（`agy --conversation <id> -i <入力>`）。値は `-` で始まってもそのフラグの値になる。
     case flag(String)
   }
 
@@ -129,10 +130,10 @@ final class AgentCatalog {
 
   private static func firstInputWords(_ profile: AgentProfile, _ firstInput: String?) -> [String] {
     guard let firstInput else { return [] }
-    var words: [String] = []
-    if case .flag(let flag) = profile.firstInput { words.append(flag) }
-    words.append(ShellWord.quoted(firstInput))
-    return words
+    switch profile.firstInput {
+    case .trailing: return ["--", ShellWord.quoted(firstInput)]
+    case .flag(let flag): return [flag, ShellWord.quoted(firstInput)]
+    }
   }
 
   /// PATH 文字列から supported の実行ファイルを解決する（検出の純粋部分）。
