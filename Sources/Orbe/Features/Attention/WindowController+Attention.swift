@@ -53,8 +53,10 @@ extension WindowController {
     reconfirmFocusNextTick()  // 別 overlay からの遷移で去りゆくカードの teardown に勝つ
   }
 
-  /// メニューバー②のクリック直行・行クリックが使う「そのタブへ移動」（前面化は呼び出し側）。
+  /// メニューバー②のクリック直行・行クリックが使う「そのタブへ移動」（前面化は呼び出し側）。差し替えてはならない
+  /// 画面の間は何もしない（焦点だけが裏の端末へ移り、画面に向けたキーが agent に届く）。
   func focusAttentionTab(tabId: Int) {
+    guard !model.overlay.isModal else { return }
     _ = controlFocusTab(tabId: tabId)
   }
 
