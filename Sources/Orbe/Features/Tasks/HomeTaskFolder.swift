@@ -32,10 +32,10 @@ enum HomeTaskFolder {
     return true
   }
 
-  /// Home が git の作業ツリーの中にあるか。あれば、タスクの作業場の根がそのリポジトリになり、作業場の一致と
-  /// 「1 つの作業場は 1 つのタスク」が崩れる。
+  /// Home が git の作業ツリーの中にあるか（Home 自身がリポジトリの根でも）。あれば、タスクの作業場の根がその
+  /// リポジトリになり、作業場の一致と「1 つの作業場は 1 つのタスク」が崩れる。
   static func isInsideGit(home: String) -> Bool {
-    GitWorktreeRoot.root(of: home) != GitWorktreeRoot.normalizedPath(home)
+    GitWorktreeRoot.locate(cwd: home) != nil
   }
 
   /// タイトルから作る短い名前。パス区切り・制御文字・空白類（と `-` の並び）を 1 つの `-` に畳み、先頭の

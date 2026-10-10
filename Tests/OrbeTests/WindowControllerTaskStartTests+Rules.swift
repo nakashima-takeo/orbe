@@ -77,6 +77,19 @@ extension WindowControllerTaskStartTests {
     XCTAssertEqual(stored(wc, task.id)?.status, .todo)
   }
 
+  /// Home 自身が git のリポジトリになっていたら（秘書や人が Home で `git init` した）、Home のタスクは始めない
+  /// （作業場の根が Home 全体になり、Home のタスクどうしが同じ作業場に重なる）。
+  func testAHomeThatIsItselfARepositoryRefusesHomeTasks() throws {
+    let wc = try launch()
+    let home = try XCTUnwrap(HomeFolder.url).path
+    try git(["init", "-q"], in: home)
+    let task = try wc.taskStore.add(TaskDraft(title: "Home のタスク", workspace: try homeId(wc)))
+
+    XCTAssertEqual(try refusal(wc, TaskStartRequest(taskId: task.id)).code, -32000)
+    XCTAssertEqual(stored(wc, task.id)?.status, .todo, "タスクは変わらない")
+    XCTAssertNil(stored(wc, task.id)?.worktree)
+  }
+
   // MARK: - 作業場の決め方
 
   /// Home のタスクは、Home の `tasks/` の下の記録だけを使う（リポジトリで始めて Home に移したタスクの worktree は
