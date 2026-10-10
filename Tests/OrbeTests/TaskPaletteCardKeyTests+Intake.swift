@@ -65,6 +65,33 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.intake.store.proposals[0].state, .open)
   }
 
+  /// 押した瞬間だけ効くキーは、押し続けても 1 回だけ効く（提案の ⌘↵、中身の space・↵）。
+  func testIntakeKeysHeldDownActOnce() {
+    let model = intakeModel()
+    var opened: [String] = []
+    model.onOpenURL = { opened.append($0.absoluteString) }
+    let window = mount(model)
+
+    press(Key.enter, "\r", .command, to: window)
+    press(Key.enter, "\r", .command, repeating: true, to: window)
+    press(Key.enter, "\r", .command, repeating: true, to: window)
+    XCTAssertEqual(opened.count, 1, "ブラウザを 1 つだけ開く")
+
+    arrow(Key.left, to: window)
+    arrow(Key.down, to: window)
+    arrow(Key.right, to: window)
+    arrow(Key.right, to: window)
+    press(Key.space, " ", to: window)
+    press(Key.space, " ", repeating: true, to: window)
+    press(Key.space, " ", repeating: true, to: window)
+    XCTAssertEqual(model.intake.selectedIntake?.paused, true, "止める ⇄ 再開は 1 回だけ")
+
+    press(Key.enter, "\r", to: window)
+    press(Key.enter, "\r", repeating: true, to: window)
+    XCTAssertTrue(model.intake.runner.isRunning(1))
+    XCTAssertNil(model.intake.error, "リピートで「受信中」の赤を出さない")
+  }
+
   /// ← で棚（入力欄が空のときだけ）、棚の ↓ で受信を選び → で戻る、→ で中身、中身の space で止める ⇄ 再開、esc で戻る。
   func testIntakeArrowsMoveBetweenShelfProposalsAndContents() {
     let model = intakeModel()
