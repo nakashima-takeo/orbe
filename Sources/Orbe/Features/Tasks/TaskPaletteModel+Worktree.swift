@@ -8,7 +8,7 @@ extension TaskPaletteModel {
   }
 
   /// ⌘T。選んでいるタスクのための ⌘T を開く（待ちが解けて会話を続きから始められるタスクなら、⌘T を開かずに
-  /// 続きから始める）。追加の行なら足してから開く。編集中なら確定してから選択で決める。完了の見出しでは何もしない。
+  /// 続きから始める）。入力の行き先なら足してから開く。編集中なら確定してから選択で決める。完了の見出しでは何もしない。
   /// GitHub タブは `openWorktreePaletteFromGitHub`。受信タブでは何もしない。
   func openWorktreePalette() {
     guard pick == nil, visibleTab != .intake else { return }
@@ -16,7 +16,7 @@ extension TaskPaletteModel {
     leaveEditingForAction()
     switch selectedID {
     case .task(let id):
-      if let task = selectedTask, continuation(of: task) != nil {
+      if let task = selectedTask, continues(task) {
         continueWait()
       } else {
         onOpenWorktreePalette(id)

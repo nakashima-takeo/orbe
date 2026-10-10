@@ -36,9 +36,19 @@ extension TaskPaletteModel {
     return conversation
   }
 
+  /// 解けた待ちの会話があるのに続きから始められない理由（作業ディレクトリ・CLI が無い）。
+  func continuationBlock(of task: TaskItem) -> TaskPaletteError? {
+    continuation(of: task) == nil ? nil : onContinuationBlock(task.id)
+  }
+
+  /// ⌘T が続きから始めるか（会話があり、始められる）。始められなければ ⌘T はいつもの ⌘T。
+  func continues(_ task: TaskItem) -> Bool {
+    continuation(of: task) != nil && continuationBlock(of: task) == nil
+  }
+
   /// 選んでいるタスクの解けた待ちを、条件を付けた会話の続きから始める（⌘T・起きたことの箱のボタン）。
   func continueWait() {
-    guard let task = selectedTask, continuation(of: task) != nil else { return }
+    guard let task = selectedTask, continues(task) else { return }
     leaveEditingForAction()
     error = onContinueWait(task.id)
   }

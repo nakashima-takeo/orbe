@@ -92,7 +92,7 @@ struct TaskPaletteList: View {
   private func taskRow(_ task: TaskPaletteTaskRow) -> some View {
     let grabbed = model.drag.session.flatMap { $0.taskID == task.id ? $0 : nil }
     return TaskPaletteTaskRowView(
-      row: task, selected: model.selectedID == .task(task.id),
+      row: task, selected: model.selectedID == .task(task.id), clock: model.clock,
       onTap: { model.tapRow(.task(task.id)) },
       onToggle: { model.toggleDone(task.id) },
       onHoverEnter: { model.hoverSelect(.task(task.id)) }
@@ -197,6 +197,8 @@ private struct TaskPaletteGrip: View {
 struct TaskPaletteTaskRowView: View {
   let row: TaskPaletteTaskRow
   let selected: Bool
+  /// 経過を数える今（`TaskPaletteModel.clock`）。
+  let clock: (Date) -> Date
   let onTap: () -> Void
   let onToggle: () -> Void
   let onHoverEnter: () -> Void
@@ -301,12 +303,13 @@ struct TaskPaletteTaskRowView: View {
       TaskPaletteBadge(
         symbol: "clock",
         text: "\(waiting.reason) \(days(waiting.days))",
-        foreground: Color.theme.textSecondary, fill: Color.theme.plainPillFill, capsule: true
+        foreground: Color.theme.textSecondary, fill: Color.theme.plainPillFill, capsule: true,
+        maxWidth: TaskPaletteRowMetrics.textBadgeMaxWidth
       )
       .layoutPriority(2)
     }
     if let resolved = row.resolved {
-      TaskResolvedBadge(resolved: resolved)
+      TaskResolvedBadge(resolved: resolved, clock: clock)
         .layoutPriority(2)
     }
     workspace
@@ -339,56 +342,6 @@ struct TaskPaletteTaskRowView: View {
 
   private func days(_ count: Int) -> String {
     count == 0 ? l10n.string(.taskPaletteToday) : l10n.format(.taskPaletteDays, count)
-  }
-}
-
-/// 一覧の PR の札（「<PR の印> #213 レビュー待ち ✓」）。
-struct TaskPullRequestBadge: View {
-  let badge: GitHubItemText.PullRequestBadge
-  @Environment(\.localization) private var l10n
-
-  var body: some View {
-    HStack(spacing: Theme.Space.tick) {
-      TaskLinkGlyph(kind: .pr, size: 10)
-      Text("#\(badge.number)").foregroundStyle(Color.theme.textPrimary)
-      if let phase = badge.phase {
-        Text(GitHubItemText.phaseText(phase, l10n.language))
-          .foregroundStyle(Color.theme.textMuted)
-      }
-      if let checks = badge.checks { TaskChecksMark.text(checks) }
-    }
-    .font(Font.theme.meta)
-    .lineLimit(1)
-    .fixedSize()
-    .padding(.horizontal, Theme.Space.note)
-    .frame(height: TaskPaletteRowMetrics.firstLine)
-    .background(RoundedRectangle(cornerRadius: Theme.Radius.sm + 1).fill(Color.theme.tintAccent))
-  }
-}
-
-/// 行の札（優先度・期限・待ち・workspace）。
-struct TaskPaletteBadge: View {
-  var symbol: String?
-  let text: String
-  let foreground: Color
-  let fill: Color
-  var capsule = false
-
-  var body: some View {
-    HStack(spacing: Theme.Space.tick) {
-      if let symbol {
-        Image(systemName: symbol).font(.system(size: 8, weight: .medium))
-      }
-      Text(text).lineLimit(1)
-    }
-    .font(Font.theme.meta)
-    .foregroundStyle(foreground)
-    .fixedSize()
-    .padding(.horizontal, capsule ? Theme.Space.step : Theme.Space.note)
-    .frame(height: TaskPaletteRowMetrics.firstLine)
-    .background(
-      RoundedRectangle(cornerRadius: capsule ? Theme.Radius.pill : Theme.Radius.sm + 1)
-        .fill(fill))
   }
 }
 

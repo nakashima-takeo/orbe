@@ -24,6 +24,8 @@ import Observation
   let today: TaskItem.DueDate
   /// 時刻を暦日へ落とすためのタイムゾーン。
   let timeZone: TimeZone
+  /// 待ちの条件の経過・「次は」を数える今（毎分の刻みの時刻を受けて返す）。preview は 1 つの固定時刻に揃える。
+  let clock: (Date) -> Date
 
   /// タスクのタブが持つ一覧の状態。読み書きは選ぶ状態を振り分ける `taskList` を通す（選ぶ状態の間に
   /// 隠れたタブの一覧を書き換えないため、ここ以外から触れないようにしておく）。
@@ -85,6 +87,8 @@ import Observation
   var onFocusTab: (Int) -> Void = { _ in }
   /// 解けた待ちの会話を続きから始める（タスクの ID）。届けられなかった理由を返す。
   var onContinueWait: (Int) -> TaskPaletteError? = { _ in nil }
+  /// 解けた待ちを続きから始められない理由（タスクの ID。nil は始められる）。
+  var onContinuationBlock: (Int) -> TaskPaletteError? = { _ in nil }
   /// 秘書に頼む。
   var onAskSecretary: (SecretaryAsk) -> Result<Secretary.Acceptance, Secretary.Refusal> = { _ in
     .failure(.claudeMissing)
@@ -95,8 +99,9 @@ import Observation
   init(
     store: TaskStore, githubItems: GitHubItemCache, viewer: GitHubViewer,
     openLists: GitHubOpenLists, root: String, agents: WorktreeAgentActivity,
-    sessionTabs: AgentSessionTabs = AgentSessionTabs(), intakes: IntakeRunner,
-    workspaces: TaskPaletteWorkspaces, now: Date, timeZone: TimeZone
+    sessionTabs: AgentSessionTabs, intakes: IntakeRunner,
+    workspaces: TaskPaletteWorkspaces, now: Date, timeZone: TimeZone,
+    clock: @escaping (Date) -> Date = { $0 }
   ) {
     self.store = store
     self.githubItems = githubItems
@@ -107,6 +112,7 @@ import Observation
     self.sessionTabs = sessionTabs
     self.workspaces = workspaces
     self.timeZone = timeZone
+    self.clock = clock
     let today = TaskItem.DueDate.today(now, timeZone: timeZone)
     self.today = today
     intake = TaskPaletteIntakeModel(

@@ -29,6 +29,7 @@ extension WindowController {
       _ = self?.controlFocusTab(tabId: tabId)
     }
     p.onContinueWait = { [weak self] id in self?.continueWait(taskId: id) }
+    p.onContinuationBlock = { [weak self] id in self?.continuationBlock(taskId: id) }
     p.onAskSecretary = { [weak self] ask in
       guard let self else { return .failure(.claudeMissing) }
       do throws(Secretary.Refusal) {

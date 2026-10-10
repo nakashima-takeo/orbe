@@ -27,7 +27,7 @@ struct TaskPaletteFooter: View {
     if model.visibleTab == .intake {
       TaskPaletteIntakeAction(model: model.intake)
     } else if let error = model.error {
-      Text(l10n.string(errorKey(error))).foregroundStyle(Color.theme.danger)
+      Text(l10n.string(error.message)).foregroundStyle(Color.theme.danger)
     } else if let notice = model.notice {
       Text(l10n.string(notice == .askedQueued ? .taskPaletteAskedQueued : .taskPaletteAsked))
         .foregroundStyle(Color.theme.textPrimary)
@@ -85,7 +85,11 @@ struct TaskPaletteFooter: View {
       case .task(let id) where id == model.justAdded:
         PaletteActionLine(key: "→", template: l10n.string(.taskPaletteActionRefine), slots: [])
       case .task:
-        if let task = model.selectedTask, let conversation = model.continuation(of: task) {
+        if let task = model.selectedTask, let block = model.continuationBlock(of: task) {
+          PaletteActionLine(
+            key: nil, template: l10n.string(.taskPaletteContinueBlocked),
+            slots: [.emphasis(l10n.string(block.message))])
+        } else if let task = model.selectedTask, let conversation = model.continuation(of: task) {
           PaletteActionLine(
             key: "⌘T", template: l10n.string(.taskPaletteActionContinue),
             slots: [.emphasis(task.title), .emphasis(conversation.command)])
@@ -176,19 +180,6 @@ struct TaskPaletteFooter: View {
     }
   }
 
-  private func errorKey(_ error: TaskPaletteError) -> L10nKey {
-    switch error {
-    case .title: .taskPaletteErrTitle
-    case .waiting: .taskPaletteErrWaiting
-    case .due: .taskPaletteErrDue
-    case .failed: .taskPaletteErrFailed
-    case .assign: .taskPaletteErrAssign
-    case .link: .taskPaletteErrLink
-    case .secretaryClaude: .taskPaletteErrSecretaryClaude
-    case .agentMissing: .taskPaletteErrAgentMissing
-    case .directoryMissing: .taskPaletteErrDirectoryMissing
-    }
-  }
 }
 
 /// GitHub タブのフッターの左（選んだ行と右の欄の場所で、↵ が何をするか）。

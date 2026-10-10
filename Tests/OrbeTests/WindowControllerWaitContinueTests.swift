@@ -220,4 +220,25 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
     XCTAssertEqual(try conversationTabs(wc).count, before + 1, "開くのは 1 つだけ")
   }
 
+  /// 続きから始められない（作業ディレクトリが無い）タスクの ⌘T は、いつもの ⌘T（worktree パレット）を開き、タブは
+  /// 開かず、起きたことも残す。
+  func testCommandTOfAConversationThatCannotContinueOpensTheUsualWorktreePalette() throws {
+    _ = try stageFakeAgent("claude")
+    let wc = try launch([TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)])
+    waitForDetection(wc)
+    let gone = TestScratch.caseDir.appendingPathComponent("gone").path
+    let id = try resolved(wc, directory: gone, workspace: conversationWorkspace)
+    let before = wc.workspaces.map { $0.tabs.map(\.id) }
+    XCTAssertEqual(wc.continuationBlock(taskId: id), .directoryMissing)
+    XCTAssertTrue(wc.handleWindowKeyCommand(.showTaskPalette))
+    let palette = try XCTUnwrap(wc.model.taskPalette)
+    palette.reconcile()
+    XCTAssertEqual(palette.selectedID, .task(id), "前提: 解けたタスクを選んでいる")
+
+    palette.openWorktreePalette()
+
+    XCTAssertEqual(wc.presentedOverlay, .worktreePalette, "いつもの ⌘T")
+    XCTAssertEqual(wc.workspaces.map { $0.tabs.map(\.id) }, before, "タブは開かない")
+    XCTAssertNotNil(resolution(wc, id), "起きたことは残る")
+  }
 }

@@ -67,6 +67,8 @@ struct TaskPaletteCard: View {
     .onChange(of: model.store.tasks) { model.reconcile() }
     // agent の状態が変わると右の欄の止まる場所（agent の場所）が増減するので、同じく付け直す。
     .onChange(of: model.agents.agents) { model.reconcile() }
+    // 会話のタブが増減すると右の欄の止まる場所（会話の行）が増減するので、同じく付け直す。
+    .onChange(of: model.sessionTabs.tabs) { model.reconcile() }
     // GitHub タブの行はストア（結び付き）と一覧の置き場の両方で変わるので、行の変化でも付け直す。
     .onChange(of: model.gitHubRows) { model.reconcile() }
     // 出ている行の結び付きが増えたら（agent の変更・完了の欄の開閉・範囲・入力）、その値を取りに行く。

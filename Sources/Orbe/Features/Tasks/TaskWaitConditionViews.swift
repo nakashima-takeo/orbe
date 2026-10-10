@@ -1,30 +1,33 @@
 import SwiftUI
 
-/// 行の解けた待ちの札（「レビューが付いた 2分前」）。経過は 1 分ごとに描き直す。
+/// 行の解けた待ちの札（「レビューが付いた 2分前」）。1 行で、文字の札の上限幅を超えれば末尾を省略する。経過は 1 分ごとに
+/// 描き直す。
 struct TaskResolvedBadge: View {
   let resolved: TaskPaletteTaskRow.Resolved
+  /// 経過を数える今（`TaskPaletteModel.clock`）。
+  let clock: (Date) -> Date
   @Environment(\.localization) private var l10n
 
   var body: some View {
     TimelineView(.periodic(from: resolved.at, by: 60)) { context in
-      HStack(spacing: Theme.Space.note) {
-        Text(TaskWaitText.headline(resolved.headline, l10n: l10n))
-          .foregroundStyle(Color.theme.accentBright)
-        Text(TaskWaitText.ago(resolved.at, now: context.date, l10n: l10n))
-          .foregroundStyle(Color.theme.textMuted)
-      }
-      .font(Font.theme.meta)
-      .lineLimit(1)
-      .fixedSize()
-      .padding(.horizontal, Theme.Space.step)
-      .frame(height: TaskPaletteRowMetrics.firstLine)
-      .background(Capsule().fill(Color.theme.tintAccent))
+      (Text(TaskWaitText.headline(resolved.headline, l10n: l10n))
+        .foregroundStyle(Color.theme.accentBright)
+        + Text(" " + TaskWaitText.ago(resolved.at, now: clock(context.date), l10n: l10n))
+        .foregroundStyle(Color.theme.textMuted))
+        .font(Font.theme.meta)
+        .lineLimit(1)
+        .truncationMode(.tail)
+        .frame(maxWidth: TaskPaletteRowMetrics.textBadgeMaxWidth, alignment: .leading)
+        .fixedSize()
+        .padding(.horizontal, Theme.Space.step)
+        .frame(height: TaskPaletteRowMetrics.firstLine)
+        .background(Capsule().fill(Color.theme.tintAccent))
     }
   }
 }
 
-/// 右の欄の上部の会話の行（「claude 2日前の会話」と「↗ タブへ」、下に「タブ pr-214」。agent の場所と同じ 2 段）。会話の
-/// タブがあるときだけ止まる場所になり、↵ かクリックでそのタブへ移る。
+/// 右の欄の上部の会話の行（「claude 2日前の会話 · タブ pr-214」と「↗ タブへ」の 1 行）。会話のタブがあるときだけ止まる
+/// 場所になり、↵ かクリックでそのタブへ移る。
 struct TaskConversationRow: View {
   let conversation: WaitConversation
   let tab: AgentSessionTabs.Tab?
@@ -35,23 +38,23 @@ struct TaskConversationRow: View {
   @Environment(\.localization) private var l10n
 
   var body: some View {
-    VStack(alignment: .leading, spacing: Theme.Space.hair) {
-      HStack(spacing: Theme.Space.step) {
-        Text(conversation.command)
-          .foregroundStyle(Color.theme.textSecondary)
-        Text(TaskWaitText.conversation(days: days, l10n: l10n))
-          .foregroundStyle(Color.theme.textMuted)
-          .truncationMode(.tail)
-        Spacer(minLength: Theme.Space.step)
-        if tab != nil { TaskGoToTabChip() }
-      }
-      .font(Font.theme.workspaceName)
+    HStack(spacing: Theme.Space.step) {
+      Text(conversation.command)
+        .font(Font.theme.workspaceName)
+        .foregroundStyle(Color.theme.textSecondary)
+        .fixedSize()
+      Text(TaskWaitText.conversation(days: days, l10n: l10n))
+        .font(Font.theme.workspaceName)
+        .foregroundStyle(Color.theme.textMuted)
+        .fixedSize()
       if let tab {
-        Text(l10n.format(.taskPaletteAgentTab, tab.title))
-          .font(Font.theme.meta)
+        Text("· " + l10n.format(.taskPaletteAgentTab, tab.title))
+          .font(Font.theme.workspaceName)
           .foregroundStyle(Color.theme.textMuted)
           .truncationMode(.tail)
       }
+      Spacer(minLength: Theme.Space.step)
+      if tab != nil { TaskGoToTabChip() }
     }
     .lineLimit(1)
     .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
@@ -98,7 +101,7 @@ struct TaskConditionBox: View {
           horizontalSpacing: Theme.Space.step + Theme.Space.hair, verticalSpacing: Theme.Space.hair
         ) {
           line(.taskWaitConditionLabel, condition.description)
-          line(.taskWaitCheckLabel, every(now: context.date))
+          line(.taskWaitCheckLabel, every(now: model.clock(context.date)))
           line(.taskWaitDeadlineLabel, deadline)
         }
       }
@@ -134,9 +137,12 @@ struct TaskConditionBox: View {
     }
   }
 
+  /// 「10 分ごと · 次は 7 分後」。期限までにもう確かめないなら「10 分ごと · 期限まで確認なし」。
   private func every(now: Date) -> String {
-    let next = condition.nextCheck(now: now, calendar: .current)
-    let minutes = next.map { Int(($0.timeIntervalSince(now) / 60).rounded(.up)) } ?? 0
+    guard let next = condition.nextCheck(now: now, calendar: .current) else {
+      return l10n.format(.taskWaitEveryUntilDeadline, condition.everyMinutes)
+    }
+    let minutes = Int((next.timeIntervalSince(now) / 60).rounded(.up))
     return l10n.format(
       .taskWaitEvery, condition.everyMinutes,
       minutes > 0 ? l10n.format(.taskWaitNextIn, minutes) : l10n.string(.taskWaitSoon))
@@ -219,6 +225,8 @@ struct TaskResolvedBox: View {
   let resolution: WaitResolution
   /// 続きから始められる会話（無ければボタンを出さない）。
   let continuation: WaitConversation?
+  /// 会話があるのに続きから始められない理由（ボタンの代わりに出す）。
+  let blocked: TaskPaletteError?
   @Environment(\.localization) private var l10n
 
   var body: some View {
@@ -229,14 +237,14 @@ struct TaskResolvedBox: View {
           HStack(spacing: Theme.Space.note) {
             dot
             headline.fixedSize()
-            meta(now: context.date).fixedSize()
+            meta(now: model.clock(context.date)).fixedSize()
           }
           VStack(alignment: .leading, spacing: Theme.Space.hair) {
             HStack(spacing: Theme.Space.note) {
               dot
               headline
             }
-            meta(now: context.date).padding(.leading, Self.indent)
+            meta(now: model.clock(context.date)).padding(.leading, Self.indent)
           }
         }
         if !resolution.restOfOutput.isEmpty {
@@ -248,6 +256,12 @@ struct TaskResolvedBox: View {
         }
         if let continuation {
           continueButton(continuation)
+        } else if let blocked {
+          Text(l10n.format(.taskPaletteContinueBlocked, l10n.string(blocked.message)))
+            .font(Font.theme.meta)
+            .foregroundStyle(Color.theme.textMuted)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.leading, Self.indent)
         }
       }
       .padding(.horizontal, Theme.Space.beat)
