@@ -36,7 +36,8 @@ enum HomeTemplate {
 
     ## 待ちの条件と受信
 
-    - 待っているタスクが解ける条件（説明・確認のコマンド・間隔・期限）は `update_task` の waitingCondition で付ける。Orbe が裏で確かめ、満たすか期限が来たら待ちを外す。
+    - 待っているタスクが解ける条件（説明・確認のコマンド・間隔・期限）は `set_wait_condition` で付ける。Orbe が確認のコマンドを人の承認なしに裏で\
+    繰り返し走らせ、満たすか期限が来たら待ちを外す。
     - 外の出どころから定期的に拾って提案にするのは受信（`set_intake`・`list_intakes`・`run_intake`・\
     `pause_intake`・`delete_intake`・`list_intake_proposals`）。
 
@@ -73,8 +74,8 @@ enum HomeTemplate {
     ## Waiting conditions and intakes
 
     - Attach the condition that ends a wait (description, check command, interval, deadline) with \
-    `update_task`'s waitingCondition. Orbe checks it in the background and clears the wait when it holds or \
-    the deadline comes.
+    `set_wait_condition`. Orbe runs the check command in the background, repeatedly and without asking the \
+    user, and clears the wait when it holds or the deadline comes.
     - To pick things up from outside sources on a schedule and turn them into proposals, use intakes \
     (`set_intake`, `list_intakes`, `run_intake`, `pause_intake`, `delete_intake`, `list_intake_proposals`).
 

@@ -18,11 +18,8 @@ extension TaskStoreTests {
   }
 
   private func waitingTask(_ store: TaskStore) throws -> (TaskItem, WaitCondition) {
-    let task = try store.add(
-      draft("設定の検索を速くする") {
-        $0.waitingReason = "レビュー待ち"
-        $0.waitingCondition = request()
-      })
+    let task = try store.addWaiting(
+      draft("設定の検索を速くする") { $0.waitingReason = "レビュー待ち" }, request())
     return (task, try XCTUnwrap(task.waiting?.condition))
   }
 
@@ -59,7 +56,6 @@ extension TaskStoreTests {
     let plain = try store.add(draft("a"))
     let done = try store.add(draft("b") { $0.status = .done })
 
-    assertInvalid({ _ = try store.add(draft("c") { $0.waitingCondition = self.request() }) })
     assertInvalid({ _ = try store.update(plain.id, self.conditionUpdate(.set(self.request()))) })
     assertInvalid({ _ = try store.update(done.id, self.conditionUpdate(.set(self.request()))) })
     let waiting = try store.add(draft("d") { $0.waitingReason = "返事" })

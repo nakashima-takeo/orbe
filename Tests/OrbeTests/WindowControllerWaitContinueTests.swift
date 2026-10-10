@@ -46,12 +46,13 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
   ) throws -> Int {
     var draft = TaskDraft(title: "設定の検索を速くする")
     draft.waitingReason = "レビュー待ち"
-    draft.waitingCondition = WaitConditionRequest(
-      description: "PR-214-reviewed", command: "exit 1", everyMinutes: 10,
-      deadline: Date().addingTimeInterval(3600), directory: directory,
-      conversation: WaitConversation(
-        command: "claude", sessionId: "s-1", workspace: workspace, secretary: false))
-    let task = try wc.taskStore.add(draft)
+    let task = try wc.taskStore.addWaiting(
+      draft,
+      WaitConditionRequest(
+        description: "PR-214-reviewed", command: "exit 1", everyMinutes: 10,
+        deadline: Date().addingTimeInterval(3600), directory: directory,
+        conversation: WaitConversation(
+          command: "claude", sessionId: "s-1", workspace: workspace, secretary: false)))
     let now = Date()
     wc.taskStore.recordCheck(
       task.id, condition: try XCTUnwrap(task.waiting?.condition?.id),

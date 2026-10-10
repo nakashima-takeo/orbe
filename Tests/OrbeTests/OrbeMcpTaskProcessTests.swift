@@ -39,4 +39,19 @@ final class OrbeMcpTaskProcessTests: OrbeTestCase {
     XCTAssertNil(outsideTask?["workspaceId"], "タブの外のブリッジでは、引数の callerTabId を使わない")
     XCTAssertNil(outsideTask?["createdBy"])
   }
+
+  /// 裏で走るコマンドを登録する口は `set_wait_condition` だけで、帳簿の動詞（`add_task` / `update_task`）は条件を
+  /// 受けない——agent CLI のツール許可はツール単位なので、帳簿の動詞を「常に許可」してもコマンドの登録は許可されない。
+  func testOnlySetWaitConditionTakesAWaitingCondition() throws {
+    let tools = ControlProcess.mcpToolsList()
+    func properties(_ name: String) throws -> [String: Any] {
+      let tool = try XCTUnwrap(tools.first { $0["name"] as? String == name }, "\(name) が無い")
+      let schema = try XCTUnwrap(tool["inputSchema"] as? [String: Any])
+      return try XCTUnwrap(schema["properties"] as? [String: Any])
+    }
+
+    XCTAssertNil(try properties("add_task")["waitingCondition"])
+    XCTAssertNil(try properties("update_task")["waitingCondition"])
+    XCTAssertNotNil(try properties("set_wait_condition")["condition"])
+  }
 }

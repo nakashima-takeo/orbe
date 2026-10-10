@@ -61,8 +61,7 @@ final class WaitConditionWatcherTests: OrbeTestCase {
   private func addWaiting(_ store: TaskStore) throws -> TaskItem {
     var draft = TaskDraft(title: "設定の検索を速くする")
     draft.waitingReason = "レビュー待ち"
-    draft.waitingCondition = request()
-    return try store.add(draft)
+    return try store.addWaiting(draft, request())
   }
 
   private func result(_ code: Int32, stdout: String = "") -> BackgroundRunResult {

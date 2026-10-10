@@ -1,23 +1,26 @@
 import Foundation
 import OrbeSessionLog
 
-/// タスクの 5 動詞の domain 操作（`ControlTarget` の一部。main スレッドでのみ呼ぶ）。
+/// タスクの動詞（5 動詞と `set_wait_condition`・`start_task`）の domain 操作（`ControlTarget` の一部。main スレッドでのみ呼ぶ）。
 protocol ControlTaskTarget: AnyObject {
   /// タスクを列の順に列挙する（list_tasks）。workspaceId 指定でその workspace のタスクだけ。未知 id は -32004。
   func controlListTasks(workspaceId: Int?) -> Result<Any, ControlError>
   /// タスクを列の末尾へ足す（add_task）。workspaceId は省略＝呼び出し元タブの workspace（タブが分からなければ
   /// なし）・`.clear`＝なし・`.set`＝その workspace（未知は -32004）。callerTabId は追加者の agent 名と
   /// 既定の付き先を引くためだけに読み、未知のタブでもエラーにしない。worktree は実在するディレクトリの
-  /// 絶対パス（それ以外は -32602）で、それを含む worktree のルートに揃えて付ける。待ちの条件には、呼び出し元タブの
-  /// 作業ディレクトリ・workspace・会話を入れる。
+  /// 絶対パス（それ以外は -32602）で、それを含む worktree のルートに揃えて付ける。
   func controlAddTask(
     _ draft: TaskDraft, workspaceId: ClearableValue<Int>?, callerTabId: Int?, worktree: String?
   ) -> Result<Any, ControlError>
   /// タスクを変える（update_task）。workspaceId・worktree は省略＝変えない・`.clear`＝なし・`.set`＝付ける。
-  /// callerTabId は待ちの条件に呼び出し元タブの作業ディレクトリ・workspace・会話を入れるためだけに読む。
   func controlUpdateTask(
     taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<Int>?,
-    worktree: ClearableValue<String>?, callerTabId: Int?
+    worktree: ClearableValue<String>?
+  ) -> Result<Any, ControlError>
+  /// 待っているタスクに解ける条件を付ける・外す（set_wait_condition）。付ける条件には、呼び出し元タブの作業ディレクトリ・
+  /// workspace・会話を入れる。
+  func controlSetWaitCondition(
+    taskId: Int, _ condition: ClearableValue<WaitConditionRequest>, callerTabId: Int?
   ) -> Result<Any, ControlError>
   /// タスクを別のタスクの前か後ろへ移す（move_task）。
   func controlMoveTask(taskId: Int, _ placement: TaskStore.Placement, anchorTaskId: Int)
@@ -53,7 +56,7 @@ extension ControlServer {
   }
 }
 
-/// タスクの 5 動詞の解決。ハンドラが見るのは params の在否と JSON の型（違反は -32602）だけで、値の検証と
+/// タスクの動詞（5 動詞と `set_wait_condition`）の解決。ハンドラが見るのは params の在否と JSON の型（違反は -32602）だけで、値の検証と
 /// 不変条件は `TaskStore`、workspace・呼び出し元タブ・worktree の解決は target が持つ。
 extension ControlServer {
   /// 非該当は nil。target を `ControlTaskTarget` に絞っても `WindowedHandler` として渡せる。
@@ -83,7 +86,6 @@ extension ControlServer {
         if let priority = try p.priority() { draft.priority = priority }
         draft.due = try p.due()?.value
         draft.waitingReason = try p.nullableString("waitingReason")?.value
-        draft.waitingCondition = try p.waitingCondition()?.value
         if let description = try p.optionalString("description") { draft.description = description }
         if let links = try p.links() { draft.links = links }
         return target.controlAddTask(
@@ -96,11 +98,16 @@ extension ControlServer {
           title: try p.optionalString("title"), status: try p.status(),
           priority: try p.priority(), due: try p.due(),
           waitingReason: try p.nullableString("waitingReason"),
-          waitingCondition: try p.waitingCondition(),
           description: try p.optionalString("description"), links: try p.links())
         return target.controlUpdateTask(
           taskId: try p.int("taskId"), update, workspaceId: try p.nullableInt("workspaceId"),
-          worktree: try p.nullableString("worktree"), callerTabId: try p.optionalInt("callerTabId"))
+          worktree: try p.nullableString("worktree"))
+      }
+    case "set_wait_condition":
+      return { target, p throws(ControlError) in
+        target.controlSetWaitCondition(
+          taskId: try p.int("taskId"), try p.condition(),
+          callerTabId: try p.optionalInt("callerTabId"))
       }
     case "move_task":
       return { target, p throws(ControlError) in
@@ -132,7 +139,7 @@ private typealias TaskBody = (ControlTaskTarget, TaskParams) throws(ControlError
 /// params の型検査。キーが無いことと `null` を区別する（`null` は「外す」）。
 private struct TaskParams {
   let params: [String: Any]
-  /// 入れ子の値のキーに付ける、拒否の文の前置き（`waitingCondition.`）。
+  /// 入れ子の値のキーに付ける、拒否の文の前置き（`condition.`）。
   let prefix: String
 
   init(_ params: [String: Any], prefix: String = "") {
@@ -221,11 +228,13 @@ private struct TaskParams {
 
   /// 待ちの条件（`{description, command, everyMinutes, deadline}`。4 つとも必須）。`null` は条件だけを外す。
   /// 値の規則（空・間隔の下限・過ぎた期限）はストアが確かめる。
-  func waitingCondition() throws(ControlError) -> ClearableValue<WaitConditionRequest>? {
-    guard let raw = params["waitingCondition"] else { return nil }
+  func condition() throws(ControlError) -> ClearableValue<WaitConditionRequest> {
+    guard let raw = params["condition"] else {
+      throw ControlError(code: -32602, message: "missing condition")
+    }
     if raw is NSNull { return .clear }
-    guard let object = raw as? [String: Any] else { throw invalid("waitingCondition") }
-    let fields = TaskParams(object, prefix: "waitingCondition.")
+    guard let object = raw as? [String: Any] else { throw invalid("condition") }
+    let fields = TaskParams(object, prefix: "condition.")
     guard let deadline = Self.deadline(try fields.string("deadline")) else {
       throw fields.invalid("deadline")
     }

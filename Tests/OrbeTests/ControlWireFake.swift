@@ -91,6 +91,10 @@ final class FakeControlTarget: ControlTarget {
     let update: TaskUpdate
     let workspaceId: ClearableValue<Int>?
     let worktree: ClearableValue<String>?
+  }
+  struct SetWaitCondition {
+    let taskId: Int
+    let condition: ClearableValue<WaitConditionRequest>
     let callerTabId: Int?
   }
   struct MovedTask {
@@ -117,6 +121,7 @@ final class FakeControlTarget: ControlTarget {
   private(set) var taskLists: [Int?] = []
   private(set) var addedTasks: [AddedTask] = []
   private(set) var updatedTasks: [UpdatedTask] = []
+  private(set) var setWaitConditions: [SetWaitCondition] = []
   private(set) var movedTasks: [MovedTask] = []
   private(set) var deletedTaskIds: [Int] = []
   private(set) var startedTasks: [TaskStartRequest] = []
@@ -269,12 +274,18 @@ final class FakeControlTarget: ControlTarget {
 
   func controlUpdateTask(
     taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<Int>?,
-    worktree: ClearableValue<String>?, callerTabId: Int?
+    worktree: ClearableValue<String>?
   ) -> Result<Any, ControlError> {
     updatedTasks.append(
-      UpdatedTask(
-        taskId: taskId, update: update, workspaceId: workspaceId, worktree: worktree,
-        callerTabId: callerTabId))
+      UpdatedTask(taskId: taskId, update: update, workspaceId: workspaceId, worktree: worktree))
+    return outcome(["task": ["taskId": taskId]])
+  }
+
+  func controlSetWaitCondition(
+    taskId: Int, _ condition: ClearableValue<WaitConditionRequest>, callerTabId: Int?
+  ) -> Result<Any, ControlError> {
+    setWaitConditions.append(
+      SetWaitCondition(taskId: taskId, condition: condition, callerTabId: callerTabId))
     return outcome(["task": ["taskId": taskId]])
   }
 

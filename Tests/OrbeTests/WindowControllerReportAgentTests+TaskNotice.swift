@@ -20,10 +20,11 @@ extension WindowControllerReportAgentTests {
     draft.workspace = workspace
     draft.links = links
     draft.waitingReason = "レビュー待ち"
-    draft.waitingCondition = WaitConditionRequest(
-      description: "PR #214 にレビューが付いたら", command: "exit 1", everyMinutes: 10,
-      deadline: Date().addingTimeInterval(3600))
-    let task = try wc.taskStore.add(draft)
+    let task = try wc.taskStore.addWaiting(
+      draft,
+      WaitConditionRequest(
+        description: "PR #214 にレビューが付いたら", command: "exit 1", everyMinutes: 10,
+        deadline: Date().addingTimeInterval(3600)))
     let condition = try XCTUnwrap(task.waiting?.condition?.id)
     let now = Date()
     let resolution =

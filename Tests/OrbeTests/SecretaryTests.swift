@@ -314,13 +314,17 @@ final class SecretaryTests: OrbeTestCase {
     report(wc, tab, "working", "s-1")
     var draft = TaskDraft(title: "見積もりの返事")
     draft.waitingReason = "返事待ち"
-    draft.waitingCondition = WaitConditionRequest(
-      description: "返事が来たら", command: "exit 1", everyMinutes: 10,
-      deadline: Date().addingTimeInterval(3600))
     let added = try XCTUnwrap(
       (try wc.controlAddTask(draft, workspaceId: nil, callerTabId: tab.id).get()
         as? [String: Any])?["task"] as? [String: Any])
     let id = try XCTUnwrap(added["taskId"] as? Int)
+    _ = try wc.controlSetWaitCondition(
+      taskId: id,
+      .set(
+        WaitConditionRequest(
+          description: "返事が来たら", command: "exit 1", everyMinutes: 10,
+          deadline: Date().addingTimeInterval(3600))), callerTabId: tab.id
+    ).get()
     let condition = try XCTUnwrap(wc.taskStore.tasks.first { $0.id == id }?.waiting?.condition)
     XCTAssertEqual(condition.conversation?.secretary, true, "秘書が付けた条件と記録する")
     report(wc, tab, "done", "s-2")

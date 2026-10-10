@@ -1,7 +1,7 @@
 import Foundation
 import OrbeSessionLog
 
-/// タスクの 5 動詞の domain 側。外に見せる起動ごとの workspaceId とタスクが持つ永続 ID の相互変換・
+/// タスクの動詞（5 動詞と `set_wait_condition`）の domain 側。外に見せる起動ごとの workspaceId とタスクが持つ永続 ID の相互変換・
 /// 呼び出し元タブの解決をここで行い、検証と変異は `TaskStore` に任せる。
 extension WindowController {
   func controlListTasks(workspaceId: Int?) -> Result<Any, ControlError> {
@@ -32,7 +32,6 @@ extension WindowController {
     if let caller, caller.agentState == "working", let session = caller.agentSlot.session {
       draft.createdBy = session.command
     }
-    draft.waitingCondition = draft.waitingCondition.map { locate($0, caller: caller) }
     switch workspaceId {
     case nil:
       draft.workspace = caller.flatMap { tab in
@@ -51,13 +50,9 @@ extension WindowController {
 
   func controlUpdateTask(
     taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<Int>?,
-    worktree: ClearableValue<String>? = nil, callerTabId: Int? = nil
+    worktree: ClearableValue<String>? = nil
   ) -> Result<Any, ControlError> {
     var update = update
-    if case .set(let request) = update.waitingCondition {
-      update.waitingCondition = .set(
-        locate(request, caller: callerTabId.flatMap(controlResolveTab)))
-    }
     switch worktree {
     case nil:
       break
@@ -79,6 +74,22 @@ extension WindowController {
         return .failure(Self.workspaceNotFound)
       }
       update.workspace = .set(ws.persistentId)
+    }
+    return taskResult { () throws(TaskStoreError) in
+      ["task": taskJSON(try taskStore.update(taskId, update))]
+    }
+  }
+
+  func controlSetWaitCondition(
+    taskId: Int, _ condition: ClearableValue<WaitConditionRequest>, callerTabId: Int?
+  ) -> Result<Any, ControlError> {
+    var update = TaskUpdate()
+    switch condition {
+    case .set(let request):
+      update.waitingCondition = .set(
+        locate(request, caller: callerTabId.flatMap(controlResolveTab)))
+    case .clear:
+      update.waitingCondition = .clear
     }
     return taskResult { () throws(TaskStoreError) in
       ["task": taskJSON(try taskStore.update(taskId, update))]
