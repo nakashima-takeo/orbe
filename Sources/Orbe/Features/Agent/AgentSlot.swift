@@ -66,6 +66,9 @@ struct AgentReport: Equatable {
   /// state の値が実際に変わった時刻（Attention の並び・経過時間表示）。
   /// 同値の連続報告と、報告以外の idle への書き戻し（フォーカス消費・タブのリセット）では動かさない。
   var stateChangedAt: Date
+  /// 報告を受けたときの端末の前面のプロセスグループ（＝報告した agent のもの。surface が無ければ nil）。会話へ入力を
+  /// 貼ってよいかを、今の前面と比べて決める（`TerminalTab.acceptsConversationInput`）。
+  var foregroundGroup: pid_t?
 }
 
 extension AgentSession {

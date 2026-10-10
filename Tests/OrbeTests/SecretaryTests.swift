@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import OrbeTestSupport
 import XCTest
 
@@ -49,7 +50,12 @@ final class SecretaryTests: OrbeTestCase {
     try XCTUnwrap(wc.workspaces.first { $0.persistentId == homeId }).tabs
   }
 
+  /// 偽の状態報告。本物の報告は agent のプロセスから来るので、端末にプロセスが起きてから送る（報告は前面のプロセス
+  /// グループを添える）。
   private func report(_ wc: WindowController, _ tab: TerminalTab, _ state: String, _ id: String) {
+    XCTAssertTrue(
+      waitUntil(ControlProcess.tabSettleTimeout) { tab.surface.foregroundProcessGroup != nil },
+      "端末のプロセスが起きない")
     wc.controlReportAgent(
       tab: tab, report: AgentHookReport(agent: "claude", state: state, sessionId: id))
     wc.flushChrome()
@@ -170,7 +176,7 @@ final class SecretaryTests: OrbeTestCase {
   /// 再起動の後、溜めがあれば検出の後に休眠の秘書のタブだけを選ばずに起こし（秘書の指示付きの再開）、手が空いたら届ける。
   /// Home のほかの休眠のタブ（人が起こした claude）は起こさず、起こしても秘書の指示は添えない。
   func testAfterRelaunchTheDormantSecretaryWakesAloneWithItsInstructions() throws {
-    let queued = SecretaryRequest(id: UUID(), receivedAt: Date(), body: "溜めた頼み")
+    let queued = SecretaryRequest(id: UUID(), receivedAt: Date(), origin: .palette, body: "溜めた頼み")
     let wc = try launch(
       SecretaryFile(version: 1, sessionId: "s-1", pending: [queued]),
       homeTabs: [
@@ -213,6 +219,112 @@ final class SecretaryTests: OrbeTestCase {
     wc.flushChrome()
 
     XCTAssertFalse(waitUntil(1) { !secretary.isDormant }, "頼まれるまで起こさない")
+  }
+
+  // MARK: - 秘書はプロセスで決まる
+
+  /// 人が Home のシェルで手で再開した秘書の会話のタブは、秘書と見なさない（頼みを貼らない）。頼むと、係は秘書の会話を
+  /// 秘書の指示付きで別に再開する（人が同じ会話を開いていると 2 本になりうる——spec の限界）。
+  func testATabWhereTheUserResumedTheSecretarysConversationByHandIsNotTheSecretary() throws {
+    let wc = try launch(
+      SecretaryFile(version: 1, sessionId: "s-1", pending: []),
+      homeTabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)])
+    let byHand = try XCTUnwrap(try homeTabs(wc).first)
+    wc.wakeUnselected(byHand)
+    report(wc, byHand, "idle", "s-1")
+
+    _ = try wc.secretary.ask(.text("手で開いた会話には貼らない"))
+
+    XCTAssertNotEqual(wc.secretary.tabId, byHand.id)
+    let resumed = try XCTUnwrap(try homeTabs(wc).first { $0.id != byHand.id }, "別に再開する")
+    XCTAssertTrue(
+      try XCTUnwrap(resumed.surface.initialCommand).hasPrefix(
+        "claude --resume s-1 --append-system-prompt "))
+    report(wc, resumed, "idle", "s-1")
+    waitForScreen(resumed, contains: "手で開いた会話には貼らない")
+    XCTAssertFalse(screen(byHand).contains("手で開いた会話には貼らない"))
+  }
+
+  /// 秘書の会話をどの経路で再開しても（ここでは `resume_agent`）秘書の指示が付き、そのタブが秘書になる（頼みは新しい
+  /// タブを開かずにそこへ届く）。
+  func testResumingTheSecretarysConversationAnywhereAddsItsRoleAndMakesItTheSecretary() throws {
+    let wc = try launch(SecretaryFile(version: 1, sessionId: "s-1", pending: []))
+    let launched = try wc.controlResumeAgent(
+      command: "claude", sessionId: "s-1", workspaceId: nil, cwd: "/tmp"
+    ).get()
+    let tab = try XCTUnwrap(wc.controlResolveTab(launched.tabId))
+    XCTAssertTrue(
+      try XCTUnwrap(tab.surface.initialCommand).hasPrefix(
+        "claude --resume s-1 --append-system-prompt "))
+    XCTAssertEqual(wc.secretary.tabId, tab.id)
+
+    _ = try wc.secretary.ask(.text("そこへ届く"))
+    report(wc, tab, "idle", "s-1")
+
+    waitForScreen(tab, contains: "そこへ届く")
+    XCTAssertTrue(try homeTabs(wc).isEmpty, "秘書をもう 1 つ起こさない")
+  }
+
+  /// Ctrl+Z などで止まった秘書には貼らず、動き出してから届ける（止まった agent の入力にも、シェルにも貼らない）。
+  func testAStoppedSecretaryGetsNothingUntilItRunsAgain() throws {
+    let wc = try launch()
+    _ = try wc.secretary.ask(.text("一件目"))
+    let tab = try XCTUnwrap(try homeTabs(wc).first)
+    report(wc, tab, "idle", "s-1")
+    waitForScreen(tab, contains: "一件目")
+    report(wc, tab, "working", "s-1")
+    let group = try XCTUnwrap(tab.surface.foregroundProcessGroup)
+    kill(-group, SIGSTOP)
+    defer { kill(-group, SIGCONT) }
+    XCTAssertTrue(waitUntil { !ProcessGroup.isRunning(group) }, "前提: 止まる")
+
+    report(wc, tab, "done", "s-1")
+    _ = try wc.secretary.ask(.text("二件目"))
+    XCTAssertEqual(wc.secretary.record.pending.count, 1, "止まっている間は溜める")
+
+    kill(-group, SIGCONT)
+    XCTAssertTrue(waitUntil { ProcessGroup.isRunning(group) })
+    wc.refreshChrome()
+    wc.flushChrome()
+    waitForScreen(tab, contains: "二件目")
+  }
+
+  // MARK: - 秘書が付けた待ちの続きから
+
+  /// 秘書が付けた待ちの条件が解けた後の ⌘T は、新しいタブで会話を開かず、起きたことを出どころ「待ちの条件」の頼みとして
+  /// 秘書の係へ渡す（/clear で秘書の会話が替わっていても、今の秘書に届く）。
+  func testWhatHappenedToTheSecretarysWaitGoesToTheSecretaryAsAnAsk() throws {
+    let wc = try launch()
+    _ = try wc.secretary.ask(.text("一件目"))
+    let tab = try XCTUnwrap(try homeTabs(wc).first)
+    report(wc, tab, "idle", "s-1")
+    waitForScreen(tab, contains: "一件目")
+    report(wc, tab, "working", "s-1")
+    var draft = TaskDraft(title: "見積もりの返事")
+    draft.waitingReason = "返事待ち"
+    draft.waitingCondition = WaitConditionRequest(
+      description: "返事が来たら", command: "exit 1", everyMinutes: 10,
+      deadline: Date().addingTimeInterval(3600))
+    let added = try XCTUnwrap(
+      (try wc.controlAddTask(draft, workspaceId: nil, callerTabId: tab.id).get()
+        as? [String: Any])?["task"] as? [String: Any])
+    let id = try XCTUnwrap(added["taskId"] as? Int)
+    let condition = try XCTUnwrap(wc.taskStore.tasks.first { $0.id == id }?.waiting?.condition)
+    XCTAssertEqual(condition.conversation?.secretary, true, "秘書が付けた条件と記録する")
+    report(wc, tab, "done", "s-2")
+    let now = Date()
+    wc.taskStore.recordCheck(
+      id, condition: condition.id,
+      BackgroundRunResult(
+        commandLine: "exit 1", startedAt: now, endedAt: now, ending: .exited(0),
+        output: .command(stdout: .init(data: Data("山田さんから返事".utf8)), stderr: .init())))
+
+    XCTAssertNil(wc.continueWait(taskId: id))
+
+    XCTAssertEqual(try homeTabs(wc).map(\.id), [tab.id], "会話を新しいタブで開かない")
+    waitForScreen(tab, contains: "待ちの条件 · ")
+    XCTAssertTrue(screen(tab).contains("山田さんから返事"))
+    XCTAssertNil(wc.taskStore.tasks.first { $0.id == id }?.waitResolution, "届けたら起きたことは消える")
   }
 
   // MARK: - 受けない

@@ -389,6 +389,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskStartHomeTask
   case taskStartHomeDescription
   case secretaryLineOrigin
+  case secretaryLineWaitOrigin
   case secretaryLineTask
   case secretaryLineLinkedTask
   case secretaryLineNote

@@ -14,14 +14,11 @@ final class AgentCatalog {
   /// `reportsIdleOnStart` は Orbe のプラグインがその CLI の起動時 hook に idle を配線しているか
   /// （claude の SessionStart→idle。codex CLI 自身も SessionStart を持つが `codex-hooks.json` は
   /// 配線していない）——出所は `docs/spec/agent/plugin-package.md` の event→state 表。
-  /// `reportsExit` は CLI の終了を報告するか（claude の SessionEnd→clear。同じ表の出所）——報告する CLI のタブでは、
-  /// 状態が残っている間は会話が今も前面にいる。`firstInput` は再開の起動に最初の入力を添える席。
-  /// `headless` は裏で非対話に回す能力。
+  /// `firstInput` は再開の起動に最初の入力を添える席。`headless` は裏で非対話に回す能力。
   struct AgentProfile {
     let command: String
     let resumeFlag: String
     let reportsIdleOnStart: Bool
-    let reportsExit: Bool
     let firstInput: FirstInputSeat
     let headless: HeadlessSupport
   }
@@ -37,18 +34,18 @@ final class AgentCatalog {
   /// 一級サポートの全体。並び＝デフォルト未設定時の優先順。
   static let profiles = [
     AgentProfile(
-      command: "claude", resumeFlag: "--resume", reportsIdleOnStart: true, reportsExit: true,
+      command: "claude", resumeFlag: "--resume", reportsIdleOnStart: true,
       firstInput: .trailing,
       headless: .runs(
         HeadlessCLI(
           arguments: ClaudeHeadless.arguments, environment: ClaudeHeadless.environment,
           reply: ClaudeHeadless.reply, availableTools: ClaudeHeadless.availableTools))),
     AgentProfile(
-      command: "codex", resumeFlag: "resume", reportsIdleOnStart: false, reportsExit: false,
+      command: "codex", resumeFlag: "resume", reportsIdleOnStart: false,
       firstInput: .trailing,
       headless: .refuses(.toolsNotAllowListable)),
     AgentProfile(
-      command: "agy", resumeFlag: "--conversation", reportsIdleOnStart: false, reportsExit: false,
+      command: "agy", resumeFlag: "--conversation", reportsIdleOnStart: false,
       firstInput: .flag("-i"),
       headless: .refuses(.noToolOrSessionControl)),
   ]

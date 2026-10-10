@@ -217,7 +217,9 @@ extension DesignSceneFixtures {
           of: taskCalendar.date(byAdding: .day, value: 2, to: now)!)!,
         directory: "\(NSHomeDirectory())/wt/pr-214",
         conversation: conversation
-          ? WaitConversation(command: "claude", sessionId: taskConversationId, workspace: nil) : nil
+          ? WaitConversation(
+            command: "claude", sessionId: taskConversationId, workspace: nil, secretary: false)
+          : nil
       ),
       setAt: taskCalendar.date(byAdding: .day, value: -2, to: taskToday)!)
     for minutes in stride(from: 163, through: 3, by: -10) {

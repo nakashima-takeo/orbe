@@ -6,7 +6,7 @@ import XCTest
 /// live 集計され、最後の live タブを閉じても workspace が起床済みと誤報する。
 @MainActor
 final class WorkspaceActivationTests: OrbeTestCase {
-  private let noResume: TerminalTab.ResumeSpawn = { _, _ in nil }
+  private let noResume: TerminalTab.ResumeSpawn = { _, _, _ in nil }
 
   /// resume 未対応 agent の復元タブ（消費時に素シェル化するが休眠チケットには数える）。
   private func restoredTab(agentId: String) -> TerminalTab {
@@ -21,7 +21,7 @@ final class WorkspaceActivationTests: OrbeTestCase {
     let session = AgentSession(command: "claude", sessionId: "resume-1")
     let tab = TerminalTab(
       restoring: TabState(cwd: "/tmp", agent: session, explicitTitle: nil),
-      resumeSpawn: { _, _ in (command: "claude --resume resume-1", env: ["PROBE": "1"]) })
+      resumeSpawn: { _, _, _ in (command: "claude --resume resume-1", env: ["PROBE": "1"]) })
 
     XCTAssertFalse(tab.activated)
     XCTAssertTrue(tab.isDormant)

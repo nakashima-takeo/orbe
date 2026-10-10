@@ -7,6 +7,7 @@ extension L10n {
     .taskStartHomeTask: ("タスク %1$@「%2$@」に取り掛かってください。", "Work on task %1$@ “%2$@”."),
     .taskStartHomeDescription: ("詳細:", "Details:"),
     .secretaryLineOrigin: ("⌘⇧X から · %@", "From ⌘⇧X · %@"),
+    .secretaryLineWaitOrigin: ("待ちの条件 · %@", "Wait condition · %@"),
     .secretaryLineTask: ("タスク %1$@「%2$@」を頼む。", "Task %1$@ “%2$@”: please take it on."),
     .secretaryLineLinkedTask: (
       "タスク %1$@「%2$@」(%3$@) を頼む。", "Task %1$@ “%2$@” (%3$@): please take it on."

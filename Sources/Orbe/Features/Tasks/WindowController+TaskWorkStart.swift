@@ -117,7 +117,7 @@ extension WindowController {
       let opened = openTab(
         workspaceIndex: index, cwd: worktree.path,
         command: AgentCatalog.startCommand(agent, firstInput: firstInput),
-        env: agentLauncher.launchEnvironment, agent: agent.command, selects: false)
+        env: agentLauncher.launchEnvironment, selects: false)
     else { return .failure(ControlError(code: -32000, message: "spawn failed")) }
     var result: [String: Any] = [
       "task": taskJSON(task), "workdir": worktree.path, "created": workplace.created,

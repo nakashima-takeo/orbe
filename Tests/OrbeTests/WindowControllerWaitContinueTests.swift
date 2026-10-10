@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import OrbeTestSupport
 import XCTest
 
@@ -48,7 +49,8 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
     draft.waitingCondition = WaitConditionRequest(
       description: "PR-214-reviewed", command: "exit 1", everyMinutes: 10,
       deadline: Date().addingTimeInterval(3600), directory: directory,
-      conversation: WaitConversation(command: "claude", sessionId: "s-1", workspace: workspace))
+      conversation: WaitConversation(
+        command: "claude", sessionId: "s-1", workspace: workspace, secretary: false))
     let task = try wc.taskStore.add(draft)
     let now = Date()
     wc.taskStore.recordCheck(
@@ -108,21 +110,44 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
     XCTAssertNil(wc.taskStore.tasks.first { $0.id == id }?.wait, "届けたら起きたことは消える")
   }
 
-  /// 作業中・確認待ちの agent や、会話が前面にいると確かでないタブ（手で起こした codex）には何も送らず、移るだけ。
-  func testBusyOrUncertainConversationGetsNothingAndKeepsWhatHappened() throws {
+  /// 作業中・確認待ちの agent や、Ctrl+Z で止めた agent には何も送らず、移るだけ。
+  func testBusyOrStoppedConversationGetsNothingAndKeepsWhatHappened() throws {
     let dump = try dump(.legacy)
     let wc = dump.controller
     let id = try resolved(wc, directory: nil)
 
-    for (agent, state) in [("claude", "working"), ("claude", "waiting"), ("codex", "idle")] {
+    for state in ["working", "waiting"] {
       wc.controlReportAgent(
-        tab: dump.tab, report: AgentHookReport(agent: agent, state: state, sessionId: "s-1"))
+        tab: dump.tab, report: AgentHookReport(agent: "claude", state: state, sessionId: "s-1"))
       XCTAssertNil(deliver(wc, id))
 
       dump.tab.surface.controlSendText("x")
-      XCTAssertEqual(dump.next(), TtyDumpTab.hex("x"), "\(agent) \(state): 目印より先に何も届いていない")
-      XCTAssertNotNil(resolution(wc, id), "\(agent) \(state): 起きたことは残る（もう一度 ⌘T を押せる）")
+      XCTAssertEqual(dump.next(), TtyDumpTab.hex("x"), "\(state): 目印より先に何も届いていない")
+      XCTAssertNotNil(resolution(wc, id), "\(state): 起きたことは残る（もう一度 ⌘T を押せる）")
     }
+
+    wc.controlReportAgent(
+      tab: dump.tab, report: AgentHookReport(agent: "claude", state: "idle", sessionId: "s-1"))
+    let group = try XCTUnwrap(dump.tab.surface.foregroundProcessGroup)
+    kill(-group, SIGSTOP)
+    XCTAssertTrue(waitUntil { !ProcessGroup.isRunning(group) }, "前提: 止まる")
+    XCTAssertNil(deliver(wc, id))
+    kill(-group, SIGCONT)
+
+    dump.tab.surface.controlSendText("x")
+    XCTAssertEqual(dump.next(), TtyDumpTab.hex("x"), "止まっている間に何も届いていない")
+    XCTAssertNotNil(resolution(wc, id), "起きたことは残る")
+  }
+
+  /// 確認の出力の制御文字（改行・タブ以外）は、会話へ届ける前に空白にする（起動引数の NUL が再開を壊さない）。
+  func testWhatHappenedReachesTheConversationWithoutControlCharacters() throws {
+    let dump = try dump(.legacy)
+    let id = try resolved(dump.controller, directory: nil, output: "a\u{0}b\u{1b}[31mc\td\ne")
+    let input = WaitContinueText.firstInput(
+      try XCTUnwrap(resolution(dump.controller, id)), l10n: dump.controller.localization,
+      timeZone: .current)
+
+    XCTAssertTrue(input.hasSuffix("a b [31mc\td\ne"), input)
   }
 
   // MARK: - 休眠のタブ
@@ -179,17 +204,20 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
     XCTAssertNil(resolution(wc, id), "届けたら起きたことは消える")
   }
 
-  func testMissingConversationDirectoryOpensNothingAndKeepsWhatHappened() throws {
+  /// 同じ会話の続きからを続けて押しても、2 つ目は開いたタブを見つける（同じ会話のタブを 2 つ開かない）。
+  func testSecondContinueOfTheSameConversationFindsTheTabJustOpened() throws {
     _ = try stageFakeAgent("claude")
+    let dir = try directory()
     let wc = try launch([TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)])
     waitForDetection(wc)
-    let gone = TestScratch.caseDir.appendingPathComponent("gone").path
-    let id = try resolved(wc, directory: gone, workspace: conversationWorkspace)
-    let before = wc.workspaces.map { $0.tabs.map(\.id) }
+    let first = try resolved(wc, directory: dir, workspace: conversationWorkspace)
+    let second = try resolved(wc, directory: dir, workspace: conversationWorkspace)
+    let before = try conversationTabs(wc).count
 
-    XCTAssertEqual(deliver(wc, id), .directoryMissing)
+    XCTAssertNil(wc.continueWait(taskId: first))
+    XCTAssertNil(wc.continueWait(taskId: second))
 
-    XCTAssertEqual(wc.workspaces.map { $0.tabs.map(\.id) }, before, "タブは開かない")
-    XCTAssertNotNil(resolution(wc, id), "起きたことは残る")
+    XCTAssertEqual(try conversationTabs(wc).count, before + 1, "開くのは 1 つだけ")
   }
+
 }

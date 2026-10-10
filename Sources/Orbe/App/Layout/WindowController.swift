@@ -66,8 +66,9 @@ final class WindowController: NSObject, NSWindowDelegate {
   private(set) lazy var waitConditions = WaitConditionWatcher(store: taskStore) { [weak self] in
     self?.notifyWaitResolved(task: $0, $1)
   }
-  // 秘書の係。復元の再開の組み立てが秘書の記録を引くので、復元より前に窓へ繋ぐ（init）。
-  private(set) lazy var secretary = Secretary(tasks: taskStore, localization: localization)
+  // 秘書の係。
+  private(set) lazy var secretary = Secretary(
+    host: self, tasks: taskStore, localization: localization)
   // パレット提示の拡張（WindowController+Palette）が設定パレットの defaultAgent 配線で触るため internal。
   let agentLauncher = AgentLauncher()
   // アップデート面。状態（UI 唯一の情報源）は updaterService が生成・所有し、提示配線は WindowController+Update。
@@ -125,7 +126,6 @@ final class WindowController: NSObject, NSWindowDelegate {
     // makeFirstResponder が成立する（= 起動直後からアクティブタブがキー入力を受ける）状態を作る。
     hostingView.layoutSubtreeIfNeeded()
     wireChromeCallbacks()
-    secretary.attach(self)
 
     // 言語が決まっていれば、復元が Home のタブを起こすより前にフォルダを用意する
     // （無いままだと、そのタブだけ Orbe の操作の指示が無いまま起きる）。初回は言語選択の確定を待つ（showFirstRunFlow）。
@@ -149,8 +149,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     agentLauncher.onLaunch = { [weak self] agent, env in
       guard let self else { return }
       self.openTab(
-        workspaceIndex: self.activeWorkspace, cwd: nil, command: agent.path, env: env,
-        agent: agent.command)
+        workspaceIndex: self.activeWorkspace, cwd: nil, command: agent.path, env: env)
     }
     // 起動/オンボーディング overlay の畳み込みも、他 overlay と同じく teardown 後の次 tick で focus を再確定する。
     agentLauncher.onDismissPalette = { [weak self] in

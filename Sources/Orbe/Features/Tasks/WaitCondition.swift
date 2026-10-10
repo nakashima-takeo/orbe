@@ -71,6 +71,8 @@ struct WaitConversation: Codable, Equatable {
   let command: String
   let sessionId: String
   let workspace: UUID?
+  /// 付けたのが秘書（付けた時点の秘書のタブ）。続きからは秘書の係へ渡す。
+  let secretary: Bool
 }
 
 /// 条件を付ける要求。作業ディレクトリと会話は、制御の層が呼び出し元タブから埋める。

@@ -19,7 +19,7 @@ extension TaskPaletteModelTests {
   }
 
   private var conversation: WaitConversation {
-    WaitConversation(command: "claude", sessionId: "s-1", workspace: nil)
+    WaitConversation(command: "claude", sessionId: "s-1", workspace: nil, secretary: false)
   }
 
   private func waiting(_ condition: WaitCondition) -> TaskItem.Wait {

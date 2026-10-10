@@ -20,9 +20,14 @@ extension WindowController: SecretaryHost {
     guard let index = store.homeIndex, let home = HomeFolder.url?.path,
       let opened = openTab(
         workspaceIndex: index, cwd: home, command: command, env: agentLauncher.launchEnvironment,
-        agent: "claude", selects: false)
+        selects: false)
     else { return nil }
     return controlResolveTab(opened.tabId)
+  }
+
+  func secretaryResume(_ session: AgentSession) {
+    guard let index = store.homeIndex, let home = HomeFolder.url?.path else { return }
+    openResumedTab(session, workspaceIndex: index, cwd: home, selects: false)
   }
 
   func secretaryWake(_ tab: TerminalTab) {

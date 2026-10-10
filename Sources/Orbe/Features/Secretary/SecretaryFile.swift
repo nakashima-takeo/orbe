@@ -19,8 +19,17 @@ struct SecretaryFile: Codable, Equatable {
 struct SecretaryRequest: Codable, Equatable {
   let id: UUID
   let receivedAt: Date
+  let origin: SecretaryOrigin
   /// 1 行の本文。
   let body: String
+}
+
+/// 頼みの出どころ（届ける 1 行の頭に出す）。
+enum SecretaryOrigin: String, Codable {
+  /// ⌘⇧X の入力欄・タスクの行。
+  case palette
+  /// 秘書の会話が付けた待ちの条件が解けた後の ⌘T。
+  case wait
 }
 
 /// 秘書の記録の永続。保存先は workspaces.json と並ぶ `StateDir.base()/secretary.json`。
