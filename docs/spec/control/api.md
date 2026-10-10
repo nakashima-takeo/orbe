@@ -1,6 +1,6 @@
 ---
 title: 制御 API（外部 → Orbe）
-description: Unix socket 上の JSON-RPC でタブ/workspace/エージェント/タスク/受信を操作する out-of-band 制御チャネルと、イベント履歴（seq）・待機・MCP ブリッジ・ツール群・mount 境界
+description: Unix socket 上の JSON-RPC でタブ/workspace/エージェント/タスク/受信を操作し、タスクから作業を始める out-of-band 制御チャネルと、イベント履歴（seq）・待機・MCP ブリッジ・ツール群・mount 境界
 updated: 2026-10-10
 ---
 
@@ -24,7 +24,7 @@ Unix domain socket `control.sock`（workspaces.json と並置・パーミッシ�
 - `-32602` params の欠落・型不一致・値域外。
 - `-32004` 宛先（tab / workspace / タスク / 受信）が見つからない。宛先 ID を解決へ直に渡すメソッド（`get_tab_text` / `send_text` / `send_key` / `report_agent` / `completion_accept`）は `tabId` の欠落・型不一致もここに落ちる（解決の前に検証を挟むメソッドは `-32602`）。
 - `-32006` `wait_for_event` の `after` が履歴の保持範囲より古い（対処は seq を取り直す。呼び出し側のバグである `-32602` と分ける）。
-- `-32000` 実行できない（ウィンドウ未接続・spawn 失敗・消せない workspace の削除・Orbe の workspace の root 変更・`prompt_agent` の busy / 未 mount・ready 待ち中のエージェント消滅・回が走っている受信の `run_intake`）。
+- `-32000` 実行できない（ウィンドウ未接続・spawn 失敗・消せない workspace の削除・Home の root 変更・`start_task` の作業場の用意の失敗・`prompt_agent` の busy / 未 mount・ready 待ち中のエージェント消滅・回が走っている受信の `run_intake`）。
 
 無応答契約を持つのは `completion_update` / `completion_end` の 2 つだけで、他は必ず 1 行応答を返す——読めない行にも返すことで、クライアントが応答待ちでハングしない。
 
@@ -69,8 +69,8 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 - `config_set {key, value, scope, workspaceId?}` → `{ok, key, value, scope}` … 設定を適用する（設定パレットと同一経路）。**全設定**が `scope` ∈ {global, workspace}。workspace は `workspaceId` 省略でアクティブ WS、指定でその WS（非アクティブ可・未知 id は `-32004`）の上書き層へ書く。**保存は常に、ライブ反映は global か対象がアクティブ WS の時だけ**（非アクティブ WS 上書きは次回 activate 時に効く）。値検証はレジストリの domain 駆動＝唯一の検証点で、`value: null` は「解除（継承へ戻す）」として受理する。未知 key・型不一致・値域外・不正 enum は `-32602`。socket 専用。
 - `create_workspace {name, rootPath?}` → `{workspaceId, name, rootPath}` … `name` 空（trim 後）は `-32602`。`rootPath` を渡してそれが空（trim 後）も `-32602`（省略はアクティブタブ cwd → ホーム導出。`~` 展開あり）。socket 専用。
 - `rename_workspace {workspaceId, name}` … 未知 id は `-32004`、`name` 空は `-32602`。socket 専用。
-- `set_workspace_root {workspaceId, rootPath}` … GUI パレットのディレクトリ変更と同一経路（trim・`~` 展開・実在チェックなし・アクティブなら chrome 即時更新・永続化）。未知 id は `-32004`、[Orbe の workspace](../platform/workspace.md#orbe-の-workspace) は `-32000`、空は `-32602`。socket 専用。
-- `remove_workspace {workspaceId}` … 未知 id は `-32004`。Orbe の workspace と最後の通常 workspace は削除不可で `-32000`（理由はメッセージで分かる。可否は [workspace](../platform/workspace.md#orbe-の-workspace) の判断に従う）。socket 専用。
+- `set_workspace_root {workspaceId, rootPath}` … GUI パレットのディレクトリ変更と同一経路（trim・`~` 展開・実在チェックなし・アクティブなら chrome 即時更新・永続化）。未知 id は `-32004`、[Home](../platform/workspace.md#home) は `-32000`、空は `-32602`。socket 専用。
+- `remove_workspace {workspaceId}` … 未知 id は `-32004`。Home と最後の通常 workspace は削除不可で `-32000`（理由はメッセージで分かる。可否は [workspace](../platform/workspace.md#home) の判断に従う）。socket 専用。
 - `focus_tab {tabId}` … そのタブを選択して焦点の面へフォーカスを移す（→ [chrome/layout](../chrome/layout.md) のフォーカス）。別 workspace のタブなら activate を伴う（手元 Mac のアクティブ workspace も切り替わる）。冪等。未知 tab は `-32004`。socket 専用。
 - `open_file {tabId, path}` … そのタブのエディターでファイルを開き（→ [editor/code](../editor/code.md)）、エディター面が見える配置にして（隠れていれば全面、分割中は焦点だけ）、`focus_tab` と同じくタブを選んでテキスト面へフォーカスを移す。`path` は絶対か、`~` 展開の上でタブの実効 cwd からの相対——symlink は実体へ解く（別の綴りで開いても同じ文書、保存も実体へ届く）。既に開いているファイルは焦点を移すだけ。開いた文書はファイルタブ行に普通のタブとして並び（既に仮のタブで開いていれば普通のタブに変わる——人の次のクリックが入れ替えない）、タブの根の下ならエクスプローラーがその祖先を開いて選択表示する（→ [editor/shell](../editor/shell.md)）。未知 tab は `-32004`、`path` 欠落・空は `-32602`、読めない・UTF-8 でないファイルと、Metal の装置が取れずテキスト面を作れない環境では `-32000`（それぞれ `cannot read: <path>`・`not UTF-8: <path>`・`no Metal device: <path>`。面は変わらない）。socket 専用。
 - `close_tab {tabId}` … GUI（Cmd+W）と同一のカスケード——アクティブ workspace の最後のタブを閉じても 0 タブの空状態でアクティブに残る（ウィンドウは閉じない）。ただしエディターの未保存の文書は確認せず黙って捨てる（無人の操作に確認は出せない → [editor/shell](../editor/shell.md)）。`remove_workspace` も同じ。応答の `seq` より前にタブが消える（応答直後の `list_tabs` に出ない）。未知 tab は `-32004`。socket 専用。
@@ -90,6 +90,27 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 - `move_task {taskId, beforeTaskId | afterTaskId}` → `{ok, seq}` … 別のタスクの前か後ろへ移す。ちょうど 1 つが必須で、自分自身を指すと `-32602`。
 - `delete_task {taskId}` → `{ok, seq}`。
   - タスクの 5 動詞に共通して、params の欠落・型違い・値域外（空のタイトル・未知のステータス／優先度・暦に無い日付・JSON の真偽値を整数として渡した値など）は `-32602`、未知のタスクと未知の workspace は `-32004`。拒否したとき一覧は変わらない。タスクの変化はイベントにならない。
+- `start_task {taskId, branch?, repo?, agent?, prompt?}` → `{task, workdir, repo?, branch?, created, tabId, workspaceId, agent:{command, path}, seq}` … タスクの作業に agent を取り掛からせる。作業場を用意し、タスクを進行中にしてその作業場を付け（⌘T の ↵ と同じ 1 回の変更 → [タスク](../platform/tasks.md#worktree)）、タスクの workspace に agent のタブを選ばずに起こす（前面化も選択もしない）。MCP に出し、`orb` には無い——[秘書](../agent/secretary.md)などの agent が作業を割り振るための口。
+  - **作業場はタスクの付き先で決まる。** リポジトリの workspace（Home でない workspace）のタスクは、[⌘T の「タスクから開く」](../palette/worktree.md#タスクから開く)と同じ規則で worktree を用意する——タスクの worktree → 主が Issue なら `issue/<番号>` → PR なら head のブランチ。`branch` を渡せば、主の結び付きの代わりにそのブランチ名を同じ規則に通す（worktree → ローカルブランチ → remote のブランチ → 作成行の条件を通れば作る）。手元に無いブランチは既定ブランチから作り（⌘T の「前回」のベースは人の文脈なので使わない）、遅れたローカルブランチは fast-forward してから開く（⌘T で人に問う最新化をそのまま行う）。行き先の決定と用意は ⌘T と同じ[リポジトリの事実の層](../palette/worktree.md#データ供給プログレッシブ)を通り、提示時の fetch の着地・remote の正式名・PR の head が揃うまで待って決める——規則の写しを作らないので、片方だけが直ることがない。[Home](../platform/workspace.md#home) のタスクは Home の `tasks/<ID>-<短い名前>/` を作業場にし（[Home のタスクの作業場](../platform/workspace.md#home-のタスクの作業場)。2 回目からは同じフォルダ）、`branch`・`repo` は読まない。
+  - **リポジトリは人の画面の状態で決めない。** 決める順は、タスクの worktree（在れば）のリポジトリ → `repo`（リポジトリの中の絶対パス。タスクに在る worktree が無いときだけ読む）→ タスクの workspace の root で、git の中の最初のものを使う。⌘T は「その workspace でアクティブなタブ」のリポジトリを使うが、画面の無い呼び出しがそれに倣うと、人の操作次第で別のリポジトリに worktree を作ってタスクに付けてしまうため。主の結び付きがあれば（`branch` を渡しても）、そのリポジトリに主のリポジトリを指す remote があるかを先に確かめる。使ったリポジトリ（本体 worktree）を結果の `repo` に入れる。
+  - `agent` は検出済みの command（省略でタスクの workspace の実効 `default-agent`）。`prompt` は agent の最初の入力になる。Home のタスクでは、Orbe が UI の言語で組んだタスク（ID・タイトル・詳細）に `prompt` を添えたものが最初の入力になる。
+  - **作業場ができてタブを開いた時点で返り、agent の準備は待たない**（`spawn_agent` と違い `ready` を持たない）。worktree の作成や fetch の着地待ちで数秒かかりうるので、作業場の用意の完了で 1 度だけ応答する。`workdir` は付けた作業場、`created` は作業場を新しく作ったか、`branch` は付けた時点のブランチ（git の外・detached なら無い）、`seq` は応答時点の履歴位置。
+  - 拒否と失敗。どれもタスクは変わらない（作業場を用意した後にタブを起こせなかったときだけは、タスクは進行中で作業場が付いたまま残る）。
+
+    | 状況 | コード |
+    |---|---|
+    | params の欠落・型違い | `-32602` |
+    | 未知のタスク（用意の間に消えたときも） | `-32004` |
+    | タスクに workspace が無い（解決できない参照を含む。先に `update_task` で付ける） | `-32602` |
+    | 未検出の agent・解決できる既定の agent が無い | `-32602` |
+    | `repo` が実在するディレクトリの絶対パスでない | `-32602` |
+    | どの候補も git の中でない（`repo` を渡す） | `-32602` |
+    | 主のリポジトリを指す remote が無い（`repository mismatch`。使ったリポジトリを添える） | `-32602` |
+    | ブランチが決まらない（結び付きも worktree も `branch` も無い・PR の head と同名の別のローカルブランチがある。`branch` を渡す） | `-32602` |
+    | `branch` をここで作れない（名前か作成先がぶつかる・ブランチ名として不正） | `-32602` |
+    | Home のフォルダが決まらない・git の作業ツリーの中にある | `-32000` |
+    | worktree の作成・最新化・フォルダの作成の失敗（理由を添える） | `-32000` |
+    | ウィンドウ未接続・用意の間にタスクの workspace が消えた・タブを起こせない | `-32000` |
 - `list_intakes` → `{intakes:[…], seq}` … [受信](../platform/intake.md)を ID 順に返す。各要素は `intakeId` と `set_intake` と同じ定義（`name`・`fetch`・`judge`・`when`。`agent` は省略時の既定も埋めて返す）に加え、`paused`・`running`（回が走っているか）・`nextRunAt`（次に予定で回る時刻。止めていれば無い。過ぎていれば今以前）・`lastRunAt`（まだ回っていなければ無い）・`openProposals`（この受信の棚にある人の判断待ちの提案の数）・`overlaps`（前回の取得結果のリンクが重なる他の受信 `[{intakeId, name, count}]`）・`runs`（回の記録。新しい順に 20 件まで。各回は `startedAt`・`endedAt`・`trigger`〔`schedule` / `now`〕・`fetch{commandLine, ending, items, rejected{count, reasons}}`・`newItems`・`judge{commandLine, ending, proposed, resolved, rejected}`〔判定を起こさなかった回は無い〕・`withdrawn`・`failure`〔失敗した回だけ〕）。時刻は UTC・ミリ秒・`Z`。
 - `set_intake {intakeId?, name, fetch, judge, when}` → `{intake, seq}` … `intakeId` が無ければ作り、あれば定義を丸ごと置き換える（止めているかは変えない）。`fetch` は `{command, directory?}` か `{agent?, model, tools, request}`（`command` と `request` のどちらを持つかで決まり、両方・どちらも無いは `-32602`）、`judge` は `{agent?, model, instruction}`、`agent` の既定は `claude`。`when` は `{everyMinutes}` か `{dailyAt: ["HH:MM", …]}`。4 つのどれかの欠落・型違い、名前が 1 行でない・コマンドが空・作業ディレクトリが絶対パスでない・裏で回せない agent（理由付き）・モデルや依頼文や指示文が空・取得役のツールが 0 個か空の名前を含む・間隔が 1 分未満・`HH:MM` でない・時刻が範囲外、はいずれも `-32602` で、受信は変わらない。未知の `intakeId` は `-32004`。取得か判定が前と違えば走っている回を止め、名前といつだけなら止めない。新しく作った受信はすぐには回らない。
 - `run_intake {intakeId}` → `{ok, seq}` … 今すぐ 1 回回し、回の終わりを待たずに返る（結果は `list_intakes` の `runs`）。止めた受信も受ける。回が走っていれば `-32000`。
@@ -103,6 +124,7 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 
 - get_tab_text / send_text / send_key は **mount 済み（surface 生存）タブにのみ作用**する。条件は surface が生きていることであって、そのタブが見えていることではない。未 mount タブは get_tab_text が空・send 系は no-op。
 - **制御 API がタブを作るとき（`spawn` / `spawn_agent` / `resume_agent`）は、対象が背景 workspace でもその場で surface を起こす**——前面化はせず、実サイズで起こす。作れと言われた 1 枚をすぐ駆動できないと、返した tabId が「読めず届かない ID」になるため。前面化したいときは `focus_tab` / `activate_workspace` が明示的に担う。
+- `start_task` が開くタブも同じくその場で surface を起こすが、**前面の workspace でも選ばない**（隠れタブとして起こす）——人が見ているタブを、agent が割り振った作業で奪わないため（[workspace](../platform/workspace.md)）。
 - 背景workspaceで明示的に作成したタブは、その1枚だけをactivatedにするため、owner workspaceのcomputedな `activated` もtrueになる。ただし `activeWorkspace`・表示タブ・focus・MRUは変えず、同じworkspaceの既存復元タブは未materializeのまま残る。作成したタブの状態報告はAttention一覧・メニューバーのピル・通知音へ即時に出る一方、未activatedタブへ直接注入された報告は注意喚起とlive集計へ出さない。`wait_for_event` は表示集合に関係なくイベント自体を扱う。
 - 既存タブの mount は従来どおり workspace 単位の keep-alive 遅延（[workspace](../platform/workspace.md)）。永続復元直後はアクティブ workspace の**全タブ**が mount され、背景 workspace のタブは ID を持つが surface 未生成で、`activate_workspace` で前面化すれば読めるようになる。復元で休眠 workspace のシェルを一斉に起こさないための遅延であり、明示的に 1 枚作れという要求には及ばない。
 - 待てるのはイベント（上記 4 種）だけで、**生の PTY 出力は待てない**（エージェントの応答待ちは `prompt_agent`、シェルのコマンド完了待ちは get_tab_text ポーリングで代替する）。
