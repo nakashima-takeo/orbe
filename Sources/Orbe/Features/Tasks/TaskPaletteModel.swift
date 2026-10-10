@@ -29,12 +29,12 @@ import Observation
 
   /// タスクのタブが持つ一覧の状態。読み書きは選ぶ状態を振り分ける `taskList` を通す（選ぶ状態の間に
   /// 隠れたタブの一覧を書き換えないため、ここ以外から触れないようにしておく）。
-  private var tabTaskList = TaskPaletteListState<TaskPaletteRowID>() {
+  private var tabTaskList = ListState<TaskPaletteRowID>() {
     didSet { if tabTaskList.selectedID != oldValue.selectedID { openedConditionParts = [] } }
   }
   /// GitHub タブが持つ一覧の状態。読み書きは `gitHubList` を通す。選択の同一性が変わると右の欄の値を既定に
   /// 戻す。
-  private var tabGitHubList = TaskPaletteListState<TaskPaletteGitHubRowID>() {
+  private var tabGitHubList = ListState<TaskPaletteGitHubRowID>() {
     didSet { resetPaneIfMoved(to: tabGitHubList.selectedID) }
   }
 
@@ -128,7 +128,7 @@ import Observation
   var rows: [TaskPaletteRow] { TaskPaletteRows.build(rowsInput) }
 
   /// タスクのタブの行で使う一覧の状態（タスクを選ぶ状態なら、その状態が持つもの）。
-  var taskList: TaskPaletteListState<TaskPaletteRowID> {
+  var taskList: ListState<TaskPaletteRowID> {
     get {
       if case .task(_, let list) = pick { return list }
       return tabTaskList
@@ -143,7 +143,7 @@ import Observation
   }
 
   /// GitHub タブの行で使う一覧の状態（項目を選ぶ状態なら、その状態が持つもの）。
-  var gitHubList: TaskPaletteListState<TaskPaletteGitHubRowID> {
+  var gitHubList: ListState<TaskPaletteGitHubRowID> {
     get {
       if case .item(_, let list) = pick { return list }
       return tabGitHubList
@@ -189,7 +189,7 @@ import Observation
   var selectedID: TaskPaletteRowID? { taskList.selectedID }
 
   /// 一覧を送る先。人の操作（選び直し・並べ替え・範囲や開閉の切り替え・画面からの変異）のたびに決め直す。
-  var scrollTarget: TaskPaletteScrollTarget<TaskPaletteRowID>? { taskList.scrollTarget }
+  var scrollTarget: ListScrollTarget<TaskPaletteRowID>? { taskList.scrollTarget }
 
   /// 選んでいるタスク（右の欄に出すもの）。入力の行き先・完了の見出しでは nil。
   var selectedTask: TaskItem? {
@@ -216,7 +216,7 @@ import Observation
   func focus() { focusToken &+= 1 }
 
   /// 列・一覧・範囲・タブ・開閉が変わったあとの付け直し。選択は一覧の状態ごとに、その行で付け直す
-  /// （`TaskPaletteListState`）。右の欄に居る間に選択が別の行へ移ったら一覧へ戻り、対象が消えた下書きと、対象が
+  /// （`ListState`）。右の欄に居る間に選択が別の行へ移ったら一覧へ戻り、対象が消えた下書きと、対象が
   /// 一覧から外れた（完了で畳まれた・範囲の外へ出た）秘書に頼む欄は捨て、並びが変わった掴みも捨てる。右の欄に
   /// 居る間に、選択の同一性が変わった・選んだ行が結び付いていない項目でなくなったら一覧へ戻る。
   func reconcile() {

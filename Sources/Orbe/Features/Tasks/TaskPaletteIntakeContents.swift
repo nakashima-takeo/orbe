@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// 受信の中身（真ん中と右をまたぐ 1 枚）。名前と状態、取得（やり方といつ）・判定・前回の回・重なり、定義を書き換える口が
-/// 秘書であること、操作（今すぐ実行・止める ⇄ 再開・削除）。値は走らせ役とストアから毎回読むので、裏の回が確定すると
+/// 秘書であること、操作（`IntakeHand`）。値は走らせ役とストアから毎回読むので、裏の回が確定すると
 /// そのまま映る。
 struct TaskPaletteIntakeContents: View {
   @Bindable var model: TaskPaletteIntakeModel
@@ -14,7 +14,7 @@ struct TaskPaletteIntakeContents: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 0) {
           heading
-          section(.taskPaletteIntakeFetch) { fetch }
+          section(.intakeFetch) { fetch }
           section(.taskPaletteIntakeJudge) { judge }
           section(.taskPaletteIntakeLast) { last }
           let overlaps = model.store.overlaps(of: intake.id)
@@ -59,11 +59,11 @@ struct TaskPaletteIntakeContents: View {
         .fixedSize(horizontal: false, vertical: true)
       Group {
         if model.isRunning(intake) {
-          Text(l10n.string(.taskPaletteIntakeRunning)).foregroundStyle(Color.theme.accentBright)
+          Text(l10n.string(.intakeRunning)).foregroundStyle(Color.theme.accentBright)
         } else if intake.paused {
-          Text(l10n.string(.taskPaletteIntakePaused)).foregroundStyle(Color.theme.textMuted)
+          Text(l10n.string(.intakePaused)).foregroundStyle(Color.theme.textMuted)
         } else if let next = model.nextRunAt(intake) {
-          Text(l10n.format(.taskPaletteIntakeNext, text.stamp(next)))
+          Text(text.next(next))
             .foregroundStyle(Color.theme.textMuted)
         }
       }
@@ -84,27 +84,21 @@ struct TaskPaletteIntakeContents: View {
   }
 
   @ViewBuilder private var fetch: some View {
-    switch intake.definition.fetch.method {
-    case .agent(let agent):
-      line(
-        [l10n.string(.taskPaletteIntakeAgentFetch), agent.cli, agent.model].joined(
-          separator: " · "))
-      line(l10n.string(.taskPaletteIntakeTools) + "  " + agent.tools.joined(separator: ", "))
-      quote(agent.request)
-    case .command(let command):
-      line(l10n.string(.taskPaletteIntakeCommandFetch))
-      quote(command.script)
-      if let directory = command.directory {
-        line(l10n.string(.taskPaletteIntakeDirectory) + "  " + directory)
-      }
-    }
-    line(text.coverage(intake.definition.fetch.coverage))
+    lines(text.fetch(intake.definition.fetch))
     line(text.when(intake.definition.when))
   }
 
-  @ViewBuilder private var judge: some View {
-    line([intake.definition.judge.cli, intake.definition.judge.model].joined(separator: " · "))
-    quote(intake.definition.judge.instruction)
+  private var judge: some View {
+    lines(text.judge(intake.definition.judge))
+  }
+
+  private func lines(_ lines: [IntakeText.Line]) -> some View {
+    ForEach(Array(lines.enumerated()), id: \.offset) { _, value in
+      switch value {
+      case .plain(let value): line(value)
+      case .source(let value): quote(value)
+      }
+    }
   }
 
   private var last: some View {
@@ -116,7 +110,6 @@ struct TaskPaletteIntakeContents: View {
       .fixedSize(horizontal: false, vertical: true)
   }
 
-  /// 切らずに全文を出す——承認なしで裏で走るもの（使えるツール・作業ディレクトリ）は、画面でいつも確かめられる。
   private func line(_ value: String) -> some View {
     fontResolver.text(value, base: Theme.Typography.workspaceName)
       .font(Font.theme.workspaceName)
@@ -124,7 +117,7 @@ struct TaskPaletteIntakeContents: View {
       .fixedSize(horizontal: false, vertical: true)
   }
 
-  /// 切らずに全文を出す（実行するコマンド・依頼文・指示文）。
+  /// 原文は箱で囲む。
   private func quote(_ value: String) -> some View {
     fontResolver.text(value, base: Theme.Typography.workspaceName)
       .font(Font.theme.workspaceName)
@@ -140,19 +133,14 @@ struct TaskPaletteIntakeContents: View {
 
   private var buttons: some View {
     HStack(spacing: Theme.Space.step) {
-      TaskPaneButton(key: "↵", title: l10n.string(.taskPaletteIntakeRunNow), primary: true) {
-        model.runNow()
-      }
-      TaskPaneButton(
-        key: "space",
-        title: l10n.string(intake.paused ? .taskPaletteIntakeResume : .taskPaletteIntakePause)
-      ) { model.togglePause() }
+      button(.runNow, primary: true)
+      button(.togglePause)
       Button {
-        model.deleteIntake()
+        model.perform(.delete)
       } label: {
         HStack(spacing: Theme.Space.step) {
-          Text("⌘⌫")
-          Text(l10n.string(.taskPaletteDelete))
+          Text(IntakeHand.Operation.delete.key)
+          Text(l10n.string(IntakeHand.Operation.delete.title(paused: intake.paused)))
         }
         .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.danger)
@@ -163,5 +151,12 @@ struct TaskPaletteIntakeContents: View {
       .buttonStyle(.plain)
       .focusable(false)
     }
+  }
+
+  private func button(_ operation: IntakeHand.Operation, primary: Bool = false) -> some View {
+    TaskPaneButton(
+      key: operation.key, title: l10n.string(operation.title(paused: intake.paused)),
+      primary: primary
+    ) { model.perform(operation) }
   }
 }

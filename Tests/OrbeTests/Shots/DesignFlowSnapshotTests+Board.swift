@@ -3,7 +3,8 @@ import XCTest
 
 @testable import Orbe
 
-/// ボード入りのタブ行の横スクロール。選択が右端のタブへ移るとタブ列だけがスクロールし、ボードのセルは左端に残る。
+/// ボードの flow。タブ行の横スクロール（`testBoardScroll`）と、自動追加の部品のキー操作（`testBoardIntake`）。
+/// タブ行の横スクロール: 選択が右端のタブへ移るとタブ列だけがスクロールし、ボードのセルは左端に残る。
 /// スクロール位置は描画を跨いで持つ状態なので、1 枚の host を使い回して選択を変えるたびに撮る（`flow` は毎回 host を
 /// 作り直すので、スクロールが出ない）。
 extension DesignFlowSnapshotTests {
@@ -46,5 +47,30 @@ extension DesignFlowSnapshotTests {
       try XCTUnwrap(rep.representation(using: .png, properties: [:])).write(to: url)
       print("[flow] wrote \(url.path)")
     }
+  }
+
+  /// ボードの自動追加: ↓ で選ぶ → space で止める（行が末尾へ沈み、選択は付いていく）→ space で再開 → ↵ で実行中… → ↵ で赤の
+  /// 断り → ⌘⌫ で消え、同じ位置の行が選ばれる。
+  func testBoardIntake() throws {
+    let model = BoardModel(
+      intake: BoardIntakeModel(
+        runner: DesignSceneFixtures.intakeRunner(DesignSceneFixtures.boardIntakeFile())))
+    let intake = model.intake
+    try flow(
+      "board_intake", size: NSSize(width: 1440, height: 826),
+      render: {
+        BoardRoot(
+          model: model, translucency: ChromeTranslucency(),
+          localization: LocalizationStore(language: .ja), fontResolver: ChromeFontResolver())
+      },
+      steps: [
+        ("start", {}),
+        ("down", { intake.move(1) }),
+        ("paused", { intake.perform(.togglePause) }),
+        ("resumed", { intake.perform(.togglePause) }),
+        ("run_now", { intake.perform(.runNow) }),
+        ("run_refused", { intake.perform(.runNow) }),
+        ("deleted", { intake.perform(.delete) }),
+      ])
   }
 }

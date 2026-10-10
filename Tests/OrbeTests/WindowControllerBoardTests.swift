@@ -12,10 +12,19 @@ import XCTest
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerBoardTests: OrbeTestCase {
+  /// 画面外に出した（ordered-in の）窓。終わりに下ろす。
+  private var shown: WindowController?
+
   override func setUp() {
     super.setUp()
     // 言語確定済み（returning user）として起動し、初回言語選択 overlay を出さない。
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
+  }
+
+  override func tearDown() {
+    shown?.window.orderOut(nil)
+    shown = nil
+    super.tearDown()
   }
 
   // MARK: - fixture
@@ -63,7 +72,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
 
   // MARK: - 選ぶ
 
-  /// セルをクリックすると、端末の代わりにボードが出て焦点を取り、chrome はどの隠れたタブも選んでいるように見せない。
+  /// セルをクリックすると、端末の代わりにボードが出て、chrome はどの隠れたタブも選んでいるように見せない。
   func testClickingTheBoardCellShowsTheBoardInPlaceOfTheTabs() throws {
     let wc = try homeOnBoard(tabs: 2)
     wc.flushChrome()
@@ -73,7 +82,6 @@ final class WindowControllerBoardTests: OrbeTestCase {
     XCTAssertTrue(wc.statusModel.location.isEmpty, "隠れたタブの現在地を出さない")
     XCTAssertNil(wc.statusModel.faceDots, "隠れたタブの位置ドットを出さない")
     XCTAssertFalse(wc.model.contentIsEmpty, "空表示の地を重ねない")
-    XCTAssertTrue(wc.window.firstResponder === wc.boardView, "焦点はボード")
   }
 
   // MARK: - キー
@@ -118,20 +126,60 @@ final class WindowControllerBoardTests: OrbeTestCase {
 
   // MARK: - 焦点
 
-  /// ボードを選んでいれば、パレットを閉じたとき・workspace を行き来したとき、焦点はボードへ戻る。
-  func testFocusReturnsToTheBoard() throws {
-    let wc = try homeOnBoard(tabs: 0)
+  /// ボードを選んだとき・パレットを閉じたとき・workspace を行き来したとき、焦点はボードの中の自動追加の一覧へ戻り、キーが効く。
+  @MainActor func testFocusReturnsToTheIntakeListOnTheBoard() throws {
+    // 止めている自動追加だけを置く——起動でも回らず、取得もコマンドなので本物の agent は起きない。
+    let intakes = DesignSceneFixtures.boardIntakes().prefix(2).map {
+      var intake = $0
+      intake.paused = true
+      intake.definition.fetch.method = .command(BackgroundCommand(script: "true", directory: nil))
+      return intake
+    }
+    IntakePersistence.save(DesignSceneFixtures.boardIntakeFile(Array(intakes)))
+    let wc = WindowController()
+    shown = wc
+    // 非アクティブなアプリの窓は key にならないが、`NSApp.sendEvent` は ordered-in の窓の first responder へ届ける。
+    NSApplication.shared.setActivationPolicy(.accessory)
+    wc.window.makeKeyAndOrderFront(nil)
+    let home = try XCTUnwrap(wc.store.homeIndex)
+    wc.switchWorkspace(to: home)
+    let list = wc.board.intake
+    XCTAssertEqual(list.selected?.id, 1, "前提")
+
+    wc.statusModel.onSelectBoard()
+    try pressDown(wc)
+    XCTAssertEqual(list.selected?.id, 2, "ボードを選ぶとボードへ")
 
     wc.showWorkspacePalette()
-    wc.window.makeFirstResponder(nil)  // パレットの入力欄が焦点を持っていった状態（窓に出さないので自分では取らない）
+    wc.window.makeFirstResponder(nil)  // パレットの入力欄が焦点を持っていった状態
     wc.dismissPalette()
-    XCTAssertTrue(wc.window.firstResponder === wc.boardView, "パレットを閉じるとボードへ")
+    try pressDown(wc)
+    XCTAssertEqual(list.selected?.id, 1, "パレットを閉じるとボードへ")
 
-    let home = wc.activeWorkspace
     wc.switchWorkspace(to: try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "default" }))
-    XCTAssertFalse(wc.window.firstResponder === wc.boardView, "前提: 他の workspace ではそのタブが焦点")
+    XCTAssertFalse(wc.boardView.focusIsInside, "前提: 他の workspace ではそのタブが焦点")
     wc.switchWorkspace(to: home)
-    XCTAssertTrue(wc.window.firstResponder === wc.boardView, "workspace を戻るとボードへ")
+    try pressDown(wc)
+    XCTAssertEqual(list.selected?.id, 2, "workspace を戻るとボードへ")
+  }
+
+  /// 焦点の当て直しが SwiftUI に写るのを待ってから ↓ を窓へ送る。
+  private func pressDown(_ wc: WindowController) throws {
+    pump()
+    let event = NSEvent.keyEvent(
+      with: .keyDown, location: .zero, modifierFlags: [.numericPad, .function],
+      timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: wc.window.windowNumber,
+      context: nil, characters: "\u{F701}", charactersIgnoringModifiers: "\u{F701}",
+      isARepeat: false, keyCode: 125)
+    NSApp.sendEvent(try XCTUnwrap(event))
+    pump()
+  }
+
+  private func pump() {
+    let end = Date().addingTimeInterval(0.3)
+    while Date() < end {
+      RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.005))
+    }
   }
 
   // MARK: - 閉じる
