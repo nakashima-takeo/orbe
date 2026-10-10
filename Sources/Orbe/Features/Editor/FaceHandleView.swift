@@ -276,6 +276,10 @@ final class FaceHandleView: NSView {
     copy.append(face == .editor ? Self.fileGlyph : Self.terminalGlyph)
     copy.transform(using: scaled)
     copy.lineWidth = 1.8 * scale
+    if face == .terminal {
+      copy.lineCapStyle = .round
+      copy.lineJoinStyle = .round
+    }
     color.setStroke()
     copy.stroke()
   }
@@ -295,14 +299,15 @@ final class FaceHandleView: NSView {
     return p
   }()
 
-  /// `❯_`。
+  /// 窓と ❯_（T2）。
   private static let terminalGlyph: NSBezierPath = {
-    let p = NSBezierPath()
-    p.move(to: NSPoint(x: 4, y: 6))
-    p.line(to: NSPoint(x: 7.5, y: 9))
-    p.line(to: NSPoint(x: 4, y: 12))
-    p.move(to: NSPoint(x: 9.5, y: 12.5))
-    p.line(to: NSPoint(x: 14, y: 12.5))
+    let p = NSBezierPath(
+      roundedRect: NSRect(x: 2.5, y: 3.5, width: 13, height: 11), xRadius: 1, yRadius: 1)
+    p.move(to: NSPoint(x: 5.5, y: 7))
+    p.line(to: NSPoint(x: 7.5, y: 8.75))
+    p.line(to: NSPoint(x: 5.5, y: 10.5))
+    p.move(to: NSPoint(x: 9.5, y: 11))
+    p.line(to: NSPoint(x: 12.5, y: 11))
     return p
   }()
 
