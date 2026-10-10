@@ -27,7 +27,7 @@ updated: 2026-10-11
 
 - `orb tab list [--workspace <id|current>] [--json]` … タブ一覧（tabId/workspaceId/workspaceName/title/cwd/agentState/agentSessionId/active）。人間向けの `*` は「前面 workspace で選択中」のタブ 1 枚に付く——`active` は背景 workspace でも 1 枚 true なので、前面かは workspace 一覧と合わせて判定する。前面 workspace が[ボード](../chrome/board.md)を選んでいれば、どのタブにも付かない。
 - `orb tab new [--workspace <id|current>] [--dir <path>] [--cmd "…"]` … 新タブを開く。新 tabId を返す。
-- `orb tab close [<tab>]` … GUI の Cmd+W と同一（アクティブ WS の最後のタブを閉じても 0 タブ空状態で残す）。
+- `orb tab close [<tab>]` … GUI の Cmd+W と同一（アクティブ WS の最後のタブを閉じても、ボードを持てばボード、持たなければ 0 タブの空状態で残す）。
 - `orb tab focus <tab>` … 別 WS なら activate 込み。位置引数必須。
 - `orb tab text [<tab>] [--scrollback] [--json]` … 画面テキスト。`--scrollback` で履歴全体、既定は可視範囲。人間向け出力は**捕捉した画面をそのまま**書き、末尾改行を足さない——整形された報告ではなく中身なので、`orb tab text > snapshot.txt` が画面を再現できる必要がある。
 - `orb tab send [<tab>] (--text <text> | --stdin)` … ペースト相当でテキストを送る。**enter は押さない**（実行は `tab key --key enter` が担う。送信と実行を分けるのは、送った内容を確かめてから走らせられるようにするため）。`--text` と `--stdin` はちょうど一方が必須で、`--stdin` を明示必須にしたのは、引数を書き損じたときに CLI が黙って標準入力を待って固まらないため。
