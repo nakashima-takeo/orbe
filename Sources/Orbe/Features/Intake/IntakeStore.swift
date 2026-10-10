@@ -287,8 +287,15 @@ import Observation
   }
 
   /// 取得役は外から届いた文面を読むので、書き込みの手段を渡さないよう、使えるツールを名指しした MCP のツールに限る。
+  /// 文字はツール名に使えるもの（英数字・`_`・`-`）だけ——`,` を通すと `--allowedTools` で連結されてサーバー単位の許可に
+  /// なり、空白も同じく区切りになる。
   private static func isMCPToolName(_ name: String) -> Bool {
-    guard name.hasPrefix("mcp__"), !name.contains("*") else { return false }
+    guard name.hasPrefix("mcp__"),
+      name.unicodeScalars.allSatisfy({
+        ("a"..."z").contains($0) || ("A"..."Z").contains($0) || ("0"..."9").contains($0)
+          || $0 == "_" || $0 == "-"
+      })
+    else { return false }
     let rest = name.dropFirst("mcp__".count)
     guard let separator = rest.range(of: "__") else { return false }
     return separator.lowerBound > rest.startIndex && separator.upperBound < rest.endIndex
