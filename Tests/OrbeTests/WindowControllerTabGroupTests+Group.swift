@@ -10,8 +10,8 @@ import XCTest
 ///
 /// 壊れると何が起きるか。同じ worktree のタブを切り替えるたびにエディターが閉じたり開いたりし、配置と文書が消える。切り替えた
 /// 瞬間に端末が描き直される。連の器を出しただけで休眠の agent が素のシェルとして起き、resume されない。cd したタブが元の
-/// 連の文書を持ち去る、あるいは連の最後のタブの cd で文書が消える。端末で cd したのにエディター全面の連へ移って入力が
-/// 見えない面へ届く。閉じたタブの surface が器に残り続ける。
+/// 連の文書を持ち去る、あるいは連の最後のタブの cd で文書が消える。端末で cd したのに、エディター全面の連へ移って入力が
+/// 見えない面へ届く、分割の連へ移って入力がエディターへ届く。閉じたタブの surface が器に残り続ける。
 extension WindowControllerTabGroupTests {
   private func layout(_ wc: WindowController) {
     wc.window.contentView?.layoutSubtreeIfNeeded()
@@ -170,6 +170,20 @@ extension WindowControllerTabGroupTests {
 
     XCTAssertTrue(a.group === c.group)
     XCTAssertEqual(c.group.faces, .terminalOnly, "エディター全面の連は端末だけになる")
+    XCTAssertTrue(wc.window.firstResponder === a.surface, "焦点は端末に残る")
+  }
+
+  /// 分割の連へ端末で cd すると、幅は保ったまま連の焦点の面だけが端末になる。
+  func testCdWithTheTerminalFocusedIntoASplitGroupMovesOnlyItsFocus() throws {
+    let wc = try restore(["/tmp/g1", "/tmp/g1", "/tmp/g2"], activeTab: 0)
+    let (a, c) = (wc.current.tabs[0], wc.current.tabs[2])
+    c.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .editor), animated: false)
+    XCTAssertTrue(wc.window.firstResponder === a.surface, "前提: 端末に焦点")
+
+    a.surface.currentPwd = "/tmp/g2"
+
+    XCTAssertTrue(a.group === c.group)
+    XCTAssertEqual(c.group.faces, FaceLayout(editorRatio: 0.5, focus: .terminal))
     XCTAssertTrue(wc.window.firstResponder === a.surface, "焦点は端末に残る")
   }
 
