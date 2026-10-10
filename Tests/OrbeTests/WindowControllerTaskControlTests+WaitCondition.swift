@@ -115,6 +115,9 @@ extension WindowControllerTaskControlTests {
     XCTAssertTrue(
       waitUntil { wc.taskStore.tasks.first?.waitResolution != nil }, "付けた直後に確かめて解ける")
     XCTAssertEqual(wc.taskStore.tasks.first?.waitResolution?.headline, "レビューが付いた")
+    XCTAssertEqual(
+      wc.attentionStore.transient?.taskNotice?.taskId, wc.taskStore.tasks.first?.id,
+      "解けたことは係から窓の知らせ（ピルと音）まで届く")
   }
 
   func testResolvedWaitIsListedWithItsConditionInsteadOfTheWait() throws {
