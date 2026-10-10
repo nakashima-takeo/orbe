@@ -11,7 +11,7 @@ extension WindowController {
     select(selection)
   }
 
-  /// アクティブ workspace の位置 `index` のタブを選ぶ（タブ行・制御 API の位置の口）。範囲外は無視。
+  /// アクティブ workspace の位置 `index` のタブを選ぶ（タブ行の位置の口）。範囲外は無視。
   func select(_ index: Int) {
     guard current.tabs.indices.contains(index) else { return }
     select(.tab(current.tabs[index]))

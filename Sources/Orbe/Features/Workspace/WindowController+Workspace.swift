@@ -87,7 +87,7 @@ extension WindowController {
     case .invalid:
       return
     case .activeChanged:
-      activateCurrent()  // MRU 繰上げ先が0タブなら空表示（シェルは起こさない）
+      activateCurrent()  // MRU 繰上げ先が0タブならボードか空表示（シェルは起こさない）
     case .backgroundChanged:
       refreshChrome()  // 背景 workspace の畳み込みでも chrome 横断 rollup を同期する
     }

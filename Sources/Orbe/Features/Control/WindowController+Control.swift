@@ -95,7 +95,7 @@ extension WindowController: ControlTarget {
   }
 
   /// 背景/休眠 workspace を前面化し全タブを mount する（制御 API の activate_workspace）。
-  /// 切替実体は `switchWorkspace(to:)` に委譲（既アクティブ no-op・0タブは空表示〔自動起動なし〕・mount・
+  /// 切替実体は `switchWorkspace(to:)` に委譲（既アクティブ no-op・0タブはボードか空表示〔自動起動なし〕・mount・
   /// フォーカス・保存を既存経路が担う）。
   func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, tabIds: [Int])? {
     guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else { return nil }

@@ -14,7 +14,7 @@ extension WindowController {
       ws.settingsOverride = state.settingsOverride  // 設定上書きを読み戻す（旧データは nil＝global 継承）
       ws.lastWorktreeBase = state.lastWorktreeBase
       for tab in state.tabs { ws.tabs.append(makeTab(from: tab)) }  // 隣接の正規化は下の store.load
-      // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・下の activateCurrent）は空表示
+      // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・下の activateCurrent）はボードか空表示
       // で、シェルは自動起動しない。背景の休眠 workspace も空のまま keep する。ボードを持つかは Home を知る
       // store.load が決め、そこで選択も不変条件へそろえる。
       if state.boardSelected {
@@ -29,7 +29,7 @@ extension WindowController {
       workspaces: restored,
       activeWorkspace: min(max(0, file.activeWorkspace), restored.count - 1),
       homeWorkspaceId: file.homeWorkspaceId)
-    activateCurrent()  // 復元アクティブが0タブ（休眠保存）なら空表示（シェルは起こさない）
+    activateCurrent()  // 復元アクティブが0タブ（休眠保存）ならボードか空表示（シェルは起こさない）
   }
 
   /// TabState 1 枚からタブを起こして配線する。起動時復元（restore）・`restoreDormantTab`・`openResumedTab` の共通経路

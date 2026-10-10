@@ -84,7 +84,7 @@ private func tabList(_ rest: [String]) -> Never {
     result["tabs"] = tabs
     printJSON(result)
   } else {
-    // 人間向けの `*` は「前面 workspace で選択中」——`active` は背景 workspace でも 1 枚 true なので、
+    // 人間向けの `*` は「前面 workspace で選択中」——`active` は背景 workspace でも true になるので、
     // 前面かは list_workspaces で確かめる。
     let front = activeWorkspaceId()
     for t in tabs {
