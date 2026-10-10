@@ -12,7 +12,7 @@ import XCTest
 /// 窓で key window になれず、`NSApp.sendEvent` はこの入口を通らないため、入口を直接叩く。
 ///
 /// 壊れると何が起きるか: 右の欄を見ているときや、詳細を打っている途中に ⌘T を押しても何も起きない（または
-/// 入力欄に文字として入る）。詳細を打ちかけのまま ⌘T を押すと、打った内容が消える。追加の行で ⌘T を
+/// 入力欄に文字として入る）。詳細を打ちかけのまま ⌘T を押すと、打った内容が消える。入力の行き先で ⌘T を
 /// 押しても、タスクが足されないまま ⌘T が開く。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
@@ -118,7 +118,7 @@ final class WindowControllerTaskWorktreePaletteTests: OrbeTestCase {
     XCTAssertTrue(wc.handleWindowKeyCommand(.showTaskPalette))
     let palette = try XCTUnwrap(wc.model.taskPalette)
     palette.query = "請求書を送る"
-    XCTAssertEqual(palette.selectedID, .add, "前提: 追加の行を選んでいる")
+    XCTAssertEqual(palette.selectedID, .add, "前提: 入力の行き先を選んでいる")
 
     XCTAssertTrue(try pressCommandT(wc))
 

@@ -154,8 +154,7 @@ extension WindowController {
     switch target {
     case .agent(let agent):
       opened = openTab(
-        workspaceIndex: index, cwd: dir, command: agent.path,
-        env: agentLauncher.launchEnvironment, agent: agent.command)
+        workspaceIndex: index, cwd: dir, command: agent.path, env: agentLauncher.launchEnvironment)
     case .shell:
       // command を渡さない＝既定シェル起動。
       opened = openTab(workspaceIndex: index, cwd: dir)

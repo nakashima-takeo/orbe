@@ -71,9 +71,10 @@ final class TaskStoreTests: OrbeTestCase {
     let low = try store.add(draft("低") { $0.priority = .low })
     let done = try store.add(draft("完了") { $0.status = .done })
 
-    let medium = try store.add(draft("中"), at: .priorityHead)
-    let urgent = try store.add(draft("急ぎ") { $0.priority = .high }, at: .priorityHead)
-    let later = try store.add(draft("後で") { $0.priority = .low }, at: .priorityHead)
+    let medium = try store.add(draft("中"), at: .priorityHead(workspace: nil))
+    let urgent = try store.add(
+      draft("急ぎ") { $0.priority = .high }, at: .priorityHead(workspace: nil))
+    let later = try store.add(draft("後で") { $0.priority = .low }, at: .priorityHead(workspace: nil))
 
     XCTAssertEqual(
       store.tasks.map(\.id),
@@ -81,8 +82,26 @@ final class TaskStoreTests: OrbeTestCase {
     XCTAssertEqual(TaskPersistence.load()?.tasks.map(\.id), store.tasks.map(\.id), "保存も同じ並び")
 
     let empty = TaskStore(file: nil)
-    let only = try empty.add(draft("ひとつ"), at: .priorityHead)
+    let only = try empty.add(draft("ひとつ"), at: .priorityHead(workspace: nil))
     XCTAssertEqual(empty.tasks.map(\.id), [only.id], "該当が無ければ末尾")
+  }
+
+  /// 範囲で絞った欄から足すと、見ている欄のタスクだけを基準にする（見えていない workspace の同じ優先度のタスクの
+  /// 前には入らず、見えている高い優先度のタスクを越えない）。
+  func testPriorityHeadCountsOnlyTheTasksOfTheWorkspaceInView() throws {
+    let store = TaskStore()
+    let (seen, other) = (UUID(), UUID())
+    let elsewhere = try store.add(draft("別の workspace") { $0.workspace = other })
+    let high = try store.add(
+      draft("高") {
+        $0.priority = .high; $0.workspace = seen
+      })
+    let medium = try store.add(draft("中") { $0.workspace = seen })
+
+    let added = try store.add(
+      draft("足す") { $0.workspace = seen }, at: .priorityHead(workspace: seen))
+
+    XCTAssertEqual(store.tasks.map(\.id), [elsewhere.id, high.id, added.id, medium.id])
   }
 
   func testAddWithWaitingReasonStartsWaiting() throws {

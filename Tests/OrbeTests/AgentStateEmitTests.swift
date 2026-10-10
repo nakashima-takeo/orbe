@@ -23,9 +23,9 @@ final class AgentStateEmitTests: OrbeTestCase {
   }
 
   /// resume を必ず解決する resolver（休眠チケットが `.live` へ消費される枝）。
-  private let resume: TerminalTab.ResumeSpawn = { _, _ in ("claude --resume x", [:]) }
+  private let resume: TerminalTab.ResumeSpawn = { _, _, _ in ("claude --resume x", [:]) }
   /// resume を解決できない resolver（休眠チケットが素シェルへ落ちる枝）。
-  private let noResume: TerminalTab.ResumeSpawn = { _, _ in nil }
+  private let noResume: TerminalTab.ResumeSpawn = { _, _, _ in nil }
 
   /// `agent_state` の待機を張り、登録完了を barrier で確定させる。tabId を省くのは、
   /// 復元前で ID がまだ採番されていない場合（kind だけで全タブを拾う）。

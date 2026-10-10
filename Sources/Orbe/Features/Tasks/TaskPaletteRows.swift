@@ -180,6 +180,8 @@ enum TaskPaletteRowMetrics {
   static let askBox: CGFloat = 84
   /// 秘書に頼む欄の箱の上下の余白。
   static let askGap: CGFloat = Theme.Space.tick
+  /// 行の右寄せの札のうち、人や agent の文字を出す札（待ちの理由・起きたこと）の文字の上限幅。
+  static let textBadgeMaxWidth: CGFloat = 180
   /// 行の先頭のアイコンの列の幅。
   static let glyphColumn: CGFloat = 12
   /// 一覧の内側の余白（⌘⇧S のリストと同じ）。

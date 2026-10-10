@@ -198,28 +198,30 @@ extension DesignSceneFixtures {
       openLists: (openLists ?? taskOpenLists)(items.viewer), root: taskRoot,
       agents: taskAgents(), sessionTabs: sessionTabs,
       intakes: intakeRunner(intakes ?? intakeDesignFile()),
-      workspaces: taskWorkspaces, now: taskToday, timeZone: taskCalendar.timeZone)
+      workspaces: taskWorkspaces, now: taskToday, timeZone: taskCalendar.timeZone,
+      clock: { _ in taskToday })
   }
 
   /// 見本 SlWait.png・SlResolved.png の待ちの条件（#214「設定の検索を速くする」）。claude が 2 日前に付け、10 分ごとに
-  /// 確かめて 17 回失敗している（最後は 3 分前）。確認は今の時計で数えるので、期限も今から 2 日後の 9:00 に置く
-  /// （見本の日付に置くと、期限が過ぎていて「次は まもなく」になる）。
-  static func taskWaitCondition(conversation: Bool = true) -> WaitCondition {
-    let now = Date()
+  /// 確かめて 17 回失敗している（最後は 3 分前）。時刻はすべて見本の今（`taskToday`。画面の時計も同じ）から数え、期限は
+  /// 見本どおり 10/6（月）9:00（`deadline` で替えられる）。
+  static func taskWaitCondition(deadline: Date? = nil) -> WaitCondition {
+    let now = taskToday
     var condition = WaitCondition(
       WaitConditionRequest(
         description: "PR #214 にレビューが付いたら",
         command:
           "gh pr view 214 --json reviews --jq '.reviews[-1] | [.author.login, .state] | join(\" · \")'",
         everyMinutes: 10,
-        deadline: taskCalendar.date(
-          bySettingHour: 9, minute: 0, second: 0,
-          of: taskCalendar.date(byAdding: .day, value: 2, to: now)!)!,
+        deadline: deadline
+          ?? taskCalendar.date(
+            bySettingHour: 9, minute: 0, second: 0,
+            of: taskCalendar.date(byAdding: .day, value: 2, to: now)!)!,
         directory: "\(NSHomeDirectory())/wt/pr-214",
-        conversation: conversation
-          ? WaitConversation(command: "claude", sessionId: taskConversationId, workspace: nil) : nil
+        conversation: WaitConversation(
+          command: "claude", sessionId: taskConversationId, workspace: nil, secretary: false)
       ),
-      setAt: taskCalendar.date(byAdding: .day, value: -2, to: taskToday)!)
+      setAt: taskCalendar.date(byAdding: .day, value: -2, to: now)!)
     for minutes in stride(from: 163, through: 3, by: -10) {
       let at = now.addingTimeInterval(-Double(minutes) * 60)
       condition.record(
@@ -233,20 +235,22 @@ extension DesignSceneFixtures {
   static let taskConversationId = "5f0c2a6e-214"
 
   /// #214 の待ちに条件を付けた一覧（`how` を渡すと、その解け方で解けた後。期限が来たのは 2 時間前とする）。
-  static func taskWaitConditionFile(resolved how: WaitResolution.How? = nil) -> TasksFile {
+  static func taskWaitConditionFile(resolved how: WaitResolution.How? = nil, deadline: Date? = nil)
+    -> TasksFile
+  {
     var file = taskDesignFile()
     let index = file.tasks.firstIndex { $0.id == 3 }!
     var waiting = file.tasks[index].waiting!
-    waiting.condition = taskWaitCondition()
+    waiting.condition = taskWaitCondition(deadline: deadline)
     if let how {
       var condition = waiting.condition!
-      let at = Date().addingTimeInterval(-2 * 60)
+      let at = taskToday.addingTimeInterval(-2 * 60)
       condition.record(WaitCheck(startedAt: at, endedAt: at, result: .success))
       waiting.condition = condition
       file.tasks[index].wait = .resolved(
         WaitResolution(
           waiting: waiting, how: how,
-          at: how == .expired ? Date().addingTimeInterval(-2 * 3600) : at))
+          at: how == .expired ? taskToday.addingTimeInterval(-2 * 3600) : at))
     } else {
       file.tasks[index].wait = .waiting(waiting)
     }

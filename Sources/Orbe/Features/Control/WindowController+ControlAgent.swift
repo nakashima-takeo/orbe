@@ -16,22 +16,24 @@ extension WindowController {
     }
   }
 
-  /// 既存セッションを resume してエージェントを新タブで起こす（制御 API の resume_agent）。
-  /// 起動文字列は `AgentCatalog.resumeCommand`（sessionId の安全文字検証込み）が組む——永続復元の
-  /// resume（`AgentLauncher.resumeSpawn`）と同一の形で、login PATH 注入により bare 名で解決する。
+  /// 既存セッションを resume してエージェントを新タブで起こす（制御 API の resume_agent）。再開は休眠のタブの起床と
+  /// 同じ組み立て（`openResumedTab`）を通る——秘書の会話なら秘書の役割の指示も添える。
   func controlResumeAgent(command: String, sessionId: String, workspaceId: Int?, cwd: String?)
     -> Result<AgentLaunch, ControlError>
   {
     resolveAgentLaunch(command: command, workspaceId: workspaceId).flatMap { target in
-      // ここへ来た時点で command は検出済み＝`AgentCatalog.supported` のいずれかなので、
-      // nil になるのは sessionId が安全文字集合の外にあるときに限られる。
-      guard
-        let resume = AgentCatalog.resumeCommand(
-          forAgent: target.agent.command, sessionId: sessionId)
-      else {
+      guard AgentCatalog.isSafeSessionId(sessionId) else {
         return .failure(ControlError(code: -32602, message: "invalid sessionId"))
       }
-      return launchAgentTab(target, command: resume, cwd: cwd)
+      guard
+        let opened = openResumedTab(
+          AgentSession(command: target.agent.command, sessionId: sessionId),
+          workspaceIndex: target.workspaceIndex, cwd: cwd)
+      else {
+        return .failure(ControlError(code: -32000, message: "spawn failed"))
+      }
+      return .success(
+        AgentLaunch(tabId: opened.tabId, workspaceId: opened.workspaceId, agent: target.agent))
     }
   }
 
@@ -84,7 +86,7 @@ extension WindowController {
     guard
       let opened = openTab(
         workspaceIndex: target.workspaceIndex, cwd: cwd, command: command,
-        env: agentLauncher.launchEnvironment, agent: target.agent.command)
+        env: agentLauncher.launchEnvironment)
     else {
       return .failure(ControlError(code: -32000, message: "spawn failed"))
     }

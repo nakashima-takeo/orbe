@@ -24,7 +24,8 @@ func clearAgentState(_ tab: TerminalTab) {
 func liveUnreportedTab(session: AgentSession, cwd: String = "/tmp") -> TerminalTab {
   let tab = TerminalTab(
     restoring: TabState(cwd: cwd, agent: session, explicitTitle: nil),
-    resumeSpawn: { session, _ in ("\(session.command) --resume \(session.sessionId ?? "")", [:]) })
+    resumeSpawn: { _, session, _ in ("\(session.command) --resume \(session.sessionId ?? "")", [:])
+    })
   tab.recordMaterializationStarted()
   return tab
 }

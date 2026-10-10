@@ -19,7 +19,7 @@ extension TaskPaletteModelTests {
   }
 
   private var conversation: WaitConversation {
-    WaitConversation(command: "claude", sessionId: "s-1", workspace: nil)
+    WaitConversation(command: "claude", sessionId: "s-1", workspace: nil, secretary: false)
   }
 
   private func waiting(_ condition: WaitCondition) -> TaskItem.Wait {
@@ -112,7 +112,7 @@ extension TaskPaletteModelTests {
     var opened: [Int] = []
     palette.onContinueWait = {
       continued.append($0)
-      return .agentMissing
+      return .failed
     }
     palette.onOpenWorktreePalette = { opened.append($0) }
 
@@ -120,7 +120,27 @@ extension TaskPaletteModelTests {
 
     XCTAssertEqual(continued, [1])
     XCTAssertEqual(opened, [])
-    XCTAssertEqual(palette.error, .agentMissing, "届けられなかった理由はフッターに出す")
+    XCTAssertEqual(palette.error, .failed, "届けられなかった理由はフッターに出す")
+  }
+
+  /// 続きから始められない（作業ディレクトリ・CLI が無い）なら、⌘T はいつもの ⌘T に戻り、理由を出し続ける。
+  func testCommandTOnAResolvedWaitThatCannotContinueOpensTheWorktreePalette() {
+    let palette = model([
+      task(1, "a", .inProgress) { $0.wait = self.resolved(conversation: self.conversation) }
+    ])
+    var opened: [Int] = []
+    palette.onContinuationBlock = { _ in .directoryMissing }
+    palette.onContinueWait = { _ in
+      XCTFail("始められないのに続きから始めた")
+      return nil
+    }
+    palette.onOpenWorktreePalette = { opened.append($0) }
+
+    palette.openWorktreePalette()
+    palette.continueWait()
+
+    XCTAssertEqual(opened, [1])
+    XCTAssertEqual(palette.continuationBlock(of: palette.store.tasks[0]), .directoryMissing)
   }
 
   /// 会話の記録が無い解けた待ち（タブの外から付けた条件）の ⌘T は、いつもの ⌘T。

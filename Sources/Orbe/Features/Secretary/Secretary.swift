@@ -10,18 +10,24 @@ protocol SecretaryHost: AnyObject {
   var secretaryClaude: AgentCLI? { get }
   /// Home に新しいタブで `command` を選ばずに起こす。起こせなければ nil。
   func secretaryOpen(command: String) -> TerminalTab?
+  /// Home に新しいタブでその会話を選ばずに再開する（休眠のタブの起床と同じ組み立てを通る）。
+  func secretaryResume(_ session: AgentSession)
   /// 休眠のタブを選ばずに起こす（起こす時点で再開が走る）。
   func secretaryWake(_ tab: TerminalTab)
 }
 
-/// 秘書の係（窓に 1 つ）。秘書 = 秘書のタブの claude の会話。人の頼みを受けて溜め（`secretary.json` へ即保存）、
-/// 秘書のタブを探し・起こし、手が空いたら 1 件ずつ貼り付けて Enter で届ける。
+/// 秘書の係（窓に 1 つ）。秘書 = Orbe が秘書として起こした claude のプロセス（そのタブ）。人の頼みを受けて溜め
+/// （`secretary.json` へ即保存）、秘書のタブを探し・起こし、手が空いたら 1 件ずつ貼り付けて Enter で届ける。
 ///
-/// - 秘書のタブ: 起こしたタブ、または覚えた会話 ID で見つけたタブを、閉じるまで覚える（タブ ID はメモリだけ）。会話 ID は
-///   そのタブが報告するたびに書き直し、再起動の後に見つける鍵にだけ使う——/clear で会話が替わっても秘書を見失わない。
+/// - 秘書のタブ: 新しい claude を起こしたタブと、秘書の会話を再開したタブ（係の再開・休眠のタブの起床・続きから・
+///   `resume_agent`。どれも休眠のタブの起床の組み立てを通り、そこで秘書の役割の指示を添えて覚える）。タブを閉じる
+///   （プロセスが終わればタブも閉じる）まで覚える（タブ ID はメモリだけ）。人がシェルで手で再開した同じ会話のタブは
+///   秘書と見なさない。起動直後は、覚えた会話 ID で休眠のタブを見つけ、起こすときに秘書として覚える。
+/// - 会話 ID: 秘書のタブが報告するたびに書き直す——/clear で会話が替わっても秘書を見失わない。再起動の後に休眠の
+///   タブを見つける鍵と、タブが無いときの再開の鍵にだけ使う。
 /// - 起こすのは頼まれたときと Orbe の起動時（溜めがあるとき）だけ。3 通りとも選ばずに、秘書の役割の指示を添えて起こす:
 ///   覚えた会話が無ければ新しい claude、あってタブが無ければ新しいタブで再開、休眠のタブがあればそれを起こす。
-/// - 届けるのは手が空いた秘書のタブ（idle / done で、送った後なら送った時刻より後に状態が変わった）に 1 件ずつ。
+/// - 届けるのは手が空いた秘書のタブ（会話へ今貼ってよく、送った後なら送った時刻より後に状態が変わった）に 1 件ずつ。
 ///   起こした直後も、最初の idle を待ってから貼る——届け方を 1 通りにして、「送った後の done / idle まで次を送らない」を
 ///   1 つの規則で守る。
 /// - 覚えた会話で起こしたタブが会話を報告しないまま閉じたら、その会話はもう再開できないとみなして外し、溜めがあれば
@@ -46,9 +52,9 @@ final class Secretary {
   private enum Origin {
     /// 新しい claude を起こした。
     case fresh
-    /// 覚えた会話で起こした（新しいタブで再開・休眠のタブを起こした）。
+    /// 覚えた会話を再開した。
     case resumed
-    /// 起きているタブを見つけた。
+    /// 覚えた会話の休眠のタブを見つけた（まだ起きていない）。
     case found
   }
 
@@ -68,16 +74,21 @@ final class Secretary {
   private var sentAt: Date?
 
   init(
-    tasks: TaskStore, localization: LocalizationStore,
+    host: SecretaryHost, tasks: TaskStore, localization: LocalizationStore,
     file: SecretaryFile? = SecretaryPersistence.load()
   ) {
+    self.host = host
     self.tasks = tasks
     self.localization = localization
     record = file ?? .empty
   }
 
-  func attach(_ host: SecretaryHost) {
-    self.host = host
+  /// 秘書のタブ（覚えていれば）。
+  var tabId: Int? { remembered?.tabId }
+
+  /// そのタブが今の秘書か（起きている秘書のタブ）。
+  func isSecretary(_ tab: TerminalTab) -> Bool {
+    remembered?.tabId == tab.id && !tab.isDormant
   }
 
   /// 頼みを受けて溜め、起こしてよい一巡を回す。
@@ -93,7 +104,8 @@ final class Secretary {
       throw .nothingToAsk
     }
     let busy = !record.pending.isEmpty || isWorking
-    record.pending.append(SecretaryRequest(id: UUID(), receivedAt: now, body: body))
+    record.pending.append(
+      SecretaryRequest(id: UUID(), receivedAt: now, origin: ask.origin, body: body))
     save()
     cycle(mayLaunch: true)
     return busy && !record.pending.isEmpty ? .queued : .accepted
@@ -105,11 +117,13 @@ final class Secretary {
     cycle(mayLaunch: true)
   }
 
-  /// その会話が秘書の会話なら、claude の起動に添える秘書の役割の指示（休眠のタブの再開・新しいタブ）。
-  func launchArguments(for session: AgentSession) -> [String] {
+  /// 会話をタブで再開する直前（休眠のタブの起床の組み立て）。秘書の会話なら、そのタブを秘書として覚え、claude の起動に
+  /// 添える秘書の役割の指示を返す。
+  func launching(_ session: AgentSession, in tab: TerminalTab) -> [String] {
     guard session.command == "claude", let id = session.sessionId, id == record.sessionId else {
       return []
     }
+    remember(tab, origin: .resumed)
     return launchArguments
   }
 
@@ -122,7 +136,9 @@ final class Secretary {
   func cycle(mayLaunch: Bool) {
     guard let host else { return }
     forgetClosedTab(host)
-    if remembered == nil, let id = record.sessionId, let found = host.secretaryTab(session: id) {
+    if remembered == nil, let id = record.sessionId, let found = host.secretaryTab(session: id),
+      found.isDormant
+    {
       remember(found, origin: .found)
     }
     if let remembered, let tab = host.secretaryTab(remembered.tabId) { follow(tab) }
@@ -141,10 +157,7 @@ final class Secretary {
     save()
     guard !record.pending.isEmpty else { return }
     // 合流点の中ではタブを起こさない（タブの増減が chrome の値を書く）。次の turn で起こす。
-    DispatchQueue.main.async { [weak self] in
-      guard let self, let host = self.host, self.remembered == nil else { return }
-      self.open(host, command: self.freshCommand(host))
-    }
+    DispatchQueue.main.async { [weak self] in self?.cycle(mayLaunch: true) }
   }
 
   /// 秘書のタブの報告を追う。会話を報告していれば覚え、記録と違えば書き直す（/clear の後の新しい会話もそのまま
@@ -159,30 +172,21 @@ final class Secretary {
     save()
   }
 
+  /// 秘書を起こす。再開の 2 通り（休眠のタブ・新しいタブ）は休眠のタブの起床を通り、そこで秘書として覚える
+  /// （`launching`）。
   private func launch(_ host: SecretaryHost) {
     if let remembered, let tab = host.secretaryTab(remembered.tabId) {
-      guard tab.isDormant else { return }
-      self.remembered?.origin = .resumed
-      host.secretaryWake(tab)
+      if tab.isDormant { host.secretaryWake(tab) }
       return
     }
-    if let id = record.sessionId,
-      let command = AgentCatalog.resumeCommand(
-        forAgent: "claude", sessionId: id, arguments: launchArguments)
+    if let id = record.sessionId {
+      host.secretaryResume(AgentSession(command: "claude", sessionId: id))
+    } else if let claude = host.secretaryClaude,
+      let tab = host.secretaryOpen(
+        command: AgentCatalog.startCommand(claude, arguments: launchArguments))
     {
-      open(host, command: command, origin: .resumed)
-    } else {
-      open(host, command: freshCommand(host))
+      remember(tab, origin: .fresh)
     }
-  }
-
-  private func freshCommand(_ host: SecretaryHost) -> String? {
-    host.secretaryClaude.map { AgentCatalog.startCommand($0, arguments: launchArguments) }
-  }
-
-  private func open(_ host: SecretaryHost, command: String?, origin: Origin = .fresh) {
-    guard let command, let tab = host.secretaryOpen(command: command) else { return }
-    remember(tab, origin: origin)
   }
 
   private func remember(_ tab: TerminalTab, origin: Origin) {
@@ -205,11 +209,9 @@ final class Secretary {
     tab.surface.controlSendKey(ControlKey.enter)
   }
 
-  /// 手が空いた: 起きていて、会話が前面にいて、idle / done で、送った後ならその後に状態が変わった。
+  /// 手が空いた: 会話へ今貼ってよく（`TerminalTab.acceptsConversationInput`）、送った後ならその後に状態が変わった。
   private func isFree(_ tab: TerminalTab) -> Bool {
-    guard !tab.isDormant, tab.surface.surfacePtr != nil, tab.conversationIsForeground,
-      let report = tab.agentReport, report.state == "idle" || report.state == "done"
-    else { return false }
+    guard tab.acceptsConversationInput, let report = tab.agentReport else { return false }
     return sentAt.map { report.stateChangedAt > $0 } ?? true
   }
 

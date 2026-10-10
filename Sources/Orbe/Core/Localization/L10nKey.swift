@@ -181,7 +181,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteSectionInProgress
   case taskPaletteSectionTodo
   case taskPaletteSectionDone
-  case taskPaletteAdd
   case taskPaletteEmpty
   case taskPaletteAddedBy
   case taskPaletteToday
@@ -304,6 +303,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteErrAgentMissing
   case taskPaletteErrDirectoryMissing
   case taskPaletteActionContinue
+  case taskPaletteContinueBlocked
   case taskPaletteActionShowCommand
   case taskPaletteActionHideCommand
   case taskPaletteActionShowLog
@@ -320,6 +320,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskWaitLogEmpty
   case taskWaitResolvedChecks
   case taskWaitContinue
+  case taskWaitEveryUntilDeadline
   case taskWaitContinueNote
   case taskWaitSatisfied
   case taskWaitExpired
@@ -389,6 +390,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskStartHomeTask
   case taskStartHomeDescription
   case secretaryLineOrigin
+  case secretaryLineWaitOrigin
   case secretaryLineTask
   case secretaryLineLinkedTask
   case secretaryLineNote

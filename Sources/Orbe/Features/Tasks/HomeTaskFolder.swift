@@ -5,12 +5,18 @@ import Foundation
 /// （`GitWorktreeRoot.root(of:)`。git の外ならそのパス）で揃うので、行の agent の札・⌘T の続きからがそのまま効く。
 /// `start_task` と ⌘⇧X の ⌘T が同じこの規則を通る。
 enum HomeTaskFolder {
-  /// 作業場のパス。記録があればそれ（消えていても同じ場所）、無ければ Home の下にタスクの ID と短い名前で決める。
+  /// 作業場のパス。記録が Home の `tasks/` の下ならそれ（消えていても同じ場所）、無ければ（リポジトリで始めたタスクを
+  /// Home に移したときの worktree を含む）Home の下にタスクの ID と短い名前で決める。
   static func path(for task: TaskItem, home: String) -> String {
-    if let worktree = task.worktree { return worktree.path }
+    let tasks = (GitWorktreeRoot.normalizedPath(home) as NSString).appendingPathComponent("tasks")
+    if let worktree = task.worktree,
+      GitWorktreeRoot.normalizedPath(worktree.path).hasPrefix(tasks + "/")
+    {
+      return worktree.path
+    }
     let slug = slug(task.title)
     let name = slug.isEmpty ? "\(task.id)" : "\(task.id)-\(slug)"
-    return (home as NSString).appendingPathComponent("tasks/\(name)")
+    return (tasks as NSString).appendingPathComponent(name)
   }
 
   /// 無ければ作る。既にあれば中身を見ずに使う。作ったら true。

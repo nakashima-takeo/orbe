@@ -175,5 +175,20 @@ extension DesignGallerySnapshotTests {
     try write(
       "tasks_wait_expired.png",
       model(DesignSceneFixtures.taskWaitConditionFile(resolved: .expired)), 1440, 900)
+
+    // 期限までにもう確かめない最後の間隔（「期限まで確認なし」）。
+    try write(
+      "tasks_wait_last_interval.png",
+      model(
+        DesignSceneFixtures.taskWaitConditionFile(
+          deadline: DesignSceneFixtures.taskToday.addingTimeInterval(5 * 60))), 1440, 900)
+
+    // 確認の出力の 1 行目が長い（行の札は上限幅で末尾を省略する）。作業ディレクトリが消えていて続きから始められない。
+    let long = model(
+      DesignSceneFixtures.taskWaitConditionFile(
+        resolved: .satisfied(
+          output: String(repeating: "@sato · CHANGES_REQUESTED · 長いレビューの要約 ", count: 8))))
+    long.onContinuationBlock = { _ in .directoryMissing }
+    try write("tasks_wait_resolved_blocked.png", long, 1440, 900)
   }
 }

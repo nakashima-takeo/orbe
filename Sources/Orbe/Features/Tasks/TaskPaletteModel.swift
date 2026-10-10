@@ -24,6 +24,8 @@ import Observation
   let today: TaskItem.DueDate
   /// 時刻を暦日へ落とすためのタイムゾーン。
   let timeZone: TimeZone
+  /// 待ちの条件の経過・「次は」を数える今（毎分の刻みの時刻を受けて返す）。preview は 1 つの固定時刻に揃える。
+  let clock: (Date) -> Date
 
   /// タスクのタブが持つ一覧の状態。読み書きは選ぶ状態を振り分ける `taskList` を通す（選ぶ状態の間に
   /// 隠れたタブの一覧を書き換えないため、ここ以外から触れないようにしておく）。
@@ -85,6 +87,8 @@ import Observation
   var onFocusTab: (Int) -> Void = { _ in }
   /// 解けた待ちの会話を続きから始める（タスクの ID）。届けられなかった理由を返す。
   var onContinueWait: (Int) -> TaskPaletteError? = { _ in nil }
+  /// 解けた待ちを続きから始められない理由（タスクの ID。nil は始められる）。
+  var onContinuationBlock: (Int) -> TaskPaletteError? = { _ in nil }
   /// 秘書に頼む。
   var onAskSecretary: (SecretaryAsk) -> Result<Secretary.Acceptance, Secretary.Refusal> = { _ in
     .failure(.claudeMissing)
@@ -95,8 +99,9 @@ import Observation
   init(
     store: TaskStore, githubItems: GitHubItemCache, viewer: GitHubViewer,
     openLists: GitHubOpenLists, root: String, agents: WorktreeAgentActivity,
-    sessionTabs: AgentSessionTabs = AgentSessionTabs(), intakes: IntakeRunner,
-    workspaces: TaskPaletteWorkspaces, now: Date, timeZone: TimeZone
+    sessionTabs: AgentSessionTabs, intakes: IntakeRunner,
+    workspaces: TaskPaletteWorkspaces, now: Date, timeZone: TimeZone,
+    clock: @escaping (Date) -> Date = { $0 }
   ) {
     self.store = store
     self.githubItems = githubItems
@@ -107,11 +112,13 @@ import Observation
     self.sessionTabs = sessionTabs
     self.workspaces = workspaces
     self.timeZone = timeZone
+    self.clock = clock
     let today = TaskItem.DueDate.today(now, timeZone: timeZone)
     self.today = today
     intake = TaskPaletteIntakeModel(
       runner: intakes, tasks: store, home: workspaces.home, today: today, timeZone: timeZone)
     intake.onPlaceChange = { [weak self] in self?.focus() }
+    intake.addPosition = { [weak self] in self?.addPosition ?? .end }
     intake.onOpenURL = { [weak self] in self?.onOpenURL($0) }
     reconcile()
     githubItems.refresh(visibleLinkIDs)
@@ -184,7 +191,7 @@ import Observation
   /// 一覧を送る先。人の操作（選び直し・並べ替え・範囲や開閉の切り替え・画面からの変異）のたびに決め直す。
   var scrollTarget: TaskPaletteScrollTarget<TaskPaletteRowID>? { taskList.scrollTarget }
 
-  /// 選んでいるタスク（右の欄に出すもの）。追加の行・完了の見出しでは nil。
+  /// 選んでいるタスク（右の欄に出すもの）。入力の行き先・完了の見出しでは nil。
   var selectedTask: TaskItem? {
     guard case .task(let id) = selectedID else { return nil }
     return store.tasks.first { $0.id == id }
@@ -209,9 +216,9 @@ import Observation
   func focus() { focusToken &+= 1 }
 
   /// 列・一覧・範囲・タブ・開閉が変わったあとの付け直し。選択は一覧の状態ごとに、その行で付け直す
-  /// （`TaskPaletteListState`）。右の欄に居る間に選択が別の行へ移ったら一覧へ戻り、対象が消えた下書きは捨て、
-  /// 並びが変わった掴みも捨てる。右の欄に居る間に、選択の同一性が変わった・選んだ行が結び付いていない項目で
-  /// なくなったら一覧へ戻る。
+  /// （`TaskPaletteListState`）。右の欄に居る間に選択が別の行へ移ったら一覧へ戻り、対象が消えた下書きと、対象が
+  /// 一覧から外れた（完了で畳まれた・範囲の外へ出た）秘書に頼む欄は捨て、並びが変わった掴みも捨てる。右の欄に
+  /// 居る間に、選択の同一性が変わった・選んだ行が結び付いていない項目でなくなったら一覧へ戻る。
   func reconcile() {
     endStalePick()
     let previous = selectedID
@@ -221,6 +228,7 @@ import Observation
     if let id = draft?.taskID, !store.tasks.contains(where: { $0.id == id }) {
       draft = nil
     }
+    if let id = askingTaskID, selectedID != .task(id) { draft = nil }
     reconcilePane()
     if case .detail = area, selectedID != previous || selectedTask == nil {
       leaveEditing()
@@ -261,7 +269,7 @@ import Observation
     }
   }
 
-  /// 行のクリック。追加の行は追加し、完了の見出しは開閉し、タスクの行は選ぶ。編集中なら確定してから移る。
+  /// 行のクリック。入力の行き先は足し、完了の見出しは開閉し、タスクの行は選ぶ。編集中なら確定してから移る。
   func tapRow(_ id: TaskPaletteRowID) {
     leaveEditingForAction()
     area = .list
@@ -341,11 +349,12 @@ import Observation
     focus()
   }
 
-  /// 結び付いている行の ↵。タスクのタブへ移り、そのタスクを選ぶ。範囲・入力・完了の欄で隠れていれば、
-  /// 見えるように切り替える。
+  /// 結び付いている行の ↵・メニューバーのタスクのピル。タスクのタブへ移り、そのタスクを選ぶ（選ぶ状態ならやめる）。
+  /// 範囲・入力・完了の欄で隠れていれば、見えるように切り替える。
   func showTask(_ id: Int) {
     guard let task = store.tasks.first(where: { $0.id == id }) else { return }
     leaveEditingForAction()
+    pick = nil
     area = .list
     tab = .tasks
     if scope == .opened, task.workspace != workspaces.opened.id { scope = .all }

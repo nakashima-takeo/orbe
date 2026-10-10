@@ -92,7 +92,7 @@ final class TabFacesViewTests: OrbeTestCase {
     let tab = TerminalTab(
       restoring: TabState(
         cwd: "/tmp", agent: nil, explicitTitle: nil,
-        faces: FaceLayout(editorRatio: 1, focus: .editor)), resumeSpawn: { _, _ in nil })
+        faces: FaceLayout(editorRatio: 1, focus: .editor)), resumeSpawn: { _, _, _ in nil })
     tab.view.frame = NSRect(origin: .zero, size: size)
     tab.view.layoutSubtreeIfNeeded()
 

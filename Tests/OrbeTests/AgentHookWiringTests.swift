@@ -63,6 +63,22 @@ final class AgentHookWiringTests: OrbeTestCase {
     XCTAssertTrue(entries.allSatisfy { $0.matcher == nil })
   }
 
+  /// 起動時の idle は、会話が始まる・切り替わる source（起動・再開・/clear・fork）だけに絞る。compact も
+  /// SessionStart を撃ち、自動 compact はターンの途中で走るので、絞らないと作業中の agent を idle と誤認して
+  /// 次の入力を貼る。
+  func testSessionStartIsNarrowedToConversationStarts() throws {
+    let entries = try XCTUnwrap(try definitions()["claude"]?["SessionStart"])
+    XCTAssertEqual(entries.map(\.matcher), ["startup|resume|clear|fork"])
+  }
+
+  /// API エラーで終わったターン（Stop の代わりに StopFailure）も、ターンの終わりとして done にする。配線しないと
+  /// working のまま残り、溜めた頼みが届かない。
+  func testATurnThatEndsInAnAPIErrorIsDone() throws {
+    let claude = try XCTUnwrap(try definitions()["claude"])
+    XCTAssertEqual(try XCTUnwrap(claude["StopFailure"]).map(\.state), ["done"])
+    XCTAssertEqual(try XCTUnwrap(claude["StopFailure"]).map(\.matcher), [nil])
+  }
+
   // MARK: Orbe 本体との突き合わせ
 
   /// 定義が報告する state は、どれも Orbe が状態として解する語（状態グリフの種別か、終わりの `clear`）。

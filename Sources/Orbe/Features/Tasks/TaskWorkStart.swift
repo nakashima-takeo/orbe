@@ -85,23 +85,12 @@ final class TaskRepoWorktree {
 
   /// 事実が動くたびに行き先を決め直す。決まらなければ次の知らせ（と主の PR の head の答え）を待つ。
   private func decide() {
-    guard !decided, let facts, facts.hasLandedGit else { return }
-    let primary = task.links.first
-    if let primary {
-      switch facts.hasRemote(for: primary.item.repo) {
-      case nil: return
-      case false?:
-        return finish(
-          .failure(
-            .invalid(
-              "repository mismatch: \(facts.worktreeBase) has no remote for \(primary.item.repo.value)"
-            )))
-      case true?: break
-      }
+    guard !decided, let facts, facts.hasLandedGit, let decision = target(facts) else { return }
+    let target: WorktreePaletteTaskTarget
+    switch decision {
+    case .failure(let failure): return finish(.failure(failure))
+    case .success(let found): target = found
     }
-    let target =
-      branch.map { facts.taskTarget(branch: $0, primary: primary?.item.repo) }
-      ?? facts.taskTarget(WorktreePaletteTaskInputs(task: task, items: items))
     switch target {
     case .pending:
       return observeItems()
@@ -123,6 +112,14 @@ final class TaskRepoWorktree {
             }
               ?? "cannot decide the branch for this task; pass branch")))
     }
+    if case .open(.directory(let path)) = plan,
+      GitWorktreeRoot.normalizedPath(path) == GitWorktreeRoot.normalizedPath(facts.worktreeBase)
+    {
+      return finish(
+        .failure(
+          .invalid(
+            "the main worktree \(path) cannot be a task's workplace; pass another branch")))
+    }
     decided = true
     switch plan {
     case .open(let destination):
@@ -137,12 +134,36 @@ final class TaskRepoWorktree {
     }
   }
 
+  /// 行き先。タスク自身の worktree が今の一覧にあればそれで、remote は照合しない（照合は主の結び付きから新しく決める
+  /// ときだけ）。無ければ主の結び付きのリポジトリを指す remote を確かめてから、`branch` か主の結び付きで決める。remote が
+  /// まだ分からなければ nil。
+  private func target(_ facts: WorktreeRepoFacts) -> Result<
+    WorktreePaletteTaskTarget, TaskStartFailure
+  >? {
+    let own = facts.taskTarget(WorktreePaletteTaskInputs(task: task, items: items))
+    if case .worktree = own { return .success(own) }
+    let primary = task.links.first
+    if let primary {
+      switch facts.hasRemote(for: primary.item.repo) {
+      case nil: return nil
+      case false?:
+        return .failure(
+          .invalid(
+            "repository mismatch: \(facts.worktreeBase) has no remote for \(primary.item.repo.value)"
+          ))
+      case true?: break
+      }
+    }
+    return .success(
+      branch.map { facts.taskTarget(branch: $0, primary: primary?.item.repo) } ?? own)
+  }
+
   /// 主の PR の head の答えが届いたら決め直す（事実の層の知らせとは別の置き場から来る）。
   private func observeItems() {
     guard !observingItems else { return }
     observingItems = true
     withObservationTracking {
-      _ = items.answers
+      _ = WorktreePaletteTaskInputs(task: task, items: items)
     } onChange: {
       DispatchQueue.main.async {
         self.observingItems = false

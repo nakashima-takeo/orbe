@@ -10,7 +10,6 @@ extension L10n {
     .taskPaletteSectionInProgress: ("進行中", "In progress"),
     .taskPaletteSectionTodo: ("未着手", "To do"),
     .taskPaletteSectionDone: ("完了", "Done"),
-    .taskPaletteAdd: ("「%1$@」を追加", "Add “%1$@”"),
     .taskPaletteEmpty: ("タスクはありません", "No tasks"),
     .taskPaletteAddedBy: ("%@ が追加", "added by %@"),
     .taskPaletteToday: ("今日", "today"),
@@ -148,6 +147,7 @@ extension L10n {
       "会話の作業ディレクトリがありません", "The conversation’s working directory is gone"
     ),
     .taskPaletteActionContinue: ("%1$@ を %2$@ で続きから", "Continue %1$@ in %2$@"),
+    .taskPaletteContinueBlocked: ("続きから始められない: %1$@", "Can’t continue: %1$@"),
     .taskPaletteActionShowCommand: ("確認のコマンドを開く", "Show the check command"),
     .taskPaletteActionHideCommand: ("確認のコマンドを閉じる", "Hide the check command"),
     .taskPaletteActionShowLog: ("実行の記録を開く", "Show the run log"),
@@ -156,6 +156,9 @@ extension L10n {
     .taskWaitCheckLabel: ("確認", "Check"),
     .taskWaitDeadlineLabel: ("期限", "Deadline"),
     .taskWaitEvery: ("%1$lld 分ごと · 次は %2$@", "every %1$lld min · next %2$@"),
+    .taskWaitEveryUntilDeadline: (
+      "%lld 分ごと · 期限まで確認なし", "every %lld min · no more checks before the deadline"
+    ),
     .taskWaitNextIn: ("%lld 分後", "in %lld min"),
     .taskWaitSoon: ("まもなく", "soon"),
     .taskWaitDeadline: ("%1$@（%2$@）%3$@ には必ず解く", "resolves by %2$@ %1$@ %3$@"),

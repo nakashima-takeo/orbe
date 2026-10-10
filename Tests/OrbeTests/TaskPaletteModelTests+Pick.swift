@@ -21,7 +21,7 @@ extension TaskPaletteModelTests {
 
   // MARK: - タスクを選ぶ（GitHub タブの L）
 
-  /// L でタスクのタブの行から選び、↵ でそのタスクの末尾に結び付けて GitHub タブのその行へ戻る。追加の行は
+  /// L でタスクのタブの行から選び、↵ でそのタスクの末尾に結び付けて GitHub タブのその行へ戻る。入力の行き先は
   /// 出さない。
   func testLinkPicksATaskAndEnterLinksItThenReturnsToTheItem() throws {
     let palette = pickingFromIssueFive([
@@ -31,7 +31,7 @@ extension TaskPaletteModelTests {
     palette.linkSelectedGitHubItem()
     XCTAssertEqual(palette.visibleTab, .tasks)
     palette.query = "b"
-    XCTAssertEqual(palette.selectableIDs, [.task(2)], "打っても追加の行は出さない")
+    XCTAssertEqual(palette.selectableIDs, [.task(2)], "打っても入力の行き先は出さない")
     palette.query = ""
     palette.move(1)
     palette.submit()
@@ -103,14 +103,30 @@ extension TaskPaletteModelTests {
     palette.enterDetail()
     palette.toggleTab()
     palette.openWorktreePalette()
+    palette.askSecretary()
+    palette.openAsk(1)
 
     XCTAssertEqual(palette.store.tasks.map(\.id), [1, 2])
     XCTAssertEqual(palette.store.tasks.map(\.status), [.todo, .todo])
     XCTAssertEqual(palette.area, .list)
     XCTAssertEqual(palette.visibleTab, .tasks)
     XCTAssertEqual(opened, [])
+    XCTAssertNil(palette.draft, "秘書に頼む欄も開かない")
     palette.cancelPick()
     XCTAssertEqual(palette.visibleTab, .github, "やめると入る前のタブへ戻る")
+  }
+
+  /// メニューバーのピルからタスクを選ぶと、選ぶ状態をやめてそのタスクを選ぶ（次の ↵ で結び付けない）。
+  func testShowingATaskEndsPicking() {
+    let palette = pickingFromIssueFive()
+    palette.linkSelectedGitHubItem()
+
+    palette.showTask(2)
+
+    XCTAssertNil(palette.pick)
+    XCTAssertEqual(palette.visibleTab, .tasks)
+    XCTAssertEqual(palette.selectedID, .task(2))
+    XCTAssertTrue(palette.store.tasks.allSatisfy(\.links.isEmpty), "結び付けない")
   }
 
   /// 選んでいる項目が一覧から消えたら（閉じられた）、選ぶ状態を終えて戻る。

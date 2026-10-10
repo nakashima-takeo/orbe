@@ -15,8 +15,8 @@ import XCTest
 ///
 /// agent は必ず偽物（`stageFakeAgent`）。
 final class WindowControllerTaskStartTests: OrbeTestCase {
-  private let webId = UUID()
-  private var local: String!
+  let webId = UUID()
+  var local: String!
 
   /// origin（bare）と、それを clone した手元。手元の `stale` は origin の `stale` を追跡し、1 コミット遅れる。
   override func setUpWithError() throws {
@@ -37,26 +37,31 @@ final class WindowControllerTaskStartTests: OrbeTestCase {
     try git(["push", "-q", "origin", "HEAD:stale"], in: other)
   }
 
-  private func git(_ args: [String], in cwd: String) throws {
+  func git(_ args: [String], in cwd: String) throws {
     let output = GitRunner.shared.runSync(args, cwd: cwd)
     XCTAssertTrue(output.isSuccess, "git \(args.joined(separator: " ")): \(output.stderrText)")
   }
 
-  private func identify(_ repo: String) throws {
+  func identify(_ repo: String) throws {
     try git(["config", "user.email", "t@example.com"], in: repo)
     try git(["config", "user.name", "t"], in: repo)
   }
 
-  /// 前面は main（素のタブ 1 枚）、背景に web（root が手元のリポジトリ・0 タブ）と Home。
-  private func launch() throws -> WindowController {
+  /// 前面は main（素のタブ 1 枚）、背景に web（root が手元のリポジトリ・0 タブ）と Home。`webRoot`・`webTabs` で
+  /// web の root とタブを、`frontWeb` で前面を web に替える。
+  func launch(webRoot: String? = nil, webTabs: [TabState] = [], frontWeb: Bool = false) throws
+    -> WindowController
+  {
     _ = try stageFakeAgent("claude")
     let file = WorkspacesFile(
-      version: WorkspacePersistence.version, activeWorkspace: 0,
+      version: WorkspacePersistence.version, activeWorkspace: frontWeb ? 1 : 0,
       workspaces: [
         WorkspaceState(
           name: "main", rootPath: "/tmp", activeTab: 0,
           tabs: [TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)]),
-        WorkspaceState(name: "web", rootPath: local, activeTab: 0, tabs: [], persistentId: webId),
+        WorkspaceState(
+          name: "web", rootPath: webRoot ?? local, activeTab: 0, tabs: webTabs,
+          persistentId: webId),
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
     AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
@@ -68,11 +73,11 @@ final class WindowControllerTaskStartTests: OrbeTestCase {
     return wc
   }
 
-  private func homeId(_ wc: WindowController) throws -> UUID {
+  func homeId(_ wc: WindowController) throws -> UUID {
     try XCTUnwrap(wc.store.homeWorkspaceId)
   }
 
-  private func start(_ wc: WindowController, _ request: TaskStartRequest) -> Result<
+  func start(_ wc: WindowController, _ request: TaskStartRequest) -> Result<
     [String: Any], ControlError
   > {
     var outcome: Result<Any, ControlError>?
@@ -85,11 +90,11 @@ final class WindowControllerTaskStartTests: OrbeTestCase {
     }
   }
 
-  private func stored(_ wc: WindowController, _ id: Int) -> TaskItem? {
+  func stored(_ wc: WindowController, _ id: Int) -> TaskItem? {
     wc.taskStore.tasks.first { $0.id == id }
   }
 
-  private func tab(_ wc: WindowController, _ id: Int?) -> TerminalTab? {
+  func tab(_ wc: WindowController, _ id: Int?) -> TerminalTab? {
     id.flatMap { id in wc.workspaces.flatMap(\.tabs).first { $0.id == id } }
   }
 

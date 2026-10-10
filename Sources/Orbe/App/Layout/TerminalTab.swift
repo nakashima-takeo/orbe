@@ -89,8 +89,6 @@ final class TerminalTab {
   var agentState: String? { agentReport?.state }
   /// 未消費の復元チケット（休眠 agent）を持つか。
   var isDormant: Bool { agentSlot.isDormant }
-  /// タブのコマンドとして起こした agent の command 名（起動パレット・制御 API・⌘T・復元の再開。終われば閉じるタブ）。
-  private(set) var launchedAgent: String?
   private var wakeInput: String?
 
   /// 実効 cwd（OSC 7 報告前は起動時 cwd＝復元値）。永続・列挙・占有判定・タイトル導出・
@@ -123,13 +121,12 @@ final class TerminalTab {
     return TabTitle.derive(pwd: cwd, root: workspaceRoot)
   }
 
-  /// 通常タブは cwd だけ。エージェント起動タブは起動コマンド・追加環境変数と、起こす agent の command 名も指定する。
+  /// 通常タブは cwd だけ。エージェント起動タブは起動コマンドと追加環境変数も指定する。
   init(
-    cwd: String, command: String? = nil, env: [String: String] = [:], agent: String? = nil,
+    cwd: String, command: String? = nil, env: [String: String] = [:],
     editorSurfaces: EditorSurfaces = .shared
   ) {
     resumeSpawn = nil
-    launchedAgent = agent
     faces = .terminalOnly
     editor = MainActor.assumeIsolated { EditorSession(surfaces: editorSurfaces) }
     groupKey = GitWorktreeRoot.root(of: cwd)
@@ -139,9 +136,11 @@ final class TerminalTab {
     wireView()
   }
 
-  /// 永続から復元した agent セッションを resume 起動の (command, env) に解決する（2 つ目は会話の最初の入力）。
+  /// 休眠のタブ（1 つ目）の agent セッションを resume 起動の (command, env) に解決する（3 つ目は会話の最初の入力）。
   /// 解決できなければ nil（呼び出し側は素のシェルで復元）。
-  typealias ResumeSpawn = (AgentSession, String?) -> (command: String, env: [String: String])?
+  typealias ResumeSpawn = (TerminalTab, AgentSession, String?) -> (
+    command: String, env: [String: String]
+  )?
 
   /// 休眠チケットの消費（materialize 開始）時に resume を解決する resolver。
   /// 復元時ではなく消費時に解決するため保持する（通常タブは nil）。
@@ -203,10 +202,9 @@ final class TerminalTab {
     activated = true
     if case .dormant(let session) = agentSlot {
       let identity = identity(of: agentSlot)
-      if let spawn = resumeSpawn?(session, wakeInput.take()) {
+      if let spawn = resumeSpawn?(self, session, wakeInput.take()) {
         surface.initialCommand = spawn.command
         surface.initialEnv = spawn.env
-        launchedAgent = session.command
         agentSlot = .live(session: session, report: nil)
         if let identity { onIdentityTransition?(.opened(identity)) }
       } else {
@@ -240,7 +238,8 @@ final class TerminalTab {
   /// 同一性の更新は `AgentSession.updated` が持つ（command は常に上書き・sessionId は同じ CLI
   /// からの報告のあいだだけ sticky）。適用の前後で同一性を比べ、終わった同一性は `closed(agent)`
   /// （`reason` は hook が運ぶ終了理由）、得た同一性は `opened` として上位へ渡す——sessionId が
-  /// A→B へ変わる報告では `closed(A)` → `opened(B)` の順。
+  /// A→B へ変わる報告では `closed(A)` → `opened(B)` の順。報告ごとに、受けた時点の端末の前面のプロセスグループ
+  /// （報告した agent のもの）を添える。
   ///
   /// Attention 用の保持: stateChangedAt は **state の値が実際に変わったときだけ** `now` に更新する
   /// （working→working の連続報告で一覧の並びが暴れない）。message は state の遷移で確定し直し、
@@ -274,13 +273,14 @@ final class TerminalTab {
           session: session,
           report: AgentReport(
             state: report.state, message: keep ? prior.message : report.message,
-            stateChangedAt: prior.stateChangedAt))
+            stateChangedAt: prior.stateChangedAt, foregroundGroup: surface.foregroundProcessGroup))
       } else {
         // 実変化（.none・report なしからの誕生を含む）。
         agentSlot = .live(
           session: session,
           report: AgentReport(
-            state: report.state, message: report.message, stateChangedAt: now))
+            state: report.state, message: report.message, stateChangedAt: now,
+            foregroundGroup: surface.foregroundProcessGroup))
         changed = true
       }
     }

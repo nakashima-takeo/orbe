@@ -28,7 +28,9 @@ struct TaskPaletteDetail: View {
               .padding(.bottom, Theme.Space.beat)
             if let resolution = task.waitResolution {
               TaskResolvedBox(
-                model: model, resolution: resolution, continuation: model.continuation(of: task)
+                model: model, resolution: resolution,
+                continuation: model.continues(task) ? model.continuation(of: task) : nil,
+                blocked: model.continuationBlock(of: task)
               )
               .padding(.bottom, Theme.Space.beat)
             } else if let conversation = model.conversation(of: task) {

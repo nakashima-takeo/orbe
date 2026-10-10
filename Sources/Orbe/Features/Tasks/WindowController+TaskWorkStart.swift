@@ -96,7 +96,8 @@ extension WindowController {
   }
 
   /// 用意できた作業場でタスクを進行中にして付け、agent のタブを選ばずに起こす。用意の間にタスクか workspace が
-  /// 消えていれば、タブは起こさない。
+  /// 消えていれば、タブは起こさない。作業場がほかのタスクのもの（付け替えは人の ⌘T だけ）か、作業中・入力待ちの
+  /// agent がいる（2 体目を起こさず、そのタブへ `prompt_agent` で頼む）なら拒む。
   private func beginTaskWork(
     _ taskId: Int, in workspaceId: UUID, at workplace: TaskWorkplace, agent: AgentCLI,
     firstInput: String?
@@ -106,6 +107,20 @@ extension WindowController {
     }
     guard let index = workspaces.firstIndex(where: { $0.persistentId == workspaceId }) else {
       return .failure(ControlError(code: -32000, message: "the task's workspace was removed"))
+    }
+    do throws(TaskStoreError) {
+      try TaskStore.checkWorktree(worktree, of: taskId, against: taskStore.tasks)
+    } catch .invalid(let message) {
+      return .failure(ControlError(code: -32602, message: message))
+    } catch {
+      return .failure(Self.taskNotFound(taskId))
+    }
+    if let busy = busyAgentTab(in: worktree) {
+      return .failure(
+        ControlError(
+          code: -32602,
+          message:
+            "an agent is \(busy.state) in \(worktree.path) (tab \(busy.tabId)); use prompt_agent"))
     }
     do {
       try taskStore.begin(taskId, worktree: worktree)
@@ -117,7 +132,7 @@ extension WindowController {
       let opened = openTab(
         workspaceIndex: index, cwd: worktree.path,
         command: AgentCatalog.startCommand(agent, firstInput: firstInput),
-        env: agentLauncher.launchEnvironment, agent: agent.command, selects: false)
+        env: agentLauncher.launchEnvironment, selects: false)
     else { return .failure(ControlError(code: -32000, message: "spawn failed")) }
     var result: [String: Any] = [
       "task": taskJSON(task), "workdir": worktree.path, "created": workplace.created,
@@ -127,6 +142,16 @@ extension WindowController {
     if let repo = workplace.repo { result["repo"] = repo }
     if let branch = worktree.currentBranch { result["branch"] = branch }
     return .success(result)
+  }
+
+  /// 作業場で作業中・入力待ちの agent のタブ（その場で全タブから引く。索引は合流点まで古いことがある）。
+  private func busyAgentTab(in worktree: TaskWorktree) -> (tabId: Int, state: String)? {
+    store.allTabs().lazy.compactMap { ref -> (tabId: Int, state: String)? in
+      guard ref.tab.groupKey == worktree.path, let state = ref.tab.agentState,
+        state == "working" || state == "waiting"
+      else { return nil }
+      return (ref.tab.id, state)
+    }.first
   }
 
   private static func taskNotFound(_ id: Int) -> ControlError {

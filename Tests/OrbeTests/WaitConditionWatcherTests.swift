@@ -105,8 +105,8 @@ final class WaitConditionWatcherTests: OrbeTestCase {
     XCTAssertEqual(resolved.first?.resolution.headline, "レビューが付いた")
   }
 
-  /// 付け直しは走っている回を止め、付け直しの後に届いた前の条件の成功は新しい条件を解かない。
-  func testReplacedConditionStopsTheRunAndIgnoresTheOldResult() throws {
+  /// 付け直しの後に届いた前の条件の成功は新しい条件を解かない（走っている回の停止は BackgroundSchedulerTests）。
+  func testReplacedConditionIgnoresTheOldResult() throws {
     let store = TaskStore()
     let task = try addWaiting(store)
     start(store)

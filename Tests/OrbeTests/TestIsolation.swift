@@ -113,7 +113,7 @@ enum TestIsolation {
 
   /// テスト 1 件の作業ディレクトリ（`TestScratch.caseDir`）の下へ、隔離の seam を向け直す。
   ///
-  /// 値の素性（永続 6 種・Home のフォルダ・同梱リソース根・プラグイン実体化先・ghostty user 層・通知音の再生層・
+  /// 値の素性（永続ファイル・Home のフォルダ・同梱リソース根・プラグイン実体化先・ghostty user 層・通知音の再生層・
   /// 端末のクリップボード）に関わらず **毎テスト無条件に張り直す**。テストが自分で書き換えても
   /// 次のテストへ漏れず、戻し忘れが起きえない——申告制を残さないため。`CompletionLearning` だけは `shared` が in-memory へ
   /// 焼き付ける都合で per-test にできず、`installOnce` の固定のままにする。
@@ -201,5 +201,4 @@ enum TestIsolation {
       }
     }
   }
-
 }

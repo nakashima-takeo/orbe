@@ -1,7 +1,7 @@
 /// Home の root に置くファイルの雛形。画面の文言ではなくファイルの中身なので、UI 文言の辞書には載せない。
 enum HomeTemplate {
-  /// Orbe の MCP の使い方（Orbe が持ち、起動のたびに書き直す）。Home で動く全員——秘書もタスクの作業場で動く agent も
-  /// ——が読むので、秘書の役割は書かない（秘書の役割は秘書の会話を起こすときにだけ渡す）。
+  /// Orbe の MCP の使い方（Orbe が持ち、起動のたびに書き直す）。Home で動く claude 全員——秘書もタスクの作業場で動く
+  /// claude も——が読むので、秘書の役割は書かない（秘書の役割は秘書の会話を起こすときにだけ渡す）。codex・agy は読まない。
   static func rules(_ language: Language) -> String {
     switch language {
     case .ja: return rulesJa

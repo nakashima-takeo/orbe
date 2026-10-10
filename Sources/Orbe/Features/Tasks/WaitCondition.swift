@@ -71,6 +71,8 @@ struct WaitConversation: Codable, Equatable {
   let command: String
   let sessionId: String
   let workspace: UUID?
+  /// 付けたのが秘書（付けた時点の秘書のタブ）。続きからは秘書の係へ渡す。
+  let secretary: Bool
 }
 
 /// 条件を付ける要求。作業ディレクトリと会話は、制御の層が呼び出し元タブから埋める。
@@ -140,12 +142,14 @@ struct WaitCheck: Codable, Equatable {
     case "exited": result = .exited(try c.decode(Int32.self, forKey: .code))
     case "signaled": result = .signaled(try c.decode(Int32.self, forKey: .signal))
     case "limited":
-      let raw = try c.decode(String.self, forKey: .limit)
-      guard let limit = Self.limits.first(where: { $0.1 == raw })?.0 else {
+      switch try c.decode(String.self, forKey: .limit) {
+      case "elapsed": result = .limited(.elapsed)
+      case "idle": result = .limited(.idle)
+      case "output": result = .limited(.output)
+      case let raw:
         throw DecodingError.dataCorruptedError(
           forKey: .limit, in: c, debugDescription: "unknown limit: \(raw)")
       }
-      result = .limited(limit)
     case "stopped": result = .stopped
     case "notStarted": result = .notStarted(try c.decode(String.self, forKey: .reason))
     case let other:
@@ -163,7 +167,7 @@ struct WaitCheck: Codable, Equatable {
     case .exited(let code): try c.encode(code, forKey: .code)
     case .signaled(let signal): try c.encode(signal, forKey: .signal)
     case .limited(let limit):
-      try c.encode(Self.limits.first { $0.0 == limit }!.1, forKey: .limit)
+      try c.encode(Self.name(limit), forKey: .limit)
     case .notStarted(let reason): try c.encode(reason, forKey: .reason)
     case .success, .stopped: break
     }
@@ -171,9 +175,14 @@ struct WaitCheck: Codable, Equatable {
     try c.encode(stderr, forKey: .stderr)
   }
 
-  private static let limits: [(BackgroundProcess.Limit, String)] = [
-    (.elapsed, "elapsed"), (.idle, "idle"), (.output, "output"),
-  ]
+  /// 上限の永続の名前（読み込みの名前と対）。
+  private static func name(_ limit: BackgroundProcess.Limit) -> String {
+    switch limit {
+    case .elapsed: "elapsed"
+    case .idle: "idle"
+    case .output: "output"
+    }
+  }
 }
 
 extension WaitCheck.Result {

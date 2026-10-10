@@ -116,7 +116,8 @@ extension WindowController {
     {
       request.conversation = WaitConversation(
         command: session.command, sessionId: sessionId,
-        workspace: workspaces.first { $0.tabs.contains { $0 === caller } }?.persistentId)
+        workspace: workspaces.first { $0.tabs.contains { $0 === caller } }?.persistentId,
+        secretary: secretary.isSecretary(caller))
     }
     return request
   }

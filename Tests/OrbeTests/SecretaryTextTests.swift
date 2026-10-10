@@ -30,7 +30,8 @@ final class SecretaryTextTests: OrbeTestCase {
     let now = date("2026-10-10T01:31:00Z")
     return SecretaryText.body(ask, task: task, l10n: l10n).map {
       SecretaryText.line(
-        SecretaryRequest(id: UUID(), receivedAt: now, body: $0), now: now, timeZone: tokyo,
+        SecretaryRequest(id: UUID(), receivedAt: now, origin: ask.origin, body: $0), now: now,
+        timeZone: tokyo,
         l10n: l10n)
     }
   }
@@ -40,6 +41,14 @@ final class SecretaryTextTests: OrbeTestCase {
       line(.text("見積もりを\n山田さんに\t送る"), task: nil, ja),
       "⌘⇧X から · 10:31 — 見積もりを 山田さんに 送る")
     XCTAssertEqual(line(.text("send it"), task: nil, en), "From ⌘⇧X · 10:31 — send it")
+  }
+
+  /// 秘書の会話が付けた待ちの続きからは、出どころを「待ちの条件」にして 1 行に畳む。
+  func testWhatHappenedToTheSecretarysWaitIsOneLineFromTheWaitCondition() {
+    XCTAssertEqual(
+      line(.wait("PR #214 にレビューが付いた\n確認の出力:\nLGTM"), task: nil, ja),
+      "待ちの条件 · 10:31 — PR #214 にレビューが付いた 確認の出力: LGTM")
+    XCTAssertEqual(line(.wait("done"), task: nil, en), "Wait condition · 10:31 — done")
   }
 
   func testATaskAskCarriesTheTaskItsPrimaryLinkAndTheNote() {
@@ -58,7 +67,8 @@ final class SecretaryTextTests: OrbeTestCase {
 
   /// 時刻は受けた時刻で、届ける日と違えば日付も付ける（夜に溜めた頼みが翌朝届く）。
   func testAnAskDeliveredOnAnotherDayShowsTheDate() {
-    let request = SecretaryRequest(id: UUID(), receivedAt: date("2026-10-09T13:05:00Z"), body: "a")
+    let request = SecretaryRequest(
+      id: UUID(), receivedAt: date("2026-10-09T13:05:00Z"), origin: .palette, body: "a")
     XCTAssertEqual(
       SecretaryText.line(request, now: date("2026-10-10T01:31:00Z"), timeZone: tokyo, l10n: ja),
       "⌘⇧X から · 10/9 22:05 — a")
@@ -67,7 +77,10 @@ final class SecretaryTextTests: OrbeTestCase {
   func testTheRecordRoundTripsAndABrokenFileIsSetAsideInsteadOfOverwritten() throws {
     let file = SecretaryFile(
       version: SecretaryPersistence.version, sessionId: "s-1",
-      pending: [SecretaryRequest(id: UUID(), receivedAt: Date(timeIntervalSince1970: 0), body: "a")]
+      pending: [
+        SecretaryRequest(
+          id: UUID(), receivedAt: Date(timeIntervalSince1970: 0), origin: .palette, body: "a")
+      ]
     )
     SecretaryPersistence.save(file)
     XCTAssertEqual(SecretaryPersistence.load(), file)

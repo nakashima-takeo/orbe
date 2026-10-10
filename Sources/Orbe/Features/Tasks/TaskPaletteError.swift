@@ -15,6 +15,23 @@ enum TaskPaletteError: Error, Equatable {
   case secretaryClaude
 }
 
+extension TaskPaletteError {
+  /// 画面に出す文。
+  var message: L10nKey {
+    switch self {
+    case .title: .taskPaletteErrTitle
+    case .waiting: .taskPaletteErrWaiting
+    case .due: .taskPaletteErrDue
+    case .failed: .taskPaletteErrFailed
+    case .assign: .taskPaletteErrAssign
+    case .link: .taskPaletteErrLink
+    case .secretaryClaude: .taskPaletteErrSecretaryClaude
+    case .agentMissing: .taskPaletteErrAgentMissing
+    case .directoryMissing: .taskPaletteErrDirectoryMissing
+    }
+  }
+}
+
 /// フッターの左に次の操作まで出す知らせ。
 enum TaskPaletteNotice: Equatable {
   /// 秘書に頼んだ（届けたか、秘書が起きるのを待っている）。
