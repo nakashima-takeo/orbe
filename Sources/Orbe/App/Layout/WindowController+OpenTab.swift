@@ -16,7 +16,7 @@ extension WindowController {
   /// `cwd` に nil を渡すと対象 workspace のアクティブタブの cwd → その workspace の rootPath へ落ちる
   /// （`newTabCwd(inWorkspaceAt:)`）。戻り値は生えたタブ・workspace の id で、
   /// workspaceIndex が範囲外ならタブを作らず nil。`selects` が偽なら選ばずに起こす（`wakeUnselected`）——人が
-  /// 見ている workspace とタブを変えずに、裏で agent を起こす経路（秘書・`start_task`）が使う。
+  /// 見ている workspace とタブを変えずに、裏でタブを起こす経路（秘書・`start_task`・`select: false` の `spawn`）が使う。
   @discardableResult
   func openTab(
     workspaceIndex: Int, cwd: String?, command: String? = nil, env: [String: String] = [:],
