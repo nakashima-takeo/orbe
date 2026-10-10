@@ -36,7 +36,7 @@ workspace の選択は「何も無い／ボード／どのタブか」の 1 つ�
 - ⌘T・⌘⇧A・⌘⇧C・⌘⇧S・⌘⇧X・⌘⇧T・⌘,・⌘H・⌘⌘ はいつもどおり効く。新しいタブは workspace の root で起き、選ばれる。
 - 上段の現在地と位置ドットは出ない。done のフォーカス消費・通知の抑制は効かない（見ているタブが無い）。
 - 制御 API の `list_tabs` では、その workspace のどのタブも `active: false`。`focus_tab` でタブを指すと、そのタブが選ばれてボードから外れる。
-- [秘書](../agent/secretary.md)や `start_task` が裏でタブを起こしても、ボードは出したままにしてそのタブを選ばない——裏で起こすタブを選んで見せるのは、何も出していなかった（空の）workspace だけで、ボードを持つ workspace は空にならない。
+- [秘書](../agent/secretary.md)・`start_task`・`select: false` の `spawn` が裏でタブを起こしても、ボードは出したままにしてそのタブを選ばない——裏で起こすタブを選んで見せるのは、何も出していなかった（空の）workspace だけで、ボードを持つ workspace は空にならない。
 
 ## 焦点
 
