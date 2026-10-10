@@ -142,8 +142,8 @@ enum TestIsolation {
     try? FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
     BundledResources.root = resources
 
-    // プラグインの実体化先。本番は `ORBE_STATE_DIR` 非依存の application support 直下を指すので、
-    // 張らないと `WindowController()` の起動同期が実ホームを書き換える。
+    // プラグインの実体化先。既定は `ORBE_STATE_DIR` 直下＝テスト間で共有される根なので、
+    // 張らないと `WindowController()` の起動同期が書いた中身が次のテストへ残る。
     AgentPluginInstaller.stablePluginDirOverride =
       dir.appendingPathComponent("agent-plugin", isDirectory: true)
 

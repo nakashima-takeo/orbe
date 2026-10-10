@@ -115,9 +115,8 @@ enum TrafficLights: Equatable {
   /// 検証インスタンス（`ORBE_STATE_DIR` 非空）でだけ、`.app` に刻まれた build-id を返す。
   /// 本物の常用 Orbe（未設定）や build-id 未刻印（`swift run`）では nil。
   private static func verificationBuildID() -> String? {
-    guard let dir = ProcessInfo.processInfo.environment["ORBE_STATE_DIR"], !dir.isEmpty
-    else { return nil }
-    guard let id = Bundle.main.object(forInfoDictionaryKey: "OrbeBuildID") as? String,
+    guard StateDir.isIsolated,
+      let id = Bundle.main.object(forInfoDictionaryKey: "OrbeBuildID") as? String,
       !id.isEmpty
     else { return nil }
     return id

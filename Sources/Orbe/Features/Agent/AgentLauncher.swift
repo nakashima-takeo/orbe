@@ -19,6 +19,9 @@ final class AgentLauncher {
   var onSetDefault: ((String) -> Void)?
   /// 検出が済んだ知らせ（検出のたびに呼ぶ）。
   var onResolved: (() -> Void)?
+  /// 各 CLI へプラグインを登録するか。登録は利用者の CLI の設定（登録先・コピー）を書き換えるので、隔離起動は登録せず、
+  /// 登録のためのオンボーディングも出さない。隔離起動のタブの agent は、常用の Orbe が登録したプラグインで動く。
+  var registersPlugin = !StateDir.isIsolated
 
   private let catalog = AgentCatalog()
   private var installProc: Process?  // 導入中の install.sh を寿命つなぎで保持
@@ -110,12 +113,13 @@ final class AgentLauncher {
   /// するので同梱の更新がそのまま届く。codex / agy は導入時にコピーを取るため、届くのは次に
   /// 登録し直したときになる）、オンボーディングを出さない経路では、実体化した中身の指紋が最後に
   /// 登録できた指紋と違うときだけ `install.sh` を無音で走らせる（codex / agy のコピーを今の中身へ
-  /// 置き換える）。同梱が無い（`swift run` 等）なら実体化が nil を返すのでそこで止まる。
+  /// 置き換える）。登録しないインスタンス（隔離起動）は実体化だけで止まる。同梱が無い（`swift run` 等）なら
+  /// 実体化が nil を返すのでそこで止まる。
   func syncAgentPluginOnLaunch() {
     guard let dir = AgentPluginInstaller.materializeStablePlugin() else { return }
     materializedPluginDir = dir
     // オンボーディングを出す経路では登録もオンボーディングが担う（install.sh の二重実行を防ぐ）。
-    guard AppStatePersistence.load()?.agentPluginsInstalled == true,
+    guard registersPlugin, AppStatePersistence.load()?.agentPluginsInstalled == true,
       let name = AgentPluginInstaller.pluginName(in: dir),
       let digest = AgentPluginInstaller.digest(of: dir),
       AgentPluginInstaller.registeredDigest != digest
@@ -137,10 +141,10 @@ final class AgentLauncher {
   }
 
   /// 初回起動オンボーディングを出す。検出 CLI を見せてデフォルトを選ばせ、エージェント
-  /// プラグインを per-CLI 進捗付きで導入する。`.app` 同梱が無い（`swift run` 等）か
-  /// 既に導入し切っている（フラグ）なら何もしない。
+  /// プラグインを per-CLI 進捗付きで導入する。登録しないインスタンス（隔離起動）・`.app` 同梱が無い
+  /// （`swift run` 等）・既に導入し切っている（フラグ）なら何もしない。
   func showOnboardingIfNeeded() {
-    guard let appModel,
+    guard registersPlugin, let appModel,
       AppStatePersistence.load()?.agentPluginsInstalled != true,
       AgentPluginInstaller.bundledPluginDir != nil
     else { return }
@@ -165,7 +169,7 @@ final class AgentLauncher {
       dismissOnboarding()
       return
     }
-    // 登録するのは ephemeral バンドルではなく起動時に実体化した ORBE_STATE_DIR 非依存の安定パス。
+    // 登録するのは ephemeral バンドルではなく起動時に実体化した安定パス。
     guard let stableDir = materializedPluginDir,
       let name = AgentPluginInstaller.pluginName(in: stableDir),
       let digest = AgentPluginInstaller.digest(of: stableDir)
