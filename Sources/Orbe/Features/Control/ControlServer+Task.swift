@@ -244,13 +244,14 @@ private struct TaskParams {
         everyMinutes: try fields.int("everyMinutes"), deadline: deadline))
   }
 
-  /// ISO 8601 の日時。時差の無い形（`2026-10-13T09:00`）は Mac のタイムゾーンの時刻として読む。
+  /// ISO 8601 の日時。時差の無い形（`2026-10-13T09:00`）は Mac のタイムゾーンの時刻として読む。秒は時差の有無に
+  /// 関わらず省ける（`2026-10-13T09:00+09:00`）。
   static func deadline(_ text: String) -> Date? {
     if let date = SessionEvent.parseISO8601(text) { return date }
     let local = DateFormatter()
     local.locale = Locale(identifier: "en_US_POSIX")
     local.timeZone = .current
-    for format in ["yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd'T'HH:mm:ss"] {
+    for format in ["yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd'T'HH:mmXXXXX"] {
       local.dateFormat = format
       if let date = local.date(from: text) { return date }
     }

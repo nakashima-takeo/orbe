@@ -63,6 +63,22 @@ extension ControlWireTests {
       calendar.date(from: DateComponents(year: 2026, month: 10, day: 13, hour: 9)))
   }
 
+  /// 時差付きの期限も秒を省ける（時差の無い形と同じく）。
+  func testDeadlineWithAnOffsetMayOmitSeconds() throws {
+    let fake = FakeControlTarget()
+    let wire = startWire(target: fake)
+    for (index, text) in ["2026-10-13T09:00+09:00", "2026-10-13T00:00Z"].enumerated() {
+      var value = condition
+      value["deadline"] = text
+      _ = wire.request(
+        id: index, method: "set_wait_condition", params: ["taskId": 7, "condition": value])
+      guard case .set(let request) = fake.setWaitConditions.last?.condition else {
+        return XCTFail("\(text) が届いていない")
+      }
+      XCTAssertEqual(request.deadline, Date(timeIntervalSince1970: 1_791_849_600), text)
+    }
+  }
+
   func testMalformedConditionsAreRejectedBeforeReachingTheTarget() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
