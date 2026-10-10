@@ -5,6 +5,9 @@ struct AgentLaunch {
   let tabId: Int
   let workspaceId: Int
   let agent: AgentCLI
+  /// 再開する会話が既に生きているタブで開いていて、新しく起こさずそのタブを返したとき、今 prompt を送れるか
+  /// （idle / done を報告しているか）。新しく起こしたなら nil（最初の idle を待つ）。
+  var readyAsOpened: Bool?
 
   /// `{tabId, workspaceId, agent:{command, path}, ready}`。`ready` はエージェントが
   /// 最初の idle を報告した（prompt を送れる）か。
@@ -58,7 +61,7 @@ extension ControlServer {
   }
 
   /// `spawn_agent` / `resume_agent`: 起動後、idle を報告できる agent なら最初の idle まで待つ。
-  /// 報告できない agent は即 `ready:false`。
+  /// 報告できない agent は即 `ready:false`。既に開いていた会話のタブを返したときは待たない。
   func launchAgent(
     id: Any?, params: [String: Any], conn: Connection,
     launch: @escaping (ControlTarget) -> Result<AgentLaunch, ControlError>
@@ -73,6 +76,8 @@ extension ControlServer {
         switch outcome {
         case .failure(let error):
           conn.respond(id: id, result: .failure(error))
+        case .success(let launched) where launched.readyAsOpened != nil:
+          conn.respond(id: id, result: .success(launched.toDict(ready: launched.readyAsOpened!)))
         case .success(let launched) where AgentCatalog.reportsIdleOnStart(launched.agent.command):
           conn.arm(
             id: id, purpose: .agentReady(tabId: launched.tabId, launch: launched),

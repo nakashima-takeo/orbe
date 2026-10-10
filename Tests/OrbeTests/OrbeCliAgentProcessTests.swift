@@ -190,6 +190,22 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
       "resume の引数が agent へ渡っていない（素の起動に化けている）: \(text)")
   }
 
+  /// その会話が生きているタブで既に開いていれば、新しく起こさずそのタブを返す（同じ会話を 2 本動かさない）。
+  func testAgentResumeOfAConversationAlreadyOpenReturnsItsTab() throws {
+    _ = try stageFakeAgent("codex")
+    let control = try startControlProcess(workspaces: ["main"])
+    waitForDetection(control, "codex")
+    let sessionId = UUID().uuidString
+    let first = try XCTUnwrap(
+      control.orbJSON(["agent", "resume", "codex", sessionId])["tabId"] as? Int)
+    let tabs = control.target.workspaces.flatMap(\.tabs).count
+
+    let again = control.orbJSON(["agent", "resume", "codex", sessionId])
+
+    XCTAssertEqual(again["tabId"] as? Int, first, "開いている会話のタブを返す")
+    XCTAssertEqual(control.target.workspaces.flatMap(\.tabs).count, tabs, "新しく起こさない")
+  }
+
   /// 拒否側。CLI は agent 名も session ID の文字集合も複製せず、control が -32602 / -32004 で弾く
   /// （どれも exit 1＝「引数を直せ」ではなく「Orbe が拒否した」）。
   func testAgentLaunchRejectionsComeFromControl() throws {
