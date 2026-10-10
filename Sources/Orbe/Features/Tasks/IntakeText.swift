@@ -31,7 +31,7 @@ struct IntakeText {
     return day == today ? clock(date) : TaskDueText.date(day, today: today)
   }
 
-  /// 提案の一覧の頭。「13:00 の回 · 9 件取得 → 新しい 4 件を判定 → 提案 2」。
+  /// 提案の一覧の頭。「13:00 の回 · 9 件取得 → 新しい 4 件を判定 → 候補 2」。
   func runHeadline(_ run: IntakeRun?) -> String {
     guard let run else { return l10n.string(.taskPaletteIntakeNeverRan) }
     return l10n.format(.taskPaletteIntakeRunAt, stamp(run.startedAt)) + " · "
@@ -40,7 +40,7 @@ struct IntakeText {
         proposedOther: .taskPaletteIntakeProposedShortOther)
   }
 
-  /// 受信の中身の前回。「今日 9:12 · 14 件取得 → 新しい 3 件を判定 → 1 件を提案」。
+  /// 受信の中身の前回。「今日 9:12 · 14 件取得 → 新しい 3 件を判定 → 候補 1 件」。
   func runDetail(_ run: IntakeRun?) -> String {
     guard let run else { return l10n.string(.taskPaletteIntakeNeverRan) }
     return moment(run.startedAt) + " · "

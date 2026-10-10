@@ -68,7 +68,7 @@ struct TaskPaletteIntakeList: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
   }
 
-  /// 「13:00 の回 · 9 件取得 → 新しい 4 件を判定 → 提案 2」と「中身 →」。狭い欄では要約を 2 行まで折り返す。
+  /// 「13:00 の回 · 9 件取得 → 新しい 4 件を判定 → 候補 2」と「中身 →」。狭い欄では要約を 2 行まで折り返す。
   private func headline(_ intake: Intake) -> some View {
     let text = IntakeText(l10n: l10n, today: model.today, timeZone: model.timeZone)
     return HStack(alignment: .firstTextBaseline, spacing: Theme.Space.step) {

@@ -21,7 +21,7 @@ extension DesignGallerySnapshotTests {
 
     try write("intake_all.png", model(), 1440, 900)
 
-    // 棚の 2 行目の全種（次の時刻・止めている・受信中…・前回は失敗・提案なし）。
+    // 棚の 2 行目の全種（次の時刻・止めている・実行中…・前回は失敗・候補なし）。
     let running = model()
     try? running.intake.runner.runNow(1)
     running.intake.enterShelf()
@@ -48,7 +48,7 @@ extension DesignGallerySnapshotTests {
     longCommand.intake.enterContents()
     try write("intake_contents_long_command.png", longCommand, 1440, 900)
 
-    // 走っている間の今すぐ受信は、フッターに赤で断る。
+    // 走っている間の今すぐ実行は、フッターに赤で断る。
     let refused = model()
     refused.intake.tapShelf(.intake(1))
     refused.intake.enterContents()
