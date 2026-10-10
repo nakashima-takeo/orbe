@@ -13,7 +13,7 @@ import XCTest
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliIntakeProcessTests: OrbeTestCase {
   private let definition = """
-    {"name": "GitHub: 通知", "fetch": {"command": "true"},
+    {"name": "GitHub: 通知", "fetch": {"command": "true", "coverage": "currentSet"},
      "judge": {"model": "haiku", "instruction": "自分がやること"}, "when": {"everyMinutes": 30}}
     """
 

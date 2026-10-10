@@ -152,7 +152,7 @@ final class IntakeRunner {
       attempt.finish(result.startedAt)
       return
     }
-    let open = store.openProposals(in: items)
+    let open = store.openProposals(of: attempt.intakeId, in: items)
     let judge = attempt.definition.judge
     let prompt = IntakePrompts.judge(
       instruction: judge.instruction, items: fresh, open: open, now: now(),
@@ -190,7 +190,7 @@ final class IntakeRunner {
   }
 
   private static func fetchJob(_ fetch: IntakeFetch) -> BackgroundJob {
-    switch fetch {
+    switch fetch.method {
     case .command(let command):
       return .command(command)
     case .agent(let agent):

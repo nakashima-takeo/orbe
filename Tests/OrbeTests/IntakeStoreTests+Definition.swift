@@ -21,9 +21,10 @@ extension IntakeStoreTests {
     var codex = Self.definition()
     codex.judge.cli = "codex"
     var noTools = Self.definition()
-    noTools.fetch = .agent(IntakeAgentFetch(cli: "claude", model: "haiku", tools: [], request: "x"))
+    noTools.fetch.method = .agent(
+      IntakeAgentFetch(cli: "claude", model: "haiku", tools: [], request: "x"))
     var relative = Self.definition()
-    relative.fetch = .command(BackgroundCommand(script: "x", directory: "tmp"))
+    relative.fetch.method = .command(BackgroundCommand(script: "x", directory: "tmp"))
     var tooOften = Self.definition()
     tooOften.when = .every(30)
 
@@ -44,7 +45,7 @@ extension IntakeStoreTests {
     let store = try store()
     func fetching(_ tools: [String]) -> IntakeDefinition {
       var definition = Self.definition()
-      definition.fetch = .agent(
+      definition.fetch.method = .agent(
         IntakeAgentFetch(cli: "claude", model: "haiku", tools: tools, request: "DM"))
       return definition
     }

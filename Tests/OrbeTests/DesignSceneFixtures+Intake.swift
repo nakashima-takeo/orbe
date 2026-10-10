@@ -78,14 +78,15 @@ extension DesignSceneFixtures {
   static func intakeDesignIntakes() -> [Intake] {
     let (estimate, onboarding, weekly) = (intakeEstimate, intakeOnboarding, intakeWeekly)
     let seen = { (item: IntakeItem) in IntakeSeen(id: item.id, link: item.link) }
-    let slack = { (script: String) in
-      IntakeFetch.command(BackgroundCommand(script: script, directory: nil))
+    let command = { (script: String, coverage: IntakeCoverage) in
+      IntakeFetch(
+        method: .command(BackgroundCommand(script: script, directory: nil)), coverage: coverage)
     }
     return [
       Intake(
         id: 1,
         definition: intakeDefinition(
-          "Slack: 自分宛の DM・メンション", fetch: slack("~/bin/slack-mentions --since 1d"),
+          "Slack: 自分宛の DM・メンション", fetch: command("~/bin/slack-mentions --since 1d", .newArrivals),
           when: .daily([
             .init(hour: 9, minute: 0), .init(hour: 13, minute: 0), .init(hour: 17, minute: 0),
           ])),
@@ -96,7 +97,7 @@ extension DesignSceneFixtures {
       Intake(
         id: 2,
         definition: intakeDefinition(
-          "Slack: 自分の発言", fetch: slack("~/bin/slack-mine --since 1d"),
+          "Slack: 自分の発言", fetch: command("~/bin/slack-mine --since 1d", .newArrivals),
           when: .daily([.init(hour: 18, minute: 0)])),
         paused: false, createdAt: intakeAt(9, daysAgo: 3),
         lastFetched: [seen(weekly), seen(onboarding)], reviewAll: false,
@@ -106,10 +107,12 @@ extension DesignSceneFixtures {
         id: 3,
         definition: intakeDefinition(
           "Backlog: 自分が担当の未完了課題",
-          fetch: .agent(
-            IntakeAgentFetch(
-              cli: "claude", model: "haiku", tools: ["mcp__backlog__get_issues"],
-              request: "自分が担当の未完了の課題を、更新の新しい順に 30 件取る。")),
+          fetch: IntakeFetch(
+            method: .agent(
+              IntakeAgentFetch(
+                cli: "claude", model: "haiku", tools: ["mcp__backlog__get_issues"],
+                request: "自分が担当の未完了の課題を、更新の新しい順に 30 件取る。")),
+            coverage: .currentSet),
           when: .every(1800)),
         paused: false, createdAt: intakeAt(9, daysAgo: 3),
         lastFetched: [IntakeSeen(id: "ORBE-12", link: "https://example.backlog.com/view/ORBE-12")],
@@ -118,7 +121,8 @@ extension DesignSceneFixtures {
       Intake(
         id: 4,
         definition: intakeDefinition(
-          "GitHub: 自分へのレビュー依頼", fetch: slack("gh search prs --review-requested=@me --json url"),
+          "GitHub: 自分へのレビュー依頼",
+          fetch: command("gh search prs --review-requested=@me --json url", .currentSet),
           when: .every(3600)),
         paused: true, createdAt: intakeAt(9, daysAgo: 3), lastFetched: [], reviewAll: false,
         lastRunAt: intakeAt(9),

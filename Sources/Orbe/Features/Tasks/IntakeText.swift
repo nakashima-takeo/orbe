@@ -57,6 +57,14 @@ struct IntakeText {
     return parts.joined(separator: " → ")
   }
 
+  /// 取得の性質と、それで提案がいつ下がるか。
+  func coverage(_ coverage: IntakeCoverage) -> String {
+    switch coverage {
+    case .currentSet: l10n.string(.taskPaletteIntakeCurrentSet)
+    case .newArrivals: l10n.string(.taskPaletteIntakeNewArrivals)
+    }
+  }
+
   /// 「30 分ごと」「毎日 9:00・13:00」。
   func when(_ timing: BackgroundTiming) -> String {
     switch timing {

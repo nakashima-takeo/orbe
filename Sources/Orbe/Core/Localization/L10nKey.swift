@@ -367,6 +367,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteIntakeHintPick
   case taskPaletteIntakeHintBack
   case taskPaletteIntakeFetch
+  case taskPaletteIntakeCurrentSet
+  case taskPaletteIntakeNewArrivals
   case taskPaletteIntakeJudge
   case taskPaletteIntakeLast
   case taskPaletteIntakeOverlaps

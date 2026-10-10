@@ -12,10 +12,12 @@ final class IntakeStoreTests: OrbeTestCase {
 
   static func definition(
     _ name: String = "Slack: 自分宛", script: String = "fetch", instruction: String = "判定して",
-    when: BackgroundTiming = .every(1800)
+    coverage: IntakeCoverage = .currentSet, when: BackgroundTiming = .every(1800)
   ) -> IntakeDefinition {
     IntakeDefinition(
-      name: name, fetch: .command(BackgroundCommand(script: script, directory: nil)),
+      name: name,
+      fetch: IntakeFetch(
+        method: .command(BackgroundCommand(script: script, directory: nil)), coverage: coverage),
       judge: IntakeJudge(cli: "claude", model: "haiku", instruction: instruction), when: when)
   }
 
@@ -44,7 +46,7 @@ final class IntakeStoreTests: OrbeTestCase {
   }
 
   /// 成功した回を確定する。`proposing` の項目に提案を出し、`resolving` のリンクを対応済みにする。
-  private func commit(
+  func commit(
     _ store: IntakeStore, _ id: Int, fetched: [IntakeItem], proposing: [IntakeItem] = [],
     resolving: [String] = []
   ) {
@@ -272,7 +274,7 @@ final class IntakeStoreTests: OrbeTestCase {
     let saved = """
       {"version":1,"nextIntakeId":3,"nextProposalId":2,"intakes":[{"id":2,"definition":{\
       "name":"Slack: 自分宛","fetch":{"agent":"claude","model":"haiku","tools":["mcp__slack__search"],\
-      "request":"DM"},"judge":{"agent":"claude","model":"sonnet","instruction":"自分がやること"},\
+      "request":"DM","coverage":"newArrivals"},"judge":{"agent":"claude","model":"sonnet","instruction":"自分がやること"},\
       "when":{"dailyAt":["09:00"]}},"paused":true,"createdAt":"2027-01-15T08:00:00.000Z",\
       "lastFetched":[{"id":"m1","link":"https://example.com/m1"}],"reviewAll":false,\
       "lastRunAt":"2027-01-15T09:00:00.000Z","runs":[{"startedAt":"2027-01-15T09:00:00.000Z",\
@@ -293,9 +295,11 @@ final class IntakeStoreTests: OrbeTestCase {
       intake.definition,
       IntakeDefinition(
         name: "Slack: 自分宛",
-        fetch: .agent(
-          IntakeAgentFetch(
-            cli: "claude", model: "haiku", tools: ["mcp__slack__search"], request: "DM")),
+        fetch: IntakeFetch(
+          method: .agent(
+            IntakeAgentFetch(
+              cli: "claude", model: "haiku", tools: ["mcp__slack__search"], request: "DM")),
+          coverage: .newArrivals),
         judge: IntakeJudge(cli: "claude", model: "sonnet", instruction: "自分がやること"),
         when: .daily([.init(hour: 9, minute: 0)])))
     XCTAssertTrue(intake.paused)
