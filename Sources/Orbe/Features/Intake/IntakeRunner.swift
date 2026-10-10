@@ -72,9 +72,8 @@ final class IntakeRunner {
   /// 次に予定で回る時刻（止めていれば nil）。過ぎていれば今以前の時刻を返す。
   func nextRunAt(_ intake: Intake) -> Date? {
     guard !intake.paused else { return nil }
-    let now = now()
     switch intake.definition.when.next(
-      after: min(intake.anchor, now), deadline: nil, now: now, calendar: calendar())
+      after: intake.anchor, deadline: nil, now: now(), calendar: calendar())
     {
     case .run(let date): return date
     case .expire: return nil
