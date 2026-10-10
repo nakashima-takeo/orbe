@@ -118,7 +118,7 @@ import Observation
     intake = TaskPaletteIntakeModel(
       runner: intakes, tasks: store, home: workspaces.home, today: today, timeZone: timeZone)
     intake.onPlaceChange = { [weak self] in self?.focus() }
-    intake.addPosition = { [weak self] in self?.addPosition ?? .end }
+    intake.addPosition = { [weak self] in self?.addPosition(attachingTo: $0) ?? .end }
     intake.onOpenURL = { [weak self] in self?.onOpenURL($0) }
     reconcile()
     githubItems.refresh(visibleLinkIDs)
