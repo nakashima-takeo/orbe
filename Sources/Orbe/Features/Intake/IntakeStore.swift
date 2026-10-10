@@ -222,7 +222,8 @@ import Observation
 
   // MARK: - 検証
 
-  /// 名前はタスクのタイトルと同じ 1 行の規則（前後の空白を除いて保存）。agent は裏で回せる CLI だけ。
+  /// 名前はタスクのタイトルと同じ 1 行の規則（前後の空白を除いて保存）。agent は裏で回せる CLI だけ。取得役のツールは
+  /// MCP のツールの完全名だけ。
   static func valid(_ definition: IntakeDefinition) throws(IntakeError) -> IntakeDefinition {
     var definition = definition
     do throws(TaskStoreError) {
@@ -240,8 +241,11 @@ import Observation
     case .agent(let agent):
       try checkAgent(agent.cli, model: agent.model, "fetch")
       guard !agent.tools.isEmpty else { throw .invalid("fetch: tools are empty") }
-      guard agent.tools.allSatisfy({ !$0.isEmpty }) else {
-        throw .invalid("fetch: a tool name is empty")
+      if let tool = agent.tools.first(where: { !isMCPToolName($0) }) {
+        throw .invalid(
+          "fetch: \(tool) is not a full MCP tool name (mcp__<server>__<tool>); built-in tools, "
+            + "whole servers and wildcards are refused so that fetched text cannot make the "
+            + "fetcher write anything")
       }
       guard !isBlank(agent.request) else { throw .invalid("fetch: request is empty") }
     }
@@ -267,6 +271,14 @@ import Observation
     case nil: throw .invalid("\(role): agent \(cli) is not supported")
     }
     guard !isBlank(model) else { throw .invalid("\(role): model is empty") }
+  }
+
+  /// 取得役は外から届いた文面を読むので、書き込みの手段を渡さないよう、使えるツールを名指しした MCP のツールに限る。
+  private static func isMCPToolName(_ name: String) -> Bool {
+    guard name.hasPrefix("mcp__"), !name.contains("*") else { return false }
+    let rest = name.dropFirst("mcp__".count)
+    guard let separator = rest.range(of: "__") else { return false }
+    return separator.lowerBound > rest.startIndex && separator.upperBound < rest.endIndex
   }
 
   private static func isBlank(_ text: String) -> Bool {

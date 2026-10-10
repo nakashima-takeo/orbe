@@ -8,7 +8,7 @@ import XCTest
 /// 壊れると何が起きるか。同じ Slack のメッセージが 2 つの受信から二重に提案される。人が捨てた提案が次の回で「対応済み」に
 /// 化ける・また提案される。取得が失敗した回に提案が一斉に消える。判定が同じ項目を回のたびに読み直す。
 final class IntakeStoreTests: OrbeTestCase {
-  private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+  let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 
   static func definition(
     _ name: String = "Slack: 自分宛", script: String = "fetch", instruction: String = "判定して",
@@ -37,7 +37,7 @@ final class IntakeStoreTests: OrbeTestCase {
       withdrawn: 0, failure: failure)
   }
 
-  private func store(intakes count: Int = 1) throws -> IntakeStore {
+  func store(intakes count: Int = 1) throws -> IntakeStore {
     let store = IntakeStore(file: nil)
     for index in 0..<count { _ = try store.create(Self.definition("受信 \(index + 1)"), now: t0) }
     return store
@@ -53,55 +53,6 @@ final class IntakeStoreTests: OrbeTestCase {
       + resolving.map { IntakeDecision.resolve(link: $0) }
     store.commit(
       id, runRecord(), fetched: fetched, judged: proposing, decisions: decisions)
-  }
-
-  // MARK: - 定義
-
-  func testCreateTrimsTheNameAndNumbersWithoutReuse() throws {
-    let store = IntakeStore(file: nil)
-    let first = try store.create(Self.definition("  GitHub: レビュー依頼 "), now: t0)
-    try store.delete(first.id)
-    let second = try store.create(Self.definition(), now: t0)
-
-    XCTAssertEqual(first.definition.name, "GitHub: レビュー依頼")
-    XCTAssertEqual(second.id, first.id + 1, "消した ID を使い回さない")
-  }
-
-  func testInvalidDefinitionsAreRejectedAndChangeNothing() throws {
-    let store = try store()
-    var multiline = Self.definition()
-    multiline.name = "a\nb"
-    var codex = Self.definition()
-    codex.judge.cli = "codex"
-    var noTools = Self.definition()
-    noTools.fetch = .agent(IntakeAgentFetch(cli: "claude", model: "haiku", tools: [], request: "x"))
-    var relative = Self.definition()
-    relative.fetch = .command(BackgroundCommand(script: "x", directory: "tmp"))
-    var tooOften = Self.definition()
-    tooOften.when = .every(30)
-
-    for (label, definition) in [
-      ("複数行の名前", multiline), ("裏で回せない agent", codex), ("ツールの無い取得役", noTools),
-      ("相対の作業ディレクトリ", relative), ("1 分より短い間隔", tooOften),
-    ] {
-      XCTAssertThrowsError(try store.replace(1, with: definition), label) {
-        guard case .invalid = $0 as? IntakeError else { return XCTFail("\(label): \($0)") }
-      }
-    }
-    XCTAssertEqual(store.intake(1)?.definition, Self.definition("受信 1"))
-  }
-
-  /// 取得か判定の書き換えだけが、次の回の全件見直しを立てる。名前やいつだけでは立てない。
-  func testReplacingFetchOrJudgeMarksReviewAll() throws {
-    let store = try store()
-    var renamed = Self.definition("新しい名前", when: .every(600))
-
-    XCTAssertFalse(try store.replace(1, with: renamed).reworked)
-    XCTAssertFalse(store.intake(1)!.reviewAll)
-
-    renamed.judge.instruction = "別の指示"
-    XCTAssertTrue(try store.replace(1, with: renamed).reworked)
-    XCTAssertTrue(store.intake(1)!.reviewAll)
   }
 
   // MARK: - 新しい項目

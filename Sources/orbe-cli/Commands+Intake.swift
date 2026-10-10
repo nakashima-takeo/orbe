@@ -28,7 +28,10 @@ let intakeUsage = """
   set reads the definition from stdin, the same JSON as the MCP tool
   set_intake: {"name", "fetch", "judge", "when"}, all four required.
     fetch  {"command": "…", "directory": "/abs"}  or
-           {"agent": "claude", "model": "…", "tools": ["mcp__…"], "request": "…"}
+           {"agent": "claude", "model": "…", "tools": ["mcp__<server>__<tool>"],
+            "request": "…"}
+           An agent may use only the MCP tools named in full; built-in tools,
+           whole servers and wildcards are refused.
            A command prints one JSON object per item:
            {"id","link","body","time"} (link http(s), time ISO 8601),
            and fails with a non-zero exit or a single {"error": "…"} line.
