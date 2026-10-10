@@ -139,4 +139,28 @@ extension WindowControllerTaskControlTests {
     XCTAssertEqual(condition["checks"] as? Int, 1)
     XCTAssertEqual((condition["lastCheck"] as? [String: Any])?["result"] as? String, "success")
   }
+
+  /// 最後の確認は、結果の名前に加えて中身（終了コード・シグナル・上限の種類・始められなかった理由）を出す——条件を
+  /// 書いた AI が「まだ」と「壊れている」を見分け、始められない条件を付け直せるように。
+  func testLastCheckCarriesWhatTheResultHolds() throws {
+    let wc = try launch()
+    let id = try addWaiting(wc, callerTabId: nil)
+    let conditionId = try XCTUnwrap(wc.taskStore.tasks.first?.waiting?.condition?.id)
+    let now = Date()
+    func record(_ ending: BackgroundEnding) throws -> [String: Any] {
+      wc.taskStore.recordCheck(
+        id, condition: conditionId,
+        BackgroundRunResult(
+          commandLine: "exit 1", startedAt: now, endedAt: now, ending: ending,
+          output: .command(stdout: .init(), stderr: .init())))
+      return try XCTUnwrap(try listedCondition(wc)["lastCheck"] as? [String: Any])
+    }
+
+    XCTAssertEqual(try record(.exited(2))["code"] as? Int32, 2)
+    XCTAssertEqual(try record(.signaled(15))["signal"] as? Int32, 15)
+    XCTAssertEqual(try record(.limited(.idle))["limit"] as? String, "idle")
+    XCTAssertEqual(
+      try record(.notStarted(.directoryMissing("/gone")))["reason"] as? String,
+      "directory not found: /gone")
+  }
 }

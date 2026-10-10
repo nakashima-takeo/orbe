@@ -216,6 +216,13 @@ extension WindowController {
       var check: [String: Any] = [
         "startedAt": SessionEvent.iso8601(last.startedAt), "result": last.result.name,
       ]
+      switch last.result {
+      case .exited(let code): check["code"] = code
+      case .signaled(let signal): check["signal"] = signal
+      case .limited(let limit): check["limit"] = WaitCheck.name(limit)
+      case .notStarted(let reason): check["reason"] = reason
+      case .success, .stopped: break
+      }
       if !last.stdout.isEmpty { check["stdout"] = last.stdout }
       if !last.stderr.isEmpty { check["stderr"] = last.stderr }
       wire["lastCheck"] = check

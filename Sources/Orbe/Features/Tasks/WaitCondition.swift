@@ -174,8 +174,8 @@ struct WaitCheck: Codable, Equatable {
     try c.encode(stderr, forKey: .stderr)
   }
 
-  /// 上限の永続の名前（読み込みもこの表で引く）。
-  private static func name(_ limit: BackgroundProcess.Limit) -> String {
+  /// 上限の永続とワイヤの名前（読み込みもこの表で引く）。
+  static func name(_ limit: BackgroundProcess.Limit) -> String {
     switch limit {
     case .elapsed: "elapsed"
     case .idle: "idle"
