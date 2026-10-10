@@ -1,7 +1,7 @@
 ---
 title: レイアウト
 description: window の SwiftUI ホスト構成・workspace / タブ / 面 / surface の構造・一方向参照・フォーカス管理・ショートカット・オーバーレイ提示機構
-updated: 2026-10-07
+updated: 2026-10-11
 ---
 
 # レイアウト
@@ -15,7 +15,7 @@ host 所有。`window.contentView` は SwiftUI ルート `ChromeHostingView`。�
 - `BackgroundGlow` の地は透過状態で変わる: **不透明時（100%・フルスクリーン）は不透明な地を敷き**、**透過時は地を敷かず clear** にする——端末の透明ピクセルをデスクトップまで抜くため。glow ラジアル自体は透過時も残る。
 - content の不透明な地は通常は各端末 surface が描くため、**surface が 1 枚も無い 0 タブ workspace のときだけ** content を薄めた地で埋める。透過ウィンドウ越しにデスクトップが透けるのを防ぐ backstop で、背景不透明度の設定変更にライブ追従する。タブがあるときは出さず二重 veil を避ける。
 - 上段 chrome はネイティブ SwiftUI。content（タブの器）は既存 AppKit ビューを passthrough representable で内包する。
-- content に載るタブの表示単位は**面の器**——エディター面｜背｜端末面を横に並べた 1 枚（→ [editor/faces](../editor/faces.md)）。器はタブごとにあり、タブごとの配置（どの面がどれだけ見えているか）を持てる。エディター面の地と背は chrome と同じ veil で塗り、端末面の地は端末 surface が描く。
+- content に載るタブの表示単位は**面の器**——エディター面と端末面を横に並べ、境に引き手・継ぎ目を重ねた 1 枚（→ [editor/faces](../editor/faces.md)）。器はタブごとにあり、タブごとの配置（どの面がどれだけ見えているか）を持てる。エディター面の地は chrome と同じ veil で塗り、端末面の地は端末 surface が描く。
 - 配置状態（content とその空判定）と上段 chrome の状態は薄い `@Observable` モデル経由で `WindowController` が所有・駆動する（状態の正は WindowController）。
 - 背景透過／ブラーは `WindowController` が所有する `ChromeTranslucency` を各 SwiftUI root へ Environment 注入して chrome 各面へ配り、各面が自分の地を同じ実効不透明度で薄める——端末面と veil 濃度を揃えるため。端末領域には塗らず二重 veil を避ける（値更新は窓の不透明度同期と同一 tick）。
 - 窓ドラッグは chrome 背景の透明 NSView が `mouseDown` で処理する。1 クリックは `window.performDrag(with:)` で Window Server へ委譲し（Space 切替等に参加させるため）、ダブルクリックはシステム設定 `AppleActionOnDoubleClick` を読んで zoom / miniaturize / 無効を明示実行する。タブ／＋ は前面で tap を持つため空き領域だけを拾う。
