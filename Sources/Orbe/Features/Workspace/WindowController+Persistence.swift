@@ -49,11 +49,18 @@ extension WindowController {
   /// 休眠チケット 1 枚を workspace へ足す。`restore_sessions` と ⇧⌘T が共有する復元単位。
   /// 起動時復元と `makeTab` を共有するが、閉じたセッションの復元が持ち込むのは cwd と同一性だけ
   /// （明示タイトルは付かない）。位置は新規タブと同じ規則——同じ worktree の連の右端、無ければ末尾。
-  /// 選択・mount はしない（起床は既存の mount 規律に従う）。
+  /// 選択・mount はしない（起床は既存の mount 規律に従う）。ただし前面の workspace の選択がそのタブになったら
+  /// （空表示だった workspace に足したタブ）、隠すと「選んでいるタブが見えない」状態になるので、`wakeUnselected` と
+  /// 同じく選んで見せる。
   func restoreDormantTab(_ state: TabState, intoWorkspaceAt index: Int) -> TabRef {
     let tab = makeTab(from: state)
     _ = store.insertTabUnselected(tab, intoWorkspaceAt: index)
-    refreshChrome()
+    let ws = workspaces[index]
+    if index == activeWorkspace, ws.selectedTab === tab {
+      select(ws.selection)
+    } else {
+      refreshChrome()
+    }
     scheduleSave()
     return TabRef(workspaceIndex: index, tab: tab)
   }
