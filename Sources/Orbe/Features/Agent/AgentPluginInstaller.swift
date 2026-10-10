@@ -105,24 +105,6 @@ enum AgentPluginInstaller {
     digest.map { String(format: "%02x", $0) }.joined()
   }
 
-  /// 最後に各 CLI へ登録できたパッケージの指紋の置き場。実体化の原子的な差し替えに巻き込まれないよう
-  /// 実体化先の中ではなく隣に置く。
-  private static var registeredDigestFile: URL? {
-    stablePluginDir?.deletingLastPathComponent().appendingPathComponent("agent-plugin.digest")
-  }
-
-  static var registeredDigest: String? {
-    guard let url = registeredDigestFile,
-      let text = try? String(contentsOf: url, encoding: .utf8)
-    else { return nil }
-    return text.trimmingCharacters(in: .whitespacesAndNewlines)
-  }
-
-  static func recordRegistered(digest: String) {
-    guard let url = registeredDigestFile else { return }
-    try? Data("\(digest)\n".utf8).write(to: url, options: .atomic)
-  }
-
   /// 同梱 `install.sh <pluginDir> <pluginName>` をバックグラウンド実行し、stdout の各行を Event として
   /// メインスレッドで `onEvent` に、読み切りを `onComplete` に流す。子プロセスは呼び出し側が
   /// 戻り値で保持する（実行中の Process 寿命を UI に紐付ける）。

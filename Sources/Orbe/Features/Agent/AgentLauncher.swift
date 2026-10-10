@@ -120,10 +120,11 @@ final class AgentLauncher {
     guard registersPlugin, let dir = AgentPluginInstaller.materializeStablePlugin() else { return }
     materializedPluginDir = dir
     // オンボーディングを出す経路では登録もオンボーディングが担う（install.sh の二重実行を防ぐ）。
-    guard AppStatePersistence.load()?.agentPluginsInstalled == true,
+    let state = AppStatePersistence.load()
+    guard state?.agentPluginsInstalled == true,
       let name = AgentPluginInstaller.pluginName(in: dir),
       let digest = AgentPluginInstaller.digest(of: dir),
-      AgentPluginInstaller.registeredDigest != digest
+      state?.registeredAgentPluginDigest != digest
     else { return }
     // 記録するのは「1 つ以上登録できて、1 つも失敗しなかった」ときだけ。指紋が一致する限り
     // 二度と走らないので、1 件も登録できていない完了を記録すると恒久的に無効化される。
@@ -137,7 +138,7 @@ final class AgentLauncher {
       onComplete: { [weak self] in
         self?.installProc = nil
         guard registered, !failed else { return }
-        AgentPluginInstaller.recordRegistered(digest: digest)
+        AppStatePersistence.update { $0.registeredAgentPluginDigest = digest }
       })
   }
 
@@ -198,8 +199,10 @@ final class AgentLauncher {
   /// 書かず、次回起動で再表示＝自動リトライさせる（install.sh は冪等）。
   private func completeOnboarding(digest: String) {
     if let model = appModel?.onboarding, model.hasInstalls, !model.hasFailures {
-      AppStatePersistence.update { $0.agentPluginsInstalled = true }
-      AgentPluginInstaller.recordRegistered(digest: digest)
+      AppStatePersistence.update {
+        $0.agentPluginsInstalled = true
+        $0.registeredAgentPluginDigest = digest
+      }
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.dismissOnboarding()
     }
