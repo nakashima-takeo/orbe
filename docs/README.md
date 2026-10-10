@@ -32,6 +32,7 @@ Orbe は、作業場所の準備・エージェントの起動・状態確認を
 **chrome/ — GUI の枠**
 
 - [chrome](spec/chrome/chrome.md) — 常駐 StatusRow（現在地・worktree ごとのタブグループ・状態インジケータ）
+- [board](spec/chrome/board.md) — workspace が持つタブでない面（今は Home。タブ行の左端に固定）
 - [layout](spec/chrome/layout.md) — ウィンドウ構成・1 タブ 1 端末のライフサイクル・ショートカット
 - [menubar](spec/chrome/menubar.md) — メニューバー投影（4 態のピル）
 - [help](spec/chrome/help.md) — ヘルプオーバーレイ（⌘H）

@@ -25,7 +25,7 @@ updated: 2026-10-11
 
 タブ内は `ORBE_TAB` を現タブ既定に、外部は明示ターゲット必須。
 
-- `orb tab list [--workspace <id|current>] [--json]` … タブ一覧（tabId/workspaceId/workspaceName/title/cwd/agentState/agentSessionId/active）。人間向けの `*` は「前面 workspace で選択中」のタブ 1 枚に付く——`active` は背景 workspace でも 1 枚 true なので、前面かは workspace 一覧と合わせて判定する。
+- `orb tab list [--workspace <id|current>] [--json]` … タブ一覧（tabId/workspaceId/workspaceName/title/cwd/agentState/agentSessionId/active）。人間向けの `*` は「前面 workspace で選択中」のタブ 1 枚に付く——`active` は背景 workspace でも 1 枚 true なので、前面かは workspace 一覧と合わせて判定する。前面 workspace が[ボード](../chrome/board.md)を選んでいれば、どのタブにも付かない。
 - `orb tab new [--workspace <id|current>] [--dir <path>] [--cmd "…"]` … 新タブを開く。新 tabId を返す。
 - `orb tab close [<tab>]` … GUI の Cmd+W と同一（アクティブ WS の最後のタブを閉じても 0 タブ空状態で残す）。
 - `orb tab focus <tab>` … 別 WS なら activate 込み。位置引数必須。
