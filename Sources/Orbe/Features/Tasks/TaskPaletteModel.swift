@@ -317,6 +317,7 @@ import Observation
   /// 確定できずに捨てた入力の理由はフッターに残る。
   func leaveEditingForAction() {
     error = nil
+    intake.clearError()
     leaveEditing()
   }
 

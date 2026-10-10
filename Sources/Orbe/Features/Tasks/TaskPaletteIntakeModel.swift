@@ -58,6 +58,11 @@ enum TaskPaletteIntakeError: Equatable {
   }
   private(set) var error: TaskPaletteIntakeError?
 
+  /// 失敗を消す（タブを替えるなど、受信タブの外の操作の境目）。
+  func clearError() {
+    error = nil
+  }
+
   /// 居場所が変わった（焦点の行き先が入力欄とカードの器の間で移る）。
   @ObservationIgnored var onPlaceChange: () -> Void = {}
   /// 提案をタスクにする位置（付く workspace を渡す。`TaskPaletteModel.addPosition`）。

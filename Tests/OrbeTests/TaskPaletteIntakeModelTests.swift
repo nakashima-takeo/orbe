@@ -198,6 +198,21 @@ final class TaskPaletteIntakeModelTests: OrbeTestCase {
     XCTAssertEqual(intake.error, .running, "走っている間は赤で断る")
   }
 
+  /// 受信タブの赤は、タブを替えた操作の境目で消える（戻ったときに当てはまらない赤が残らない）。
+  func testLeavingTheTabClearsItsError() {
+    let palette = palette()
+    palette.intake.tapShelf(.intake(1))
+    palette.intake.enterContents()
+    palette.intake.runNow()
+    palette.intake.runNow()
+    XCTAssertEqual(palette.intake.error, .running)
+
+    palette.setTab(.tasks)
+    palette.setTab(.intake)
+
+    XCTAssertNil(palette.intake.error)
+  }
+
   func testSpaceTogglesPause() {
     let intake = palette().intake
     intake.tapShelf(.intake(4))
