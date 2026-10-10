@@ -129,7 +129,7 @@ extension TaskPaletteModelTests {
       task(1, "a", .inProgress) { $0.wait = self.resolved(conversation: self.conversation) }
     ])
     var opened: [Int] = []
-    palette.onContinuationBlock = { _ in .directoryMissing }
+    palette.continuationBlock = { _ in .directoryMissing }
     palette.onContinueWait = { _ in
       XCTFail("始められないのに続きから始めた")
       return nil
@@ -140,7 +140,7 @@ extension TaskPaletteModelTests {
     palette.continueWait()
 
     XCTAssertEqual(opened, [1])
-    XCTAssertEqual(palette.continuationBlock(of: palette.store.tasks[0]), .directoryMissing)
+    XCTAssertEqual(palette.continuation(of: palette.store.tasks[0]), .blocked(.directoryMissing))
   }
 
   /// 会話の記録が無い解けた待ち（タブの外から付けた条件）の ⌘T は、いつもの ⌘T。

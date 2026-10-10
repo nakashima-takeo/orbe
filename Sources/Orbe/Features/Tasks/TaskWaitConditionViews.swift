@@ -223,10 +223,8 @@ struct TaskConditionBox: View {
 struct TaskResolvedBox: View {
   let model: TaskPaletteModel
   let resolution: WaitResolution
-  /// 続きから始められる会話（無ければボタンを出さない）。
-  let continuation: WaitConversation?
-  /// 会話があるのに続きから始められない理由（ボタンの代わりに出す）。
-  let blocked: TaskPaletteError?
+  /// 続きから始められるならボタンを、始められなければ理由を出す。
+  let continuation: TaskContinuation
   @Environment(\.localization) private var l10n
 
   var body: some View {
@@ -254,14 +252,17 @@ struct TaskResolvedBox: View {
             .lineLimit(6)
             .padding(.leading, Self.indent)
         }
-        if let continuation {
-          continueButton(continuation)
-        } else if let blocked {
-          Text(l10n.format(.taskPaletteContinueBlocked, l10n.string(blocked.message)))
+        switch continuation {
+        case .ready(let conversation):
+          continueButton(conversation)
+        case .blocked(let block):
+          Text(l10n.format(.taskPaletteContinueBlocked, l10n.string(block.message)))
             .font(Font.theme.meta)
             .foregroundStyle(Color.theme.textMuted)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.leading, Self.indent)
+        case .none:
+          EmptyView()
         }
       }
       .padding(.horizontal, Theme.Space.beat)

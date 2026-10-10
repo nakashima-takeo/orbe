@@ -188,7 +188,7 @@ extension DesignGallerySnapshotTests {
       DesignSceneFixtures.taskWaitConditionFile(
         resolved: .satisfied(
           output: String(repeating: "@sato · CHANGES_REQUESTED · 長いレビューの要約 ", count: 8))))
-    long.onContinuationBlock = { _ in .directoryMissing }
+    long.continuationBlock = { _ in .directoryMissing }
     try write("tasks_wait_resolved_blocked.png", long, 1440, 900)
   }
 }

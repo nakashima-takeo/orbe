@@ -85,11 +85,13 @@ struct TaskPaletteFooter: View {
       case .task(let id) where id == model.justAdded:
         PaletteActionLine(key: "→", template: l10n.string(.taskPaletteActionRefine), slots: [])
       case .task:
-        if let task = model.selectedTask, let block = model.continuationBlock(of: task) {
+        if let task = model.selectedTask, case .blocked(let block) = model.continuation(of: task) {
           PaletteActionLine(
             key: nil, template: l10n.string(.taskPaletteContinueBlocked),
             slots: [.emphasis(l10n.string(block.message))])
-        } else if let task = model.selectedTask, let conversation = model.continuation(of: task) {
+        } else if let task = model.selectedTask,
+          case .ready(let conversation) = model.continuation(of: task)
+        {
           PaletteActionLine(
             key: "⌘T", template: l10n.string(.taskPaletteActionContinue),
             slots: [.emphasis(task.title), .emphasis(conversation.command)])
