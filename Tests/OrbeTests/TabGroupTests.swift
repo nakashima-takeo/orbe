@@ -11,7 +11,8 @@ import XCTest
 ///
 /// 壊れると何が起きるか。一度も見なかった連の文書が終了で失われる。復元で読めないファイルが復元を止める。再起動で
 /// 仮のタブが普通のタブとして積もる。エージェントが見せたファイルを人の次のクリックが黙って入れ替える。再起動で
-/// 連の検索語と切替が消える、復元のたびに根の全体を探す。cd で連を移ったタブの文書が消える、未保存の編集が黙って上書きされる。
+/// 連の検索語と切替が消える、復元のたびに根の全体を探す。cd で連を移ったタブの文書が消える、未保存の編集が黙って上書きされる、
+/// 移った文書が外の書き換えを見失って ⌘S がエージェントの編集を潰す。
 @MainActor
 final class TabGroupTests: OrbeTestCase {
   private func file(_ name: String) throws -> URL {
@@ -161,6 +162,24 @@ final class TabGroupTests: OrbeTestCase {
 
     XCTAssertTrue(dest.editor.activeDocument === a)
     XCTAssertTrue(dest.editor.preview === p)
+  }
+
+  /// 移った文書は外のファイルに付いていき続ける——未保存のまま外で書き換えられれば印が立ち、その変化は行き先の連の
+  /// 通知に載る。
+  func testAbsorbedDocumentKeepsFollowingItsFile() throws {
+    let dest = group()
+    let from = group()
+    let url = try file("a.txt")
+    let moved = try from.editor.open(url, as: .pinned)
+    moved.surface.responder.perform(Selector(("insertText:")), with: "mine ")
+    dest.absorb(from)
+    var changes = 0
+    dest.onEditorChange = { changes += 1 }
+
+    try Data("theirs".utf8).write(to: url)
+
+    pumpMain(until: { moved.isDiskChanged }, "未保存なら印が立つ")
+    XCTAssertEqual(changes, 1, "印の変化は行き先の連の通知に載る")
   }
 
   /// 一度も載らなかった元の連の復元待ちは、行き先が載っていれば開き、まだなら行き先の復元待ちの末尾へ合わさる。
