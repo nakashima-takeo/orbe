@@ -7,10 +7,8 @@ struct TaskPaletteIntakeAction: View {
 
   var body: some View {
     if let error = model.error {
-      Text(
-        l10n.string(error == .accept ? .taskPaletteIntakeErrAccept : .taskPaletteIntakeErrRunning)
-      )
-      .foregroundStyle(Color.theme.danger)
+      Text(l10n.string(error.message))
+        .foregroundStyle(Color.theme.danger)
     } else {
       switch model.place {
       case .proposals:

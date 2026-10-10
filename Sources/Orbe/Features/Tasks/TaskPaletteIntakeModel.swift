@@ -31,6 +31,13 @@ enum TaskPaletteIntakeError: Equatable {
   case accept
   /// 走っている間の今すぐ受信。
   case running
+
+  var message: L10nKey {
+    switch self {
+    case .accept: .taskPaletteIntakeErrAccept
+    case .running: .taskPaletteIntakeErrRunning
+    }
+  }
 }
 
 /// ⌘⇧X の受信タブの状態（@Observable）。受信・提案・回の記録は受信のストアから、走っているか・次の時刻は走らせ役から
