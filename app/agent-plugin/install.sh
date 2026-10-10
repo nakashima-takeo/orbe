@@ -16,9 +16,11 @@ NAME="${2:?plugin_name required}"
 tmo() { perl -e 'alarm shift; exec @ARGV' "$@" </dev/null 2>/dev/null; }
 
 # list の出力はパイプでなくこのファイルで受ける（毎回 truncate される）。CLI が孫プロセスを残した
-# まま打ち切られても、孫が握るのはこの fd なので grep は EOF を待たない（パイプだと孫が閉じるまで
-# 待ち続け、打ち切りが効かない）。打ち切り時は空＝未登録扱いで install を試す＝誤って unchanged を
-# 名乗って導入を永久に飛ばすより安全な倒れ方。
+# まま打ち切られても、孫が握るのはこの fd なので読み手は EOF を待たない（パイプだと孫が閉じるまで
+# 待ち続け、打ち切りが効かない）。読めない一覧（打ち切り・形の変化）の扱いは CLI ごとに違う:
+# claude は未登録扱いで install を試す（install は無効の設定を変えない）。codex は error にする
+# （plugin add は必ず有効へ戻すので、読めないまま入れ直すと利用者の無効を黙って覆す。error なら
+# 指紋を記録せず、次の起動でやり直す）。
 LIST="$(mktemp -t orbe-plugin-list)" || exit 1
 trap 'rm -f "$LIST"' EXIT
 
@@ -46,12 +48,22 @@ if command -v codex >/dev/null 2>&1; then
   # 有効へ戻すので、利用者が無効にしていれば入れ直さない（次に中身が変わって有効なら入れ直す）。
   tmo 30 codex plugin marketplace add "$DIR" >/dev/null
   tmo 15 codex plugin list --json --marketplace "$NAME" >"$LIST"
-  if perl -MJSON::PP -0777 -e '
+  # 0: 利用者が無効にしている / 1: 無効ではない / 2: 一覧を読めない（installed の配列が無い形も含む）。
+  perl -MJSON::PP -0777 -e '
       my $id = shift;
-      my $list = eval { decode_json(<STDIN>) } or exit 1;
-      exit((grep { $_->{pluginId} eq $id && !$_->{enabled} } @{ $list->{installed} || [] }) ? 0 : 1);
-    ' "${NAME}@${NAME}" <"$LIST" 2>/dev/null; then
+      my $list = eval { decode_json(<STDIN>) };
+      exit 2 unless ref $list eq "HASH" && ref $list->{installed} eq "ARRAY";
+      exit((grep { $_->{pluginId} eq $id && !$_->{enabled} } @{ $list->{installed} }) ? 0 : 1);
+    ' "${NAME}@${NAME}" <"$LIST" 2>/dev/null
+  case $? in
+    0) DISABLED=yes ;;
+    1) DISABLED=no ;;
+    *) DISABLED=unknown ;;
+  esac
+  if [ "$DISABLED" = yes ]; then
     echo "unchanged codex"
+  elif [ "$DISABLED" = unknown ]; then
+    echo "error codex"
   elif tmo 60 codex plugin add "${NAME}@${NAME}" >/dev/null; then
     echo "installed codex"
   else
