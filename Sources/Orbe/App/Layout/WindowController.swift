@@ -85,9 +85,12 @@ final class WindowController: NSObject, NSWindowDelegate {
   private(set) lazy var editorSurfaces = EditorSurfaces(
     queriesRoot: BundledResources.root,
     language: { [weak self] in self?.localization.language ?? .systemDefault })
-  // ボードの器（1 枚だけ）。前面の workspace がボードを持つ間 content に載り、そのボードを映す。
+  // ボードの状態と器（どちらも 1 つだけ）。前面の workspace がボードを持つ間、器が content に載り、そのボードを映す。
+  private(set) lazy var board = BoardModel(intake: BoardIntakeModel(runner: intakeRunner))
   private(set) lazy var boardView: BoardView = {
-    let view = BoardView(translucency: chromeTranslucency, localization: localization)
+    let view = BoardView(
+      model: board, translucency: chromeTranslucency, localization: localization,
+      fontResolver: fontResolver)
     view.onWindowCommand = { [weak self] command in self?.handleWindowCommand(command) }
     return view
   }()

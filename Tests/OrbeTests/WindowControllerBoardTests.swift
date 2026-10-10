@@ -73,7 +73,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
     XCTAssertTrue(wc.statusModel.location.isEmpty, "隠れたタブの現在地を出さない")
     XCTAssertNil(wc.statusModel.faceDots, "隠れたタブの位置ドットを出さない")
     XCTAssertFalse(wc.model.contentIsEmpty, "空表示の地を重ねない")
-    XCTAssertTrue(wc.window.firstResponder === wc.boardView, "焦点はボード")
+    XCTAssertTrue(wc.boardView.focusIsInside, "焦点はボードの中")
   }
 
   // MARK: - キー
@@ -125,13 +125,13 @@ final class WindowControllerBoardTests: OrbeTestCase {
     wc.showWorkspacePalette()
     wc.window.makeFirstResponder(nil)  // パレットの入力欄が焦点を持っていった状態（窓に出さないので自分では取らない）
     wc.dismissPalette()
-    XCTAssertTrue(wc.window.firstResponder === wc.boardView, "パレットを閉じるとボードへ")
+    XCTAssertTrue(wc.boardView.focusIsInside, "パレットを閉じるとボードへ")
 
     let home = wc.activeWorkspace
     wc.switchWorkspace(to: try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "default" }))
-    XCTAssertFalse(wc.window.firstResponder === wc.boardView, "前提: 他の workspace ではそのタブが焦点")
+    XCTAssertFalse(wc.boardView.focusIsInside, "前提: 他の workspace ではそのタブが焦点")
     wc.switchWorkspace(to: home)
-    XCTAssertTrue(wc.window.firstResponder === wc.boardView, "workspace を戻るとボードへ")
+    XCTAssertTrue(wc.boardView.focusIsInside, "workspace を戻るとボードへ")
   }
 
   // MARK: - 閉じる

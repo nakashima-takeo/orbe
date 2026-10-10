@@ -4,7 +4,8 @@ import Foundation
 /// 両方がここを通す（`language == .ja` 分岐を 1 箇所へ集約）。全 `L10nKey` の網羅は `L10nCompletenessTests`。
 /// 辞書はドメイン分冊（本体＋`L10nTable+Settings.swift`＋`L10nTable+Help.swift`＋
 /// `L10nTable+Attention.swift`＋`L10nTable+WorktreePalette.swift`＋`L10nTable+ClosedAgents.swift`＋
-/// `L10nTable+Tasks.swift`＋`L10nTable+Intake.swift`＋`L10nTable+Secretary.swift`）を `table` が結合する。
+/// `L10nTable+Tasks.swift`＋`L10nTable+Intake.swift`＋`L10nTable+Secretary.swift`＋`L10nTable+Board.swift`）を `table` が
+/// 結合する。
 enum L10n {
   static let table: [L10nKey: (ja: String, en: String)] =
     baseTable
@@ -16,6 +17,7 @@ enum L10n {
     .merging(tasksTable) { a, _ in a }
     .merging(intakeTable) { a, _ in a }
     .merging(secretaryTable) { a, _ in a }
+    .merging(boardTable) { a, _ in a }
 
   private static let baseTable: [L10nKey: (ja: String, en: String)] = [
     // MARK: Menu
@@ -198,9 +200,6 @@ enum L10n {
     ),
     .editorOverwriteConfirm: ("上書き", "Overwrite"),
     .editorOmittedCharacters: ("ほか %@字", "%@ more"),
-
-    // MARK: ボード（空状態）
-    .boardEmpty: ("まだ何も置かれていません", "Nothing here yet"),
 
     // MARK: Link（OSC 8）
     .linkConfirmTitle: ("端末出力のリンクを開きますか？", "Open Link from Terminal Output?"),
