@@ -32,7 +32,9 @@ extension TaskStore {
     }
     switch update.waitingCondition {
     case .set(let request):
-      guard item.status != .done else { throw .invalid(conditionWithoutWaiting) }
+      guard item.status != .done else {
+        throw .invalid("a done task cannot have a waiting condition")
+      }
       waiting.condition = try newCondition(request, now: now)
     case .clear:
       waiting.condition = nil

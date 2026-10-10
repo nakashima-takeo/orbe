@@ -61,7 +61,11 @@ extension TaskStoreTests {
     let waiting = try store.add(draft("d") { $0.waitingReason = "返事" })
     var doneWithCondition = conditionUpdate(.set(request()))
     doneWithCondition.status = .done
-    assertInvalid({ _ = try store.update(waiting.id, doneWithCondition) })
+    XCTAssertThrowsError(try store.update(waiting.id, doneWithCondition)) {
+      XCTAssertEqual(
+        $0 as? TaskStoreError, .invalid("a done task cannot have a waiting condition"),
+        "理由は「完了と同時」（「待っていない」ではない）")
+    }
     XCTAssertEqual(
       store.tasks.first { $0.id == waiting.id }, waiting, "拒否された変更はタスクを変えない")
   }
