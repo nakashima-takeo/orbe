@@ -25,11 +25,10 @@ enum TabCloseOrigin {
   }
 }
 
-/// 1 タブと、その居場所（workspace / タブの index）。
+/// 1 タブと、その居場所の workspace の index。
 /// `SessionStore.allTabs()` の走査結果と `restoreDormantTab` の戻り値が共有する。
 struct TabRef {
   let workspaceIndex: Int
-  let tabIndex: Int
   let tab: TerminalTab
 }
 
@@ -163,7 +162,7 @@ final class SessionStore {
   /// 休眠タブは `currentPwd` を持たないが `initialCwd`（復元値）は持つので、cwd の話には必ず含める。
   func allTabs() -> [TabRef] {
     workspaces.enumerated().flatMap { wi, ws in
-      ws.tabs.enumerated().map { ti, tab in TabRef(workspaceIndex: wi, tabIndex: ti, tab: tab) }
+      ws.tabs.map { TabRef(workspaceIndex: wi, tab: $0) }
     }
   }
 

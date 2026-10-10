@@ -52,10 +52,10 @@ extension WindowController {
   /// 選択・mount はしない（起床は既存の mount 規律に従う）。
   func restoreDormantTab(_ state: TabState, intoWorkspaceAt index: Int) -> TabRef {
     let tab = makeTab(from: state)
-    let tabIndex = store.insertTabUnselected(tab, intoWorkspaceAt: index)
+    _ = store.insertTabUnselected(tab, intoWorkspaceAt: index)
     refreshChrome()
     scheduleSave()
-    return TabRef(workspaceIndex: index, tabIndex: tabIndex, tab: tab)
+    return TabRef(workspaceIndex: index, tab: tab)
   }
 
   // ユーザーのリサイズ確定で意図サイズを記憶し、保存を予約する（高頻度なドラッグはデバウンスでまとまる）。
