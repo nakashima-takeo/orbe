@@ -58,21 +58,20 @@ final class AgentLauncherTests: OrbeTestCase {
     XCTAssertEqual(runCount, 2, "同じ中身の起動では走らない")
   }
 
-  /// 隔離起動は実体化だけをして、CLI への登録（install.sh）も、そのためのオンボーディングもしない。
+  /// 隔離起動（`ORBE_STATE_DIR` を持つ Orbe）は既定で、実体化も CLI への登録（install.sh）も、そのための
+  /// オンボーディングもしない。
   ///
   /// 壊れると何が起きるか: 検証用に起こした Orbe が利用者の claude / codex / agy の登録先を自分の一時フォルダへ向け替え、
   /// codex / agy のコピーを検証中の中身で上書きする。片付けた後には利用者の agent から状態追跡と MCP が消える。
-  func testIsolatedLauncherMaterializesButNeverRegisters() throws {
+  func testIsolatedLauncherNeitherMaterializesNorRegisters() throws {
     let launcher = AgentLauncher()
-    launcher.registersPlugin = false
+    XCTAssertFalse(launcher.registersPlugin, "ORBE_STATE_DIR を持つ Orbe は既定で登録しない")
 
     launcher.syncAgentPluginOnLaunch()
     RunLoop.main.run(until: Date(timeIntervalSinceNow: 1))
 
-    let materialized = try XCTUnwrap(AgentPluginInstaller.stablePluginDir)
-    XCTAssertTrue(
-      FileManager.default.fileExists(atPath: materialized.appendingPathComponent("install.sh").path)
-    )
+    let place = try XCTUnwrap(AgentPluginInstaller.stablePluginDir)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: place.path), "実体化しない")
     XCTAssertEqual(runCount, 0, "中身の指紋が記録と違っても登録しない")
     XCTAssertNil(AgentPluginInstaller.registeredDigest)
 
