@@ -39,7 +39,7 @@ hook からシムを呼ぶ経路も CLI ごとに違う: claude / codex はそ�
 
 - **claude**: `.claude-plugin/plugin.json` の `mcpServers`。プラグインルート変数を展開した絶対パスで呼ぶ（相対パスでは起動に失敗する）。
 - **codex**: `.codex-plugin/plugin.json` の `mcpServers`。cwd をプラグインルートにした相対パスで呼ぶ。codex は MCP サーバーへ親の環境のうち既定の数個（`HOME`・`PATH` など）と名指しされた変数しか渡さないので、シムとブリッジが読む変数（`ORBE_MCP_BIN`・`ORBE_BUNDLE_ID`・`ORBE_TAB`・`ORBE_SOCK`）を `env_vars` で名指しして通す。
-- **agy**: プラグインのルートの `mcp_config.json`。相対パスで呼ぶ。
+- **agy**: プラグインのルートの `mcp_config.json`。相対パスで呼ぶ——agy は MCP サーバーをステージ済みプラグインルートを cwd にして起こし、相対の command をそこから解く。親の環境（`ORBE_MCP_BIN` など）はそのまま MCP サーバーへ渡る。Orbe の外では空サーバーが接続できたサーバーとして扱われ、警告は出ない（HOME を一時ディレクトリに差し替えた隔離環境の agy の print モードで確かめた。対話画面の表示は見ていない）。
 
 プラグインのルートに `.mcp.json`（claude も codex も既定の置き場として読む）は置かない。
 
