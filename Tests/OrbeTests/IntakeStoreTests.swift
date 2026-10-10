@@ -279,7 +279,7 @@ final class IntakeStoreTests: OrbeTestCase {
       decisions: [.propose(itemId: "a", title: "レビューする", due: TaskItem.DueDate("2026-10-12"))])
 
     let home = UUID()
-    let task = try store.accept(store.proposals[0].id, into: tasks, workspace: home)
+    let task = try store.accept(store.proposals[0].id, into: tasks, workspace: home, at: .end)
 
     XCTAssertEqual(tasks.tasks.last, task)
     XCTAssertEqual(task.title, "レビューする")
@@ -292,7 +292,7 @@ final class IntakeStoreTests: OrbeTestCase {
     XCTAssertThrowsError(try store.dismiss(id), "さばいた提案はもうさばけない") {
       XCTAssertEqual($0 as? IntakeError, .proposalNotOpen(id), "値の不正とは分けて断る")
     }
-    XCTAssertThrowsError(try store.accept(id, into: tasks, workspace: home)) {
+    XCTAssertThrowsError(try store.accept(id, into: tasks, workspace: home, at: .end)) {
       XCTAssertEqual($0 as? IntakeError, .proposalNotOpen(id))
     }
     XCTAssertEqual(tasks.tasks.count, 1, "断った「タスクにする」はタスクを足さない")

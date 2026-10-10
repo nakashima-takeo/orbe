@@ -234,7 +234,8 @@ enum TaskPaletteIntakeError: Equatable {
     guard let proposal = selectedProposal else { return }
     error = nil
     do throws(IntakeError) {
-      _ = try store.accept(proposal.id, into: tasks, workspace: home)
+      _ = try store.accept(
+        proposal.id, into: tasks, workspace: home, at: TaskPaletteModel.addPosition)
     } catch {
       if case .invalid = error { self.error = .accept }
     }

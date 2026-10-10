@@ -33,7 +33,7 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.intake.proposalList.selectedID, 2)
 
     press(Key.enter, "\r", to: window)
-    XCTAssertEqual(model.store.tasks.last?.title, "オンボーディングの環境構築手順を見る")
+    XCTAssertTrue(model.store.tasks.contains { $0.title == "オンボーディングの環境構築手順を見る" })
   }
 
   /// 入力を行頭まで消した ⌘⌫ を押し続けても、空になった後のリピートでは提案を捨てない（捨てた提案は戻せない）。

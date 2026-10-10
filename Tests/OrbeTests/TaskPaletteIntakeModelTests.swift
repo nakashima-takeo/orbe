@@ -70,14 +70,19 @@ final class TaskPaletteIntakeModelTests: OrbeTestCase {
 
   // MARK: - さばく
 
-  func testEnterMakesATodoTaskOnHomeAndSelectsTheSamePosition() throws {
+  /// ⌘⇧X で人が受けて足すタスクなので、入力欄から足すのと同じく、その優先度の未着手の先頭に入る。
+  func testEnterMakesATodoTaskOnHomeAtTheHeadOfMediumAndSelectsTheSamePosition() throws {
     let palette = palette()
     let tasks = palette.store.tasks.count
 
     palette.submit()
 
-    let task = try XCTUnwrap(palette.store.tasks.last)
+    let task = try XCTUnwrap(palette.store.tasks.first { $0.title == "見積もりを山田さんに送る" })
     XCTAssertEqual(palette.store.tasks.count, tasks + 1)
+    XCTAssertEqual(
+      palette.store.tasks.firstIndex { $0.status == .todo && $0.priority != .high }.map {
+        palette.store.tasks[$0].id
+      }, task.id, "未着手の中の先頭")
     XCTAssertEqual(task.title, "見積もりを山田さんに送る")
     XCTAssertEqual(task.status, .todo)
     XCTAssertEqual(task.due, TaskItem.DueDate("2025-10-10"))
