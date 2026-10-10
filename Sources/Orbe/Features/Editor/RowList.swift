@@ -55,9 +55,12 @@ struct RowListKey: Equatable {
 }
 
 /// 行の列のスクロールの器。持ち主（pane）が持ち続け、載せる SwiftUI が隠れている間も捨てない——出し直すたびに行の
-/// view を作り直さない。読む値（行の版・選択・焦点の要求・絵文字の字体）は `update` で受ける。
+/// view を作り直さない。読む値（行の版・選択・焦点の要求・絵文字の字体）は `update` で受ける。OS のスクロールバーは
+/// 持たず、サイドバーの一覧のつまみ（`RowListScrollbar`）を子として重ねる。
 final class RowList<Source: RowListSource>: NSScrollView {
   let list: RowListView<Source>
+  let scrollbar = RowListScrollbar()
+  private var hoverArea: NSTrackingArea?
   private var rowsVersion: Int?
   /// 最後に写した選択。選択が変わったときだけ、その行を見せる（行の番号がずれただけ・列が出ただけでは送らない）。
   private var selection: Source.Selection?
@@ -71,10 +74,19 @@ final class RowList<Source: RowListSource>: NSScrollView {
     documentView = list
     drawsBackground = false
     borderType = .noBorder
-    hasVerticalScroller = true
+    hasVerticalScroller = false
     hasHorizontalScroller = false
-    autohidesScrollers = true
     automaticallyAdjustsContentInsets = false
+    addSubview(scrollbar)
+    scrollbar.onScroll = { [weak self] position in self?.list.scroll(NSPoint(x: 0, y: position)) }
+    let hoverArea = NSTrackingArea(
+      rect: .zero,
+      options: [
+        .mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect, .enabledDuringMouseDrag,
+      ],
+      owner: self)
+    addTrackingArea(hoverArea)
+    self.hoverArea = hoverArea
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
@@ -108,6 +120,7 @@ final class RowList<Source: RowListSource>: NSScrollView {
     super.tile()
     list.fitWidth(to: contentSize.width)
     list.layoutRows()
+    scrollbar.reflect(metrics)
     guard contentSize.height > 0, let pending = pendingReveal else { return }
     pendingReveal = nil
     if let row = list.source.row(of: pending) { list.scrollRowToVisible(row) }
@@ -116,6 +129,28 @@ final class RowList<Source: RowListSource>: NSScrollView {
   override func reflectScrolledClipView(_ clipView: NSClipView) {
     super.reflectScrolledClipView(clipView)
     list.layoutRows()
+    scrollbar.reflect(metrics)
+  }
+
+  private var metrics: SidebarScrollbar.Metrics {
+    SidebarScrollbar.Metrics(
+      position: contentView.bounds.minY, total: list.frame.height, visible: contentSize.height)
+  }
+
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    // 隠れる間にポインタが出ても出た通知は来ないので、載せ直すたびに外に居るところから始める。
+    scrollbar.hover(false)
+  }
+
+  override func mouseEntered(with event: NSEvent) {
+    guard event.trackingArea === hoverArea else { return super.mouseEntered(with: event) }
+    scrollbar.hover(true)
+  }
+
+  override func mouseExited(with event: NSEvent) {
+    guard event.trackingArea === hoverArea else { return super.mouseExited(with: event) }
+    scrollbar.hover(false)
   }
 }
 

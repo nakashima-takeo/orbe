@@ -221,6 +221,46 @@ final class RowListTests: OrbeTestCase {
     XCTAssertEqual(hosted.source.clicks, ["click 2", "double 0"])
   }
 
+  // MARK: - つまみ
+
+  /// OS のスクロールバーは持たず、右端につまみを重ねる。つまみは位置が変わると見え、当たりは見えているつまみだけ（消えて
+  /// いるつまみ・帯の他は行へ通る）。掴んで引くと移動ぶんだけ文書が送られ、つまみの上のホイールは列へ届く。
+  func testTheThumbShowsOnScrollHitsOnlyItselfAndDragsTheDocument() throws {
+    let hosted = host()
+    let rows = hosted.rows
+    let thumb = rows.scrollbar
+    XCTAssertFalse(rows.hasVerticalScroller)
+    XCTAssertEqual(
+      thumb.frame, NSRect(x: 190, y: 0, width: 10, height: 20), "右端の上端・幅 10・最小の長さ 20")
+    // hitTest の点は窓（下が原点）の座標。上端の 20pt は y 80〜100。
+    XCTAssertFalse(rows.hitTest(NSPoint(x: 195, y: 90)) === thumb, "消えているつまみは当たらない")
+
+    scroll(hosted, by: 1)
+    XCTAssertTrue(rows.hitTest(NSPoint(x: 195, y: 90)) === thumb, "位置が変わると見えて当たる")
+    XCTAssertFalse(rows.hitTest(NSPoint(x: 195, y: 10)) === thumb, "帯のつまみの外は行へ通る")
+
+    func drag(_ type: NSEvent.EventType, y: CGFloat) -> NSEvent {
+      NSEvent.mouseEvent(
+        with: type, location: NSPoint(x: 195, y: y), modifierFlags: [], timestamp: 0,
+        windowNumber: hosted.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
+        pressure: 1)!
+    }
+    thumb.mouseDown(with: drag(.leftMouseDown, y: 90))
+    thumb.mouseDragged(with: drag(.leftMouseDragged, y: 82))
+    // 8pt 引く → 位置は 8 ×（全体 − 見えている長さ）/（トラック − つまみ）。
+    XCTAssertEqual(rows.contentView.bounds.minY, 8 * 3900 / 80, accuracy: 0.5)
+    thumb.mouseUp(with: drag(.leftMouseUp, y: 82))
+
+    let top = rows.contentView.bounds.minY
+    let wheel = try XCTUnwrap(
+      CGEvent(
+        scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: -3, wheel2: 0,
+        wheel3: 0))
+    thumb.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: wheel)))
+    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+    XCTAssertGreaterThan(rows.contentView.bounds.minY, top, "つまみの上のホイールで列が送られる")
+  }
+
   // MARK: - 送り
 
   /// 大きさが決まる前（SwiftUI の最初の更新）に変わった選択は、大きさが付いてから見せる——大きさの無いまま送った位置が
