@@ -1,40 +1,49 @@
 import AppKit
 
-/// 取っ手: 片面が隠れているときは隠れた側の縁に重なる引き手、分割中は継ぎ目（面と面の間そのもの。縦中央に 3 つの点）
-/// を描く。形と frame は器が決める。引き手の重なった範囲の押す・引く・ポインタの形は取っ手が持ち、スクロールは器を
-/// 通して下の面へ渡す。ホバーは乗っている間と、引いている間に効く。
+/// 取っ手: 引き手と継ぎ目を 1 つの物として描く。器が毎フレーム、形の進み具合 `t`（0 = 縁の引き手、1 = 全高の継ぎ目）と
+/// 左右（`edgeOnLeft`）、ホバーの進み `hover`（0→1）を書き、取っ手はその値だけから描く——縁から離れるほど高さが伸び、
+/// 塗りが継ぎ目の地へ移り、枠と角が消え、グリフが縦棒に替わる。層のアニメーションは使わない（形とホバーは器の時計が進める）。
 ///
-/// 押せるのは引き手と、間の 3 つの点の周りだけ。そこで押せばすぐ「掴んだ」を伝え、動かさずに離せば「押した」を伝える。
-/// 間の他の部分は閾値を越えて動くまで器に何も伝えない——押して離しても配置も焦点も変わらない。
+/// 全体が押せる。押せばすぐ「掴んだ」を伝え、閾値を越えて動けば「引いている」、動かさずに離せば「押した」、引いた末に
+/// 離せば「離した」を伝える。器が掴みを打ち切ったら（`cancelGrab`）、その後の dragged / up は無視する。引き手が面に
+/// 重なった範囲のポインタの形は取っ手が持ち、スクロールは器を通して下の面へ渡す。
 final class FaceHandleView: NSView {
-  var look: FaceGeometry.HandleLook = .notch(.editor) {
+  /// 形の進み具合と左右。
+  var shape: (edgeOnLeft: Bool, t: CGFloat) = (true, 0) {
     didSet {
-      guard look != oldValue else { return }
-      hovering = pointerIsOver || grab?.moved == true
-      needsDisplay = true
-      updateShadowShape()
-      setShadow(visible: showsShadow, duration: 0)
-      animateOpacity(from: 0, to: restAlpha, duration: Theme.Motion.faceHandleLook)
-      refreshPointer()
+      guard shape != oldValue else { return }
+      redraw()
     }
+  }
+  /// ホバーの進み（0 = 普段、1 = ホバー）。
+  var hover: CGFloat = 0 {
+    didSet {
+      guard hover != oldValue else { return }
+      redraw()
+    }
+  }
+  /// 継ぎ目の地の veil。設定パレットで不透明度を変えた直後も追従する（観測して再描画）。
+  var translucency: ChromeTranslucency? {
+    didSet { observeTranslucency() }
   }
   /// 掴んだ。引数は掴んだ点の x（器の座標）。
   var onGrab: ((CGFloat) -> Void)?
-  /// 引いている。引数はポインタの x（器の座標）。
-  var onDrag: ((CGFloat) -> Void)?
+  /// 引いている。引数はポインタの x（器の座標）とイベントの時刻。
+  var onDrag: ((CGFloat, CFTimeInterval) -> Void)?
   /// 押した（動かさずに離した）。
   var onClick: (() -> Void)?
-  /// 引いた末に離した。
-  var onRelease: (() -> Void)?
+  /// 引いた末に離した。引数は離した点の x（器の座標）とイベントの時刻。
+  var onRelease: ((CGFloat, CFTimeInterval) -> Void)?
+  /// ポインタが取っ手の上にあるかが変わった。
+  var onPointerOver: ((Bool) -> Void)?
   var onScroll: ((NSEvent) -> Void)?
 
   private struct Grab {
     let x0: CGFloat
-    let pressable: Bool
     var moved = false
   }
   private var grab: Grab?
-  private var hovering = false
+  private(set) var isPointerOver = false
 
   override init(frame: NSRect) {
     super.init(frame: frame)
@@ -42,33 +51,21 @@ final class FaceHandleView: NSView {
     layerContentsRedrawPolicy = .onSetNeedsDisplay
     layer?.shadowRadius = Theme.Layout.faceNotchShadowRadius
     layer?.shadowOpacity = 0
-    alphaValue = restAlpha
     addTrackingArea(
       NSTrackingArea(
         rect: .zero,
         options: [.cursorUpdate, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
         owner: self))
+    redraw()
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
   override var isFlipped: Bool { true }
 
-  private var isNotch: Bool {
-    if case .notch = look { return true }
-    return false
-  }
+  /// 縁にいて、引き手として止まっているか（影と指のカーソルはこのときだけ）。
+  private var resting: Bool { shape.t < 0.02 }
 
-  private var restAlpha: CGFloat {
-    isNotch && !hovering ? Theme.Opacity.faceNotchRest : 1
-  }
-
-  private var showsShadow: Bool { isNotch && hovering }
-
-  /// 継ぎ目のうち押せる範囲（縦中央、3 つの点の周り）。
-  private var pressRect: NSRect {
-    let height = Theme.Layout.faceSeamPress
-    return NSRect(x: 0, y: bounds.midY - height / 2, width: bounds.width, height: height)
-  }
+  private var morph: CGFloat { min(max(shape.t, 0), 1) }
 
   override func setFrameOrigin(_ newOrigin: NSPoint) {
     let moved = newOrigin != frame.origin
@@ -80,15 +77,55 @@ final class FaceHandleView: NSView {
     let resized = newSize != frame.size
     super.setFrameSize(newSize)
     guard resized else { return }
-    needsDisplay = true
-    updateShadowShape()
+    redraw()
     refreshPointer()
   }
 
   override func viewDidChangeEffectiveAppearance() {
     super.viewDidChangeEffectiveAppearance()
+    redraw()
+  }
+
+  private func observeTranslucency() {
+    guard let translucency else { return }
+    withObservationTracking {
+      _ = translucency.effectiveOpacity
+    } onChange: { [weak self] in
+      DispatchQueue.main.async {
+        self?.needsDisplay = true
+        self?.observeTranslucency()
+      }
+    }
+  }
+
+  /// 形とホバーから、層の不透明度と影を書き、描き直しを求める。
+  private func redraw() {
+    let ee = morph
+    let idle = Theme.Opacity.faceNotchRest + (1 - Theme.Opacity.faceNotchRest) * hover
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    alphaValue = idle + (1 - idle) * ee
+    updateShadow()
+    CATransaction.commit()
     needsDisplay = true
-    updateShadowShape()
+  }
+
+  /// 影は取っ手の形の外へ落ちるので、view の bounds で切れない層の影で描く。縁にいるときだけ、強さはホバーの進み。
+  private func updateShadow() {
+    guard let layer else { return }
+    guard resting else {
+      layer.shadowOpacity = 0
+      return
+    }
+    let radius = Theme.Radius.faceNotch * (1 - morph)
+    layer.shadowPath =
+      Self.outline(bounds, radius: radius, edgeOnLeft: shape.edgeOnLeft, closed: true).cgPath
+    let offset = Theme.Layout.faceNotchShadowOffset
+    layer.shadowOffset = CGSize(width: shape.edgeOnLeft ? offset : -offset, height: 0)
+    effectiveAppearance.performAsCurrentDrawingAppearance {
+      layer.shadowColor = Theme.Color.faceNotchShadow.cgColor
+    }
+    layer.shadowOpacity = Float(hover)
   }
 
   // MARK: - ポインタ
@@ -100,8 +137,8 @@ final class FaceHandleView: NSView {
   }
 
   private var cursor: NSCursor {
-    if grab?.moved == true { return .resizeLeftRight }
-    return isNotch ? .pointingHand : .resizeLeftRight
+    if grab?.moved == true || !resting { return .resizeLeftRight }
+    return .pointingHand
   }
 
   override func cursorUpdate(with event: NSEvent) {
@@ -109,174 +146,127 @@ final class FaceHandleView: NSView {
   }
 
   override func mouseEntered(with event: NSEvent) {
-    setHovering(true)
+    setPointerOver(true)
   }
 
   override func mouseExited(with event: NSEvent) {
-    setHovering(grab?.moved == true)
+    setPointerOver(false)
   }
 
-  /// 見え方・frame・掴みの終わりのたび、ホバーとカーソルを取り直す——ポインタの下で形や位置が変わっても
+  /// frame・掴みの終わりのたび、ポインタが上にあるかとカーソルを取り直す——ポインタの下で位置や形が変わっても
   /// enter や cursorUpdate は来ない。
   private func refreshPointer() {
     let over = pointerIsOver
-    setHovering(over || grab?.moved == true)
+    setPointerOver(over)
     if over || grab?.moved == true { cursor.set() }
   }
 
-  private func setHovering(_ value: Bool) {
-    guard value != hovering else { return }
-    hovering = value
-    let duration = reduceMotion ? 0 : Theme.Motion.quick
-    if duration > 0 {
-      let fade = CATransition()
-      fade.type = .fade
-      fade.duration = duration
-      layer?.add(fade, forKey: "hover")
-    }
-    needsDisplay = true
-    setShadow(visible: showsShadow, duration: duration)
-    animateOpacity(from: nil, to: restAlpha, duration: duration)
-  }
-
-  private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
-
-  // MARK: - 層の不透明度と影
-
-  /// 不透明度を `to` にする。`from` が nil なら今見えている値から動かす。
-  private func animateOpacity(from: CGFloat?, to: CGFloat, duration: Double) {
-    let shown = CGFloat(layer?.presentation()?.opacity ?? Float(alphaValue))
-    alphaValue = to
-    guard let layer, duration > 0, !reduceMotion else {
-      layer?.removeAnimation(forKey: "opacity")
-      return
-    }
-    let animation = CABasicAnimation(keyPath: "opacity")
-    animation.fromValue = from ?? shown
-    animation.toValue = to
-    animation.duration = duration
-    animation.timingFunction = CAMediaTimingFunction(name: .default)
-    layer.add(animation, forKey: "opacity")
-  }
-
-  private func setShadow(visible: Bool, duration: Double) {
-    guard let layer else { return }
-    let shown = layer.presentation()?.shadowOpacity ?? layer.shadowOpacity
-    layer.shadowOpacity = visible ? 1 : 0
-    guard duration > 0 else {
-      layer.removeAnimation(forKey: "shadow")
-      return
-    }
-    let animation = CABasicAnimation(keyPath: "shadowOpacity")
-    animation.fromValue = shown
-    animation.toValue = layer.shadowOpacity
-    animation.duration = duration
-    layer.add(animation, forKey: "shadow")
-  }
-
-  /// 影は引き手の形の外へ落ちるので、view の bounds で切れない層の影で描く。
-  private func updateShadowShape() {
-    guard let layer else { return }
-    guard case .notch(let face) = look else {
-      layer.shadowPath = nil
-      return
-    }
-    let edgeOnLeft = face == .editor
-    layer.shadowPath =
-      Self.notchOutline(
-        bounds, radius: Theme.Radius.faceNotch, edgeOnLeft: edgeOnLeft, closed: true
-      )
-      .cgPath
-    let offset = Theme.Layout.faceNotchShadowOffset
-    layer.shadowOffset = CGSize(width: edgeOnLeft ? offset : -offset, height: 0)
-    effectiveAppearance.performAsCurrentDrawingAppearance {
-      layer.shadowColor = Theme.Color.faceNotchShadow.cgColor
-    }
+  private func setPointerOver(_ value: Bool) {
+    guard value != isPointerOver else { return }
+    isPointerOver = value
+    onPointerOver?(value)
   }
 
   // MARK: - 描画
 
   override func draw(_ dirtyRect: NSRect) {
-    switch look {
-    case .notch(let face): drawNotch(face)
-    case .seam: drawSeam()
+    let ee = morph
+    let left = shape.edgeOnLeft
+    let key = left ? Theme.Color.faceEditor : Theme.Color.faceTerminal
+    let notchFill = key.withAlphaComponent(Theme.Opacity.faceNotchFill)
+    let hoverFill =
+      resting
+      ? (left ? Theme.Color.faceNotchEditorHover : Theme.Color.faceNotchTerminalHover)
+      : notchFill
+    let ground = SeamGroundView.ground(veil: translucency?.effectiveOpacity ?? 1)
+    let radius = Theme.Radius.faceNotch * (1 - ee)
+    Self.mix(Self.mix(notchFill, hoverFill, hover), ground, ee).setFill()
+    Self.outline(bounds, radius: radius, edgeOnLeft: left, closed: true).fill()
+
+    let borderAlpha =
+      (Theme.Opacity.faceNotchBorder
+        + (Theme.Opacity.faceNotchBorderHover - Theme.Opacity.faceNotchBorder) * hover) * (1 - ee)
+    if borderAlpha > 0 {
+      // 縁側の辺には枠を引かないので、縁側は内側へ寄せない。
+      let inset = Theme.Stroke.hairline / 2
+      var rim = bounds.insetBy(dx: 0, dy: inset)
+      rim.size.width -= inset
+      if !left { rim.origin.x += inset }
+      let border = Self.outline(
+        rim, radius: max(0, radius - inset), edgeOnLeft: left, closed: false)
+      border.lineWidth = Theme.Stroke.hairline
+      key.withAlphaComponent(borderAlpha).setStroke()
+      border.stroke()
+    }
+
+    let glyphAlpha = 1 - min(max(shape.t / 0.5, 0), 1)
+    if glyphAlpha > 0 {
+      let bright = left ? Theme.Color.faceEditorBright : Theme.Color.faceTerminalBright
+      drawGlyph(
+        editor: left, color: Self.mix(key, bright, hover).withAlphaComponent(glyphAlpha))
+    }
+
+    let barAlpha = min(max((shape.t - 0.5) / 0.5, 0), 1)
+    if barAlpha > 0 {
+      let size = Theme.Layout.faceSeamBar
+      let bar = NSRect(
+        x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2, width: size.width,
+        height: size.height)
+      Theme.Color.faceTerminal.withAlphaComponent(Theme.Opacity.faceSeamBar * barAlpha).setFill()
+      NSBezierPath(
+        roundedRect: bar, xRadius: Theme.Radius.faceSeamBar, yRadius: Theme.Radius.faceSeamBar
+      ).fill()
     }
   }
 
-  private func drawNotch(_ face: Face) {
-    let editor = face == .editor
-    let key = editor ? Theme.Color.faceEditor : Theme.Color.faceTerminal
-    let radius = Theme.Radius.faceNotch
-    let fill =
-      hovering
-      ? (editor ? Theme.Color.faceNotchEditorHover : Theme.Color.faceNotchTerminalHover)
-      : key.withAlphaComponent(Theme.Opacity.faceNotchFill)
-    fill.setFill()
-    Self.notchOutline(bounds, radius: radius, edgeOnLeft: editor, closed: true).fill()
-    // 縁側の辺には枠を引かないので、縁側は内側へ寄せない。
-    let inset = Theme.Stroke.hairline / 2
-    var rim = bounds.insetBy(dx: 0, dy: inset)
-    rim.size.width -= inset
-    if !editor { rim.origin.x += inset }
-    let border = Self.notchOutline(rim, radius: radius - inset, edgeOnLeft: editor, closed: false)
-    border.lineWidth = Theme.Stroke.hairline
-    key.withAlphaComponent(
-      hovering ? Theme.Opacity.faceNotchBorderHover : Theme.Opacity.faceNotchBorder
-    ).setStroke()
-    border.stroke()
-    let glyph =
-      hovering ? (editor ? Theme.Color.faceEditorBright : Theme.Color.faceTerminalBright) : key
-    drawGlyph(for: face, color: glyph)
+  /// 2 色を RGBA（sRGB・非事前乗算）で線形補間する。
+  private static func mix(_ a: NSColor, _ b: NSColor, _ t: CGFloat) -> NSColor {
+    guard t > 0 else { return a }
+    guard t < 1 else { return b }
+    let ca = a.usingColorSpace(.sRGB) ?? a
+    let cb = b.usingColorSpace(.sRGB) ?? b
+    func lerp(_ x: CGFloat, _ y: CGFloat) -> CGFloat { x + (y - x) * t }
+    return NSColor(
+      srgbRed: lerp(ca.redComponent, cb.redComponent),
+      green: lerp(ca.greenComponent, cb.greenComponent),
+      blue: lerp(ca.blueComponent, cb.blueComponent),
+      alpha: lerp(ca.alphaComponent, cb.alphaComponent))
   }
 
-  private func drawSeam() {
-    if hovering {
-      Theme.Color.surface1.setFill()
-      bounds.fill(using: .sourceOver)
-    }
-    let size = Theme.Layout.faceSeamDot
-    let pitch = size + Theme.Layout.faceSeamDotSpacing
-    let radius = Theme.Radius.faceSeamDot
-    let color =
-      hovering
-      ? Theme.Color.faceSeamDotHover
-      : Theme.Color.faceTerminal.withAlphaComponent(Theme.Opacity.faceSeamDot)
-    color.setFill()
-    for step in -1...1 {
-      let dot = NSRect(
-        x: bounds.midX - size / 2, y: bounds.midY - size / 2 + CGFloat(step) * pitch,
-        width: size, height: size)
-      NSBezierPath(roundedRect: dot, xRadius: radius, yRadius: radius).fill()
-    }
-  }
-
-  /// 縁側の 2 角は直角、反対側の 2 角は丸めた引き手の輪郭。`closed` でなければ縁側の辺を引かない。
-  private static func notchOutline(
+  /// 縁側の 2 角は直角、反対側の 2 角は丸めた輪郭。`closed` でなければ縁側の辺を引かない。
+  private static func outline(
     _ r: NSRect, radius: CGFloat, edgeOnLeft: Bool, closed: Bool
   ) -> NSBezierPath {
     let edgeX = edgeOnLeft ? r.minX : r.maxX
     let farX = edgeOnLeft ? r.maxX : r.minX
     let p = NSBezierPath()
     p.move(to: NSPoint(x: edgeX, y: r.minY))
-    p.appendArc(from: NSPoint(x: farX, y: r.minY), to: NSPoint(x: farX, y: r.maxY), radius: radius)
-    p.appendArc(from: NSPoint(x: farX, y: r.maxY), to: NSPoint(x: edgeX, y: r.maxY), radius: radius)
+    if radius > 0 {
+      p.appendArc(
+        from: NSPoint(x: farX, y: r.minY), to: NSPoint(x: farX, y: r.maxY), radius: radius)
+      p.appendArc(
+        from: NSPoint(x: farX, y: r.maxY), to: NSPoint(x: edgeX, y: r.maxY), radius: radius)
+    } else {
+      p.line(to: NSPoint(x: farX, y: r.minY))
+      p.line(to: NSPoint(x: farX, y: r.maxY))
+    }
     p.line(to: NSPoint(x: edgeX, y: r.maxY))
     if closed { p.close() }
     return p
   }
 
   /// 見本 `parts.tsx` のグリフ（viewBox 18・stroke 1.8）を `faceNotchGlyph` に写す。
-  private func drawGlyph(for face: Face, color: NSColor) {
+  private func drawGlyph(editor: Bool, color: NSColor) {
     let size = Theme.Layout.faceNotchGlyph
     let scale = size / 18
     let origin = NSPoint(x: bounds.midX - size / 2, y: bounds.midY - size / 2)
     var scaled = AffineTransform(scale: scale)
     scaled.append(AffineTransform(translationByX: origin.x, byY: origin.y))
     let copy = NSBezierPath()
-    copy.append(face == .editor ? Self.fileGlyph : Self.terminalGlyph)
+    copy.append(editor ? Self.fileGlyph : Self.terminalGlyph)
     copy.transform(using: scaled)
     copy.lineWidth = 1.8 * scale
-    if face == .terminal {
+    if !editor {
       copy.lineCapStyle = .round
       copy.lineJoinStyle = .round
     }
@@ -318,15 +308,15 @@ final class FaceHandleView: NSView {
     return superview.convert(event.locationInWindow, from: nil).x
   }
 
-  private func isPressable(_ event: NSEvent) -> Bool {
-    isNotch || pressRect.contains(convert(event.locationInWindow, from: nil))
+  /// 器が掴みを打ち切った（外から配置が来た）。この後の dragged / up は無視する。
+  func cancelGrab() {
+    grab = nil
   }
 
   override func mouseDown(with event: NSEvent) {
     let x0 = x(in: event)
-    let pressable = isPressable(event)
-    grab = Grab(x0: x0, pressable: pressable)
-    if pressable { onGrab?(x0) }
+    grab = Grab(x0: x0)
+    onGrab?(x0)
   }
 
   override func mouseDragged(with event: NSEvent) {
@@ -336,18 +326,17 @@ final class FaceHandleView: NSView {
       guard abs(x - g.x0) >= FaceGeometry.dragThreshold else { return }
       g.moved = true
       grab = g
-      if !g.pressable { onGrab?(g.x0) }
     }
     NSCursor.resizeLeftRight.set()
-    onDrag?(x)
+    onDrag?(x, event.timestamp)
   }
 
   override func mouseUp(with event: NSEvent) {
     guard let g = grab else { return }
     grab = nil
     if g.moved {
-      onRelease?()
-    } else if g.pressable {
+      onRelease?(x(in: event), event.timestamp)
+    } else {
       onClick?()
     }
     refreshPointer()

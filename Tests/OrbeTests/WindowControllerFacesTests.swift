@@ -96,8 +96,8 @@ final class WindowControllerFacesTests: OrbeTestCase {
 
   // MARK: - 引き手・継ぎ目
 
-  /// 端末だけのときに左縁の引き手を掴んで引くと、間がポインタの下に付いて面が追従する（間の中央は掴んだ点の
-  /// ずれを間の半幅に収めて保つ）。タブの配置は離すまで書き換えず、離したときに 1 回だけ確定する。
+  /// 端末だけのときに左縁の引き手を掴んで引くと、取っ手はポインタに 1:1 で付き、面が追従する。タブの配置は離すまで
+  /// 書き換えず、離したときに 1 回だけ確定する（ゆっくり離せばその位置で分割として残る）。
   func testNotchDragFollowsThePointerAndCommitsOnRelease() throws {
     let wc = WindowController()
     let tab = try XCTUnwrap(wc.activeTab)
@@ -106,17 +106,16 @@ final class WindowControllerFacesTests: OrbeTestCase {
     tab.onFacesChange = { changes += 1 }
     let handle = tab.view.handle
     let grab = handle.centerInWindow
-    let offset = min(grab.x, Theme.Layout.faceSplitGap / 2)
+    let offset = grab.x - handle.frame.minX
     let y = grab.y
 
     handle.mouseDown(with: .mouse(.leftMouseDown, at: grab, in: wc.window))
     handle.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 300, y: y), in: wc.window))
     handle.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 400, y: y), in: wc.window))
 
-    XCTAssertEqual(handle.frame.midX, 400 - offset, "間の中央は掴んだ点のずれを保ってポインタに追従する")
-    XCTAssertTrue(
-      handle.frame.minX <= 400 && 400 <= handle.frame.maxX, "引き手から引いても間はポインタの下")
-    let ratio = try XCTUnwrap(FaceGeometry.ratio(seamX: 400 - offset, width: facesWidth(wc)))
+    XCTAssertEqual(handle.frame.minX, 400 - offset, "取っ手は掴んだ点のずれを保ってポインタに追従する")
+    XCTAssertTrue(handle.frame.minX <= 400 && 400 <= handle.frame.maxX, "取っ手はポインタの下")
+    let ratio = try XCTUnwrap(FaceGeometry.ratio(hx: 400 - offset, width: facesWidth(wc)))
     XCTAssertFalse(tab.view.editor.isHiddenOrHasHiddenAncestor, "引き出したエディター面は見えている")
     XCTAssertEqual(tab.faces, .terminalOnly, "離すまでタブの配置は変わらない")
     XCTAssertEqual(changes, 0)
@@ -127,8 +126,8 @@ final class WindowControllerFacesTests: OrbeTestCase {
     XCTAssertEqual(changes, 1, "確定は 1 回")
   }
 
-  /// 閉じる境より狭い面を残したまま離すと、その面が閉じて隣が全面になる。閉じたのが焦点の面なら
-  /// 焦点と first responder は残る面へ移る。
+  /// 端の近く（勢いで滑った先が端から 24 以内）で離すと、その面が閉じて隣が全面になる。閉じたのが焦点の面なら
+  /// 焦点と first responder は残る面へ移る。動いている途中で掴み直しても同じ。
   func testHandleReleaseNearTheEdgeClosesTheFace() throws {
     let wc = WindowController()
     let tab = try XCTUnwrap(wc.activeTab)
@@ -137,12 +136,12 @@ final class WindowControllerFacesTests: OrbeTestCase {
     let y = handle.centerInWindow.y
 
     handle.mouseDown(with: .mouse(.leftMouseDown, at: handle.centerInWindow, in: wc.window))
-    handle.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 30, y: y), in: wc.window))
-    handle.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: 30, y: y), in: wc.window))
+    handle.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 20, y: y), in: wc.window))
+    handle.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: 20, y: y), in: wc.window))
     XCTAssertEqual(tab.faces, .terminalOnly, "端ぎりぎりのエディターは閉じる")
     XCTAssertTrue(wc.window.firstResponder === tab.surface)
 
-    let nearRight = facesWidth(wc) - 30
+    let nearRight = facesWidth(wc) - 20
     handle.mouseDown(with: .mouse(.leftMouseDown, at: handle.centerInWindow, in: wc.window))
     handle.mouseDragged(
       with: .mouse(.leftMouseDragged, at: NSPoint(x: nearRight, y: y), in: wc.window))
@@ -151,7 +150,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
     XCTAssertTrue(wc.window.firstResponder === tab.view.editor, "焦点は残ったエディターへ")
   }
 
-  /// 間の点を掴んだ瞬間に焦点の面へ first responder が戻り、引いて離しても焦点の面は変わらない。
+  /// 継ぎ目を掴んだ瞬間に焦点の面へ first responder が戻り、引いて離しても焦点の面は変わらない。
   func testSeamGrabReturnsFocusToTheFocusedFaceAndDragKeepsIt() throws {
     let wc = WindowController()
     let tab = try XCTUnwrap(wc.activeTab)
@@ -161,9 +160,9 @@ final class WindowControllerFacesTests: OrbeTestCase {
     XCTAssertFalse(wc.window.firstResponder === tab.view.editor, "前提: 焦点の面から外れている")
     let handle = tab.view.handle
     let grab = handle.centerInWindow
-    let offset = grab.x - handle.frame.midX
+    let offset = grab.x - handle.frame.minX
     let y = grab.y
-    let ratio = try XCTUnwrap(FaceGeometry.ratio(seamX: 300 - offset, width: facesWidth(wc)))
+    let ratio = try XCTUnwrap(FaceGeometry.ratio(hx: 300 - offset, width: facesWidth(wc)))
 
     handle.mouseDown(with: .mouse(.leftMouseDown, at: grab, in: wc.window))
     XCTAssertTrue(wc.window.firstResponder === tab.view.editor, "掴んだ瞬間に焦点の面へ戻る")
@@ -256,7 +255,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
     XCTAssertGreaterThan(content.width, 0, "前提: content が実サイズを持つ")
     XCTAssertEqual(
       tab.surface.bounds.size,
-      FaceGeometry.resolve(tab.faces, size: content).frames.terminal.size, "端末は分割後のカードの寸法")
+      FaceGeometry.resolve(tab.faces, size: content).frames.terminal.size, "端末は分割後の面の寸法")
   }
 
   // MARK: - 器に包まれた端末

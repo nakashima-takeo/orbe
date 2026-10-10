@@ -1,25 +1,26 @@
 import Foundation
 
-/// 面の幾何（純粋関数）。配置と器の大きさから面 2 枚と間の矩形・取っ手（引き手・継ぎ目）の見え方・位置ドットを解き、
-/// ⌘E・取っ手を押す／引く／離したときの結果の配置を返す。状態は正規形（`FaceLayout.normalized`）に
+/// 面の幾何（純粋関数）。境の位置 hx と、左右の縁から離れた度合い sL・sR（形）から、両面・両面の間・取っ手の矩形と
+/// 取っ手の形の進み具合を解き、⌘E・取っ手を押す／離したときの結果の配置を返す。状態は正規形（`FaceLayout.normalized`）に
 /// 限り、ここでは焦点を寄せ直さない。
 ///
-/// 全面は器いっぱいを使う。分割中は両面がカードになり、器の内側の余白と面と面の間を空けて並ぶ——分けるのは
-/// 器から余白 2 つと間を除いた幅（分割の幅）で、割合をその幅で解いて両面に幅が残るときだけ分割になる。
-/// カードの形の計算は `frames` と、その逆の `ratio(seamX:width:)` だけが持つ。
+/// hx は取っ手の左端で、0（端末だけ）…MAX（エディターだけ。MAX = 器の幅 − 取っ手の幅）。割合は hx ÷ MAX。形の目標は
+/// 縁から `morphDistance` 離れるまでに 0（引き手）から 1（継ぎ目）へ移り、両面の間は形に応じて 0〜取っ手の幅だけ開く。
 enum FaceGeometry {
   /// 分割中、焦点の面の中身の上辺へ重ねる焦点の印の高さ（場所は取らない）。
   static let focusBand: CGFloat = 2
   /// これ未満の移動はクリック扱い。
   static let dragThreshold: CGFloat = 4
-  /// 取っ手を離したとき、面がこれより狭ければ端ぎりぎりに寄せたとみなして閉じる（使えない細い面を残さない）。
-  static let closeEdge: CGFloat = 40
+  /// 縁からこの距離で、形の目標が引き手から継ぎ目へ移り切る。
+  static let morphDistance: CGFloat = 56
+  /// 離したとき、勢いで滑った先がこの距離より端に近ければ閉じる。
+  static let releaseSnap: CGFloat = 24
+  /// 離したときの勢いを、この秒数だけ先へ投影する。
+  static let releaseProjection: CGFloat = 0.12
+  /// 離したときの速度は、この秒数より新しい標本から測る。
+  static let releaseVelocityWindow: CFTimeInterval = 0.08
 
-  /// 取っ手の見え方: 隠れた面の側の縁に出る引き手か、分割中の継ぎ目（面と面の間）。
-  enum HandleLook: Equatable {
-    case notch(Face)
-    case seam
-  }
+  private static var handleWidth: CGFloat { Theme.Layout.faceHandle }
 
   /// 位置ドットの 3 態: 隠れている / 見えていて非焦点 / 見えていて焦点。
   enum DotState: Equatable {
@@ -31,32 +32,36 @@ enum FaceGeometry {
     let terminal: DotState
   }
 
-  /// chrome と取っ手が読む投影。器の `layout()` がこれの差分で更新を起こす。
+  /// chrome が読む投影。器の `layout()` がこれの差分で更新を起こす。
   struct Projection: Equatable {
     let dots: FaceDots
-    let handleLook: HandleLook
     let isSplit: Bool
   }
 
-  /// 置き方: 表示中のエディターの割合と、カードで描くか。
-  struct Placement: Equatable {
-    var ratio: Double
-    var cards: Bool
+  /// 境の位置と形。sL・sR は左右の縁から離れた度合い（0 = 引き手、1 = 継ぎ目。ばねで追うので範囲を越えうる）。
+  struct Shape: Equatable {
+    var hx: CGFloat
+    var sL: CGFloat
+    var sR: CGFloat
   }
 
-  /// 置き方を器の大きさで解いた、面 2 枚と間の矩形（器の座標・上が原点）。
+  /// 形を器の大きさで解いた矩形（器の座標・上が原点）と、取っ手の形の進み具合 `t`（0 = 引き手、1 = 継ぎ目）。
   struct Frames: Equatable {
     let editor: CGRect
     let terminal: CGRect
+    /// 両面の間（継ぎ目の地で埋める列）。
     let gap: CGRect
+    let handle: CGRect
+    let t: CGFloat
+    /// 取っ手が左寄り（エディターの引き手）か。
+    let edgeOnLeft: Bool
   }
 
   /// 配置を器の大きさで解いた結果。
   struct Resolved: Equatable {
     let faces: FaceLayout
     let size: CGSize
-    /// 静止しているときの置き方（割合は実効の値。分割でなければ 0 か 1）。
-    let placement: Placement
+    let shape: Shape
     let frames: Frames
     let projection: Projection
     var width: CGFloat { size.width }
@@ -65,65 +70,80 @@ enum FaceGeometry {
     var isSplit: Bool { projection.isSplit }
   }
 
-  private static var inset: CGFloat { Theme.Layout.faceSplitInset }
-  private static var gap: CGFloat { Theme.Layout.faceSplitGap }
-
-  /// 分割中に両面で分ける幅（器 − 余白 2 つ − 間）。
-  static func splitWidth(_ width: CGFloat) -> CGFloat {
-    max(0, width - 2 * inset - gap)
+  /// hx の取りうる最大（器の幅 − 取っ手の幅）。
+  static func maxPosition(_ width: CGFloat) -> CGFloat {
+    max(0, width - handleWidth)
   }
 
-  /// 割合を分割の幅で解き、両面に幅が残れば分割、残らなければ割合の近い側の全面にする。
+  /// 位置が決める形の目標（左右）。器が取っ手より狭ければ端末だけの形。
+  static func targets(_ hx: CGFloat, width: CGFloat) -> (l: CGFloat, r: CGFloat) {
+    let maxX = maxPosition(width)
+    guard maxX > 0 else { return (0, 1) }
+    return (clamp(hx / morphDistance), clamp((maxX - hx) / morphDistance))
+  }
+
+  /// 割合を点に丸めた hx と、その目標の形で解く（静止の配置）。
   static func resolve(_ faces: FaceLayout, size: CGSize) -> Resolved {
     let size = CGSize(width: max(0, size.width), height: max(0, size.height))
-    let s = splitWidth(size.width)
-    let eS = (faces.editorRatio * s).rounded()
-    let placement =
-      eS > 0 && eS < s
-      ? Placement(ratio: faces.editorRatio, cards: true)
-      : Placement(ratio: faces.editorRatio < 0.5 ? 0 : 1, cards: false)
-    let f = frames(placement, size: size)
-    let eW = f.editor.width
-    let tW = f.terminal.width
-    let look: HandleLook = eW <= 0 ? .notch(.editor) : tW <= 0 ? .notch(.terminal) : .seam
+    let hx = (CGFloat(faces.editorRatio) * maxPosition(size.width)).rounded()
+    let (l, r) = targets(hx, width: size.width)
+    return resolve(faces, shape: Shape(hx: hx, sL: l, sR: r), size: size)
+  }
+
+  /// 形をそのまま解く（引いている間・動いている間）。
+  static func resolve(_ faces: FaceLayout, shape: Shape, size: CGSize) -> Resolved {
+    let f = frames(shape, size: size)
+    let editorVisible = f.editor.width > 0
+    let terminalVisible = f.terminal.width > 0
     func dot(_ face: Face, visible: Bool) -> DotState {
       !visible ? .off : faces.focus == face ? .focus : .on
     }
     return Resolved(
-      faces: faces, size: size, placement: placement, frames: f,
+      faces: faces, size: size, shape: shape, frames: f,
       projection: Projection(
         dots: FaceDots(
-          editor: dot(.editor, visible: eW > 0), terminal: dot(.terminal, visible: tW > 0)),
-        handleLook: look, isSplit: eW > 0 && tW > 0))
+          editor: dot(.editor, visible: editorVisible),
+          terminal: dot(.terminal, visible: terminalVisible)),
+        isSplit: editorVisible && terminalVisible))
   }
 
-  /// 置き方の矩形。カードなら余白と間を空けて分割の幅を割合で分け、そうでなければ器いっぱいを割合で分ける
-  /// （間は境に立つ幅 0 の矩形）。
-  static func frames(_ p: Placement, size: CGSize) -> Frames {
+  /// 形の矩形。エディターは取っ手の右端から縁へ近づくほど取っ手の下へ潜り、端末は左端から同じく潜る——両面の間は
+  /// 形に応じて 0〜取っ手の幅。取っ手の高さは引き手の高さから全高へ伸びる。
+  static func frames(_ s: Shape, size: CGSize) -> Frames {
     let w = size.width
     let h = size.height
-    let ratio = CGFloat(p.ratio)
-    guard p.cards else {
-      let eW = (ratio * w).rounded()
-      return Frames(
-        editor: CGRect(x: 0, y: 0, width: eW, height: h),
-        terminal: CGRect(x: eW, y: 0, width: w - eW, height: h),
-        gap: CGRect(x: eW, y: 0, width: 0, height: h))
-    }
-    let s = splitWidth(w)
-    let eW = (ratio * s).rounded()
-    let cardHeight = max(0, h - 2 * inset)
+    let cl = clamp(s.sL)
+    let cr = clamp(s.sR)
+    let t = min(cl, cr)
+    let editorRight = min(max(s.hx + handleWidth * (1 - cr), 0), w)
+    let terminalLeft = min(max(s.hx + handleWidth * cl, 0), w)
+    let grown =
+      Theme.Layout.faceNotchHeight
+      + (h - Theme.Layout.faceNotchHeight) * min(max(t, 0), 1.08)
+    let handleHeight = min(max(grown, Theme.Layout.faceNotchMinHeight), h)
     return Frames(
-      editor: CGRect(x: inset, y: inset, width: eW, height: cardHeight),
-      terminal: CGRect(x: inset + eW + gap, y: inset, width: s - eW, height: cardHeight),
-      gap: CGRect(x: inset + eW, y: inset, width: gap, height: cardHeight))
+      editor: CGRect(x: 0, y: 0, width: editorRight, height: h),
+      terminal: CGRect(x: terminalLeft, y: 0, width: w - terminalLeft, height: h),
+      gap: CGRect(x: editorRight, y: 0, width: max(0, terminalLeft - editorRight), height: h),
+      handle: CGRect(x: s.hx, y: (h - handleHeight) / 2, width: handleWidth, height: handleHeight),
+      t: t, edgeOnLeft: s.hx < maxPosition(w) / 2)
   }
 
-  /// `frames` の間の中央 `x` を割合へ戻す（分割の幅に収める）。分割の幅が無ければ nil。
-  static func ratio(seamX x: CGFloat, width: CGFloat) -> Double? {
-    let s = splitWidth(width)
-    guard s > 0 else { return nil }
-    return Double(min(max(x - inset - gap / 2, 0), s) / s)
+  /// hx の割合。取っ手より狭い器では nil。
+  static func ratio(hx: CGFloat, width: CGFloat) -> Double? {
+    let maxX = maxPosition(width)
+    guard maxX > 0 else { return nil }
+    return Double(hx / maxX)
+  }
+
+  /// 離した: 勢いで `releaseProjection` 秒先まで滑った位置が端から `releaseSnap` 以内なら、その端（0 か MAX）を返して
+  /// 閉じる。それ以外はその場に留まる（nil）。
+  static func release(hx: CGFloat, velocity: CGFloat, width: CGFloat) -> CGFloat? {
+    let maxX = maxPosition(width)
+    let projected = hx + velocity * releaseProjection
+    if projected < releaseSnap { return 0 }
+    if projected > maxX - releaseSnap { return maxX }
+    return nil
   }
 
   /// ⌘E: 分割中は焦点の往復。それ以外は端末 ⇄ エディターの全面切替。
@@ -132,32 +152,15 @@ enum FaceGeometry {
       return FaceLayout(
         editorRatio: g.faces.editorRatio, focus: g.faces.focus == .editor ? .terminal : .editor)
     }
-    return g.placement.ratio >= 1 ? .terminalOnly : FaceLayout(editorRatio: 1, focus: .editor)
+    return g.editorWidth > 0 ? .terminalOnly : FaceLayout(editorRatio: 1, focus: .editor)
   }
 
-  /// 引き手・間の点を押した: 隣が隠れていれば全開、自分が隠れていれば戻る、分割中は焦点側で全面。
+  /// 取っ手を押した: 隣が隠れていれば全開、自分が隠れていれば戻る、分割中は焦点側で全面。
   static func handleClick(_ g: Resolved) -> FaceLayout {
     if g.editorWidth <= 0 { return FaceLayout(editorRatio: 1, focus: .editor) }
     if g.terminalWidth <= 0 { return .terminalOnly }
     return g.faces.focus == .editor ? FaceLayout(editorRatio: 1, focus: .editor) : .terminalOnly
   }
 
-  /// 取っ手を引いている間。`x` は間の中央の求める位置（器の座標）で、分割の幅に収めた連続値が割合になる。
-  /// `g0` は掴んだ瞬間の配置を今の器の大きさで解いた結果（器が広がってもドラッグは今の幅で続く）。焦点は動かさない——
-  /// 焦点の面が幅 0 になるときだけ残る面へ移る（正規形）。分割の幅が無い器では配置を変えない。結果は正規形。
-  static func drag(from g0: Resolved, x: CGFloat) -> FaceLayout {
-    guard let ratio = ratio(seamX: x, width: g0.width) else { return g0.faces }
-    return FaceLayout(editorRatio: ratio, focus: g0.faces.focus).normalized
-  }
-
-  /// 取っ手を離した: 分割の幅の上で端に寄せた面（`closeEdge` 未満）は閉じ、それ以外はドラッグの値をそのまま確定する。
-  /// 閉じる側が焦点の面なら残る面へ焦点が移る（全面の配置は正規形でその面が焦点）。分割の幅が無い器では配置を変えない。
-  static func release(_ faces: FaceLayout, width: CGFloat) -> FaceLayout {
-    let s = splitWidth(width)
-    guard s > 0 else { return faces }
-    let eW = (faces.editorRatio * s).rounded()
-    if eW < closeEdge { return .terminalOnly }
-    if s - eW < closeEdge { return FaceLayout(editorRatio: 1, focus: .editor) }
-    return faces
-  }
+  private static func clamp(_ x: CGFloat) -> CGFloat { min(max(x, 0), 1) }
 }

@@ -3,8 +3,8 @@ import XCTest
 
 @testable import Orbe
 
-/// 面の遷移（スライド）のどのコマでも、見えている面は中身で覆われている——窓が透けるコマを作らない。中身の寸法を変えるのは
-/// 遷移の始めか終わりの 1 回だけ（端末の pty の resize とエディターの再配置を増やさない）。
+/// 面の動き（位置のばねで行き先へ運ぶ）のどのコマでも、見えている面は中身で覆われている——窓が透けるコマを作らない。
+/// 中身の寸法を変えるのは動きの始めか終わりの 1 回だけ（端末の pty の resize とエディターの再配置を増やさない）。
 ///
 /// 壊れると何が起きるか。隠れていく面の中身が先に幅 0 へ縮むと、縮んでいく面の全体が透けて窓の後ろが見える。縮む面の中身を
 /// 先に行き先の幅へ縮めると、面が中身より広いコマで面の端が透ける。
@@ -15,7 +15,7 @@ extension TabFacesViewTests {
   /// 窓に載せた器（遷移は窓に付いているときだけ動く）。
   private func hostedForSlide(_ faces: FaceLayout) -> (TerminalTab, NSWindow) {
     let window = NSWindow(
-      contentRect: NSRect(origin: .zero, size: NSSize(width: 1016, height: 400)),
+      contentRect: NSRect(origin: .zero, size: NSSize(width: 1012, height: 400)),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     let tab = TerminalTab(cwd: "/tmp")
@@ -37,7 +37,7 @@ extension TabFacesViewTests {
     }
   }
 
-  /// 遷移を始めて（`trigger`）、終わりまでのコマを刻み、各コマの覆われていない面積と中身の寸法が変わった回数を測る。
+  /// 動きを始めて（`trigger`）、止まるまでのコマを刻み、各コマの覆われていない面積と中身の寸法が変わった回数を測る。
   private func measureSlide(
     from: FaceLayout, to: FaceLayout, trigger: (TerminalTab) -> Void,
     file: StaticString = #filePath, line: UInt = #line
@@ -52,19 +52,22 @@ extension TabFacesViewTests {
         terminalSizes.append(tab.surface.bounds.size)
       }
     }
-    let start = CACurrentMediaTime()
     trigger(tab)
     XCTAssertEqual(tab.faces, to, "前提: 行き先の配置", file: file, line: line)
+    XCTAssertTrue(view.isAnimating, "前提: 動きが始まっている", file: file, line: line)
     var worst: CGFloat = uncoveredPixels(view)
     record()
-    let frames = 48
-    for i in 1...frames + 1 {
-      view.slideFrame(now: start + Theme.Motion.faceSlide * Double(i) / Double(frames))
+    var frames = 0
+    while view.isAnimating, frames < 600 {
+      view.tick(dt: 1.0 / 120)
       worst = max(worst, uncoveredPixels(view))
       record()
+      frames += 1
     }
+    XCTAssertFalse(view.isAnimating, "動きが止まらない", file: file, line: line)
     let label = "\(from.editorRatio)→\(to.editorRatio)"
-    XCTAssertEqual(worst, 0, "\(label): 中身に覆われていない面が見える", file: file, line: line)
+    // 動きの途中の面は端数の位置に置かれるので、面積の引き算に浮動小数の誤差が残る。1 デバイス px 未満は覆われている。
+    XCTAssertLessThan(worst, 1, "\(label): 中身に覆われていない面が見える", file: file, line: line)
     XCTAssertLessThanOrEqual(
       editorSizes.count - 1, 1, "\(label): エディターの寸法の変更 \(editorSizes)", file: file, line: line)
     XCTAssertLessThanOrEqual(
@@ -82,8 +85,11 @@ extension TabFacesViewTests {
     }
   }
 
-  /// 間の点を押して起こす遷移も同じ口を通る（分割から焦点側の全面へ）。
+  /// 継ぎ目を押して起こす動きも同じ口を通る（分割から焦点側の全面へ）。
   func testHandleClickSlideKeepsTheFacesCovered() {
-    measureSlide(from: Self.split, to: Self.editorOnly) { _ = $0.view.handle.onClick?() }
+    measureSlide(from: Self.split, to: Self.editorOnly) {
+      $0.view.handle.onGrab?($0.view.handle.frame.midX)
+      $0.view.handle.onClick?()
+    }
   }
 }

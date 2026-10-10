@@ -13,8 +13,8 @@ import XCTest
 /// 投影の通知が差分ゲートを失うとライブリサイズの毎フレームで全 workspace の chrome snapshot が組まれる。
 /// 焦点の面が幅で変わると、記憶した焦点と responder の行き先がずれる。
 final class TabFacesViewTests: OrbeTestCase {
-  /// 余白 4×2 と間 8 を除いた分割の幅が 1000 になる器。
-  private let size = NSSize(width: 1016, height: 400)
+  /// 取っ手の幅 12 を除いた位置の最大が 1000 になる器。
+  private let size = NSSize(width: 1012, height: 400)
 
   private func laidOut(_ faces: FaceLayout, size: NSSize? = nil) -> TerminalTab {
     let tab = TerminalTab(cwd: "/tmp")
@@ -31,17 +31,16 @@ final class TabFacesViewTests: OrbeTestCase {
 
   // MARK: - 面の並び
 
-  /// 分割中は左からエディター・端末のカードが余白と間を空けて並び、継ぎ目は間そのもの。中身はカードいっぱいで、
-  /// カードの上端から置かれる。
-  func testSplitPlacesCardsLeftToRightWithTheSeamInTheGap() {
+  /// 分割中は左からエディター面・継ぎ目・端末面が並ぶ。中身は面いっぱいで、面の上端から置かれる。
+  func testSplitPlacesEditorSeamAndTerminalLeftToRight() {
     let tab = laidOut(FaceLayout(editorRatio: 0.25, focus: .terminal))
     let view = tab.view
 
-    XCTAssertEqual(rect(of: view.editor, in: view), NSRect(x: 4, y: 4, width: 250, height: 392))
-    XCTAssertEqual(view.handle.frame, NSRect(x: 254, y: 4, width: 8, height: 392))
+    XCTAssertEqual(rect(of: view.editor, in: view), NSRect(x: 0, y: 0, width: 250, height: 400))
+    XCTAssertEqual(view.handle.frame, NSRect(x: 250, y: 0, width: 12, height: 400))
     XCTAssertEqual(
-      rect(of: view.terminal, in: view), NSRect(x: 262, y: 4, width: 750, height: 392))
-    XCTAssertEqual(tab.surface.bounds.size, NSSize(width: 750, height: 392), "端末の中身もカードと同じ寸法")
+      rect(of: view.terminal, in: view), NSRect(x: 262, y: 0, width: 750, height: 400))
+    XCTAssertEqual(tab.surface.bounds.size, NSSize(width: 750, height: 400), "端末の中身も面と同じ寸法")
   }
 
   /// 端末だけの配置ではエディター面は隠れ、端末が器の幅を全部使い、左縁の縦中央にエディターの引き手が重なる。
@@ -62,7 +61,7 @@ final class TabFacesViewTests: OrbeTestCase {
 
     XCTAssertTrue(view.terminal.isHiddenOrHasHiddenAncestor)
     XCTAssertFalse(view.editor.isHiddenOrHasHiddenAncestor)
-    XCTAssertEqual(view.handle.frame, NSRect(x: 1004, y: 176, width: 12, height: 48))
+    XCTAssertEqual(view.handle.frame, NSRect(x: 1000, y: 176, width: 12, height: 48))
     XCTAssertEqual(rect(of: view.editor, in: view), NSRect(origin: .zero, size: size))
   }
 
@@ -76,17 +75,17 @@ final class TabFacesViewTests: OrbeTestCase {
 
     tab.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
     tab.view.layoutSubtreeIfNeeded()
-    XCTAssertEqual(tab.surface.bounds.size, NSSize(width: 500, height: 392), "隠した瞬間に縮めない")
+    XCTAssertEqual(tab.surface.bounds.size, NSSize(width: 500, height: 400), "隠した瞬間に縮めない")
 
-    tab.view.frame = NSRect(x: 0, y: 0, width: 1216, height: 600)
+    tab.view.frame = NSRect(x: 0, y: 0, width: 1212, height: 600)
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertEqual(
-      tab.surface.bounds.size, NSSize(width: 500, height: 392), "隠れている間の器の resize に追従しない")
+      tab.surface.bounds.size, NSSize(width: 500, height: 400), "隠れている間の器の resize に追従しない")
 
     tab.setFaces(FaceLayout(editorRatio: 0.5, focus: .editor), animated: false)
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertEqual(
-      tab.surface.bounds.size, NSSize(width: 600, height: 592), "戻したら今の器の大きさで置き直す")
+      tab.surface.bounds.size, NSSize(width: 600, height: 600), "戻したら今の器の大きさで置き直す")
   }
 
   /// 隠れたまま生まれた端末（エディター全面で復元）は、戻したときに得る幅＝器の幅で起きる。
@@ -167,25 +166,25 @@ final class TabFacesViewTests: OrbeTestCase {
     assertSame(top, try pixel(tab.view, x: 500, y: 3.5), "上端の行がすぐ下の中身と続いていない")
   }
 
-  /// 分割中は焦点の面のカードの上辺に面のキー色の印が重なり、焦点を移しても中身は動かない。
+  /// 分割中は焦点の面の上辺に面のキー色の印が重なり、焦点を移しても中身は動かない。
   func testFocusMarkOverlaysTheFocusedFaceWithoutMovingContent() throws {
     let tab = laidOut(FaceLayout(editorRatio: 0.5, focus: .editor))
     let view = tab.view
     view.appearance = NSAppearance(named: .darkAqua)
     let editorRect = rect(of: view.editor, in: view)
     let terminalRect = rect(of: view.terminal, in: view)
-    XCTAssertEqual(editorRect, NSRect(x: 4, y: 4, width: 500, height: 392), "中身はカードの上端から")
+    XCTAssertEqual(editorRect, NSRect(x: 0, y: 0, width: 500, height: 400), "中身は面の上端から")
 
     assertSame(
-      try pixel(view, x: 250, y: 4.5), try rgba(Theme.Color.faceEditor, in: view), "焦点の面の上辺に印")
+      try pixel(view, x: 250, y: 0.5), try rgba(Theme.Color.faceEditor, in: view), "焦点の面の上辺に印")
 
     tab.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
     view.layoutSubtreeIfNeeded()
     XCTAssertEqual(rect(of: view.editor, in: view), editorRect, "焦点を移しても中身は動かない")
     XCTAssertEqual(rect(of: view.terminal, in: view), terminalRect)
-    let top = try pixel(view, x: 250, y: 4.5)
+    let top = try pixel(view, x: 250, y: 0.5)
     XCTAssertEqual(top[3], 255, "印の消えた上端が透けている: \(top)")
-    assertSame(top, try pixel(view, x: 250, y: 7.5), "焦点を外れた面の印は消え、上端は中身の続き")
+    assertSame(top, try pixel(view, x: 250, y: 3.5), "焦点を外れた面の印は消え、上端は中身の続き")
   }
 
   /// 印は当たりを取らない——印の上の押下は下の中身へ届く。
@@ -193,7 +192,7 @@ final class TabFacesViewTests: OrbeTestCase {
     let tab = laidOut(FaceLayout(editorRatio: 0.5, focus: .editor))
     let face = try XCTUnwrap(tab.view.editor.superview)
 
-    let hit = try XCTUnwrap(face.hitTest(NSPoint(x: 250, y: 5)))
+    let hit = try XCTUnwrap(face.hitTest(NSPoint(x: 250, y: 1)))
     XCTAssertTrue(hit.isDescendant(of: tab.view.editor), "印の上の押下が中身に届かない: \(hit)")
   }
 

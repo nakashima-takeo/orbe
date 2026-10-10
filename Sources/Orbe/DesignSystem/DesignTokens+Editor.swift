@@ -16,8 +16,6 @@ extension Theme.Color {
   static let faceNotchTerminalHover = editorDyn(light: 0xe3e1e9, dark: 0x312d3a)
   /// ホバー中の引き手の影。
   static let faceNotchShadow = editorDynAB(light: (0x5a4696, 0.14), dark: (0x000000, 0.35))
-  /// ホバー中の間の 3 つの点。dark / light とも editorText と偶然同値だが役割が違うので別トークン。
-  static let faceSeamDotHover = editorDyn(light: 0x4d4368, dark: 0xcdc7e2)
   /// 空状態の ◐ の沈んだ塗り。
   static let editorGhost = editorDyn(light: 0xd9d3e6, dark: 0x3d3752)
   /// エディター面のアイコン・kbd の文字。dark / light とも kbKeyText と偶然同値だが役割が違うので別トークン。
@@ -213,20 +211,18 @@ extension Theme.Layout {
   static let editorSearchChevron: CGFloat = 10
   /// 検索中の進捗の細い線。
   static let editorSearchProgress: CGFloat = 2
-  /// 片面が隠れているときに縁へ出る引き手と、その中のグリフ。
-  static let faceNotch = CGSize(width: 12, height: 48)
+  /// 引き手と継ぎ目の幅。
+  static let faceHandle: CGFloat = 12
+  /// 引き手の高さ（縁にいるとき）と、伸び縮みの途中の下限。
+  static let faceNotchHeight: CGFloat = 48
+  static let faceNotchMinHeight: CGFloat = 40
+  /// 引き手のグリフ。
   static let faceNotchGlyph: CGFloat = 9
   /// ホバー中の引き手の影（縁から離れる向きのずれと、ぼかし半径）。
   static let faceNotchShadowOffset: CGFloat = 2
   static let faceNotchShadowRadius: CGFloat = 5
-  /// 分割中、器の内側に取る余白と、面と面の間（継ぎ目）の幅。
-  static let faceSplitInset: CGFloat = 4
-  static let faceSplitGap: CGFloat = 8
-  /// 間の縦中央に縦に並べる 3 つの点の大きさと、点と点の隙間。
-  static let faceSeamDot: CGFloat = 2
-  static let faceSeamDotSpacing: CGFloat = 3
-  /// 間のうち押せる範囲の高さ（縦中央。幅は間の幅）。
-  static let faceSeamPress: CGFloat = 24
+  /// 継ぎ目の中央の縦棒。
+  static let faceSeamBar = CGSize(width: 2, height: 22)
 }
 
 extension Theme.Radius {
@@ -234,10 +230,8 @@ extension Theme.Radius {
   static let editorTabClose: CGFloat = 6
   /// 引き手の縁と反対側の角。
   static let faceNotch: CGFloat = 6
-  /// 分割中の面のカード。
-  static let faceCard: CGFloat = 6
-  /// 間の点の角。
-  static let faceSeamDot: CGFloat = 1
+  /// 継ぎ目の縦棒の角。
+  static let faceSeamBar: CGFloat = 1
 }
 
 extension Theme.Stroke {
@@ -260,18 +254,16 @@ extension Theme.Opacity {
   static let faceNotchFill: Double = 0.16
   static let faceNotchBorder: Double = 0.4
   static let faceNotchBorderHover: Double = 0.65
-  /// 普段の間の点（端末のキー色に掛ける α）。
-  static let faceSeamDot: Double = 0.45
+  /// 継ぎ目の地（veil に重ねる）と縦棒（どちらも端末のキー色に掛ける α）。
+  static let faceSeamGround: Double = 0.07
+  static let faceSeamBar: Double = 0.55
 }
 
 extension Theme.Motion {
-  /// 面のスライド（⌘E・引き手を押す）。
-  static let faceSlide: Double = 0.32
-  /// faceSlide のイージング cubic-bezier(0.32,0.72,0,1)。
-  static let faceSlideCurve = UnitCurve.bezier(
-    startControlPoint: UnitPoint(x: 0.32, y: 0.72), endControlPoint: UnitPoint(x: 0, y: 1))
-  /// 引き手・継ぎ目が現れるフェードイン。
-  static let faceHandleLook: Double = 0.20
+  /// 境の位置を行き先へ運ぶばね（⌘E・取っ手を押す・閉じる着地）。時間は固定せず、収束で止まる。
+  static let facePositionSpring: (stiffness: CGFloat, damping: CGFloat) = (320, 1.0)
+  /// 取っ手の形（引き手 ⇄ 継ぎ目）が位置の決める目標を追うばね。
+  static let faceShapeSpring: (stiffness: CGFloat, damping: CGFloat) = (420, 0.85)
   /// 位置ドットの幅・色の遷移。
   static let faceDot: Double = 0.24
   /// ミニマップの帯が現れる・消える、スクロールバーのつまみが現れる（VS Code の opacity 100ms linear）。

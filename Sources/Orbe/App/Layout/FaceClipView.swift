@@ -10,11 +10,6 @@ final class FaceClipView: NSView {
     set { mark.color = newValue }
   }
 
-  /// 角丸（分割中のカードのとき）。中身と焦点の印はこの角で切られる。
-  var cornerRadius: CGFloat = 0 {
-    didSet { layer?.cornerRadius = cornerRadius }
-  }
-
   init(content: NSView) {
     super.init(frame: .zero)
     wantsLayer = true
