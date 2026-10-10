@@ -25,9 +25,9 @@ enum TaskStoreError: Error, Equatable {
   enum AddPosition: Equatable {
     /// 列の末尾。
     case end
-    /// 未着手の欄の中で、足すタスクと同じか低い優先度の最初のタスクの直前（無ければ列の末尾）——その優先度の
-    /// 未着手の先頭に入る。
-    case priorityHead
+    /// 人が見ている欄（`workspace` のタスク。nil は全部）の未着手の中で、足すタスクと同じか低い優先度の最初の
+    /// タスクの直前（無ければ列の末尾）——見ている欄で、その優先度の未着手の先頭に入る。
+    case priorityHead(workspace: UUID?)
   }
 
   init(file: TasksFile? = TaskPersistence.load()) {
@@ -68,9 +68,10 @@ enum TaskStoreError: Error, Equatable {
     switch position {
     case .end:
       return tasks.endIndex
-    case .priorityHead:
+    case .priorityHead(let workspace):
       return tasks.firstIndex {
         $0.status == .todo && $0.priority.rank >= item.priority.rank
+          && (workspace == nil || $0.workspace == workspace)
       } ?? tasks.endIndex
     }
   }
