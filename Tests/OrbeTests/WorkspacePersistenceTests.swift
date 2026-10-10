@@ -268,4 +268,18 @@ final class WorkspacePersistenceTests: OrbeTestCase {
     XCTAssertEqual(loaded.workspaces[0].lastUsedAt, Date(timeIntervalSinceReferenceDate: 123))
     XCTAssertEqual(loaded.workspaces[1].tabs, [], "0 タブの休眠 workspace はそのまま")
   }
+
+  // MARK: - ボードの選択
+
+  /// 「ボードを選んでいるか」の型の合わない値は「選んでいない」として読み、workspace は失わない。
+  func testMalformedBoardSelectionReadsAsNotSelected() throws {
+    let file = """
+      {"version":4,"activeWorkspace":0,"workspaces":[\
+      {"name":"a","rootPath":"/","activeTab":0,"boardSelected":"yes","tabs":[]}]}
+      """
+    try Data(file.utf8).write(to: workspacesFile())
+    let loaded = try XCTUnwrap(WorkspacePersistence.load())
+    XCTAssertEqual(loaded.workspaces.map(\.name), ["a"])
+    XCTAssertEqual(loaded.workspaces.map(\.boardSelected), [false])
+  }
 }
