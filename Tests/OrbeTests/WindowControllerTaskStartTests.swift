@@ -7,10 +7,11 @@ import XCTest
 /// タスクから作業を始める口（`start_task`）を、実 `WindowController` と実 git・偽 agent で固定する。リポジトリの
 /// workspace のタスクは ⌘T と同じ規則で worktree を用意し、Home のタスクは Home の中のタスクのフォルダを作業場にし、
 /// どちらもタスクを進行中にして作業場を付け、人の見ている workspace とタブを変えずに agent のタブを起こす。
-/// 決まらない・付き先が無いときは理由付きで拒み、タスクを変えない。
+/// 決まらない・リポジトリが違う・付き先が無いときは理由付きで拒み、タスクを変えない。
 ///
 /// 壊れると何が起きるか: 秘書が agent に取り掛からせるたびに人の画面が飛ぶ。Home のタスクが Home の直下で動き、
 /// 行の agent の札が付かない。2 回目に別のフォルダができる。決まらないまま人の作業中の worktree に agent が重なる。
+/// 主の Issue と別のリポジトリに worktree を作ってタスクに付ける。
 ///
 /// agent は必ず偽物（`stageFakeAgent`）。
 final class WindowControllerTaskStartTests: OrbeTestCase {
@@ -136,16 +137,26 @@ final class WindowControllerTaskStartTests: OrbeTestCase {
     XCTAssertEqual(again["created"] as? Bool, false)
   }
 
-  /// Home のタスクの ⌘T は、タスクのフォルダ（無ければ作る）を「このディレクトリ」として開く。
-  func testCommandTOnAHomeTaskOpensItsFolder() throws {
+  /// Home のタスクの ⌘T は、タスクのフォルダ（無ければ作る）を「このディレクトリ」として開き、↵ でそこをタスクの
+  /// 作業場として付けて、そこにタブを開く。
+  func testCommandTOnAHomeTaskOpensItsFolderAndEnterStartsTheTaskThere() throws {
     let wc = try launch()
-    let task = try wc.taskStore.add(TaskDraft(title: "歯医者", workspace: try homeId(wc)))
+    let home = try homeId(wc)
+    let task = try wc.taskStore.add(TaskDraft(title: "歯医者", workspace: home))
+    let folder = "\(try XCTUnwrap(HomeFolder.url).path)/tasks/\(task.id)-歯医者"
+    let row = WorktreePaletteAction.open(.directory(path: folder))
 
     wc.showWorktreePalette(task: task.id)
+    let palette = try XCTUnwrap(wc.model.worktreePalette)
+    XCTAssertTrue(waitUntil(20) { palette.items.contains { $0.action == row } }, "フォルダの行が出る")
+    palette.chooseTarget(at: try XCTUnwrap(palette.targets.firstIndex(of: .shell)))
+    palette.activate(at: try XCTUnwrap(palette.items.firstIndex { $0.action == row }))
 
-    let folder = "\(try XCTUnwrap(HomeFolder.url).path)/tasks/\(task.id)-歯医者"
-    XCTAssertEqual(wc.model.worktreePaletteProvider?.facts.cwd, folder)
-    XCTAssertTrue(FileManager.default.fileExists(atPath: folder), "無ければ作る")
+    let started = try XCTUnwrap(stored(wc, task.id))
+    XCTAssertEqual(started.status, .inProgress)
+    XCTAssertEqual(started.worktree?.path, GitWorktreeRoot.root(of: folder), "タスクのフォルダが作業場として付く")
+    XCTAssertEqual(wc.current.persistentId, home)
+    XCTAssertEqual(wc.current.tabs.map(\.cwd), [folder], "そのフォルダにタブが開く")
   }
 
   // MARK: - 拒否
@@ -181,7 +192,42 @@ final class WindowControllerTaskStartTests: OrbeTestCase {
     XCTAssertNil(stored(wc, task.id)?.worktree)
   }
 
+  /// 主の結び付きのリポジトリを指す remote が手元に無ければ、branch を渡しても拒み、ブランチも作らない。
+  func testRepositoryWithoutARemoteForTheLinkedRepositoryIsRefusedEvenWithABranch() throws {
+    let wc = try launch()
+    var draft = TaskDraft(title: "別のリポジトリの Issue", workspace: webId)
+    draft.links = [
+      TaskLink(item: try XCTUnwrap(GitHubItemID(repo: "o/n", number: 5)), kind: .issue)
+    ]
+    let task = try wc.taskStore.add(draft)
+
+    guard case .failure(let error) = start(wc, TaskStartRequest(taskId: task.id, branch: "feat/x"))
+    else { return XCTFail("リポジトリが違えば拒む") }
+    XCTAssertEqual(error.code, -32602)
+    XCTAssertTrue(error.message.contains("repository mismatch"), error.message)
+    XCTAssertEqual(stored(wc, task.id), task, "タスクは変わらない")
+    XCTAssertFalse(
+      GitRunner.shared.runSync(["rev-parse", "--verify", "-q", "feat/x"], cwd: local).isSuccess,
+      "ブランチを作らない")
+  }
+
   // MARK: - リポジトリ
+
+  /// Issue に結び付いたタスクは、branch を渡さなくても ⌘T と同じ issue/<番号> の worktree で始まる。
+  func testIssueTaskStartsOnTheIssueBranchWithoutABranch() throws {
+    try git(["remote", "add", "upstream", "https://github.com/o/n.git"], in: local)
+    let wc = try launch()
+    var draft = TaskDraft(title: "Issue を直す", workspace: webId)
+    draft.links = [
+      TaskLink(item: try XCTUnwrap(GitHubItemID(repo: "o/n", number: 5)), kind: .issue)
+    ]
+    let task = try wc.taskStore.add(draft)
+
+    let result = try start(wc, TaskStartRequest(taskId: task.id)).get()
+
+    XCTAssertEqual(result["branch"] as? String, "issue/5")
+    XCTAssertEqual(stored(wc, task.id)?.worktree?.path, result["workdir"] as? String)
+  }
 
   func testBranchIsCreatedFromTheDefaultBaseAndTheTaskStartsThere() throws {
     let wc = try launch()
