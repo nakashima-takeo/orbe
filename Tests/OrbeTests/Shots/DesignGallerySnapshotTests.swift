@@ -77,6 +77,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     try renderCompletionSnapshot(dir: dir)
     try renderStatusRowSnapshots(dir: dir)
     try renderStatusRowSegmentSnapshots(dir: dir)
+    try renderBoardSnapshots(dir: dir)
     try renderWorkspaceCreateSnapshots(dir: dir)
     try renderUpdateSnapshots(dir: dir)
     try renderAttentionSnapshots(dir: dir)
