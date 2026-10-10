@@ -63,13 +63,15 @@ final class WindowControllerBoardTests: OrbeTestCase {
 
   // MARK: - 選ぶ
 
-  /// セルをクリックすると、端末の代わりにボードが出て焦点を取り、タブのセルはどれも選択の見た目にならない。
+  /// セルをクリックすると、端末の代わりにボードが出て焦点を取り、chrome はどの隠れたタブも選んでいるように見せない。
   func testClickingTheBoardCellShowsTheBoardInPlaceOfTheTabs() throws {
     let wc = try homeOnBoard(tabs: 2)
     wc.flushChrome()
 
     XCTAssertEqual(visibleContent(wc), [wc.boardView], "見えるのはボードだけ")
     XCTAssertEqual(wc.statusModel.selection, .board, "タブのセルは選択の見た目にならない")
+    XCTAssertTrue(wc.statusModel.location.isEmpty, "隠れたタブの現在地を出さない")
+    XCTAssertNil(wc.statusModel.faceDots, "隠れたタブの位置ドットを出さない")
     XCTAssertFalse(wc.model.contentIsEmpty, "空表示の地を重ねない")
     XCTAssertTrue(wc.window.firstResponder === wc.boardView, "焦点はボード")
   }
