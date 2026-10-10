@@ -31,7 +31,9 @@ let intakeUsage = """
            {"agent": "claude", "model": "…", "tools": ["mcp__<server>__<tool>"],
             "request": "…", "coverage": "…"}
            An agent may use only the MCP tools named in full; built-in tools,
-           whole servers and wildcards are refused.
+           whole servers and wildcards are refused. Name only tools that
+           read the source (never ones that send, update or delete, nor
+           Orbe's own tools): the name is checked, not what the tool does.
            A command prints one JSON object per item:
            {"id","link","body","time"} (link http(s), time ISO 8601),
            and fails with a non-zero exit or a single {"error": "…"} line.
