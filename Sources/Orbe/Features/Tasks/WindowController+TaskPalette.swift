@@ -33,7 +33,7 @@ extension WindowController {
     p.onAskSecretary = { [weak self] ask in
       guard let self else { return .failure(.claudeMissing) }
       do throws(Secretary.Refusal) {
-        return .success(try self.secretary.ask(ask))
+        return .success(try self.secretary.ask(ask, from: .palette))
       } catch {
         return .failure(error)
       }

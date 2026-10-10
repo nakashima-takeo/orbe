@@ -48,7 +48,7 @@ extension WindowController {
     let input = WaitContinueText.firstInput(resolution, l10n: localization, timeZone: .current)
     if conversation.secretary {
       do {
-        _ = try secretary.ask(.wait(input))
+        _ = try secretary.ask(.text(input), from: .wait)
       } catch {
         return error == .claudeMissing ? .agentMissing : .failed
       }

@@ -16,18 +16,67 @@ struct SecretaryFile: Codable, Equatable {
 
 /// 溜めた頼み 1 件。本文は受けた時点に組んで固定する（言語も受けた時点のもの）。届ける 1 行は、届けるときに受けた時刻と
 /// 本文から組む（`SecretaryText.line`）。
+///
+/// 出どころの保存の値は、旧ビルドが読める形に写す。旧ビルドは `origin` を palette・wait の 2 値で厳密に読み、知らない値が
+/// あると記録ごと退避に落とすが、知らない欄は無視する。だから Home のボードは `origin: palette` と `screen: board` に分けて
+/// 書き、旧ビルドへ戻しても溜まった頼みを失わない（頭が「⌘⇧X から」になるだけ）。文字列との対応はこの読み書きだけが持つ。
 struct SecretaryRequest: Codable, Equatable {
   let id: UUID
   let receivedAt: Date
   let origin: SecretaryOrigin
   /// 1 行の本文。
   let body: String
+
+  init(id: UUID, receivedAt: Date, origin: SecretaryOrigin, body: String) {
+    self.id = id
+    self.receivedAt = receivedAt
+    self.origin = origin
+    self.body = body
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case id, receivedAt, origin, screen, body
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = try c.decode(UUID.self, forKey: .id)
+    receivedAt = try c.decode(Date.self, forKey: .receivedAt)
+    body = try c.decode(String.self, forKey: .body)
+    switch try c.decode(String.self, forKey: .origin) {
+    case "wait":
+      origin = .wait
+    case "palette":
+      origin = try c.decodeIfPresent(String.self, forKey: .screen) == "board" ? .board : .palette
+    case let raw:
+      throw DecodingError.dataCorruptedError(
+        forKey: .origin, in: c, debugDescription: "unknown origin: \(raw)")
+    }
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(id, forKey: .id)
+    try c.encode(receivedAt, forKey: .receivedAt)
+    try c.encode(body, forKey: .body)
+    switch origin {
+    case .palette:
+      try c.encode("palette", forKey: .origin)
+    case .board:
+      try c.encode("palette", forKey: .origin)
+      try c.encode("board", forKey: .screen)
+    case .wait:
+      try c.encode("wait", forKey: .origin)
+    }
+  }
 }
 
-/// 頼みの出どころ（届ける 1 行の頭に出す）。
-enum SecretaryOrigin: String, Codable {
+/// 頼みの出どころ（届ける 1 行の頭に出す）。頼む側が渡す。保存の値は `SecretaryRequest` の読み書きが決める。
+enum SecretaryOrigin: Equatable {
   /// ⌘⇧X の入力欄・タスクの行。
   case palette
+  /// Home のボードの依頼の欄。
+  case board
   /// 秘書の会話が付けた待ちの条件が解けた後の ⌘T。
   case wait
 }
