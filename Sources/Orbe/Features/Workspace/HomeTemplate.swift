@@ -46,11 +46,11 @@ enum HomeTemplate {
 
     ## 予定どおり何かを拾ってタスクの候補にする
 
-    - 受信（`set_intake`・`list_intakes`・`run_intake`・`pause_intake`・`delete_intake`・`list_intake_proposals`）。
-    - 予定（間隔か毎日の時刻）ごとに、取得（コマンドか軽い agent）が項目を取り、判定（agent）が指示文に照らして提案を出す。
-    - 人が ⌘⇧X の受信タブで受けた提案だけがタスクになる。Slack・メール・課題管理・GitHub などから拾うのが主な使い方。
+    - タスクの自動追加（`set_intake`・`list_intakes`・`run_intake`・`pause_intake`・`delete_intake`・`list_intake_proposals`）。
+    - 予定（間隔か毎日の時刻）ごとに、取得（コマンドか軽い agent）が項目を取り、判定（agent）が指示文に照らして候補を出す。
+    - 人が ⌘⇧X の自動追加タブで受けた候補だけがタスクになる。Slack・メール・課題管理・GitHub などから拾うのが主な使い方。
 
-    Orbe の中で予定どおり繰り返し動くのは、待ちの条件の確認と受信の 2 つ。
+    Orbe の中で予定どおり繰り返し動くのは、待ちの条件の確認とタスクの自動追加の 2 つ。
 
     ## タブと agent を操作する
 
@@ -95,14 +95,14 @@ enum HomeTemplate {
 
     ## Pick things up on a schedule as task candidates
 
-    - Intakes (`set_intake`, `list_intakes`, `run_intake`, `pause_intake`, `delete_intake`, \
+    - Task auto-add (`set_intake`, `list_intakes`, `run_intake`, `pause_intake`, `delete_intake`, \
     `list_intake_proposals`).
     - On each scheduled run (an interval or daily times), the fetch (a command or a light agent) gets items, \
-    and the judge (an agent) makes proposals against its instruction.
-    - Only proposals the user accepts in the Intake tab of ⌘⇧X become tasks. The main use is picking things \
+    and the judge (an agent) makes candidates against its instruction.
+    - Only candidates the user accepts in the Auto-add tab of ⌘⇧X become tasks. The main use is picking things \
     up from Slack, mail, issue trackers, GitHub, and the like.
 
-    Inside Orbe, the only things that run repeatedly on schedule are waiting-condition checks and intakes.
+    Inside Orbe, the only things that run repeatedly on schedule are waiting-condition checks and task auto-add.
 
     ## Operate tabs and agents
 

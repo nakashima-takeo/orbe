@@ -19,11 +19,11 @@ final class IntakeTextTests: OrbeTestCase {
     XCTAssertEqual(
       text.runHeadline(
         DesignSceneFixtures.intakeRun(at: at(13, 0, 0), items: 9, newItems: 4, proposed: 2)),
-      "13:00 の回 · 9 件取得 → 新しい 4 件を判定 → 提案 2")
+      "13:00 の回 · 9 件取得 → 新しい 4 件を判定 → 候補 2")
     XCTAssertEqual(
       text.runDetail(
         DesignSceneFixtures.intakeRun(at: at(9, 12, 0), items: 14, newItems: 3, proposed: 1)),
-      "今日 9:12 · 14 件取得 → 新しい 3 件を判定 → 1 件を提案")
+      "今日 9:12 · 14 件取得 → 新しい 3 件を判定 → 候補 1 件")
     XCTAssertEqual(
       text.runHeadline(DesignSceneFixtures.intakeRun(at: at(13, 0, 1), items: 9, newItems: 0)),
       "10/3 13:00 の回 · 9 件取得 → 新しい項目なし")
