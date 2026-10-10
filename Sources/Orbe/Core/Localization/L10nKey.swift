@@ -600,6 +600,17 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardIntakeRuns
   case boardIntakePausedNote
   case boardHintSelect
+  case boardHintToList
+  case boardHintCancel
+  case boardAskPlaceholder
+  case boardAskHint
+  case boardAskFixTag
+  case boardAskFixPlaceholder
+  case boardAskFixHint
+  case boardAsked
+  case boardAskedQueued
+  case boardAskClaudeMissing
+  case boardAskFixGone
 
   // MARK: - Link（OSC 8 リンクの確認・ブロック）
   case linkConfirmTitle

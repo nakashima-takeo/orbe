@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// ボードの gallery。Home のタブ行（左端に固定のボードのセル）を、ボード選択中・タブ選択中・タブが溢れて横スクロールへ
-/// 回る段で撮り、部品を持たないボードの一文と、自動追加の部品（見本『Home』）を撮る。タブ行の見本は §5 Tab 契約・§5.1 TabBar
+/// 回る段で撮り、部品を持たないボードの一文と、自動追加の部品（見本『Home』。依頼の欄を含む）を撮る。タブ行の見本は §5 Tab 契約・§5.1 TabBar
 /// （ボードのセルは単独タブの器）。
 extension DesignGallerySnapshotTests {
   func renderBoardSnapshots(dir: URL) throws {
@@ -87,6 +87,59 @@ extension DesignGallerySnapshotTests {
     try write("board_intake_long_command.png", long)
 
     try write("board_intake_narrow.png", board(), .ja, NSSize(width: 800, height: 480))
+
+    try renderBoardRequestSnapshots(write: write, board: board)
+  }
+
+  /// 依頼の欄: 文字あり（欄に焦点・フッターが欄のキー）・札あり・知らせ 4 種・狭い窓の札。秘書の口は閉包の差し替えで、本物の
+  /// 秘書・claude は起きない。
+  private func renderBoardRequestSnapshots(
+    write: (String, BoardModel, Language, NSSize) throws -> Void,
+    board: (IntakesFile?) -> BoardModel
+  ) throws {
+    let size = NSSize(width: 1440, height: 826)
+    func asking(_ result: Result<Secretary.Acceptance, Secretary.Refusal>) -> BoardModel {
+      let model = board(nil)
+      model.intake.onAsk = { _ in result }
+      return model
+    }
+
+    for language in [Language.ja, .en] {
+      let suffix = language == .ja ? "" : "_en"
+      let typed = board(nil)
+      typed.intake.toRequest()
+      typed.intake.requestText =
+        language == .ja ? "Slack の自分宛ての DM をタスクの候補にして" : "Turn my Slack DMs into task candidates"
+      try write("board_request_typed\(suffix).png", typed, language, size)
+
+      let fix = board(nil)
+      fix.intake.requestFix()
+      try write("board_request_fix\(suffix).png", fix, language, size)
+      fix.intake.requestText = language == .ja ? "認証を直して" : "Fix the auth"
+      try write("board_request_fix_typed\(suffix).png", fix, language, size)
+    }
+
+    for (name, result) in [
+      ("asked", Result<Secretary.Acceptance, Secretary.Refusal>.success(.accepted)),
+      ("queued", .success(.queued)), ("claude_missing", .failure(.claudeMissing)),
+    ] {
+      let model = asking(result)
+      model.intake.toRequest()
+      model.intake.requestText = "Slack の自分宛ての DM をタスクの候補にして"
+      model.intake.send()
+      try write("board_request_\(name).png", model, .ja, size)
+    }
+
+    let gone = asking(.success(.accepted))
+    gone.intake.requestFix()
+    try gone.intake.runner.delete(try XCTUnwrap(gone.intake.request.fix?.id))
+    gone.intake.send()
+    try write("board_request_fix_gone.png", gone, .ja, size)
+
+    let long = board(DesignSceneFixtures.boardIntakeLongFile())
+    long.intake.requestFix()
+    long.intake.requestText = "認証を直して"
+    try write("board_request_fix_narrow.png", long, .ja, NSSize(width: 800, height: 480))
   }
 
   private func homeRow(_ strip: TabStrip, selection: StatusRowModel.Selection) -> StatusRowModel {

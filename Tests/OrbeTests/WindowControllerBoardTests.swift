@@ -163,14 +163,61 @@ final class WindowControllerBoardTests: OrbeTestCase {
     XCTAssertEqual(list.selected?.id, 2, "workspace を戻るとボードへ")
   }
 
+  /// 依頼の欄で打っている途中にボードを離れて戻ると（パレットを閉じる・端末タブから戻る・workspace を戻る）、焦点は欄へ戻り、
+  /// 打ちかけの続きが打てる。端末タブを選んでいる間、隠れた欄はキーを取らない。
+  @MainActor func testFocusReturnsToTheRequestFieldWhereItWasLeft() throws {
+    IntakePersistence.save(DesignSceneFixtures.intakeEmptyFile())
+    let wc = WindowController()
+    shown = wc
+    NSApplication.shared.setActivationPolicy(.accessory)
+    wc.window.makeKeyAndOrderFront(nil)
+    let home = try XCTUnwrap(wc.store.homeIndex)
+    wc.switchWorkspace(to: home)
+    wc.newTab()
+    let tab = try XCTUnwrap(wc.activeTab)
+    let intake = wc.board.intake
+
+    wc.statusModel.onSelectBoard()
+    try press(wc, keyCode: 48, "\t")
+    XCTAssertEqual(intake.place, .request, "⇥ で欄へ")
+    try press(wc, keyCode: 0, "a")
+    XCTAssertEqual(intake.request.text, "a")
+
+    wc.showWorkspacePalette()
+    wc.window.makeFirstResponder(nil)  // パレットの入力欄が焦点を持っていった状態
+    wc.dismissPalette()
+    try press(wc, keyCode: 0, "b")
+    XCTAssertEqual(intake.request.text, "ab", "パレットを閉じると欄へ")
+
+    wc.select(.tab(tab))
+    try press(wc, keyCode: 0, "x")
+    XCTAssertEqual(intake.request.text, "ab", "端末タブの間は隠れた欄にキーが届かない")
+    wc.statusModel.onSelectBoard()
+    try press(wc, keyCode: 0, "c")
+    XCTAssertEqual(intake.request.text, "abc", "ボードへ戻ると欄へ")
+
+    wc.switchWorkspace(to: try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "default" }))
+    wc.switchWorkspace(to: home)
+    try press(wc, keyCode: 0, "d")
+    XCTAssertEqual(intake.request.text, "abcd", "workspace を戻ると欄へ")
+  }
+
   /// 焦点の当て直しが SwiftUI に写るのを待ってから ↓ を窓へ送る。
   private func pressDown(_ wc: WindowController) throws {
+    try press(wc, keyCode: 125, "\u{F701}", [.numericPad, .function])
+  }
+
+  /// 焦点の当て直しが SwiftUI に写るのを待ってからキーを窓へ送る。
+  private func press(
+    _ wc: WindowController, keyCode: UInt16, _ characters: String,
+    _ flags: NSEvent.ModifierFlags = []
+  ) throws {
     pump()
     let event = NSEvent.keyEvent(
-      with: .keyDown, location: .zero, modifierFlags: [.numericPad, .function],
+      with: .keyDown, location: .zero, modifierFlags: flags,
       timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: wc.window.windowNumber,
-      context: nil, characters: "\u{F701}", charactersIgnoringModifiers: "\u{F701}",
-      isARepeat: false, keyCode: 125)
+      context: nil, characters: characters, charactersIgnoringModifiers: characters,
+      isARepeat: false, keyCode: keyCode)
     NSApp.sendEvent(try XCTUnwrap(event))
     pump()
   }

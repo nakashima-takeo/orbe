@@ -3,7 +3,8 @@ import XCTest
 
 @testable import Orbe
 
-/// ボードの flow。タブ行の横スクロール（`testBoardScroll`）と、自動追加の部品のキー操作（`testBoardIntake`）。
+/// ボードの flow。タブ行の横スクロール（`testBoardScroll`）と、自動追加の部品のキー操作（`testBoardIntake`）と、依頼の欄
+/// （`testBoardRequest`）。
 /// タブ行の横スクロール: 選択が右端のタブへ移るとタブ列だけがスクロールし、ボードのセルは左端に残る。
 /// スクロール位置は描画を跨いで持つ状態なので、1 枚の host を使い回して選択を変えるたびに撮る（`flow` は毎回 host を
 /// 作り直すので、スクロールが出ない）。
@@ -71,6 +72,32 @@ extension DesignFlowSnapshotTests {
         ("run_now", { intake.perform(.runNow) }),
         ("run_refused", { intake.perform(.runNow) }),
         ("deleted", { intake.perform(.delete) }),
+      ])
+  }
+
+  /// 依頼の欄: ⇥ で欄へ → 打つ → ↵ で「依頼した」・欄が空 → ⇥ で一覧 → ⌘↵ で札と焦点 → esc で札が外れて一覧。秘書の口は
+  /// 閉包の差し替えで、本物の秘書・claude は起きない。
+  func testBoardRequest() throws {
+    let model = BoardModel(
+      intake: BoardIntakeModel(
+        runner: DesignSceneFixtures.intakeRunner(DesignSceneFixtures.boardIntakeFile())))
+    let intake = model.intake
+    intake.onAsk = { _ in .success(.accepted) }
+    try flow(
+      "board_request", size: NSSize(width: 1440, height: 826),
+      render: {
+        BoardRoot(
+          model: model, translucency: ChromeTranslucency(),
+          localization: LocalizationStore(language: .ja), fontResolver: ChromeFontResolver())
+      },
+      steps: [
+        ("start", {}),
+        ("tab", { intake.toRequest() }),
+        ("typed", { intake.requestText = "Slack の自分宛ての DM をタスクの候補にして" }),
+        ("sent", { intake.send() }),
+        ("tab_back", { intake.toList() }),
+        ("fix", { intake.requestFix() }),
+        ("cancel", { intake.toList() }),
       ])
   }
 }

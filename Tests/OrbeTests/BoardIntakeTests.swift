@@ -12,8 +12,11 @@ import XCTest
 /// 詳細が消えてキーが効かなくなる。
 @MainActor
 final class BoardIntakeTests: PaletteCardWindowTestCase {
-  private enum Key {
+  enum Key {
+    static let a: UInt16 = 0
     static let x: UInt16 = 7
+    static let tab: UInt16 = 48
+    static let escape: UInt16 = 53
     static let space: UInt16 = 49
     static let delete: UInt16 = 51
     static let enter: UInt16 = 36
@@ -21,10 +24,10 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
   }
 
   // 見本『Home』の 4 件（DesignSceneFixtures+Board）。
-  private static let slack = 1
-  private static let github = 2
-  private static let failingBacklog = 3
-  private static let pausedGmail = 4
+  static let slack = 1
+  static let github = 2
+  static let failingBacklog = 3
+  static let pausedGmail = 4
 
   private var held: [NSWindow] = []
 
@@ -34,14 +37,14 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
     super.tearDown()
   }
 
-  private func board() -> BoardModel {
+  func board() -> BoardModel {
     BoardModel(
       intake: BoardIntakeModel(
         runner: DesignSceneFixtures.intakeRunner(DesignSceneFixtures.boardIntakeFile())))
   }
 
   /// ボードを実窓に載せ、ボードを選んだときと同じ当て直し（`focus()`）で焦点を中へ入れる。
-  private func mount(_ model: BoardModel) -> NSWindow {
+  func mount(_ model: BoardModel) -> NSWindow {
     NSApplication.shared.setActivationPolicy(.accessory)
     let window = KeyDeliveryWindow(
       contentRect: NSRect(x: -20000, y: -20000, width: 1200, height: 700),
@@ -58,7 +61,7 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
   }
 
   /// 実アプリと同じく、キューから取り出してから配る（SwiftUI はキーリピートかをそのキーから読む）。
-  private func press(
+  func press(
     _ keyCode: UInt16, _ characters: String, _ flags: NSEvent.ModifierFlags = [],
     repeating: Bool = false, to window: NSWindow
   ) {
@@ -79,7 +82,7 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
   }
 
   /// 実機の矢印キーは numericPad と function の修飾を伴って届く。
-  private func down(_ window: NSWindow) {
+  func down(_ window: NSWindow) {
     press(Key.down, "\u{F701}", [.numericPad, .function], to: window)
   }
 
@@ -140,7 +143,7 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
     press(Key.enter, "\r", to: window)
     press(Key.enter, "\r", repeating: true, to: window)
     XCTAssertTrue(intake.runner.isRunning(Self.slack))
-    XCTAssertNil(intake.refusal, "リピートで「実行中のため今すぐ実行できません」の赤を出さない")
+    XCTAssertNil(model.notice, "リピートで「実行中のため今すぐ実行できません」の赤を出さない")
 
     press(Key.delete, "\u{7F}", .command, to: window)
     press(Key.delete, "\u{7F}", .command, repeating: true, to: window)
@@ -150,13 +153,12 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
       "消えるのは 1 件だけ")
   }
 
-  /// 今すぐ実行は修飾なしの ↵ だけ。⌘↵・⇧↵・文字キーは何も起こさない。
+  /// 今すぐ実行は修飾なしの ↵ だけ。⇧↵・文字キーは何も起こさない（⌘↵ は直しの依頼で、走らせない）。
   func testModifiedEnterAndLettersDoNothing() {
     let model = board()
     let intake = model.intake
     let window = mount(model)
 
-    press(Key.enter, "\r", .command, to: window)
     press(Key.enter, "\r", .shift, to: window)
     press(Key.x, "x", to: window)
 

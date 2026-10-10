@@ -85,7 +85,18 @@ final class WindowController: NSObject, NSWindowDelegate {
     queriesRoot: BundledResources.root,
     language: { [weak self] in self?.localization.language ?? .systemDefault })
   // ボードの状態と器（どちらも 1 つだけ）。前面の workspace がボードを持つ間、器が content に載り、そのボードを映す。
-  private(set) lazy var board = BoardModel(intake: BoardIntakeModel(runner: intakeRunner))
+  private(set) lazy var board: BoardModel = {
+    let intake = BoardIntakeModel(runner: intakeRunner)
+    intake.onAsk = { [weak self] ask in
+      guard let self else { return .failure(.claudeMissing) }
+      do throws(Secretary.Refusal) {
+        return .success(try self.secretary.ask(ask, from: .board))
+      } catch {
+        return .failure(error)
+      }
+    }
+    return BoardModel(intake: intake)
+  }()
   private(set) lazy var boardView: BoardView = {
     let view = BoardView(
       model: board, translucency: chromeTranslucency, localization: localization,

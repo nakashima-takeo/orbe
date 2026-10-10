@@ -9,7 +9,9 @@ extension Theme.Typography {
   static let boardDetailTitle = NSFont.monospacedSystemFont(ofSize: 14, weight: .semibold)
   /// 見出しの件数と、詳細の値（mono 13）。
   static let boardValue = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-  /// 一覧の行の 2 段（名前・いつ）の行高。
+  /// 依頼の欄の頭の ❯（mono 16）。
+  static let boardPrompt = NSFont.monospacedSystemFont(ofSize: 16, weight: .regular)
+  /// 一覧の行の 2 段（名前・いつ）と、部品の見出しの行高。
   static let lineBoardRow: CGFloat = 1.5
 }
 
@@ -22,6 +24,9 @@ extension Theme.Layout {
   /// 一覧の行の最小の高さと、行の左の点。
   static let boardRowMinHeight: CGFloat = 58
   static let boardDot: CGFloat = 7
+  /// 依頼の欄の高さ（枠の内側）と、欄の頭の札の幅の上限（長い名前でも入力の幅を残す）。
+  static let boardRequest: CGFloat = 46
+  static let boardRequestTagMax: CGFloat = 320
   /// 選んだ行で効くキーのフッターの高さ。
   static let boardFooter: CGFloat = 44
 }

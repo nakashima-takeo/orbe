@@ -1,21 +1,22 @@
 import Observation
 
-/// ボードの状態。部品（今は自動追加 1 つ）のモデルと、ボードの中の焦点の宛先へ焦点を当て直す合図を持つ。
+/// ボードの状態。部品（今は自動追加 1 つ）のモデルと、フッターの右の知らせの 1 枠を持ち、部品へ焦点を当て直す口になる。
 @Observable final class BoardModel {
   let intake: BoardIntakeModel
-  /// 進むたびに、ボードの中の焦点の宛先へ焦点を当て直す。
-  private(set) var focusToken = 0
+  /// 部品が置き、次の操作で部品が消す。
+  private(set) var notice: BoardNotice?
 
   init(intake: BoardIntakeModel) {
     self.intake = intake
+    intake.onNotice = { [weak self] in self?.notice = $0 }
   }
 
   /// 器がホストへ first responder を渡す口。
   @ObservationIgnored var onFocus: () -> Void = {}
 
-  /// 焦点をボードの中の宛先へ当て直す。何度呼んでも同じ結果になる。
+  /// 焦点をボードの中（部品の最後に居た場所）へ当て直す。何度呼んでも同じ結果になる。
   func focus() {
     onFocus()
-    focusToken &+= 1
+    intake.refocus()
   }
 }
