@@ -219,7 +219,7 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
       unknown.stderr.contains("-32602") && unknown.stderr.contains("agent not detected"),
       "未検出 agent の理由が残る: \(unknown.stderr)")
 
-    // session ID の安全文字検証は `AgentCatalog.resumeCommand` の再利用（CLI に写さない）。
+    // session ID の安全文字検証は control 側の `AgentCatalog.isSafeSessionId`（CLI に写さない）。
     let injected = control.orb(["agent", "resume", "codex", "a;rm -rf /"])
     XCTAssertEqual(injected.status, 1, "不正 session ID は RPC エラー")
     XCTAssertTrue(

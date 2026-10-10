@@ -125,7 +125,7 @@ extension ControlServer {
       cwd: params["cwd"] as? String)
   }
 
-  /// `resume_agent` の main 側。sessionId の文字集合検証は target（`AgentCatalog.resumeCommand`）が持つ。
+  /// `resume_agent` の main 側。sessionId の文字集合検証は target（`controlResumeAgent` の `AgentCatalog.isSafeSessionId`）が持つ。
   func resumeAgent(params: [String: Any], target: ControlTarget) -> Result<
     AgentLaunch, ControlError
   > {

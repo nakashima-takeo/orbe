@@ -1,9 +1,9 @@
 import AppKit
 
-/// 制御チャネルのエージェント起動（`spawn_agent` / `resume_agent`）。どちらも GUI の
-/// Cmd+Shift+A / Cmd+Shift+C と同じ経路（`openTab` ＋ 解決済み絶対パス ＋ login shell の PATH）を
-/// 通る——起動のされ方が経路ごとに割れると、「GUI からは動くが CLI からは動かない」という形で
-/// 後から必ず出る。
+/// 制御チャネルのエージェント起動（`spawn_agent` / `resume_agent`）。spawn_agent は GUI の
+/// Cmd+Shift+A / Cmd+Shift+C と同じ経路（`openTab` ＋ 解決済み絶対パス ＋ login shell の PATH）を、
+/// resume_agent は復元・⇧⌘T と同じ休眠のタブの起床（`openResumedTab`）を通る——起動のされ方が
+/// 経路ごとに割れると、「GUI からは動くが CLI からは動かない」という形で後から必ず出る。
 extension WindowController {
   /// 検出済みエージェントを新タブで起こす（制御 API の spawn_agent）。command 省略時は対象
   /// workspace の実効 `default-agent` を `AgentLauncher.resolveDefault` で解く（GUI の Cmd+Shift+C
