@@ -32,7 +32,7 @@ updated: 2026-10-10
 
 ## 外部からの起動
 
-制御 API と `orb agent spawn` / `orb agent resume`（[control/cli](../control/cli.md)）からも起こせる。**GUI と同じ経路**を通る——新タブを起こす関数が 1 本しかなく、絶対パス・PATH 注入・cwd フォールバックの組成をそのまま共有する。起動のされ方が入口ごとに割れると、その差は「GUI からは動くが CLI からは動かない」という遠い形で出る。
+制御 API と `orb agent spawn` / `orb agent resume`（[control/cli](../control/cli.md)）からも起こせる。**GUI と同じ経路**を通る——新しく起こすのは GUI と同じ 1 本の関数で、絶対パス・PATH 注入・cwd フォールバックの組成をそのまま共有し、再開は[会話の再開の組み立て](#会話の再開の組み立て)の 1 か所を通る。起動のされ方が入口ごとに割れると、その差は「GUI からは動くが CLI からは動かない」という遠い形で出る。
 
 外部起動だけが持つのは対象 workspace の指定で、**指定しても前面化しない**（[control/api](../control/api.md) の mount 境界）。このとき解くデフォルトは**対象 workspace の**実効 `default-agent` で、⌘⇧C がアクティブ workspace のそれを読むのと同じ規則を、入力だけ変えて使う。
 
