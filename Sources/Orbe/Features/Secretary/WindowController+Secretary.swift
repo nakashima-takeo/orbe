@@ -34,6 +34,21 @@ extension WindowController: SecretaryHost {
     wakeUnselected(tab)
   }
 
+  /// 秘書のタブを指す知らせ（メニューバーのピルと通知音）。そのタブを見ているときは出さない。
+  func secretaryUnresponsive(_ tab: TerminalTab) {
+    if let visibleTab, tab === visibleTab { return }
+    guard let ws = workspaces.first(where: { ws in ws.tabs.contains { $0 === tab } }) else {
+      return
+    }
+    deliver(
+      ChromeNotification(
+        notice: .secretary(
+          SecretaryNotice(
+            tabId: tab.id, workspaceName: ws.name,
+            text: localization.string(.secretaryUnresponsive))),
+        settings: settingsStore.effective(override: ws.settingsOverride)))
+  }
+
   /// 起動時に 1 度、agent の検出が済んだら、溜めた頼みのために秘書を起こす（溜めが無ければ起こさない）。
   /// 検出は画面を開くたびにやり直されるので、2 度目以降の知らせでは起こさない——人が秘書のタブを閉じても、
   /// 勝手に起こし直さない。

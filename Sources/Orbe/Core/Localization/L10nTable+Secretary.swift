@@ -13,6 +13,9 @@ extension L10n {
       "タスク %1$@「%2$@」(%3$@) を頼む。", "Task %1$@ “%2$@” (%3$@): please take it on."
     ),
     .secretaryLineNote: ("補足: %@", " Note: %@"),
+    .secretaryUnresponsive: (
+      "秘書が応答しない — タブで確かめる", "The secretary isn’t responding — check its tab"
+    ),
     .taskPaletteDestination: ("行き先", "Destination"),
     .taskPaletteDestinationTask: ("タスクに書く", "Write a task"),
     .taskPaletteDestinationDefault: ("既定", "default"),

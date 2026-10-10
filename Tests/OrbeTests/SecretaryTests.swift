@@ -20,9 +20,10 @@ final class SecretaryTests: OrbeTestCase {
 
   /// 前面は main（素のタブ 1 枚）、背景に Home（`homeTabs`）。
   func launch(
-    _ file: SecretaryFile? = nil, homeTabs: [TabState] = [], stage: Bool = true
+    _ file: SecretaryFile? = nil, homeTabs: [TabState] = [], stage: Bool = true,
+    agentBody: String = "exec /bin/cat"
   ) throws -> WindowController {
-    if stage { _ = try stageFakeAgent("claude") }
+    if stage { _ = try stageFakeAgent("claude", body: agentBody) }
     if let file { SecretaryPersistence.save(file) }
     let home = try XCTUnwrap(HomeFolder.url).path
     let workspaces = WorkspacesFile(
@@ -99,7 +100,10 @@ final class SecretaryTests: OrbeTestCase {
 
     waitForScreen(tab, contains: "見積もりを山田さんに送る")
     XCTAssertTrue(screen(tab).contains("⌘⇧X から · "), "出どころが見える")
-    XCTAssertEqual(wc.secretary.record.pending, [], "届けたら列から外す")
+    XCTAssertEqual(wc.secretary.record.pending.count, 1, "届いた確証を見るまでは溜めたまま")
+
+    report(wc, tab, "working", "s-1")
+    XCTAssertEqual(wc.secretary.record.pending, [], "貼った後の working で列から外す")
     XCTAssertEqual(SecretaryPersistence.load()?.pending, [], "保存からも外す（再起動で二重に届かない）")
     XCTAssertEqual(SecretaryPersistence.load()?.sessionId, "s-1", "会話 ID を覚える")
   }
@@ -124,9 +128,10 @@ final class SecretaryTests: OrbeTestCase {
     report(wc, tab, "done", "s-1")
     waitForScreen(tab, contains: "二件目")
     XCTAssertFalse(screen(tab).contains("三件目"), "1 ターンに 1 件")
-    XCTAssertEqual(wc.secretary.record.pending.count, 1)
+    XCTAssertEqual(wc.secretary.record.pending.count, 2, "二件目は確証を見るまで残る")
 
     report(wc, tab, "working", "s-1")
+    XCTAssertEqual(wc.secretary.record.pending.count, 1)
     report(wc, tab, "done", "s-1")
     waitForScreen(tab, contains: "三件目")
   }

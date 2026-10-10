@@ -143,6 +143,13 @@ struct MenuBarStatusView: View {
           .environment(\.colorScheme, .dark)
         if let name = task.workspaceName { workspaceSlot(name) }
         messageSlot(task.text)
+      case .secretary(let secretary):
+        if let kind = AgentStateIcon.kind(state: "waiting") {
+          StatusGlyphView(kind: kind, size: 11, symbol: iconResolver.symbol(for: kind))
+            .environment(\.colorScheme, .dark)
+        }
+        workspaceSlot(secretary.workspaceName)
+        messageSlot(secretary.text)
       }
     }
   }
