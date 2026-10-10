@@ -1,7 +1,7 @@
 ---
 title: Orbe CLI（orb）
-description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/受信/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/intake/session/wait サブコマンド・socket 文脈解決・終了コード契約
-updated: 2026-10-10
+description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/タスクの自動追加/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/intake/session/wait サブコマンド・socket 文脈解決・終了コード契約
+updated: 2026-10-11
 ---
 
 # Orbe CLI（`orb`）
@@ -66,14 +66,14 @@ updated: 2026-10-10
 
 ステータスと優先度の語彙と日付の妥当性は control が持ち、CLI は素通しする（`--help` の一覧は人が読むための写し）。詳細の `-` 始まりや空文字は値必須フラグの規約で渡せず、詳細を外すのは `--no-description`。
 
-### intake（受信）
+### intake（タスクの自動追加）
 
-[受信](../platform/intake.md)を作り・直し・回し・結果を読む。各サブコマンドは同名の制御 API の動詞へそのまま乗る。
+[タスクの自動追加](../platform/intake.md)を作り・直し・回し・結果を読む。各サブコマンドは同名の制御 API の動詞へそのまま乗る。
 
-- `orb intake list [--json]` … ID 順に 1 行 1 受信（`id 状態 名前 いつ 次の時刻 前回` のタブ区切り。状態は `active` / `paused` / `running`、いつは `every 30m` / `daily 09:00,13:00`、前回は `<開始> 12 fetched, 3 new, 1 proposed` か `<開始> failed: <理由>`。無い値は `-`。制御文字の扱いは `task list` と同じ）。
-- `orb intake proposals [<id>] [--json]` … 覚えている提案を 1 行 1 つ（`id 状態 受信の id 期限 タイトル リンク`）。`<id>` でその受信の棚の分だけ。
+- `orb intake list [--json]` … ID 順に 1 行 1 自動追加（`id 状態 名前 いつ 次の時刻 前回` のタブ区切り。状態は `active` / `paused` / `running`、いつは `every 30m` / `daily 09:00,13:00`、前回は `<開始> 12 fetched, 3 new, 1 proposed` か `<開始> failed: <理由>`。無い値は `-`。制御文字の扱いは `task list` と同じ）。
+- `orb intake proposals [<id>] [--json]` … 覚えている候補を 1 行 1 つ（`id 状態 自動追加の id 期限 タイトル リンク`）。`<id>` でその自動追加の棚の分だけ。
 - `orb intake set [<id>] [--json]` … 標準入力の JSON（MCP の `set_intake` と同じ形の `name`・`fetch`・`judge`・`when`）で、`<id>` が無ければ作って新しい ID だけを出し、あれば丸ごと置き換える。定義をフラグに割らないのは、取得がコマンドか agent かで項目が入れ子になり、検証が CLI と control の 2 か所に割れるため。標準入力が空・JSON オブジェクトでないは usage エラー（exit 2）、定義の検証は control が持つ（違反は exit 1）。
-- `orb intake run <id> [--json]` … 今すぐ回す（止めた受信も受ける）。回の終わりを待たずに返る。
+- `orb intake run <id> [--json]` … 今すぐ回す（止めた自動追加も受ける）。回の終わりを待たずに返る。
 - `orb intake pause <id> [--json]` / `orb intake resume <id> [--json]` … 予定を止める・再開する。
 - `orb intake rm <id> [--json]`
 

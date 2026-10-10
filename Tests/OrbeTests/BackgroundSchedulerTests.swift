@@ -336,10 +336,10 @@ final class BackgroundSchedulerTests: OrbeTestCase {
     return changed
   }
 
-  /// 画面の「受信中…」は走っているかを観測して描く。今すぐ・予定で始まる・終わる・外して止めるのどれでも変化が届き、
+  /// 画面の「実行中…」は走っているかを観測して描く。今すぐ・予定で始まる・終わる・外して止めるのどれでも変化が届き、
   /// 数え直しや予約の張り直し（いつの差し替え）だけでは届かない。
   ///
-  /// 壊れると何が起きるか。受信中…が出ない・終わっても消えない。予約を張り直すたびに画面が無駄に描き直される。
+  /// 壊れると何が起きるか。実行中…が出ない・終わっても消えない。予約を張り直すたびに画面が無駄に描き直される。
   @MainActor func testRunningIsObservableAndRecountsAreNot() throws {
     let recorder = try registerStart()
 

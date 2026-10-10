@@ -3,11 +3,11 @@ import XCTest
 @testable import Orbe
 
 /// ⌘⇧X の受信タブ——棚と提案の一覧を同一性で選び、居場所（提案の一覧・棚・中身）を移り、提案をタスクにする・捨てる、受信を
-/// 今すぐ受信・止める・消す。本物の `IntakeStore`・`IntakeRunner`・`TaskStore` を読み書きする（取得は始まっても終わらない）。
+/// 今すぐ実行・止める・消す。本物の `IntakeStore`・`IntakeRunner`・`TaskStore` を読み書きする（取得は始まっても終わらない）。
 ///
 /// 壊れると何が起きるか。↵ や ⌘⌫ が光っている行とは別の提案に当たる（タスクにした・捨てた直後や、裏の回が確定した直後）。
 /// タスクにした提案が Home に付かず、期限やリンクを失う。消えた受信の中身が残り、⌘⌫ が別の受信を消す。
-/// 走っている受信の今すぐ受信が黙って無視される。
+/// 走っている受信の今すぐ実行が黙って無視される。
 @MainActor
 final class TaskPaletteIntakeModelTests: OrbeTestCase {
   func palette() -> TaskPaletteModel {

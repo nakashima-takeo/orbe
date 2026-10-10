@@ -31,27 +31,33 @@ struct IntakeText {
     return day == today ? clock(date) : TaskDueText.date(day, today: today)
   }
 
-  /// 提案の一覧の頭。「13:00 の回 · 9 件取得 → 新しい 4 件を判定 → 提案 2」。
+  /// 提案の一覧の頭。「13:00 の回 · 9 件取得 → 新しい 4 件を判定 → 候補 2」。
   func runHeadline(_ run: IntakeRun?) -> String {
     guard let run else { return l10n.string(.taskPaletteIntakeNeverRan) }
     return l10n.format(.taskPaletteIntakeRunAt, stamp(run.startedAt)) + " · "
-      + steps(run, proposed: .taskPaletteIntakeProposedShort)
+      + steps(
+        run, proposedOne: .taskPaletteIntakeProposedShortOne,
+        proposedOther: .taskPaletteIntakeProposedShortOther)
   }
 
-  /// 受信の中身の前回。「今日 9:12 · 14 件取得 → 新しい 3 件を判定 → 1 件を提案」。
+  /// 受信の中身の前回。「今日 9:12 · 14 件取得 → 新しい 3 件を判定 → 候補 1 件」。
   func runDetail(_ run: IntakeRun?) -> String {
     guard let run else { return l10n.string(.taskPaletteIntakeNeverRan) }
-    return moment(run.startedAt) + " · " + steps(run, proposed: .taskPaletteIntakeProposedLong)
+    return moment(run.startedAt) + " · "
+      + steps(
+        run, proposedOne: .taskPaletteIntakeProposedLongOne,
+        proposedOther: .taskPaletteIntakeProposedLongOther)
   }
 
-  private func steps(_ run: IntakeRun, proposed: L10nKey) -> String {
+  private func steps(_ run: IntakeRun, proposedOne: L10nKey, proposedOther: L10nKey) -> String {
     if let failure = run.failure { return l10n.format(.taskPaletteIntakeFailed, failure) }
     var parts = [l10n.format(.taskPaletteIntakeFetched, run.fetch.items)]
     if run.newItems == 0 {
       parts.append(l10n.string(.taskPaletteIntakeNothingNew))
     } else {
       parts.append(l10n.format(.taskPaletteIntakeJudged, run.newItems))
-      parts.append(l10n.format(proposed, run.judge?.proposed ?? 0))
+      parts.append(
+        l10n.plural(run.judge?.proposed ?? 0, one: proposedOne, other: proposedOther))
     }
     return parts.joined(separator: " → ")
   }

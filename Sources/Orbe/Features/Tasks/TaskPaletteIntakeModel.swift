@@ -29,7 +29,7 @@ struct TaskPaletteIntakeShelfRow: Equatable, Identifiable {
 enum TaskPaletteIntakeError: Equatable {
   /// タスクにするを、タスクのストアが受け付けなかった。
   case accept
-  /// 走っている間の今すぐ受信。
+  /// 走っている間の今すぐ実行。
   case running
 
   var message: L10nKey {
