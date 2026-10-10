@@ -238,8 +238,8 @@ final class TerminalTab {
   /// 同一性の更新は `AgentSession.updated` が持つ（command は常に上書き・sessionId は同じ CLI
   /// からの報告のあいだだけ sticky）。適用の前後で同一性を比べ、終わった同一性は `closed(agent)`
   /// （`reason` は hook が運ぶ終了理由）、得た同一性は `opened` として上位へ渡す——sessionId が
-  /// A→B へ変わる報告では `closed(A)` → `opened(B)` の順。報告ごとに、受けた時点の端末の前面のプロセスグループ
-  /// （報告した agent のもの）を添える。
+  /// A→B へ変わる報告では `closed(A)` → `opened(B)` の順。報告ごとに、受けた時点の端末の前面のプロセスグループが
+  /// 報告者のグループなら、報告した agent の前面として添える（tmux の中の agent・前面が入れ替わった後の報告は添えない）。
   ///
   /// Attention 用の保持: stateChangedAt は **state の値が実際に変わったときだけ** `now` に更新する
   /// （working→working の連続報告で一覧の並びが暴れない）。message は state の遷移で確定し直し、
@@ -273,14 +273,14 @@ final class TerminalTab {
           session: session,
           report: AgentReport(
             state: report.state, message: keep ? prior.message : report.message,
-            stateChangedAt: prior.stateChangedAt, foregroundGroup: surface.foregroundProcessGroup))
+            stateChangedAt: prior.stateChangedAt, foregroundGroup: foreground(reportedBy: report)))
       } else {
         // 実変化（.none・report なしからの誕生を含む）。
         agentSlot = .live(
           session: session,
           report: AgentReport(
             state: report.state, message: report.message, stateChangedAt: now,
-            foregroundGroup: surface.foregroundProcessGroup))
+            foregroundGroup: foreground(reportedBy: report)))
         changed = true
       }
     }

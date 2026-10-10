@@ -6,7 +6,7 @@ import OrbeSessionLog
 /// `windowedHandler(for:)` の switch が持ち、拡張は fall-through で引き受ける。param 検証（-32602）は
 /// ここのハンドラが行い、ドメイン解決（-32004 等）は target 側が返す。
 extension ControlServer {
-  /// サーバーがタブを解決してから触る動詞（読み書き・状態報告）を解決する。未解決のタブは -32004。
+  /// サーバーがタブを解決してから触る動詞（読み書き）を解決する。未解決のタブは -32004。
   /// 非該当は nil で次の解決（タブ操作）へ落とす。
   func resolvedTabHandler(for method: String) -> WindowedHandler? {
     func tab(_ target: ControlTarget, _ params: [String: Any]) -> TerminalTab? {
@@ -37,15 +37,6 @@ extension ControlServer {
           return .failure(ControlError(code: -32602, message: "invalid key"))
         }
         t.surface.controlSendKey(key)
-        return .success(["ok": true])
-      }
-    case "report_agent":
-      return { target, params in
-        guard let t = tab(target, params) else { return .failure(notFound) }
-        guard let report = self.hookReport(params) else {
-          return .failure(ControlError(code: -32602, message: "missing agent/state"))
-        }
-        target.controlReportAgent(tab: t, report: report)
         return .success(["ok": true])
       }
     default:
@@ -83,6 +74,26 @@ extension ControlServer {
       }
     default:
       return nil
+    }
+  }
+
+  /// `report_agent`。報告者は接続の向こうのプロセスなので、接続が取った報告者のグループを報告に添えて main で適用する
+  /// （会話へ貼ってよいかは、報告者が端末の前面のグループに属するかで決まる）。未解決のタブは -32004。
+  func reportAgent(id: Any?, params: [String: Any], conn: Connection) {
+    let reporterGroup = conn.peerGroup
+    DispatchQueue.main.async {
+      let result: Result<Any, ControlError> = self.onWindow { target in
+        guard let tab = (params["tabId"] as? Int).flatMap(target.controlResolveTab) else {
+          return .failure(ControlError(code: -32004, message: "tab not found"))
+        }
+        guard var report = self.hookReport(params) else {
+          return .failure(ControlError(code: -32602, message: "missing agent/state"))
+        }
+        report.reporterGroup = reporterGroup
+        target.controlReportAgent(tab: tab, report: report)
+        return .success(["ok": true])
+      }
+      self.queue.async { conn.respond(id: id, result: result) }
     }
   }
 

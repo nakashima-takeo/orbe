@@ -33,7 +33,9 @@ extension WindowControllerTaskControlTests {
   private func report(_ wc: WindowController, _ tab: TerminalTab, _ agent: String, _ state: String)
   {
     wc.controlReportAgent(
-      tab: tab, report: AgentHookReport(agent: agent, state: state, sessionId: "s-1"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: agent, state: state, sessionId: "s-1", reporterGroup: foregroundReporter(tab)))
   }
 
   // MARK: - 付ける

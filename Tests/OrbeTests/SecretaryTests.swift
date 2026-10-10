@@ -57,7 +57,9 @@ final class SecretaryTests: OrbeTestCase {
       waitUntil(ControlProcess.tabSettleTimeout) { tab.surface.foregroundProcessGroup != nil },
       "端末のプロセスが起きない")
     wc.controlReportAgent(
-      tab: tab, report: AgentHookReport(agent: "claude", state: state, sessionId: id))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: state, sessionId: id, reporterGroup: foregroundReporter(tab)))
     wc.flushChrome()
   }
 

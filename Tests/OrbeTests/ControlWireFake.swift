@@ -45,6 +45,7 @@ final class FakeControlTarget: ControlTarget {
     let messageText: String?
     let messageSource: String?
     let reason: String?
+    let reporterGroup: pid_t?
   }
   struct Spawn {
     let workspaceId: Int?
@@ -197,7 +198,7 @@ final class FakeControlTarget: ControlTarget {
       ReportedAgent(
         tabId: tab.id, agent: report.agent, state: report.state, sessionId: report.sessionId,
         messageText: report.message?.text, messageSource: report.message?.source,
-        reason: report.reason))
+        reason: report.reason, reporterGroup: report.reporterGroup))
   }
 
   func controlFocusTab(tabId: Int) -> Result<Any, ControlError> {

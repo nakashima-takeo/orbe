@@ -69,6 +69,26 @@ final class AgentHookPathTests: OrbeTestCase {
       tab.agentSlot.session?.sessionId, "s-1", "stdin の session_id が resume 鍵としてタブまで届く")
   }
 
+  /// タブの中の agent が起こした hook の報告だけが、会話へ貼ってよい前面を覚えさせる。同じタブを名乗っても、タブの
+  /// 端末の外（tmux のペイン・ここではテストのプロセス）から来た報告は前面を覚えさせない。
+  func testOnlyAHookFromTheTabsForegroundLetsTheConversationTakeInput() throws {
+    let control = try startControlProcess(workspaces: ["main"])
+    let shim = try stagePlugin()
+    let tabId = try XCTUnwrap(
+      control.target.controlSpawn(
+        workspaceId: nil, cwd: nil,
+        command: "/bin/sh -c 'echo {} | /bin/sh \(shim.path) claude idle; exec /bin/sleep 600'"))
+    let tab = try XCTUnwrap(control.target.controlResolveTab(tabId))
+
+    XCTAssertTrue(
+      waitUntil(5) { tab.acceptsConversationInput },
+      "タブの前面の hook の報告で貼ってよくならない（agentState=\(tab.agentState ?? "nil")）")
+
+    runShim(shim, env: tabEnv(tab), state: "idle", stdin: "{}")
+    XCTAssertTrue(
+      waitUntil(5) { !tab.acceptsConversationInput }, "タブの外から来た報告で前面を覚えたまま")
+  }
+
   /// Orbe 外の端末（`ORBE_TAB` / `ORBE_SOCK` が無い）で走った hook はタブを一切動かさない。
   /// hook は Orbe を知らないセッションでも走るため、ここが no-op でないと無関係な端末の活動が
   /// タブの状態として現れる。
