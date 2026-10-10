@@ -16,8 +16,7 @@ struct IntakeText {
 
   /// 今日なら「13:00」、ほかの日は「10/3 13:00」。
   func stamp(_ date: Date) -> String {
-    let day = TaskItem.DueDate(date, timeZone: timeZone)
-    return day == today ? clock(date) : "\(TaskDueText.date(day, today: today)) \(clock(date))"
+    TaskDueText.stamp(date, timeZone, today: today)
   }
 
   /// 今日なら「今日 10:24」、ほかの日は「10/9 10:24」。

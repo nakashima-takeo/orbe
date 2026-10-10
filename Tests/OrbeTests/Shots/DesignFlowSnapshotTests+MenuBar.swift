@@ -228,6 +228,55 @@ extension DesignFlowSnapshotTests {
         ),
       ])
   }
+
+  /// 秘書が応えない知らせ。印は入力待ちのグリフ・workspace 名は Home・本文「秘書が応答しない — タブで確かめる」の
+  /// ピルが agent と同じ開き方で開く。03 は開いた直後の chrome の再投影で、一覧の投影ではないので取り下げられずに
+  /// 開いたまま滞留する。閉じた 06 の件数は agent の 1 件だけで、秘書の知らせは数えない。
+  func testMenubarSecretaryNotice() throws {
+    let t0 = Date()
+    let store = AttentionStore()
+    let driver = MenuBarArrivalDriver()
+    let agent = AttentionRow(
+      tabId: 9301, workspaceName: "api-gateway", tabTitle: "deploy スクリプト整理", state: "waiting",
+      message: "ビルド成果物の掃除方法を選んでください。", stateChangedAt: t0.addingTimeInterval(-45))
+    let notice = SecretaryNotice(
+      tabId: 9201, workspaceName: "Home",
+      text: LocalizationStore(language: .ja).string(.secretaryUnresponsive))
+    try flow(
+      "menubar_secretary_notice", size: NSSize(width: 420, height: 64),
+      render: { menuBarSnapshot(store: store, phase: driver.phase) },
+      steps: [
+        ("quiet", {}),
+        (
+          "arrive",
+          {
+            store.noteTransient(.secretary(notice), dwell: 22, now: t0)
+            driver.arrived(at: t0)
+          }
+        ),
+        (
+          "reprojected",
+          {
+            reproject(store, driver, [agent], at: t0.addingTimeInterval(0.5))
+            driver.tick(now: t0.addingTimeInterval(0.84))
+          }
+        ),
+        ("dwell", { driver.tick(now: t0.addingTimeInterval(5)) }),
+        (
+          "collapse_half",
+          {
+            driver.expired(at: t0.addingTimeInterval(22))
+            driver.tick(now: t0.addingTimeInterval(22.3))
+          }
+        ),
+        (
+          "closed",
+          {
+            if driver.tick(now: t0.addingTimeInterval(22.6)) { store.transient = nil }
+          }
+        ),
+      ])
+  }
 }
 
 /// chrome の再投影（一覧の差し替え）。`MenuBarController.syncTransient` と同じく、取り下げが決まったら

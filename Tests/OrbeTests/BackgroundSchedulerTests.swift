@@ -13,12 +13,12 @@ final class BackgroundSchedulerTests: OrbeTestCase {
   private let start = Date(timeIntervalSince1970: 1_800_000_000)
   private var now = Date(timeIntervalSince1970: 1_800_000_000)
   private var armed: (date: Date, fire: () -> Void)?
-  private var runner: FakeRunner!
+  private var runner: FakeJobs!
   private var scheduler: BackgroundScheduler!
   private var events: [String: [BackgroundScheduler.Event]] = [:]
 
   override func setUp() {
-    runner = FakeRunner()
+    runner = FakeJobs()
     scheduler = BackgroundScheduler(run: runner.run)
     scheduler.now = { [unowned self] in now }
     scheduler.calendar = { Calendar(identifier: .gregorian) }
@@ -75,7 +75,7 @@ final class BackgroundSchedulerTests: OrbeTestCase {
 
     advance(to: start.addingTimeInterval(60))
     XCTAssertEqual(runner.calls.count, 1)
-    runner.finish(0, with: result(startedAt: now))
+    runner.finish(0, result(startedAt: now))
 
     XCTAssertEqual(events["a"], [.ran(result(startedAt: now))])
     XCTAssertEqual(armed?.date, now.addingTimeInterval(60), "次は走った回から 1 間隔後")
@@ -86,7 +86,7 @@ final class BackgroundSchedulerTests: OrbeTestCase {
     try register(anchor: start.addingTimeInterval(-3600))
 
     XCTAssertEqual(runner.calls.count, 1)
-    runner.finish(0, with: result(startedAt: now))
+    runner.finish(0, result(startedAt: now))
 
     XCTAssertEqual(runner.calls.count, 1, "過ぎた 60 回分を積まない")
     XCTAssertEqual(armed?.date, now.addingTimeInterval(60))
@@ -187,7 +187,7 @@ final class BackgroundSchedulerTests: OrbeTestCase {
     scheduler.runNow(id: "a")
 
     try register(anchor: start.addingTimeInterval(-30))
-    runner.finish(0, with: result(startedAt: now))
+    runner.finish(0, result(startedAt: now))
 
     XCTAssertEqual(runner.stopped, [0])
     XCTAssertNil(events["a"], "外した回の結果は返さない")
@@ -199,7 +199,7 @@ final class BackgroundSchedulerTests: OrbeTestCase {
     scheduler.runNow(id: "a")
 
     scheduler.remove(id: "a")
-    runner.finish(0, with: result(startedAt: now))
+    runner.finish(0, result(startedAt: now))
     advance(to: start.addingTimeInterval(3600))
 
     XCTAssertEqual(runner.stopped, [0])
@@ -229,7 +229,7 @@ final class BackgroundSchedulerTests: OrbeTestCase {
     XCTAssertEqual(armed?.date, start.addingTimeInterval(90), "走っている間も期限を見張る")
 
     advance(to: start.addingTimeInterval(90))
-    runner.finish(0, with: result(startedAt: start.addingTimeInterval(60)))
+    runner.finish(0, result(startedAt: start.addingTimeInterval(60)))
 
     XCTAssertEqual(runner.stopped, [0])
     XCTAssertEqual(events["a"], [.expired])
@@ -360,26 +360,10 @@ private final class StartRecorder {
   private(set) var finishes: [(Date) -> Void] = []
   private(set) var stopped = 0
 
-  func start(_ finish: @escaping (Date) -> Void) -> BackgroundRunHandle {
-    finishes.append(finish)
-    return BackgroundRunHandle { [unowned self] in stopped += 1 }
-  }
-}
-
-/// 実行の係の代役。呼ばれた順に番号を振り、止める手と終わらせる口を持つ。
-private final class FakeRunner {
-  private(set) var calls: [(job: BackgroundJob, completion: (BackgroundRunResult) -> Void)] = []
-  private(set) var stopped: [Int] = []
-
-  func run(_ job: BackgroundJob, completion: @escaping (BackgroundRunResult) -> Void)
+  func start(_ trigger: BackgroundScheduler.Trigger, _ finish: @escaping (Date) -> Void)
     -> BackgroundRunHandle
   {
-    let index = calls.count
-    calls.append((job, completion))
-    return BackgroundRunHandle { [unowned self] in stopped.append(index) }
-  }
-
-  func finish(_ index: Int, with result: BackgroundRunResult) {
-    calls[index].completion(result)
+    finishes.append(finish)
+    return BackgroundRunHandle { [unowned self] in stopped += 1 }
   }
 }

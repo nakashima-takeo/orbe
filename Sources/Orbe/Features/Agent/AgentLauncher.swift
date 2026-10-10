@@ -113,16 +113,18 @@ final class AgentLauncher {
   /// するので同梱の更新がそのまま届く。codex / agy は導入時にコピーを取るため、届くのは次に
   /// 登録し直したときになる）、オンボーディングを出さない経路では、実体化した中身の指紋が最後に
   /// 登録できた指紋と違うときだけ `install.sh` を無音で走らせる（codex / agy のコピーを今の中身へ
-  /// 置き換える）。登録しないインスタンス（隔離起動）は実体化だけで止まる。同梱が無い（`swift run` 等）なら
-  /// 実体化が nil を返すのでそこで止まる。
+  /// 置き換える）。登録しないインスタンス（隔離起動）は実体化もしない——実体化を読むのは登録だけで、隔離起動の
+  /// タブの agent は常用の Orbe が登録したプラグインで動く。同梱が無い（`swift run` 等）なら実体化が nil を返すので
+  /// そこで止まる。
   func syncAgentPluginOnLaunch() {
-    guard let dir = AgentPluginInstaller.materializeStablePlugin() else { return }
+    guard registersPlugin, let dir = AgentPluginInstaller.materializeStablePlugin() else { return }
     materializedPluginDir = dir
     // オンボーディングを出す経路では登録もオンボーディングが担う（install.sh の二重実行を防ぐ）。
-    guard registersPlugin, AppStatePersistence.load()?.agentPluginsInstalled == true,
+    let state = AppStatePersistence.load()
+    guard state?.agentPluginsInstalled == true,
       let name = AgentPluginInstaller.pluginName(in: dir),
       let digest = AgentPluginInstaller.digest(of: dir),
-      AgentPluginInstaller.registeredDigest != digest
+      state?.registeredAgentPluginDigest != digest
     else { return }
     // 記録するのは「1 つ以上登録できて、1 つも失敗しなかった」ときだけ。指紋が一致する限り
     // 二度と走らないので、1 件も登録できていない完了を記録すると恒久的に無効化される。
@@ -136,7 +138,7 @@ final class AgentLauncher {
       onComplete: { [weak self] in
         self?.installProc = nil
         guard registered, !failed else { return }
-        AgentPluginInstaller.recordRegistered(digest: digest)
+        AppStatePersistence.update { $0.registeredAgentPluginDigest = digest }
       })
   }
 
@@ -197,8 +199,10 @@ final class AgentLauncher {
   /// 書かず、次回起動で再表示＝自動リトライさせる（install.sh は冪等）。
   private func completeOnboarding(digest: String) {
     if let model = appModel?.onboarding, model.hasInstalls, !model.hasFailures {
-      AppStatePersistence.update { $0.agentPluginsInstalled = true }
-      AgentPluginInstaller.recordRegistered(digest: digest)
+      AppStatePersistence.update {
+        $0.agentPluginsInstalled = true
+        $0.registeredAgentPluginDigest = digest
+      }
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.dismissOnboarding()
     }

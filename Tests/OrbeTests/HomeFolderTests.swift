@@ -27,13 +27,13 @@ final class HomeFolderTests: OrbeTestCase {
 
     HomeFolder.prepare(language: .en)
     XCTAssertEqual(try contents(claudeMd()), "edited")
-    XCTAssertEqual(try contents(rules()), HomeTemplate.rules(.en))
+    XCTAssertEqual(try contents(rules()), HomeTemplate.rules(.en, home: try folder().path))
 
     try FileManager.default.removeItem(at: claudeMd())
     try FileManager.default.removeItem(at: rules())
     HomeFolder.prepare(language: .ja)
     XCTAssertFalse(FileManager.default.fileExists(atPath: try claudeMd().path))
-    XCTAssertEqual(try contents(rules()), HomeTemplate.rules(.ja))
+    XCTAssertEqual(try contents(rules()), HomeTemplate.rules(.ja, home: try folder().path))
   }
 
   func testReturningUserGetsTheFolderAtLaunchAndTheHomePointsAtIt() throws {
@@ -41,7 +41,7 @@ final class HomeFolderTests: OrbeTestCase {
     let wc = WindowController()
 
     XCTAssertEqual(try contents(claudeMd()), HomeTemplate.claudeMd(.ja))
-    XCTAssertEqual(try contents(rules()), HomeTemplate.rules(.ja))
+    XCTAssertEqual(try contents(rules()), HomeTemplate.rules(.ja, home: try folder().path))
     XCTAssertEqual(try XCTUnwrap(wc.workspaces.last).rootPath, try folder().path)
   }
 
@@ -56,6 +56,7 @@ final class HomeFolderTests: OrbeTestCase {
     gate.activate()
 
     XCTAssertEqual(try contents(claudeMd()), HomeTemplate.claudeMd(chosen), "選んだ言語の雛形")
-    XCTAssertEqual(try contents(rules()), HomeTemplate.rules(chosen), "選んだ言語の雛形")
+    XCTAssertEqual(
+      try contents(rules()), HomeTemplate.rules(chosen, home: try folder().path), "選んだ言語の雛形")
   }
 }

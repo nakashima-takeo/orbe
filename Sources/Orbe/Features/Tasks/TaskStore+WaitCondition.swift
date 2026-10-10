@@ -32,7 +32,9 @@ extension TaskStore {
     }
     switch update.waitingCondition {
     case .set(let request):
-      guard item.status != .done else { throw .invalid(conditionWithoutWaiting) }
+      guard item.status != .done else {
+        throw .invalid("a done task cannot have a waiting condition")
+      }
       waiting.condition = try newCondition(request, now: now)
     case .clear:
       waiting.condition = nil
@@ -55,7 +57,7 @@ extension TaskStore {
     return condition
   }
 
-  /// 付けるときと読み込みが共有する値の規則: 説明が空でない 1 行で、u1 の予定として通ること（間隔の下限・空の
+  /// 付けるときと読み込みが共有する値の規則: 説明が空でない 1 行で、`BackgroundSchedule` として通ること（間隔の下限・空の
   /// コマンド・相対の作業ディレクトリ）。期限が過ぎていることは問わない（読み込んだ後に解けるだけ）。
   static func checkCondition(_ condition: WaitCondition) throws(TaskStoreError) {
     guard
@@ -65,16 +67,7 @@ extension TaskStore {
     do throws(BackgroundJobError) {
       try condition.schedule.validate()
     } catch {
-      throw .invalid("invalid waiting condition: \(Self.message(error))")
-    }
-  }
-
-  private static func message(_ error: BackgroundJobError) -> String {
-    switch error {
-    case .intervalTooShort: "interval must be at least 1 minute"
-    case .emptyCommand: "command is empty"
-    case .relativeDirectory: "directory must be an absolute path"
-    default: "\(error)"
+      throw .invalid("invalid waiting condition: \(error.message)")
     }
   }
 }

@@ -88,7 +88,7 @@ import Observation
   /// 解けた待ちの会話を続きから始める（タスクの ID）。届けられなかった理由を返す。
   var onContinueWait: (Int) -> TaskPaletteError? = { _ in nil }
   /// 解けた待ちを続きから始められない理由（タスクの ID。nil は始められる）。
-  var onContinuationBlock: (Int) -> TaskPaletteError? = { _ in nil }
+  var continuationBlock: (Int) -> TaskPaletteError? = { _ in nil }
   /// 秘書に頼む。
   var onAskSecretary: (SecretaryAsk) -> Result<Secretary.Acceptance, Secretary.Refusal> = { _ in
     .failure(.claudeMissing)
@@ -118,7 +118,7 @@ import Observation
     intake = TaskPaletteIntakeModel(
       runner: intakes, tasks: store, home: workspaces.home, today: today, timeZone: timeZone)
     intake.onPlaceChange = { [weak self] in self?.focus() }
-    intake.addPosition = { [weak self] in self?.addPosition ?? .end }
+    intake.addPosition = { [weak self] in self?.addPosition(attachingTo: $0) ?? .end }
     intake.onOpenURL = { [weak self] in self?.onOpenURL($0) }
     reconcile()
     githubItems.refresh(visibleLinkIDs)
@@ -317,6 +317,7 @@ import Observation
   /// 確定できずに捨てた入力の理由はフッターに残る。
   func leaveEditingForAction() {
     error = nil
+    intake.clearError()
     leaveEditing()
   }
 

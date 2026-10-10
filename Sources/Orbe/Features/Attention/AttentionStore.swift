@@ -7,6 +7,15 @@ enum MenuBarNotice {
   case agent(AttentionRow)
   /// 待ちの条件が解けた瞬間。一覧の投影ではない出来事の知らせなので、取り下げは無い。
   case task(TaskNotice)
+  /// 秘書が応えない（起こした後の最初の報告・貼った頼みの確証が来ない）。取り下げは無い。
+  case secretary(SecretaryNotice)
+}
+
+/// 秘書が応えないことの知らせの中身。押すと秘書のタブへ移る。
+struct SecretaryNotice: Equatable {
+  let tabId: Int
+  let workspaceName: String
+  let text: String
 }
 
 /// タスク由来の知らせの中身。本文は到来の時点の UI の言語で組んだもの。

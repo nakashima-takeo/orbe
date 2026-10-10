@@ -166,12 +166,9 @@ struct HeadlessCLI {
   let reply: (Data) -> BackgroundAgentReply?
   let availableTools: (Data) -> [String]?
 
-  /// 指定した MCP のツールのうち、`available` に無いもの。`mcp__<サーバー>` はそのサーバーのツールが 1 つでもあれば揃っている。
+  /// 指定した MCP のツールのうち、`available` に無いもの。
   static func missingTools(_ requested: [String], available: [String]) -> [String] {
-    requested.filter { name in
-      name.hasPrefix("mcp__")
-        && !available.contains { $0 == name || $0.hasPrefix(name + "__") }
-    }
+    requested.filter { $0.hasPrefix("mcp__") && !available.contains($0) }
   }
 }
 
@@ -234,5 +231,14 @@ enum ClaudeHeadless {
     let text =
       event["result"] as? String ?? (event["errors"] as? [String] ?? []).joined(separator: "\n")
     return BackgroundAgentReply(text: text, isError: event["is_error"] as? Bool ?? false)
+  }
+}
+
+extension HeadlessRefusal {
+  var message: String {
+    switch self {
+    case .toolsNotAllowListable: "its built-in tools cannot be allow-listed"
+    case .noToolOrSessionControl: "it cannot limit tools or skip saving the session"
+    }
   }
 }

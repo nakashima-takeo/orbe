@@ -46,12 +46,13 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
   ) throws -> Int {
     var draft = TaskDraft(title: "設定の検索を速くする")
     draft.waitingReason = "レビュー待ち"
-    draft.waitingCondition = WaitConditionRequest(
-      description: "PR-214-reviewed", command: "exit 1", everyMinutes: 10,
-      deadline: Date().addingTimeInterval(3600), directory: directory,
-      conversation: WaitConversation(
-        command: "claude", sessionId: "s-1", workspace: workspace, secretary: false))
-    let task = try wc.taskStore.add(draft)
+    let task = try wc.taskStore.addWaiting(
+      draft,
+      WaitConditionRequest(
+        description: "PR-214-reviewed", command: "exit 1", everyMinutes: 10,
+        deadline: Date().addingTimeInterval(3600), directory: directory,
+        conversation: WaitConversation(
+          command: "claude", sessionId: "s-1", workspace: workspace, secretary: false)))
     let now = Date()
     wc.taskStore.recordCheck(
       task.id, condition: try XCTUnwrap(task.waiting?.condition?.id),
@@ -100,7 +101,10 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
     let wc = dump.controller
     let id = try resolved(wc, directory: nil)
     wc.controlReportAgent(
-      tab: dump.tab, report: AgentHookReport(agent: "claude", state: "idle", sessionId: "s-1"))
+      tab: dump.tab,
+      report: AgentHookReport(
+        agent: "claude", state: "idle", sessionId: "s-1",
+        reporterGroup: foregroundReporter(dump.tab)))
     let input = WaitContinueText.firstInput(
       try XCTUnwrap(resolution(wc, id)), l10n: wc.localization, timeZone: .current)
 
@@ -118,7 +122,10 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
 
     for state in ["working", "waiting"] {
       wc.controlReportAgent(
-        tab: dump.tab, report: AgentHookReport(agent: "claude", state: state, sessionId: "s-1"))
+        tab: dump.tab,
+        report: AgentHookReport(
+          agent: "claude", state: state, sessionId: "s-1",
+          reporterGroup: foregroundReporter(dump.tab)))
       XCTAssertNil(deliver(wc, id))
 
       dump.tab.surface.controlSendText("x")
@@ -127,7 +134,10 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
     }
 
     wc.controlReportAgent(
-      tab: dump.tab, report: AgentHookReport(agent: "claude", state: "idle", sessionId: "s-1"))
+      tab: dump.tab,
+      report: AgentHookReport(
+        agent: "claude", state: "idle", sessionId: "s-1",
+        reporterGroup: foregroundReporter(dump.tab)))
     let group = try XCTUnwrap(dump.tab.surface.foregroundProcessGroup)
     kill(-group, SIGSTOP)
     XCTAssertTrue(waitUntil { !ProcessGroup.isRunning(group) }, "前提: 止まる")

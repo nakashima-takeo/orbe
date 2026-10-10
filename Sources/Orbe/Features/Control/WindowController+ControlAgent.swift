@@ -1,9 +1,9 @@
 import AppKit
 
-/// 制御チャネルのエージェント起動（`spawn_agent` / `resume_agent`）。どちらも GUI の
-/// Cmd+Shift+A / Cmd+Shift+C と同じ経路（`openTab` ＋ 解決済み絶対パス ＋ login shell の PATH）を
-/// 通る——起動のされ方が経路ごとに割れると、「GUI からは動くが CLI からは動かない」という形で
-/// 後から必ず出る。
+/// 制御チャネルのエージェント起動（`spawn_agent` / `resume_agent`）。spawn_agent は GUI の
+/// Cmd+Shift+A / Cmd+Shift+C と同じ経路（`openTab` ＋ 解決済み絶対パス ＋ login shell の PATH）を、
+/// resume_agent は復元・⇧⌘T と同じ休眠のタブの起床（`openResumedTab`）を通る——起動のされ方が
+/// 経路ごとに割れると、「GUI からは動くが CLI からは動かない」という形で後から必ず出る。
 extension WindowController {
   /// 検出済みエージェントを新タブで起こす（制御 API の spawn_agent）。command 省略時は対象
   /// workspace の実効 `default-agent` を `AgentLauncher.resolveDefault` で解く（GUI の Cmd+Shift+C
@@ -12,12 +12,13 @@ extension WindowController {
     AgentLaunch, ControlError
   > {
     resolveAgentLaunch(command: command, workspaceId: workspaceId).flatMap { target in
-      launchAgentTab(target, command: target.agent.path, cwd: cwd)
+      launchAgentTab(target, command: AgentCatalog.startCommand(target.agent), cwd: cwd)
     }
   }
 
   /// 既存セッションを resume してエージェントを新タブで起こす（制御 API の resume_agent）。再開は休眠のタブの起床と
-  /// 同じ組み立て（`openResumedTab`）を通る——秘書の会話なら秘書の役割の指示も添える。
+  /// 同じ組み立て（`openResumedTab`）を通る——秘書の会話なら秘書の役割の指示も添える。その会話が既に生きているタブで
+  /// 開いていれば、新しく起こさずそのタブを返す（同じ会話を 2 つの claude が同時に書くと記録が混ざる）。
   func controlResumeAgent(command: String, sessionId: String, workspaceId: Int?, cwd: String?)
     -> Result<AgentLaunch, ControlError>
   {
@@ -25,10 +26,19 @@ extension WindowController {
       guard AgentCatalog.isSafeSessionId(sessionId) else {
         return .failure(ControlError(code: -32602, message: "invalid sessionId"))
       }
+      let session = AgentSession(command: target.agent.command, sessionId: sessionId)
+      if let open = store.allTabs().first(where: {
+        !$0.tab.isDormant && $0.tab.agentSlot.session == session
+      }) {
+        let state = open.tab.agentState
+        return .success(
+          AgentLaunch(
+            tabId: open.tab.id, workspaceId: workspaces[open.workspaceIndex].id,
+            agent: target.agent, readyAsOpened: state == "idle" || state == "done"))
+      }
       guard
         let opened = openResumedTab(
-          AgentSession(command: target.agent.command, sessionId: sessionId),
-          workspaceIndex: target.workspaceIndex, cwd: cwd)
+          session, workspaceIndex: target.workspaceIndex, cwd: cwd)
       else {
         return .failure(ControlError(code: -32000, message: "spawn failed"))
       }

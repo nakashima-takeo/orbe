@@ -52,6 +52,13 @@ extension DesignGallerySnapshotTests {
     expanded.submit()
     try write("tasks_done_expanded.png", expanded)
 
+    // 完了のタスクを選ぶ: 秘書には頼めないので、フッターに ⌘↵ のヒントも右の欄の「秘書に頼む」も出ない。
+    let doneSelected = DesignSceneFixtures.taskPaletteModel()
+    doneSelected.jump(1)
+    doneSelected.submit()
+    doneSelected.move(1)
+    try write("tasks_done_selected.png", doneSelected)
+
     // 右の欄の「＋ 結び付ける」に居る（右に「ブランチの PR は自動」）。
     let addLink = DesignSceneFixtures.taskPaletteModel()
     addLink.enterDetail()
@@ -188,7 +195,7 @@ extension DesignGallerySnapshotTests {
       DesignSceneFixtures.taskWaitConditionFile(
         resolved: .satisfied(
           output: String(repeating: "@sato · CHANGES_REQUESTED · 長いレビューの要約 ", count: 8))))
-    long.onContinuationBlock = { _ in .directoryMissing }
+    long.continuationBlock = { _ in .directoryMissing }
     try write("tasks_wait_resolved_blocked.png", long, 1440, 900)
   }
 }

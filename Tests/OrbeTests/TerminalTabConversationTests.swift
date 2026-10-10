@@ -4,11 +4,12 @@ import XCTest
 
 @testable import Orbe
 
-/// 会話へ今、文字を貼って Enter してよいか（秘書へ届ける・解けた待ちの続きから）を、本物の端末の前面のプロセスグループで
-/// 決めることと、休眠のタブを起こす再開に最初の入力を 1 度だけ添えること。
+/// 会話へ今、文字を貼って Enter してよいか（秘書へ届ける・解けた待ちの続きから）を、本物の端末の前面のプロセスグループと
+/// 報告者が属するグループで決めることと、休眠のタブを起こす再開に最初の入力を 1 度だけ添えること。
 ///
-/// 壊れると何が起きるか: agent を Ctrl+Z で止めた・agent が終わった後のシェルに、溜めた頼みや外の人が書いた文面（確認の
-/// 出力）が貼り付けられ、コマンドとして実行される。休眠のタブを起こすたびに、同じ起きたことが何度も届く。
+/// 壊れると何が起きるか: agent を Ctrl+Z で止めた・agent が終わった後のシェルや、tmux の今のペインのシェルに、溜めた頼みや
+/// 外の人が書いた文面（確認の出力）が貼り付けられ、コマンドとして実行される。休眠のタブを起こすたびに、同じ起きたことが
+/// 何度も届く。
 final class TerminalTabConversationTests: OrbeTestCase {
   func testWakeInputIsAddedToTheResumeOnce() {
     var inputs: [String?] = []
@@ -41,7 +42,7 @@ final class TerminalTabConversationTests: OrbeTestCase {
 
     run(tab, "sleep 600")
     let agent = try foreground(tab, other: shell)
-    tab.applyReport(AgentHookReport(agent: "claude", state: "idle", sessionId: "s-1"))
+    tab.applyReport(idle(ProcessGroup.terminalGroup(of: agent)))
     XCTAssertTrue(tab.acceptsConversationInput, "前面で動いている agent")
 
     kill(-agent, SIGTSTP)
@@ -61,7 +62,10 @@ final class TerminalTabConversationTests: OrbeTestCase {
     let (controller, tab) = try openTab("/bin/sleep 600")
     defer { withExtendedLifetime(controller) {} }
     let agent = try foreground(tab)
-    tab.applyReport(AgentHookReport(agent: "claude", state: "done", sessionId: "s-1"))
+    tab.applyReport(
+      AgentHookReport(
+        agent: "claude", state: "done", sessionId: "s-1",
+        reporterGroup: ProcessGroup.terminalGroup(of: agent)))
     XCTAssertTrue(tab.acceptsConversationInput)
 
     kill(-agent, SIGSTOP)
@@ -72,8 +76,78 @@ final class TerminalTabConversationTests: OrbeTestCase {
     kill(-agent, SIGCONT)
     XCTAssertTrue(waitUntil { tab.acceptsConversationInput }, "動き出せば、また貼ってよい")
 
-    tab.applyReport(AgentHookReport(agent: "claude", state: "working", sessionId: "s-1"))
+    tab.applyReport(
+      AgentHookReport(
+        agent: "claude", state: "working", sessionId: "s-1",
+        reporterGroup: ProcessGroup.terminalGroup(of: agent)))
     XCTAssertFalse(tab.acceptsConversationInput, "作業中は貼らない")
+  }
+
+  /// tmux の中の agent: 報告者は別の端末（tmux のペイン）に属し、タブの前面（tmux のクライアント）は動いていても報告者の
+  /// グループではない。ここでは別のタブの前面のプロセスを報告者にする。
+  func testReportFromAProcessOutsideTheForegroundGroupTakesNoInput() throws {
+    let (controller, tab) = try openTab("/bin/sleep 600")
+    defer { withExtendedLifetime(controller) {} }
+    let client = try foreground(tab)
+    let paneTabId = try XCTUnwrap(
+      controller.controlSpawn(workspaceId: nil, cwd: nil, command: "/bin/sleep 601"))
+    let pane = try foreground(try XCTUnwrap(controller.controlResolveTab(paneTabId)))
+
+    tab.applyReport(idle(ProcessGroup.terminalGroup(of: pane)))
+    XCTAssertTrue(ProcessGroup.isRunning(client), "前提: 前面は動いている")
+    XCTAssertFalse(tab.acceptsConversationInput, "報告者が前面のグループに属さない")
+
+    tab.applyReport(idle(ProcessGroup.terminalGroup(of: client)))
+    XCTAssertTrue(tab.acceptsConversationInput, "前面の agent が報告し直せば貼ってよい")
+  }
+
+  /// 前面がシェルへ戻った後に届いた agent の報告は、シェルを agent として覚えない（シェルは報告者の祖先でも）。
+  func testReportArrivingAfterTheShellRegainedTheForegroundTakesNoInput() throws {
+    let (controller, tab) = try openTab("/bin/zsh -f -i")
+    defer { withExtendedLifetime(controller) {} }
+    XCTAssertTrue(
+      waitUntil(ControlProcess.tabSettleTimeout) {
+        (tab.surface.controlReadText(scrollback: true) ?? "").contains("%")
+      }, "zsh のプロンプトが出ない")
+    let shell = try foreground(tab)
+    run(tab, "sleep 600")
+    let agent = try foreground(tab, other: shell)
+    let reporter = ProcessGroup.terminalGroup(of: agent)
+    kill(-agent, SIGTSTP)
+    XCTAssertTrue(waitUntil { tab.surface.foregroundProcessGroup == shell }, "シェルが前面に戻る")
+
+    tab.applyReport(idle(reporter))
+    XCTAssertFalse(tab.acceptsConversationInput)
+    kill(-agent, SIGKILL)
+  }
+
+  /// hook を制御端末から切り離して（setsid で）起こしても、報告者から辿れば端末を持つ agent のグループに当たる。
+  func testTerminalGroupWalksUpToTheProcessHoldingTheTerminal() throws {
+    let (controller, tab) = try openTab("/bin/zsh -f -i")
+    defer { withExtendedLifetime(controller) {} }
+    XCTAssertTrue(
+      waitUntil(ControlProcess.tabSettleTimeout) {
+        (tab.surface.controlReadText(scrollback: true) ?? "").contains("%")
+      }, "zsh のプロンプトが出ない")
+    let shell = try foreground(tab)
+    let pidFile = TestScratch.caseDir.appendingPathComponent("hook.pid").path
+    run(
+      tab,
+      "/bin/sh -c '/usr/bin/perl -MPOSIX -e \"POSIX::setsid(); sleep 600\" & echo $! > \(pidFile); wait'"
+    )
+    let agent = try foreground(tab, other: shell)
+    var hook: pid_t = 0
+    XCTAssertTrue(
+      waitUntil(ControlProcess.tabSettleTimeout) {
+        hook =
+          (try? String(contentsOfFile: pidFile, encoding: .utf8))
+          .flatMap { pid_t($0.trimmingCharacters(in: .whitespacesAndNewlines)) } ?? 0
+        return hook > 0 && getsid(hook) == hook
+      }, "切り離した hook が起きない")
+    defer { kill(hook, SIGKILL) }
+
+    XCTAssertEqual(ProcessGroup.terminalGroup(of: hook), agent)
+    kill(-agent, SIGKILL)
   }
 
   func testProcessGroupIsRunningOnlyWhileItHasProcessesAndNoneIsStopped() throws {
@@ -100,6 +174,10 @@ final class TerminalTabConversationTests: OrbeTestCase {
   }
 
   // MARK: - 駆動
+
+  private func idle(_ reporterGroup: pid_t?) -> AgentHookReport {
+    AgentHookReport(agent: "claude", state: "idle", sessionId: "s-1", reporterGroup: reporterGroup)
+  }
 
   /// 0 タブの workspace に `command` のタブを開く。タブ（surface と PTY）の寿命は controller が持つ。
   private func openTab(_ command: String) throws -> (WindowController, TerminalTab) {

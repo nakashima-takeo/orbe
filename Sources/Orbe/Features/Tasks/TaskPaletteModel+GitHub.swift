@@ -181,7 +181,8 @@ extension TaskPaletteModel {
       task = try store.add(
         TaskDraft(
           title: row.item.title, priority: pane.priority, due: pane.due,
-          workspace: workspaces.opened.id, links: [link]), at: addPosition)
+          workspace: workspaces.opened.id, links: [link]),
+        at: addPosition(attachingTo: workspaces.opened.id))
     } catch {
       // 拒まれうるのは、間に agent がその項目を結び付けていたときだけ（タイトルは GitHub が 1 行に保つ）。
       self.error = .link

@@ -8,6 +8,15 @@ enum TaskConditionPart: CaseIterable, Hashable {
   case log
 }
 
+/// 解けた待ちを、条件を付けた会話の続きから始められるか。
+enum TaskContinuation: Equatable {
+  /// 続きから始める会話が無い（解けていない・会話の記録が無い・再開できない CLI）。⌘T はいつもの ⌘T。
+  case none
+  case ready(WaitConversation)
+  /// 会話はあるが始められない（作業ディレクトリ・CLI が無い）。⌘T はいつもの ⌘T で、理由を出し続ける。
+  case blocked(TaskPaletteError)
+}
+
 /// 待ちの条件まわりの操作（会話のタブへ移る・箱の部分の開閉・解けた待ちを続きから始める）。条件の値は画面から変えない。
 extension TaskPaletteModel {
   /// 待っている条件を付けた agent の会話（解けた待ちの会話は `continuation(of:)`）。
@@ -28,27 +37,18 @@ extension TaskPaletteModel {
     return agent
   }
 
-  /// 解けた待ちを続きから始められるなら、その会話（会話が記録され、その CLI が再開できる）。
-  func continuation(of task: TaskItem) -> WaitConversation? {
+  /// 解けた待ちを続きから始められるか（会話が記録され、その CLI が再開でき、窓が始められるとき `ready`）。
+  func continuation(of task: TaskItem) -> TaskContinuation {
     guard let conversation = task.waitResolution?.waiting.condition?.conversation,
       AgentCatalog.profile(conversation.command) != nil
-    else { return nil }
-    return conversation
-  }
-
-  /// 解けた待ちの会話があるのに続きから始められない理由（作業ディレクトリ・CLI が無い）。
-  func continuationBlock(of task: TaskItem) -> TaskPaletteError? {
-    continuation(of: task) == nil ? nil : onContinuationBlock(task.id)
-  }
-
-  /// ⌘T が続きから始めるか（会話があり、始められる）。始められなければ ⌘T はいつもの ⌘T。
-  func continues(_ task: TaskItem) -> Bool {
-    continuation(of: task) != nil && continuationBlock(of: task) == nil
+    else { return .none }
+    if let block = continuationBlock(task.id) { return .blocked(block) }
+    return .ready(conversation)
   }
 
   /// 選んでいるタスクの解けた待ちを、条件を付けた会話の続きから始める（⌘T・起きたことの箱のボタン）。
   func continueWait() {
-    guard let task = selectedTask, continues(task) else { return }
+    guard let task = selectedTask, case .ready = continuation(of: task) else { return }
     leaveEditingForAction()
     error = onContinueWait(task.id)
   }

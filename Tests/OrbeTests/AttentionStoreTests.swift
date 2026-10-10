@@ -90,4 +90,9 @@ extension AttentionStore.Transient {
   var taskNotice: TaskNotice? {
     if case .task(let notice) = notice { notice } else { nil }
   }
+
+  /// 秘書が応えない知らせの中身（ほかの中身なら nil）。
+  var secretaryNotice: SecretaryNotice? {
+    if case .secretary(let notice) = notice { notice } else { nil }
+  }
 }

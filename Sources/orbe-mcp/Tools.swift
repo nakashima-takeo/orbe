@@ -3,7 +3,7 @@ import Foundation
 // MCP に露出するツール定義（名前＝control のメソッド名）。description は AI が読む唯一の説明なので、
 // 使い分け（prompt_agent と send_text）・意味（ready:false・truncated）・導出手順（session_log →
 // restore_sessions）をここに持つ。main.swift（stdio ループ・control 転送）から分離し、ツールを足す
-// ときに触るのはこのファイル（受信の動詞は Tools+Intake.swift）だけにする。
+// ときに触るのはこのファイルと `Tools+*.swift` だけにする。
 
 func obj(_ pairs: [(String, Any)]) -> [String: Any] { Dictionary(uniqueKeysWithValues: pairs) }
 func strProp(_ desc: String) -> [String: Any] { ["type": "string", "description": desc] }
@@ -275,7 +275,9 @@ let tools: [[String: Any]] =
           + "worktree（このタスクの作業の場所＝worktree のルートの絶対パス。ディレクトリが無ければ出ない）。"
           + "待ちに条件があれば waiting.condition{description,command,everyMinutes,deadline,directory?,"
           + "agent?{command,sessionId},setAt,checks（確認の回数）,lastCheck?{startedAt,result（success / exited / "
-          + "signaled / limited / stopped / notStarted）,stdout?,stderr?}}。条件で解けた待ちは waiting の代わりに "
+          + "signaled / limited / stopped / notStarted）,code?（exited の終了コード）,signal?（signaled のシグナル）,"
+          + "limit?（limited の上限: elapsed / idle / output）,reason?（notStarted の理由）,stdout?,stderr?}}。"
+          + "条件で解けた待ちは waiting の代わりに "
           + "waitResolved{how（satisfied / expired）,at,output?（確認の標準出力）,waiting（解けた待ちと条件。同じ形）}。"
           + "workspace に付いていないタスク（付き先が削除されたものを含む）は workspaceId を持たない。"
           + "完了したタスクも削除されるまで残る。description は人も agent も読む前提の欄。"
@@ -305,7 +307,6 @@ let tools: [[String: Any]] =
             "priority": strProp("high / medium / low（既定 medium）"),
             "due": strProp("期限（YYYY-MM-DD）"),
             "waitingReason": strProp("何を待っているか（待ちにする場合）"),
-            "waitingCondition": waitingConditionProp(nullable: false),
             "description": strProp("詳細（複数行可。人も agent も読む）"),
             "links": taskLinksProp("結び付ける GitHub の Issue・PR（先頭が主）"),
             "worktree": strProp("このタスクの作業の場所（実在するディレクトリの絶対パス）"),
@@ -326,7 +327,7 @@ let tools: [[String: Any]] =
           + "主（先頭）を先頭に保ったまま末尾に足して渡す。ほかのタスクに付いている Issue・PR を付け替えるには、"
           + "先にそのタスクの links から外してから、このタスクに付ける。worktree は null で外す。"
           + "ほかのタスクに付いている worktree を付け替えるときも、先にそのタスクから外す。"
-          + "waitingCondition で待ちに解ける条件を付ける（待っていないタスクには、waitingReason と一緒に渡す）。"
+          + "待ちに解ける条件を付ける・外すのは set_wait_condition。"
       ),
       (
         "inputSchema",
@@ -340,7 +341,6 @@ let tools: [[String: Any]] =
             "waitingReason": [
               "type": ["string", "null"], "description": "待ちの理由（null で待ちと条件を外す）",
             ],
-            "waitingCondition": waitingConditionProp(nullable: true),
             "description": strProp("詳細（置き換え）"),
             "links": taskLinksProp("結び付ける GitHub の Issue・PR（丸ごと置き換え。先頭が主。[] で全部外す）"),
             "worktree": [
@@ -374,6 +374,6 @@ let tools: [[String: Any]] =
       ("description", "タスクを一覧から消す（完了にするだけなら update_task の status: \"done\"）。"),
       ("inputSchema", schema(["taskId": intProp("消すタスク")], required: ["taskId"])),
     ]),
-  ] + startTaskTools + intakeTools
+  ] + waitConditionTools + startTaskTools + intakeTools
 
 let toolNames = Set(tools.compactMap { $0["name"] as? String })

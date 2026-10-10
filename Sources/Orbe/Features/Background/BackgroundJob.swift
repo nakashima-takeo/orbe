@@ -82,6 +82,7 @@ struct BackgroundLimits: Equatable {
 
 enum BackgroundJobError: Error, Equatable {
   case intervalTooShort
+  case intervalTooLong
   case noTimesOfDay
   case invalidTimeOfDay
   case emptyCommand
@@ -102,11 +103,14 @@ enum BackgroundTiming: Equatable {
   case daily(Set<BackgroundTimeOfDay>)
 
   static let minimumInterval: TimeInterval = 60
+  /// 7 日。番人の時計は秒を整数で持つので、桁あふれする間隔を予定に入れないため。
+  static let maximumInterval: TimeInterval = 7 * 24 * 60 * 60
 
   func validate() throws(BackgroundJobError) {
     switch self {
     case .every(let interval):
       guard interval >= Self.minimumInterval else { throw BackgroundJobError.intervalTooShort }
+      guard interval <= Self.maximumInterval else { throw BackgroundJobError.intervalTooLong }
     case .daily(let times):
       guard !times.isEmpty else { throw BackgroundJobError.noTimesOfDay }
       guard times.allSatisfy({ (0...23).contains($0.hour) && (0...59).contains($0.minute) }) else {

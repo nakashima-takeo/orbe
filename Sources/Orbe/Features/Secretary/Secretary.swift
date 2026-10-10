@@ -4,8 +4,8 @@ import Foundation
 protocol SecretaryHost: AnyObject {
   /// 起動中のタブ（休眠を含む）。閉じていれば nil。
   func secretaryTab(_ id: Int) -> TerminalTab?
-  /// その会話を持つタブ（生きているものを休眠より優先）。
-  func secretaryTab(session: String) -> TerminalTab?
+  /// その会話を持つ休眠のタブ。
+  func secretaryDormantTab(session: String) -> TerminalTab?
   /// 検出済みの claude。
   var secretaryClaude: AgentCLI? { get }
   /// Home に新しいタブで `command` を選ばずに起こす。起こせなければ nil。
@@ -14,6 +14,8 @@ protocol SecretaryHost: AnyObject {
   func secretaryResume(_ session: AgentSession)
   /// 休眠のタブを選ばずに起こす（起こす時点で再開が走る）。
   func secretaryWake(_ tab: TerminalTab)
+  /// 秘書が応えない（起こした後の最初の報告・貼った頼みの確証が来ない）ことを、秘書のタブを指す知らせで人に伝える。
+  func secretaryUnresponsive(_ tab: TerminalTab)
 }
 
 /// 秘書の係（窓に 1 つ）。秘書 = Orbe が秘書として起こした claude のプロセス（そのタブ）。人の頼みを受けて溜め
@@ -30,8 +32,12 @@ protocol SecretaryHost: AnyObject {
 /// - 届けるのは手が空いた秘書のタブ（会話へ今貼ってよく、送った後なら送った時刻より後に状態が変わった）に 1 件ずつ。
 ///   起こした直後も、最初の idle を待ってから貼る——届け方を 1 通りにして、「送った後の done / idle まで次を送らない」を
 ///   1 つの規則で守る。
-/// - 覚えた会話で起こしたタブが会話を報告しないまま閉じたら、その会話はもう再開できないとみなして外し、溜めがあれば
-///   新しい claude で 1 度だけ起こし直す。新しく起こしたタブが同じく閉じても起こし直さない（溜めは次に頼んだときへ）。
+/// - 貼った頼みは、その後の working（UserPromptSubmit）の報告を届いた確証として、そこで溜めから外す。確証が無いまま
+///   次の状態の変化が来たら同じ頼みを送り直す——claude の対話（フォルダの信頼・要約から再開）が出ていると、貼った文字は
+///   入力欄に届かない。起こしてから最初の報告、貼ってから確証が `patience` の間に来なければ、秘書のタブを指す知らせを出す。
+/// - 覚えた会話で起こしたタブが、会話を報告しないまま claude が終わって閉じたら、その会話はもう再開できないとみなして
+///   外し、溜めがあれば新しい claude で 1 度だけ起こし直す。新しく起こしたタブが同じく閉じても、人や制御 API が閉じても
+///   起こし直さない（溜めは次に頼んだときへ）。
 final class Secretary {
   /// 頼みの受け付けの結果。
   enum Acceptance: Equatable {
@@ -60,9 +66,11 @@ final class Secretary {
 
   private struct Remembered {
     let tabId: Int
-    var origin: Origin
+    let origin: Origin
     /// 会話を報告した（状態の報告と会話 ID を持った）ことがある。
     var reported: Bool
+    /// 閉じ方（閉じたときだけ）。
+    var closedBy: TabCloseOrigin?
   }
 
   private(set) var record: SecretaryFile
@@ -72,6 +80,12 @@ final class Secretary {
   private var remembered: Remembered?
   /// 最後に貼った時刻。秘書のタブが替われば消える。
   private var sentAt: Date?
+  /// 貼ったが、まだ届いた確証の無い頼み。
+  private var unconfirmed: UUID?
+  /// 応えを待つ見張りの世代。新しい見張りが前の見張りを無効にする。
+  private var watchGeneration = 0
+  /// 秘書が応えないとみなすまでの時間（起こしてから最初の報告・貼ってから確証まで）。
+  var patience: TimeInterval = 30
 
   init(
     host: SecretaryHost, tasks: TaskStore, localization: LocalizationStore,
@@ -127,6 +141,23 @@ final class Secretary {
     return launchArguments
   }
 
+  /// タブを閉じる直前（閉じ方を覚える。覚えた会話が再開できないとみなすのは claude が終わって閉じたときだけ）。
+  func tabClosing(_ id: Int, origin: TabCloseOrigin) {
+    guard remembered?.tabId == id else { return }
+    remembered?.closedBy = origin
+  }
+
+  /// 秘書のタブの報告（合流点を待たずに、届いた直後に）。貼った頼みの後に作業を始めた（working）なら、届いた確証として
+  /// 溜めから外す。合流点で見ると、すぐ終わるターンの working を見逃して同じ頼みを送り直す。
+  func noteReport(from tab: TerminalTab) {
+    guard remembered?.tabId == tab.id, let id = unconfirmed, let sentAt,
+      let report = tab.agentReport, report.state == "working", report.stateChangedAt > sentAt
+    else { return }
+    unconfirmed = nil
+    record.pending.removeAll { $0.id == id }
+    save()
+  }
+
   private var launchArguments: [String] {
     ["--append-system-prompt", SecretaryText.instructions(localization.language)]
   }
@@ -136,8 +167,8 @@ final class Secretary {
   func cycle(mayLaunch: Bool) {
     guard let host else { return }
     forgetClosedTab(host)
-    if remembered == nil, let id = record.sessionId, let found = host.secretaryTab(session: id),
-      found.isDormant
+    if remembered == nil, let id = record.sessionId,
+      let found = host.secretaryDormantTab(session: id)
     {
       remember(found, origin: .found)
     }
@@ -152,7 +183,8 @@ final class Secretary {
     guard let closed = remembered, host.secretaryTab(closed.tabId) == nil else { return }
     remembered = nil
     sentAt = nil
-    guard !closed.reported, closed.origin == .resumed else { return }
+    unconfirmed = nil
+    guard !closed.reported, closed.origin == .resumed, closed.closedBy == .process else { return }
     record.sessionId = nil
     save()
     guard !record.pending.isEmpty else { return }
@@ -192,21 +224,37 @@ final class Secretary {
   private func remember(_ tab: TerminalTab, origin: Origin) {
     remembered = Remembered(tabId: tab.id, origin: origin, reported: false)
     sentAt = nil
+    unconfirmed = nil
     follow(tab)
+    if origin != .found { watch { $0.agentReport == nil } }
   }
 
-  /// 手が空いた秘書のタブに 1 件を貼って Enter。印は貼る前に立てる（同じ一巡で 2 件送らない）。
+  /// 手が空いた秘書のタブに 1 件を貼って Enter。印は貼る前に立てる（同じ一巡で 2 件送らない）。溜めから外すのは
+  /// 届いた確証を見てから（`noteReport`）。
   private func deliver(_ host: SecretaryHost) {
     guard let remembered, let tab = host.secretaryTab(remembered.tabId), isFree(tab),
       let next = record.pending.first
     else { return }
     let now = Date()
     sentAt = now
-    record.pending.removeFirst()
-    save()
+    unconfirmed = next.id
     tab.surface.controlSendText(
       SecretaryText.line(next, now: now, timeZone: .current, l10n: localization))
     tab.surface.controlSendKey(ControlKey.enter)
+    watch { [weak self] _ in self?.unconfirmed == next.id && self?.sentAt == now }
+  }
+
+  /// `patience` の後も秘書のタブが `silent` なら、人に知らせる。
+  private func watch(_ silent: @escaping (TerminalTab) -> Bool) {
+    watchGeneration += 1
+    let generation = watchGeneration
+    DispatchQueue.main.asyncAfter(deadline: .now() + patience) { [weak self] in
+      guard let self, generation == self.watchGeneration, let host = self.host,
+        let id = self.remembered?.tabId, let tab = host.secretaryTab(id), !tab.isDormant,
+        silent(tab)
+      else { return }
+      host.secretaryUnresponsive(tab)
+    }
   }
 
   /// 手が空いた: 会話へ今貼ってよく（`TerminalTab.acceptsConversationInput`）、送った後ならその後に状態が変わった。

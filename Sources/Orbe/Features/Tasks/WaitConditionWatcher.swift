@@ -26,20 +26,27 @@ final class WaitConditionWatcher {
     self.onResolved = onResolved
   }
 
-  /// 観測を始める（以後、一覧が変わるたびに番人の予定と突き合わせる）。
+  /// 観測を始める（以後、一覧が変わるたびに番人の予定と突き合わせる）。観測するのは一覧だけで、番人への登録は観測の
+  /// 外で行う——中で行うと番人の状態まで観測に入り、確認が始まる・終わるたびに突き合わせが空回りする。
   func start() {
-    withObservationTracking {
-      reconcile()
+    let desired = withObservationTracking {
+      Self.desired(store.tasks)
     } onChange: { [weak self] in
       DispatchQueue.main.async { self?.start() }
     }
+    reconcile(desired)
   }
 
-  private func reconcile() {
+  /// 条件を持って待っているタスク（タスク ID → 条件）。
+  private static func desired(_ tasks: [TaskItem]) -> [Int: WaitCondition] {
     var desired: [Int: WaitCondition] = [:]
-    for task in store.tasks {
+    for task in tasks {
       if let condition = task.waiting?.condition { desired[task.id] = condition }
     }
+    return desired
+  }
+
+  private func reconcile(_ desired: [Int: WaitCondition]) {
     for id in registered.keys where desired[id] == nil {
       registered[id] = nil
       scheduler.remove(id: Self.key(id))

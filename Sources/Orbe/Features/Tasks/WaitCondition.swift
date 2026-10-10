@@ -39,7 +39,7 @@ struct WaitCondition: Codable, Equatable {
     log = []
   }
 
-  /// 番人へ渡す予定。値の検証（間隔の下限・空のコマンド・相対の作業ディレクトリ）も u1 の予定の検証に任せる。
+  /// 番人へ渡す予定。値の検証（間隔の下限・空のコマンド・相対の作業ディレクトリ）も `BackgroundSchedule.validate()` に任せる。
   var schedule: BackgroundSchedule {
     BackgroundSchedule(
       job: .command(BackgroundCommand(script: command, directory: directory)),
@@ -142,14 +142,13 @@ struct WaitCheck: Codable, Equatable {
     case "exited": result = .exited(try c.decode(Int32.self, forKey: .code))
     case "signaled": result = .signaled(try c.decode(Int32.self, forKey: .signal))
     case "limited":
-      switch try c.decode(String.self, forKey: .limit) {
-      case "elapsed": result = .limited(.elapsed)
-      case "idle": result = .limited(.idle)
-      case "output": result = .limited(.output)
-      case let raw:
+      let raw = try c.decode(String.self, forKey: .limit)
+      guard let limit = BackgroundProcess.Limit.allCases.first(where: { Self.name($0) == raw })
+      else {
         throw DecodingError.dataCorruptedError(
           forKey: .limit, in: c, debugDescription: "unknown limit: \(raw)")
       }
+      result = .limited(limit)
     case "stopped": result = .stopped
     case "notStarted": result = .notStarted(try c.decode(String.self, forKey: .reason))
     case let other:
@@ -175,8 +174,8 @@ struct WaitCheck: Codable, Equatable {
     try c.encode(stderr, forKey: .stderr)
   }
 
-  /// 上限の永続の名前（読み込みの名前と対）。
-  private static func name(_ limit: BackgroundProcess.Limit) -> String {
+  /// 上限の永続とワイヤの名前（読み込みもこの表で引く）。
+  static func name(_ limit: BackgroundProcess.Limit) -> String {
     switch limit {
     case .elapsed: "elapsed"
     case .idle: "idle"
@@ -205,19 +204,8 @@ extension WaitCheck.Result {
     case .signaled(let signal): self = .signaled(signal)
     case .limited(let limit): self = .limited(limit)
     case .stopped: self = .stopped
-    case .notStarted(let failure): self = .notStarted(Self.reason(failure))
-    case .toolsUnavailable(let tools):
-      self = .notStarted("tools unavailable: \(tools.joined(separator: ", "))")
-    }
-  }
-
-  private static func reason(_ failure: BackgroundStartFailure) -> String {
-    switch failure {
-    case .directoryMissing(let path): "directory not found: \(path)"
-    case .launchFailed(let errno): "launch failed: \(String(cString: strerror(errno)))"
-    case .invalid(let error): "invalid: \(error)"
-    case .agentNotFound(let cli): "agent not found: \(cli)"
-    case .agentUnsupported(let cli, _): "agent unsupported: \(cli)"
+    case .notStarted(let failure): self = .notStarted(failure.text)
+    case .toolsUnavailable: self = .notStarted(ending.text)
     }
   }
 }

@@ -37,6 +37,8 @@ final class AgentLauncherTests: OrbeTestCase {
     try Data(text.utf8).write(to: url)
   }
 
+  private var registeredDigest: String? { AppStatePersistence.load()?.registeredAgentPluginDigest }
+
   private var runCount: Int {
     ((try? String(contentsOf: runs, encoding: .utf8)) ?? "").split(separator: "\n").count
   }
@@ -46,35 +48,34 @@ final class AgentLauncherTests: OrbeTestCase {
     launcher.registersPlugin = true
 
     launcher.syncAgentPluginOnLaunch()
-    pumpMain(until: { AgentPluginInstaller.registeredDigest != nil }, "登録の記録が無い起動で入れ直す")
-    let first = AgentPluginInstaller.registeredDigest
+    pumpMain(until: { registeredDigest != nil }, "登録の記録が無い起動で入れ直す")
+    let first = registeredDigest
 
     launcher.syncAgentPluginOnLaunch()  // 同じ中身のまま起動し直す
 
     try write("plugins/orbe-agent-dev/mcp_config.json", #"{"mcpServers":{}}"#)
     launcher.syncAgentPluginOnLaunch()
-    pumpMain(until: { AgentPluginInstaller.registeredDigest != first }, "中身の変わった起動で入れ直す")
+    pumpMain(until: { registeredDigest != first }, "中身の変わった起動で入れ直す")
 
     XCTAssertEqual(runCount, 2, "同じ中身の起動では走らない")
   }
 
-  /// 隔離起動は実体化だけをして、CLI への登録（install.sh）も、そのためのオンボーディングもしない。
+  /// 隔離起動（`ORBE_STATE_DIR` を持つ Orbe）は既定で、実体化も CLI への登録（install.sh）も、そのための
+  /// オンボーディングもしない。
   ///
   /// 壊れると何が起きるか: 検証用に起こした Orbe が利用者の claude / codex / agy の登録先を自分の一時フォルダへ向け替え、
   /// codex / agy のコピーを検証中の中身で上書きする。片付けた後には利用者の agent から状態追跡と MCP が消える。
-  func testIsolatedLauncherMaterializesButNeverRegisters() throws {
+  func testIsolatedLauncherNeitherMaterializesNorRegisters() throws {
     let launcher = AgentLauncher()
-    launcher.registersPlugin = false
+    XCTAssertFalse(launcher.registersPlugin, "ORBE_STATE_DIR を持つ Orbe は既定で登録しない")
 
     launcher.syncAgentPluginOnLaunch()
     RunLoop.main.run(until: Date(timeIntervalSinceNow: 1))
 
-    let materialized = try XCTUnwrap(AgentPluginInstaller.stablePluginDir)
-    XCTAssertTrue(
-      FileManager.default.fileExists(atPath: materialized.appendingPathComponent("install.sh").path)
-    )
+    let place = try XCTUnwrap(AgentPluginInstaller.stablePluginDir)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: place.path), "実体化しない")
     XCTAssertEqual(runCount, 0, "中身の指紋が記録と違っても登録しない")
-    XCTAssertNil(AgentPluginInstaller.registeredDigest)
+    XCTAssertNil(registeredDigest)
 
     AppStatePersistence.save(AppStateFile())
     let model = AppShellModel(statusModel: StatusRowModel(), content: NSView())

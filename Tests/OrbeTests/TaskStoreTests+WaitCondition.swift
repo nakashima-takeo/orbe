@@ -18,11 +18,8 @@ extension TaskStoreTests {
   }
 
   private func waitingTask(_ store: TaskStore) throws -> (TaskItem, WaitCondition) {
-    let task = try store.add(
-      draft("設定の検索を速くする") {
-        $0.waitingReason = "レビュー待ち"
-        $0.waitingCondition = request()
-      })
+    let task = try store.addWaiting(
+      draft("設定の検索を速くする") { $0.waitingReason = "レビュー待ち" }, request())
     return (task, try XCTUnwrap(task.waiting?.condition))
   }
 
@@ -59,13 +56,16 @@ extension TaskStoreTests {
     let plain = try store.add(draft("a"))
     let done = try store.add(draft("b") { $0.status = .done })
 
-    assertInvalid({ _ = try store.add(draft("c") { $0.waitingCondition = self.request() }) })
     assertInvalid({ _ = try store.update(plain.id, self.conditionUpdate(.set(self.request()))) })
     assertInvalid({ _ = try store.update(done.id, self.conditionUpdate(.set(self.request()))) })
     let waiting = try store.add(draft("d") { $0.waitingReason = "返事" })
     var doneWithCondition = conditionUpdate(.set(request()))
     doneWithCondition.status = .done
-    assertInvalid({ _ = try store.update(waiting.id, doneWithCondition) })
+    XCTAssertThrowsError(try store.update(waiting.id, doneWithCondition)) {
+      XCTAssertEqual(
+        $0 as? TaskStoreError, .invalid("a done task cannot have a waiting condition"),
+        "理由は「完了と同時」（「待っていない」ではない）")
+    }
     XCTAssertEqual(
       store.tasks.first { $0.id == waiting.id }, waiting, "拒否された変更はタスクを変えない")
   }
@@ -230,9 +230,8 @@ extension TaskStoreTests {
     let store = TaskStore()
     let (waiting, condition) = try waitingTask(store)
     for ending in [
-      BackgroundEnding.exited(1), .signaled(15), .limited(.output), .stopped,
-      .notStarted(.directoryMissing("/gone")),
-    ] {
+      BackgroundEnding.exited(1), .signaled(15), .stopped, .notStarted(.directoryMissing("/gone")),
+    ] + BackgroundProcess.Limit.allCases.map(BackgroundEnding.limited) {
       store.recordCheck(waiting.id, condition: condition.id, run(ending, stdout: "まだ"))
     }
     let (resolved, other) = try waitingTask(store)

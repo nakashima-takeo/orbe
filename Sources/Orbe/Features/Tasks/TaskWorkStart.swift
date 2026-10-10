@@ -220,11 +220,10 @@ final class TaskRepoWorktree {
 
 /// 作業を始める agent への最初の入力（Orbe が UI の言語で組む）。
 enum TaskStartText {
-  /// Home のタスク: タスク（ID・タイトル・詳細）と、あれば `prompt`。起動引数なので複数行でよい。
+  /// Home のタスク: タスク（ID・タイトル）と、あれば `prompt`。起動引数なので複数行でよい。詳細は載せず MCP で読ませる——
+  /// 詳細には受信が取り込んだ外の文面が入りうるので、利用者の発話の席（最初の入力）ではなくツール結果の席で読ませる。
   static func homeFirstInput(_ task: TaskItem, prompt: String?, l10n: LocalizationStore) -> String {
     var lines = [l10n.format(.taskStartHomeTask, "\(task.id)", task.title)]
-    let description = task.description.trimmingCharacters(in: .whitespacesAndNewlines)
-    if !description.isEmpty { lines += [l10n.string(.taskStartHomeDescription), description] }
     if let prompt = prompt?.trimmingCharacters(in: .whitespacesAndNewlines), !prompt.isEmpty {
       lines += ["", prompt]
     }

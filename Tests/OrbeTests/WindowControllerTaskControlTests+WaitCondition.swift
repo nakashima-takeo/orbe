@@ -3,8 +3,8 @@ import XCTest
 
 @testable import Orbe
 
-/// 待ちの条件の制御 API 側（呼び出し元タブから作業ディレクトリと会話を入れる・一覧の形）と、付けた条件を窓が裏で
-/// 確かめること。
+/// 待ちの条件の制御 API 側（`set_wait_condition` が呼び出し元タブから作業ディレクトリと会話を入れる・一覧の形）と、
+/// 付けた条件を窓が裏で確かめること。
 ///
 /// 壊れると何が起きるか: 人がシェルから付けた条件が、たまたまそのタブにいた agent の会話のものとして残り、⌘T が別の
 /// 会話を再開する。条件と経過が一覧に出ず、AI が同じ条件で付け直せない。付けた条件が一度も確かめられず、いつまでも
@@ -16,13 +16,18 @@ extension WindowControllerTaskControlTests {
       deadline: Date().addingTimeInterval(deadlineIn))
   }
 
-  private func addWaiting(_ wc: WindowController, callerTabId: Int?) throws -> Int {
+  private func addWaiting(
+    _ wc: WindowController, callerTabId: Int?, command: String = "exit 1"
+  ) throws -> Int {
     var draft = TaskDraft(title: "設定の検索を速くする")
     draft.waitingReason = "レビュー待ち"
-    draft.waitingCondition = condition()
     let added = try success(
       wc.controlAddTask(draft, workspaceId: nil, callerTabId: callerTabId))
-    return try XCTUnwrap((added["task"] as? [String: Any])?["taskId"] as? Int)
+    let id = try XCTUnwrap((added["task"] as? [String: Any])?["taskId"] as? Int)
+    var request = condition()
+    request.command = command
+    _ = try success(wc.controlSetWaitCondition(taskId: id, .set(request), callerTabId: callerTabId))
+    return id
   }
 
   private func listedCondition(_ wc: WindowController) throws -> [String: Any] {
@@ -33,7 +38,9 @@ extension WindowControllerTaskControlTests {
   private func report(_ wc: WindowController, _ tab: TerminalTab, _ agent: String, _ state: String)
   {
     wc.controlReportAgent(
-      tab: tab, report: AgentHookReport(agent: agent, state: state, sessionId: "s-1"))
+      tab: tab,
+      report: AgentHookReport(
+        agent: agent, state: state, sessionId: "s-1", reporterGroup: foregroundReporter(tab)))
   }
 
   // MARK: - 付ける
@@ -68,46 +75,49 @@ extension WindowControllerTaskControlTests {
     XCTAssertEqual(listed["directory"] as? String, tab.cwd)
   }
 
-  func testUpdateReadsTheCallerTabAndRejectsConditionsTheStoreRefuses() throws {
+  func testSetWaitConditionRejectsConditionsTheStoreRefusesAndClears() throws {
     let wc = try launch()
     let tab = try backgroundTab(wc)
     report(wc, tab, "claude", "working")
     let id = try XCTUnwrap(try added(wc)["taskId"] as? Int)
 
-    var withoutWait = TaskUpdate()
-    withoutWait.waitingCondition = .set(condition())
     XCTAssertEqual(
-      code(wc.controlUpdateTask(taskId: id, withoutWait, workspaceId: nil, callerTabId: tab.id)),
+      code(wc.controlSetWaitCondition(taskId: id, .set(condition()), callerTabId: tab.id)),
       -32602, "待っていないタスクには付けられない")
 
-    var past = TaskUpdate(waitingReason: .set("返事"))
-    past.waitingCondition = .set(condition(deadlineIn: -60))
+    _ = try success(
+      wc.controlUpdateTask(
+        taskId: id, TaskUpdate(waitingReason: .set("返事")), workspaceId: nil))
     XCTAssertEqual(
-      code(wc.controlUpdateTask(taskId: id, past, workspaceId: nil, callerTabId: tab.id)), -32602,
+      code(
+        wc.controlSetWaitCondition(
+          taskId: id, .set(condition(deadlineIn: -60)), callerTabId: tab.id)), -32602,
       "過ぎた期限は付けられない")
 
-    var update = TaskUpdate(waitingReason: .set("返事"))
-    update.waitingCondition = .set(condition())
     _ = try success(
-      wc.controlUpdateTask(taskId: id, update, workspaceId: nil, callerTabId: tab.id))
+      wc.controlSetWaitCondition(taskId: id, .set(condition()), callerTabId: tab.id))
     XCTAssertEqual(
       try listedCondition(wc)["agent"] as? [String: String],
       ["command": "claude", "sessionId": "s-1"])
+
+    _ = try success(wc.controlSetWaitCondition(taskId: id, .clear, callerTabId: tab.id))
+    let waiting = try XCTUnwrap(try listed(wc).first?["waiting"] as? [String: Any])
+    XCTAssertNil(waiting["condition"], "条件だけを外す")
+    XCTAssertEqual(waiting["reason"] as? String, "返事", "待ちは残る")
   }
 
   // MARK: - 確かめる
 
   func testWindowChecksTheConditionInTheBackgroundAndResolvesTheWait() throws {
     let wc = try launch()
-    var draft = TaskDraft(title: "設定の検索を速くする")
-    draft.waitingReason = "レビュー待ち"
-    draft.waitingCondition = condition()
-    draft.waitingCondition?.command = "echo レビューが付いた"
-    _ = try success(wc.controlAddTask(draft, workspaceId: nil, callerTabId: nil))
+    _ = try addWaiting(wc, callerTabId: nil, command: "echo レビューが付いた")
 
     XCTAssertTrue(
       waitUntil { wc.taskStore.tasks.first?.waitResolution != nil }, "付けた直後に確かめて解ける")
     XCTAssertEqual(wc.taskStore.tasks.first?.waitResolution?.headline, "レビューが付いた")
+    XCTAssertEqual(
+      wc.attentionStore.transient?.taskNotice?.taskId, wc.taskStore.tasks.first?.id,
+      "解けたことは係から窓の知らせ（ピルと音）まで届く")
   }
 
   func testResolvedWaitIsListedWithItsConditionInsteadOfTheWait() throws {
@@ -131,5 +141,29 @@ extension WindowControllerTaskControlTests {
     let condition = try XCTUnwrap(waiting["condition"] as? [String: Any])
     XCTAssertEqual(condition["checks"] as? Int, 1)
     XCTAssertEqual((condition["lastCheck"] as? [String: Any])?["result"] as? String, "success")
+  }
+
+  /// 最後の確認は、結果の名前に加えて中身（終了コード・シグナル・上限の種類・始められなかった理由）を出す——条件を
+  /// 書いた AI が「まだ」と「壊れている」を見分け、始められない条件を付け直せるように。
+  func testLastCheckCarriesWhatTheResultHolds() throws {
+    let wc = try launch()
+    let id = try addWaiting(wc, callerTabId: nil)
+    let conditionId = try XCTUnwrap(wc.taskStore.tasks.first?.waiting?.condition?.id)
+    let now = Date()
+    func record(_ ending: BackgroundEnding) throws -> [String: Any] {
+      wc.taskStore.recordCheck(
+        id, condition: conditionId,
+        BackgroundRunResult(
+          commandLine: "exit 1", startedAt: now, endedAt: now, ending: ending,
+          output: .command(stdout: .init(), stderr: .init())))
+      return try XCTUnwrap(try listedCondition(wc)["lastCheck"] as? [String: Any])
+    }
+
+    XCTAssertEqual(try record(.exited(2))["code"] as? Int32, 2)
+    XCTAssertEqual(try record(.signaled(15))["signal"] as? Int32, 15)
+    XCTAssertEqual(try record(.limited(.idle))["limit"] as? String, "idle")
+    XCTAssertEqual(
+      try record(.notStarted(.directoryMissing("/gone")))["reason"] as? String,
+      "directory missing: /gone")
   }
 }

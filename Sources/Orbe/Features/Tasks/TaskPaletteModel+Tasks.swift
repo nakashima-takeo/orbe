@@ -3,7 +3,7 @@ import Foundation
 /// タスクのタブの行の操作（足す・完了 ⇄ 未着手・消す・並べ替え）。変異はストアのメソッドをそのまま呼び、
 /// 検証はストアに任せる。選ぶ状態の間は、選ぶこと以外でタスクを変えない。
 extension TaskPaletteModel {
-  /// 入力のタイトルで未着手のタスクを足し（見ている欄で、その優先度の未着手の先頭 = `addPosition`）、入力を空にして「今足した」
+  /// 入力のタイトルで未着手のタスクを足し（付く欄で、その優先度の未着手の先頭 = `addPosition`）、入力を空にして「今足した」
   /// 印を付けて選ぶ。workspace は範囲で決める——「すべて」ならなし、開いた workspace ならその workspace。
   /// 足したタスクの ID を返す。
   @discardableResult func addFromQuery() -> Int? {
@@ -11,7 +11,8 @@ extension TaskPaletteModel {
     guard visibleTab == .tasks, !title.isEmpty else { return nil }
     do {
       let item = try store.add(
-        TaskDraft(title: title, workspace: addedWorkspace?.id), at: addPosition)
+        TaskDraft(title: title, workspace: addedWorkspace?.id),
+        at: addPosition(attachingTo: addedWorkspace?.id))
       query = ""
       justAdded = item.id
       taskList.select(.task(item.id), in: selectableIDs)
@@ -22,9 +23,10 @@ extension TaskPaletteModel {
     }
   }
 
-  /// 画面から足す位置（入力欄・GitHub タブ・受信）。今の範囲で見ている欄で、その優先度の未着手の先頭。
-  var addPosition: TaskStore.AddPosition {
-    .priorityHead(workspace: scope == .all ? nil : workspaces.opened.id)
+  /// 画面から足すタスクの位置（入力欄・GitHub タブ・受信）。その優先度の未着手の先頭で、基準は範囲が「すべて」なら
+  /// 列全体、それ以外は足すタスクが付く欄（`workspace`）。
+  func addPosition(attachingTo workspace: UUID?) -> TaskStore.AddPosition {
+    .priorityHead(workspace: scope == .all ? nil : workspace)
   }
 
   /// 足すタスクが付く workspace（範囲で決まる）。

@@ -16,13 +16,14 @@ import XCTest
 ///
 /// claude は必ず偽物（`stageFakeAgent`。入力を反響し続ける）。
 final class SecretaryTests: OrbeTestCase {
-  private let homeId = UUID()
+  let homeId = UUID()
 
   /// 前面は main（素のタブ 1 枚）、背景に Home（`homeTabs`）。
-  private func launch(
-    _ file: SecretaryFile? = nil, homeTabs: [TabState] = [], stage: Bool = true
+  func launch(
+    _ file: SecretaryFile? = nil, homeTabs: [TabState] = [], stage: Bool = true,
+    agentBody: String = "exec /bin/cat"
   ) throws -> WindowController {
-    if stage { _ = try stageFakeAgent("claude") }
+    if stage { _ = try stageFakeAgent("claude", body: agentBody) }
     if let file { SecretaryPersistence.save(file) }
     let home = try XCTUnwrap(HomeFolder.url).path
     let workspaces = WorkspacesFile(
@@ -46,33 +47,35 @@ final class SecretaryTests: OrbeTestCase {
     return wc
   }
 
-  private func homeTabs(_ wc: WindowController) throws -> [TerminalTab] {
+  func homeTabs(_ wc: WindowController) throws -> [TerminalTab] {
     try XCTUnwrap(wc.workspaces.first { $0.persistentId == homeId }).tabs
   }
 
   /// 偽の状態報告。本物の報告は agent のプロセスから来るので、端末にプロセスが起きてから送る（報告は前面のプロセス
   /// グループを添える）。
-  private func report(_ wc: WindowController, _ tab: TerminalTab, _ state: String, _ id: String) {
+  func report(_ wc: WindowController, _ tab: TerminalTab, _ state: String, _ id: String) {
     XCTAssertTrue(
       waitUntil(ControlProcess.tabSettleTimeout) { tab.surface.foregroundProcessGroup != nil },
       "端末のプロセスが起きない")
     wc.controlReportAgent(
-      tab: tab, report: AgentHookReport(agent: "claude", state: state, sessionId: id))
+      tab: tab,
+      report: AgentHookReport(
+        agent: "claude", state: state, sessionId: id, reporterGroup: foregroundReporter(tab)))
     wc.flushChrome()
   }
 
-  private func screen(_ tab: TerminalTab) -> String {
+  func screen(_ tab: TerminalTab) -> String {
     tab.surface.controlReadText(scrollback: true) ?? ""
   }
 
   /// 画面に `needle` が現れるまで待つ。
-  private func waitForScreen(_ tab: TerminalTab, contains needle: String) {
+  func waitForScreen(_ tab: TerminalTab, contains needle: String) {
     let seen = waitUntil(ControlProcess.tabSettleTimeout) { self.screen(tab).contains(needle) }
     XCTAssertTrue(seen, "タブに \"\(needle)\" が出ない: \(screen(tab))")
   }
 
   /// 少し待っても画面に現れない。
-  private func assertNeverOnScreen(_ tab: TerminalTab, _ needle: String) {
+  func assertNeverOnScreen(_ tab: TerminalTab, _ needle: String) {
     XCTAssertFalse(waitUntil(1) { self.screen(tab).contains(needle) }, "まだ届けない: \(needle)")
   }
 
@@ -97,7 +100,10 @@ final class SecretaryTests: OrbeTestCase {
 
     waitForScreen(tab, contains: "見積もりを山田さんに送る")
     XCTAssertTrue(screen(tab).contains("⌘⇧X から · "), "出どころが見える")
-    XCTAssertEqual(wc.secretary.record.pending, [], "届けたら列から外す")
+    XCTAssertEqual(wc.secretary.record.pending.count, 1, "届いた確証を見るまでは溜めたまま")
+
+    report(wc, tab, "working", "s-1")
+    XCTAssertEqual(wc.secretary.record.pending, [], "貼った後の working で列から外す")
     XCTAssertEqual(SecretaryPersistence.load()?.pending, [], "保存からも外す（再起動で二重に届かない）")
     XCTAssertEqual(SecretaryPersistence.load()?.sessionId, "s-1", "会話 ID を覚える")
   }
@@ -122,9 +128,10 @@ final class SecretaryTests: OrbeTestCase {
     report(wc, tab, "done", "s-1")
     waitForScreen(tab, contains: "二件目")
     XCTAssertFalse(screen(tab).contains("三件目"), "1 ターンに 1 件")
-    XCTAssertEqual(wc.secretary.record.pending.count, 1)
+    XCTAssertEqual(wc.secretary.record.pending.count, 2, "二件目は確証を見るまで残る")
 
     report(wc, tab, "working", "s-1")
+    XCTAssertEqual(wc.secretary.record.pending.count, 1)
     report(wc, tab, "done", "s-1")
     waitForScreen(tab, contains: "三件目")
   }
@@ -149,6 +156,11 @@ final class SecretaryTests: OrbeTestCase {
     let resumed = try XCTUnwrap(try homeTabs(wc).first)
     let command = try XCTUnwrap(resumed.surface.initialCommand)
     XCTAssertTrue(command.hasPrefix("claude --resume s-2 --append-system-prompt "), command)
+
+    report(wc, resumed, "idle", "s-2")
+    wc.closeTab(resumed, origin: .process)
+    wc.flushChrome()
+    XCTAssertEqual(wc.secretary.record.sessionId, "s-2", "会話を報告した後に閉じた会話は捨てない")
   }
 
   /// 覚えた会話で起こしたタブが会話を報告しないまま閉じたら、その会話を捨てて新しい claude で 1 度だけ起こし直す。
@@ -302,13 +314,17 @@ final class SecretaryTests: OrbeTestCase {
     report(wc, tab, "working", "s-1")
     var draft = TaskDraft(title: "見積もりの返事")
     draft.waitingReason = "返事待ち"
-    draft.waitingCondition = WaitConditionRequest(
-      description: "返事が来たら", command: "exit 1", everyMinutes: 10,
-      deadline: Date().addingTimeInterval(3600))
     let added = try XCTUnwrap(
       (try wc.controlAddTask(draft, workspaceId: nil, callerTabId: tab.id).get()
         as? [String: Any])?["task"] as? [String: Any])
     let id = try XCTUnwrap(added["taskId"] as? Int)
+    _ = try wc.controlSetWaitCondition(
+      taskId: id,
+      .set(
+        WaitConditionRequest(
+          description: "返事が来たら", command: "exit 1", everyMinutes: 10,
+          deadline: Date().addingTimeInterval(3600))), callerTabId: tab.id
+    ).get()
     let condition = try XCTUnwrap(wc.taskStore.tasks.first { $0.id == id }?.waiting?.condition)
     XCTAssertEqual(condition.conversation?.secretary, true, "秘書が付けた条件と記録する")
     report(wc, tab, "done", "s-2")

@@ -133,9 +133,11 @@ final class WindowControllerTaskStartTests: OrbeTestCase {
         $0 === opened
       }, "Home に開く")
     let command = try XCTUnwrap(opened.surface.initialCommand)
-    for part in ["見積もりを 山田さん/経理 に送る", "金額は 10 万円", "急ぎで"] {
+    for part in ["見積もりを 山田さん/経理 に送る", "急ぎで"] {
       XCTAssertTrue(command.contains(part), "最初の入力に \(part): \(command)")
     }
+    XCTAssertFalse(
+      command.contains("金額は 10 万円"), "詳細は最初の入力に載せない（外の文面が入りうる）: \(command)")
 
     let again = try start(wc, TaskStartRequest(taskId: task.id)).get()
     XCTAssertEqual(again["workdir"] as? String, result["workdir"] as? String, "2 回目は同じフォルダ")

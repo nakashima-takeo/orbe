@@ -54,6 +54,23 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     }
   }
 
+  /// Home の rules（日英）が名指しする MCP のツールは、どれも `tools/list` にある。rules は Home の claude が起動のたびに
+  /// 読む手引きで、orbe-mcp は別ターゲットなので、ツールを改名・削除してもコンパイルもほかのテストも通ってしまう。
+  func testHomeRulesNameOnlyToolsTheBridgeLists() throws {
+    let names = Set(ControlProcess.mcpToolsList().compactMap { $0["name"] as? String })
+    let pattern = try NSRegularExpression(pattern: "`([a-z]+(?:_[a-z]+)+|spawn)`")
+    for language in Language.allCases {
+      let rules = HomeTemplate.rules(language, home: "/home")
+      let named = pattern.matches(in: rules, range: NSRange(rules.startIndex..., in: rules)).map {
+        String(rules[Range($0.range(at: 1), in: rules)!])
+      }
+      XCTAssertFalse(named.isEmpty, "\(language): 前提: ツールを名指ししている")
+      for name in named {
+        XCTAssertTrue(names.contains(name), "\(language) の rules が tools/list に無い \(name) を名指ししている")
+      }
+    }
+  }
+
   /// `tools/list` の description が写す既定・上限は control の正本（`WaitTimeout` / `SessionLogLimits`）と
   /// 同じ値。AI が timeoutMs・limit・一度に戻す件数を決める唯一の情報源なので、写しが古いと省略時の
   /// 待ち時間を誤って見積もり、上限を超えた要求を組む。数字の直後の区切りまで含めて比べる——部分一致だと

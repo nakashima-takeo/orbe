@@ -14,7 +14,7 @@ let startTaskTools: [[String: Any]] = [
         + "workspace の無いタスクは拒否されるので、先に update_task で workspaceId を付ける。"
         + "ブランチが決まらなければ branch（と必要なら repo）を渡す。主の Issue・PR のリポジトリを指す remote が"
         + "無いリポジトリは「repository mismatch」で拒否される。prompt は agent の最初の入力になる"
-        + "（Home のタスクではタスクの ID・タイトル・詳細に添えて渡す）。作業場ができてタブを開いた時点で返り、"
+        + "（Home のタスクではタスクの ID とタイトルに添えて渡す。詳細は agent が list_tasks で読む）。作業場ができてタブを開いた時点で返り、"
         + "agent の準備は待たない。返り値は task・workdir・created（作業場を新しく作ったか）・tabId・workspaceId・"
         + "agent{command,path}、リポジトリのタスクなら repo と branch。"
     ),

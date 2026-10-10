@@ -116,18 +116,19 @@ struct TaskPaletteIntakeContents: View {
       .fixedSize(horizontal: false, vertical: true)
   }
 
+  /// 切らずに全文を出す——承認なしで裏で走るもの（使えるツール・作業ディレクトリ）は、画面でいつも確かめられる。
   private func line(_ value: String) -> some View {
     fontResolver.text(value, base: Theme.Typography.workspaceName)
       .font(Font.theme.workspaceName)
       .foregroundStyle(Color.theme.textSecondary)
-      .lineLimit(2)
+      .fixedSize(horizontal: false, vertical: true)
   }
 
+  /// 切らずに全文を出す（実行するコマンド・依頼文・指示文）。
   private func quote(_ value: String) -> some View {
     fontResolver.text(value, base: Theme.Typography.workspaceName)
       .font(Font.theme.workspaceName)
       .foregroundStyle(Color.theme.textPrimary)
-      .lineLimit(6)
       .fixedSize(horizontal: false, vertical: true)
       .padding(.vertical, Theme.Space.step)
       .padding(.horizontal, Theme.Space.beat)

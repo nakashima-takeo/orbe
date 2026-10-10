@@ -189,5 +189,13 @@ extension L10n {
       "待ちの条件「%1$@」は満たされないまま期限（%2$@）が来ました（確認 %3$lld 回目）。",
       "The waiting condition “%1$@” reached its deadline (%2$@) without being met (check #%3$lld)."
     ),
+    .taskPaletteMatchingTasks: ("一致するタスク", "Matching tasks"),
+    .taskPaletteActionAddTodo: ("%1$@ を未着手に足す", "Add %1$@ to To do"),
+    .taskPaletteHintToMatches: ("一致する項目へ", "Matches"),
+    .taskPaletteJustAdded: ("今足した", "Just added"),
+    .taskPaletteAddedHeading: ("今 ⌘⇧X から足した", "just added from ⌘⇧X"),
+    .taskPaletteHeadingTask: ("タスク", "Task"),
+    .taskPaletteScopeWasAll: ("範囲が「すべて」だった", "the scope was “All”"),
+    .taskPaletteActionRefine: ("期限などを詰める", "Set the due date and more"),
   ]
 }

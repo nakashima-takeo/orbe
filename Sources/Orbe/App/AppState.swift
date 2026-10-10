@@ -6,6 +6,8 @@ struct AppStateFile: Codable, Equatable {
   /// エージェントプラグインを 1 つ以上の CLI へ失敗なく導入できたか。true ならオンボーディングを
   /// 出さず、以後の登録は起動時の無音同期が担う。
   var agentPluginsInstalled: Bool?
+  /// 最後に各 CLI へ登録できたプラグインの中身の指紋（`AgentPluginInstaller.digest`）。違えば起動時に入れ直す。
+  var registeredAgentPluginDigest: String?
   /// 旧 managed block 方式の導入済み flag。読み取りは legacy 掃除（除去して nil へ戻す）のみで、
   /// 新規に true を書く者はいない。
   var completionInstalled: Bool?

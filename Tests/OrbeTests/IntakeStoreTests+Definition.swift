@@ -52,6 +52,7 @@ extension IntakeStoreTests {
 
     for tool in [
       "Read", "Bash", "mcp__slack", "mcp__slack__", "mcp____search", "mcp__*", "mcp__slack__*",
+      "mcp__slack__search,mcp__slack", "mcp__slack__a b",
     ] {
       XCTAssertThrowsError(
         try store.replace(1, with: fetching(["mcp__slack__search", tool])), tool

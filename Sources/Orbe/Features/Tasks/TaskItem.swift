@@ -264,7 +264,6 @@ struct TaskDraft {
   var priority: TaskItem.Priority = .medium
   var due: TaskItem.DueDate?
   var waitingReason: String?
-  var waitingCondition: WaitConditionRequest?
   var description = ""
   var workspace: UUID?
   var createdBy: String?

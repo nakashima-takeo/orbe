@@ -128,6 +128,7 @@ final class MenuBarController: NSObject {
       switch transient.notice {
       case .agent(let row): windowController.focusAttentionTab(tabId: row.tabId)
       case .task(let notice): windowController.showTaskPalette(selecting: notice.taskId)
+      case .secretary(let notice): windowController.focusAttentionTab(tabId: notice.tabId)
       }
       closeDropdown()
       return

@@ -265,6 +265,9 @@ extension ControlWireTests {
       "messageSource は AgentMessage.source へ畳まれる。-32602 ガードが無く欠落しても目に見えないため、"
         + "この経路以外にこの語を固定する手段が無い（#50 が名指しした穴）")
     XCTAssertEqual(reported?.reason, "other", "reason が名前どおり届く（セッションログの closed に載る語）")
+    XCTAssertEqual(
+      reported?.reporterGroup, ProcessGroup.terminalGroup(of: getpid()),
+      "報告者は params でなく接続の向こうのプロセス（ここではテスト自身）から辿る")
   }
 
   /// `spawn` の optional 3 件が名前どおり target へ届く（いずれもガードが無い）。

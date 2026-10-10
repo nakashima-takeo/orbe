@@ -16,7 +16,7 @@ extension TaskPaletteModel {
     leaveEditingForAction()
     switch selectedID {
     case .task(let id):
-      if let task = selectedTask, continues(task) {
+      if let task = selectedTask, case .ready = continuation(of: task) {
         continueWait()
       } else {
         onOpenWorktreePalette(id)

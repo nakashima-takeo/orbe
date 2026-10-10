@@ -45,6 +45,7 @@ final class FakeControlTarget: ControlTarget {
     let messageText: String?
     let messageSource: String?
     let reason: String?
+    let reporterGroup: pid_t?
   }
   struct Spawn {
     let workspaceId: Int?
@@ -90,6 +91,10 @@ final class FakeControlTarget: ControlTarget {
     let update: TaskUpdate
     let workspaceId: ClearableValue<Int>?
     let worktree: ClearableValue<String>?
+  }
+  struct SetWaitCondition {
+    let taskId: Int
+    let condition: ClearableValue<WaitConditionRequest>
     let callerTabId: Int?
   }
   struct MovedTask {
@@ -116,6 +121,7 @@ final class FakeControlTarget: ControlTarget {
   private(set) var taskLists: [Int?] = []
   private(set) var addedTasks: [AddedTask] = []
   private(set) var updatedTasks: [UpdatedTask] = []
+  private(set) var setWaitConditions: [SetWaitCondition] = []
   private(set) var movedTasks: [MovedTask] = []
   private(set) var deletedTaskIds: [Int] = []
   private(set) var startedTasks: [TaskStartRequest] = []
@@ -197,7 +203,7 @@ final class FakeControlTarget: ControlTarget {
       ReportedAgent(
         tabId: tab.id, agent: report.agent, state: report.state, sessionId: report.sessionId,
         messageText: report.message?.text, messageSource: report.message?.source,
-        reason: report.reason))
+        reason: report.reason, reporterGroup: report.reporterGroup))
   }
 
   func controlFocusTab(tabId: Int) -> Result<Any, ControlError> {
@@ -268,12 +274,18 @@ final class FakeControlTarget: ControlTarget {
 
   func controlUpdateTask(
     taskId: Int, _ update: TaskUpdate, workspaceId: ClearableValue<Int>?,
-    worktree: ClearableValue<String>?, callerTabId: Int?
+    worktree: ClearableValue<String>?
   ) -> Result<Any, ControlError> {
     updatedTasks.append(
-      UpdatedTask(
-        taskId: taskId, update: update, workspaceId: workspaceId, worktree: worktree,
-        callerTabId: callerTabId))
+      UpdatedTask(taskId: taskId, update: update, workspaceId: workspaceId, worktree: worktree))
+    return outcome(["task": ["taskId": taskId]])
+  }
+
+  func controlSetWaitCondition(
+    taskId: Int, _ condition: ClearableValue<WaitConditionRequest>, callerTabId: Int?
+  ) -> Result<Any, ControlError> {
+    setWaitConditions.append(
+      SetWaitCondition(taskId: taskId, condition: condition, callerTabId: callerTabId))
     return outcome(["task": ["taskId": taskId]])
   }
 

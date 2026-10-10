@@ -129,6 +129,17 @@ extension TaskPaletteModelTests {
     XCTAssertNil(palette.draft)
   }
 
+  /// 秘書に頼めるのは未完了のタスクだけ。完了のタスクの行では頼む欄を開かない（右の欄のボタンも出ない）。
+  func testADoneTaskCannotBeAskedAbout() {
+    let palette = model([task(1, "a"), task(2, "b", .done)])
+    let asks = recording(palette)
+
+    palette.openAsk(2)
+
+    XCTAssertNil(palette.draft)
+    XCTAssertEqual(asks(), [])
+  }
+
   /// 行き先の段の右端は、足したタスクが入る先（範囲で workspace が変わる）。
   func testTheDestinationPlaceFollowsTheScope() {
     let palette = threeTodos()

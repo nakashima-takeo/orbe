@@ -26,7 +26,8 @@ enum HomeFolder {
       let rules = url.appendingPathComponent(rulesPath)
       try FileManager.default.createDirectory(
         at: rules.deletingLastPathComponent(), withIntermediateDirectories: true)
-      try HomeTemplate.rules(language).write(to: rules, atomically: true, encoding: .utf8)
+      try HomeTemplate.rules(language, home: url.path).write(
+        to: rules, atomically: true, encoding: .utf8)
     } catch {
       NSLog("[home] rules not written: \(error)")
     }

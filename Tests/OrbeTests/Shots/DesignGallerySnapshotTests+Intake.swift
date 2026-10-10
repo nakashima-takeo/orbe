@@ -37,6 +37,17 @@ extension DesignGallerySnapshotTests {
     agent.intake.enterContents()
     try write("intake_contents_agent.png", agent, 1440, 900)
 
+    // 取得と判定の中身は行数で切らず、折り返して全文を出す（長い依頼文・使えるツール・指示文・コマンドと作業ディレクトリ）。
+    let long = DesignSceneFixtures.intakeLongFile()
+    let longAgent = model(long)
+    longAgent.intake.tapShelf(.intake(3))
+    longAgent.intake.enterContents()
+    try write("intake_contents_long_agent.png", longAgent, 1440, 900)
+    let longCommand = model(long)
+    longCommand.intake.tapShelf(.intake(1))
+    longCommand.intake.enterContents()
+    try write("intake_contents_long_command.png", longCommand, 1440, 900)
+
     // 走っている間の今すぐ受信は、フッターに赤で断る。
     let refused = model()
     refused.intake.tapShelf(.intake(1))

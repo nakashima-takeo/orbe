@@ -44,14 +44,7 @@ enum TaskStoreError: Error, Equatable {
     var wait: TaskItem.Wait?
     if let raw = draft.waitingReason {
       guard draft.status != .done else { throw .invalid("a done task cannot be waiting") }
-      wait = .waiting(
-        TaskItem.Waiting(
-          reason: try Self.validReason(raw), since: now,
-          condition: try draft.waitingCondition.map { r throws(TaskStoreError) in
-            try Self.newCondition(r, now: now)
-          }))
-    } else if draft.waitingCondition != nil {
-      throw .invalid(Self.conditionWithoutWaiting)
+      wait = .waiting(TaskItem.Waiting(reason: try Self.validReason(raw), since: now))
     }
     let item = TaskItem(
       id: nextId, title: title, status: draft.status, wait: wait, priority: draft.priority,

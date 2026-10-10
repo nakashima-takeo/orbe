@@ -9,14 +9,13 @@ let taskUsageLines = [
   "orb task list [--workspace <id|current>] [--json]",
   "orb task add <title> [--status <s>] [--priority <p>] [--due <YYYY-MM-DD>]"
     + " [--workspace <id|current> | --no-workspace] [--waiting <reason>] [--description <text>]"
-    + " [--issue <owner/name#N>]... [--pr <owner/name#N>]... [--worktree <path>]"
-    + " [--condition <text> --check <command> --every <minutes> --deadline <date-time>] [--json]",
+    + " [--issue <owner/name#N>]... [--pr <owner/name#N>]... [--worktree <path>] [--json]",
   "orb task set <id> [--title <t>] [--status <s>] [--priority <p>] [--due <date> | --no-due]"
     + " [--workspace <id|current> | --no-workspace] [--waiting <reason> | --no-waiting]"
     + " [--description <text> | --no-description] [--issue <owner/name#N>]... [--pr <owner/name#N>]..."
-    + " [--no-links] [--worktree <path> | --no-worktree]"
-    + " [--condition <text> --check <command> --every <minutes> --deadline <date-time>"
-    + " | --no-condition] [--json]",
+    + " [--no-links] [--worktree <path> | --no-worktree] [--json]",
+  "orb task condition <id> (--condition <text> --check <command> --every <minutes>"
+    + " --deadline <date-time> | --no-condition) [--json]",
   "orb task move <id> (--before <id> | --after <id>) [--json]",
   "orb task rm <id> [--json]",
 ]
@@ -50,14 +49,15 @@ let taskUsage = """
   paths are read from your current directory; a subdirectory is lifted to the
   worktree root). The directory must exist. A worktree belongs to only one
   task (detach it from the other task first); --no-worktree detaches it.
-  --condition / --check / --every / --deadline (all four together) give the
-  wait a condition that resolves it: Orbe runs <command> with /bin/sh right
-  away and then every <minutes>, in the directory of the tab you run it in,
-  without asking. Exit code 0 resolves the wait; print what happened as the
-  first line of stdout. <date-time> is ISO 8601 (2026-10-13T09:00 is local
-  time) and must be in the future; the wait resolves then even if the check
-  never succeeds. A condition needs --waiting (or an existing wait).
-  --no-condition removes the condition and keeps the wait.
+  condition gives a waiting task a condition that resolves the wait (all four
+  of --condition / --check / --every / --deadline): Orbe runs <command> with
+  /bin/sh right away and then every <minutes>, in the directory of the tab you
+  run it in, without asking. Exit code 0 resolves the wait; print what
+  happened as the first line of stdout. <date-time> is ISO 8601
+  (2026-10-13T09:00 is local time) and must be in the future; the wait
+  resolves then even if the check never succeeds. The task must be waiting
+  (set --waiting first). --no-condition removes the condition and keeps the
+  wait.
   list prints one task per line: id, status, priority, due, workspace, title,
   waiting reason, links, worktree (`-` when absent; links read
   issue:owner/name#221,pr:…).
@@ -73,6 +73,7 @@ func runTask(_ args: [String]) -> Never {
   case "set": taskSet(rest)
   case "move": taskMove(rest)
   case "rm": taskRemove(rest)
+  case "condition": taskCondition(rest)
   case nil:
     print(taskUsage)
     exit(2)
@@ -144,9 +145,28 @@ private func taskSet(_ rest: [String]) -> Never {
   let id = taskIdArg(args, verb: "set")
   guard !params.isEmpty else { usageDie("task set requires at least one field to change") }
   params["taskId"] = id
-  // 呼び出し元タブは、待ちの条件に作業ディレクトリと agent の会話を入れるのに control が使う。
-  if let tab = resolveCurrentTab() { params["callerTabId"] = tab }
   let result = callOrExit("update_task", params)
+  if wantJSON { printJSON(result) } else { print("updated task \(id)") }
+  exit(0)
+}
+
+private func taskCondition(_ rest: [String]) -> Never {
+  var args = rest
+  let condition = takeCondition(&args)
+  let clear = takeFlag(&args, "--no-condition")
+  exitIfHelp(args)
+  rejectLeftovers(args, positionals: 1)
+  let id = taskIdArg(args, verb: "condition")
+  var params: [String: Any] = ["taskId": id]
+  switch (condition, clear) {
+  case (let condition?, false): params["condition"] = condition
+  case (nil, true): params["condition"] = NSNull()
+  case (nil, false): usageDie("task condition requires --condition ... or --no-condition")
+  case (.some, true): usageDie("pass only one of --condition / --no-condition")
+  }
+  // 呼び出し元タブは、条件に作業ディレクトリと agent の会話を入れるのに control が使う。
+  if let tab = resolveCurrentTab() { params["callerTabId"] = tab }
+  let result = callOrExit("set_wait_condition", params)
   if wantJSON { printJSON(result) } else { print("updated task \(id)") }
   exit(0)
 }
@@ -219,13 +239,6 @@ private func takeFields(_ args: inout [String], update: Bool) -> [String: Any] {
     takeOption(&args, "--worktree", requires: "a <path>").map(absolutePath)
   }
   params["worktree"] = update ? takeClearable(&args, "--worktree", take: worktree) : worktree(&args)
-  let condition = takeCondition(&args)
-  if update, takeFlag(&args, "--no-condition") {
-    guard condition == nil else { usageDie("pass only one of --condition / --no-condition") }
-    params["waitingCondition"] = NSNull()
-  } else if let condition {
-    params["waitingCondition"] = condition
-  }
   let links = takeLinks(&args)
   if update, takeFlag(&args, "--no-links") {
     guard links.isEmpty else { usageDie("pass only one of --issue / --pr / --no-links") }

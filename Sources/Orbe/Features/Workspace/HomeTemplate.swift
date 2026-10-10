@@ -2,10 +2,12 @@
 enum HomeTemplate {
   /// Orbe の MCP の使い方（Orbe が持ち、起動のたびに書き直す）。Home で動く claude 全員——秘書もタスクの作業場で動く
   /// claude も——が読むので、秘書の役割は書かない（秘書の役割は秘書の会話を起こすときにだけ渡す）。codex・agy は読まない。
-  static func rules(_ language: Language) -> String {
+  /// `home` は Home の root。AI が `list_workspaces` から Home を一意に見分ける手掛かり（root の祖先かどうかでは、
+  /// root が `~` の default workspace も当てはまる）。
+  static func rules(_ language: Language, home: String) -> String {
     switch language {
-    case .ja: return rulesJa
-    case .en: return rulesEn
+    case .ja: return rulesJa(home)
+    case .en: return rulesEn(home)
     }
   }
 
@@ -17,11 +19,12 @@ enum HomeTemplate {
     }
   }
 
-  private static let rulesJa = """
+  private static func rulesJa(_ home: String) -> String {
+    """
     # Orbe の操作
 
-    このフォルダの上は Orbe の Home（workspace の 1 つで、リポジトリに属さないタスクの居場所）です。自分の作業ディレクトリかその祖先が root の workspace が Home \
-    です。`tasks/<ID>-…/` は Home のタスクの作業場です。
+    Orbe の Home（workspace の 1 つで、リポジトリに属さないタスクの居場所）の root は `\(home)` です。`list_workspaces` の \
+    rootPath がこのパスの workspace が Home です。`tasks/<ID>-…/` は Home のタスクの作業場です。
 
     ## タスク
 
@@ -36,7 +39,8 @@ enum HomeTemplate {
 
     ## 待ちの条件と受信
 
-    - 待っているタスクが解ける条件（説明・確認のコマンド・間隔・期限）は `update_task` の waitingCondition で付ける。Orbe が裏で確かめ、満たすか期限が来たら待ちを外す。
+    - 待っているタスクが解ける条件（説明・確認のコマンド・間隔・期限）は `set_wait_condition` で付ける。Orbe が確認のコマンドを人の承認なしに裏で\
+    繰り返し走らせ、満たすか期限が来たら待ちを外す。
     - 外の出どころから定期的に拾って提案にするのは受信（`set_intake`・`list_intakes`・`run_intake`・\
     `pause_intake`・`delete_intake`・`list_intake_proposals`）。
 
@@ -50,12 +54,14 @@ enum HomeTemplate {
     このファイルは Orbe が起動のたびに書き直す。書き足したいことは CLAUDE.md に書く。
 
     """
+  }
 
-  private static let rulesEn = """
+  private static func rulesEn(_ home: String) -> String {
+    """
     # Operating Orbe
 
-    The folder above is Orbe's Home (one of the workspaces; the place for tasks that belong to no \
-    repository). The workspace whose root is your working directory or one of its ancestors is Home. \
+    The root of Orbe's Home (one of the workspaces; the place for tasks that belong to no repository) \
+    is `\(home)`. Home is the workspace whose rootPath in `list_workspaces` is this path. \
     `tasks/<ID>-…/` are the workplaces of Home's tasks.
 
     ## Tasks
@@ -73,8 +79,8 @@ enum HomeTemplate {
     ## Waiting conditions and intakes
 
     - Attach the condition that ends a wait (description, check command, interval, deadline) with \
-    `update_task`'s waitingCondition. Orbe checks it in the background and clears the wait when it holds or \
-    the deadline comes.
+    `set_wait_condition`. Orbe runs the check command in the background, repeatedly and without asking the \
+    user, and clears the wait when it holds or the deadline comes.
     - To pick things up from outside sources on a schedule and turn them into proposals, use intakes \
     (`set_intake`, `list_intakes`, `run_intake`, `pause_intake`, `delete_intake`, `list_intake_proposals`).
 
@@ -88,6 +94,7 @@ enum HomeTemplate {
     Orbe rewrites this file at every launch. Put your own additions in CLAUDE.md.
 
     """
+  }
 
   private static let claudeMdJa = """
     # Home

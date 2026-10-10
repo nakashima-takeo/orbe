@@ -66,13 +66,13 @@ final class ClaudeHeadlessTests: OrbeTestCase {
     XCTAssertNil(ClaudeHeadless.availableTools(Data(#"{"type":"result","result":"x"}"#.utf8)))
   }
 
-  /// 揃っているかを見るのは MCP のツールだけ。`mcp__<サーバー>` はそのサーバーのツールが 1 つでもあれば揃っている。
+  /// 揃っているかを見るのは MCP のツールだけ。
   func testMissingToolsAreTheRequestedMCPToolsNotInTheSession() {
     XCTAssertEqual(
       HeadlessCLI.missingTools(
-        ["Read", "mcp__slack__search", "mcp__github", "mcp__linear"],
+        ["Read", "mcp__slack__search", "mcp__linear__issues"],
         available: ["mcp__slack__search", "mcp__github__issues"]),
-      ["mcp__linear"])
+      ["mcp__linear__issues"])
   }
 
   func testReplyComesFromTheResultEvent() {

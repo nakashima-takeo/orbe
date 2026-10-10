@@ -28,8 +28,8 @@ enum IntakePrompts {
 
   /// 取得の出力を読む。`{"error":…}` の行（`id` を持たず文字列の `error` を持つ）があるか、1 行以上あって全部が形違いなら
   /// 失敗。同じ id が 2 度出たら後の行を捨てる。
-  static func readFetch(_ text: String, truncated: Bool = false) -> FetchReading {
-    let lines = JSONLines<IntakeItem>(text, truncated: truncated)
+  static func readFetch(_ text: String) -> FetchReading {
+    let lines = JSONLines<IntakeItem>(text)
     var rejected = IntakeRejections()
     if let error = JSONLines<FetchError>(text).items.first {
       return .failed("the fetch reported an error: \(error.error)", rejected: rejected)
@@ -178,19 +178,4 @@ private struct JudgeLine: Decodable {
   let resolve: String?
   let title: String?
   let due: String?
-}
-
-extension JSONLines.Reason {
-  /// 回の記録に残す理由。
-  var text: String {
-    switch self {
-    case .notJSON: "not JSON"
-    case .notObject: "not a JSON object"
-    case .missingKey(let key): "missing \(key)"
-    case .nullValue(let key): "\(key) is null"
-    case .typeMismatch(let key): "\(key) has the wrong type"
-    case .invalidValue(let key): key.isEmpty ? "invalid value" : "invalid \(key)"
-    case .truncated: "cut off by the output limit"
-    }
-  }
 }

@@ -22,7 +22,7 @@ updated: 2026-10-10
 
 `install.sh` はプラグインディレクトリとプラグイン名を引数で受け、「渡したディレクトリの中身を、各 CLI が読むものにそろえる」。claude は登録先をライブ参照するので、未導入のときだけ導入する（導入済みなら unchanged）。codex と agy はコピーを読むので入れ直す。利用者がプラグインを無効にした設定は、どの CLI でも残す。
 
-- codex は marketplace の追加（冪等）のあと `plugin add` し、キャッシュのコピーを丸ごと置き換える。`plugin add` は必ず有効へ戻すので、利用者が無効にしていれば入れ直さない（unchanged）。有効に戻したあとは、次に中身が変わるまで古いコピーのまま。
+- codex は marketplace の追加（冪等）のあと `plugin add` し、キャッシュのコピーを丸ごと置き換える。`plugin add` は必ず有効へ戻すので、利用者が無効にしていれば入れ直さない（unchanged）。有効に戻したあとは、次に中身が変わるまで古いコピーのまま。一覧（`plugin list --json`）を読めない（打ち切り・出力の形の変化）ときは、無効かどうか分からないので入れ直さず error にする——指紋を記録しないので次の起動でやり直す。codex の出力の形が恒久的に変わると、起動のたびに `install.sh` が走り（agy もそのたびに入れ直す）、codex のコピーは更新されない。
 - agy は `plugin install` し直す。ステージ先は中身どおりに置き換わり（消したファイルも消える）、有効/無効の設定は残る。
 
 自分の枠かどうか（claude の導入済み・codex の無効）は名前の**完全一致**で見る——前方一致だと別チャネルの枠を自分のものと誤認する（claude は `<name>@<name>`、codex は JSON 出力の plugin ID）。
@@ -39,7 +39,7 @@ hook からシムを呼ぶ経路も CLI ごとに違う: claude / codex はそ�
 
 - **claude**: `.claude-plugin/plugin.json` の `mcpServers`。プラグインルート変数を展開した絶対パスで呼ぶ（相対パスでは起動に失敗する）。
 - **codex**: `.codex-plugin/plugin.json` の `mcpServers`。cwd をプラグインルートにした相対パスで呼ぶ。codex は MCP サーバーへ親の環境のうち既定の数個（`HOME`・`PATH` など）と名指しされた変数しか渡さないので、シムとブリッジが読む変数（`ORBE_MCP_BIN`・`ORBE_BUNDLE_ID`・`ORBE_TAB`・`ORBE_SOCK`）を `env_vars` で名指しして通す。
-- **agy**: プラグインのルートの `mcp_config.json`。相対パスで呼ぶ。
+- **agy**: プラグインのルートの `mcp_config.json`。相対パスで呼ぶ——agy は MCP サーバーをステージ済みプラグインルートを cwd にして起こし、相対の command をそこから解く。親の環境（`ORBE_MCP_BIN` など）はそのまま MCP サーバーへ渡る。Orbe の外では空サーバーが接続できたサーバーとして扱われ、警告は出ない（HOME を一時ディレクトリに差し替えた隔離環境の agy の print モードで確かめた。対話画面の表示は見ていない）。
 
 プラグインのルートに `.mcp.json`（claude も codex も既定の置き場として読む）は置かない。
 
@@ -49,7 +49,7 @@ MCP シムは、`ORBE_MCP_BIN` が実行可能でチャネル判定に通れば�
 
 ## event→state 対応
 
-- **claude**: SessionStart(startup|resume|clear|fork)→idle / UserPromptSubmit→working / Notification(permission_prompt|worker_permission_prompt)→waiting / PreToolUse(AskUserQuestion|ExitPlanMode)→waiting / PostToolUse(AskUserQuestion|ExitPlanMode)→working / PostToolBatch→working / Stop→done / StopFailure→done / SessionEnd→clear。SessionStart は matcher で会話が始まる・切り替わる source に絞る——compact も SessionStart を撃ち、自動 compact はターンの途中で走るので、絞らないと作業中の agent を idle と誤認する（[秘書](secretary.md)が作業中の秘書へ次の頼みを貼る）。StopFailure（API エラーで終わったターン。Stop の代わりに撃たれる）もターンの終わりとして done に写す——写さないと working が残り、秘書への溜めが止まる。Notification は matcher で permission 待ちの notification_type に絞る——絞らないと idle（無操作）等でも発火し waiting を誤認するため（matcher に外れた通知はフックコマンド自体が走らない）。待ちの解除は種類ごとに経路が分かれる——ツールの待ち（AskUserQuestion / ExitPlanMode）は待つツールが事前に確定するので同じ matcher の PostToolUse が応答の瞬間に解除し（matcher 無しにすると並列に走る無関係なツールの完了でも撃たれ waiting が潰れる）、permission の待ちはどのツールが承認されるか事前に分からないのでバッチ解決（PostToolBatch・matcher の概念を持たないイベント）で解除する。
+- **claude**: SessionStart(startup|resume|clear|fork)→idle / UserPromptSubmit→working / Notification(permission_prompt|worker_permission_prompt)→waiting / Notification(quota_auto_resume_disabled)→done / PreToolUse(AskUserQuestion|ExitPlanMode)→waiting / PostToolUse(AskUserQuestion|ExitPlanMode)→working / PostToolBatch→working / Stop→done / StopFailure(rate_limit 以外の種別)→done / SessionEnd→clear。SessionStart は matcher で会話が始まる・切り替わる source に絞る——compact も SessionStart を撃ち、自動 compact はターンの途中で走るので、絞らないと作業中の agent を idle と誤認する（[秘書](secretary.md)が作業中の秘書へ次の頼みを貼る）。StopFailure（API エラーで終わったターン。Stop の代わりに撃たれる）もターンの終わりとして done に写す——写さないと working が残り、秘書への溜めが止まる。ただし usage limit（`rate_limit`）は matcher で外す：claude はその場でリセットを待って自分で続けるので、終わりとすると待ちの間に溜めた頼みが次々貼られ、続きが打ち切られる。待ちが続きなしに終わったこと（Notification の `quota_auto_resume_disabled`）を終わりとする。matcher は `rate_limit` 以外の種別を列挙するので、claude が新しい種別を足すとその種別のターンは working のまま残る。Notification は matcher で permission 待ちの notification_type に絞る——絞らないと idle（無操作）等でも発火し waiting を誤認するため（matcher に外れた通知はフックコマンド自体が走らない）。待ちの解除は種類ごとに経路が分かれる——ツールの待ち（AskUserQuestion / ExitPlanMode）は待つツールが事前に確定するので同じ matcher の PostToolUse が応答の瞬間に解除し（matcher 無しにすると並列に走る無関係なツールの完了でも撃たれ waiting が潰れる）、permission の待ちはどのツールが承認されるか事前に分からないのでバッチ解決（PostToolBatch・matcher の概念を持たないイベント）で解除する。
 - **codex**: UserPromptSubmit→working / PermissionRequest→waiting / Stop→done / Interrupt→idle。turn を中断（Esc）すると Stop は出ず Interrupt だけが出るので、これを受けないと中断後も working が残る。中断は人が目の前で止めた操作で応答を終えたのではないので、done（通知音が鳴る）でなく idle に写す。
 - **agy**: PreInvocation→working / Stop→done（agy のフックに SessionStart/Notification/PermissionRequest 相当が無く idle/waiting/clear は取得不可）
 
@@ -59,11 +59,11 @@ MCP シムは、`ORBE_MCP_BIN` が実行可能でチャネル判定に通れば�
 
 Orbe は**起動ごとに**同梱パッケージを **state フォルダの下の安定パス**（[persistence](../platform/persistence.md)。常用なら Application Support 配下で、bundle id 由来なのでチャネルごとに別——[channel](../platform/channel.md)。テスト用に実体化先を差し替える seam を持つ）へ実体化する（tmp へコピー→原子的差し替え＝冪等・途中失敗でも既存を壊さない・実行ビット保持）。毎起動やり直すのは、claude が登録先ディレクトリをライブ参照するため——同梱が更新されても実体化が走らなければ古い定義が読まれ続ける。安定パスを使うのは `marketplace add` が記録する登録先が消えて dangling しないため（`.app` を消しても manifest は読める）。実体化のとき自分の bundle ID をプラグインのルートの `channel` へ刻む。
 
-**隔離インスタンス（`ORBE_STATE_DIR`）は実体化だけをし、各 CLI へ登録しない**（下の入れ直しも初回オンボーディングもしない）。実体化先は自分の state フォルダの下なので常用の実体化先と指紋には触れないが、登録は利用者の CLI の設定そのもの——claude の marketplace の登録先、codex / agy のコピー——を書き換え、検証のために起こした Orbe が利用者の agent の中身を差し替えてしまう。隔離インスタンスのタブの agent は、常用の Orbe が登録したプラグイン（hook・MCP のシム）で動き、シムが env 越しに exec する `orbe-report` / `orbe-mcp` は隔離インスタンスの `.app` のもの。
+**隔離インスタンス（`ORBE_STATE_DIR`）は実体化も各 CLI への登録もしない**（下の入れ直しも初回オンボーディングもしない）。実体化を読むのは登録だけなので、登録しないなら実体化も要らない。登録は利用者の CLI の設定そのもの——claude の marketplace の登録先、codex / agy のコピー——を書き換え、検証のために起こした Orbe が利用者の agent の中身を差し替えてしまう。隔離インスタンスのタブの agent は、常用の Orbe が登録したプラグイン（hook・MCP のシム）で動き、シムが env 越しに exec する `orbe-report` / `orbe-mcp` は隔離インスタンスの `.app` のもの。
 
 登録は**中身の指紋が変わったときだけ**やり直す: 最後に登録できた実体化済みパッケージの指紋（全ファイルの相対パスと中身から作る SHA-256）を覚え、今回実体化した中身の指紋と違えば `install.sh` を無音でバックグラウンド実行する。codex / agy は自分のコピーを読むので、入れ直さなければ中身の更新が届かない。名前も刻印もパッケージの中にあるので、チャネルの違いも指紋の違いに含まれる。1 つでも CLI が失敗したら指紋を記録せず、次回起動で再試行する。記録をまだ持たない利用者は、食い違いとして一度入れ直される。
 
-指紋の記録は実体化先の隣に 1 つ置く（実体化先の中には置かない。毎起動の差し替えに巻き込まれるため）。
+指紋の記録は導入済みの印と同じ `app-state.json` に置く（[persistence](../platform/persistence.md)）。
 
 ## 初回オンボーディング
 

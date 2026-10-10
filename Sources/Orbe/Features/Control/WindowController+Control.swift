@@ -51,12 +51,14 @@ extension WindowController: ControlTarget {
     return nil
   }
 
-  /// エージェント hook の状態報告を発信元タブへ適用する。遷移表と同一性の寿命の判断はタブ
-  /// （`TerminalTab.applyReport`）が持ち、ここは waiting / done への実変化を 1 つの通知
+  /// エージェント hook の状態報告を発信元タブへ適用し、秘書の係へも届いた直後に見せる（貼った頼みの確証）。
+  /// 遷移表と同一性の寿命の判断はタブ（`TerminalTab.applyReport`）が持ち、ここは waiting / done への実変化を 1 つの通知
   /// （`agentNotification`）として成立させ、メニューバーの一過性表示と通知音という 2 つの面へ流す
   /// （成立条件——見ているタブ・未activatedタブでは通知しない——は通知側が 1 回だけ解く）。
   func controlReportAgent(tab: TerminalTab, report: AgentHookReport) {
-    guard tab.applyReport(report), report.state == "waiting" || report.state == "done",
+    let changed = tab.applyReport(report)
+    secretary.noteReport(from: tab)
+    guard changed, report.state == "waiting" || report.state == "done",
       let notification = agentNotification(for: tab)
     else { return }
     deliver(notification)

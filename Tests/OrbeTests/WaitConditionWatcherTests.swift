@@ -12,14 +12,14 @@ import XCTest
 final class WaitConditionWatcherTests: OrbeTestCase {
   private var now = Date()
   private var armed: (date: Date, fire: () -> Void)?
-  private var runner: WatcherFakeRunner!
+  private var runner: FakeJobs!
   private var scheduler: BackgroundScheduler!
   private var watcher: WaitConditionWatcher?
   private var resolved: [(task: Int, resolution: WaitResolution)] = []
 
   override func setUp() {
     now = Date()
-    runner = WatcherFakeRunner()
+    runner = FakeJobs()
     scheduler = BackgroundScheduler(run: runner.run)
     scheduler.now = { [unowned self] in now }
     scheduler.arm = { [unowned self] date, fire in
@@ -61,8 +61,7 @@ final class WaitConditionWatcherTests: OrbeTestCase {
   private func addWaiting(_ store: TaskStore) throws -> TaskItem {
     var draft = TaskDraft(title: "設定の検索を速くする")
     draft.waitingReason = "レビュー待ち"
-    draft.waitingCondition = request()
-    return try store.add(draft)
+    return try store.addWaiting(draft, request())
   }
 
   private func result(_ code: Int32, stdout: String = "") -> BackgroundRunResult {
@@ -81,7 +80,7 @@ final class WaitConditionWatcherTests: OrbeTestCase {
       runner.calls.first?.job,
       .command(BackgroundCommand(script: "gh pr view 214", directory: nil)))
 
-    runner.finish(0, with: result(1))
+    runner.finish(0, result(1))
     settle()
 
     XCTAssertEqual(store.tasks.first { $0.id == task.id }?.waiting?.condition?.checks, 1)
@@ -94,7 +93,7 @@ final class WaitConditionWatcherTests: OrbeTestCase {
     let task = try addWaiting(store)
     start(store)
 
-    runner.finish(0, with: result(0, stdout: "レビューが付いた"))
+    runner.finish(0, result(0, stdout: "レビューが付いた"))
     settle()
     now = now.addingTimeInterval(3600)
     scheduler.recount()
@@ -111,7 +110,7 @@ final class WaitConditionWatcherTests: OrbeTestCase {
     let task = try addWaiting(store)
     start(store)
 
-    runner.finish(0, with: result(0, stdout: "前の条件"))
+    runner.finish(0, result(0, stdout: "前の条件"))
     var update = TaskUpdate()
     update.waitingCondition = .set(request("別の条件"))
     _ = try store.update(task.id, update)
@@ -140,6 +139,27 @@ final class WaitConditionWatcherTests: OrbeTestCase {
     XCTAssertEqual(store.tasks.first { $0.id == task.id }?.waiting?.reason, "レビュー待ち")
   }
 
+  /// 再起動の後は、最後の確認の始まりから数えて続き、起動ですぐには確かめない（付けた日時からは数え直さない）。
+  func testAfterRelaunchTheConditionContinuesFromItsLastCheck() throws {
+    let store = TaskStore()
+    _ = try addWaiting(store)
+    start(store)
+    now = now.addingTimeInterval(120)
+    runner.finish(0, result(1))
+    settle()
+    let lastCheck = now
+
+    now = now.addingTimeInterval(180)
+    start(TaskStore())
+    settle()
+
+    XCTAssertEqual(runner.calls.count, 1, "起動ですぐには確かめない")
+    XCTAssertEqual(
+      try XCTUnwrap(armed?.date).timeIntervalSince1970,
+      lastCheck.addingTimeInterval(600).timeIntervalSince1970, accuracy: 0.01,
+      "最後の確認の始まり＋間隔")
+  }
+
   /// 終了している間に期限を過ぎた条件は、起動したときに「期限が来た」で解ける。
   func testConditionPastItsDeadlineResolvesOnStart() throws {
     let task = try addWaiting(TaskStore())
@@ -156,22 +176,5 @@ final class WaitConditionWatcherTests: OrbeTestCase {
     XCTAssertEqual(runner.calls.count, 0, "期限を過ぎた条件は確かめずに解ける")
     XCTAssertEqual(resolved.map(\.task), [task.id], "起動直後に解けたものも知らせる")
     XCTAssertEqual(resolved.first?.resolution.how, .expired)
-  }
-}
-
-private final class WatcherFakeRunner {
-  private(set) var calls: [(job: BackgroundJob, completion: (BackgroundRunResult) -> Void)] = []
-  private(set) var stopped: [Int] = []
-
-  func run(_ job: BackgroundJob, completion: @escaping (BackgroundRunResult) -> Void)
-    -> BackgroundRunHandle
-  {
-    let index = calls.count
-    calls.append((job, completion))
-    return BackgroundRunHandle { [unowned self] in stopped.append(index) }
-  }
-
-  func finish(_ index: Int, with result: BackgroundRunResult) {
-    calls[index].completion(result)
   }
 }

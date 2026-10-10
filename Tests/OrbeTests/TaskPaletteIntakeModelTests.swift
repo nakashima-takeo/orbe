@@ -70,6 +70,29 @@ final class TaskPaletteIntakeModelTests: OrbeTestCase {
 
   // MARK: - さばく
 
+  /// 範囲を Home 以外の workspace に絞っていても、位置は足すタスクが付く Home の欄で決まる（高い優先度を越えない）。
+  func testEnterWhileScopedToAnotherWorkspacePlacesTheTaskInHomesColumn() throws {
+    let opened = TaskPaletteSamples.opened.id
+    let home = TaskPaletteSamples.home
+    let palette = TaskPaletteSamples.model(
+      [
+        TaskPaletteSamples.task(1, "X") { $0.workspace = opened },
+        TaskPaletteSamples.task(2, "Home 高") {
+          $0.workspace = home
+          $0.priority = .high
+        },
+        TaskPaletteSamples.task(3, "Home 中") { $0.workspace = home },
+      ],
+      intakes: DesignSceneFixtures.intakeRunner(DesignSceneFixtures.intakeDesignFile()))
+    palette.setScope(.opened)
+    palette.setTab(.intake)
+
+    palette.submit()
+
+    let added = try XCTUnwrap(palette.store.tasks.first { $0.id > 3 }).id
+    XCTAssertEqual(palette.store.tasks.map(\.id), [1, 2, added, 3])
+  }
+
   /// ⌘⇧X で人が受けて足すタスクなので、入力欄から足すのと同じく、その優先度の未着手の先頭に入る。
   func testEnterMakesATodoTaskOnHomeAtTheHeadOfMediumAndSelectsTheSamePosition() throws {
     let palette = palette()
@@ -175,6 +198,21 @@ final class TaskPaletteIntakeModelTests: OrbeTestCase {
     XCTAssertEqual(intake.error, .running, "走っている間は赤で断る")
   }
 
+  /// 受信タブの赤は、タブを替えた操作の境目で消える（戻ったときに当てはまらない赤が残らない）。
+  func testLeavingTheTabClearsItsError() {
+    let palette = palette()
+    palette.intake.tapShelf(.intake(1))
+    palette.intake.enterContents()
+    palette.intake.runNow()
+    palette.intake.runNow()
+    XCTAssertEqual(palette.intake.error, .running)
+
+    palette.setTab(.tasks)
+    palette.setTab(.intake)
+
+    XCTAssertNil(palette.intake.error)
+  }
+
   func testSpaceTogglesPause() {
     let intake = palette().intake
     intake.tapShelf(.intake(4))
@@ -196,18 +234,5 @@ final class TaskPaletteIntakeModelTests: OrbeTestCase {
     XCTAssertNil(intake.store.intake(2))
     XCTAssertEqual(intake.place, .proposals)
     XCTAssertEqual(intake.shelfList.selectedID, .intake(3))
-  }
-
-  /// AI が中身を見ている受信を消したら（カードが `.onChange` で付け直しへ届ける）、提案の一覧へ戻る。
-  func testIntakeDeletedElsewhereWhileInContentsReturnsToProposals() throws {
-    let intake = palette().intake
-    intake.tapShelf(.intake(1))
-    intake.enterContents()
-
-    try intake.runner.delete(1)
-    intake.reconcile()
-
-    XCTAssertEqual(intake.place, .proposals)
-    XCTAssertEqual(intake.shelfList.selectedID, .intake(2))
   }
 }
