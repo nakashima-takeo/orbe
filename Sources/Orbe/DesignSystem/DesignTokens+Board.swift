@@ -24,9 +24,8 @@ extension Theme.Layout {
   /// 一覧の行の最小の高さと、行の左の点。
   static let boardRowMinHeight: CGFloat = 58
   static let boardDot: CGFloat = 7
-  /// 依頼の欄の高さ（枠の内側）と、欄の頭の札の幅の上限（長い名前でも入力の幅を残す）。
+  /// 依頼の欄の高さ（枠の内側）。
   static let boardRequest: CGFloat = 46
-  static let boardRequestTagMax: CGFloat = 320
   /// 選んだ行で効くキーのフッターの高さ。
   static let boardFooter: CGFloat = 44
 }

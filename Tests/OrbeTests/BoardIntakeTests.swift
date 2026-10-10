@@ -21,6 +21,7 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
     static let delete: UInt16 = 51
     static let enter: UInt16 = 36
     static let down: UInt16 = 125
+    static let up: UInt16 = 126
   }
 
   // 見本『Home』の 4 件（DesignSceneFixtures+Board）。
@@ -84,6 +85,10 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
   /// 実機の矢印キーは numericPad と function の修飾を伴って届く。
   func down(_ window: NSWindow) {
     press(Key.down, "\u{F701}", [.numericPad, .function], to: window)
+  }
+
+  func up(_ window: NSWindow) {
+    press(Key.up, "\u{F700}", [.numericPad, .function], to: window)
   }
 
   // MARK: - 並び

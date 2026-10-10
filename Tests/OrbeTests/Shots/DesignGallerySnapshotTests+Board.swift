@@ -91,8 +91,7 @@ extension DesignGallerySnapshotTests {
     try renderBoardRequestSnapshots(write: write, board: board)
   }
 
-  /// 依頼の欄: 文字あり（欄に焦点・フッターが欄のキー）・札あり・断り 2 種・狭い窓の札。秘書の口は閉包の差し替えで、本物の
-  /// 秘書・claude は起きない。
+  /// 依頼の欄: 文字あり（欄に焦点・フッターが欄のキー）・断り 2 種。秘書の口は閉包の差し替えで、本物の秘書・claude は起きない。
   private func renderBoardRequestSnapshots(
     write: (String, BoardModel, Language, NSSize) throws -> Void,
     board: (IntakesFile?) -> BoardModel
@@ -102,35 +101,23 @@ extension DesignGallerySnapshotTests {
     for language in [Language.ja, .en] {
       let suffix = language == .ja ? "" : "_en"
       let typed = board(nil)
-      typed.intake.toRequest()
+      typed.intake.go(.request)
       typed.intake.requestText =
         language == .ja ? "Slack の自分宛ての DM をタスクの候補にして" : "Turn my Slack DMs into task candidates"
       try write("board_request_typed\(suffix).png", typed, language, size)
-
-      let fix = board(nil)
-      fix.intake.requestFix()
-      try write("board_request_fix\(suffix).png", fix, language, size)
-      fix.intake.requestText = language == .ja ? "認証を直して" : "Fix the auth"
-      try write("board_request_fix_typed\(suffix).png", fix, language, size)
     }
 
     let missing = board(nil)
     missing.intake.onAsk = { _ in .claudeMissing }
-    missing.intake.toRequest()
+    missing.intake.go(.request)
     missing.intake.requestText = "Slack の自分宛ての DM をタスクの候補にして"
     missing.intake.send()
     try write("board_request_claude_missing.png", missing, .ja, size)
 
     let gone = board(nil)
-    gone.intake.requestFix()
-    try gone.intake.runner.delete(try XCTUnwrap(gone.intake.request.fix?.id))
-    gone.intake.send()
+    try gone.intake.runner.delete(try XCTUnwrap(gone.intake.selected?.id))
+    gone.intake.askFix()
     try write("board_request_fix_gone.png", gone, .ja, size)
-
-    let long = board(DesignSceneFixtures.boardIntakeLongFile())
-    long.intake.requestFix()
-    long.intake.requestText = "認証を直して"
-    try write("board_request_fix_narrow.png", long, .ja, NSSize(width: 800, height: 480))
   }
 
   private func homeRow(_ strip: TabStrip, selection: StatusRowModel.Selection) -> StatusRowModel {

@@ -601,11 +601,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardIntakePausedNote
   case boardHintSelect
   case boardHintToList
-  case boardHintCancel
   case boardAskPlaceholder
   case boardAskHint
-  case boardAskFixTag
-  case boardAskFixPlaceholder
   case boardAskFixHint
   case boardAskClaudeMissing
   case boardAskFixGone

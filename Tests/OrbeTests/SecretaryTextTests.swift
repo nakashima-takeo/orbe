@@ -78,12 +78,11 @@ final class SecretaryTextTests: OrbeTestCase {
 
     let intake = DesignSceneFixtures.boardIntakes()[2]
     XCTAssertEqual(
-      line(.intakeFix(intake, note: "認証を\n直して"), from: .board, ja),
-      "Home のボードから · 10:31 — タスクの自動追加 \(intake.id)「\(intake.definition.name)」を直す。補足: 認証を 直して")
+      line(.intakeFix(intake), from: .board, ja),
+      "Home のボードから · 10:31 — タスクの自動追加 \(intake.id)「\(intake.definition.name)」を直す。")
     XCTAssertEqual(
-      line(.intakeFix(intake, note: " "), from: .board, en),
-      "From the Home board · 10:31 — Fix task auto-add \(intake.id) “\(intake.definition.name)”.",
-      "補足が空なら「Note」を省く")
+      line(.intakeFix(intake), from: .board, en),
+      "From the Home board · 10:31 — Fix task auto-add \(intake.id) “\(intake.definition.name)”.")
   }
 
   /// 時刻は受けた時刻で、届ける日と違えば日付も付ける（夜に溜めた頼みが翌朝届く）。

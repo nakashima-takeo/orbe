@@ -153,7 +153,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
     wc.showWorkspacePalette()
     wc.window.makeFirstResponder(nil)  // パレットの入力欄が焦点を持っていった状態
     wc.dismissPalette()
-    try pressDown(wc)
+    try press(wc, keyCode: 126, "\u{F700}", [.numericPad, .function])
     XCTAssertEqual(list.selected?.id, 1, "パレットを閉じるとボードへ")
 
     wc.switchWorkspace(to: try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "default" }))
@@ -178,28 +178,28 @@ final class WindowControllerBoardTests: OrbeTestCase {
     let intake = wc.board.intake
 
     wc.statusModel.onSelectBoard()
-    try press(wc, keyCode: 48, "\t")
-    XCTAssertEqual(intake.place, .request, "⇥ で欄へ")
+    try press(wc, keyCode: 126, "\u{F700}", [.numericPad, .function])
+    XCTAssertEqual(intake.place, .request, "↑ で欄へ")
     try press(wc, keyCode: 0, "a")
-    XCTAssertEqual(intake.request.text, "a")
+    XCTAssertEqual(intake.requestText, "a")
 
     wc.showWorkspacePalette()
     wc.window.makeFirstResponder(nil)  // パレットの入力欄が焦点を持っていった状態
     wc.dismissPalette()
     try press(wc, keyCode: 0, "b")
-    XCTAssertEqual(intake.request.text, "ab", "パレットを閉じると欄へ")
+    XCTAssertEqual(intake.requestText, "ab", "パレットを閉じると欄へ")
 
     wc.select(.tab(tab))
     try press(wc, keyCode: 0, "x")
-    XCTAssertEqual(intake.request.text, "ab", "端末タブの間は隠れた欄にキーが届かない")
+    XCTAssertEqual(intake.requestText, "ab", "端末タブの間は隠れた欄にキーが届かない")
     wc.statusModel.onSelectBoard()
     try press(wc, keyCode: 0, "c")
-    XCTAssertEqual(intake.request.text, "abc", "ボードへ戻ると欄へ")
+    XCTAssertEqual(intake.requestText, "abc", "ボードへ戻ると欄へ")
 
     wc.switchWorkspace(to: try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "default" }))
     wc.switchWorkspace(to: home)
     try press(wc, keyCode: 0, "d")
-    XCTAssertEqual(intake.request.text, "abcd", "workspace を戻ると欄へ")
+    XCTAssertEqual(intake.requestText, "abcd", "workspace を戻ると欄へ")
   }
 
   /// 焦点の当て直しが SwiftUI に写るのを待ってから ↓ を窓へ送る。

@@ -1,8 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// 自動追加の部品の依頼の欄（「❯ やりたいことを入力 … ↵ 依頼」）。打って ↵ でタスクの自動追加を頼む。札（⌘↵ で付く「「名前」を
-/// 直す」）があれば、その自動追加の直しを頼む。
+/// 自動追加の部品の依頼の欄（「❯ やりたいことを入力 … ↵ 依頼」）。打って ↵ でタスクの自動追加を頼む。
 ///
 /// 欄に焦点が無い間は入力欄にクリックを渡さず、被せた面で受けて欄へ移る操作としてモデルに伝える——入力欄が直に焦点を取ると、
 /// 地のクリックの当て直し（最後に居た場所）と行き先を取り合うため。焦点はモデルから写る。
@@ -10,24 +9,13 @@ struct BoardIntakeRequestField: View {
   @Bindable var model: BoardIntakeModel
   let focused: FocusState<BoardIntakeModel.Place?>.Binding
   @Environment(\.localization) private var l10n
-  @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
-    let fix = model.request.fix
     let here = model.place == .request
     HStack(spacing: Theme.Space.beat) {
       Text("❯")
         .font(Font.theme.boardPrompt)
         .foregroundStyle(Color.theme.accentPrimary)
-      if let fix {
-        fontResolver.text(l10n.format(.boardAskFixTag, fix.name), base: Theme.Typography.meta)
-          .font(Font.theme.meta)
-          .foregroundStyle(Color.theme.accentBright)
-          .lineLimit(1)
-          .truncationMode(.tail)
-          .frame(maxWidth: Theme.Layout.boardRequestTagMax, alignment: .leading)
-          .fixedSize()
-      }
       TextField("", text: $model.requestText)
         .textFieldStyle(.plain)
         .font(Font.theme.title)
@@ -35,8 +23,8 @@ struct BoardIntakeRequestField: View {
         .tint(Color.theme.accentPrimary)
         .focused(focused, equals: .request)
         .imePlaceholder(
-          l10n.string(fix == nil ? .boardAskPlaceholder : .boardAskFixPlaceholder),
-          showWhenEmpty: model.request.text.isEmpty, focused: focused.wrappedValue == .request,
+          l10n.string(.boardAskPlaceholder),
+          showWhenEmpty: model.requestText.isEmpty, focused: focused.wrappedValue == .request,
           font: Font.theme.title, color: Color.theme.textMuted
         )
         .padding(.leading, Theme.Space.hair)
@@ -51,7 +39,7 @@ struct BoardIntakeRequestField: View {
               .onTapGesture { model.go(.request) }
           }
         }
-      Text("↵ " + l10n.string(fix == nil ? .boardAskHint : .boardAskFixHint))
+      Text("↵ " + l10n.string(.boardAskHint))
         .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.textMuted)
         .lineLimit(1)

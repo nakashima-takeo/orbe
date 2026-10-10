@@ -6,8 +6,8 @@ import SwiftUI
 /// ストアが変わったら `reconcile()` で選択を付け直す（ビューの `.onChange` が届ける）。だから裏の回・AI の変更・⌘⇧X での
 /// 操作がそのまま映る。
 ///
-/// 焦点の場所は欄か一覧で、初めは一覧（選べばすぐ space・↵ が効く）。ボードから当て直されると最後に居た場所へ戻る。札は欄から
-/// 一覧へ移ったときに外れ、ボードの外へ焦点が出ただけでは外れない。
+/// 焦点の場所は欄か一覧で、初めは一覧（選べばすぐ space・↵ が効く）。欄は一覧の上の 1 段で、↑↓ は欄と一覧の行を 1 つの並びと
+/// して端で巡回する（⌘⇧X で入力の行き先が一覧の先頭に並ぶのと同じ）。ボードから当て直されると最後に居た場所へ戻る。
 @Observable final class BoardIntakeModel {
   enum Place: Hashable {
     case request
@@ -16,12 +16,15 @@ import SwiftUI
 
   let runner: IntakeRunner
   private(set) var list = ListState<Int>()
-  private(set) var request = BoardIntakeRequest()
+  /// 欄の文字（入力欄の binding）。変われば断りを消す。
+  var requestText = "" {
+    didSet { if requestText != oldValue { onRefusal(nil) } }
+  }
   private(set) var place = Place.list
   /// 進むたびに、ビューが焦点を `place` へ当て直す。
   private(set) var focusToken = 0
 
-  /// 欄から頼む（自動追加の新しい依頼か直し）。ボードの配線が出どころを付けて秘書の口へ渡し、受けなければ断りを返す。
+  /// 自動追加の新しい依頼か直しを頼む。ボードの配線が出どころを付けて秘書の口へ渡し、受けなければ断りを返す。
   @ObservationIgnored var onAsk: (SecretaryAsk) -> Secretary.Refusal? = { _ in .claudeMissing }
   /// ボードの断りの枠へ置く（nil は消す）。
   @ObservationIgnored var onRefusal: (L10nKey?) -> Void = { _ in }
@@ -60,9 +63,8 @@ import SwiftUI
 
   // MARK: - 焦点の場所
 
-  /// 焦点がその場所へ移った（クリック・キーのどちらからも）。欄から一覧へ移ったら札を外す（打った文字は残す）。
+  /// 焦点がその場所へ移った（クリック・キーのどちらからも）。
   func arrive(_ place: Place) {
-    if self.place == .request, place == .list { request.fix = nil }
     self.place = place
   }
 
@@ -77,13 +79,13 @@ import SwiftUI
     focusToken &+= 1
   }
 
-  /// フッターの左に出すキー。欄では送る・離れるキー、一覧では選んだ自動追加で効くキー（無ければ出さない）。
+  /// フッターの左に出すキー。欄では送る・一覧へ移るキー（一覧が空なら移る先が無いので出さない）、一覧では選んだ自動追加で効く
+  /// キー（無ければ出さない）。
   var hints: [BoardKeyHint] {
     switch place {
     case .request:
-      return request.fix == nil
-        ? [BoardKeyHint("↵", .boardAskHint), BoardKeyHint("⇥", .boardHintToList)]
-        : [BoardKeyHint("↵", .boardAskFixHint), BoardKeyHint("esc", .boardHintCancel)]
+      return [BoardKeyHint("↵", .boardAskHint)]
+        + (ids.isEmpty ? [] : [BoardKeyHint("↓", .boardHintToList)])
     case .list:
       guard let selected else { return [] }
       let paused = selected.intake.paused
@@ -97,9 +99,13 @@ import SwiftUI
 
   // MARK: - 一覧
 
-  /// ↑↓。端で巡回する。
+  /// 一覧の ↑↓。端の行から外へ出ると欄へ移る（先頭の ↑ は真上の欄へ、末尾の ↓ は巡回して欄へ）。
   func move(_ direction: Int) {
     onRefusal(nil)
+    let ids = self.ids
+    guard let index = list.selectedID.flatMap({ ids.firstIndex(of: $0) }),
+      ids.indices.contains(index + direction)
+    else { return go(.request) }
     list.move(direction, in: ids)
   }
 
@@ -121,22 +127,20 @@ import SwiftUI
     list.follow()
   }
 
-  /// ⌘↵。選んでいる自動追加の札を欄に付け、焦点を欄へ移す（直したいことを打ってから送る）。
-  func requestFix() {
-    guard let intake = selected?.intake else { return }
+  /// ⌘↵。選んでいる自動追加の直しをその場で頼む。頼む相手は今のストアから引き、もう無ければ頼まずに断る。
+  func askFix() {
+    guard let id = list.selectedID else { return }
     onRefusal(nil)
-    request.fix = BoardIntakeRequest.Fix(id: intake.id, name: intake.definition.name)
-    go(.request)
+    guard let intake = store.intake(id) else { return onRefusal(.boardAskFixGone) }
+    _ = ask(.intakeFix(intake))
   }
 
-  /// 一覧の器のキー。↑↓・`IntakeHand` の写し・⌘↵・⇥（欄へ）のほかは何も起こさず、どれも握る（⇥ で焦点をボードの外へ逃がさない）。
+  /// 一覧の器のキー。↑↓・`IntakeHand` の写し・⌘↵ のほかは何も起こさず、どれも握る（⇥ で焦点をボードの外へ逃がさない）。
   func handleKey(_ press: KeyPress) -> KeyPress.Result {
     if let stroke = IntakeHand.stroke(press) {
       if case .press(let operation) = stroke { perform(operation) }
     } else if press.key == .return, press.modifiers.contains(.command) {
-      if press.phase == .down { requestFix() }
-    } else if press.key == .tab || press.key == .backtab {
-      if press.phase == .down { toRequest() }
+      if press.phase == .down { askFix() }
     } else if press.key == .upArrow || press.key == .downArrow,
       !press.modifiers.contains(.command)
     {
@@ -147,55 +151,51 @@ import SwiftUI
 
   // MARK: - 依頼の欄
 
-  /// 欄の文字（入力欄の binding）。打てば断りを消す。
-  var requestText: String {
-    get { request.text }
-    set {
-      guard newValue != request.text else { return }
-      onRefusal(nil)
-      request.text = newValue
-    }
-  }
-
-  /// 欄のキー。⇥・⇧⇥・↓・esc で一覧へ移る（変換中のキーは窓が IME へ渡すので、ここへは来ない）。ほかは入力欄へ流す。
+  /// 欄のキー。↑↓ で一覧の行へ、esc で一覧へ戻る。⇥・⇧⇥ は何もせずに握る（焦点をボードの外へ逃がさない）。変換中のキーは窓が
+  /// IME へ渡すので、ここへは来ない。ほかは入力欄へ流す。
   func handleRequestKey(_ press: KeyPress) -> KeyPress.Result {
-    guard [.tab, .backtab, .downArrow, .escape].contains(press.key) else { return .ignored }
-    if press.phase == .down { toList() }
+    switch press.key {
+    case .upArrow, .downArrow:
+      guard !press.modifiers.contains(.command) else { return .ignored }
+      leaveRequest(press.key == .upArrow ? -1 : 1)
+    case .escape:
+      if press.phase == .down { toList() }
+    case .tab, .backtab:
+      break
+    default:
+      return .ignored
+    }
     return .handled
   }
 
-  /// 一覧の ⇥。
-  func toRequest() {
+  /// 欄の ↑↓。↓ は一覧の先頭、↑ は巡回して一覧の末尾の行を選んで一覧へ移る。一覧が空なら何もしない。
+  func leaveRequest(_ direction: Int) {
+    let ids = self.ids
+    guard !ids.isEmpty else { return }
     onRefusal(nil)
-    go(.request)
+    list.jump(direction > 0 ? -1 : 1, in: ids)
+    go(.list)
   }
 
-  /// 欄の ⇥・↓・esc。
+  /// 欄の esc。選択はそのまま。
   func toList() {
     onRefusal(nil)
     go(.list)
   }
 
-  /// 欄の ↵。札が無ければ新しい依頼、あれば今のストアから引いた相手の直しを頼む。受けたら欄を空にして札を外し、断られたら
-  /// 欄と札を残す。空の欄は黙る。
+  /// 欄の ↵。打った文をタスクの自動追加の新しい依頼として頼み、受けたら欄を空にする。断られたら欄を残す。空の欄は黙る。
   func send() {
     onRefusal(nil)
-    let ask: SecretaryAsk
-    if let fix = request.fix {
-      guard let intake = store.intake(fix.id) else {
-        return onRefusal(.boardAskFixGone)
-      }
-      ask = .intakeFix(intake, note: request.text)
-    } else {
-      ask = .intake(request.text)
-    }
+    if ask(.intake(requestText)) { requestText = "" }
+  }
+
+  /// 頼んで、受けたかを返す。claude が無ければ断りを置く。空の頼みは黙って受けない。
+  private func ask(_ ask: SecretaryAsk) -> Bool {
     switch onAsk(ask) {
-    case nil:
-      request = BoardIntakeRequest()
-    case .claudeMissing:
-      onRefusal(.boardAskClaudeMissing)
-    case .empty:
-      break
+    case nil: return true
+    case .claudeMissing: onRefusal(.boardAskClaudeMissing)
+    case .empty: break
     }
+    return false
   }
 }
