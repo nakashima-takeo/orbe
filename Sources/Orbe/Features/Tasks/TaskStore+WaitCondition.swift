@@ -57,7 +57,7 @@ extension TaskStore {
     return condition
   }
 
-  /// 付けるときと読み込みが共有する値の規則: 説明が空でない 1 行で、u1 の予定として通ること（間隔の下限・空の
+  /// 付けるときと読み込みが共有する値の規則: 説明が空でない 1 行で、`BackgroundSchedule` として通ること（間隔の下限・空の
   /// コマンド・相対の作業ディレクトリ）。期限が過ぎていることは問わない（読み込んだ後に解けるだけ）。
   static func checkCondition(_ condition: WaitCondition) throws(TaskStoreError) {
     guard

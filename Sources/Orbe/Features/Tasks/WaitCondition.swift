@@ -39,7 +39,7 @@ struct WaitCondition: Codable, Equatable {
     log = []
   }
 
-  /// 番人へ渡す予定。値の検証（間隔の下限・空のコマンド・相対の作業ディレクトリ）も u1 の予定の検証に任せる。
+  /// 番人へ渡す予定。値の検証（間隔の下限・空のコマンド・相対の作業ディレクトリ）も `BackgroundSchedule.validate()` に任せる。
   var schedule: BackgroundSchedule {
     BackgroundSchedule(
       job: .command(BackgroundCommand(script: command, directory: directory)),
