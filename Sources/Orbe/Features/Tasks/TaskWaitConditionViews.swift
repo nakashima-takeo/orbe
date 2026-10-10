@@ -202,7 +202,7 @@ struct TaskConditionBox: View {
         ForEach(Array(condition.log.reversed().enumerated()), id: \.offset) { _, check in
           Text(
             [
-              TaskWaitText.time(check.startedAt, model.timeZone, today: model.today),
+              TaskDueText.stamp(check.startedAt, model.timeZone, today: model.today),
               TaskWaitText.result(check.result, l10n: l10n),
             ]
             .joined(separator: " · ")
@@ -351,16 +351,6 @@ enum TaskWaitText {
   static func conversation(days: Int, l10n: LocalizationStore) -> String {
     days == 0
       ? l10n.string(.taskWaitConversationToday) : l10n.format(.taskWaitConversationDays, days)
-  }
-
-  /// 記録の時刻（今日なら「14:02」、それ以外は「10/9 14:02」）。
-  static func time(_ date: Date, _ timeZone: TimeZone, today: TaskItem.DueDate) -> String {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = timeZone
-    let c = calendar.dateComponents([.hour, .minute], from: date)
-    let clock = String(format: "%d:%02d", c.hour!, c.minute!)
-    let day = TaskItem.DueDate(date, timeZone: timeZone)
-    return day == today ? clock : "\(TaskDueText.date(day, today: today)) \(clock)"
   }
 
   static func result(_ result: WaitCheck.Result, l10n: LocalizationStore) -> String {
