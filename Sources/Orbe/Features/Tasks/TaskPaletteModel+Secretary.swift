@@ -14,8 +14,8 @@ extension TaskPaletteModel {
     visibleTab == .tasks ? TaskPaletteRows.addTitle(rowsInput) : nil
   }
 
-  /// ⌘↵。選んでいるのが入力の行き先なら打った文を頼み、タスクの行ならその直下に頼む欄を開く。完了の見出し・選ぶ
-  /// 状態・GitHub タブでは何もしない。
+  /// ⌘↵。選んでいるのが入力の行き先なら打った文を頼み、未完了のタスクの行ならその直下に頼む欄を開く。完了のタスク・
+  /// 完了の見出し・選ぶ状態・GitHub タブでは何もしない。
   func askSecretary() {
     guard pick == nil, visibleTab == .tasks else { return }
     switch selectedID {
@@ -32,9 +32,12 @@ extension TaskPaletteModel {
     deliver(.text(title)) { query = "" }
   }
 
-  /// タスクの行の直下に頼む欄を開く（そのタスクを選び、焦点は欄の補足の入力へ）。
+  /// 未完了のタスクの行の直下に頼む欄を開く（そのタスクを選び、焦点は欄の補足の入力へ）。秘書に頼めるのは未完了の
+  /// タスクだけ。
   func openAsk(_ id: Int) {
-    guard pick == nil, store.tasks.contains(where: { $0.id == id }) else { return }
+    guard pick == nil, store.tasks.contains(where: { $0.id == id && $0.status != .done }) else {
+      return
+    }
     leaveEditingForAction()
     area = .list
     taskList.select(.task(id), in: selectableIDs)

@@ -149,7 +149,9 @@ struct TaskPaletteFooter: View {
         }
         PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintClose))
       } else {
-        PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteAskSecretary))
+        if let task = model.selectedTask, task.status != .done {
+          PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteAskSecretary))
+        }
         PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteHintOpenWorktree))
         PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintEdit))
         PaletteKeyHint(key: "⌥↑↓", label: l10n.string(.taskPaletteHintReorder))
