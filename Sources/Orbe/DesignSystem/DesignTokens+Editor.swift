@@ -4,15 +4,15 @@ import SwiftUI
 /// エディター面（⌘E）のトークンが所有する自己完結ファイル（`DesignTokens+Glass.swift` と同型）。
 /// 面のキー色は「どの面に居るか」を示す識別色で、引き手・分割中の焦点の印・位置ドットが共有する。
 extension Theme.Color {
-  /// エディター面のキー色（amber）。
-  static let faceEditor = editorDyn(light: 0xbf6a2e, dark: 0xe0a97c)
+  /// エディター面のキー色（紙の白。light は紙面に向けて濃い側へ写した値）。
+  static let faceEditor = editorDyn(light: 0x352d4a, dark: 0xece7f5)
   /// 端末面のキー色。dark / light とも textSecondary と偶然同値だが役割が違うので別トークン。
   static let faceTerminal = editorDyn(light: 0x5f5678, dark: 0xb8afc4)
   /// ホバー中の引き手のグリフ（キー色を明るくした色。light は紙面に向けて暗くする）。
-  static let faceEditorBright = editorDyn(light: 0x9d5a2e, dark: 0xf0c49e)
+  static let faceEditorBright = editorDyn(light: 0x221c32, dark: 0xfffdff)
   static let faceTerminalBright = editorDyn(light: 0x4a435e, dark: 0xcfc7d9)
   /// ホバー中の引き手の不透明な地（キー色 α .16 を bgBase の上で不透明にした色）。
-  static let faceNotchEditorHover = editorDyn(light: 0xf2e4dd, dark: 0x3a2e2a)
+  static let faceNotchEditorHover = editorDyn(light: 0xdcdae1, dark: 0x393642)
   static let faceNotchTerminalHover = editorDyn(light: 0xe3e1e9, dark: 0x312d3a)
   /// ホバー中の引き手の影。
   static let faceNotchShadow = editorDynAB(light: (0x5a4696, 0.14), dark: (0x000000, 0.35))
