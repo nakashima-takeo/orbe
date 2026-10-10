@@ -145,9 +145,6 @@ enum L10n {
     .editorEmptySearchProject: ("プロジェクト全体を検索", "Search the whole project"),
     .editorEmptyBackToTerminal: ("ターミナルへ戻る", "Back to terminal"),
 
-    // MARK: ボード（空状態）
-    .boardEmpty: ("まだ何も置かれていません", "Nothing here yet"),
-
     // MARK: Editor 面（骨: エクスプローラー）
     .editorExplorerTitle: ("エクスプローラー", "Explorer"),
     .editorNewFile: ("新規ファイル", "New File"),
@@ -201,6 +198,9 @@ enum L10n {
     ),
     .editorOverwriteConfirm: ("上書き", "Overwrite"),
     .editorOmittedCharacters: ("ほか %@字", "%@ more"),
+
+    // MARK: ボード（空状態）
+    .boardEmpty: ("まだ何も置かれていません", "Nothing here yet"),
 
     // MARK: Link（OSC 8）
     .linkConfirmTitle: ("端末出力のリンクを開きますか？", "Open Link from Terminal Output?"),
