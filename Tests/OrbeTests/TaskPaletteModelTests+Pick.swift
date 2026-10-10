@@ -21,7 +21,7 @@ extension TaskPaletteModelTests {
 
   // MARK: - タスクを選ぶ（GitHub タブの L）
 
-  /// L でタスクのタブの行から選び、↵ でそのタスクの末尾に結び付けて GitHub タブのその行へ戻る。追加の行は
+  /// L でタスクのタブの行から選び、↵ でそのタスクの末尾に結び付けて GitHub タブのその行へ戻る。入力の行き先は
   /// 出さない。
   func testLinkPicksATaskAndEnterLinksItThenReturnsToTheItem() throws {
     let palette = pickingFromIssueFive([
@@ -31,7 +31,7 @@ extension TaskPaletteModelTests {
     palette.linkSelectedGitHubItem()
     XCTAssertEqual(palette.visibleTab, .tasks)
     palette.query = "b"
-    XCTAssertEqual(palette.selectableIDs, [.task(2)], "打っても追加の行は出さない")
+    XCTAssertEqual(palette.selectableIDs, [.task(2)], "打っても入力の行き先は出さない")
     palette.query = ""
     palette.move(1)
     palette.submit()

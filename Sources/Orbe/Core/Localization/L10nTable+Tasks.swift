@@ -10,7 +10,6 @@ extension L10n {
     .taskPaletteSectionInProgress: ("進行中", "In progress"),
     .taskPaletteSectionTodo: ("未着手", "To do"),
     .taskPaletteSectionDone: ("完了", "Done"),
-    .taskPaletteAdd: ("「%1$@」を追加", "Add “%1$@”"),
     .taskPaletteEmpty: ("タスクはありません", "No tasks"),
     .taskPaletteAddedBy: ("%@ が追加", "added by %@"),
     .taskPaletteToday: ("今日", "today"),

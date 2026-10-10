@@ -191,7 +191,7 @@ import Observation
   /// 一覧を送る先。人の操作（選び直し・並べ替え・範囲や開閉の切り替え・画面からの変異）のたびに決め直す。
   var scrollTarget: TaskPaletteScrollTarget<TaskPaletteRowID>? { taskList.scrollTarget }
 
-  /// 選んでいるタスク（右の欄に出すもの）。追加の行・完了の見出しでは nil。
+  /// 選んでいるタスク（右の欄に出すもの）。入力の行き先・完了の見出しでは nil。
   var selectedTask: TaskItem? {
     guard case .task(let id) = selectedID else { return nil }
     return store.tasks.first { $0.id == id }
@@ -269,7 +269,7 @@ import Observation
     }
   }
 
-  /// 行のクリック。追加の行は追加し、完了の見出しは開閉し、タスクの行は選ぶ。編集中なら確定してから移る。
+  /// 行のクリック。入力の行き先は足し、完了の見出しは開閉し、タスクの行は選ぶ。編集中なら確定してから移る。
   func tapRow(_ id: TaskPaletteRowID) {
     leaveEditingForAction()
     area = .list

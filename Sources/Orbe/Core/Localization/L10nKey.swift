@@ -181,7 +181,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteSectionInProgress
   case taskPaletteSectionTodo
   case taskPaletteSectionDone
-  case taskPaletteAdd
   case taskPaletteEmpty
   case taskPaletteAddedBy
   case taskPaletteToday

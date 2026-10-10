@@ -8,8 +8,6 @@ import XCTest
 extension WorktreePaletteTests {
 
   /// **`clean` 行はパレット内の画面遷移で、外の決定経路には出さない。**
-  /// ここが崩れると `WorktreePaletteDataProvider.prepareDirectory` に `.clean` が届き、completion が
-  /// 呼ばれず `isPreparing` が立ったままパレットが閉じられなくなる（release では assertion も消える）。
   func testCleanRowEntersCleanModeInsteadOfExecuting() throws {
     let p = makeModel()
     p.classification = cleanRows()

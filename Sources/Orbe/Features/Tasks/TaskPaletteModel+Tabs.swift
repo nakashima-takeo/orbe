@@ -68,7 +68,7 @@ extension TaskPaletteModel {
     if visibleTab == .intake { intake.showProposals() } else { leaveDetail() }
   }
 
-  /// 入力が変わったら、先頭の行（タスクのタブで入力があれば追加の行）を選ぶ。
+  /// 入力が変わったら、先頭の行（タスクのタブで入力があれば入力の行き先）を選ぶ。
   private func queryChanged() {
     error = nil
     switch visibleTab {

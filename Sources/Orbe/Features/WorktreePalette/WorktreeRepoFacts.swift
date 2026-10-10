@@ -3,7 +3,7 @@ import Foundation
 /// 1 つのリポジトリの事実を集めて答える処理役。画面を持たない。git の列挙（worktree・ローカル / リモートのブランチ・
 /// 既定ブランチ・remote）、提示時の `fetch --prune` とその着地、gh の可用性と remote の正式名（remote の台帳）を持ち、
 /// それらからタスクの行き先を決め（`taskTarget`）、worktree を用意する（`prepareDirectory`）。⌘T のデータ供給
-/// （`WorktreePaletteDataProvider`）と、タスクから作業を始める口（`TaskWorkStart`）が同じこの層を通る。
+/// （`WorktreePaletteDataProvider`）と、タスクから作業を始める口（`TaskRepoWorktree`）が同じこの層を通る。
 /// 事実が動いたら `onChange` で知らせる。
 /// 全メソッドはメインスレッドで呼ばれ、`GitRepo`/`GitHubCLI` の completion もメインで返る（`GitRunner` 契約）。
 final class WorktreeRepoFacts {

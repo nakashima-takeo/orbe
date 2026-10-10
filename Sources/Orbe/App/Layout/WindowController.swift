@@ -63,7 +63,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   // worktree ごとに動いている agent の索引。flushChrome が作り直し、タスク画面と ⌘T が読む。
   let worktreeAgents = WorktreeAgentActivity()
   let agentSessionTabs = AgentSessionTabs()
-  private(set) lazy var waitConditions = WaitConditionWatcher(store: taskStore) { [weak self] in
+  private lazy var waitConditions = WaitConditionWatcher(store: taskStore) { [weak self] in
     self?.notifyWaitResolved(task: $0, $1)
   }
   // 秘書の係。

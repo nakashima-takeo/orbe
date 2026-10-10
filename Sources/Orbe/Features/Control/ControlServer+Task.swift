@@ -1,4 +1,5 @@
 import Foundation
+import OrbeSessionLog
 
 /// タスクの 5 動詞の domain 操作（`ControlTarget` の一部。main スレッドでのみ呼ぶ）。
 protocol ControlTaskTarget: AnyObject {
@@ -236,13 +237,7 @@ private struct TaskParams {
 
   /// ISO 8601 の日時。時差の無い形（`2026-10-13T09:00`）は Mac のタイムゾーンの時刻として読む。
   static func deadline(_ text: String) -> Date? {
-    for options: ISO8601DateFormatter.Options in [
-      [.withInternetDateTime], [.withInternetDateTime, .withFractionalSeconds],
-    ] {
-      let formatter = ISO8601DateFormatter()
-      formatter.formatOptions = options
-      if let date = formatter.date(from: text) { return date }
-    }
+    if let date = SessionEvent.parseISO8601(text) { return date }
     let local = DateFormatter()
     local.locale = Locale(identifier: "en_US_POSIX")
     local.timeZone = .current

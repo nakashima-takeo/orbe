@@ -191,8 +191,9 @@ enum TaskStoreError: Error, Equatable {
     -> WaitResolution?
   {
     changeCondition(id, condition) { condition in
-      condition.record(WaitCheck(run))
-      guard case .exited(0) = run.ending else { return nil }
+      let check = WaitCheck(run)
+      condition.record(check)
+      guard check.result == .success else { return nil }
       var output = ""
       if case .command(let stdout, _) = run.output {
         output = WaitText.head(stdout.data, bytes: WaitResolution.outputBytes)

@@ -83,6 +83,8 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
       }
       XCTAssertTrue(waitUntil { onPalette() }, "前提: \(name) パレットが焦点を取った")
       wc.statusModel.onCancelRename()
+      // 取消の非同期の効果（焦点を端末へ戻す退行）を流してから見る。条件は取消の前から真なので、待つだけでは流れない。
+      RunLoop.current.run(until: Date().addingTimeInterval(0.3))
 
       XCTAssertTrue(
         waitUntil { onPalette() },

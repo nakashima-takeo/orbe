@@ -94,7 +94,7 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     XCTAssertEqual(TaskPaletteRows.build(input([])), [.empty])
   }
 
-  // MARK: - 入力・追加の行
+  // MARK: - 入力の行き先
 
   /// 入力中は、前後の空白を除いたタイトルが入力の行き先になり、一覧は「一致するタスク」の見出しの下に一致する
   /// タスクだけを並べる（欄の見出しは出さない）。

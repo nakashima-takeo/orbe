@@ -296,7 +296,7 @@ extension WindowController: ControlTarget {
     }
     guard store.canChangeDir(index) else {
       return .failure(
-        ControlError(code: -32000, message: "cannot change the Home directory"))
+        ControlError(code: -32000, message: "cannot change Home's directory"))
     }
     guard !rootPath.trimmingCharacters(in: .whitespaces).isEmpty else {
       return .failure(ControlError(code: -32602, message: "workspace rootPath is empty"))
