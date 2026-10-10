@@ -32,7 +32,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     XCTAssertEqual(pane.bodyRect.minY, 29 + 20, "文書があればパンくずの分だけ下がる")
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
 
-    window.setContentSize(NSSize(width: 360 + FaceGeometry.spine, height: 400))
+    window.setContentSize(NSSize(width: 360, height: 400))
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertTrue(pane.sidebar.isOpen, "狭い列でも隠れない")
     XCTAssertEqual(pane.shownSidebarWidth, 360 - 36 - 2 - 160, "本体に 160 残るまで表示幅を切り詰める")
@@ -42,14 +42,14 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
     try assertSidebarContentFills(pane, width: 162)
 
-    window.setContentSize(NSSize(width: 120 + FaceGeometry.spine, height: 400))
+    window.setContentSize(NSSize(width: 120, height: 400))
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertEqual(pane.shownSidebarWidth, 0, "極端な幅では残りをそのまま分け、0 まで縮む")
     XCTAssertTrue(pane.sidebar.isOpen, "見えるかは開閉だけで決まる（列幅は関係ない）")
     XCTAssertEqual(pane.bodyRect.minX, 37 + 1)
     try assertSidebarContentIsGone(pane, railGround: railGround, explorerGround: explorerGround)
 
-    window.setContentSize(NSSize(width: 900 + FaceGeometry.spine, height: 400))
+    window.setContentSize(NSSize(width: 900, height: 400))
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertEqual(pane.shownSidebarWidth, 240, "広がれば記憶の幅に戻る")
     XCTAssertEqual(pane.bodyRect.minX, 37 + 241)
@@ -94,7 +94,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     pane.sidebar.setWidth(240)
     pane.sidebar.commit()
 
-    window.setContentSize(NSSize(width: 340 + FaceGeometry.spine, height: 400))
+    window.setContentSize(NSSize(width: 340, height: 400))
     tab.view.layoutSubtreeIfNeeded()
     XCTAssertEqual(pane.shownSidebarWidth, 142, "下限 160 を割って切り詰まる")
     XCTAssertTrue(handle.isHidden, "下限までも出せない列では当たりを出さない（レールの右 1pt を覆わない）")

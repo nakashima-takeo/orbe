@@ -15,7 +15,7 @@ extension TabFacesViewTests {
   /// 窓に載せた器（遷移は窓に付いているときだけ動く）。
   private func hostedForSlide(_ faces: FaceLayout) -> (TerminalTab, NSWindow) {
     let window = NSWindow(
-      contentRect: NSRect(origin: .zero, size: NSSize(width: 1014, height: 400)),
+      contentRect: NSRect(origin: .zero, size: NSSize(width: 1000, height: 400)),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     let tab = TerminalTab(cwd: "/tmp")
@@ -82,8 +82,8 @@ extension TabFacesViewTests {
     }
   }
 
-  /// 背のクリックが起こす遷移も同じ口を通る（分割から焦点側の全面へ）。
-  func testSpineClickSlideKeepsTheFacesCovered() {
-    measureSlide(from: Self.split, to: Self.editorOnly) { _ = $0.view.spine.onClick?() }
+  /// グリップを押して起こす遷移も同じ口を通る（分割から焦点側の全面へ）。
+  func testHandleClickSlideKeepsTheFacesCovered() {
+    measureSlide(from: Self.split, to: Self.editorOnly) { _ = $0.view.handle.onClick?() }
   }
 }

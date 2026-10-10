@@ -1,21 +1,21 @@
 import AppKit
 import SwiftUI
 
-/// タブの器: [エディター面 | 背 | 端末面]。配置（`FaceLayout`）を幅で解いた結果を子の frame に写すだけで、
-/// 配置の正はタブが持つ。面は clip の器で、中身の幅は面の幅に等しい。
+/// タブの器: [エディター面 | 端末面] と、その上に重なる取っ手（引き手・継ぎ目）。配置（`FaceLayout`）を幅で解いた
+/// 結果を子の frame に写すだけで、配置の正はタブが持つ。面は clip の器で、両面の幅の合計は器の幅に等しい。
 ///
-/// 相互作用（背のドラッグ・面の遷移）は幅に依らない形（割合と時刻）で持ち、`layout()` はそれを新しい幅へ
+/// 相互作用（取っ手を引く・面の遷移）は幅に依らない形（割合と時刻）で持ち、`layout()` はそれを新しい幅へ
 /// 写す——器の再レイアウトは chrome 更新などから随時起きるので、確定配置で相互作用を捨てない。
 ///
 /// 隠れた端末の中身は最後に見えていた寸法のまま据え置く（隠すたびの pty resize と scrollback の
 /// 再折り返しを避ける）。隠れたまま生まれた端末は「戻したときに得る寸法」で起きる。
 /// 遷移は「どのコマでも見えている面は中身で覆われ、中身の寸法は始めか終わりの 1 回だけ変わり、間は面の clip と中身の
-/// 位置だけ動く」。背のドラッグ中は
-/// 面と背をポインタごとに置き、中身の resize は表示のフレーム単位に間引く。
+/// 位置だけ動く」。取っ手を引いている間は
+/// 面と取っ手をポインタごとに置き、中身の resize は表示のフレーム単位に間引く。
 final class TabFacesView: NSView {
   let terminal: SurfaceScrollView
   let editor: EditorPaneView
-  let spine = SpineView()
+  let handle = FaceHandleView()
   private let editorFace: FaceClipView
   private let terminalFace: FaceClipView
 
@@ -27,9 +27,9 @@ final class TabFacesView: NSView {
   /// 確定済みの配置（鏡 `faces`）を今の幅で解いた結果。相互作用中でもポインタ値を映さないので、
   /// コマンド（⌘E）はこちらを読む。
   var committed: FaceGeometry.Resolved { FaceGeometry.resolve(faces, width: bounds.width) }
-  /// 投影（ドット・背の見え方・分割中か）が変わった。器の幅で変わりうるので chrome はここから追従する。
+  /// 投影（ドット・取っ手の見え方・分割中か）が変わった。器の幅で変わりうるので chrome はここから追従する。
   var onProjectionChange: (() -> Void)?
-  /// 背のクリック／離したときに求める配置。タブが正規化して状態に置き、`set` で戻す。
+  /// 取っ手を押した／離したときに求める配置。タブが正規化して状態に置き、`set` で戻す。
   var onFacesRequested: ((FaceLayout, _ animated: Bool) -> Void)?
   /// 窓の first responder が面の配下に入った（面の焦点の記憶はここからだけ導く）。
   var onFaceFocused: ((Face) -> Void)?
@@ -49,8 +49,8 @@ final class TabFacesView: NSView {
   /// 相互作用の状態。幅に依らない形で持ち、`layout()` が新しい幅へ写す。
   private enum Interaction {
     case settled
-    /// 背のドラッグ中: 掴んだ瞬間の配置と、ポインタが求める現在の配置。
-    case dragging(origin: FaceLayout, current: FaceLayout)
+    /// 取っ手を引いている間: 掴んだ瞬間の配置と、ポインタが求める現在の配置と、掴んだ点から境までのずれ。
+    case dragging(origin: FaceLayout, current: FaceLayout, offset: CGFloat)
     /// 遷移中: 起点のエディター割合と開始時刻。終点は鏡 `faces`。
     case sliding(fromRatio: Double, start: CFTimeInterval)
   }
@@ -74,11 +74,11 @@ final class TabFacesView: NSView {
     editorFace = FaceClipView(content: editor)
     terminalFace = FaceClipView(content: terminal)
     super.init(frame: .zero)
-    for view in [editorFace, spine, terminalFace] {
+    for view in [editorFace, terminalFace, handle] {
       view.autoresizingMask = []
       addSubview(view)
     }
-    wireSpine()
+    wireHandle()
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
@@ -96,19 +96,30 @@ final class TabFacesView: NSView {
     }
   }
 
-  /// 背の操作を器の状態へ結ぶ。init の外に置き、閉包が読む `faces` を常に鏡（プロパティ）にする。
-  private func wireSpine() {
-    spine.onGrab = { [unowned self] in
+  /// 取っ手の操作を器の状態へ結ぶ。init の外に置き、閉包が読む `faces` を常に鏡（プロパティ）にする。
+  private func wireHandle() {
+    handle.onGrab = { [unowned self] x0 in
       stopClock()
-      interaction = .dragging(origin: faces, current: faces)
+      // 掴んだ瞬間に見えていた境からのずれ。継ぎ目の帯の中に収めるので、引き手から引いても継ぎ目はポインタの下に来る。
+      let reach = Theme.Layout.faceSeamGrip.width / 2
+      let offset = min(max(x0 - placedEditorWidth, -reach), reach)
+      interaction = .dragging(origin: faces, current: faces, offset: offset)
       window?.makeFirstResponder(focusTarget)
     }
-    spine.onDrag = { [unowned self] x in drag(to: x) }
-    spine.onRelease = { [unowned self] in release() }
-    spine.onClick = { [unowned self] in
+    handle.onDrag = { [unowned self] x in drag(to: x) }
+    handle.onRelease = { [unowned self] in release() }
+    handle.onClick = { [unowned self] in
       interaction = .settled
-      onFacesRequested?(FaceGeometry.spineClick(resolved), true)
+      onFacesRequested?(FaceGeometry.handleClick(resolved), true)
     }
+    handle.onScroll = { [unowned self] event in scrollFace(event) }
+  }
+
+  /// 取っ手の上のスクロールを、その点にある見えている面へ渡す。
+  private func scrollFace(_ event: NSEvent) {
+    let point = convert(event.locationInWindow, from: nil)
+    let face = [editorFace, terminalFace].first { !$0.isHidden && $0.frame.contains(point) }
+    face?.hitTest(point)?.scrollWheel(with: event)
   }
 
   /// 窓の環境（透過・言語・フォント割り当て・サイドバーの状態）を面へ配る。
@@ -119,7 +130,6 @@ final class TabFacesView: NSView {
     editor.configure(
       translucency: translucency, localization: localization, fontResolver: fontResolver,
       sidebar: sidebar)
-    spine.translucency = translucency
   }
 
   /// 配置を写す。`animated` なら面の clip と中身の位置を `Theme.Motion.faceSlide` で動かす
@@ -136,7 +146,7 @@ final class TabFacesView: NSView {
     switch interaction {
     case .settled:
       apply(committed)
-    case .dragging(_, let current):
+    case .dragging(_, let current, _):
       pendingDragSizes = nil
       apply(FaceGeometry.resolve(current, width: bounds.width))
     case .sliding:
@@ -183,27 +193,43 @@ final class TabFacesView: NSView {
     terminalFace.isHidden = g.terminalWidth <= 0
   }
 
-  /// 焦点の印と背の見え方。
+  /// 焦点の印と取っ手の見え方。
   private func paint(_ g: FaceGeometry.Resolved) {
     editorFace.markColor = g.isSplit && g.faces.focus == .editor ? Theme.Color.faceEditor : nil
     terminalFace.markColor =
       g.isSplit && g.faces.focus == .terminal ? Theme.Color.faceTerminal : nil
-    spine.look = g.projection.spineLook
+    handle.look = g.projection.handleLook
   }
 
-  /// 面・背・中身の位置を `editorWidth` で置く。中身のサイズは触らない（遷移中は補間した幅で呼ぶ）。
+  /// 面・取っ手・中身の位置を `editorWidth` で置く。中身のサイズは触らない（遷移中は補間した幅で呼ぶ）。
   /// 中身は錨側（エディター＝右・端末＝隣にエディターがあれば右、無ければ左）に付き、遷移中は面の
-  /// 端から滑り込む。
+  /// 端から滑り込む。取っ手の形は `g` の見え方で決まり、引き手は隠れた側の縁、継ぎ目は境に跨がる。
   private func place(editorWidth eW: CGFloat, _ g: FaceGeometry.Resolved) {
     placedEditorWidth = eW
     let h = bounds.height
-    let tW = g.contentWidth - eW
+    let tW = g.width - eW
     editorFace.frame = NSRect(x: 0, y: 0, width: eW, height: h)
-    spine.frame = NSRect(x: eW, y: 0, width: FaceGeometry.spine, height: h)
-    terminalFace.frame = NSRect(x: eW + FaceGeometry.spine, y: 0, width: tW, height: h)
+    terminalFace.frame = NSRect(x: eW, y: 0, width: tW, height: h)
+    handle.frame = handleFrame(g.projection.handleLook, editorWidth: eW, width: g.width, height: h)
     editor.frame.origin = NSPoint(x: eW - editor.frame.width, y: 0)
     let terminalX = g.editorWidth > 0 ? tW - terminal.frame.width : 0
     terminal.frame.origin = NSPoint(x: terminalX, y: 0)
+  }
+
+  private func handleFrame(
+    _ look: FaceGeometry.HandleLook, editorWidth eW: CGFloat, width: CGFloat, height h: CGFloat
+  ) -> NSRect {
+    let notch = Theme.Layout.faceNotch
+    let notchY = h / 2 - notch.height / 2
+    switch look {
+    case .notch(.editor):
+      return NSRect(x: 0, y: notchY, width: notch.width, height: notch.height)
+    case .notch(.terminal):
+      return NSRect(x: width - notch.width, y: notchY, width: notch.width, height: notch.height)
+    case .seam:
+      let band = Theme.Layout.faceSeamGrip.width
+      return NSRect(x: eW - band / 2, y: 0, width: band, height: h)
+    }
   }
 
   private func editorContentSize(_ g: FaceGeometry.Resolved) -> CGSize {
@@ -212,7 +238,7 @@ final class TabFacesView: NSView {
 
   private func terminalContentSize(_ g: FaceGeometry.Resolved) -> CGSize {
     if g.terminalWidth > 0 { return CGSize(width: g.terminalWidth, height: bounds.height) }
-    return lastVisibleTerminalSize ?? CGSize(width: g.contentWidth, height: bounds.height)
+    return lastVisibleTerminalSize ?? CGSize(width: g.width, height: bounds.height)
   }
 
   private func setSize(_ view: NSView, _ size: CGSize) {
@@ -225,14 +251,14 @@ final class TabFacesView: NSView {
     onProjectionChange?()
   }
 
-  // MARK: - 背のドラッグ
+  // MARK: - 取っ手を引く
 
-  /// ポインタごとに面と背を置く。中身の resize は次のフレームへ間引く。
+  /// ポインタごとに面と取っ手を置く。中身の resize は次のフレームへ間引く。
   private func drag(to x: CGFloat) {
-    guard case .dragging(let origin, _) = interaction else { return }
+    guard case .dragging(let origin, _, let offset) = interaction else { return }
     let g0 = FaceGeometry.resolve(origin, width: bounds.width)
-    let current = FaceGeometry.drag(from: g0, x: x)
-    interaction = .dragging(origin: origin, current: current)
+    let current = FaceGeometry.drag(from: g0, x: x - offset)
+    interaction = .dragging(origin: origin, current: current, offset: offset)
     let g = FaceGeometry.resolve(current, width: bounds.width)
     resolved = g
     pendingDragSizes = g
@@ -254,11 +280,11 @@ final class TabFacesView: NSView {
 
   /// 離した: 端に寄せていれば閉じる配置をタブへ 1 回だけ求め、変わらなければその場で確定する。
   private func release() {
-    guard case .dragging(_, let current) = interaction else { return }
+    guard case .dragging(_, let current, _) = interaction else { return }
     interaction = .settled
     stopClock()
     flushDragSizes()
-    let final = FaceGeometry.release(current, contentWidth: resolved.contentWidth)
+    let final = FaceGeometry.release(current, width: resolved.width)
     if final == faces {
       settle(to: committed, animated: true)
     } else {
@@ -271,7 +297,7 @@ final class TabFacesView: NSView {
   private func startSlide(from: CGFloat, to target: FaceGeometry.Resolved) {
     stopClock()
     let start = CACurrentMediaTime()
-    interaction = .sliding(fromRatio: Double(from / target.contentWidth), start: start)
+    interaction = .sliding(fromRatio: Double(from / target.width), start: start)
     prepareSlide(to: target)
     clock = FrameClock(view: self) { [unowned self] in slideFrame(now: CACurrentMediaTime()) }
     slideFrame(now: start)
@@ -284,14 +310,14 @@ final class TabFacesView: NSView {
   private func prepareSlide(to target: FaceGeometry.Resolved) {
     guard case .sliding(let fromRatio, _) = interaction else { return }
     resolved = target
-    let fromEditor = CGFloat(fromRatio) * target.contentWidth
+    let fromEditor = CGFloat(fromRatio) * target.width
     if target.editorWidth > 0 {
       setSize(
         editor, CGSize(width: max(fromEditor, target.editorWidth), height: bounds.height))
       editorFace.isHidden = false
     }
     if target.terminalWidth > 0 {
-      let width = max(target.contentWidth - fromEditor, target.terminalWidth)
+      let width = max(target.width - fromEditor, target.terminalWidth)
       setSize(terminal, CGSize(width: width, height: bounds.height))
       terminalFace.isHidden = false
     }
@@ -299,13 +325,13 @@ final class TabFacesView: NSView {
     report(target.projection)
   }
 
-  /// 遷移の 1 フレーム。`now` の進行で起点と終点の間に背を置き、終端で確定配置へ着地する。
+  /// 遷移の 1 フレーム。`now` の進行で起点と終点の間に境を置き、終端で確定配置へ着地する。
   func slideFrame(now: CFTimeInterval) {
     guard case .sliding(let fromRatio, let start) = interaction else { return }
     let target = committed
     let progress = min(1, (now - start) / Theme.Motion.faceSlide)
     let eased = CGFloat(Theme.Motion.faceSlideCurve.value(at: max(0, progress)))
-    let from = CGFloat(fromRatio) * target.contentWidth
+    let from = CGFloat(fromRatio) * target.width
     place(editorWidth: from + (target.editorWidth - from) * eased, target)
     if progress >= 1 {
       stopClock()
@@ -336,58 +362,5 @@ final class TabFacesView: NSView {
       link?.invalidate()
       link = nil
     }
-  }
-}
-
-/// 面の clip の器。中身を面いっぱいに置き、分割中の焦点の印（面のキー色の細い帯）を中身の上辺へ重ねる——
-/// 印は場所を取らないので、焦点が移っても中身は動かない。
-private final class FaceClipView: NSView {
-  private let mark = FocusMarkView()
-  /// 印の色。nil なら印を出さない。
-  var markColor: NSColor? {
-    get { mark.color }
-    set { mark.color = newValue }
-  }
-
-  init(content: NSView) {
-    super.init(frame: .zero)
-    wantsLayer = true
-    clipsToBounds = true
-    content.autoresizingMask = []
-    addSubview(content)
-    addSubview(mark)
-  }
-  required init?(coder: NSCoder) { fatalError("not supported") }
-
-  override var isFlipped: Bool { true }
-
-  override func setFrameSize(_ newSize: NSSize) {
-    super.setFrameSize(newSize)
-    mark.frame = NSRect(x: 0, y: 0, width: newSize.width, height: FaceGeometry.focusBand)
-  }
-}
-
-/// 焦点の印。中身より手前に重なるが、クリックやドラッグは中身へ通す。
-private final class FocusMarkView: NSView {
-  var color: NSColor? {
-    didSet {
-      guard color != oldValue else { return }
-      isHidden = color == nil
-      needsDisplay = true
-    }
-  }
-
-  override init(frame: NSRect) {
-    super.init(frame: frame)
-    wantsLayer = true
-    isHidden = true
-  }
-  required init?(coder: NSCoder) { fatalError("not supported") }
-
-  override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-  override func draw(_ dirtyRect: NSRect) {
-    color?.setFill()
-    bounds.fill()
   }
 }
