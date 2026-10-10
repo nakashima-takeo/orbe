@@ -7,7 +7,8 @@
       { "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude working" }] }
     ],
     "Notification": [
-      { "matcher": "permission_prompt|worker_permission_prompt", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude waiting" }] }
+      { "matcher": "permission_prompt|worker_permission_prompt", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude waiting" }] },
+      { "matcher": "quota_auto_resume_disabled", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude done" }] }
     ],
     "PreToolUse": [
       { "matcher": "AskUserQuestion|ExitPlanMode", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude waiting" }] }
@@ -22,7 +23,7 @@
       { "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude done" }] }
     ],
     "StopFailure": [
-      { "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude done" }] }
+      { "matcher": "overloaded|authentication_failed|oauth_org_not_allowed|account_on_hold|billing_error|invalid_request|model_not_found|server_error|max_output_tokens|cloud_credential_error|unknown", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude done" }] }
     ],
     "SessionEnd": [
       { "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/orbe-agent-status.sh claude clear" }] }
