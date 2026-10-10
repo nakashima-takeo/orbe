@@ -26,25 +26,33 @@ enum HomeTemplate {
     Orbe の Home（workspace の 1 つで、リポジトリに属さないタスクの居場所）の root は `\(home)` です。`list_workspaces` の \
     rootPath がこのパスの workspace が Home です。`tasks/<ID>-…/` は Home のタスクの作業場です。
 
-    ## タスク
+    「Orbe で〜できる？」と聞かれたら、まず下のやりたいことの一覧から Orbe の機能で答える。
 
-    - 読み書きは Orbe の MCP ツール `list_tasks`・`add_task`・`update_task`・`move_task` で行う。
+    ## タスクを足す・直す・並べる
+
+    - `list_tasks`・`add_task`・`update_task`・`move_task`。
     - `add_task` は workspaceId を省くと、呼び出し元タブの workspace（ここなら Home）に付く。
 
-    ## 作業を始める
+    ## タスクに作業を始めさせる
 
-    - `start_task`（MCP だけ。orb には無い）。リポジトリの workspace のタスクは worktree を、Home のタスクは `tasks/` の下のフォルダを用意し、そこで \
-    agent を開く。
+    - `start_task`（MCP だけ。orb には無い）。リポジトリの workspace のタスクは worktree を、Home のタスクは `tasks/` の下の\
+    フォルダを用意し、そこで agent を開く。
     - workspace の無いタスクには、先に `update_task` で workspaceId を付ける。
 
-    ## 待ちの条件と受信
+    ## 何かが起きるまで待つ（レビュー・返事・ビルドなど）
 
-    - 待っているタスクが解ける条件（説明・確認のコマンド・間隔・期限）は `set_wait_condition` で付ける。Orbe が確認のコマンドを人の承認なしに裏で\
-    繰り返し走らせ、満たすか期限が来たら待ちを外す。
-    - 外の出どころから定期的に拾って提案にするのは受信（`set_intake`・`list_intakes`・`run_intake`・\
-    `pause_intake`・`delete_intake`・`list_intake_proposals`）。
+    - タスクを待ちにし、解ける条件（説明・確認のコマンド・間隔・期限）を `set_wait_condition` で付ける。
+    - Orbe が確認のコマンドを人の承認なしに裏で予定どおり繰り返し走らせ、満たすか期限が来たら待ちを外して人に知らせる。
 
-    ## タブと agent
+    ## 予定どおり何かを拾ってタスクの候補にする
+
+    - 受信（`set_intake`・`list_intakes`・`run_intake`・`pause_intake`・`delete_intake`・`list_intake_proposals`）。
+    - 予定（間隔か毎日の時刻）ごとに、取得（コマンドか軽い agent）が項目を取り、判定（agent）が指示文に照らして提案を出す。
+    - 人が ⌘⇧X の受信タブで受けた提案だけがタスクになる。Slack・メール・課題管理・GitHub などから拾うのが主な使い方。
+
+    Orbe の中で予定どおり繰り返し動くのは、待ちの条件の確認と受信の 2 つ。
+
+    ## タブと agent を操作する
 
     - `list_tabs`・`get_tab_text`・`prompt_agent`・`wait_for_event`。
     - `spawn_agent`・`spawn` は workspaceId を省くとアクティブな workspace に開く。
@@ -64,27 +72,39 @@ enum HomeTemplate {
     is `\(home)`. Home is the workspace whose rootPath in `list_workspaces` is this path. \
     `tasks/<ID>-…/` are the workplaces of Home's tasks.
 
-    ## Tasks
+    When asked "can Orbe do …?", answer first with Orbe's own features from the list of things to do below.
 
-    - Read and write tasks with Orbe's MCP tools `list_tasks`, `add_task`, `update_task`, and `move_task`.
+    ## Add, edit, and order tasks
+
+    - `list_tasks`, `add_task`, `update_task`, `move_task`.
     - Without workspaceId, `add_task` attaches the task to the calling tab's workspace (Home, when called \
     from here).
 
-    ## Starting work
+    ## Have an agent start work on a task
 
     - `start_task` (MCP only; not in orb). For a task in a repository workspace it prepares a worktree; for \
     a Home task it prepares a folder under `tasks/`; then it opens an agent there.
     - For a task without a workspace, attach one first with `update_task` (workspaceId).
 
-    ## Waiting conditions and intakes
+    ## Wait until something happens (a review, a reply, a build, …)
 
-    - Attach the condition that ends a wait (description, check command, interval, deadline) with \
-    `set_wait_condition`. Orbe runs the check command in the background, repeatedly and without asking the \
-    user, and clears the wait when it holds or the deadline comes.
-    - To pick things up from outside sources on a schedule and turn them into proposals, use intakes \
-    (`set_intake`, `list_intakes`, `run_intake`, `pause_intake`, `delete_intake`, `list_intake_proposals`).
+    - Put the task in waiting and attach the condition that ends the wait (description, check command, \
+    interval, deadline) with `set_wait_condition`.
+    - Orbe runs the check command in the background on schedule, repeatedly and without asking the user, \
+    and clears the wait and notifies the user when it holds or the deadline comes.
 
-    ## Tabs and agents
+    ## Pick things up on a schedule as task candidates
+
+    - Intakes (`set_intake`, `list_intakes`, `run_intake`, `pause_intake`, `delete_intake`, \
+    `list_intake_proposals`).
+    - On each scheduled run (an interval or daily times), the fetch (a command or a light agent) gets items, \
+    and the judge (an agent) makes proposals against its instruction.
+    - Only proposals the user accepts in the Intake tab of ⌘⇧X become tasks. The main use is picking things \
+    up from Slack, mail, issue trackers, GitHub, and the like.
+
+    Inside Orbe, the only things that run repeatedly on schedule are waiting-condition checks and intakes.
+
+    ## Operate tabs and agents
 
     - `list_tabs`, `get_tab_text`, `prompt_agent`, `wait_for_event`.
     - Without workspaceId, `spawn_agent` and `spawn` open in the active workspace.
