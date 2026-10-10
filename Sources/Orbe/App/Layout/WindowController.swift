@@ -149,7 +149,8 @@ final class WindowController: NSObject, NSWindowDelegate {
     agentLauncher.onLaunch = { [weak self] agent, env in
       guard let self else { return }
       self.openTab(
-        workspaceIndex: self.activeWorkspace, cwd: nil, command: agent.path, env: env)
+        workspaceIndex: self.activeWorkspace, cwd: nil, command: AgentCatalog.startCommand(agent),
+        env: env)
     }
     // 起動/オンボーディング overlay の畳み込みも、他 overlay と同じく teardown 後の次 tick で focus を再確定する。
     agentLauncher.onDismissPalette = { [weak self] in

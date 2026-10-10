@@ -12,7 +12,7 @@ extension WindowController {
     AgentLaunch, ControlError
   > {
     resolveAgentLaunch(command: command, workspaceId: workspaceId).flatMap { target in
-      launchAgentTab(target, command: target.agent.path, cwd: cwd)
+      launchAgentTab(target, command: AgentCatalog.startCommand(target.agent), cwd: cwd)
     }
   }
 
