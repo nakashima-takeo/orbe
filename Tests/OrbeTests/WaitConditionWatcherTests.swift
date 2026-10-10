@@ -139,6 +139,27 @@ final class WaitConditionWatcherTests: OrbeTestCase {
     XCTAssertEqual(store.tasks.first { $0.id == task.id }?.waiting?.reason, "レビュー待ち")
   }
 
+  /// 再起動の後は、最後の確認の始まりから数えて続き、起動ですぐには確かめない（付けた日時からは数え直さない）。
+  func testAfterRelaunchTheConditionContinuesFromItsLastCheck() throws {
+    let store = TaskStore()
+    _ = try addWaiting(store)
+    start(store)
+    now = now.addingTimeInterval(120)
+    runner.finish(0, result(1))
+    settle()
+    let lastCheck = now
+
+    now = now.addingTimeInterval(180)
+    start(TaskStore())
+    settle()
+
+    XCTAssertEqual(runner.calls.count, 1, "起動ですぐには確かめない")
+    XCTAssertEqual(
+      try XCTUnwrap(armed?.date).timeIntervalSince1970,
+      lastCheck.addingTimeInterval(600).timeIntervalSince1970, accuracy: 0.01,
+      "最後の確認の始まり＋間隔")
+  }
+
   /// 終了している間に期限を過ぎた条件は、起動したときに「期限が来た」で解ける。
   func testConditionPastItsDeadlineResolvesOnStart() throws {
     let task = try addWaiting(TaskStore())
