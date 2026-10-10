@@ -22,8 +22,6 @@ extension L10n {
     .boardAskFixTag: ("「%@」を直す", "Fix “%@”"),
     .boardAskFixPlaceholder: ("直したいことを入力（無くてもよい）", "What to fix (optional)"),
     .boardAskFixHint: ("直しを依頼", "ask to fix"),
-    .boardAsked: ("依頼した", "Asked"),
-    .boardAskedQueued: ("依頼した — 手が空いたら届く", "Asked — delivered when free"),
     .boardAskClaudeMissing: (
       "claude が見つからないので依頼できない", "claude not found, so the request was not sent"
     ),

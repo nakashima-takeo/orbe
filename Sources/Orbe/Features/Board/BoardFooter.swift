@@ -11,7 +11,7 @@ struct BoardKeyHint: Hashable {
   }
 }
 
-/// ボードのフッター。左に焦点のある場所で効くキー（部品が出す。ボタンは置かない）、右にボードの知らせ。
+/// ボードのフッター。左に焦点のある場所で効くキー（部品が出す。ボタンは置かない）、右にボードの断り（赤）。
 struct BoardFooter: View {
   let model: BoardModel
   @Environment(\.localization) private var l10n
@@ -22,9 +22,8 @@ struct BoardFooter: View {
         PaletteKeyHint(key: hint.key, label: l10n.string(hint.label))
       }
       Spacer(minLength: 0)
-      if let notice = model.notice {
-        Text(l10n.string(notice.message))
-          .foregroundStyle(notice.tone == .danger ? Color.theme.danger : Color.theme.textMuted)
+      if let refusal = model.refusal {
+        Text(l10n.string(refusal)).foregroundStyle(Color.theme.danger)
       }
     }
     .font(Font.theme.workspaceName)

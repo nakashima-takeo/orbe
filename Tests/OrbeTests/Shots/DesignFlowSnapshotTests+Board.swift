@@ -75,14 +75,14 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
-  /// 依頼の欄: ⇥ で欄へ → 打つ → ↵ で「依頼した」・欄が空 → ⇥ で一覧 → ⌘↵ で札と焦点 → esc で札が外れて一覧。秘書の口は
+  /// 依頼の欄: ⇥ で欄へ → 打つ → ↵ で欄が空 → ⇥ で一覧 → ⌘↵ で札と焦点 → esc で札が外れて一覧。秘書の口は
   /// 閉包の差し替えで、本物の秘書・claude は起きない。
   func testBoardRequest() throws {
     let model = BoardModel(
       intake: BoardIntakeModel(
         runner: DesignSceneFixtures.intakeRunner(DesignSceneFixtures.boardIntakeFile())))
     let intake = model.intake
-    intake.onAsk = { _ in .success(.accepted) }
+    intake.onAsk = { _ in nil }
     try flow(
       "board_request", size: NSSize(width: 1440, height: 826),
       render: {

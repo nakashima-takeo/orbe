@@ -21,11 +21,10 @@ import SwiftUI
   /// 進むたびに、ビューが焦点を `place` へ当て直す。
   private(set) var focusToken = 0
 
-  /// 欄から頼む（自動追加の新しい依頼か直し）。ボードの配線が出どころを付けて秘書の口へ渡す。
-  @ObservationIgnored var onAsk: (SecretaryAsk) -> Result<Secretary.Acceptance, Secretary.Refusal> =
-    { _ in .failure(.claudeMissing) }
-  /// ボードの知らせの枠へ置く（nil は消す）。
-  @ObservationIgnored var onNotice: (BoardNotice?) -> Void = { _ in }
+  /// 欄から頼む（自動追加の新しい依頼か直し）。ボードの配線が出どころを付けて秘書の口へ渡し、受けなければ断りを返す。
+  @ObservationIgnored var onAsk: (SecretaryAsk) -> Secretary.Refusal? = { _ in .claudeMissing }
+  /// ボードの断りの枠へ置く（nil は消す）。
+  @ObservationIgnored var onRefusal: (L10nKey?) -> Void = { _ in }
 
   init(runner: IntakeRunner) {
     self.runner = runner
@@ -100,13 +99,13 @@ import SwiftUI
 
   /// ↑↓。端で巡回する。
   func move(_ direction: Int) {
-    onNotice(nil)
+    onRefusal(nil)
     list.move(direction, in: ids)
   }
 
   /// 行のクリック。
   func tap(_ id: Int) {
-    onNotice(nil)
+    onRefusal(nil)
     list.select(id, in: ids)
     go(.list)
   }
@@ -114,9 +113,9 @@ import SwiftUI
   /// 選んでいる自動追加への手の操作。止める ⇄ 再開で行が沈んでも浮いても、選択は同じ自動追加に付いていく。
   func perform(_ operation: IntakeHand.Operation) {
     guard let intake = selected?.intake else { return }
-    onNotice(nil)
+    onRefusal(nil)
     if let refusal = IntakeHand.perform(operation, on: intake, runner: runner) {
-      onNotice(BoardNotice(message: refusal.message, tone: .danger))
+      onRefusal(refusal.message)
     }
     reconcile()
     list.follow()
@@ -125,7 +124,7 @@ import SwiftUI
   /// ⌘↵。選んでいる自動追加の札を欄に付け、焦点を欄へ移す（直したいことを打ってから送る）。
   func requestFix() {
     guard let intake = selected?.intake else { return }
-    onNotice(nil)
+    onRefusal(nil)
     request.fix = BoardIntakeRequest.Fix(id: intake.id, name: intake.definition.name)
     go(.request)
   }
@@ -148,12 +147,12 @@ import SwiftUI
 
   // MARK: - 依頼の欄
 
-  /// 欄の文字（入力欄の binding）。打てば知らせを消す。
+  /// 欄の文字（入力欄の binding）。打てば断りを消す。
   var requestText: String {
     get { request.text }
     set {
       guard newValue != request.text else { return }
-      onNotice(nil)
+      onRefusal(nil)
       request.text = newValue
     }
   }
@@ -167,37 +166,35 @@ import SwiftUI
 
   /// 一覧の ⇥。
   func toRequest() {
-    onNotice(nil)
+    onRefusal(nil)
     go(.request)
   }
 
   /// 欄の ⇥・↓・esc。
   func toList() {
-    onNotice(nil)
+    onRefusal(nil)
     go(.list)
   }
 
   /// 欄の ↵。札が無ければ新しい依頼、あれば今のストアから引いた相手の直しを頼む。受けたら欄を空にして札を外し、断られたら
   /// 欄と札を残す。空の欄は黙る。
   func send() {
-    onNotice(nil)
+    onRefusal(nil)
     let ask: SecretaryAsk
     if let fix = request.fix {
       guard let intake = store.intake(fix.id) else {
-        return onNotice(BoardNotice(message: .boardAskFixGone, tone: .danger))
+        return onRefusal(.boardAskFixGone)
       }
       ask = .intakeFix(intake, note: request.text)
     } else {
       ask = .intake(request.text)
     }
     switch onAsk(ask) {
-    case .success(let acceptance):
+    case nil:
       request = BoardIntakeRequest()
-      onNotice(
-        BoardNotice(message: acceptance == .queued ? .boardAskedQueued : .boardAsked, tone: .quiet))
-    case .failure(.claudeMissing):
-      onNotice(BoardNotice(message: .boardAskClaudeMissing, tone: .danger))
-    case .failure(.empty):
+    case .claudeMissing:
+      onRefusal(.boardAskClaudeMissing)
+    case .empty:
       break
     }
   }

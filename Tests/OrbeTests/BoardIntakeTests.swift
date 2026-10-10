@@ -143,7 +143,7 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
     press(Key.enter, "\r", to: window)
     press(Key.enter, "\r", repeating: true, to: window)
     XCTAssertTrue(intake.runner.isRunning(Self.slack))
-    XCTAssertNil(model.notice, "リピートで「実行中のため今すぐ実行できません」の赤を出さない")
+    XCTAssertNil(model.refusal, "リピートで「実行中のため今すぐ実行できません」の赤を出さない")
 
     press(Key.delete, "\u{7F}", .command, to: window)
     press(Key.delete, "\u{7F}", .command, repeating: true, to: window)

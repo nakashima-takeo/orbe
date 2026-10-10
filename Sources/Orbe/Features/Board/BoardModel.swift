@@ -1,14 +1,14 @@
 import Observation
 
-/// ボードの状態。部品（今は自動追加 1 つ）のモデルと、フッターの右の知らせの 1 枠を持ち、部品へ焦点を当て直す口になる。
+/// ボードの状態。部品（今は自動追加 1 つ）のモデルと、フッターの右の断りの 1 枠を持ち、部品へ焦点を当て直す口になる。
 @Observable final class BoardModel {
   let intake: BoardIntakeModel
   /// 部品が置き、次の操作で部品が消す。
-  private(set) var notice: BoardNotice?
+  private(set) var refusal: L10nKey?
 
   init(intake: BoardIntakeModel) {
     self.intake = intake
-    intake.onNotice = { [weak self] in self?.notice = $0 }
+    intake.onRefusal = { [weak self] in self?.refusal = $0 }
   }
 
   /// 器がホストへ first responder を渡す口。

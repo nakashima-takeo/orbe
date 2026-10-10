@@ -88,11 +88,12 @@ final class WindowController: NSObject, NSWindowDelegate {
   private(set) lazy var board: BoardModel = {
     let intake = BoardIntakeModel(runner: intakeRunner)
     intake.onAsk = { [weak self] ask in
-      guard let self else { return .failure(.claudeMissing) }
+      guard let self else { return .claudeMissing }
       do throws(Secretary.Refusal) {
-        return .success(try self.secretary.ask(ask, from: .board))
+        _ = try self.secretary.ask(ask, from: .board)
+        return nil
       } catch {
-        return .failure(error)
+        return error
       }
     }
     return BoardModel(intake: intake)

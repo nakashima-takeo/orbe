@@ -607,8 +607,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardAskFixTag
   case boardAskFixPlaceholder
   case boardAskFixHint
-  case boardAsked
-  case boardAskedQueued
   case boardAskClaudeMissing
   case boardAskFixGone
 
