@@ -211,7 +211,7 @@ final class IntakeRunner {
       guard let text = String(bytes: stdout.data, encoding: .utf8) else {
         return .failed("the fetch output is not UTF-8", rejected: IntakeRejections())
       }
-      return IntakePrompts.readFetch(text, truncated: stdout.truncated)
+      return IntakePrompts.readFetch(text)
     }
     switch reply(result, role: "fetch") {
     case .failure(let failure): return .failed(failure.reason, rejected: IntakeRejections())

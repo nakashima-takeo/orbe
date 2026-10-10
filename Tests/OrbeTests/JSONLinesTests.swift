@@ -62,24 +62,4 @@ final class JSONLinesTests: OrbeTestCase {
     XCTAssertEqual(lines.items.map(\.id), [1, 2])
     XCTAssertEqual(lines.rejected, [])
   }
-
-  /// 上限で切れた出力の最後の行は、形に合っても受けない。
-  func testLastLineOfTruncatedOutputIsRejected() {
-    let lines = JSONLines<Item>(
-      """
-      {"id":1,"title":"a"}
-      {"id":2,"title":"b"}
-      """, truncated: true)
-
-    XCTAssertEqual(lines.items, [Item(id: 1, title: "a", tags: nil)])
-    XCTAssertEqual(lines.rejected, [.init(line: 2, reason: .truncated)])
-  }
-
-  /// 切れたのが行の境目なら、残った行はすべて完全。
-  func testTruncatedOutputEndingWithNewlineKeepsAllLines() {
-    let lines = JSONLines<Item>("{\"id\":1,\"title\":\"a\"}\n", truncated: true)
-
-    XCTAssertEqual(lines.items.count, 1)
-    XCTAssertEqual(lines.rejected, [])
-  }
 }

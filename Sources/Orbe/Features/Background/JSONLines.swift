@@ -16,18 +16,14 @@ struct JSONLines<Item: Decodable> {
     case nullValue(String)
     case typeMismatch(String)
     case invalidValue(String)
-    /// 出力の上限で切れた最後の行。
-    case truncated
   }
 
   let items: [Item]
   let rejected: [Rejection]
 
-  /// `truncated` は出力が上限で切られたか。改行で終わっていない最後の行を、切れた行として捨てる。
-  init(_ text: String, truncated: Bool = false) {
+  init(_ text: String) {
     // CRLF は 1 つの Character なので、LF と並べて区切りに数える。
     var lines = text.split(omittingEmptySubsequences: false) { $0 == "\n" || $0 == "\r\n" }
-    let cutLine = truncated && lines.last?.isEmpty == false ? lines.count : nil
     if lines.last?.isEmpty == true { lines.removeLast() }
     var items: [Item] = []
     var rejected: [Rejection] = []
@@ -35,10 +31,6 @@ struct JSONLines<Item: Decodable> {
       let number = index + 1
       let body = line.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !body.isEmpty else { continue }
-      if number == cutLine {
-        rejected.append(Rejection(line: number, reason: .truncated))
-        continue
-      }
       switch Self.decode(Data(body.utf8)) {
       case .success(let item): items.append(item)
       case .failure(let reason): rejected.append(Rejection(line: number, reason: reason))
