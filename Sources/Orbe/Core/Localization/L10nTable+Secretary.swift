@@ -1,6 +1,6 @@
 import Foundation
 
-/// 秘書（⌘⇧X の ⌘↵・頼む欄・頼みの文面）と、タスクから作業を始める（`start_task`）の文言分冊。
+/// 秘書（行き先の段の ⌘↵・頼む欄・頼みの文面・応えない知らせ）と、タスクから作業を始める（`start_task`）の文言分冊。
 /// 本体 `L10n.table` が結合する。
 extension L10n {
   static let secretaryTable: [L10nKey: (ja: String, en: String)] = [
@@ -24,9 +24,6 @@ extension L10n {
     .taskPaletteAskSecretary: ("秘書に頼む", "Ask the secretary"),
     .taskPaletteDestinationPlace: ("%1$@ · %2$@の先頭 · %3$@", "%1$@ · top of %2$@ · %3$@"),
     .taskPaletteDestinationNoWorkspace: ("workspace なし", "no workspace"),
-    .taskPaletteMatchingTasks: ("一致するタスク", "Matching tasks"),
-    .taskPaletteActionAddTodo: ("%1$@ を未着手に足す", "Add %1$@ to To do"),
-    .taskPaletteHintToMatches: ("一致する項目へ", "Matches"),
     .taskPaletteAskTitle: ("%1$@ を秘書に頼む", "Ask the secretary about %1$@"),
     .taskPaletteAskOptional: ("補足は無くてもよい", "A note is optional"),
     .taskPaletteAskScope: (
@@ -43,11 +40,6 @@ extension L10n {
     .taskPaletteErrSecretaryClaude: (
       "claude が見つからないので秘書に頼めない", "Can’t ask the secretary: claude was not found"
     ),
-    .taskPaletteJustAdded: ("今足した", "Just added"),
-    .taskPaletteAddedHeading: ("今 ⌘⇧X から足した", "just added from ⌘⇧X"),
-    .taskPaletteHeadingTask: ("タスク", "Task"),
-    .taskPaletteScopeWasAll: ("範囲が「すべて」だった", "the scope was “All”"),
     .taskPaletteAskHandOver: ("このタスクを渡す", "Hand this task over"),
-    .taskPaletteActionRefine: ("期限などを詰める", "Set the due date and more"),
   ]
 }

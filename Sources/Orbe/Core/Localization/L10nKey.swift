@@ -338,6 +338,14 @@ enum L10nKey: String, CaseIterable, Sendable {
   case waitContinueOutput
   case waitContinueExpired
 
+  case taskPaletteMatchingTasks
+  case taskPaletteActionAddTodo
+  case taskPaletteHintToMatches
+  case taskPaletteJustAdded
+  case taskPaletteAddedHeading
+  case taskPaletteHeadingTask
+  case taskPaletteScopeWasAll
+  case taskPaletteActionRefine
   // MARK: - タスク画面の受信タブ
   case taskPaletteTabIntake
   case taskPaletteIntakePlaceholder
@@ -400,9 +408,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAskSecretary
   case taskPaletteDestinationPlace
   case taskPaletteDestinationNoWorkspace
-  case taskPaletteMatchingTasks
-  case taskPaletteActionAddTodo
-  case taskPaletteHintToMatches
   case taskPaletteAskTitle
   case taskPaletteAskOptional
   case taskPaletteAskScope
@@ -411,12 +416,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAsked
   case taskPaletteAskedQueued
   case taskPaletteErrSecretaryClaude
-  case taskPaletteJustAdded
-  case taskPaletteAddedHeading
-  case taskPaletteHeadingTask
-  case taskPaletteScopeWasAll
   case taskPaletteAskHandOver
-  case taskPaletteActionRefine
 
   // MARK: - Onboarding
   case onboardingBegin
