@@ -226,9 +226,8 @@ extension TaskStoreTests {
     let store = TaskStore()
     let (waiting, condition) = try waitingTask(store)
     for ending in [
-      BackgroundEnding.exited(1), .signaled(15), .limited(.output), .stopped,
-      .notStarted(.directoryMissing("/gone")),
-    ] {
+      BackgroundEnding.exited(1), .signaled(15), .stopped, .notStarted(.directoryMissing("/gone")),
+    ] + BackgroundProcess.Limit.allCases.map(BackgroundEnding.limited) {
       store.recordCheck(waiting.id, condition: condition.id, run(ending, stdout: "まだ"))
     }
     let (resolved, other) = try waitingTask(store)

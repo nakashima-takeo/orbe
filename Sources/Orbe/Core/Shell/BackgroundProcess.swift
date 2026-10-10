@@ -375,7 +375,7 @@ extension BackgroundProcess {
     var truncated = false
   }
 
-  enum Limit: Equatable {
+  enum Limit: Equatable, CaseIterable {
     case elapsed
     case idle
     case output

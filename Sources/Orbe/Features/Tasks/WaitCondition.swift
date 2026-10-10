@@ -142,14 +142,13 @@ struct WaitCheck: Codable, Equatable {
     case "exited": result = .exited(try c.decode(Int32.self, forKey: .code))
     case "signaled": result = .signaled(try c.decode(Int32.self, forKey: .signal))
     case "limited":
-      switch try c.decode(String.self, forKey: .limit) {
-      case "elapsed": result = .limited(.elapsed)
-      case "idle": result = .limited(.idle)
-      case "output": result = .limited(.output)
-      case let raw:
+      let raw = try c.decode(String.self, forKey: .limit)
+      guard let limit = BackgroundProcess.Limit.allCases.first(where: { Self.name($0) == raw })
+      else {
         throw DecodingError.dataCorruptedError(
           forKey: .limit, in: c, debugDescription: "unknown limit: \(raw)")
       }
+      result = .limited(limit)
     case "stopped": result = .stopped
     case "notStarted": result = .notStarted(try c.decode(String.self, forKey: .reason))
     case let other:
@@ -175,7 +174,7 @@ struct WaitCheck: Codable, Equatable {
     try c.encode(stderr, forKey: .stderr)
   }
 
-  /// 上限の永続の名前（読み込みの名前と対）。
+  /// 上限の永続の名前（読み込みもこの表で引く）。
   private static func name(_ limit: BackgroundProcess.Limit) -> String {
     switch limit {
     case .elapsed: "elapsed"
