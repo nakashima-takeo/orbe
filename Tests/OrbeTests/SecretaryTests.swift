@@ -92,6 +92,7 @@ final class SecretaryTests: OrbeTestCase {
     waitForScreen(tab, contains: "見積もりを山田さんに送る")
     XCTAssertTrue(screen(tab).contains("⌘⇧X から · "), "出どころが見える")
     XCTAssertEqual(wc.secretary.record.pending, [], "届けたら列から外す")
+    XCTAssertEqual(SecretaryPersistence.load()?.pending, [], "保存からも外す（再起動で二重に届かない）")
     XCTAssertEqual(SecretaryPersistence.load()?.sessionId, "s-1", "会話 ID を覚える")
   }
 
@@ -196,6 +197,22 @@ final class SecretaryTests: OrbeTestCase {
     XCTAssertFalse(
       try XCTUnwrap(other.surface.initialCommand).contains("--append-system-prompt"),
       "秘書の会話でなければ指示を添えない")
+  }
+
+  /// 溜めが無ければ、再起動の後も休眠の秘書のタブは起こさない（頼まれるまで起きない）。
+  func testAfterRelaunchWithoutQueuedAsksTheDormantSecretaryStaysAsleep() throws {
+    let wc = try launch(
+      SecretaryFile(version: 1, sessionId: "s-1", pending: []),
+      homeTabs: [
+        TabState(
+          cwd: "/tmp", agent: AgentSession(command: "claude", sessionId: "s-1"),
+          explicitTitle: nil)
+      ])
+    let secretary = try XCTUnwrap(try homeTabs(wc).first)
+
+    wc.flushChrome()
+
+    XCTAssertFalse(waitUntil(1) { !secretary.isDormant }, "頼まれるまで起こさない")
   }
 
   // MARK: - 受けない
