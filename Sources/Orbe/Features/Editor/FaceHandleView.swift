@@ -1,16 +1,16 @@
 import AppKit
 
-/// 取っ手: 面の上に幅を取らずに重なり、片面が隠れているときは隠れた側の縁の引き手、分割中は継ぎ目（1px の線と
-/// 縦長のグリップ）を描く。形と frame は器が決める。重なった範囲の押す・引く・ポインタの形は取っ手が持ち、
-/// スクロールは器を通して下の面へ渡す。
+/// 取っ手: 片面が隠れているときは隠れた側の縁に重なる引き手、分割中は継ぎ目（面と面の間そのもの。縦中央に 3 つの点）
+/// を描く。形と frame は器が決める。引き手の重なった範囲の押す・引く・ポインタの形は取っ手が持ち、スクロールは器を
+/// 通して下の面へ渡す。ホバーは乗っている間と、引いている間に効く。
 ///
-/// 押せるのは引き手とグリップだけ。そこで押せばすぐ「掴んだ」を伝え、動かさずに離せば「押した」を伝える。
-/// 継ぎ目の線の当たりは閾値を越えて動くまで器に何も伝えない——押して離しても配置も焦点も変わらない。
+/// 押せるのは引き手と、間の 3 つの点の周りだけ。そこで押せばすぐ「掴んだ」を伝え、動かさずに離せば「押した」を伝える。
+/// 間の他の部分は閾値を越えて動くまで器に何も伝えない——押して離しても配置も焦点も変わらない。
 final class FaceHandleView: NSView {
   var look: FaceGeometry.HandleLook = .notch(.editor) {
     didSet {
       guard look != oldValue else { return }
-      hovering = isNotch && pointerIsOver
+      hovering = pointerIsOver || grab?.moved == true
       needsDisplay = true
       updateShadowShape()
       setShadow(visible: showsShadow, duration: 0)
@@ -64,11 +64,10 @@ final class FaceHandleView: NSView {
 
   private var showsShadow: Bool { isNotch && hovering }
 
-  private var gripRect: NSRect {
-    let size = Theme.Layout.faceSeamGrip
-    return NSRect(
-      x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2,
-      width: size.width, height: size.height)
+  /// 継ぎ目のうち押せる範囲（縦中央、3 つの点の周り）。
+  private var pressRect: NSRect {
+    let height = Theme.Layout.faceSeamPress
+    return NSRect(x: 0, y: bounds.midY - height / 2, width: bounds.width, height: height)
   }
 
   override func setFrameOrigin(_ newOrigin: NSPoint) {
@@ -110,18 +109,18 @@ final class FaceHandleView: NSView {
   }
 
   override func mouseEntered(with event: NSEvent) {
-    setHovering(isNotch)
+    setHovering(true)
   }
 
   override func mouseExited(with event: NSEvent) {
-    setHovering(false)
+    setHovering(grab?.moved == true)
   }
 
   /// 見え方・frame・掴みの終わりのたび、ホバーとカーソルを取り直す——ポインタの下で形や位置が変わっても
   /// enter や cursorUpdate は来ない。
   private func refreshPointer() {
     let over = pointerIsOver
-    setHovering(isNotch && over)
+    setHovering(over || grab?.moved == true)
     if over || grab?.moved == true { cursor.set() }
   }
 
@@ -231,28 +230,24 @@ final class FaceHandleView: NSView {
   }
 
   private func drawSeam() {
-    let line = Theme.Stroke.hairline
-    Theme.Color.faceSeamLine.setFill()
-    NSRect(x: bounds.midX - line / 2, y: 0, width: line, height: bounds.height)
-      .fill(using: .sourceOver)
-    let grip = gripRect
-    let radius = Theme.Radius.faceSeamGrip
-    Theme.Color.faceSeamGrip.setFill()
-    NSBezierPath(roundedRect: grip, xRadius: radius, yRadius: radius).fill()
-    let inset = line / 2
-    let border = NSBezierPath(
-      roundedRect: grip.insetBy(dx: inset, dy: inset), xRadius: radius - inset,
-      yRadius: radius - inset)
-    border.lineWidth = line
-    Theme.Color.faceSeamGripBorder.setStroke()
-    border.stroke()
-    let size = Theme.Layout.faceSeamGripBar
-    let bar = NSRect(
-      x: grip.midX - size.width / 2, y: grip.midY - size.height / 2, width: size.width,
-      height: size.height)
-    let barRadius = Theme.Radius.faceSeamGripBar
-    Theme.Color.faceTerminal.withAlphaComponent(Theme.Opacity.faceSeamGripBar).setFill()
-    NSBezierPath(roundedRect: bar, xRadius: barRadius, yRadius: barRadius).fill()
+    if hovering {
+      Theme.Color.surface1.setFill()
+      bounds.fill(using: .sourceOver)
+    }
+    let size = Theme.Layout.faceSeamDot
+    let pitch = size + Theme.Layout.faceSeamDotSpacing
+    let radius = Theme.Radius.faceSeamDot
+    let color =
+      hovering
+      ? Theme.Color.faceSeamDotHover
+      : Theme.Color.faceTerminal.withAlphaComponent(Theme.Opacity.faceSeamDot)
+    color.setFill()
+    for step in -1...1 {
+      let dot = NSRect(
+        x: bounds.midX - size / 2, y: bounds.midY - size / 2 + CGFloat(step) * pitch,
+        width: size, height: size)
+      NSBezierPath(roundedRect: dot, xRadius: radius, yRadius: radius).fill()
+    }
   }
 
   /// 縁側の 2 角は直角、反対側の 2 角は丸めた引き手の輪郭。`closed` でなければ縁側の辺を引かない。
@@ -319,7 +314,7 @@ final class FaceHandleView: NSView {
   }
 
   private func isPressable(_ event: NSEvent) -> Bool {
-    isNotch || gripRect.contains(convert(event.locationInWindow, from: nil))
+    isNotch || pressRect.contains(convert(event.locationInWindow, from: nil))
   }
 
   override func mouseDown(with event: NSEvent) {

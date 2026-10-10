@@ -49,9 +49,11 @@ import SwiftUI
   /// 0タブの content 地など、元々 bgBase の不透明地に載っていた面が使う。
   var baseFill: Color { Color.theme.bgBase.opacity(effectiveOpacity) }
 
-  /// 透過時のみ足す追加 base（不透明時は clear＝現行の透明を維持し glow を透かす）。
-  /// 上段が元来透明な StatusRow が、透過時だけ端末と同濃度の veil を敷くために使う。
-  var additiveBase: Color { Color.theme.bgBase.opacity(translucent ? effectiveOpacity : 0) }
+  /// 透過時だけ敷く veil の濃さ（不透明時は 0＝敷かずに glow を透かす）。透過時は端末と同濃度。
+  var additiveOpacity: CGFloat { translucent ? effectiveOpacity : 0 }
+
+  /// 透過時のみ足す追加 base（`additiveOpacity` の bgBase）。上段が元来透明な StatusRow が使う。
+  var additiveBase: Color { Color.theme.bgBase.opacity(additiveOpacity) }
 }
 
 private struct ChromeTranslucencyKey: EnvironmentKey {

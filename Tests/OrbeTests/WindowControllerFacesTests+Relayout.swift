@@ -17,19 +17,20 @@ extension WindowControllerFacesTests {
     layout(wc)
     let handle = tab.view.handle
     let grab = handle.centerInWindow
-    let offset = min(grab.x, Theme.Layout.faceSeamGrip.width / 2)
+    let offset = min(grab.x, Theme.Layout.faceSplitGap / 2)
     let y = grab.y
 
     handle.mouseDown(with: .mouse(.leftMouseDown, at: grab, in: wc.window))
     handle.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 500, y: y), in: wc.window))
+    let ratio = try XCTUnwrap(FaceGeometry.ratio(seamX: 500 - offset, width: facesWidth(wc)))
     tab.view.needsLayout = true
     layout(wc)
-    XCTAssertEqual(tab.view.resolved.editorWidth, 500 - offset, "再レイアウト後もドラッグ中の幅のまま")
-    XCTAssertEqual(handle.frame.midX, 500 - offset, "継ぎ目も動かない")
+    XCTAssertEqual(
+      tab.view.resolved.placement.ratio, ratio, accuracy: 0.0001, "再レイアウト後もドラッグ中の位置のまま")
+    XCTAssertEqual(handle.frame.midX, 500 - offset, "間も動かない")
 
     handle.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: 500, y: y), in: wc.window))
-    XCTAssertEqual(
-      tab.faces.editorRatio * facesWidth(wc), 500 - offset, accuracy: 0.5, "離した幅で確定")
+    XCTAssertEqual(tab.faces.editorRatio, ratio, accuracy: 0.0001, "離した位置で確定")
   }
 
   /// ⌘E の遷移は再レイアウトで終点へ飛ばず、時間に沿って境が段階的に動き、終端で確定する。

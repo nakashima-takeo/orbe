@@ -11,10 +11,13 @@ import XCTest
 /// 実態と別の面を示す。toggle / handleClick が違う面を選ぶと ⌘E と引き手を押す操作が「戻れない」操作になり、
 /// drag / release の境がずれると取っ手を離した瞬間に意図しない面が閉じる。
 final class FaceGeometryTests: OrbeTestCase {
-  private let width: CGFloat = 1000
+  /// 余白 4×2 と間 8 を除いた分割の幅が 1000 になる器。
+  private let size = CGSize(width: 1016, height: 400)
+  private var width: CGFloat { size.width }
+  private let splitWidth: CGFloat = 1000
 
   private func resolved(_ ratio: Double, _ focus: Face) -> FaceGeometry.Resolved {
-    FaceGeometry.resolve(FaceLayout(editorRatio: ratio, focus: focus), width: width)
+    FaceGeometry.resolve(FaceLayout(editorRatio: ratio, focus: focus), size: size)
   }
 
   // MARK: - 正規形
@@ -46,13 +49,15 @@ final class FaceGeometryTests: OrbeTestCase {
 
   // MARK: - resolve
 
-  /// 器の幅をすべて割合で分け、両面が見えていれば継ぎ目と分割中の投影になる。
-  func testResolveSplitsTheWholeWidth() {
+  /// 分割中は分割の幅を割合で分け、両面は余白と間を空けたカードとして並ぶ。投影は継ぎ目と分割中。
+  func testResolveSplitsTheSplitWidthIntoCards() {
     let g = resolved(0.25, .terminal)
 
     XCTAssertEqual(g.width, width)
-    XCTAssertEqual(g.editorWidth, 250)
-    XCTAssertEqual(g.terminalWidth, 750)
+    XCTAssertEqual(g.placement, .init(ratio: 0.25, cards: true))
+    XCTAssertEqual(g.frames.editor, CGRect(x: 4, y: 4, width: 250, height: 392))
+    XCTAssertEqual(g.frames.gap, CGRect(x: 254, y: 4, width: 8, height: 392))
+    XCTAssertEqual(g.frames.terminal, CGRect(x: 262, y: 4, width: 750, height: 392))
     XCTAssertTrue(g.isSplit)
     XCTAssertEqual(g.projection.handleLook, .seam)
     XCTAssertEqual(g.projection.dots, .init(editor: .on, terminal: .focus), "焦点の面だけ focus、他は on")
@@ -63,7 +68,7 @@ final class FaceGeometryTests: OrbeTestCase {
     let g = resolved(0, .terminal)
 
     XCTAssertEqual(g.editorWidth, 0)
-    XCTAssertEqual(g.terminalWidth, width)
+    XCTAssertEqual(g.frames.terminal, CGRect(origin: .zero, size: size), "全面は器いっぱい")
     XCTAssertFalse(g.isSplit)
     XCTAssertEqual(g.projection.handleLook, .notch(.editor))
     XCTAssertEqual(g.projection.dots, .init(editor: .off, terminal: .focus))
@@ -73,25 +78,26 @@ final class FaceGeometryTests: OrbeTestCase {
   func testResolveEditorOnlyShowsTheTerminalNotch() {
     let g = resolved(1, .editor)
 
-    XCTAssertEqual(g.editorWidth, width)
+    XCTAssertEqual(g.frames.editor, CGRect(origin: .zero, size: size), "全面は器いっぱい")
     XCTAssertEqual(g.terminalWidth, 0)
     XCTAssertFalse(g.isSplit)
     XCTAssertEqual(g.projection.handleLook, .notch(.terminal))
     XCTAssertEqual(g.projection.dots, .init(editor: .focus, terminal: .off))
   }
 
-  /// 面の幅は整数 px に丸め、端末が残りを取る（合計が器の幅から欠けない）。
+  /// 面の幅は整数 px に丸め、端末が残りを取る（合計が分割の幅から欠けない）。
   func testResolveRoundsTheEditorWidthAndGivesTheRemainderToTheTerminal() {
     let g = resolved(1.0 / 3.0, .terminal)
 
     XCTAssertEqual(g.editorWidth, 333)
     XCTAssertEqual(g.terminalWidth, 667)
-    XCTAssertEqual(g.editorWidth + g.terminalWidth, width)
+    XCTAssertEqual(g.editorWidth + g.terminalWidth, splitWidth)
   }
 
-  /// 負の器の幅は 0 として解く（面の幅が負にならない）。
+  /// 負の器の大きさは 0 として解く（面の幅が負にならない）。
   func testResolveNegativeWidthHasNoContent() {
-    let g = FaceGeometry.resolve(FaceLayout(editorRatio: 0.5, focus: .editor), width: -10)
+    let g = FaceGeometry.resolve(
+      FaceLayout(editorRatio: 0.5, focus: .editor), size: CGSize(width: -10, height: 400))
 
     XCTAssertEqual(g.width, 0)
     XCTAssertEqual(g.editorWidth, 0)
@@ -143,20 +149,21 @@ final class FaceGeometryTests: OrbeTestCase {
 
   // MARK: - 取っ手を引く
 
-  /// 境の求める位置がそのままエディター幅になり（隠れている面からも引き出せる）、焦点は掴んだときのまま。
+  /// 間の中央の求める位置から余白と間の半分を引いた値がエディター幅になり（隠れている面からも引き出せる）、焦点は
+  /// 掴んだときのまま。
   func testDragFollowsThePointerAndKeepsTheFocus() {
     XCTAssertEqual(
-      FaceGeometry.drag(from: resolved(0.5, .terminal), x: 300),
+      FaceGeometry.drag(from: resolved(0.5, .terminal), x: 308),
       FaceLayout(editorRatio: 0.3, focus: .terminal))
     XCTAssertEqual(
-      FaceGeometry.drag(from: resolved(0.5, .editor), x: 300),
+      FaceGeometry.drag(from: resolved(0.5, .editor), x: 308),
       FaceLayout(editorRatio: 0.3, focus: .editor), "エディター焦点も動かない")
     XCTAssertEqual(
-      FaceGeometry.drag(from: resolved(0, .terminal), x: 400),
+      FaceGeometry.drag(from: resolved(0, .terminal), x: 408),
       FaceLayout(editorRatio: 0.4, focus: .terminal), "隠れている面からも引き出せる")
   }
 
-  /// 器の外へ引いても器の幅の範囲に収まり、端に着いた面へ焦点が移る（正規形）。
+  /// 器の外へ引いても分割の幅の範囲に収まり、端に着いた面へ焦点が移る（正規形）。
   func testDragClampsToTheWidthAndMovesFocusToTheRemainingFace() {
     let editorFocused = FaceLayout(editorRatio: 0.5, focus: .editor)
     let terminalFocused = FaceLayout(editorRatio: 0.5, focus: .terminal)
@@ -169,10 +176,10 @@ final class FaceGeometryTests: OrbeTestCase {
       FaceLayout(editorRatio: 1, focus: .editor), "右端を越えたら端末が閉じ焦点はエディターへ")
   }
 
-  /// 幅 0 の器では配置を変えない（0 で割らない）。
-  func testDragWithNoWidthLeavesTheLayout() {
+  /// 分割の幅が無い器（余白 2 つと間より狭い）では配置を変えない（0 で割らない）。
+  func testDragWithNoSplitWidthLeavesTheLayout() {
     let split = FaceLayout(editorRatio: 0.5, focus: .terminal)
-    let empty = FaceGeometry.resolve(split, width: 0)
+    let empty = FaceGeometry.resolve(split, size: CGSize(width: 16, height: 400))
 
     XCTAssertEqual(FaceGeometry.drag(from: empty, x: 100), split)
   }
@@ -182,17 +189,17 @@ final class FaceGeometryTests: OrbeTestCase {
   /// 閉じる境（40）より狭い面は閉じ、境ちょうどからは幅をそのまま確定する。
   func testReleaseClosesAFaceNarrowerThanTheCloseEdge() {
     XCTAssertEqual(
-      FaceGeometry.release(FaceLayout(editorRatio: 0.039, focus: .terminal), width: 1000),
+      FaceGeometry.release(FaceLayout(editorRatio: 0.039, focus: .terminal), width: width),
       .terminalOnly, "エディター 39 は閉じる")
     XCTAssertEqual(
-      FaceGeometry.release(FaceLayout(editorRatio: 0.961, focus: .terminal), width: 1000),
+      FaceGeometry.release(FaceLayout(editorRatio: 0.961, focus: .terminal), width: width),
       FaceLayout(editorRatio: 1, focus: .editor), "端末 39 は閉じる")
 
     let editorAtEdge = FaceLayout(editorRatio: 0.04, focus: .terminal)
     XCTAssertEqual(
-      FaceGeometry.release(editorAtEdge, width: 1000), editorAtEdge, "エディター 40 は残る")
+      FaceGeometry.release(editorAtEdge, width: width), editorAtEdge, "エディター 40 は残る")
     let terminalAtEdge = FaceLayout(editorRatio: 0.96, focus: .terminal)
     XCTAssertEqual(
-      FaceGeometry.release(terminalAtEdge, width: 1000), terminalAtEdge, "端末 40 は残る")
+      FaceGeometry.release(terminalAtEdge, width: width), terminalAtEdge, "端末 40 は残る")
   }
 }

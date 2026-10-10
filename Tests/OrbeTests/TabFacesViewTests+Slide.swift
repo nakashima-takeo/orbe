@@ -15,7 +15,7 @@ extension TabFacesViewTests {
   /// 窓に載せた器（遷移は窓に付いているときだけ動く）。
   private func hostedForSlide(_ faces: FaceLayout) -> (TerminalTab, NSWindow) {
     let window = NSWindow(
-      contentRect: NSRect(origin: .zero, size: NSSize(width: 1000, height: 400)),
+      contentRect: NSRect(origin: .zero, size: NSSize(width: 1016, height: 400)),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     let tab = TerminalTab(cwd: "/tmp")
@@ -69,7 +69,7 @@ extension TabFacesViewTests {
       editorSizes.count - 1, 1, "\(label): エディターの寸法の変更 \(editorSizes)", file: file, line: line)
     XCTAssertLessThanOrEqual(
       terminalSizes.count - 1, 1, "\(label): 端末の寸法の変更 \(terminalSizes)", file: file, line: line)
-    XCTAssertEqual(view.projection, FaceGeometry.resolve(to, width: view.bounds.width).projection)
+    XCTAssertEqual(view.projection, FaceGeometry.resolve(to, size: view.bounds.size).projection)
   }
 
   /// エディター全面・分割・端末だけの間の 6 方向（配置を写す口から）。
@@ -82,7 +82,7 @@ extension TabFacesViewTests {
     }
   }
 
-  /// グリップを押して起こす遷移も同じ口を通る（分割から焦点側の全面へ）。
+  /// 間の点を押して起こす遷移も同じ口を通る（分割から焦点側の全面へ）。
   func testHandleClickSlideKeepsTheFacesCovered() {
     measureSlide(from: Self.split, to: Self.editorOnly) { _ = $0.view.handle.onClick?() }
   }

@@ -96,8 +96,8 @@ final class WindowControllerFacesTests: OrbeTestCase {
 
   // MARK: - 引き手・継ぎ目
 
-  /// 端末だけのときに左縁の引き手を掴んで引くと、継ぎ目がポインタの下に付いて面が追従する（境は掴んだ点の
-  /// ずれを継ぎ目の帯の半幅に収めて保つ）。タブの配置は離すまで書き換えず、離したときに 1 回だけ確定する。
+  /// 端末だけのときに左縁の引き手を掴んで引くと、間がポインタの下に付いて面が追従する（間の中央は掴んだ点の
+  /// ずれを間の半幅に収めて保つ）。タブの配置は離すまで書き換えず、離したときに 1 回だけ確定する。
   func testNotchDragFollowsThePointerAndCommitsOnRelease() throws {
     let wc = WindowController()
     let tab = try XCTUnwrap(wc.activeTab)
@@ -106,24 +106,23 @@ final class WindowControllerFacesTests: OrbeTestCase {
     tab.onFacesChange = { changes += 1 }
     let handle = tab.view.handle
     let grab = handle.centerInWindow
-    let offset = min(grab.x, Theme.Layout.faceSeamGrip.width / 2)
+    let offset = min(grab.x, Theme.Layout.faceSplitGap / 2)
     let y = grab.y
 
     handle.mouseDown(with: .mouse(.leftMouseDown, at: grab, in: wc.window))
     handle.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 300, y: y), in: wc.window))
     handle.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 400, y: y), in: wc.window))
 
-    XCTAssertEqual(tab.view.resolved.editorWidth, 400 - offset, "境は掴んだ点のずれを保ってポインタに追従する")
-    XCTAssertEqual(handle.frame.midX, 400 - offset, "継ぎ目は境に跨がる")
+    XCTAssertEqual(handle.frame.midX, 400 - offset, "間の中央は掴んだ点のずれを保ってポインタに追従する")
     XCTAssertTrue(
-      handle.frame.minX <= 400 && 400 <= handle.frame.maxX, "引き手から引いても継ぎ目はポインタの下")
+      handle.frame.minX <= 400 && 400 <= handle.frame.maxX, "引き手から引いても間はポインタの下")
+    let ratio = try XCTUnwrap(FaceGeometry.ratio(seamX: 400 - offset, width: facesWidth(wc)))
     XCTAssertFalse(tab.view.editor.isHiddenOrHasHiddenAncestor, "引き出したエディター面は見えている")
     XCTAssertEqual(tab.faces, .terminalOnly, "離すまでタブの配置は変わらない")
     XCTAssertEqual(changes, 0)
 
     handle.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: 400, y: y), in: wc.window))
-    XCTAssertEqual(
-      tab.faces.editorRatio * facesWidth(wc), 400 - offset, accuracy: 0.5, "離した幅で確定")
+    XCTAssertEqual(tab.faces.editorRatio, ratio, accuracy: 0.0001, "離した位置で確定")
     XCTAssertEqual(tab.faces.focus, .terminal, "焦点は掴んだときのまま")
     XCTAssertEqual(changes, 1, "確定は 1 回")
   }
@@ -152,8 +151,8 @@ final class WindowControllerFacesTests: OrbeTestCase {
     XCTAssertTrue(wc.window.firstResponder === tab.view.editor, "焦点は残ったエディターへ")
   }
 
-  /// グリップを掴んだ瞬間に焦点の面へ first responder が戻り、引いて離しても焦点の面は変わらない。
-  func testGripGrabReturnsFocusToTheFocusedFaceAndDragKeepsIt() throws {
+  /// 間の点を掴んだ瞬間に焦点の面へ first responder が戻り、引いて離しても焦点の面は変わらない。
+  func testSeamGrabReturnsFocusToTheFocusedFaceAndDragKeepsIt() throws {
     let wc = WindowController()
     let tab = try XCTUnwrap(wc.activeTab)
     tab.setFaces(FaceLayout(editorRatio: 0.5, focus: .editor), animated: false)
@@ -164,6 +163,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
     let grab = handle.centerInWindow
     let offset = grab.x - handle.frame.midX
     let y = grab.y
+    let ratio = try XCTUnwrap(FaceGeometry.ratio(seamX: 300 - offset, width: facesWidth(wc)))
 
     handle.mouseDown(with: .mouse(.leftMouseDown, at: grab, in: wc.window))
     XCTAssertTrue(wc.window.firstResponder === tab.view.editor, "掴んだ瞬間に焦点の面へ戻る")
@@ -171,7 +171,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
     handle.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 300, y: y), in: wc.window))
     handle.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: 300, y: y), in: wc.window))
     XCTAssertEqual(tab.faces.focus, .editor, "焦点はエディターのまま")
-    XCTAssertEqual(tab.faces.editorRatio * facesWidth(wc), 300 - offset, accuracy: 0.5)
+    XCTAssertEqual(tab.faces.editorRatio, ratio, accuracy: 0.0001)
     XCTAssertTrue(wc.window.firstResponder === tab.view.editor)
   }
 
@@ -256,9 +256,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
     XCTAssertGreaterThan(content.width, 0, "前提: content が実サイズを持つ")
     XCTAssertEqual(
       tab.surface.bounds.size,
-      CGSize(
-        width: (content.width / 2).rounded(),
-        height: content.height), "端末は分割後の面の寸法")
+      FaceGeometry.resolve(tab.faces, size: content).frames.terminal.size, "端末は分割後のカードの寸法")
   }
 
   // MARK: - 器に包まれた端末

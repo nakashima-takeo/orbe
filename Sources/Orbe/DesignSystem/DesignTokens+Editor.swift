@@ -16,10 +16,8 @@ extension Theme.Color {
   static let faceNotchTerminalHover = editorDyn(light: 0xe3e1e9, dark: 0x312d3a)
   /// ホバー中の引き手の影。
   static let faceNotchShadow = editorDynAB(light: (0x5a4696, 0.14), dark: (0x000000, 0.35))
-  /// 継ぎ目の線と、グリップの地・枠。
-  static let faceSeamLine = editorHairline(0.16)
-  static let faceSeamGrip = editorDyn(light: 0xe7e3f1, dark: 0x2a2438)
-  static let faceSeamGripBorder = editorHairline(0.22)
+  /// ホバー中の間の 3 つの点。dark / light とも editorText と偶然同値だが役割が違うので別トークン。
+  static let faceSeamDotHover = editorDyn(light: 0x4d4368, dark: 0xcdc7e2)
   /// 空状態の ◐ の沈んだ塗り。
   static let editorGhost = editorDyn(light: 0xd9d3e6, dark: 0x3d3752)
   /// エディター面のアイコン・kbd の文字。dark / light とも kbKeyText と偶然同値だが役割が違うので別トークン。
@@ -102,15 +100,6 @@ extension Theme.Color {
 
   private static func editorDynA(light: Int, dark: Int, alpha: CGFloat) -> NSColor {
     editorDynAB(light: (light, alpha), dark: (dark, alpha))
-  }
-
-  /// borderInk の hairline（light は紙面で濃くする）。
-  private static func editorHairline(_ alpha: CGFloat) -> NSColor {
-    NSColor(name: nil) { ap in
-      let dark = ap.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-      return borderInk.withAlphaComponent(
-        dark ? alpha : alpha * CGFloat(Theme.Opacity.editorHairlineLight))
-    }
   }
 
   /// 外観ごとに色と α が違う色。
@@ -230,9 +219,14 @@ extension Theme.Layout {
   /// ホバー中の引き手の影（縁から離れる向きのずれと、ぼかし半径）。
   static let faceNotchShadowOffset: CGFloat = 2
   static let faceNotchShadowRadius: CGFloat = 5
-  /// 継ぎ目のグリップ（幅が継ぎ目の当たりの幅）と、その中の縦棒。
-  static let faceSeamGrip = CGSize(width: 10, height: 40)
-  static let faceSeamGripBar = CGSize(width: 2, height: 16)
+  /// 分割中、器の内側に取る余白と、面と面の間（継ぎ目）の幅。
+  static let faceSplitInset: CGFloat = 4
+  static let faceSplitGap: CGFloat = 8
+  /// 間の縦中央に縦に並べる 3 つの点の大きさと、点と点の隙間。
+  static let faceSeamDot: CGFloat = 2
+  static let faceSeamDotSpacing: CGFloat = 3
+  /// 間のうち押せる範囲の高さ（縦中央。幅は間の幅）。
+  static let faceSeamPress: CGFloat = 24
 }
 
 extension Theme.Radius {
@@ -240,8 +234,10 @@ extension Theme.Radius {
   static let editorTabClose: CGFloat = 6
   /// 引き手の縁と反対側の角。
   static let faceNotch: CGFloat = 6
-  static let faceSeamGrip: CGFloat = 5
-  static let faceSeamGripBar: CGFloat = 1
+  /// 分割中の面のカード。
+  static let faceCard: CGFloat = 6
+  /// 間の点の角。
+  static let faceSeamDot: CGFloat = 1
 }
 
 extension Theme.Stroke {
@@ -264,8 +260,8 @@ extension Theme.Opacity {
   static let faceNotchFill: Double = 0.16
   static let faceNotchBorder: Double = 0.4
   static let faceNotchBorderHover: Double = 0.65
-  /// グリップの縦棒（端末のキー色に掛ける α）。
-  static let faceSeamGripBar: Double = 0.85
+  /// 普段の間の点（端末のキー色に掛ける α）。
+  static let faceSeamDot: Double = 0.45
 }
 
 extension Theme.Motion {
