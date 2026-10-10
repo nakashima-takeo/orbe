@@ -100,7 +100,7 @@ private struct TaskPaletteIntakeShelfRowView: View {
 
   private var dimmed: Bool { row.intake != nil && row.count == 0 }
 
-  /// 「次 17:00 · 候補なし · 前回は失敗」。受信中は強調色、前回の失敗は赤（どちらも文字でも言う）。
+  /// 「次 17:00 · 候補なし · 前回は失敗」。実行中は強調色、前回の失敗は赤（どちらも文字でも言う）。
   private func status(_ intake: Intake) -> Text {
     let muted = { (value: String) in Text(value).foregroundStyle(Color.theme.textMuted) }
     var parts: [Text] = []
