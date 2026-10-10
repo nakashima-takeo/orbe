@@ -33,6 +33,9 @@ extension TaskPaletteModel {
       }
     case .tab:
       toggleScope()
+    case .return where press.modifiers.contains(.command):
+      // onSubmit（↵ = 選んだ行の操作）へ流さず握る。押し続けたリピートでは頼まない。
+      if press.phase == .down { askSecretary() }
     case .rightArrow:
       guard Self.isUnmodified(press), pick == nil, selectedTask != nil else { return .ignored }
       enterDetail()
@@ -107,6 +110,10 @@ extension TaskPaletteModel {
   }
 
   private func handleDetailKey(_ press: KeyPress, _ stop: TaskDetailStop) -> KeyPress.Result {
+    if press.key == .return, press.modifiers.contains(.command) {
+      if press.phase == .down, let task = selectedTask { openAsk(task.id) }
+      return .handled
+    }
     switch press.key {
     case .upArrow: moveField(-1)
     case .downArrow: moveField(1)
@@ -180,7 +187,7 @@ extension TaskPaletteModel {
     switch press.key {
     case .escape: endEditing(commit: draft.isMultiline)
     case .return where press.modifiers.contains(.command):
-      if !draft.isMultiline { endEditing(commit: true) }
+      if askingTaskID == nil, !draft.isMultiline { endEditing(commit: true) }
     case .tab, .backtab: break
     default: return .ignored
     }

@@ -93,7 +93,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(
       palette.detailStops(selected).prefix(2), [.field(.title), .agent], "タブが無ければ agent だけ")
 
-    tabs.update([(sessionId: "s-1", tab: .init(tabId: 7, title: "pr-214"))])
+    tabs.update([.init(sessionId: "s-1", tab: .init(tabId: 7, title: "pr-214"), isDormant: false)])
     XCTAssertEqual(
       palette.detailStops(selected).prefix(3), [.field(.title), .conversation, .addLink],
       "会話のタブと同じタブの agent は出さない")

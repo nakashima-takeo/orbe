@@ -17,6 +17,10 @@ struct TaskPaletteCard: View {
       VStack(spacing: 0) {
         header
         divider
+        if model.addTitle != nil {
+          TaskPaletteDestinationBar(model: model)
+          divider
+        }
         if model.pick != nil {
           TaskPalettePickBanner(model: model)
           divider
@@ -25,12 +29,15 @@ struct TaskPaletteCard: View {
           switch model.visibleTab {
           case .tasks:
             HStack(spacing: 0) {
-              TaskPaletteList(model: model)
-              Rectangle().fill(Color.theme.surface1).frame(width: Theme.Stroke.hairline)
-              // 選ぶ状態の間は、右の欄からタスクを変えさせない（キーは一覧の選択だけが効く）。
-              TaskPaletteDetail(model: model, focus: $focus)
-                .frame(width: detailWidth)
-                .allowsHitTesting(model.pick == nil)
+              TaskPaletteList(model: model, focus: $focus)
+              // 入力の行き先を選んでいる間は、一覧を広く使う（右の欄に出すタスクが無い）。
+              if model.selectedID != .add {
+                Rectangle().fill(Color.theme.surface1).frame(width: Theme.Stroke.hairline)
+                // 選ぶ状態の間は、右の欄からタスクを変えさせない（キーは一覧の選択だけが効く）。
+                TaskPaletteDetail(model: model, focus: $focus)
+                  .frame(width: detailWidth)
+                  .allowsHitTesting(model.pick == nil)
+              }
             }
           case .github:
             HStack(spacing: 0) {

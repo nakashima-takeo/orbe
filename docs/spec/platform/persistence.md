@@ -1,6 +1,6 @@
 ---
 title: workspace 永続
-description: 構成（workspace・タブ・cwd・エージェントセッション）の JSON 保存と起動時復元・エージェント resume・デバウンス保存、タスク一覧と受信の即時保存、壊れた原本の退避
+description: 構成（workspace・タブ・cwd・エージェントセッション）の JSON 保存と起動時復元・エージェント resume・デバウンス保存、タスク一覧・受信・秘書の即時保存、壊れた原本の退避
 updated: 2026-10-10
 ---
 
@@ -8,11 +8,11 @@ updated: 2026-10-10
 
 アプリを再起動しても作業の構成——workspace・タブ・cwd・エージェントセッション——が戻るための永続層。
 
-保存先は `~/Library/Application Support/<bundle-id>/` 直下。`<bundle-id>` はビルドチャネルごとに異なるため（[channel](channel.md)）、dev（Orbe Dev）と release は state を共有しない。環境変数 `ORBE_STATE_DIR`（非空）を設定するとその dir 直下へ移る——検証用の隔離インスタンス用途で、settings.json・tasks.json・intakes.json・gui.conf・取り込んだ通知音の `sounds/`・[制御 API](../control/api.md) の control.sock も同じ dir に同居する。テスト用にファイル位置を差し替える seam を持つ。
+保存先は `~/Library/Application Support/<bundle-id>/` 直下。`<bundle-id>` はビルドチャネルごとに異なるため（[channel](channel.md)）、dev（Orbe Dev）と release は state を共有しない。環境変数 `ORBE_STATE_DIR`（非空）を設定するとその dir 直下へ移る——検証用の隔離インスタンス用途で、settings.json・tasks.json・intakes.json・secretary.json・gui.conf・取り込んだ通知音の `sounds/`・[制御 API](../control/api.md) の control.sock も同じ dir に同居する。テスト用にファイル位置を差し替える seam を持つ。
 
 ## workspaces.json — 構成の永続
 
-保存するもの: workspace 名・root path・永続 ID（[タスク](tasks.md)が workspace を指すための内部専用の ID。外には見せない）・各 workspace の設定上書き（[workspace](workspace.md)・[settings](../palette/settings.md)）・最終使用時刻（`WorkspacePalette` の MRU 並べ替え用）・worktree パレットで前回新しいブランチを作ったときのベース（[worktree](../palette/worktree.md)）・アクティブ workspace・[Orbe の workspace](workspace.md#orbe-の-workspace) の永続 ID・ウィンドウサイズ／各 workspace のタブ群と active タブ／各タブの cwd・エージェントセッション・明示タイトル（[chrome](../chrome/chrome.md)）・面の配置（エディター幅の割合と焦点の面 → [editor/faces](../editor/faces.md)。既定＝端末だけのときは書かない）・エディターの状態（開いていた文書の実体パスの列とアクティブの実体パスと仮のタブの実体パス〔仮のタブが無ければ書かない〕 → [editor/shell](../editor/shell.md)、プロジェクト検索の検索語と 3 つの切替 → [editor/search](../editor/search.md)。文書が 1 つも無く問いが既定なら書かない。検索の結果は書かない）。
+保存するもの: workspace 名・root path・永続 ID（[タスク](tasks.md)が workspace を指すための内部専用の ID。外には見せない）・各 workspace の設定上書き（[workspace](workspace.md)・[settings](../palette/settings.md)）・最終使用時刻（`WorkspacePalette` の MRU 並べ替え用）・worktree パレットで前回新しいブランチを作ったときのベース（[worktree](../palette/worktree.md)）・アクティブ workspace・[Home](workspace.md#home) の永続 ID・ウィンドウサイズ／各 workspace のタブ群と active タブ／各タブの cwd・エージェントセッション・明示タイトル（[chrome](../chrome/chrome.md)）・面の配置（エディター幅の割合と焦点の面 → [editor/faces](../editor/faces.md)。既定＝端末だけのときは書かない）・エディターの状態（開いていた文書の実体パスの列とアクティブの実体パスと仮のタブの実体パス〔仮のタブが無ければ書かない〕 → [editor/shell](../editor/shell.md)、プロジェクト検索の検索語と 3 つの切替 → [editor/search](../editor/search.md)。文書が 1 つも無く問いが既定なら書かない。検索の結果は書かない）。
 
 ### 復元の挙動
 
@@ -24,7 +24,7 @@ updated: 2026-10-10
 - エージェントセッションは hook 由来の (CLI 名, session_id)（[agent/notify](../agent/notify.md)）をタブに持つ。復元直後のタブは記録を凍結したまま休眠し、resume の解決——CLI 別の resume コマンド（claude `--resume <id>`／agy `--conversation <id>`／codex `resume <id>`）＋ログインシェル PATH——は**タブ起床（materialize 開始）時**に行う。CLI 名が未対応・session_id が安全文字集合外なら素のシェルで起きる——生成コマンドへの注入を防ぐため。セッション記録そのものは休眠のあいだ保持され、resume 可否は起床まで判定しない。
 - resume が注入する PATH は `app-state.json` のキャッシュ値から**同期で**読む——起動復元をシェル起動の subprocess にブロックさせないため。キャッシュが無い初回は上限つきで待ち、尽きれば既知パスだけで起こす（[shell-path](shell-path.md)）。
 - タブ 1 枚分の復元単位は、閉じたセッションの復元（⇧⌘T パレット → [closed-agents](../palette/closed-agents.md)、制御 API `restore_sessions`）と共有する。ただし閉じたセッションの復元が持ち込むのは cwd と同一性だけで、明示タイトルは付かず、位置は新規タブと同じ規則（同じ worktree の連の右端、無ければ末尾）になる。閉じたセッションの記録はこのファイルではなく[寿命ログ](session-log.md)が持つ。
-- 復元の後に Orbe の workspace を保証する（無ければ末尾に足す・root は専用フォルダへそろえる → [workspace](workspace.md#orbe-の-workspace)）。保存されている Orbe の workspace の root は読み戻さない。
+- 復元の後に Home を保証する（無ければ末尾に足す・root は専用フォルダへそろえる → [workspace](workspace.md#home)）。保存されている Home の root は読み戻さない。
 - ウィンドウサイズは画面 `visibleFrame` へクランプして復元し、位置は保存せず毎回中央表示。記憶するのはユーザー意図サイズ（クランプ前）で、小画面での表示クランプは記憶値を破壊しない。
 - `NSWindow.isRestorable = false` で OS 標準の復元は使わない。
 
@@ -32,9 +32,9 @@ updated: 2026-10-10
 
 ### 互換と破損時の退避
 
-現行形式は version 4 で、タブは `{cwd, agent?, explicitTitle?, faces?, editor?}` の平坦な形。旧形式（version 2 / 3。タブが分割ツリーを持つ）は移行専用の経路が一度だけ読み、分割ツリーの葉を深さ優先順に 1 葉 = 1 タブへ展開する——明示タイトルは先頭の葉に付け、active タブは旧 active タブの先頭葉へ写し、cwd の無い葉は workspace の root path で起こす。次回保存で version 4 へ置き換わる（workspace 一覧・cwd・エージェントセッション・workspace 別設定を失わない。失うのは配置と分割比だけ）。旧 camelCase の設定上書きもこの経路だけが読む。後から足したフィールドは**欠落**を許容する。「あるが読めない」を既定へ落とすのはタブの面の配置（`faces`。読めなければ端末だけへ、割合が範囲外なら 0…1 へ丸めて焦点を正規形へ寄せる）・エディターの状態（`editor`。文書の列とアクティブ、検索の問いの 2 つをそれぞれ独立に扱い、読めない方だけを無しへ。仮のタブのパスが読めなければ仮のタブ無しへ落ち、列とアクティブは残る。問いの中の読めない項目は既定へ）と設定層（`settingsOverride`）と前回のベース（`lastWorktreeBase`。読めなければ「前回なし」）と workspace の永続 ID と Orbe の workspace を指す永続 ID の 6 つだけで（workspace の永続 ID は無いか読めなければその workspace にだけ新しく振る。旧形式から読んだ場合も新しく振る。Orbe の workspace を指す値は読めなければ「無し」へ落ち、起動時の保証が新しく足す）、そのほか——タブ本体（`cwd`・エージェントセッション）・`explicitTitle`・`lastUsedAt`・`windowSize`・workspace の名前や index——はファイル全体の fallback へ落ちて**全 workspace を失う**。optional で後から足したフィールドも、既定へ落とす decode を自分で書かない限りこちら側になる。設定層（global・workspace 上書きとも）は現行形式なら読めない 1 キーだけを落として残りを活かし、値ごと読めなければ上書き無し（global 継承）へ落ちる——1 項目の異常で層ごと消さないため。旧 camelCase の読みは global 移行・workspace 上書きとも all-or-nothing で、そこでは範囲外の `theme` が既定値として層に載る。値域を持つ項目は、範囲外の値を**最寄りの端へ丸めて**層に載せる——読出には拒否を返す先が無く、既定へ落とすと「大きくしたい／小さくしたい」という書き手の意図まで捨てるため。丸めは書き込み経路の検証と同じ値域を関門 1 つで共有する。
+現行形式は version 4 で、タブは `{cwd, agent?, explicitTitle?, faces?, editor?}` の平坦な形。旧形式（version 2 / 3。タブが分割ツリーを持つ）は移行専用の経路が一度だけ読み、分割ツリーの葉を深さ優先順に 1 葉 = 1 タブへ展開する——明示タイトルは先頭の葉に付け、active タブは旧 active タブの先頭葉へ写し、cwd の無い葉は workspace の root path で起こす。次回保存で version 4 へ置き換わる（workspace 一覧・cwd・エージェントセッション・workspace 別設定を失わない。失うのは配置と分割比だけ）。旧 camelCase の設定上書きもこの経路だけが読む。後から足したフィールドは**欠落**を許容する。「あるが読めない」を既定へ落とすのはタブの面の配置（`faces`。読めなければ端末だけへ、割合が範囲外なら 0…1 へ丸めて焦点を正規形へ寄せる）・エディターの状態（`editor`。文書の列とアクティブ、検索の問いの 2 つをそれぞれ独立に扱い、読めない方だけを無しへ。仮のタブのパスが読めなければ仮のタブ無しへ落ち、列とアクティブは残る。問いの中の読めない項目は既定へ）と設定層（`settingsOverride`）と前回のベース（`lastWorktreeBase`。読めなければ「前回なし」）と workspace の永続 ID と Home を指す永続 ID の 6 つだけで（workspace の永続 ID は無いか読めなければその workspace にだけ新しく振る。旧形式から読んだ場合も新しく振る。Home を指す値は読めなければ「無し」へ落ち、起動時の保証が新しく足す）、そのほか——タブ本体（`cwd`・エージェントセッション）・`explicitTitle`・`lastUsedAt`・`windowSize`・workspace の名前や index——はファイル全体の fallback へ落ちて**全 workspace を失う**。optional で後から足したフィールドも、既定へ落とす decode を自分で書かない限りこちら側になる。設定層（global・workspace 上書きとも）は現行形式なら読めない 1 キーだけを落として残りを活かし、値ごと読めなければ上書き無し（global 継承）へ落ちる——1 項目の異常で層ごと消さないため。旧 camelCase の読みは global 移行・workspace 上書きとも all-or-nothing で、そこでは範囲外の `theme` が既定値として層に載る。値域を持つ項目は、範囲外の値を**最寄りの端へ丸めて**層に載せる——読出には拒否を返す先が無く、既定へ落とすと「大きくしたい／小さくしたい」という書き手の意図まで捨てるため。丸めは書き込み経路の検証と同じ値域を関門 1 つで共有する。
 
-壊れている・非互換バージョン・空 JSON は新規と同じ構成（default と Orbe の workspace）で fallback する。このとき**原本が在るのに使えなかった**場合（読めない・構造破損・非互換バージョン）は、fallback する前に原本を同じディレクトリの `workspaces-broken-<日時>.json` へ退避する——直後の既定起動が打つ保存が原本を潰すため。退避物は最新 1 件だけ残す。退避できなかった原本が原位置に残っている間は、そのセッションはその場所へ書かない（保全できていない原本を潰さないため）。ファイル不在（初回起動）と空 JSON は失う構成が無いので退避しない。この退避の規律（退避・最新 1 件だけ残す・退避できなければ書かない）は tasks.json・intakes.json と共有する。
+壊れている・非互換バージョン・空 JSON は新規と同じ構成（default と Home）で fallback する。このとき**原本が在るのに使えなかった**場合（読めない・構造破損・非互換バージョン）は、fallback する前に原本を同じディレクトリの `workspaces-broken-<日時>.json` へ退避する——直後の既定起動が打つ保存が原本を潰すため。退避物は最新 1 件だけ残す。退避できなかった原本が原位置に残っている間は、そのセッションはその場所へ書かない（保全できていない原本を潰さないため）。ファイル不在（初回起動）と空 JSON は失う構成が無いので退避しない。この退避の規律（退避・最新 1 件だけ残す・退避できなければ書かない）は tasks.json・intakes.json・secretary.json と共有する。
 
 ## tasks.json — タスク一覧の永続
 
@@ -47,6 +47,12 @@ updated: 2026-10-10
 [受信](intake.md)の定義と、回を重ねて溜まるもの（前回の取得結果・全件見直しの印・最後に回った時刻・回の記録）と、提案を 1 つに持つ。タスク一覧と同じく変更のたびに即座に保存し、1 回の確定を 1 度の書き込みにする——定義と蓄積を別ファイルに割ると、確定が途中で落ちたときに両者が食い違うため。tasks.json に同居させないのは、人が書き溜めるタスク一覧の退避の規律に、機械が書く蓄積を巻き込まないため。後から足すフィールドは欠落を許容する。
 
 不在は空で始める。在るのに使えない（読めない・構造破損・非互換 version・定義の不正・ID やリンクの重複）ときは、同じ規律で `intakes-broken-<日時>.json` へ退避してから空で始める。
+
+## secretary.json — 秘書の永続
+
+[秘書](../agent/secretary.md)の会話 ID と、まだ届けていない頼みの列（受けた順。1 件は受けた時刻と 1 行の本文）を持つ。頼みを受けたとき・届けたとき・会話 ID を書き直したときに、即座に保存する——人が打った頼みは、Orbe を終了しても強制終了しても消えない。workspaces.json に同居させないのは、構成の保存はデバウンスで即時でなく、秘書は workspace の構成とは別の関心のため。起動時の復元より前に読む（休眠の秘書のタブを起こすときの再開が、記録の会話 ID を引くため）。
+
+不在は空で始める。在るのに使えない（読めない・構造破損・非互換 version・再開に使えない文字の会話 ID・1 行でない本文）ときは、同じ規律で `secretary-broken-<日時>.json` へ退避してから空で始める。
 
 ## settings.json / app-state.json
 

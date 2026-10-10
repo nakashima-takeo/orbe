@@ -19,27 +19,38 @@ import Observation
     self.tabs = tabs
   }
 
-  /// タブごとの (セッション ID, タブ) から作り直す。同じ会話が複数のタブにあれば、先に来た方を取る。
-  func update(_ entries: [(sessionId: String, tab: Tab)]) {
+  /// 索引の材料（タブ 1 枚の会話）。
+  struct Entry {
+    let sessionId: String
+    let tab: Tab
+    let isDormant: Bool
+  }
+
+  /// タブごとの会話から作り直す。同じ会話が複数のタブにあれば、生きているタブを休眠のタブより優先し、その中では先に
+  /// 来た方を取る（人が同じ会話を手で再開したとき、動いている方へ届ける）。
+  func update(_ entries: [Entry]) {
     var next: [String: Tab] = [:]
-    for (sessionId, tab) in entries where next[sessionId] == nil { next[sessionId] = tab }
+    for entry in entries.filter({ !$0.isDormant }) + entries.filter(\.isDormant)
+    where next[entry.sessionId] == nil {
+      next[entry.sessionId] = entry.tab
+    }
     if next != tabs { tabs = next }
   }
 }
 
 extension WindowController {
-  /// 全タブから会話ごとのタブの索引を作り直す（`flushChrome` から）。
+  /// 全タブから会話ごとのタブの索引を作り直す（`flushChrome` から。秘書の係は引く前にも）。
   func refreshAgentSessionTabs() {
     agentSessionTabs.update(
       store.allTabs().compactMap { ref in
         let tab = ref.tab
         guard let sessionId = tab.agentSlot.session?.sessionId else { return nil }
-        return (
-          sessionId,
-          AgentSessionTabs.Tab(
+        return AgentSessionTabs.Entry(
+          sessionId: sessionId,
+          tab: AgentSessionTabs.Tab(
             tabId: tab.id,
-            title: tab.displayTitle(workspaceRoot: workspaces[ref.workspaceIndex].rootPath))
-        )
+            title: tab.displayTitle(workspaceRoot: workspaces[ref.workspaceIndex].rootPath)),
+          isDormant: tab.isDormant)
       })
   }
 }

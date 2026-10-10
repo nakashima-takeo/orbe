@@ -289,7 +289,7 @@ extension WindowController: ControlTarget {
     return .success(["ok": true])
   }
 
-  /// workspace の rootPath を変更する（`ws dir`）。id 未発見 -32004・Orbe の workspace -32000・rootPath 空 -32602。
+  /// workspace の rootPath を変更する（`ws dir`）。id 未発見 -32004・Home -32000・rootPath 空 -32602。
   /// 意味論は GUI（パレットのディレクトリ変更）と同一: trim・`~` ホーム展開・実在チェックなし。
   func controlSetWorkspaceRoot(workspaceId: Int, rootPath: String) -> Result<Any, ControlError> {
     guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else {
@@ -297,7 +297,7 @@ extension WindowController: ControlTarget {
     }
     guard store.canChangeDir(index) else {
       return .failure(
-        ControlError(code: -32000, message: "cannot change the Orbe workspace directory"))
+        ControlError(code: -32000, message: "cannot change the Home directory"))
     }
     guard !rootPath.trimmingCharacters(in: .whitespaces).isEmpty else {
       return .failure(ControlError(code: -32602, message: "workspace rootPath is empty"))
@@ -313,8 +313,8 @@ extension WindowController: ControlTarget {
     }
     // closeWorkspace は消せない workspace を no-op で握るため、CLI へ明示エラーを返すべく事前に理由を引く。
     switch store.removalBlocker(index) {
-    case .orbeWorkspace:
-      return .failure(ControlError(code: -32000, message: "cannot remove the Orbe workspace"))
+    case .home:
+      return .failure(ControlError(code: -32000, message: "cannot remove Home"))
     case .lastRegularWorkspace:
       return .failure(
         ControlError(code: -32000, message: "cannot remove the last regular workspace"))

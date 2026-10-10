@@ -8,7 +8,7 @@ import Foundation
 enum TaskPaletteSamples {
   static let opened = TaskPaletteWorkspaces.Entry(id: UUID(), name: "orbe")
   static let other = TaskPaletteWorkspaces.Entry(id: UUID(), name: "web-app")
-  /// Orbe の workspace（受信の提案をタスクにすると付く）。
+  /// Home（受信の提案をタスクにすると付く）。
   static let home = UUID()
   /// 開いた workspace の root。
   static let root = "/work/orbe"

@@ -13,7 +13,7 @@ extension WorktreePaletteDataProvider {
     _ requests: [CleanDeleteRequest], token: CleanRunToken,
     progress: @escaping (CleanProgress) -> Void, completion: @escaping () -> Void
   ) {
-    guard let repo else {
+    guard let repo = facts.repo else {
       for request in requests {
         progress(
           .finished(
@@ -27,10 +27,10 @@ extension WorktreePaletteDataProvider {
     }
     WorktreeCleaner(
       repo: repo, localization: localization,
-      prunablePaths: Set(worktrees.filter(\.isPrunable).map(\.path))
+      prunablePaths: Set(facts.worktrees.filter(\.isPrunable).map(\.path))
     ).run(requests, token: token, progress: progress) { [weak self] in
       // 削除は必ず prune の後に起きるので、分類ごと引き直してよい。
-      self?.loadGit(repo, classifying: true)
+      self?.facts.loadGit(repo, classifying: true)
       completion()
     }
   }

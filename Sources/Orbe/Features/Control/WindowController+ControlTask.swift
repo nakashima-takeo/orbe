@@ -146,7 +146,7 @@ extension WindowController {
   /// list_tasks の要素。workspace は今の workspaceId と名前で見せ、解決できない参照（削除済み）は
   /// 「なし」と同じくキーごと出さない。worktree もディレクトリが無ければ出さない。無い値はキーごと出さない。
   /// 外した項目は出さない（自動の結び付けのための内部の記録）。
-  private func taskJSON(_ task: TaskItem) -> [String: Any] {
+  func taskJSON(_ task: TaskItem) -> [String: Any] {
     var json: [String: Any] = [
       "taskId": task.id, "title": task.title, "status": task.status.rawValue,
       "priority": task.priority.rawValue, "description": task.description,

@@ -6,7 +6,7 @@ import XCTest
 /// 今すぐ受信・止める・消す。本物の `IntakeStore`・`IntakeRunner`・`TaskStore` を読み書きする（取得は始まっても終わらない）。
 ///
 /// 壊れると何が起きるか。↵ や ⌘⌫ が光っている行とは別の提案に当たる（タスクにした・捨てた直後や、裏の回が確定した直後）。
-/// タスクにした提案が Orbe の workspace に付かず、期限やリンクを失う。消えた受信の中身が残り、⌘⌫ が別の受信を消す。
+/// タスクにした提案が Home に付かず、期限やリンクを失う。消えた受信の中身が残り、⌘⌫ が別の受信を消す。
 /// 走っている受信の今すぐ受信が黙って無視される。
 @MainActor
 final class TaskPaletteIntakeModelTests: OrbeTestCase {
@@ -70,18 +70,23 @@ final class TaskPaletteIntakeModelTests: OrbeTestCase {
 
   // MARK: - さばく
 
-  func testEnterMakesATodoTaskOnHomeAndSelectsTheSamePosition() throws {
+  /// ⌘⇧X で人が受けて足すタスクなので、入力欄から足すのと同じく、その優先度の未着手の先頭に入る。
+  func testEnterMakesATodoTaskOnHomeAtTheHeadOfMediumAndSelectsTheSamePosition() throws {
     let palette = palette()
     let tasks = palette.store.tasks.count
 
     palette.submit()
 
-    let task = try XCTUnwrap(palette.store.tasks.last)
+    let task = try XCTUnwrap(palette.store.tasks.first { $0.title == "見積もりを山田さんに送る" })
     XCTAssertEqual(palette.store.tasks.count, tasks + 1)
+    XCTAssertEqual(
+      palette.store.tasks.firstIndex { $0.status == .todo && $0.priority != .high }.map {
+        palette.store.tasks[$0].id
+      }, task.id, "未着手の中の先頭")
     XCTAssertEqual(task.title, "見積もりを山田さんに送る")
     XCTAssertEqual(task.status, .todo)
     XCTAssertEqual(task.due, TaskItem.DueDate("2025-10-10"))
-    XCTAssertEqual(task.workspace, TaskPaletteSamples.home, "Orbe の workspace に付く")
+    XCTAssertEqual(task.workspace, TaskPaletteSamples.home, "Home に付く")
     XCTAssertTrue(task.description.hasPrefix("https://example.slack.com/archives/D01-1\n\n"))
     XCTAssertEqual(palette.intake.store.proposals[0].state, .accepted(taskId: task.id))
     XCTAssertEqual(palette.intake.proposalIDs, [2, 3])

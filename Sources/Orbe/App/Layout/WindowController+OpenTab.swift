@@ -16,25 +16,46 @@ extension WindowController {
   /// `cwd` に nil を渡すと対象 workspace のアクティブタブの cwd → その workspace の rootPath へ落ちる
   /// （`newTabCwd(inWorkspaceAt:)`）。戻り値は生えたタブ・workspace の id で、
   /// workspaceIndex が範囲外ならタブを作らず nil。`agent` は `command` が起こす agent の command 名（agent を
-  /// タブのコマンドとして起こすとき）。
+  /// タブのコマンドとして起こすとき）。`selects` が偽なら選ばずに起こす（`wakeUnselected`）——人が見ている
+  /// workspace とタブを変えずに、裏で agent を起こす経路（秘書・`start_task`）が使う。
   @discardableResult
   func openTab(
     workspaceIndex: Int, cwd: String?, command: String? = nil, env: [String: String] = [:],
-    agent: String? = nil
+    agent: String? = nil, selects: Bool = true
   ) -> OpenedTab? {
     guard workspaces.indices.contains(workspaceIndex) else { return nil }
     let initialCwd = cwd ?? store.newTabCwd(inWorkspaceAt: workspaceIndex)
     let tab = wire(
       TerminalTab(
         cwd: initialCwd, command: command, env: env, agent: agent, editorSurfaces: editorSurfaces))
-    let index = store.insertTab(tab, intoWorkspaceAt: workspaceIndex)  // 背景 WS はここで active も新タブへ
-    if workspaceIndex == activeWorkspace {
-      select(index)  // surface を起こす（mount）
+    if selects {
+      let index = store.insertTab(tab, intoWorkspaceAt: workspaceIndex)  // 背景 WS はここで active も新タブへ
+      if workspaceIndex == activeWorkspace {
+        select(index)  // surface を起こす（mount）
+      } else {
+        materializeOffscreen(tab, in: workspaces[workspaceIndex])
+      }
     } else {
-      materializeOffscreen(tab, in: workspaces[workspaceIndex])
+      _ = store.insertTabUnselected(tab, intoWorkspaceAt: workspaceIndex)
+      wakeUnselected(tab)
     }
     scheduleSave()
     return OpenedTab(tabId: tab.id, workspaceId: workspaces[workspaceIndex].id)
+  }
+
+  /// 既にあるタブ（休眠のタブを含む）の surface を、選ばずに起こす。休眠のタブは起こす時点で再開が走る。
+  /// 背景 workspace なら前面化せずに起こし（`materializeOffscreen`）、前面の workspace なら隠れタブとして mount する。
+  /// 前面の workspace にタブがそれしか無い（0 タブの空表示だった）なら、隠すと「選んでいるタブが見えない」状態に
+  /// なるので、選んで見せる。
+  func wakeUnselected(_ tab: TerminalTab) {
+    guard
+      let index = workspaces.firstIndex(where: { ws in ws.tabs.contains { $0 === tab } })
+    else { return }
+    let ws = workspaces[index]
+    guard index == activeWorkspace else { return materializeOffscreen(tab, in: ws) }
+    if ws.tabs.count == 1 { return select(0) }
+    mountTab(tab, in: ws, visible: false)
+    refreshChrome()
   }
 
   /// 背景 workspace に生えたタブの surface を、前面化せずに起こす。

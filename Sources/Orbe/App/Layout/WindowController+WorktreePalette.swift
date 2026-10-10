@@ -16,6 +16,10 @@ extension WindowController {
   ///
   /// ↵ で worktree が用意できたら、タブを開く前に、決定の時点の文脈のタスクを進行中にしてその worktree を
   /// 付ける（`settleWorktreePalette`）。
+  ///
+  /// Home のタスクから開いたときは、リポジトリを探す基点を `start_task` と同じ規則のタスクのフォルダ
+  /// （`HomeTaskFolder`。無ければ作る）にする——Home は git の外なので、一覧はそのフォルダの「このディレクトリ」の
+  /// 1 行になり、↵ でそこがタスクの作業場として付く。
   func showWorktreePalette(task taskID: Int? = nil) {
     if model.overlay == .worktreePalette {
       model.worktreePalette?.focus()
@@ -29,6 +33,7 @@ extension WindowController {
       frontsWorkspace: task != nil)
     let p = WorktreePaletteModel(
       tasks: taskStore, githubItems: .shared, agents: worktreeAgents, task: task?.id)
+    if let task { readHomeTaskFolder(task, p, binding) }
     guard let provider = makeWorktreePaletteProvider(p, binding) else { return }
     p.setTargets(
       agents: agentLauncher.detectedAgents,
@@ -50,7 +55,7 @@ extension WindowController {
       let launch = WorktreePaletteLaunch(target: target, task: p.task?.id, binding: binding)
       p.errorMessage = nil
       p.isPreparing = true  // 進捗表示 ON。非同期 worktree 作成の待機中だけフッターにスピナが出る。
-      provider.prepareDirectory(for: destination) { [weak self] outcome in
+      provider.facts.prepareDirectory(for: destination) { [weak self] outcome in
         guard let self, let p = self.model.worktreePalette else { return }
         switch outcome {
         case .resolved(let resolution):
@@ -83,8 +88,23 @@ extension WindowController {
     reconfirmFocusNextTick()  // 別 overlay からの遷移で去りゆくカードの teardown に勝つ
   }
 
-  /// 結び付いた workspace のリポジトリを読む provider（基点はその workspace のアクティブタブの cwd、0 タブなら
-  /// root path）。workspace が既に消えていれば nil。
+  /// Home のタスクなら、リポジトリを探す基点をタスクのフォルダ（無ければ作る）にする。用意できなければ理由を出し、
+  /// いつもの基点で開く。
+  private func readHomeTaskFolder(
+    _ task: TaskItem, _ p: WorktreePaletteModel, _ binding: WorktreePaletteBinding
+  ) {
+    guard let workspace = binding.workspace,
+      let index = workspaces.firstIndex(where: { $0 === workspace }), store.isHome(index)
+    else { return }
+    switch prepareHomeTaskFolder(task) {
+    case .success(let workplace): binding.directory = workplace.path
+    case .failure(.failed(let message)), .failure(.invalid(let message)):
+      p.errorMessage = message
+    }
+  }
+
+  /// 結び付いた workspace のリポジトリを読む provider（基点は Home のタスクのフォルダ、無ければその workspace の
+  /// アクティブタブの cwd、0 タブなら root path）。workspace が既に消えていれば nil。
   private func makeWorktreePaletteProvider(
     _ p: WorktreePaletteModel, _ binding: WorktreePaletteBinding
   ) -> WorktreePaletteDataProvider? {
@@ -92,19 +112,24 @@ extension WindowController {
       let index = workspaces.firstIndex(where: { $0 === workspace })
     else { return nil }
     return WorktreePaletteDataProvider(
-      cwd: store.newTabCwd(inWorkspaceAt: index), model: p, localization: localization,
+      cwd: binding.directory ?? store.newTabCwd(inWorkspaceAt: index), model: p,
+      localization: localization,
       worktreeTemplate: settingsStore.effective(override: workspace.settingsOverride)[
         SettingKeys.worktreeDir],
       tabOccupancies: tabOccupancies(), previousBase: workspace.lastWorktreeBase)
   }
 
   /// 札を外した。開いた時点の workspace（消えていれば今の workspace）へ結び付け直し、前面化もやめる。
-  /// タスクの workspace が別だったなら、そのリポジトリの一覧を捨てて、開いた時点の workspace のリポジトリを
-  /// 読み直す（前の provider は切り離し、遅れて着地した読み取りがパレットを書かないようにする）。
+  /// タスクの workspace が別だった・Home のタスクのフォルダを読んでいたなら、その一覧を捨てて、開いた時点の
+  /// workspace のリポジトリを読み直す（前の provider は切り離し、遅れて着地した読み取りがパレットを書かないようにする）。
   private func returnWorktreePaletteToOpenedWorkspace(_ binding: WorktreePaletteBinding) {
     binding.frontsWorkspace = false
+    let readTaskFolder = binding.directory != nil
+    binding.directory = nil
     let opened = binding.opened ?? current
-    guard opened !== binding.workspace, let p = model.worktreePalette else { return }
+    guard opened !== binding.workspace || readTaskFolder, let p = model.worktreePalette else {
+      return
+    }
     binding.workspace = opened
     model.worktreePaletteProvider?.detach()
     p.discardRepositoryFacts()
@@ -143,7 +168,7 @@ extension WindowController {
   /// その worktree を付けてから（タスクが消えていたら何もしない）起動し、失敗はモデルが畳む——失敗の経路は
   /// タスクを変えない。
   private func settleWorktreePalette(
-    _ resolution: WorktreePaletteDataProvider.DirectoryResolution, _ launch: WorktreePaletteLaunch
+    _ resolution: WorktreeRepoFacts.DirectoryResolution, _ launch: WorktreePaletteLaunch
   ) {
     guard let p = model.worktreePalette else { return }
     switch resolution {
@@ -161,7 +186,7 @@ extension WindowController {
     }
   }
 
-  /// 最新化画面の 2 択を配線する。手順（fetch → fast-forward → 作成）は provider が持ち、ここは
+  /// 最新化画面の 2 択を配線する。手順（fetch → fast-forward → 作成）はリポジトリの事実の層が持ち、ここは
   /// 進行（作成が始まった）と終端をモデルへ流すだけ。
   private func wireWorktreePaletteRefresh(
     _ p: WorktreePaletteModel, _ binding: WorktreePaletteBinding
@@ -173,11 +198,11 @@ extension WindowController {
       let launch = WorktreePaletteLaunch(target: target, task: p.task?.id, binding: binding)
       switch choice {
       case .asIs:
-        provider.createLocalBranchWorktree(name: sync.name) { [weak self] resolution in
+        provider.facts.createLocalBranchWorktree(name: sync.name) { [weak self] resolution in
           self?.settleWorktreePalette(resolution, launch)
         }
       case .refreshed:
-        provider.refreshAndCreate(
+        provider.facts.refreshAndCreate(
           sync, creating: { [weak self] in self?.model.worktreePalette?.refresh?.beginCreating() },
           completion: { [weak self] result in
             guard let self else { return }
@@ -231,6 +256,8 @@ private final class WorktreePaletteBinding {
   weak var workspace: Workspace?
   /// 開いた後に、その workspace と新しいタブを前面にする。
   var frontsWorkspace: Bool
+  /// リポジトリを探す基点（Home のタスクのフォルダ）。nil は workspace の今の場所。
+  var directory: String?
 
   init(opened: Workspace, workspace: Workspace, frontsWorkspace: Bool) {
     self.opened = opened

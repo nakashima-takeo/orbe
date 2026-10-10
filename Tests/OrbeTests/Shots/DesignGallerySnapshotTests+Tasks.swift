@@ -59,6 +59,7 @@ extension DesignGallerySnapshotTests {
     try write("tasks_detail_add_link.png", addLink)
 
     try renderTaskWaitConditionSnapshots(write)
+    try renderTaskSecretarySnapshots(write)
     try renderTaskPaletteGitHubSnapshots(write)
     try renderTaskPaletteIntakeSnapshots(write)
 

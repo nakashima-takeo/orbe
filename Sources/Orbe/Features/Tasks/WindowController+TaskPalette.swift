@@ -19,7 +19,7 @@ extension WindowController {
       store: taskStore, githubItems: .shared, viewer: .shared, openLists: .shared,
       root: base, agents: worktreeAgents, sessionTabs: agentSessionTabs, intakes: intakeRunner,
       workspaces: TaskPaletteWorkspaces(
-        opened: entry(current), all: workspaces.map(entry), home: store.orbeWorkspaceId),
+        opened: entry(current), all: workspaces.map(entry), home: store.homeWorkspaceId),
       now: Date(), timeZone: .current)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
     p.onOpenURL = { NSWorkspace.shared.open($0) }
@@ -29,6 +29,14 @@ extension WindowController {
       _ = self?.controlFocusTab(tabId: tabId)
     }
     p.onContinueWait = { [weak self] id in self?.continueWait(taskId: id) }
+    p.onAskSecretary = { [weak self] ask in
+      guard let self else { return .failure(.claudeMissing) }
+      do throws(Secretary.Refusal) {
+        return .success(try self.secretary.ask(ask))
+      } catch {
+        return .failure(error)
+      }
+    }
     model.taskPalette = p
     model.overlay = .taskPalette
     p.focus()

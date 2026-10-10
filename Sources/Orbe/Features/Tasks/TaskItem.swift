@@ -44,6 +44,9 @@ struct TaskItem: Codable, Equatable, Identifiable {
 
   enum Priority: String, Codable, CaseIterable {
     case high, medium, low
+
+    /// 高いほど小さい。
+    var rank: Int { Self.allCases.firstIndex(of: self)! }
   }
 
   /// 待ちの段階。両方を同時に持つことは型で表せない。

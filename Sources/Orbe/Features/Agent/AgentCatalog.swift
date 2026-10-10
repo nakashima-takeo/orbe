@@ -105,20 +105,37 @@ final class AgentCatalog {
       && sessionId.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." }
   }
 
-  /// 各 CLI の resume コマンド文字列（`/bin/sh -c` 経由で実行される前提）。`firstInput` があれば、会話の最初の入力として
-  /// その CLI の席に添える。未対応 agent・安全な文字集合（UUID 等）外の sessionId は nil（呼び出し側が素のシェルへ
-  /// fallback）。command は表のリテラルでのみ一致し、sessionId は文字集合検証し、入力はシェルの単語として引用するため
-  /// shell インジェクションを防ぐ。
-  static func resumeCommand(forAgent command: String, sessionId: String, firstInput: String? = nil)
-    -> String?
-  {
+  /// 各 CLI の resume コマンド文字列（`/bin/sh -c` 経由で実行される前提）。`arguments` は再開に添える追加の引数
+  /// （1 つずつシェルの単語として引用する）。`firstInput` があれば、会話の最初の入力としてその CLI の席に添える。
+  /// 未対応 agent・安全な文字集合（UUID 等）外の sessionId は nil（呼び出し側が素のシェルへ fallback）。command は
+  /// 表のリテラルでのみ一致し、sessionId は文字集合検証し、引数と入力はシェルの単語として引用するため shell
+  /// インジェクションを防ぐ。
+  static func resumeCommand(
+    forAgent command: String, sessionId: String, arguments: [String] = [],
+    firstInput: String? = nil
+  ) -> String? {
     guard isSafeSessionId(sessionId), let profile = profile(command) else { return nil }
-    var words = [profile.command, profile.resumeFlag, sessionId]
-    if let firstInput {
-      if case .flag(let flag) = profile.firstInput { words.append(flag) }
-      words.append(ShellWord.quoted(firstInput))
-    }
-    return words.joined(separator: " ")
+    return
+      ([profile.command, profile.resumeFlag, sessionId] + arguments.map(ShellWord.quoted)
+      + firstInputWords(profile, firstInput)).joined(separator: " ")
+  }
+
+  /// 新しく起こすコマンド文字列（`/bin/sh -c` 経由）。実行ファイルは検出した絶対パスで起こす。`arguments` と
+  /// `firstInput` の添え方は `resumeCommand` と同じ。
+  static func startCommand(_ agent: AgentCLI, arguments: [String] = [], firstInput: String? = nil)
+    -> String
+  {
+    let input = profile(agent.command).map { firstInputWords($0, firstInput) } ?? []
+    return ([ShellWord.quoted(agent.path)] + arguments.map(ShellWord.quoted) + input)
+      .joined(separator: " ")
+  }
+
+  private static func firstInputWords(_ profile: AgentProfile, _ firstInput: String?) -> [String] {
+    guard let firstInput else { return [] }
+    var words: [String] = []
+    if case .flag(let flag) = profile.firstInput { words.append(flag) }
+    words.append(ShellWord.quoted(firstInput))
+    return words
   }
 
   /// PATH 文字列から supported の実行ファイルを解決する（検出の純粋部分）。

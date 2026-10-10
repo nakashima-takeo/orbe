@@ -64,6 +64,8 @@ final class WindowController: NSObject, NSWindowDelegate {
   let worktreeAgents = WorktreeAgentActivity()
   let agentSessionTabs = AgentSessionTabs()
   private(set) lazy var waitConditions = WaitConditionWatcher(store: taskStore)
+  // 秘書の係。復元の再開の組み立てが秘書の記録を引くので、復元より前に窓へ繋ぐ（init）。
+  private(set) lazy var secretary = Secretary(tasks: taskStore, localization: localization)
   // パレット提示の拡張（WindowController+Palette）が設定パレットの defaultAgent 配線で触るため internal。
   let agentLauncher = AgentLauncher()
   // アップデート面。状態（UI 唯一の情報源）は updaterService が生成・所有し、提示配線は WindowController+Update。
@@ -121,10 +123,11 @@ final class WindowController: NSObject, NSWindowDelegate {
     // makeFirstResponder が成立する（= 起動直後からアクティブタブがキー入力を受ける）状態を作る。
     hostingView.layoutSubtreeIfNeeded()
     wireChromeCallbacks()
+    secretary.attach(self)
 
-    // 言語が決まっていれば、復元が Orbe の workspace のタブを起こすより前にフォルダを用意する
-    // （無いままだと、そのタブだけ秘書の場所の外で起きる）。初回は言語選択の確定を待つ（showFirstRunFlow）。
-    if AppStatePersistence.load()?.preferredLanguage != nil { prepareOrbeWorkspaceFolder() }
+    // 言語が決まっていれば、復元が Home のタブを起こすより前にフォルダを用意する
+    // （無いままだと、そのタブだけ Orbe の操作の指示が無いまま起きる）。初回は言語選択の確定を待つ（showFirstRunFlow）。
+    if AppStatePersistence.load()?.preferredLanguage != nil { prepareHomeFolder() }
     if let file = WorkspacePersistence.load() {
       restore(from: file)  // activateCurrent 経由で applyActiveWorkspaceConfig（外観＋gui.conf）が走る
     } else {
@@ -135,10 +138,11 @@ final class WindowController: NSObject, NSWindowDelegate {
       // 無いと、ユーザー ~/.config/ghostty の theme 指定が初回起動に限り勝ってしまう。
       applyActiveWorkspaceConfig()
     }
-    ensureOrbeWorkspace()  // 復元・新規のどちらの後にも 1 回（先に置くと復元の配列で上書きされる）
+    ensureHome()  // 復元・新規のどちらの後にも 1 回（先に置くと復元の配列で上書きされる）
     agentLauncher.appModel = model
     agentLauncher.localization = localization  // 起動パレット・オンボーディングの文言引き用
     configureAgentDefaults()
+    resumeSecretaryAtLaunch()
     // 起動パレット・Cmd+Shift+C の起動。アクティブ workspace の新タブで agent の絶対パスを起こす。
     agentLauncher.onLaunch = { [weak self] agent, env in
       guard let self else { return }
@@ -289,7 +293,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   /// 隠れタブも実サイズで起こす（pty winsize 正常）。frame/isHidden は既 mount でも毎回更新し、
   /// addSubview より先に確定させる——窓に付いた瞬間の可視性で面（エクスプローラー）が根のサービスを
   /// 握るか決まるので、隠れタブを一瞬でも見えている扱いにしない（`materializeOffscreen` と同じ順）。
-  private func mountTab(_ tab: TerminalTab, in ws: Workspace, visible: Bool) {
+  func mountTab(_ tab: TerminalTab, in ws: Workspace, visible: Bool) {
     guard store.recordMaterialization(of: tab, in: ws) else { return }
     tab.view.frame = model.content.bounds
     tab.view.isHidden = !visible
@@ -358,6 +362,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     refreshWorkspacePaletteLiveStates()  // 表示中の workspace パレットの行チップも同じ契機で追従
     refreshWorktreeAgents()  // タスク画面と ⌘T の agent の札も同じ契機で追従
     refreshAgentSessionTabs()  // タスク画面の会話の行と解けた待ちの ⌘T も同じ契機で追従
+    secretary.cycle(mayLaunch: false)  // 索引の後に。秘書のタブを探し直し、手が空いていれば 1 件届ける
   }
 
   /// アクティブタブの焦点の面（端末 surface かエディター pane）へフォーカスを戻す

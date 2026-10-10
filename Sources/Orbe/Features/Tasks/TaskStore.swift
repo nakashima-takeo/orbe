@@ -21,13 +21,22 @@ enum TaskStoreError: Error, Equatable {
     case before, after
   }
 
+  /// 足す位置。
+  enum AddPosition: Equatable {
+    /// 列の末尾。
+    case end
+    /// 未着手の欄の中で、足すタスクと同じか低い優先度の最初のタスクの直前（無ければ列の末尾）——その優先度の
+    /// 未着手の先頭に入る。
+    case priorityHead
+  }
+
   init(file: TasksFile? = TaskPersistence.load()) {
     tasks = file?.tasks ?? []
     nextId = file?.nextId ?? 1
   }
 
-  /// 列の末尾へ足す。
-  func add(_ draft: TaskDraft) throws(TaskStoreError) -> TaskItem {
+  /// `position` の位置へ足す（既定は列の末尾）。
+  func add(_ draft: TaskDraft, at position: AddPosition = .end) throws(TaskStoreError) -> TaskItem {
     let title = try Self.validTitle(draft.title)
     try Self.checkLinks(draft.links, of: nextId, against: tasks)
     try Self.checkWorktree(draft.worktree, of: nextId, against: tasks)
@@ -50,9 +59,20 @@ enum TaskStoreError: Error, Equatable {
       createdBy: draft.createdBy, links: draft.links, worktree: draft.worktree,
       worktreeBranch: draft.worktree?.currentBranch)
     nextId += 1
-    tasks.append(item)
+    tasks.insert(item, at: index(for: item, position))
     persist()
     return item
+  }
+
+  private func index(for item: TaskItem, _ position: AddPosition) -> Int {
+    switch position {
+    case .end:
+      return tasks.endIndex
+    case .priorityHead:
+      return tasks.firstIndex {
+        $0.status == .todo && $0.priority.rank >= item.priority.rank
+      } ?? tasks.endIndex
+    }
   }
 
   /// 指定した項目だけを変える。完了にすると待ちの席が空になる（起きたことも消える）。完了のまま待ちや条件を

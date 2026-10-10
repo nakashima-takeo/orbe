@@ -17,6 +17,8 @@ final class AgentLauncher {
   var configuredDefault: (() -> String?)?
   /// default agent を global スコープの設定変更として書く窓口。WindowController が注入（store 経由に一本化）。
   var onSetDefault: ((String) -> Void)?
+  /// 検出が済んだ知らせ（検出のたびに呼ぶ）。
+  var onResolved: (() -> Void)?
 
   private let catalog = AgentCatalog()
   private var installProc: Process?  // 導入中の install.sh を寿命つなぎで保持
@@ -209,20 +211,23 @@ final class AgentLauncher {
     onDismissPalette?()
   }
 
-  /// 永続から復元した agent セッションを resume 起動の (command, env) に解決する（`firstInput` は会話の最初の入力）。
-  /// 起動と同じ PATH を渡す。未対応 agent は nil（呼び出し側は素のシェルで復元）。
-  func resumeSpawn(for session: AgentSession, firstInput: String? = nil) -> (
-    command: String, env: [String: String]
-  )? {
+  /// 永続から復元した agent セッションを resume 起動の (command, env) に解決する（`arguments` は再開に添える追加の
+  /// 引数、`firstInput` は会話の最初の入力）。起動と同じ PATH を渡す。未対応 agent は nil（呼び出し側は素のシェルで
+  /// 復元）。
+  func resumeSpawn(
+    for session: AgentSession, arguments: [String] = [], firstInput: String? = nil
+  ) -> (command: String, env: [String: String])? {
     guard let sessionId = session.sessionId,
       let command = AgentCatalog.resumeCommand(
-        forAgent: session.command, sessionId: sessionId, firstInput: firstInput)
+        forAgent: session.command, sessionId: sessionId, arguments: arguments,
+        firstInput: firstInput)
     else { return nil }
     return (command, launchEnvironment)
   }
 
-  /// 検出完了の単一窓口。提示中の onboarding／palette 双方の detecting を解いて結果へ差し替える。
+  /// 検出完了の単一窓口。提示中の onboarding／palette 双方の detecting を解いて結果へ差し替え、知らせる。
   private func handleResolved() {
+    onResolved?()
     if let m = appModel?.onboarding {
       m.setCommands(catalog.agents.map(\.command))
       m.detecting = false

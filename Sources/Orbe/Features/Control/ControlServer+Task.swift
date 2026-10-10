@@ -23,6 +23,33 @@ protocol ControlTaskTarget: AnyObject {
     -> Result<Any, ControlError>
   /// タスクを消す（delete_task）。
   func controlDeleteTask(taskId: Int) -> Result<Any, ControlError>
+  /// タスクから作業を始める（start_task）。作業場を用意してタブを開いた時点で、main で 1 度だけ `completion` を呼ぶ。
+  func controlStartTask(
+    _ request: TaskStartRequest, completion: @escaping (Result<Any, ControlError>) -> Void)
+}
+
+extension ControlServer {
+  /// `start_task`: queue で params の型を確かめ、main で始め、作業場の用意（worktree の作成・fetch の着地待ちで
+  /// 数秒かかりうる）が済んだ完了で 1 度だけ応答する。
+  func startTask(id: Any?, params: [String: Any], conn: Connection) {
+    let request: TaskStartRequest
+    do throws(ControlError) {
+      let p = TaskParams(params)
+      request = TaskStartRequest(
+        taskId: try p.int("taskId"), branch: try p.optionalString("branch"),
+        repo: try p.optionalString("repo"), agent: try p.optionalString("agent"),
+        prompt: try p.optionalString("prompt"))
+    } catch {
+      return conn.respond(id: id, result: .failure(error))
+    }
+    DispatchQueue.main.async {
+      let respond = { result in self.queue.async { conn.respond(id: id, result: result) } }
+      guard let target = self.target else {
+        return respond(.failure(ControlError(code: -32000, message: "no window")))
+      }
+      target.controlStartTask(request, completion: respond)
+    }
+  }
 }
 
 /// タスクの 5 動詞の解決。ハンドラが見るのは params の在否と JSON の型（違反は -32602）だけで、値の検証と

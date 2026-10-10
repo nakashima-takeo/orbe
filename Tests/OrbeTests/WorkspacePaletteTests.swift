@@ -213,7 +213,7 @@ final class WorkspacePaletteTests: OrbeTestCase {
   }
 
   /// 詳細メニューは行の値に従う。消せない行（最後の通常 workspace）は「削除」を出さず、ディレクトリを変えられない
-  /// 行（Orbe の workspace）は「ディレクトリ」も出さない。改名はどの行にも出す。
+  /// 行（Home）は「ディレクトリ」も出さない。改名はどの行にも出す。
   func testSubmenuFollowsItemPermissions() {
     let l10n = LocalizationStore(language: .ja)
     for (canSetDir, canClose, expected) in [

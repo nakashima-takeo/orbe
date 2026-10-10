@@ -160,8 +160,32 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
 
     type("新しい", into: window)
     press(Key.enter, "\r", to: window)
-    XCTAssertEqual(model.store.tasks.last?.title, "新しい")
+    XCTAssertTrue(model.store.tasks.contains { $0.title == "新しい" })
     XCTAssertEqual(model.query, "")
+  }
+
+  /// 入力欄の ⌘↵ は onSubmit（↵ = 追加）へ流れず、打った文を秘書に頼む。タスクの行を選んで ⌘↵ なら、頼む欄が開いて
+  /// 補足の入力に焦点が移り、↵ でそのタスクを頼む。
+  func testCommandEnterInTheFieldAsksInsteadOfAddingAndOnARowOpensTheAsk() {
+    let model = model()
+    var asks: [SecretaryAsk] = []
+    model.onAskSecretary = {
+      asks.append($0)
+      return .success(.accepted)
+    }
+    let window = mount(model)
+
+    type("見積もり", into: window)
+    press(Key.enter, "\r", .command, to: window)
+    XCTAssertEqual(asks, [.text("見積もり")])
+    XCTAssertEqual(model.store.tasks.count, 3, "足さない")
+
+    press(Key.enter, "\r", .command, to: window)
+    XCTAssertEqual(model.askingTaskID, 1, "選んでいる行の直下に頼む欄")
+    type("直して", into: window)
+    press(Key.enter, "\r", to: window)
+    XCTAssertEqual(asks.last, .task(id: 1, note: "直して"))
+    XCTAssertNil(model.draft)
   }
 
   /// 押し始めを見ていない ↵ のリピートだけが入力欄に届いても、完了にも追加にもならない。

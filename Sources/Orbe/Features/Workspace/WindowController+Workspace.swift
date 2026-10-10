@@ -3,20 +3,20 @@ import AppKit
 /// workspace の切替・作成・改名・ディレクトリ設定・削除と、空（0タブ）workspace のアクティブ化。
 /// WindowController 本体からタブ管理・復元・chrome 更新と関心を分離する。
 extension WindowController {
-  /// Orbe の workspace がちょうど 1 つあり、root が専用フォルダを指す状態へそろえ、保存を予約する。
-  /// フォルダそのものの用意は UI 言語の確定を待つ（`prepareOrbeWorkspaceFolder`）。
-  func ensureOrbeWorkspace() {
-    guard let root = OrbeWorkspaceFolder.url else {
-      NSLog("[orbe-workspace] state dir unresolved, Orbe workspace not ensured")
+  /// Home がちょうど 1 つあり、root が専用フォルダを指す状態へそろえ、保存を予約する。
+  /// フォルダそのものの用意は UI 言語の確定を待つ（`prepareHomeFolder`）。
+  func ensureHome() {
+    guard let root = HomeFolder.url else {
+      NSLog("[home] state dir unresolved, Home not ensured")
       return
     }
-    store.ensureOrbeWorkspace(rootPath: root.path)
+    store.ensureHome(rootPath: root.path)
     scheduleSave()
   }
 
-  /// Orbe の workspace のフォルダを現在の UI 言語の雛形で用意する（秘書への指示は書き直し、CLAUDE.md は無ければ作る）。
-  func prepareOrbeWorkspaceFolder() {
-    OrbeWorkspaceFolder.prepare(language: localization.language)
+  /// Home のフォルダを現在の UI 言語の雛形で用意する（Orbe の操作の指示は書き直し、CLAUDE.md は無ければ作る）。
+  func prepareHomeFolder() {
+    HomeFolder.prepare(language: localization.language)
   }
 
   func switchWorkspace(to index: Int) {

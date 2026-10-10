@@ -3,6 +3,7 @@ import SwiftUI
 /// タスク画面の左の一覧。行は `TaskPaletteRows` が組んだ値をそのまま描き、選択は行の同一性で光らせる。
 struct TaskPaletteList: View {
   @Bindable var model: TaskPaletteModel
+  let focus: FocusState<TaskPaletteFocusTarget?>.Binding
   @Environment(\.localization) private var l10n
 
   var body: some View {
@@ -17,7 +18,12 @@ struct TaskPaletteList: View {
       }
       .scrollIndicators(.automatic)
       .onChange(of: model.scrollTarget) { scroll(proxy, to: model.scrollTarget?.id) }
-      .onAppear { scroll(proxy, to: model.selectedID) }
+      // 行の直下に開いた頼む欄が見えるように送る（行だけを見せると、狭い窓で欄が下に切れる）。
+      .onChange(of: model.askingTaskID) { revealAsk(proxy) }
+      .onAppear {
+        scroll(proxy, to: model.selectedID)
+        revealAsk(proxy)
+      }
     }
   }
 
@@ -31,27 +37,21 @@ struct TaskPaletteList: View {
     if let id { proxy.scrollTo(TaskPaletteRow.Identity.selectable(id)) }
   }
 
+  private func revealAsk(_ proxy: ScrollViewProxy) {
+    if let id = model.askingTaskID { proxy.scrollTo(TaskPaletteRow.Identity.ask(id)) }
+  }
+
   @ViewBuilder private func row(_ row: TaskPaletteRow) -> some View {
     switch row {
-    case .add(let title):
-      TaskPaletteRowFrame(
-        selected: model.selectedID == .add, onTap: { model.tapRow(.add) },
-        onHoverEnter: { model.hoverSelect(.add) },
-        content: {
-          Text("＋")
-            .font(Font.theme.chrome)
-            .foregroundStyle(Color.theme.accentPrimary)
-            .frame(width: TaskPaletteRowMetrics.glyphColumn)
-          TruncatingSlot(l10n.format(.taskPaletteAdd, title), leading: Theme.Space.step) {
-            Text($0).font(Font.theme.workspaceName).foregroundStyle(Color.theme.textPrimary)
-          }
-          Spacer(minLength: 0)
-        })
     case .sectionHeader(let status, let count):
       sectionLabel(
         status == .inProgress ? .taskPaletteSectionInProgress : .taskPaletteSectionTodo, count)
+    case .matchHeader:
+      sectionLabel(.taskPaletteMatchingTasks, nil)
     case .task(let task):
       taskRow(task)
+    case .ask(let ask):
+      TaskPaletteAskField(model: model, row: ask, focus: focus)
     case .doneHeader(let count, let expanded):
       VStack(spacing: 0) {
         Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
@@ -130,10 +130,10 @@ struct TaskPaletteList: View {
   }
 
   /// 見出しの字は ⌘T の欄の見出しと同じ。
-  private func sectionLabel(_ key: L10nKey, _ count: Int) -> some View {
+  private func sectionLabel(_ key: L10nKey, _ count: Int?) -> some View {
     HStack(spacing: Theme.Space.note) {
       Text(l10n.string(key)).foregroundStyle(Color.theme.textMuted)
-      Text("\(count)").foregroundStyle(Color.theme.textMuted.opacity(0.8))
+      if let count { Text("\(count)").foregroundStyle(Color.theme.textMuted.opacity(0.8)) }
     }
     .font(Font.theme.sectionLabel)
     .tracking(Theme.Typography.trackingLabel)
@@ -251,6 +251,13 @@ struct TaskPaletteTaskRowView: View {
         .foregroundStyle(titleColor)
     }
     .layoutPriority(1)
+    if row.justAdded {
+      TaskPaletteBadge(
+        text: l10n.string(.taskPaletteJustAdded), foreground: Color.theme.accentBright,
+        fill: Color.theme.tintAccent
+      )
+      .padding(.leading, Theme.Space.step)
+    }
     if row.needsReview {
       Text(l10n.string(.taskPaletteReview))
         .font(Font.theme.meta)
