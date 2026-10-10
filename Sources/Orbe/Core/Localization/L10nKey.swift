@@ -359,8 +359,10 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteIntakeRunAt
   case taskPaletteIntakeFetched
   case taskPaletteIntakeJudged
-  case taskPaletteIntakeProposedShort
-  case taskPaletteIntakeProposedLong
+  case taskPaletteIntakeProposedShortOne
+  case taskPaletteIntakeProposedShortOther
+  case taskPaletteIntakeProposedLongOne
+  case taskPaletteIntakeProposedLongOther
   case taskPaletteIntakeNothingNew
   case taskPaletteIntakeFailed
   case taskPaletteIntakeNeverRan
