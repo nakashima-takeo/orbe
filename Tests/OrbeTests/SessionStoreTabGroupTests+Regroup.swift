@@ -68,7 +68,7 @@ extension SessionStoreTabGroupTests {
 
     XCTAssertEqual(store.regroup(moved), 0)
     XCTAssertTrue(activeTab(store.current) === viewed, "index がずれても同じタブ")
-    XCTAssertEqual(store.current.active, 1)
+    XCTAssertEqual(store.current.selectedTabIndex, 1)
   }
 
   /// 動いたのが active 自身なら、active は移動後の自分を指す（cd したタブを見続ける）。
@@ -79,7 +79,7 @@ extension SessionStoreTabGroupTests {
 
     XCTAssertEqual(store.regroup(moved), 0)
     XCTAssertTrue(activeTab(store.current) === moved, "移動後の自分")
-    XCTAssertEqual(store.current.active, 3)
+    XCTAssertEqual(store.current.selectedTabIndex, 3)
   }
 
   /// 背景 workspace のタブでも扱い、その workspace index を返す（アクティブ側の chrome には触れない）。

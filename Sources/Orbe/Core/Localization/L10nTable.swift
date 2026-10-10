@@ -145,6 +145,9 @@ enum L10n {
     .editorEmptySearchProject: ("プロジェクト全体を検索", "Search the whole project"),
     .editorEmptyBackToTerminal: ("ターミナルへ戻る", "Back to terminal"),
 
+    // MARK: ボード（空状態）
+    .boardEmpty: ("まだ何も置かれていません", "Nothing here yet"),
+
     // MARK: Editor 面（骨: エクスプローラー）
     .editorExplorerTitle: ("エクスプローラー", "Explorer"),
     .editorNewFile: ("新規ファイル", "New File"),

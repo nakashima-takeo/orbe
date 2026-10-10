@@ -50,9 +50,9 @@ extension WindowController {
 
   private func place(_ tab: TerminalTab, workspaceIndex: Int, selects: Bool) -> OpenedTab {
     if selects {
-      let index = store.insertTab(tab, intoWorkspaceAt: workspaceIndex)  // 背景 WS はここで active も新タブへ
+      store.insertTab(tab, intoWorkspaceAt: workspaceIndex)  // 背景 WS はここで選択も新タブへ
       if workspaceIndex == activeWorkspace {
-        select(index)  // surface を起こす（mount）
+        select(.tab(tab))  // surface を起こす（mount）
       } else {
         materializeOffscreen(tab, in: workspaces[workspaceIndex])
       }
@@ -66,15 +66,15 @@ extension WindowController {
 
   /// 既にあるタブ（休眠のタブを含む）の surface を、選ばずに起こす。休眠のタブは起こす時点で再開が走る。
   /// 背景 workspace なら前面化せずに起こし（`materializeOffscreen`）、前面の workspace なら隠れタブとして mount する。
-  /// 前面の workspace にタブがそれしか無い（0 タブの空表示だった）なら、隠すと「選んでいるタブが見えない」状態に
-  /// なるので、選んで見せる。
+  /// 前面の workspace の選択がそのタブなら（空表示だった workspace に足したタブ）、隠すと「選んでいるタブが見えない」状態に
+  /// なるので、選んで見せる。ボードを持つ workspace は空にならないので、そのタブはボードの裏で起きる。
   func wakeUnselected(_ tab: TerminalTab) {
     guard
       let index = workspaces.firstIndex(where: { ws in ws.tabs.contains { $0 === tab } })
     else { return }
     let ws = workspaces[index]
     guard index == activeWorkspace else { return materializeOffscreen(tab, in: ws) }
-    if ws.tabs.count == 1 { return select(0) }
+    if ws.selectedTab === tab { return select(ws.selection) }
     mountTab(tab, in: ws, visible: false)
     refreshChrome()
   }

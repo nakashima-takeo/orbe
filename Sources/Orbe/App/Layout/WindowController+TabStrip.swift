@@ -15,4 +15,13 @@ extension WindowController {
           colorIndex: WorktreeColor.index(forKey: ws.tabs[r.lowerBound].groupKey))
       })
   }
+
+  /// 選択の chrome への投影（タブは位置で）。
+  func chromeSelection(of ws: Workspace) -> StatusRowModel.Selection {
+    switch ws.selection {
+    case .empty: return .empty
+    case .board: return .board
+    case .tab: return ws.selectedTabIndex.map { .tab($0) } ?? .empty
+    }
+  }
 }

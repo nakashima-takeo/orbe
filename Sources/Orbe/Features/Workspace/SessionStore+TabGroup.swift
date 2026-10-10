@@ -62,7 +62,6 @@ extension SessionStore {
     let strayPeer = !attached && ws.tabs.contains { $0 !== tab && $0.groupKey == key }
     let splitting = !attached && left != nil && right != nil && left?.groupKey == right?.groupKey
     guard strayPeer || splitting else { return nil }
-    let activeTab = ws.tabs.indices.contains(ws.active) ? ws.tabs[ws.active] : nil
     ws.tabs.remove(at: idx)
     // ②の `idx - 1` は除去前 index を除去後配列に当てている——左隣は除去で動かないので同じ位置。
     // `idx > 0` は `splitting` の `left != nil` が含意する（不変条件は大域的に SessionStore が保証する建前）。
@@ -71,12 +70,11 @@ extension SessionStore {
       ? Self.insertionIndex(forKey: key, in: ws.tabs)
       : Self.segment(containing: idx - 1, in: ws.tabs).upperBound
     ws.tabs.insert(tab, at: dest)
-    if let activeTab, let i = ws.tabs.firstIndex(where: { $0 === activeTab }) { ws.active = i }
     return wsIndex
   }
 
   /// `from` を含む連を丸ごと、挿入先 `to`（挿入前 index 基準・0 か各連の upperBound＝セグメント境界）
-  /// へ移動する。境界でない・範囲外・自連の両端（実移動なし）は false。active は参照で引き直す。
+  /// へ移動する。境界でない・範囲外・自連の両端（実移動なし）は false。選択は参照なので補正しない。
   @discardableResult func moveSegment(containing from: Int, to: Int) -> Bool {
     let tabs = current.tabs
     guard tabs.indices.contains(from), (0...tabs.count).contains(to) else { return false }
@@ -87,13 +85,9 @@ extension SessionStore {
     guard to != r.lowerBound, to != r.upperBound else { return false }
     let dest = to > r.upperBound ? to - r.count : to
     let ws = current
-    let activeTab = ws.tabs.indices.contains(ws.active) ? ws.tabs[ws.active] : nil
     let moved = Array(ws.tabs[r])
     ws.tabs.removeSubrange(r)
     ws.tabs.insert(contentsOf: moved, at: dest)
-    if let activeTab, let idx = ws.tabs.firstIndex(where: { $0 === activeTab }) {
-      ws.active = idx
-    }
     return true
   }
 }

@@ -47,7 +47,7 @@ final class WindowControllerRestoreSessionsTests: OrbeTestCase {
     XCTAssertEqual(rows[0]["tabId"] as? Int, tab.id)
     XCTAssertTrue(tab.isDormant, "休眠チケットのまま（起こさない）")
     XCTAssertEqual(tab.cwd, "/tmp/bg/src")
-    XCTAssertEqual(wc.workspaces[1].active, 0, "背景 WS の選択は動かさない")
+    XCTAssertEqual(wc.workspaces[1].selectedTabIndex, 0, "背景 WS の選択は動かさない")
     XCTAssertEqual(wc.activeWorkspace, 0, "前面化しない")
     XCTAssertEqual(wc.sessionLog.lastEvent(sessionId: "b-1")?.closeOrigin, .process, "復元では書かない")
   }

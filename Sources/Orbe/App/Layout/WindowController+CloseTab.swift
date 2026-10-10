@@ -32,14 +32,11 @@ extension WindowController {
     switch store.removeTab(tab, origin: origin) {
     case .notFound:
       return
-    case .emptiedActive:
-      // アクティブ workspace が0タブ化。閉じたタブの view を content から外し空表示にする
-      // （従来 select が担う唯一のビュー除去経路をここで明示し surface leak を避ける）。
-      clearActiveContent()
-    case .reselectActive(let i):
+    case .activeWorkspaceChanged:
       // 閉じたタブの view を model.content から外す唯一の経路が select() の不要ビュー除去なので、
-      // 背景タブの close も必ず通す（通さないと外れた TerminalTab を retain し続け surface がリークする）。
-      select(i)
+      // 選択が動かなかった（隠れタブ・ボード選択中）close も必ず通す（通さないと外れた TerminalTab を retain し続け
+      // surface がリークする）。
+      select(current.selection)
     case .backgroundChanged:
       refreshChrome()  // 背景タブ/背景 workspace の空化でも chrome 横断 rollup を同期する
     }

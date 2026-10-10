@@ -149,7 +149,7 @@ final class WindowControllerWindowCommandTests: OrbeTestCase {
     let token = wc.statusModel.editFocusToken
     let display = wc.current.tabs[0].displayTitle(workspaceRoot: wc.current.rootPath)
     wc.beginTabRename()
-    XCTAssertEqual(wc.statusModel.editingIndex, wc.current.active, "編集 index は active タブ")
+    XCTAssertEqual(wc.statusModel.editingIndex, wc.current.selectedTabIndex, "編集 index は active タブ")
     XCTAssertEqual(wc.statusModel.editingText, display, "編集テキストは現在の表示名でプリフィル")
     XCTAssertEqual(wc.statusModel.editFocusToken, token &+ 1, "focus トークンが前進")
   }

@@ -32,9 +32,9 @@ import SwiftUI
 
   /// 上段 chrome（ネイティブ SwiftUI `StatusRowView` の状態）。
   let statusModel: StatusRowModel
-  /// 端末の器（アクティブ workspace の全タブの view を WindowController が出し入れする）。
+  /// 端末の器（アクティブ workspace の全タブの view とボードの器を WindowController が出し入れする）。
   let content: NSView
-  /// アクティブ workspace が0タブ（surface が1枚も無い）か。true のとき content の地は端末が塗らないため、
+  /// アクティブ workspace の選択が空（タブが 0 でボードも無い）か。true のとき content の地は端末もボードも塗らないため、
   /// AppShell が baseFill（透過設定追従）で埋める（透過ウィンドウ越しにデスクトップが透けるのを防ぐ）。
   var contentIsEmpty = false
 
@@ -65,7 +65,7 @@ import SwiftUI
   /// 現在の overlay の入力欄へ focus を再確定する（各モデルの focusToken を進め、描画後に `@FocusState` を
   /// 立て直す）。overlay 遷移（overlay→overlay・overlay→端末）では去りゆくカードの TextField（field editor）
   /// teardown が次 runloop tick に走り、同期で当てた新しい focus を奪い返す。その次 tick でここを呼び、
-  /// 遷移先 overlay の入力欄へ focus を取り戻して teardown に勝つ。`.none`（端末）は host（`focusActiveTab`）が担う。
+  /// 遷移先 overlay の入力欄へ focus を取り戻して teardown に勝つ。`.none`（端末）は host（`focusSelection`）が担う。
   func focusCurrentOverlayField() {
     switch overlay {
     case .none: break
@@ -109,8 +109,8 @@ struct AppShell: View {
           // 実窓の信号機を読むのは製品の殻だけ（見本系は既定値で描く）。
           .background(TrafficLightsProbe(model: model.statusModel))
         NSViewContainer(view: model.content)
-          // 0タブ時のみ端末と同濃度の地で埋める（surface が無く BackgroundGlow も透過時は塗らないため）。
-          // baseFill は effectiveOpacity 追従なので背景不透明度の設定変更にライブで従う。タブが載れば
+          // 空のときのみ端末と同濃度の地で埋める（surface が無く BackgroundGlow も透過時は塗らないため）。
+          // baseFill は effectiveOpacity 追従なので背景不透明度の設定変更にライブで従う。タブかボードが載れば
           // contentIsEmpty=false で clear に戻り二重 veil を避ける。
           .background(model.contentIsEmpty ? translucency.baseFill : Color.clear)
       }

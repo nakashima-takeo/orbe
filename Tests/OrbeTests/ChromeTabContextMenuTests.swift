@@ -34,13 +34,13 @@ final class ChromeTabContextMenuTests: OrbeTestCase {
     let other = tab(wc, at: 1)
     setReportedState(target, "waiting")
     setReportedState(other, "working")
-    let active = wc.current.tabs[wc.current.active]
+    let active = wc.current.selectedTab
 
     wc.statusModel.onResetAgentState(wc.current.tabs[0].id)
 
     XCTAssertEqual(target.agentState, "idle", "指されたタブは idle へ")
     XCTAssertEqual(other.agentState, "working", "他のタブは変わらない")
-    XCTAssertTrue(wc.current.tabs[wc.current.active] === active, "アクティブタブは切り替わらない")
+    XCTAssertTrue(wc.current.selectedTab === active, "アクティブタブは切り替わらない")
   }
 
   /// メニューを開いている間に前のタブが消えて位置が詰まっても、指したタブに効く。

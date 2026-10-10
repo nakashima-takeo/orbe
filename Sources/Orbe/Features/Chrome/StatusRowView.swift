@@ -38,8 +38,8 @@ extension View {
 /// 最上段 chrome をネイティブ SwiftUI で描く（TopBar＋TabBar・§5.1）。
 /// 上段=現在地（workspace 名・build-id・焦点の面の現在地、左）とステータスストリップ（右端）、テキストは
 /// 信号機の縦中央へ整列・背景は透明（最背面の BackgroundGlow が見える）。下段=全幅セグメント形タブ行
-/// （地 tabRowBg・同 worktree のタブを連ねた DSTabSegment・shrink＋横スクロール・＋ボタン）と右端の
-/// 位置ドット（エディター・端末の焦点と可視）。
+/// （地 tabRowBg・ボードを持つ workspace では左端に固定のボードのセル・同 worktree のタブを連ねた DSTabSegment・
+/// shrink＋横スクロール・＋ボタン）と右端の位置ドット（エディター・端末の焦点と可視）。
 /// 罫線は持たない（tabRowBg の濃度差が境界）。背景に窓ドラッグ（タブ/ボタンのクリックは奪わない）。
 struct StatusRowView: View {
   @Bindable var model: StatusRowModel
@@ -154,10 +154,16 @@ struct StatusRowView: View {
     GeometryReader { geo in
       let strip = model.strip
       let dots = model.faceDots
-      // 位置ドットは ScrollView の外（右端）に置き、その予約幅を行の利用可能幅から引く。
-      let available = geo.size.width - (dots == nil ? 0 : Chrome.faceDotsWidth)
+      let boardLabel = model.boardLabel
+      // ボードのセルと位置ドットは ScrollView の外（左端・右端）に置き、その予約幅を行の利用可能幅から引く。
+      // ボードはスクロールの外なので、横スクロールしても左端に残り、並び替えの幾何（x=0 起点）にも入らない。
+      let available =
+        geo.size.width - (dots == nil ? 0 : Chrome.faceDotsWidth) - boardReserve(boardLabel)
       let widths = tabWidths(strip, available: available)
       HStack(spacing: 0) {
+        if let boardLabel {
+          boardCell(boardLabel)
+        }
         ScrollViewReader { proxy in
           ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Chrome.tabGap) {
@@ -206,7 +212,9 @@ struct StatusRowView: View {
           // これを切るので、クリップを外し、枠ぶんだけ広げた矩形で自分でクリップする。
           .scrollClipDisabled()
           .clipShape(Rectangle().inset(by: -DSTabSegmentMetrics.frameOutset))
-          .onChange(of: model.active) { _, new in proxy.scrollTo(new, anchor: .center) }
+          .onChange(of: model.selection) { _, new in
+            if case .tab(let i) = new { proxy.scrollTo(i, anchor: .center) }
+          }
           // 編集開始時、編集タブが横スクロール域外でも可視域へ入れる。
           .onChange(of: model.editingIndex) { _, new in
             if let n = new { proxy.scrollTo(n, anchor: .center) }
@@ -215,7 +223,7 @@ struct StatusRowView: View {
             // 掴み中にタブ集合・順序・連構造が変わったら（shell exit・cd 再判定等）掴み状態を破棄する。
             // 凍結した幾何が実体とずれ、掴んでいた View は構造ごと消えて onEnded が来ない。
             dragState.discard()
-            proxy.scrollTo(model.active, anchor: .center)
+            if case .tab(let i) = model.selection { proxy.scrollTo(i, anchor: .center) }
           }
         }
         if let dots {
@@ -234,7 +242,7 @@ struct StatusRowView: View {
     let isEditing = model.editingIndex == i
     let grabbed = drag.flatMap { $0.source == .tab(i) ? $0 : nil }
     return DSTab(
-      title: displayTitle(cell), active: i == model.active, stateGlyph: cell.glyph,
+      title: displayTitle(cell), active: model.selection == .tab(i), stateGlyph: cell.glyph,
       stateSymbol: cell.glyph.flatMap { iconResolver.symbol(for: $0) },
       action: { model.onSelect(i) },
       onMiddleClick: { model.onCloseTab(i) },
@@ -257,7 +265,24 @@ struct StatusRowView: View {
     .offset(x: grabbed.map(Self.cellOffset) ?? 0)
     .zIndex(grabbed == nil ? 0 : 1)
     .opacity(grabbed == nil ? 1 : 0.85)
-    .id(i)  // scrollTo(active) は平坦 index
+    .id(i)  // scrollTo(選んでいるタブ) は平坦 index
+  }
+
+  /// ボードのセル（単独タブの器・家のグリフと workspace 名）と右の区切り。選ぶだけで、閉じる・動かす・メニューの
+  /// ジェスチャは付けない。
+  private func boardCell(_ label: String) -> some View {
+    HStack(spacing: Chrome.tabGap) {
+      DSTabSegment {
+        DSTab(
+          title: label, active: model.selection == .board, leadingSymbol: "house",
+          action: model.onSelectBoard)
+      }
+      .frame(width: boardCellWidth(label))
+      Rectangle()
+        .fill(Color.theme.tabDivider)
+        .frame(width: Theme.Stroke.hairline, height: Chrome.tabHeight)
+    }
+    .padding(.trailing, Chrome.tabGap)
   }
 }
 

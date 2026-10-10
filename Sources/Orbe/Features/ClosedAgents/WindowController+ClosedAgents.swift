@@ -42,7 +42,7 @@ extension WindowController {
         agent: AgentSession(command: item.command, sessionId: item.sessionId),
         explicitTitle: nil),
       intoWorkspaceAt: activeWorkspace)
-    select(restored.tabIndex)
-    dismissPalette()  // dismiss の focusActiveTab が新しい active＝復元したタブへ当たる
+    select(.tab(restored.tab))
+    dismissPalette()  // dismiss の focusSelection が新しい active＝復元したタブへ当たる
   }
 }

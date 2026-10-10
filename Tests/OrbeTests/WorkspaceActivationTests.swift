@@ -51,7 +51,7 @@ final class WorkspaceActivationTests: OrbeTestCase {
     let target = restoredTab(agentId: "a")
     let sibling = restoredTab(agentId: "c")
     owned.tabs = [target, sibling]
-    owned.active = 1
+    owned.selection = .tab(owned.tabs[1])
     owned.lastUsedAt = Date(timeIntervalSinceReferenceDate: 123)
     let other = Workspace(name: "other", rootPath: "/tmp")
     let foreignTab = restoredTab(agentId: "d")
@@ -64,7 +64,7 @@ final class WorkspaceActivationTests: OrbeTestCase {
     XCTAssertFalse(target.isDormant)
     XCTAssertFalse(sibling.activated)
     XCTAssertTrue(sibling.isDormant)
-    XCTAssertEqual(owned.active, 1)
+    XCTAssertEqual(owned.selectedTabIndex, 1)
     XCTAssertEqual(owned.lastUsedAt, Date(timeIntervalSinceReferenceDate: 123))
 
     XCTAssertTrue(store.recordMaterialization(of: target, in: owned), "同じ遷移は冪等")
@@ -86,8 +86,8 @@ final class WorkspaceActivationTests: OrbeTestCase {
     ws.lastUsedAt = Date(timeIntervalSinceReferenceDate: 1)
     let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
 
-    XCTAssertTrue(store.recordSelection(1))
-    XCTAssertEqual(ws.active, 1)
+    XCTAssertTrue(store.recordSelection(.tab(ws.tabs[1])))
+    XCTAssertEqual(ws.selectedTabIndex, 1)
     XCTAssertGreaterThan(try XCTUnwrap(ws.lastUsedAt), Date(timeIntervalSinceReferenceDate: 1))
     XCTAssertFalse(ws.activated)
     XCTAssertTrue(ws.tabs.allSatisfy { !$0.activated })

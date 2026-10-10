@@ -15,8 +15,13 @@ extension WindowController {
       ws.lastWorktreeBase = state.lastWorktreeBase
       for tab in state.tabs { ws.tabs.append(makeTab(from: tab)) }  // 隣接の正規化は下の store.load
       // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・下の activateCurrent）は空表示
-      // で、シェルは自動起動しない。背景の休眠 workspace も空のまま keep する。
-      ws.active = ws.tabs.isEmpty ? 0 : min(max(0, state.activeTab), ws.tabs.count - 1)
+      // で、シェルは自動起動しない。背景の休眠 workspace も空のまま keep する。ボードを持つかは Home を知る
+      // store.load が決め、そこで選択も不変条件へそろえる。
+      if state.boardSelected {
+        ws.selection = .board
+      } else if !ws.tabs.isEmpty {
+        ws.selection = .tab(ws.tabs[min(max(0, state.activeTab), ws.tabs.count - 1)])
+      }
       restored.append(ws)
     }
     // workspaces 非空は load() が保証する（空 workspaces のファイルは load が nil を返す）。
@@ -113,7 +118,8 @@ extension WindowController {
       activeWorkspace: activeWorkspace,
       workspaces: workspaces.map { ws in
         WorkspaceState(
-          name: ws.name, rootPath: ws.rootPath, activeTab: ws.active,
+          name: ws.name, rootPath: ws.rootPath, activeTab: ws.selectedTabIndex ?? 0,
+          boardSelected: ws.selection == .board,
           tabs: ws.tabs.map { $0.tabState() },
           lastUsedAt: ws.lastUsedAt, settingsOverride: ws.settingsOverride,
           lastWorktreeBase: ws.lastWorktreeBase, persistentId: ws.persistentId)

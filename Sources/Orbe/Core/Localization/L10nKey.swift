@@ -542,6 +542,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorEmptySearchProject
   case editorEmptyBackToTerminal
 
+  // MARK: - ボード（空状態）
+  case boardEmpty
+
   // MARK: - Editor 面（骨: エクスプローラー）
   case editorExplorerTitle
   case editorNewFile

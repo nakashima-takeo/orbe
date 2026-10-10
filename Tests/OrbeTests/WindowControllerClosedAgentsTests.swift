@@ -74,7 +74,7 @@ final class WindowControllerClosedAgentsTests: OrbeTestCase {
     XCTAssertEqual(
       wc.current.tabs.map { $0.agentSlot.session?.sessionId }, [nil, "m-1", nil],
       "戻るのは選んだ 1 件だけで、末尾ではなく同じ cwd の連（/tmp）の右端に足す")
-    XCTAssertEqual(wc.current.active, 1, "復元したタブを選択して起こす")
+    XCTAssertEqual(wc.current.selectedTabIndex, 1, "復元したタブを選択して起こす")
     XCTAssertEqual(wc.sessionLog.lastEvent(sessionId: "m-1")?.kind, .opened, "起床で opened が付く")
     XCTAssertTrue(wc.current.tabs[1].activated)
 
@@ -98,7 +98,7 @@ final class WindowControllerClosedAgentsTests: OrbeTestCase {
 
     XCTAssertEqual(
       wc.current.tabs.map { $0.agentSlot.session?.sessionId }, ["m-1"], "0 タブからも戻る")
-    XCTAssertEqual(wc.current.active, 0, "唯一のタブを指す")
+    XCTAssertEqual(wc.current.selectedTabIndex, 0, "唯一のタブを指す")
     XCTAssertTrue(wc.current.tabs[0].activated, "選択して起こす")
   }
 
