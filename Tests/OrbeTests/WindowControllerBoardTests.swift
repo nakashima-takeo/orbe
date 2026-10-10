@@ -164,7 +164,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
   }
 
   /// 依頼の欄で打っている途中にボードを離れて戻ると（パレットを閉じる・端末タブから戻る・workspace を戻る）、焦点は欄へ戻り、
-  /// 打ちかけの続きが打てる。端末タブを選んでいる間、隠れた欄はキーを取らない。
+  /// 打ちかけは全文が選ばれている（⌘⇧X の入力欄と同じ）。端末タブを選んでいる間、隠れた欄はキーを取らない。
   @MainActor func testFocusReturnsToTheRequestFieldWhereItWasLeft() throws {
     IntakePersistence.save(DesignSceneFixtures.intakeEmptyFile())
     let wc = WindowController()
@@ -178,28 +178,37 @@ final class WindowControllerBoardTests: OrbeTestCase {
     let intake = wc.board.intake
 
     wc.statusModel.onSelectBoard()
-    try press(wc, keyCode: 126, "\u{F700}", [.numericPad, .function])
-    XCTAssertEqual(intake.place, .request, "↑ で欄へ")
+    XCTAssertEqual(intake.place, .request, "0 件なら初めから欄")
     try press(wc, keyCode: 0, "a")
-    XCTAssertEqual(intake.requestText, "a")
+    try press(wc, keyCode: 0, "b")
+    XCTAssertEqual(intake.requestText, "ab")
 
     wc.showWorkspacePalette()
     wc.window.makeFirstResponder(nil)  // パレットの入力欄が焦点を持っていった状態
     wc.dismissPalette()
-    try press(wc, keyCode: 0, "b")
-    XCTAssertEqual(intake.requestText, "ab", "パレットを閉じると欄へ")
+    pump()
+    try assertFieldSelectsAll(wc, "ab", "パレットを閉じると欄へ")
 
     wc.select(.tab(tab))
     try press(wc, keyCode: 0, "x")
     XCTAssertEqual(intake.requestText, "ab", "端末タブの間は隠れた欄にキーが届かない")
     wc.statusModel.onSelectBoard()
-    try press(wc, keyCode: 0, "c")
-    XCTAssertEqual(intake.requestText, "abc", "ボードへ戻ると欄へ")
+    pump()
+    try assertFieldSelectsAll(wc, "ab", "ボードへ戻ると欄へ")
 
     wc.switchWorkspace(to: try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "default" }))
     wc.switchWorkspace(to: home)
-    try press(wc, keyCode: 0, "d")
-    XCTAssertEqual(intake.requestText, "abcd", "workspace を戻ると欄へ")
+    pump()
+    try assertFieldSelectsAll(wc, "ab", "workspace を戻ると欄へ")
+  }
+
+  private func assertFieldSelectsAll(
+    _ wc: WindowController, _ text: String, _ message: String
+  ) throws {
+    let editor = try XCTUnwrap(wc.window.firstResponder as? NSTextView, message)
+    XCTAssertEqual(editor.string, text, message)
+    XCTAssertEqual(
+      editor.selectedRange(), NSRange(location: 0, length: (text as NSString).length), message)
   }
 
   /// 焦点の当て直しが SwiftUI に写るのを待ってから ↓ を窓へ送る。

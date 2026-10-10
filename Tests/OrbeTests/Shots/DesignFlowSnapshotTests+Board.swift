@@ -75,8 +75,9 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
-  /// 依頼の欄: 先頭の行の ↑ で欄へ → 打つ → ↵ で欄が空 → ↓ で一覧の先頭 → ↑↑ で欄を巡って一覧の末尾 → ↓ で巡回して欄。秘書の口は
-  /// 閉包の差し替えで、本物の秘書・claude は起きない。
+  /// 依頼の欄: 一覧（欄は控えめな枠）→ 先頭の行の ↑ で欄（強調の枠・行の選択と詳細が消える）→ 打つ → ↓ で一覧の先頭 →
+  /// ↑ で欄へ戻る → ↵ で欄が空 → ↑ で巡回して一覧の末尾 → ↓ で巡回して欄。秘書の口は閉包の差し替えで、本物の秘書・claude は
+  /// 起きない。
   func testBoardRequest() throws {
     let model = BoardModel(
       intake: BoardIntakeModel(
@@ -92,12 +93,12 @@ extension DesignFlowSnapshotTests {
       },
       steps: [
         ("start", {}),
-        ("up", { intake.move(-1) }),
-        ("typed", { intake.requestText = "Slack の自分宛ての DM をタスクの候補にして" }),
-        ("sent", { intake.send() }),
-        ("down", { intake.leaveRequest(1) }),
         ("up_to_field", { intake.move(-1) }),
-        ("wrap_to_last", { intake.leaveRequest(-1) }),
+        ("typed", { intake.requestText = "Slack の自分宛ての DM をタスクの候補にして" }),
+        ("down_to_list", { intake.move(1) }),
+        ("back_to_field", { intake.move(-1) }),
+        ("sent", { intake.send() }),
+        ("wrap_to_last", { intake.move(-1) }),
         ("wrap_to_field", { intake.move(1) }),
       ])
   }

@@ -26,8 +26,9 @@ struct BoardRoot: View {
 }
 
 /// 自動追加の部品: 見出し「タスクの自動追加 4 件」・依頼の欄・一覧（左 3）と詳細（右 2）。焦点の宛先は欄と一覧の器の 2 つで、
-/// モデルの場所（`place`）を合図（`focusToken`）のたびに写す。クリックやキーで焦点が移れば、場所をモデルへ書き戻す——ボードの
-/// 外へ出た（宛先が無くなった）ときは書き戻さず、戻ったときに最後に居た場所へ当て直せるようにする。
+/// モデルの場所（`place`）を合図（`focusToken`）のたびに写す。クリックで焦点が移れば、場所をモデルへ書き戻す——ボードの
+/// 外へ出た（宛先が無くなった）ときは書き戻さず、戻ったときに選んでいる場所へ当て直せるようにする。ストアの変化で場所が
+/// 替わった（行がすべて消えて欄になった）ときは、焦点が部品の中にあるときだけ追う（外にある焦点を奪わない）。
 struct BoardIntakePart: View {
   let model: BoardIntakeModel
   @FocusState private var focused: BoardIntakeModel.Place?
@@ -44,6 +45,9 @@ struct BoardIntakePart: View {
       }
     }
     .onChange(of: model.focusToken, initial: true) { focused = model.place }
+    .onChange(of: model.place) { _, place in
+      if focused != nil { focused = place }
+    }
     .onChange(of: focused) { _, place in
       if let place { model.arrive(place) }
     }
@@ -69,7 +73,9 @@ struct BoardIntakeHeading: View {
   }
 }
 
-/// 一覧（左 3）と詳細（右 2）。一覧の器は 0 件でも常に置く焦点の宛先で、一覧のキーはここで受ける。器のクリック（行・地）は一覧へ。
+/// 一覧（左 3）と詳細（右 2）。詳細は自動追加を選んでいる間だけ出し、欄を選んでいる間は一覧が幅いっぱいを使う（⌘⇧X で入力の
+/// 行き先を選んでいる間に右の欄を出さないのと同じ）。一覧の器は 0 件でも常に置く焦点の宛先で、一覧のキーはここで受ける。器の
+/// クリック（行・地）は一覧へ。
 struct BoardIntakeColumns: View {
   let model: BoardIntakeModel
   let focused: FocusState<BoardIntakeModel.Place?>.Binding
@@ -78,7 +84,10 @@ struct BoardIntakeColumns: View {
   var body: some View {
     let text = model.text(l10n)
     GeometryReader { geometry in
-      let listWidth = (geometry.size.width - Theme.Layout.boardColumnGap) * 3 / 5
+      let selected = model.selected
+      let listWidth =
+        selected == nil
+        ? geometry.size.width : (geometry.size.width - Theme.Layout.boardColumnGap) * 3 / 5
       HStack(alignment: .top, spacing: Theme.Layout.boardColumnGap) {
         Group {
           if model.standings.isEmpty {
@@ -96,7 +105,7 @@ struct BoardIntakeColumns: View {
         .focusEffectDisabled()
         .focused(focused, equals: .list)
         .onKeyPress { model.handleKey($0) }
-        if let selected = model.selected {
+        if let selected {
           BoardIntakeDetail(standing: selected, text: text)
         }
       }

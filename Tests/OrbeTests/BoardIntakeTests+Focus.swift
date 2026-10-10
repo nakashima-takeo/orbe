@@ -46,9 +46,10 @@ extension BoardIntakeTests {
     pump(0.3)
   }
 
-  /// 欄は一覧の上の 1 段。先頭の行の ↑ で欄へ移って文字が入り、欄の ↓ で一覧の先頭、欄の ↑ で一覧の末尾（巡回）、末尾の行の
-  /// ↓ で欄（巡回）、欄の esc で選択をそのままに一覧へ戻る。⇥ は欄でも一覧でも何もしない。
-  func testArrowsMoveBetweenTheFieldAboveAndTheList() {
+  /// 欄は一覧の上の 1 段で、欄と行は 1 つの選択を分け合う。先頭の行の ↑ で欄へ移ると行の選択と詳細が消え、欄の ↓ で一覧の
+  /// 先頭、欄の ↑ で一覧の末尾（巡回）、末尾の行の ↓ で欄（巡回）、欄の esc は ↓ と同じく一覧の先頭へ。⇥ は欄でも一覧でも
+  /// 何もしない。
+  func testArrowsMoveOneSelectionThroughTheFieldAndTheRows() {
     let model = board()
     let intake = model.intake
     let window = mount(model)
@@ -60,6 +61,8 @@ extension BoardIntakeTests {
 
     up(window)
     XCTAssertEqual(intake.place, .request, "先頭の行の ↑ で欄へ")
+    XCTAssertEqual(intake.list.selectedID, .request)
+    XCTAssertNil(intake.selected, "欄を選んでいる間はどの行も選ばれず、詳細も無い")
     type("a b", to: window)
     XCTAssertEqual(intake.requestText, "a b", "space は欄の文字になる")
     XCTAssertEqual(intake.store.intakes, DesignSceneFixtures.boardIntakes(), "space は一覧の止めるにならない")
@@ -82,25 +85,51 @@ extension BoardIntakeTests {
 
     press(Key.escape, "\u{1B}", to: window)
     XCTAssertEqual(intake.place, .list, "欄の esc で一覧へ")
-    XCTAssertEqual(intake.selected?.id, Self.pausedGmail, "esc は選択を動かさない")
+    XCTAssertEqual(intake.selected?.id, Self.failingBacklog, "esc は ↓ と同じく一覧の先頭")
     XCTAssertEqual(intake.requestText, "a b", "打った文字は残る")
   }
 
-  /// 自動追加が 0 件なら、欄の ↑↓ は何もしない（移る行が無い）。0 件の一覧の ↑↓ は欄へ移る。
-  func testWithNoAutoAddsTheFieldArrowsStay() {
+  /// 欄へ戻ると、打ってあった文は AppKit の入力欄の既定どおり全文が選ばれる（⌘⇧X の入力欄と同じ）。
+  func testReturningToTheFieldSelectsItsText() throws {
+    let model = board()
+    let window = mount(model)
+    up(window)
+    type("abc", to: window)
+    down(window)
+    up(window)
+
+    let editor = try XCTUnwrap(window.firstResponder as? NSTextView, "欄に焦点がある")
+    XCTAssertEqual(editor.string, "abc")
+    XCTAssertEqual(editor.selectedRange(), NSRange(location: 0, length: 3))
+  }
+
+  /// 自動追加が 0 件なら初めから欄で、欄の ↑↓ は何もしない（移る行が無い）。
+  func testWithNoAutoAddsTheFieldIsTheOnlyStop() {
     let model = BoardModel(
       intake: BoardIntakeModel(
         runner: DesignSceneFixtures.intakeRunner(DesignSceneFixtures.intakeEmptyFile())))
     let intake = model.intake
     let window = mount(model)
-
-    down(window)
     XCTAssertEqual(intake.place, .request)
+
     down(window)
     XCTAssertEqual(intake.place, .request, "欄の ↓ は何もしない")
     up(window)
     XCTAssertEqual(intake.place, .request, "欄の ↑ は何もしない")
     XCTAssertEqual(intake.hints.map(\.label), [.boardAskHint], "移る先が無いので ↓ の案内を出さない")
+  }
+
+  /// 一覧に居る間に行がすべて消えると欄になり、焦点も欄へ移って続けて打てる。
+  func testWhenEveryRowIsGoneTheFieldTakesOver() throws {
+    let model = board()
+    let intake = model.intake
+    let window = mount(model)
+
+    for id in intake.ids { try intake.runner.delete(id) }
+    flush(window)
+    XCTAssertEqual(intake.place, .request)
+    type("a", to: window)
+    XCTAssertEqual(intake.requestText, "a")
   }
 
   /// 欄のクリックで欄、行のクリックで一覧、地のクリックで最後に居た場所へ移り、直後のキーがそこに届く。
@@ -123,14 +152,15 @@ extension BoardIntakeTests {
 
     click(Point.field, in: window)
     click(Point.ground, in: window)
-    XCTAssertEqual(intake.place, .request, "地は最後に居た場所")
+    XCTAssertEqual(intake.place, .request, "地は選んでいる場所")
     type("c", to: window)
-    XCTAssertEqual(intake.requestText, "bc")
+    XCTAssertEqual(intake.requestText, "c", "欄へ戻ると全文が選ばれているので、打てば置き換わる")
 
     press(Key.escape, "\u{1B}", to: window)
     click(Point.ground, in: window)
     XCTAssertEqual(intake.place, .list)
+    let before = intake.selected?.id
     down(window)
-    XCTAssertNotEqual(intake.selected?.id, Self.slack, "地のクリックの直後の ↓ は一覧に効く")
+    XCTAssertNotEqual(intake.selected?.id, before, "地のクリックの直後の ↓ は一覧に効く")
   }
 }
