@@ -7,7 +7,8 @@ import XCTest
 ///
 /// 壊れると何が起きるか: 絞り込みに「x」を打つと提案が消える。入力を消そうと押した ⌘⌫（そのリピート）が提案を捨てる。
 /// リンクを開くつもりの ⌘↵ が提案をタスクにする。← で文字の間を動けない、または棚へ入れない。中身の space が入力欄に
-/// 空白を打つ。⇧⇥ で棚から焦点が逃げる。
+/// 空白を打つ。⇧⇥ で棚から焦点が逃げる。中身の ↵ が今すぐ受信にならず提案をタスクにする、⌘⌫ が受信でなく提案を捨てる。
+/// 提案の一覧の esc で画面が閉じない。
 extension TaskPaletteCardKeyTests {
   private func intakeModel() -> TaskPaletteModel {
     let model = TaskPaletteSamples.model(
@@ -89,5 +90,38 @@ extension TaskPaletteCardKeyTests {
     type("a", into: window)
     arrow(Key.left, to: window)
     XCTAssertEqual(model.intake.place, .proposals, "文字があるときの ← は文字の間を動く")
+  }
+
+  /// 中身の ↵ は今すぐ受信、⌘⌫ は確認なしで受信を消して提案の一覧へ戻る。どちらも提案には触れない。
+  func testIntakeContentsEnterRunsNowAndCommandDeleteRemovesTheIntake() {
+    let model = intakeModel()
+    let window = mount(model)
+    arrow(Key.left, to: window)
+    arrow(Key.down, to: window)
+    arrow(Key.right, to: window)
+    arrow(Key.right, to: window)
+    XCTAssertEqual(model.intake.place, .contents)
+
+    press(Key.enter, "\r", to: window)
+    XCTAssertTrue(model.intake.runner.isRunning(1))
+    XCTAssertEqual(model.store.tasks.count, 1, "提案をタスクにしない")
+
+    press(Key.delete, "\u{7F}", .command, to: window)
+    XCTAssertNil(model.intake.store.intake(1))
+    XCTAssertEqual(model.intake.place, .proposals)
+    XCTAssertFalse(
+      model.intake.store.proposals.contains { $0.state == .dismissed }, "提案を捨てない")
+  }
+
+  /// 提案の一覧の esc は画面を閉じる。
+  func testIntakeEscapeOnTheProposalsClosesTheScreen() {
+    let model = intakeModel()
+    var dismissed = false
+    model.onDismiss = { dismissed = true }
+    let window = mount(model)
+
+    press(Key.escape, "\u{1B}", to: window)
+
+    XCTAssertTrue(dismissed)
   }
 }
