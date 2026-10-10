@@ -29,8 +29,7 @@ usage() {
 # 隔離インスタンスの control.sock へ JSON-RPC を 1 本投げ、result を JSON で stdout に出す。
 # 応答の改行まで受信してから閉じる（ControlServer はクライアント側 EOF で接続を閉じるため、送信側が先に閉じると応答が取れない）。
 rpc_call() {
-  local sock="$1" method="$2" params="${3:-}" timeout="${4:-5}"
-  [ -n "$params" ] || params='{}'  # "${3:-{\}}" は macOS の bash 3.2 だと {\} に展開され JSON として読めない
+  local sock="$1" method="$2" params="${3:-"{}"}" timeout="${4:-5}"
   python3 - "$sock" "$method" "$params" "$timeout" <<'PY'
 import json
 import socket
