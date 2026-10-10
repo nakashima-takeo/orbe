@@ -360,7 +360,9 @@ private final class StartRecorder {
   private(set) var finishes: [(Date) -> Void] = []
   private(set) var stopped = 0
 
-  func start(_ finish: @escaping (Date) -> Void) -> BackgroundRunHandle {
+  func start(_ trigger: BackgroundScheduler.Trigger, _ finish: @escaping (Date) -> Void)
+    -> BackgroundRunHandle
+  {
     finishes.append(finish)
     return BackgroundRunHandle { [unowned self] in stopped += 1 }
   }

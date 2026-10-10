@@ -11,8 +11,6 @@ final class IntakeRunner {
 
   private let scheduler: BackgroundScheduler
   private let run: BackgroundScheduler.Run
-  /// 「今すぐ」で始めている受信（番人は始め方を同期で呼ぶので、その間だけ立つ）。
-  private var startingNow: Int?
 
   init(
     store: IntakeStore, scheduler: BackgroundScheduler = BackgroundScheduler(),
@@ -60,8 +58,6 @@ final class IntakeRunner {
   func runNow(_ id: Int) throws(IntakeError) {
     guard store.intake(id) != nil else { throw .intakeNotFound(id) }
     guard !isRunning(id) else { throw .running(id) }
-    startingNow = id
-    defer { startingNow = nil }
     scheduler.runNow(id: Self.key(id))
   }
 
@@ -91,8 +87,8 @@ final class IntakeRunner {
   /// ストアの定義は検証済みなので、番人の検証で落ちることはない。
   private func register(_ intake: Intake) {
     let id = intake.id
-    let start: BackgroundScheduler.Start = { [weak self] finish in
-      self?.begin(id, finish: finish) ?? BackgroundRunHandle {}
+    let start: BackgroundScheduler.Start = { [weak self] trigger, finish in
+      self?.begin(id, trigger: trigger, finish: finish) ?? BackgroundRunHandle {}
     }
     try? scheduler.register(
       id: Self.key(id), timing: timing(intake), anchor: intake.anchor, start: start)
@@ -104,7 +100,9 @@ final class IntakeRunner {
 
   // MARK: - 1 回
 
-  private func begin(_ id: Int, finish: @escaping (Date) -> Void) -> BackgroundRunHandle {
+  private func begin(
+    _ id: Int, trigger: BackgroundScheduler.Trigger, finish: @escaping (Date) -> Void
+  ) -> BackgroundRunHandle {
     // 番人の上に「走っている」を残さないよう、受信が無ければ回はすぐ終わったものとして知らせる。
     guard let intake = store.intake(id) else {
       finish(now())
@@ -112,7 +110,7 @@ final class IntakeRunner {
     }
     let attempt = Attempt(
       intakeId: id, definition: intake.definition,
-      trigger: startingNow == id ? .now : .schedule, finish: finish)
+      trigger: trigger == .now ? .now : .schedule, finish: finish)
     attempt.current = run(Self.fetchJob(intake.definition.fetch)) { [weak self] result in
       guard !attempt.cancelled else { return }
       self?.fetched(result, attempt)

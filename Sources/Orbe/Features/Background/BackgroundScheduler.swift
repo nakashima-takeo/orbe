@@ -26,9 +26,15 @@ import Observation
     case expired
   }
 
+  /// 回を始めたきっかけ。
+  enum Trigger: Equatable {
+    case schedule
+    case now
+  }
+
   typealias Run = (BackgroundJob, @escaping (BackgroundRunResult) -> Void) -> BackgroundRunHandle
   /// 1 回を始め、止める手を返す。終わったら `finish` に数え始め（その回の開始時刻）を渡す。
-  typealias Start = (_ finish: @escaping (Date) -> Void) -> BackgroundRunHandle
+  typealias Start = (_ trigger: Trigger, _ finish: @escaping (Date) -> Void) -> BackgroundRunHandle
 
   @ObservationIgnored var now: () -> Date = Date.init
   @ObservationIgnored var calendar: () -> Calendar = { Calendar.current }
@@ -63,7 +69,7 @@ import Observation
     let run = run
     add(
       id,
-      Entry(timing: schedule.timing, deadline: schedule.deadline, anchor: anchor) { finish in
+      Entry(timing: schedule.timing, deadline: schedule.deadline, anchor: anchor) { _, finish in
         run(schedule.job) { result in finish(result.startedAt) { onEvent(.ran(result)) } }
       } onExpire: {
         onEvent(.expired)
@@ -76,8 +82,10 @@ import Observation
   {
     try timing?.validate()
     add(
-      id, Entry(timing: timing, deadline: nil, anchor: anchor) { finish in start { finish($0) {} } }
-    )
+      id,
+      Entry(timing: timing, deadline: nil, anchor: anchor) { trigger, finish in
+        start(trigger) { finish($0) {} }
+      })
   }
 
   /// いつだけを差し替えて数え直す（nil は「今すぐ」だけ）。走っている回は止めない。
@@ -97,7 +105,7 @@ import Observation
   /// 今すぐ走らせる。走っている間は何もしない。
   func runNow(id: String) {
     guard let entry = entries[id], entry.runToken == nil else { return }
-    start(id, entry)
+    start(id, entry, .now)
     recount()
   }
 
@@ -150,7 +158,7 @@ import Observation
           wake(at: date)
           continue
         }
-        start(id, entry)
+        start(id, entry, .schedule)
         if let deadline { wake(at: deadline) }
       }
     }
@@ -158,11 +166,11 @@ import Observation
     disarm = earliest.map { arm($0) { [weak self] in self?.recount() } }
   }
 
-  private func start(_ id: String, _ entry: Entry) {
+  private func start(_ id: String, _ entry: Entry, _ trigger: Trigger) {
     nextToken += 1
     let token = nextToken
     entry.runToken = token
-    let handle = entry.start { [weak self] anchor, deliver in
+    let handle = entry.start(trigger) { [weak self] anchor, deliver in
       self?.finished(id, token: token, anchor: anchor, deliver: deliver)
     }
     if entry.runToken == token { entry.handle = handle }
@@ -217,8 +225,9 @@ import Observation
   }
 
   /// 番人の中での始め方。終わりの知らせは、数え直しより先に使い手へ渡す知らせを添える。
-  fileprivate typealias EntryStart = (_ finish: @escaping (Date, () -> Void) -> Void) ->
-    BackgroundRunHandle
+  fileprivate typealias EntryStart = (
+    _ trigger: Trigger, _ finish: @escaping (Date, () -> Void) -> Void
+  ) -> BackgroundRunHandle
 
   @Observable fileprivate final class Entry {
     @ObservationIgnored var timing: BackgroundTiming?
