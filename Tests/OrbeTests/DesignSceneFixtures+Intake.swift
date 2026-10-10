@@ -183,4 +183,35 @@ extension DesignSceneFixtures {
       version: IntakePersistence.version, nextIntakeId: 1, nextProposalId: 1, intakes: [],
       proposals: [])
   }
+
+  /// 受信の中身を行数で切らないことを見る見本: Backlog（3）の取得役に長い依頼文と多くのツール・長い判定の指示文、
+  /// Slack（1）に長い取得のコマンドと作業ディレクトリ。
+  static func intakeLongFile() -> IntakesFile {
+    var long = intakeDesignFile()
+    if let agentIndex = long.intakes.firstIndex(where: { $0.id == 3 }) {
+      long.intakes[agentIndex].definition.fetch.method = .agent(
+        IntakeAgentFetch(
+          cli: "claude", model: "haiku",
+          tools: [
+            "mcp__backlog__get_issues", "mcp__backlog__get_issue_comments",
+            "mcp__backlog__get_project_list", "mcp__backlog__get_users",
+            "mcp__backlog__get_notifications", "mcp__backlog__get_wiki_pages",
+          ],
+          request: (1...9).map { "\($0). 自分が担当の未完了の課題を、更新の新しい順に 30 件取る。期限の近いものを先に。" }
+            .joined(separator: "\n")))
+      long.intakes[agentIndex].definition.judge.instruction =
+        (1...8).map { "\($0). 今日中に自分が手を動かす必要があるものだけをタスクにする。" }.joined(separator: "\n")
+    }
+    if let commandIndex = long.intakes.firstIndex(where: { $0.id == 1 }) {
+      long.intakes[commandIndex].definition.fetch.method = .command(
+        BackgroundCommand(
+          script: (1...8).map {
+            "gh search prs --review-requested=@me --json url,title,body --limit \($0 * 10) \\"
+          }
+          .joined(separator: "\n") + "\n  | jq -c '.[] | {id: .url, link: .url, body: .title}'",
+          directory:
+            "/Users/someone/work/very/long/path/to/the/repository/that/wraps/onto/the/next/line"))
+    }
+    return long
+  }
 }

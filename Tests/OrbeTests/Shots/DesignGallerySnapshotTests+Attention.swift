@@ -75,13 +75,22 @@ extension DesignGallerySnapshotTests {
       store.noteTransient(.task(notice), dwell: 7)
       return store
     }
+    // 秘書が応えない知らせ（入力待ちのグリフ・Home・本文）。
+    let secretaryStore = AttentionStore()
+    secretaryStore.noteTransient(
+      .secretary(
+        SecretaryNotice(
+          tabId: 9201, workspaceName: "Home",
+          text: LocalizationStore(language: .ja).string(.secretaryUnresponsive))), dwell: 7)
     let countStore = AttentionStore()
     countStore.apply(rows: rows)
     let openUI = MenuBarUIState()
     openUI.dropdownOpen = true
     return VStack(alignment: .trailing, spacing: Theme.Space.beat) {
       MenuBarStatusView(store: AttentionStore(), ui: MenuBarUIState(), phase: .closed).fixedSize()
-      ForEach(Array((transientStores + taskStores).enumerated()), id: \.offset) { _, store in
+      ForEach(
+        Array((transientStores + taskStores + [secretaryStore]).enumerated()), id: \.offset
+      ) { _, store in
         MenuBarStatusView(store: store, ui: MenuBarUIState(), phase: .open).fixedSize()
       }
       MenuBarStatusView(store: countStore, ui: MenuBarUIState(), phase: .closed).fixedSize()
