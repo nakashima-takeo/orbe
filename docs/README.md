@@ -48,7 +48,7 @@ Orbe は、作業場所の準備・エージェントの起動・状態確認を
 
 - [worktree](spec/palette/worktree.md) — worktree・ブランチを選んで新しいタブを開く（⌘T）
 - [tasks](spec/palette/tasks.md) — タスク画面（⌘⇧X）
-- [intake](spec/palette/intake.md) — タスク画面の受信タブ（提案をさばく）
+- [intake](spec/palette/intake.md) — タスク画面の自動追加タブ（候補をさばく）
 - [workspace](spec/palette/workspace.md) — workspace 切替・作成（⌘⇧S）・共有 PaletteCard 規律
 - [settings](spec/palette/settings.md) — 設定パレット（⌘,）
 - [attention](spec/palette/attention.md) — 対応すべきエージェントの一覧（⌘⌘）
