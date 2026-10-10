@@ -83,8 +83,7 @@ extension TaskPaletteCardKeyTests {
     arrow(Key.right, to: window)
     press(Key.space, " ", to: window)
     press(Key.space, " ", repeating: true, to: window)
-    press(Key.space, " ", repeating: true, to: window)
-    XCTAssertEqual(model.intake.selectedIntake?.paused, true, "止める ⇄ 再開は 1 回だけ")
+    XCTAssertEqual(model.intake.selectedIntake?.paused, true, "止める ⇄ 再開は 1 回だけ（往復しない）")
 
     press(Key.enter, "\r", to: window)
     press(Key.enter, "\r", repeating: true, to: window)
