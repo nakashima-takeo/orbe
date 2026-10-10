@@ -67,7 +67,8 @@ struct WorkspaceState: Codable, Equatable {
   /// 読んだ場合も同じ）——後から足したフィールドの異常でファイル全体を落とさない。
   var persistentId: UUID
 
-  enum CodingKeys: String, CodingKey {
+  /// `CaseIterable` は TabState と同じ seam（encode を手書きにしたので、足したキーの書き忘れを全キーの往復テストが見る）。
+  enum CodingKeys: String, CodingKey, CaseIterable {
     case name, rootPath, activeTab, boardSelected, tabs, lastUsedAt, settingsOverride
     case lastWorktreeBase, persistentId
   }
