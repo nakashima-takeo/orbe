@@ -58,4 +58,36 @@ extension TaskPaletteCardKeyTests {
     arrow(Key.up, to: window)
     XCTAssertEqual(model.area, .detail(.field(.title)), "↑ が効く")
   }
+
+  /// 会話の行に居る間に会話のタブが去ったら、カードが会話の索引の変化を付け直しへ届け、↑↓ が効く場所へ移る。
+  func testWhenTheConversationsTabGoesAwayTheArrowsStillMove() {
+    let tabs = AgentSessionTabs()
+    tabs.update([.init(sessionId: "s-1", tab: .init(tabId: 7, title: "pr-214"), isDormant: false)])
+    let condition = WaitCondition(
+      WaitConditionRequest(
+        description: "レビューが付いたら", command: "gh pr view 214", everyMinutes: 10,
+        deadline: DesignSceneFixtures.taskToday.addingTimeInterval(86400),
+        conversation: WaitConversation(
+          command: "claude", sessionId: "s-1", workspace: nil, secretary: false)),
+      setAt: DesignSceneFixtures.taskToday)
+    let model = TaskPaletteSamples.model(
+      [
+        TaskPaletteSamples.task(1, "a") {
+          $0.wait = .waiting(
+            TaskItem.Waiting(
+              reason: "レビュー待ち", since: DesignSceneFixtures.taskToday, condition: condition))
+        }
+      ], sessionTabs: tabs)
+    let window = mount(model)
+    model.enterDetail()
+    model.area = .detail(.conversation)
+    flush(window)
+
+    tabs.update([])
+    flush(window)
+    XCTAssertNotEqual(model.area, .detail(.conversation), "去った会話の行に残らない")
+
+    arrow(Key.up, to: window)
+    XCTAssertEqual(model.area, .detail(.field(.title)), "↑ が効く")
+  }
 }

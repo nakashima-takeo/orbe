@@ -6,8 +6,9 @@ import SwiftUI
 /// 静止画とテストで確かめられる。
 ///
 /// ① 要対応 0・閉じ切り: 減光した ◐ だけ（地なし・数字なし・水平余白も持たない）。
-/// ② `store.transient` が生きている間: 状態グリフ 11＋WS 名（上限で省略）＋文言（残り予算まで）を
-///    **1 つの箱**として滲み出し、件数は仕舞われる。祝いは艶の走査 1 本が担う。
+/// ② `store.transient` が生きている間: 印 11＋WS 名（上限で省略）＋文言（残り予算まで）を
+///    **1 つの箱**として滲み出し、件数は仕舞われる。祝いは艶の走査 1 本が担う。印は agent なら
+///    状態グリフ、タスクの知らせなら丸に ✓。タスクに workspace が無ければ WS 名の欄を出さない。
 /// ③ 閉じ切りで要対応あり: ◐＋件数（waiting+done のみ）。地 surfaceInk 16%。
 /// ④ ドロップダウン表示中はピル地を accent 35% に。
 struct MenuBarStatusView: View {
@@ -103,8 +104,8 @@ struct MenuBarStatusView: View {
   var body: some View {
     PillRow(spacing: Theme.Space.note, budget: Self.pillBudget) {
       brandGlyph.pillSlot(gap: 0, fold: 1)
-      if let row = store.transient?.row {
-        transientGroup(row).pillSlot(gap: Theme.Space.note, fold: textFold)
+      if let notice = store.transient?.notice {
+        transientGroup(notice).pillSlot(gap: Theme.Space.note, fold: textFold)
       }
       if slotCount > 0 {
         Text("\(slotCount)")
@@ -123,23 +124,46 @@ struct MenuBarStatusView: View {
     .padding(.horizontal, Theme.Space.hair)
   }
 
-  /// ②の中身（状態グリフ・WS 名・文言）。**これで 1 つのスロット**——原典は 3 つを 1 枚の
+  /// ②の中身（印・WS 名・文言）。**これで 1 つのスロット**——原典は 3 つを 1 枚の
   /// `max-width` の箱に入れて畳むので、滲み出しは左から途切れず一続きに現れ、収縮では右から
   /// 一続きに消える。3 つを個別に畳むと、同じ瞬間に WS 名も文言も字の途中で切れた断片が並ぶ。
   /// 内側の予算配分（WS 名は上限までハグ・文言が残りを吸う）はここが担う。
-  private func transientGroup(_ row: AttentionRow) -> some View {
+  private func transientGroup(_ notice: MenuBarNotice) -> some View {
     PillRow(spacing: Theme.Space.note, budget: Self.textBudget) {
-      if let kind = AgentStateIcon.kind(state: row.state) {
-        StatusGlyphView(kind: kind, size: 11, symbol: iconResolver.symbol(for: kind))
+      switch notice {
+      case .agent(let row):
+        if let kind = AgentStateIcon.kind(state: row.state) {
+          StatusGlyphView(kind: kind, size: 11, symbol: iconResolver.symbol(for: kind))
+            .environment(\.colorScheme, .dark)
+        }
+        workspaceSlot(row.workspaceName)
+        messageSlot(row.message ?? row.tabTitle)
+      case .task(let task):
+        TaskNoticeGlyph(size: 11)
           .environment(\.colorScheme, .dark)
+        if let name = task.workspaceName { workspaceSlot(name) }
+        messageSlot(task.text)
+      case .secretary(let secretary):
+        if let kind = AgentStateIcon.kind(state: "waiting") {
+          StatusGlyphView(kind: kind, size: 11, symbol: iconResolver.symbol(for: kind))
+            .environment(\.colorScheme, .dark)
+        }
+        workspaceSlot(secretary.workspaceName)
+        messageSlot(secretary.text)
       }
-      textSlot(row.workspaceName, color: Color.theme.textPrimary)
-        .pillSlotCap(Self.transientWorkspaceCap)
-      // 上限を宣言せず残り予算を吸う。インクは WS 名より一段沈めて「名前 → 中身」の順を作る
-      // （見本の副次インク #a49bb4 は②の地に対し 4.3:1 で、design-system §3 の本文 4.5:1 を
-      // 満たさない。`textSecondary` は #b8afc4＝5.4:1 で、条件を満たすうちの最も近い階調）。
-      textSlot(row.message ?? row.tabTitle, color: Color.theme.textSecondary)
     }
+  }
+
+  private func workspaceSlot(_ name: String) -> some View {
+    textSlot(name, color: Color.theme.textPrimary)
+      .pillSlotCap(Self.transientWorkspaceCap)
+  }
+
+  /// 上限を宣言せず残り予算を吸う。インクは WS 名より一段沈めて「名前 → 中身」の順を作る
+  /// （見本の副次インク #a49bb4 は②の地に対し 4.3:1 で、design-system §3 の本文 4.5:1 を
+  /// 満たさない。`textSecondary` は #b8afc4＝5.4:1 で、条件を満たすうちの最も近い階調）。
+  private func messageSlot(_ text: String) -> some View {
+    textSlot(text, color: Color.theme.textSecondary)
   }
 
   /// ◐。①③④は前景モノクロ（.primary＝メニューバー外観追従）で、他の常駐アイコンと同じ
@@ -339,5 +363,25 @@ struct PillRow: Layout {
         proposal: ProposedViewSize(width: width, height: bounds.height))
       x += width * fold
     }
+  }
+}
+
+/// タスク由来の知らせの印（丸に ✓）。解けた待ちの札と同じ accent の明色で描く。
+private struct TaskNoticeGlyph: View {
+  let size: CGFloat
+
+  var body: some View {
+    Canvas { context, canvasSize in
+      let k = canvasSize.width / 10
+      let ring = Path(ellipseIn: CGRect(x: k, y: k, width: 8 * k, height: 8 * k))
+      var check = Path()
+      check.move(to: CGPoint(x: 3.2 * k, y: 5.1 * k))
+      check.addLine(to: CGPoint(x: 4.5 * k, y: 6.4 * k))
+      check.addLine(to: CGPoint(x: 6.9 * k, y: 3.8 * k))
+      let style = StrokeStyle(lineWidth: 1.3 * k, lineCap: .round, lineJoin: .round)
+      context.stroke(ring, with: .color(Color.theme.accentBright), style: style)
+      context.stroke(check, with: .color(Color.theme.accentBright), style: style)
+    }
+    .frame(width: size, height: size)
   }
 }

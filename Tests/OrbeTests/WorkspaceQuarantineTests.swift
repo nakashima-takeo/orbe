@@ -239,7 +239,7 @@ final class WorkspaceQuarantineTests: OrbeTestCase {
       try Data(contentsOf: XCTUnwrap(quarantined.first)), Data(corruptJSON.utf8),
       "退避物は原本とバイト単位で一致する（手で rename すれば復旧できる）")
     XCTAssertEqual(
-      WorkspacePersistence.load()?.workspaces.count, 1,
+      WorkspacePersistence.load()?.workspaces.map(\.name), ["default", "Home"],
       "workspaces.json は既定構成で書き直されている（次回起動からは正常）")
   }
 }

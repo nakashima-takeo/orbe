@@ -28,6 +28,7 @@ extension WindowController {
     // タブ集合が変わると editingIndex（位置 index）が別タブを指しうる。編集中なら畳む
     // （前方の背景タブが shell exit する等、フォーカスを保ったまま集合が変わる経路を決定的に解除）。
     if statusModel.editingIndex != nil { endTabRename() }
+    secretary.tabClosing(tab.id, origin: origin)
     switch store.removeTab(tab, origin: origin) {
     case .notFound:
       return

@@ -8,9 +8,10 @@ enum StateDir {
   /// state ディレクトリ。存在しなければ作成する。解決できなければ nil。
   static func base() -> URL? { OrbePaths.stateDirBase() }
 
-  /// Apple 規定の `~/Library/Application Support/<bundle-id>/`。`ORBE_STATE_DIR` を一切見ない
-  /// （全インスタンス共有の固定パスが要る用途向け）。存在しなければ作成する。
-  static func appSupport() -> URL? { OrbePaths.appSupportDir() }
+  /// `ORBE_STATE_DIR` で隔離した検証用のインスタンスか。隔離したインスタンスは state フォルダの外を書かない。
+  static var isIsolated: Bool {
+    ProcessInfo.processInfo.environment[OrbePaths.stateDirEnvVar]?.isEmpty == false
+  }
 
   /// このインスタンスの bundle ID（チャネル identity）。タブへ注入し、実体化コピーへも刻む。
   static var bundleId: String { OrbePaths.bundleId }

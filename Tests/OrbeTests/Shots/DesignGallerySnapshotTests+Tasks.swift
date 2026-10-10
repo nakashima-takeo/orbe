@@ -52,13 +52,23 @@ extension DesignGallerySnapshotTests {
     expanded.submit()
     try write("tasks_done_expanded.png", expanded)
 
+    // 完了のタスクを選ぶ: 秘書には頼めないので、フッターに ⌘↵ のヒントも右の欄の「秘書に頼む」も出ない。
+    let doneSelected = DesignSceneFixtures.taskPaletteModel()
+    doneSelected.jump(1)
+    doneSelected.submit()
+    doneSelected.move(1)
+    try write("tasks_done_selected.png", doneSelected)
+
     // 右の欄の「＋ 結び付ける」に居る（右に「ブランチの PR は自動」）。
     let addLink = DesignSceneFixtures.taskPaletteModel()
     addLink.enterDetail()
     addLink.moveField(-1)
     try write("tasks_detail_add_link.png", addLink)
 
+    try renderTaskWaitConditionSnapshots(write)
+    try renderTaskSecretarySnapshots(write)
     try renderTaskPaletteGitHubSnapshots(write)
+    try renderTaskPaletteIntakeSnapshots(write)
 
     try write(
       "tasks_empty.png",
@@ -137,5 +147,55 @@ extension DesignGallerySnapshotTests {
     })
     missing.toggleTab()
     try write("tasks_github_unavailable.png", missing, 1440, 900)
+  }
+}
+
+extension DesignGallerySnapshotTests {
+  /// 待ちの条件（見本 SlWait.png・SlResolved.png）。#214 を選ぶ。
+  func renderTaskWaitConditionSnapshots(
+    _ write: (String, TaskPaletteModel, CGFloat, CGFloat) throws -> Void
+  ) throws {
+    func model(_ file: TasksFile, tabs: AgentSessionTabs? = nil) -> TaskPaletteModel {
+      let palette = DesignSceneFixtures.taskPaletteModel(
+        file, sessionTabs: tabs ?? DesignSceneFixtures.taskSessionTabs())
+      palette.move(1)
+      palette.move(1)
+      return palette
+    }
+    // SlWait: 待っている間（会話のタブ pr-214 がある）。
+    try write(
+      "tasks_wait_condition.png", model(DesignSceneFixtures.taskWaitConditionFile()), 1440, 900)
+
+    // 会話のタブが無い（「claude 2日前の会話」だけ）。実行の記録を開いている。
+    let noTab = model(DesignSceneFixtures.taskWaitConditionFile(), tabs: AgentSessionTabs())
+    noTab.toggleConditionPart(.log)
+    try write("tasks_wait_condition_log.png", noTab, 1440, 900)
+
+    // SlResolved: 解けた後。
+    try write(
+      "tasks_wait_resolved.png",
+      model(
+        DesignSceneFixtures.taskWaitConditionFile(
+          resolved: .satisfied(output: DesignSceneFixtures.taskWaitOutput))), 1440, 900)
+
+    // 期限が来た後。
+    try write(
+      "tasks_wait_expired.png",
+      model(DesignSceneFixtures.taskWaitConditionFile(resolved: .expired)), 1440, 900)
+
+    // 期限までにもう確かめない最後の間隔（「期限まで確認なし」）。
+    try write(
+      "tasks_wait_last_interval.png",
+      model(
+        DesignSceneFixtures.taskWaitConditionFile(
+          deadline: DesignSceneFixtures.taskToday.addingTimeInterval(5 * 60))), 1440, 900)
+
+    // 確認の出力の 1 行目が長い（行の札は上限幅で末尾を省略する）。作業ディレクトリが消えていて続きから始められない。
+    let long = model(
+      DesignSceneFixtures.taskWaitConditionFile(
+        resolved: .satisfied(
+          output: String(repeating: "@sato · CHANGES_REQUESTED · 長いレビューの要約 ", count: 8))))
+    long.continuationBlock = { _ in .directoryMissing }
+    try write("tasks_wait_resolved_blocked.png", long, 1440, 900)
   }
 }

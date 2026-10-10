@@ -1,7 +1,7 @@
 import AppKit
 
-/// ⌘⇧X タスク画面の提示。画面はタスクのストア（唯一の正）を直接読み書きし、ここは開いた時点の
-/// workspace の写しと GitHub タブのリポジトリの基点、GitHub の値の置き場を渡して配線するだけ。
+/// ⌘⇧X タスク画面の提示。画面はタスクと受信のストア（唯一の正）を直接読み書きし、ここは開いた時点の
+/// workspace の写しと GitHub タブのリポジトリの基点、GitHub の値の置き場、受信の走らせ役を渡して配線するだけ。
 extension WindowController {
   /// タスク画面を開く（開いていれば焦点をモデルが決めた行き先へ当て直すだけ）。タブが 0 枚の workspace でも開く。
   /// GitHub タブの一覧は、タスクのタブを開いていても取り直す（ヘッダーの「GitHub N」のため）。
@@ -17,8 +17,9 @@ extension WindowController {
     }
     let p = TaskPaletteModel(
       store: taskStore, githubItems: .shared, viewer: .shared, openLists: .shared,
-      root: base, agents: worktreeAgents,
-      workspaces: TaskPaletteWorkspaces(opened: entry(current), all: workspaces.map(entry)),
+      root: base, agents: worktreeAgents, sessionTabs: agentSessionTabs, intakes: intakeRunner,
+      workspaces: TaskPaletteWorkspaces(
+        opened: entry(current), all: workspaces.map(entry), home: store.homeWorkspaceId),
       now: Date(), timeZone: .current)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
     p.onOpenURL = { NSWorkspace.shared.open($0) }
@@ -26,6 +27,16 @@ extension WindowController {
     p.onFocusTab = { [weak self] tabId in
       self?.dismissPalette()
       _ = self?.controlFocusTab(tabId: tabId)
+    }
+    p.onContinueWait = { [weak self] id in self?.continueWait(taskId: id) }
+    p.continuationBlock = { [weak self] id in self?.continuationBlock(taskId: id) }
+    p.onAskSecretary = { [weak self] ask in
+      guard let self else { return .failure(.claudeMissing) }
+      do throws(Secretary.Refusal) {
+        return .success(try self.secretary.ask(ask))
+      } catch {
+        return .failure(error)
+      }
     }
     model.taskPalette = p
     model.overlay = .taskPalette

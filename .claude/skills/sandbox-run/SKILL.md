@@ -16,6 +16,7 @@ Orbe の新ビルドを、本物の Orbe（常用の workspaces・control.sock�
 - **隔離インスタンスへの操作は `scripts/sandbox-run.sh rpc` だけで行う。** 手元の Orbe MCP ツール（`mcp__orbe__*`）と `orb` CLI は**常用インスタンス**に繋がる。使うと利用者の実タブに目印が打ち込まれたうえ、起こしたバンドルについて何も測らないまま緑になる。
 - **DMG から起こすときはマウント先を指定する**（`hdiutil attach <dmg> -mountpoint <dir> -nobrowse`）。自動命名は同名ボリュームが既にあると `/Volumes/Orbe 1` へ逃げるので、古い DMG が張りっぱなしのとき別バージョンを起こす。
 - **使い捨ては必ず片付ける。** 承認・NG・失敗のいずれで終わっても `stop` を通す。片付けが走らなくても 60 分で自壊するが、それは保険であって手順ではない。
+- **隔離インスタンスはエージェントプラグインを各 CLI へ登録しない。** 実体化も登録（と登録のためのオンボーディング）もしない——登録は利用者の claude / codex / agy の設定を書き換えるため。隔離インスタンスのタブの agent は、常用の Orbe が登録したプラグイン（hook・MCP のシム）で動き、シムが呼ぶ `orbe-report` / `orbe-mcp` は検証ビルドのもの。プラグインの中身（`app/agent-plugin/`）の変更は、隔離インスタンスでは agent に届かない。
 
 ## 手順
 
@@ -30,7 +31,7 @@ flowchart TD
 ```
 
 1. **起こす対象を決める。** 既定は `./scripts/build-app.sh` でビルドした `./build/Orbe.app`（前提不足＝フル Xcode 未導入などでの失敗は出力メッセージ〔`docs/guides/build.md` 参照〕に従う）。呼び出し元が別のバンドルを渡したときはそれを使う（公証済み DMG 内の `Orbe.app` など）。
-2. **`./scripts/sandbox-run.sh start [<app>]` を実行する。** 隔離起動から煙探知までを通し、`state_dir` / `sock` / `pid` / `build_id` / `log` を出す。煙探知は `.app` の起動経路と `AppDelegate` の配線を機械的に確かめる唯一の場所なので、承認モードでも飛ばさない。失敗（control.sock が現れない・目印が出ない）は自分で片付けて非 0 で返るので、駆動も承認も始めず、失敗として呼び出し側へ返す。
+2. **`./scripts/sandbox-run.sh start [<app>] [--seed <dir>]` を実行する。** state を前もって置きたいとき（受信の `intakes.json` の見本など）は `--seed` に置き場のディレクトリを渡すと、起こす前にその中身を隔離した state dir へ写す。隔離起動から煙探知までを通し、`state_dir` / `sock` / `pid` / `build_id` / `log` を出す。煙探知は `.app` の起動経路と `AppDelegate` の配線を機械的に確かめる唯一の場所なので、承認モードでも飛ばさない。失敗（control.sock が現れない・目印が出ない）は自分で片付けて非 0 で返るので、駆動も承認も始めず、失敗として呼び出し側へ返す。
 3. モードで分岐:
    - **承認モード（既定）**: 今回の変更が**どこに現れ・何を触って見るか**と、画面 chrome の **build-id が手順2 の `build_id` か**を短く提示する（人間目視が必須の条件があればここで渡す）。`AskUserQuestion` で承認を問う。**この承認が後続（確定・マージ等）の許可**。NG・指摘があれば呼び出し側へ差し戻す。
    - **無人モード**: `./scripts/sandbox-run.sh rpc <state_dir> <method> '<params の JSON>' [<timeout 秒>]` で制御 API（`docs/spec/control/api.md`）を駆動して確かめる。`prompt_agent` / `wait_for_event` のように待つメソッドは、その `timeoutMs` より長い timeout 秒を渡す。

@@ -47,7 +47,7 @@ final class TerminalTabEditorTests: OrbeTestCase {
       cwd: "/tmp", agent: nil, explicitTitle: nil,
       editor: EditorState(
         documents: .init(open: [a.path, "/nonexistent/z.txt"], active: a.path, preview: a.path)))
-    let tab = TerminalTab(restoring: state, resumeSpawn: { _ in nil })
+    let tab = TerminalTab(restoring: state, resumeSpawn: { _, _, _ in nil })
     XCTAssertTrue(tab.editor.documents.isEmpty, "復元時は開かない")
     XCTAssertEqual(tab.tabState().editor, state.editor, "未消費のまま同じ形で書き戻す")
 
@@ -72,7 +72,7 @@ final class TerminalTabEditorTests: OrbeTestCase {
     let tab = TerminalTab(
       restoring: TabState(
         cwd: "/tmp", agent: nil, explicitTitle: nil, editor: EditorState(search: query)),
-      resumeSpawn: { _ in nil })
+      resumeSpawn: { _, _, _ in nil })
     let search = tab.view.editor.projectSearch
     XCTAssertEqual(search.query, query, "入力欄に戻る")
     XCTAssertEqual(search.phase, .idle, "復元では探さない")

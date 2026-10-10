@@ -34,7 +34,7 @@ extension TaskPaletteModelTests {
     let palette = model([task(1, "a"), task(2, "b", .done)])
     palette.query = "a"
     palette.enterDetail()
-    XCTAssertEqual(palette.area, .list, "追加の行では入らない")
+    XCTAssertEqual(palette.area, .list, "入力の行き先では入らない")
 
     palette.query = ""
     palette.enterDetail()

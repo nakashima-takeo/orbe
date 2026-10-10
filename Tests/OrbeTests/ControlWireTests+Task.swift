@@ -183,6 +183,9 @@ extension ControlWireTests {
       ("list_tasks", ["workspaceId": "3"]),
       ("move_task", ["taskId": 7, "beforeTaskId": false]),
       ("delete_task", ["taskId": 7.5]),
+      ("start_task", ["taskId": "7"]),
+      ("start_task", ["taskId": 7, "branch": 1]),
+      ("start_task", ["taskId": 7, "prompt": NSNull()]),
     ]
 
     for (index, entry) in rejected.enumerated() {
@@ -195,6 +198,7 @@ extension ControlWireTests {
     XCTAssertTrue(fake.taskLists.isEmpty)
     XCTAssertTrue(fake.movedTasks.isEmpty)
     XCTAssertTrue(fake.deletedTaskIds.isEmpty)
+    XCTAssertTrue(fake.startedTasks.isEmpty)
   }
 
   /// `links` は `{kind, repo, number}` の配列で、順を保って届く。update では省略が「変えない」、`[]` が全部外す。
@@ -264,5 +268,26 @@ extension ControlWireTests {
 
     XCTAssertEqual(fake.taskLists, [nil, 6], "workspaceId の省略は絞り込まない")
     XCTAssertEqual(fake.deletedTaskIds, [11])
+  }
+
+  /// `start_task` は渡した項目だけを target へ届け、target の完了で 1 度だけ応答する。
+  func testStartTaskCarriesItsFieldsAndAnswersWithTheTargetsResult() {
+    let fake = FakeControlTarget()
+    let wire = startWire(target: fake)
+
+    let response = wire.request(
+      id: 1, method: "start_task",
+      params: [
+        "taskId": 7, "branch": "feat/x", "repo": "/r", "agent": "claude", "prompt": "直して",
+      ])
+    _ = wire.request(id: 2, method: "start_task", params: ["taskId": 8])
+
+    XCTAssertEqual((response?["result"] as? [String: Any])?["workdir"] as? String, "/w")
+    XCTAssertEqual(fake.startedTasks.map(\.taskId), [7, 8])
+    let full = fake.startedTasks[0]
+    XCTAssertEqual(
+      [full.branch, full.repo, full.agent, full.prompt], ["feat/x", "/r", "claude", "直して"])
+    let bare = fake.startedTasks[1]
+    XCTAssertEqual([bare.branch, bare.repo, bare.agent, bare.prompt], [nil, nil, nil, nil])
   }
 }

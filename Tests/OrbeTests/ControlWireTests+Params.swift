@@ -86,7 +86,8 @@ extension ControlWireTests {
       ("update_task", ["taskId": 7, "title": "改題"]),
       ("move_task", ["taskId": 7, "beforeTaskId": 8]),
       ("delete_task", ["taskId": 7]),
-    ]
+      ("start_task", ["taskId": 7, "branch": "feat/x", "prompt": "直して"]),
+    ] + intakeRequests
   }
 
   /// `validRequests` を method 引きにしたもの。
@@ -137,6 +138,15 @@ extension ControlWireTests {
       RequiredParam(method: "update_task", key: "taskId", code: -32602),
       RequiredParam(method: "move_task", key: "taskId", code: -32602),
       RequiredParam(method: "delete_task", key: "taskId", code: -32602),
+      RequiredParam(method: "start_task", key: "taskId", code: -32602),
+      RequiredParam(method: "set_intake", key: "name", code: -32602),
+      RequiredParam(method: "set_intake", key: "fetch", code: -32602),
+      RequiredParam(method: "set_intake", key: "judge", code: -32602),
+      RequiredParam(method: "set_intake", key: "when", code: -32602),
+      RequiredParam(method: "run_intake", key: "intakeId", code: -32602),
+      RequiredParam(method: "pause_intake", key: "intakeId", code: -32602),
+      RequiredParam(method: "pause_intake", key: "paused", code: -32602),
+      RequiredParam(method: "delete_intake", key: "intakeId", code: -32602),
     ]
   }
 
@@ -255,6 +265,9 @@ extension ControlWireTests {
       "messageSource は AgentMessage.source へ畳まれる。-32602 ガードが無く欠落しても目に見えないため、"
         + "この経路以外にこの語を固定する手段が無い（#50 が名指しした穴）")
     XCTAssertEqual(reported?.reason, "other", "reason が名前どおり届く（セッションログの closed に載る語）")
+    XCTAssertEqual(
+      reported?.reporterGroup, ProcessGroup.terminalGroup(of: getpid()),
+      "報告者は params でなく接続の向こうのプロセス（ここではテスト自身）から辿る")
   }
 
   /// `spawn` の optional 3 件が名前どおり target へ届く（いずれもガードが無い）。

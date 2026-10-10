@@ -63,6 +63,31 @@ final class AgentHookWiringTests: OrbeTestCase {
     XCTAssertTrue(entries.allSatisfy { $0.matcher == nil })
   }
 
+  /// 起動時の idle は、会話が始まる・切り替わる source（起動・再開・/clear・fork）だけに絞る。compact も
+  /// SessionStart を撃ち、自動 compact はターンの途中で走るので、絞らないと作業中の agent を idle と誤認して
+  /// 次の入力を貼る。
+  func testSessionStartIsNarrowedToConversationStarts() throws {
+    let entries = try XCTUnwrap(try definitions()["claude"]?["SessionStart"])
+    XCTAssertEqual(entries.map(\.matcher), ["startup|resume|clear|fork"])
+  }
+
+  /// API エラーで終わったターン（Stop の代わりに StopFailure）も、ターンの終わりとして done にする。配線しないと
+  /// working のまま残り、溜めた頼みが届かない。ただし usage limit（`rate_limit`）は終わりにしない——claude はその場で
+  /// リセットを待って自分で続けるので、done にすると待ちの間に溜めが次々貼られ、続きが打ち切られる。待ちが続きなしに
+  /// 終わったこと（Notification の `quota_auto_resume_disabled`）を終わりとする。
+  func testATurnThatEndsInAnAPIErrorIsDoneExceptAUsageLimit() throws {
+    let claude = try XCTUnwrap(try definitions()["claude"])
+    let failure = try XCTUnwrap(claude["StopFailure"])
+    XCTAssertEqual(failure.map(\.state), ["done"])
+    let kinds = try XCTUnwrap(failure.first?.matcher).split(separator: "|").map(String.init)
+    XCTAssertTrue(kinds.contains("server_error"))
+    XCTAssertFalse(kinds.contains("rate_limit"))
+    let quota = try XCTUnwrap(claude["Notification"]).filter {
+      $0.matcher == "quota_auto_resume_disabled"
+    }
+    XCTAssertEqual(quota.map(\.state), ["done"])
+  }
+
   // MARK: Orbe 本体との突き合わせ
 
   /// 定義が報告する state は、どれも Orbe が状態として解する語（状態グリフの種別か、終わりの `clear`）。

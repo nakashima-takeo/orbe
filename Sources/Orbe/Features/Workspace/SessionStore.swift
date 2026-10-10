@@ -45,6 +45,9 @@ struct TabRef {
 final class SessionStore {
   private(set) var workspaces: [Workspace]
   private(set) var activeWorkspace: Int
+  /// Home（Orbe 自身の窓口になる、消せない workspace）の `persistentId`。一覧の側が 1 つだけを指す。
+  /// 指す先が一覧に無ければ Home は無い。それ以外の workspace を「通常の workspace」と呼ぶ。
+  private(set) var homeWorkspaceId: UUID?
   var current: Workspace { workspaces[activeWorkspace] }
 
   init(workspaces: [Workspace] = [], activeWorkspace: Int = 0) {
@@ -54,7 +57,8 @@ final class SessionStore {
 
   /// 復元/初期化で組み立て済みの配列一式を差し替える（WindowController.init が wire 後に渡す）。
   /// 隣接不変条件の入口——各 workspace のタブを `grouped` で正規化し、active は同一性で引き直す。
-  func load(workspaces: [Workspace], activeWorkspace: Int) {
+  /// 渡した配列をそのまま入れる（Home を足すのは `ensureHome`）。
+  func load(workspaces: [Workspace], activeWorkspace: Int, homeWorkspaceId: UUID? = nil) {
     for ws in workspaces {
       let activeTab = ws.tabs.indices.contains(ws.active) ? ws.tabs[ws.active] : nil
       ws.tabs = Self.grouped(ws.tabs)
@@ -64,7 +68,52 @@ final class SessionStore {
     }
     self.workspaces = workspaces
     self.activeWorkspace = activeWorkspace
+    self.homeWorkspaceId = homeWorkspaceId
   }
+
+  // MARK: - Home
+
+  /// 「Home がちょうど 1 つあり、root が `rootPath`」へそろえる（起動時に復元の後で 1 回）。
+  /// 指している workspace があれば root を上書きし、無ければ「Home」を末尾に足して指す。active は動かさず、
+  /// タブも作らない。root は state フォルダから導く値なので、保存されていた root は使わない。
+  func ensureHome(rootPath: String) {
+    if let i = homeIndex {
+      workspaces[i].rootPath = rootPath
+      return
+    }
+    let ws = Workspace(name: "Home", rootPath: rootPath)
+    workspaces.append(ws)
+    homeWorkspaceId = ws.persistentId
+  }
+
+  /// Home の位置。無ければ nil。
+  var homeIndex: Int? {
+    guard let homeWorkspaceId else { return nil }
+    return workspaces.firstIndex { $0.persistentId == homeWorkspaceId }
+  }
+
+  func isHome(_ index: Int) -> Bool { index == homeIndex }
+
+  /// 起源（パレットで Home の次に固定する workspace）＝配列で最初の通常 workspace。
+  var originWorkspaceIndex: Int? { workspaces.indices.first { !isHome($0) } }
+
+  /// workspace の削除を妨げる理由。
+  enum RemovalBlocker {
+    case home
+    case lastRegularWorkspace
+  }
+
+  /// 指定 workspace を消せない理由。消せるなら nil。workspace index の妥当性は呼び出し側が保証する。
+  /// 通常の workspace を 1 つは残す——Home だけになると、新しく起こすタブが Home の
+  /// root（リポジトリに属さない場所）で起きる。
+  func removalBlocker(_ index: Int) -> RemovalBlocker? {
+    if isHome(index) { return .home }
+    let regularCount = workspaces.count - (homeIndex == nil ? 0 : 1)
+    return regularCount <= 1 ? .lastRegularWorkspace : nil
+  }
+
+  /// ディレクトリ（rootPath）を変えられるか。Home の root は state フォルダから導く値なので変えない。
+  func canChangeDir(_ index: Int) -> Bool { !isHome(index) }
 
   // MARK: - 純ドメイン読み
 
@@ -169,11 +218,11 @@ final class SessionStore {
     return dest
   }
 
-  /// 復元した休眠チケットを、指定 workspace の同キー連の右端（無ければ末尾）へ挿し、実挿入 index を返す。
-  /// `active` は挿す前と同じタブを指し続ける——復元は「見せる先を変えない」ので、背景 workspace で
-  /// active を挿したタブへ動かす `insertTab` を継がない（0 タブだった workspace は `active == 0` のままで
-  /// 新タブがそれになる）。workspace index の妥当性は呼び出し側が保証する。
-  func insertRestoredTab(_ tab: TerminalTab, intoWorkspaceAt i: Int) -> Int {
+  /// 選ばずに足すタブ（復元した休眠チケット・選ばずに起こすタブ）を、指定 workspace の同キー連の右端（無ければ
+  /// 末尾）へ挿し、実挿入 index を返す。`active` は挿す前と同じタブを指し続ける——どちらも「見せる先を変えない」ので、
+  /// 背景 workspace で active を挿したタブへ動かす `insertTab` を継がない（0 タブだった workspace は `active == 0` の
+  /// ままで新タブがそれになる）。workspace index の妥当性は呼び出し側が保証する。
+  func insertTabUnselected(_ tab: TerminalTab, intoWorkspaceAt i: Int) -> Int {
     insert(tab, intoWorkspaceAt: i)
   }
 
@@ -293,10 +342,13 @@ final class SessionStore {
     return true
   }
 
-  /// workspace のディレクトリ設定（rootPath）を変更する。`~` はホーム展開する（空・範囲外は false）。
+  /// workspace のディレクトリ設定（rootPath）を変更する。`~` はホーム展開する（空・範囲外・
+  /// `canChangeDir` が偽は false）。
   @discardableResult func setWorkspaceDir(_ index: Int, to path: String) -> Bool {
     let trimmed = path.trimmingCharacters(in: .whitespaces)
-    guard workspaces.indices.contains(index), !trimmed.isEmpty else { return false }
+    guard workspaces.indices.contains(index), canChangeDir(index), !trimmed.isEmpty else {
+      return false
+    }
     workspaces[index].rootPath = (trimmed as NSString).expandingTildeInPath
     return true
   }
@@ -308,12 +360,12 @@ final class SessionStore {
     case backgroundChanged
   }
 
-  /// workspace を削除して `activeWorkspace` をシフトする。最後の 1 つは残す（`.invalid`）。
+  /// workspace を削除して `activeWorkspace` をシフトする。`removalBlocker` があれば消さない（`.invalid`）。
   /// 背景 workspace の削除ではアクティブの同一性を保つ（index を詰めるだけ）。アクティブ workspace の
   /// 削除では MRU（`lastUsedAt` 最大の他 workspace）を次のアクティブにする。
   /// 配下のタブには外れる前に `origin`（呼び手が名乗る発火源）を配る（`.invalid` では何も告げない）。
   func closeWorkspace(_ index: Int, origin: TabCloseOrigin) -> CloseWorkspaceOutcome {
-    guard workspaces.indices.contains(index), workspaces.count > 1 else { return .invalid }
+    guard workspaces.indices.contains(index), removalBlocker(index) == nil else { return .invalid }
     guard index == activeWorkspace else {
       workspaces[index].tabs.forEach { detach($0, origin: origin) }
       workspaces.remove(at: index)

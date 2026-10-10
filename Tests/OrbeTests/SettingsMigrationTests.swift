@@ -78,12 +78,10 @@ final class SettingsMigrationTests: OrbeTestCase {
     XCTAssertEqual(layer[SettingKeys.fontSize], 16)
   }
 
-  /// 移行は app-state.json の既存項目を潰さない。旧 settings.json は `preferredLanguage` も
-  /// `registeredAgentPluginName` も持たないので、全体上書きするとこの 2 つが消える
-  /// ——言語が未選択に戻って初回言語選択画面が再び出る／プラグインが毎起動登録し直される。
+  /// 移行は app-state.json の既存項目を潰さない。旧 settings.json は `preferredLanguage` を
+  /// 持たないので、全体上書きするとこれが消える——言語が未選択に戻って初回言語選択画面が再び出る。
   func testMigrationMergesIntoExistingAppState() throws {
-    AppStatePersistence.save(
-      AppStateFile(registeredAgentPluginName: "orbe-notify-v2", preferredLanguage: "ja"))
+    AppStatePersistence.save(AppStateFile(preferredLanguage: "ja"))
     let legacy = """
       {"agentPluginsInstalled":true,"completionInstalled":true,\
       "cachedShellPath":"/usr/local/bin:/usr/bin","fontSize":16}
@@ -94,7 +92,6 @@ final class SettingsMigrationTests: OrbeTestCase {
 
     let app = try XCTUnwrap(AppStatePersistence.load())
     XCTAssertEqual(app.preferredLanguage, "ja", "旧形式が持たない項目は移行で消えない")
-    XCTAssertEqual(app.registeredAgentPluginName, "orbe-notify-v2", "旧形式が持たない項目は移行で消えない")
     XCTAssertEqual(app.agentPluginsInstalled, true, "旧形式の項目は入る")
     XCTAssertEqual(app.completionInstalled, true, "旧形式の項目は入る")
     XCTAssertEqual(app.cachedShellPath, "/usr/local/bin:/usr/bin", "旧形式の項目は入る")

@@ -181,7 +181,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteSectionInProgress
   case taskPaletteSectionTodo
   case taskPaletteSectionDone
-  case taskPaletteAdd
   case taskPaletteEmpty
   case taskPaletteAddedBy
   case taskPaletteToday
@@ -301,6 +300,123 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAddLink
   case taskPaletteBranchPRAuto
   case taskPaletteActionAddLink
+  case taskPaletteErrAgentMissing
+  case taskPaletteErrDirectoryMissing
+  case taskPaletteActionContinue
+  case taskPaletteContinueBlocked
+  case taskPaletteActionShowCommand
+  case taskPaletteActionHideCommand
+  case taskPaletteActionShowLog
+  case taskPaletteActionHideLog
+  case taskWaitConditionLabel
+  case taskWaitCheckLabel
+  case taskWaitDeadlineLabel
+  case taskWaitEvery
+  case taskWaitNextIn
+  case taskWaitSoon
+  case taskWaitDeadline
+  case taskWaitCommand
+  case taskWaitLog
+  case taskWaitLogEmpty
+  case taskWaitResolvedChecks
+  case taskWaitContinue
+  case taskWaitEveryUntilDeadline
+  case taskWaitContinueNote
+  case taskWaitSatisfied
+  case taskWaitExpired
+  case taskWaitJustNow
+  case taskWaitAgo
+  case taskWaitConversationToday
+  case taskWaitConversationDays
+  case taskWaitResultSuccess
+  case taskWaitResultExited
+  case taskWaitResultSignaled
+  case taskWaitResultLimited
+  case taskWaitResultStopped
+  case taskWaitResultNotStarted
+  case waitContinueSatisfied
+  case waitContinueOutput
+  case waitContinueExpired
+
+  case taskPaletteMatchingTasks
+  case taskPaletteActionAddTodo
+  case taskPaletteHintToMatches
+  case taskPaletteJustAdded
+  case taskPaletteAddedHeading
+  case taskPaletteHeadingTask
+  case taskPaletteScopeWasAll
+  case taskPaletteActionRefine
+  // MARK: - タスク画面の受信タブ
+  case taskPaletteTabIntake
+  case taskPaletteIntakePlaceholder
+  case taskPaletteIntakeAskSecretary
+  case taskPaletteIntakeNext
+  case taskPaletteIntakePaused
+  case taskPaletteIntakeRunning
+  case taskPaletteIntakeNoProposals
+  case taskPaletteIntakeLastFailed
+  case taskPaletteIntakeContents
+  case taskPaletteIntakeRunAt
+  case taskPaletteIntakeFetched
+  case taskPaletteIntakeJudged
+  case taskPaletteIntakeProposedShort
+  case taskPaletteIntakeProposedLong
+  case taskPaletteIntakeNothingNew
+  case taskPaletteIntakeFailed
+  case taskPaletteIntakeNeverRan
+  case taskPaletteIntakeEmpty
+  case taskPaletteIntakeOpenLink
+  case taskPaletteIntakeAsTask
+  case taskPaletteIntakeDue
+  case taskPaletteIntakeDismiss
+  case taskPaletteIntakeActionAccept
+  case taskPaletteIntakeActionProposals
+  case taskPaletteIntakeActionRunNow
+  case taskPaletteIntakeHintShelf
+  case taskPaletteIntakeHintPick
+  case taskPaletteIntakeHintBack
+  case taskPaletteIntakeFetch
+  case taskPaletteIntakeCurrentSet
+  case taskPaletteIntakeNewArrivals
+  case taskPaletteIntakeJudge
+  case taskPaletteIntakeLast
+  case taskPaletteIntakeOverlaps
+  case taskPaletteIntakeAgentFetch
+  case taskPaletteIntakeCommandFetch
+  case taskPaletteIntakeTools
+  case taskPaletteIntakeDirectory
+  case taskPaletteIntakeEvery
+  case taskPaletteIntakeDaily
+  case taskPaletteIntakeOverlapCount
+  case taskPaletteIntakeRewriteNote
+  case taskPaletteIntakeRunNow
+  case taskPaletteIntakePause
+  case taskPaletteIntakeResume
+  case taskPaletteIntakeErrAccept
+  case taskPaletteIntakeErrRunning
+  // MARK: - 秘書・作業を始める（L10nTable+Secretary）
+  case taskStartHomeTask
+  case secretaryLineOrigin
+  case secretaryLineWaitOrigin
+  case secretaryLineTask
+  case secretaryLineLinkedTask
+  case secretaryLineNote
+  case secretaryUnresponsive
+  case taskPaletteDestination
+  case taskPaletteDestinationTask
+  case taskPaletteDestinationDefault
+  case taskPaletteAskSecretary
+  case taskPaletteDestinationPlace
+  case taskPaletteDestinationNoWorkspace
+  case taskPaletteAskTitle
+  case taskPaletteAskOptional
+  case taskPaletteAskScope
+  case taskPaletteAskAfter
+  case taskPaletteHintStopAsking
+  case taskPaletteAsked
+  case taskPaletteAskedQueued
+  case taskPaletteErrSecretaryClaude
+  case taskPaletteAskHandOver
 
   // MARK: - Onboarding
   case onboardingBegin

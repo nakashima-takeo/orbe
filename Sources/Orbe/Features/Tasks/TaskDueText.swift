@@ -35,6 +35,16 @@ enum TaskDueText {
     return day.year == today.year ? monthDay : "\(day.year)/\(monthDay)"
   }
 
+  /// 時刻の印。今日なら「14:02」、ほかの日は「10/9 14:02」（待ちの確認の記録・受信の回）。
+  static func stamp(_ instant: Date, _ timeZone: TimeZone, today: TaskItem.DueDate) -> String {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = timeZone
+    let c = calendar.dateComponents([.hour, .minute], from: instant)
+    let clock = String(format: "%d:%02d", c.hour ?? 0, c.minute ?? 0)
+    let day = TaskItem.DueDate(instant, timeZone: timeZone)
+    return day == today ? clock : "\(date(day, today: today)) \(clock)"
+  }
+
   /// 言語に合わせた日曜始まりの短い曜日名。
   static func weekdays(_ language: Language) -> [String] {
     var calendar = Calendar(identifier: .gregorian)

@@ -1,7 +1,7 @@
 ---
 title: ビルドチャネル
 description: dev / release の 2 チャネル。ORBE_CHANNEL を唯一の入力に identity を全導出し、dev は「Orbe Dev」として本番と併存する
-updated: 2026-08-08
+updated: 2026-10-10
 ---
 
 # ビルドチャネル
@@ -13,7 +13,7 @@ updated: 2026-08-08
 | bundle ID | `dev.orbe.app.dev` | `dev.orbe.app` |
 | 表示名（CFBundleName / CFBundleDisplayName） | Orbe Dev | Orbe |
 | アイコン | アンバー地（glyph は共有） | オリジナル |
-| エージェントプラグイン名 | `orbe-agent-dev` | `orbe-agent` |
+| エージェントプラグイン名（＝MCP サーバー名） | `orbe-agent-dev` | `orbe-agent` |
 | Swift 定義 | なし | `-DORBE_RELEASE` |
 | インストール先 | `/Applications/Orbe Dev.app`（local-release） | `/Applications/Orbe.app`（DMG / Sparkle） |
 

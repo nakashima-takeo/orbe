@@ -25,7 +25,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
 
   /// 台帳が確定し、origin を確かめられない。
   func originUnverified(_ provider: WorktreePaletteDataProvider) -> Bool {
-    guard case .settled(let resolved) = provider.remoteLedger else { return false }
+    guard case .settled(let resolved) = provider.facts.remoteLedger else { return false }
     return resolved.repository(forPushRemote: nil) == .unverified
   }
 

@@ -40,6 +40,7 @@ extension DesignGallerySnapshotTests {
   /// メニューバーアイテムの 4 態（①静か ②滲み出し ③収縮 ④ドロップダウン中）を縦に並べる。
   /// ②の幅配分は WS 名と本文の長短で決まる（WS 名は上限 120 までハグ・本文は残り予算まで
   /// ハグ）ため、両軸の 2×2 を並べ、上限での切り詰めと短い内容での縮みを静止確認できるようにする。
+  /// ②の下にタスク由来の知らせ（workspace あり・なし）を 2 本足す。
   /// `.fixedSize()` で実メニューバーと同じ ideal サイズ（intrinsicContentSize）で撮る。
   private func menuBarStrip(rows: [AttentionRow]) -> some View {
     let shortWS = "orbe-core"
@@ -59,16 +60,37 @@ extension DesignGallerySnapshotTests {
           tabId: 9101 + index, workspaceName: pair.0, tabTitle: "emit API 移行",
           state: "waiting", message: pair.1, stateChangedAt: Date())
         store.apply(rows: [row])
-        store.noteTransient(row, dwell: 7)  // 撮るのは②の姿——滞留は画に出ない
+        store.noteTransient(.agent(row), dwell: 7)  // 撮るのは②の姿——滞留は画に出ない
         return store
       }
+    // タスク由来の知らせ（丸に ✓）。workspace あり・なし（名前の欄が無く、長いタイトルで起きたことが末尾で切れる）。
+    let taskStores = [
+      TaskNotice(taskId: 214, workspaceName: "orbe", text: "#214 レビューが付いた"),
+      TaskNotice(
+        taskId: 215, workspaceName: nil,
+        text: "見積もりの数字を経理に確認して来期の予算案に反映する 期限が来た"),
+    ]
+    .map { notice -> AttentionStore in
+      let store = AttentionStore()
+      store.noteTransient(.task(notice), dwell: 7)
+      return store
+    }
+    // 秘書が応えない知らせ（入力待ちのグリフ・Home・本文）。
+    let secretaryStore = AttentionStore()
+    secretaryStore.noteTransient(
+      .secretary(
+        SecretaryNotice(
+          tabId: 9201, workspaceName: "Home",
+          text: LocalizationStore(language: .ja).string(.secretaryUnresponsive))), dwell: 7)
     let countStore = AttentionStore()
     countStore.apply(rows: rows)
     let openUI = MenuBarUIState()
     openUI.dropdownOpen = true
     return VStack(alignment: .trailing, spacing: Theme.Space.beat) {
       MenuBarStatusView(store: AttentionStore(), ui: MenuBarUIState(), phase: .closed).fixedSize()
-      ForEach(Array(transientStores.enumerated()), id: \.offset) { _, store in
+      ForEach(
+        Array((transientStores + taskStores + [secretaryStore]).enumerated()), id: \.offset
+      ) { _, store in
         MenuBarStatusView(store: store, ui: MenuBarUIState(), phase: .open).fixedSize()
       }
       MenuBarStatusView(store: countStore, ui: MenuBarUIState(), phase: .closed).fixedSize()
@@ -97,7 +119,7 @@ extension DesignGallerySnapshotTests {
 
     let rows = attentionFixtureRows()
     try writePNG(
-      menuBarStrip(rows: rows), size: NSSize(width: 420, height: 260),
+      menuBarStrip(rows: rows), size: NSSize(width: 420, height: 320),
       name: "menubar_states.png", dir: dir)
 
     // ドロップダウン（第11シーン④・幅 420・working 集約・フッター・権限ヒントなし/あり）。

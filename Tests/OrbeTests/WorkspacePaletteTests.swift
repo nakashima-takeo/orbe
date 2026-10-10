@@ -19,7 +19,8 @@ final class WorkspacePaletteTests: OrbeTestCase {
     names.enumerated().map {
       WorkspacePaletteModel.Item(
         index: $0.offset, name: $0.element.0, isActive: $0.element.1,
-        dir: "/tmp/\($0.element.0)", live: .init(rollup: [], dormant: false))
+        dir: "/tmp/\($0.element.0)", canSetDir: true, canClose: true,
+        live: .init(rollup: [], dormant: false))
     }
   }
 
@@ -117,10 +118,10 @@ final class WorkspacePaletteTests: OrbeTestCase {
     let p = palette()
     p.setItems([
       WorkspacePaletteModel.Item(
-        index: 0, name: "live", isActive: true, dir: "/",
+        index: 0, name: "live", isActive: true, dir: "/", canSetDir: true, canClose: true,
         live: .init(rollup: [], dormant: false)),
       WorkspacePaletteModel.Item(
-        index: 1, name: "sleep", isActive: false, dir: "/",
+        index: 1, name: "sleep", isActive: false, dir: "/", canSetDir: true, canClose: true,
         live: .init(rollup: [], dormant: true)),
     ])
     XCTAssertEqual(p.render.rows.count, 3, "2 workspace ＋ 末尾の常設 createFlow 行")
@@ -202,7 +203,7 @@ final class WorkspacePaletteTests: OrbeTestCase {
     var setDir: (Int, String)?
     p.onSetDir = { setDir = ($0, $1) }
     p.setItems(items([("default", true)]))
-    send(p, right)  // 詳細メニュー（[改名, ディレクトリ]・単一なので削除なし）
+    send(p, right)  // 詳細メニュー（[改名, ディレクトリ, 削除]）
     key(p, kDown)  // ディレクトリへ
     key(p, kReturn)  // 編集モード
     XCTAssertEqual(p.render.query, "/tmp/default", "setDir モードに入り現 dir がプリフィルされている")
@@ -211,16 +212,24 @@ final class WorkspacePaletteTests: OrbeTestCase {
     XCTAssertNil(setDir, "空ディレクトリの確定は無視（現状維持）")
   }
 
-  /// workspace が1つのとき詳細メニューに「削除」を出さない（最後の1つは消せない）。改名・ディレクトリは出す。
-  func testSingleWorkspaceHasNoDeleteInSubmenu() {
+  /// 詳細メニューは行の値に従う。消せない行（最後の通常 workspace）は「削除」を出さず、ディレクトリを変えられない
+  /// 行（Home）は「ディレクトリ」も出さない。改名はどの行にも出す。
+  func testSubmenuFollowsItemPermissions() {
     let l10n = LocalizationStore(language: .ja)
-    let p = palette()
-    p.setItems(items([("only", true)]))
-    send(p, right)  // 詳細メニューへ
-    XCTAssertEqual(
-      p.render.rows.map(\.label),
-      [l10n.string(.wsActionRename), l10n.string(.wsActionSetDir)],
-      "単一 workspace の詳細メニューは改名・ディレクトリだけで、削除は無い")
+    for (canSetDir, canClose, expected) in [
+      (true, false, [l10n.string(.wsActionRename), l10n.string(.wsActionSetDir)]),
+      (false, false, [l10n.string(.wsActionRename)]),
+    ] {
+      let p = palette()
+      p.setItems([
+        WorkspacePaletteModel.Item(
+          index: 0, name: "only", isActive: true, dir: "/", canSetDir: canSetDir,
+          canClose: canClose, live: .init(rollup: [], dormant: false))
+      ])
+      send(p, right)  // 詳細メニューへ
+      XCTAssertEqual(
+        p.render.rows.map(\.label), expected, "canSetDir=\(canSetDir) canClose=\(canClose)")
+    }
   }
 
   // MARK: - 戻る / 閉じる

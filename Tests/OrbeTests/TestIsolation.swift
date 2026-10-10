@@ -32,6 +32,7 @@ extension OrbeTestCase {
   func appStateFile() throws -> URL { try XCTUnwrap(AppStatePersistence.fileURL) }
   func guiConfFile() throws -> URL { try XCTUnwrap(GuiConfig.fileURL) }
   func tasksFile() throws -> URL { try XCTUnwrap(TaskPersistence.fileURL) }
+  func intakesFile() throws -> URL { try XCTUnwrap(IntakePersistence.fileURL) }
 }
 
 /// テストプロセス全体の隔離。`installOnce()` は冪等で、最初の 1 回だけ実際に張る。
@@ -53,6 +54,9 @@ enum TestIsolation {
   static let maxRootPathBytes = 90
 
   private nonisolated(unsafe) static var installed = false
+
+  /// テストを始める前のアプリの activation policy（xctest は前面化しない `prohibited`）。
+  private nonisolated(unsafe) static var initialActivationPolicy: NSApplication.ActivationPolicy!
 
   static func installOnce() {
     guard !installed else { return }
@@ -100,13 +104,16 @@ enum TestIsolation {
           + "テスト本体より前に ORBE_STATE_DIR を張れていない")
     }
 
-    // 5. 毎テストの隔離。以降の全テストへ効く。
+    // 5. アプリの前面化の状態。どのテストにも触られる前の値を、各テストの終わりに戻す先として控える。
+    initialActivationPolicy = NSApplication.shared.activationPolicy()
+
+    // 6. 毎テストの隔離。以降の全テストへ効く。
     TestScratch.addCaseHooks(begin: beginCase, end: endCase)
   }
 
   /// テスト 1 件の作業ディレクトリ（`TestScratch.caseDir`）の下へ、隔離の seam を向け直す。
   ///
-  /// 値の素性（永続 6 種・同梱リソース根・プラグイン実体化先・ghostty user 層・通知音の再生層・
+  /// 値の素性（永続ファイル・Home のフォルダ・同梱リソース根・プラグイン実体化先・ghostty user 層・通知音の再生層・
   /// 端末のクリップボード）に関わらず **毎テスト無条件に張り直す**。テストが自分で書き換えても
   /// 次のテストへ漏れず、戻し忘れが起きえない——申告制を残さないため。`CompletionLearning` だけは `shared` が in-memory へ
   /// 焼き付ける都合で per-test にできず、`installOnce` の固定のままにする。
@@ -125,6 +132,8 @@ enum TestIsolation {
     GuiConfig.fileURLOverride = dir.appendingPathComponent("gui.conf")
     AgentSessionLog.fileURLOverride = dir.appendingPathComponent("agent-sessions.jsonl")
     TaskPersistence.fileURLOverride = dir.appendingPathComponent("tasks.json")
+    IntakePersistence.fileURLOverride = dir.appendingPathComponent("intakes.json")
+    SecretaryPersistence.fileURLOverride = dir.appendingPathComponent("secretary.json")
 
     // 同梱リソースの探索根。既定は Xcode の bin を指しており空でも中立でもないため、管理下の
     // 空ディレクトリを用意する（層1 の `orbe-defaults.conf` は不在になる）。テストが同梱物を
@@ -133,8 +142,8 @@ enum TestIsolation {
     try? FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
     BundledResources.root = resources
 
-    // プラグインの実体化先。本番は `ORBE_STATE_DIR` 非依存の application support 直下を指すので、
-    // 張らないと `WindowController()` の起動同期が実ホームを書き換える。
+    // プラグインの実体化先。既定は `ORBE_STATE_DIR` 直下＝テスト間で共有される根なので、
+    // 張らないと `WindowController()` の起動同期が書いた中身が次のテストへ残る。
     AgentPluginInstaller.stablePluginDirOverride =
       dir.appendingPathComponent("agent-plugin", isDirectory: true)
 
@@ -150,6 +159,11 @@ enum TestIsolation {
     // 書いたファイルが次のテストへ残る。他の永続と同じく caseDir の下へ張り直す。
     CustomSoundStore.directoryURLOverride = dir.appendingPathComponent("sounds", isDirectory: true)
 
+    // Home のフォルダ。既定は `ORBE_STATE_DIR` 直下＝テスト間で共有される根なので、
+    // 一度作ると以降のテストで「あれば触らない」が効いてしまう。caseDir の下へ張り直す。
+    HomeFolder.urlOverride = dir.appendingPathComponent(
+      "home", isDirectory: true)
+
     // 子プロセス PATH の probe。張らないと `WindowController` を立てる多数のテストが開発者の
     // 実ログインシェルを起こし、手元の dotfiles で結果が変わる（CI と手元で違う PATH を見る）。
     ShellPATH.shared = ShellPATH(probe: { "/usr/bin:/bin" })
@@ -161,7 +175,30 @@ enum TestIsolation {
         "dev.orbe.tests.\(stateDir.lastPathComponent).\(dir.lastPathComponent)"))
   }
 
+  /// テスト 1 件の終わり（`tearDown` の後）。
+  ///
+  /// 窓を key にするテストは、アプリの activation policy を変えて前面化する。どちらもプロセス全体の状態で、戻さなければ
+  /// 後続の全テストが「前面のアプリ」で走り、焦点の振る舞いの前提が変わる。窓を下ろすのは窓を上げたテストの責務だが、
+  /// アプリの状態は誰が変えたかに依らずここで必ず戻す——申告制だと戻し忘れが起きる。
+  ///
+  /// policy を先に戻す（前面化を許す policy のままでは `deactivate` が効かない）。前面を降りたことはウィンドウサーバーの
+  /// イベントとして届き、NSApp が捌いて初めて成立するので、降りるまでイベントを配送する。
   static func endCase() {
     Ghostty.pasteboard.releaseGlobally()
+    let app = NSApplication.shared
+    if app.activationPolicy() != initialActivationPolicy {
+      app.setActivationPolicy(initialActivationPolicy)
+    }
+    if app.isActive {
+      app.deactivate()
+      let deadline = Date().addingTimeInterval(5)
+      while app.isActive, Date() < deadline {
+        if let event = app.nextEvent(
+          matching: .any, until: Date().addingTimeInterval(0.01), inMode: .default, dequeue: true)
+        {
+          app.sendEvent(event)
+        }
+      }
+    }
   }
 }

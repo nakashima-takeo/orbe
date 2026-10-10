@@ -45,6 +45,7 @@ final class FakeControlTarget: ControlTarget {
     let messageText: String?
     let messageSource: String?
     let reason: String?
+    let reporterGroup: pid_t?
   }
   struct Spawn {
     let workspaceId: Int?
@@ -91,6 +92,11 @@ final class FakeControlTarget: ControlTarget {
     let workspaceId: ClearableValue<Int>?
     let worktree: ClearableValue<String>?
   }
+  struct SetWaitCondition {
+    let taskId: Int
+    let condition: ClearableValue<WaitConditionRequest>
+    let callerTabId: Int?
+  }
   struct MovedTask {
     let taskId: Int
     let placement: TaskStore.Placement
@@ -115,8 +121,15 @@ final class FakeControlTarget: ControlTarget {
   private(set) var taskLists: [Int?] = []
   private(set) var addedTasks: [AddedTask] = []
   private(set) var updatedTasks: [UpdatedTask] = []
+  private(set) var setWaitConditions: [SetWaitCondition] = []
   private(set) var movedTasks: [MovedTask] = []
   private(set) var deletedTaskIds: [Int] = []
+  private(set) var startedTasks: [TaskStartRequest] = []
+  private(set) var setIntakes: [(intakeId: Int?, definition: IntakeDefinition)] = []
+  private(set) var ranIntakeIds: [Int] = []
+  private(set) var pausedIntakes: [(intakeId: Int, paused: Bool)] = []
+  private(set) var deletedIntakeIds: [Int] = []
+  private(set) var proposalLists: [Int?] = []
 
   // MARK: - 宛先
 
@@ -190,7 +203,7 @@ final class FakeControlTarget: ControlTarget {
       ReportedAgent(
         tabId: tab.id, agent: report.agent, state: report.state, sessionId: report.sessionId,
         messageText: report.message?.text, messageSource: report.message?.source,
-        reason: report.reason))
+        reason: report.reason, reporterGroup: report.reporterGroup))
   }
 
   func controlFocusTab(tabId: Int) -> Result<Any, ControlError> {
@@ -268,6 +281,14 @@ final class FakeControlTarget: ControlTarget {
     return outcome(["task": ["taskId": taskId]])
   }
 
+  func controlSetWaitCondition(
+    taskId: Int, _ condition: ClearableValue<WaitConditionRequest>, callerTabId: Int?
+  ) -> Result<Any, ControlError> {
+    setWaitConditions.append(
+      SetWaitCondition(taskId: taskId, condition: condition, callerTabId: callerTabId))
+    return outcome(["task": ["taskId": taskId]])
+  }
+
   func controlMoveTask(taskId: Int, _ placement: TaskStore.Placement, anchorTaskId: Int)
     -> Result<Any, ControlError>
   {
@@ -278,5 +299,42 @@ final class FakeControlTarget: ControlTarget {
   func controlDeleteTask(taskId: Int) -> Result<Any, ControlError> {
     deletedTaskIds.append(taskId)
     return outcome(["ok": true])
+  }
+
+  func controlStartTask(
+    _ request: TaskStartRequest, completion: @escaping (Result<Any, ControlError>) -> Void
+  ) {
+    startedTasks.append(request)
+    completion(outcome(["workdir": "/w"]))
+  }
+
+  func controlListIntakes() -> Result<Any, ControlError> {
+    outcome(["intakes": [Any]()])
+  }
+
+  func controlSetIntake(intakeId: Int?, _ definition: IntakeDefinition) -> Result<Any, ControlError>
+  {
+    setIntakes.append((intakeId, definition))
+    return outcome(["intake": ["intakeId": intakeId ?? 1]])
+  }
+
+  func controlRunIntake(intakeId: Int) -> Result<Any, ControlError> {
+    ranIntakeIds.append(intakeId)
+    return outcome(["ok": true])
+  }
+
+  func controlPauseIntake(intakeId: Int, paused: Bool) -> Result<Any, ControlError> {
+    pausedIntakes.append((intakeId, paused))
+    return outcome(["intake": ["intakeId": intakeId]])
+  }
+
+  func controlDeleteIntake(intakeId: Int) -> Result<Any, ControlError> {
+    deletedIntakeIds.append(intakeId)
+    return outcome(["ok": true])
+  }
+
+  func controlListIntakeProposals(intakeId: Int?) -> Result<Any, ControlError> {
+    proposalLists.append(intakeId)
+    return outcome(["proposals": [Any]()])
   }
 }

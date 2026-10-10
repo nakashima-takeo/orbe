@@ -16,12 +16,16 @@ enum TaskDetailField: CaseIterable, Equatable, Hashable {
   var isMultiline: Bool { self == .description }
 }
 
-/// 右の欄で ↑↓ で止まる場所。固定の項目と、タスクごとに数が変わる結び付きの行・agent の場所。結び付きは位置で
-/// なく項目の同一性で持つ（agent が結び付きを変えても、焦点が別の項目へずれない）。
+/// 右の欄で ↑↓ で止まる場所。固定の項目と、タスクごとに数が変わる結び付きの行・agent の場所・待ちの条件の部分。
+/// 結び付きは位置でなく項目の同一性で持つ（agent が結び付きを変えても、焦点が別の項目へずれない）。
 enum TaskDetailStop: Hashable {
   case field(TaskDetailField)
+  /// 待ちの条件を付けた agent の会話のタブ（↵ でそのタブへ）。タブがあるときだけ止まる。
+  case conversation
   /// タスクの worktree で動いている agent（↵ でそのタブへ）。
   case agent
+  /// 待ちの条件の箱の開閉する部分（↵ で開閉）。
+  case condition(TaskConditionPart)
   case link(GitHubItemID)
   /// 「＋ 結び付ける」（↵ で GitHub タブの項目を選ぶ状態へ）。
   case addLink
@@ -45,6 +49,8 @@ enum TaskPaletteFocusTarget: Hashable {
   case edit(TaskDetailField)
   /// GitHub タブの右の欄の期限の入力欄。
   case paneDue
+  /// 秘書に頼む欄の補足の入力欄。
+  case ask
 }
 
 /// 文字の項目の下書き。編集を始めたときの書き戻し先に結び付き、確定はそこへ書く。焦点・キー・変換中・確定の
@@ -55,6 +61,8 @@ struct TaskEditDraft: Equatable {
     case task(id: Int, field: TaskDetailField)
     /// GitHub タブの右の欄の期限（画面の値へ書く。ストアには「タスクにする」で初めて書く）。
     case paneDue
+    /// そのタスクを秘書に頼む欄の補足。書き戻し先は無く、↵ でだけ秘書へ出る（欄を離れたら送らずに捨てる）。
+    case ask(Int)
   }
 
   let target: Target
@@ -71,15 +79,33 @@ struct TaskEditDraft: Equatable {
 
   /// 複数行の項目の下書きか（esc で確定する）。
   var isMultiline: Bool { field?.isMultiline == true }
+
+  /// 対象のタスク（右の欄の項目・秘書に頼む欄）。
+  var taskID: Int? {
+    switch target {
+    case .task(let id, _), .ask(let id): id
+    case .paneDue: nil
+    }
+  }
 }
 
 /// 右の欄の操作（項目の移動・選択式の値・文字の項目の編集と確定・結び付きを開く / 外す）。変異はすべて
 /// ストアのメソッドをそのまま呼び、検証はストアに任せる。
 extension TaskPaletteModel {
-  /// 右の欄で止まる場所の並び（タイトル → agent → 各結び付き → 結び付ける → ステータス → … → 詳細の欄）。
+  /// 右の欄で止まる場所の並び（タイトル → 会話 → agent → 各結び付き → 結び付ける → ステータス → 待ち → 待ちの
+  /// 条件の部分 → … → 詳細の欄）。
   func detailStops(_ task: TaskItem) -> [TaskDetailStop] {
-    [.field(.title)] + (agent(of: task) == nil ? [] : [.agent]) + task.links.map { .link($0.item) }
-      + [.addLink] + TaskDetailField.allCases.filter { $0 != .title }.map { .field($0) }
+    var stops: [TaskDetailStop] = [.field(.title)]
+    if conversationTab(of: task) != nil { stops.append(.conversation) }
+    if detailAgent(of: task) != nil { stops.append(.agent) }
+    stops += task.links.map { .link($0.item) } + [.addLink]
+    for field in TaskDetailField.allCases where field != .title {
+      stops.append(.field(field))
+      if field == .waiting, task.waiting?.condition != nil {
+        stops += TaskConditionPart.allCases.map { .condition($0) }
+      }
+    }
+    return stops
   }
 
   /// →。タスクの行を選んでいれば、右の欄のステータスへ入る。
@@ -232,8 +258,16 @@ extension TaskPaletteModel {
   /// 編集を抜ける唯一の 1 本。確定は下書きの書き戻し先へ書き、空のタイトルは取り消しとして扱う。
   private func finishDraft(commit: Bool) -> Bool {
     guard let draft else { return true }
-    guard case .task(let id, let field) = draft.target else {
+    let id: Int
+    let field: TaskDetailField
+    switch draft.target {
+    case .task(let taskID, let taskField):
+      (id, field) = (taskID, taskField)
+    case .paneDue:
       return finishPaneDue(draft, commit: commit)
+    case .ask:
+      self.draft = nil
+      return true
     }
     guard commit, let task = store.tasks.first(where: { $0.id == id }),
       let pending = pendingUpdate(draft.text, draft.original, field, task)

@@ -14,7 +14,7 @@ final class TaskPaletteRowsTests: OrbeTestCase {
   private let opened = TaskPaletteWorkspaces.Entry(id: UUID(), name: "orbe")
   private let other = TaskPaletteWorkspaces.Entry(id: UUID(), name: "web-app")
   private var workspaces: TaskPaletteWorkspaces {
-    TaskPaletteWorkspaces(opened: opened, all: [opened, other])
+    TaskPaletteWorkspaces(opened: opened, all: [opened, other], home: nil)
   }
   private let today = TaskItem.DueDate(year: 2025, month: 10, day: 4)!
   private var now: Date {
@@ -26,7 +26,7 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     _ mutate: (inout TaskItem) -> Void = { _ in }
   ) -> TaskItem {
     var item = TaskItem(
-      id: id, title: title, status: status, waiting: nil, priority: .medium, due: nil,
+      id: id, title: title, status: status, wait: nil, priority: .medium, due: nil,
       workspace: nil, description: "", createdAt: now, createdBy: nil)
     mutate(&item)
     return item
@@ -94,31 +94,55 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     XCTAssertEqual(TaskPaletteRows.build(input([])), [.empty])
   }
 
-  // MARK: - 入力・追加の行
+  // MARK: - 入力の行き先
 
-  func testQueryPutsTheTrimmedAddRowFirstAndFiltersTitlesIgnoringCase() {
+  /// 入力中は、前後の空白を除いたタイトルが入力の行き先になり、一覧は「一致するタスク」の見出しの下に一致する
+  /// タスクだけを並べる（欄の見出しは出さない）。
+  func testQueryGivesTheTrimmedTitleToTheDestinationAndListsMatchesUnderOneHeader() {
     let tasks = [
-      task(1, "PR の説明を書く"), task(2, "経費精算を出す"), task(3, "pr をレビューする", .done),
+      task(1, "PR の説明を書く", .inProgress), task(2, "経費精算を出す"), task(3, "pr を見る"),
+      task(4, "pr をレビューする", .done),
     ]
+    let typed = input(tasks, query: "  Pr  ", doneExpanded: true)
 
-    let rows = TaskPaletteRows.build(input(tasks, query: "  Pr  ", doneExpanded: true))
+    let rows = TaskPaletteRows.build(typed)
 
-    XCTAssertEqual(rows.first, .add(title: "Pr"), "追加の行は前後の空白を除いたタイトルで先頭に出る")
-    XCTAssertEqual(taskIDs(rows), [1, 3], "大文字小文字を区別せず部分一致で絞る")
+    XCTAssertEqual(TaskPaletteRows.addTitle(typed), "Pr", "前後の空白を除いたタイトル")
+    XCTAssertEqual(rows.first, .matchHeader)
+    XCTAssertFalse(rows.contains { if case .sectionHeader = $0 { true } else { false } })
+    XCTAssertEqual(taskIDs(rows), [1, 3, 4], "大文字小文字を区別せず部分一致で絞る")
     XCTAssertTrue(rows.contains(.doneHeader(count: 1, expanded: true)), "完了の件数も絞った数")
   }
 
   func testWhitespaceOnlyQueryNeitherAddsNorFilters() {
-    let rows = TaskPaletteRows.build(input([task(1, "a"), task(2, "b")], query: "   "))
+    let typed = input([task(1, "a"), task(2, "b")], query: "   ")
 
-    XCTAssertFalse(rows.contains(.add(title: "")))
-    XCTAssertEqual(taskIDs(rows), [1, 2])
+    XCTAssertNil(TaskPaletteRows.addTitle(typed))
+    XCTAssertEqual(taskIDs(TaskPaletteRows.build(typed)), [1, 2])
   }
 
-  func testQueryMatchingNothingShowsOnlyTheAddRow() {
-    let rows = TaskPaletteRows.build(input([task(1, "経費精算を出す")], query: "歯医者"))
+  func testQueryMatchingNothingLeavesOnlyTheDestination() {
+    let typed = input([task(1, "経費精算を出す")], query: "歯医者")
 
-    XCTAssertEqual(rows, [.add(title: "歯医者")])
+    XCTAssertEqual(TaskPaletteRows.addTitle(typed), "歯医者")
+    XCTAssertEqual(TaskPaletteRows.build(typed), [], "一覧は空（「タスクはありません」も出さない）")
+  }
+
+  /// 秘書に頼む欄は、開いたタスクの行の直後に置く（主の結び付きがあれば番号、無ければタイトルで呼ぶ）。開いている間は
+  /// どの行も並べ替えられない。
+  func testTheAskRowFollowsItsTaskAndFreezesReordering() throws {
+    var linked = task(2, "Dispatch")
+    linked.links = [TaskLink(item: GitHubItemID(repo: "o/r", number: 218)!, kind: .issue)]
+    var asking = input([task(1, "a"), linked, task(3, "c")])
+    asking.asking = 2
+
+    let rows = TaskPaletteRows.build(asking)
+
+    let index = try XCTUnwrap(rows.firstIndex { $0.id == .selectable(.task(2)) })
+    XCTAssertEqual(rows[index + 1], .ask(TaskPaletteAskRow(taskID: 2, label: "#218")))
+    XCTAssertFalse(
+      rows.contains { if case .task(let row) = $0 { row.reorderable } else { false } },
+      "欄が開いている間は掴めない")
   }
 
   // MARK: - 範囲と件数
@@ -157,8 +181,9 @@ final class TaskPaletteRowsTests: OrbeTestCase {
 
     XCTAssertEqual(try taskRow(task(1, "a", .todo)).glyph, .todo)
     XCTAssertEqual(try taskRow(task(1, "a", .inProgress)).glyph, .inProgress)
-    XCTAssertEqual(try taskRow(task(1, "a", .inProgress) { $0.waiting = waiting }).glyph, .waiting)
-    XCTAssertEqual(try taskRow(task(1, "a", .todo) { $0.waiting = waiting }).glyph, .waiting)
+    XCTAssertEqual(
+      try taskRow(task(1, "a", .inProgress) { $0.wait = .waiting(waiting) }).glyph, .waiting)
+    XCTAssertEqual(try taskRow(task(1, "a", .todo) { $0.wait = .waiting(waiting) }).glyph, .waiting)
     XCTAssertEqual(try taskRow(task(1, "a", .done)).glyph, .done)
     XCTAssertTrue(try taskRow(task(1, "a", .done)).isDone)
   }
@@ -175,7 +200,7 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     let earlyThisMorning = calendar.date(from: DateComponents(year: 2025, month: 10, day: 4))!
     let row = { (since: Date) in
       try self.taskRow(
-        self.task(1) { $0.waiting = TaskItem.Waiting(reason: "経理の返事", since: since) })
+        self.task(1) { $0.wait = .waiting(TaskItem.Waiting(reason: "経理の返事", since: since)) })
     }
 
     XCTAssertEqual(

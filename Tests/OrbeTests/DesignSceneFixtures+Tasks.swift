@@ -15,12 +15,13 @@ extension DesignSceneFixtures {
     taskCalendar.date(from: DateComponents(year: 2025, month: 10, day: 4, hour: 10))!
   }
 
+  /// 開いたのは orbe。末尾が Home（受信の提案をタスクにすると付く）。
   static let taskWorkspaces: TaskPaletteWorkspaces = {
-    let ids = (0..<3).map { _ in UUID() }
-    let all = zip(ids, ["orbe", "web-app", "api"]).map {
+    let ids = (0..<4).map { _ in UUID() }
+    let all = zip(ids, ["orbe", "web-app", "api", "Home"]).map {
       TaskPaletteWorkspaces.Entry(id: $0, name: $1)
     }
-    return TaskPaletteWorkspaces(opened: all[0], all: all)
+    return TaskPaletteWorkspaces(opened: all[0], all: all, home: all[3].id)
   }()
 
   /// 見本の 11 件（進行中 4・未着手 7）と完了 3 件。
@@ -37,7 +38,7 @@ extension DesignSceneFixtures {
     ) -> TaskItem {
       TaskItem(
         id: id, title: title, status: status,
-        waiting: waiting.map { TaskItem.Waiting(reason: $0.0, since: daysAgo($0.1)) },
+        wait: waiting.map { .waiting(TaskItem.Waiting(reason: $0.0, since: daysAgo($0.1))) },
         priority: priority, due: due.flatMap(TaskItem.DueDate.init), workspace: workspace,
         description: description, createdAt: daysAgo(2), createdBy: by, links: links,
         worktree: worktree.map(taskWorktree))
@@ -188,13 +189,79 @@ extension DesignSceneFixtures {
   }
 
   static func taskPaletteModel(
-    _ file: TasksFile? = nil, openLists: ((GitHubViewer) -> GitHubOpenLists)? = nil
+    _ file: TasksFile? = nil, openLists: ((GitHubViewer) -> GitHubOpenLists)? = nil,
+    sessionTabs: AgentSessionTabs = AgentSessionTabs(), intakes: IntakesFile? = nil
   ) -> TaskPaletteModel {
     let items = taskGitHubItems()
     return TaskPaletteModel(
       store: TaskStore(file: file ?? taskDesignFile()), githubItems: items, viewer: items.viewer,
       openLists: (openLists ?? taskOpenLists)(items.viewer), root: taskRoot,
-      agents: taskAgents(),
-      workspaces: taskWorkspaces, now: taskToday, timeZone: taskCalendar.timeZone)
+      agents: taskAgents(), sessionTabs: sessionTabs,
+      intakes: intakeRunner(intakes ?? intakeDesignFile()),
+      workspaces: taskWorkspaces, now: taskToday, timeZone: taskCalendar.timeZone,
+      clock: { _ in taskToday })
+  }
+
+  /// 見本 SlWait.png・SlResolved.png の待ちの条件（#214「設定の検索を速くする」）。claude が 2 日前に付け、10 分ごとに
+  /// 確かめて 17 回失敗している（最後は 3 分前）。時刻はすべて見本の今（`taskToday`。画面の時計も同じ）から数え、期限は
+  /// 見本どおり 10/6（月）9:00（`deadline` で替えられる）。
+  static func taskWaitCondition(deadline: Date? = nil) -> WaitCondition {
+    let now = taskToday
+    var condition = WaitCondition(
+      WaitConditionRequest(
+        description: "PR #214 にレビューが付いたら",
+        command:
+          "gh pr view 214 --json reviews --jq '.reviews[-1] | [.author.login, .state] | join(\" · \")'",
+        everyMinutes: 10,
+        deadline: deadline
+          ?? taskCalendar.date(
+            bySettingHour: 9, minute: 0, second: 0,
+            of: taskCalendar.date(byAdding: .day, value: 2, to: now)!)!,
+        directory: "\(NSHomeDirectory())/wt/pr-214",
+        conversation: WaitConversation(
+          command: "claude", sessionId: taskConversationId, workspace: nil, secretary: false)
+      ),
+      setAt: taskCalendar.date(byAdding: .day, value: -2, to: now)!)
+    for minutes in stride(from: 163, through: 3, by: -10) {
+      let at = now.addingTimeInterval(-Double(minutes) * 60)
+      condition.record(
+        WaitCheck(
+          startedAt: at, endedAt: at.addingTimeInterval(2), result: .exited(1),
+          stderr: minutes == 163 ? "gh: Not Found (HTTP 404)" : ""))
+    }
+    return condition
+  }
+
+  static let taskConversationId = "5f0c2a6e-214"
+
+  /// #214 の待ちに条件を付けた一覧（`how` を渡すと、その解け方で解けた後。期限が来たのは 2 時間前とする）。
+  static func taskWaitConditionFile(resolved how: WaitResolution.How? = nil, deadline: Date? = nil)
+    -> TasksFile
+  {
+    var file = taskDesignFile()
+    let index = file.tasks.firstIndex { $0.id == 3 }!
+    var waiting = file.tasks[index].waiting!
+    waiting.condition = taskWaitCondition(deadline: deadline)
+    if let how {
+      var condition = waiting.condition!
+      let at = taskToday.addingTimeInterval(-2 * 60)
+      condition.record(WaitCheck(startedAt: at, endedAt: at, result: .success))
+      waiting.condition = condition
+      file.tasks[index].wait = .resolved(
+        WaitResolution(
+          waiting: waiting, how: how,
+          at: how == .expired ? taskToday.addingTimeInterval(-2 * 3600) : at))
+    } else {
+      file.tasks[index].wait = .waiting(waiting)
+    }
+    return file
+  }
+
+  /// 見本の解けた後の確認の出力。
+  static let taskWaitOutput = "レビューが付いた\n@sato · CHANGES_REQUESTED · コメント 2\n"
+
+  /// 条件を付けた claude の会話のタブ（pr-214）。
+  static func taskSessionTabs() -> AgentSessionTabs {
+    AgentSessionTabs(tabs: [taskConversationId: .init(tabId: 5, title: "pr-214")])
   }
 }

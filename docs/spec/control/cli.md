@@ -1,7 +1,7 @@
 ---
 title: Orbe CLI（orb）
-description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/session/wait サブコマンド・socket 文脈解決・終了コード契約
-updated: 2026-10-05
+description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/受信/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/intake/session/wait サブコマンド・socket 文脈解決・終了コード契約
+updated: 2026-10-10
 ---
 
 # Orbe CLI（`orb`）
@@ -59,11 +59,23 @@ updated: 2026-10-05
 - `orb task set <id> [--title <t>] [--status <s>] [--priority <p>] [--due <date> | --no-due] [--workspace <id|current> | --no-workspace] [--waiting <reason> | --no-waiting] [--description <text> | --no-description] [--issue <owner/name#N>]... [--pr <owner/name#N>]... [--no-links] [--worktree <path> | --no-worktree] [--json]` … 渡した項目だけを変える。`--no-*` は値を外す。完了は `--status done`（待ちは外れる）。変更フラグが 1 つも無い、または `--x` と `--no-x` を同時に渡すと usage エラー（exit 2）。
 - `--issue` / `--pr` は GitHub の Issue・PR を結び付ける（くり返し可）。**引数に現れた順を保ち、先頭が主**になる。`set` では渡した結び付きで丸ごと置き換え、`--no-links` で全部外す（`--issue` / `--pr` と同時なら usage エラー）。1 つの Issue・PR は 1 つのタスクにだけ付き、ほかのタスクに付いているものは拒否される（[タスク](../platform/tasks.md)）。`owner/name#N` は最後の `#` で割り、後ろが正の整数でなければ usage エラー（exit 2）。`owner/name` の形は control が確かめる。
 - `--worktree` はタスクに作業の場所を付ける（`orb task set 12 --worktree .`）。**相対パスは呼び出し元の作業ディレクトリから解いて**絶対パスで送り、control が実在するディレクトリか確かめて、それを含む worktree のルートに揃える（worktree の中のどこで打ってもルートが付く）。1 つの worktree は 1 つのタスクにだけ付き、ほかのタスクが持つ worktree は相手の ID を添えて拒否される。`set --no-worktree` で外す。
+- `orb task condition <id> (--condition <text> --check <command> --every <minutes> --deadline <date-time> | --no-condition) [--json]` … 待っているタスクに解ける条件を付ける（`set_wait_condition`。[待ちの条件](../platform/tasks.md)。説明・確認のコマンド・間隔〔分〕・期限）。条件を付ける口はこれだけ（`add` / `set` は受けない）。4 つは揃えて渡し、欠ければ usage エラー（exit 2）。`--every` は整数でなければ usage エラー。期限は ISO 8601 の日時をそのまま送り、読むのは control（時差の無い形は Mac のタイムゾーンの時刻）。値の規則は control が確かめる。待っていないタスクには先に `set --waiting` で待ちにする。`--no-condition` は条件だけを外す（待ちは残る。`--condition` と同時か、どちらも無ければ usage エラー）。呼び出し元タブ（`ORBE_TAB`）を control へ伝え、条件にタブの作業ディレクトリと、タブで作業中の agent の会話が入る。TSV の一覧は変えない（条件と経過は `--json` で見える）。
 - `orb task move <id> (--before <id> | --after <id>) [--json]` / `orb task rm <id> [--json]`
 
 **`add` で `--workspace` を省くと、呼び出し元タブ（`ORBE_TAB`）の workspace に付く**——タブの外なら「なし」。`tab new` / `agent spawn` の省略が前面の workspace に落ちるのと違うのは、タブ内の agent が背景で足したタスクを、人が見ている別の workspace に付けないため。同じ理由で、`--workspace current` は**前面の** workspace であって自分のタブの workspace ではない。`add` は `ORBE_TAB` を control へ伝え、タブ内の agent が足したタスクにはその agent の名前が追加者として残る。
 
 ステータスと優先度の語彙と日付の妥当性は control が持ち、CLI は素通しする（`--help` の一覧は人が読むための写し）。詳細の `-` 始まりや空文字は値必須フラグの規約で渡せず、詳細を外すのは `--no-description`。
+
+### intake（受信）
+
+[受信](../platform/intake.md)を作り・直し・回し・結果を読む。各サブコマンドは同名の制御 API の動詞へそのまま乗る。
+
+- `orb intake list [--json]` … ID 順に 1 行 1 受信（`id 状態 名前 いつ 次の時刻 前回` のタブ区切り。状態は `active` / `paused` / `running`、いつは `every 30m` / `daily 09:00,13:00`、前回は `<開始> 12 fetched, 3 new, 1 proposed` か `<開始> failed: <理由>`。無い値は `-`。制御文字の扱いは `task list` と同じ）。
+- `orb intake proposals [<id>] [--json]` … 覚えている提案を 1 行 1 つ（`id 状態 受信の id 期限 タイトル リンク`）。`<id>` でその受信の棚の分だけ。
+- `orb intake set [<id>] [--json]` … 標準入力の JSON（MCP の `set_intake` と同じ形の `name`・`fetch`・`judge`・`when`）で、`<id>` が無ければ作って新しい ID だけを出し、あれば丸ごと置き換える。定義をフラグに割らないのは、取得がコマンドか agent かで項目が入れ子になり、検証が CLI と control の 2 か所に割れるため。標準入力が空・JSON オブジェクトでないは usage エラー（exit 2）、定義の検証は control が持つ（違反は exit 1）。
+- `orb intake run <id> [--json]` … 今すぐ回す（止めた受信も受ける）。回の終わりを待たずに返る。
+- `orb intake pause <id> [--json]` / `orb intake resume <id> [--json]` … 予定を止める・再開する。
+- `orb intake rm <id> [--json]`
 
 ### session（閉じたエージェントセッションの記録と復元）
 
@@ -85,7 +97,7 @@ kind の語彙と値域の検証は control が持つ（未知 kind は CLI を�
 
 ### 共通
 
-各サブコマンドは対応する [制御 API](api.md) メソッドへそのまま乗る。`--json` は全サブコマンドで効き、control の result をそのまま出す——成功応答に載る `seq`（[api](api.md)）もそのまま出る（例外は 3 つ——`config get` は `config_list` から抽出した 1 行で `seq` を持たない、`session closed` は `session_log` と `list_tabs` から CLI が組む派生ビューで `seq` を持たない、`tab list` は `--workspace` で絞った後の `{"tabs":[…], "seq": N}`）。write が採番した id（`ws new` の workspaceId・`tab new` の tabId・`task add` の taskId）は人間向け出力にも載るが、書式が割れずに読めるのは `--json` だけ。`--help`（`-h` も同じ）は全階層で効き、固有 usage を持つのは `config set` だけで、他はドメインの usage を出す。`<id|current>` の `current` はアクティブ WS。
+各サブコマンドは対応する [制御 API](api.md) メソッドへそのまま乗る。`--json` は全サブコマンドで効き、control の result をそのまま出す——成功応答に載る `seq`（[api](api.md)）もそのまま出る（例外は 3 つ——`config get` は `config_list` から抽出した 1 行で `seq` を持たない、`session closed` は `session_log` と `list_tabs` から CLI が組む派生ビューで `seq` を持たない、`tab list` は `--workspace` で絞った後の `{"tabs":[…], "seq": N}`）。write が採番した id（`ws new` の workspaceId・`tab new` の tabId・`task add` の taskId・`intake set` の intakeId）は人間向け出力にも載るが、書式が割れずに読めるのは `--json` だけ。`--help`（`-h` も同じ）は全階層で効き、固有 usage を持つのは `config set` だけで、他はドメインの usage を出す。`<id|current>` の `current` はアクティブ WS。
 
 値必須フラグ（`--workspace <id>` / `--dir <path>` / `--cmd "…"` / `--text <text>` / `--key <key>` / `--kind <kind>` / `--value <value>` / `--after <seq>` / `--timeout-ms <ms>` / task の項目フラグ）の値は `-` 始まりも空（空白だけの形も含む）も取らない（usage エラー、exit 2）。`orb tab new --dir "$DIR" --cmd "$CMD"` の `$DIR` が空になる形が両方ここで落ちる——引用符が無ければトークンごと消えて `--cmd` が cwd に化け、引用符があれば空文字が cwd として通ってしまうため。パスは絶対パスで渡す（`-` 始まりのディレクトリは `./-foo` の形）——相対パスは CLI も control も解決せずそのまま格納するので、利用者のシェルの cwd 基準にはならない（例外は `task` の `--worktree` で、CLI が呼び出し元の cwd から解く）。`~` 始まりを展開するのは workspace のパス（`ws new --dir` / `ws dir`）だけで、`tab new --dir` は展開せずそのまま cwd にする。
 
@@ -93,14 +105,14 @@ kind の語彙と値域の検証は control が持つ（未知 kind は CLI を�
 
 ## 文脈解決
 
-control.sock の解決順は `ORBE_STATE_DIR`（非空の明示指定・最優先。`$ORBE_STATE_DIR/control.sock` を使い `ORBE_SOCK` は見ない）→ `ORBE_SOCK`（タブ注入の絶対パス）→ 既定の Application Support 直下（自ビルドのチャネルが焼いた bundle id・[channel](../platform/channel.md)）。tab は現タブ既定に `ORBE_TAB`（タブ注入の自 tab id）を読む。`task add` は呼び出し元タブとして `ORBE_TAB` を control へ伝える。config/ws はインスタンス/WS 単位なので `ORBE_TAB` を読まない。外部（`ORBE_TAB` 無し）で tab の対象を省略すると usage エラー（exit 2）。
+control.sock の解決順は `ORBE_STATE_DIR`（非空の明示指定・最優先。`$ORBE_STATE_DIR/control.sock` を使い `ORBE_SOCK` は見ない）→ `ORBE_SOCK`（タブ注入の絶対パス）→ 既定の Application Support 直下（自ビルドのチャネルが焼いた bundle id・[channel](../platform/channel.md)）。tab は現タブ既定に `ORBE_TAB`（タブ注入の自 tab id）を読む。`task add` と `task set` は呼び出し元タブとして `ORBE_TAB` を control へ伝える（追加者と既定の付き先、待ちの条件の作業ディレクトリと会話に使う）。config/ws はインスタンス/WS 単位なので `ORBE_TAB` を読まない。外部（`ORBE_TAB` 無し）で tab の対象を省略すると usage エラー（exit 2）。
 
 ## 終了コード・エラー
 
 - 成功=0、usage エラー（未知 key・引数不足・非数値 id・対象欠如等でクライアントが弾く）=2、RPC/接続エラー=1、`session restore` で 1 つでも `unknown` があった=1（打ち間違いを黙らせない）、`agent prompt` がエージェントの入力待ち（`waiting`）で止まった=3、同じくセッション終了（`clear`）で止まった=4、`wait` / `agent prompt` / `agent spawn` / `agent resume` の時間切れ=124。
 - 時間切れに専用コードを与えるのは、待っていたイベントが来ていないのに `orb wait … && 次の処理` が進むのを止めるため——この CLI は成功していないのに 0 を返さない。124 は `timeout(1)` の慣習で、Orbe の文書を読まなくても意味が通る。時間切れは `--json` なら結果を stdout に出すが、それ以外では stdout に何も書かない（`text=$(orb wait …)` が偽のイベントを掴まないため）。`agent prompt` の 3 / 4 も同じ理由で非 0——答えは返っていないので `&& 次の処理` を進めない。3 と 4 を分けるのは対処が違うため（3 は答えを送る、4 は起こし直す）。
 - Orbe 未起動や Orbe 外（socket 不達）は、クラッシュせず構造化メッセージ＋非 0 終了（`--json` 時は `{"error":{code,message}}`）。
-- control の error は code/message をそのまま出す（値域外・不正 enum・未知/最後の workspace・未知 tab 等は control 側が弾く）。未知 key・型不一致はクライアントが `config_list` を SSOT に事前に弾く。
+- control の error は code/message をそのまま出す（値域外・不正 enum・未知/消せない workspace・未知 tab 等は control 側が弾く）。未知 key・型不一致はクライアントが `config_list` を SSOT に事前に弾く。
 
 ## 配布・PATH
 

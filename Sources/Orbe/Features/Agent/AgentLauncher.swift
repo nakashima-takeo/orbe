@@ -17,6 +17,11 @@ final class AgentLauncher {
   var configuredDefault: (() -> String?)?
   /// default agent を global スコープの設定変更として書く窓口。WindowController が注入（store 経由に一本化）。
   var onSetDefault: ((String) -> Void)?
+  /// 検出が済んだ知らせ（検出のたびに呼ぶ）。
+  var onResolved: (() -> Void)?
+  /// 各 CLI へプラグインを登録するか。登録は利用者の CLI の設定（登録先・コピー）を書き換えるので、隔離起動は登録せず、
+  /// 登録のためのオンボーディングも出さない。隔離起動のタブの agent は、常用の Orbe が登録したプラグインで動く。
+  var registersPlugin = !StateDir.isIsolated
 
   private let catalog = AgentCatalog()
   private var installProc: Process?  // 導入中の install.sh を寿命つなぎで保持
@@ -106,19 +111,22 @@ final class AgentLauncher {
 
   /// 起動時のプラグイン同期。`.app` 同梱があれば毎回安定パスへ実体化し（claude はここをライブ参照
   /// するので同梱の更新がそのまま届く。codex / agy は導入時にコピーを取るため、届くのは次に
-  /// 登録し直したときになる）、オンボーディングを出さない経路では、登録できた名前が現在のチャネルの
-  /// プラグイン名と違うときだけ `install.sh` を無音で走らせる（名前はチャネルごとに変わる）。
-  /// 同梱が無い（`swift run` 等）なら実体化が nil を返すのでそこで止まる。
+  /// 登録し直したときになる）、オンボーディングを出さない経路では、実体化した中身の指紋が最後に
+  /// 登録できた指紋と違うときだけ `install.sh` を無音で走らせる（codex / agy のコピーを今の中身へ
+  /// 置き換える）。登録しないインスタンス（隔離起動）は実体化もしない——実体化を読むのは登録だけで、隔離起動の
+  /// タブの agent は常用の Orbe が登録したプラグインで動く。同梱が無い（`swift run` 等）なら実体化が nil を返すので
+  /// そこで止まる。
   func syncAgentPluginOnLaunch() {
-    guard let dir = AgentPluginInstaller.materializeStablePlugin() else { return }
+    guard registersPlugin, let dir = AgentPluginInstaller.materializeStablePlugin() else { return }
     materializedPluginDir = dir
     // オンボーディングを出す経路では登録もオンボーディングが担う（install.sh の二重実行を防ぐ）。
     let state = AppStatePersistence.load()
     guard state?.agentPluginsInstalled == true,
       let name = AgentPluginInstaller.pluginName(in: dir),
-      state?.registeredAgentPluginName != name
+      let digest = AgentPluginInstaller.digest(of: dir),
+      state?.registeredAgentPluginDigest != digest
     else { return }
-    // 記録するのは「1 つ以上登録できて、1 つも失敗しなかった」ときだけ。名前が一致する限り
+    // 記録するのは「1 つ以上登録できて、1 つも失敗しなかった」ときだけ。指紋が一致する限り
     // 二度と走らないので、1 件も登録できていない完了を記録すると恒久的に無効化される。
     var registered = false
     var failed = false
@@ -130,15 +138,15 @@ final class AgentLauncher {
       onComplete: { [weak self] in
         self?.installProc = nil
         guard registered, !failed else { return }
-        AppStatePersistence.update { $0.registeredAgentPluginName = name }
+        AppStatePersistence.update { $0.registeredAgentPluginDigest = digest }
       })
   }
 
-  /// 初回起動オンボーディングを出す。検出 CLI を見せてデフォルトを選ばせ、状態追跡
-  /// プラグインを per-CLI 進捗付きで導入する。`.app` 同梱が無い（`swift run` 等）か
-  /// 既に導入し切っている（フラグ）なら何もしない。
+  /// 初回起動オンボーディングを出す。検出 CLI を見せてデフォルトを選ばせ、エージェント
+  /// プラグインを per-CLI 進捗付きで導入する。登録しないインスタンス（隔離起動）・`.app` 同梱が無い
+  /// （`swift run` 等）・既に導入し切っている（フラグ）なら何もしない。
   func showOnboardingIfNeeded() {
-    guard let appModel,
+    guard registersPlugin, let appModel,
       AppStatePersistence.load()?.agentPluginsInstalled != true,
       AgentPluginInstaller.bundledPluginDir != nil
     else { return }
@@ -163,9 +171,10 @@ final class AgentLauncher {
       dismissOnboarding()
       return
     }
-    // 登録するのは ephemeral バンドルではなく起動時に実体化した ORBE_STATE_DIR 非依存の安定パス。
+    // 登録するのは ephemeral バンドルではなく起動時に実体化した安定パス。
     guard let stableDir = materializedPluginDir,
-      let name = AgentPluginInstaller.pluginName(in: stableDir)
+      let name = AgentPluginInstaller.pluginName(in: stableDir),
+      let digest = AgentPluginInstaller.digest(of: stableDir)
     else {
       dismissOnboarding()
       return
@@ -182,17 +191,17 @@ final class AgentLauncher {
         case .skip(let cli): self?.appModel?.onboarding?.setStatus(cli, .skipped)
         }
       },
-      onComplete: { [weak self] in self?.completeOnboarding(pluginName: name) })
+      onComplete: { [weak self] in self?.completeOnboarding(digest: digest) })
   }
 
-  /// 導入完了。1 つ以上導入できて失敗 CLI が無ければ導入済みフラグと登録できた名前を書き
+  /// 導入完了。1 つ以上導入できて失敗 CLI が無ければ導入済みフラグと登録できた中身の指紋を書き
   /// （再提示・再登録の防止）、進捗を見せてから閉じる。1 件も導入できなかった／失敗があれば
   /// 書かず、次回起動で再表示＝自動リトライさせる（install.sh は冪等）。
-  private func completeOnboarding(pluginName: String) {
+  private func completeOnboarding(digest: String) {
     if let model = appModel?.onboarding, model.hasInstalls, !model.hasFailures {
       AppStatePersistence.update {
         $0.agentPluginsInstalled = true
-        $0.registeredAgentPluginName = pluginName
+        $0.registeredAgentPluginDigest = digest
       }
     }
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in self?.dismissOnboarding()
@@ -210,17 +219,23 @@ final class AgentLauncher {
     onDismissPalette?()
   }
 
-  /// 永続から復元した agent セッションを resume 起動の (command, env) に解決する。
-  /// 起動と同じ PATH を渡す。未対応 agent は nil（呼び出し側は素のシェルで復元）。
-  func resumeSpawn(for session: AgentSession) -> (command: String, env: [String: String])? {
+  /// 永続から復元した agent セッションを resume 起動の (command, env) に解決する（`arguments` は再開に添える追加の
+  /// 引数、`firstInput` は会話の最初の入力）。起動と同じ PATH を渡す。未対応 agent は nil（呼び出し側は素のシェルで
+  /// 復元）。
+  func resumeSpawn(
+    for session: AgentSession, arguments: [String] = [], firstInput: String? = nil
+  ) -> (command: String, env: [String: String])? {
     guard let sessionId = session.sessionId,
-      let command = AgentCatalog.resumeCommand(forAgent: session.command, sessionId: sessionId)
+      let command = AgentCatalog.resumeCommand(
+        forAgent: session.command, sessionId: sessionId, arguments: arguments,
+        firstInput: firstInput)
     else { return nil }
     return (command, launchEnvironment)
   }
 
-  /// 検出完了の単一窓口。提示中の onboarding／palette 双方の detecting を解いて結果へ差し替える。
+  /// 検出完了の単一窓口。提示中の onboarding／palette 双方の detecting を解いて結果へ差し替え、知らせる。
   private func handleResolved() {
+    onResolved?()
     if let m = appModel?.onboarding {
       m.setCommands(catalog.agents.map(\.command))
       m.detecting = false

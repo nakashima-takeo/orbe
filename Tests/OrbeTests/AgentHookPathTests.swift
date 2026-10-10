@@ -15,26 +15,8 @@ import XCTest
 /// 壊れると何が起きるか: エージェントの状態がタブに一切出なくなる。しかもどの実行体も
 /// エラーを出さない——シムは env が欠ければ黙って exit 0、`orbe-report` は接続できなくても exit 0。
 final class AgentHookPathTests: OrbeTestCase {
-  /// リポジトリ実体のプラグインパッケージ。このファイル: <repo>/Tests/OrbeTests/...swift → 3 階層上が repo root。
-  private static let sourcePackage = URL(fileURLWithPath: #filePath)
-    .deletingLastPathComponent()  // OrbeTests
-    .deletingLastPathComponent()  // Tests
-    .deletingLastPathComponent()  // repo root
-    .appendingPathComponent("app/agent-plugin")
-
-  /// 同梱物レイアウトへプラグインを実体化し、シムの絶対パスを返す。
-  /// `hooks/channel` は `materializeStablePlugin()` が書くのと同じ 1 行（自分の bundle ID）。
   private func stagePlugin() throws -> URL {
-    let resources = try XCTUnwrap(BundledResources.root, "同梱物の探索根がステージされていない")
-    let package = resources.appendingPathComponent("agent-plugin", isDirectory: true)
-    try? FileManager.default.removeItem(at: package)
-    // copyItem は POSIX permission を保つ（実体化と同じ性質）。
-    try FileManager.default.copyItem(at: Self.sourcePackage, to: package)
-    let name = try XCTUnwrap(
-      AgentPluginInstaller.pluginName(in: package), "プラグイン名を読めない（パッケージが壊れている）")
-    let hooks = package.appendingPathComponent("plugins/\(name)/hooks", isDirectory: true)
-    try Data("\(StateDir.bundleId)\n".utf8).write(to: hooks.appendingPathComponent("channel"))
-    return hooks.appendingPathComponent("orbe-agent-status.sh")
+    try ControlProcess.stagePlugin().appendingPathComponent("hooks/orbe-agent-status.sh")
   }
 
   /// 同梱シムを実 `/bin/sh` で起こす。env はタブから受け取った実値そのままで、親からは継承しない。
@@ -85,6 +67,26 @@ final class AgentHookPathTests: OrbeTestCase {
       "hook の報告がタブ \(tab.id) に届かない（agentState=\(tab.agentState ?? "nil")）")
     XCTAssertEqual(
       tab.agentSlot.session?.sessionId, "s-1", "stdin の session_id が resume 鍵としてタブまで届く")
+  }
+
+  /// タブの中の agent が起こした hook の報告だけが、会話へ貼ってよい前面を覚えさせる。同じタブを名乗っても、タブの
+  /// 端末の外（tmux のペイン・ここではテストのプロセス）から来た報告は前面を覚えさせない。
+  func testOnlyAHookFromTheTabsForegroundLetsTheConversationTakeInput() throws {
+    let control = try startControlProcess(workspaces: ["main"])
+    let shim = try stagePlugin()
+    let tabId = try XCTUnwrap(
+      control.target.controlSpawn(
+        workspaceId: nil, cwd: nil,
+        command: "/bin/sh -c 'echo {} | /bin/sh \(shim.path) claude idle; exec /bin/sleep 600'"))
+    let tab = try XCTUnwrap(control.target.controlResolveTab(tabId))
+
+    XCTAssertTrue(
+      waitUntil(5) { tab.acceptsConversationInput },
+      "タブの前面の hook の報告で貼ってよくならない（agentState=\(tab.agentState ?? "nil")）")
+
+    runShim(shim, env: tabEnv(tab), state: "idle", stdin: "{}")
+    XCTAssertTrue(
+      waitUntil(5) { !tab.acceptsConversationInput }, "タブの外から来た報告で前面を覚えたまま")
   }
 
   /// Orbe 外の端末（`ORBE_TAB` / `ORBE_SOCK` が無い）で走った hook はタブを一切動かさない。

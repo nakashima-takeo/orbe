@@ -56,6 +56,13 @@ final class SurfaceView: NSView {
   /// 内部の surface ハンドル（制御チャネルの読み書きが参照する）。
   var surfacePtr: ghostty_surface_t? { surface }
 
+  /// pty の前面のプロセスグループ（libghostty が pty の親側で `tcgetpgrp` する）。surface が無い・取れなければ nil。
+  var foregroundProcessGroup: pid_t? {
+    guard let surface else { return nil }
+    let group = ghostty_surface_foreground_pid(surface)
+    return group > 0 ? pid_t(truncatingIfNeeded: group) : nil
+  }
+
   // MARK: - スクロールバー状態（更新ロジックは SurfaceView+Scrollbar.swift。ラップ層が読む）
 
   /// libghostty が報告する scrollback の状態。未報告なら nil。更新は updateScrollbar 経由のみ。

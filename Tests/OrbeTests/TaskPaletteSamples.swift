@@ -8,6 +8,8 @@ import Foundation
 enum TaskPaletteSamples {
   static let opened = TaskPaletteWorkspaces.Entry(id: UUID(), name: "orbe")
   static let other = TaskPaletteWorkspaces.Entry(id: UUID(), name: "web-app")
+  /// Home（受信の提案をタスクにすると付く）。
+  static let home = UUID()
   /// 開いた workspace の root。
   static let root = "/work/orbe"
 
@@ -16,7 +18,7 @@ enum TaskPaletteSamples {
     _ mutate: (inout TaskItem) -> Void = { _ in }
   ) -> TaskItem {
     var item = TaskItem(
-      id: id, title: title, status: status, waiting: nil, priority: .medium, due: nil,
+      id: id, title: title, status: status, wait: nil, priority: .medium, due: nil,
       workspace: nil, description: "", createdAt: DesignSceneFixtures.taskToday, createdBy: nil)
     mutate(&item)
     return item
@@ -26,15 +28,17 @@ enum TaskPaletteSamples {
   /// GitHub の値の置き場は、既定では何も取りに行かない。
   static func model(
     _ tasks: [TaskItem], githubItems: GitHubItemCache = GitHubItemCache(fetch: { _, _ in }),
-    openLists: GitHubOpenLists? = nil, agents: WorktreeAgentActivity = WorktreeAgentActivity()
+    openLists: GitHubOpenLists? = nil, agents: WorktreeAgentActivity = WorktreeAgentActivity(),
+    sessionTabs: AgentSessionTabs = AgentSessionTabs(), intakes: IntakeRunner? = nil
   ) -> TaskPaletteModel {
     let file = TasksFile(
       version: TaskPersistence.version, nextId: (tasks.map(\.id).max() ?? 0) + 1, tasks: tasks)
     return TaskPaletteModel(
       store: TaskStore(file: file), githubItems: githubItems, viewer: githubItems.viewer,
       openLists: openLists ?? GitHubOpenLists(source: .idle, viewer: githubItems.viewer),
-      root: root, agents: agents,
-      workspaces: TaskPaletteWorkspaces(opened: opened, all: [opened, other]),
+      root: root, agents: agents, sessionTabs: sessionTabs,
+      intakes: intakes ?? DesignSceneFixtures.intakeRunner(nil),
+      workspaces: TaskPaletteWorkspaces(opened: opened, all: [opened, other], home: home),
       now: DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone)
   }
 

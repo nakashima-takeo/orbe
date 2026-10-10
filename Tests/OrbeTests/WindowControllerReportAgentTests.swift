@@ -73,9 +73,9 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
     let wc = WindowController()
-    _ = wc.controlActivateWorkspace(workspaceId: try XCTUnwrap(wc.workspaces.last).id)
-    XCTAssertTrue(wc.workspaces.allSatisfy(\.activated), "前提: どちらも activate 済み")
-    let tabs = try wc.workspaces.map {
+    _ = wc.controlActivateWorkspace(workspaceId: try XCTUnwrap(wc.regularWorkspaces.last).id)
+    XCTAssertTrue(wc.regularWorkspaces.allSatisfy(\.activated), "前提: どちらも activate 済み")
+    let tabs = try wc.regularWorkspaces.map {
       try XCTUnwrap($0.tabs.first)
     }
     return (wc, tabs)
@@ -94,7 +94,7 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
       ])
     try JSONEncoder().encode(file).write(to: workspacesFile())
     let wc = WindowController()
-    let dormant = try XCTUnwrap(wc.workspaces.last)
+    let dormant = try XCTUnwrap(wc.regularWorkspaces.last)
     XCTAssertFalse(dormant.activated, "前提: 復元直後の未切替 workspace は休眠")
     return (wc, try XCTUnwrap(dormant.tabs.first))
   }
@@ -167,9 +167,9 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
         agent: "claude", state: "waiting", sessionId: nil,
         message: AgentMessage(text: "q")))
     let transient = try XCTUnwrap(wc.attentionStore.transient)
-    XCTAssertEqual(transient.row.tabId, tab.id)
-    XCTAssertEqual(transient.row.state, "waiting")
-    XCTAssertEqual(transient.row.message, "q")
+    XCTAssertEqual(transient.row?.tabId, tab.id)
+    XCTAssertEqual(transient.row?.state, "waiting")
+    XCTAssertEqual(transient.row?.message, "q")
 
     wc.attentionStore.transient = nil
     wc.controlReportAgent(
@@ -183,7 +183,7 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
       tab: tab,
       report: AgentHookReport(
         agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d")))
-    XCTAssertEqual(wc.attentionStore.transient?.row.state, "done")
+    XCTAssertEqual(wc.attentionStore.transient?.row?.state, "done")
 
     wc.attentionStore.transient = nil
     wc.controlReportAgent(tab: tab, report: AgentHookReport(agent: "claude", state: "clear"))
@@ -231,7 +231,7 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
       report: AgentHookReport(
         agent: "claude", state: "waiting", sessionId: nil,
         message: AgentMessage(text: "q")))
-    XCTAssertEqual(wc.attentionStore.transient?.row.tabId, tabs[1].id)
+    XCTAssertEqual(wc.attentionStore.transient?.row?.tabId, tabs[1].id)
   }
 
   /// 抑制は「立てない」だけ。別の場所で起きた変化の既存ピルには触らない。
@@ -244,14 +244,14 @@ final class WindowControllerReportAgentTests: OrbeTestCase {
       report: AgentHookReport(
         agent: "claude", state: "waiting", sessionId: nil,
         message: AgentMessage(text: "bg")))
-    XCTAssertEqual(wc.attentionStore.transient?.row.tabId, tabs[1].id)
+    XCTAssertEqual(wc.attentionStore.transient?.row?.tabId, tabs[1].id)
 
     wc.controlReportAgent(
       tab: tabs[0],
       report: AgentHookReport(
         agent: "claude", state: "waiting", sessionId: nil,
         message: AgentMessage(text: "fg")))
-    XCTAssertEqual(wc.attentionStore.transient?.row.tabId, tabs[1].id, "抑制は既存のピルを消さない")
+    XCTAssertEqual(wc.attentionStore.transient?.row?.tabId, tabs[1].id, "抑制は既存のピルを消さない")
   }
 
   /// done のフォーカス消費（done→idle）は stateChangedAt / message を触らない。

@@ -3,6 +3,7 @@ import SwiftUI
 /// タスク画面の左の一覧。行は `TaskPaletteRows` が組んだ値をそのまま描き、選択は行の同一性で光らせる。
 struct TaskPaletteList: View {
   @Bindable var model: TaskPaletteModel
+  let focus: FocusState<TaskPaletteFocusTarget?>.Binding
   @Environment(\.localization) private var l10n
 
   var body: some View {
@@ -16,8 +17,13 @@ struct TaskPaletteList: View {
         .padding(TaskPaletteRowMetrics.listPadding)
       }
       .scrollIndicators(.automatic)
-      .onChange(of: model.scrollTarget) { scroll(proxy, to: model.scrollTarget?.id) }
-      .onAppear { scroll(proxy, to: model.selectedID) }
+      .onChange(of: model.scrollTarget) { scroll(proxy, to: model.scrollTarget?.id, rows) }
+      // 行の直下に開いた頼む欄が見えるように送る（行だけを見せると、狭い窓で欄が下に切れる）。
+      .onChange(of: model.askingTaskID) { revealAsk(proxy) }
+      .onAppear {
+        scroll(proxy, to: model.selectedID, rows)
+        revealAsk(proxy)
+      }
     }
   }
 
@@ -26,32 +32,33 @@ struct TaskPaletteList: View {
   /// これだけ動かして初めてドラッグになる（未満はクリック）。
   private static let dragActivation: CGFloat = 6
 
-  /// 最小の量だけ送る（見えていれば動かない）。
-  private func scroll(_ proxy: ScrollViewProxy, to id: TaskPaletteRowID?) {
-    if let id { proxy.scrollTo(TaskPaletteRow.Identity.selectable(id)) }
+  /// 最小の量だけ送る（見えていれば動かない）。入力の行き先は一覧の行ではないので、一覧の先頭（行き先の次の一致）を
+  /// 見せる。
+  private func scroll(_ proxy: ScrollViewProxy, to id: TaskPaletteRowID?, _ rows: [TaskPaletteRow])
+  {
+    guard let id else { return }
+    if id == .add {
+      rows.first.map { proxy.scrollTo($0.id, anchor: .top) }
+    } else {
+      proxy.scrollTo(TaskPaletteRow.Identity.selectable(id))
+    }
+  }
+
+  private func revealAsk(_ proxy: ScrollViewProxy) {
+    if let id = model.askingTaskID { proxy.scrollTo(TaskPaletteRow.Identity.ask(id)) }
   }
 
   @ViewBuilder private func row(_ row: TaskPaletteRow) -> some View {
     switch row {
-    case .add(let title):
-      TaskPaletteRowFrame(
-        selected: model.selectedID == .add, onTap: { model.tapRow(.add) },
-        onHoverEnter: { model.hoverSelect(.add) },
-        content: {
-          Text("＋")
-            .font(Font.theme.chrome)
-            .foregroundStyle(Color.theme.accentPrimary)
-            .frame(width: TaskPaletteRowMetrics.glyphColumn)
-          TruncatingSlot(l10n.format(.taskPaletteAdd, title), leading: Theme.Space.step) {
-            Text($0).font(Font.theme.workspaceName).foregroundStyle(Color.theme.textPrimary)
-          }
-          Spacer(minLength: 0)
-        })
     case .sectionHeader(let status, let count):
       sectionLabel(
         status == .inProgress ? .taskPaletteSectionInProgress : .taskPaletteSectionTodo, count)
+    case .matchHeader:
+      sectionLabel(.taskPaletteMatchingTasks, nil)
     case .task(let task):
       taskRow(task)
+    case .ask(let ask):
+      TaskPaletteAskField(model: model, row: ask, focus: focus)
     case .doneHeader(let count, let expanded):
       VStack(spacing: 0) {
         Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
@@ -92,7 +99,7 @@ struct TaskPaletteList: View {
   private func taskRow(_ task: TaskPaletteTaskRow) -> some View {
     let grabbed = model.drag.session.flatMap { $0.taskID == task.id ? $0 : nil }
     return TaskPaletteTaskRowView(
-      row: task, selected: model.selectedID == .task(task.id),
+      row: task, selected: model.selectedID == .task(task.id), clock: model.clock,
       onTap: { model.tapRow(.task(task.id)) },
       onToggle: { model.toggleDone(task.id) },
       onHoverEnter: { model.hoverSelect(.task(task.id)) }
@@ -130,10 +137,10 @@ struct TaskPaletteList: View {
   }
 
   /// 見出しの字は ⌘T の欄の見出しと同じ。
-  private func sectionLabel(_ key: L10nKey, _ count: Int) -> some View {
+  private func sectionLabel(_ key: L10nKey, _ count: Int?) -> some View {
     HStack(spacing: Theme.Space.note) {
       Text(l10n.string(key)).foregroundStyle(Color.theme.textMuted)
-      Text("\(count)").foregroundStyle(Color.theme.textMuted.opacity(0.8))
+      if let count { Text("\(count)").foregroundStyle(Color.theme.textMuted.opacity(0.8)) }
     }
     .font(Font.theme.sectionLabel)
     .tracking(Theme.Typography.trackingLabel)
@@ -192,11 +199,13 @@ private struct TaskPaletteGrip: View {
 }
 
 /// タスクの行。アイコン（クリックで完了 ⇄ 未着手）・主の結び付きの印と番号・タイトル・札（「レビュー」・
-/// PR・優先度・期限・追加者）、右寄せで agent の札・待ちの札と workspace。縮むのはタイトルが先。詳細があれば
+/// PR・優先度・期限・追加者）、右寄せで agent の札・待ちの札（解けた待ちは起きたことの札）と workspace。縮むのはタイトルが先。詳細があれば
 /// タイトルの下に先頭を 1 行出す（書き出しはタイトルにそろえ、右寄せの札は 1 行目に残す）。
 struct TaskPaletteTaskRowView: View {
   let row: TaskPaletteTaskRow
   let selected: Bool
+  /// 経過を数える今（`TaskPaletteModel.clock`）。
+  let clock: (Date) -> Date
   let onTap: () -> Void
   let onToggle: () -> Void
   let onHoverEnter: () -> Void
@@ -251,6 +260,13 @@ struct TaskPaletteTaskRowView: View {
         .foregroundStyle(titleColor)
     }
     .layoutPriority(1)
+    if row.justAdded {
+      TaskPaletteBadge(
+        text: l10n.string(.taskPaletteJustAdded), foreground: Color.theme.accentBright,
+        fill: Color.theme.tintAccent
+      )
+      .padding(.leading, Theme.Space.step)
+    }
     if row.needsReview {
       Text(l10n.string(.taskPaletteReview))
         .font(Font.theme.meta)
@@ -288,15 +304,20 @@ struct TaskPaletteTaskRowView: View {
     if let agent = row.agent {
       TaskAgentBadge(agent: agent)
         .layoutPriority(2)
-        .padding(.trailing, row.waiting == nil ? 0 : Theme.Space.note)
+        .padding(.trailing, row.waiting == nil && row.resolved == nil ? 0 : Theme.Space.note)
     }
     if let waiting = row.waiting {
       TaskPaletteBadge(
         symbol: "clock",
         text: "\(waiting.reason) \(days(waiting.days))",
-        foreground: Color.theme.textSecondary, fill: Color.theme.plainPillFill, capsule: true
+        foreground: Color.theme.textSecondary, fill: Color.theme.plainPillFill, capsule: true,
+        maxWidth: TaskPaletteRowMetrics.textBadgeMaxWidth
       )
       .layoutPriority(2)
+    }
+    if let resolved = row.resolved {
+      TaskResolvedBadge(resolved: resolved, clock: clock)
+        .layoutPriority(2)
     }
     workspace
       .layoutPriority(2)
@@ -328,56 +349,6 @@ struct TaskPaletteTaskRowView: View {
 
   private func days(_ count: Int) -> String {
     count == 0 ? l10n.string(.taskPaletteToday) : l10n.format(.taskPaletteDays, count)
-  }
-}
-
-/// 一覧の PR の札（「<PR の印> #213 レビュー待ち ✓」）。
-struct TaskPullRequestBadge: View {
-  let badge: GitHubItemText.PullRequestBadge
-  @Environment(\.localization) private var l10n
-
-  var body: some View {
-    HStack(spacing: Theme.Space.tick) {
-      TaskLinkGlyph(kind: .pr, size: 10)
-      Text("#\(badge.number)").foregroundStyle(Color.theme.textPrimary)
-      if let phase = badge.phase {
-        Text(GitHubItemText.phaseText(phase, l10n.language))
-          .foregroundStyle(Color.theme.textMuted)
-      }
-      if let checks = badge.checks { TaskChecksMark.text(checks) }
-    }
-    .font(Font.theme.meta)
-    .lineLimit(1)
-    .fixedSize()
-    .padding(.horizontal, Theme.Space.note)
-    .frame(height: TaskPaletteRowMetrics.firstLine)
-    .background(RoundedRectangle(cornerRadius: Theme.Radius.sm + 1).fill(Color.theme.tintAccent))
-  }
-}
-
-/// 行の札（優先度・期限・待ち・workspace）。
-struct TaskPaletteBadge: View {
-  var symbol: String?
-  let text: String
-  let foreground: Color
-  let fill: Color
-  var capsule = false
-
-  var body: some View {
-    HStack(spacing: Theme.Space.tick) {
-      if let symbol {
-        Image(systemName: symbol).font(.system(size: 8, weight: .medium))
-      }
-      Text(text).lineLimit(1)
-    }
-    .font(Font.theme.meta)
-    .foregroundStyle(foreground)
-    .fixedSize()
-    .padding(.horizontal, capsule ? Theme.Space.step : Theme.Space.note)
-    .frame(height: TaskPaletteRowMetrics.firstLine)
-    .background(
-      RoundedRectangle(cornerRadius: capsule ? Theme.Radius.pill : Theme.Radius.sm + 1)
-        .fill(fill))
   }
 }
 

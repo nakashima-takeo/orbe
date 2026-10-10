@@ -44,7 +44,7 @@ final class WindowControllerActivationLifecycleTests: OrbeTestCase {
     XCTAssertEqual(control["activated"] as? Bool, true)
     XCTAssertEqual(control["dormantAgentCount"] as? Int, 2)
     wc.showWorkspacePalette()
-    let initialItem = try XCTUnwrap(wc.model.workspacePalette?.items.first)
+    let initialItem = try XCTUnwrap(wc.model.workspacePalette?.items.first { $0.name == "main" })
     XCTAssertEqual(initialItem.live.dormant, false)
     XCTAssertEqual(initialItem.live.rollup.map(\.state), ["dormant"])
     XCTAssertEqual(initialItem.live.rollup.map(\.count), [2])
@@ -117,7 +117,7 @@ final class WindowControllerActivationLifecycleTests: OrbeTestCase {
     let wc = WindowController()
     wc.showWorkspacePalette()
     func rollup() throws -> [(state: String, count: Int)] {
-      try XCTUnwrap(wc.model.workspacePalette?.items.first).live.rollup
+      try XCTUnwrap(wc.model.workspacePalette?.items.first { $0.name == "main" }).live.rollup
     }
     XCTAssertEqual(try rollup().map(\.state), ["dormant"])
     XCTAssertEqual(try rollup().map(\.count), [2], "前提: 未消費の復元チケット 2 枚")

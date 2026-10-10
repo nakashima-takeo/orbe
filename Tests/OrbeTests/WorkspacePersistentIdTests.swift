@@ -9,9 +9,9 @@ import XCTest
 /// 片方に付けたタスクがもう片方にも付いて見える。往復で値が保たれることは、`WorkspacesFile` の等値で
 /// 見る既存の往復テスト（`WindowControllerRestoreTests` ほか）が持つ。
 final class WorkspacePersistentIdTests: OrbeTestCase {
-  private func write(_ workspaces: [String]) throws {
+  private func write(_ workspaces: [String], top extra: String = "") throws {
     let json =
-      #"{"version":4,"activeWorkspace":0,"workspaces":[\#(workspaces.joined(separator: ","))]}"#
+      #"{"version":4,"activeWorkspace":0,"workspaces":[\#(workspaces.joined(separator: ","))]\#(extra)}"#
     try Data(json.utf8).write(to: workspacesFile())
   }
 
@@ -42,5 +42,17 @@ final class WorkspacePersistentIdTests: OrbeTestCase {
     XCTAssertEqual(loaded.workspaces.map(\.name), ["broken", "kept"])
     XCTAssertEqual(loaded.workspaces[1].persistentId, kept, "読める永続 ID はそのまま保つ")
     XCTAssertNotEqual(loaded.workspaces[0].persistentId, kept)
+  }
+
+  /// Home を指す値も同じく寛容に読む。読めなければ「無し」へ落ち、ファイル全体は失わない。
+  func testHomeIdIsReadAndAnUnreadableOneFallsBackToNone() throws {
+    let home = UUID()
+    try write([workspace("alpha")], top: #","homeWorkspaceId":"\#(home.uuidString)""#)
+    XCTAssertEqual(try XCTUnwrap(WorkspacePersistence.load()).homeWorkspaceId, home)
+
+    try write([workspace("alpha")], top: #","homeWorkspaceId":42"#)
+    let loaded = try XCTUnwrap(WorkspacePersistence.load(), "読めない値でもファイルは読める")
+    XCTAssertNil(loaded.homeWorkspaceId)
+    XCTAssertEqual(loaded.workspaces.map(\.name), ["alpha"])
   }
 }

@@ -1,8 +1,34 @@
 import Foundation
 import Observation
 
-/// Attention 一覧の単一情報源（@Observable・main のみ）。WindowController が既存の chrome
-/// coalesce（`flushChrome`）と同じ契機で snapshot を流し込み、パレットとメニューバーが同じ値を読む。
+/// メニューバー②が映す中身。agent のタブ由来か、タスク由来か。
+enum MenuBarNotice {
+  /// 見ていないタブの状態変化。Attention 一覧の投影なので、投影元が消えれば取り下げる。
+  case agent(AttentionRow)
+  /// 待ちの条件が解けた瞬間。一覧の投影ではない出来事の知らせなので、取り下げは無い。
+  case task(TaskNotice)
+  /// 秘書が応えない（起こした後の最初の報告・貼った頼みの確証が来ない）。取り下げは無い。
+  case secretary(SecretaryNotice)
+}
+
+/// 秘書が応えないことの知らせの中身。押すと秘書のタブへ移る。
+struct SecretaryNotice: Equatable {
+  let tabId: Int
+  let workspaceName: String
+  let text: String
+}
+
+/// タスク由来の知らせの中身。本文は到来の時点の UI の言語で組んだもの。
+struct TaskNotice: Equatable {
+  let taskId: Int
+  /// タスクの workspace の名前。workspace が無ければ nil（名前の欄を出さない）。
+  let workspaceName: String?
+  let text: String
+}
+
+/// Attention 一覧と、メニューバー②の一過性の知らせの単一情報源（@Observable・main のみ）。
+/// WindowController が既存の chrome coalesce（`flushChrome`）と同じ契機で snapshot を流し込み、
+/// パレットとメニューバーが同じ値を読む。
 @Observable final class AttentionStore {
   /// 全対象行（waiting/done/working・stateChangedAt 降順）。`apply(rows:)` だけが差し替える。
   private(set) var rows: [AttentionRow] = []
@@ -14,11 +40,11 @@ import Observation
   /// working の減光集約 1 行の素材（件数と WS 名。0 件は nil）。書式は描画側が L10n で組む。
   var workingSummary: (count: Int, names: [String])? { AttentionSnapshot.workingSummary(rows) }
 
-  /// メニューバー②（状態変化の瞬間の滲み出し）の一過性イベント。
-  /// waiting / done への実変化のときだけ report 経路（controlReportAgent）が立てる。
+  /// メニューバー②（状態変化・待ちが解けた瞬間の滲み出し）の一過性イベント。
+  /// 立てるのは窓の通知の流し口（`WindowController.deliver`）だけ。
   /// 期限管理（ホバー延長・収縮）は MenuBarController が担う。
   struct Transient {
-    let row: AttentionRow
+    let notice: MenuBarNotice
     /// 到来時刻。ホバー延長では変わらない——MenuBarController が「新しい到来か」を見分ける印
     /// （同じ tabId の積み替えも新しい到来なので `tabId` の比較では見分けられない）。
     let arrivedAt: Date
@@ -28,7 +54,7 @@ import Observation
     let arrivedCount: Int
     /// 収縮の開始時刻（＝滞留の満了）。
     var expiresAt: Date
-    /// 投影元が消えて取り下げが決まった。ここから閉じるだけで、②としてはもう生きていない
+    /// 投影元が消えて取り下げが決まった（agent の中身だけ）。ここから閉じるだけで、②としてはもう生きていない
     /// （中身は収縮を描き切るために残す——落とすのは閉じ切った `MenuBarController`）。
     var retracted = false
   }
@@ -38,13 +64,13 @@ import Observation
   /// 実効設定（`menubar-notification-duration`）から解決して渡し、その到来が終わるまで動かない。
   /// store が既定を持たないのは、発信元を知らない store が設定の既定と別口の既定を作らないため。
   /// ホバー延長は MenuBarController が `expiresAt` を伸ばす。
-  func noteTransient(_ row: AttentionRow, dwell: TimeInterval, now: Date = Date()) {
+  func noteTransient(_ notice: MenuBarNotice, dwell: TimeInterval, now: Date = Date()) {
     transient = Transient(
-      row: row, arrivedAt: now, arrivedCount: count,
+      notice: notice, arrivedAt: now, arrivedCount: count,
       expiresAt: now.addingTimeInterval(dwell))
   }
 
-  /// 行 snapshot を差し替え、②が指す行が一覧（`listRows`）に**同じ状態で**居なければ取り下げる。
+  /// 行 snapshot を差し替え、②が指す agent の行が一覧（`listRows`）に**同じ状態で**居なければ取り下げる。
   /// ②は一覧の投影なので、投影元が消えた（`idle` へ落ちた・`clear` された・閉じられた）／別の
   /// 状態になった（`working` へ戻った）ピルは残さない。行が残っている間の中身は更新しない
   /// （差し替えは report 経路が新しい行で立て直す）。
@@ -56,10 +82,10 @@ import Observation
   /// まだ行に反映されていない変化を先に立てられる。
   func apply(rows newRows: [AttentionRow]) {
     rows = newRows
-    guard let transient, !transient.retracted else { return }
-    let projected = listRows.contains {
-      $0.tabId == transient.row.tabId && $0.state == transient.row.state
+    guard let transient, !transient.retracted, case .agent(let row) = transient.notice else {
+      return
     }
+    let projected = listRows.contains { $0.tabId == row.tabId && $0.state == row.state }
     if !projected { self.transient?.retracted = true }
   }
 }

@@ -46,16 +46,7 @@ struct TaskAgentDetail: View {
             .foregroundStyle(agent.state.stateColor)
             .lineLimit(1)
           Spacer(minLength: Theme.Space.step)
-          Text("↗ " + l10n.string(.taskPaletteAgentGoToTab))
-            .font(Font.theme.meta)
-            .foregroundStyle(Color.theme.textSecondary)
-            .lineLimit(1)
-            .fixedSize()
-            .padding(.horizontal, Theme.Space.note)
-            .frame(height: 18)
-            .background(
-              RoundedRectangle(cornerRadius: Theme.Radius.sm + 1)
-                .fill(Color.theme.surfaceInk.opacity(0.06)))
+          TaskGoToTabChip()
         }
         Text(
           [

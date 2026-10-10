@@ -22,15 +22,22 @@ extension WindowController {
     // workspaces 非空は load() が保証する（空 workspaces のファイルは load が nil を返す）。
     store.load(
       workspaces: restored,
-      activeWorkspace: min(max(0, file.activeWorkspace), restored.count - 1))
+      activeWorkspace: min(max(0, file.activeWorkspace), restored.count - 1),
+      homeWorkspaceId: file.homeWorkspaceId)
     activateCurrent()  // 復元アクティブが0タブ（休眠保存）なら空表示（シェルは起こさない）
   }
 
-  /// TabState 1 枚からタブを起こして配線する。起動時復元（restore）と `restoreDormantTab` の共通経路
+  /// TabState 1 枚からタブを起こして配線する。起動時復元（restore）・`restoreDormantTab`・`openResumedTab` の共通経路
   /// ——agent 付きは休眠チケットのまま起こし、resume 解決（と解決不能時の素シェル化）は
-  /// タブ起床時に走る（`TerminalTab.recordMaterializationStarted`）。ここは resolver を渡すだけ。
-  private func makeTab(from state: TabState) -> TerminalTab {
-    let resume: TerminalTab.ResumeSpawn = { [agentLauncher] in agentLauncher.resumeSpawn(for: $0) }
+  /// タブ起床時に走る（`TerminalTab.recordMaterializationStarted`）。ここは resolver を渡すだけ。会話の再開の組み立ては
+  /// すべてこの resolver を通る。起こす会話が秘書の会話なら、秘書の係がそのタブを秘書として覚え、秘書の役割の指示を
+  /// 再開に添える（起こす時点の秘書の記録で決まる）。
+  func makeTab(from state: TabState) -> TerminalTab {
+    let resume: TerminalTab.ResumeSpawn = { [weak self, agentLauncher] tab, session, input in
+      agentLauncher.resumeSpawn(
+        for: session, arguments: self?.secretary.launching(session, in: tab) ?? [],
+        firstInput: input)
+    }
     return wire(TerminalTab(restoring: state, resumeSpawn: resume, editorSurfaces: editorSurfaces))
   }
 
@@ -40,7 +47,7 @@ extension WindowController {
   /// 選択・mount はしない（起床は既存の mount 規律に従う）。
   func restoreDormantTab(_ state: TabState, intoWorkspaceAt index: Int) -> TabRef {
     let tab = makeTab(from: state)
-    let tabIndex = store.insertRestoredTab(tab, intoWorkspaceAt: index)
+    let tabIndex = store.insertTabUnselected(tab, intoWorkspaceAt: index)
     refreshChrome()
     scheduleSave()
     return TabRef(workspaceIndex: index, tabIndex: tabIndex, tab: tab)
@@ -111,6 +118,6 @@ extension WindowController {
           lastUsedAt: ws.lastUsedAt, settingsOverride: ws.settingsOverride,
           lastWorktreeBase: ws.lastWorktreeBase, persistentId: ws.persistentId)
       },
-      windowSize: rememberedWindowSize)
+      windowSize: rememberedWindowSize, homeWorkspaceId: store.homeWorkspaceId)
   }
 }

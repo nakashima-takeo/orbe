@@ -112,7 +112,7 @@ extension WindowControllerReportAgentTests {
         agent: "claude", state: "waiting", sessionId: nil,
         message: AgentMessage(text: "q")))
     flushDelivered(wc)
-    XCTAssertEqual(wc.attentionStore.transient?.row.tabId, tabs[1].id)
+    XCTAssertEqual(wc.attentionStore.transient?.row?.tabId, tabs[1].id)
 
     wc.closeTab(wc.current.tabs[1], origin: .gesture)
     flushDelivered(wc)
@@ -128,15 +128,15 @@ extension WindowControllerReportAgentTests {
         agent: "claude", state: "waiting", sessionId: nil,
         message: AgentMessage(text: "q")))
     flushDelivered(wc)
-    XCTAssertEqual(wc.attentionStore.transient?.row.state, "waiting")
+    XCTAssertEqual(wc.attentionStore.transient?.row?.state, "waiting")
 
     wc.controlReportAgent(
       tab: tab,
       report: AgentHookReport(
         agent: "claude", state: "done", sessionId: nil, message: AgentMessage(text: "d")))
-    XCTAssertEqual(wc.attentionStore.transient?.row.state, "done")
+    XCTAssertEqual(wc.attentionStore.transient?.row?.state, "done")
     flushDelivered(wc)
-    XCTAssertEqual(wc.attentionStore.transient?.row.state, "done")
+    XCTAssertEqual(wc.attentionStore.transient?.row?.state, "done")
   }
 
   /// 休眠（未 activate）workspace のタブでは②を立てない——通知を組む側（`agentNotification(for:)`）は

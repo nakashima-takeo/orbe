@@ -3,7 +3,7 @@ import Foundation
 
 /// 外部やエージェントが Orbe を操作するための domain 操作（main スレッドでのみ呼ぶ）。
 /// 実体は WindowController。ControlServer がリクエストを main へ hop して叩く。
-protocol ControlTarget: ControlTaskTarget {
+protocol ControlTarget: ControlTaskTarget, ControlIntakeTarget {
   func controlListWorkspaces() -> [[String: Any]]
   func controlListTabs() -> [[String: Any]]
   /// 検出済みエージェント CLI を列挙する（読み取り専用）。
@@ -48,9 +48,9 @@ protocol ControlTarget: ControlTaskTarget {
   func controlCreateWorkspace(name: String, rootPath: String?) -> Result<Any, ControlError>
   /// workspace を改名する（id 未発見 -32004・name 空 -32602）。
   func controlRenameWorkspace(workspaceId: Int, name: String) -> Result<Any, ControlError>
-  /// workspace の rootPath を変更する（id 未発見 -32004・rootPath 空 -32602）。
+  /// workspace の rootPath を変更する（id 未発見 -32004・Home -32000・rootPath 空 -32602）。
   func controlSetWorkspaceRoot(workspaceId: Int, rootPath: String) -> Result<Any, ControlError>
-  /// workspace を削除する（id 未発見 -32004・最後の 1 つは削除不可 -32000）。
+  /// workspace を削除する（id 未発見 -32004・Home と最後の通常 workspace は削除不可 -32000）。
   func controlRemoveWorkspace(workspaceId: Int) -> Result<Any, ControlError>
   /// 閉じたセッションを休眠チケットとして戻す（restore_sessions）。id ごとの status
   /// （restored / already-present / unknown）を返す。窓は onWindow が保証する。
@@ -238,30 +238,7 @@ final class ControlServer {
     let id = obj["id"]
     let params = obj["params"] as? [String: Any] ?? [:]
 
-    // main を要さない動詞（待機系＋ファイル読み）は queue が受け持つ。
-    switch method {
-    case "wait_for_event":
-      conn.waitForEvent(id: id, params: params)
-      return
-    case "session_log":
-      sessionLog(id: id, params: params, conn: conn)
-      return
-    case "prompt_agent":
-      promptAgent(id: id, params: params, conn: conn)
-      return
-    case "spawn_agent":
-      launchAgent(id: id, params: params, conn: conn) {
-        self.spawnAgent(params: params, target: $0)
-      }
-      return
-    case "resume_agent":
-      launchAgent(id: id, params: params, conn: conn) {
-        self.resumeAgent(params: params, target: $0)
-      }
-      return
-    default:
-      break
-    }
+    if respondsByConnection(method: method, id: id, params: params, conn: conn) { return }
 
     // 補完系は無応答契約（update/end は応答を書かない）を含むため、windowed の解決より先に分ける
     // （target==nil 時や未知扱いで update/end が応答を書くと、打鍵ぶんの行が accept 応答の前に積む）。
@@ -286,6 +263,42 @@ final class ControlServer {
     DispatchQueue.main.async {
       let result = self.onWindow { handler($0, params) }
       self.queue.async { conn.respond(id: id, result: result) }
+    }
+  }
+
+  /// 応答を接続ごとに自分で返す動詞（待機・ファイル読み・接続の向こうの報告者を使う報告・起動や作業開始の待ち合わせ）。
+  /// 引き受けたら true。
+  private func respondsByConnection(
+    method: String, id: Any?, params: [String: Any], conn: Connection
+  ) -> Bool {
+    switch method {
+    case "wait_for_event":
+      conn.waitForEvent(id: id, params: params)
+      return true
+    case "session_log":
+      sessionLog(id: id, params: params, conn: conn)
+      return true
+    case "prompt_agent":
+      promptAgent(id: id, params: params, conn: conn)
+      return true
+    case "spawn_agent":
+      launchAgent(id: id, params: params, conn: conn) {
+        self.spawnAgent(params: params, target: $0)
+      }
+      return true
+    case "resume_agent":
+      launchAgent(id: id, params: params, conn: conn) {
+        self.resumeAgent(params: params, target: $0)
+      }
+      return true
+    case "start_task":
+      startTask(id: id, params: params, conn: conn)
+      return true
+    case "report_agent":
+      reportAgent(id: id, params: params, conn: conn)
+      return true
+    default:
+      return false
     }
   }
 
@@ -328,13 +341,14 @@ final class ControlServer {
         return .success(["activeWorkspaceId": r.activeWorkspaceId, "tabIds": r.tabIds])
       }
     default:
-      // タブ宛て・config / workspace CRUD・セッション復元・タスクは拡張の解決
-      // （ControlServer+Dispatch / +Task）へ。いずれも非該当なら未知メソッド。
+      // タブ宛て・config / workspace CRUD・セッション復元・タスク・受信は拡張の解決
+      // （ControlServer+Dispatch / +Task / +Intake）へ。いずれも非該当なら未知メソッド。
       return resolvedTabHandler(for: method)
         ?? tabHandler(for: method)
         ?? configWorkspaceHandler(for: method)
         ?? sessionHandler(for: method)
         ?? taskHandler(for: method)
+        ?? intakeHandler(for: method)
     }
   }
 

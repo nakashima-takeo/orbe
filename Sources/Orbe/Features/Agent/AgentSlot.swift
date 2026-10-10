@@ -35,7 +35,7 @@ extension AgentSlot {
   }
 }
 
-/// エージェント hook 1 発の報告（`report_agent` の params と同じ形）。適用は `TerminalTab.applyReport`。
+/// エージェント hook 1 発の報告（`report_agent` の params と、それを送ってきた報告者）。適用は `TerminalTab.applyReport`。
 struct AgentHookReport: Equatable {
   var agent: String
   var state: String
@@ -44,16 +44,20 @@ struct AgentHookReport: Equatable {
   /// hook が運ぶ終了理由（Claude Code の SessionEnd: `clear` / `logout` / `prompt_input_exit` / `other`）。
   /// 他の hook・他の CLI は持たない。
   var reason: String?
+  /// 報告者（接続の向こうのプロセス）から辿った、制御端末を持つプロセスのグループ（`ProcessGroup.terminalGroup`）。
+  /// 分からなければ nil（会話へ貼ってよい前面を覚えない）。
+  var reporterGroup: pid_t?
 
   init(
     agent: String, state: String, sessionId: String? = nil, message: AgentMessage? = nil,
-    reason: String? = nil
+    reason: String? = nil, reporterGroup: pid_t? = nil
   ) {
     self.agent = agent
     self.state = state
     self.sessionId = sessionId
     self.message = message
     self.reason = reason
+    self.reporterGroup = reporterGroup
   }
 }
 
@@ -66,6 +70,10 @@ struct AgentReport: Equatable {
   /// state の値が実際に変わった時刻（Attention の並び・経過時間表示）。
   /// 同値の連続報告と、報告以外の idle への書き戻し（フォーカス消費・タブのリセット）では動かさない。
   var stateChangedAt: Date
+  /// 報告を受けたときの端末の前面のプロセスグループで、報告者がそこに属していたもの（＝報告した agent のもの。
+  /// 属していない・surface が無ければ nil）。会話へ入力を貼ってよいかを、今の前面と比べて決める
+  /// （`TerminalTab.acceptsConversationInput`）。
+  var foregroundGroup: pid_t?
 }
 
 extension AgentSession {

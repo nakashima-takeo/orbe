@@ -124,7 +124,7 @@ final class SessionStoreTabGroupTests: OrbeTestCase {
     XCTAssertTrue(activeTab(background) === new, "背景 workspace の active は挿したタブ")
   }
 
-  // MARK: - 復元（insertRestoredTab）
+  // MARK: - 復元（insertTabUnselected）
 
   /// 復元した休眠チケットは同キーの連の右端へ入り、選択は挿す前と同じタブを指し続ける。
   /// 背景 workspace でも active を挿したタブへ動かさない（復元は見せる先を変えない）。
@@ -132,13 +132,13 @@ final class SessionStoreTabGroupTests: OrbeTestCase {
     let store = makeStore(["a", "b", "b"], active: 1)
     let before = activeTab(store.current)
 
-    XCTAssertEqual(store.insertRestoredTab(tab("a"), intoWorkspaceAt: 0), 1, "a の連の右端")
+    XCTAssertEqual(store.insertTabUnselected(tab("a"), intoWorkspaceAt: 0), 1, "a の連の右端")
     XCTAssertEqual(keys(store.current), ["a", "a", "b", "b"])
     XCTAssertTrue(activeTab(store.current) === before, "選択は同じタブのまま（index は 2 へ）")
 
     let background = workspace(["a"], active: 0)
     let two = SessionStore(workspaces: [workspace(["x"]), background], activeWorkspace: 0)
-    XCTAssertEqual(two.insertRestoredTab(tab("z"), intoWorkspaceAt: 1), 1, "同キーが無ければ末尾")
+    XCTAssertEqual(two.insertTabUnselected(tab("z"), intoWorkspaceAt: 1), 1, "同キーが無ければ末尾")
     XCTAssertEqual(background.active, 0, "背景 workspace の active は動かない")
   }
 }

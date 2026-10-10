@@ -18,7 +18,7 @@ enum WorktreePaletteSectionBuilder {
     /// 提示時の `fetch --prune` が着地した（列挙が fetch 後の値）。Local branch 行の同期ピルは
     /// 着地後の値だけを出す——fetch 前の差は古い remote 追跡 ref との差で、事実として嘘になる。
     var remoteFetchLanded = false
-    /// タスクから開いたときの先頭の欄の行き先（provider が導く）。
+    /// タスクから開いたときの先頭の欄の行き先（リポジトリの事実の層が導く）。
     var taskTarget = WorktreePaletteTaskTarget.none
     /// 先頭の欄の見出しに添える主の番号（無ければ「このタスクの worktree」）。
     var taskNumber: Int?
@@ -44,35 +44,28 @@ enum WorktreePaletteSectionBuilder {
     ].filter { !$0.items.isEmpty }
   }
 
-  /// 先頭の欄の行。worktree → ローカルブランチ → そのリポジトリの remote のブランチの順に、今の一覧の行を
-  /// 探す。どれも無く、作れる Issue のブランチなら作成行。見つからず作りもしないなら nil（欄を出さない）。
+  /// 先頭の欄の行。行き先から決まる用意の仕方（`WorktreeRepoFacts.plan`）を、今の一覧の行で出す（作るなら作成行）。
+  /// 決まらないなら nil（欄を出さない）。PR のブランチの行には PR の印を付ける。
   private static func taskItem(_ input: Input, among items: [WorktreePaletteItem])
     -> WorktreePaletteItem?
   {
-    let find = { (action: WorktreePaletteAction) in items.first { $0.action == action } }
-    switch input.taskTarget {
-    case .none, .pending:
+    let plan = WorktreeRepoFacts.plan(
+      for: input.taskTarget, worktrees: input.worktrees, localBranches: input.localBranches,
+      remoteBranches: input.remoteBranches, newBranchRules: input.newBranchRules)
+    switch plan {
+    case nil:
       return nil
-    case .worktree(let path):
-      return find(.open(.directory(path: path)))
-    case .branch(let name, let pullRequest, let remotes):
-      if let worktree = input.worktrees.first(where: { $0.branch == name }) {
-        return find(.open(.directory(path: worktree.path)))
-      }
-      let branch =
-        find(.open(.localBranch(name: name)))
-        ?? remotes.lazy.compactMap {
-          remoteBranch(named: "\($0)/\(name)", in: items)
-        }.first
-      if var branch {
-        if let pullRequest {
-          branch.glyph = .pullRequest
-          branch.pullRequest = pullRequest
-        }
-        return branch
-      }
-      guard pullRequest == nil, input.newBranchRules?.allows(name) == true else { return nil }
+    case .create(let name):
       return newBranchItem(name: name)
+    case .open(let destination):
+      guard var item = items.first(where: { $0.action == .open(destination) }) else { return nil }
+      if case .branch(_, let pullRequest?, _) = input.taskTarget,
+        destination.existingDirectory == nil
+      {
+        item.glyph = .pullRequest
+        item.pullRequest = pullRequest
+      }
+      return item
     }
   }
 
@@ -96,16 +89,6 @@ enum WorktreePaletteSectionBuilder {
   static func newBranchItem(name: String) -> WorktreePaletteItem {
     WorktreePaletteItem(
       glyph: .newBranch, name: name, action: .createBranch(name: name), enter: .create(name))
-  }
-
-  /// リモートブランチの行は名前で探す（行き先に焼き込んだ既存の worktree の有無に依らない）。
-  private static func remoteBranch(named name: String, in items: [WorktreePaletteItem])
-    -> WorktreePaletteItem?
-  {
-    items.first {
-      if case .open(.remoteBranch(name, _)) = $0.action { return true }
-      return false
-    }
   }
 
   // MARK: - セクションごとの item 組み立て

@@ -192,14 +192,41 @@ final class WindowControllerControlTests: OrbeTestCase {
     XCTAssertEqual(err.code, -32602, "invalid scope の invalid params")
   }
 
-  /// remove_workspace は最後の 1 つを -32000 で弾く（closeWorkspace の no-op を CLI へ明示エラー化）。
-  func testRemoveLastWorkspaceIsRejected() throws {
+  /// remove_workspace は最後の通常 workspace を -32000 で弾く（closeWorkspace の no-op を CLI へ明示エラー化）。
+  /// Home が残っていても数に入れない。
+  func testRemoveLastRegularWorkspaceIsRejected() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("solo")])
     let id = try XCTUnwrap(row(wc, name: "solo")?["id"] as? Int)
     guard case .failure(let err) = wc.controlRemoveWorkspace(workspaceId: id) else {
-      return XCTFail("最後の 1 つの削除は failure")
+      return XCTFail("最後の通常 workspace の削除は failure")
     }
-    XCTAssertEqual(err.code, -32000, "cannot remove last workspace")
+    XCTAssertEqual(err.code, -32000)
+    XCTAssertEqual(err.message, "cannot remove the last regular workspace")
+    XCTAssertEqual(wc.regularWorkspaces.map(\.name), ["solo"])
+  }
+
+  /// Home は remove_workspace も set_workspace_root も -32000 で弾き、一覧も root も変えない。改名は通る。
+  func testHomeRejectsRemoveAndSetRootButAcceptsRename() throws {
+    let wc = try restore(activeWorkspace: 0, [tabbed("main"), tabbed("other")])
+    let home = try XCTUnwrap(wc.workspaces.last)
+    let root = home.rootPath
+
+    guard case .failure(let removal) = wc.controlRemoveWorkspace(workspaceId: home.id) else {
+      return XCTFail("Home の削除は failure")
+    }
+    XCTAssertEqual(removal.code, -32000)
+    XCTAssertEqual(removal.message, "cannot remove Home")
+    guard
+      case .failure(let reroot) = wc.controlSetWorkspaceRoot(workspaceId: home.id, rootPath: "/tmp")
+    else { return XCTFail("Home の root 変更は failure") }
+    XCTAssertEqual(reroot.code, -32000)
+    XCTAssertTrue(wc.workspaces.contains { $0 === home })
+    XCTAssertEqual(home.rootPath, root)
+
+    guard case .success = wc.controlRenameWorkspace(workspaceId: home.id, name: "secretary") else {
+      return XCTFail("Home の改名は通る")
+    }
+    XCTAssertEqual(home.name, "secretary")
   }
 
   /// remove_workspace は未知 id を -32004 で弾く（workspace not found）。

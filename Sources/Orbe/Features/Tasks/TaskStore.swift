@@ -21,36 +21,57 @@ enum TaskStoreError: Error, Equatable {
     case before, after
   }
 
+  /// 足す位置。
+  enum AddPosition: Equatable {
+    /// 列の末尾。
+    case end
+    /// 人が見ている欄（`workspace` のタスク。nil は全部）の未着手の中で、足すタスクと同じか低い優先度の最初の
+    /// タスクの直前（無ければ列の末尾）——見ている欄で、その優先度の未着手の先頭に入る。
+    case priorityHead(workspace: UUID?)
+  }
+
   init(file: TasksFile? = TaskPersistence.load()) {
     tasks = file?.tasks ?? []
     nextId = file?.nextId ?? 1
   }
 
-  /// 列の末尾へ足す。
-  func add(_ draft: TaskDraft) throws(TaskStoreError) -> TaskItem {
+  /// `position` の位置へ足す（既定は列の末尾）。
+  func add(_ draft: TaskDraft, at position: AddPosition = .end) throws(TaskStoreError) -> TaskItem {
     let title = try Self.validTitle(draft.title)
     try Self.checkLinks(draft.links, of: nextId, against: tasks)
     try Self.checkWorktree(draft.worktree, of: nextId, against: tasks)
     let now = TaskItem.storedInstant(Date())
-    var waiting: TaskItem.Waiting?
+    var wait: TaskItem.Wait?
     if let raw = draft.waitingReason {
       guard draft.status != .done else { throw .invalid("a done task cannot be waiting") }
-      waiting = TaskItem.Waiting(reason: try Self.validReason(raw), since: now)
+      wait = .waiting(TaskItem.Waiting(reason: try Self.validReason(raw), since: now))
     }
     let item = TaskItem(
-      id: nextId, title: title, status: draft.status, waiting: waiting, priority: draft.priority,
+      id: nextId, title: title, status: draft.status, wait: wait, priority: draft.priority,
       due: draft.due, workspace: draft.workspace, description: draft.description, createdAt: now,
       createdBy: draft.createdBy, links: draft.links, worktree: draft.worktree,
       worktreeBranch: draft.worktree?.currentBranch)
     nextId += 1
-    tasks.append(item)
+    tasks.insert(item, at: index(for: item, position))
     persist()
     return item
   }
 
-  /// 指定した項目だけを変える。完了にすると待ちが外れる。完了のまま待ちを入れることはできない
-  /// （同じ要求でステータスを戻せば入れられる）。結び付きは丸ごと置き換え、外れた項目を「外した項目」に
-  /// 足し、足された項目をそこから消す（外した経路を区別しない）。
+  private func index(for item: TaskItem, _ position: AddPosition) -> Int {
+    switch position {
+    case .end:
+      return tasks.endIndex
+    case .priorityHead(let workspace):
+      return tasks.firstIndex {
+        $0.status == .todo && $0.priority.rank >= item.priority.rank
+          && (workspace == nil || $0.workspace == workspace)
+      } ?? tasks.endIndex
+    }
+  }
+
+  /// 指定した項目だけを変える。完了にすると待ちの席が空になる（起きたことも消える）。完了のまま待ちや条件を
+  /// 入れることはできない（同じ要求でステータスを戻せば入れられる）。結び付きは丸ごと置き換え、外れた項目を
+  /// 「外した項目」に足し、足された項目をそこから消す（外した経路を区別しない）。
   func update(_ id: Int, _ update: TaskUpdate) throws(TaskStoreError) -> TaskItem {
     guard let index = tasks.firstIndex(where: { $0.id == id }) else { throw .notFound(id) }
     guard !update.isEmpty else { throw .invalid("no fields to update") }
@@ -62,8 +83,8 @@ enum TaskStoreError: Error, Equatable {
     if let description = update.description { item.description = description }
     if let workspace = update.workspace { item.workspace = workspace.value }
     try applyLinksAndWorktree(update, to: &item)
-    item.waiting = try Self.waiting(update.waitingReason, of: item)
-    if item.status == .done { item.waiting = nil }
+    item.wait = try Self.wait(update, of: item, now: TaskItem.storedInstant(Date()))
+    if item.status == .done { item.wait = nil }
     tasks[index] = item
     persist()
     return item
@@ -84,23 +105,6 @@ enum TaskStoreError: Error, Equatable {
       try Self.checkWorktree(worktree.value, of: item.id, against: tasks)
       item.worktree = worktree.value
       item.worktreeBranch = worktree.value?.currentBranch
-    }
-  }
-
-  /// 待ちの変更を当てた後の待ち。理由だけを変えても待ち始めた日時は動かない。
-  private static func waiting(_ change: ClearableValue<String>?, of item: TaskItem)
-    throws(TaskStoreError) -> TaskItem.Waiting?
-  {
-    switch change {
-    case .set(let raw):
-      guard item.status != .done else { throw .invalid("a done task cannot be waiting") }
-      return TaskItem.Waiting(
-        reason: try validReason(raw),
-        since: item.waiting?.since ?? TaskItem.storedInstant(Date()))
-    case .clear:
-      return nil
-    case nil:
-      return item.waiting
     }
   }
 
@@ -174,6 +178,53 @@ enum TaskStoreError: Error, Equatable {
     return true
   }
 
+  /// 確認 1 回の結果を記録する。成功なら同じ変異で待ちを「解けた」に置き換え、起きたことを返す。タスクが無い・
+  /// 待っていない・条件の同一性が `condition` でないなら何もしない（付け直し・解除の後に届いた古い結果）。
+  @discardableResult func recordCheck(_ id: Int, condition: UUID, _ run: BackgroundRunResult)
+    -> WaitResolution?
+  {
+    changeCondition(id, condition) { condition in
+      let check = WaitCheck(run)
+      condition.record(check)
+      guard check.result == .success else { return nil }
+      var output = ""
+      if case .command(let stdout, _) = run.output {
+        output = WaitText.head(stdout.data, bytes: WaitResolution.outputBytes)
+      }
+      return (.satisfied(output: output), TaskItem.storedInstant(run.endedAt))
+    }
+  }
+
+  /// 期限が来た。待ちを「解けた」に置き換え、起きたことを返す（解けた日時は期限）。何もしない条件は `recordCheck` と同じ。
+  @discardableResult func expire(_ id: Int, condition: UUID) -> WaitResolution? {
+    changeCondition(id, condition) { condition in (.expired, condition.deadline) }
+  }
+
+  /// 起きたことを外す（⌘T で会話へ届けた）。解けていなければ何もしない。
+  func clearResolution(_ id: Int) {
+    guard let index = tasks.firstIndex(where: { $0.id == id }), tasks[index].waitResolution != nil
+    else { return }
+    tasks[index].wait = nil
+    persist()
+  }
+
+  /// 待っている条件を変え、解けたなら待ちを起きたことに置き換えて、1 度だけ保存する。
+  private func changeCondition(
+    _ id: Int, _ conditionId: UUID,
+    _ body: (inout WaitCondition) -> (WaitResolution.How, Date)?
+  ) -> WaitResolution? {
+    guard let index = tasks.firstIndex(where: { $0.id == id }),
+      var waiting = tasks[index].waiting, var condition = waiting.condition,
+      condition.id == conditionId
+    else { return nil }
+    let resolved = body(&condition)
+    waiting.condition = condition
+    let resolution = resolved.map { WaitResolution(waiting: waiting, how: $0.0, at: $0.1) }
+    tasks[index].wait = resolution.map(TaskItem.Wait.resolved) ?? .waiting(waiting)
+    persist()
+    return resolution
+  }
+
   func delete(_ id: Int) throws(TaskStoreError) {
     guard let index = tasks.firstIndex(where: { $0.id == id }) else { throw .notFound(id) }
     tasks.remove(at: index)
@@ -185,19 +236,24 @@ enum TaskStoreError: Error, Equatable {
       TasksFile(version: TaskPersistence.version, nextId: nextId, tasks: tasks))
   }
 
+  /// 前後の空白を除いた 1 行のタイトル（`validLine` の規則）。
+  static func validTitle(_ raw: String) throws(TaskStoreError) -> String {
+    try validLine(raw, "title")
+  }
+
   /// 前後の空白を除いて空でなく、制御文字（Cc）と改行類（U+2028 / U+2029 を含む）を含まない 1 行。
-  /// 書式文字（ZWJ 絵文字の U+200D など）は行を壊さないので通す。
-  private static func validTitle(_ raw: String) throws(TaskStoreError) -> String {
-    let title = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !title.isEmpty else { throw .invalid("title is empty") }
+  /// 書式文字（ZWJ 絵文字の U+200D など）は行を壊さないので通す。`name` は拒否の文に入れる項目名。
+  static func validLine(_ raw: String, _ name: String) throws(TaskStoreError) -> String {
+    let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !line.isEmpty else { throw .invalid("\(name) is empty") }
     guard
-      !title.unicodeScalars.contains(where: {
+      !line.unicodeScalars.contains(where: {
         $0.properties.generalCategory == .control || CharacterSet.newlines.contains($0)
       })
     else {
-      throw .invalid("title contains control characters")
+      throw .invalid("\(name) contains control characters")
     }
-    return title
+    return line
   }
 
   /// 結び付きの不変条件。`links` を `id` のタスクの結び付きとして、同じタスクの中で項目が重複せず、
@@ -228,7 +284,7 @@ enum TaskStoreError: Error, Equatable {
     throw .invalid("worktree \(worktree.path) is linked to task \(other.id)")
   }
 
-  private static func validReason(_ raw: String) throws(TaskStoreError) -> String {
+  static func validReason(_ raw: String) throws(TaskStoreError) -> String {
     let reason = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !reason.isEmpty else { throw .invalid("waiting reason is empty") }
     return reason

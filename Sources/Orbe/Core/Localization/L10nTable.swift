@@ -4,7 +4,7 @@ import Foundation
 /// 両方がここを通す（`language == .ja` 分岐を 1 箇所へ集約）。全 `L10nKey` の網羅は `L10nCompletenessTests`。
 /// 辞書はドメイン分冊（本体＋`L10nTable+Settings.swift`＋`L10nTable+Help.swift`＋
 /// `L10nTable+Attention.swift`＋`L10nTable+WorktreePalette.swift`＋`L10nTable+ClosedAgents.swift`＋
-/// `L10nTable+Tasks.swift`）を `table` が結合する。
+/// `L10nTable+Tasks.swift`＋`L10nTable+Intake.swift`＋`L10nTable+Secretary.swift`）を `table` が結合する。
 enum L10n {
   static let table: [L10nKey: (ja: String, en: String)] =
     baseTable
@@ -14,6 +14,8 @@ enum L10n {
     .merging(worktreePaletteTable) { a, _ in a }
     .merging(closedAgentsTable) { a, _ in a }
     .merging(tasksTable) { a, _ in a }
+    .merging(intakeTable) { a, _ in a }
+    .merging(secretaryTable) { a, _ in a }
 
   private static let baseTable: [L10nKey: (ja: String, en: String)] = [
     // MARK: Menu
@@ -68,8 +70,8 @@ enum L10n {
     .onboardingBegin: ("始める", "Get started"),
     .onboardingDetecting: ("CLI を検出中…", "Detecting CLIs…"),
     .onboardingIntro: (
-      "状態追跡プラグインを各 CLI に導入して始めます",
-      "We'll install the status-tracking plugin into each CLI to begin"
+      "エージェントプラグイン（状態の通知と、Orbe を操作する MCP サーバー）を各 CLI に導入して始めます",
+      "We'll install the agent plugin (status hooks and an MCP server that controls Orbe) into each CLI to begin"
     ),
     .onboardingWelcome: ("Orbe へようこそ", "Welcome to Orbe"),
     .onboardingInstalling: ("プラグインを導入中 · %lld/%lld 完了", "Installing plugins · %lld/%lld done"),

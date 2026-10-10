@@ -33,8 +33,7 @@ final class TestIsolationTests: OrbeTestCase {
   /// テストが自分で書き換えても `beginCase` が毎回張り直すので、戻し忘れが次へ漏れない。
   ///
   /// `stablePluginDirOverride` が外れると、`WindowController()` の起動同期
-  /// （`materializeStablePlugin`）が `ORBE_STATE_DIR` を見ずに実ホームの application support を
-  /// 書き換える——テストは緑のまま開発機と CI のホームが汚れる。
+  /// （`materializeStablePlugin`）がテスト間で共有の state フォルダへ書き、前のテストの中身が次へ残る。
   func testPerCaseOverridesPointIntoCaseDir() throws {
     let dir = TestScratch.caseDir
     XCTAssertEqual(dir.deletingLastPathComponent().path, TestIsolation.stateDir.path)
@@ -43,7 +42,8 @@ final class TestIsolationTests: OrbeTestCase {
       AppStatePersistence.fileURLOverride, GuiConfig.fileURLOverride,
       AgentPluginInstaller.stablePluginDirOverride, BundledResources.root,
       CustomSoundStore.directoryURLOverride, TaskPersistence.fileURLOverride,
-      AgentSessionLog.fileURLOverride, Config.userFileURLOverride,
+      IntakePersistence.fileURLOverride, SecretaryPersistence.fileURLOverride,
+      HomeFolder.urlOverride, AgentSessionLog.fileURLOverride, Config.userFileURLOverride,
     ] {
       let url = try XCTUnwrap(url, "per-test の override が張られていない")
       XCTAssertEqual(url.deletingLastPathComponent().path, dir.path)

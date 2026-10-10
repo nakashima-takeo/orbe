@@ -62,6 +62,48 @@ final class TaskStoreTests: OrbeTestCase {
     XCTAssertEqual(second.description, "")
   }
 
+  /// 「その優先度の未着手の先頭」は、未着手の欄で同じか低い優先度の最初のタスクの直前。進行中・完了・高い優先度の
+  /// 未着手は越える。該当が無ければ列の末尾。1 回の変異で入る（保存も 1 回）。
+  func testPriorityHeadGoesBeforeTheFirstTodoOfTheSameOrLowerPriority() throws {
+    let store = TaskStore()
+    let progress = try store.add(draft("進行中") { $0.status = .inProgress })
+    let high = try store.add(draft("高") { $0.priority = .high })
+    let low = try store.add(draft("低") { $0.priority = .low })
+    let done = try store.add(draft("完了") { $0.status = .done })
+
+    let medium = try store.add(draft("中"), at: .priorityHead(workspace: nil))
+    let urgent = try store.add(
+      draft("急ぎ") { $0.priority = .high }, at: .priorityHead(workspace: nil))
+    let later = try store.add(draft("後で") { $0.priority = .low }, at: .priorityHead(workspace: nil))
+
+    XCTAssertEqual(
+      store.tasks.map(\.id),
+      [progress.id, urgent.id, high.id, medium.id, later.id, low.id, done.id])
+    XCTAssertEqual(TaskPersistence.load()?.tasks.map(\.id), store.tasks.map(\.id), "保存も同じ並び")
+
+    let empty = TaskStore(file: nil)
+    let only = try empty.add(draft("ひとつ"), at: .priorityHead(workspace: nil))
+    XCTAssertEqual(empty.tasks.map(\.id), [only.id], "該当が無ければ末尾")
+  }
+
+  /// 範囲で絞った欄から足すと、見ている欄のタスクだけを基準にする（見えていない workspace の同じ優先度のタスクの
+  /// 前には入らず、見えている高い優先度のタスクを越えない）。
+  func testPriorityHeadCountsOnlyTheTasksOfTheWorkspaceInView() throws {
+    let store = TaskStore()
+    let (seen, other) = (UUID(), UUID())
+    let elsewhere = try store.add(draft("別の workspace") { $0.workspace = other })
+    let high = try store.add(
+      draft("高") {
+        $0.priority = .high; $0.workspace = seen
+      })
+    let medium = try store.add(draft("中") { $0.workspace = seen })
+
+    let added = try store.add(
+      draft("足す") { $0.workspace = seen }, at: .priorityHead(workspace: seen))
+
+    XCTAssertEqual(store.tasks.map(\.id), [elsewhere.id, high.id, added.id, medium.id])
+  }
+
   func testAddWithWaitingReasonStartsWaiting() throws {
     let store = TaskStore()
 
@@ -175,7 +217,7 @@ final class TaskStoreTests: OrbeTestCase {
 
   func testChangingOnlyTheWaitingReasonKeepsWhenTheWaitStarted() throws {
     let waiting = TaskItem(
-      id: 1, title: "a", status: .todo, waiting: .init(reason: "返事", since: past),
+      id: 1, title: "a", status: .todo, wait: .waiting(.init(reason: "返事", since: past)),
       priority: .medium, due: nil, workspace: nil, description: "", createdAt: past, createdBy: nil)
     let store = TaskStore(
       file: TasksFile(version: TaskPersistence.version, nextId: 2, tasks: [waiting]))

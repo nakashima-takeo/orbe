@@ -152,11 +152,13 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
     let workspace = WorkspacePaletteModel(localization: LocalizationStore(language: .ja))
     let items = [
       WorkspacePaletteModel.Item(
-        index: 0, name: "main", isActive: true, dir: "/", live: .init(rollup: [], dormant: false)),
+        index: 0, name: "main", isActive: true, dir: "/", canSetDir: true, canClose: true,
+        live: .init(rollup: [], dormant: false)),
       WorkspacePaletteModel.Item(
-        index: 1, name: "infra", isActive: false, dir: "/", live: .init(rollup: [], dormant: false)),
+        index: 1, name: "infra", isActive: false, dir: "/", canSetDir: true, canClose: true,
+        live: .init(rollup: [], dormant: false)),
       WorkspacePaletteModel.Item(
-        index: 2, name: "archive", isActive: false, dir: "/",
+        index: 2, name: "archive", isActive: false, dir: "/", canSetDir: true, canClose: true,
         live: .init(rollup: [], dormant: true)),
     ]
     try flow(
@@ -203,13 +205,13 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
     let workspace = WorkspacePaletteModel(localization: LocalizationStore(language: .ja))
     let items = [
       WorkspacePaletteModel.Item(
-        index: 0, name: "orbe", isActive: true, dir: "/",
+        index: 0, name: "orbe", isActive: true, dir: "/", canSetDir: true, canClose: true,
         live: .init(rollup: [(state: "done", count: 1)], dormant: false)),
       WorkspacePaletteModel.Item(
-        index: 1, name: "orbe-infra", isActive: false, dir: "/",
+        index: 1, name: "orbe-infra", isActive: false, dir: "/", canSetDir: true, canClose: true,
         live: .init(rollup: [(state: "dormant", count: 2)], dormant: true)),
       WorkspacePaletteModel.Item(
-        index: 2, name: "docs", isActive: false, dir: "/",
+        index: 2, name: "docs", isActive: false, dir: "/", canSetDir: true, canClose: true,
         live: .init(rollup: [], dormant: false)),
     ]
     try flow(
@@ -257,9 +259,11 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
     let workspace = WorkspacePaletteModel(localization: LocalizationStore(language: .ja))
     let items = [
       WorkspacePaletteModel.Item(
-        index: 0, name: "main", isActive: true, dir: "/", live: .init(rollup: [], dormant: false)),
+        index: 0, name: "main", isActive: true, dir: "/", canSetDir: true, canClose: true,
+        live: .init(rollup: [], dormant: false)),
       WorkspacePaletteModel.Item(
         index: 1, name: "infra-experiments", isActive: false, dir: "/Users/me/code/infra",
+        canSetDir: true, canClose: true,
         live: .init(rollup: [], dormant: false)),
     ]
     try flow(
@@ -330,7 +334,8 @@ final class DesignFlowSnapshotTests: SnapshotTestCase {
     ]
     let items = names.enumerated().map { i, n in
       WorkspacePaletteModel.Item(
-        index: i, name: n, isActive: i == 0, dir: "/", live: .init(rollup: [], dormant: false))
+        index: i, name: n, isActive: i == 0, dir: "/", canSetDir: true, canClose: true,
+        live: .init(rollup: [], dormant: false))
     }
     let workspace = WorkspacePaletteModel(localization: LocalizationStore(language: .ja))
     // shrink の段だけ窓を下げる。`flow` は 1 本の size で撮るので、キャンバスは 300 のまま

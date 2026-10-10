@@ -48,7 +48,7 @@ extension WorktreePaletteTaskInputs {
   }
 }
 
-/// 先頭の欄の解決の結果。provider が rebuild のたびに、文脈の入力と git・remote の台帳の事実から導く。
+/// タスクの行き先（⌘T の先頭の欄・`start_task`）。リポジトリの事実の層が、文脈の入力と git・remote の台帳の事実から導く。
 enum WorktreePaletteTaskTarget: Equatable {
   /// 欄を出さない（文脈が無い・手元のリポジトリから扱えない Issue・PR・主が無い）。
   case none

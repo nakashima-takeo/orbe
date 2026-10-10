@@ -57,8 +57,18 @@ final class WindowController: NSObject, NSWindowDelegate {
   // タスク一覧の唯一の正。制御 API と画面が同じ変異メソッドを呼び、変異ごとに tasks.json へ即時保存される。
   // workspace の参照は表示・応答のときに解くので、workspace の復元との順序の依存は無い。
   let taskStore = TaskStore()
+  // 受信の走らせ役。定義の変異はここを通して番人の登録を合わせ、読みと提案のさばきは `intakeStore` が持つ。
+  let intakeRunner = IntakeRunner(store: IntakeStore())
+  var intakeStore: IntakeStore { intakeRunner.store }
   // worktree ごとに動いている agent の索引。flushChrome が作り直し、タスク画面と ⌘T が読む。
   let worktreeAgents = WorktreeAgentActivity()
+  let agentSessionTabs = AgentSessionTabs()
+  private lazy var waitConditions = WaitConditionWatcher(store: taskStore) { [weak self] in
+    self?.notifyWaitResolved(task: $0, $1)
+  }
+  // 秘書の係。
+  private(set) lazy var secretary = Secretary(
+    host: self, tasks: taskStore, localization: localization)
   // パレット提示の拡張（WindowController+Palette）が設定パレットの defaultAgent 配線で触るため internal。
   let agentLauncher = AgentLauncher()
   // アップデート面。状態（UI 唯一の情報源）は updaterService が生成・所有し、提示配線は WindowController+Update。
@@ -117,6 +127,9 @@ final class WindowController: NSObject, NSWindowDelegate {
     hostingView.layoutSubtreeIfNeeded()
     wireChromeCallbacks()
 
+    // 言語が決まっていれば、復元が Home のタブを起こすより前にフォルダを用意する
+    // （無いままだと、そのタブだけ Orbe の操作の指示が無いまま起きる）。初回は言語選択の確定を待つ（showFirstRunFlow）。
+    if AppStatePersistence.load()?.preferredLanguage != nil { prepareHomeFolder() }
     if let file = WorkspacePersistence.load() {
       restore(from: file)  // activateCurrent 経由で applyActiveWorkspaceConfig（外観＋gui.conf）が走る
     } else {
@@ -127,14 +140,17 @@ final class WindowController: NSObject, NSWindowDelegate {
       // 無いと、ユーザー ~/.config/ghostty の theme 指定が初回起動に限り勝ってしまう。
       applyActiveWorkspaceConfig()
     }
+    ensureHome()  // 復元・新規のどちらの後にも 1 回（先に置くと復元の配列で上書きされる）
     agentLauncher.appModel = model
     agentLauncher.localization = localization  // 起動パレット・オンボーディングの文言引き用
     configureAgentDefaults()
+    resumeSecretaryAtLaunch()
     // 起動パレット・Cmd+Shift+C の起動。アクティブ workspace の新タブで agent の絶対パスを起こす。
     agentLauncher.onLaunch = { [weak self] agent, env in
       guard let self else { return }
       self.openTab(
-        workspaceIndex: self.activeWorkspace, cwd: nil, command: agent.path, env: env)
+        workspaceIndex: self.activeWorkspace, cwd: nil, command: AgentCatalog.startCommand(agent),
+        env: env)
     }
     // 起動/オンボーディング overlay の畳み込みも、他 overlay と同じく teardown 後の次 tick で focus を再確定する。
     agentLauncher.onDismissPalette = { [weak self] in
@@ -147,6 +163,8 @@ final class WindowController: NSObject, NSWindowDelegate {
     showFirstRunFlow()  // 初回言語選択（preferredLanguage 未設定時）→ 既存 Onboarding（各 CLI へ導入）
     cleanupLegacyCompletionIfNeeded()  // 旧方式が zshrc へ書いた managed block を一度だけ除去
     wireUpdateUI()  // アップデート提示導線を配線し、ゲートを通れば update サイクル開始
+    intakeRunner.start()  // 全受信を番人へ載せる（過ぎていた回はここで 1 回だけ走る）
+    waitConditions.start()
     window.center()
   }
 
@@ -277,7 +295,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   /// 隠れタブも実サイズで起こす（pty winsize 正常）。frame/isHidden は既 mount でも毎回更新し、
   /// addSubview より先に確定させる——窓に付いた瞬間の可視性で面（エクスプローラー）が根のサービスを
   /// 握るか決まるので、隠れタブを一瞬でも見えている扱いにしない（`materializeOffscreen` と同じ順）。
-  private func mountTab(_ tab: TerminalTab, in ws: Workspace, visible: Bool) {
+  func mountTab(_ tab: TerminalTab, in ws: Workspace, visible: Bool) {
     guard store.recordMaterialization(of: tab, in: ws) else { return }
     tab.view.frame = model.content.bounds
     tab.view.isHidden = !visible
@@ -345,21 +363,8 @@ final class WindowController: NSObject, NSWindowDelegate {
     refreshClosedAgentsPalette()  // ⇧⌘T の一覧も同じ契機で追従（WindowController+ClosedAgents）
     refreshWorkspacePaletteLiveStates()  // 表示中の workspace パレットの行チップも同じ契機で追従
     refreshWorktreeAgents()  // タスク画面と ⌘T の agent の札も同じ契機で追従
-  }
-
-  /// タブ行の投影。連の分割は `SessionStore.segments(of:)`、色番号は連の先頭タブのキーから。
-  private func tabStrip(of ws: Workspace) -> TabStrip {
-    TabStrip(
-      segments: SessionStore.segments(of: ws.tabs).map { r in
-        TabStrip.Segment(
-          cells: r.map { i in
-            let tab = ws.tabs[i]
-            return TabStrip.Cell(
-              index: i, title: tab.displayTitle(workspaceRoot: ws.rootPath),
-              glyph: tab.activated ? tab.agentStateKind : nil, tabId: tab.id)
-          },
-          colorIndex: WorktreeColor.index(forKey: ws.tabs[r.lowerBound].groupKey))
-      })
+    refreshAgentSessionTabs()  // タスク画面の会話の行と解けた待ちの ⌘T も同じ契機で追従
+    secretary.cycle(mayLaunch: false)  // 索引の後に。秘書のタブを探し直し、手が空いていれば 1 件届ける
   }
 
   /// アクティブタブの焦点の面（端末 surface かエディター pane）へフォーカスを戻す

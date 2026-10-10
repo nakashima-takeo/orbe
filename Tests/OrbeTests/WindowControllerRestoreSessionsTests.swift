@@ -58,7 +58,7 @@ final class WindowControllerRestoreSessionsTests: OrbeTestCase {
 
     let rows = try results(wc.controlRestoreSessions(sessionIds: ["n-1"]))
 
-    XCTAssertEqual(wc.workspaces.count, 3)
+    XCTAssertEqual(wc.regularWorkspaces.count, 3)
     let created = try XCTUnwrap(wc.workspaces.last)
     XCTAssertEqual(created.name, "newws")
     XCTAssertEqual(created.rootPath, "/tmp/new")

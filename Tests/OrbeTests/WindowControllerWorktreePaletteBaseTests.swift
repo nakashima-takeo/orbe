@@ -32,7 +32,7 @@ final class WindowControllerWorktreePaletteBaseTests: OrbeTestCase {
     defer { wc.dismissPalette() }
 
     XCTAssertEqual(
-      wc.model.worktreePaletteProvider?.cwd, "/tmp/ws-root",
+      wc.model.worktreePaletteProvider?.facts.cwd, "/tmp/ws-root",
       "0 タブでは workspace の root path から探す（ホームではない）")
   }
 
@@ -47,7 +47,7 @@ final class WindowControllerWorktreePaletteBaseTests: OrbeTestCase {
     defer { wc.dismissPalette() }
 
     XCTAssertEqual(
-      wc.model.worktreePaletteProvider?.cwd, "/tmp/tab/elsewhere",
+      wc.model.worktreePaletteProvider?.facts.cwd, "/tmp/tab/elsewhere",
       "タブがあればアクティブタブの実効 cwd から探す（root path ではない）")
   }
 

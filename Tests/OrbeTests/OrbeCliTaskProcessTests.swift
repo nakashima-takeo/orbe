@@ -215,6 +215,38 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
     XCTAssertEqual(listed.map { $0["createdBy"] as? String }, ["claude", "claude", "claude", nil])
   }
 
+  /// `condition` は呼び出し元タブを送り、タブで作業中の agent が付けた条件にはその会話とタブの作業ディレクトリが入る。
+  /// `--no-condition` は条件だけを外す。
+  func testConditionSetInsideATabRecordsTheConversationAndCanBeRemoved() throws {
+    let control = try startControlProcess()
+    let tab = try XCTUnwrap(control.target.workspaces.first { $0.name == "background" }?.tabs.first)
+    control.target.controlReportAgent(
+      tab: tab, report: AgentHookReport(agent: "claude", state: "working", sessionId: "s-1"))
+    let inTab = ["ORBE_TAB": String(tab.id)]
+    let id = run(control, ["add", "レビュー待ち"]).trimmingCharacters(in: .whitespacesAndNewlines)
+
+    run(control, ["set", id, "--waiting", "レビュー"])
+    run(
+      control,
+      [
+        "condition", id, "--condition", "レビューが付いたら", "--check", "exit 1",
+        "--every", "10", "--deadline", "2099-01-01T09:00",
+      ], env: inTab)
+
+    let waiting = try XCTUnwrap(try tasks(control).first?["waiting"] as? [String: Any])
+    let condition = try XCTUnwrap(waiting["condition"] as? [String: Any])
+    XCTAssertEqual(condition["description"] as? String, "レビューが付いたら")
+    XCTAssertEqual(condition["everyMinutes"] as? Int, 10)
+    XCTAssertEqual(
+      condition["agent"] as? [String: String], ["command": "claude", "sessionId": "s-1"])
+    XCTAssertEqual(condition["directory"] as? String, tab.cwd)
+
+    run(control, ["condition", id, "--no-condition"])
+    let kept = try XCTUnwrap(try tasks(control).first?["waiting"] as? [String: Any])
+    XCTAssertEqual(kept["reason"] as? String, "レビュー")
+    XCTAssertNil(kept["condition"])
+  }
+
   /// 引数だけで判る誤りは socket に触れる前に exit 2 で弾く。
   func testUsageErrorsAreRejectedBeforeTouchingTheSocket() {
     for (args, message) in [
@@ -247,6 +279,23 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
         ["task", "set", "1", "--worktree", ".", "--no-worktree"],
         "pass only one of --worktree / --no-worktree"
       ),
+      (
+        ["task", "condition", "1", "--condition", "c", "--check", "true"],
+        "pass --condition, --check, --every and --deadline together"
+      ),
+      (
+        [
+          "task", "condition", "1", "--condition", "c", "--check", "true", "--every", "ten",
+          "--deadline", "2099-01-01T00:00",
+        ], "--every requires <minutes>: ten"
+      ),
+      (
+        [
+          "task", "condition", "1", "--condition", "c", "--check", "true", "--every", "10",
+          "--deadline", "2099-01-01T00:00", "--no-condition",
+        ], "pass only one of --condition / --no-condition"
+      ),
+      (["task", "condition", "1"], "task condition requires --condition ... or --no-condition"),
       (["task", "rm", "abc"], "invalid task id: abc"),
       (["task", "rm", "0"], "invalid task id: 0"),
     ] {

@@ -14,6 +14,12 @@ func setReportedState(
     now: date)
 }
 
+/// タブの端末の前面のプロセスを報告者としたときの、報告者のグループ（`report_agent` の接続が取るものと同じ辿り方）。
+/// 本物の報告は前面の agent の hook から来る。
+func foregroundReporter(_ tab: TerminalTab) -> pid_t? {
+  tab.surface.foregroundProcessGroup.flatMap(ProcessGroup.terminalGroup)
+}
+
 /// タブのエージェントを終わらせる（hook の `clear` 報告と同じ経路。`.none` なら no-op）。
 func clearAgentState(_ tab: TerminalTab) {
   tab.applyReport(AgentHookReport(agent: "claude", state: "clear"))
@@ -24,7 +30,8 @@ func clearAgentState(_ tab: TerminalTab) {
 func liveUnreportedTab(session: AgentSession, cwd: String = "/tmp") -> TerminalTab {
   let tab = TerminalTab(
     restoring: TabState(cwd: cwd, agent: session, explicitTitle: nil),
-    resumeSpawn: { session in ("\(session.command) --resume \(session.sessionId ?? "")", [:]) })
+    resumeSpawn: { _, session, _ in ("\(session.command) --resume \(session.sessionId ?? "")", [:])
+    })
   tab.recordMaterializationStarted()
   return tab
 }

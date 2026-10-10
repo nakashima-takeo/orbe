@@ -10,7 +10,14 @@ extension TaskPaletteModel {
       toggleTab()
       return .handled
     }
-    return visibleTab == .tasks ? handleTaskFieldKey(press) : handleGitHubFieldKey(press)
+    switch visibleTab {
+    case .tasks: return handleTaskFieldKey(press)
+    case .github: return handleGitHubFieldKey(press)
+    case .intake:
+      guard press.key == .escape else { return intake.handleFieldKey(press) }
+      onDismiss()
+      return .handled
+    }
   }
 
   private func handleTaskFieldKey(_ press: KeyPress) -> KeyPress.Result {
@@ -26,6 +33,9 @@ extension TaskPaletteModel {
       }
     case .tab:
       toggleScope()
+    case .return where press.modifiers.contains(.command):
+      // onSubmit（↵ = 選んだ行の操作）へ流さず握る。押し続けたリピートでは頼まない。
+      if press.phase == .down { askSecretary() }
     case .rightArrow:
       guard Self.isUnmodified(press), pick == nil, selectedTask != nil else { return .ignored }
       enterDetail()
@@ -91,6 +101,7 @@ extension TaskPaletteModel {
   /// カードの器（右の欄の項目に居て、編集していない間）。
   func handleCardKey(_ press: KeyPress) -> KeyPress.Result {
     guard draft == nil else { return .ignored }
+    if visibleTab == .intake { return intake.handleCardKey(press) }
     switch area {
     case .list: return .ignored
     case .pane(let stop): return handlePaneKey(press, stop)
@@ -99,23 +110,16 @@ extension TaskPaletteModel {
   }
 
   private func handleDetailKey(_ press: KeyPress, _ stop: TaskDetailStop) -> KeyPress.Result {
+    if press.key == .return, press.modifiers.contains(.command) {
+      if press.phase == .down, let task = selectedTask { openAsk(task.id) }
+      return .handled
+    }
     switch press.key {
     case .upArrow: moveField(-1)
     case .downArrow: moveField(1)
     case .leftArrow: if !changeValue(-1) { leaveDetail() }
     case .rightArrow: changeValue(1)
-    case .return:
-      switch stop {
-      // ⌘↵ は 1 行の項目の確定のキーなので編集を始めない（確定した直後の ⌘↵ で、また編集に入らない）。
-      case .field(let field):
-        if field.isText, press.phase == .down, !press.modifiers.contains(.command) {
-          beginEditing()
-        }
-      case .agent: if press.phase == .down { focusAgentTab() }
-      // 押し続けたキーリピートで、同じページを何度も開かない。
-      case .link(let item): if press.phase == .down { openLink(item) }
-      case .addLink: if press.phase == .down { beginPickingItem() }
-      }
+    case .return: activate(stop, press)
     case .space:
       if press.phase == .down, let task = selectedTask { toggleDone(task.id) }
     case _ where Self.isCommandBackspace(press):
@@ -129,6 +133,20 @@ extension TaskPaletteModel {
     default: return .ignored
     }
     return .handled
+  }
+
+  /// 右の欄の止まる場所の ↵。押し続けたキーリピートでは繰り返さない（同じページを何度も開かない・開閉を繰り返さない）。
+  private func activate(_ stop: TaskDetailStop, _ press: KeyPress) {
+    guard press.phase == .down else { return }
+    switch stop {
+    case .field(let field):
+      if field.isText { beginEditing() }
+    case .conversation: focusConversationTab()
+    case .agent: focusAgentTab()
+    case .condition(let part): toggleConditionPart(part)
+    case .link(let item): openLink(item)
+    case .addLink: beginPickingItem()
+    }
   }
 
   /// 右の欄の項目。↵（期限の項目以外）・⌘L・⌘↵ は、行の「タスクにする」「結び付ける」「ブラウザで開く」と
@@ -168,7 +186,7 @@ extension TaskPaletteModel {
     switch press.key {
     case .escape: endEditing(commit: draft.isMultiline)
     case .return where press.modifiers.contains(.command):
-      if !draft.isMultiline { endEditing(commit: true) }
+      if askingTaskID == nil, !draft.isMultiline { endEditing(commit: true) }
     case .tab, .backtab: break
     default: return .ignored
     }
@@ -177,12 +195,12 @@ extension TaskPaletteModel {
 
   /// 押している修飾キーが無いか。実機の矢印キーは numericPad と function の修飾を伴って届くので、
   /// 修飾の集合が空かでは判定しない。
-  private static func isUnmodified(_ press: KeyPress) -> Bool {
+  static func isUnmodified(_ press: KeyPress) -> Bool {
     press.modifiers.isDisjoint(with: [.command, .option, .control, .shift])
   }
 
   /// ⌘⌫。
-  private static func isCommandBackspace(_ press: KeyPress) -> Bool {
+  static func isCommandBackspace(_ press: KeyPress) -> Bool {
     press.modifiers.contains(.command) && press.key == .backspace
   }
 

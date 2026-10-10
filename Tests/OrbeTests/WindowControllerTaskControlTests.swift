@@ -35,7 +35,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
       wc.controlListWorkspaces().first { $0["name"] as? String == name }?["id"] as? Int)
   }
 
-  private func backgroundTab(_ wc: WindowController) throws -> TerminalTab {
+  func backgroundTab(_ wc: WindowController) throws -> TerminalTab {
     try XCTUnwrap(wc.workspaces.first { $0.name == "background" }?.tabs.first)
   }
 
@@ -319,7 +319,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
 
   func testLaunchReadsSavedTasksAndResolvesThemToRestoredWorkspaces() throws {
     let saved = TaskItem(
-      id: 4, title: "前回のタスク", status: .todo, waiting: nil, priority: .low, due: nil,
+      id: 4, title: "前回のタスク", status: .todo, wait: nil, priority: .low, due: nil,
       workspace: backgroundId, description: "",
       createdAt: Date(timeIntervalSince1970: 1_800_000_000),
       createdBy: "claude")

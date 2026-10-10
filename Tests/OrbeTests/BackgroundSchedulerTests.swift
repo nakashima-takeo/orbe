@@ -1,0 +1,369 @@
+import AppKit
+import Observation
+import XCTest
+
+@testable import Orbe
+
+/// 予定の番人——新しい予定はすぐには走らない、時刻が来たら 1 回走る、過ぎていた回は何回分でも 1 回だけ、重ねて走らせない、
+/// 再登録・外す・期限は走っている回を止めてその結果を返さない、「期限が来た」は 1 度だけ、時計の変更で数え直す。
+///
+/// 壊れると何が起きるか。再起動の直後に claude が何本も立ち上がる。走っている回の結果が外した予定の記録として保存される。
+/// 期限の切れた待ちが走り続ける。スリープ明けにタイマーの発火を待って、過ぎた予定がいつまでも走らない。
+final class BackgroundSchedulerTests: OrbeTestCase {
+  private let start = Date(timeIntervalSince1970: 1_800_000_000)
+  private var now = Date(timeIntervalSince1970: 1_800_000_000)
+  private var armed: (date: Date, fire: () -> Void)?
+  private var runner: FakeJobs!
+  private var scheduler: BackgroundScheduler!
+  private var events: [String: [BackgroundScheduler.Event]] = [:]
+
+  override func setUp() {
+    runner = FakeJobs()
+    scheduler = BackgroundScheduler(run: runner.run)
+    scheduler.now = { [unowned self] in now }
+    scheduler.calendar = { Calendar(identifier: .gregorian) }
+    scheduler.arm = { [unowned self] date, fire in
+      armed = (date, fire)
+      return { [unowned self] in armed = nil }
+    }
+  }
+
+  override func tearDown() {
+    scheduler = nil
+  }
+
+  private func schedule(every interval: TimeInterval = 60, deadline: Date? = nil)
+    -> BackgroundSchedule
+  {
+    BackgroundSchedule(
+      job: .command(.init(script: "true")), timing: .every(interval), deadline: deadline)
+  }
+
+  private func register(
+    _ schedule: BackgroundSchedule? = nil, id: String = "a", anchor: Date? = nil
+  ) throws {
+    let record: (BackgroundScheduler.Event) -> Void = { [unowned self] event in
+      events[id, default: []].append(event)
+    }
+    try scheduler.register(
+      id: id, schedule: schedule ?? self.schedule(), anchor: anchor ?? now, onEvent: record)
+  }
+
+  /// 時計を進め、張られた予約が来ていれば発火させる。
+  private func advance(to date: Date) {
+    now = date
+    if let armed, armed.date <= date { armed.fire() }
+  }
+
+  private func result(startedAt: Date) -> BackgroundRunResult {
+    BackgroundRunResult(
+      commandLine: "true", startedAt: startedAt, endedAt: startedAt, ending: .exited(0),
+      output: .none)
+  }
+
+  // MARK: - 数える
+
+  func testNewScheduleWaitsOneInterval() throws {
+    try register()
+
+    XCTAssertEqual(runner.calls.count, 0, "作った直後には走らない")
+    XCTAssertEqual(armed?.date, start.addingTimeInterval(60))
+  }
+
+  func testRunsWhenTheTimeComesAndCountsFromThatRun() throws {
+    try register()
+
+    advance(to: start.addingTimeInterval(60))
+    XCTAssertEqual(runner.calls.count, 1)
+    runner.finish(0, result(startedAt: now))
+
+    XCTAssertEqual(events["a"], [.ran(result(startedAt: now))])
+    XCTAssertEqual(armed?.date, now.addingTimeInterval(60), "次は走った回から 1 間隔後")
+  }
+
+  /// 再起動やスリープで何回分過ぎていても、走るのは 1 回だけで、その後は規則どおりに戻る。
+  func testOverdueRunsOnceThenResumesTheRule() throws {
+    try register(anchor: start.addingTimeInterval(-3600))
+
+    XCTAssertEqual(runner.calls.count, 1)
+    runner.finish(0, result(startedAt: now))
+
+    XCTAssertEqual(runner.calls.count, 1, "過ぎた 60 回分を積まない")
+    XCTAssertEqual(armed?.date, now.addingTimeInterval(60))
+  }
+
+  /// 走っている間に次の回が来ても重ねない。終わった時点で数え直す。
+  func testDoesNotOverlapWhileRunning() throws {
+    try register()
+    advance(to: start.addingTimeInterval(60))
+
+    now = start.addingTimeInterval(600)
+    scheduler.recount()
+    scheduler.runNow(id: "a")
+
+    XCTAssertEqual(runner.calls.count, 1)
+  }
+
+  /// タイマーの発火に頼らない。時計が変わったら数え直し、過ぎていた予定を走らせる。
+  func testClockChangeRecounts() throws {
+    try register()
+    now = start.addingTimeInterval(120)
+
+    NotificationCenter.default.post(name: .NSSystemClockDidChange, object: nil)
+
+    XCTAssertEqual(runner.calls.count, 1)
+  }
+
+  /// スリープ明けも、予約の発火を待たずに数え直し、眠っている間に過ぎた予定を走らせる。
+  func testWakeRecounts() throws {
+    try register()
+    now = start.addingTimeInterval(120)
+
+    NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.didWakeNotification, object: nil)
+
+    XCTAssertEqual(runner.calls.count, 1)
+  }
+
+  /// 時計が大きく戻って数え始めが未来になったら、数え始めを今にそろえて数え直す（戻った分だけ予定が止まらない）。
+  func testClockMovedBackBeforeAnchorRecountsFromNow() throws {
+    try register()
+    now = start.addingTimeInterval(-86400)
+
+    NotificationCenter.default.post(name: .NSSystemClockDidChange, object: nil)
+
+    XCTAssertEqual(armed?.date, now.addingTimeInterval(60))
+  }
+
+  /// タイムゾーンが変わったら、毎日の時刻を新しいタイムゾーンで数え直す（予約の発火を待たない）。
+  func testTimeZoneChangeRecountsDailyTimesInTheNewZone() throws {
+    var zone = try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo"))
+    scheduler.calendar = {
+      var calendar = Calendar(identifier: .gregorian)
+      calendar.timeZone = zone
+      return calendar
+    }
+    // start は 08:00 UTC（17:00 JST）。
+    try register(
+      BackgroundSchedule(
+        job: .command(.init(script: "true")),
+        timing: .daily([BackgroundTimeOfDay(hour: 9, minute: 0)]), deadline: nil))
+    XCTAssertEqual(armed?.date, start.addingTimeInterval(16 * 3600), "前提: 翌日 9:00 JST")
+
+    zone = try XCTUnwrap(TimeZone(identifier: "UTC"))
+    NotificationCenter.default.post(name: .NSSystemTimeZoneDidChange, object: nil)
+
+    XCTAssertEqual(armed?.date, start.addingTimeInterval(1 * 3600), "当日 9:00 UTC")
+  }
+
+  /// 予定が複数あれば、最も早い回に合わせて待つ。
+  func testWaitsForTheEarliestOfSeveralSchedules() throws {
+    try register(schedule(every: 60), id: "fast")
+    try register(schedule(every: 300), id: "slow")
+
+    XCTAssertEqual(armed?.date, start.addingTimeInterval(60))
+    advance(to: start.addingTimeInterval(60))
+
+    XCTAssertEqual(runner.calls.count, 1, "早い予定の時刻に、早い予定だけが走る")
+  }
+
+  func testRunNowStartsImmediately() throws {
+    try register()
+
+    scheduler.runNow(id: "a")
+
+    XCTAssertEqual(runner.calls.count, 1)
+  }
+
+  func testInvalidScheduleIsRejected() {
+    XCTAssertThrowsError(try register(schedule(every: 10))) {
+      XCTAssertEqual($0 as? BackgroundJobError, .intervalTooShort)
+    }
+  }
+
+  // MARK: - 外す・再登録
+
+  func testReRegisterStopsTheRunningRunAndDropsItsResult() throws {
+    try register()
+    scheduler.runNow(id: "a")
+
+    try register(anchor: start.addingTimeInterval(-30))
+    runner.finish(0, result(startedAt: now))
+
+    XCTAssertEqual(runner.stopped, [0])
+    XCTAssertNil(events["a"], "外した回の結果は返さない")
+    XCTAssertEqual(armed?.date, start.addingTimeInterval(30), "新しい数え始めで数え直す")
+  }
+
+  func testRemoveStopsTheRunningRunAndForgetsTheSchedule() throws {
+    try register()
+    scheduler.runNow(id: "a")
+
+    scheduler.remove(id: "a")
+    runner.finish(0, result(startedAt: now))
+    advance(to: start.addingTimeInterval(3600))
+
+    XCTAssertEqual(runner.stopped, [0])
+    XCTAssertEqual(runner.calls.count, 1)
+    XCTAssertNil(events["a"])
+    XCTAssertNil(armed)
+  }
+
+  // MARK: - 期限
+
+  func testDeadlineExpiresOnceAndStopsCounting() throws {
+    try register(schedule(deadline: start.addingTimeInterval(30)))
+    XCTAssertEqual(armed?.date, start.addingTimeInterval(30))
+
+    advance(to: start.addingTimeInterval(30))
+    scheduler.recount()
+
+    XCTAssertEqual(events["a"], [.expired])
+    XCTAssertEqual(runner.calls.count, 0)
+    XCTAssertNil(armed)
+  }
+
+  /// 期限が来たら、走っている回を止め、その結果は返さない。
+  func testDeadlineStopsTheRunningRun() throws {
+    try register(schedule(deadline: start.addingTimeInterval(90)))
+    advance(to: start.addingTimeInterval(60))
+    XCTAssertEqual(armed?.date, start.addingTimeInterval(90), "走っている間も期限を見張る")
+
+    advance(to: start.addingTimeInterval(90))
+    runner.finish(0, result(startedAt: start.addingTimeInterval(60)))
+
+    XCTAssertEqual(runner.stopped, [0])
+    XCTAssertEqual(events["a"], [.expired])
+  }
+
+  // MARK: - 使い手の中からの呼び直し
+
+  /// 出来事を受けた使い手が、その場で登録し直しても数えが崩れない。
+  func testReRegisterFromEventHandlerIsCounted() throws {
+    try scheduler.register(
+      id: "a", schedule: schedule(deadline: start.addingTimeInterval(30)), anchor: now
+    ) { [unowned self] _ in
+      try? register(id: "b")
+    }
+
+    advance(to: start.addingTimeInterval(30))
+
+    XCTAssertEqual(armed?.date, start.addingTimeInterval(90), "登録し直した予定の時刻で張り直す")
+  }
+
+  // MARK: - 始め方の登録
+
+  /// 始め方の登録は、番人が時刻に関数を呼び、使い手が知らせた数え始めから数え直す。
+  private func registerStart(
+    id: String = "s", timing: BackgroundTiming? = .every(60), anchor: Date? = nil
+  ) throws -> StartRecorder {
+    let recorder = StartRecorder()
+    try scheduler.register(id: id, timing: timing, anchor: anchor ?? now, start: recorder.start)
+    return recorder
+  }
+
+  func testStartFormRunsOnScheduleAndCountsFromTheReportedAnchor() throws {
+    let recorder = try registerStart()
+
+    advance(to: start.addingTimeInterval(60))
+    XCTAssertEqual(recorder.finishes.count, 1)
+    XCTAssertTrue(scheduler.isRunning(id: "s"))
+    recorder.finishes[0](start.addingTimeInterval(55))
+
+    XCTAssertFalse(scheduler.isRunning(id: "s"))
+    XCTAssertEqual(armed?.date, start.addingTimeInterval(115), "知らせた数え始めから 1 間隔後")
+  }
+
+  /// いつを持たない予定は、自分では走らず、「今すぐ」でだけ走る。
+  func testUnscheduledEntryRunsOnlyWhenAskedNow() throws {
+    let recorder = try registerStart(timing: nil, anchor: start.addingTimeInterval(-86400))
+    advance(to: start.addingTimeInterval(86400))
+    XCTAssertEqual(recorder.finishes.count, 0)
+    XCTAssertNil(armed)
+
+    scheduler.runNow(id: "s")
+    scheduler.runNow(id: "s")
+
+    XCTAssertEqual(recorder.finishes.count, 1, "走っている間の「今すぐ」は何もしない")
+  }
+
+  /// いつだけの差し替えは走っている回を止めない。回の終わりは受け、新しいいつで数え直す。
+  func testRetimeKeepsTheRunningRunAndCountsWithTheNewTiming() throws {
+    let recorder = try registerStart()
+    scheduler.runNow(id: "s")
+
+    try scheduler.retime(id: "s", timing: .every(300))
+    XCTAssertEqual(recorder.stopped, 0, "走っている回は止めない")
+    XCTAssertTrue(scheduler.isRunning(id: "s"))
+    recorder.finishes[0](now)
+
+    XCTAssertEqual(armed?.date, now.addingTimeInterval(300))
+  }
+
+  func testRetimeToNoTimingStopsCounting() throws {
+    _ = try registerStart()
+
+    try scheduler.retime(id: "s", timing: nil)
+
+    XCTAssertNil(armed)
+  }
+
+  /// 外した回の終わりの知らせは捨てる（外した後に登録し直した予定の数え始めを動かさない）。
+  func testFinishFromARemovedRunIsIgnored() throws {
+    let recorder = try registerStart()
+    scheduler.runNow(id: "s")
+    let again = try registerStart(anchor: start.addingTimeInterval(-30))
+
+    recorder.finishes[0](start.addingTimeInterval(1000))
+
+    XCTAssertEqual(recorder.stopped, 1, "登録し直しは走っている回を止める")
+    XCTAssertEqual(again.finishes.count, 0)
+    XCTAssertEqual(armed?.date, start.addingTimeInterval(30))
+  }
+
+  // MARK: - 観測
+
+  /// 走っているかを読んだ側に、変化が届くか（届いたら true）。
+  @MainActor private func runningChanges(_ id: String = "s", _ change: () throws -> Void) rethrows
+    -> Bool
+  {
+    var changed = false
+    withObservationTracking {
+      _ = scheduler.isRunning(id: id)
+    } onChange: {
+      changed = true
+    }
+    try change()
+    return changed
+  }
+
+  /// 画面の「受信中…」は走っているかを観測して描く。今すぐ・予定で始まる・終わる・外して止めるのどれでも変化が届き、
+  /// 数え直しや予約の張り直し（いつの差し替え）だけでは届かない。
+  ///
+  /// 壊れると何が起きるか。受信中…が出ない・終わっても消えない。予約を張り直すたびに画面が無駄に描き直される。
+  @MainActor func testRunningIsObservableAndRecountsAreNot() throws {
+    let recorder = try registerStart()
+
+    XCTAssertTrue(runningChanges { scheduler.runNow(id: "s") }, "今すぐで始まる")
+    XCTAssertTrue(runningChanges { recorder.finishes[0](now) }, "終わる")
+    XCTAssertTrue(runningChanges { advance(to: armed!.date) }, "予定で始まる")
+    XCTAssertFalse(
+      try runningChanges { try scheduler.retime(id: "s", timing: .every(300)) },
+      "走っている間の差し替えは、走っているかを変えない")
+    XCTAssertFalse(runningChanges { scheduler.recount() }, "数え直しだけでは届かない")
+    XCTAssertTrue(runningChanges { scheduler.remove(id: "s") }, "外して止める")
+    XCTAssertFalse(scheduler.isRunning(id: "s"))
+  }
+}
+
+/// 始め方の代役。呼ばれるたびに終わりを知らせる口を貯め、止められた回数を数える。
+private final class StartRecorder {
+  private(set) var finishes: [(Date) -> Void] = []
+  private(set) var stopped = 0
+
+  func start(_ trigger: BackgroundScheduler.Trigger, _ finish: @escaping (Date) -> Void)
+    -> BackgroundRunHandle
+  {
+    finishes.append(finish)
+    return BackgroundRunHandle { [unowned self] in stopped += 1 }
+  }
+}

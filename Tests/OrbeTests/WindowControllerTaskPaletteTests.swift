@@ -8,7 +8,7 @@ import XCTest
 /// 画面を閉じる・別の画面へ差し替わるときの打ちかけの編集の確定。
 ///
 /// 壊れると何が起きるか: タブが 0 枚の workspace でタスク画面が開かない。画面で足したタスクが、見ている
-/// workspace ではなく別の workspace に付く。詳細を打ちかけのまま esc 以外で画面を閉じたり ⌘⌘ で
+/// workspace ではなく別の workspace に付く。受信の提案から足したタスクが Home に付かず、秘書がそこから始められない。詳細を打ちかけのまま esc 以外で画面を閉じたり ⌘⌘ で
 /// 差し替えたりすると、打った内容が黙って消える。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
@@ -53,12 +53,36 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
     let wc = try launchOnAnEmptyWorkspace()
 
     let palette = try openTaskPalette(wc)
+    palette.setScope(.opened)
     palette.query = "見積もりを出す"
     palette.submit()
 
     XCTAssertEqual(palette.workspaces.opened, .init(id: emptyId, name: "empty"))
-    XCTAssertEqual(palette.workspaces.all.map(\.id), [mainId, emptyId], "サイドバーの順")
-    XCTAssertEqual(wc.taskStore.tasks.last?.workspace, emptyId, "画面を開いた workspace に付く")
+    XCTAssertEqual(
+      palette.workspaces.all.map(\.id), [mainId, emptyId, try XCTUnwrap(wc.store.homeWorkspaceId)],
+      "サイドバーの順（Home も選べる）")
+    XCTAssertEqual(
+      wc.taskStore.tasks.first { $0.title == "見積もりを出す" }?.workspace, emptyId,
+      "範囲が開いた workspace なら、その workspace に付く")
+  }
+
+  /// 受信タブで提案をタスクにすると、開いた workspace ではなく Home に付く。
+  @MainActor func testAcceptingAProposalInTheIntakeTabAttachesTheTaskToHome() throws {
+    let wc = try launchOnAnEmptyWorkspace()
+    let intake = try wc.intakeRunner.set(nil, IntakeStoreTests.definition())
+    let item = IntakeStoreTests.item("a")
+    wc.intakeStore.commit(
+      intake.id, DesignSceneFixtures.intakeRun(at: Date(), items: 1, newItems: 1),
+      fetched: [item], judged: [item],
+      decisions: [.propose(itemId: "a", title: "見積もりを送る", due: nil)])
+
+    let palette = try openTaskPalette(wc)
+    palette.setTab(.intake)
+    palette.submit()
+
+    XCTAssertEqual(
+      wc.taskStore.tasks.first { $0.title == "見積もりを送る" }?.workspace,
+      try XCTUnwrap(wc.store.homeWorkspaceId))
   }
 
   /// GitHub タブのリポジトリは ⌘T と同じ基点（アクティブタブの cwd）で解決する——workspace の root が別の場所
