@@ -17,6 +17,8 @@ final class WindowControllerClosedAgentsTests: OrbeTestCase {
   /// `main` は cwd の違う 2 連（`/tmp`・`/var/tmp`）。単一の連だと「連の右端」と「末尾」が同じ index に
   /// なり、復元先を末尾に固定する実装と区別できない（識別できる位置で叩く作法）。
   private func restore() throws -> WindowController {
+    // 戻したタブは `claude --resume <id>` で起きる。PATH の先頭に偽の claude を置き、本物を起こさない。
+    _ = try stageFakeAgent("claude")
     let tmp = TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)
     let varTmp = TabState(cwd: "/var/tmp", agent: nil, explicitTitle: nil)
     let file = WorkspacesFile(
