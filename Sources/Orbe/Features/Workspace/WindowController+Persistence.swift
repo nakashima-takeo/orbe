@@ -14,9 +14,14 @@ extension WindowController {
       ws.settingsOverride = state.settingsOverride  // 設定上書きを読み戻す（旧データは nil＝global 継承）
       ws.lastWorktreeBase = state.lastWorktreeBase
       for tab in state.tabs { ws.tabs.append(makeTab(from: tab)) }  // 隣接の正規化は下の store.load
-      // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・下の activateCurrent）は空表示
-      // で、シェルは自動起動しない。背景の休眠 workspace も空のまま keep する。
-      ws.active = ws.tabs.isEmpty ? 0 : min(max(0, state.activeTab), ws.tabs.count - 1)
+      // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・下の activateCurrent）はボードか空表示
+      // で、シェルは自動起動しない。背景の休眠 workspace も空のまま keep する。ボードを持つかは Home を知る
+      // store.load が決め、そこで選択も不変条件へそろえる。
+      if state.boardSelected {
+        ws.selection = .board
+      } else if !ws.tabs.isEmpty {
+        ws.selection = .tab(ws.tabs[min(max(0, state.activeTab), ws.tabs.count - 1)])
+      }
       restored.append(ws)
     }
     // workspaces 非空は load() が保証する（空 workspaces のファイルは load が nil を返す）。
@@ -24,7 +29,7 @@ extension WindowController {
       workspaces: restored,
       activeWorkspace: min(max(0, file.activeWorkspace), restored.count - 1),
       homeWorkspaceId: file.homeWorkspaceId)
-    activateCurrent()  // 復元アクティブが0タブ（休眠保存）なら空表示（シェルは起こさない）
+    activateCurrent()  // 復元アクティブが0タブ（休眠保存）ならボードか空表示（シェルは起こさない）
   }
 
   /// TabState 1 枚からタブを起こして配線する。起動時復元（restore）・`restoreDormantTab`・`openResumedTab` の共通経路
@@ -44,13 +49,20 @@ extension WindowController {
   /// 休眠チケット 1 枚を workspace へ足す。`restore_sessions` と ⇧⌘T が共有する復元単位。
   /// 起動時復元と `makeTab` を共有するが、閉じたセッションの復元が持ち込むのは cwd と同一性だけ
   /// （明示タイトルは付かない）。位置は新規タブと同じ規則——同じ worktree の連の右端、無ければ末尾。
-  /// 選択・mount はしない（起床は既存の mount 規律に従う）。
+  /// 選択・mount はしない（起床は既存の mount 規律に従う）。ただし前面の workspace の選択がそのタブになったら
+  /// （空表示だった workspace に足したタブ）、隠すと「選んでいるタブが見えない」状態になるので、`wakeUnselected` と
+  /// 同じく選んで見せる。
   func restoreDormantTab(_ state: TabState, intoWorkspaceAt index: Int) -> TabRef {
     let tab = makeTab(from: state)
-    let tabIndex = store.insertTabUnselected(tab, intoWorkspaceAt: index)
-    refreshChrome()
+    _ = store.insertTabUnselected(tab, intoWorkspaceAt: index)
+    let ws = workspaces[index]
+    if index == activeWorkspace, ws.selectedTab === tab {
+      select(ws.selection)
+    } else {
+      refreshChrome()
+    }
     scheduleSave()
-    return TabRef(workspaceIndex: index, tabIndex: tabIndex, tab: tab)
+    return TabRef(workspaceIndex: index, tab: tab)
   }
 
   // ユーザーのリサイズ確定で意図サイズを記憶し、保存を予約する（高頻度なドラッグはデバウンスでまとまる）。
@@ -113,7 +125,8 @@ extension WindowController {
       activeWorkspace: activeWorkspace,
       workspaces: workspaces.map { ws in
         WorkspaceState(
-          name: ws.name, rootPath: ws.rootPath, activeTab: ws.active,
+          name: ws.name, rootPath: ws.rootPath, activeTab: ws.selectedTabIndex ?? 0,
+          boardSelected: ws.selection == .board,
           tabs: ws.tabs.map { $0.tabState() },
           lastUsedAt: ws.lastUsedAt, settingsOverride: ws.settingsOverride,
           lastWorktreeBase: ws.lastWorktreeBase, persistentId: ws.persistentId)

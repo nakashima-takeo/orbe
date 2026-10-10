@@ -199,6 +199,9 @@ enum L10n {
     .editorOverwriteConfirm: ("上書き", "Overwrite"),
     .editorOmittedCharacters: ("ほか %@字", "%@ more"),
 
+    // MARK: ボード（空状態）
+    .boardEmpty: ("まだ何も置かれていません", "Nothing here yet"),
+
     // MARK: Link（OSC 8）
     .linkConfirmTitle: ("端末出力のリンクを開きますか？", "Open Link from Terminal Output?"),
     .linkConfirmMessage: (

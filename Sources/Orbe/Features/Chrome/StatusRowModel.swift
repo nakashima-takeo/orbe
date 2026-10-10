@@ -33,7 +33,10 @@ enum TrafficLights: Equatable {
   var workspace = ""
   /// タブ行（セル＋セグメント構造）。1 つの値として代入され、View はこれだけを辿る。
   var strip = TabStrip()
-  var active = 0
+  /// 選んでいるもの。ボードのセルとタブのセルの選択中は、どちらもこの 1 つの値から導く。
+  var selection: Selection = .empty
+  /// ボードのセルのラベル（workspace 名）。ボードを持たない workspace では nil（セルを出さない）。
+  var boardLabel: String?
   /// 現在地（アクティブタブの焦点の面が居る場所）。`~` 短縮済みのトーン付き断片列。空は出さない。
   var location: [LocationPart] = []
   /// アクティブタブの位置ドット（エディター・端末）。0 タブは nil。
@@ -44,6 +47,8 @@ enum TrafficLights: Equatable {
   let buildId: String?
 
   var onSelect: (Int) -> Void = { _ in }
+  /// ボードのセルのクリック。
+  var onSelectBoard: () -> Void = {}
   /// タブ `i` をタブごと閉じる（中クリック）。選択切替を挟まない。
   var onCloseTab: (Int) -> Void = { _ in }
   var onNewTab: () -> Void = {}
@@ -81,11 +86,19 @@ enum TrafficLights: Equatable {
 
   init() { buildId = Self.verificationBuildID() }
 
+  /// 選択の投影。タブは位置で指す。
+  enum Selection: Equatable {
+    case empty
+    case board
+    case tab(Int)
+  }
+
   /// chrome へ反映する 1 回ぶんのスナップショット。
   struct Snapshot {
     let workspace: String
     let strip: TabStrip
-    let active: Int
+    let selection: Selection
+    let boardLabel: String?
     let location: TerminalTab.Location?
     let faceDots: FaceGeometry.FaceDots?
     let rollup: [(state: String, count: Int)]
@@ -94,7 +107,8 @@ enum TrafficLights: Equatable {
   func update(_ s: Snapshot) {
     workspace = s.workspace
     strip = s.strip
-    active = s.active
+    selection = s.selection
+    boardLabel = s.boardLabel
     location = s.location.map(Self.parts(of:)) ?? []
     faceDots = s.faceDots
     rollup = s.rollup

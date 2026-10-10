@@ -13,7 +13,7 @@ import Observation
   let githubItems: GitHubItemCache
   let viewer: GitHubViewer
   let openLists: GitHubOpenLists
-  /// GitHub タブのリポジトリを解決する基点（⌘T と同じ: 開いた workspace のアクティブタブの cwd、0 タブなら
+  /// GitHub タブのリポジトリを解決する基点（⌘T と同じ: 開いた workspace の選んでいるタブの cwd、無ければ
   /// workspace の root）。
   let root: String
   let agents: WorktreeAgentActivity

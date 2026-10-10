@@ -1,6 +1,6 @@
 import AppKit
 
-/// workspace の切替・作成・改名・ディレクトリ設定・削除と、空（0タブ）workspace のアクティブ化。
+/// workspace の切替・作成・改名・ディレクトリ設定・削除とアクティブ化。
 /// WindowController 本体からタブ管理・復元・chrome 更新と関心を分離する。
 extension WindowController {
   /// Home がちょうど 1 つあり、root が専用フォルダを指す状態へそろえ、保存を予約する。
@@ -25,27 +25,11 @@ extension WindowController {
     scheduleSave()
   }
 
-  /// アクティブ workspace が0タブのときの content 掃除。全 subview（前タブ/前 WS のビュー）を外し、
-  /// 除去済み surface に宙ぶらりんの first responder が残らないよう nil 化し、空状態の chrome を投影する。
-  /// シェルは起こさない。`closeTab`（本体）と `activateCurrent` の双方から呼ぶため internal。
-  func clearActiveContent() {
-    model.content.subviews.forEach { $0.removeFromSuperview() }
-    model.contentIsEmpty = true  // 0タブの地を AppShell が baseFill で埋める（透過越しの透け防止）
-    // overlay 非表示時のみ first responder を落とす（0タブ時 ⌘W が dangling surface に届かないことを保証）。
-    // overlay 表示中はパレットが first responder のため奪わない（select と同じ不変条件）。
-    if model.overlay == .none { window.makeFirstResponder(nil) }
-    refreshChrome()
-  }
-
-  /// アクティブ workspace を表示する。0タブなら空表示（シェルは起こさない）、非0タブなら select。
+  /// アクティブ workspace を表示する（選択をそのまま描く。空ならシェルは起こさない）。
   /// 切替・復元・明示削除後の MRU 繰上げの全アクティブ化経路がここを共有する。
   func activateCurrent() {
-    if current.tabs.isEmpty {
-      store.recordWorkspaceUse(current)
-      clearActiveContent()  // 0タブ WS のアクティブ化は空状態を表示する（自動シェル起こしはしない）
-    } else {
-      select(current.active)
-    }
+    store.recordWorkspaceUse(current)  // 前面へ出すこと自体が利用（空でも MRU を進める）
+    select(current.selection)
     applyActiveWorkspaceConfig()  // 実効設定（外観＋gui.conf）は0タブでも従来どおり反映する
   }
 
@@ -103,7 +87,7 @@ extension WindowController {
     case .invalid:
       return
     case .activeChanged:
-      activateCurrent()  // MRU 繰上げ先が0タブなら空表示（シェルは起こさない）
+      activateCurrent()  // MRU 繰上げ先が0タブならボードか空表示（シェルは起こさない）
     case .backgroundChanged:
       refreshChrome()  // 背景 workspace の畳み込みでも chrome 横断 rollup を同期する
     }

@@ -15,7 +15,7 @@ extension WindowController: ControlTarget {
   }
 
   /// 全タブを列挙する（list_tabs）。`active` は「その workspace で選択中のタブ」——背景 workspace でも
-  /// 1 枚 true で、前面かは `list_workspaces` の `active` で分かる。
+  /// 1 枚 true（ボードを選んでいる workspace ではどれも false）で、前面かは `list_workspaces` の `active` で分かる。
   func controlListTabs() -> [[String: Any]] {
     store.allTabs().map { ref in
       let ws = workspaces[ref.workspaceIndex]
@@ -26,7 +26,7 @@ extension WindowController: ControlTarget {
         "cwd": tab.cwd,
         "agentState": tab.agentState.map { $0 as Any } ?? NSNull(),
         "agentSessionId": tab.agentSlot.session?.sessionId.map { $0 as Any } ?? NSNull(),
-        "active": ref.tabIndex == ws.active,
+        "active": ref.tab === ws.selectedTab,
       ]
     }
   }
@@ -87,14 +87,15 @@ extension WindowController: ControlTarget {
 
   /// 指定 workspace に新タブを開き、新タブ ID を返す（制御 API の spawn）。未知 workspaceId は
   /// アクティブへフォールバックする（`spawn_agent` / `resume_agent` は同じ形を継がず -32004 で弾く）。
-  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?) -> Int? {
+  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?, selects: Bool = true) -> Int?
+  {
     let index =
       workspaceId.flatMap { wid in workspaces.firstIndex { $0.id == wid } } ?? activeWorkspace
-    return openTab(workspaceIndex: index, cwd: cwd, command: command)?.tabId
+    return openTab(workspaceIndex: index, cwd: cwd, command: command, selects: selects)?.tabId
   }
 
   /// 背景/休眠 workspace を前面化し全タブを mount する（制御 API の activate_workspace）。
-  /// 切替実体は `switchWorkspace(to:)` に委譲（既アクティブ no-op・0タブは空表示〔自動起動なし〕・mount・
+  /// 切替実体は `switchWorkspace(to:)` に委譲（既アクティブ no-op・0タブはボードか空表示〔自動起動なし〕・mount・
   /// フォーカス・保存を既存経路が担う）。
   func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, tabIds: [Int])? {
     guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else { return nil }
@@ -105,15 +106,15 @@ extension WindowController: ControlTarget {
 
   // MARK: - タブ操作（focus・close）
 
-  /// 指定タブへフォーカスする（focus_tab）。別 WS なら switchWorkspace で activate、その上でタブを選び
-  /// first responder を移す（既フォーカスでも成功＝冪等）。Attention / メニューバーの「そのタブへ移動」も
+  /// 指定タブへフォーカスする（focus_tab）。別 WS なら switchWorkspace で activate、その上でタブを選び（ボードを
+  /// 選んでいてもタブへ移る）first responder を移す（既フォーカスでも成功＝冪等）。Attention / メニューバーの「そのタブへ移動」も
   /// 同じ経路を通る。
   func controlFocusTab(tabId: Int) -> Result<Any, ControlError> {
     for (wi, ws) in workspaces.enumerated() {
-      for (ti, tab) in ws.tabs.enumerated() where tab.id == tabId {
+      for tab in ws.tabs where tab.id == tabId {
         if wi != activeWorkspace { switchWorkspace(to: wi) }
-        select(ti)
-        window.makeFirstResponder(tab.focusTarget)
+        select(.tab(tab))
+        focusSelection()
         return .success(["ok": true])
       }
     }
@@ -121,7 +122,7 @@ extension WindowController: ControlTarget {
   }
 
   /// 指定タブ（TerminalTab.id）を閉じる（close_tab）。id 解決の上で internal 化した closeTab へ
-  /// 素直に委譲し、カスケード（アクティブ WS 最後のタブは0タブ空維持）を GUI（Cmd+W）と完全一致させる。
+  /// 素直に委譲し、カスケード（最後のタブを閉じればボードか空表示）を GUI（Cmd+W）と完全一致させる。
   func controlCloseTab(tabId: Int) -> Result<Any, ControlError> {
     guard let tab = controlResolveTab(tabId) else {
       return .failure(ControlError(code: -32004, message: "tab not found"))

@@ -199,7 +199,7 @@ scrim ＋ガラスパネルのカード。上端アンカーで窓に収まり�
 
 ⌘T と同じ基点で決まるリポジトリ（下記）の **open な Issue・PR を全部**（自分のものに限らない）出し、タスクにする・タスクに結び付ける入口にする。Issue・PR から作業を始めるのはここで、⌘T には Issue・PR の欄を持たせない。
 
-**リポジトリは 1 つ**——[⌘T](worktree.md) と同じ基点（開いた workspace のアクティブタブの cwd、タブが 0 枚なら workspace の root）で gh が既定とするリポジトリ（set-default、無ければ gh の規則で upstream → origin の順）。⌘T と揃えるのは、「⌘T タスクにして開く」が一覧と同じリポジトリの ⌘T を開くため（workspace の root がリポジトリでない既定の workspace でも、タブの居るリポジトリが出る）。github.com のリポジトリに限り、GitHub Enterprise のリポジトリは「見つからない」として扱う（問い合わせと書き込みは github.com へ送るので、同じ owner/name の別のリポジトリを読み書きしないため）。origin が自分の fork で upstream が本体という形では本体の一覧が出て、`gh issue list` が出すリポジトリと一致する。結び付きとの突き合わせはこのリポジトリの正式名と番号で行う（リポジトリを改名する前に保存した結び付きは一致せず、結び付いていない側に出る）。
+**リポジトリは 1 つ**——[⌘T](worktree.md) と同じ基点（開いた workspace のアクティブタブの cwd、タブが 0 枚かボード選択中なら workspace の root）で gh が既定とするリポジトリ（set-default、無ければ gh の規則で upstream → origin の順）。⌘T と揃えるのは、「⌘T タスクにして開く」が一覧と同じリポジトリの ⌘T を開くため（workspace の root がリポジトリでない既定の workspace でも、タブの居るリポジトリが出る）。github.com のリポジトリに限り、GitHub Enterprise のリポジトリは「見つからない」として扱う（問い合わせと書き込みは github.com へ送るので、同じ owner/name の別のリポジトリを読み書きしないため）。origin が自分の fork で upstream が本体という形では本体の一覧が出て、`gh issue list` が出すリポジトリと一致する。結び付きとの突き合わせはこのリポジトリの正式名と番号で行う（リポジトリを改名する前に保存した結び付きは一致せず、結び付いていない側に出る）。
 
 ### 一覧
 

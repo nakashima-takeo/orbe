@@ -6,7 +6,7 @@ import Foundation
 /// View が両方を別々に読む構造そのものが不整合を持つ）。controller が `SessionStore.segments(of:)`
 /// から組んで `StatusRowModel.strip` へ 1 回で代入し、幅計算もこの値から出す。
 struct TabStrip: Equatable {
-  /// タブ 1 枚。`index` は平坦なタブ index（`active`・`editingIndex`・`onSelect` と同じ空間）で、
+  /// タブ 1 枚。`index` は平坦なタブ index（`selection` の `.tab`・`editingIndex`・`onSelect` と同じ空間）で、
   /// 連の順に 0 から連番＝`cells` の位置と一致する（組み手が保証する）。
   struct Cell: Equatable, Identifiable {
     let index: Int

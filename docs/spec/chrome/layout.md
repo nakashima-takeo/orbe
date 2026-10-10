@@ -1,7 +1,7 @@
 ---
 title: レイアウト
 description: window の SwiftUI ホスト構成・workspace / タブ / 面 / surface の構造・一方向参照・フォーカス管理・ショートカット・オーバーレイ提示機構
-updated: 2026-10-07
+updated: 2026-10-11
 ---
 
 # レイアウト
@@ -13,8 +13,9 @@ updated: 2026-10-07
 host 所有。`window.contentView` は SwiftUI ルート `ChromeHostingView`。ルートビュー `AppShell` は最背面に装飾層 `BackgroundGlow`（accent＋working のラジアル・非対話）を敷き、その上に上段 chrome ＋下段 content を置く。
 
 - `BackgroundGlow` の地は透過状態で変わる: **不透明時（100%・フルスクリーン）は不透明な地を敷き**、**透過時は地を敷かず clear** にする——端末の透明ピクセルをデスクトップまで抜くため。glow ラジアル自体は透過時も残る。
-- content の不透明な地は通常は各端末 surface が描くため、**surface が 1 枚も無い 0 タブ workspace のときだけ** content を薄めた地で埋める。透過ウィンドウ越しにデスクトップが透けるのを防ぐ backstop で、背景不透明度の設定変更にライブ追従する。タブがあるときは出さず二重 veil を避ける。
+- content の不透明な地は通常は各端末 surface（ボードを選んでいればボードの面）が描くため、**選択が空（タブが 0 でボードも無い）のときだけ** content を薄めた地で埋める。透過ウィンドウ越しにデスクトップが透けるのを防ぐ backstop で、背景不透明度の設定変更にライブ追従する。タブかボードが出ているときは出さず二重 veil を避ける。
 - 上段 chrome はネイティブ SwiftUI。content（タブの器）は既存 AppKit ビューを passthrough representable で内包する。
+- ボードを持つ workspace が前面の間は、ボードの面（窓に 1 枚。前面の workspace のボードを映す）もタブの器と並べて content に載り、ボードを選んでいる間だけ見える（→ [board](board.md)）。
 - content に載るタブの表示単位は**面の器**——エディター面｜背｜端末面を横に並べた 1 枚（→ [editor/faces](../editor/faces.md)）。器はタブごとにあり、タブごとの配置（どの面がどれだけ見えているか）を持てる。エディター面の地と背は chrome と同じ veil で塗り、端末面の地は端末 surface が描く。
 - 配置状態（content とその空判定）と上段 chrome の状態は薄い `@Observable` モデル経由で `WindowController` が所有・駆動する（状態の正は WindowController）。
 - 背景透過／ブラーは `WindowController` が所有する `ChromeTranslucency` を各 SwiftUI root へ Environment 注入して chrome 各面へ配り、各面が自分の地を同じ実効不透明度で薄める——端末面と veil 濃度を揃えるため。端末領域には塗らず二重 veil を避ける（値更新は窓の不透明度同期と同一 tick）。
@@ -24,7 +25,7 @@ host 所有。`window.contentView` は SwiftUI ルート `ChromeHostingView`。�
 
 ## 構造と参照方向
 
-1 ウィンドウは複数の workspace（→ [workspace](../platform/workspace.md)）を束ね、各 workspace が複数タブ、各タブが端末 surface を 1 枚とエディター面を 1 つ持つ。ドメイン状態は Foundation 純粋型 `SessionStore` が持ち、`WindowController` が窓・ビュー・chrome を束ねる薄いコーディネータ、その下に `Workspace`（root path ＋タブ群）・`TerminalTab`（タブの同一性・エージェント状態・明示タイトル・面の配置と焦点の面・復元単位・制御イベントの発火）・`SurfaceView`（surface 1 = NSView 1。libghostty 埋め込みと、シェルが報告するタイトル / cwd）と続く。タブの表示単位は面の器（→ [editor/faces](../editor/faces.md)）で、端末面の中身は `SurfaceView` をネイティブスクロールバー層で包んだ view（→ [terminal/core](../terminal/core.md)）。mount・クローズ・スナップショットはタブを単位に扱う。
+1 ウィンドウは複数の workspace（→ [workspace](../platform/workspace.md)）を束ね、各 workspace が複数タブ（とボードを持つ workspace ならボード → [board](board.md)）、各タブが端末 surface を 1 枚とエディター面を 1 つ持つ。workspace の選択は「何も無い／ボード／どのタブか」の 1 つの値で、タブは位置でなくタブそのものを指す。ドメイン状態は Foundation 純粋型 `SessionStore` が持ち、`WindowController` が窓・ビュー・chrome を束ねる薄いコーディネータ、その下に `Workspace`（root path ＋タブ群）・`TerminalTab`（タブの同一性・エージェント状態・明示タイトル・面の配置と焦点の面・復元単位・制御イベントの発火）・`SurfaceView`（surface 1 = NSView 1。libghostty 埋め込みと、シェルが報告するタイトル / cwd）と続く。タブの表示単位は面の器（→ [editor/faces](../editor/faces.md)）で、端末面の中身は `SurfaceView` をネイティブスクロールバー層で包んだ view（→ [terminal/core](../terminal/core.md)）。mount・クローズ・スナップショットはタブを単位に扱う。
 
 参照は**一方向**。タブ → 上位への通知（タブ閉鎖・タイトル・ウィンドウレベル chrome キー・cwd 報告・エージェント状態変化・面の配置の変化）はすべて `TerminalTab` のクロージャを `WindowController` が配線し、面（surface・エディター pane）は所属タブへ事実（タイトル・cwd・閉鎖要求・自分が焦点になった）を通知するだけで、どちらも上位を型として参照しない。面の配置の正はタブが持ち、器はそれを写すだけ。
 
@@ -37,7 +38,7 @@ host 所有。`window.contentView` は SwiftUI ルート `ChromeHostingView`。�
 chrome キーは「どの面が所有するか」（window / 端末 / エディター / 両面）と、window コマンドは「タブが無くても効くか」の網羅分類を持つ。default 節なしの switch なので、将来コマンドを追加するとこの分類はコンパイルで強制される。
 
 - **タブ不要のコマンド**（新タブ・閉じたエージェント パレット・新規 workspace・workspace 切替・デフォルトエージェント起動・各パレット表示・設定）は window レベルが面より先に配信するため、面が 1 つも無い 0 タブでも効く（overlay 表示中は不活性。面があるときも同じハンドラへ集約されるので挙動差はない）。
-- **タブ依存のコマンド**（タブ切替・リネーム・⌘W・⌘E・⌘⇧F）は焦点の面（端末 surface かエディター pane）起点で、同じ経路でタブへ届く——端末焦点でもエディター焦点でも同じに効く。0 タブでは受け手が無く no-op。
+- **タブ依存のコマンド**（タブ切替・リネーム・⌘W・⌘E・⌘⇧F）は焦点の面（端末 surface かエディター pane）起点で、同じ経路でタブへ届く——端末焦点でもエディター焦点でも同じに効く。0 タブでは受け手が無く no-op。ボードの面も、焦点が自分の中にあるときだけ同じ window コマンドを受け（タブ切替は巡回し、選んでいるタブが無いので他は no-op）、端末・エディター・両面のキーは何も起こさず飲む（→ [board](board.md)）。
 - **端末のキー**（フォント ⌘+/-/0）は端末面だけが扱う。エディター焦点中はエディター面が消費して何も起こさず、端末へも届かない。
 - **エディターのキー**（⌘S 保存）はエディター面だけが扱う。端末焦点中は Orbe が束縛せず端末へ届く。
 - **両面のキー**（⌘F・⌘↑↓）は焦点の面がそれぞれの意味で扱う——⌘F は端末がスクロールバック検索、エディターがファイル内検索（→ [editor/code](../editor/code.md)。文書が無ければ何も起きず、端末にも届かない）。⌘↑↓ は端末がスクロールバックの先頭／末尾、エディターが文書の先頭／末尾。
@@ -45,18 +46,18 @@ chrome キーは「どの面が所有するか」（window / 端末 / エディ�
 
 ## フォーカス
 
-フォーカスは排他管理。タブ切替・workspace 切替・パレット／ヘルプを閉じたとき・⌘R の確定・制御 API `focus_tab` / `open_file` のいずれでも、そのタブの**焦点の面**（端末 surface か、エディター面の焦点 view——文書があればそのテキスト面、無ければ面自身）へフォーカスが戻る。焦点の面は常に見えている面（→ [editor/faces](../editor/faces.md) の正規形）。焦点がどの経路で面の中へ入っても（クリック・骨の操作・サイドバーの入力欄）、その面が焦点になりタブの記憶も追従する——記憶は窓のフォーカスがどちらの面の配下にあるかから 1 か所で導く。焦点の面が変わったとき、フォーカスが既にその面の中（サイドバーの入力欄など）にあれば動かさない。エディター面の骨の操作（ファイルを開く・切り替える・新規作成）は焦点をテキスト面へ運ぶ（→ [editor/shell](../editor/shell.md)）。パレットで一時的に焦点を失っても面の記憶は残る。
+フォーカスは排他管理。タブ切替・workspace 切替・パレット／ヘルプを閉じたとき・⌘R の確定・制御 API `focus_tab` / `open_file` のいずれでも、選んでいるものへフォーカスが戻る——ボードならボードの面、何も無ければどこにも置かない、タブならそのタブの**焦点の面**（端末 surface か、エディター面の焦点 view——文書があればそのテキスト面、無ければ面自身）へフォーカスが戻る。焦点の面は常に見えている面（→ [editor/faces](../editor/faces.md) の正規形）。焦点がどの経路で面の中へ入っても（クリック・骨の操作・サイドバーの入力欄）、その面が焦点になりタブの記憶も追従する——記憶は窓のフォーカスがどちらの面の配下にあるかから 1 か所で導く。焦点の面が変わったとき、フォーカスが既にその面の中（サイドバーの入力欄など）にあれば動かさない。エディター面の骨の操作（ファイルを開く・切り替える・新規作成）は焦点をテキスト面へ運ぶ（→ [editor/shell](../editor/shell.md)）。パレットで一時的に焦点を失っても面の記憶は残る。
 
 ## ショートカット
 
-- Cmd+E エディター面 ⇄ 端末面（→ [editor/faces](../editor/faces.md)）/ Cmd+S エディターの文書を保存（→ [editor/code](../editor/code.md)）/ Cmd+T 新タブ（[worktree パレット](../palette/worktree.md)を開く。タブ行の `+` も同じ）/ Cmd+Shift+T 閉じたエージェント パレット（後述）/ Cmd+Shift+[ ] および Cmd+Shift+←→ タブ切替 / Cmd+W タブを閉じる（エディターに未保存の文書があれば確認 → [editor/shell](../editor/shell.md)。アクティブ workspace の最後のタブを閉じても 0 タブの空状態でアクティブに残る。ウィンドウは閉じない → [workspace](../platform/workspace.md)）/ Cmd+Shift+A エージェント起動パレット・Cmd+Shift+C デフォルトエージェント起動（→ [agent/launch](../agent/launch.md)）/ Cmd+Shift+S workspace パレット（→ [workspace パレット](../palette/workspace.md)）/ Cmd+Shift+X タスク画面（→ [tasks](../palette/tasks.md)）/ Cmd+, 設定パレット（→ [settings](../palette/settings.md)）/ Cmd+F 検索（端末はスクロールバック → [search](../terminal/search.md)、エディターはファイル内 → [editor/code](../editor/code.md)）/ Cmd+R タブリネーム（→ [chrome](chrome.md)）/ Cmd+↑↓ 先頭/末尾ジャンプ（端末はスクロールバック → [terminal/core](../terminal/core.md)、エディターは文書 → [editor/code](../editor/code.md)）/ Cmd+Shift+E アクティブタブの cwd を GUI エディタで開く / ⌘⌘（Cmd 素タップ×2）Attention パレット（→ [attention](../palette/attention.md)。前面時。背面時はメニューバーのドロップダウン → [menubar](menubar.md)）。
+- Cmd+E エディター面 ⇄ 端末面（→ [editor/faces](../editor/faces.md)）/ Cmd+S エディターの文書を保存（→ [editor/code](../editor/code.md)）/ Cmd+T 新タブ（[worktree パレット](../palette/worktree.md)を開く。タブ行の `+` も同じ）/ Cmd+Shift+T 閉じたエージェント パレット（後述）/ Cmd+Shift+[ ] および Cmd+Shift+←→ タブ切替（ボードを持つ workspace ではボードも含めて巡回 → [board](board.md)）/ Cmd+W タブを閉じる（エディターに未保存の文書があれば確認 → [editor/shell](../editor/shell.md)。アクティブ workspace の最後のタブを閉じても、ボードを持てばボード、持たなければ 0 タブの空状態でアクティブに残る。ウィンドウは閉じない → [workspace](../platform/workspace.md)）/ Cmd+Shift+A エージェント起動パレット・Cmd+Shift+C デフォルトエージェント起動（→ [agent/launch](../agent/launch.md)）/ Cmd+Shift+S workspace パレット（→ [workspace パレット](../palette/workspace.md)）/ Cmd+Shift+X タスク画面（→ [tasks](../palette/tasks.md)）/ Cmd+, 設定パレット（→ [settings](../palette/settings.md)）/ Cmd+F 検索（端末はスクロールバック → [search](../terminal/search.md)、エディターはファイル内 → [editor/code](../editor/code.md)）/ Cmd+R タブリネーム（→ [chrome](chrome.md)）/ Cmd+↑↓ 先頭/末尾ジャンプ（端末はスクロールバック → [terminal/core](../terminal/core.md)、エディターは文書 → [editor/code](../editor/code.md)）/ Cmd+Shift+E アクティブタブの cwd を GUI エディタで開く / ⌘⌘（Cmd 素タップ×2）Attention パレット（→ [attention](../palette/attention.md)。前面時。背面時はメニューバーのドロップダウン → [menubar](menubar.md)）。
 - フォント動的ズーム Cmd +/-/0（ghostty binding action）。
 
 **Cmd+Shift+T は「閉じたエージェント」パレットを開く**（→ [closed-agents](../palette/closed-agents.md)）。この workspace で閉じたまま戻っていないエージェントセッションを[寿命ログ](../platform/session-log.md)から一覧し、Enter で 1 件を休眠チケットとして戻して起こす。閉じ方（人のジェスチャ・プロセス終了・制御 API・エージェント自身の終了）を問わず、アプリの再起動をまたいで戻せる。素のシェルタブは対象外——戻してもプロセスもスクロールバックも戻らず、resume を持つ CLI だけが中身ごと戻るため。戻るのは cwd と同一性だけで、明示タイトルは付かず、位置は新規タブと同じ規則——同じ worktree の連が残っていればその右端、無ければ末尾（→ [persistence](../platform/persistence.md)・[chrome](chrome.md) の連）。0 タブの workspace でも開く。
 
 ## cwd の確定
 
-cwd を指定せずに起こすタブ（エージェント起動・制御 API の `spawn`・初回起動のシェル）の初期 cwd は、アクティブタブの実効 cwd（0 タブなら workspace の root path）を**明示指定**して起こす——cwd 未指定の surface は ghostty がホームへ解決してしまうため、ここで必ず確定させる。[worktree パレット](../palette/worktree.md)がリポジトリを探す基点も同じ値を使う。workspace 新規作成時の初期シェルは rootPath 指定（→ [workspace](../platform/workspace.md)）。
+cwd を指定せずに起こすタブ（エージェント起動・制御 API の `spawn`・初回起動のシェル）の初期 cwd は、アクティブタブの実効 cwd（0 タブ・ボード選択中なら workspace の root path）を**明示指定**して起こす——cwd 未指定の surface は ghostty がホームへ解決してしまうため、ここで必ず確定させる。[worktree パレット](../palette/worktree.md)がリポジトリを探す基点も同じ値を使う。workspace 新規作成時の初期シェルは rootPath 指定（→ [workspace](../platform/workspace.md)）。
 
 ## GUI エディタ起動（Cmd+Shift+E）
 

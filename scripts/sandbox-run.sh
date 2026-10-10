@@ -29,7 +29,7 @@ usage() {
 # 隔離インスタンスの control.sock へ JSON-RPC を 1 本投げ、result を JSON で stdout に出す。
 # 応答の改行まで受信してから閉じる（ControlServer はクライアント側 EOF で接続を閉じるため、送信側が先に閉じると応答が取れない）。
 rpc_call() {
-  local sock="$1" method="$2" params="${3:-{\}}" timeout="${4:-5}"
+  local sock="$1" method="$2" params="${3:-"{}"}" timeout="${4:-5}"
   python3 - "$sock" "$method" "$params" "$timeout" <<'PY'
 import json
 import socket
@@ -126,15 +126,20 @@ do_start() {
   [ -S "$sock" ] || fail "control.sock が 10 秒で現れない（起動経路が ControlServer を張っていない）"
 
   # 煙探知: .app の起動経路と AppDelegate の配線は swift test の守備範囲外なので、ここで機械的に確かめる。
+  # 駆動するのは選ばずに起こした素のシェルタブで、確かめたら閉じる。復元されたタブは休眠のまま起きていないことが
+  # あり（前面でない workspace・ボードを選んでいる workspace）、agent のタブもある。既存のタブを選んで起こすと、
+  # 人が見る前に復元された選択（前面の workspace・ボード・タブ）が変わる。
   # 目印をコマンド行の中で 2 つのリテラルに割り、シェルが引用符除去を評価した出力にしか現れない連結形を待つ
   # （入力行の描き返しでは合格にならないので、利用者の rc とテーマが走る実 .app でも判定が揺れない）。
-  local tab=""
+  local ready=""
   for _ in $(seq 1 40); do
-    tab="$(rpc_call "$sock" list_tabs '{}' 2>/dev/null | python3 -c 'import json,sys; t=json.load(sys.stdin)["tabs"]; print(t[0]["tabId"] if t else "")' 2>/dev/null || true)"
-    [ -n "$tab" ] && break
+    rpc_call "$sock" list_workspaces >/dev/null 2>&1 && { ready=1; break; }
     sleep 0.25
   done
-  [ -n "$tab" ] || fail "タブが 10 秒で現れない"
+  [ -n "$ready" ] || fail "ウィンドウが 10 秒で制御 API に繋がらない"
+  local tab
+  tab="$(rpc_call "$sock" spawn '{"select":false}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["tabId"])')" \
+    || fail "spawn に失敗"
   sleep 1  # シェルが立ち上がる猶予
   local marker="L4DONE_${RANDOM}${RANDOM}"
   rpc_call "$sock" send_text "{\"tabId\":$tab,\"text\":\"echo L4D\\\"\\\"ONE_${marker#L4DONE_}\"}" >/dev/null || fail "send_text に失敗"
@@ -145,6 +150,7 @@ do_start() {
     sleep 0.25
   done
   [ -n "$seen" ] || fail "煙探知の目印 $marker が 15 秒で出ない（制御 API から駆動できていない）"
+  rpc_call "$sock" close_tab "{\"tabId\":$tab}" >/dev/null || fail "煙探知のタブを閉じられない"
 
   cat <<EOF
 state_dir=$state_dir

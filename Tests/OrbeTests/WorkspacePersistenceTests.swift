@@ -268,4 +268,38 @@ final class WorkspacePersistenceTests: OrbeTestCase {
     XCTAssertEqual(loaded.workspaces[0].lastUsedAt, Date(timeIntervalSinceReferenceDate: 123))
     XCTAssertEqual(loaded.workspaces[1].tabs, [], "0 タブの休眠 workspace はそのまま")
   }
+
+  // MARK: - ボードの選択
+
+  /// 「ボードを選んでいるか」の型の合わない値は「選んでいない」として読み、workspace は失わない。
+  func testMalformedBoardSelectionReadsAsNotSelected() throws {
+    let file = """
+      {"version":4,"activeWorkspace":0,"workspaces":[\
+      {"name":"a","rootPath":"/","activeTab":0,"boardSelected":"yes","tabs":[]}]}
+      """
+    try Data(file.utf8).write(to: workspacesFile())
+    let loaded = try XCTUnwrap(WorkspacePersistence.load())
+    XCTAssertEqual(loaded.workspaces.map(\.name), ["a"])
+    XCTAssertEqual(loaded.workspaces.map(\.boardSelected), [false])
+  }
+
+  // MARK: - 全キーの往復
+
+  /// 全フィールドを非既定にした WorkspaceState は、全キーが JSON に現れ、往復で等しい。
+  /// 壊れると、手書きの encode に書き忘れたフィールドが黙って保存されず、再起動で消える。
+  func testEveryWorkspaceStateCodingKeyRoundTrips() throws {
+    var override = SettingsLayer()
+    override[SettingKeys.fontSize] = 20
+    let full = WorkspaceState(
+      name: "w", rootPath: "/w", activeTab: 0, boardSelected: true,
+      tabs: [TabState(cwd: "/w", agent: nil, explicitTitle: nil)],
+      lastUsedAt: Date(timeIntervalSinceReferenceDate: 123), settingsOverride: override,
+      lastWorktreeBase: "origin/main")
+    let data = try JSONEncoder().encode(full)
+    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    for key in WorkspaceState.CodingKeys.allCases {
+      XCTAssertNotNil(object[key.rawValue], "\(key) が encode に現れない")
+    }
+    XCTAssertEqual(try JSONDecoder().decode(WorkspaceState.self, from: data), full)
+  }
 }

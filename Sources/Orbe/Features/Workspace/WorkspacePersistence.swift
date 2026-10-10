@@ -49,7 +49,10 @@ struct WindowSize: Codable, Equatable {
 struct WorkspaceState: Codable, Equatable {
   var name: String
   var rootPath: String
+  /// 選んでいるタブの位置。ボード・空なら 0（ボードを知らない版が読んでも範囲内に収まる）。
   var activeTab: Int
+  /// ボードを選んでいるか。選んでいるときだけ書き、無いか読めなければ false（`activeTab` のタブを選ぶ）。
+  var boardSelected: Bool
   var tabs: [TabState]
   /// この workspace に最後に切り替えてフォーカスした時刻（MRU 並べ替えのキー）。
   /// optional——一度も前面で使っていない workspace では書かれない（タブ選択でも進む）。無ければ nil（最古扱い）。
@@ -64,19 +67,21 @@ struct WorkspaceState: Codable, Equatable {
   /// 読んだ場合も同じ）——後から足したフィールドの異常でファイル全体を落とさない。
   var persistentId: UUID
 
-  enum CodingKeys: String, CodingKey {
-    case name, rootPath, activeTab, tabs, lastUsedAt, settingsOverride, lastWorktreeBase
-    case persistentId
+  /// `CaseIterable` は TabState と同じ seam（encode を手書きにしたので、足したキーの書き忘れを全キーの往復テストが見る）。
+  enum CodingKeys: String, CodingKey, CaseIterable {
+    case name, rootPath, activeTab, boardSelected, tabs, lastUsedAt, settingsOverride
+    case lastWorktreeBase, persistentId
   }
 
   init(
-    name: String, rootPath: String, activeTab: Int, tabs: [TabState],
+    name: String, rootPath: String, activeTab: Int, boardSelected: Bool = false, tabs: [TabState],
     lastUsedAt: Date? = nil, settingsOverride: SettingsLayer? = nil,
     lastWorktreeBase: String? = nil, persistentId: UUID = UUID()
   ) {
     self.name = name
     self.rootPath = rootPath
     self.activeTab = activeTab
+    self.boardSelected = boardSelected
     self.tabs = tabs
     self.lastUsedAt = lastUsedAt
     self.settingsOverride = settingsOverride
@@ -92,12 +97,26 @@ struct WorkspaceState: Codable, Equatable {
     name = try c.decode(String.self, forKey: .name)
     rootPath = try c.decode(String.self, forKey: .rootPath)
     activeTab = try c.decode(Int.self, forKey: .activeTab)
+    boardSelected = (try? c.decodeIfPresent(Bool.self, forKey: .boardSelected)) ?? false
     tabs = try c.decode([TabState].self, forKey: .tabs)
     lastUsedAt = try c.decodeIfPresent(Date.self, forKey: .lastUsedAt)
     let layer = try? c.decode(SettingsLayer.self, forKey: .settingsOverride)
     settingsOverride = layer.flatMap { $0.isEmpty ? nil : $0 }
     lastWorktreeBase = try? c.decodeIfPresent(String.self, forKey: .lastWorktreeBase)
     persistentId = (try? c.decode(UUID.self, forKey: .persistentId)) ?? UUID()
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(name, forKey: .name)
+    try c.encode(rootPath, forKey: .rootPath)
+    try c.encode(activeTab, forKey: .activeTab)
+    if boardSelected { try c.encode(true, forKey: .boardSelected) }
+    try c.encode(tabs, forKey: .tabs)
+    try c.encodeIfPresent(lastUsedAt, forKey: .lastUsedAt)
+    try c.encodeIfPresent(settingsOverride, forKey: .settingsOverride)
+    try c.encodeIfPresent(lastWorktreeBase, forKey: .lastWorktreeBase)
+    try c.encode(persistentId, forKey: .persistentId)
   }
 }
 

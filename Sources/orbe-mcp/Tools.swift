@@ -112,6 +112,7 @@ let tools: [[String: Any]] =
           "workspaceId": intProp("開く workspace（省略時アクティブ）"),
           "cwd": strProp("作業ディレクトリ（省略時アクティブタブ由来）"),
           "command": strProp("シェルの代わりに起動するコマンド（絶対パス推奨）"),
+          "select": boolProp("false で選ばずに起こす（人が見ているタブを変えない。既定 true）"),
         ])
       ),
     ]),

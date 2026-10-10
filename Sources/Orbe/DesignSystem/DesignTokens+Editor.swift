@@ -105,7 +105,7 @@ extension Theme.Color {
 }
 
 extension Theme.Typography {
-  /// エディター面の空状態の一文（サンセリフ 13）。
+  /// エディター面・ボードの空状態の一文（サンセリフ 13）。
   static let editorLead = NSFont.systemFont(ofSize: 13, weight: .regular)
   /// エディター面のショートカット行・kbd（mono 12）。
   static let editorHint = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)

@@ -582,6 +582,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   // MARK: - Editor 面（コード）
   case editorOmittedCharacters
 
+  // MARK: - ボード（空状態）
+  case boardEmpty
+
   // MARK: - Link（OSC 8 リンクの確認・ブロック）
   case linkConfirmTitle
   case linkConfirmMessage

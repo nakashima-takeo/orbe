@@ -70,7 +70,7 @@ final class ChromeMiddleClickTests: OrbeTestCase {
     let window = try mount(wc)
     let catchers = try tabCatchers(in: window)
     XCTAssertEqual(catchers.count, 3, "catcher はタブ 1 枚に 1 つ載る")
-    let active = wc.current.tabs[wc.current.active]
+    let active = wc.current.selectedTab
     let survivors = [wc.current.tabs[0], wc.current.tabs[2]]
 
     window.sendEvent(try otherDown(button: 2, at: center(of: catchers[1])))  // 中央の非選択タブ
@@ -78,7 +78,7 @@ final class ChromeMiddleClickTests: OrbeTestCase {
     XCTAssertEqual(wc.current.tabs.count, 2, "配送された中クリックがタブを閉じる")
     XCTAssertTrue(
       zip(wc.current.tabs, survivors).allSatisfy { $0 === $1 }, "閉じたのはクリック座標のタブだけ")
-    XCTAssertTrue(wc.current.tabs[wc.current.active] === active, "アクティブタブは切り替わらない")
+    XCTAssertTrue(wc.current.selectedTab === active, "アクティブタブは切り替わらない")
   }
 
   /// サイドボタン（buttonNumber 3）では閉じない。hitTest が catcher を返さず、

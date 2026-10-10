@@ -14,6 +14,8 @@ struct DSTab: View {
   var stateGlyph: AgentStateIcon.Kind?
   /// 状態グリフを上書きする SF Symbol 名（nil＝Glass 既定）。DS 層は env を読まず、解決は app 層が担う。
   var stateSymbol: String?
+  /// 状態グリフの無いセルの先頭に置く SF Symbol（ボードの家）。状態グリフと同じ 12pt 角に収める。
+  var leadingSymbol: String?
   var action: () -> Void = {}
   /// 中ボタンクリック（押し下げで即発火）。app 層がタブごと閉じる操作に配線する。
   var onMiddleClick: () -> Void = {}
@@ -56,6 +58,12 @@ struct DSTab: View {
           color: selected ? stateGlyph.inverseColor : nil,
           checkStroke: selected ? Color.theme.textPrimary : nil,
           symbol: stateSymbol)
+      } else if let leadingSymbol {
+        Image(systemName: leadingSymbol)
+          .resizable()
+          .scaledToFit()
+          .frame(width: glyphSize, height: glyphSize)
+          .foregroundStyle(selected ? Color.theme.tabActiveText : Color.theme.textMuted)
       }
       if editing {
         titleField

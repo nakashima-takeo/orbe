@@ -19,7 +19,7 @@ final class SessionStoreMoveTabTests: OrbeTestCase {
     let ws = Workspace(name: "ws", rootPath: "/tmp")
     let tabs = (0..<n).map { _ in TerminalTab(cwd: "/tmp") }
     ws.tabs = tabs
-    ws.active = active
+    ws.selection = .tab(ws.tabs[active])
     return (SessionStore(workspaces: [ws], activeWorkspace: 0), tabs)
   }
 
@@ -58,8 +58,8 @@ final class SessionStoreMoveTabTests: OrbeTestCase {
   func testMovingActiveTabItselfKeepsActiveOnIt() {
     let (store, t) = makeStore(tabCount: 4, active: 0)  // active = tab0
     XCTAssertTrue(store.moveTab(from: 0, to: 4))  // tab0 を末尾へ → [1,2,3,0]
-    XCTAssertTrue(store.current.tabs[store.current.active] === t[0], "active は移動後の tab0 を指す")
-    XCTAssertEqual(store.current.active, 3, "tab0 の新 index=3")
+    XCTAssertTrue(store.current.selectedTab === t[0], "active は移動後の tab0 を指す")
+    XCTAssertEqual(store.current.selectedTabIndex, 3, "tab0 の新 index=3")
   }
 
   /// 他タブの移動でアクティブの index がずれても、active は同じ TerminalTab を指し続ける。
@@ -67,8 +67,8 @@ final class SessionStoreMoveTabTests: OrbeTestCase {
   func testMovingOtherTabKeepsActiveOnSameController() {
     let (store, t) = makeStore(tabCount: 4, active: 1)  // active = tab1
     XCTAssertTrue(store.moveTab(from: 0, to: 4))  // tab0 を末尾へ → [1,2,3,0]
-    XCTAssertTrue(store.current.tabs[store.current.active] === t[1], "active は依然 tab1 を指す")
-    XCTAssertEqual(store.current.active, 0, "tab1 の index が 1→0 に追従")
+    XCTAssertTrue(store.current.selectedTab === t[1], "active は依然 tab1 を指す")
+    XCTAssertEqual(store.current.selectedTabIndex, 0, "tab1 の index が 1→0 に追従")
   }
 
   // MARK: - no-op（false・配列不変）
