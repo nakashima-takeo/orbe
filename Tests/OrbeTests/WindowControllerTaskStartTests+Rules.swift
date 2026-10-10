@@ -77,6 +77,48 @@ extension WindowControllerTaskStartTests {
     XCTAssertEqual(stored(wc, task.id)?.status, .todo)
   }
 
+  /// ブランチ名として不正な `branch` は、作業場を用意せず -32602 で拒む（非同期の名前の検査からも 1 度だけ答える）。
+  func testAnInvalidBranchNameIsRefused() throws {
+    let wc = try launch()
+    let task = try wc.taskStore.add(TaskDraft(title: "不正な名前", workspace: webId))
+
+    let error = try refusal(wc, TaskStartRequest(taskId: task.id, branch: "bad..name"))
+
+    XCTAssertEqual(error.code, -32602)
+    XCTAssertTrue(error.message.contains("invalid branch name"), error.message)
+    XCTAssertEqual(stored(wc, task.id)?.status, .todo)
+    XCTAssertNil(stored(wc, task.id)?.worktree)
+    XCTAssertFalse(
+      GitRunner.shared.runSync(["rev-parse", "--verify", "refs/heads/bad..name"], cwd: local)
+        .isSuccess, "ブランチを作らない")
+  }
+
+  /// 既存のブランチと名前や worktree の場所がぶつかる `branch`（`feat/x/y` があるときの `feat/x`）は、ここで作れない
+  /// として -32602 で拒む。
+  func testABranchThatCannotBeCreatedHereIsRefused() throws {
+    try git(["branch", "feat/x/y"], in: local)
+    let wc = try launch()
+    let task = try wc.taskStore.add(TaskDraft(title: "ぶつかる名前", workspace: webId))
+
+    let error = try refusal(wc, TaskStartRequest(taskId: task.id, branch: "feat/x"))
+
+    XCTAssertEqual(error.code, -32602)
+    XCTAssertTrue(error.message.contains("cannot be created here"), error.message)
+    XCTAssertEqual(stored(wc, task.id)?.status, .todo)
+  }
+
+  /// `repo` が実在するディレクトリの絶対パスでなければ -32602。
+  func testARepoThatIsNotAnAbsoluteDirectoryIsRefused() throws {
+    let wc = try launch()
+    let task = try wc.taskStore.add(TaskDraft(title: "相対の repo", workspace: webId))
+
+    let error = try refusal(
+      wc, TaskStartRequest(taskId: task.id, branch: "feat/relative", repo: "relative/path"))
+
+    XCTAssertEqual(error.code, -32602)
+    XCTAssertEqual(stored(wc, task.id)?.status, .todo)
+  }
+
   /// Home 自身が git のリポジトリになっていたら（秘書や人が Home で `git init` した）、Home のタスクは始めない
   /// （作業場の根が Home 全体になり、Home のタスクどうしが同じ作業場に重なる）。
   func testAHomeThatIsItselfARepositoryRefusesHomeTasks() throws {
