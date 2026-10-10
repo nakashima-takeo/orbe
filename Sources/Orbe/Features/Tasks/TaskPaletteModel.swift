@@ -216,9 +216,9 @@ import Observation
   func focus() { focusToken &+= 1 }
 
   /// 列・一覧・範囲・タブ・開閉が変わったあとの付け直し。選択は一覧の状態ごとに、その行で付け直す
-  /// （`TaskPaletteListState`）。右の欄に居る間に選択が別の行へ移ったら一覧へ戻り、対象が消えた下書きは捨て、
-  /// 並びが変わった掴みも捨てる。右の欄に居る間に、選択の同一性が変わった・選んだ行が結び付いていない項目で
-  /// なくなったら一覧へ戻る。
+  /// （`TaskPaletteListState`）。右の欄に居る間に選択が別の行へ移ったら一覧へ戻り、対象が消えた下書きと、対象が
+  /// 一覧から外れた（完了で畳まれた・範囲の外へ出た）秘書に頼む欄は捨て、並びが変わった掴みも捨てる。右の欄に
+  /// 居る間に、選択の同一性が変わった・選んだ行が結び付いていない項目でなくなったら一覧へ戻る。
   func reconcile() {
     endStalePick()
     let previous = selectedID
@@ -228,6 +228,7 @@ import Observation
     if let id = draft?.taskID, !store.tasks.contains(where: { $0.id == id }) {
       draft = nil
     }
+    if let id = askingTaskID, selectedID != .task(id) { draft = nil }
     reconcilePane()
     if case .detail = area, selectedID != previous || selectedTask == nil {
       leaveEditing()
@@ -348,11 +349,12 @@ import Observation
     focus()
   }
 
-  /// 結び付いている行の ↵。タスクのタブへ移り、そのタスクを選ぶ。範囲・入力・完了の欄で隠れていれば、
-  /// 見えるように切り替える。
+  /// 結び付いている行の ↵・メニューバーのタスクのピル。タスクのタブへ移り、そのタスクを選ぶ（選ぶ状態ならやめる）。
+  /// 範囲・入力・完了の欄で隠れていれば、見えるように切り替える。
   func showTask(_ id: Int) {
     guard let task = store.tasks.first(where: { $0.id == id }) else { return }
     leaveEditingForAction()
+    pick = nil
     area = .list
     tab = .tasks
     if scope == .opened, task.workspace != workspaces.opened.id { scope = .all }

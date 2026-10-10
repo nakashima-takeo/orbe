@@ -139,9 +139,8 @@ extension TaskPaletteModel {
   private func activate(_ stop: TaskDetailStop, _ press: KeyPress) {
     guard press.phase == .down else { return }
     switch stop {
-    // ⌘↵ は 1 行の項目の確定のキーなので編集を始めない（確定した直後の ⌘↵ で、また編集に入らない）。
     case .field(let field):
-      if field.isText, !press.modifiers.contains(.command) { beginEditing() }
+      if field.isText { beginEditing() }
     case .conversation: focusConversationTab()
     case .agent: focusAgentTab()
     case .condition(let part): toggleConditionPart(part)

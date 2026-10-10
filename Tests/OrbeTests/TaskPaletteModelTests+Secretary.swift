@@ -97,6 +97,24 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(asks(), [], "何も送らない")
   }
 
+  /// 頼む欄の対象が一覧から外れたら（agent が完了にして完了の欄に畳まれた）、欄を閉じる（キーの受け手が無いまま
+  /// 残さない）。
+  func testAnAskWhoseTaskLeavesTheListIsClosed() throws {
+    let palette = threeTodos()
+    let asks = recording(palette)
+    palette.move(1)
+    palette.askSecretary()
+    palette.draftText = "書きかけ"
+
+    var update = TaskUpdate()
+    update.status = .done
+    _ = try palette.store.update(2, update)
+    palette.reconcile()
+
+    XCTAssertNil(palette.draft)
+    XCTAssertEqual(asks(), [], "何も送らない")
+  }
+
   /// 完了の見出し・GitHub タブでは何もしない。
   func testCommandEnterElsewhereDoesNothing() {
     let palette = model([task(1, "a", .done)])

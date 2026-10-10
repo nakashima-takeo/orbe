@@ -17,11 +17,11 @@ struct TaskPaletteList: View {
         .padding(TaskPaletteRowMetrics.listPadding)
       }
       .scrollIndicators(.automatic)
-      .onChange(of: model.scrollTarget) { scroll(proxy, to: model.scrollTarget?.id) }
+      .onChange(of: model.scrollTarget) { scroll(proxy, to: model.scrollTarget?.id, rows) }
       // 行の直下に開いた頼む欄が見えるように送る（行だけを見せると、狭い窓で欄が下に切れる）。
       .onChange(of: model.askingTaskID) { revealAsk(proxy) }
       .onAppear {
-        scroll(proxy, to: model.selectedID)
+        scroll(proxy, to: model.selectedID, rows)
         revealAsk(proxy)
       }
     }
@@ -32,9 +32,16 @@ struct TaskPaletteList: View {
   /// これだけ動かして初めてドラッグになる（未満はクリック）。
   private static let dragActivation: CGFloat = 6
 
-  /// 最小の量だけ送る（見えていれば動かない）。
-  private func scroll(_ proxy: ScrollViewProxy, to id: TaskPaletteRowID?) {
-    if let id { proxy.scrollTo(TaskPaletteRow.Identity.selectable(id)) }
+  /// 最小の量だけ送る（見えていれば動かない）。入力の行き先は一覧の行ではないので、一覧の先頭（行き先の次の一致）を
+  /// 見せる。
+  private func scroll(_ proxy: ScrollViewProxy, to id: TaskPaletteRowID?, _ rows: [TaskPaletteRow])
+  {
+    guard let id else { return }
+    if id == .add {
+      rows.first.map { proxy.scrollTo($0.id, anchor: .top) }
+    } else {
+      proxy.scrollTo(TaskPaletteRow.Identity.selectable(id))
+    }
   }
 
   private func revealAsk(_ proxy: ScrollViewProxy) {

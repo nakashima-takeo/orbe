@@ -103,14 +103,30 @@ extension TaskPaletteModelTests {
     palette.enterDetail()
     palette.toggleTab()
     palette.openWorktreePalette()
+    palette.askSecretary()
+    palette.openAsk(1)
 
     XCTAssertEqual(palette.store.tasks.map(\.id), [1, 2])
     XCTAssertEqual(palette.store.tasks.map(\.status), [.todo, .todo])
     XCTAssertEqual(palette.area, .list)
     XCTAssertEqual(palette.visibleTab, .tasks)
     XCTAssertEqual(opened, [])
+    XCTAssertNil(palette.draft, "秘書に頼む欄も開かない")
     palette.cancelPick()
     XCTAssertEqual(palette.visibleTab, .github, "やめると入る前のタブへ戻る")
+  }
+
+  /// メニューバーのピルからタスクを選ぶと、選ぶ状態をやめてそのタスクを選ぶ（次の ↵ で結び付けない）。
+  func testShowingATaskEndsPicking() {
+    let palette = pickingFromIssueFive()
+    palette.linkSelectedGitHubItem()
+
+    palette.showTask(2)
+
+    XCTAssertNil(palette.pick)
+    XCTAssertEqual(palette.visibleTab, .tasks)
+    XCTAssertEqual(palette.selectedID, .task(2))
+    XCTAssertTrue(palette.store.tasks.allSatisfy(\.links.isEmpty), "結び付けない")
   }
 
   /// 選んでいる項目が一覧から消えたら（閉じられた）、選ぶ状態を終えて戻る。
