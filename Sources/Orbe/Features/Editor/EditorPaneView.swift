@@ -24,11 +24,11 @@ struct EditorFaceRoot: View {
 /// セッションの変化は `sessionDidChange` 1 本で受け、写し → 面の差し替え → ツリーの追従の順に進める。
 /// ツリーとプロジェクト検索は面が画面に見えている間（窓に付き、隠れていない）だけ根のサービスを握る。
 ///
-/// chrome キーは `performKeyEquivalent` で先取りし、window コマンドはタブ経由で上位へ、⌘S は保存、
+/// chrome キーは `performKeyEquivalent` で先取りし、window コマンドは連経由で上位へ、⌘S は保存、
 /// 端末のキーは消し、両面のキーのうち ⌘F はファイル内検索、残り（⌘↑↓）と通常の打鍵はテキスト面へ流す。
 /// 空状態では通常の打鍵を飲む——エディター焦点中に端末へ届けない。
 final class EditorPaneView: NSView {
-  weak var tab: TerminalTab?
+  weak var group: TabGroup?
   /// 骨の写し（ファイルタブ行・パンくず）。
   let shell = EditorShellModel()
   /// エクスプローラーのツリー。根が変われば作り直す。
@@ -44,7 +44,7 @@ final class EditorPaneView: NSView {
   var searchBarTrailing: NSLayoutConstraint?
   /// 出現の強調の状態（pane ごと）。
   let occurrences = EditorOccurrences()
-  /// プロジェクト検索の状態（pane ごと＝タブごと）。
+  /// プロジェクト検索の状態（pane ごと＝連ごと）。
   let projectSearch: ProjectSearch
   /// 検索結果の列。検索パネルが隠れている間も持ち、出し直すたびに作り直さない。
   let searchResults: RowList<SearchResultsSource>
@@ -141,16 +141,18 @@ final class EditorPaneView: NSView {
   private func wireShell() {
     shell.open = { [weak self] url, mode in self?.open(url, as: mode) }
     shell.activate = { [weak self] url in
-      guard let self, let tab, let document = tab.editor.documents.first(where: { $0.url == url })
+      guard let self, let group,
+        let document = group.editor.documents.first(where: { $0.url == url })
       else { return }
-      tab.editor.activate(document)
+      group.editor.activate(document)
       tree.reveal(document.url)
       focusEditor()
     }
     shell.pin = { [weak self] url in
-      guard let tab = self?.tab, let document = tab.editor.documents.first(where: { $0.url == url })
+      guard let group = self?.group,
+        let document = group.editor.documents.first(where: { $0.url == url })
       else { return }
-      tab.editor.pin(document)
+      group.editor.pin(document)
     }
     shell.requestClose = { [weak self] url in self?.requestClose(url) }
     shell.revealDirectory = { [weak self] url in self?.tree.revealDirectory(url) }
@@ -175,10 +177,10 @@ final class EditorPaneView: NSView {
   /// 骨から `mode` で開く。読めないときは beep（`open_file` と同じ理由でエラー面は持たない）。開けたらその行を
   /// 選択して焦点を面へ——既に焦点の文書ならセッションは変わらないので、選択はここで明示に移す。
   func open(_ url: URL, as mode: EditorSession.OpenMode) {
-    guard let tab else { return }
+    guard let group else { return }
     let document: EditorDocument
     do {
-      document = try tab.editor.open(url, as: mode)
+      document = try group.editor.open(url, as: mode)
     } catch {
       NSSound.beep()
       return
@@ -190,20 +192,20 @@ final class EditorPaneView: NSView {
   /// ファイルタブの ×。未保存なら確認を sheet で出し、保存／保存しないで閉じる（保存が外部変更で失敗すれば
   /// 閉じない）。応答が返るまでに文書が消えていれば何もしない。
   private func requestClose(_ url: URL) {
-    guard let tab, let document = tab.editor.documents.first(where: { $0.url == url }) else {
+    guard let group, let document = group.editor.documents.first(where: { $0.url == url }) else {
       return
     }
     guard document.isDirty, let window else {
-      tab.editor.close(document)
+      group.editor.close(document)
       return
     }
     let alert = UnsavedGate.alert(count: 1, language: localization.language)
     alert.beginSheetModal(for: window) { [weak self, weak document] response in
-      guard let self, let tab = self.tab, let document,
-        tab.editor.documents.contains(where: { $0 === document }),
+      guard let self, let group = self.group, let document,
+        group.editor.documents.contains(where: { $0 === document }),
         UnsavedGate.proceed(response, discarding: [document])
       else { return }
-      tab.editor.close(document)
+      group.editor.close(document)
     }
   }
 
@@ -266,16 +268,16 @@ final class EditorPaneView: NSView {
   /// 祖先を開いて選択する。写しを `show` に相乗りさせない——同一文書の未保存・衝突の変化は `show` の
   /// guard で止まる。
   func sessionDidChange() {
-    guard let tab else { return }
-    let active = tab.editor.activeDocument
+    guard let group else { return }
+    let active = group.editor.activeDocument
     let changed = active !== document
-    shell.update(from: tab.editor, root: tree.root)
+    shell.update(from: group.editor, root: tree.root)
     show(active)
     if changed, let url = active?.url { tree.reveal(url) }
   }
 
   /// 根が変わった（cd）。ツリーを作り直し、握っていたなら握り直す。プロジェクト検索は結果を捨て、この面の検索パネルが
-  /// 画面に見えていれば今の問いで検索し直す（裏のタブの cd で見えない根を探さない）。
+  /// 画面に見えていれば今の問いで検索し直す（裏の連の cd で見えない根を探さない）。
   func setRoot(_ root: String) {
     guard root != tree.root else { return }
     tree.cancelNew()
@@ -285,9 +287,9 @@ final class EditorPaneView: NSView {
     projectSearch.setRoot(root, searchNow: showsSearchPanel && projectSearch.isLive)
     updateLiveness()
     installRoots()
-    if let tab {
-      shell.update(from: tab.editor, root: root)
-      if let url = tab.editor.activeDocument?.url { tree.reveal(url) }
+    if let group {
+      shell.update(from: group.editor, root: root)
+      if let url = group.editor.activeDocument?.url { tree.reveal(url) }
     }
   }
 
@@ -301,12 +303,7 @@ final class EditorPaneView: NSView {
   func show(_ document: EditorDocument?) {
     guard document !== self.document else { return }
     let hadFocusInside = focusIsInside && !focusIsInSidebar
-    if let previous = self.document {
-      previous.surface.view.removeFromSuperview()
-      observe(previous, false)
-      previous.surface.setHighlights([], for: .findMatch)
-      previous.surface.setHighlights([], for: .currentFindMatch)
-    }
+    if let previous = self.document { unbind(previous) }
     self.document = document
     if let document {
       document.surface.host = self
@@ -329,6 +326,23 @@ final class EditorPaneView: NSView {
     if hadFocusInside, window?.firstResponder !== focusTarget {
       window?.makeFirstResponder(focusTarget)
     }
+  }
+
+  /// 見せている文書を、セッションに告げずに手放す（文書を別の連のセッションへ移す前に、この面の観測・テキスト面の親・
+  /// 一致の強調を外す。外さないと、この面の後片付けが移した先の文書を壊す）。
+  func releaseDocuments() {
+    guard let previous = document else { return }
+    unbind(previous)
+    document = nil
+    search.bind(nil)
+    occurrences.bind(nil)
+  }
+
+  private func unbind(_ document: EditorDocument) {
+    document.surface.view.removeFromSuperview()
+    observe(document, false)
+    document.surface.setHighlights([], for: .findMatch)
+    document.surface.setHighlights([], for: .currentFindMatch)
   }
 
   // MARK: - 可視性（ツリーとプロジェクト検索が根のサービスを握る寿命）
@@ -355,12 +369,12 @@ final class EditorPaneView: NSView {
     let live = window != nil && !isHiddenOrHasHiddenAncestor
     tree.isLive = live
     projectSearch.isLive = live
-    if live { tab?.editor.prepareSurfaces() }
+    if live { group?.editor.prepareSurfaces() }
     prepareDocumentIfVisible()
   }
 
   /// 面が画面に見えていれば、結んだ文書を初めて見せる前の上限つきの待ちを通す（2 回目以降は文書が何もしない）。畳まれた
-  /// 面・窓に無い面では待たず、面が見えたときに待つ——端末だけの配置のタブを復元しても main を止めない。
+  /// 面・窓に無い面では待たず、面が見えたときに待つ——端末だけの配置の連を復元しても main を止めない。
   private func prepareDocumentIfVisible() {
     guard let document, window != nil, !isHiddenOrHasHiddenAncestor else { return }
     document.prepareToShow()

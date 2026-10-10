@@ -1,15 +1,52 @@
 import Foundation
+import OrbeEditorCore
 
-/// 旧 workspaces.json（version 2 / 3）の読みと現行形式への平坦化移行。旧形式を知るのはこのファイルだけで、
-/// 現行モデルからは `WorkspacePersistence.load()` の 1 箇所が呼ぶ。
+/// 旧 workspaces.json の読みと現行形式への移行。version 2 / 3 は `WorkspacePersistence.load()` の 1 箇所が呼び、
+/// version 4 のタブごとの配置と状態の連への集約は復元が `WorkspaceState.groupStates` を通して呼ぶ。
 ///
-/// 旧形式はタブが分割ツリー（`LegacySplitTree` 二分木）を持っていた。葉ごとに 1 タブへ展開する。
+/// version 2 / 3 はタブが分割ツリー（`LegacySplitTree` 二分木）を持っていた。葉ごとに 1 タブへ展開する。
 extension WorkspacePersistence {
   static func loadLegacy(_ data: Data) -> WorkspacesFile? {
     guard let file = try? JSONDecoder().decode(LegacyWorkspacesFile.self, from: data) else {
       return nil
     }
     return file.migrated()
+  }
+}
+
+extension WorkspaceState {
+  /// version 4 のタブごとの配置と状態を、連ごとに 1 つへ集約する。面の配置・焦点の文書・仮の文書・検索の問いは、連に
+  /// アクティブなタブがあればそのタブ、無ければ保存順で最初に状態を持つタブのもの。開いていた文書の列は、連の全タブの列を
+  /// 保存順に重複なく合わせる。集約して既定のままの連は載せない。
+  func version4GroupStates(keys: [String]) -> [String: GroupState] {
+    var states: [String: GroupState] = [:]
+    for key in Set(keys) {
+      let members = keys.indices.filter { keys[$0] == key }
+      let source =
+        members.contains(activeTab)
+        ? tabs[activeTab].version4
+        : members.lazy.compactMap { tabs[$0].version4 }.first {
+          $0.faces != .terminalOnly || $0.editor != nil
+        }
+      var open: [String] = []
+      for member in members {
+        for path in tabs[member].version4?.editor?.documents?.open ?? [] where !open.contains(path)
+        {
+          open.append(path)
+        }
+      }
+      let documents = source?.editor?.documents
+      let editor = EditorState(
+        documents: open.first.map {
+          EditorState.OpenDocuments(
+            open: open, active: documents?.active ?? $0, preview: documents?.preview)
+        },
+        search: source?.editor?.search ?? SearchQuery())
+      let state = GroupState(
+        root: key, faces: source?.faces ?? .terminalOnly, editor: editor.isEmpty ? nil : editor)
+      if state.faces != .terminalOnly || state.editor != nil { states[key] = state }
+    }
+    return states
   }
 }
 

@@ -28,7 +28,7 @@ func clearAgentState(_ tab: TerminalTab) {
 /// 報告前の稼働（`.live(session, report: nil)`）を持つタブ。production でこの形が生まれる唯一の経路
 /// ＝休眠チケットの起床（resume が解けた直後・最初の hook 報告前）を踏む。
 func liveUnreportedTab(session: AgentSession, cwd: String = "/tmp") -> TerminalTab {
-  let tab = TerminalTab(
+  let tab = TerminalTab.alone(
     restoring: TabState(cwd: cwd, agent: session, explicitTitle: nil),
     resumeSpawn: { _, session, _ in ("\(session.command) --resume \(session.sessionId ?? "")", [:])
     })

@@ -15,10 +15,10 @@ extension WindowControllerFacesTests {
   func testEditorBodyOwnsThePointerThroughTheWindow() throws {
     let wc = WindowController()
     let tab = try XCTUnwrap(wc.activeTab)
-    tab.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
-    let document = try tab.editor.open(try caseFile("a.swift", "let a = 1\n"), as: .pinned)
+    tab.group.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
+    let document = try tab.group.editor.open(try caseFile("a.swift", "let a = 1\n"), as: .pinned)
     layout(wc)
-    let pane = tab.view.editor
+    let pane = tab.group.view.editor
     let body = pane.convert(NSPoint(x: pane.bodyRect.midX, y: pane.bodyRect.midY), to: nil)
     let text = try engine(document).textView
     NSCursor.arrow.set()

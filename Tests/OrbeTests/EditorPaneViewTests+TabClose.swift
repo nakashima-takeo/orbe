@@ -22,26 +22,26 @@ final class EditorPaneViewTabCloseTests: OrbeTestCase {
   private struct Row {
     let tab: TerminalTab
     let window: NSWindow
-    var pane: EditorPaneView { tab.view.editor }
+    var pane: EditorPaneView { tab.group.view.editor }
   }
 
   /// 幅 900・サイドバー閉の面に 3 枚: 未保存の a・保存済みの b・アクティブの c。窓は物理画面の外へ並べる
   /// （`sendEvent` は ordered-in の窓にしか配送しない）。
   private func row() throws -> Row {
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
     window.appearance = NSAppearance(named: .darkAqua)
     window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
     window.orderFront(nil)
     pane.shell.selectPanel(.files)
-    let a = try tab.editor.open(try caseFile("a.swift", "let a = 1\n"), as: .pinned)
+    let a = try tab.group.editor.open(try caseFile("a.swift", "let a = 1\n"), as: .pinned)
     a.surface.responder.perform(Selector(("insertText:")), with: "x")
-    _ = try tab.editor.open(try caseFile("b.txt", "b"), as: .pinned)
-    _ = try tab.editor.open(try caseFile("c.md", "c"), as: .pinned)
-    tab.view.layoutSubtreeIfNeeded()
+    _ = try tab.group.editor.open(try caseFile("b.txt", "b"), as: .pinned)
+    _ = try tab.group.editor.open(try caseFile("c.md", "c"), as: .pinned)
+    tab.group.view.layoutSubtreeIfNeeded()
     pumpMain(
       until: { pane.shell.tabs.map(\.isDirty) == [true, false, false] }, "a だけ未保存・c がアクティブ")
     return Row(tab: tab, window: window)
@@ -107,7 +107,7 @@ final class EditorPaneViewTabCloseTests: OrbeTestCase {
     try click(pane, at: NSPoint(x: c.x, y: c.y + 9))
     pumpMain(until: { names() == ["a.swift"] }, "枠の下端を押して c を閉じる")
 
-    _ = try row.tab.editor.open(try caseFile("d.txt", "d"), as: .pinned)
+    _ = try row.tab.group.editor.open(try caseFile("d.txt", "d"), as: .pinned)
     try drawn([.dot, .close])
     let a = fileTabSlotCenter(pane, 0)
     try click(pane, at: NSPoint(x: a.x + Theme.Layout.editorTabClose / 2 + 2, y: a.y))

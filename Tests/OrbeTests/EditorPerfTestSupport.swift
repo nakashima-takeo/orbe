@@ -26,7 +26,7 @@ extension OrbeTestCase {
   func openEditor(_ text: String, extension ext: String = "swift") throws -> OpenedEditor {
     let host = try editorWindow()
     let url = try caseFile("big-\(UUID().uuidString).\(ext)", text)
-    let document = try host.tab.editor.open(url, as: .pinned)
+    let document = try host.tab.group.editor.open(url, as: .pinned)
     host.pane.layoutSubtreeIfNeeded()
     pumpMain(until: { document.surface.viewport.visibleLines > 0 }, "面が大きさを持つ")
     XCTAssertTrue(document.waitUntilCaughtUp(timeout: 60))
@@ -39,12 +39,12 @@ extension OrbeTestCase {
   @MainActor
   func editorWindow() throws -> EditorWindow {
     let queries = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: queries))
     let window = hostEditor(tab, width: 1200, height: 800)
     window.appearance = NSAppearance(named: .darkAqua)
-    return EditorWindow(tab: tab, pane: tab.view.editor, window: window)
+    return EditorWindow(tab: tab, pane: tab.group.view.editor, window: window)
   }
 
   /// 文書が裏の結果を受け取って今の版に追いつくまで main を回す（裏を急かさない——本番と同じ経路）。

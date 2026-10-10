@@ -12,7 +12,7 @@ extension DesignFlowSnapshotTests {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
     let scene = try EditorShellFixtures.scene(queriesRoot: queriesRoot, in: TestScratch.caseDir)
     let tab = scene.tab
-    let view = tab.view
+    let view = tab.group.view
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 1100, height: 640), styleMask: [.borderless],
       backing: .buffered, defer: false)
@@ -23,7 +23,7 @@ extension DesignFlowSnapshotTests {
     ground.addSubview(view)
     window.contentView = ground
     defer { window.contentView = nil }
-    tab.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
+    tab.group.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
     view.layoutSubtreeIfNeeded()
     pumpMain(until: { scene.isReady }, "git バッジが揃う")
     let handle = view.handle
@@ -33,7 +33,7 @@ extension DesignFlowSnapshotTests {
     }
     let morph = {
       pointer(false)
-      tab.setFaces(.terminalOnly, animated: false)
+      tab.group.setFaces(.terminalOnly, animated: false)
       let x0 = handle.frame.midX
       handle.onGrab?(x0)
       handle.onDrag?(x0 + 28, 0)
@@ -51,13 +51,13 @@ extension DesignFlowSnapshotTests {
             {
               window.appearance = NSAppearance(named: appearance)
               pointer(false)
-              tab.setFaces(layout.faces, animated: false)
+              tab.group.setFaces(layout.faces, animated: false)
             }
           ))
         steps.append(("\(layout.label)_hover\(suffix)", { pointer(true) }))
       }
       steps.append(("morph\(suffix)", morph))
-      steps.append(("seam_rest\(suffix)", { tab.setFaces(split, animated: false) }))
+      steps.append(("seam_rest\(suffix)", { tab.group.setFaces(split, animated: false) }))
       steps.append(("seam_hover\(suffix)", { pointer(true) }))
     }
     for (idx, step) in steps.enumerated() {

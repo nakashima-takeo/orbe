@@ -51,6 +51,8 @@ struct WorkspaceState: Codable, Equatable {
   var rootPath: String
   var activeTab: Int
   var tabs: [TabState]
+  /// 連ごとのエディターと面の配置（根の正規形パスで連を指す）。書くのは状態を持つ連だけ。
+  var groups: [GroupState]
   /// この workspace に最後に切り替えてフォーカスした時刻（MRU 並べ替えのキー）。
   /// optional——一度も前面で使っていない workspace では書かれない（タブ選択でも進む）。無ければ nil（最古扱い）。
   var lastUsedAt: Date?
@@ -65,12 +67,12 @@ struct WorkspaceState: Codable, Equatable {
   var persistentId: UUID
 
   enum CodingKeys: String, CodingKey {
-    case name, rootPath, activeTab, tabs, lastUsedAt, settingsOverride, lastWorktreeBase
+    case name, rootPath, activeTab, tabs, groups, lastUsedAt, settingsOverride, lastWorktreeBase
     case persistentId
   }
 
   init(
-    name: String, rootPath: String, activeTab: Int, tabs: [TabState],
+    name: String, rootPath: String, activeTab: Int, tabs: [TabState], groups: [GroupState] = [],
     lastUsedAt: Date? = nil, settingsOverride: SettingsLayer? = nil,
     lastWorktreeBase: String? = nil, persistentId: UUID = UUID()
   ) {
@@ -78,6 +80,7 @@ struct WorkspaceState: Codable, Equatable {
     self.rootPath = rootPath
     self.activeTab = activeTab
     self.tabs = tabs
+    self.groups = groups
     self.lastUsedAt = lastUsedAt
     self.settingsOverride = settingsOverride
     self.lastWorktreeBase = lastWorktreeBase
@@ -86,13 +89,17 @@ struct WorkspaceState: Codable, Equatable {
 
   /// settingsOverride は 1 キー単位で寛容に読む（`SettingsLayer` 自身の decode）——未知 key・型不一致の
   /// 1 項目で層ごと失わない（global 層と同じ家風）。読めた項目が 1 つも無ければ nil（上書き無し＝global 継承）。
-  /// lastWorktreeBase も読めなければ nil（前回が無いだけで、workspace は失わない）。
+  /// lastWorktreeBase も読めなければ nil（前回が無いだけで、workspace は失わない）。groups は欠落なら空、読めない要素は
+  /// その要素だけを落とす（その連は端末だけ・文書なしで起きる）。
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     name = try c.decode(String.self, forKey: .name)
     rootPath = try c.decode(String.self, forKey: .rootPath)
     activeTab = try c.decode(Int.self, forKey: .activeTab)
     tabs = try c.decode([TabState].self, forKey: .tabs)
+    groups =
+      ((try? c.decodeIfPresent([Lenient<GroupState>].self, forKey: .groups)) ?? nil)?
+      .compactMap(\.value) ?? []
     lastUsedAt = try c.decodeIfPresent(Date.self, forKey: .lastUsedAt)
     let layer = try? c.decode(SettingsLayer.self, forKey: .settingsOverride)
     settingsOverride = layer.flatMap { $0.isEmpty ? nil : $0 }
@@ -101,7 +108,16 @@ struct WorkspaceState: Codable, Equatable {
   }
 }
 
-/// タブのエディターの状態——開いていた文書と、プロジェクト検索の問い（検索語と 3 つの切替。結果は持たない）。文書が無く
+/// 読めない要素だけを落とすための包み（配列の 1 要素の異常で配列全体を失わない）。
+private struct Lenient<Value: Decodable>: Decodable {
+  let value: Value?
+
+  init(from decoder: Decoder) throws {
+    value = try? Value(from: decoder)
+  }
+}
+
+/// 連のエディターの状態——開いていた文書と、プロジェクト検索の問い（検索語と 3 つの切替。結果は持たない）。文書が無く
 /// 問いが既定なら空で、書かない。JSON は 1 段（`open` / `active` / `search`）で、既定の問いは書かず、読めない項目はその
 /// 項目だけを落とす（既定へ）。
 struct EditorState: Codable, Equatable {
@@ -151,31 +167,72 @@ struct EditorState: Codable, Equatable {
   }
 }
 
-/// 1 タブの永続表現。cwd・エージェントセッション・明示タイトル・面の配置・エディターの状態。
+/// 連 1 本の永続表現。根（連のキー）・面の配置・エディターの状態。
+struct GroupState: Codable, Equatable {
+  var root: String
+  /// 面の配置。既定（端末だけ）は書かず、読めなければ既定へ落とす。
+  var faces: FaceLayout
+  /// エディターの状態（開いていた文書・検索の問い）。無ければ書かず、読めなければ nil へ落とす。
+  var editor: EditorState?
+
+  /// `CaseIterable` は TabState と同じ seam。
+  enum CodingKeys: String, CodingKey, CaseIterable {
+    case root, faces, editor
+  }
+
+  init(root: String, faces: FaceLayout = .terminalOnly, editor: EditorState? = nil) {
+    self.root = root
+    self.faces = faces
+    self.editor = editor
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    root = try c.decode(String.self, forKey: .root)
+    faces = ((try? c.decode(FaceLayout.self, forKey: .faces)) ?? .terminalOnly).normalized
+    editor = (try? c.decode(EditorState.self, forKey: .editor)).flatMap { $0.isEmpty ? nil : $0 }
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(root, forKey: .root)
+    if faces != .terminalOnly { try c.encode(faces, forKey: .faces) }
+    if let editor, !editor.isEmpty { try c.encode(editor, forKey: .editor) }
+  }
+}
+
+/// 1 タブの永続表現。cwd・エージェントセッション・明示タイトル。
 struct TabState: Codable, Equatable {
   var cwd: String
   var agent: AgentSession?
   var explicitTitle: String?
-  /// 面の配置。既定（端末だけ）は書かず、読めなければ既定へ落とす（ファイル全体は失わない）。
-  var faces: FaceLayout
-  /// エディターの状態（開いていた文書・検索の問い）。無ければ書かず、読めなければ nil へ落とす（ファイル全体は失わない）。
-  var editor: EditorState?
+  /// version 4 から読んだタブだけが持つ、タブごとだった面の配置とエディターの状態（移行専用。書かない）。
+  /// 連への集約は復元が行う（`WorkspaceState.groupStates`）。
+  var version4: Version4?
+
+  struct Version4: Equatable {
+    var faces: FaceLayout
+    var editor: EditorState?
+  }
 
   /// `CaseIterable` は「フィールドを足して encode / decode を忘れる」を検出する seam
   /// （`WorkspacePersistenceTests` が全キーの往復を見る）。
   enum CodingKeys: String, CodingKey, CaseIterable {
-    case cwd, agent, explicitTitle, faces, editor
+    case cwd, agent, explicitTitle
   }
 
-  init(
-    cwd: String, agent: AgentSession?, explicitTitle: String?, faces: FaceLayout = .terminalOnly,
-    editor: EditorState? = nil
-  ) {
+  private enum Version4Keys: String, CodingKey {
+    case faces, editor
+  }
+
+  /// decoder の userInfo にこのキーが true で入っていれば、version 4 のタブとして旧い配置と状態も読む。
+  static let decodesVersion4 = CodingUserInfoKey(rawValue: "orbe.tabState.version4")!
+
+  init(cwd: String, agent: AgentSession?, explicitTitle: String?, version4: Version4? = nil) {
     self.cwd = cwd
     self.agent = agent
     self.explicitTitle = explicitTitle
-    self.faces = faces
-    self.editor = editor
+    self.version4 = version4
   }
 
   init(from decoder: Decoder) throws {
@@ -183,8 +240,13 @@ struct TabState: Codable, Equatable {
     cwd = try c.decode(String.self, forKey: .cwd)
     agent = try c.decodeIfPresent(AgentSession.self, forKey: .agent)
     explicitTitle = try c.decodeIfPresent(String.self, forKey: .explicitTitle)
-    faces = ((try? c.decode(FaceLayout.self, forKey: .faces)) ?? .terminalOnly).normalized
-    editor = (try? c.decode(EditorState.self, forKey: .editor)).flatMap { $0.isEmpty ? nil : $0 }
+    guard decoder.userInfo[Self.decodesVersion4] as? Bool == true else { return }
+    let old = try decoder.container(keyedBy: Version4Keys.self)
+    version4 = Version4(
+      faces: ((try? old.decode(FaceLayout.self, forKey: .faces)) ?? .terminalOnly).normalized,
+      editor: (try? old.decode(EditorState.self, forKey: .editor)).flatMap {
+        $0.isEmpty ? nil : $0
+      })
   }
 
   func encode(to encoder: Encoder) throws {
@@ -192,8 +254,6 @@ struct TabState: Codable, Equatable {
     try c.encode(cwd, forKey: .cwd)
     try c.encodeIfPresent(agent, forKey: .agent)
     try c.encodeIfPresent(explicitTitle, forKey: .explicitTitle)
-    if faces != .terminalOnly { try c.encode(faces, forKey: .faces) }
-    if let editor, !editor.isEmpty { try c.encode(editor, forKey: .editor) }
   }
 }
 
@@ -206,7 +266,7 @@ struct AgentSession: Codable, Equatable {
 }
 
 enum WorkspacePersistence {
-  static let version = 4
+  static let version = 5
 
   /// テスト用に保存先を差し替える（設定時はこちらを使う）。本番は nil。
   static var fileURLOverride: URL?
@@ -220,9 +280,9 @@ enum WorkspacePersistence {
   }
 
   /// 読み込み。欠落・壊れ・非互換 version は nil（呼び出し側が既定で fallback）。
-  /// version を先に読み、現行（4）は素直に decode、旧 v2 / v3 は移行専用 decoder
-  /// （`WorkspacePersistence+Legacy`）で読んで平坦化する。受理後、次回 save で snapshotFile が
-  /// version:4 で書き直す＝自動移行。
+  /// version を先に読み、現行（5）は素直に decode、v4 はタブごとの旧い配置と状態を移行専用の値として添えて読み
+  /// （連への集約は復元が行う）、旧 v2 / v3 は移行専用 decoder（`WorkspacePersistence+Legacy`）で読んで平坦化する。
+  /// 受理後、次回 save で snapshotFile が現行の version で書き直す＝自動移行。
   ///
   /// 原本が「在るのに使えない」ときは nil を返す前に退避する。直後の既定起動が打つ save が
   /// `.atomic` write で原本を完全に潰すため、ここで残さないと復元手段が消える。
@@ -247,6 +307,10 @@ enum WorkspacePersistence {
     guard let probe = try? JSONDecoder().decode(VersionProbe.self, from: data) else { return nil }
     switch probe.version {
     case version: return try? JSONDecoder().decode(WorkspacesFile.self, from: data)
+    case 4:
+      let decoder = JSONDecoder()
+      decoder.userInfo[TabState.decodesVersion4] = true
+      return try? decoder.decode(WorkspacesFile.self, from: data)
     case 2, 3: return loadLegacy(data)
     default: return nil
     }
@@ -258,5 +322,20 @@ enum WorkspacePersistence {
     enc.outputFormatting = [.prettyPrinted, .sortedKeys]
     guard let data = try? enc.encode(file) else { return }
     try? data.write(to: url, options: .atomic)
+  }
+}
+
+extension WorkspaceState {
+  /// 連ごとのエディターと面の配置を、連のキーで引ける形にする。`keys` はタブごとの連のキー（`tabs` と同じ順。キーの
+  /// 導出はファイルシステムに触るので復元の側が渡す）。version 4 から読んだタブがあれば連ごとに 1 つへ集約し、無ければ
+  /// キーの一致する `groups` を採る。キーの合わない状態は捨てる。
+  func groupStates(keys: [String]) -> [String: GroupState] {
+    if tabs.contains(where: { $0.version4 != nil }) { return version4GroupStates(keys: keys) }
+    let wanted = Set(keys)
+    var states: [String: GroupState] = [:]
+    for group in groups where wanted.contains(group.root) && states[group.root] == nil {
+      states[group.root] = group
+    }
+    return states
   }
 }

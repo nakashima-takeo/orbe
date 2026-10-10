@@ -23,7 +23,7 @@ extension DesignFlowSnapshotTests {
     let pane = scene.pane
     let tab = scene.tab
     let readme = try XCTUnwrap(
-      tab.editor.documents.first { $0.url.lastPathComponent == "README.md" })
+      tab.group.editor.documents.first { $0.url.lastPathComponent == "README.md" })
     try flow(
       "editor_shell", size: NSSize(width: 1100, height: 640), render: { scene.view },
       steps: [
@@ -43,7 +43,10 @@ extension DesignFlowSnapshotTests {
             pumpMain(until: { readme.isDiskChanged }, "外部変更の印")
           }
         ),
-        ("empty", { for document in tab.editor.documents { tab.editor.close(document) } }),
+        (
+          "empty",
+          { for document in tab.group.editor.documents { tab.group.editor.close(document) } }
+        ),
       ])
   }
 
@@ -71,14 +74,14 @@ extension DesignFlowSnapshotTests {
     let pane = scene.pane
     let tab = scene.tab
     let shallow = try XCTUnwrap(
-      tab.editor.documents.first { $0.url.lastPathComponent == "tokens.json" })
+      tab.group.editor.documents.first { $0.url.lastPathComponent == "tokens.json" })
     let deep = try XCTUnwrap(
-      tab.editor.documents.first { $0.url.lastPathComponent == "FileTree.swift" })
+      tab.group.editor.documents.first { $0.url.lastPathComponent == "FileTree.swift" })
     scene.warmUp(size: NSSize(width: 1100, height: 240))
     pane.window?.appearance = NSAppearance(named: .darkAqua)
     let steps: [(label: String, action: () -> Void)] = [
-      ("shallow_active", { tab.editor.activate(shallow) }),
-      ("deep_active", { tab.editor.activate(deep) }),  // 選択行（深さ 4）が可視位置へ
+      ("shallow_active", { tab.group.editor.activate(shallow) }),
+      ("deep_active", { tab.group.editor.activate(deep) }),  // 選択行（深さ 4）が可視位置へ
       ("new_file_input", { pane.shell.createFile() }),  // 入力行が可視位置に生まれる
     ]
     for (idx, step) in steps.enumerated() {
@@ -135,7 +138,7 @@ extension DesignFlowSnapshotTests {
     let scene = try editorScene()
     defer { scene.cleanup() }
     let pane = scene.pane
-    let editor = scene.tab.editor
+    let editor = scene.tab.group.editor
     let directory = scene.directory
     let tokens = directory.appendingPathComponent("docs/design/tokens.json")
     let fileTree = try XCTUnwrap(

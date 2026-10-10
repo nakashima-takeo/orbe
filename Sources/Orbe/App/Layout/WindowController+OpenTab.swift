@@ -24,8 +24,8 @@ extension WindowController {
   ) -> OpenedTab? {
     guard workspaces.indices.contains(workspaceIndex) else { return nil }
     let initialCwd = cwd ?? store.newTabCwd(inWorkspaceAt: workspaceIndex)
-    let tab = wire(
-      TerminalTab(cwd: initialCwd, command: command, env: env, editorSurfaces: editorSurfaces))
+    let group = group(for: initialCwd, in: workspaces[workspaceIndex])
+    let tab = wire(TerminalTab(cwd: initialCwd, group: group, command: command, env: env))
     return place(tab, workspaceIndex: workspaceIndex, selects: selects)
   }
 
@@ -38,10 +38,10 @@ extension WindowController {
     selects: Bool = true
   ) -> OpenedTab? {
     guard workspaces.indices.contains(workspaceIndex) else { return nil }
-    let tab = makeTab(
-      from: TabState(
-        cwd: cwd ?? store.newTabCwd(inWorkspaceAt: workspaceIndex), agent: session,
-        explicitTitle: nil))
+    let state = TabState(
+      cwd: cwd ?? store.newTabCwd(inWorkspaceAt: workspaceIndex), agent: session,
+      explicitTitle: nil)
+    let tab = makeTab(from: state, group: group(for: state.cwd, in: workspaces[workspaceIndex]))
     if let firstInput { tab.addWakeInput(firstInput) }
     let opened = place(tab, workspaceIndex: workspaceIndex, selects: selects)
     refreshAgentSessionTabs()
@@ -75,11 +75,12 @@ extension WindowController {
     let ws = workspaces[index]
     guard index == activeWorkspace else { return materializeOffscreen(tab, in: ws) }
     if ws.tabs.count == 1 { return select(0) }
-    mountTab(tab, in: ws, visible: false)
+    mountTab(tab, in: ws)
     refreshChrome()
   }
 
-  /// 背景 workspace に生えたタブの surface を、前面化せずに起こす。
+  /// 背景 workspace に生えたタブの surface を、前面化せずに起こす。端末をその連の器へ差し（照合）、器ごと一瞬
+  /// attach して外す。器に入っているのは materialize 済みの端末だけなので、同じ連の休眠タブは起きない。
   ///
   /// surface は「一度 window に attach された時点で誕生し、detach しても生き続ける」
   /// （`SurfaceView.viewDidMoveToWindow` は `surface == nil` の初回だけ生成し、解放は deinit のみ）。
@@ -100,15 +101,16 @@ extension WindowController {
     // 素シェルを背景 workspace に起こす場合 `agentSlot` は変わらず、`activated` の反転だけが起きる。
     // ここで要求しないと減光解除が chrome 更新点（`flushChrome`）へ届かない。
     refreshChrome()
-    tab.view.autoresizingMask = [.width, .height]
-    tab.view.frame = model.content.bounds
-    tab.view.isHidden = true
+    reconcileContent()
+    let view = tab.group.view
+    view.isHidden = true
     // surface のサイズは `SurfaceScrollView.layout()` だけが配り、それが走るのは window の display
     // サイクル。同じ turn で detach する以上そのサイクルは来ないので、ここで同期に確定させる
     // ——さもないと `SurfaceView` は 0 サイズのまま `createSurface` を迎え、`updateSize` の
     // ゼロ面積ガードに弾かれて pty が libghostty 既定サイズのまま起きる（前面化するまで直らない）。
-    tab.view.layoutSubtreeIfNeeded()
-    model.content.addSubview(tab.view)  // viewDidMoveToWindow → createSurface
-    tab.view.removeFromSuperview()  // detach。surface は生存
+    fitToContent(view)
+    tab.group.materialize()
+    model.content.addSubview(view)  // viewDidMoveToWindow → createSurface
+    view.removeFromSuperview()  // detach。surface は生存
   }
 }

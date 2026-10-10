@@ -13,15 +13,14 @@ import XCTest
 ///
 /// TerminalTab は window 未接続なら libghostty surface を生成しないため、`groupKey` を直接注入した
 /// タブで配列ロジックだけを検証する（キーの導出そのものは `GitWorktreeRootTests` /
-/// `TerminalTabTests+GroupKey` が持つ）。
+/// `TerminalTabTests+GroupKey`・`WindowControllerTabGroupTests` が持つ）。
 final class SessionStoreTabGroupTests: OrbeTestCase {
 
   // MARK: - fixture
 
   /// 所属キー `key` のタブ。タイトルにもキーを置き、失敗メッセージで並びを読めるようにする。
   func tab(_ key: String) -> TerminalTab {
-    let tab = TerminalTab(cwd: "/tmp")
-    tab.groupKey = key
+    let tab = TerminalTab(cwd: "/tmp", group: TabGroup(key: key))
     tab.explicitTitle = key
     return tab
   }

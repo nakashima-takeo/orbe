@@ -12,14 +12,14 @@ import XCTest
 final class EditorSurfaceHostTests: OrbeTestCase {
   func testThePaneAnswersTheSurface() throws {
     let dir = TestScratch.caseDir
-    let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 700)
     defer { window.contentView = nil }
-    let pane = tab.view.editor
+    let pane = tab.group.view.editor
     pane.configure(
       translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
       fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState())
-    let document = try tab.editor.open(try caseFile("a.txt", "x\n"), as: .pinned)
+    let document = try tab.group.editor.open(try caseFile("a.txt", "x\n"), as: .pinned)
     XCTAssertTrue(document.surface.host === pane, "焦点の文書の面を載せる側は pane")
     let inside = dir.appendingPathComponent("src/b c.swift")
     XCTAssertEqual(
@@ -37,9 +37,9 @@ final class EditorSurfaceHostTests: OrbeTestCase {
 
     let other = try caseFile("b.txt", "y\n")
     pane.openFiles([dir, other])
-    XCTAssertEqual(tab.editor.activeDocument?.url, other, "フォルダは開かず、ファイルを開く")
-    XCTAssertEqual(tab.editor.documents.count, 2)
-    XCTAssertNil(tab.editor.preview, "ドロップは普通のタブ")
+    XCTAssertEqual(tab.group.editor.activeDocument?.url, other, "フォルダは開かず、ファイルを開く")
+    XCTAssertEqual(tab.group.editor.documents.count, 2)
+    XCTAssertNil(tab.group.editor.preview, "ドロップは普通のタブ")
   }
 
   /// 変換中に pane が解く chrome キーを押すと、走らせる前に変換を確定する。⌘R（タブの名前。タブに依らない window
@@ -47,13 +47,13 @@ final class EditorSurfaceHostTests: OrbeTestCase {
   /// 確定するので、それだけでは区別にならない）。⌘S は見えている本文を保存する——未確定の
   /// 文字は既に本文にある。
   func testChromeKeysCommitTheCompositionFirst() throws {
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 700)
     defer { window.contentView = nil }
     let url = try caseFile("a.swift", "let a = 1\n")
-    let document = try tab.editor.open(url, as: .pinned)
+    let document = try tab.group.editor.open(url, as: .pinned)
     XCTAssertTrue(document.surface.responder is InputMethodKeyEquivalents, "面の view は窓の根の口に答える")
     window.makeFirstResponder(document.surface.responder)
     let client = try XCTUnwrap(document.surface.responder as? NSTextInputClient)
@@ -61,13 +61,13 @@ final class EditorSurfaceHostTests: OrbeTestCase {
       "あ", selectedRange: NSRange(location: 1, length: 0),
       replacementRange: NSRange(location: NSNotFound, length: 0))
     XCTAssertTrue(client.hasMarkedText())
-    XCTAssertTrue(tab.view.editor.performKeyEquivalent(with: .key("r")))
+    XCTAssertTrue(tab.group.view.editor.performKeyEquivalent(with: .key("r")))
     XCTAssertFalse(client.hasMarkedText(), "chrome キーを走らせる前に確定する")
     client.setMarkedText(
       "あ", selectedRange: NSRange(location: 1, length: 0),
       replacementRange: NSRange(location: 0, length: 1))
     XCTAssertTrue(client.hasMarkedText())
-    XCTAssertTrue(tab.view.editor.performKeyEquivalent(with: .key("s")))
+    XCTAssertTrue(tab.group.view.editor.performKeyEquivalent(with: .key("s")))
     XCTAssertFalse(client.hasMarkedText(), "保存の前に確定する")
     XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "あlet a = 1\n", "見えている本文を保存する")
   }

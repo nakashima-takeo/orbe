@@ -80,7 +80,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
     var captured: AgentSession?
     let state = TabState(
       cwd: "/w", agent: AgentSession(command: "claude", sessionId: "abc-123"), explicitTitle: nil)
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       restoring: state,
       resumeSpawn: { _, session, _ in
         captured = session
@@ -104,7 +104,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   func testRestoreAgentTabFallsBackToShellWhenUnresolved() {
     let state = TabState(
       cwd: "/w", agent: AgentSession(command: "unknown", sessionId: "x"), explicitTitle: nil)
-    let tab = TerminalTab(restoring: state, resumeSpawn: noResume)
+    let tab = TerminalTab.alone(restoring: state, resumeSpawn: noResume)
     XCTAssertEqual(tab.tabState(), state, "休眠のあいだセッション記録は保持される")
 
     tab.recordMaterializationStarted()
@@ -121,7 +121,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   func testAgentWithoutSessionIdKeyLoadsAsNilIdentity() throws {
     let tmp = try workspacesFile()
     let json = """
-      {"version":4,"activeWorkspace":0,"workspaces":[\
+      {"version":\(WorkspacePersistence.version),"activeWorkspace":0,"workspaces":[\
       {"name":"default","rootPath":"/r","activeTab":0,"tabs":[\
       {"cwd":"/r/a","agent":{"command":"claude"}}]}]}
       """
@@ -139,13 +139,13 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   /// sessionId を持たない同一性は、休眠でも稼働中でも tabState に書かない。resume 不能な記録を
   /// ディスクへ増やすと、次の起動で必ず素シェル化する死にチケットが永続する。
   func testTabStateDropsIdentitiesWithoutASessionId() {
-    let dormant = TerminalTab(
+    let dormant = TerminalTab.alone(
       restoring: TabState(
         cwd: "/w", agent: AgentSession(command: "claude", sessionId: nil), explicitTitle: nil),
       resumeSpawn: noResume)
     XCTAssertNil(dormant.tabState().agent, "sessionId 欠落のチケットは保存しない")
 
-    let live = TerminalTab(cwd: "/tmp")
+    let live = TerminalTab.alone(cwd: "/tmp")
     setReportedState(live, "working", command: "claude")
     XCTAssertEqual(
       live.agentSlot.session, AgentSession(command: "claude", sessionId: nil),

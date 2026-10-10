@@ -23,21 +23,21 @@ final class EditorPaneViewTests: OrbeTestCase {
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.borderless],
       backing: .buffered, defer: false)
-    window.contentView = tab.view
-    tab.setFaces(FaceLayout(editorRatio: 0.5, focus: focus), animated: false)
-    tab.view.layoutSubtreeIfNeeded()
+    window.contentView = tab.group.view
+    tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: focus), animated: false)
+    tab.group.view.layoutSubtreeIfNeeded()
     return window
   }
 
   func testShowingADocumentMountsItsSurfaceAndMovesTheFocusTarget() throws {
-    let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.group.view.editor
     let window = hosted(tab)
     window.makeFirstResponder(pane)
     XCTAssertTrue(tab.focusTarget === pane, "空状態の行き先は pane")
 
     let url = try file("a.swift", "let a = 1\n")
-    let document = try XCTUnwrap(try tab.editor.open(url, as: .pinned))
+    let document = try XCTUnwrap(try tab.group.editor.open(url, as: .pinned))
     XCTAssertTrue(pane.document === document, "セッションの変化が器へ写る")
     XCTAssertTrue(document.surface.view.superview === pane)
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect, "骨の右下の本体いっぱい")
@@ -48,7 +48,7 @@ final class EditorPaneViewTests: OrbeTestCase {
       NSPoint(x: pane.bodyRect.midX, y: pane.bodyRect.midY), to: pane.superview)
     XCTAssertFalse(pane.hitTest(point) === pane, "文書を見せている間は中身がクリックを受ける")
 
-    tab.editor.close(document)
+    tab.group.editor.close(document)
     XCTAssertNil(pane.document)
     XCTAssertNil(document.surface.view.superview)
     XCTAssertTrue(tab.focusTarget === pane)
@@ -57,24 +57,24 @@ final class EditorPaneViewTests: OrbeTestCase {
   }
 
   func testSurfaceFocusMovesTheTabsFocusToTheEditor() throws {
-    let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let document = try tab.editor.open(try file("b.txt", "x"), as: .pinned)
+    let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let document = try tab.group.editor.open(try file("b.txt", "x"), as: .pinned)
     let window = hosted(tab, focus: .terminal)
-    XCTAssertEqual(tab.faces.focus, .terminal)
+    XCTAssertEqual(tab.group.faces.focus, .terminal)
 
     window.makeFirstResponder(document.surface.responder)
-    XCTAssertEqual(tab.faces.focus, .editor, "テキスト面の焦点が面の記憶へ写る")
+    XCTAssertEqual(tab.group.faces.focus, .editor, "テキスト面の焦点が面の記憶へ写る")
     window.orderOut(nil)
   }
 
   /// 文書を切り替えると見せる面が入れ替わり、それぞれの文書の本文・undo はその文書の面に残る
   /// （面を 1 つ使い回して本文を差し替えていれば、戻ったときに undo も本文も失われる）。
   func testSwitchingDocumentsSwapsTheSurfacesAndKeepsEachDocumentsState() throws {
-    let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.group.view.editor
     let window = hosted(tab)
-    let first = try tab.editor.open(try file("one.txt", "one"), as: .pinned)
-    let second = try tab.editor.open(try file("two.txt", "two"), as: .pinned)
+    let first = try tab.group.editor.open(try file("one.txt", "one"), as: .pinned)
+    let second = try tab.group.editor.open(try file("two.txt", "two"), as: .pinned)
     window.makeFirstResponder(second.surface.responder)
 
     first.surface.responder.keyDown(with: .key("X", []))
@@ -82,7 +82,7 @@ final class EditorPaneViewTests: OrbeTestCase {
     XCTAssertTrue(pane.document === second, "見せているのは焦点の文書の面")
     XCTAssertNil(first.surface.view.superview, "焦点でない文書の面は外れている")
 
-    tab.editor.activate(first)
+    tab.group.editor.activate(first)
     XCTAssertTrue(pane.document === first)
     XCTAssertTrue(first.surface.view.superview === pane)
     XCTAssertNil(second.surface.view.superview)
@@ -97,34 +97,34 @@ final class EditorPaneViewTests: OrbeTestCase {
   /// 前の面を外すと AppKit が first responder を窓へ戻すので、「中にあった」は外す前に取っていなければ
   /// ならない——外した後に見ると焦点は窓に落ちたままになり、切り替えても閉じても打鍵の行き先が消える。
   func testSwappingTheShownDocumentKeepsTheFocusInsideThePane() throws {
-    let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hosted(tab)
-    let first = try tab.editor.open(try file("p.txt", "p"), as: .pinned)
-    let second = try tab.editor.open(try file("q.txt", "q"), as: .pinned)
+    let first = try tab.group.editor.open(try file("p.txt", "p"), as: .pinned)
+    let second = try tab.group.editor.open(try file("q.txt", "q"), as: .pinned)
     window.makeFirstResponder(second.surface.responder)
 
-    tab.editor.activate(first)
+    tab.group.editor.activate(first)
     XCTAssertTrue(window.firstResponder === first.surface.responder, "切り替えた先の面へ移る")
 
-    tab.editor.close(first)
+    tab.group.editor.close(first)
     XCTAssertTrue(window.firstResponder === second.surface.responder, "閉じたら残る文書の面へ移る")
 
-    tab.editor.close(second)
-    XCTAssertTrue(window.firstResponder === tab.view.editor, "最後の文書を閉じたら面自身へ")
+    tab.group.editor.close(second)
+    XCTAssertTrue(window.firstResponder === tab.group.view.editor, "最後の文書を閉じたら面自身へ")
     window.orderOut(nil)
   }
 
   /// 面の外（端末）に焦点があるときに文書を開いても、焦点は奪わない。
   func testOpeningADocumentDoesNotStealFocusFromOutsideThePane() throws {
-    let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hosted(tab, focus: .terminal)
     let outsider = NSTextField(frame: .zero)
-    tab.view.addSubview(outsider)
+    tab.group.view.addSubview(outsider)
     window.makeFirstResponder(outsider)
 
-    let document = try tab.editor.open(try file("d.txt", "x"), as: .pinned)
+    let document = try tab.group.editor.open(try file("d.txt", "x"), as: .pinned)
 
-    XCTAssertTrue(tab.view.editor.document === document, "面の中身は入れ替わる")
+    XCTAssertTrue(tab.group.view.editor.document === document, "面の中身は入れ替わる")
     XCTAssertFalse(
       window.firstResponder === document.surface.responder, "面の外にある焦点は動かさない")
     window.orderOut(nil)
@@ -133,15 +133,15 @@ final class EditorPaneViewTests: OrbeTestCase {
   /// 面のクリックは焦点の行き先（文書があればテキスト面）へ焦点を運ぶ。pane 自身を指すと、テキスト面が
   /// 覆っていない余白を押しただけで打鍵が消える。
   func testMouseDownFocusesTheFocusTarget() throws {
-    let tab = TerminalTab(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.group.view.editor
     let window = hosted(tab)
     window.makeFirstResponder(nil)
 
     pane.mouseDown(with: .mouse(.leftMouseDown, at: pane.centerInWindow, in: window))
     XCTAssertTrue(window.firstResponder === pane, "空状態では面自身")
 
-    let document = try tab.editor.open(try file("m.txt", "x"), as: .pinned)
+    let document = try tab.group.editor.open(try file("m.txt", "x"), as: .pinned)
     window.makeFirstResponder(nil)
     pane.mouseDown(with: .mouse(.leftMouseDown, at: pane.centerInWindow, in: window))
     XCTAssertTrue(window.firstResponder === document.surface.responder, "文書があればテキスト面")

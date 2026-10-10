@@ -1,7 +1,7 @@
 import AppKit
 
 /// 面の clip の器。中身を面いっぱいに置き、分割中の焦点の印（面のキー色の細い帯）を中身の上辺へ重ねる——
-/// 印は場所を取らないので、焦点が移っても中身は動かない。
+/// 印は場所を取らないので、焦点が移っても中身は動かない。中身は何枚でも差せ、印は常にその上に重なる。
 final class FaceClipView: NSView {
   private let mark = FocusMarkView()
   /// 印の色。nil なら印を出さない。
@@ -10,17 +10,21 @@ final class FaceClipView: NSView {
     set { mark.color = newValue }
   }
 
-  init(content: NSView) {
-    super.init(frame: .zero)
+  override init(frame: NSRect) {
+    super.init(frame: frame)
     wantsLayer = true
     clipsToBounds = true
-    content.autoresizingMask = []
-    addSubview(content)
     addSubview(mark)
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
   override var isFlipped: Bool { true }
+
+  /// 中身を差す（印の下）。
+  func addContent(_ content: NSView) {
+    content.autoresizingMask = []
+    addSubview(content, positioned: .below, relativeTo: mark)
+  }
 
   override func setFrameSize(_ newSize: NSSize) {
     super.setFrameSize(newSize)

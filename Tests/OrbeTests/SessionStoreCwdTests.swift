@@ -26,13 +26,13 @@ final class SessionStoreCwdTests: OrbeTestCase {
 
   /// タブ有り：アクティブタブの cwd（ここでは initialCwd）を継ぎ、rootPath は使わない。
   func testActiveTabCwdWinsOverRootPath() {
-    let store = makeStore(rootPath: "/tmp/ws-root", tabs: [TerminalTab(cwd: "/tmp/tab-cwd")])
+    let store = makeStore(rootPath: "/tmp/ws-root", tabs: [TerminalTab.alone(cwd: "/tmp/tab-cwd")])
     XCTAssertEqual(store.newTabCwd(inWorkspaceAt: 0), "/tmp/tab-cwd")
   }
 
   /// OSC 7 の報告があればそちらが勝つ（`TerminalTab.cwd` の定義）。
   func testReportedPwdWinsOverInitialCwd() {
-    let tab = TerminalTab(cwd: "/tmp/tab-cwd")
+    let tab = TerminalTab.alone(cwd: "/tmp/tab-cwd")
     tab.surface.currentPwd = "/tmp/reported"
     let store = makeStore(rootPath: "/tmp/ws-root", tabs: [tab])
     XCTAssertEqual(store.newTabCwd(inWorkspaceAt: 0), "/tmp/reported")
@@ -56,12 +56,12 @@ final class SessionStoreCwdTests: OrbeTestCase {
   /// アクティブ workspace の選択タブの cwd（報告があれば報告値）——別タブ・別 workspace は見ない。
   func testActiveTabCwdFollowsTheSelectedTabOfTheActiveWorkspace() {
     let background = Workspace(name: "background", rootPath: "/tmp/bg")
-    background.tabs = [TerminalTab(cwd: "/tmp/bg/tab")]
+    background.tabs = [TerminalTab.alone(cwd: "/tmp/bg/tab")]
     background.active = 0
     let active = Workspace(name: "active", rootPath: "/tmp/ws-root")
-    let viewed = TerminalTab(cwd: "/tmp/viewed")
+    let viewed = TerminalTab.alone(cwd: "/tmp/viewed")
     viewed.surface.currentPwd = "/tmp/viewed/reported"
-    active.tabs = [TerminalTab(cwd: "/tmp/other"), viewed]
+    active.tabs = [TerminalTab.alone(cwd: "/tmp/other"), viewed]
     active.active = 1
     let store = SessionStore(workspaces: [background, active], activeWorkspace: 1)
 

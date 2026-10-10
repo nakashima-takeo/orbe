@@ -21,9 +21,9 @@ extension OrbeTestCase {
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: width, height: height),
       styleMask: [.borderless], backing: .buffered, defer: false)
-    window.contentView = tab.view
-    tab.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
-    tab.view.layoutSubtreeIfNeeded()
+    window.contentView = tab.group.view
+    tab.group.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
+    tab.group.view.layoutSubtreeIfNeeded()
     return window
   }
 

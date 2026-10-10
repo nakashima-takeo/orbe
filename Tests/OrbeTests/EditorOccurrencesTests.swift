@@ -28,16 +28,16 @@ final class EditorOccurrencesTests: OrbeTestCase {
   /// 時計を差し替えて、テキスト面に焦点を置いた pane（暗い外観の窓に載せる）。本文は語の外（行頭の空白）から始める
   /// ——焦点が入ると先頭のキャレットで語の出現を取りに行くので、語の上から始めるとその語の地が残る。
   func host(_ text: String, clock: Clock) throws -> Hosted {
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 700, height: 400)
     window.appearance = NSAppearance(named: .darkAqua)
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
     let file = try caseFile("o-\(UUID().uuidString).txt", text)
     let hosted = Hosted(
-      tab: tab, pane: pane, document: try tab.editor.open(file, as: .pinned), window: window)
+      tab: tab, pane: pane, document: try tab.group.editor.open(file, as: .pinned), window: window)
     pane.layoutSubtreeIfNeeded()
     pumpMain(until: { hosted.document.surface.viewport.visibleLines > 0 }, "viewport が出る")
     let occurrences = hosted.pane.occurrences
@@ -155,7 +155,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
     catchUp(hosted.document)
 
     let outside = NSTextField(frame: .zero)
-    hosted.tab.view.addSubview(outside)
+    hosted.tab.group.view.addSubview(outside)
     hosted.window.makeFirstResponder(outside)
     pumpMain(until: { pane.occurrences.wordOccurrences.isEmpty }, "面の外へ出れば消える")
     clock.word = nil
@@ -180,7 +180,7 @@ final class EditorOccurrencesTests: OrbeTestCase {
     RunLoop.main.run(until: Date().addingTimeInterval(0.02))
     XCTAssertEqual(pane.occurrences.wordOccurrences.count, 2, "前提: バーにいる間は残る")
     let outside = NSTextField(frame: .zero)
-    hosted.tab.view.addSubview(outside)
+    hosted.tab.group.view.addSubview(outside)
     hosted.window.makeFirstResponder(outside)
     pumpMain(until: { pane.occurrences.wordOccurrences.isEmpty }, "バーから外へ出れば消える")
     XCTAssertNotNil(pane.searchBar, "バーは開いたまま")

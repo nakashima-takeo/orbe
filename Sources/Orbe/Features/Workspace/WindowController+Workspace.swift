@@ -80,11 +80,12 @@ extension WindowController {
 
   /// workspace を閉じる。`SessionStore.removalBlocker` があれば閉じない。`origin` は呼び手が名乗る（WorkspacePalette の削除は
   /// `.gesture`・`remove_workspace` は `.controlAPI`）——配下のタブが同一性の終わり方として写す。
-  /// 人の操作で、配下のタブのエディターに未保存の文書があれば合計で 1 回 sheet で確認する（`closeTab` と
+  /// 人の操作で、配下の連のエディターに未保存の文書があれば合計で 1 回 sheet で確認する（`closeTab` と
   /// 同じ関門。`store.closeWorkspace` はタブを直接外し `closeTab` を通らない）。
   func closeWorkspace(_ index: Int, origin: TabCloseOrigin) {
     guard workspaces.indices.contains(index), store.removalBlocker(index) == nil else { return }
-    let unsaved = origin == .gesture ? workspaces[index].tabs.flatMap { $0.unsavedDocuments() } : []
+    let unsaved =
+      origin == .gesture ? workspaces[index].groups.flatMap { $0.unsavedDocuments() } : []
     guard !unsaved.isEmpty else {
       performCloseWorkspace(index, origin: origin)
       return

@@ -19,11 +19,11 @@ extension DesignFlowSnapshotTests {
     let pane = scene.pane
     let tab = scene.tab
     let search = pane.projectSearch
-    tab.setFaces(.terminalOnly, animated: false)
+    tab.group.setFaces(.terminalOnly, animated: false)
     try flow(
       "editor_search", size: NSSize(width: 1100, height: 640), render: { scene.view },
       steps: [
-        ("command_shift_f", { tab.findInProject() }),
+        ("command_shift_f", { tab.group.findInProject() }),
         (
           "typed",
           {

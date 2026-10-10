@@ -150,7 +150,7 @@ extension ProjectSearchPaneTests {
   func testClickingMatchesBrowsesInOnePreviewTab() throws {
     let hosted = try host(["a.txt": "needle\n", "b.txt": "needle\n", "c.txt": "needle\n"])
     searchAll(hosted, "needle")
-    let editor = hosted.tab.editor
+    let editor = hosted.tab.group.editor
 
     hosted.search.click(RowID(path: "a.txt", match: 0))
     hosted.search.click(RowID(path: "b.txt", match: 0))
