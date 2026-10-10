@@ -72,6 +72,7 @@ extension TaskStore {
   private static func message(_ error: BackgroundJobError) -> String {
     switch error {
     case .intervalTooShort: "interval must be at least 1 minute"
+    case .intervalTooLong: "interval must be at most 10080 minutes (7 days)"
     case .emptyCommand: "command is empty"
     case .relativeDirectory: "directory must be an absolute path"
     default: "\(error)"

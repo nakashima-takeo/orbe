@@ -40,7 +40,7 @@ let intakeTools: [[String: Any]] = [
         + "{\"error\": 理由} の 1 行だけを出す。agent の取得役には Orbe が同じ出力の形を指示する。"
         + "judge は {agent?（既定 claude）, model, instruction}。指示文は「どんな項目をタスクにするか・タイトルと期限の付け方」"
         + "を書く。判定の agent はツールを持たず、Orbe が渡す新しい項目だけを読み、出力の形は Orbe が決める。"
-        + "when は {everyMinutes: 1 以上} か {dailyAt: [\"09:00\", \"13:00\"]}。"
+        + "when は {everyMinutes: 1〜10080（7 日）} か {dailyAt: [\"09:00\", \"13:00\"]}。"
         + "前の回に無かった項目だけが判定に回り、新しい項目が無い回は判定を起こさない。"
         + "提案はリンク単位で全受信を通じて 1 つ。"
         + "置き換えで fetch のやり方（coverage 以外）か judge が変わると、走っている回を止め、次の回は取れた全件を"

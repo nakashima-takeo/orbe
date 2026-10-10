@@ -28,7 +28,7 @@ let waitConditionTools: [[String: Any]] = [
             "properties": [
               "description": strProp("何が起きたら解けるか（1 行。例「PR #214 にレビューが付いたら」）"),
               "command": strProp("確認のコマンド（終了コード 0 で解ける。成功時は標準出力の 1 行目に起きたことを書く）"),
-              "everyMinutes": intProp("確認の間隔（分。1 以上）"),
+              "everyMinutes": intProp("確認の間隔（分。1〜10080＝7 日）"),
               "deadline": strProp(
                 "期限（ISO 8601 の日時。今より後。時差の無い 2026-10-13T09:00 は Mac のタイムゾーンの時刻）"),
             ],

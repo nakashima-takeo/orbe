@@ -157,6 +157,17 @@ final class BackgroundTimingTests: OrbeTestCase {
     XCTAssertNoThrow(try BackgroundTiming.every(60).validate())
   }
 
+  /// 7 日より長い間隔は断る。極端な値を予定に入れると、番人の時計を組む時点で桁あふれして落ち、保存した受信が
+  /// 起動のたびに落とす。
+  func testIntervalLongerThanSevenDaysIsRejected() {
+    for interval: TimeInterval in [7 * 86400 + 60, 2e17 * 60] {
+      XCTAssertThrowsError(try BackgroundTiming.every(interval).validate()) {
+        XCTAssertEqual($0 as? BackgroundJobError, .intervalTooLong)
+      }
+    }
+    XCTAssertNoThrow(try BackgroundTiming.every(7 * 86400).validate())
+  }
+
   func testDailyTimesAreValidated() {
     XCTAssertThrowsError(try BackgroundTiming.daily([]).validate()) {
       XCTAssertEqual($0 as? BackgroundJobError, .noTimesOfDay)

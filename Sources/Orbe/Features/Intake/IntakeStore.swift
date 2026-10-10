@@ -309,6 +309,7 @@ extension BackgroundJobError {
   var message: String {
     switch self {
     case .intervalTooShort: "the interval must be at least 1 minute"
+    case .intervalTooLong: "the interval must be at most 10080 minutes (7 days)"
     case .noTimesOfDay: "no times of day"
     case .invalidTimeOfDay: "a time of day is out of range"
     case .emptyCommand: "command is empty"
