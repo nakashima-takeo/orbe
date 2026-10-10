@@ -153,4 +153,17 @@ extension WindowControllerReportAgentTests {
       XCTAssertNil(wc.model.taskPalette)
     }
   }
+
+  /// agent のピル・ドロップダウンの行のクリック（`focusAttentionTab`）も、差し替えてはならない画面の間は裏のタブへ
+  /// 移らない（焦点だけが裏の端末へ移ると、画面に向けた esc・↵ が agent に届く）。
+  func testAgentPillClickKeepsModalOverlay() throws {
+    let (wc, tabs) = try makeControllerAndTwoActivatedWorkspaces()
+    let active = wc.activeWorkspace
+    for overlay in [AppShellModel.Overlay.languageSelect, .onboarding, .updateChanges] {
+      wc.model.overlay = overlay
+      wc.focusAttentionTab(tabId: tabs[0].id)
+      XCTAssertEqual(wc.presentedOverlay, overlay)
+      XCTAssertEqual(wc.activeWorkspace, active, "\(overlay): 別の workspace のタブへ移らない")
+    }
+  }
 }
