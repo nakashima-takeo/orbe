@@ -72,9 +72,8 @@ final class IntakeRunner {
   /// 次に予定で回る時刻（止めていれば nil）。過ぎていれば今以前の時刻を返す。
   func nextRunAt(_ intake: Intake) -> Date? {
     guard !intake.paused else { return nil }
-    let now = now()
     switch intake.definition.when.next(
-      after: min(intake.anchor, now), deadline: nil, now: now, calendar: calendar())
+      after: intake.anchor, deadline: nil, now: now(), calendar: calendar())
     {
     case .run(let date): return date
     case .expire: return nil
@@ -153,7 +152,7 @@ final class IntakeRunner {
       attempt.finish(result.startedAt)
       return
     }
-    let open = store.openProposals(in: items)
+    let open = store.openProposals(of: attempt.intakeId, in: items)
     let judge = attempt.definition.judge
     let prompt = IntakePrompts.judge(
       instruction: judge.instruction, items: fresh, open: open, now: now(),
@@ -191,7 +190,7 @@ final class IntakeRunner {
   }
 
   private static func fetchJob(_ fetch: IntakeFetch) -> BackgroundJob {
-    switch fetch {
+    switch fetch.method {
     case .command(let command):
       return .command(command)
     case .agent(let agent):

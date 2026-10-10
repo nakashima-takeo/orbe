@@ -4,8 +4,9 @@ import Observation
 /// 受信と提案の唯一の正（@Observable・main のみ）。`WindowController` が 1 個所有し、制御 API・走らせ役・画面が同じ変異
 /// メソッドを呼ぶ——値の検証と不変条件はここだけが持つ。変異が成功するたびに即座に保存する。
 ///
-/// 提案はリンク単位で全受信を通じて 1 つ。提案が忘れられるのは、そのリンクがどの受信の前回の取得結果からも消えたときだけで、
-/// それまではタスクにした・捨てた・対応済みの提案も覚えていて、同じリンクを再び提案しない。
+/// 提案はリンク単位で全受信を通じて 1 つ。提案が忘れられるのは、どの受信も提案を持たなくなったときだけで、それまでは
+/// タスクにした・捨てた・対応済みの提案も覚えていて、同じリンクを再び提案しない。受信が提案を持つのは、前回の取得結果に
+/// そのリンクがあるとき、または新着の流れの受信が出してまだ人の判断待ちのとき。
 @Observable final class IntakeStore {
   private(set) var intakes: [Intake]
   private(set) var proposals: [IntakeProposal]
@@ -36,8 +37,8 @@ import Observation
     return intake
   }
 
-  /// 定義を丸ごと置き換える。取得か判定が変わったら（`reworked`）、次の回は取れた全件を新しい判定で見直す。
-  /// 止めているかは変えない。
+  /// 定義を丸ごと置き換える。取得のやり方か判定が変わったら（`reworked`）、次の回は取れた全件を新しい判定で見直す。
+  /// 止めているかは変えない。取得の性質が変わって誰も持たなくなった提案は、その場で忘れる。
   func replace(_ id: Int, with definition: IntakeDefinition) throws(IntakeError) -> (
     intake: Intake, reworked: Bool
   ) {
@@ -46,9 +47,10 @@ import Observation
     }
     let definition = try Self.valid(definition)
     let old = intakes[index].definition
-    let reworked = old.fetch != definition.fetch || old.judge != definition.judge
+    let reworked = old.fetch.method != definition.fetch.method || old.judge != definition.judge
     intakes[index].definition = definition
     if reworked { intakes[index].reviewAll = true }
+    _ = forgetUnheld()
     persist()
     return (intakes[index], reworked)
   }
@@ -62,13 +64,13 @@ import Observation
     return intakes[index]
   }
 
-  /// 消す。その受信だけが取っていたリンクの提案は忘れる。
+  /// 消す。その受信だけが持っていた提案は忘れる。
   func delete(_ id: Int) throws(IntakeError) {
     guard let index = intakes.firstIndex(where: { $0.id == id }) else {
       throw .intakeNotFound(id)
     }
     intakes.remove(at: index)
-    _ = forgetUnfetched()
+    _ = forgetUnheld()
     persist()
   }
 
@@ -86,10 +88,14 @@ import Observation
     }
   }
 
-  /// 取れた項目のリンクを持つ、出ている提案（判定が対応済みにできる相手）。
-  func openProposals(in fetched: [IntakeItem]) -> [IntakeProposal] {
+  /// 判定に見せる出ている提案（判定が対応済みにできる相手）。取れた項目のリンクを持つものと、新着の流れの受信なら
+  /// 自分が出して判断待ちのままのもの——新着の流れでは、対応済みの知らせが元の項目と別の項目として届くため。
+  func openProposals(of id: Int, in fetched: [IntakeItem]) -> [IntakeProposal] {
     let links = Set(fetched.map(\.link))
-    return proposals.filter { $0.state == .open && links.contains($0.item.link) }
+    let streams = intake(id)?.definition.fetch.coverage == .newArrivals
+    return proposals.filter {
+      $0.state == .open && (links.contains($0.item.link) || (streams && $0.intakeId == id))
+    }
   }
 
   /// 失敗した回。記録と最後に回った時刻だけを進め、取得済みも提案も動かさない。
@@ -133,7 +139,7 @@ import Observation
         run.judge?.resolved += 1
       }
     }
-    run.withdrawn = forgetUnfetched()
+    run.withdrawn = forgetUnheld()
     record(run, at: index)
     persist()
   }
@@ -146,20 +152,27 @@ import Observation
     intakes[index].lastRunAt = run.startedAt
   }
 
-  /// どの受信の前回の取得結果にも無いリンクの提案を忘れ、そのうち出ていたものの数を返す。止めた受信の取得結果も数える。
-  private func forgetUnfetched() -> Int {
-    let fetched = Set(intakes.flatMap { $0.lastFetched.map(\.link) })
-    let gone = proposals.filter { !fetched.contains($0.item.link) }
-    proposals.removeAll { !fetched.contains($0.item.link) }
-    return gone.filter { $0.state == .open }.count
+  /// どの受信も持たない提案を忘れ、そのうち出ていたものの数を返す。止めた受信も持つ。
+  private func forgetUnheld() -> Int {
+    let held = { (proposal: IntakeProposal) in self.intakes.contains { Self.holds($0, proposal) } }
+    let withdrawn = proposals.filter { $0.state == .open && !held($0) }.count
+    proposals.removeAll { !held($0) }
+    return withdrawn
+  }
+
+  /// 受信が提案を持っているか。前回の取得結果にリンクがあるか、新着の流れの受信が出してまだ人の判断待ちのものか。
+  private static func holds(_ intake: Intake, _ proposal: IntakeProposal) -> Bool {
+    intake.lastFetched.contains { $0.link == proposal.item.link }
+      || (intake.definition.fetch.coverage == .newArrivals && intake.id == proposal.intakeId
+        && proposal.state == .open)
   }
 
   // MARK: - 読むときに導くもの
 
-  /// 提案を棚に出す受信。提案した受信がまだそのリンクを取っていればそれ、いなければ取っている受信のうち ID が最小のもの。
+  /// 提案を棚に出す受信。提案した受信がまだ提案を持っていればそれ、いなければ持っている受信のうち ID が最小のもの。
   func shelf(of proposal: IntakeProposal) -> Intake? {
-    let fetching = intakes.filter { $0.lastFetched.contains { $0.link == proposal.item.link } }
-    return fetching.first { $0.id == proposal.intakeId } ?? fetching.min { $0.id < $1.id }
+    let holding = intakes.filter { Self.holds($0, proposal) }
+    return holding.first { $0.id == proposal.intakeId } ?? holding.min { $0.id < $1.id }
   }
 
   /// 他の受信と前回の取得結果が重なっているリンクの数（重なりのある相手だけ、ID 順）。
@@ -222,7 +235,8 @@ import Observation
 
   // MARK: - 検証
 
-  /// 名前はタスクのタイトルと同じ 1 行の規則（前後の空白を除いて保存）。agent は裏で回せる CLI だけ。
+  /// 名前はタスクのタイトルと同じ 1 行の規則（前後の空白を除いて保存）。agent は裏で回せる CLI だけ。取得役のツールは
+  /// MCP のツールの完全名だけ。
   static func valid(_ definition: IntakeDefinition) throws(IntakeError) -> IntakeDefinition {
     var definition = definition
     do throws(TaskStoreError) {
@@ -230,7 +244,7 @@ import Observation
     } catch {
       throw .invalid("name must be a single non-empty line")
     }
-    switch definition.fetch {
+    switch definition.fetch.method {
     case .command(let command):
       do throws(BackgroundJobError) {
         try BackgroundJob.command(command).validate()
@@ -240,8 +254,11 @@ import Observation
     case .agent(let agent):
       try checkAgent(agent.cli, model: agent.model, "fetch")
       guard !agent.tools.isEmpty else { throw .invalid("fetch: tools are empty") }
-      guard agent.tools.allSatisfy({ !$0.isEmpty }) else {
-        throw .invalid("fetch: a tool name is empty")
+      if let tool = agent.tools.first(where: { !isMCPToolName($0) }) {
+        throw .invalid(
+          "fetch: \(tool) is not a full MCP tool name (mcp__<server>__<tool>); built-in tools, "
+            + "whole servers and wildcards are refused so that fetched text cannot make the "
+            + "fetcher write anything")
       }
       guard !isBlank(agent.request) else { throw .invalid("fetch: request is empty") }
     }
@@ -267,6 +284,14 @@ import Observation
     case nil: throw .invalid("\(role): agent \(cli) is not supported")
     }
     guard !isBlank(model) else { throw .invalid("\(role): model is empty") }
+  }
+
+  /// 取得役は外から届いた文面を読むので、書き込みの手段を渡さないよう、使えるツールを名指しした MCP のツールに限る。
+  private static func isMCPToolName(_ name: String) -> Bool {
+    guard name.hasPrefix("mcp__"), !name.contains("*") else { return false }
+    let rest = name.dropFirst("mcp__".count)
+    guard let separator = rest.range(of: "__") else { return false }
+    return separator.lowerBound > rest.startIndex && separator.upperBound < rest.endIndex
   }
 
   private static func isBlank(_ text: String) -> Bool {

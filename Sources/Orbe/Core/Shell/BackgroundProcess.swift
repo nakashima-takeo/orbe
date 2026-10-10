@@ -245,13 +245,12 @@ final class BackgroundProcess {
 
   /// 行を受け手へ渡し、受け手が終わり方を返したらそれで打ち切る。
   private func deliverLines(_ body: (inout LineSplitter, (Data) -> Bool) -> Bool) {
-    guard case .lines(_, let onLine) = spec.stdout, var splitter = lines else { return }
+    guard case .lines(_, let onLine) = spec.stdout, lines != nil else { return }
     var cut: Ending?
-    let proceeds = body(&splitter) { line in
+    let proceeds = body(&lines!) { line in
       cut = onLine(line)
       return cut == nil
     }
-    lines = splitter
     if !proceeds, let cut { terminate(cut) }
   }
 

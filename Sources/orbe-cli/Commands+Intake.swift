@@ -27,16 +27,23 @@ let intakeUsage = """
   Orbe. A proposal belongs to its link across all intakes.
   set reads the definition from stdin, the same JSON as the MCP tool
   set_intake: {"name", "fetch", "judge", "when"}, all four required.
-    fetch  {"command": "…", "directory": "/abs"}  or
-           {"agent": "claude", "model": "…", "tools": ["mcp__…"], "request": "…"}
+    fetch  {"command": "…", "directory": "/abs", "coverage": "…"}  or
+           {"agent": "claude", "model": "…", "tools": ["mcp__<server>__<tool>"],
+            "request": "…", "coverage": "…"}
+           An agent may use only the MCP tools named in full; built-in tools,
+           whole servers and wildcards are refused.
            A command prints one JSON object per item:
            {"id","link","body","time"} (link http(s), time ISO 8601),
            and fails with a non-zero exit or a single {"error": "…"} line.
+           coverage (required) is "currentSet" when the fetch returns the
+           whole current set: a proposal whose link leaves the fetch is
+           withdrawn. It is "newArrivals" when the fetch returns only new
+           items: a proposal stays until the judge resolves it.
     judge  {"agent": "claude", "model": "…", "instruction": "…"}
     when   {"everyMinutes": 30}  or  {"dailyAt": ["09:00", "13:00"]}
   set without <id> creates an intake and prints its id; with <id> it
-  replaces the whole definition. Changing fetch or judge stops a running
-  run and makes the next run judge every fetched item again.
+  replaces the whole definition. Changing how to fetch or the judge stops
+  a running run and makes the next run judge every fetched item again.
   run starts a run now (paused intakes too) and returns at once; the result
   shows up in list. pause stops only the schedule; resume restarts it.
   list prints one intake per line: id, state (active / paused / running),

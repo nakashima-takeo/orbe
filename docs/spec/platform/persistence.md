@@ -8,7 +8,7 @@ updated: 2026-10-10
 
 アプリを再起動しても作業の構成——workspace・タブ・cwd・エージェントセッション——が戻るための永続層。
 
-保存先は `~/Library/Application Support/<bundle-id>/` 直下。`<bundle-id>` はビルドチャネルごとに異なるため（[channel](channel.md)）、dev（Orbe Dev）と release は state を共有しない。環境変数 `ORBE_STATE_DIR`（非空）を設定するとその dir 直下へ移る——検証用の隔離インスタンス用途で、settings.json・tasks.json・intakes.json・secretary.json・gui.conf・取り込んだ通知音の `sounds/`・[制御 API](../control/api.md) の control.sock も同じ dir に同居する。テスト用にファイル位置を差し替える seam を持つ。
+保存先は `~/Library/Application Support/<bundle-id>/` 直下。`<bundle-id>` はビルドチャネルごとに異なるため（[channel](channel.md)）、dev（Orbe Dev）と release は state を共有しない。環境変数 `ORBE_STATE_DIR`（非空）を設定するとその dir 直下へ移る——検証用の隔離インスタンス用途で、settings.json・tasks.json・intakes.json・secretary.json・gui.conf・取り込んだ通知音の `sounds/`・[制御 API](../control/api.md) の control.sock・エージェントプラグインの実体化先（[plugin-package](../agent/plugin-package.md)）も同じ dir に同居する。テスト用にファイル位置を差し替える seam を持つ。
 
 ## workspaces.json — 構成の永続
 

@@ -15,9 +15,7 @@
 #   プロセス環境は素通りするため、残すと隔離インスタンスが本物へ接続したり旧バンドルの資産を読んだりする。
 # - open は使わない: 起動中のインスタンスを前面化するだけで新ビルドに入れ替わらない。バイナリを直接起こす。
 #
-# エージェントプラグインの実体化先（Application Support/<bundle-id>/agent-plugin）と指紋の記録は ORBE_STATE_DIR で
-# 分かれず、隔離インスタンスも起動するだけで常用と同じ場所へ自分の同梱物を書く。claude はそこを毎セッション読むので、
-# 起こす前に退避し、片付けで戻す。
+# 隔離インスタンスはエージェントプラグインを state dir の下へ実体化し、各 CLI へは登録しない（Orbe 側の規約）。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -63,27 +61,6 @@ kill_wait() {  # pid を止め、消えるまで最大 5 秒待つ
   kill -9 "$pid" 2>/dev/null || true
 }
 
-backup_plugin() {  # <state_dir> <Application Support/<bundle-id>>
-  local backup="$1/plugin-backup" support="$2"
-  mkdir "$backup"
-  printf '%s\n' "$support" >"$backup/support"
-  if [ -e "$support/agent-plugin" ]; then cp -Rp "$support/agent-plugin" "$backup/agent-plugin"; fi
-  if [ -e "$support/agent-plugin.digest" ]; then cp -p "$support/agent-plugin.digest" "$backup/"; fi
-}
-
-restore_plugin() {  # <state_dir>。隔離インスタンスを止めてから呼ぶ。
-  local backup="$1/plugin-backup"
-  [ -f "$backup/support" ] || return 0
-  local support; support="$(cat "$backup/support")"
-  rm -rf "$support/agent-plugin"
-  if [ -e "$backup/agent-plugin" ]; then mv "$backup/agent-plugin" "$support/agent-plugin"; fi
-  # 指紋が変わっていたら、隔離インスタンスが各 CLI へ入れ直している（codex / agy のコピーはその中身のまま）。
-  # 戻さずに消し、次の常用の起動に食い違いとして入れ直させる。
-  if ! cmp -s "$backup/agent-plugin.digest" "$support/agent-plugin.digest"; then
-    rm -f "$support/agent-plugin.digest"
-  fi
-}
-
 do_stop() {
   local state_dir="$1"
   [ -d "$state_dir" ] || { echo "==> 既に片付いている: $state_dir"; return 0; }
@@ -93,7 +70,6 @@ do_stop() {
     kill "$wd" 2>/dev/null || true
   fi
   [ -f "$state_dir/sandbox.pid" ] && kill_wait "$(cat "$state_dir/sandbox.pid")"
-  restore_plugin "$state_dir"
   rm -rf "$state_dir"
   echo "==> 片付け完了: $state_dir"
 }
@@ -110,15 +86,13 @@ do_start() {
   [ -z "$seed" ] || [ -d "$seed" ] || { echo "エラー: --seed のディレクトリ $seed が無い" >&2; exit 1; }
   local bin="$app/Contents/MacOS/Orbe"
   [ -x "$bin" ] || { echo "エラー: $bin が無い。./scripts/build-app.sh でビルドするか、起こす .app を渡せ" >&2; exit 1; }
-  local build_id bundle_id
+  local build_id
   build_id="$(/usr/libexec/PlistBuddy -c 'Print :OrbeBuildID' "$app/Contents/Info.plist" 2>/dev/null || echo unknown)"
-  bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")"
 
   local state_dir; state_dir="$(mktemp -d)"
   local sock="$state_dir/control.sock" log="$state_dir/orbe.log"
   # 見本の state（intakes.json など）は起こす前に置く。起動時に読まれる。
   [ -z "$seed" ] || cp -R "$seed/." "$state_dir/"
-  backup_plugin "$state_dir" "$HOME/Library/Application Support/$bundle_id"
 
   local scrub=(env
     -u ORBE_STATE_DIR -u ORBE_SOCK -u ORBE_TAB
@@ -137,7 +111,7 @@ do_start() {
   "${scrub[@]}" ORBE_STATE_DIR="$state_dir" "$bin" >"$log" 2>&1 &
   local pid=$!
   echo "$pid" >"$state_dir/sandbox.pid"
-  ( sleep "$TTL_SEC"; kill "$pid" 2>/dev/null || true; sleep 1; restore_plugin "$state_dir"; rm -rf "$state_dir" ) >/dev/null 2>&1 &
+  ( sleep "$TTL_SEC"; kill "$pid" 2>/dev/null || true; sleep 1; rm -rf "$state_dir" ) >/dev/null 2>&1 &
   echo $! >"$state_dir/watchdog.pid"
 
   fail() {

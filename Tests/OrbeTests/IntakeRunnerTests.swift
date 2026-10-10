@@ -12,9 +12,9 @@ final class IntakeRunnerTests: OrbeTestCase {
   private let start = Date(timeIntervalSince1970: 1_800_000_000)
   private var now = Date(timeIntervalSince1970: 1_800_000_000)
   private var armed: (date: Date, fire: () -> Void)?
-  private var jobs: FakeJobs!
-  private var store: IntakeStore!
-  private var runner: IntakeRunner!
+  var jobs: FakeJobs!
+  var store: IntakeStore!
+  var runner: IntakeRunner!
 
   override func setUp() {
     jobs = FakeJobs()
@@ -40,7 +40,7 @@ final class IntakeRunnerTests: OrbeTestCase {
     if let armed, armed.date <= date { armed.fire() }
   }
 
-  private func create(_ definition: IntakeDefinition = IntakeStoreTests.definition()) throws
+  func create(_ definition: IntakeDefinition = IntakeStoreTests.definition()) throws
     -> Intake
   {
     try runner.set(nil, definition)
@@ -50,8 +50,7 @@ final class IntakeRunnerTests: OrbeTestCase {
     #"{"id":"\#(id)","link":"https://example.com/\#(id)","body":"\#(id) の本文","time":"2026-10-10T09:00:00Z"}"#
   }
 
-  private func fetched(_ ids: [String], exit: Int32 = 0, stderr: String = "") -> BackgroundRunResult
-  {
+  func fetched(_ ids: [String], exit: Int32 = 0, stderr: String = "") -> BackgroundRunResult {
     BackgroundRunResult(
       commandLine: "fetch", startedAt: now, endedAt: now, ending: .exited(exit),
       output: .command(
@@ -59,13 +58,13 @@ final class IntakeRunnerTests: OrbeTestCase {
         stderr: .init(data: Data(stderr.utf8))))
   }
 
-  private func replied(_ text: String, isError: Bool = false) -> BackgroundRunResult {
+  func replied(_ text: String, isError: Bool = false) -> BackgroundRunResult {
     BackgroundRunResult(
       commandLine: "claude -p", startedAt: now, endedAt: now, ending: .exited(0),
       output: .agent(reply: BackgroundAgentReply(text: text, isError: isError), stderr: .init()))
   }
 
-  private func prompt(_ index: Int) -> String {
+  func prompt(_ index: Int) -> String {
     guard case .agent(let call) = jobs.calls[index].job.work else { return "" }
     return call.prompt
   }
@@ -271,7 +270,7 @@ final class IntakeRunnerTests: OrbeTestCase {
   /// 取得役の agent は固定の枠で依頼され、指定したツールが使えなかった回は失敗として何も進めない。
   func testAgentFetchUsesTheFixedFrameAndFailsWhenToolsAreUnavailable() throws {
     var definition = IntakeStoreTests.definition()
-    definition.fetch = .agent(
+    definition.fetch.method = .agent(
       IntakeAgentFetch(
         cli: "claude", model: "haiku", tools: ["mcp__slack__search"], request: "自分宛の DM"))
     let intake = try create(definition)
@@ -296,7 +295,7 @@ final class IntakeRunnerTests: OrbeTestCase {
   /// 取得役の agent は、最終応答の行を項目として読み、新しい項目を判定へ回す。
   func testAgentFetchReadsItemsFromItsReply() throws {
     var definition = IntakeStoreTests.definition()
-    definition.fetch = .agent(
+    definition.fetch.method = .agent(
       IntakeAgentFetch(
         cli: "claude", model: "haiku", tools: ["mcp__slack__search"], request: "自分宛の DM"))
     let intake = try create(definition)
@@ -326,7 +325,7 @@ final class IntakeRunnerTests: OrbeTestCase {
 }
 
 /// 実行の係の代役。呼ばれた順に番号を振り、止める手と終わらせる口を持つ。
-private final class FakeJobs {
+final class FakeJobs {
   private(set) var calls: [(job: BackgroundJob, completion: (BackgroundRunResult) -> Void)] = []
   private(set) var stopped: [Int] = []
 

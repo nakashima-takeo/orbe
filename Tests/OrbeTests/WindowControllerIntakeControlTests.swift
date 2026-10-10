@@ -167,7 +167,7 @@ final class WindowControllerIntakeControlTests: OrbeTestCase {
     let wc = try launch()
     var definition = IntakeStoreTests.definition(
       when: .daily([.init(hour: 13, minute: 30), .init(hour: 9, minute: 0)]))
-    definition.fetch = .agent(
+    definition.fetch.method = .agent(
       IntakeAgentFetch(
         cli: "claude", model: "haiku", tools: ["mcp__slack__search"], request: "自分宛の DM"))
     let id = try set(wc, definition)

@@ -22,15 +22,14 @@ enum AgentPluginInstaller {
   }
 
   /// テスト用に実体化先を差し替える（設定時はこちらを使う）。本番は nil。
-  /// `stablePluginDir` は `ORBE_STATE_DIR` を見ない固定登録先なので、これが無いとテストの
-  /// `WindowController()` が起動同期で実ホームの application support を書き換える。
+  /// 張らないと、テストの `WindowController()` が起動同期でテスト間共有の state フォルダへ書く。
   static var stablePluginDirOverride: URL?
 
-  /// marketplace へ登録する安定パス（`ORBE_STATE_DIR` 非依存の application support 直下）。
-  /// ビルド固有 ephemeral パスを焼き付けないための固定登録先。
+  /// 実体化先。state フォルダの下に置くので、隔離起動のものは常用のものに触れない。常用の実体化先は marketplace への
+  /// 登録先でもあり、ビルド固有の ephemeral パスを焼き付けないための固定の置き場になる。
   static var stablePluginDir: URL? {
     if let stablePluginDirOverride { return stablePluginDirOverride }
-    return StateDir.appSupport()?.appendingPathComponent("agent-plugin", isDirectory: true)
+    return StateDir.base()?.appendingPathComponent("agent-plugin", isDirectory: true)
   }
 
   /// パッケージのプラグイン名（＝marketplace 名＝`plugins/` 直下の唯一のサブディレクトリ名）。
@@ -106,9 +105,7 @@ enum AgentPluginInstaller {
     digest.map { String(format: "%02x", $0) }.joined()
   }
 
-  /// 最後に各 CLI へ登録できたパッケージの指紋の置き場。CLI への登録は「利用者 × チャネル」に 1 つ
-  /// なので、実体化先と同じく `ORBE_STATE_DIR` を見ない application support 直下に置く（隔離
-  /// インスタンスが入れ直したことを常用側も知る）。実体化の原子的な差し替えに巻き込まれないよう
+  /// 最後に各 CLI へ登録できたパッケージの指紋の置き場。実体化の原子的な差し替えに巻き込まれないよう
   /// 実体化先の中ではなく隣に置く。
   private static var registeredDigestFile: URL? {
     stablePluginDir?.deletingLastPathComponent().appendingPathComponent("agent-plugin.digest")

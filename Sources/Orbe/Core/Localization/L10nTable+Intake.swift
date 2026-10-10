@@ -35,6 +35,14 @@ extension L10n {
     .taskPaletteIntakeHintPick: ("受信", "intake"),
     .taskPaletteIntakeHintBack: ("提案へ", "proposals"),
     .taskPaletteIntakeFetch: ("取得", "Fetch"),
+    .taskPaletteIntakeCurrentSet: (
+      "今の集合 · 取得から消えた提案を下げる",
+      "Current set · drops proposals that leave the fetch"
+    ),
+    .taskPaletteIntakeNewArrivals: (
+      "新着の流れ · 判定が対応済みとした提案だけを下げる",
+      "New arrivals · drops proposals only when the judge resolves them"
+    ),
     .taskPaletteIntakeJudge: ("判定", "Judge"),
     .taskPaletteIntakeLast: ("前回", "Last run"),
     .taskPaletteIntakeOverlaps: ("重なり", "Overlaps"),

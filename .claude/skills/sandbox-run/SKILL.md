@@ -16,7 +16,7 @@ Orbe の新ビルドを、本物の Orbe（常用の workspaces・control.sock�
 - **隔離インスタンスへの操作は `scripts/sandbox-run.sh rpc` だけで行う。** 手元の Orbe MCP ツール（`mcp__orbe__*`）と `orb` CLI は**常用インスタンス**に繋がる。使うと利用者の実タブに目印が打ち込まれたうえ、起こしたバンドルについて何も測らないまま緑になる。
 - **DMG から起こすときはマウント先を指定する**（`hdiutil attach <dmg> -mountpoint <dir> -nobrowse`）。自動命名は同名ボリュームが既にあると `/Volumes/Orbe 1` へ逃げるので、古い DMG が張りっぱなしのとき別バージョンを起こす。
 - **使い捨ては必ず片付ける。** 承認・NG・失敗のいずれで終わっても `stop` を通す。片付けが走らなくても 60 分で自壊するが、それは保険であって手順ではない。
-- **起こしている間は、常用のエージェントプラグインが検証ビルドの中身になる。** 実体化先（`~/Library/Application Support/<bundle-id>/agent-plugin`）と指紋の記録は `ORBE_STATE_DIR` で分かれず、claude はそこを毎セッション読むので、`stop` までは Orbe 内外の claude が検証ビルドの hook と MCP で動く。`start` が起こす前に退避し、`stop`（と自壊）が戻す。隔離インスタンスのオンボーディングで各 CLI へ入れ直したときは、`stop` が指紋の記録を消し、次の常用の起動に入れ直させる。
+- **隔離インスタンスはエージェントプラグインを各 CLI へ登録しない。** 実体化は state dir の下にだけ行い、登録（と登録のためのオンボーディング）は飛ばす——登録は利用者の claude / codex / agy の設定を書き換えるため。隔離インスタンスのタブの agent は、常用の Orbe が登録したプラグイン（hook・MCP のシム）で動き、シムが呼ぶ `orbe-report` / `orbe-mcp` は検証ビルドのもの。プラグインの中身（`app/agent-plugin/`）の変更は、隔離インスタンスでは agent に届かない。
 
 ## 手順
 

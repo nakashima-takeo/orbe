@@ -84,7 +84,7 @@ struct TaskPaletteIntakeContents: View {
   }
 
   @ViewBuilder private var fetch: some View {
-    switch intake.definition.fetch {
+    switch intake.definition.fetch.method {
     case .agent(let agent):
       line(
         [l10n.string(.taskPaletteIntakeAgentFetch), agent.cli, agent.model].joined(
@@ -98,6 +98,7 @@ struct TaskPaletteIntakeContents: View {
         line(l10n.string(.taskPaletteIntakeDirectory) + "  " + directory)
       }
     }
+    line(text.coverage(intake.definition.fetch.coverage))
     line(text.when(intake.definition.when))
   }
 

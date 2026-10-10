@@ -27,8 +27,14 @@ let intakeTools: [[String: Any]] = [
       "受信を作るか、intakeId を渡して丸ごと置き換え、その受信を返す。name・fetch・judge・when の 4 つが全部必須。"
         + "name は「出どころ: 何を取るか」の 1 行（例「Slack: 自分宛の DM・メンション」）。"
         + "範囲は fetch の条件（検索語・期間・宛先）で切る。広すぎる取得は判定の依頼文を大きくし、失敗の元になる。"
-        + "fetch はコマンド {command, directory?}（/bin/sh -c で走る。directory は絶対パス、既定はホーム）か、"
-        + "軽い agent {agent?（既定 claude）, model, tools（使ってよいツール名 1 つ以上。MCP のツールは mcp__<サーバー>__<ツール>）, request（何を取るか）}。"
+        + "fetch はコマンド {command, directory?, coverage}（/bin/sh -c で走る。directory は絶対パス、既定はホーム）か、"
+        + "軽い agent {agent?（既定 claude）, model, tools（使ってよい MCP のツールの完全名 mcp__<サーバー>__<ツール> を 1 つ以上）, "
+        + "request（何を取るか）, coverage}。取得役は外から届いた文面を読むので、組み込みのツール・サーバー単位（mcp__<サーバー>）・"
+        + "ワイルドカードは断られる（文面に仕込まれた指示で書き込みが起きないように）。"
+        + "coverage は取得の性質で必須。\"currentSet\"（取得結果がその時点の全体。例: 自分が担当の未完了課題・"
+        + "自分へのレビュー依頼）は、取得から消えた項目の提案を Orbe が下げる。\"newArrivals\"（取得結果は新着だけ。"
+        + "例: 自分宛の新しい DM・メンション）は、取得から消えても下げず、判定が対応済みとしたときだけ下げる"
+        + "（判定には、この受信が出して人の判断待ちの提案も見せる）。"
         + "コマンドは 1 項目 1 行の JSON {\"id\": 出どころの中で変わらない ID, \"link\": http(s) の URL, \"body\": 本文, "
         + "\"time\": ISO 8601 の時刻} だけを標準出力に出し、取得に失敗したら終了コードを 0 以外にするか "
         + "{\"error\": 理由} の 1 行だけを出す。agent の取得役には Orbe が同じ出力の形を指示する。"
@@ -36,9 +42,10 @@ let intakeTools: [[String: Any]] = [
         + "を書く。判定の agent はツールを持たず、Orbe が渡す新しい項目だけを読み、出力の形は Orbe が決める。"
         + "when は {everyMinutes: 1 以上} か {dailyAt: [\"09:00\", \"13:00\"]}。"
         + "前の回に無かった項目だけが判定に回り、新しい項目が無い回は判定を起こさない。"
-        + "提案はリンク単位で全受信を通じて 1 つで、リンクがどの受信の取得結果からも消えると下がる。"
-        + "置き換えで fetch か judge が変わると、走っている回を止め、次の回は取れた全件を新しい判定で見直す"
-        + "（既に提案のあるリンクは見直さない）。name や when だけの置き換えは走っている回を止めない。"
+        + "提案はリンク単位で全受信を通じて 1 つ。"
+        + "置き換えで fetch のやり方（coverage 以外）か judge が変わると、走っている回を止め、次の回は取れた全件を"
+        + "新しい判定で見直す（既に提案のあるリンクは見直さない）。name・when・coverage だけの置き換えは走っている回を"
+        + "止めない。"
         + "新しく作った受信はすぐには回らない。試すときは run_intake。"
     ),
     (
@@ -50,7 +57,8 @@ let intakeTools: [[String: Any]] = [
           "fetch": [
             "type": "object",
             "description":
-              "コマンド {command, directory?} か agent {agent?, model, tools, request}",
+              "コマンド {command, directory?, coverage} か agent {agent?, model, tools, request, coverage}。"
+              + "coverage は \"currentSet\" か \"newArrivals\"",
           ],
           "judge": [
             "type": "object", "description": "{agent?（既定 claude）, model, instruction}",

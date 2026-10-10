@@ -24,7 +24,7 @@ struct JSONLines<Item: Decodable> {
   let rejected: [Rejection]
 
   /// `truncated` は出力が上限で切られたか。改行で終わっていない最後の行を、切れた行として捨てる。
-  init(_ text: String, truncated: Bool = false, decoder: JSONDecoder = JSONDecoder()) {
+  init(_ text: String, truncated: Bool = false) {
     // CRLF は 1 つの Character なので、LF と並べて区切りに数える。
     var lines = text.split(omittingEmptySubsequences: false) { $0 == "\n" || $0 == "\r\n" }
     let cutLine = truncated && lines.last?.isEmpty == false ? lines.count : nil
@@ -39,7 +39,7 @@ struct JSONLines<Item: Decodable> {
         rejected.append(Rejection(line: number, reason: .truncated))
         continue
       }
-      switch Self.decode(Data(body.utf8), decoder: decoder) {
+      switch Self.decode(Data(body.utf8)) {
       case .success(let item): items.append(item)
       case .failure(let reason): rejected.append(Rejection(line: number, reason: reason))
       }
@@ -48,12 +48,12 @@ struct JSONLines<Item: Decodable> {
     self.rejected = rejected
   }
 
-  private static func decode(_ data: Data, decoder: JSONDecoder) -> Result<Item, Reason> {
+  private static func decode(_ data: Data) -> Result<Item, Reason> {
     guard let value = try? JSONSerialization.jsonObject(with: data, options: .fragmentsAllowed)
     else { return .failure(.notJSON) }
     guard value is [String: Any] else { return .failure(.notObject) }
     do {
-      return .success(try decoder.decode(Item.self, from: data))
+      return .success(try JSONDecoder().decode(Item.self, from: data))
     } catch DecodingError.keyNotFound(let key, let context) {
       return .failure(.missingKey(path(context.codingPath + [key])))
     } catch DecodingError.valueNotFound(_, let context) {

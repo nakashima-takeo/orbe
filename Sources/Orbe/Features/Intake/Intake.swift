@@ -1,5 +1,4 @@
 import Foundation
-import OrbeSessionLog
 
 /// 受信 1 つ。定義（名前・取得・判定・いつ）と、回を重ねて溜まるもの（前回の取得結果・回の記録）を持つ。
 /// 不変条件（ID の一意・定義が正しい）は `IntakeStore` が保証する。
@@ -44,17 +43,31 @@ extension Intake: Codable {
 }
 
 /// 受信の定義。制御 API・MCP・`orb intake set`・intakes.json が同じ形で読み書きする。
-struct IntakeDefinition: Equatable {
+struct IntakeDefinition: Equatable, Codable {
   var name: String
   var fetch: IntakeFetch
   var judge: IntakeJudge
   var when: BackgroundTiming
 }
 
-/// 何を取るか。コマンドは 1 行 1 項目の JSON を自分で出し、agent は渡したツールだけで依頼文どおりに取る。
-enum IntakeFetch: Equatable {
-  case command(BackgroundCommand)
-  case agent(IntakeAgentFetch)
+/// 何をどう取るかと、取れたものが何を表すか。
+struct IntakeFetch: Equatable {
+  var method: Method
+  var coverage: IntakeCoverage
+
+  /// コマンドは 1 行 1 項目の JSON を自分で出し、agent は渡したツールだけで依頼文どおりに取る。
+  enum Method: Equatable {
+    case command(BackgroundCommand)
+    case agent(IntakeAgentFetch)
+  }
+}
+
+/// 取得の性質——取得結果が何を表すか。Orbe が提案を下げるかはこれで決まる。
+enum IntakeCoverage: String {
+  /// その時点の全体（例: 自分が担当の未完了課題）。取得から消えたリンクの提案を下げる。
+  case currentSet
+  /// 新着だけ（例: 自分宛の新しい DM）。取得から消えても下げず、判定が対応済みとしたときだけ下げる。
+  case newArrivals
 }
 
 struct IntakeAgentFetch: Equatable {
@@ -168,220 +181,4 @@ enum IntakeError: Error, Equatable {
   case invalid(String)
   /// 走っている回がある。
   case running(Int)
-}
-
-// MARK: - 永続とワイヤの形
-
-extension IntakeDefinition: Codable {
-  private enum CodingKeys: String, CodingKey {
-    case name, fetch, judge, when
-  }
-}
-
-extension IntakeFetch: Codable {
-  private enum CodingKeys: String, CodingKey {
-    case command, directory, agent, model, tools, request
-  }
-
-  /// `command` があればコマンド、`request` があれば agent（`agent` の既定は claude）。両方・どちらも無いは不正。
-  init(from decoder: Decoder) throws {
-    let c = try decoder.container(keyedBy: CodingKeys.self)
-    switch (c.contains(.command), c.contains(.request)) {
-    case (true, false):
-      self = .command(
-        BackgroundCommand(
-          script: try c.decode(String.self, forKey: .command),
-          directory: try c.decodeIfPresent(String.self, forKey: .directory)))
-    case (false, true):
-      self = .agent(
-        IntakeAgentFetch(
-          cli: try c.decodeIfPresent(String.self, forKey: .agent) ?? "claude",
-          model: try c.decode(String.self, forKey: .model),
-          tools: try c.decode([String].self, forKey: .tools),
-          request: try c.decode(String.self, forKey: .request)))
-    default:
-      throw DecodingError.dataCorrupted(
-        .init(
-          codingPath: c.codingPath,
-          debugDescription: "pass either command (a shell command) or request (an agent fetch)"))
-    }
-  }
-
-  func encode(to encoder: Encoder) throws {
-    var c = encoder.container(keyedBy: CodingKeys.self)
-    switch self {
-    case .command(let command):
-      try c.encode(command.script, forKey: .command)
-      try c.encodeIfPresent(command.directory, forKey: .directory)
-    case .agent(let agent):
-      try c.encode(agent.cli, forKey: .agent)
-      try c.encode(agent.model, forKey: .model)
-      try c.encode(agent.tools, forKey: .tools)
-      try c.encode(agent.request, forKey: .request)
-    }
-  }
-}
-
-extension IntakeJudge: Codable {
-  private enum CodingKeys: String, CodingKey {
-    case agent, model, instruction
-  }
-
-  init(from decoder: Decoder) throws {
-    let c = try decoder.container(keyedBy: CodingKeys.self)
-    cli = try c.decodeIfPresent(String.self, forKey: .agent) ?? "claude"
-    model = try c.decode(String.self, forKey: .model)
-    instruction = try c.decode(String.self, forKey: .instruction)
-  }
-
-  func encode(to encoder: Encoder) throws {
-    var c = encoder.container(keyedBy: CodingKeys.self)
-    try c.encode(cli, forKey: .agent)
-    try c.encode(model, forKey: .model)
-    try c.encode(instruction, forKey: .instruction)
-  }
-}
-
-/// いつの形は `{"everyMinutes": 30}` か `{"dailyAt": ["09:00", "13:00"]}`。
-extension BackgroundTiming: Codable {
-  private enum CodingKeys: String, CodingKey {
-    case everyMinutes, dailyAt
-  }
-
-  init(from decoder: Decoder) throws {
-    let c = try decoder.container(keyedBy: CodingKeys.self)
-    switch (c.contains(.everyMinutes), c.contains(.dailyAt)) {
-    case (true, false):
-      self = .every(TimeInterval(try c.decode(Int.self, forKey: .everyMinutes)) * 60)
-    case (false, true):
-      var times = Set<BackgroundTimeOfDay>()
-      for text in try c.decode([String].self, forKey: .dailyAt) {
-        guard let time = BackgroundTimeOfDay(text) else {
-          throw DecodingError.dataCorruptedError(
-            forKey: .dailyAt, in: c, debugDescription: "not HH:MM: \(text)")
-        }
-        times.insert(time)
-      }
-      self = .daily(times)
-    default:
-      throw DecodingError.dataCorrupted(
-        .init(codingPath: c.codingPath, debugDescription: "pass either everyMinutes or dailyAt"))
-    }
-  }
-
-  func encode(to encoder: Encoder) throws {
-    var c = encoder.container(keyedBy: CodingKeys.self)
-    switch self {
-    case .every(let interval):
-      try c.encode(Int(interval / 60), forKey: .everyMinutes)
-    case .daily(let times):
-      try c.encode(
-        times.sorted { ($0.hour, $0.minute) < ($1.hour, $1.minute) }.map(\.text), forKey: .dailyAt)
-    }
-  }
-}
-
-extension BackgroundTimeOfDay {
-  /// `HH:MM`（2 桁ずつ）。範囲は `BackgroundTiming.validate` が見る。
-  init?(_ text: String) {
-    let parts = text.split(separator: ":", omittingEmptySubsequences: false)
-    guard parts.count == 2, parts.allSatisfy({ $0.count == 2 && $0.allSatisfy(\.isASCII) }),
-      let hour = Int(parts[0]), let minute = Int(parts[1])
-    else { return nil }
-    self.init(hour: hour, minute: minute)
-  }
-
-  var text: String { String(format: "%02d:%02d", hour, minute) }
-}
-
-extension IntakeItem: Codable {
-  private enum CodingKeys: String, CodingKey {
-    case id, link, body, time
-  }
-
-  /// 取得の出力 1 行の関門でもある。id は空でなく、link は http か https の URL、time は ISO 8601。
-  init(from decoder: Decoder) throws {
-    let c = try decoder.container(keyedBy: CodingKeys.self)
-    id = try c.decode(String.self, forKey: .id)
-    guard !id.trimmingCharacters(in: .whitespaces).isEmpty else {
-      throw DecodingError.dataCorruptedError(forKey: .id, in: c, debugDescription: "empty id")
-    }
-    link = try c.decode(String.self, forKey: .link)
-    guard Self.isWebLink(link) else {
-      throw DecodingError.dataCorruptedError(
-        forKey: .link, in: c, debugDescription: "not an http(s) URL")
-    }
-    body = try c.decode(String.self, forKey: .body)
-    let rawTime = try c.decode(String.self, forKey: .time)
-    guard let time = SessionEvent.parseISO8601(rawTime) else {
-      throw DecodingError.dataCorruptedError(
-        forKey: .time, in: c, debugDescription: "not ISO 8601")
-    }
-    self.time = time
-  }
-
-  func encode(to encoder: Encoder) throws {
-    var c = encoder.container(keyedBy: CodingKeys.self)
-    try c.encode(id, forKey: .id)
-    try c.encode(link, forKey: .link)
-    try c.encode(body, forKey: .body)
-    try c.encode(SessionEvent.iso8601(time), forKey: .time)
-  }
-
-  private static func isWebLink(_ text: String) -> Bool {
-    guard let url = URL(string: text), let scheme = url.scheme?.lowercased(),
-      scheme == "http" || scheme == "https", url.host?.isEmpty == false
-    else { return false }
-    return true
-  }
-}
-
-extension IntakeProposal: Codable {
-  private enum CodingKeys: String, CodingKey {
-    case id, intakeId, item, title, due, proposedAt, state, taskId
-  }
-
-  private enum StateName: String, Codable {
-    case open, accepted, dismissed, resolved
-  }
-
-  init(from decoder: Decoder) throws {
-    let c = try decoder.container(keyedBy: CodingKeys.self)
-    id = try c.decode(Int.self, forKey: .id)
-    intakeId = try c.decode(Int.self, forKey: .intakeId)
-    item = try c.decode(IntakeItem.self, forKey: .item)
-    title = try c.decode(String.self, forKey: .title)
-    due = try c.decodeIfPresent(TaskItem.DueDate.self, forKey: .due)
-    proposedAt = try c.decode(Date.self, forKey: .proposedAt)
-    switch try c.decode(StateName.self, forKey: .state) {
-    case .open: state = .open
-    case .accepted: state = .accepted(taskId: try c.decode(Int.self, forKey: .taskId))
-    case .dismissed: state = .dismissed
-    case .resolved: state = .resolved
-    }
-  }
-
-  func encode(to encoder: Encoder) throws {
-    var c = encoder.container(keyedBy: CodingKeys.self)
-    try c.encode(id, forKey: .id)
-    try c.encode(intakeId, forKey: .intakeId)
-    try c.encode(item, forKey: .item)
-    try c.encode(title, forKey: .title)
-    try c.encodeIfPresent(due, forKey: .due)
-    try c.encode(proposedAt, forKey: .proposedAt)
-    try c.encode(state.name, forKey: .state)
-    if case .accepted(let taskId) = state { try c.encode(taskId, forKey: .taskId) }
-  }
-}
-
-extension IntakeProposal.State {
-  /// 永続とワイヤの語（open / accepted / dismissed / resolved）。
-  var name: String {
-    switch self {
-    case .open: "open"
-    case .accepted: "accepted"
-    case .dismissed: "dismissed"
-    case .resolved: "resolved"
-    }
-  }
 }

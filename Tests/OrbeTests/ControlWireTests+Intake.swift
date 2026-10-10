@@ -6,7 +6,8 @@ import XCTest
 /// 受信の 6 動詞の params の語と型検査。定義は intakes.json と同じ形で読み、読めない箇所を -32602 の文に入れる。
 ///
 /// 壊れると何が起きるか: 定義の片方だけの書き換えが形の上で通り、取得か判定が消えた受信ができる。`fetch` がコマンドと
-/// agent の両方の形を持っても黙ってどちらかに落ちる。`paused` に文字列を渡して止めたつもりが再開になる。
+/// agent の両方の形を持っても黙ってどちらかに落ちる。取得の性質の書き忘れが黙ってどちらかに落ち、提案が下がる・下がらないが
+/// AI の意図と食い違う。`paused` に文字列を渡して止めたつもりが再開になる。
 extension ControlWireTests {
   /// 受信の 6 動詞の正しい params 一式（`validRequests` の一部）。
   var intakeRequests: [(method: String, params: [String: Any])] {
@@ -15,7 +16,8 @@ extension ControlWireTests {
       (
         "set_intake",
         [
-          "name": "GitHub: レビュー依頼", "fetch": ["command": "gh api notifications"],
+          "name": "GitHub: レビュー依頼",
+          "fetch": ["command": "gh api notifications", "coverage": "currentSet"],
           "judge": ["model": "haiku", "instruction": "自分がやること"],
           "when": ["everyMinutes": 30],
         ]
@@ -32,6 +34,7 @@ extension ControlWireTests {
       "name": "Slack: 自分宛",
       "fetch": [
         "agent": "claude", "model": "haiku", "tools": ["mcp__slack__search"], "request": "DM",
+        "coverage": "newArrivals",
       ],
       "judge": ["model": "sonnet", "instruction": "自分がやること"],
       "when": ["dailyAt": ["13:00", "09:00"]],
@@ -53,9 +56,11 @@ extension ControlWireTests {
       fake.setIntakes.last?.definition,
       IntakeDefinition(
         name: "Slack: 自分宛",
-        fetch: .agent(
-          IntakeAgentFetch(
-            cli: "claude", model: "haiku", tools: ["mcp__slack__search"], request: "DM")),
+        fetch: IntakeFetch(
+          method: .agent(
+            IntakeAgentFetch(
+              cli: "claude", model: "haiku", tools: ["mcp__slack__search"], request: "DM")),
+          coverage: .newArrivals),
         judge: IntakeJudge(cli: "claude", model: "sonnet", instruction: "自分がやること"),
         when: .daily([.init(hour: 9, minute: 0), .init(hour: 13, minute: 0)])),
       "judge の agent は省略で claude")
@@ -68,6 +73,10 @@ extension ControlWireTests {
     missingWhen["when"] = nil
     var both = definitionParams
     both["fetch"] = ["command": "gh api", "request": "x", "model": "m", "tools": ["Read"]]
+    var noCoverage = definitionParams
+    noCoverage["fetch"] = ["command": "gh api notifications"]
+    var unknownCoverage = definitionParams
+    unknownCoverage["fetch"] = ["command": "gh api notifications", "coverage": "all"]
     var badTime = definitionParams
     badTime["when"] = ["dailyAt": ["9:00"]]
     var minutesAsText = definitionParams
@@ -78,6 +87,11 @@ extension ControlWireTests {
       (
         "取得が 2 つの形", both,
         "invalid fetch: pass either command (a shell command) or request (an agent fetch)"
+      ),
+      ("取得の性質が無い", noCoverage, "missing fetch.coverage"),
+      (
+        "知らない取得の性質", unknownCoverage,
+        "invalid fetch.coverage: pass currentSet or newArrivals"
       ),
       ("HH:MM でない", badTime, "invalid when.dailyAt: not HH:MM: 9:00"),
       ("間隔が文字列", minutesAsText, "invalid when.everyMinutes"),
