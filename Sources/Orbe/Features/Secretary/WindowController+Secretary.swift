@@ -1,15 +1,15 @@
 import Foundation
 
-/// 秘書の係（`Secretary`）を窓に配線する。秘書のタブは Home に選ばずに起こし、会話ごとのタブの索引で見つける。
+/// 秘書の係（`Secretary`）を窓に配線する。秘書のタブは Home に選ばずに起こし、覚えた会話の休眠のタブは全タブから見つける。
 extension WindowController: SecretaryHost {
   func secretaryTab(_ id: Int) -> TerminalTab? {
     controlResolveTab(id)
   }
 
-  /// 索引は chrome の合流点が作り直すので、合流点の外（頼まれた・起動時）では古いことがある。引く前に作り直す。
-  func secretaryTab(session: String) -> TerminalTab? {
-    refreshAgentSessionTabs()
-    return agentSessionTabs.tabs[session].flatMap { controlResolveTab($0.tabId) }
+  func secretaryDormantTab(session: String) -> TerminalTab? {
+    store.allTabs().lazy.map(\.tab).first {
+      $0.isDormant && $0.agentSlot.session?.sessionId == session
+    }
   }
 
   var secretaryClaude: AgentCLI? {

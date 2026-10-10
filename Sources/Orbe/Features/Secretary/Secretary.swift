@@ -4,8 +4,8 @@ import Foundation
 protocol SecretaryHost: AnyObject {
   /// 起動中のタブ（休眠を含む）。閉じていれば nil。
   func secretaryTab(_ id: Int) -> TerminalTab?
-  /// その会話を持つタブ（生きているものを休眠より優先）。
-  func secretaryTab(session: String) -> TerminalTab?
+  /// その会話を持つ休眠のタブ。
+  func secretaryDormantTab(session: String) -> TerminalTab?
   /// 検出済みの claude。
   var secretaryClaude: AgentCLI? { get }
   /// Home に新しいタブで `command` を選ばずに起こす。起こせなければ nil。
@@ -30,8 +30,9 @@ protocol SecretaryHost: AnyObject {
 /// - 届けるのは手が空いた秘書のタブ（会話へ今貼ってよく、送った後なら送った時刻より後に状態が変わった）に 1 件ずつ。
 ///   起こした直後も、最初の idle を待ってから貼る——届け方を 1 通りにして、「送った後の done / idle まで次を送らない」を
 ///   1 つの規則で守る。
-/// - 覚えた会話で起こしたタブが会話を報告しないまま閉じたら、その会話はもう再開できないとみなして外し、溜めがあれば
-///   新しい claude で 1 度だけ起こし直す。新しく起こしたタブが同じく閉じても起こし直さない（溜めは次に頼んだときへ）。
+/// - 覚えた会話で起こしたタブが、会話を報告しないまま claude が終わって閉じたら、その会話はもう再開できないとみなして
+///   外し、溜めがあれば新しい claude で 1 度だけ起こし直す。新しく起こしたタブが同じく閉じても、人や制御 API が閉じても
+///   起こし直さない（溜めは次に頼んだときへ）。
 final class Secretary {
   /// 頼みの受け付けの結果。
   enum Acceptance: Equatable {
@@ -60,9 +61,11 @@ final class Secretary {
 
   private struct Remembered {
     let tabId: Int
-    var origin: Origin
+    let origin: Origin
     /// 会話を報告した（状態の報告と会話 ID を持った）ことがある。
     var reported: Bool
+    /// 閉じ方（閉じたときだけ）。
+    var closedBy: TabCloseOrigin?
   }
 
   private(set) var record: SecretaryFile
@@ -127,6 +130,12 @@ final class Secretary {
     return launchArguments
   }
 
+  /// タブを閉じる直前（閉じ方を覚える。覚えた会話が再開できないとみなすのは claude が終わって閉じたときだけ）。
+  func tabClosing(_ id: Int, origin: TabCloseOrigin) {
+    guard remembered?.tabId == id else { return }
+    remembered?.closedBy = origin
+  }
+
   private var launchArguments: [String] {
     ["--append-system-prompt", SecretaryText.instructions(localization.language)]
   }
@@ -136,8 +145,8 @@ final class Secretary {
   func cycle(mayLaunch: Bool) {
     guard let host else { return }
     forgetClosedTab(host)
-    if remembered == nil, let id = record.sessionId, let found = host.secretaryTab(session: id),
-      found.isDormant
+    if remembered == nil, let id = record.sessionId,
+      let found = host.secretaryDormantTab(session: id)
     {
       remember(found, origin: .found)
     }
@@ -152,7 +161,7 @@ final class Secretary {
     guard let closed = remembered, host.secretaryTab(closed.tabId) == nil else { return }
     remembered = nil
     sentAt = nil
-    guard !closed.reported, closed.origin == .resumed else { return }
+    guard !closed.reported, closed.origin == .resumed, closed.closedBy == .process else { return }
     record.sessionId = nil
     save()
     guard !record.pending.isEmpty else { return }

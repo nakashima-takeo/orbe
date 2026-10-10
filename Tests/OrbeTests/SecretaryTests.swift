@@ -16,10 +16,10 @@ import XCTest
 ///
 /// claude は必ず偽物（`stageFakeAgent`。入力を反響し続ける）。
 final class SecretaryTests: OrbeTestCase {
-  private let homeId = UUID()
+  let homeId = UUID()
 
   /// 前面は main（素のタブ 1 枚）、背景に Home（`homeTabs`）。
-  private func launch(
+  func launch(
     _ file: SecretaryFile? = nil, homeTabs: [TabState] = [], stage: Bool = true
   ) throws -> WindowController {
     if stage { _ = try stageFakeAgent("claude") }
@@ -46,13 +46,13 @@ final class SecretaryTests: OrbeTestCase {
     return wc
   }
 
-  private func homeTabs(_ wc: WindowController) throws -> [TerminalTab] {
+  func homeTabs(_ wc: WindowController) throws -> [TerminalTab] {
     try XCTUnwrap(wc.workspaces.first { $0.persistentId == homeId }).tabs
   }
 
   /// 偽の状態報告。本物の報告は agent のプロセスから来るので、端末にプロセスが起きてから送る（報告は前面のプロセス
   /// グループを添える）。
-  private func report(_ wc: WindowController, _ tab: TerminalTab, _ state: String, _ id: String) {
+  func report(_ wc: WindowController, _ tab: TerminalTab, _ state: String, _ id: String) {
     XCTAssertTrue(
       waitUntil(ControlProcess.tabSettleTimeout) { tab.surface.foregroundProcessGroup != nil },
       "端末のプロセスが起きない")
@@ -63,18 +63,18 @@ final class SecretaryTests: OrbeTestCase {
     wc.flushChrome()
   }
 
-  private func screen(_ tab: TerminalTab) -> String {
+  func screen(_ tab: TerminalTab) -> String {
     tab.surface.controlReadText(scrollback: true) ?? ""
   }
 
   /// 画面に `needle` が現れるまで待つ。
-  private func waitForScreen(_ tab: TerminalTab, contains needle: String) {
+  func waitForScreen(_ tab: TerminalTab, contains needle: String) {
     let seen = waitUntil(ControlProcess.tabSettleTimeout) { self.screen(tab).contains(needle) }
     XCTAssertTrue(seen, "タブに \"\(needle)\" が出ない: \(screen(tab))")
   }
 
   /// 少し待っても画面に現れない。
-  private func assertNeverOnScreen(_ tab: TerminalTab, _ needle: String) {
+  func assertNeverOnScreen(_ tab: TerminalTab, _ needle: String) {
     XCTAssertFalse(waitUntil(1) { self.screen(tab).contains(needle) }, "まだ届けない: \(needle)")
   }
 
@@ -151,6 +151,11 @@ final class SecretaryTests: OrbeTestCase {
     let resumed = try XCTUnwrap(try homeTabs(wc).first)
     let command = try XCTUnwrap(resumed.surface.initialCommand)
     XCTAssertTrue(command.hasPrefix("claude --resume s-2 --append-system-prompt "), command)
+
+    report(wc, resumed, "idle", "s-2")
+    wc.closeTab(resumed, origin: .process)
+    wc.flushChrome()
+    XCTAssertEqual(wc.secretary.record.sessionId, "s-2", "会話を報告した後に閉じた会話は捨てない")
   }
 
   /// 覚えた会話で起こしたタブが会話を報告しないまま閉じたら、その会話を捨てて新しい claude で 1 度だけ起こし直す。
