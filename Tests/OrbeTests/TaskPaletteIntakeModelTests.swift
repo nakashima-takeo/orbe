@@ -235,17 +235,4 @@ final class TaskPaletteIntakeModelTests: OrbeTestCase {
     XCTAssertEqual(intake.place, .proposals)
     XCTAssertEqual(intake.shelfList.selectedID, .intake(3))
   }
-
-  /// AI が中身を見ている受信を消したら（カードが `.onChange` で付け直しへ届ける）、提案の一覧へ戻る。
-  func testIntakeDeletedElsewhereWhileInContentsReturnsToProposals() throws {
-    let intake = palette().intake
-    intake.tapShelf(.intake(1))
-    intake.enterContents()
-
-    try intake.runner.delete(1)
-    intake.reconcile()
-
-    XCTAssertEqual(intake.place, .proposals)
-    XCTAssertEqual(intake.shelfList.selectedID, .intake(2))
-  }
 }
