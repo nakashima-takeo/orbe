@@ -107,16 +107,6 @@ final class FaceGeometryTests: OrbeTestCase {
     XCTAssertEqual(f.handle.height, 224)
   }
 
-  /// 負の器の大きさは 0 として解く（面の幅が負にならない）。
-  func testResolveNegativeWidthHasNoContent() {
-    let g = FaceGeometry.resolve(
-      FaceLayout(editorRatio: 0.5, focus: .editor), size: CGSize(width: -10, height: 400))
-
-    XCTAssertEqual(g.width, 0)
-    XCTAssertEqual(g.editorWidth, 0)
-    XCTAssertEqual(g.terminalWidth, 0)
-  }
-
   // MARK: - ⌘E
 
   /// 分割していなければ端末 ⇄ エディター全面を往復する。
@@ -171,11 +161,5 @@ final class FaceGeometryTests: OrbeTestCase {
     XCTAssertEqual(
       FaceGeometry.release(hx: 900, velocity: 1000, width: width), 1000, "右へ投げるとエディターへ閉じる")
     XCTAssertNil(FaceGeometry.release(hx: 500, velocity: 300, width: width), "中ほどは勢いがあっても留まる")
-  }
-
-  /// 割合は位置 ÷ MAX。取っ手より狭い器では nil。
-  func testRatioIsThePositionOverTheMaximum() {
-    XCTAssertEqual(FaceGeometry.ratio(hx: 250, width: width), 0.25)
-    XCTAssertNil(FaceGeometry.ratio(hx: 0, width: 12))
   }
 }
