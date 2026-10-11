@@ -128,7 +128,7 @@ final class FaceGeometryTests: OrbeTestCase {
     XCTAssertEqual(FaceGeometry.toggle(resolved(0.5, .editor)), terminalFocused)
   }
 
-  // MARK: - 引き手・グリップを押す
+  // MARK: - 取っ手を押す
 
   /// 隣が隠れていれば全開、自分が隠れていれば戻る。
   func testHandleClickOpensTheHiddenFace() {

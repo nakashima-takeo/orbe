@@ -103,7 +103,7 @@ final class TabFacesViewTests: OrbeTestCase {
 
   // MARK: - 投影の通知
 
-  /// 投影（ドット・取っ手の見え方・分割中か）が変わったときだけ通知し、同じ投影のまま layout が走っても黙る。
+  /// 投影（ドット・分割中か）が変わったときだけ通知し、同じ投影のまま layout が走っても黙る。
   func testProjectionChangeFiresOnlyWhenTheProjectionDiffers() {
     let tab = laidOut(.terminalOnly)
     var fired = 0
