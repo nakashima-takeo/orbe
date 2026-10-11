@@ -92,7 +92,7 @@ if [ "$ORBE_QUERIES" != "1" ]; then
   exit 1
 fi
 # アプリアイコン: Icon Composer の app/Orbe.icon を actool でコンパイルし、
-# Assets.car（macOS 26+ の light/dark 外観切替）と Orbe.icns（macOS 14–25 フォールバック）を
+# Assets.car（macOS 26+ の light/dark 外観切替）と Orbe.icns（macOS 15–25 フォールバック）を
 # 同時生成して Resources へ出力する。Info.plist は CFBundleIconName=Orbe で参照する。
 # dev チャネルは temp コピーの icon.json で背景 fill だけをアンバー系へ差し替え、Dock で本番
 # （白/紫）と一目で見分けられるようにする。glyph.svg は共有＝アートワークの SSOT は 1 つのまま。
@@ -123,7 +123,7 @@ xcrun actool "$ICON_SRC" \
   --compile "$APP/Contents/Resources" \
   --app-icon Orbe \
   --output-partial-info-plist "$(mktemp -d)/orbe-icon-partial.plist" \
-  --platform macosx --minimum-deployment-target 14.0 \
+  --platform macosx --minimum-deployment-target 15.0 \
   --errors --warnings --output-format human-readable-text >/dev/null
 cp -R "$GHOSTTYKIT/share/ghostty" "$APP/Contents/Resources/ghostty"
 # themes は ghostty stock を同梱せず Orbe 自前の 2枚のみ（テーマは Auto/Dark/Light の外観スイッチで、
