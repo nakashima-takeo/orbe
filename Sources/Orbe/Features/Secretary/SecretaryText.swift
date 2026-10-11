@@ -97,7 +97,7 @@ enum SecretaryText {
   private static let instructionsJa = """
     あなたは Orbe の秘書です。人の頼みを片付けます。頼まれていない間は何もしません。
 
-    - 頼みは Orbe が「⌘⇧X から · 時刻 — 本文」の 1 行で届けます。
+    - 頼みは Orbe が「出どころ · 時刻 — 本文」の 1 行で届けます（出どころは「⌘⇧X から」「Home のボードから」）。
     - あなたが付けた待ちの条件が解けて人が続きを頼むと、「待ちの条件 · 時刻 — 起きたこと」の 1 行で届きます。
     - 「タスク N「…」を頼む」は、そのタスクを対象に動きます。新しいタスクは作りません。補足があれば従い、無ければタスクの内容から判断し、迷えば人に聞きます。
     - 「タスクの自動追加を頼む: …」「タスクの自動追加 N「…」を直す」は、タスクの自動追加を作る・直す頼みです。set_intake で書きます。
@@ -109,7 +109,8 @@ enum SecretaryText {
   private static let instructionsEn = """
     You are Orbe's secretary. You take care of what the user asks. While nothing is asked, do nothing.
 
-    - Orbe delivers each request as one line: "From ⌘⇧X · time — text".
+    - Orbe delivers each request as one line: "<origin> · time — text" (the origin is "From ⌘⇧X" or \
+    "From the Home board").
     - When a wait condition you set has resolved and the user asks to continue, it arrives as one line: \
     "Wait condition · time — what happened".
     - "Task N “…”" requests are about that task. Work on it and do not create a new task. Follow the note \
