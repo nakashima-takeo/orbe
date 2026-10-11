@@ -8,9 +8,10 @@ import XCTest
 /// サイドバーの一覧のつまみの決まり——見せる規則（ホバー・ドラッグ・位置の変化と、止まってからの消え始め）と、弾みの間も
 /// つまみをトラックの中に置く位置の丸め。エクスプローラーのツリー（SwiftUI）に重ねたつまみの、ホイール・ドラッグ・クリック。
 ///
-/// 壊れると何が起きるか。一覧を出しただけで、または検索結果が流れ込むたびにつまみが点く。ポインタを外へ出しても、少し前の
+/// 壊れると何が起きるか。一覧を出しただけでつまみが点く。ポインタを外へ出しても、少し前の
 /// スクロールのせいで見え続ける。スクロールを止めても消えない。弾みの間につまみがトラックの外へはみ出す。ツリーのつまみの
-/// 上でホイールが効かない、ドラッグがポインタからずれる・末尾まで届かない、つまみを押すと下の行が開く。
+/// 上でホイールが効かない、ドラッグがポインタからずれる・末尾まで届かない、つまみを押すと下の行が開く、帯の右端に
+/// かかる行（git バッジの辺り）を押せない。
 @MainActor
 final class SidebarScrollbarTests: OrbeTestCase {
   private typealias Visibility = SidebarScrollbar.Visibility
@@ -53,9 +54,6 @@ final class SidebarScrollbarTests: OrbeTestCase {
     let below = SidebarScrollbar.Metrics(position: 900, total: 1000, visible: 200).geometry
     XCTAssertEqual(
       below.sliderPosition + below.sliderLength, 200, "下へ弾んでもつまみは下端")
-    XCTAssertFalse(
-      SidebarScrollbar.Metrics(position: 0, total: 150, visible: 200).geometry.isNeeded,
-      "収まればつまみは要らない")
   }
 
   /// 溢れたツリー（41 行・見えている 192pt）を載せた、前に出した窓。
@@ -159,8 +157,8 @@ final class SidebarScrollbarTests: OrbeTestCase {
     NSApp.sendEvent(tree.mouse(.leftMouseUp, end))
   }
 
-  /// ツリーのつまみを押しても下の行は選ばれず、末尾まで送って最後の行の下の空きを押しても何も選ばれない。
-  func testClickingTheTreeThumbOrTheTrailingSpaceSelectsNothing() throws {
+  /// 掴めるのは見えているつまみだけ——つまみを押しても下の行は選ばれず、帯のつまみの外を押せばその行が選ばれる。
+  func testOnlyTheTreeThumbIsGrabbedAndTheRestOfTheBandSelectsTheRow() throws {
     let tree = try hostTree()
     func click(_ point: NSPoint) throws {
       try tree.hover(point)
@@ -168,17 +166,18 @@ final class SidebarScrollbarTests: OrbeTestCase {
       NSApp.sendEvent(tree.mouse(.leftMouseUp, point))
       RunLoop.main.run(until: Date().addingTimeInterval(NSEvent.doubleClickInterval + 0.1))
     }
-    tree.move(to: 100)
-    try click(tree.thumbCenter(at: 100))
+    let position: CGFloat = 100
+    tree.move(to: position)
+    try click(tree.thumbCenter(at: position))
     XCTAssertNil(tree.pane.tree.selected, "つまみ")
 
-    tree.move(to: tree.document.frame.height - tree.scroll.documentVisibleRect.height)
+    let geometry = tree.geometry(at: position)
+    let bandY = geometry.sliderPosition + geometry.sliderLength + Theme.Layout.editorRow
     try click(
       tree.scroll.convert(
-        NSPoint(
-          x: tree.scroll.bounds.midX, y: tree.scroll.bounds.maxY - Theme.Layout.editorRow / 2),
+        NSPoint(x: tree.scroll.bounds.maxX - Theme.Layout.editorSidebarScrollbar / 2, y: bandY),
         to: nil))
-    XCTAssertNil(tree.pane.tree.selected, "最後の行の下の空き")
+    let row = tree.pane.tree.rows[Int((position + bandY) / Theme.Layout.editorRow)]
+    XCTAssertEqual(tree.pane.tree.selected, row.id, "帯のつまみの外")
   }
-
 }

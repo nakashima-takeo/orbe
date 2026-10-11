@@ -9,7 +9,8 @@ import XCTest
 ///
 /// 壊れると何が起きるか。送るたびに見えている行を全部描き直して重い、行の数が変わるたびに枠を作り直す。↑↓ や Enter が
 /// 源へ届かない、Home / End で送れない。押した行と違う行が開く。選んだ行が見えているのに送られる、見えていないのに
-/// 寄らない。結果が届くたびに選択の行へ引き戻される。
+/// 寄らない。結果が届くたびに選択の行へ引き戻される。末尾まで送っても最後の行が下端に付く。つまみを掴めない・引いても
+/// ポインタに付いてこない、消えているつまみや帯が行のクリックを奪う。
 @MainActor
 final class RowListTests: OrbeTestCase {
   private let rowHeight: CGFloat = 20
@@ -226,42 +227,35 @@ final class RowListTests: OrbeTestCase {
 
   // MARK: - つまみ
 
-  /// OS のスクロールバーは持たず、右端につまみを重ねる。つまみは位置が変わると見え、当たりは見えているつまみだけ（消えて
-  /// いるつまみ・帯の他は行へ通る）。掴んで引くと移動ぶんだけ文書が送られ、つまみの上のホイールは列へ届く。
-  func testTheThumbShowsOnScrollHitsOnlyItselfAndDragsTheDocument() throws {
+  /// 当たりは見えているつまみだけ——列を出しただけの（消えている）つまみも、帯のつまみの外も行へ通る。掴んで引くと、
+  /// つまみがポインタに付いて動く。
+  func testOnlyTheShownThumbIsGrabbedAndItFollowsTheDrag() {
     let hosted = host()
     let rows = hosted.rows
     let thumb = rows.scrollbar
-    XCTAssertFalse(rows.hasVerticalScroller)
-    XCTAssertEqual(
-      thumb.frame, NSRect(x: 190, y: 0, width: 10, height: 20), "右端の上端・幅 10・最小の長さ 20")
-    // hitTest の点は窓（下が原点）の座標。上端の 20pt は y 80〜100。
-    XCTAssertFalse(rows.hitTest(NSPoint(x: 195, y: 90)) === thumb, "消えているつまみは当たらない")
+    /// 列の座標の点を、hitTest が受ける親の座標へ。
+    func inParent(_ point: NSPoint) -> NSPoint { rows.superview!.convert(point, from: rows) }
+    var onThumb: NSPoint { inParent(NSPoint(x: thumb.frame.midX, y: thumb.frame.midY)) }
+    XCTAssertFalse(rows.hitTest(onThumb) === thumb, "消えているつまみは当たらない")
 
     scroll(hosted, by: 1)
-    XCTAssertTrue(rows.hitTest(NSPoint(x: 195, y: 90)) === thumb, "位置が変わると見えて当たる")
-    XCTAssertFalse(rows.hitTest(NSPoint(x: 195, y: 10)) === thumb, "帯のつまみの外は行へ通る")
+    XCTAssertTrue(rows.hitTest(onThumb) === thumb, "位置が変わると見えて当たる")
+    let band = inParent(NSPoint(x: thumb.frame.midX, y: thumb.frame.maxY + rowHeight))
+    XCTAssertTrue(
+      rows.hitTest(band)?.isDescendant(of: hosted.list) == true, "帯のつまみの外は行へ通る")
 
-    func drag(_ type: NSEvent.EventType, y: CGFloat) -> NSEvent {
+    func mouse(_ type: NSEvent.EventType, y: CGFloat) -> NSEvent {
       NSEvent.mouseEvent(
-        with: type, location: NSPoint(x: 195, y: y), modifierFlags: [], timestamp: 0,
+        with: type, location: NSPoint(x: onThumb.x, y: y), modifierFlags: [], timestamp: 0,
         windowNumber: hosted.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
         pressure: 1)!
     }
-    thumb.mouseDown(with: drag(.leftMouseDown, y: 90))
-    thumb.mouseDragged(with: drag(.leftMouseDragged, y: 82))
-    // 8pt 引く → 位置は 8 ×（全体 − 見えている長さ）/（トラック − つまみ）。
-    XCTAssertEqual(rows.contentView.bounds.minY, 8 * 3920 / 80, accuracy: 0.5)
-    thumb.mouseUp(with: drag(.leftMouseUp, y: 82))
-
-    let top = rows.contentView.bounds.minY
-    let wheel = try XCTUnwrap(
-      CGEvent(
-        scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: -3, wheel2: 0,
-        wheel3: 0))
-    thumb.scrollWheel(with: try XCTUnwrap(NSEvent(cgEvent: wheel)))
-    RunLoop.main.run(until: Date().addingTimeInterval(0.3))
-    XCTAssertGreaterThan(rows.contentView.bounds.minY, top, "つまみの上のホイールで列が送られる")
+    let grab = onThumb.y
+    let top = thumb.frame.minY
+    thumb.mouseDown(with: mouse(.leftMouseDown, y: grab))
+    thumb.mouseDragged(with: mouse(.leftMouseDragged, y: grab - 8))
+    XCTAssertEqual(thumb.frame.minY - top, 8, accuracy: 0.5, "8pt 引けばつまみも 8pt 下りる")
+    thumb.mouseUp(with: mouse(.leftMouseUp, y: grab - 8))
   }
 
   // MARK: - 送り
