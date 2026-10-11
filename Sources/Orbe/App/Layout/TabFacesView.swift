@@ -65,8 +65,8 @@ final class TabFacesView: NSView {
   var interaction: Interaction = .settled
 
   var motion = FaceMotion.rest(at: 0, width: 0)
-  /// `motion` の位置が表す器の幅（幅が変わったら位置を伸縮する）。
-  private var motionWidth: CGFloat = 0
+  /// `motion` を置いた器の大きさ（幅が変わったら位置を伸縮し、大きさが変わったら動きの中身を配り直す）。
+  private var motionSize: CGSize = .zero
   /// ホバーの進み（0→1）。的は「ポインタが取っ手の上にあるか、掴んでいるか」。
   private var hover: CGFloat = 0
   private var lastTick: CFTimeInterval?
@@ -199,18 +199,20 @@ final class TabFacesView: NSView {
 
   var maxPosition: CGFloat { FaceGeometry.maxPosition(bounds.width) }
 
-  /// 幅が変わっていれば位置と速度を MAX の比で伸縮する（行き先は鏡から引くので伸縮しない）。変わったかを返す。
+  /// 器の大きさが変わったかを返す。幅が変わっていれば位置と速度を MAX の比で伸縮する（行き先は鏡から引くので伸縮しない）。
   private func rescaleMotion() -> Bool {
-    let width = bounds.width
-    guard width != motionWidth else { return false }
-    let old = FaceGeometry.maxPosition(motionWidth)
-    motionWidth = width
+    let size = bounds.size
+    guard size != motionSize else { return false }
+    let old = FaceGeometry.maxPosition(motionSize.width)
+    let widthChanged = size.width != motionSize.width
+    motionSize = size
+    guard widthChanged else { return true }
     if old > 0 {
       let scale = maxPosition / old
       motion.hx *= scale
       motion.v *= scale
     } else {
-      motion = .rest(at: committed.shape.hx, width: width)
+      motion = .rest(at: committed.shape.hx, width: size.width)
     }
     return true
   }
@@ -218,7 +220,7 @@ final class TabFacesView: NSView {
   /// 静止へ確定する: 動きを行き先に止め、解決結果を写す。
   func settle(_ target: FaceGeometry.Resolved) {
     motion = .rest(at: target.shape.hx, width: target.width)
-    motionWidth = target.width
+    motionSize = target.size
     interaction = .settled
     pendingDragSizes = nil
     apply(target)
