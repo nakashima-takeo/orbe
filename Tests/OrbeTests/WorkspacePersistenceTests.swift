@@ -294,7 +294,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
       name: "w", rootPath: "/w", activeTab: 0, boardSelected: true,
       tabs: [TabState(cwd: "/w", agent: nil, explicitTitle: nil)],
       lastUsedAt: Date(timeIntervalSinceReferenceDate: 123), settingsOverride: override,
-      lastWorktreeBase: "origin/main")
+      lastWorktreeBase: "origin/main", boardParts: [.intake])
     let data = try JSONEncoder().encode(full)
     let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     for key in WorkspaceState.CodingKeys.allCases {

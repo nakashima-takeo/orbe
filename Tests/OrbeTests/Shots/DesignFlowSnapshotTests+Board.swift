@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// ボードの flow。タブ行の横スクロール（`testBoardScroll`）と、自動追加の部品のキー操作（`testBoardIntake`）と、依頼の欄
-/// （`testBoardRequest`）。
+/// （`testBoardRequest`）と、部品の並びの変化（`testBoardParts`）。
 /// タブ行の横スクロール: 選択が右端のタブへ移るとタブ列だけがスクロールし、ボードのセルは左端に残る。
 /// スクロール位置は描画を跨いで持つ状態なので、1 枚の host を使い回して選択を変えるたびに撮る（`flow` は毎回 host を
 /// 作り直すので、スクロールが出ない）。
@@ -50,12 +50,33 @@ extension DesignFlowSnapshotTests {
     }
   }
 
+  /// 部品の並び: 自動追加の部品 → 外すと中央の一文だけ（フッターも出ない） → 置くと部品とフッターが戻る。
+  func testBoardParts() throws {
+    let model = BoardModel(
+      intake: BoardIntakeModel(
+        runner: DesignSceneFixtures.intakeRunner(DesignSceneFixtures.boardIntakeFile())),
+      parts: [.intake])
+    try flow(
+      "board_parts", size: NSSize(width: 1440, height: 826),
+      render: {
+        BoardRoot(
+          model: model, translucency: ChromeTranslucency(),
+          localization: LocalizationStore(language: .ja), fontResolver: ChromeFontResolver())
+      },
+      steps: [
+        ("start", {}),
+        ("removed", { model.show([]) }),
+        ("added", { model.show([.intake]) }),
+      ])
+  }
+
   /// ボードの自動追加: 欄から ↓ で一覧の先頭 → ↓ で選ぶ → space で止める（行が末尾へ沈み、選択は付いていく）→ space で再開 → ↵ で実行中… → ↵ で赤の
   /// 断り → ⌘⌫ で消え、同じ位置の行が選ばれる。
   func testBoardIntake() throws {
     let model = BoardModel(
       intake: BoardIntakeModel(
-        runner: DesignSceneFixtures.intakeRunner(DesignSceneFixtures.boardIntakeFile())))
+        runner: DesignSceneFixtures.intakeRunner(DesignSceneFixtures.boardIntakeFile())),
+      parts: [.intake])
     let intake = model.intake
     try flow(
       "board_intake", size: NSSize(width: 1440, height: 826),
@@ -82,7 +103,8 @@ extension DesignFlowSnapshotTests {
   func testBoardRequest() throws {
     let model = BoardModel(
       intake: BoardIntakeModel(
-        runner: DesignSceneFixtures.intakeRunner(DesignSceneFixtures.boardIntakeFile())))
+        runner: DesignSceneFixtures.intakeRunner(DesignSceneFixtures.boardIntakeFile())),
+      parts: [.intake])
     let intake = model.intake
     intake.onAsk = { _ in nil }
     try flow(

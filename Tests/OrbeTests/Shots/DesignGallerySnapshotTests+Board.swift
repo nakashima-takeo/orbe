@@ -61,7 +61,8 @@ extension DesignGallerySnapshotTests {
     func board(_ file: IntakesFile? = nil) -> BoardModel {
       let model = BoardModel(
         intake: BoardIntakeModel(
-          runner: DesignSceneFixtures.intakeRunner(file ?? DesignSceneFixtures.boardIntakeFile())))
+          runner: DesignSceneFixtures.intakeRunner(file ?? DesignSceneFixtures.boardIntakeFile())),
+        parts: [.intake])
       model.intake.move(1)
       return model
     }

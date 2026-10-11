@@ -38,6 +38,9 @@ final class Workspace {
   /// worktree パレットで前回新しいブランチを作ったときのベース（ブランチ名）。次の作成行で最初に選ぶ。
   /// 書き手は起動時の復元と `WindowController.rememberWorktreeBase` だけ。永続化する。
   var lastWorktreeBase: String?
+  /// ボードの部品の決めた並び。nil は一度も決めていない。ボードを持つか・既定・置ける／外せるかは `SessionStore` が決め、
+  /// 変異もそこを通す（復元の組み立てだけは直接入れ、直後の `SessionStore.load` の正規化を必ず通す）。永続化する。
+  var boardParts: [BoardPart]?
 
   /// workspace の選択。タブは位置ではなくタブそのもので指す（並びが変わっても同じタブを指し続ける）。
   enum Selection: Equatable {

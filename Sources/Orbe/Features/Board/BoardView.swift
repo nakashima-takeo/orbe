@@ -4,9 +4,11 @@ import SwiftUI
 /// ボードの器。workspace が持つ、タブ（端末）ではない面。WindowController が 1 枚だけ持ち、前面の workspace がボードを持つ間
 /// タブの器と並べて content に載せ、選んでいる間だけ見せる。
 ///
-/// 焦点の宛先は中身（SwiftUI）にあり、器自身は焦点を受けない。chrome キーはエディター面と同じ作法で受ける——first
-/// responder が配下のときだけ解決し（隠れている間も窓に残るので、焦点が無ければ素通しする）、window コマンドは上位へ渡し、
-/// 端末・エディター・両面のキーはボードに意味が無いので飲む。中身が握らなかった打鍵も飲む。
+/// 焦点の宛先は中身（SwiftUI）にあり、器自身は焦点を受けない。部品が 1 つも無い間だけは中身に宛先が無いのでホストが焦点を
+/// 持ち、窓のキーを効かせる。
+/// chrome キーはエディター面と同じ作法で受ける——first responder が配下のときだけ解決し（隠れている間も窓に残るので、焦点が
+/// 無ければ素通しする）、window コマンドは上位へ渡し、端末・エディター・両面のキーはボードに意味が無いので飲む。中身が握らな
+/// かった打鍵も飲む。
 final class BoardView: NSView {
   private let host: NSHostingView<BoardRoot>
   /// window コマンドの届け先（WindowController が配線する）。
@@ -27,12 +29,10 @@ final class BoardView: NSView {
     host.frame = bounds
     host.autoresizingMask = [.width, .height]
     addSubview(host)
-    // 焦点が外にあるときだけホストへ first responder を渡す（中の宛先は SwiftUI の焦点が決める）。中にあるときに渡し直すと、
-    // 依頼の欄の入力を終わらせて、当て直す先の焦点を取りこぼす。
-    model.onFocus = { [weak self] in
-      guard let self, !self.focusIsInside else { return false }
+    model.focusIsInside = { [weak self] in self?.focusIsInside ?? false }
+    model.takeFocus = { [weak self] in
+      guard let self else { return }
       self.window?.makeFirstResponder(self.host)
-      return true
     }
   }
   required init?(coder: NSCoder) { fatalError("not supported") }

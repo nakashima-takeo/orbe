@@ -107,7 +107,8 @@ extension BoardIntakeTests {
   func testWithNoAutoAddsTheFieldIsTheOnlyStop() {
     let model = BoardModel(
       intake: BoardIntakeModel(
-        runner: DesignSceneFixtures.intakeRunner(DesignSceneFixtures.intakeEmptyFile())))
+        runner: DesignSceneFixtures.intakeRunner(DesignSceneFixtures.intakeEmptyFile())),
+      parts: [.intake])
     let intake = model.intake
     let window = mount(model)
     XCTAssertEqual(intake.place, .request)

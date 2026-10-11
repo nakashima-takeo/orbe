@@ -13,6 +13,7 @@ extension WindowController {
       ws.lastUsedAt = state.lastUsedAt  // MRU 並べ替えキーを読み戻す（旧データは nil）
       ws.settingsOverride = state.settingsOverride  // 設定上書きを読み戻す（旧データは nil＝global 継承）
       ws.lastWorktreeBase = state.lastWorktreeBase
+      ws.boardParts = state.boardParts  // 重なりは下の store.load が落とす
       for tab in state.tabs { ws.tabs.append(makeTab(from: tab)) }  // 隣接の正規化は下の store.load
       // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・下の activateCurrent）はボードか空表示
       // で、シェルは自動起動しない。背景の休眠 workspace も空のまま keep する。ボードを持つかは Home を知る
@@ -129,7 +130,8 @@ extension WindowController {
           boardSelected: ws.selection == .board,
           tabs: ws.tabs.map { $0.tabState() },
           lastUsedAt: ws.lastUsedAt, settingsOverride: ws.settingsOverride,
-          lastWorktreeBase: ws.lastWorktreeBase, persistentId: ws.persistentId)
+          lastWorktreeBase: ws.lastWorktreeBase, persistentId: ws.persistentId,
+          boardParts: ws.boardParts)
       },
       windowSize: rememberedWindowSize, homeWorkspaceId: store.homeWorkspaceId)
   }
