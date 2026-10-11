@@ -5,8 +5,8 @@ import SwiftUI
 /// 枠は欄に焦点があるときだけ強調色で、一覧にあるときは入力欄の控えめな枠（選ばれて見えるのは常に 1 か所）。焦点を受けると
 /// AppKit の入力欄の既定どおり全文が選ばれる（⌘⇧X の入力欄と同じ）。
 ///
-/// 欄に焦点が無い間は入力欄にクリックを渡さず、被せた面で受けて欄へ移る操作としてモデルに伝える——入力欄が直に焦点を取ると、
-/// 地のクリックの当て直し（選んでいる場所）と行き先を取り合うため。焦点はモデルから写る。
+/// 欄に焦点が無い間は入力欄にクリックを渡さず、枠全体に被せた面で受けて欄へ移る操作としてモデルに伝える——入力欄が直に
+/// 焦点を取ると、地のクリックの当て直し（選んでいる場所）と行き先を取り合うため。焦点はモデルから写る。
 struct BoardIntakeRequestField: View {
   @Bindable var model: BoardIntakeModel
   let focused: FocusState<BoardIntakeModel.Place?>.Binding
@@ -33,13 +33,6 @@ struct BoardIntakeRequestField: View {
         .onSubmitIgnoringKeyRepeat { model.send() }
         .onKeyPress { model.handleRequestKey($0) }
         .allowsHitTesting(here)
-        .overlay {
-          if !here {
-            Color.clear
-              .contentShape(Rectangle())
-              .onTapGesture { model.go(.request) }
-          }
-        }
       Text("↵ " + l10n.string(.boardAskHint))
         .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.textMuted)
@@ -61,5 +54,12 @@ struct BoardIntakeRequestField: View {
         )
         .animation(.linear(duration: Theme.Motion.quick), value: here)
     )
+    .overlay {
+      if !here {
+        Color.clear
+          .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.md))
+          .onTapGesture { model.go(.request) }
+      }
+    }
   }
 }

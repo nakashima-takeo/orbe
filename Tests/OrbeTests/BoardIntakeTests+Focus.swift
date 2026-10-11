@@ -11,6 +11,10 @@ extension BoardIntakeTests {
   /// 一覧の行・欄・地の窓の中の点（1200×700 の窓、見本の寸法から）。
   private enum Point {
     static let field = NSPoint(x: 300, y: 619)
+    /// 欄の枠の中で入力欄の外（上の余白・❯・「↵ 依頼」）。
+    static let fieldMargins = [
+      NSPoint(x: 300, y: 632), NSPoint(x: 66, y: 613), NSPoint(x: 1120, y: 613),
+    ]
     static let secondRow = NSPoint(x: 120, y: 485)
     static let ground = NSPoint(x: 120, y: 100)
   }
@@ -160,5 +164,21 @@ extension BoardIntakeTests {
     let before = intake.selected?.id
     down(window)
     XCTAssertNotEqual(intake.selected?.id, before, "地のクリックの直後の ↓ は一覧に効く")
+  }
+
+  /// 欄の枠のどこを押しても欄（入力欄の字の高さの外の余白・❯・「↵ 依頼」も）。
+  func testClickingAnywhereInTheFieldsFrameMovesTheFocusToTheField() {
+    let model = board()
+    let intake = model.intake
+    let window = mount(model)
+
+    for point in Point.fieldMargins {
+      press(Key.escape, "\u{1B}", to: window)
+      XCTAssertEqual(intake.place, .list)
+      click(point, in: window)
+      XCTAssertEqual(intake.place, .request, "\(point)")
+      type("x", to: window)
+      XCTAssertEqual(intake.requestText, "x", "\(point) の直後の文字は欄に入る")
+    }
   }
 }
