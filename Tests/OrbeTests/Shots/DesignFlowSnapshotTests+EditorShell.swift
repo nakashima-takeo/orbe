@@ -21,9 +21,9 @@ extension DesignFlowSnapshotTests {
     let scene = try editorScene()
     defer { scene.cleanup() }
     let pane = scene.pane
-    let tab = scene.tab
+    let group = scene.group
     let readme = try XCTUnwrap(
-      tab.group.editor.documents.first { $0.url.lastPathComponent == "README.md" })
+      group.editor.documents.first { $0.url.lastPathComponent == "README.md" })
     try flow(
       "editor_shell", size: NSSize(width: 1100, height: 640), render: { scene.view },
       steps: [
@@ -45,7 +45,7 @@ extension DesignFlowSnapshotTests {
         ),
         (
           "empty",
-          { for document in tab.group.editor.documents { tab.group.editor.close(document) } }
+          { for document in group.editor.documents { group.editor.close(document) } }
         ),
       ])
   }
@@ -72,16 +72,16 @@ extension DesignFlowSnapshotTests {
     let scene = try editorScene()
     defer { scene.cleanup() }
     let pane = scene.pane
-    let tab = scene.tab
+    let group = scene.group
     let shallow = try XCTUnwrap(
-      tab.group.editor.documents.first { $0.url.lastPathComponent == "tokens.json" })
+      group.editor.documents.first { $0.url.lastPathComponent == "tokens.json" })
     let deep = try XCTUnwrap(
-      tab.group.editor.documents.first { $0.url.lastPathComponent == "FileTree.swift" })
+      group.editor.documents.first { $0.url.lastPathComponent == "FileTree.swift" })
     scene.warmUp(size: NSSize(width: 1100, height: 240))
     pane.window?.appearance = NSAppearance(named: .darkAqua)
     let steps: [(label: String, action: () -> Void)] = [
-      ("shallow_active", { tab.group.editor.activate(shallow) }),
-      ("deep_active", { tab.group.editor.activate(deep) }),  // 選択行（深さ 4）が可視位置へ
+      ("shallow_active", { group.editor.activate(shallow) }),
+      ("deep_active", { group.editor.activate(deep) }),  // 選択行（深さ 4）が可視位置へ
       ("new_file_input", { pane.shell.createFile() }),  // 入力行が可視位置に生まれる
     ]
     for (idx, step) in steps.enumerated() {
@@ -138,7 +138,7 @@ extension DesignFlowSnapshotTests {
     let scene = try editorScene()
     defer { scene.cleanup() }
     let pane = scene.pane
-    let editor = scene.tab.group.editor
+    let editor = scene.group.editor
     let directory = scene.directory
     let tokens = directory.appendingPathComponent("docs/design/tokens.json")
     let fileTree = try XCTUnwrap(

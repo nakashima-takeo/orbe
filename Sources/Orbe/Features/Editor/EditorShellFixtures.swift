@@ -18,7 +18,7 @@
     ]
 
     @MainActor final class Scene {
-      let tab: TerminalTab
+      private let tab: TerminalTab
       /// fixture のリポジトリ（置き場の下。消すのは置き場の持ち主）。
       let directory: URL
       var group: TabGroup { tab.group }
