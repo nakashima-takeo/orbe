@@ -214,33 +214,16 @@ struct TabState: Codable, Equatable {
   var cwd: String
   var agent: AgentSession?
   var explicitTitle: String?
-  /// version 4 から読んだタブだけが持つ、タブごとだった面の配置とエディターの状態（移行専用。書かない）。
-  /// 連への集約は復元が行う（`WorkspaceState.groupStates`）。
-  var version4: Version4?
-
-  struct Version4: Equatable {
-    var faces: FaceLayout
-    var editor: EditorState?
-  }
-
   /// `CaseIterable` は「フィールドを足して encode / decode を忘れる」を検出する seam
   /// （`WorkspacePersistenceTests` が全キーの往復を見る）。
   enum CodingKeys: String, CodingKey, CaseIterable {
     case cwd, agent, explicitTitle
   }
 
-  private enum Version4Keys: String, CodingKey {
-    case faces, editor
-  }
-
-  /// decoder の userInfo にこのキーが true で入っていれば、version 4 のタブとして旧い配置と状態も読む。
-  static let decodesVersion4 = CodingUserInfoKey(rawValue: "orbe.tabState.version4")!
-
-  init(cwd: String, agent: AgentSession?, explicitTitle: String?, version4: Version4? = nil) {
+  init(cwd: String, agent: AgentSession?, explicitTitle: String?) {
     self.cwd = cwd
     self.agent = agent
     self.explicitTitle = explicitTitle
-    self.version4 = version4
   }
 
   init(from decoder: Decoder) throws {
@@ -248,13 +231,6 @@ struct TabState: Codable, Equatable {
     cwd = try c.decode(String.self, forKey: .cwd)
     agent = try c.decodeIfPresent(AgentSession.self, forKey: .agent)
     explicitTitle = try c.decodeIfPresent(String.self, forKey: .explicitTitle)
-    guard decoder.userInfo[Self.decodesVersion4] as? Bool == true else { return }
-    let old = try decoder.container(keyedBy: Version4Keys.self)
-    version4 = Version4(
-      faces: ((try? old.decode(FaceLayout.self, forKey: .faces)) ?? .terminalOnly).normalized,
-      editor: (try? old.decode(EditorState.self, forKey: .editor)).flatMap {
-        $0.isEmpty ? nil : $0
-      })
   }
 
   func encode(to encoder: Encoder) throws {
@@ -274,7 +250,7 @@ struct AgentSession: Codable, Equatable {
 }
 
 enum WorkspacePersistence {
-  static let version = 5
+  static let version = 4
 
   /// テスト用に保存先を差し替える（設定時はこちらを使う）。本番は nil。
   static var fileURLOverride: URL?
@@ -288,9 +264,9 @@ enum WorkspacePersistence {
   }
 
   /// 読み込み。欠落・壊れ・非互換 version は nil（呼び出し側が既定で fallback）。
-  /// version を先に読み、現行（5）は素直に decode、v4 はタブごとの旧い配置と状態を移行専用の値として添えて読み
-  /// （連への集約は復元が行う）、旧 v2 / v3 は移行専用 decoder（`WorkspacePersistence+Legacy`）で読んで平坦化する。
-  /// 受理後、次回 save で snapshotFile が現行の version で書き直す＝自動移行。
+  /// version を先に読み、現行（4）は素直に decode、旧 v2 / v3 は移行専用 decoder
+  /// （`WorkspacePersistence+Legacy`）で読んで平坦化する。受理後、次回 save で snapshotFile が
+  /// version:4 で書き直す＝自動移行。
   ///
   /// 原本が「在るのに使えない」ときは nil を返す前に退避する。直後の既定起動が打つ save が
   /// `.atomic` write で原本を完全に潰すため、ここで残さないと復元手段が消える。
@@ -315,10 +291,6 @@ enum WorkspacePersistence {
     guard let probe = try? JSONDecoder().decode(VersionProbe.self, from: data) else { return nil }
     switch probe.version {
     case version: return try? JSONDecoder().decode(WorkspacesFile.self, from: data)
-    case 4:
-      let decoder = JSONDecoder()
-      decoder.userInfo[TabState.decodesVersion4] = true
-      return try? decoder.decode(WorkspacesFile.self, from: data)
     case 2, 3: return loadLegacy(data)
     default: return nil
     }
@@ -335,10 +307,8 @@ enum WorkspacePersistence {
 
 extension WorkspaceState {
   /// 連ごとのエディターと面の配置を、連のキーで引ける形にする。`keys` はタブごとの連のキー（`tabs` と同じ順。キーの
-  /// 導出はファイルシステムに触るので復元の側が渡す）。version 4 から読んだタブがあれば連ごとに 1 つへ集約し、無ければ
-  /// キーの一致する `groups` を採る。キーの合わない状態は捨てる。
+  /// 導出はファイルシステムに触るので復元の側が渡す）。キーの一致する `groups` を採り、キーの合わない状態は捨てる。
   func groupStates(keys: [String]) -> [String: GroupState] {
-    if tabs.contains(where: { $0.version4 != nil }) { return version4GroupStates(keys: keys) }
     let wanted = Set(keys)
     var states: [String: GroupState] = [:]
     for group in groups where wanted.contains(group.root) && states[group.root] == nil {
