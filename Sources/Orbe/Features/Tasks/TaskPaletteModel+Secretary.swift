@@ -55,8 +55,8 @@ extension TaskPaletteModel {
     deliver(.task(task, note: draft.text)) { self.draft = nil }
   }
 
-  /// 秘書の係へ渡す。受けたら `accepted` を呼んで、フッターに頼んだことを出す。受けなければ理由を出して、入力も
-  /// 欄もそのまま残す。
+  /// 秘書の係へ渡す。受けたら `accepted` を呼んで、フッターに頼んだことを出す。受けなければ入力も欄もそのまま残し、
+  /// 理由を出す（空の頼みは黙る）。
   private func deliver(_ ask: SecretaryAsk, accepted: () -> Void) {
     switch onAskSecretary(ask) {
     case .success(let acceptance):
@@ -67,8 +67,7 @@ extension TaskPaletteModel {
     case .failure(.claudeMissing):
       error = .secretaryClaude
     case .failure(.empty):
-      error = .failed
-      reconcile()
+      break
     }
   }
 
