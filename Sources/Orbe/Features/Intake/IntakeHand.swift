@@ -3,8 +3,7 @@ import SwiftUI
 /// 自動追加 1 つへの人の手の操作（今すぐ実行・止める ⇄ 再開・削除）。キー・キーの表示・名前・断りをここだけが決め、⌘⇧X の
 /// 中身とボードが使う——キーを変えたとき、片方の画面の表示だけが嘘になる写しを残さないため。
 enum IntakeHand {
-  /// 並びはキーを並べて見せる順。
-  enum Operation: CaseIterable {
+  enum Operation {
     case togglePause
     case runNow
     case delete

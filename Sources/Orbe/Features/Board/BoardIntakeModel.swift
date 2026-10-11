@@ -108,11 +108,13 @@ import SwiftUI
         + (ids.isEmpty ? [] : [BoardKeyHint("↓", .boardHintToList)])
     }
     let paused = selected.intake.paused
-    let hand = IntakeHand.Operation.allCases.map {
-      BoardKeyHint($0.key, $0.title(paused: paused))
+    func hand(_ operation: IntakeHand.Operation) -> BoardKeyHint {
+      BoardKeyHint(operation.key, operation.title(paused: paused))
     }
-    return [BoardKeyHint("↑↓", .boardHintSelect)] + hand.prefix(2)
-      + [BoardKeyHint("⌘↵", .boardAskFixHint)] + hand.dropFirst(2)
+    return [
+      BoardKeyHint("↑↓", .boardHintSelect), hand(.togglePause), hand(.runNow),
+      BoardKeyHint("⌘↵", .boardAskFixHint), hand(.delete),
+    ]
   }
 
   // MARK: - 選択
@@ -151,7 +153,7 @@ import SwiftUI
     ask(.intakeFix(intake))
   }
 
-  /// 一覧の器のキー。↑↓・`IntakeHand` の写し・⌘↵ のほかは何も起こさず、どれも握る（⇥ で焦点をボードの外へ逃がさない）。
+  /// 一覧の器のキー。↑↓・`IntakeHand.stroke` に任せるキー・⌘↵ のほかは何も起こさず、どれも握る（⇥ で焦点をボードの外へ逃がさない）。
   func handleKey(_ press: KeyPress) -> KeyPress.Result {
     if let stroke = IntakeHand.stroke(press) {
       if case .press(let operation) = stroke { perform(operation) }
