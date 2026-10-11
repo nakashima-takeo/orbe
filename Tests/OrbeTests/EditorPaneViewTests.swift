@@ -8,7 +8,7 @@ import XCTest
 /// テキスト面が first responder になると面の記憶がエディターへ移る。
 ///
 /// 壊れると何が起きるか。文書があるのに pane が焦点の行き先だと打鍵がテキスト面に届かない。hitTest が
-/// self 固定のままだとテキスト面をクリックできない。テキスト面の焦点がタブに上がらないと分割中に
+/// self 固定のままだとテキスト面をクリックできない。テキスト面の焦点が連に上がらないと分割中に
 /// エディターを触っても焦点の印とドットが端末を指したまま。
 @MainActor
 final class EditorPaneViewTests: OrbeTestCase {
@@ -56,7 +56,7 @@ final class EditorPaneViewTests: OrbeTestCase {
     window.orderOut(nil)
   }
 
-  func testSurfaceFocusMovesTheTabsFocusToTheEditor() throws {
+  func testSurfaceFocusMovesTheGroupsFocusToTheEditor() throws {
     let tab = TerminalTab.alone(cwd: "/tmp", editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let document = try tab.group.editor.open(try file("b.txt", "x"), as: .pinned)
     let window = hosted(tab, focus: .terminal)

@@ -52,7 +52,7 @@ extension WindowControllerFocusRestoreTests {
 
     pane.mouseDown(with: .mouse(.leftMouseDown, at: pane.centerInWindow, in: wc.window))
     XCTAssertTrue(wc.window.firstResponder === pane, "クリックでエディター pane が first responder")
-    XCTAssertEqual(tab.group.faces.focus, .editor, "タブの焦点の面がエディターへ追従する")
+    XCTAssertEqual(tab.group.faces.focus, .editor, "連の焦点の面がエディターへ追従する")
 
     let handle = tab.group.view.handle
     handle.mouseDown(with: .mouse(.leftMouseDown, at: handle.centerInWindow, in: wc.window))

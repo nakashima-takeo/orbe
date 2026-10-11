@@ -203,7 +203,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     try assertSidebarContentFills(pane, width: 240)
   }
 
-  /// 幅と開閉はアプリ全体で 1 つ——既に窓に載っている別のタブの面も、ドラッグと開閉に追随する（置き直しは
+  /// 幅と開閉はアプリ全体で 1 つ——既に窓に載っている別の連の面も、ドラッグと開閉に追随する（置き直しは
   /// 観測の非同期ホップ越し。自分でドラッグした面だけがその場で置き直す）。
   func testSharedSidebarStateMovesEveryHostedPane() throws {
     let state = EditorSidebarState()

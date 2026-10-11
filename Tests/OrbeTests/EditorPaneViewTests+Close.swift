@@ -5,11 +5,11 @@ import XCTest
 
 @testable import Orbe
 
-/// 閉じる——ファイルタブの × は焦点を動かさず、タブが消えれば面・ツリー・文書は解放され、同じ根を握る別のタブの
-/// 監視は続く。
+/// 閉じる——ファイルタブの × は焦点を動かさず、連が消えれば（最後のタブが閉じれば）面・ツリー・文書は解放され、
+/// 同じ根を握る別の連（別の workspace の同じ worktree）の監視は続く。
 ///
-/// 壊れると何が起きるか。端末で打っている最中に隣の × を押すと打鍵がエディターへ移る。閉じたタブの面が根の
-/// サービスを握り続けて、閉じたはずのリポジトリを監視し続ける（タブ数に比例して常時監視が増える）。
+/// 壊れると何が起きるか。端末で打っている最中に隣の × を押すと打鍵がエディターへ移る。消えた連の面が根の
+/// サービスを握り続けて、閉じたはずのリポジトリを監視し続ける（連の数に比例して常時監視が増える）。
 @MainActor
 final class EditorPaneViewCloseTests: OrbeTestCase {
   func testFileTabCloseDoesNotMoveTheFocus() throws {
@@ -35,7 +35,7 @@ final class EditorPaneViewCloseTests: OrbeTestCase {
     XCTAssertEqual(tab.group.faces.focus, .terminal, "面の記憶も動かない")
   }
 
-  func testClosingATabFreesItsPaneWhileAnotherTabKeepsTheRootService() throws {
+  func testReleasingAGroupFreesItsPaneWhileAnotherGroupKeepsTheRootService() throws {
     let repo = try TempGitRepo()
     weak var pane: EditorPaneView?
     weak var tree: FileTree?
@@ -54,13 +54,13 @@ final class EditorPaneViewCloseTests: OrbeTestCase {
       tree = tab.group.view.editor.tree
       document = opened
       service = RootFiles.shared(for: repo.root)
-      XCTAssertNotNil(service, "前提: 2 つのタブが同じ根を握っている")
+      XCTAssertNotNil(service, "前提: 2 つの連が同じ根を握っている")
       window.orderOut(nil)
       window.contentView = nil
     }
 
-    pumpMain(until: { pane == nil && tree == nil && document == nil }, "タブが消えれば面・ツリー・文書は解放される")
-    XCTAssertNotNil(service, "同じ根を握る別のタブが居る間、根のサービスは生きている")
+    pumpMain(until: { pane == nil && tree == nil && document == nil }, "連が消えれば面・ツリー・文書は解放される")
+    XCTAssertNotNil(service, "同じ根を握る別の連が居る間、根のサービスは生きている")
 
     keeper = nil
     keeperWindow.contentView = nil

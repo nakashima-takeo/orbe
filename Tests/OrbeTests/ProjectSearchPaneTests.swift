@@ -20,8 +20,7 @@ final class ProjectSearchPaneTests: OrbeTestCase {
     @MainActor var search: ProjectSearch { pane.projectSearch }
   }
 
-  /// 根 `repo` のタブの面だけを窓に載せる。端末は載せない——端末の shell は起動しないので、その cwd の報告（OSC 7）が面の根を
-  /// 動かさない（検索は根に依る）。
+  /// 根 `repo` の連の面だけを窓に載せる。
   func host(_ files: [String: String]) throws -> Hosted {
     let repo = try TempGitRepo(name: "orbe-search-pane")
     for (path, text) in files { try repo.write(path, text) }
