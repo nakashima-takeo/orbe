@@ -38,6 +38,25 @@ final class WindowControllerBoardTests: OrbeTestCase {
     return wc
   }
 
+  /// 止めている自動追加を 2 件置く——起動でも回らず、取得もコマンドなので本物の agent は起きない。
+  @MainActor private func savePausedIntakes() {
+    let intakes = DesignSceneFixtures.boardIntakes().prefix(2).map {
+      var intake = $0
+      intake.paused = true
+      intake.definition.fetch.method = .command(BackgroundCommand(script: "true", directory: nil))
+      return intake
+    }
+    IntakePersistence.save(DesignSceneFixtures.boardIntakeFile(Array(intakes)))
+  }
+
+  /// 窓を画面外に出す。非アクティブなアプリの窓は key にならないが、`NSApp.sendEvent` は ordered-in の窓の first responder
+  /// へ届ける。
+  private func show(_ wc: WindowController) {
+    shown = wc
+    NSApplication.shared.setActivationPolicy(.accessory)
+    wc.window.makeKeyAndOrderFront(nil)
+  }
+
   /// content に載っていて見えているビュー。
   private func visibleContent(_ wc: WindowController) -> [NSView] {
     wc.model.content.subviews.filter { !$0.isHidden }
@@ -86,9 +105,13 @@ final class WindowControllerBoardTests: OrbeTestCase {
 
   // MARK: - キー
 
-  /// ボードに焦点がある間、タブに効くキー（⌘W・⌘R・⌘E・⌘F・⌘+）はボードで止まり、どのタブにも何も起こさない。
-  func testTabKeysStopAtTheFocusedBoard() throws {
+  /// ボードに焦点がある間（入ったときの依頼の欄にあっても）、タブに効くキー（⌘W・⌘R・⌘E・⌘F・⌘+）はボードで止まり、
+  /// どのタブにも何も起こさない。
+  @MainActor func testTabKeysStopAtTheFocusedBoard() throws {
     let wc = try homeOnBoard(tabs: 2)
+    show(wc)
+    pump()
+    XCTAssertTrue(wc.window.firstResponder is NSTextView, "前提: 焦点は依頼の欄")
     let tabs = wc.current.tabs
 
     for key in ["w", "r", "e", "f", "+"] {
@@ -129,19 +152,9 @@ final class WindowControllerBoardTests: OrbeTestCase {
   /// 焦点が外から入る（ボードを選ぶ・パレットを閉じる・workspace を戻る）と、部品は欄から始まり、↓ で一覧の先頭へ下りる。
   /// 一覧で選んでいた行は入り直すと保たないが、裏のタブが閉じただけ（焦点は中のまま）なら保つ。
   @MainActor func testEnteringTheBoardStartsAtTheRequestField() throws {
-    // 止めている自動追加だけを置く——起動でも回らず、取得もコマンドなので本物の agent は起きない。
-    let intakes = DesignSceneFixtures.boardIntakes().prefix(2).map {
-      var intake = $0
-      intake.paused = true
-      intake.definition.fetch.method = .command(BackgroundCommand(script: "true", directory: nil))
-      return intake
-    }
-    IntakePersistence.save(DesignSceneFixtures.boardIntakeFile(Array(intakes)))
+    savePausedIntakes()
     let wc = WindowController()
-    shown = wc
-    // 非アクティブなアプリの窓は key にならないが、`NSApp.sendEvent` は ordered-in の窓の first responder へ届ける。
-    NSApplication.shared.setActivationPolicy(.accessory)
-    wc.window.makeKeyAndOrderFront(nil)
+    show(wc)
     let home = try XCTUnwrap(wc.store.homeIndex)
     wc.switchWorkspace(to: home)
     wc.newTab()
@@ -184,9 +197,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
   @MainActor func testFocusReturnsToTheRequestFieldWhereItWasLeft() throws {
     IntakePersistence.save(DesignSceneFixtures.intakeEmptyFile())
     let wc = WindowController()
-    shown = wc
-    NSApplication.shared.setActivationPolicy(.accessory)
-    wc.window.makeKeyAndOrderFront(nil)
+    show(wc)
     let home = try XCTUnwrap(wc.store.homeIndex)
     wc.switchWorkspace(to: home)
     wc.newTab()
@@ -216,6 +227,30 @@ final class WindowControllerBoardTests: OrbeTestCase {
     wc.switchWorkspace(to: home)
     pump()
     try assertFieldSelectsAll(wc, "ab", "workspace を戻ると欄へ")
+  }
+
+  /// ボードの上に ⌘⇧X を開いている間に自動追加がすべて消えても（⌘⇧X で最後の 1 件を消す）、ボードの欄は焦点を奪わず、
+  /// 打鍵は ⌘⇧X の入力欄に届いたまま。
+  @MainActor func testAutoAddsVanishingUnderThePaletteLeaveTheFocusInThePalette() throws {
+    savePausedIntakes()
+    let wc = WindowController()
+    show(wc)
+    wc.switchWorkspace(to: try XCTUnwrap(wc.store.homeIndex))
+    let intake = wc.board.intake
+    wc.statusModel.onSelectBoard()
+    try pressDown(wc)
+    XCTAssertEqual(intake.place, .list, "前提: 一覧にいる")
+
+    wc.showTaskPalette()
+    pump()
+    let palette = try XCTUnwrap(wc.model.taskPalette)
+    for id in intake.ids { try wc.intakeRunner.delete(id) }
+    pump()
+
+    XCTAssertEqual(intake.place, .request, "前提: 行がすべて消えて欄になった")
+    try press(wc, keyCode: 0, "x")
+    XCTAssertEqual(palette.query, "x", "打鍵は ⌘⇧X の入力欄に届く")
+    XCTAssertEqual(intake.requestText, "", "ボードの欄は焦点を奪わない")
   }
 
   private func assertFieldSelectsAll(
