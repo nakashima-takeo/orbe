@@ -82,6 +82,7 @@ struct WorkspaceCreateCloneForm: View {
   @Environment(\.localization) private var l10n
   private enum Field { case url, dir, name }
   @FocusState private var focus: Field?
+  @State private var placement = FocusPlacement<Field>(order: [.url, .dir, .name])
 
   var body: some View {
     Group {
@@ -95,7 +96,26 @@ struct WorkspaceCreateCloneForm: View {
     // 未準備／SrcTab クリックが focus をさらった状態。同期代入だと URL 欄に focus が乗らず esc も死ぬため、
     // 次 tick で確実に当てる（表示中は常に入力欄 focus の不変）。
     .onChange(of: model.focusToken, initial: true) {
-      DispatchQueue.main.async { focus = .url }
+      DispatchQueue.main.async { place(.url) }
+    }
+    .onChange(of: focus) { placement.focusDidChange(to: focus, caretAtEnd: caretAtEnd) }
+  }
+
+  private func place(_ field: Field) {
+    placement.place(field, focus: $focus, caretAtEnd: caretAtEnd)
+  }
+
+  private func cycleFocus(forward: Bool) -> KeyPress.Result {
+    placement.cycle(forward: forward, focus: $focus, caretAtEnd: caretAtEnd)
+    return .handled
+  }
+
+  /// URL と clone 先は続きを打つ値なのでキャレットを末尾に、名前は打ち直すことが多い値なので宣言しない（全選択で入る）。
+  private func caretAtEnd(_ field: Field) -> String? {
+    switch field {
+    case .url: model.cloneURL
+    case .dir: model.cloneDir
+    case .name: nil
     }
   }
 
@@ -116,7 +136,7 @@ struct WorkspaceCreateCloneForm: View {
   }
 
   private var urlField: some View {
-    TextField("", text: urlBinding)
+    TextField("", text: urlBinding, selection: $placement[selection: .url])
       .textFieldStyle(.plain)
       .font(Font.theme.code)
       .foregroundStyle(Color.theme.textPrimary)
@@ -129,10 +149,8 @@ struct WorkspaceCreateCloneForm: View {
         focused: focus == .url, font: Font.theme.code, color: Color.theme.textMuted
       )
       .modifier(FieldChrome(focused: focus == .url))
-      .onKeyPress(.tab) {
-        focus = .dir
-        return .handled
-      }
+      .onKeyPress(.tab) { cycleFocus(forward: true) }
+      .onKeyPress(.backtab) { cycleFocus(forward: false) }
       .onKeyPress(.escape) {
         dismiss()
         return .handled
@@ -160,17 +178,15 @@ struct WorkspaceCreateCloneForm: View {
   /// （gap 8・`/`＝idle・名前＝done で編集可）。箱と `/名前` は縦中央で揃える。
   private var destField: some View {
     HStack(spacing: Theme.Space.step) {
-      TextField("", text: dirBinding)
+      TextField("", text: dirBinding, selection: $placement[selection: .dir])
         .textFieldStyle(.plain)
         .font(Font.theme.code)
         .foregroundStyle(Color.theme.textPrimary)
         .tint(Color.theme.accentPrimary)
         .focused($focus, equals: .dir)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .onKeyPress(.tab) {
-          focus = .name
-          return .handled
-        }
+        .onKeyPress(.tab) { cycleFocus(forward: true) }
+        .onKeyPress(.backtab) { cycleFocus(forward: false) }
         .onKeyPress(.escape) {
           dismiss()
           return .handled
@@ -189,10 +205,8 @@ struct WorkspaceCreateCloneForm: View {
           .tint(Color.theme.accentPrimary)
           .focused($focus, equals: .name)
           .fixedSize()  // 名前部は内容幅にハグ（末尾に /name を並べる）
-          .onKeyPress(.tab) {
-            focus = .url
-            return .handled
-          }
+          .onKeyPress(.tab) { cycleFocus(forward: true) }
+          .onKeyPress(.backtab) { cycleFocus(forward: false) }
           .onKeyPress(.escape) {
             dismiss()
             return .handled
