@@ -14,7 +14,7 @@ import OrbeSessionLog
 final class TerminalTab {
   /// 制御チャネルの宛先 ID（外部からこのタブを一意に指す）。
   let id = IdGen.next()
-  /// mount 単位（エディター面・背・端末面の器）。`WindowController` が content へ載せる／隠す／外す。
+  /// mount 単位（エディター面・端末面と取っ手の器）。`WindowController` が content へ載せる／隠す／外す。
   let view: TabFacesView
   var surface: SurfaceView { view.terminal.surfaceView }
 
@@ -172,7 +172,7 @@ final class TerminalTab {
       editor: EditorPaneView(root: root), faces: faces)
   }
 
-  /// 両面がタブを知り（事実の通知先）、背の求める配置がタブの状態を通って器へ戻るよう配線する。
+  /// 両面がタブを知り（事実の通知先）、取っ手の求める配置がタブの状態を通って器へ戻るよう配線する。
   /// セッションの変化は器（面の骨と中身）へ写してから上位へ 1 本で上げる。
   private func wireView() {
     surface.tab = self

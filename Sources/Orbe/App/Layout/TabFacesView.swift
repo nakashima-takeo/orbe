@@ -1,35 +1,36 @@
 import AppKit
-import SwiftUI
 
-/// タブの器: [エディター面 | 背 | 端末面]。配置（`FaceLayout`）を幅で解いた結果を子の frame に写すだけで、
-/// 配置の正はタブが持つ。面は clip の器で、中身の幅は面の幅に等しい。
+/// タブの器: [エディター面 | 端末面] と、その境の取っ手（引き手と継ぎ目を 1 つの物にしたもの）。配置（`FaceLayout`）の
+/// 正はタブが持ち、器は境の位置と形の動き（`FaceMotion`）を表示のフレームごとに進め、`FaceGeometry.frames` の矩形を子へ
+/// 写すだけ。位置は引いている間はポインタに 1:1 で付き、⌘E・取っ手を押す・閉じる着地では位置のばねで確定した配置（鏡
+/// `faces`）へ運ばれる。形は位置が決める目標を形のばねで追う。ホバーの進みも同じ時計で進める。
 ///
-/// 相互作用（背のドラッグ・面の遷移）は幅に依らない形（割合と時刻）で持ち、`layout()` はそれを新しい幅へ
-/// 写す——器の再レイアウトは chrome 更新などから随時起きるので、確定配置で相互作用を捨てない。
+/// 相互作用は大きさに依らない形（割合）で持ち、`layout()` は今の状態を新しい大きさで置き直す——器の再レイアウトは chrome
+/// 更新などから随時起きるので、確定配置で相互作用を捨てない。
 ///
-/// 隠れた端末の中身は最後に見えていた寸法のまま据え置く（隠すたびの pty resize と scrollback の
-/// 再折り返しを避ける）。隠れたまま生まれた端末は「戻したときに得る寸法」で起きる。
-/// 遷移は「どのコマでも見えている面は中身で覆われ、中身の寸法は始めか終わりの 1 回だけ変わり、間は面の clip と中身の
-/// 位置だけ動く」。背のドラッグ中は
-/// 面と背をポインタごとに置き、中身の resize は表示のフレーム単位に間引く。
+/// 中身の寸法を変えるのは、動きの始め（現れる・広がる面）と終わり（両方のばねが止まったとき、縮む・隠れる面）の 1 回だけで、
+/// 間は面の clip と中身の位置だけが動く。押しただけでは変えない。引いている間は表示のフレーム単位に間引いて配る。
+/// 隠れた端末の中身は最後に見えていた寸法のまま据え置く（隠すたびの pty resize と scrollback の再折り返しを避ける）。
+/// 隠れたまま生まれた端末は「戻したときに得る寸法」で起きる。
 final class TabFacesView: NSView {
   let terminal: SurfaceScrollView
   let editor: EditorPaneView
-  let spine = SpineView()
+  let handle = FaceHandleView()
+  private let seamGround = SeamGroundView()
   private let editorFace: FaceClipView
   private let terminalFace: FaceClipView
 
-  /// タブが `set` で写す配置の鏡。ドラッグ中は書き換えない。遷移の終点でもある。
+  /// タブが `set` で写す配置の鏡。引いている間は書き換えない。位置のばねの行き先でもある。
   private(set) var faces: FaceLayout
-  /// 今見えている配置を器の幅で解いた結果（ドラッグ中はポインタの値、遷移中は終点）。
+  /// 今見えている配置を器の大きさで解いた結果（引いている間はポインタの値、動いている間は行き先）。
   private(set) var resolved: FaceGeometry.Resolved
   var projection: FaceGeometry.Projection { resolved.projection }
-  /// 確定済みの配置（鏡 `faces`）を今の幅で解いた結果。相互作用中でもポインタ値を映さないので、
+  /// 確定済みの配置（鏡 `faces`）を今の大きさで解いた結果。相互作用中でもポインタ値を映さないので、
   /// コマンド（⌘E）はこちらを読む。
-  var committed: FaceGeometry.Resolved { FaceGeometry.resolve(faces, width: bounds.width) }
-  /// 投影（ドット・背の見え方・分割中か）が変わった。器の幅で変わりうるので chrome はここから追従する。
+  var committed: FaceGeometry.Resolved { FaceGeometry.resolve(faces, size: bounds.size) }
+  /// 投影（ドット・分割中か）が変わった。器の幅で変わりうるので chrome はここから追従する。
   var onProjectionChange: (() -> Void)?
-  /// 背のクリック／離したときに求める配置。タブが正規化して状態に置き、`set` で戻す。
+  /// 取っ手を押した／離したときに求める配置。タブが正規化して状態に置き、`set` で戻す。
   var onFacesRequested: ((FaceLayout, _ animated: Bool) -> Void)?
   /// 窓の first responder が面の配下に入った（面の焦点の記憶はここからだけ導く）。
   var onFaceFocused: ((Face) -> Void)?
@@ -46,22 +47,31 @@ final class TabFacesView: NSView {
     return nil
   }
 
-  /// 相互作用の状態。幅に依らない形で持ち、`layout()` が新しい幅へ写す。
-  private enum Interaction {
-    case settled
-    /// 背のドラッグ中: 掴んだ瞬間の配置と、ポインタが求める現在の配置。
-    case dragging(origin: FaceLayout, current: FaceLayout)
-    /// 遷移中: 起点のエディター割合と開始時刻。終点は鏡 `faces`。
-    case sliding(fromRatio: Double, start: CFTimeInterval)
+  struct Sample {
+    let time: CFTimeInterval
+    let hx: CGFloat
   }
-  private var interaction: Interaction = .settled
 
+  /// 相互作用の状態。位置は割合で持ち、`layout()` が新しい幅へ写す。
+  enum Interaction {
+    case settled
+    /// 押したが閾値の前: 掴んだ点・掴んだ瞬間の位置の割合・位置のばねが動いていたか。
+    case pressed(x0: CGFloat, ratio0: CGFloat, wasFlying: Bool)
+    /// 引いている間: 掴んだ点・掴んだ瞬間の位置の割合・離したときの速度を測る標本。
+    case dragging(x0: CGFloat, ratio0: CGFloat, samples: [Sample])
+    /// 確定した配置へ動いている途中（両方のばねが止まれば確定する）。
+    case moving
+  }
+  var interaction: Interaction = .settled
+
+  var motion = FaceMotion.rest(at: 0, width: 0)
+  /// `motion` を置いた器の大きさ（幅が変わったら位置を伸縮し、大きさが変わったら動きの中身を配り直す）。
+  private var motionSize: CGSize = .zero
+  /// ホバーの進み（0→1）。的は「ポインタが取っ手の上にあるか、掴んでいるか」。
+  private var hover: CGFloat = 0
+  private var lastTick: CFTimeInterval?
   private var lastVisibleTerminalSize: CGSize?
   private var reportedProjection: FaceGeometry.Projection?
-  /// 今置いてあるエディター幅（遷移の起点）。
-  private var placedEditorWidth: CGFloat = 0
-  /// ドラッグ中、次のフレームで中身へ配る寸法の元。
-  private var pendingDragSizes: FaceGeometry.Resolved?
   private var clock: FrameClock?
 
   override var isFlipped: Bool { true }
@@ -70,15 +80,18 @@ final class TabFacesView: NSView {
     self.terminal = terminal
     self.editor = editor
     self.faces = faces
-    resolved = FaceGeometry.resolve(faces, width: 0)
+    resolved = FaceGeometry.resolve(faces, size: .zero)
     editorFace = FaceClipView(content: editor)
     terminalFace = FaceClipView(content: terminal)
     super.init(frame: .zero)
-    for view in [editorFace, spine, terminalFace] {
+    for view in [editorFace, terminalFace, seamGround, handle] {
       view.autoresizingMask = []
       addSubview(view)
     }
-    wireSpine()
+    wireHandle()
+    NSWorkspace.shared.notificationCenter.addObserver(
+      self, selector: #selector(accessibilityDisplayOptionsDidChange),
+      name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
@@ -96,22 +109,24 @@ final class TabFacesView: NSView {
     }
   }
 
-  /// 背の操作を器の状態へ結ぶ。init の外に置き、閉包が読む `faces` を常に鏡（プロパティ）にする。
-  private func wireSpine() {
-    spine.onGrab = { [unowned self] in
-      stopClock()
-      interaction = .dragging(origin: faces, current: faces)
-      window?.makeFirstResponder(focusTarget)
-    }
-    spine.onDrag = { [unowned self] x in drag(to: x) }
-    spine.onRelease = { [unowned self] in release() }
-    spine.onClick = { [unowned self] in
-      interaction = .settled
-      onFacesRequested?(FaceGeometry.spineClick(resolved), true)
-    }
+  /// 取っ手の操作を器の状態へ結ぶ。init の外に置き、閉包が読む `faces` を常に鏡（プロパティ）にする。
+  private func wireHandle() {
+    handle.onGrab = { [unowned self] x0 in grab(at: x0) }
+    handle.onDrag = { [unowned self] x, time in drag(to: x, at: time) }
+    handle.onRelease = { [unowned self] x, time in release(at: x, time: time) }
+    handle.onClick = { [unowned self] in click() }
+    handle.onPointerOver = { [unowned self] _ in updateClock() }
+    handle.onScroll = { [unowned self] event in scrollFace(event) }
   }
 
-  /// 窓の環境（透過・言語・フォント割り当て・サイドバーの状態）を面へ配る。
+  /// 取っ手の上のスクロールを、その点にある見えている面へ渡す。
+  private func scrollFace(_ event: NSEvent) {
+    let point = convert(event.locationInWindow, from: nil)
+    let face = [editorFace, terminalFace].first { !$0.isHidden && $0.frame.contains(point) }
+    face?.hitTest(point)?.scrollWheel(with: event)
+  }
+
+  /// 窓の環境（透過・言語・フォント割り当て・サイドバーの状態）を面と取っ手へ配る。
   func configure(
     translucency: ChromeTranslucency, localization: LocalizationStore,
     fontResolver: ChromeFontResolver, sidebar: EditorSidebarState
@@ -119,44 +134,123 @@ final class TabFacesView: NSView {
     editor.configure(
       translucency: translucency, localization: localization, fontResolver: fontResolver,
       sidebar: sidebar)
-    spine.translucency = translucency
+    handle.translucency = translucency
+    seamGround.translucency = translucency
   }
 
-  /// 配置を写す。`animated` なら面の clip と中身の位置を `Theme.Motion.faceSlide` で動かす
-  /// （窓に付いていない・幅 0・Reduce Motion・幅が変わらないときは即時）。
+  /// 配置を写す。`animated` なら位置のばねで行き先へ運ぶ（窓に付いていない・幅 0・Reduce Motion なら即時）。
+  /// 押さえている・引いている途中でも、外から来た配置が勝つ（掴みを打ち切る）。
   func set(_ faces: FaceLayout, animated: Bool) {
     guard faces != self.faces else { return }
+    if isGrabbing {
+      handle.cancelGrab()
+      interaction = .settled
+    }
     self.faces = faces
-    settle(to: committed, animated: animated)
+    let target = committed
+    if animated, window != nil, bounds.width > 0, !reduceMotion {
+      if motion.hx != target.shape.hx { motion.flying = true }
+      beginMove(to: target)
+    } else {
+      settle(target)
+    }
   }
 
-  /// 器が再レイアウトされた（幅が変わったとは限らない）。今の相互作用を今の幅で置き直す。
+  /// 器が再レイアウトされた（幅が変わったとは限らない）。今の状態を今の大きさで置き直す。
   override func layout() {
     super.layout()
+    let resized = rescaleMotion()
     switch interaction {
     case .settled:
-      apply(committed)
-    case .dragging(_, let current):
-      pendingDragSizes = nil
-      apply(FaceGeometry.resolve(current, width: bounds.width))
-    case .sliding:
-      prepareSlide(to: committed)
-      slideFrame(now: CACurrentMediaTime())
+      settle(committed)
+    case .dragging:
+      let g = dragResolved()
+      applySizes(g)
+      showDrag(g)
+    case .pressed, .moving:
+      if resized {
+        resolved = committed
+        distributeMoveSizes(to: resolved)
+        report(resolved.projection)
+      }
+      placeMotion()
     }
   }
 
   // MARK: - 配置
 
-  private func settle(to target: FaceGeometry.Resolved, animated: Bool) {
-    let animatable =
-      animated && window != nil && bounds.width > 0
-      && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-    if animatable, target.editorWidth != placedEditorWidth {
-      startSlide(from: placedEditorWidth, to: target)
+  /// 動きを減らすか。システムの設定を写して変化に追従する（テストは直接決める）。真なら位置は行き先へ即時に移り、形は位置に
+  /// 直結し、ホバーは即時に切り替わる。
+  var reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+
+  @objc private func accessibilityDisplayOptionsDidChange() {
+    reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+  }
+
+  var isGrabbing: Bool {
+    switch interaction {
+    case .pressed, .dragging: true
+    case .settled, .moving: false
+    }
+  }
+
+  var maxPosition: CGFloat { FaceGeometry.maxPosition(bounds.width) }
+
+  /// 器の大きさが変わったかを返す。幅が変わっていれば位置と速度を MAX の比で伸縮する（行き先は鏡から引くので伸縮しない）。
+  private func rescaleMotion() -> Bool {
+    let size = bounds.size
+    guard size != motionSize else { return false }
+    let old = FaceGeometry.maxPosition(motionSize.width)
+    let widthChanged = size.width != motionSize.width
+    motionSize = size
+    guard widthChanged else { return true }
+    if old > 0 {
+      let scale = maxPosition / old
+      motion.hx *= scale
+      motion.v *= scale
     } else {
-      stopClock()
-      interaction = .settled
-      apply(target)
+      motion = .rest(at: committed.shape.hx, width: size.width)
+    }
+    return true
+  }
+
+  /// 静止へ確定する: 動きを行き先に止め、解決結果を写す。
+  func settle(_ target: FaceGeometry.Resolved) {
+    motion = .rest(at: target.shape.hx, width: target.width)
+    motionSize = target.size
+    interaction = .settled
+    apply(target)
+    updateClock()
+  }
+
+  /// 確定した配置へ動き始める: 現れる・広がる面の中身を配り、行き先の焦点の印と投影を写す。
+  func beginMove(to target: FaceGeometry.Resolved) {
+    guard !reduceMotion else { return settle(target) }
+    interaction = .moving
+    resolved = target
+    distributeMoveSizes(to: target)
+    paint(target)
+    report(target.projection)
+    placeMotion()
+    if motion.isAtRest(width: bounds.width) { settle(target) } else { updateClock() }
+  }
+
+  /// 動きの始めの中身の寸法: 行き先で見えている面の中身を、今見えている中身・今の面・行き先の面の幅の大きい方にする——
+  /// どのコマでも見えている面が中身で覆われ、縮む・隠れる面の寸法は終わりの 1 回だけ変わる。隠れている端末の中身は最後に
+  /// 見えていた寸法で据え置かれているので、その幅は拾わない（現れる面は始めから行き先の寸法で入る）。
+  private func distributeMoveSizes(to target: FaceGeometry.Resolved) {
+    let now = FaceGeometry.frames(motion.shape, size: bounds.size)
+    let h = bounds.height
+    if target.editorWidth > 0 {
+      let width = max(editor.frame.width, now.editor.width, target.editorWidth)
+      setSize(editor, CGSize(width: width, height: h))
+      editorFace.isHidden = false
+    }
+    if target.terminalWidth > 0 {
+      let current = now.terminal.width > 0 ? terminal.frame.width : 0
+      let width = max(current, now.terminal.width, target.terminalWidth)
+      setSize(terminal, CGSize(width: width, height: h))
+      terminalFace.isHidden = false
     }
   }
 
@@ -166,228 +260,126 @@ final class TabFacesView: NSView {
     applySizes(g)
     setVisibility(g)
     paint(g)
-    place(editorWidth: g.editorWidth, g)
+    place(g.frames)
     report(g.projection)
   }
 
   /// 中身のサイズ。端末は見えているときだけ寸法を覚える。
-  private func applySizes(_ g: FaceGeometry.Resolved) {
+  func applySizes(_ g: FaceGeometry.Resolved) {
     if g.terminalWidth > 0 { lastVisibleTerminalSize = terminalContentSize(g) }
-    setSize(editor, editorContentSize(g))
+    setSize(editor, g.frames.editor.size)
     setSize(terminal, terminalContentSize(g))
   }
 
+  private func terminalContentSize(_ g: FaceGeometry.Resolved) -> CGSize {
+    if g.terminalWidth > 0 { return g.frames.terminal.size }
+    return lastVisibleTerminalSize ?? g.size
+  }
+
   /// 幅 0 の面を隠す。
-  private func setVisibility(_ g: FaceGeometry.Resolved) {
+  func setVisibility(_ g: FaceGeometry.Resolved) {
     editorFace.isHidden = g.editorWidth <= 0
     terminalFace.isHidden = g.terminalWidth <= 0
   }
 
-  /// 焦点の印と背の見え方。
-  private func paint(_ g: FaceGeometry.Resolved) {
+  /// 焦点の印。
+  func paint(_ g: FaceGeometry.Resolved) {
     editorFace.markColor = g.isSplit && g.faces.focus == .editor ? Theme.Color.faceEditor : nil
     terminalFace.markColor =
       g.isSplit && g.faces.focus == .terminal ? Theme.Color.faceTerminal : nil
-    spine.look = g.projection.spineLook
   }
 
-  /// 面・背・中身の位置を `editorWidth` で置く。中身のサイズは触らない（遷移中は補間した幅で呼ぶ）。
-  /// 中身は錨側（エディター＝右・端末＝隣にエディターがあれば右、無ければ左）に付き、遷移中は面の
-  /// 端から滑り込む。
-  private func place(editorWidth eW: CGFloat, _ g: FaceGeometry.Resolved) {
-    placedEditorWidth = eW
-    let h = bounds.height
-    let tW = g.contentWidth - eW
-    editorFace.frame = NSRect(x: 0, y: 0, width: eW, height: h)
-    spine.frame = NSRect(x: eW, y: 0, width: FaceGeometry.spine, height: h)
-    terminalFace.frame = NSRect(x: eW + FaceGeometry.spine, y: 0, width: tW, height: h)
-    editor.frame.origin = NSPoint(x: eW - editor.frame.width, y: 0)
-    let terminalX = g.editorWidth > 0 ? tW - terminal.frame.width : 0
+  /// 動きの今の矩形を置く。確定した位置に止まっていれば、点に丸めた静止の矩形を置く。
+  private func placeMotion() {
+    let target = committed
+    if motion.hx == target.shape.hx, motion.isAtRest(width: bounds.width) {
+      place(target.frames)
+    } else {
+      place(FaceGeometry.frames(motion.shape, size: bounds.size))
+    }
+  }
+
+  /// 面・両面の間の地・取っ手・中身の位置を矩形 `f` で置く。中身のサイズは触らない。中身は錨側（エディター＝右・端末＝
+  /// 隣にエディターがあれば右、無ければ左）に付き、動きの間は面の端から滑り込む。
+  func place(_ f: FaceGeometry.Frames) {
+    editorFace.frame = f.editor
+    terminalFace.frame = f.terminal
+    seamGround.frame = f.gap
+    seamGround.isHidden = f.gap.width <= 0
+    handle.frame = f.handle
+    handle.shape = (f.edgeOnLeft, f.t)
+    handle.hover = hover
+    editor.frame.origin = NSPoint(x: f.editor.width - editor.frame.width, y: 0)
+    let terminalX = resolved.editorWidth > 0 ? f.terminal.width - terminal.frame.width : 0
     terminal.frame.origin = NSPoint(x: terminalX, y: 0)
   }
 
-  private func editorContentSize(_ g: FaceGeometry.Resolved) -> CGSize {
-    CGSize(width: g.editorWidth, height: bounds.height)
-  }
-
-  private func terminalContentSize(_ g: FaceGeometry.Resolved) -> CGSize {
-    if g.terminalWidth > 0 { return CGSize(width: g.terminalWidth, height: bounds.height) }
-    return lastVisibleTerminalSize ?? CGSize(width: g.contentWidth, height: bounds.height)
+  func showDrag(_ g: FaceGeometry.Resolved) {
+    resolved = g
+    setVisibility(g)
+    paint(g)
+    place(g.frames)
+    report(g.projection)
   }
 
   private func setSize(_ view: NSView, _ size: CGSize) {
     if view.frame.size != size { view.setFrameSize(size) }
   }
 
-  private func report(_ projection: FaceGeometry.Projection) {
+  func report(_ projection: FaceGeometry.Projection) {
     guard projection != reportedProjection else { return }
     reportedProjection = projection
     onProjectionChange?()
   }
 
-  // MARK: - 背のドラッグ
+  // MARK: - 時計
 
-  /// ポインタごとに面と背を置く。中身の resize は次のフレームへ間引く。
-  private func drag(to x: CGFloat) {
-    guard case .dragging(let origin, _) = interaction else { return }
-    let g0 = FaceGeometry.resolve(origin, width: bounds.width)
-    let current = FaceGeometry.drag(from: g0, x: x)
-    interaction = .dragging(origin: origin, current: current)
-    let g = FaceGeometry.resolve(current, width: bounds.width)
-    resolved = g
-    pendingDragSizes = g
-    setVisibility(g)
-    paint(g)
-    place(editorWidth: g.editorWidth, g)
-    report(g.projection)
-    if clock == nil {
-      clock = FrameClock(view: self) { [unowned self] in flushDragSizes() }
+  private var hoverTarget: CGFloat { handle.isPointerOver || isGrabbing ? 1 : 0 }
+
+  /// 時計が要るか: 引いている間・動きが止まっていない間・ホバーが的に届いていない間。
+  var isAnimating: Bool {
+    if case .dragging = interaction { return true }
+    return !motion.isAtRest(width: bounds.width) || hover != hoverTarget
+  }
+
+  func updateClock() {
+    if reduceMotion, hover != hoverTarget {
+      hover = hoverTarget
+      handle.hover = hover
     }
-  }
-
-  private func flushDragSizes() {
-    guard let g = pendingDragSizes else { return }
-    pendingDragSizes = nil
-    applySizes(g)
-    place(editorWidth: g.editorWidth, g)
-  }
-
-  /// 離した: 端に寄せていれば閉じる配置をタブへ 1 回だけ求め、変わらなければその場で確定する。
-  private func release() {
-    guard case .dragging(_, let current) = interaction else { return }
-    interaction = .settled
-    stopClock()
-    flushDragSizes()
-    let final = FaceGeometry.release(current, contentWidth: resolved.contentWidth)
-    if final == faces {
-      settle(to: committed, animated: true)
+    if isAnimating {
+      if clock == nil {
+        lastTick = nil
+        clock = FrameClock(view: self) { [unowned self] in frame() }
+      }
     } else {
-      onFacesRequested?(final, true)
+      clock?.cancel()
+      clock = nil
     }
   }
 
-  // MARK: - 遷移
-
-  private func startSlide(from: CGFloat, to target: FaceGeometry.Resolved) {
-    stopClock()
-    let start = CACurrentMediaTime()
-    interaction = .sliding(fromRatio: Double(from / target.contentWidth), start: start)
-    prepareSlide(to: target)
-    clock = FrameClock(view: self) { [unowned self] in slideFrame(now: CACurrentMediaTime()) }
-    slideFrame(now: start)
+  private func frame() {
+    let now = CACurrentMediaTime()
+    tick(dt: CGFloat(now - (lastTick ?? now)))
+    lastTick = now
   }
 
-  /// 遷移の終点を据える: どのコマでも見えている面が中身で覆われるようにする——隠れていく面の中身は最後に見えていた寸法の
-  /// まま（遷移中に器が resize されても据え置く）、残る面の中身は起点と終点の面の幅の大きい方。中身の寸法が変わるのは、
-  /// 現れる・広がる面はここ、縮む・隠れる面は終端の `apply` の 1 回だけ。現れる側は最初の 1 フレームから見せ、隠れる側は
-  /// 終端まで倒さない。塗りは終点の規則。
-  private func prepareSlide(to target: FaceGeometry.Resolved) {
-    guard case .sliding(let fromRatio, _) = interaction else { return }
-    resolved = target
-    let fromEditor = CGFloat(fromRatio) * target.contentWidth
-    if target.editorWidth > 0 {
-      setSize(
-        editor, CGSize(width: max(fromEditor, target.editorWidth), height: bounds.height))
-      editorFace.isHidden = false
+  /// `dt` 秒の 1 フレーム: 動きとホバーを進め、今の状態で置く。動きが止まったら確定する。
+  func tick(dt: CGFloat) {
+    motion.step(dt: dt, width: bounds.width, goal: committed.shape.hx)
+    let rate = dt / CGFloat(Theme.Motion.quick)
+    hover =
+      hoverTarget > hover ? min(hoverTarget, hover + rate) : max(hoverTarget, hover - rate)
+    switch interaction {
+    case .dragging:
+      let g = dragResolved()
+      applySizes(g)
+      showDrag(g)
+    case .moving where motion.isAtRest(width: bounds.width):
+      settle(committed)
+    case .settled, .pressed, .moving:
+      placeMotion()
     }
-    if target.terminalWidth > 0 {
-      let width = max(target.contentWidth - fromEditor, target.terminalWidth)
-      setSize(terminal, CGSize(width: width, height: bounds.height))
-      terminalFace.isHidden = false
-    }
-    paint(target)
-    report(target.projection)
-  }
-
-  /// 遷移の 1 フレーム。`now` の進行で起点と終点の間に背を置き、終端で確定配置へ着地する。
-  func slideFrame(now: CFTimeInterval) {
-    guard case .sliding(let fromRatio, let start) = interaction else { return }
-    let target = committed
-    let progress = min(1, (now - start) / Theme.Motion.faceSlide)
-    let eased = CGFloat(Theme.Motion.faceSlideCurve.value(at: max(0, progress)))
-    let from = CGFloat(fromRatio) * target.contentWidth
-    place(editorWidth: from + (target.editorWidth - from) * eased, target)
-    if progress >= 1 {
-      stopClock()
-      interaction = .settled
-      apply(target)
-    }
-  }
-
-  private func stopClock() {
-    clock?.cancel()
-    clock = nil
-  }
-
-  /// display link 駆動でフレームごとに `tick` を呼ぶ。遷移の補間とドラッグ中の resize の間引きが共有する。
-  private final class FrameClock {
-    private var link: CADisplayLink?
-    private let tick: () -> Void
-
-    init(view: NSView, tick: @escaping () -> Void) {
-      self.tick = tick
-      link = view.displayLink(target: self, selector: #selector(step))
-      link?.add(to: .main, forMode: .common)
-    }
-
-    @objc private func step(_ link: CADisplayLink) { tick() }
-
-    func cancel() {
-      link?.invalidate()
-      link = nil
-    }
-  }
-}
-
-/// 面の clip の器。中身を面いっぱいに置き、分割中の焦点の印（面のキー色の細い帯）を中身の上辺へ重ねる——
-/// 印は場所を取らないので、焦点が移っても中身は動かない。
-private final class FaceClipView: NSView {
-  private let mark = FocusMarkView()
-  /// 印の色。nil なら印を出さない。
-  var markColor: NSColor? {
-    get { mark.color }
-    set { mark.color = newValue }
-  }
-
-  init(content: NSView) {
-    super.init(frame: .zero)
-    wantsLayer = true
-    clipsToBounds = true
-    content.autoresizingMask = []
-    addSubview(content)
-    addSubview(mark)
-  }
-  required init?(coder: NSCoder) { fatalError("not supported") }
-
-  override var isFlipped: Bool { true }
-
-  override func setFrameSize(_ newSize: NSSize) {
-    super.setFrameSize(newSize)
-    mark.frame = NSRect(x: 0, y: 0, width: newSize.width, height: FaceGeometry.focusBand)
-  }
-}
-
-/// 焦点の印。中身より手前に重なるが、クリックやドラッグは中身へ通す。
-private final class FocusMarkView: NSView {
-  var color: NSColor? {
-    didSet {
-      guard color != oldValue else { return }
-      isHidden = color == nil
-      needsDisplay = true
-    }
-  }
-
-  override init(frame: NSRect) {
-    super.init(frame: frame)
-    wantsLayer = true
-    isHidden = true
-  }
-  required init?(coder: NSCoder) { fatalError("not supported") }
-
-  override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-  override func draw(_ dirtyRect: NSRect) {
-    color?.setFill()
-    bounds.fill()
+    updateClock()
   }
 }

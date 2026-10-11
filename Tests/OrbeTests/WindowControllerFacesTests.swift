@@ -5,12 +5,12 @@ import XCTest
 
 @testable import Orbe
 
-/// 面の機構を実窓で固定する——⌘E の往復、⌘W の発火源、背のドラッグ／離す／クリック、タブごとの配置と
+/// 面の機構を実窓で固定する——⌘E の往復、⌘W の発火源、引き手・継ぎ目を引く／離す／押す、タブごとの配置と
 /// 焦点の面への復帰、器に包まれた端末の寸法、chrome への投影（現在地・位置ドット）。
 ///
 /// 壊れると何が起きるか。⌘E が焦点の面へ first responder を運ばないとキーが隠れた面へ届く。⌘W の発火源が
 /// `.gesture` でなくなると寿命ログが人の操作を「落ちた」と記録し、⇧⌘T のバッジと `orb session closed` の
-/// 群れ分けが狂う。背を引いている間にタブの配置を書き換えると毎ポインタで保存と chrome 更新が走る。
+/// 群れ分けが狂う。取っ手を引いている間にタブの配置を書き換えると毎ポインタで保存と chrome 更新が走る。
 /// 離したときの閉じ境がずれると意図しない面が閉じ、焦点が残る面へ移らないと responder が隠れた面に残る。
 /// 隠れている端末が resize されると scrollback が折り返し直され、復元した配置に戻らないとタブを切り替える
 /// たびに分割が消える。chrome が焦点の面を映さないと現在地とドットが実態と別の面を指す。
@@ -41,9 +41,9 @@ final class WindowControllerFacesTests: OrbeTestCase {
     wc.window.contentView?.layoutSubtreeIfNeeded()
   }
 
-  /// 器の内容幅（窓の content 幅から背を除いた値）。
-  func contentWidth(_ wc: WindowController) -> CGFloat {
-    wc.model.content.bounds.width - FaceGeometry.spine
+  /// 器の幅（窓の content 幅）。
+  func facesWidth(_ wc: WindowController) -> CGFloat {
+    wc.model.content.bounds.width
   }
 
   // MARK: - ⌘E
@@ -94,97 +94,98 @@ final class WindowControllerFacesTests: OrbeTestCase {
     XCTAssertEqual(events.last?.closeOrigin, .gesture, "⌘W は人のジェスチャとして記録される")
   }
 
-  // MARK: - 背
+  // MARK: - 引き手・継ぎ目
 
-  /// 背を引くと面はポインタに追従する（掴んだ位置のオフセットを保つ）が、タブの配置は離すまで
-  /// 書き換えず、離したときに 1 回だけ確定する。
-  func testSpineDragFollowsThePointerAndCommitsOnRelease() throws {
+  /// 端末だけのときに左縁の引き手を掴んで引くと、取っ手はポインタに 1:1 で付き、面が追従する。タブの配置は離すまで
+  /// 書き換えず、離したときに 1 回だけ確定する（ゆっくり離せばその位置で分割として残る）。
+  func testNotchDragFollowsThePointerAndCommitsOnRelease() throws {
     let wc = WindowController()
     let tab = try XCTUnwrap(wc.activeTab)
     layout(wc)
     var changes = 0
     tab.onFacesChange = { changes += 1 }
-    let spine = tab.view.spine
-    let grab = spine.centerInWindow
-    let offset = grab.x - spine.frame.minX
+    let handle = tab.view.handle
+    let grab = handle.centerInWindow
+    let offset = grab.x - handle.frame.minX
     let y = grab.y
 
-    spine.mouseDown(with: .mouse(.leftMouseDown, at: grab, in: wc.window))
-    spine.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 300, y: y), in: wc.window))
-    spine.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 400, y: y), in: wc.window))
+    handle.mouseDown(with: .mouse(.leftMouseDown, at: grab, in: wc.window))
+    handle.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 300, y: y), in: wc.window))
+    handle.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 400, y: y), in: wc.window))
 
-    XCTAssertEqual(spine.frame.minX, 400 - offset, "背は掴んだ位置を保ってポインタに追従する")
-    XCTAssertEqual(tab.view.resolved.editorWidth, 400 - offset, "エディター面は背の左端まで広がる")
+    XCTAssertEqual(handle.frame.minX, 400 - offset, "取っ手は掴んだ点のずれを保ってポインタに追従する")
+    XCTAssertTrue(handle.frame.minX <= 400 && 400 <= handle.frame.maxX, "取っ手はポインタの下")
+    let ratio = try XCTUnwrap(FaceGeometry.ratio(hx: 400 - offset, width: facesWidth(wc)))
     XCTAssertFalse(tab.view.editor.isHiddenOrHasHiddenAncestor, "引き出したエディター面は見えている")
     XCTAssertEqual(tab.faces, .terminalOnly, "離すまでタブの配置は変わらない")
     XCTAssertEqual(changes, 0)
 
-    spine.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: 400, y: y), in: wc.window))
-    XCTAssertEqual(
-      tab.faces.editorRatio * contentWidth(wc), 400 - offset, accuracy: 0.5, "離した幅で確定")
+    handle.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: 400, y: y), in: wc.window))
+    XCTAssertEqual(tab.faces.editorRatio, ratio, accuracy: 0.0001, "離した位置で確定")
     XCTAssertEqual(tab.faces.focus, .terminal, "焦点は掴んだときのまま")
     XCTAssertEqual(changes, 1, "確定は 1 回")
   }
 
-  /// 閉じる境より狭い面を残したまま離すと、その面が閉じて隣が全面になる。閉じたのが焦点の面なら
-  /// 焦点と first responder は残る面へ移る。
-  func testSpineReleaseNearTheEdgeClosesTheFace() throws {
+  /// 端の近く（勢いで滑った先が端から 24 以内）で離すと、その面が閉じて隣が全面になる。閉じたのが焦点の面なら
+  /// 焦点と first responder は残る面へ移る。動いている途中で掴み直しても同じ。
+  func testHandleReleaseNearTheEdgeClosesTheFace() throws {
     let wc = WindowController()
     let tab = try XCTUnwrap(wc.activeTab)
     layout(wc)
-    let spine = tab.view.spine
-    let y = spine.centerInWindow.y
+    let handle = tab.view.handle
+    let y = handle.centerInWindow.y
 
-    spine.mouseDown(with: .mouse(.leftMouseDown, at: spine.centerInWindow, in: wc.window))
-    spine.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 30, y: y), in: wc.window))
-    spine.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: 30, y: y), in: wc.window))
+    handle.mouseDown(with: .mouse(.leftMouseDown, at: handle.centerInWindow, in: wc.window))
+    handle.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 20, y: y), in: wc.window))
+    handle.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: 20, y: y), in: wc.window))
     XCTAssertEqual(tab.faces, .terminalOnly, "端ぎりぎりのエディターは閉じる")
     XCTAssertTrue(wc.window.firstResponder === tab.surface)
 
-    let nearRight = contentWidth(wc) - 30
-    spine.mouseDown(with: .mouse(.leftMouseDown, at: spine.centerInWindow, in: wc.window))
-    spine.mouseDragged(
+    let nearRight = facesWidth(wc) - 20
+    handle.mouseDown(with: .mouse(.leftMouseDown, at: handle.centerInWindow, in: wc.window))
+    handle.mouseDragged(
       with: .mouse(.leftMouseDragged, at: NSPoint(x: nearRight, y: y), in: wc.window))
-    spine.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: nearRight, y: y), in: wc.window))
+    handle.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: nearRight, y: y), in: wc.window))
     XCTAssertEqual(tab.faces, FaceLayout(editorRatio: 1, focus: .editor), "端ぎりぎりの端末は閉じる")
     XCTAssertTrue(wc.window.firstResponder === tab.view.editor, "焦点は残ったエディターへ")
   }
 
-  /// 掴んだ瞬間に焦点の面へ first responder が戻り、引いて離しても焦点の面は変わらない。
-  func testSpineGrabReturnsFocusToTheFocusedFaceAndDragKeepsIt() throws {
+  /// 継ぎ目を掴んだ瞬間に焦点の面へ first responder が戻り、引いて離しても焦点の面は変わらない。
+  func testSeamGrabReturnsFocusToTheFocusedFaceAndDragKeepsIt() throws {
     let wc = WindowController()
     let tab = try XCTUnwrap(wc.activeTab)
     tab.setFaces(FaceLayout(editorRatio: 0.5, focus: .editor), animated: false)
     layout(wc)
     wc.window.makeFirstResponder(nil)
     XCTAssertFalse(wc.window.firstResponder === tab.view.editor, "前提: 焦点の面から外れている")
-    let spine = tab.view.spine
-    let grab = spine.centerInWindow
-    let offset = grab.x - spine.frame.minX
+    let handle = tab.view.handle
+    let grab = handle.centerInWindow
+    let offset = grab.x - handle.frame.minX
     let y = grab.y
+    let ratio = try XCTUnwrap(FaceGeometry.ratio(hx: 300 - offset, width: facesWidth(wc)))
 
-    spine.mouseDown(with: .mouse(.leftMouseDown, at: grab, in: wc.window))
+    handle.mouseDown(with: .mouse(.leftMouseDown, at: grab, in: wc.window))
     XCTAssertTrue(wc.window.firstResponder === tab.view.editor, "掴んだ瞬間に焦点の面へ戻る")
 
-    spine.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 300, y: y), in: wc.window))
-    spine.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: 300, y: y), in: wc.window))
+    handle.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 300, y: y), in: wc.window))
+    handle.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: 300, y: y), in: wc.window))
     XCTAssertEqual(tab.faces.focus, .editor, "焦点はエディターのまま")
-    XCTAssertEqual(tab.faces.editorRatio * contentWidth(wc), 300 - offset, accuracy: 0.5)
+    XCTAssertEqual(tab.faces.editorRatio, ratio, accuracy: 0.0001)
     XCTAssertTrue(wc.window.firstResponder === tab.view.editor)
   }
 
-  /// 閾値（4px）未満しか動かさずに離せばクリック（隣の面を全開）。
-  func testSpineMoveUnderTheThresholdIsAClick() throws {
+  /// 閾値（4px）未満しか動かさずに離せば押した扱い（隣の面を全開）。
+  func testNotchMoveUnderTheThresholdIsAClick() throws {
     let wc = WindowController()
     let tab = try XCTUnwrap(wc.activeTab)
     layout(wc)
-    let spine = tab.view.spine
-    let grab = spine.centerInWindow
+    let handle = tab.view.handle
+    let grab = handle.centerInWindow
 
-    spine.mouseDown(with: .mouse(.leftMouseDown, at: grab, in: wc.window))
-    spine.mouseDragged(
+    handle.mouseDown(with: .mouse(.leftMouseDown, at: grab, in: wc.window))
+    handle.mouseDragged(
       with: .mouse(.leftMouseDragged, at: NSPoint(x: grab.x + 3, y: grab.y), in: wc.window))
-    spine.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: grab.x + 3, y: grab.y), in: wc.window))
+    handle.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: grab.x + 3, y: grab.y), in: wc.window))
 
     XCTAssertEqual(tab.faces, FaceLayout(editorRatio: 1, focus: .editor), "隠れていたエディターが全開")
     XCTAssertTrue(wc.window.firstResponder === tab.view.editor)
@@ -254,9 +255,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
     XCTAssertGreaterThan(content.width, 0, "前提: content が実サイズを持つ")
     XCTAssertEqual(
       tab.surface.bounds.size,
-      CGSize(
-        width: ((content.width - FaceGeometry.spine) / 2).rounded(),
-        height: content.height), "端末は分割後の面の寸法")
+      FaceGeometry.resolve(tab.faces, size: content).frames.terminal.size, "端末は分割後の面の寸法")
   }
 
   // MARK: - 器に包まれた端末
@@ -282,7 +281,7 @@ final class WindowControllerFacesTests: OrbeTestCase {
     let content = wc.model.content.bounds.size
     XCTAssertEqual(
       tab.surface.bounds.size,
-      CGSize(width: content.width - FaceGeometry.spine, height: content.height),
+      CGSize(width: content.width, height: content.height),
       "戻したら今の窓幅で置き直す")
   }
 
