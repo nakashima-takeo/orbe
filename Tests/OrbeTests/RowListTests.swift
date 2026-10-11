@@ -9,7 +9,8 @@ import XCTest
 ///
 /// 壊れると何が起きるか。送るたびに見えている行を全部描き直して重い、行の数が変わるたびに枠を作り直す。↑↓ や Enter が
 /// 源へ届かない、Home / End で送れない。押した行と違う行が開く。選んだ行が見えているのに送られる、見えていないのに
-/// 寄らない。結果が届くたびに選択の行へ引き戻される。
+/// 寄らない。結果が届くたびに選択の行へ引き戻される。末尾まで送っても最後の行が下端に付く。つまみを掴めない・引いても
+/// ポインタに付いてこない、消えているつまみや帯が行のクリックを奪う。
 @MainActor
 final class RowListTests: OrbeTestCase {
   private let rowHeight: CGFloat = 20
@@ -118,7 +119,7 @@ final class RowListTests: OrbeTestCase {
   func testSlotsAreReusedAndScrollingRedrawsOnlyTheNewlyVisibleRows() {
     let hosted = host()
     let list = hosted.list
-    XCTAssertEqual(list.frame.height, rowHeight * 200, "行の高さは 1 つ")
+    XCTAssertEqual(list.frame.height, rowHeight * 201, "行の高さは 1 つ・最後の行の下に 1 行分の空き")
     XCTAssertEqual(slots(list).count, 6, "見えている 5 行＋1 本")
     XCTAssertEqual(slot(list, 4)?.label, "row 4")
     XCTAssertNil(slot(list, 5), "見えていない行は描かない")
@@ -138,7 +139,7 @@ final class RowListTests: OrbeTestCase {
     hosted.rows.update(
       rowsVersion: 1, selection: nil, emoji: nil, wantsFocus: false)
     XCTAssertEqual(list.rowCount, 3)
-    XCTAssertEqual(list.frame.height, rowHeight * 3, "行の数の変化は列の高さだけで受ける")
+    XCTAssertEqual(list.frame.height, rowHeight * 4, "行の数の変化は列の高さだけで受ける")
     XCTAssertEqual(
       slots(list).map(ObjectIdentifier.init), kept.map(ObjectIdentifier.init), "枠は作り直さない")
     XCTAssertEqual(slot(list, 2)?.label, "row 2")
@@ -192,6 +193,9 @@ final class RowListTests: OrbeTestCase {
     let height = list.visibleRect.height
     list.scrollToEndOfDocument(nil)
     XCTAssertEqual(list.visibleRect.maxY, list.frame.height, accuracy: 0.5, "End は末尾へ送る")
+    XCTAssertEqual(
+      list.visibleRect.maxY - CGFloat(list.rowCount) * rowHeight, rowHeight, accuracy: 0.5,
+      "最後の行の下に 1 行分の空きが残る")
     list.scrollToBeginningOfDocument(nil)
     XCTAssertEqual(list.visibleRect.minY, 0, "Home は先頭へ送る")
     list.pageDown(nil)
@@ -203,7 +207,7 @@ final class RowListTests: OrbeTestCase {
 
   // MARK: - マウス
 
-  /// 押すと焦点を取り、行の番号を源へ渡す（ダブルクリックは別の口）。行の無いところは渡さない。
+  /// 押すと焦点を取り、行の番号を源へ渡す（ダブルクリックは別の口）。行の無いところ（最後の行の下の空き）は渡さない。
   func testClicksPassTheRow() {
     let hosted = host(rowCount: 3)
     let list = hosted.list
@@ -217,8 +221,65 @@ final class RowListTests: OrbeTestCase {
     press(x: 13, y: 2.5 * rowHeight, count: 1)
     XCTAssertTrue(hosted.window.firstResponder === list, "押すと焦点を取る")
     press(x: 150, y: 0.5 * rowHeight, count: 2)
-    press(x: 20, y: 4.5 * rowHeight, count: 1)
+    press(x: 20, y: 3.5 * rowHeight, count: 1)  // 最後の行の下の空き
     XCTAssertEqual(hosted.source.clicks, ["click 2", "double 0"])
+  }
+
+  // MARK: - つまみ
+
+  /// 当たりは見えているつまみだけ——列を出しただけの（消えている）つまみも、帯のつまみの外も行へ通る。掴んで引くと、
+  /// つまみがポインタに付いて動く。
+  func testOnlyTheShownThumbIsGrabbedAndItFollowsTheDrag() {
+    let hosted = host()
+    let rows = hosted.rows
+    let thumb = rows.scrollbar
+    /// 列の座標の点を、hitTest が受ける親の座標へ。
+    func inParent(_ point: NSPoint) -> NSPoint { rows.superview!.convert(point, from: rows) }
+    var onThumb: NSPoint { inParent(NSPoint(x: thumb.frame.midX, y: thumb.frame.midY)) }
+    XCTAssertFalse(rows.hitTest(onThumb) === thumb, "消えているつまみは当たらない")
+
+    scroll(hosted, by: 1)
+    XCTAssertTrue(rows.hitTest(onThumb) === thumb, "位置が変わると見えて当たる")
+    let band = inParent(NSPoint(x: thumb.frame.midX, y: thumb.frame.maxY + rowHeight))
+    XCTAssertTrue(
+      rows.hitTest(band)?.isDescendant(of: hosted.list) == true, "帯のつまみの外は行へ通る")
+
+    func mouse(_ type: NSEvent.EventType, y: CGFloat) -> NSEvent {
+      NSEvent.mouseEvent(
+        with: type, location: NSPoint(x: onThumb.x, y: y), modifierFlags: [], timestamp: 0,
+        windowNumber: hosted.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
+        pressure: 1)!
+    }
+    let grab = onThumb.y
+    let top = thumb.frame.minY
+    thumb.mouseDown(with: mouse(.leftMouseDown, y: grab))
+    thumb.mouseDragged(with: mouse(.leftMouseDragged, y: grab - 8))
+    XCTAssertEqual(thumb.frame.minY - top, 8, accuracy: 0.5, "8pt 引けばつまみも 8pt 下りる")
+    thumb.mouseUp(with: mouse(.leftMouseUp, y: grab - 8))
+  }
+
+  /// ポインタの真下で窓に載り直した列（入った通知は来ない）でも、上でポインタを動かせばつまみが見える。外で動いても
+  /// 見せない（焦点のある列へは外の動きも届く）。
+  func testMovingThePointerOverAReplacedListShowsTheThumb() {
+    let hosted = host()
+    let rows = hosted.rows
+    let thumb = rows.scrollbar
+    hosted.window.contentView = nil
+    hosted.window.contentView = rows
+    rows.layoutSubtreeIfNeeded()
+    let onThumb = rows.superview!.convert(
+      NSPoint(x: thumb.frame.midX, y: thumb.frame.midY), from: rows)
+    func moved(to point: NSPoint) {
+      rows.mouseMoved(
+        with: NSEvent.mouseEvent(
+          with: .mouseMoved, location: point, modifierFlags: [], timestamp: 0,
+          windowNumber: hosted.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
+          pressure: 1)!)
+    }
+    moved(to: NSPoint(x: 100, y: 300))
+    XCTAssertFalse(rows.hitTest(onThumb) === thumb, "外で動いても見せない")
+    moved(to: NSPoint(x: 100, y: 50))
+    XCTAssertTrue(rows.hitTest(onThumb) === thumb, "上で動けば見える")
   }
 
   // MARK: - 送り
