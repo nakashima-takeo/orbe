@@ -82,7 +82,8 @@ final class RowList<Source: RowListSource>: NSScrollView {
     let hoverArea = NSTrackingArea(
       rect: .zero,
       options: [
-        .mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect, .enabledDuringMouseDrag,
+        .mouseEnteredAndExited, .mouseMoved, .activeInActiveApp, .inVisibleRect,
+        .enabledDuringMouseDrag,
       ],
       owner: self)
     addTrackingArea(hoverArea)
@@ -139,8 +140,15 @@ final class RowList<Source: RowListSource>: NSScrollView {
 
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
-    // 隠れる間にポインタが出ても出た通知は来ないので、載せ直すたびに外に居るところから始める。
+    // 隠れる間にポインタが出ても出た通知は来ないので、載せ直すたびに外に居るところから始める。ポインタの真下に
+    // 載ったときは入った通知も来ないので、動いたところで内外を決め直す（→ mouseMoved）。
     scrollbar.hover(false)
+  }
+
+  override func mouseMoved(with event: NSEvent) {
+    super.mouseMoved(with: event)
+    // 焦点のある列へは外で動いても届くので、位置で内外を決める。
+    scrollbar.hover(bounds.contains(convert(event.locationInWindow, from: nil)))
   }
 
   override func mouseEntered(with event: NSEvent) {

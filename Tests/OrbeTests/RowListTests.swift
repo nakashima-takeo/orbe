@@ -258,6 +258,30 @@ final class RowListTests: OrbeTestCase {
     thumb.mouseUp(with: mouse(.leftMouseUp, y: grab - 8))
   }
 
+  /// ポインタの真下で窓に載り直した列（入った通知は来ない）でも、上でポインタを動かせばつまみが見える。外で動いても
+  /// 見せない（焦点のある列へは外の動きも届く）。
+  func testMovingThePointerOverAReplacedListShowsTheThumb() {
+    let hosted = host()
+    let rows = hosted.rows
+    let thumb = rows.scrollbar
+    hosted.window.contentView = nil
+    hosted.window.contentView = rows
+    rows.layoutSubtreeIfNeeded()
+    let onThumb = rows.superview!.convert(
+      NSPoint(x: thumb.frame.midX, y: thumb.frame.midY), from: rows)
+    func moved(to point: NSPoint) {
+      rows.mouseMoved(
+        with: NSEvent.mouseEvent(
+          with: .mouseMoved, location: point, modifierFlags: [], timestamp: 0,
+          windowNumber: hosted.window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
+          pressure: 1)!)
+    }
+    moved(to: NSPoint(x: 100, y: 300))
+    XCTAssertFalse(rows.hitTest(onThumb) === thumb, "外で動いても見せない")
+    moved(to: NSPoint(x: 100, y: 50))
+    XCTAssertTrue(rows.hitTest(onThumb) === thumb, "上で動けば見える")
+  }
+
   // MARK: - 送り
 
   /// 大きさが決まる前（SwiftUI の最初の更新）に変わった選択は、大きさが付いてから見せる——大きさの無いまま送った位置が
