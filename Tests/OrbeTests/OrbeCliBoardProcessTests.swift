@@ -31,4 +31,18 @@ final class OrbeCliBoardProcessTests: OrbeTestCase {
       (control.orbJSON(["board", "list", "\(home)"])["parts"] as? [[String: Any]])?.count, 1)
     XCTAssertEqual(control.orb(["board", "add", "\(home)"]).status, 2, "種類の欠落は usage")
   }
+
+  /// 各サブコマンドは受ける数より多い位置引数を、socket に触れる前に usage エラー（2）で断る。
+  ///
+  /// 壊れると何が起きるか: `orb board list 3 4` が 4 を黙って捨てて 3 の並びを返し、両方を見たつもりの AI が食い違う。
+  func testSubcommandsRejectExtraPositionals() {
+    for args in [["list", "1", "2"], ["add", "1", "intake", "x"], ["rm", "1", "intake", "x"]] {
+      let outcome = ControlProcess.orbWithoutServer(["board"] + args)
+      let label = "orb board \(args.joined(separator: " "))"
+      XCTAssertEqual(outcome.status, 2, "\(label): \(outcome.stderr)")
+      XCTAssertTrue(
+        outcome.stderr.contains("unexpected argument: \(args.last!)"), "\(label): \(outcome.stderr)"
+      )
+    }
+  }
 }
