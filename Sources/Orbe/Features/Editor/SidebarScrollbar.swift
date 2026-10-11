@@ -213,7 +213,8 @@ private struct SidebarScrollbarOverlay: ViewModifier {
           visibility.drag(true, at: SidebarScrollbar.now)
           refresh()
         }
-        guard let grab else { return }
+        // 押しただけ（移動 0）では送らない——起点の位置は丸めてあるので、送ると一覧がずれる。
+        guard let grab, value.translation.height != 0 else { return }
         let position = grab.position(afterDragging: value.translation.height)
         proxy.scrollTo(
           contentID, anchor: UnitPoint(x: 0, y: position / max(1, grab.maxPosition)))
