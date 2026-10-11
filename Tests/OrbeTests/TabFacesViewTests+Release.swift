@@ -3,11 +3,13 @@ import XCTest
 
 @testable import Orbe
 
-/// 取っ手を離す・押すときの判定——離す直前の勢いだけが閉じるかを決め、位置のばねが動いている途中で掴めば止まって手に渡る。
+/// 取っ手を引く・離す・押すときの判定——引いている間は器の外へ出ず、離す直前の勢いだけが閉じるかを決め、位置のばねが
+/// 動いている途中で掴めば止まって手に渡る。
 ///
-/// 壊れると何が起きるか。勢いを測る窓が効かないと、端の近くへ素早く寄せて止めてから離しただけで面が閉じ、勢いが器へ
-/// 届かないと端へ投げても閉じない。滑っている途中で掴んで離すと、その場に置いたつもりが反対の全面へ飛び、形がまだ追って
-/// いるだけの離した直後に押すと、押しても何も起きない。
+/// 壊れると何が起きるか。器の外まで引くと（閉じようと端へ投げると起きやすい）、掴んでいる取っ手が窓の外へ消える。
+/// 勢いを測る窓が効かないと、端の近くへ素早く寄せて止めてから離しただけで面が閉じ、勢いが器へ届かないと端へ投げても
+/// 閉じない。滑っている途中で掴んで離すと、その場に置いたつもりが反対の全面へ飛び、形がまだ追っているだけの離した直後に
+/// 押すと、押しても何も起きない。
 extension TabFacesViewTests {
   /// 取っ手へ、窓の x と時刻（秒）を持つマウスの出来事を届ける。
   private func send(
@@ -22,6 +24,18 @@ extension TabFacesViewTests {
     case .leftMouseDragged: handle.mouseDragged(with: event)
     default: handle.mouseUp(with: event)
     }
+  }
+
+  /// 器の外まで引いても、取っ手は縁で止まって見えたまま残る。
+  func testDragPastTheContainerKeepsTheHandleInside() {
+    let (tab, _) = hostedInWindow(.terminalOnly)
+    let handle = tab.view.handle
+
+    send(.leftMouseDown, x: 6, at: 10.00, to: handle)
+    send(.leftMouseDragged, x: -50, at: 10.01, to: handle)
+    XCTAssertEqual(handle.frame.minX, 0, "左の縁で止まる")
+    send(.leftMouseDragged, x: 1100, at: 10.02, to: handle)
+    XCTAssertEqual(handle.frame.maxX, 1012, "右の縁で止まる")
   }
 
   /// 継ぎ目を端へ向けて投げて離すと、離した位置が端から遠くても、その勢いで面が閉じる。
