@@ -91,6 +91,9 @@ final class TabFacesView: NSView {
       addSubview(view)
     }
     wireHandle()
+    NSWorkspace.shared.notificationCenter.addObserver(
+      self, selector: #selector(accessibilityDisplayOptionsDidChange),
+      name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
@@ -179,7 +182,13 @@ final class TabFacesView: NSView {
 
   // MARK: - 配置
 
-  var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+  /// 動きを減らすか。システムの設定を写して変化に追従する（テストは直接決める）。真なら位置は行き先へ即時に移り、形は位置に
+  /// 直結し、ホバーは即時に切り替わる。
+  var reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+
+  @objc private func accessibilityDisplayOptionsDidChange() {
+    reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+  }
 
   var isGrabbing: Bool {
     switch interaction {

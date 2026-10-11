@@ -55,9 +55,7 @@ extension TabFacesViewTests {
 
   /// 位置のばねで滑っている途中で掴むと、境はその場で止まり中身の寸法も変わらない。動かさずに離せば、その位置で離した
   /// ことになり、分割として残る（押した扱いで反対の全面へ飛ばない）。
-  func testGrabWhileSlidingStopsInPlaceAndReleasesThere() throws {
-    try XCTSkipIf(
-      NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, "Reduce Motion では滑らない")
+  func testGrabWhileSlidingStopsInPlaceAndReleasesThere() {
     let (tab, _) = hostedInWindow(.terminalOnly)
     let view = tab.view
     let handle = view.handle

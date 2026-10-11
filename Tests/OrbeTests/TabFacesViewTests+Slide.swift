@@ -12,13 +12,15 @@ extension TabFacesViewTests {
   private static let editorOnly = FaceLayout(editorRatio: 1, focus: .editor)
   private static let split = FaceLayout(editorRatio: 0.5, focus: .editor)
 
-  /// 窓に載せた器（動きは窓に付いているときだけ起きる）。
+  /// 窓に載せた器（動きは窓に付いているときだけ起きる）。動きを減らす設定は実行する機械に依らず切る——ばねの動きを
+  /// 確かめるテストが、Reduce Motion の入った機械で即時の着地に化けないように。
   func hostedInWindow(_ faces: FaceLayout) -> (TerminalTab, NSWindow) {
     let window = NSWindow(
       contentRect: NSRect(origin: .zero, size: NSSize(width: 1012, height: 400)),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     let tab = TerminalTab(cwd: "/tmp")
+    tab.view.reduceMotion = false
     tab.setFaces(faces, animated: false)
     window.contentView = tab.view
     tab.view.layoutSubtreeIfNeeded()
@@ -83,6 +85,19 @@ extension TabFacesViewTests {
         measureSlide(from: from, to: to) { $0.setFaces(to, animated: true) }
       }
     }
+  }
+
+  /// 動きを減らす設定では、配置を写す口から動かずに行き先へ即時に着地する。
+  func testReduceMotionLandsAtOnce() {
+    let (tab, _) = hostedInWindow(.terminalOnly)
+    let view = tab.view
+    view.reduceMotion = true
+
+    tab.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: true)
+
+    XCTAssertFalse(view.isAnimating, "動きは起きない")
+    XCTAssertEqual(view.handle.frame.minX, view.committed.frames.handle.minX, "行き先に着いている")
+    XCTAssertEqual(view.resolved.editorWidth, view.bounds.width)
   }
 
   /// 継ぎ目を押して起こす動きも同じ口を通る（分割から焦点側の全面へ）。

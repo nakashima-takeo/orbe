@@ -34,10 +34,9 @@ extension WindowControllerFacesTests {
 
   /// ⌘E の動きは再レイアウトで終点へ飛ばず、フレームごとに境が段階的に動き、止まったところで確定する。
   func testToggleEditorFaceSlidesTheBoundaryOverTime() throws {
-    try XCTSkipIf(
-      NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, "Reduce Motion では遷移しない")
     let wc = WindowController()
     let tab = try XCTUnwrap(wc.activeTab)
+    tab.view.reduceMotion = false
     layout(wc)
     let editorFace = try XCTUnwrap(tab.view.editor.superview)
     let full = facesWidth(wc)
