@@ -137,4 +137,26 @@ final class SecretaryTextTests: OrbeTestCase {
     try Data((#"{"version":1,"pending":["# + later + "]}").utf8).write(to: url)
     XCTAssertEqual(SecretaryPersistence.load()?.pending.first?.origin, .palette, "知らない画面は ⌘⇧X")
   }
+
+  /// 知らない出どころ（新しいビルドが書いた値）の記録は使えない原本として退避し、空で始める——直後の保存で溜まった頼みを
+  /// 潰さない。
+  func testAnUnknownOriginIsSetAsideWithTheOriginalKept() throws {
+    let url = try XCTUnwrap(SecretaryPersistence.fileURL)
+    let request =
+      #"{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","receivedAt":"2026-10-10T01:31:00Z","#
+      + #""origin":"slack","body":"a"}"#
+    let original = Data((#"{"version":1,"pending":["# + request + "]}").utf8)
+    try original.write(to: url)
+
+    XCTAssertNil(SecretaryPersistence.load(), "空で始める")
+
+    XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), "原位置には残さない")
+    let directory = url.deletingLastPathComponent()
+    let broken = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+      .filter { $0.hasPrefix("secretary-broken-") && $0.hasSuffix(".json") }
+    XCTAssertEqual(broken.count, 1, "退避物が 1 件")
+    XCTAssertEqual(
+      try Data(contentsOf: directory.appendingPathComponent(try XCTUnwrap(broken.first))), original,
+      "原本のまま退避する")
+  }
 }
