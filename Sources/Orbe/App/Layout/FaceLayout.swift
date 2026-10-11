@@ -9,7 +9,7 @@ enum Face: String, Codable, Equatable {
 /// タブ 1 枚の面の配置——エディター幅の割合と焦点の面。永続表現と同型。
 ///
 /// 正規形: `editorRatio == 0` なら焦点は端末、`1` ならエディター。焦点の面は常に見えている面で、
-/// 書き手（背のドラッグ・永続の decode・pane の焦点通知）は `normalized` を通してから状態に置く。
+/// 書き手（取っ手を引く操作・永続の decode・pane の焦点通知）は `normalized` を通してから状態に置く。
 struct FaceLayout: Equatable, Codable {
   var editorRatio: Double
   var focus: Face
