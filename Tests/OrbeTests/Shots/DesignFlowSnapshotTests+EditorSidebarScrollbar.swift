@@ -100,31 +100,14 @@ extension DesignFlowSnapshotTests {
     scroll(tree, to: document.frame.height - tree.documentVisibleRect.height)
   }
 
-  /// ツリーのつまみの中央へポインタを入れる・一覧の外へ出す（SwiftUI のホバーはポインタの下の view が受ける
-  /// mouseEntered / mouseMoved / mouseExited で動く）。
+  /// ツリーのつまみの中央へポインタを入れる・一覧の外へ出す。
   private func pointer(_ pane: EditorPaneView, onTreeThumb inside: Bool) {
-    guard let tree = scrollView(in: pane.sideHost), let document = tree.documentView,
-      let window = pane.window
-    else { return }
-    let geometry = SidebarScrollbar.Metrics(
-      position: tree.documentVisibleRect.minY, total: document.frame.height,
-      visible: tree.documentVisibleRect.height
-    ).geometry
-    let point = tree.convert(
-      NSPoint(
-        x: tree.bounds.maxX - Theme.Layout.editorSidebarScrollbar / 2,
-        y: geometry.sliderPosition + geometry.sliderLength / 2), to: nil)
-    let host = pane.sideHost
-    guard let target = host.hitTest(host.superview!.convert(point, from: nil)) else { return }
-    let event = NSEvent.mouseEvent(
-      with: .mouseMoved, location: inside ? point : NSPoint(x: -10, y: -10), modifierFlags: [],
-      timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-      context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+    guard let thumb = treeThumbFrame(pane) else { return }
+    let center = pane.convert(NSPoint(x: thumb.midX, y: thumb.midY), from: nil)
     if inside {
-      target.mouseEntered(with: event)
-      target.mouseMoved(with: event)
+      movePointer(pane, to: center, over: pane.sideHost)
     } else {
-      target.mouseExited(with: event)
+      movePointerOut(pane, from: center, over: pane.sideHost)
     }
   }
 }

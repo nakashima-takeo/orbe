@@ -75,29 +75,11 @@ final class SidebarScrollbarTests: OrbeTestCase {
       ).geometry
     }
 
-    /// 位置 `y` のときのつまみの中央（窓の座標）。
-    func thumbCenter(at y: CGFloat) -> NSPoint {
-      let geometry = geometry(at: y)
-      return scroll.convert(
-        NSPoint(
-          x: scroll.bounds.maxX - Theme.Layout.editorSidebarScrollbar / 2,
-          y: geometry.sliderPosition + geometry.sliderLength / 2), to: nil)
-    }
-
     func mouse(_ type: NSEvent.EventType, _ point: NSPoint) -> NSEvent {
       NSEvent.mouseEvent(
         with: type, location: point, modifierFlags: [],
         timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
         context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
-    }
-
-    /// ポインタを `point` へ（SwiftUI のホバーはポインタの下の view が受ける mouseEntered / mouseMoved で動く）。
-    func hover(_ point: NSPoint) throws {
-      let host = pane.sideHost
-      let target = try XCTUnwrap(host.hitTest(host.superview!.convert(point, from: nil)))
-      target.mouseEntered(with: mouse(.mouseMoved, point))
-      target.mouseMoved(with: mouse(.mouseMoved, point))
-      RunLoop.main.run(until: Date().addingTimeInterval(0.2))
     }
   }
 
@@ -118,6 +100,18 @@ final class SidebarScrollbarTests: OrbeTestCase {
     return Tree(pane: tab.view.editor, window: window, scroll: scroll, document: document)
   }
 
+  /// 今の位置のつまみの中央（窓の座標）。
+  private func thumbCenter(_ tree: Tree) throws -> NSPoint {
+    let frame = try XCTUnwrap(treeThumbFrame(tree.pane))
+    return NSPoint(x: frame.midX, y: frame.midY)
+  }
+
+  /// ポインタを `point`（窓の座標）へ。
+  private func hover(_ tree: Tree, _ point: NSPoint) {
+    movePointer(tree.pane, to: tree.pane.convert(point, from: nil), over: tree.pane.sideHost)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+  }
+
   /// ツリーのつまみの上でホイールを回すとツリーが送られる（つまみは当たりを持たない）。
   func testTheWheelOverTheTreeThumbScrollsTheTree() throws {
     let tree = try hostTree()
@@ -126,7 +120,7 @@ final class SidebarScrollbarTests: OrbeTestCase {
       CGEvent(
         scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: -3, wheel2: 0,
         wheel3: 0))
-    let point = tree.thumbCenter(at: 100)
+    let point = try thumbCenter(tree)
     wheel.location = CGPoint(x: point.x, y: (tree.window.screen?.frame.height ?? 0) - point.y)
     tree.window.sendEvent(try XCTUnwrap(NSEvent(cgEvent: wheel)))
     pumpMain(until: { tree.scroll.documentVisibleRect.minY > 100 }, "ツリーが送られる")
@@ -135,8 +129,8 @@ final class SidebarScrollbarTests: OrbeTestCase {
   /// ツリーのつまみを掴んで引くと移動ぶんだけ連続に送られ、末尾まで引けば最後の行の下の 1 行分の空きまで届く。
   func testDraggingTheTreeThumbScrollsByTheDistance() throws {
     let tree = try hostTree()
-    let start = tree.thumbCenter(at: 0)
-    try tree.hover(start)
+    let start = try thumbCenter(tree)
+    hover(tree, start)
     NSApp.sendEvent(tree.mouse(.leftMouseDown, start))
     for step in 1...10 {
       NSApp.sendEvent(
@@ -160,23 +154,21 @@ final class SidebarScrollbarTests: OrbeTestCase {
   /// 掴めるのは見えているつまみだけ——つまみを押しても下の行は選ばれず、帯のつまみの外を押せばその行が選ばれる。
   func testOnlyTheTreeThumbIsGrabbedAndTheRestOfTheBandSelectsTheRow() throws {
     let tree = try hostTree()
-    func click(_ point: NSPoint) throws {
-      try tree.hover(point)
+    func click(_ point: NSPoint) {
+      hover(tree, point)
       NSApp.sendEvent(tree.mouse(.leftMouseDown, point))
       NSApp.sendEvent(tree.mouse(.leftMouseUp, point))
       RunLoop.main.run(until: Date().addingTimeInterval(NSEvent.doubleClickInterval + 0.1))
     }
     let position: CGFloat = 100
     tree.move(to: position)
-    try click(tree.thumbCenter(at: position))
+    let thumb = try XCTUnwrap(treeThumbFrame(tree.pane))
+    click(NSPoint(x: thumb.midX, y: thumb.midY))
     XCTAssertNil(tree.pane.tree.selected, "つまみ")
 
-    let geometry = tree.geometry(at: position)
-    let bandY = geometry.sliderPosition + geometry.sliderLength + Theme.Layout.editorRow
-    try click(
-      tree.scroll.convert(
-        NSPoint(x: tree.scroll.bounds.maxX - Theme.Layout.editorSidebarScrollbar / 2, y: bandY),
-        to: nil))
+    let band = NSPoint(x: thumb.midX, y: thumb.minY - Theme.Layout.editorRow)
+    click(band)
+    let bandY = tree.scroll.convert(band, from: nil).y
     let row = tree.pane.tree.rows[Int((position + bandY) / Theme.Layout.editorRow)]
     XCTAssertEqual(tree.pane.tree.selected, row.id, "帯のつまみの外")
   }
