@@ -36,10 +36,13 @@ extension DesignGallerySnapshotTests {
       dir: dir)
 
     try writePNG(
-      BoardEmptyView()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(ChromeTranslucency().baseFill)
-        .environment(\.localization, LocalizationStore(language: .ja)),
+      BoardRoot(
+        model: BoardModel(
+          intake: BoardIntakeModel(
+            runner: DesignSceneFixtures.intakeRunner(DesignSceneFixtures.boardIntakeFile())),
+          parts: []),
+        translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
+        fontResolver: ChromeFontResolver()),
       size: NSSize(width: 640, height: 480), name: "board_empty.png", dir: dir)
 
     try renderBoardIntakeSnapshots(dir: dir)
