@@ -1,7 +1,7 @@
 ---
 title: workspace
 description: 名前付きコンテナの保持・切替・keep-alive、リポジトリに属さないタスクの居場所 Home とそのタスクの作業場、workspace 毎の設定上書き。切替・作成の UI は palette/workspace が持つ
-updated: 2026-10-10
+updated: 2026-10-12
 ---
 
 # workspace
@@ -23,7 +23,7 @@ host 所有。ドメイン状態（workspace 配列とアクティブ index と 
 - 背景workspaceへ新規タブを明示作成したときは、その1枚だけをオフスクリーンでmaterializeする。computedなworkspaceもactivatedになるが、既存の復元タブは起こさず休眠のまま保つ。通常のworkspace前面化は上記どおり全タブを順次起こす。タブ単位の起床・再休眠を直接操作する公開UI/APIは持たない。
 - 人が見ている workspace とタブを変えずに、裏で agent を起こす経路（[秘書](../agent/secretary.md)・[`start_task`](../control/api.md)）は、タブを**選ばずに**起こす。対象が背景 workspace なら上と同じく前面化せずにその 1 枚を起こし、前面の workspace なら隠れタブとして mount する（その workspace のタブがそれしか無いときだけは、空表示のまま見えないタブを作らないよう、選んで見せる）。既にある休眠のタブ（休眠の秘書のタブ）も同じ口で、その 1 枚だけを起こす。
 - workspaceの `active`（現在前面にあるか）と `activated`（起動済みタブがあるか）、`lastUsedAt`（前面で利用したMRU）は別の事実である。0タブworkspaceを前面化すると `active: true / activated: false` のままMRUだけを更新する。背景でのmaterialize、背景workspaceのtab close、前面workspaceを0tab化するcloseではMRUを動かさない。一方、前面workspaceでtab close後も残存tabを実際にreselectして表示し続ける場合は、新たなforeground useとしてMRUを更新する。
-- 新規 workspace の root path は、作成フォーム経由では入力パス（clone なら clone 先）。制御 API `create_workspace` で rootPath を省略したときはアクティブタブの cwd 由来（不明時はホームディレクトリ）。
+- 新規 workspace の root path は、作成フォーム経由では入力パス（clone なら clone 先）。制御 API `create_workspace` で rootPath を省略したときはホームディレクトリ。作成フォームの初期値も同じホームディレクトリで、両者は 1 つの既定を読む——今いる場所はたいてい既存の workspace の中にあり、新しい workspace の起点としては中立なホームが適するため。起動時の default の root（ホーム）はこの既定とは別の決定で、片方を変えてももう片方は変わらない。
 - アクティブ workspace の最後のタブを閉じても、その workspace は 0 タブの空状態でアクティブに残る（単一・複数 workspace 問わず。ウィンドウは閉じない）。背景 workspace の最後のタブが閉じても 0 タブのまま残す。
 - パレットの詳細メニューからの削除は、アクティブ workspace なら最近使った他 workspace（MRU）を次のアクティブにし、背景 workspace なら現アクティブは不変。Home と最後の通常 workspace は消せない（下記）。
 
