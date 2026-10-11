@@ -12,8 +12,8 @@ extension TabFacesViewTests {
   private static let editorOnly = FaceLayout(editorRatio: 1, focus: .editor)
   private static let split = FaceLayout(editorRatio: 0.5, focus: .editor)
 
-  /// 窓に載せた器（遷移は窓に付いているときだけ動く）。
-  private func hostedForSlide(_ faces: FaceLayout) -> (TerminalTab, NSWindow) {
+  /// 窓に載せた器（動きは窓に付いているときだけ起きる）。
+  func hostedInWindow(_ faces: FaceLayout) -> (TerminalTab, NSWindow) {
     let window = NSWindow(
       contentRect: NSRect(origin: .zero, size: NSSize(width: 1012, height: 400)),
       styleMask: [.borderless], backing: .buffered, defer: false)
@@ -42,7 +42,7 @@ extension TabFacesViewTests {
     from: FaceLayout, to: FaceLayout, trigger: (TerminalTab) -> Void,
     file: StaticString = #filePath, line: UInt = #line
   ) {
-    let (tab, _) = hostedForSlide(from)
+    let (tab, _) = hostedInWindow(from)
     let view = tab.view
     var editorSizes = [view.editor.frame.size]
     var terminalSizes = [tab.surface.bounds.size]
