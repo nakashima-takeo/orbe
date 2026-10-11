@@ -153,14 +153,17 @@ final class UnsavedGateTests: OrbeTestCase {
     XCTAssertEqual(wc.regularWorkspaces.count, 1, "制御 API は黙って捨てる")
   }
 
-  /// 終了の関門が集める未保存は全 workspace の全連。
+  /// 終了の関門が集める未保存は全 workspace の全連で、連のタブが何枚でも 1 回ずつ。
   func testUnsavedDocumentsSpanAllWorkspaces() throws {
-    let wc = try restore([TabState(cwd: repo.root, agent: nil, explicitTitle: nil)])
+    let wc = try restore([
+      TabState(cwd: repo.root, agent: nil, explicitTitle: nil),
+      TabState(cwd: repo.root, agent: nil, explicitTitle: nil),
+    ])
     edit(try XCTUnwrap(wc.activeTab).group.editor.open(repo.url("a.txt"), as: .pinned))
     wc.createWorkspace(name: "other", rootPath: repo.root)
     try repo.write("b.txt", "b\n")
     edit(try XCTUnwrap(wc.activeTab).group.editor.open(repo.url("b.txt"), as: .pinned))
-    XCTAssertEqual(Set(wc.unsavedDocuments().map(\.url.lastPathComponent)), ["a.txt", "b.txt"])
+    XCTAssertEqual(wc.unsavedDocuments().map(\.url.lastPathComponent).sorted(), ["a.txt", "b.txt"])
   }
 
   // MARK: - 入口: ファイルタブの ×
