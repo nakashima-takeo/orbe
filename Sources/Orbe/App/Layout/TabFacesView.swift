@@ -237,8 +237,9 @@ final class TabFacesView: NSView {
     if motion.isAtRest(width: bounds.width) { settle(target) } else { updateClock() }
   }
 
-  /// 動きの始めの中身の寸法: 行き先で見えている面の中身を、今の中身・今の面・行き先の面の幅の大きい方にする——
-  /// どのコマでも見えている面が中身で覆われ、縮む・隠れる面の寸法は終わりの 1 回だけ変わる。
+  /// 動きの始めの中身の寸法: 行き先で見えている面の中身を、今見えている中身・今の面・行き先の面の幅の大きい方にする——
+  /// どのコマでも見えている面が中身で覆われ、縮む・隠れる面の寸法は終わりの 1 回だけ変わる。隠れている端末の中身は最後に
+  /// 見えていた寸法で据え置かれているので、その幅は拾わない（現れる面は始めから行き先の寸法で入る）。
   private func distributeMoveSizes(to target: FaceGeometry.Resolved) {
     let now = FaceGeometry.frames(motion.shape, size: bounds.size)
     let h = bounds.height
@@ -248,7 +249,8 @@ final class TabFacesView: NSView {
       editorFace.isHidden = false
     }
     if target.terminalWidth > 0 {
-      let width = max(terminal.frame.width, now.terminal.width, target.terminalWidth)
+      let current = now.terminal.width > 0 ? terminal.frame.width : 0
+      let width = max(current, now.terminal.width, target.terminalWidth)
       setSize(terminal, CGSize(width: width, height: h))
       terminalFace.isHidden = false
     }

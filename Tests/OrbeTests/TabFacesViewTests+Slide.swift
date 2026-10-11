@@ -87,6 +87,32 @@ extension TabFacesViewTests {
     }
   }
 
+  /// エディター全面のまま器が縮んでから端末を出すと、端末の中身は隠れていた間の古い寸法でなく、始めから今の器の寸法で
+  /// 入る——pty の resize は 1 回だけ。
+  func testTerminalShownAfterShrinkingWhileHiddenResizesOnce() {
+    let (tab, _) = hostedInWindow(.terminalOnly)
+    let view = tab.view
+    tab.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
+    view.frame = NSRect(x: 0, y: 0, width: 812, height: 300)
+    view.layoutSubtreeIfNeeded()
+    XCTAssertEqual(view.editor.frame.size, NSSize(width: 812, height: 300), "前提: 器が縮んだ")
+    let hidden = view.terminal.frame.size
+    XCTAssertEqual(hidden, NSSize(width: 1012, height: 400), "前提: 隠れている端末は最後に見えていた寸法のまま")
+
+    tab.setFaces(.terminalOnly, animated: true)
+    XCTAssertTrue(view.isAnimating, "前提: 動きが始まっている")
+    var sizes = [hidden]
+    var frames = 0
+    repeat {
+      if sizes.last != view.terminal.frame.size { sizes.append(view.terminal.frame.size) }
+      view.tick(dt: 1.0 / 120)
+      frames += 1
+    } while view.isAnimating && frames < 600
+    if sizes.last != view.terminal.frame.size { sizes.append(view.terminal.frame.size) }
+
+    XCTAssertEqual(sizes, [hidden, NSSize(width: 812, height: 300)], "端末の寸法の変更は 1 回")
+  }
+
   /// 動きを減らす設定では、配置を写す口から動かずに行き先へ即時に着地する。
   func testReduceMotionLandsAtOnce() {
     let (tab, _) = hostedInWindow(.terminalOnly)
