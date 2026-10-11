@@ -25,11 +25,11 @@ extension WindowController {
     scheduleSave()
   }
 
-  /// アクティブ workspace が0タブのときの content 掃除。全 subview（前タブ/前 WS のビュー）を外し、
+  /// アクティブ workspace が0タブのときの content 掃除。content を照合して器を外し（0タブなので全部外れる）、
   /// 除去済み surface に宙ぶらりんの first responder が残らないよう nil 化し、空状態の chrome を投影する。
   /// シェルは起こさない。`closeTab`（本体）と `activateCurrent` の双方から呼ぶため internal。
   func clearActiveContent() {
-    model.content.subviews.forEach { $0.removeFromSuperview() }
+    reconcileContent()
     model.contentIsEmpty = true  // 0タブの地を AppShell が baseFill で埋める（透過越しの透け防止）
     // overlay 非表示時のみ first responder を落とす（0タブ時 ⌘W が dangling surface に届かないことを保証）。
     // overlay 表示中はパレットが first responder のため奪わない（select と同じ不変条件）。

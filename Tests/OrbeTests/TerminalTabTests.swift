@@ -29,8 +29,8 @@ final class TerminalTabTests: OrbeTestCase {
     }
   }
 
-  /// ⌘W（`.closeTab`）はタブ水準の window コマンドとして上位へ届く（端末・エディターのどちらの面からも
-  /// 同じ経路）。閉じる実体と発火源（`.gesture`）は `WindowController.handleWindowCommand` が持つ。
+  /// ⌘W（`.closeTab`）は端末面からタブ水準の window コマンドとして上位へ届く。閉じる実体と発火源（`.gesture`）は
+  /// `WindowController.handleWindowCommand` が持つ。
   func testCloseTabChromeActionRequestsWindowCommand() {
     let tab = TerminalTab.alone(cwd: "/tmp")
     var received: [WindowCommand] = []

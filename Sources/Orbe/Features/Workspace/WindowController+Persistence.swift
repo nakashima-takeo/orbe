@@ -16,10 +16,8 @@ extension WindowController {
       // 連はキー（cwd の根）ごとに 1 つ作り、その連の保存状態で起こす。隣接の正規化は下の store.load。
       let keys = state.tabs.map { GitWorktreeRoot.root(of: $0.cwd) }
       let groupStates = state.groupStates(keys: keys)
-      var groups: [String: TabGroup] = [:]
       for (tab, key) in zip(state.tabs, keys) {
-        let group = groups[key] ?? makeGroup(key: key, state: groupStates[key])
-        groups[key] = group
+        let group = group(forKey: key, in: ws) ?? makeGroup(key: key, state: groupStates[key])
         ws.tabs.append(makeTab(from: tab, group: group))
       }
       // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・下の activateCurrent）は空表示

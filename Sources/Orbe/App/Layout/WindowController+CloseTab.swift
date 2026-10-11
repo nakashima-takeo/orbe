@@ -43,12 +43,11 @@ extension WindowController {
     case .notFound:
       return
     case .emptiedActive:
-      // アクティブ workspace が0タブ化。閉じたタブの view を content から外し空表示にする
-      // （従来 select が担う唯一のビュー除去経路をここで明示し surface leak を避ける）。
+      // アクティブ workspace が0タブ化。照合で閉じたタブの器を content から外し空表示にする（surface leak を避ける）。
       clearActiveContent()
     case .reselectActive(let i):
-      // 閉じたタブの view を model.content から外す唯一の経路が select() の不要ビュー除去なので、
-      // 背景タブの close も必ず通す（通さないと外れた TerminalTab を retain し続け surface がリークする）。
+      // 閉じたタブの端末を器から、空になった器を content から外すのは select() が呼ぶ照合なので、背景タブの close も
+      // 必ず通す（通さないと外れたタブの端末を器が retain し続け surface がリークする）。
       select(i)
     case .backgroundChanged:
       reconcileContent()  // 閉じたタブの端末を器から外す（外さないと surface がリークする）

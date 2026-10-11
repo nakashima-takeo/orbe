@@ -21,7 +21,7 @@ final class TabGroup {
   /// 同じ形で書き戻す。
   private var pendingDocuments: EditorState.OpenDocuments?
   /// 器が一度でも content に載ったか。
-  private(set) var materialized = false
+  private var materialized = false
 
   /// 面の配置が変わった（永続保存・chrome 更新・焦点の追従は上位）。
   var onFacesChange: (() -> Void)?

@@ -98,8 +98,8 @@ struct WorkspaceState: Codable, Equatable {
     activeTab = try c.decode(Int.self, forKey: .activeTab)
     tabs = try c.decode([TabState].self, forKey: .tabs)
     groups =
-      ((try? c.decodeIfPresent([Lenient<GroupState>].self, forKey: .groups)) ?? nil)?
-      .compactMap(\.value) ?? []
+      (try? c.decodeIfPresent([Lenient<GroupState>].self, forKey: .groups))?.compactMap(\.value)
+      ?? []
     lastUsedAt = try c.decodeIfPresent(Date.self, forKey: .lastUsedAt)
     let layer = try? c.decode(SettingsLayer.self, forKey: .settingsOverride)
     settingsOverride = layer.flatMap { $0.isEmpty ? nil : $0 }
