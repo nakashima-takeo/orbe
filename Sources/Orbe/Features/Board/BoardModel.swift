@@ -11,12 +11,18 @@ import Observation
     intake.onRefusal = { [weak self] in self?.refusal = $0 }
   }
 
-  /// 器がホストへ first responder を渡す口。
-  @ObservationIgnored var onFocus: () -> Void = {}
+  /// 器が、焦点が外にあればホストへ first responder を渡し、渡したか（焦点が外から入ったか）を返す口。
+  @ObservationIgnored var onFocus: () -> Bool = { true }
 
-  /// 焦点をボードの中（部品の最後に居た場所）へ当て直す。何度呼んでも同じ結果になる。
+  /// 焦点をボードの中へ当てる。外から入るなら部品は欄から始まり、中にあるなら選んでいる場所へ当て直す——ボードを選ぶ・パレットを
+  /// 閉じる・workspace を戻るのは入り直しで、裏のタブが閉じたのは中の続きだから。何度呼んでも同じ結果になる。
   func focus() {
-    onFocus()
+    if onFocus() { intake.enter() } else { intake.refocus() }
+  }
+
+  /// 地のクリック。ボードの中の操作なので、外から入ったときも選んでいる場所へ当て直す。
+  func refocus() {
+    _ = onFocus()
     intake.refocus()
   }
 }

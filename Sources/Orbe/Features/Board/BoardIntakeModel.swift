@@ -6,8 +6,8 @@ import SwiftUI
 /// `reconcile()` で選択を付け直す（ビューの `.onChange` が届ける）。だから裏の回・AI の変更・⌘⇧X での操作がそのまま映る。
 ///
 /// 欄は一覧の上の 1 段で、欄と一覧の行は 1 つの選択の同一性を分け合う（⌘⇧X で入力の行き先と一覧の行が 1 つの選択なのと
-/// 同じ）。選ばれて見えるのは常に 1 か所で、焦点の場所は選択から決まる。↑↓ は欄と行の並びを端で巡回する。初めは一覧の先頭の
-/// 行（選べばすぐ space・↵ が効く）、0 件なら欄。ボードから当て直されると、選んでいる場所へ戻る。
+/// 同じ）。選ばれて見えるのは常に 1 か所で、焦点の場所は選択から決まる。↑↓ は欄と行の並びを端で巡回する。焦点が外から
+/// 部品へ入ると欄から始まり（⌘⇧X が開くと入力欄に焦点があるのと同じ）、中での当て直しは選んでいる場所へ戻る。
 @Observable final class BoardIntakeModel {
   /// 焦点の場所。
   enum Place: Hashable {
@@ -38,7 +38,6 @@ import SwiftUI
   init(runner: IntakeRunner) {
     self.runner = runner
     reconcile()
-    if let first = ids.first { list.select(.intake(first), in: stops) }
   }
 
   var store: IntakeStore { runner.store }
@@ -79,29 +78,24 @@ import SwiftUI
 
   // MARK: - 焦点の場所
 
-  /// 焦点がその場所へ移った（クリックから）。欄なら欄を選び、欄から一覧へ移ったら一覧の先頭の行を選ぶ。行が無ければ欄へ
-  /// 当て直す。
-  func arrive(_ place: Place) {
-    guard place != self.place else { return }
-    switch place {
-    case .request:
-      list.select(.request, in: stops)
-    case .list:
-      if let first = ids.first {
-        list.select(.intake(first), in: stops)
-      } else {
-        focusToken &+= 1
+  /// 部品の中で焦点を移す（クリックから）。欄なら欄を選び、欄から一覧へ移ったら一覧の先頭の行を選ぶ。行が無ければ欄のまま。
+  func go(_ place: Place) {
+    if place != self.place {
+      switch place {
+      case .request: list.select(.request, in: stops)
+      case .list: if let first = ids.first { list.select(.intake(first), in: stops) }
       }
     }
-  }
-
-  /// 部品の中で焦点を移す。
-  func go(_ place: Place) {
-    arrive(place)
     focusToken &+= 1
   }
 
-  /// ボードからの当て直し。選んでいる場所へ戻る。
+  /// 焦点が外から入った。欄を選ぶ（一覧で選んでいた行は保たない。⌘⇧X が開き直すたびに選択を初めからにするのと同じ）。
+  func enter() {
+    list.select(.request, in: stops)
+    focusToken &+= 1
+  }
+
+  /// 中での当て直し。選んでいる場所へ戻る。
   func refocus() {
     focusToken &+= 1
   }

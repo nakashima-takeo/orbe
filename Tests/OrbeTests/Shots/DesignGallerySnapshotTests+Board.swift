@@ -57,10 +57,13 @@ extension DesignGallerySnapshotTests {
           localization: LocalizationStore(language: language), fontResolver: ChromeFontResolver()),
         size: size, name: name, dir: dir)
     }
+    /// 一覧の先頭の行を選んだ状態（見本『Home』と突き合わせる。0 件なら欄のまま）。
     func board(_ file: IntakesFile? = nil) -> BoardModel {
-      BoardModel(
+      let model = BoardModel(
         intake: BoardIntakeModel(
           runner: DesignSceneFixtures.intakeRunner(file ?? DesignSceneFixtures.boardIntakeFile())))
+      model.intake.move(1)
+      return model
     }
 
     try write("board_intake.png", board())

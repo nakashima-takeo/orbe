@@ -5,7 +5,7 @@ import XCTest
 
 /// 自動追加の部品の中の焦点——依頼の欄と一覧の行き来。本物の `BoardView` を実窓に載せ、実 `NSEvent` のキーとクリックを届ける。
 ///
-/// 壊れると何が起きるか: ↑ で欄へ移れず頼めない。欄で打った space・↵ が一覧の止める・今すぐ実行になる。クリックした場所と
+/// 壊れると何が起きるか: 欄と一覧を行き来できず、頼めないか一覧を操れない。欄で打った space・↵ が一覧の止める・今すぐ実行になる。クリックした場所と
 /// キーの届く場所が食い違い、行をクリックしてから押した space が欄に入る。
 extension BoardIntakeTests {
   /// 一覧の行・欄・地の窓の中の点（1200×700 の窓、見本の寸法から）。
@@ -46,23 +46,17 @@ extension BoardIntakeTests {
     pump(0.3)
   }
 
-  /// 欄は一覧の上の 1 段で、欄と行は 1 つの選択を分け合う。先頭の行の ↑ で欄へ移ると行の選択と詳細が消え、欄の ↓ で一覧の
-  /// 先頭、欄の ↑ で一覧の末尾（巡回）、末尾の行の ↓ で欄（巡回）、欄の esc は ↓ と同じく一覧の先頭へ。⇥ は欄でも一覧でも
-  /// 何もしない。
+  /// 欄は一覧の上の 1 段で、欄と行は 1 つの選択を分け合う。部品は欄から始まり、欄を選んでいる間は行の選択と詳細が無い。
+  /// 欄の ↓ で一覧の先頭、先頭の行の ↑ で欄、欄の ↑ で一覧の末尾（巡回）、末尾の行の ↓ で欄（巡回）、欄の esc は ↓ と同じく
+  /// 一覧の先頭へ。⇥ は欄でも一覧でも何もしない。
   func testArrowsMoveOneSelectionThroughTheFieldAndTheRows() {
     let model = board()
     let intake = model.intake
     let window = mount(model)
-    XCTAssertEqual(intake.place, .list)
-    XCTAssertEqual(intake.selected?.id, Self.failingBacklog, "前提: 先頭の行")
-
-    press(Key.tab, "\t", to: window)
-    XCTAssertEqual(intake.place, .list, "一覧の ⇥ は何もしない")
-
-    up(window)
-    XCTAssertEqual(intake.place, .request, "先頭の行の ↑ で欄へ")
+    XCTAssertEqual(intake.place, .request, "欄から始まる")
     XCTAssertEqual(intake.list.selectedID, .request)
     XCTAssertNil(intake.selected, "欄を選んでいる間はどの行も選ばれず、詳細も無い")
+
     type("a b", to: window)
     XCTAssertEqual(intake.requestText, "a b", "space は欄の文字になる")
     XCTAssertEqual(intake.store.intakes, DesignSceneFixtures.boardIntakes(), "space は一覧の止めるにならない")
@@ -72,11 +66,14 @@ extension BoardIntakeTests {
     down(window)
     XCTAssertEqual(intake.place, .list, "欄の ↓ で一覧へ")
     XCTAssertEqual(intake.selected?.id, Self.failingBacklog, "一覧の先頭")
+    press(Key.tab, "\t", to: window)
+    XCTAssertEqual(intake.place, .list, "一覧の ⇥ は何もしない")
     down(window)
     XCTAssertEqual(intake.selected?.id, Self.slack, "一覧のキーが効く")
 
     up(window)
     up(window)
+    XCTAssertEqual(intake.place, .request, "先頭の行の ↑ で欄へ")
     up(window)
     XCTAssertEqual(intake.place, .list, "欄の ↑ で一覧へ")
     XCTAssertEqual(intake.selected?.id, Self.pausedGmail, "巡回して一覧の末尾")
@@ -93,7 +90,6 @@ extension BoardIntakeTests {
   func testReturningToTheFieldSelectsItsText() throws {
     let model = board()
     let window = mount(model)
-    up(window)
     type("abc", to: window)
     down(window)
     up(window)
@@ -103,7 +99,7 @@ extension BoardIntakeTests {
     XCTAssertEqual(editor.selectedRange(), NSRange(location: 0, length: 3))
   }
 
-  /// 自動追加が 0 件なら初めから欄で、欄の ↑↓ は何もしない（移る行が無い）。
+  /// 自動追加が 0 件なら、欄の ↑↓ は何もしない（移る行が無い）。
   func testWithNoAutoAddsTheFieldIsTheOnlyStop() {
     let model = BoardModel(
       intake: BoardIntakeModel(
@@ -124,6 +120,8 @@ extension BoardIntakeTests {
     let model = board()
     let intake = model.intake
     let window = mount(model)
+    down(window)
+    XCTAssertEqual(intake.place, .list, "前提")
 
     for id in intake.ids { try intake.runner.delete(id) }
     flush(window)

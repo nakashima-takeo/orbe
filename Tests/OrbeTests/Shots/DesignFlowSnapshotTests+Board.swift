@@ -50,7 +50,7 @@ extension DesignFlowSnapshotTests {
     }
   }
 
-  /// ボードの自動追加: ↓ で選ぶ → space で止める（行が末尾へ沈み、選択は付いていく）→ space で再開 → ↵ で実行中… → ↵ で赤の
+  /// ボードの自動追加: 欄から ↓ で一覧の先頭 → ↓ で選ぶ → space で止める（行が末尾へ沈み、選択は付いていく）→ space で再開 → ↵ で実行中… → ↵ で赤の
   /// 断り → ⌘⌫ で消え、同じ位置の行が選ばれる。
   func testBoardIntake() throws {
     let model = BoardModel(
@@ -66,6 +66,7 @@ extension DesignFlowSnapshotTests {
       },
       steps: [
         ("start", {}),
+        ("to_list", { intake.move(1) }),
         ("down", { intake.move(1) }),
         ("paused", { intake.perform(.togglePause) }),
         ("resumed", { intake.perform(.togglePause) }),
@@ -75,8 +76,8 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
-  /// 依頼の欄: 一覧（欄は控えめな枠）→ 先頭の行の ↑ で欄（強調の枠・行の選択と詳細が消える）→ 打つ → ↓ で一覧の先頭 →
-  /// ↑ で欄へ戻る → ↵ で欄が空 → ↑ で巡回して一覧の末尾 → ↓ で巡回して欄。秘書の口は閉包の差し替えで、本物の秘書・claude は
+  /// 依頼の欄: 入ると欄（強調の枠・行の選択と詳細が無い）→ 打つ → ↓ で一覧の先頭（欄は控えめな枠）→ ↑ で欄へ戻る →
+  /// ↵ で欄が空 → ↑ で巡回して一覧の末尾 → ↓ で巡回して欄。秘書の口は閉包の差し替えで、本物の秘書・claude は
   /// 起きない。
   func testBoardRequest() throws {
     let model = BoardModel(
@@ -93,7 +94,6 @@ extension DesignFlowSnapshotTests {
       },
       steps: [
         ("start", {}),
-        ("up_to_field", { intake.move(-1) }),
         ("typed", { intake.requestText = "Slack の自分宛ての DM をタスクの候補にして" }),
         ("down_to_list", { intake.move(1) }),
         ("back_to_field", { intake.move(-1) }),

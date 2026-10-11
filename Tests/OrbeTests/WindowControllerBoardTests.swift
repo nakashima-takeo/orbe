@@ -126,8 +126,9 @@ final class WindowControllerBoardTests: OrbeTestCase {
 
   // MARK: - 焦点
 
-  /// ボードを選んだとき・パレットを閉じたとき・workspace を行き来したとき、焦点はボードの中の自動追加の一覧へ戻り、キーが効く。
-  @MainActor func testFocusReturnsToTheIntakeListOnTheBoard() throws {
+  /// 焦点が外から入る（ボードを選ぶ・パレットを閉じる・workspace を戻る）と、部品は欄から始まり、↓ で一覧の先頭へ下りる。
+  /// 一覧で選んでいた行は入り直すと保たないが、裏のタブが閉じただけ（焦点は中のまま）なら保つ。
+  @MainActor func testEnteringTheBoardStartsAtTheRequestField() throws {
     // 止めている自動追加だけを置く——起動でも回らず、取得もコマンドなので本物の agent は起きない。
     let intakes = DesignSceneFixtures.boardIntakes().prefix(2).map {
       var intake = $0
@@ -143,24 +144,39 @@ final class WindowControllerBoardTests: OrbeTestCase {
     wc.window.makeKeyAndOrderFront(nil)
     let home = try XCTUnwrap(wc.store.homeIndex)
     wc.switchWorkspace(to: home)
-    let list = wc.board.intake
-    XCTAssertEqual(list.selected?.id, 1, "前提")
+    wc.newTab()
+    let behind = try XCTUnwrap(wc.activeTab)
+    let intake = wc.board.intake
 
     wc.statusModel.onSelectBoard()
+    pump()
+    XCTAssertEqual(intake.place, .request, "ボードを選ぶと欄")
     try pressDown(wc)
-    XCTAssertEqual(list.selected?.id, 2, "ボードを選ぶとボードへ")
+    XCTAssertEqual(intake.selected?.id, 1, "↓ で一覧の先頭")
+    try pressDown(wc)
+    XCTAssertEqual(intake.selected?.id, 2)
+
+    guard case .success = wc.controlCloseTab(tabId: behind.id) else {
+      return XCTFail("close_tab は success")
+    }
+    pump()
+    XCTAssertEqual(intake.selected?.id, 2, "裏のタブが閉じても、焦点は中のままなので選択を保つ")
 
     wc.showWorkspacePalette()
     wc.window.makeFirstResponder(nil)  // パレットの入力欄が焦点を持っていった状態
     wc.dismissPalette()
-    try press(wc, keyCode: 126, "\u{F700}", [.numericPad, .function])
-    XCTAssertEqual(list.selected?.id, 1, "パレットを閉じるとボードへ")
+    pump()
+    XCTAssertEqual(intake.place, .request, "パレットを閉じると欄から")
+    try pressDown(wc)
+    XCTAssertEqual(intake.selected?.id, 1, "↓ で一覧の先頭")
 
     wc.switchWorkspace(to: try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "default" }))
     XCTAssertFalse(wc.boardView.focusIsInside, "前提: 他の workspace ではそのタブが焦点")
     wc.switchWorkspace(to: home)
+    pump()
+    XCTAssertEqual(intake.place, .request, "workspace を戻ると欄から")
     try pressDown(wc)
-    XCTAssertEqual(list.selected?.id, 2, "workspace を戻るとボードへ")
+    XCTAssertEqual(intake.selected?.id, 1, "キーがボードに効く")
   }
 
   /// 依頼の欄で打っている途中にボードを離れて戻ると（パレットを閉じる・端末タブから戻る・workspace を戻る）、焦点は欄へ戻り、

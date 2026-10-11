@@ -44,7 +44,7 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
         runner: DesignSceneFixtures.intakeRunner(DesignSceneFixtures.boardIntakeFile())))
   }
 
-  /// ボードを実窓に載せ、ボードを選んだときと同じ当て直し（`focus()`）で焦点を中へ入れる。
+  /// ボードを実窓に載せ、ボードを選んだときと同じ当て直し（`focus()`）で焦点を中へ入れる。部品は欄から始まる。
   func mount(_ model: BoardModel) -> NSWindow {
     NSApplication.shared.setActivationPolicy(.accessory)
     let window = KeyDeliveryWindow(
@@ -116,6 +116,7 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
     let window = mount(model)
 
     down(window)
+    down(window)
     XCTAssertEqual(intake.selected?.id, Self.slack)
 
     press(Key.space, " ", to: window)
@@ -140,6 +141,7 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
     let intake = model.intake
     let window = mount(model)
     down(window)
+    down(window)
 
     press(Key.space, " ", to: window)
     press(Key.space, " ", repeating: true, to: window)
@@ -163,6 +165,7 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
     let model = board()
     let intake = model.intake
     let window = mount(model)
+    down(window)
 
     press(Key.enter, "\r", .shift, to: window)
     press(Key.x, "x", to: window)
@@ -179,6 +182,7 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
     let model = board()
     let intake = model.intake
     let window = mount(model)
+    down(window)
     down(window)
     XCTAssertEqual(intake.selected?.id, Self.slack, "前提")
 

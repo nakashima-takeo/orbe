@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// ボードの SwiftUI ルート。器（`BoardView`）の中の別 root なので環境は明示注入する。地は端末・エディター面と同じ veil。
-/// 中身は上から部品（自動追加）とフッター。地のクリックはボードの当て直し（部品の最後に居た場所へ）を通るので、続けてキーが効く。
+/// 中身は上から部品（自動追加）とフッター。地のクリックはボードの当て直し（選んでいる場所へ）を通るので、続けてキーが効く。
 struct BoardRoot: View {
   let model: BoardModel
   let translucency: ChromeTranslucency
@@ -19,16 +19,16 @@ struct BoardRoot: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .contentShape(Rectangle())
     .background(translucency.baseFill)
-    .simultaneousGesture(TapGesture().onEnded { model.focus() })
+    .simultaneousGesture(TapGesture().onEnded { model.refocus() })
     .environment(\.localization, localization)
     .environment(\.chromeFontResolver, fontResolver)
   }
 }
 
 /// 自動追加の部品: 見出し「タスクの自動追加 4 件」・依頼の欄・一覧（左 3）と詳細（右 2）。焦点の宛先は欄と一覧の器の 2 つで、
-/// モデルの場所（`place`）を合図（`focusToken`）のたびに写す。クリックで焦点が移れば、場所をモデルへ書き戻す——ボードの
-/// 外へ出た（宛先が無くなった）ときは書き戻さず、戻ったときに選んでいる場所へ当て直せるようにする。ストアの変化で場所が
-/// 替わった（行がすべて消えて欄になった）ときは、焦点が部品の中にあるときだけ追う（外にある焦点を奪わない）。
+/// 場所の正はモデル（`place`）だけ。合図（`focusToken`）のたびに写し、SwiftUI が自分で焦点を動かした（窓が key になったときの
+/// 既定の焦点など）ら、モデルの場所へ戻す。クリックはジェスチャがモデルへ届ける。ストアの変化で場所が替わった（行がすべて
+/// 消えて欄になった）ときは、焦点が部品の中にあるときだけ追う（外にある焦点を奪わない）。
 struct BoardIntakePart: View {
   let model: BoardIntakeModel
   @FocusState private var focused: BoardIntakeModel.Place?
@@ -49,7 +49,7 @@ struct BoardIntakePart: View {
       if focused != nil { focused = place }
     }
     .onChange(of: focused) { _, place in
-      if let place { model.arrive(place) }
+      if let place, place != model.place { focused = model.place }
     }
     .onChange(of: model.store.intakes, initial: true) { model.reconcile() }
   }

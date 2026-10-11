@@ -25,7 +25,6 @@ extension BoardIntakeTests {
     let asks = recording(model)
     let window = mount(model)
 
-    up(window)
     type("abc", to: window)
     press(Key.enter, "\r", to: window)
     press(Key.enter, "\r", repeating: true, to: window)
@@ -41,6 +40,7 @@ extension BoardIntakeTests {
     let intake = model.intake
     let asks = recording(model)
     let window = mount(model)
+    down(window)
 
     press(Key.enter, "\r", .command, to: window)
     press(Key.enter, "\r", .command, repeating: true, to: window)
@@ -56,6 +56,7 @@ extension BoardIntakeTests {
     let model = board()
     let intake = model.intake
     let asks = recording(model)
+    intake.move(1)
     XCTAssertEqual(intake.selected?.id, Self.failingBacklog, "前提")
 
     try intake.runner.delete(Self.failingBacklog)
@@ -71,7 +72,6 @@ extension BoardIntakeTests {
     _ = recording(model, .claudeMissing)
     let window = mount(model)
 
-    up(window)
     type("a", to: window)
     press(Key.enter, "\r", to: window)
 
