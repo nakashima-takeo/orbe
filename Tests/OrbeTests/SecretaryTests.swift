@@ -85,7 +85,7 @@ final class SecretaryTests: OrbeTestCase {
     let wc = try launch()
     let front = wc.activeTab?.id
 
-    XCTAssertEqual(try wc.secretary.ask(.text("見積もりを山田さんに送る")), .accepted)
+    XCTAssertEqual(try wc.secretary.ask(.text("見積もりを山田さんに送る"), from: .palette), .accepted)
 
     XCTAssertEqual(wc.current.name, "main", "見ている workspace は変わらない")
     XCTAssertEqual(wc.activeTab?.id, front, "見ているタブは変わらない")
@@ -112,13 +112,13 @@ final class SecretaryTests: OrbeTestCase {
   /// まま（状態が変わっていない）では次を送らない。
   func testAsksWhileBusyAreQueuedAndDeliveredOneAfterEachTurn() throws {
     let wc = try launch()
-    _ = try wc.secretary.ask(.text("一件目"))
+    _ = try wc.secretary.ask(.text("一件目"), from: .palette)
     let tab = try XCTUnwrap(try homeTabs(wc).first)
     report(wc, tab, "idle", "s-1")
     waitForScreen(tab, contains: "一件目")
 
-    XCTAssertEqual(try wc.secretary.ask(.text("二件目")), .queued, "送った後のターンが終わるまで溜める")
-    XCTAssertEqual(try wc.secretary.ask(.text("三件目")), .queued)
+    XCTAssertEqual(try wc.secretary.ask(.text("二件目"), from: .palette), .queued, "送った後のターンが終わるまで溜める")
+    XCTAssertEqual(try wc.secretary.ask(.text("三件目"), from: .palette), .queued)
     wc.flushChrome()
     assertNeverOnScreen(tab, "二件目")
 
@@ -141,7 +141,7 @@ final class SecretaryTests: OrbeTestCase {
   /// 秘書のタブを閉じて頼むと、覚えた会話を新しいタブで再開する（秘書の指示付き）。/clear で会話が替われば新しい会話を覚える。
   func testAClosedSecretaryResumesItsLatestConversation() throws {
     let wc = try launch()
-    _ = try wc.secretary.ask(.text("一件目"))
+    _ = try wc.secretary.ask(.text("一件目"), from: .palette)
     let first = try XCTUnwrap(try homeTabs(wc).first)
     report(wc, first, "idle", "s-1")
     waitForScreen(first, contains: "一件目")
@@ -151,7 +151,7 @@ final class SecretaryTests: OrbeTestCase {
     wc.closeTab(first, origin: .gesture)
     wc.flushChrome()
     XCTAssertTrue(try homeTabs(wc).isEmpty, "閉じても勝手に起こし直さない")
-    _ = try wc.secretary.ask(.text("二件目"))
+    _ = try wc.secretary.ask(.text("二件目"), from: .palette)
 
     let resumed = try XCTUnwrap(try homeTabs(wc).first)
     let command = try XCTUnwrap(resumed.surface.initialCommand)
@@ -167,7 +167,7 @@ final class SecretaryTests: OrbeTestCase {
   /// 新しく起こしたタブが同じく閉じても、もう起こし直さない。
   func testAConversationThatCannotResumeIsDroppedAndAFreshSecretaryStartsOnce() throws {
     let wc = try launch(SecretaryFile(version: 1, sessionId: "gone", pending: []))
-    _ = try wc.secretary.ask(.text("届けたい"))
+    _ = try wc.secretary.ask(.text("届けたい"), from: .palette)
     let resumed = try XCTUnwrap(try homeTabs(wc).first)
     XCTAssertTrue(try XCTUnwrap(resumed.surface.initialCommand).hasPrefix("claude --resume gone "))
 
@@ -245,7 +245,7 @@ final class SecretaryTests: OrbeTestCase {
     wc.wakeUnselected(byHand)
     report(wc, byHand, "idle", "s-1")
 
-    _ = try wc.secretary.ask(.text("手で開いた会話には貼らない"))
+    _ = try wc.secretary.ask(.text("手で開いた会話には貼らない"), from: .palette)
 
     XCTAssertNotEqual(wc.secretary.tabId, byHand.id)
     let resumed = try XCTUnwrap(try homeTabs(wc).first { $0.id != byHand.id }, "別に再開する")
@@ -270,7 +270,7 @@ final class SecretaryTests: OrbeTestCase {
         "claude --resume s-1 --append-system-prompt "))
     XCTAssertEqual(wc.secretary.tabId, tab.id)
 
-    _ = try wc.secretary.ask(.text("そこへ届く"))
+    _ = try wc.secretary.ask(.text("そこへ届く"), from: .palette)
     report(wc, tab, "idle", "s-1")
 
     waitForScreen(tab, contains: "そこへ届く")
@@ -280,7 +280,7 @@ final class SecretaryTests: OrbeTestCase {
   /// Ctrl+Z などで止まった秘書には貼らず、動き出してから届ける（止まった agent の入力にも、シェルにも貼らない）。
   func testAStoppedSecretaryGetsNothingUntilItRunsAgain() throws {
     let wc = try launch()
-    _ = try wc.secretary.ask(.text("一件目"))
+    _ = try wc.secretary.ask(.text("一件目"), from: .palette)
     let tab = try XCTUnwrap(try homeTabs(wc).first)
     report(wc, tab, "idle", "s-1")
     waitForScreen(tab, contains: "一件目")
@@ -291,7 +291,7 @@ final class SecretaryTests: OrbeTestCase {
     XCTAssertTrue(waitUntil { !ProcessGroup.isRunning(group) }, "前提: 止まる")
 
     report(wc, tab, "done", "s-1")
-    _ = try wc.secretary.ask(.text("二件目"))
+    _ = try wc.secretary.ask(.text("二件目"), from: .palette)
     XCTAssertEqual(wc.secretary.record.pending.count, 1, "止まっている間は溜める")
 
     kill(-group, SIGCONT)
@@ -307,7 +307,7 @@ final class SecretaryTests: OrbeTestCase {
   /// 秘書の係へ渡す（/clear で秘書の会話が替わっていても、今の秘書に届く）。
   func testWhatHappenedToTheSecretarysWaitGoesToTheSecretaryAsAnAsk() throws {
     let wc = try launch()
-    _ = try wc.secretary.ask(.text("一件目"))
+    _ = try wc.secretary.ask(.text("一件目"), from: .palette)
     let tab = try XCTUnwrap(try homeTabs(wc).first)
     report(wc, tab, "idle", "s-1")
     waitForScreen(tab, contains: "一件目")
@@ -343,15 +343,43 @@ final class SecretaryTests: OrbeTestCase {
     XCTAssertNil(wc.taskStore.tasks.first { $0.id == id }?.waitResolution, "届けたら起きたことは消える")
   }
 
+  // MARK: - Home のボードから
+
+  /// Home のボードの欄で頼むと、出どころ「Home のボード」の頼みとして秘書のタブに 1 行で届き、欄は空になる。
+  func testTheBoardFieldAsksTheSecretaryFromTheBoard() throws {
+    let wc = try launch()
+    let intake = wc.board.intake
+
+    intake.requestText = "DM を候補に"
+    intake.send()
+
+    XCTAssertEqual(intake.requestText, "", "受けたら欄は空")
+    XCTAssertNil(wc.board.refusal, "断らない")
+    let tab = try XCTUnwrap(try homeTabs(wc).first, "Home に秘書のタブが起きる")
+    report(wc, tab, "idle", "s-1")
+    waitForScreen(tab, contains: "タスクの自動追加を頼む: DM を候補に")
+    XCTAssertTrue(screen(tab).contains("Home のボードから · "), "出どころが見える")
+  }
+
   // MARK: - 受けない
 
   func testWithoutClaudeTheAskIsRefusedAndNothingIsQueued() throws {
     let wc = try launch(stage: false)
 
-    XCTAssertThrowsError(try wc.secretary.ask(.text("頼み"))) {
+    XCTAssertThrowsError(try wc.secretary.ask(.text("頼み"), from: .palette)) {
       XCTAssertEqual($0 as? Secretary.Refusal, .claudeMissing)
     }
     XCTAssertEqual(wc.secretary.record.pending, [])
     XCTAssertTrue(try homeTabs(wc).isEmpty)
+  }
+
+  /// 空の頼み（空白だけ）は claude の有無より先に空として断る——ボードの欄の空の ↵ は、claude が無くても黙る。
+  func testAnEmptyAskIsRefusedAsEmptyEvenWithoutClaude() throws {
+    let wc = try launch(stage: false)
+
+    XCTAssertThrowsError(try wc.secretary.ask(.intake(" \n "), from: .board)) {
+      XCTAssertEqual($0 as? Secretary.Refusal, .empty)
+    }
+    XCTAssertEqual(wc.secretary.record.pending, [])
   }
 }

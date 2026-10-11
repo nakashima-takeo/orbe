@@ -405,6 +405,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskStartHomeTask
   case secretaryLineOrigin
   case secretaryLineWaitOrigin
+  case secretaryLineBoardOrigin
+  case secretaryLineIntake
+  case secretaryLineIntakeFix
   case secretaryLineTask
   case secretaryLineLinkedTask
   case secretaryLineNote
@@ -597,6 +600,12 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardIntakeRuns
   case boardIntakePausedNote
   case boardHintSelect
+  case boardHintToList
+  case boardAskPlaceholder
+  case boardAskHint
+  case boardAskFixHint
+  case boardAskClaudeMissing
+  case boardAskFixGone
 
   // MARK: - Link（OSC 8 リンクの確認・ブロック）
   case linkConfirmTitle

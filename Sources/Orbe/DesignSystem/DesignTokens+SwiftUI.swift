@@ -137,6 +137,7 @@ struct ThemeFonts {
   let boardHeading = Font(Theme.Typography.boardHeading as CTFont)
   let boardDetailTitle = Font(Theme.Typography.boardDetailTitle as CTFont)
   let boardValue = Font(Theme.Typography.boardValue as CTFont)
+  let boardPrompt = Font(Theme.Typography.boardPrompt as CTFont)
   // エディター面の空状態
   let editorLead = Font(Theme.Typography.editorLead as CTFont)
   let editorHint = Font(Theme.Typography.editorHint as CTFont)

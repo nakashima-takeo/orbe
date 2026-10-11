@@ -67,8 +67,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     self?.notifyWaitResolved(task: $0, $1)
   }
   // 秘書の係。
-  private(set) lazy var secretary = Secretary(
-    host: self, tasks: taskStore, localization: localization)
+  private(set) lazy var secretary = Secretary(host: self, localization: localization)
   // パレット提示の拡張（WindowController+Palette）が設定パレットの defaultAgent 配線で触るため internal。
   let agentLauncher = AgentLauncher()
   // アップデート面。状態（UI 唯一の情報源）は updaterService が生成・所有し、提示配線は WindowController+Update。
@@ -86,7 +85,19 @@ final class WindowController: NSObject, NSWindowDelegate {
     queriesRoot: BundledResources.root,
     language: { [weak self] in self?.localization.language ?? .systemDefault })
   // ボードの状態と器（どちらも 1 つだけ）。前面の workspace がボードを持つ間、器が content に載り、そのボードを映す。
-  private(set) lazy var board = BoardModel(intake: BoardIntakeModel(runner: intakeRunner))
+  private(set) lazy var board: BoardModel = {
+    let intake = BoardIntakeModel(runner: intakeRunner)
+    intake.onAsk = { [weak self] ask in
+      guard let self else { return .claudeMissing }
+      do throws(Secretary.Refusal) {
+        _ = try self.secretary.ask(ask, from: .board)
+        return nil
+      } catch {
+        return error
+      }
+    }
+    return BoardModel(intake: intake)
+  }()
   private(set) lazy var boardView: BoardView = {
     let view = BoardView(
       model: board, translucency: chromeTranslucency, localization: localization,

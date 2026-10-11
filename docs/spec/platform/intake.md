@@ -118,3 +118,5 @@ agent は裏で回せる CLI だけを受ける（claude。codex・agy は理由
 [制御 API](../control/api.md) の 6 動詞（`list_intakes`・`set_intake`・`run_intake`・`pause_intake`・`delete_intake`・`list_intake_proposals`）を MCP にも出し、`orb intake`（[cli](../control/cli.md)）からも同じ形で叩ける。自動追加も候補もイベントにはならない。
 
 人の画面は 2 つ: ⌘⇧X の[自動追加タブ](../palette/intake.md)と、Home の[ボード](../chrome/board.md#自動追加の部品)。どちらからも止める ⇄ 再開・今すぐ実行・削除ができ、キー・キーの表示・断りは 1 つの定義を共有する。定義を足す・書き換えるのは AI の口だけ。どの口も同じ唯一の正を変えるので、片方の画面での操作はもう片方にすぐ映る。
+
+人が自動追加を作る・直すときの口は、Home のボード。[依頼の欄](../chrome/board.md#依頼の欄)に打った文はタスクの自動追加の依頼として、一覧で選んで ⌘↵ を押すとその自動追加の直しとして（[直しを依頼](../chrome/board.md#直しを依頼)）、その場で[秘書](../agent/secretary.md)に届き、秘書が `set_intake` で書く。人は定義の項目を自分で埋めず、やりたいことを言うだけで済む。

@@ -27,10 +27,12 @@ final class BoardView: NSView {
     host.frame = bounds
     host.autoresizingMask = [.width, .height]
     addSubview(host)
-    // 当て直しのたびにホストへ first responder を渡す（中の宛先は SwiftUI の焦点が決める）。
+    // 焦点が外にあるときだけホストへ first responder を渡す（中の宛先は SwiftUI の焦点が決める）。中にあるときに渡し直すと、
+    // 依頼の欄の入力を終わらせて、当て直す先の焦点を取りこぼす。
     model.onFocus = { [weak self] in
-      guard let self else { return }
+      guard let self, !self.focusIsInside else { return false }
       self.window?.makeFirstResponder(self.host)
+      return true
     }
   }
   required init?(coder: NSCoder) { fatalError("not supported") }

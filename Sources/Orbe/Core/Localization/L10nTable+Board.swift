@@ -12,5 +12,16 @@ extension L10n {
     .boardIntakeRuns: ("回の記録", "Runs"),
     .boardIntakePausedNote: ("（止めている）", " (paused)"),
     .boardHintSelect: ("選択", "select"),
+    .boardHintToList: ("一覧へ", "to list"),
+    .boardAskPlaceholder: (
+      "やりたいことを入力（例: Slack の自分宛ての DM をタスクの候補にして）",
+      "Describe what you want (e.g. Turn my Slack DMs into task candidates)"
+    ),
+    .boardAskHint: ("依頼", "ask"),
+    .boardAskFixHint: ("直しを依頼", "ask to fix"),
+    .boardAskClaudeMissing: (
+      "claude が見つからないので依頼できない", "claude not found, so the request was not sent"
+    ),
+    .boardAskFixGone: ("その自動追加はもうありません", "That auto-add no longer exists"),
   ]
 }

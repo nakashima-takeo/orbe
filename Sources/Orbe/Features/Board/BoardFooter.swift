@@ -1,25 +1,29 @@
 import SwiftUI
 
-/// ボードのフッター。左に選んだ行で効くキー（↑↓ と `IntakeHand` の操作。ボタンは置かない）、右に赤の断り。自動追加が無ければ
-/// キーは出さない。
+/// フッターの左に並べるキー 1 つ（キーと名前）。並びは部品が出す。
+struct BoardKeyHint: Hashable {
+  let key: String
+  let label: L10nKey
+
+  init(_ key: String, _ label: L10nKey) {
+    self.key = key
+    self.label = label
+  }
+}
+
+/// ボードのフッター。左に焦点のある場所で効くキー（部品が出す。ボタンは置かない）、右にボードの断り（赤）。
 struct BoardFooter: View {
-  @Bindable var model: BoardIntakeModel
+  let model: BoardModel
   @Environment(\.localization) private var l10n
 
   var body: some View {
     HStack(spacing: Theme.Space.span + Theme.Space.hair) {
-      if let selected = model.selected {
-        PaletteKeyHint(key: "↑↓", label: l10n.string(.boardHintSelect))
-        ForEach(IntakeHand.Operation.allCases, id: \.self) { operation in
-          PaletteKeyHint(
-            key: operation.key,
-            label: l10n.string(operation.title(paused: selected.intake.paused)))
-        }
+      ForEach(model.intake.hints, id: \.self) { hint in
+        PaletteKeyHint(key: hint.key, label: l10n.string(hint.label))
       }
       Spacer(minLength: 0)
       if let refusal = model.refusal {
-        Text(l10n.string(refusal.message))
-          .foregroundStyle(Color.theme.danger)
+        Text(l10n.string(refusal)).foregroundStyle(Color.theme.danger)
       }
     }
     .font(Font.theme.workspaceName)

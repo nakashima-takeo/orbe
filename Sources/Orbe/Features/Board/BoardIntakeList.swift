@@ -14,9 +14,10 @@ struct BoardIntakeList: View {
         VStack(spacing: 0) {
           ForEach(model.standings) { standing in
             BoardIntakeRow(
-              standing: standing, text: text, selected: standing.id == model.list.selectedID
+              standing: standing, text: text,
+              selected: model.list.selectedID == .intake(standing.id)
             )
-            .id(standing.id)
+            .id(BoardIntakeModel.Stop.intake(standing.id))
             .onTapGesture { model.tap(standing.id) }
           }
         }

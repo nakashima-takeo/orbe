@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// ボードの gallery。Home のタブ行（左端に固定のボードのセル）を、ボード選択中・タブ選択中・タブが溢れて横スクロールへ
-/// 回る段で撮り、部品を持たないボードの一文と、自動追加の部品（見本『Home』）を撮る。タブ行の見本は §5 Tab 契約・§5.1 TabBar
+/// 回る段で撮り、部品を持たないボードの一文と、自動追加の部品（見本『Home』。依頼の欄を含む）を撮る。タブ行の見本は §5 Tab 契約・§5.1 TabBar
 /// （ボードのセルは単独タブの器）。
 extension DesignGallerySnapshotTests {
   func renderBoardSnapshots(dir: URL) throws {
@@ -57,10 +57,13 @@ extension DesignGallerySnapshotTests {
           localization: LocalizationStore(language: language), fontResolver: ChromeFontResolver()),
         size: size, name: name, dir: dir)
     }
+    /// 一覧の先頭の行を選んだ状態（見本『Home』と突き合わせる。0 件なら欄のまま）。
     func board(_ file: IntakesFile? = nil) -> BoardModel {
-      BoardModel(
+      let model = BoardModel(
         intake: BoardIntakeModel(
           runner: DesignSceneFixtures.intakeRunner(file ?? DesignSceneFixtures.boardIntakeFile())))
+      model.intake.move(1)
+      return model
     }
 
     try write("board_intake.png", board())
@@ -87,6 +90,37 @@ extension DesignGallerySnapshotTests {
     try write("board_intake_long_command.png", long)
 
     try write("board_intake_narrow.png", board(), .ja, NSSize(width: 800, height: 480))
+
+    try renderBoardRequestSnapshots(write: write, board: board)
+  }
+
+  /// 依頼の欄: 文字あり（欄に焦点・フッターが欄のキー）・断り 2 種。秘書の口は閉包の差し替えで、本物の秘書・claude は起きない。
+  private func renderBoardRequestSnapshots(
+    write: (String, BoardModel, Language, NSSize) throws -> Void,
+    board: (IntakesFile?) -> BoardModel
+  ) throws {
+    let size = NSSize(width: 1440, height: 826)
+
+    for language in [Language.ja, .en] {
+      let suffix = language == .ja ? "" : "_en"
+      let typed = board(nil)
+      typed.intake.go(.request)
+      typed.intake.requestText =
+        language == .ja ? "Slack の自分宛ての DM をタスクの候補にして" : "Turn my Slack DMs into task candidates"
+      try write("board_request_typed\(suffix).png", typed, language, size)
+    }
+
+    let missing = board(nil)
+    missing.intake.onAsk = { _ in .claudeMissing }
+    missing.intake.go(.request)
+    missing.intake.requestText = "Slack の自分宛ての DM をタスクの候補にして"
+    missing.intake.send()
+    try write("board_request_claude_missing.png", missing, .ja, size)
+
+    let gone = board(nil)
+    try gone.intake.runner.delete(try XCTUnwrap(gone.intake.selected?.id))
+    gone.intake.askFix()
+    try write("board_request_fix_gone.png", gone, .ja, size)
   }
 
   private func homeRow(_ strip: TabStrip, selection: StatusRowModel.Selection) -> StatusRowModel {
