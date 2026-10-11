@@ -82,17 +82,19 @@ enum FaceGeometry {
     return (clamp(hx / morphDistance), clamp((maxX - hx) / morphDistance))
   }
 
-  /// 割合を点に丸めた hx と、その目標の形で解く（静止の配置）。
+  /// 静止の配置: 割合を点に丸めた hx と、その目標の形で解き、面の境も点に丸める（面と中身をピクセルに揃える）。
   static func resolve(_ faces: FaceLayout, size: CGSize) -> Resolved {
     let size = CGSize(width: max(0, size.width), height: max(0, size.height))
     let hx = (CGFloat(faces.editorRatio) * maxPosition(size.width)).rounded()
     let (l, r) = targets(hx, width: size.width)
-    return resolve(faces, shape: Shape(hx: hx, sL: l, sR: r), size: size)
+    return resolve(faces, shape: Shape(hx: hx, sL: l, sR: r), size: size, snapped: true)
   }
 
-  /// 形をそのまま解く（引いている間・動いている間）。
-  static func resolve(_ faces: FaceLayout, shape: Shape, size: CGSize) -> Resolved {
-    let f = frames(shape, size: size)
+  /// 形を解く。`snapped` なら面の境を点に丸める（静止のとき）。引いている間・動いている間は丸めない。
+  static func resolve(
+    _ faces: FaceLayout, shape: Shape, size: CGSize, snapped: Bool = false
+  ) -> Resolved {
+    let f = frames(shape, size: size, snapped: snapped)
     let editorVisible = f.editor.width > 0
     let terminalVisible = f.terminal.width > 0
     func dot(_ face: Face, visible: Bool) -> DotState {
@@ -108,15 +110,16 @@ enum FaceGeometry {
   }
 
   /// 形の矩形。エディターは取っ手の右端から縁へ近づくほど取っ手の下へ潜り、端末は左端から同じく潜る——両面の間は
-  /// 形に応じて 0〜取っ手の幅。取っ手の高さは引き手の高さから全高へ伸びる。
-  static func frames(_ s: Shape, size: CGSize) -> Frames {
+  /// 形に応じて 0〜取っ手の幅。取っ手の高さは引き手の高さから全高へ伸びる。`snapped` なら面の境を点に丸める。
+  static func frames(_ s: Shape, size: CGSize, snapped: Bool = false) -> Frames {
     let w = size.width
     let h = size.height
     let cl = clamp(s.sL)
     let cr = clamp(s.sR)
     let t = min(cl, cr)
-    let editorRight = min(max(s.hx + handleWidth * (1 - cr), 0), w)
-    let terminalLeft = min(max(s.hx + handleWidth * cl, 0), w)
+    func edge(_ x: CGFloat) -> CGFloat { min(max(snapped ? x.rounded() : x, 0), w) }
+    let editorRight = edge(s.hx + handleWidth * (1 - cr))
+    let terminalLeft = edge(s.hx + handleWidth * cl)
     let notch = Theme.Layout.faceNotchHeight
     let handleHeight = min(notch + (h - notch) * t, h)
     return Frames(

@@ -289,8 +289,14 @@ final class TabFacesView: NSView {
       g.isSplit && g.faces.focus == .terminal ? Theme.Color.faceTerminal : nil
   }
 
+  /// 動きの今の矩形を置く。確定した位置に止まっていれば、点に丸めた静止の矩形を置く。
   private func placeMotion() {
-    place(FaceGeometry.frames(motion.shape, size: bounds.size))
+    let target = committed
+    if motion.hx == target.shape.hx, motion.isAtRest(width: bounds.width) {
+      place(target.frames)
+    } else {
+      place(FaceGeometry.frames(motion.shape, size: bounds.size))
+    }
   }
 
   /// 面・両面の間の地・取っ手・中身の位置を矩形 `f` で置く。中身のサイズは触らない。中身は錨側（エディター＝右・端末＝
