@@ -15,7 +15,7 @@ struct TaskPaletteIntakeContents: View {
         VStack(alignment: .leading, spacing: 0) {
           heading
           section(.intakeFetch) { fetch }
-          section(.taskPaletteIntakeJudge) { judge }
+          section(.intakeJudge) { judge }
           section(.taskPaletteIntakeLast) { last }
           let overlaps = model.store.overlaps(of: intake.id)
           if !overlaps.isEmpty {

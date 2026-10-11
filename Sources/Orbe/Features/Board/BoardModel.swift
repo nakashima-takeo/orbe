@@ -42,6 +42,14 @@ import Observation
     if entering { intake.enter() } else { intake.refocus() }
   }
 
+  /// 部品の焦点の合図を受け取り、当てる場所を返す（ビューが合図の進みと、部品が現れたときに呼ぶ）。焦点がボードの外にあれば
+  /// 合図は捨てる——ボードを一瞬選んで同じ turn にタブへ移ると、合図が届く頃には焦点が端末にあるため。`show(_:)` と同じく、
+  /// 外にある焦点は奪わない。
+  func takeFocusRequest() -> BoardIntakeModel.Place? {
+    let place = intake.takeFocusRequest()
+    return focusIsInside() ? place : nil
+  }
+
   /// 地のクリック。ボードの中の操作なので、外から入ったときも選んでいる場所へ当て直す。
   func refocus() {
     _ = enter()

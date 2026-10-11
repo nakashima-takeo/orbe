@@ -7,7 +7,6 @@ extension L10n {
     .boardIntakeTitle: ("タスクの自動追加", "Task auto-add"),
     .boardIntakeCount: ("%lld 件", "%lld"),
     .boardIntakeEmpty: ("タスクの自動追加はまだありません", "No task auto-adds yet"),
-    .boardIntakeJudge: ("判定の指示", "Judge instruction"),
     .boardIntakeWhen: ("いつ", "When"),
     .boardIntakeRuns: ("回の記録", "Runs"),
     .boardIntakePausedNote: ("（止めている）", " (paused)"),

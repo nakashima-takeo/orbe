@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 選んだ自動追加の詳細（右）。名前・取得・判定の指示・いつ・回の記録。取得と判定は 1 行の要約にせず全文を出す——承認なしで
+/// 選んだ自動追加の詳細（右）。名前・取得・判定・いつ・回の記録。取得と判定は 1 行の要約にせず全文を出す——承認なしで
 /// 裏で走るもの（使えるツール・コマンド・作業ディレクトリ）を、いつも確かめられるため。原文も素の文字で描き、欄全体が縦に
 /// スクロールする（選択が替わると先頭へ戻る）。
 struct BoardIntakeDetail: View {
@@ -19,7 +19,7 @@ struct BoardIntakeDetail: View {
           .foregroundStyle(Color.theme.textPrimary)
           .fixedSize(horizontal: false, vertical: true)
         field(.intakeFetch) { lines(text.fetch(intake.definition.fetch)) }
-        field(.boardIntakeJudge) { lines(text.judge(intake.definition.judge)) }
+        field(.intakeJudge) { lines(text.judge(intake.definition.judge)) }
         field(.boardIntakeWhen) {
           value(
             text.when(intake.definition.when)

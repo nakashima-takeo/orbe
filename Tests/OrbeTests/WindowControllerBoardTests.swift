@@ -377,4 +377,22 @@ final class WindowControllerBoardTests: OrbeTestCase {
     XCTAssertEqual(visibleContent(wc), [target.view])
     XCTAssertTrue(wc.window.firstResponder === target.surface)
   }
+
+  /// ボードのまま Home を離れ、別の workspace から `focus_tab`（メニューバー・`orb tab focus` と同じ経路）で Home のタブへ移ると、
+  /// 焦点はそのタブに残る——戻る途中でボードが一瞬選ばれても、そのときの欄への焦点の合図が後から端末の焦点を奪わない。
+  @MainActor func testFocusTabFromAnotherWorkspaceLeavesNoFocusRequestBehind() throws {
+    let wc = try homeOnBoard(tabs: 1)
+    show(wc)
+    pump()
+    let target = wc.current.tabs[0]
+    wc.switchWorkspace(to: try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "default" }))
+
+    guard case .success = wc.controlFocusTab(tabId: target.id) else {
+      return XCTFail("focus_tab は success")
+    }
+    pump()
+
+    XCTAssertEqual(wc.current.selection, .tab(target))
+    XCTAssertTrue(wc.window.firstResponder === target.surface, "焦点はタブの端末に残る")
+  }
 }

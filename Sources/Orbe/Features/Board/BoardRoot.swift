@@ -42,18 +42,21 @@ struct BoardPartView: View {
 
   var body: some View {
     switch part {
-    case .intake: BoardIntakePart(model: model.intake)
+    case .intake: BoardIntakePart(board: model)
     }
   }
 }
 
 /// 自動追加の部品: 見出し「タスクの自動追加 4 件」・依頼の欄・一覧（左 3）と詳細（右 2）。焦点の宛先は欄と一覧の器の 2 つで、
-/// 場所の正はモデル（`place`）だけ。届いていない合図（`focusToken`）があれば写し（現れただけでは写さない）、SwiftUI が
-/// 自分で焦点を動かした（窓が key になったときの既定の焦点など）ら、モデルの場所へ戻す。クリックはジェスチャがモデルへ届ける。
-/// ストアの変化で場所が替わった（行がすべて消えて欄になった）ときは、焦点が部品の中にあるときだけ追う（外にある焦点を奪わない）。
+/// 場所の正はモデル（`place`）だけ。届いていない合図（`focusToken`）はボードを通して受け取って写し（現れただけでは写さず、
+/// 焦点がボードの外にあれば捨てる）、SwiftUI が自分で焦点を動かした（窓が key になったときの既定の焦点など）ら、モデルの場所へ
+/// 戻す。クリックはジェスチャがモデルへ届ける。ストアの変化で場所が替わった（行がすべて消えて欄になった）ときは、焦点が部品の
+/// 中にあるときだけ追う（外にある焦点を奪わない）。
 struct BoardIntakePart: View {
-  let model: BoardIntakeModel
+  let board: BoardModel
   @FocusState private var focused: BoardIntakeModel.Place?
+
+  private var model: BoardIntakeModel { board.intake }
 
   var body: some View {
     VStack(alignment: .leading, spacing: Theme.Space.phrase) {
@@ -67,7 +70,7 @@ struct BoardIntakePart: View {
       }
     }
     .onChange(of: model.focusToken, initial: true) {
-      if let place = model.takeFocusRequest() { focused = place }
+      if let place = board.takeFocusRequest() { focused = place }
     }
     .onChange(of: model.place) { _, place in
       if focused != nil { focused = place }

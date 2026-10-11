@@ -62,6 +62,7 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
     let active = ws("active", t3)
     let tab = TerminalTab(cwd: "/tmp")
     active.tabs = [tab]
+    active.selection = .tab(tab)
     let alpha = ws("Alpha", t1)  // 他 workspace があっても退避しない
     let beta = ws("Beta", t2)
     let store = SessionStore(workspaces: [active, alpha, beta], activeWorkspace: 0)

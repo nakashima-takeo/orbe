@@ -363,7 +363,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteIntakeHintShelf
   case taskPaletteIntakeHintPick
   case taskPaletteIntakeHintBack
-  case taskPaletteIntakeJudge
   case taskPaletteIntakeLast
   case taskPaletteIntakeOverlaps
   case taskPaletteIntakeOverlapCount
@@ -371,6 +370,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteIntakeErrAccept
   // MARK: - 自動追加の共有の文（IntakeText・IntakeHand。L10nTable+Intake）
   case intakeFetch
+  case intakeJudge
   case intakeNext
   case intakePaused
   case intakeRunning
@@ -595,7 +595,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardIntakeTitle
   case boardIntakeCount
   case boardIntakeEmpty
-  case boardIntakeJudge
   case boardIntakeWhen
   case boardIntakeRuns
   case boardIntakePausedNote

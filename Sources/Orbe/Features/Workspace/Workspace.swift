@@ -23,7 +23,7 @@ final class Workspace {
     if case .tab(let tab) = selection { return tab }
     return nil
   }
-  /// 選んでいるタブの位置。chrome・保存・制御 API へ位置で出すときだけ使う。
+  /// 選んでいるタブの位置。chrome・保存へ位置で出すときだけ使う。
   var selectedTabIndex: Int? {
     selectedTab.flatMap { tab in tabs.firstIndex { $0 === tab } }
   }

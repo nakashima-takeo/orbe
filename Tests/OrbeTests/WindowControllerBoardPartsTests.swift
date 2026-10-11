@@ -100,7 +100,7 @@ final class WindowControllerBoardPartsTests: OrbeTestCase {
     XCTAssertEqual(wc.board.intake.requestText, "b", "そのまま打てる")
   }
 
-  /// 端末タブで作業中に部品を外しても置いても、焦点と選択は動かない。ボードへ戻ると変えた並びで出る。
+  /// 端末タブで作業中に部品を外しても置いても、焦点と選択は動かない。
   @MainActor func testChangingThePartsBehindATerminalTabLeavesTheFocusThere() throws {
     let wc = try homeOnBoard(tabs: 1)
     let homeId = wc.current.id

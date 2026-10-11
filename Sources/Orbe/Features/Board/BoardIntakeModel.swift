@@ -27,9 +27,9 @@ import SwiftUI
   var requestText = "" {
     didSet { if requestText != oldValue { onRefusal(nil) } }
   }
-  /// 進むたびに、ビューが焦点を `place` へ当て直す。
+  /// 進むたびに、焦点がボードの中にあればビューが焦点を `place` へ当て直し、外にあれば合図を捨てる。
   private(set) var focusToken = 0
-  /// ビューが受け取った最後の合図。
+  /// ボードが受け取った最後の合図（捨てたものを含む）。
   @ObservationIgnored private var deliveredFocusToken = 0
 
   /// 自動追加の新しい依頼か直しを頼む。ボードの配線が出どころを付けて秘書の口へ渡し、受けなければ断りを返す。
@@ -102,8 +102,8 @@ import SwiftUI
     focusToken &+= 1
   }
 
-  /// 届いていない合図があれば受け取り、当てる場所を返す。ビューが合図の進みと、現れたときに呼ぶ——部品は焦点が外にある間にも
-  /// 置かれて現れるので、現れただけでは焦点を動かさない（外にある焦点を奪わない）。
+  /// 届いていない合図があれば受け取り、当てる場所を返す。部品は焦点が外にある間にも置かれて現れるので、現れただけでは焦点を
+  /// 動かさない。受け取るのはボード（`BoardModel.takeFocusRequest()`）だけ。
   func takeFocusRequest() -> Place? {
     guard focusToken != deliveredFocusToken else { return nil }
     deliveredFocusToken = focusToken

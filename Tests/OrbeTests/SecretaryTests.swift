@@ -376,10 +376,13 @@ final class SecretaryTests: OrbeTestCase {
   /// 空の頼み（空白だけ）は claude の有無より先に空として断る——ボードの欄の空の ↵ は、claude が無くても黙る。
   func testAnEmptyAskIsRefusedAsEmptyEvenWithoutClaude() throws {
     let wc = try launch(stage: false)
+    let intake = wc.board.intake
 
-    XCTAssertThrowsError(try wc.secretary.ask(.intake(" \n "), from: .board)) {
-      XCTAssertEqual($0 as? Secretary.Refusal, .empty)
-    }
+    intake.requestText = " \n "
+    intake.send()
+
+    XCTAssertNil(wc.board.refusal, "何も出さない")
+    XCTAssertEqual(intake.requestText, " \n ", "欄はそのまま")
     XCTAssertEqual(wc.secretary.record.pending, [])
   }
 }

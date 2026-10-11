@@ -22,7 +22,6 @@ extension L10n {
     .taskPaletteIntakeHintShelf: ("棚へ", "shelf"),
     .taskPaletteIntakeHintPick: ("自動追加", "auto-add"),
     .taskPaletteIntakeHintBack: ("候補へ", "candidates"),
-    .taskPaletteIntakeJudge: ("判定", "Judge"),
     .taskPaletteIntakeLast: ("前回", "Last run"),
     .taskPaletteIntakeOverlaps: ("重なり", "Overlaps"),
     .taskPaletteIntakeOverlapCount: ("%1$@ と %2$lld 件", "%2$lld with %1$@"),
@@ -34,6 +33,7 @@ extension L10n {
 
     // MARK: 自動追加の共有の文（IntakeText・IntakeHand）
     .intakeFetch: ("取得", "Fetch"),
+    .intakeJudge: ("判定", "Judge"),
     .intakeNext: ("次 %@", "next %@"),
     .intakePaused: ("止めている", "paused"),
     .intakeRunning: ("実行中…", "running…"),
