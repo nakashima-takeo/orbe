@@ -132,26 +132,22 @@ final class TabGroup {
       MainActor.assumeIsolated {
         editor.restore(paths: pending.open, active: pending.active, preview: pending.preview)
       }
-    } else if let mine = pendingDocuments {
-      pendingDocuments = EditorState.OpenDocuments(
-        open: mine.open + pending.open.filter { !mine.open.contains($0) }, active: mine.active,
-        preview: mine.preview ?? pending.preview)
     } else {
-      pendingDocuments = pending
+      pendingDocuments = pendingDocuments?.merging(pending) ?? pending
     }
   }
 
-  /// この連の永続状態。配置が既定で、文書も検索の問いも無ければ nil（書かない）。文書は開いているもの、無ければ
-  /// 未消費の復元状態。
+  /// この連の永続状態。配置が既定で、文書も検索の問いも無ければ nil（書かない）。文書は開いているものに、未消費の復元状態
+  /// を後ろに合わせたもの——まだ一度も載っていない連へ cd で文書が入っても、復元待ちの文書を書き落とさない。
   func groupState() -> GroupState? {
     let editorState: EditorState? = MainActor.assumeIsolated {
       let documents = editor.documents
-      let open =
-        documents.first.map { first in
-          EditorState.OpenDocuments(
-            open: documents.map(\.url.path), active: (editor.activeDocument ?? first).url.path,
-            preview: editor.preview?.url.path)
-        } ?? pendingDocuments
+      let opened = documents.first.map { first in
+        EditorState.OpenDocuments(
+          open: documents.map(\.url.path), active: (editor.activeDocument ?? first).url.path,
+          preview: editor.preview?.url.path)
+      }
+      let open = pendingDocuments.map { opened?.merging($0) ?? $0 } ?? opened
       let state = EditorState(documents: open, search: view.editor.projectSearch.query)
       return state.isEmpty ? nil : state
     }

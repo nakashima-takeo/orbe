@@ -130,6 +130,14 @@ struct EditorState: Codable, Equatable {
     var open: [String]
     var active: String
     var preview: String?
+
+    /// `other` を後ろに合わせた列。自分の列が先で、`other` にしか無いパスを末尾へ足す。焦点は自分のもの、仮も自分のものを
+    /// 優先する（仮は高々 1 つ）。
+    func merging(_ other: OpenDocuments) -> OpenDocuments {
+      OpenDocuments(
+        open: open + other.open.filter { !open.contains($0) }, active: active,
+        preview: preview ?? other.preview)
+    }
   }
 
   /// `CaseIterable` は TabState と同じ seam（encode / decode を手書きにしたので、足したキーの書き忘れを全キーの往復テストが見る）。

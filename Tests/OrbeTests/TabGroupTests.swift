@@ -201,4 +201,21 @@ final class TabGroupTests: OrbeTestCase {
     shown.absorb(group(pending(b.path)))
     XCTAssertEqual(shown.editor.documents.map(\.url), [b], "載っている行き先はその場で開く")
   }
+
+  /// まだ一度も載っていない連へ cd で文書が移ってきても、その連の復元待ちは保存から消えない——開いている文書が先で、
+  /// 復元待ちにしか無い文書を末尾へ合わせて書く。
+  func testAbsorbIntoAGroupNotYetShownKeepsItsPendingDocumentsInTheState() throws {
+    let a = try file("a.txt")
+    let waiting = group(
+      GroupState(
+        root: "/tmp", editor: EditorState(documents: .init(open: [a.path], active: a.path))))
+    let from = group()
+    let b = try from.editor.open(try file("b.txt"), as: .pinned)
+
+    waiting.absorb(from)
+
+    XCTAssertEqual(
+      waiting.groupState()?.editor?.documents,
+      .init(open: [b.url.path, a.path], active: b.url.path))
+  }
 }
