@@ -213,9 +213,8 @@ extension Theme.Layout {
   static let editorSearchProgress: CGFloat = 2
   /// 引き手と継ぎ目の幅。
   static let faceHandle: CGFloat = 12
-  /// 引き手の高さ（縁にいるとき）と、伸び縮みの途中の下限。
+  /// 縁にいるときの引き手の高さ（縁から離れるにつれて全高へ伸びる）。
   static let faceNotchHeight: CGFloat = 48
-  static let faceNotchMinHeight: CGFloat = 40
   /// 引き手のグリフ。
   static let faceNotchGlyph: CGFloat = 9
   /// ホバー中の引き手の影（縁から離れる向きのずれと、ぼかし半径）。

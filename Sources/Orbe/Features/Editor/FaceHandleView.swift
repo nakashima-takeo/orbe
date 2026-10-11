@@ -65,8 +65,6 @@ final class FaceHandleView: NSView {
   /// 縁にいて、引き手として止まっているか（影と指のカーソルはこのときだけ）。
   private var resting: Bool { shape.t < 0.02 }
 
-  private var morph: CGFloat { min(max(shape.t, 0), 1) }
-
   override func setFrameOrigin(_ newOrigin: NSPoint) {
     let moved = newOrigin != frame.origin
     super.setFrameOrigin(newOrigin)
@@ -100,7 +98,7 @@ final class FaceHandleView: NSView {
 
   /// 形とホバーから、層の不透明度と影を書き、描き直しを求める。
   private func redraw() {
-    let ee = morph
+    let ee = shape.t
     let idle = Theme.Opacity.faceNotchRest + (1 - Theme.Opacity.faceNotchRest) * hover
     CATransaction.begin()
     CATransaction.setDisableActions(true)
@@ -117,7 +115,7 @@ final class FaceHandleView: NSView {
       layer.shadowOpacity = 0
       return
     }
-    let radius = Theme.Radius.faceNotch * (1 - morph)
+    let radius = Theme.Radius.faceNotch * (1 - shape.t)
     layer.shadowPath =
       Self.outline(bounds, radius: radius, edgeOnLeft: shape.edgeOnLeft, closed: true).cgPath
     let offset = Theme.Layout.faceNotchShadowOffset
@@ -170,7 +168,7 @@ final class FaceHandleView: NSView {
   // MARK: - 描画
 
   override func draw(_ dirtyRect: NSRect) {
-    let ee = morph
+    let ee = shape.t
     let left = shape.edgeOnLeft
     let key = left ? Theme.Color.faceEditor : Theme.Color.faceTerminal
     let notchFill = key.withAlphaComponent(Theme.Opacity.faceNotchFill)

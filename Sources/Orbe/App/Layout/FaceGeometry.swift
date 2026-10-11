@@ -117,10 +117,8 @@ enum FaceGeometry {
     let t = min(cl, cr)
     let editorRight = min(max(s.hx + handleWidth * (1 - cr), 0), w)
     let terminalLeft = min(max(s.hx + handleWidth * cl, 0), w)
-    let grown =
-      Theme.Layout.faceNotchHeight
-      + (h - Theme.Layout.faceNotchHeight) * min(max(t, 0), 1.08)
-    let handleHeight = min(max(grown, Theme.Layout.faceNotchMinHeight), h)
+    let notch = Theme.Layout.faceNotchHeight
+    let handleHeight = min(notch + (h - notch) * t, h)
     return Frames(
       editor: CGRect(x: 0, y: 0, width: editorRight, height: h),
       terminal: CGRect(x: terminalLeft, y: 0, width: w - terminalLeft, height: h),
