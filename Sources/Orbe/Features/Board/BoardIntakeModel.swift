@@ -102,8 +102,8 @@ import SwiftUI
     focusToken &+= 1
   }
 
-  /// 届いていない合図があれば受け取り、当てる場所を返す。ビューが合図の進みと、現れたときに呼ぶ——部品は焦点が外にある間にも
-  /// 置かれて現れるので、現れただけでは焦点を動かさない（外にある焦点を奪わない）。
+  /// 届いていない合図があれば受け取り、当てる場所を返す。部品は焦点が外にある間にも置かれて現れるので、現れただけでは焦点を
+  /// 動かさない。受け取るのはボード（`BoardModel.takeFocusRequest()`）だけ。
   func takeFocusRequest() -> Place? {
     guard focusToken != deliveredFocusToken else { return nil }
     deliveredFocusToken = focusToken
