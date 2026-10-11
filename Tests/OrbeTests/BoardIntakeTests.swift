@@ -128,8 +128,11 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
 
     press(Key.enter, "\r", to: window)
     XCTAssertTrue(intake.runner.isRunning(Self.slack))
+    press(Key.enter, "\r", to: window)
+    XCTAssertEqual(model.refusal, .intakeErrRunning, "走っている間の ↵ は赤で断る")
 
     down(window)
+    XCTAssertNil(model.refusal, "↓ で消える")
     XCTAssertEqual(intake.selected?.id, Self.github, "前提")
     press(Key.delete, "\u{7F}", .command, to: window)
     XCTAssertNil(intake.store.intake(Self.github))
