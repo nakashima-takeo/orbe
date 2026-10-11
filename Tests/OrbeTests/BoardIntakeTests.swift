@@ -41,7 +41,8 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
   func board() -> BoardModel {
     BoardModel(
       intake: BoardIntakeModel(
-        runner: DesignSceneFixtures.intakeRunner(DesignSceneFixtures.boardIntakeFile())))
+        runner: DesignSceneFixtures.intakeRunner(DesignSceneFixtures.boardIntakeFile())),
+      parts: [.intake])
   }
 
   /// ボードを実窓に載せ、ボードを選んだときと同じ当て直し（`focus()`）で焦点を中へ入れる。部品は欄から始まる。

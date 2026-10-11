@@ -96,7 +96,7 @@ final class WindowController: NSObject, NSWindowDelegate {
         return error
       }
     }
-    return BoardModel(intake: intake)
+    return BoardModel(intake: intake, parts: [])
   }()
   private(set) lazy var boardView: BoardView = {
     let view = BoardView(

@@ -87,7 +87,7 @@ extension ControlWireTests {
       ("move_task", ["taskId": 7, "beforeTaskId": 8]),
       ("delete_task", ["taskId": 7]),
       ("start_task", ["taskId": 7, "branch": "feat/x", "prompt": "直して"]),
-    ] + intakeRequests
+    ] + intakeRequests + boardRequests
   }
 
   /// `validRequests` を method 引きにしたもの。
@@ -147,6 +147,11 @@ extension ControlWireTests {
       RequiredParam(method: "pause_intake", key: "intakeId", code: -32602),
       RequiredParam(method: "pause_intake", key: "paused", code: -32602),
       RequiredParam(method: "delete_intake", key: "intakeId", code: -32602),
+      RequiredParam(method: "list_board_parts", key: "workspaceId", code: -32602),
+      RequiredParam(method: "add_board_part", key: "workspaceId", code: -32602),
+      RequiredParam(method: "add_board_part", key: "kind", code: -32602),
+      RequiredParam(method: "remove_board_part", key: "workspaceId", code: -32602),
+      RequiredParam(method: "remove_board_part", key: "kind", code: -32602),
     ]
   }
 

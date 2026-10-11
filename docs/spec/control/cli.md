@@ -1,6 +1,6 @@
 ---
 title: Orbe CLI（orb）
-description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/タスクの自動追加/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/intake/session/wait サブコマンド・socket 文脈解決・終了コード契約
+description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/タスクの自動追加/ボードの部品/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/intake/board/session/wait サブコマンド・socket 文脈解決・終了コード契約
 updated: 2026-10-11
 ---
 
@@ -20,6 +20,7 @@ updated: 2026-10-11
   - フラグを取り切った残余が位置引数の席に収まらなければ usage エラー（exit 2）。`--workspace=<id>`（= 区切り）・綴り誤り・2 個目の `--workspace`・席から溢れたトークン（`config set <key> <value> <余り>`）はここで落ちる——黙って捨てると exit 0 のまま指定と違う WS を触ることになる。`-` 始まりを値として通す席は `config set <key> <value>` の `<value>` だけで（`config set font-size -1`）、`<key>` の席は通さない。
 - `orb ws list [--json]` / `ws new <name> [--dir <path>]` / `ws rename <id|current> <name>` / `ws dir <id|current> <path>` / `ws switch <id>` / `ws rm <id|current>`
   - `--workspace` は取らない（対象は位置引数の `<id|current>`）。フラグを取り切った残余が位置引数の席に収まらなければ usage エラー（exit 2）。位置引数（`<name>`・`<id|current>`・`<path>`）はいずれも `-` 始まりを取らないので、tab と同じく**位置引数の席にも例外を設けない**。黙って捨てると `ws new <name> --dir=<path>` も `ws new <name> <path>`（`--dir` の書き忘れ）も、既定 root の workspace を exit 0 で作ってしまう。
+  - `ws list` の人間向けの列は `id 名前 root`（アクティブに `*`）で、`hasBoard` などほかの値は `--json` にだけ出る。
 
 ### tab（タブ操作）
 
@@ -76,6 +77,12 @@ updated: 2026-10-11
 - `orb intake run <id> [--json]` … 今すぐ回す（止めた自動追加も受ける）。回の終わりを待たずに返る。
 - `orb intake pause <id> [--json]` / `orb intake resume <id> [--json]` … 予定を止める・再開する。
 - `orb intake rm <id> [--json]`
+
+### board（ボードの部品）
+
+workspace の[ボード](../chrome/board.md)に何を出すかを読み・変える。各サブコマンドは制御 API の `list_board_parts`・`add_board_part`・`remove_board_part` へそのまま乗る。宛先はボードを持つ workspace だけで（`orb ws list --json` の `hasBoard` で分かる）、ほかは exit 1 で断られる。
+
+- `orb board list <id|current> [--json]` / `orb board add <id|current> <kind> [--json]` / `orb board rm <id|current> <kind> [--json]` … どれも結果の並びを 1 行 1 種類で出す（空なら何も出さない）。`<kind>` は今は `intake`（タスクの自動追加の部品）だけで、知らない種類の検証は control が持つ（exit 1）。workspace は `ws rename` と同じく位置引数——ボードはその workspace の持ち物なので。既にあるものの `add`・無いものの `rm` は何も変えずに exit 0。
 
 ### session（閉じたエージェントセッションの記録と復元）
 

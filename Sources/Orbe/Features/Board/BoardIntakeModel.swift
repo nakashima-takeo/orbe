@@ -29,6 +29,8 @@ import SwiftUI
   }
   /// 進むたびに、ビューが焦点を `place` へ当て直す。
   private(set) var focusToken = 0
+  /// ビューが受け取った最後の合図。
+  @ObservationIgnored private var deliveredFocusToken = 0
 
   /// 自動追加の新しい依頼か直しを頼む。ボードの配線が出どころを付けて秘書の口へ渡し、受けなければ断りを返す。
   @ObservationIgnored var onAsk: (SecretaryAsk) -> Secretary.Refusal? = { _ in .claudeMissing }
@@ -98,6 +100,14 @@ import SwiftUI
   /// 中での当て直し。選んでいる場所へ戻る。
   func refocus() {
     focusToken &+= 1
+  }
+
+  /// 届いていない合図があれば受け取り、当てる場所を返す。ビューが合図の進みと、現れたときに呼ぶ——部品は焦点が外にある間にも
+  /// 置かれて現れるので、現れただけでは焦点を動かさない（外にある焦点を奪わない）。
+  func takeFocusRequest() -> Place? {
+    guard focusToken != deliveredFocusToken else { return nil }
+    deliveredFocusToken = focusToken
+    return place
   }
 
   /// フッターの左に出すキー。欄では送る・一覧へ移るキー（一覧が空なら移る先が無いので出さない）、一覧では選んだ自動追加で効く

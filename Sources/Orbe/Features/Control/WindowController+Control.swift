@@ -9,7 +9,7 @@ extension WindowController: ControlTarget {
       [
         "id": ws.id, "name": ws.name, "rootPath": ws.rootPath,
         "active": i == activeWorkspace, "tabCount": ws.tabs.count, "activated": ws.activated,
-        "dormantAgentCount": ws.dormantAgentCount(),
+        "dormantAgentCount": ws.dormantAgentCount(), "hasBoard": store.hasBoard(ws),
       ]
     }
   }

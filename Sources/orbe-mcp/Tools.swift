@@ -37,7 +37,8 @@ let tools: [[String: Any]] =
       ("name", "list_workspaces"),
       (
         "description",
-        "Orbe の全 workspace を列挙する（id・名前・root path・タブ数・アクティブか・休眠 agent 数 dormantAgentCount）。"
+        "Orbe の全 workspace を列挙する（id・名前・root path・タブ数・アクティブか・休眠 agent 数 dormantAgentCount・"
+          + "ボードを持つか hasBoard）。"
       ),
       ("inputSchema", schema([:])),
     ]),
@@ -375,6 +376,6 @@ let tools: [[String: Any]] =
       ("description", "タスクを一覧から消す（完了にするだけなら update_task の status: \"done\"）。"),
       ("inputSchema", schema(["taskId": intProp("消すタスク")], required: ["taskId"])),
     ]),
-  ] + waitConditionTools + startTaskTools + intakeTools
+  ] + waitConditionTools + startTaskTools + intakeTools + boardTools
 
 let toolNames = Set(tools.compactMap { $0["name"] as? String })

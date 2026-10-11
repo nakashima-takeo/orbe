@@ -139,6 +139,25 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       rejected.text.contains("workspace not found"), "error 本文に理由が残る: \(rejected.text)")
   }
 
+  /// AI が MCP だけで、`hasBoard` の workspace（Home の root を知らなくても選べる）のボードの部品を読み・外し・置ける。
+  func testBoardPartsAreReachableByHasBoard() throws {
+    let control = try startControlProcess()
+    let workspaces = try XCTUnwrap(
+      control.mcpJSON("list_workspaces")["workspaces"] as? [[String: Any]])
+    let home = try XCTUnwrap(
+      workspaces.first { $0["hasBoard"] as? Bool == true }?["id"] as? Int,
+      "list_workspaces に hasBoard")
+    func kinds(_ tool: String, _ arguments: [String: Any]) -> [String]? {
+      (control.mcpJSON(tool, arguments)["parts"] as? [[String: Any]])?.compactMap {
+        $0["kind"] as? String
+      }
+    }
+
+    XCTAssertEqual(kinds("list_board_parts", ["workspaceId": home]), ["intake"], "決めていなければ既定")
+    XCTAssertEqual(kinds("remove_board_part", ["workspaceId": home, "kind": "intake"]), [])
+    XCTAssertEqual(kinds("add_board_part", ["workspaceId": home, "kind": "intake"]), ["intake"])
+  }
+
   /// 背景 workspace を `activate_workspace` すると、返る `tabIds` の先頭が実際に読めるタブになる
   /// （mount まで届いている）。fixture が背景 WS を必ず作るので、この検証は環境次第で省略されない。
   func testActivateBackgroundWorkspaceYieldsReadableTab() throws {

@@ -30,15 +30,18 @@ extension WindowController {
     // 空のときだけ 0タブ backstop が地を塗る（タブは surface が、ボードは器が地を塗る＝二重 veil 回避）。
     model.contentIsEmpty = selection == .empty
     let ws = current
-    let board = store.hasBoard(ws) ? boardView : nil
+    let boardView = store.hasBoard(ws) ? boardView : nil
     // アクティブ WS に属さないビュー（前 WS のタブ・閉じたタブ・ボードを持たない WS でのボード）を外す。
     // surface は keep-alive で生存。
     var wanted = Set(ws.tabs.map { ObjectIdentifier($0.view) })
-    if let board { wanted.insert(ObjectIdentifier(board)) }
+    if let boardView { wanted.insert(ObjectIdentifier(boardView)) }
     for sub in model.content.subviews where !wanted.contains(ObjectIdentifier(sub)) {
       sub.removeFromSuperview()
     }
-    if let board { mountBoard(board, visible: selection == .board) }
+    if let boardView {
+      mountBoard(boardView, visible: selection == .board)
+      projectBoardParts()
+    }
     // 可視タブを同期 mount（即操作可能に＝この turn の surface 誕生を 1 枚へ上限化）。既 mount の
     // 隠れタブは isHidden/frame を即時更新（既に surface 在りで安価）。未 mount の隠れタブの
     // surface 誕生は後続 tick へ分割し、1 turn で N 個まとめて生成して固まるのを防ぐ。
@@ -53,12 +56,17 @@ extension WindowController {
     scheduleHiddenMounts(for: ws)
   }
 
-  private func mountBoard(_ board: BoardView, visible: Bool) {
-    board.frame = model.content.bounds
-    board.isHidden = !visible
-    if board.superview !== model.content {
-      board.autoresizingMask = [.width, .height]
-      model.content.addSubview(board)
+  /// 前面の workspace のボードの部品の並びをボードへ写す唯一の口（ボードを載せる `select` と、部品の操作の後）。
+  func projectBoardParts() {
+    board.show(store.boardParts(of: current) ?? [])
+  }
+
+  private func mountBoard(_ boardView: BoardView, visible: Bool) {
+    boardView.frame = model.content.bounds
+    boardView.isHidden = !visible
+    if boardView.superview !== model.content {
+      boardView.autoresizingMask = [.width, .height]
+      model.content.addSubview(boardView)
     }
   }
 

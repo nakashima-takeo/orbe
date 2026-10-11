@@ -52,6 +52,12 @@ enum HomeTemplate {
 
     Orbe の中で予定どおり繰り返し動くのは、待ちの条件の確認とタスクの自動追加の 2 つ。
 
+    ## Home のボード（画面）に出すものを変える
+
+    - `list_board_parts`・`add_board_part`・`remove_board_part`。workspaceId は Home の id（`list_workspaces` で hasBoard が \
+    true のもの）。
+    - 部品は `intake`（タスクの自動追加の一覧と依頼の欄）。外しても自動追加そのものは消えず、置けば戻る。
+
     ## タブと agent を操作する
 
     - `list_tabs`・`get_tab_text`・`prompt_agent`・`wait_for_event`。
@@ -103,6 +109,13 @@ enum HomeTemplate {
     up from Slack, mail, issue trackers, GitHub, and the like.
 
     Inside Orbe, the only things that run repeatedly on schedule are waiting-condition checks and task auto-add.
+
+    ## Change what Home's board (screen) shows
+
+    - `list_board_parts`, `add_board_part`, `remove_board_part`. workspaceId is Home's id (the one with \
+    hasBoard true in `list_workspaces`).
+    - The part is `intake` (the task auto-add list and its request field). Removing it keeps the auto-adds \
+    themselves; adding it brings the part back.
 
     ## Operate tabs and agents
 
