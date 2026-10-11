@@ -193,7 +193,7 @@ final class WindowControllerBoardPartsTests: OrbeTestCase {
 
   // MARK: - 保存
 
-  /// 外した並びは再起動しても空のまま戻り、置き直した並びも戻る。保存に重なった種類は 1 つに落ちる。
+  /// 外した並びは再起動しても空のまま戻る。保存に重なった種類は 1 つに落ちる。
   @MainActor func testPartsSurviveARestart() throws {
     let wc = try homeOnBoard(tabs: 0)
     _ = wc.controlRemoveBoardPart(workspaceId: wc.current.id, part: .intake)
