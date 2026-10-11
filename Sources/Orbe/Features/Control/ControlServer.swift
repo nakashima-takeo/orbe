@@ -349,14 +349,21 @@ final class ControlServer {
       }
     default:
       // タブ宛て・config / workspace CRUD・セッション復元・タスク・受信・ボードは拡張の解決
-      // （ControlServer+Dispatch / +Task / +Intake / +Board）へ。いずれも非該当なら未知メソッド。
-      return resolvedTabHandler(for: method)
-        ?? tabHandler(for: method)
-        ?? configWorkspaceHandler(for: method)
-        ?? sessionHandler(for: method)
-        ?? taskHandler(for: method)
-        ?? intakeHandler(for: method)
-        ?? boardHandler(for: method)
+      // （ControlServer+Dispatch / +Task / +Intake / +Board）へ順に問う。いずれも非該当なら未知メソッド。
+      // `??` で連ねると口の数とともに型推論が重くなるので、配列で順に問う。
+      let resolvers: [(String) -> WindowedHandler?] = [
+        { self.resolvedTabHandler(for: $0) },
+        { self.tabHandler(for: $0) },
+        { self.configWorkspaceHandler(for: $0) },
+        { self.sessionHandler(for: $0) },
+        { self.taskHandler(for: $0) },
+        { self.intakeHandler(for: $0) },
+        { self.boardHandler(for: $0) },
+      ]
+      for resolve in resolvers {
+        if let handler = resolve(method) { return handler }
+      }
+      return nil
     }
   }
 
