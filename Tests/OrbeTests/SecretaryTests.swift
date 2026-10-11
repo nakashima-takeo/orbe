@@ -343,6 +343,24 @@ final class SecretaryTests: OrbeTestCase {
     XCTAssertNil(wc.taskStore.tasks.first { $0.id == id }?.waitResolution, "届けたら起きたことは消える")
   }
 
+  // MARK: - Home のボードから
+
+  /// Home のボードの欄で頼むと、出どころ「Home のボード」の頼みとして秘書のタブに 1 行で届き、欄は空になる。
+  func testTheBoardFieldAsksTheSecretaryFromTheBoard() throws {
+    let wc = try launch()
+    let intake = wc.board.intake
+
+    intake.requestText = "DM を候補に"
+    intake.send()
+
+    XCTAssertEqual(intake.requestText, "", "受けたら欄は空")
+    XCTAssertNil(wc.board.refusal, "断らない")
+    let tab = try XCTUnwrap(try homeTabs(wc).first, "Home に秘書のタブが起きる")
+    report(wc, tab, "idle", "s-1")
+    waitForScreen(tab, contains: "タスクの自動追加を頼む: DM を候補に")
+    XCTAssertTrue(screen(tab).contains("Home のボードから · "), "出どころが見える")
+  }
+
   // MARK: - 受けない
 
   func testWithoutClaudeTheAskIsRefusedAndNothingIsQueued() throws {
