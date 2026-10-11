@@ -109,14 +109,13 @@ final class TabGroupTests: OrbeTestCase {
   }
 
   /// 畳まれる連の文書は行き先の列の末尾へ移り、行き先の焦点は保たれる。同じ実ファイルは行き先のものが残る——元の文書だけが
-  /// 未保存なら元の文書がその位置に入る。元の連は空になる。
+  /// 未保存なら元の文書がその位置に入り、行き先の焦点がその文書だったなら焦点も入れ替わる。元の連は空になる。
   func testAbsorbAppendsDocumentsAndKeepsTheDestinationsActive() throws {
     let dest = group()
     let from = group()
     let shared = try file("shared.txt")
     let a = try dest.editor.open(try file("a.txt"), as: .pinned)
     _ = try dest.editor.open(shared, as: .pinned)
-    dest.editor.activate(a)
     let edited = try from.editor.open(shared, as: .pinned)
     edited.surface.responder.perform(Selector(("insertText:")), with: "y")
     let b = try from.editor.open(try file("b.txt"), as: .pinned)
@@ -127,10 +126,10 @@ final class TabGroupTests: OrbeTestCase {
 
     XCTAssertEqual(dest.editor.documents.map(\.url), [a.url, shared, b.url])
     XCTAssertTrue(dest.editor.documents[1] === edited, "元だけが未保存なら元の文書が入る")
-    XCTAssertTrue(dest.editor.activeDocument === a, "行き先の焦点を保つ")
+    XCTAssertTrue(dest.editor.activeDocument === edited, "行き先の焦点の位置を保ち、入れ替わった文書が焦点")
     XCTAssertTrue(from.editor.documents.isEmpty)
     XCTAssertEqual(changes, 1, "変化は 1 本の通知")
-    XCTAssertTrue(dest.view.editor.document === a, "行き先の面は自分の焦点の文書を見せる")
+    XCTAssertTrue(dest.view.editor.document === edited, "行き先の面は自分の焦点の文書を見せる")
     XCTAssertNil(from.view.editor.document, "元の面は文書を手放す")
   }
 
