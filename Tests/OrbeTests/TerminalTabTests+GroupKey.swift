@@ -3,8 +3,8 @@ import XCTest
 
 @testable import Orbe
 
-/// タブの所属キー（`groupKey`＝所属の連のキー）——cwd が属する git worktree ルート、管理外は cwd 自身（Q1）。
-/// cwd が変わったときの付け替えは `WindowController` が行う（`WindowControllerTabGroupTests`）。
+/// タブの cwd の報告は所属を変えない。連のキーの導出と付け替えは `WindowController` が行う
+/// （`WindowControllerTabGroupTests`）。
 extension TerminalTabTests {
 
   private func gitRoot() throws -> URL {
@@ -14,17 +14,6 @@ extension TerminalTabTests {
     try FileManager.default.createDirectory(
       at: root.appendingPathComponent("src"), withIntermediateDirectories: true)
     return root
-  }
-
-  /// 復元したタブは保存 cwd から同じ規則で導く（キーは永続しない）。
-  func testRestoredTabDerivesGroupKeyFromSavedCwd() throws {
-    let root = try gitRoot()
-    let state = TabState(
-      cwd: root.appendingPathComponent("src").path, agent: nil, explicitTitle: nil)
-
-    let tab = TerminalTab.alone(restoring: state) { _, _, _ in nil }
-
-    XCTAssertEqual(tab.groupKey, GitWorktreeRoot.normalizedPath(root.path))
   }
 
   /// cwd の報告（OSC 7）は上位へ知らせるだけで、所属は変えない（付け替えは `WindowController` が新しい根から決める）。

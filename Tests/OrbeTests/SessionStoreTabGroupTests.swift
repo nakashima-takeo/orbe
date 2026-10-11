@@ -12,8 +12,7 @@ import XCTest
 /// 挿入・並び替えの直後に別のタブへフォーカスが飛ぶ。
 ///
 /// TerminalTab は window 未接続なら libghostty surface を生成しないため、所属の連（`TabGroup(key:)`）を直接与えた
-/// タブで配列ロジックだけを検証する（キーの導出そのものは `GitWorktreeRootTests` /
-/// `TerminalTabTests+GroupKey`・`WindowControllerTabGroupTests` が持つ）。
+/// タブで配列ロジックだけを検証する（キーの導出そのものは `GitWorktreeRootTests`・`WindowControllerTabGroupTests` が持つ）。
 final class SessionStoreTabGroupTests: OrbeTestCase {
 
   // MARK: - fixture

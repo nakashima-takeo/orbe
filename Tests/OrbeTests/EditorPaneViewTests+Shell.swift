@@ -9,7 +9,7 @@ import XCTest
 /// 変わればツリーを作り直す（サイドバーの幅は `EditorPaneViewSidebarTests`）。
 ///
 /// 壊れると何が起きるか。結線が外れると操作が無反応のまま緑。hitTest が面全体を self に固定したままだと骨が
-/// クリックできない。隠れたタブのツリーが握り続けると全タブの根を常時監視する。
+/// クリックできない。隠れた連のツリーが握り続けると全連の根を常時監視する。
 @MainActor
 final class EditorPaneViewShellTests: OrbeTestCase {
   /// 行内入力を続けて出すと前の入力は消えて新しい入力だけが出る。入力の終わりは入力の状態が落ちることで、
@@ -182,9 +182,6 @@ final class EditorPaneViewShellTests: OrbeTestCase {
     XCTAssertEqual(pane.tree.root, GitWorktreeRoot.root(of: other))
     XCTAssertTrue(pane.tree.isLive)
     XCTAssertFalse(before.isLive, "古いツリーは離す")
-
-    tab.group.rekey(GitWorktreeRoot.root(of: other + "/"))
-    XCTAssertTrue(pane.tree.root == GitWorktreeRoot.root(of: other), "同じ根なら作り直さない")
   }
 
   /// 骨の写しはセッションに追従し、文書をアクティブにするとツリーがその行を選択する。

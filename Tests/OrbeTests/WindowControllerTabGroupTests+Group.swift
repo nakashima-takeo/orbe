@@ -6,12 +6,13 @@ import XCTest
 
 /// 連（`TabGroup`）がエディターと面の配置を共有する配線を、実 `WindowController` で通す——連の中の切替は端末の入れ替え
 /// だけ、別の連へは器ごと、休眠タブは器の mount で起きない、cd の 3 通り（タブだけ移る・連ごと付け替える・文書を移して
-/// 畳む）と焦点、閉じたタブの端末の後片付け。
+/// 畳む）と焦点、worktree の中の cd、閉じたタブの端末の後片付け。
 ///
 /// 壊れると何が起きるか。同じ worktree のタブを切り替えるたびにエディターが閉じたり開いたりし、配置と文書が消える。切り替えた
 /// 瞬間に端末が描き直される。連の器を出しただけで休眠の agent が素のシェルとして起き、resume されない。cd したタブが元の
 /// 連の文書を持ち去る、あるいは連の最後のタブの cd で文書が消える。端末で cd したのに、エディター全面の連へ移って入力が
-/// 見えない面へ届く、分割の連へ移って入力がエディターへ届く。閉じたタブの surface が器に残り続ける。
+/// 見えない面へ届く、分割の連へ移って入力がエディターへ届く。サブディレクトリへ cd するたびにエディターの文書・
+/// 配置・ツリーを失う。閉じたタブの surface が器に残り続ける。
 extension WindowControllerTabGroupTests {
   private func layout(_ wc: WindowController) {
     wc.window.contentView?.layoutSubtreeIfNeeded()
@@ -185,6 +186,29 @@ extension WindowControllerTabGroupTests {
     XCTAssertTrue(a.group === c.group)
     XCTAssertEqual(c.group.faces, FaceLayout(editorRatio: 0.5, focus: .terminal))
     XCTAssertTrue(wc.window.firstResponder === a.surface, "焦点は端末に残る")
+  }
+
+  /// 連のキーは worktree のルート。worktree の中で cd しても連もツリーも作り直さず、外から worktree の下へ cd したタブと
+  /// 下で開いた新しいタブはルートの連に入る。
+  func testCdWithinAWorktreeKeepsItsGroup() throws {
+    let root = try directory("repo")
+    try FileManager.default.createDirectory(
+      at: root.appendingPathComponent(".git"), withIntermediateDirectories: true)
+    let src = try directory("repo/src")
+    let wc = try restore([root.path, "/tmp/g2"], activeTab: 0)
+    let (a, b) = (wc.current.tabs[0], wc.current.tabs[1])
+    let group = a.group
+    let tree = MainActor.assumeIsolated { group.view.editor.tree }
+
+    a.surface.currentPwd = src.path
+    XCTAssertTrue(a.group === group)
+    XCTAssertTrue(MainActor.assumeIsolated { group.view.editor.tree } === tree, "ツリーも作り直さない")
+
+    b.surface.currentPwd = src.path
+    XCTAssertTrue(b.group === group, "外から入ればルートの連へ")
+
+    wc.openTab(workspaceIndex: wc.activeWorkspace, cwd: src.path)
+    XCTAssertTrue(try XCTUnwrap(wc.activeTab).group === group, "下で開いた新しいタブもルートの連へ")
   }
 
   /// 閉じたタブの端末は器から外れる（器に残ると surface がリークする）。連の器は残りのタブの端末を見せる。
