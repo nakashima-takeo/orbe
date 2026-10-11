@@ -88,7 +88,7 @@ extension WindowController {
   /// 作る専用フォーム。`name` 非 nil でリンク解除状態の名前を引き継ぐ。dismiss は切替画面（⌘⇧S パレット）へ戻す。
   func showWorkspaceCreate(name: String?) {
     // パス初期値＝新しい workspace の root の既定（`~` 短縮）。clone 先の親も同じ初期値（model init）。
-    let initialPath = (store.defaultNewWorkspaceRoot() as NSString).abbreviatingWithTildeInPath
+    let initialPath = (SessionStore.defaultNewWorkspaceRoot as NSString).abbreviatingWithTildeInPath
     let m = WorkspaceCreateModel(path: initialPath, name: name, localization: localization)
     m.onCreate = { [weak self] path, name in
       guard let self else { return }
