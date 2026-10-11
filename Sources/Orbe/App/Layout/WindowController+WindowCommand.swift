@@ -2,8 +2,8 @@ import AppKit
 
 /// window コマンドのディスパッチ（面の経路・window レベル経路の共通実体）。
 extension WindowController {
-  /// 面の経路（`TerminalTab.onWindowCommand`）と window レベル経路
-  /// （`ChromeHostingView.performKeyEquivalent`）が共有する実体。
+  /// 面の経路（端末面の `TerminalTab.onWindowCommand`・エディター面の `TabGroup.onWindowCommand`）と
+  /// window レベル経路（`ChromeHostingView.performKeyEquivalent`）が共有する実体。
   func handleWindowCommand(_ command: WindowCommand) {
     switch command {
     case .closeTab: activeTab?.close(origin: .gesture)

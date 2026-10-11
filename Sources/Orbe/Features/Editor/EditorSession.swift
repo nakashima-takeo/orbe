@@ -1,9 +1,9 @@
 import Foundation
 import OrbeEditorCore
 
-/// タブ 1 枚が持つ、開いた文書の列と焦点の文書。文書 1 つにテキスト面 1 つを対で持ち（開いてから
+/// 連（`TabGroup`）1 つが持つ、開いた文書の列と焦点の文書。文書 1 つにテキスト面 1 つを対で持ち（開いてから
 /// 閉じるまで）、切り替えは「どの文書の面を見せるか」を変えるだけなので undo・選択・スクロールは
-/// 文書ごとに残る。変化は `onChange` 1 本でタブへ上がる。
+/// 文書ごとに残る。変化は `onChange` 1 本で連へ上がる。
 ///
 /// 列の中に仮の文書（見るだけのファイル）を高々 1 つ持つ。仮で開くと今の仮の文書をその位置で入れ替えるので、見て回る
 /// だけなら列が伸びない。仮の文書は常に未保存でない——未保存になった瞬間に普通の文書へ戻すので、入れ替えで中身を失わない。
@@ -93,6 +93,12 @@ final class EditorSession {
     guard let surface = surfaces.make() else { throw EditorSurfaceError.noMetalDevice }
     let document = EditorDocument(
       url: url, contents: contents, surface: surface, registry: surfaces.registry)
+    own(document, link: DocumentLink(document: document))
+    return document
+  }
+
+  /// 文書の通知をこのセッションへ結び、結線を持つ。
+  private func own(_ document: EditorDocument, link: DocumentLink?) {
     document.onDirtyChange = { [weak self, weak document] dirty in
       guard let self else { return }
       if dirty, let document, document === preview { preview = nil }
@@ -100,8 +106,44 @@ final class EditorSession {
     }
     document.onDiskChange = { [weak self] _ in self?.onChange?() }
     document.onFocusChange = { [weak self] _ in self?.onFocusChange?() }
-    links[ObjectIdentifier(document)] = DocumentLink(document: document)
-    return document
+    links[ObjectIdentifier(document)] = link
+  }
+
+  /// 別のセッションの文書を列の末尾へ引き取る（cd で連が畳まれたとき）。`other` の列の順に見て、同じ実体が自分に
+  /// 無ければ結線ごと移す。あれば、`other` の文書だけが未保存のときに限り自分の文書をその位置で置き換え、それ以外は
+  /// `other` の文書を捨てる（未保存でも）。仮の文書は自分に仮が無いときだけ仮のまま移り、あれば普通の文書になる。
+  /// 焦点は自分のものを保ち、自分に文書が無かったときだけ `other` の焦点にする。`other` は通知なしに空になり、
+  /// 自分の変化は 1 本の通知で上げる。文書の面を見せていた pane は、呼ぶ前に手放しておく。
+  func adopt(from other: EditorSession) {
+    guard !other.documents.isEmpty else { return }
+    let wasEmpty = documents.isEmpty
+    for document in other.documents {
+      let link = other.links[ObjectIdentifier(document)]
+      guard let index = documents.firstIndex(where: { $0.url == document.url }) else {
+        documents.append(document)
+        own(document, link: link)
+        if document === other.preview, preview == nil { preview = document }
+        continue
+      }
+      let mine = documents[index]
+      guard document.isDirty, !mine.isDirty else { continue }
+      links[ObjectIdentifier(mine)] = nil
+      if preview === mine { preview = nil }
+      documents[index] = document
+      own(document, link: link)
+      if activeDocument === mine { activeDocument = document }
+    }
+    if wasEmpty {
+      activeDocument =
+        other.activeDocument.flatMap { active in
+          documents.first { $0 === active }
+        } ?? documents.first
+    }
+    other.documents = []
+    other.links = [:]
+    other.activeDocument = nil
+    other.preview = nil
+    onChange?()
   }
 
   /// テキスト面を描く用意を裏で始める（エディター面が初めて見えたとき。何度呼んでもよい）。

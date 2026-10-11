@@ -4,11 +4,11 @@ import XCTest
 
 @testable import Orbe
 
-/// 未保存を捨てる前の確認の解決規則（1 か所）と、それを使う入口——ファイルタブの ×・人の操作でタブを閉じる・
-/// workspace を閉じる——が、未保存のときだけ sheet を出し、シェル終了・制御 API では黙って捨てること。
+/// 未保存を捨てる前の確認の解決規則（1 か所）と、それを使う入口——ファイルタブの ×・人の操作で連の最後のタブを閉じる・
+/// workspace を閉じる——が、未保存のときだけ sheet を出し、連の途中のタブ・シェル終了・制御 API では問わないこと。
 ///
 /// 壊れると何が起きるか。⌘W が未保存の編集を無言で捨てる。保存が外部変更で失敗したのにタブが消える。
-/// シェル終了のたびに確認が出てプロセスの後始末が止まる。
+/// エディターが残る連の途中のタブを閉じるたびに確認が出る。シェル終了のたびに確認が出てプロセスの後始末が止まる。
 @MainActor
 final class UnsavedGateTests: OrbeTestCase {
   var repo: TempGitRepo!
@@ -79,29 +79,42 @@ final class UnsavedGateTests: OrbeTestCase {
     return WindowController()
   }
 
-  /// 人の操作（⌘W・中クリック）は未保存なら sheet で確認し、保存しないで閉じる。
-  func testGestureCloseAsksBeforeDiscardingAndProcessCloseDoesNot() throws {
+  /// 人の操作（⌘W・中クリック）は、連の最後のタブを閉じるときだけ未保存を sheet で確認し、保存しないで閉じる。
+  /// 連の途中のタブは問わない（連のエディターは残る）。
+  func testGestureCloseAsksOnlyForTheLastTabOfTheGroup() throws {
     let wc = try restore([
       TabState(cwd: repo.root, agent: nil, explicitTitle: nil),
       TabState(cwd: repo.root, agent: nil, explicitTitle: nil),
+      TabState(cwd: repo.root, agent: nil, explicitTitle: nil),
     ])
-    let first = try XCTUnwrap(wc.activeTab)
-    let second = wc.current.tabs[1]
-    edit(try first.editor.open(repo.url("a.txt"), as: .pinned))
-    edit(try second.editor.open(repo.url("a.txt"), as: .pinned))
+    let tabs = wc.current.tabs
+    XCTAssertTrue(tabs[0].group === tabs[2].group, "前提: 同じ連")
+    edit(try tabs[0].group.editor.open(repo.url("a.txt"), as: .pinned))
 
-    wc.closeTab(first, origin: .gesture)
-    XCTAssertEqual(wc.current.tabs.count, 2, "未保存なら即座には閉じない")
+    wc.closeTab(tabs[0], origin: .gesture)
+    XCTAssertNil(wc.window.attachedSheet, "連の途中は問わない")
+    XCTAssertEqual(wc.current.tabs.count, 2)
+    wc.closeTab(tabs[1], origin: .process)
+    XCTAssertEqual(wc.current.tabs.count, 1)
+
+    wc.closeTab(tabs[2], origin: .gesture)
+    XCTAssertEqual(wc.current.tabs.count, 1, "最後のタブは未保存なら即座には閉じない")
     let sheet = try XCTUnwrap(wc.window.attachedSheet, "確認の sheet が出る")
     wc.window.endSheet(sheet, returnCode: .alertThirdButtonReturn)
-    XCTAssertEqual(wc.current.tabs.count, 2, "キャンセルで残る")
+    XCTAssertEqual(wc.current.tabs.count, 1, "キャンセルで残る")
 
-    wc.closeTab(first, origin: .gesture)
+    wc.closeTab(tabs[2], origin: .gesture)
     wc.window.endSheet(try XCTUnwrap(wc.window.attachedSheet), returnCode: .alertSecondButtonReturn)
-    XCTAssertEqual(wc.current.tabs.count, 1, "保存しないで閉じる")
-    XCTAssertTrue(wc.current.tabs[0] === second)
+    XCTAssertEqual(wc.current.tabs.count, 0, "保存しないで閉じる")
+  }
 
-    wc.closeTab(second, origin: .process)
+  /// シェル終了で連の最後のタブが閉じても確認しない（未保存は黙って捨てる）。
+  func testProcessCloseOfTheLastTabDoesNotAsk() throws {
+    let wc = try restore([TabState(cwd: repo.root, agent: nil, explicitTitle: nil)])
+    let tab = try XCTUnwrap(wc.activeTab)
+    edit(try tab.group.editor.open(repo.url("a.txt"), as: .pinned))
+
+    wc.closeTab(tab, origin: .process)
     XCTAssertNil(wc.window.attachedSheet, "シェル終了は確認しない")
     XCTAssertEqual(wc.current.tabs.count, 0)
   }
@@ -110,7 +123,7 @@ final class UnsavedGateTests: OrbeTestCase {
   func testGestureCloseStaysWhenTheSaveFails() throws {
     let wc = try restore([TabState(cwd: repo.root, agent: nil, explicitTitle: nil)])
     let tab = try XCTUnwrap(wc.activeTab)
-    let document = try tab.editor.open(repo.url("a.txt"), as: .pinned)
+    let document = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     edit(document)
     try repo.write("a.txt", "outside\n")
 
@@ -120,13 +133,13 @@ final class UnsavedGateTests: OrbeTestCase {
     XCTAssertTrue(document.isDiskChanged)
   }
 
-  /// workspace の削除は配下の全タブの未保存を合計して 1 回確認する。制御 API は確認しない。
+  /// workspace の削除は配下の全連の未保存を合計して 1 回確認する。制御 API は確認しない。
   func testClosingAWorkspaceAsksOnceForAllItsTabs() throws {
     let wc = try restore([TabState(cwd: repo.root, agent: nil, explicitTitle: nil)])
     wc.createWorkspace(name: "other", rootPath: repo.root)
     let index = wc.activeWorkspace
     let tab = try XCTUnwrap(wc.activeTab)
-    edit(try tab.editor.open(repo.url("a.txt"), as: .pinned))
+    edit(try tab.group.editor.open(repo.url("a.txt"), as: .pinned))
 
     wc.closeWorkspace(index, origin: .gesture)
     XCTAssertEqual(wc.regularWorkspaces.count, 2)
@@ -134,46 +147,49 @@ final class UnsavedGateTests: OrbeTestCase {
     XCTAssertEqual(wc.regularWorkspaces.count, 1, "保存しないで閉じる")
 
     wc.createWorkspace(name: "third", rootPath: repo.root)
-    edit(try XCTUnwrap(wc.activeTab).editor.open(repo.url("a.txt"), as: .pinned))
+    edit(try XCTUnwrap(wc.activeTab).group.editor.open(repo.url("a.txt"), as: .pinned))
     wc.closeWorkspace(wc.activeWorkspace, origin: .controlAPI)
     XCTAssertNil(wc.window.attachedSheet)
     XCTAssertEqual(wc.regularWorkspaces.count, 1, "制御 API は黙って捨てる")
   }
 
-  /// 終了の関門が集める未保存は全 workspace の全タブ。
+  /// 終了の関門が集める未保存は全 workspace の全連で、連のタブが何枚でも 1 回ずつ。
   func testUnsavedDocumentsSpanAllWorkspaces() throws {
-    let wc = try restore([TabState(cwd: repo.root, agent: nil, explicitTitle: nil)])
-    edit(try XCTUnwrap(wc.activeTab).editor.open(repo.url("a.txt"), as: .pinned))
+    let wc = try restore([
+      TabState(cwd: repo.root, agent: nil, explicitTitle: nil),
+      TabState(cwd: repo.root, agent: nil, explicitTitle: nil),
+    ])
+    edit(try XCTUnwrap(wc.activeTab).group.editor.open(repo.url("a.txt"), as: .pinned))
     wc.createWorkspace(name: "other", rootPath: repo.root)
     try repo.write("b.txt", "b\n")
-    edit(try XCTUnwrap(wc.activeTab).editor.open(repo.url("b.txt"), as: .pinned))
-    XCTAssertEqual(Set(wc.unsavedDocuments().map(\.url.lastPathComponent)), ["a.txt", "b.txt"])
+    edit(try XCTUnwrap(wc.activeTab).group.editor.open(repo.url("b.txt"), as: .pinned))
+    XCTAssertEqual(wc.unsavedDocuments().map(\.url.lastPathComponent).sorted(), ["a.txt", "b.txt"])
   }
 
   // MARK: - 入口: ファイルタブの ×
 
   func testFileTabCloseAsksOnlyWhenDirty() throws {
-    let tab = TerminalTab(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
       backing: .buffered, defer: false)
-    window.contentView = tab.view
-    tab.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
+    window.contentView = tab.group.view
+    tab.group.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
     defer { window.orderOut(nil) }
-    let pane = tab.view.editor
+    let pane = tab.group.view.editor
     try repo.write("b.txt", "b\n")
-    let a = try tab.editor.open(repo.url("a.txt"), as: .pinned)
-    let b = try tab.editor.open(repo.url("b.txt"), as: .pinned)
+    let a = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
+    let b = try tab.group.editor.open(repo.url("b.txt"), as: .pinned)
 
     pane.shell.requestClose(b.url)
-    XCTAssertEqual(tab.editor.documents.count, 1, "未保存でなければそのまま閉じる")
+    XCTAssertEqual(tab.group.editor.documents.count, 1, "未保存でなければそのまま閉じる")
     XCTAssertNil(window.attachedSheet)
 
     edit(a)
     pane.shell.requestClose(a.url)
-    XCTAssertEqual(tab.editor.documents.count, 1, "未保存なら確認")
+    XCTAssertEqual(tab.group.editor.documents.count, 1, "未保存なら確認")
     window.endSheet(try XCTUnwrap(window.attachedSheet), returnCode: .alertFirstButtonReturn)
-    XCTAssertTrue(tab.editor.documents.isEmpty, "保存して閉じる")
+    XCTAssertTrue(tab.group.editor.documents.isEmpty, "保存して閉じる")
     XCTAssertEqual(try String(contentsOf: repo.url("a.txt"), encoding: .utf8), "xone\n")
   }
 
@@ -182,15 +198,15 @@ final class UnsavedGateTests: OrbeTestCase {
   /// 印の立った文書の ⌘S は上書き確認を sheet で出し、キャンセルならディスクを触らず、上書きなら本文で置き換えて
   /// 印が落ちる。上書きされるのは確認を出した文書——sheet の間に別の文書を開いて焦点が移っても変わらない。
   func testCommandSOverwritesOnlyTheDocumentThatWasConfirmed() throws {
-    let tab = TerminalTab(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
       backing: .buffered, defer: false)
-    window.contentView = tab.view
-    tab.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
+    window.contentView = tab.group.view
+    tab.group.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
     defer { window.orderOut(nil) }
-    let pane = tab.view.editor
-    let a = try tab.editor.open(repo.url("a.txt"), as: .pinned)
+    let pane = tab.group.view.editor
+    let a = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     window.makeFirstResponder(a.surface.responder)
     edit(a)
     try repo.write("a.txt", "outside\n")
@@ -204,8 +220,8 @@ final class UnsavedGateTests: OrbeTestCase {
 
     XCTAssertTrue(pane.performKeyEquivalent(with: .key("s")))
     try repo.write("b.txt", "b\n")
-    let b = try tab.editor.open(repo.url("b.txt"), as: .pinned)  // sheet の間にエージェントが別の文書を開く
-    XCTAssertTrue(tab.editor.activeDocument === b)
+    let b = try tab.group.editor.open(repo.url("b.txt"), as: .pinned)  // sheet の間にエージェントが別の文書を開く
+    XCTAssertTrue(tab.group.editor.activeDocument === b)
     window.endSheet(try XCTUnwrap(window.attachedSheet), returnCode: .alertFirstButtonReturn)
     XCTAssertEqual(
       try String(contentsOf: repo.url("a.txt"), encoding: .utf8), "xone\n", "同意した文書を上書き")

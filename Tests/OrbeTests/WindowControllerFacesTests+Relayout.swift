@@ -15,7 +15,7 @@ extension WindowControllerFacesTests {
     let wc = WindowController()
     let tab = try XCTUnwrap(wc.activeTab)
     layout(wc)
-    let handle = tab.view.handle
+    let handle = tab.group.view.handle
     let grab = handle.centerInWindow
     let offset = grab.x - handle.frame.minX
     let y = grab.y
@@ -23,42 +23,42 @@ extension WindowControllerFacesTests {
     handle.mouseDown(with: .mouse(.leftMouseDown, at: grab, in: wc.window))
     handle.mouseDragged(with: .mouse(.leftMouseDragged, at: NSPoint(x: 500, y: y), in: wc.window))
     let ratio = try XCTUnwrap(FaceGeometry.ratio(hx: 500 - offset, width: facesWidth(wc)))
-    tab.view.needsLayout = true
+    tab.group.view.needsLayout = true
     layout(wc)
-    XCTAssertEqual(tab.view.resolved.shape.hx, 500 - offset, "再レイアウト後もドラッグ中の位置のまま")
+    XCTAssertEqual(tab.group.view.resolved.shape.hx, 500 - offset, "再レイアウト後もドラッグ中の位置のまま")
     XCTAssertEqual(handle.frame.minX, 500 - offset, "取っ手も動かない")
 
     handle.mouseUp(with: .mouse(.leftMouseUp, at: NSPoint(x: 500, y: y), in: wc.window))
-    XCTAssertEqual(tab.faces.editorRatio, ratio, accuracy: 0.0001, "離した位置で確定")
+    XCTAssertEqual(tab.group.faces.editorRatio, ratio, accuracy: 0.0001, "離した位置で確定")
   }
 
   /// ⌘E の動きは再レイアウトで終点へ飛ばず、フレームごとに境が段階的に動き、止まったところで確定する。
   func testToggleEditorFaceSlidesTheBoundaryOverTime() throws {
     let wc = WindowController()
     let tab = try XCTUnwrap(wc.activeTab)
-    tab.view.reduceMotion = false
+    tab.group.view.reduceMotion = false
     layout(wc)
-    let editorFace = try XCTUnwrap(tab.view.editor.superview)
+    let editorFace = try XCTUnwrap(tab.group.view.editor.superview)
     let full = facesWidth(wc)
 
     wc.handleWindowCommand(.toggleEditorFace)
-    tab.view.tick(dt: 0.02)
-    tab.view.needsLayout = true
+    tab.group.view.tick(dt: 0.02)
+    tab.group.view.needsLayout = true
     layout(wc)
     XCTAssertGreaterThan(editorFace.frame.maxX, 0, "動きが始まっている")
     XCTAssertLessThan(editorFace.frame.maxX, full, "再レイアウトしても終点へ飛ばない")
 
-    tab.view.tick(dt: 0.05)
+    tab.group.view.tick(dt: 0.05)
     let mid = editorFace.frame.maxX
     XCTAssertGreaterThan(mid, 0)
     XCTAssertLessThan(mid, full, "途中は起点と終点の間")
 
     var frames = 0
-    while tab.view.isAnimating, frames < 600 {
-      tab.view.tick(dt: 1.0 / 120)
+    while tab.group.view.isAnimating, frames < 600 {
+      tab.group.view.tick(dt: 1.0 / 120)
       frames += 1
     }
     XCTAssertEqual(editorFace.frame.maxX, full, "止まったところで確定配置へ着地")
-    XCTAssertEqual(tab.view.resolved.editorWidth, full)
+    XCTAssertEqual(tab.group.view.resolved.editorWidth, full)
   }
 }

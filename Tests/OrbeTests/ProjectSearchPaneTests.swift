@@ -20,13 +20,12 @@ final class ProjectSearchPaneTests: OrbeTestCase {
     @MainActor var search: ProjectSearch { pane.projectSearch }
   }
 
-  /// 根 `repo` のタブの面だけを窓に載せる。端末は載せない——端末の shell は起動しないので、その cwd の報告（OSC 7）が面の根を
-  /// 動かさない（検索は根に依る）。
+  /// 根 `repo` の連の面だけを窓に載せる。
   func host(_ files: [String: String]) throws -> Hosted {
     let repo = try TempGitRepo(name: "orbe-search-pane")
     for (path, text) in files { try repo.write(path, text) }
-    let tab = TerminalTab(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.group.view.editor
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 900, height: 400), styleMask: [.borderless],
       backing: .buffered, defer: false)
@@ -45,7 +44,7 @@ final class ProjectSearchPaneTests: OrbeTestCase {
   }
 
   func open(_ hosted: Hosted, _ path: String) throws -> EditorDocument {
-    let document = try hosted.tab.editor.open(hosted.repo.url(path), as: .pinned)
+    let document = try hosted.tab.group.editor.open(hosted.repo.url(path), as: .pinned)
     hosted.pane.layoutSubtreeIfNeeded()
     return document
   }
@@ -157,7 +156,7 @@ final class ProjectSearchPaneTests: OrbeTestCase {
     let closed = try open(hosted, "a.txt")
     searchAll(hosted, "needle")
     XCTAssertEqual(hosted.search.results["a.txt"]?.document?.version, 0, "前提: 文書の結果")
-    hosted.tab.editor.close(closed)
+    hosted.tab.group.editor.close(closed)
     try hosted.repo.write("a.txt", "x\nneedle a zzzzzz b\nneedle\n")
 
     hosted.search.click(ProjectSearch.RowID(path: "a.txt", match: 1))

@@ -56,7 +56,7 @@ extension DesignFlowSnapshotTests {
 
   func longScene() throws -> (EditorCodeFixtures.Scene, EditorDocument) {
     let scene = try codeScene()
-    let long = try scene.tab.editor.open(
+    let long = try scene.group.editor.open(
       scene.directory.appendingPathComponent("Long.swift"), as: .pinned)
     pumpMain(
       until: { scene.isReady && long.baseline != nil && long.waitUntilCaughtUp(timeout: 0) },

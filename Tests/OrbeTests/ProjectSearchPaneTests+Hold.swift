@@ -71,7 +71,7 @@ extension ProjectSearchPaneTests {
       hosted.pane.document?.url, url, "\(message): 待っていた一致に入れ替わらない", line: line)
     XCTAssertTrue(hosted.window.firstResponder === responder, "\(message): 焦点は動かない", line: line)
     XCTAssertFalse(
-      hosted.tab.editor.documents.contains { $0.url == hosted.repo.url("b.txt") },
+      hosted.tab.group.editor.documents.contains { $0.url == hosted.repo.url("b.txt") },
       "\(message): 待っていた一致は開かない", line: line)
   }
 
@@ -106,7 +106,7 @@ extension ProjectSearchPaneTests {
       let x = hosted.repo.url("x.txt")
       let index = try XCTUnwrap(hosted.pane.shell.tabs.firstIndex { $0.id == x })
       try click(hosted.pane, at: fileTabSlotCenter(hosted.pane, index))
-      pumpMain(until: { !hosted.tab.editor.documents.contains { $0.url == x } }, "× で閉じる")
+      pumpMain(until: { !hosted.tab.group.editor.documents.contains { $0.url == x } }, "× で閉じる")
       assertTheWaitingMatchStaysClosed(
         held, shows: hosted.repo.url("a.txt"), released ? "離した直後に ×" : "押したまま ×")
     }

@@ -134,7 +134,7 @@ final class FakeControlTarget: ControlTarget {
   // MARK: - 宛先
 
   /// 解決可能な唯一のタブ。id は `IdGen` のプロセス単調増加なので、テストは必ずここから読む。
-  let tab = TerminalTab(cwd: "/tmp")
+  let tab = TerminalTab.alone(cwd: "/tmp")
   var tabId: Int { tab.id }
 
   func controlResolveTab(_ id: Int) -> TerminalTab? {

@@ -28,8 +28,8 @@ final class WindowController: NSObject, NSWindowDelegate {
   // chrome 全域のフォント割り当て（絵文字 Noto/Apple・タブタイトルフォント）を届ける観測可能ホルダー。
   // 値は applyActiveWorkspaceConfig が実効設定から同一 tick で更新し、各 NSHostingView root へ注入する。
   let fontResolver = ChromeFontResolver()
-  // エディター面のサイドバーの幅と開閉。アプリ全体で 1 つ（タブ・workspace をまたいで同じ）で、
-  // app-state から起こして各タブの面へ配る。
+  // エディター面のサイドバーの幅と開閉。アプリ全体で 1 つ（連・workspace をまたいで同じ）で、
+  // app-state から起こして各連の面へ配る。
   let editorSidebar = MainActor.assumeIsolated { EditorSidebarState.loaded() }
   // 現在の UI 言語ホルダー。起動時に app-state の preferredLanguage（未設定は OS 追従）で解決し、
   // NSHostingView root（AppShell）へ Environment 注入する。言語変更は初回言語画面と
@@ -81,7 +81,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   // メモリに持ち、タブの同一性の遷移（wire の onIdentityTransition）を積む。復元（restore）より先に
   // 出来ていることが要る——復元タブの起床が opened を書く。
   let sessionLog = AgentSessionLog()
-  // タブのエディターが文書を開くときの面の作り方。打ち切った行の印の文言は、面を作る時点の UI の言語で決まる。
+  // 連のエディターが文書を開くときの面の作り方。打ち切った行の印の文言は、面を作る時点の UI の言語で決まる。
   private(set) lazy var editorSurfaces = EditorSurfaces(
     queriesRoot: BundledResources.root,
     language: { [weak self] in self?.localization.language ?? .systemDefault })
@@ -234,18 +234,6 @@ final class WindowController: NSObject, NSWindowDelegate {
       self.recordSessionEvent(transition, of: tab)
     }
     tab.onWindowCommand = { [weak self] command in self?.handleWindowCommand(command) }
-    tab.onFacesChange = { [weak self, weak tab] in
-      guard let tab else { return }
-      self?.tabFacesDidChange(tab)
-    }
-    tab.view.onProjectionChange = { [weak self] in self?.refreshChrome() }
-    tab.onEditorChange = { [weak self] in
-      self?.refreshChrome()
-      self?.scheduleSave()
-    }
-    tab.view.configure(
-      translucency: chromeTranslucency, localization: localization, fontResolver: fontResolver,
-      sidebar: editorSidebar)
     return tab
   }
 
@@ -262,10 +250,9 @@ final class WindowController: NSObject, NSWindowDelegate {
     select(i)
   }
 
-  /// 不変条件: model.content はアクティブ workspace の全タブの view を保持し、アクティブ
-  /// のみ可視・他は isHidden（他 WS のビューは外す。surface は keep-alive）。可視タブは即時 mount し、
-  /// 未 mount の隠れタブは後続 tick へ分割 mount（surface 誕生を 1 turn で N 個積まない）。全タブは
-  /// 最終的に mount され viewDidMoveToWindow で surface が誕生。制御チャネルも使うため internal。
+  /// タブを選ぶ。選んだタブを即時に materialize し、content を照合する（`reconcileContent`）——連の中の切替は器の中の
+  /// 端末の入れ替えだけになる。未 materialize の隠れタブは後続 tick へ分割して起こす（surface 誕生を 1 turn で N 個
+  /// 積まない）。全タブは最終的に起き、窓に付いた時点で surface が誕生する。制御チャネルも使うため internal。
   func select(_ index: Int) {
     guard store.recordSelection(index) else { return }
     // 別タブへ切替＝インライン改名の文脈が崩れる。編集中なら畳む（DragSession と同じ「集合/選択が
@@ -273,17 +260,8 @@ final class WindowController: NSObject, NSWindowDelegate {
     if statusModel.editingIndex != nil { endTabRename() }
     model.contentIsEmpty = false  // タブが載る＝surface が地を塗るので 0タブ backstop を下げる（二重 veil 回避）
     let ws = current
-    // アクティブ WS に属さないビュー（前 WS のタブ）を外す。surface は keep-alive で生存。
-    let wanted = ws.tabs.map { ObjectIdentifier($0.view) }
-    for sub in model.content.subviews where !wanted.contains(ObjectIdentifier(sub)) {
-      sub.removeFromSuperview()
-    }
-    // 可視タブを同期 mount（即操作可能に＝この turn の surface 誕生を 1 枚へ上限化）。既 mount の
-    // 隠れタブは isHidden/frame を即時更新（既に surface 在りで安価）。未 mount の隠れタブの
-    // surface 誕生は後続 tick へ分割し、1 turn で N 個まとめて生成して固まるのを防ぐ。
-    for (i, tab) in ws.tabs.enumerated() where i == index || tab.view.superview === model.content {
-      mountTab(tab, in: ws, visible: i == index)
-    }
+    // 選んだタブを同期 mount（即操作可能に＝この turn の surface 誕生を 1 枚へ上限化）。
+    mountTab(ws.tabs[index], in: ws)
     // overlay 表示中は入力を奪わない（フォーカス復帰は dismiss 側が担う）。
     if model.overlay == .none { focusActiveTab() }
     consumeVisibleTabDone()
@@ -291,31 +269,22 @@ final class WindowController: NSObject, NSWindowDelegate {
     scheduleHiddenMounts(for: ws)
   }
 
-  /// タブ 1 枚を model.content へ mount（surface 誕生は viewDidMoveToWindow 経由で冪等に 1 度）。
-  /// 隠れタブも実サイズで起こす（pty winsize 正常）。frame/isHidden は既 mount でも毎回更新し、
-  /// addSubview より先に確定させる——窓に付いた瞬間の可視性で面（エクスプローラー）が根のサービスを
-  /// 握るか決まるので、隠れタブを一瞬でも見えている扱いにしない（`materializeOffscreen` と同じ順）。
-  func mountTab(_ tab: TerminalTab, in ws: Workspace, visible: Bool) {
+  /// タブ 1 枚を materialize し（休眠チケットの消費と起動指示の確定）、content を照合する。端末はそこで連の器へ差さり、
+  /// 窓に付いた時点で surface が生まれる（冪等に 1 度）。
+  func mountTab(_ tab: TerminalTab, in ws: Workspace) {
     guard store.recordMaterialization(of: tab, in: ws) else { return }
-    tab.view.frame = model.content.bounds
-    tab.view.isHidden = !visible
-    if tab.view.superview !== model.content {
-      tab.view.autoresizingMask = [.width, .height]
-      tab.view.layoutSubtreeIfNeeded()
-      model.content.addSubview(tab.view)
-    }
+    reconcileContent()
   }
 
-  /// 未 mount の隠れタブを後続 runloop tick で 1 枚ずつ mount（surface 誕生を分割）。
+  /// 未 materialize の隠れタブを後続 runloop tick で 1 枚ずつ起こす（surface 誕生を分割）。
   /// 全タブ最終 mount・resume 起動を保つ。フラッシュ時に対象 WS がまだアクティブか
-  /// 確認し、切替済みなら破棄して孤児 addSubview を防ぐ（次のアクティブ化でまた mount 対象＝冪等）。
+  /// 確認し、切替済みなら破棄する（次のアクティブ化でまた対象＝冪等）。
   private func scheduleHiddenMounts(for ws: Workspace) {
-    guard ws.tabs.contains(where: { $0.view.superview !== model.content }) else { return }
+    guard ws.tabs.contains(where: { !$0.activated }) else { return }
     DispatchQueue.main.async { [weak self, weak ws] in
       guard let self, let ws, self.current === ws else { return }
-      guard let tab = ws.tabs.first(where: { $0.view.superview !== self.model.content })
-      else { return }
-      self.mountTab(tab, in: ws, visible: false)  // 隠れタブ＝不可視（surface 誕生・resume は走る）
+      guard let tab = ws.tabs.first(where: { !$0.activated }) else { return }
+      self.mountTab(tab, in: ws)  // 隠れタブ＝不可視（surface 誕生・resume は走る）
       self.scheduleHiddenMounts(for: ws)
     }
   }
@@ -357,7 +326,7 @@ final class WindowController: NSObject, NSWindowDelegate {
         strip: tabStrip(of: current),
         active: current.active,
         location: activeTab?.location,
-        faceDots: activeTab?.view.projection.dots,
+        faceDots: activeTab?.group.view.projection.dots,
         rollup: AgentRollup.ordered(AgentRollup.grandTotal(of: workspaces))))
     refreshAttentionSnapshot()  // Attention 一覧も同じ coalesce 契機で追従（WindowController+Attention）
     refreshClosedAgentsPalette()  // ⇧⌘T の一覧も同じ契機で追従（WindowController+ClosedAgents）
@@ -374,11 +343,23 @@ final class WindowController: NSObject, NSWindowDelegate {
     window.makeFirstResponder(tab.focusTarget)
   }
 
-  /// OSC 7 の cwd 報告を受けた。所属キーが変わって隣接不変条件が破れていればタブを移し（アクティブ
-  /// workspace の順が変わったときだけ打ちかけの改名を畳む）、行の cwd 表示を更新し、永続保存を予約する。
+  /// OSC 7 の cwd 報告を受けた。根が変わっていれば連を付け替え（`moveToGroup`）、隣接不変条件が破れていれば
+  /// タブを移し（アクティブ workspace の順が変わったときだけ打ちかけの改名を畳む）、content を照合し、行の cwd 表示を
+  /// 更新し、永続保存を予約する。
   private func tabDidReportPwd(_ tab: TerminalTab?) {
     guard let tab else { return }
-    if store.regroup(tab) == activeWorkspace {
+    let key = GitWorktreeRoot.root(of: tab.cwd)
+    guard key != tab.groupKey else {
+      refreshChrome()
+      scheduleSave()
+      return
+    }
+    let old = tab.group
+    moveToGroup(tab, key: key)
+    let reordered = store.regroup(tab) == activeWorkspace
+    reconcileContent()
+    if tab.group !== old, tab === activeTab, model.overlay == .none { focusActiveTab() }
+    if reordered {
       tabsDidReorder()
     } else {
       refreshChrome()

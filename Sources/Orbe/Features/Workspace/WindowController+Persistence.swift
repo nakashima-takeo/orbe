@@ -13,7 +13,13 @@ extension WindowController {
       ws.lastUsedAt = state.lastUsedAt  // MRU 並べ替えキーを読み戻す（旧データは nil）
       ws.settingsOverride = state.settingsOverride  // 設定上書きを読み戻す（旧データは nil＝global 継承）
       ws.lastWorktreeBase = state.lastWorktreeBase
-      for tab in state.tabs { ws.tabs.append(makeTab(from: tab)) }  // 隣接の正規化は下の store.load
+      // 連はキー（cwd の根）ごとに 1 つ作り、その連の保存状態で起こす。隣接の正規化は下の store.load。
+      let keys = state.tabs.map { GitWorktreeRoot.root(of: $0.cwd) }
+      let groupStates = state.groupStates(keys: keys)
+      for (tab, key) in zip(state.tabs, keys) {
+        let group = group(forKey: key, in: ws) ?? makeGroup(key: key, state: groupStates[key])
+        ws.tabs.append(makeTab(from: tab, group: group))
+      }
       // 0タブ（休眠）workspace はそのまま残す。アクティブ化（切替・下の activateCurrent）は空表示
       // で、シェルは自動起動しない。背景の休眠 workspace も空のまま keep する。
       ws.active = ws.tabs.isEmpty ? 0 : min(max(0, state.activeTab), ws.tabs.count - 1)
@@ -27,18 +33,18 @@ extension WindowController {
     activateCurrent()  // 復元アクティブが0タブ（休眠保存）なら空表示（シェルは起こさない）
   }
 
-  /// TabState 1 枚からタブを起こして配線する。起動時復元（restore）・`restoreDormantTab`・`openResumedTab` の共通経路
+  /// TabState 1 枚から、所属の連 `group` のタブを起こして配線する。起動時復元（restore）・`restoreDormantTab`・`openResumedTab` の共通経路
   /// ——agent 付きは休眠チケットのまま起こし、resume 解決（と解決不能時の素シェル化）は
   /// タブ起床時に走る（`TerminalTab.recordMaterializationStarted`）。ここは resolver を渡すだけ。会話の再開の組み立ては
   /// すべてこの resolver を通る。起こす会話が秘書の会話なら、秘書の係がそのタブを秘書として覚え、秘書の役割の指示を
   /// 再開に添える（起こす時点の秘書の記録で決まる）。
-  func makeTab(from state: TabState) -> TerminalTab {
+  func makeTab(from state: TabState, group: TabGroup) -> TerminalTab {
     let resume: TerminalTab.ResumeSpawn = { [weak self, agentLauncher] tab, session, input in
       agentLauncher.resumeSpawn(
         for: session, arguments: self?.secretary.launching(session, in: tab) ?? [],
         firstInput: input)
     }
-    return wire(TerminalTab(restoring: state, resumeSpawn: resume, editorSurfaces: editorSurfaces))
+    return wire(TerminalTab(restoring: state, group: group, resumeSpawn: resume))
   }
 
   /// 休眠チケット 1 枚を workspace へ足す。`restore_sessions` と ⇧⌘T が共有する復元単位。
@@ -46,7 +52,7 @@ extension WindowController {
   /// （明示タイトルは付かない）。位置は新規タブと同じ規則——同じ worktree の連の右端、無ければ末尾。
   /// 選択・mount はしない（起床は既存の mount 規律に従う）。
   func restoreDormantTab(_ state: TabState, intoWorkspaceAt index: Int) -> TabRef {
-    let tab = makeTab(from: state)
+    let tab = makeTab(from: state, group: group(for: state.cwd, in: workspaces[index]))
     let tabIndex = store.insertTabUnselected(tab, intoWorkspaceAt: index)
     refreshChrome()
     scheduleSave()
@@ -114,7 +120,7 @@ extension WindowController {
       workspaces: workspaces.map { ws in
         WorkspaceState(
           name: ws.name, rootPath: ws.rootPath, activeTab: ws.active,
-          tabs: ws.tabs.map { $0.tabState() },
+          tabs: ws.tabs.map { $0.tabState() }, groups: ws.groups.compactMap { $0.groupState() },
           lastUsedAt: ws.lastUsedAt, settingsOverride: ws.settingsOverride,
           lastWorktreeBase: ws.lastWorktreeBase, persistentId: ws.persistentId)
       },

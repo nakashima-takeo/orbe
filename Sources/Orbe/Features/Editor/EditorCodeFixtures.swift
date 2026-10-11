@@ -116,14 +116,14 @@
     }
 
     @MainActor final class Scene {
-      let tab: TerminalTab
+      let group: TabGroup
       let document: EditorDocument
       /// fixture のリポジトリ（置き場の下。消すのは置き場の持ち主）。
       let directory: URL
-      var pane: EditorPaneView { tab.view.editor }
+      var pane: EditorPaneView { group.view.editor }
 
-      init(tab: TerminalTab, document: EditorDocument, directory: URL) {
-        self.tab = tab
+      init(group: TabGroup, document: EditorDocument, directory: URL) {
+        self.group = group
         self.document = document
         self.directory = directory
       }
@@ -157,11 +157,11 @@
       try git(["commit", "-qm", "gallery"])
       try Data(edited.utf8).write(to: url)
       try Data(longEdited.utf8).write(to: longURL)
-      let tab = TerminalTab(
-        cwd: dir.path,
+      let group = TabGroup(
+        key: GitWorktreeRoot.root(of: dir.path),
         editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot, language: { .ja }))
-      let document = try tab.editor.open(url, as: .pinned)
-      return Scene(tab: tab, document: document, directory: dir)
+      let document = try group.editor.open(url, as: .pinned)
+      return Scene(group: group, document: document, directory: dir)
     }
 
     private struct CodePane: NSViewRepresentable {

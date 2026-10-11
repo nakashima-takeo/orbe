@@ -8,7 +8,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか。隠れていく面の中身が先に幅 0 へ縮むと、縮んでいく面の全体が透けて窓の後ろが見える。縮む面の中身を
 /// 先に行き先の幅へ縮めると、面が中身より広いコマで面の端が透ける。
-extension TabFacesViewTests {
+extension GroupFacesViewTests {
   private static let editorOnly = FaceLayout(editorRatio: 1, focus: .editor)
   private static let split = FaceLayout(editorRatio: 0.5, focus: .editor)
 
@@ -19,18 +19,18 @@ extension TabFacesViewTests {
       contentRect: NSRect(origin: .zero, size: NSSize(width: 1012, height: 400)),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
-    let tab = TerminalTab(cwd: "/tmp")
-    tab.view.reduceMotion = false
-    tab.setFaces(faces, animated: false)
-    window.contentView = tab.view
-    tab.view.layoutSubtreeIfNeeded()
+    let tab = TerminalTab.alone(cwd: "/tmp")
+    tab.group.view.reduceMotion = false
+    tab.group.setFaces(faces, animated: false)
+    window.contentView = tab.group.view
+    tab.group.view.layoutSubtreeIfNeeded()
     addTeardownBlock { @MainActor in window.contentView = nil }
     return (tab, window)
   }
 
   /// 見えている面のうち、中身に覆われていない面積（2x のデバイス px）。
-  private func uncoveredPixels(_ view: TabFacesView) -> CGFloat {
-    [view.editor, view.terminal as NSView].reduce(0) { sum, content in
+  private func uncoveredPixels(_ view: GroupFacesView) -> CGFloat {
+    ([view.editor] as [NSView] + view.terminals).reduce(0) { sum, content in
       guard let face = content.superview, !face.isHidden else { return sum }
       let covered = face.bounds.intersection(content.frame)
       let area = face.bounds.width * face.bounds.height
@@ -45,7 +45,7 @@ extension TabFacesViewTests {
     file: StaticString = #filePath, line: UInt = #line
   ) {
     let (tab, _) = hostedInWindow(from)
-    let view = tab.view
+    let view = tab.group.view
     var editorSizes = [view.editor.frame.size]
     var terminalSizes = [tab.surface.bounds.size]
     func record() {
@@ -55,7 +55,7 @@ extension TabFacesViewTests {
       }
     }
     trigger(tab)
-    XCTAssertEqual(tab.faces, to, "前提: 行き先の配置", file: file, line: line)
+    XCTAssertEqual(tab.group.faces, to, "前提: 行き先の配置", file: file, line: line)
     XCTAssertTrue(view.isAnimating, "前提: 動きが始まっている", file: file, line: line)
     var worst: CGFloat = uncoveredPixels(view)
     record()
@@ -82,7 +82,7 @@ extension TabFacesViewTests {
     let layouts = [Self.editorOnly, Self.split, FaceLayout.terminalOnly]
     for from in layouts {
       for to in layouts where to != from {
-        measureSlide(from: from, to: to) { $0.setFaces(to, animated: true) }
+        measureSlide(from: from, to: to) { $0.group.setFaces(to, animated: true) }
       }
     }
   }
@@ -91,24 +91,24 @@ extension TabFacesViewTests {
   /// 入る——pty の resize は 1 回だけ。
   func testTerminalShownAfterShrinkingWhileHiddenResizesOnce() {
     let (tab, _) = hostedInWindow(.terminalOnly)
-    let view = tab.view
-    tab.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
+    let view = tab.group.view
+    tab.group.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
     view.frame = NSRect(x: 0, y: 0, width: 812, height: 300)
     view.layoutSubtreeIfNeeded()
     XCTAssertEqual(view.editor.frame.size, NSSize(width: 812, height: 300), "前提: 器が縮んだ")
-    let hidden = view.terminal.frame.size
+    let hidden = tab.terminal.frame.size
     XCTAssertEqual(hidden, NSSize(width: 1012, height: 400), "前提: 隠れている端末は最後に見えていた寸法のまま")
 
-    tab.setFaces(.terminalOnly, animated: true)
+    tab.group.setFaces(.terminalOnly, animated: true)
     XCTAssertTrue(view.isAnimating, "前提: 動きが始まっている")
     var sizes = [hidden]
     var frames = 0
     repeat {
-      if sizes.last != view.terminal.frame.size { sizes.append(view.terminal.frame.size) }
+      if sizes.last != tab.terminal.frame.size { sizes.append(tab.terminal.frame.size) }
       view.tick(dt: 1.0 / 120)
       frames += 1
     } while view.isAnimating && frames < 600
-    if sizes.last != view.terminal.frame.size { sizes.append(view.terminal.frame.size) }
+    if sizes.last != tab.terminal.frame.size { sizes.append(tab.terminal.frame.size) }
 
     XCTAssertEqual(sizes, [hidden, NSSize(width: 812, height: 300)], "端末の寸法の変更は 1 回")
   }
@@ -116,10 +116,10 @@ extension TabFacesViewTests {
   /// 動きを減らす設定では、配置を写す口から動かずに行き先へ即時に着地する。
   func testReduceMotionLandsAtOnce() {
     let (tab, _) = hostedInWindow(.terminalOnly)
-    let view = tab.view
+    let view = tab.group.view
     view.reduceMotion = true
 
-    tab.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: true)
+    tab.group.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: true)
 
     XCTAssertFalse(view.isAnimating, "動きは起きない")
     XCTAssertEqual(view.handle.frame.minX, view.committed.frames.handle.minX, "行き先に着いている")
@@ -129,8 +129,8 @@ extension TabFacesViewTests {
   /// 継ぎ目を押して起こす動きも同じ口を通る（分割から焦点側の全面へ）。
   func testHandleClickSlideKeepsTheFacesCovered() {
     measureSlide(from: Self.split, to: Self.editorOnly) {
-      $0.view.handle.onGrab?($0.view.handle.frame.midX)
-      $0.view.handle.onClick?()
+      $0.group.view.handle.onGrab?($0.group.view.handle.frame.midX)
+      $0.group.view.handle.onClick?()
     }
   }
 }

@@ -67,10 +67,10 @@ final class EditorPaneViewGutterTests: OrbeTestCase {
   /// 透過設定のタブで、最初の文書を開く・サイドバーを引く・文書を閉じる、のどれでも地は 1 枚（二重にも空にも
   /// ならない）で、行番号の列（行の中・上端の余白・文書の直下・文書より下）も本体の地と同じ濃度。
   func testGroundStaysSingleLayeredAsTheBodyRectMoves() throws {
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let pane = tab.group.view.editor
     pane.configure(
       translucency: ChromeTranslucency(effectiveOpacity: 0.5, translucent: true, blur: false),
       localization: LocalizationStore(language: .systemDefault), fontResolver: ChromeFontResolver(),
@@ -84,7 +84,7 @@ final class EditorPaneViewGutterTests: OrbeTestCase {
       of: pane, until: { try $0.rgba(center.midX, center.midY)[3] == veil }, "空状態の地")
     _ = empty
 
-    let document = try tab.editor.open(try caseFile("a.txt", "abc\nabc\n"), as: .pinned)
+    let document = try tab.group.editor.open(try caseFile("a.txt", "abc\nabc\n"), as: .pinned)
     pane.layoutSubtreeIfNeeded()
     let surface = document.surface.view
     let origin = pane.convert(surface.bounds, from: surface).origin
@@ -118,7 +118,7 @@ final class EditorPaneViewGutterTests: OrbeTestCase {
       of: pane, until: { try $0.rgba(band, below)[3] == veil }, "戻した帯は本体の地 1 枚（二重なら 192）")
     _ = narrowed
 
-    tab.editor.close(document)
+    tab.group.editor.close(document)
     let closed = try layer(
       of: pane, until: { try $0.rgba(center.midX, center.midY)[3] == veil }, "閉じても地は 1 枚")
     _ = closed

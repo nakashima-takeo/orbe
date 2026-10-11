@@ -15,14 +15,14 @@ final class EditorPaneViewPreviewTabTests: OrbeTestCase {
   private struct Hosted {
     let tab: TerminalTab
     let window: NSWindow
-    @MainActor var pane: EditorPaneView { tab.view.editor }
+    @MainActor var pane: EditorPaneView { tab.group.view.editor }
   }
 
   /// 根に a.txt・b.txt・c.txt を置いた幅 900 の面（エクスプローラーを出す）。窓は物理画面の外へ並べる（`sendEvent` は
   /// ordered-in の窓にしか配送しない）。
   private func host() throws -> Hosted {
     for name in ["a.txt", "b.txt", "c.txt"] { _ = try caseFile(name, name) }
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900)
@@ -32,7 +32,7 @@ final class EditorPaneViewPreviewTabTests: OrbeTestCase {
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
     pumpMain(
       until: {
-        Set(tab.view.editor.tree.rows.map(\.name)).isSuperset(of: ["a.txt", "b.txt", "c.txt"])
+        Set(tab.group.view.editor.tree.rows.map(\.name)).isSuperset(of: ["a.txt", "b.txt", "c.txt"])
       },
       "ファイルの行が出る")
     return Hosted(tab: tab, window: window)
@@ -47,12 +47,12 @@ final class EditorPaneViewPreviewTabTests: OrbeTestCase {
   }
 
   private func names(_ hosted: Hosted) -> [String] {
-    hosted.tab.editor.documents.map(\.url.lastPathComponent)
+    hosted.tab.group.editor.documents.map(\.url.lastPathComponent)
   }
 
   func testTreeRowsOpenAPreviewOnTheFirstClickAndPinOnTheSecond() throws {
     let hosted = try host()
-    let editor = hosted.tab.editor
+    let editor = hosted.tab.group.editor
 
     try click(hosted.pane, at: try treeRow(hosted, "a.txt"))
     pumpMain(
@@ -73,7 +73,7 @@ final class EditorPaneViewPreviewTabTests: OrbeTestCase {
   func testDoubleClickingAFileTabPinsIt() throws {
     let hosted = try host()
     let pane = hosted.pane
-    let editor = hosted.tab.editor
+    let editor = hosted.tab.group.editor
     try editor.open(try caseFile("a.txt", "a.txt"), as: .pinned)
     let preview = try editor.open(try caseFile("b.txt", "b.txt"), as: .preview)
     try editor.open(try caseFile("c.txt", "c.txt"), as: .pinned)
@@ -93,7 +93,7 @@ final class EditorPaneViewPreviewTabTests: OrbeTestCase {
   func testThePreviewTabHasAHatchedGround() throws {
     let hosted = try host()
     let pane = hosted.pane
-    let editor = hosted.tab.editor
+    let editor = hosted.tab.group.editor
     try editor.open(try caseFile("a.txt", "a.txt"), as: .pinned)
     try editor.open(try caseFile("b.txt", "b.txt"), as: .preview)
     try editor.open(try caseFile("c.txt", "c.txt"), as: .pinned)

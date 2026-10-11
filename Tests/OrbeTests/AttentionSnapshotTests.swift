@@ -11,7 +11,7 @@ final class AttentionSnapshotTests: OrbeTestCase {
   /// 1 タブの workspace を組む。live はタブの正規遷移で作る。
   private func workspace(name: String, activated: Bool = true) -> Workspace {
     let ws = Workspace(name: name, rootPath: "/tmp/\(name)")
-    let tab = TerminalTab(cwd: "/tmp/\(name)")
+    let tab = TerminalTab.alone(cwd: "/tmp/\(name)")
     ws.tabs.append(tab)
     if activated { tab.recordMaterializationStarted() }
     return ws
@@ -35,7 +35,7 @@ final class AttentionSnapshotTests: OrbeTestCase {
   /// 発信元タブの現在状態で母集合を決める。
   func testMixedWorkspaceIncludesOnlyActivatedTab() {
     let ws = workspace(name: "mixed")
-    let dormant = TerminalTab(cwd: "/tmp/mixed")
+    let dormant = TerminalTab.alone(cwd: "/tmp/mixed")
     ws.tabs.append(dormant)
     setState(ws, tab: 0, state: "waiting", at: Date())
     setState(ws, tab: 1, state: "done", at: Date().addingTimeInterval(1))
@@ -141,8 +141,8 @@ final class AttentionSnapshotTests: OrbeTestCase {
   func testWorkingSummaryDeduplicatesWorkspacesInAppearanceOrder() {
     let base = Date()
     let a = Workspace(name: "zeta", rootPath: "/tmp/zeta")
-    a.tabs.append(TerminalTab(cwd: "/tmp/zeta"))
-    a.tabs.append(TerminalTab(cwd: "/tmp/zeta"))
+    a.tabs.append(TerminalTab.alone(cwd: "/tmp/zeta"))
+    a.tabs.append(TerminalTab.alone(cwd: "/tmp/zeta"))
     a.tabs.forEach { $0.recordMaterializationStarted() }
     setReportedState(a.tabs[0], "working", at: base)
     setReportedState(a.tabs[1], "working", at: base.addingTimeInterval(-1))
