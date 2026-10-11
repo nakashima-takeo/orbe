@@ -10,7 +10,7 @@ extension SecretaryTests {
   /// 覚えた会話で起こしたタブを、会話を報告する前に人が閉じても、その会話は捨てず、勝手に起こし直さない。
   func testAResumedSecretaryClosedByThePersonBeforeItsFirstReportKeepsItsConversation() throws {
     let wc = try launch(SecretaryFile(version: 1, sessionId: "s-1", pending: []))
-    _ = try wc.secretary.ask(.text("届けたい"))
+    _ = try wc.secretary.ask(.text("届けたい"), from: .palette)
     let resumed = try XCTUnwrap(try homeTabs(wc).first)
 
     wc.closeTab(resumed, origin: .gesture)
@@ -35,7 +35,7 @@ extension SecretaryTests {
     wc.wakeUnselected(byHand)
     report(wc, byHand, "idle", "s-1")
 
-    _ = try wc.secretary.ask(.text("休眠のタブへ"))
+    _ = try wc.secretary.ask(.text("休眠のタブへ"), from: .palette)
 
     XCTAssertEqual(try homeTabs(wc).count, 2, "もう 1 本開かない")
     XCTAssertTrue(

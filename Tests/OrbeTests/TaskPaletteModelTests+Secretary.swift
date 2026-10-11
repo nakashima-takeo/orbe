@@ -72,10 +72,26 @@ extension TaskPaletteModelTests {
     palette.draftText = "直して PR まで出して"
     palette.sendAsk()
 
-    XCTAssertEqual(asks(), [.task(id: 2, note: "直して PR まで出して")])
+    XCTAssertEqual(
+      asks(), [.task(palette.store.tasks.first { $0.id == 2 }!, note: "直して PR まで出して")])
     XCTAssertNil(palette.draft, "欄を閉じる")
     XCTAssertEqual(palette.selectedID, .task(2))
     XCTAssertEqual(palette.notice, .asked)
+  }
+
+  /// 頼む欄の ↵ の前にタスクが消えていたら（agent が消した）、係へ渡さずに断る。
+  func testATaskDeletedBeforeSendingIsRefusedWithoutAsking() throws {
+    let palette = threeTodos()
+    let asks = recording(palette)
+    palette.move(1)
+    palette.askSecretary()
+    palette.draftText = "書きかけ"
+
+    try palette.store.delete(2)
+    palette.sendAsk()
+
+    XCTAssertEqual(asks(), [], "何も送らない")
+    XCTAssertEqual(palette.error, .failed)
   }
 
   /// 頼む欄は、別の行のクリックや範囲の切り替えで離れたら、何も送らずに捨てる。

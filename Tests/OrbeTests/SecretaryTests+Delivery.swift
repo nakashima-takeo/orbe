@@ -22,7 +22,7 @@ extension SecretaryTests {
 
   func testAnAskIsSentAgainWhenTheNextChangeComesWithoutConfirmation() throws {
     let (wc, log) = try launchCounting()
-    _ = try wc.secretary.ask(.text("届いたか確かめる"))
+    _ = try wc.secretary.ask(.text("届いたか確かめる"), from: .palette)
     let tab = try XCTUnwrap(try homeTabs(wc).first)
     report(wc, tab, "idle", "s-1")
     XCTAssertTrue(waitUntil { self.deliveries(log, "届いたか確かめる") == 1 }, "1 度貼る")
@@ -43,7 +43,7 @@ extension SecretaryTests {
   func testAnUnresponsiveSecretaryIsPointedOutWithItsTab() throws {
     let wc = try launch()
     wc.secretary.patience = 0.3
-    _ = try wc.secretary.ask(.text("応えるか"))
+    _ = try wc.secretary.ask(.text("応えるか"), from: .palette)
     let tab = try XCTUnwrap(try homeTabs(wc).first)
 
     XCTAssertTrue(

@@ -106,11 +106,11 @@ private struct TaskPaletteIntakeShelfRowView: View {
     var parts: [Text] = []
     if running {
       parts.append(
-        Text(l10n.string(.taskPaletteIntakeRunning)).foregroundStyle(Color.theme.accentBright))
+        Text(l10n.string(.intakeRunning)).foregroundStyle(Color.theme.accentBright))
     } else if intake.paused {
-      parts.append(muted(l10n.string(.taskPaletteIntakePaused)))
+      parts.append(muted(l10n.string(.intakePaused)))
     } else if let next {
-      parts.append(muted(l10n.format(.taskPaletteIntakeNext, text.stamp(next))))
+      parts.append(muted(text.next(next)))
     }
     if row.count == 0 { parts.append(muted(l10n.string(.taskPaletteIntakeNoProposals))) }
     if intake.runs.first?.failure != nil {

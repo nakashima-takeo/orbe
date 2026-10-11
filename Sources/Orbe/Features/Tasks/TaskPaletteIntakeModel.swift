@@ -29,13 +29,13 @@ struct TaskPaletteIntakeShelfRow: Equatable, Identifiable {
 enum TaskPaletteIntakeError: Equatable {
   /// タスクにするを、タスクのストアが受け付けなかった。
   case accept
-  /// 走っている間の今すぐ実行。
-  case running
+  /// 自動追加への手の操作を断った。
+  case refused(IntakeHand.Refusal)
 
   var message: L10nKey {
     switch self {
     case .accept: .taskPaletteIntakeErrAccept
-    case .running: .taskPaletteIntakeErrRunning
+    case .refused(let refusal): refusal.message
     }
   }
 }
@@ -51,8 +51,8 @@ enum TaskPaletteIntakeError: Equatable {
   let today: TaskItem.DueDate
   let timeZone: TimeZone
 
-  private(set) var shelfList = TaskPaletteListState<TaskPaletteIntakeShelfID>()
-  private(set) var proposalList = TaskPaletteListState<Int>()
+  private(set) var shelfList = ListState<TaskPaletteIntakeShelfID>()
+  private(set) var proposalList = ListState<Int>()
   private(set) var place: TaskPaletteIntakePlace = .proposals {
     didSet { if place != oldValue { onPlaceChange() } }
   }
@@ -277,28 +277,11 @@ enum TaskPaletteIntakeError: Equatable {
 
   // MARK: - 受信の中身
 
-  func runNow() {
+  /// 選んでいる自動追加への手の操作。削除は確認なしで消し、提案の一覧へ戻る（棚は同じ位置の段を選ぶ）。
+  func perform(_ operation: IntakeHand.Operation) {
     guard let intake = selectedIntake else { return }
-    error = nil
-    do throws(IntakeError) {
-      try runner.runNow(intake.id)
-    } catch {
-      if case .running = error { self.error = .running }
-    }
-  }
-
-  /// space。止める ⇄ 再開。
-  func togglePause() {
-    guard let intake = selectedIntake else { return }
-    error = nil
-    _ = try? runner.pause(intake.id, !intake.paused)
-  }
-
-  /// ⌘⌫。確認なしで消し、提案の一覧へ戻る。棚は同じ位置の段を選ぶ。
-  func deleteIntake() {
-    guard let intake = selectedIntake else { return }
-    error = nil
-    try? runner.delete(intake.id)
+    error = IntakeHand.perform(operation, on: intake, runner: runner).map { .refused($0) }
+    guard operation == .delete else { return }
     reconcile()
     place = .proposals
     proposalList.selectFirst(in: proposalIDs)

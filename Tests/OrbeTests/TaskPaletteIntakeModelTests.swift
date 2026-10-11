@@ -190,12 +190,12 @@ final class TaskPaletteIntakeModelTests: OrbeTestCase {
     intake.tapShelf(.intake(1))
     intake.enterContents()
 
-    intake.runNow()
+    intake.perform(.runNow)
     XCTAssertTrue(intake.isRunning(intake.selectedIntake!))
     XCTAssertNil(intake.error)
 
-    intake.runNow()
-    XCTAssertEqual(intake.error, .running, "走っている間は赤で断る")
+    intake.perform(.runNow)
+    XCTAssertEqual(intake.error, .refused(.running), "走っている間は赤で断る")
   }
 
   /// 受信タブの赤は、タブを替えた操作の境目で消える（戻ったときに当てはまらない赤が残らない）。
@@ -203,9 +203,9 @@ final class TaskPaletteIntakeModelTests: OrbeTestCase {
     let palette = palette()
     palette.intake.tapShelf(.intake(1))
     palette.intake.enterContents()
-    palette.intake.runNow()
-    palette.intake.runNow()
-    XCTAssertEqual(palette.intake.error, .running)
+    palette.intake.perform(.runNow)
+    palette.intake.perform(.runNow)
+    XCTAssertEqual(palette.intake.error, .refused(.running))
 
     palette.setTab(.tasks)
     palette.setTab(.intake)
@@ -217,10 +217,10 @@ final class TaskPaletteIntakeModelTests: OrbeTestCase {
     let intake = palette().intake
     intake.tapShelf(.intake(4))
 
-    intake.togglePause()
+    intake.perform(.togglePause)
     XCTAssertEqual(intake.selectedIntake?.paused, false)
     XCTAssertNotNil(intake.nextRunAt(intake.selectedIntake!), "再開すれば次の時刻が出る")
-    intake.togglePause()
+    intake.perform(.togglePause)
     XCTAssertEqual(intake.selectedIntake?.paused, true)
   }
 
@@ -229,7 +229,7 @@ final class TaskPaletteIntakeModelTests: OrbeTestCase {
     intake.tapShelf(.intake(2))
     intake.enterContents()
 
-    intake.deleteIntake()
+    intake.perform(.delete)
 
     XCTAssertNil(intake.store.intake(2))
     XCTAssertEqual(intake.place, .proposals)

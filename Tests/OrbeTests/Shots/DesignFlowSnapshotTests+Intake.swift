@@ -36,8 +36,8 @@ extension DesignFlowSnapshotTests {
             intake.showProposals(); intake.enterContents()
           }
         ),
-        ("run_now", { intake.runNow() }),
-        ("run_refused", { intake.runNow() }),
+        ("run_now", { intake.perform(.runNow) }),
+        ("run_refused", { intake.perform(.runNow) }),
         (
           "contents_agent",
           {
@@ -45,8 +45,8 @@ extension DesignFlowSnapshotTests {
             intake.showProposals(); intake.enterContents()
           }
         ),
-        ("paused", { intake.togglePause() }),
-        ("deleted", { intake.deleteIntake() }),
+        ("paused", { intake.perform(.togglePause) }),
+        ("deleted", { intake.perform(.delete) }),
         ("tasks_tab", { palette.setTab(.tasks) }),
       ])
   }

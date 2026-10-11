@@ -26,11 +26,13 @@ final class SecretaryTextTests: OrbeTestCase {
     return item
   }
 
-  private func line(_ ask: SecretaryAsk, task: TaskItem?, _ l10n: LocalizationStore) -> String? {
+  private func line(
+    _ ask: SecretaryAsk, from origin: SecretaryOrigin = .palette, _ l10n: LocalizationStore
+  ) -> String? {
     let now = date("2026-10-10T01:31:00Z")
-    return SecretaryText.body(ask, task: task, l10n: l10n).map {
+    return SecretaryText.body(ask, l10n: l10n).map {
       SecretaryText.line(
-        SecretaryRequest(id: UUID(), receivedAt: now, origin: ask.origin, body: $0), now: now,
+        SecretaryRequest(id: UUID(), receivedAt: now, origin: origin, body: $0), now: now,
         timeZone: tokyo,
         l10n: l10n)
     }
@@ -38,31 +40,49 @@ final class SecretaryTextTests: OrbeTestCase {
 
   func testTypedTextIsOneLineWithTheOriginAndTheTime() {
     XCTAssertEqual(
-      line(.text("見積もりを\n山田さんに\t送る"), task: nil, ja),
+      line(.text("見積もりを\n山田さんに\t送る"), ja),
       "⌘⇧X から · 10:31 — 見積もりを 山田さんに 送る")
-    XCTAssertEqual(line(.text("send it"), task: nil, en), "From ⌘⇧X · 10:31 — send it")
+    XCTAssertEqual(line(.text("send it"), en), "From ⌘⇧X · 10:31 — send it")
   }
 
   /// 秘書の会話が付けた待ちの続きからは、出どころを「待ちの条件」にして 1 行に畳む。
   func testWhatHappenedToTheSecretarysWaitIsOneLineFromTheWaitCondition() {
     XCTAssertEqual(
-      line(.wait("PR #214 にレビューが付いた\n確認の出力:\nLGTM"), task: nil, ja),
+      line(.text("PR #214 にレビューが付いた\n確認の出力:\nLGTM"), from: .wait, ja),
       "待ちの条件 · 10:31 — PR #214 にレビューが付いた 確認の出力: LGTM")
-    XCTAssertEqual(line(.wait("done"), task: nil, en), "Wait condition · 10:31 — done")
+    XCTAssertEqual(line(.text("done"), from: .wait, en), "Wait condition · 10:31 — done")
   }
 
   func testATaskAskCarriesTheTaskItsPrimaryLinkAndTheNote() {
     XCTAssertEqual(
-      line(.task(id: 12, note: "直して PR まで\n出して"), task: task, ja),
+      line(.task(task, note: "直して PR まで\n出して"), ja),
       "⌘⇧X から · 10:31 — タスク 12「Dispatch: fetch 待ちの間 Esc が効かない」(nakashima-takeo/orbe#218) を頼む。"
         + "補足: 直して PR まで 出して")
     var bare = task
     bare.links = []
     XCTAssertEqual(
-      line(.task(id: 12, note: "  "), task: bare, ja),
+      line(.task(bare, note: "  "), ja),
       "⌘⇧X から · 10:31 — タスク 12「Dispatch: fetch 待ちの間 Esc が効かない」を頼む。",
       "結び付きが無ければ括弧を、補足が空なら「補足」を省く")
-    XCTAssertNil(line(.task(id: 99, note: ""), task: nil, ja), "消えたタスクは頼めない")
+  }
+
+  /// Home のボードからの頼みは、自動追加の新しい依頼か直しとして 1 行で意味が通る（既存の秘書の会話は指示の改版を知らない）。
+  func testBoardAsksNameTheTaskAutoAddInTheLineItself() {
+    XCTAssertEqual(
+      line(.intake("Slack の自分宛ての DM を\nタスクの候補にして"), from: .board, ja),
+      "Home のボードから · 10:31 — タスクの自動追加を頼む: Slack の自分宛ての DM を タスクの候補にして")
+    XCTAssertEqual(
+      line(.intake("watch my DMs"), from: .board, en),
+      "From the Home board · 10:31 — Task auto-add request: watch my DMs")
+    XCTAssertNil(line(.intake(" \n "), from: .board, ja), "空の依頼は頼めない")
+
+    let intake = DesignSceneFixtures.boardIntakes()[2]
+    XCTAssertEqual(
+      line(.intakeFix(intake), from: .board, ja),
+      "Home のボードから · 10:31 — タスクの自動追加 \(intake.id)「\(intake.definition.name)」を直す。")
+    XCTAssertEqual(
+      line(.intakeFix(intake), from: .board, en),
+      "From the Home board · 10:31 — Fix task auto-add \(intake.id) “\(intake.definition.name)”.")
   }
 
   /// 時刻は受けた時刻で、届ける日と違えば日付も付ける（夜に溜めた頼みが翌朝届く）。
@@ -89,5 +109,54 @@ final class SecretaryTextTests: OrbeTestCase {
     try Data(#"{"version":1,"sessionId":"x; rm -rf /","pending":[]}"#.utf8).write(to: url)
     XCTAssertNil(SecretaryPersistence.load(), "再開に使えない会話 ID は読まない")
     XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), "原本は退避する")
+  }
+
+  /// 出どころは旧ビルドの知る 2 値で保存し、Home のボードは別の欄で細分する——旧ビルドへ戻しても記録が退避に落ちない。
+  func testTheBoardOriginIsSavedInAFormTheOlderBuildReads() throws {
+    let at = Date(timeIntervalSince1970: 0)
+    let file = SecretaryFile(
+      version: SecretaryPersistence.version, sessionId: nil,
+      pending: [
+        SecretaryRequest(id: UUID(), receivedAt: at, origin: .board, body: "b"),
+        SecretaryRequest(id: UUID(), receivedAt: at, origin: .palette, body: "p"),
+        SecretaryRequest(id: UUID(), receivedAt: at, origin: .wait, body: "w"),
+      ]
+    )
+    SecretaryPersistence.save(file)
+    let url = try XCTUnwrap(SecretaryPersistence.fileURL)
+    let saved = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+    let pending = try XCTUnwrap(saved["pending"] as? [[String: Any]])
+    XCTAssertEqual(pending.map { $0["origin"] as? String }, ["palette", "palette", "wait"])
+    XCTAssertEqual(pending.map { $0["screen"] as? String }, ["board", nil, nil])
+    XCTAssertEqual(SecretaryPersistence.load(), file, "読むと出どころが戻る")
+
+    let later =
+      #"{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","receivedAt":"2026-10-10T01:31:00Z","#
+      + #""origin":"palette","screen":"later","body":"a"}"#
+    try Data((#"{"version":1,"pending":["# + later + "]}").utf8).write(to: url)
+    XCTAssertEqual(SecretaryPersistence.load()?.pending.first?.origin, .palette, "知らない画面は ⌘⇧X")
+  }
+
+  /// 知らない出どころ（新しいビルドが書いた値）の記録は使えない原本として退避し、空で始める——直後の保存で溜まった頼みを
+  /// 潰さない。
+  func testAnUnknownOriginIsSetAsideWithTheOriginalKept() throws {
+    let url = try XCTUnwrap(SecretaryPersistence.fileURL)
+    let request =
+      #"{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","receivedAt":"2026-10-10T01:31:00Z","#
+      + #""origin":"slack","body":"a"}"#
+    let original = Data((#"{"version":1,"pending":["# + request + "]}").utf8)
+    try original.write(to: url)
+
+    XCTAssertNil(SecretaryPersistence.load(), "空で始める")
+
+    XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), "原位置には残さない")
+    let directory = url.deletingLastPathComponent()
+    let broken = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+      .filter { $0.hasPrefix("secretary-broken-") && $0.hasSuffix(".json") }
+    XCTAssertEqual(broken.count, 1, "退避物が 1 件")
+    XCTAssertEqual(
+      try Data(contentsOf: directory.appendingPathComponent(try XCTUnwrap(broken.first))), original,
+      "原本のまま退避する")
   }
 }

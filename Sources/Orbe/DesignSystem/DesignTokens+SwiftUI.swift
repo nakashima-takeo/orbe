@@ -133,6 +133,11 @@ struct ThemeFonts {
   let helpCaption = Font(Theme.Typography.helpCaption as CTFont)
   let helpKeyFn = Font(Theme.Typography.helpKeyFn as CTFont)
   let helpKeyArrow = Font(Theme.Typography.helpKeyArrow as CTFont)
+  // ボード
+  let boardHeading = Font(Theme.Typography.boardHeading as CTFont)
+  let boardDetailTitle = Font(Theme.Typography.boardDetailTitle as CTFont)
+  let boardValue = Font(Theme.Typography.boardValue as CTFont)
+  let boardPrompt = Font(Theme.Typography.boardPrompt as CTFont)
   // エディター面の空状態
   let editorLead = Font(Theme.Typography.editorLead as CTFont)
   let editorHint = Font(Theme.Typography.editorHint as CTFont)

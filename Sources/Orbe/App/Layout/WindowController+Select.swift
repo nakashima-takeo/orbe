@@ -91,13 +91,13 @@ extension WindowController {
     }
   }
 
-  /// 選んでいるものへフォーカスを戻す——タブなら焦点の面（端末 surface かエディター pane）、ボードならボードの器、
+  /// 選んでいるものへフォーカスを戻す——タブなら焦点の面（端末 surface かエディター pane）、ボードならボードの中の宛先、
   /// 空なら無し（除去済みの surface に宙ぶらりんの first responder を残さない）。パレットの dismiss・workspace の切替・
   /// `focus_tab` が共有する。
   func focusSelection() {
     switch current.selection {
     case .tab(let tab): window.makeFirstResponder(tab.focusTarget)
-    case .board: window.makeFirstResponder(boardView)
+    case .board: board.focus()
     case .empty: window.makeFirstResponder(nil)
     }
   }
