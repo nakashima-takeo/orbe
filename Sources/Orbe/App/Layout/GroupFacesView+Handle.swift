@@ -1,7 +1,7 @@
 import AppKit
 
 /// 取っ手の操作: 掴む・引く・押す・離す。
-extension TabFacesView {
+extension GroupFacesView {
   /// 掴んだ: 位置のばねを止めて手に渡す（動いていたかを覚える）。焦点の面へ first responder を戻す。寸法は配らない。
   func grab(at x0: CGFloat) {
     let wasFlying = motion.flying

@@ -18,7 +18,7 @@ final class ProjectSearchArrowPerfTests: OrbeTestCase {
     let repo: TempGitRepo
     let tab: TerminalTab
     let window: NSWindow
-    @MainActor var pane: EditorPaneView { tab.view.editor }
+    @MainActor var pane: EditorPaneView { tab.group.view.editor }
     @MainActor var search: ProjectSearch { pane.projectSearch }
   }
 
@@ -37,7 +37,7 @@ final class ProjectSearchArrowPerfTests: OrbeTestCase {
       try repo.write(String(format: "f%02d.swift", index), "// needle\n" + body)
     }
     let queries = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: queries))
     let window = hostEditor(tab, width: 1200, height: 800)
     window.appearance = NSAppearance(named: .darkAqua)
@@ -123,7 +123,7 @@ final class ProjectSearchArrowPerfTests: OrbeTestCase {
     let open = hosted.search.onOpen
     hosted.search.onOpen = { _, _ in }
     defer { hosted.search.onOpen = open }
-    for document in hosted.tab.editor.documents { hosted.tab.editor.close(document) }
+    for document in hosted.tab.group.editor.documents { hosted.tab.group.editor.close(document) }
     hosted.search.select(ProjectSearch.RowID(path: "f00.swift", match: nil))
     idle(0.2)
     let reference = hold(hosted, repeats: 66, interval: 0.03).quiet
@@ -134,7 +134,7 @@ final class ProjectSearchArrowPerfTests: OrbeTestCase {
   /// 仮のタブを入れ替える開きと、入れ替えの無い開き（文書の無い面でクリックして開く）の main の時間を並べる。
   func testMeasuresReplacingThePreviewAgainstAPlainOpen() throws {
     let hosted = try host()
-    let editor = hosted.tab.editor
+    let editor = hosted.tab.group.editor
     let match = { (index: Int) in
       ProjectSearch.RowID(path: String(format: "f%02d.swift", index), match: 0)
     }

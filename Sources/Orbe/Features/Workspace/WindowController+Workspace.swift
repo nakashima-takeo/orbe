@@ -25,11 +25,11 @@ extension WindowController {
     scheduleSave()
   }
 
-  /// アクティブ workspace が0タブのときの content 掃除。全 subview（前タブ/前 WS のビュー）を外し、
+  /// アクティブ workspace が0タブのときの content 掃除。content を照合して器を外し（0タブなので全部外れる）、
   /// 除去済み surface に宙ぶらりんの first responder が残らないよう nil 化し、空状態の chrome を投影する。
   /// シェルは起こさない。`closeTab`（本体）と `activateCurrent` の双方から呼ぶため internal。
   func clearActiveContent() {
-    model.content.subviews.forEach { $0.removeFromSuperview() }
+    reconcileContent()
     model.contentIsEmpty = true  // 0タブの地を AppShell が baseFill で埋める（透過越しの透け防止）
     // overlay 非表示時のみ first responder を落とす（0タブ時 ⌘W が dangling surface に届かないことを保証）。
     // overlay 表示中はパレットが first responder のため奪わない（select と同じ不変条件）。
@@ -80,11 +80,12 @@ extension WindowController {
 
   /// workspace を閉じる。`SessionStore.removalBlocker` があれば閉じない。`origin` は呼び手が名乗る（WorkspacePalette の削除は
   /// `.gesture`・`remove_workspace` は `.controlAPI`）——配下のタブが同一性の終わり方として写す。
-  /// 人の操作で、配下のタブのエディターに未保存の文書があれば合計で 1 回 sheet で確認する（`closeTab` と
+  /// 人の操作で、配下の連のエディターに未保存の文書があれば合計で 1 回 sheet で確認する（`closeTab` と
   /// 同じ関門。`store.closeWorkspace` はタブを直接外し `closeTab` を通らない）。
   func closeWorkspace(_ index: Int, origin: TabCloseOrigin) {
     guard workspaces.indices.contains(index), store.removalBlocker(index) == nil else { return }
-    let unsaved = origin == .gesture ? workspaces[index].tabs.flatMap { $0.unsavedDocuments() } : []
+    let unsaved =
+      origin == .gesture ? workspaces[index].groups.flatMap { $0.unsavedDocuments() } : []
     guard !unsaved.isEmpty else {
       performCloseWorkspace(index, origin: origin)
       return

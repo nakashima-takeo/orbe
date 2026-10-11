@@ -130,7 +130,7 @@ extension WindowController: ControlTarget {
     return .success(["ok": true])
   }
 
-  /// 指定タブのエディターでファイルを開く（open_file）。`path` は絶対か、`~` 展開の上でタブの実効 cwd
+  /// 指定タブの連のエディターでファイルを開く（open_file）。`path` は絶対か、`~` 展開の上でタブの実効 cwd
   /// からの相対。開けたら配置をエディターが見える正規形へ（隠れていれば全面・分割中は焦点だけ）、
   /// `focus_tab` と同じ経路でタブを選んで first responder を移す。
   func controlOpenFile(tabId: Int, path: String) -> Result<Any, ControlError> {
@@ -143,7 +143,7 @@ extension WindowController: ControlTarget {
       ? URL(fileURLWithPath: expanded)
       : URL(fileURLWithPath: expanded, relativeTo: URL(fileURLWithPath: tab.cwd, isDirectory: true))
     do {
-      try tab.openFile(url)
+      try tab.group.openFile(url)
     } catch EditorDocumentError.notUTF8 {
       return .failure(ControlError(code: -32000, message: "not UTF-8: \(url.path)"))
     } catch EditorSurfaceError.noMetalDevice {
@@ -151,8 +151,8 @@ extension WindowController: ControlTarget {
     } catch {
       return .failure(ControlError(code: -32000, message: "cannot read: \(url.path)"))
     }
-    let ratio = tab.faces.editorRatio == 0 ? 1 : tab.faces.editorRatio
-    tab.setFaces(FaceLayout(editorRatio: ratio, focus: .editor), animated: true)
+    let ratio = tab.group.faces.editorRatio == 0 ? 1 : tab.group.faces.editorRatio
+    tab.group.setFaces(FaceLayout(editorRatio: ratio, focus: .editor), animated: true)
     return controlFocusTab(tabId: tabId)
   }
 

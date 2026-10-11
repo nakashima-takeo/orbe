@@ -13,8 +13,8 @@ import XCTest
 final class EditorPaneViewHeaderTests: OrbeTestCase {
   func testColumnHeadContentFillsTheReservedHeightWithAndWithoutADocument() throws {
     let dir = TestScratch.caseDir
-    let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
 
@@ -26,8 +26,8 @@ final class EditorPaneViewHeaderTests: OrbeTestCase {
       PaneProbe.same(try drawn.rgb(x, y: 14), try drawn.rgb(x, y: 200)),
       "文書が無くてもファイルタブ行の帯（沈み面）は本体の地と違う色で残る")
 
-    _ = try tab.editor.open(try caseFile("a.swift", "let a = 1\n"), as: .pinned)
-    tab.view.layoutSubtreeIfNeeded()
+    _ = try tab.group.editor.open(try caseFile("a.swift", "let a = 1\n"), as: .pinned)
+    tab.group.view.layoutSubtreeIfNeeded()
     XCTAssertEqual(pane.headerHeight, 49)
     pumpMain(until: { pane.headerHost.fittingSize.height == 49 }, "文書があればパンくずの段が加わる")
   }
@@ -35,18 +35,18 @@ final class EditorPaneViewHeaderTests: OrbeTestCase {
   /// ファイルタブ行は自然幅のタブを並べ、溢れれば横スクロールし、アクティブが変われば可視位置へ送る。
   func testFileTabsOverflowScrollsToTheActiveTab() throws {
     let dir = TestScratch.caseDir
-    let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 400)
     defer { window.orderOut(nil) }
     pane.shell.selectPanel(.files)  // 列を本体だけにして溢れを作る（本体 363）
     let documents = try (0..<8).map { index in
-      try tab.editor.open(try caseFile("a-long-file-name-\(index).swift", "x"), as: .pinned)
+      try tab.group.editor.open(try caseFile("a-long-file-name-\(index).swift", "x"), as: .pinned)
     }
     let scroll = try XCTUnwrap(scrollView(in: pane.headerHost))
     pumpMain(until: { scroll.documentVisibleRect.minX > 0 }, "末尾のタブがアクティブなら可視位置へ")
 
-    tab.editor.activate(documents[0])
+    tab.group.editor.activate(documents[0])
     pumpMain(until: { scroll.documentVisibleRect.minX == 0 }, "先頭へ戻ればスクロールも戻る")
   }
 }

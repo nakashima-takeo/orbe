@@ -11,17 +11,15 @@ import XCTest
 /// 右端」からずれると、⌘T で開いたタブが隣の worktree の連に紛れ込む。active の参照追従が外れれば
 /// 挿入・並び替えの直後に別のタブへフォーカスが飛ぶ。
 ///
-/// TerminalTab は window 未接続なら libghostty surface を生成しないため、`groupKey` を直接注入した
-/// タブで配列ロジックだけを検証する（キーの導出そのものは `GitWorktreeRootTests` /
-/// `TerminalTabTests+GroupKey` が持つ）。
+/// TerminalTab は window 未接続なら libghostty surface を生成しないため、所属の連（`TabGroup(key:)`）を直接与えた
+/// タブで配列ロジックだけを検証する（キーの導出そのものは `GitWorktreeRootTests`・`WindowControllerTabGroupTests` が持つ）。
 final class SessionStoreTabGroupTests: OrbeTestCase {
 
   // MARK: - fixture
 
   /// 所属キー `key` のタブ。タイトルにもキーを置き、失敗メッセージで並びを読めるようにする。
   func tab(_ key: String) -> TerminalTab {
-    let tab = TerminalTab(cwd: "/tmp")
-    tab.groupKey = key
+    let tab = TerminalTab(cwd: "/tmp", group: TabGroup(key: key))
     tab.explicitTitle = key
     return tab
   }

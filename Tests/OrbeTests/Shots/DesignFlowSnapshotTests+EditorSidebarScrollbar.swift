@@ -19,7 +19,7 @@ extension DesignFlowSnapshotTests {
     pumpMain(until: { scene.isReady }, "git バッジが揃う")
     let pane = scene.pane
     let deep = try XCTUnwrap(
-      scene.tab.editor.documents.first { $0.url.lastPathComponent == "FileTree.swift" })
+      scene.group.editor.documents.first { $0.url.lastPathComponent == "FileTree.swift" })
     scene.warmUp(size: NSSize(width: 1100, height: 240))
     pane.window?.appearance = NSAppearance(named: .darkAqua)
     let settle = { RunLoop.main.run(until: Date().addingTimeInterval(1.6)) }
@@ -27,7 +27,7 @@ extension DesignFlowSnapshotTests {
       (
         "tree_rest",
         {
-          scene.tab.editor.activate(deep)  // 深い行まで開いてツリーを溢れさせる
+          scene.group.editor.activate(deep)  // 深い行まで開いてツリーを溢れさせる
           settle()
         }
       ),

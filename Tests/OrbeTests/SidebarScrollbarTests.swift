@@ -90,14 +90,14 @@ final class SidebarScrollbarTests: OrbeTestCase {
         at: dir.appendingPathComponent(String(format: "d%02d", index)),
         withIntermediateDirectories: true)
     }
-    let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900, height: 240)
     window.orderFront(nil)
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
-    let scroll = try XCTUnwrap(scrollView(in: tab.view.editor.sideHost))
+    let scroll = try XCTUnwrap(scrollView(in: tab.group.view.editor.sideHost))
     let document = try XCTUnwrap(scroll.documentView)
     pumpMain(until: { document.frame.height > scroll.documentVisibleRect.height * 2 }, "ツリーが溢れる")
-    return Tree(pane: tab.view.editor, window: window, scroll: scroll, document: document)
+    return Tree(pane: tab.group.view.editor, window: window, scroll: scroll, document: document)
   }
 
   /// 今の位置のつまみの中央（窓の座標）。

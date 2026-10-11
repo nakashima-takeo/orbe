@@ -10,7 +10,7 @@ extension SessionStoreTabGroupTests {
   func testRegroupMovesStrayTabToEndOfItsPeersSegment() {
     let store = makeStore(["a", "a", "a", "b", "b"])
     let moved = store.current.tabs[1]
-    moved.groupKey = "b"
+    moved.group = TabGroup(key: "b")
 
     XCTAssertEqual(store.regroup(moved), 0, "動かしたので所属 workspace index")
     XCTAssertEqual(keys(store.current), ["a", "a", "b", "b", "b"], "b の連の右端へ")
@@ -21,7 +21,7 @@ extension SessionStoreTabGroupTests {
   func testRegroupEjectsSplittingTabToRightOfItsFormerSegment() {
     let store = makeStore(["a", "a", "a", "b"])
     let moved = store.current.tabs[1]
-    moved.groupKey = "z"
+    moved.group = TabGroup(key: "z")
 
     XCTAssertEqual(store.regroup(moved), 0)
     XCTAssertEqual(keys(store.current), ["a", "a", "z", "b"], "元の連の直右")
@@ -31,7 +31,7 @@ extension SessionStoreTabGroupTests {
   func testRegroupLeavesTabAttachedToItsOwnSegmentInPlace() {
     let store = makeStore(["a", "a", "a", "b"])
     let tab = store.current.tabs[0]
-    tab.groupKey = "a"
+    tab.group = TabGroup(key: "a")
 
     XCTAssertNil(store.regroup(tab), "隣接している＝不変条件は保たれている")
     XCTAssertTrue(store.current.tabs[0] === tab)
@@ -43,7 +43,7 @@ extension SessionStoreTabGroupTests {
   func testRegroupLeavesTabInPlaceWhenItSplitsNoSegment() {
     let store = makeStore(["a", "a", "b"])
     let tab = store.current.tabs[1]
-    tab.groupKey = "z"
+    tab.group = TabGroup(key: "z")
 
     XCTAssertNil(store.regroup(tab), "不変条件は破れていない＝動かさない")
     XCTAssertEqual(keys(store.current), ["a", "z", "b"])
@@ -53,7 +53,7 @@ extension SessionStoreTabGroupTests {
   func testRegroupPrefersJoiningPeersOverEjecting() {
     let store = makeStore(["b", "a", "a", "a"])
     let moved = store.current.tabs[2]
-    moved.groupKey = "b"
+    moved.group = TabGroup(key: "b")
 
     XCTAssertEqual(store.regroup(moved), 0)
     XCTAssertEqual(keys(store.current), ["b", "b", "a", "a"], "b の連の右端（直右 index 3 ではない）")
@@ -64,7 +64,7 @@ extension SessionStoreTabGroupTests {
     let store = makeStore(["a", "a", "a", "b"], active: 2)
     let viewed = activeTab(store.current)
     let moved = store.current.tabs[0]
-    moved.groupKey = "b"
+    moved.group = TabGroup(key: "b")
 
     XCTAssertEqual(store.regroup(moved), 0)
     XCTAssertTrue(activeTab(store.current) === viewed, "index がずれても同じタブ")
@@ -75,7 +75,7 @@ extension SessionStoreTabGroupTests {
   func testRegroupFollowsActiveTabWhenItMoves() {
     let store = makeStore(["a", "a", "a", "b"], active: 0)
     let moved = activeTab(store.current)
-    moved.groupKey = "b"
+    moved.group = TabGroup(key: "b")
 
     XCTAssertEqual(store.regroup(moved), 0)
     XCTAssertTrue(activeTab(store.current) === moved, "移動後の自分")
@@ -87,7 +87,7 @@ extension SessionStoreTabGroupTests {
     let background = workspace(["a", "a", "a", "b"])
     let store = SessionStore(workspaces: [workspace(["x"]), background], activeWorkspace: 0)
     let moved = background.tabs[1]
-    moved.groupKey = "b"
+    moved.group = TabGroup(key: "b")
 
     XCTAssertEqual(store.regroup(moved), 1, "背景 workspace の index")
     XCTAssertEqual(keys(background), ["a", "a", "b", "b"])
