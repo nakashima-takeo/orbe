@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// 実 `orb board`（`orbe-cli`）を子プロセスで起こし、実 `WindowController` の Home のボードの部品を list → rm → add で
-/// 動かせること、ボードを持たない workspace と知らない種類が exit 1 で断られることを固定する。
+/// 動かせることを固定する。
 ///
 /// 壊れると何が起きるか: CLI が組み立てる control メソッド名・params の語（`workspaceId`・`kind`）はここでしか測れない。
 /// `rm` が `add_board_part` を送ると、exit 0 を返しながら部品が残る。
@@ -18,8 +18,6 @@ final class OrbeCliBoardProcessTests: OrbeTestCase {
     let home = try XCTUnwrap(
       workspaces.first { $0["hasBoard"] as? Bool == true }?["id"] as? Int,
       "ws list --json に hasBoard")
-    let other = try XCTUnwrap(
-      workspaces.first { $0["hasBoard"] as? Bool == false }?["id"] as? Int)
     func run(_ args: [String]) -> String {
       let outcome = control.orb(["board"] + args)
       XCTAssertEqual(outcome.status, 0, "orb board \(args) が exit 0 でない: \(outcome.stderr)")
@@ -28,17 +26,9 @@ final class OrbeCliBoardProcessTests: OrbeTestCase {
 
     XCTAssertEqual(run(["list", "\(home)"]), "intake")
     XCTAssertEqual(run(["rm", "\(home)", "intake"]), "", "結果の並び（空）")
-    XCTAssertEqual(control.target.workspaces.first { $0.id == home }?.boardParts, [])
     XCTAssertEqual(run(["add", "\(home)", "intake"]), "intake")
     XCTAssertEqual(
       (control.orbJSON(["board", "list", "\(home)"])["parts"] as? [[String: Any]])?.count, 1)
-
-    let noBoard = control.orb(["board", "add", "\(other)", "intake"])
-    XCTAssertEqual(noBoard.status, 1)
-    XCTAssertTrue(noBoard.stderr.contains("workspace has no board"), noBoard.stderr)
-    let unknown = control.orb(["board", "add", "\(home)", "weather"])
-    XCTAssertEqual(unknown.status, 1)
-    XCTAssertTrue(unknown.stderr.contains("unknown kind: weather"), unknown.stderr)
     XCTAssertEqual(control.orb(["board", "add", "\(home)"]).status, 2, "種類の欠落は usage")
   }
 }

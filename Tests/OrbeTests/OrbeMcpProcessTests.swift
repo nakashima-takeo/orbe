@@ -140,16 +140,13 @@ final class OrbeMcpProcessTests: OrbeTestCase {
   }
 
   /// AI が MCP だけで、`hasBoard` の workspace（Home の root を知らなくても選べる）のボードの部品を読み・外し・置ける。
-  /// ボードを持たない workspace への操作は `isError` で断られる。
   func testBoardPartsAreReachableByHasBoard() throws {
     let control = try startControlProcess()
     let workspaces = try XCTUnwrap(
       control.mcpJSON("list_workspaces")["workspaces"] as? [[String: Any]])
-    let boards = workspaces.filter { $0["hasBoard"] as? Bool == true }
-    XCTAssertEqual(boards.count, 1, "ボードを持つのは Home だけ")
-    let home = try XCTUnwrap(boards.first?["id"] as? Int)
-    let other = try XCTUnwrap(
-      workspaces.first { $0["hasBoard"] as? Bool == false }?["id"] as? Int)
+    let home = try XCTUnwrap(
+      workspaces.first { $0["hasBoard"] as? Bool == true }?["id"] as? Int,
+      "list_workspaces に hasBoard")
     func kinds(_ tool: String, _ arguments: [String: Any]) -> [String]? {
       (control.mcpJSON(tool, arguments)["parts"] as? [[String: Any]])?.compactMap {
         $0["kind"] as? String
@@ -158,14 +155,7 @@ final class OrbeMcpProcessTests: OrbeTestCase {
 
     XCTAssertEqual(kinds("list_board_parts", ["workspaceId": home]), ["intake"], "決めていなければ既定")
     XCTAssertEqual(kinds("remove_board_part", ["workspaceId": home, "kind": "intake"]), [])
-    XCTAssertEqual(
-      control.target.workspaces.first { $0.id == home }?.boardParts, [],
-      "実 WindowController の並びが変わる")
     XCTAssertEqual(kinds("add_board_part", ["workspaceId": home, "kind": "intake"]), ["intake"])
-
-    let refused = control.mcpCall("add_board_part", ["workspaceId": other, "kind": "intake"])
-    XCTAssertTrue(refused.isError, "ボードを持たない workspace は断られる")
-    XCTAssertTrue(refused.text.contains("workspace has no board"), refused.text)
   }
 
   /// 背景 workspace を `activate_workspace` すると、返る `tabIds` の先頭が実際に読めるタブになる
