@@ -134,7 +134,7 @@ final class SidebarScrollbarTests: OrbeTestCase {
     pumpMain(until: { tree.scroll.documentVisibleRect.minY > 100 }, "ツリーが送られる")
   }
 
-  /// ツリーのつまみを掴んで引くと移動ぶんだけ連続に送られ、末尾まで引けば最終行が下端に来る。
+  /// ツリーのつまみを掴んで引くと移動ぶんだけ連続に送られ、末尾まで引けば最後の行の下の 1 行分の空きまで届く。
   func testDraggingTheTreeThumbScrollsByTheDistance() throws {
     let tree = try hostTree()
     let start = tree.thumbCenter(at: 0)
@@ -153,18 +153,32 @@ final class SidebarScrollbarTests: OrbeTestCase {
     RunLoop.main.run(until: Date().addingTimeInterval(0.2))
     XCTAssertEqual(
       tree.scroll.documentVisibleRect.maxY, tree.document.frame.height, accuracy: 1, "末尾まで届く")
+    XCTAssertEqual(
+      tree.document.frame.height, CGFloat(tree.pane.tree.rows.count + 1) * Theme.Layout.editorRow,
+      accuracy: 1, "末尾は最後の行の下の 1 行分の空き")
     NSApp.sendEvent(tree.mouse(.leftMouseUp, end))
   }
 
-  /// ツリーのつまみを押しても、下の行は選ばれない。
-  func testClickingTheTreeThumbDoesNotSelectTheRowBeneath() throws {
+  /// ツリーのつまみを押しても下の行は選ばれず、末尾まで送って最後の行の下の空きを押しても何も選ばれない。
+  func testClickingTheTreeThumbOrTheTrailingSpaceSelectsNothing() throws {
     let tree = try hostTree()
+    func click(_ point: NSPoint) throws {
+      try tree.hover(point)
+      NSApp.sendEvent(tree.mouse(.leftMouseDown, point))
+      NSApp.sendEvent(tree.mouse(.leftMouseUp, point))
+      RunLoop.main.run(until: Date().addingTimeInterval(NSEvent.doubleClickInterval + 0.1))
+    }
     tree.move(to: 100)
-    let point = tree.thumbCenter(at: 100)
-    try tree.hover(point)
-    NSApp.sendEvent(tree.mouse(.leftMouseDown, point))
-    NSApp.sendEvent(tree.mouse(.leftMouseUp, point))
-    RunLoop.main.run(until: Date().addingTimeInterval(0.2))
-    XCTAssertNil(tree.pane.tree.selected)
+    try click(tree.thumbCenter(at: 100))
+    XCTAssertNil(tree.pane.tree.selected, "つまみ")
+
+    tree.move(to: tree.document.frame.height - tree.scroll.documentVisibleRect.height)
+    try click(
+      tree.scroll.convert(
+        NSPoint(
+          x: tree.scroll.bounds.midX, y: tree.scroll.bounds.maxY - Theme.Layout.editorRow / 2),
+        to: nil))
+    XCTAssertNil(tree.pane.tree.selected, "最後の行の下の空き")
   }
+
 }

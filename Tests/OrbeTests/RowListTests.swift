@@ -118,7 +118,7 @@ final class RowListTests: OrbeTestCase {
   func testSlotsAreReusedAndScrollingRedrawsOnlyTheNewlyVisibleRows() {
     let hosted = host()
     let list = hosted.list
-    XCTAssertEqual(list.frame.height, rowHeight * 200, "行の高さは 1 つ")
+    XCTAssertEqual(list.frame.height, rowHeight * 201, "行の高さは 1 つ・最後の行の下に 1 行分の空き")
     XCTAssertEqual(slots(list).count, 6, "見えている 5 行＋1 本")
     XCTAssertEqual(slot(list, 4)?.label, "row 4")
     XCTAssertNil(slot(list, 5), "見えていない行は描かない")
@@ -138,7 +138,7 @@ final class RowListTests: OrbeTestCase {
     hosted.rows.update(
       rowsVersion: 1, selection: nil, emoji: nil, wantsFocus: false)
     XCTAssertEqual(list.rowCount, 3)
-    XCTAssertEqual(list.frame.height, rowHeight * 3, "行の数の変化は列の高さだけで受ける")
+    XCTAssertEqual(list.frame.height, rowHeight * 4, "行の数の変化は列の高さだけで受ける")
     XCTAssertEqual(
       slots(list).map(ObjectIdentifier.init), kept.map(ObjectIdentifier.init), "枠は作り直さない")
     XCTAssertEqual(slot(list, 2)?.label, "row 2")
@@ -192,6 +192,9 @@ final class RowListTests: OrbeTestCase {
     let height = list.visibleRect.height
     list.scrollToEndOfDocument(nil)
     XCTAssertEqual(list.visibleRect.maxY, list.frame.height, accuracy: 0.5, "End は末尾へ送る")
+    XCTAssertEqual(
+      list.visibleRect.maxY - CGFloat(list.rowCount) * rowHeight, rowHeight, accuracy: 0.5,
+      "最後の行の下に 1 行分の空きが残る")
     list.scrollToBeginningOfDocument(nil)
     XCTAssertEqual(list.visibleRect.minY, 0, "Home は先頭へ送る")
     list.pageDown(nil)
@@ -203,7 +206,7 @@ final class RowListTests: OrbeTestCase {
 
   // MARK: - マウス
 
-  /// 押すと焦点を取り、行の番号を源へ渡す（ダブルクリックは別の口）。行の無いところは渡さない。
+  /// 押すと焦点を取り、行の番号を源へ渡す（ダブルクリックは別の口）。行の無いところ（最後の行の下の空き）は渡さない。
   func testClicksPassTheRow() {
     let hosted = host(rowCount: 3)
     let list = hosted.list
@@ -217,7 +220,7 @@ final class RowListTests: OrbeTestCase {
     press(x: 13, y: 2.5 * rowHeight, count: 1)
     XCTAssertTrue(hosted.window.firstResponder === list, "押すと焦点を取る")
     press(x: 150, y: 0.5 * rowHeight, count: 2)
-    press(x: 20, y: 4.5 * rowHeight, count: 1)
+    press(x: 20, y: 3.5 * rowHeight, count: 1)  // 最後の行の下の空き
     XCTAssertEqual(hosted.source.clicks, ["click 2", "double 0"])
   }
 
@@ -248,7 +251,7 @@ final class RowListTests: OrbeTestCase {
     thumb.mouseDown(with: drag(.leftMouseDown, y: 90))
     thumb.mouseDragged(with: drag(.leftMouseDragged, y: 82))
     // 8pt 引く → 位置は 8 ×（全体 − 見えている長さ）/（トラック − つまみ）。
-    XCTAssertEqual(rows.contentView.bounds.minY, 8 * 3900 / 80, accuracy: 0.5)
+    XCTAssertEqual(rows.contentView.bounds.minY, 8 * 3920 / 80, accuracy: 0.5)
     thumb.mouseUp(with: drag(.leftMouseUp, y: 82))
 
     let top = rows.contentView.bounds.minY

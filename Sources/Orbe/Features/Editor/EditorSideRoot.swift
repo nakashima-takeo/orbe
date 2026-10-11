@@ -152,6 +152,8 @@ struct ExplorerView: View {
               }
             }
           }
+          // 最後の行の下に行 1 つ分の空き（末尾まで送っても最後の行が下端に付かない）。つまみが測る中身に含める。
+          .padding(.bottom, Theme.Layout.editorRow)
           .sidebarScrollContent(id: Content.tree)
         }
         .scrollIndicators(.never)

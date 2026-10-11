@@ -156,7 +156,8 @@ final class RowList<Source: RowListSource>: NSScrollView {
 
 /// 行を並べる列（`RowList` の文書）。行は数万になりうるので、見えている行の数＋1 本の枠だけを持ち、行 r を枠
 /// r mod 本数 に割り当てて使い回す——送って描き直すのは新しく見えた行だけで、行の数が変わっても列の高さを変えるだけ
-/// （行ごとの仕事をしない）。行の高さは 1 つ。
+/// （行ごとの仕事をしない）。行の高さは 1 つ。最後の行の下に行 1 つ分の空きを持つ——末尾まで送っても最後の行が下端に
+/// 付かない（VS Code の一覧と同じ）。空きは文書の内側なので、ホイール・つまみ・End のどれでも届き、押しても行は無い。
 ///
 /// キーは源の操作へ渡す（`RowListKey`）。Home / End・PageUp / PageDown は列が送るだけ。押すと焦点を取り、行の番号を源へ
 /// 渡す。VoiceOver には AX のリスト（行の総数と、見えている行・選択の行）として見せる。
@@ -204,7 +205,7 @@ final class RowListView<Source: RowListSource>: NSView {
   /// 行の数と中身を読み直す。見えている行の枠は捨てずに中身だけを差し替える。
   func reloadRows() {
     rowCount = source.rowCount
-    setFrameSize(NSSize(width: frame.width, height: CGFloat(rowCount) * rowHeight))
+    setFrameSize(NSSize(width: frame.width, height: CGFloat(rowCount + 1) * rowHeight))
     layoutRows()
   }
 
