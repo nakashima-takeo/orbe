@@ -112,7 +112,7 @@ final class SidebarScrollbarTests: OrbeTestCase {
     RunLoop.main.run(until: Date().addingTimeInterval(0.2))
   }
 
-  /// ツリーのつまみの上でホイールを回すとツリーが送られる（つまみは当たりを持たない）。
+  /// ポインタを乗せたツリーのつまみの上でホイールを回すとツリーが送られる（つまみは当たりを持たない）。
   func testTheWheelOverTheTreeThumbScrollsTheTree() throws {
     let tree = try hostTree()
     tree.move(to: 100)
@@ -121,6 +121,7 @@ final class SidebarScrollbarTests: OrbeTestCase {
         scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: -3, wheel2: 0,
         wheel3: 0))
     let point = try thumbCenter(tree)
+    hover(tree, point)
     wheel.location = CGPoint(x: point.x, y: (tree.window.screen?.frame.height ?? 0) - point.y)
     tree.window.sendEvent(try XCTUnwrap(NSEvent(cgEvent: wheel)))
     pumpMain(until: { tree.scroll.documentVisibleRect.minY > 100 }, "ツリーが送られる")
