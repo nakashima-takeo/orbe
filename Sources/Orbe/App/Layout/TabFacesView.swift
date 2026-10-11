@@ -72,8 +72,6 @@ final class TabFacesView: NSView {
   private var lastTick: CFTimeInterval?
   private var lastVisibleTerminalSize: CGSize?
   private var reportedProjection: FaceGeometry.Projection?
-  /// 引いている間、次のフレームで中身へ配る寸法の元。
-  var pendingDragSizes: FaceGeometry.Resolved?
   private var clock: FrameClock?
 
   override var isFlipped: Bool { true }
@@ -166,10 +164,9 @@ final class TabFacesView: NSView {
     case .settled:
       settle(committed)
     case .dragging:
-      pendingDragSizes = nil
       let g = dragResolved()
-      showDrag(g)
       applySizes(g)
+      showDrag(g)
     case .pressed, .moving:
       if resized {
         resolved = committed
@@ -222,7 +219,6 @@ final class TabFacesView: NSView {
     motion = .rest(at: target.shape.hx, width: target.width)
     motionSize = target.size
     interaction = .settled
-    pendingDragSizes = nil
     apply(target)
     updateClock()
   }
@@ -377,9 +373,8 @@ final class TabFacesView: NSView {
     switch interaction {
     case .dragging:
       let g = dragResolved()
-      pendingDragSizes = g
+      applySizes(g)
       showDrag(g)
-      flushDragSizes()
     case .moving where motion.isAtRest(width: bounds.width):
       settle(committed)
     case .settled, .pressed, .moving:

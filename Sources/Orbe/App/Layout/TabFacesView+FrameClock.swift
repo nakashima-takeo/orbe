@@ -1,7 +1,8 @@
 import AppKit
 
 extension TabFacesView {
-  /// display link 駆動でフレームごとに `tick` を呼ぶ。動きの積分・ホバーの進み・引いている間の resize の間引きが共有する。
+  /// display link 駆動でフレームごとに `tick` を呼ぶ。動きの積分・ホバーの進み・引いている間の resize の間引きが共有する
+  /// （引いている間の中身の寸法は、このフレームでだけ配る）。
   final class FrameClock {
     private var link: CADisplayLink?
     private let tick: () -> Void

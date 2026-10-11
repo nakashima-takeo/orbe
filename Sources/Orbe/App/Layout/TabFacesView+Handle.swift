@@ -13,7 +13,8 @@ extension TabFacesView {
     updateClock()
   }
 
-  /// 引いている: 位置はポインタに 1:1 で付き、形は時計が追う（Reduce Motion なら直結）。鏡は書き換えない。
+  /// 引いている: 位置はポインタに 1:1 で付き、形は時計が追う（Reduce Motion なら直結）。鏡は書き換えない。中身の寸法は
+  /// 時計のフレームで配る。
   func drag(to x: CGFloat, at time: CFTimeInterval) {
     var samples: [Sample]
     let x0: CGFloat
@@ -26,17 +27,20 @@ extension TabFacesView {
     case .settled, .moving:
       return
     }
-    motion.hx = min(max(ratio0 * maxPosition + x - x0, 0), maxPosition)
+    motion.hx = pointerPosition(x: x, x0: x0, ratio0: ratio0)
     samples.append(Sample(time: time, hx: motion.hx))
     while samples.count > 2, time - samples[0].time > FaceGeometry.releaseVelocityWindow {
       samples.removeFirst()
     }
     interaction = .dragging(x0: x0, ratio0: ratio0, samples: samples)
     if reduceMotion { motion.snapShape(width: bounds.width) }
-    let g = dragResolved()
-    pendingDragSizes = g
-    showDrag(g)
+    showDrag(dragResolved())
     updateClock()
+  }
+
+  /// ポインタの x が求める位置: 掴んだ瞬間の位置から引いた距離だけ動き、0…MAX に収める。
+  private func pointerPosition(x: CGFloat, x0: CGFloat, ratio0: CGFloat) -> CGFloat {
+    min(max(ratio0 * maxPosition + x - x0, 0), maxPosition)
   }
 
   /// 引いている間の形を解く（割合は位置から、焦点は鏡のまま）。
@@ -47,38 +51,27 @@ extension TabFacesView {
       size: bounds.size)
   }
 
-  func flushDragSizes() {
-    guard let g = pendingDragSizes else { return }
-    pendingDragSizes = nil
-    applySizes(g)
-    place(g.frames)
-  }
-
   /// 動かさずに離した: 位置のばねが動いていたなら、その位置で速度 0 で離したことにする。そうでなければ押した——端なら
   /// 反対の全面へ、分割中なら焦点の側の全面へ。
   func click() {
     guard case .pressed(_, _, let wasFlying) = interaction else { return }
-    if wasFlying { return release(at: nil, time: nil) }
+    if wasFlying { return finishRelease(velocity: 0) }
     interaction = .settled
     onFacesRequested?(FaceGeometry.handleClick(committed), true)
   }
 
-  /// 離した: 直前の勢いで少し先を見て、端の近くなら閉じる配置へ勢いのまま滑らせ、それ以外は離した位置（点に丸める）で
-  /// 分割として確定する（行き過ぎない）。
-  func release(at x: CGFloat?, time: CFTimeInterval?) {
-    var velocity: CGFloat = 0
-    switch interaction {
-    case .dragging(let x0, let ratio0, let samples):
-      if let x { motion.hx = min(max(ratio0 * maxPosition + x - x0, 0), maxPosition) }
-      if let time {
-        velocity = Self.velocity(samples + [Sample(time: time, hx: motion.hx)], at: time)
-      }
-      flushDragSizes()
-    case .pressed(_, _, wasFlying: true):
-      break
-    case .pressed, .settled, .moving:
-      return
-    }
+  /// 引いた末に離した: 離した点を位置にし、直前の勢いを測って離す。中身の寸法はここでは配らない（続く動きの始めと
+  /// 終わりが配る）。
+  func release(at x: CGFloat, time: CFTimeInterval) {
+    guard case .dragging(let x0, let ratio0, let samples) = interaction else { return }
+    motion.hx = pointerPosition(x: x, x0: x0, ratio0: ratio0)
+    finishRelease(
+      velocity: Self.velocity(samples + [Sample(time: time, hx: motion.hx)], at: time))
+  }
+
+  /// 今の位置で、勢い `velocity` で離す: 少し先を見て端の近くなら閉じる配置へ勢いのまま滑らせ、それ以外は今の位置（点に
+  /// 丸める）で分割として確定する（行き過ぎない）。
+  private func finishRelease(velocity: CGFloat) {
     let maxX = maxPosition
     let final: FaceLayout
     if let goal = FaceGeometry.release(hx: motion.hx, velocity: velocity, width: bounds.width) {
