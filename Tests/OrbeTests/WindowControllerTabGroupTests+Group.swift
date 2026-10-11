@@ -12,7 +12,7 @@ import XCTest
 /// 瞬間に端末が描き直される。連の器を出しただけで休眠の agent が素のシェルとして起き、resume されない。cd したタブが元の
 /// 連の文書を持ち去る、あるいは連の最後のタブの cd で文書が消える。端末で cd したのに、エディター全面の連へ移って入力が
 /// 見えない面へ届く、分割の連へ移って入力がエディターへ届く。サブディレクトリへ cd するたびにエディターの文書・
-/// 配置・ツリーを失う。閉じたタブの surface が器に残り続ける。
+/// 配置・ツリーを失う。閉じたタブの surface とプロセスが器に残り続ける。
 extension WindowControllerTabGroupTests {
   private func layout(_ wc: WindowController) {
     wc.window.contentView?.layoutSubtreeIfNeeded()
@@ -222,5 +222,31 @@ extension WindowControllerTabGroupTests {
 
     XCTAssertTrue(b.group.view.terminals.elementsEqual([b.terminal], by: ===))
     XCTAssertTrue(b.group.view.shownTerminal === b.terminal)
+  }
+
+  /// 背景の workspace で閉じたタブの端末も、その場で器から外れる（次の切替まで surface とプロセスが残らない）。
+  func testClosingATabInABackgroundWorkspaceRemovesItsTerminal() throws {
+    let file = WorkspacesFile(
+      version: WorkspacePersistence.version, activeWorkspace: 1,
+      workspaces: [
+        WorkspaceState(
+          name: "front", rootPath: "/tmp", activeTab: 0,
+          tabs: [TabState(cwd: "/tmp/g1", agent: nil, explicitTitle: nil)]),
+        WorkspaceState(
+          name: "back", rootPath: "/tmp", activeTab: 0,
+          tabs: [
+            TabState(cwd: "/tmp/g2", agent: nil, explicitTitle: nil),
+            TabState(cwd: "/tmp/g2", agent: nil, explicitTitle: nil),
+          ]),
+      ])
+    try JSONEncoder().encode(file).write(to: workspacesFile())
+    let wc = WindowController()
+    let (a, b) = (wc.current.tabs[0], wc.current.tabs[1])
+    pumpMain(until: { b.activated }, "隠れた兄弟が起きる")
+    wc.switchWorkspace(to: 0)
+
+    wc.closeTab(a, origin: .controlAPI)
+
+    XCTAssertTrue(b.group.view.terminals.elementsEqual([b.terminal], by: ===))
   }
 }
