@@ -7,7 +7,8 @@ import XCTest
 
 /// サイドバーの一覧のつまみ（design-system §5 Explorer / Search panel）: 縦に溢れたツリーと検索結果で、操作していない
 /// ときは何も出ず、位置を変えると幅 10 の矩形のつまみだけが出て（トラックの地・枠なし）、ポインタが一覧の上にある間は
-/// 見え続け（つまみの上では色が上がる）、止まってしばらく・ポインタが出たらすぐ消え始める。位置を変えた状態は面を付けた
+/// 見え続け（つまみの上では色が上がる）、止まってしばらく・ポインタが出たらすぐ消え始める。一番下まで送ると最後の行の
+/// 下に 1 行分の空きが残る。位置を変えた状態は面を付けた
 /// 窓の中でしか保てないので、reveal と同じく窓の中でそのまま描く。
 extension DesignFlowSnapshotTests {
   func testEditorSidebarScrollbar() throws {
@@ -45,6 +46,7 @@ extension DesignFlowSnapshotTests {
           settle()
         }
       ),
+      ("tree_end", { self.scrollTreeToEnd(pane) }),  // 最後の行の下に 1 行分の空き
       (
         "search_rest",
         {
@@ -54,11 +56,13 @@ extension DesignFlowSnapshotTests {
         }
       ),
       ("search_scrolled", { self.scroll(pane.searchResults, to: 120) }),
+      ("search_end", { pane.searchResults.list.scrollToEndOfDocument(nil) }),  // End
       (
-        "search_scrolled_light",
+        "search_end_light",
         {
           pane.window?.appearance = NSAppearance(named: .aqua)
-          self.scroll(pane.searchResults, to: 160)  // 撮る間に消え始めないよう、もう一度送る
+          self.scroll(pane.searchResults, to: 0)  // 撮る間に消え始めないよう、送り直す
+          pane.searchResults.list.scrollToEndOfDocument(nil)
         }
       ),
       ("search_faded", settle),
@@ -89,6 +93,11 @@ extension DesignFlowSnapshotTests {
 
   private func scrollTree(_ pane: EditorPaneView, to y: CGFloat) {
     if let tree = scrollView(in: pane.sideHost) { scroll(tree, to: y) }
+  }
+
+  private func scrollTreeToEnd(_ pane: EditorPaneView) {
+    guard let tree = scrollView(in: pane.sideHost), let document = tree.documentView else { return }
+    scroll(tree, to: document.frame.height - tree.documentVisibleRect.height)
   }
 
   /// ツリーのつまみの中央へポインタを入れる・一覧の外へ出す（SwiftUI のホバーはポインタの下の view が受ける
