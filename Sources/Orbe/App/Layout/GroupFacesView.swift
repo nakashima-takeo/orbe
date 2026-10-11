@@ -206,7 +206,7 @@ final class GroupFacesView: NSView {
       settle(committed)
     case .dragging:
       let g = dragResolved()
-      applySizes(g, siblings: true)
+      applySizes(g, siblings: false)
       showDrag(g)
     case .pressed, .moving:
       if resized {

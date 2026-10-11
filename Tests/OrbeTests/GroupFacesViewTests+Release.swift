@@ -114,4 +114,27 @@ extension GroupFacesViewTests {
 
     XCTAssertEqual(tab.group.faces, .terminalOnly, "焦点の側（端末）が全面になる")
   }
+
+  /// 引いている間に器が再レイアウトされても、見せていない兄弟の端末は途中の寸法で resize されず、離して確定したときに
+  /// 1 回だけ確定寸法を受け取る。
+  func testRelayoutWhileDraggingLeavesHiddenSiblingsAtTheCommittedSize() {
+    let (tab, _) = hostedInWindow(FaceLayout(editorRatio: 0.5, focus: .terminal))
+    let view = tab.group.view
+    let sibling = TerminalTab(cwd: "/tmp", group: tab.group)
+    view.add(terminal: sibling.terminal)
+    let before = sibling.terminal.frame.size
+    let handle = view.handle
+
+    send(.leftMouseDown, x: 506, at: 10.00, to: handle)
+    send(.leftMouseDragged, x: 456, at: 10.01, to: handle)
+    send(.leftMouseDragged, x: 406, at: 10.20, to: handle)
+    view.needsLayout = true
+    view.layoutSubtreeIfNeeded()
+    XCTAssertEqual(sibling.terminal.frame.size, before, "引いている間は兄弟へ配らない")
+    XCTAssertNotEqual(tab.terminal.frame.size, before, "前提: 見せている端末は追従する")
+
+    send(.leftMouseUp, x: 406, at: 10.50, to: handle)
+    while view.isAnimating { view.tick(dt: 1.0 / 120) }
+    XCTAssertEqual(sibling.terminal.frame.size, tab.terminal.frame.size, "確定で兄弟にも配る")
+  }
 }
