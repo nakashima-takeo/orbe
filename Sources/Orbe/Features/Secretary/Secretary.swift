@@ -50,7 +50,7 @@ final class Secretary {
   /// 頼みを受けられない理由。
   enum Refusal: Error, Equatable {
     case claudeMissing
-    /// 本文が空（打った文が空白だけ）。
+    /// 本文が空（打った文が空白・制御文字だけ）。
     case empty
   }
 

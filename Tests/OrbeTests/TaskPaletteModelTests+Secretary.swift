@@ -58,6 +58,19 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.error, .secretaryClaude)
   }
 
+  /// 空の頼み（制御文字だけ）は黙って受けない——赤字を出さず、打った文も残す。
+  func testAnEmptyAskIsSilentAndKeepsTheText() {
+    let palette = threeTodos()
+    _ = recording(palette, .failure(.empty))
+    palette.query = "x"
+
+    palette.askSecretary()
+
+    XCTAssertEqual(palette.query, "x", "打った文は残す")
+    XCTAssertNil(palette.error)
+    XCTAssertNil(palette.notice)
+  }
+
   /// タスクの行の ⌘↵ は直下に頼む欄を開き、↵ でそのタスクを補足ごと頼んで欄を閉じる。
   func testCommandEnterOnATaskRowOpensTheAskAndEnterSendsTheTaskWithTheNote() {
     let palette = threeTodos()
