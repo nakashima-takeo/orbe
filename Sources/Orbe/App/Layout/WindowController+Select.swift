@@ -18,8 +18,8 @@ extension WindowController {
   }
 
   /// アクティブ workspace の選択を描く唯一の入口（アクティブ化・クリック・巡回・閉鎖後・`focus_tab`）。選択を記録し、
-  /// 選んだタブを即時に materialize してから content を照合する（`reconcileContent`。見せるものは照合が選択から導く）。
-  /// 焦点を戻すのはここだけ。未 materialize の隠れタブは後続 tick へ分割して起こす（surface 誕生を 1 turn で N 個
+  /// 選んだタブを即時に materialize してから content を照合し（`reconcileContent`。見せるものは照合が選択から導く）、
+  /// 焦点を選んだものへ戻す。未 materialize の隠れタブは後続 tick へ分割して起こす（surface 誕生を 1 turn で N 個
   /// 積まない）。
   func select(_ selection: Workspace.Selection) {
     guard store.recordSelection(selection) else { return }
