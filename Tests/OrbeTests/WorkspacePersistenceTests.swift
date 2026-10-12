@@ -274,7 +274,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   /// 「ボードを選んでいるか」の型の合わない値は「選んでいない」として読み、workspace は失わない。
   func testMalformedBoardSelectionReadsAsNotSelected() throws {
     let file = """
-      {"version":4,"activeWorkspace":0,"workspaces":[\
+      {"version":\(WorkspacePersistence.version),"activeWorkspace":0,"workspaces":[\
       {"name":"a","rootPath":"/","activeTab":0,"boardSelected":"yes","tabs":[]}]}
       """
     try Data(file.utf8).write(to: workspacesFile())
