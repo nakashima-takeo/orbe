@@ -5,13 +5,13 @@ import Foundation
 struct BoardIntakeStanding: Equatable, Identifiable {
   let intake: Intake
   let running: Bool
-  /// 次に予定で回る時刻。止めていれば nil。
+  /// `now` から見て次に予定で回る時刻。止めていれば nil。
   let next: Date?
 
-  init(_ intake: Intake, runner: IntakeRunner) {
+  init(_ intake: Intake, runner: IntakeRunner, now: Date) {
     self.intake = intake
     running = runner.isRunning(intake.id)
-    next = runner.nextRunAt(intake)
+    next = runner.nextRunAt(intake, now: now)
   }
 
   var id: Int { intake.id }

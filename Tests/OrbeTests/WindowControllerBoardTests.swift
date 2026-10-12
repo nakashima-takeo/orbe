@@ -175,15 +175,15 @@ final class WindowControllerBoardTests: OrbeTestCase {
     pump()
     XCTAssertEqual(intake.place, .request, "ボードを選ぶと欄")
     try pressDown(wc)
-    XCTAssertEqual(intake.selected?.id, 1, "↓ で一覧の先頭")
+    XCTAssertEqual(intake.selectedIntake?.id, 1, "↓ で一覧の先頭")
     try pressDown(wc)
-    XCTAssertEqual(intake.selected?.id, 2)
+    XCTAssertEqual(intake.selectedIntake?.id, 2)
 
     guard case .success = wc.controlCloseTab(tabId: behind.id) else {
       return XCTFail("close_tab は success")
     }
     pump()
-    XCTAssertEqual(intake.selected?.id, 2, "裏のタブが閉じても、焦点は中のままなので選択を保つ")
+    XCTAssertEqual(intake.selectedIntake?.id, 2, "裏のタブが閉じても、焦点は中のままなので選択を保つ")
 
     wc.showWorkspacePalette()
     wc.window.makeFirstResponder(nil)  // パレットの入力欄が焦点を持っていった状態
@@ -191,7 +191,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
     pump()
     XCTAssertEqual(intake.place, .request, "パレットを閉じると欄から")
     try pressDown(wc)
-    XCTAssertEqual(intake.selected?.id, 1, "↓ で一覧の先頭")
+    XCTAssertEqual(intake.selectedIntake?.id, 1, "↓ で一覧の先頭")
 
     wc.switchWorkspace(to: try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "default" }))
     XCTAssertFalse(wc.boardView.focusIsInside, "前提: 他の workspace ではそのタブが焦点")
@@ -199,7 +199,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
     pump()
     XCTAssertEqual(intake.place, .request, "workspace を戻ると欄から")
     try pressDown(wc)
-    XCTAssertEqual(intake.selected?.id, 1, "キーがボードに効く")
+    XCTAssertEqual(intake.selectedIntake?.id, 1, "キーがボードに効く")
   }
 
   /// 依頼の欄で打っている途中にボードを離れて戻ると（パレットを閉じる・端末タブから戻る・workspace を戻る）、焦点は欄へ戻り、

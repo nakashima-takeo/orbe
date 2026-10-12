@@ -65,11 +65,11 @@ final class IntakeRunner {
     scheduler.isRunning(id: Self.key(id))
   }
 
-  /// 次に予定で回る時刻（止めていれば nil）。過ぎていれば今以前の時刻を返す。
-  func nextRunAt(_ intake: Intake) -> Date? {
+  /// `now`（渡さなければ走らせ役の今）から見て次に予定で回る時刻（止めていれば nil）。過ぎていれば `now` 以前の時刻を返す。
+  func nextRunAt(_ intake: Intake, now: Date? = nil) -> Date? {
     guard !intake.paused else { return nil }
     switch intake.definition.when.next(
-      after: intake.anchor, deadline: nil, now: now(), calendar: calendar())
+      after: intake.anchor, deadline: nil, now: now ?? self.now(), calendar: calendar())
     {
     case .run(let date): return date
     case .expire: return nil

@@ -64,9 +64,10 @@ struct BoardIntakePart: View {
         BoardIntakeHeading(model: model)
         BoardIntakeRequestField(model: model, focused: $focused)
       }
-      // 時刻の文言（「今日」・「次 17:00」）を分の境で描き直す。時刻そのものは走らせ役の今から読む。
+      // 時刻の文言（「今日」・「次 17:00」）を分の境で描き直す。今は分の境ごとに走らせ役から 1 回読み、中身の入力として渡す
+      // （入力が変わらなければ SwiftUI は中身を描き直さない）。
       TimelineView(.everyMinute) { _ in
-        BoardIntakeColumns(model: model, focused: $focused)
+        BoardIntakeColumns(model: model, now: model.runner.now(), focused: $focused)
       }
     }
     .onChange(of: model.focusToken, initial: true) {
@@ -102,27 +103,30 @@ struct BoardIntakeHeading: View {
 
 /// 一覧（左 3）と詳細（右 2）。詳細は自動追加を選んでいる間だけ出し、欄を選んでいる間は一覧が幅いっぱいを使う（⌘⇧X で入力の
 /// 行き先を選んでいる間に右の欄を出さないのと同じ）。一覧の器は 0 件でも常に置く焦点の宛先で、一覧のキーはここで受ける。器の
-/// クリック（行・地）は一覧へ。
+/// クリック（行・地）は一覧へ。並び・選んだもの・文は `now` から計算する。
 struct BoardIntakeColumns: View {
   let model: BoardIntakeModel
+  let now: Date
   let focused: FocusState<BoardIntakeModel.Place?>.Binding
   @Environment(\.localization) private var l10n
 
   var body: some View {
-    let text = model.text(l10n)
+    let text = model.text(l10n, now: now)
+    let standings = model.standings(at: now)
     GeometryReader { geometry in
-      let selected = model.selected
+      let selected = model.selected(at: now)
       let listWidth =
         selected == nil
         ? geometry.size.width : (geometry.size.width - Theme.Layout.boardColumnGap) * 3 / 5
       HStack(alignment: .top, spacing: Theme.Layout.boardColumnGap) {
         Group {
-          if model.standings.isEmpty {
+          if standings.isEmpty {
             Text(l10n.string(.boardIntakeEmpty))
               .font(Font.theme.boardValue)
               .foregroundStyle(Color.theme.textMuted)
           } else {
-            BoardIntakeList(model: model, text: text, maxHeight: geometry.size.height)
+            BoardIntakeList(
+              model: model, standings: standings, text: text, maxHeight: geometry.size.height)
           }
         }
         .frame(width: listWidth, alignment: .topLeading)

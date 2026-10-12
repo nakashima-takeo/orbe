@@ -59,7 +59,7 @@ extension BoardIntakeTests {
     let window = mount(model)
     XCTAssertEqual(intake.place, .request, "欄から始まる")
     XCTAssertEqual(intake.list.selectedID, .request)
-    XCTAssertNil(intake.selected, "欄を選んでいる間はどの行も選ばれず、詳細も無い")
+    XCTAssertNil(intake.selectedIntake, "欄を選んでいる間はどの行も選ばれず、詳細も無い")
 
     type("a b", to: window)
     XCTAssertEqual(intake.requestText, "a b", "space は欄の文字になる")
@@ -69,24 +69,24 @@ extension BoardIntakeTests {
 
     down(window)
     XCTAssertEqual(intake.place, .list, "欄の ↓ で一覧へ")
-    XCTAssertEqual(intake.selected?.id, Self.failingBacklog, "一覧の先頭")
+    XCTAssertEqual(intake.selectedIntake?.id, Self.failingBacklog, "一覧の先頭")
     press(Key.tab, "\t", to: window)
     XCTAssertEqual(intake.place, .list, "一覧の ⇥ は何もしない")
     down(window)
-    XCTAssertEqual(intake.selected?.id, Self.slack, "一覧のキーが効く")
+    XCTAssertEqual(intake.selectedIntake?.id, Self.slack, "一覧のキーが効く")
 
     up(window)
     up(window)
     XCTAssertEqual(intake.place, .request, "先頭の行の ↑ で欄へ")
     up(window)
     XCTAssertEqual(intake.place, .list, "欄の ↑ で一覧へ")
-    XCTAssertEqual(intake.selected?.id, Self.pausedGmail, "巡回して一覧の末尾")
+    XCTAssertEqual(intake.selectedIntake?.id, Self.pausedGmail, "巡回して一覧の末尾")
     down(window)
     XCTAssertEqual(intake.place, .request, "末尾の行の ↓ で巡回して欄へ")
 
     press(Key.escape, "\u{1B}", to: window)
     XCTAssertEqual(intake.place, .list, "欄の esc で一覧へ")
-    XCTAssertEqual(intake.selected?.id, Self.failingBacklog, "esc は ↓ と同じく一覧の先頭")
+    XCTAssertEqual(intake.selectedIntake?.id, Self.failingBacklog, "esc は ↓ と同じく一覧の先頭")
     XCTAssertEqual(intake.requestText, "a b", "打った文字は残る")
   }
 
@@ -148,7 +148,7 @@ extension BoardIntakeTests {
 
     click(Point.secondRow, in: window)
     XCTAssertEqual(intake.place, .list)
-    XCTAssertEqual(intake.selected?.id, Self.slack)
+    XCTAssertEqual(intake.selectedIntake?.id, Self.slack)
     press(Key.space, " ", to: window)
     XCTAssertEqual(intake.store.intake(Self.slack)?.paused, true, "行のクリックの直後の space は一覧に効く")
     XCTAssertEqual(intake.requestText, "b")
@@ -162,9 +162,9 @@ extension BoardIntakeTests {
     press(Key.escape, "\u{1B}", to: window)
     click(Point.ground, in: window)
     XCTAssertEqual(intake.place, .list)
-    let before = intake.selected?.id
+    let before = intake.selectedIntake?.id
     down(window)
-    XCTAssertNotEqual(intake.selected?.id, before, "地のクリックの直後の ↓ は一覧に効く")
+    XCTAssertNotEqual(intake.selectedIntake?.id, before, "地のクリックの直後の ↓ は一覧に効く")
   }
 
   /// 欄の枠のどこを押しても欄（入力欄の字の高さの外の余白・❯・「↵ 依頼」も）。
