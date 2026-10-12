@@ -8,7 +8,8 @@ import XCTest
 /// ⇧⇥ は AppKit では backtab の文字で届き、SwiftUI の `.tab` 判定だけでは拾えない形がある——拾えないと
 /// ⇧⇥ が起動先を回したり、焦点が入力欄から外へ逃げて ↑↓ と打鍵が効かなくなる。ベースを選ぶ画面は
 /// 入力欄を一覧と使い回すので、行き先の切り替えを誤ると、絞り込みが一覧の入力を書き換える・戻った後に
-/// キーが効かない・↵ が別の候補に決まる、のどれかになる。
+/// キーが効かない・↵ が別の候補に決まる、のどれかになる。別の画面で押し続けた ↵ のリピートが届くと、人が行を選ぶ前に
+/// 起動する。
 @MainActor
 final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
 
@@ -152,6 +153,40 @@ final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
 
     backspace(to: window)
     XCTAssertNil(model.taskContextID, "空の入力欄の ⌫ で外す")
+  }
+
+  /// 実アプリと同じく、キューから取り出してから配る（確定の入口はキーリピートかを `NSApp.currentEvent` で見る）。
+  private func enter(repeating: Bool = false, to window: NSWindow) {
+    guard
+      let event = NSEvent.keyEvent(
+        with: .keyDown, location: .zero, modifierFlags: [],
+        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+        context: nil, characters: "\r", charactersIgnoringModifiers: "\r",
+        isARepeat: repeating, keyCode: 36)
+    else { return XCTFail("キーイベントを作れない") }
+    NSApp.postEvent(event, atStart: true)
+    guard
+      let dequeued = NSApp.nextEvent(
+        matching: .keyDown, until: Date().addingTimeInterval(1), inMode: .default, dequeue: true)
+    else { return XCTFail("キーイベントがキューから取れない") }
+    NSApp.sendEvent(dequeued)
+    pump(0.15)
+  }
+
+  /// 別の画面で押し始めた ↵ を押し続け、この画面に差し替わった後のリピートだけが入力欄に届いても、人が行を選ぶ前に
+  /// 実行しない。押した瞬間の ↵ は実行する。
+  func testEnterKeyRepeatFromAnotherScreenDoesNotExecute() {
+    let model = DesignSceneFixtures.worktreePalettePullRequestModel()
+    var executed: [WorktreePaletteDestination] = []
+    model.onExecute = { executed.append($0) }
+    let window = mount(model)
+
+    enter(repeating: true, to: window)
+    enter(repeating: true, to: window)
+    XCTAssertEqual(executed, [])
+
+    enter(to: window)
+    XCTAssertEqual(executed.count, 1)
   }
 
   /// 開いている間にタスクや GitHub の値が変わると（PR のブランチ名が届く等）、カードが provider に組み直させる。
