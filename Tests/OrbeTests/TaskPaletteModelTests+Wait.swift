@@ -18,7 +18,7 @@ extension TaskPaletteModelTests {
       setAt: DesignSceneFixtures.taskToday)
   }
 
-  private var conversation: WaitConversation {
+  var conversation: WaitConversation {
     WaitConversation(command: "claude", sessionId: "s-1", workspace: nil)
   }
 
@@ -28,7 +28,7 @@ extension TaskPaletteModelTests {
     )
   }
 
-  private func resolved(conversation: WaitConversation?) -> TaskItem.Wait {
+  func resolved(conversation: WaitConversation?) -> TaskItem.Wait {
     .resolved(
       WaitResolution(
         waiting: TaskItem.Waiting(
