@@ -271,12 +271,28 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
       "拒否した要求は一覧を変えない")
   }
 
-  func testListIsNewestFirstAndDeleteReachesIt() throws {
+  /// 手で並べ替えていた頃の tasks.json（配列の順が作成の順と違う）を読んでも、全件を作成の新しい順で返す。
+  func testListIsNewestFirstWhateverOrderTheSavedFileHolds() throws {
+    let created = Date(timeIntervalSince1970: 1_800_000_000)
+    let saved = [2, 3, 1].map { id in
+      TaskItem(
+        id: id, title: "t\(id)", status: .todo, wait: nil, priority: .medium, due: nil,
+        workspace: nil, description: "", createdAt: created.addingTimeInterval(Double(id)),
+        createdBy: nil)
+    }
+    TaskPersistence.save(TasksFile(version: TaskPersistence.version, nextId: 4, tasks: saved))
+
+    let wc = try launch()
+
+    XCTAssertEqual(try listed(wc).compactMap { $0["taskId"] as? Int }, [3, 2, 1])
+  }
+
+  func testDeleteReachesTheList() throws {
     let wc = try launch()
     let a = try XCTUnwrap(try added(wc, "a")["taskId"] as? Int)
     let b = try XCTUnwrap(try added(wc, "b")["taskId"] as? Int)
 
-    XCTAssertEqual(try listed(wc).compactMap { $0["taskId"] as? Int }, [b, a])
+    XCTAssertEqual(try listed(wc).compactMap { $0["taskId"] as? Int }, [b, a], "前提")
 
     XCTAssertEqual(try success(wc.controlDeleteTask(taskId: a))["ok"] as? Bool, true)
     XCTAssertEqual(try listed(wc).compactMap { $0["taskId"] as? Int }, [b])

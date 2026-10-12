@@ -59,9 +59,10 @@ final class TaskPaletteRowsTests: OrbeTestCase {
   // MARK: - 欄と並び
 
   func testRowsAreGroupedInProgressThenTodoThenDoneHeaderNewestFirstWithinEachSection() {
+    // 保存の順は作成の順と違う（手で並べ替えていた頃の tasks.json）。
     let tasks = [
-      task(1, "a", .todo), task(2, "b", .inProgress), task(3, "c", .done), task(4, "d", .todo),
-      task(5, "e", .inProgress),
+      task(4, "d", .todo), task(1, "a", .todo), task(5, "e", .inProgress), task(3, "c", .done),
+      task(2, "b", .inProgress),
     ]
 
     let rows = TaskPaletteRows.build(input(tasks))
@@ -70,7 +71,8 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     XCTAssertEqual(rows[0], .sectionHeader(.inProgress, count: 2))
     XCTAssertEqual(rows[3], .sectionHeader(.todo, count: 2))
     XCTAssertEqual(rows[6], .doneHeader(count: 1, expanded: false), "完了は最初は畳まれ、見出しだけが出る")
-    XCTAssertEqual(taskIDs(rows), [5, 2, 4, 1], "どの欄でも作成の新しい順（同時刻は ID の大きい方が先）")
+    XCTAssertEqual(
+      taskIDs(rows), [5, 2, 4, 1], "どの欄でも、保存の順に依らず作成の新しい順（同時刻は ID の大きい方が先）")
   }
 
   func testExpandedDoneSectionListsDoneTasksUnderTheHeaderNewestFirst() {
