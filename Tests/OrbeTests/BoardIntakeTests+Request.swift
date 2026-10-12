@@ -57,7 +57,7 @@ extension BoardIntakeTests {
     let intake = model.intake
     let asks = recording(model)
     intake.move(1)
-    XCTAssertEqual(intake.selected?.id, Self.failingBacklog, "前提")
+    XCTAssertEqual(intake.selectedIntake?.id, Self.failingBacklog, "前提")
 
     try intake.runner.delete(Self.failingBacklog)
     intake.askFix()

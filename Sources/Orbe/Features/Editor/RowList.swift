@@ -55,9 +55,12 @@ struct RowListKey: Equatable {
 }
 
 /// 行の列のスクロールの器。持ち主（pane）が持ち続け、載せる SwiftUI が隠れている間も捨てない——出し直すたびに行の
-/// view を作り直さない。読む値（行の版・選択・焦点の要求・絵文字の字体）は `update` で受ける。
+/// view を作り直さない。読む値（行の版・選択・焦点の要求・絵文字の字体）は `update` で受ける。OS のスクロールバーは
+/// 持たず、サイドバーの一覧のつまみ（`RowListScrollbar`）を子として重ねる。
 final class RowList<Source: RowListSource>: NSScrollView {
   let list: RowListView<Source>
+  let scrollbar = RowListScrollbar()
+  private var hoverArea: NSTrackingArea?
   private var rowsVersion: Int?
   /// 最後に写した選択。選択が変わったときだけ、その行を見せる（行の番号がずれただけ・列が出ただけでは送らない）。
   private var selection: Source.Selection?
@@ -71,10 +74,20 @@ final class RowList<Source: RowListSource>: NSScrollView {
     documentView = list
     drawsBackground = false
     borderType = .noBorder
-    hasVerticalScroller = true
+    hasVerticalScroller = false
     hasHorizontalScroller = false
-    autohidesScrollers = true
     automaticallyAdjustsContentInsets = false
+    addSubview(scrollbar)
+    scrollbar.onScroll = { [weak self] position in self?.list.scroll(NSPoint(x: 0, y: position)) }
+    let hoverArea = NSTrackingArea(
+      rect: .zero,
+      options: [
+        .mouseEnteredAndExited, .mouseMoved, .activeInActiveApp, .inVisibleRect,
+        .enabledDuringMouseDrag,
+      ],
+      owner: self)
+    addTrackingArea(hoverArea)
+    self.hoverArea = hoverArea
   }
   required init?(coder: NSCoder) { fatalError("not supported") }
 
@@ -108,6 +121,7 @@ final class RowList<Source: RowListSource>: NSScrollView {
     super.tile()
     list.fitWidth(to: contentSize.width)
     list.layoutRows()
+    scrollbar.reflect(metrics)
     guard contentSize.height > 0, let pending = pendingReveal else { return }
     pendingReveal = nil
     if let row = list.source.row(of: pending) { list.scrollRowToVisible(row) }
@@ -116,12 +130,42 @@ final class RowList<Source: RowListSource>: NSScrollView {
   override func reflectScrolledClipView(_ clipView: NSClipView) {
     super.reflectScrolledClipView(clipView)
     list.layoutRows()
+    scrollbar.reflect(metrics)
+  }
+
+  private var metrics: SidebarScrollbar.Metrics {
+    SidebarScrollbar.Metrics(
+      position: contentView.bounds.minY, total: list.frame.height, visible: contentSize.height)
+  }
+
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    // 隠れる間にポインタが出ても出た通知は来ないので、載せ直すたびに外に居るところから始める。ポインタの真下に
+    // 載ったときは入った通知も来ないので、動いたところで内外を決め直す（→ mouseMoved）。
+    scrollbar.hover(false)
+  }
+
+  override func mouseMoved(with event: NSEvent) {
+    super.mouseMoved(with: event)
+    // 焦点のある列へは外で動いても届くので、位置で内外を決める。
+    scrollbar.hover(bounds.contains(convert(event.locationInWindow, from: nil)))
+  }
+
+  override func mouseEntered(with event: NSEvent) {
+    guard event.trackingArea === hoverArea else { return super.mouseEntered(with: event) }
+    scrollbar.hover(true)
+  }
+
+  override func mouseExited(with event: NSEvent) {
+    guard event.trackingArea === hoverArea else { return super.mouseExited(with: event) }
+    scrollbar.hover(false)
   }
 }
 
 /// 行を並べる列（`RowList` の文書）。行は数万になりうるので、見えている行の数＋1 本の枠だけを持ち、行 r を枠
 /// r mod 本数 に割り当てて使い回す——送って描き直すのは新しく見えた行だけで、行の数が変わっても列の高さを変えるだけ
-/// （行ごとの仕事をしない）。行の高さは 1 つ。
+/// （行ごとの仕事をしない）。行の高さは 1 つ。最後の行の下に行 1 つ分の空きを持つ——末尾まで送っても最後の行が下端に
+/// 付かない（VS Code の一覧と同じ）。空きは文書の内側なので、ホイール・つまみ・End のどれでも届き、押しても行は無い。
 ///
 /// キーは源の操作へ渡す（`RowListKey`）。Home / End・PageUp / PageDown は列が送るだけ。押すと焦点を取り、行の番号を源へ
 /// 渡す。VoiceOver には AX のリスト（行の総数と、見えている行・選択の行）として見せる。
@@ -169,7 +213,7 @@ final class RowListView<Source: RowListSource>: NSView {
   /// 行の数と中身を読み直す。見えている行の枠は捨てずに中身だけを差し替える。
   func reloadRows() {
     rowCount = source.rowCount
-    setFrameSize(NSSize(width: frame.width, height: CGFloat(rowCount) * rowHeight))
+    setFrameSize(NSSize(width: frame.width, height: CGFloat(rowCount + 1) * rowHeight))
     layoutRows()
   }
 

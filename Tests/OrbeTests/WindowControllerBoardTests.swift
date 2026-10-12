@@ -30,7 +30,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
   // MARK: - fixture
 
   /// Home を前面にし、素のシェルのタブを `count` 枚開いてから、ボードのセルをクリックした WindowController。
-  private func homeOnBoard(tabs count: Int) throws -> WindowController {
+  func homeOnBoard(tabs count: Int) throws -> WindowController {
     let wc = WindowController()
     wc.switchWorkspace(to: try XCTUnwrap(wc.store.homeIndex))
     for _ in 0..<count { wc.newTab() }
@@ -51,20 +51,30 @@ final class WindowControllerBoardTests: OrbeTestCase {
 
   /// 窓を画面外に出す。非アクティブなアプリの窓は key にならないが、`NSApp.sendEvent` は ordered-in の窓の first responder
   /// へ届ける。
-  private func show(_ wc: WindowController) {
+  func show(_ wc: WindowController) {
     shown = wc
     NSApplication.shared.setActivationPolicy(.accessory)
     wc.window.makeKeyAndOrderFront(nil)
   }
 
   /// content に載っていて見えているビュー。
-  private func visibleContent(_ wc: WindowController) -> [NSView] {
+  func visibleContent(_ wc: WindowController) -> [NSView] {
     wc.model.content.subviews.filter { !$0.isHidden }
   }
 
-  /// content に載っているビューの中に `view` があるか。
-  private func contentHolds(_ wc: WindowController, _ view: NSView) -> Bool {
-    wc.model.content.subviews.contains { $0 === view }
+  /// 見えているのは `tab` の連の器だけで、その器は `tab` の端末を見せている。
+  func assertShows(
+    _ wc: WindowController, _ tab: TerminalTab, file: StaticString = #filePath, line: UInt = #line
+  ) {
+    XCTAssertEqual(visibleContent(wc), [tab.group.view], file: file, line: line)
+    XCTAssertTrue(tab.group.view.shownTerminal === tab.terminal, file: file, line: line)
+  }
+
+  /// content に載っている器のどれかが `tab` の端末を抱えているか。
+  func contentHolds(_ wc: WindowController, terminalOf tab: TerminalTab) -> Bool {
+    wc.model.content.subviews.contains { view in
+      (view as? GroupFacesView)?.terminals.contains { $0 === tab.terminal } == true
+    }
   }
 
   private static let nextTabKey = NSEvent.key("}", [.command, .shift])
@@ -78,7 +88,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
     XCTAssertNil(wc.statusModel.boardLabel, "Home でない workspace にセルは無い")
     wc.select(.board)
     XCTAssertNotEqual(wc.current.selection, .board, "Home でない workspace はボードを選べない")
-    XCTAssertFalse(contentHolds(wc, wc.boardView), "ボードの面も載らない")
+    XCTAssertFalse(wc.model.content.subviews.contains { $0 === wc.boardView }, "ボードの面も載らない")
 
     let home = try XCTUnwrap(wc.store.homeIndex)
     wc.switchWorkspace(to: home)
@@ -121,7 +131,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
     XCTAssertEqual(wc.current.tabs.count, 2, "⌘W でタブは閉じない")
     XCTAssertEqual(wc.current.selection, .board, "ボードのまま")
     XCTAssertNil(wc.statusModel.editingIndex, "⌘R で隠れたタブの改名は始まらない")
-    XCTAssertTrue(tabs.allSatisfy { $0.faces == FaceLayout.terminalOnly }, "⌘E で面は動かない")
+    XCTAssertTrue(tabs.allSatisfy { $0.group.faces == FaceLayout.terminalOnly }, "⌘E で面は動かない")
     XCTAssertTrue(tabs.allSatisfy { $0.surface.searchBar == nil }, "⌘F で検索は開かない")
   }
 
@@ -133,7 +143,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
     XCTAssertTrue(wc.window.performKeyEquivalent(with: Self.nextTabKey))
 
     XCTAssertEqual(wc.current.selection, .tab(first))
-    XCTAssertEqual(visibleContent(wc), [first.view], "ボードは隠れて先頭のタブが見える")
+    assertShows(wc, first)  // ボードは隠れて先頭のタブが見える
   }
 
   /// 見えているボードでも、焦点が外（ボードの上に開いたパレット）にある間はキーを取らない——⌘⇧] で裏の選択が動かない。
@@ -165,15 +175,15 @@ final class WindowControllerBoardTests: OrbeTestCase {
     pump()
     XCTAssertEqual(intake.place, .request, "ボードを選ぶと欄")
     try pressDown(wc)
-    XCTAssertEqual(intake.selected?.id, 1, "↓ で一覧の先頭")
+    XCTAssertEqual(intake.selectedIntake?.id, 1, "↓ で一覧の先頭")
     try pressDown(wc)
-    XCTAssertEqual(intake.selected?.id, 2)
+    XCTAssertEqual(intake.selectedIntake?.id, 2)
 
     guard case .success = wc.controlCloseTab(tabId: behind.id) else {
       return XCTFail("close_tab は success")
     }
     pump()
-    XCTAssertEqual(intake.selected?.id, 2, "裏のタブが閉じても、焦点は中のままなので選択を保つ")
+    XCTAssertEqual(intake.selectedIntake?.id, 2, "裏のタブが閉じても、焦点は中のままなので選択を保つ")
 
     wc.showWorkspacePalette()
     wc.window.makeFirstResponder(nil)  // パレットの入力欄が焦点を持っていった状態
@@ -181,7 +191,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
     pump()
     XCTAssertEqual(intake.place, .request, "パレットを閉じると欄から")
     try pressDown(wc)
-    XCTAssertEqual(intake.selected?.id, 1, "↓ で一覧の先頭")
+    XCTAssertEqual(intake.selectedIntake?.id, 1, "↓ で一覧の先頭")
 
     wc.switchWorkspace(to: try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "default" }))
     XCTAssertFalse(wc.boardView.focusIsInside, "前提: 他の workspace ではそのタブが焦点")
@@ -189,7 +199,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
     pump()
     XCTAssertEqual(intake.place, .request, "workspace を戻ると欄から")
     try pressDown(wc)
-    XCTAssertEqual(intake.selected?.id, 1, "キーがボードに効く")
+    XCTAssertEqual(intake.selectedIntake?.id, 1, "キーがボードに効く")
   }
 
   /// 依頼の欄で打っている途中にボードを離れて戻ると（パレットを閉じる・端末タブから戻る・workspace を戻る）、焦点は欄へ戻り、
@@ -282,73 +292,11 @@ final class WindowControllerBoardTests: OrbeTestCase {
     pump()
   }
 
-  private func pump() {
+  func pump() {
     let end = Date().addingTimeInterval(0.3)
     while Date() < end {
       RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.005))
     }
-  }
-
-  // MARK: - 閉じる
-
-  /// Home の最後のタブを閉じる（⌘W）とボードが出て、空表示にならず、閉じたタブの画面も残らない。
-  func testClosingTheLastHomeTabShowsTheBoard() throws {
-    let wc = try homeOnBoard(tabs: 1)
-    let tab = wc.current.tabs[0]
-    wc.select(.tab(tab))
-
-    wc.handleWindowCommand(.closeTab)
-    XCTAssertTrue(waitUntil { wc.current.tabs.isEmpty }, "前提: ⌘W でタブが閉じる")
-
-    XCTAssertEqual(wc.current.selection, .board)
-    XCTAssertEqual(visibleContent(wc), [wc.boardView])
-    XCTAssertFalse(wc.model.contentIsEmpty, "空表示にならない")
-    XCTAssertFalse(contentHolds(wc, tab.view), "閉じたタブの画面は残らない")
-  }
-
-  /// ボードを選んでいる間に Home の他のタブが閉じても、ボードは出たままで、閉じたタブの画面は残らない。
-  func testATabClosingBehindTheBoardLeavesNoTrace() throws {
-    let wc = try homeOnBoard(tabs: 2)
-    let closing = wc.current.tabs[1]
-
-    guard case .success = wc.controlCloseTab(tabId: closing.id) else {
-      return XCTFail("close_tab は success")
-    }
-
-    XCTAssertEqual(wc.current.selection, .board)
-    XCTAssertEqual(visibleContent(wc), [wc.boardView])
-    XCTAssertFalse(contentHolds(wc, closing.view), "閉じたタブの画面は残らない")
-  }
-
-  // MARK: - 新しいタブ
-
-  /// ボードから開いた新しいタブは選ばれて見え、隠れたタブの場所でなく Home の root で起きる。
-  func testNewTabFromTheBoardOpensAtHomeRootAndIsShown() throws {
-    let wc = WindowController()
-    let home = try XCTUnwrap(wc.store.homeIndex)
-    wc.switchWorkspace(to: home)
-    _ = wc.openTab(workspaceIndex: home, cwd: "/tmp")
-    wc.statusModel.onSelectBoard()
-
-    wc.newTab()
-
-    let opened = try XCTUnwrap(wc.activeTab, "新しいタブが選ばれる")
-    XCTAssertEqual(opened.cwd, wc.current.rootPath, "Home の root で起きる")
-    XCTAssertEqual(visibleContent(wc), [opened.view])
-  }
-
-  /// 裏で起こすタブ（`select: false` の spawn——秘書・`start_task` と同じ経路）は、ボードを押しのけずに起きる。
-  func testUnselectedSpawnWakesBehindTheBoard() throws {
-    let wc = try homeOnBoard(tabs: 0)
-    let homeId = wc.current.id
-
-    let tabId = try XCTUnwrap(
-      wc.controlSpawn(workspaceId: homeId, cwd: nil, command: nil, selects: false))
-
-    XCTAssertEqual(wc.current.selection, .board, "ボードのまま")
-    XCTAssertEqual(visibleContent(wc), [wc.boardView])
-    let opened = try XCTUnwrap(wc.controlResolveTab(tabId))
-    XCTAssertTrue(waitUntil { opened.surface.surfacePtr != nil }, "そのタブは起きる")
   }
 
   // MARK: - 制御 API
@@ -374,7 +322,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
     }
 
     XCTAssertEqual(wc.current.selection, .tab(target))
-    XCTAssertEqual(visibleContent(wc), [target.view])
+    assertShows(wc, target)
     XCTAssertTrue(wc.window.firstResponder === target.surface)
   }
 

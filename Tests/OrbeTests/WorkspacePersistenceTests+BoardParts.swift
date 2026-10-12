@@ -40,7 +40,7 @@ extension WorkspacePersistenceTests {
     ]
     for item in cases {
       let file = """
-        {"version":4,"activeWorkspace":0,"workspaces":[\
+        {"version":\(WorkspacePersistence.version),"activeWorkspace":0,"workspaces":[\
         {"name":"a","rootPath":"/","activeTab":0,"tabs":[],"boardParts":\(item.raw)}]}
         """
       try Data(file.utf8).write(to: workspacesFile())

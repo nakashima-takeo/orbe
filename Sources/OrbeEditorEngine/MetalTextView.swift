@@ -156,14 +156,12 @@ final class MetalTextView: TextSurfaceInputView {
       ) { [weak self] _ in
         MainActor.assumeIsolated { self?.reduceMotionDidChange() }
       })
-    if let blinking = CaretBlinking.didChangeNotification {
-      let changed: @Sendable (Notification) -> Void = { [weak self] _ in
+    observers.append(
+      NotificationCenter.default.addObserver(
+        forName: CaretBlinking.didChangeNotification, object: nil, queue: .main
+      ) { [weak self] _ in
         MainActor.assumeIsolated { self?.surface?.setCaretBlinks(CaretBlinking.systemPreference) }
-      }
-      observers.append(
-        NotificationCenter.default.addObserver(
-          forName: blinking, object: nil, queue: .main, using: changed))
-    }
+      })
   }
 
   override func viewDidMoveToWindow() {
@@ -278,17 +276,33 @@ final class MetalTextView: TextSurfaceInputView {
         owner: self))
   }
 
+  /// 窓の hit-test がその点で自分（か配下）に解けるか。tracking area は重なった view を考慮しないので、手前に重なる
+  /// view（面の取っ手など）の下では、ポインタの形も俯瞰のホバーも出さない——ポインタは最前面の view が持つ。
+  private func ownsPointer(at windowPoint: NSPoint) -> Bool {
+    window?.contentView?.hitTest(windowPoint)?.isDescendant(of: self) == true
+  }
+
+  /// 最前面のときだけポインタの形と ⌘ の URL の下線を出す。戻り値はポインタを持ったか。
+  @discardableResult
+  private func trackPointer(at windowPoint: NSPoint, flags: NSEvent.ModifierFlags) -> Bool {
+    guard ownsPointer(at: windowPoint) else {
+      surface?.setLinkPointer(nil)
+      return false
+    }
+    pointer.updatePointer(at: windowPoint, flags: flags, in: self)
+    return true
+  }
+
   override func cursorUpdate(with event: NSEvent) {
-    pointer.updatePointer(at: event.locationInWindow, flags: event.modifierFlags, in: self)
+    trackPointer(at: event.locationInWindow, flags: event.modifierFlags)
   }
 
   override func mouseMoved(with event: NSEvent) {
-    pointer.updatePointer(at: event.locationInWindow, flags: event.modifierFlags, in: self)
-    hover(event, inside: true)
+    hover(event, inside: trackPointer(at: event.locationInWindow, flags: event.modifierFlags))
   }
 
   override func mouseEntered(with event: NSEvent) {
-    hover(event, inside: true)
+    hover(event, inside: ownsPointer(at: event.locationInWindow))
   }
 
   override func mouseExited(with event: NSEvent) {
@@ -309,8 +323,7 @@ final class MetalTextView: TextSurfaceInputView {
 
   override func flagsChanged(with event: NSEvent) {
     guard let window else { return super.flagsChanged(with: event) }
-    pointer.updatePointer(
-      at: window.mouseLocationOutsideOfEventStream, flags: event.modifierFlags, in: self)
+    trackPointer(at: window.mouseLocationOutsideOfEventStream, flags: event.modifierFlags)
     super.flagsChanged(with: event)
   }
 

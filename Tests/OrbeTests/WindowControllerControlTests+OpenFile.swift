@@ -25,19 +25,19 @@ extension WindowControllerControlTests {
     let tabs = wc.controlListTabs()
     let second = try XCTUnwrap(tabs[1]["tabId"] as? Int)
     let tab = try XCTUnwrap(wc.controlResolveTab(second))
-    XCTAssertEqual(tab.faces, .terminalOnly)
+    XCTAssertEqual(tab.group.faces, .terminalOnly)
 
     let result = wc.controlOpenFile(tabId: second, path: "note.md")
     guard case .success = result else { return XCTFail("\(result)") }
-    XCTAssertEqual(tab.faces, FaceLayout(editorRatio: 1, focus: .editor), "隠れていれば全面")
-    let opened = MainActor.assumeIsolated { tab.editor.activeDocument?.url }
+    XCTAssertEqual(tab.group.faces, FaceLayout(editorRatio: 1, focus: .editor), "隠れていれば全面")
+    let opened = MainActor.assumeIsolated { tab.group.editor.activeDocument?.url }
     XCTAssertEqual(opened, url.resolvingSymlinksInPath())
     XCTAssertTrue(wc.controlListTabs()[1]["active"] as? Bool == true, "そのタブが選ばれる")
     XCTAssertTrue(wc.window.firstResponder === tab.focusTarget, "テキスト面へフォーカス")
 
-    tab.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
+    tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
     _ = wc.controlOpenFile(tabId: second, path: url.path)
-    XCTAssertEqual(tab.faces, FaceLayout(editorRatio: 0.5, focus: .editor), "分割中は焦点だけ")
+    XCTAssertEqual(tab.group.faces, FaceLayout(editorRatio: 0.5, focus: .editor), "分割中は焦点だけ")
   }
 
   /// 一度も起きていない背景 workspace のタブ（前回開いていた文書を持つ）へ `open_file` すると、materialize の
@@ -53,24 +53,27 @@ extension WindowControllerControlTests {
         WorkspaceState(
           name: "bg", rootPath: dir.path, activeTab: 0,
           tabs: [
-            TabState(
-              cwd: dir.path, agent: nil, explicitTitle: nil,
+            TabState(cwd: dir.path, agent: nil, explicitTitle: nil)
+          ],
+          groups: [
+            GroupState(
+              root: GitWorktreeRoot.root(of: dir.path),
               editor: EditorState(documents: .init(open: [a.path], active: a.path)))
           ]),
       ])
     let tab = wc.workspaces[1].tabs[0]
-    XCTAssertTrue(MainActor.assumeIsolated { tab.editor.documents.isEmpty }, "前提: まだ起きていない")
+    XCTAssertTrue(MainActor.assumeIsolated { tab.group.editor.documents.isEmpty }, "前提: まだ起きていない")
 
     let result = wc.controlOpenFile(tabId: tab.id, path: c.path)
     guard case .success = result else { return XCTFail("\(result)") }
 
     XCTAssertEqual(wc.activeWorkspace, 1, "そのタブの workspace が前面に出る")
     let (documents, active) = MainActor.assumeIsolated {
-      (tab.editor.documents.map(\.url), tab.editor.activeDocument?.url)
+      (tab.group.editor.documents.map(\.url), tab.group.editor.activeDocument?.url)
     }
     XCTAssertEqual(active, c, "要求した文書が焦点のまま（復元が奪わない）")
     XCTAssertEqual(Set(documents), [a, c], "前回開いていた文書も戻る")
-    let shown = MainActor.assumeIsolated { tab.view.editor.document?.url }
+    let shown = MainActor.assumeIsolated { tab.group.view.editor.document?.url }
     XCTAssertEqual(shown, c, "面に載っているのも要求した文書")
   }
 
@@ -98,7 +101,7 @@ extension WindowControllerControlTests {
     } else {
       XCTFail("UTF-8 でないファイルは -32000")
     }
-    XCTAssertEqual(tab.faces, .terminalOnly, "失敗では面は変わらない")
-    XCTAssertNil(MainActor.assumeIsolated { tab.editor.activeDocument })
+    XCTAssertEqual(tab.group.faces, .terminalOnly, "失敗では面は変わらない")
+    XCTAssertNil(MainActor.assumeIsolated { tab.group.editor.activeDocument })
   }
 }

@@ -21,7 +21,7 @@ final class WorkspaceWorktreeBasePersistenceTests: OrbeTestCase {
   /// 項目の無い旧 JSON と、型の合わない値は「前回なし」として読み、workspace は失わない。
   func testMissingOrMalformedValueReadsAsNoPrevious() throws {
     let file = """
-      {"version":4,"activeWorkspace":0,"workspaces":[\
+      {"version":\(WorkspacePersistence.version),"activeWorkspace":0,"workspaces":[\
       {"name":"a","rootPath":"/","activeTab":0,"tabs":[]},\
       {"name":"b","rootPath":"/","activeTab":0,"tabs":[],"lastWorktreeBase":42}]}
       """

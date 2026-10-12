@@ -24,14 +24,14 @@ final class EditorSearchTests: OrbeTestCase {
   }
 
   func host(_ text: String, name: String = "s.txt") throws -> Hosted {
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 700)
     window.appearance = NSAppearance(named: .darkAqua)
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
-    let document = try tab.editor.open(try caseFile(name, text), as: .pinned)
+    let document = try tab.group.editor.open(try caseFile(name, text), as: .pinned)
     pane.layoutSubtreeIfNeeded()
     window.makeFirstResponder(document.surface.responder)
     pumpMain(until: { document.surface.viewport.visibleLines > 0 }, "viewport が出る")
@@ -307,7 +307,7 @@ final class EditorSearchTests: OrbeTestCase {
     catchUp(pane)
     XCTAssertEqual(pane.search.matches.count, 2)
 
-    let other = try hosted.tab.editor.open(try caseFile("t.txt", "one\n"), as: .pinned)
+    let other = try hosted.tab.group.editor.open(try caseFile("t.txt", "one\n"), as: .pinned)
     catchUp(pane)
     XCTAssertTrue(pane.search.document === other)
     XCTAssertEqual(pane.search.matches.count, 1, "新しい文書の一致")
@@ -315,10 +315,10 @@ final class EditorSearchTests: OrbeTestCase {
     pumpMain(until: { seen().last?.1 == 1 }, "件数")
     XCTAssertNotNil(pane.searchBar, "バーは残る")
 
-    hosted.tab.editor.close(other)
+    hosted.tab.group.editor.close(other)
     catchUp(pane)
     XCTAssertEqual(pane.search.matches.count, 2, "戻れば元の文書の一致")
-    hosted.tab.editor.close(hosted.document)
+    hosted.tab.group.editor.close(hosted.document)
     XCTAssertNil(pane.searchBar, "文書が無くなればバーは閉じる")
   }
 }

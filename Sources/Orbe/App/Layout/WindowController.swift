@@ -28,8 +28,8 @@ final class WindowController: NSObject, NSWindowDelegate {
   // chrome 全域のフォント割り当て（絵文字 Noto/Apple・タブタイトルフォント）を届ける観測可能ホルダー。
   // 値は applyActiveWorkspaceConfig が実効設定から同一 tick で更新し、各 NSHostingView root へ注入する。
   let fontResolver = ChromeFontResolver()
-  // エディター面のサイドバーの幅と開閉。アプリ全体で 1 つ（タブ・workspace をまたいで同じ）で、
-  // app-state から起こして各タブの面へ配る。
+  // エディター面のサイドバーの幅と開閉。アプリ全体で 1 つ（連・workspace をまたいで同じ）で、
+  // app-state から起こして各連の面へ配る。
   let editorSidebar = MainActor.assumeIsolated { EditorSidebarState.loaded() }
   // 現在の UI 言語ホルダー。起動時に app-state の preferredLanguage（未設定は OS 追従）で解決し、
   // NSHostingView root（AppShell）へ Environment 注入する。言語変更は初回言語画面と
@@ -80,7 +80,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   // メモリに持ち、タブの同一性の遷移（wire の onIdentityTransition）を積む。復元（restore）より先に
   // 出来ていることが要る——復元タブの起床が opened を書く。
   let sessionLog = AgentSessionLog()
-  // タブのエディターが文書を開くときの面の作り方。打ち切った行の印の文言は、面を作る時点の UI の言語で決まる。
+  // 連のエディターが文書を開くときの面の作り方。打ち切った行の印の文言は、面を作る時点の UI の言語で決まる。
   private(set) lazy var editorSurfaces = EditorSurfaces(
     queriesRoot: BundledResources.root,
     language: { [weak self] in self?.localization.language ?? .systemDefault })
@@ -255,18 +255,6 @@ final class WindowController: NSObject, NSWindowDelegate {
       self.recordSessionEvent(transition, of: tab)
     }
     tab.onWindowCommand = { [weak self] command in self?.handleWindowCommand(command) }
-    tab.onFacesChange = { [weak self, weak tab] in
-      guard let tab else { return }
-      self?.tabFacesDidChange(tab)
-    }
-    tab.view.onProjectionChange = { [weak self] in self?.refreshChrome() }
-    tab.onEditorChange = { [weak self] in
-      self?.refreshChrome()
-      self?.scheduleSave()
-    }
-    tab.view.configure(
-      translucency: chromeTranslucency, localization: localization, fontResolver: fontResolver,
-      sidebar: editorSidebar)
     return tab
   }
 
@@ -310,7 +298,7 @@ final class WindowController: NSObject, NSWindowDelegate {
         selection: chromeSelection(of: current),
         boardLabel: store.hasBoard(current) ? current.name : nil,
         location: activeTab?.location,
-        faceDots: activeTab?.view.projection.dots,
+        faceDots: activeTab?.group.view.projection.dots,
         rollup: AgentRollup.ordered(AgentRollup.grandTotal(of: workspaces))))
     refreshAttentionSnapshot()  // Attention 一覧も同じ coalesce 契機で追従（WindowController+Attention）
     refreshClosedAgentsPalette()  // ⇧⌘T の一覧も同じ契機で追従（WindowController+ClosedAgents）
@@ -320,11 +308,23 @@ final class WindowController: NSObject, NSWindowDelegate {
     secretary.cycle(mayLaunch: false)  // 索引の後に。秘書のタブを探し直し、手が空いていれば 1 件届ける
   }
 
-  /// OSC 7 の cwd 報告を受けた。所属キーが変わって隣接不変条件が破れていればタブを移し（アクティブ
-  /// workspace の順が変わったときだけ打ちかけの改名を畳む）、行の cwd 表示を更新し、永続保存を予約する。
+  /// OSC 7 の cwd 報告を受けた。根が変わっていれば連を付け替え（`moveToGroup`）、隣接不変条件が破れていれば
+  /// タブを移し（アクティブ workspace の順が変わったときだけ打ちかけの改名を畳む）、content を照合し、行の cwd 表示を
+  /// 更新し、永続保存を予約する。
   private func tabDidReportPwd(_ tab: TerminalTab?) {
     guard let tab else { return }
-    if store.regroup(tab) == activeWorkspace {
+    let key = GitWorktreeRoot.root(of: tab.cwd)
+    guard key != tab.groupKey else {
+      refreshChrome()
+      scheduleSave()
+      return
+    }
+    let old = tab.group
+    moveToGroup(tab, key: key)
+    let reordered = store.regroup(tab) == activeWorkspace
+    reconcileContent()
+    if tab.group !== old, tab === activeTab, model.overlay == .none { focusSelection() }
+    if reordered {
       tabsDidReorder()
     } else {
       refreshChrome()

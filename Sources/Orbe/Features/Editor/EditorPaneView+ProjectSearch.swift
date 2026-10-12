@@ -5,7 +5,7 @@ import OrbeEditorCore
 /// （⌘↓ / ⌘↑・⌥⌘C / W / R）・F4 / ⇧F4。
 extension EditorPaneView {
   func wireProjectSearch() {
-    projectSearch.documents = { [weak self] in self?.tab?.editor.documents ?? [] }
+    projectSearch.documents = { [weak self] in self?.group?.editor.documents ?? [] }
     projectSearch.onOpen = { [weak self] id, opening in self?.openProjectMatch(id, opening) }
     projectSearch.onGroundChange = { [weak self] in self?.pushFindGround() }
   }
@@ -68,12 +68,12 @@ extension EditorPaneView {
   /// VS Code と同じ）、横に隠れていれば寄せる。本文へ焦点を移す開き方でなければ焦点に触らない（クリックでは列が押下で
   /// 焦点を取っていて、遅れて走るキーの開きは、その間に人が移した焦点を奪わない）。
   func openProjectMatch(_ id: ProjectSearch.RowID, _ opening: ProjectSearch.Opening) {
-    guard let tab else { return }
+    guard let group else { return }
     let url = URL(fileURLWithPath: projectSearch.root, isDirectory: true)
       .appendingPathComponent(id.path)
     let document: EditorDocument
     do {
-      document = try tab.editor.open(url, as: opening.mode)
+      document = try group.editor.open(url, as: opening.mode)
     } catch {
       NSSound.beep()
       return

@@ -17,7 +17,7 @@ final class SessionStoreMoveTabTests: OrbeTestCase {
   /// 全タブ同 cwd＝1 セグメントなので、連ガードは素通り（0…count のどこへでも動かせる）。
   private func makeStore(tabCount n: Int, active: Int = 0) -> (SessionStore, [TerminalTab]) {
     let ws = Workspace(name: "ws", rootPath: "/tmp")
-    let tabs = (0..<n).map { _ in TerminalTab(cwd: "/tmp") }
+    let tabs = (0..<n).map { _ in TerminalTab.alone(cwd: "/tmp") }
     ws.tabs = tabs
     ws.selection = .tab(ws.tabs[active])
     return (SessionStore(workspaces: [ws], activeWorkspace: 0), tabs)

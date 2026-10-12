@@ -225,7 +225,7 @@ extension WindowControllerTaskStartTests {
     let result = try start(wc, TaskStartRequest(taskId: task.id, branch: "feat/empty")).get()
 
     XCTAssertEqual(wc.activeTab?.id, result["tabId"] as? Int, "選ばれる")
-    XCTAssertFalse(try XCTUnwrap(wc.activeTab).view.isHidden, "見える")
+    XCTAssertFalse(try XCTUnwrap(wc.activeTab).group.view.isHidden, "見える")
   }
 
   // MARK: - ⌘T

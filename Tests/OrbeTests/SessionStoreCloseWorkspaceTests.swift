@@ -60,14 +60,14 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
   /// 空のままアクティブで残る（単一/複数 workspace 問わず）。
   func testRemoveLastTabEmptiesActiveInPlace() {
     let active = ws("active", t3)
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     active.tabs = [tab]
     active.selection = .tab(tab)
     let alpha = ws("Alpha", t1)  // 他 workspace があっても退避しない
     let beta = ws("Beta", t2)
     let store = SessionStore(workspaces: [active, alpha, beta], activeWorkspace: 0)
 
-    guard case .activeWorkspaceChanged = store.removeTab(tab, origin: .gesture) else {
+    guard case .activeTabsChanged = store.removeTab(tab, origin: .gesture) else {
       return XCTFail("アクティブ workspace の 0タブ化はその場で描き直す")
     }
     XCTAssertEqual(store.current.selection, .empty, "ボードを持たない workspace は空表示")
@@ -84,20 +84,20 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
   /// index を据え置く実装も、どちらの脚かで落ちる。
   func testRemovingAnotherTabKeepsTheSelectedTab() {
     let active = ws("active", t3)
-    let first = TerminalTab(cwd: "/a")
-    let viewed = TerminalTab(cwd: "/b")
-    let mid = TerminalTab(cwd: "/c")
-    let last = TerminalTab(cwd: "/d")
+    let first = TerminalTab.alone(cwd: "/a")
+    let viewed = TerminalTab.alone(cwd: "/b")
+    let mid = TerminalTab.alone(cwd: "/c")
+    let last = TerminalTab.alone(cwd: "/d")
     active.tabs = [first, viewed, mid, last]
     active.selection = .tab(active.tabs[1])
     let store = SessionStore(workspaces: [active], activeWorkspace: 0)
 
-    guard case .activeWorkspaceChanged = store.removeTab(last, origin: .process) else {
+    guard case .activeTabsChanged = store.removeTab(last, origin: .process) else {
       return XCTFail("後方のタブを閉じたら描き直す")
     }
     XCTAssertTrue(active.selectedTab === viewed, "後方が消えても見ていたタブが選択されたまま")
 
-    guard case .activeWorkspaceChanged = store.removeTab(first, origin: .process) else {
+    guard case .activeTabsChanged = store.removeTab(first, origin: .process) else {
       return XCTFail("前方のタブを閉じたら描き直す")
     }
     XCTAssertTrue(active.selectedTab === viewed, "前方が消えても見ていたタブが選択されたまま")

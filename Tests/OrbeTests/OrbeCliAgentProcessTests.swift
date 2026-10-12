@@ -157,7 +157,7 @@ final class OrbeCliAgentProcessTests: OrbeTestCase {
     waitForTabText(control, tab: tab, contains: probe, times: 2)
 
     // (d) surface は実サイズで生まれている。端末面のサイズを配るのは window の display サイクルで
-    // 走る器（`TabFacesView`）と `SurfaceScrollView` の `layout()` だけなので、同じ turn で detach
+    // 走る器（`GroupFacesView`）と `SurfaceScrollView` の `layout()` だけなので、同じ turn で detach
     // する起こし方はレイアウトを同期で確定させない限り 0 サイズのまま surface を作ってしまう。
     // 基準は前面に載っている端末面の寸法——背景で起きた面もそれと同じ寸法で生まれていなければならない。
     let surface = try XCTUnwrap(

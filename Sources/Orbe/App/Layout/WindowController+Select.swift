@@ -17,38 +17,19 @@ extension WindowController {
     select(.tab(current.tabs[index]))
   }
 
-  /// アクティブ workspace の選択を描く唯一の入口（アクティブ化・クリック・巡回・閉鎖後・`focus_tab`）。
-  /// 不変条件: model.content はアクティブ workspace の全タブの view（ボードを持てばボードの器も）を保持し、選んでいる
-  /// ものだけ可視・他は isHidden（他 WS のビューは外す。surface は keep-alive）。可視タブは即時 mount し、
-  /// 未 mount の隠れタブは後続 tick へ分割 mount（surface 誕生を 1 turn で N 個積まない）。全タブは
-  /// 最終的に mount され viewDidMoveToWindow で surface が誕生。閉じたタブの view を content から外す唯一の経路でもある。
+  /// アクティブ workspace の選択を描く唯一の入口（アクティブ化・クリック・巡回・閉鎖後・`focus_tab`）。選択を記録し、
+  /// 選んだタブを即時に materialize してから content を照合し（`reconcileContent`。見せるものは照合が選択から導く）、
+  /// 焦点を選んだものへ戻す。未 materialize の隠れタブは後続 tick へ分割して起こす（surface 誕生を 1 turn で N 個
+  /// 積まない）。
   func select(_ selection: Workspace.Selection) {
     guard store.recordSelection(selection) else { return }
     // 選択が動いた＝インライン改名の文脈が崩れる。編集中なら畳む（DragSession と同じ「集合/選択が
     // 変わったら継続は不正」不変条件。blur 自己修復に頼らず SSOT 遷移点で決定的に解除する）。
     if statusModel.editingIndex != nil { endTabRename() }
-    // 空のときだけ 0タブ backstop が地を塗る（タブは surface が、ボードは器が地を塗る＝二重 veil 回避）。
-    model.contentIsEmpty = selection == .empty
     let ws = current
-    let boardView = store.hasBoard(ws) ? boardView : nil
-    // アクティブ WS に属さないビュー（前 WS のタブ・閉じたタブ・ボードを持たない WS でのボード）を外す。
-    // surface は keep-alive で生存。
-    var wanted = Set(ws.tabs.map { ObjectIdentifier($0.view) })
-    if let boardView { wanted.insert(ObjectIdentifier(boardView)) }
-    for sub in model.content.subviews where !wanted.contains(ObjectIdentifier(sub)) {
-      sub.removeFromSuperview()
-    }
-    if let boardView {
-      mountBoard(boardView, visible: selection == .board)
-      projectBoardParts()
-    }
-    // 可視タブを同期 mount（即操作可能に＝この turn の surface 誕生を 1 枚へ上限化）。既 mount の
-    // 隠れタブは isHidden/frame を即時更新（既に surface 在りで安価）。未 mount の隠れタブの
-    // surface 誕生は後続 tick へ分割し、1 turn で N 個まとめて生成して固まるのを防ぐ。
-    let selectedTab = ws.selectedTab
-    for tab in ws.tabs where tab === selectedTab || tab.view.superview === model.content {
-      mountTab(tab, in: ws, visible: tab === selectedTab)
-    }
+    if let tab = ws.selectedTab { store.recordMaterialization(of: tab, in: ws) }
+    reconcileContent()
+    if store.hasBoard(ws) { projectBoardParts() }
     // overlay 表示中は入力を奪わない（フォーカス復帰は dismiss 側が担う）。
     if model.overlay == .none { focusSelection() }
     consumeVisibleTabDone()
@@ -56,45 +37,27 @@ extension WindowController {
     scheduleHiddenMounts(for: ws)
   }
 
-  /// 前面の workspace のボードの部品の並びをボードへ写す唯一の口（ボードを載せる `select` と、部品の操作の後）。
+  /// 前面の workspace のボードの部品の並びをボードへ写す唯一の口（`select` と、部品の操作の後）。
   func projectBoardParts() {
     board.show(store.boardParts(of: current) ?? [])
   }
 
-  private func mountBoard(_ boardView: BoardView, visible: Bool) {
-    boardView.frame = model.content.bounds
-    boardView.isHidden = !visible
-    if boardView.superview !== model.content {
-      boardView.autoresizingMask = [.width, .height]
-      model.content.addSubview(boardView)
-    }
-  }
-
-  /// タブ 1 枚を model.content へ mount（surface 誕生は viewDidMoveToWindow 経由で冪等に 1 度）。
-  /// 隠れタブも実サイズで起こす（pty winsize 正常）。frame/isHidden は既 mount でも毎回更新し、
-  /// addSubview より先に確定させる——窓に付いた瞬間の可視性で面（エクスプローラー）が根のサービスを
-  /// 握るか決まるので、隠れタブを一瞬でも見えている扱いにしない（`materializeOffscreen` と同じ順）。
-  func mountTab(_ tab: TerminalTab, in ws: Workspace, visible: Bool) {
+  /// タブ 1 枚を materialize し（休眠チケットの消費と起動指示の確定）、content を照合する。端末はそこで連の器へ差さり、
+  /// 窓に付いた時点で surface が生まれる（冪等に 1 度）。
+  func mountTab(_ tab: TerminalTab, in ws: Workspace) {
     guard store.recordMaterialization(of: tab, in: ws) else { return }
-    tab.view.frame = model.content.bounds
-    tab.view.isHidden = !visible
-    if tab.view.superview !== model.content {
-      tab.view.autoresizingMask = [.width, .height]
-      tab.view.layoutSubtreeIfNeeded()
-      model.content.addSubview(tab.view)
-    }
+    reconcileContent()
   }
 
-  /// 未 mount の隠れタブを後続 runloop tick で 1 枚ずつ mount（surface 誕生を分割）。
+  /// 未 materialize の隠れタブを後続 runloop tick で 1 枚ずつ起こす（surface 誕生を分割）。
   /// 全タブ最終 mount・resume 起動を保つ。フラッシュ時に対象 WS がまだアクティブか
-  /// 確認し、切替済みなら破棄して孤児 addSubview を防ぐ（次のアクティブ化でまた mount 対象＝冪等）。
+  /// 確認し、切替済みなら破棄する（次のアクティブ化でまた対象＝冪等）。
   private func scheduleHiddenMounts(for ws: Workspace) {
-    guard ws.tabs.contains(where: { $0.view.superview !== model.content }) else { return }
+    guard ws.tabs.contains(where: { !$0.activated }) else { return }
     DispatchQueue.main.async { [weak self, weak ws] in
       guard let self, let ws, self.current === ws else { return }
-      guard let tab = ws.tabs.first(where: { $0.view.superview !== self.model.content })
-      else { return }
-      self.mountTab(tab, in: ws, visible: false)  // 隠れタブ＝不可視（surface 誕生・resume は走る）
+      guard let tab = ws.tabs.first(where: { !$0.activated }) else { return }
+      self.mountTab(tab, in: ws)  // 隠れタブ＝不可視（surface 誕生・resume は走る）
       self.scheduleHiddenMounts(for: ws)
     }
   }

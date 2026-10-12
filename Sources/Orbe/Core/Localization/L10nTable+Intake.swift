@@ -31,7 +31,7 @@ extension L10n {
     ),
     .taskPaletteIntakeErrAccept: ("タスクにできませんでした", "Couldn’t make it a task"),
 
-    // MARK: 自動追加の共有の文（IntakeText・IntakeHand）
+    // MARK: 自動追加の共有の文
     .intakeFetch: ("取得", "Fetch"),
     .intakeJudge: ("判定", "Judge"),
     .intakeNext: ("次 %@", "next %@"),

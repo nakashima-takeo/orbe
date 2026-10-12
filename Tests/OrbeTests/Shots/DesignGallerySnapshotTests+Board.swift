@@ -122,7 +122,7 @@ extension DesignGallerySnapshotTests {
     try write("board_request_claude_missing.png", missing, .ja, size)
 
     let gone = board(nil)
-    try gone.intake.runner.delete(try XCTUnwrap(gone.intake.selected?.id))
+    try gone.intake.runner.delete(try XCTUnwrap(gone.intake.selectedIntake?.id))
     gone.intake.askFix()
     try write("board_request_fix_gone.png", gone, .ja, size)
   }

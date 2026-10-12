@@ -118,11 +118,11 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
 
     down(window)
     down(window)
-    XCTAssertEqual(intake.selected?.id, Self.slack)
+    XCTAssertEqual(intake.selectedIntake?.id, Self.slack)
 
     press(Key.space, " ", to: window)
     XCTAssertEqual(intake.store.intake(Self.slack)?.paused, true)
-    XCTAssertEqual(intake.selected?.id, Self.slack, "末尾へ沈んでも選択は同じ自動追加")
+    XCTAssertEqual(intake.selectedIntake?.id, Self.slack, "末尾へ沈んでも選択は同じ自動追加")
     press(Key.space, " ", to: window)
     XCTAssertEqual(intake.store.intake(Self.slack)?.paused, false)
 
@@ -133,10 +133,10 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
 
     down(window)
     XCTAssertNil(model.refusal, "↓ で消える")
-    XCTAssertEqual(intake.selected?.id, Self.github, "前提")
+    XCTAssertEqual(intake.selectedIntake?.id, Self.github, "前提")
     press(Key.delete, "\u{7F}", .command, to: window)
     XCTAssertNil(intake.store.intake(Self.github))
-    XCTAssertEqual(intake.selected?.id, Self.pausedGmail, "同じ位置の行")
+    XCTAssertEqual(intake.selectedIntake?.id, Self.pausedGmail, "同じ位置の行")
   }
 
   /// space・↵・⌘⌫ は押し続けても 1 回だけ効く。
@@ -176,7 +176,7 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
 
     XCTAssertFalse(intake.store.intakes.contains { intake.runner.isRunning($0.id) }, "どれも走らない")
     XCTAssertEqual(intake.store.intakes, DesignSceneFixtures.boardIntakes(), "どれも変わらない")
-    XCTAssertEqual(intake.selected?.id, Self.failingBacklog, "選択も動かない")
+    XCTAssertEqual(intake.selectedIntake?.id, Self.failingBacklog, "選択も動かない")
   }
 
   // MARK: - 追従
@@ -188,12 +188,12 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
     let window = mount(model)
     down(window)
     down(window)
-    XCTAssertEqual(intake.selected?.id, Self.slack, "前提")
+    XCTAssertEqual(intake.selectedIntake?.id, Self.slack, "前提")
 
     try intake.runner.delete(Self.slack)
     flush(window)
 
-    XCTAssertEqual(intake.selected?.id, Self.github)
+    XCTAssertEqual(intake.selectedIntake?.id, Self.github)
     press(Key.space, " ", to: window)
     XCTAssertEqual(intake.store.intake(Self.github)?.paused, true)
   }

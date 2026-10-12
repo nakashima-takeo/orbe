@@ -9,7 +9,7 @@
 
 **AI コーディングエージェントとの並列開発を支える、macOS ネイティブターミナル**
 
-[![CI](https://github.com/nakashima-takeo/orbe/actions/workflows/ci.yml/badge.svg)](https://github.com/nakashima-takeo/orbe/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/nakashima-takeo/orbe)](https://github.com/nakashima-takeo/orbe/releases/latest) [![macOS 14+](https://img.shields.io/badge/macOS-14.0%2B-000000?logo=apple)](#インストール) [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
+[![CI](https://github.com/nakashima-takeo/orbe/actions/workflows/ci.yml/badge.svg)](https://github.com/nakashima-takeo/orbe/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/nakashima-takeo/orbe)](https://github.com/nakashima-takeo/orbe/releases/latest) [![macOS 15.7+](https://img.shields.io/badge/macOS-15.7%2B-000000?logo=apple)](#インストール) [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
 [インストール](#インストール) · [機能](#機能) · [ショートカット](#キーボードショートカット) · [CLI・MCP](#cli-と-mcp) · [開発ドキュメント](docs/README.md)
 
@@ -33,7 +33,7 @@ Orbe は、作業場所の準備、エージェントの起動、入力待ち・
 
 ## インストール
 
-配布アプリの対象は **macOS 14.0 以降 / Apple Silicon** です。
+配布アプリの対象は **macOS 15.7 以降 / Apple Silicon** です。
 
 1. [最新リリース](https://github.com/nakashima-takeo/orbe/releases/latest)の Assets から `.dmg` をダウンロードします。
 2. DMG を開き、`Orbe.app` を「アプリケーション」へドラッグします。

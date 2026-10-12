@@ -27,7 +27,7 @@ struct WorkspaceCreateOverlay: View {
 
 /// 作成フォームのカード本体。ヘッダ（◐＋「新規ワークスペース」＋「esc 戻る」ピル）／ソース切替タブ（既存フォルダ /
 /// git clone）／本文（ソース別）／フッター（案内＋「キャンセル」「作成して開く」）。外郭は `GlassPanel(.panel)`。
-/// folder のキーはパス欄／名前欄の `TextField` に集約し、↑↓（補完移動）・⇥（補完確定 or 名前欄へ）・esc・↵ を捌く。
+/// folder のキーはパス欄／名前欄の `TextField` に集約し、↑↓（補完移動）・⇥（補完確定 or 次の欄へ）・⇧⇥・esc・↵ を捌く。
 /// clone 本文とソースタブ・clone 案内は `WorkspaceCreateCard+Clone.swift`（`WorkspaceCreateCloneForm`）に置く。
 struct WorkspaceCreateCard: View {
   @Bindable var model: WorkspaceCreateModel
@@ -35,6 +35,7 @@ struct WorkspaceCreateCard: View {
   @Environment(\.localization) var l10n
   private enum Field { case path, name }
   @FocusState private var focus: Field?
+  @State private var placement = FocusPlacement<Field>(order: [.path, .name])
 
   /// 補完ドロップダウンの高さ上限（px・見本 maxHeight 186。超過は内部スクロール）。
   private let suggestionCap: CGFloat = 186
@@ -56,7 +57,25 @@ struct WorkspaceCreateCard: View {
     // 未準備／クリックが focus をさらった状態で、同期代入だと focus が乗らない。次 tick で確実に当てる。
     .onChange(of: model.focusToken, initial: true) {
       guard model.source == .folder else { return }
-      DispatchQueue.main.async { focus = .path }
+      DispatchQueue.main.async { place(.path) }
+    }
+    .onChange(of: focus) { placement.focusDidChange(to: focus, caretAtEnd: caretAtEnd) }
+  }
+
+  private func place(_ field: Field) {
+    placement.place(field, focus: $focus, caretAtEnd: caretAtEnd)
+  }
+
+  private func cycleFocus(forward: Bool) -> KeyPress.Result {
+    placement.cycle(forward: forward, focus: $focus, caretAtEnd: caretAtEnd)
+    return .handled
+  }
+
+  /// パスは続きを打つ値なのでキャレットを末尾に、名前は打ち直すことが多い値なので宣言しない（全選択で入る）。
+  private func caretAtEnd(_ field: Field) -> String? {
+    switch field {
+    case .path: model.path
+    case .name: nil
     }
   }
 
@@ -122,14 +141,14 @@ struct WorkspaceCreateCard: View {
   }
 
   private var pathField: some View {
-    TextField("", text: pathBinding)
+    TextField("", text: pathBinding, selection: $placement[selection: .path])
       .textFieldStyle(.plain)
       .font(Font.theme.code)
       .foregroundStyle(Color.theme.textPrimary)
       .tint(Color.theme.accentPrimary)
       .focused($focus, equals: .path)
       .modifier(FieldChrome(focused: focus == .path))
-      // ↑↓＝補完ハイライト移動、⌘↑↓＝先頭/末尾候補へジャンプ、⇥＝候補ありなら確定・無ければ名前欄へ、
+      // ↑↓＝補完ハイライト移動、⌘↑↓＝先頭/末尾候補へジャンプ、⇥＝候補ありなら確定・無ければ次の欄へ、⇧⇥＝前の欄へ、
       // esc＝候補ありなら閉じる・無ければ戻る、↵＝候補ありなら確定・無ければ作成。
       // 矢印は単一の catch-all に集約し ⌘ 有無で分岐する（bare ハンドラが ⌘↑ を食う不確実性を構造で排除）。
       .onKeyPress { press in
@@ -154,9 +173,9 @@ struct WorkspaceCreateCard: View {
       }
       .onKeyPress(.tab) {
         if model.acceptSuggestion() { return .handled }
-        focus = .name
-        return .handled
+        return cycleFocus(forward: true)
       }
+      .onKeyPress(.backtab) { cycleFocus(forward: false) }
       .onKeyPress(.escape) {
         if model.dismissSuggestions() { return .handled }  // 候補ありなら閉じるだけ
         dismissIfIdle()  // 候補なしなら前の画面へ
@@ -273,6 +292,8 @@ struct WorkspaceCreateCard: View {
       .tint(Color.theme.accentPrimary)
       .focused($focus, equals: .name)
       .modifier(FieldChrome(focused: focus == .name))
+      .onKeyPress(.tab) { cycleFocus(forward: true) }
+      .onKeyPress(.backtab) { cycleFocus(forward: false) }
       .onKeyPress(.escape) {
         dismissIfIdle()
         return .handled
@@ -332,34 +353,6 @@ struct WorkspaceCreateCard: View {
         .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.textMuted)
     }
-  }
-}
-
-/// 入力欄のラベル（見本: 11px muted ラベル・letterSpacing 0.08em ≒ tracking 1）。folder/clone で共用。
-func workspaceFieldLabel(_ text: String) -> some View {
-  Text(text)
-    .font(Font.theme.chrome)
-    .tracking(Theme.Typography.trackingLabel)
-    .foregroundStyle(Color.theme.textMuted)
-}
-
-/// 入力欄の共通装飾（inputWash 地・角丸・focus で accent 半透明枠／非 focus で border トークン枠）。
-/// α が外観で切れない `.opacity()` は focus 枠のみ（accent は動的色で uniform に効く）。地・枠色は
-/// `DesignSystem` トークンへ写像し、生 hex を直書きしない。folder/clone の入力欄で共用。
-struct FieldChrome: ViewModifier {
-  let focused: Bool
-
-  func body(content: Content) -> some View {
-    content
-      .padding(.horizontal, Theme.Space.beat)
-      .padding(.vertical, 11)  // 見本の入力欄高（padding 11px・off-grid の指定値）
-      .background(RoundedRectangle(cornerRadius: Theme.Radius.md).fill(Color.theme.inputWash))
-      .overlay(
-        RoundedRectangle(cornerRadius: Theme.Radius.md)
-          .strokeBorder(
-            focused ? Color.theme.accentPrimary.opacity(0.5) : Color.theme.inputBorder,
-            lineWidth: Theme.Stroke.hairline)
-      )
   }
 }
 

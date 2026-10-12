@@ -10,14 +10,14 @@ final class SessionStoreTabEnumerationTests: OrbeTestCase {
   /// 落とすと `restore_sessions` と ⇧⌘T が生きているセッションを二重に戻す。
   func testPresentSessionIdsSpanLiveAndDormantTabsOfEveryWorkspace() {
     let live = Workspace(name: "live", rootPath: "/tmp")
-    let liveTab = TerminalTab(cwd: "/tmp")
+    let liveTab = TerminalTab.alone(cwd: "/tmp")
     liveTab.applyReport(AgentHookReport(agent: "claude", state: "idle", sessionId: "l-1"))
-    let unnamed = TerminalTab(cwd: "/tmp")
+    let unnamed = TerminalTab.alone(cwd: "/tmp")
     unnamed.applyReport(AgentHookReport(agent: "claude", state: "idle"))
-    live.tabs = [liveTab, unnamed, TerminalTab(cwd: "/tmp")]
+    live.tabs = [liveTab, unnamed, TerminalTab.alone(cwd: "/tmp")]
     let dormant = Workspace(name: "dormant", rootPath: "/tmp")
     dormant.tabs = [
-      TerminalTab(
+      TerminalTab.alone(
         restoring: TabState(
           cwd: "/tmp", agent: AgentSession(command: "codex", sessionId: "d-1"), explicitTitle: nil),
         resumeSpawn: { _, _, _ in nil })

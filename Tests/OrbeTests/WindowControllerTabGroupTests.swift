@@ -21,7 +21,7 @@ final class WindowControllerTabGroupTests: OrbeTestCase {
       AppStateFile(cachedShellPath: "/usr/bin:/bin", preferredLanguage: "ja"))
   }
 
-  private func restore(_ cwds: [String], activeTab: Int = 0) throws -> WindowController {
+  func restore(_ cwds: [String], activeTab: Int = 0) throws -> WindowController {
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [

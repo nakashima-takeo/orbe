@@ -38,7 +38,7 @@ final class WorkspaceOverridePersistenceTests: OrbeTestCase {
   /// workspaces.json に 1 workspace ＋ 生の settingsOverride を書く（異常キー混在の fixture 用）。
   private func writeOverrideJSON(_ override: String) throws {
     let file = """
-      {"version":4,"activeWorkspace":0,"workspaces":[\
+      {"version":\(WorkspacePersistence.version),"activeWorkspace":0,"workspaces":[\
       {"name":"a","rootPath":"/","activeTab":0,"tabs":[{"cwd":"/"}],\
       "settingsOverride":\(override)}]}
       """

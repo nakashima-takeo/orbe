@@ -5,6 +5,7 @@ import SwiftUI
 /// 中でスクロールする。
 struct BoardIntakeList: View {
   @Bindable var model: BoardIntakeModel
+  let standings: [BoardIntakeStanding]
   let text: IntakeText
   let maxHeight: CGFloat
 
@@ -12,7 +13,7 @@ struct BoardIntakeList: View {
     ScrollViewReader { proxy in
       ScrollView {
         VStack(spacing: 0) {
-          ForEach(model.standings) { standing in
+          ForEach(standings) { standing in
             BoardIntakeRow(
               standing: standing, text: text,
               selected: model.list.selectedID == .intake(standing.id)
