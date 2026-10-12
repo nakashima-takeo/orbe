@@ -72,7 +72,8 @@ final class OrbeReportWireTests: OrbeTestCase {
   }
 
   /// 子が走っている間に背景で 1 接続を受け、1 行を読む。`reply` なら応答の 1 行を返す。どちらでも、本物の
-  /// Orbe と同じく接続は自分からは畳まず、相手が閉じるまで保つ。`finish()` は子の終了後に呼ぶ——`connect` は子の終了より前に起きるので、
+  /// Orbe と同じく接続は自分からは畳まず、相手が閉じるまで保つ。
+  /// `finish()` は子の終了後に呼ぶ——`connect` は子の終了より前に起きるので、
   /// その時点で接続が backlog に無ければ、接続しない経路だったと言い切れる。
   private final class OneShotServer {
     private let lock = NSLock()
