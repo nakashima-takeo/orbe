@@ -2,7 +2,7 @@
 
 Orbe は、作業場所の準備・エージェントの起動・状態確認をまとめて扱う macOS ネイティブターミナル。この文書は構成・現状仕様・開発手順への入口。インストールと基本操作は[リポジトリの README](../README.md)を参照する。
 
-**技術スタック**: Swift 6 ツールチェーン（言語モード 5）/ macOS 14+ / SwiftPM（Xcode プロジェクトなし）/ AppKit + SwiftUI / ターミナルエンジンは [libghostty](spec/terminal/libghostty.md)（固定コミット・静的リンク・Metal 描画）。SwiftPM の依存とターゲットは [Package.swift](../Package.swift)、CI の lint・format・build・test は [ci.yml](../.github/workflows/ci.yml)を参照する。
+**技術スタック**: Swift 6 ツールチェーン（言語モード 5）/ macOS 15.7+ / SwiftPM（Xcode プロジェクトなし）/ AppKit + SwiftUI / ターミナルエンジンは [libghostty](spec/terminal/libghostty.md)（固定コミット・静的リンク・Metal 描画）。SwiftPM の依存とターゲットは [Package.swift](../Package.swift)、CI の lint・format・build・test は [ci.yml](../.github/workflows/ci.yml)を参照する。
 
 ## 地図
 
