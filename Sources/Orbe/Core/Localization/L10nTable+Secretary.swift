@@ -8,6 +8,7 @@ extension L10n {
       "タスク %1$@「%2$@」に取り掛かってください。詳細は Orbe の MCP（list_tasks）で読む。",
       "Work on task %1$@ “%2$@”. Read its details with Orbe’s MCP (list_tasks)."
     ),
+    .secretaryRequestInput: ("依頼: %@", "Request: %@"),
     .secretaryAutomationFixInput: (
       "タスクの自動追加 %1$@「%2$@」を直す。", "Fix task auto-add %1$@ “%2$@”."
     ),

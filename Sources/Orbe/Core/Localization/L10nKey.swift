@@ -402,6 +402,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationErrRunning
   // MARK: - 秘書・作業を始める（L10nTable+Secretary）
   case taskStartHomeTask
+  case secretaryRequestInput
   case secretaryAutomationFixInput
   case taskPaletteDestination
   case taskPaletteDestinationTask

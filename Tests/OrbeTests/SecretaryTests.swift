@@ -62,7 +62,7 @@ final class SecretaryTests: OrbeTestCase {
     XCTAssertTrue(
       command.contains("--append-system-prompt") && command.contains("add_task")
         && !command.contains("set_intake"), "タスクを足す役目を添える: \(command)")
-    XCTAssertTrue(command.hasSuffix(" -- '見積もりを山田さんに送る'"), "頼みは最初の入力: \(command)")
+    XCTAssertTrue(command.hasSuffix(" -- '依頼: 見積もりを山田さんに送る'"), "頼みは最初の入力: \(command)")
 
     try wc.secretary.ask(.text("二件目"), from: .palette)
     XCTAssertEqual(try homeTabs(wc).count, 2, "頼みのたびに別の claude")
@@ -86,7 +86,7 @@ final class SecretaryTests: OrbeTestCase {
     XCTAssertTrue(
       command.contains("set_intake") && !command.contains("add_task"),
       "自動追加の定義を書く役目を添える: \(command)")
-    XCTAssertTrue(command.hasSuffix(" -- 'DM を候補に'"), "欄の文は最初の入力: \(command)")
+    XCTAssertTrue(command.hasSuffix(" -- '依頼: DM を候補に'"), "欄の文は最初の入力: \(command)")
   }
 
   // MARK: - 受けない

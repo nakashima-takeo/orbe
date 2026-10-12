@@ -45,14 +45,16 @@ final class Secretary {
   }
 
   func ask(_ ask: SecretaryAsk, from origin: SecretaryOrigin) throws(Refusal) {
-    guard let body = SecretaryText.body(ask, l10n: localization) else { throw .empty }
+    guard let input = SecretaryText.firstInput(ask, from: origin, l10n: localization) else {
+      throw .empty
+    }
     guard let host, let claude = host.secretaryClaude else { throw .claudeMissing }
     let command = AgentCatalog.startCommand(
       claude,
       arguments: [
         "--append-system-prompt", SecretaryText.instructions(for: origin, localization.language),
       ],
-      firstInput: body)
+      firstInput: input)
     guard host.secretaryOpen(command: command, shows: origin.shows) else { throw .unavailable }
   }
 }

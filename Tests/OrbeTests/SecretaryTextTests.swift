@@ -10,17 +10,19 @@ final class SecretaryTextTests: OrbeTestCase {
 
   func testTypedTextIsPassedAsTypedWithoutItsSurroundingBlanks() {
     XCTAssertEqual(
-      SecretaryText.body(.text("  見積もりを\n山田さんに送る\n"), l10n: ja), "見積もりを\n山田さんに送る")
-    XCTAssertNil(SecretaryText.body(.text(" \n\u{0}\t "), l10n: ja), "空白と制御文字だけは頼めない")
+      SecretaryText.firstInput(.text("  見積もりを\n山田さんに送る\n"), from: .palette, l10n: ja),
+      "依頼: 見積もりを\n山田さんに送る")
+    XCTAssertNil(
+      SecretaryText.firstInput(.text(" \n\u{0}\t "), from: .palette, l10n: ja), "空白と制御文字だけは頼めない")
   }
 
   func testAFixNamesTheTaskAutoAdd() {
     let automation = DesignSceneFixtures.boardAutomations()[2]
     XCTAssertEqual(
-      SecretaryText.body(.automationFix(automation), l10n: ja),
-      "タスクの自動追加 \(automation.id)「\(automation.definition.name)」を直す。")
+      SecretaryText.firstInput(.automationFix(automation), from: .board, l10n: ja),
+      "依頼: タスクの自動追加 \(automation.id)「\(automation.definition.name)」を直す。")
     XCTAssertEqual(
-      SecretaryText.body(.automationFix(automation), l10n: en),
-      "Fix task auto-add \(automation.id) “\(automation.definition.name)”.")
+      SecretaryText.firstInput(.automationFix(automation), from: .board, l10n: en),
+      "Request: Fix task auto-add \(automation.id) “\(automation.definition.name)”.")
   }
 }
