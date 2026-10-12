@@ -346,10 +346,10 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteHeadingTask
   case taskPaletteScopeWasAll
   case taskPaletteActionRefine
-  // MARK: - タスク画面の受信タブ
+  // MARK: - タスク画面の提案タブ
   case taskPaletteTabAutomation
   case taskPaletteAutomationPlaceholder
-  case taskPaletteAutomationAskSecretary
+  case taskPaletteAutomationAskBoard
   case taskPaletteAutomationNoProposals
   case taskPaletteAutomationLastFailed
   case taskPaletteAutomationContents

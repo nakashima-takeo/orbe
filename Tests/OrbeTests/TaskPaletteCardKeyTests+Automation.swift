@@ -3,13 +3,18 @@ import XCTest
 
 @testable import Orbe
 
-/// 受信タブのキー（入力欄の提案の一覧、カードの器の棚と中身）。
+/// 提案タブのキー（入力欄の提案の一覧、カードの器の棚と中身）。
 ///
 /// 壊れると何が起きるか: 絞り込みに「x」を打つと提案が消える。入力を消そうと押した ⌘⌫（そのリピート）が提案を捨てる。
-/// リンクを開くつもりの ⌘↵ が提案をタスクにする。← で文字の間を動けない、または棚へ入れない。中身の space が入力欄に
+/// リンクを開くつもりの ⌘O が提案をタスクにする。⌘↵ でタスクになっても agent を開く画面が出ない、押し続けるとタスクが
+/// いくつもできる。← で文字の間を動けない、または棚へ入れない。中身の space が入力欄に
 /// 空白を打つ。⇧⇥ で棚から焦点が逃げる。中身の ↵ が今すぐ実行にならず提案をタスクにする、⌘⌫ が受信でなく提案を捨てる。
 /// 提案の一覧の esc で画面が閉じない。
 extension TaskPaletteCardKeyTests {
+  private enum AutomationKey {
+    static let o: UInt16 = 31
+  }
+
   private func automationModel() -> TaskPaletteModel {
     let model = TaskPaletteSamples.model(
       [TaskPaletteSamples.task(1, "a")],
@@ -51,30 +56,49 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.automation.store.proposals.map(\.state), [.open, .open, .open])
   }
 
-  /// ⌘↵ は選んでいる提案のリンクをブラウザで開くだけで、タスクにはしない。
-  func testAutomationCommandEnterOpensTheLinkWithoutMakingATask() {
+  /// ⌘O は選んでいる提案のリンクをブラウザで開くだけで、タスクにはしない。
+  func testAutomationCommandOOpensTheLinkWithoutMakingATask() {
     let model = automationModel()
     var opened: [String] = []
     model.onOpenURL = { opened.append($0.absoluteString) }
     let window = mount(model)
 
-    press(Key.enter, "\r", .command, to: window)
+    press(AutomationKey.o, "o", .command, to: window)
 
     XCTAssertEqual(opened, ["https://example.slack.com/archives/D01-1"])
     XCTAssertEqual(model.store.tasks.count, 1, "タスクにしない")
     XCTAssertEqual(model.automation.store.proposals[0].state, .open)
   }
 
-  /// 押した瞬間だけ効くキーは、押し続けても 1 回だけ効く（提案の ⌘↵、中身の space・↵）。
+  /// ⌘↵ は選んでいる提案を ↵ と同じくタスクにし、そのタスクの agent を開く口へ渡す。押し続けても 1 回だけ。
+  func testAutomationCommandEnterMakesATaskAndOpensItOnceEvenWhenHeldDown() throws {
+    let model = automationModel()
+    var opened: [Int] = []
+    model.onOpenWorktreePalette = { opened.append($0) }
+    let window = mount(model)
+
+    press(Key.enter, "\r", .command, to: window)
+    press(Key.enter, "\r", .command, repeating: true, to: window)
+    press(Key.enter, "\r", .command, repeating: true, to: window)
+
+    let task = try XCTUnwrap(model.store.tasks.first { $0.title == "見積もりを山田さんに送る" })
+    XCTAssertEqual(model.store.tasks.count, 2, "タスクは 1 つだけ")
+    XCTAssertEqual(task.workspace, TaskPaletteSamples.home, "↵ と同じく Home に付く")
+    XCTAssertEqual(model.automation.store.proposals[0].state, .accepted(taskId: task.id))
+    XCTAssertEqual(model.automation.store.proposals[1].state, .open, "リピートで次の提案をさばかない")
+    XCTAssertEqual(opened, [task.id])
+  }
+
+  /// 押した瞬間だけ効くキーは、押し続けても 1 回だけ効く（提案の ⌘O、中身の space・↵）。
   func testAutomationKeysHeldDownActOnce() {
     let model = automationModel()
     var opened: [String] = []
     model.onOpenURL = { opened.append($0.absoluteString) }
     let window = mount(model)
 
-    press(Key.enter, "\r", .command, to: window)
-    press(Key.enter, "\r", .command, repeating: true, to: window)
-    press(Key.enter, "\r", .command, repeating: true, to: window)
+    press(AutomationKey.o, "o", .command, to: window)
+    press(AutomationKey.o, "o", .command, repeating: true, to: window)
+    press(AutomationKey.o, "o", .command, repeating: true, to: window)
     XCTAssertEqual(opened.count, 1, "ブラウザを 1 つだけ開く")
 
     arrow(Key.left, to: window)

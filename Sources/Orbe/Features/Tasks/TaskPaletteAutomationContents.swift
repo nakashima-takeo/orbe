@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// 自動追加の中身（真ん中と右をまたぐ 1 枚）。名前と状態、取得（やり方といつ）・処理・前回の回・重なり、定義を書き換える口が
-/// 秘書であること、操作（`AutomationHand`）。値は走らせ役とストアから毎回読むので、裏の回が確定すると
+/// ボードであること、操作（`AutomationHand`）。値は走らせ役とストアから毎回読むので、裏の回が確定すると
 /// そのまま映る。
 struct TaskPaletteAutomationContents: View {
   @Bindable var model: TaskPaletteAutomationModel
