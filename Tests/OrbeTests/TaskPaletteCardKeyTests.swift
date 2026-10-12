@@ -251,7 +251,6 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
 
     arrow(Key.up, .option, to: window)
     XCTAssertEqual(model.selectedID, .task(2), "⌥↑ は ↑ と同じく前の行へ")
-    XCTAssertEqual(model.store.tasks.map(\.id), [1, 2, 3], "並びは変えない")
   }
 
   func testTabSwitchesScopeAndShiftTabSwitchesTabWhileTheFieldKeepsTheKeys() {

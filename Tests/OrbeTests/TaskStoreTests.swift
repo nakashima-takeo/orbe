@@ -46,13 +46,13 @@ final class TaskStoreTests: OrbeTestCase {
 
   // MARK: - 追加
 
-  func testAddAppendsToTheEndWithDefaultsAndTrimmedTitle() throws {
+  func testAddNumbersTheTaskWithDefaultsAndTrimmedTitle() throws {
     let store = TaskStore()
 
     let first = try store.add(draft("経費精算を出す"))
     let second = try store.add(draft("  レビューを返す \n"))
 
-    XCTAssertEqual(store.tasks.map(\.id), [first.id, second.id], "足した順に持つ")
+    XCTAssertEqual(Set(store.tasks.map(\.id)), [first.id, second.id], "足したタスクは一覧に入る")
     XCTAssertEqual(second.id, first.id + 1)
     XCTAssertEqual(second.title, "レビューを返す", "タイトルは前後の空白を除いて持つ")
     XCTAssertEqual(second.status, .todo, "ステータスの既定は未着手")

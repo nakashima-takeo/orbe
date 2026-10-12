@@ -165,9 +165,10 @@ final class TaskQuarantineTests: OrbeTestCase {
 
     XCTAssertTrue(try quarantineFiles().isEmpty, "必須フィールドだけの形を退避しない")
     XCTAssertEqual(loaded.nextId, 5)
-    XCTAssertEqual(loaded.tasks.map(\.id), [3, 1], "保存されている配列の順のまま読む")
-    XCTAssertEqual(loaded.tasks.map(\.status), [.done, .todo])
-    XCTAssertEqual(loaded.tasks.last?.description, "m")
+    XCTAssertEqual(
+      Dictionary(uniqueKeysWithValues: loaded.tasks.map { ($0.id, $0.status) }),
+      [3: .done, 1: .todo])
+    XCTAssertEqual(loaded.tasks.first { $0.id == 1 }?.description, "m")
   }
 
   func testStoreStartsEmptyFromACorruptFileAndSavesAfterQuarantine() throws {

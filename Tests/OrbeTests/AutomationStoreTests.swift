@@ -224,7 +224,7 @@ final class AutomationStoreTests: OrbeTestCase {
 
   // MARK: - 提案をさばく
 
-  func testAcceptAppendsATodoTaskOnTheGivenWorkspaceAndMarksTheProposal() throws {
+  func testAcceptAddsATodoTaskOnTheGivenWorkspaceAndMarksTheProposal() throws {
     let store = try store()
     let tasks = TaskStore(file: nil)
     let a = Self.item("a", body: "レビューをお願いします")
@@ -235,7 +235,7 @@ final class AutomationStoreTests: OrbeTestCase {
     let home = UUID()
     let task = try store.accept(store.proposals[0].id, into: tasks, workspace: home)
 
-    XCTAssertEqual(tasks.tasks.last, task)
+    XCTAssertEqual(tasks.tasks, [task])
     XCTAssertEqual(task.title, "レビューする")
     XCTAssertEqual(task.status, .todo)
     XCTAssertEqual(task.due?.text, "2026-10-12")
