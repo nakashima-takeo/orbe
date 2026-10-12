@@ -87,7 +87,7 @@ extension ControlWireTests {
       ("move_task", ["taskId": 7, "beforeTaskId": 8]),
       ("delete_task", ["taskId": 7]),
       ("start_task", ["taskId": 7, "branch": "feat/x", "prompt": "直して"]),
-    ] + intakeRequests + boardRequests
+    ] + automationRequests + boardRequests
   }
 
   /// `validRequests` を method 引きにしたもの。

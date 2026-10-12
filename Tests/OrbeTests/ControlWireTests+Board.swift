@@ -31,9 +31,9 @@ extension ControlWireTests {
         as? String, "intake", "結果の並びは parts で包む")
     XCTAssertEqual(fake.boardLists, [3])
     XCTAssertEqual(fake.addedBoardParts.map(\.workspaceId), [4])
-    XCTAssertEqual(fake.addedBoardParts.map(\.part), [.intake])
+    XCTAssertEqual(fake.addedBoardParts.map(\.part), [.automation])
     XCTAssertEqual(fake.removedBoardParts.map(\.workspaceId), [5])
-    XCTAssertEqual(fake.removedBoardParts.map(\.part), [.intake])
+    XCTAssertEqual(fake.removedBoardParts.map(\.part), [.automation])
   }
 
   func testBoardVerbsCheckTheirParams() {

@@ -29,7 +29,7 @@ enum TaskPaletteSamples {
   static func model(
     _ tasks: [TaskItem], githubItems: GitHubItemCache = GitHubItemCache(fetch: { _, _ in }),
     openLists: GitHubOpenLists? = nil, agents: WorktreeAgentActivity = WorktreeAgentActivity(),
-    sessionTabs: AgentSessionTabs = AgentSessionTabs(), intakes: IntakeRunner? = nil
+    sessionTabs: AgentSessionTabs = AgentSessionTabs(), automations: AutomationRunner? = nil
   ) -> TaskPaletteModel {
     let file = TasksFile(
       version: TaskPersistence.version, nextId: (tasks.map(\.id).max() ?? 0) + 1, tasks: tasks)
@@ -37,7 +37,7 @@ enum TaskPaletteSamples {
       store: TaskStore(file: file), githubItems: githubItems, viewer: githubItems.viewer,
       openLists: openLists ?? GitHubOpenLists(source: .idle, viewer: githubItems.viewer),
       root: root, agents: agents, sessionTabs: sessionTabs,
-      intakes: intakes ?? DesignSceneFixtures.intakeRunner(nil),
+      automations: automations ?? DesignSceneFixtures.automationRunner(nil),
       workspaces: TaskPaletteWorkspaces(opened: opened, all: [opened, other], home: home),
       now: DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone)
   }

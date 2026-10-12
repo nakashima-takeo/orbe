@@ -3,16 +3,16 @@ import Observation
 /// ボードの状態。描く部品の並び（前面の workspace のボードの投影）・部品（今は自動追加 1 つ）のモデル・フッターの右の断りの
 /// 1 枠を持ち、部品へ焦点を当て直す口になる。
 @Observable final class BoardModel {
-  let intake: BoardIntakeModel
+  let automation: BoardAutomationModel
   /// 描く部品の並び。作った後に書くのは `show(_:)` だけ。
   private(set) var parts: [BoardPart]
   /// 部品が置き、次の操作で部品が消す。
   private(set) var refusal: L10nKey?
 
-  init(intake: BoardIntakeModel, parts: [BoardPart]) {
-    self.intake = intake
+  init(automation: BoardAutomationModel, parts: [BoardPart]) {
+    self.automation = automation
     self.parts = parts
-    intake.onRefusal = { [weak self] in self?.refusal = $0 }
+    automation.onRefusal = { [weak self] in self?.refusal = $0 }
   }
 
   /// 器の first responder が器か配下にあるか。
@@ -27,10 +27,10 @@ import Observation
     // 部品が消えると焦点の宛先も画面から消え、焦点が窓へ落ちるので、替える前に読む。
     let inside = focusIsInside()
     self.parts = parts
-    if !parts.contains(.intake) { refusal = nil }
+    if !parts.contains(.automation) { refusal = nil }
     guard inside else { return }
     takeFocus()
-    if parts.contains(.intake) { intake.enter() }
+    if parts.contains(.automation) { automation.enter() }
   }
 
   /// 焦点をボードの中へ当てる。外から入るなら部品は欄から始まり、中にあるなら選んでいる場所へ当て直す——ボードを選ぶ・パレットを
@@ -38,22 +38,22 @@ import Observation
   /// 同じ結果になる。
   func focus() {
     let entering = enter()
-    guard parts.contains(.intake) else { return }
-    if entering { intake.enter() } else { intake.refocus() }
+    guard parts.contains(.automation) else { return }
+    if entering { automation.enter() } else { automation.refocus() }
   }
 
   /// 部品の焦点の合図を受け取り、当てる場所を返す（ビューが合図の進みと、部品が現れたときに呼ぶ）。焦点がボードの外にあれば
   /// 合図は捨てる——ボードを一瞬選んで同じ turn にタブへ移ると、合図が届く頃には焦点が端末にあるため。`show(_:)` と同じく、
   /// 外にある焦点は奪わない。
-  func takeFocusRequest() -> BoardIntakeModel.Place? {
-    let place = intake.takeFocusRequest()
+  func takeFocusRequest() -> BoardAutomationModel.Place? {
+    let place = automation.takeFocusRequest()
     return focusIsInside() ? place : nil
   }
 
   /// 地のクリック。ボードの中の操作なので、外から入ったときも選んでいる場所へ当て直す。
   func refocus() {
     _ = enter()
-    if parts.contains(.intake) { intake.refocus() }
+    if parts.contains(.automation) { automation.refocus() }
   }
 
   /// 焦点が外にあればホストへ渡し、渡したか（焦点が外から入ったか）を返す。中にあるときに渡し直すと、依頼の欄の入力を終わらせて、

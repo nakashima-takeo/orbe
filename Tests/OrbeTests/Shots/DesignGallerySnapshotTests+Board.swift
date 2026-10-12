@@ -38,18 +38,18 @@ extension DesignGallerySnapshotTests {
     try writePNG(
       BoardRoot(
         model: BoardModel(
-          intake: BoardIntakeModel(
-            runner: DesignSceneFixtures.intakeRunner(DesignSceneFixtures.boardIntakeFile())),
+          automation: BoardAutomationModel(
+            runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationFile())),
           parts: []),
         translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
         fontResolver: ChromeFontResolver()),
       size: NSSize(width: 640, height: 480), name: "board_empty.png", dir: dir)
 
-    try renderBoardIntakeSnapshots(dir: dir)
+    try renderBoardAutomationSnapshots(dir: dir)
   }
 
   /// 見本『Home』のボードの面（窓の chrome とタブ行を除いた 1440×826）。
-  private func renderBoardIntakeSnapshots(dir: URL) throws {
+  private func renderBoardAutomationSnapshots(dir: URL) throws {
     func write(
       _ name: String, _ model: BoardModel, _ language: Language = .ja,
       _ size: NSSize = NSSize(width: 1440, height: 826)
@@ -61,39 +61,40 @@ extension DesignGallerySnapshotTests {
         size: size, name: name, dir: dir)
     }
     /// 一覧の先頭の行を選んだ状態（見本『Home』と突き合わせる。0 件なら欄のまま）。
-    func board(_ file: IntakesFile? = nil) -> BoardModel {
+    func board(_ file: AutomationsFile? = nil) -> BoardModel {
       let model = BoardModel(
-        intake: BoardIntakeModel(
-          runner: DesignSceneFixtures.intakeRunner(file ?? DesignSceneFixtures.boardIntakeFile())),
-        parts: [.intake])
-      model.intake.move(1)
+        automation: BoardAutomationModel(
+          runner: DesignSceneFixtures.automationRunner(
+            file ?? DesignSceneFixtures.boardAutomationFile())),
+        parts: [.automation])
+      model.automation.move(1)
       return model
     }
 
-    try write("board_intake.png", board())
-    try write("board_intake_en.png", board(), .en)
+    try write("board_automation.png", board())
+    try write("board_automation_en.png", board(), .en)
 
     let paused = board()
-    paused.intake.move(1)
-    paused.intake.move(1)
-    paused.intake.move(1)
-    try write("board_intake_paused.png", paused)
+    paused.automation.move(1)
+    paused.automation.move(1)
+    paused.automation.move(1)
+    try write("board_automation_paused.png", paused)
 
     let running = board()
-    running.intake.move(1)
-    running.intake.perform(.runNow)
-    running.intake.perform(.runNow)
-    try write("board_intake_running.png", running)
+    running.automation.move(1)
+    running.automation.perform(.runNow)
+    running.automation.perform(.runNow)
+    try write("board_automation_running.png", running)
 
-    try write("board_intake_zero.png", board(DesignSceneFixtures.intakeEmptyFile()))
+    try write("board_automation_zero.png", board(DesignSceneFixtures.automationEmptyFile()))
 
-    let long = board(DesignSceneFixtures.boardIntakeLongFile())
-    try write("board_intake_long_agent.png", long)
-    long.intake.move(1)
-    long.intake.move(1)
-    try write("board_intake_long_command.png", long)
+    let long = board(DesignSceneFixtures.boardAutomationLongFile())
+    try write("board_automation_long_agent.png", long)
+    long.automation.move(1)
+    long.automation.move(1)
+    try write("board_automation_long_command.png", long)
 
-    try write("board_intake_narrow.png", board(), .ja, NSSize(width: 800, height: 480))
+    try write("board_automation_narrow.png", board(), .ja, NSSize(width: 800, height: 480))
 
     try renderBoardRequestSnapshots(write: write, board: board)
   }
@@ -101,29 +102,29 @@ extension DesignGallerySnapshotTests {
   /// 依頼の欄: 文字あり（欄に焦点・フッターが欄のキー）・断り 2 種。秘書の口は閉包の差し替えで、本物の秘書・claude は起きない。
   private func renderBoardRequestSnapshots(
     write: (String, BoardModel, Language, NSSize) throws -> Void,
-    board: (IntakesFile?) -> BoardModel
+    board: (AutomationsFile?) -> BoardModel
   ) throws {
     let size = NSSize(width: 1440, height: 826)
 
     for language in [Language.ja, .en] {
       let suffix = language == .ja ? "" : "_en"
       let typed = board(nil)
-      typed.intake.go(.request)
-      typed.intake.requestText =
+      typed.automation.go(.request)
+      typed.automation.requestText =
         language == .ja ? "Slack の自分宛ての DM をタスクの候補にして" : "Turn my Slack DMs into task candidates"
       try write("board_request_typed\(suffix).png", typed, language, size)
     }
 
     let missing = board(nil)
-    missing.intake.onAsk = { _ in .claudeMissing }
-    missing.intake.go(.request)
-    missing.intake.requestText = "Slack の自分宛ての DM をタスクの候補にして"
-    missing.intake.send()
+    missing.automation.onAsk = { _ in .claudeMissing }
+    missing.automation.go(.request)
+    missing.automation.requestText = "Slack の自分宛ての DM をタスクの候補にして"
+    missing.automation.send()
     try write("board_request_claude_missing.png", missing, .ja, size)
 
     let gone = board(nil)
-    try gone.intake.runner.delete(try XCTUnwrap(gone.intake.selectedIntake?.id))
-    gone.intake.askFix()
+    try gone.automation.runner.delete(try XCTUnwrap(gone.automation.selectedAutomation?.id))
+    gone.automation.askFix()
     try write("board_request_fix_gone.png", gone, .ja, size)
   }
 

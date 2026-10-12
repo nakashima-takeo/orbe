@@ -4,7 +4,7 @@ import Foundation
 /// ここと `load` の正規化だけ。
 extension SessionStore {
   /// 何も決めていないボードの部品の並び。
-  static let defaultBoardParts: [BoardPart] = [.intake]
+  static let defaultBoardParts: [BoardPart] = [.automation]
 
   /// ボードを持たない workspace へ部品を置こうとした・外そうとした。
   struct NoBoard: Error {}

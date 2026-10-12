@@ -8,9 +8,9 @@ enum SecretaryAsk: Equatable {
   /// タスクを頼む（補足は空でもよい）。
   case task(TaskItem, note: String)
   /// タスクの自動追加の新しい依頼の文。
-  case intake(String)
+  case automation(String)
   /// タスクの自動追加の直し。
-  case intakeFix(Intake)
+  case automationFix(Automation)
 }
 
 /// 秘書へ届ける文面と、秘書の役割の指示（Orbe が UI の言語で組む）。
@@ -30,12 +30,12 @@ enum SecretaryText {
             "\($0.item.repo.value)#\($0.item.number)")
         } ?? l10n.format(.secretaryLineTask, "\(task.id)", task.title)
       return noted(head, note, l10n)
-    case .intake(let text):
+    case .automation(let text):
       let text = flattened(text)
-      return text.isEmpty ? nil : l10n.format(.secretaryLineIntake, text)
-    case .intakeFix(let intake):
+      return text.isEmpty ? nil : l10n.format(.secretaryLineAutomation, text)
+    case .automationFix(let automation):
       return flattened(
-        l10n.format(.secretaryLineIntakeFix, "\(intake.id)", intake.definition.name))
+        l10n.format(.secretaryLineAutomationFix, "\(automation.id)", automation.definition.name))
     }
   }
 

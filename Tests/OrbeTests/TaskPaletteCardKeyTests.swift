@@ -265,7 +265,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.tab, .github)
 
     press(Key.tab, "\u{19}", .shift, to: window)
-    XCTAssertEqual(model.tab, .intake, "3 つのタブを巡る")
+    XCTAssertEqual(model.tab, .automation, "3 つのタブを巡る")
 
     press(Key.tab, "\u{19}", .shift, to: window)
     type("x", into: window)

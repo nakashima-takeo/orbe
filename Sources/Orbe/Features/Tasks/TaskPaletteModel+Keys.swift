@@ -13,8 +13,8 @@ extension TaskPaletteModel {
     switch visibleTab {
     case .tasks: return handleTaskFieldKey(press)
     case .github: return handleGitHubFieldKey(press)
-    case .intake:
-      guard press.key == .escape else { return intake.handleFieldKey(press) }
+    case .automation:
+      guard press.key == .escape else { return automation.handleFieldKey(press) }
       onDismiss()
       return .handled
     }
@@ -101,7 +101,7 @@ extension TaskPaletteModel {
   /// カードの器（右の欄の項目に居て、編集していない間）。
   func handleCardKey(_ press: KeyPress) -> KeyPress.Result {
     guard draft == nil else { return .ignored }
-    if visibleTab == .intake { return intake.handleCardKey(press) }
+    if visibleTab == .automation { return automation.handleCardKey(press) }
     switch area {
     case .list: return .ignored
     case .pane(let stop): return handlePaneKey(press, stop)

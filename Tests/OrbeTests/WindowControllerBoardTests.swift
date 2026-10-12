@@ -39,14 +39,15 @@ final class WindowControllerBoardTests: OrbeTestCase {
   }
 
   /// 止めている自動追加を 2 件置く——起動でも回らず、取得もコマンドなので本物の agent は起きない。
-  @MainActor private func savePausedIntakes() {
-    let intakes = DesignSceneFixtures.boardIntakes().prefix(2).map {
-      var intake = $0
-      intake.paused = true
-      intake.definition.fetch.method = .command(BackgroundCommand(script: "true", directory: nil))
-      return intake
+  @MainActor private func savePausedAutomations() {
+    let automations = DesignSceneFixtures.boardAutomations().prefix(2).map {
+      var automation = $0
+      automation.paused = true
+      automation.definition.fetch.method = .command(
+        BackgroundCommand(script: "true", directory: nil))
+      return automation
     }
-    IntakePersistence.save(DesignSceneFixtures.boardIntakeFile(Array(intakes)))
+    AutomationPersistence.save(DesignSceneFixtures.boardAutomationFile(Array(automations)))
   }
 
   /// 窓を画面外に出す。非アクティブなアプリの窓は key にならないが、`NSApp.sendEvent` は ordered-in の窓の first responder
@@ -162,63 +163,63 @@ final class WindowControllerBoardTests: OrbeTestCase {
   /// 焦点が外から入る（ボードを選ぶ・パレットを閉じる・workspace を戻る）と、部品は欄から始まり、↓ で一覧の先頭へ下りる。
   /// 一覧で選んでいた行は入り直すと保たないが、裏のタブが閉じただけ（焦点は中のまま）なら保つ。
   @MainActor func testEnteringTheBoardStartsAtTheRequestField() throws {
-    savePausedIntakes()
+    savePausedAutomations()
     let wc = WindowController()
     show(wc)
     let home = try XCTUnwrap(wc.store.homeIndex)
     wc.switchWorkspace(to: home)
     wc.newTab()
     let behind = try XCTUnwrap(wc.activeTab)
-    let intake = wc.board.intake
+    let automation = wc.board.automation
 
     wc.statusModel.onSelectBoard()
     pump()
-    XCTAssertEqual(intake.place, .request, "ボードを選ぶと欄")
+    XCTAssertEqual(automation.place, .request, "ボードを選ぶと欄")
     try pressDown(wc)
-    XCTAssertEqual(intake.selectedIntake?.id, 1, "↓ で一覧の先頭")
+    XCTAssertEqual(automation.selectedAutomation?.id, 1, "↓ で一覧の先頭")
     try pressDown(wc)
-    XCTAssertEqual(intake.selectedIntake?.id, 2)
+    XCTAssertEqual(automation.selectedAutomation?.id, 2)
 
     guard case .success = wc.controlCloseTab(tabId: behind.id) else {
       return XCTFail("close_tab は success")
     }
     pump()
-    XCTAssertEqual(intake.selectedIntake?.id, 2, "裏のタブが閉じても、焦点は中のままなので選択を保つ")
+    XCTAssertEqual(automation.selectedAutomation?.id, 2, "裏のタブが閉じても、焦点は中のままなので選択を保つ")
 
     wc.showWorkspacePalette()
     wc.window.makeFirstResponder(nil)  // パレットの入力欄が焦点を持っていった状態
     wc.dismissPalette()
     pump()
-    XCTAssertEqual(intake.place, .request, "パレットを閉じると欄から")
+    XCTAssertEqual(automation.place, .request, "パレットを閉じると欄から")
     try pressDown(wc)
-    XCTAssertEqual(intake.selectedIntake?.id, 1, "↓ で一覧の先頭")
+    XCTAssertEqual(automation.selectedAutomation?.id, 1, "↓ で一覧の先頭")
 
     wc.switchWorkspace(to: try XCTUnwrap(wc.workspaces.firstIndex { $0.name == "default" }))
     XCTAssertFalse(wc.boardView.focusIsInside, "前提: 他の workspace ではそのタブが焦点")
     wc.switchWorkspace(to: home)
     pump()
-    XCTAssertEqual(intake.place, .request, "workspace を戻ると欄から")
+    XCTAssertEqual(automation.place, .request, "workspace を戻ると欄から")
     try pressDown(wc)
-    XCTAssertEqual(intake.selectedIntake?.id, 1, "キーがボードに効く")
+    XCTAssertEqual(automation.selectedAutomation?.id, 1, "キーがボードに効く")
   }
 
   /// 依頼の欄で打っている途中にボードを離れて戻ると（パレットを閉じる・端末タブから戻る・workspace を戻る）、焦点は欄へ戻り、
   /// 打ちかけは全文が選ばれている（⌘⇧X の入力欄と同じ）。端末タブを選んでいる間、隠れた欄はキーを取らない。
   @MainActor func testFocusReturnsToTheRequestFieldWhereItWasLeft() throws {
-    IntakePersistence.save(DesignSceneFixtures.intakeEmptyFile())
+    AutomationPersistence.save(DesignSceneFixtures.automationEmptyFile())
     let wc = WindowController()
     show(wc)
     let home = try XCTUnwrap(wc.store.homeIndex)
     wc.switchWorkspace(to: home)
     wc.newTab()
     let tab = try XCTUnwrap(wc.activeTab)
-    let intake = wc.board.intake
+    let automation = wc.board.automation
 
     wc.statusModel.onSelectBoard()
-    XCTAssertEqual(intake.place, .request, "0 件なら初めから欄")
+    XCTAssertEqual(automation.place, .request, "0 件なら初めから欄")
     try press(wc, keyCode: 0, "a")
     try press(wc, keyCode: 0, "b")
-    XCTAssertEqual(intake.requestText, "ab")
+    XCTAssertEqual(automation.requestText, "ab")
 
     wc.showWorkspacePalette()
     wc.window.makeFirstResponder(nil)  // パレットの入力欄が焦点を持っていった状態
@@ -228,7 +229,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
 
     wc.select(.tab(tab))
     try press(wc, keyCode: 0, "x")
-    XCTAssertEqual(intake.requestText, "ab", "端末タブの間は隠れた欄にキーが届かない")
+    XCTAssertEqual(automation.requestText, "ab", "端末タブの間は隠れた欄にキーが届かない")
     wc.statusModel.onSelectBoard()
     pump()
     try assertFieldSelectsAll(wc, "ab", "ボードへ戻ると欄へ")
@@ -242,25 +243,25 @@ final class WindowControllerBoardTests: OrbeTestCase {
   /// ボードの上に ⌘⇧X を開いている間に自動追加がすべて消えても（⌘⇧X で最後の 1 件を消す）、ボードの欄は焦点を奪わず、
   /// 打鍵は ⌘⇧X の入力欄に届いたまま。
   @MainActor func testAutoAddsVanishingUnderThePaletteLeaveTheFocusInThePalette() throws {
-    savePausedIntakes()
+    savePausedAutomations()
     let wc = WindowController()
     show(wc)
     wc.switchWorkspace(to: try XCTUnwrap(wc.store.homeIndex))
-    let intake = wc.board.intake
+    let automation = wc.board.automation
     wc.statusModel.onSelectBoard()
     try pressDown(wc)
-    XCTAssertEqual(intake.place, .list, "前提: 一覧にいる")
+    XCTAssertEqual(automation.place, .list, "前提: 一覧にいる")
 
     wc.showTaskPalette()
     pump()
     let palette = try XCTUnwrap(wc.model.taskPalette)
-    for id in intake.ids { try wc.intakeRunner.delete(id) }
+    for id in automation.ids { try wc.automationRunner.delete(id) }
     pump()
 
-    XCTAssertEqual(intake.place, .request, "前提: 行がすべて消えて欄になった")
+    XCTAssertEqual(automation.place, .request, "前提: 行がすべて消えて欄になった")
     try press(wc, keyCode: 0, "x")
     XCTAssertEqual(palette.query, "x", "打鍵は ⌘⇧X の入力欄に届く")
-    XCTAssertEqual(intake.requestText, "", "ボードの欄は焦点を奪わない")
+    XCTAssertEqual(automation.requestText, "", "ボードの欄は焦点を奪わない")
   }
 
   private func assertFieldSelectsAll(
