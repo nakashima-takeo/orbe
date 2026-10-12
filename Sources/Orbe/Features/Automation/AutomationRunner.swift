@@ -116,7 +116,7 @@ final class AutomationRunner {
       trigger: trigger == .now ? .now : .schedule, finish: finish)
     switch automation.definition.sink {
     case .taskCandidates:
-      start(Pass(attempt, AutomationTaskCandidates(store: store, automationId: id)), automation)
+      runSource(Pass(attempt, AutomationTaskCandidates(store: store, automationId: id)), automation)
     }
     return BackgroundRunHandle {
       attempt.cancelled = true
@@ -125,7 +125,7 @@ final class AutomationRunner {
   }
 
   /// 新着の流れの取得元にだけ、前回成功した回の開始時刻を目印として渡す。
-  private func start<Sink>(_ pass: Pass<Sink>, _ automation: Automation) {
+  private func runSource<Sink>(_ pass: Pass<Sink>, _ automation: Automation) {
     guard let source = automation.definition.source else {
       runStep(0, rows: [], pass)
       return

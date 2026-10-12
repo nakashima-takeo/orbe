@@ -163,8 +163,7 @@ final class BackgroundRuns {
       else { return .failure(.directoryMissing(directory)) }
       return .success(
         .command(
-          command, input: input, directory: directory, limits: job.limits,
-          env: environment().merging(input.environment) { $1 }))
+          command, input: input, directory: directory, limits: job.limits, env: environment()))
     case .agent(let call):
       let cli: HeadlessCLI
       switch AgentCatalog.profile(call.cli)?.headless {
@@ -237,9 +236,9 @@ private struct Prepared {
     limits: BackgroundLimits, env: [String: String]
   ) -> Prepared {
     let spec = BackgroundProcess.Spec(
-      executable: "/bin/sh", arguments: ["-c", command.script], environment: env,
-      directory: directory, stdin: input.stdin, elapsedLimit: limits.elapsed,
-      idleLimit: limits.idle,
+      executable: "/bin/sh", arguments: ["-c", command.script],
+      environment: env.merging(input.environment) { $1 }, directory: directory,
+      stdin: input.stdin, elapsedLimit: limits.elapsed, idleLimit: limits.idle,
       stdout: .collect(.init(limit: limits.output, overflowStops: true)),
       stderr: .init(limit: limits.stderr, overflowStops: true))
     return Prepared(commandLine: command.script, spec: spec) { outcome, startedAt, endedAt in
