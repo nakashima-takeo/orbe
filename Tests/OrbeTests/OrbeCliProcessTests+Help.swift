@@ -53,6 +53,35 @@ extension OrbeCliProcessTests {
       "tab --help の KEYS が ControlKey と食い違っている")
   }
 
+  /// `orb board --help` の `KINDS:` は control の `BoardPart` と同じ集合。種類の後の括弧は説明で、行をまたぐ。
+  ///
+  /// 弾くのは control（知らない種類は -32602）だが、help は socket 不達でも出す必要があるため CLI に種類を写している。
+  /// 写しが欠けると、置ける部品が help を読む人と AI から見えなくなる。
+  func testBoardHelpListsEveryKind() throws {
+    let outcome = ControlProcess.orbWithoutServer(["board", "--help"])
+    XCTAssertEqual(outcome.status, 0, "board --help は socket 不達でも exit 0: \(outcome.stderr)")
+    let text = outcome.stdout.replacingOccurrences(of: "\n", with: " ")
+    let start = try XCTUnwrap(
+      text.range(of: "KINDS: "), "board --help に KINDS: が無い: \(outcome.stdout)"
+    ).upperBound
+    var depth = 0
+    var names = ""
+    for character in text[start...] {
+      if character == "(" {
+        depth += 1
+      } else if character == ")" {
+        depth -= 1
+      } else if depth == 0 {
+        if character == "." { break }
+        names.append(character)
+      }
+    }
+    let listed = names.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+    XCTAssertEqual(
+      Set(listed), Set(BoardPart.allCases.map(\.rawValue)),
+      "board --help の KINDS が BoardPart と食い違っている")
+  }
+
   /// `orb task --help` の `STATUSES:` / `PRIORITIES:` は control の `TaskItem.Status` / `Priority` と同じ集合。
   ///
   /// 弾くのは control（未知の値は -32602）だが、help は socket 不達でも出す必要があるため CLI に語彙を
