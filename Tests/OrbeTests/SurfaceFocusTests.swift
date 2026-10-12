@@ -32,7 +32,7 @@ final class SurfaceFocusTests: OrbeTestCase {
     XCTAssertEqual(dump.next(), Self.focusIn)
 
     let other = NSWindow(
-      contentRect: NSRect(x: -20000, y: -20000, width: 200, height: 100),
+      contentRect: NSRect(x: 0, y: 0, width: 200, height: 100),
       styleMask: [.titled], backing: .buffered, defer: false)
     other.isReleasedWhenClosed = false
     makeKey(other)
