@@ -18,9 +18,9 @@ final class SurfaceFocusTests: OrbeTestCase {
     super.tearDown()
   }
 
-  /// first responder の端末は、窓が key になって初めてフォーカスを得て、別の窓（Orbe のダイアログ等）が key に
-  /// なると失う。
-  func testTerminalHasFocusOnlyWhileItsWindowIsKey() throws {
+  /// 端末は first responder でも窓が key になって初めてフォーカスを得る。key の窓の中で焦点が端末から外れるか、
+  /// 別の窓（Orbe のダイアログ等）が key になると失う。
+  func testTerminalHasFocusOnlyWhileFirstResponderOfTheKeyWindow() throws {
     let dump = try dump(.focusReport)
     let window = dump.controller.window
     XCTAssertEqual(dump.next(), Self.focusOut, "前提: 有効にした時点のフォーカス（無し）が届く")
@@ -29,6 +29,11 @@ final class SurfaceFocusTests: OrbeTestCase {
     XCTAssertEqual(dump.next(), TtyDumpTab.hex("a"), "窓が key でない間は first responder でもフォーカスを得ない")
 
     makeKey(window)
+    XCTAssertEqual(dump.next(), Self.focusIn)
+
+    XCTAssertTrue(window.makeFirstResponder(nil))
+    XCTAssertEqual(dump.next(), Self.focusOut, "key の窓の中で焦点が端末から外れると失う")
+    XCTAssertTrue(window.makeFirstResponder(dump.tab.surface))
     XCTAssertEqual(dump.next(), Self.focusIn)
 
     let other = NSWindow(
