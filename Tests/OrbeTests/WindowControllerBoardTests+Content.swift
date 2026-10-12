@@ -3,8 +3,8 @@ import XCTest
 
 @testable import Orbe
 
-/// ボードと content の照合——タブを閉じる・裏のタブの cd・別の workspace で起こす・新しいタブのどの経路が照合を呼んでも、
-/// ボードは外れず、見え方は選択どおり。
+/// ボードと content の照合——タブを閉じる・裏のタブの cd・別の workspace で起こす・休眠のタブを起こす・新しいタブのどの経路が
+/// 照合を呼んでも、ボードは外れず、見え方は選択どおり。
 extension WindowControllerBoardTests {
   // MARK: - 閉じる
 
@@ -67,6 +67,27 @@ extension WindowControllerBoardTests {
     XCTAssertEqual(visibleContent(wc), [wc.boardView])
     let tab = try XCTUnwrap(wc.workspaces[other].tabs.first { $0.id == opened.tabId })
     XCTAssertNotNil(tab.surface.surfacePtr, "そのタブは裏で起きる")
+  }
+
+  /// ボードを選んだまま再起動すると、Home の休眠のタブが裏で順に起き終わっても、ボードが出たまま。
+  func testDormantTabsWakingAfterARestartOnTheBoardLeaveTheBoardShown() throws {
+    let home = WorkspaceState(
+      name: "Home", rootPath: try XCTUnwrap(HomeFolder.url).path, activeTab: 0,
+      boardSelected: true,
+      tabs: [
+        TabState(cwd: "/tmp", agent: nil, explicitTitle: nil),
+        TabState(cwd: "/", agent: nil, explicitTitle: nil),
+      ])
+    WorkspacePersistence.save(
+      WorkspacesFile(
+        version: WorkspacePersistence.version, activeWorkspace: 0, workspaces: [home],
+        homeWorkspaceId: home.persistentId))
+
+    let wc = WindowController()
+    XCTAssertTrue(waitUntil { wc.current.tabs.allSatisfy(\.activated) }, "前提: 休眠のタブが起きる")
+
+    XCTAssertEqual(wc.current.selection, .board)
+    XCTAssertEqual(visibleContent(wc), [wc.boardView])
   }
 
   // MARK: - 新しいタブ
