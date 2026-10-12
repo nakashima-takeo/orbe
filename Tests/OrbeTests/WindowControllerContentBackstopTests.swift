@@ -31,7 +31,7 @@ final class WindowControllerContentBackstopTests: OrbeTestCase {
     XCTAssertFalse(wc.model.contentIsEmpty, "タブありへ戻ると backstop が下がる")
   }
 
-  /// ボードの無い workspace で最後のタブを閉じると backstop が立ち、閉じたタブの画面は見えない。
+  /// ボードの無い workspace で最後のタブを閉じると backstop が立ち、閉じたタブの画面は content に残らない。
   func testClosingTheLastTabRaisesTheBackstop() throws {
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
@@ -49,6 +49,6 @@ final class WindowControllerContentBackstopTests: OrbeTestCase {
     }
 
     XCTAssertTrue(wc.model.contentIsEmpty, "0 タブで backstop が立つ")
-    XCTAssertEqual(wc.model.content.subviews.filter { !$0.isHidden }, [], "閉じたタブの画面は見えない")
+    XCTAssertEqual(wc.model.content.subviews, [], "閉じたタブの画面は残らない")
   }
 }
