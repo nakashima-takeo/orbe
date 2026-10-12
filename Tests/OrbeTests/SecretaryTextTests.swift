@@ -111,6 +111,19 @@ final class SecretaryTextTests: OrbeTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), "原本は退避する")
   }
 
+  /// 出どころは保存した値（palette・board・wait）のまま読める——値の綴りが変わると、溜まった頼みが次の起動で退避に落ちる。
+  func testEachOriginIsReadFromItsSavedValue() throws {
+    let url = try XCTUnwrap(SecretaryPersistence.fileURL)
+    let records = ["palette", "board", "wait"].map { origin in
+      #"{"id":"\#(UUID().uuidString)","receivedAt":"2026-10-10T01:31:00Z","#
+        + #""origin":"\#(origin)","body":"a"}"#
+    }
+    try Data((#"{"version":1,"pending":["# + records.joined(separator: ",") + "]}").utf8)
+      .write(to: url)
+
+    XCTAssertEqual(SecretaryPersistence.load()?.pending.map(\.origin), [.palette, .board, .wait])
+  }
+
   /// 知らない出どころ（新しいビルドが書いた値）の記録は使えない原本として退避し、空で始める——直後の保存で溜まった頼みを
   /// 潰さない。
   func testAnUnknownOriginIsSetAsideWithTheOriginalKept() throws {
