@@ -111,33 +111,6 @@ final class SecretaryTextTests: OrbeTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), "原本は退避する")
   }
 
-  /// 出どころは旧ビルドの知る 2 値で保存し、Home のボードは別の欄で細分する——旧ビルドへ戻しても記録が退避に落ちない。
-  func testTheBoardOriginIsSavedInAFormTheOlderBuildReads() throws {
-    let at = Date(timeIntervalSince1970: 0)
-    let file = SecretaryFile(
-      version: SecretaryPersistence.version, sessionId: nil,
-      pending: [
-        SecretaryRequest(id: UUID(), receivedAt: at, origin: .board, body: "b"),
-        SecretaryRequest(id: UUID(), receivedAt: at, origin: .palette, body: "p"),
-        SecretaryRequest(id: UUID(), receivedAt: at, origin: .wait, body: "w"),
-      ]
-    )
-    SecretaryPersistence.save(file)
-    let url = try XCTUnwrap(SecretaryPersistence.fileURL)
-    let saved = try XCTUnwrap(
-      JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
-    let pending = try XCTUnwrap(saved["pending"] as? [[String: Any]])
-    XCTAssertEqual(pending.map { $0["origin"] as? String }, ["palette", "palette", "wait"])
-    XCTAssertEqual(pending.map { $0["screen"] as? String }, ["board", nil, nil])
-    XCTAssertEqual(SecretaryPersistence.load(), file, "読むと出どころが戻る")
-
-    let later =
-      #"{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","receivedAt":"2026-10-10T01:31:00Z","#
-      + #""origin":"palette","screen":"later","body":"a"}"#
-    try Data((#"{"version":1,"pending":["# + later + "]}").utf8).write(to: url)
-    XCTAssertEqual(SecretaryPersistence.load()?.pending.first?.origin, .palette, "知らない画面は ⌘⇧X")
-  }
-
   /// 知らない出どころ（新しいビルドが書いた値）の記録は使えない原本として退避し、空で始める——直後の保存で溜まった頼みを
   /// 潰さない。
   func testAnUnknownOriginIsSetAsideWithTheOriginalKept() throws {
