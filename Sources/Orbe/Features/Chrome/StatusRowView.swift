@@ -41,12 +41,14 @@ extension View {
 /// （地 tabRowBg・ボードを持つ workspace では左端に固定のボードのセル・同 worktree のタブを連ねた DSTabSegment・
 /// shrink＋横スクロール・＋ボタン）と右端の位置ドット（エディター・端末の焦点と可視）。
 /// 罫線は持たない（tabRowBg の濃度差が境界）。背景に窓ドラッグ（タブ/ボタンのクリックは奪わない）。
+/// 窓が main でない間は文字とタブを退いた姿で描く（状態グリフの色は保つ）。
 struct StatusRowView: View {
   @Bindable var model: StatusRowModel
   @Environment(\.chromeTranslucency) private var translucency
   @Environment(\.agentIconResolver) private var iconResolver
   @Environment(\.localization) private var l10n
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.windowIsMain) private var windowIsMain
   // 寸法計算（StatusRowView+Metrics）が同じ resolver で幅を測るため internal。
   @Environment(\.chromeFontResolver) var fontResolver
 
@@ -102,7 +104,7 @@ struct StatusRowView: View {
     HStack(spacing: Theme.Space.beat) {
       fontResolver.text(model.workspace, base: Theme.Typography.chrome)
         .font(Font.theme.chrome)
-        .foregroundStyle(Color.theme.textPrimary)
+        .foregroundStyle(windowIsMain ? Color.theme.textPrimary : Color.theme.textMuted)
         .lineLimit(1)
         .layoutPriority(1)
       if let buildId = model.buildId {
@@ -116,8 +118,7 @@ struct StatusRowView: View {
         // 断片ごとの Text を 1 本に連結する（省略は全体で 1 回、末尾側を残す）。
         model.location.map { part in
           fontResolver.text(part.text, base: Theme.Typography.meta)
-            .foregroundStyle(
-              part.tone == .dim ? Color.theme.textMuted : Color.theme.statusText)
+            .foregroundStyle(locationColor(part.tone))
         }
         .reduce(Text(verbatim: ""), +)
         .font(Font.theme.meta)
@@ -129,7 +130,7 @@ struct StatusRowView: View {
 
       if !model.rollup.isEmpty {
         // クリックで Attention パレット。見た目は変えない（hover 装飾は足さない）。
-        StatusRollupView(rollup: model.rollup)
+        StatusRollupView(rollup: model.rollup, receded: !windowIsMain)
           .fixedSize()
           .contentShape(Rectangle())
           .onTapGesture { model.onAttentionTap() }
@@ -140,6 +141,16 @@ struct StatusRowView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     .offset(y: headerLayout.yShift)
     .animation(headerLayoutAnimation, value: model.trafficLights.isOverChrome)
+  }
+
+  /// 現在地の断片の色。退いた姿では 2 トーンの強弱を保ったまま両方一段沈める。
+  private func locationColor(_ tone: LocationPart.Tone) -> Color {
+    switch (tone, windowIsMain) {
+    case (.dim, true): Color.theme.textMuted
+    case (.text, true): Color.theme.statusText
+    case (.dim, false): Color.theme.textMutedInactive
+    case (.text, false): Color.theme.textMuted
+    }
   }
 
   // MARK: - 下段（セグメント形タブ行・全幅）
@@ -247,6 +258,7 @@ struct StatusRowView: View {
       action: { model.onSelect(i) },
       onMiddleClick: { model.onCloseTab(i) },
       divided: divided,
+      receded: !windowIsMain,
       editing: isEditing,
       editingText: $model.editingText,
       editFocusToken: model.editFocusToken,
@@ -275,7 +287,7 @@ struct StatusRowView: View {
       DSTabSegment {
         DSTab(
           title: label, active: model.selection == .board, leadingSymbol: "house",
-          action: model.onSelectBoard)
+          action: model.onSelectBoard, receded: !windowIsMain)
       }
       .frame(width: boardCellWidth(label))
       Rectangle()
