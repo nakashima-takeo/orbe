@@ -86,4 +86,16 @@ extension BoardAutomationTests {
     down(window)
     XCTAssertNil(model.refusal, "↓ で消える")
   }
+
+  /// Home に claude を起こせなければ、依頼できなかったと赤で断り、打った文を残す。
+  func testWhenNoAgentCanStartTheTextStaysAndTheReasonShows() {
+    let model = board()
+    _ = recording(model, .unavailable)
+
+    model.automation.requestText = "a"
+    model.automation.send()
+
+    XCTAssertEqual(model.refusal, .boardAskUnavailable)
+    XCTAssertEqual(model.automation.requestText, "a")
+  }
 }
