@@ -215,7 +215,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteActionEditDescription
   case taskPaletteActionCommit
   case taskPaletteHintEdit
-  case taskPaletteHintReorder
   case taskPaletteHintScope
   case taskPaletteHintField
   case taskPaletteHintBack

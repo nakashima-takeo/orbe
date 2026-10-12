@@ -24,9 +24,7 @@ extension TaskPaletteModel {
     switch press.key {
     case .upArrow, .downArrow:
       let direction = press.key == .upArrow ? -1 : 1
-      if press.modifiers.contains(.option) {
-        reorder(direction)
-      } else if press.modifiers.contains(.command) {
+      if press.modifiers.contains(.command) {
         jump(direction)
       } else {
         move(direction)
@@ -73,7 +71,7 @@ extension TaskPaletteModel {
       let direction = press.key == .upArrow ? -1 : 1
       if press.modifiers.contains(.command) {
         jump(direction)
-      } else if !press.modifiers.contains(.option) {
+      } else {
         move(direction)
       }
     case .tab:

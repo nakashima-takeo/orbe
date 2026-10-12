@@ -16,7 +16,6 @@ let taskUsageLines = [
     + " [--no-links] [--worktree <path> | --no-worktree] [--json]",
   "orb task condition <id> (--condition <text> --check <command> --every <minutes>"
     + " --deadline <date-time> | --no-condition) [--json]",
-  "orb task move <id> (--before <id> | --after <id>) [--json]",
   "orb task rm <id> [--json]",
 ]
 
@@ -32,8 +31,8 @@ let taskUsage = """
 
   STATUSES: \(taskStatusNames.joined(separator: ", "))
   PRIORITIES: \(taskPriorityNames.joined(separator: ", ")) (default medium)
-  The list is one ordered column across all workspaces; add appends to the end
-  and prints the new task id. Ids are never reused.
+  list prints the tasks of all workspaces, newest first (by creation time;
+  ties go to the higher id). add prints the new task id. Ids are never reused.
   add without --workspace attaches the task to the workspace of the tab you run
   it in (ORBE_TAB), or to no workspace outside a Orbe tab. --workspace current
   means the workspace in front, which is not necessarily your tab's.
@@ -71,7 +70,6 @@ func runTask(_ args: [String]) -> Never {
   case "list": taskList(rest)
   case "add": taskAdd(rest)
   case "set": taskSet(rest)
-  case "move": taskMove(rest)
   case "rm": taskRemove(rest)
   case "condition": taskCondition(rest)
   case nil:
@@ -168,24 +166,6 @@ private func taskCondition(_ rest: [String]) -> Never {
   if let tab = resolveCurrentTab() { params["callerTabId"] = tab }
   let result = callOrExit("set_wait_condition", params)
   if wantJSON { printJSON(result) } else { print("updated task \(id)") }
-  exit(0)
-}
-
-private func taskMove(_ rest: [String]) -> Never {
-  var args = rest
-  let before = takeIntOption(&args, "--before", requires: "a task <id>")
-  let after = takeIntOption(&args, "--after", requires: "a task <id>")
-  exitIfHelp(args)
-  rejectLeftovers(args, positionals: 1)
-  let id = taskIdArg(args, verb: "move")
-  var params: [String: Any] = ["taskId": id]
-  switch (before, after) {
-  case (let anchor?, nil): params["beforeTaskId"] = anchor
-  case (nil, let anchor?): params["afterTaskId"] = anchor
-  default: usageDie("task move requires exactly one of --before / --after")
-  }
-  let result = callOrExit("move_task", params)
-  if wantJSON { printJSON(result) } else { print("moved task \(id)") }
   exit(0)
 }
 

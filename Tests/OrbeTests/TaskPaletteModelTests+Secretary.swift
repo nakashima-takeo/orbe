@@ -174,8 +174,8 @@ extension TaskPaletteModelTests {
     let palette = threeTodos()
     let l10n = LocalizationStore(language: .ja)
 
-    XCTAssertEqual(palette.destinationPlace(l10n), "未着手 · 中の先頭 · workspace なし")
+    XCTAssertEqual(palette.destinationPlace(l10n), "未着手 · 中 · workspace なし")
     palette.setScope(.opened)
-    XCTAssertEqual(palette.destinationPlace(l10n), "未着手 · 中の先頭 · orbe")
+    XCTAssertEqual(palette.destinationPlace(l10n), "未着手 · 中 · orbe")
   }
 }

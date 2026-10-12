@@ -19,7 +19,7 @@ extension DesignGallerySnapshotTests {
     longTitle.query = DesignSceneFixtures.taskSecretaryLongText
     try write("tasks_destination_long.png", longTitle, 1440, 900)
 
-    // R3Added: ↵ で足した直後（未着手の中の先頭・今足した・範囲が「すべて」だった）。
+    // R3Added: ↵ で足した直後（今足した・範囲が「すべて」だった）。
     let added = DesignSceneFixtures.taskPaletteModel()
     added.query = "見積もりを山田さんに送る"
     added.submit()

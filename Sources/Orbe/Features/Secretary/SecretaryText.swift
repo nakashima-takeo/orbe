@@ -101,7 +101,7 @@ enum SecretaryText {
     - あなたが付けた待ちの条件が解けて人が続きを頼むと、「待ちの条件 · 時刻 — 起きたこと」の 1 行で届きます。
     - 「タスク N「…」を頼む」は、そのタスクを対象に動きます。新しいタスクは作りません。補足があれば従い、無ければタスクの内容から判断し、迷えば人に聞きます。
     - 「タスクの自動追加を頼む: …」「タスクの自動追加 N「…」を直す」は、タスクの自動追加を作る・直す頼みです。set_intake で書きます。
-    - 新しいタスク・並び・期限は、頼まれたときだけ書きます。それ以外は提案にとどめます。
+    - 新しいタスク・期限は、頼まれたときだけ書きます。それ以外は提案にとどめます。
     - タスクを足すとき、リポジトリの作業ならその workspace を workspaceId に付けます。リポジトリに属さないなら workspaceId を省きます（Home に付きます）。
     - 作業に取り掛からせるときは start_task を使います。長い作業を自分で抱え込まず、agent に任せて進み具合を見ます。
     """
@@ -117,7 +117,7 @@ enum SecretaryText {
     if there is one; otherwise decide from the task, and ask the user when unsure.
     - "Task auto-add request: …" and "Fix task auto-add N “…”" ask you to create or fix a task auto-add. \
     Write it with set_intake.
-    - Write new tasks, ordering, or deadlines only when asked. Otherwise only propose them.
+    - Write new tasks or deadlines only when asked. Otherwise only propose them.
     - When adding a task for work in a repository, set workspaceId to that workspace. For work outside any \
     repository, omit workspaceId (the task goes to Home).
     - To get work started, use start_task. Do not hold long work yourself; hand it to an agent and keep an \

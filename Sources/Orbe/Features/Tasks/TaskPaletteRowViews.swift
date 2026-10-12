@@ -13,7 +13,6 @@ struct TaskPaletteList: View {
         LazyVStack(alignment: .leading, spacing: 0) {
           ForEach(rows) { row($0) }
         }
-        .coordinateSpace(.named(Self.contentSpace))
         .padding(TaskPaletteRowMetrics.listPadding)
       }
       .scrollIndicators(.automatic)
@@ -26,11 +25,6 @@ struct TaskPaletteList: View {
       }
     }
   }
-
-  /// 一覧の内容（スクロールする中身）の座標空間。掴み中にホイールで流した分も移動量に乗る。
-  private static let contentSpace = "TaskPaletteList.content"
-  /// これだけ動かして初めてドラッグになる（未満はクリック）。
-  private static let dragActivation: CGFloat = 6
 
   /// 最小の量だけ送る（見えていれば動かない）。入力の行き先は一覧の行ではないので、一覧の先頭（行き先の次の一致）を
   /// 見せる。
@@ -94,46 +88,12 @@ struct TaskPaletteList: View {
     }
   }
 
-  /// タスクの行。未完了の行は掴んで同じ欄の中で動かせ、掴んだ行は指に付いて動き（欄の外へは出ない）、
-  /// 落ちる位置に線を出す。ほかの行はずらさない。
   private func taskRow(_ task: TaskPaletteTaskRow) -> some View {
-    let grabbed = model.drag.session.flatMap { $0.taskID == task.id ? $0 : nil }
-    return TaskPaletteTaskRowView(
+    TaskPaletteTaskRowView(
       row: task, selected: model.selectedID == .task(task.id), clock: model.clock,
       onTap: { model.tapRow(.task(task.id)) },
       onToggle: { model.toggleDone(task.id) },
-      onHoverEnter: { model.hoverSelect(.task(task.id)) }
-    )
-    .background { if grabbed != nil { floatingGround } }
-    .offset(y: grabbed?.offset ?? 0)
-    // 線の位置は掴んだ行の元の場所から測る（offset はレイアウトの枠を動かさない）。
-    .overlay(alignment: .top) {
-      if let y = grabbed?.indicatorY {
-        Rectangle()
-          .fill(Color.theme.accentBright)
-          .frame(height: 2)
-          .offset(y: y - 1)
-          .allowsHitTesting(false)
-      }
-    }
-    .zIndex(grabbed == nil ? 0 : 1)
-    .gesture(dragGesture(task.id), including: task.reorderable ? .all : .subviews)
-  }
-
-  /// 掴んだ行の地。浮いた面（ポップアップ）の面色を不透明な bgBase に重ね、下の行を透かさずカードの地に
-  /// 揃える。選択の塗りはこの上に行が自分で重ねる。
-  private var floatingGround: some View {
-    let shape = RoundedRectangle(cornerRadius: Theme.Radius.row)
-    return shape.fill(Color.theme.bgBase)
-      .overlay(shape.fill(Color(nsColor: Theme.Glass.surface(.popup))))
-  }
-
-  private func dragGesture(_ id: Int) -> some Gesture {
-    DragGesture(minimumDistance: Self.dragActivation, coordinateSpace: .named(Self.contentSpace))
-      .onChanged {
-        model.dragChanged(id, start: $0.startLocation, translation: $0.translation.height)
-      }
-      .onEnded { _ in model.dragEnded() }
+      onHoverEnter: { model.hoverSelect(.task(task.id)) })
   }
 
   /// 見出しの字は ⌘T の欄の見出しと同じ。
@@ -152,11 +112,9 @@ struct TaskPaletteList: View {
   }
 }
 
-/// 一覧の選べる行の骨格。選択行は accent の淡塗り。先頭の 22 は並べ替えの取っ手の場所。
+/// 一覧の選べる行の骨格。選択行は accent の淡塗り。先頭の 22 は行頭の余白（頼む欄・GitHub の一覧と揃える）。
 struct TaskPaletteRowFrame<Content: View>: View {
   let selected: Bool
-  /// 並べ替えの取っ手を出すか（選ばれている未完了のタスクの行）。取っ手は印で、掴む場所は行全体。
-  var grip = false
   var height = TaskPaletteRowMetrics.line
   let onTap: () -> Void
   let onHoverEnter: () -> Void
@@ -168,9 +126,6 @@ struct TaskPaletteRowFrame<Content: View>: View {
       .padding(.trailing, Theme.Space.step + Theme.Space.hair)
       .frame(height: height)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .overlay(alignment: .leading) {
-        if grip { TaskPaletteGrip().padding(.leading, 8) }
-      }
       .background(
         RoundedRectangle(cornerRadius: Theme.Radius.row)
           .fill(selected ? Color.theme.selectionFill : .clear)
@@ -178,23 +133,6 @@ struct TaskPaletteRowFrame<Content: View>: View {
       .contentShape(Rectangle())
       .onTapGesture(perform: onTap)
       .onHover { if $0 { onHoverEnter() } }
-  }
-}
-
-/// 並べ替えの取っ手（2 列 3 段の点）。
-private struct TaskPaletteGrip: View {
-  private let dot: CGFloat = 3
-  private let gap: CGFloat = 2
-
-  var body: some View {
-    HStack(spacing: gap) {
-      ForEach(0..<2, id: \.self) { _ in
-        VStack(spacing: gap) {
-          ForEach(0..<3, id: \.self) { _ in Circle().frame(width: dot, height: dot) }
-        }
-      }
-    }
-    .foregroundStyle(Color.theme.textMuted)
   }
 }
 
@@ -214,8 +152,8 @@ struct TaskPaletteTaskRowView: View {
 
   var body: some View {
     TaskPaletteRowFrame(
-      selected: selected, grip: selected && row.reorderable,
-      height: TaskPaletteRowMetrics.height(.task(row)), onTap: onTap, onHoverEnter: onHoverEnter
+      selected: selected, height: TaskPaletteRowMetrics.height(.task(row)), onTap: onTap,
+      onHoverEnter: onHoverEnter
     ) {
       // アイコンの列は行の高さ全体でクリックを受ける。
       TaskStatusGlyph(glyph: row.glyph, size: TaskPaletteRowMetrics.glyphColumn)

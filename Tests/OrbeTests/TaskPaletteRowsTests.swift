@@ -2,10 +2,9 @@ import XCTest
 
 @testable import Orbe
 
-/// タスク画面（⌘⇧X）の一覧の行を、タスクの列・入力・範囲から組む純関数 `TaskPaletteRows` を固定する。
+/// タスク画面（⌘⇧X）の一覧の行を、タスク・入力・範囲から組む純関数 `TaskPaletteRows` を固定する。
 ///
-/// 壊れると何が起きるか: 人と agent が決めた列の順が画面で組み替わり、`orb task list` と画面の並びが
-/// 食い違う。絞り込みや範囲の外のタスクが混ざる、または消える。待ちの日数・期限・workspace の札が
+/// 壊れると何が起きるか: 欄の中が作成の新しい順でなくなり、`orb task list` と画面の並びが食い違う。絞り込みや範囲の外のタスクが混ざる、または消える。待ちの日数・期限・workspace の札が
 /// 別の値を言い、人が「今日やるもの」「自分の workspace のもの」を見誤る。ヘッダーの件数が打った文字で
 /// 揺れて、残りの量が分からなくなる。詳細の改行がそのまま一覧の行に出て、行の高さが崩れる。
 @MainActor
@@ -59,10 +58,11 @@ final class TaskPaletteRowsTests: OrbeTestCase {
 
   // MARK: - 欄と並び
 
-  func testRowsAreGroupedInProgressThenTodoThenDoneHeaderKeepingTheListOrderWithinEachSection() {
+  func testRowsAreGroupedInProgressThenTodoThenDoneHeaderNewestFirstWithinEachSection() {
+    // 保存の順は、どの欄でも作成の順と逆。
     let tasks = [
-      task(1, "a", .todo), task(2, "b", .inProgress), task(3, "c", .done), task(4, "d", .todo),
-      task(5, "e", .inProgress),
+      task(1, "a", .todo), task(2, "b", .inProgress), task(4, "d", .todo),
+      task(5, "e", .inProgress), task(3, "c", .done),
     ]
 
     let rows = TaskPaletteRows.build(input(tasks))
@@ -71,16 +71,17 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     XCTAssertEqual(rows[0], .sectionHeader(.inProgress, count: 2))
     XCTAssertEqual(rows[3], .sectionHeader(.todo, count: 2))
     XCTAssertEqual(rows[6], .doneHeader(count: 1, expanded: false), "完了は最初は畳まれ、見出しだけが出る")
-    XCTAssertEqual(taskIDs(rows), [2, 5, 1, 4], "どの欄でも列の順のまま")
+    XCTAssertEqual(
+      taskIDs(rows), [5, 2, 4, 1], "どの欄でも、保存の順に依らず作成の新しい順（同時刻は ID の大きい方が先）")
   }
 
-  func testExpandedDoneSectionListsDoneTasksUnderTheHeaderInListOrder() {
+  func testExpandedDoneSectionListsDoneTasksUnderTheHeaderNewestFirst() {
     let tasks = [task(1, "a", .done), task(2, "b", .todo), task(3, "c", .done)]
 
     let rows = TaskPaletteRows.build(input(tasks, doneExpanded: true))
 
     XCTAssertEqual(rows[2], .doneHeader(count: 2, expanded: true))
-    XCTAssertEqual(taskIDs(rows), [2, 1, 3])
+    XCTAssertEqual(taskIDs(rows), [2, 3, 1])
   }
 
   func testEmptySectionsAreOmittedWithTheirHeaders() {
@@ -118,7 +119,7 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     let typed = input([task(1, "a"), task(2, "b")], query: "   ")
 
     XCTAssertNil(TaskPaletteRows.addTitle(typed))
-    XCTAssertEqual(taskIDs(TaskPaletteRows.build(typed)), [1, 2])
+    XCTAssertEqual(taskIDs(TaskPaletteRows.build(typed)), [2, 1])
   }
 
   func testQueryMatchingNothingLeavesOnlyTheDestination() {
@@ -128,9 +129,8 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     XCTAssertEqual(TaskPaletteRows.build(typed), [], "一覧は空（「タスクはありません」も出さない）")
   }
 
-  /// 秘書に頼む欄は、開いたタスクの行の直後に置く（主の結び付きがあれば番号、無ければタイトルで呼ぶ）。開いている間は
-  /// どの行も並べ替えられない。
-  func testTheAskRowFollowsItsTaskAndFreezesReordering() throws {
+  /// 秘書に頼む欄は、開いたタスクの行の直後に置く（主の結び付きがあれば番号、無ければタイトルで呼ぶ）。
+  func testTheAskRowFollowsItsTask() throws {
     var linked = task(2, "Dispatch")
     linked.links = [TaskLink(item: GitHubItemID(repo: "o/r", number: 218)!, kind: .issue)]
     var asking = input([task(1, "a"), linked, task(3, "c")])
@@ -140,9 +140,6 @@ final class TaskPaletteRowsTests: OrbeTestCase {
 
     let index = try XCTUnwrap(rows.firstIndex { $0.id == .selectable(.task(2)) })
     XCTAssertEqual(rows[index + 1], .ask(TaskPaletteAskRow(taskID: 2, label: "#218")))
-    XCTAssertFalse(
-      rows.contains { if case .task(let row) = $0 { row.reorderable } else { false } },
-      "欄が開いている間は掴めない")
   }
 
   // MARK: - 範囲と件数

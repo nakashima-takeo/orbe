@@ -191,10 +191,10 @@ import Observation
 
   // MARK: - 提案をさばく
 
-  /// 出ている提案を、`workspace` に付けてタスク一覧の `position` へ未着手で足す。追加が拒否されたら提案は変わらない。
-  func accept(
-    _ proposalId: Int, into tasks: TaskStore, workspace: UUID?, at position: TaskStore.AddPosition
-  ) throws(AutomationError) -> TaskItem {
+  /// 出ている提案を、`workspace` に付けてタスク一覧へ未着手で足す。追加が拒否されたら提案は変わらない。
+  func accept(_ proposalId: Int, into tasks: TaskStore, workspace: UUID?) throws(AutomationError)
+    -> TaskItem
+  {
     let index = try openIndex(proposalId)
     let proposal = proposals[index]
     var draft = TaskDraft(title: proposal.title)
@@ -203,7 +203,7 @@ import Observation
     draft.description = proposal.item.link + "\n\n" + proposal.item.body
     let task: TaskItem
     do {
-      task = try tasks.add(draft, at: position)
+      task = try tasks.add(draft)
     } catch {
       switch error {
       case .invalid(let message): throw .invalid(message)

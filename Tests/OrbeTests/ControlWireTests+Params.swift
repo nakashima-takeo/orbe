@@ -84,7 +84,6 @@ extension ControlWireTests {
         ]
       ),
       ("update_task", ["taskId": 7, "title": "改題"]),
-      ("move_task", ["taskId": 7, "beforeTaskId": 8]),
       ("delete_task", ["taskId": 7]),
       ("start_task", ["taskId": 7, "branch": "feat/x", "prompt": "直して"]),
     ] + automationRequests + boardRequests
@@ -136,7 +135,6 @@ extension ControlWireTests {
       RequiredParam(method: "restore_sessions", key: "sessionIds", code: -32602),
       RequiredParam(method: "add_task", key: "title", code: -32602),
       RequiredParam(method: "update_task", key: "taskId", code: -32602),
-      RequiredParam(method: "move_task", key: "taskId", code: -32602),
       RequiredParam(method: "delete_task", key: "taskId", code: -32602),
       RequiredParam(method: "start_task", key: "taskId", code: -32602),
       RequiredParam(method: "set_intake", key: "name", code: -32602),

@@ -33,7 +33,7 @@ enum TaskGitHubRelation: Equatable {
   case assignee(String)
 }
 
-/// GitHub タブの項目の行に出す値（一覧の項目とタスクの列から純関数で決まる）。
+/// GitHub タブの項目の行に出す値（一覧の項目とタスク一覧から純関数で決まる）。
 struct TaskPaletteGitHubItemRow: Equatable {
   /// 結び付いたタスク。
   struct LinkedTask: Equatable {
@@ -91,7 +91,7 @@ struct TaskGitHubFilterCounts: Equatable {
   let reviewRequested: Int?
 }
 
-/// GitHub タブの一覧の行を、open 一覧・タスクの列・自分・絞り込み・入力・開いた区分から組む純関数。
+/// GitHub タブの一覧の行を、open 一覧・タスク一覧・自分・絞り込み・入力・開いた区分から組む純関数。
 enum TaskPaletteGitHubRows {
   struct Input {
     let repo: GitHubRepoName

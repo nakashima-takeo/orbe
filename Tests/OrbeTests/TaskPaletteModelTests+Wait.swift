@@ -58,6 +58,7 @@ extension TaskPaletteModelTests {
       task(1, "a", .inProgress) { $0.wait = self.waiting(self.waitCondition()) },
       task(2, "b", .inProgress),
     ])
+    palette.tapRow(.task(1))
 
     palette.toggleConditionPart(.log)
     XCTAssertTrue(palette.isConditionPartOpen(.log))

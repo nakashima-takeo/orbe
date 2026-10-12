@@ -7,6 +7,7 @@ extension TaskPaletteModelTests {
   /// 未着手 2 件（a・b）を開き、a の右の欄に入った状態。
   func detailOfFirst(_ tasks: [TaskItem]? = nil) -> TaskPaletteModel {
     let palette = model(tasks ?? [task(1, "a"), task(2, "b")])
+    palette.tapRow(.task(1))
     palette.enterDetail()
     XCTAssertEqual(palette.selectedTask?.id, 1, "前提: a の右の欄")
     return palette
@@ -242,6 +243,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(try storedTask(palette, 1).description, "範囲で抜ける")
 
     palette.toggleScope()
+    palette.tapRow(.task(1))
     palette.enterDetail()
     edit(palette, .description, "タブで抜ける")
     palette.toggleTab()
@@ -285,13 +287,14 @@ extension TaskPaletteModelTests {
   }
 
   func testCompletingFromDetailReturnsToTheListAtTheSamePosition() throws {
-    let palette = detailOfFirst()
+    let palette = model([task(1, "a"), task(2, "b")])
+    palette.enterDetail()
 
-    palette.toggleDone(1)
+    palette.toggleDone(2)
 
-    XCTAssertEqual(try storedTask(palette, 1).status, .done)
+    XCTAssertEqual(try storedTask(palette, 2).status, .done)
     XCTAssertEqual(palette.area, .list)
-    XCTAssertEqual(palette.selectedID, .task(2))
+    XCTAssertEqual(palette.selectedID, .task(1))
   }
 
   func testTaskDeletedByAgentWhileEditingDiscardsTheDraftAndReturnsToTheList() throws {
@@ -349,8 +352,7 @@ extension TaskPaletteModelTests {
     let palette = detailOfFirst()
     edit(palette, .description, "書きかけ")
 
-    let inserted = try palette.store.add(TaskDraft(title: "agent が足した"))
-    try palette.store.move(inserted.id, .before, 1)
+    _ = try palette.store.add(TaskDraft(title: "agent が足した"))
     palette.reconcile()
 
     XCTAssertEqual(palette.selectedTask?.id, 1)

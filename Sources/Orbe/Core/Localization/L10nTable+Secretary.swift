@@ -27,7 +27,7 @@ extension L10n {
     .taskPaletteDestinationTask: ("タスクに書く", "Write a task"),
     .taskPaletteDestinationDefault: ("既定", "default"),
     .taskPaletteAskSecretary: ("秘書に頼む", "Ask the secretary"),
-    .taskPaletteDestinationPlace: ("%1$@ · %2$@の先頭 · %3$@", "%1$@ · top of %2$@ · %3$@"),
+    .taskPaletteDestinationPlace: ("%1$@ · %2$@ · %3$@", "%1$@ · %2$@ · %3$@"),
     .taskPaletteDestinationNoWorkspace: ("workspace なし", "no workspace"),
     .taskPaletteAskTitle: ("%1$@ を秘書に頼む", "Ask the secretary about %1$@"),
     .taskPaletteAskOptional: ("補足は無くてもよい", "A note is optional"),

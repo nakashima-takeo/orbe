@@ -4,9 +4,9 @@ import Observation
 /// ⌘⇧X タスク画面の状態（@Observable）。タスクの値は写さずストア（唯一の正）を直接読み書きし、GitHub の値も
 /// 写さず置き場（結び付いた項目は `GitHubItemCache`、open 一覧は `GitHubOpenLists`、自分は `GitHubViewer`）
 /// から、agent の状態も写さず窓の索引（`WorktreeAgentActivity`・`AgentSessionTabs`）から引く。ここは一覧ごとの状態（入力・選択・
-/// 送り先）・範囲・タブ・絞り込み・焦点・編集中の下書き・右の欄の値・行の掴みだけを持つ。一覧の行は
+/// 送り先）・範囲・タブ・絞り込み・焦点・編集中の下書き・右の欄の値だけを持つ。一覧の行は
 /// `TaskPaletteRows` と `TaskPaletteGitHubRows` が毎回組む。
-/// 列か一覧が変わったとき（agent の変更を含む）は `reconcile()` 1 本で選択・焦点・下書き・掴みを付け直す。
+/// タスクか一覧が変わったとき（agent の変更を含む）は `reconcile()` 1 本で選択・焦点・下書きを付け直す。
 /// 受信タブの状態と手続きは `automation` が持ち、見えているタブが受信のときだけ、入力・キー・焦点をそこへ振り分ける。
 @Observable final class TaskPaletteModel {
   let store: TaskStore
@@ -69,8 +69,6 @@ import Observation
   var notice: TaskPaletteNotice?
   /// 画面を開いている間に入力欄から最後に足したタスク（「今足した」の印）。書くのはモデル（拡張を含む）だけ。
   var justAdded: Int?
-  /// 一覧の行の掴み。書くのはモデル（拡張を含む）だけ。
-  var drag: TaskPaletteDrag = .idle
   /// 右の欄の待ちの条件の箱で開いている部分。画面が持ち、別のタスクを選ぶと閉じる。書くのはモデル（拡張を含む）だけ。
   var openedConditionParts: Set<TaskConditionPart> = []
   /// 右の欄で居る場所が最後に居た位置（そのタスクの止まる場所の並びでの番号）。
@@ -118,7 +116,6 @@ import Observation
     automation = TaskPaletteAutomationModel(
       runner: automations, tasks: store, home: workspaces.home, today: today, timeZone: timeZone)
     automation.onPlaceChange = { [weak self] in self?.focus() }
-    automation.addPosition = { [weak self] in self?.addPosition(attachingTo: $0) ?? .end }
     automation.onOpenURL = { [weak self] in self?.onOpenURL($0) }
     reconcile()
     githubItems.refresh(visibleLinkIDs)
@@ -188,7 +185,7 @@ import Observation
 
   var selectedID: TaskPaletteRowID? { taskList.selectedID }
 
-  /// 一覧を送る先。人の操作（選び直し・並べ替え・範囲や開閉の切り替え・画面からの変異）のたびに決め直す。
+  /// 一覧を送る先。人の操作（選び直し・範囲や開閉の切り替え・画面からの変異）のたびに決め直す。
   var scrollTarget: ListScrollTarget<TaskPaletteRowID>? { taskList.scrollTarget }
 
   /// 選んでいるタスク（右の欄に出すもの）。入力の行き先・完了の見出しでは nil。
@@ -215,9 +212,9 @@ import Observation
 
   func focus() { focusToken &+= 1 }
 
-  /// 列・一覧・範囲・タブ・開閉が変わったあとの付け直し。選択は一覧の状態ごとに、その行で付け直す
+  /// タスク・一覧・範囲・タブ・開閉が変わったあとの付け直し。選択は一覧の状態ごとに、その行で付け直す
   /// （`ListState`）。右の欄に居る間に選択が別の行へ移ったら一覧へ戻り、対象が消えた下書きと、対象が
-  /// 一覧から外れた（完了で畳まれた・範囲の外へ出た）秘書に頼む欄は捨て、並びが変わった掴みも捨てる。右の欄に
+  /// 一覧から外れた（完了で畳まれた・範囲の外へ出た）秘書に頼む欄は捨てる。右の欄に
   /// 居る間に、選択の同一性が変わった・選んだ行が結び付いていない項目でなくなったら一覧へ戻る。
   func reconcile() {
     endStalePick()
@@ -239,7 +236,6 @@ import Observation
       if !stops.contains(stop) { area = .detail(stops[min(detailPosition, stops.count - 1)]) }
     }
     rememberDetailPosition()
-    discardStaleDrag()
   }
 
   /// 右の欄で居る場所の位置を覚え直す。焦点の結び付きが外れたとき、同じ位置の止まる場所へ移すため。

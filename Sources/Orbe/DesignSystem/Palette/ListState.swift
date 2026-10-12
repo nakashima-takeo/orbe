@@ -1,6 +1,6 @@
 import Foundation
 
-/// 一覧を見える所まで送る先。同じ行へ続けて送るとき（⌥↑↓ を続けて押す）も変化として届くよう、決めるたびに
+/// 一覧を見える所まで送る先。同じ行へ続けて送るとき（⌘↑ を続けて押す）も変化として届くよう、決めるたびに
 /// 進む番号を持つ。
 struct ListScrollTarget<ID: Hashable>: Equatable {
   let id: ID

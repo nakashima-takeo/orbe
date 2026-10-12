@@ -44,7 +44,6 @@ extension L10n {
     .taskPaletteActionEditDescription: ("詳細を書く", "Write description"),
     .taskPaletteActionCommit: ("確定", "Confirm"),
     .taskPaletteHintEdit: ("編集", "Edit"),
-    .taskPaletteHintReorder: ("並べ替え", "Reorder"),
     .taskPaletteHintScope: ("範囲", "Scope"),
     .taskPaletteHintField: ("項目", "Field"),
     .taskPaletteHintBack: ("一覧へ", "Back"),
