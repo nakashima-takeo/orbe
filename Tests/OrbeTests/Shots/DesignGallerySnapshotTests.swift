@@ -77,6 +77,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     try renderCompletionSnapshot(dir: dir)
     try renderStatusRowSnapshots(dir: dir)
     try renderStatusRowSegmentSnapshots(dir: dir)
+    try renderStatusRowEditorSnapshots(dir: dir)
     try renderBoardSnapshots(dir: dir)
     try renderWorkspaceCreateSnapshots(dir: dir)
     try renderUpdateSnapshots(dir: dir)
@@ -88,12 +89,25 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
   /// タブ・色・shrink・overflow・ストリップを検証する（信号機整列は実窓ハーネスで詰める）。
   /// 実アプリ同様に、design 正典 ステージ同寸（640×520）の BackgroundGlow の上へ重ねて撮る
   /// （TopBar は透明背景で、ambient の減衰はステージ全体の寸法に依存するため帯だけで描かない）。
-  private func chromeBand(_ model: StatusRowModel, size: NSSize) -> some View {
+  private func chromeBand(_ model: StatusRowModel, size: NSSize, windowIsMain: Bool = true)
+    -> some View
+  {
     ZStack(alignment: .top) {
       BackgroundGlow()
       StatusRowView(model: model).frame(width: size.width, height: Chrome.barHeight)
     }
     .frame(width: size.width, height: size.height, alignment: .top)
+    .environment(\.windowIsMain, windowIsMain)
+  }
+
+  /// 前面の姿（`<name>`）と、窓が main でない退いた姿（`<name>_inactive`）を対で書く。
+  private func writeChromeBandPair(_ model: StatusRowModel, size: NSSize, name: String, dir: URL)
+    throws
+  {
+    try writePNG(chromeBand(model, size: size), size: size, name: "\(name).png", dir: dir)
+    try writePNG(
+      chromeBand(model, size: size, windowIsMain: false), size: size,
+      name: "\(name)_inactive.png", dir: dir)
   }
 
   /// design 正典 のステージ同寸（chrome 帯 28+28 ＋ 空のターミナル領域）。
@@ -117,7 +131,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     normal.selection = .tab(0)
     normal.faceDots = .init(editor: .off, terminal: .focus)
     normal.rollup = [("working", 3), ("waiting", 1), ("done", 5), ("idle", 2)]
-    try writePNG(chromeBand(normal, size: size), size: size, name: "statusrow_normal.png", dir: dir)
+    try writeChromeBandPair(normal, size: size, name: "statusrow_normal", dir: dir)
 
     // overflow: 多数タブ＋長いタブ名（maxWidth cap＋shrink＋末尾省略）。状態グリフ各色を巡回。cwd あり。
     let overflow = StatusRowModel()
@@ -159,8 +173,7 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     grouped.location = [.dim("~/dev/storefront/src/hooks")]
     grouped.faceDots = .init(editor: .off, terminal: .focus)
     grouped.rollup = [("working", 2), ("waiting", 1), ("done", 2), ("idle", 4)]
-    try writePNG(
-      chromeBand(grouped, size: size), size: size, name: "statusrow_grouped.png", dir: dir)
+    try writeChromeBandPair(grouped, size: size, name: "statusrow_grouped", dir: dir)
 
     // grouped overflow: 長い名前 × 3 連（4+4+3）で全タブが床 40、バー幅ぶん器が広い状態。
     let groupedOverflow = StatusRowModel()
@@ -217,6 +230,28 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
     fitting.rollup = [("working", 1), ("done", 1), ("idle", 2)]
     try writePNG(
       chromeBand(fitting, size: size), size: size, name: "statusrow_fitting.png", dir: dir)
+  }
+
+  /// エディター焦点の段——ボードのセル・2 トーンの現在地・選択タブの done グリフ。renaming は改名中の選択面。
+  private func renderStatusRowEditorSnapshots(dir: URL) throws {
+    let size = statusRowStageSize
+    let editor = StatusRowModel()
+    editor.workspace = "orbe"
+    editor.boardLabel = "orbe"
+    editor.strip = TabStrip(
+      titles: ["window-look", "editor", "~/notes"],
+      glyphs: [.done, .working, nil],
+      segments: [0..<2, 2..<3],
+      colorIndices: ["orbe", "notes"].map { WorktreeColor.index(forKey: $0) })
+    editor.selection = .tab(0)
+    editor.location = [.dim("~/dev/orbe/"), .text("Sources/Orbe/App/Layout/AppShell.swift")]
+    editor.faceDots = .init(editor: .focus, terminal: .on)
+    editor.rollup = [("working", 1), ("done", 1), ("idle", 1)]
+    try writeChromeBandPair(editor, size: size, name: "statusrow_editor", dir: dir)
+
+    editor.editingIndex = 0
+    editor.editingText = "window-look"
+    try writeChromeBandPair(editor, size: size, name: "statusrow_renaming", dir: dir)
   }
 
   /// 補完のサイドカードと design 正典の 2 枚組。cap 超過のスクロール追従は flow の `completion_scroll` が撮る。

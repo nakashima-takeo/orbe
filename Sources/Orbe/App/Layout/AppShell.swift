@@ -37,6 +37,8 @@ import SwiftUI
   /// アクティブ workspace の選択が空（タブが 0 でボードも無い）か。true のとき content の地は端末もボードも塗らないため、
   /// AppShell が baseFill（透過設定追従）で埋める（透過ウィンドウ越しにデスクトップが透けるのを防ぐ）。
   var contentIsEmpty = false
+  /// 窓が main window か（WindowController が main の得失で書く）。false の間 chrome は退いた姿で描く。
+  var windowIsMain = false
 
   /// 前面 overlay の種別と、その描画状態（@Observable モデル）。提示元が立て下げる。
   var overlay: Overlay = .none
@@ -137,6 +139,7 @@ struct AppShell: View {
     .environment(\.chromeFontResolver, fontResolver)
     // chrome 全面が現在言語を読む単一注入点。言語変更でこの root と全子孫が再描画される。
     .environment(\.localization, localization)
+    .environment(\.windowIsMain, model.windowIsMain)
   }
 
   @ViewBuilder private var overlayView: some View {
@@ -168,5 +171,19 @@ struct AppShell: View {
     case .help:
       if let help = model.help { HelpOverlay(model: help) }
     }
+  }
+}
+
+private struct WindowIsMainKey: EnvironmentKey {
+  /// 未注入（見本系・別の SwiftUI の根）は前面の姿で描く。
+  static let defaultValue = true
+}
+
+extension EnvironmentValues {
+  /// 窓が main window か。macOS が信号機に色を付ける条件と同じで、key でなくても main なら前面の姿で描く。
+  /// `AppShell` が根で注入し、上段とタブ行・グローが読む。
+  var windowIsMain: Bool {
+    get { self[WindowIsMainKey.self] }
+    set { self[WindowIsMainKey.self] = newValue }
   }
 }
