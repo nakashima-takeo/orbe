@@ -70,7 +70,7 @@ private typealias AutomationBody = (ControlAutomationTarget, AutomationParams) t
     Any, ControlError
   >
 
-/// params の型検査。定義は intakes.json と同じ `Decodable` で読み、読めない箇所を -32602 の文に入れる。
+/// params の型検査。定義は旧い形（`AutomationLegacyDefinition`）で読んで今の定義へ変換し、読めない箇所を -32602 の文に入れる。
 private struct AutomationParams {
   let params: [String: Any]
 
@@ -107,7 +107,8 @@ private struct AutomationParams {
   func definition() throws(ControlError) -> AutomationDefinition {
     do {
       let data = try JSONSerialization.data(withJSONObject: params)
-      return try AutomationWire.decoder.decode(AutomationDefinition.self, from: data)
+      return try AutomationWire.decoder.decode(AutomationLegacyDefinition.self, from: data)
+        .definition
     } catch DecodingError.keyNotFound(let key, let context) {
       throw ControlError(code: -32602, message: "missing \(path(context.codingPath + [key]))")
     } catch DecodingError.typeMismatch(_, let context) {

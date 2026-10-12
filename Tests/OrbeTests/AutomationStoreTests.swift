@@ -12,13 +12,25 @@ final class AutomationStoreTests: OrbeTestCase {
 
   static func definition(
     _ name: String = "Slack: 自分宛", script: String = "fetch", instruction: String = "判定して",
-    coverage: AutomationCoverage = .currentSet, when: BackgroundTiming = .every(1800)
+    coverage: AutomationCoverage = .currentSet, trigger: BackgroundTiming = .every(1800)
   ) -> AutomationDefinition {
     AutomationDefinition(
-      name: name,
-      fetch: AutomationFetch(
+      name: name, trigger: trigger,
+      source: AutomationSource(
         method: .command(BackgroundCommand(script: script, directory: nil)), coverage: coverage),
-      judge: AutomationJudge(cli: "claude", model: "haiku", instruction: instruction), when: when)
+      steps: [judgeStep(instruction)], sink: .taskCandidates)
+  }
+
+  static func judgeStep(_ instruction: String = "判定して", cli: String = "claude") -> AutomationStep {
+    AutomationStep(
+      name: "判定",
+      method: .agent(AutomationStepAgent(cli: cli, model: "haiku", instruction: instruction)))
+  }
+
+  static func agentSource(
+    tools: [String] = ["mcp__slack__search"], request: String = "自分宛の DM"
+  ) -> AutomationSource.Method {
+    .agent(AutomationSourceAgent(cli: "claude", model: "haiku", tools: tools, request: request))
   }
 
   static func item(_ id: String, link: String? = nil, body: String = "本文") -> AutomationItem {
@@ -28,15 +40,35 @@ final class AutomationStoreTests: OrbeTestCase {
   }
 
   private func runRecord(failure: String? = nil) -> AutomationRun {
+    Self.run(at: t0, failure: failure)
+  }
+
+  /// 取得元まで行った回の記録（確定で出力先の記録が付く）。
+  static func run(at date: Date, failure: String? = nil) -> AutomationRun {
     AutomationRun(
-      startedAt: t0, endedAt: t0, trigger: .schedule,
-      fetch: AutomationFetchReport(
-        commandLine: "fetch", ending: "exited 0", items: 0, rejected: AutomationRejections()),
-      newItems: 0,
-      judge: AutomationJudgeReport(
-        commandLine: "claude", ending: "exited 0", proposed: 0, resolved: 0,
+      startedAt: date, endedAt: date, trigger: .schedule,
+      source: AutomationStepReport(
+        name: nil, commandLine: "fetch", ending: "exited 0", count: 0,
         rejected: AutomationRejections()),
-      withdrawn: 0, failure: failure)
+      fresh: 0, steps: [], sink: nil, failure: failure)
+  }
+
+  /// 確定した回の出力先の記録。
+  static func candidates(_ run: AutomationRun?) -> AutomationTaskCandidatesReport? {
+    guard case .taskCandidates(let report) = run?.sink else { return nil }
+    return report
+  }
+
+  /// 出力先タスク候補の確定を、判定の決定 `decisions` で行う（取れた項目をすべて新しい項目として取り込む）。
+  static func commit(
+    _ store: AutomationStore, _ id: Int, _ run: AutomationRun, fetched: [AutomationItem],
+    decisions: [AutomationDecision]
+  ) {
+    let sink = AutomationTaskCandidates(store: store, automationId: id)
+    _ = sink.admit(fetched, fetched: fetched)
+    store.commit(id, run, fetched: fetched) {
+      sink.commit(decisions, into: &$0, automations: $1, endedAt: run.endedAt)
+    }
   }
 
   func store(automations count: Int = 1) throws -> AutomationStore {
@@ -54,20 +86,27 @@ final class AutomationStoreTests: OrbeTestCase {
     let decisions =
       proposing.map { AutomationDecision.propose(itemId: $0.id, title: "対応: \($0.id)", due: nil) }
       + resolving.map { AutomationDecision.resolve(link: $0) }
-    store.commit(
-      id, runRecord(), fetched: fetched, judged: proposing, decisions: decisions)
+    Self.commit(store, id, runRecord(), fetched: fetched, decisions: decisions)
   }
 
   // MARK: - 新しい項目
+
+  /// 枠の差分の後にタスク候補の取り込みを掛けた、段に回す項目。
+  private func newItems(
+    _ store: AutomationStore, _ id: Int, _ fetched: [AutomationItem]
+  ) -> [AutomationItem] {
+    AutomationTaskCandidates(store: store, automationId: id)
+      .admit(store.unseen(of: id, in: fetched), fetched: fetched)
+  }
 
   func testNewItemsSkipThePreviousFetchExistingProposalsAndRepeatedLinks() throws {
     let store = try store(automations: 2)
     commit(store, 1, fetched: [Self.item("a"), Self.item("b")])
     commit(store, 2, fetched: [Self.item("x")], proposing: [Self.item("x")])
 
-    let fresh = store.newItems(
-      of: 1,
-      in: [
+    let fresh = newItems(
+      store, 1,
+      [
         Self.item("a"), Self.item("c"), Self.item("c2", link: "https://example.com/c"),
         Self.item("y", link: "https://example.com/x"),
       ])
@@ -81,17 +120,15 @@ final class AutomationStoreTests: OrbeTestCase {
     commit(store, 1, fetched: [Self.item("a")])
 
     XCTAssertEqual(
-      store.newItems(of: 1, in: [Self.item("a2", link: "https://example.com/a")]).map(\.id), ["a2"])
+      newItems(store, 1, [Self.item("a2", link: "https://example.com/a")]).map(\.id), ["a2"])
   }
 
   func testReviewAllJudgesEverythingExceptProposedLinks() throws {
     let store = try store()
     commit(store, 1, fetched: [Self.item("a"), Self.item("b")], proposing: [Self.item("b")])
-    var changed = Self.definition("受信 1")
-    changed.judge.instruction = "別の指示"
-    _ = try store.replace(1, with: changed)
+    _ = try store.replace(1, with: Self.definition("受信 1", instruction: "別の指示"))
 
-    XCTAssertEqual(store.newItems(of: 1, in: [Self.item("a"), Self.item("b")]).map(\.id), ["a"])
+    XCTAssertEqual(newItems(store, 1, [Self.item("a"), Self.item("b")]).map(\.id), ["a"])
     commit(store, 1, fetched: [Self.item("a"), Self.item("b")])
     XCTAssertFalse(store.automation(1)!.reviewAll, "見直した回の確定で下ろす")
   }
@@ -102,19 +139,22 @@ final class AutomationStoreTests: OrbeTestCase {
   func testOneProposalPerLinkAcrossAutomations() throws {
     let store = try store(automations: 2)
     let shared = Self.item("m", link: "https://example.com/shared")
+    let second = AutomationTaskCandidates(store: store, automationId: 2)
+    XCTAssertEqual(second.admit([shared], fetched: [shared]), [shared], "まだ候補が無いので受ける")
     commit(store, 1, fetched: [shared], proposing: [shared])
 
-    var record = runRecord()
-    store.commit(
-      2, record, fetched: [shared], judged: [shared],
-      decisions: [.propose(itemId: "m", title: "二重", due: nil)])
-    record = store.automation(2)!.runs[0]
+    store.commit(2, runRecord(), fetched: [shared]) {
+      second.commit(
+        [.propose(itemId: "m", title: "二重", due: nil)], into: &$0, automations: $1,
+        endedAt: self.t0)
+    }
+    let report = Self.candidates(store.automation(2)!.runs[0])
 
     XCTAssertEqual(store.proposals.count, 1)
     XCTAssertEqual(store.proposals[0].automationId, 1)
-    XCTAssertEqual(record.judge?.proposed, 0)
+    XCTAssertEqual(report?.proposed, 0)
     XCTAssertEqual(
-      record.judge?.rejected.reasons, ["propose m: https://example.com/shared is already proposed"])
+      report?.rejected.reasons, ["propose m: https://example.com/shared is already proposed"])
   }
 
   /// 判定中に人がさばいた提案は、後から届いた判定の「対応済み」で上書きしない。
@@ -128,7 +168,7 @@ final class AutomationStoreTests: OrbeTestCase {
     commit(store, 1, fetched: [a, b], resolving: [a.link, b.link])
 
     XCTAssertEqual(store.proposals.map(\.state), [.dismissed, .resolved])
-    XCTAssertEqual(store.automation(1)!.runs[0].judge?.resolved, 1)
+    XCTAssertEqual(Self.candidates(store.automation(1)!.runs[0])?.resolved, 1)
   }
 
   /// どの受信の取得結果からも消えたリンクの提案は忘れる（出ていたものは下げた数に入る）。他の受信が取っている間は残る。
@@ -142,7 +182,7 @@ final class AutomationStoreTests: OrbeTestCase {
     commit(store, 1, fetched: [])
 
     XCTAssertEqual(store.proposals.map(\.item.link), [shared.link])
-    XCTAssertEqual(store.automation(1)!.runs[0].withdrawn, 1)
+    XCTAssertEqual(Self.candidates(store.automation(1)!.runs[0])?.withdrawn, 1)
     XCTAssertEqual(store.shelf(of: store.proposals[0])?.id, 2, "提案した受信が取らなくなったら、取っている受信の棚へ")
   }
 
@@ -153,7 +193,7 @@ final class AutomationStoreTests: OrbeTestCase {
     commit(store, 1, fetched: [a], proposing: [a])
     commit(store, 1, fetched: [])
 
-    XCTAssertEqual(store.newItems(of: 1, in: [a]).map(\.id), ["a"])
+    XCTAssertEqual(newItems(store, 1, [a]).map(\.id), ["a"])
   }
 
   func testPausingKeepsTheFetchedLinksSoProposalsStay() throws {
@@ -228,8 +268,8 @@ final class AutomationStoreTests: OrbeTestCase {
     let store = try store()
     let tasks = TaskStore(file: nil)
     let a = Self.item("a", body: "レビューをお願いします")
-    store.commit(
-      1, runRecord(), fetched: [a], judged: [a],
+    Self.commit(
+      store, 1, runRecord(), fetched: [a],
       decisions: [.propose(itemId: "a", title: "レビューする", due: TaskItem.DueDate("2026-10-12"))])
 
     let home = UUID()
@@ -267,11 +307,12 @@ final class AutomationStoreTests: OrbeTestCase {
     XCTAssertEqual(try reloaded.create(Self.definition(), now: t0).id, 2, "採番位置も戻る")
   }
 
-  /// 以前の Orbe が書いた intakes.json を読み戻せる。この fixture はこの形で凍結しておく（型の変更に合わせて書き換えない）。
+  /// 以前の Orbe が書いた intakes.json を読み替え、同じ自動化・候補として持ち、その場で automations.json を書く。旧ファイル
+  /// には触らない。この fixture はこの形で凍結しておく（型の変更に合わせて書き換えない）。
   ///
-  /// 壊れると何が起きるか: 回の記録や提案の Swift の名前を変える・既定値付きの必須フィールドを足すと、保存の語が黙って
-  /// 変わり、更新した利用者の intakes.json が初回起動で丸ごと退避されて、AI と人が作った受信と提案が消える。
-  func testFileWrittenByThisVersionLoads() throws {
+  /// 壊れると何が起きるか: 更新した利用者の自動化と候補が初回起動で消える。次の起動で移行がやり直され、新しい版で起きた
+  /// ことが巻き戻る。旧版の Orbe に戻すと旧ファイルが読めない。
+  func testLegacyFileIsMigratedOnceAndLeftUntouched() throws {
     let saved = """
       {"version":1,"nextIntakeId":3,"nextProposalId":2,"intakes":[{"id":2,"definition":{\
       "name":"Slack: 自分宛","fetch":{"agent":"claude","model":"haiku","tools":["mcp__slack__search"],\
@@ -287,7 +328,9 @@ final class AutomationStoreTests: OrbeTestCase {
       "body":"返信ください","time":"2027-01-15T08:30:00.000Z"},"title":"返信する","due":"2027-01-16",\
       "proposedAt":"2027-01-15T09:01:00.000Z","state":"accepted","taskId":7}]}
       """
-    try Data(saved.utf8).write(to: try automationsFile())
+    let legacy = try automationsFile().deletingLastPathComponent()
+      .appendingPathComponent("intakes.json")
+    try Data(saved.utf8).write(to: legacy)
 
     let store = AutomationStore()
 
@@ -295,29 +338,49 @@ final class AutomationStoreTests: OrbeTestCase {
     XCTAssertEqual(
       automation.definition,
       AutomationDefinition(
-        name: "Slack: 自分宛",
-        fetch: AutomationFetch(
+        name: "Slack: 自分宛", trigger: .daily([.init(hour: 9, minute: 0)]),
+        source: AutomationSource(
           method: .agent(
-            AutomationAgentFetch(
+            AutomationSourceAgent(
               cli: "claude", model: "haiku", tools: ["mcp__slack__search"], request: "DM")),
           coverage: .newArrivals),
-        judge: AutomationJudge(cli: "claude", model: "sonnet", instruction: "自分がやること"),
-        when: .daily([.init(hour: 9, minute: 0)])))
+        steps: [
+          AutomationStep(
+            name: "判定",
+            method: .agent(
+              AutomationStepAgent(cli: "claude", model: "sonnet", instruction: "自分がやること")))
+        ],
+        sink: .taskCandidates))
     XCTAssertTrue(automation.paused)
     XCTAssertEqual(
       automation.lastFetched, [AutomationSeen(id: "m1", link: "https://example.com/m1")])
-    XCTAssertEqual(automation.runs.first?.newItems, 1)
-    XCTAssertEqual(automation.runs.first?.judge?.rejected.reasons, ["line 2: not JSON"])
+    let run = try XCTUnwrap(automation.runs.first)
+    XCTAssertEqual(run.source?.count, 1)
+    XCTAssertEqual(run.fresh, 1)
+    XCTAssertEqual(run.steps.map(\.name), ["判定"])
+    XCTAssertEqual(Self.candidates(run)?.proposed, 1)
+    XCTAssertEqual(Self.candidates(run)?.rejected.reasons, ["line 2: not JSON"])
+    XCTAssertEqual(automation.lastSucceededAt, run.startedAt, "失敗でない最新の回の開始時刻")
+    XCTAssertEqual(store.proposals.first?.automationId, 2)
     XCTAssertEqual(store.proposals.first?.state, .accepted(taskId: 7))
     XCTAssertEqual(store.proposals.first?.due?.text, "2027-01-16")
+
+    XCTAssertEqual(
+      AutomationPersistence.load()?.automations, store.automations,
+      "読み替えた時点で automations.json を書く")
+    XCTAssertEqual(try Data(contentsOf: legacy), Data(saved.utf8), "旧ファイルは書き換えない")
     XCTAssertEqual(try store.create(Self.definition(), now: t0).id, 3, "採番位置も読む")
   }
 
+  /// 使えない automations.json は退避し、その場で空の automations.json を書く——古い intakes.json へ巻き戻らない。
   func testBrokenFileIsQuarantinedAndStartsEmpty() throws {
     let url = try automationsFile()
     try Data("{\"version\":1}".utf8).write(to: url)
+    try Data(
+      #"{"version":1,"nextIntakeId":5,"nextProposalId":1,"intakes":[],"proposals":[]}"#.utf8
+    ).write(to: url.deletingLastPathComponent().appendingPathComponent("intakes.json"))
 
     XCTAssertTrue(AutomationStore().automations.isEmpty)
-    XCTAssertFalse(FileManager.default.fileExists(atPath: url.path), "使えない原本は退避する")
+    XCTAssertEqual(AutomationPersistence.load(), .empty, "空の automations.json が在る")
   }
 }

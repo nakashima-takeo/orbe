@@ -1,24 +1,34 @@
 import Foundation
 import OrbeSessionLog
 
-/// 取得役と判定の依頼文、その出力の読み取り。入出力の形は Orbe が固定の枠で持つ——利用者の依頼文・指示文が形まで決めると、
-/// 受信ごとに形が割れて検証できないため。
+/// 取得元・段・判定の依頼文と、その出力の読み取り。入出力の形は Orbe が固定の枠で持つ——利用者の依頼文・指示文が形まで
+/// 決めると、自動化ごとに形が割れて検証できないため。
 enum AutomationPrompts {
   // MARK: - 取得
 
-  static func fetch(request: String) -> String {
-    """
-    You fetch items for Orbe. Use only the tools you were given to fetch what the request below asks for.
+  /// `since` は新着の流れの目印（前回成功した回の開始時刻）。無ければ目印の文を載せない。
+  static func fetch(request: String, since: Date? = nil) -> String {
+    let mark =
+      since.map {
+        """
 
-    Request:
-    \(request)
+        Fetch the items after \(SessionEvent.iso8601($0)) (the start of Orbe's last successful run); \
+        including some earlier items is fine, Orbe drops items it has already seen.
 
-    Output one JSON object per line and nothing else (no prose, no code fences):
-    {"id": "<stable id of the item within this source>", "link": "<http(s) URL of the item>", \
-    "body": "<the item's text>", "time": "<ISO 8601 time of the item>"}
-    Output nothing when there are no items.
-    If a tool fails or is unavailable, output only this one line instead: {"error": "<what went wrong>"}
-    """
+        """
+      } ?? ""
+    return """
+      You fetch items for Orbe. Use only the tools you were given to fetch what the request below asks for.
+
+      Request:
+      \(request)
+      \(mark)
+      Output one JSON object per line and nothing else (no prose, no code fences):
+      {"id": "<stable id of the item within this source>", "link": "<http(s) URL of the item>", \
+      "body": "<the item's text>", "time": "<ISO 8601 time of the item>"}
+      Output nothing when there are no items.
+      If a tool fails or is unavailable, output only this one line instead: {"error": "<what went wrong>"}
+      """
   }
 
   enum FetchReading: Equatable {
@@ -52,17 +62,55 @@ enum AutomationPrompts {
     return .items(items, rejected: rejected)
   }
 
+  // MARK: - 段
+
+  /// 項目を段に渡す 1 行。
+  static func row(_ item: AutomationItem) -> String {
+    jsonLine(AutomationWire.object(item))
+  }
+
+  /// 中間の agent の段の依頼文。
+  static func step(instruction: String, rows: [String], now: Date, timeZone: TimeZone) -> String {
+    """
+    You process items for Orbe as one step of an automation. You have no tools; read only what is below.
+
+    Now: \(local(now, timeZone)), time zone \(timeZone.identifier).
+
+    The user's instruction:
+    \(instruction)
+
+    Input (one JSON object per line):
+    \(rows.isEmpty ? "(none)" : rows.joined(separator: "\n"))
+
+    Output one JSON object per line and nothing else (no prose, no code fences). \
+    Keep the "id" of each item you pass on unchanged. Output nothing when no item remains.
+    """
+  }
+
+  /// 段に渡す行の `id`（文字列でなければ nil）。
+  static func id(of row: String) -> String? {
+    guard let object = try? JSONSerialization.jsonObject(with: Data(row.utf8)) as? [String: Any]
+    else { return nil }
+    return object["id"] as? String
+  }
+
+  /// 段の出力を JSON オブジェクトの行として読む。読めた行はそのまま次へ渡し、読めない行は理由付きで捨てる。
+  static func readRows(_ text: String) -> (rows: [AutomationRow], rejected: AutomationRejections) {
+    let lines = JSONLines<AnyObjectLine>(text)
+    var rejected = AutomationRejections()
+    for rejection in lines.rejected {
+      rejected.add("line \(rejection.line): \(rejection.reason.text)")
+    }
+    return (lines.accepted.map { AutomationRow(line: $0.line, text: $0.text) }, rejected)
+  }
+
   // MARK: - 判定
 
+  /// タスク候補の出力先が最後の agent の段に渡す依頼文。`rows` は確かめた入力行。
   static func judge(
-    instruction: String, items: [AutomationItem], open: [AutomationProposal], now: Date,
+    instruction: String, rows: [String], open: [AutomationProposal], now: Date,
     timeZone: TimeZone
   ) -> String {
-    let local = DateFormatter()
-    local.locale = Locale(identifier: "en_US_POSIX")
-    local.timeZone = timeZone
-    local.dateFormat = "yyyy-MM-dd HH:mm (EEEE)"
-    let itemLines = items.map { jsonLine(AutomationWire.object($0)) }.joined(separator: "\n")
     let openLines = open.map { proposal in
       var entry: [String: Any] = ["link": proposal.item.link, "title": proposal.title]
       if let due = proposal.due { entry["due"] = due.text }
@@ -72,13 +120,13 @@ enum AutomationPrompts {
       You decide which incoming items should become tasks on the user's task list. You have no tools; \
       read only what is below.
 
-      Now: \(local.string(from: now)), time zone \(timeZone.identifier).
+      Now: \(local(now, timeZone)), time zone \(timeZone.identifier).
 
       The user's instruction:
       \(instruction)
 
       New items (one JSON object per line):
-      \(itemLines)
+      \(rows.joined(separator: "\n"))
 
       Proposals already waiting for the user (one JSON object per line; may be empty):
       \(openLines.isEmpty ? "(none)" : openLines)
@@ -93,22 +141,24 @@ enum AutomationPrompts {
       """
   }
 
-  /// 判定の出力を読む。形の違う行・知らない項目や提案を指す行・不正なタイトルや期限・同じ項目への 2 つ目の提案は、
-  /// 理由付きで捨てる。
-  static func readJudge(_ text: String, items: [AutomationItem], open: [AutomationProposal]) -> (
-    decisions: [AutomationDecision], rejected: AutomationRejections
-  ) {
-    let lines = JSONLines<JudgeLine>(text)
+  /// 最後の段の行を判定の出力として読む。propose・resolve の形でない行・知らない項目や候補を指す行・不正なタイトルや
+  /// 期限・同じ項目への 2 つ目の候補は、理由付きで捨てる。`itemIds` は今回の新しい項目の id。
+  static func readJudge(
+    _ rows: [AutomationRow], itemIds: Set<String>, open: [AutomationProposal]
+  ) -> (decisions: [AutomationDecision], rejected: AutomationRejections) {
     var rejected = AutomationRejections()
-    for rejection in lines.rejected {
-      rejected.add("line \(rejection.line): \(rejection.reason.text)")
-    }
-    let itemIds = Set(items.map(\.id))
     let openLinks = Set(open.map(\.item.link))
     var proposed = Set<String>()
     var resolved = Set<String>()
     var decisions: [AutomationDecision] = []
-    for line in lines.items {
+    for row in rows {
+      let line: JudgeLine
+      switch JSONLines<JudgeLine>.decode(row.text) {
+      case .success(let read): line = read
+      case .failure(let reason):
+        rejected.add("line \(row.line): \(reason.text)")
+        continue
+      }
       switch (line.propose, line.resolve) {
       case (let id?, nil):
         guard itemIds.contains(id) else {
@@ -145,6 +195,15 @@ enum AutomationPrompts {
     return (decisions, rejected)
   }
 
+  /// 「2026-10-13 09:00 (Tuesday)」。
+  private static func local(_ now: Date, _ timeZone: TimeZone) -> String {
+    let local = DateFormatter()
+    local.locale = Locale(identifier: "en_US_POSIX")
+    local.timeZone = timeZone
+    local.dateFormat = "yyyy-MM-dd HH:mm (EEEE)"
+    return local.string(from: now)
+  }
+
   private static func jsonLine(_ object: Any) -> String {
     guard
       let data = try? JSONSerialization.data(
@@ -153,6 +212,17 @@ enum AutomationPrompts {
     else { return "{}" }
     return line
   }
+}
+
+/// 段の出力の 1 行（JSON オブジェクト）。`line` は出力の中の 1 始まりの行番号。
+struct AutomationRow: Equatable {
+  let line: Int
+  let text: String
+}
+
+/// どんな JSON オブジェクトも受ける行（オブジェクトかは `JSONLines` が見る）。
+private struct AnyObjectLine: Decodable {
+  init(from decoder: Decoder) throws {}
 }
 
 /// 取得役の失敗の申告（`id` を持たず文字列の `error` を持つ行）。

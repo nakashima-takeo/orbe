@@ -26,14 +26,14 @@ extension L10n {
     .taskPaletteAutomationOverlaps: ("重なり", "Overlaps"),
     .taskPaletteAutomationOverlapCount: ("%1$@ と %2$lld 件", "%2$lld with %1$@"),
     .taskPaletteAutomationRewriteNote: (
-      "名前・取得・判定は秘書が一度にまとめて書き換える",
-      "The secretary rewrites the name, fetch, and judge together"
+      "名前・取得・処理は秘書が一度にまとめて書き換える",
+      "The secretary rewrites the name, fetch, and steps together"
     ),
     .taskPaletteAutomationErrAccept: ("タスクにできませんでした", "Couldn’t make it a task"),
 
     // MARK: 自動追加の共有の文
     .automationFetch: ("取得", "Fetch"),
-    .automationJudge: ("判定", "Judge"),
+    .automationSteps: ("処理", "Steps"),
     .automationNext: ("次 %@", "next %@"),
     .automationPaused: ("止めている", "paused"),
     .automationRunning: ("実行中…", "running…"),
@@ -59,8 +59,12 @@ extension L10n {
       "新着の流れ · 判定が対応済みとした候補だけを下げる",
       "New arrivals · drops candidates only when the judge resolves them"
     ),
+    .automationEverything: (
+      "毎回全件 · 前回の取得結果との差分を掛けない",
+      "Everything · no diff against the last fetch"
+    ),
     .automationAgentFetch: ("軽い agent", "Light agent"),
-    .automationCommandFetch: ("コマンド", "Command"),
+    .automationCommand: ("コマンド", "Command"),
     .automationTools: ("使えるツール", "Tools"),
     .automationDirectory: ("作業ディレクトリ", "Directory"),
     .automationEvery: ("%lld 分ごと", "every %lld min"),

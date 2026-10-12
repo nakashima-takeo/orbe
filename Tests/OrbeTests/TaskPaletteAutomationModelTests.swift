@@ -36,13 +36,13 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     let runner = DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignFile())
     let item = DesignSceneFixtures.automationItem(
       "C03-9", "後の回", at: DesignSceneFixtures.automationNow)
-    runner.store.commit(
-      2,
+    AutomationStoreTests.commit(
+      runner.store, 2,
       DesignSceneFixtures.automationRun(
-        at: DesignSceneFixtures.automationNow, items: 3, newItems: 1),
+        at: DesignSceneFixtures.automationNow, items: 3, fresh: 1),
       fetched: runner.store.automation(2)!.lastFetched.map {
         AutomationItem(id: $0.id, link: $0.link, body: "", time: DesignSceneFixtures.automationNow)
-      } + [item], judged: [item], decisions: [.propose(itemId: "C03-9", title: "後の提案", due: nil)])
+      } + [item], decisions: [.propose(itemId: "C03-9", title: "後の提案", due: nil)])
     let palette = TaskPaletteSamples.model([], automations: runner)
 
     XCTAssertEqual(palette.automation.proposalIDs, [4, 1, 2, 3])

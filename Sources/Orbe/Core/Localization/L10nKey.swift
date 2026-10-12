@@ -370,7 +370,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAutomationErrAccept
   // MARK: - 自動追加の共有の文（L10nTable+Automation）
   case automationFetch
-  case automationJudge
+  case automationSteps
   case automationNext
   case automationPaused
   case automationRunning
@@ -390,8 +390,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationDue
   case automationCurrentSet
   case automationNewArrivals
+  case automationEverything
   case automationAgentFetch
-  case automationCommandFetch
+  case automationCommand
   case automationTools
   case automationDirectory
   case automationEvery

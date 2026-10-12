@@ -62,19 +62,8 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
   private func commit(
     _ wc: WindowController, _ id: Int, fetched: [AutomationItem], proposing: [AutomationItem] = []
   ) {
-    let now = Date()
-    let run = AutomationRun(
-      startedAt: now, endedAt: now, trigger: .now,
-      fetch: AutomationFetchReport(
-        commandLine: "fetch", ending: "exited 0", items: fetched.count,
-        rejected: AutomationRejections()),
-      newItems: proposing.count,
-      judge: AutomationJudgeReport(
-        commandLine: "claude", ending: "exited 0", proposed: 0, resolved: 0,
-        rejected: AutomationRejections()),
-      withdrawn: 0, failure: nil)
-    wc.automationStore.commit(
-      id, run, fetched: fetched, judged: proposing,
+    AutomationStoreTests.commit(
+      wc.automationStore, id, AutomationStoreTests.run(at: Date()), fetched: fetched,
       decisions: proposing.map { .propose(itemId: $0.id, title: "対応: \($0.id)", due: nil) })
   }
 
@@ -151,7 +140,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let wc = try launch()
     let id = try set(wc, AutomationStoreTests.definition())
     var codex = AutomationStoreTests.definition("codex に判定させる")
-    codex.judge.cli = "codex"
+    codex.steps = [AutomationStoreTests.judgeStep(cli: "codex")]
 
     XCTAssertEqual(code(wc.controlRunAutomation(automationId: 99)), -32004)
     XCTAssertEqual(code(wc.controlPauseAutomation(automationId: 99, paused: true)), -32004)
@@ -171,16 +160,15 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
   func testListedDefinitionReadsBackAsTheSameDefinition() throws {
     let wc = try launch()
     var definition = AutomationStoreTests.definition(
-      when: .daily([.init(hour: 13, minute: 30), .init(hour: 9, minute: 0)]))
-    definition.fetch.method = .agent(
-      AutomationAgentFetch(
-        cli: "claude", model: "haiku", tools: ["mcp__slack__search"], request: "自分宛の DM"))
+      trigger: .daily([.init(hour: 13, minute: 30), .init(hour: 9, minute: 0)]))
+    definition.source?.method = AutomationStoreTests.agentSource()
     let id = try set(wc, definition)
 
     let entry = try XCTUnwrap(try listed(wc)[id])
     let data = try JSONSerialization.data(withJSONObject: entry)
 
     XCTAssertEqual(
-      try AutomationWire.decoder.decode(AutomationDefinition.self, from: data), definition)
+      try AutomationWire.decoder.decode(AutomationLegacyDefinition.self, from: data).definition,
+      definition)
   }
 }

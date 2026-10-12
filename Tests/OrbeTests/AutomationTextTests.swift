@@ -22,18 +22,18 @@ final class AutomationTextTests: OrbeTestCase {
     let at = DesignSceneFixtures.automationAt
     XCTAssertEqual(
       text.runHeadline(
-        DesignSceneFixtures.automationRun(at: at(13, 0, 0), items: 9, newItems: 4, proposed: 2)),
+        DesignSceneFixtures.automationRun(at: at(13, 0, 0), items: 9, fresh: 4, proposed: 2)),
       "13:00 の回 · 9 件取得 → 新しい 4 件を判定 → 候補 2")
     XCTAssertEqual(
       text.runDetail(
-        DesignSceneFixtures.automationRun(at: at(9, 12, 0), items: 14, newItems: 3, proposed: 1)),
+        DesignSceneFixtures.automationRun(at: at(9, 12, 0), items: 14, fresh: 3, proposed: 1)),
       "今日 9:12 · 14 件取得 → 新しい 3 件を判定 → 候補 1 件")
     XCTAssertEqual(
-      text.runHeadline(DesignSceneFixtures.automationRun(at: at(13, 0, 1), items: 9, newItems: 0)),
+      text.runHeadline(DesignSceneFixtures.automationRun(at: at(13, 0, 1), items: 9, fresh: 0)),
       "10/3 13:00 の回 · 9 件取得 → 新しい項目なし")
     XCTAssertEqual(
       text.runHeadline(
-        DesignSceneFixtures.automationRun(at: at(9, 0, 0), items: 0, newItems: 0, failure: "boom")),
+        DesignSceneFixtures.automationRun(at: at(9, 0, 0), items: 0, fresh: 0, failure: "boom")),
       "9:00 の回 · 失敗 — boom")
     XCTAssertEqual(text.runHeadline(nil), "まだ回っていない")
   }
@@ -42,9 +42,9 @@ final class AutomationTextTests: OrbeTestCase {
   func testProposedCountSingularAndPlural() {
     let at = DesignSceneFixtures.automationAt
     let one = DesignSceneFixtures.automationRun(
-      at: at(13, 0, 0), items: 9, newItems: 4, proposed: 1)
+      at: at(13, 0, 0), items: 9, fresh: 4, proposed: 1)
     let two = DesignSceneFixtures.automationRun(
-      at: at(13, 0, 0), items: 9, newItems: 4, proposed: 2)
+      at: at(13, 0, 0), items: 9, fresh: 4, proposed: 2)
     let en = Self.automationText(.en)
     XCTAssertEqual(en.runHeadline(one), "13:00 run · fetched 9 → judged 4 new → 1 candidate")
     XCTAssertEqual(en.runHeadline(two), "13:00 run · fetched 9 → judged 4 new → 2 candidates")

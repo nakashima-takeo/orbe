@@ -19,14 +19,13 @@ extension AutomationStoreTests {
     var multiline = Self.definition()
     multiline.name = "a\nb"
     var codex = Self.definition()
-    codex.judge.cli = "codex"
+    codex.steps = [Self.judgeStep(cli: "codex")]
     var noTools = Self.definition()
-    noTools.fetch.method = .agent(
-      AutomationAgentFetch(cli: "claude", model: "haiku", tools: [], request: "x"))
+    noTools.source?.method = Self.agentSource(tools: [])
     var relative = Self.definition()
-    relative.fetch.method = .command(BackgroundCommand(script: "x", directory: "tmp"))
+    relative.source?.method = .command(BackgroundCommand(script: "x", directory: "tmp"))
     var tooOften = Self.definition()
-    tooOften.when = .every(30)
+    tooOften.trigger = .every(30)
 
     for (label, definition) in [
       ("複数行の名前", multiline), ("裏で回せない agent", codex), ("ツールの無い取得役", noTools),
@@ -45,8 +44,7 @@ extension AutomationStoreTests {
     let store = try store()
     func fetching(_ tools: [String]) -> AutomationDefinition {
       var definition = Self.definition()
-      definition.fetch.method = .agent(
-        AutomationAgentFetch(cli: "claude", model: "haiku", tools: tools, request: "DM"))
+      definition.source?.method = Self.agentSource(tools: tools)
       return definition
     }
 
@@ -68,15 +66,15 @@ extension AutomationStoreTests {
       "サーバー名に _ を含む完全名は通す")
   }
 
-  /// 取得か判定の書き換えだけが、次の回の全件見直しを立てる。名前やいつだけでは立てない。
+  /// 取得元か処理の書き換えだけが、次の回の全件見直しを立てる。名前やいつだけでは立てない。
   func testReplacingFetchOrJudgeMarksReviewAll() throws {
     let store = try store()
-    var renamed = Self.definition("新しい名前", when: .every(600))
+    var renamed = Self.definition("新しい名前", trigger: .every(600))
 
     XCTAssertFalse(try store.replace(1, with: renamed).reworked)
     XCTAssertFalse(store.automation(1)!.reviewAll)
 
-    renamed.judge.instruction = "別の指示"
+    renamed.steps = [Self.judgeStep("別の指示")]
     XCTAssertTrue(try store.replace(1, with: renamed).reworked)
     XCTAssertTrue(store.automation(1)!.reviewAll)
   }

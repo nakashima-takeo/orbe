@@ -3,7 +3,7 @@ import Foundation
 /// 裏で回す仕事。走らせるものと上限の組。
 struct BackgroundJob: Equatable {
   enum Work: Equatable {
-    case command(BackgroundCommand)
+    case command(BackgroundCommand, BackgroundInput)
     case agent(BackgroundAgentCall)
   }
 
@@ -16,8 +16,10 @@ struct BackgroundJob: Equatable {
   var work: Work
   var limits: BackgroundLimits
 
-  static func command(_ command: BackgroundCommand) -> BackgroundJob {
-    BackgroundJob(work: .command(command), limits: .command)
+  static func command(_ command: BackgroundCommand, input: BackgroundInput = BackgroundInput())
+    -> BackgroundJob
+  {
+    BackgroundJob(work: .command(command, input), limits: .command)
   }
 
   static func agent(_ call: BackgroundAgentCall) -> BackgroundJob {
@@ -33,7 +35,7 @@ struct BackgroundJob: Equatable {
 
   func validate() throws(BackgroundJobError) {
     switch work {
-    case .command(let command):
+    case .command(let command, _):
       guard !command.script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
         throw BackgroundJobError.emptyCommand
       }
@@ -59,6 +61,13 @@ struct BackgroundJob: Equatable {
 struct BackgroundCommand: Equatable {
   var script: String
   var directory: String?
+}
+
+/// コマンドの 1 回分の入力。保存する定義（`BackgroundCommand`）と混ぜないよう、仕事の側に持つ。
+struct BackgroundInput: Equatable {
+  var stdin: Data?
+  /// 子の環境に足す変数。
+  var environment: [String: String] = [:]
 }
 
 /// 非対話の agent の呼び出し。`tools` は使ってよいツールの名前（組み込みと `mcp__` で始まる MCP のツール）。
