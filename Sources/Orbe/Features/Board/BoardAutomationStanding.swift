@@ -1,20 +1,16 @@
 import Foundation
 
-/// 自動追加 1 つの立ち位置——走っているか・止めているか・前回の結果——を 1 回だけ導いた値。並びの群・点の色・右端の文と色は
-/// すべてここから読む（同じ判定が並び・点・文・色に散ると、優先順位が 1 か所だけずれる）。
+/// 自動化 1 つの立ち位置——走っているか・止めているか・前回の区分——を 1 回だけ導いた値。並びの群・点の色・右端の種類は
+/// すべてここから読む（同じ判定が並び・点・文・色に散ると、優先順位が 1 か所だけずれる）。自動化そのものは持たない。
 struct BoardAutomationStanding: Equatable, Identifiable {
-  let automation: Automation
+  let id: Int
+  let name: String
+  let paused: Bool
   let running: Bool
   /// `now` から見て次に予定で回る時刻。止めていれば nil。
   let next: Date?
-
-  init(_ automation: Automation, runner: AutomationRunner, now: Date) {
-    self.automation = automation
-    running = runner.isRunning(automation.id)
-    next = runner.nextRunAt(automation, now: now)
-  }
-
-  var id: Int { automation.id }
+  /// 最新の回の区分。まだ回っていなければ nil。
+  let last: BoardRunTone?
 
   /// 並びの群（この順に並ぶ）。走っているかは効かない——走り出すたびに行が跳ねないため。
   enum Group: Comparable {
@@ -24,8 +20,8 @@ struct BoardAutomationStanding: Equatable, Identifiable {
   }
 
   var group: Group {
-    if automation.paused { return .paused }
-    return automation.runs.first?.failure == nil ? .active : .failing
+    if paused { return .paused }
+    return last == .failed ? .failing : .active
   }
 
   /// 右端に出す 1 つ。走っている ＞ 止めている ＞ 前回の結果、の順に決まる。
@@ -33,14 +29,21 @@ struct BoardAutomationStanding: Equatable, Identifiable {
     case running
     case paused
     case neverRan
-    case failed(AutomationRun)
-    case ran(AutomationRun)
+    case ran(BoardRunTone)
   }
 
   var mark: Mark {
     if running { return .running }
-    if automation.paused { return .paused }
-    guard let last = automation.runs.first else { return .neverRan }
-    return last.failure == nil ? .ran(last) : .failed(last)
+    if paused { return .paused }
+    return last.map(Mark.ran) ?? .neverRan
+  }
+}
+
+extension BoardAutomationStanding {
+  init(_ automation: Automation, runner: AutomationRunner, now: Date) {
+    self.init(
+      id: automation.id, name: automation.definition.name, paused: automation.paused,
+      running: runner.isRunning(automation.id), next: runner.nextRunAt(automation, now: now),
+      last: automation.runs.first.map(BoardAutomationSummary.tone))
   }
 }

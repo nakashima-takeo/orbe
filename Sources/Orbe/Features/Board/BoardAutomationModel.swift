@@ -1,7 +1,7 @@
 import Observation
 import SwiftUI
 
-/// ボードの自動追加の部品の状態（@Observable）。部品は見出し・依頼の欄・一覧・詳細で 1 つ。自動追加・回・走っているか・次の
+/// ボードの自動追加の部品の状態（@Observable）。部品は依頼の欄・一覧・右の欄（詳細か案内）で 1 つ。自動追加・回・走っているか・次の
 /// 時刻は唯一の正（走らせ役とストア）から毎回読み、写さない。持つのは選択（同一性）と欄の中身だけ。ストアが変わったら
 /// `reconcile()` で選択を付け直す（ビューの `.onChange` が届ける）。だから裏の回・AI の変更・⌘⇧X での操作がそのまま映る。
 ///
@@ -60,10 +60,15 @@ import SwiftUI
     if case .automation = list.selectedID { .list } else { .request }
   }
 
-  /// 選んでいる自動追加。欄を選んでいる間は nil（詳細を出さない）。
+  /// 選んでいる自動化。欄を選んでいる間は nil（詳細の代わりに案内を出す）。
   var selectedAutomation: Automation? {
     guard case .automation(let id) = list.selectedID else { return nil }
     return store.automation(id)
+  }
+
+  /// 自動化 1 つのボードの描画用の値。ビューは自動化そのものに触れず、これと立ち位置だけを読む。
+  func summary(_ id: Int, text: AutomationText) -> BoardAutomationSummary? {
+    store.automation(id).map { BoardAutomationSummary($0, text: text) }
   }
 
   /// 描くときの文。暦の今日は描くときの今から導く（開きっぱなしの画面で日をまたいでも「今日」が古くならない）。

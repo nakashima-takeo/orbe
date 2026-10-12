@@ -55,8 +55,9 @@ final class AutomationTextTests: OrbeTestCase {
   }
 
   func testWhen() {
-    XCTAssertEqual(text.when(.every(1800)), "30 分ごと")
+    XCTAssertEqual(text.when(.every(1800)), "30分ごと")
     XCTAssertEqual(
-      text.when(.daily([.init(hour: 13, minute: 0), .init(hour: 9, minute: 5)])), "毎日 9:05・13:00")
+      text.when(.daily([.init(hour: 13, minute: 0), .init(hour: 9, minute: 5)])), "毎日 9:05 / 13:00")
+    XCTAssertEqual(text.next(DesignSceneFixtures.automationAt(17, 0)), "次回 17:00")
   }
 }

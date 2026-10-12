@@ -383,7 +383,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationProposedLongOther
   case automationNothingNew
   case automationFailed
-  case automationFailedShort
   case automationNeverRan
   case automationNowMark
   case automationToday
@@ -594,11 +593,32 @@ enum L10nKey: String, CaseIterable, Sendable {
   // MARK: - ボード（L10nTable+Board）
   case boardEmpty
   case boardAutomationTitle
-  case boardAutomationCount
   case boardAutomationEmpty
-  case boardAutomationWhen
+  case boardAutomationLast
+  case boardAutomationFlow
+  case boardAutomationCounts
   case boardAutomationRuns
-  case boardAutomationPausedNote
+  case boardRoleTrigger
+  case boardRoleSource
+  case boardRoleOrbe
+  case boardRoleStep
+  case boardRoleOutput
+  case boardOrbeSeen
+  case boardOutputTaskCandidates
+  case boardRunFailed
+  case boardRunFailedShort
+  case boardRunAdded
+  case boardRunAddedTo
+  case boardRunNothingNew
+  case boardRunAllDropped
+  case boardRunNoneAdded
+  case boardRunMark
+  case boardRunMarkAdded
+  case boardGuideLead
+  case boardGuideExamples
+  case boardExampleSlack
+  case boardExampleGitHub
+  case boardExampleBacklog
   case boardHintSelect
   case boardHintToList
   case boardAskPlaceholder
