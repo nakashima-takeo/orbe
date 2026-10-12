@@ -123,7 +123,7 @@ xcrun actool "$ICON_SRC" \
   --compile "$APP/Contents/Resources" \
   --app-icon Orbe \
   --output-partial-info-plist "$(mktemp -d)/orbe-icon-partial.plist" \
-  --platform macosx --minimum-deployment-target 15.0 \
+  --platform macosx --minimum-deployment-target 15.7 \
   --errors --warnings --output-format human-readable-text >/dev/null
 cp -R "$GHOSTTYKIT/share/ghostty" "$APP/Contents/Resources/ghostty"
 # themes は ghostty stock を同梱せず Orbe 自前の 2枚のみ（テーマは Auto/Dark/Light の外観スイッチで、

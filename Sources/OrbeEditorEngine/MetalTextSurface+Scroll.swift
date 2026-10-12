@@ -158,7 +158,7 @@ extension MetalTextSurface {
     inputMethodPosition = position
     guard editor.isComposing, let context = textView.inputContext else { return }
     context.invalidateCharacterCoordinates()
-    if #available(macOS 15.4, *) { context.textInputClientDidScroll() }
+    context.textInputClientDidScroll()
   }
 
   /// 見えている範囲。行は y = 行 × 行高で並び、端を越えて見せている分は端で数える。見えている高さが無ければ nil。
