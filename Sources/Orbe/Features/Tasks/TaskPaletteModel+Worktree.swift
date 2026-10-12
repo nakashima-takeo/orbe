@@ -11,7 +11,7 @@ extension TaskPaletteModel {
   /// 続きから始める）。入力の行き先なら足してから開く。編集中なら確定してから選択で決める。完了の見出しでは何もしない。
   /// GitHub タブは `openWorktreePaletteFromGitHub`。受信タブでは何もしない。
   func openWorktreePalette() {
-    guard pick == nil, visibleTab != .intake else { return }
+    guard pick == nil, visibleTab != .automation else { return }
     guard visibleTab == .tasks else { return openWorktreePaletteFromGitHub() }
     leaveEditingForAction()
     switch selectedID {

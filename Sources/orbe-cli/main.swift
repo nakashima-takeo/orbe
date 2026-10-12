@@ -127,7 +127,7 @@ case "agent":
 case "task":
   runTask(Array(args.dropFirst()))
 case "intake":
-  runIntake(Array(args.dropFirst()))
+  runAutomation(Array(args.dropFirst()))
 case "board":
   runBoard(Array(args.dropFirst()))
 case "session":

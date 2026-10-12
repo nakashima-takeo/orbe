@@ -7,7 +7,7 @@ import Observation
 /// 送り先）・範囲・タブ・絞り込み・焦点・編集中の下書き・右の欄の値・行の掴みだけを持つ。一覧の行は
 /// `TaskPaletteRows` と `TaskPaletteGitHubRows` が毎回組む。
 /// 列か一覧が変わったとき（agent の変更を含む）は `reconcile()` 1 本で選択・焦点・下書き・掴みを付け直す。
-/// 受信タブの状態と手続きは `intake` が持ち、見えているタブが受信のときだけ、入力・キー・焦点をそこへ振り分ける。
+/// 受信タブの状態と手続きは `automation` が持ち、見えているタブが受信のときだけ、入力・キー・焦点をそこへ振り分ける。
 @Observable final class TaskPaletteModel {
   let store: TaskStore
   let githubItems: GitHubItemCache
@@ -20,7 +20,7 @@ import Observation
   /// 会話ごとのタブ（待ちの条件の会話の行）。
   let sessionTabs: AgentSessionTabs
   let workspaces: TaskPaletteWorkspaces
-  let intake: TaskPaletteIntakeModel
+  let automation: TaskPaletteAutomationModel
   let today: TaskItem.DueDate
   /// 時刻を暦日へ落とすためのタイムゾーン。
   let timeZone: TimeZone
@@ -99,7 +99,7 @@ import Observation
   init(
     store: TaskStore, githubItems: GitHubItemCache, viewer: GitHubViewer,
     openLists: GitHubOpenLists, root: String, agents: WorktreeAgentActivity,
-    sessionTabs: AgentSessionTabs, intakes: IntakeRunner,
+    sessionTabs: AgentSessionTabs, automations: AutomationRunner,
     workspaces: TaskPaletteWorkspaces, now: Date, timeZone: TimeZone,
     clock: @escaping (Date) -> Date = { $0 }
   ) {
@@ -115,11 +115,11 @@ import Observation
     self.clock = clock
     let today = TaskItem.DueDate.today(now, timeZone: timeZone)
     self.today = today
-    intake = TaskPaletteIntakeModel(
-      runner: intakes, tasks: store, home: workspaces.home, today: today, timeZone: timeZone)
-    intake.onPlaceChange = { [weak self] in self?.focus() }
-    intake.addPosition = { [weak self] in self?.addPosition(attachingTo: $0) ?? .end }
-    intake.onOpenURL = { [weak self] in self?.onOpenURL($0) }
+    automation = TaskPaletteAutomationModel(
+      runner: automations, tasks: store, home: workspaces.home, today: today, timeZone: timeZone)
+    automation.onPlaceChange = { [weak self] in self?.focus() }
+    automation.addPosition = { [weak self] in self?.addPosition(attachingTo: $0) ?? .end }
+    automation.onOpenURL = { [weak self] in self?.onOpenURL($0) }
     reconcile()
     githubItems.refresh(visibleLinkIDs)
   }
@@ -198,7 +198,7 @@ import Observation
   }
 
   var focusTarget: TaskPaletteFocusTarget {
-    if visibleTab == .intake { return intake.place == .proposals ? .field : .card }
+    if visibleTab == .automation { return automation.place == .proposals ? .field : .card }
     switch draft?.target {
     case .task(_, let field): return .edit(field)
     case .paneDue: return .paneDue
@@ -255,7 +255,7 @@ import Observation
     switch visibleTab {
     case .tasks: taskList.move(direction, in: selectableIDs)
     case .github: gitHubList.move(direction, in: gitHubSelectableIDs)
-    case .intake: intake.moveProposal(direction)
+    case .automation: automation.moveProposal(direction)
     }
   }
 
@@ -265,7 +265,7 @@ import Observation
     switch visibleTab {
     case .tasks: taskList.jump(direction, in: selectableIDs)
     case .github: gitHubList.jump(direction, in: gitHubSelectableIDs)
-    case .intake: intake.jumpProposal(direction)
+    case .automation: automation.jumpProposal(direction)
     }
   }
 
@@ -292,7 +292,7 @@ import Observation
   /// `submitGitHub`、受信タブはタスクにする、選ぶ状態は `confirmPick`）。
   func submit() {
     guard pick == nil else { return confirmPick() }
-    if visibleTab == .intake { return intake.accept() }
+    if visibleTab == .automation { return automation.accept() }
     guard visibleTab == .tasks else { return submitGitHub() }
     switch selectedID {
     case .add: addFromQuery()
@@ -317,7 +317,7 @@ import Observation
   /// 確定できずに捨てた入力の理由はフッターに残る。
   func leaveEditingForAction() {
     error = nil
-    intake.clearError()
+    automation.clearError()
     leaveEditing()
   }
 

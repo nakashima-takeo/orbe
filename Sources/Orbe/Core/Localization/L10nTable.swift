@@ -4,7 +4,7 @@ import Foundation
 /// 両方がここを通す（`language == .ja` 分岐を 1 箇所へ集約）。全 `L10nKey` の網羅は `L10nCompletenessTests`。
 /// 辞書はドメイン分冊（本体＋`L10nTable+Settings.swift`＋`L10nTable+Help.swift`＋
 /// `L10nTable+Attention.swift`＋`L10nTable+WorktreePalette.swift`＋`L10nTable+ClosedAgents.swift`＋
-/// `L10nTable+Tasks.swift`＋`L10nTable+Intake.swift`＋`L10nTable+Secretary.swift`＋`L10nTable+Board.swift`）を `table` が
+/// `L10nTable+Tasks.swift`＋`L10nTable+Automation.swift`＋`L10nTable+Secretary.swift`＋`L10nTable+Board.swift`）を `table` が
 /// 結合する。
 enum L10n {
   static let table: [L10nKey: (ja: String, en: String)] =
@@ -15,7 +15,7 @@ enum L10n {
     .merging(worktreePaletteTable) { a, _ in a }
     .merging(closedAgentsTable) { a, _ in a }
     .merging(tasksTable) { a, _ in a }
-    .merging(intakeTable) { a, _ in a }
+    .merging(automationTable) { a, _ in a }
     .merging(secretaryTable) { a, _ in a }
     .merging(boardTable) { a, _ in a }
 

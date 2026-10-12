@@ -348,12 +348,12 @@ final class SecretaryTests: OrbeTestCase {
   /// Home のボードの欄で頼むと、出どころ「Home のボード」の頼みとして秘書のタブに 1 行で届き、欄は空になる。
   func testTheBoardFieldAsksTheSecretaryFromTheBoard() throws {
     let wc = try launch()
-    let intake = wc.board.intake
+    let automation = wc.board.automation
 
-    intake.requestText = "DM を候補に"
-    intake.send()
+    automation.requestText = "DM を候補に"
+    automation.send()
 
-    XCTAssertEqual(intake.requestText, "", "受けたら欄は空")
+    XCTAssertEqual(automation.requestText, "", "受けたら欄は空")
     XCTAssertNil(wc.board.refusal, "断らない")
     let tab = try XCTUnwrap(try homeTabs(wc).first, "Home に秘書のタブが起きる")
     report(wc, tab, "idle", "s-1")
@@ -376,13 +376,13 @@ final class SecretaryTests: OrbeTestCase {
   /// 空の頼み（空白だけ）は claude の有無より先に空として断る——ボードの欄の空の ↵ は、claude が無くても黙る。
   func testAnEmptyAskIsRefusedAsEmptyEvenWithoutClaude() throws {
     let wc = try launch(stage: false)
-    let intake = wc.board.intake
+    let automation = wc.board.automation
 
-    intake.requestText = " \n "
-    intake.send()
+    automation.requestText = " \n "
+    automation.send()
 
     XCTAssertNil(wc.board.refusal, "何も出さない")
-    XCTAssertEqual(intake.requestText, " \n ", "欄はそのまま")
+    XCTAssertEqual(automation.requestText, " \n ", "欄はそのまま")
     XCTAssertEqual(wc.secretary.record.pending, [])
   }
 }

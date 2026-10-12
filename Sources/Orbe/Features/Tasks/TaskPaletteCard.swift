@@ -46,8 +46,8 @@ struct TaskPaletteCard: View {
               TaskPaletteGitHubPane(model: model, focus: $focus)
                 .frame(width: detailWidth)
             }
-          case .intake:
-            TaskPaletteIntakeBody(model: model.intake, detailWidth: detailWidth)
+          case .automation:
+            TaskPaletteAutomationBody(model: model.automation, detailWidth: detailWidth)
           }
         }
         .frame(maxHeight: .infinity)
@@ -74,8 +74,8 @@ struct TaskPaletteCard: View {
     // 出ている行の結び付きが増えたら（agent の変更・完了の欄の開閉・範囲・入力）、その値を取りに行く。
     .onChange(of: model.visibleLinkIDs) { model.ensureVisibleItems() }
     // 裏の回の確定や AI の変更で受信と提案が変わったら、受信タブの選択と居場所を付け直す。
-    .onChange(of: model.intake.store.intakes) { model.intake.reconcile() }
-    .onChange(of: model.intake.store.proposals) { model.intake.reconcile() }
+    .onChange(of: model.automation.store.automations) { model.automation.reconcile() }
+    .onChange(of: model.automation.store.proposals) { model.automation.reconcile() }
   }
 
   private var divider: some View {
@@ -122,12 +122,12 @@ struct TaskPaletteCard: View {
               title: "GitHub", count: model.gitHubCount, selected: model.visibleTab == .github,
               action: { model.setTab(.github) }),
             .init(
-              title: l10n.string(.taskPaletteTabIntake), count: model.intake.openCount,
-              selected: model.visibleTab == .intake, action: { model.setTab(.intake) }),
+              title: l10n.string(.taskPaletteTabAutomation), count: model.automation.openCount,
+              selected: model.visibleTab == .automation, action: { model.setTab(.automation) }),
           ], font: Font.theme.chrome, height: 20, selectedFill: Color.theme.surfaceInk.opacity(0.08)
         )
         // 範囲は受信に効かないので、受信タブでは出さない。
-        if model.visibleTab != .intake { scopeSegments }
+        if model.visibleTab != .automation { scopeSegments }
       }
       .fixedSize()
     }
@@ -139,7 +139,7 @@ struct TaskPaletteCard: View {
     switch model.visibleTab {
     case .tasks: .taskPalettePlaceholder
     case .github: .taskPaletteGitHubPlaceholder
-    case .intake: .taskPaletteIntakePlaceholder
+    case .automation: .taskPaletteAutomationPlaceholder
     }
   }
 

@@ -3,7 +3,7 @@ import Foundation
 
 /// 外部やエージェントが Orbe を操作するための domain 操作（main スレッドでのみ呼ぶ）。
 /// 実体は WindowController。ControlServer がリクエストを main へ hop して叩く。
-protocol ControlTarget: ControlTaskTarget, ControlIntakeTarget, ControlBoardTarget {
+protocol ControlTarget: ControlTaskTarget, ControlAutomationTarget, ControlBoardTarget {
   func controlListWorkspaces() -> [[String: Any]]
   func controlListTabs() -> [[String: Any]]
   /// 検出済みエージェント CLI を列挙する（読み取り専用）。
@@ -349,7 +349,7 @@ final class ControlServer {
       }
     default:
       // タブ宛て・config / workspace CRUD・セッション復元・タスク・受信・ボードは拡張の解決
-      // （ControlServer+Dispatch / +Task / +Intake / +Board）へ順に問う。いずれも非該当なら未知メソッド。
+      // （ControlServer+Dispatch / +Task / +Automation / +Board）へ順に問う。いずれも非該当なら未知メソッド。
       // `??` で連ねると口の数とともに型推論が重くなるので、配列で順に問う。
       let resolvers: [(String) -> WindowedHandler?] = [
         { self.resolvedTabHandler(for: $0) },
@@ -357,7 +357,7 @@ final class ControlServer {
         { self.configWorkspaceHandler(for: $0) },
         { self.sessionHandler(for: $0) },
         { self.taskHandler(for: $0) },
-        { self.intakeHandler(for: $0) },
+        { self.automationHandler(for: $0) },
         { self.boardHandler(for: $0) },
       ]
       for resolve in resolvers {
