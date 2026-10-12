@@ -40,7 +40,7 @@ enum TaskPaletteRowID: Hashable {
   case doneHeader
 }
 
-/// タスクの行に出す値（列の要素から純関数で決まる）。
+/// タスクの行に出す値（タスクから純関数で決まる）。
 struct TaskPaletteTaskRow: Equatable {
   enum Glyph: Equatable {
     case todo, inProgress, waiting, done
@@ -85,8 +85,6 @@ struct TaskPaletteTaskRow: Equatable {
   let resolved: Resolved?
   let workspace: WorkspaceBadge?
   let isDone: Bool
-  /// 掴んで同じ欄の中で動かせるか（未完了で、タスクを選ぶ状態でない）。
-  let reorderable: Bool
   let link: GitHubItemText.Mark?
   let pullRequest: GitHubItemText.PullRequestBadge?
   /// 主が自分以外の作成した PR（「レビュー」）。
@@ -155,8 +153,7 @@ struct TaskPaletteAskRow: Equatable {
   let label: String
 }
 
-/// 一覧の行の寸法。行の高さは行の値だけで決まり、描画（各行の枠）とドラッグの落ちる位置の計算が同じ値を
-/// 読む。選べる 1 行の行は ⌘⇧S の行（上下 5 ＋ 12pt の 1 行）と同じ高さ。
+/// 一覧の行の寸法。行の高さは行の値だけで決まる。選べる 1 行の行は ⌘⇧S の行（上下 5 ＋ 12pt の 1 行）と同じ高さ。
 enum TaskPaletteRowMetrics {
   /// 行の上下の余白。
   static let inset: CGFloat = 4
@@ -207,14 +204,15 @@ struct TaskPaletteCounts: Equatable {
   let opened: Int
 }
 
-/// 一覧の行を、タスクの列・入力・範囲・完了の欄の開閉から組む純関数。どの欄でも列の順をそのまま使う。
+/// 一覧の行を、タスク・入力・範囲・完了の欄の開閉から組む純関数。どの欄でも作成の新しい順
+/// （`TaskItem.newerFirst`）に並べる。
 enum TaskPaletteRows {
   struct Input {
     let tasks: [TaskItem]
     let query: String
-    /// 結び付けるタスクを選ぶ状態か。選ぶ間は入力の行き先を持たず、行を並べ替えられない。
+    /// 結び付けるタスクを選ぶ状態か。選ぶ間は入力の行き先を持たない。
     var picking = false
-    /// 秘書に頼む欄を開いているタスク。開いている間は行を並べ替えられない。
+    /// 秘書に頼む欄を開いているタスク。
     var asking: Int?
     /// 画面を開いている間に入力欄から最後に足したタスク（「今足した」の印）。
     var justAdded: Int?
@@ -243,7 +241,7 @@ enum TaskPaletteRows {
     let title = input.query.trimmingCharacters(in: .whitespacesAndNewlines)
     let visible = inScope(input.tasks, input).filter {
       title.isEmpty || $0.title.localizedStandardContains(title)
-    }
+    }.sorted(by: TaskItem.newerFirst)
     let matching = addTitle(input) != nil
     var rows: [TaskPaletteRow] = []
     let undone = visible.filter { $0.status != .done }
@@ -304,7 +302,6 @@ enum TaskPaletteRows {
         TaskPaletteTaskRow.Resolved(headline: $0.headline, at: $0.at)
       },
       workspace: workspace, isDone: task.status == .done,
-      reorderable: !input.picking && input.asking == nil && task.status != .done,
       link: GitHubItemText.mark(task.links),
       pullRequest: GitHubItemText.pullRequestBadge(task.links, input.items),
       needsReview: GitHubItemText.needsReview(

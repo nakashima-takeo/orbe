@@ -74,31 +74,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
 
   // MARK: - さばく
 
-  /// 範囲を Home 以外の workspace に絞っていても、位置は足すタスクが付く Home の欄で決まる（高い優先度を越えない）。
-  func testEnterWhileScopedToAnotherWorkspacePlacesTheTaskInHomesColumn() throws {
-    let opened = TaskPaletteSamples.opened.id
-    let home = TaskPaletteSamples.home
-    let palette = TaskPaletteSamples.model(
-      [
-        TaskPaletteSamples.task(1, "X") { $0.workspace = opened },
-        TaskPaletteSamples.task(2, "Home 高") {
-          $0.workspace = home
-          $0.priority = .high
-        },
-        TaskPaletteSamples.task(3, "Home 中") { $0.workspace = home },
-      ],
-      automations: DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignFile()))
-    palette.setScope(.opened)
-    palette.setTab(.automation)
-
-    palette.submit()
-
-    let added = try XCTUnwrap(palette.store.tasks.first { $0.id > 3 }).id
-    XCTAssertEqual(palette.store.tasks.map(\.id), [1, 2, added, 3])
-  }
-
-  /// ⌘⇧X で人が受けて足すタスクなので、入力欄から足すのと同じく、その優先度の未着手の先頭に入る。
-  func testEnterMakesATodoTaskOnHomeAtTheHeadOfMediumAndSelectsTheSamePosition() throws {
+  func testEnterMakesATodoTaskOnHomeAndSelectsTheSamePosition() throws {
     let palette = palette()
     let tasks = palette.store.tasks.count
 
@@ -106,10 +82,6 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
 
     let task = try XCTUnwrap(palette.store.tasks.first { $0.title == "見積もりを山田さんに送る" })
     XCTAssertEqual(palette.store.tasks.count, tasks + 1)
-    XCTAssertEqual(
-      palette.store.tasks.firstIndex { $0.status == .todo && $0.priority != .high }.map {
-        palette.store.tasks[$0].id
-      }, task.id, "未着手の中の先頭")
     XCTAssertEqual(task.title, "見積もりを山田さんに送る")
     XCTAssertEqual(task.status, .todo)
     XCTAssertEqual(task.due, TaskItem.DueDate("2025-10-10"))

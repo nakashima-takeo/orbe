@@ -12,7 +12,7 @@ extension TaskPaletteAutomationModel {
       let direction = press.key == .upArrow ? -1 : 1
       if press.modifiers.contains(.command) {
         jumpProposal(direction)
-      } else if !press.modifiers.contains(.option) {
+      } else {
         moveProposal(direction)
       }
     case .return where press.modifiers.contains(.command):

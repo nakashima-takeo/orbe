@@ -165,7 +165,7 @@ final class TaskQuarantineTests: OrbeTestCase {
 
     XCTAssertTrue(try quarantineFiles().isEmpty, "必須フィールドだけの形を退避しない")
     XCTAssertEqual(loaded.nextId, 5)
-    XCTAssertEqual(loaded.tasks.map(\.id), [3, 1], "列の順を保つ")
+    XCTAssertEqual(loaded.tasks.map(\.id), [3, 1], "保存されている配列の順のまま読む")
     XCTAssertEqual(loaded.tasks.map(\.status), [.done, .todo])
     XCTAssertEqual(loaded.tasks.last?.description, "m")
   }

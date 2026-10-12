@@ -52,8 +52,7 @@ extension DesignFlowSnapshotTests {
         (
           "agent_inserted",
           {
-            let item = try? palette.store.add(TaskDraft(title: "agent が足した", status: .inProgress))
-            if let item { try? palette.store.move(item.id, .before, 1) }
+            _ = try? palette.store.add(TaskDraft(title: "agent が足した", status: .inProgress))
             palette.reconcile()
           }
         ),
@@ -165,29 +164,6 @@ extension DesignFlowSnapshotTests {
             palette.reconcile()
           }
         ),
-      ])
-  }
-
-  /// 選んだ未完了の行の取っ手・掴んで下へ動かした途中（行のずれと落ちる位置の線）・欄の端で止まる掴んだ
-  /// 行・離して並びが変わった後、を撮る。
-  func testTaskPaletteDrag() throws {
-    let palette = DesignSceneFixtures.taskPaletteModel()
-    let height = TaskPaletteRowMetrics.line
-    let start = CGPoint(x: 200, y: 300)
-    try flow(
-      "task_palette_drag", size: NSSize(width: 1440, height: 900),
-      render: {
-        ZStack {
-          BackgroundGlow()
-          TaskPaletteOverlay(model: palette)
-        }
-        .environment(\.localization, LocalizationStore(language: .ja))
-      },
-      steps: [
-        ("grip", {}),
-        ("grabbed_down", { palette.dragChanged(6, start: start, translation: height * 2.4) }),
-        ("grabbed_up_edge", { palette.dragChanged(6, start: start, translation: -height * 5) }),
-        ("dropped", { palette.dragEnded() }),
       ])
   }
 

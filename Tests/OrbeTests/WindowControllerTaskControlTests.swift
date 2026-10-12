@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// タスクの 5 動詞のドメイン側を、実 `WindowController` 越しに固定する。外に見せる起動ごとの
+/// タスクの 4 動詞のドメイン側を、実 `WindowController` 越しに固定する。外に見せる起動ごとの
 /// workspaceId とタスクが持つ永続 ID の変換、呼び出し元タブからの既定の付き先と追加者、
 /// ストアの拒否から制御エラーへの写像、応答の形。
 ///
@@ -160,7 +160,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
     _ = try added(wc, "最小")
 
     let tasks = try listed(wc)
-    let full = tasks[0]
+    let full = tasks[1]
     XCTAssertEqual(full["title"] as? String, "経費精算")
     XCTAssertEqual(full["status"] as? String, "in_progress")
     XCTAssertEqual(full["priority"] as? String, "high")
@@ -181,7 +181,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
         text.range(of: iso, options: .regularExpression), "時刻は UTC・ミリ秒の ISO 8601: \(text)")
     }
 
-    let minimal = tasks[1]
+    let minimal = tasks[0]
     XCTAssertEqual(minimal["taskId"] as? Int, (full["taskId"] as? Int).map { $0 + 1 })
     XCTAssertEqual(minimal["status"] as? String, "todo")
     XCTAssertEqual(minimal["priority"] as? String, "medium")
@@ -191,7 +191,7 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
     }
   }
 
-  func testListFiltersByWorkspaceKeepingTheColumnOrder() throws {
+  func testListFiltersByWorkspaceKeepingTheNewestFirstOrder() throws {
     let wc = try launch()
     let main = try workspaceId(wc, "main")
     let caller = try backgroundTab(wc).id
@@ -201,9 +201,9 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
     _ = try added(wc, "m2", workspaceId: .set(main))
 
     XCTAssertEqual(
-      try listed(wc).compactMap { $0["title"] as? String }, ["m1", "b1", "none", "m2"])
+      try listed(wc).compactMap { $0["title"] as? String }, ["m2", "none", "b1", "m1"])
     XCTAssertEqual(
-      try listed(wc, workspaceId: main).compactMap { $0["title"] as? String }, ["m1", "m2"])
+      try listed(wc, workspaceId: main).compactMap { $0["title"] as? String }, ["m2", "m1"])
     XCTAssertEqual(
       code(wc.controlListTasks(workspaceId: 999_999)), -32004, "未知の workspace は -32004")
   }
@@ -246,7 +246,6 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
       code(wc.controlUpdateTask(taskId: 999_999, TaskUpdate(title: "x"), workspaceId: nil)), -32004,
       "未知のタスクは -32004")
     XCTAssertEqual(code(wc.controlDeleteTask(taskId: 999_999)), -32004)
-    XCTAssertEqual(code(wc.controlMoveTask(taskId: taskId, .before, anchorTaskId: 999_999)), -32004)
     XCTAssertEqual(
       code(wc.controlAddTask(TaskDraft(title: "  "), workspaceId: nil, callerTabId: nil)), -32602,
       "不正な値は -32602")
@@ -258,7 +257,6 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
         wc.controlUpdateTask(
           taskId: taskId, TaskUpdate(status: .done, waitingReason: .set("返事")), workspaceId: nil)),
       -32602, "完了と待ちの同時指定は -32602")
-    XCTAssertEqual(code(wc.controlMoveTask(taskId: taskId, .after, anchorTaskId: taskId)), -32602)
     var relink = TaskUpdate()
     relink.links = [issue]
     guard case .failure(let clash) = wc.controlUpdateTask(taskId: taskId, relink, workspaceId: nil)
@@ -273,13 +271,11 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
       "拒否した要求は一覧を変えない")
   }
 
-  func testMoveAndDeleteReachTheList() throws {
+  func testListIsNewestFirstAndDeleteReachesIt() throws {
     let wc = try launch()
     let a = try XCTUnwrap(try added(wc, "a")["taskId"] as? Int)
     let b = try XCTUnwrap(try added(wc, "b")["taskId"] as? Int)
 
-    XCTAssertEqual(
-      try success(wc.controlMoveTask(taskId: b, .before, anchorTaskId: a))["ok"] as? Bool, true)
     XCTAssertEqual(try listed(wc).compactMap { $0["taskId"] as? Int }, [b, a])
 
     XCTAssertEqual(try success(wc.controlDeleteTask(taskId: a))["ok"] as? Bool, true)

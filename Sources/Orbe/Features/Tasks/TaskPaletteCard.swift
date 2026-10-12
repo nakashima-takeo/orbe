@@ -63,7 +63,7 @@ struct TaskPaletteCard: View {
     .onKeyPress { model.handleCardKey($0) }
     .simultaneousGesture(TapGesture().onEnded { model.focus() })
     .onChange(of: model.focusToken, initial: true) { focus = model.focusTarget }
-    // agent の変更を含む列の変化を、描画の外で付け直しへ届ける。
+    // agent の変更を含むタスク一覧の変化を、描画の外で付け直しへ届ける。
     .onChange(of: model.store.tasks) { model.reconcile() }
     // agent の状態が変わると右の欄の止まる場所（agent の場所）が増減するので、同じく付け直す。
     .onChange(of: model.agents.agents) { model.reconcile() }

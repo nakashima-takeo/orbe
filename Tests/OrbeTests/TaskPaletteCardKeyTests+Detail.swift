@@ -31,13 +31,13 @@ extension TaskPaletteCardKeyTests {
     enterDetail(model, at: .status, in: window)
 
     arrow(Key.right, to: window)
-    XCTAssertEqual(status(model, 1), .inProgress, "→ で値を変える")
+    XCTAssertEqual(status(model, 3), .inProgress, "→ で値を変える")
 
     arrow(Key.down, to: window)
     arrow(Key.down, to: window)
     XCTAssertEqual(model.area, .detail(.field(.priority)))
     arrow(Key.left, to: window)
-    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.priority, .high, "← で値を変える")
+    XCTAssertEqual(model.store.tasks.first { $0.id == 3 }?.priority, .high, "← で値を変える")
 
     arrow(Key.down, to: window)
     arrow(Key.left, to: window)
@@ -56,7 +56,7 @@ extension TaskPaletteCardKeyTests {
 
     enterDetail(model, at: .priority, in: window)
     press(Key.space, " ", to: window)
-    XCTAssertEqual(status(model, 1), .done, "右の欄でも space はそのタスクに効く")
+    XCTAssertEqual(status(model, 3), .done, "右の欄でも space はそのタスクに効く")
     XCTAssertEqual(model.area, .list)
   }
 
@@ -84,7 +84,7 @@ extension TaskPaletteCardKeyTests {
     try click(atFieldOf: window)
     type("x", into: window)
 
-    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.description, "abc", "打った内容は確定して残る")
+    XCTAssertEqual(model.store.tasks.first { $0.id == 3 }?.description, "abc", "打った内容は確定して残る")
     XCTAssertNil(model.draft)
     XCTAssertEqual(model.area, .list)
     XCTAssertEqual(model.query, "x", "続く打鍵は入力欄に入る")
@@ -100,14 +100,14 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.query, "", "打った文字は一覧の入力に入らない")
     press(Key.enter, "\r", to: window)
 
-    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.waiting?.reason, "review")
+    XCTAssertEqual(model.store.tasks.first { $0.id == 3 }?.waiting?.reason, "review")
     XCTAssertNil(model.draft)
 
     press(Key.enter, "\r", to: window)
     type("x", into: window)
     press(Key.escape, "\u{1B}", to: window)
     XCTAssertEqual(
-      model.store.tasks.first { $0.id == 1 }?.waiting?.reason, "review", "esc は編集を取り消す")
+      model.store.tasks.first { $0.id == 3 }?.waiting?.reason, "review", "esc は編集を取り消す")
     XCTAssertEqual(model.area, .detail(.field(.waiting)), "取り消した後も項目に居る")
     arrow(Key.down, to: window)
     XCTAssertEqual(model.area, .detail(.field(.priority)), "器が再びキーを受ける")
@@ -168,7 +168,7 @@ extension TaskPaletteCardKeyTests {
     type("2", into: window)
     press(Key.escape, "\u{1B}", to: window)
 
-    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.description, "1\n\n\n2")
+    XCTAssertEqual(model.store.tasks.first { $0.id == 3 }?.description, "1\n\n\n2")
     XCTAssertNil(model.draft)
     XCTAssertEqual(model.area, .detail(.field(.description)))
 
@@ -187,9 +187,9 @@ extension TaskPaletteCardKeyTests {
     press(Key.enter, "\r", .command, to: window)
 
     XCTAssertNotNil(model.draft, "編集が続く")
-    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.description, "", "確定しない")
+    XCTAssertEqual(model.store.tasks.first { $0.id == 3 }?.description, "", "確定しない")
     type("2", into: window)
     press(Key.escape, "\u{1B}", to: window)
-    XCTAssertEqual(model.store.tasks.first { $0.id == 1 }?.description, "12", "同じ編集が続き、改行は入らない")
+    XCTAssertEqual(model.store.tasks.first { $0.id == 3 }?.description, "12", "同じ編集が続き、改行は入らない")
   }
 }

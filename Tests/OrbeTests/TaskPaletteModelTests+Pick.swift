@@ -33,7 +33,6 @@ extension TaskPaletteModelTests {
     palette.query = "b"
     XCTAssertEqual(palette.selectableIDs, [.task(2)], "打っても入力の行き先は出さない")
     palette.query = ""
-    palette.move(1)
     palette.submit()
 
     XCTAssertEqual(try storedTask(palette, 2).links, [GitHub.link(3), GitHub.link(5)])
@@ -49,7 +48,6 @@ extension TaskPaletteModelTests {
     ])
 
     palette.linkSelectedGitHubItem()
-    palette.move(1)
     palette.submit()
 
     XCTAssertEqual(try storedTask(palette, 1).links, [])
@@ -64,6 +62,7 @@ extension TaskPaletteModelTests {
     ])
 
     palette.linkSelectedGitHubItem()
+    palette.move(1)
     palette.submit()
 
     XCTAssertNotNil(palette.pick)
@@ -86,10 +85,10 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.selectedGitHubID, .item(GitHub.id(5)))
     palette.setTab(.tasks)
     XCTAssertEqual(palette.query, "")
-    XCTAssertEqual(palette.selectedID, .task(2))
+    XCTAssertEqual(palette.selectedID, .task(1))
   }
 
-  /// タスクを選ぶ間は、選ぶこと以外でタスクを変えない（完了・削除・並べ替え・ドラッグ・右の欄・タブ切替・⌘T）。
+  /// タスクを選ぶ間は、選ぶこと以外でタスクを変えない（完了・削除・右の欄・タブ切替・⌘T）。
   func testPickingATaskCannotChangeTasks() {
     let palette = pickingFromIssueFive()
     var opened: [Int] = []
@@ -98,8 +97,6 @@ extension TaskPaletteModelTests {
 
     palette.toggleDone(1)
     palette.delete(2)
-    palette.reorder(1)
-    drop(palette, 2, by: -1)
     palette.enterDetail()
     palette.toggleTab()
     palette.openWorktreePalette()
@@ -150,14 +147,14 @@ extension TaskPaletteModelTests {
     let palette = pickingFromIssueFive()
     palette.linkSelectedGitHubItem()
     palette.move(1)
-    try palette.store.delete(2)
+    try palette.store.delete(1)
 
     palette.confirmPick()
 
     XCTAssertNil(palette.error)
     XCTAssertNotNil(palette.pick)
-    XCTAssertEqual(palette.selectedID, .task(1), "同じ位置の行へ付け直す")
-    XCTAssertEqual(try storedTask(palette, 1).links, [], "別のタスクには結び付けない")
+    XCTAssertEqual(palette.selectedID, .task(2), "同じ位置の行へ付け直す")
+    XCTAssertEqual(try storedTask(palette, 2).links, [], "別のタスクには結び付けない")
   }
 
   // MARK: - 項目を選ぶ（右の欄の「＋ 結び付ける」）
@@ -177,6 +174,7 @@ extension TaskPaletteModelTests {
       [task(1, "a"), task(2, "b") { $0.links = [GitHub.link(6)] }],
       issues: [GitHub.issue(6), GitHub.issue(5)])
     palette.setTab(.tasks)
+    palette.tapRow(.task(1))
     palette.area = .detail(.addLink)
     return palette
   }
@@ -211,8 +209,7 @@ extension TaskPaletteModelTests {
   /// そのタスクが既に持つ項目では何もしない。
   func testAddLinkOnAnItemTheTaskAlreadyHasDoesNothing() throws {
     let palette = atAddLink()
-    palette.setTab(.tasks)
-    palette.move(1)
+    palette.tapRow(.task(2))
     palette.area = .detail(.addLink)
 
     palette.beginPickingItem()

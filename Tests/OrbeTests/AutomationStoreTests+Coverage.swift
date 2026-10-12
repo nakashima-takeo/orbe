@@ -15,8 +15,7 @@ extension AutomationStoreTests {
     let store = try store()
     try streaming(store)
     commit(store, 1, fetched: [Self.item("a")], proposing: [Self.item("a")])
-    _ = try store.accept(
-      store.proposals[0].id, into: TaskStore(file: nil), workspace: nil, at: .end)
+    _ = try store.accept(store.proposals[0].id, into: TaskStore(file: nil), workspace: nil)
 
     commit(store, 1, fetched: [Self.item("b")])
 

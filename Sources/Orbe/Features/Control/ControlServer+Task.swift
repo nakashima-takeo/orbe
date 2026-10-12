@@ -1,11 +1,11 @@
 import Foundation
 import OrbeSessionLog
 
-/// タスクの動詞（5 動詞と `set_wait_condition`・`start_task`）の domain 操作（`ControlTarget` の一部。main スレッドでのみ呼ぶ）。
+/// タスクの動詞（4 動詞と `set_wait_condition`・`start_task`）の domain 操作（`ControlTarget` の一部。main スレッドでのみ呼ぶ）。
 protocol ControlTaskTarget: AnyObject {
-  /// タスクを列の順に列挙する（list_tasks）。workspaceId 指定でその workspace のタスクだけ。未知 id は -32004。
+  /// タスクを作成の新しい順（`TaskItem.newerFirst`）に列挙する（list_tasks）。workspaceId 指定でその workspace のタスクだけ。未知 id は -32004。
   func controlListTasks(workspaceId: Int?) -> Result<Any, ControlError>
-  /// タスクを列の末尾へ足す（add_task）。workspaceId は省略＝呼び出し元タブの workspace（タブが分からなければ
+  /// タスクを足す（add_task）。workspaceId は省略＝呼び出し元タブの workspace（タブが分からなければ
   /// なし）・`.clear`＝なし・`.set`＝その workspace（未知は -32004）。callerTabId は追加者の agent 名と
   /// 既定の付き先を引くためだけに読み、未知のタブでもエラーにしない。worktree は実在するディレクトリの
   /// 絶対パス（それ以外は -32602）で、それを含む worktree のルートに揃えて付ける。
@@ -22,9 +22,6 @@ protocol ControlTaskTarget: AnyObject {
   func controlSetWaitCondition(
     taskId: Int, _ condition: ClearableValue<WaitConditionRequest>, callerTabId: Int?
   ) -> Result<Any, ControlError>
-  /// タスクを別のタスクの前か後ろへ移す（move_task）。
-  func controlMoveTask(taskId: Int, _ placement: TaskStore.Placement, anchorTaskId: Int)
-    -> Result<Any, ControlError>
   /// タスクを消す（delete_task）。
   func controlDeleteTask(taskId: Int) -> Result<Any, ControlError>
   /// タスクから作業を始める（start_task）。作業場を用意してタブを開いた時点で、main で 1 度だけ `completion` を呼ぶ。
@@ -56,7 +53,7 @@ extension ControlServer {
   }
 }
 
-/// タスクの動詞（5 動詞と `set_wait_condition`）の解決。ハンドラが見るのは params の在否と JSON の型（違反は -32602）だけで、値の検証と
+/// タスクの動詞（4 動詞と `set_wait_condition`）の解決。ハンドラが見るのは params の在否と JSON の型（違反は -32602）だけで、値の検証と
 /// 不変条件は `TaskStore`、workspace・呼び出し元タブ・worktree の解決は target が持つ。
 extension ControlServer {
   /// 非該当は nil。target を `ControlTaskTarget` に絞っても `WindowedHandler` として渡せる。
@@ -108,19 +105,6 @@ extension ControlServer {
         target.controlSetWaitCondition(
           taskId: try p.int("taskId"), try p.condition(),
           callerTabId: try p.optionalInt("callerTabId"))
-      }
-    case "move_task":
-      return { target, p throws(ControlError) in
-        let taskId = try p.int("taskId")
-        switch (try p.optionalInt("beforeTaskId"), try p.optionalInt("afterTaskId")) {
-        case (let anchor?, nil):
-          return target.controlMoveTask(taskId: taskId, .before, anchorTaskId: anchor)
-        case (nil, let anchor?):
-          return target.controlMoveTask(taskId: taskId, .after, anchorTaskId: anchor)
-        default:
-          throw ControlError(
-            code: -32602, message: "pass exactly one of beforeTaskId / afterTaskId")
-        }
       }
     case "delete_task":
       return { target, p throws(ControlError) in

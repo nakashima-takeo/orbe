@@ -1,7 +1,7 @@
 import Foundation
 import OrbeSessionLog
 
-/// タスク一覧のディスク表現。`tasks` の配列の順が列の順。
+/// タスク一覧のディスク表現。
 struct TasksFile: Codable, Equatable {
   var version: Int
   /// 次に振る ID。削除した ID を使い回さないために、一覧とは別に持つ。

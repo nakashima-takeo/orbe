@@ -76,6 +76,5 @@ extension TaskPaletteModel {
     case .github: gitHubList.selectFirst(in: gitHubSelectableIDs)
     case .automation: break
     }
-    discardStaleDrag()
   }
 }

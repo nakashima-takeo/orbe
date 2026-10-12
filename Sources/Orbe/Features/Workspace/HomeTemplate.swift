@@ -28,9 +28,9 @@ enum HomeTemplate {
 
     「Orbe で〜できる？」と聞かれたら、まず下のやりたいことの一覧から Orbe の機能で答える。
 
-    ## タスクを足す・直す・並べる
+    ## タスクを足す・直す
 
-    - `list_tasks`・`add_task`・`update_task`・`move_task`。
+    - `list_tasks`・`add_task`・`update_task`。
     - `add_task` は workspaceId を省くと、呼び出し元タブの workspace（ここなら Home）に付く。
 
     ## タスクに作業を始めさせる
@@ -80,9 +80,9 @@ enum HomeTemplate {
 
     When asked "can Orbe do …?", answer first with Orbe's own features from the list of things to do below.
 
-    ## Add, edit, and order tasks
+    ## Add and edit tasks
 
-    - `list_tasks`, `add_task`, `update_task`, `move_task`.
+    - `list_tasks`, `add_task`, `update_task`.
     - Without workspaceId, `add_task` attaches the task to the calling tab's workspace (Home, when called \
     from here).
 

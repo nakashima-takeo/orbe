@@ -71,8 +71,8 @@ extension TaskPaletteModel {
     }
   }
 
-  /// 行き先の段の右端の言葉（「未着手 · 中の先頭 · <workspace>」）。足すタスクの値（`TaskDraft` の既定の
-  /// ステータスと優先度）と、範囲で決まる workspace から出す（位置の「の先頭」は `addPosition` に合わせた文言）。
+  /// 行き先の段の右端の言葉（「未着手 · 中 · <workspace>」）。足すタスクの値（`TaskDraft` の既定の
+  /// ステータスと優先度）と、範囲で決まる workspace から出す。
   func destinationPlace(_ l10n: LocalizationStore) -> String {
     let draft = TaskDraft(title: "")
     let status: L10nKey =

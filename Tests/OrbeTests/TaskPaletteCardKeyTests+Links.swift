@@ -27,6 +27,7 @@ extension TaskPaletteCardKeyTests {
     var opened: [URL] = []
     model.onOpenURL = { opened.append($0) }
     let window = mount(model)
+    model.tapRow(.task(1))
     model.enterDetail()
     model.area = .detail(.link(link(.issue, 1).item))
     flush(window)

@@ -98,11 +98,6 @@ final class FakeControlTarget: ControlTarget {
     let condition: ClearableValue<WaitConditionRequest>
     let callerTabId: Int?
   }
-  struct MovedTask {
-    let taskId: Int
-    let placement: TaskStore.Placement
-    let anchorTaskId: Int
-  }
 
   private(set) var reportedAgents: [ReportedAgent] = []
   private(set) var spawns: [Spawn] = []
@@ -123,7 +118,6 @@ final class FakeControlTarget: ControlTarget {
   private(set) var addedTasks: [AddedTask] = []
   private(set) var updatedTasks: [UpdatedTask] = []
   private(set) var setWaitConditions: [SetWaitCondition] = []
-  private(set) var movedTasks: [MovedTask] = []
   private(set) var deletedTaskIds: [Int] = []
   private(set) var startedTasks: [TaskStartRequest] = []
   private(set) var setAutomations: [(automationId: Int?, definition: AutomationDefinition)] = []
@@ -291,13 +285,6 @@ final class FakeControlTarget: ControlTarget {
     setWaitConditions.append(
       SetWaitCondition(taskId: taskId, condition: condition, callerTabId: callerTabId))
     return outcome(["task": ["taskId": taskId]])
-  }
-
-  func controlMoveTask(taskId: Int, _ placement: TaskStore.Placement, anchorTaskId: Int)
-    -> Result<Any, ControlError>
-  {
-    movedTasks.append(MovedTask(taskId: taskId, placement: placement, anchorTaskId: anchorTaskId))
-    return outcome(["ok": true])
   }
 
   func controlDeleteTask(taskId: Int) -> Result<Any, ControlError> {

@@ -46,7 +46,7 @@ extension DesignSceneFixtures {
     let tasks = [
       task(
         1, "タスク機能の設計", .inProgress, workspace: ws[0],
-        description: "人と agent が同じ一覧を見て動けるようにする。並べ替え・結び付き・worktree の起動までを"
+        description: "人と agent が同じ一覧を見て動けるようにする。結び付き・worktree の起動までを"
           + "一続きにし、agent には制御 API と MCP から同じ操作を渡す。見た目は ⌘⇧S の尺度にそろえる。",
         links: [taskLink(.issue, "orbe", 212), taskLink(.pr, "orbe", 213)], worktree: "issue-212"),
       task(

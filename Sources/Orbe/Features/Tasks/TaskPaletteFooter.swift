@@ -156,7 +156,6 @@ struct TaskPaletteFooter: View {
         }
         PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteHintOpenWorktree))
         PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintEdit))
-        PaletteKeyHint(key: "⌥↑↓", label: l10n.string(.taskPaletteHintReorder))
         PaletteKeyHint(key: "⇥", label: l10n.string(.taskPaletteHintScope))
         PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteDelete))
         PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintClose))

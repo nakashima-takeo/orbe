@@ -134,7 +134,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     let window = mount(model)
 
     press(Key.space, " ", to: window)
-    XCTAssertEqual(status(model, 1), .done, "空の入力欄の space は選んだタスクを完了にする")
+    XCTAssertEqual(status(model, 3), .done, "空の入力欄の space は選んだタスクを完了にする")
 
     type("b", into: window)
     press(Key.space, " ", to: window)
@@ -148,7 +148,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
 
     press(Key.space, " ", .capsLock, to: window)
 
-    XCTAssertEqual(status(model, 1), .done)
+    XCTAssertEqual(status(model, 3), .done)
   }
 
   func testEnterCompletesTheSelectedTaskAndAddsFromTheAddRow() throws {
@@ -156,7 +156,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     let window = mount(model)
 
     press(Key.enter, "\r", to: window)
-    XCTAssertEqual(status(model, 1), .done)
+    XCTAssertEqual(status(model, 3), .done)
 
     type("新しい", into: window)
     press(Key.enter, "\r", to: window)
@@ -181,14 +181,14 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.store.tasks.count, 3, "足さない")
 
     press(Key.enter, "\r", .command, to: window)
-    XCTAssertEqual(model.askingTaskID, 1, "選んでいる行の直下に頼む欄")
+    XCTAssertEqual(model.askingTaskID, 3, "選んでいる行の直下に頼む欄")
     type("直して", into: window)
     press(Key.enter, "\r", .command, to: window)
     XCTAssertEqual(asks.count, 1, "頼む欄の中の ⌘↵ は送らない")
-    XCTAssertEqual(model.askingTaskID, 1, "欄は開いたまま")
+    XCTAssertEqual(model.askingTaskID, 3, "欄は開いたまま")
     XCTAssertEqual(model.draftText, "直して", "補足も残る")
     press(Key.enter, "\r", to: window)
-    XCTAssertEqual(asks.last, .task(model.store.tasks.first { $0.id == 1 }!, note: "直して"))
+    XCTAssertEqual(asks.last, .task(model.store.tasks.first { $0.id == 3 }!, note: "直して"))
     XCTAssertNil(model.draft)
   }
 
@@ -214,7 +214,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     press(Key.delete, "\u{7F}", .command, repeating: true, to: window)
     press(Key.delete, "\u{7F}", .command, repeating: true, to: window)
 
-    XCTAssertEqual(model.store.tasks.map(\.id), [2, 3], "消えるのは押した 1 件だけ")
+    XCTAssertEqual(model.store.tasks.map(\.id), [1, 2], "消えるのは押した 1 件だけ")
   }
 
   func testSpaceHeldDownCompletesOneTaskAndTypesNoSpace() {
@@ -225,7 +225,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     press(Key.space, " ", repeating: true, to: window)
     press(Key.space, " ", repeating: true, to: window)
 
-    XCTAssertEqual(model.store.tasks.map(\.status), [.done, .todo, .todo], "完了は押した 1 件だけ")
+    XCTAssertEqual(model.store.tasks.map(\.status), [.todo, .todo, .done], "完了は押した 1 件だけ")
     XCTAssertEqual(model.query, "", "リピートは入力欄に空白を入れない")
   }
 
@@ -242,16 +242,16 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.query, "", "入力欄の文字を行頭まで消す")
   }
 
-  func testOptionArrowsReorderAndCommandArrowsJump() {
+  func testOptionArrowsMoveLikeArrowsAndCommandArrowsJump() {
     let model = model()
     let window = mount(model)
 
     arrow(Key.down, .command, to: window)
-    XCTAssertEqual(model.selectedID, .task(3), "⌘↓ で末尾へ")
+    XCTAssertEqual(model.selectedID, .task(1), "⌘↓ で末尾へ")
 
     arrow(Key.up, .option, to: window)
-    XCTAssertEqual(model.store.tasks.map(\.id), [1, 3, 2], "⌥↑ で前のタスクの前へ")
-    XCTAssertEqual(model.selectedID, .task(3))
+    XCTAssertEqual(model.selectedID, .task(2), "⌥↑ は ↑ と同じく前の行へ")
+    XCTAssertEqual(model.store.tasks.map(\.id), [1, 2, 3], "並びは変えない")
   }
 
   func testTabSwitchesScopeAndShiftTabSwitchesTabWhileTheFieldKeepsTheKeys() {
@@ -296,6 +296,6 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     flush(window)
     press(Key.space, " ", to: window)
 
-    XCTAssertEqual(status(model, 3), .done, "同じ位置に来た c を完了にする")
+    XCTAssertEqual(status(model, 1), .done, "同じ位置に来た a を完了にする")
   }
 }

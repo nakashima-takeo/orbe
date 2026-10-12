@@ -13,30 +13,16 @@ enum TaskStoreError: Error, Equatable {
 /// 同じ変異メソッドを呼ぶ——値の検証と不変条件はここだけが持つ。変異が成功するたびに即座に保存するので、
 /// 呼び出し側に保存の責務は無い。
 @Observable final class TaskStore {
-  /// ユーザーが決める 1 本の列。ステータス別の欄や絞り込みは表示側がここから抜き出す。
+  /// 足した順に持つ。並びに意味は持たせない——一覧の並びは読む側が `TaskItem.newerFirst` で決める。
   private(set) var tasks: [TaskItem]
   private var nextId: Int
-
-  enum Placement {
-    case before, after
-  }
-
-  /// 足す位置。
-  enum AddPosition: Equatable {
-    /// 列の末尾。
-    case end
-    /// 人が見ている欄（`workspace` のタスク。nil は全部）の未着手の中で、足すタスクと同じか低い優先度の最初の
-    /// タスクの直前（無ければ列の末尾）——見ている欄で、その優先度の未着手の先頭に入る。
-    case priorityHead(workspace: UUID?)
-  }
 
   init(file: TasksFile? = TaskPersistence.load()) {
     tasks = file?.tasks ?? []
     nextId = file?.nextId ?? 1
   }
 
-  /// `position` の位置へ足す（既定は列の末尾）。
-  func add(_ draft: TaskDraft, at position: AddPosition = .end) throws(TaskStoreError) -> TaskItem {
+  func add(_ draft: TaskDraft) throws(TaskStoreError) -> TaskItem {
     let title = try Self.validTitle(draft.title)
     try Self.checkLinks(draft.links, of: nextId, against: tasks)
     try Self.checkWorktree(draft.worktree, of: nextId, against: tasks)
@@ -52,21 +38,9 @@ enum TaskStoreError: Error, Equatable {
       createdBy: draft.createdBy, links: draft.links, worktree: draft.worktree,
       worktreeBranch: draft.worktree?.currentBranch)
     nextId += 1
-    tasks.insert(item, at: index(for: item, position))
+    tasks.append(item)
     persist()
     return item
-  }
-
-  private func index(for item: TaskItem, _ position: AddPosition) -> Int {
-    switch position {
-    case .end:
-      return tasks.endIndex
-    case .priorityHead(let workspace):
-      return tasks.firstIndex {
-        $0.status == .todo && $0.priority.rank >= item.priority.rank
-          && (workspace == nil || $0.workspace == workspace)
-      } ?? tasks.endIndex
-    }
   }
 
   /// 指定した項目だけを変える。完了にすると待ちの席が空になる（起きたことも消える）。完了のまま待ちや条件を
@@ -106,17 +80,6 @@ enum TaskStoreError: Error, Equatable {
       item.worktree = worktree.value
       item.worktreeBranch = worktree.value?.currentBranch
     }
-  }
-
-  /// `id` を `anchor` の前か後ろへ移す。
-  func move(_ id: Int, _ placement: Placement, _ anchor: Int) throws(TaskStoreError) {
-    guard id != anchor else { throw .invalid("a task cannot be moved relative to itself") }
-    guard let from = tasks.firstIndex(where: { $0.id == id }) else { throw .notFound(id) }
-    guard tasks.contains(where: { $0.id == anchor }) else { throw .notFound(anchor) }
-    let item = tasks.remove(at: from)
-    let at = tasks.firstIndex { $0.id == anchor }!
-    tasks.insert(item, at: placement == .before ? at : at + 1)
-    persist()
   }
 
   /// ⌘T の ↵ で作業を始めた。`worktree` を付け（ほかのタスクが持っていればそこから外し）、未着手・完了なら
