@@ -254,23 +254,14 @@ extension AutomationProposal: Codable {
     case id, automationId, item, title, due, proposedAt, state, taskId
   }
 
-  /// 候補を出した自動化を指すキー。intakes.json は `intakeId` で持つ。
-  enum OwnerKey: String, CodingKey {
-    case automationId, intakeId
-  }
-
   private enum StateName: String, Codable {
     case open, accepted, dismissed, resolved
   }
 
   init(from decoder: Decoder) throws {
-    try self.init(from: decoder, owner: .automationId)
-  }
-
-  init(from decoder: Decoder, owner: OwnerKey) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     id = try c.decode(Int.self, forKey: .id)
-    automationId = try decoder.container(keyedBy: OwnerKey.self).decode(Int.self, forKey: owner)
+    automationId = try c.decode(Int.self, forKey: .automationId)
     item = try c.decode(AutomationItem.self, forKey: .item)
     title = try c.decode(String.self, forKey: .title)
     due = try c.decodeIfPresent(TaskItem.DueDate.self, forKey: .due)

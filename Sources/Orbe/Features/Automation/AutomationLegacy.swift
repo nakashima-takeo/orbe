@@ -1,14 +1,14 @@
 import Foundation
 
-/// 以前の版の形。intakes.json と、制御 API の set_intake・list_intakes が同じ形で持つので、両方がこの 1 組の型で今の
-/// 定義と相互変換する。旧い定義は「取得 → 判定」で、今の形では取得元・段 1 つ「判定」・出力先タスク候補に当たる。
+/// 制御 API の set_intake・list_intakes が読み書きする旧い形。この 1 組の型で今の定義と相互変換する。旧い定義は
+/// 「取得 → 判定」で、今の形では取得元・段 1 つ「判定」・出力先タスク候補に当たる。
 struct AutomationLegacyDefinition: Codable, Equatable {
   var name: String
   var fetch: AutomationLegacyFetch
   var judge: AutomationLegacyJudge
   var when: BackgroundTiming
 
-  /// 移行した判定の段の名前。
+  /// 判定を置く段の名前。
   static let judgeStepName = "判定"
 
   /// 旧→今。
@@ -108,7 +108,7 @@ struct AutomationLegacyJudge: Codable, Equatable {
 }
 
 /// 旧い回の記録。
-struct AutomationLegacyRun: Codable, Equatable {
+struct AutomationLegacyRun: Encodable, Equatable {
   var startedAt: Date
   var endedAt: Date
   var trigger: AutomationRun.Trigger
@@ -119,44 +119,19 @@ struct AutomationLegacyRun: Codable, Equatable {
   var withdrawn: Int
   var failure: String?
 
-  struct FetchReport: Codable, Equatable {
+  struct FetchReport: Encodable, Equatable {
     var commandLine: String
     var ending: String
     var items: Int
     var rejected: AutomationRejections
   }
 
-  struct JudgeReport: Codable, Equatable {
+  struct JudgeReport: Encodable, Equatable {
     var commandLine: String
     var ending: String
     var proposed: Int
     var resolved: Int
     var rejected: AutomationRejections
-  }
-
-  /// 旧→今。判定は段「判定」の記録になり、その数は候補と対応済みの和で近似する（旧い記録は JSON の行の数を持たない）。
-  /// 確定した回だけが出力先の記録を持つ。
-  var run: AutomationRun {
-    AutomationRun(
-      startedAt: startedAt, endedAt: endedAt, trigger: trigger,
-      source: AutomationStepReport(
-        name: nil, commandLine: fetch.commandLine, ending: fetch.ending, count: fetch.items,
-        rejected: fetch.rejected),
-      fresh: newItems,
-      steps: judge.map {
-        [
-          AutomationStepReport(
-            name: AutomationLegacyDefinition.judgeStepName, commandLine: $0.commandLine,
-            ending: $0.ending, count: $0.proposed + $0.resolved, rejected: AutomationRejections())
-        ]
-      } ?? [],
-      sink: failure == nil
-        ? .taskCandidates(
-          AutomationTaskCandidatesReport(
-            proposed: judge?.proposed ?? 0, resolved: judge?.resolved ?? 0, withdrawn: withdrawn,
-            rejected: judge?.rejected ?? AutomationRejections()))
-        : nil,
-      failure: failure)
   }
 
   /// 今→旧。判定は最後の段の記録に、出力先の候補・対応済みと、段と出力先の捨てた行を合わせたもの。
@@ -179,67 +154,5 @@ struct AutomationLegacyRun: Codable, Equatable {
     }
     withdrawn = sink.withdrawn
     failure = run.failure
-  }
-}
-
-/// intakes.json。読み替え元としてだけ読む。
-struct AutomationLegacyFile: Decodable {
-  var version: Int
-  var nextIntakeId: Int
-  var nextProposalId: Int
-  var intakes: [AutomationLegacyIntake]
-  var proposals: [Proposal]
-
-  struct Proposal: Decodable {
-    let proposal: AutomationProposal
-
-    init(from decoder: Decoder) throws {
-      proposal = try AutomationProposal(from: decoder, owner: .intakeId)
-    }
-  }
-
-  /// 今の形。前回成功の目印は、記録のうち失敗でない最新の回の開始時刻。旧い version は 1 だけ。
-  var file: AutomationsFile? {
-    guard version == 1 else { return nil }
-    return AutomationsFile(
-      version: AutomationPersistence.version, nextAutomationId: nextIntakeId,
-      nextProposalId: nextProposalId,
-      automations: intakes.map { intake in
-        let runs = intake.runs.map(\.run)
-        return Automation(
-          id: intake.id, definition: intake.definition.definition, paused: intake.paused,
-          createdAt: intake.createdAt, lastFetched: intake.lastFetched, reviewAll: intake.reviewAll,
-          lastRunAt: intake.lastRunAt,
-          lastSucceededAt: runs.first { $0.failure == nil }?.startedAt, runs: runs)
-      },
-      proposals: proposals.map(\.proposal))
-  }
-}
-
-/// intakes.json の自動化 1 つ。
-struct AutomationLegacyIntake: Decodable {
-  var id: Int
-  var definition: AutomationLegacyDefinition
-  var paused: Bool
-  var createdAt: Date
-  var lastFetched: [AutomationSeen]
-  var reviewAll: Bool
-  var lastRunAt: Date?
-  var runs: [AutomationLegacyRun]
-
-  private enum CodingKeys: String, CodingKey {
-    case id, definition, paused, createdAt, lastFetched, reviewAll, lastRunAt, runs
-  }
-
-  init(from decoder: Decoder) throws {
-    let c = try decoder.container(keyedBy: CodingKeys.self)
-    id = try c.decode(Int.self, forKey: .id)
-    definition = try c.decode(AutomationLegacyDefinition.self, forKey: .definition)
-    paused = try c.decodeIfPresent(Bool.self, forKey: .paused) ?? false
-    createdAt = try c.decode(Date.self, forKey: .createdAt)
-    lastFetched = try c.decodeIfPresent([AutomationSeen].self, forKey: .lastFetched) ?? []
-    reviewAll = try c.decodeIfPresent(Bool.self, forKey: .reviewAll) ?? false
-    lastRunAt = try c.decodeIfPresent(Date.self, forKey: .lastRunAt)
-    runs = try c.decodeIfPresent([AutomationLegacyRun].self, forKey: .runs) ?? []
   }
 }

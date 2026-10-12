@@ -9,21 +9,14 @@ struct AutomationsFile: Codable, Equatable {
   var nextProposalId: Int
   var automations: [Automation]
   var proposals: [AutomationProposal]
-
-  static let empty = AutomationsFile(
-    version: AutomationPersistence.version, nextAutomationId: 1, nextProposalId: 1,
-    automations: [], proposals: [])
 }
 
 /// 自動化の永続（自前 JSON）。保存先は tasks.json と並ぶ `StateDir.base()/automations.json`。書くのは `AutomationStore` の
 /// 変異ごと。
-///
-/// automations.json が在ることが「移行済み」を表す。不在なら同じディレクトリの intakes.json（以前の版の形）を読み替えて、
-/// その場で automations.json を書く。intakes.json は書き換えも削除もしない（旧版の Orbe に戻しても旧ファイルで動く）。
 enum AutomationPersistence {
   static let version = 1
 
-  /// テスト用に保存先を差し替える（設定時はこちらを使う）。本番は nil。旧ファイルの場所もここから導く。
+  /// テスト用に保存先を差し替える（設定時はこちらを使う）。本番は nil。
   static var fileURLOverride: URL?
 
   private static var quarantine = StateFileQuarantine()
@@ -33,43 +26,22 @@ enum AutomationPersistence {
     return StateDir.base()?.appendingPathComponent("automations.json")
   }
 
-  static var legacyFileURL: URL? {
-    fileURL?.deletingLastPathComponent().appendingPathComponent("intakes.json")
-  }
-
-  /// 読み込み。どちらも不在なら nil。在るのに使えない原本——読めない・構造破損・非互換 version・定義の不正・ID とリンクの
+  /// 読み込み。不在は nil。在るのに使えない原本——読めない・構造破損・非互換 version・定義の不正・ID とリンクの
   /// 不変条件の破れ——は退避してから nil を返す（AI と人が作った定義で、直後の保存が原本を潰すと戻らないため）。
-  /// automations.json を退避したら、その場で空の automations.json を書く——次の起動で古い intakes.json へ巻き戻らないため。
   static func load() -> AutomationsFile? {
     quarantine.reset()
-    guard let url = fileURL else { return nil }
-    if FileManager.default.fileExists(atPath: url.path) {
-      if let data = try? Data(contentsOf: url),
-        let file = try? AutomationWire.decoder.decode(AutomationsFile.self, from: data),
-        let valid = validated(file)
-      {
-        return valid
-      }
+    guard let url = fileURL, FileManager.default.fileExists(atPath: url.path) else { return nil }
+    guard let data = try? Data(contentsOf: url), let file = decode(data) else {
       quarantine.quarantine(url)
-      save(.empty)
       return nil
     }
-    guard let legacy = legacyFileURL, FileManager.default.fileExists(atPath: legacy.path) else {
-      return nil
-    }
-    guard let data = try? Data(contentsOf: legacy),
-      let read = try? AutomationWire.decoder.decode(AutomationLegacyFile.self, from: data),
-      let converted = read.file, let file = validated(converted)
-    else {
-      quarantine.quarantine(legacy)
-      return nil
-    }
-    save(file)
     return file
   }
 
-  private static func validated(_ file: AutomationsFile) -> AutomationsFile? {
-    guard file.version == version else { return nil }
+  private static func decode(_ data: Data) -> AutomationsFile? {
+    guard let file = try? AutomationWire.decoder.decode(AutomationsFile.self, from: data),
+      file.version == version
+    else { return nil }
     let ids = file.automations.map(\.id)
     let proposalIds = file.proposals.map(\.id)
     let links = file.proposals.map(\.item.link)

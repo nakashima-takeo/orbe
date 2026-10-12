@@ -33,10 +33,9 @@ final class AutomationQuarantineTests: OrbeTestCase {
     XCTAssertEqual(
       try Data(contentsOf: XCTUnwrap(quarantined.first)), original, "退避物は原本とバイト単位で一致する",
       file: file, line: line)
-    XCTAssertEqual(
-      try AutomationWire.decoder.decode(
-        AutomationsFile.self, from: Data(contentsOf: automationsFile())), .empty,
-      "原位置には空のファイルを書く", file: file, line: line)
+    XCTAssertFalse(
+      FileManager.default.fileExists(atPath: try automationsFile().path), "原位置は空く", file: file,
+      line: line)
   }
 
   /// 前提: 手を加えない見本の原本は読める（下の退避は、書き換えた規則のせいで起きている）。
