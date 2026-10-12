@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 入力欄の下の行き先の段（「行き先 [↵ タスクに書く 既定] [⌘↵ ◐ 秘書に頼む]」と、右端に足したタスクが入る先）。
+/// 入力欄の下の行き先の段（「行き先 [↵ タスクに書く 既定] [⌘↵ ◐ agent に任せる]」と、右端に足したタスクが入る先）。
 /// 入力欄に文字がある間だけ出る。選択の同一性の入力の行き先（`TaskPaletteRowID.add`）の見せ方で、それが選ばれている
 /// 間だけ「タスクに書く」が枠付きで光る。切り替えの状態は持たない（2 つのキー）——開くたびに ↵ はタスクに書く。
 struct TaskPaletteDestinationBar: View {
@@ -27,7 +27,7 @@ struct TaskPaletteDestinationBar: View {
         label: {
           Text("⌘↵").foregroundStyle(Color.theme.textMuted)
           SecretaryMark(size: 10)
-          Text(l10n.string(.taskPaletteAskSecretary)).foregroundStyle(Color.theme.textPrimary)
+          Text(l10n.string(.taskPaletteHandToAgent)).foregroundStyle(Color.theme.textPrimary)
         })
       Spacer(minLength: Theme.Space.step)
       Text(model.destinationPlace(l10n))

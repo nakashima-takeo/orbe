@@ -46,7 +46,7 @@ extension TaskPaletteModel {
     return .ready(conversation)
   }
 
-  /// 選んでいるタスクの解けた待ちを、条件を付けた会話の続きから始める（⌘T・起きたことの箱のボタン）。
+  /// 選んでいるタスクの解けた待ちを、条件を付けた会話の続きから始める（起きたことの箱のボタン）。
   func continueWait() {
     guard let task = selectedTask, case .ready = continuation(of: task) else { return }
     leaveEditingForAction()

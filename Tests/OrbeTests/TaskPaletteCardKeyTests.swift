@@ -164,15 +164,17 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.query, "")
   }
 
-  /// 入力欄の ⌘↵ は onSubmit（↵ = 追加）へ流れず、打った文を秘書に頼む。タスクの行を選んで ⌘↵ なら、頼む欄が開いて
-  /// 補足の入力に焦点が移り、↵ でそのタスクを頼む。
-  func testCommandEnterInTheFieldAsksInsteadOfAddingAndOnARowOpensTheAsk() {
+  /// 入力欄の ⌘↵ は onSubmit（↵ = 追加）へ流れず、打った文を agent に任せる。タスクの行を選んで ⌘↵ なら、そのタスクの
+  /// agent を開く。
+  func testCommandEnterInTheFieldHandsTheTextOverAndOnARowOpensTheAgent() {
     let model = model()
     var asks: [SecretaryAsk] = []
     model.onAskSecretary = {
       asks.append($0)
-      return .success(.accepted)
+      return nil
     }
+    var opened: [Int] = []
+    model.onOpenWorktreePalette = { opened.append($0) }
     let window = mount(model)
 
     type("見積もり", into: window)
@@ -181,15 +183,8 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.store.tasks.count, 3, "足さない")
 
     press(Key.enter, "\r", .command, to: window)
-    XCTAssertEqual(model.askingTaskID, 3, "選んでいる行の直下に頼む欄")
-    type("直して", into: window)
-    press(Key.enter, "\r", .command, to: window)
-    XCTAssertEqual(asks.count, 1, "頼む欄の中の ⌘↵ は送らない")
-    XCTAssertEqual(model.askingTaskID, 3, "欄は開いたまま")
-    XCTAssertEqual(model.draftText, "直して", "補足も残る")
-    press(Key.enter, "\r", to: window)
-    XCTAssertEqual(asks.last, .task(model.store.tasks.first { $0.id == 3 }!, note: "直して"))
-    XCTAssertNil(model.draft)
+    XCTAssertEqual(opened, [3], "選んでいる行のタスクの agent を開く")
+    XCTAssertEqual(asks.count, 1)
   }
 
   /// 押し始めを見ていない ↵ のリピートだけが入力欄に届いても、完了にも追加にもならない。

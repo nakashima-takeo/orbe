@@ -52,7 +52,7 @@ extension DesignGallerySnapshotTests {
     expanded.submit()
     try write("tasks_done_expanded.png", expanded)
 
-    // 完了のタスクを選ぶ: 秘書には頼めないので、フッターに ⌘↵ のヒントも右の欄の「秘書に頼む」も出ない。
+    // 完了のタスクを選ぶ: フッターに「⌘↵ agent を開く」が出る（未完了のタスクと同じ）。
     let doneSelected = DesignSceneFixtures.taskPaletteModel()
     doneSelected.jump(1)
     doneSelected.submit()

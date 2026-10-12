@@ -103,23 +103,21 @@ final class AgentCatalog {
       && sessionId.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." }
   }
 
-  /// 各 CLI の resume コマンド文字列（`/bin/sh -c` 経由で実行される前提）。`arguments` は再開に添える追加の引数
-  /// （1 つずつシェルの単語として引用する）。`firstInput` があれば、会話の最初の入力としてその CLI の席に添える。
-  /// 未対応 agent・安全な文字集合（UUID 等）外の sessionId は nil（呼び出し側が素のシェルへ fallback）。command は
-  /// 表のリテラルでのみ一致し、sessionId は文字集合検証し、引数と入力はシェルの単語として引用するため shell
-  /// インジェクションを防ぐ。
-  static func resumeCommand(
-    forAgent command: String, sessionId: String, arguments: [String] = [],
-    firstInput: String? = nil
-  ) -> String? {
+  /// 各 CLI の resume コマンド文字列（`/bin/sh -c` 経由で実行される前提）。`firstInput` があれば、会話の最初の入力と
+  /// してその CLI の席に添える。未対応 agent・安全な文字集合（UUID 等）外の sessionId は nil（呼び出し側が素のシェルへ
+  /// fallback）。command は表のリテラルでのみ一致し、sessionId は文字集合検証し、入力はシェルの単語として引用するため
+  /// shell インジェクションを防ぐ。
+  static func resumeCommand(forAgent command: String, sessionId: String, firstInput: String? = nil)
+    -> String?
+  {
     guard isSafeSessionId(sessionId), let profile = profile(command) else { return nil }
     return
-      ([profile.command, profile.resumeFlag, sessionId] + arguments.map(ShellWord.quoted)
-      + firstInputWords(profile, firstInput)).joined(separator: " ")
+      ([profile.command, profile.resumeFlag, sessionId] + firstInputWords(profile, firstInput))
+      .joined(separator: " ")
   }
 
-  /// 新しく起こすコマンド文字列（`/bin/sh -c` 経由）。実行ファイルは検出した絶対パスで起こす。`arguments` と
-  /// `firstInput` の添え方は `resumeCommand` と同じ。
+  /// 新しく起こすコマンド文字列（`/bin/sh -c` 経由）。実行ファイルは検出した絶対パスで起こす。`arguments` は 1 つずつ
+  /// シェルの単語として引用する。`firstInput` の添え方は `resumeCommand` と同じ。
   static func startCommand(_ agent: AgentCLI, arguments: [String] = [], firstInput: String? = nil)
     -> String
   {
@@ -130,10 +128,22 @@ final class AgentCatalog {
 
   private static func firstInputWords(_ profile: AgentProfile, _ firstInput: String?) -> [String] {
     guard let firstInput else { return [] }
+    let word = ShellWord.quoted(seated(firstInput))
     switch profile.firstInput {
-    case .trailing: return ["--", ShellWord.quoted(firstInput)]
-    case .flag(let flag): return [flag, ShellWord.quoted(firstInput)]
+    case .trailing: return ["--", word]
+    case .flag(let flag): return [flag, word]
     }
+  }
+
+  /// 最初の入力を席に置ける形にする。改行・タブ以外の制御文字（C0・DEL・C1）は空白にする——NUL はコマンドの C 文字列を
+  /// そこで切って起動を壊す。
+  private static func seated(_ input: String) -> String {
+    String(
+      String.UnicodeScalarView(
+        input.unicodeScalars.map { scalar in
+          let control = scalar.value < 0x20 || (0x7F...0x9F).contains(scalar.value)
+          return control && scalar != "\n" && scalar != "\t" ? " " : scalar
+        }))
   }
 
   /// PATH 文字列から supported の実行ファイルを解決する（検出の純粋部分）。

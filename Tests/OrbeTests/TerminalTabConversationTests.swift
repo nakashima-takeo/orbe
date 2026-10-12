@@ -4,7 +4,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 会話へ今、文字を貼って Enter してよいか（秘書へ届ける・解けた待ちの続きから）を、本物の端末の前面のプロセスグループと
+/// 会話へ今、文字を貼って Enter してよいか（解けた待ちの続きから）を、本物の端末の前面のプロセスグループと
 /// 報告者が属するグループで決めることと、休眠のタブを起こす再開に最初の入力を 1 度だけ添えること。
 ///
 /// 壊れると何が起きるか: agent を Ctrl+Z で止めた・agent が終わった後のシェルや、tmux の今のペインのシェルに、溜めた頼みや
@@ -16,7 +16,7 @@ final class TerminalTabConversationTests: OrbeTestCase {
     let tab = TerminalTab.alone(
       restoring: TabState(
         cwd: "/tmp", agent: AgentSession(command: "codex", sessionId: "s-1"), explicitTitle: nil),
-      resumeSpawn: { _, _, input in
+      resumeSpawn: { _, input in
         inputs.append(input)
         return ("codex resume s-1", [:])
       })

@@ -39,7 +39,7 @@ import Observation
 }
 
 extension WindowController {
-  /// 全タブから会話ごとのタブの索引を作り直す（`flushChrome` から。秘書の係は引く前にも）。
+  /// 全タブから会話ごとのタブの索引を作り直す（`flushChrome` から。会話を再開するタブを開いた直後にも）。
   func refreshAgentSessionTabs() {
     agentSessionTabs.update(
       store.allTabs().compactMap { ref in

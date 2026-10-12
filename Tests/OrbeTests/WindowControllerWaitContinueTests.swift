@@ -52,7 +52,7 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
         description: "PR-214-reviewed", command: "exit 1", everyMinutes: 10,
         deadline: Date().addingTimeInterval(3600), directory: directory,
         conversation: WaitConversation(
-          command: "claude", sessionId: "s-1", workspace: workspace, secretary: false)))
+          command: "claude", sessionId: "s-1", workspace: workspace)))
     let now = Date()
     wc.taskStore.recordCheck(
       task.id, condition: try XCTUnwrap(task.waiting?.condition?.id),

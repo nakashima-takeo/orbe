@@ -17,7 +17,7 @@ extension TaskPaletteCardKeyTests {
         description: "レビューが付いたら", command: "gh pr view 214", everyMinutes: 10,
         deadline: DesignSceneFixtures.taskToday.addingTimeInterval(86400),
         conversation: WaitConversation(
-          command: "claude", sessionId: "s-1", workspace: nil, secretary: false)),
+          command: "claude", sessionId: "s-1", workspace: nil)),
       setAt: DesignSceneFixtures.taskToday)
     let model = TaskPaletteSamples.model(
       [
@@ -35,7 +35,7 @@ extension TaskPaletteCardKeyTests {
     var asks: [SecretaryAsk] = []
     model.onAskSecretary = {
       asks.append($0)
-      return .success(.accepted)
+      return nil
     }
     let window = mount(model)
     type("見積もり", into: window)
@@ -45,7 +45,6 @@ extension TaskPaletteCardKeyTests {
     press(Key.enter, "\r", .command, repeating: true, to: window)
 
     XCTAssertEqual(asks, [.text("見積もり")])
-    XCTAssertNil(model.draft, "空になった入力欄から先頭のタスクの頼む欄を開かない")
   }
 
   func testEnterHeldDownOnTheConditionBoxTogglesOnce() {

@@ -1,12 +1,10 @@
 import Foundation
 
 /// 解けた待ちの ⌘T（「続きから」）。条件を付けた agent の会話へ、起きたことを最初の入力として届ける。同じ会話が 2 つの
-/// タブで同時に動かないよう、その会話のタブがあればそこへ届け、無ければ記録した場所で再開する。秘書の会話が付けた条件は
-/// 秘書の係へ渡す。
+/// タブで同時に動かないよう、その会話のタブがあればそこへ届け、無ければ記録した場所で再開する。
 extension WindowController {
   /// 続きから始められない理由（nil は始められる）。始められないタスクの ⌘T は、いつもの ⌘T（worktree パレット）を開く。
   ///
-  /// - 秘書の会話: claude が見つかること。
   /// - 会話のタブがある: 何も要らない（そのタブへ移る・届ける）。
   /// - タブが無い: 会話の CLI が見つかり、記録した作業ディレクトリがあること。
   func continuationBlock(taskId: Int) -> TaskPaletteError? {
@@ -14,7 +12,6 @@ extension WindowController {
       let condition = task.waitResolution?.waiting.condition,
       let conversation = condition.conversation
     else { return .failed }
-    if conversation.secretary { return secretaryClaude == nil ? .agentMissing : nil }
     if let entry = agentSessionTabs.tabs[conversation.sessionId],
       controlResolveTab(entry.tabId) != nil
     {
@@ -30,10 +27,8 @@ extension WindowController {
     return nil
   }
 
-  /// 届けられなかった理由はタスク画面のフッターに出す（nil は届けた、会話のタブへ移った、または秘書の係へ渡した）。
+  /// 届けられなかった理由はタスク画面のフッターに出す（nil は届けた、または会話のタブへ移った）。
   ///
-  /// - 秘書の会話: 起きたことを出どころ「待ちの条件」の頼みとして秘書の係へ渡し（溜める・1 件ずつ・/clear の後の
-  ///   会話へ届く）、秘書のタブへ移る。秘書の会話を 2 本にしない。
   /// - 休眠のタブ: 起こすときの再開に最初の入力を 1 度だけ添えて、そのタブへ移る。
   /// - 生きたタブ: そのタブへ移る。会話へ今貼ってよい（`TerminalTab.acceptsConversationInput`）ときだけ、起きたことを
   ///   貼り付けて Enter を押す。それ以外（作業中・確認待ち・agent が前面にいない）は移るだけで、起きたことを残す。
@@ -46,17 +41,6 @@ extension WindowController {
       let conversation = condition.conversation
     else { return nil }
     let input = WaitContinueText.firstInput(resolution, l10n: localization, timeZone: .current)
-    if conversation.secretary {
-      do {
-        _ = try secretary.ask(.text(input), from: .wait)
-      } catch {
-        return error == .claudeMissing ? .agentMissing : .failed
-      }
-      dismissPalette()
-      if let tabId = secretary.tabId { _ = controlFocusTab(tabId: tabId) }
-      taskStore.clearResolution(taskId)
-      return nil
-    }
     if let entry = agentSessionTabs.tabs[conversation.sessionId],
       let tab = controlResolveTab(entry.tabId)
     {
@@ -92,8 +76,8 @@ extension WindowController {
 }
 
 /// 会話へ届ける最初の入力（Orbe が UI の言語で組む）。条件の説明・解けた時刻と確認の回数（期限なら期限）と、満たした
-/// ときは確認の標準出力（起きたことに残した長さまで）。改行・タブ以外の制御文字（C0・DEL・C1）は空白にする——起動
-/// 引数の NUL はそこで引数を切って再開を壊し、貼る経路では端末の制御として届くため。
+/// ときは確認の標準出力（起きたことに残した長さまで）。改行・タブ以外の制御文字（C0・DEL・C1）は空白にする——貼る経路
+/// では端末の制御として届くため。
 enum WaitContinueText {
   static func firstInput(_ resolution: WaitResolution, l10n: LocalizationStore, timeZone: TimeZone)
     -> String

@@ -7,7 +7,7 @@ import XCTest
 /// のキーを届ける。秘書の口は頼みを記録する閉包で、本物の秘書・claude は起きない。
 ///
 /// 壊れると何が起きるか: 頼んだのに欄が残って二度送る。消えた自動追加の直しを秘書へ渡す。claude が無いのに打った文が消える。
-/// ↵・⌘↵ を押し続けて同じ頼みが何件も溜まる。
+/// ↵・⌘↵ を押し続けて同じ頼みで何本も claude が起きる。
 extension BoardAutomationTests {
   private func recording(
     _ model: BoardModel, _ refusal: Secretary.Refusal? = nil
@@ -20,7 +20,7 @@ extension BoardAutomationTests {
     return { asks }
   }
 
-  func testEnterInTheFieldAsksForANewAutoAddAndEmptiesTheField() {
+  func testEnterInTheFieldAsksTheTypedTextAndEmptiesTheField() {
     let model = board()
     let asks = recording(model)
     let window = mount(model)
@@ -29,7 +29,7 @@ extension BoardAutomationTests {
     press(Key.enter, "\r", to: window)
     press(Key.enter, "\r", repeating: true, to: window)
 
-    XCTAssertEqual(asks(), [.automation("abc")], "押し続けても 1 回")
+    XCTAssertEqual(asks(), [.text("abc")], "押し続けても 1 回")
     XCTAssertEqual(model.automation.requestText, "")
     XCTAssertNil(model.refusal)
   }

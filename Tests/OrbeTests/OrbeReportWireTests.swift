@@ -243,7 +243,7 @@ final class OrbeReportWireTests: OrbeTestCase {
   // MARK: - 接続の保ち方
 
   /// 報告者は Orbe の応答の 1 行まで接続を保ち、受けたら待たずに閉じる。保たないと、Orbe が受け取るのが
-  /// 遅れたとき報告者のグループをたどれず、秘書のタブは会話へ貼ってよくならない。受けても閉じないと、Orbe は
+  /// 遅れたとき報告者のグループをたどれず、会話のタブは解けた待ちの続きを貼ってよくならない。受けても閉じないと、Orbe は
   /// 接続を畳まないので、hook のたびに claude が待ちの上限まで止まる。
   func testReporterHoldsTheConnectionUntilTheReplyAndNoLonger() throws {
     let served = try XCTUnwrap(

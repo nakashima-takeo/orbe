@@ -33,7 +33,7 @@ enum TaskPaletteScope: Equatable {
 /// 選べる行の同一性。選択はこれで持ち、位置は付け直しのときだけ使う。
 enum TaskPaletteRowID: Hashable {
   /// 入力欄に打った文の行き先（入力欄の下の行き先の段が描く。一覧の行は持たない）。選ばれている間の ↵ は
-  /// タスクに書き、⌘↵ は秘書に頼む。
+  /// タスクに書き、⌘↵ は agent に任せる。
   case add
   case task(Int)
   /// 「完了 N ⌄」の見出し（↵ とクリックで開閉）。
@@ -114,7 +114,6 @@ enum TaskPaletteRow: Equatable, Identifiable {
     case selectable(TaskPaletteRowID)
     case sectionHeader(TaskItem.Status)
     case matchHeader
-    case ask(Int)
     case empty
   }
 
@@ -123,8 +122,6 @@ enum TaskPaletteRow: Equatable, Identifiable {
   /// 入力中の「一致するタスク」の見出し（選べない）。
   case matchHeader
   case task(TaskPaletteTaskRow)
-  /// タスクの行の直下に開いた、そのタスクを秘書に頼む欄（選べない）。
-  case ask(TaskPaletteAskRow)
   case doneHeader(count: Int, expanded: Bool)
   /// 範囲にタスクが 1 件も無く、入力も無いときの情報行（選べない）。
   case empty
@@ -134,7 +131,6 @@ enum TaskPaletteRow: Equatable, Identifiable {
     case .sectionHeader(let status, _): .sectionHeader(status)
     case .matchHeader: .matchHeader
     case .task(let row): .selectable(.task(row.id))
-    case .ask(let row): .ask(row.taskID)
     case .doneHeader: .selectable(.doneHeader)
     case .empty: .empty
     }
@@ -144,13 +140,6 @@ enum TaskPaletteRow: Equatable, Identifiable {
     guard case .selectable(let id) = id else { return nil }
     return id
   }
-}
-
-/// 秘書に頼む欄の行に出す値。
-struct TaskPaletteAskRow: Equatable {
-  let taskID: Int
-  /// 欄の見出しに出す名前（主の結び付きの「#番号」、無ければタイトル）。
-  let label: String
 }
 
 /// 一覧の行の寸法。行の高さは行の値だけで決まる。選べる 1 行の行は ⌘⇧S の行（上下 5 ＋ 12pt の 1 行）と同じ高さ。
@@ -171,12 +160,6 @@ enum TaskPaletteRowMetrics {
   static let doneHeader: CGFloat = doneRuleGap + Theme.Stroke.hairline + line
   /// 完了の見出しの上の、罫線までの余白。
   static let doneRuleGap: CGFloat = Theme.Space.note
-  /// 秘書に頼む欄の行（上下の余白を含む）。
-  static let ask: CGFloat = askBox + askGap * 2
-  /// 秘書に頼む欄の箱（見出し・補足の入力・注記の 3 段）。
-  static let askBox: CGFloat = 84
-  /// 秘書に頼む欄の箱の上下の余白。
-  static let askGap: CGFloat = Theme.Space.tick
   /// 行の右寄せの札のうち、人や agent の文字を出す札（待ちの理由・起きたこと）の文字の上限幅。
   static let textBadgeMaxWidth: CGFloat = 180
   /// 行の先頭のアイコンの列の幅。
@@ -188,7 +171,6 @@ enum TaskPaletteRowMetrics {
     switch row {
     case .empty: line
     case .sectionHeader, .matchHeader: sectionHeader
-    case .ask: ask
     case .task(let task): task.descriptionLine == nil ? line : taskWithDescription
     case .doneHeader: doneHeader
     }
@@ -212,8 +194,6 @@ enum TaskPaletteRows {
     let query: String
     /// 結び付けるタスクを選ぶ状態か。選ぶ間は入力の行き先を持たない。
     var picking = false
-    /// 秘書に頼む欄を開いているタスク。
-    var asking: Int?
     /// 画面を開いている間に入力欄から最後に足したタスク（「今足した」の印）。
     var justAdded: Int?
     let scope: TaskPaletteScope
@@ -236,7 +216,7 @@ enum TaskPaletteRows {
   }
 
   /// 入力中は「一致するタスク」の見出しの下に一致するタスクを並べ（欄の見出しは出さない）、入力が無ければ欄ごとに
-  /// 見出しを付ける。秘書に頼む欄はそのタスクの行の直後に置く。
+  /// 見出しを付ける。
   static func build(_ input: Input) -> [TaskPaletteRow] {
     let title = input.query.trimmingCharacters(in: .whitespacesAndNewlines)
     let visible = inScope(input.tasks, input).filter {
@@ -250,23 +230,15 @@ enum TaskPaletteRows {
       let section = visible.filter { $0.status == status }
       guard !section.isEmpty else { continue }
       if !matching { rows.append(.sectionHeader(status, count: section.count)) }
-      rows += section.flatMap { taskRows($0, input) }
+      rows += section.map { .task(taskRow($0, input)) }
     }
     let done = visible.filter { $0.status == .done }
     if !done.isEmpty {
       rows.append(.doneHeader(count: done.count, expanded: input.doneExpanded))
-      if input.doneExpanded { rows += done.flatMap { taskRows($0, input) } }
+      if input.doneExpanded { rows += done.map { .task(taskRow($0, input)) } }
     }
     if rows.isEmpty, title.isEmpty { rows.append(.empty) }
     return rows
-  }
-
-  /// タスクの行と、開いていれば直後の秘書に頼む欄。
-  private static func taskRows(_ task: TaskItem, _ input: Input) -> [TaskPaletteRow] {
-    let row = TaskPaletteRow.task(taskRow(task, input))
-    guard input.asking == task.id else { return [row] }
-    let label = task.links.first.map { "#\($0.item.number)" } ?? task.title
-    return [row, .ask(TaskPaletteAskRow(taskID: task.id, label: label))]
   }
 
   static func counts(_ input: Input) -> TaskPaletteCounts {

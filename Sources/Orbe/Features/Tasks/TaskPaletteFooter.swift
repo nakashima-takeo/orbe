@@ -28,12 +28,6 @@ struct TaskPaletteFooter: View {
       TaskPaletteAutomationAction(model: model.automation)
     } else if let error = model.error {
       Text(l10n.string(error.message)).foregroundStyle(Color.theme.danger)
-    } else if let notice = model.notice {
-      Text(l10n.string(notice == .askedQueued ? .taskPaletteAskedQueued : .taskPaletteAsked))
-        .foregroundStyle(Color.theme.textPrimary)
-    } else if let label = askLabel {
-      PaletteActionLine(
-        key: "↵", template: l10n.string(.taskPaletteAskTitle), slots: [.emphasis(label)])
     } else if let draft = model.draft {
       PaletteActionLine(
         key: draft.isMultiline ? "esc" : "↵", template: l10n.string(.taskPaletteActionCommit),
@@ -110,20 +104,10 @@ struct TaskPaletteFooter: View {
     }
   }
 
-  /// 開いている秘書に頼む欄のタスクの名前。
-  private var askLabel: String? {
-    model.rows.lazy.compactMap { row -> String? in
-      if case .ask(let ask) = row { return ask.label }
-      return nil
-    }.first
-  }
-
   private var hints: some View {
     HStack(spacing: Theme.Space.beat + Theme.Space.hair) {
       if model.visibleTab == .automation {
         TaskPaletteAutomationHints(model: model.automation)
-      } else if askLabel != nil {
-        PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintStopAsking))
       } else if let draft = model.draft {
         // 複数行の項目は esc が確定（左の 1 行が言う）で、取り消しのキーは無い。
         if !draft.isMultiline {
@@ -138,6 +122,7 @@ struct TaskPaletteFooter: View {
       } else if model.visibleTab == .github {
         TaskPaletteGitHubHints(model: model)
       } else if case .detail(let stop) = model.area {
+        PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteHintOpenAgent))
         PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteHintOpenWorktree))
         if case .link = stop {
           PaletteKeyHint(key: "⌫", label: l10n.string(.taskPaletteUnlink))
@@ -145,14 +130,14 @@ struct TaskPaletteFooter: View {
         PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteHintField))
         PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintBack))
       } else if model.selectedID == .add {
-        PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteAskSecretary))
+        PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteHandToAgent))
         if model.selectableIDs.count > 1 {
           PaletteKeyHint(key: "↓", label: l10n.string(.taskPaletteHintToMatches))
         }
         PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintClose))
       } else {
-        if let task = model.selectedTask, task.status != .done {
-          PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteAskSecretary))
+        if model.selectedTask != nil {
+          PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteHintOpenAgent))
         }
         PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteHintOpenWorktree))
         PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintEdit))

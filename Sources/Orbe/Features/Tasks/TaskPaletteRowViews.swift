@@ -3,7 +3,6 @@ import SwiftUI
 /// タスク画面の左の一覧。行は `TaskPaletteRows` が組んだ値をそのまま描き、選択は行の同一性で光らせる。
 struct TaskPaletteList: View {
   @Bindable var model: TaskPaletteModel
-  let focus: FocusState<TaskPaletteFocusTarget?>.Binding
   @Environment(\.localization) private var l10n
 
   var body: some View {
@@ -17,12 +16,7 @@ struct TaskPaletteList: View {
       }
       .scrollIndicators(.automatic)
       .onChange(of: model.scrollTarget) { scroll(proxy, to: model.scrollTarget?.id, rows) }
-      // 行の直下に開いた頼む欄が見えるように送る（行だけを見せると、狭い窓で欄が下に切れる）。
-      .onChange(of: model.askingTaskID) { revealAsk(proxy) }
-      .onAppear {
-        scroll(proxy, to: model.selectedID, rows)
-        revealAsk(proxy)
-      }
+      .onAppear { scroll(proxy, to: model.selectedID, rows) }
     }
   }
 
@@ -38,10 +32,6 @@ struct TaskPaletteList: View {
     }
   }
 
-  private func revealAsk(_ proxy: ScrollViewProxy) {
-    if let id = model.askingTaskID { proxy.scrollTo(TaskPaletteRow.Identity.ask(id)) }
-  }
-
   @ViewBuilder private func row(_ row: TaskPaletteRow) -> some View {
     switch row {
     case .sectionHeader(let status, let count):
@@ -51,8 +41,6 @@ struct TaskPaletteList: View {
       sectionLabel(.taskPaletteMatchingTasks, nil)
     case .task(let task):
       taskRow(task)
-    case .ask(let ask):
-      TaskPaletteAskField(model: model, row: ask, focus: focus)
     case .doneHeader(let count, let expanded):
       VStack(spacing: 0) {
         Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)

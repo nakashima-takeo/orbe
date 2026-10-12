@@ -232,14 +232,14 @@ extension TaskPaletteModel {
     onOpenURL(TaskLink(item: row.id, kind: row.item.kind).url)
   }
 
-  /// ⌘T（GitHub タブ）。結び付いていない行はタスクにしてから、結び付いている行はそのタスクで、⌘T を開く。
+  /// ⌘T（GitHub タブ）。結び付いていない行はタスクにしてから、結び付いている行はそのタスクで、そのタスクのための
+  /// agent を開く。
   func openWorktreePaletteFromGitHub() {
     guard let row = selectedGitHubRow else { return }
     if let task = row.task {
-      leaveEditingForAction()
-      onOpenWorktreePalette(task.id)
+      openAgent(forTask: task.id)
     } else if let id = makeTask(row) {
-      onOpenWorktreePalette(id)
+      openAgent(forTask: id)
     }
   }
 

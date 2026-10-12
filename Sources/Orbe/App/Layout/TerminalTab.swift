@@ -115,9 +115,9 @@ final class TerminalTab {
     surface.tab = self
   }
 
-  /// 休眠のタブ（1 つ目）の agent セッションを resume 起動の (command, env) に解決する（3 つ目は会話の最初の入力）。
+  /// 休眠のタブの agent セッションを resume 起動の (command, env) に解決する（2 つ目は会話の最初の入力）。
   /// 解決できなければ nil（呼び出し側は素のシェルで復元）。
-  typealias ResumeSpawn = (TerminalTab, AgentSession, String?) -> (
+  typealias ResumeSpawn = (AgentSession, String?) -> (
     command: String, env: [String: String]
   )?
 
@@ -146,7 +146,7 @@ final class TerminalTab {
     activated = true
     if case .dormant(let session) = agentSlot {
       let identity = identity(of: agentSlot)
-      if let spawn = resumeSpawn?(self, session, wakeInput.take()) {
+      if let spawn = resumeSpawn?(session, wakeInput.take()) {
         surface.initialCommand = spawn.command
         surface.initialEnv = spawn.env
         agentSlot = .live(session: session, report: nil)

@@ -402,30 +402,15 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationErrRunning
   // MARK: - 秘書・作業を始める（L10nTable+Secretary）
   case taskStartHomeTask
-  case secretaryLineOrigin
-  case secretaryLineWaitOrigin
-  case secretaryLineBoardOrigin
-  case secretaryLineAutomation
-  case secretaryLineAutomationFix
-  case secretaryLineTask
-  case secretaryLineLinkedTask
-  case secretaryLineNote
-  case secretaryUnresponsive
+  case secretaryAutomationFixInput
   case taskPaletteDestination
   case taskPaletteDestinationTask
   case taskPaletteDestinationDefault
-  case taskPaletteAskSecretary
-  case taskPaletteDestinationPlace
+  case taskPaletteHandToAgent
+  case taskPaletteHintOpenAgent
   case taskPaletteDestinationNoWorkspace
-  case taskPaletteAskTitle
-  case taskPaletteAskOptional
-  case taskPaletteAskScope
-  case taskPaletteAskAfter
-  case taskPaletteHintStopAsking
-  case taskPaletteAsked
-  case taskPaletteAskedQueued
   case taskPaletteErrSecretaryClaude
-  case taskPaletteAskHandOver
+  case taskPaletteErrSecretaryUnavailable
 
   // MARK: - Onboarding
   case onboardingBegin
@@ -603,6 +588,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardAskHint
   case boardAskFixHint
   case boardAskClaudeMissing
+  case boardAskUnavailable
   case boardAskFixGone
 
   // MARK: - Link（OSC 8 リンクの確認・ブロック）
