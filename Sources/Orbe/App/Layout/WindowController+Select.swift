@@ -37,7 +37,7 @@ extension WindowController {
     scheduleHiddenMounts(for: ws)
   }
 
-  /// 前面の workspace のボードの部品の並びをボードへ写す唯一の口（ボードを載せる `select` と、部品の操作の後）。
+  /// 前面の workspace のボードの部品の並びをボードへ写す唯一の口（`select` と、部品の操作の後）。
   func projectBoardParts() {
     board.show(store.boardParts(of: current) ?? [])
   }
