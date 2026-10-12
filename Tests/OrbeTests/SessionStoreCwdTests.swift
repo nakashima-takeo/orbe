@@ -14,7 +14,7 @@ final class SessionStoreCwdTests: OrbeTestCase {
   private func makeStore(rootPath: String, tabs: [TerminalTab]) -> SessionStore {
     let ws = Workspace(name: "ws", rootPath: rootPath)
     ws.tabs = tabs
-    ws.active = 0
+    if let first = tabs.first { ws.selection = .tab(first) }
     return (SessionStore(workspaces: [ws], activeWorkspace: 0))
   }
 
@@ -50,12 +50,12 @@ final class SessionStoreCwdTests: OrbeTestCase {
   func testActiveTabCwdFollowsTheSelectedTabOfTheActiveWorkspace() {
     let background = Workspace(name: "background", rootPath: "/tmp/bg")
     background.tabs = [TerminalTab.alone(cwd: "/tmp/bg/tab")]
-    background.active = 0
+    background.selection = .tab(background.tabs[0])
     let active = Workspace(name: "active", rootPath: "/tmp/ws-root")
     let viewed = TerminalTab.alone(cwd: "/tmp/viewed")
     viewed.surface.currentPwd = "/tmp/viewed/reported"
     active.tabs = [TerminalTab.alone(cwd: "/tmp/other"), viewed]
-    active.active = 1
+    active.selection = .tab(active.tabs[1])
     let store = SessionStore(workspaces: [background, active], activeWorkspace: 1)
 
     XCTAssertEqual(store.activeTabCwd(), "/tmp/viewed/reported")

@@ -11,7 +11,7 @@ extension WindowController {
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
       if self.model.overlay == .none {
-        self.focusActiveTab()
+        self.focusSelection()
       } else {
         self.model.focusCurrentOverlayField()
       }
@@ -153,11 +153,11 @@ extension WindowController {
     reconfirmFocusNextTick()
   }
 
-  /// ヘルプを畳み、アクティブタブへ first responder を戻す（パレット dismiss と同じ規則）。
+  /// ヘルプを畳み、選んでいるものへ first responder を戻す（パレット dismiss と同じ規則）。
   func dismissHelp() {
     model.help = nil
     model.overlay = .none
-    focusActiveTab()
+    focusSelection()
     reconfirmFocusNextTick()
   }
 
@@ -174,8 +174,8 @@ extension WindowController {
     model.attentionPalette = nil
     model.closedAgentsPalette = nil
     model.help = nil
-    focusActiveTab()
-    // teardown 後の次 tick で focus を再確定する。overlay==.none のままなら端末へ、直後に別 overlay へ
+    focusSelection()
+    // teardown 後の次 tick で focus を再確定する。overlay==.none のままなら選んでいるものへ、直後に別 overlay へ
     // 差し替わっていれば（例: 切替パレットの ＋新規 → dismiss→作成フォーム）その overlay の入力欄へ当たる。
     reconfirmFocusNextTick()
   }
@@ -183,9 +183,8 @@ extension WindowController {
   /// Cmd+R。フォーカス中タブをタブ行内でその場編集する（中央パレットは出さない）。
   /// 現在の表示名（明示名 or 派生名②③）をプリフィルし、field editor で全選択して開く。
   func beginTabRename() {
-    guard current.tabs.indices.contains(current.active) else { return }
-    let tab = current.tabs[current.active]
-    statusModel.editingIndex = current.active
+    guard let tab = activeTab, let index = current.selectedTabIndex else { return }
+    statusModel.editingIndex = index
     statusModel.editingText = tab.displayTitle(workspaceRoot: current.rootPath)  // 明示名 or 派生名
     statusModel.editingPlaceholder = tab.derivedTitle(workspaceRoot: current.rootPath)  // 空時の戻り先
     // クロージャは対象タブを弱参照する。tab を強参照すると改名タブの surface/pty がリークする。
@@ -202,12 +201,12 @@ extension WindowController {
   }
 
   /// インライン改名を畳み、焦点をその時点の前面へ戻す（`reconfirmFocusNextTick` と同じ分岐）。overlay が
-  /// 無ければアクティブタブへ、あればその入力欄へ——改名中に「＋」や Attention でパレットを開くと、改名欄の
+  /// 無ければ選んでいるものへ、あればその入力欄へ——改名中に「＋」や Attention でパレットを開くと、改名欄の
   /// blur がここへ来る。タブへ戻すとパレットが見えているのに打鍵が端末へ流れる。
   func endTabRename() {
     statusModel.editingIndex = nil
     if model.overlay == .none {
-      focusActiveTab()
+      focusSelection()
     } else {
       model.focusCurrentOverlayField()
     }

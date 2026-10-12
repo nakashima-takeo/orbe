@@ -3,15 +3,15 @@ import Foundation
 
 /// 外部やエージェントが Orbe を操作するための domain 操作（main スレッドでのみ呼ぶ）。
 /// 実体は WindowController。ControlServer がリクエストを main へ hop して叩く。
-protocol ControlTarget: ControlTaskTarget, ControlIntakeTarget {
+protocol ControlTarget: ControlTaskTarget, ControlIntakeTarget, ControlBoardTarget {
   func controlListWorkspaces() -> [[String: Any]]
   func controlListTabs() -> [[String: Any]]
   /// 検出済みエージェント CLI を列挙する（読み取り専用）。
   /// 検出未完了なら空配列（エラーにしない）。
   func controlListAgents() -> [[String: Any]]
   func controlResolveTab(_ id: Int) -> TerminalTab?
-  /// 新タブをアクティブ workspace（または指定 workspace）に開く。戻り値は新タブ ID。
-  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?) -> Int?
+  /// 新タブをアクティブ workspace（または指定 workspace）に開く。`selects` が偽なら選ばずに起こす。戻り値は新タブ ID。
+  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?, selects: Bool) -> Int?
   /// 検出済みエージェントを新タブで起こす（spawn_agent）。command 省略時は対象 workspace の
   /// 実効 default-agent を解く。未知 workspaceId は -32004・未検出 command は -32602・
   /// 検出ゼロは -32000。
@@ -322,11 +322,18 @@ final class ControlServer {
       return { target, _ in .success(["agents": target.controlListAgents()]) }
     case "spawn":
       return { target, params in
+        let select = params["select"]
+        if let select,
+          (select as? NSNumber).map({ CFGetTypeID($0) == CFBooleanGetTypeID() }) != true
+        {
+          return .failure(ControlError(code: -32602, message: "invalid select"))
+        }
         guard
           let tid = target.controlSpawn(
             workspaceId: params["workspaceId"] as? Int,
             cwd: params["cwd"] as? String,
-            command: params["command"] as? String)
+            command: params["command"] as? String,
+            selects: select as? Bool ?? true)
         else { return .failure(ControlError(code: -32000, message: "spawn failed")) }
         return .success(["tabId": tid])
       }
@@ -341,14 +348,22 @@ final class ControlServer {
         return .success(["activeWorkspaceId": r.activeWorkspaceId, "tabIds": r.tabIds])
       }
     default:
-      // タブ宛て・config / workspace CRUD・セッション復元・タスク・受信は拡張の解決
-      // （ControlServer+Dispatch / +Task / +Intake）へ。いずれも非該当なら未知メソッド。
-      return resolvedTabHandler(for: method)
-        ?? tabHandler(for: method)
-        ?? configWorkspaceHandler(for: method)
-        ?? sessionHandler(for: method)
-        ?? taskHandler(for: method)
-        ?? intakeHandler(for: method)
+      // タブ宛て・config / workspace CRUD・セッション復元・タスク・受信・ボードは拡張の解決
+      // （ControlServer+Dispatch / +Task / +Intake / +Board）へ順に問う。いずれも非該当なら未知メソッド。
+      // `??` で連ねると口の数とともに型推論が重くなるので、配列で順に問う。
+      let resolvers: [(String) -> WindowedHandler?] = [
+        { self.resolvedTabHandler(for: $0) },
+        { self.tabHandler(for: $0) },
+        { self.configWorkspaceHandler(for: $0) },
+        { self.sessionHandler(for: $0) },
+        { self.taskHandler(for: $0) },
+        { self.intakeHandler(for: $0) },
+        { self.boardHandler(for: $0) },
+      ]
+      for resolve in resolvers {
+        if let handler = resolve(method) { return handler }
+      }
+      return nil
     }
   }
 

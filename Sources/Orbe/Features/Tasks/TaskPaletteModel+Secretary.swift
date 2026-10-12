@@ -44,14 +44,19 @@ extension TaskPaletteModel {
     draft = TaskEditDraft(target: .ask(id), original: "", text: "")
   }
 
-  /// 頼む欄の ↵。補足（空でもよい）を添えてそのタスクを頼み、欄を閉じる。
+  /// 頼む欄の ↵。補足（空でもよい）を添えてそのタスクを頼み、欄を閉じる。頼む前にタスクが消えていれば、係へ渡さずに断る。
   func sendAsk() {
     guard let draft, case .ask(let id) = draft.target else { return }
-    deliver(.task(id: id, note: draft.text)) { self.draft = nil }
+    guard let task = store.tasks.first(where: { $0.id == id }) else {
+      error = .failed
+      reconcile()
+      return
+    }
+    deliver(.task(task, note: draft.text)) { self.draft = nil }
   }
 
-  /// 秘書の係へ渡す。受けたら `accepted` を呼んで、フッターに頼んだことを出す。受けなければ理由を出して、入力も
-  /// 欄もそのまま残す。
+  /// 秘書の係へ渡す。受けたら `accepted` を呼んで、フッターに頼んだことを出す。受けなければ入力も欄もそのまま残し、
+  /// 理由を出す（空の頼みは黙る）。
   private func deliver(_ ask: SecretaryAsk, accepted: () -> Void) {
     switch onAskSecretary(ask) {
     case .success(let acceptance):
@@ -61,9 +66,8 @@ extension TaskPaletteModel {
       reconcile()
     case .failure(.claudeMissing):
       error = .secretaryClaude
-    case .failure(.nothingToAsk):
-      error = .failed
-      reconcile()
+    case .failure(.empty):
+      break
     }
   }
 

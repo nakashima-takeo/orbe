@@ -188,7 +188,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.askingTaskID, 1, "欄は開いたまま")
     XCTAssertEqual(model.draftText, "直して", "補足も残る")
     press(Key.enter, "\r", to: window)
-    XCTAssertEqual(asks.last, .task(id: 1, note: "直して"))
+    XCTAssertEqual(asks.last, .task(model.store.tasks.first { $0.id == 1 }!, note: "直して"))
     XCTAssertNil(model.draft)
   }
 

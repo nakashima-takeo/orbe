@@ -1,7 +1,7 @@
 ---
 title: Orbe CLI（orb）
-description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/受信/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/intake/session/wait サブコマンド・socket 文脈解決・終了コード契約
-updated: 2026-10-10
+description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/タスクの自動追加/ボードの部品/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/intake/board/session/wait サブコマンド・socket 文脈解決・終了コード契約
+updated: 2026-10-11
 ---
 
 # Orbe CLI（`orb`）
@@ -20,14 +20,15 @@ updated: 2026-10-10
   - フラグを取り切った残余が位置引数の席に収まらなければ usage エラー（exit 2）。`--workspace=<id>`（= 区切り）・綴り誤り・2 個目の `--workspace`・席から溢れたトークン（`config set <key> <value> <余り>`）はここで落ちる——黙って捨てると exit 0 のまま指定と違う WS を触ることになる。`-` 始まりを値として通す席は `config set <key> <value>` の `<value>` だけで（`config set font-size -1`）、`<key>` の席は通さない。
 - `orb ws list [--json]` / `ws new <name> [--dir <path>]` / `ws rename <id|current> <name>` / `ws dir <id|current> <path>` / `ws switch <id>` / `ws rm <id|current>`
   - `--workspace` は取らない（対象は位置引数の `<id|current>`）。フラグを取り切った残余が位置引数の席に収まらなければ usage エラー（exit 2）。位置引数（`<name>`・`<id|current>`・`<path>`）はいずれも `-` 始まりを取らないので、tab と同じく**位置引数の席にも例外を設けない**。黙って捨てると `ws new <name> --dir=<path>` も `ws new <name> <path>`（`--dir` の書き忘れ）も、既定 root の workspace を exit 0 で作ってしまう。
+  - `ws list` の人間向けの列は `id 名前 root`（アクティブに `*`）で、`hasBoard` などほかの値は `--json` にだけ出る。
 
 ### tab（タブ操作）
 
 タブ内は `ORBE_TAB` を現タブ既定に、外部は明示ターゲット必須。
 
-- `orb tab list [--workspace <id|current>] [--json]` … タブ一覧（tabId/workspaceId/workspaceName/title/cwd/agentState/agentSessionId/active）。人間向けの `*` は「前面 workspace で選択中」のタブ 1 枚に付く——`active` は背景 workspace でも 1 枚 true なので、前面かは workspace 一覧と合わせて判定する。
+- `orb tab list [--workspace <id|current>] [--json]` … タブ一覧（tabId/workspaceId/workspaceName/title/cwd/agentState/agentSessionId/active）。人間向けの `*` は「前面 workspace で選択中」のタブ 1 枚に付く——`active` は背景 workspace でも true になりうる（ボードを選んでいる workspace ではどのタブも false）ので、前面かは workspace 一覧と合わせて判定する。前面 workspace が[ボード](../chrome/board.md)を選んでいれば、どのタブにも付かない。
 - `orb tab new [--workspace <id|current>] [--dir <path>] [--cmd "…"]` … 新タブを開く。新 tabId を返す。
-- `orb tab close [<tab>]` … GUI の Cmd+W と同一（アクティブ WS の最後のタブを閉じても 0 タブ空状態で残す）。
+- `orb tab close [<tab>]` … GUI の Cmd+W と同一（アクティブ WS の最後のタブを閉じても、ボードを持てばボード、持たなければ 0 タブの空状態で残す）。
 - `orb tab focus <tab>` … 別 WS なら activate 込み。位置引数必須。
 - `orb tab text [<tab>] [--scrollback] [--json]` … 画面テキスト。`--scrollback` で履歴全体、既定は可視範囲。人間向け出力は**捕捉した画面をそのまま**書き、末尾改行を足さない——整形された報告ではなく中身なので、`orb tab text > snapshot.txt` が画面を再現できる必要がある。
 - `orb tab send [<tab>] (--text <text> | --stdin)` … ペースト相当でテキストを送る。**enter は押さない**（実行は `tab key --key enter` が担う。送信と実行を分けるのは、送った内容を確かめてから走らせられるようにするため）。`--text` と `--stdin` はちょうど一方が必須で、`--stdin` を明示必須にしたのは、引数を書き損じたときに CLI が黙って標準入力を待って固まらないため。
@@ -66,16 +67,22 @@ updated: 2026-10-10
 
 ステータスと優先度の語彙と日付の妥当性は control が持ち、CLI は素通しする（`--help` の一覧は人が読むための写し）。詳細の `-` 始まりや空文字は値必須フラグの規約で渡せず、詳細を外すのは `--no-description`。
 
-### intake（受信）
+### intake（タスクの自動追加）
 
-[受信](../platform/intake.md)を作り・直し・回し・結果を読む。各サブコマンドは同名の制御 API の動詞へそのまま乗る。
+[タスクの自動追加](../platform/intake.md)を作り・直し・回し・結果を読む。各サブコマンドは同名の制御 API の動詞へそのまま乗る。
 
-- `orb intake list [--json]` … ID 順に 1 行 1 受信（`id 状態 名前 いつ 次の時刻 前回` のタブ区切り。状態は `active` / `paused` / `running`、いつは `every 30m` / `daily 09:00,13:00`、前回は `<開始> 12 fetched, 3 new, 1 proposed` か `<開始> failed: <理由>`。無い値は `-`。制御文字の扱いは `task list` と同じ）。
-- `orb intake proposals [<id>] [--json]` … 覚えている提案を 1 行 1 つ（`id 状態 受信の id 期限 タイトル リンク`）。`<id>` でその受信の棚の分だけ。
+- `orb intake list [--json]` … ID 順に 1 行 1 自動追加（`id 状態 名前 いつ 次の時刻 前回` のタブ区切り。状態は `active` / `paused` / `running`、いつは `every 30m` / `daily 09:00,13:00`、前回は `<開始> 12 fetched, 3 new, 1 proposed` か `<開始> failed: <理由>`。無い値は `-`。制御文字の扱いは `task list` と同じ）。
+- `orb intake proposals [<id>] [--json]` … 覚えている候補を 1 行 1 つ（`id 状態 自動追加の id 期限 タイトル リンク`）。`<id>` でその自動追加の棚の分だけ。
 - `orb intake set [<id>] [--json]` … 標準入力の JSON（MCP の `set_intake` と同じ形の `name`・`fetch`・`judge`・`when`）で、`<id>` が無ければ作って新しい ID だけを出し、あれば丸ごと置き換える。定義をフラグに割らないのは、取得がコマンドか agent かで項目が入れ子になり、検証が CLI と control の 2 か所に割れるため。標準入力が空・JSON オブジェクトでないは usage エラー（exit 2）、定義の検証は control が持つ（違反は exit 1）。
-- `orb intake run <id> [--json]` … 今すぐ回す（止めた受信も受ける）。回の終わりを待たずに返る。
+- `orb intake run <id> [--json]` … 今すぐ回す（止めた自動追加も受ける）。回の終わりを待たずに返る。
 - `orb intake pause <id> [--json]` / `orb intake resume <id> [--json]` … 予定を止める・再開する。
 - `orb intake rm <id> [--json]`
+
+### board（ボードの部品）
+
+workspace の[ボード](../chrome/board.md)に何を出すかを読み・変える。各サブコマンドは制御 API の `list_board_parts`・`add_board_part`・`remove_board_part` へそのまま乗る。宛先はボードを持つ workspace だけで（`orb ws list --json` の `hasBoard` で分かる）、ほかは exit 1 で断られる。
+
+- `orb board list <id|current> [--json]` / `orb board add <id|current> <kind> [--json]` / `orb board rm <id|current> <kind> [--json]` … どれも結果の並びを 1 行 1 種類で出す（空なら何も出さない）。`<kind>` は今は `intake`（タスクの自動追加の部品）だけで、知らない種類の検証は control が持つ（exit 1）。workspace は `ws rename` と同じく位置引数——ボードはその workspace の持ち物なので。既にあるものの `add`・無いものの `rm` は何も変えずに exit 0。
 
 ### session（閉じたエージェントセッションの記録と復元）
 

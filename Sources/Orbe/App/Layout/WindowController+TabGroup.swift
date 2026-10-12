@@ -60,14 +60,41 @@ extension WindowController {
       animated: false)
   }
 
-  /// content と器の中身を、タブの状態に揃える（冪等。状態を変えた経路の終わりで毎回呼ぶ）。保つ不変条件は 2 つ。
+  /// content と器の中身を、タブの状態と選択に揃える（冪等。状態を変えた経路の終わりで毎回呼ぶ）。保つ不変条件は 3 つ。
   /// - 器の端末面に入っているのは、その連の materialize 済みのタブの端末だけ（器を窓に付けても休眠タブは起きない）。
-  /// - content に載っているのは、前面の workspace の器のうち端末を 1 枚以上持つものだけ。見えるのはアクティブなタブの連の
-  ///   器で、その器ではアクティブなタブの端末を見せる。
+  /// - content に載っているのは、前面の workspace の器のうち端末を 1 枚以上持つものと、前面の workspace がボードを持てば
+  ///   ボードの面だけ。
+  /// - 見えるのは選択が指すもの 1 つ。タブならその連の器（器の中ではそのタブの端末）、ボードならボードの面、空なら何も
+  ///   見せず 0 タブの地を出す。
   ///
-  /// 器は窓に付く前に大きさと可視を確定させる——窓に付いた瞬間の可視性で面（エクスプローラー）が根のサービスを握るか
-  /// 決まり、差した端末はその寸法で surface を起こす。器を初めて載せるときに連の文書を戻す（`TabGroup.materialize`）。
+  /// 焦点は当てない（器を外す・隠すと焦点は落ちうる。当て直すのは呼び手）。器は窓に付く前に大きさと可視を確定させる——窓に付いた瞬間の可視性で面
+  /// （エクスプローラー）が根のサービスを握るか決まり、差した端末はその寸法で surface を起こす。器を初めて載せるときに
+  /// 連の文書を戻す（`TabGroup.materialize`）。
   func reconcileContent() {
+    reconcileTerminals()
+    let selected = current.selectedTab
+    var wanted: [NSView] = []
+    for group in current.groups where !group.view.terminals.isEmpty {
+      let view = group.view
+      view.isHidden = group !== selected?.group
+      if let selected, group === selected.group { view.show(terminal: selected.terminal) }
+      if view.superview !== model.content {
+        fitToContent(view)
+        group.materialize()
+        model.content.addSubview(view)
+      }
+      wanted.append(view)
+    }
+    if store.hasBoard(current) { wanted.append(placeBoard()) }
+    for sub in model.content.subviews where !wanted.contains(where: { $0 === sub }) {
+      sub.removeFromSuperview()
+    }
+    let empty = current.selection == .empty
+    if model.contentIsEmpty != empty { model.contentIsEmpty = empty }
+  }
+
+  /// 全 workspace の器の端末面を、その連の materialize 済みのタブの端末にそろえる。
+  private func reconcileTerminals() {
     var placements: [(group: TabGroup, terminals: [SurfaceScrollView])] = []
     for ws in workspaces {
       for group in ws.groups {
@@ -88,22 +115,16 @@ extension WindowController {
       fitToContent(group.view)
       missing.forEach(group.view.add(terminal:))
     }
-    let active = activeTab
-    var wanted: [NSView] = []
-    for group in current.groups where !group.view.terminals.isEmpty {
-      let view = group.view
-      view.isHidden = group !== active?.group
-      if let active, group === active.group { view.show(terminal: active.terminal) }
-      if view.superview !== model.content {
-        fitToContent(view)
-        group.materialize()
-        model.content.addSubview(view)
-      }
-      wanted.append(view)
-    }
-    for sub in model.content.subviews where !wanted.contains(where: { $0 === sub }) {
-      sub.removeFromSuperview()
-    }
+  }
+
+  /// ボードの面を content の大きさにし、ボードを選んでいるときだけ見せて content に載せる。
+  private func placeBoard() -> NSView {
+    let view = boardView
+    view.autoresizingMask = [.width, .height]
+    if view.frame != model.content.bounds { view.frame = model.content.bounds }
+    view.isHidden = current.selection != .board
+    if view.superview !== model.content { model.content.addSubview(view) }
+    return view
   }
 
   /// 器を content の大きさにする（窓に付く前に中身の寸法を確定させる）。

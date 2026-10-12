@@ -7,7 +7,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか: 絞り込みに「x」を打つと提案が消える。入力を消そうと押した ⌘⌫（そのリピート）が提案を捨てる。
 /// リンクを開くつもりの ⌘↵ が提案をタスクにする。← で文字の間を動けない、または棚へ入れない。中身の space が入力欄に
-/// 空白を打つ。⇧⇥ で棚から焦点が逃げる。中身の ↵ が今すぐ受信にならず提案をタスクにする、⌘⌫ が受信でなく提案を捨てる。
+/// 空白を打つ。⇧⇥ で棚から焦点が逃げる。中身の ↵ が今すぐ実行にならず提案をタスクにする、⌘⌫ が受信でなく提案を捨てる。
 /// 提案の一覧の esc で画面が閉じない。
 extension TaskPaletteCardKeyTests {
   private func intakeModel() -> TaskPaletteModel {
@@ -83,13 +83,12 @@ extension TaskPaletteCardKeyTests {
     arrow(Key.right, to: window)
     press(Key.space, " ", to: window)
     press(Key.space, " ", repeating: true, to: window)
-    press(Key.space, " ", repeating: true, to: window)
-    XCTAssertEqual(model.intake.selectedIntake?.paused, true, "止める ⇄ 再開は 1 回だけ")
+    XCTAssertEqual(model.intake.selectedIntake?.paused, true, "止める ⇄ 再開は 1 回だけ（往復しない）")
 
     press(Key.enter, "\r", to: window)
     press(Key.enter, "\r", repeating: true, to: window)
     XCTAssertTrue(model.intake.runner.isRunning(1))
-    XCTAssertNil(model.intake.error, "リピートで「受信中」の赤を出さない")
+    XCTAssertNil(model.intake.error, "リピートで「実行中のため今すぐ実行できません」の赤を出さない")
   }
 
   /// ← で棚（入力欄が空のときだけ）、棚の ↓ で受信を選び → で戻る、→ で中身、中身の space で止める ⇄ 再開、esc で戻る。
@@ -119,7 +118,7 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.intake.place, .proposals, "文字があるときの ← は文字の間を動く")
   }
 
-  /// 中身の ↵ は今すぐ受信、⌘⌫ は確認なしで受信を消して提案の一覧へ戻る。どちらも提案には触れない。
+  /// 中身の ↵ は今すぐ実行、⌘⌫ は確認なしで受信を消して提案の一覧へ戻る。どちらも提案には触れない。
   func testIntakeContentsEnterRunsNowAndCommandDeleteRemovesTheIntake() {
     let model = intakeModel()
     let window = mount(model)

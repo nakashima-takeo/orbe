@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 受信タブの左の棚。先頭に「すべて」、続いて受信ごとに名前・件数・2 行目（次の時刻 / 止めている / 受信中…）。提案の無い受信は
+/// 受信タブの左の棚。先頭に「すべて」、続いて受信ごとに名前・件数・2 行目（次の時刻 / 止めている / 実行中…）。提案の無い受信は
 /// 減光する。下に、受信を足す・変える口が秘書であることを添える（この画面では定義を変えない）。
 struct TaskPaletteIntakeShelf: View {
   @Bindable var model: TaskPaletteIntakeModel
@@ -100,17 +100,17 @@ private struct TaskPaletteIntakeShelfRowView: View {
 
   private var dimmed: Bool { row.intake != nil && row.count == 0 }
 
-  /// 「次 17:00 · 提案なし · 前回は失敗」。受信中は強調色、前回の失敗は赤（どちらも文字でも言う）。
+  /// 「次 17:00 · 候補なし · 前回は失敗」。実行中は強調色、前回の失敗は赤（どちらも文字でも言う）。
   private func status(_ intake: Intake) -> Text {
     let muted = { (value: String) in Text(value).foregroundStyle(Color.theme.textMuted) }
     var parts: [Text] = []
     if running {
       parts.append(
-        Text(l10n.string(.taskPaletteIntakeRunning)).foregroundStyle(Color.theme.accentBright))
+        Text(l10n.string(.intakeRunning)).foregroundStyle(Color.theme.accentBright))
     } else if intake.paused {
-      parts.append(muted(l10n.string(.taskPaletteIntakePaused)))
+      parts.append(muted(l10n.string(.intakePaused)))
     } else if let next {
-      parts.append(muted(l10n.format(.taskPaletteIntakeNext, text.stamp(next))))
+      parts.append(muted(text.next(next)))
     }
     if row.count == 0 { parts.append(muted(l10n.string(.taskPaletteIntakeNoProposals))) }
     if intake.runs.first?.failure != nil {

@@ -24,10 +24,12 @@ struct SecretaryRequest: Codable, Equatable {
   let body: String
 }
 
-/// 頼みの出どころ（届ける 1 行の頭に出す）。
+/// 頼みの出どころ（届ける 1 行の頭に出す）。頼む側が渡す。
 enum SecretaryOrigin: String, Codable {
   /// ⌘⇧X の入力欄・タスクの行。
   case palette
+  /// Home のボードの依頼の欄。
+  case board
   /// 秘書の会話が付けた待ちの条件が解けた後の ⌘T。
   case wait
 }

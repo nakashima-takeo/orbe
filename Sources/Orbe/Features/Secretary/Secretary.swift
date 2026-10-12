@@ -50,8 +50,8 @@ final class Secretary {
   /// 頼みを受けられない理由。
   enum Refusal: Error, Equatable {
     case claudeMissing
-    /// 頼めるものが無い（頼んだタスクが消えた・本文が空）。
-    case nothingToAsk
+    /// 本文が空（打った文が空白・制御文字だけ）。
+    case empty
   }
 
   /// 秘書のタブを覚えた経緯。
@@ -75,7 +75,6 @@ final class Secretary {
 
   private(set) var record: SecretaryFile
   private weak var host: SecretaryHost?
-  private let tasks: TaskStore
   private let localization: LocalizationStore
   private var remembered: Remembered?
   /// 最後に貼った時刻。秘書のタブが替われば消える。
@@ -88,11 +87,10 @@ final class Secretary {
   var patience: TimeInterval = 30
 
   init(
-    host: SecretaryHost, tasks: TaskStore, localization: LocalizationStore,
+    host: SecretaryHost, localization: LocalizationStore,
     file: SecretaryFile? = SecretaryPersistence.load()
   ) {
     self.host = host
-    self.tasks = tasks
     self.localization = localization
     record = file ?? .empty
   }
@@ -105,21 +103,15 @@ final class Secretary {
     remembered?.tabId == tab.id && !tab.isDormant
   }
 
-  /// 頼みを受けて溜め、起こしてよい一巡を回す。
-  func ask(_ ask: SecretaryAsk, now: Date = Date()) throws(Refusal) -> Acceptance {
+  /// 頼みを受けて溜め、起こしてよい一巡を回す。出どころは頼む側が渡す（届ける 1 行の頭になる）。
+  func ask(_ ask: SecretaryAsk, from origin: SecretaryOrigin, now: Date = Date()) throws(Refusal)
+    -> Acceptance
+  {
+    guard let body = SecretaryText.body(ask, l10n: localization) else { throw .empty }
     guard host?.secretaryClaude != nil else { throw .claudeMissing }
-    let task: TaskItem?
-    if case .task(let id, _) = ask {
-      task = tasks.tasks.first { $0.id == id }
-    } else {
-      task = nil
-    }
-    guard let body = SecretaryText.body(ask, task: task, l10n: localization) else {
-      throw .nothingToAsk
-    }
     let busy = !record.pending.isEmpty || isWorking
     record.pending.append(
-      SecretaryRequest(id: UUID(), receivedAt: now, origin: ask.origin, body: body))
+      SecretaryRequest(id: UUID(), receivedAt: now, origin: origin, body: body))
     save()
     cycle(mayLaunch: true)
     return busy && !record.pending.isEmpty ? .queued : .accepted

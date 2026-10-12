@@ -9,6 +9,7 @@ extension WindowController {
   /// 新規タブと同じ規則——同じ worktree の連の右端、無ければ末尾）。
   /// 冪等で、部分成功は成功。復元したタブは選択も前面化もしない——起床は mount 規律に従う（アクティブ
   /// workspace に足した分は次の選択で他の未 mount タブと順次、背景 workspace の分はそのアクティブ化で）。
+  /// ただし空表示だったアクティブ workspace に足したタブは、選んで見せる（`restoreDormantTab`）。
   func controlRestoreSessions(sessionIds: [String]) -> Result<Any, ControlError> {
     var present = store.presentSessionIds
     let results: [[String: Any]] = sessionIds.map { id in

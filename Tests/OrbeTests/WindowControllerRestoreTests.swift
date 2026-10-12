@@ -51,11 +51,14 @@ final class WindowControllerRestoreTests: OrbeTestCase {
     return layer
   }
 
-  /// 保存済みの Home（root は起動時にそろえる先と同じ）。ラウンドトリップを等値で見る
-  /// fixture に入れておくと、起動時の保証が何も足さない。
-  private func homeWorkspace() throws -> WorkspaceState {
+  /// 保存済みの Home（root は起動時にそろえる先と同じ・タブ 1 枚）。ラウンドトリップを等値で見る
+  /// fixture に入れておくと、起動時の保証が何も足さない。タブがあるので、ボードとタブのどちらを選んでいたかが
+  /// 保存値どおりに戻らなければ等値が崩れる。
+  private func homeWorkspace(boardSelected: Bool) throws -> WorkspaceState {
     WorkspaceState(
-      name: "Home", rootPath: try XCTUnwrap(HomeFolder.url).path, activeTab: 0, tabs: [])
+      name: "Home", rootPath: try XCTUnwrap(HomeFolder.url).path, activeTab: 0,
+      boardSelected: boardSelected,
+      tabs: [TabState(cwd: "/work/home", agent: nil, explicitTitle: "home")])
   }
 
   /// ディスクへ書いてから復元済み `WindowController` を返す。
@@ -81,12 +84,12 @@ final class WindowControllerRestoreTests: OrbeTestCase {
 
   /// アクティブが 0 タブ（休眠）なら surface が 1 つも起きず、`WorkspacesFile` が**完全に等値**で戻る。
   /// 分割比・cwd・エージェントセッション・明示タイトル・上書き設定・最終使用時刻・前回のベース・
-  /// ウィンドウサイズ・Home を 1 本で通す——どれか 1 つを復元が落とせばここで落ちる。
+  /// ウィンドウサイズ・Home とそのボードの選択を 1 本で通す——どれか 1 つを復元が落とせばここで落ちる。
   ///
   /// 0 タブでも前面 workspace として利用した時刻は進む。一方、タブの起床状態は
   /// 永続化しないため、再保存で変わるのはアクティブ側の `lastUsedAt` だけ。
   func testRoundTripForEmptyActiveWorkspaceAdvancesOnlyLastUsedAt() throws {
-    let home = try homeWorkspace()
+    let home = try homeWorkspace(boardSelected: true)
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
@@ -130,7 +133,7 @@ final class WindowControllerRestoreTests: OrbeTestCase {
   /// 背景 workspace も含めて保存値のまま等値で見る。
   func testRoundTripWithMountedTabOnlyAdvancesActiveLastUsedAt() throws {
     let userHome = FileManager.default.homeDirectoryForCurrentUser.path
-    let home = try homeWorkspace()
+    let home = try homeWorkspace(boardSelected: false)
     let original = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 1,
       workspaces: [
@@ -200,7 +203,7 @@ final class WindowControllerRestoreTests: OrbeTestCase {
     XCTAssertEqual(wc.window.title, "a", "丸めた先の workspace が実際にアクティブになる")
   }
 
-  /// 各 workspace の activeTab は自分のタブ数へ丸める（0 タブなら 0）。
+  /// 各 workspace の activeTab は自分のタブ数へ丸める（0 タブなら選ぶタブが無く空）。
   /// アクティブを 0 タブ（休眠）にして、丸めそのものは surface を起こさずに観測する。
   func testActiveTabIndexClampsWithinEachWorkspace() {
     let wc = launch(
@@ -210,17 +213,16 @@ final class WindowControllerRestoreTests: OrbeTestCase {
         state("over", activeTab: 9, tabs: 2),
         state("under", activeTab: -4, tabs: 2),
       ])
-    XCTAssertEqual(
-      wc.workspaces[0].active, 0, "0 タブ workspace の activeTab は 0（再アクティブ化で index 0 を選べる）")
-    XCTAssertEqual(wc.workspaces[1].active, 1, "範囲超の activeTab は最終タブへ丸める")
-    XCTAssertEqual(wc.workspaces[2].active, 0, "負値の activeTab は 0 へ丸める")
+    XCTAssertEqual(wc.workspaces[0].selection, .empty, "0 タブ workspace は空")
+    XCTAssertEqual(wc.workspaces[1].selectedTabIndex, 1, "範囲超の activeTab は最終タブへ丸める")
+    XCTAssertEqual(wc.workspaces[2].selectedTabIndex, 0, "負値の activeTab は 0 へ丸める")
   }
 
   /// アクティブ workspace の activeTab の丸めは、後続の `select()` に上書きされない
   /// （丸め値のまま mount されるので、範囲外 index でタブ配列を引く経路が残らない）。
   func testActiveTabClampSurvivesActivation() {
     let wc = launch(activeWorkspace: 0, [state("front", activeTab: 9, tabs: 2)])
-    XCTAssertEqual(wc.current.active, 1, "アクティブ workspace でも丸めた最終タブが選ばれたまま")
+    XCTAssertEqual(wc.current.selectedTabIndex, 1, "アクティブ workspace でも丸めた最終タブが選ばれたまま")
   }
 
   // MARK: - ウィンドウサイズ（記憶はクランプ前・表示はクランプ後）

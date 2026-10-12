@@ -41,7 +41,7 @@ extension SessionStoreTabGroupTests {
       store.current.tabs.elementsEqual([t[2], t[0], t[1], t[3], t[4]], by: ===),
       "[b, a, a, c, c]")
     XCTAssertTrue(activeTab(store.current) === t[1], "active は動いた連の中の同じタブ")
-    XCTAssertEqual(store.current.active, 2)
+    XCTAssertEqual(store.current.selectedTabIndex, 2)
   }
 
   /// 連を前の境界（先頭）へ動かす。掴んだのが連の中央のタブでも連全体が動く。

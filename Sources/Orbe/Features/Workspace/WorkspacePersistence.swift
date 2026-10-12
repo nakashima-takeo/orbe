@@ -49,7 +49,10 @@ struct WindowSize: Codable, Equatable {
 struct WorkspaceState: Codable, Equatable {
   var name: String
   var rootPath: String
+  /// 選んでいるタブの位置。ボード・空なら 0（ボードを知らない版が読んでも範囲内に収まる）。
   var activeTab: Int
+  /// ボードを選んでいるか。選んでいるときだけ書き、無いか読めなければ false（`activeTab` のタブを選ぶ）。
+  var boardSelected: Bool
   var tabs: [TabState]
   /// 連ごとのエディターと面の配置（根の正規形パスで連を指す）。書くのは状態を持つ連だけ。
   var groups: [GroupState]
@@ -65,26 +68,34 @@ struct WorkspaceState: Codable, Equatable {
   /// `Workspace.persistentId`。無いか読めない workspace にはその workspace だけ新しく振る（旧形式から
   /// 読んだ場合も同じ）——後から足したフィールドの異常でファイル全体を落とさない。
   var persistentId: UUID
+  /// ボードの部品の決めた並び（`Workspace.boardParts`）。決めていれば空でも書き、nil（決めていない）は書かない。読めない要素
+  /// （知らない種類を含む）はその要素だけ落とし、配列でない・中身があるのに 1 つも読めなければ nil（既定）——後から足した
+  /// フィールドの異常でファイル全体を落とさない。重なりは `SessionStore.load` が落とす。
+  var boardParts: [BoardPart]?
 
-  enum CodingKeys: String, CodingKey {
-    case name, rootPath, activeTab, tabs, groups, lastUsedAt, settingsOverride, lastWorktreeBase
-    case persistentId
+  /// `CaseIterable` は TabState と同じ seam（encode を手書きにしたので、足したキーの書き忘れを全キーの往復テストが見る）。
+  enum CodingKeys: String, CodingKey, CaseIterable {
+    case name, rootPath, activeTab, boardSelected, tabs, groups, lastUsedAt, settingsOverride
+    case lastWorktreeBase, persistentId, boardParts
   }
 
   init(
-    name: String, rootPath: String, activeTab: Int, tabs: [TabState], groups: [GroupState] = [],
+    name: String, rootPath: String, activeTab: Int, boardSelected: Bool = false, tabs: [TabState],
+    groups: [GroupState] = [],
     lastUsedAt: Date? = nil, settingsOverride: SettingsLayer? = nil,
-    lastWorktreeBase: String? = nil, persistentId: UUID = UUID()
+    lastWorktreeBase: String? = nil, persistentId: UUID = UUID(), boardParts: [BoardPart]? = nil
   ) {
     self.name = name
     self.rootPath = rootPath
     self.activeTab = activeTab
+    self.boardSelected = boardSelected
     self.tabs = tabs
     self.groups = groups
     self.lastUsedAt = lastUsedAt
     self.settingsOverride = settingsOverride
     self.lastWorktreeBase = lastWorktreeBase
     self.persistentId = persistentId
+    self.boardParts = boardParts
   }
 
   /// settingsOverride は 1 キー単位で寛容に読む（`SettingsLayer` 自身の decode）——未知 key・型不一致の
@@ -96,6 +107,7 @@ struct WorkspaceState: Codable, Equatable {
     name = try c.decode(String.self, forKey: .name)
     rootPath = try c.decode(String.self, forKey: .rootPath)
     activeTab = try c.decode(Int.self, forKey: .activeTab)
+    boardSelected = (try? c.decodeIfPresent(Bool.self, forKey: .boardSelected)) ?? false
     tabs = try c.decode([TabState].self, forKey: .tabs)
     groups =
       (try? c.decodeIfPresent([Lenient<GroupState>].self, forKey: .groups))?.compactMap(\.value)
@@ -105,6 +117,26 @@ struct WorkspaceState: Codable, Equatable {
     settingsOverride = layer.flatMap { $0.isEmpty ? nil : $0 }
     lastWorktreeBase = try? c.decodeIfPresent(String.self, forKey: .lastWorktreeBase)
     persistentId = (try? c.decode(UUID.self, forKey: .persistentId)) ?? UUID()
+    boardParts = (try? c.decodeIfPresent([Lenient<BoardPart>].self, forKey: .boardParts))
+      .flatMap { elements in
+        let parts = elements.compactMap(\.value)
+        return elements.isEmpty || !parts.isEmpty ? parts : nil
+      }
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(name, forKey: .name)
+    try c.encode(rootPath, forKey: .rootPath)
+    try c.encode(activeTab, forKey: .activeTab)
+    if boardSelected { try c.encode(true, forKey: .boardSelected) }
+    try c.encode(tabs, forKey: .tabs)
+    try c.encode(groups, forKey: .groups)
+    try c.encodeIfPresent(lastUsedAt, forKey: .lastUsedAt)
+    try c.encodeIfPresent(settingsOverride, forKey: .settingsOverride)
+    try c.encodeIfPresent(lastWorktreeBase, forKey: .lastWorktreeBase)
+    try c.encode(persistentId, forKey: .persistentId)
+    try c.encodeIfPresent(boardParts, forKey: .boardParts)
   }
 }
 

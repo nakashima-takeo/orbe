@@ -2,13 +2,13 @@ import AppKit
 
 /// 面の機構の上位配線——⌘E・⌘⇧F と、連の配置が変わったときの保存・chrome・焦点の追従。
 extension WindowController {
-  /// ⌘E。分割中は焦点の往復、それ以外は端末 ⇄ エディター全面。0 タブは no-op。
+  /// ⌘E。分割中は焦点の往復、それ以外は端末 ⇄ エディター全面。選んでいるタブが無ければ（ボード・空）no-op。
   func toggleEditorFace() {
     guard let group = activeTab?.group else { return }
     group.setFaces(FaceGeometry.toggle(group.view.committed), animated: true)
   }
 
-  /// ⌘⇧F（→ `TabGroup.findInProject`）。0 タブは no-op。
+  /// ⌘⇧F（→ `TabGroup.findInProject`）。選んでいるタブが無ければ no-op。
   func findInProject() {
     activeTab?.group.findInProject()
   }

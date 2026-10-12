@@ -10,6 +10,11 @@ extension L10n {
     ),
     .secretaryLineOrigin: ("⌘⇧X から · %@", "From ⌘⇧X · %@"),
     .secretaryLineWaitOrigin: ("待ちの条件 · %@", "Wait condition · %@"),
+    .secretaryLineBoardOrigin: ("Home のボードから · %@", "From the Home board · %@"),
+    .secretaryLineIntake: ("タスクの自動追加を頼む: %@", "Task auto-add request: %@"),
+    .secretaryLineIntakeFix: (
+      "タスクの自動追加 %1$@「%2$@」を直す。", "Fix task auto-add %1$@ “%2$@”."
+    ),
     .secretaryLineTask: ("タスク %1$@「%2$@」を頼む。", "Task %1$@ “%2$@”: please take it on."),
     .secretaryLineLinkedTask: (
       "タスク %1$@「%2$@」(%3$@) を頼む。", "Task %1$@ “%2$@” (%3$@): please take it on."

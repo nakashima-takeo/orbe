@@ -104,7 +104,7 @@ extension WindowController {
   }
 
   /// 結び付いた workspace のリポジトリを読む provider（基点は Home のタスクのフォルダ、無ければその workspace の
-  /// アクティブタブの cwd、0 タブなら root path）。workspace が既に消えていれば nil。
+  /// 選んでいるタブの cwd、無ければ root path）。workspace が既に消えていれば nil。
   private func makeWorktreePaletteProvider(
     _ p: WorktreePaletteModel, _ binding: WorktreePaletteBinding
   ) -> WorktreePaletteDataProvider? {
@@ -142,7 +142,7 @@ extension WindowController {
   /// 開く先はパレットが結び付いた workspace で、位置は実行時に引き直す。その workspace が既に消えていたら
   /// 開かない。`frontsWorkspace` なら、開いた後にその workspace と新しいタブを前面にする（`openTab` は背景の
   /// workspace には前面化せずに開く）。
-  /// `dismissPalette()` ＋次 tick の `focusActiveTab()` の 2 点セットは、WorktreePaletteOverlay
+  /// `dismissPalette()` ＋次 tick の `focusSelection()` の 2 点セットは、WorktreePaletteOverlay
   /// （focus を握る TextField 入り）の SwiftUI teardown が非同期で、同期のフォーカス確定の後に
   /// first responder を奪いうるという既知の事情への手当てなので、2 箇所に複製しない。
   private func openResolvedDirectory(
@@ -161,7 +161,7 @@ extension WindowController {
       opened = openTab(workspaceIndex: index, cwd: dir)
     }
     if frontsWorkspace, let opened { _ = controlFocusTab(tabId: opened.tabId) }
-    DispatchQueue.main.async { [weak self] in self?.focusActiveTab() }
+    DispatchQueue.main.async { [weak self] in self?.focusSelection() }
   }
 
   /// 解決の終端（一覧の Enter・最新化画面の 2 択が共に通る）。開けたら、文脈のタスクを進行中にして

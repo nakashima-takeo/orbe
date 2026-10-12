@@ -51,6 +51,7 @@ final class FakeControlTarget: ControlTarget {
     let workspaceId: Int?
     let cwd: String?
     let command: String?
+    let selects: Bool
   }
   struct AgentSpawn {
     let command: String?
@@ -130,6 +131,9 @@ final class FakeControlTarget: ControlTarget {
   private(set) var pausedIntakes: [(intakeId: Int, paused: Bool)] = []
   private(set) var deletedIntakeIds: [Int] = []
   private(set) var proposalLists: [Int?] = []
+  private(set) var boardLists: [Int] = []
+  private(set) var addedBoardParts: [(workspaceId: Int, part: BoardPart)] = []
+  private(set) var removedBoardParts: [(workspaceId: Int, part: BoardPart)] = []
 
   // MARK: - 宛先
 
@@ -147,8 +151,8 @@ final class FakeControlTarget: ControlTarget {
   func controlListTabs() -> [[String: Any]] { tabs }
   func controlListAgents() -> [[String: Any]] { agents }
 
-  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?) -> Int? {
-    spawns.append(Spawn(workspaceId: workspaceId, cwd: cwd, command: command))
+  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?, selects: Bool) -> Int? {
+    spawns.append(Spawn(workspaceId: workspaceId, cwd: cwd, command: command, selects: selects))
     return spawnedTabId
   }
 
@@ -336,5 +340,20 @@ final class FakeControlTarget: ControlTarget {
   func controlListIntakeProposals(intakeId: Int?) -> Result<Any, ControlError> {
     proposalLists.append(intakeId)
     return outcome(["proposals": [Any]()])
+  }
+
+  func controlListBoardParts(workspaceId: Int) -> Result<Any, ControlError> {
+    boardLists.append(workspaceId)
+    return outcome(["parts": [["kind": "intake"]]])
+  }
+
+  func controlAddBoardPart(workspaceId: Int, part: BoardPart) -> Result<Any, ControlError> {
+    addedBoardParts.append((workspaceId, part))
+    return outcome(["parts": [["kind": "intake"]]])
+  }
+
+  func controlRemoveBoardPart(workspaceId: Int, part: BoardPart) -> Result<Any, ControlError> {
+    removedBoardParts.append((workspaceId, part))
+    return outcome(["parts": [Any]()])
   }
 }

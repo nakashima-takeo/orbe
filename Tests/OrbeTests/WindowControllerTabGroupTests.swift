@@ -45,7 +45,7 @@ final class WindowControllerTabGroupTests: OrbeTestCase {
     let wc = try restore(["/tmp/g1", "/tmp/g2", "/tmp/g1", "/tmp/g3"], activeTab: 2)
 
     XCTAssertEqual(cwds(wc), ["/tmp/g1", "/tmp/g1", "/tmp/g2", "/tmp/g3"], "初出順で連へ")
-    XCTAssertEqual(wc.current.active, 1, "保存時 index 2 のタブ（2 枚目の g1）を指し続ける")
+    XCTAssertEqual(wc.current.selectedTabIndex, 1, "保存時 index 2 のタブ（2 枚目の g1）を指し続ける")
 
     wc.flushChrome()
     XCTAssertEqual(wc.statusModel.strip.ranges, [0..<2, 2..<3, 3..<4])
@@ -61,10 +61,10 @@ final class WindowControllerTabGroupTests: OrbeTestCase {
     wc.newTab()
 
     XCTAssertEqual(cwds(wc), ["/tmp/g1", "/tmp/g1", "/tmp/g1", "/tmp/g2"], "g1 の連の右端（末尾ではない）")
-    XCTAssertEqual(wc.current.active, 2, "生えたタブが選ばれる")
+    XCTAssertEqual(wc.current.selectedTabIndex, 2, "生えたタブが選ばれる")
     wc.flushChrome()
     XCTAssertEqual(wc.statusModel.strip.ranges, [0..<3, 3..<4])
-    XCTAssertEqual(wc.statusModel.active, 2)
+    XCTAssertEqual(wc.statusModel.selection, .tab(2))
   }
 
   /// 連の中のタブが cd で別 worktree へ出ると、その連の直右へ移り、chrome と保存順に反映される。
@@ -75,10 +75,10 @@ final class WindowControllerTabGroupTests: OrbeTestCase {
     moved.surface.currentPwd = "/tmp/g3"  // OSC 7
 
     XCTAssertEqual(cwds(wc), ["/tmp/g1", "/tmp/g1", "/tmp/g3", "/tmp/g2"], "元の連の直右へ")
-    XCTAssertTrue(wc.current.tabs[wc.current.active] === moved, "cd したタブを見続ける")
+    XCTAssertTrue(wc.current.selectedTab === moved, "cd したタブを見続ける")
     wc.flushChrome()
     XCTAssertEqual(wc.statusModel.strip.ranges, [0..<2, 2..<3, 3..<4])
-    XCTAssertEqual(wc.statusModel.active, 2)
+    XCTAssertEqual(wc.statusModel.selection, .tab(2))
 
     wc.flushSave()
     XCTAssertEqual(
@@ -94,9 +94,9 @@ final class WindowControllerTabGroupTests: OrbeTestCase {
     wc.statusModel.onReorderSegment(0, 3)
 
     XCTAssertEqual(cwds(wc), ["/tmp/g2", "/tmp/g1", "/tmp/g1"], "g1 の連が末尾へ")
-    XCTAssertTrue(wc.current.tabs[wc.current.active] === viewed, "active は同じタブ")
+    XCTAssertTrue(wc.current.selectedTab === viewed, "active は同じタブ")
     wc.flushChrome()
     XCTAssertEqual(wc.statusModel.strip.ranges, [0..<1, 1..<3])
-    XCTAssertEqual(wc.statusModel.active, 1)
+    XCTAssertEqual(wc.statusModel.selection, .tab(1))
   }
 }
