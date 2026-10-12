@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 受信の中身（真ん中と右をまたぐ 1 枚）。名前と状態、取得（やり方といつ）・判定・前回の回・重なり、定義を書き換える口が
+/// 自動追加の中身（真ん中と右をまたぐ 1 枚）。名前と状態、取得（やり方といつ）・処理・前回の回・重なり、定義を書き換える口が
 /// 秘書であること、操作（`AutomationHand`）。値は走らせ役とストアから毎回読むので、裏の回が確定すると
 /// そのまま映る。
 struct TaskPaletteAutomationContents: View {
@@ -15,7 +15,7 @@ struct TaskPaletteAutomationContents: View {
         VStack(alignment: .leading, spacing: 0) {
           heading
           section(.automationFetch) { fetch }
-          section(.automationJudge) { judge }
+          section(.automationSteps) { steps }
           section(.taskPaletteAutomationLast) { last }
           let overlaps = model.store.overlaps(of: automation.id)
           if !overlaps.isEmpty {
@@ -85,12 +85,12 @@ struct TaskPaletteAutomationContents: View {
   }
 
   @ViewBuilder private var fetch: some View {
-    lines(text.fetch(automation.definition.fetch))
-    line(text.when(automation.definition.when))
+    if let source = automation.definition.source { lines(text.source(source)) }
+    line(text.when(automation.definition.trigger))
   }
 
-  private var judge: some View {
-    lines(text.judge(automation.definition.judge))
+  private var steps: some View {
+    lines(text.steps(automation.definition))
   }
 
   private func lines(_ lines: [AutomationText.Line]) -> some View {

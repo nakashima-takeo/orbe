@@ -3,7 +3,8 @@ import XCTest
 
 @testable import Orbe
 
-/// 受信の 6 動詞の params の語と型検査。定義は intakes.json と同じ形で読み、読めない箇所を -32602 の文に入れる。
+/// 受信の 6 動詞の params の語と型検査。定義は旧い形（取得・判定）で読んで今の定義へ変換し、読めない箇所を -32602 の文に
+/// 入れる。
 ///
 /// 壊れると何が起きるか: 定義の片方だけの書き換えが形の上で通り、取得か判定が消えた受信ができる。`fetch` がコマンドと
 /// agent の両方の形を持っても黙ってどちらかに落ちる。取得の性質の書き忘れが黙ってどちらかに落ち、提案が下がる・下がらないが
@@ -56,13 +57,19 @@ extension ControlWireTests {
       fake.setAutomations.last?.definition,
       AutomationDefinition(
         name: "Slack: 自分宛",
-        fetch: AutomationFetch(
+        trigger: .daily([.init(hour: 9, minute: 0), .init(hour: 13, minute: 0)]),
+        source: AutomationSource(
           method: .agent(
-            AutomationAgentFetch(
+            AutomationSourceAgent(
               cli: "claude", model: "haiku", tools: ["mcp__slack__search"], request: "DM")),
           coverage: .newArrivals),
-        judge: AutomationJudge(cli: "claude", model: "sonnet", instruction: "自分がやること"),
-        when: .daily([.init(hour: 9, minute: 0), .init(hour: 13, minute: 0)])),
+        steps: [
+          AutomationStep(
+            name: "判定",
+            method: .agent(
+              AutomationStepAgent(cli: "claude", model: "sonnet", instruction: "自分がやること")))
+        ],
+        sink: .taskCandidates),
       "judge の agent は省略で claude")
   }
 

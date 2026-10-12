@@ -132,7 +132,7 @@ enum TestIsolation {
     GuiConfig.fileURLOverride = dir.appendingPathComponent("gui.conf")
     AgentSessionLog.fileURLOverride = dir.appendingPathComponent("agent-sessions.jsonl")
     TaskPersistence.fileURLOverride = dir.appendingPathComponent("tasks.json")
-    AutomationPersistence.fileURLOverride = dir.appendingPathComponent("intakes.json")
+    AutomationPersistence.fileURLOverride = dir.appendingPathComponent("automations.json")
     SecretaryPersistence.fileURLOverride = dir.appendingPathComponent("secretary.json")
 
     // 同梱リソースの探索根。既定は Xcode の bin を指しており空でも中立でもないため、管理下の

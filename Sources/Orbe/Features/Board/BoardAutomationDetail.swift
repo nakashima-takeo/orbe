@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 選んだ自動追加の詳細（右）。名前・取得・判定・いつ・回の記録。取得と判定は 1 行の要約にせず全文を出す——承認なしで
+/// 選んだ自動追加の詳細（右）。名前・取得・処理・いつ・回の記録。取得と処理は 1 行の要約にせず全文を出す——承認なしで
 /// 裏で走るもの（使えるツール・コマンド・作業ディレクトリ）を、いつも確かめられるため。原文も素の文字で描き、欄全体が縦に
 /// スクロールする（選択が替わると先頭へ戻る）。
 struct BoardAutomationDetail: View {
@@ -16,11 +16,13 @@ struct BoardAutomationDetail: View {
           .font(Font.theme.boardDetailTitle)
           .foregroundStyle(Color.theme.textPrimary)
           .fixedSize(horizontal: false, vertical: true)
-        field(.automationFetch) { lines(text.fetch(automation.definition.fetch)) }
-        field(.automationJudge) { lines(text.judge(automation.definition.judge)) }
+        if let source = automation.definition.source {
+          field(.automationFetch) { lines(text.source(source)) }
+        }
+        field(.automationSteps) { lines(text.steps(automation.definition)) }
         field(.boardAutomationWhen) {
           value(
-            text.when(automation.definition.when)
+            text.when(automation.definition.trigger)
               + (automation.paused ? l10n.string(.boardAutomationPausedNote) : ""))
         }
         runs

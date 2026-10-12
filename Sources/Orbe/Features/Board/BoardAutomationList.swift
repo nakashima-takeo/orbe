@@ -91,7 +91,7 @@ struct BoardAutomationRow: View {
 
   /// 「30 分ごと · 次 17:00」。止めていれば次を出さない。
   private var when: String {
-    let when = text.when(standing.automation.definition.when)
+    let when = text.when(standing.automation.definition.trigger)
     guard let next = standing.next else { return when }
     return when + " · " + text.next(next)
   }

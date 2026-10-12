@@ -3,11 +3,12 @@ import XCTest
 @testable import Orbe
 
 /// 受信の 6 動詞のドメイン側を、実 `WindowController` 越しに固定する。起動で保存済みの受信が番人に載ること、
-/// 提案と重なりが棚に出す受信の側に出ること、拒否が制御 API の語彙になること、一覧の定義を `set_intake` へ戻せること。
+/// 提案と重なりが棚に出す受信の側に出ること、拒否が制御 API の語彙になること、一覧の定義を `set_intake` へ戻せること、
+/// 一覧の回の記録が旧い形のままであること。
 ///
 /// 壊れると何が起きるか: Orbe を再起動しただけで全受信が黙って回らなくなる。AI が受信の棚を読んでも、提案した受信が
 /// もう取っていない提案が混ざる・取っている受信に出ない。走っている受信への `run_intake` が別の誤りに化ける。一覧の定義を
-/// 書き換えて戻すと、間隔や取得役が別物になる。
+/// 書き換えて戻すと、間隔や取得役が別物になる。回の記録を読む AI・秘書が、件数や判定の結果を読めなくなる。
 ///
 /// 重要: 実 NSWindow に SurfaceView を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerAutomationControlTests: OrbeTestCase {
@@ -62,19 +63,8 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
   private func commit(
     _ wc: WindowController, _ id: Int, fetched: [AutomationItem], proposing: [AutomationItem] = []
   ) {
-    let now = Date()
-    let run = AutomationRun(
-      startedAt: now, endedAt: now, trigger: .now,
-      fetch: AutomationFetchReport(
-        commandLine: "fetch", ending: "exited 0", items: fetched.count,
-        rejected: AutomationRejections()),
-      newItems: proposing.count,
-      judge: AutomationJudgeReport(
-        commandLine: "claude", ending: "exited 0", proposed: 0, resolved: 0,
-        rejected: AutomationRejections()),
-      withdrawn: 0, failure: nil)
-    wc.automationStore.commit(
-      id, run, fetched: fetched, judged: proposing,
+    AutomationStoreTests.commit(
+      wc.automationStore, id, AutomationStoreTests.run(at: Date()), fetched: fetched,
       decisions: proposing.map { .propose(itemId: $0.id, title: "対応: \($0.id)", due: nil) })
   }
 
@@ -151,7 +141,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let wc = try launch()
     let id = try set(wc, AutomationStoreTests.definition())
     var codex = AutomationStoreTests.definition("codex に判定させる")
-    codex.judge.cli = "codex"
+    codex.steps = [AutomationStoreTests.judgeStep(cli: "codex")]
 
     XCTAssertEqual(code(wc.controlRunAutomation(automationId: 99)), -32004)
     XCTAssertEqual(code(wc.controlPauseAutomation(automationId: 99, paused: true)), -32004)
@@ -171,16 +161,44 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
   func testListedDefinitionReadsBackAsTheSameDefinition() throws {
     let wc = try launch()
     var definition = AutomationStoreTests.definition(
-      when: .daily([.init(hour: 13, minute: 30), .init(hour: 9, minute: 0)]))
-    definition.fetch.method = .agent(
-      AutomationAgentFetch(
-        cli: "claude", model: "haiku", tools: ["mcp__slack__search"], request: "自分宛の DM"))
+      trigger: .daily([.init(hour: 13, minute: 30), .init(hour: 9, minute: 0)]))
+    definition.source?.method = AutomationStoreTests.agentSource()
     let id = try set(wc, definition)
 
     let entry = try XCTUnwrap(try listed(wc)[id])
     let data = try JSONSerialization.data(withJSONObject: entry)
 
     XCTAssertEqual(
-      try AutomationWire.decoder.decode(AutomationDefinition.self, from: data), definition)
+      try AutomationWire.decoder.decode(AutomationLegacyDefinition.self, from: data).definition,
+      definition)
+  }
+
+  /// 一覧の回の記録は旧い形（取得・新しい件数・判定・下げた数）のまま。
+  func testListedRunsKeepTheLegacyShape() throws {
+    let wc = try launch()
+    let id = try set(wc, AutomationStoreTests.definition())
+    let a = AutomationStoreTests.item("a")
+    var run = AutomationStoreTests.run(at: Date())
+    run.source?.count = 1
+    run.fresh = 1
+    run.steps = [
+      AutomationStepReport(
+        name: "判定", commandLine: "claude -p", ending: "exited 0", count: 1,
+        rejected: AutomationRejections())
+    ]
+    AutomationStoreTests.commit(
+      wc.automationStore, id, run, fetched: [a],
+      decisions: [.propose(itemId: "a", title: "対応する", due: nil)])
+
+    let listedRun = try XCTUnwrap((try listed(wc)[id]?["runs"] as? [[String: Any]])?.first)
+
+    XCTAssertEqual(
+      Set(listedRun.keys),
+      ["startedAt", "endedAt", "trigger", "fetch", "newItems", "judge", "withdrawn"])
+    XCTAssertEqual((listedRun["fetch"] as? [String: Any])?["items"] as? Int, 1)
+    XCTAssertEqual(listedRun["newItems"] as? Int, 1)
+    let judge = try XCTUnwrap(listedRun["judge"] as? [String: Any])
+    XCTAssertEqual(judge["commandLine"] as? String, "claude -p")
+    XCTAssertEqual(judge["proposed"] as? Int, 1)
   }
 }

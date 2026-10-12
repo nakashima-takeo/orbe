@@ -18,29 +18,42 @@ struct JSONLines<Item: Decodable> {
     case invalidValue(String)
   }
 
-  let items: [Item]
+  /// 読めた行。
+  struct Accepted {
+    /// 1 始まりの行番号（空行も数える）。
+    let line: Int
+    /// 前後の空白を除いた原文。
+    let text: String
+    let item: Item
+  }
+
+  let accepted: [Accepted]
   let rejected: [Rejection]
+
+  var items: [Item] { accepted.map(\.item) }
 
   init(_ text: String) {
     // CRLF は 1 つの Character なので、LF と並べて区切りに数える。
     var lines = text.split(omittingEmptySubsequences: false) { $0 == "\n" || $0 == "\r\n" }
     if lines.last?.isEmpty == true { lines.removeLast() }
-    var items: [Item] = []
+    var accepted: [Accepted] = []
     var rejected: [Rejection] = []
     for (index, line) in lines.enumerated() {
       let number = index + 1
       let body = line.trimmingCharacters(in: .whitespacesAndNewlines)
       guard !body.isEmpty else { continue }
-      switch Self.decode(Data(body.utf8)) {
-      case .success(let item): items.append(item)
+      switch Self.decode(body) {
+      case .success(let item): accepted.append(Accepted(line: number, text: body, item: item))
       case .failure(let reason): rejected.append(Rejection(line: number, reason: reason))
       }
     }
-    self.items = items
+    self.accepted = accepted
     self.rejected = rejected
   }
 
-  private static func decode(_ data: Data) -> Result<Item, Reason> {
+  /// 1 行を読む。
+  static func decode(_ line: String) -> Result<Item, Reason> {
+    let data = Data(line.utf8)
     guard let value = try? JSONSerialization.jsonObject(with: data, options: .fragmentsAllowed)
     else { return .failure(.notJSON) }
     guard value is [String: Any] else { return .failure(.notObject) }

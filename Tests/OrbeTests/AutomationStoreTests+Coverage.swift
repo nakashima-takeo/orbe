@@ -21,7 +21,8 @@ extension AutomationStoreTests {
     commit(store, 1, fetched: [Self.item("b")])
 
     XCTAssertTrue(store.proposals.isEmpty, "人がさばいた提案は、取得から消えたら忘れる")
-    XCTAssertEqual(store.automation(1)?.runs.first?.withdrawn, 0, "さばいた提案は下げた数に入れない")
+    XCTAssertEqual(
+      Self.candidates(store.automation(1)?.runs.first)?.withdrawn, 0, "さばいた提案は下げた数に入れない")
   }
 
   func testDeletingANewArrivalsAutomationForgetsTheProposalsItHeld() throws {
