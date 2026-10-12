@@ -18,10 +18,11 @@
     ]
 
     @MainActor final class Scene {
-      let tab: TerminalTab
+      private let tab: TerminalTab
       /// fixture のリポジトリ（置き場の下。消すのは置き場の持ち主）。
       let directory: URL
-      var pane: EditorPaneView { tab.view.editor }
+      var group: TabGroup { tab.group }
+      var pane: EditorPaneView { group.view.editor }
       private var warmWindow: NSWindow?
 
       init(tab: TerminalTab, directory: URL) {
@@ -50,7 +51,7 @@
       var isReady: Bool {
         pane.tree.status?.badge(of: "README.md") == .modified
           && pane.tree.status?.badge(of: "docs/spec/editor/shell.md") == .added
-          && tab.editor.documents.allSatisfy { $0.waitUntilCaughtUp(timeout: 0) }
+          && group.editor.documents.allSatisfy { $0.waitUntilCaughtUp(timeout: 0) }
       }
 
       /// 検索パネルを出し、問いで実際に検索する（開いている文書は保存前の中身、ほかは git grep）。
@@ -97,12 +98,16 @@
       try "todo\n".write(
         to: dir.appendingPathComponent("notes.txt"), atomically: true, encoding: .utf8)
 
-      let tab = TerminalTab(
-        cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot, language: { .ja }))
-      let readmeDocument = try tab.editor.open(readme, as: .pinned)
+      let group = TabGroup(
+        key: GitWorktreeRoot.root(of: dir.path),
+        editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot, language: { .ja }))
+      let tab = TerminalTab(cwd: dir.path, group: group)
+      group.view.add(terminal: tab.terminal)
+      group.view.show(terminal: tab.terminal)
+      let readmeDocument = try group.editor.open(readme, as: .pinned)
       readmeDocument.surface.responder.perform(Selector(("insertText:")), with: "# ")
-      _ = try tab.editor.open(dir.appendingPathComponent("docs/design/tokens.json"), as: .preview)
-      _ = try tab.editor.open(
+      _ = try group.editor.open(dir.appendingPathComponent("docs/design/tokens.json"), as: .preview)
+      _ = try group.editor.open(
         dir.appendingPathComponent("Sources/Orbe/Features/Editor/FileTree.swift"), as: .pinned)
       return Scene(tab: tab, directory: dir)
     }

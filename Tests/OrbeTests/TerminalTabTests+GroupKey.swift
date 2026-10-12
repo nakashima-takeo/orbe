@@ -3,9 +3,8 @@ import XCTest
 
 @testable import Orbe
 
-/// タブの所属キー（`groupKey`）——cwd が属する git worktree ルート、管理外は cwd 自身（Q1）。
-/// cwd が変わったときに再計算され、`onPwdChange` が呼ばれる時点で新しいキーになっている
-/// （`WindowController` はその中で `regroup` を呼ぶ）。
+/// タブの cwd の報告は所属を変えない。連のキーの導出と付け替えは `WindowController` が行う
+/// （`WindowControllerTabGroupTests`）。
 extension TerminalTabTests {
 
   private func gitRoot() throws -> URL {
@@ -17,27 +16,19 @@ extension TerminalTabTests {
     return root
   }
 
-  /// 復元したタブは保存 cwd から同じ規則で導く（キーは永続しない）。
-  func testRestoredTabDerivesGroupKeyFromSavedCwd() throws {
+  /// cwd の報告（OSC 7）は上位へ知らせるだけで、所属は変えない（付け替えは `WindowController` が新しい根から決める）。
+  func testPwdChangeNotifiesWithoutMovingTheGroup() throws {
     let root = try gitRoot()
-    let state = TabState(
-      cwd: root.appendingPathComponent("src").path, agent: nil, explicitTitle: nil)
-
-    let tab = TerminalTab(restoring: state) { _, _, _ in nil }
-
-    XCTAssertEqual(tab.groupKey, GitWorktreeRoot.normalizedPath(root.path))
-  }
-
-  /// cwd の報告（OSC 7）でキーが再計算され、`onPwdChange` が呼ばれる時点で既に新しいキーになっている。
-  func testPwdChangeRecomputesGroupKeyBeforeNotifying() throws {
-    let root = try gitRoot()
-    let tab = TerminalTab(cwd: "/tmp")
-    var keyWhenNotified: String?
-    tab.onPwdChange = { keyWhenNotified = tab.groupKey }
+    let tab = TerminalTab.alone(cwd: "/tmp")
+    let group = tab.group
+    let key = tab.groupKey
+    var notified = false
+    tab.onPwdChange = { notified = true }
 
     tab.surface.currentPwd = root.appendingPathComponent("src").path
 
-    XCTAssertEqual(keyWhenNotified, GitWorktreeRoot.normalizedPath(root.path), "通知時点で新キー")
-    XCTAssertEqual(tab.groupKey, keyWhenNotified)
+    XCTAssertTrue(notified)
+    XCTAssertTrue(tab.group === group)
+    XCTAssertEqual(tab.groupKey, key)
   }
 }

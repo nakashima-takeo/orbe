@@ -13,7 +13,7 @@ import XCTest
 final class TerminalTabConversationTests: OrbeTestCase {
   func testWakeInputIsAddedToTheResumeOnce() {
     var inputs: [String?] = []
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       restoring: TabState(
         cwd: "/tmp", agent: AgentSession(command: "codex", sessionId: "s-1"), explicitTitle: nil),
       resumeSpawn: { _, _, input in

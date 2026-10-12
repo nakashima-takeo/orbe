@@ -48,7 +48,7 @@ import Foundation
     localization: LocalizationStore = LocalizationStore(language: .systemDefault)
   ) {
     self.path = path
-    self.cloneDir = path  // clone 先の親も folder と同じ初期値（cwd 短縮 or `~`）
+    self.cloneDir = path  // clone 先の親も folder と同じ初期値
     self.name = name
     self.localization = localization
   }

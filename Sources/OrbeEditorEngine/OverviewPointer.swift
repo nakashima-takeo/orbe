@@ -103,10 +103,11 @@ final class OverviewPointer {
     return true
   }
 
-  /// ポインタが動いた・面に入った（`inside`）・面から出た。
+  /// ポインタが動いた・面に入った（`inside`）・面から出た。面の外（手前に重なる view の下を含む）ではポインタの位置を
+  /// 持たない——帯もつまみのホバー色も出さない。
   func pointerMoved(to point: CGPoint, inside: Bool) {
     input.hovering = inside
-    update(point: point)
+    update(point: inside ? point : nil)
   }
 
   /// 押している間に窓から外れた。

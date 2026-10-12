@@ -18,7 +18,7 @@ final class WorkspaceQuarantineTests: OrbeTestCase {
 
   /// ユーザー構成が入った、壊れた JSON（末尾で切れている）。
   private let corruptJSON = """
-    {"version":4,"activeWorkspace":0,"workspaces":[\
+    {"version":\(WorkspacePersistence.version),"activeWorkspace":0,"workspaces":[\
     {"name":"alpha","rootPath":"/tmp/alpha","activeTab":0,"tabs":[{"cwd":"/tmp/alpha"}]},\
     {"name":"bravo","rootPath":"/tmp/bravo","activeTab":0,"tabs":[{"cwd":
     """

@@ -103,7 +103,7 @@ final class SessionStoreHomeTests: OrbeTestCase {
     store.load(workspaces: [Workspace(name: "a", rootPath: "/a")], activeWorkspace: 0)
     store.ensureHome(rootPath: root)
     store.setActiveWorkspace(1)
-    let (first, second) = (TerminalTab(cwd: "/tmp"), TerminalTab(cwd: "/tmp"))
+    let (first, second) = (TerminalTab.alone(cwd: "/tmp"), TerminalTab.alone(cwd: "/tmp"))
     _ = store.insertTabUnselected(first, intoWorkspaceAt: 1)
     _ = store.insertTabUnselected(second, intoWorkspaceAt: 1)
     XCTAssertEqual(store.current.selection, .board, "前提: ボードを選んでいる")

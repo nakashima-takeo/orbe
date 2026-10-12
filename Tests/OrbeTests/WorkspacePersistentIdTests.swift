@@ -11,7 +11,8 @@ import XCTest
 final class WorkspacePersistentIdTests: OrbeTestCase {
   private func write(_ workspaces: [String], top extra: String = "") throws {
     let json =
-      #"{"version":4,"activeWorkspace":0,"workspaces":[\#(workspaces.joined(separator: ","))]\#(extra)}"#
+      #"{"version":\#(WorkspacePersistence.version),"activeWorkspace":0,"#
+      + #""workspaces":[\#(workspaces.joined(separator: ","))]\#(extra)}"#
     try Data(json.utf8).write(to: workspacesFile())
   }
 

@@ -27,6 +27,11 @@ final class Workspace {
   var selectedTabIndex: Int? {
     selectedTab.flatMap { tab in tabs.firstIndex { $0 === tab } }
   }
+  /// 配下のタブが属する連（重複なし・タブ順）。
+  var groups: [TabGroup] {
+    var seen = Set<ObjectIdentifier>()
+    return tabs.compactMap { seen.insert(ObjectIdentifier($0.group)).inserted ? $0.group : nil }
+  }
   /// 配下に materialize 開始済みのタブが 1 枚以上あるか。
   /// タブ状態から導出する現在値で、0タブまたは全タブ未activatedなら false。永続化しない。
   var activated: Bool { tabs.contains(where: \.activated) }

@@ -54,10 +54,10 @@ final class AgentStateEmitTests: OrbeTestCase {
   func testRestoreAndTicketConsumptionEmitNothing() throws {
     let w = armAgentStateWait(id: 1)
 
-    let dormant = TerminalTab(
+    let dormant = TerminalTab.alone(
       restoring: TabState(cwd: "/w", agent: ticket, explicitTitle: nil), resumeSpawn: resume)
     dormant.recordMaterializationStarted()
-    let plain = TerminalTab(
+    let plain = TerminalTab.alone(
       restoring: TabState(cwd: "/w", agent: nil, explicitTitle: nil), resumeSpawn: resume)
     plain.recordMaterializationStarted()
 
@@ -72,7 +72,7 @@ final class AgentStateEmitTests: OrbeTestCase {
   func testUnresolvableTicketConsumptionEmitsNothing() throws {
     let w = armAgentStateWait(id: 1)
 
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       restoring: TabState(
         cwd: "/w", agent: AgentSession(command: "unknown", sessionId: "x"), explicitTitle: nil),
       resumeSpawn: noResume)
@@ -86,7 +86,7 @@ final class AgentStateEmitTests: OrbeTestCase {
 
   /// done のフォーカス消費（done → idle）は実変化なので `idle` を載せて流れる。
   func testConsumeDoneStateEmitsIdle() throws {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     setReportedState(tab, "done")
     let w = armAgentStateWait(id: 1, tabId: tab.id)
 
@@ -100,10 +100,10 @@ final class AgentStateEmitTests: OrbeTestCase {
 
   /// done でないタブの消費では流れない（waiting・報告前の live・素のシェル）。
   func testConsumeDoneStateEmitsNothingWithoutADoneState() throws {
-    let waiting = TerminalTab(cwd: "/tmp")
+    let waiting = TerminalTab.alone(cwd: "/tmp")
     setReportedState(waiting, "waiting")
     let unreported = liveUnreportedTab(session: ticket)
-    let plain = TerminalTab(cwd: "/tmp")
+    let plain = TerminalTab.alone(cwd: "/tmp")
     let w = armAgentStateWait(id: 1)
 
     for tab in [waiting, unreported, plain] { tab.consumeDoneState() }
@@ -115,7 +115,7 @@ final class AgentStateEmitTests: OrbeTestCase {
 
   /// タブのコンテキストメニューからのリセットは、実変化した `idle` を載せて流れる。
   func testResetAgentStatesEmitsIdle() throws {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     setReportedState(tab, "waiting")
     let w = armAgentStateWait(id: 1, tabId: tab.id)
 
@@ -129,10 +129,10 @@ final class AgentStateEmitTests: OrbeTestCase {
 
   /// リセットできる状態の無いタブでは流れない（idle・報告前の live・素のシェル）。
   func testResetAgentStatesEmitsNothingWithoutAResettableState() throws {
-    let idle = TerminalTab(cwd: "/tmp")
+    let idle = TerminalTab.alone(cwd: "/tmp")
     setReportedState(idle, "idle")
     let unreported = liveUnreportedTab(session: ticket)
-    let plain = TerminalTab(cwd: "/tmp")
+    let plain = TerminalTab.alone(cwd: "/tmp")
     let w = armAgentStateWait(id: 1)
 
     for tab in [idle, unreported, plain] { tab.resetAgentState() }

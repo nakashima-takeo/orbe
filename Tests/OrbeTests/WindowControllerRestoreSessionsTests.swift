@@ -76,7 +76,9 @@ final class WindowControllerRestoreSessionsTests: OrbeTestCase {
 
     let tab = try XCTUnwrap(wc.current.tabs.first)
     XCTAssertTrue(wc.current.selectedTab === tab)
-    XCTAssertEqual(wc.model.content.subviews.filter { !$0.isHidden }, [tab.view], "そのタブが見える")
+    XCTAssertEqual(
+      wc.model.content.subviews.filter { !$0.isHidden }, [tab.group.view], "そのタブの連の器が見える")
+    XCTAssertTrue(tab.group.view.shownTerminal === tab.terminal, "器はそのタブの端末を見せる")
     XCTAssertFalse(wc.model.contentIsEmpty, "空表示の地を重ねない")
     XCTAssertTrue(wc.window.firstResponder === tab.surface, "焦点はそのタブ")
   }

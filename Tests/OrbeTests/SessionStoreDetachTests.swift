@@ -8,7 +8,7 @@ import XCTest
 /// 壊れると何が起きるか: 生きているタブのセッションが寿命ログで閉じたことになる。
 final class SessionStoreDetachTests: OrbeTestCase {
   private func agentTab(_ id: String) -> TerminalTab {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     tab.applyReport(AgentHookReport(agent: "claude", state: "idle", sessionId: id))
     return tab
   }

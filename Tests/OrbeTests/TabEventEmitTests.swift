@@ -42,7 +42,7 @@ final class TabEventEmitTests: OrbeTestCase {
 
   /// surface のタイトル変化は `title` に新値を載せて流れ、同値の再代入では流れない。
   func testTitleChangeEmitsTitleOnlyOnRealChange() throws {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     let w = armWait(id: 1, kind: "title", tabId: tab.id)
 
     tab.surface.title = "vim"
@@ -62,7 +62,7 @@ final class TabEventEmitTests: OrbeTestCase {
 
   /// OSC 7 の cwd 報告は `pwd` に新値を載せて流れ、同じ cwd の再報告では流れない。
   func testPwdChangeEmitsPwdOnlyOnRealChange() throws {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     let w = armWait(id: 1, kind: "pwd", tabId: tab.id)
 
     tab.surface.currentPwd = "/work"
@@ -85,7 +85,7 @@ final class TabEventEmitTests: OrbeTestCase {
 
   /// タブが消滅すると `tab_closed` がそのタブの id で流れる。
   func testTabDeallocationEmitsTabClosed() throws {
-    var tab: TerminalTab? = TerminalTab(cwd: "/tmp")
+    var tab: TerminalTab? = TerminalTab.alone(cwd: "/tmp")
     let id = try XCTUnwrap(tab?.id)
     let w = armWait(id: 1, kind: "tab_closed", tabId: id)
 

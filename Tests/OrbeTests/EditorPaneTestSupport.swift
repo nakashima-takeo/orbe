@@ -16,14 +16,14 @@ extension OrbeTestCase {
     return url
   }
 
-  /// タブを幅 `width` のエディター全面（＋背）の窓に載せる。
+  /// タブを幅 `width` のエディター全面の窓に載せる。
   func hostEditor(_ tab: TerminalTab, width: CGFloat, height: CGFloat = 400) -> NSWindow {
     let window = NSWindow(
-      contentRect: NSRect(x: 0, y: 0, width: width + FaceGeometry.spine, height: height),
+      contentRect: NSRect(x: 0, y: 0, width: width, height: height),
       styleMask: [.borderless], backing: .buffered, defer: false)
-    window.contentView = tab.view
-    tab.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
-    tab.view.layoutSubtreeIfNeeded()
+    window.contentView = tab.group.view
+    tab.group.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
+    tab.group.view.layoutSubtreeIfNeeded()
     return window
   }
 
@@ -108,17 +108,42 @@ extension OrbeTestCase {
       y: Theme.Layout.editorFileTabs / 2)
   }
 
-  /// ポインタを列の頭の上の点（面の座標）へ動かす。SwiftUI の onHover はポインタの下の view が受ける
-  /// mouseEntered / mouseMoved で動く。
+  /// ポインタを面の座標の点へ動かす（`host` はその点の上の SwiftUI の器。既定は列の頭）。SwiftUI の onHover は
+  /// ポインタの下の view が受ける mouseEntered / mouseMoved で動く。
   @MainActor
-  func movePointer(_ pane: EditorPaneView, to point: NSPoint) {
-    let host = pane.headerHost
+  func movePointer(_ pane: EditorPaneView, to point: NSPoint, over host: NSView? = nil) {
+    let host = host ?? pane.headerHost
     let local = host.convert(point, from: pane)
     guard let target = host.hitTest(host.convert(local, to: host.superview)) else { return }
     let event = timedMouse(.mouseMoved, at: pane.convert(point, to: nil), in: pane.window)
     target.mouseExited(with: event)
     target.mouseEntered(with: event)
     target.mouseMoved(with: event)
+  }
+
+  /// ポインタを面の座標の点 `point`（`host` の上）から面の外へ出す。
+  @MainActor
+  func movePointerOut(_ pane: EditorPaneView, from point: NSPoint, over host: NSView) {
+    let local = host.convert(point, from: pane)
+    guard let target = host.hitTest(host.convert(local, to: host.superview)) else { return }
+    target.mouseExited(with: timedMouse(.mouseMoved, at: NSPoint(x: -10, y: -10), in: pane.window))
+  }
+
+  /// ツリーのつまみの矩形（窓の座標）。本番のつまみと同じく、ツリーの今の位置から、一覧の右端・全高のトラックに置く。
+  @MainActor
+  func treeThumbFrame(_ pane: EditorPaneView) -> NSRect? {
+    guard let tree = scrollView(in: pane.sideHost), let document = tree.documentView else {
+      return nil
+    }
+    let visible = tree.documentVisibleRect
+    let geometry = SidebarScrollbar.Metrics(
+      position: visible.minY, total: document.frame.height, visible: visible.height
+    ).geometry
+    let width = Theme.Layout.editorSidebarScrollbar
+    return tree.convert(
+      NSRect(
+        x: tree.bounds.maxX - width, y: geometry.sliderPosition, width: width,
+        height: geometry.sliderLength), to: nil)
   }
 
   /// 面の座標の点を押して離す（窓は ordered-in であること——`sendEvent` はそれ以外に配送しない）。アプリの配送の口

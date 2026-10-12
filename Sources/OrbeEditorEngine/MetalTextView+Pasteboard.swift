@@ -121,7 +121,7 @@ extension MetalTextView {
       if !inside { surface.editor.select(CursorList(Cursor(hit.offset)), reveal: .none) }
     }
     let menu = host.contextMenu()
-    if #available(macOS 15.2, *) { menu.automaticallyInsertsWritingToolsItems = false }
+    menu.automaticallyInsertsWritingToolsItems = false
     return menu
   }
 
