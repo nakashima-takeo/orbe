@@ -18,6 +18,8 @@ extension BoardAutomationTests {
     static let secondRow = NSPoint(x: 120, y: 536)
     /// 一覧でも欄でもない地（右の欄）。
     static let ground = NSPoint(x: 800, y: 100)
+    /// 一覧の行の下の空き。
+    static let listGround = NSPoint(x: 120, y: 100)
   }
 
   func type(_ text: String, to window: NSWindow) {
@@ -137,7 +139,7 @@ extension BoardAutomationTests {
     XCTAssertEqual(automation.requestText, "a")
   }
 
-  /// 欄のクリックで欄、行のクリックで一覧、地のクリックで最後に居た場所へ移り、直後のキーがそこに届く。
+  /// 欄のクリックで欄、行や一覧の下の空きのクリックで一覧、地のクリックで最後に居た場所へ移り、直後のキーがそこに届く。
   func testClicksMoveTheFocusAndTheNextKeyArrivesThere() {
     let model = board()
     let automation = model.automation
@@ -167,6 +169,11 @@ extension BoardAutomationTests {
     let before = automation.selectedAutomation?.id
     down(window)
     XCTAssertNotEqual(automation.selectedAutomation?.id, before, "地のクリックの直後の ↓ は一覧に効く")
+
+    click(Point.field, in: window)
+    click(Point.listGround, in: window)
+    XCTAssertEqual(automation.place, .list, "一覧の下の空きは一覧")
+    XCTAssertEqual(automation.selectedAutomation?.id, Self.failingBacklog, "欄から来たなら一覧の先頭")
   }
 
   /// 欄の枠のどこを押しても欄（入力欄の字の高さの外の余白・❯・「↵ 依頼する」も）。

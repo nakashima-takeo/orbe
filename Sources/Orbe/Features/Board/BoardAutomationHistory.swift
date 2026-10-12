@@ -42,7 +42,8 @@ struct BoardAutomationHistory: View {
   }
 
   @ViewBuilder private func result(_ run: BoardRunLine) -> some View {
-    let text = Text(run.result).foregroundStyle(color(run.tone, strip: false))
+    let text = fontResolver.text(run.result, base: Theme.Typography.codeSmall)
+      .foregroundStyle(color(run.tone, strip: false))
     if run.tone == .failed {
       text
         .lineSpacing(Self.wrapLeading)

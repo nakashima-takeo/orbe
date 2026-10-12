@@ -62,7 +62,7 @@ struct BoardAutomationSummary: Equatable {
   let strip: [BoardRunTone]
   /// 一覧の右端の、最新の回の文（「16:40 に 2件を追加」「13:00 に失敗」）。まだ回っていなければ nil。
   let mark: String?
-  /// 詳細の見出しの前回（「前回 今日 16:40　2件をタスク候補に追加」）。
+  /// 詳細の見出しの前回（「前回 今日 16:40　2件をタスク候補に追加」「前回 今日 13:00　失敗」）。失敗の理由は実行履歴だけが出す。
   let last: String
 
   /// 件数の列を出すか。取得元を持つ並びだけが件数を持つ。
@@ -83,7 +83,10 @@ extension BoardAutomationSummary {
 
     func result(_ run: AutomationRun, heading: Bool) -> String {
       let counts = Self.counts(run)
-      if let failure = run.failure { return l10n.format(.boardRunFailed, failure) }
+      if let failure = run.failure {
+        return heading
+          ? l10n.string(.boardRunFailedShort) : l10n.format(.boardRunFailed, failure)
+      }
       if let proposed = counts.output, proposed > 0 {
         return heading
           ? l10n.format(.boardRunAddedTo, proposed, output) : l10n.format(.boardRunAdded, proposed)

@@ -22,7 +22,7 @@ extension L10n {
     .boardRunAdded: ("%lld件を追加", "added %lld"),
     .boardRunAddedTo: ("%1$lld件を%2$@に追加", "added %1$lld to %2$@"),
     .boardRunNothingNew: ("新着なし", "nothing new"),
-    .boardRunAllDropped: ("処理 %lld ですべて除外", "all dropped at step %lld"),
+    .boardRunAllDropped: ("処理 %lld ですべて除外", "all dropped in step %lld"),
     .boardRunNoneAdded: ("追加なし", "none added"),
     .boardRunMark: ("%1$@ に%2$@", "%2$@ at %1$@"),
     .boardRunMarkAdded: ("%1$@ に %2$lld件を追加", "added %2$lld at %1$@"),

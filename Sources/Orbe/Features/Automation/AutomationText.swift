@@ -53,12 +53,6 @@ struct AutomationText {
     return moment(run.startedAt) + " · " + longSteps(run)
   }
 
-  /// 回の記録の 1 行。「今すぐ」で回った回は時刻の後に印を添える。「今日 9:12 今すぐ · 14 件取得 → …」。
-  func runLine(_ run: AutomationRun) -> String {
-    let mark = run.trigger == .now ? " " + l10n.string(.automationNowMark) : ""
-    return moment(run.startedAt) + mark + " · " + longSteps(run)
-  }
-
   private func longSteps(_ run: AutomationRun) -> String {
     steps(run, proposedOne: .automationProposedLongOne, proposedOther: .automationProposedLongOther)
   }

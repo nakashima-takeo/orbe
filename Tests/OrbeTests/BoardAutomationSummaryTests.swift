@@ -29,12 +29,12 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
 
   private func run(
     _ hour: Int, _ minute: Int, items: Int, newItems: Int, proposed: Int = 0, resolved: Int = 0,
-    failure: String? = nil, judged: Bool? = nil
+    failure: String? = nil, judged: Bool = false
   ) -> AutomationRun {
     var run = DesignSceneFixtures.automationRun(
       at: DesignSceneFixtures.automationAt(hour, minute), items: items, newItems: newItems,
       proposed: proposed, failure: failure)
-    if judged == true, run.judge == nil {
+    if judged, run.judge == nil {
       run.judge = AutomationJudgeReport(
         commandLine: "claude -p", ending: "exited 1", proposed: 0, resolved: 0,
         rejected: AutomationRejections())
@@ -84,7 +84,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     let failed = BoardAutomationSummary(
       automation([run(13, 0, items: 0, newItems: 0, failure: "boom")]), text: text)
     XCTAssertEqual(failed.mark, "13:00 に失敗")
-    XCTAssertEqual(failed.last, "前回 今日 13:00　失敗：boom")
+    XCTAssertEqual(failed.last, "前回 今日 13:00　失敗")
 
     let quiet = BoardAutomationSummary(
       automation([run(16, 0, items: 6, newItems: 0)]), text: text)

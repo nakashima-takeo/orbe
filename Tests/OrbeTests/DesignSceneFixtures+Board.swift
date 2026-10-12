@@ -145,7 +145,7 @@ extension DesignSceneFixtures {
       nextProposalId: 1, automations: automations, proposals: [])
   }
 
-  /// 取得の依頼文・使えるツール・コマンドと作業ディレクトリが長く、詳細がスクロールする。回の記録は 20 件。
+  /// 取得の依頼文・使えるツール・コマンドと作業ディレクトリが長く、詳細がスクロールする。コマンドの前回の取得は 3 桁。回の記録は 20 件。
   static func boardAutomationLongFile() -> AutomationsFile {
     var automations = boardAutomations()
     automations[2].definition.fetch.method = .agent(
@@ -171,6 +171,7 @@ extension DesignSceneFixtures {
         .joined(separator: "\n") + "\n  | jq -c '.[] | {id: .url, link: .url, body: .title}'",
         directory:
           "/Users/someone/work/very/long/path/to/the/repository/that/wraps/onto/the/next/line"))
+    automations[1].runs[0].fetch.items = 999
     return boardAutomationFile(automations)
   }
 }

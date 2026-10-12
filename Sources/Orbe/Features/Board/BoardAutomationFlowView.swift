@@ -117,7 +117,7 @@ struct BoardFlowNodeRow: View {
           }
         }
         if let note = node.note {
-          Text(note)
+          fontResolver.text(note, base: Theme.Typography.codeSmall)
             .font(Font.theme.codeSmall)
             .foregroundStyle(Color.theme.textMuted)
             .fixedSize(horizontal: false, vertical: true)
@@ -178,7 +178,8 @@ struct BoardFlowNodeRow: View {
   private static let boxRadius: CGFloat = 6
   private static let boxMaxWidth: CGFloat = 640
   private static let countColumn: CGFloat = 132
-  private static let countWidth: CGFloat = 20
+  /// 3 桁の数が入る幅。
+  private static let countWidth: CGFloat = 26
   private static let barMax: CGFloat = 96
   /// 行高 1.6 に当たる行間。1 行目の上と最終行の下にも半分ずつ置く（CSS の line-height と同じ組み方）。
   private static let sourceLeading = Theme.Typography.codeCompact.extraLeading(
@@ -242,7 +243,7 @@ struct BoardChipFlow: Layout {
   private func size(_ subview: LayoutSubview, width: CGFloat) -> CGSize {
     let ideal = subview.sizeThatFits(.unspecified)
     guard ideal.width > width else { return ideal }
-    return subview.sizeThatFits(ProposedViewSize(width: width, height: ideal.height))
+    return subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
   }
 
   private func arrange(_ subviews: Subviews, width: CGFloat) -> [Row] {
