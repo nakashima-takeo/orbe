@@ -6,11 +6,11 @@ import Foundation
 /// （2025-10-04 15:00）。走らせ役は `automationRunner` の取得が終わらない偽物で、本物の claude は起きない。
 extension DesignSceneFixtures {
   private static func agentFetch(_ tool: String, _ request: String, _ coverage: AutomationCoverage)
-    -> AutomationFetch
+    -> AutomationSource
   {
-    AutomationFetch(
+    AutomationSource(
       method: .agent(
-        AutomationAgentFetch(cli: "claude", model: "haiku", tools: [tool], request: request)),
+        AutomationSourceAgent(cli: "claude", model: "haiku", tools: [tool], request: request)),
       coverage: coverage)
   }
 
@@ -40,21 +40,21 @@ extension DesignSceneFixtures {
       id: 1,
       definition: automationDefinition(
         "Slack: 自分宛の DM",
-        fetch: agentFetch(
+        source: agentFetch(
           "mcp__slack__search_messages", "自分宛の DM とメンションを、新しい順に 50 件取る。", .newArrivals),
-        when: .every(1800),
+        trigger: .every(1800),
         instruction: "自分に頼まれたことだけをタスクにする。お礼や雑談は外す。"),
       paused: false, createdAt: boardCreated, lastFetched: [], reviewAll: false,
       lastRunAt: at(14, 45, 0),
       runs: [
-        automationRun(at: at(14, 45, 0), items: 14, newItems: 3, proposed: 2),
-        now(automationRun(at: at(14, 12, 0), items: 11, newItems: 0)),
-        automationRun(at: at(14, 0, 0), items: 11, newItems: 1, proposed: 0),
-        resolvedOnly(automationRun(at: at(13, 30, 0), items: 10, newItems: 2)),
+        automationRun(at: at(14, 45, 0), items: 14, fresh: 3, proposed: 2),
+        now(automationRun(at: at(14, 12, 0), items: 11, fresh: 0)),
+        automationRun(at: at(14, 0, 0), items: 11, fresh: 1, proposed: 0),
+        resolvedOnly(automationRun(at: at(13, 30, 0), items: 10, fresh: 2)),
         automationRun(
-          at: at(13, 0, 0), items: 0, newItems: 0,
+          at: at(13, 0, 0), items: 0, fresh: 0,
           failure: "the fetch agent ended: exited 1: Slack API rate limited"),
-        automationRun(at: at(12, 30, 0), items: 9, newItems: 2, proposed: 1),
+        automationRun(at: at(12, 30, 0), items: 9, fresh: 2, proposed: 1),
       ])
   }
 
@@ -65,17 +65,17 @@ extension DesignSceneFixtures {
       id: 2,
       definition: automationDefinition(
         "GitHub: レビュー依頼",
-        fetch: AutomationFetch(
+        source: AutomationSource(
           method: .command(
             BackgroundCommand(
               script: "gh search prs --review-requested=@me --json url,title", directory: nil)),
           coverage: .currentSet),
-        when: .every(3600), instruction: "すべてタスクにする。期限は付けない。"),
+        trigger: .every(3600), instruction: "すべてタスクにする。期限は付けない。"),
       paused: false, createdAt: boardCreated, lastFetched: [], reviewAll: false,
       lastRunAt: at(14, 20, 0),
       runs: [
-        automationRun(at: at(14, 20, 0), items: 2, newItems: 0),
-        automationRun(at: at(13, 0, 0), items: 2, newItems: 1, proposed: 1),
+        automationRun(at: at(14, 20, 0), items: 2, fresh: 0),
+        automationRun(at: at(13, 0, 0), items: 2, fresh: 1, proposed: 1),
       ])
   }
 
@@ -86,18 +86,18 @@ extension DesignSceneFixtures {
       id: 3,
       definition: automationDefinition(
         "Backlog: 担当課題",
-        fetch: agentFetch(
+        source: agentFetch(
           "mcp__backlog__get_issues", "自分が担当の未完了の課題を、更新の新しい順に 30 件取る。", .currentSet),
-        when: .daily([.init(hour: 9, minute: 0), .init(hour: 13, minute: 0)]),
+        trigger: .daily([.init(hour: 9, minute: 0), .init(hour: 13, minute: 0)]),
         instruction: "期限のある課題と、自分がコメントで頼まれた課題をタスクにする。"),
       paused: false, createdAt: boardCreated, lastFetched: [], reviewAll: false,
       lastRunAt: at(13, 0, 0),
       runs: [
         automationRun(
-          at: at(13, 0, 0), items: 0, newItems: 0,
+          at: at(13, 0, 0), items: 0, fresh: 0,
           failure: "the fetch agent ended: exited 1: Backlog の認証が切れています（401 Unauthorized）"),
-        automationRun(at: at(9, 0, 0), items: 12, newItems: 1, proposed: 1),
-        automationRun(at: at(13, 0, 1), items: 11, newItems: 0),
+        automationRun(at: at(9, 0, 0), items: 12, fresh: 1, proposed: 1),
+        automationRun(at: at(13, 0, 1), items: 11, fresh: 0),
       ])
   }
 
@@ -108,13 +108,13 @@ extension DesignSceneFixtures {
       id: 4,
       definition: automationDefinition(
         "Gmail: 請求書",
-        fetch: agentFetch(
+        source: agentFetch(
           "mcp__gmail__search_threads", "請求書と支払い依頼のメールを、直近 3 日分取る。", .newArrivals),
-        when: .daily([.init(hour: 10, minute: 0)]),
+        trigger: .daily([.init(hour: 10, minute: 0)]),
         instruction: "請求書の受領と支払い依頼をタスクにし、支払期日を期限にする。"),
       paused: true, createdAt: boardCreated, lastFetched: [], reviewAll: false,
       lastRunAt: at(10, 0, 1),
-      runs: [automationRun(at: at(10, 0, 1), items: 3, newItems: 1, proposed: 1)])
+      runs: [automationRun(at: at(10, 0, 1), items: 3, fresh: 1, proposed: 1)])
   }
 
   /// まだ回っていない（作ったばかり）。
@@ -148,8 +148,8 @@ extension DesignSceneFixtures {
   /// 取得の依頼文・使えるツール・コマンドと作業ディレクトリが長く、詳細がスクロールする。コマンドの前回の取得は 3 桁。回の記録は 20 件。
   static func boardAutomationLongFile() -> AutomationsFile {
     var automations = boardAutomations()
-    automations[2].definition.fetch.method = .agent(
-      AutomationAgentFetch(
+    automations[2].definition.source?.method = .agent(
+      AutomationSourceAgent(
         cli: "claude", model: "haiku",
         tools: [
           "mcp__backlog__get_issues", "mcp__backlog__get_issue_comments",
@@ -160,10 +160,10 @@ extension DesignSceneFixtures {
           .joined(separator: "\n")))
     automations[2].runs += (1...17).map {
       automationRun(
-        at: automationAt(13, 0, daysAgo: $0), items: 10 + $0 % 3, newItems: $0 % 2, proposed: $0 % 2
+        at: automationAt(13, 0, daysAgo: $0), items: 10 + $0 % 3, fresh: $0 % 2, proposed: $0 % 2
       )
     }
-    automations[1].definition.fetch.method = .command(
+    automations[1].definition.source?.method = .command(
       BackgroundCommand(
         script: (1...6).map {
           "gh search prs --review-requested=@me --json url,title,body --limit \($0 * 10) \\"

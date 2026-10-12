@@ -94,6 +94,18 @@ final class BackgroundRunsTests: OrbeTestCase {
     XCTAssertEqual(stdout(result), NSHomeDirectory() + "\n")
   }
 
+  /// 1 回分の入力（標準入力と足す変数）が子に届く。
+  func testCommandReceivesItsInput() throws {
+    let job = BackgroundJob.command(
+      BackgroundCommand(script: #"cat; printf %s "$ORBE_SINCE""#),
+      input: BackgroundInput(
+        stdin: Data("a\nb\n".utf8), environment: ["ORBE_SINCE": "2026-10-13T00:00:00.000Z"]))
+
+    let result = try run(runs(), job)
+
+    XCTAssertEqual(stdout(result), "a\nb\n2026-10-13T00:00:00.000Z")
+  }
+
   func testMissingDirectoryIsNotStarted() throws {
     let missing = TestScratch.caseDir.appendingPathComponent("gone").path
 

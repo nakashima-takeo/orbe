@@ -74,19 +74,8 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     for (id, item) in [
       (first, AutomationStoreTests.item("a")), (second, AutomationStoreTests.item("b")),
     ] {
-      let now = Date()
-      store.commit(
-        id,
-        AutomationRun(
-          startedAt: now, endedAt: now, trigger: .now,
-          fetch: AutomationFetchReport(
-            commandLine: "fetch", ending: "exited 0", items: 1, rejected: AutomationRejections()),
-          newItems: 1,
-          judge: AutomationJudgeReport(
-            commandLine: "claude", ending: "exited 0", proposed: 0, resolved: 0,
-            rejected: AutomationRejections()),
-          withdrawn: 0, failure: nil),
-        fetched: [item], judged: [item],
+      AutomationStoreTests.commit(
+        store, id, AutomationStoreTests.run(at: Date()), fetched: [item],
         decisions: [.propose(itemId: item.id, title: "対応: \(item.id)", due: nil)])
     }
     let b = try XCTUnwrap(store.proposals.first { $0.item.id == "b" })

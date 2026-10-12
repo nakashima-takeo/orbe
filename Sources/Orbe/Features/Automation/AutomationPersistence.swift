@@ -1,7 +1,7 @@
 import Foundation
 import OrbeSessionLog
 
-/// 受信と提案のディスク表現。定義も蓄積も 1 ファイルに置き、1 回の確定を 1 度の書き込みにする。
+/// 自動化と候補のディスク表現。定義も蓄積も 1 ファイルに置き、1 回の確定を 1 度の書き込みにする。
 struct AutomationsFile: Codable, Equatable {
   var version: Int
   /// 次に振る ID。削除した ID を使い回さないために、一覧とは別に持つ。
@@ -9,17 +9,10 @@ struct AutomationsFile: Codable, Equatable {
   var nextProposalId: Int
   var automations: [Automation]
   var proposals: [AutomationProposal]
-
-  private enum CodingKeys: String, CodingKey {
-    case version
-    case nextAutomationId = "nextIntakeId"
-    case nextProposalId
-    case automations = "intakes"
-    case proposals
-  }
 }
 
-/// 受信の永続（自前 JSON）。保存先は tasks.json と並ぶ `StateDir.base()/intakes.json`。書くのは `AutomationStore` の変異ごと。
+/// 自動化の永続（自前 JSON）。保存先は tasks.json と並ぶ `StateDir.base()/automations.json`。書くのは `AutomationStore` の
+/// 変異ごと。
 enum AutomationPersistence {
   static let version = 1
 
@@ -30,7 +23,7 @@ enum AutomationPersistence {
 
   static var fileURL: URL? {
     if let override = fileURLOverride { return override }
-    return StateDir.base()?.appendingPathComponent("intakes.json")
+    return StateDir.base()?.appendingPathComponent("automations.json")
   }
 
   /// 読み込み。不在は nil。在るのに使えない原本——読めない・構造破損・非互換 version・定義の不正・ID とリンクの
@@ -70,7 +63,7 @@ enum AutomationPersistence {
   }
 }
 
-/// intakes.json と制御 API が共有する JSON の書き方（時刻は ISO 8601・ミリ秒・Z）。
+/// 自動化の保存ファイルと制御 API が共有する JSON の書き方（時刻は ISO 8601・ミリ秒・Z）。
 enum AutomationWire {
   static var decoder: JSONDecoder {
     let decoder = JSONDecoder()

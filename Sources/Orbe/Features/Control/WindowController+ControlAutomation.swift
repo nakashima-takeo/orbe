@@ -59,9 +59,16 @@ extension WindowController {
     return .success(["proposals": proposals])
   }
 
-  /// 定義（set_intake と同じ形）に、止めているか・走っているか・次の時刻・出ている提案の数・重なり・回の記録を足す。
+  /// 定義（set_intake と同じ旧い形。表せない定義は fetch・judge を省く）に、止めているか・走っているか・次の時刻・
+  /// 出ている提案の数・重なり・回の記録（旧い形）を足す。
   private func automationJSON(_ automation: Automation) -> [String: Any] {
-    var json = AutomationWire.object(automation.definition) as? [String: Any] ?? [:]
+    let definition = automation.definition
+    var json: [String: Any]
+    if let legacy = AutomationLegacyDefinition(definition) {
+      json = AutomationWire.object(legacy) as? [String: Any] ?? [:]
+    } else {
+      json = ["name": definition.name, "when": AutomationWire.object(definition.trigger)]
+    }
     json["intakeId"] = automation.id
     json["paused"] = automation.paused
     json["running"] = automationRunner.isRunning(automation.id)
@@ -77,7 +84,7 @@ extension WindowController {
       ["intakeId": $0.automation.id, "name": $0.automation.definition.name, "count": $0.count]
         as [String: Any]
     }
-    json["runs"] = AutomationWire.object(automation.runs)
+    json["runs"] = AutomationWire.object(automation.runs.map(AutomationLegacyRun.init))
     return json
   }
 

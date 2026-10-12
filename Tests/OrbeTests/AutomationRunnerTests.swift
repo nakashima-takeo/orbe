@@ -89,9 +89,9 @@ final class AutomationRunnerTests: OrbeTestCase {
     XCTAssertEqual(store.proposals.map(\.title), ["a に返信する"])
     let run = try XCTUnwrap(store.automation(automation.id)?.runs.first)
     XCTAssertEqual(run.trigger, .schedule)
-    XCTAssertEqual(run.fetch.items, 2)
-    XCTAssertEqual(run.newItems, 2)
-    XCTAssertEqual(run.judge?.proposed, 1)
+    XCTAssertEqual(run.source?.count, 2)
+    XCTAssertEqual(run.fresh, 2)
+    XCTAssertEqual(AutomationStoreTests.candidates(run)?.proposed, 1)
     XCTAssertNil(run.failure)
     XCTAssertEqual(store.automation(automation.id)?.lastRunAt, now)
     XCTAssertEqual(armed?.date, now.addingTimeInterval(1800), "取得の開始から数え直す")
@@ -116,8 +116,8 @@ final class AutomationRunnerTests: OrbeTestCase {
     XCTAssertEqual(jobs.calls.count, 5, "新しい項目が無い回は判定を起こさない")
     let run = try XCTUnwrap(store.automation(automation.id)?.runs.first)
     XCTAssertEqual(run.trigger, .now)
-    XCTAssertEqual(run.newItems, 0)
-    XCTAssertNil(run.judge)
+    XCTAssertEqual(run.fresh, 0)
+    XCTAssertEqual(run.steps, [])
     XCTAssertFalse(runner.isRunning(automation.id))
   }
 
@@ -212,7 +212,8 @@ final class AutomationRunnerTests: OrbeTestCase {
     let automation = try create()
     try runner.runNow(automation.id)
 
-    _ = try runner.set(automation.id, AutomationStoreTests.definition("新しい名前", when: .every(600)))
+    _ = try runner.set(
+      automation.id, AutomationStoreTests.definition("新しい名前", trigger: .every(600)))
     _ = try runner.pause(automation.id, true)
     _ = try runner.pause(automation.id, false)
     XCTAssertTrue(runner.isRunning(automation.id))
@@ -261,7 +262,7 @@ final class AutomationRunnerTests: OrbeTestCase {
     jobs.finish(1, replied("overloaded", isError: true))
 
     let run = try XCTUnwrap(store.automation(automation.id)?.runs.first)
-    XCTAssertEqual(run.failure, "the judge agent reported an error: overloaded")
+    XCTAssertEqual(run.failure, #"the step "判定" agent reported an error: overloaded"#)
     XCTAssertEqual(store.automation(automation.id)?.lastFetched, [])
     try runner.runNow(automation.id)
     jobs.finish(2, fetched(["a"]))
@@ -271,9 +272,7 @@ final class AutomationRunnerTests: OrbeTestCase {
   /// 取得役の agent は固定の枠で依頼され、指定したツールが使えなかった回は失敗として何も進めない。
   func testAgentFetchUsesTheFixedFrameAndFailsWhenToolsAreUnavailable() throws {
     var definition = AutomationStoreTests.definition()
-    definition.fetch.method = .agent(
-      AutomationAgentFetch(
-        cli: "claude", model: "haiku", tools: ["mcp__slack__search"], request: "自分宛の DM"))
+    definition.source?.method = AutomationStoreTests.agentSource()
     let automation = try create(definition)
     try runner.runNow(automation.id)
 
@@ -296,9 +295,7 @@ final class AutomationRunnerTests: OrbeTestCase {
   /// 取得役の agent は、最終応答の行を項目として読み、新しい項目を判定へ回す。
   func testAgentFetchReadsItemsFromItsReply() throws {
     var definition = AutomationStoreTests.definition()
-    definition.fetch.method = .agent(
-      AutomationAgentFetch(
-        cli: "claude", model: "haiku", tools: ["mcp__slack__search"], request: "自分宛の DM"))
+    definition.source?.method = AutomationStoreTests.agentSource()
     let automation = try create(definition)
     try runner.runNow(automation.id)
 

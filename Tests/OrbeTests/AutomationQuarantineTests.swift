@@ -2,8 +2,8 @@ import XCTest
 
 @testable import Orbe
 
-/// intakes.json だけが持つ「使えない」の判定（ID の重複・採番位置・提案のリンクの重複・定義の不正）で、原本を
-/// `intakes-broken-<日時>.json` へ退避して空で始めること。
+/// automations.json だけが持つ「使えない」の判定（ID の重複・採番位置・提案のリンクの重複・定義の不正）で、原本を
+/// `automations-broken-<日時>.json` へ退避して空で始めること。
 ///
 /// 壊れると何が起きるか: 同じリンクの提案が 2 件ある原本をそのまま読み「提案はリンク単位で 1 つ」が崩れる。次の追加が
 /// 既存の受信の ID を振り直す。取得役に組み込みのツールを渡す定義が、検証を通らずに無人で回る。
@@ -12,7 +12,7 @@ final class AutomationQuarantineTests: OrbeTestCase {
   private func quarantineFiles() throws -> [URL] {
     let dir = try automationsFile().deletingLastPathComponent()
     let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
-    return names.filter { $0.hasPrefix("intakes-broken-") && $0.hasSuffix(".json") }
+    return names.filter { $0.hasPrefix("automations-broken-") && $0.hasSuffix(".json") }
       .sorted().map { dir.appendingPathComponent($0) }
   }
 
@@ -69,8 +69,8 @@ final class AutomationQuarantineTests: OrbeTestCase {
 
   func testInvalidDefinitionIsQuarantined() throws {
     try assertQuarantined("取得役に組み込みのツール") {
-      $0.automations[0].definition.fetch.method = .agent(
-        AutomationAgentFetch(cli: "claude", model: "haiku", tools: ["Read"], request: "DM"))
+      $0.automations[0].definition.source?.method = .agent(
+        AutomationSourceAgent(cli: "claude", model: "haiku", tools: ["Read"], request: "DM"))
     }
   }
 }
