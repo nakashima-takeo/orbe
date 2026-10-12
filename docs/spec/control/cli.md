@@ -69,7 +69,7 @@ updated: 2026-10-11
 
 ### intake（タスクの自動追加）
 
-[タスクの自動追加](../platform/intake.md)を作り・直し・回し・結果を読む。各サブコマンドは同名の制御 API の動詞へそのまま乗る。
+[タスクの自動追加](../platform/automation.md)を作り・直し・回し・結果を読む。各サブコマンドは同名の制御 API の動詞へそのまま乗る。
 
 - `orb intake list [--json]` … ID 順に 1 行 1 自動追加（`id 状態 名前 いつ 次の時刻 前回` のタブ区切り。状態は `active` / `paused` / `running`、いつは `every 30m` / `daily 09:00,13:00`、前回は `<開始> 12 fetched, 3 new, 1 proposed` か `<開始> failed: <理由>`。無い値は `-`。制御文字の扱いは `task list` と同じ）。
 - `orb intake proposals [<id>] [--json]` … 覚えている候補を 1 行 1 つ（`id 状態 自動追加の id 期限 タイトル リンク`）。`<id>` でその自動追加の棚の分だけ。

@@ -67,17 +67,17 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
   }
 
   /// 受信タブで提案をタスクにすると、開いた workspace ではなく Home に付く。
-  @MainActor func testAcceptingAProposalInTheIntakeTabAttachesTheTaskToHome() throws {
+  @MainActor func testAcceptingAProposalInTheAutomationTabAttachesTheTaskToHome() throws {
     let wc = try launchOnAnEmptyWorkspace()
-    let intake = try wc.intakeRunner.set(nil, IntakeStoreTests.definition())
-    let item = IntakeStoreTests.item("a")
-    wc.intakeStore.commit(
-      intake.id, DesignSceneFixtures.intakeRun(at: Date(), items: 1, newItems: 1),
+    let automation = try wc.automationRunner.set(nil, AutomationStoreTests.definition())
+    let item = AutomationStoreTests.item("a")
+    wc.automationStore.commit(
+      automation.id, DesignSceneFixtures.automationRun(at: Date(), items: 1, newItems: 1),
       fetched: [item], judged: [item],
       decisions: [.propose(itemId: "a", title: "見積もりを送る", due: nil)])
 
     let palette = try openTaskPalette(wc)
-    palette.setTab(.intake)
+    palette.setTab(.automation)
     palette.submit()
 
     XCTAssertEqual(

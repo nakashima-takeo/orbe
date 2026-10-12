@@ -17,7 +17,8 @@ extension WindowController {
     }
     let p = TaskPaletteModel(
       store: taskStore, githubItems: .shared, viewer: .shared, openLists: .shared,
-      root: base, agents: worktreeAgents, sessionTabs: agentSessionTabs, intakes: intakeRunner,
+      root: base, agents: worktreeAgents, sessionTabs: agentSessionTabs,
+      automations: automationRunner,
       workspaces: TaskPaletteWorkspaces(
         opened: entry(current), all: workspaces.map(entry), home: store.homeWorkspaceId),
       now: Date(), timeZone: .current)

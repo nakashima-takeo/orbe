@@ -57,9 +57,9 @@ final class WindowController: NSObject, NSWindowDelegate {
   // タスク一覧の唯一の正。制御 API と画面が同じ変異メソッドを呼び、変異ごとに tasks.json へ即時保存される。
   // workspace の参照は表示・応答のときに解くので、workspace の復元との順序の依存は無い。
   let taskStore = TaskStore()
-  // 受信の走らせ役。定義の変異はここを通して番人の登録を合わせ、読みと提案のさばきは `intakeStore` が持つ。
-  let intakeRunner = IntakeRunner(store: IntakeStore())
-  var intakeStore: IntakeStore { intakeRunner.store }
+  // 受信の走らせ役。定義の変異はここを通して番人の登録を合わせ、読みと提案のさばきは `automationStore` が持つ。
+  let automationRunner = AutomationRunner(store: AutomationStore())
+  var automationStore: AutomationStore { automationRunner.store }
   // worktree ごとに動いている agent の索引。flushChrome が作り直し、タスク画面と ⌘T が読む。
   let worktreeAgents = WorktreeAgentActivity()
   let agentSessionTabs = AgentSessionTabs()
@@ -86,8 +86,8 @@ final class WindowController: NSObject, NSWindowDelegate {
     language: { [weak self] in self?.localization.language ?? .systemDefault })
   // ボードの状態と器（どちらも 1 つだけ）。前面の workspace がボードを持つ間、器が content に載り、そのボードを映す。
   private(set) lazy var board: BoardModel = {
-    let intake = BoardIntakeModel(runner: intakeRunner)
-    intake.onAsk = { [weak self] ask in
+    let automation = BoardAutomationModel(runner: automationRunner)
+    automation.onAsk = { [weak self] ask in
       guard let self else { return .claudeMissing }
       do throws(Secretary.Refusal) {
         _ = try self.secretary.ask(ask, from: .board)
@@ -96,7 +96,7 @@ final class WindowController: NSObject, NSWindowDelegate {
         return error
       }
     }
-    return BoardModel(intake: intake, parts: [])
+    return BoardModel(automation: automation, parts: [])
   }()
   private(set) lazy var boardView: BoardView = {
     let view = BoardView(
@@ -183,7 +183,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     showFirstRunFlow()  // 初回言語選択（preferredLanguage 未設定時）→ 既存 Onboarding（各 CLI へ導入）
     cleanupLegacyCompletionIfNeeded()  // 旧方式が zshrc へ書いた managed block を一度だけ除去
     wireUpdateUI()  // アップデート提示導線を配線し、ゲートを通れば update サイクル開始
-    intakeRunner.start()  // 全受信を番人へ載せる（過ぎていた回はここで 1 回だけ走る）
+    automationRunner.start()  // 全受信を番人へ載せる（過ぎていた回はここで 1 回だけ走る）
     waitConditions.start()
     window.center()
   }

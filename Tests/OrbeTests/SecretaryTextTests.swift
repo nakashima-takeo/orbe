@@ -69,20 +69,21 @@ final class SecretaryTextTests: OrbeTestCase {
   /// Home のボードからの頼みは、自動追加の新しい依頼か直しとして 1 行で意味が通る（既存の秘書の会話は指示の改版を知らない）。
   func testBoardAsksNameTheTaskAutoAddInTheLineItself() {
     XCTAssertEqual(
-      line(.intake("Slack の自分宛ての DM を\nタスクの候補にして"), from: .board, ja),
+      line(.automation("Slack の自分宛ての DM を\nタスクの候補にして"), from: .board, ja),
       "Home のボードから · 10:31 — タスクの自動追加を頼む: Slack の自分宛ての DM を タスクの候補にして")
     XCTAssertEqual(
-      line(.intake("watch my DMs"), from: .board, en),
+      line(.automation("watch my DMs"), from: .board, en),
       "From the Home board · 10:31 — Task auto-add request: watch my DMs")
-    XCTAssertNil(line(.intake(" \n "), from: .board, ja), "空の依頼は頼めない")
+    XCTAssertNil(line(.automation(" \n "), from: .board, ja), "空の依頼は頼めない")
 
-    let intake = DesignSceneFixtures.boardIntakes()[2]
+    let automation = DesignSceneFixtures.boardAutomations()[2]
     XCTAssertEqual(
-      line(.intakeFix(intake), from: .board, ja),
-      "Home のボードから · 10:31 — タスクの自動追加 \(intake.id)「\(intake.definition.name)」を直す。")
+      line(.automationFix(automation), from: .board, ja),
+      "Home のボードから · 10:31 — タスクの自動追加 \(automation.id)「\(automation.definition.name)」を直す。")
     XCTAssertEqual(
-      line(.intakeFix(intake), from: .board, en),
-      "From the Home board · 10:31 — Fix task auto-add \(intake.id) “\(intake.definition.name)”.")
+      line(.automationFix(automation), from: .board, en),
+      "From the Home board · 10:31 — Fix task auto-add \(automation.id) “\(automation.definition.name)”."
+    )
   }
 
   /// 時刻は受けた時刻で、届ける日と違えば日付も付ける（夜に溜めた頼みが翌朝届く）。

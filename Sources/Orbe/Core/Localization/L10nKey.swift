@@ -347,67 +347,67 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteScopeWasAll
   case taskPaletteActionRefine
   // MARK: - タスク画面の受信タブ
-  case taskPaletteTabIntake
-  case taskPaletteIntakePlaceholder
-  case taskPaletteIntakeAskSecretary
-  case taskPaletteIntakeNoProposals
-  case taskPaletteIntakeLastFailed
-  case taskPaletteIntakeContents
-  case taskPaletteIntakeEmpty
-  case taskPaletteIntakeOpenLink
-  case taskPaletteIntakeAsTask
-  case taskPaletteIntakeDismiss
-  case taskPaletteIntakeActionAccept
-  case taskPaletteIntakeActionProposals
-  case taskPaletteIntakeActionRunNow
-  case taskPaletteIntakeHintShelf
-  case taskPaletteIntakeHintPick
-  case taskPaletteIntakeHintBack
-  case taskPaletteIntakeLast
-  case taskPaletteIntakeOverlaps
-  case taskPaletteIntakeOverlapCount
-  case taskPaletteIntakeRewriteNote
-  case taskPaletteIntakeErrAccept
-  // MARK: - 自動追加の共有の文（L10nTable+Intake）
-  case intakeFetch
-  case intakeJudge
-  case intakeNext
-  case intakePaused
-  case intakeRunning
-  case intakeRunAt
-  case intakeFetched
-  case intakeJudged
-  case intakeProposedShortOne
-  case intakeProposedShortOther
-  case intakeProposedLongOne
-  case intakeProposedLongOther
-  case intakeNothingNew
-  case intakeFailed
-  case intakeFailedShort
-  case intakeNeverRan
-  case intakeNowMark
-  case intakeToday
-  case intakeDue
-  case intakeCurrentSet
-  case intakeNewArrivals
-  case intakeAgentFetch
-  case intakeCommandFetch
-  case intakeTools
-  case intakeDirectory
-  case intakeEvery
-  case intakeDaily
-  case intakeRunNow
-  case intakePause
-  case intakeResume
-  case intakeDelete
-  case intakeErrRunning
+  case taskPaletteTabAutomation
+  case taskPaletteAutomationPlaceholder
+  case taskPaletteAutomationAskSecretary
+  case taskPaletteAutomationNoProposals
+  case taskPaletteAutomationLastFailed
+  case taskPaletteAutomationContents
+  case taskPaletteAutomationEmpty
+  case taskPaletteAutomationOpenLink
+  case taskPaletteAutomationAsTask
+  case taskPaletteAutomationDismiss
+  case taskPaletteAutomationActionAccept
+  case taskPaletteAutomationActionProposals
+  case taskPaletteAutomationActionRunNow
+  case taskPaletteAutomationHintShelf
+  case taskPaletteAutomationHintPick
+  case taskPaletteAutomationHintBack
+  case taskPaletteAutomationLast
+  case taskPaletteAutomationOverlaps
+  case taskPaletteAutomationOverlapCount
+  case taskPaletteAutomationRewriteNote
+  case taskPaletteAutomationErrAccept
+  // MARK: - 自動追加の共有の文（L10nTable+Automation）
+  case automationFetch
+  case automationJudge
+  case automationNext
+  case automationPaused
+  case automationRunning
+  case automationRunAt
+  case automationFetched
+  case automationJudged
+  case automationProposedShortOne
+  case automationProposedShortOther
+  case automationProposedLongOne
+  case automationProposedLongOther
+  case automationNothingNew
+  case automationFailed
+  case automationFailedShort
+  case automationNeverRan
+  case automationNowMark
+  case automationToday
+  case automationDue
+  case automationCurrentSet
+  case automationNewArrivals
+  case automationAgentFetch
+  case automationCommandFetch
+  case automationTools
+  case automationDirectory
+  case automationEvery
+  case automationDaily
+  case automationRunNow
+  case automationPause
+  case automationResume
+  case automationDelete
+  case automationErrRunning
   // MARK: - 秘書・作業を始める（L10nTable+Secretary）
   case taskStartHomeTask
   case secretaryLineOrigin
   case secretaryLineWaitOrigin
   case secretaryLineBoardOrigin
-  case secretaryLineIntake
-  case secretaryLineIntakeFix
+  case secretaryLineAutomation
+  case secretaryLineAutomationFix
   case secretaryLineTask
   case secretaryLineLinkedTask
   case secretaryLineNote
@@ -592,12 +592,12 @@ enum L10nKey: String, CaseIterable, Sendable {
 
   // MARK: - ボード（L10nTable+Board）
   case boardEmpty
-  case boardIntakeTitle
-  case boardIntakeCount
-  case boardIntakeEmpty
-  case boardIntakeWhen
-  case boardIntakeRuns
-  case boardIntakePausedNote
+  case boardAutomationTitle
+  case boardAutomationCount
+  case boardAutomationEmpty
+  case boardAutomationWhen
+  case boardAutomationRuns
+  case boardAutomationPausedNote
   case boardHintSelect
   case boardHintToList
   case boardAskPlaceholder
