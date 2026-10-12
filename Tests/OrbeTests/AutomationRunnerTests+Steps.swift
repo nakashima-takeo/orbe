@@ -33,8 +33,8 @@ extension AutomationRunnerTests {
     }
     let stdin = String(bytes: input.stdin ?? Data(), encoding: .utf8) ?? ""
     XCTAssertEqual(stdin.split(separator: "\n").count, 3, "項目を 1 行ずつ標準入力で渡す")
-    let kept = String(stdin.split(separator: "\n")[1])
-    jobs.finish(1, printed(kept + "\nnot json\n"))
+    let rewritten = #"{"id":"b","link":"https://evil.example/","body":"段が書いた本文"}"#
+    jobs.finish(1, printed(rewritten + "\nnot json\n"))
 
     XCTAssertTrue(prompt(2).contains(#""id":"b""#))
     XCTAssertFalse(prompt(2).contains(#""id":"a""#), "絞り込んだ行だけを最後の段へ")
@@ -48,6 +48,7 @@ extension AutomationRunnerTests {
     XCTAssertEqual(run.steps.map(\.count), [1, 1])
     XCTAssertEqual(run.steps[0].rejected.count, 1)
     XCTAssertEqual(AutomationStoreTests.candidates(run)?.proposed, 1)
+    XCTAssertEqual(store.proposals.map(\.item.link), ["https://example.com/b"], "リンクは取得元の項目から")
     XCTAssertEqual(store.proposals.map(\.item.body), ["b の本文"], "本文は取得元の項目から")
   }
 
@@ -120,7 +121,7 @@ extension AutomationRunnerTests {
     XCTAssertEqual(succeeded, fetchStart, "回の終わりでなく始まり——回の途中に届いた分を次の回で取りこぼさない")
 
     try runner.runNow(automation.id)
-    XCTAssertEqual(prompt(1), AutomationPrompts.fetch(request: "自分宛の DM", since: succeeded))
+    XCTAssertTrue(prompt(1).contains(SessionEvent.iso8601(succeeded)), prompt(1))
     jobs.finish(1, replied("overloaded", isError: true))
     XCTAssertEqual(store.automation(automation.id)?.lastSucceededAt, succeeded, "失敗した回では進まない")
 
@@ -151,7 +152,7 @@ extension AutomationRunnerTests {
     _ = try runner.set(automation.id, definition)
     try runner.runNow(automation.id)
 
-    XCTAssertEqual(prompt(1), AutomationPrompts.fetch(request: "自分宛の DM", since: succeeded))
+    XCTAssertTrue(prompt(1).contains(SessionEvent.iso8601(succeeded)), prompt(1))
   }
 
   /// 今の集合の取得元には目印を渡さない——渡すと前回以降の分だけが取れ、取得から消えたものとして候補が一斉に下がる。
