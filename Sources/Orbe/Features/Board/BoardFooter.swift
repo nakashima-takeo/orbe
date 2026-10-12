@@ -18,7 +18,7 @@ struct BoardFooter: View {
 
   var body: some View {
     HStack(spacing: Theme.Space.span + Theme.Space.hair) {
-      ForEach(model.intake.hints, id: \.self) { hint in
+      ForEach(model.automation.hints, id: \.self) { hint in
         PaletteKeyHint(key: hint.key, label: l10n.string(hint.label))
       }
       Spacer(minLength: 0)

@@ -3,35 +3,35 @@ import Foundation
 @testable import Orbe
 
 /// ボードの自動追加の fixture（見本『Home』の 4 件: 前回が失敗・候補あり・新しい項目なし・止めている）。今と今日は受信タブと同じ
-/// （2025-10-04 15:00）。走らせ役は `intakeRunner` の取得が終わらない偽物で、本物の claude は起きない。
+/// （2025-10-04 15:00）。走らせ役は `automationRunner` の取得が終わらない偽物で、本物の claude は起きない。
 extension DesignSceneFixtures {
-  private static func agentFetch(_ tool: String, _ request: String, _ coverage: IntakeCoverage)
-    -> IntakeFetch
+  private static func agentFetch(_ tool: String, _ request: String, _ coverage: AutomationCoverage)
+    -> AutomationFetch
   {
-    IntakeFetch(
+    AutomationFetch(
       method: .agent(
-        IntakeAgentFetch(cli: "claude", model: "haiku", tools: [tool], request: request)),
+        AutomationAgentFetch(cli: "claude", model: "haiku", tools: [tool], request: request)),
       coverage: coverage)
   }
 
-  private static func now(_ run: IntakeRun) -> IntakeRun {
+  private static func now(_ run: AutomationRun) -> AutomationRun {
     var run = run
     run.trigger = .now
     return run
   }
 
-  private static var boardCreated: Date { intakeAt(9, 0, daysAgo: 7) }
+  private static var boardCreated: Date { automationAt(9, 0, daysAgo: 7) }
 
-  static func boardIntakes() -> [Intake] {
+  static func boardAutomations() -> [Automation] {
     [boardSlack, boardGitHub, boardBacklog, boardGmail]
   }
 
   /// 候補ありで成功（「今すぐ」の回を含む）。
-  private static var boardSlack: Intake {
-    let at = intakeAt
-    return Intake(
+  private static var boardSlack: Automation {
+    let at = automationAt
+    return Automation(
       id: 1,
-      definition: intakeDefinition(
+      definition: automationDefinition(
         "Slack: 自分宛の DM",
         fetch: agentFetch(
           "mcp__slack__search_messages", "自分宛の DM とメンションを、新しい順に 50 件取る。", .newArrivals),
@@ -40,20 +40,20 @@ extension DesignSceneFixtures {
       paused: false, createdAt: boardCreated, lastFetched: [], reviewAll: false,
       lastRunAt: at(14, 45, 0),
       runs: [
-        intakeRun(at: at(14, 45, 0), items: 14, newItems: 3, proposed: 2),
-        now(intakeRun(at: at(14, 12, 0), items: 11, newItems: 0)),
-        intakeRun(at: at(14, 0, 0), items: 11, newItems: 1, proposed: 0),
+        automationRun(at: at(14, 45, 0), items: 14, newItems: 3, proposed: 2),
+        now(automationRun(at: at(14, 12, 0), items: 11, newItems: 0)),
+        automationRun(at: at(14, 0, 0), items: 11, newItems: 1, proposed: 0),
       ])
   }
 
   /// 新しい項目なしで成功（コマンド）。
-  private static var boardGitHub: Intake {
-    let at = intakeAt
-    return Intake(
+  private static var boardGitHub: Automation {
+    let at = automationAt
+    return Automation(
       id: 2,
-      definition: intakeDefinition(
+      definition: automationDefinition(
         "GitHub: レビュー依頼",
-        fetch: IntakeFetch(
+        fetch: AutomationFetch(
           method: .command(
             BackgroundCommand(
               script: "gh search prs --review-requested=@me --json url,title", directory: nil)),
@@ -62,17 +62,17 @@ extension DesignSceneFixtures {
       paused: false, createdAt: boardCreated, lastFetched: [], reviewAll: false,
       lastRunAt: at(14, 20, 0),
       runs: [
-        intakeRun(at: at(14, 20, 0), items: 2, newItems: 0),
-        intakeRun(at: at(13, 0, 0), items: 2, newItems: 1, proposed: 1),
+        automationRun(at: at(14, 20, 0), items: 2, newItems: 0),
+        automationRun(at: at(13, 0, 0), items: 2, newItems: 1, proposed: 1),
       ])
   }
 
   /// 前回が失敗。
-  private static var boardBacklog: Intake {
-    let at = intakeAt
-    return Intake(
+  private static var boardBacklog: Automation {
+    let at = automationAt
+    return Automation(
       id: 3,
-      definition: intakeDefinition(
+      definition: automationDefinition(
         "Backlog: 担当課題",
         fetch: agentFetch(
           "mcp__backlog__get_issues", "自分が担当の未完了の課題を、更新の新しい順に 30 件取る。", .currentSet),
@@ -81,20 +81,20 @@ extension DesignSceneFixtures {
       paused: false, createdAt: boardCreated, lastFetched: [], reviewAll: false,
       lastRunAt: at(13, 0, 0),
       runs: [
-        intakeRun(
+        automationRun(
           at: at(13, 0, 0), items: 0, newItems: 0,
           failure: "the fetch agent ended: exited 1: Backlog の認証が切れています（401 Unauthorized）"),
-        intakeRun(at: at(9, 0, 0), items: 12, newItems: 1, proposed: 1),
-        intakeRun(at: at(13, 0, 1), items: 11, newItems: 0),
+        automationRun(at: at(9, 0, 0), items: 12, newItems: 1, proposed: 1),
+        automationRun(at: at(13, 0, 1), items: 11, newItems: 0),
       ])
   }
 
   /// 止めている。
-  private static var boardGmail: Intake {
-    let at = intakeAt
-    return Intake(
+  private static var boardGmail: Automation {
+    let at = automationAt
+    return Automation(
       id: 4,
-      definition: intakeDefinition(
+      definition: automationDefinition(
         "Gmail: 請求書",
         fetch: agentFetch(
           "mcp__gmail__search_threads", "請求書と支払い依頼のメールを、直近 3 日分取る。", .newArrivals),
@@ -102,21 +102,22 @@ extension DesignSceneFixtures {
         instruction: "請求書の受領と支払い依頼をタスクにし、支払期日を期限にする。"),
       paused: true, createdAt: boardCreated, lastFetched: [], reviewAll: false,
       lastRunAt: at(10, 0, 1),
-      runs: [intakeRun(at: at(10, 0, 1), items: 3, newItems: 1, proposed: 1)])
+      runs: [automationRun(at: at(10, 0, 1), items: 3, newItems: 1, proposed: 1)])
   }
 
-  static func boardIntakeFile(_ intakes: [Intake]? = nil) -> IntakesFile {
-    let intakes = intakes ?? boardIntakes()
-    return IntakesFile(
-      version: IntakePersistence.version, nextIntakeId: (intakes.map(\.id).max() ?? 0) + 1,
-      nextProposalId: 1, intakes: intakes, proposals: [])
+  static func boardAutomationFile(_ automations: [Automation]? = nil) -> AutomationsFile {
+    let automations = automations ?? boardAutomations()
+    return AutomationsFile(
+      version: AutomationPersistence.version,
+      nextAutomationId: (automations.map(\.id).max() ?? 0) + 1,
+      nextProposalId: 1, automations: automations, proposals: [])
   }
 
   /// 取得の依頼文・使えるツール・コマンドと作業ディレクトリが長く、詳細がスクロールする。回の記録は 20 件。
-  static func boardIntakeLongFile() -> IntakesFile {
-    var intakes = boardIntakes()
-    intakes[2].definition.fetch.method = .agent(
-      IntakeAgentFetch(
+  static func boardAutomationLongFile() -> AutomationsFile {
+    var automations = boardAutomations()
+    automations[2].definition.fetch.method = .agent(
+      AutomationAgentFetch(
         cli: "claude", model: "haiku",
         tools: [
           "mcp__backlog__get_issues", "mcp__backlog__get_issue_comments",
@@ -125,11 +126,12 @@ extension DesignSceneFixtures {
         ],
         request: (1...8).map { "\($0). 自分が担当の未完了の課題を、更新の新しい順に 30 件取る。期限の近いものを先に。" }
           .joined(separator: "\n")))
-    intakes[2].runs += (1...17).map {
-      intakeRun(
-        at: intakeAt(13, 0, daysAgo: $0), items: 10 + $0 % 3, newItems: $0 % 2, proposed: $0 % 2)
+    automations[2].runs += (1...17).map {
+      automationRun(
+        at: automationAt(13, 0, daysAgo: $0), items: 10 + $0 % 3, newItems: $0 % 2, proposed: $0 % 2
+      )
     }
-    intakes[1].definition.fetch.method = .command(
+    automations[1].definition.fetch.method = .command(
       BackgroundCommand(
         script: (1...6).map {
           "gh search prs --review-requested=@me --json url,title,body --limit \($0 * 10) \\"
@@ -137,6 +139,6 @@ extension DesignSceneFixtures {
         .joined(separator: "\n") + "\n  | jq -c '.[] | {id: .url, link: .url, body: .title}'",
         directory:
           "/Users/someone/work/very/long/path/to/the/repository/that/wraps/onto/the/next/line"))
-    return boardIntakeFile(intakes)
+    return boardAutomationFile(automations)
   }
 }

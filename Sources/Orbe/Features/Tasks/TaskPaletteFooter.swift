@@ -24,8 +24,8 @@ struct TaskPaletteFooter: View {
   }
 
   @ViewBuilder private var actionLine: some View {
-    if model.visibleTab == .intake {
-      TaskPaletteIntakeAction(model: model.intake)
+    if model.visibleTab == .automation {
+      TaskPaletteAutomationAction(model: model.automation)
     } else if let error = model.error {
       Text(l10n.string(error.message)).foregroundStyle(Color.theme.danger)
     } else if let notice = model.notice {
@@ -120,8 +120,8 @@ struct TaskPaletteFooter: View {
 
   private var hints: some View {
     HStack(spacing: Theme.Space.beat + Theme.Space.hair) {
-      if model.visibleTab == .intake {
-        TaskPaletteIntakeHints(model: model.intake)
+      if model.visibleTab == .automation {
+        TaskPaletteAutomationHints(model: model.automation)
       } else if askLabel != nil {
         PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintStopAsking))
       } else if let draft = model.draft {

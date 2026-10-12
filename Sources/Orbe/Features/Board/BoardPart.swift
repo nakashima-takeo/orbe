@@ -4,7 +4,7 @@ import Foundation
 /// `{"kind": "intake"}` のオブジェクトで、部品に設定が付いても外の形を壊さない。
 enum BoardPart: String, CaseIterable, Codable {
   /// タスクの自動追加の部品（見出し・依頼の欄・一覧・詳細）。
-  case intake
+  case automation = "intake"
 
   private enum CodingKeys: String, CodingKey {
     case kind

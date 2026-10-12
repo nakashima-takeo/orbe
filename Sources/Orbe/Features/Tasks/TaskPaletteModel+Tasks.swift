@@ -100,7 +100,7 @@ extension TaskPaletteModel {
     switch visibleTab {
     case .tasks: taskList.follow()
     case .github: gitHubList.follow()
-    case .intake: break
+    case .automation: break
     }
   }
 }

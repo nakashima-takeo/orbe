@@ -126,10 +126,10 @@ final class FakeControlTarget: ControlTarget {
   private(set) var movedTasks: [MovedTask] = []
   private(set) var deletedTaskIds: [Int] = []
   private(set) var startedTasks: [TaskStartRequest] = []
-  private(set) var setIntakes: [(intakeId: Int?, definition: IntakeDefinition)] = []
-  private(set) var ranIntakeIds: [Int] = []
-  private(set) var pausedIntakes: [(intakeId: Int, paused: Bool)] = []
-  private(set) var deletedIntakeIds: [Int] = []
+  private(set) var setAutomations: [(automationId: Int?, definition: AutomationDefinition)] = []
+  private(set) var ranAutomationIds: [Int] = []
+  private(set) var pausedAutomations: [(automationId: Int, paused: Bool)] = []
+  private(set) var deletedAutomationIds: [Int] = []
   private(set) var proposalLists: [Int?] = []
   private(set) var boardLists: [Int] = []
   private(set) var addedBoardParts: [(workspaceId: Int, part: BoardPart)] = []
@@ -312,33 +312,34 @@ final class FakeControlTarget: ControlTarget {
     completion(outcome(["workdir": "/w"]))
   }
 
-  func controlListIntakes() -> Result<Any, ControlError> {
+  func controlListAutomations() -> Result<Any, ControlError> {
     outcome(["intakes": [Any]()])
   }
 
-  func controlSetIntake(intakeId: Int?, _ definition: IntakeDefinition) -> Result<Any, ControlError>
-  {
-    setIntakes.append((intakeId, definition))
-    return outcome(["intake": ["intakeId": intakeId ?? 1]])
+  func controlSetAutomation(automationId: Int?, _ definition: AutomationDefinition) -> Result<
+    Any, ControlError
+  > {
+    setAutomations.append((automationId, definition))
+    return outcome(["intake": ["intakeId": automationId ?? 1]])
   }
 
-  func controlRunIntake(intakeId: Int) -> Result<Any, ControlError> {
-    ranIntakeIds.append(intakeId)
+  func controlRunAutomation(automationId: Int) -> Result<Any, ControlError> {
+    ranAutomationIds.append(automationId)
     return outcome(["ok": true])
   }
 
-  func controlPauseIntake(intakeId: Int, paused: Bool) -> Result<Any, ControlError> {
-    pausedIntakes.append((intakeId, paused))
-    return outcome(["intake": ["intakeId": intakeId]])
+  func controlPauseAutomation(automationId: Int, paused: Bool) -> Result<Any, ControlError> {
+    pausedAutomations.append((automationId, paused))
+    return outcome(["intake": ["intakeId": automationId]])
   }
 
-  func controlDeleteIntake(intakeId: Int) -> Result<Any, ControlError> {
-    deletedIntakeIds.append(intakeId)
+  func controlDeleteAutomation(automationId: Int) -> Result<Any, ControlError> {
+    deletedAutomationIds.append(automationId)
     return outcome(["ok": true])
   }
 
-  func controlListIntakeProposals(intakeId: Int?) -> Result<Any, ControlError> {
-    proposalLists.append(intakeId)
+  func controlListAutomationProposals(automationId: Int?) -> Result<Any, ControlError> {
+    proposalLists.append(automationId)
     return outcome(["proposals": [Any]()])
   }
 
