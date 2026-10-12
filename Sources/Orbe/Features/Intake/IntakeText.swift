@@ -115,7 +115,7 @@ struct IntakeText {
   }
 
   /// 取得の性質と、それで候補がいつ下がるか。
-  func coverage(_ coverage: IntakeCoverage) -> String {
+  private func coverage(_ coverage: IntakeCoverage) -> String {
     switch coverage {
     case .currentSet: l10n.string(.intakeCurrentSet)
     case .newArrivals: l10n.string(.intakeNewArrivals)
