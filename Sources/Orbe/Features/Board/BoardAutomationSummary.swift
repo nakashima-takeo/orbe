@@ -49,7 +49,8 @@ struct BoardRunLine: Equatable {
 /// 自動化 1 つをボードの描画用の値へ読み替えたもの。定義と回の記録の形に依るのはこのファイルだけで、ボードのビューはこの値と
 /// 立ち位置だけを読む——定義の形が変わったとき、直すのがここだけで済むため。
 ///
-/// 今の定義（取得 → 判定）は「トリガー → 取得元 → 既に見たものを除く → 処理 1 判定 → 出力先 タスク候補」の段の並びにする。
+/// 段の並びは「トリガー → 取得元 → 既に見たものを除く → 処理 1..n → 出力先」。取得元の無い自動化は、既に見たものを除く段も
+/// 持たない。
 struct BoardAutomationSummary: Equatable {
   /// 出力先の種類の名前（一覧の 2 行目）。
   let output: String
@@ -73,26 +74,31 @@ extension BoardAutomationSummary {
   init(_ automation: Automation, text: AutomationText) {
     let l10n = text.l10n
     let definition = automation.definition
-    let output = l10n.string(.boardOutputTaskCandidates)
-    let when = text.when(definition.when)
+    let output =
+      switch definition.sink {
+      case .taskCandidates: l10n.string(.boardOutputTaskCandidates)
+      }
+    let when = text.when(definition.trigger)
+    let stepCount = definition.steps.count
     self.output = output
     self.when = when
     nodes = Self.nodes(
-      definition, counts: automation.runs.first.map(Self.counts) ?? Counts(), when: when,
-      output: output, l10n: l10n)
+      definition,
+      counts: automation.runs.first.map { Self.counts($0, stepCount: stepCount) } ?? Counts(),
+      when: when, output: output, l10n: l10n)
 
     func result(_ run: AutomationRun, heading: Bool) -> String {
-      let counts = Self.counts(run)
       if let failure = run.failure {
         return heading
           ? l10n.string(.boardRunFailedShort) : l10n.format(.boardRunFailed, failure)
       }
-      if let proposed = counts.output, proposed > 0 {
+      let proposed = Self.proposed(run)
+      if proposed > 0 {
         return heading
           ? l10n.format(.boardRunAddedTo, proposed, output) : l10n.format(.boardRunAdded, proposed)
       }
-      if run.newItems == 0 { return l10n.string(.boardRunNothingNew) }
-      if let step = counts.steps.firstIndex(of: 0) {
+      if run.fresh == 0 { return l10n.string(.boardRunNothingNew) }
+      if let step = Self.counts(run, stepCount: stepCount).steps.firstIndex(of: 0) {
         return l10n.format(.boardRunAllDropped, step + 1)
       }
       return l10n.string(.boardRunNoneAdded)
@@ -109,8 +115,8 @@ extension BoardAutomationSummary {
       let at = text.stamp(latest.startedAt)
       if latest.failure != nil {
         mark = l10n.format(.boardRunMark, at, l10n.string(.boardRunFailedShort))
-      } else if let proposed = Self.counts(latest).output, proposed > 0 {
-        mark = l10n.format(.boardRunMarkAdded, at, proposed)
+      } else if Self.proposed(latest) > 0 {
+        mark = l10n.format(.boardRunMarkAdded, at, Self.proposed(latest))
       } else {
         mark = l10n.format(.boardRunMark, at, result(latest, heading: false))
       }
@@ -122,32 +128,45 @@ extension BoardAutomationSummary {
     }
   }
 
-  /// 今の定義の段の並び。件数は最新の回のもの。
+  /// 段の並び。件数は最新の回のもの。モデルは省略なら解いた既定を出す。
   private static func nodes(
     _ definition: AutomationDefinition, counts: Counts, when: String, output: String,
     l10n: LocalizationStore
   ) -> [BoardFlowNode] {
-    var source = BoardFlowNode(role: .source, count: counts.source)
-    switch definition.fetch.method {
-    case .agent(let agent):
-      source.means = .model(agent.model)
-      source.source = agent.request
-      source.tools = agent.tools
-    case .command(let command):
-      source.means = .command(l10n.string(.automationCommandFetch))
-      source.source = command.script
-      source.note = command.directory.map { l10n.string(.automationDirectory) + "  " + $0 }
+    func command(_ node: inout BoardFlowNode, _ command: BackgroundCommand) {
+      node.means = .command(l10n.string(.automationCommand))
+      node.source = command.script
+      node.note = command.directory.map { l10n.string(.automationDirectory) + "  " + $0 }
     }
-    return [
-      BoardFlowNode(role: .trigger, title: when),
-      source,
-      BoardFlowNode(role: .orbe, title: l10n.string(.boardOrbeSeen), count: counts.orbe),
-      BoardFlowNode(
-        role: .step(1), title: l10n.string(.automationJudge),
-        means: .model(definition.judge.model), source: definition.judge.instruction,
-        count: counts.steps.first),
-      BoardFlowNode(role: .output, title: output, count: counts.output),
-    ]
+
+    var nodes = [BoardFlowNode(role: .trigger, title: when)]
+    if let source = definition.source {
+      var node = BoardFlowNode(role: .source, count: counts.source)
+      switch source.method {
+      case .agent(let agent):
+        node.means = .model(AutomationDefinition.model(agent.model, finalStep: false))
+        node.source = agent.request
+        node.tools = agent.tools
+      case .command(let script): command(&node, script)
+      }
+      nodes.append(node)
+      nodes.append(
+        BoardFlowNode(role: .orbe, title: l10n.string(.boardOrbeSeen), count: counts.orbe))
+    }
+    for (index, step) in definition.steps.enumerated() {
+      var node = BoardFlowNode(
+        role: .step(index + 1), title: step.name,
+        count: counts.steps.indices.contains(index) ? counts.steps[index] : nil)
+      switch step.method {
+      case .agent(let agent):
+        node.means = .model(definition.model(of: agent, at: index))
+        node.source = agent.instruction
+      case .command(let script): command(&node, script)
+      }
+      nodes.append(node)
+    }
+    nodes.append(BoardFlowNode(role: .output, title: output, count: counts.output))
+    return nodes
   }
 
   // MARK: - 文言に依らない分類
@@ -155,28 +174,41 @@ extension BoardAutomationSummary {
   /// 回の区分。並べ替え（文言を解かずに走る）も、この分類だけを使う。
   static func tone(_ run: AutomationRun) -> BoardRunTone {
     if run.failure != nil { return .failed }
-    return (counts(run).output ?? 0) > 0 ? .produced : .quiet
+    return proposed(run) > 0 ? .produced : .quiet
+  }
+
+  /// 出力先へ出した数。
+  private static func proposed(_ run: AutomationRun) -> Int {
+    switch run.sink {
+    case .taskCandidates(let report): report.proposed
+    case nil: 0
+    }
   }
 
   /// 1 回で各段を出た件数。
   struct Counts: Equatable {
     var source: Int?
     var orbe: Int?
-    /// 処理の段の順。
+    /// 処理の段の順。届かなかった段から先は無い。
     var steps: [Int] = []
     var output: Int?
   }
 
-  /// 失敗した回は届いた段までを数える。判定の記録が無い失敗は取得で落ちた回なので何も数えず、判定の記録がある失敗は既に見た
-  /// ものを除くまで。判定を起こさなかった回は、処理と出力先へ届いていない。処理 1 を出た数は、提案と対応済みの和。
-  static func counts(_ run: AutomationRun) -> Counts {
-    if run.failure != nil {
-      guard run.judge != nil else { return Counts() }
-      return Counts(source: run.fetch.items, orbe: run.newItems)
+  /// 回の記録の段ごとの件数を、届いた段まで並べる。取得元と既に見たものを除くは、取得元を通った回（新しい項目の数を持つ回）
+  /// だけが持つ。失敗した回は、記録の最後の段が落ちた段なので、その手前まで。出力先は、成功して最後の段（`stepCount` 番目）まで
+  /// 回った回だけが持つ——途中の段が 0 件を出した回・新しい項目が無かった回は、出力先へ届いていない。
+  static func counts(_ run: AutomationRun, stepCount: Int) -> Counts {
+    var counts = Counts()
+    if let fresh = run.fresh {
+      counts.source = run.source?.count
+      counts.orbe = fresh
     }
-    guard let judge = run.judge else { return Counts(source: run.fetch.items, orbe: run.newItems) }
-    return Counts(
-      source: run.fetch.items, orbe: run.newItems, steps: [judge.proposed + judge.resolved],
-      output: judge.proposed)
+    counts.steps = run.steps.map(\.count)
+    if run.failure != nil {
+      if !counts.steps.isEmpty { counts.steps.removeLast() }
+    } else if run.steps.count == stepCount {
+      counts.output = proposed(run)
+    }
+    return counts
   }
 }

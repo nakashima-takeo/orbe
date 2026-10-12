@@ -20,10 +20,12 @@ extension DesignSceneFixtures {
     return run
   }
 
-  /// 判定が提案を出さず、対応済みだけを返した回。
+  /// 判定が提案を出さず、新しい項目をすべて対応済みとして返した回。
   private static func resolvedOnly(_ run: AutomationRun) -> AutomationRun {
     var run = run
-    run.judge?.resolved = run.newItems
+    let fresh = run.fresh ?? 0
+    run.steps[run.steps.count - 1].count = fresh
+    run.sink = .taskCandidates(AutomationTaskCandidatesReport(resolved: fresh))
     return run
   }
 
@@ -123,11 +125,11 @@ extension DesignSceneFixtures {
       id: 5,
       definition: automationDefinition(
         "日報の素材",
-        fetch: AutomationFetch(
+        source: AutomationSource(
           method: .command(
             BackgroundCommand(script: "~/bin/daily-notes.sh --today", directory: "~/notes")),
           coverage: .newArrivals),
-        when: .daily([.init(hour: 23, minute: 0)])),
+        trigger: .daily([.init(hour: 23, minute: 0)])),
       paused: false, createdAt: automationAt(14, 50), lastFetched: [], reviewAll: false,
       lastRunAt: nil, runs: [])
   }
@@ -171,75 +173,94 @@ extension DesignSceneFixtures {
         .joined(separator: "\n") + "\n  | jq -c '.[] | {id: .url, link: .url, body: .title}'",
         directory:
           "/Users/someone/work/very/long/path/to/the/repository/that/wraps/onto/the/next/line"))
-    automations[1].runs[0].fetch.items = 999
+    automations[1].runs[0].source?.count = 999
     return boardAutomationFile(automations)
   }
 }
 
-/// 今の定義では作れない並び（処理が 3 段・取得元が無い）。読み替えの結果を直接組み、描き方だけを確かめる。値は見本の
-/// 『段の多い例』『一番単純な例』。
+/// 見本『段の多い例』『一番単純な例』の自動化。段の多い例は取得元と処理 3 段（コマンド・既定のモデルの agent 2 つ）、一番単純な
+/// 例は取得元も処理も無い。一番単純な例は、まだ定義の検証を通らない（タスク候補は取得元と段を要る）が、ボードはそのまま描く。
 extension DesignSceneFixtures {
-  static func boardStepsExample() -> (BoardAutomationStanding, BoardAutomationSummary) {
-    let (ok, none, bad) = (BoardRunTone.produced, BoardRunTone.quiet, BoardRunTone.failed)
-    let standing = BoardAutomationStanding(
-      id: 1, name: "自分宛ての Slack DM", paused: false, running: false,
-      next: automationAt(16, 50), last: .produced)
-    let summary = BoardAutomationSummary(
-      output: "タスク候補", when: "10分ごと",
-      nodes: [
-        BoardFlowNode(role: .trigger, title: "10分ごと"),
-        BoardFlowNode(
-          role: .source, title: "Slack の DM", means: .command("コマンド"),
-          source: "~/bin/slack-dm.sh", count: 6),
-        BoardFlowNode(role: .orbe, title: "既に見たものを除く", count: 5),
-        BoardFlowNode(
-          role: .step(1), title: "bot の投稿を除く", means: .command("コマンド"),
-          source: "jq 'select(.bot_id == null)'", count: 4),
-        BoardFlowNode(
-          role: .step(2), title: "雑談を除く", means: .model("haiku"), source: "挨拶やお礼だけのメッセージは除く。",
-          count: 3),
-        BoardFlowNode(
-          role: .step(3), title: "依頼をタスク候補にする", means: .model("sonnet"),
-          source: "自分に何かを頼んでいるものだけを候補にする。\n期限が書かれていれば期限に入れる。", count: 2),
-        BoardFlowNode(role: .output, title: "タスク候補", count: 2),
-      ],
-      runs: [
-        BoardRunLine(at: "16:40", result: "2件を追加", tone: ok),
-        BoardRunLine(at: "16:30", result: "新着なし", tone: none),
-        BoardRunLine(at: "16:20", result: "1件を追加", tone: ok),
-        BoardRunLine(at: "16:10", result: "失敗：取得元が終了コード 1", tone: bad),
-        BoardRunLine(at: "16:00", result: "処理 1 ですべて除外", tone: none),
-        BoardRunLine(at: "15:50", result: "処理 2 ですべて除外", tone: none),
-      ],
-      strip: [
-        ok, none, ok, none, none, ok, bad, none, ok, ok, none, none, ok, none, ok, none, none, ok,
-        none, ok,
-      ],
-      mark: "16:40 に 2件を追加", last: "前回 今日 16:40　2件をタスク候補に追加")
-    return (standing, summary)
+  /// 段ごとの件数を持つ回。`steps` は各段が出した数で、`stepCount` に満たなければ途中の段で止まった回。
+  private static func stepsRun(
+    at start: Date, source: Int, fresh: Int?, steps: [Int], proposed: Int = 0,
+    failure: String? = nil
+  ) -> AutomationRun {
+    AutomationRun(
+      startedAt: start, endedAt: start.addingTimeInterval(60), trigger: .schedule,
+      source: AutomationStepReport(
+        name: nil, commandLine: "~/bin/slack-dm.sh", ending: "exited 0", count: source,
+        rejected: AutomationRejections()),
+      fresh: fresh,
+      steps: steps.enumerated().map { index, count in
+        AutomationStepReport(
+          name: nil, commandLine: "step \(index + 1)", ending: "exited 0", count: count,
+          rejected: AutomationRejections())
+      },
+      sink: failure == nil
+        ? .taskCandidates(AutomationTaskCandidatesReport(proposed: proposed)) : nil,
+      failure: failure)
   }
 
-  static func boardSimpleExample() -> (BoardAutomationStanding, BoardAutomationSummary) {
-    let standing = BoardAutomationStanding(
-      id: 3, name: "毎朝の PR 報告", paused: false, running: false,
-      next: automationAt(9, 0, daysAgo: -1), last: .produced)
-    let summary = BoardAutomationSummary(
-      output: "秘書に依頼", when: "平日 9:00",
-      nodes: [
-        BoardFlowNode(role: .trigger, title: "平日 9:00"),
-        BoardFlowNode(
-          role: .output, title: "秘書に依頼",
-          source: "自分がレビュー待ちの PR と、自分の PR に付いたレビューをまとめて、\nSlack の #dev-me に投稿して。"),
-      ],
-      runs: [
-        BoardRunLine(at: "今日 9:00", result: "秘書に依頼済み", tone: .produced),
-        BoardRunLine(at: "10/12（月）9:00", result: "秘書に依頼済み", tone: .produced),
-        BoardRunLine(at: "10/9（金）9:00", result: "秘書に依頼済み", tone: .produced),
-        BoardRunLine(at: "10/8（木）9:00", result: "秘書に依頼済み", tone: .produced),
-        BoardRunLine(at: "10/7（水）9:00", result: "秘書に依頼済み", tone: .produced),
-      ],
-      strip: Array(repeating: .produced, count: 20),
-      mark: "9:00 に依頼済み", last: "前回 今日 9:00　秘書に依頼済み")
-    return (standing, summary)
+  static func boardStepsExample() -> Automation {
+    let at = { (minutes: Int) in
+      automationAt(14, 55).addingTimeInterval(TimeInterval(-60 * minutes))
+    }
+    let head = [
+      stepsRun(at: at(0), source: 6, fresh: 5, steps: [4, 3, 2], proposed: 2),
+      stepsRun(at: at(10), source: 6, fresh: 0, steps: []),
+      stepsRun(at: at(20), source: 7, fresh: 3, steps: [2, 2, 1], proposed: 1),
+      stepsRun(at: at(30), source: 0, fresh: nil, steps: [], failure: "the fetch ended: exited 1"),
+      stepsRun(at: at(40), source: 6, fresh: 2, steps: [0]),
+      stepsRun(at: at(50), source: 6, fresh: 3, steps: [3, 0]),
+    ]
+    let tail = (6..<20).map { n in
+      n.isMultiple(of: 3)
+        ? stepsRun(at: at(n * 10), source: 6, fresh: 2, steps: [2, 1, 1], proposed: 1)
+        : stepsRun(at: at(n * 10), source: 6, fresh: 0, steps: [])
+    }
+    return Automation(
+      id: 1,
+      definition: AutomationDefinition(
+        name: "自分宛ての Slack DM", trigger: .every(600),
+        source: AutomationSource(
+          method: .command(BackgroundCommand(script: "~/bin/slack-dm.sh", directory: nil)),
+          coverage: .newArrivals),
+        steps: [
+          AutomationStep(
+            name: "bot の投稿を除く",
+            method: .command(
+              BackgroundCommand(script: "jq 'select(.bot_id == null)'", directory: nil))),
+          AutomationStep(
+            name: "雑談を除く",
+            method: .agent(
+              AutomationStepAgent(cli: "claude", model: nil, instruction: "挨拶やお礼だけのメッセージは除く。"))),
+          AutomationStep(
+            name: "依頼をタスク候補にする",
+            method: .agent(
+              AutomationStepAgent(
+                cli: "claude", model: nil,
+                instruction: "自分に何かを頼んでいるものだけを候補にする。\n期限が書かれていれば期限に入れる。"))),
+        ],
+        sink: .taskCandidates),
+      paused: false, createdAt: boardCreated, lastFetched: [], reviewAll: false,
+      lastRunAt: at(0), runs: head + tail)
+  }
+
+  static func boardSimpleExample() -> Automation {
+    let runs = (0..<20).map { daysAgo in
+      AutomationRun(
+        startedAt: automationAt(9, 0, daysAgo: daysAgo),
+        endedAt: automationAt(9, 1, daysAgo: daysAgo), trigger: .schedule, source: nil,
+        fresh: nil, steps: [], sink: .taskCandidates(AutomationTaskCandidatesReport(proposed: 1)),
+        failure: nil)
+    }
+    return Automation(
+      id: 2,
+      definition: AutomationDefinition(
+        name: "毎朝の PR 報告", trigger: .daily([.init(hour: 9, minute: 0)]), source: nil, steps: [],
+        sink: .taskCandidates),
+      paused: false, createdAt: boardCreated, lastFetched: [], reviewAll: false,
+      lastRunAt: automationAt(9, 0), runs: runs)
   }
 }

@@ -100,27 +100,13 @@ extension DesignGallerySnapshotTests {
     try write("board_automation_narrow.png", board(row: 1), .ja, NSSize(width: 800, height: 600))
     try write("board_automation_narrow_failed.png", board(), .ja, NSSize(width: 800, height: 600))
 
-    try renderBoardExampleSnapshots(dir: dir)
+    // 見本『段の多い例』『一番単純な例』。どちらも回の記録から読み替えた本物の値で描く。
+    let examples = DesignSceneFixtures.boardAutomationFile([
+      DesignSceneFixtures.boardStepsExample(), DesignSceneFixtures.boardSimpleExample(),
+    ])
+    try write("board_automation_steps.png", board(examples))
+    try write("board_automation_simple.png", board(examples, row: 1))
     try renderBoardRequestSnapshots(write: write, board: { board($0) })
-  }
-
-  /// 今の定義では作れない並び（見本『段の多い例』『一番単純な例』）を、読み替えの結果を直接組んで詳細の欄だけ撮る。大きさは
-  /// 見本の詳細の欄（1440 から一覧と罫線を除いた幅・欄の帯とフッターを除いた高さ）。
-  private func renderBoardExampleSnapshots(dir: URL) throws {
-    let size = NSSize(width: 1079, height: 752)
-    let model = BoardAutomationModel(
-      runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardDesignFile()))
-    let text = model.text(LocalizationStore(language: .ja), now: DesignSceneFixtures.automationNow)
-    for (name, (standing, summary)) in [
-      ("board_automation_steps.png", DesignSceneFixtures.boardStepsExample()),
-      ("board_automation_simple.png", DesignSceneFixtures.boardSimpleExample()),
-    ] {
-      try writePNG(
-        BoardAutomationDetail(standing: standing, summary: summary, text: text)
-          .background(ChromeTranslucency().baseFill)
-          .environment(\.localization, LocalizationStore(language: .ja)),
-        size: size, name: name, dir: dir)
-    }
   }
 
   /// 依頼の欄: 文字あり（欄に焦点・フッターが欄のキー）・断り 2 種。秘書の口は閉包の差し替えで、本物の秘書・claude は起きない。
