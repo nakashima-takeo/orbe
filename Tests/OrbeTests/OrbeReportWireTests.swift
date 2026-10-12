@@ -61,45 +61,104 @@ final class OrbeReportWireTests: OrbeTestCase {
 
   // MARK: - 駆動
 
-  /// `orbe-report <agent> <state>` を起こし、listener が受けた生の 1 行を返す（接続が来なければ nil）。
+  /// listener が 1 本の接続から受け取ったもの。
+  private struct Served {
+    var line: String
+    /// 1 行を受けて少し置いた後も、接続の向こうのプロセスが取れた。Orbe は接続の向こうから報告者の
+    /// プロセスグループをたどるので、受け取りが遅れても報告者が残っていなければならない。
+    var peerHeld: Bool
+    /// 応答の 1 行を書いてから報告者が閉じるまで（応答しなかったときは nil）。
+    var closedAfterReply: TimeInterval?
+  }
+
+  /// 子が走っている間に背景で 1 接続を受け、1 行を読む。`reply` なら応答の 1 行を返す。どちらでも、本物の
+  /// Orbe と同じく接続は自分からは畳まず、相手が閉じるまで保つ。
+  /// `finish()` は子の終了後に呼ぶ——`connect` は子の終了より前に起きるので、
+  /// その時点で接続が backlog に無ければ、接続しない経路だったと言い切れる。
+  private final class OneShotServer {
+    private let lock = NSLock()
+    private var stopped = false
+    private var served: Served?
+    private let done = DispatchSemaphore(value: 0)
+
+    init(listenFD: Int32, reply: Bool) {
+      DispatchQueue.global().async { [self] in
+        defer { done.signal() }
+        while true {
+          let last = lock.withLock { stopped }
+          var pfd = pollfd(fd: listenFD, events: Int16(POLLIN), revents: 0)
+          if poll(&pfd, 1, 50) > 0 { break }
+          if last { return }
+        }
+        let fd = accept(listenFD, nil, nil)
+        guard fd >= 0 else { return }
+        defer { Darwin.close(fd) }
+        // accept した fd は listener の O_NONBLOCK を継ぐ。blocking に戻して読む。
+        let flags = fcntl(fd, F_GETFL)
+        if flags >= 0 { _ = fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) }
+        // 先に閉じた相手への応答で xctest ごと SIGPIPE で落ちないように。
+        var noSigPipe: Int32 = 1
+        _ = setsockopt(
+          fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
+        let line = Self.readLine(fd)
+        usleep(200_000)
+        let peerHeld = ProcessGroup.peer(of: fd).map { kill($0, 0) == 0 } ?? false
+        var repliedAt: Date?
+        if reply {
+          let response = Data(#"{"jsonrpc":"2.0","id":1,"result":{}}"#.utf8 + [0x0A])
+          _ = response.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
+          repliedAt = Date()
+        }
+        _ = Self.readLine(fd)  // 相手が閉じる（EOF）まで保つ
+        let result = Served(
+          line: String(data: line, encoding: .utf8) ?? "", peerHeld: peerHeld,
+          closedAfterReply: repliedAt.map { Date().timeIntervalSince($0) })
+        lock.withLock { served = result }
+      }
+    }
+
+    func finish() -> Served? {
+      lock.withLock { stopped = true }
+      _ = done.wait(timeout: .now() + ControlProcess.processTimeout)
+      return lock.withLock { served }
+    }
+
+    private static func readLine(_ fd: Int32) -> Data {
+      var line = Data()
+      var byte: UInt8 = 0
+      while read(fd, &byte, 1) > 0, byte != 0x0A { line.append(byte) }
+      return line
+    }
+  }
+
+  /// `orbe-report <agent> <state>` を起こし、listener が受けたものを返す（接続が来なければ nil）。
   /// env は明示辞書のみ（親から継承しない）——継承すると開発者の実 `ORBE_SOCK` へ報告が飛ぶ。
-  private func report(
+  private func run(
     agent: String = "claude", state: String, stdin: String, dropping: [String] = [],
-    file: StaticString = #filePath, line: UInt = #line
-  ) -> String? {
+    reply: Bool = true, file: StaticString = #filePath, line: UInt = #line
+  ) -> (served: Served?, elapsed: TimeInterval) {
     var env = [
       "PATH": "/usr/bin:/bin", "ORBE_TAB": String(Self.tabId), "ORBE_SOCK": socketPath,
     ]
     for key in dropping { env.removeValue(forKey: key) }
+    let server = OneShotServer(listenFD: listenFD, reply: reply)
+    let started = Date()
     let outcome = ControlProcess.run(
       ControlProcess.executable("orbe-report"), [agent, state], env: env, stdin: stdin,
       file: file, line: line)
+    let elapsed = Date().timeIntervalSince(started)
     XCTAssertEqual(
       outcome.status, 0, "orbe-report は常に exit 0: \(outcome.stderr)", file: file, line: line)
-    return acceptLine()
+    return (server.finish(), elapsed)
   }
 
-  /// 届いた 1 行を読む。`connect` は子の終了より前に起きるので、報告する経路なら呼ばれた時点で
-  /// 接続は backlog に在る＝待つ必要はない。短い猶予だけ置くのは、接続しない契約（サブエージェント・
-  /// Orbe 外）の検証を「待ち時間ぶん遅いだけのテスト」にしないため。
-  private func acceptLine(within seconds: TimeInterval = 0.5) -> String? {
-    var fd: Int32 = -1
-    _ = waitUntil(seconds) {
-      fd = accept(listenFD, nil, nil)
-      return fd >= 0
-    }
-    guard fd >= 0 else { return nil }
-    defer { Darwin.close(fd) }
-    // accept した fd は listener の O_NONBLOCK を継ぐ。子は終了済みなので blocking に戻して読み切る。
-    let flags = fcntl(fd, F_GETFL)
-    if flags >= 0 { _ = fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) }
-    var line = Data()
-    var byte: UInt8 = 0
-    while read(fd, &byte, 1) > 0 {
-      if byte == 0x0A { break }
-      line.append(byte)
-    }
-    return String(data: line, encoding: .utf8)
+  /// 応答する listener へ報告させ、受けた生の 1 行を返す（接続が来なければ nil）。
+  private func report(
+    agent: String = "claude", state: String, stdin: String, dropping: [String] = [],
+    file: StaticString = #filePath, line: UInt = #line
+  ) -> String? {
+    run(agent: agent, state: state, stdin: stdin, dropping: dropping, file: file, line: line)
+      .served?.line
   }
 
   /// 生の 1 行を JSON-RPC リクエストとして解く。
@@ -179,5 +238,27 @@ final class OrbeReportWireTests: OrbeTestCase {
     XCTAssertNil(
       report(state: "working", stdin: "{}", dropping: ["ORBE_SOCK"]),
       "ORBE_SOCK が無ければ報告しない")
+  }
+
+  // MARK: - 接続の保ち方
+
+  /// 報告者は Orbe の応答の 1 行まで接続を保ち、受けたら待たずに閉じる。保たないと、Orbe が受け取るのが
+  /// 遅れたとき報告者のグループをたどれず、秘書のタブは会話へ貼ってよくならない。受けても閉じないと、Orbe は
+  /// 接続を畳まないので、hook のたびに claude が待ちの上限まで止まる。
+  func testReporterHoldsTheConnectionUntilTheReplyAndNoLonger() throws {
+    let served = try XCTUnwrap(
+      run(state: "idle", stdin: #"{"session_id":"s-1"}"#).served, "orbe-report が接続しない")
+    XCTAssertTrue(served.peerHeld, "1 行を書いた後、応答を待たずに報告者が消えている")
+    // 待ちの上限（2 秒）より十分短い。
+    XCTAssertLessThan(
+      try XCTUnwrap(served.closedAfterReply), 1, "応答を受けた後も、上限まで接続を保っている")
+  }
+
+  /// Orbe が受け取っても応答しないときは、上限で諦めて exit 0 で抜ける。hook は claude のターンを
+  /// 同期で止めるので、ここが無限待ちになると Orbe の固まりが claude に伝わる。
+  func testUnresponsiveOrbeReleasesTheHookWithinTheLimit() throws {
+    let result = run(state: "idle", stdin: "{}", reply: false)
+    XCTAssertNotNil(result.served, "orbe-report が接続しない")
+    XCTAssertLessThan(result.elapsed, 5, "応答しない Orbe を上限を超えて待っている")
   }
 }
