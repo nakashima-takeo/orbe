@@ -4,19 +4,22 @@ import XCTest
 @testable import Orbe
 
 /// 実 `orb automation`（`orbe-cli`）を子プロセスで起こし、実 `WindowController` の自動化を set（標準入力の JSON）→ list →
-/// pause → run → resume → rm のライフサイクルで動かせること、proposals が自動化の棚の提案を出すことを固定する。取得元は
-/// 何も出さないコマンドで、提案はストアへ直に確定するので、段の agent は起きない。
+/// pause → run → resume → rm のライフサイクルで動かせること、proposals が自動化の棚の提案を出すことを固定する。取得元も
+/// 段もコマンドなので、agent は起きない。
 ///
 /// 壊れると何が起きるか: CLI が組み立てる control メソッド名・params の語（`pause` / `resume` の `paused`、`set` と
 /// `proposals` の `automationId`、`set` の `definition`）はここでしか測れない。`resume` が `paused:true` を送ると、exit 0 を返しながら止まったままになる。
 ///
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliAutomationProcessTests: OrbeTestCase {
-  private let definition = """
+  /// 回すと項目 a を 1 つ取り、最後の段（コマンド）が a を候補に出す。
+  private let definition = #"""
     {"name": "GitHub: 通知", "trigger": {"everyMinutes": 30},
-     "source": {"command": "true", "coverage": "currentSet"},
-     "steps": [{"name": "判定", "instruction": "自分がやること"}], "sink": {"kind": "taskCandidates"}}
-    """
+     "source": {"coverage": "currentSet", "command":
+       "echo '{\"id\":\"a\",\"link\":\"https://x.test/a\",\"body\":\"a\",\"time\":\"2026-01-01T00:00:00Z\"}'"},
+     "steps": [{"name": "判定", "command": "cat >/dev/null; echo '{\"propose\":\"a\",\"title\":\"a を見る\"}'"}],
+     "sink": {"kind": "taskCandidates"}}
+    """#
 
   private func run(
     _ control: ControlProcess, _ args: [String], stdin: String? = nil,
@@ -53,7 +56,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertTrue(
       waitUntil(10) { control.target.automationStore.automation(Int(id)!)?.runs.isEmpty == false },
       "今すぐの回が記録に残らない")
-    XCTAssertTrue(row(control)[5].hasSuffix("0 fetched, 0 new, 0 proposed"), row(control)[5])
+    XCTAssertTrue(row(control)[5].hasSuffix("1 fetched, 1 new, 1 proposed"), row(control)[5])
 
     XCTAssertEqual(run(control, ["resume", id]), "resumed automation \(id)")
     XCTAssertEqual(row(control)[1], "active")

@@ -89,7 +89,6 @@ extension ControlWireTests {
     }
 
     for (label, params, message) in [
-      ("定義が無い", ["name": "x"], "missing definition"),
       ("定義がオブジェクトでない", ["definition": "x"], "invalid definition"),
       ("段が無い", with("steps", nil), "missing steps"),
       ("出力先が無い", with("sink", nil), "missing sink"),

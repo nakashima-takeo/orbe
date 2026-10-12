@@ -159,12 +159,21 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
   // MARK: - 定義の往復
 
-  /// 一覧の定義は `set_automation` と同じ形で、そのまま読み戻すと同じ定義になる（AI が読んで直して戻せる）。
+  /// 一覧の定義は `set_automation` と同じ形で、そのまま読み戻すと同じ定義になる（AI が読んで直して戻せる）。省略した
+  /// モデルは省略のまま返る——解いた値で返すと、書き戻した定義のモデルが固定され、段を並べ替えても既定が追従しない。
   func testListedDefinitionReadsBackAsTheSameDefinition() throws {
     let wc = try launch()
     var definition = AutomationStoreTests.definition(
       trigger: .daily([.init(hour: 13, minute: 30), .init(hour: 9, minute: 0)]))
-    definition.source?.method = AutomationStoreTests.agentSource()
+    definition.source?.method = .agent(
+      AutomationSourceAgent(
+        cli: "claude", model: nil, tools: ["mcp__slack__search"], request: "自分宛の DM"))
+    definition.steps = [
+      AutomationStep(name: "絞り込み", method: .command(BackgroundCommand(script: "jq -c ."))),
+      AutomationStep(
+        name: "判定",
+        method: .agent(AutomationStepAgent(cli: "claude", model: nil, instruction: "判定して"))),
+    ]
     let id = try set(wc, definition)
 
     let listedDefinition = try XCTUnwrap(try listed(wc)[id]?["definition"])
