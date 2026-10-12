@@ -101,15 +101,7 @@ extension TaskPaletteModelTests {
   /// ↵ で、開いた workspace の未着手のタスクを、右の欄の優先度と期限、その項目を主の結び付きとして足す。行は
   /// 結び付いた行として区分の上へ移り、選択はその行を追い、右の欄は既定に戻る。
   func testEnterOnAnUnlinkedItemMakesATodoTaskWithThePaneValues() throws {
-    let existing = [
-      TaskPaletteSamples.task(1, "高") {
-        $0.priority = .high
-        $0.workspace = openedWorkspace.id
-      },
-      TaskPaletteSamples.task(2, "中") { $0.workspace = openedWorkspace.id },
-    ]
-    let palette = GitHub.model(
-      existing, issues: [GitHub.issue(7), GitHub.issue(5, "ログの保存先")])
+    let palette = GitHub.model([], issues: [GitHub.issue(7), GitHub.issue(5, "ログの保存先")])
     palette.tapGitHubRow(.item(GitHub.id(5)))
     palette.enterPane()
     palette.movePaneStop(1)

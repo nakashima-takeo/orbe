@@ -56,10 +56,7 @@ final class TaskPaletteModelTests: OrbeTestCase {
 
   /// 足したタスクは「今足した」の印で選ばれる。
   func testEnterOnTheAddRowAddsATodoTaskClearsTheQueryAndMarksIt() throws {
-    let palette = model([
-      task(1, "進行中", .inProgress), task(2, "高") { $0.priority = .high },
-      task(3, "中"), task(4, "低") { $0.priority = .low },
-    ])
+    let palette = model([task(1, "進行中", .inProgress)])
     palette.query = "  PR の説明を書く "
 
     palette.submit()
