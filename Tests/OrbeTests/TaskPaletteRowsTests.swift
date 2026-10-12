@@ -59,10 +59,10 @@ final class TaskPaletteRowsTests: OrbeTestCase {
   // MARK: - 欄と並び
 
   func testRowsAreGroupedInProgressThenTodoThenDoneHeaderNewestFirstWithinEachSection() {
-    // 保存の順は作成の順と違う（手で並べ替えていた頃の tasks.json）。
+    // 保存の順は、どの欄でも作成の順と逆。
     let tasks = [
-      task(4, "d", .todo), task(1, "a", .todo), task(5, "e", .inProgress), task(3, "c", .done),
-      task(2, "b", .inProgress),
+      task(1, "a", .todo), task(2, "b", .inProgress), task(4, "d", .todo),
+      task(5, "e", .inProgress), task(3, "c", .done),
     ]
 
     let rows = TaskPaletteRows.build(input(tasks))
