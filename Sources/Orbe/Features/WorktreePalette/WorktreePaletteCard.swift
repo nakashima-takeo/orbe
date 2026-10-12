@@ -178,7 +178,7 @@ struct WorktreePaletteCard: View {
       )
       .onChange(of: model.query) { model.onQueryChanged() }
       // 実行＝onSubmit（IME 変換確定の Enter では発火しない＝誤爆しない）。行タップと同じ決定 funnel。
-      .onSubmit { model.submit() }
+      .onSubmitIgnoringKeyRepeat { model.submit() }
       .onKeyPress { WorktreePaletteFieldKeys.handle($0, model: model) }
   }
 
