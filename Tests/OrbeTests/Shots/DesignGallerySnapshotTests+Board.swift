@@ -16,6 +16,9 @@ extension DesignGallerySnapshotTests {
     try writePNG(
       homeBand(boardSelected, size: rowStage), size: rowStage,
       name: "statusrow_board_selected.png", dir: dir)
+    try writePNG(
+      homeBand(boardSelected, size: rowStage).environment(\.windowIsMain, false), size: rowStage,
+      name: "statusrow_board_selected_inactive.png", dir: dir)
 
     let tabSelected = homeRow(homeTabs, selection: .tab(1))
     tabSelected.location = [.dim("~/Library/Application Support/dev.orbe.app.dev/home")]
