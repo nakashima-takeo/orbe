@@ -187,6 +187,42 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(asks.count, 1)
   }
 
+  /// 行の ⌘↵ は ⌘T と同じ口——待ちが解けたタスクなら、一覧でも右の欄でも ⌘T の画面を開かずに会話を続きから始める。
+  func testCommandEnterOnAResolvedWaitContinuesTheConversationLikeCommandT() {
+    let condition = WaitCondition(
+      WaitConditionRequest(
+        description: "レビューが付いたら", command: "gh pr view 214", everyMinutes: 10,
+        deadline: DesignSceneFixtures.taskToday.addingTimeInterval(86400),
+        conversation: WaitConversation(command: "claude", sessionId: "s-1", workspace: nil)),
+      setAt: DesignSceneFixtures.taskToday)
+    let model = TaskPaletteSamples.model([
+      TaskPaletteSamples.task(1, "a", .inProgress) {
+        $0.wait = .resolved(
+          WaitResolution(
+            waiting: TaskItem.Waiting(
+              reason: "レビュー待ち", since: DesignSceneFixtures.taskToday, condition: condition),
+            how: .satisfied(output: "レビューが付いた"), at: DesignSceneFixtures.taskToday))
+      }
+    ])
+    var continued: [Int] = []
+    var opened: [Int] = []
+    model.onContinueWait = {
+      continued.append($0)
+      return nil
+    }
+    model.onOpenWorktreePalette = { opened.append($0) }
+    let window = mount(model)
+    XCTAssertEqual(model.selectedID, .task(1), "前提")
+
+    press(Key.enter, "\r", .command, to: window)
+    model.enterDetail()
+    flush(window)
+    press(Key.enter, "\r", .command, to: window)
+
+    XCTAssertEqual(continued, [1, 1])
+    XCTAssertEqual(opened, [])
+  }
+
   /// 押し始めを見ていない ↵ のリピートだけが入力欄に届いても、完了にも追加にもならない。
   func testEnterKeyRepeatAloneInTheFieldDoesNothing() {
     let model = model()

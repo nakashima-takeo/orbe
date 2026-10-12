@@ -5,7 +5,7 @@ import XCTest
 
 /// 押した瞬間だけ効くキー（入力欄の ⌘↵・条件の箱の ↵・会話の行の ↵）は、押し続けても 1 回だけ効く。
 ///
-/// 壊れると何が起きるか: ⌘↵ を長押しすると、頼んだ後に空になった入力欄から、関係の無い先頭タスクの頼む欄が開く。条件の箱が
+/// 壊れると何が起きるか: ⌘↵ を長押しすると、任せた後に空になった入力欄から、関係の無い先頭タスクの agent が開く。条件の箱が
 /// 開閉を繰り返す。会話のタブへ何度も移る。
 extension TaskPaletteCardKeyTests {
   /// 待っている条件に会話が付き、その会話のタブが開いているタスク 1 つ。
@@ -37,6 +37,8 @@ extension TaskPaletteCardKeyTests {
       asks.append($0)
       return nil
     }
+    var opened: [Int] = []
+    model.onOpenWorktreePalette = { opened.append($0) }
     let window = mount(model)
     type("見積もり", into: window)
 
@@ -45,6 +47,7 @@ extension TaskPaletteCardKeyTests {
     press(Key.enter, "\r", .command, repeating: true, to: window)
 
     XCTAssertEqual(asks, [.text("見積もり")])
+    XCTAssertEqual(opened, [], "空になった入力欄から先頭のタスクの agent を開かない")
   }
 
   func testEnterHeldDownOnTheConditionBoxTogglesOnce() {
