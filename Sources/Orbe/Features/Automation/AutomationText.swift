@@ -39,7 +39,7 @@ struct AutomationText {
     return day == today ? clock(date) : TaskDueText.date(day, today: today)
   }
 
-  /// 候補の一覧の頭。「13:00 の回 · 9 件取得 → 新しい 4 件を判定 → 候補 2」。
+  /// 候補の一覧の頭。「13:00 の回 · 9 件取得 → 新しい 4 件を処理 → 候補 2」。
   func runHeadline(_ run: AutomationRun?) -> String {
     guard let run else { return l10n.string(.automationNeverRan) }
     return l10n.format(.automationRunAt, stamp(run.startedAt)) + " · "
@@ -47,7 +47,7 @@ struct AutomationText {
         run, proposedOne: .automationProposedShortOne, proposedOther: .automationProposedShortOther)
   }
 
-  /// 自動追加の中身の前回。「今日 9:12 · 14 件取得 → 新しい 3 件を判定 → 候補 1 件」。
+  /// 自動追加の中身の前回。「今日 9:12 · 14 件取得 → 新しい 3 件を処理 → 候補 1 件」。
   func runDetail(_ run: AutomationRun?) -> String {
     guard let run else { return l10n.string(.automationNeverRan) }
     return moment(run.startedAt) + " · " + longSteps(run)
@@ -86,7 +86,7 @@ struct AutomationText {
     if fresh == 0 {
       parts.append(l10n.string(.automationNothingNew))
     } else {
-      parts.append(l10n.format(.automationJudged, fresh))
+      parts.append(l10n.format(.automationProcessed, fresh))
       parts.append(l10n.plural(Self.proposed(run), one: proposedOne, other: proposedOther))
     }
     return parts.joined(separator: " → ")

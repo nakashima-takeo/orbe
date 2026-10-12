@@ -39,7 +39,7 @@ extension L10n {
     .automationRunning: ("実行中…", "running…"),
     .automationRunAt: ("%@ の回", "%@ run"),
     .automationFetched: ("%lld 件取得", "fetched %lld"),
-    .automationJudged: ("新しい %lld 件を判定", "judged %lld new"),
+    .automationProcessed: ("新しい %lld 件を処理", "processed %lld new"),
     .automationProposedShortOne: ("候補 %lld", "%lld candidate"),
     .automationProposedShortOther: ("候補 %lld", "%lld candidates"),
     .automationProposedLongOne: ("候補 %lld 件", "%lld candidate"),

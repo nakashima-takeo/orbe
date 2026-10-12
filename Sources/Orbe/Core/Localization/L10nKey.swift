@@ -376,7 +376,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationRunning
   case automationRunAt
   case automationFetched
-  case automationJudged
+  case automationProcessed
   case automationProposedShortOne
   case automationProposedShortOther
   case automationProposedLongOne
