@@ -271,20 +271,21 @@ final class WindowControllerTaskControlTests: OrbeTestCase {
       "拒否した要求は一覧を変えない")
   }
 
-  /// 手で並べ替えていた頃の tasks.json（配列の順が作成の順と違う）を読んでも、全件を作成の新しい順で返す。
+  /// 保存の配列の順に依らず、作成日時の新しい順で返す。作成日時が同じなら ID の大きい方が先。
   func testListIsNewestFirstWhateverOrderTheSavedFileHolds() throws {
     let created = Date(timeIntervalSince1970: 1_800_000_000)
-    let saved = [2, 3, 1].map { id in
+    // ID の順と作成日時の順が食い違う（時計の巻き戻しや手で直した tasks.json）。2 と 3 は同時刻。
+    let saved = [(id: 2, after: 1.0), (id: 1, after: 2.0), (id: 3, after: 1.0)].map { entry in
       TaskItem(
-        id: id, title: "t\(id)", status: .todo, wait: nil, priority: .medium, due: nil,
-        workspace: nil, description: "", createdAt: created.addingTimeInterval(Double(id)),
+        id: entry.id, title: "t\(entry.id)", status: .todo, wait: nil, priority: .medium, due: nil,
+        workspace: nil, description: "", createdAt: created.addingTimeInterval(entry.after),
         createdBy: nil)
     }
     TaskPersistence.save(TasksFile(version: TaskPersistence.version, nextId: 4, tasks: saved))
 
     let wc = try launch()
 
-    XCTAssertEqual(try listed(wc).compactMap { $0["taskId"] as? Int }, [3, 2, 1])
+    XCTAssertEqual(try listed(wc).compactMap { $0["taskId"] as? Int }, [1, 3, 2])
   }
 
   func testDeleteReachesTheList() throws {
