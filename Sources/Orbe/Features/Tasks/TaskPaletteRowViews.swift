@@ -100,7 +100,7 @@ struct TaskPaletteList: View {
   }
 }
 
-/// 一覧の選べる行の骨格。選択行は accent の淡塗り。先頭の 22 は行頭の余白（頼む欄・GitHub の一覧と揃える）。
+/// 一覧の選べる行の骨格。選択行は accent の淡塗り。先頭の 22 は行頭の余白（GitHub の一覧と揃える）。
 struct TaskPaletteRowFrame<Content: View>: View {
   let selected: Bool
   var height = TaskPaletteRowMetrics.line
