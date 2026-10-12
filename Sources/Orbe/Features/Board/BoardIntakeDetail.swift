@@ -4,12 +4,10 @@ import SwiftUI
 /// 裏で走るもの（使えるツール・コマンド・作業ディレクトリ）を、いつも確かめられるため。原文も素の文字で描き、欄全体が縦に
 /// スクロールする（選択が替わると先頭へ戻る）。
 struct BoardIntakeDetail: View {
-  let standing: BoardIntakeStanding
+  let intake: Intake
   let text: IntakeText
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
-
-  private var intake: Intake { standing.intake }
 
   var body: some View {
     ScrollView {
@@ -31,7 +29,7 @@ struct BoardIntakeDetail: View {
       .padding(.horizontal, Theme.Space.bar + Theme.Space.hair)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
-    .id(standing.id)
+    .id(intake.id)
     .scrollIndicators(.automatic)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     .background(Color.theme.surfaceInk.opacity(0.025))

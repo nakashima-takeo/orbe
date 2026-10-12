@@ -15,7 +15,7 @@ struct IntakeText {
   }
 
   /// 「9:12」。
-  func clock(_ date: Date) -> String {
+  private func clock(_ date: Date) -> String {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = timeZone
     let c = calendar.dateComponents([.hour, .minute], from: date)
@@ -23,7 +23,7 @@ struct IntakeText {
   }
 
   /// 今日なら「13:00」、ほかの日は「10/3 13:00」。
-  func stamp(_ date: Date) -> String {
+  private func stamp(_ date: Date) -> String {
     TaskDueText.stamp(date, timeZone, today: today)
   }
 
