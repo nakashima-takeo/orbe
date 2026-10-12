@@ -52,6 +52,28 @@ extension AutomationRunnerTests {
     XCTAssertEqual(store.proposals.map(\.item.body), ["b の本文"], "本文は取得元の項目から")
   }
 
+  /// 中間の agent の段は、ツールを持たずに指示文と項目の行を受け、渡す項目の id を保つよう頼まれる——id を落とすと回が
+  /// 毎回失敗する。モデルを省略すると haiku で走る。
+  func testAMiddleAgentStepIsAskedToKeepTheIdsOfTheItemsItPassesOn() throws {
+    var definition = AutomationStoreTests.definition()
+    definition.steps.insert(
+      AutomationStep(
+        name: "英語だけ",
+        method: .agent(
+          AutomationStepAgent(cli: "claude", model: nil, instruction: "英語の項目だけ残す"))),
+      at: 0)
+    let automation = try create(definition)
+    try runner.runNow(automation.id)
+    jobs.finish(0, fetched(["a", "b"]))
+
+    guard case .agent(let call) = jobs.calls[1].job.work else { return XCTFail("中間の段は agent") }
+    XCTAssertEqual(call.tools, [])
+    XCTAssertEqual(call.model, "haiku")
+    XCTAssertTrue(call.prompt.contains("英語の項目だけ残す"))
+    XCTAssertTrue(call.prompt.contains(#""id":"a""#) && call.prompt.contains(#""id":"b""#))
+    XCTAssertTrue(call.prompt.contains(#"Keep the "id" of each item you pass on"#))
+  }
+
   /// 中間の段が何も残さなければ、最後の段を起こさずに成功として確定する。
   func testAnEmptyMiddleStepCommitsWithoutTheLastStep() throws {
     let automation = try create(filtered())
