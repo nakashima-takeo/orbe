@@ -133,11 +133,6 @@ struct ThemeFonts {
   let helpCaption = Font(Theme.Typography.helpCaption as CTFont)
   let helpKeyFn = Font(Theme.Typography.helpKeyFn as CTFont)
   let helpKeyArrow = Font(Theme.Typography.helpKeyArrow as CTFont)
-  // ボード
-  let boardHeading = Font(Theme.Typography.boardHeading as CTFont)
-  let boardDetailTitle = Font(Theme.Typography.boardDetailTitle as CTFont)
-  let boardValue = Font(Theme.Typography.boardValue as CTFont)
-  let boardPrompt = Font(Theme.Typography.boardPrompt as CTFont)
   // エディター面の空状態
   let editorLead = Font(Theme.Typography.editorLead as CTFont)
   let editorHint = Font(Theme.Typography.editorHint as CTFont)
@@ -151,4 +146,16 @@ struct ThemeFonts {
   let editorSearchField = Font(Theme.Typography.editorSearchField as CTFont)
   let editorSearchOption = Font(Theme.Typography.editorSearchOption as CTFont)
   let editorSearchNote = Font(Theme.Typography.editorSearchNote as CTFont)
+}
+
+extension NSFont {
+  /// 等幅の段の字を、大きさはそのままに太さだけ替えた字（SwiftUI の `Font(CTFont)` は `weight` を受けないため、段の字から作る）。
+  func monospacedWeight(_ weight: NSFont.Weight) -> NSFont {
+    NSFont.monospacedSystemFont(ofSize: pointSize, weight: weight)
+  }
+
+  /// CSS の line-height（倍率）で 1 行が占める高さと、字の自然な行の高さ（文字の描画が置く 1 行の高さ）の差（行間に足す量）。
+  func extraLeading(lineHeight multiple: CGFloat) -> CGFloat {
+    max(0, pointSize * multiple - NSLayoutManager().defaultLineHeight(for: self))
+  }
 }

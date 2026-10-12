@@ -10,13 +10,14 @@ import XCTest
 extension BoardAutomationTests {
   /// 一覧の行・欄・地の窓の中の点（1200×700 の窓、見本の寸法から）。
   private enum Point {
-    static let field = NSPoint(x: 300, y: 619)
-    /// 欄の枠の中で入力欄の外（上の余白・❯・「↵ 依頼」）。
+    static let field = NSPoint(x: 300, y: 669)
+    /// 欄の枠の中で入力欄の外（上の余白・❯・「↵ 依頼する」）。
     static let fieldMargins = [
-      NSPoint(x: 300, y: 632), NSPoint(x: 66, y: 613), NSPoint(x: 1120, y: 613),
+      NSPoint(x: 300, y: 684), NSPoint(x: 35, y: 669), NSPoint(x: 1140, y: 669),
     ]
-    static let secondRow = NSPoint(x: 120, y: 485)
-    static let ground = NSPoint(x: 120, y: 100)
+    static let secondRow = NSPoint(x: 120, y: 536)
+    /// 一覧でも欄でもない地（右の欄）。
+    static let ground = NSPoint(x: 800, y: 100)
   }
 
   func type(_ text: String, to window: NSWindow) {
@@ -168,7 +169,7 @@ extension BoardAutomationTests {
     XCTAssertNotEqual(automation.selectedAutomation?.id, before, "地のクリックの直後の ↓ は一覧に効く")
   }
 
-  /// 欄の枠のどこを押しても欄（入力欄の字の高さの外の余白・❯・「↵ 依頼」も）。
+  /// 欄の枠のどこを押しても欄（入力欄の字の高さの外の余白・❯・「↵ 依頼する」も）。
   func testClickingAnywhereInTheFieldsFrameMovesTheFocusToTheField() {
     let model = board()
     let automation = model.automation
