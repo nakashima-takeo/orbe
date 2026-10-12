@@ -12,7 +12,7 @@ extension SessionStoreTabGroupTests {
     let left = store.current.tabs[0]
 
     guard
-      case .activeWorkspaceChanged = store.removeTab(activeTab(store.current), origin: .gesture)
+      case .activeTabsChanged = store.removeTab(activeTab(store.current), origin: .gesture)
     else { return XCTFail("アクティブ workspace のタブを閉じたので描き直す") }
 
     XCTAssertEqual(store.current.selectedTabIndex, 0, "同じ連の左隣")
@@ -25,7 +25,7 @@ extension SessionStoreTabGroupTests {
     let right = store.current.tabs[2]
 
     guard
-      case .activeWorkspaceChanged = store.removeTab(activeTab(store.current), origin: .gesture)
+      case .activeTabsChanged = store.removeTab(activeTab(store.current), origin: .gesture)
     else { return XCTFail("アクティブ workspace のタブを閉じたので描き直す") }
 
     XCTAssertEqual(store.current.selectedTabIndex, 1, "index 据え置き＝右隣")
@@ -38,7 +38,7 @@ extension SessionStoreTabGroupTests {
     let right = store.current.tabs[2]
 
     guard
-      case .activeWorkspaceChanged = store.removeTab(activeTab(store.current), origin: .gesture)
+      case .activeTabsChanged = store.removeTab(activeTab(store.current), origin: .gesture)
     else { return XCTFail("アクティブ workspace のタブを閉じたので描き直す") }
 
     XCTAssertEqual(store.current.selectedTabIndex, 1)
@@ -52,7 +52,7 @@ extension SessionStoreTabGroupTests {
     let viewed = activeTab(store.current)
 
     guard
-      case .activeWorkspaceChanged = store.removeTab(store.current.tabs[2], origin: .gesture)
+      case .activeTabsChanged = store.removeTab(store.current.tabs[2], origin: .gesture)
     else { return XCTFail("アクティブ workspace のタブを閉じたので描き直す") }
 
     XCTAssertEqual(store.current.selectedTabIndex, 0)

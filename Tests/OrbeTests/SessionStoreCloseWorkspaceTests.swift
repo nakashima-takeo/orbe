@@ -67,7 +67,7 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
     let beta = ws("Beta", t2)
     let store = SessionStore(workspaces: [active, alpha, beta], activeWorkspace: 0)
 
-    guard case .activeWorkspaceChanged = store.removeTab(tab, origin: .gesture) else {
+    guard case .activeTabsChanged = store.removeTab(tab, origin: .gesture) else {
       return XCTFail("アクティブ workspace の 0タブ化はその場で描き直す")
     }
     XCTAssertEqual(store.current.selection, .empty, "ボードを持たない workspace は空表示")
@@ -92,12 +92,12 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
     active.selection = .tab(active.tabs[1])
     let store = SessionStore(workspaces: [active], activeWorkspace: 0)
 
-    guard case .activeWorkspaceChanged = store.removeTab(last, origin: .process) else {
+    guard case .activeTabsChanged = store.removeTab(last, origin: .process) else {
       return XCTFail("後方のタブを閉じたら描き直す")
     }
     XCTAssertTrue(active.selectedTab === viewed, "後方が消えても見ていたタブが選択されたまま")
 
-    guard case .activeWorkspaceChanged = store.removeTab(first, origin: .process) else {
+    guard case .activeTabsChanged = store.removeTab(first, origin: .process) else {
       return XCTFail("前方のタブを閉じたら描き直す")
     }
     XCTAssertTrue(active.selectedTab === viewed, "前方が消えても見ていたタブが選択されたまま")

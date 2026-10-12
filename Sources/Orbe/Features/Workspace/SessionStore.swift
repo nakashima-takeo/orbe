@@ -286,7 +286,7 @@ final class SessionStore {
   enum CloseTabOutcome {
     case notFound
     /// アクティブ workspace のタブが外れた（選択が動いたかに依らず、今の選択を描き直す）。
-    case activeWorkspaceChanged
+    case activeTabsChanged
     case backgroundChanged
   }
 
@@ -309,7 +309,7 @@ final class SessionStore {
         idx == r.upperBound - 1 && r.lowerBound < idx ? idx - 1 : min(idx, ws.tabs.count - 1)
       ws.selection = ws.tabs.indices.contains(next) ? .tab(ws.tabs[next]) : restingSelection(of: ws)
     }
-    return wsIndex == activeWorkspace ? .activeWorkspaceChanged : .backgroundChanged
+    return wsIndex == activeWorkspace ? .activeTabsChanged : .backgroundChanged
   }
 
   /// `index` を除く他 workspace のうち MRU（`lastUsedAt` 最大）の index。他が無ければ nil。
