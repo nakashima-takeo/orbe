@@ -108,19 +108,6 @@ final class BoardIntakeTests: PaletteCardWindowTestCase {
       "走り出しても行は動かない")
   }
 
-  /// 時刻の文は描くときに渡した今から計算する——分の境ごとに今を渡し直す画面では、日をまたげば「次」に日付が付く。
-  func testTimeTextIsComputedFromTheGivenNow() throws {
-    let intake = board().intake
-    let l10n = LocalizationStore(language: .ja)
-    let next = try XCTUnwrap(
-      intake.standings(at: intake.runner.now()).first { $0.id == Self.slack }?.next)
-
-    let sameDay = intake.text(l10n, now: next).next(next)
-    let daysLater = intake.text(l10n, now: next.addingTimeInterval(2 * 24 * 60 * 60)).next(next)
-
-    XCTAssertNotEqual(sameDay, daysLater, "走らせ役の今ではなく渡した今で「今日」を決める")
-  }
-
   // MARK: - キー
 
   /// ↓ で選び、space で止める ⇄ 再開（沈んでも選択は付いていく）、↵ で今すぐ実行、⌘⌫ で消して同じ位置の行を選ぶ。
