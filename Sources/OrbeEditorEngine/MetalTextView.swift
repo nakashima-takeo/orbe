@@ -156,13 +156,12 @@ final class MetalTextView: TextSurfaceInputView {
       ) { [weak self] _ in
         MainActor.assumeIsolated { self?.reduceMotionDidChange() }
       })
-    let blinkingChanged: @Sendable (Notification) -> Void = { [weak self] _ in
-      MainActor.assumeIsolated { self?.surface?.setCaretBlinks(CaretBlinking.systemPreference) }
-    }
     observers.append(
       NotificationCenter.default.addObserver(
-        forName: CaretBlinking.didChangeNotification, object: nil, queue: .main,
-        using: blinkingChanged))
+        forName: CaretBlinking.didChangeNotification, object: nil, queue: .main
+      ) { [weak self] _ in
+        MainActor.assumeIsolated { self?.surface?.setCaretBlinks(CaretBlinking.systemPreference) }
+      })
   }
 
   override func viewDidMoveToWindow() {

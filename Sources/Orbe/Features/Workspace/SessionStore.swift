@@ -129,7 +129,7 @@ final class SessionStore {
   func activeTabCwd() -> String? { tabCwd(inWorkspaceAt: activeWorkspace) }
 
   /// 新しい workspace の root の既定。作成画面の初期値と、制御 API で rootPath を省いたときが読む。
-  /// ホームなのは、今いる場所はたいてい既存の workspace の中にあり、ホームは補完で辿る中立の起点だから。
+  /// ホームなのは、今いる場所はたいてい既存の workspace の中だから。
   static var defaultNewWorkspaceRoot: String {
     FileManager.default.homeDirectoryForCurrentUser.path
   }
