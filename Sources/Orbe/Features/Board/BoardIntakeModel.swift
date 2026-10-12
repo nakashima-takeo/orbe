@@ -66,11 +66,6 @@ import SwiftUI
     return store.intake(id)
   }
 
-  /// 選んでいる自動追加の `now` での立ち位置。
-  func selected(at now: Date) -> BoardIntakeStanding? {
-    selectedIntake.map { BoardIntakeStanding($0, runner: runner, now: now) }
-  }
-
   /// 描くときの文。暦の今日は描くときの今から導く（開きっぱなしの画面で日をまたいでも「今日」が古くならない）。
   func text(_ l10n: LocalizationStore, now: Date) -> IntakeText {
     let timeZone = runner.calendar().timeZone

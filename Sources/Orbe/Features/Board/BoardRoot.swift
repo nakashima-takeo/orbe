@@ -103,7 +103,7 @@ struct BoardIntakeHeading: View {
 
 /// 一覧（左 3）と詳細（右 2）。詳細は自動追加を選んでいる間だけ出し、欄を選んでいる間は一覧が幅いっぱいを使う（⌘⇧X で入力の
 /// 行き先を選んでいる間に右の欄を出さないのと同じ）。一覧の器は 0 件でも常に置く焦点の宛先で、一覧のキーはここで受ける。器の
-/// クリック（行・地）は一覧へ。並び・選んだもの・文は `now` から計算する。
+/// クリック（行・地）は一覧へ。並び・文は `now` から計算する。
 struct BoardIntakeColumns: View {
   let model: BoardIntakeModel
   let now: Date
@@ -114,7 +114,7 @@ struct BoardIntakeColumns: View {
     let text = model.text(l10n, now: now)
     let standings = model.standings(at: now)
     GeometryReader { geometry in
-      let selected = model.selected(at: now)
+      let selected = model.selectedIntake
       let listWidth =
         selected == nil
         ? geometry.size.width : (geometry.size.width - Theme.Layout.boardColumnGap) * 3 / 5
@@ -137,7 +137,7 @@ struct BoardIntakeColumns: View {
         .focused(focused, equals: .list)
         .onKeyPress { model.handleKey($0) }
         if let selected {
-          BoardIntakeDetail(standing: selected, text: text)
+          BoardIntakeDetail(intake: selected, text: text)
         }
       }
     }
