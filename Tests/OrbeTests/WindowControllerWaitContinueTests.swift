@@ -149,7 +149,7 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
     XCTAssertNotNil(resolution(wc, id), "起きたことは残る")
   }
 
-  /// 確認の出力の制御文字（改行・タブ以外）は、会話へ届ける前に空白にする（起動引数の NUL が再開を壊さない）。
+  /// 確認の出力の制御文字（改行・タブ以外）は、会話へ届ける前に空白にする（貼る経路では端末の制御として届くため）。
   func testWhatHappenedReachesTheConversationWithoutControlCharacters() throws {
     let dump = try dump(.legacy)
     let id = try resolved(dump.controller, directory: nil, output: "a\u{0}b\u{1b}[31mc\td\ne")
