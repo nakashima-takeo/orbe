@@ -7,6 +7,9 @@ import XCTest
 /// 秘書の係を、実 `WindowController`・偽 claude で固定する。頼みのたびに、出どころの役目の指示と頼みの本文を起動の
 /// 引数にして Home に claude を 1 つ起こし、Home へ移ってそのタブを選ぶ。
 ///
+/// 壊れると何が起きるか: ⌘↵ で任せたのに ⌘⇧X が開いたままで、起きた claude が見えない。ボードの依頼でタスクを足す役目の
+/// claude が起きる。頼みが 1 本の会話に混ざる。claude が無いのに打った文が消える。
+///
 /// claude は必ず偽物（`stageFakeAgent`。入力を反響し続ける）。
 final class SecretaryTests: OrbeTestCase {
   let homeId = UUID()
@@ -42,16 +45,23 @@ final class SecretaryTests: OrbeTestCase {
 
   // MARK: - 起こす
 
-  func testAnAskOpensClaudeInHomeWithTheRoleAndTheFirstInputAndMovesThere() throws {
+  /// ⌘⇧X の入力の行き先で agent に任せると、⌘⇧X が閉じ、Home に起きた claude のタブへ移る。
+  func testHandingOverFromTheTaskPaletteOpensClaudeInHomeWithTheRoleAndMovesThere() throws {
     let wc = try launch()
+    XCTAssertTrue(wc.handleWindowKeyCommand(.showTaskPalette))
+    let palette = try XCTUnwrap(wc.model.taskPalette)
+    palette.query = "見積もりを山田さんに送る"
 
-    try wc.secretary.ask(.text("見積もりを山田さんに送る"), from: .palette)
+    palette.askWithQuery()
 
+    XCTAssertEqual(wc.presentedOverlay, .none, "⌘⇧X は閉じる")
     let tab = try XCTUnwrap(try homeTabs(wc).first, "Home に claude のタブが起きる")
     XCTAssertEqual(wc.current.persistentId, homeId, "Home へ移る")
     XCTAssertEqual(wc.activeTab?.id, tab.id, "そのタブを選ぶ")
     let command = try XCTUnwrap(tab.surface.initialCommand)
-    XCTAssertTrue(command.contains("--append-system-prompt"), "役目の指示を添える: \(command)")
+    XCTAssertTrue(
+      command.contains("--append-system-prompt") && command.contains("add_task")
+        && !command.contains("set_intake"), "タスクを足す役目を添える: \(command)")
     XCTAssertTrue(command.hasSuffix(" -- '見積もりを山田さんに送る'"), "頼みは最初の入力: \(command)")
 
     try wc.secretary.ask(.text("二件目"), from: .palette)
@@ -60,8 +70,8 @@ final class SecretaryTests: OrbeTestCase {
 
   // MARK: - Home のボードから
 
-  /// Home のボードの欄で頼むと、Home に claude のタブが起き、欄は空になる。
-  func testTheBoardFieldOpensClaudeAndClearsTheField() throws {
+  /// Home のボードの欄で頼むと、自動追加の定義を書く役目の claude が Home に起きてそのタブへ移り、欄は空になる。
+  func testTheBoardFieldOpensClaudeWithTheAutoAddRoleAndClearsTheField() throws {
     let wc = try launch()
     let automation = wc.board.automation
 
@@ -71,7 +81,12 @@ final class SecretaryTests: OrbeTestCase {
     XCTAssertEqual(automation.requestText, "", "受けたら欄は空")
     XCTAssertNil(wc.board.refusal, "断らない")
     let tab = try XCTUnwrap(try homeTabs(wc).first, "Home に claude のタブが起きる")
-    XCTAssertTrue(try XCTUnwrap(tab.surface.initialCommand).hasSuffix(" -- 'DM を候補に'"))
+    XCTAssertEqual(wc.activeTab?.id, tab.id, "そのタブへ移る")
+    let command = try XCTUnwrap(tab.surface.initialCommand)
+    XCTAssertTrue(
+      command.contains("set_intake") && !command.contains("add_task"),
+      "自動追加の定義を書く役目を添える: \(command)")
+    XCTAssertTrue(command.hasSuffix(" -- 'DM を候補に'"), "欄の文は最初の入力: \(command)")
   }
 
   // MARK: - 受けない
