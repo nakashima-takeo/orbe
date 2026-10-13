@@ -2,8 +2,8 @@ import Foundation
 
 /// Home のタスクの作業場（`<Home>/tasks/<ID>-<短い名前>/`）。リポジトリに属さないタスクは worktree の代わりにここで
 /// 作業し、タスクの worktree と同じ席に記録する——タブの連のキーとタスクの worktree は同じ根の規則
-/// （`GitWorktreeRoot.root(of:)`。git の外ならそのパス）で揃うので、行の agent の札・⌘T の続きからがそのまま効く。
-/// `start_task` と ⌘⇧X の ⌘T が同じこの規則を通る。
+/// （`GitWorktreeRoot.root(of:)`。git の外ならそのパス）で揃うので、行の agent の札・⌘↵ の続きからがそのまま効く。
+/// `start_task` と ⌘T の「タスクから開く」が同じこの規則を通る。
 enum HomeTaskFolder {
   /// 作業場のパス。記録が Home の `tasks/` の下ならそれ（消えていても同じ場所）、無ければ（リポジトリで始めたタスクを
   /// Home に移したときの worktree を含む）Home の下にタスクの ID と短い名前で決める。

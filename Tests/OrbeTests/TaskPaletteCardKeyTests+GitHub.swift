@@ -15,6 +15,7 @@ private typealias GitHub = TaskPaletteGitHubSamples
 extension TaskPaletteCardKeyTests {
   private enum GitHubKey {
     static let l: UInt16 = 37
+    static let o: UInt16 = 31
   }
 
   /// ⌘L は入力欄に文字があっても結び付けを始め、入力は変えない。素の l・L は文字として入る。
@@ -165,11 +166,11 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.selectedGitHubID, .item(GitHub.id(5)))
   }
 
-  // MARK: - ブラウザで開く（⌘↵）
+  // MARK: - ブラウザで開く（⌘O）
 
-  /// 一覧でも右の欄でも、⌘↵ は選んでいる項目の GitHub のページをブラウザで開く（結び付きの有無を問わない）。
+  /// 一覧でも右の欄でも、⌘O は選んでいる項目の GitHub のページをブラウザで開く（結び付きの有無を問わない）。
   /// タスクにはしない。
-  func testCommandEnterOpensTheSelectedItemInTheBrowserFromTheListAndThePane() {
+  func testCommandOOpensTheSelectedItemInTheBrowserFromTheListAndThePane() {
     let model = GitHub.model(
       [TaskPaletteSamples.task(1, "a") { $0.links = [GitHub.link(6)] }],
       issues: [GitHub.issue(6), GitHub.issue(5)], pullRequests: [GitHub.pullRequest(9)])
@@ -180,11 +181,11 @@ extension TaskPaletteCardKeyTests {
     for id in [GitHub.id(6), GitHub.id(5), GitHub.id(9)] {
       model.tapGitHubRow(.item(id))
       flush(window)
-      press(Key.enter, "\r", .command, to: window)
+      press(GitHubKey.o, "o", .command, to: window)
     }
     arrow(Key.right, to: window)
     XCTAssertEqual(model.area, .pane(.assign), "前提: 結び付いていない PR の右の欄")
-    press(Key.enter, "\r", .command, to: window)
+    press(GitHubKey.o, "o", .command, to: window)
 
     XCTAssertEqual(
       opened,
@@ -195,11 +196,13 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.store.tasks.count, 1, "タスクにしない")
   }
 
-  /// 結び付ける項目を選ぶ間の ⌘↵ は、開きもせず、↵ の結び付けとしても働かない。
-  func testCommandEnterWhilePickingAnItemNeitherOpensNorLinks() {
+  /// 結び付ける項目を選ぶ間の ⌘↵・⌘O は、タスクにも開きもせず、↵ の結び付けとしても働かない。
+  func testCommandEnterAndCommandOWhilePickingAnItemNeitherOpenNorLink() {
     let model = GitHub.model([TaskPaletteSamples.task(1, "a")], issues: [GitHub.issue(5)])
     var opened: [URL] = []
+    var openedTasks: [Int] = []
     model.onOpenURL = { opened.append($0) }
+    model.onOpenWorktreePalette = { openedTasks.append($0) }
     model.setTab(.tasks)
     model.area = .detail(.addLink)
     model.beginPickingItem()
@@ -207,17 +210,20 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.selectedGitHubID, .item(GitHub.id(5)), "前提: 項目を選ぶ状態")
 
     press(Key.enter, "\r", .command, to: window)
+    press(GitHubKey.o, "o", .command, to: window)
 
     XCTAssertEqual(opened, [])
+    XCTAssertEqual(openedTasks, [])
+    XCTAssertEqual(model.store.tasks.count, 1)
     XCTAssertEqual(model.store.tasks.first?.links, [])
     XCTAssertNotNil(model.pick)
   }
 
-  /// 右の欄の期限を打っている間の ⌘↵ は、打った期限の確定で、ブラウザでは開かない。
+  /// 右の欄の期限を打っている間の ⌘↵ は、打った期限の確定で、タスクにして開かない。
   func testCommandEnterWhileTypingThePaneDueCommitsIt() {
     let model = GitHub.model([], issues: [GitHub.issue(5)])
-    var opened: [URL] = []
-    model.onOpenURL = { opened.append($0) }
+    var opened: [Int] = []
+    model.onOpenWorktreePalette = { opened.append($0) }
     let window = mount(model)
     arrow(Key.right, to: window)
     arrow(Key.down, to: window)
@@ -229,6 +235,7 @@ extension TaskPaletteCardKeyTests {
 
     XCTAssertEqual(model.pane.due, TaskItem.DueDate("2025-10-06"))
     XCTAssertNil(model.draft)
+    XCTAssertEqual(model.store.tasks, [])
     XCTAssertEqual(opened, [])
   }
 

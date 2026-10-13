@@ -88,7 +88,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.selectedID, .task(1))
   }
 
-  /// タスクを選ぶ間は、選ぶこと以外でタスクを変えない（完了・削除・右の欄・タブ切替・⌘T）。
+  /// タスクを選ぶ間は、選ぶこと以外でタスクを変えない（完了・削除・右の欄・タブ切替・agent を開く）。
   func testPickingATaskCannotChangeTasks() {
     let palette = pickingFromIssueFive()
     var opened: [Int] = []
@@ -99,7 +99,6 @@ extension TaskPaletteModelTests {
     palette.delete(2)
     palette.enterDetail()
     palette.setTab(palette.tab.next)
-    palette.openWorktreePalette()
     palette.openAgent(forTask: 1)
 
     XCTAssertEqual(palette.store.tasks.map(\.id), [1, 2])
@@ -237,15 +236,14 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.selectedGitHubID, .item(GitHub.id(5)))
   }
 
-  /// 項目を選ぶ間は、⌘T・L・→ が効かない。
-  func testPickingAnItemCannotOpenLinkOrEnterThePane() {
+  /// 項目を選ぶ間は、L・→ が効かない。
+  func testPickingAnItemCannotLinkOrEnterThePane() {
     let palette = atAddLink()
     var opened: [Int] = []
     palette.onOpenWorktreePalette = { opened.append($0) }
     palette.beginPickingItem()
     palette.tapGitHubRow(.item(GitHub.id(5)))
 
-    palette.openWorktreePalette()
     palette.linkSelectedGitHubItem()
     palette.enterPane()
 

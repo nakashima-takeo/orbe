@@ -93,7 +93,7 @@ struct TaskPaletteFooter: View {
           case .ready(let conversation) = model.continuation(of: task)
         {
           PaletteActionLine(
-            key: "⌘T", template: l10n.string(.taskPaletteActionContinue),
+            key: "⌘↵", template: l10n.string(.taskPaletteActionContinue),
             slots: [.emphasis(task.title), .emphasis(conversation.command)])
         } else if let task = model.selectedTask {
           PaletteActionLine(
@@ -123,7 +123,6 @@ struct TaskPaletteFooter: View {
         TaskPaletteGitHubHints(model: model)
       } else if case .detail(let stop) = model.area {
         PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteHintOpenAgent))
-        PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteHintOpenWorktree))
         if case .link = stop {
           PaletteKeyHint(key: "⌫", label: l10n.string(.taskPaletteUnlink))
         }
@@ -138,11 +137,13 @@ struct TaskPaletteFooter: View {
         PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintClose))
       } else {
         if model.selectedTask != nil {
+          PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintDetail))
           PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteHintOpenAgent))
+          // 文字があるときの ⌘⌫ は入力欄の文字を消す。
+          if model.query.isEmpty {
+            PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteDelete))
+          }
         }
-        PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteHintOpenWorktree))
-        PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintEdit))
-        PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteDelete))
         PaletteKeyHint(key: "⇥", label: l10n.string(.taskPaletteHintTab))
         PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintClose))
       }
@@ -233,20 +234,20 @@ private struct TaskPaletteGitHubHints: View {
     if case .pane(let stop) = model.area {
       // 期限の ↵ は期限を打つ（左の 1 行が言う）。
       if stop != .due { PaletteKeyHint(key: "↵", label: l10n.string(.taskPaletteMakeTask)) }
-      PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteHintOpenInBrowser))
+      PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteMakeTaskOpen))
+      PaletteKeyHint(key: "⌘O", label: l10n.string(.taskPaletteHintOpenInBrowser))
       PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteHintField))
       PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintBack))
     } else if let row = model.selectedGitHubRow {
       if row.task == nil {
-        PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteMakeTaskOpen))
+        PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteMakeTaskOpen))
         PaletteKeyHint(key: "⌘L", label: l10n.string(.taskPaletteHintLink))
-        PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintEdit))
       } else {
-        PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteHintOpenWorktree))
+        PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteHintOpenAgent))
         PaletteKeyHint(key: "⌘L", label: l10n.string(.taskPaletteHintRelink))
         PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteUnlink))
       }
-      PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteHintOpenInBrowser))
+      PaletteKeyHint(key: "⌘O", label: l10n.string(.taskPaletteHintOpenInBrowser))
       PaletteKeyHint(key: "⇥", label: l10n.string(.taskPaletteHintTab))
       PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintClose))
     } else {

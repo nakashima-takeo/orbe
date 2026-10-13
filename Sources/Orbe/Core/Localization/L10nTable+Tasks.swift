@@ -39,7 +39,7 @@ extension L10n {
     .taskPaletteActionEditDue: ("期限を入れる", "Set due date"),
     .taskPaletteActionEditDescription: ("詳細を書く", "Write description"),
     .taskPaletteActionCommit: ("確定", "Confirm"),
-    .taskPaletteHintEdit: ("編集", "Edit"),
+    .taskPaletteHintDetail: ("詳細", "Details"),
     .taskPaletteHintTab: ("タブ", "Tab"),
     .taskPaletteHintField: ("項目", "Field"),
     .taskPaletteHintBack: ("一覧へ", "Back"),
@@ -74,7 +74,6 @@ extension L10n {
     .taskPaletteAgentTab: ("タブ %@", "tab %@"),
     .taskPaletteAgentGoToTab: ("タブへ", "Go to tab"),
     .taskPaletteActionGoToTab: ("%1$@ へ移る", "Go to %1$@"),
-    .taskPaletteHintOpenWorktree: ("開く", "Open"),
     .taskPaletteGitHubFilterAssigned: ("担当が自分", "Assigned to me"),
     .taskPaletteGitHubFilterAuthored: ("作成者が自分", "Created by me"),
     .taskPaletteGitHubFilterReview: ("レビュー依頼", "Review requests"),
@@ -105,9 +104,6 @@ extension L10n {
     ),
     .taskPaletteReviewFailed: (
       "GitHub のレビュアーに自分を追加できませんでした", "Couldn’t add you as a reviewer on GitHub"
-    ),
-    .taskPaletteMakeTaskNote: (
-      "⌘T で、タスクにしてから worktree を選んで開く", "⌘T makes it a task, then opens a worktree"
     ),
     .taskPaletteMakeTask: ("タスクにする", "Make a task"),
     .taskPaletteMakeTaskOpen: ("タスクにして開く", "Make a task and open"),

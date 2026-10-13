@@ -112,25 +112,14 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
     XCTAssertNil(GitHubOpenLists.shared.roots[root])
   }
 
-  /// 日本語入力の変換中の ⌘T は、タスク画面が握らずに変換へ渡す（⌘T の画面へ切り替えて未確定の文字を
-  /// 捨てない）。変換中でなければ握る。
-  func testCommandTWhileComposingIsLeftToTheInputMethod() throws {
+  /// タスク画面の表示中の ⌘T は、ほかのパレットと同じく窓のキーとして効かない（画面は閉じず、⌘T の画面へ
+  /// 切り替わらない）。
+  func testCommandTDoesNothingWhileTheScreenIsShown() throws {
     let wc = try launchOnAnEmptyWorkspace()
     _ = try openTaskPalette(wc)
-    let editor = NSTextView(frame: NSRect(x: 0, y: 0, width: 200, height: 40))
-    wc.window.contentView?.addSubview(editor)
-    addTeardownBlock { @MainActor in editor.removeFromSuperview() }
-    XCTAssertTrue(wc.window.makeFirstResponder(editor), "前提: 主窓の焦点が入力欄")
-    editor.setMarkedText(
-      "か", selectedRange: NSRange(location: 1, length: 0),
-      replacementRange: NSRange(location: NSNotFound, length: 0))
-    XCTAssertNotNil(IMEComposition.composingTextView(in: wc.window), "前提: 主窓で変換中")
 
     XCTAssertFalse(wc.handleWindowKeyCommand(.showWorktreePalette))
-    XCTAssertEqual(wc.presentedOverlay, .taskPalette, "⌘T の画面へ切り替わらない")
-
-    editor.unmarkText()
-    XCTAssertTrue(wc.handleWindowKeyCommand(.showWorktreePalette), "変換中でなければ握る")
+    XCTAssertEqual(wc.presentedOverlay, .taskPalette)
   }
 
   func testClosingTheScreenCommitsTheEditInProgress() throws {

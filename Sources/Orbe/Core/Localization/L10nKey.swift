@@ -210,7 +210,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteActionEditDue
   case taskPaletteActionEditDescription
   case taskPaletteActionCommit
-  case taskPaletteHintEdit
+  case taskPaletteHintDetail
   case taskPaletteHintTab
   case taskPaletteHintField
   case taskPaletteHintBack
@@ -243,7 +243,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAgentTab
   case taskPaletteAgentGoToTab
   case taskPaletteActionGoToTab
-  case taskPaletteHintOpenWorktree
   case taskPaletteGitHubFilterAssigned
   case taskPaletteGitHubFilterAuthored
   case taskPaletteGitHubFilterReview
@@ -266,7 +265,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteReviewSelfNote
   case taskPaletteAssignFailed
   case taskPaletteReviewFailed
-  case taskPaletteMakeTaskNote
   case taskPaletteMakeTask
   case taskPaletteMakeTaskOpen
   case taskPaletteLinkExisting
