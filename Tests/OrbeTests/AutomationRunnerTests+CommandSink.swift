@@ -112,8 +112,8 @@ extension AutomationRunnerTests {
 
     try runner.runNow(automation.id)
     jobs.finish(2, fetched(["a"]))
-    jobs.finish(3, replied(""))
-    XCTAssertEqual(jobs.calls.count, 4, "段が 0 行を出した回は走らない")
+    jobs.finish(3, replied(#"{"nothing": "要約するものが無い"}"#))
+    XCTAssertEqual(jobs.calls.count, 4, "段が 0 行を申告した回は走らない")
     run = try XCTUnwrap(store.automation(automation.id)?.runs.first)
     XCTAssertNil(run.failure)
     XCTAssertNil(run.sink)

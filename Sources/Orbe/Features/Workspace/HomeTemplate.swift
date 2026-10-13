@@ -128,11 +128,11 @@ enum HomeTemplate {
     - コマンド: 届いた行を標準入力で受けて走る。取得元も段も無ければ、トリガーのたびに走る（例: 毎晩 23 時に \
     `~/bin/daily-note.sh` を実行する）。
     - 報告: 最後の段が書いた短い文章を、その回の結果として残す（例: 毎日 18 時に開いている PR を要約する）。1 行目がボードの\
-    見出しと通知に出る。言うことが無ければ何も出さない。
+    見出しと通知に出る。言うことが無い回は「報告なし」になり、知らせない。
     - agent: 回ごとに裏で使い捨ての claude を起こし、定義の依頼文と名指ししたツールだけで仕事をさせる（例: 毎日 9:00 に、\
     レビュー待ちの PR をまとめて Slack の自分宛てに投稿する）。取得元か段があれば届いた行が 1 行以上ある回だけ、無ければトリガーの\
     たびに起きる。ツールを使って何かをしてほしいときはこれを使い、コマンドの出力先の中で `claude -p` を起こさない（Orbe の\
-    絞り込みが掛からない）。応答の 1 行目がボードの見出しと通知に出る。することが無い回は何も出さずに終わり、知らせない。
+    絞り込みが掛からない）。応答の 1 行目がボードの見出しと通知に出る。することが無い回は agent がそう申告して終わり、知らせない。
     - agent の名指しは MCP のツールの完全名か `Bash(<コマンドの接頭>:*)`（例 `Bash(gh search prs:*)`）だけで、最小にする。\
     agent は回ごとに作る空のディレクトリを作業ディレクトリにして起きる（ディレクトリに結び付く登録〔claude の local・project\
     スコープ〕の MCP サーバーは使えない）。Bash の規則だけなら、利用者の設定を読まずに走り、作業ディレクトリの外の読み取りも名指しの\
@@ -164,14 +164,14 @@ enum HomeTemplate {
     - Command: it runs with the lines that reach it on stdin. With neither a source nor steps, it runs on every \
     trigger (e.g. run `~/bin/daily-note.sh` every night at 23:00).
     - Report: the short text the last step writes is kept as the result of the run (e.g. summarize the \
-    open PRs every day at 18:00). Its first line shows on the board's heading and in the notification. With \
-    nothing to report, the last step prints nothing.
+    open PRs every day at 18:00). Its first line shows on the board's heading and in the notification. A run \
+    with nothing to report shows "nothing to report", and nobody is notified.
     - Agent: each run starts a throwaway claude in the background that does the job with only the \
     definition's request and the tools it names (e.g. every day at 9:00, post a digest of the PRs waiting for \
     my review to myself on Slack). With a source or steps it starts only when at least one line arrives; \
     without them, on every trigger. Use it when you want something done with tools; never start `claude -p` \
     inside a command sink (Orbe's limits do not apply there). The first line of its reply shows on the \
-    board's heading and in the notification. When there is nothing to do, it ends printing nothing, and \
+    board's heading and in the notification. When there is nothing to do, the agent says so and ends, and \
     nobody is notified.
     - An agent may name only full MCP tool names and `Bash(<command prefix>:*)` rules (e.g. \
     `Bash(gh search prs:*)`); name as few as possible. Each run starts in a fresh empty directory (MCP \

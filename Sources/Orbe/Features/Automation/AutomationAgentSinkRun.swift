@@ -81,7 +81,7 @@ final class AutomationAgentSinkRun: AutomationSinkRun {
         request: sink.request, now: now(), timeZone: calendar().timeZone))
     return run(.agent(call)) { result in
       var report = AutomationAgentReport(
-        commandLine: result.commandLine, ending: result.ending.text, text: nil)
+        commandLine: result.commandLine, ending: result.ending.text)
       let reply: String
       switch AutomationRunOutput.text(result, role: "sink") {
       case .failure(let failure):
@@ -95,7 +95,11 @@ final class AutomationAgentSinkRun: AutomationSinkRun {
             reason: "the sink agent reported an error: \(error)", report: .agent(report)))
         return
       }
-      report.text = AutomationReportSinkRun.kept(reply)
+      if let nothing = AutomationPrompts.nothing(reply) {
+        report.nothing = nothing
+      } else {
+        report.text = AutomationReportSinkRun.kept(reply)
+      }
       self.report = report
       completion(nil)
     }

@@ -3,12 +3,12 @@ import XCTest
 @testable import Orbe
 
 /// 出力先の agent。届いた行は「起こすか」を決めるだけで、依頼文は Orbe の枠と定義の依頼文だけ。名指しの規則をそのまま裏の
-/// agent に渡し、最終応答を報告と同じく回の結果に残す。`{"error": …}` の 1 行・落ちた・揃わなかった回は失敗で、項目は次の回に
-/// もう一度流れる。
+/// agent に渡し、最終応答を報告と同じく回の結果に残す。`{"nothing": …}` の 1 行はすることが無いという申告。`{"error": …}` の
+/// 1 行・落ちた・揃わなかった回は失敗で、項目は次の回にもう一度流れる。
 ///
 /// 壊れると何が起きるか: 取得した外の文面が、書き込みのツールを持つ agent の依頼文に入り、仕込まれた指示で投稿される。新着の
 /// 無い回にも agent が起きて投稿が重なる。agent ができなかった回が成功と読まれ、知らせが出ない。報告に JSON の例を書いた回が
-/// 失敗になる。
+/// 失敗になる。することが無いという申告が報告として残り、通知が鳴る。
 extension AutomationRunnerTests {
   static func agentSink(
     tools: [String] = ["Bash(gh search prs:*)", "mcp__slack__post"],
@@ -67,17 +67,31 @@ extension AutomationRunnerTests {
     XCTAssertEqual(recorded, [automation.id])
   }
 
-  /// 空の応答は文の無い成功（何も出さなかった回）。長い応答は報告と同じく切る。
-  func testAnEmptyReplyLeavesNoTextAndALongReplyIsCut() throws {
+  /// 全体が `{"nothing": …}` の 1 行の応答は、することが無いという申告で、理由を記録に残す。空の応答は文の無い成功。長い応答は
+  /// 報告と同じく切る。
+  func testANothingLineIsRecordedAndAnEmptyReplyLeavesNoTextAndALongReplyIsCut() throws {
     let automation = try create(agentDefinition())
     try runner.runNow(automation.id)
-    jobs.finish(0, replied("  \n"))
+    XCTAssertTrue(prompt(0).contains(#"{"nothing": "<why>"}"#))
+    jobs.finish(0, replied(#" {"nothing": "土曜なので投稿しない"}"# + "\n"))
+    var run = try XCTUnwrap(store.automation(automation.id)?.runs.first)
+    XCTAssertNil(run.failure)
     XCTAssertEqual(
-      store.automation(automation.id)?.runs.first?.sink,
+      run.sink,
+      .agent(
+        AutomationAgentReport(
+          commandLine: "claude -p", ending: "exited 0", text: nil, nothing: "土曜なので投稿しない")))
+
+    try runner.runNow(automation.id)
+    jobs.finish(1, replied("  \n"))
+    run = try XCTUnwrap(store.automation(automation.id)?.runs.first)
+    XCTAssertNil(run.failure)
+    XCTAssertEqual(
+      run.sink,
       .agent(AutomationAgentReport(commandLine: "claude -p", ending: "exited 0", text: nil)))
 
     try runner.runNow(automation.id)
-    jobs.finish(1, replied(String(repeating: "あ", count: 2_500)))
+    jobs.finish(2, replied(String(repeating: "あ", count: 2_500)))
     guard case .agent(let report) = store.automation(automation.id)?.runs.first?.sink else {
       return XCTFail("agent の記録")
     }
@@ -117,8 +131,8 @@ extension AutomationRunnerTests {
     try runner.runNow(automation.id)
     jobs.finish(0, fetched(["a"]))
     XCTAssertTrue(prompt(1).contains(#"Keep the "id" of each item you pass on"#), "中間の段の枠")
-    jobs.finish(1, replied(""))
-    XCTAssertEqual(jobs.calls.count, 2, "段が 0 行を出した回は起こさない")
+    jobs.finish(1, replied(#"{"nothing": "依頼は無い"}"#))
+    XCTAssertEqual(jobs.calls.count, 2, "段が 0 行を申告した回は起こさない")
     var run = try XCTUnwrap(store.automation(automation.id)?.runs.first)
     XCTAssertNil(run.failure)
     XCTAssertNil(run.sink)

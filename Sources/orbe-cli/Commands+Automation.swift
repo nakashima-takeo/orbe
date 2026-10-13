@@ -113,9 +113,10 @@ let automationUsage = """
              2000 characters) in the run record; a command last step prints
              it on stdout. Its first line shows on the board's heading and in
              the notification. An agent last step is told to keep it short and
-             to print nothing when there is nothing to report; a run with no
-             report succeeds as "nothing to report". Editing the definition
-             does not make the next run process every fetched item again.
+             to print only {"nothing": "…"} when there is nothing to report;
+             a run with no report succeeds as "nothing to report". Editing
+             the definition does not make the next run process every fetched
+             item again.
              {"kind": "agent", "agent": "claude", "model": "…",
               "tools": ["Bash(gh search prs:*)", "mcp__<server>__<tool>"],
               "request": "…"}
@@ -139,26 +140,28 @@ let automationUsage = """
              Without model it runs sonnet; it is cut off after 10 minutes, or
              3 minutes without output. Its final reply is kept as the result
              of the run (the first line shows on the board's heading and in
-             the notification). Orbe tells it to print nothing when there is
-             nothing to do; a run with an empty reply delivers nothing. A run
-             fails when the agent replies only {"error": "…"}, crashes, hits
-             its limit, or a named MCP tool is unavailable. A failed run, or
-             one Orbe did not finish, starts the agent again on the next run
-             (a post can be doubled). Editing the definition does not make the
-             next run process every fetched item again. The request stays in
-             automations.json; never put secrets in it.
+             the notification). Orbe tells it to reply only {"nothing": "…"}
+             when there is nothing to do; such a run delivers nothing (an
+             empty reply counts as done). A run fails when the agent replies
+             only {"error": "…"}, crashes, hits its limit, or a named MCP tool
+             is unavailable. A failed run, or one Orbe did not finish, starts
+             the agent again on the next run (a post can be doubled). Editing
+             the definition does not make the next run process every fetched
+             item again. The request stays in automations.json; never put
+             secrets in it.
     notify   "menuBar" or "notificationCenter"  (any sink; omit to stay
              silent)
              When a run delivers something (a proposal, a command run, a
-             report, an agent's reply), or on the first of consecutive failed
-             runs, the automation's name and the result line show with a
-             sound: in the menu bar, or in macOS Notification Center.
-             Notification Center keeps one notification per automation; a new
-             run replaces it. Setting notificationCenter makes macOS ask for
-             Orbe's notification permission if it is not decided yet; without
-             permission, the run shows in the menu bar. Clicking either opens
-             the automation on Home's board. Runs that deliver nothing are not
-             notified. Changing only notify does not stop a running run.
+             report, an agent run that had something to do), or on the first
+             of consecutive failed runs, the automation's name and the result
+             line show with a sound: in the menu bar, or in macOS Notification
+             Center. Notification Center keeps one notification per
+             automation; a new run replaces it. Setting notificationCenter
+             makes macOS ask for Orbe's notification permission if it is not
+             decided yet; without permission, the run shows in the menu bar.
+             Clicking either opens the automation on Home's board. Runs that
+             deliver nothing are not notified. Changing only notify does not
+             stop a running run.
   To edit, take .definition from list --json, change it and pipe it whole:
     orb automation list --json | jq '.automations[] |
       select(.automationId==3) | .definition' | … | orb automation set 3

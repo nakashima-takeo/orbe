@@ -202,6 +202,14 @@ extension AutomationStoreTests {
                 "kind": "agent", "commandLine": "claude -p --model sonnet", "ending": "exited 0",
                 "text": "レビュー待ちの PR 2 件を投稿した。"
               }
+            },
+            {
+              "startedAt": "2026-10-01T23:00:00.000Z", "endedAt": "2026-10-01T23:00:40.000Z",
+              "trigger": "schedule", "steps": [], "lastStepCountedBySink": false,
+              "sink": {
+                "kind": "agent", "commandLine": "claude -p --model sonnet", "ending": "exited 0",
+                "nothing": "レビュー待ちの PR は無かった"
+              }
             }
           ]
         }

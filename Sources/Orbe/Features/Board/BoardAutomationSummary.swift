@@ -99,8 +99,8 @@ extension BoardAutomationSummary {
         return heading ? String(text.prefix { !$0.isNewline }) : text
       }
       switch run.sink {
+      case .agent(let report): return Self.agentResult(report, heading: heading, l10n: l10n)
       case .command: return l10n.string(.boardRunDone)
-      case .agent: return l10n.string(.boardRunNothingDone)
       case .taskCandidates(let report) where report.proposed > 0:
         return heading
           ? l10n.format(.boardRunAddedTo, report.proposed, output)
@@ -119,7 +119,8 @@ extension BoardAutomationSummary {
       let now = run.trigger == .now ? " " + l10n.string(.automationNowMark) : ""
       return BoardRunLine(
         at: text.stamp(run.startedAt) + now, result: result(run, heading: false),
-        tone: Self.tone(run), wraps: run.failure != nil || Self.written(run) != nil)
+        tone: Self.tone(run),
+        wraps: run.failure != nil || Self.written(run) != nil || Self.declined(run))
     }
     strip = automation.runs.reversed().map(Self.tone)
     if let latest = automation.runs.first {
@@ -130,8 +131,8 @@ extension BoardAutomationSummary {
         mark = l10n.format(.boardRunMarkAdded, at, report.proposed)
       } else if case .report(.some) = latest.sink {
         mark = l10n.format(.boardRunMarkReported, at)
-      } else if case .agent(let report) = latest.sink, report.text != nil {
-        mark = l10n.format(.boardRunMark, at, l10n.string(.boardRunDone))
+      } else if case .agent(let report) = latest.sink {
+        mark = l10n.format(.boardRunMark, at, Self.agentResult(report, heading: true, l10n: l10n))
       } else {
         mark = l10n.format(.boardRunMark, at, result(latest, heading: false))
       }
@@ -241,14 +242,28 @@ extension BoardAutomationSummary {
     }
   }
 
-  /// 出力先へ出したかと、出力先の件数。タスク候補は候補を 1 つ以上受けた回、コマンドは走った回、報告と agent は文のある回が
-  /// 出した回で、件数は受けた候補の数・渡した行の数・報告か応答の数（1 か 0）。
+  /// 応答の文が無い agent の回の結果。することが無いと申告した回は「何もしなかった」（見出しでなければ理由付き）、ほかは「完了」。
+  private static func agentResult(
+    _ report: AutomationAgentReport, heading: Bool, l10n: LocalizationStore
+  ) -> String {
+    guard let nothing = report.nothing else { return l10n.string(.boardRunDone) }
+    return heading
+      ? l10n.string(.boardRunNothingDone) : l10n.format(.boardRunNothingDoneBecause, nothing)
+  }
+
+  /// agent がすることが無いと申告した回か。
+  private static func declined(_ run: AutomationRun) -> Bool {
+    if case .agent(let report) = run.sink { report.nothing != nil } else { false }
+  }
+
+  /// 出力先へ出したかと、出力先の件数。タスク候補は候補を 1 つ以上受けた回、コマンドは走った回、報告は文のある回、agent は
+  /// することが無いと申告しなかった回が出した回で、件数は受けた候補の数・渡した行の数・報告か応答の数（1 か 0）。
   private static func delivered(_ run: AutomationRun) -> (produced: Bool, count: Int) {
     switch run.sink {
     case .taskCandidates(let report): (report.proposed > 0, report.proposed)
     case .command(let report): (true, report.count)
     case .report(let text): (text != nil, text == nil ? 0 : 1)
-    case .agent(let report): (report.text != nil, report.text == nil ? 0 : 1)
+    case .agent(let report): (report.nothing == nil, report.nothing == nil ? 1 : 0)
     case nil: (false, 0)
     }
   }

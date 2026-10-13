@@ -83,7 +83,8 @@ enum AutomationPrompts {
     \(rows.isEmpty ? "(none)" : rows.joined(separator: "\n"))
 
     Output one JSON object per line and nothing else (no prose, no code fences). \
-    Keep the "id" of each item you pass on unchanged. Output nothing when no item remains.
+    Keep the "id" of each item you pass on unchanged. When no item remains, output only this one line instead: \
+    \(nothingLine)
     """
   }
 
@@ -111,9 +112,12 @@ enum AutomationPrompts {
     let failure: String?
   }
 
-  /// 次へ渡す段の出力を読む。出力があったのに 1 行も読めなければ失敗。`step` は失敗の文でどの段かを言う語
-  /// （`step "<名前>"`・`the last step`）。
+  /// 次へ渡す段の出力を読む。全体が `{"nothing": …}` の 1 行なら 0 行。出力があったのに 1 行も読めなければ失敗。`step` は
+  /// 失敗の文でどの段かを言う語（`step "<名前>"`・`the last step`）。
   static func readStep(_ text: String, step: String) -> StepReading {
+    if nothing(text) != nil {
+      return StepReading(rows: [], rejected: AutomationRejections(), failure: nil)
+    }
     let (rows, rejected) = readRows(text)
     let malformed = rows.isEmpty && rejected.count > 0
     return StepReading(
@@ -139,7 +143,8 @@ enum AutomationPrompts {
 
     Output only the report as plain text (no code fences), in the language of the user's instruction. \
     The first line is the summary shown on the board's heading and in the notification. Keep the whole report short \
-    (\(AutomationReportSinkRun.limit) characters at most). Output nothing when there is nothing to report.
+    (\(AutomationReportSinkRun.limit) characters at most). When there is nothing to report, output only this one \
+    line instead: \(nothingLine)
     """
   }
 
@@ -160,20 +165,34 @@ enum AutomationPrompts {
     When you are done, output only a short plain-text report of what you did (no code fences), in the language \
     of the user's request. The first line is the summary shown on the board's heading and in the notification. \
     Keep the whole report within \(AutomationReportSinkRun.limit) characters.
-    If the request leaves nothing to do this time, do nothing and output nothing at all.
+    If the request leaves nothing to do this time, do nothing and output only this one line instead: \
+    \(nothingLine)
     If you cannot do what the request asks (a tool fails, is unavailable or is refused), output only this one \
     line instead: {"error": "<what went wrong>"}
     """
   }
 
-  /// 出力先の agent の最終応答が失敗の申告なら、その理由。前後の空白を除いた全体が `{"error": …}` の 1 行のときだけ——報告の
-  /// 中に JSON の例を書いた回を失敗と読み違えないため。
+  /// 出力先の agent の最終応答が失敗の申告なら、その理由。
   static func sinkAgentError(_ reply: String) -> String? {
-    let trimmed = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+    only(ReportedError.self, reply)?.error
+  }
+
+  /// することが無いという申告の 1 行。目に見える出力なしで終えたモデルを claude が催促し、催促されたモデルは地の文を返しうるので、
+  /// することが無い回も 1 行で言わせる。
+  private static let nothingLine = #"{"nothing": "<why>"}"#
+
+  /// 出力がすることが無いという申告なら、その理由。
+  static func nothing(_ text: String) -> String? {
+    only(ReportedNothing.self, text)?.nothing
+  }
+
+  /// 前後の空白を除いた全体が `T` の 1 行なら、それ——文章や行の中に JSON の例を書いた出力を申告と読み違えないため。
+  private static func only<T: Decodable>(_: T.Type, _ text: String) -> T? {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.contains(where: \.isNewline),
-      case .success(let error) = JSONLines<ReportedError>.decode(trimmed)
+      case .success(let line) = JSONLines<T>.decode(trimmed)
     else { return nil }
-    return error.error
+    return line
   }
 
   // MARK: - 判定
@@ -330,6 +349,23 @@ private struct ReportedError: Decodable {
       throw DecodingError.dataCorruptedError(forKey: .id, in: c, debugDescription: "an item")
     }
     error = try c.decode(String.self, forKey: .error)
+  }
+}
+
+/// することが無いという申告（`id` を持たず文字列の `nothing` を持つ行）。
+private struct ReportedNothing: Decodable {
+  let nothing: String
+
+  private enum CodingKeys: String, CodingKey {
+    case id, nothing
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    guard !c.contains(.id) else {
+      throw DecodingError.dataCorruptedError(forKey: .id, in: c, debugDescription: "an item")
+    }
+    nothing = try c.decode(String.self, forKey: .nothing)
   }
 }
 

@@ -156,7 +156,7 @@ extension AutomationSink: Codable {
 
 /// `{"kind": "taskCandidates", "proposed": …, "resolved": …, "withdrawn": …, "rejected": …}`・
 /// `{"kind": "command", "commandLine": …, "ending": …, "count": …}`・`{"kind": "report", "text"?: …}`・
-/// `{"kind": "agent", "commandLine": …, "ending": …, "text"?: …}`。
+/// `{"kind": "agent", "commandLine": …, "ending": …, "text"?: …, "nothing"?: …}`。
 extension AutomationSinkReport: Codable {
   private enum CodingKeys: String, CodingKey {
     case kind, text

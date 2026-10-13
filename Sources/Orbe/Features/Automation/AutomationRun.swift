@@ -49,8 +49,10 @@ enum AutomationSinkReport: Equatable {
 struct AutomationAgentReport: Codable, Equatable {
   var commandLine: String
   var ending: String
-  /// agent の報告の文。言うことが無かった回と落ちた回は nil。
+  /// agent の報告の文。空を返した回・することが無いと申告した回・落ちた回は nil。
   var text: String?
+  /// agent がすることが無いと申告した回の理由。
+  var nothing: String?
 }
 
 /// 出力先のコマンドを走らせた回の記録（落ちた回も）。

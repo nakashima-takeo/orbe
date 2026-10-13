@@ -2,11 +2,11 @@ import XCTest
 
 @testable import Orbe
 
-/// 出力先の報告。最後の段の出力を JSON の行として読まず、文章のまま回の記録に残す。何も出さなかった回は「報告なし」の記録を
-/// 持ち、2,000 字を超える報告は切る。回を記録するたびに走らせ役が自動化の ID を知らせる。
+/// 出力先の報告。最後の段の出力を JSON の行として読まず、文章のまま回の記録に残す。空か `{"nothing": …}` の 1 行だけを出した回は
+/// 「報告なし」の記録を持ち、2,000 字を超える報告は切る。回を記録するたびに走らせ役が自動化の ID を知らせる。
 ///
 /// 壊れると何が起きるか: 報告の各行が形違いとして捨てられ、報告が残らない。何も言うことが無かった回が「すべて除外」と読まれる。
-/// 長い報告が回の記録を膨らませる。通知を付けた自動化の回がピルに出ない。
+/// 言うことが無いという申告が報告として残り、通知が鳴る。長い報告が回の記録を膨らませる。通知を付けた自動化の回がピルに出ない。
 extension AutomationRunnerTests {
   private func reportDefinition() -> AutomationDefinition {
     var definition = AutomationStoreTests.definition()
@@ -19,7 +19,8 @@ extension AutomationRunnerTests {
     let automation = try create(reportDefinition())
     try runner.runNow(automation.id)
     jobs.finish(0, fetched(["a", "b"]))
-    XCTAssertTrue(prompt(1).contains("Output nothing when there is nothing to report."))
+    XCTAssertTrue(
+      prompt(1).contains(#"When there is nothing to report, output only this one line"#))
     jobs.finish(1, replied("\n開いている PR は 2 件。\n- #1 …\n- #2 …\n\n"))
 
     let run = try XCTUnwrap(store.automation(automation.id)?.runs.first)
@@ -30,16 +31,19 @@ extension AutomationRunnerTests {
     XCTAssertEqual(recorded, [automation.id])
   }
 
-  func testAnEmptyLastStepIsNothingToReport() throws {
+  /// 空の出力と、`{"nothing": …}` の 1 行だけの出力は「報告なし」。
+  func testAnEmptyOrNothingLastStepIsNothingToReport() throws {
     let automation = try create(reportDefinition())
-    try runner.runNow(automation.id)
-    jobs.finish(0, fetched(["a"]))
-    jobs.finish(1, replied("  \n"))
+    for (index, output) in ["  \n", #" {"nothing": "変化なし"}"# + "\n"].enumerated() {
+      try runner.runNow(automation.id)
+      jobs.finish(index * 2, fetched(["a"]))
+      jobs.finish(index * 2 + 1, replied(output))
 
-    let run = try XCTUnwrap(store.automation(automation.id)?.runs.first)
-    XCTAssertNil(run.failure)
-    XCTAssertEqual(run.sink, .report(text: nil))
-    XCTAssertEqual(run.steps.last?.count, 0)
+      let run = try XCTUnwrap(store.automation(automation.id)?.runs.first)
+      XCTAssertNil(run.failure)
+      XCTAssertEqual(run.sink, .report(text: nil), output)
+      XCTAssertEqual(run.steps.last?.count, 0)
+    }
   }
 
   func testNothingNewLeavesNoReportRecord() throws {

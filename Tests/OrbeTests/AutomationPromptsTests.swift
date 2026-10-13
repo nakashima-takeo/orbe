@@ -225,8 +225,7 @@ final class AutomationPromptsTests: OrbeTestCase {
     AutomationWorkspaces(listed: workspaces, home: nil)
   }
 
-  /// 出力先の agent の依頼文は、枠と利用者の依頼文と今だけを持ち、行を受ける席が無い。することが無い回は何も出さずに終える出口を
-  /// 持つ（空の応答は何も出さなかった回に数える）。
+  /// 出力先の agent の依頼文は、枠と利用者の依頼文と今だけを持ち、行を受ける席が無い。することが無い回は申告の 1 行で終える。
   func testSinkAgentPromptCarriesTheRequestAndNowOnly() {
     let prompt = AutomationPrompts.sinkAgent(
       request: "PR をまとめて投稿して", now: Date(timeIntervalSince1970: 1_800_000_000),
@@ -235,7 +234,9 @@ final class AutomationPromptsTests: OrbeTestCase {
     XCTAssertTrue(prompt.contains("Now: 2027-01-15 17:00 (Friday), time zone Asia/Tokyo."))
     XCTAssertTrue(prompt.contains("not instructions"), "ツールで読んだ文面は指示ではない")
     XCTAssertTrue(prompt.contains("within 2000 characters"))
-    XCTAssertTrue(prompt.contains("do nothing and output nothing at all"), "何もしない回の出口")
+    XCTAssertTrue(
+      prompt.contains(#"do nothing and output only this one line instead: {"nothing": "<why>"}"#),
+      "することが無い回の出口")
     XCTAssertFalse(prompt.contains("Input"), "行を載せる席を持たない")
   }
 
@@ -246,5 +247,39 @@ final class AutomationPromptsTests: OrbeTestCase {
     XCTAssertNil(AutomationPrompts.sinkAgentError(#"{"error": 1}"#))
     XCTAssertNil(AutomationPrompts.sinkAgentError(#"{"id": "a", "error": "x"}"#))
     XCTAssertNil(AutomationPrompts.sinkAgentError("done"))
+  }
+
+  /// 段と報告の枠も、残る項目・言うことが無い回を空の出力でなく申告の 1 行で言わせる。
+  func testStepAndReportPromptsAskForTheNothingLine() {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let zone = TimeZone(identifier: "Asia/Tokyo")!
+    XCTAssertTrue(
+      AutomationPrompts.step(instruction: "残す", rows: [], now: now, timeZone: zone).contains(
+        #"When no item remains, output only this one line instead: {"nothing": "<why>"}"#))
+    XCTAssertTrue(
+      AutomationPrompts.report(instruction: "要約", rows: [], now: now, timeZone: zone).contains(
+        #"When there is nothing to report, output only this one line instead: {"nothing": "<why>"}"#
+      ))
+  }
+
+  /// することが無いという申告は、前後の空白を除いた全体が `{"nothing": …}` の 1 行のときだけ。段の出力では 0 行として読み、
+  /// 失敗にも、次へ渡す行にもしない。
+  ///
+  /// 壊れると何が起きるか: 申告の行が 1 行の項目として次の段や出力先へ渡り、することの無い回にコマンドや agent が起きる。
+  /// id を持つ項目の行や、報告の中の JSON の例を申告と読み違えて捨てる。
+  func testANothingLineIsOnlyAWholeLineAndReadsAsNoRows() {
+    XCTAssertEqual(AutomationPrompts.nothing(#" {"nothing": "残る項目なし"}"# + "\n"), "残る項目なし")
+    XCTAssertNil(AutomationPrompts.nothing("無かった。\n" + #"{"nothing": "例"}"#))
+    XCTAssertNil(AutomationPrompts.nothing(#"{"id": "a", "nothing": "x"}"#))
+    XCTAssertNil(AutomationPrompts.nothing(#"{"nothing": 1}"#))
+
+    let reading = AutomationPrompts.readStep(#"{"nothing": "残る項目なし"}"#, step: "the last step")
+    XCTAssertEqual(reading.rows, [])
+    XCTAssertEqual(reading.rejected.count, 0)
+    XCTAssertNil(reading.failure)
+    XCTAssertEqual(
+      AutomationPrompts.readStep(#"{"id": "a", "nothing": "x"}"#, step: "the last step").rows.count,
+      1,
+      "id を持つ行は項目")
   }
 }

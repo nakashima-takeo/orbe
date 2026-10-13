@@ -29,9 +29,10 @@ final class AutomationReportSinkRun: AutomationSinkRun {
     AutomationPrompts.report(instruction: instruction, rows: rows, now: now, timeZone: timeZone)
   }
 
-  /// 前後の空白を除き、上限を超えれば切る。最後の段の記録に載せる数は、報告があれば 1。
+  /// 前後の空白を除き、上限を超えれば切る。全体が `{"nothing": …}` の 1 行なら報告なし。最後の段の記録に載せる数は、報告が
+  /// あれば 1。
   func read(_ text: String) -> AutomationSinkReading<Output> {
-    let output = Output(text: Self.kept(text))
+    let output = Output(text: AutomationPrompts.nothing(text) == nil ? Self.kept(text) : nil)
     return .output(output, count: output.text == nil ? 0 : 1, rejected: AutomationRejections())
   }
 
