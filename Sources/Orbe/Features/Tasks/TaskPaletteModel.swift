@@ -10,7 +10,7 @@ struct TaskPaletteTaskList {
   }
   /// 表に載せたタスクの ID（表の並びの順）。リストの更新で空にし、中身を書くのは `TaskPaletteRows.listing` の結果だけ。
   var listed: [Int] = []
-  /// 結び付けるタスクを選ぶ状態の一覧か。
+  /// 結び付けるタスクを選ぶ状態の一覧か（`pick` からは決めない——選ぶ状態の間もタスクのタブの一覧を組み直すため）。
   let picking: Bool
 }
 
