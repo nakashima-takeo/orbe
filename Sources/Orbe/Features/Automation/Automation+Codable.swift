@@ -104,54 +104,56 @@ extension AutomationStep: Codable {
   }
 }
 
-/// `{"kind": "taskCandidates"}`。
+/// `{"kind": "taskCandidates"}`・`{"kind": "command", "command", "directory"?, "timeoutMinutes"?}`・`{"kind": "report"}`。
 extension AutomationSink: Codable {
   private enum CodingKeys: String, CodingKey {
-    case kind
-  }
-
-  private enum Kind: String, Codable {
-    case taskCandidates
+    case kind, command, directory, timeoutMinutes
   }
 
   init(from decoder: Decoder) throws {
-    switch try decoder.container(keyedBy: CodingKeys.self).decode(Kind.self, forKey: .kind) {
-    case .taskCandidates: self = .taskCandidates
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    switch try c.decode(String.self, forKey: .kind) {
+    case "taskCandidates": self = .taskCandidates
+    case "command":
+      self = .command(
+        AutomationSinkCommand(
+          command: BackgroundCommand(
+            script: try c.decode(String.self, forKey: .command),
+            directory: try c.decodeIfPresent(String.self, forKey: .directory)),
+          timeoutMinutes: try c.decodeIfPresent(Int.self, forKey: .timeoutMinutes)))
+    case "report": self = .report
+    default: throw unknownSinkKind(c, .kind)
     }
   }
 
   func encode(to encoder: Encoder) throws {
     var c = encoder.container(keyedBy: CodingKeys.self)
     switch self {
-    case .taskCandidates: try c.encode(Kind.taskCandidates, forKey: .kind)
+    case .taskCandidates: try c.encode("taskCandidates", forKey: .kind)
+    case .command(let sink):
+      try c.encode("command", forKey: .kind)
+      try c.encode(sink.command.script, forKey: .command)
+      try c.encodeIfPresent(sink.command.directory, forKey: .directory)
+      try c.encodeIfPresent(sink.timeoutMinutes, forKey: .timeoutMinutes)
+    case .report: try c.encode("report", forKey: .kind)
     }
   }
 }
 
-/// 中身だけを書く（タスク候補なら `{"accepted": …, "dismissed": …}`）。種類は定義の出力先が言うので書かず、読むのは定義を
-/// 先に読む `Automation` が受け持つ。
-extension AutomationSinkState: Encodable {
-  func encode(to encoder: Encoder) throws {
-    switch self {
-    case .taskCandidates(let state): try state.encode(to: encoder)
-    }
-  }
-}
-
-/// `{"kind": "taskCandidates", "proposed": …, "resolved": …, "withdrawn": …, "rejected": …}`。
+/// `{"kind": "taskCandidates", "proposed": …, "resolved": …, "withdrawn": …, "rejected": …}`・
+/// `{"kind": "command", "commandLine": …, "ending": …, "count": …}`・`{"kind": "report", "text"?: …}`。
 extension AutomationSinkReport: Codable {
   private enum CodingKeys: String, CodingKey {
-    case kind
-  }
-
-  private enum Kind: String, Codable {
-    case taskCandidates
+    case kind, text
   }
 
   init(from decoder: Decoder) throws {
-    switch try decoder.container(keyedBy: CodingKeys.self).decode(Kind.self, forKey: .kind) {
-    case .taskCandidates:
-      self = .taskCandidates(try AutomationTaskCandidatesReport(from: decoder))
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    switch try c.decode(String.self, forKey: .kind) {
+    case "taskCandidates": self = .taskCandidates(try AutomationTaskCandidatesReport(from: decoder))
+    case "command": self = .command(try AutomationCommandReport(from: decoder))
+    case "report": self = .report(text: try c.decodeIfPresent(String.self, forKey: .text))
+    default: throw unknownSinkKind(c, .kind)
     }
   }
 
@@ -159,9 +161,39 @@ extension AutomationSinkReport: Codable {
     var c = encoder.container(keyedBy: CodingKeys.self)
     switch self {
     case .taskCandidates(let report):
-      try c.encode(Kind.taskCandidates, forKey: .kind)
+      try c.encode("taskCandidates", forKey: .kind)
       try report.encode(to: encoder)
+    case .command(let report):
+      try c.encode("command", forKey: .kind)
+      try report.encode(to: encoder)
+    case .report(let text):
+      try c.encode("report", forKey: .kind)
+      try c.encodeIfPresent(text, forKey: .text)
     }
+  }
+}
+
+/// 種類は文字列で読む——知らない種類を、型の名前を出さずに言うため。
+private func unknownSinkKind<Key: CodingKey>(_ c: KeyedDecodingContainer<Key>, _ key: Key)
+  -> DecodingError
+{
+  DecodingError.dataCorruptedError(
+    forKey: key, in: c, debugDescription: "pass taskCandidates, command or report")
+}
+
+/// 値は文字列で読む——知らない通知先を、型の名前を出さずに言うため。
+extension AutomationNotify: Codable {
+  init(from decoder: Decoder) throws {
+    let c = try decoder.singleValueContainer()
+    guard let notify = Self(rawValue: try c.decode(String.self)) else {
+      throw DecodingError.dataCorruptedError(in: c, debugDescription: "pass menuBar")
+    }
+    self = notify
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.singleValueContainer()
+    try c.encode(rawValue)
   }
 }
 

@@ -69,6 +69,23 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertEqual(run(control, ["list"]), "")
   }
 
+  /// 取得元の無いコマンドの自動化の前回は、回の記録だけから「コマンドの終わり方」で出る（取得の数を出さない）。
+  func testListShowsTheEndingOfACommandSink() throws {
+    let control = try startControlProcess()
+    let id = run(
+      control, ["set"],
+      stdin: #"{"name": "日報", "trigger": {"dailyAt": ["23:00"]}, "steps": [], "#
+        + #""sink": {"kind": "command", "command": "cat >/dev/null"}}"#)
+
+    XCTAssertEqual(run(control, ["run", id]), "started automation \(id)")
+    XCTAssertTrue(
+      waitUntil(10) { control.target.automationStore.automation(Int(id)!)?.runs.isEmpty == false },
+      "今すぐの回が記録に残らない")
+    let last = row(control)[5]
+    XCTAssertTrue(last.hasSuffix(" command exited 0"), last)
+    XCTAssertFalse(last.contains("fetched"), last)
+  }
+
   /// `proposals <id>` はその自動化の棚の提案だけを、`proposals` は全部を 1 行 1 提案で出す。
   func testProposalsListsTheShelfOfTheGivenAutomation() throws {
     let control = try startControlProcess()

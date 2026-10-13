@@ -605,7 +605,10 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardRoleOutput
   case boardOrbeSeen
   case boardOutputTaskCandidates
+  case boardOutputCommand
+  case boardOutputReport
   case boardOutputTally
+  case boardOutputNotifyMenuBar
   case boardRunFailed
   case boardRunFailedShort
   case boardRunAdded
@@ -613,13 +616,16 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardRunNothingNew
   case boardRunAllDropped
   case boardRunNoneAdded
+  case boardRunDone
+  case boardRunNothingToReport
   case boardRunMark
   case boardRunMarkAdded
+  case boardRunMarkReported
   case boardGuideLead
   case boardGuideExamples
   case boardExampleSlack
   case boardExampleGitHub
-  case boardExampleBacklog
+  case boardExampleDailyNote
   case boardHintSelect
   case boardHintToList
   case boardAskPlaceholder

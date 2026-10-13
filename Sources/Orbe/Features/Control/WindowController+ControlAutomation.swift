@@ -86,6 +86,7 @@ extension WindowController {
             ] as [String: Any]
           },
         ] as [String: Any]
+    case .command, .report: break
     }
     return json
   }

@@ -104,6 +104,28 @@ enum AutomationPrompts {
     return (lines.accepted.map { AutomationRow(line: $0.line, text: $0.text) }, rejected)
   }
 
+  // MARK: - 報告
+
+  /// 報告の出力先が最後の agent の段に渡す依頼文。
+  static func report(instruction: String, rows: [String], now: Date, timeZone: TimeZone) -> String {
+    """
+    You write a short report for the user as the last step of an automation. You have no tools; read only \
+    what is below.
+
+    Now: \(local(now, timeZone)), time zone \(timeZone.identifier).
+
+    The user's instruction:
+    \(instruction)
+
+    Input (one JSON object per line):
+    \(rows.isEmpty ? "(none)" : rows.joined(separator: "\n"))
+
+    Output only the report as plain text (no code fences), in the language of the user's instruction. \
+    The first line is the summary shown on the board's heading and in the notification. Keep the whole report short \
+    (\(AutomationReportSinkRun.limit) characters at most). Output nothing when there is nothing to report.
+    """
+  }
+
   // MARK: - 判定
 
   /// タスク候補の出力先が最後の agent の段に渡す依頼文。`rows` は確かめた入力行。

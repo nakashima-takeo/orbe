@@ -6,7 +6,8 @@ import OrbeSessionLog
 ///
 /// 1 回が終わるまで同じ自動化の次の回は始まらない（重ねない保証・「今すぐ」・走っているかは番人が持つ）。番人が回を止めたら
 /// （何をするかの書き換え・削除）、走っている段か届けを止め、以後の確定を行わない。定義の変異はここを通し、番人の登録を
-/// 合わせる。状態を読み書きするのは枠（ストア）と出力先だけで、段は状態を持たない。
+/// 合わせる。状態を読み書きするのは枠（ストア）と出力先だけで、段は状態を持たない。回を記録するたびに `recorded` で
+/// 自動化の ID を知らせる（知らせるかどうか・何を出すかは受けた側がストアの今の値から決める）。
 final class AutomationRunner {
   let store: AutomationStore
   var now: () -> Date = Date.init
@@ -14,14 +15,17 @@ final class AutomationRunner {
 
   private let scheduler: BackgroundScheduler
   private let run: BackgroundScheduler.Run
+  private let recorded: (Int) -> Void
 
   init(
     store: AutomationStore, scheduler: BackgroundScheduler = BackgroundScheduler(),
-    run: @escaping BackgroundScheduler.Run = { BackgroundRuns.shared.run($0, completion: $1) }
+    run: @escaping BackgroundScheduler.Run = { BackgroundRuns.shared.run($0, completion: $1) },
+    recorded: @escaping (Int) -> Void
   ) {
     self.store = store
     self.scheduler = scheduler
     self.run = run
+    self.recorded = recorded
   }
 
   /// 起動時に一度、全自動化を番人へ載せる（止めた自動化は予定なしで）。
@@ -111,12 +115,20 @@ final class AutomationRunner {
       finish(now())
       return BackgroundRunHandle {}
     }
+    let definition = automation.definition
     let attempt = Attempt(
-      automationId: id, definition: automation.definition,
-      trigger: trigger == .now ? .now : .schedule, finish: finish)
-    switch automation.definition.sink {
+      automationId: id, definition: definition, trigger: trigger == .now ? .now : .schedule,
+      startedAt: now(), finish: finish)
+    switch definition.sink {
     case .taskCandidates:
       runSource(Pass(attempt, AutomationTaskCandidates(store: store, automationId: id)), automation)
+    case .command(let command):
+      let sink = AutomationCommandSinkRun(
+        command, runId: automation.runId,
+        producesRows: definition.source != nil || !definition.steps.isEmpty, run: run)
+      runSource(Pass(attempt, sink), automation)
+    case .report:
+      runSource(Pass(attempt, AutomationReportSinkRun()), automation)
     }
     return BackgroundRunHandle {
       attempt.cancelled = true
@@ -127,7 +139,7 @@ final class AutomationRunner {
   /// 新着の流れの取得元にだけ、前回成功した回の開始時刻を目印として渡す。
   private func runSource<Sink>(_ pass: Pass<Sink>, _ automation: Automation) {
     guard let source = automation.definition.source else {
-      runStep(0, rows: [], pass)
+      forward([], pass)
       return
     }
     let since = source.coverage == .newArrivals ? automation.lastSucceededAt : nil
@@ -137,7 +149,6 @@ final class AutomationRunner {
   }
 
   private func sourced<Sink>(_ result: BackgroundRunResult, _ pass: Pass<Sink>) {
-    pass.ran(result)
     var report = AutomationStepReport(
       name: nil, commandLine: result.commandLine, ending: result.ending.text, count: 0,
       rejected: AutomationRejections())
@@ -162,23 +173,35 @@ final class AutomationRunner {
       settle(pass, nil)
       return
     }
-    runStep(0, rows: fresh.map(AutomationPrompts.row), pass)
+    forward(fresh.map(AutomationPrompts.row), pass)
+  }
+
+  /// 決まった行を、段があれば最初の段へ、無ければ出力先へ渡す。
+  private func forward<Sink>(_ rows: [String], _ pass: Pass<Sink>) {
+    guard pass.attempt.definition.steps.isEmpty else {
+      runStep(0, rows: rows, pass)
+      return
+    }
+    guard let rows = prepared(rows, pass) else { return }
+    toSink(rows.map { $0 + "\n" }.joined(), step: nil, pass)
+  }
+
+  /// 出力先へ向かう最後の入力を出力先に確かめさせる。行があったのに全部外れたら回を失敗にして nil を返す。
+  private func prepared<Sink>(_ rows: [String], _ pass: Pass<Sink>) -> [String]? {
+    let checked = pass.sink.prepare(rows)
+    guard checked.count > 0 || rows.isEmpty else {
+      fail(pass, "no line passed to the last step has the id of a new item")
+      return nil
+    }
+    return checked
   }
 
   private func runStep<Sink>(_ index: Int, rows: [String], _ pass: Pass<Sink>) {
     let definition = pass.attempt.definition
-    guard definition.steps.indices.contains(index) else {
-      settle(pass, nil)
-      return
-    }
     let last = index == definition.steps.count - 1
     var rows = rows
     if last {
-      let checked = pass.sink.prepareLastStep(rows)
-      guard checked.count > 0 || rows.isEmpty else {
-        fail(pass, "no line passed to the last step has the id of a new item")
-        return
-      }
+      guard let checked = prepared(rows, pass) else { return }
       rows = checked
     }
     let job: BackgroundJob
@@ -205,14 +228,13 @@ final class AutomationRunner {
   }
 
   private func stepped<Sink>(_ result: BackgroundRunResult, _ index: Int, _ pass: Pass<Sink>) {
-    pass.ran(result)
     let definition = pass.attempt.definition
     let name = definition.steps[index].name
     var report = AutomationStepReport(
       name: name, commandLine: result.commandLine, ending: result.ending.text, count: 0,
       rejected: AutomationRejections())
     let text: String
-    switch Self.output(result, role: "step \"\(name)\"") {
+    switch AutomationRunOutput.text(result, role: "step \"\(name)\"") {
     case .failure(let failure):
       pass.record.steps.append(report)
       fail(pass, failure.reason)
@@ -220,25 +242,45 @@ final class AutomationRunner {
     case .success(let output):
       text = output
     }
+    guard index < definition.steps.count - 1 else {
+      toSink(text, step: report, pass)
+      return
+    }
     let (rows, rejected) = AutomationPrompts.readRows(text)
     report.count = rows.count
     report.rejected = rejected
     pass.record.steps.append(report)
-    guard index == definition.steps.count - 1 else {
-      if rows.isEmpty, rejected.count > 0 {
-        fail(pass, "every line of the output of step \"\(name)\" was malformed")
-      } else if rows.isEmpty {
-        settle(pass, nil)
-      } else {
-        runStep(index + 1, rows: rows.map(\.text), pass)
-      }
-      return
+    if rows.isEmpty, rejected.count > 0 {
+      fail(pass, "every line of the output of step \"\(name)\" was malformed")
+    } else if rows.isEmpty {
+      settle(pass, nil)
+    } else {
+      runStep(index + 1, rows: rows.map(\.text), pass)
     }
-    let output = pass.sink.read(rows)
+  }
+
+  /// 出力先に読ませて届ける。`text` は最後の段の出力（段が無ければ出力先が読む行）。最後の段の記録 `step` には、出力先が
+  /// 数えた数を載せて回の記録に足す。出力先で落ちた回は、出力先の記録も回の記録に残す。
+  private func toSink<Sink>(_ text: String, step: AutomationStepReport?, _ pass: Pass<Sink>) {
+    var step = step
+    let output: Sink.Output
+    switch pass.sink.read(text) {
+    case .failed(let reason, let rejected):
+      step?.rejected = rejected
+      if let step { pass.record.steps.append(step) }
+      fail(pass, reason)
+      return
+    case .output(let read, let count, let rejected):
+      step?.count = count
+      step?.rejected = rejected
+      if let step { pass.record.steps.append(step) }
+      output = read
+    }
     pass.attempt.current = pass.sink.deliver(output) { [weak self] failure in
       guard !pass.attempt.cancelled else { return }
       if let failure {
-        self?.fail(pass, failure)
+        pass.record.sink = failure.report
+        self?.fail(pass, failure.reason)
       } else {
         self?.settle(pass, output)
       }
@@ -258,17 +300,21 @@ final class AutomationRunner {
   /// 確定（成功）。
   private func settle<Sink>(_ pass: Pass<Sink>, _ output: Sink.Output?) {
     let sink = pass.sink
-    let endedAt = pass.record.endedAt
+    let endedAt = now()
+    pass.record.endedAt = endedAt
     store.commit(pass.attempt.automationId, pass.record, fetched: pass.fetched) {
       sink.commit(output, into: &$0, automations: $1, endedAt: endedAt)
     }
+    recorded(pass.attempt.automationId)
     pass.attempt.finish(pass.record.startedAt)
   }
 
   /// 失敗した回。記録と最後に回った時刻だけを進める。
   private func fail<Sink>(_ pass: Pass<Sink>, _ reason: String) {
+    pass.record.endedAt = now()
     pass.record.failure = reason
     store.recordFailure(of: pass.attempt.automationId, pass.record)
+    recorded(pass.attempt.automationId)
     pass.attempt.finish(pass.record.startedAt)
   }
 
@@ -277,17 +323,20 @@ final class AutomationRunner {
     let automationId: Int
     let definition: AutomationDefinition
     let trigger: AutomationRun.Trigger
+    /// Orbe が回を始めた時刻。
+    let startedAt: Date
     let finish: (Date) -> Void
     var current: BackgroundRunHandle?
     var cancelled = false
 
     init(
       automationId: Int, definition: AutomationDefinition, trigger: AutomationRun.Trigger,
-      finish: @escaping (Date) -> Void
+      startedAt: Date, finish: @escaping (Date) -> Void
     ) {
       self.automationId = automationId
       self.definition = definition
       self.trigger = trigger
+      self.startedAt = startedAt
       self.finish = finish
     }
   }
@@ -298,28 +347,19 @@ final class AutomationRunner {
     let sink: Sink
     var record: AutomationRun
     var fetched: [AutomationItem] = []
-    private var began = false
 
+    /// 終わりは確定か失敗のときに入る。
     init(_ attempt: Attempt, _ sink: Sink) {
       self.attempt = attempt
       self.sink = sink
       record = AutomationRun(
-        startedAt: .distantPast, endedAt: .distantPast, trigger: attempt.trigger, source: nil,
-        fresh: nil, steps: [], sink: nil, failure: nil)
-    }
-
-    /// 回の始まりは最初に走ったものの始まり、終わりは最後に走ったものの終わり。
-    func ran(_ result: BackgroundRunResult) {
-      if !began {
-        record.startedAt = result.startedAt
-        began = true
-      }
-      record.endedAt = result.endedAt
+        startedAt: attempt.startedAt, endedAt: attempt.startedAt, trigger: attempt.trigger,
+        source: nil, fresh: nil, steps: [], sink: nil, failure: nil)
     }
   }
 }
 
-/// 走らせるものの組み立てと、その出力の読み取り。
+/// 走らせるものの組み立てと、取得の出力の読み取り。
 extension AutomationRunner {
   fileprivate static func sourceJob(_ source: AutomationSource, since: Date?) -> BackgroundJob {
     switch source.method {
@@ -339,59 +379,9 @@ extension AutomationRunner {
   fileprivate static func readSource(_ result: BackgroundRunResult)
     -> AutomationPrompts.FetchReading
   {
-    switch output(result, role: "fetch") {
+    switch AutomationRunOutput.text(result, role: "fetch") {
     case .failure(let failure): .failed(failure.reason, rejected: AutomationRejections())
     case .success(let text): AutomationPrompts.readFetch(text)
     }
-  }
-
-  /// 走らせたものの出力。コマンドは終了コード 0 で UTF-8 の標準出力、agent は終了コード 0 で最終応答があり失敗の報告で
-  /// ないこと。
-  fileprivate static func output(_ result: BackgroundRunResult, role: String) -> Result<
-    String, ReplyFailure
-  > {
-    if case .command(let stdout, let stderr) = result.output {
-      guard result.ending == .exited(0) else {
-        return .failure(ReplyFailure(failure(role, result.ending, detail: stderr.data)))
-      }
-      guard let text = String(bytes: stdout.data, encoding: .utf8) else {
-        return .failure(ReplyFailure("the \(role) output is not UTF-8"))
-      }
-      return .success(text)
-    }
-    guard case .agent(let reply, let stderr) = result.output, result.ending == .exited(0) else {
-      var detail = Data()
-      if case .agent(let reply, let stderr) = result.output {
-        detail = reply.map { Data($0.text.utf8) } ?? stderr.data
-      }
-      return .failure(ReplyFailure(failure(role, result.ending, detail: detail)))
-    }
-    guard let reply else {
-      return .failure(
-        ReplyFailure(
-          failure(role, result.ending, detail: stderr.data, what: "ended without a reply")))
-    }
-    guard !reply.isError else {
-      return .failure(ReplyFailure("the \(role) agent reported an error: \(snippet(reply.text))"))
-    }
-    return .success(reply.text)
-  }
-
-  fileprivate static func failure(
-    _ role: String, _ ending: BackgroundEnding, detail: Data, what: String? = nil
-  ) -> String {
-    let text = snippet(String(bytes: detail, encoding: .utf8) ?? "")
-    let head = "the \(role) \(what ?? "ended: \(ending.text)")"
-    return text.isEmpty ? head : "\(head): \(text)"
-  }
-
-  fileprivate static func snippet(_ text: String) -> String {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    return trimmed.count > 500 ? String(trimmed.prefix(500)) + "…" : trimmed
-  }
-
-  fileprivate struct ReplyFailure: Error {
-    let reason: String
-    init(_ reason: String) { self.reason = reason }
   }
 }

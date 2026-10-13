@@ -8,7 +8,8 @@ import SwiftUI
 /// ① 要対応 0・閉じ切り: 減光した ◐ だけ（地なし・数字なし・水平余白も持たない）。
 /// ② `store.transient` が生きている間: 印 11＋WS 名（上限で省略）＋文言（残り予算まで）を
 ///    **1 つの箱**として滲み出し、件数は仕舞われる。祝いは艶の走査 1 本が担う。印は agent なら
-///    状態グリフ、タスクの知らせなら丸に ✓。タスクに workspace が無ければ WS 名の欄を出さない。
+///    状態グリフ、タスクの知らせなら丸に ✓、自動化の知らせなら一覧の行と同じ点。タスクに workspace が無ければ WS 名の欄を
+///    出さず、自動化は WS 名の欄に自動化の名前を出す。
 /// ③ 閉じ切りで要対応あり: ◐＋件数（waiting+done のみ）。地 surfaceInk 16%。
 /// ④ ドロップダウン表示中はピル地を accent 35% に。
 struct MenuBarStatusView: View {
@@ -150,6 +151,14 @@ struct MenuBarStatusView: View {
         }
         workspaceSlot(secretary.workspaceName)
         messageSlot(secretary.text)
+      case .automation(let automation):
+        Circle()
+          .fill(automation.failed ? Color.theme.danger : Color.theme.accentBright)
+          .frame(width: 6, height: 6)
+          .frame(width: 11, height: 11)
+          .environment(\.colorScheme, .dark)
+        workspaceSlot(automation.name)
+        messageSlot(automation.text)
       }
     }
   }

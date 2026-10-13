@@ -58,7 +58,8 @@ final class WindowController: NSObject, NSWindowDelegate {
   // workspace の参照は表示・応答のときに解くので、workspace の復元との順序の依存は無い。
   let taskStore = TaskStore()
   // 受信の走らせ役。定義の変異はここを通して番人の登録を合わせ、読みと提案のさばきは `automationStore` が持つ。
-  let automationRunner = AutomationRunner(store: AutomationStore())
+  private(set) lazy var automationRunner = AutomationRunner(
+    store: AutomationStore(), recorded: { [weak self] in self?.notifyAutomationRecorded($0) })
   var automationStore: AutomationStore { automationRunner.store }
   // worktree ごとに動いている agent の索引。flushChrome が作り直し、タスク画面と ⌘T が読む。
   let worktreeAgents = WorktreeAgentActivity()

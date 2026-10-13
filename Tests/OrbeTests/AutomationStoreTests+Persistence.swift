@@ -31,7 +31,7 @@ extension AutomationStoreTests {
 extension AutomationStoreTests {
   private static let frozenFile = #"""
     {
-      "version": 1, "nextAutomationId": 4, "nextProposalId": 5,
+      "version": 1, "nextAutomationId": 5, "nextProposalId": 5,
       "automations": [
         {
           "id": 1,
@@ -88,6 +88,30 @@ extension AutomationStoreTests {
           ]
         },
         {
+          "id": 2,
+          "definition": {
+            "name": "日報の下書き",
+            "trigger": {"dailyAt": ["23:00"]},
+            "steps": [],
+            "sink": {
+              "kind": "command", "command": "~/bin/daily-note.sh", "directory": "/Users/me",
+              "timeoutMinutes": 10
+            }
+          },
+          "paused": false, "reviewAll": false,
+          "createdAt": "2026-10-01T09:30:00.000Z",
+          "lastRunAt": "2026-10-01T14:00:00.000Z",
+          "lastSucceededAt": "2026-10-01T14:00:00.000Z",
+          "lastFetched": [],
+          "runs": [
+            {
+              "startedAt": "2026-10-01T14:00:00.000Z", "endedAt": "2026-10-01T14:00:02.000Z",
+              "trigger": "schedule", "steps": [],
+              "sink": {"kind": "command", "commandLine": "~/bin/daily-note.sh", "ending": "exited 0", "count": 0}
+            }
+          ]
+        },
+        {
           "id": 3,
           "definition": {
             "name": "Slack: 自分宛",
@@ -103,6 +127,45 @@ extension AutomationStoreTests {
           "paused": true, "reviewAll": true,
           "createdAt": "2026-10-01T10:00:00.000Z",
           "lastFetched": [], "runs": []
+        },
+        {
+          "id": 4,
+          "definition": {
+            "name": "開いている PR の要約",
+            "trigger": {"dailyAt": ["18:00"]},
+            "steps": [{"name": "要約", "agent": "claude", "instruction": "開いている PR を要約する"}],
+            "sink": {"kind": "report"},
+            "notify": "menuBar"
+          },
+          "paused": false, "reviewAll": false,
+          "createdAt": "2026-10-01T11:00:00.000Z",
+          "lastRunAt": "2026-10-02T18:00:00.000Z",
+          "lastSucceededAt": "2026-10-02T18:00:00.000Z",
+          "lastFetched": [],
+          "runs": [
+            {
+              "startedAt": "2026-10-02T18:00:00.000Z", "endedAt": "2026-10-02T18:00:30.000Z",
+              "trigger": "schedule",
+              "steps": [
+                {
+                  "name": "要約", "commandLine": "claude -p", "ending": "exited 0", "count": 0,
+                  "rejected": {"count": 0, "reasons": []}
+                }
+              ],
+              "sink": {"kind": "report"}
+            },
+            {
+              "startedAt": "2026-10-01T18:00:00.000Z", "endedAt": "2026-10-01T18:00:30.000Z",
+              "trigger": "schedule",
+              "steps": [
+                {
+                  "name": "要約", "commandLine": "claude -p", "ending": "exited 0", "count": 1,
+                  "rejected": {"count": 0, "reasons": []}
+                }
+              ],
+              "sink": {"kind": "report", "text": "開いている PR は 2 件。\n- #412 レビュー待ち"}
+            }
+          ]
         }
       ],
       "proposals": [

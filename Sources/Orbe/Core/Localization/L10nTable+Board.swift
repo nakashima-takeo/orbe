@@ -17,6 +17,9 @@ extension L10n {
     .boardRoleOutput: ("出力先", "Output"),
     .boardOrbeSeen: ("既に見たものを除く", "Skip what was already seen"),
     .boardOutputTaskCandidates: ("タスク候補", "Task candidates"),
+    .boardOutputCommand: ("コマンド", "Command"),
+    .boardOutputReport: ("報告", "Report"),
+    .boardOutputNotifyMenuBar: ("通知：メニューバー", "Notify: menu bar"),
     .boardOutputTally: (
       "これまでに採用 %1$lld件 / 見送り %2$lld件", "So far %1$lld accepted / %2$lld dismissed"
     ),
@@ -27,8 +30,11 @@ extension L10n {
     .boardRunNothingNew: ("新着なし", "nothing new"),
     .boardRunAllDropped: ("処理 %lld ですべて除外", "all dropped in step %lld"),
     .boardRunNoneAdded: ("追加なし", "none added"),
+    .boardRunDone: ("完了", "done"),
+    .boardRunNothingToReport: ("報告なし", "nothing to report"),
     .boardRunMark: ("%1$@ に%2$@", "%2$@ at %1$@"),
     .boardRunMarkAdded: ("%1$@ に %2$lld件を追加", "added %2$lld at %1$@"),
+    .boardRunMarkReported: ("%@ に報告", "reported at %@"),
     .boardGuideLead: (
       "いつ、何をしてほしいかを一文で送ると、左の一覧に加わります。",
       "Send when and what you want in one sentence, and it joins the list on the left."
@@ -42,9 +48,8 @@ extension L10n {
       "毎日 9:00 と 13:00 に、レビューを頼まれた GitHub の PR をタスク候補にする",
       "At 9:00 and 13:00 every day, make the GitHub PRs I’m asked to review task candidates"
     ),
-    .boardExampleBacklog: (
-      "自分が担当の Backlog の課題を30分ごとに確認して、期限のあるものをタスク候補にする",
-      "Check my Backlog issues every 30 minutes and make the ones with a due date task candidates"
+    .boardExampleDailyNote: (
+      "毎晩23時に ~/bin/daily-note.sh を実行する", "Run ~/bin/daily-note.sh every night at 23:00"
     ),
     .boardHintSelect: ("移動", "move"),
     .boardHintToList: ("一覧へ", "to list"),

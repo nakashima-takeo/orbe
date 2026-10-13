@@ -8,7 +8,7 @@ import XCTest
 /// 判定の指示文の誤りに気づけない。失敗した回が帯や履歴で失敗の色にならず、一覧の右端に理由の全文があふれる。
 @MainActor
 final class BoardAutomationSummaryTests: OrbeTestCase {
-  private let text = AutomationText(
+  let text = AutomationText(
     l10n: LocalizationStore(language: .ja),
     today: .today(
       DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone),
@@ -77,6 +77,13 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     XCTAssertEqual(
       counts(run(14, 40, items: 6, fresh: 4, failure: "exited 1", failedInStep: true)),
       [nil, 6, 4, nil, nil], "段で落ちた回は、その段の手前まで")
+    var sinkFailed = run(
+      14, 40, items: 6, fresh: 4, steps: [3], failure: "the sink command ended: exited 1",
+      failedInStep: true)
+    sinkFailed.sink = .command(
+      AutomationCommandReport(commandLine: "~/bin/post.sh", ending: "exited 1", count: 3))
+    XCTAssertEqual(
+      counts(sinkFailed), [nil, 6, 4, 3, nil], "出力先で落ちた回は最後の段まで出し、出力先は出さない")
     XCTAssertEqual(
       counts(run(14, 40, items: 0, fresh: 0, failure: "exited 1")), [nil, nil, nil, nil, nil],
       "取得元で落ちた回は何も数えない")
@@ -104,7 +111,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
   func testTheTaskCandidatesOutputNotesTheTally() throws {
     var counted = automation([])
     XCTAssertEqual(
-      BoardAutomationSummary(counted, text: text).nodes.last?.note, "これまでに採用 0件 / 見送り 0件")
+      BoardAutomationSummary(counted, text: text).nodes.last?.notes, ["これまでに採用 0件 / 見送り 0件"])
 
     counted = Automation(
       id: 1, definition: counted.definition,
@@ -112,7 +119,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
       paused: false, createdAt: counted.createdAt, lastFetched: [], reviewAll: false, runs: [])
     let output = try XCTUnwrap(BoardAutomationSummary(counted, text: text).nodes.last)
     XCTAssertEqual(output.role, .output)
-    XCTAssertEqual(output.note, "これまでに採用 9件 / 見送り 3件")
+    XCTAssertEqual(output.notes, ["これまでに採用 9件 / 見送り 3件"])
   }
 
   func testAnAutomationWithoutASourceIsTriggerThenOutput() {
@@ -137,6 +144,59 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     XCTAssertEqual(summary.strip, [.failed, .quiet, .quiet, .quiet, .produced], "帯は古い回が左")
     XCTAssertEqual(summary.mark, "14:40 に 2件を追加")
     XCTAssertEqual(summary.last, "前回 今日 14:40　2件をタスク候補に追加")
+  }
+
+  /// 出力先のコマンドは、コマンドの全文・作業ディレクトリを出力先の段に出し（手段の札は題と同じ語なので出さない）、走った回を
+  /// 「完了」として出した回に数える。件数の列の出力先は渡した行の数で、新着の無い回は出力先へ届いていないので出さない。
+  func testACommandOutputShowsItsCommandAndCountsRunsAsDone() throws {
+    func ran(_ hour: Int, count: Int, sourced: Bool) -> AutomationRun {
+      var run = DesignSceneFixtures.automationRun(
+        at: DesignSceneFixtures.automationAt(hour), items: 3, fresh: 3)
+      if !sourced {
+        run.source = nil
+        run.fresh = nil
+      }
+      run.steps = []
+      run.sink = .command(
+        AutomationCommandReport(
+          commandLine: "~/bin/daily-note.sh", ending: "exited 0", count: count))
+      return run
+    }
+    func commanding(_ runs: [AutomationRun], sourced: Bool) -> Automation {
+      var definition = automation([], steps: [], sourced: sourced).definition
+      definition.sink = AutomationRunnerTests.commandSink(
+        "~/bin/daily-note.sh", directory: "/Users/me")
+      return Automation(
+        id: 1, definition: definition, paused: false,
+        createdAt: DesignSceneFixtures.automationAt(9), lastFetched: [], reviewAll: false,
+        runs: runs)
+    }
+
+    let alone = BoardAutomationSummary(
+      commanding([ran(23, count: 0, sourced: false)], sourced: false), text: text)
+    XCTAssertEqual(alone.output, "コマンド")
+    let output = try XCTUnwrap(alone.nodes.last)
+    XCTAssertEqual(output.role, .output)
+    XCTAssertNil(output.means)
+    XCTAssertEqual(output.source, "~/bin/daily-note.sh")
+    XCTAssertEqual(output.notes, ["作業ディレクトリ  /Users/me"])
+    XCTAssertEqual(alone.runs.map(\.result), ["完了"])
+    XCTAssertEqual(alone.runs.map(\.tone), [.produced])
+    XCTAssertEqual(alone.mark, "23:00 に完了")
+    XCTAssertEqual(alone.last, "前回 今日 23:00　完了")
+
+    let sourced = BoardAutomationSummary(
+      commanding(
+        [ran(23, count: 3, sourced: true), run(22, 0, items: 3, fresh: 0)], sourced: true),
+      text: text)
+    XCTAssertEqual(sourced.nodes.map(\.count), [nil, 3, 3, 3])
+    XCTAssertEqual(sourced.runs.map(\.result), ["完了", "新着なし"])
+    XCTAssertEqual(sourced.runs.map(\.tone), [.produced, .quiet])
+
+    var nothingNew = run(22, 0, items: 3, fresh: 0)
+    nothingNew.sink = nil
+    let quiet = BoardAutomationSummary(commanding([nothingNew], sourced: true), text: text)
+    XCTAssertEqual(quiet.nodes.map(\.count), [nil, 3, 0, nil])
   }
 
   func testMarksOfALatestFailureAndOfNoRun() {

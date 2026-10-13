@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 詳細の「実行履歴」。見出しの右に直近の回の帯（古い回が左）、下に新しい順の 1 行ずつ。失敗の行だけは理由の全文を赤で
-/// 折り返す——ボードで失敗の理由を読めるのはここだけで、直すかどうかを決める材料になるため。
+/// 詳細の「実行履歴」。見出しの右に直近の回の帯（古い回が左）、下に新しい順の 1 行ずつ。失敗の理由と報告は全文を折り返す
+/// ——ボードでそれを読めるのはここだけで、失敗の理由は直すかどうかを決める材料になるため。
 struct BoardAutomationHistory: View {
   let summary: BoardAutomationSummary
   @Environment(\.localization) private var l10n
@@ -44,7 +44,7 @@ struct BoardAutomationHistory: View {
   @ViewBuilder private func result(_ run: BoardRunLine) -> some View {
     let text = fontResolver.text(run.result, base: Theme.Typography.codeSmall)
       .foregroundStyle(color(run.tone, strip: false))
-    if run.tone == .failed {
+    if run.wraps {
       text
         .lineSpacing(Self.wrapLeading)
         .padding(.vertical, Self.wrapLeading / 2)
@@ -69,7 +69,7 @@ struct BoardAutomationHistory: View {
   static let width: CGFloat = 300
   private static let line: CGFloat = 24
   private static let columnGap: CGFloat = 14
-  /// 1 行 24 に当たる行間（折り返した失敗の理由も、1 行の行と同じ間隔で並ぶ）。
+  /// 1 行 24 に当たる行間（折り返した全文も、1 行の行と同じ間隔で並ぶ）。
   private static let wrapLeading = Theme.Typography.codeSmall.extraLeading(
     lineHeight: line / Theme.Typography.codeSmall.pointSize)
 }

@@ -182,6 +182,84 @@ extension DesignSceneFixtures {
   }
 }
 
+/// 見本『日報の下書き』の自動化と、取得元のある出力先コマンドの自動化。出力先のコマンドは走った回を「完了」と読む。
+extension DesignSceneFixtures {
+  private static func commandRun(
+    at start: Date, source: Int? = nil, fresh: Int? = nil, steps: [Int] = [], count: Int? = 0,
+    failure: String? = nil
+  ) -> AutomationRun {
+    AutomationRun(
+      startedAt: start, endedAt: start.addingTimeInterval(4), trigger: .schedule,
+      source: source.map {
+        AutomationStepReport(
+          name: nil, commandLine: "gh search prs --merged", ending: "exited 0", count: $0,
+          rejected: AutomationRejections())
+      },
+      fresh: fresh,
+      steps: steps.map {
+        AutomationStepReport(
+          name: "要約", commandLine: "claude -p", ending: "exited 0", count: $0,
+          rejected: AutomationRejections())
+      },
+      sink: count.map {
+        .command(
+          AutomationCommandReport(commandLine: "~/bin/post.sh", ending: "exited 0", count: $0))
+      },
+      failure: failure)
+  }
+
+  /// 取得元も段も無く、毎晩 23 時にコマンドだけを走らせる。
+  static func boardDailyNoteExample() -> Automation {
+    var runs = (1..<20).map { commandRun(at: automationAt(23, 0, daysAgo: $0)) }
+    runs[2] = commandRun(
+      at: automationAt(23, 0, daysAgo: 3), count: nil,
+      failure: "the sink command ended: exited 1: daily-note: ~/notes is not writable")
+    return Automation(
+      id: 3,
+      definition: AutomationDefinition(
+        name: "日報の下書き", trigger: .daily([.init(hour: 23, minute: 0)]), source: nil, steps: [],
+        sink: .command(
+          AutomationSinkCommand(
+            command: BackgroundCommand(script: "~/bin/daily-note.sh", directory: "/Users/me/notes"),
+            timeoutMinutes: 10))),
+      paused: false, createdAt: boardCreated, lastFetched: [], reviewAll: false,
+      lastRunAt: runs[0].startedAt, runs: runs)
+  }
+
+  /// 取得元と段 1 つの後に、出力先のコマンドへ要約の行を渡す。新着の無い回はコマンドを起こさない。
+  static func boardMergedPostExample() -> Automation {
+    let at = { (hours: Int) in automationAt(14, 30).addingTimeInterval(TimeInterval(-3600 * hours))
+    }
+    let runs = [
+      commandRun(at: at(0), source: 5, fresh: 2, steps: [2], count: 2),
+      commandRun(at: at(1), source: 3, fresh: 0, count: nil),
+      commandRun(at: at(2), source: 3, fresh: 1, steps: [0], count: nil),
+      commandRun(at: at(3), source: 3, fresh: 3, steps: [3], count: 3),
+    ]
+    return Automation(
+      id: 4,
+      definition: AutomationDefinition(
+        name: "GitHub: マージした PR を Slack へ", trigger: .every(3600),
+        source: AutomationSource(
+          method: .command(
+            BackgroundCommand(
+              script: "gh search prs --merged --author=@me --json url,title", directory: nil)),
+          coverage: .newArrivals),
+        steps: [
+          AutomationStep(
+            name: "要約",
+            method: .agent(
+              AutomationStepAgent(cli: "claude", model: nil, instruction: "PR ごとに 1 行の要約を付ける。")))
+        ],
+        sink: .command(
+          AutomationSinkCommand(
+            command: BackgroundCommand(script: "~/bin/post.sh '#dev-log'", directory: nil),
+            timeoutMinutes: nil))),
+      paused: false, createdAt: boardCreated, lastFetched: [], reviewAll: false,
+      lastRunAt: runs[0].startedAt, runs: runs)
+  }
+}
+
 /// 見本『段の多い例』『一番単純な例』の自動化。段の多い例は取得元と処理 3 段（コマンド・既定のモデルの agent 2 つ）と
 /// 採用・見送りの累計を持ち、一番単純な例は取得元も処理も無い。一番単純な例は、まだ定義の検証を通らない（タスク候補は取得元と
 /// 段を要る）が、ボードはそのまま描く。

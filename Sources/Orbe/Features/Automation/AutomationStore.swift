@@ -35,8 +35,9 @@ import Observation
     return automation
   }
 
-  /// 定義を丸ごと置き換える。何をするか（`AutomationDefinition.work`）が変わったら（`reworked`）、次の回は枠の差分を
-  /// 掛けずに見直す。止めているかは変えない。誰も持たなくなった候補は、その場で忘れる。
+  /// 定義を丸ごと置き換える。何をするか（`AutomationDefinition.work`）が変わったら（`reworked`）、見直しを受ける出力先なら
+  /// 次の回は枠の差分を掛けずに見直す。全件見直しの印は新しい出力先で決め直す——見直しを受けない出力先へ替えたら、前から
+  /// 立っていた印も下ろす。止めているかは変えない。誰も持たなくなった候補は、その場で忘れる。
   func replace(_ id: Int, with definition: AutomationDefinition) throws(AutomationError) -> (
     automation: Automation, reworked: Bool
   ) {
@@ -46,7 +47,8 @@ import Observation
     let definition = try Self.valid(definition)
     let reworked = automations[index].definition.work != definition.work
     automations[index].redefine(definition)
-    if reworked { automations[index].reviewAll = true }
+    automations[index].reviewAll =
+      Self.reviewsAfterRework(definition.sink) && (automations[index].reviewAll || reworked)
     _ = book.forgetUnheld(by: automations)
     persist()
     return (automations[index], reworked)
@@ -94,7 +96,7 @@ import Observation
   /// 自動化を受けて記録を返す）と回の記録を 1 度に保存する。
   func commit(
     _ id: Int, _ run: AutomationRun, fetched: [AutomationItem],
-    sink: (inout AutomationProposalBook, [Automation]) -> AutomationSinkReport
+    sink: (inout AutomationProposalBook, [Automation]) -> AutomationSinkReport?
   ) {
     guard let index = automations.firstIndex(where: { $0.id == id }) else { return }
     var run = run
@@ -200,6 +202,8 @@ import Observation
     }
     switch definition.sink {
     case .taskCandidates: try AutomationTaskCandidates.check(definition)
+    case .command(let command): try AutomationCommandSinkRun.check(command)
+    case .report: try AutomationReportSinkRun.check(definition)
     }
     do throws(BackgroundJobError) {
       try definition.trigger.validate()
@@ -207,6 +211,15 @@ import Observation
       throw .invalid("trigger: \(error.message)")
     }
     return definition
+  }
+
+  /// 書き換えの後に全件を見直す出力先か。
+  private static func reviewsAfterRework(_ sink: AutomationSink) -> Bool {
+    switch sink {
+    case .taskCandidates: AutomationTaskCandidates.reviewsAfterRework
+    case .command: AutomationCommandSinkRun.reviewsAfterRework
+    case .report: AutomationReportSinkRun.reviewsAfterRework
+    }
   }
 
   private static func check(_ source: AutomationSource) throws(AutomationError) {
