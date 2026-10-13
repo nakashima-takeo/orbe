@@ -323,7 +323,7 @@ extension TaskPaletteModelTests {
     var seen: [TaskPaletteGitHubRowID?] = []
 
     for filter in [TaskGitHubFilter.assigned, .authored, .assigned, .authored] {
-      palette.toggleGitHubRelation(filter)
+      palette.toggleGitHubFilter(filter)
       seen.append(palette.selectedGitHubID)
     }
 

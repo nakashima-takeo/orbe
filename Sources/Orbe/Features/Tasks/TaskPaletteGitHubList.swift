@@ -141,7 +141,7 @@ struct TaskGitHubFilterChips: View {
   private func chip(_ filter: TaskGitHubFilter, _ title: L10nKey, _ count: Int?) -> some View {
     TaskPaletteFilterChip(
       title: l10n.string(title), count: count, on: model.githubFilters.contains(filter),
-      action: { model.toggleGitHubRelation(filter) })
+      action: { model.toggleGitHubFilter(filter) })
   }
 }
 

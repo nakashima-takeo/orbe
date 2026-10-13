@@ -157,8 +157,8 @@ extension DesignGallerySnapshotTests {
     // 「レビュー依頼」と「担当が自分」の札を入れる（どちらかに当たる項目）。
     let filtered = DesignSceneFixtures.taskPaletteModel()
     filtered.setTab(filtered.tab.next)
-    filtered.toggleGitHubRelation(.reviewRequested)
-    filtered.toggleGitHubRelation(.assigned)
+    filtered.toggleGitHubFilter(.reviewRequested)
+    filtered.toggleGitHubFilter(.assigned)
     try write("tasks_github_review_requests.png", filtered, 1440, 900)
 
     // 「さらに」を開いた Issue の区分。

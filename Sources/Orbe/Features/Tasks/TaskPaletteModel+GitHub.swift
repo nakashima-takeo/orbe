@@ -143,7 +143,7 @@ extension TaskPaletteModel {
   }
 
   /// 札のクリック。入れ切りし、一覧は先頭の行から選び直す。
-  func toggleGitHubRelation(_ filter: TaskGitHubFilter) {
+  func toggleGitHubFilter(_ filter: TaskGitHubFilter) {
     leaveEditingForAction()
     area = .list
     githubFilters.formSymmetricDifference([filter])
