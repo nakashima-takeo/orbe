@@ -6,7 +6,7 @@ updated: 2026-10-13
 
 # Orbe デザインシステム
 
-> ステータス: v0.12.0 · 2026-09-24
+> ステータス: v0.13.0 · 2026-10-13
 > 値の正（SSOT）: chrome/semantic は `Sources/Orbe/DesignSystem/DesignTokens.swift`（機械可読ミラー `docs/design/tokens.json`）／ 識別色（端末 ANSI 16 色・chrome 共有アンカー）は `Sources/Orbe/DesignSystem/OrbePalette.swift`（端末 conf を生成し、chrome アンカーへ定数を供給）／ worktree 識別色 48 色（24 色相 × 2 トーン）を dark / light 別に持つ表は `Sources/Orbe/DesignSystem/WorktreePalette.swift`（`scripts/gen-worktree-palette.py` が oklch から生成・手で編集しない）。
 > ガラス質感・elevation・glow は `Sources/Orbe/DesignSystem/DesignTokens+Glass.swift` が所有（本書は再定義しない）。
 > エディター面のトークン（`face.*` / `editor.*` / `syntax.*` / `type.editor*` / `layout.editor*` `layout.face*` / `radius.face*` / `opacity.editor*` `opacity.face*` / `stroke.editor*` / `facePositionSpring` `faceShapeSpring` `faceDot` `editorSlider*` `editorScrollbar*`）は `Sources/Orbe/DesignSystem/DesignTokens+Editor.swift` が所有。
@@ -47,6 +47,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `text.secondary` | 通常ラベル・非選択タブ文字 | `#b8afc4` | `#5f5678` |
 | `text.tertiary` | 三次 | `#8b8397` | `#8d85a3` |
 | `text.muted` | 非アクティブ・補助・ヒント | `#8b8397` | `#8d85a3` |
+| `text.mutedInactive` | 窓が main でない間、`text.muted` だった chrome の文字をさらに一段沈める色（§5.1） | `#6f6880` | `#a49cb5` |
 | `accent.primary` | 選択・自分の出番・プロンプト | `#9068f0` | `#6d43d8` |
 | `accent.focus` | フォーカス | `#9068f0` | `#6d43d8` |
 | `accent.bright` | accent の明色変種（tint(accent) 面上の強調文字・タブ行の挿入キャレット） | `#b18aff` | `#6d43d8` |
@@ -75,6 +76,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `worktree.frame[0…47]` | グループの器の外側 1px 枠 | `WorktreePalette.dark` の各色 .38 | `WorktreePalette.light` の各色 .45 |
 | `tab.divider` | グループ内セルの区切り線（識別色を敷いた地の上でも読める濃さ） | `rgba(255,255,255,.14)` | `rgba(58,49,81,.16)` |
 | `tab.activeText` | 選択セグメント（反転面）の文字 | `#1a1721` | `#f3f0fa` |
+| `tab.activeBgInactive` | 窓が main でない間の選択セルの地（反転をやめた控えめな地。§5.1） | `rgba(255,255,255,.16)` | `rgba(58,49,81,.12)` |
 | `face.editor` | エディター面のキー色（紙の白。引き手・焦点の印・位置ドット） | `#ece7f5` | `#352d4a` |
 | `face.terminal` | 端末面のキー色（同上。dark / light とも `text.secondary` と偶然同値だが別トークン） | `#b8afc4` | `#5f5678` |
 | `face.editorBright` / `face.terminalBright` | ホバー中の引き手のグリフ（キー色を明るくした色。light は紙面に向けて暗くする） | `#fffdff` / `#cfc7d9` | `#221c32` / `#4a435e` |
@@ -118,7 +120,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 `accent.focus` ＝ `accent.primary`／ `text.tertiary` ＝ `text.muted`／
 `success` ＝ `diff.added`（green）／ `danger` ＝ `diff.removed`（red）／
 `state.dormant` ＝ `text.muted`／ `surface.0` ＝ `bg.sunken`。
-**値だけが一致する独立トークン**: `face.terminal` ＝ `text.secondary`／ `editor.icon` ＝ `kbKeyText`／ `editor.text` ＝ `statusText`／ `editor.modified` ＝ `editor.hue.yellow`／ `diff.modified` ＝ `editor.hue.blue`／ `editor.whitespace` ＝ `editor.lineNumber`／ `editor.hue.sky` ＝ `syntax.variable`（上の収束と違い SSOT でも互いを参照せず、片方の値が動いてももう片方は追随しない）。`syntax.*` の dark は VSCode Dark Modern の実在トークン色で、5 色が端末の ANSI（§8）と偶然同値だが、端末色は別レイヤーなので参照しない。選択・俯瞰・強調の `editor.*`（selection〜minimapShadow）は VS Code Dark Modern / Light Modern の値（上書きの無いものは VS Code の既定）で、エディターの使い勝手を VS Code に揃えるために借りる。同じ意味の Orbe トークンがあるもの（git の印・キャレット・縁）はそれを使い、git の印とキャレットには VS Code の α を掛ける。
+**値だけが一致する独立トークン**: `face.terminal` ＝ `text.secondary`／ `text.mutedInactive` ＝ `kbKeyMutedText`／ `editor.icon` ＝ `kbKeyText`／ `editor.text` ＝ `statusText`／ `editor.modified` ＝ `editor.hue.yellow`／ `diff.modified` ＝ `editor.hue.blue`／ `editor.whitespace` ＝ `editor.lineNumber`／ `editor.hue.sky` ＝ `syntax.variable`（上の収束と違い SSOT でも互いを参照せず、片方の値が動いてももう片方は追随しない）。`syntax.*` の dark は VSCode Dark Modern の実在トークン色で、5 色が端末の ANSI（§8）と偶然同値だが、端末色は別レイヤーなので参照しない。選択・俯瞰・強調の `editor.*`（selection〜minimapShadow）は VS Code Dark Modern / Light Modern の値（上書きの無いものは VS Code の既定）で、エディターの使い勝手を VS Code に揃えるために借りる。同じ意味の Orbe トークンがあるもの（git の印・キャレット・縁）はそれを使い、git の印とキャレットには VS Code の α を掛ける。
 `state.done`（完了・緑）と `diff.added`（green）、`state.waiting`（要応答・黄）と `conflict`（ANSI黄）は**別トークンとして分離**（light では偶々同値だが dark では異なる。SSOT は状態色を `StateHue`、ANSI 系を端末アンカーから別々に導く）。
 **反転色（`state.*Inverse`）は対テーマの状態色**＝dark/light の値を入れ替えただけ（選択タブの反転面上でコントラストを確保する仕組み）。
 **light の `tab.activeText` `#f3f0fa` は `bg.base` `#fcfbfe` と別値**（on.accent の流用不可）。
@@ -225,6 +227,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 - **成功＝green（`success`）＋ `✓`／エラー＝red（`danger`）＋ `⚠`。**
 - **エージェント状態はグリフ形＋動きが一次情報。** 4状態すべてが固有の形（円弧・吹き出し・チェック・zzz）を持ち、色情報を除いても判別できる。横断ロールアップは常に件数（数字）を併記。
 - **コントラスト**: テキスト階層は背景に対し WCAG AA（本文 4.5:1 / 大字 3:1）。`text.muted` は補助情報専用、本文に使わない。
+- **例外**: 窓が main でない間の退いた姿の chrome の文字（§5.1）は AA を下回ってよい——裏にあるときは読みやすさより退くことを優先する。前面に戻れば即座に前面の姿に戻る。
 
 ---
 
@@ -254,7 +257,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 - **選択の示し方**: リスト行の選択は **tint 背景**（`selectionFill`）。タブの選択のみ**前景色反転**（§5.1）。**選択を左バーで示すのはエディター面のレールだけ（次項）。chrome ではどこでもしない**（Completion も例外にしない）。下線・太字による選択弁別も持たない（タブ行の左 3px バーは選択ではなく worktree の識別色で、意味が別）。
 - **エディター面の例外**（見本 `Rail.tsx`・`CodeView.tsx` の値をそのまま持つ）: レールの選択項目は左 2px の `accent.primary` の縦線 ＋ 地 `surfaceInk` .04（light ×0.6）、ファイルタブの選択は上縁 1.5px の `accent.primary` ＋ 地 `surfaceInk` .045。どちらも chrome の反転や tint とは別の、面の中に閉じた見せ方で、この 2 か所以外へ広げない。エクスプローラーのツリー行の選択は通常どおり `selectionFill`。
 - **Tab（セグメント）**: タブ行（高さ 28・padding 上下 3・左右 5（＝gap）・gap 5・地 `tab.rowBg`）の中の器。**面を持つのはグループ（同じ worktree のタブ 2 枚以上の連）だけ**——地 `tab.groupBg` に `worktree.tint` を重ね・radius 4・クリップ、器の**外側**に 1px の `worktree.frame` の枠（幅の取り分に含まれず gap に重なる）、左端に識別色バー 3px（縦いっぱい）、各セルの左に hairline `tab.divider` の区切り線（先頭セルを含む・選択セルでも残る）。1 枚の連は単独タブの器で、地 `tab.segBg`・radius 3 だけを持ち、枠・バー・区切り線を持たない。
-- **Tab のセル**: padding 横8・グリフとタイトルの間 6・幅は床40〜上限140（超える名前は末尾省略）。非選択＝地なし（器の地が透ける）・文字 `text.secondary`（idle/dormant/なしも同じ）・状態グリフ 12px（working は stroke 1.6。idle は非表示）。**選択＝地 `text.primary`（前景色反転。区切り線を持つセルでは左 1px を空けて線を残す）・文字 `tab.activeText`・グリフ＝`state.*Inverse`（対テーマ状態色）**、done の check 線のみ `text.primary`。タブ背景を状態色で塗らない。
+- **Tab のセル**: padding 横8・グリフとタイトルの間 6・幅は床40〜上限140（超える名前は末尾省略）。非選択＝地なし（器の地が透ける）・文字 `text.secondary`（idle/dormant/なしも同じ）・状態グリフ 12px（working は stroke 1.6。idle は非表示）。**選択＝地 `text.primary`（前景色反転。区切り線を持つセルでは左 1px を空けて線を残す）・文字 `tab.activeText`・グリフ＝`state.*Inverse`（対テーマ状態色）**、done の check 線のみ `text.primary`。タブ背景を状態色で塗らない。窓が main でない間は反転しない（§5.1）。
 - **Palette row**: default＝`text.secondary`（workspace 行の名前＝最優先状態の色）。hover＝`hoverFill`＋`text.primary`。selected＝`selectionFill` 地。dormant＝`Opacity.dormant`。タスク画面の表だけは、選んでいる行も減光する（減光は行の中身だけに掛け、選択の地は満の濃さのまま）——space で完了にした結果を、選んだまま確かめるため。情報行＝`text.muted`・選択不可。そのうち直前の操作が失敗した理由を述べる行だけ `danger`（§3）——中立な補足と同じ弱さで出さない。行= padding 5×10・radius 8。workspace 行の右詰め＝状態別カウントピル（padding 1×7・radius pill・地 tint .12・文字 状態色・グリフ 9px）。
 - **Button**: primary（主 CTA）＝塗り `accent.primary`・文字 `on.accent`・radius `md`。secondary＝塗りなし・文字 `accent.primary`・枠 1px `surface.1`・hover で `hoverFill`。disabled＝`Opacity.disabled`。
 - **Search field**: 外枠＝`bg.sunken`＋1px `surface.1`＋radius `md`。focus＝リング `accent.focus`。no-match＝`danger`。件数＝`captionDigit`。
@@ -283,6 +286,11 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 - **TopBar（上段 28px）**: 背景透明（最背面の chromeBg＋ambient が見える）・**罫線なし**。左 padding 16＋信号機の柱 80px。縦位置は信号機 close ボタン中央へ整列。空白は窓ドラッグ面。
   - 左: `workspace名`（mono 11・`text.primary`）。build-id・現在地は名前の後に後置（→§9）。現在地は焦点の面のもので、トーン付きの断片列——端末焦点は cwd 1 本（`text.muted`）、エディター焦点は根（`text.muted`）＋ 相対パス（`statusText`）、根の外の文書は絶対パス 1 本（`statusText`）、空状態は根だけ。
   - 右: ステータスストリップ（§4 の書式）・右 padding 16。
+- **窓が main でない間（退いた姿）**: chrome だけが退き、端末・エディターの本文の濃さは変えない。切り替えは即時（アニメーションなし）。
+  - グロー（BackgroundGlow のラジアル 2 枚）を描かない。不透明時の `bg.base` の地は残す。
+  - workspace 名 `text.muted`。現在地は 2 トーンの強弱を保って一段沈める——弱い断片 `text.mutedInactive`・強い断片 `text.muted`。ストリップの件数 `text.muted`（idle の減光は残す）。
+  - 選択セル＝地 `tab.activeBgInactive`・文字と家のアイコン `text.primary`・グリフは通常の状態色（done の check 線も既定の `checkStroke`）。改名中の入力欄の文字も `text.primary`。非選択セルの文字 `text.muted`。
+  - 状態グリフの色・build-id・＋・位置ドット・連の地／枠／識別バー・区切り線・挿入キャレットは変えない。
 - **TabBar（下段 28px・全幅セグメント行）**: 地 `tab.rowBg`・padding 上下 3・左右 5・セグメント間 gap 5（行の端の隙間はセグメント間と同じリズム）。器とセルは §5 Tab 契約。行に収まらないときは**行内の全セル**が幅に比例して縮み（床 40・器ではなく行が再配分の単位）、それ以下は横スクロール。＋ボタンはセグメント様式（地 `tab.segBg`・radius 3）で末尾に置く（→§9）。並び替えのドラッグ中は挿入先に幅 2 の縦キャレット `accent.bright`（識別色の地の上に立つ）。
 
 ---
