@@ -166,19 +166,22 @@ final class TaskPaletteGitHubRowsTests: OrbeTestCase {
   }
 
   /// 担当が自分・作成者が自分は login で（大小文字を問わず）、レビュー依頼は検索の答え（チーム宛を含む）で
-  /// 決める。
+  /// 決める。札を複数入れると、そのどれかに当たる項目を出す。
   func testFiltersSelectByLoginAndTheReviewRequestSearch() {
     let issues = [issue(1, assignees: ["ME"]), issue(2, author: "me"), issue(3)]
     let pullRequests = [pr(10), pr(11, teams: ["o/core"]), pr(12, author: "Me")]
-    func rows(_ filter: TaskGitHubFilter) -> [Shape] {
+    func rows(_ filters: Set<TaskGitHubFilter>) -> [Shape] {
       shape(
         input(
-          issues: issues, pullRequests: pullRequests, reviewRequests: [10, 11], filters: [filter]))
+          issues: issues, pullRequests: pullRequests, reviewRequests: [10, 11], filters: filters))
     }
 
-    XCTAssertEqual(rows(.assigned), [.header(.issue, 1), .item(1)])
-    XCTAssertEqual(rows(.authored), [.header(.issue, 1), .item(2), .header(.pr, 1), .item(12)])
-    XCTAssertEqual(rows(.reviewRequested), [.header(.pr, 2), .item(10), .item(11)])
+    XCTAssertEqual(rows([.assigned]), [.header(.issue, 1), .item(1)])
+    XCTAssertEqual(rows([.authored]), [.header(.issue, 1), .item(2), .header(.pr, 1), .item(12)])
+    XCTAssertEqual(rows([.reviewRequested]), [.header(.pr, 2), .item(10), .item(11)])
+    XCTAssertEqual(
+      rows([.assigned, .reviewRequested]),
+      [.header(.issue, 1), .item(1), .header(.pr, 2), .item(10), .item(11)])
   }
 
   /// 札の件数は一覧の全件で数え、入力に左右されない。自分の login・レビュー依頼がまだ分からない札は
