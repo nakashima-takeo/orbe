@@ -8,6 +8,9 @@ import SwiftUI
 /// 欄は一覧の上の 1 段で、欄と一覧の行は 1 つの選択の同一性を分け合う（⌘⇧X で入力の行き先と一覧の行が 1 つの選択なのと
 /// 同じ）。選ばれて見えるのは常に 1 か所で、焦点の場所は選択から決まる。↑↓ は欄と行の並びを端で巡回する。焦点が外から
 /// 部品へ入ると欄から始まり（⌘⇧X が開くと入力欄に焦点があるのと同じ）、中での当て直しは選んでいる場所へ戻る。
+///
+/// 一覧の行の → で開くサブメニュー「通知」は、選んでいる行の付属で、焦点の場所を増やさない。対象はいつも選んでいる自動化で、
+/// 選んでいる段が変わると閉じる。
 @Observable final class BoardAutomationModel {
   /// 焦点の場所。
   enum Place: Hashable {
@@ -21,8 +24,15 @@ import SwiftUI
     case automation(Int)
   }
 
+  /// サブメニュー「通知」の行の並び（通知しない・メニューバー・通知センター）。
+  static let notifyChoices: [AutomationNotify?] = [nil, .menuBar, .notificationCenter]
+
   let runner: AutomationRunner
-  private(set) var list = ListState<Stop>()
+  private(set) var list = ListState<Stop>() {
+    didSet { if list.selectedID != oldValue.selectedID { notifyCursor = nil } }
+  }
+  /// サブメニュー「通知」で選んでいる行（`notifyChoices` の番号）。nil は閉じている。
+  private(set) var notifyCursor: Int?
   /// 欄の文字（入力欄の binding）。変われば断りを消す。
   var requestText = "" {
     didSet { if requestText != oldValue { onRefusal(nil) } }
@@ -124,8 +134,14 @@ import SwiftUI
   }
 
   /// フッターの左に出すキー。欄では送る・一覧へ移るキー（一覧が空なら移る先が無いので出さない）、一覧では選んだ自動化で効く
-  /// キー。
+  /// キー、サブメニューを開いている間はその中のキー。
   var hints: [BoardKeyHint] {
+    if notifyCursor != nil {
+      return [
+        BoardKeyHint("↑↓", .boardHintSelect), BoardKeyHint("↵", .boardHintChoose),
+        BoardKeyHint("←", .boardHintBack),
+      ]
+    }
     guard let selectedAutomation else {
       return [BoardKeyHint("↵", .boardAskHint)]
         + (ids.isEmpty ? [] : [BoardKeyHint("↓", .boardHintToList)])
@@ -136,7 +152,7 @@ import SwiftUI
     }
     return [
       BoardKeyHint("↑↓", .boardHintSelect), hand(.togglePause), hand(.runNow),
-      BoardKeyHint("⌘↵", .boardAskFixHint), hand(.delete),
+      BoardKeyHint("→", .boardNotifyTitle), BoardKeyHint("⌘↵", .boardAskFixHint), hand(.delete),
     ]
   }
 
@@ -176,9 +192,14 @@ import SwiftUI
     ask(.automationFix(automation))
   }
 
-  /// 一覧の器のキー。↑↓・`AutomationHand.stroke` に任せるキー・⌘↵ のほかは何も起こさず、どれも握る（⇥ で焦点をボードの外へ逃がさない）。
+  /// 一覧の器のキー。サブメニューを開いている間はそちらへ回す。↑↓・→・`AutomationHand.stroke` に任せるキー・⌘↵ のほかは
+  /// 何も起こさず、どれも握る（⇥ で焦点をボードの外へ逃がさない）。
   func handleKey(_ press: KeyPress) -> KeyPress.Result {
-    if let stroke = AutomationHand.stroke(press) {
+    if notifyCursor != nil {
+      handleNotifyKey(press)
+    } else if press.key == .rightArrow, press.modifiers.isDisjoint(with: Self.chords) {
+      if press.phase == .down { openNotify() }
+    } else if let stroke = AutomationHand.stroke(press) {
       if case .press(let operation) = stroke { perform(operation) }
     } else if press.key == .return, press.modifiers.contains(.command) {
       if press.phase == .down { askFix() }
@@ -189,6 +210,59 @@ import SwiftUI
     }
     return .handled
   }
+
+  // MARK: - 通知
+
+  /// 選んでいる自動化のサブメニューを開く。選んでいる行は今の設定から。
+  func openNotify() {
+    guard let automation = selectedAutomation else { return }
+    onRefusal(nil)
+    notifyCursor = Self.notifyChoices.firstIndex(of: automation.definition.notify) ?? 0
+  }
+
+  /// サブメニューの ↑↓。端で巡回する。
+  func moveNotify(_ direction: Int) {
+    guard let cursor = notifyCursor else { return }
+    let count = Self.notifyChoices.count
+    notifyCursor = (cursor + direction + count) % count
+  }
+
+  func closeNotify() {
+    notifyCursor = nil
+  }
+
+  /// 選んでいる自動化の通知を `notify` に決めて閉じる。今の定義の通知だけを差し替えて走らせ役の書き換えの口へ渡す（通知は
+  /// 何をするかに入らないので、走っている回は止まらない）。同じ値なら書かない。消えていたら黙る（行き違い）。
+  func chooseNotify(_ notify: AutomationNotify?) {
+    notifyCursor = nil
+    guard let automation = selectedAutomation, automation.definition.notify != notify else {
+      return
+    }
+    var definition = automation.definition
+    definition.notify = notify
+    _ = try? runner.set(automation.id, definition)
+    reconcile()
+  }
+
+  /// サブメニューのキー。↑↓ は端で巡回し、↵ で決め、← / esc で何もせず閉じる。ほかは下の一覧の操作を起こさずに握る。
+  private func handleNotifyKey(_ press: KeyPress) {
+    guard let cursor = notifyCursor else { return }
+    switch press.key {
+    case .upArrow, .downArrow:
+      guard !press.modifiers.contains(.command) else { return }
+      moveNotify(press.key == .upArrow ? -1 : 1)
+    case .return:
+      guard press.phase == .down, press.modifiers.isDisjoint(with: Self.chords) else { return }
+      chooseNotify(Self.notifyChoices[cursor])
+    case .leftArrow, .escape:
+      closeNotify()
+    default:
+      break
+    }
+  }
+
+  /// 修飾なしのキーとみなさない修飾（矢印キーが伴う numericPad・function は含めない）。
+  private static let chords: EventModifiers = [.command, .option, .control, .shift]
 
   // MARK: - 依頼の欄
 

@@ -19,8 +19,11 @@ extension L10n {
     .boardOutputTaskCandidates: ("タスク候補", "Task candidates"),
     .boardOutputCommand: ("コマンド", "Command"),
     .boardOutputReport: ("報告", "Report"),
-    .boardOutputNotifyMenuBar: ("通知：メニューバー", "Notify: menu bar"),
-    .boardOutputNotifyNotificationCenter: ("通知：通知センター", "Notify: Notification Center"),
+    .boardOutputNotify: ("通知：%@", "Notify: %@"),
+    .boardNotifyTitle: ("通知", "Notifications"),
+    .boardNotifyOff: ("通知しない", "Off"),
+    .boardNotifyMenuBar: ("メニューバー", "Menu bar"),
+    .boardNotifyNotificationCenter: ("通知センター", "Notification Center"),
     .boardOutputTally: (
       "これまでに採用 %1$lld件 / 見送り %2$lld件", "So far %1$lld accepted / %2$lld dismissed"
     ),
@@ -54,6 +57,8 @@ extension L10n {
     ),
     .boardHintSelect: ("移動", "move"),
     .boardHintToList: ("一覧へ", "to list"),
+    .boardHintChoose: ("決定", "Choose"),
+    .boardHintBack: ("戻る", "Back"),
     .boardAskPlaceholder: ("自動化したいことを入力（例：%@）", "Describe what to automate (e.g. %@)"),
     .boardAskHint: ("依頼する", "ask"),
     .boardAskFixHint: ("修正を依頼", "ask to fix"),

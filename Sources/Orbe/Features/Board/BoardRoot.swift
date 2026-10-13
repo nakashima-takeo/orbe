@@ -49,7 +49,8 @@ struct BoardPartView: View {
 /// 欄と一覧の器の 2 つで、場所の正はモデル（`place`）だけ。届いていない合図（`focusToken`）はボードを通して受け取って写し
 /// （現れただけでは写さず、焦点がボードの外にあれば捨てる）、SwiftUI が自分で焦点を動かした（窓が key になったときの既定の
 /// 焦点など）ら、モデルの場所へ戻す。クリックはジェスチャがモデルへ届ける。ストアの変化で場所が替わった（行がすべて消えて欄に
-/// なった）ときは、焦点が部品の中にあるときだけ追う（外にある焦点を奪わない）。
+/// なった）ときは、焦点が部品の中にあるときだけ追う（外にある焦点を奪わない）。サブメニュー「通知」は一覧の行の右に、部品の上の
+/// 1 枚の層として重ねる。
 struct BoardAutomationPart: View {
   let board: BoardModel
   @FocusState private var focused: BoardAutomationModel.Place?
@@ -64,6 +65,9 @@ struct BoardAutomationPart: View {
       TimelineView(.everyMinute) { _ in
         BoardAutomationColumns(model: model, now: model.runner.now(), focused: $focused)
       }
+    }
+    .overlayPreferenceValue(BoardAutomationNotifyAnchor.self) {
+      BoardAutomationNotifyLayer(model: model, anchors: $0)
     }
     .onChange(of: model.focusToken, initial: true) {
       if let place = board.takeFocusRequest() { focused = place }

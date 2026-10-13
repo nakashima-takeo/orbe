@@ -36,6 +36,9 @@ struct BoardAutomationList: View {
     .overlay(alignment: .trailing) {
       Rectangle().fill(Color.theme.surface1).frame(width: Theme.Stroke.hairline)
     }
+    .transformAnchorPreference(key: BoardAutomationNotifyAnchor.self, value: .bounds) {
+      $0.list = $1
+    }
   }
 
   private var rows: some View {
@@ -49,6 +52,9 @@ struct BoardAutomationList: View {
             )
             .id(BoardAutomationModel.Stop.automation(standing.id))
             .onTapGesture { model.tap(standing.id) }
+            .anchorPreference(key: BoardAutomationNotifyAnchor.self, value: .bounds) {
+              model.list.selectedID == .automation(standing.id) ? .init(row: $0) : .init()
+            }
           }
         }
         .padding(.horizontal, Theme.Space.note)
