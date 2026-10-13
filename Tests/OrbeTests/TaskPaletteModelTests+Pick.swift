@@ -88,6 +88,26 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.selectedID, .task(1))
   }
 
+  /// 選ぶ状態で列の見出しを押してから抜けると、タスクのタブの表も新しい並びで組み直されていて、前の暗い行は残らない
+  /// （並びはタスクのタブと選ぶ状態が共有する）。
+  func testSortingWhilePickingAlsoRebuildsTheTasksTabTable() {
+    let palette = GitHub.model(
+      [task(1, "a"), task(2, "b"), task(3, "c")], issues: [GitHub.issue(5)])
+    palette.setTab(.tasks)
+    palette.toggleDone(2)
+    XCTAssertEqual(
+      palette.rows.compactMap(\.selectableID), [.task(3), .task(2), .task(1)], "前提: 暗く残る")
+    palette.setTab(.github)
+    palette.tapGitHubRow(.item(GitHub.id(5)))
+    palette.linkSelectedGitHubItem()
+
+    palette.setSort(.title)
+    palette.cancelPick()
+    palette.setTab(.tasks)
+
+    XCTAssertEqual(palette.rows.compactMap(\.selectableID), [.task(1), .task(3)])
+  }
+
   /// タスクを選ぶ間は、選ぶこと以外でタスクを変えない（完了・削除・右の欄・タブ切替・agent を開く）。
   func testPickingATaskCannotChangeTasks() {
     let palette = pickingFromIssueFive()

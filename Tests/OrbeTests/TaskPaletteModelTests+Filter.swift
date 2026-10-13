@@ -40,6 +40,32 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.selectedID, .task(2), "並びを変えても同じタスクを選んだまま")
   }
 
+  /// 状態で並べていても、完了にした行は次のリストの更新まで並べ直さず、同じ場所に残る（最下段へ動かない）。
+  func testCompletingInATableSortedByStateKeepsTheRowInPlace() throws {
+    let palette = model([task(1, "a", .inProgress), task(2, "b"), task(3, "c")])
+    palette.setSort(.state)
+    XCTAssertEqual(rowIDs(palette), [.task(1), .task(3), .task(2)], "前提: 進行中が先")
+    palette.tapRow(.task(1))
+
+    palette.submit()
+
+    XCTAssertEqual(try storedTask(palette, 1).status, .done)
+    XCTAssertEqual(rowIDs(palette), [.task(1), .task(3), .task(2)])
+  }
+
+  /// 列の見出しで組み直して、選んでいた暗い行が消えたら、同じ位置の行ではなく先頭の行を選ぶ。
+  func testSortingAfterTheSelectedRowWasDimmedSelectsTheFirstRow() {
+    let palette = threeTodos()
+    palette.move(1)
+    palette.submit()
+    XCTAssertEqual(palette.selectedID, .task(2), "前提: 完了にした行を選んだまま")
+
+    palette.setSort(.title)
+
+    XCTAssertEqual(rowIDs(palette), [.task(1), .task(3)], "暗い行は消える")
+    XCTAssertEqual(palette.selectedID, .task(1))
+  }
+
   // MARK: - 絞り込み
 
   /// 選んでいたのが暗い行でも、絞り込みを変えたら組み直して暗い行を消し、合う行の先頭を選ぶ。
