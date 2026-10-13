@@ -88,6 +88,30 @@ extension AutomationStoreTests {
           ]
         },
         {
+          "id": 2,
+          "definition": {
+            "name": "日報の下書き",
+            "trigger": {"dailyAt": ["23:00"]},
+            "steps": [],
+            "sink": {
+              "kind": "command", "command": "~/bin/daily-note.sh", "directory": "/Users/me",
+              "timeoutMinutes": 10
+            }
+          },
+          "paused": false, "reviewAll": false,
+          "createdAt": "2026-10-01T09:30:00.000Z",
+          "lastRunAt": "2026-10-01T14:00:00.000Z",
+          "lastSucceededAt": "2026-10-01T14:00:00.000Z",
+          "lastFetched": [],
+          "runs": [
+            {
+              "startedAt": "2026-10-01T14:00:00.000Z", "endedAt": "2026-10-01T14:00:02.000Z",
+              "trigger": "schedule", "steps": [],
+              "sink": {"kind": "command", "commandLine": "~/bin/daily-note.sh", "ending": "exited 0", "count": 0}
+            }
+          ]
+        },
+        {
           "id": 3,
           "definition": {
             "name": "Slack: 自分宛",

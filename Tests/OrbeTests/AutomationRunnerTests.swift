@@ -10,7 +10,7 @@ import XCTest
 /// 取得の結果が新しい定義の回として確定する。ツールが使えなかった回を 0 件と読み、提案が一斉に下がる。
 final class AutomationRunnerTests: OrbeTestCase {
   private let start = Date(timeIntervalSince1970: 1_800_000_000)
-  private var now = Date(timeIntervalSince1970: 1_800_000_000)
+  var now = Date(timeIntervalSince1970: 1_800_000_000)
   private var armed: (date: Date, fire: () -> Void)?
   var jobs: FakeJobs!
   var store: AutomationStore!

@@ -74,33 +74,27 @@ extension BoardAutomationSummary {
   init(_ automation: Automation, text: AutomationText) {
     let l10n = text.l10n
     let definition = automation.definition
-    let output =
-      switch definition.sink {
-      case .taskCandidates: l10n.string(.boardOutputTaskCandidates)
-      }
     let when = text.when(definition.trigger)
-    let tally =
-      switch automation.sinkState {
-      case .taskCandidates(let state):
-        l10n.format(.boardOutputTally, state.accepted, state.dismissed)
-      }
     let stepCount = definition.steps.count
     let counts = automation.runs.first.map { Self.counts($0, stepCount: stepCount) } ?? Counts()
+    let sink = Self.sink(automation, count: counts.output, l10n: l10n)
+    let output = sink.title
     self.output = output
     self.when = when
-    nodes =
-      Self.nodes(definition, counts: counts, when: when, l10n: l10n)
-      + [BoardFlowNode(role: .output, title: output, note: tally, count: counts.output)]
+    nodes = Self.nodes(definition, counts: counts, when: when, l10n: l10n) + [sink]
 
     func result(_ run: AutomationRun, heading: Bool) -> String {
       if let failure = run.failure {
         return heading
           ? l10n.string(.boardRunFailedShort) : l10n.format(.boardRunFailed, failure)
       }
-      let proposed = Self.proposed(run)
-      if proposed > 0 {
+      switch run.sink {
+      case .command: return l10n.string(.boardRunDone)
+      case .taskCandidates(let report) where report.proposed > 0:
         return heading
-          ? l10n.format(.boardRunAddedTo, proposed, output) : l10n.format(.boardRunAdded, proposed)
+          ? l10n.format(.boardRunAddedTo, report.proposed, output)
+          : l10n.format(.boardRunAdded, report.proposed)
+      case .taskCandidates, nil: break
       }
       if run.fresh == 0 { return l10n.string(.boardRunNothingNew) }
       if let step = Self.counts(run, stepCount: stepCount).steps.firstIndex(of: 0) {
@@ -120,8 +114,8 @@ extension BoardAutomationSummary {
       let at = text.stamp(latest.startedAt)
       if latest.failure != nil {
         mark = l10n.format(.boardRunMark, at, l10n.string(.boardRunFailedShort))
-      } else if Self.proposed(latest) > 0 {
-        mark = l10n.format(.boardRunMarkAdded, at, Self.proposed(latest))
+      } else if case .taskCandidates(let report) = latest.sink, report.proposed > 0 {
+        mark = l10n.format(.boardRunMarkAdded, at, report.proposed)
       } else {
         mark = l10n.format(.boardRunMark, at, result(latest, heading: false))
       }
@@ -133,16 +127,37 @@ extension BoardAutomationSummary {
     }
   }
 
+  /// 出力先の段。タイトルは出力先の種類の名前。タスク候補は採用・見送りの累計を注記に、コマンドはコマンドの段と同じ組み立てで出す。
+  private static func sink(_ automation: Automation, count: Int?, l10n: LocalizationStore)
+    -> BoardFlowNode
+  {
+    var node = BoardFlowNode(role: .output, count: count)
+    switch automation.definition.sink {
+    case .taskCandidates:
+      node.title = l10n.string(.boardOutputTaskCandidates)
+      if case .taskCandidates(let state) = automation.sinkState {
+        node.note = l10n.format(.boardOutputTally, state.accepted, state.dismissed)
+      }
+    case .command(let sink):
+      node.title = l10n.string(.boardOutputCommand)
+      command(&node, sink.command, l10n: l10n)
+    }
+    return node
+  }
+
+  /// コマンドの段: 手段の札・コマンドの全文・作業ディレクトリ。
+  private static func command(
+    _ node: inout BoardFlowNode, _ command: BackgroundCommand, l10n: LocalizationStore
+  ) {
+    node.means = .command(l10n.string(.automationCommand))
+    node.source = command.script
+    node.note = command.directory.map { l10n.string(.automationDirectory) + "  " + $0 }
+  }
+
   /// 出力先の手前までの段の並び。件数は最新の回のもの。モデルは省略なら解いた既定を出す。
   private static func nodes(
     _ definition: AutomationDefinition, counts: Counts, when: String, l10n: LocalizationStore
   ) -> [BoardFlowNode] {
-    func command(_ node: inout BoardFlowNode, _ command: BackgroundCommand) {
-      node.means = .command(l10n.string(.automationCommand))
-      node.source = command.script
-      node.note = command.directory.map { l10n.string(.automationDirectory) + "  " + $0 }
-    }
-
     var nodes = [BoardFlowNode(role: .trigger, title: when)]
     if let source = definition.source {
       var node = BoardFlowNode(role: .source, count: counts.source)
@@ -151,7 +166,7 @@ extension BoardAutomationSummary {
         node.means = .model(AutomationDefinition.model(agent.model, finalStep: false))
         node.source = agent.request
         node.tools = agent.tools
-      case .command(let script): command(&node, script)
+      case .command(let script): command(&node, script, l10n: l10n)
       }
       nodes.append(node)
       nodes.append(
@@ -165,7 +180,7 @@ extension BoardAutomationSummary {
       case .agent(let agent):
         node.means = .model(definition.model(of: agent, at: index))
         node.source = agent.instruction
-      case .command(let script): command(&node, script)
+      case .command(let script): command(&node, script, l10n: l10n)
       }
       nodes.append(node)
     }
@@ -177,14 +192,16 @@ extension BoardAutomationSummary {
   /// 回の区分。並べ替え（文言を解かずに走る）も、この分類だけを使う。
   static func tone(_ run: AutomationRun) -> BoardRunTone {
     if run.failure != nil { return .failed }
-    return proposed(run) > 0 ? .produced : .quiet
+    return delivered(run).produced ? .produced : .quiet
   }
 
-  /// 出力先へ出した数。
-  private static func proposed(_ run: AutomationRun) -> Int {
+  /// 出力先へ出したかと、出力先の件数。タスク候補は候補を 1 つ以上受けた回、コマンドは走った回が出した回で、件数は受けた
+  /// 候補の数・渡した行の数。
+  private static func delivered(_ run: AutomationRun) -> (produced: Bool, count: Int) {
     switch run.sink {
-    case .taskCandidates(let report): report.proposed
-    case nil: 0
+    case .taskCandidates(let report): (report.proposed > 0, report.proposed)
+    case .command(let report): (true, report.count)
+    case nil: (false, 0)
     }
   }
 
@@ -199,7 +216,7 @@ extension BoardAutomationSummary {
 
   /// 回の記録の段ごとの件数を、届いた段まで並べる。取得元と既に見たものを除くは、取得元を通った回（新しい項目の数を持つ回）
   /// だけが持つ。失敗した回は、記録の最後の段が落ちた段なので、その手前まで。出力先は、成功して最後の段（`stepCount` 番目）まで
-  /// 回った回だけが持つ——途中の段が 0 件を出した回・新しい項目が無かった回は、出力先へ届いていない。
+  /// 回り、新しい項目があった回だけが持つ——途中の段が 0 件を出した回・新しい項目が無かった回は、出力先へ届いていない。
   static func counts(_ run: AutomationRun, stepCount: Int) -> Counts {
     var counts = Counts()
     if let fresh = run.fresh {
@@ -209,8 +226,8 @@ extension BoardAutomationSummary {
     counts.steps = run.steps.map(\.count)
     if run.failure != nil {
       if !counts.steps.isEmpty { counts.steps.removeLast() }
-    } else if run.steps.count == stepCount {
-      counts.output = proposed(run)
+    } else if run.steps.count == stepCount, run.fresh != 0 {
+      counts.output = delivered(run).count
     }
     return counts
   }

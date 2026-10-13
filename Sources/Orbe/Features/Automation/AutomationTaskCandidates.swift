@@ -15,6 +15,9 @@ final class AutomationTaskCandidates: AutomationSinkRun {
     self.automationId = automationId
   }
 
+  /// 判定を直したら、今の集合を見直して候補を出し直す（既に候補のあるリンクは取り込みで除く）。
+  static let reviewsAfterRework = true
+
   /// 要件。取得元が要り、取得の性質は新着の流れか今の集合（毎回全件で候補をどう保つかは決めていない）。段は 1 つ以上。
   static func check(_ definition: AutomationDefinition) throws(AutomationError) {
     guard let source = definition.source else {
@@ -38,7 +41,7 @@ final class AutomationTaskCandidates: AutomationSinkRun {
   }
 
   /// `id` が今回の新しい項目の行だけを渡す。判断待ちの候補はこの時点で取る。
-  func prepareLastStep(_ rows: [String]) -> [String] {
+  func prepare(_ rows: [String]) -> [String] {
     open = store.openProposals(of: automationId, in: fetched)
     let ids = Set(fresh.map(\.id))
     return rows.filter { row in
@@ -59,11 +62,13 @@ final class AutomationTaskCandidates: AutomationSinkRun {
       instruction: instruction, rows: rows, open: open, now: now, timeZone: timeZone)
   }
 
-  func read(_ rows: [AutomationRow]) -> [AutomationDecision] {
+  /// JSON の行として読めた数を数える。全行が形違いでも回は失敗にせず、候補なしとする。
+  func read(_ text: String) -> AutomationSinkReading<[AutomationDecision]> {
+    let (rows, malformed) = AutomationPrompts.readRows(text)
     let (decisions, rejected) = AutomationPrompts.readJudge(
       rows, itemIds: Set(fresh.map(\.id)), open: open)
     self.rejected.add(rejected)
-    return decisions
+    return AutomationSinkReading(output: decisions, count: rows.count, rejected: malformed)
   }
 
   /// 候補は確定で覚えるので、届けはすぐ終わる。
@@ -79,7 +84,7 @@ final class AutomationTaskCandidates: AutomationSinkRun {
   func commit(
     _ output: [AutomationDecision]?, into book: inout AutomationProposalBook,
     automations: [Automation], endedAt: Date
-  ) -> AutomationSinkReport {
+  ) -> AutomationSinkReport? {
     var report = AutomationTaskCandidatesReport(rejected: rejected)
     for decision in output ?? [] {
       switch decision {
@@ -144,6 +149,7 @@ struct AutomationProposalBook: Equatable {
         || (automation.definition.source?.coverage == .newArrivals
           && automation.id == proposal.automationId
           && proposal.state == .open)
+    case .command: false
     }
   }
 }

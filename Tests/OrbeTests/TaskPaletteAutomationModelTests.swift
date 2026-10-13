@@ -32,6 +32,18 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertEqual(automation.place, .proposals)
   }
 
+  /// 棚は候補を出す自動化だけを並べる。出力先がコマンドの自動化は候補を出さないので出さない。
+  func testTheShelfListsOnlyTaskCandidateAutomations() throws {
+    let runner = DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignFile())
+    var command = runner.store.automation(4)!.definition
+    command.sink = AutomationRunnerTests.commandSink()
+    _ = try runner.set(4, command)
+    let palette = TaskPaletteSamples.model([], automations: runner)
+
+    XCTAssertEqual(
+      palette.automation.shelfIDs, [.all, .automation(1), .automation(2), .automation(3)])
+  }
+
   func testProposalsOfALaterRunComeFirst() throws {
     let runner = DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignFile())
     let item = DesignSceneFixtures.automationItem(

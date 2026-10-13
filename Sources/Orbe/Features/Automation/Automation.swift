@@ -49,6 +49,12 @@ struct Automation: Equatable, Identifiable {
   /// 番人の数え始め。
   var anchor: Date { lastRunAt ?? createdAt }
 
+  /// 今の回の ID。数え始めは回が記録されたときだけ進むので、記録される前に止まった回のやり直しは同じ値になる。数え始めは
+  /// 保存の精度に通してから使う——再起動の後に読み直した値と同じ ID にするため。
+  var runId: String {
+    "\(id)-\(Int64((TaskItem.storedInstant(anchor).timeIntervalSince1970 * 1000).rounded()))"
+  }
+
   /// 定義を差し替える。出力先の種類が変われば、出力先ごとの状態は新しい出力先の初めの状態になる。
   mutating func redefine(_ definition: AutomationDefinition) {
     self.definition = definition
@@ -81,6 +87,7 @@ extension Automation: Codable {
       sinkState =
         try c.decodeIfPresent(AutomationTaskCandidatesState.self, forKey: .sinkState)
         .map(AutomationSinkState.taskCandidates) ?? .initial(for: definition.sink)
+    case .command: sinkState = .command
     }
     paused = try c.decodeIfPresent(Bool.self, forKey: .paused) ?? false
     createdAt = try c.decode(Date.self, forKey: .createdAt)
@@ -89,6 +96,24 @@ extension Automation: Codable {
     lastRunAt = try c.decodeIfPresent(Date.self, forKey: .lastRunAt)
     lastSucceededAt = try c.decodeIfPresent(Date.self, forKey: .lastSucceededAt)
     runs = try c.decodeIfPresent([AutomationRun].self, forKey: .runs) ?? []
+  }
+
+  /// 出力先ごとの状態は中身だけを書き、中身の無い出力先はキーを書かない。
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(id, forKey: .id)
+    try c.encode(definition, forKey: .definition)
+    switch sinkState {
+    case .taskCandidates(let state): try c.encode(state, forKey: .sinkState)
+    case .command: break
+    }
+    try c.encode(paused, forKey: .paused)
+    try c.encode(createdAt, forKey: .createdAt)
+    try c.encode(lastFetched, forKey: .lastFetched)
+    try c.encode(reviewAll, forKey: .reviewAll)
+    try c.encodeIfPresent(lastRunAt, forKey: .lastRunAt)
+    try c.encodeIfPresent(lastSucceededAt, forKey: .lastSucceededAt)
+    try c.encode(runs, forKey: .runs)
   }
 }
 
@@ -111,7 +136,7 @@ struct AutomationDefinition: Equatable, Codable {
     Self.model(agent.model, finalStep: index == steps.count - 1)
   }
 
-  /// 何をするか。名前・トリガー・取得の性質・段の名前を除き、モデルは解いた値で持つ。これが変わる書き換えはやり直しになる。
+  /// 何をするか。名前・トリガー・取得の性質・段の名前を除き、モデルと出力先のコマンドの上限は解いた値で持つ。これが変わる書き換えはやり直しになる。
   var work: Work {
     var source = source?.method
     if case .agent(var agent) = source {
@@ -122,6 +147,11 @@ struct AutomationDefinition: Equatable, Codable {
       guard case .agent(var agent) = step.method else { return step.method }
       agent.model = model(of: agent, at: index)
       return .agent(agent)
+    }
+    var sink = sink
+    if case .command(var command) = sink {
+      command.timeoutMinutes = command.resolvedTimeoutMinutes
+      sink = .command(command)
     }
     return Work(source: source, steps: steps, sink: sink)
   }
@@ -185,22 +215,39 @@ struct AutomationStepAgent: Equatable {
 enum AutomationSink: Equatable {
   /// タスクの候補として覚え、人がさばく。
   case taskCandidates
+  /// 届いた行を標準入力で受けるコマンド。
+  case command(AutomationSinkCommand)
+}
+
+/// 出力先のコマンド。上限は経過時間と出力の無い時間の両方に当てる。
+struct AutomationSinkCommand: Equatable {
+  var command: BackgroundCommand
+  /// 分。省略は `resolvedTimeoutMinutes` が解く。
+  var timeoutMinutes: Int?
+
+  static let timeoutRange = 1...60
+
+  /// 省略を解いた上限（分）。走らせるときも、やり直しの比較もここを通す。
+  var resolvedTimeoutMinutes: Int { timeoutMinutes ?? 2 }
 }
 
 /// 出力先ごとの状態。種類は `AutomationSink` と同じ並びで、出力先の種類を足すときはここにも足す。
 enum AutomationSinkState: Equatable {
   case taskCandidates(AutomationTaskCandidatesState)
+  case command
 
   static func initial(for sink: AutomationSink) -> Self {
     switch sink {
     case .taskCandidates: .taskCandidates(AutomationTaskCandidatesState())
+    case .command: .command
     }
   }
 
   /// `sink` の種類の状態か。
   func belongs(to sink: AutomationSink) -> Bool {
     switch (self, sink) {
-    case (.taskCandidates, .taskCandidates): true
+    case (.taskCandidates, .taskCandidates), (.command, .command): true
+    case (.taskCandidates, _), (.command, _): false
     }
   }
 }
@@ -263,7 +310,7 @@ struct AutomationRun: Codable, Equatable {
   /// 枠の差分と出力先の取り込みを経て、段に回した項目の数。取得元から先へ進まなかった回は nil。
   var fresh: Int?
   var steps: [AutomationStepReport]
-  /// 確定した回だけが持つ。
+  /// 確定した回のうち、出力先が記録を返した回だけが持つ（出力先のコマンドは走った回だけ）。
   var sink: AutomationSinkReport?
   /// 失敗した回の理由。失敗した回は前回の取得結果も出力先の状態も動かさない。
   var failure: String?
@@ -282,6 +329,15 @@ struct AutomationStepReport: Codable, Equatable {
 /// 出力先の記録。
 enum AutomationSinkReport: Equatable {
   case taskCandidates(AutomationTaskCandidatesReport)
+  case command(AutomationCommandReport)
+}
+
+/// 出力先のコマンドが走った回の記録。
+struct AutomationCommandReport: Codable, Equatable {
+  var commandLine: String
+  var ending: String
+  /// 標準入力に渡した行の数。
+  var count: Int
 }
 
 struct AutomationTaskCandidatesReport: Codable, Equatable {
