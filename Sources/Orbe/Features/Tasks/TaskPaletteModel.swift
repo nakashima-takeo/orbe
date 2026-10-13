@@ -134,7 +134,7 @@ struct TaskPaletteTaskList {
     automation = TaskPaletteAutomationModel(
       runner: automations, tasks: store, home: workspaces.home, today: today, timeZone: timeZone)
     automation.onPlaceChange = { [weak self] in self?.focus() }
-    automation.onOpenTask = { [weak self] in self?.onOpenWorktreePalette($0) }
+    automation.onOpenTask = { [weak self] in self?.openAgent(forTask: $0) }
     automation.onOpenURL = { [weak self] in self?.onOpenURL($0) }
     reconcile()
     githubItems.refresh(visibleLinkIDs)
