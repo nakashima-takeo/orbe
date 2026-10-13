@@ -104,13 +104,17 @@ extension AutomationRunnerTests {
     let reread = try AutomationWire.decoder.decode(
       AutomationDefinition.self, from: AutomationWire.encoder().encode(definition))
     XCTAssertEqual(reread, definition)
+    let center = json.replacingOccurrences(of: "menuBar", with: "notificationCenter")
+    XCTAssertEqual(
+      try AutomationWire.decoder.decode(AutomationDefinition.self, from: Data(center.utf8)).notify,
+      .notificationCenter)
 
     let unknown = json.replacingOccurrences(of: "menuBar", with: "mail")
     XCTAssertThrowsError(
       try AutomationWire.decoder.decode(AutomationDefinition.self, from: Data(unknown.utf8))
     ) {
       guard case .dataCorrupted(let context) = $0 as? DecodingError else { return XCTFail("\($0)") }
-      XCTAssertEqual(context.debugDescription, "pass menuBar")
+      XCTAssertEqual(context.debugDescription, "pass menuBar or notificationCenter")
     }
   }
 

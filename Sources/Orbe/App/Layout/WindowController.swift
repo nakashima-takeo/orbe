@@ -77,6 +77,8 @@ final class WindowController: NSObject, NSWindowDelegate {
   let attentionStore = AttentionStore()
   // 通知音の再生層。見ていないタブの状態変化（WindowController+Sound）と設定パレットの試聴が使う。
   let soundPlayer: AgentSoundPlaying = AgentSoundOutput.make()
+  // 通知センター。通知先が通知センターの自動化の知らせが使う。押された通知を受けるので、起動の完了より前に据える（init）。
+  let systemNotifier: SystemNotifying = SystemNotifierOutput.make()
   // エージェントセッションの寿命ログ（agent-sessions.jsonl）の書き手。起動時に読んで剪定した結果を
   // メモリに持ち、タブの同一性の遷移（wire の onIdentityTransition）を積む。復元（restore）より先に
   // 出来ていることが要る——復元タブの起床が opened を書く。
@@ -147,6 +149,9 @@ final class WindowController: NSObject, NSWindowDelegate {
     // makeFirstResponder が成立する（= 起動直後からアクティブタブがキー入力を受ける）状態を作る。
     hostingView.layoutSubtreeIfNeeded()
     wireChromeCallbacks()
+    systemNotifier.onOpenAutomation = { [weak self] in
+      self?.openAutomationFromSystemNotification($0)
+    }
 
     // 言語が決まっていれば、復元が Home のタブを起こすより前にフォルダを用意する
     // （無いままだと、そのタブだけ Orbe の操作の指示が無いまま起きる）。初回は言語選択の確定を待つ（showFirstRunFlow）。

@@ -20,6 +20,7 @@ extension L10n {
     .boardOutputCommand: ("コマンド", "Command"),
     .boardOutputReport: ("報告", "Report"),
     .boardOutputNotifyMenuBar: ("通知：メニューバー", "Notify: menu bar"),
+    .boardOutputNotifyNotificationCenter: ("通知：通知センター", "Notify: Notification Center"),
     .boardOutputTally: (
       "これまでに採用 %1$lld件 / 見送り %2$lld件", "So far %1$lld accepted / %2$lld dismissed"
     ),

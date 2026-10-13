@@ -186,7 +186,8 @@ extension AutomationNotify: Codable {
   init(from decoder: Decoder) throws {
     let c = try decoder.singleValueContainer()
     guard let notify = Self(rawValue: try c.decode(String.self)) else {
-      throw DecodingError.dataCorruptedError(in: c, debugDescription: "pass menuBar")
+      throw DecodingError.dataCorruptedError(
+        in: c, debugDescription: "pass menuBar or notificationCenter")
     }
     self = notify
   }

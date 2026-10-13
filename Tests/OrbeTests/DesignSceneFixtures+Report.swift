@@ -64,6 +64,13 @@ extension DesignSceneFixtures {
       lastRunAt: runs[0].startedAt, runs: runs)
   }
 
+  /// 『開いている PR の要約』の通知先を通知センターにしたもの。
+  static func boardReportNotificationCenterExample() -> Automation {
+    var automation = boardReportExample()
+    automation.redefine { $0.notify = .notificationCenter }
+    return automation
+  }
+
   /// 段の多い例に通知を付けたもの。出力先の段に累計と通知の注記が 2 行で並ぶ。
   static func boardStepsNotifyExample() -> Automation {
     var automation = boardStepsExample()
