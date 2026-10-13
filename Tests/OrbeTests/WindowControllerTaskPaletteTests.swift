@@ -66,7 +66,7 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
       "範囲が開いた workspace なら、その workspace に付く")
   }
 
-  /// 受信タブで提案をタスクにすると、開いた workspace ではなく Home に付く。
+  /// 提案タブで提案をタスクにすると、開いた workspace ではなく Home に付く。
   @MainActor func testAcceptingAProposalInTheAutomationTabAttachesTheTaskToHome() throws {
     let wc = try launchOnAnEmptyWorkspace()
     let automation = try wc.automationRunner.set(nil, AutomationStoreTests.definition())

@@ -2,7 +2,7 @@ import Foundation
 
 @testable import Orbe
 
-/// ボードの自動化の fixture（4 件: 前回が失敗・候補あり・新しい項目なし・止めている）。今と今日は受信タブと同じ
+/// ボードの自動化の fixture（4 件: 前回が失敗・候補あり・新しい項目なし・止めている）。今と今日は提案タブと同じ
 /// （2025-10-04 15:00）。走らせ役は `automationRunner` の取得が終わらない偽物で、本物の claude は起きない。
 extension DesignSceneFixtures {
   private static func agentFetch(_ tool: String, _ request: String, _ coverage: AutomationCoverage)
