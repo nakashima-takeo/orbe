@@ -7,15 +7,9 @@ enum TaskPaletteGitHubRowID: Hashable {
   case more(GitHubItemKind)
 }
 
-/// GitHub タブの絞り込みの札（⇥ で巡回する順）。
-enum TaskGitHubFilter: CaseIterable, Equatable {
-  case all, assigned, authored, reviewRequested
-
-  /// 次の札（末尾の次は先頭）。
-  var next: TaskGitHubFilter {
-    let all = Self.allCases
-    return all[(all.firstIndex(of: self)! + 1) % all.count]
-  }
+/// GitHub タブの絞り込みの札（自分との関係）。
+enum TaskGitHubFilter: Hashable {
+  case assigned, authored, reviewRequested
 }
 
 /// 行に添える、自分との関係の文。
@@ -58,7 +52,7 @@ enum TaskPaletteGitHubRow: Equatable, Identifiable {
     case empty
   }
 
-  /// 「ISSUES · ORBE 24」の見出し（選べない）。件数は絞り込みと入力を当てた後の数。
+  /// 「Issue 24」「PR 7」の見出し（選べない）。件数は絞り込みと入力を当てた後の数。
   case header(GitHubItemKind, count: Int)
   case item(TaskPaletteGitHubItemRow)
   case more(GitHubItemKind, count: Int)
@@ -102,7 +96,8 @@ enum TaskPaletteGitHubRows {
     let login: String?
     /// 自分（所属チームを含む）にレビューを頼んでいる PR の番号。nil = まだ分からない。
     let reviewRequests: Set<Int>?
-    let filter: TaskGitHubFilter
+    /// 入っている札（どれかに当たる項目を出す。空は全件）。
+    let filters: Set<TaskGitHubFilter>
     let query: String
     /// 「さらに」で全部を出した区分。
     var expanded: Set<GitHubItemKind>
@@ -211,9 +206,12 @@ enum TaskPaletteGitHubRows {
       task: task)
   }
 
-  /// 絞り込みの札と入力（タイトルの部分一致か、`#` の有無を問わない番号の前方一致）の両方に当たるか。
+  /// 絞り込みの札（入っている札のどれか。空は全件）と入力（タイトルの部分一致か、`#` の有無を問わない番号の
+  /// 前方一致）の両方に当たるか。
   private static func matches(_ item: GitHubOpenItem, _ input: Input) -> Bool {
-    guard passes(item, input.filter, input) else { return false }
+    guard input.filters.isEmpty || input.filters.contains(where: { passes(item, $0, input) }) else {
+      return false
+    }
     let query = input.query.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !query.isEmpty else { return true }
     let digits = query.hasPrefix("#") ? String(query.dropFirst()) : query
@@ -229,7 +227,6 @@ enum TaskPaletteGitHubRows {
     -> Bool
   {
     switch filter {
-    case .all: true
     case .assigned: item.assignees.contains { isSame($0, input.login) }
     case .authored: isSame(item.author, input.login)
     case .reviewRequested: item.kind == .pr && input.reviewRequests?.contains(item.number) == true

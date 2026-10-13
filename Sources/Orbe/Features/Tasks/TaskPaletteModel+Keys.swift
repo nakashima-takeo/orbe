@@ -1,13 +1,17 @@
 import SwiftUI
 
 /// 焦点ごとのキーの意味。⇥・⇧⇥ はどの焦点でも握る（握らないと焦点がカードの外へ逃げ、以後のキーが
-/// 届かない）。矢印は単一の catch-all で修飾の有無を分ける。
+/// 届かない）。入力欄ではタブを巡り、ほかの焦点では何もしない。矢印は単一の catch-all で修飾の有無を分ける。
 extension TaskPaletteModel {
   /// ヘッダーの入力欄（一覧）。↵ は `onSubmit` が受ける（変換確定の ↵ では発火しない。押し続けたキーリピート
   /// は確定の入口が捨てる——押し続けて次々に完了にする・タスクにしない）。
   func handleFieldKey(_ press: KeyPress) -> KeyPress.Result {
     if press.key == .backtab {
-      toggleTab()
+      setTab(tab.previous)
+      return .handled
+    }
+    if press.key == .tab {
+      setTab(tab.next)
       return .handled
     }
     switch visibleTab {
@@ -29,15 +33,13 @@ extension TaskPaletteModel {
       } else {
         move(direction)
       }
-    case .tab:
-      toggleScope()
     case .return where press.modifiers.contains(.command):
       // onSubmit（↵ = 選んだ行の操作）へ流さず握る。押し続けたリピートでは動かない。
       guard press.phase == .down, pick == nil else { break }
       switch selectedID {
       case .add: askWithQuery()
       case .task(let id): openAgent(forTask: id)
-      case .doneHeader, nil: break
+      case nil: break
       }
     case .rightArrow:
       guard Self.isUnmodified(press), pick == nil, selectedTask != nil else { return .ignored }
@@ -49,21 +51,29 @@ extension TaskPaletteModel {
       guard pick == nil else { return .handled }
       // 押し続けたキーリピートは握り潰す（次の行を次々に完了にしない。入力欄へ空白も入れない）。
       guard press.phase == .down else { return .handled }
-      switch selectedID {
-      case .task(let id): toggleDone(id)
-      case .doneHeader: toggleDoneExpanded()
-      case .add, nil: break
-      }
+      if case .task(let id) = selectedID { toggleDone(id) }
     case _ where Self.isCommandBackspace(press):
       // 文字があるときの ⌘⌫ は行頭まで消す。消して空になった瞬間のキーリピートは削除に使わない。
       guard query.isEmpty else { return .ignored }
       if press.phase == .down, case .task(let id) = selectedID { delete(id) }
     case .escape:
-      if pick == nil { onDismiss() } else { cancelPick() }
+      escapeTaskList()
     default:
       return .ignored
     }
     return .handled
+  }
+
+  /// タスクのタブの一覧の esc。絞り込みの面が開いていればまずそれだけを閉じ、選ぶ状態ならやめ、どちらでもなければ
+  /// 画面を閉じる。
+  private func escapeTaskList() {
+    if openFilterMenu != nil {
+      closeFilterMenu()
+    } else if pick == nil {
+      onDismiss()
+    } else {
+      cancelPick()
+    }
   }
 
   /// GitHub タブの入力欄（一覧）。結び付ける（⌘L）・外す（⌘⌫）・ブラウザで開く（⌘↵）は修飾付きのキーに
@@ -79,8 +89,6 @@ extension TaskPaletteModel {
       } else {
         move(direction)
       }
-    case .tab:
-      cycleGitHubFilter()
     case .rightArrow:
       guard Self.isUnmodified(press), pick == nil, let row = selectedGitHubRow, row.task == nil
       else { return .ignored }

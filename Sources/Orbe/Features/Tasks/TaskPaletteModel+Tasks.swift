@@ -3,8 +3,8 @@ import Foundation
 /// タスクのタブの行の操作（足す・完了 ⇄ 未着手・消す）。変異はストアのメソッドをそのまま呼び、
 /// 検証はストアに任せる。選ぶ状態の間は、選ぶこと以外でタスクを変えない。
 extension TaskPaletteModel {
-  /// 入力のタイトルで未着手のタスクを足し、入力を空にして「今足した」印を付けて選ぶ。workspace は範囲で決める——「すべて」ならなし、開いた workspace ならその workspace。
-  /// 足したタスクの ID を返す。
+  /// 入力のタイトルで未着手のタスクを足し、入力を空にして「今足した」印を付け、絞り込みに合わなくても選ぶ。
+  /// workspace は絞り込みで決める（`addedWorkspace`）。足したタスクの ID を返す。
   @discardableResult func addFromQuery() -> Int? {
     let title = query.trimmingCharacters(in: .whitespacesAndNewlines)
     guard visibleTab == .tasks, !title.isEmpty else { return nil }
@@ -12,7 +12,7 @@ extension TaskPaletteModel {
       let item = try store.add(TaskDraft(title: title, workspace: addedWorkspace?.id))
       query = ""
       justAdded = item.id
-      taskList.select(.task(item.id), in: selectableIDs)
+      selectTask(item.id)
       return item.id
     } catch {
       self.error = .title
@@ -20,13 +20,13 @@ extension TaskPaletteModel {
     }
   }
 
-  /// 足すタスクが付く workspace（範囲で決まる）。
+  /// 足すタスクが付く workspace（絞り込みの workspace がちょうど 1 つならそれ、そうでなければなし）。
   var addedWorkspace: TaskPaletteWorkspaces.Entry? {
-    scope == .all ? nil : workspaces.opened
+    filter.addedWorkspace(in: workspaces)
   }
 
-  /// 完了 ⇄ 未着手。選んでいるタスクなら、選択は同一性を捨てて同じ位置の行へ移る（完了の欄が開いて
-  /// いても追わない）。選んでいないタスク（行のアイコンのクリック）なら、選択はそのまま動かない。
+  /// 完了 ⇄ 未着手。選んでいるタスクなら、選択は同一性を捨てて同じ位置の行へ移る（行が表に残っていても
+  /// 追わない）。選んでいないタスク（行の状態の札のクリック）なら、選択はそのまま動かない。
   func toggleDone(_ id: Int) {
     guard pick == nil else { return }
     leaveEditingForAction()

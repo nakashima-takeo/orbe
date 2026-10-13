@@ -131,12 +131,10 @@ extension TaskPaletteModel {
     error = nil
     switch field {
     case .status:
-      let options: [TaskItem.Status] = [.todo, .inProgress]
-      // 完了のタスクはどちらも選ばれていないので、押した向きの端の値に戻す。
-      let next =
-        options.firstIndex(of: task.status).map { min(max($0 + direction, 0), options.count - 1) }
-        ?? (direction < 0 ? 0 : options.count - 1)
-      if options[next] != task.status { setStatus(options[next]) }
+      // 表の状態ではなくストアのステータスを一周する（待ちのタスクの札は元のステータス）。
+      let options: [TaskItem.Status] = [.todo, .inProgress, .done]
+      let current = options.firstIndex(of: task.status)!
+      setStatus(options[(current + direction + options.count) % options.count])
     case .priority:
       let options: [TaskItem.Priority] = [.high, .medium, .low]
       let index = options.firstIndex(of: task.priority)!

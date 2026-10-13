@@ -3,22 +3,22 @@ import XCTest
 
 @testable import Orbe
 
-/// ⌘⇧X の行き先の段・足した直後（見本 R3Ask.png・R3Added.png と同じ 1440×900）と、長いタイトル・狭い窓の最悪条件。
+/// ⌘⇧X の入力の行き先（入力欄の中のヒント）・足した直後（1440×900）と、長いタイトル・狭い窓の最悪条件。
 extension DesignGallerySnapshotTests {
   func renderTaskSecretarySnapshots(
     _ write: (String, TaskPaletteModel, CGFloat, CGFloat) throws -> Void
   ) throws {
-    // R3Ask: 入力欄に打つと行き先の段が出て、一致するタスクが下に並ぶ。
+    // 入力欄に打つと、入力欄の中に「↵ タスクに追加」「⌘↵ agent に任せる」が出て、一致するタスクが表に並ぶ。
     let destination = DesignSceneFixtures.taskPaletteModel()
     destination.query = "見積もり"
     try write("tasks_destination.png", destination, 1440, 900)
 
     let longTitle = DesignSceneFixtures.taskPaletteModel()
-    longTitle.setScope(.opened)
+    longTitle.toggleWorkspaceFilter(DesignSceneFixtures.taskWorkspaces.opened.id)
     longTitle.query = DesignSceneFixtures.taskSecretaryLongText
     try write("tasks_destination_long.png", longTitle, 1440, 900)
 
-    // R3Added: ↵ で足した直後（今足した・範囲が「すべて」だった）。
+    // ↵ で足した直後（右の欄の見出しが「タスク · 今 ⌘⇧X から足した」）。
     let added = DesignSceneFixtures.taskPaletteModel()
     added.query = "見積もりを山田さんに送る"
     added.submit()

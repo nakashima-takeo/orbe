@@ -1,6 +1,6 @@
 import Foundation
 
-/// ヘッダーのタブ（⇧⇥ で並びの順に巡る）。
+/// ヘッダーのタブ（⇥ で並びの順に、⇧⇥ で逆に巡る）。
 enum TaskPaletteTab: Equatable {
   case tasks, github, automation
 
@@ -9,6 +9,14 @@ enum TaskPaletteTab: Equatable {
     case .tasks: .github
     case .github: .automation
     case .automation: .tasks
+    }
+  }
+
+  var previous: TaskPaletteTab {
+    switch self {
+    case .tasks: .automation
+    case .github: .tasks
+    case .automation: .github
     }
   }
 }
@@ -72,7 +80,7 @@ extension TaskPaletteModel {
   private func queryChanged() {
     error = nil
     switch visibleTab {
-    case .tasks: taskList.selectFirst(in: selectableIDs)
+    case .tasks: selectFirstTask()
     case .github: gitHubList.selectFirst(in: gitHubSelectableIDs)
     case .automation: break
     }

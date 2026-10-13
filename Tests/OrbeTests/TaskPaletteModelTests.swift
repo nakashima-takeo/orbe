@@ -2,11 +2,11 @@ import XCTest
 
 @testable import Orbe
 
-/// タスク画面（⌘⇧X）のモデル `TaskPaletteModel` が、本物の `TaskStore` を読み書きしながら、選択・範囲・
+/// タスク画面（⌘⇧X）のモデル `TaskPaletteModel` が、本物の `TaskStore` を読み書きしながら、選択・絞り込み・
 /// タブ・追加・完了・削除と、agent の変更への付け直しを正しく扱うことを固定する。
 ///
 /// 壊れると何が起きるか: space や ⌘⌫ が、光っている行とは別のタスクを完了・削除する（agent が上に行を
-/// 足した直後や、完了の欄を開いているとき）。足したタスクが別の workspace に付く、または選ばれず見失う。
+/// 足した直後など）。足したタスクが別の workspace に付く、または選ばれず見失う。
 /// 右の欄に居る間に agent がそのタスクを消すと、消えたタスクの右の欄と下書きが残る。
 ///
 /// タスク一覧の変化はカードの `.onChange(of: store.tasks)` が `reconcile()` へ届けるので、agent の変更はストアを
@@ -33,13 +33,13 @@ final class TaskPaletteModelTests: OrbeTestCase {
 
   // MARK: - 開いたとき・入力
 
-  func testOpeningSelectsTheFirstRowInAllScopeOnTheTasksTabWithDoneCollapsed() {
-    let palette = model([task(1, "a", .done), task(2, "b", .inProgress), task(3, "c")])
+  func testOpeningSelectsTheFirstRowOnTheTasksTabWithDoneFilteredOut() {
+    let palette = model([task(1, "a", .done), task(2, "b", .inProgress), task(4, "d", .done)])
 
-    XCTAssertEqual(palette.selectedID, .task(2), "先頭の行（進行中の欄の先頭）")
-    XCTAssertEqual(palette.scope, .all)
+    XCTAssertEqual(palette.selectedID, .task(2), "先頭の行（完了は既定の絞り込みで出ない）")
+    XCTAssertEqual(palette.filter, TaskPaletteFilter())
+    XCTAssertEqual(palette.sort, TaskPaletteSort())
     XCTAssertEqual(palette.tab, .tasks)
-    XCTAssertFalse(palette.doneExpanded)
     XCTAssertEqual(palette.area, .list)
   }
 
@@ -68,18 +68,18 @@ final class TaskPaletteModelTests: OrbeTestCase {
     XCTAssertEqual(palette.justAdded, added.id, "今足した")
   }
 
-  /// 足すタスクの workspace は範囲で決まる——「すべて」ならなし、開いた workspace ならその workspace。
-  func testTheAddedTasksWorkspaceFollowsTheScope() throws {
+  /// 足すタスクの workspace は絞り込みで決まる——workspace がちょうど 1 つならその workspace、そうでなければなし。
+  func testTheAddedTasksWorkspaceFollowsTheWorkspaceFilter() throws {
     let palette = model([])
-    palette.query = "すべてで足す"
+    palette.query = "絞らずに足す"
     palette.submit()
-    palette.setScope(.opened)
-    palette.query = "開いた workspace で足す"
+    palette.toggleWorkspaceFilter(openedWorkspace.id)
+    palette.query = "orbe で足す"
     palette.submit()
 
     let byTitle = Dictionary(uniqueKeysWithValues: palette.store.tasks.map { ($0.title, $0) })
-    XCTAssertNil(try XCTUnwrap(byTitle["すべてで足す"]).workspace, "範囲が「すべて」ならなし")
-    XCTAssertEqual(try XCTUnwrap(byTitle["開いた workspace で足す"]).workspace, openedWorkspace.id)
+    XCTAssertNil(try XCTUnwrap(byTitle["絞らずに足す"]).workspace, "workspace で絞っていなければなし")
+    XCTAssertEqual(try XCTUnwrap(byTitle["orbe で足す"]).workspace, openedWorkspace.id)
   }
 
   /// 入力に文字があっても、↵ は選ばれている行の操作（↓ で一致したタスクを選べば、そのタスクを完了）。
@@ -96,16 +96,15 @@ final class TaskPaletteModelTests: OrbeTestCase {
 
   // MARK: - 完了・削除
 
-  func testCompletingMovesTheSelectionToTheRowAtTheSamePositionEvenWhenDoneIsExpanded() throws {
-    let palette = model([task(1, "a"), task(2, "b"), task(3, "c"), task(9, "z", .done)])
-    palette.toggleDoneExpanded()
+  func testCompletingMovesTheSelectionToTheRowAtTheSamePosition() throws {
+    let palette = threeTodos()
     palette.move(1)
     XCTAssertEqual(palette.selectedID, .task(2), "前提")
 
     palette.submit()
 
     XCTAssertEqual(try storedTask(palette, 2).status, .done)
-    XCTAssertEqual(palette.selectedID, .task(1), "完了の欄へ追わず、同じ位置に来た行を選ぶ")
+    XCTAssertEqual(palette.selectedID, .task(1), "完了にしたタスクを残して追わず、同じ位置に来た行を選ぶ")
   }
 
   /// 行のアイコンのクリックで、選んでいない（上の）行を完了にしても、選んでいるタスクは変わらない。
@@ -129,18 +128,6 @@ final class TaskPaletteModelTests: OrbeTestCase {
     XCTAssertEqual(try storedTask(palette, 1).status, .todo, "完了前の進行中には戻さない")
   }
 
-  func testEnterOnTheDoneHeaderTogglesTheDoneSection() {
-    let palette = model([task(1, "a"), task(2, "b", .done)])
-    palette.move(1)
-    XCTAssertEqual(palette.selectedID, .doneHeader, "前提")
-
-    palette.submit()
-    XCTAssertTrue(palette.rows.contains { $0.selectableID == .task(2) })
-
-    palette.submit()
-    XCTAssertFalse(palette.rows.contains { $0.selectableID == .task(2) })
-  }
-
   func testDeletingRemovesTheTaskAndSelectsTheRowAtTheSamePosition() {
     let palette = threeTodos()
     palette.move(1)
@@ -160,30 +147,12 @@ final class TaskPaletteModelTests: OrbeTestCase {
     XCTAssertEqual(palette.selectedID, .task(2))
   }
 
-  // MARK: - 範囲とタブ
-
-  func testSwitchingScopeKeepsAStillVisibleSelectionOrMovesToTheSamePosition() {
-    let palette = model([
-      task(1, "a") { $0.workspace = self.openedWorkspace.id }, task(2, "b"),
-      task(3, "c") { $0.workspace = self.openedWorkspace.id },
-    ])
-    palette.jump(1)
-
-    palette.toggleScope()
-    XCTAssertEqual(palette.scope, .opened)
-    XCTAssertEqual(palette.selectedID, .task(1), "見えたままなら同じタスク")
-
-    palette.toggleScope()
-    palette.move(-1)
-    XCTAssertEqual(palette.selectedID, .task(2), "前提")
-    palette.toggleScope()
-    XCTAssertEqual(palette.selectedID, .task(1), "見えなくなったら同じ位置の行")
-  }
+  // MARK: - タブ
 
   func testGitHubTabWithoutListsHasNoRowsAndEnterDoesNothing() throws {
     let palette = threeTodos()
 
-    palette.toggleTab()
+    palette.setTab(.github)
     palette.submit()
 
     XCTAssertEqual(palette.tab, .github)

@@ -12,12 +12,9 @@ extension L10n {
     .secretaryAutomationFixInput: (
       "タスクの自動追加 %1$@「%2$@」を直す。", "Fix task auto-add %1$@ “%2$@”."
     ),
-    .taskPaletteDestination: ("行き先", "Destination"),
-    .taskPaletteDestinationTask: ("タスクに書く", "Write a task"),
-    .taskPaletteDestinationDefault: ("既定", "default"),
+    .taskPaletteAddToTasks: ("タスクに追加", "Add a task"),
     .taskPaletteHandToAgent: ("agent に任せる", "Hand to an agent"),
     .taskPaletteHintOpenAgent: ("agent を開く", "Open agent"),
-    .taskPaletteDestinationNoWorkspace: ("workspace なし", "no workspace"),
     .taskPaletteErrSecretaryClaude: (
       "claude が見つからないので agent に任せられない", "Can’t hand to an agent: claude was not found"
     ),

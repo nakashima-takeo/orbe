@@ -64,19 +64,19 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(log.requested, [[link(.issue, 1).item], [link(.issue, 1).item]])
   }
 
-  /// 完了の欄を開く・agent が結び付けるなどで新しく出た項目は、この開いている間に 1 回だけ取る。
+  /// 完了の札を入れる・agent が結び付けるなどで新しく出た項目は、この開いている間に 1 回だけ取る。
   /// 前に開いたときの答えがあっても、この開いている間にまだ試していなければ取る。
   func testNewlyVisibleLinksAreFetchedOnceWhileOpenEvenWithAnEarlierAnswer() throws {
     let log = FetchLog()
     let earlier = TaskPaletteSamples.model(todoAndDone, githubItems: log.cache)
-    earlier.toggleDoneExpanded()
+    earlier.toggleState(.done)
     earlier.ensureVisibleItems()
-    XCTAssertNotNil(log.cache.answers[link(.issue, 3).item], "前提: 完了の欄の項目に前の答えがある")
+    XCTAssertNotNil(log.cache.answers[link(.issue, 3).item], "前提: 完了のタスクの項目に前の答えがある")
 
     let palette = TaskPaletteSamples.model(todoAndDone, githubItems: log.cache)
-    palette.toggleDoneExpanded()
+    palette.toggleState(.done)
     palette.ensureVisibleItems()
-    XCTAssertEqual(log.requested.last, [link(.issue, 3).item], "開いた完了の欄の項目")
+    XCTAssertEqual(log.requested.last, [link(.issue, 3).item], "出てきた完了のタスクの項目")
 
     try setLinks(palette, 1, [link(.issue, 1), link(.pr, 4)])
     palette.reconcile()
@@ -85,7 +85,7 @@ extension TaskPaletteModelTests {
 
     let count = log.requested.count
     palette.ensureVisibleItems()
-    palette.toggleDoneExpanded()
+    palette.toggleState(.done)
     palette.ensureVisibleItems()
     XCTAssertEqual(log.requested.count, count, "答えが届いた後も、この開いている間に試した項目は頼まない")
   }

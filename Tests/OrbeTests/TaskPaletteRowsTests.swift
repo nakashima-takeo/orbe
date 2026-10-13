@@ -2,11 +2,11 @@ import XCTest
 
 @testable import Orbe
 
-/// タスク画面（⌘⇧X）の一覧の行を、タスク・入力・範囲から組む純関数 `TaskPaletteRows` を固定する。
+/// タスク画面（⌘⇧X）の表の行を、タスク・入力・絞り込み・並びから組む純関数 `TaskPaletteRows` を固定する。
 ///
-/// 壊れると何が起きるか: 欄の中が作成の新しい順でなくなり、`orb task list` と画面の並びが食い違う。絞り込みや範囲の外のタスクが混ざる、または消える。待ちの日数・期限・workspace の札が
-/// 別の値を言い、人が「今日やるもの」「自分の workspace のもの」を見誤る。ヘッダーの件数が打った文字で
-/// 揺れて、残りの量が分からなくなる。詳細の改行がそのまま一覧の行に出て、行の高さが崩れる。
+/// 壊れると何が起きるか: 既定の並びが作成の新しい順でなくなり、`orb task list` と画面の並びが食い違う。絞り込みの外の
+/// タスクが混ざる、または消える。待ちの日数・workspace の値が別の値を言い、人が「今日やるもの」「自分の workspace の
+/// もの」を見誤る。状態の札の件数が打った文字で揺れて、残りの量が分からなくなる。
 @MainActor
 final class TaskPaletteRowsTests: OrbeTestCase {
   private let calendar = DesignSceneFixtures.taskCalendar
@@ -32,15 +32,21 @@ final class TaskPaletteRowsTests: OrbeTestCase {
   }
 
   func input(
-    _ tasks: [TaskItem], query: String = "", scope: TaskPaletteScope = .all,
-    doneExpanded: Bool = false, items: [GitHubItemID: GitHubItemAnswer] = [:],
-    viewerLogin: String? = nil,
+    _ tasks: [TaskItem], query: String = "", filter: TaskPaletteFilter = TaskPaletteFilter(),
+    items: [GitHubItemID: GitHubItemAnswer] = [:], viewerLogin: String? = nil,
     agents: [String: WorktreeAgentActivity.Agent] = [:]
   ) -> TaskPaletteRows.Input {
     TaskPaletteRows.Input(
-      tasks: tasks, query: query, scope: scope, doneExpanded: doneExpanded,
+      tasks: tasks, query: query, filter: filter, sort: TaskPaletteSort(),
       workspaces: workspaces, today: today, timeZone: calendar.timeZone, items: items,
       viewerLogin: viewerLogin, agents: agents)
+  }
+
+  /// どの状態も出す絞り込み。
+  private var everything: TaskPaletteFilter {
+    var filter = TaskPaletteFilter()
+    filter.states = []
+    return filter
   }
 
   private func taskIDs(_ rows: [TaskPaletteRow]) -> [Int] {
@@ -51,15 +57,15 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     _ item: TaskItem, items: [GitHubItemID: GitHubItemAnswer] = [:], viewerLogin: String? = nil
   ) throws -> TaskPaletteTaskRow {
     let rows = TaskPaletteRows.build(
-      input([item], doneExpanded: true, items: items, viewerLogin: viewerLogin))
+      input([item], filter: everything, items: items, viewerLogin: viewerLogin))
     return try XCTUnwrap(
       rows.lazy.compactMap { if case .task(let row) = $0 { row } else { nil } }.first)
   }
 
-  // MARK: - 欄と並び
+  // MARK: - 並びと絞り込み
 
-  func testRowsAreGroupedInProgressThenTodoThenDoneHeaderNewestFirstWithinEachSection() {
-    // 保存の順は、どの欄でも作成の順と逆。
+  func testRowsAreFlatNewestFirstAndHideDoneByDefault() {
+    // 保存の順は作成の順と逆。
     let tasks = [
       task(1, "a", .todo), task(2, "b", .inProgress), task(4, "d", .todo),
       task(5, "e", .inProgress), task(3, "c", .done),
@@ -67,28 +73,15 @@ final class TaskPaletteRowsTests: OrbeTestCase {
 
     let rows = TaskPaletteRows.build(input(tasks))
 
-    XCTAssertEqual(rows.count, 7)
-    XCTAssertEqual(rows[0], .sectionHeader(.inProgress, count: 2))
-    XCTAssertEqual(rows[3], .sectionHeader(.todo, count: 2))
-    XCTAssertEqual(rows[6], .doneHeader(count: 1, expanded: false), "完了は最初は畳まれ、見出しだけが出る")
     XCTAssertEqual(
-      taskIDs(rows), [5, 2, 4, 1], "どの欄でも、保存の順に依らず作成の新しい順（同時刻は ID の大きい方が先）")
+      taskIDs(rows), [5, 4, 2, 1], "保存の順に依らず作成の新しい順（同時刻は ID の大きい方が先）。完了は既定の絞り込みで出ない")
+    XCTAssertEqual(rows.count, 4, "区分の見出しは無い")
   }
 
-  func testExpandedDoneSectionListsDoneTasksUnderTheHeaderNewestFirst() {
+  func testStateFilterIncludingDoneListsDoneTasksAmongTheOthers() {
     let tasks = [task(1, "a", .done), task(2, "b", .todo), task(3, "c", .done)]
 
-    let rows = TaskPaletteRows.build(input(tasks, doneExpanded: true))
-
-    XCTAssertEqual(rows[2], .doneHeader(count: 2, expanded: true))
-    XCTAssertEqual(taskIDs(rows), [2, 3, 1])
-  }
-
-  func testEmptySectionsAreOmittedWithTheirHeaders() {
-    let rows = TaskPaletteRows.build(input([task(1, "a", .todo)]))
-
-    XCTAssertEqual(rows.count, 2, "進行中と完了の欄は見出しごと出ない")
-    XCTAssertEqual(rows[0], .sectionHeader(.todo, count: 1))
+    XCTAssertEqual(taskIDs(TaskPaletteRows.build(input(tasks, filter: everything))), [3, 2, 1])
   }
 
   func testNoTasksAndNoQueryShowsTheEmptyInfoRowOnly() {
@@ -97,22 +90,18 @@ final class TaskPaletteRowsTests: OrbeTestCase {
 
   // MARK: - 入力の行き先
 
-  /// 入力中は、前後の空白を除いたタイトルが入力の行き先になり、一覧は「一致するタスク」の見出しの下に一致する
-  /// タスクだけを並べる（欄の見出しは出さない）。
-  func testQueryGivesTheTrimmedTitleToTheDestinationAndListsMatchesUnderOneHeader() {
+  /// 入力中は、前後の空白を除いたタイトルが入力の行き先になり、表は絞り込みに合うタスクのうち一致するものだけを並べる。
+  func testQueryGivesTheTrimmedTitleToTheDestinationAndListsMatches() {
     let tasks = [
       task(1, "PR の説明を書く", .inProgress), task(2, "経費精算を出す"), task(3, "pr を見る"),
       task(4, "pr をレビューする", .done),
     ]
-    let typed = input(tasks, query: "  Pr  ", doneExpanded: true)
+    let typed = input(tasks, query: "  Pr  ")
 
     let rows = TaskPaletteRows.build(typed)
 
     XCTAssertEqual(TaskPaletteRows.addTitle(typed), "Pr", "前後の空白を除いたタイトル")
-    XCTAssertEqual(rows.first, .matchHeader)
-    XCTAssertFalse(rows.contains { if case .sectionHeader = $0 { true } else { false } })
-    XCTAssertEqual(taskIDs(rows), [1, 3, 4], "大文字小文字を区別せず部分一致で絞る")
-    XCTAssertTrue(rows.contains(.doneHeader(count: 1, expanded: true)), "完了の件数も絞った数")
+    XCTAssertEqual(taskIDs(rows), [3, 1], "大文字小文字を区別せず部分一致で絞る（完了は絞り込みの外）")
   }
 
   func testWhitespaceOnlyQueryNeitherAddsNorFilters() {
@@ -126,56 +115,38 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     let typed = input([task(1, "経費精算を出す")], query: "歯医者")
 
     XCTAssertEqual(TaskPaletteRows.addTitle(typed), "歯医者")
-    XCTAssertEqual(TaskPaletteRows.build(typed), [], "一覧は空（「タスクはありません」も出さない）")
+    XCTAssertEqual(TaskPaletteRows.build(typed), [], "表は空（「該当するタスクはありません」も出さない）")
   }
 
-  // MARK: - 範囲と件数
+  // MARK: - 件数
 
-  func testOpenedScopeShowsOnlyTasksOfTheOpenedWorkspace() {
-    let tasks = [
-      task(1) { $0.workspace = self.opened.id }, task(2) { $0.workspace = self.other.id },
-      task(3),
-    ]
-
-    let rows = TaskPaletteRows.build(input(tasks, scope: .opened))
-
-    XCTAssertEqual(taskIDs(rows), [1])
-  }
-
-  func testCountsAreUndoneTasksPerScopeAndIgnoreTheQuery() {
+  func testCountsArePerDisplayStateOverAllTasksAndUndoneTotal() {
+    let waiting = TaskItem.Waiting(reason: "返事", since: now)
     let tasks = [
       task(1, "a", .todo) { $0.workspace = self.opened.id },
       task(2, "b", .inProgress) { $0.workspace = self.opened.id },
       task(3, "c", .done) { $0.workspace = self.opened.id },
-      task(4, "d", .todo) { $0.workspace = self.other.id },
+      task(4, "d", .inProgress) { $0.wait = .waiting(waiting) },
       task(5, "e", .todo),
     ]
 
-    let all = TaskPaletteRows.counts(input(tasks, query: "a", scope: .all))
-    let scoped = TaskPaletteRows.counts(input(tasks, query: "a", scope: .opened))
+    let counts = TaskPaletteCounts(tasks)
 
-    XCTAssertEqual(all, TaskPaletteCounts(scoped: 4, all: 4, opened: 2))
-    XCTAssertEqual(scoped, TaskPaletteCounts(scoped: 2, all: 4, opened: 2))
+    XCTAssertEqual(counts.states, [.todo: 2, .inProgress: 1, .waiting: 1, .done: 1])
+    XCTAssertEqual(counts.undone, 4)
   }
 
-  // MARK: - タスクの行の札
+  // MARK: - タスクの行の値
 
-  func testGlyphShowsDoneOverWaitingAndWaitingOverInProgressOrTodo() throws {
+  func testStateShowsDoneOverWaitingAndWaitingOverInProgressOrTodo() throws {
     let waiting = TaskItem.Waiting(reason: "返事", since: now)
 
-    XCTAssertEqual(try taskRow(task(1, "a", .todo)).glyph, .todo)
-    XCTAssertEqual(try taskRow(task(1, "a", .inProgress)).glyph, .inProgress)
+    XCTAssertEqual(try taskRow(task(1, "a", .todo)).state, .todo)
+    XCTAssertEqual(try taskRow(task(1, "a", .inProgress)).state, .inProgress)
     XCTAssertEqual(
-      try taskRow(task(1, "a", .inProgress) { $0.wait = .waiting(waiting) }).glyph, .waiting)
-    XCTAssertEqual(try taskRow(task(1, "a", .todo) { $0.wait = .waiting(waiting) }).glyph, .waiting)
-    XCTAssertEqual(try taskRow(task(1, "a", .done)).glyph, .done)
-    XCTAssertTrue(try taskRow(task(1, "a", .done)).isDone)
-  }
-
-  func testPriorityBadgeIsShownOnlyForHighAndLow() throws {
-    XCTAssertEqual(try taskRow(task(1) { $0.priority = .high }).priority, .high)
-    XCTAssertEqual(try taskRow(task(1) { $0.priority = .low }).priority, .low)
-    XCTAssertNil(try taskRow(task(1) { $0.priority = .medium }).priority)
+      try taskRow(task(1, "a", .inProgress) { $0.wait = .waiting(waiting) }).state, .waiting)
+    XCTAssertEqual(try taskRow(task(1, "a", .todo) { $0.wait = .waiting(waiting) }).state, .waiting)
+    XCTAssertEqual(try taskRow(task(1, "a", .done)).state, .done)
   }
 
   func testWaitingBadgeCountsCalendarDaysSinceTheStartInTheGivenCalendar() throws {
@@ -192,25 +163,10 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     XCTAssertEqual(try row(earlyThisMorning).waiting?.days, 0, "今日始まった待ちは 0 日")
   }
 
-  func testWorkspaceBadgeIsOpenedOtherOrNoneForAnUnresolvableReference() throws {
-    XCTAssertEqual(
-      try taskRow(task(1) { $0.workspace = self.opened.id }).workspace, .opened("orbe"))
-    XCTAssertEqual(
-      try taskRow(task(1) { $0.workspace = self.other.id }).workspace, .other("web-app"))
+  func testWorkspaceIsTheNameOrNoneForAnUnresolvableReference() throws {
+    XCTAssertEqual(try taskRow(task(1) { $0.workspace = self.opened.id }).workspace, "orbe")
+    XCTAssertEqual(try taskRow(task(1) { $0.workspace = self.other.id }).workspace, "web-app")
     XCTAssertNil(try taskRow(task(1)).workspace)
     XCTAssertNil(try taskRow(task(1) { $0.workspace = UUID() }).workspace, "削除された workspace は「なし」")
-  }
-
-  /// 一覧に出す詳細は 1 行——改行と続く空白を 1 つの空白にまとめ、前後の空白を除く。
-  func testDescriptionLineJoinsLinesAndRunsOfWhitespaceIntoSingleSpaces() throws {
-    let row = try taskRow(task(1) { $0.description = "  ⌘⇧S にそろえる。\n\n  行と\tフッター  \n" })
-
-    XCTAssertEqual(row.descriptionLine, "⌘⇧S にそろえる。 行と フッター")
-  }
-
-  /// 空白だけの詳細は、詳細が無いのと同じく行に出さない（行は 1 行のまま）。
-  func testWhitespaceOnlyDescriptionShowsNoDescriptionLine() throws {
-    XCTAssertNil(try taskRow(task(1)).descriptionLine)
-    XCTAssertNil(try taskRow(task(1) { $0.description = " \n\t\n " }).descriptionLine)
   }
 }

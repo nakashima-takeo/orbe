@@ -41,8 +41,7 @@ extension TaskPaletteModel {
   }
 
   /// 選ぶ状態の ↵。タスクを選ぶ状態はそのタスクへ結び付けて GitHub タブのその行へ、項目を選ぶ状態はその項目を
-  /// 結び付けて右の欄のその結び付きへ戻る。その項目を既に持つタスクでは何もしない。完了の見出しは開閉し、
-  /// 「さらに」は区分を開く。
+  /// 結び付けて右の欄のその結び付きへ戻る。その項目を既に持つタスクでは何もしない。「さらに」は区分を開く。
   func confirmPick() {
     switch pick {
     case .task(let link, _):
@@ -51,7 +50,6 @@ extension TaskPaletteModel {
         guard pickedItemOwner?.id != id, attach(link, to: id) else { return }
         endPick(returningTo: .list)
         gitHubList.select(.item(link.item), in: gitHubSelectableIDs)
-      case .doneHeader: toggleDoneExpanded()
       case .add, nil: break
       }
     case .item(let taskID, _):

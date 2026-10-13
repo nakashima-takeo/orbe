@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// GitHub タブの左の一覧。上に絞り込みの札、その下に区分ごとの行。行は `TaskPaletteGitHubRows` が組んだ値を
+/// GitHub タブの左の一覧。上に絞り込みの札と右端のリポジトリ名、その下に区分ごとの行。行は `TaskPaletteGitHubRows` が組んだ値を
 /// そのまま描き、選択は行の同一性で光らせる。使えないとき・読み込み中は理由の 1 行だけを出す。
 struct TaskPaletteGitHubList: View {
   @Bindable var model: TaskPaletteModel
@@ -11,8 +11,8 @@ struct TaskPaletteGitHubList: View {
     case .lists:
       VStack(alignment: .leading, spacing: 0) {
         TaskGitHubFilterChips(model: model)
-          .padding(.leading, 22 + TaskPaletteRowMetrics.listPadding)
-          .padding(.top, Theme.Space.beat)
+          .padding(.horizontal, 22 + TaskPaletteRowMetrics.listPadding)
+          .padding(.top, Theme.Space.step)
           .padding(.bottom, Theme.Space.tick)
         rows
       }
@@ -95,63 +95,53 @@ struct TaskPaletteGitHubList: View {
     }
   }
 
-  /// 「ISSUES · ORBE 24」。リポジトリ名は owner を除く。
+  /// 「Issue 24」「PR 7」。
   private func sectionLabel(_ kind: GitHubItemKind, _ count: Int) -> some View {
-    let title = kind == .issue ? "ISSUES" : "PULL REQUESTS"
-    let repo = model.gitHubRepo?.name.uppercased() ?? ""
-    return Text("\(title) · \(repo) \(count)")
-      .font(Font.theme.sectionLabel)
-      .tracking(Theme.Typography.trackingLabel)
-      .foregroundStyle(Color.theme.textMuted)
-      .lineLimit(1)
-      .padding(.leading, 22)
-      .padding(.top, Theme.Space.step)
-      .padding(.bottom, Theme.Space.tick)
-      .frame(maxWidth: .infinity, alignment: .leading)
+    HStack(spacing: Theme.Space.note) {
+      Text(kind == .issue ? "Issue" : "PR")
+        .fontWeight(.semibold)
+        .foregroundStyle(Color.theme.textPrimary)
+      Text("\(count)").foregroundStyle(Color.theme.textMuted)
+    }
+    .font(Font.theme.chrome)
+    .lineLimit(1)
+    .padding(.leading, 22)
+    .padding(.top, Theme.Space.step)
+    .padding(.bottom, Theme.Space.tick)
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
 
-/// 絞り込みの札（すべて / 担当が自分 / 作成者が自分 / レビュー依頼）。件数は一覧の全件で数え、自分がまだ
-/// 分からない札には出さない。焦点は取らない。
+/// 絞り込みの札（担当が自分 / 作成者が自分 / レビュー依頼。押して入れ切り）と、右端にリポジトリ名（owner を除く）。
+/// 件数は一覧の全件で数え、自分がまだ分からない札には出さない。焦点は取らない。
 struct TaskGitHubFilterChips: View {
   @Bindable var model: TaskPaletteModel
   @Environment(\.localization) private var l10n
 
   var body: some View {
     let counts = model.gitHubFilterCounts
-    HStack(spacing: Theme.Space.note) {
-      chip(.all, l10n.string(.taskPaletteScopeAll), nil)
-      chip(.assigned, l10n.string(.taskPaletteGitHubFilterAssigned), counts?.assigned)
-      chip(.authored, l10n.string(.taskPaletteGitHubFilterAuthored), counts?.authored)
-      chip(.reviewRequested, l10n.string(.taskPaletteGitHubFilterReview), counts?.reviewRequested)
+    HStack(spacing: Theme.Space.step) {
+      chip(.assigned, .taskPaletteGitHubFilterAssigned, counts?.assigned)
+      chip(.authored, .taskPaletteGitHubFilterAuthored, counts?.authored)
+      chip(.reviewRequested, .taskPaletteGitHubFilterReview, counts?.reviewRequested)
+      Spacer(minLength: Theme.Space.step)
+      if let repo = model.gitHubRepo {
+        HStack(spacing: Theme.Space.note) {
+          Image(systemName: "book.closed").font(.system(size: 10))
+          Text(repo.name)
+        }
+        .font(Font.theme.chrome)
+        .foregroundStyle(Color.theme.textMuted)
+        .lineLimit(1)
+        .fixedSize()
+      }
     }
   }
 
-  private func chip(_ filter: TaskGitHubFilter, _ title: String, _ count: Int?) -> some View {
-    let selected = model.githubFilter == filter
-    return Button {
-      model.setGitHubFilter(filter)
-    } label: {
-      HStack(spacing: Theme.Space.note) {
-        Text(title)
-          .foregroundStyle(selected ? Color.theme.textPrimary : Color.theme.textSecondary)
-        if let count {
-          Text("\(count)").foregroundStyle(Color.theme.textMuted)
-        }
-      }
-      .font(Font.theme.chrome)
-      .lineLimit(1)
-      .fixedSize()
-      .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
-      .frame(height: 22)
-      .background(
-        RoundedRectangle(cornerRadius: Theme.Radius.row)
-          .fill(selected ? Color.theme.tintAccent : Color.theme.surfaceInk.opacity(0.04))
-      )
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .focusable(false)
+  private func chip(_ filter: TaskGitHubFilter, _ title: L10nKey, _ count: Int?) -> some View {
+    TaskPaletteFilterChip(
+      title: l10n.string(title), count: count, on: model.githubFilters.contains(filter),
+      action: { model.toggleGitHubRelation(filter) })
   }
 }
 

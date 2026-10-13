@@ -6,7 +6,7 @@ import XCTest
 /// タスク画面の flow（ファイル分割の拡張）。撮り方・出力先は本体の `flow` を共有する。
 extension DesignFlowSnapshotTests {
   /// 打って絞り込み・↵ で追加・space で完了・→ で右の欄・期限の編集（読めない入力は赤）・esc で一覧、
-  /// agent が上の欄に足しても選択が動かない・完了の欄を開く（詳細のある完了の行も沈む）、までを撮る。
+  /// agent が足しても選択が動かない、までを撮る。
   func testTaskPalette() throws {
     let palette = DesignSceneFixtures.taskPaletteModel()
     try flow(
@@ -56,12 +56,55 @@ extension DesignFlowSnapshotTests {
             palette.reconcile()
           }
         ),
-        ("done_expanded", { palette.toggleDoneExpanded() }),
       ])
   }
 
-  /// 待ちの条件: #214（待っている）を選ぶ → → で右の欄 → ↓ で確認のコマンド → ↵ で開く → ↓ で実行の記録 → ↵ で開く →
-  /// 一覧へ戻り、確認が成功して解けた #214 を選んだまま（フッターの「⌘T … を claude で続きから」）、までを撮る。
+  /// 表: 完了の札を入れる（完了の行は沈む）・優先度の面を開いて値を入れる（面は開いたまま）・面を閉じる・
+  /// 件名の列で並べてもう一度押して逆にする・右の欄で完了まで巡っても行が残る・↓ で離れると残した行が消える・
+  /// ⇥ で次のタブ、までを撮る。
+  func testTaskPaletteTable() throws {
+    let palette = DesignSceneFixtures.taskPaletteModel()
+    try flow(
+      "task_palette_table", size: NSSize(width: 1440, height: 900),
+      render: {
+        ZStack {
+          BackgroundGlow()
+          TaskPaletteOverlay(model: palette)
+        }
+        .environment(\.localization, LocalizationStore(language: .ja))
+      },
+      steps: [
+        ("start", {}),
+        ("filter_done", { palette.toggleState(.done) }),
+        ("filter_menu", { palette.toggleFilterMenu(.priority) }),
+        ("filter_menu_high", { palette.togglePriorityFilter(.high) }),
+        ("filter_menu_closed", { palette.closeFilterMenu() }),
+        (
+          "sorted_title",
+          {
+            palette.togglePriorityFilter(.high); palette.toggleState(.done)
+            palette.setSort(.title)
+          }
+        ),
+        ("sorted_title_reversed", { palette.setSort(.title) }),
+        (
+          "status_done_kept",
+          {
+            palette.enterDetail(); palette.changeValue(1); palette.changeValue(1)
+          }
+        ),
+        (
+          "kept_released",
+          {
+            palette.leaveDetail(); palette.move(1)
+          }
+        ),
+        ("next_tab", { palette.setTab(palette.tab.next) }),
+      ])
+  }
+
+  /// 待ちの条件: 見積もり（待っている）を選ぶ → → で右の欄 → ↓ で確認のコマンド → ↵ で開く → ↓ で実行の記録 → ↵ で
+  /// 開く → 一覧へ戻り、確認が成功して解けた見積もりを選んだまま（フッターの「⌘T … を claude で続きから」）、までを撮る。
   func testTaskWaitCondition() throws {
     let palette = DesignSceneFixtures.taskPaletteModel(
       DesignSceneFixtures.taskWaitConditionFile(),
@@ -76,12 +119,7 @@ extension DesignFlowSnapshotTests {
         .environment(\.localization, LocalizationStore(language: .ja))
       },
       steps: [
-        (
-          "selected",
-          {
-            palette.move(1); palette.move(1)
-          }
-        ),
+        ("selected", { palette.tapRow(.task(3)) }),
         ("detail", { palette.enterDetail() }),
         (
           "command",
@@ -122,7 +160,7 @@ extension DesignFlowSnapshotTests {
         (
           "command",
           { _ in
-            palette.move(1); palette.move(1); palette.enterDetail()
+            palette.tapRow(.task(3)); palette.enterDetail()
             palette.moveField(1); palette.moveField(1)
           }
         ),
@@ -150,7 +188,8 @@ extension DesignFlowSnapshotTests {
         (
           "link_focused",
           {
-            palette.enterDetail(); palette.moveField(-1); palette.moveField(-1)
+            palette.tapRow(.task(4)); palette.enterDetail(); palette.moveField(-1)
+            palette.moveField(-1)
           }
         ),
         ("unlinked", { palette.unlink(palette.selectedTask!.links[0].item) }),
@@ -160,7 +199,7 @@ extension DesignFlowSnapshotTests {
             var update = TaskUpdate()
             update.links =
               palette.selectedTask!.links + [DesignSceneFixtures.taskLink(.issue, "orbe", 230)]
-            _ = try? palette.store.update(1, update)
+            _ = try? palette.store.update(4, update)
             palette.reconcile()
           }
         ),
@@ -185,7 +224,7 @@ extension DesignFlowSnapshotTests {
         (
           "start",
           {
-            palette.toggleTab(); palette.tapGitHubRow(issue221)
+            palette.setTab(palette.tab.next); palette.tapGitHubRow(issue221)
           }
         ),
         (
@@ -252,7 +291,7 @@ extension DesignFlowSnapshotTests {
         (
           "pane_assign",
           { _ in
-            palette.toggleTab(); palette.tapGitHubRow(issue221); palette.enterPane()
+            palette.setTab(palette.tab.next); palette.tapGitHubRow(issue221); palette.enterPane()
           }
         ),
         (

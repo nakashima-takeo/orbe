@@ -284,18 +284,18 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.selectedID, .task(2), "⌥↑ は ↑ と同じく前の行へ")
   }
 
-  func testTabSwitchesScopeAndShiftTabSwitchesTabWhileTheFieldKeepsTheKeys() {
+  func testTabAndShiftTabCycleTheTabsWhileTheFieldKeepsTheKeys() {
     let model = model()
     let window = mount(model)
 
     press(Key.tab, "\t", to: window)
-    XCTAssertEqual(model.scope, .opened)
-
-    press(Key.tab, "\u{19}", .shift, to: window)
     XCTAssertEqual(model.tab, .github)
 
-    press(Key.tab, "\u{19}", .shift, to: window)
+    press(Key.tab, "\t", to: window)
     XCTAssertEqual(model.tab, .automation, "3 つのタブを巡る")
+
+    press(Key.tab, "\u{19}", .shift, to: window)
+    XCTAssertEqual(model.tab, .github, "⇧⇥ は逆に巡る")
 
     press(Key.tab, "\u{19}", .shift, to: window)
     type("x", into: window)

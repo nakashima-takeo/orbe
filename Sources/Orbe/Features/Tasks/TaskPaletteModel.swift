@@ -4,7 +4,7 @@ import Observation
 /// ⌘⇧X タスク画面の状態（@Observable）。タスクの値は写さずストア（唯一の正）を直接読み書きし、GitHub の値も
 /// 写さず置き場（結び付いた項目は `GitHubItemCache`、open 一覧は `GitHubOpenLists`、自分は `GitHubViewer`）
 /// から、agent の状態も写さず窓の索引（`WorktreeAgentActivity`・`AgentSessionTabs`）から引く。ここは一覧ごとの状態（入力・選択・
-/// 送り先）・範囲・タブ・絞り込み・焦点・編集中の下書き・右の欄の値だけを持つ。一覧の行は
+/// 送り先）・タスクの絞り込みと並び・タブ・GitHub の絞り込み・焦点・編集中の下書き・右の欄の値だけを持つ。一覧の行は
 /// `TaskPaletteRows` と `TaskPaletteGitHubRows` が毎回組む。
 /// タスクか一覧が変わったとき（agent の変更を含む）は `reconcile()` 1 本で選択・焦点・下書きを付け直す。
 /// 受信タブの状態と手続きは `automation` が持ち、見えているタブが受信のときだけ、入力・キー・焦点をそこへ振り分ける。
@@ -38,22 +38,30 @@ import Observation
     didSet { resetPaneIfMoved(to: tabGitHubList.selectedID) }
   }
 
-  private(set) var scope: TaskPaletteScope = .all
   /// 保存したタブ。今見えているタブは `visibleTab`。
   private(set) var tab: TaskPaletteTab = .tasks
-  private(set) var doneExpanded = false
-  /// GitHub タブの絞り込みの札。書くのはモデル（拡張を含む）だけ。
-  var githubFilter: TaskGitHubFilter = .all
+  /// タスクのタブの絞り込み（選ぶ状態と共有する）。書くのはモデル（拡張を含む）だけ。
+  var filter = TaskPaletteFilter()
+  /// タスクのタブの並び。書くのはモデル（拡張を含む）だけ。
+  var sort = TaskPaletteSort()
+  /// 開いている絞り込みの面。書くのはモデル（拡張を含む）だけ。
+  var openFilterMenu: TaskPaletteFilterKind?
+  /// GitHub タブの絞り込みの札（入っている関係のどれかに当たる項目を出す。空は全件）。書くのはモデル（拡張を
+  /// 含む）だけ。
+  var githubFilters: Set<TaskGitHubFilter> = []
   /// 「さらに」で全部を出した区分。書くのはモデル（拡張を含む）だけ。
   var expandedKinds: Set<GitHubItemKind> = []
   /// 右の欄の値。書くのはモデル（拡張を含む）だけ。
   var pane = TaskGitHubPane()
-  /// 選ぶ状態（自分の一覧の状態を持つ）。書くのはモデル（拡張を含む）だけ。
-  var pick: TaskPalettePick?
-  /// キーを受ける場所。書くのはモデル（拡張を含む）だけ。
+  /// 選ぶ状態（自分の一覧の状態を持つ）。書くのはモデル（拡張を含む）だけ。入る・出るときは絞り込みの面を閉じる。
+  var pick: TaskPalettePick? {
+    didSet { if (pick == nil) != (oldValue == nil) { openFilterMenu = nil } }
+  }
+  /// キーを受ける場所。書くのはモデル（拡張を含む）だけ。一覧を離れたら絞り込みの面を閉じる。
   var area: TaskPaletteArea = .list {
     didSet {
       if area != oldValue { focus() }
+      if area != .list { openFilterMenu = nil }
       rememberDetailPosition()
     }
   }
@@ -116,6 +124,7 @@ import Observation
   }
 
   /// タスクのタブの行（見えていなくても組む——タブを行き来しても選んだ行が残るよう、付け直しは自分の行で行う）。
+  /// 選んでいるタスクは、絞り込みと入力に合わなくても残す。
   var rows: [TaskPaletteRow] { TaskPaletteRows.build(rowsInput) }
 
   /// タスクのタブの行で使う一覧の状態（タスクを選ぶ状態なら、その状態が持つもの）。
@@ -148,41 +157,84 @@ import Observation
     }
   }
 
-  var counts: TaskPaletteCounts { TaskPaletteRows.counts(rowsInput) }
+  var counts: TaskPaletteCounts { TaskPaletteCounts(store.tasks) }
 
-  var rowsInput: TaskPaletteRows.Input {
+  /// 今の選択を残して組む行の入力。
+  var rowsInput: TaskPaletteRows.Input { rowsInput(keeping: keptTask) }
+
+  /// `kept` のタスクを、絞り込みと入力に合わなくても残して組む行の入力。
+  func rowsInput(keeping kept: Int?) -> TaskPaletteRows.Input {
     TaskPaletteRows.Input(
-      tasks: store.tasks, query: taskList.query, picking: pick != nil,
-      justAdded: justAdded, scope: scope, doneExpanded: doneExpanded,
-      workspaces: workspaces, today: today, timeZone: timeZone, items: githubItems.answers,
-      viewerLogin: viewer.login, agents: agents.agents)
+      tasks: store.tasks, query: taskList.query, picking: pick != nil, filter: filter, sort: sort,
+      kept: kept, workspaces: workspaces, today: today, timeZone: timeZone,
+      items: githubItems.answers, viewerLogin: viewer.login, agents: agents.agents)
   }
 
-  /// 出ている行（今の範囲・入力で一覧に出るタスク。完了の欄は開いているときだけ）の結び付きの項目。
-  /// GitHub の値を取りに行く範囲はこれで決まる。
+  /// 今の一覧の状態で選んでいるタスク（選ぶ状態ならその状態の選択）。
+  private var keptTask: Int? {
+    guard case .task(let id) = taskList.selectedID else { return nil }
+    return id
+  }
+
+  /// 出ている行（今の絞り込み・並び・入力で表に出るタスク）の結び付きの項目。GitHub の値を取りに行く範囲は
+  /// これで決まる。
   var visibleLinkIDs: Set<GitHubItemID> {
     let ids = Set(
       rows.compactMap { row -> Int? in if case .task(let task) = row { task.id } else { nil } })
     return Set(store.tasks.filter { ids.contains($0.id) }.flatMap { $0.links.map(\.item) })
   }
 
-  /// 出ている行の結び付きが変わったとき（agent の変更・完了の欄の開閉・範囲・入力）、この開いている間に
+  /// 出ている行の結び付きが変わったとき（agent の変更・絞り込み・入力）、この開いている間に
   /// まだ取りに行っていない項目を取る。
   func ensureVisibleItems() {
     githubItems.ensure(visibleLinkIDs)
   }
 
-  /// 選べる行（入力があれば先頭に入力の行き先、続いて一覧の選べる行）。
-  var selectableIDs: [TaskPaletteRowID] {
-    (TaskPaletteRows.addTitle(rowsInput) == nil ? [] : [.add]) + rows.compactMap(\.selectableID)
+  /// 今の選択を残して組んだ選べる行。
+  var selectableIDs: [TaskPaletteRowID] { selectableIDs(keeping: keptTask) }
+
+  /// `kept` を残して組んだ選べる行（入力があれば先頭に入力の行き先、続いて表の行）。
+  func selectableIDs(keeping kept: Int?) -> [TaskPaletteRowID] {
+    let input = rowsInput(keeping: kept)
+    return (TaskPaletteRows.addTitle(input) == nil ? [] : [.add])
+      + TaskPaletteRows.build(input).compactMap(\.selectableID)
+  }
+
+  /// 選んでいるタスクが、絞り込みと入力に合わないのに残っているか。
+  var isKeepingSelection: Bool {
+    guard let id = selectedID, case .task = id else { return false }
+    return !selectableIDs(keeping: nil).contains(id)
+  }
+
+  /// タスクのタブの一覧の選択を動かす唯一の入口。`kept` を残して組んだ並びの中で動かし、動かした後の選択を
+  /// 残して組んだ並びで位置を合わせ直す（選べる行の並びは選択に左右されるが、`ListState` は左右されない前提で
+  /// 位置を覚えるため）。
+  func moveTaskSelection(
+    keeping kept: Int?,
+    _ change: (inout ListState<TaskPaletteRowID>, [TaskPaletteRowID]) -> Void
+  ) {
+    var list = taskList
+    change(&list, selectableIDs(keeping: kept))
+    taskList = list
+    taskList.reconcile(selectableIDs)
+  }
+
+  /// そのタスクを、絞り込みと入力に合わなくても残して選ぶ（足した直後・「タスクへ移る」・ピル）。
+  func selectTask(_ id: Int) {
+    moveTaskSelection(keeping: id) { $0.select(.task(id), in: $1) }
+  }
+
+  /// 先頭の行を選ぶ（入力・絞り込みが変わったとき）。選んでいたタスクは残さない。
+  func selectFirstTask() {
+    moveTaskSelection(keeping: nil) { $0.selectFirst(in: $1) }
   }
 
   var selectedID: TaskPaletteRowID? { taskList.selectedID }
 
-  /// 一覧を送る先。人の操作（選び直し・範囲や開閉の切り替え・画面からの変異）のたびに決め直す。
+  /// 一覧を送る先。人の操作（選び直し・絞り込みや並びの切り替え・画面からの変異）のたびに決め直す。
   var scrollTarget: ListScrollTarget<TaskPaletteRowID>? { taskList.scrollTarget }
 
-  /// 選んでいるタスク（右の欄に出すもの）。入力の行き先・完了の見出しでは nil。
+  /// 選んでいるタスク（右の欄に出すもの）。入力の行き先では nil。
   var selectedTask: TaskItem? {
     guard case .task(let id) = selectedID else { return nil }
     return store.tasks.first { $0.id == id }
@@ -205,7 +257,7 @@ import Observation
 
   func focus() { focusToken &+= 1 }
 
-  /// タスク・一覧・範囲・タブ・開閉が変わったあとの付け直し。選択は一覧の状態ごとに、その行で付け直す
+  /// タスク・一覧・絞り込み・並び・タブが変わったあとの付け直し。選択は一覧の状態ごとに、その行で付け直す
   /// （`ListState`）。右の欄に居る間に選択が別の行へ移ったら一覧へ戻り、対象が消えた下書きは捨てる。右の欄に
   /// 居る間に、選択の同一性が変わった・選んだ行が結び付いていない項目でなくなったら一覧へ戻る。
   func reconcile() {
@@ -240,7 +292,7 @@ import Observation
   func move(_ direction: Int) {
     error = nil
     switch visibleTab {
-    case .tasks: taskList.move(direction, in: selectableIDs)
+    case .tasks: moveTaskSelection(keeping: keptTask) { $0.move(direction, in: $1) }
     case .github: gitHubList.move(direction, in: gitHubSelectableIDs)
     case .automation: automation.moveProposal(direction)
     }
@@ -250,33 +302,33 @@ import Observation
   func jump(_ direction: Int) {
     error = nil
     switch visibleTab {
-    case .tasks: taskList.jump(direction, in: selectableIDs)
+    case .tasks: moveTaskSelection(keeping: keptTask) { $0.jump(direction, in: $1) }
     case .github: gitHubList.jump(direction, in: gitHubSelectableIDs)
     case .automation: automation.jumpProposal(direction)
     }
   }
 
-  /// 行のクリック。入力の行き先は足し、完了の見出しは開閉し、タスクの行は選ぶ。編集中なら確定してから移る。
+  /// 行のクリック。入力の行き先は足し、タスクの行は選ぶ。編集中なら確定してから移る。
   func tapRow(_ id: TaskPaletteRowID) {
     leaveEditingForAction()
     area = .list
-    guard taskList.select(id, in: selectableIDs) else { return }
+    guard selectableIDs.contains(id) else { return }
+    moveTaskSelection(keeping: keptTask) { $0.select(id, in: $1) }
     focus()
-    switch id {
-    case .add: addFromQuery()
-    case .doneHeader: flipDoneExpanded()
-    case .task: break
-    }
+    if id == .add { addFromQuery() }
   }
 
-  /// ホバー開始による選択の追従。実マウス移動の後、一覧に居る間だけ効く。
+  /// ホバー開始による選択の追従。実マウス移動の後、一覧に居る間だけ効く。絞り込みに合わないのに残している行が
+  /// ある間は移さない（移すと残した行が消えて下の行が 1 行ずれ、次のクリックが狙った行の 1 つ下に当たる）。
   func hoverSelect(_ id: TaskPaletteRowID) {
-    guard area == .list, draft == nil, inputModality == .pointer else { return }
-    taskList.hoverSelect(id, in: selectableIDs)
+    guard area == .list, draft == nil, inputModality == .pointer, !isKeepingSelection else {
+      return
+    }
+    moveTaskSelection(keeping: keptTask) { $0.hoverSelect(id, in: $1) }
   }
 
-  /// ↵。選んでいる行の操作（タスクのタブは追加 / 完了 ⇄ 未着手 / 完了の欄の開閉、GitHub タブは
-  /// `submitGitHub`、受信タブはタスクにする、選ぶ状態は `confirmPick`）。
+  /// ↵。選んでいる行の操作（タスクのタブは追加 / 完了 ⇄ 未着手、GitHub タブは `submitGitHub`、受信タブは
+  /// タスクにする、選ぶ状態は `confirmPick`）。
   func submit() {
     guard pick == nil else { return confirmPick() }
     if visibleTab == .automation { return automation.accept() }
@@ -284,20 +336,8 @@ import Observation
     switch selectedID {
     case .add: addFromQuery()
     case .task(let id): toggleDone(id)
-    case .doneHeader: toggleDoneExpanded()
     case nil: break
     }
-  }
-
-  func toggleDoneExpanded() {
-    error = nil
-    flipDoneExpanded()
-  }
-
-  private func flipDoneExpanded() {
-    doneExpanded.toggle()
-    reconcile()
-    taskList.follow()
   }
 
   /// 別の操作に移る前の共通の手順。前の操作の失敗を消してから、編集中の文字を確定する——この順なので、
@@ -308,52 +348,27 @@ import Observation
     leaveEditing()
   }
 
-  /// ⇥・範囲の札のクリック。
-  func toggleScope() {
-    leaveEditingForAction()
-    area = .list
-    scope = scope == .all ? .opened : .all
-    reconcile()
-    taskList.follow()
-  }
-
-  func setScope(_ scope: TaskPaletteScope) {
-    guard scope != self.scope else { return }
-    toggleScope()
-  }
-
-  /// ⇧⇥。次のタブへ巡る。
-  func toggleTab() {
-    setTab(tab.next)
-  }
-
-  /// タブのクリック。選ぶ状態の間は切り替えない。
+  /// タブのクリック・⇥・⇧⇥。選ぶ状態の間は切り替えない。
   func setTab(_ tab: TaskPaletteTab) {
     guard pick == nil, tab != self.tab else { return }
     leaveEditingForAction()
     area = .list
+    openFilterMenu = nil
     self.tab = tab
     reconcile()
     focus()
   }
 
   /// 結び付いている行の ↵・メニューバーのタスクのピル。タスクのタブへ移り、そのタスクを選ぶ（選ぶ状態ならやめる）。
-  /// 範囲・入力・完了の欄で隠れていれば、見えるように切り替える。
+  /// 絞り込みと入力は変えず、合わなくても選んだタスクとして残して見せる。
   func showTask(_ id: Int) {
-    guard let task = store.tasks.first(where: { $0.id == id }) else { return }
+    guard store.tasks.contains(where: { $0.id == id }) else { return }
     leaveEditingForAction()
     pick = nil
     area = .list
     tab = .tasks
-    if scope == .opened, task.workspace != workspaces.opened.id { scope = .all }
-    if task.status == .done { doneExpanded = true }
-    if !taskList.query.isEmpty,
-      !task.title.localizedStandardContains(
-        taskList.query.trimmingCharacters(in: .whitespacesAndNewlines))
-    {
-      taskList.query = ""
-    }
+    openFilterMenu = nil
     reconcile()
-    taskList.select(.task(id), in: selectableIDs)
+    selectTask(id)
   }
 }

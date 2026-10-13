@@ -53,7 +53,7 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
     let wc = try launchOnAnEmptyWorkspace()
 
     let palette = try openTaskPalette(wc)
-    palette.setScope(.opened)
+    palette.toggleWorkspaceFilter(emptyId)
     palette.query = "見積もりを出す"
     palette.submit()
 

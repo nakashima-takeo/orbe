@@ -1,27 +1,32 @@
 import SwiftUI
 
-/// タスク画面の左の一覧。行は `TaskPaletteRows` が組んだ値をそのまま描き、選択は行の同一性で光らせる。
+/// タスクのタブの左の一覧。上に絞り込みの段、その下に表の見出しと行。行は `TaskPaletteRows` が組んだ値をそのまま
+/// 描き、選択は行の同一性で光らせる。
 struct TaskPaletteList: View {
   @Bindable var model: TaskPaletteModel
   @Environment(\.localization) private var l10n
 
   var body: some View {
     let rows = model.rows
-    ScrollViewReader { proxy in
-      ScrollView {
-        LazyVStack(alignment: .leading, spacing: 0) {
-          ForEach(rows) { row($0) }
+    VStack(alignment: .leading, spacing: 0) {
+      TaskPaletteFilterBar(model: model)
+      TaskPaletteTableHeader(model: model)
+        .padding(.horizontal, TaskPaletteRowMetrics.listPadding)
+      ScrollViewReader { proxy in
+        ScrollView {
+          LazyVStack(alignment: .leading, spacing: 0) {
+            ForEach(rows) { row($0) }
+          }
+          .padding(TaskPaletteRowMetrics.listPadding)
         }
-        .padding(TaskPaletteRowMetrics.listPadding)
+        .scrollIndicators(.automatic)
+        .onChange(of: model.scrollTarget) { scroll(proxy, to: model.scrollTarget?.id, rows) }
+        .onAppear { scroll(proxy, to: model.selectedID, rows) }
       }
-      .scrollIndicators(.automatic)
-      .onChange(of: model.scrollTarget) { scroll(proxy, to: model.scrollTarget?.id, rows) }
-      .onAppear { scroll(proxy, to: model.selectedID, rows) }
     }
   }
 
-  /// 最小の量だけ送る（見えていれば動かない）。入力の行き先は一覧の行ではないので、一覧の先頭（行き先の次の一致）を
-  /// 見せる。
+  /// 最小の量だけ送る（見えていれば動かない）。入力の行き先は表の行ではないので、表の先頭を見せる。
   private func scroll(_ proxy: ScrollViewProxy, to id: TaskPaletteRowID?, _ rows: [TaskPaletteRow])
   {
     guard let id else { return }
@@ -34,73 +39,92 @@ struct TaskPaletteList: View {
 
   @ViewBuilder private func row(_ row: TaskPaletteRow) -> some View {
     switch row {
-    case .sectionHeader(let status, let count):
-      sectionLabel(
-        status == .inProgress ? .taskPaletteSectionInProgress : .taskPaletteSectionTodo, count)
-    case .matchHeader:
-      sectionLabel(.taskPaletteMatchingTasks, nil)
     case .task(let task):
-      taskRow(task)
-    case .doneHeader(let count, let expanded):
-      VStack(spacing: 0) {
-        Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
-          .padding(.horizontal, 22)
-          .padding(.top, TaskPaletteRowMetrics.doneRuleGap)
-        TaskPaletteRowFrame(
-          selected: model.selectedID == .doneHeader, onTap: { model.tapRow(.doneHeader) },
-          onHoverEnter: { model.hoverSelect(.doneHeader) },
-          content: {
-            TaskStatusGlyph(glyph: .done, size: TaskPaletteRowMetrics.glyphColumn)
-              .frame(width: TaskPaletteRowMetrics.glyphColumn)
-            HStack(spacing: Theme.Space.step) {
-              Text(l10n.string(.taskPaletteSectionDone))
-              Text("\(count)").foregroundStyle(Color.theme.textMuted)
-              Image(systemName: "chevron.down")
-                .font(.system(size: 8, weight: .semibold))
-                .rotationEffect(.degrees(expanded ? 180 : 0))
-                .foregroundStyle(Color.theme.textMuted)
-            }
-            .font(Font.theme.chrome)
-            .foregroundStyle(Color.theme.textSecondary)
-            .padding(.leading, Theme.Space.step)
-            Spacer(minLength: 0)
-          })
-      }
-      .frame(height: TaskPaletteRowMetrics.doneHeader)
+      TaskPaletteTaskRowView(
+        row: task, selected: model.selectedID == .task(task.id), clock: model.clock,
+        onTap: { model.tapRow(.task(task.id)) },
+        onToggle: { model.toggleDone(task.id) },
+        onHoverEnter: { model.hoverSelect(.task(task.id)) })
     case .empty:
       Text(l10n.string(.taskPaletteEmpty))
         .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.textMuted)
-        .padding(.leading, 22)
-        .frame(height: TaskPaletteRowMetrics.line)
+        .padding(.leading, TaskPaletteRowMetrics.rowInset)
+        .frame(height: TaskPaletteRowMetrics.row)
     }
-  }
-
-  private func taskRow(_ task: TaskPaletteTaskRow) -> some View {
-    TaskPaletteTaskRowView(
-      row: task, selected: model.selectedID == .task(task.id), clock: model.clock,
-      onTap: { model.tapRow(.task(task.id)) },
-      onToggle: { model.toggleDone(task.id) },
-      onHoverEnter: { model.hoverSelect(.task(task.id)) })
-  }
-
-  /// 見出しの字は ⌘T の欄の見出しと同じ。
-  private func sectionLabel(_ key: L10nKey, _ count: Int?) -> some View {
-    HStack(spacing: Theme.Space.note) {
-      Text(l10n.string(key)).foregroundStyle(Color.theme.textMuted)
-      if let count { Text("\(count)").foregroundStyle(Color.theme.textMuted.opacity(0.8)) }
-    }
-    .font(Font.theme.sectionLabel)
-    .tracking(Theme.Typography.trackingLabel)
-    .padding(.leading, 22)
-    .padding(.bottom, Theme.Space.tick)
-    .frame(
-      maxWidth: .infinity, minHeight: TaskPaletteRowMetrics.sectionHeader,
-      maxHeight: TaskPaletteRowMetrics.sectionHeader, alignment: .bottomLeading)
   }
 }
 
-/// 一覧の選べる行の骨格。選択行は accent の淡塗り。先頭の 22 は行頭の余白（GitHub の一覧と揃える）。
+/// 表の列の並び（状態・件名・優先度・期限・workspace・作成）。件名だけ左揃えで幅を取り、ほかは固定幅で中央揃え。
+struct TaskPaletteTableColumns<State: View, Title: View, Rest: View>: View {
+  @ViewBuilder let state: () -> State
+  @ViewBuilder let title: () -> Title
+  /// 件名より右の列の中身（優先度・期限・workspace・作成）。
+  let rest: (TaskPaletteSort.Column) -> Rest
+
+  var body: some View {
+    HStack(spacing: TaskPaletteRowMetrics.columnGap) {
+      column(TaskPaletteRowMetrics.stateColumn, state)
+      // 件名は残りの幅だけを取り、収まらない中身は切る（ほかの列を押し出さない）。
+      title().frame(minWidth: 0, maxWidth: .infinity, alignment: .leading).clipped()
+      column(TaskPaletteRowMetrics.priorityColumn) { rest(.priority) }
+      column(TaskPaletteRowMetrics.dueColumn) { rest(.due) }
+      column(TaskPaletteRowMetrics.workspaceColumn) { rest(.workspace) }
+      column(TaskPaletteRowMetrics.createdColumn) { rest(.created) }
+    }
+    .padding(.horizontal, TaskPaletteRowMetrics.rowInset)
+  }
+
+  /// 固定幅の列。値が無い（空の）列も幅を保つ。
+  private func column<Content: View>(_ width: CGFloat, _ content: () -> Content) -> some View {
+    Color.clear.frame(width: width).overlay { content() }
+  }
+}
+
+/// 表の見出し。押すとその列で並べ、並べている列は前景を一段上げて向きの矢印（既定の向きは ↓、逆は ↑）を添える。
+/// 焦点は取らない。
+struct TaskPaletteTableHeader: View {
+  @Bindable var model: TaskPaletteModel
+  @Environment(\.localization) private var l10n
+
+  var body: some View {
+    TaskPaletteTableColumns(
+      state: { label(.state) }, title: { label(.title) }, rest: { label($0) }
+    )
+    .frame(height: TaskPaletteRowMetrics.header)
+    .overlay(alignment: .bottom) {
+      Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
+    }
+  }
+
+  private func label(_ column: TaskPaletteSort.Column) -> some View {
+    let sorted = model.sort.column == column
+    return Button {
+      model.setSort(column)
+    } label: {
+      HStack(spacing: Theme.Space.hair) {
+        Text(l10n.string(column.labelKey))
+        if sorted {
+          Image(systemName: model.sort.reversed ? "arrow.up" : "arrow.down")
+            .font(.system(size: 8, weight: .semibold))
+        }
+      }
+      .font(Font.theme.meta)
+      .foregroundStyle(sorted ? Color.theme.textPrimary : Color.theme.textMuted)
+      .lineLimit(1)
+      .fixedSize()
+      .frame(
+        maxWidth: .infinity, maxHeight: .infinity,
+        alignment: column == .title ? .leading : .center
+      )
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .focusable(false)
+  }
+}
+
+/// GitHub タブの一覧の選べる行の骨格。選択行は accent の淡塗り。先頭の 22 は行頭の余白。
 struct TaskPaletteRowFrame<Content: View>: View {
   let selected: Bool
   var height = TaskPaletteRowMetrics.line
@@ -124,9 +148,8 @@ struct TaskPaletteRowFrame<Content: View>: View {
   }
 }
 
-/// タスクの行。アイコン（クリックで完了 ⇄ 未着手）・主の結び付きの印と番号・タイトル・札（「レビュー」・
-/// PR・優先度・期限・追加者）、右寄せで agent の札・待ちの札（解けた待ちは起きたことの札）と workspace。縮むのはタイトルが先。詳細があれば
-/// タイトルの下に先頭を 1 行出す（書き出しはタイトルにそろえ、右寄せの札は 1 行目に残す）。
+/// 表のタスクの行。状態の札（クリックで完了 ⇄ 未着手）・件名（主の番号・タイトル・「レビュー」・PR の札・補足）・
+/// 優先度・期限・workspace・作成。縮むのはタイトルが先。完了のタスクは行ごと沈める。
 struct TaskPaletteTaskRowView: View {
   let row: TaskPaletteTaskRow
   let selected: Bool
@@ -139,138 +162,104 @@ struct TaskPaletteTaskRowView: View {
   @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
-    TaskPaletteRowFrame(
-      selected: selected, height: TaskPaletteRowMetrics.height(.task(row)), onTap: onTap,
-      onHoverEnter: onHoverEnter
-    ) {
-      // アイコンの列は行の高さ全体でクリックを受ける。
-      TaskStatusGlyph(glyph: row.glyph, size: TaskPaletteRowMetrics.glyphColumn)
-        .frame(width: TaskPaletteRowMetrics.glyphColumn, height: TaskPaletteRowMetrics.firstLine)
-        .firstLineSlot()
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onToggle)
-      if let link = row.link {
-        HStack(spacing: Theme.Space.tick) {
-          TaskLinkGlyph(kind: link.kind, size: 12)
-          Text("#\(link.number)")
-            .font(Font.theme.meta)
-            .foregroundStyle(Color.theme.textMuted)
-        }
-        .fixedSize()
-        .frame(height: TaskPaletteRowMetrics.firstLine)
-        .padding(.leading, Theme.Space.step)
-        .firstLineSlot()
-      }
-      VStack(alignment: .leading, spacing: 0) {
-        HStack(spacing: 0) { firstLine }
-          .frame(height: TaskPaletteRowMetrics.firstLine)
-        if let line = row.descriptionLine {
-          fontResolver.text(line, base: Theme.Typography.meta)
-            .font(Font.theme.meta)
-            .foregroundStyle(Color.theme.textMuted)
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .padding(.leading, Theme.Space.step)
-            .frame(height: TaskPaletteRowMetrics.descriptionLine, alignment: .leading)
-        }
-      }
-      .firstLineSlot()
-    }
-    .opacity(row.isDone ? Theme.Opacity.dormant : 1)
+    TaskPaletteTableColumns(
+      state: {
+        TaskStateChip(state: row.state)
+          .frame(maxHeight: .infinity)
+          .contentShape(Rectangle())
+          .onTapGesture(perform: onToggle)
+      },
+      title: { subject },
+      rest: { cell($0) }
+    )
+    .frame(height: TaskPaletteRowMetrics.row)
+    .background(
+      RoundedRectangle(cornerRadius: Theme.Radius.row)
+        .fill(selected ? Color.theme.selectionFill : .clear)
+    )
+    .contentShape(Rectangle())
+    .onTapGesture(perform: onTap)
+    .onHover { if $0 { onHoverEnter() } }
+    .opacity(row.state == .done ? Theme.Opacity.dormant : 1)
   }
 
-  @ViewBuilder private var firstLine: some View {
-    TruncatingSlot(row.title, leading: Theme.Space.step) {
-      fontResolver.text($0, base: Theme.Typography.workspaceName)
-        .font(Font.theme.workspaceName)
-        .foregroundStyle(titleColor)
+  private var subject: some View {
+    HStack(spacing: Theme.Space.note) {
+      if let link = row.link {
+        Text("#\(link.number)")
+          .font(Font.theme.chrome)
+          .foregroundStyle(Color.theme.textMuted)
+          .fixedSize()
+      }
+      TruncatingSlot(row.title) {
+        fontResolver.text($0, base: Theme.Typography.workspaceName)
+          .font(Font.theme.workspaceName)
+          .foregroundStyle(
+            row.priority == .low ? Color.theme.textSecondary : Color.theme.textPrimary)
+      }
+      .layoutPriority(1)
+      if row.needsReview {
+        Text(l10n.string(.taskPaletteReview))
+          .font(Font.theme.meta)
+          .foregroundStyle(Color.theme.textMuted)
+          .fixedSize()
+      }
+      if let pullRequest = row.pullRequest {
+        TaskPullRequestBadge(badge: pullRequest)
+      }
+      supplement
     }
-    .layoutPriority(1)
-    if row.justAdded {
-      TaskPaletteBadge(
-        text: l10n.string(.taskPaletteJustAdded), foreground: Color.theme.accentBright,
-        fill: Color.theme.tintAccent
-      )
-      .padding(.leading, Theme.Space.step)
-    }
-    if row.needsReview {
-      Text(l10n.string(.taskPaletteReview))
-        .font(Font.theme.meta)
-        .foregroundStyle(Color.theme.textMuted)
-        .fixedSize()
-        .padding(.leading, Theme.Space.step)
-    }
-    if let pullRequest = row.pullRequest {
-      TaskPullRequestBadge(badge: pullRequest)
-        .padding(.leading, Theme.Space.step)
-    }
-    if let priority = row.priority {
-      TaskPaletteBadge(
-        text: l10n.string(priority == .high ? .taskPalettePriorityHigh : .taskPalettePriorityLow),
-        foreground: priority == .high ? Color.theme.danger : Color.theme.textMuted,
-        fill: priority == .high ? Color.theme.tintRed : Color.theme.plainPillFill
-      )
-      .padding(.leading, Theme.Space.step)
-    }
-    if let due = row.due {
-      TaskPaletteBadge(
-        symbol: "calendar",
-        text: TaskDueText.label(
-          due.date, today: due.today, weekdays: TaskDueText.weekdays(l10n.language)),
-        foreground: Color.theme.textSecondary, fill: Color.theme.plainPillFill
-      )
-      .padding(.leading, Theme.Space.step)
-    }
-    if let createdBy = row.createdBy {
-      TruncatingSlot(l10n.format(.taskPaletteAddedBy, createdBy), leading: Theme.Space.step) {
+  }
+
+  /// 件名の補足（待ちは「理由 · N日」、解けた待ちは起きたことの札、agent は「◌ claude 12分」）。
+  @ViewBuilder private var supplement: some View {
+    if let waiting = row.waiting {
+      TruncatingSlot("\(waiting.reason) · \(days(waiting.days))") {
         Text($0).font(Font.theme.meta).foregroundStyle(Color.theme.textMuted)
       }
+    } else if let resolved = row.resolved {
+      TaskResolvedBadge(resolved: resolved, clock: clock)
     }
-    Spacer(minLength: Theme.Space.step)
     if let agent = row.agent {
       TaskAgentBadge(agent: agent)
-        .layoutPriority(2)
-        .padding(.trailing, row.waiting == nil && row.resolved == nil ? 0 : Theme.Space.note)
     }
-    if let waiting = row.waiting {
-      TaskPaletteBadge(
-        symbol: "clock",
-        text: "\(waiting.reason) \(days(waiting.days))",
-        foreground: Color.theme.textSecondary, fill: Color.theme.plainPillFill, capsule: true,
-        maxWidth: TaskPaletteRowMetrics.textBadgeMaxWidth
-      )
-      .layoutPriority(2)
-    }
-    if let resolved = row.resolved {
-      TaskResolvedBadge(resolved: resolved, clock: clock)
-        .layoutPriority(2)
-    }
-    workspace
-      .layoutPriority(2)
   }
 
-  /// 低い優先度のタスクは一段沈める（見本どおり）。
-  private var titleColor: Color {
-    row.priority == .low ? Color.theme.textSecondary : Color.theme.textPrimary
-  }
-
-  @ViewBuilder private var workspace: some View {
-    switch row.workspace {
-    case .opened(let name):
-      TaskPaletteBadge(
-        text: name, foreground: Color.theme.accentBright, fill: Color.theme.tintAccent
-      )
-      .padding(.leading, Theme.Space.span)
-    case .other(let name):
-      Text(name)
-        .font(Font.theme.meta)
-        .foregroundStyle(Color.theme.textMuted)
-        .lineLimit(1)
-        .fixedSize()
-        .padding(.leading, Theme.Space.span)
-    case nil:
+  @ViewBuilder private func cell(_ column: TaskPaletteSort.Column) -> some View {
+    switch column {
+    case .priority:
+      text(l10n.string(row.priority.labelKey), priorityColor)
+    case .due:
+      if let due = row.due {
+        text(
+          TaskDueText.label(
+            due.date, today: due.today, weekdays: TaskDueText.weekdays(l10n.language)),
+          Color.theme.textSecondary)
+      }
+    case .workspace:
+      if let workspace = row.workspace { text(workspace, Color.theme.textSecondary) }
+    case .created:
+      text(TaskDueText.date(row.created.date, today: row.created.today), Color.theme.textMuted)
+    case .state, .title:
       EmptyView()
     }
+  }
+
+  /// 高は赤、低は沈める。
+  private var priorityColor: Color {
+    switch row.priority {
+    case .high: Color.theme.danger
+    case .medium: Color.theme.textSecondary
+    case .low: Color.theme.textMuted
+    }
+  }
+
+  private func text(_ value: String, _ color: Color) -> some View {
+    fontResolver.text(value, base: Theme.Typography.meta)
+      .font(Font.theme.meta)
+      .foregroundStyle(color)
+      .lineLimit(1)
+      .truncationMode(.tail)
   }
 
   private func days(_ count: Int) -> String {
@@ -278,9 +267,50 @@ struct TaskPaletteTaskRowView: View {
   }
 }
 
-extension View {
-  /// タスクの行の 1 つの列を、上の余白の下から 1 行目にそろえて置き、行の高さいっぱいに広げる。
-  fileprivate func firstLineSlot() -> some View {
-    padding(.top, TaskPaletteRowMetrics.inset).frame(maxHeight: .infinity, alignment: .top)
+/// 表の状態の札（同じ幅。未着手と完了は中立、進行中と待ちは状態の色）。
+struct TaskStateChip: View {
+  let state: TaskItem.DisplayState
+  @Environment(\.localization) private var l10n
+
+  var body: some View {
+    Text(l10n.string(state.labelKey))
+      .font(Font.theme.meta)
+      .foregroundStyle(foreground)
+      .lineLimit(1)
+      .frame(
+        width: TaskPaletteRowMetrics.stateChip.width,
+        height: TaskPaletteRowMetrics.stateChip.height
+      )
+      .background(RoundedRectangle(cornerRadius: Theme.Radius.sm + Theme.Space.hair).fill(fill))
+  }
+
+  private var foreground: Color {
+    switch state {
+    case .todo: Color.theme.textSecondary
+    case .inProgress: Color.theme.stateWorking
+    case .waiting: Color.theme.stateWaiting
+    case .done: Color.theme.textMuted
+    }
+  }
+
+  private var fill: Color {
+    switch state {
+    case .todo, .done: Color.theme.plainPillFill
+    case .inProgress: Color.theme.tintWorking
+    case .waiting: Color.theme.tintWaiting
+    }
+  }
+}
+
+extension TaskPaletteSort.Column {
+  var labelKey: L10nKey {
+    switch self {
+    case .state: .taskPaletteColumnState
+    case .title: .taskPaletteColumnTitle
+    case .priority: .taskPaletteFieldPriority
+    case .due: .taskPaletteFieldDue
+    case .workspace: .taskPaletteFieldWorkspace
+    case .created: .taskPaletteFieldCreated
+    }
   }
 }
