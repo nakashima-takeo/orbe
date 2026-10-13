@@ -2,6 +2,15 @@ import Foundation
 
 @testable import Orbe
 
+extension Automation {
+  /// 定義の一部を書き換える（出力先ごとの状態は `redefine` が合わせる）。
+  mutating func redefine(_ edit: (inout AutomationDefinition) -> Void) {
+    var definition = definition
+    edit(&definition)
+    redefine(definition)
+  }
+}
+
 /// 提案タブの fixture（見本 R3Inbox.png と同じ並び）。今日はタスク画面と同じ 2025-10-04、走らせ役の今は同じ日の 15:00 に
 /// 固定し、次の時刻と回の時刻を決定論にする。取得は始まっても終わらない（実行中のまま）——実物の claude は起こさない。
 extension DesignSceneFixtures {
@@ -207,31 +216,35 @@ extension DesignSceneFixtures {
   static func automationLongFile() -> AutomationsFile {
     var long = automationDesignFile()
     if let agentIndex = long.automations.firstIndex(where: { $0.id == 3 }) {
-      long.automations[agentIndex].definition.source?.method = .agent(
-        AutomationSourceAgent(
-          cli: "claude", model: "haiku",
-          tools: [
-            "mcp__backlog__get_issues", "mcp__backlog__get_issue_comments",
-            "mcp__backlog__get_project_list", "mcp__backlog__get_users",
-            "mcp__backlog__get_notifications", "mcp__backlog__get_wiki_pages",
-          ],
-          request: (1...9).map { "\($0). 自分が担当の未完了の課題を、更新の新しい順に 30 件取る。期限の近いものを先に。" }
-            .joined(separator: "\n")))
-      long.automations[agentIndex].definition.steps[0].method = .agent(
-        AutomationStepAgent(
-          cli: "claude", model: "sonnet",
-          instruction: (1...8).map { "\($0). 今日中に自分が手を動かす必要があるものだけをタスクにする。" }
-            .joined(separator: "\n")))
+      long.automations[agentIndex].redefine {
+        $0.source?.method = .agent(
+          AutomationSourceAgent(
+            cli: "claude", model: "haiku",
+            tools: [
+              "mcp__backlog__get_issues", "mcp__backlog__get_issue_comments",
+              "mcp__backlog__get_project_list", "mcp__backlog__get_users",
+              "mcp__backlog__get_notifications", "mcp__backlog__get_wiki_pages",
+            ],
+            request: (1...9).map { "\($0). 自分が担当の未完了の課題を、更新の新しい順に 30 件取る。期限の近いものを先に。" }
+              .joined(separator: "\n")))
+        $0.steps[0].method = .agent(
+          AutomationStepAgent(
+            cli: "claude", model: "sonnet",
+            instruction: (1...8).map { "\($0). 今日中に自分が手を動かす必要があるものだけをタスクにする。" }
+              .joined(separator: "\n")))
+      }
     }
     if let commandIndex = long.automations.firstIndex(where: { $0.id == 1 }) {
-      long.automations[commandIndex].definition.source?.method = .command(
-        BackgroundCommand(
-          script: (1...8).map {
-            "gh search prs --review-requested=@me --json url,title,body --limit \($0 * 10) \\"
-          }
-          .joined(separator: "\n") + "\n  | jq -c '.[] | {id: .url, link: .url, body: .title}'",
-          directory:
-            "/Users/someone/work/very/long/path/to/the/repository/that/wraps/onto/the/next/line"))
+      long.automations[commandIndex].redefine {
+        $0.source?.method = .command(
+          BackgroundCommand(
+            script: (1...8).map {
+              "gh search prs --review-requested=@me --json url,title,body --limit \($0 * 10) \\"
+            }
+            .joined(separator: "\n") + "\n  | jq -c '.[] | {id: .url, link: .url, body: .title}'",
+            directory:
+              "/Users/someone/work/very/long/path/to/the/repository/that/wraps/onto/the/next/line"))
+      }
     }
     return long
   }

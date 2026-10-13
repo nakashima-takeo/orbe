@@ -150,36 +150,41 @@ extension DesignSceneFixtures {
   /// 取得の依頼文・使えるツール・コマンドと作業ディレクトリが長く、詳細がスクロールする。コマンドの前回の取得は 3 桁。回の記録は 20 件。
   static func boardAutomationLongFile() -> AutomationsFile {
     var automations = boardAutomations()
-    automations[2].definition.source?.method = .agent(
-      AutomationSourceAgent(
-        cli: "claude", model: "haiku",
-        tools: [
-          "mcp__backlog__get_issues", "mcp__backlog__get_issue_comments",
-          "mcp__backlog__get_project_list", "mcp__backlog__get_users",
-          "mcp__backlog__get_notifications",
-        ],
-        request: (1...8).map { "\($0). 自分が担当の未完了の課題を、更新の新しい順に 30 件取る。期限の近いものを先に。" }
-          .joined(separator: "\n")))
+    automations[2].redefine {
+      $0.source?.method = .agent(
+        AutomationSourceAgent(
+          cli: "claude", model: "haiku",
+          tools: [
+            "mcp__backlog__get_issues", "mcp__backlog__get_issue_comments",
+            "mcp__backlog__get_project_list", "mcp__backlog__get_users",
+            "mcp__backlog__get_notifications",
+          ],
+          request: (1...8).map { "\($0). 自分が担当の未完了の課題を、更新の新しい順に 30 件取る。期限の近いものを先に。" }
+            .joined(separator: "\n")))
+    }
     automations[2].runs += (1...17).map {
       automationRun(
         at: automationAt(13, 0, daysAgo: $0), items: 10 + $0 % 3, fresh: $0 % 2, proposed: $0 % 2
       )
     }
-    automations[1].definition.source?.method = .command(
-      BackgroundCommand(
-        script: (1...6).map {
-          "gh search prs --review-requested=@me --json url,title,body --limit \($0 * 10) \\"
-        }
-        .joined(separator: "\n") + "\n  | jq -c '.[] | {id: .url, link: .url, body: .title}'",
-        directory:
-          "/Users/someone/work/very/long/path/to/the/repository/that/wraps/onto/the/next/line"))
+    automations[1].redefine {
+      $0.source?.method = .command(
+        BackgroundCommand(
+          script: (1...6).map {
+            "gh search prs --review-requested=@me --json url,title,body --limit \($0 * 10) \\"
+          }
+          .joined(separator: "\n") + "\n  | jq -c '.[] | {id: .url, link: .url, body: .title}'",
+          directory:
+            "/Users/someone/work/very/long/path/to/the/repository/that/wraps/onto/the/next/line"))
+    }
     automations[1].runs[0].source?.count = 999
     return boardAutomationFile(automations)
   }
 }
 
-/// 見本『段の多い例』『一番単純な例』の自動化。段の多い例は取得元と処理 3 段（コマンド・既定のモデルの agent 2 つ）、一番単純な
-/// 例は取得元も処理も無い。一番単純な例は、まだ定義の検証を通らない（タスク候補は取得元と段を要る）が、ボードはそのまま描く。
+/// 見本『段の多い例』『一番単純な例』の自動化。段の多い例は取得元と処理 3 段（コマンド・既定のモデルの agent 2 つ）と
+/// 採用・見送りの累計を持ち、一番単純な例は取得元も処理も無い。一番単純な例は、まだ定義の検証を通らない（タスク候補は取得元と
+/// 段を要る）が、ボードはそのまま描く。
 extension DesignSceneFixtures {
   /// 段ごとの件数を持つ回。`steps` は各段が出した数で、`stepCount` に満たなければ途中の段で止まった回。
   private static func stepsRun(
@@ -243,6 +248,7 @@ extension DesignSceneFixtures {
                 instruction: "自分に何かを頼んでいるものだけを候補にする。\n期限が書かれていれば期限に入れる。"))),
         ],
         sink: .taskCandidates),
+      sinkState: .taskCandidates(AutomationTaskCandidatesState(accepted: 9, dismissed: 3)),
       paused: false, createdAt: boardCreated, lastFetched: [], reviewAll: false,
       lastRunAt: at(0), runs: head + tail)
   }
