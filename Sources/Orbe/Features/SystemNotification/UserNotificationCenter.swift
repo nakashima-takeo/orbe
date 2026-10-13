@@ -1,8 +1,8 @@
 import Foundation
 import UserNotifications
 
-/// UNUserNotificationCenter の本物。作られたときに自分を delegate に据える——窓は起動の完了より前に作られるので、止まって
-/// いる間に押された通知で起動したときも、押されたことを受け取れる。
+/// UNUserNotificationCenter の本物。作られたときに自分を delegate に据える——delegate は applicationDidFinishLaunching
+/// を抜ける前に据わっていればよく、窓はその中で作られるので、止まっている間に押された通知で起動したときも受け取れる。
 final class UserNotificationCenter: NSObject, SystemNotifying, UNUserNotificationCenterDelegate {
   var onOpenAutomation: ((Int) -> Void)?
   private let center = UNUserNotificationCenter.current()

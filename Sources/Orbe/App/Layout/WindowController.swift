@@ -77,7 +77,8 @@ final class WindowController: NSObject, NSWindowDelegate {
   let attentionStore = AttentionStore()
   // 通知音の再生層。見ていないタブの状態変化（WindowController+Sound）と設定パレットの試聴が使う。
   let soundPlayer: AgentSoundPlaying = AgentSoundOutput.make()
-  // 通知センター。通知先が通知センターの自動化の知らせが使う。押された通知を受けるので、起動の完了より前に据える（init）。
+  // 通知センター。通知先が通知センターの自動化の知らせが使う。押された通知を受ける delegate は
+  // applicationDidFinishLaunching を抜ける前に据わっている要があり、窓はその中で作られるので init で作る。
   let systemNotifier: SystemNotifying = SystemNotifierOutput.make()
   // エージェントセッションの寿命ログ（agent-sessions.jsonl）の書き手。起動時に読んで剪定した結果を
   // メモリに持ち、タブの同一性の遷移（wire の onIdentityTransition）を積む。復元（restore）より先に
