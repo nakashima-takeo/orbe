@@ -64,14 +64,4 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.query, "x", "打った文は残す")
     XCTAssertNil(palette.error)
   }
-
-  /// 行き先の段の右端は、足したタスクが入る先（範囲で workspace が変わる）。
-  func testTheDestinationPlaceFollowsTheScope() {
-    let palette = threeTodos()
-    let l10n = LocalizationStore(language: .ja)
-
-    XCTAssertEqual(palette.destinationPlace(l10n), "未着手 · 中 · workspace なし")
-    palette.setScope(.opened)
-    XCTAssertEqual(palette.destinationPlace(l10n), "未着手 · 中 · orbe")
-  }
 }

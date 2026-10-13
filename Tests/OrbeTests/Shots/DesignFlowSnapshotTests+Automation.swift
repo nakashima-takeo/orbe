@@ -22,8 +22,8 @@ extension DesignFlowSnapshotTests {
       },
       steps: [
         ("start", {}),
-        ("tab_github", { palette.toggleTab() }),
-        ("tab_automation", { palette.toggleTab() }),
+        ("tab_github", { palette.setTab(palette.tab.next) }),
+        ("tab_automation", { palette.setTab(palette.tab.next) }),
         ("filtered", { palette.query = "週報" }),
         ("cleared", { palette.query = "" }),
         ("dismissed", { automation.dismiss() }),

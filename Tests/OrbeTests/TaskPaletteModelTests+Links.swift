@@ -5,9 +5,9 @@ import XCTest
 /// 結び付いた Issue・PR を、画面に出ている行の分だけ取りに行くことと、右の欄の Issue・PR の欄の行
 /// （↑↓ で止まる・開く・外す・焦点の付け直し）。
 ///
-/// 壊れると何が起きるか: 完了の欄に溜まった結び付きまで毎回取りに行き、使うほど ⌘⇧X を開くたびの
-/// 問い合わせが膨らむ。逆に、agent が結び付けた項目や開いた完了の欄の項目を取りに行かず、番号だけのまま
-/// 残る。外したときに焦点が右の欄の先頭へ飛ぶ、または消えた項目に残ってキーが効かなくなる。agent が
+/// 壊れると何が起きるか: 表に出ていない完了のタスクに溜まった結び付きまで毎回取りに行き、使うほど ⌘⇧X を開く
+/// たびの問い合わせが膨らむ。逆に、agent が結び付けた項目や絞り込みを変えて出てきた項目を取りに行かず、番号
+/// だけのまま残る。外したときに焦点が右の欄の先頭へ飛ぶ、または消えた項目に残ってキーが効かなくなる。agent が
 /// 結び付きを足しただけで、見ていた項目から焦点がずれ、⌫ が別の項目を外す。
 extension TaskPaletteModelTests {
   /// 頼まれた項目を順に記録し、その場で全部「無かった」と答える取得（取得中に残る項目は無い）。
@@ -41,7 +41,7 @@ extension TaskPaletteModelTests {
 
   // MARK: - 取りに行く範囲
 
-  /// 開いたときは、出ている行の結び付きだけを取り直す（畳んだ完了の欄のタスクの分は取らない）。
+  /// 開いたときは、出ている行の結び付きだけを取り直す（既定の絞り込みで出ない完了のタスクの分は取らない）。
   func testOpeningFetchesOnlyTheLinksOfTheVisibleRows() {
     let log = FetchLog()
 
@@ -64,19 +64,19 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(log.requested, [[link(.issue, 1).item], [link(.issue, 1).item]])
   }
 
-  /// 完了の欄を開く・agent が結び付けるなどで新しく出た項目は、この開いている間に 1 回だけ取る。
+  /// 完了の札を入れる・agent が結び付けるなどで新しく出た項目は、この開いている間に 1 回だけ取る。
   /// 前に開いたときの答えがあっても、この開いている間にまだ試していなければ取る。
   func testNewlyVisibleLinksAreFetchedOnceWhileOpenEvenWithAnEarlierAnswer() throws {
     let log = FetchLog()
     let earlier = TaskPaletteSamples.model(todoAndDone, githubItems: log.cache)
-    earlier.toggleDoneExpanded()
+    earlier.toggleState(.done)
     earlier.ensureVisibleItems()
-    XCTAssertNotNil(log.cache.answers[link(.issue, 3).item], "前提: 完了の欄の項目に前の答えがある")
+    XCTAssertNotNil(log.cache.answers[link(.issue, 3).item], "前提: 完了のタスクの項目に前の答えがある")
 
     let palette = TaskPaletteSamples.model(todoAndDone, githubItems: log.cache)
-    palette.toggleDoneExpanded()
+    palette.toggleState(.done)
     palette.ensureVisibleItems()
-    XCTAssertEqual(log.requested.last, [link(.issue, 3).item], "開いた完了の欄の項目")
+    XCTAssertEqual(log.requested.last, [link(.issue, 3).item], "出てきた完了のタスクの項目")
 
     try setLinks(palette, 1, [link(.issue, 1), link(.pr, 4)])
     palette.reconcile()
@@ -85,7 +85,7 @@ extension TaskPaletteModelTests {
 
     let count = log.requested.count
     palette.ensureVisibleItems()
-    palette.toggleDoneExpanded()
+    palette.toggleState(.done)
     palette.ensureVisibleItems()
     XCTAssertEqual(log.requested.count, count, "答えが届いた後も、この開いている間に試した項目は頼まない")
   }

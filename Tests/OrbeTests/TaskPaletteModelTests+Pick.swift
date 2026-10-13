@@ -98,7 +98,7 @@ extension TaskPaletteModelTests {
     palette.toggleDone(1)
     palette.delete(2)
     palette.enterDetail()
-    palette.toggleTab()
+    palette.setTab(palette.tab.next)
     palette.openWorktreePalette()
     palette.openAgent(forTask: 1)
 

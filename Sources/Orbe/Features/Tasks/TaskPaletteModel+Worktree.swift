@@ -8,7 +8,7 @@ extension TaskPaletteModel {
   }
 
   /// ⌘T。選んでいるタスクのための agent を開く。入力の行き先なら足してから開く。編集中なら確定してから選択で決める。
-  /// 完了の見出しでは何もしない。GitHub タブは `openWorktreePaletteFromGitHub`。受信タブでは何もしない。
+  /// GitHub タブは `openWorktreePaletteFromGitHub`。受信タブでは何もしない。
   func openWorktreePalette() {
     guard pick == nil, visibleTab != .automation else { return }
     guard visibleTab == .tasks else { return openWorktreePaletteFromGitHub() }
@@ -16,7 +16,7 @@ extension TaskPaletteModel {
     switch selectedID {
     case .task(let id): openAgent(forTask: id)
     case .add: if let id = addFromQuery() { openAgent(forTask: id) }
-    case .doneHeader, nil: break
+    case nil: break
     }
   }
 

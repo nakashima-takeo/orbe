@@ -53,7 +53,7 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
     let wc = try launchOnAnEmptyWorkspace()
 
     let palette = try openTaskPalette(wc)
-    palette.setScope(.opened)
+    palette.toggleWorkspaceFilter(emptyId)
     palette.query = "見積もりを出す"
     palette.submit()
 
@@ -63,7 +63,7 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
       "サイドバーの順（Home も選べる）")
     XCTAssertEqual(
       wc.taskStore.tasks.first { $0.title == "見積もりを出す" }?.workspace, emptyId,
-      "範囲が開いた workspace なら、その workspace に付く")
+      "workspace をその workspace だけに絞っていれば、その workspace に付く")
   }
 
   /// 受信タブで提案をタスクにすると、開いた workspace ではなく Home に付く。

@@ -46,12 +46,12 @@ final class TaskPaletteGitHubRowsTests: OrbeTestCase {
 
   private func input(
     issues: [GitHubOpenItem] = [], pullRequests: [GitHubOpenItem] = [], tasks: [TaskItem] = [],
-    login: String? = "me", reviewRequests: Set<Int>? = [], filter: TaskGitHubFilter = .all,
+    login: String? = "me", reviewRequests: Set<Int>? = [], filters: Set<TaskGitHubFilter> = [],
     query: String = "", expanded: Set<GitHubItemKind> = [], loading: Set<GitHubItemKind> = []
   ) -> TaskPaletteGitHubRows.Input {
     TaskPaletteGitHubRows.Input(
       repo: repo, issues: issues, pullRequests: pullRequests, tasks: tasks, login: login,
-      reviewRequests: reviewRequests, filter: filter, query: query, expanded: expanded,
+      reviewRequests: reviewRequests, filters: filters, query: query, expanded: expanded,
       loading: loading)
   }
 
@@ -173,7 +173,7 @@ final class TaskPaletteGitHubRowsTests: OrbeTestCase {
     func rows(_ filter: TaskGitHubFilter) -> [Shape] {
       shape(
         input(
-          issues: issues, pullRequests: pullRequests, reviewRequests: [10, 11], filter: filter))
+          issues: issues, pullRequests: pullRequests, reviewRequests: [10, 11], filters: [filter]))
     }
 
     XCTAssertEqual(rows(.assigned), [.header(.issue, 1), .item(1)])
@@ -193,7 +193,7 @@ final class TaskPaletteGitHubRowsTests: OrbeTestCase {
       input(issues: issues, login: nil, reviewRequests: nil))
     XCTAssertEqual(unknown, .init(assigned: nil, authored: nil, reviewRequested: nil))
     XCTAssertEqual(
-      shape(input(issues: issues, login: nil, filter: .assigned)), [.empty],
+      shape(input(issues: issues, login: nil, filters: [.assigned])), [.empty],
       "自分が分からない間の「担当が自分」には何も出さない")
   }
 

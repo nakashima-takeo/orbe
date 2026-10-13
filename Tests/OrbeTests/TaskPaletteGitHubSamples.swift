@@ -68,7 +68,7 @@ enum TaskPaletteGitHubSamples {
       [repo: repository], source: source, viewer: viewer)
     let palette = TaskPaletteSamples.model(
       tasks, githubItems: GitHubItemCache(viewer: viewer, fetch: { _, _ in }), openLists: lists)
-    palette.toggleTab()
+    palette.setTab(palette.tab.next)
     return palette
   }
 

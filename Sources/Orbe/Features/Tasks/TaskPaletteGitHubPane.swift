@@ -115,7 +115,7 @@ struct TaskPaletteGitHubPane: View {
         TaskPaletteSegments(
           segments: [TaskItem.Priority.high, .medium, .low].map { priority in
             TaskPaletteSegments.Segment(
-              title: l10n.string(Self.priorityKey(priority)), count: nil,
+              title: l10n.string(priority.labelKey), count: nil,
               selected: model.pane.priority == priority,
               action: { model.setPanePriority(priority) })
           }, font: Font.theme.workspaceName, height: TaskPaletteFieldMetrics.choiceHeight,
@@ -292,7 +292,7 @@ extension TaskPaletteGitHubPane {
         .foregroundStyle(Color.theme.textMuted)
         HStack(spacing: Theme.Space.step) {
           TaskStatusGlyph(
-            glyph: TaskPaletteTaskRow.Glyph(task), size: TaskPaletteRowMetrics.glyphColumn)
+            state: task.displayState, size: TaskPaletteRowMetrics.glyphColumn)
           fontResolver.text(row.task?.label ?? task.title, base: Theme.Typography.workspaceName)
             .font(Font.theme.workspaceName)
             .foregroundStyle(Color.theme.textPrimary)
@@ -369,19 +369,11 @@ extension TaskPaletteGitHubPane {
     }
   }
 
-  private static func priorityKey(_ priority: TaskItem.Priority) -> L10nKey {
-    switch priority {
-    case .high: .taskPalettePriorityHigh
-    case .medium: .taskPalettePriorityMedium
-    case .low: .taskPalettePriorityLow
-    }
-  }
-
   private static func statusKey(_ status: TaskItem.Status) -> L10nKey {
     switch status {
-    case .todo: .taskPaletteSectionTodo
-    case .inProgress: .taskPaletteSectionInProgress
-    case .done: .taskPaletteSectionDone
+    case .todo: .taskPaletteStateTodo
+    case .inProgress: .taskPaletteStateInProgress
+    case .done: .taskPaletteStateDone
     }
   }
 }

@@ -1,6 +1,6 @@
 import Foundation
 
-/// 秘書の係（行き先の段の ⌘↵・行の ⌘↵・最初の入力）と、タスクから作業を始める（`start_task`）の文言分冊。
+/// 秘書の係（入力欄の中の「⌘↵ agent に任せる」・行の ⌘↵・最初の入力）と、タスクから作業を始める（`start_task`）の文言分冊。
 /// 本体 `L10n.table` が結合する。
 extension L10n {
   static let secretaryTable: [L10nKey: (ja: String, en: String)] = [
@@ -12,12 +12,9 @@ extension L10n {
     .secretaryAutomationFixInput: (
       "タスクの自動追加 %1$@「%2$@」を直す。", "Fix task auto-add %1$@ “%2$@”."
     ),
-    .taskPaletteDestination: ("行き先", "Destination"),
-    .taskPaletteDestinationTask: ("タスクに書く", "Write a task"),
-    .taskPaletteDestinationDefault: ("既定", "default"),
+    .taskPaletteAddToTasks: ("タスクに追加", "Add a task"),
     .taskPaletteHandToAgent: ("agent に任せる", "Hand to an agent"),
     .taskPaletteHintOpenAgent: ("agent を開く", "Open agent"),
-    .taskPaletteDestinationNoWorkspace: ("workspace なし", "no workspace"),
     .taskPaletteErrSecretaryClaude: (
       "claude が見つからないので agent に任せられない", "Can’t hand to an agent: claude was not found"
     ),

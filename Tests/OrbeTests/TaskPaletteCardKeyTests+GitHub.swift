@@ -100,15 +100,15 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.visibleTab, .github, "タスクを選ぶ状態へ移らない")
   }
 
-  /// GitHub タブの ⇥ は絞り込みの札を巡回し、範囲は変えない。
-  func testTabCyclesTheFilterOnTheGitHubTab() {
+  /// GitHub タブの ⇥ は次のタブへ移り、絞り込みの札は変えない。
+  func testTabMovesToTheNextTabOnTheGitHubTab() {
     let model = GitHub.model([], issues: [GitHub.issue(5)])
     let window = mount(model)
 
     press(Key.tab, "\t", to: window)
 
-    XCTAssertEqual(model.githubFilter, .assigned)
-    XCTAssertEqual(model.scope, .all)
+    XCTAssertEqual(model.tab, .automation)
+    XCTAssertEqual(model.githubFilters, [])
   }
 
   /// → で右の欄へ入り、space でチェックを切り替え、← で一覧へ戻る。

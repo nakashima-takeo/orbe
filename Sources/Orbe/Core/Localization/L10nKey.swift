@@ -178,11 +178,11 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteGitHubPlaceholder
   case taskPaletteTabTasks
   case taskPaletteScopeAll
-  case taskPaletteSectionInProgress
-  case taskPaletteSectionTodo
-  case taskPaletteSectionDone
+  case taskPaletteStateInProgress
+  case taskPaletteStateTodo
+  case taskPaletteStateWaiting
+  case taskPaletteStateDone
   case taskPaletteEmpty
-  case taskPaletteAddedBy
   case taskPaletteToday
   case taskPaletteDays
   case taskPalettePriorityHigh
@@ -193,19 +193,15 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteFieldPriority
   case taskPaletteFieldDue
   case taskPaletteFieldWorkspace
-  case taskPaletteFieldAdded
+  case taskPaletteFieldCreated
   case taskPaletteDescriptionPlaceholder
   case taskPaletteAddReason
   case taskPaletteSetDue
   case taskPaletteClear
   case taskPaletteNoWorkspace
-  case taskPaletteMarkDone
-  case taskPaletteReopen
   case taskPaletteDelete
   case taskPaletteActionDone
   case taskPaletteActionReopen
-  case taskPaletteActionShowDone
-  case taskPaletteActionHideDone
   case taskPaletteActionChangeStatus
   case taskPaletteActionChangePriority
   case taskPaletteActionChangeWorkspace
@@ -215,7 +211,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteActionEditDescription
   case taskPaletteActionCommit
   case taskPaletteHintEdit
-  case taskPaletteHintScope
+  case taskPaletteHintTab
   case taskPaletteHintField
   case taskPaletteHintBack
   case taskPaletteHintCancel
@@ -286,7 +282,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteActionToggle
   case taskPaletteHintLink
   case taskPaletteHintRelink
-  case taskPaletteHintFilter
   case taskPaletteHintOpenInBrowser
   case taskPaletteErrAssign
   case taskPaletteErrLink
@@ -337,14 +332,20 @@ enum L10nKey: String, CaseIterable, Sendable {
   case waitContinueOutput
   case waitContinueExpired
 
-  case taskPaletteMatchingTasks
-  case taskPaletteActionAddTodo
+  case taskPaletteActionAdd
+  case taskPaletteActionAddTo
   case taskPaletteHintToMatches
-  case taskPaletteJustAdded
   case taskPaletteAddedHeading
   case taskPaletteHeadingTask
-  case taskPaletteScopeWasAll
   case taskPaletteActionRefine
+  case taskPaletteCreatedByYou
+  case taskPaletteColumnState
+  case taskPaletteColumnTitle
+  case taskPaletteDueOverdue
+  case taskPaletteDueToday
+  case taskPaletteDueWithinWeek
+  case taskPaletteDueLater
+  case taskPaletteDueNone
   // MARK: - タスク画面の受信タブ
   case taskPaletteTabAutomation
   case taskPaletteAutomationPlaceholder
@@ -404,12 +405,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskStartHomeTask
   case secretaryRequestInput
   case secretaryAutomationFixInput
-  case taskPaletteDestination
-  case taskPaletteDestinationTask
-  case taskPaletteDestinationDefault
+  case taskPaletteAddToTasks
   case taskPaletteHandToAgent
   case taskPaletteHintOpenAgent
-  case taskPaletteDestinationNoWorkspace
   case taskPaletteErrSecretaryClaude
   case taskPaletteErrSecretaryUnavailable
 

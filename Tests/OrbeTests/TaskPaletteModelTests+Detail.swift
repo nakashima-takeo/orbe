@@ -13,10 +13,10 @@ extension TaskPaletteModelTests {
     return palette
   }
 
-  /// 完了のタスク 1 件だけを開き、完了の欄を開いてその右の欄に入った状態。
+  /// 完了のタスク 1 件だけを開き、完了の札を入れてその右の欄に入った状態。
   func detailOfDone() -> TaskPaletteModel {
     let palette = model([task(1, "a", .done)])
-    palette.toggleDoneExpanded()
+    palette.toggleState(.done)
     palette.jump(1)
     palette.enterDetail()
     XCTAssertEqual(palette.selectedTask?.status, .done, "前提: 完了のタスクの右の欄")
@@ -56,27 +56,19 @@ extension TaskPaletteModelTests {
 
   // MARK: - 選択式の値
 
-  func testStatusChoiceMovesBetweenTodoAndInProgressAndStopsAtTheEnds() throws {
+  func testStatusChoiceCyclesTodoInProgressDoneAndStaysOnTheTask() throws {
     let palette = detailOfFirst()
 
     palette.changeValue(1)
     XCTAssertEqual(try storedTask(palette, 1).status, .inProgress)
     palette.changeValue(1)
-    XCTAssertEqual(try storedTask(palette, 1).status, .inProgress)
-    palette.changeValue(-1)
-    XCTAssertEqual(try storedTask(palette, 1).status, .todo)
-    XCTAssertEqual(palette.area, .detail(.field(.status)), "値を変えても右の欄に居続ける")
+    XCTAssertEqual(try storedTask(palette, 1).status, .done)
+    XCTAssertEqual(palette.area, .detail(.field(.status)), "完了に入っても右の欄に居続ける")
     XCTAssertEqual(palette.selectedTask?.id, 1)
-  }
-
-  func testStatusChoiceOnADoneTaskReturnsItToTheChosenEnd() throws {
-    let toLeft = detailOfDone()
-    toLeft.changeValue(-1)
-    XCTAssertEqual(try storedTask(toLeft, 1).status, .todo)
-
-    let toRight = detailOfDone()
-    toRight.changeValue(1)
-    XCTAssertEqual(try storedTask(toRight, 1).status, .inProgress)
+    palette.changeValue(1)
+    XCTAssertEqual(try storedTask(palette, 1).status, .todo)
+    palette.changeValue(-1)
+    XCTAssertEqual(try storedTask(palette, 1).status, .done)
   }
 
   func testPriorityChoiceStepsHighMediumLowAndStopsAtTheEnds() throws {
@@ -236,17 +228,17 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.draft?.field, .description)
   }
 
-  func testSwitchingScopeOrTabCommitsTheEdit() throws {
+  func testSwitchingFilterOrTabCommitsTheEdit() throws {
     let palette = detailOfFirst()
-    edit(palette, .description, "範囲で抜ける")
-    palette.toggleScope()
-    XCTAssertEqual(try storedTask(palette, 1).description, "範囲で抜ける")
+    edit(palette, .description, "絞り込みで抜ける")
+    palette.toggleState(.done)
+    XCTAssertEqual(try storedTask(palette, 1).description, "絞り込みで抜ける")
 
-    palette.toggleScope()
+    palette.toggleState(.done)
     palette.tapRow(.task(1))
     palette.enterDetail()
     edit(palette, .description, "タブで抜ける")
-    palette.toggleTab()
+    palette.setTab(palette.tab.next)
     XCTAssertEqual(try storedTask(palette, 1).description, "タブで抜ける")
   }
 

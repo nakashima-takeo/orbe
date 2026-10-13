@@ -68,7 +68,7 @@ extension TaskPaletteModelTests {
         [TaskPaletteSamples.root: .init(resolution: .resolved, repo: GitHub.repo)],
         [GitHub.repo: repository])
       let palette = TaskPaletteSamples.model([], openLists: lists)
-      palette.toggleTab()
+      palette.setTab(palette.tab.next)
       palette.query = query
       return palette.gitHubRows.map(\.id)
     }
@@ -243,7 +243,7 @@ extension TaskPaletteModelTests {
 
   // MARK: - 結び付いている行
 
-  /// ↵ でタスクのタブのそのタスクへ移る。範囲・入力・完了の欄で隠れていれば見えるように切り替える。
+  /// ↵ でタスクのタブのそのタスクへ移る。絞り込みと入力は変えず、合わなくてもそのタスクを残して選ぶ。
   func testEnterOnALinkedItemRevealsItsTaskOnTheTasksTab() throws {
     let palette = GitHub.model(
       [
@@ -254,17 +254,17 @@ extension TaskPaletteModelTests {
         },
       ], issues: [GitHub.issue(5)])
     palette.setTab(.tasks)
-    palette.setScope(.opened)
+    palette.toggleWorkspaceFilter(self.openedWorkspace.id)
     palette.query = "zzz"
     palette.setTab(.github)
 
     palette.submit()
 
     XCTAssertEqual(palette.visibleTab, .tasks)
-    XCTAssertEqual(palette.scope, .all)
-    XCTAssertTrue(palette.doneExpanded)
-    XCTAssertEqual(palette.query, "")
+    XCTAssertEqual(palette.filter.workspaces, [self.openedWorkspace.id], "絞り込みは緩めない")
+    XCTAssertEqual(palette.query, "zzz", "入力も消さない")
     XCTAssertEqual(palette.selectedID, .task(2))
+    XCTAssertEqual(palette.rows.compactMap(\.selectableID), [.task(2)], "合わないタスクを残して見せる")
   }
 
   /// ⌘⌫ で結び付きを外す（外した項目に記録する）。行は結び付いていない側へ戻り、選択はその行に残る。
@@ -314,23 +314,23 @@ extension TaskPaletteModelTests {
 
   // MARK: - 絞り込み・さらに
 
-  /// ⇥ は札を「すべて → 担当が自分 → 作成者が自分 → レビュー依頼」と巡回し、一覧の先頭を選ぶ。
-  func testTabCyclesTheFiltersAndSelectsTheFirstRow() {
+  /// 札は入れ切りで、入れるたび・切るたびに一覧の先頭を選ぶ。
+  func testTogglingRelationChipsSelectsTheFirstRow() {
     let palette = GitHub.model(
       [],
       issues: [GitHub.issue(7), GitHub.issue(6, author: "me"), GitHub.issue(5, assignees: ["me"])],
       pullRequests: [GitHub.pullRequest(9)], reviewRequests: [9])
-    var seen: [(TaskGitHubFilter, TaskPaletteGitHubRowID?)] = []
+    var seen: [TaskPaletteGitHubRowID?] = []
 
-    for _ in 0..<4 {
-      palette.cycleGitHubFilter()
-      seen.append((palette.githubFilter, palette.selectedGitHubID))
+    for filter in [TaskGitHubFilter.assigned, .authored, .assigned, .authored] {
+      palette.toggleGitHubRelation(filter)
+      seen.append(palette.selectedGitHubID)
     }
 
-    XCTAssertEqual(seen.map(\.0), [.assigned, .authored, .reviewRequested, .all])
     XCTAssertEqual(
-      seen.map(\.1),
-      [.item(GitHub.id(5)), .item(GitHub.id(6)), .item(GitHub.id(9)), .item(GitHub.id(7))])
+      seen,
+      [.item(GitHub.id(5)), .item(GitHub.id(6)), .item(GitHub.id(6)), .item(GitHub.id(7))])
+    XCTAssertEqual(palette.githubFilters, [])
   }
 
   /// 「さらに」の ↵ で区分の残りを出し、選択は同じ位置の行（出てきた最初の行）へ移る。
