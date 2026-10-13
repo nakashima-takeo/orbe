@@ -70,7 +70,8 @@ struct BackgroundInput: Equatable {
   var environment: [String: String] = [:]
 }
 
-/// 非対話の agent の呼び出し。`tools` は使ってよいツールの名前（組み込みと `mcp__` で始まる MCP のツール）。
+/// 非対話の agent の呼び出し。`tools` は許可の規則（組み込みのツール名・`Bash(<コマンドの接頭>:*)`・`mcp__` で始まる MCP の
+/// ツールの完全名）。
 struct BackgroundAgentCall: Equatable {
   var cli: String
   var model: String

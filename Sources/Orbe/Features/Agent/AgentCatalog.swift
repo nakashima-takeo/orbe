@@ -167,7 +167,8 @@ enum HeadlessSupport {
   case refuses(HeadlessRefusal)
 }
 
-/// 非対話の 1 回の起こし方。依頼文は標準入力で渡す。`environment` は子の環境に上書きする変数。`reply` は標準出力の 1 行から
+/// 非対話の 1 回の起こし方。依頼文は標準入力で渡す。`arguments`・`environment` の `tools` は許可の規則（組み込みのツール名・
+/// `Bash(<コマンドの接頭>:*)`・`mcp__` で始まる MCP のツールの完全名）。`environment` は子の環境に上書きする変数。`reply` は標準出力の 1 行から
 /// 最終応答を取り出す（最終応答の行でなければ nil）。`availableTools` は始まりの出来事の行から、その回で使えるツールの名前を
 /// 取り出す（始まりの行でなければ nil）。
 struct HeadlessCLI {
@@ -192,12 +193,19 @@ enum HeadlessRefusal: Equatable {
 
 /// claude の非対話の契約。
 enum ClaudeHeadless {
-  /// MCP のツール（`mcp__` で始まる名前）を指定しない呼び出しは、利用者の設定・プラグイン・hook・MCP サーバーを一切読まず、
-  /// 指定した組み込みツールだけで閉じる。MCP のツールを指定した呼び出しは、利用者が登録した MCP サーバーを名前で使うため
-  /// 設定を読み、指定したもの以外は問わずに拒否する（`dontAsk`。利用者の bypassPermissions もこれで上書きする）。
+  /// 組み込みの規則はツール名を `--tools` に、規則そのものを `--allowedTools` に渡す（`Bash(gh search prs:*)` なら Bash を
+  /// 持たせ、その接頭のコマンドだけを許す）。MCP のツール（`mcp__` で始まる名前）を指定しない呼び出しは、利用者の設定・
+  /// プラグイン・hook・MCP サーバーを一切読まず、指定した規則だけで閉じる。MCP のツールを指定した呼び出しは、利用者が登録した
+  /// MCP サーバーを名前で使うため設定を読み、指定したもの以外は問わずに拒否する（`dontAsk`。利用者の bypassPermissions も
+  /// これで上書きする）——ただし利用者が常に許可にしたツールと hook は効く。
   static func arguments(model: String, tools: [String]) -> [String] {
     let builtins = tools.filter { !$0.hasPrefix("mcp__") }
-    var args = ["-p", "--model", model, "--tools", builtins.joined(separator: ",")]
+    var names: [String] = []
+    for rule in builtins {
+      let name = rule.firstIndex(of: "(").map { String(rule[..<$0]) } ?? rule
+      if !names.contains(name) { names.append(name) }
+    }
+    var args = ["-p", "--model", model, "--tools", names.joined(separator: ",")]
     if !tools.isEmpty { args += ["--allowedTools", tools.joined(separator: ",")] }
     args += [
       "--permission-mode", "dontAsk", "--no-session-persistence",
