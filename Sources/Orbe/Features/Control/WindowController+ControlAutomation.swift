@@ -33,7 +33,6 @@ extension WindowController {
   func controlDeleteAutomation(automationId: Int) -> Result<Any, ControlError> {
     automationResult { () throws(AutomationError) in
       try automationRunner.delete(automationId)
-      automationDeleted(automationId)
       return ["ok": true]
     }
   }

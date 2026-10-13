@@ -72,8 +72,9 @@ extension WindowControllerAutomationNoticeTests {
     XCTAssertTrue(center.posted.isEmpty)
   }
 
-  /// 通知センターへの書き換えはその場で許可を求め、メニューバーへの書き換えは求めない。消すとその自動化の通知を取り下げる。
-  @MainActor func testSettingAsksForPermissionAndDeletingWithdraws() throws {
+  /// 通知センターへの書き換えはその場で許可を求め、メニューバーへの書き換えは求めない。ボードの ⌘⌫ で消しても、その自動化の
+  /// 通知を取り下げる（取り下げが制御 API の削除だけに付いていると、人の手で消した自動化の通知が残る）。
+  @MainActor func testSettingAsksForPermissionAndDeletingFromTheBoardWithdraws() throws {
     let wc = controller()
     let center = try notifier(wc)
     var definition = AutomationStoreTests.definition()
@@ -89,7 +90,9 @@ extension WindowControllerAutomationNoticeTests {
     _ = wc.controlSetAutomation(automationId: id, definition)
     XCTAssertEqual(center.requestCount, 1)
 
-    _ = wc.controlDeleteAutomation(automationId: id)
+    wc.showAutomation(id)
+    wc.board.automation.perform(.delete)
+    XCTAssertNil(wc.automationStore.automation(id), "前提: ボードの ⌘⌫ で消えていない")
     XCTAssertEqual(center.removed, ["automation.\(id)"])
   }
 

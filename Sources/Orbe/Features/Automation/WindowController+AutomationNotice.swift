@@ -47,7 +47,7 @@ extension WindowController {
     systemNotifier.requestAuthorizationIfUndetermined()
   }
 
-  /// 自動化を消した直後。その自動化の通知を通知センターから取り下げる。
+  /// 自動化を消した（走らせ役から。どの経路で消しても通る）。その自動化の通知を通知センターから取り下げる。
   func automationDeleted(_ id: Int) {
     systemNotifier.remove(identifier: Self.systemNotificationIdentifier(id))
   }
