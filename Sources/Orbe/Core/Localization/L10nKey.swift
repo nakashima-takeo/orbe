@@ -177,7 +177,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPalettePlaceholder
   case taskPaletteGitHubPlaceholder
   case taskPaletteTabTasks
-  case taskPaletteScopeAll
   case taskPaletteStateInProgress
   case taskPaletteStateTodo
   case taskPaletteStateWaiting
@@ -347,6 +346,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   // MARK: - タスク画面の受信タブ
   case taskPaletteTabAutomation
   case taskPaletteAutomationPlaceholder
+  case taskPaletteAutomationAll
   case taskPaletteAutomationAskSecretary
   case taskPaletteAutomationNoProposals
   case taskPaletteAutomationLastFailed
