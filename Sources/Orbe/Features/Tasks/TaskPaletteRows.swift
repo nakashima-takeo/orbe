@@ -80,7 +80,7 @@ enum TaskPaletteRow: Equatable, Identifiable {
   }
 
   case task(TaskPaletteTaskRow)
-  /// 絞り込みに合うタスクが 1 件も無く、入力も無いときの情報行（選べない）。
+  /// 表に出す行（暗い行も数える）が 1 件も無く、入力も無いときの情報行（選べない）。
   case empty
 
   var id: Identity {
@@ -210,7 +210,7 @@ enum TaskPaletteRows {
     return listed
   }
 
-  /// `listing` の並びの行。合うタスクが 1 件も無く入力も無ければ情報行。
+  /// `listing` の並びの行。表に出す行（暗い行も数える）が 1 件も無く、入力も無ければ情報行。
   static func build(_ input: Input) -> [TaskPaletteRow] {
     let tasks = Dictionary(input.tasks.map { ($0.id, $0) }) { first, _ in first }
     let rows = listing(input).compactMap { tasks[$0] }.map {

@@ -8,7 +8,7 @@ struct TaskPaletteTaskList {
   var state = ListState<TaskPaletteRowID>() {
     didSet { if state.query != oldValue.query { listed = [] } }
   }
-  /// 表に載せたタスクの ID（表の並びの順）。書くのは `TaskPaletteRows.listing` の結果だけ。
+  /// 表に載せたタスクの ID（表の並びの順）。リストの更新で空にし、中身を書くのは `TaskPaletteRows.listing` の結果だけ。
   var listed: [Int] = []
   /// 結び付けるタスクを選ぶ状態の一覧か。
   let picking: Bool
