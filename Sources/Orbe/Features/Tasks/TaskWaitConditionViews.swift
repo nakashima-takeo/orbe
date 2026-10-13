@@ -20,7 +20,7 @@ struct TaskResolvedBadge: View {
         .frame(maxWidth: TaskPaletteRowMetrics.textBadgeMaxWidth, alignment: .leading)
         .fixedSize()
         .padding(.horizontal, Theme.Space.step)
-        .frame(height: TaskPaletteRowMetrics.firstLine)
+        .frame(height: TaskPaletteRowMetrics.badge)
         .background(Capsule().fill(Color.theme.tintAccent))
     }
   }

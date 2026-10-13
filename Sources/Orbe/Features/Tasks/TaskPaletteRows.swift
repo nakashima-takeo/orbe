@@ -94,13 +94,14 @@ enum TaskPaletteRow: Equatable, Identifiable {
   }
 }
 
-/// 表の寸法。行の高さは 1 種類。列の幅は見本の比率（72 / 可変 / 44 / 76 / 80 / 48、間 12）を本番の字の
-/// 大きさ（行 12pt・欄 10pt）に合わせて丸めたもの。
+/// 表の寸法。行の高さは 1 種類。優先度・workspace の列の幅は見本の比率（44 / 80、間 12）を本番の字の
+/// 大きさ（行 12pt・欄 10pt）に合わせて丸めたもの。件名は残りの幅、状態は最も長い状態の名前、期限・作成は最も長い
+/// 書式から測る。
 enum TaskPaletteRowMetrics {
   /// 札の 1 行（GitHub タブ・選ぶ状態の帯）の高さ。⌘⇧S の行（上下 4 ＋ 16pt の 1 行）と同じ。
   static let line: CGFloat = 24
   /// 札の高さ。
-  static let firstLine: CGFloat = 16
+  static let badge: CGFloat = 16
   /// 表の行の高さ。
   static let row: CGFloat = 30
   /// 表の見出しの高さ。

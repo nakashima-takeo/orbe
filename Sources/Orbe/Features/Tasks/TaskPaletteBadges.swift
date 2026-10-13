@@ -19,7 +19,7 @@ struct TaskPullRequestBadge: View {
     .lineLimit(1)
     .fixedSize()
     .padding(.horizontal, Theme.Space.note)
-    .frame(height: TaskPaletteRowMetrics.firstLine)
+    .frame(height: TaskPaletteRowMetrics.badge)
     .background(RoundedRectangle(cornerRadius: Theme.Radius.sm + 1).fill(Color.theme.tintAccent))
   }
 }
@@ -46,7 +46,7 @@ struct TaskPaletteBadge: View {
     .foregroundStyle(foreground)
     .fixedSize()
     .padding(.horizontal, capsule ? Theme.Space.step : Theme.Space.note)
-    .frame(height: TaskPaletteRowMetrics.firstLine)
+    .frame(height: TaskPaletteRowMetrics.badge)
     .background(
       RoundedRectangle(cornerRadius: capsule ? Theme.Radius.pill : Theme.Radius.sm + 1)
         .fill(fill))
