@@ -255,7 +255,8 @@ import Observation
     }
   }
 
-  /// モデルは省略できる（既定は `AutomationDefinition.model`）。書くなら空でないこと。
+  /// モデルは省略できる（既定は段・取得元なら `AutomationDefinition.model`、出力先の agent なら
+  /// `AutomationSinkAgent.resolvedModel`）。書くなら空でないこと。
   private static func checkAgent(_ cli: String, model: String?, _ role: String)
     throws(AutomationError)
   {
