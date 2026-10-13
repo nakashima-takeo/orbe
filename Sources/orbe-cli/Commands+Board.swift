@@ -18,11 +18,11 @@ let boardUsage = """
 
   The board is a screen of the workspace beside its tabs. Only a workspace
   with a board takes these commands (`orb ws list --json` shows hasBoard).
-  KINDS: intake (the task auto-add: its heading, request field, list and
-  detail). A board holds each kind at most once.
+  KINDS: automation (automations: the request field, the list and the
+  right pane). A board holds each kind at most once.
   add appends the part; adding a part already there changes nothing.
-  rm removes it; removing a part not there changes nothing. Removing intake
-  keeps the auto-adds themselves (`orb intake list`).
+  rm removes it; removing a part not there changes nothing. Removing
+  automation keeps the automations themselves (`orb automation list`).
   Each command prints the resulting parts, one kind per line.
   """
 

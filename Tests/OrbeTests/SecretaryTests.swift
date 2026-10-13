@@ -357,7 +357,7 @@ final class SecretaryTests: OrbeTestCase {
     XCTAssertNil(wc.board.refusal, "断らない")
     let tab = try XCTUnwrap(try homeTabs(wc).first, "Home に秘書のタブが起きる")
     report(wc, tab, "idle", "s-1")
-    waitForScreen(tab, contains: "タスクの自動追加を頼む: DM を候補に")
+    waitForScreen(tab, contains: "自動化を頼む: DM を候補に")
     XCTAssertTrue(screen(tab).contains("Home のボードから · "), "出どころが見える")
   }
 

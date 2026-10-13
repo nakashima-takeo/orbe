@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 受信タブの本体。左に棚、真ん中に提案の一覧、右に選んだ提案の詳細。中身に居る間は、真ん中と右をまたいで受信の中身を
+/// 提案タブの本体。左に棚、真ん中に提案の一覧、右に選んだ提案の詳細。中身に居る間は、真ん中と右をまたいで受信の中身を
 /// 1 枚で出す。棚はカードの幅の 1/4 で、狭い窓では下限で止めて真ん中を縮める。
 struct TaskPaletteAutomationBody: View {
   @Bindable var model: TaskPaletteAutomationModel
@@ -68,7 +68,7 @@ struct TaskPaletteAutomationList: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
   }
 
-  /// 「13:00 の回 · 9 件取得 → 新しい 4 件を判定 → 候補 2」と「中身 →」。狭い欄では要約を 2 行まで折り返す。
+  /// 「13:00 の回 · 9 件取得 → 新しい 4 件を処理 → 候補 2」と「中身 →」。狭い欄では要約を 2 行まで折り返す。
   private func headline(_ automation: Automation) -> some View {
     let text = AutomationText(l10n: l10n, today: model.today, timeZone: model.timeZone)
     return HStack(alignment: .firstTextBaseline, spacing: Theme.Space.step) {

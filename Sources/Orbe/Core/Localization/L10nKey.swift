@@ -346,10 +346,10 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteHeadingTask
   case taskPaletteScopeWasAll
   case taskPaletteActionRefine
-  // MARK: - タスク画面の受信タブ
+  // MARK: - タスク画面の提案タブ
   case taskPaletteTabAutomation
   case taskPaletteAutomationPlaceholder
-  case taskPaletteAutomationAskSecretary
+  case taskPaletteAutomationAskBoard
   case taskPaletteAutomationNoProposals
   case taskPaletteAutomationLastFailed
   case taskPaletteAutomationContents
@@ -368,30 +368,30 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAutomationOverlapCount
   case taskPaletteAutomationRewriteNote
   case taskPaletteAutomationErrAccept
-  // MARK: - 自動追加の共有の文（L10nTable+Automation）
+  // MARK: - 自動化の共有の文（L10nTable+Automation）
   case automationFetch
-  case automationJudge
+  case automationSteps
   case automationNext
   case automationPaused
   case automationRunning
   case automationRunAt
   case automationFetched
-  case automationJudged
+  case automationProcessed
   case automationProposedShortOne
   case automationProposedShortOther
   case automationProposedLongOne
   case automationProposedLongOther
   case automationNothingNew
   case automationFailed
-  case automationFailedShort
   case automationNeverRan
   case automationNowMark
   case automationToday
   case automationDue
   case automationCurrentSet
   case automationNewArrivals
+  case automationEverything
   case automationAgentFetch
-  case automationCommandFetch
+  case automationCommand
   case automationTools
   case automationDirectory
   case automationEvery
@@ -593,11 +593,40 @@ enum L10nKey: String, CaseIterable, Sendable {
   // MARK: - ボード（L10nTable+Board）
   case boardEmpty
   case boardAutomationTitle
-  case boardAutomationCount
   case boardAutomationEmpty
-  case boardAutomationWhen
+  case boardAutomationLast
+  case boardAutomationFlow
+  case boardAutomationCounts
   case boardAutomationRuns
-  case boardAutomationPausedNote
+  case boardRoleTrigger
+  case boardRoleSource
+  case boardRoleOrbe
+  case boardRoleStep
+  case boardRoleOutput
+  case boardOrbeSeen
+  case boardOutputTaskCandidates
+  case boardOutputCommand
+  case boardOutputReport
+  case boardOutputTally
+  case boardOutputNotifyMenuBar
+  case boardOutputNotifyNotificationCenter
+  case boardRunFailed
+  case boardRunFailedShort
+  case boardRunAdded
+  case boardRunAddedTo
+  case boardRunNothingNew
+  case boardRunAllDropped
+  case boardRunNoneAdded
+  case boardRunDone
+  case boardRunNothingToReport
+  case boardRunMark
+  case boardRunMarkAdded
+  case boardRunMarkReported
+  case boardGuideLead
+  case boardGuideExamples
+  case boardExampleSlack
+  case boardExampleGitHub
+  case boardExampleDailyNote
   case boardHintSelect
   case boardHintToList
   case boardAskPlaceholder

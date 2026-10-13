@@ -2,7 +2,7 @@ import AppKit
 import OrbeSound
 
 /// Attention パレットの提示と、Attention snapshot（単一情報源 `AttentionStore`）の流し込み。
-/// 加えて、知らせ 1 件（`ChromeNotification`）をメニューバー②と通知音の 2 面へ流す口と、
+/// 加えて、知らせ 1 件（`ChromeNotification`）をメニューバー②・通知センターと通知音へ流す口と、
 /// 見ていないタブの状態変化をその 1 件として成立させる入口を持つ。
 extension WindowController {
   /// `flushChrome` から呼ぶ snapshot 更新（既存 coalesce に相乗り。新たな走査タイミングは作らない）。
@@ -60,31 +60,52 @@ extension WindowController {
     _ = controlFocusTab(tabId: tabId)
   }
 
-  /// 知らせ 1 件をメニューバー②と通知音の 2 面へ流す。成立条件（見ているか・所属）は知らせを組む側が
-  /// 1 回だけ解き、面ごとに判断しない。②の滞留は知らせが持つ発信元 workspace の実効設定
-  /// （`menubar-notification-duration`）から決まり、その到来が終わるまで動かない——設定を変えても
-  /// 今出ているピルには効かず、次の到来から効く。
+  /// 知らせ 1 件を通知音と、メニューバー②か通知センターのどちらかへ流す。成立条件（見ているか・所属）は知らせを組む側が
+  /// 1 回だけ解き、面ごとに判断しない。通知センターの形を持つ知らせは、その時点で許可があれば通知センターへ、無い・出せな
+  /// ければ②へ出し、許可が未確認なら求める（答えは待たない——待つ間、知らせがどこにも届かないため）。音は答えを待たずに
+  /// 鳴らす。②の滞留は知らせが持つ発信元 workspace の実効設定（`menubar-notification-duration`）から決まり、その到来が
+  /// 終わるまで動かない——設定を変えても今出ているピルには効かず、次の到来から効く。
   func deliver(_ notification: ChromeNotification) {
+    playNotificationSound(notification)
+    guard let content = notification.systemNotification else {
+      return showMenuBarNotice(notification)
+    }
+    systemNotifier.isAuthorized { [weak self] authorized in
+      guard let self else { return }
+      guard authorized else {
+        self.systemNotifier.requestAuthorizationIfUndetermined()
+        return self.showMenuBarNotice(notification)
+      }
+      self.systemNotifier.post(content) { [weak self] posted in
+        if !posted { self?.showMenuBarNotice(notification) }
+      }
+    }
+  }
+
+  private func showMenuBarNotice(_ notification: ChromeNotification) {
     attentionStore.noteTransient(
       notification.notice,
       dwell: TimeInterval(notification.settings[SettingKeys.menuBarNotificationDuration]))
-    playNotificationSound(notification)
   }
 
-  /// 知らせ 1 件の文脈。メニューバー②と通知音は、この 1 つを投影する 2 つの面。
+  /// 知らせ 1 件の文脈。メニューバー②・通知センターと通知音は、この 1 つを投影する面。
   struct ChromeNotification {
     let notice: MenuBarNotice
     /// 発信元（タブ・タスク）が属する workspace の実効設定。workspace 上書き（「この workspace で起きた
     /// 変化の通知はこう」）が意味を持つのはこの読み方だけ——見ている workspace の値ではない。
     /// workspace の無いタスクは全体の設定。
     let settings: EffectiveSettings
+    /// 通知センターへ出す形。nil の知らせは通知センターへ出さない。
+    var systemNotification: SystemNotificationContent?
 
-    /// 鳴らす音。agent は状態から、タスクの知らせは完了の音、秘書が応えない知らせは人の操作を待つ音。
+    /// 鳴らす音。agent は状態から、タスクの知らせは完了の音、秘書が応えない知らせは人の操作を待つ音、自動化の知らせは
+    /// 出した回なら完了の音・失敗した回なら人の操作を待つ音。
     var soundEvent: AgentSoundEvent? {
       switch notice {
       case .agent(let row): AgentSoundEvent(rawValue: row.state)
       case .task: .done
       case .secretary: .waiting
+      case .automation(let automation): automation.failed ? .waiting : .done
       }
     }
   }

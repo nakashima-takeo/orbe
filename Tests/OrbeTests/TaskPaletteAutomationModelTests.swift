@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// ⌘⇧X の受信タブ——棚と提案の一覧を同一性で選び、居場所（提案の一覧・棚・中身）を移り、提案をタスクにする・捨てる、受信を
+/// ⌘⇧X の提案タブ——棚と提案の一覧を同一性で選び、居場所（提案の一覧・棚・中身）を移り、提案をタスクにする・捨てる、受信を
 /// 今すぐ実行・止める・消す。本物の `AutomationStore`・`AutomationRunner`・`TaskStore` を読み書きする（取得は始まっても終わらない）。
 ///
 /// 壊れると何が起きるか。↵ や ⌘⌫ が光っている行とは別の提案に当たる（タスクにした・捨てた直後や、裏の回が確定した直後）。
@@ -32,17 +32,29 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertEqual(automation.place, .proposals)
   }
 
+  /// 棚は候補を出す自動化だけを並べる。出力先がコマンドの自動化は候補を出さないので出さない。
+  func testTheShelfListsOnlyTaskCandidateAutomations() throws {
+    let runner = DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignFile())
+    var command = runner.store.automation(4)!.definition
+    command.sink = AutomationRunnerTests.commandSink()
+    _ = try runner.set(4, command)
+    let palette = TaskPaletteSamples.model([], automations: runner)
+
+    XCTAssertEqual(
+      palette.automation.shelfIDs, [.all, .automation(1), .automation(2), .automation(3)])
+  }
+
   func testProposalsOfALaterRunComeFirst() throws {
     let runner = DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignFile())
     let item = DesignSceneFixtures.automationItem(
       "C03-9", "後の回", at: DesignSceneFixtures.automationNow)
-    runner.store.commit(
-      2,
+    AutomationStoreTests.commit(
+      runner.store, 2,
       DesignSceneFixtures.automationRun(
-        at: DesignSceneFixtures.automationNow, items: 3, newItems: 1),
+        at: DesignSceneFixtures.automationNow, items: 3, fresh: 1),
       fetched: runner.store.automation(2)!.lastFetched.map {
         AutomationItem(id: $0.id, link: $0.link, body: "", time: DesignSceneFixtures.automationNow)
-      } + [item], judged: [item], decisions: [.propose(itemId: "C03-9", title: "後の提案", due: nil)])
+      } + [item], decisions: [.propose(itemId: "C03-9", title: "後の提案", due: nil)])
     let palette = TaskPaletteSamples.model([], automations: runner)
 
     XCTAssertEqual(palette.automation.proposalIDs, [4, 1, 2, 3])
@@ -144,6 +156,27 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertEqual(palette.store.tasks.count, 1, "タスクは足さない")
   }
 
+  /// タスクのストアが断ったら、タスクにならず agent も開かず、赤を出す。
+  func testAcceptAndOpenRefusedByTheTaskStoreOpensNothing() {
+    var file = DesignSceneFixtures.automationDesignFile()
+    let first = file.proposals[0]
+    file.proposals[0] = AutomationProposal(
+      id: first.id, automationId: first.automationId, item: first.item, title: "改行\nを含む",
+      due: first.due, proposedAt: first.proposedAt, state: .open)
+    let palette = TaskPaletteSamples.model(
+      [TaskPaletteSamples.task(1, "a")], automations: DesignSceneFixtures.automationRunner(file))
+    palette.setTab(.automation)
+    var opened: [Int] = []
+    palette.onOpenWorktreePalette = { opened.append($0) }
+
+    palette.automation.acceptAndOpen()
+
+    XCTAssertEqual(palette.store.tasks.count, 1, "タスクは足さない")
+    XCTAssertEqual(palette.automation.store.proposals[0].state, .open)
+    XCTAssertEqual(palette.automation.error, .accept)
+    XCTAssertEqual(opened, [])
+  }
+
   func testOpenLinkOpensTheProposalLink() {
     let palette = palette()
     var opened: [URL] = []
@@ -202,7 +235,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertEqual(automation.error, .refused(.running), "走っている間は赤で断る")
   }
 
-  /// 受信タブの赤は、タブを替えた操作の境目で消える（戻ったときに当てはまらない赤が残らない）。
+  /// 提案タブの赤は、タブを替えた操作の境目で消える（戻ったときに当てはまらない赤が残らない）。
   func testLeavingTheTabClearsItsError() {
     let palette = palette()
     palette.automation.tapShelf(.automation(1))

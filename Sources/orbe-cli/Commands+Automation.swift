@@ -1,56 +1,136 @@
 import Foundation
 
-// `orb intake <サブコマンド>` の実装と usage。定義は MCP の set_intake と同じ形の JSON を標準入力で受け、検証は control に
-// 任せる（取得はコマンドか agent かで項目が入れ子になるので、フラグに割ると検証が 2 か所に割れる）。
+// `orb automation <サブコマンド>` の実装と usage。定義は MCP の set_automation の definition と同じ形の JSON を標準入力で
+// 受け、検証は control に任せる（取得元や段はコマンドか agent かで項目が入れ子になるので、フラグに割ると検証が 2 か所に割れる）。
 
 // MARK: - usage
 
 let automationUsageLines = [
-  "orb intake list [--json]",
-  "orb intake proposals [<id>] [--json]",
-  "orb intake set [<id>] [--json]   (definition JSON on stdin)",
-  "orb intake run <id> [--json]",
-  "orb intake pause <id> [--json]",
-  "orb intake resume <id> [--json]",
-  "orb intake rm <id> [--json]",
+  "orb automation list [--json]",
+  "orb automation proposals [<id>] [--json]",
+  "orb automation set [<id>] [--json]   (definition JSON on stdin)",
+  "orb automation run <id> [--json]",
+  "orb automation pause <id> [--json]",
+  "orb automation resume <id> [--json]",
+  "orb automation rm <id> [--json]",
 ]
 
 let automationUsage = """
-  orb intake — fetch items on a schedule and let an agent propose tasks
+  orb automation — fetch items on a schedule, process them in steps, and
+  deliver the result
 
   USAGE:
   \(usageBlock(automationUsageLines))
 
-  An intake fetches items (a shell command or a light agent with the tools
-  you name), passes only items not seen in its previous run to a judging
-  agent, and keeps the tasks it proposes for you to accept or dismiss in
-  Orbe. A proposal belongs to its link across all intakes.
-  set reads the definition from stdin, the same JSON as the MCP tool
-  set_intake: {"name", "fetch", "judge", "when"}, all four required.
-    fetch  {"command": "…", "directory": "/abs", "coverage": "…"}  or
-           {"agent": "claude", "model": "…", "tools": ["mcp__<server>__<tool>"],
-            "request": "…", "coverage": "…"}
-           An agent may use only the MCP tools named in full; built-in tools,
-           whole servers and wildcards are refused. Name only tools that
-           read the source (never ones that send, update or delete, nor
-           Orbe's own tools): the name is checked, not what the tool does.
-           A command prints one JSON object per item:
-           {"id","link","body","time"} (link http(s), time ISO 8601),
-           and fails with a non-zero exit or a single {"error": "…"} line.
-           coverage (required) is "currentSet" when the fetch returns the
-           whole current set: a proposal whose link leaves the fetch is
-           withdrawn. It is "newArrivals" when the fetch returns only new
-           items: a proposal stays until the judge resolves it.
-    judge  {"agent": "claude", "model": "…", "instruction": "…"}
-    when   {"everyMinutes": 30}  or  {"dailyAt": ["09:00", "13:00"]}
-  set without <id> creates an intake and prints its id; with <id> it
-  replaces the whole definition. Changing how to fetch or the judge stops
-  a running run and makes the next run judge every fetched item again.
-  run starts a run now (paused intakes too) and returns at once; the result
-  shows up in list. pause stops only the schedule; resume restarts it.
-  list prints one intake per line: id, state (active / paused / running),
-  name, when, next run, last run.
-  proposals prints one proposal per line: id, state, intake id, due,
+  An automation runs trigger -> source (optional) -> steps (zero or more)
+  -> sink. Only items not seen in its previous run reach the steps. There
+  are three sinks. Task candidates: the last step proposes tasks for you to
+  accept or dismiss in Orbe; it needs a source (currentSet or newArrivals)
+  and at least one step, and a proposal belongs to its link across all
+  automations. Command: a command receives the lines that reach the sink;
+  the source and the steps are optional. Report: the text the last step
+  writes is kept as the result of the run; it needs at least one step.
+  set reads the definition from stdin, the same JSON as the definition of
+  the MCP tool set_automation:
+  {"name", "trigger", "source", "steps", "sink", "notify"}; source and
+  notify are optional.
+    trigger  {"everyMinutes": 30}  or  {"dailyAt": ["09:00", "13:00"]}
+    source   {"command": "…", "directory": "/abs", "coverage": "…"}  or
+             {"agent": "claude", "model": "…", "tools": ["mcp__<server>__<tool>"],
+              "request": "…", "coverage": "…"}
+             An agent may use only the MCP tools named in full; built-in
+             tools, whole servers and wildcards are refused. Name only
+             tools that read the source (never ones that send, update or
+             delete, nor Orbe's own tools): the name is checked, not what
+             the tool does.
+             A command prints one JSON object per item:
+             {"id","link","body","time"} (link http(s), time ISO 8601),
+             and fails with a non-zero exit or a single {"error": "…"} line.
+             coverage (required): "currentSet" when the source returns the
+             whole current set (a proposal whose link leaves it is
+             withdrawn), "newArrivals" when it returns only new items (a
+             proposal stays until the last step resolves it), "everything"
+             to skip the diff against the previous run (not for task
+             candidates). With newArrivals, the start of the last
+             successful run is passed as ORBE_SINCE (ISO 8601, UTC) to a
+             command and as a sentence to an agent; fetch from then on
+             (overlap is fine; Orbe drops seen ids). The first run has none.
+    steps    [{"name": "…", "command": "…", "directory": "/abs"}  or
+              {"name": "…", "agent": "claude", "model": "…", "instruction": "…"}]
+             A step takes JSON lines and prints JSON lines (stdin for a
+             command, Orbe's framed prompt for an agent). A step agent has
+             no tools. Keep each item's id: a run fails when no line that
+             reaches the last step carries an id of this run's items.
+             Narrow with cheap steps (commands, haiku) before costly ones.
+             Without model, the last step runs sonnet and the other steps
+             and the source run haiku; an omitted model stays omitted, so
+             reordering steps moves the default with them.
+             The lines a step command or the sink command receives are text
+             from outside, or what steps made from it, so instructions hidden
+             in that text can reshape them, and Orbe does not check what they
+             say: never evaluate their values as shell, nor pass them to an
+             agent (claude -p and the like). To have an agent read them, make
+             it a step (Orbe runs a step agent without tools).
+    sink     {"kind": "taskCandidates"}
+             An agent last step is told the output form by Orbe: write in
+             its instruction what makes a task and how to title and date
+             it. A command last step prints
+             {"propose": id, "title": "…", "due": "YYYY-MM-DD"} lines itself
+             (it gets no open proposals, so it cannot resolve).
+             {"kind": "command", "command": "…", "directory": "/abs",
+              "timeoutMinutes": 10}
+             The command gets the lines that reach it on stdin, one JSON
+             object per line (the source's items when there are no steps).
+             It runs only when at least one line arrives; with neither a
+             source nor steps it runs on every trigger with empty stdin. A
+             run fails when the last step prints lines but none is a JSON
+             object, and when the command exits non-zero or hits its limit.
+             ORBE_RUN_ID names the run and stays the same when Orbe retries a
+             run that did not finish; record it at the end, not the start.
+             Items of a failed run flow again in the next run, mixed with new
+             ones: skip them by each line's "id" (steps keep the id).
+             timeoutMinutes (1-60, default 2) bounds both the run time and the
+             time without output. stdout is not read. Over 1 MiB of stdout or
+             64 KiB of stderr cuts the command off and fails the run; send
+             large output to /dev/null. Editing the definition does not make
+             the next run process every fetched item again.
+             {"kind": "report"}
+             The output of the last step is the report, kept as text (up to
+             2000 characters) in the run record; a command last step prints
+             it on stdout. Its first line shows on the board's heading and in
+             the notification. An agent last step is told to keep it short and
+             to print nothing when there is nothing to report; a run with no
+             report succeeds as "nothing to report". Editing the definition
+             does not make the next run process every fetched item again.
+    notify   "menuBar" or "notificationCenter"  (any sink; omit to stay
+             silent)
+             When a run delivers something (a proposal, a command run, a
+             report), or on the first of consecutive failed runs, the
+             automation's name and the result line show with a sound: in the
+             menu bar, or in macOS Notification Center. Notification Center
+             keeps one notification per automation; a new run replaces it.
+             Setting notificationCenter makes macOS ask for Orbe's
+             notification permission if it is not decided yet; without
+             permission, the run shows in the menu bar. Clicking either opens
+             the automation on Home's board. Runs that deliver nothing are not
+             notified. Changing only notify does not stop a running run.
+  To edit, take .definition from list --json, change it and pipe it whole:
+    orb automation list --json | jq '.automations[] |
+      select(.automationId==3) | .definition' | … | orb automation set 3
+  set without <id> creates an automation and prints its id; with <id> it
+  replaces the whole definition. Changing the source method, a step's
+  method, model, instruction or command, or the sink stops a running run;
+  with task candidates the next run also processes every fetched item
+  again.
+  run starts a run now (paused automations too) and returns at once; the
+  result shows up in list. pause stops only the schedule; resume restarts
+  it.
+  list prints one automation per line: id, state (active / paused /
+  running), name, trigger, next run, last run (from the run record:
+  fetched and new when it has a source, then proposed, the command's
+  ending, reported or nothing to report when the sink recorded one).
+  Per-step counts are in list --json.
+  proposals prints one proposal per line: id, state, automation id, due,
   title, link.
   """
 
@@ -62,10 +142,12 @@ func runAutomation(_ args: [String]) -> Never {
   case "list": automationList(rest)
   case "proposals": automationProposals(rest)
   case "set": automationSet(rest)
-  case "run": automationSimple(rest, verb: "run", method: "run_intake", done: "started intake")
+  case "run":
+    automationSimple(rest, verb: "run", method: "run_automation", done: "started automation")
   case "pause": automationPause(rest, paused: true)
   case "resume": automationPause(rest, paused: false)
-  case "rm": automationSimple(rest, verb: "rm", method: "delete_intake", done: "removed intake")
+  case "rm":
+    automationSimple(rest, verb: "rm", method: "delete_automation", done: "removed automation")
   case nil:
     print(automationUsage)
     exit(2)
@@ -74,7 +156,7 @@ func runAutomation(_ args: [String]) -> Never {
       print(automationUsage)
       exit(0)
     }
-    usageDie("unknown intake command: \(other)")
+    usageDie("unknown automation command: \(other)")
   }
 }
 
@@ -87,20 +169,21 @@ private func exitIfHelp(_ args: [String]) {
 private func automationList(_ rest: [String]) -> Never {
   exitIfHelp(rest)
   rejectLeftovers(rest, positionals: 0)
-  let result = callOrExit("list_intakes", [:])
+  let result = callOrExit("list_automations", [:])
   if wantJSON {
     printJSON(result)
     exit(0)
   }
-  let automations = (result as? [String: Any])?["intakes"] as? [[String: Any]] ?? []
+  let automations = (result as? [String: Any])?["automations"] as? [[String: Any]] ?? []
   for automation in automations {
     let state =
       automation["running"] as? Bool == true
       ? "running" : automation["paused"] as? Bool == true ? "paused" : "active"
+    let definition = automation["definition"] as? [String: Any]
     let runs = automation["runs"] as? [[String: Any]] ?? []
     print(
       [
-        automation["intakeId"], state, automation["name"], whenCell(automation["when"]),
+        automation["automationId"], state, definition?["name"], triggerCell(definition?["trigger"]),
         automation["nextRunAt"],
         runs.first.map(runCell),
       ].map { $0.map(display) ?? "-" }.map(tsvCell).joined(separator: "\t"))
@@ -109,29 +192,41 @@ private func automationList(_ rest: [String]) -> Never {
 }
 
 /// `every 30m` / `daily 09:00,13:00`。
-private func whenCell(_ raw: Any?) -> String? {
-  guard let when = raw as? [String: Any] else { return nil }
-  if let minutes = when["everyMinutes"] { return "every \(display(minutes))m" }
-  if let times = when["dailyAt"] as? [String] { return "daily " + times.joined(separator: ",") }
+private func triggerCell(_ raw: Any?) -> String? {
+  guard let trigger = raw as? [String: Any] else { return nil }
+  if let minutes = trigger["everyMinutes"] { return "every \(display(minutes))m" }
+  if let times = trigger["dailyAt"] as? [String] { return "daily " + times.joined(separator: ",") }
   return nil
 }
 
-/// 前回の要約（`<開始> failed: <理由>` か `<開始> 12 fetched, 3 new, 1 proposed`）。
+/// 前回の要約。回の記録だけから組む: `<開始> failed: <理由>`、または `<開始>` に、取得元の記録があれば
+/// `12 fetched, 3 new`、出力先の記録があれば `1 proposed`（タスク候補）・`command exited 0`（コマンド）・`reported` か
+/// `nothing to report`（報告）を続ける。
 private func runCell(_ run: [String: Any]) -> String {
   let started = run["startedAt"].map(display) ?? "?"
   if let failure = run["failure"] as? String { return "\(started) failed: \(failure)" }
-  let fetched = (run["fetch"] as? [String: Any])?["items"].map(display) ?? "0"
-  let fresh = run["newItems"].map(display) ?? "0"
-  let proposed = (run["judge"] as? [String: Any])?["proposed"].map(display) ?? "0"
-  return "\(started) \(fetched) fetched, \(fresh) new, \(proposed) proposed"
+  var parts: [String] = []
+  if let source = run["source"] as? [String: Any] {
+    let fetched = source["count"].map(display) ?? "0"
+    parts.append("\(fetched) fetched, \(run["fresh"].map(display) ?? "0") new")
+  }
+  if let sink = run["sink"] as? [String: Any] {
+    switch sink["kind"] as? String {
+    case "taskCandidates": parts.append("\(sink["proposed"].map(display) ?? "0") proposed")
+    case "command": parts.append("command \(sink["ending"].map(display) ?? "?")")
+    case "report": parts.append(sink["text"] == nil ? "nothing to report" : "reported")
+    default: break
+    }
+  }
+  return parts.isEmpty ? started : "\(started) " + parts.joined(separator: ", ")
 }
 
 private func automationProposals(_ rest: [String]) -> Never {
   exitIfHelp(rest)
   rejectLeftovers(rest, positionals: 1)
   var params: [String: Any] = [:]
-  if !rest.isEmpty { params["intakeId"] = automationIdArg(rest, verb: "proposals") }
-  let result = callOrExit("list_intake_proposals", params)
+  if !rest.isEmpty { params["automationId"] = automationIdArg(rest, verb: "proposals") }
+  let result = callOrExit("list_automation_proposals", params)
   if wantJSON {
     printJSON(result)
     exit(0)
@@ -140,7 +235,7 @@ private func automationProposals(_ rest: [String]) -> Never {
   for proposal in proposals {
     print(
       [
-        proposal["proposalId"], proposal["state"], proposal["intakeId"], proposal["due"],
+        proposal["proposalId"], proposal["state"], proposal["automationId"], proposal["due"],
         proposal["title"], proposal["link"],
       ].map { $0.map(display) ?? "-" }.map(tsvCell).joined(separator: "\t"))
   }
@@ -152,19 +247,20 @@ private func automationSet(_ rest: [String]) -> Never {
   rejectLeftovers(rest, positionals: 1)
   let id = rest.isEmpty ? nil : automationIdArg(rest, verb: "set")
   let data = FileHandle.standardInput.readDataToEndOfFile()
-  guard !data.isEmpty else { usageDie("intake set reads the definition JSON from stdin") }
-  guard var params = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
-    usageDie("intake set: stdin is not a JSON object")
+  guard !data.isEmpty else { usageDie("automation set reads the definition JSON from stdin") }
+  guard let definition = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+    usageDie("automation set: stdin is not a JSON object")
   }
-  if let id { params["intakeId"] = id }
-  let result = callOrExit("set_intake", params)
+  var params: [String: Any] = ["definition": definition]
+  if let id { params["automationId"] = id }
+  let result = callOrExit("set_automation", params)
   if wantJSON {
     printJSON(result)
   } else if let id {
-    print("updated intake \(id)")
+    print("updated automation \(id)")
   } else {
-    let automation = (result as? [String: Any])?["intake"] as? [String: Any]
-    print(automation?["intakeId"] as? Int ?? -1)
+    let automation = (result as? [String: Any])?["automation"] as? [String: Any]
+    print(automation?["automationId"] as? Int ?? -1)
   }
   exit(0)
 }
@@ -173,8 +269,12 @@ private func automationPause(_ rest: [String], paused: Bool) -> Never {
   exitIfHelp(rest)
   rejectLeftovers(rest, positionals: 1)
   let id = automationIdArg(rest, verb: paused ? "pause" : "resume")
-  let result = callOrExit("pause_intake", ["intakeId": id, "paused": paused])
-  if wantJSON { printJSON(result) } else { print("\(paused ? "paused" : "resumed") intake \(id)") }
+  let result = callOrExit("pause_automation", ["automationId": id, "paused": paused])
+  if wantJSON {
+    printJSON(result)
+  } else {
+    print("\(paused ? "paused" : "resumed") automation \(id)")
+  }
   exit(0)
 }
 
@@ -183,14 +283,14 @@ private func automationSimple(_ rest: [String], verb: String, method: String, do
   exitIfHelp(rest)
   rejectLeftovers(rest, positionals: 1)
   let id = automationIdArg(rest, verb: verb)
-  let result = callOrExit(method, ["intakeId": id])
+  let result = callOrExit(method, ["automationId": id])
   if wantJSON { printJSON(result) } else { print("\(done) \(id)") }
   exit(0)
 }
 
-/// 位置引数の intake id（正の整数）。
+/// 位置引数の automation id（正の整数）。
 private func automationIdArg(_ args: [String], verb: String) -> Int {
-  guard let raw = args.first else { usageDie("intake \(verb) requires <id>") }
-  guard let id = Int(raw), id >= 1 else { usageDie("invalid intake id: \(raw)") }
+  guard let raw = args.first else { usageDie("automation \(verb) requires <id>") }
+  guard let id = Int(raw), id >= 1 else { usageDie("invalid automation id: \(raw)") }
   return id
 }

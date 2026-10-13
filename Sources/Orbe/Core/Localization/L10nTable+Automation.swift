@@ -1,13 +1,13 @@
 import Foundation
 
-/// 自動追加の文言分冊（⌘⇧X の自動追加タブの文と、⌘⇧X とボードが共有する自動追加の文）。本体 `L10n.table` が結合する。
+/// 自動化の文言分冊（⌘⇧X の提案タブの文と、⌘⇧X とボードが共有する自動化の文）。本体 `L10n.table` が結合する。
 extension L10n {
   static let automationTable: [L10nKey: (ja: String, en: String)] = [
-    .taskPaletteTabAutomation: ("自動追加", "Auto-add"),
+    .taskPaletteTabAutomation: ("提案", "Proposals"),
     .taskPaletteAutomationPlaceholder: ("候補を絞り込み", "Filter candidates"),
-    .taskPaletteAutomationAskSecretary: (
-      "自動追加を足す・変えるのは秘書に頼む",
-      "Ask the secretary to add or change auto-adds"
+    .taskPaletteAutomationAskBoard: (
+      "自動追加を足す・変えるのは Home のボードから頼む",
+      "To add or change auto-adds, ask from the Home board"
     ),
     .taskPaletteAutomationNoProposals: ("候補なし", "no candidates"),
     .taskPaletteAutomationLastFailed: ("前回は失敗", "last run failed"),
@@ -26,27 +26,26 @@ extension L10n {
     .taskPaletteAutomationOverlaps: ("重なり", "Overlaps"),
     .taskPaletteAutomationOverlapCount: ("%1$@ と %2$lld 件", "%2$lld with %1$@"),
     .taskPaletteAutomationRewriteNote: (
-      "名前・取得・判定は秘書が一度にまとめて書き換える",
-      "The secretary rewrites the name, fetch, and judge together"
+      "名前・取得元・処理は、ボードから頼むと agent がまとめて書き換える",
+      "Ask from the board, and an agent rewrites the name, source, and steps together"
     ),
     .taskPaletteAutomationErrAccept: ("タスクにできませんでした", "Couldn’t make it a task"),
 
-    // MARK: 自動追加の共有の文
+    // MARK: 自動化の共有の文
     .automationFetch: ("取得", "Fetch"),
-    .automationJudge: ("判定", "Judge"),
-    .automationNext: ("次 %@", "next %@"),
-    .automationPaused: ("止めている", "paused"),
+    .automationSteps: ("処理", "Steps"),
+    .automationNext: ("次回 %@", "next %@"),
+    .automationPaused: ("停止中", "paused"),
     .automationRunning: ("実行中…", "running…"),
     .automationRunAt: ("%@ の回", "%@ run"),
     .automationFetched: ("%lld 件取得", "fetched %lld"),
-    .automationJudged: ("新しい %lld 件を判定", "judged %lld new"),
+    .automationProcessed: ("新しい %lld 件を処理", "processed %lld new"),
     .automationProposedShortOne: ("候補 %lld", "%lld candidate"),
     .automationProposedShortOther: ("候補 %lld", "%lld candidates"),
     .automationProposedLongOne: ("候補 %lld 件", "%lld candidate"),
     .automationProposedLongOther: ("候補 %lld 件", "%lld candidates"),
     .automationNothingNew: ("新しい項目なし", "nothing new"),
     .automationFailed: ("失敗 — %@", "failed — %@"),
-    .automationFailedShort: ("失敗", "failed"),
     .automationNeverRan: ("まだ回っていない", "not run yet"),
     .automationNowMark: ("今すぐ", "now"),
     .automationToday: ("今日", "today"),
@@ -59,14 +58,18 @@ extension L10n {
       "新着の流れ · 判定が対応済みとした候補だけを下げる",
       "New arrivals · drops candidates only when the judge resolves them"
     ),
+    .automationEverything: (
+      "毎回全件 · 前回の取得結果との差分を掛けない",
+      "Everything · no diff against the last fetch"
+    ),
     .automationAgentFetch: ("軽い agent", "Light agent"),
-    .automationCommandFetch: ("コマンド", "Command"),
+    .automationCommand: ("コマンド", "Command"),
     .automationTools: ("使えるツール", "Tools"),
     .automationDirectory: ("作業ディレクトリ", "Directory"),
-    .automationEvery: ("%lld 分ごと", "every %lld min"),
+    .automationEvery: ("%lld分ごと", "every %lld min"),
     .automationDaily: ("毎日 %@", "daily at %@"),
     .automationRunNow: ("今すぐ実行", "Run now"),
-    .automationPause: ("止める", "Pause"),
+    .automationPause: ("停止", "Pause"),
     .automationResume: ("再開", "Resume"),
     .automationDelete: ("削除", "Delete"),
     .automationErrRunning: ("実行中のため今すぐ実行できません", "Already running — can’t run now"),

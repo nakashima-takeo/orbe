@@ -24,9 +24,9 @@ final class OrbeCliBoardProcessTests: OrbeTestCase {
       return outcome.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    XCTAssertEqual(run(["list", "\(home)"]), "intake")
-    XCTAssertEqual(run(["rm", "\(home)", "intake"]), "", "結果の並び（空）")
-    XCTAssertEqual(run(["add", "\(home)", "intake"]), "intake")
+    XCTAssertEqual(run(["list", "\(home)"]), "automation")
+    XCTAssertEqual(run(["rm", "\(home)", "automation"]), "", "結果の並び（空）")
+    XCTAssertEqual(run(["add", "\(home)", "automation"]), "automation")
     XCTAssertEqual(
       (control.orbJSON(["board", "list", "\(home)"])["parts"] as? [[String: Any]])?.count, 1)
     XCTAssertEqual(control.orb(["board", "add", "\(home)"]).status, 2, "種類の欠落は usage")
@@ -36,7 +36,9 @@ final class OrbeCliBoardProcessTests: OrbeTestCase {
   ///
   /// 壊れると何が起きるか: `orb board list 3 4` が 4 を黙って捨てて 3 の並びを返し、両方を見たつもりの AI が食い違う。
   func testSubcommandsRejectExtraPositionals() {
-    for args in [["list", "1", "2"], ["add", "1", "intake", "x"], ["rm", "1", "intake", "x"]] {
+    for args in [
+      ["list", "1", "2"], ["add", "1", "automation", "x"], ["rm", "1", "automation", "x"],
+    ] {
       let outcome = ControlProcess.orbWithoutServer(["board"] + args)
       let label = "orb board \(args.joined(separator: " "))"
       XCTAssertEqual(outcome.status, 2, "\(label): \(outcome.stderr)")

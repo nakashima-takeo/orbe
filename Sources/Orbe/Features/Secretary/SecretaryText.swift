@@ -1,15 +1,15 @@
 import Foundation
 
 /// 画面から秘書の係へ渡す頼み（何を頼むか）。どこから頼んだかは頼む側が `SecretaryOrigin` で別に渡す。頼む相手（タスク・
-/// 自動追加）は頼む側が今のストアから引いて渡す。
+/// 自動化）は頼む側が今のストアから引いて渡す。
 enum SecretaryAsk: Equatable {
   /// 打った文（⌘⇧X の入力欄・待ちの条件の続きで起きたこと）。
   case text(String)
   /// タスクを頼む（補足は空でもよい）。
   case task(TaskItem, note: String)
-  /// タスクの自動追加の新しい依頼の文。
+  /// 自動化の新しい依頼の文。
   case automation(String)
-  /// タスクの自動追加の直し。
+  /// 自動化の直し。
   case automationFix(Automation)
 }
 
@@ -100,7 +100,7 @@ enum SecretaryText {
     - 頼みは Orbe が「出どころ · 時刻 — 本文」の 1 行で届けます（出どころは「⌘⇧X から」「Home のボードから」）。
     - あなたが付けた待ちの条件が解けて人が続きを頼むと、「待ちの条件 · 時刻 — 起きたこと」の 1 行で届きます。
     - 「タスク N「…」を頼む」は、そのタスクを対象に動きます。新しいタスクは作りません。補足があれば従い、無ければタスクの内容から判断し、迷えば人に聞きます。
-    - 「タスクの自動追加を頼む: …」「タスクの自動追加 N「…」を直す」は、タスクの自動追加を作る・直す頼みです。set_intake で書きます。
+    - 「自動化を頼む: …」「自動化 N「…」を直す」は、自動化を作る・直す頼みです。set_automation で書きます。
     - 新しいタスク・並び・期限は、頼まれたときだけ書きます。それ以外は提案にとどめます。
     - タスクを足すとき、リポジトリの作業ならその workspace を workspaceId に付けます。リポジトリに属さないなら workspaceId を省きます（Home に付きます）。
     - 作業に取り掛からせるときは start_task を使います。長い作業を自分で抱え込まず、agent に任せて進み具合を見ます。
@@ -115,8 +115,8 @@ enum SecretaryText {
     "Wait condition · time — what happened".
     - "Task N “…”" requests are about that task. Work on it and do not create a new task. Follow the note \
     if there is one; otherwise decide from the task, and ask the user when unsure.
-    - "Task auto-add request: …" and "Fix task auto-add N “…”" ask you to create or fix a task auto-add. \
-    Write it with set_intake.
+    - "Automation request: …" and "Fix automation N “…”" ask you to create or fix an automation. Write it \
+    with set_automation.
     - Write new tasks, ordering, or deadlines only when asked. Otherwise only propose them.
     - When adding a task for work in a repository, set workspaceId to that workspace. For work outside any \
     repository, omit workspaceId (the task goes to Home).
