@@ -113,7 +113,7 @@ struct TaskPaletteGitHubPane: View {
       }
       paneRow(.priority, label: .taskPaletteFieldPriority) {
         TaskPaletteSegments(
-          segments: [TaskItem.Priority.high, .medium, .low].map { priority in
+          segments: TaskItem.Priority.allCases.map { priority in
             TaskPaletteSegments.Segment(
               title: l10n.string(priority.labelKey), count: nil,
               selected: model.pane.priority == priority,
