@@ -196,7 +196,14 @@ private struct TaskPaletteGitHubAction: View {
       PaletteActionLine(
         key: "↵", template: l10n.string(.taskPaletteActionMore), slots: [.emphasis("\(count)")])
     } else if let row = model.selectedGitHubRow {
-      if let task = row.task {
+      // ⌘↵ が解けた待ちの続きから始めるなら（タスクのタブと同じく）それを先に言う。
+      if let linked = row.task, let task = model.store.tasks.first(where: { $0.id == linked.id }),
+        case .ready(let conversation) = model.continuation(of: task)
+      {
+        PaletteActionLine(
+          key: "⌘↵", template: l10n.string(.taskPaletteActionContinue),
+          slots: [.emphasis(task.title), .emphasis(conversation.command)])
+      } else if let task = row.task {
         PaletteActionLine(
           key: "↵", template: l10n.string(.taskPaletteActionOpenTask),
           slots: [.emphasis(task.label)])

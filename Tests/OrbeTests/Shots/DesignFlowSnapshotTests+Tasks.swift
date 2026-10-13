@@ -108,11 +108,13 @@ extension DesignFlowSnapshotTests {
   }
 
   /// 待ちの条件: 見積もり（待っている）を選ぶ → → で右の欄 → ↓ で確認のコマンド → ↵ で開く → ↓ で実行の記録 → ↵ で
-  /// 開く → 一覧へ戻り、確認が成功して解けた見積もりを選んだまま（フッターの「⌘↵ … を claude で続きから」）、までを撮る。
+  /// 開く → 一覧へ戻り、確認が成功して解けた見積もりを選んだまま（フッターの「⌘↵ … を claude で続きから」）→ 見積もりに
+  /// #221 を結び付けて GitHub タブでその行を選ぶ（フッターは同じく「⌘↵ … を claude で続きから」）、までを撮る。
   func testTaskWaitCondition() throws {
     let palette = DesignSceneFixtures.taskPaletteModel(
       DesignSceneFixtures.taskWaitConditionFile(),
       sessionTabs: DesignSceneFixtures.taskSessionTabs())
+    let issue221 = DesignSceneFixtures.taskLink(.issue, "orbe", 221)
     try flow(
       "task_wait_condition", size: NSSize(width: 1440, height: 900),
       render: {
@@ -148,6 +150,14 @@ extension DesignFlowSnapshotTests {
                   stdout: .init(data: Data(DesignSceneFixtures.taskWaitOutput.utf8)),
                   stderr: .init())))
             palette.reconcile()
+          }
+        ),
+        (
+          "resolved_github",
+          {
+            _ = try? palette.store.update(3, TaskUpdate(links: [issue221]))
+            palette.setTab(.github)
+            palette.tapGitHubRow(.item(issue221.item))
           }
         ),
       ])
