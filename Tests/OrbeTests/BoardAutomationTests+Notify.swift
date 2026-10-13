@@ -46,6 +46,33 @@ extension BoardAutomationTests {
       to: NSPoint(x: 0, y: document.bounds.height - list.contentView.bounds.height))
     list.reflectScrolledClipView(list.contentView)
     flush(window)
+    XCTAssertGreaterThan(list.contentView.bounds.minY, 0, "前提: 一覧が流れた")
+  }
+
+  /// 一覧が先頭まで戻るのを待つ。行の引き寄せ（`scrollTo`）はキーを処理した後の RunLoop で効くので、決まった時間だけ回すと
+  /// 遅い環境では引き寄せが後から効き、そのあと流した一覧を先頭へ戻してしまう。
+  private func waitForTop(_ list: NSScrollView, in window: NSWindow) -> Bool {
+    let deadline = Date().addingTimeInterval(5)
+    while list.contentView.bounds.minY != 0, Date() < deadline {
+      pump(0.05)
+    }
+    flush(window)
+    return list.contentView.bounds.minY == 0
+  }
+
+  /// 先頭の行を選び、一覧を末尾まで流して先頭の行を見える範囲の外にした窓。引き寄せが残っていない状態で返す: 流してから
+  /// 先頭の行を選び、その引き寄せで一覧が先頭へ戻るのを見届けてから流し直す。
+  private func mountWithTheFirstRowScrolledOut(_ model: BoardModel) throws -> (
+    NSWindow, NSScrollView
+  ) {
+    let window = mount(model)
+    let list = try listScroll(in: window)
+    try scrollToBottom(list, in: window)
+    down(window)
+    XCTAssertEqual(model.automation.selectedAutomation?.id, Self.failingBacklog)
+    XCTAssertTrue(waitForTop(list, in: window), "前提: 選んだ先頭の行が引き寄せられる")
+    try scrollToBottom(list, in: window)
+    return (window, list)
   }
 
   private func outputNotes(_ automation: BoardAutomationModel, _ id: Int) -> [String] {
@@ -200,17 +227,12 @@ extension BoardAutomationTests {
   func testArrowRightBringsTheRowIntoViewAndOpensBesideIt() throws {
     let model = longBoard()
     let automation = model.automation
-    let window = mount(model)
-    down(window)
-    XCTAssertEqual(automation.selectedAutomation?.id, Self.failingBacklog)
-    let list = try listScroll(in: window)
-    try scrollToBottom(list, in: window)
-    XCTAssertGreaterThan(list.contentView.bounds.minY, 0, "前提: 先頭の行は見える範囲の外")
+    let (window, list) = try mountWithTheFirstRowScrolledOut(model)
 
     right(window)
 
     XCTAssertEqual(automation.notifyCursor, 0)
-    XCTAssertEqual(list.contentView.bounds.minY, 0, "先頭の行が見える範囲へ戻る")
+    XCTAssertTrue(waitForTop(list, in: window), "先頭の行が見える範囲へ戻る")
     click(NotifyPoint.menuBarRow, in: window)
     XCTAssertEqual(
       automation.store.automation(Self.failingBacklog)?.definition.notify, .menuBar,
@@ -221,12 +243,12 @@ extension BoardAutomationTests {
   func testRowLeavingTheViewWhileOpenCloses() throws {
     let model = longBoard()
     let automation = model.automation
-    let window = mount(model)
-    down(window)
+    let (window, list) = try mountWithTheFirstRowScrolledOut(model)
     right(window)
+    XCTAssertTrue(waitForTop(list, in: window), "前提: 開くときの引き寄せが効き終わった")
     XCTAssertEqual(automation.notifyCursor, 0, "前提: 開いている")
 
-    try scrollToBottom(try listScroll(in: window), in: window)
+    try scrollToBottom(list, in: window)
 
     XCTAssertNil(automation.notifyCursor)
     XCTAssertEqual(automation.selectedAutomation?.id, Self.failingBacklog, "選択は動かない")
