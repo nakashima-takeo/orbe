@@ -1,7 +1,7 @@
 import Foundation
 import Observation
 
-/// 受信タブで居る場所。→ が一段深く、← が一段浅い（棚 ← 提案の一覧 → 中身）。
+/// 提案タブで居る場所。→ が一段深く、← が一段浅い（棚 ← 提案の一覧 → 中身）。
 enum TaskPaletteAutomationPlace: Equatable {
   /// 提案の一覧（入力欄に焦点）。
   case proposals
@@ -25,7 +25,7 @@ struct TaskPaletteAutomationShelfRow: Equatable, Identifiable {
   let count: Int
 }
 
-/// 受信タブの失敗（フッターに赤で出す）。
+/// 提案タブの失敗（フッターに赤で出す）。
 enum TaskPaletteAutomationError: Equatable {
   /// タスクにするを、タスクのストアが受け付けなかった。
   case accept
@@ -40,7 +40,7 @@ enum TaskPaletteAutomationError: Equatable {
   }
 }
 
-/// ⌘⇧X の受信タブの状態（@Observable）。受信・提案・回の記録は受信のストアから、走っているか・次の時刻は走らせ役から
+/// ⌘⇧X の提案タブの状態（@Observable）。受信・提案・回の記録は受信のストアから、走っているか・次の時刻は走らせ役から
 /// 毎回読み、写さない。ここが持つのは棚と提案の一覧の状態（入力・同一性での選択）・居場所・失敗だけ。
 /// ストアが変わったら `reconcile()` で選択と居場所を付け直す（カードの `.onChange` が届ける）。
 @Observable final class TaskPaletteAutomationModel {
@@ -58,7 +58,7 @@ enum TaskPaletteAutomationError: Equatable {
   }
   private(set) var error: TaskPaletteAutomationError?
 
-  /// 失敗を消す（タブを替えるなど、受信タブの外の操作の境目）。
+  /// 失敗を消す（タブを替えるなど、提案タブの外の操作の境目）。
   func clearError() {
     error = nil
   }
@@ -68,6 +68,8 @@ enum TaskPaletteAutomationError: Equatable {
   /// 提案をタスクにする位置（付く workspace を渡す。`TaskPaletteModel.addPosition`）。
   @ObservationIgnored var addPosition: (UUID?) -> TaskStore.AddPosition = { _ in .end }
   @ObservationIgnored var onOpenURL: (URL) -> Void = { _ in }
+  /// そのタスクのための agent を開く口（タスクの ID）。
+  @ObservationIgnored var onOpenTask: (Int) -> Void = { _ in }
 
   init(
     runner: AutomationRunner, tasks: TaskStore, home: UUID?, today: TaskItem.DueDate,
@@ -244,17 +246,30 @@ enum TaskPaletteAutomationError: Equatable {
 
   // MARK: - 提案をさばく
 
-  /// ↵。選んでいる提案を Home のタスクにする。判定の確定や下げと行き違っただけなら何も出さず、付け直しに任せる。
+  /// ↵。選んでいる提案を Home のタスクにする。
   func accept() {
-    guard let proposal = selectedProposal else { return }
+    _ = acceptSelected()
+  }
+
+  /// ⌘↵・詳細のボタン。↵ と同じくタスクにして、できたタスクの agent を開く口へ渡す。
+  func acceptAndOpen() {
+    guard let task = acceptSelected() else { return }
+    onOpenTask(task.id)
+  }
+
+  /// 選んでいる提案を Home のタスクにする。判定の確定や下げと行き違っただけなら何も出さず、付け直しに任せる。
+  private func acceptSelected() -> TaskItem? {
+    guard let proposal = selectedProposal else { return nil }
     error = nil
+    var task: TaskItem?
     do throws(AutomationError) {
-      _ = try store.accept(
+      task = try store.accept(
         proposal.id, into: tasks, workspace: home, at: addPosition(home))
     } catch {
       if case .invalid = error { self.error = .accept }
     }
     settle()
+    return task
   }
 
   /// ⌘⌫。選んでいる提案を捨てる。
@@ -265,7 +280,7 @@ enum TaskPaletteAutomationError: Equatable {
     settle()
   }
 
-  /// ⌘↵・リンクのクリック。
+  /// ⌘O・リンクのクリック。
   func openLink() {
     guard let proposal = selectedProposal, let url = URL(string: proposal.item.link) else { return }
     onOpenURL(url)

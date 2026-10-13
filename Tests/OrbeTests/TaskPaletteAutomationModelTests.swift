@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// ⌘⇧X の受信タブ——棚と提案の一覧を同一性で選び、居場所（提案の一覧・棚・中身）を移り、提案をタスクにする・捨てる、受信を
+/// ⌘⇧X の提案タブ——棚と提案の一覧を同一性で選び、居場所（提案の一覧・棚・中身）を移り、提案をタスクにする・捨てる、受信を
 /// 今すぐ実行・止める・消す。本物の `AutomationStore`・`AutomationRunner`・`TaskStore` を読み書きする（取得は始まっても終わらない）。
 ///
 /// 壊れると何が起きるか。↵ や ⌘⌫ が光っている行とは別の提案に当たる（タスクにした・捨てた直後や、裏の回が確定した直後）。
@@ -144,6 +144,27 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertEqual(palette.store.tasks.count, 1, "タスクは足さない")
   }
 
+  /// タスクのストアが断ったら、タスクにならず agent も開かず、赤を出す。
+  func testAcceptAndOpenRefusedByTheTaskStoreOpensNothing() {
+    var file = DesignSceneFixtures.automationDesignFile()
+    let first = file.proposals[0]
+    file.proposals[0] = AutomationProposal(
+      id: first.id, automationId: first.automationId, item: first.item, title: "改行\nを含む",
+      due: first.due, proposedAt: first.proposedAt, state: .open)
+    let palette = TaskPaletteSamples.model(
+      [TaskPaletteSamples.task(1, "a")], automations: DesignSceneFixtures.automationRunner(file))
+    palette.setTab(.automation)
+    var opened: [Int] = []
+    palette.onOpenWorktreePalette = { opened.append($0) }
+
+    palette.automation.acceptAndOpen()
+
+    XCTAssertEqual(palette.store.tasks.count, 1, "タスクは足さない")
+    XCTAssertEqual(palette.automation.store.proposals[0].state, .open)
+    XCTAssertEqual(palette.automation.error, .accept)
+    XCTAssertEqual(opened, [])
+  }
+
   func testOpenLinkOpensTheProposalLink() {
     let palette = palette()
     var opened: [URL] = []
@@ -202,7 +223,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertEqual(automation.error, .refused(.running), "走っている間は赤で断る")
   }
 
-  /// 受信タブの赤は、タブを替えた操作の境目で消える（戻ったときに当てはまらない赤が残らない）。
+  /// 提案タブの赤は、タブを替えた操作の境目で消える（戻ったときに当てはまらない赤が残らない）。
   func testLeavingTheTabClearsItsError() {
     let palette = palette()
     palette.automation.tapShelf(.automation(1))

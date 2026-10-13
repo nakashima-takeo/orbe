@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 受信タブの gallery（見本 R3Inbox.png と同じ 1440×900 の窓）。
+/// 提案タブの gallery（見本 R3Inbox.png と同じ 1440×900 の窓）。
 extension DesignGallerySnapshotTests {
   func renderTaskPaletteAutomationSnapshots(
     _ write: (String, TaskPaletteModel, CGFloat, CGFloat) throws -> Void

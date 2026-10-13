@@ -120,6 +120,38 @@ final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.selectedBaseChoice?.role, .previous, "⇧⇥ が末尾から先頭へ回る")
   }
 
+  /// 押し始めを見ていない ↵ のリピートだけが入力欄に届いても確定しない（⌘⇧X の ⌘↵ の押し始めでこの画面に替わり、
+  /// 残りのリピートが入力欄の確定へ届く経路）。押し直した ↵ では確定する。
+  func testEnterKeyRepeatAloneInTheFieldDecidesNothing() {
+    let model = DesignSceneFixtures.worktreePaletteBasePickerModel()
+    let window = mount(model)
+    type("origin", into: window)
+
+    enter(repeating: true, to: window)
+    XCTAssertEqual(model.mode, .basePicker, "リピートでは決めない")
+
+    enter(to: window)
+    XCTAssertEqual(model.mode, .list, "押し直した ↵ で決める")
+  }
+
+  /// 実アプリと同じく、キューから取り出してから配る（確定の入口は `NSApp.currentEvent` でリピートを見分ける）。
+  private func enter(repeating: Bool = false, to window: NSWindow) {
+    guard
+      let event = NSEvent.keyEvent(
+        with: .keyDown, location: .zero, modifierFlags: [],
+        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+        context: nil, characters: "\r", charactersIgnoringModifiers: "\r",
+        isARepeat: repeating, keyCode: 36)
+    else { return XCTFail("キーイベントを作れない") }
+    NSApp.postEvent(event, atStart: true)
+    guard
+      let dequeued = NSApp.nextEvent(
+        matching: .keyDown, until: Date().addingTimeInterval(1), inMode: .default, dequeue: true)
+    else { return XCTFail("キーイベントがキューから取れない") }
+    NSApp.sendEvent(dequeued)
+    pump(0.15)
+  }
+
   private func type(_ text: String, into window: NSWindow) {
     for character in text { send(0, String(character), to: window) }
   }

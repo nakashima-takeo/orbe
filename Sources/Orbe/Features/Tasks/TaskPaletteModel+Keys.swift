@@ -204,6 +204,12 @@ extension TaskPaletteModel {
     press.modifiers.contains(.command) && press.key == .backspace
   }
 
+  /// ブラウザで開く（⌘O）。
+  static func isOpenInBrowserKey(_ press: KeyPress) -> Bool {
+    press.modifiers.contains(.command) && press.modifiers.isDisjoint(with: [.option, .control])
+      && press.key.character.lowercased() == "o"
+  }
+
   /// 結び付ける（⌘L）。
   private static func isLinkKey(_ press: KeyPress) -> Bool {
     press.modifiers.contains(.command) && press.modifiers.isDisjoint(with: [.option, .control])

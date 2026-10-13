@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 受信タブの本体。左に棚、真ん中に提案の一覧、右に選んだ提案の詳細。中身に居る間は、真ん中と右をまたいで受信の中身を
+/// 提案タブの本体。左に棚、真ん中に提案の一覧、右に選んだ提案の詳細。中身に居る間は、真ん中と右をまたいで受信の中身を
 /// 1 枚で出す。棚はカードの幅の 1/4 で、狭い窓では下限で止めて真ん中を縮める。
 struct TaskPaletteAutomationBody: View {
   @Bindable var model: TaskPaletteAutomationModel
