@@ -98,14 +98,14 @@ extension AutomationStoreTests {
       try AutomationWire.decoder.decode(AutomationSink.self, from: Data(#"{"kind": "mail"}"#.utf8))
     ) {
       guard case .dataCorrupted(let context) = $0 as? DecodingError else { return XCTFail("\($0)") }
-      XCTAssertEqual(context.debugDescription, "pass taskCandidates or command")
+      XCTAssertEqual(context.debugDescription, "pass taskCandidates, command or report")
     }
     XCTAssertThrowsError(
       try AutomationWire.decoder.decode(
         AutomationSinkReport.self, from: Data(#"{"kind": "mail"}"#.utf8))
     ) {
       guard case .dataCorrupted(let context) = $0 as? DecodingError else { return XCTFail("\($0)") }
-      XCTAssertEqual(context.debugDescription, "pass taskCandidates or command")
+      XCTAssertEqual(context.debugDescription, "pass taskCandidates, command or report")
     }
   }
 }

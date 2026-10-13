@@ -116,7 +116,7 @@ struct BoardFlowNodeRow: View {
             ForEach(node.tools, id: \.self) { BoardFlowChip(means: .command($0)) }
           }
         }
-        if let note = node.note {
+        ForEach(Array(node.notes.enumerated()), id: \.offset) { _, note in
           fontResolver.text(note, base: Theme.Typography.codeSmall)
             .font(Font.theme.codeSmall)
             .foregroundStyle(Color.theme.textMuted)

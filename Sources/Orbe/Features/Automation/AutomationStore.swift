@@ -203,6 +203,7 @@ import Observation
     switch definition.sink {
     case .taskCandidates: try AutomationTaskCandidates.check(definition)
     case .command(let command): try AutomationCommandSinkRun.check(command)
+    case .report: try AutomationReportSinkRun.check(definition)
     }
     do throws(BackgroundJobError) {
       try definition.trigger.validate()
@@ -217,6 +218,7 @@ import Observation
     switch sink {
     case .taskCandidates: AutomationTaskCandidates.reviewsAfterRework
     case .command: AutomationCommandSinkRun.reviewsAfterRework
+    case .report: AutomationReportSinkRun.reviewsAfterRework
     }
   }
 

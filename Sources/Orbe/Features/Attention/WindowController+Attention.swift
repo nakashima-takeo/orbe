@@ -79,12 +79,14 @@ extension WindowController {
     /// workspace の無いタスクは全体の設定。
     let settings: EffectiveSettings
 
-    /// 鳴らす音。agent は状態から、タスクの知らせは完了の音、秘書が応えない知らせは人の操作を待つ音。
+    /// 鳴らす音。agent は状態から、タスクの知らせは完了の音、秘書が応えない知らせは人の操作を待つ音、自動化の知らせは
+    /// 出した回なら完了の音・失敗した回なら人の操作を待つ音。
     var soundEvent: AgentSoundEvent? {
       switch notice {
       case .agent(let row): AgentSoundEvent(rawValue: row.state)
       case .task: .done
       case .secretary: .waiting
+      case .automation(let automation): automation.failed ? .waiting : .done
       }
     }
   }
