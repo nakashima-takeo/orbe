@@ -4,24 +4,16 @@ import Foundation
 protocol SecretaryHost: AnyObject {
   /// 検出済みの claude。
   var secretaryClaude: AgentCLI? { get }
-  /// Home に新しいタブで `command` を起こす。`shows` なら開いている画面を閉じ、Home へ切り替えてそのタブを選ぶ。
-  /// `shows` でなければ選ばずに起こす。起こせなければ false。
-  func secretaryOpen(command: String, shows: Bool) -> Bool
+  /// Home に新しいタブで `command` を起こし、開いている画面を閉じて Home へ切り替え、そのタブを選ぶ。起こせなければ false。
+  func secretaryOpen(command: String) -> Bool
 }
 
-/// 頼みの出どころ。起こした claude の役目の指示と見せ方を決める。
+/// 頼みの出どころ。起こした claude の役目の指示を決める。
 enum SecretaryOrigin {
   /// ⌘⇧X の入力の行き先。
   case palette
   /// Home のボード（依頼の欄・直しを依頼）。
   case board
-
-  /// 起こしたタブを前面に出して移るか。
-  var shows: Bool {
-    switch self {
-    case .palette, .board: true
-    }
-  }
 }
 
 /// 秘書の係（窓に 1 つ。状態を持たない）。頼みのたびに、出どころの役目の指示と頼みの本文を起動の引数にして、Home で
@@ -45,7 +37,7 @@ final class Secretary {
   }
 
   func ask(_ ask: SecretaryAsk, from origin: SecretaryOrigin) throws(Refusal) {
-    guard let input = SecretaryText.firstInput(ask, from: origin, l10n: localization) else {
+    guard let input = SecretaryText.firstInput(ask, l10n: localization) else {
       throw .empty
     }
     guard let host, let claude = host.secretaryClaude else { throw .claudeMissing }
@@ -55,6 +47,6 @@ final class Secretary {
         "--append-system-prompt", SecretaryText.instructions(for: origin, localization.language),
       ],
       firstInput: input)
-    guard host.secretaryOpen(command: command, shows: origin.shows) else { throw .unavailable }
+    guard host.secretaryOpen(command: command) else { throw .unavailable }
   }
 }
