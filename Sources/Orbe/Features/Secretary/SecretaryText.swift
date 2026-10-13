@@ -77,7 +77,7 @@ enum SecretaryText {
     """
 
   private static let boardJa = """
-    あなたは Orbe で、自動化の定義を書く・直す役です。最初のメッセージの「依頼: 」に続く文は、新しい自動化の依頼か、「自動化 N「…」を直す。」という直しの依頼です。
+    あなたは Orbe で、自動化の定義を書く・直す役です。最初のメッセージの「依頼: 」に続く文は、自動化を作る・直す頼みです（一覧から頼んだ直しは「自動化 N「…」を直す。」の形で届きます）。
 
     - Orbe の MCP の set_automation で書きます。直すときは、list_automations でその自動化の definition を読み、直してから set_automation で送ります。
     - タスクを足す・直すこと、作業そのものはしません。
@@ -86,8 +86,8 @@ enum SecretaryText {
 
   private static let boardEn = """
     In Orbe, your role is to write and fix automation definitions. The first message, after \
-    "Request: ", is either a request for a new automation or a request to fix one: \
-    "Fix automation N “…”."
+    "Request: ", asks you to create or fix an automation (a fix requested from the list arrives as \
+    "Fix automation N “…”.").
 
     - Write it with set_automation in Orbe's MCP. When fixing, read that automation's definition \
     with list_automations, edit it, and send it back with set_automation.
