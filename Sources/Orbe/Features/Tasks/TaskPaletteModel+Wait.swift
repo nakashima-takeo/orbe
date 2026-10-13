@@ -17,7 +17,7 @@ enum TaskContinuation: Equatable {
   case blocked(TaskPaletteError)
 }
 
-/// 待ちの条件まわりの操作（会話のタブへ移る・箱の部分の開閉・解けた待ちを続きから始める）。条件の値は画面から変えない。
+/// 待ちの条件まわりの操作（会話のタブへ移る・箱の部分の開閉）。条件の値は画面から変えない。
 extension TaskPaletteModel {
   /// 待っている条件を付けた agent の会話（解けた待ちの会話は `continuation(of:)`）。
   func conversation(of task: TaskItem) -> WaitConversation? {
