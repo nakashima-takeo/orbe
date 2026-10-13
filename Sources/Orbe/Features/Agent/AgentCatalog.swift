@@ -194,10 +194,12 @@ enum HeadlessRefusal: Equatable {
 /// claude の非対話の契約。
 enum ClaudeHeadless {
   /// 組み込みの規則はツール名を `--tools` に、規則そのものを `--allowedTools` に渡す（`Bash(gh search prs:*)` なら Bash を
-  /// 持たせ、その接頭のコマンドだけを許す）。MCP のツール（`mcp__` で始まる名前）を指定しない呼び出しは、利用者の設定・
-  /// プラグイン・hook・MCP サーバーを一切読まず、指定した規則だけで閉じる。MCP のツールを指定した呼び出しは、利用者が登録した
-  /// MCP サーバーを名前で使うため設定を読み、指定したもの以外は問わずに拒否する（`dontAsk`。利用者の bypassPermissions も
-  /// これで上書きする）——ただし利用者が常に許可にしたツールと hook は効く。
+  /// 持たせ、その接頭のコマンドを許す）。claude は作業ディレクトリの中の読み取り専用のコマンドを規則と関係なく走らせるので、
+  /// 次の保証は作業ディレクトリが空であること（`BackgroundRuns` が回ごとに空のディレクトリを作る）を前提にする。MCP のツール
+  /// （`mcp__` で始まる名前）を指定しない呼び出しは、利用者の設定・プラグイン・hook・MCP サーバーを一切読まず、作業ディレクトリの
+  /// 外のファイルの読み取りも指定した規則だけで閉じる。MCP のツールを指定した呼び出しは、利用者が登録した MCP サーバーを名前で
+  /// 使うため設定を読み、指定したもの以外は拒否する（`dontAsk`。利用者の bypassPermissions もこれで上書きする）——ただし利用者が
+  /// 常に許可にしたツールと hook は効き、設定の `additionalDirectories` の下は指定なしで読める。
   static func arguments(model: String, tools: [String]) -> [String] {
     let builtins = tools.filter { !$0.hasPrefix("mcp__") }
     var names: [String] = []

@@ -121,31 +121,32 @@ let automationUsage = """
               "request": "…"}
              Each run starts a throwaway claude in the background (no tab)
              with Orbe's fixed frame and the request, and only the named
-             tools. It starts only when at least one line reaches the sink
-             (on every trigger with neither a source nor steps); the lines
-             and their count never reach the agent, so have it look up its
-             targets itself. tools names full MCP tool names and
+             tools. It starts only when at least one line reaches the sink (on
+             every trigger with neither a source nor steps); the lines and
+             their count never reach the agent, so have it look up its targets
+             itself. tools names full MCP tool names and
              Bash(<command prefix>:*) rules only (the prefix has no , ( ) *);
              bare built-in tools, whole servers and wildcards are refused.
              Name as few as possible. Each run starts in a fresh empty
-             directory, and reads outside it follow the named rules too. With
-             Bash rules only, claude reads none of your settings. Once an MCP
-             tool is named, it reads your settings to reach your MCP servers,
-             so the tools you always allow in claude (MCP tools and Bash
-             commands) and your hooks apply too. Instructions hidden in
-             outside text the agent reads with its tools can make it use a
-             writing tool it was given. Without model it runs sonnet; it is
-             cut off after 10 minutes, or 3 minutes without output. Its final
-             reply is kept as the result of the run (the first line shows on
-             the board's heading and in the notification). Orbe tells it to
-             print nothing when there is nothing to do; a run with an empty
-             reply delivers nothing. A run fails when the agent replies only
-             {"error": "…"}, crashes, hits its limit, or a named MCP tool is
-             unavailable. A failed run, or one Orbe did not finish, starts the
-             agent again on the next run (a post can be doubled). Editing the
-             definition does not make the next run process every fetched item
-             again. The request stays in automations.json; never put secrets
-             in it.
+             directory. With Bash rules only, claude reads none of your
+             settings, and reads outside that directory follow the named rules
+             too. Once an MCP tool is named, it reads your settings to reach
+             your MCP servers, so the tools you always allow in claude (MCP
+             tools and Bash commands) and your hooks apply too, and it can
+             read under your settings' additionalDirectories without naming
+             anything. Instructions hidden in outside text the agent reads
+             with its tools can make it use a writing tool it was given.
+             Without model it runs sonnet; it is cut off after 10 minutes, or
+             3 minutes without output. Its final reply is kept as the result
+             of the run (the first line shows on the board's heading and in
+             the notification). Orbe tells it to print nothing when there is
+             nothing to do; a run with an empty reply delivers nothing. A run
+             fails when the agent replies only {"error": "…"}, crashes, hits
+             its limit, or a named MCP tool is unavailable. A failed run, or
+             one Orbe did not finish, starts the agent again on the next run
+             (a post can be doubled). Editing the definition does not make the
+             next run process every fetched item again. The request stays in
+             automations.json; never put secrets in it.
     notify   "menuBar" or "notificationCenter"  (any sink; omit to stay
              silent)
              When a run delivers something (a proposal, a command run, a
