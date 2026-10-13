@@ -100,7 +100,7 @@ private struct TaskPaletteAutomationShelfRowView: View {
 
   private var dimmed: Bool { row.automation != nil && row.count == 0 }
 
-  /// 「次 17:00 · 候補なし · 前回は失敗」。実行中は強調色、前回の失敗は赤（どちらも文字でも言う）。
+  /// 「次回 17:00 · 候補なし · 前回は失敗」。実行中は強調色、前回の失敗は赤（どちらも文字でも言う）。
   private func status(_ automation: Automation) -> Text {
     let muted = { (value: String) in Text(value).foregroundStyle(Color.theme.textMuted) }
     var parts: [Text] = []

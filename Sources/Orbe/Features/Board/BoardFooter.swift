@@ -17,22 +17,26 @@ struct BoardFooter: View {
   @Environment(\.localization) private var l10n
 
   var body: some View {
-    HStack(spacing: Theme.Space.span + Theme.Space.hair) {
+    HStack(spacing: Theme.Space.bar) {
       ForEach(model.automation.hints, id: \.self) { hint in
-        PaletteKeyHint(key: hint.key, label: l10n.string(hint.label))
+        Text("\(Text(hint.key).foregroundStyle(Color.theme.kbKeyText)) \(l10n.string(hint.label))")
       }
       Spacer(minLength: 0)
       if let refusal = model.refusal {
         Text(l10n.string(refusal)).foregroundStyle(Color.theme.danger)
       }
     }
-    .font(Font.theme.workspaceName)
-    .foregroundStyle(Color.theme.textSecondary)
+    .font(Font.theme.codeSmall)
+    .foregroundStyle(Color.theme.textMuted)
     .lineLimit(1)
-    .padding(.horizontal, Theme.Layout.boardInsetSide)
-    .frame(height: Theme.Layout.boardFooter)
+    .padding(.horizontal, Theme.Space.bar)
+    .frame(height: Self.height)
+    .padding(.top, Theme.Stroke.hairline)
     .overlay(alignment: .top) {
       Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
     }
   }
+
+  /// 上の罫線を除いた高さ。
+  private static let height: CGFloat = 28
 }

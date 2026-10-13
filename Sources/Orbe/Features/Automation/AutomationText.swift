@@ -23,7 +23,7 @@ struct AutomationText {
   }
 
   /// 今日なら「13:00」、ほかの日は「10/3 13:00」。
-  private func stamp(_ date: Date) -> String {
+  func stamp(_ date: Date) -> String {
     TaskDueText.stamp(date, timeZone, today: today)
   }
 
@@ -51,26 +51,6 @@ struct AutomationText {
   func runDetail(_ run: AutomationRun?) -> String {
     guard let run else { return l10n.string(.automationNeverRan) }
     return moment(run.startedAt) + " · " + longSteps(run)
-  }
-
-  /// 回の記録の 1 行。「今すぐ」で回った回は時刻の後に印を添える。「今日 9:12 今すぐ · 14 件取得 → …」。
-  func runLine(_ run: AutomationRun) -> String {
-    let mark = run.trigger == .now ? " " + l10n.string(.automationNowMark) : ""
-    return moment(run.startedAt) + mark + " · " + longSteps(run)
-  }
-
-  /// 前回の結果の短い言い方。「13:00 · 失敗」「16:30 · 候補 2 件」「16:00 · 新しい項目なし」。理由は回の記録で読む。
-  func outcome(_ run: AutomationRun) -> String {
-    let result =
-      if run.failure != nil {
-        l10n.string(.automationFailedShort)
-      } else if (run.fresh ?? 0) == 0 {
-        l10n.string(.automationNothingNew)
-      } else {
-        l10n.plural(
-          Self.proposed(run), one: .automationProposedLongOne, other: .automationProposedLongOther)
-      }
-    return stamp(run.startedAt) + " · " + result
   }
 
   private func longSteps(_ run: AutomationRun) -> String {
@@ -151,7 +131,7 @@ struct AutomationText {
     }
   }
 
-  /// 「30 分ごと」「毎日 9:00・13:00」。
+  /// 「30分ごと」「毎日 9:00 / 13:00」。
   func when(_ timing: BackgroundTiming) -> String {
     switch timing {
     case .every(let interval):
@@ -160,11 +140,11 @@ struct AutomationText {
       let sorted = times.sorted { ($0.hour, $0.minute) < ($1.hour, $1.minute) }
       return l10n.format(
         .automationDaily,
-        sorted.map { Self.clock(hour: $0.hour, minute: $0.minute) }.joined(separator: "・"))
+        sorted.map { Self.clock(hour: $0.hour, minute: $0.minute) }.joined(separator: " / "))
     }
   }
 
-  /// 「次 17:00」（今日でなければ日付付き）。
+  /// 「次回 17:00」（今日でなければ日付付き）。
   func next(_ date: Date) -> String {
     l10n.format(.automationNext, stamp(date))
   }

@@ -57,7 +57,7 @@ extension DesignFlowSnapshotTests {
         runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationFile())),
       parts: [.automation])
     try flow(
-      "board_parts", size: NSSize(width: 1440, height: 826),
+      "board_parts", size: NSSize(width: 1440, height: 844),
       render: {
         BoardRoot(
           model: model, translucency: ChromeTranslucency(),
@@ -79,7 +79,7 @@ extension DesignFlowSnapshotTests {
       parts: [.automation])
     let automation = model.automation
     try flow(
-      "board_automation", size: NSSize(width: 1440, height: 826),
+      "board_automation", size: NSSize(width: 1440, height: 844),
       render: {
         BoardRoot(
           model: model, translucency: ChromeTranslucency(),
@@ -108,7 +108,7 @@ extension DesignFlowSnapshotTests {
     let automation = model.automation
     automation.onAsk = { _ in nil }
     try flow(
-      "board_request", size: NSSize(width: 1440, height: 826),
+      "board_request", size: NSSize(width: 1440, height: 844),
       render: {
         BoardRoot(
           model: model, translucency: ChromeTranslucency(),
