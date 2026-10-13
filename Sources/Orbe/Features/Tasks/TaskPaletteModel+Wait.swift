@@ -10,10 +10,10 @@ enum TaskConditionPart: CaseIterable, Hashable {
 
 /// 解けた待ちを、条件を付けた会話の続きから始められるか。
 enum TaskContinuation: Equatable {
-  /// 続きから始める会話が無い（解けていない・会話の記録が無い・再開できない CLI）。⌘T はいつもの ⌘T。
+  /// 続きから始める会話が無い（解けていない・会話の記録が無い・再開できない CLI）。⌘↵ はいつもの ⌘T を開く。
   case none
   case ready(WaitConversation)
-  /// 会話はあるが始められない（作業ディレクトリ・CLI が無い）。⌘T はいつもの ⌘T で、理由を出し続ける。
+  /// 会話はあるが始められない（作業ディレクトリ・CLI が無い）。⌘↵ はいつもの ⌘T を開き、理由を出し続ける。
   case blocked(TaskPaletteError)
 }
 
@@ -44,13 +44,6 @@ extension TaskPaletteModel {
     else { return .none }
     if let block = continuationBlock(task.id) { return .blocked(block) }
     return .ready(conversation)
-  }
-
-  /// 選んでいるタスクの解けた待ちを、条件を付けた会話の続きから始める（起きたことの箱のボタン）。
-  func continueWait() {
-    guard let task = selectedTask, case .ready = continuation(of: task) else { return }
-    leaveEditingForAction()
-    error = onContinueWait(task.id)
   }
 
   /// 会話の行の ↵・クリック。そのタブへ移る（画面は閉じる）。

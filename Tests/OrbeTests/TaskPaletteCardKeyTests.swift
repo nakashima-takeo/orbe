@@ -187,8 +187,8 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(asks.count, 1)
   }
 
-  /// 行の ⌘↵ は ⌘T と同じ口——待ちが解けたタスクなら、一覧でも右の欄でも ⌘T の画面を開かずに会話を続きから始める。
-  func testCommandEnterOnAResolvedWaitContinuesTheConversationLikeCommandT() {
+  /// 行の ⌘↵ は、待ちが解けたタスクなら、一覧でも右の欄でも ⌘T の画面を開かずに会話を続きから始める。
+  func testCommandEnterOnAResolvedWaitContinuesTheConversationFromTheListAndTheDetail() {
     let condition = WaitCondition(
       WaitConditionRequest(
         description: "レビューが付いたら", command: "gh pr view 214", everyMinutes: 10,

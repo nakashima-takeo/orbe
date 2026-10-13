@@ -58,8 +58,9 @@ extension TaskPaletteModelTests {
     palette.toggleState(.todo)
     palette.query = "未着手で足す"
 
-    let added = try XCTUnwrap(palette.addFromQuery())
+    palette.addFromQuery()
 
+    let added = try XCTUnwrap(palette.store.tasks.first { $0.title == "未着手で足す" }).id
     XCTAssertEqual(palette.selectedID, .task(added))
     XCTAssertTrue(rowIDs(palette).contains(.task(added)))
   }

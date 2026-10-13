@@ -221,15 +221,15 @@ extension TaskPaletteModel {
     }
   }
 
-  /// ⌘↵（GitHub タブ）。選んでいる項目の GitHub のページをブラウザで開く（結び付きの有無を問わない）。
+  /// ⌘O（GitHub タブ）。選んでいる項目の GitHub のページをブラウザで開く（結び付きの有無を問わない）。
   func openSelectedGitHubItemInBrowser() {
     guard let row = selectedGitHubRow else { return }
     onOpenURL(TaskLink(item: row.id, kind: row.item.kind).url)
   }
 
-  /// ⌘T（GitHub タブ）。結び付いていない行はタスクにしてから、結び付いている行はそのタスクで、そのタスクのための
-  /// agent を開く。
-  func openWorktreePaletteFromGitHub() {
+  /// ⌘↵（GitHub タブ）・右の欄の ⌘↵・ボタン。結び付いていない行はタスクにしてから、結び付いている行はそのタスクで、
+  /// そのタスクのための agent を開く。
+  func openSelectedGitHubItemAsTask() {
     guard let row = selectedGitHubRow else { return }
     if let task = row.task {
       openAgent(forTask: task.id)

@@ -5,13 +5,13 @@ import XCTest
 private typealias GitHub = TaskPaletteGitHubSamples
 
 /// GitHub タブ（⌘T と同じ基点で解決したリポジトリの open な Issue・PR）の操作: 本体の出し方、タスクにする（右の欄の
-/// 値と、自分を GitHub に足す書き込み）、⌘T、結び付いたタスクへ移る・外す、絞り込み、「さらに」、右の欄、
+/// 値と、自分を GitHub に足す書き込み）、タスクにして開く、結び付いたタスクへ移る・外す、絞り込み、「さらに」、右の欄、
 /// タブごとの入力と選択、agent の変更への追従。
 ///
 /// 壊れると何が起きるか: ↵ で作ったタスクが別の workspace・別の項目に付く、右の欄で選んだ優先度や期限が
 /// 落ちる。選択が動いた後に裏の書き込みが別の項目へアサインする。アサインが黙って捨てられても何も言わない。
 /// 前回の一覧があるのに「取得できませんでした」で隠れる。タブを移るたびに絞り込みと選んだ行が消える。agent が
-/// 結び付けた直後に、右の欄の値が別の行のものとして残る。待ちの解けたタスクの ⌘T が、記録した会話を続けずに別の
+/// 結び付けた直後に、右の欄の値が別の行のものとして残る。待ちの解けたタスクの ⌘↵ が、記録した会話を続けずに別の
 /// 場所で新しい会話を始める。
 extension TaskPaletteModelTests {
   // MARK: - 本体
@@ -197,17 +197,17 @@ extension TaskPaletteModelTests {
     XCTAssertTrue(source.writes.isEmpty, "GitHub にも書かない")
   }
 
-  // MARK: - ⌘T
+  // MARK: - タスクにして開く（⌘↵）
 
-  /// 結び付いていない行の ⌘T はタスクにしてからそのタスクで開く。アサインの失敗は、画面を閉じた後でも
-  /// 次に開いた画面でその項目に見える。
-  func testCommandTOnAnUnlinkedItemMakesTheTaskThenOpensIt() throws {
+  /// 結び付いていない行の「タスクにして開く」はタスクにしてからそのタスクで開く。アサインの失敗は、画面を
+  /// 閉じた後でも次に開いた画面でその項目に見える。
+  func testOpeningAnUnlinkedItemAsATaskMakesTheTaskThenOpensIt() throws {
     let source = GitHub.Source()
     let palette = GitHub.model([], issues: [GitHub.issue(5)], source: source)
     var opened: [Int] = []
     palette.onOpenWorktreePalette = { opened.append($0) }
 
-    palette.openWorktreePalette()
+    palette.openSelectedGitHubItemAsTask()
     try XCTUnwrap(source.writes.first).completion(nil)
 
     XCTAssertEqual(opened, palette.store.tasks.map(\.id))
@@ -216,9 +216,9 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(reopened.writeFailure(GitHub.id(5)), .assignee)
   }
 
-  /// 結び付いている行の ⌘T はそのタスクで開く。タスクのタブの ⌘T と同じく、待ちが解けていれば ⌘T の画面を開かずに
-  /// 会話を続きから始める。
-  func testCommandTOnALinkedItemWithAResolvedWaitContinuesItsTasksConversation() {
+  /// 結び付いている行の「タスクにして開く」はそのタスクで開く。タスクのタブの ⌘↵ と同じく、待ちが解けていれば
+  /// ⌘T の画面を開かずに会話を続きから始める。
+  func testOpeningALinkedItemAsATaskWithAResolvedWaitContinuesItsTasksConversation() {
     let palette = GitHub.model(
       [
         task(4, "a", .inProgress) {
@@ -234,7 +234,7 @@ extension TaskPaletteModelTests {
     }
     palette.onOpenWorktreePalette = { opened.append($0) }
 
-    palette.openWorktreePalette()
+    palette.openSelectedGitHubItemAsTask()
 
     XCTAssertEqual(continued, [4])
     XCTAssertEqual(opened, [])

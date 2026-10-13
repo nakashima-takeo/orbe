@@ -4,19 +4,17 @@ import Foundation
 /// 検証はストアに任せる。選ぶ状態の間は、選ぶこと以外でタスクを変えない。
 extension TaskPaletteModel {
   /// 入力のタイトルで未着手のタスクを足し、入力を空にして今足したタスクとして覚え、絞り込みに合わなくても選ぶ。
-  /// workspace は絞り込みで決める（`addedWorkspace`）。足したタスクの ID を返す。
-  @discardableResult func addFromQuery() -> Int? {
+  /// workspace は絞り込みで決める（`addedWorkspace`）。
+  func addFromQuery() {
     let title = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard visibleTab == .tasks, !title.isEmpty else { return nil }
+    guard visibleTab == .tasks, !title.isEmpty else { return }
     do {
       let item = try store.add(TaskDraft(title: title, workspace: addedWorkspace?.id))
       query = ""
       justAdded = item.id
       selectTask(item.id)
-      return item.id
     } catch {
       self.error = .title
-      return nil
     }
   }
 
