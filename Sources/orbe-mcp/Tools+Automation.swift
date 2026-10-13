@@ -34,8 +34,12 @@ private let definitionShape =
   + "最後の段に届いた行の id が全部外れた回は失敗になる。安い段（コマンド・haiku）で先に絞ってから、高い段に回す。"
   + "model を省略すると、最後の段は sonnet、それ以外の段と取得元は haiku で走る。省略は省略のまま保存され、段を並べ替えれば既定も追従する。"
   + "出力先がタスク候補のとき、最後の段が agent なら Orbe が出力の形（propose / resolve）を指示するので、指示文には"
-  + "「どんな項目をタスクにするか・タイトルと期限の付け方」を書く。最後の段がコマンドなら、自分で "
-  + "{\"propose\": id, \"title\": …, \"due\"?: \"YYYY-MM-DD\"} の行を出す（判断待ちの候補は渡らないので resolve は出せない）。"
+  + "「どんな項目をタスクにするか・タイトルと期限の付け方」を書く。最後の段は候補ごとに付け先の workspace を書ける"
+  + "（Orbe が Home 以外の workspace の一覧を渡す。省けばタスクは Home に付く）。付け先の決め方も指示文に書ける。"
+  + "最後の段がコマンドなら、自分で "
+  + "{\"propose\": id, \"title\": …, \"due\"?: \"YYYY-MM-DD\", \"workspace\"?: <list_workspaces の id>} の行を出す"
+  + "（判断待ちの候補も workspace の一覧も渡らないので resolve は出せない。workspace の id は起動ごとに変わるので、"
+  + "コマンドに書き込まず走るたびに引く）。Home の id か省略ならタスクは Home に付く。今ある workspace でない id を書いた行は捨てられる。"
   + "前の回に無かった項目だけが段に回り、新しい項目が無い回は段を起こさない。候補はリンク単位ですべての自動化を通じて 1 つ。"
   + "出力先がコマンドのとき、出力先に届いた行が 1 行 1 JSON オブジェクトで標準入力に渡る（段が 0 個なら取得元の項目の形）。"
   + "コマンドは届いた行が 1 行以上ある回だけ走り、取得元も段も無ければトリガーのたびに空の標準入力で走る"
@@ -157,7 +161,8 @@ let automationTools: [[String: Any]] = [
       "description",
       "出力先がタスク候補の自動化が出した候補を、覚えている全状態で返す（指示文を直す材料）。各要素は proposalId・state"
         + "（open: 人の判断待ち / accepted: タスクにした〔taskId〕 / dismissed: 捨てた / resolved: 最後の段が対応済みとした）・"
-        + "title・due（YYYY-MM-DD）・link・body・time・proposedAt・automationId と automationName（棚に出す自動化）。"
+        + "title・due（YYYY-MM-DD）・link・body・time・proposedAt・automationId と automationName（棚に出す自動化）・"
+        + "workspaceId と workspaceName（付け先が解けるときだけ。無ければタスクにすると Home に付く）。"
         + "automationId を渡すとその自動化の棚の分だけ。候補をタスクにする・捨てるのは人が Orbe の画面で行う。"
     ),
     ("inputSchema", schema(["automationId": intProp("この自動化の棚の候補だけに絞る")])),

@@ -5,10 +5,13 @@ import XCTest
 @testable import Orbe
 
 /// ⌘⇧X のタスク画面を実 `WindowController` から開き・閉じる配線を固定する。開いた workspace の写しと、
-/// 画面を閉じる・別の画面へ差し替わるときの打ちかけの編集の確定、⌘↵ で ⌘T の画面へ差し替わること。
+/// 画面を閉じる・別の画面へ差し替わるときの打ちかけの編集の確定、⌘↵ で ⌘T の画面へ差し替わること。提案は付け先の
+/// workspace（↵ の時点で解けなければ Home）に付き、⌘↵ はそこに結び付く ⌘T を開くこと。
 ///
 /// 壊れると何が起きるか: タブが 0 枚の workspace でタスク画面が開かない。画面で足したタスクが、見ている
-/// workspace ではなく別の workspace に付く。受信の提案から足したタスクが Home に付かず、Home で動く claude がそこから始められない。詳細を打ちかけのまま esc 以外で画面を閉じたり ⌘⌘ で
+/// workspace ではなく別の workspace に付く。付け先を持たない提案から足したタスクが Home に付かず、Home で動く claude が
+/// そこから始められない。付け先を持つ提案が Home や開いた workspace に付く。開いている間に消えた付け先に付き、行き場の無い
+/// タスクになる。詳細を打ちかけのまま esc 以外で画面を閉じたり ⌘⌘ で
 /// 差し替えたりすると、打った内容が黙って消える。⌘↵ で開いた ⌘T がそのタスクに結び付かず、タスクの文脈の無い agent が起きる。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
@@ -75,7 +78,7 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
       wc.automationStore, automation.id,
       DesignSceneFixtures.automationRun(at: Date(), items: 1, fresh: 1),
       fetched: [item],
-      decisions: [.propose(itemId: "a", title: "見積もりを送る", due: nil)])
+      decisions: [.propose(itemId: "a", title: "見積もりを送る", due: nil, workspace: nil)])
 
     let palette = try openTaskPalette(wc)
     palette.setTab(.automation)
@@ -83,6 +86,50 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
 
     XCTAssertEqual(
       wc.taskStore.tasks.first { $0.title == "見積もりを送る" }?.workspace,
+      try XCTUnwrap(wc.store.homeWorkspaceId))
+  }
+
+  /// 付け先を持つ候補の ⌘↵ は、その workspace のタスクにして、そのタスクのための ⌘T に差し替わる。
+  @MainActor
+  func testCommandEnterOnAProposalAttachesTheTaskToItsWorkspaceAndOpensItsWorktreePalette()
+    throws
+  {
+    let wc = try launchOnAnEmptyWorkspace()
+    let automation = try wc.automationRunner.set(nil, AutomationStoreTests.definition())
+    AutomationStoreTests.commit(
+      wc.automationStore, automation.id,
+      DesignSceneFixtures.automationRun(at: Date(), items: 1, fresh: 1),
+      fetched: [AutomationStoreTests.item("a")],
+      decisions: [.propose(itemId: "a", title: "main で直す", due: nil, workspace: mainId)])
+
+    let palette = try openTaskPalette(wc)
+    palette.setTab(.automation)
+    palette.automation.acceptAndOpen()
+
+    let task = try XCTUnwrap(wc.taskStore.tasks.first { $0.title == "main で直す" })
+    XCTAssertEqual(task.workspace, mainId, "開いた workspace（empty）ではなく付け先に付く")
+    XCTAssertEqual(wc.presentedOverlay, .worktreePalette)
+    XCTAssertEqual(wc.model.worktreePalette?.taskContextID, task.id)
+  }
+
+  /// ⌘⇧X を開いている間に付け先の workspace が消えたら、↵ の時点の値で解いて Home に付ける。
+  @MainActor func testAProposalWhoseWorkspaceWasDeletedWhileOpenGoesToHome() throws {
+    let wc = try launchOnAnEmptyWorkspace()
+    let automation = try wc.automationRunner.set(nil, AutomationStoreTests.definition())
+    AutomationStoreTests.commit(
+      wc.automationStore, automation.id,
+      DesignSceneFixtures.automationRun(at: Date(), items: 1, fresh: 1),
+      fetched: [AutomationStoreTests.item("a")],
+      decisions: [.propose(itemId: "a", title: "main で直す", due: nil, workspace: mainId)])
+    let palette = try openTaskPalette(wc)
+    palette.setTab(.automation)
+
+    let main = try XCTUnwrap(wc.workspaces.firstIndex { $0.persistentId == mainId })
+    wc.closeWorkspace(main, origin: .controlAPI)
+    palette.submit()
+
+    XCTAssertEqual(
+      wc.taskStore.tasks.first { $0.title == "main で直す" }?.workspace,
       try XCTUnwrap(wc.store.homeWorkspaceId))
   }
 

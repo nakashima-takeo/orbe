@@ -4,11 +4,12 @@ import XCTest
 
 /// 自動化の 6 動詞のドメイン側を、実 `WindowController` 越しに固定する。起動で保存済みの自動化が番人に載ること、
 /// 提案と重なりが棚に出す自動化の側に出ること、拒否が制御 API の語彙になること、一覧の定義を `set_automation` へ戻せること、
-/// 一覧の回の記録が保存と同じ形であること。
+/// 一覧の回の記録が保存と同じ形であること。候補の付け先は今ある workspace に解けるときだけ起動ごとの id と名前で出ること。
 ///
 /// 壊れると何が起きるか: Orbe を再起動しただけで全自動化が黙って回らなくなる。AI が自動化の棚を読んでも、提案した自動化が
 /// もう取っていない提案が混ざる・取っている自動化に出ない。走っている自動化への `run_automation` が別の誤りに化ける。
 /// 一覧の定義を書き換えて戻すと、間隔や取得元が別物になる。回の記録を読む AI・秘書が、段ごとの件数や出力先の結果を読めなくなる。
+/// AI が候補の付け先を読めない、または消えた workspace を付け先として読む。
 ///
 /// 重要: 実 NSWindow に SurfaceView を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerAutomationControlTests: OrbeTestCase {
@@ -66,7 +67,9 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
   ) {
     AutomationStoreTests.commit(
       wc.automationStore, id, AutomationStoreTests.run(at: Date()), fetched: fetched,
-      decisions: proposing.map { .propose(itemId: $0.id, title: "対応: \($0.id)", due: nil) })
+      decisions: proposing.map {
+        .propose(itemId: $0.id, title: "対応: \($0.id)", due: nil, workspace: nil)
+      })
   }
 
   // MARK: - 起動
@@ -121,6 +124,32 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
         overlaps?.map { $0["automationId"] as? Int }, [other], "自動化 \(id) に相手が出る")
       XCTAssertEqual(overlaps?.first?["name"] as? String, name)
       XCTAssertEqual(overlaps?.first?["count"] as? Int, 1)
+    }
+  }
+
+  /// 候補は付け先が今ある workspace に解けるときだけ、起動ごとの id と名前を持つ（永続 ID は出さない）。付け先が無い・
+  /// 消えた候補はキーごと出さない。
+  func testProposalsCarryTheirWorkspaceOnlyWhenItResolves() throws {
+    let wc = try launch()
+    let id = try set(wc, AutomationStoreTests.definition())
+    let main = try XCTUnwrap(wc.workspaces.first { $0.name == "main" })
+    let items = ["a", "b", "c"].map { AutomationStoreTests.item($0) }
+    AutomationStoreTests.commit(
+      wc.automationStore, id, AutomationStoreTests.run(at: Date()), fetched: items,
+      decisions: [
+        .propose(itemId: "a", title: "main の作業", due: nil, workspace: main.persistentId),
+        .propose(itemId: "b", title: "付け先なし", due: nil, workspace: nil),
+        .propose(itemId: "c", title: "消えた付け先", due: nil, workspace: UUID()),
+      ])
+
+    let listed = Dictionary(
+      uniqueKeysWithValues: try proposals(wc, of: id).map { ($0["title"] as? String ?? "", $0) })
+
+    XCTAssertEqual(listed["main の作業"]?["workspaceId"] as? Int, main.id)
+    XCTAssertEqual(listed["main の作業"]?["workspaceName"] as? String, "main")
+    for title in ["付け先なし", "消えた付け先"] {
+      XCTAssertNil(listed[title]?["workspaceId"], title)
+      XCTAssertNil(listed[title]?["workspaceName"], title)
     }
   }
 
@@ -199,7 +228,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     run.lastStepCountedBySink = true
     AutomationStoreTests.commit(
       wc.automationStore, id, run, fetched: [a],
-      decisions: [.propose(itemId: "a", title: "対応する", due: nil)])
+      decisions: [.propose(itemId: "a", title: "対応する", due: nil, workspace: nil)])
 
     let listedRun = try XCTUnwrap((try listed(wc)[id]?["runs"] as? [[String: Any]])?.first)
 

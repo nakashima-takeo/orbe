@@ -29,7 +29,9 @@ extension DesignSceneFixtures {
     scheduler.arm = { _, _ in {} }
     let runner = AutomationRunner(
       store: AutomationStore(file: file), scheduler: scheduler,
-      run: { _, _ in BackgroundRunHandle {} }, recorded: { _ in }, defined: { _ in },
+      run: { _, _ in BackgroundRunHandle {} },
+      workspaces: { AutomationWorkspaces(listed: [], home: nil) }, recorded: { _ in },
+      defined: { _ in },
       deleted: { _ in })
     runner.now = { automationNow }
     runner.calendar = { taskCalendar }
@@ -160,7 +162,8 @@ extension DesignSceneFixtures {
   }
 
   /// 受信 4 つ（Slack の 2 つは毎日の時刻で提案あり・Backlog は 30 分ごとの軽い agent で提案なし・GitHub は止めていて
-  /// 前回が失敗）と、判断待ちの提案 3 件（期限あり / なし）。Slack の 2 つは 1 件のリンクを重ねて取っている。
+  /// 前回が失敗）と、判断待ちの提案 3 件（期限あり / なし、付け先が orbe / Home / work）。Slack の 2 つは 1 件のリンクを
+  /// 重ねて取っている。
   static func automationDesignFile() -> AutomationsFile {
     let (estimate, onboarding, weekly) = (
       automationEstimate, automationOnboarding, automationWeekly
@@ -170,13 +173,15 @@ extension DesignSceneFixtures {
     let proposals = [
       AutomationProposal(
         id: 1, automationId: 1, item: estimate, title: "見積もりを山田さんに送る",
-        due: TaskItem.DueDate("2025-10-10"), proposedAt: proposedAt, state: .open),
-      AutomationProposal(
-        id: 2, automationId: 1, item: onboarding, title: "オンボーディングの環境構築手順を見る", due: nil,
+        due: TaskItem.DueDate("2025-10-10"), workspace: taskWorkspaces.all[0].id,
         proposedAt: proposedAt, state: .open),
       AutomationProposal(
+        id: 2, automationId: 1, item: onboarding, title: "オンボーディングの環境構築手順を見る", due: nil,
+        workspace: nil, proposedAt: proposedAt, state: .open),
+      AutomationProposal(
         id: 3, automationId: 2, item: weekly, title: "週報に今週の進捗を書く",
-        due: TaskItem.DueDate("2025-10-10"), proposedAt: proposedAt, state: .open),
+        due: TaskItem.DueDate("2025-10-10"), workspace: taskWorkspaces.all[1].id,
+        proposedAt: proposedAt, state: .open),
     ]
     return AutomationsFile(
       version: AutomationPersistence.version, nextAutomationId: 5, nextProposalId: 4,
@@ -199,7 +204,7 @@ extension DesignSceneFixtures {
           id: file.nextProposalId, automationId: 1, item: item,
           title: n == 0
             ? "本番のログイン直後に白画面になる件の再現手順と影響範囲をまとめて朝会で共有する" : "確認の依頼 \(n) に返事をする",
-          due: n.isMultiple(of: 3) ? TaskItem.DueDate("2025-10-06") : nil,
+          due: n.isMultiple(of: 3) ? TaskItem.DueDate("2025-10-06") : nil, workspace: nil,
           proposedAt: automationAt(9, 1), state: .open))
       file.nextProposalId += 1
     }

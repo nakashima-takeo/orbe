@@ -18,7 +18,8 @@ extension TaskPaletteCardKeyTests {
   private func automationModel() -> TaskPaletteModel {
     let model = TaskPaletteSamples.model(
       [TaskPaletteSamples.task(1, "a")],
-      automations: DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignFile()))
+      automations: DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignFile()),
+      workspaces: { DesignSceneFixtures.taskWorkspaces })
     model.setTab(.automation)
     return model
   }
@@ -83,7 +84,8 @@ extension TaskPaletteCardKeyTests {
 
     let task = try XCTUnwrap(model.store.tasks.first { $0.title == "見積もりを山田さんに送る" })
     XCTAssertEqual(model.store.tasks.count, 2, "タスクは 1 つだけ")
-    XCTAssertEqual(task.workspace, TaskPaletteSamples.home, "↵ と同じく Home に付く")
+    XCTAssertEqual(
+      task.workspace, DesignSceneFixtures.taskWorkspaces.all[0].id, "↵ と同じく付け先に付く")
     XCTAssertEqual(model.automation.store.proposals[0].state, .accepted(taskId: task.id))
     XCTAssertEqual(model.automation.store.proposals[1].state, .open, "リピートで次の提案をさばかない")
     XCTAssertEqual(opened, [task.id])

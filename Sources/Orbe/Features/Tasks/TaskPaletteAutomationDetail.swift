@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 提案タブの右の詳細。選んでいる提案の出どころ（受信名と時刻）・本文の全体・リンク、タスクにしたときのタイトルと期限、
+/// 提案タブの右の詳細。選んでいる提案の出どころ（受信名と時刻）・本文の全体・リンク、タスクにしたときのタイトル・期限・付け先、
 /// 「タスクにする」「タスクにして開く」「捨てる」のボタン。収まらなければ欄ごとスクロールし、収まる間はボタンを下端へ押す。
 struct TaskPaletteAutomationDetail: View {
   @Bindable var model: TaskPaletteAutomationModel
@@ -64,6 +64,15 @@ struct TaskPaletteAutomationDetail: View {
         .foregroundStyle(Color.theme.textSecondary)
         .padding(.top, Theme.Space.note)
     }
+    Text(
+      l10n.string(.taskPaletteFieldWorkspace) + " "
+        + (model.destination(of: proposal)?.name ?? l10n.string(.taskPaletteNoWorkspace))
+    )
+    .font(Font.theme.workspaceName)
+    .foregroundStyle(Color.theme.textSecondary)
+    .lineLimit(1)
+    .truncationMode(.tail)
+    .padding(.top, Theme.Space.note)
   }
 
   /// 本文の全体と「↗ <ホスト名> で開く」（クリックか ⌘O でブラウザで開く）。
