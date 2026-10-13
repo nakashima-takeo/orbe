@@ -66,23 +66,23 @@ final class SecretaryTextTests: OrbeTestCase {
       "結び付きが無ければ括弧を、補足が空なら「補足」を省く")
   }
 
-  /// Home のボードからの頼みは、自動追加の新しい依頼か直しとして 1 行で意味が通る（既存の秘書の会話は指示の改版を知らない）。
-  func testBoardAsksNameTheTaskAutoAddInTheLineItself() {
+  /// Home のボードからの頼みは、自動化の新しい依頼か直しとして 1 行で意味が通る（既存の秘書の会話は指示の改版を知らない）。
+  func testBoardAsksNameTheAutomationInTheLineItself() {
     XCTAssertEqual(
       line(.automation("Slack の自分宛ての DM を\nタスクの候補にして"), from: .board, ja),
-      "Home のボードから · 10:31 — タスクの自動追加を頼む: Slack の自分宛ての DM を タスクの候補にして")
+      "Home のボードから · 10:31 — 自動化を頼む: Slack の自分宛ての DM を タスクの候補にして")
     XCTAssertEqual(
       line(.automation("watch my DMs"), from: .board, en),
-      "From the Home board · 10:31 — Task auto-add request: watch my DMs")
+      "From the Home board · 10:31 — Automation request: watch my DMs")
     XCTAssertNil(line(.automation(" \n "), from: .board, ja), "空の依頼は頼めない")
 
     let automation = DesignSceneFixtures.boardAutomations()[2]
     XCTAssertEqual(
       line(.automationFix(automation), from: .board, ja),
-      "Home のボードから · 10:31 — タスクの自動追加 \(automation.id)「\(automation.definition.name)」を直す。")
+      "Home のボードから · 10:31 — 自動化 \(automation.id)「\(automation.definition.name)」を直す。")
     XCTAssertEqual(
       line(.automationFix(automation), from: .board, en),
-      "From the Home board · 10:31 — Fix task auto-add \(automation.id) “\(automation.definition.name)”."
+      "From the Home board · 10:31 — Fix automation \(automation.id) “\(automation.definition.name)”."
     )
   }
 

@@ -92,7 +92,7 @@ final class WindowControllerBoardPartsTests: OrbeTestCase {
     pump()
 
     XCTAssertEqual(
-      parts(wc.controlAddBoardPart(workspaceId: homeId, part: .automation)), ["intake"])
+      parts(wc.controlAddBoardPart(workspaceId: homeId, part: .automation)), ["automation"])
     pump()
     XCTAssertEqual(wc.board.automation.place, .request)
     XCTAssertTrue(wc.window.firstResponder is NSTextView, "置かれた部品の欄に焦点が入る")
@@ -179,9 +179,10 @@ final class WindowControllerBoardPartsTests: OrbeTestCase {
     }
     XCTAssertEqual(unknown.code, -32004)
 
-    XCTAssertEqual(parts(wc.controlListBoardParts(workspaceId: homeId)), ["intake"], "決めていなければ既定")
     XCTAssertEqual(
-      parts(wc.controlAddBoardPart(workspaceId: homeId, part: .automation)), ["intake"])
+      parts(wc.controlListBoardParts(workspaceId: homeId)), ["automation"], "決めていなければ既定")
+    XCTAssertEqual(
+      parts(wc.controlAddBoardPart(workspaceId: homeId, part: .automation)), ["automation"])
     XCTAssertNil(wc.current.boardParts, "既にあるものを置いても何も変えない")
     XCTAssertEqual(parts(wc.controlRemoveBoardPart(workspaceId: homeId, part: .automation)), [])
     XCTAssertEqual(parts(wc.controlRemoveBoardPart(workspaceId: homeId, part: .automation)), [])
@@ -213,6 +214,6 @@ final class WindowControllerBoardPartsTests: OrbeTestCase {
     let restored = WindowController()
     let home = restored.workspaces[try XCTUnwrap(restored.store.homeIndex)]
     XCTAssertEqual(
-      parts(restored.controlListBoardParts(workspaceId: home.id)), ["intake"], "重なりは 1 つ")
+      parts(restored.controlListBoardParts(workspaceId: home.id)), ["automation"], "重なりは 1 つ")
   }
 }
