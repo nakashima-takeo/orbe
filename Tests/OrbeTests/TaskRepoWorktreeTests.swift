@@ -6,7 +6,7 @@ import XCTest
 /// `start_task` のリポジトリの作業場の決定（`TaskRepoWorktree`）が、主が PR のタスクで head の取得の答えを待つ間も、
 /// 取得が失敗したら決め直して必ず 1 度答えること。
 ///
-/// 壊れると何が起きるか: gh が遅れて失敗すると start_task が永久に応答せず、秘書の claude がその後の Orbe のツールまで
+/// 壊れると何が起きるか: gh が遅れて失敗すると start_task が永久に応答せず、呼んだ claude がその後の Orbe のツールまで
 /// 待たされる。
 final class TaskRepoWorktreeTests: OrbeTestCase {
   func testAFailedFetchOfThePullRequestHeadStillGetsAnAnswer() throws {

@@ -71,7 +71,7 @@ final class SecretaryTests: OrbeTestCase {
   // MARK: - Home のボードから
 
   /// Home のボードの欄で頼むと、自動化の定義を書く役目の claude が Home に起きてそのタブへ移り、欄は空になる。
-  func testTheBoardFieldOpensClaudeWithTheAutoAddRoleAndClearsTheField() throws {
+  func testTheBoardFieldOpensClaudeWithTheAutomationRoleAndClearsTheField() throws {
     let wc = try launch()
     let automation = wc.board.automation
 

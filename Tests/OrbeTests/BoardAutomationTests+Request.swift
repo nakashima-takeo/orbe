@@ -34,7 +34,7 @@ extension BoardAutomationTests {
     XCTAssertNil(model.refusal)
   }
 
-  /// ⌘↵ は選んでいる自動化の直しをその場で頼み、焦点は一覧に残る。押し続けても 1 回。
+  /// ⌘↵ は選んでいる自動化の直しをその場で頼み、選択は一覧の行のまま。押し続けても 1 回。
   func testCommandEnterAsksToFixTheSelectedAutomationAtOnce() throws {
     let model = board()
     let automation = model.automation

@@ -7,7 +7,7 @@ import XCTest
 /// `start_task` の作業場の規則（拒否・タスク自身の worktree・Home の記録・リポジトリの決め方）と、前面の workspace に
 /// 開くときの起こし方。
 ///
-/// 壊れると何が起きるか: 秘書の start_task が別のタスクの worktree を黙って奪う・人の本体の作業ツリーで agent を起こす・
+/// 壊れると何が起きるか: start_task が別のタスクの worktree を黙って奪う・人の本体の作業ツリーで agent を起こす・
 /// 作業中の agent の隣に 2 体目を起こす。リポジトリで始めて Home に移したタスクが本体の中にフォルダを作る。worktree を
 /// 付けたタスクが remote の照合で始められない。人の開いている別の clone に worktree を作る。前面の workspace で起こした
 /// タブが人の見ているタブを奪う・0 タブの画面で隠れたままになる。
