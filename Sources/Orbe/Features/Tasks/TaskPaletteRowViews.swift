@@ -184,30 +184,31 @@ struct TaskPaletteTaskRowView: View {
   }
 
   private var subject: some View {
-    HStack(spacing: Theme.Space.note) {
-      if let link = row.link {
-        Text("#\(link.number)")
-          .font(Font.theme.chrome)
-          .foregroundStyle(Color.theme.textMuted)
-          .fixedSize()
-      }
+    TaskSubjectLayout(
+      spacing: Theme.Space.note, titleMinWidth: TaskPaletteRowMetrics.titleMinWidth
+    ) {
+      Text(row.link.map { "#\($0.number)" } ?? "")
+        .font(Font.theme.chrome)
+        .foregroundStyle(Color.theme.textMuted)
+        .fixedSize()
       TruncatingSlot(row.title) {
         fontResolver.text($0, base: Theme.Typography.workspaceName)
           .font(Font.theme.workspaceName)
           .foregroundStyle(
             row.priority == .low ? Color.theme.textSecondary : Color.theme.textPrimary)
       }
-      .layoutPriority(1)
-      if row.needsReview {
-        Text(l10n.string(.taskPaletteReview))
-          .font(Font.theme.meta)
-          .foregroundStyle(Color.theme.textMuted)
-          .fixedSize()
+      HStack(spacing: Theme.Space.note) {
+        if row.needsReview {
+          Text(l10n.string(.taskPaletteReview))
+            .font(Font.theme.meta)
+            .foregroundStyle(Color.theme.textMuted)
+            .fixedSize()
+        }
+        if let pullRequest = row.pullRequest {
+          TaskPullRequestBadge(badge: pullRequest)
+        }
+        supplement
       }
-      if let pullRequest = row.pullRequest {
-        TaskPullRequestBadge(badge: pullRequest)
-      }
-      supplement
     }
   }
 
@@ -264,6 +265,50 @@ struct TaskPaletteTaskRowView: View {
 
   private func days(_ count: Int) -> String {
     count == 0 ? l10n.string(.taskPaletteToday) : l10n.format(.taskPaletteDays, count)
+  }
+}
+
+/// 件名の 3 つの子（主の番号・タイトル・タイトルに続く札と補足）の並び。縮むのはタイトルが先で、タイトルが
+/// 最小幅まで縮んだら、続く札と補足の側を切り詰める（収まらない分は件名の列が切る）——件名で最も大事なのはタイトルで、
+/// 札に押されて消えてはいけないため。主の番号は縮めない。
+struct TaskSubjectLayout: Layout {
+  let spacing: CGFloat
+  let titleMinWidth: CGFloat
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    let ideals = subviews.map { $0.sizeThatFits(.unspecified) }
+    let height = ideals.map(\.height).max() ?? 0
+    let ideal = widths(ideals, available: .infinity).enumerated().reduce(0) { sum, item in
+      sum + item.element + (item.offset > 0 && item.element > 0 ? spacing : 0)
+    }
+    return CGSize(width: proposal.width ?? ideal, height: proposal.height ?? height)
+  }
+
+  func placeSubviews(
+    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+  ) {
+    let ideals = subviews.map { $0.sizeThatFits(.unspecified) }
+    var x = bounds.minX
+    for (index, width) in widths(ideals, available: bounds.width).enumerated() where width > 0 {
+      subviews[index].place(
+        at: CGPoint(x: x, y: bounds.midY), anchor: .leading,
+        proposal: ProposedViewSize(width: width, height: bounds.height))
+      x += width + spacing
+    }
+  }
+
+  /// 番号・タイトル・続きの幅。番号は理想の幅、タイトルは続きを理想の幅で置いた残り（最小幅は下回らない）、続きは
+  /// その残り。幅 0 の子は間隔ごと詰める。
+  private func widths(_ ideals: [CGSize], available: CGFloat) -> [CGFloat] {
+    guard ideals.count == 3 else { return ideals.map(\.width) }
+    let number = ideals[0].width
+    let title = ideals[1].width
+    let rest = ideals[2].width
+    var free = available - (number > 0 ? number + spacing : 0)
+    let restGap = rest > 0 ? spacing : 0
+    let titleWidth = min(title, max(min(title, titleMinWidth), free - rest - restGap))
+    free -= titleWidth + restGap
+    return [number, titleWidth, rest > 0 ? max(0, min(rest, free)) : 0]
   }
 }
 

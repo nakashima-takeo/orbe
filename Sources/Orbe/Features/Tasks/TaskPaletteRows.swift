@@ -114,6 +114,8 @@ enum TaskPaletteRowMetrics {
   static let dueColumn: CGFloat = 60
   static let workspaceColumn: CGFloat = 64
   static let createdColumn: CGFloat = 48
+  /// 件名のタイトルの最小幅（日本語で 8 文字前後）。これより狭くなるときは、続く札と補足の側を切り詰める。
+  static let titleMinWidth: CGFloat = 100
   /// 状態の札（同じ幅）。
   static let stateChip = CGSize(width: 52, height: 18)
   /// 行の札のうち、人や agent の文字を出す札（起きたこと）の文字の上限幅。
