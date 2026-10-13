@@ -24,14 +24,16 @@ let automationUsage = """
 
   An automation runs trigger -> source (optional) -> steps (zero or more)
   -> sink. Only items not seen in its previous run reach the steps. There
-  are two sinks. Task candidates: the last step proposes tasks for you to
+  are three sinks. Task candidates: the last step proposes tasks for you to
   accept or dismiss in Orbe; it needs a source (currentSet or newArrivals)
   and at least one step, and a proposal belongs to its link across all
   automations. Command: a command receives the lines that reach the sink;
-  the source and the steps are optional.
+  the source and the steps are optional. Report: the text the last step
+  writes is kept as the result of the run; it needs at least one step.
   set reads the definition from stdin, the same JSON as the definition of
   the MCP tool set_automation:
-  {"name", "trigger", "source", "steps", "sink"}; source is optional.
+  {"name", "trigger", "source", "steps", "sink", "notify"}; source and
+  notify are optional.
     trigger  {"everyMinutes": 30}  or  {"dailyAt": ["09:00", "13:00"]}
     source   {"command": "…", "directory": "/abs", "coverage": "…"}  or
              {"agent": "claude", "model": "…", "tools": ["mcp__<server>__<tool>"],
@@ -85,6 +87,20 @@ let automationUsage = """
              time without output. stdout is not read; discard large output
              (over 1 MiB fails the run). Editing the definition does not make
              the next run process every fetched item again.
+             {"kind": "report"}
+             The output of the last step is the report, kept as text (up to
+             2000 characters) in the run record; a command last step prints
+             it on stdout. Its first line shows in the board list and in the
+             notification. An agent last step is told to keep it short and
+             to print nothing when there is nothing to report; a run with no
+             report succeeds as "nothing to report". Editing the definition
+             does not make the next run process every fetched item again.
+    notify   "menuBar"  (any sink; omit to stay silent)
+             When a run delivers something (a proposal, a command run, a
+             report) or fails, the menu bar shows the automation's name and
+             the result line with a sound; clicking it opens the
+             automation on Home's board. Runs that deliver nothing are not
+             notified. Changing only notify does not stop a running run.
   To edit, take .definition from list --json, change it and pipe it whole:
     orb automation list --json | jq '.automations[] |
       select(.automationId==3) | .definition' | … | orb automation set 3
@@ -98,8 +114,9 @@ let automationUsage = """
   it.
   list prints one automation per line: id, state (active / paused /
   running), name, trigger, next run, last run (from the run record:
-  fetched and new when it has a source, then proposed or the command's
-  ending when the sink recorded one). Per-step counts are in list --json.
+  fetched and new when it has a source, then proposed, the command's
+  ending, reported or nothing to report when the sink recorded one).
+  Per-step counts are in list --json.
   proposals prints one proposal per line: id, state, automation id, due,
   title, link.
   """
@@ -170,7 +187,8 @@ private func triggerCell(_ raw: Any?) -> String? {
 }
 
 /// 前回の要約。回の記録だけから組む: `<開始> failed: <理由>`、または `<開始>` に、取得元の記録があれば
-/// `12 fetched, 3 new`、出力先の記録があれば `1 proposed`（タスク候補）か `command exited 0`（コマンド）を続ける。
+/// `12 fetched, 3 new`、出力先の記録があれば `1 proposed`（タスク候補）・`command exited 0`（コマンド）・`reported` か
+/// `nothing to report`（報告）を続ける。
 private func runCell(_ run: [String: Any]) -> String {
   let started = run["startedAt"].map(display) ?? "?"
   if let failure = run["failure"] as? String { return "\(started) failed: \(failure)" }
@@ -183,6 +201,7 @@ private func runCell(_ run: [String: Any]) -> String {
     switch sink["kind"] as? String {
     case "taskCandidates": parts.append("\(sink["proposed"].map(display) ?? "0") proposed")
     case "command": parts.append("command \(sink["ending"].map(display) ?? "?")")
+    case "report": parts.append(sink["text"] == nil ? "nothing to report" : "reported")
     default: break
     }
   }

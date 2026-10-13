@@ -18,6 +18,8 @@ extension L10n {
     .boardOrbeSeen: ("既に見たものを除く", "Skip what was already seen"),
     .boardOutputTaskCandidates: ("タスク候補", "Task candidates"),
     .boardOutputCommand: ("コマンド", "Command"),
+    .boardOutputReport: ("報告", "Report"),
+    .boardOutputNotifyMenuBar: ("通知：メニューバー", "Notify: menu bar"),
     .boardOutputTally: (
       "これまでに採用 %1$lld件 / 見送り %2$lld件", "So far %1$lld accepted / %2$lld dismissed"
     ),
@@ -29,8 +31,10 @@ extension L10n {
     .boardRunAllDropped: ("処理 %lld ですべて除外", "all dropped in step %lld"),
     .boardRunNoneAdded: ("追加なし", "none added"),
     .boardRunDone: ("完了", "done"),
+    .boardRunNothingToReport: ("報告なし", "nothing to report"),
     .boardRunMark: ("%1$@ に%2$@", "%2$@ at %1$@"),
     .boardRunMarkAdded: ("%1$@ に %2$lld件を追加", "added %2$lld at %1$@"),
+    .boardRunMarkReported: ("%@ に報告", "reported at %@"),
     .boardGuideLead: (
       "いつ、何をしてほしいかを一文で送ると、左の一覧に加わります。",
       "Send when and what you want in one sentence, and it joins the list on the left."

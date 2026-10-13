@@ -111,6 +111,13 @@ extension DesignGallerySnapshotTests {
     try write("board_automation_command.png", board(examples, row: 2))
     try write("board_automation_command_en.png", board(examples, row: 2), .en)
     try write("board_automation_command_sourced.png", board(examples, row: 3))
+    // 見本 B2『開いている PR の要約』（出力先は報告・通知はメニューバー）と、累計と通知の注記が並ぶタスク候補。
+    let reports = DesignSceneFixtures.boardAutomationFile([
+      DesignSceneFixtures.boardStepsNotifyExample(), DesignSceneFixtures.boardReportExample(),
+    ])
+    try write("board_automation_report.png", board(reports, row: 1))
+    try write("board_automation_report_en.png", board(reports, row: 1), .en)
+    try write("board_automation_steps_notify.png", board(reports))
     try renderBoardRequestSnapshots(write: write, board: { board($0) })
   }
 

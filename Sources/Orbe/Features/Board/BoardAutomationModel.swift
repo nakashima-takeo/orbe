@@ -102,6 +102,14 @@ import SwiftUI
     focusToken &+= 1
   }
 
+  /// 外から行き先を指して入る（ピルから）。入り方の既定（欄から）の後に呼び、行き先の指定がそれに勝つ。自動化が在ればその行を
+  /// 選んで焦点を一覧へ、無ければ欄を選ぶ。
+  func open(_ id: Int) {
+    onRefusal(nil)
+    if !list.select(.automation(id), in: stops) { list.select(.request, in: stops) }
+    focusToken &+= 1
+  }
+
   /// 中での当て直し。選んでいる場所へ戻る。
   func refocus() {
     focusToken &+= 1

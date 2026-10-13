@@ -8,7 +8,7 @@ import XCTest
 /// 判定の指示文の誤りに気づけない。失敗した回が帯や履歴で失敗の色にならず、一覧の右端に理由の全文があふれる。
 @MainActor
 final class BoardAutomationSummaryTests: OrbeTestCase {
-  private let text = AutomationText(
+  let text = AutomationText(
     l10n: LocalizationStore(language: .ja),
     today: .today(
       DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone),
@@ -104,7 +104,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
   func testTheTaskCandidatesOutputNotesTheTally() throws {
     var counted = automation([])
     XCTAssertEqual(
-      BoardAutomationSummary(counted, text: text).nodes.last?.note, "これまでに採用 0件 / 見送り 0件")
+      BoardAutomationSummary(counted, text: text).nodes.last?.notes, ["これまでに採用 0件 / 見送り 0件"])
 
     counted = Automation(
       id: 1, definition: counted.definition,
@@ -112,7 +112,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
       paused: false, createdAt: counted.createdAt, lastFetched: [], reviewAll: false, runs: [])
     let output = try XCTUnwrap(BoardAutomationSummary(counted, text: text).nodes.last)
     XCTAssertEqual(output.role, .output)
-    XCTAssertEqual(output.note, "これまでに採用 9件 / 見送り 3件")
+    XCTAssertEqual(output.notes, ["これまでに採用 9件 / 見送り 3件"])
   }
 
   func testAnAutomationWithoutASourceIsTriggerThenOutput() {
@@ -172,7 +172,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     XCTAssertEqual(output.role, .output)
     XCTAssertEqual(output.means, .command("コマンド"))
     XCTAssertEqual(output.source, "~/bin/daily-note.sh")
-    XCTAssertEqual(output.note, "作業ディレクトリ  /Users/me")
+    XCTAssertEqual(output.notes, ["作業ディレクトリ  /Users/me"])
     XCTAssertEqual(alone.runs.map(\.result), ["完了"])
     XCTAssertEqual(alone.runs.map(\.tone), [.produced])
     XCTAssertEqual(alone.mark, "23:00 に完了")

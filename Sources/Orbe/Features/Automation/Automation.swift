@@ -88,6 +88,7 @@ extension Automation: Codable {
         try c.decodeIfPresent(AutomationTaskCandidatesState.self, forKey: .sinkState)
         .map(AutomationSinkState.taskCandidates) ?? .initial(for: definition.sink)
     case .command: sinkState = .command
+    case .report: sinkState = .report
     }
     paused = try c.decodeIfPresent(Bool.self, forKey: .paused) ?? false
     createdAt = try c.decode(Date.self, forKey: .createdAt)
@@ -105,7 +106,7 @@ extension Automation: Codable {
     try c.encode(definition, forKey: .definition)
     switch sinkState {
     case .taskCandidates(let state): try c.encode(state, forKey: .sinkState)
-    case .command: break
+    case .command, .report: break
     }
     try c.encode(paused, forKey: .paused)
     try c.encode(createdAt, forKey: .createdAt)
@@ -117,13 +118,15 @@ extension Automation: Codable {
   }
 }
 
-/// 自動化の定義。トリガー → 取得元（任意）→ 処理の段 0 個以上 → 出力先。
+/// 自動化の定義。トリガー → 取得元（任意）→ 処理の段 0 個以上 → 出力先。通知は出力先と並ぶ設定で、どの出力先にも付く。
 struct AutomationDefinition: Equatable, Codable {
   var name: String
   var trigger: BackgroundTiming
   var source: AutomationSource?
   var steps: [AutomationStep]
   var sink: AutomationSink
+  /// 出した回・失敗した回を知らせる先。nil は知らせない。何をするか（`work`）には入らない。
+  var notify: AutomationNotify?
 
   /// 省略したモデルを解く。最後の段は判断を担うので sonnet、それ以外の段と取得元は haiku。保存は省略のまま持ち、
   /// 走らせるとき・画面に出すとき・やり直しの比較がどれもここを通す——段の並びを変えたら既定も追従させるため。
@@ -161,6 +164,12 @@ struct AutomationDefinition: Equatable, Codable {
     let steps: [AutomationStep.Method]
     let sink: AutomationSink
   }
+}
+
+/// 回を知らせる先。
+enum AutomationNotify: String {
+  /// メニューバーのピルと音。
+  case menuBar
 }
 
 /// 何をどう取るかと、取れたものが何を表すか。
@@ -217,6 +226,8 @@ enum AutomationSink: Equatable {
   case taskCandidates
   /// 届いた行を標準入力で受けるコマンド。
   case command(AutomationSinkCommand)
+  /// 最後の段が書いた文章を、その回の結果として残す。
+  case report
 }
 
 /// 出力先のコマンド。上限は経過時間と出力の無い時間の両方に当てる。
@@ -235,19 +246,21 @@ struct AutomationSinkCommand: Equatable {
 enum AutomationSinkState: Equatable {
   case taskCandidates(AutomationTaskCandidatesState)
   case command
+  case report
 
   static func initial(for sink: AutomationSink) -> Self {
     switch sink {
     case .taskCandidates: .taskCandidates(AutomationTaskCandidatesState())
     case .command: .command
+    case .report: .report
     }
   }
 
   /// `sink` の種類の状態か。
   func belongs(to sink: AutomationSink) -> Bool {
     switch (self, sink) {
-    case (.taskCandidates, .taskCandidates), (.command, .command): true
-    case (.taskCandidates, _), (.command, _): false
+    case (.taskCandidates, .taskCandidates), (.command, .command), (.report, .report): true
+    case (.taskCandidates, _), (.command, _), (.report, _): false
     }
   }
 }
@@ -310,7 +323,7 @@ struct AutomationRun: Codable, Equatable {
   /// 枠の差分と出力先の取り込みを経て、段に回した項目の数。取得元から先へ進まなかった回は nil。
   var fresh: Int?
   var steps: [AutomationStepReport]
-  /// 確定した回のうち、出力先が記録を返した回だけが持つ（出力先のコマンドは走った回だけ）。
+  /// 確定した回のうち、出力先が記録を返した回だけが持つ（出力先のコマンドは走った回だけ、報告は最後の段の出力を読んだ回だけ）。
   var sink: AutomationSinkReport?
   /// 失敗した回の理由。失敗した回は前回の取得結果も出力先の状態も動かさない。
   var failure: String?
@@ -330,6 +343,8 @@ struct AutomationStepReport: Codable, Equatable {
 enum AutomationSinkReport: Equatable {
   case taskCandidates(AutomationTaskCandidatesReport)
   case command(AutomationCommandReport)
+  /// 最後の段の出力を読んだ回はいつも持つ。`text` は報告の文で、言うことが無かった回は nil。
+  case report(text: String?)
 }
 
 /// 出力先のコマンドが走った回の記録。

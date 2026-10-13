@@ -4,10 +4,11 @@ import Foundation
 // 候補をタスクにする・捨てるは人の判断なので、AI には出さない。
 
 private let definitionShape =
-  "定義は {name, trigger, source?, steps, sink}。自動化は、トリガー → 取得元（任意）→ 処理の段 0 個以上 → 出力先 の順に流れる。"
-  + "出力先はタスク候補 {\"kind\": \"taskCandidates\"} と"
-  + "コマンド {\"kind\": \"command\", command, directory?, timeoutMinutes?} の 2 つ。"
+  "定義は {name, trigger, source?, steps, sink, notify?}。自動化は、トリガー → 取得元（任意）→ 処理の段 0 個以上 → 出力先 の順に流れる。"
+  + "出力先はタスク候補 {\"kind\": \"taskCandidates\"}・"
+  + "コマンド {\"kind\": \"command\", command, directory?, timeoutMinutes?}・報告 {\"kind\": \"report\"} の 3 つ。"
   + "タスク候補には取得元（coverage は currentSet か newArrivals）と段 1 つ以上が要る。コマンドでは取得元も段も省略できる。"
+  + "報告には段 1 つ以上が要り、取得元は省略できる。"
   + "name は「出どころ: 何を取るか」の 1 行（例「GitHub: 自分へのレビュー依頼」）。"
   + "trigger は {everyMinutes: 1〜10080（7 日）} か {dailyAt: [\"09:00\", \"13:00\"]}。"
   + "source はコマンド {command, directory?, coverage}（/bin/sh -c で走る。directory は絶対パス、既定はホーム）か、"
@@ -43,6 +44,14 @@ private let definitionShape =
   + "失敗した回の項目は次の回にもう一度、新しい項目と混ざって流れるので、二重実行は回の ID ではなく行の id で除く（段は id を保つ）。"
   + "timeoutMinutes は 1〜60（既定 2）で、経過時間と出力の無い時間の両方の上限。標準出力は読まない（1 MiB を超えると失敗になるので、多く出すなら捨てる）。"
   + "出力先がコマンドの自動化は、定義を書き換えても全件を見直さない（既にコマンドに渡した項目は渡し直さない）。"
+  + "出力先が報告のとき、最後の段の出力が文章のまま回の結果として残る（2,000 字まで。超えた分は切る）。1 行目が一覧と通知に出る。"
+  + "最後の段が agent なら、Orbe が「地の文だけ・1 行目は要約・全体は短く・言うことが無ければ何も出さない」を指示するので、"
+  + "指示文には何をどうまとめるかを書く。最後の段がコマンドなら、標準出力がそのまま報告になる。"
+  + "最後の段が何も出さない回は「報告なし」の成功になる。報告の自動化は、定義を書き換えても全件を見直さない"
+  + "（毎回全体をまとめたいなら、取得元の coverage を everything にする）。"
+  + "notify は任意で、値は \"menuBar\" だけ（省略すると知らせない）。どの出力先にも付けられ、出力先へ何かを出した回"
+  + "（候補を受けた・コマンドが走った・報告があった）と失敗した回に、メニューバーへ自動化の名前と結果の 1 行が出て音が鳴る。"
+  + "押すと Home のボードでその自動化が開く。何も出さなかった回は知らせない。"
   + "例: {\"name\": \"GitHub: 自分へのレビュー依頼\", \"trigger\": {\"everyMinutes\": 30}, "
   + "\"source\": {\"command\": \"gh api …\", \"coverage\": \"currentSet\"}, "
   + "\"steps\": [{\"name\": \"絞り込み\", \"command\": \"jq -c 'select(…)'\"}, "
@@ -64,7 +73,8 @@ let automationTools: [[String: Any]] = [
         + "（取得元の無い自動化と、取得元まで行かなかった回は無い）・fresh（段に回した新しい項目の数）・"
         + "steps[{name, commandLine, ending, count, rejected}]（走った段だけ）・"
         + "sink（確定した回だけ。タスク候補は {kind, proposed, resolved, withdrawn, rejected} で withdrawn は下げた候補の数、"
-        + "コマンドは走った回だけ {kind, commandLine, ending, count} で count は渡した行の数）・failure（失敗した回の理由）。"
+        + "コマンドは走った回だけ {kind, commandLine, ending, count} で count は渡した行の数、"
+        + "報告は最後の段の出力を読んだ回だけ {kind, text?} で、報告が無かった回は text を持たない）・failure（失敗した回の理由）。"
         + "count は取得元なら項目として読めた数、段なら JSON の行として読めた数で、rejected は読めなかった行。"
         + "失敗した回は取得済みも候補も動かさないので、failure と各所の rejected.reasons を読んで、どこで落ちたかを直す。"
         + "モデルを省略した段は、最後の段なら sonnet、それ以外の段と取得元なら haiku で走る。"
@@ -81,7 +91,7 @@ let automationTools: [[String: Any]] = [
         + "置き換えで、取得元のやり方・段の手段とモデル（省略は解いた値で比べる）と指示文かコマンド・出力先"
         + "（出力先のコマンドの timeoutMinutes も、省略は 2 として比べる）が変わると、走っている回を止める。"
         + "出力先がタスク候補なら、次の回は取れた全件を見直す（既に候補のあるリンクは見直さない）。"
-        + "名前・トリガー・coverage・段の名前だけの置き換えは走っている回を止めない。"
+        + "名前・トリガー・coverage・段の名前・notify だけの置き換えは走っている回を止めない。"
         + "新しく作った自動化はすぐには回らない。試すときは run_automation。"
     ),
     (
@@ -92,10 +102,11 @@ let automationTools: [[String: Any]] = [
           "definition": [
             "type": "object",
             "description":
-              "{name, trigger, source?, steps, sink}。trigger は {everyMinutes: n} か {dailyAt: [\"HH:MM\", …]}、"
+              "{name, trigger, source?, steps, sink, notify?}。trigger は {everyMinutes: n} か {dailyAt: [\"HH:MM\", …]}、"
               + "source は {command, directory?, coverage} か {agent?, model?, tools, request, coverage}、"
               + "steps は [{name, command, directory?} か {name, agent?, model?, instruction}]、"
-              + "sink は {\"kind\": \"taskCandidates\"} か {\"kind\": \"command\", command, directory?, timeoutMinutes?}",
+              + "sink は {\"kind\": \"taskCandidates\"}・{\"kind\": \"command\", command, directory?, timeoutMinutes?}・"
+              + "{\"kind\": \"report\"} のどれか、notify は \"menuBar\"（省略で知らせない）",
           ],
         ], required: ["definition"])
     ),

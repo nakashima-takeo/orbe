@@ -44,17 +44,7 @@ enum HomeTemplate {
     - タスクを待ちにし、解ける条件（説明・確認のコマンド・間隔・期限）を `set_wait_condition` で付ける。
     - Orbe が確認のコマンドを人の承認なしに裏で予定どおり繰り返し走らせ、満たすか期限が来たら待ちを外して人に知らせる。
 
-    ## 予定どおり何かを拾い、絞り・判断してタスクの候補にするか、コマンドを走らせる
-
-    - 自動化（`set_automation`・`list_automations`・`run_automation`・`pause_automation`・`delete_automation`・\
-    `list_automation_proposals`）。
-    - トリガー（間隔か毎日の時刻）ごとに、取得元（コマンドか軽い agent）が項目を取り、処理の段（コマンドか agent）が順に\
-    絞り・判断して、出力先へ出す。出力先はタスク候補とコマンドの 2 つ。
-    - タスク候補: 人が ⌘⇧X の提案タブで受けた候補だけがタスクになる。Slack・メール・課題管理・GitHub などから拾うのが主な使い方。
-    - コマンド: 届いた行を標準入力で受けて走る。取得元も段も無ければ、トリガーのたびに走る（例: 毎晩 23 時に \
-    `~/bin/daily-note.sh` を実行する）。
-
-    Orbe の中で予定どおり繰り返し動くのは、待ちの条件の確認と自動化の 2 つ。
+    \(automationJa)
 
     ## Home のボード（画面）に出すものを変える
 
@@ -103,19 +93,7 @@ enum HomeTemplate {
     - Orbe runs the check command in the background on schedule, repeatedly and without asking the user, \
     and clears the wait and notifies the user when it holds or the deadline comes.
 
-    ## Pick things up on a schedule, narrow and judge them into task candidates, or run a command
-
-    - Automation (`set_automation`, `list_automations`, `run_automation`, `pause_automation`, \
-    `delete_automation`, `list_automation_proposals`).
-    - On each trigger (an interval or daily times), the source (a command or a light agent) gets items, the \
-    steps (commands or agents) narrow and judge them in order, and the sink receives the result. There are \
-    two sinks: task candidates and a command.
-    - Task candidates: only candidates the user accepts in the Proposals tab of ⌘⇧X become tasks. The main use \
-    is picking things up from Slack, mail, issue trackers, GitHub, and the like.
-    - Command: it runs with the lines that reach it on stdin. With neither a source nor steps, it runs on every \
-    trigger (e.g. run `~/bin/daily-note.sh` every night at 23:00).
-
-    Inside Orbe, the only things that run repeatedly on schedule are waiting-condition checks and automations.
+    \(automationEn)
 
     ## Change what Home's board (screen) shows
 
@@ -135,6 +113,47 @@ enum HomeTemplate {
 
     """
   }
+
+  /// 自動化の節。
+  private static let automationJa = """
+    ## 予定どおり何かを拾い、絞り・判断してタスクの候補にするか、コマンドを走らせるか、報告する
+
+    - 自動化（`set_automation`・`list_automations`・`run_automation`・`pause_automation`・`delete_automation`・\
+    `list_automation_proposals`）。
+    - トリガー（間隔か毎日の時刻）ごとに、取得元（コマンドか軽い agent）が項目を取り、処理の段（コマンドか agent）が順に\
+    絞り・判断して、出力先へ出す。出力先はタスク候補・コマンド・報告の 3 つ。
+    - タスク候補: 人が ⌘⇧X の提案タブで受けた候補だけがタスクになる。Slack・メール・課題管理・GitHub などから拾うのが主な使い方。
+    - コマンド: 届いた行を標準入力で受けて走る。取得元も段も無ければ、トリガーのたびに走る（例: 毎晩 23 時に \
+    `~/bin/daily-note.sh` を実行する）。
+    - 報告: 最後の段が書いた短い文章を、その回の結果として残す（例: 毎日 18 時に開いている PR を要約する）。1 行目が一覧と\
+    通知に出る。言うことが無ければ何も出さない。
+    - 通知（`notify: "menuBar"`）: どの出力先にも付けられる。何かを出した回と失敗した回に、メニューバーへ名前と結果の 1 行が\
+    出る。押すと Home のボードでその自動化が開く。省略すると知らせない。
+
+    Orbe の中で予定どおり繰り返し動くのは、待ちの条件の確認と自動化の 2 つ。
+    """
+
+  private static let automationEn = """
+    ## Pick things up on a schedule, narrow and judge them into task candidates, run a command, or report
+
+    - Automation (`set_automation`, `list_automations`, `run_automation`, `pause_automation`, \
+    `delete_automation`, `list_automation_proposals`).
+    - On each trigger (an interval or daily times), the source (a command or a light agent) gets items, the \
+    steps (commands or agents) narrow and judge them in order, and the sink receives the result. There are \
+    three sinks: task candidates, a command, and a report.
+    - Task candidates: only candidates the user accepts in the Proposals tab of ⌘⇧X become tasks. The main use \
+    is picking things up from Slack, mail, issue trackers, GitHub, and the like.
+    - Command: it runs with the lines that reach it on stdin. With neither a source nor steps, it runs on every \
+    trigger (e.g. run `~/bin/daily-note.sh` every night at 23:00).
+    - Report: the short text the last step writes is kept as the result of the run (e.g. summarize the \
+    open PRs every day at 18:00). Its first line shows in the list and in the notification. With nothing \
+    to report, the last step prints nothing.
+    - Notify (`notify: "menuBar"`): any sink can have it. When a run delivers something or fails, the \
+    menu bar shows the name and the result line; clicking it opens the automation on Home's board. Omit \
+    it to stay silent.
+
+    Inside Orbe, the only things that run repeatedly on schedule are waiting-condition checks and automations.
+    """
 
   private static let claudeMdJa = """
     # Home

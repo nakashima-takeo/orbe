@@ -29,7 +29,7 @@ extension DesignSceneFixtures {
     scheduler.arm = { _, _ in {} }
     let runner = AutomationRunner(
       store: AutomationStore(file: file), scheduler: scheduler,
-      run: { _, _ in BackgroundRunHandle {} })
+      run: { _, _ in BackgroundRunHandle {} }, recorded: { _ in })
     runner.now = { automationNow }
     runner.calendar = { taskCalendar }
     runner.start()

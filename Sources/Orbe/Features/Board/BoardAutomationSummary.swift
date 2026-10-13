@@ -24,7 +24,8 @@ struct BoardFlowNode: Equatable {
   /// 実行されるとおりの原文（コマンド・依頼文・指示文）。切らずに全文を出す——承認なしで裏で走るものを、いつも確かめられるため。
   var source: String?
   var tools: [String] = []
-  var note: String?
+  /// 注記。出どころごとに 1 行。
+  var notes: [String] = []
   /// 前回の回でこの段を出た件数。前回が届かなかった段は nil。
   var count: Int?
 }
@@ -44,6 +45,8 @@ struct BoardRunLine: Equatable {
   let at: String
   let result: String
   let tone: BoardRunTone
+  /// 結果を全文で折り返すか（失敗の理由と報告）。ボードでそれを読めるのはこの行だけ。
+  let wraps: Bool
 }
 
 /// 自動化 1 つをボードの描画用の値へ読み替えたもの。定義と回の記録の形に依るのはこのファイルだけで、ボードのビューはこの値と
@@ -68,6 +71,11 @@ struct BoardAutomationSummary: Equatable {
 
   /// 件数の列を出すか。取得元を持つ並びだけが件数を持つ。
   var counted: Bool { nodes.contains { $0.role == .source } }
+
+  /// 実行履歴の最新の行の 1 行目（知らせの本文）。まだ回っていなければ nil。
+  var latestLine: String? {
+    runs.first.map { String($0.result.prefix { !$0.isNewline }) }
+  }
 }
 
 extension BoardAutomationSummary {
@@ -94,6 +102,8 @@ extension BoardAutomationSummary {
         return heading
           ? l10n.format(.boardRunAddedTo, report.proposed, output)
           : l10n.format(.boardRunAdded, report.proposed)
+      case .report(let text?): return heading ? String(text.prefix { !$0.isNewline }) : text
+      case .report(nil): return l10n.string(.boardRunNothingToReport)
       case .taskCandidates, nil: break
       }
       if run.fresh == 0 { return l10n.string(.boardRunNothingNew) }
@@ -107,7 +117,7 @@ extension BoardAutomationSummary {
       let now = run.trigger == .now ? " " + l10n.string(.automationNowMark) : ""
       return BoardRunLine(
         at: text.stamp(run.startedAt) + now, result: result(run, heading: false),
-        tone: Self.tone(run))
+        tone: Self.tone(run), wraps: run.failure != nil || Self.reported(run))
     }
     strip = automation.runs.reversed().map(Self.tone)
     if let latest = automation.runs.first {
@@ -116,6 +126,8 @@ extension BoardAutomationSummary {
         mark = l10n.format(.boardRunMark, at, l10n.string(.boardRunFailedShort))
       } else if case .taskCandidates(let report) = latest.sink, report.proposed > 0 {
         mark = l10n.format(.boardRunMarkAdded, at, report.proposed)
+      } else if Self.reported(latest) {
+        mark = l10n.format(.boardRunMarkReported, at)
       } else {
         mark = l10n.format(.boardRunMark, at, result(latest, heading: false))
       }
@@ -127,7 +139,8 @@ extension BoardAutomationSummary {
     }
   }
 
-  /// 出力先の段。タイトルは出力先の種類の名前。タスク候補は採用・見送りの累計を注記に、コマンドはコマンドの段と同じ組み立てで出す。
+  /// 出力先の段。タイトルは出力先の種類の名前。タスク候補は採用・見送りの累計を注記に、コマンドはコマンドの段と同じ組み立てで
+  /// 出し、報告は定義に何も持たないので題だけ。通知の設定は、どの出力先でも注記のいちばん下に出す。
   private static func sink(_ automation: Automation, count: Int?, l10n: LocalizationStore)
     -> BoardFlowNode
   {
@@ -136,11 +149,17 @@ extension BoardAutomationSummary {
     case .taskCandidates:
       node.title = l10n.string(.boardOutputTaskCandidates)
       if case .taskCandidates(let state) = automation.sinkState {
-        node.note = l10n.format(.boardOutputTally, state.accepted, state.dismissed)
+        node.notes.append(l10n.format(.boardOutputTally, state.accepted, state.dismissed))
       }
     case .command(let sink):
       node.title = l10n.string(.boardOutputCommand)
       command(&node, sink.command, l10n: l10n)
+    case .report:
+      node.title = l10n.string(.boardOutputReport)
+    }
+    switch automation.definition.notify {
+    case .menuBar: node.notes.append(l10n.string(.boardOutputNotifyMenuBar))
+    case nil: break
     }
     return node
   }
@@ -151,7 +170,9 @@ extension BoardAutomationSummary {
   ) {
     node.means = .command(l10n.string(.automationCommand))
     node.source = command.script
-    node.note = command.directory.map { l10n.string(.automationDirectory) + "  " + $0 }
+    if let directory = command.directory {
+      node.notes.append(l10n.string(.automationDirectory) + "  " + directory)
+    }
   }
 
   /// 出力先の手前までの段の並び。件数は最新の回のもの。モデルは省略なら解いた既定を出す。
@@ -195,12 +216,18 @@ extension BoardAutomationSummary {
     return delivered(run).produced ? .produced : .quiet
   }
 
-  /// 出力先へ出したかと、出力先の件数。タスク候補は候補を 1 つ以上受けた回、コマンドは走った回が出した回で、件数は受けた
-  /// 候補の数・渡した行の数。
+  /// 報告のある回か。
+  private static func reported(_ run: AutomationRun) -> Bool {
+    if case .report(.some) = run.sink { true } else { false }
+  }
+
+  /// 出力先へ出したかと、出力先の件数。タスク候補は候補を 1 つ以上受けた回、コマンドは走った回、報告は報告のある回が出した回
+  /// で、件数は受けた候補の数・渡した行の数・報告の数（1 か 0）。
   private static func delivered(_ run: AutomationRun) -> (produced: Bool, count: Int) {
     switch run.sink {
     case .taskCandidates(let report): (report.proposed > 0, report.proposed)
     case .command(let report): (true, report.count)
+    case .report(let text): (text != nil, text == nil ? 0 : 1)
     case nil: (false, 0)
     }
   }

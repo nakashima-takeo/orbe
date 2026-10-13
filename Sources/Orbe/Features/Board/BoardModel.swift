@@ -42,6 +42,17 @@ import Observation
     if entering { automation.enter() } else { automation.refocus() }
   }
 
+  /// 自動化の部品へ、その自動化を開くよう頼む（ピルから。焦点を当てた後に呼ぶ）。部品が無ければボードが開いているだけ。
+  func open(automation id: Int) {
+    guard parts.contains(.automation) else { return }
+    automation.open(id)
+  }
+
+  /// 自動化の部品で、その自動化の行を選んでいるか。
+  func selects(automation id: Int) -> Bool {
+    parts.contains(.automation) && automation.list.selectedID == .automation(id)
+  }
+
   /// 部品の焦点の合図を受け取り、当てる場所を返す（ビューが合図の進みと、部品が現れたときに呼ぶ）。焦点がボードの外にあれば
   /// 合図は捨てる——ボードを一瞬選んで同じ turn にタブへ移ると、合図が届く頃には焦点が端末にあるため。`show(_:)` と同じく、
   /// 外にある焦点は奪わない。
