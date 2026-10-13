@@ -109,7 +109,8 @@ enum TaskPaletteRowMetrics {
   static let rowInset: CGFloat = Theme.Space.step
   /// 表の列の間。
   static let columnGap: CGFloat = Theme.Space.step
-  static let stateColumn: CGFloat = 56
+  /// 状態の列。札に左右の余白を足した幅。
+  static let stateColumn: CGFloat = stateChip.width + Theme.Space.tick
   static let priorityColumn: CGFloat = 36
   /// 期限の列。最も長い書式（年の付いた「2026/12/31」と、どの UI 言語でも最も幅のある曜日名）が収まる幅。
   static let dueColumn: CGFloat = {
@@ -121,8 +122,14 @@ enum TaskPaletteRowMetrics {
   static let createdColumn: CGFloat = ceil(cellWidth("0000/00/00"))
   /// 件名のタイトルの最小幅（日本語で 8 文字前後）。これより狭くなるときは、続く札と補足の側を切り詰める。
   static let titleMinWidth: CGFloat = 100
-  /// 状態の札（同じ幅）。
-  static let stateChip = CGSize(width: 52, height: 18)
+  /// 状態の札（同じ幅）。どの UI 言語でも最も長い状態の名前に、行の札と同じ左右の内側の余白を足した幅。
+  static let stateChip: CGSize = {
+    let labels = Language.allCases.flatMap { language in
+      TaskItem.DisplayState.allCases.map { L10n.string($0.labelKey, language) }
+    }
+    let width = ceil(labels.map(cellWidth).max() ?? 0) + 2 * Theme.Space.note
+    return CGSize(width: width, height: 18)
+  }()
   /// 行の札のうち、人や agent の文字を出す札（起きたこと）の文字の上限幅。
   static let textBadgeMaxWidth: CGFloat = 180
   /// GitHub タブの行の先頭のアイコンの列の幅。
