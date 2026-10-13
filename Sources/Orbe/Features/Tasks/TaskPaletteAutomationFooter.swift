@@ -49,6 +49,7 @@ struct TaskPaletteAutomationHints: View {
         PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteAutomationContents))
       }
       PaletteKeyHint(key: "←", label: l10n.string(.taskPaletteAutomationHintShelf))
+      PaletteKeyHint(key: "⇥", label: l10n.string(.taskPaletteHintTab))
       PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintClose))
     case .shelf:
       PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteAutomationHintPick))
