@@ -41,9 +41,10 @@ extension WindowController {
   /// 通知センターでの自動化の通知の識別子。自動化ごとに 1 つなので、新しい回が前の通知を差し替える。
   private static func systemNotificationIdentifier(_ id: Int) -> String { "automation.\(id)" }
 
-  /// 定義を書いた直後。通知先が通知センターなら、頼んだその場で OS に許可を問う（未確認のときだけ）。
-  func automationDefinitionSet(_ definition: AutomationDefinition) {
-    guard definition.notify == .notificationCenter else { return }
+  /// 定義を書いた（走らせ役から。AI の口でもボードでも通る）。通知先が通知センターなら、書いたその場で OS に許可を問う
+  /// （未確認のときだけ）。
+  func automationDefined(_ id: Int) {
+    guard automationStore.automation(id)?.definition.notify == .notificationCenter else { return }
     systemNotifier.requestAuthorizationIfUndetermined()
   }
 

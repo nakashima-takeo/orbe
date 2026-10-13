@@ -11,9 +11,7 @@ extension WindowController {
     Any, ControlError
   > {
     automationResult { () throws(AutomationError) in
-      let automation = try automationRunner.set(automationId, definition)
-      automationDefinitionSet(automation.definition)
-      return ["automation": automationJSON(automation)]
+      ["automation": automationJSON(try automationRunner.set(automationId, definition))]
     }
   }
 

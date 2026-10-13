@@ -7,7 +7,8 @@ import OrbeSessionLog
 /// 1 回が終わるまで同じ自動化の次の回は始まらない（重ねない保証・「今すぐ」・走っているかは番人が持つ）。番人が回を止めたら
 /// （何をするかの書き換え・削除）、走っている段か届けを止め、以後の確定を行わない。定義の変異はここを通し、番人の登録を
 /// 合わせる。状態を読み書きするのは枠（ストア）と出力先だけで、段は状態を持たない。回を記録するたびに `recorded` で
-/// 自動化の ID を知らせる（知らせるかどうか・何を出すかは受けた側がストアの今の値から決める）。消したら `deleted` で知らせる。
+/// 自動化の ID を知らせる（知らせるかどうか・何を出すかは受けた側がストアの今の値から決める）。定義を書いたら `defined`、
+/// 消したら `deleted` で知らせる。
 final class AutomationRunner {
   let store: AutomationStore
   var now: () -> Date = Date.init
@@ -16,59 +17,26 @@ final class AutomationRunner {
   private let scheduler: BackgroundScheduler
   private let run: BackgroundScheduler.Run
   private let recorded: (Int) -> Void
+  private let defined: (Int) -> Void
   private let deleted: (Int) -> Void
 
   init(
     store: AutomationStore, scheduler: BackgroundScheduler = BackgroundScheduler(),
     run: @escaping BackgroundScheduler.Run = { BackgroundRuns.shared.run($0, completion: $1) },
-    recorded: @escaping (Int) -> Void, deleted: @escaping (Int) -> Void
+    recorded: @escaping (Int) -> Void, defined: @escaping (Int) -> Void,
+    deleted: @escaping (Int) -> Void
   ) {
     self.store = store
     self.scheduler = scheduler
     self.run = run
     self.recorded = recorded
+    self.defined = defined
     self.deleted = deleted
   }
 
   /// 起動時に一度、全自動化を番人へ載せる（止めた自動化は予定なしで）。
   func start() {
     for automation in store.automations { register(automation) }
-  }
-
-  // MARK: - 定義の変異
-
-  /// `id` が nil なら作り、あれば丸ごと置き換える。何をするかが変われば走っている回を止めて載せ直し、名前・トリガー・
-  /// 取得の性質・段の名前だけなら予定だけを差し替える（走っている回は最後まで走る）。
-  func set(_ id: Int?, _ definition: AutomationDefinition) throws(AutomationError) -> Automation {
-    guard let id else {
-      let automation = try store.create(definition, now: now())
-      register(automation)
-      return automation
-    }
-    let (automation, reworked) = try store.replace(id, with: definition)
-    if reworked { register(automation) } else { retime(automation) }
-    return automation
-  }
-
-  /// 止めるのは予定だけ。走っている回は止めない。
-  func pause(_ id: Int, _ paused: Bool) throws(AutomationError) -> Automation {
-    let automation = try store.setPaused(id, paused)
-    retime(automation)
-    return automation
-  }
-
-  /// 消す。走っている回は止め、その結果は捨てる。
-  func delete(_ id: Int) throws(AutomationError) {
-    try store.delete(id)
-    scheduler.remove(id: Self.key(id))
-    deleted(id)
-  }
-
-  /// 今すぐ回す（止めた自動化も受ける）。走っている回があれば断る。
-  func runNow(_ id: Int) throws(AutomationError) {
-    guard store.automation(id) != nil else { throw .automationNotFound(id) }
-    guard !isRunning(id) else { throw .running(id) }
-    scheduler.runNow(id: Self.key(id))
   }
 
   func isRunning(_ id: Int) -> Bool {
@@ -362,6 +330,45 @@ final class AutomationRunner {
         startedAt: attempt.startedAt, endedAt: attempt.startedAt, trigger: attempt.trigger,
         source: nil, fresh: nil, steps: [], lastStepCountedBySink: false, sink: nil, failure: nil)
     }
+  }
+}
+
+/// 定義の変異。
+extension AutomationRunner {
+  /// `id` が nil なら作り、あれば丸ごと置き換える。何をするかが変われば走っている回を止めて載せ直し、名前・トリガー・
+  /// 取得の性質・段の名前だけなら予定だけを差し替える（走っている回は最後まで走る）。
+  func set(_ id: Int?, _ definition: AutomationDefinition) throws(AutomationError) -> Automation {
+    guard let id else {
+      let automation = try store.create(definition, now: now())
+      register(automation)
+      defined(automation.id)
+      return automation
+    }
+    let (automation, reworked) = try store.replace(id, with: definition)
+    if reworked { register(automation) } else { retime(automation) }
+    defined(automation.id)
+    return automation
+  }
+
+  /// 止めるのは予定だけ。走っている回は止めない。
+  func pause(_ id: Int, _ paused: Bool) throws(AutomationError) -> Automation {
+    let automation = try store.setPaused(id, paused)
+    retime(automation)
+    return automation
+  }
+
+  /// 消す。走っている回は止め、その結果は捨てる。
+  func delete(_ id: Int) throws(AutomationError) {
+    try store.delete(id)
+    scheduler.remove(id: Self.key(id))
+    deleted(id)
+  }
+
+  /// 今すぐ回す（止めた自動化も受ける）。走っている回があれば断る。
+  func runNow(_ id: Int) throws(AutomationError) {
+    guard store.automation(id) != nil else { throw .automationNotFound(id) }
+    guard !isRunning(id) else { throw .running(id) }
+    scheduler.runNow(id: Self.key(id))
   }
 }
 
