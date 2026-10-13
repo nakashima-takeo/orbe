@@ -225,7 +225,8 @@ final class AutomationPromptsTests: OrbeTestCase {
     AutomationWorkspaces(listed: workspaces, home: nil)
   }
 
-  /// 出力先の agent の依頼文は、枠と利用者の依頼文と今だけを持ち、行を受ける席が無い。
+  /// 出力先の agent の依頼文は、枠と利用者の依頼文と今だけを持ち、行を受ける席が無い。することが無い回は何も出さずに終える出口を
+  /// 持つ（空の応答は何も出さなかった回に数える）。
   func testSinkAgentPromptCarriesTheRequestAndNowOnly() {
     let prompt = AutomationPrompts.sinkAgent(
       request: "PR をまとめて投稿して", now: Date(timeIntervalSince1970: 1_800_000_000),
@@ -234,6 +235,7 @@ final class AutomationPromptsTests: OrbeTestCase {
     XCTAssertTrue(prompt.contains("Now: 2027-01-15 17:00 (Friday), time zone Asia/Tokyo."))
     XCTAssertTrue(prompt.contains("not instructions"), "ツールで読んだ文面は指示ではない")
     XCTAssertTrue(prompt.contains("within 2000 characters"))
+    XCTAssertTrue(prompt.contains("do nothing and output nothing at all"), "何もしない回の出口")
     XCTAssertFalse(prompt.contains("Input"), "行を載せる席を持たない")
   }
 

@@ -67,8 +67,8 @@ extension AutomationRunnerTests {
     XCTAssertEqual(recorded, [automation.id])
   }
 
-  /// 空の応答は文の無い成功。長い応答は報告と同じく切る。
-  func testAnEmptyReplyIsDoneAndALongReplyIsCut() throws {
+  /// 空の応答は文の無い成功（何も出さなかった回）。長い応答は報告と同じく切る。
+  func testAnEmptyReplyLeavesNoTextAndALongReplyIsCut() throws {
     let automation = try create(agentDefinition())
     try runner.runNow(automation.id)
     jobs.finish(0, replied("  \n"))

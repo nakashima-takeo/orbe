@@ -99,7 +99,8 @@ extension BoardAutomationSummary {
         return heading ? String(text.prefix { !$0.isNewline }) : text
       }
       switch run.sink {
-      case .command, .agent: return l10n.string(.boardRunDone)
+      case .command: return l10n.string(.boardRunDone)
+      case .agent: return l10n.string(.boardRunNothingDone)
       case .taskCandidates(let report) where report.proposed > 0:
         return heading
           ? l10n.format(.boardRunAddedTo, report.proposed, output)
@@ -129,7 +130,7 @@ extension BoardAutomationSummary {
         mark = l10n.format(.boardRunMarkAdded, at, report.proposed)
       } else if case .report(.some) = latest.sink {
         mark = l10n.format(.boardRunMarkReported, at)
-      } else if case .agent = latest.sink {
+      } else if case .agent(let report) = latest.sink, report.text != nil {
         mark = l10n.format(.boardRunMark, at, l10n.string(.boardRunDone))
       } else {
         mark = l10n.format(.boardRunMark, at, result(latest, heading: false))
@@ -240,14 +241,14 @@ extension BoardAutomationSummary {
     }
   }
 
-  /// 出力先へ出したかと、出力先の件数。タスク候補は候補を 1 つ以上受けた回、コマンドと agent は起こした回、報告は報告のある回が
-  /// 出した回で、件数は受けた候補の数・渡した行の数・起こした数（1）・報告の数（1 か 0）。
+  /// 出力先へ出したかと、出力先の件数。タスク候補は候補を 1 つ以上受けた回、コマンドは走った回、報告と agent は文のある回が
+  /// 出した回で、件数は受けた候補の数・渡した行の数・報告か応答の数（1 か 0）。
   private static func delivered(_ run: AutomationRun) -> (produced: Bool, count: Int) {
     switch run.sink {
     case .taskCandidates(let report): (report.proposed > 0, report.proposed)
     case .command(let report): (true, report.count)
-    case .agent: (true, 1)
     case .report(let text): (text != nil, text == nil ? 0 : 1)
+    case .agent(let report): (report.text != nil, report.text == nil ? 0 : 1)
     case nil: (false, 0)
     }
   }

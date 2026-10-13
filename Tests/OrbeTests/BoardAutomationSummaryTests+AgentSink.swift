@@ -2,11 +2,11 @@ import XCTest
 
 @testable import Orbe
 
-/// 出力先の agent の読み替え。出力先の段は題「agent」・解いたモデルの札・依頼文の全文・ツールの札。起こした回は「出した」で、
-/// 応答があれば全文を折り返し、無ければ「完了」。一覧の右端は応答の有無によらず「に完了」。
+/// 出力先の agent の読み替え。出力先の段は題「agent」・解いたモデルの札・依頼文の全文・ツールの札。応答のある回だけが「出した」で、
+/// 全文を折り返し、一覧の右端は「に完了」。応答の無い回は何も出さなかった回で「何もしなかった」。
 ///
 /// 壊れると何が起きるか: 承認なしで裏で走る依頼文と名指しのツールを、ボードで確かめられない。agent が報告した 1 行目が
-/// 見出しや知らせに出ない。応答の長い回で一覧の右端があふれる。
+/// 見出しや知らせに出ない。応答の長い回で一覧の右端があふれる。何もしなかった回のたびに通知が鳴る。
 extension BoardAutomationSummaryTests {
   func testAnAgentSinkShowsItsModelRequestAndTools() throws {
     let summary = BoardAutomationSummary(DesignSceneFixtures.boardAgentExample(), text: text)
@@ -23,12 +23,12 @@ extension BoardAutomationSummaryTests {
     XCTAssertEqual(summary.nodes.map(\.role), [.trigger, .output])
   }
 
-  func testAnAgentRunIsProducedAndWrapsItsReply() throws {
+  func testOnlyAnAgentRunWithAReplyIsProduced() throws {
     let summary = BoardAutomationSummary(DesignSceneFixtures.boardAgentExample(), text: text)
-    XCTAssertEqual(summary.runs.map(\.tone), [.produced, .produced, .failed, .produced])
+    XCTAssertEqual(summary.runs.map(\.tone), [.produced, .quiet, .failed, .produced])
     XCTAssertEqual(summary.runs.map(\.wraps), [true, false, true, true])
     XCTAssertTrue(summary.runs[0].result.hasPrefix("レビュー待ちの PR 2 件を #dev-me に投稿した。\n- #412"))
-    XCTAssertEqual(summary.runs[1].result, "完了")
+    XCTAssertEqual(summary.runs[1].result, "何もしなかった")
     XCTAssertEqual(
       summary.runs[2].result,
       "失敗：the sink agent reported an error: mcp__slack__slack_send_message was refused")
@@ -37,10 +37,17 @@ extension BoardAutomationSummaryTests {
     XCTAssertEqual(summary.latestLine, "レビュー待ちの PR 2 件を #dev-me に投稿した。")
   }
 
-  /// 起こした回の出力先の件数は 1。取得元があって新着の無い回は agent へ届いていない。
-  func testTheOutputCountIsOneForARunThatStartedTheAgent() throws {
+  /// 応答のあった回の出力先の件数は 1、応答の無かった回は 0。成功して出力先の記録が無い回（agent を起こさなかった回）は出した回に
+  /// 数えない。
+  func testTheOutputCountIsOneOnlyForARunWithAReply() throws {
     var automation = DesignSceneFixtures.boardAgentExample()
     XCTAssertEqual(BoardAutomationSummary(automation, text: text).nodes.last?.count, 1)
+
+    automation.runs[0].sink = .agent(
+      AutomationAgentReport(commandLine: "claude -p --model sonnet", ending: "exited 0", text: nil))
+    let quiet = BoardAutomationSummary(automation, text: text)
+    XCTAssertEqual(quiet.nodes.last?.count, 0)
+    XCTAssertEqual(quiet.mark, "9:00 に何もしなかった")
 
     automation.runs.insert(
       AutomationRun(

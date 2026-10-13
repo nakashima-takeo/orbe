@@ -3,7 +3,7 @@ import Foundation
 @testable import Orbe
 
 /// 見本『レビュー待ちの PR を Slack へ』: 取得元も段も無く、毎朝 9:00 に出力先の agent が gh で調べて Slack に投稿する。通知は
-/// メニューバー。応答の全文（複数行）・応答なし（完了）・agent が失敗を申告した回を持つ。
+/// メニューバー。応答の全文（複数行）・応答なし（何もしなかった）・agent が失敗を申告した回を持つ。
 extension DesignSceneFixtures {
   private static func agentRun(daysAgo: Int, text: String?, failure: String? = nil) -> AutomationRun
   {
@@ -30,7 +30,7 @@ extension DesignSceneFixtures {
       agentRun(
         daysAgo: 2, text: nil,
         failure: "the sink agent reported an error: mcp__slack__slack_send_message was refused"),
-      agentRun(daysAgo: 3, text: "レビュー待ちの PR は無かったので、投稿していない。"),
+      agentRun(daysAgo: 3, text: "レビュー待ちの PR 1 件を #dev-me に投稿した。"),
     ]
     return Automation(
       id: 6,

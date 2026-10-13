@@ -604,6 +604,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardRunNoneAdded
   case boardRunDone
   case boardRunNothingToReport
+  case boardRunNothingDone
   case boardRunMark
   case boardRunMarkAdded
   case boardRunMarkReported

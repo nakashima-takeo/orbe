@@ -37,6 +37,7 @@ extension L10n {
     .boardRunNoneAdded: ("追加なし", "none added"),
     .boardRunDone: ("完了", "done"),
     .boardRunNothingToReport: ("報告なし", "nothing to report"),
+    .boardRunNothingDone: ("何もしなかった", "nothing done"),
     .boardRunMark: ("%1$@ に%2$@", "%2$@ at %1$@"),
     .boardRunMarkAdded: ("%1$@ に %2$lld件を追加", "added %2$lld at %1$@"),
     .boardRunMarkReported: ("%@ に報告", "reported at %@"),

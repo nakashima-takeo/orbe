@@ -160,6 +160,7 @@ enum AutomationPrompts {
     When you are done, output only a short plain-text report of what you did (no code fences), in the language \
     of the user's request. The first line is the summary shown on the board's heading and in the notification. \
     Keep the whole report within \(AutomationReportSinkRun.limit) characters.
+    If the request leaves nothing to do this time, do nothing and output nothing at all.
     If you cannot do what the request asks (a tool fails, is unavailable or is refused), output only this one \
     line instead: {"error": "<what went wrong>"}
     """
