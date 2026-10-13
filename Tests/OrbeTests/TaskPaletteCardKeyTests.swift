@@ -107,7 +107,10 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     pump(0.3)
   }
 
-  func arrow(_ keyCode: UInt16, _ extra: NSEvent.ModifierFlags = [], to window: NSWindow) {
+  func arrow(
+    _ keyCode: UInt16, _ extra: NSEvent.ModifierFlags = [], repeating: Bool = false,
+    to window: NSWindow
+  ) {
     let character: NSEvent.SpecialKey =
       switch keyCode {
       case Key.left: .leftArrow
@@ -116,7 +119,8 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
       default: .downArrow
       }
     press(
-      keyCode, String(UnicodeScalar(character.rawValue)!), arrowFlags.union(extra), to: window)
+      keyCode, String(UnicodeScalar(character.rawValue)!), arrowFlags.union(extra),
+      repeating: repeating, to: window)
   }
 
   func type(_ text: String, into window: NSWindow) {
