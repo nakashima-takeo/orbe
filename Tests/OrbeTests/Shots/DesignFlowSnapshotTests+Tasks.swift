@@ -319,23 +319,6 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
-  /// 小さい窓（800×560）で workspace が 36 個あるとき、workspace のメニューはカードの下端の手前までに収まり、
-  /// 下端まで送ると最後の workspace が見えて選べる（選ぶとドロップダウンが伸びて折り返し、メニューも下がる）、
-  /// までを撮る。
-  func testTaskPaletteWorkspaceMenu() throws {
-    let palette = DesignSceneFixtures.taskPaletteModel(
-      workspaces: DesignSceneFixtures.taskManyWorkspaces)
-    let last = try XCTUnwrap(DesignSceneFixtures.taskManyWorkspaces.all.last)
-    try hostedTaskPaletteFlow(
-      "task_palette_workspace_menu", palette, size: NSSize(width: 800, height: 560),
-      steps: [
-        ("menu", { _ in palette.toggleFilterMenu(.workspace) }),
-        ("menu_bottom", { host in self.scrollToBottom(in: host, pick: { $0.last }) }),
-        ("menu_last_on", { _ in palette.toggleWorkspaceFilter(last.id) }),
-        ("menu_last_on_bottom", { host in self.scrollToBottom(in: host, pick: { $0.last }) }),
-      ])
-  }
-
   /// いちばん右のスクロール（GitHub タブの右の欄）を下端まで送る。
   private func scrollRightmostToBottom(in host: NSView) {
     scrollToBottom(in: host) { views in
@@ -346,7 +329,7 @@ extension DesignFlowSnapshotTests {
   }
 
   /// `pick` が選んだスクロール（引数は view の木を深さ優先でたどった順）を下端まで送る。
-  private func scrollToBottom(in host: NSView, pick: ([NSScrollView]) -> NSScrollView?) {
+  func scrollToBottom(in host: NSView, pick: ([NSScrollView]) -> NSScrollView?) {
     func scrollViews(_ view: NSView) -> [NSScrollView] {
       (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap(scrollViews)
     }

@@ -31,14 +31,16 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
 
   func model() -> TaskPaletteModel { TaskPaletteSamples.threeTodos() }
 
-  func mount(_ model: TaskPaletteModel) -> NSWindow {
+  func mount(
+    _ model: TaskPaletteModel, width: CGFloat = 960, detailWidth: CGFloat = 340
+  ) -> NSWindow {
     NSApplication.shared.setActivationPolicy(.accessory)
     let window = KeyDeliveryWindow(
-      contentRect: NSRect(x: -20000, y: -20000, width: 1000, height: 640),
+      contentRect: NSRect(x: -20000, y: -20000, width: width + 40, height: 640),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = FirstMouseHost(
-      rootView: TaskPaletteCard(model: model, detailWidth: 340)
-        .frame(width: 960, height: 600)
+      rootView: TaskPaletteCard(model: model, detailWidth: detailWidth)
+        .frame(width: width, height: 600)
         .environment(\.localization, LocalizationStore(language: .ja)))
     window.makeKeyAndOrderFront(nil)
     held.append(window)
@@ -60,12 +62,16 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     super.tearDown()
   }
 
-  /// ヘッダーの入力欄（カード左上の「❯」の右）を実 NSEvent のマウスでクリックする。窓はカードの
-  /// 大きさに揃うので、窓座標（原点は左下）でヘッダーの縦中央を叩く。離す方は先にキューへ入れておく
-  /// ——入力欄の文字の面が押下を受けると、離すまでキューを待つ追跡に入り、後から送ると戻ってこない。
+  /// ヘッダーの入力欄（カード左上の「❯」の右）をクリックする。窓はカードの大きさに揃うので、窓座標
+  /// （原点は左下）でヘッダーの縦中央を叩く。
   func click(atFieldOf window: NSWindow) throws {
     let content = try XCTUnwrap(window.contentView)
-    let point = NSPoint(x: 120, y: content.bounds.height - 28)
+    try click(NSPoint(x: 120, y: content.bounds.height - 28), in: window)
+  }
+
+  /// 窓座標（原点は左下）の 1 点を実 NSEvent のマウスでクリックする。離す方は先にキューへ入れておく——入力欄の
+  /// 文字の面が押下を受けると、離すまでキューを待つ追跡に入り、後から送ると戻ってこない。
+  func click(_ point: NSPoint, in window: NSWindow) throws {
     let make = { (type: NSEvent.EventType) in
       NSEvent.mouseEvent(
         with: type, location: point, modifierFlags: [],
@@ -309,6 +315,37 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
 
     send(Key.escape, "\u{1B}", to: window)
     XCTAssertTrue(dismissed)
+  }
+
+  /// 期限のメニューの値を上から 3 つ続けてクリックすると、3 つともオンになり、メニューは開いたまま。カードは窓が
+  /// 広いときの最大の寸法（880 幅・右の欄は 1/3）で、1 つ目をオンにするとドロップダウンの表記が伸びて次の行へ
+  /// 折り返す。メニューがドロップダウンを追って動くと、2 つ目のクリックがメニューの外に当たって閉じる。
+  func testClickingThreeValuesInARowKeepsTheFilterMenuOpenAndTurnsAllOn() throws {
+    let model = model()
+    model.toggleFilterMenu(.due)
+    let window = mount(model, width: 880, detailWidth: 880 / 3)
+    let content = try XCTUnwrap(window.contentView)
+    let table = try XCTUnwrap(scrollViews(in: content).first)
+    let tableTop = table.convert(table.bounds, to: nil).maxY
+    let menu = try XCTUnwrap(scrollViews(in: content).last)
+    let frame = menu.convert(menu.bounds, to: nil)
+
+    for (row, bucket) in [TaskDueBucket.overdue, .today, .withinWeek].enumerated() {
+      let y =
+        frame.maxY - Theme.Space.tick - TaskPaletteRowMetrics.line * (CGFloat(row) + 0.5)
+      try click(NSPoint(x: frame.minX + 40, y: y), in: window)
+      if row == 0 {
+        XCTAssertLessThan(
+          table.convert(table.bounds, to: nil).maxY, tableTop, "前提: ドロップダウンが次の行へ折り返す")
+      }
+      XCTAssertEqual(model.openFilterMenu, .due, "\(row + 1) つ目のクリックの後も開いたまま")
+      XCTAssertTrue(model.filter.dues.contains(bucket), "\(row + 1) つ目の値がオン")
+    }
+  }
+
+  /// view の木を深さ優先でたどった順のスクロール。先頭が表で、絞り込みのメニューはカードの最後に重ねるので末尾。
+  private func scrollViews(in view: NSView) -> [NSScrollView] {
+    (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap { scrollViews(in: $0) }
   }
 
   /// agent の変更（ストアの直接の変異）は、カードが付け直しへ届ける。選んでいたタスクが消えたら、
