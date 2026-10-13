@@ -280,10 +280,16 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.tab, .github)
 
     send(Key.tab, "\t", to: window)
-    XCTAssertEqual(model.tab, .automation, "3 つのタブを巡る")
+    XCTAssertEqual(model.tab, .automation)
+
+    send(Key.tab, "\t", to: window)
+    XCTAssertEqual(model.tab, .tasks, "3 つのタブを巡る")
 
     send(Key.tab, "\u{19}", .shift, to: window)
-    XCTAssertEqual(model.tab, .github, "⇧⇥ は逆に巡る")
+    XCTAssertEqual(model.tab, .automation, "⇧⇥ は逆に巡る")
+
+    send(Key.tab, "\u{19}", .shift, to: window)
+    XCTAssertEqual(model.tab, .github)
 
     send(Key.tab, "\u{19}", .shift, to: window)
     type("x", into: window)
