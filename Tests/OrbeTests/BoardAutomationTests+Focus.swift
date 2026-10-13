@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 自動追加の部品の中の焦点——依頼の欄と一覧の行き来。本物の `BoardView` を実窓に載せ、実 `NSEvent` のキーとクリックを届ける。
+/// 自動化の部品の中の焦点——依頼の欄と一覧の行き来。本物の `BoardView` を実窓に載せ、実 `NSEvent` のキーとクリックを届ける。
 ///
 /// 壊れると何が起きるか: 欄と一覧を行き来できず、頼めないか一覧を操れない。欄で打った space・↵ が一覧の止める・今すぐ実行になる。クリックした場所と
 /// キーの届く場所が食い違い、行をクリックしてから押した space が欄に入る。
@@ -107,7 +107,7 @@ extension BoardAutomationTests {
     XCTAssertEqual(editor.selectedRange(), NSRange(location: 0, length: 3))
   }
 
-  /// 自動追加が 0 件なら、欄の ↑↓ は何もしない（移る行が無い）。
+  /// 自動化が 0 件なら、欄の ↑↓ は何もしない（移る行が無い）。
   func testWithNoAutoAddsTheFieldIsTheOnlyStop() {
     let model = BoardModel(
       automation: BoardAutomationModel(

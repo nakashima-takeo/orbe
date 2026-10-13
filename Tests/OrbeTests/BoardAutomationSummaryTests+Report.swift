@@ -23,7 +23,7 @@ extension BoardAutomationSummaryTests {
     let output = try XCTUnwrap(summary.nodes.last)
     XCTAssertEqual(output.title, "報告")
     XCTAssertNil(output.means)
-    XCTAssertNil(output.source)
+    XCTAssertNil(output.verbatim)
     XCTAssertEqual(output.notes, ["通知：メニューバー"])
     XCTAssertEqual(output.count, 1)
   }

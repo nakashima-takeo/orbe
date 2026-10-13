@@ -264,7 +264,9 @@ extension DesignSceneFixtures {
 /// 採用・見送りの累計を持ち、一番単純な例は取得元も処理も無い。一番単純な例は、まだ定義の検証を通らない（タスク候補は取得元と
 /// 段を要る）が、ボードはそのまま描く。
 extension DesignSceneFixtures {
-  /// 段ごとの件数を持つ回。`steps` は各段が出した数で、`stepCount` に満たなければ途中の段で止まった回。
+  private static let boardStepNames = ["bot の投稿を除く", "雑談を除く", "依頼をタスク候補にする"]
+
+  /// 段ごとの件数を持つ回。`steps` は各段が出した数で、段の数に満たなければ途中の段で止まった回。
   private static func stepsRun(
     at start: Date, source: Int, fresh: Int?, steps: [Int], proposed: Int = 0,
     failure: String? = nil
@@ -277,7 +279,8 @@ extension DesignSceneFixtures {
       fresh: fresh,
       steps: steps.enumerated().map { index, count in
         AutomationStepReport(
-          name: nil, commandLine: "step \(index + 1)", ending: "exited 0", count: count,
+          name: boardStepNames[index], commandLine: "step \(index + 1)", ending: "exited 0",
+          count: count,
           rejected: AutomationRejections())
       },
       sink: failure == nil
@@ -311,15 +314,15 @@ extension DesignSceneFixtures {
           coverage: .newArrivals),
         steps: [
           AutomationStep(
-            name: "bot の投稿を除く",
+            name: boardStepNames[0],
             method: .command(
               BackgroundCommand(script: "jq 'select(.bot_id == null)'", directory: nil))),
           AutomationStep(
-            name: "雑談を除く",
+            name: boardStepNames[1],
             method: .agent(
               AutomationStepAgent(cli: "claude", model: nil, instruction: "挨拶やお礼だけのメッセージは除く。"))),
           AutomationStep(
-            name: "依頼をタスク候補にする",
+            name: boardStepNames[2],
             method: .agent(
               AutomationStepAgent(
                 cli: "claude", model: nil,

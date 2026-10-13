@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 提案タブの左の棚。先頭に「すべて」、続いて受信ごとに名前・件数・2 行目（次の時刻 / 止めている / 実行中…）。提案の無い受信は
+/// 提案タブの左の棚。先頭に「すべて」、続いて受信ごとに名前・件数・2 行目（次の時刻 / 停止中 / 実行中…）。提案の無い受信は
 /// 減光する。下に、受信を足す・変える口が Home のボードであることを添える（この画面では定義を変えない）。
 struct TaskPaletteAutomationShelf: View {
   @Bindable var model: TaskPaletteAutomationModel

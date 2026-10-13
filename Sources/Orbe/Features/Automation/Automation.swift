@@ -332,7 +332,8 @@ struct AutomationRun: Codable, Equatable {
   var failure: String?
 }
 
-/// 取得元か段 1 つの記録。`count` は JSON の行として読めた数（取得元は項目として読めた数）、`rejected` は読めなかった行。
+/// 取得元か段 1 つの記録。`count` は JSON の行として読めた数（取得元は項目として読めた数、最後の段は出力先が数えた数）、
+/// `rejected` は読めなかった行。
 struct AutomationStepReport: Codable, Equatable {
   /// 段の名前。取得元は持たない。
   var name: String?

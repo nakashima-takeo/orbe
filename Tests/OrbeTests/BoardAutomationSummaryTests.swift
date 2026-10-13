@@ -31,19 +31,20 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
       lastRunAt: runs.first?.startedAt, runs: runs)
   }
 
-  /// 段が出した数は、最後の段では提案と対応済みの行の和。`steps` を渡せば各段の出した数をそのまま記録にする。
+  /// 段が出した数は、最後の段では提案と対応済みの行の和。`steps` を渡せば各段の出した数を、`names` の段名で記録にする。
   private func run(
     _ hour: Int, _ minute: Int, items: Int, fresh: Int, proposed: Int = 0, resolved: Int = 0,
-    steps: [Int]? = nil, failure: String? = nil, failedInStep: Bool = false
+    steps: [Int]? = nil, names: [String] = ["判定"], failure: String? = nil,
+    failedInStep: Bool = false
   ) -> AutomationRun {
     var run = DesignSceneFixtures.automationRun(
       at: DesignSceneFixtures.automationAt(hour, minute), items: items, fresh: fresh,
       proposed: proposed, failure: failure)
     if failedInStep {
       run.fresh = fresh
-      run.steps = [Self.report(0)]
+      run.steps = [Self.report(0, name: names[0])]
     }
-    if let steps { run.steps = steps.map(Self.report) }
+    if let steps { run.steps = zip(steps, names).map { Self.report($0, name: $1) } }
     if resolved > 0 {
       run.steps[run.steps.count - 1].count = proposed + resolved
       run.sink = .taskCandidates(
@@ -52,9 +53,9 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     return run
   }
 
-  private static func report(_ count: Int) -> AutomationStepReport {
+  private static func report(_ count: Int, name: String) -> AutomationStepReport {
     AutomationStepReport(
-      name: nil, commandLine: "claude -p", ending: "exited 0", count: count,
+      name: name, commandLine: "claude -p", ending: "exited 0", count: count,
       rejected: AutomationRejections())
   }
 
@@ -82,8 +83,11 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
       failedInStep: true)
     sinkFailed.sink = .command(
       AutomationCommandReport(commandLine: "~/bin/post.sh", ending: "exited 1", count: 3))
+    var commanding = automation([sinkFailed])
+    commanding.redefine { $0.sink = AutomationRunnerTests.commandSink() }
     XCTAssertEqual(
-      counts(sinkFailed), [nil, 6, 4, 3, nil], "出力先で落ちた回は最後の段まで出し、出力先は出さない")
+      BoardAutomationSummary(commanding, text: text).nodes.map(\.count), [nil, 6, 4, 3, nil],
+      "出力先で落ちた回は最後の段まで出し、出力先は出さない")
     XCTAssertEqual(
       counts(run(14, 40, items: 0, fresh: 0, failure: "exited 1")), [nil, nil, nil, nil, nil],
       "取得元で落ちた回は何も数えない")
@@ -93,7 +97,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
   func testStepsAreListedWithTheirResolvedModelsAndCounts() {
     let summary = BoardAutomationSummary(
       automation(
-        [run(14, 40, items: 6, fresh: 5, steps: [3, 0])],
+        [run(14, 40, items: 6, fresh: 5, steps: [3, 0], names: ["雑談を除く", "依頼を絞る"])],
         steps: [Self.agentStep("雑談を除く"), Self.agentStep("依頼を絞る"), Self.agentStep("判定")]),
       text: text)
     XCTAssertEqual(
@@ -105,6 +109,25 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
       [.command("コマンド"), .model("haiku"), .model("haiku"), .model("sonnet")])
     XCTAssertEqual(summary.nodes.map(\.count), [nil, 6, 5, 3, 0, nil, nil])
     XCTAssertEqual(summary.runs.map(\.result), ["処理 2 ですべて除外"])
+  }
+
+  /// 書き換えても回の記録は残る。前回の件数は段名の並びと出力先の種類が合う段にだけ出し、最初に食い違った段から先と、種類の
+  /// 違う出力先（とそれが数えた最後の段）には出さない。
+  func testCountsAreShownOnlyOnStagesTheLatestRunRanAs() {
+    let ran = run(14, 40, items: 6, fresh: 5, proposed: 2, steps: [5, 2], names: ["A", "B"])
+    func counts(_ steps: [String], sink: AutomationSink = .taskCandidates) -> [Int?] {
+      var rewritten = automation([ran], steps: steps.map(Self.agentStep))
+      rewritten.redefine { $0.sink = sink }
+      return BoardAutomationSummary(rewritten, text: text).nodes.map(\.count)
+    }
+    XCTAssertEqual(counts(["A", "B"]), [nil, 6, 5, 5, 2, 2], "同じ並びなら全段に出す")
+    XCTAssertEqual(
+      counts(["A", "X", "B"]), [nil, 6, 5, 5, nil, nil, nil], "足した段から先と出力先は出さない")
+    XCTAssertEqual(counts(["X", "B"]), [nil, 6, 5, nil, nil, nil], "名前の変わった段から先は出さない")
+    XCTAssertEqual(counts(["A"]), [nil, 6, 5, 5, nil], "段を消すと出力先へ届いた数は今の並びのものでない")
+    XCTAssertEqual(
+      counts(["A", "B"], sink: .report), [nil, 6, 5, 5, nil, nil],
+      "出力先の種類が違えば、出力先とそれが数えた最後の段は出さない")
   }
 
   /// タスク候補の出力先は、0 件でも採用・見送りの累計を出力先の段の注記に出す。
@@ -178,7 +201,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     let output = try XCTUnwrap(alone.nodes.last)
     XCTAssertEqual(output.role, .output)
     XCTAssertNil(output.means)
-    XCTAssertEqual(output.source, "~/bin/daily-note.sh")
+    XCTAssertEqual(output.verbatim, "~/bin/daily-note.sh")
     XCTAssertEqual(output.notes, ["作業ディレクトリ  /Users/me"])
     XCTAssertEqual(alone.runs.map(\.result), ["完了"])
     XCTAssertEqual(alone.runs.map(\.tone), [.produced])

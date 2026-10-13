@@ -50,12 +50,9 @@ struct AutomationText {
   /// 自動追加の中身の前回。「今日 9:12 · 14 件取得 → 新しい 3 件を処理 → 候補 1 件」。
   func runDetail(_ run: AutomationRun?) -> String {
     guard let run else { return l10n.string(.automationNeverRan) }
-    return moment(run.startedAt) + " · " + longSteps(run)
-  }
-
-  private func longSteps(_ run: AutomationRun) -> String {
-    summary(
-      run, proposedOne: .automationProposedLongOne, proposedOther: .automationProposedLongOther)
+    return moment(run.startedAt) + " · "
+      + summary(
+        run, proposedOne: .automationProposedLongOne, proposedOther: .automationProposedLongOther)
   }
 
   private func summary(_ run: AutomationRun, proposedOne: L10nKey, proposedOther: L10nKey) -> String

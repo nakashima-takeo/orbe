@@ -2,11 +2,12 @@ import XCTest
 
 @testable import Orbe
 
-/// automations.json だけが持つ「使えない」の判定（ID の重複・採番位置・提案のリンクの重複・定義の不正）で、原本を
+/// automations.json の「使えない」の判定（非互換の version・ID の重複・採番位置・提案のリンクの重複・定義の不正）で、原本を
 /// `automations-broken-<日時>.json` へ退避して空で始めること。
 ///
-/// 壊れると何が起きるか: 同じリンクの提案が 2 件ある原本をそのまま読み「提案はリンク単位で 1 つ」が崩れる。次の追加が
-/// 既存の受信の ID を振り直す。取得役に組み込みのツールを渡す定義が、検証を通らずに無人で回る。
+/// 壊れると何が起きるか: 新しい形の原本を古い Orbe が読み、保存で中身を落とす。同じリンクの提案が 2 件ある原本をそのまま読み
+/// 「提案はリンク単位で 1 つ」が崩れる。次の追加が既存の受信の ID を振り直す。取得役に組み込みのツールを渡す定義が、検証を
+/// 通らずに無人で回る。
 @MainActor
 final class AutomationQuarantineTests: OrbeTestCase {
   private func quarantineFiles() throws -> [URL] {
@@ -43,6 +44,10 @@ final class AutomationQuarantineTests: OrbeTestCase {
     try AutomationWire.encoder(pretty: true).encode(DesignSceneFixtures.automationDesignFile())
       .write(to: automationsFile())
     XCTAssertNotNil(AutomationPersistence.load())
+  }
+
+  func testIncompatibleVersionIsQuarantined() throws {
+    try assertQuarantined("非互換 version") { $0.version = AutomationPersistence.version + 1 }
   }
 
   func testDuplicateAutomationIdsAreQuarantined() throws {

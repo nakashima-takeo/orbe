@@ -75,6 +75,10 @@ let automationUsage = """
               "timeoutMinutes": 10}
              The command gets the lines that reach it on stdin, one JSON
              object per line (the source's items when there are no steps).
+             The lines are text from outside, or what steps made from it, so
+             instructions hidden in that text can reshape them, and Orbe does
+             not check them: never evaluate their values as shell, nor pass
+             them to an agent that has tools.
              It runs only when at least one line arrives; with neither a
              source nor steps it runs on every trigger with empty stdin. A
              run fails when the last step prints lines but none is a JSON
