@@ -156,7 +156,8 @@ struct TaskPaletteRowFrame<Content: View>: View {
 }
 
 /// 表のタスクの行。状態の札（クリックで完了 ⇄ 未着手）・件名（主の番号・タイトル・「レビュー」・PR の札・補足）・
-/// 優先度・期限・workspace・作成。縮むのはタイトルが先。完了のタスクは行ごと沈める。
+/// 優先度・期限・workspace・作成。縮むのはタイトルが先。完了か絞り込みに合わない行は中身だけを暗くし、選択の
+/// 地は普段の濃さのまま（space で完了にした結果を、選んだまま確かめられるように）。暗くなる・戻るときはフェードする。
 struct TaskPaletteTaskRowView: View {
   let row: TaskPaletteTaskRow
   let selected: Bool
@@ -167,8 +168,10 @@ struct TaskPaletteTaskRowView: View {
   let onHoverEnter: () -> Void
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
+    let dimmed = row.state == .done || !row.matches
     TaskPaletteTableColumns(
       state: {
         TaskStateChip(state: row.state)
@@ -179,6 +182,7 @@ struct TaskPaletteTaskRowView: View {
       title: { subject },
       rest: { cell($0) }
     )
+    .animation(fade) { $0.opacity(dimmed ? Theme.Opacity.dormant : 1) }
     .frame(height: TaskPaletteRowMetrics.row)
     .background(
       RoundedRectangle(cornerRadius: Theme.Radius.row)
@@ -187,7 +191,12 @@ struct TaskPaletteTaskRowView: View {
     .contentShape(Rectangle())
     .onTapGesture(perform: onTap)
     .onHover { if $0 { onHoverEnter() } }
-    .opacity(row.state == .done ? Theme.Opacity.dormant : 1)
+  }
+
+  private var fade: Animation? {
+    guard !reduceMotion else { return nil }
+    let (p1, p2) = Theme.Motion.easing
+    return .timingCurve(p1.x, p1.y, p2.x, p2.y, duration: Theme.Motion.slow)
   }
 
   private var subject: some View {

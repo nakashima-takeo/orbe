@@ -1,7 +1,8 @@
 import Foundation
 
-/// タスクのタブの絞り込み・並び・絞り込みのメニュー。絞り込みを変えたら先頭の行を選び（入力を変えたときと同じ）、
-/// 並びを変えたら選択を同一性で保って見える所へスクロールする。どれも編集中なら確定してから行う。
+/// タスクのタブの絞り込み・並び・絞り込みのメニュー。絞り込みと並びの変化はリストの更新で、表を今の絞り込みと
+/// 並びで組み直す。絞り込みを変えたら先頭の行を選び（入力を変えたときと同じ）、並びを変えたら選択を同一性で保って
+/// 見える所へスクロールする（選んでいた行が組み直しで消えたら先頭の行）。どれも編集中なら確定してから行う。
 extension TaskPaletteModel {
   /// 状態の札のクリック。
   func toggleState(_ state: TaskItem.DisplayState) {
@@ -21,13 +22,16 @@ extension TaskPaletteModel {
     changeFilter { $0.dues.formSymmetricDifference([bucket]) }
   }
 
-  /// 列の見出しのクリック。
+  /// 列の見出しのクリック。選んでいた行が組み直しで消えたら（暗かった行）、同じ位置ではなく先頭の行を選ぶ——
+  /// 並びが変わった後の同じ位置は関係のない行で、次の space がそこに当たるため。
   func setSort(_ column: TaskPaletteSort.Column) {
     leaveEditingForAction()
     area = .list
+    let previous = selectedID
     sort = sort.tapped(column)
+    clearListings()
     reconcile()
-    taskList.follow()
+    if selectedID == previous { taskList.state.follow() } else { selectFirstTask() }
   }
 
   /// 絞り込みのドロップダウンのクリック。開いているメニューのドロップダウンなら閉じる。
@@ -46,6 +50,7 @@ extension TaskPaletteModel {
     leaveEditingForAction()
     area = .list
     change(&filter)
+    clearListings()
     reconcile()
     selectFirstTask()
   }

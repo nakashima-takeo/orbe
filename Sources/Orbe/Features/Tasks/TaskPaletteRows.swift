@@ -67,6 +67,8 @@ struct TaskPaletteTaskRow: Equatable {
   /// 主が自分以外の作成した PR（「レビュー」）。
   let needsReview: Bool
   let agent: WorktreeAgentActivity.Agent?
+  /// 絞り込みと入力に合っているか。合わない行（リストの更新の間に外れた・足した・移った先）は暗く出す。
+  let matches: Bool
 }
 
 /// 表の 1 行。
@@ -158,7 +160,7 @@ struct TaskPaletteCounts: Equatable {
   }
 }
 
-/// 表の行を、タスク・入力・絞り込み・並び・残すタスクから組む純関数。
+/// 表の行を、タスク・入力・絞り込み・並び・載せた並びから組む純関数。
 enum TaskPaletteRows {
   struct Input {
     let tasks: [TaskItem]
@@ -167,8 +169,8 @@ enum TaskPaletteRows {
     var picking = false
     let filter: TaskPaletteFilter
     let sort: TaskPaletteSort
-    /// 絞り込みと入力に合わなくても出すタスク（選んでいるタスク）。
-    var kept: Int?
+    /// 表に載せたタスクの ID（表の並びの順）。空はリストの更新の直後で、今の絞り込みと並びで全部を組む。
+    var listed: [Int] = []
     let workspaces: TaskPaletteWorkspaces
     let today: TaskItem.DueDate
     /// 待ち始めた時刻・作成日時を暦日へ落とすためのタイムゾーン。
@@ -182,21 +184,48 @@ enum TaskPaletteRows {
 
   /// 入力の行き先（`TaskPaletteRowID.add`）が持つタイトル。入力が無い・選ぶ状態なら nil。
   static func addTitle(_ input: Input) -> String? {
-    let title = input.query.trimmingCharacters(in: .whitespacesAndNewlines)
+    let title = trimmedQuery(input)
     return title.isEmpty || input.picking ? nil : title
   }
 
-  /// 絞り込みと入力（タイトルの部分一致）に合うタスクと残すタスクを、並びのとおりに並べる。
-  static func build(_ input: Input) -> [TaskPaletteRow] {
-    let title = input.query.trimmingCharacters(in: .whitespacesAndNewlines)
-    let rows = input.tasks.filter {
-      $0.id == input.kept
-        || input.filter.matches($0, today: input.today, workspaces: input.workspaces)
-          && (title.isEmpty || $0.title.localizedStandardContains(title))
+  /// 表に出すタスクの ID の並び。載せた並びのうちストアにあるタスクをその順で残し、絞り込みと入力（タイトルの
+  /// 部分一致）に合うのに並びに無いタスクと `including` のタスクを、並びの規則の順に「自分より後ろに来る最初の
+  /// 行」の前へ差し込む（無ければ末尾）。結果を載せた並びとして渡し直しても同じ結果になる。
+  static func listing(_ input: Input, including: [Int] = []) -> [Int] {
+    let tasks = Dictionary(input.tasks.map { ($0.id, $0) }) { first, _ in first }
+    var listed = input.listed.filter { tasks[$0] != nil }
+    let present = Set(listed)
+    let arrivals = input.tasks.filter {
+      !present.contains($0.id) && (including.contains($0.id) || matches($0, input))
     }
     .sorted { input.sort.areInIncreasingOrder($0, $1, workspaces: input.workspaces) }
-    .map { TaskPaletteRow.task(taskRow($0, input)) }
-    return rows.isEmpty && title.isEmpty ? [.empty] : rows
+    for task in arrivals {
+      let index = listed.firstIndex {
+        tasks[$0].map { input.sort.areInIncreasingOrder(task, $0, workspaces: input.workspaces) }
+          ?? false
+      }
+      listed.insert(task.id, at: index ?? listed.endIndex)
+    }
+    return listed
+  }
+
+  /// `listing` の並びの行。合うタスクが 1 件も無く入力も無ければ情報行。
+  static func build(_ input: Input) -> [TaskPaletteRow] {
+    let tasks = Dictionary(input.tasks.map { ($0.id, $0) }) { first, _ in first }
+    let rows = listing(input).compactMap { tasks[$0] }.map {
+      TaskPaletteRow.task(taskRow($0, input))
+    }
+    return rows.isEmpty && trimmedQuery(input).isEmpty ? [.empty] : rows
+  }
+
+  private static func matches(_ task: TaskItem, _ input: Input) -> Bool {
+    let title = trimmedQuery(input)
+    return input.filter.matches(task, today: input.today, workspaces: input.workspaces)
+      && (title.isEmpty || task.title.localizedStandardContains(title))
+  }
+
+  private static func trimmedQuery(_ input: Input) -> String {
+    input.query.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   private static func taskRow(_ task: TaskItem, _ input: Input) -> TaskPaletteTaskRow {
@@ -218,6 +247,7 @@ enum TaskPaletteRows {
       pullRequest: GitHubItemText.pullRequestBadge(task.links, input.items),
       needsReview: GitHubItemText.needsReview(
         task.links, input.items, viewerLogin: input.viewerLogin),
-      agent: task.agent(in: input.agents).flatMap { $0.isBusy ? $0 : nil })
+      agent: task.agent(in: input.agents).flatMap { $0.isBusy ? $0 : nil },
+      matches: matches(task, input))
   }
 }

@@ -74,7 +74,7 @@ extension TaskPaletteCardKeyTests {
     enterDetail(model, at: .priority, in: window)
     press(Key.space, " ", to: window)
     XCTAssertEqual(status(model, 3), .done, "右の欄でも space はそのタスクに効く")
-    XCTAssertEqual(model.area, .list)
+    XCTAssertEqual(model.area, .detail(.field(.priority)), "右の欄に居たまま")
   }
 
   func testSpaceKeyRepeatInDetailCompletesNothing() {

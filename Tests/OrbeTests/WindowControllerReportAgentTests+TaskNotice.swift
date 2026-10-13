@@ -126,7 +126,7 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(sound.played.count, 1)
   }
 
-  /// ピルのクリックは ⌘⇧X を開いてそのタスクを選ぶ。入力に合わなくても、入力は変えずに選んだ行として残して見せる。
+  /// ピルのクリックは ⌘⇧X を開いてそのタスクを選ぶ。入力に合わなくても、入力は変えずに表に入れて選ぶ。
   func testTaskPillClickSelectsTheTask() throws {
     let wc = try launchWithoutFirstRun()
     let (id, _) = try resolveTask(wc)

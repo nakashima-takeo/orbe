@@ -117,12 +117,12 @@ extension DesignGallerySnapshotTests {
     doneSelected.tapRow(.task(8))
     try write("tasks_done_selected.png", doneSelected, 1440, 900)
 
-    // 右の欄で完了まで巡る: 行は絞り込みに合わなくなっても残り、右の欄に居続ける。
+    // 右の欄で完了まで巡る: 行は絞り込みに合わなくなっても暗くなって同じ場所に残り、右の欄に居続ける。
     let cycled = DesignSceneFixtures.taskPaletteModel()
     cycled.enterDetail()
     cycled.changeValue(1)
     cycled.changeValue(1)
-    try write("tasks_status_done_kept.png", cycled, 1440, 900)
+    try write("tasks_status_done_dimmed.png", cycled, 1440, 900)
   }
 }
 

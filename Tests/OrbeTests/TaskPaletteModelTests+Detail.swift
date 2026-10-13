@@ -280,15 +280,16 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.selectedTask?.id, 2)
   }
 
-  func testCompletingFromDetailReturnsToTheListAtTheSamePosition() throws {
+  /// 右の欄で完了にしても行は表に残るので、そのタスクの右の欄に居たまま。
+  func testCompletingFromDetailStaysInTheDetail() throws {
     let palette = model([task(1, "a"), task(2, "b")])
     palette.enterDetail()
 
     palette.toggleDone(2)
 
     XCTAssertEqual(try storedTask(palette, 2).status, .done)
-    XCTAssertEqual(palette.area, .list)
-    XCTAssertEqual(palette.selectedID, .task(1))
+    XCTAssertEqual(palette.area, .detail(.field(.status)))
+    XCTAssertEqual(palette.selectedID, .task(2))
   }
 
   func testTaskDeletedByAgentWhileEditingDiscardsTheDraftAndReturnsToTheList() throws {
