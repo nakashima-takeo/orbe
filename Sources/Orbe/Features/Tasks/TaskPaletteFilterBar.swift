@@ -152,7 +152,7 @@ struct TaskPaletteFilterMenuAnchor: PreferenceKey {
 }
 
 /// 絞り込みのメニュー（値ごとに 1 行、チェックの印と名前）。行のクリックは値をオン・オフし、メニューは開いたまま。
-/// 焦点は取らない。
+/// 焦点は取らない。`maxHeight` を超える分はスクロールする。
 struct TaskPaletteFilterMenu: View {
   struct Value: Identifiable {
     let id: Int
@@ -163,33 +163,38 @@ struct TaskPaletteFilterMenu: View {
 
   @Bindable var model: TaskPaletteModel
   let kind: TaskPaletteFilterKind
+  let maxHeight: CGFloat
   @Environment(\.localization) private var l10n
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      ForEach(Self.values(kind, model, l10n)) { value in
-        Button(action: value.toggle) {
-          HStack(spacing: Theme.Space.step) {
-            Image(systemName: "checkmark")
-              .font(.system(size: 9, weight: .semibold))
-              .foregroundStyle(Color.theme.accentBright)
-              .opacity(value.on ? 1 : 0)
-            Text(value.title)
-              .font(Font.theme.chrome)
-              .foregroundStyle(value.on ? Color.theme.textPrimary : Color.theme.textSecondary)
-              .lineLimit(1)
-            Spacer(minLength: 0)
+    ScrollView {
+      VStack(alignment: .leading, spacing: 0) {
+        ForEach(Self.values(kind, model, l10n)) { value in
+          Button(action: value.toggle) {
+            HStack(spacing: Theme.Space.step) {
+              Image(systemName: "checkmark")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Color.theme.accentBright)
+                .opacity(value.on ? 1 : 0)
+              Text(value.title)
+                .font(Font.theme.chrome)
+                .foregroundStyle(value.on ? Color.theme.textPrimary : Color.theme.textSecondary)
+                .lineLimit(1)
+              Spacer(minLength: 0)
+            }
+            .padding(.horizontal, Theme.Space.step)
+            .frame(height: TaskPaletteRowMetrics.line)
+            .contentShape(Rectangle())
           }
-          .padding(.horizontal, Theme.Space.step)
-          .frame(height: TaskPaletteRowMetrics.line)
-          .contentShape(Rectangle())
+          .buttonStyle(.plain)
+          .focusable(false)
         }
-        .buttonStyle(.plain)
-        .focusable(false)
       }
+      .padding(Theme.Space.tick)
+      .frame(minWidth: 160, alignment: .leading)
     }
-    .padding(Theme.Space.tick)
-    .frame(minWidth: 160, alignment: .leading)
+    .scrollIndicators(.automatic)
+    .frame(maxHeight: maxHeight)
     .fixedSize()
     .background(
       RoundedRectangle(cornerRadius: Theme.Radius.row).fill(Color.theme.bgBase)

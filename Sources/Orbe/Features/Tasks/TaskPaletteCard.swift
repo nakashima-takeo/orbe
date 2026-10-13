@@ -82,20 +82,23 @@ struct TaskPaletteCard: View {
     Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
   }
 
-  /// 開いている絞り込みのメニューを、そのドロップダウンの直下に重ねる。メニューの外のクリックはメニューを閉じるだけで、
-  /// 下へは届かない。
+  /// 開いている絞り込みのメニューを、そのドロップダウンの直下に重ねる。メニューはカードの下端の手前までに収める。
+  /// メニューの外のクリックはメニューを閉じるだけで、下へは届かない。
   @ViewBuilder private func filterMenu(_ anchors: [TaskPaletteFilterKind: Anchor<CGRect>])
     -> some View
   {
     if let kind = model.openFilterMenu, let anchor = anchors[kind] {
       GeometryReader { proxy in
         let chip = proxy[anchor]
+        let top = chip.maxY + Theme.Space.tick
         ZStack(alignment: .topLeading) {
           Color.clear
             .contentShape(Rectangle())
             .onTapGesture { model.closeFilterMenu() }
-          TaskPaletteFilterMenu(model: model, kind: kind)
-            .offset(x: chip.minX, y: chip.maxY + Theme.Space.tick)
+          TaskPaletteFilterMenu(
+            model: model, kind: kind, maxHeight: proxy.size.height - top - Theme.Space.beat
+          )
+          .offset(x: chip.minX, y: top)
         }
       }
     }
