@@ -17,7 +17,7 @@ extension WindowController {
   }
 
   /// 既存セッションを resume してエージェントを新タブで起こす（制御 API の resume_agent）。再開は休眠のタブの起床と
-  /// 同じ組み立て（`openResumedTab`）を通る——秘書の会話なら秘書の役割の指示も添える。その会話が既に生きているタブで
+  /// 同じ組み立て（`openResumedTab`）を通る。その会話が既に生きているタブで
   /// 開いていれば、新しく起こさずそのタブを返す（同じ会話を 2 つの claude が同時に書くと記録が混ざる）。
   func controlResumeAgent(command: String, sessionId: String, workspaceId: Int?, cwd: String?)
     -> Result<AgentLaunch, ControlError>

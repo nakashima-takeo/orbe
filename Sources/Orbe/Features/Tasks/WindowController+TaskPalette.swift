@@ -32,11 +32,12 @@ extension WindowController {
     p.onContinueWait = { [weak self] id in self?.continueWait(taskId: id) }
     p.continuationBlock = { [weak self] id in self?.continuationBlock(taskId: id) }
     p.onAskSecretary = { [weak self] ask in
-      guard let self else { return .failure(.claudeMissing) }
+      guard let self else { return .claudeMissing }
       do throws(Secretary.Refusal) {
-        return .success(try self.secretary.ask(ask, from: .palette))
+        try self.secretary.ask(ask, from: .palette)
+        return nil
       } catch {
-        return .failure(error)
+        return error
       }
     }
     model.taskPalette = p

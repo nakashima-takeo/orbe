@@ -71,7 +71,8 @@ struct TaskPaletteDetail: View {
             descriptionField(task)
               .id(TaskDetailStop.field(.description))
               .padding(.top, Theme.Space.beat)
-            TaskPaletteDetailBottom(model: model, task: task)
+            TaskPaletteDetailActions(model: model, task: task)
+              .padding(.top, Theme.Space.beat)
           }
           .padding(.horizontal, Theme.Space.span)
           .padding(.bottom, Theme.Space.bar)

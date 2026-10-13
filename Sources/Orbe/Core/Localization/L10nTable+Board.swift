@@ -21,6 +21,7 @@ extension L10n {
     .boardAskClaudeMissing: (
       "claude が見つからないので依頼できない", "claude not found, so the request was not sent"
     ),
+    .boardAskUnavailable: ("依頼できなかった", "Couldn’t send the request"),
     .boardAskFixGone: ("その自動追加はもうありません", "That auto-add no longer exists"),
   ]
 }

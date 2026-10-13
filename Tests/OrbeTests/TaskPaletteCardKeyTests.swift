@@ -164,15 +164,17 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.query, "")
   }
 
-  /// 入力欄の ⌘↵ は onSubmit（↵ = 追加）へ流れず、打った文を秘書に頼む。タスクの行を選んで ⌘↵ なら、頼む欄が開いて
-  /// 補足の入力に焦点が移り、↵ でそのタスクを頼む。
-  func testCommandEnterInTheFieldAsksInsteadOfAddingAndOnARowOpensTheAsk() {
+  /// 入力欄の ⌘↵ は onSubmit（↵ = 追加）へ流れず、打った文を agent に任せる。タスクの行を選んで ⌘↵ なら、そのタスクの
+  /// agent を開く。
+  func testCommandEnterInTheFieldHandsTheTextOverAndOnARowOpensTheAgent() {
     let model = model()
     var asks: [SecretaryAsk] = []
     model.onAskSecretary = {
       asks.append($0)
-      return .success(.accepted)
+      return nil
     }
+    var opened: [Int] = []
+    model.onOpenWorktreePalette = { opened.append($0) }
     let window = mount(model)
 
     type("見積もり", into: window)
@@ -181,15 +183,44 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.store.tasks.count, 3, "足さない")
 
     press(Key.enter, "\r", .command, to: window)
-    XCTAssertEqual(model.askingTaskID, 3, "選んでいる行の直下に頼む欄")
-    type("直して", into: window)
+    XCTAssertEqual(opened, [3], "選んでいる行のタスクの agent を開く")
+    XCTAssertEqual(asks.count, 1)
+  }
+
+  /// 行の ⌘↵ は ⌘T と同じ口——待ちが解けたタスクなら、一覧でも右の欄でも ⌘T の画面を開かずに会話を続きから始める。
+  func testCommandEnterOnAResolvedWaitContinuesTheConversationLikeCommandT() {
+    let condition = WaitCondition(
+      WaitConditionRequest(
+        description: "レビューが付いたら", command: "gh pr view 214", everyMinutes: 10,
+        deadline: DesignSceneFixtures.taskToday.addingTimeInterval(86400),
+        conversation: WaitConversation(command: "claude", sessionId: "s-1", workspace: nil)),
+      setAt: DesignSceneFixtures.taskToday)
+    let model = TaskPaletteSamples.model([
+      TaskPaletteSamples.task(1, "a", .inProgress) {
+        $0.wait = .resolved(
+          WaitResolution(
+            waiting: TaskItem.Waiting(
+              reason: "レビュー待ち", since: DesignSceneFixtures.taskToday, condition: condition),
+            how: .satisfied(output: "レビューが付いた"), at: DesignSceneFixtures.taskToday))
+      }
+    ])
+    var continued: [Int] = []
+    var opened: [Int] = []
+    model.onContinueWait = {
+      continued.append($0)
+      return nil
+    }
+    model.onOpenWorktreePalette = { opened.append($0) }
+    let window = mount(model)
+    XCTAssertEqual(model.selectedID, .task(1), "前提")
+
     press(Key.enter, "\r", .command, to: window)
-    XCTAssertEqual(asks.count, 1, "頼む欄の中の ⌘↵ は送らない")
-    XCTAssertEqual(model.askingTaskID, 3, "欄は開いたまま")
-    XCTAssertEqual(model.draftText, "直して", "補足も残る")
-    press(Key.enter, "\r", to: window)
-    XCTAssertEqual(asks.last, .task(model.store.tasks.first { $0.id == 3 }!, note: "直して"))
-    XCTAssertNil(model.draft)
+    model.enterDetail()
+    flush(window)
+    press(Key.enter, "\r", .command, to: window)
+
+    XCTAssertEqual(continued, [1, 1])
+    XCTAssertEqual(opened, [])
   }
 
   /// 押し始めを見ていない ↵ のリピートだけが入力欄に届いても、完了にも追加にもならない。

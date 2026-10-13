@@ -100,15 +100,13 @@ extension TaskPaletteModelTests {
     palette.enterDetail()
     palette.toggleTab()
     palette.openWorktreePalette()
-    palette.askSecretary()
-    palette.openAsk(1)
+    palette.openAgent(forTask: 1)
 
     XCTAssertEqual(palette.store.tasks.map(\.id), [1, 2])
     XCTAssertEqual(palette.store.tasks.map(\.status), [.todo, .todo])
     XCTAssertEqual(palette.area, .list)
     XCTAssertEqual(palette.visibleTab, .tasks)
     XCTAssertEqual(opened, [])
-    XCTAssertNil(palette.draft, "秘書に頼む欄も開かない")
     palette.cancelPick()
     XCTAssertEqual(palette.visibleTab, .github, "やめると入る前のタブへ戻る")
   }

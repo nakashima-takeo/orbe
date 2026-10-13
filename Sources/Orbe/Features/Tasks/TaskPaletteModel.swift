@@ -61,12 +61,8 @@ import Observation
   var draft: TaskEditDraft? {
     didSet { if draft?.target != oldValue?.target { focus() } }
   }
-  /// 書くのはモデル（拡張を含む）だけ。失敗を消す点が操作の境目なので、通知も一緒に消える。
-  var error: TaskPaletteError? {
-    didSet { notice = nil }
-  }
-  /// フッターの左に次の操作まで出す知らせ（秘書に頼んだ）。書くのはモデル（拡張を含む）だけ。
-  var notice: TaskPaletteNotice?
+  /// 書くのはモデル（拡張を含む）だけ。
+  var error: TaskPaletteError?
   /// 画面を開いている間に入力欄から最後に足したタスク（「今足した」の印）。書くのはモデル（拡張を含む）だけ。
   var justAdded: Int?
   /// 右の欄の待ちの条件の箱で開いている部分。画面が持ち、別のタスクを選ぶと閉じる。書くのはモデル（拡張を含む）だけ。
@@ -87,10 +83,8 @@ import Observation
   var onContinueWait: (Int) -> TaskPaletteError? = { _ in nil }
   /// 解けた待ちを続きから始められない理由（タスクの ID。nil は始められる）。
   var continuationBlock: (Int) -> TaskPaletteError? = { _ in nil }
-  /// 秘書に頼む。
-  var onAskSecretary: (SecretaryAsk) -> Result<Secretary.Acceptance, Secretary.Refusal> = { _ in
-    .failure(.claudeMissing)
-  }
+  /// 秘書の係へ頼む（agent に任せる）。受けなければ断りを返す。
+  var onAskSecretary: (SecretaryAsk) -> Secretary.Refusal? = { _ in .claudeMissing }
 
   /// 開いた時点で、出ている行の結び付きの値を取り直す（届くまでは前回の答えで描く）。GitHub タブの一覧の
   /// 取り直し（`openLists.open(root:)`）は開く側が呼ぶ。
@@ -158,7 +152,7 @@ import Observation
 
   var rowsInput: TaskPaletteRows.Input {
     TaskPaletteRows.Input(
-      tasks: store.tasks, query: taskList.query, picking: pick != nil, asking: askingTaskID,
+      tasks: store.tasks, query: taskList.query, picking: pick != nil,
       justAdded: justAdded, scope: scope, doneExpanded: doneExpanded,
       workspaces: workspaces, today: today, timeZone: timeZone, items: githubItems.answers,
       viewerLogin: viewer.login, agents: agents.agents)
@@ -199,7 +193,6 @@ import Observation
     switch draft?.target {
     case .task(_, let field): return .edit(field)
     case .paneDue: return .paneDue
-    case .ask: return .ask
     case nil: return area == .list ? .field : .card
     }
   }
@@ -213,8 +206,7 @@ import Observation
   func focus() { focusToken &+= 1 }
 
   /// タスク・一覧・範囲・タブ・開閉が変わったあとの付け直し。選択は一覧の状態ごとに、その行で付け直す
-  /// （`ListState`）。右の欄に居る間に選択が別の行へ移ったら一覧へ戻り、対象が消えた下書きと、対象が
-  /// 一覧から外れた（完了で畳まれた・範囲の外へ出た）秘書に頼む欄は捨てる。右の欄に
+  /// （`ListState`）。右の欄に居る間に選択が別の行へ移ったら一覧へ戻り、対象が消えた下書きは捨てる。右の欄に
   /// 居る間に、選択の同一性が変わった・選んだ行が結び付いていない項目でなくなったら一覧へ戻る。
   func reconcile() {
     endStalePick()
@@ -225,7 +217,6 @@ import Observation
     if let id = draft?.taskID, !store.tasks.contains(where: { $0.id == id }) {
       draft = nil
     }
-    if let id = askingTaskID, selectedID != .task(id) { draft = nil }
     reconcilePane()
     if case .detail = area, selectedID != previous || selectedTask == nil {
       leaveEditing()

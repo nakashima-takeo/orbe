@@ -11,7 +11,8 @@ private typealias GitHub = TaskPaletteGitHubSamples
 /// 壊れると何が起きるか: ↵ で作ったタスクが別の workspace・別の項目に付く、右の欄で選んだ優先度や期限が
 /// 落ちる。選択が動いた後に裏の書き込みが別の項目へアサインする。アサインが黙って捨てられても何も言わない。
 /// 前回の一覧があるのに「取得できませんでした」で隠れる。タブを移るたびに絞り込みと選んだ行が消える。agent が
-/// 結び付けた直後に、右の欄の値が別の行のものとして残る。
+/// 結び付けた直後に、右の欄の値が別の行のものとして残る。待ちの解けたタスクの ⌘T が、記録した会話を続けずに別の
+/// 場所で新しい会話を始める。
 extension TaskPaletteModelTests {
   // MARK: - 本体
 
@@ -215,15 +216,28 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(reopened.writeFailure(GitHub.id(5)), .assignee)
   }
 
-  func testCommandTOnALinkedItemOpensItsTask() {
+  /// 結び付いている行の ⌘T はそのタスクで開く。タスクのタブの ⌘T と同じく、待ちが解けていれば ⌘T の画面を開かずに
+  /// 会話を続きから始める。
+  func testCommandTOnALinkedItemWithAResolvedWaitContinuesItsTasksConversation() {
     let palette = GitHub.model(
-      [task(4, "a") { $0.links = [GitHub.link(5)] }], issues: [GitHub.issue(5)])
+      [
+        task(4, "a", .inProgress) {
+          $0.links = [GitHub.link(5)]
+          $0.wait = self.resolved(conversation: self.conversation)
+        }
+      ], issues: [GitHub.issue(5)])
+    var continued: [Int] = []
     var opened: [Int] = []
+    palette.onContinueWait = {
+      continued.append($0)
+      return nil
+    }
     palette.onOpenWorktreePalette = { opened.append($0) }
 
     palette.openWorktreePalette()
 
-    XCTAssertEqual(opened, [4])
+    XCTAssertEqual(continued, [4])
+    XCTAssertEqual(opened, [])
     XCTAssertEqual(palette.store.tasks.count, 1, "タスクを足さない")
   }
 

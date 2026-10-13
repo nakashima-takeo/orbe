@@ -129,19 +129,6 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     XCTAssertEqual(TaskPaletteRows.build(typed), [], "一覧は空（「タスクはありません」も出さない）")
   }
 
-  /// 秘書に頼む欄は、開いたタスクの行の直後に置く（主の結び付きがあれば番号、無ければタイトルで呼ぶ）。
-  func testTheAskRowFollowsItsTask() throws {
-    var linked = task(2, "Dispatch")
-    linked.links = [TaskLink(item: GitHubItemID(repo: "o/r", number: 218)!, kind: .issue)]
-    var asking = input([task(1, "a"), linked, task(3, "c")])
-    asking.asking = 2
-
-    let rows = TaskPaletteRows.build(asking)
-
-    let index = try XCTUnwrap(rows.firstIndex { $0.id == .selectable(.task(2)) })
-    XCTAssertEqual(rows[index + 1], .ask(TaskPaletteAskRow(taskID: 2, label: "#218")))
-  }
-
   // MARK: - 範囲と件数
 
   func testOpenedScopeShowsOnlyTasksOfTheOpenedWorkspace() {

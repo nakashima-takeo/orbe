@@ -107,7 +107,7 @@ extension WindowControllerBoardTests {
     assertShows(wc, opened)
   }
 
-  /// 裏で起こすタブ（`select: false` の spawn——秘書・`start_task` と同じ経路）は、ボードを押しのけずに起きる。
+  /// 裏で起こすタブ（`select: false` の spawn——`start_task` と同じ経路）は、ボードを押しのけずに起きる。
   func testUnselectedSpawnWakesBehindTheBoard() throws {
     let wc = try homeOnBoard(tabs: 0)
     let homeId = wc.current.id

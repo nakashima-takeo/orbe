@@ -96,6 +96,20 @@ final class AgentCatalogTests: OrbeTestCase {
       "/bin/claude -- '- 箇条書き'")
   }
 
+  /// 席に置けない制御文字（改行・タブ以外の C0・DEL・C1）は空白にして添える。NUL はコマンドの C 文字列をそこで切り、
+  /// 起動を壊す。新規起動でも再開でも同じ。
+  func testFirstInputControlCharactersOtherThanNewlineAndTabBecomeSpaces() {
+    let input = "a\u{0}b\u{1B}[1mc\u{7F}d\u{85}e\nf\tg"
+    let seated = "'a b [1mc d e\nf\tg'"
+    XCTAssertEqual(
+      AgentCatalog.startCommand(
+        AgentCLI(command: "claude", path: "/bin/claude"), firstInput: input),
+      "/bin/claude -- \(seated)")
+    XCTAssertEqual(
+      AgentCatalog.resumeCommand(forAgent: "claude", sessionId: "s-1", firstInput: input),
+      "claude --resume s-1 -- \(seated)")
+  }
+
   /// 外の人が書いた文面（確認の出力）を含む入力でも、シェルは 1 語として読み、何も実行しない。
   func testFirstInputReachesTheCLIAsOneWordWithoutRunningAnything() throws {
     let input = "レビューが付いた\n@sato: it's $(touch pwned) `touch pwned2`; \"x\""

@@ -16,7 +16,7 @@ extension WindowController {
   /// `cwd` に nil を渡すと対象 workspace のアクティブタブの cwd → その workspace の rootPath へ落ちる
   /// （`newTabCwd(inWorkspaceAt:)`）。戻り値は生えたタブ・workspace の id で、
   /// workspaceIndex が範囲外ならタブを作らず nil。`selects` が偽なら選ばずに起こす（`wakeUnselected`）——人が
-  /// 見ている workspace とタブを変えずに、裏でタブを起こす経路（秘書・`start_task`・`select: false` の `spawn`）が使う。
+  /// 見ている workspace とタブを変えずに、裏でタブを起こす経路（`start_task`・`select: false` の `spawn`）が使う。
   @discardableResult
   func openTab(
     workspaceIndex: Int, cwd: String?, command: String? = nil, env: [String: String] = [:],
@@ -29,13 +29,12 @@ extension WindowController {
     return place(tab, workspaceIndex: workspaceIndex, selects: selects)
   }
 
-  /// 会話を新しいタブで再開する（続きから・`resume_agent`・秘書）。休眠のタブとして足して `openTab` と同じ規則で
+  /// 会話を新しいタブで再開する（続きから・`resume_agent`）。休眠のタブとして足して `openTab` と同じ規則で
   /// 起こすので、再開の組み立ては休眠のタブの起床（`makeTab` の resolver）の 1 か所を通る。開いた時点で会話のタブの
   /// 索引に載る（続けて同じ会話を開こうとしても、このタブが見つかる）。`firstInput` は会話の最初の入力。
   @discardableResult
   func openResumedTab(
-    _ session: AgentSession, workspaceIndex: Int, cwd: String?, firstInput: String? = nil,
-    selects: Bool = true
+    _ session: AgentSession, workspaceIndex: Int, cwd: String?, firstInput: String? = nil
   ) -> OpenedTab? {
     guard workspaces.indices.contains(workspaceIndex) else { return nil }
     let state = TabState(
@@ -43,7 +42,7 @@ extension WindowController {
       explicitTitle: nil)
     let tab = makeTab(from: state, group: group(for: state.cwd, in: workspaces[workspaceIndex]))
     if let firstInput { tab.addWakeInput(firstInput) }
-    let opened = place(tab, workspaceIndex: workspaceIndex, selects: selects)
+    let opened = place(tab, workspaceIndex: workspaceIndex, selects: true)
     refreshAgentSessionTabs()
     return opened
   }

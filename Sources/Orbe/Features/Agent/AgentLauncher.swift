@@ -17,8 +17,6 @@ final class AgentLauncher {
   var configuredDefault: (() -> String?)?
   /// default agent を global スコープの設定変更として書く窓口。WindowController が注入（store 経由に一本化）。
   var onSetDefault: ((String) -> Void)?
-  /// 検出が済んだ知らせ（検出のたびに呼ぶ）。
-  var onResolved: (() -> Void)?
   /// 各 CLI へプラグインを登録するか。登録は利用者の CLI の設定（登録先・コピー）を書き換えるので、隔離起動は登録せず、
   /// 登録のためのオンボーディングも出さない。隔離起動のタブの agent は、常用の Orbe が登録したプラグインで動く。
   var registersPlugin = !StateDir.isIsolated
@@ -219,23 +217,20 @@ final class AgentLauncher {
     onDismissPalette?()
   }
 
-  /// 永続から復元した agent セッションを resume 起動の (command, env) に解決する（`arguments` は再開に添える追加の
-  /// 引数、`firstInput` は会話の最初の入力）。起動と同じ PATH を渡す。未対応 agent は nil（呼び出し側は素のシェルで
-  /// 復元）。
-  func resumeSpawn(
-    for session: AgentSession, arguments: [String] = [], firstInput: String? = nil
-  ) -> (command: String, env: [String: String])? {
+  /// 永続から復元した agent セッションを resume 起動の (command, env) に解決する（`firstInput` は会話の最初の入力）。
+  /// 起動と同じ PATH を渡す。未対応 agent は nil（呼び出し側は素のシェルで復元）。
+  func resumeSpawn(for session: AgentSession, firstInput: String? = nil)
+    -> (command: String, env: [String: String])?
+  {
     guard let sessionId = session.sessionId,
       let command = AgentCatalog.resumeCommand(
-        forAgent: session.command, sessionId: sessionId, arguments: arguments,
-        firstInput: firstInput)
+        forAgent: session.command, sessionId: sessionId, firstInput: firstInput)
     else { return nil }
     return (command, launchEnvironment)
   }
 
-  /// 検出完了の単一窓口。提示中の onboarding／palette 双方の detecting を解いて結果へ差し替え、知らせる。
+  /// 検出完了の単一窓口。提示中の onboarding／palette 双方の detecting を解いて結果へ差し替える。
   private func handleResolved() {
-    onResolved?()
     if let m = appModel?.onboarding {
       m.setCommands(catalog.agents.map(\.command))
       m.detecting = false
