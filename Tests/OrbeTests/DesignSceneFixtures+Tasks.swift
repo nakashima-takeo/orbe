@@ -3,7 +3,7 @@ import Foundation
 @testable import Orbe
 
 /// タスク画面の fixture（見本 List.png と同じ行・値）。今日は 2025-10-04 に固定し、待ちの日数と期限の曜日を
-/// 決定論にする（作成日と期限は見本の今日からの隔たりをそのまま写す）。
+/// 決定論にする（作成日と期限は見本の今日からの日数の差をそのまま写す）。
 extension DesignSceneFixtures {
   static let taskCalendar: Calendar = {
     var calendar = Calendar(identifier: .gregorian)

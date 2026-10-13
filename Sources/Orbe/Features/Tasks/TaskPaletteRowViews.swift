@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// タスクのタブの左の一覧。上に絞り込みの段、その下に表の見出しと行。行は `TaskPaletteRows` が組んだ値をそのまま
+/// タスクのタブの左の一覧。上に絞り込みの行、その下に表の見出しと行。行は `TaskPaletteRows` が組んだ値をそのまま
 /// 描き、選択は行の同一性で光らせる。
 struct TaskPaletteList: View {
   @Bindable var model: TaskPaletteModel
@@ -32,7 +32,7 @@ struct TaskPaletteList: View {
     }
   }
 
-  /// 最小の量だけ送る（見えていれば動かない）。入力の行き先は表の行ではないので、表の先頭を見せる。
+  /// 最小の量だけスクロールする（見えていれば動かない）。入力の行き先は表の行ではないので、表の先頭を見せる。
   private func scroll(_ proxy: ScrollViewProxy, to id: TaskPaletteRowID?, _ rows: [TaskPaletteRow])
   {
     guard let id else { return }
@@ -88,7 +88,7 @@ struct TaskPaletteTableColumns<State: View, Title: View, Rest: View>: View {
   }
 }
 
-/// 表の見出し。押すとその列で並べ、並べている列は前景を一段上げて向きの矢印（既定の向きは ↓、逆は ↑）を添える。
+/// 表の見出し。押すとその列で並べ、並べている列は文字を濃くして向きの矢印（既定の向きは ↓、逆は ↑）を添える。
 /// 焦点は取らない。
 struct TaskPaletteTableHeader: View {
   @Bindable var model: TaskPaletteModel
@@ -270,7 +270,7 @@ struct TaskPaletteTaskRowView: View {
   }
 }
 
-/// 表の状態の札（同じ幅。未着手と完了は中立、進行中と待ちは状態の色）。
+/// 表に出す状態の札（同じ幅。未着手と完了は中立、進行中と待ちは状態の色）。
 struct TaskStateChip: View {
   let state: TaskItem.DisplayState
   @Environment(\.localization) private var l10n

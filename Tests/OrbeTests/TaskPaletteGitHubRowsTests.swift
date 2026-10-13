@@ -166,7 +166,7 @@ final class TaskPaletteGitHubRowsTests: OrbeTestCase {
   }
 
   /// 担当が自分・作成者が自分は login で（大小文字を問わず）、レビュー依頼は検索の答え（チーム宛を含む）で
-  /// 決める。札を複数入れると、そのどれかに当たる項目を出す。
+  /// 決める。札を複数オンにすると、そのどれかに当たる項目を出す。
   func testFiltersSelectByLoginAndTheReviewRequestSearch() {
     let issues = [issue(1, assignees: ["ME"]), issue(2, author: "me"), issue(3)]
     let pullRequests = [pr(10), pr(11, teams: ["o/core"]), pr(12, author: "Me")]

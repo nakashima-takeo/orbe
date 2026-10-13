@@ -112,7 +112,7 @@ struct TaskPaletteGitHubList: View {
   }
 }
 
-/// 絞り込みの札（担当が自分 / 作成者が自分 / レビュー依頼。押して入れ切り）と、右端にリポジトリ名（owner を除く）。
+/// 絞り込みの札（担当が自分 / 作成者が自分 / レビュー依頼。押してオン・オフ）と、右端にリポジトリ名（owner を除く）。
 /// 件数は一覧の全件で数え、自分がまだ分からない札には出さない。焦点は取らない。
 struct TaskGitHubFilterChips: View {
   @Bindable var model: TaskPaletteModel

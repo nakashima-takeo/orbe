@@ -96,7 +96,7 @@ enum TaskPaletteGitHubRows {
     let login: String?
     /// 自分（所属チームを含む）にレビューを頼んでいる PR の番号。nil = まだ分からない。
     let reviewRequests: Set<Int>?
-    /// 入っている札（どれかに当たる項目を出す。空は全件）。
+    /// オンの札（どれかに当たる項目を出す。空は全件）。
     let filters: Set<TaskGitHubFilter>
     let query: String
     /// 「さらに」で全部を出した区分。
@@ -206,7 +206,7 @@ enum TaskPaletteGitHubRows {
       task: task)
   }
 
-  /// 絞り込みの札（入っている札のどれか。空は全件）と入力（タイトルの部分一致か、`#` の有無を問わない番号の
+  /// 絞り込みの札（オンの札のどれか。空は全件）と入力（タイトルの部分一致か、`#` の有無を問わない番号の
   /// 前方一致）の両方に当たるか。
   private static func matches(_ item: GitHubOpenItem, _ input: Input) -> Bool {
     guard input.filters.isEmpty || input.filters.contains(where: { passes(item, $0, input) }) else {

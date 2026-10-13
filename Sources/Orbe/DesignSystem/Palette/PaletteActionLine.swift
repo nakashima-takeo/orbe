@@ -2,7 +2,7 @@ import SwiftUI
 
 /// 「このキーで何が起きるか」を言う 1 行。言語ごとの語順をテンプレート（`%1$@`…の位置指定）が持ち、
 /// 差し込む値だけを色分けして 1 つの Text に連結する（単位で truncate し、狭幅で個々に折り返して崩れない）。
-/// 先頭のキーと地の語は muted、強調の値は textPrimary、accent の値は accent、地の値は地の語と同じ muted。
+/// 先頭のキーと地の語は muted、強調の値は textPrimary、accent の値は accent、本文と同じ色の値は地の語と同じ muted。
 struct PaletteActionLine: View {
   enum Slot {
     case emphasis(String)

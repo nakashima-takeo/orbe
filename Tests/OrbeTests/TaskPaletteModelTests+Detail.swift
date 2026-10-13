@@ -13,7 +13,7 @@ extension TaskPaletteModelTests {
     return palette
   }
 
-  /// 完了のタスク 1 件だけを開き、完了の札を入れてその右の欄に入った状態。
+  /// 完了のタスク 1 件だけを開き、完了の札をオンにしてその右の欄に入った状態。
   func detailOfDone() -> TaskPaletteModel {
     let palette = model([task(1, "a", .done)])
     palette.toggleState(.done)

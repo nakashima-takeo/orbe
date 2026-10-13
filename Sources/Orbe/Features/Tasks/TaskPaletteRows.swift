@@ -26,7 +26,7 @@ struct TaskPaletteWorkspaces: Equatable {
 /// 選べる行の同一性。選択はこれで持ち、位置は付け直しのときだけ使う。
 enum TaskPaletteRowID: Hashable {
   /// 入力欄に打った文の行き先（入力欄の中のヒントが描く。一覧の行は持たない）。選ばれている間の ↵ は
-  /// タスクに書き、⌘↵ は agent に任せる。
+  /// タスクに足し、⌘↵ は agent に任せる。
   case add
   case task(Int)
 }
@@ -147,7 +147,7 @@ enum TaskPaletteRowMetrics {
 
 /// 件数（全タスクで数え、絞り込みと入力には左右されない）。
 struct TaskPaletteCounts: Equatable {
-  /// 表の状態ごとの数（状態の札）。
+  /// 表に出す状態ごとの数（状態の札）。
   let states: [TaskItem.DisplayState: Int]
   /// 未完了の数（タブの「タスク N」）。
   let undone: Int

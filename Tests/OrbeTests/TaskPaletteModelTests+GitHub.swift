@@ -314,7 +314,7 @@ extension TaskPaletteModelTests {
 
   // MARK: - 絞り込み・さらに
 
-  /// 札は入れ切りで、入れるたび・切るたびに一覧の先頭を選ぶ。
+  /// 札はオン・オフで、オンにするたび・オフにするたびに一覧の先頭を選ぶ。
   func testTogglingRelationChipsSelectsTheFirstRow() {
     let palette = GitHub.model(
       [],

@@ -13,7 +13,7 @@ enum TaskPaletteError: Error, Equatable {
   case link
   /// claude が見つからないので agent に任せられない。
   case secretaryClaude
-  /// agent を起こせなかった。
+  /// agent を起動できなかった。
   case secretaryUnavailable
 }
 

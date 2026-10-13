@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 絞り込み・並び・絞り込みの面と、選んでいるタスクを絞り込みに合わなくても表に残す規則。
+/// 絞り込み・並び・絞り込みのメニューと、選んでいるタスクを絞り込みに合わなくても表に残す規則。
 extension TaskPaletteModelTests {
   private func rowIDs(_ palette: TaskPaletteModel) -> [TaskPaletteRowID] {
     palette.rows.compactMap(\.selectableID)
@@ -93,7 +93,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.selectedID, .task(2))
   }
 
-  // MARK: - 絞り込みの面
+  // MARK: - 絞り込みのメニュー
 
   func testTogglingValuesKeepsTheFilterMenuOpenAndEnteringTheDetailClosesIt() {
     let palette = threeTodos()
@@ -101,7 +101,7 @@ extension TaskPaletteModelTests {
 
     palette.togglePriorityFilter(.medium)
     palette.togglePriorityFilter(.high)
-    XCTAssertEqual(palette.openFilterMenu, .priority, "続けて複数の値を入れられる")
+    XCTAssertEqual(palette.openFilterMenu, .priority, "続けて複数の値をオンにできる")
 
     palette.enterDetail()
     XCTAssertNil(palette.openFilterMenu)

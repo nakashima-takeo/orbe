@@ -44,20 +44,20 @@ import Observation
   var filter = TaskPaletteFilter()
   /// タスクのタブの並び。書くのはモデル（拡張を含む）だけ。
   var sort = TaskPaletteSort()
-  /// 開いている絞り込みの面。書くのはモデル（拡張を含む）だけ。
+  /// 開いている絞り込みのメニュー。書くのはモデル（拡張を含む）だけ。
   var openFilterMenu: TaskPaletteFilterKind?
-  /// GitHub タブの絞り込みの札（入っている関係のどれかに当たる項目を出す。空は全件）。書くのはモデル（拡張を
+  /// GitHub タブの絞り込みの札（オンの関係のどれかに当たる項目を出す。空は全件）。書くのはモデル（拡張を
   /// 含む）だけ。
   var githubFilters: Set<TaskGitHubFilter> = []
   /// 「さらに」で全部を出した区分。書くのはモデル（拡張を含む）だけ。
   var expandedKinds: Set<GitHubItemKind> = []
   /// 右の欄の値。書くのはモデル（拡張を含む）だけ。
   var pane = TaskGitHubPane()
-  /// 選ぶ状態（自分の一覧の状態を持つ）。書くのはモデル（拡張を含む）だけ。入る・出るときは絞り込みの面を閉じる。
+  /// 選ぶ状態（自分の一覧の状態を持つ）。書くのはモデル（拡張を含む）だけ。入る・出るときは絞り込みのメニューを閉じる。
   var pick: TaskPalettePick? {
     didSet { if (pick == nil) != (oldValue == nil) { openFilterMenu = nil } }
   }
-  /// キーを受ける場所。書くのはモデル（拡張を含む）だけ。一覧を離れたら絞り込みの面を閉じる。
+  /// キーを受ける場所。書くのはモデル（拡張を含む）だけ。一覧を離れたら絞り込みのメニューを閉じる。
   var area: TaskPaletteArea = .list {
     didSet {
       if area != oldValue { focus() }
@@ -232,7 +232,7 @@ import Observation
 
   var selectedID: TaskPaletteRowID? { taskList.selectedID }
 
-  /// 一覧を送る先。人の操作（選び直し・絞り込みや並びの切り替え・画面からの変異）のたびに決め直す。
+  /// 一覧をスクロールする先。人の操作（選び直し・絞り込みや並びの切り替え・画面からの変異）のたびに決め直す。
   var scrollTarget: ListScrollTarget<TaskPaletteRowID>? { taskList.scrollTarget }
 
   /// 選んでいるタスク（右の欄に出すもの）。入力の行き先では nil。
