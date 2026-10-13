@@ -2,11 +2,13 @@ import SwiftUI
 
 /// 「このキーで何が起きるか」を言う 1 行。言語ごとの語順をテンプレート（`%1$@`…の位置指定）が持ち、
 /// 差し込む値だけを色分けして 1 つの Text に連結する（単位で truncate し、狭幅で個々に折り返して崩れない）。
-/// 先頭のキーと地の語は muted、強調の値は textPrimary、accent の値は accent。
+/// 先頭のキーと地の語は muted、強調の値は textPrimary、accent の値は accent、地の値は地の語と同じ muted。
 struct PaletteActionLine: View {
   enum Slot {
     case emphasis(String)
     case accent(String)
+    /// 人や agent の書いた値を、地の語と同じ色で（囲みはテンプレートが持つ）。
+    case plain(String)
   }
 
   /// 先頭に置くキー（`↵`・`space` など）。nil は置かない。
@@ -37,6 +39,8 @@ struct PaletteActionLine: View {
       fontResolver.text(value, base: Theme.Typography.meta).foregroundStyle(Color.theme.textPrimary)
     case .accent(let value):
       Text(value).foregroundStyle(Color.theme.accentPrimary)
+    case .plain(let value):
+      fontResolver.text(value, base: Theme.Typography.meta).foregroundStyle(Color.theme.textMuted)
     }
   }
 

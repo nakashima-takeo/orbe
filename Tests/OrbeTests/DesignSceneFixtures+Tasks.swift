@@ -68,6 +68,27 @@ extension DesignSceneFixtures {
     return TasksFile(version: TaskPersistence.version, nextId: 11, tasks: tasks)
   }
 
+  /// 見本の一覧のうち、経費精算（ID 1）とヘルプの検索（ID 2）を去年に作り、期限を来年にしたもの（年の付いた作成と
+  /// 期限。期限は曜日まで含めて最も長い書式の 12 月 30 日（水））。
+  static func taskYearDatesFile() -> TasksFile {
+    var file = taskDesignFile()
+    let lastYear = { (month: Int, day: Int) in
+      taskCalendar.date(from: DateComponents(year: 2024, month: month, day: day, hour: 10))!
+    }
+    let changes: [Int: (Date, String)] = [
+      1: (lastYear(12, 28), "2026-12-30"), 2: (lastYear(11, 15), "2026-01-05"),
+    ]
+    file.tasks = file.tasks.map { task in
+      guard let (createdAt, due) = changes[task.id] else { return task }
+      return TaskItem(
+        id: task.id, title: task.title, status: task.status, wait: task.wait,
+        priority: task.priority, due: TaskItem.DueDate(due), workspace: task.workspace,
+        description: task.description, createdAt: createdAt, createdBy: task.createdBy,
+        links: task.links, worktree: task.worktree)
+    }
+    return file
+  }
+
   /// 見本の worktree（`~/wt/<name>`。ファイルシステムには無い）。
   static func taskWorktree(_ name: String) -> TaskWorktree {
     TaskWorktree(key: "\(NSHomeDirectory())/wt/\(name)")

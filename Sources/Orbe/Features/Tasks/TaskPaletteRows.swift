@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// タスク画面を開いた時点の workspace の写し。開いている間に workspace が改名・削除されても、閉じて
 /// 開き直すまでこの値のまま（`Workspace` は観測できないので、描くたびに引くと反映が描き直しのついでに
@@ -111,9 +111,14 @@ enum TaskPaletteRowMetrics {
   static let columnGap: CGFloat = Theme.Space.step
   static let stateColumn: CGFloat = 56
   static let priorityColumn: CGFloat = 36
-  static let dueColumn: CGFloat = 60
+  /// 期限の列。最も長い書式（年の付いた「2026/12/31」と、どの UI 言語でも最も幅のある曜日名）が収まる幅。
+  static let dueColumn: CGFloat = {
+    let weekdays = Language.allCases.flatMap { TaskDueText.weekdays($0) }
+    return ceil(weekdays.map { cellWidth("0000/00/00 " + $0) }.max() ?? 0)
+  }()
   static let workspaceColumn: CGFloat = 64
-  static let createdColumn: CGFloat = 48
+  /// 作成の列。最も長い書式（年の付いた「2026/12/31」）が収まる幅。
+  static let createdColumn: CGFloat = ceil(cellWidth("0000/00/00"))
   /// 件名のタイトルの最小幅（日本語で 8 文字前後）。これより狭くなるときは、続く札と補足の側を切り詰める。
   static let titleMinWidth: CGFloat = 100
   /// 状態の札（同じ幅）。
@@ -124,6 +129,11 @@ enum TaskPaletteRowMetrics {
   static let glyphColumn: CGFloat = 12
   /// 一覧の内側の余白（⌘⇧S のリストと同じ）。
   static let listPadding: CGFloat = Theme.Space.note
+
+  /// 表の欄の字（`Theme.Typography.meta`）で書いた幅。
+  private static func cellWidth(_ text: String) -> CGFloat {
+    (text as NSString).size(withAttributes: [.font: Theme.Typography.meta]).width
+  }
 }
 
 /// 件数（全タスクで数え、絞り込みと入力には左右されない）。

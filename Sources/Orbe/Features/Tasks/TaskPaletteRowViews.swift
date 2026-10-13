@@ -197,32 +197,27 @@ struct TaskPaletteTaskRowView: View {
           .foregroundStyle(
             row.priority == .low ? Color.theme.textSecondary : Color.theme.textPrimary)
       }
-      HStack(spacing: Theme.Space.note) {
-        if row.needsReview {
-          Text(l10n.string(.taskPaletteReview))
-            .font(Font.theme.meta)
-            .foregroundStyle(Color.theme.textMuted)
-            .fixedSize()
-        }
-        if let pullRequest = row.pullRequest {
-          TaskPullRequestBadge(badge: pullRequest)
-        }
-        supplement
+      if row.needsReview {
+        Text(l10n.string(.taskPaletteReview))
+          .font(Font.theme.meta)
+          .foregroundStyle(Color.theme.textMuted)
+          .fixedSize()
+          .subjectBadge(dropOrder: 0)
       }
-    }
-  }
-
-  /// 件名の補足（待ちは「理由 · N日」、解けた待ちは起きたことの札、agent は「◌ claude 12分」）。
-  @ViewBuilder private var supplement: some View {
-    if let waiting = row.waiting {
-      TruncatingSlot("\(waiting.reason) · \(days(waiting.days))") {
-        Text($0).font(Font.theme.meta).foregroundStyle(Color.theme.textMuted)
+      if let pullRequest = row.pullRequest {
+        TaskPullRequestBadge(badge: pullRequest).subjectBadge(dropOrder: 1)
       }
-    } else if let resolved = row.resolved {
-      TaskResolvedBadge(resolved: resolved, clock: clock)
-    }
-    if let agent = row.agent {
-      TaskAgentBadge(agent: agent)
+      // 補足（待ちは「理由 · N日」で末尾を省略、解けた待ちは起きたことの札、agent は「◌ claude 12分」）。
+      if let waiting = row.waiting {
+        TruncatingSlot("\(waiting.reason) · \(days(waiting.days))") {
+          Text($0).font(Font.theme.meta).foregroundStyle(Color.theme.textMuted)
+        }
+      } else if let resolved = row.resolved {
+        TaskResolvedBadge(resolved: resolved, clock: clock).subjectBadge(dropOrder: 2)
+      }
+      if let agent = row.agent {
+        TaskAgentBadge(agent: agent).subjectBadge(dropOrder: 3)
+      }
     }
   }
 
@@ -268,47 +263,82 @@ struct TaskPaletteTaskRowView: View {
   }
 }
 
-/// 件名の 3 つの子（主の番号・タイトル・タイトルに続く札と補足）の並び。縮むのはタイトルが先で、タイトルが
-/// 最小幅まで縮んだら、続く札と補足の側を切り詰める（収まらない分は件名の列が切る）——件名で最も大事なのはタイトルで、
-/// 札に押されて消えてはいけないため。主の番号は縮めない。
+/// 件名の並び（主の番号・タイトル・続く札と補足）。縮むのはタイトルが先で、タイトルが最小幅まで縮んだら、続く札を
+/// `dropOrder` の小さい順にまるごと外す（途中で切った札は読めないため）。札でない補足（待ちの理由）は外さず、残りの幅で
+/// 末尾を省略する。件名で最も大事なのはタイトルで、札に押されて消えてはいけない。主の番号は縮めない。
 struct TaskSubjectLayout: Layout {
   let spacing: CGFloat
   let titleMinWidth: CGFloat
 
   func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-    let ideals = subviews.map { $0.sizeThatFits(.unspecified) }
-    let height = ideals.map(\.height).max() ?? 0
-    let ideal = widths(ideals, available: .infinity).enumerated().reduce(0) { sum, item in
-      sum + item.element + (item.offset > 0 && item.element > 0 ? spacing : 0)
-    }
+    let height = subviews.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
+    let widths = self.widths(subviews, available: proposal.width ?? .infinity)
+    let ideal =
+      widths.reduce(0) { $0 + $1 } + spacing * CGFloat(max(0, widths.count { $0 > 0 } - 1))
     return CGSize(width: proposal.width ?? ideal, height: proposal.height ?? height)
   }
 
   func placeSubviews(
     in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
   ) {
-    let ideals = subviews.map { $0.sizeThatFits(.unspecified) }
     var x = bounds.minX
-    for (index, width) in widths(ideals, available: bounds.width).enumerated() where width > 0 {
+    for (index, width) in widths(subviews, available: bounds.width).enumerated() {
       subviews[index].place(
         at: CGPoint(x: x, y: bounds.midY), anchor: .leading,
         proposal: ProposedViewSize(width: width, height: bounds.height))
-      x += width + spacing
+      if width > 0 { x += width + spacing }
     }
   }
 
-  /// 番号・タイトル・続きの幅。番号は理想の幅、タイトルは続きを理想の幅で置いた残り（最小幅は下回らない）、続きは
-  /// その残り。幅 0 の子は間隔ごと詰める。
-  private func widths(_ ideals: [CGSize], available: CGFloat) -> [CGFloat] {
-    guard ideals.count == 3 else { return ideals.map(\.width) }
-    let number = ideals[0].width
-    let title = ideals[1].width
-    let rest = ideals[2].width
-    var free = available - (number > 0 ? number + spacing : 0)
-    let restGap = rest > 0 ? spacing : 0
-    let titleWidth = min(title, max(min(title, titleMinWidth), free - rest - restGap))
-    free -= titleWidth + restGap
-    return [number, titleWidth, rest > 0 ? max(0, min(rest, free)) : 0]
+  /// 子ごとの幅（0 は出さない）。番号は理想の幅、札は理想の幅か 0、タイトルは最小幅を下回らない範囲で残りを取り、
+  /// 札でない補足はその残り。
+  private func widths(_ subviews: Subviews, available: CGFloat) -> [CGFloat] {
+    let ideals = subviews.map { $0.sizeThatFits(.unspecified).width }
+    guard ideals.count >= 2 else { return ideals }
+    let items = ideals.indices.dropFirst(2).filter { ideals[$0] > 0 }
+    let gap = { (width: CGFloat) in width > 0 ? width + self.spacing : 0 }
+    let space = available - gap(ideals[0])
+    // 列そのものが最小幅より狭ければ、タイトルは列に収まる幅で末尾を省略する（はみ出して切らない）。
+    let titleFloor = min(ideals[1], titleMinWidth, max(0, space))
+    var kept = items
+    func badgesWidth() -> CGFloat {
+      kept.filter { subviews[$0][SubjectDropOrder.self] != nil }.reduce(0) { $0 + gap(ideals[$1]) }
+    }
+    // 札を外しても足りない間、外す順の早い札から外す（補足は 0 まで縮められるので数えない）。
+    while titleFloor + badgesWidth() > space,
+      let drop = kept.filter({ subviews[$0][SubjectDropOrder.self] != nil })
+        .min(by: { subviews[$0][SubjectDropOrder.self]! < subviews[$1][SubjectDropOrder.self]! })
+    {
+      kept.removeAll { $0 == drop }
+    }
+    let rest = kept.reduce(0) { $0 + gap(ideals[$1]) }
+    let title = min(ideals[1], max(titleFloor, space - rest))
+    var free = space - title - badgesWidth()
+    var widths = ideals.indices.map { $0 < 2 ? ideals[$0] : 0 }
+    widths[1] = title
+    for index in kept {
+      if subviews[index][SubjectDropOrder.self] != nil {
+        widths[index] = ideals[index]
+      } else {
+        widths[index] = max(0, min(ideals[index], free - spacing))
+        free -= gap(widths[index])
+      }
+    }
+    return widths
+  }
+}
+
+/// 件名に続く札を外す順（小さいほど先に外す）。nil は札でない補足で、外さずに縮める。
+private struct SubjectDropOrder: LayoutValueKey {
+  static let defaultValue: Int? = nil
+}
+
+extension View {
+  /// 件名に続く札。幅 0 を言われたらまるごと出さない（途中で切らない）。
+  fileprivate func subjectBadge(dropOrder: Int) -> some View {
+    frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+      .clipped()
+      .layoutValue(key: SubjectDropOrder.self, value: dropOrder)
   }
 }
 

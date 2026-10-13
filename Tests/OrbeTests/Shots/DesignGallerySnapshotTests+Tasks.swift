@@ -101,6 +101,11 @@ extension DesignGallerySnapshotTests {
     menu.toggleWorkspaceFilter(DesignSceneFixtures.taskWorkspaces.all[1].id)
     try write("tasks_filter_menu.png", menu, 1440, 900)
 
+    // 今年でない作成と期限（年が付いても月日と曜日まで列に収まる）。窓が狭くても同じ。
+    let years = DesignSceneFixtures.taskPaletteModel(DesignSceneFixtures.taskYearDatesFile())
+    try write("tasks_year_dates.png", years, 1440, 900)
+    try write("tasks_year_dates_small.png", years, 800, 560)
+
     // 期限の列で並べた（近い順。期限なしは末尾）。
     let sorted = DesignSceneFixtures.taskPaletteModel()
     sorted.setSort(.due)

@@ -76,11 +76,11 @@ struct TaskPaletteFooter: View {
         if let workspace = model.addedWorkspace {
           PaletteActionLine(
             key: "↵", template: l10n.string(.taskPaletteActionAddTo),
-            slots: [.emphasis(model.addTitle ?? ""), .emphasis(workspace.name)])
+            slots: [.plain(model.addTitle ?? ""), .plain(workspace.name)])
         } else {
           PaletteActionLine(
             key: "↵", template: l10n.string(.taskPaletteActionAdd),
-            slots: [.emphasis(model.addTitle ?? "")])
+            slots: [.plain(model.addTitle ?? "")])
         }
       case .task(let id) where id == model.justAdded:
         PaletteActionLine(key: "→", template: l10n.string(.taskPaletteActionRefine), slots: [])
@@ -100,7 +100,7 @@ struct TaskPaletteFooter: View {
             key: model.query.isEmpty ? "space" : "↵",
             template: l10n.string(
               task.status == .done ? .taskPaletteActionReopen : .taskPaletteActionDone),
-            slots: [.emphasis(task.title)])
+            slots: [.plain(task.title)])
         }
       case nil:
         EmptyView()
