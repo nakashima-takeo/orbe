@@ -173,7 +173,7 @@ struct AutomationDefinition: Equatable, Codable {
 }
 
 /// 回を知らせる先。
-enum AutomationNotify: String {
+enum AutomationNotify: String, CaseIterable {
   /// メニューバーのピルと音。
   case menuBar
   /// macOS の通知センターと音。許可が無い回はメニューバーのピルに出る。
@@ -323,6 +323,8 @@ struct AutomationProposal: Equatable, Identifiable {
   let item: AutomationItem
   let title: String
   let due: TaskItem.DueDate?
+  /// 付け先の `Workspace.persistentId`（判定が決める）。解決できない参照は「なし」と同じに扱う。
+  let workspace: UUID?
   let proposedAt: Date
   var state: State
 

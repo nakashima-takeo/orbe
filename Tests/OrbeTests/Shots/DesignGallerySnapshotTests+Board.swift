@@ -116,6 +116,34 @@ extension DesignGallerySnapshotTests {
     try write("board_automation_command_sourced.png", board(examples, row: 3))
     try renderBoardReportSnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardRequestSnapshots(write: write, board: { board($0) })
+    try renderBoardNotifySnapshots(write: write, board: { board($0, row: $1) })
+  }
+
+  /// サブメニュー「通知」: 通知しない自動化で開いた直後（印と選びが同じ行）・メニューバーの自動化で通知センターへ選びを
+  /// 動かした姿・低い窓の末尾の行で開いて部品の下端の内側へずれた姿。
+  private func renderBoardNotifySnapshots(
+    write: (String, BoardModel, Language, NSSize) throws -> Void,
+    board: (AutomationsFile?, Int) -> BoardModel
+  ) throws {
+    let size = NSSize(width: 1440, height: 844)
+    for language in [Language.ja, .en] {
+      let suffix = language == .ja ? "" : "_en"
+      let off = board(nil, 1)
+      off.automation.openNotify()
+      try write("board_notify\(suffix).png", off, language, size)
+    }
+
+    let reports = DesignSceneFixtures.boardAutomationFile([
+      DesignSceneFixtures.boardStepsNotifyExample(), DesignSceneFixtures.boardReportExample(),
+    ])
+    let menuBar = board(reports, 1)
+    menuBar.automation.openNotify()
+    menuBar.automation.moveNotify(1)
+    try write("board_notify_moved.png", menuBar, .ja, size)
+
+    let low = board(nil, 4)
+    low.automation.openNotify()
+    try write("board_notify_low.png", low, .ja, NSSize(width: 1000, height: 400))
   }
 
   /// 見本 B2『開いている PR の要約』（出力先は報告・通知はメニューバー）と、累計と通知の注記が並ぶタスク候補。通知先が

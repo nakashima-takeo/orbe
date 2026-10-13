@@ -1,5 +1,4 @@
 import Foundation
-import OrbeSessionLog
 
 /// 自動化を番人に載せ、1 回（取得元 → 枠の差分 → 出力先の取り込み → 段を 1 つずつ → 出力先が読む・届ける → 確定）を
 /// まるごと番人の 1 回として進める。main で使う。
@@ -7,7 +6,8 @@ import OrbeSessionLog
 /// 1 回が終わるまで同じ自動化の次の回は始まらない（重ねない保証・「今すぐ」・走っているかは番人が持つ）。番人が回を止めたら
 /// （何をするかの書き換え・削除）、走っている段か届けを止め、以後の確定を行わない。定義の変異はここを通し、番人の登録を
 /// 合わせる。状態を読み書きするのは枠（ストア）と出力先だけで、段は状態を持たない。回を記録するたびに `recorded` で
-/// 自動化の ID を知らせる（知らせるかどうか・何を出すかは受けた側がストアの今の値から決める）。消したら `deleted` で知らせる。
+/// 自動化の ID を知らせる（知らせるかどうか・何を出すかは受けた側がストアの今の値から決める）。定義を書いたら `defined`、
+/// 消したら `deleted` で知らせる。
 final class AutomationRunner {
   let store: AutomationStore
   var now: () -> Date = Date.init
@@ -15,60 +15,31 @@ final class AutomationRunner {
 
   private let scheduler: BackgroundScheduler
   private let run: BackgroundScheduler.Run
+  private let workspaces: () -> AutomationWorkspaces
   private let recorded: (Int) -> Void
+  private let defined: (Int) -> Void
   private let deleted: (Int) -> Void
 
+  /// `workspaces` はタスク候補の付け先にできる今の workspace。タスク候補の出力先にだけ渡す。
   init(
     store: AutomationStore, scheduler: BackgroundScheduler = BackgroundScheduler(),
     run: @escaping BackgroundScheduler.Run = { BackgroundRuns.shared.run($0, completion: $1) },
-    recorded: @escaping (Int) -> Void, deleted: @escaping (Int) -> Void
+    workspaces: @escaping () -> AutomationWorkspaces,
+    recorded: @escaping (Int) -> Void, defined: @escaping (Int) -> Void,
+    deleted: @escaping (Int) -> Void
   ) {
     self.store = store
     self.scheduler = scheduler
     self.run = run
+    self.workspaces = workspaces
     self.recorded = recorded
+    self.defined = defined
     self.deleted = deleted
   }
 
   /// 起動時に一度、全自動化を番人へ載せる（止めた自動化は予定なしで）。
   func start() {
     for automation in store.automations { register(automation) }
-  }
-
-  // MARK: - 定義の変異
-
-  /// `id` が nil なら作り、あれば丸ごと置き換える。何をするかが変われば走っている回を止めて載せ直し、名前・トリガー・
-  /// 取得の性質・段の名前だけなら予定だけを差し替える（走っている回は最後まで走る）。
-  func set(_ id: Int?, _ definition: AutomationDefinition) throws(AutomationError) -> Automation {
-    guard let id else {
-      let automation = try store.create(definition, now: now())
-      register(automation)
-      return automation
-    }
-    let (automation, reworked) = try store.replace(id, with: definition)
-    if reworked { register(automation) } else { retime(automation) }
-    return automation
-  }
-
-  /// 止めるのは予定だけ。走っている回は止めない。
-  func pause(_ id: Int, _ paused: Bool) throws(AutomationError) -> Automation {
-    let automation = try store.setPaused(id, paused)
-    retime(automation)
-    return automation
-  }
-
-  /// 消す。走っている回は止め、その結果は捨てる。
-  func delete(_ id: Int) throws(AutomationError) {
-    try store.delete(id)
-    scheduler.remove(id: Self.key(id))
-    deleted(id)
-  }
-
-  /// 今すぐ回す（止めた自動化も受ける）。走っている回があれば断る。
-  func runNow(_ id: Int) throws(AutomationError) {
-    guard store.automation(id) != nil else { throw .automationNotFound(id) }
-    guard !isRunning(id) else { throw .running(id) }
-    scheduler.runNow(id: Self.key(id))
   }
 
   func isRunning(_ id: Int) -> Bool {
@@ -84,28 +55,6 @@ final class AutomationRunner {
     case .run(let date): return date
     case .expire: return nil
     }
-  }
-
-  // MARK: - 番人
-
-  private static func key(_ id: Int) -> String { "automation:\(id)" }
-
-  private func timing(_ automation: Automation) -> BackgroundTiming? {
-    automation.paused ? nil : automation.definition.trigger
-  }
-
-  /// ストアの定義は検証済みなので、番人の検証で落ちることはない。
-  private func register(_ automation: Automation) {
-    let id = automation.id
-    let start: BackgroundScheduler.Start = { [weak self] trigger, finish in
-      self?.begin(id, trigger: trigger, finish: finish) ?? BackgroundRunHandle {}
-    }
-    try? scheduler.register(
-      id: Self.key(id), timing: timing(automation), anchor: automation.anchor, start: start)
-  }
-
-  private func retime(_ automation: Automation) {
-    try? scheduler.retime(id: Self.key(automation.id), timing: timing(automation))
   }
 
   // MARK: - 1 回
@@ -124,7 +73,8 @@ final class AutomationRunner {
       startedAt: now(), finish: finish)
     switch definition.sink {
     case .taskCandidates:
-      runSource(Pass(attempt, AutomationTaskCandidates(store: store, automationId: id)), automation)
+      let sink = AutomationTaskCandidates(store: store, automationId: id, workspaces: workspaces)
+      runSource(Pass(attempt, sink), automation)
     case .command(let command):
       let sink = AutomationCommandSinkRun(
         command, runId: automation.runId, gate: AutomationRowGate(definition), run: run)
@@ -371,29 +321,64 @@ extension AutomationRunner {
   }
 }
 
-/// 走らせるものの組み立てと、取得の出力の読み取り。
+/// 定義の変異。
 extension AutomationRunner {
-  fileprivate static func sourceJob(_ source: AutomationSource, since: Date?) -> BackgroundJob {
-    switch source.method {
-    case .command(let command):
-      var input = BackgroundInput()
-      if let since { input.environment["ORBE_SINCE"] = SessionEvent.iso8601(since) }
-      return .command(command, input: input)
-    case .agent(let agent):
-      return .agent(
-        BackgroundAgentCall(
-          cli: agent.cli, model: AutomationDefinition.model(agent.model, finalStep: false),
-          tools: agent.tools, prompt: AutomationPrompts.fetch(request: agent.request, since: since))
-      )
+  /// `id` が nil なら作り、あれば丸ごと置き換える。何をするかが変われば走っている回を止めて載せ直し、名前・トリガー・
+  /// 取得の性質・段の名前だけなら予定だけを差し替える（走っている回は最後まで走る）。
+  func set(_ id: Int?, _ definition: AutomationDefinition) throws(AutomationError) -> Automation {
+    guard let id else {
+      let automation = try store.create(definition, now: now())
+      register(automation)
+      defined(automation.id)
+      return automation
     }
+    let (automation, reworked) = try store.replace(id, with: definition)
+    if reworked { register(automation) } else { retime(automation) }
+    defined(automation.id)
+    return automation
   }
 
-  fileprivate static func readSource(_ result: BackgroundRunResult)
-    -> AutomationPrompts.FetchReading
-  {
-    switch AutomationRunOutput.text(result, role: "fetch") {
-    case .failure(let failure): .failed(failure.reason, rejected: AutomationRejections())
-    case .success(let text): AutomationPrompts.readFetch(text)
+  /// 止めるのは予定だけ。走っている回は止めない。
+  func pause(_ id: Int, _ paused: Bool) throws(AutomationError) -> Automation {
+    let automation = try store.setPaused(id, paused)
+    retime(automation)
+    return automation
+  }
+
+  /// 消す。走っている回は止め、その結果は捨てる。
+  func delete(_ id: Int) throws(AutomationError) {
+    try store.delete(id)
+    scheduler.remove(id: Self.key(id))
+    deleted(id)
+  }
+
+  /// 今すぐ回す（止めた自動化も受ける）。走っている回があれば断る。
+  func runNow(_ id: Int) throws(AutomationError) {
+    guard store.automation(id) != nil else { throw .automationNotFound(id) }
+    guard !isRunning(id) else { throw .running(id) }
+    scheduler.runNow(id: Self.key(id))
+  }
+}
+
+/// 番人への登録。
+extension AutomationRunner {
+  private static func key(_ id: Int) -> String { "automation:\(id)" }
+
+  private func timing(_ automation: Automation) -> BackgroundTiming? {
+    automation.paused ? nil : automation.definition.trigger
+  }
+
+  /// ストアの定義は検証済みなので、番人の検証で落ちることはない。
+  private func register(_ automation: Automation) {
+    let id = automation.id
+    let start: BackgroundScheduler.Start = { [weak self] trigger, finish in
+      self?.begin(id, trigger: trigger, finish: finish) ?? BackgroundRunHandle {}
     }
+    try? scheduler.register(
+      id: Self.key(id), timing: timing(automation), anchor: automation.anchor, start: start)
+  }
+
+  private func retime(_ automation: Automation) {
+    try? scheduler.retime(id: Self.key(automation.id), timing: timing(automation))
   }
 }

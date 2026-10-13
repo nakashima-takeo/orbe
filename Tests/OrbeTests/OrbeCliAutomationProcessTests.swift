@@ -117,7 +117,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     ] {
       AutomationStoreTests.commit(
         store, id, AutomationStoreTests.run(at: Date()), fetched: [item],
-        decisions: [.propose(itemId: item.id, title: "対応: \(item.id)", due: nil)])
+        decisions: [.propose(itemId: item.id, title: "対応: \(item.id)", due: nil, workspace: nil)])
     }
     let b = try XCTUnwrap(store.proposals.first { $0.item.id == "b" })
 

@@ -4,7 +4,8 @@ import XCTest
 @testable import Orbe
 
 /// ボードの flow。タブ行の横スクロール（`testBoardScroll`）と、自動化の部品のキー操作（`testBoardAutomation`）と、依頼の欄
-/// （`testBoardRequest`）と、部品の並びの変化（`testBoardParts`）。
+/// （`testBoardRequest`）と、部品の並びの変化（`testBoardParts`）と、サブメニュー「通知」（`testBoardNotify`・
+/// `testBoardNotifyLow`）。
 /// タブ行の横スクロール: 選択が右端のタブへ移るとタブ列だけがスクロールし、ボードのセルは左端に残る。
 /// スクロール位置は描画を跨いで持つ状態なので、1 枚の host を使い回して選択を変えるたびに撮る（`flow` は毎回 host を
 /// 作り直すので、スクロールが出ない）。
@@ -122,6 +123,58 @@ extension DesignFlowSnapshotTests {
         ("sent", { automation.send() }),
         ("wrap_to_last", { automation.move(-1) }),
         ("wrap_to_field", { automation.move(1) }),
+      ])
+  }
+
+  /// サブメニュー「通知」: 一覧の 2 行目で → で開く（通知しないに印と選び）→ ↓ でメニューバーへ → ↵ で決めて閉じ、注記が
+  /// 「通知：メニューバー」に → 開き直すと印の行から → ↓ で通知センターへ → ← で何も変えずに閉じる。
+  func testBoardNotify() throws {
+    let model = BoardModel(
+      automation: BoardAutomationModel(
+        runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationFile())),
+      parts: [.automation])
+    let automation = model.automation
+    try flow(
+      "board_notify", size: NSSize(width: 1440, height: 844),
+      render: {
+        BoardRoot(
+          model: model, translucency: ChromeTranslucency(),
+          localization: LocalizationStore(language: .ja), fontResolver: ChromeFontResolver())
+      },
+      steps: [
+        (
+          "start",
+          {
+            automation.move(1)
+            automation.move(1)
+          }
+        ),
+        ("opened", { automation.openNotify() }),
+        ("moved", { automation.moveNotify(1) }),
+        ("chosen", { automation.chooseNotify(.menuBar) }),
+        ("reopened", { automation.openNotify() }),
+        ("moved_again", { automation.moveNotify(1) }),
+        ("back", { automation.closeNotify() }),
+      ])
+  }
+
+  /// 低く狭い窓: 末尾の行で開くと、部品の下端の内側へずれて収まる。フッターのキーが幅に収まるか。
+  func testBoardNotifyLow() throws {
+    let model = BoardModel(
+      automation: BoardAutomationModel(
+        runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationFile())),
+      parts: [.automation])
+    let automation = model.automation
+    try flow(
+      "board_notify_low", size: NSSize(width: 900, height: 340),
+      render: {
+        BoardRoot(
+          model: model, translucency: ChromeTranslucency(),
+          localization: LocalizationStore(language: .ja), fontResolver: ChromeFontResolver())
+      },
+      steps: [
+        ("last_row", { automation.move(-1) }),
+        ("opened", { automation.openNotify() }),
       ])
   }
 }

@@ -32,6 +32,7 @@ struct TaskPaletteTaskList {
   let agents: WorktreeAgentActivity
   /// 会話ごとのタブ（待ちの条件の会話の行）。
   let sessionTabs: AgentSessionTabs
+  /// 開いた時点の workspace の写し（タスクのタブが使う）。
   let workspaces: TaskPaletteWorkspaces
   let automation: TaskPaletteAutomationModel
   let today: TaskItem.DueDate
@@ -111,12 +112,13 @@ struct TaskPaletteTaskList {
   var onAskSecretary: (SecretaryAsk) -> Secretary.Refusal? = { _ in .claudeMissing }
 
   /// 開いた時点で、出ている行の結び付きの値を取り直す（届くまでは前回の答えで描く）。GitHub タブの一覧の
-  /// 取り直し（`openLists.open(root:)`）は開く側が呼ぶ。
+  /// 取り直し（`openLists.open(root:)`）は開く側が呼ぶ。`workspaces` は今の workspace の値を返す口で、タスクのタブは
+  /// 開いた時点の写しを、提案タブは口そのものを使う。
   init(
     store: TaskStore, githubItems: GitHubItemCache, viewer: GitHubViewer,
     openLists: GitHubOpenLists, root: String, agents: WorktreeAgentActivity,
     sessionTabs: AgentSessionTabs, automations: AutomationRunner,
-    workspaces: TaskPaletteWorkspaces, now: Date, timeZone: TimeZone,
+    workspaces: @escaping () -> TaskPaletteWorkspaces, now: Date, timeZone: TimeZone,
     clock: @escaping (Date) -> Date = { $0 }
   ) {
     self.store = store
@@ -126,13 +128,14 @@ struct TaskPaletteTaskList {
     self.root = root
     self.agents = agents
     self.sessionTabs = sessionTabs
-    self.workspaces = workspaces
+    self.workspaces = workspaces()
     self.timeZone = timeZone
     self.clock = clock
     let today = TaskItem.DueDate.today(now, timeZone: timeZone)
     self.today = today
     automation = TaskPaletteAutomationModel(
-      runner: automations, tasks: store, home: workspaces.home, today: today, timeZone: timeZone)
+      runner: automations, tasks: store, workspaces: workspaces, today: today,
+      timeZone: timeZone)
     automation.onPlaceChange = { [weak self] in self?.focus() }
     automation.onOpenTask = { [weak self] in self?.openAgent(forTask: $0) }
     automation.onOpenURL = { [weak self] in self?.onOpenURL($0) }

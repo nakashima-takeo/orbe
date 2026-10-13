@@ -5,10 +5,11 @@ import XCTest
 
 /// 通知先が通知センターの自動化。許可があれば名前と結果の 1 行を自動化ごとの識別子で通知センターへ出し、ピルは出さない。
 /// 許可が無い・未確認・出せなかった回はピルに出し、未確認なら許可を求める。音はどの面でも鳴る。定義を通知センターへ書き換えた
-/// 直後に許可を求め、消したら取り下げる。通知のクリックはピルと同じ行き先。
+/// 直後に（AI の口でもボードでも）許可を求め、消したら取り下げる。通知のクリックはピルと同じ行き先。
 ///
 /// 壊れると何が起きるか: 許可を切った人や答えていない人に知らせがどこにも届かない。通知センターに同じ自動化の通知が溜まる。
-/// 消した自動化の通知が残り、押すと欄に落ちる。AI に頼んだその場で許可の問いが出ず、初めての回まで気づけない。
+/// 消した自動化の通知が残り、押すと欄に落ちる。AI に頼んだ・ボードで選んだその場で許可の問いが出ず、初めての
+/// 回まで気づけない。
 extension WindowControllerAutomationNoticeTests {
   @MainActor private func notifier(_ wc: WindowController) throws -> SystemNotifierFake {
     try XCTUnwrap(wc.systemNotifier as? SystemNotifierFake, "隔離ハーネスが通知センターをフェイクへ差していない")
@@ -94,6 +95,20 @@ extension WindowControllerAutomationNoticeTests {
     wc.board.automation.perform(.delete)
     XCTAssertNil(wc.automationStore.automation(id), "前提: ボードの ⌘⌫ で消えていない")
     XCTAssertEqual(center.removed, ["automation.\(id)"])
+  }
+
+  /// ボードのサブメニューで通知センターを選んでも、AI の口と同じくその場で許可を求める。
+  @MainActor func testChoosingNotificationCenterOnTheBoardAsksForPermission() throws {
+    let wc = controller()
+    let center = try notifier(wc)
+    let id = try wc.automationStore.create(AutomationStoreTests.definition(), now: Date()).id
+    wc.showAutomation(id)
+
+    wc.board.automation.openNotify()
+    wc.board.automation.chooseNotify(.notificationCenter)
+
+    XCTAssertEqual(wc.automationStore.automation(id)?.definition.notify, .notificationCenter)
+    XCTAssertEqual(center.requestCount, 1)
   }
 
   @MainActor func testClickingTheNotificationOpensTheAutomationOnTheBoard() throws {

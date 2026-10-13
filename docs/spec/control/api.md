@@ -124,7 +124,7 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 - `run_automation {automationId}` → `{ok, seq}` … 今すぐ 1 回回し、回の終わりを待たずに返る（結果は `list_automations` の `runs`）。止めた自動化も受ける。回が走っていれば `-32000`。
 - `pause_automation {automationId, paused}` → `{automation, seq}` … 予定を止める（`true`）・再開する（`false`）。走っている回は止めない。`paused` は JSON の真偽値だけを受ける。
 - `delete_automation {automationId}` → `{ok, seq}` … 走っている回を止め、結果は捨てる。その自動化だけが持っていた候補は忘れる。その自動化の通知を通知センターから取り下げる。
-- `list_automation_proposals {automationId?}` → `{proposals:[…], seq}` … 覚えている候補を全状態で返す。各要素は `proposalId`・`state`（`open` / `accepted` / `dismissed` / `resolved`）・`title`・`due?`・`link`・`body`・`time`・`proposedAt`・`taskId`（`accepted` だけ）・`automationId` と `automationName`（棚に出す自動化）。`automationId` を渡すとその自動化の棚の分だけ（未知は `-32004`）。
+- `list_automation_proposals {automationId?}` → `{proposals:[…], seq}` … 覚えている候補を全状態で返す。各要素は `proposalId`・`state`（`open` / `accepted` / `dismissed` / `resolved`）・`title`・`due?`・`link`・`body`・`time`・`proposedAt`・`taskId`（`accepted` だけ）・`automationId` と `automationName`（棚に出す自動化）・`workspaceId` と `workspaceName`（付け先が今ある workspace に解けるときだけ。起動ごとの ID と名前。無ければ人がタスクにすると Home に付く）。`automationId` を渡すとその自動化の棚の分だけ（未知は `-32004`）。
   - 自動化の 6 動詞はいずれも MCP に出す。候補をタスクにする・捨てるは人の判断なので制御 API に無い。自動化の変化はイベントにならない。
 - `list_board_parts {workspaceId}` → `{parts:[{kind}], seq}` … その workspace の[ボード](../chrome/board.md)の部品の並びを上から順に返す。何も決めていないボードは既定（`automation` 1 つ）。
 - `add_board_part {workspaceId, kind}` → `{parts, seq}` … 部品を末尾に置き、結果の並びを返す。1 つのボードに同じ種類は 1 つまでで、既にあれば何も変えずに成功する。

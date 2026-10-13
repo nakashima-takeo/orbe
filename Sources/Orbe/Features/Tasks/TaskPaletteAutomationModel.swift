@@ -46,8 +46,9 @@ enum TaskPaletteAutomationError: Equatable {
 @Observable final class TaskPaletteAutomationModel {
   let runner: AutomationRunner
   let tasks: TaskStore
-  /// 提案をタスクにすると付く workspace（開いた時点の Home）。
-  let home: UUID?
+  /// 今の workspace の値。候補の付け先は表示も受理もこれで解く——開いた時点の写しで受理すると、開いている間に消えた
+  /// 付け先へ付けてしまう。
+  let workspaces: () -> TaskPaletteWorkspaces
   let today: TaskItem.DueDate
   let timeZone: TimeZone
 
@@ -70,12 +71,12 @@ enum TaskPaletteAutomationError: Equatable {
   @ObservationIgnored var onOpenTask: (Int) -> Void = { _ in }
 
   init(
-    runner: AutomationRunner, tasks: TaskStore, home: UUID?, today: TaskItem.DueDate,
-    timeZone: TimeZone
+    runner: AutomationRunner, tasks: TaskStore, workspaces: @escaping () -> TaskPaletteWorkspaces,
+    today: TaskItem.DueDate, timeZone: TimeZone
   ) {
     self.runner = runner
     self.tasks = tasks
-    self.home = home
+    self.workspaces = workspaces
     self.today = today
     self.timeZone = timeZone
     reconcile()
@@ -137,6 +138,11 @@ enum TaskPaletteAutomationError: Equatable {
   var selectedProposal: AutomationProposal? {
     guard let id = proposalList.selectedID else { return nil }
     return store.proposals.first { $0.id == id && $0.state == .open }
+  }
+
+  /// 候補をタスクにしたときの付け先（今の値で解く）。
+  func destination(of proposal: AutomationProposal) -> TaskPaletteWorkspaces.Entry? {
+    workspaces().destination(of: proposal.workspace)
   }
 
   func isRunning(_ automation: Automation) -> Bool { runner.isRunning(automation.id) }
@@ -245,7 +251,7 @@ enum TaskPaletteAutomationError: Equatable {
 
   // MARK: - 提案をさばく
 
-  /// ↵。選んでいる提案を Home のタスクにする。
+  /// ↵。選んでいる提案を付け先のタスクにする。
   func accept() {
     _ = acceptSelected()
   }
@@ -256,13 +262,13 @@ enum TaskPaletteAutomationError: Equatable {
     onOpenTask(task.id)
   }
 
-  /// 選んでいる提案を Home のタスクにする。判定の確定や下げと行き違っただけなら何も出さず、付け直しに任せる。
+  /// 選んでいる提案を付け先のタスクにする。判定の確定や下げと行き違っただけなら何も出さず、付け直しに任せる。
   private func acceptSelected() -> TaskItem? {
     guard let proposal = selectedProposal else { return nil }
     error = nil
     var task: TaskItem?
     do throws(AutomationError) {
-      task = try store.accept(proposal.id, into: tasks, workspace: home)
+      task = try store.accept(proposal.id, into: tasks, workspace: destination(of: proposal)?.id)
     } catch {
       if case .invalid = error { self.error = .accept }
     }

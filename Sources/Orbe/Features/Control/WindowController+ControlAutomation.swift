@@ -11,9 +11,7 @@ extension WindowController {
     Any, ControlError
   > {
     automationResult { () throws(AutomationError) in
-      let automation = try automationRunner.set(automationId, definition)
-      automationDefinitionSet(automation.definition)
-      return ["automation": automationJSON(automation)]
+      ["automation": automationJSON(try automationRunner.set(automationId, definition))]
     }
   }
 
@@ -55,6 +53,10 @@ extension WindowController {
         json["automationName"] = shelf.definition.name
       }
       if let due = proposal.due { json["due"] = due.text }
+      if let ws = proposal.workspace.flatMap({ id in workspaces.first { $0.persistentId == id } }) {
+        json["workspaceId"] = ws.id
+        json["workspaceName"] = ws.name
+      }
       if case .accepted(let taskId) = proposal.state { json["taskId"] = taskId }
       return json
     }
