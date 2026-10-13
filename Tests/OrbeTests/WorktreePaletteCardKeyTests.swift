@@ -112,6 +112,20 @@ final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.selectedBaseChoice?.role, .previous, "⇧⇥ が末尾から先頭へ回る")
   }
 
+  /// 押し始めを見ていない ↵ のリピートだけが入力欄に届いても確定しない（⌘⇧X の ⌘↵ の押し始めでこの画面に替わり、
+  /// 残りのリピートが入力欄の確定へ届く経路）。押し直した ↵ では確定する。
+  func testEnterKeyRepeatAloneInTheFieldDecidesNothing() {
+    let model = DesignSceneFixtures.worktreePaletteBasePickerModel()
+    let window = mount(model)
+    type("origin", into: window)
+
+    send(36, "\r", repeating: true, to: window)
+    XCTAssertEqual(model.mode, .basePicker, "リピートでは決めない")
+
+    send(36, "\r", to: window)
+    XCTAssertEqual(model.mode, .list, "押し直した ↵ で決める")
+  }
+
   private func type(_ text: String, into window: NSWindow) {
     for character in text { send(0, String(character), to: window) }
   }

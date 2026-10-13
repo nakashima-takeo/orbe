@@ -134,6 +134,7 @@ extension OrbeCliProcessTests {
       ["task", "list", "3"],
       ["task", "add", "経費", "精算"],  // 引用符の付け忘れ
       ["task", "set", "1", "2", "--title", "t"],
+      ["task", "condition", "1", "2", "--no-condition"],
       ["task", "rm", "1", "2"],
     ] {
       failure(

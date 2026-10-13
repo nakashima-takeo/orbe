@@ -7,8 +7,8 @@ extension TaskPaletteModel {
     task.agent(in: agents.agents)
   }
 
-  /// そのタスクのための agent を開く（行と右の欄の ⌘↵、GitHub タブの ⌘↵）。待ちが解けて会話を続きから始められるタスクなら続きから
-  /// 始め、そうでなければそのタスクのための ⌘T を開く。完了のタスクでも同じ。選ぶ状態では何もしない。
+  /// そのタスクのための agent を開く（行と右の欄の ⌘↵、GitHub タブと提案タブの ⌘↵）。待ちが解けて会話を続きから始められる
+  /// タスクなら続きから始め、そうでなければそのタスクのための ⌘T を開く。完了のタスクでも同じ。選ぶ状態では何もしない。
   func openAgent(forTask id: Int) {
     guard pick == nil else { return }
     leaveEditingForAction()

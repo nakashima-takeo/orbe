@@ -22,7 +22,7 @@ extension TaskPaletteModelTests {
 
   // MARK: - 並び
 
-  func testTappingAColumnHeaderSortsByItReversesOnTheSecondTapAndKeepsTheSelection() {
+  func testTappingAColumnHeaderSortsByItReversesOnTheSecondTapAndKeepsTheSelectionInView() {
     let palette = model([
       task(1, "a") { $0.priority = .high }, task(2, "c") { $0.priority = .low },
       task(3, "b"),
@@ -34,10 +34,13 @@ extension TaskPaletteModelTests {
 
     palette.setSort(.priority)
     XCTAssertEqual(rowIDs(palette), [.task(2), .task(3), .task(1)], "同じ列は逆になる")
+    let serial = scrollSerial(palette)
 
     palette.setSort(.title)
     XCTAssertEqual(rowIDs(palette), [.task(1), .task(3), .task(2)], "別の列はその列の既定の向き")
     XCTAssertEqual(palette.selectedID, .task(2), "並びを変えても同じタスクを選んだまま")
+    XCTAssertEqual(palette.scrollTarget?.id, .task(2))
+    XCTAssertGreaterThan(scrollSerial(palette), serial, "先頭から末尾へ動いた行へスクロールする")
   }
 
   /// 状態で並べていても、完了にした行は次のリストの更新まで並べ直さず、同じ場所に残る（最下段へ動かない）。

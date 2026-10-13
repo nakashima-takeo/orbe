@@ -221,10 +221,11 @@ func statusSegments(_ rollup: [(state: String, count: Int)]) -> [StatusSegment] 
 
 /// 横断ステータスストリップ（グリフ＋数字のみ）。件数 0／未知状態は飛ばす。
 /// 項目=グリフ(13px 状態色)＋gap6＋件数(mono11.5・`statusText`)、項目間 gap14・仕切り線なし。
-/// 休止（idle）項目のみ opacity 0.55 で減光する。
+/// 休止（idle）項目のみ opacity 0.55 で減光する。`receded`（窓が main でない間）は件数だけ `textMuted` に落とす。
 struct StatusRollupView: View {
   let rollup: [(state: String, count: Int)]
   var glyphSize: CGFloat = 13
+  var receded: Bool = false
   @Environment(\.agentIconResolver) private var iconResolver
 
   var body: some View {
@@ -235,7 +236,7 @@ struct StatusRollupView: View {
             kind: seg.kind, size: glyphSize, symbol: iconResolver.symbol(for: seg.kind))
           Text("\(seg.count)")
             .font(.system(size: 11.5, weight: .regular, design: .monospaced))
-            .foregroundStyle(Color.theme.statusText)
+            .foregroundStyle(receded ? Color.theme.textMuted : Color.theme.statusText)
         }
         .opacity(seg.kind == .idle ? 0.55 : 1)
       }

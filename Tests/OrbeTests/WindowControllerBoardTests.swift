@@ -38,13 +38,14 @@ final class WindowControllerBoardTests: OrbeTestCase {
     return wc
   }
 
-  /// 止めている自動追加を 2 件置く——起動でも回らず、取得もコマンドなので本物の agent は起きない。
+  /// 止めている自動化を 2 件置く——起動でも回らず、取得もコマンドなので本物の agent は起きない。
   @MainActor private func savePausedAutomations() {
     let automations = DesignSceneFixtures.boardAutomations().prefix(2).map {
       var automation = $0
       automation.paused = true
-      automation.definition.fetch.method = .command(
-        BackgroundCommand(script: "true", directory: nil))
+      automation.redefine {
+        $0.source?.method = .command(BackgroundCommand(script: "true", directory: nil))
+      }
       return automation
     }
     AutomationPersistence.save(DesignSceneFixtures.boardAutomationFile(Array(automations)))
@@ -240,9 +241,9 @@ final class WindowControllerBoardTests: OrbeTestCase {
     try assertFieldSelectsAll(wc, "ab", "workspace を戻ると欄へ")
   }
 
-  /// ボードの上に ⌘⇧X を開いている間に自動追加がすべて消えても（⌘⇧X で最後の 1 件を消す）、ボードの欄は焦点を奪わず、
+  /// ボードの上に ⌘⇧X を開いている間に自動化がすべて消えても（⌘⇧X で最後の 1 件を消す）、ボードの欄は焦点を奪わず、
   /// 打鍵は ⌘⇧X の入力欄に届いたまま。
-  @MainActor func testAutoAddsVanishingUnderThePaletteLeaveTheFocusInThePalette() throws {
+  @MainActor func testAutomationsVanishingUnderThePaletteLeaveTheFocusInThePalette() throws {
     savePausedAutomations()
     let wc = WindowController()
     show(wc)

@@ -17,7 +17,7 @@ extension WorkspacePersistenceTests {
     }
     XCTAssertNil(try written(nil))
     XCTAssertEqual((try written([]) as? [Any])?.count, 0)
-    XCTAssertEqual(try written([.automation]) as? [[String: String]], [["kind": "intake"]])
+    XCTAssertEqual(try written([.automation]) as? [[String: String]], [["kind": "automation"]])
   }
 
   /// 欄は寛容に読む: 読めない要素だけ落とし、中身があるのに 1 つも読めない・配列でないなら決めていない（既定）、`[]` だけが
@@ -31,11 +31,11 @@ extension WorkspacePersistenceTests {
     let cases = [
       Case(raw: "[]", expected: [], label: "決めた空"),
       Case(
-        raw: #"[{"kind":"intake"},{"kind":"weather"},{"kind":"intake"}]"#,
+        raw: #"[{"kind":"automation"},{"kind":"weather"},{"kind":"automation"}]"#,
         expected: [.automation, .automation], label: "知らない種類だけ落とす（重なりは SessionStore.load が落とす）"),
       Case(raw: #"[{"kind":"weather"}]"#, expected: nil, label: "1 つも読めなければ既定"),
-      Case(raw: #"[1, "intake"]"#, expected: nil, label: "要素の型違い"),
-      Case(raw: #""intake""#, expected: nil, label: "配列でない"),
+      Case(raw: #"[1, "automation"]"#, expected: nil, label: "要素の型違い"),
+      Case(raw: #""automation""#, expected: nil, label: "配列でない"),
       Case(raw: "null", expected: nil, label: "null"),
     ]
     for item in cases {

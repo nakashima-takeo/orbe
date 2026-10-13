@@ -228,6 +228,61 @@ extension DesignFlowSnapshotTests {
         ),
       ])
   }
+
+  /// 自動化の知らせ。印は一覧の行と同じ点（出した回は強調色・失敗は赤）・名前の欄に自動化の名前・本文に結果の 1 行の
+  /// ピルが agent と同じ開き方で開く。03 は開いた直後の chrome の再投影で、一覧の投影ではないので取り下げられずに開いた
+  /// まま滞留する。閉じた 05 の件数は agent の 1 件だけで、自動化の知らせは数えない。06〜07 は失敗した回。
+  func testMenubarAutomationNotice() throws {
+    let t0 = Date()
+    let store = AttentionStore()
+    let driver = MenuBarArrivalDriver()
+    let agent = AttentionRow(
+      tabId: 9301, workspaceName: "api-gateway", tabTitle: "deploy スクリプト整理", state: "waiting",
+      message: "ビルド成果物の掃除方法を選んでください。", stateChangedAt: t0.addingTimeInterval(-45))
+    let reported = AutomationNotice(
+      automationId: 5, name: "開いている PR の要約",
+      text: "開いている PR は 3 件。うち 1 件はレビュー待ちが 2 日を超えている。", failed: false)
+    let failed = AutomationNotice(
+      automationId: 5, name: "開いている PR の要約",
+      text: "失敗：the step \"要約\" ended: exited 1: Claude usage limit reached", failed: true)
+    try flow(
+      "menubar_automation_notice", size: NSSize(width: 420, height: 64),
+      render: { menuBarSnapshot(store: store, phase: driver.phase) },
+      steps: [
+        ("quiet", {}),
+        (
+          "arrive",
+          {
+            store.noteTransient(.automation(reported), dwell: 22, now: t0)
+            driver.arrived(at: t0)
+          }
+        ),
+        (
+          "reprojected",
+          {
+            reproject(store, driver, [agent], at: t0.addingTimeInterval(0.5))
+            driver.tick(now: t0.addingTimeInterval(0.84))
+          }
+        ),
+        ("dwell", { driver.tick(now: t0.addingTimeInterval(5)) }),
+        (
+          "closed",
+          {
+            driver.expired(at: t0.addingTimeInterval(22))
+            if driver.tick(now: t0.addingTimeInterval(22.6)) { store.transient = nil }
+          }
+        ),
+        (
+          "failed_arrive",
+          {
+            store.noteTransient(.automation(failed), dwell: 22, now: t0.addingTimeInterval(30))
+            driver.arrived(at: t0.addingTimeInterval(30))
+            driver.tick(now: t0.addingTimeInterval(30.42))
+          }
+        ),
+        ("failed_open", { driver.tick(now: t0.addingTimeInterval(35)) }),
+      ])
+  }
 }
 
 /// chrome の再投影（一覧の差し替え）。`MenuBarController.syncTransient` と同じく、取り下げが決まったら

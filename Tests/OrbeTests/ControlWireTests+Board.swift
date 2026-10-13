@@ -12,8 +12,8 @@ extension ControlWireTests {
   var boardRequests: [(method: String, params: [String: Any])] {
     [
       ("list_board_parts", ["workspaceId": 3]),
-      ("add_board_part", ["workspaceId": 3, "kind": "intake"]),
-      ("remove_board_part", ["workspaceId": 3, "kind": "intake"]),
+      ("add_board_part", ["workspaceId": 3, "kind": "automation"]),
+      ("remove_board_part", ["workspaceId": 3, "kind": "automation"]),
     ]
   }
 
@@ -22,13 +22,14 @@ extension ControlWireTests {
     let wire = startWire(target: fake)
 
     let listed = wire.request(id: 1, method: "list_board_parts", params: ["workspaceId": 3])
-    _ = wire.request(id: 2, method: "add_board_part", params: ["workspaceId": 4, "kind": "intake"])
     _ = wire.request(
-      id: 3, method: "remove_board_part", params: ["workspaceId": 5, "kind": "intake"])
+      id: 2, method: "add_board_part", params: ["workspaceId": 4, "kind": "automation"])
+    _ = wire.request(
+      id: 3, method: "remove_board_part", params: ["workspaceId": 5, "kind": "automation"])
 
     XCTAssertEqual(
       ((listed?["result"] as? [String: Any])?["parts"] as? [[String: Any]])?.first?["kind"]
-        as? String, "intake", "結果の並びは parts で包む")
+        as? String, "automation", "結果の並びは parts で包む")
     XCTAssertEqual(fake.boardLists, [3])
     XCTAssertEqual(fake.addedBoardParts.map(\.workspaceId), [4])
     XCTAssertEqual(fake.addedBoardParts.map(\.part), [.automation])
@@ -51,7 +52,8 @@ extension ControlWireTests {
         label: "真偽値は workspace の番号でない", method: "list_board_parts", params: ["workspaceId": true],
         message: "invalid workspaceId"),
       Case(
-        label: "文字列の番号", method: "add_board_part", params: ["workspaceId": "3", "kind": "intake"],
+        label: "文字列の番号", method: "add_board_part",
+        params: ["workspaceId": "3", "kind": "automation"],
         message: "invalid workspaceId"),
       Case(
         label: "種類が文字列でない", method: "add_board_part", params: ["workspaceId": 3, "kind": 1],
@@ -59,7 +61,7 @@ extension ControlWireTests {
       Case(
         label: "知らない種類", method: "remove_board_part",
         params: ["workspaceId": 3, "kind": "weather"],
-        message: "unknown kind: weather (known: intake)"),
+        message: "unknown kind: weather (known: automation)"),
     ]
     for item in cases {
       let response = wire.request(id: 1, method: item.method, params: item.params)

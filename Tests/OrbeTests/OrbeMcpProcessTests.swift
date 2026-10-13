@@ -54,19 +54,26 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     }
   }
 
-  /// Home の rules（日英）が名指しする MCP のツールは、どれも `tools/list` にある。rules は Home の claude が起動のたびに
-  /// 読む手引きで、orbe-mcp は別ターゲットなので、ツールを改名・削除してもコンパイルもほかのテストも通ってしまう。
-  func testHomeRulesNameOnlyToolsTheBridgeLists() throws {
+  /// Home の rules と秘書の役目の指示（日英）が名指しする MCP のツールは、どれも `tools/list` にある。どちらも claude が
+  /// 起動のたびに読む手引きで、orbe-mcp は別ターゲットなので、ツールを改名・削除してもコンパイルもほかのテストも通ってしまう。
+  func testAgentInstructionsNameOnlyToolsTheBridgeLists() throws {
     let names = Set(ControlProcess.mcpToolsList().compactMap { $0["name"] as? String })
     let pattern = try NSRegularExpression(pattern: "`([a-z]+(?:_[a-z]+)+|spawn)`")
     for language in Language.allCases {
-      let rules = HomeTemplate.rules(language, home: "/home")
-      let named = pattern.matches(in: rules, range: NSRange(rules.startIndex..., in: rules)).map {
-        String(rules[Range($0.range(at: 1), in: rules)!])
-      }
-      XCTAssertFalse(named.isEmpty, "\(language): 前提: ツールを名指ししている")
-      for name in named {
-        XCTAssertTrue(names.contains(name), "\(language) の rules が tools/list に無い \(name) を名指ししている")
+      let texts = [
+        ("Home の rules", HomeTemplate.rules(language, home: "/home")),
+        ("⌘⇧X の役目の指示", SecretaryText.instructions(for: .palette, language)),
+        ("ボードの役目の指示", SecretaryText.instructions(for: .board, language)),
+      ]
+      for (label, text) in texts {
+        let named = pattern.matches(in: text, range: NSRange(text.startIndex..., in: text)).map {
+          String(text[Range($0.range(at: 1), in: text)!])
+        }
+        XCTAssertFalse(named.isEmpty, "\(language) の\(label): 前提: ツールを名指ししている")
+        for name in named {
+          XCTAssertTrue(
+            names.contains(name), "\(language) の\(label)が tools/list に無い \(name) を名指ししている")
+        }
       }
     }
   }
@@ -111,7 +118,7 @@ final class OrbeMcpProcessTests: OrbeTestCase {
         .contains("\(SessionLogLimits.restoreMaxIds) 件"),
       "sessionIds の上限を写す")
     XCTAssertTrue(
-      description(try tool("list_intakes")).contains("新しい順に \(Automation.retainedRuns) 件まで。"),
+      description(try tool("list_automations")).contains("新しい順に \(Automation.retainedRuns) 件まで。"),
       "回の記録を残す件数を写す")
   }
 
@@ -153,9 +160,10 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       }
     }
 
-    XCTAssertEqual(kinds("list_board_parts", ["workspaceId": home]), ["intake"], "決めていなければ既定")
-    XCTAssertEqual(kinds("remove_board_part", ["workspaceId": home, "kind": "intake"]), [])
-    XCTAssertEqual(kinds("add_board_part", ["workspaceId": home, "kind": "intake"]), ["intake"])
+    XCTAssertEqual(kinds("list_board_parts", ["workspaceId": home]), ["automation"], "決めていなければ既定")
+    XCTAssertEqual(kinds("remove_board_part", ["workspaceId": home, "kind": "automation"]), [])
+    XCTAssertEqual(
+      kinds("add_board_part", ["workspaceId": home, "kind": "automation"]), ["automation"])
   }
 
   /// 背景 workspace を `activate_workspace` すると、返る `tabIds` の先頭が実際に読めるタブになる

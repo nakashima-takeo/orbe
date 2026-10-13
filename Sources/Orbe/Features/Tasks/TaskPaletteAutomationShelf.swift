@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 受信タブの左の棚。先頭に「すべて」、続いて受信ごとに名前・件数・2 行目（次の時刻 / 止めている / 実行中…）。提案の無い受信は
-/// 減光する。下に、受信を足す・変える口が秘書であることを添える（この画面では定義を変えない）。
+/// 提案タブの左の棚。先頭に「すべて」、続いて受信ごとに名前・件数・2 行目（次の時刻 / 停止中 / 実行中…）。提案の無い受信は
+/// 減光する。下に、受信を足す・変える口が Home のボードであることを添える（この画面では定義を変えない）。
 struct TaskPaletteAutomationShelf: View {
   @Bindable var model: TaskPaletteAutomationModel
   @Environment(\.localization) private var l10n
@@ -22,7 +22,7 @@ struct TaskPaletteAutomationShelf: View {
           if let id = list.scrollTarget?.id { proxy.scrollTo(id) }
         }
       }
-      Text(l10n.string(.taskPaletteAutomationAskSecretary))
+      Text(l10n.string(.taskPaletteAutomationAskBoard))
         .font(Font.theme.meta)
         .foregroundStyle(Color.theme.textMuted)
         .fixedSize(horizontal: false, vertical: true)
@@ -100,7 +100,7 @@ private struct TaskPaletteAutomationShelfRowView: View {
 
   private var dimmed: Bool { row.automation != nil && row.count == 0 }
 
-  /// 「次 17:00 · 候補なし · 前回は失敗」。実行中は強調色、前回の失敗は赤（どちらも文字でも言う）。
+  /// 「次回 17:00 · 候補なし · 前回は失敗」。実行中は強調色、前回の失敗は赤（どちらも文字でも言う）。
   private func status(_ automation: Automation) -> Text {
     let muted = { (value: String) in Text(value).foregroundStyle(Color.theme.textMuted) }
     var parts: [Text] = []

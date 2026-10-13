@@ -80,7 +80,9 @@ final class AutomationPromptsTests: OrbeTestCase {
       "説明文",
     ].joined(separator: "\n")
 
-    let (decisions, rejected) = AutomationPrompts.readJudge(text, items: items, open: open)
+    let (rows, notJSON) = AutomationPrompts.readRows(text)
+    let (decisions, rejected) = AutomationPrompts.readJudge(
+      rows, itemIds: Set(items.map(\.id)), open: open)
 
     XCTAssertEqual(
       decisions,
@@ -88,14 +90,15 @@ final class AutomationPromptsTests: OrbeTestCase {
         .propose(itemId: "a", title: "レビューする", due: TaskItem.DueDate("2026-10-12")),
         .resolve(link: "https://example.com/old"),
       ])
-    XCTAssertEqual(rejected.count, 7)
+    XCTAssertEqual(notJSON.reasons, ["line 9: not JSON"], "JSON でない行は段の読み取りで捨てる")
+    XCTAssertEqual(rejected.count, 6)
     XCTAssertEqual(rejected.reasons.count, AutomationRejections.retainedReasons, "理由は最初の数件だけ残す")
   }
 
   /// 判定の依頼文には、新しい項目・出ている提案・期限を決めるための今日と利用者の指示文が載る。
   func testJudgePromptCarriesTheNewItemsTheOpenProposalsAndToday() throws {
     let prompt = AutomationPrompts.judge(
-      instruction: "自分がやるべきことだけ", items: [items[0]], open: open,
+      instruction: "自分がやるべきことだけ", rows: [AutomationPrompts.row(items[0])], open: open,
       now: Date(timeIntervalSince1970: 1_800_000_000),
       timeZone: try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo")))
 

@@ -178,6 +178,7 @@ struct WorktreePaletteCard: View {
       )
       .onChange(of: model.query) { model.onQueryChanged() }
       // 実行＝onSubmit（IME 変換確定の Enter では発火しない＝誤爆しない）。行タップと同じ決定 funnel。
+      // 押し続けた ↵ のリピートでは確定しない（⌘⇧X の ⌘↵ の押し始めでこの画面に替わっても、残りのリピートで開かない）。
       .onSubmitIgnoringKeyRepeat { model.submit() }
       .onKeyPress { WorktreePaletteFieldKeys.handle($0, model: model) }
   }

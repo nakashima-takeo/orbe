@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// タスク画面のカード本体。ヘッダー（❯＋入力欄・タブ）＋選ぶ状態の帯＋本体（左に絞り込みの行と表・右の欄にタスク。
-/// GitHub タブは左に open な Issue・PR、右の欄に項目。受信タブは棚・提案・詳細の 3 列）＋フッター（主な操作の 1 行・
+/// GitHub タブは左に open な Issue・PR、右の欄に項目。提案タブは棚・提案・詳細の 3 列）＋フッター（主な操作の 1 行・
 /// キーヒント）。絞り込みのメニューはカードの上に重ねる。焦点の行き先（入力欄 / 右の欄の項目 / 右の欄の編集欄）はモデルの
 /// `focusTarget` から一方向に写し、カード内のクリックでも当て直す（⌘T 画面と同じ契約）。
 struct TaskPaletteCard: View {
@@ -73,7 +73,7 @@ struct TaskPaletteCard: View {
     .onChange(of: model.gitHubRows) { model.reconcile() }
     // 出ている行の結び付きが増えたら（agent の変更・絞り込み・入力）、その値を取りに行く。
     .onChange(of: model.visibleLinkIDs) { model.ensureVisibleItems() }
-    // 裏の回の確定や AI の変更で受信と提案が変わったら、受信タブの選択と居場所を付け直す。
+    // 裏の回の確定や AI の変更で受信と提案が変わったら、提案タブの選択と居場所を付け直す。
     .onChange(of: model.automation.store.automations) { model.automation.reconcile() }
     .onChange(of: model.automation.store.proposals) { model.automation.reconcile() }
   }

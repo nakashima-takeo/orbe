@@ -1,23 +1,21 @@
 import Foundation
 import Observation
 
-/// 受信と提案の唯一の正（@Observable・main のみ）。`WindowController` が 1 個所有し、制御 API・走らせ役・画面が同じ変異
-/// メソッドを呼ぶ——値の検証と不変条件はここだけが持つ。変異が成功するたびに即座に保存する。
-///
-/// 提案はリンク単位で全受信を通じて 1 つ。提案が忘れられるのは、どの受信も提案を持たなくなったときだけで、それまでは
-/// タスクにした・捨てた・対応済みの提案も覚えていて、同じリンクを再び提案しない。受信が提案を持つのは、前回の取得結果に
-/// そのリンクがあるとき、または新着の流れの受信が出してまだ人の判断待ちのとき。
+/// 自動化と候補の唯一の正（@Observable・main のみ）。`WindowController` が 1 個所有し、制御 API・走らせ役・画面が同じ変異
+/// メソッドを呼ぶ——値の検証と不変条件はここだけが持つ。変異が成功するたびに即座に保存する。候補の保ち方は
+/// `AutomationProposalBook`（タスク候補の出力先）が持つ。
 @Observable final class AutomationStore {
   private(set) var automations: [Automation]
-  private(set) var proposals: [AutomationProposal]
+  private var book: AutomationProposalBook
   private var nextAutomationId: Int
-  private var nextProposalId: Int
+
+  var proposals: [AutomationProposal] { book.proposals }
 
   init(file: AutomationsFile? = AutomationPersistence.load()) {
     automations = file?.automations ?? []
-    proposals = file?.proposals ?? []
+    book = AutomationProposalBook(
+      proposals: file?.proposals ?? [], nextId: file?.nextProposalId ?? 1)
     nextAutomationId = file?.nextAutomationId ?? 1
-    nextProposalId = file?.nextProposalId ?? 1
   }
 
   func automation(_ id: Int) -> Automation? {
@@ -30,15 +28,16 @@ import Observation
     let automation = Automation(
       id: nextAutomationId, definition: try Self.valid(definition), paused: false,
       createdAt: TaskItem.storedInstant(now), lastFetched: [], reviewAll: false, lastRunAt: nil,
-      runs: [])
+      lastSucceededAt: nil, runs: [])
     nextAutomationId += 1
     automations.append(automation)
     persist()
     return automation
   }
 
-  /// 定義を丸ごと置き換える。取得のやり方か判定が変わったら（`reworked`）、次の回は取れた全件を新しい判定で見直す。
-  /// 止めているかは変えない。取得の性質が変わって誰も持たなくなった提案は、その場で忘れる。
+  /// 定義を丸ごと置き換える。何をするか（`AutomationDefinition.work`）が変わったら（`reworked`）、見直しを受ける出力先なら
+  /// 次の回は枠の差分を掛けずに見直す。全件見直しの印は新しい出力先で決め直す——見直しを受けない出力先へ替えたら、前から
+  /// 立っていた印も下ろす。止めているかは変えない。誰も持たなくなった候補は、その場で忘れる。
   func replace(_ id: Int, with definition: AutomationDefinition) throws(AutomationError) -> (
     automation: Automation, reworked: Bool
   ) {
@@ -46,11 +45,11 @@ import Observation
       throw .automationNotFound(id)
     }
     let definition = try Self.valid(definition)
-    let old = automations[index].definition
-    let reworked = old.fetch.method != definition.fetch.method || old.judge != definition.judge
-    automations[index].definition = definition
-    if reworked { automations[index].reviewAll = true }
-    _ = forgetUnheld()
+    let reworked = automations[index].definition.work != definition.work
+    automations[index].redefine(definition)
+    automations[index].reviewAll =
+      Self.reviewsAfterRework(definition.sink) && (automations[index].reviewAll || reworked)
+    _ = book.forgetUnheld(by: automations)
     persist()
     return (automations[index], reworked)
   }
@@ -64,82 +63,47 @@ import Observation
     return automations[index]
   }
 
-  /// 消す。その受信だけが持っていた提案は忘れる。
+  /// 消す。その自動化だけが持っていた候補は忘れる。
   func delete(_ id: Int) throws(AutomationError) {
     guard let index = automations.firstIndex(where: { $0.id == id }) else {
       throw .automationNotFound(id)
     }
     automations.remove(at: index)
-    _ = forgetUnheld()
+    _ = book.forgetUnheld(by: automations)
     persist()
   }
 
   // MARK: - 1 回
 
-  /// 判定に回す項目。この受信の前回の取得結果に id が無く（全件見直しの回は問わない）、同じリンクの提案がどこにも無いもの。
-  /// 同じリンクの項目が複数あれば最初の 1 件だけ。
-  func newItems(of id: Int, in fetched: [AutomationItem]) -> [AutomationItem] {
+  /// 枠の差分。この自動化の前回の取得結果に id が無い項目。全件見直しの回と、毎回全件の取得元では掛けない。
+  func unseen(of id: Int, in fetched: [AutomationItem]) -> [AutomationItem] {
     guard let automation = automation(id) else { return [] }
-    let seen = automation.reviewAll ? [] : Set(automation.lastFetched.map(\.id))
-    let proposed = Set(proposals.map(\.item.link))
-    var links = Set<String>()
-    return fetched.filter {
-      !seen.contains($0.id) && !proposed.contains($0.link) && links.insert($0.link).inserted
+    guard !automation.reviewAll, automation.definition.source?.coverage != .everything else {
+      return fetched
     }
+    let seen = Set(automation.lastFetched.map(\.id))
+    return fetched.filter { !seen.contains($0.id) }
   }
 
-  /// 判定に見せる出ている提案（判定が対応済みにできる相手）。取れた項目のリンクを持つものと、新着の流れの受信なら
-  /// 自分が出して判断待ちのままのもの——新着の流れでは、対応済みの知らせが元の項目と別の項目として届くため。
-  func openProposals(of id: Int, in fetched: [AutomationItem]) -> [AutomationProposal] {
-    let links = Set(fetched.map(\.link))
-    let streams = automation(id)?.definition.fetch.coverage == .newArrivals
-    return proposals.filter {
-      $0.state == .open && (links.contains($0.item.link) || (streams && $0.automationId == id))
-    }
-  }
-
-  /// 失敗した回。記録と最後に回った時刻だけを進め、取得済みも提案も動かさない。
+  /// 失敗した回。記録と最後に回った時刻だけを進め、取得済みも候補も動かさない。
   func recordFailure(of id: Int, _ run: AutomationRun) {
     guard let index = automations.firstIndex(where: { $0.id == id }) else { return }
     record(run, at: index)
     persist()
   }
 
-  /// 成功した回を、この時点の状態に当て直して 1 度に保存する。回の途中に他の受信の確定や人のさばきがあっても、
-  /// 既に提案のあるリンクへの提案は捨て、出ていない提案は対応済みにしない。提案した時刻は回の終わり。
+  /// 成功した回を確定する。前回の取得結果・全件見直しの印・前回成功の目印を進め、出力先の確定（`sink`。この時点の候補と
+  /// 自動化を受けて記録を返す）と回の記録を 1 度に保存する。
   func commit(
-    _ id: Int, _ run: AutomationRun, fetched: [AutomationItem], judged: [AutomationItem],
-    decisions: [AutomationDecision]
+    _ id: Int, _ run: AutomationRun, fetched: [AutomationItem],
+    sink: (inout AutomationProposalBook, [Automation]) -> AutomationSinkReport?
   ) {
     guard let index = automations.firstIndex(where: { $0.id == id }) else { return }
     var run = run
     automations[index].lastFetched = fetched.map { AutomationSeen(id: $0.id, link: $0.link) }
     automations[index].reviewAll = false
-    for decision in decisions {
-      switch decision {
-      case .propose(let itemId, let title, let due):
-        guard let item = judged.first(where: { $0.id == itemId }) else { continue }
-        guard !proposals.contains(where: { $0.item.link == item.link }) else {
-          run.judge?.rejected.add("propose \(itemId): \(item.link) is already proposed")
-          continue
-        }
-        proposals.append(
-          AutomationProposal(
-            id: nextProposalId, automationId: id, item: item, title: title, due: due,
-            proposedAt: TaskItem.storedInstant(run.endedAt), state: .open))
-        nextProposalId += 1
-        run.judge?.proposed += 1
-      case .resolve(let link):
-        guard let open = proposals.firstIndex(where: { $0.item.link == link && $0.state == .open })
-        else {
-          run.judge?.rejected.add("resolve \(link): no open proposal")
-          continue
-        }
-        proposals[open].state = .resolved
-        run.judge?.resolved += 1
-      }
-    }
-    run.withdrawn = forgetUnheld()
+    automations[index].lastSucceededAt = run.startedAt
+    run.sink = sink(&book, automations)
     record(run, at: index)
     persist()
   }
@@ -152,46 +116,9 @@ import Observation
     automations[index].lastRunAt = run.startedAt
   }
 
-  /// どの受信も持たない提案を忘れ、そのうち出ていたものの数を返す。止めた受信も持つ。
-  private func forgetUnheld() -> Int {
-    let held = { (proposal: AutomationProposal) in
-      self.automations.contains { Self.holds($0, proposal) }
-    }
-    let withdrawn = proposals.filter { $0.state == .open && !held($0) }.count
-    proposals.removeAll { !held($0) }
-    return withdrawn
-  }
+  // MARK: - 候補をさばく
 
-  /// 受信が提案を持っているか。前回の取得結果にリンクがあるか、新着の流れの受信が出してまだ人の判断待ちのものか。
-  private static func holds(_ automation: Automation, _ proposal: AutomationProposal) -> Bool {
-    automation.lastFetched.contains { $0.link == proposal.item.link }
-      || (automation.definition.fetch.coverage == .newArrivals
-        && automation.id == proposal.automationId
-        && proposal.state == .open)
-  }
-
-  // MARK: - 読むときに導くもの
-
-  /// 提案を棚に出す受信。提案した受信がまだ提案を持っていればそれ、いなければ持っている受信のうち ID が最小のもの。
-  func shelf(of proposal: AutomationProposal) -> Automation? {
-    let holding = automations.filter { Self.holds($0, proposal) }
-    return holding.first { $0.id == proposal.automationId } ?? holding.min { $0.id < $1.id }
-  }
-
-  /// 他の受信と前回の取得結果が重なっているリンクの数（重なりのある相手だけ、ID 順）。
-  func overlaps(of id: Int) -> [(automation: Automation, count: Int)] {
-    guard let automation = automation(id) else { return [] }
-    let links = Set(automation.lastFetched.map(\.link))
-    return automations.compactMap { other in
-      guard other.id != id else { return nil }
-      let count = links.intersection(other.lastFetched.map(\.link)).count
-      return count > 0 ? (other, count) : nil
-    }
-  }
-
-  // MARK: - 提案をさばく
-
-  /// 出ている提案を、`workspace` に付けてタスク一覧へ未着手で足す。追加が拒否されたら提案は変わらない。
+  /// 出ている候補を、`workspace` に付けてタスク一覧へ未着手で足す。追加が拒否されたら候補も累計も変わらない。
   func accept(_ proposalId: Int, into tasks: TaskStore, workspace: UUID?) throws(AutomationError)
     -> TaskItem
   {
@@ -210,15 +137,27 @@ import Observation
       case .notFound(let id): throw .invalid("task not found: \(id)")
       }
     }
-    proposals[index].state = .accepted(taskId: task.id)
+    book.proposals[index].state = .accepted(taskId: task.id)
+    tally(proposal, \.accepted)
     persist()
     return task
   }
 
   func dismiss(_ proposalId: Int) throws(AutomationError) {
     let index = try openIndex(proposalId)
-    proposals[index].state = .dismissed
+    book.proposals[index].state = .dismissed
+    tally(proposals[index], \.dismissed)
     persist()
+  }
+
+  /// さばいた候補を、出した自動化の累計に数える（棚に出していた自動化ではなく）。出した自動化が居なければ数えない。
+  private func tally(
+    _ proposal: AutomationProposal, _ outcome: WritableKeyPath<AutomationTaskCandidatesState, Int>
+  ) {
+    guard let index = automations.firstIndex(where: { $0.id == proposal.automationId }) else {
+      return
+    }
+    automations[index].tally(outcome)
   }
 
   private func openIndex(_ proposalId: Int) throws(AutomationError) -> Int {
@@ -233,53 +172,87 @@ import Observation
     AutomationPersistence.save(
       AutomationsFile(
         version: AutomationPersistence.version, nextAutomationId: nextAutomationId,
-        nextProposalId: nextProposalId, automations: automations, proposals: proposals))
+        nextProposalId: book.nextId, automations: automations, proposals: book.proposals))
   }
 
   // MARK: - 検証
 
-  /// 名前はタスクのタイトルと同じ 1 行の規則（前後の空白を除いて保存）。agent は裏で回せる CLI だけ。取得役のツールは
-  /// MCP のツールの完全名だけ。
+  /// 名前と段の名前はタスクのタイトルと同じ 1 行の規則（前後の空白を除いて保存）。agent は裏で回せる CLI だけ。取得元の
+  /// agent のツールは MCP のツールの完全名だけ。出力先ごとの要件はその出力先が見る。
   static func valid(_ definition: AutomationDefinition) throws(AutomationError)
     -> AutomationDefinition
   {
     var definition = definition
-    do throws(TaskStoreError) {
-      definition.name = try TaskStore.validTitle(definition.name)
-    } catch {
-      throw .invalid("name must be a single non-empty line")
-    }
-    switch definition.fetch.method {
-    case .command(let command):
-      do throws(BackgroundJobError) {
-        try BackgroundJob.command(command).validate()
-      } catch {
-        throw .invalid("fetch: \(error.message)")
+    definition.name = try line(definition.name, "name")
+    if let source = definition.source { try check(source) }
+    for (index, step) in definition.steps.enumerated() {
+      let role = "steps[\(index)]"
+      definition.steps[index].name = try line(step.name, "\(role).name")
+      switch step.method {
+      case .command(let command):
+        do throws(BackgroundJobError) {
+          try BackgroundJob.command(command).validate()
+        } catch {
+          throw .invalid("\(role): \(error.message)")
+        }
+      case .agent(let agent):
+        try checkAgent(agent.cli, model: agent.model, role)
+        guard !isBlank(agent.instruction) else { throw .invalid("\(role): instruction is empty") }
       }
-    case .agent(let agent):
-      try checkAgent(agent.cli, model: agent.model, "fetch")
-      guard !agent.tools.isEmpty else { throw .invalid("fetch: tools are empty") }
-      if let tool = agent.tools.first(where: { !isMCPToolName($0) }) {
-        throw .invalid(
-          "fetch: \(tool) is not a full MCP tool name (mcp__<server>__<tool>); built-in tools, "
-            + "whole servers and wildcards are refused so that fetched text cannot make the "
-            + "fetcher write anything")
-      }
-      guard !isBlank(agent.request) else { throw .invalid("fetch: request is empty") }
     }
-    try checkAgent(definition.judge.cli, model: definition.judge.model, "judge")
-    guard !isBlank(definition.judge.instruction) else {
-      throw .invalid("judge: instruction is empty")
+    switch definition.sink {
+    case .taskCandidates: try AutomationTaskCandidates.check(definition)
+    case .command(let command): try AutomationCommandSinkRun.check(command)
+    case .report: try AutomationReportSinkRun.check(definition)
     }
     do throws(BackgroundJobError) {
-      try definition.when.validate()
+      try definition.trigger.validate()
     } catch {
-      throw .invalid("when: \(error.message)")
+      throw .invalid("trigger: \(error.message)")
     }
     return definition
   }
 
-  private static func checkAgent(_ cli: String, model: String, _ role: String)
+  /// 書き換えの後に全件を見直す出力先か。
+  private static func reviewsAfterRework(_ sink: AutomationSink) -> Bool {
+    switch sink {
+    case .taskCandidates: AutomationTaskCandidates.reviewsAfterRework
+    case .command: AutomationCommandSinkRun.reviewsAfterRework
+    case .report: AutomationReportSinkRun.reviewsAfterRework
+    }
+  }
+
+  private static func check(_ source: AutomationSource) throws(AutomationError) {
+    switch source.method {
+    case .command(let command):
+      do throws(BackgroundJobError) {
+        try BackgroundJob.command(command).validate()
+      } catch {
+        throw .invalid("source: \(error.message)")
+      }
+    case .agent(let agent):
+      try checkAgent(agent.cli, model: agent.model, "source")
+      guard !agent.tools.isEmpty else { throw .invalid("source: tools are empty") }
+      if let tool = agent.tools.first(where: { !isMCPToolName($0) }) {
+        throw .invalid(
+          "source: \(tool) is not a full MCP tool name (mcp__<server>__<tool>); built-in tools, "
+            + "whole servers and wildcards are refused so that fetched text cannot make the "
+            + "fetcher write anything")
+      }
+      guard !isBlank(agent.request) else { throw .invalid("source: request is empty") }
+    }
+  }
+
+  private static func line(_ text: String, _ field: String) throws(AutomationError) -> String {
+    do throws(TaskStoreError) {
+      return try TaskStore.validTitle(text)
+    } catch {
+      throw .invalid("\(field) must be a single non-empty line")
+    }
+  }
+
+  /// モデルは省略できる（既定は `AutomationDefinition.model`）。書くなら空でないこと。
+  private static func checkAgent(_ cli: String, model: String?, _ role: String)
     throws(AutomationError)
   {
     switch AgentCatalog.profile(cli)?.headless {
@@ -288,7 +261,7 @@ import Observation
       throw .invalid("\(role): \(cli) cannot run in the background (\(reason.message))")
     case nil: throw .invalid("\(role): agent \(cli) is not supported")
     }
-    guard !isBlank(model) else { throw .invalid("\(role): model is empty") }
+    if let model, isBlank(model) { throw .invalid("\(role): model is empty") }
   }
 
   /// 取得役は外から届いた文面を読むので、書き込みの手段を渡さないよう、使えるツールを名指しした MCP のツールに限る。
@@ -309,10 +282,4 @@ import Observation
   private static func isBlank(_ text: String) -> Bool {
     text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
-}
-
-/// 判定の出力から読み取った 1 つの決定。
-enum AutomationDecision: Equatable {
-  case propose(itemId: String, title: String, due: TaskItem.DueDate?)
-  case resolve(link: String)
 }

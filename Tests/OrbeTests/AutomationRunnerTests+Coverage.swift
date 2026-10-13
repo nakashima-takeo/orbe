@@ -19,7 +19,8 @@ extension AutomationRunnerTests {
     jobs.finish(3, replied(""))
 
     XCTAssertTrue(store.proposals.isEmpty)
-    XCTAssertEqual(store.automation(automation.id)?.runs.first?.withdrawn, 1)
+    XCTAssertEqual(
+      AutomationStoreTests.candidates(store.automation(automation.id)?.runs.first)?.withdrawn, 1)
   }
 
   func testNewArrivalsKeepAProposalUntilTheJudgeResolvesIt() throws {
@@ -37,13 +38,15 @@ extension AutomationRunnerTests {
 
     XCTAssertEqual(store.proposals.map(\.state), [.open], "取得から消えても下げない")
     XCTAssertEqual(store.shelf(of: store.proposals[0])?.id, automation.id, "棚に出し続ける")
-    XCTAssertEqual(store.automation(automation.id)?.runs.first?.withdrawn, 0)
+    XCTAssertEqual(
+      AutomationStoreTests.candidates(store.automation(automation.id)?.runs.first)?.withdrawn, 0)
 
     try runner.runNow(automation.id)
     jobs.finish(4, fetched(["c"]))
     jobs.finish(5, replied(#"{"resolve":"https://example.com/a"}"#))
 
     XCTAssertTrue(store.proposals.isEmpty, "判定が対応済みとしたら下げる")
-    XCTAssertEqual(store.automation(automation.id)?.runs.first?.judge?.resolved, 1)
+    XCTAssertEqual(
+      AutomationStoreTests.candidates(store.automation(automation.id)?.runs.first)?.resolved, 1)
   }
 }

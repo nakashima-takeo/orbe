@@ -1,9 +1,9 @@
 import Foundation
 import OrbeSessionLog
 
-// 受信の永続（intakes.json）と制御 API が共有する JSON の形。
+// automations.json の JSON の形。
 
-extension AutomationFetch: Codable {
+extension AutomationSource: Codable {
   private enum CodingKeys: String, CodingKey {
     case command, directory, agent, model, tools, request, coverage
   }
@@ -20,9 +20,9 @@ extension AutomationFetch: Codable {
           directory: try c.decodeIfPresent(String.self, forKey: .directory)))
     case (false, true):
       method = .agent(
-        AutomationAgentFetch(
+        AutomationSourceAgent(
           cli: try c.decodeIfPresent(String.self, forKey: .agent) ?? "claude",
-          model: try c.decode(String.self, forKey: .model),
+          model: try c.decodeIfPresent(String.self, forKey: .model),
           tools: try c.decode([String].self, forKey: .tools),
           request: try c.decode(String.self, forKey: .request)))
     default:
@@ -34,7 +34,7 @@ extension AutomationFetch: Codable {
     let rawCoverage = try c.decode(String.self, forKey: .coverage)
     guard let coverage = AutomationCoverage(rawValue: rawCoverage) else {
       throw DecodingError.dataCorruptedError(
-        forKey: .coverage, in: c, debugDescription: "pass currentSet or newArrivals")
+        forKey: .coverage, in: c, debugDescription: "pass newArrivals, currentSet or everything")
     }
     self.coverage = coverage
   }
@@ -48,30 +48,153 @@ extension AutomationFetch: Codable {
       try c.encodeIfPresent(command.directory, forKey: .directory)
     case .agent(let agent):
       try c.encode(agent.cli, forKey: .agent)
-      try c.encode(agent.model, forKey: .model)
+      try c.encodeIfPresent(agent.model, forKey: .model)
       try c.encode(agent.tools, forKey: .tools)
       try c.encode(agent.request, forKey: .request)
     }
   }
 }
 
-extension AutomationJudge: Codable {
+/// `command`（＋`directory`）か `instruction`（＋`agent`〔既定 claude〕・`model`）のちょうど一方。段はツールを持たないので、
+/// `tools` があれば読まない。
+extension AutomationStep: Codable {
   private enum CodingKeys: String, CodingKey {
-    case agent, model, instruction
+    case name, command, directory, agent, model, instruction, tools
   }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
-    cli = try c.decodeIfPresent(String.self, forKey: .agent) ?? "claude"
-    model = try c.decode(String.self, forKey: .model)
-    instruction = try c.decode(String.self, forKey: .instruction)
+    name = try c.decode(String.self, forKey: .name)
+    guard !c.contains(.tools) else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .tools, in: c, debugDescription: "a step has no tools")
+    }
+    switch (c.contains(.command), c.contains(.instruction)) {
+    case (true, false):
+      method = .command(
+        BackgroundCommand(
+          script: try c.decode(String.self, forKey: .command),
+          directory: try c.decodeIfPresent(String.self, forKey: .directory)))
+    case (false, true):
+      method = .agent(
+        AutomationStepAgent(
+          cli: try c.decodeIfPresent(String.self, forKey: .agent) ?? "claude",
+          model: try c.decodeIfPresent(String.self, forKey: .model),
+          instruction: try c.decode(String.self, forKey: .instruction)))
+    default:
+      throw DecodingError.dataCorrupted(
+        .init(
+          codingPath: c.codingPath,
+          debugDescription: "pass either command (a shell command) or instruction (an agent step)"))
+    }
   }
 
   func encode(to encoder: Encoder) throws {
     var c = encoder.container(keyedBy: CodingKeys.self)
-    try c.encode(cli, forKey: .agent)
-    try c.encode(model, forKey: .model)
-    try c.encode(instruction, forKey: .instruction)
+    try c.encode(name, forKey: .name)
+    switch method {
+    case .command(let command):
+      try c.encode(command.script, forKey: .command)
+      try c.encodeIfPresent(command.directory, forKey: .directory)
+    case .agent(let agent):
+      try c.encode(agent.cli, forKey: .agent)
+      try c.encodeIfPresent(agent.model, forKey: .model)
+      try c.encode(agent.instruction, forKey: .instruction)
+    }
+  }
+}
+
+/// `{"kind": "taskCandidates"}`・`{"kind": "command", "command", "directory"?, "timeoutMinutes"?}`・`{"kind": "report"}`。
+extension AutomationSink: Codable {
+  private enum CodingKeys: String, CodingKey {
+    case kind, command, directory, timeoutMinutes
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    switch try c.decode(String.self, forKey: .kind) {
+    case "taskCandidates": self = .taskCandidates
+    case "command":
+      self = .command(
+        AutomationSinkCommand(
+          command: BackgroundCommand(
+            script: try c.decode(String.self, forKey: .command),
+            directory: try c.decodeIfPresent(String.self, forKey: .directory)),
+          timeoutMinutes: try c.decodeIfPresent(Int.self, forKey: .timeoutMinutes)))
+    case "report": self = .report
+    default: throw unknownSinkKind(c, .kind)
+    }
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    switch self {
+    case .taskCandidates: try c.encode("taskCandidates", forKey: .kind)
+    case .command(let sink):
+      try c.encode("command", forKey: .kind)
+      try c.encode(sink.command.script, forKey: .command)
+      try c.encodeIfPresent(sink.command.directory, forKey: .directory)
+      try c.encodeIfPresent(sink.timeoutMinutes, forKey: .timeoutMinutes)
+    case .report: try c.encode("report", forKey: .kind)
+    }
+  }
+}
+
+/// `{"kind": "taskCandidates", "proposed": …, "resolved": …, "withdrawn": …, "rejected": …}`・
+/// `{"kind": "command", "commandLine": …, "ending": …, "count": …}`・`{"kind": "report", "text"?: …}`。
+extension AutomationSinkReport: Codable {
+  private enum CodingKeys: String, CodingKey {
+    case kind, text
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    switch try c.decode(String.self, forKey: .kind) {
+    case "taskCandidates": self = .taskCandidates(try AutomationTaskCandidatesReport(from: decoder))
+    case "command": self = .command(try AutomationCommandReport(from: decoder))
+    case "report": self = .report(text: try c.decodeIfPresent(String.self, forKey: .text))
+    default: throw unknownSinkKind(c, .kind)
+    }
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    switch self {
+    case .taskCandidates(let report):
+      try c.encode("taskCandidates", forKey: .kind)
+      try report.encode(to: encoder)
+    case .command(let report):
+      try c.encode("command", forKey: .kind)
+      try report.encode(to: encoder)
+    case .report(let text):
+      try c.encode("report", forKey: .kind)
+      try c.encodeIfPresent(text, forKey: .text)
+    }
+  }
+}
+
+/// 種類は文字列で読む——知らない種類を、型の名前を出さずに言うため。
+private func unknownSinkKind<Key: CodingKey>(_ c: KeyedDecodingContainer<Key>, _ key: Key)
+  -> DecodingError
+{
+  DecodingError.dataCorruptedError(
+    forKey: key, in: c, debugDescription: "pass taskCandidates, command or report")
+}
+
+/// 値は文字列で読む——知らない通知先を、型の名前を出さずに言うため。
+extension AutomationNotify: Codable {
+  init(from decoder: Decoder) throws {
+    let c = try decoder.singleValueContainer()
+    guard let notify = Self(rawValue: try c.decode(String.self)) else {
+      throw DecodingError.dataCorruptedError(
+        in: c, debugDescription: "pass menuBar or notificationCenter")
+    }
+    self = notify
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.singleValueContainer()
+    try c.encode(rawValue)
   }
 }
 
@@ -171,9 +294,7 @@ extension AutomationItem: Codable {
 
 extension AutomationProposal: Codable {
   private enum CodingKeys: String, CodingKey {
-    case id
-    case automationId = "intakeId"
-    case item, title, due, proposedAt, state, taskId
+    case id, automationId, item, title, due, proposedAt, state, taskId
   }
 
   private enum StateName: String, Codable {

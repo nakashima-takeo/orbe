@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 受信タブのフッターの左（居場所と選択で、↵ が何をするか。失敗は赤で置き換える）。
+/// 提案タブのフッターの左（居場所と選択で、↵ が何をするか。失敗は赤で置き換える）。
 struct TaskPaletteAutomationAction: View {
   @Bindable var model: TaskPaletteAutomationModel
   @Environment(\.localization) private var l10n
@@ -32,7 +32,7 @@ struct TaskPaletteAutomationAction: View {
   }
 }
 
-/// 受信タブのフッターの右のヒント。
+/// 提案タブのフッターの右のヒント。
 struct TaskPaletteAutomationHints: View {
   @Bindable var model: TaskPaletteAutomationModel
   @Environment(\.localization) private var l10n
@@ -41,13 +41,15 @@ struct TaskPaletteAutomationHints: View {
     switch model.place {
     case .proposals:
       if model.selectedProposal != nil {
+        PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteMakeTaskOpen))
         PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteAutomationDismiss))
-        PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteHintOpenInBrowser))
+        PaletteKeyHint(key: "⌘O", label: l10n.string(.taskPaletteHintOpenInBrowser))
       }
       if model.selectedAutomation != nil {
         PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteAutomationContents))
       }
       PaletteKeyHint(key: "←", label: l10n.string(.taskPaletteAutomationHintShelf))
+      PaletteKeyHint(key: "⇥", label: l10n.string(.taskPaletteHintTab))
       PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintClose))
     case .shelf:
       PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteAutomationHintPick))

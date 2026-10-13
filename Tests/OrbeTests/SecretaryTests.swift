@@ -61,7 +61,7 @@ final class SecretaryTests: OrbeTestCase {
     let command = try XCTUnwrap(tab.surface.initialCommand)
     XCTAssertTrue(
       command.contains("--append-system-prompt") && command.contains("add_task")
-        && !command.contains("set_intake"), "タスクを足す役目を添える: \(command)")
+        && !command.contains("set_automation"), "タスクを足す役目を添える: \(command)")
     XCTAssertTrue(command.hasSuffix(" -- '依頼: 見積もりを山田さんに送る'"), "頼みは最初の入力: \(command)")
 
     try wc.secretary.ask(.text("二件目"), from: .palette)
@@ -70,8 +70,8 @@ final class SecretaryTests: OrbeTestCase {
 
   // MARK: - Home のボードから
 
-  /// Home のボードの欄で頼むと、自動追加の定義を書く役目の claude が Home に起きてそのタブへ移り、欄は空になる。
-  func testTheBoardFieldOpensClaudeWithTheAutoAddRoleAndClearsTheField() throws {
+  /// Home のボードの欄で頼むと、自動化の定義を書く役目の claude が Home に起きてそのタブへ移り、欄は空になる。
+  func testTheBoardFieldOpensClaudeWithTheAutomationRoleAndClearsTheField() throws {
     let wc = try launch()
     let automation = wc.board.automation
 
@@ -84,8 +84,8 @@ final class SecretaryTests: OrbeTestCase {
     XCTAssertEqual(wc.activeTab?.id, tab.id, "そのタブへ移る")
     let command = try XCTUnwrap(tab.surface.initialCommand)
     XCTAssertTrue(
-      command.contains("set_intake") && !command.contains("add_task"),
-      "自動追加の定義を書く役目を添える: \(command)")
+      command.contains("set_automation") && !command.contains("add_task"),
+      "自動化の定義を書く役目を添える: \(command)")
     XCTAssertTrue(command.hasSuffix(" -- '依頼: DM を候補に'"), "欄の文は最初の入力: \(command)")
   }
 

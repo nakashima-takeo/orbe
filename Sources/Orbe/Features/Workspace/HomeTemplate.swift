@@ -44,19 +44,13 @@ enum HomeTemplate {
     - タスクを待ちにし、解ける条件（説明・確認のコマンド・間隔・期限）を `set_wait_condition` で付ける。
     - Orbe が確認のコマンドを人の承認なしに裏で予定どおり繰り返し走らせ、満たすか期限が来たら待ちを外して人に知らせる。
 
-    ## 予定どおり何かを拾ってタスクの候補にする
-
-    - タスクの自動追加（`set_intake`・`list_intakes`・`run_intake`・`pause_intake`・`delete_intake`・`list_intake_proposals`）。
-    - 予定（間隔か毎日の時刻）ごとに、取得（コマンドか軽い agent）が項目を取り、判定（agent）が指示文に照らして候補を出す。
-    - 人が ⌘⇧X の自動追加タブで受けた候補だけがタスクになる。Slack・メール・課題管理・GitHub などから拾うのが主な使い方。
-
-    Orbe の中で予定どおり繰り返し動くのは、待ちの条件の確認とタスクの自動追加の 2 つ。
+    \(automationJa)
 
     ## Home のボード（画面）に出すものを変える
 
     - `list_board_parts`・`add_board_part`・`remove_board_part`。workspaceId は Home の id（`list_workspaces` で hasBoard が \
     true のもの）。
-    - 部品は `intake`（タスクの自動追加の一覧と依頼の欄）。外しても自動追加そのものは消えず、置けば戻る。
+    - 部品は `automation`（自動化の一覧と依頼の欄）。外しても自動化そのものは消えず、置けば戻る。
 
     ## タブと agent を操作する
 
@@ -99,23 +93,14 @@ enum HomeTemplate {
     - Orbe runs the check command in the background on schedule, repeatedly and without asking the user, \
     and clears the wait and notifies the user when it holds or the deadline comes.
 
-    ## Pick things up on a schedule as task candidates
-
-    - Task auto-add (`set_intake`, `list_intakes`, `run_intake`, `pause_intake`, `delete_intake`, \
-    `list_intake_proposals`).
-    - On each scheduled run (an interval or daily times), the fetch (a command or a light agent) gets items, \
-    and the judge (an agent) makes candidates against its instruction.
-    - Only candidates the user accepts in the Auto-add tab of ⌘⇧X become tasks. The main use is picking things \
-    up from Slack, mail, issue trackers, GitHub, and the like.
-
-    Inside Orbe, the only things that run repeatedly on schedule are waiting-condition checks and task auto-add.
+    \(automationEn)
 
     ## Change what Home's board (screen) shows
 
     - `list_board_parts`, `add_board_part`, `remove_board_part`. workspaceId is Home's id (the one with \
     hasBoard true in `list_workspaces`).
-    - The part is `intake` (the task auto-add list and its request field). Removing it keeps the auto-adds \
-    themselves; adding it brings the part back.
+    - The part is `automation` (the automation list and its request field). Removing it keeps the \
+    automations themselves; adding it brings the part back.
 
     ## Operate tabs and agents
 
@@ -128,6 +113,56 @@ enum HomeTemplate {
 
     """
   }
+
+  /// 自動化の節。
+  private static let automationJa = """
+    ## 予定どおり何かを拾い、絞り・判断してタスクの候補にするか、コマンドを走らせるか、報告する
+
+    - 自動化（`set_automation`・`list_automations`・`run_automation`・`pause_automation`・`delete_automation`・\
+    `list_automation_proposals`）。
+    - トリガー（間隔か毎日の時刻）ごとに、取得元（コマンドか軽い agent）が項目を取り、処理の段（コマンドか agent）が順に\
+    絞り・判断して、出力先へ出す。出力先はタスク候補・コマンド・報告の 3 つ。
+    - 名前は「出どころ: 何を取るか」の 1 行（例「GitHub: 自分へのレビュー依頼」）。取得元が無ければ、何をするかの 1 行\
+    （例「日報の下書き」）。
+    - タスク候補: 人が ⌘⇧X の提案タブで受けた候補だけがタスクになる。Slack・メール・課題管理・GitHub などから拾うのが主な使い方。
+    - コマンド: 届いた行を標準入力で受けて走る。取得元も段も無ければ、トリガーのたびに走る（例: 毎晩 23 時に \
+    `~/bin/daily-note.sh` を実行する）。
+    - 報告: 最後の段が書いた短い文章を、その回の結果として残す（例: 毎日 18 時に開いている PR を要約する）。1 行目がボードの\
+    見出しと通知に出る。言うことが無ければ何も出さない。
+    - 通知（`notify: "menuBar"` か `"notificationCenter"`）: どの出力先にも付けられる。何かを出した回と、失敗が続くなら最初の\
+    失敗の回に、メニューバーか macOS の通知センターへ名前と結果の 1 行が出る。通知センターの通知は自動化ごとに 1 つで、新しい回が\
+    差し替える。`notificationCenter` を書くと、Orbe の通知の許可がまだ決まっていなければ OS が許可を問う。許可が無い回は\
+    メニューバーに出る。押すと Home のボードでその自動化が開く。省略すると知らせない。
+
+    Orbe の中で予定どおり繰り返し動くのは、待ちの条件の確認と自動化の 2 つ。
+    """
+
+  private static let automationEn = """
+    ## Pick things up on a schedule, narrow and judge them into task candidates, run a command, or report
+
+    - Automation (`set_automation`, `list_automations`, `run_automation`, `pause_automation`, \
+    `delete_automation`, `list_automation_proposals`).
+    - On each trigger (an interval or daily times), the source (a command or a light agent) gets items, the \
+    steps (commands or agents) narrow and judge them in order, and the sink receives the result. There are \
+    three sinks: task candidates, a command, and a report.
+    - Name it in one line, "<source>: <what it gets>" (e.g. "GitHub: review requests for me"); without a \
+    source, say what it does (e.g. "Daily note draft").
+    - Task candidates: only candidates the user accepts in the Proposals tab of ⌘⇧X become tasks. The main use \
+    is picking things up from Slack, mail, issue trackers, GitHub, and the like.
+    - Command: it runs with the lines that reach it on stdin. With neither a source nor steps, it runs on every \
+    trigger (e.g. run `~/bin/daily-note.sh` every night at 23:00).
+    - Report: the short text the last step writes is kept as the result of the run (e.g. summarize the \
+    open PRs every day at 18:00). Its first line shows on the board's heading and in the notification. With \
+    nothing to report, the last step prints nothing.
+    - Notify (`notify: "menuBar"` or `"notificationCenter"`): any sink can have it. When a run delivers \
+    something, or on the first of consecutive failed runs, the name and the result line show in the menu bar \
+    or in macOS Notification Center. Notification Center keeps one notification per automation; a new run \
+    replaces it. Setting `notificationCenter` makes macOS ask for Orbe's notification permission if it is not \
+    decided yet; without permission, the run shows in the menu bar. Clicking either opens the automation on \
+    Home's board. Omit it to stay silent.
+
+    Inside Orbe, the only things that run repeatedly on schedule are waiting-condition checks and automations.
+    """
 
   private static let claudeMdJa = """
     # Home
