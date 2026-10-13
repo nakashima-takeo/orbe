@@ -48,7 +48,7 @@ extension ControlWireTests {
     ]
   }
 
-  /// cron 式は前後の空白を除いて受けたまま運ぶ（一覧はそのまま返す）。
+  /// cron 式は前後の空白を除いて受けたまま運ぶ。
   func testSetAutomationCarriesTheDefinitionToTheTarget() throws {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
