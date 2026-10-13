@@ -232,7 +232,7 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
 
   /// 続きから始められない（作業ディレクトリが無い）タスクの ⌘↵ は、そのタスクのための ⌘T（worktree パレット）を開き、タブは
   /// 開かず、起きたことも残す。
-  func testOpeningTheAgentOfAConversationThatCannotContinueOpensTheUsualWorktreePalette() throws {
+  func testOpeningTheAgentOfAConversationThatCannotContinueOpensTheWorktreePalette() throws {
     _ = try stageFakeAgent("claude")
     let wc = try launch([TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)])
     waitForDetection(wc)
