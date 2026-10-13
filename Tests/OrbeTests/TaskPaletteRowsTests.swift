@@ -5,7 +5,7 @@ import XCTest
 /// タスク画面（⌘⇧X）の表の行を、タスク・入力・絞り込み・並びから組む純関数 `TaskPaletteRows` を固定する。
 ///
 /// 壊れると何が起きるか: 既定の並びが作成の新しい順でなくなり、`orb task list` と画面の並びが食い違う。絞り込みの外の
-/// タスクが混ざる、または消える。待ちの日数・workspace の値が別の値を言い、人が「今日やるもの」「自分の workspace の
+/// タスクが混ざる、または消える。期限で並べると期限の無いタスクが先に来て、近い期限が埋もれる。待ちの日数・workspace の値が別の値を言い、人が「今日やるもの」「自分の workspace の
 /// もの」を見誤る。状態の札の件数が打った文字で揺れて、残りの量が分からなくなる。
 @MainActor
 final class TaskPaletteRowsTests: OrbeTestCase {
@@ -33,11 +33,11 @@ final class TaskPaletteRowsTests: OrbeTestCase {
 
   func input(
     _ tasks: [TaskItem], query: String = "", filter: TaskPaletteFilter = TaskPaletteFilter(),
-    items: [GitHubItemID: GitHubItemAnswer] = [:], viewerLogin: String? = nil,
-    agents: [String: WorktreeAgentActivity.Agent] = [:]
+    sort: TaskPaletteSort = TaskPaletteSort(), items: [GitHubItemID: GitHubItemAnswer] = [:],
+    viewerLogin: String? = nil, agents: [String: WorktreeAgentActivity.Agent] = [:]
   ) -> TaskPaletteRows.Input {
     TaskPaletteRows.Input(
-      tasks: tasks, query: query, filter: filter, sort: TaskPaletteSort(),
+      tasks: tasks, query: query, filter: filter, sort: sort,
       workspaces: workspaces, today: today, timeZone: calendar.timeZone, items: items,
       viewerLogin: viewerLogin, agents: agents)
   }
@@ -82,6 +82,68 @@ final class TaskPaletteRowsTests: OrbeTestCase {
     let tasks = [task(1, "a", .done), task(2, "b", .todo), task(3, "c", .done)]
 
     XCTAssertEqual(taskIDs(TaskPaletteRows.build(input(tasks, filter: everything))), [3, 2, 1])
+  }
+
+  /// workspace の「なし」には、削除された workspace への参照も当たる。
+  func testFilterKindsCombineWithAndWhileValuesOfAKindCombineWithOr() {
+    let tasks = [
+      task(1) {
+        $0.workspace = self.opened.id
+        $0.priority = .high
+      },
+      task(2) {
+        $0.workspace = self.other.id
+        $0.priority = .high
+      },
+      task(3) { $0.priority = .low },
+      task(4) {
+        $0.workspace = UUID()
+        $0.priority = .high
+      },
+      task(5) { $0.workspace = self.opened.id },
+    ]
+    var filter = TaskPaletteFilter()
+    filter.workspaces = [opened.id, nil]
+    filter.priorities = [.high, .low]
+
+    XCTAssertEqual(taskIDs(TaskPaletteRows.build(input(tasks, filter: filter))), [4, 3, 1])
+  }
+
+  /// 期限の区切りは今日との暦日の差だけで決まる（7 日後までが「7 日以内」）。
+  func testDueFilterBucketsTasksByCalendarDaysFromToday() {
+    func due(_ day: Int) -> TaskItem.DueDate { TaskItem.DueDate(year: 2025, month: 10, day: day)! }
+    let tasks = [
+      task(1) { $0.due = due(3) }, task(2) { $0.due = due(4) }, task(3) { $0.due = due(11) },
+      task(4) { $0.due = due(12) }, task(5),
+    ]
+    func ids(_ bucket: TaskDueBucket) -> [Int] {
+      var filter = TaskPaletteFilter()
+      filter.dues = [bucket]
+      return taskIDs(TaskPaletteRows.build(input(tasks, filter: filter)))
+    }
+
+    XCTAssertEqual(ids(.overdue), [1])
+    XCTAssertEqual(ids(.today), [2])
+    XCTAssertEqual(ids(.withinWeek), [3])
+    XCTAssertEqual(ids(.later), [4])
+    XCTAssertEqual(ids(.none), [5])
+  }
+
+  /// 期限の無いタスクはどちらの向きでも末尾に来て、同じ値どうしは作成の新しい順（同時刻は ID の大きい方が先）。
+  func testSortingByDueKeepsTasksWithoutDueLastInEitherDirection() {
+    func due(_ day: Int) -> TaskItem.DueDate { TaskItem.DueDate(year: 2025, month: 10, day: day)! }
+    let tasks = [
+      task(1) { $0.due = due(10) }, task(2), task(3) { $0.due = due(5) },
+      task(4) { $0.due = due(10) }, task(5),
+    ]
+    func ids(reversed: Bool) -> [Int] {
+      taskIDs(
+        TaskPaletteRows.build(
+          input(tasks, sort: TaskPaletteSort(column: .due, reversed: reversed))))
+    }
+
+    XCTAssertEqual(ids(reversed: false), [3, 4, 1, 5, 2], "近い順")
+    XCTAssertEqual(ids(reversed: true), [4, 1, 3, 5, 2], "遠い順")
   }
 
   func testNoTasksAndNoQueryShowsTheEmptyInfoRowOnly() {
