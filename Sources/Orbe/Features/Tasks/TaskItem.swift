@@ -186,6 +186,21 @@ extension TaskItem {
   static func newerFirst(_ a: TaskItem, _ b: TaskItem) -> Bool {
     a.createdAt != b.createdAt ? a.createdAt > b.createdAt : a.id > b.id
   }
+
+  /// 表に出す状態（状態の札・状態の絞り込み・件数・状態の列の並べ替え・アイコン）。
+  enum DisplayState: CaseIterable, Hashable {
+    case todo, inProgress, waiting, done
+  }
+
+  /// 完了 → 待ち → 進行中 → 未着手 の順に決まる（待ちはステータスと独立した属性なので、完了以外で優先する）。
+  var displayState: DisplayState {
+    switch (status, waiting) {
+    case (.done, _): .done
+    case (_, .some): .waiting
+    case (.inProgress, nil): .inProgress
+    case (.todo, nil): .todo
+    }
+  }
 }
 
 /// 外した項目 1 つの永続の形（`{repo, number}`）。

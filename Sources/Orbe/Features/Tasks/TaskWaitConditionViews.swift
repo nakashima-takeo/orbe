@@ -20,7 +20,7 @@ struct TaskResolvedBadge: View {
         .frame(maxWidth: TaskPaletteRowMetrics.textBadgeMaxWidth, alignment: .leading)
         .fixedSize()
         .padding(.horizontal, Theme.Space.step)
-        .frame(height: TaskPaletteRowMetrics.firstLine)
+        .frame(height: TaskPaletteRowMetrics.badge)
         .background(Capsule().fill(Color.theme.tintAccent))
     }
   }
@@ -219,7 +219,7 @@ struct TaskConditionBox: View {
   }
 }
 
-/// 右の欄の上部の起きたことの箱（「● レビューが付いた 2分前 · 確認 18 回目」・確認の出力の続き・「⌘T claude で続きから」）。
+/// 右の欄の上部の起きたことの箱（「● レビューが付いた 2分前 · 確認 18 回目」・確認の出力の続き・「⌘↵ claude で続きから」）。
 struct TaskResolvedBox: View {
   let model: TaskPaletteModel
   let resolution: WaitResolution
@@ -301,10 +301,10 @@ struct TaskResolvedBox: View {
   private func continueButton(_ conversation: WaitConversation) -> some View {
     VStack(alignment: .leading, spacing: Theme.Space.tick) {
       Button {
-        model.continueWait()
+        if let task = model.selectedTask { model.openAgent(forTask: task.id) }
       } label: {
         HStack(spacing: Theme.Space.step) {
-          Text("⌘T").foregroundStyle(Color.theme.accentBright)
+          Text("⌘↵").foregroundStyle(Color.theme.accentBright)
           Text(l10n.format(.taskWaitContinue, conversation.command))
             .foregroundStyle(Color.theme.textPrimary)
         }

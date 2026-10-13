@@ -2,8 +2,8 @@ import Foundation
 
 @testable import Orbe
 
-/// タスク画面の fixture（見本 XTTasks.png と同じ並び・札）。今日は見本の日付（2025-10-04）に固定し、
-/// 待ちの日数と期限の曜日を決定論にする。
+/// タスク画面の fixture（見本 List.png と同じ行・値）。今日は 2025-10-04 に固定し、待ちの日数と期限の曜日を
+/// 決定論にする（作成日と期限は見本の今日からの隔たりをそのまま写す）。
 extension DesignSceneFixtures {
   static let taskCalendar: Calendar = {
     var calendar = Calendar(identifier: .gregorian)
@@ -17,21 +17,21 @@ extension DesignSceneFixtures {
 
   /// 開いたのは orbe。末尾が Home（受信の提案をタスクにすると付く）。
   static let taskWorkspaces: TaskPaletteWorkspaces = {
-    let ids = (0..<4).map { _ in UUID() }
-    let all = zip(ids, ["orbe", "web-app", "api", "Home"]).map {
+    let ids = (0..<3).map { _ in UUID() }
+    let all = zip(ids, ["orbe", "work", "Home"]).map {
       TaskPaletteWorkspaces.Entry(id: $0, name: $1)
     }
-    return TaskPaletteWorkspaces(opened: all[0], all: all, home: all[3].id)
+    return TaskPaletteWorkspaces(opened: all[0], all: all, home: all[2].id)
   }()
 
-  /// 見本の 11 件（進行中 4・未着手 7）と完了 3 件。
+  /// 見本の 7 件（未着手 4・進行中 1・待ち 2）と完了 3 件。ID は作成の順。
   static func taskDesignFile() -> TasksFile {
     let ws = taskWorkspaces.all.map(\.id)
     let daysAgo = { (days: Int) in
       taskCalendar.date(byAdding: .day, value: -days, to: taskToday)!
     }
     func task(
-      _ id: Int, _ title: String, _ status: TaskItem.Status = .todo,
+      _ id: Int, _ title: String, _ status: TaskItem.Status = .todo, created: Int,
       waiting: (String, Int)? = nil, priority: TaskItem.Priority = .medium,
       due: String? = nil, workspace: UUID? = nil, description: String = "", by: String? = nil,
       links: [TaskLink] = [], worktree: String? = nil
@@ -40,38 +40,53 @@ extension DesignSceneFixtures {
         id: id, title: title, status: status,
         wait: waiting.map { .waiting(TaskItem.Waiting(reason: $0.0, since: daysAgo($0.1))) },
         priority: priority, due: due.flatMap(TaskItem.DueDate.init), workspace: workspace,
-        description: description, createdAt: daysAgo(2), createdBy: by, links: links,
+        description: description, createdAt: daysAgo(created), createdBy: by, links: links,
         worktree: worktree.map(taskWorktree))
     }
     let tasks = [
       task(
-        1, "タスク機能の設計", .inProgress, workspace: ws[0],
+        1, "経費精算を出す", created: 10, priority: .low, due: "2025-10-25", workspace: ws[1],
+        description: "交通費 3 件\n  会議室代は別に申請する\n"),
+      task(2, "ヘルプの検索を速くする", created: 7, workspace: ws[0]),
+      task(
+        3, "見積もりの数字を経理に確認する", .inProgress, created: 5, waiting: ("経理の返事", 1),
+        workspace: ws[1]),
+      task(
+        4, "タスク機能の設計", .inProgress, created: 4, workspace: ws[0],
         description: "人と agent が同じ一覧を見て動けるようにする。結び付き・worktree の起動までを"
-          + "一続きにし、agent には制御 API と MCP から同じ操作を渡す。見た目は ⌘⇧S の尺度にそろえる。",
+          + "一続きにし、agent には制御 API と MCP から同じ操作を渡す。",
         links: [taskLink(.issue, "orbe", 212), taskLink(.pr, "orbe", 213)], worktree: "issue-212"),
       task(
-        2, "レビュー指摘に返信する", .inProgress, workspace: ws[0], links: [taskLink(.pr, "orbe", 209)],
-        worktree: "pr-209"),
-      task(
-        3, "設定の検索を速くする", .inProgress, waiting: ("レビュー待ち", 2), workspace: ws[0],
-        links: [taskLink(.pr, "orbe", 214)], worktree: "pr-214"),
-      task(4, "見積もりの数字を経理に確認する", .inProgress, waiting: ("経理の返事", 1)),
-      task(
-        5, "ログイン直後に白画面になる", priority: .high, workspace: ws[1],
-        links: [taskLink(.issue, "web-app", 47)]),
-      task(6, "Slack で上司に来週の休みを連絡する"),
-      task(7, "経費精算を出す", due: "2025-10-06", description: "交通費 3 件\n  会議室代は別に申請する\n"),
-      task(8, "キャッシュ層を差し替える", workspace: ws[2], links: [taskLink(.pr, "orbe", 88)]),
-      task(
-        9, "Dispatch: fetch 待ちの間 Esc が効かない", workspace: ws[0],
+        5, "Dispatch: fetch 待ちの間 Esc が効かない", created: 2, priority: .high, workspace: ws[0],
         links: [taskLink(.issue, "orbe", 218)]),
-      task(10, "control/api.md にタスクのツール節を足す", workspace: ws[0], by: "claude"),
-      task(11, "歯医者の予約を取り直す", priority: .low),
-      task(12, "ヘルプに ⌘⇧X を載せる", .done, workspace: ws[0], description: "キーの一覧の末尾に足した"),
-      task(13, "請求書を送る", .done),
-      task(14, "ブランチ名の検証を直す", .done, workspace: ws[0]),
+      task(6, "デザインレビューの返事を待つ", created: 1, waiting: ("先方の確認", 0), workspace: ws[0]),
+      task(7, "先月の請求書を送る", created: 0, due: "2025-10-09", workspace: ws[0]),
+      task(8, "ヘルプに ⌘⇧X を載せる", .done, created: 14, workspace: ws[0], by: "claude"),
+      task(9, "請求書のひな形を作る", .done, created: 13),
+      task(10, "ブランチ名の検証を直す", .done, created: 12, workspace: ws[0]),
     ]
-    return TasksFile(version: TaskPersistence.version, nextId: 15, tasks: tasks)
+    return TasksFile(version: TaskPersistence.version, nextId: 11, tasks: tasks)
+  }
+
+  /// 見本の一覧のうち、経費精算（ID 1）とヘルプの検索（ID 2）を去年に作り、期限を来年にしたもの（年の付いた作成と
+  /// 期限。期限は曜日まで含めて最も長い書式の 12 月 30 日（水））。
+  static func taskYearDatesFile() -> TasksFile {
+    var file = taskDesignFile()
+    let lastYear = { (month: Int, day: Int) in
+      taskCalendar.date(from: DateComponents(year: 2024, month: month, day: day, hour: 10))!
+    }
+    let changes: [Int: (Date, String)] = [
+      1: (lastYear(12, 28), "2026-12-30"), 2: (lastYear(11, 15), "2026-01-05"),
+    ]
+    file.tasks = file.tasks.map { task in
+      guard let (createdAt, due) = changes[task.id] else { return task }
+      return TaskItem(
+        id: task.id, title: task.title, status: task.status, wait: task.wait,
+        priority: task.priority, due: TaskItem.DueDate(due), workspace: task.workspace,
+        description: task.description, createdAt: createdAt, createdBy: task.createdBy,
+        links: task.links, worktree: task.worktree)
+    }
+    return file
   }
 
   /// 見本の worktree（`~/wt/<name>`。ファイルシステムには無い）。
@@ -202,7 +217,7 @@ extension DesignSceneFixtures {
       clock: { _ in taskToday })
   }
 
-  /// 見本 SlWait.png・SlResolved.png の待ちの条件（#214「設定の検索を速くする」）。claude が 2 日前に付け、10 分ごとに
+  /// 見本 SlWait.png・SlResolved.png の待ちの条件。claude が 2 日前に付け、10 分ごとに
   /// 確かめて 17 回失敗している（最後は 3 分前）。時刻はすべて見本の今（`taskToday`。画面の時計も同じ）から数え、期限は
   /// 見本どおり 10/6（月）9:00（`deadline` で替えられる）。
   static func taskWaitCondition(deadline: Date? = nil) -> WaitCondition {
@@ -234,7 +249,7 @@ extension DesignSceneFixtures {
 
   static let taskConversationId = "5f0c2a6e-214"
 
-  /// #214 の待ちに条件を付けた一覧（`how` を渡すと、その解け方で解けた後。期限が来たのは 2 時間前とする）。
+  /// 見積もりのタスク（ID 3）の待ちに条件を付けた一覧（`how` を渡すと、その解け方で解けた後。期限が来たのは 2 時間前とする）。
   static func taskWaitConditionFile(resolved how: WaitResolution.How? = nil, deadline: Date? = nil)
     -> TasksFile
   {

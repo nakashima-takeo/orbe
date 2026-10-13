@@ -6,13 +6,13 @@ import XCTest
 /// ⌘⇧X の「agent に任せる」と行の「agent を開く」の flow（ファイル分割の拡張）。撮り方は `hostedTaskPaletteFlow`（窓に載せ、
 /// 焦点を実物どおりに当てる）。
 extension DesignFlowSnapshotTests {
-  /// 打つ（行き先の段が出る）→ ⌘↵ が断られる（claude が無い。打った文が残り、フッターに赤）→ ↵（足した直後）→
-  /// #218 を選ぶ（フッターに「⌘↵ agent を開く」）→ 右の欄へ入る。
+  /// 打つ（入力欄の中に行き先のヒントが出る）→ ⌘↵ が断られる（claude が無い。打った文が残り、フッターに赤）→
+  /// ↵（足した直後）→ #218 を選ぶ（フッターに「⌘↵ agent を開く」）→ 右の欄へ入る。
   func testTaskSecretary() throws {
     try secretaryFlow("task_secretary", size: NSSize(width: 1440, height: 900))
   }
 
-  /// 狭い窓（SmallDetail と同じ大きさ）で、段とフッターの切れ・重なり・はみ出しを見る。
+  /// 狭い窓（SmallDetail と同じ大きさ）で、入力欄の中のヒントとフッターの切れ・重なり・はみ出しを見る。
   func testTaskSecretarySmall() throws {
     try secretaryFlow("task_secretary_small", size: NSSize(width: 800, height: 560))
   }

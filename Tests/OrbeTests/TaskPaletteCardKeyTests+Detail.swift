@@ -46,6 +46,23 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.query, "x", "一覧へ戻ると入力欄が再びキーを受ける")
   }
 
+  /// 完了はストアが待ちを外すので、→ を押し続けたリピートで未着手から完了まで進まない。
+  func testHoldingRightArrowOnTheStatusStepsOnceAndKeepsTheWait() {
+    let waiting = TaskItem.Waiting(reason: "レビュー待ち", since: DesignSceneFixtures.taskToday)
+    let model = TaskPaletteSamples.model([
+      TaskPaletteSamples.task(1, "a") { $0.wait = .waiting(waiting) }
+    ])
+    let window = mount(model)
+    enterDetail(model, at: .status, in: window)
+
+    arrow(Key.right, to: window)
+    arrow(Key.right, repeating: true, to: window)
+    arrow(Key.right, repeating: true, to: window)
+
+    XCTAssertEqual(status(model, 1), .inProgress)
+    XCTAssertNotNil(model.store.tasks.first?.wait, "待ちは消えない")
+  }
+
   func testSpaceAndEscapeInDetail() {
     let model = model()
     let window = mount(model)

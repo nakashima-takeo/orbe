@@ -107,7 +107,10 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     pump(0.3)
   }
 
-  func arrow(_ keyCode: UInt16, _ extra: NSEvent.ModifierFlags = [], to window: NSWindow) {
+  func arrow(
+    _ keyCode: UInt16, _ extra: NSEvent.ModifierFlags = [], repeating: Bool = false,
+    to window: NSWindow
+  ) {
     let character: NSEvent.SpecialKey =
       switch keyCode {
       case Key.left: .leftArrow
@@ -116,7 +119,8 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
       default: .downArrow
       }
     press(
-      keyCode, String(UnicodeScalar(character.rawValue)!), arrowFlags.union(extra), to: window)
+      keyCode, String(UnicodeScalar(character.rawValue)!), arrowFlags.union(extra),
+      repeating: repeating, to: window)
   }
 
   func type(_ text: String, into window: NSWindow) {
@@ -187,8 +191,8 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(asks.count, 1)
   }
 
-  /// 行の ⌘↵ は ⌘T と同じ口——待ちが解けたタスクなら、一覧でも右の欄でも ⌘T の画面を開かずに会話を続きから始める。
-  func testCommandEnterOnAResolvedWaitContinuesTheConversationLikeCommandT() {
+  /// 行の ⌘↵ は、待ちが解けたタスクなら、一覧でも右の欄でも ⌘T の画面を開かずに会話を続きから始める。
+  func testCommandEnterOnAResolvedWaitContinuesTheConversationFromTheListAndTheDetail() {
     let condition = WaitCondition(
       WaitConditionRequest(
         description: "レビューが付いたら", command: "gh pr view 214", everyMinutes: 10,
@@ -284,18 +288,18 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.selectedID, .task(2), "⌥↑ は ↑ と同じく前の行へ")
   }
 
-  func testTabSwitchesScopeAndShiftTabSwitchesTabWhileTheFieldKeepsTheKeys() {
+  func testTabAndShiftTabCycleTheTabsWhileTheFieldKeepsTheKeys() {
     let model = model()
     let window = mount(model)
 
     press(Key.tab, "\t", to: window)
-    XCTAssertEqual(model.scope, .opened)
-
-    press(Key.tab, "\u{19}", .shift, to: window)
     XCTAssertEqual(model.tab, .github)
 
-    press(Key.tab, "\u{19}", .shift, to: window)
+    press(Key.tab, "\t", to: window)
     XCTAssertEqual(model.tab, .automation, "3 つのタブを巡る")
+
+    press(Key.tab, "\u{19}", .shift, to: window)
+    XCTAssertEqual(model.tab, .github, "⇧⇥ は逆に巡る")
 
     press(Key.tab, "\u{19}", .shift, to: window)
     type("x", into: window)
@@ -311,6 +315,21 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
 
     press(Key.escape, "\u{1B}", to: window)
 
+    XCTAssertTrue(dismissed)
+  }
+
+  func testEscapeClosesTheOpenFilterMenuBeforeTheScreen() {
+    let model = model()
+    var dismissed = false
+    model.onDismiss = { dismissed = true }
+    model.toggleFilterMenu(.workspace)
+    let window = mount(model)
+
+    press(Key.escape, "\u{1B}", to: window)
+    XCTAssertNil(model.openFilterMenu)
+    XCTAssertFalse(dismissed, "面だけを閉じる")
+
+    press(Key.escape, "\u{1B}", to: window)
     XCTAssertTrue(dismissed)
   }
 

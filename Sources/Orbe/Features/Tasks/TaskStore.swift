@@ -163,7 +163,7 @@ enum TaskStoreError: Error, Equatable {
     changeCondition(id, condition) { condition in (.expired, condition.deadline) }
   }
 
-  /// 起きたことを外す（⌘T で会話へ届けた）。解けていなければ何もしない。
+  /// 起きたことを外す（続きからで会話へ届けた）。解けていなければ何もしない。
   func clearResolution(_ id: Int) {
     guard let index = tasks.firstIndex(where: { $0.id == id }), tasks[index].waitResolution != nil
     else { return }

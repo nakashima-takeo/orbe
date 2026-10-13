@@ -303,7 +303,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     refreshClosedAgentsPalette()  // ⇧⌘T の一覧も同じ契機で追従（WindowController+ClosedAgents）
     refreshWorkspacePaletteLiveStates()  // 表示中の workspace パレットの行チップも同じ契機で追従
     refreshWorktreeAgents()  // タスク画面と ⌘T の agent の札も同じ契機で追従
-    refreshAgentSessionTabs()  // タスク画面の会話の行と解けた待ちの ⌘T も同じ契機で追従
+    refreshAgentSessionTabs()  // タスク画面の会話の行と解けた待ちの ⌘↵ も同じ契機で追従
   }
 
   /// OSC 7 の cwd 報告を受けた。根が変わっていれば連を付け替え（`moveToGroup`）、隣接不変条件が破れていれば

@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// タスク画面を開いた時点の workspace の写し。開いている間に workspace が改名・削除されても、閉じて
 /// 開き直すまでこの値のまま（`Workspace` は観測できないので、描くたびに引くと反映が描き直しのついでに
@@ -23,36 +23,16 @@ struct TaskPaletteWorkspaces: Equatable {
   }
 }
 
-/// 一覧の範囲。
-enum TaskPaletteScope: Equatable {
-  case all
-  /// 開いた workspace のタスクだけ。
-  case opened
-}
-
 /// 選べる行の同一性。選択はこれで持ち、位置は付け直しのときだけ使う。
 enum TaskPaletteRowID: Hashable {
-  /// 入力欄に打った文の行き先（入力欄の下の行き先の段が描く。一覧の行は持たない）。選ばれている間の ↵ は
+  /// 入力欄に打った文の行き先（入力欄の中のヒントが描く。一覧の行は持たない）。選ばれている間の ↵ は
   /// タスクに書き、⌘↵ は agent に任せる。
   case add
   case task(Int)
-  /// 「完了 N ⌄」の見出し（↵ とクリックで開閉）。
-  case doneHeader
 }
 
-/// タスクの行に出す値（タスクから純関数で決まる）。
+/// 表の 1 行に出す値（タスクから純関数で決まる）。
 struct TaskPaletteTaskRow: Equatable {
-  enum Glyph: Equatable {
-    case todo, inProgress, waiting, done
-  }
-
-  enum WorkspaceBadge: Equatable {
-    /// 開いた workspace（紫の札）。
-    case opened(String)
-    /// ほかの workspace（灰色の文字）。
-    case other(String)
-  }
-
   struct Waiting: Equatable {
     let reason: String
     /// 待ち始めた日から今日までの暦日の差（0 は今日）。
@@ -66,72 +46,44 @@ struct TaskPaletteTaskRow: Equatable {
     let at: Date
   }
 
-  /// 期限の札。曜日名は言語に依るので表示側が引く。
-  struct Due: Equatable {
+  /// 暦日の値（期限・作成日）。曜日名は言語に依るので表示側が引く。
+  struct Day: Equatable {
     let date: TaskItem.DueDate
     let today: TaskItem.DueDate
   }
 
   let id: Int
   let title: String
-  /// 詳細の先頭（改行と連続する空白を 1 つの空白にまとめ、前後の空白を除いたもの）。空なら nil。
-  let descriptionLine: String?
-  let glyph: Glyph
-  /// 高と低だけ（中は札を出さない）。
-  let priority: TaskItem.Priority?
-  let due: Due?
-  let createdBy: String?
+  let state: TaskItem.DisplayState
+  let priority: TaskItem.Priority
+  let due: Day?
+  let created: Day
   let waiting: Waiting?
   let resolved: Resolved?
-  let workspace: WorkspaceBadge?
-  let isDone: Bool
+  /// workspace の名前（なしなら nil）。
+  let workspace: String?
   let link: GitHubItemText.Mark?
   let pullRequest: GitHubItemText.PullRequestBadge?
   /// 主が自分以外の作成した PR（「レビュー」）。
   let needsReview: Bool
   let agent: WorktreeAgentActivity.Agent?
-  /// 画面を開いている間に入力欄から最後に足したタスク。
-  var justAdded = false
 }
 
-extension TaskPaletteTaskRow.Glyph {
-  /// 完了 → 待ち → 進行中 → 未着手 の順に決まる（待ちはステータスと独立した属性なので、完了以外で優先する）。
-  init(_ task: TaskItem) {
-    self =
-      switch (task.status, task.waiting) {
-      case (.done, _): .done
-      case (_, .some): .waiting
-      case (.inProgress, nil): .inProgress
-      case (.todo, nil): .todo
-      }
-  }
-}
-
-/// 一覧の 1 行。
+/// 表の 1 行。
 enum TaskPaletteRow: Equatable, Identifiable {
-  /// 行の同一性（選べない行を含む）。一覧の中で一意。
+  /// 行の同一性（選べない行を含む）。表の中で一意。
   enum Identity: Hashable {
     case selectable(TaskPaletteRowID)
-    case sectionHeader(TaskItem.Status)
-    case matchHeader
     case empty
   }
 
-  /// 「進行中 N」「未着手 N」の見出し（選べない）。
-  case sectionHeader(TaskItem.Status, count: Int)
-  /// 入力中の「一致するタスク」の見出し（選べない）。
-  case matchHeader
   case task(TaskPaletteTaskRow)
-  case doneHeader(count: Int, expanded: Bool)
-  /// 範囲にタスクが 1 件も無く、入力も無いときの情報行（選べない）。
+  /// 絞り込みに合うタスクが 1 件も無く、入力も無いときの情報行（選べない）。
   case empty
 
   var id: Identity {
     switch self {
-    case .sectionHeader(let status, _): .sectionHeader(status)
-    case .matchHeader: .matchHeader
     case .task(let row): .selectable(.task(row.id))
-    case .doneHeader: .selectable(.doneHeader)
     case .empty: .empty
     }
   }
@@ -142,65 +94,84 @@ enum TaskPaletteRow: Equatable, Identifiable {
   }
 }
 
-/// 一覧の行の寸法。行の高さは行の値だけで決まる。選べる 1 行の行は ⌘⇧S の行（上下 5 ＋ 12pt の 1 行）と同じ高さ。
+/// 表の寸法。行の高さは 1 種類。優先度・workspace の列の幅は見本の比率（44 / 80、間 12）を本番の字の
+/// 大きさ（行 12pt・欄 10pt）に合わせて丸めたもの。件名は残りの幅。状態は今の UI 言語の最も長い状態の名前、
+/// 期限・作成は最も長い書式から測る。
 enum TaskPaletteRowMetrics {
-  /// 行の上下の余白。
-  static let inset: CGFloat = 4
-  /// 1 行目（タイトルと札）の高さ。
-  static let firstLine: CGFloat = 16
-  /// 詳細の先頭の 1 行の高さ。
-  static let descriptionLine: CGFloat = 14
-  /// 選べる 1 行の行（追加・1 行のタスク・空の行）。
-  static let line: CGFloat = inset * 2 + firstLine
-  /// 詳細のあるタスクの行。
-  static let taskWithDescription: CGFloat = line + descriptionLine
-  /// 「進行中 N」「未着手 N」の見出し。
-  static let sectionHeader: CGFloat = 26
-  /// 「完了 N ⌄」の見出し（上の罫線と余白を含む）。
-  static let doneHeader: CGFloat = doneRuleGap + Theme.Stroke.hairline + line
-  /// 完了の見出しの上の、罫線までの余白。
-  static let doneRuleGap: CGFloat = Theme.Space.note
-  /// 行の右寄せの札のうち、人や agent の文字を出す札（待ちの理由・起きたこと）の文字の上限幅。
+  /// 札の 1 行（GitHub タブ・選ぶ状態の帯）の高さ。⌘⇧S の行（上下 4 ＋ 16pt の 1 行）と同じ。
+  static let line: CGFloat = 24
+  /// 札の高さ。
+  static let badge: CGFloat = 16
+  /// 表の行の高さ。
+  static let row: CGFloat = 30
+  /// 表の見出しの高さ。
+  static let header: CGFloat = 24
+  /// 表の行と見出しの左右の内側の余白。
+  static let rowInset: CGFloat = Theme.Space.step
+  /// 表の列の間。
+  static let columnGap: CGFloat = Theme.Space.step
+  /// 状態の列。札に左右の余白を足した幅。
+  static func stateColumn(_ language: Language) -> CGFloat {
+    stateChip(language).width + Theme.Space.tick
+  }
+  static let priorityColumn: CGFloat = 36
+  /// 期限の列。最も長い書式（年の付いた「2026/12/31」と、どの UI 言語でも最も幅のある曜日名）が収まる幅。
+  static let dueColumn: CGFloat = {
+    let weekdays = Language.allCases.flatMap { TaskDueText.weekdays($0) }
+    return ceil(weekdays.map { cellWidth("0000/00/00 " + $0) }.max() ?? 0)
+  }()
+  static let workspaceColumn: CGFloat = 64
+  /// 作成の列。最も長い書式（年の付いた「2026/12/31」）が収まる幅。
+  static let createdColumn: CGFloat = ceil(cellWidth("0000/00/00"))
+  /// 件名のタイトルの最小幅（日本語で 8 文字前後）。これより狭くなるときは、続く札と補足の側を切り詰める。
+  static let titleMinWidth: CGFloat = 100
+  /// 状態の札（同じ幅）。その UI 言語の状態の名前のうち最も長いものに、左右の内側の余白を足した幅。余白は見本の
+  /// 札（字の幅に対して左右にゆったり取る）に合わせる。
+  static func stateChip(_ language: Language) -> CGSize {
+    let labels = TaskItem.DisplayState.allCases.map { L10n.string($0.labelKey, language) }
+    let widest = ceil(labels.map(cellWidth).max() ?? 0)
+    return CGSize(width: widest + 2 * Theme.Space.beat, height: 18)
+  }
+  /// 行の札のうち、人や agent の文字を出す札（起きたこと）の文字の上限幅。
   static let textBadgeMaxWidth: CGFloat = 180
-  /// 行の先頭のアイコンの列の幅。
+  /// GitHub タブの行の先頭のアイコンの列の幅。
   static let glyphColumn: CGFloat = 12
   /// 一覧の内側の余白（⌘⇧S のリストと同じ）。
   static let listPadding: CGFloat = Theme.Space.note
 
-  static func height(_ row: TaskPaletteRow) -> CGFloat {
-    switch row {
-    case .empty: line
-    case .sectionHeader, .matchHeader: sectionHeader
-    case .task(let task): task.descriptionLine == nil ? line : taskWithDescription
-    case .doneHeader: doneHeader
-    }
+  /// 表の欄の字（`Theme.Typography.meta`）で書いた幅。
+  private static func cellWidth(_ text: String) -> CGFloat {
+    (text as NSString).size(withAttributes: [.font: Theme.Typography.meta]).width
   }
 }
 
-/// ヘッダーの件数（どれも未完了の数。入力の絞り込みには左右されない）。
+/// 件数（全タスクで数え、絞り込みと入力には左右されない）。
 struct TaskPaletteCounts: Equatable {
-  /// 今の範囲。
-  let scoped: Int
-  let all: Int
-  /// 開いた workspace。
-  let opened: Int
+  /// 表の状態ごとの数（状態の札）。
+  let states: [TaskItem.DisplayState: Int]
+  /// 未完了の数（タブの「タスク N」）。
+  let undone: Int
+
+  init(_ tasks: [TaskItem]) {
+    states = Dictionary(grouping: tasks, by: \.displayState).mapValues(\.count)
+    undone = tasks.filter { $0.status != .done }.count
+  }
 }
 
-/// 一覧の行を、タスク・入力・範囲・完了の欄の開閉から組む純関数。どの欄でも作成の新しい順
-/// （`TaskItem.newerFirst`）に並べる。
+/// 表の行を、タスク・入力・絞り込み・並び・残すタスクから組む純関数。
 enum TaskPaletteRows {
   struct Input {
     let tasks: [TaskItem]
     let query: String
     /// 結び付けるタスクを選ぶ状態か。選ぶ間は入力の行き先を持たない。
     var picking = false
-    /// 画面を開いている間に入力欄から最後に足したタスク（「今足した」の印）。
-    var justAdded: Int?
-    let scope: TaskPaletteScope
-    let doneExpanded: Bool
+    let filter: TaskPaletteFilter
+    let sort: TaskPaletteSort
+    /// 絞り込みと入力に合わなくても出すタスク（選んでいるタスク）。
+    var kept: Int?
     let workspaces: TaskPaletteWorkspaces
     let today: TaskItem.DueDate
-    /// 待ち始めた時刻を暦日へ落とすためのタイムゾーン。
+    /// 待ち始めた時刻・作成日時を暦日へ落とすためのタイムゾーン。
     let timeZone: TimeZone
     /// 結び付いた項目の GitHub の値（`GitHubItemCache` の答え）。
     let items: [GitHubItemID: GitHubItemAnswer]
@@ -215,56 +186,25 @@ enum TaskPaletteRows {
     return title.isEmpty || input.picking ? nil : title
   }
 
-  /// 入力中は「一致するタスク」の見出しの下に一致するタスクを並べ（欄の見出しは出さない）、入力が無ければ欄ごとに
-  /// 見出しを付ける。
+  /// 絞り込みと入力（タイトルの部分一致）に合うタスクと残すタスクを、並びのとおりに並べる。
   static func build(_ input: Input) -> [TaskPaletteRow] {
     let title = input.query.trimmingCharacters(in: .whitespacesAndNewlines)
-    let visible = inScope(input.tasks, input).filter {
-      title.isEmpty || $0.title.localizedStandardContains(title)
-    }.sorted(by: TaskItem.newerFirst)
-    let matching = addTitle(input) != nil
-    var rows: [TaskPaletteRow] = []
-    let undone = visible.filter { $0.status != .done }
-    if matching, !undone.isEmpty { rows.append(.matchHeader) }
-    for status in [TaskItem.Status.inProgress, .todo] {
-      let section = visible.filter { $0.status == status }
-      guard !section.isEmpty else { continue }
-      if !matching { rows.append(.sectionHeader(status, count: section.count)) }
-      rows += section.map { .task(taskRow($0, input)) }
+    let rows = input.tasks.filter {
+      $0.id == input.kept
+        || input.filter.matches($0, today: input.today, workspaces: input.workspaces)
+          && (title.isEmpty || $0.title.localizedStandardContains(title))
     }
-    let done = visible.filter { $0.status == .done }
-    if !done.isEmpty {
-      rows.append(.doneHeader(count: done.count, expanded: input.doneExpanded))
-      if input.doneExpanded { rows += done.map { .task(taskRow($0, input)) } }
-    }
-    if rows.isEmpty, title.isEmpty { rows.append(.empty) }
-    return rows
-  }
-
-  static func counts(_ input: Input) -> TaskPaletteCounts {
-    let undone = input.tasks.filter { $0.status != .done }
-    return TaskPaletteCounts(
-      scoped: inScope(undone, input).count, all: undone.count,
-      opened: undone.filter { $0.workspace == input.workspaces.opened.id }.count)
-  }
-
-  private static func inScope(_ tasks: [TaskItem], _ input: Input) -> [TaskItem] {
-    switch input.scope {
-    case .all: tasks
-    case .opened: tasks.filter { $0.workspace == input.workspaces.opened.id }
-    }
+    .sorted { input.sort.areInIncreasingOrder($0, $1, workspaces: input.workspaces) }
+    .map { TaskPaletteRow.task(taskRow($0, input)) }
+    return rows.isEmpty && title.isEmpty ? [.empty] : rows
   }
 
   private static func taskRow(_ task: TaskItem, _ input: Input) -> TaskPaletteTaskRow {
-    let workspace: TaskPaletteTaskRow.WorkspaceBadge? = input.workspaces.entry(task.workspace).map {
-      $0.id == input.workspaces.opened.id ? .opened($0.name) : .other($0.name)
-    }
-    return TaskPaletteTaskRow(
-      id: task.id, title: task.title, descriptionLine: descriptionLine(task.description),
-      glyph: TaskPaletteTaskRow.Glyph(task),
-      priority: task.priority == .medium ? nil : task.priority,
-      due: task.due.map { TaskPaletteTaskRow.Due(date: $0, today: input.today) },
-      createdBy: task.createdBy,
+    TaskPaletteTaskRow(
+      id: task.id, title: task.title, state: task.displayState, priority: task.priority,
+      due: task.due.map { TaskPaletteTaskRow.Day(date: $0, today: input.today) },
+      created: TaskPaletteTaskRow.Day(
+        date: TaskItem.DueDate(task.createdAt, timeZone: input.timeZone), today: input.today),
       waiting: task.waiting.map {
         TaskPaletteTaskRow.Waiting(
           reason: $0.reason,
@@ -273,17 +213,11 @@ enum TaskPaletteRows {
       resolved: task.waitResolution.map {
         TaskPaletteTaskRow.Resolved(headline: $0.headline, at: $0.at)
       },
-      workspace: workspace, isDone: task.status == .done,
+      workspace: input.workspaces.entry(task.workspace)?.name,
       link: GitHubItemText.mark(task.links),
       pullRequest: GitHubItemText.pullRequestBadge(task.links, input.items),
       needsReview: GitHubItemText.needsReview(
         task.links, input.items, viewerLogin: input.viewerLogin),
-      agent: task.agent(in: input.agents).flatMap { $0.isBusy ? $0 : nil },
-      justAdded: input.justAdded == task.id)
-  }
-
-  private static func descriptionLine(_ description: String) -> String? {
-    let line = description.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-    return line.isEmpty ? nil : line
+      agent: task.agent(in: input.agents).flatMap { $0.isBusy ? $0 : nil })
   }
 }

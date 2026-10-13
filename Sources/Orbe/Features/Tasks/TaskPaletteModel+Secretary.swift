@@ -19,22 +19,4 @@ extension TaskPaletteModel {
     case .empty: break
     }
   }
-
-  /// 行き先の段の右端の言葉（「未着手 · 中 · <workspace>」）。足すタスクの値（`TaskDraft` の既定の
-  /// ステータスと優先度）と、範囲で決まる workspace から出す。
-  func destinationPlace(_ l10n: LocalizationStore) -> String {
-    let draft = TaskDraft(title: "")
-    let status: L10nKey =
-      draft.status == .inProgress ? .taskPaletteSectionInProgress : .taskPaletteSectionTodo
-    let priority: L10nKey =
-      switch draft.priority {
-      case .high: .taskPalettePriorityHigh
-      case .medium: .taskPalettePriorityMedium
-      case .low: .taskPalettePriorityLow
-      }
-    return [
-      l10n.string(status), l10n.string(priority),
-      addedWorkspace?.name ?? l10n.string(.taskPaletteDestinationNoWorkspace),
-    ].joined(separator: " · ")
-  }
 }
