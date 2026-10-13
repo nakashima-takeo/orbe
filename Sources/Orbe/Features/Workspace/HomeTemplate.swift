@@ -50,7 +50,7 @@ enum HomeTemplate {
     `list_automation_proposals`）。
     - トリガー（間隔か毎日の時刻）ごとに、取得元（コマンドか軽い agent）が項目を取り、処理の段（コマンドか agent）が順に\
     絞り・判断して、出力先へ出す。今の出力先はタスク候補だけ。
-    - 人が ⌘⇧X の自動追加タブで受けた候補だけがタスクになる。Slack・メール・課題管理・GitHub などから拾うのが主な使い方。
+    - 人が ⌘⇧X の提案タブで受けた候補だけがタスクになる。Slack・メール・課題管理・GitHub などから拾うのが主な使い方。
 
     Orbe の中で予定どおり繰り返し動くのは、待ちの条件の確認と自動化の 2 つ。
 
@@ -108,7 +108,7 @@ enum HomeTemplate {
     - On each trigger (an interval or daily times), the source (a command or a light agent) gets items, the \
     steps (commands or agents) narrow and judge them in order, and the sink receives the result. The only \
     sink today is task candidates.
-    - Only candidates the user accepts in the Auto-add tab of ⌘⇧X become tasks. The main use is picking things \
+    - Only candidates the user accepts in the Proposals tab of ⌘⇧X become tasks. The main use is picking things \
     up from Slack, mail, issue trackers, GitHub, and the like.
 
     Inside Orbe, the only things that run repeatedly on schedule are waiting-condition checks and automations.

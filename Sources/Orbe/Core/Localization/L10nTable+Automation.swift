@@ -1,13 +1,13 @@
 import Foundation
 
-/// 自動追加の文言分冊（⌘⇧X の自動追加タブの文と、⌘⇧X とボードが共有する自動追加の文）。本体 `L10n.table` が結合する。
+/// 自動追加の文言分冊（⌘⇧X の提案タブの文と、⌘⇧X とボードが共有する自動追加の文）。本体 `L10n.table` が結合する。
 extension L10n {
   static let automationTable: [L10nKey: (ja: String, en: String)] = [
-    .taskPaletteTabAutomation: ("自動追加", "Auto-add"),
+    .taskPaletteTabAutomation: ("提案", "Proposals"),
     .taskPaletteAutomationPlaceholder: ("候補を絞り込み", "Filter candidates"),
-    .taskPaletteAutomationAskSecretary: (
-      "自動追加を足す・変えるのは秘書に頼む",
-      "Ask the secretary to add or change auto-adds"
+    .taskPaletteAutomationAskBoard: (
+      "自動追加を足す・変えるのは Home のボードから頼む",
+      "To add or change auto-adds, ask from the Home board"
     ),
     .taskPaletteAutomationNoProposals: ("候補なし", "no candidates"),
     .taskPaletteAutomationLastFailed: ("前回は失敗", "last run failed"),
@@ -26,8 +26,8 @@ extension L10n {
     .taskPaletteAutomationOverlaps: ("重なり", "Overlaps"),
     .taskPaletteAutomationOverlapCount: ("%1$@ と %2$lld 件", "%2$lld with %1$@"),
     .taskPaletteAutomationRewriteNote: (
-      "名前・取得・処理は秘書が一度にまとめて書き換える",
-      "The secretary rewrites the name, fetch, and steps together"
+      "名前・取得元・処理は、ボードから頼むと agent がまとめて書き換える",
+      "Ask from the board, and an agent rewrites the name, source, and steps together"
     ),
     .taskPaletteAutomationErrAccept: ("タスクにできませんでした", "Couldn’t make it a task"),
 

@@ -7,7 +7,7 @@ import Observation
 /// 送り先）・範囲・タブ・絞り込み・焦点・編集中の下書き・右の欄の値・行の掴みだけを持つ。一覧の行は
 /// `TaskPaletteRows` と `TaskPaletteGitHubRows` が毎回組む。
 /// 列か一覧が変わったとき（agent の変更を含む）は `reconcile()` 1 本で選択・焦点・下書き・掴みを付け直す。
-/// 受信タブの状態と手続きは `automation` が持ち、見えているタブが受信のときだけ、入力・キー・焦点をそこへ振り分ける。
+/// 提案タブの状態と手続きは `automation` が持ち、見えているタブが提案のときだけ、入力・キー・焦点をそこへ振り分ける。
 @Observable final class TaskPaletteModel {
   let store: TaskStore
   let githubItems: GitHubItemCache
@@ -119,6 +119,7 @@ import Observation
       runner: automations, tasks: store, home: workspaces.home, today: today, timeZone: timeZone)
     automation.onPlaceChange = { [weak self] in self?.focus() }
     automation.addPosition = { [weak self] in self?.addPosition(attachingTo: $0) ?? .end }
+    automation.onOpenTask = { [weak self] in self?.onOpenWorktreePalette($0) }
     automation.onOpenURL = { [weak self] in self?.onOpenURL($0) }
     reconcile()
     githubItems.refresh(visibleLinkIDs)
@@ -289,7 +290,7 @@ import Observation
   }
 
   /// ↵。選んでいる行の操作（タスクのタブは追加 / 完了 ⇄ 未着手 / 完了の欄の開閉、GitHub タブは
-  /// `submitGitHub`、受信タブはタスクにする、選ぶ状態は `confirmPick`）。
+  /// `submitGitHub`、提案タブはタスクにする、選ぶ状態は `confirmPick`）。
   func submit() {
     guard pick == nil else { return confirmPick() }
     if visibleTab == .automation { return automation.accept() }

@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 受信タブの右の詳細。選んでいる提案の出どころ（受信名と時刻）・本文の全体・リンク、タスクにしたときのタイトルと期限、
-/// 「タスクにする」「捨てる」のボタン。収まらなければ欄ごとスクロールし、収まる間はボタンを下端へ押す。
+/// 提案タブの右の詳細。選んでいる提案の出どころ（受信名と時刻）・本文の全体・リンク、タスクにしたときのタイトルと期限、
+/// 「タスクにする」「タスクにして開く」「捨てる」のボタン。収まらなければ欄ごとスクロールし、収まる間はボタンを下端へ押す。
 struct TaskPaletteAutomationDetail: View {
   @Bindable var model: TaskPaletteAutomationModel
   @Environment(\.localization) private var l10n
@@ -66,7 +66,7 @@ struct TaskPaletteAutomationDetail: View {
     }
   }
 
-  /// 本文の全体と「↗ <ホスト名> で開く」（クリックか ⌘↵ でブラウザで開く）。
+  /// 本文の全体と「↗ <ホスト名> で開く」（クリックか ⌘O でブラウザで開く）。
   private func quote(_ proposal: AutomationProposal) -> some View {
     VStack(alignment: .leading, spacing: Theme.Space.note) {
       fontResolver.text(proposal.item.body, base: Theme.Typography.workspaceName)
@@ -96,14 +96,23 @@ struct TaskPaletteAutomationDetail: View {
       RoundedRectangle(cornerRadius: Theme.Radius.md).fill(Color.theme.surfaceInk.opacity(0.04)))
   }
 
+  /// 横に並びきらない狭い欄では縦に積む（ボタンの文字は縮めない）。
   private var buttons: some View {
-    HStack(spacing: Theme.Space.step) {
-      TaskPaneButton(key: "↵", title: l10n.string(.taskPaletteMakeTask), primary: true) {
-        model.accept()
-      }
-      TaskPaneButton(key: "⌘⌫", title: l10n.string(.taskPaletteAutomationDismiss)) {
-        model.dismiss()
-      }
+    ViewThatFits(in: .horizontal) {
+      HStack(spacing: Theme.Space.step) { buttonRow }
+      VStack(alignment: .leading, spacing: Theme.Space.step) { buttonRow }
+    }
+  }
+
+  @ViewBuilder private var buttonRow: some View {
+    TaskPaneButton(key: "↵", title: l10n.string(.taskPaletteMakeTask), primary: true) {
+      model.accept()
+    }
+    TaskPaneButton(key: "⌘↵", title: l10n.string(.taskPaletteMakeTaskOpen)) {
+      model.acceptAndOpen()
+    }
+    TaskPaneButton(key: "⌘⌫", title: l10n.string(.taskPaletteAutomationDismiss)) {
+      model.dismiss()
     }
   }
 }
