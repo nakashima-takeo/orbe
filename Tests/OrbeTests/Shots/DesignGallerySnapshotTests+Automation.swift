@@ -21,6 +21,11 @@ extension DesignGallerySnapshotTests {
 
     try write("automation_all.png", model(), 1440, 900)
 
+    // 付け先を持たない提案は、詳細の付け先に Home が出る。
+    let home = model()
+    home.automation.moveProposal(1)
+    try write("automation_destination_home.png", home, 1440, 900)
+
     // 棚の 2 行目の全種（次の時刻・止めている・実行中…・前回は失敗・候補なし）。
     let running = model()
     try? running.automation.runner.runNow(1)

@@ -67,7 +67,7 @@ final class AutomationQuarantineTests: OrbeTestCase {
         AutomationProposal(
           id: file.nextProposalId, automationId: first.automationId, item: first.item,
           title: "同じリンク",
-          due: nil, proposedAt: first.proposedAt, state: .open))
+          due: nil, workspace: nil, proposedAt: first.proposedAt, state: .open))
       file.nextProposalId += 1
     }
   }

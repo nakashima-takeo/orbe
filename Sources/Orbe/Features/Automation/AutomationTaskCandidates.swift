@@ -5,14 +5,19 @@ import Foundation
 final class AutomationTaskCandidates: AutomationSinkRun {
   private let store: AutomationStore
   private let automationId: Int
+  private let workspaces: () -> [AutomationWorkspace]
   private var fetched: [AutomationItem] = []
   private var fresh: [AutomationItem] = []
-  private var open: [AutomationProposal] = []
+  private var choices = AutomationJudgeChoices(open: [], workspaces: [])
   private var rejected = AutomationRejections()
 
-  init(store: AutomationStore, automationId: Int) {
+  /// `workspaces` は候補の付け先にできる今の workspace（Home を除く）。
+  init(
+    store: AutomationStore, automationId: Int, workspaces: @escaping () -> [AutomationWorkspace]
+  ) {
     self.store = store
     self.automationId = automationId
+    self.workspaces = workspaces
   }
 
   /// 判定を直したら、今の集合を見直して候補を出し直す（既に候補のあるリンクは取り込みで除く）。
@@ -40,9 +45,10 @@ final class AutomationTaskCandidates: AutomationSinkRun {
     return fresh
   }
 
-  /// `id` が今回の新しい項目の行だけを渡す。判断待ちの候補はこの時点で取る。
+  /// `id` が今回の新しい項目の行だけを渡す。判断待ちの候補と workspace の一覧はこの時点で取る。
   func prepare(_ rows: [String]) -> [String] {
-    open = store.openProposals(of: automationId, in: fetched)
+    choices = AutomationJudgeChoices(
+      open: store.openProposals(of: automationId, in: fetched), workspaces: workspaces())
     let ids = Set(fresh.map(\.id))
     return rows.filter { row in
       guard let id = AutomationPrompts.id(of: row) else {
@@ -59,14 +65,14 @@ final class AutomationTaskCandidates: AutomationSinkRun {
 
   func prompt(instruction: String, rows: [String], now: Date, timeZone: TimeZone) -> String {
     AutomationPrompts.judge(
-      instruction: instruction, rows: rows, open: open, now: now, timeZone: timeZone)
+      instruction: instruction, rows: rows, choices: choices, now: now, timeZone: timeZone)
   }
 
   /// JSON の行として読めた数を数える。全行が形違いでも回は失敗にせず、候補なしとする。
   func read(_ text: String) -> AutomationSinkReading<[AutomationDecision]> {
     let (rows, malformed) = AutomationPrompts.readRows(text)
     let (decisions, rejected) = AutomationPrompts.readJudge(
-      rows, itemIds: Set(fresh.map(\.id)), open: open)
+      rows, itemIds: Set(fresh.map(\.id)), choices: choices)
     self.rejected.add(rejected)
     return .output(decisions, count: rows.count, rejected: malformed)
   }
@@ -88,7 +94,7 @@ final class AutomationTaskCandidates: AutomationSinkRun {
     var report = AutomationTaskCandidatesReport(rejected: rejected)
     for decision in output ?? [] {
       switch decision {
-      case .propose(let itemId, let title, let due):
+      case .propose(let itemId, let title, let due, let workspace):
         guard let item = fresh.first(where: { $0.id == itemId }) else { continue }
         guard !book.proposals.contains(where: { $0.item.link == item.link }) else {
           report.rejected.add("propose \(itemId): \(item.link) is already proposed")
@@ -97,7 +103,7 @@ final class AutomationTaskCandidates: AutomationSinkRun {
         book.proposals.append(
           AutomationProposal(
             id: book.nextId, automationId: automationId, item: item, title: title, due: due,
-            proposedAt: TaskItem.storedInstant(endedAt), state: .open))
+            workspace: workspace, proposedAt: TaskItem.storedInstant(endedAt), state: .open))
         book.nextId += 1
         report.proposed += 1
       case .resolve(let link):
@@ -116,10 +122,28 @@ final class AutomationTaskCandidates: AutomationSinkRun {
   }
 }
 
-/// 判定の出力から読み取った 1 つの決定。
+/// 判定の出力から読み取った 1 つの決定。`workspace` は照合を済ませた付け先の `Workspace.persistentId`。
 enum AutomationDecision: Equatable {
-  case propose(itemId: String, title: String, due: TaskItem.DueDate?)
+  case propose(itemId: String, title: String, due: TaskItem.DueDate?, workspace: UUID?)
   case resolve(link: String)
+}
+
+/// 判定に見せ、判定の出力をその中で照合する選択肢。1 回の中で `prepare` のときに 1 度だけ取り、依頼文と読み取りの両方に
+/// 同じ値を使う——回の途中に候補がさばかれたり workspace が増減・改名されたりしても、判定が見たものと照合するものが
+/// 食い違わない。
+struct AutomationJudgeChoices: Equatable {
+  /// 判断待ちの候補（resolve の相手）。
+  let open: [AutomationProposal]
+  /// 付け先にできる workspace（Home を除く）。
+  let workspaces: [AutomationWorkspace]
+}
+
+/// 判定に付け先として見せる workspace 1 つ。`id` は起動ごとの ID で、1 回の中でしか使わず保存しない。
+struct AutomationWorkspace: Equatable {
+  let id: Int
+  let persistentId: UUID
+  let name: String
+  let root: String
 }
 
 /// 候補の帳面（候補と次に振る ID）。`AutomationStore` が持ち、確定のときだけタスク候補の出力先に貸す。

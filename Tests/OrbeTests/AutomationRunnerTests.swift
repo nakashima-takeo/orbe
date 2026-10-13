@@ -17,6 +17,8 @@ final class AutomationRunnerTests: OrbeTestCase {
   var runner: AutomationRunner!
   /// 走らせ役が記録を知らせた自動化の ID（知らせた順）。
   var recorded: [Int] = []
+  /// 走らせ役が今の workspace として受ける一覧。
+  var workspaces: [AutomationWorkspace] = []
 
   override func setUp() {
     jobs = FakeJobs()
@@ -34,6 +36,7 @@ final class AutomationRunnerTests: OrbeTestCase {
     }
     let runner = AutomationRunner(
       store: store, scheduler: scheduler, run: jobs.run,
+      workspaces: { [unowned self] in workspaces },
       recorded: { [unowned self] in recorded.append($0) }, deleted: { _ in })
     runner.now = { [unowned self] in now }
     return runner
@@ -123,6 +126,34 @@ final class AutomationRunnerTests: OrbeTestCase {
     XCTAssertEqual(run.fresh, 0)
     XCTAssertEqual(run.steps, [])
     XCTAssertFalse(runner.isRunning(automation.id))
+  }
+
+  /// 判定には付け先にできる workspace の一覧が載り、判定が書いた付け先は永続 ID で候補に残る。照合には回の始めに写した
+  /// 一覧を使うので、判定の間に workspace が消えても判定が見た一覧で読む。一覧に無い付け先の行は理由付きで捨てる。
+  func testJudgeAttachesProposalsToTheWorkspacesItWasShown() throws {
+    let orbe = AutomationWorkspace(id: 7, persistentId: UUID(), name: "orbe", root: "/src/orbe")
+    workspaces = [orbe]
+    let automation = try create()
+    try runner.runNow(automation.id)
+    jobs.finish(0, fetched(["a", "b", "c"]))
+
+    XCTAssertTrue(prompt(1).contains(#"{"name":"orbe","root":"/src/orbe","workspace":7}"#))
+    workspaces = []
+    jobs.finish(
+      1,
+      replied(
+        [
+          #"{"propose":"a","title":"a に返信する","workspace":7}"#,
+          #"{"propose":"b","title":"b に返信する"}"#,
+          #"{"propose":"c","title":"c に返信する","workspace":8}"#,
+        ].joined(separator: "\n")))
+
+    XCTAssertEqual(store.proposals.map(\.title), ["a に返信する", "b に返信する"])
+    XCTAssertEqual(store.proposals.map(\.workspace), [orbe.persistentId, nil])
+    let run = try XCTUnwrap(store.automation(automation.id)?.runs.first)
+    XCTAssertEqual(
+      AutomationStoreTests.candidates(run)?.rejected.reasons,
+      ["propose c: workspace 8 is not a listed workspace"])
   }
 
   func testRunNowIsRefusedWhileRunning() throws {

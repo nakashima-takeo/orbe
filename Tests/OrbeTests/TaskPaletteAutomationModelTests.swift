@@ -6,7 +6,8 @@ import XCTest
 /// 今すぐ実行・止める・消す。本物の `AutomationStore`・`AutomationRunner`・`TaskStore` を読み書きする（取得は始まっても終わらない）。
 ///
 /// 壊れると何が起きるか。↵ や ⌘⌫ が光っている行とは別の提案に当たる（タスクにした・捨てた直後や、裏の回が確定した直後）。
-/// タスクにした提案が Home に付かず、期限やリンクを失う。消えた受信の中身が残り、⌘⌫ が別の受信を消す。
+/// タスクにした提案が付け先（無ければ Home）に付かず、期限やリンクを失う。開いている間に消えた付け先に付き、行き場の無い
+/// タスクになる。消えた受信の中身が残り、⌘⌫ が別の受信を消す。
 /// 走っている受信の今すぐ実行が黙って無視される。
 @MainActor
 final class TaskPaletteAutomationModelTests: OrbeTestCase {
@@ -54,7 +55,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
         at: DesignSceneFixtures.automationNow, items: 3, fresh: 1),
       fetched: runner.store.automation(2)!.lastFetched.map {
         AutomationItem(id: $0.id, link: $0.link, body: "", time: DesignSceneFixtures.automationNow)
-      } + [item], decisions: [.propose(itemId: "C03-9", title: "後の提案", due: nil)])
+      } + [item], decisions: [.propose(itemId: "C03-9", title: "後の提案", due: nil, workspace: nil)])
     let palette = TaskPaletteSamples.model([], automations: runner)
 
     XCTAssertEqual(palette.automation.proposalIDs, [4, 1, 2, 3])
@@ -105,6 +106,59 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertNil(palette.automation.error)
   }
 
+  /// 付け先は今の workspace で解く。解ければそこ、付け先が無いか解けなければ Home。詳細の表示と ↵ が同じ付け先を使う。
+  func testEnterAttachesTheTaskToTheProposalsWorkspaceOrElseHome() throws {
+    var file = DesignSceneFixtures.automationDesignFile()
+    let proposals = file.proposals
+    let workspaces: [UUID?] = [TaskPaletteSamples.other.id, nil, UUID()]
+    file.proposals = zip(proposals, workspaces).map { proposal, workspace in
+      AutomationProposal(
+        id: proposal.id, automationId: proposal.automationId, item: proposal.item,
+        title: proposal.title, due: proposal.due, workspace: workspace,
+        proposedAt: proposal.proposedAt, state: .open)
+    }
+    let palette = TaskPaletteSamples.model(
+      [], automations: DesignSceneFixtures.automationRunner(file))
+    palette.setTab(.automation)
+    let automation = palette.automation
+
+    XCTAssertEqual(
+      automation.proposals.map { automation.destination(of: $0)?.name },
+      ["web-app", "Home", "Home"])
+    for _ in proposals { automation.accept() }
+
+    XCTAssertEqual(
+      proposals.map { proposal in
+        palette.store.tasks.first { $0.title == proposal.title }?.workspace
+      },
+      [TaskPaletteSamples.other.id, TaskPaletteSamples.home, TaskPaletteSamples.home])
+  }
+
+  /// 付け先は開いた時点の写しではなく ↵ の時点の値で解く。開いている間に付け先が消えたら Home に付く。
+  func testEnterUsesTheWorkspacesAtThatMomentNotWhenOpened() throws {
+    var file = DesignSceneFixtures.automationDesignFile()
+    let first = file.proposals[0]
+    file.proposals = [
+      AutomationProposal(
+        id: first.id, automationId: first.automationId, item: first.item, title: first.title,
+        due: first.due, workspace: TaskPaletteSamples.other.id, proposedAt: first.proposedAt,
+        state: .open)
+    ]
+    var current = TaskPaletteSamples.workspaces
+    let palette = TaskPaletteSamples.model(
+      [], automations: DesignSceneFixtures.automationRunner(file), workspaces: { current })
+    palette.setTab(.automation)
+    let proposal = try XCTUnwrap(palette.automation.selectedProposal)
+    XCTAssertEqual(palette.automation.destination(of: proposal)?.name, "web-app")
+
+    current = TaskPaletteWorkspaces(
+      opened: current.opened, all: current.all.filter { $0 != TaskPaletteSamples.other },
+      home: current.home)
+    palette.automation.accept()
+
+    XCTAssertEqual(palette.store.tasks.first?.workspace, TaskPaletteSamples.home)
+  }
+
   func testDismissMakesNoTaskAndSelectsTheSamePosition() {
     let palette = palette()
     palette.automation.moveProposal(1)
@@ -134,7 +188,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     let first = file.proposals[0]
     file.proposals[0] = AutomationProposal(
       id: first.id, automationId: first.automationId, item: first.item, title: "改行\nを含む",
-      due: first.due, proposedAt: first.proposedAt, state: .open)
+      due: first.due, workspace: first.workspace, proposedAt: first.proposedAt, state: .open)
     let palette = TaskPaletteSamples.model(
       [TaskPaletteSamples.task(1, "a")], automations: DesignSceneFixtures.automationRunner(file))
     palette.setTab(.automation)

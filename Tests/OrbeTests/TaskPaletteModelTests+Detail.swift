@@ -95,9 +95,11 @@ extension TaskPaletteModelTests {
     palette.changeValue(1)
     XCTAssertEqual(try storedTask(palette, 1).workspace, otherWorkspace.id)
     palette.changeValue(1)
+    XCTAssertEqual(try storedTask(palette, 1).workspace, TaskPaletteSamples.home)
+    palette.changeValue(1)
     XCTAssertNil(try storedTask(palette, 1).workspace, "末尾の次は「なし」へ回る")
     palette.changeValue(-1)
-    XCTAssertEqual(try storedTask(palette, 1).workspace, otherWorkspace.id)
+    XCTAssertEqual(try storedTask(palette, 1).workspace, TaskPaletteSamples.home)
   }
 
   /// 削除された workspace を指すタスクは「なし」として扱い、そこから巡回する。

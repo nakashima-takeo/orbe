@@ -66,7 +66,9 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
   ) {
     AutomationStoreTests.commit(
       wc.automationStore, id, AutomationStoreTests.run(at: Date()), fetched: fetched,
-      decisions: proposing.map { .propose(itemId: $0.id, title: "対応: \($0.id)", due: nil) })
+      decisions: proposing.map {
+        .propose(itemId: $0.id, title: "対応: \($0.id)", due: nil, workspace: nil)
+      })
   }
 
   // MARK: - 起動
@@ -127,6 +129,32 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
   // MARK: - 拒否
 
   /// 走っている回がある間は一覧にそう出て、`run_automation` は「実行できない」で断られる。
+  /// 候補は付け先が今ある workspace に解けるときだけ、起動ごとの id と名前を持つ（永続 ID は出さない）。付け先が無い・
+  /// 消えた候補はキーごと出さない。
+  func testProposalsCarryTheirWorkspaceOnlyWhenItResolves() throws {
+    let wc = try launch()
+    let id = try set(wc, AutomationStoreTests.definition())
+    let main = try XCTUnwrap(wc.workspaces.first { $0.name == "main" })
+    let items = ["a", "b", "c"].map { AutomationStoreTests.item($0) }
+    AutomationStoreTests.commit(
+      wc.automationStore, id, AutomationStoreTests.run(at: Date()), fetched: items,
+      decisions: [
+        .propose(itemId: "a", title: "main の作業", due: nil, workspace: main.persistentId),
+        .propose(itemId: "b", title: "付け先なし", due: nil, workspace: nil),
+        .propose(itemId: "c", title: "消えた付け先", due: nil, workspace: UUID()),
+      ])
+
+    let listed = Dictionary(
+      uniqueKeysWithValues: try proposals(wc, of: id).map { ($0["title"] as? String ?? "", $0) })
+
+    XCTAssertEqual(listed["main の作業"]?["workspaceId"] as? Int, main.id)
+    XCTAssertEqual(listed["main の作業"]?["workspaceName"] as? String, "main")
+    for title in ["付け先なし", "消えた付け先"] {
+      XCTAssertNil(listed[title]?["workspaceId"], title)
+      XCTAssertNil(listed[title]?["workspaceName"], title)
+    }
+  }
+
   func testRunningAutomationIsListedAsRunningAndRefusesRunNow() throws {
     let wc = try launch()
     let id = try set(wc, AutomationStoreTests.definition(script: "sleep 30"))
@@ -199,7 +227,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     run.lastStepCountedBySink = true
     AutomationStoreTests.commit(
       wc.automationStore, id, run, fetched: [a],
-      decisions: [.propose(itemId: "a", title: "対応する", due: nil)])
+      decisions: [.propose(itemId: "a", title: "対応する", due: nil, workspace: nil)])
 
     let listedRun = try XCTUnwrap((try listed(wc)[id]?["runs"] as? [[String: Any]])?.first)
 

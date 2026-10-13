@@ -15,17 +15,21 @@ final class AutomationRunner {
 
   private let scheduler: BackgroundScheduler
   private let run: BackgroundScheduler.Run
+  private let workspaces: () -> [AutomationWorkspace]
   private let recorded: (Int) -> Void
   private let deleted: (Int) -> Void
 
+  /// `workspaces` はタスク候補の付け先にできる今の workspace（Home を除く）。タスク候補の出力先にだけ渡す。
   init(
     store: AutomationStore, scheduler: BackgroundScheduler = BackgroundScheduler(),
     run: @escaping BackgroundScheduler.Run = { BackgroundRuns.shared.run($0, completion: $1) },
+    workspaces: @escaping () -> [AutomationWorkspace],
     recorded: @escaping (Int) -> Void, deleted: @escaping (Int) -> Void
   ) {
     self.store = store
     self.scheduler = scheduler
     self.run = run
+    self.workspaces = workspaces
     self.recorded = recorded
     self.deleted = deleted
   }
@@ -86,28 +90,6 @@ final class AutomationRunner {
     }
   }
 
-  // MARK: - 番人
-
-  private static func key(_ id: Int) -> String { "automation:\(id)" }
-
-  private func timing(_ automation: Automation) -> BackgroundTiming? {
-    automation.paused ? nil : automation.definition.trigger
-  }
-
-  /// ストアの定義は検証済みなので、番人の検証で落ちることはない。
-  private func register(_ automation: Automation) {
-    let id = automation.id
-    let start: BackgroundScheduler.Start = { [weak self] trigger, finish in
-      self?.begin(id, trigger: trigger, finish: finish) ?? BackgroundRunHandle {}
-    }
-    try? scheduler.register(
-      id: Self.key(id), timing: timing(automation), anchor: automation.anchor, start: start)
-  }
-
-  private func retime(_ automation: Automation) {
-    try? scheduler.retime(id: Self.key(automation.id), timing: timing(automation))
-  }
-
   // MARK: - 1 回
 
   private func begin(
@@ -124,7 +106,8 @@ final class AutomationRunner {
       startedAt: now(), finish: finish)
     switch definition.sink {
     case .taskCandidates:
-      runSource(Pass(attempt, AutomationTaskCandidates(store: store, automationId: id)), automation)
+      let sink = AutomationTaskCandidates(store: store, automationId: id, workspaces: workspaces)
+      runSource(Pass(attempt, sink), automation)
     case .command(let command):
       let sink = AutomationCommandSinkRun(
         command, runId: automation.runId,
@@ -362,6 +345,29 @@ final class AutomationRunner {
         startedAt: attempt.startedAt, endedAt: attempt.startedAt, trigger: attempt.trigger,
         source: nil, fresh: nil, steps: [], lastStepCountedBySink: false, sink: nil, failure: nil)
     }
+  }
+}
+
+/// 番人への登録。
+extension AutomationRunner {
+  private static func key(_ id: Int) -> String { "automation:\(id)" }
+
+  private func timing(_ automation: Automation) -> BackgroundTiming? {
+    automation.paused ? nil : automation.definition.trigger
+  }
+
+  /// ストアの定義は検証済みなので、番人の検証で落ちることはない。
+  private func register(_ automation: Automation) {
+    let id = automation.id
+    let start: BackgroundScheduler.Start = { [weak self] trigger, finish in
+      self?.begin(id, trigger: trigger, finish: finish) ?? BackgroundRunHandle {}
+    }
+    try? scheduler.register(
+      id: Self.key(id), timing: timing(automation), anchor: automation.anchor, start: start)
+  }
+
+  private func retime(_ automation: Automation) {
+    try? scheduler.retime(id: Self.key(automation.id), timing: timing(automation))
   }
 }
 

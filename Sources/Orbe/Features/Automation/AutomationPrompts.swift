@@ -130,13 +130,16 @@ enum AutomationPrompts {
 
   /// タスク候補の出力先が最後の agent の段に渡す依頼文。`rows` は確かめた入力行。
   static func judge(
-    instruction: String, rows: [String], open: [AutomationProposal], now: Date,
+    instruction: String, rows: [String], choices: AutomationJudgeChoices, now: Date,
     timeZone: TimeZone
   ) -> String {
-    let openLines = open.map { proposal in
+    let openLines = choices.open.map { proposal in
       var entry: [String: Any] = ["link": proposal.item.link, "title": proposal.title]
       if let due = proposal.due { entry["due"] = due.text }
       return jsonLine(entry)
+    }.joined(separator: "\n")
+    let workspaceLines = choices.workspaces.map {
+      jsonLine(["workspace": $0.id, "name": $0.name, "root": $0.root] as [String: Any])
     }.joined(separator: "\n")
     return """
       You decide which incoming items should become tasks on the user's task list. You have no tools; \
@@ -153,10 +156,17 @@ enum AutomationPrompts {
       Proposals already waiting for the user (one JSON object per line; may be empty):
       \(openLines.isEmpty ? "(none)" : openLines)
 
+      Workspaces the user works in (one JSON object per line; may be empty):
+      \(workspaceLines.isEmpty ? "(none)" : workspaceLines)
+
       Output one JSON object per line and nothing else (no prose, no code fences):
       - To propose a task for a new item: \
-      {"propose": "<item id>", "title": "<one-line task title>", "due": "YYYY-MM-DD"}. \
-      Omit due when there is no deadline. At most one proposal per item; use only ids of the new items above.
+      {"propose": "<item id>", "title": "<one-line task title>", "due": "YYYY-MM-DD", \
+      "workspace": <workspace number>}. \
+      Omit due when there is no deadline. At most one proposal per item; use only ids of the new items above. \
+      Write workspace only when the item clearly belongs to one of the workspaces above (by the user's \
+      instruction or by the item itself, such as its repository), using only numbers listed above; omit it \
+      when unsure, and the task goes to Home.
       - When the new items show that a waiting proposal is already dealt with: {"resolve": "<link of that proposal>"}. \
       Use only links of the waiting proposals above.
       Output nothing when no item needs a task.
@@ -164,12 +174,12 @@ enum AutomationPrompts {
   }
 
   /// 最後の段の行を判定の出力として読む。propose・resolve の形でない行・知らない項目や候補を指す行・不正なタイトルや
-  /// 期限・同じ項目への 2 つ目の候補は、理由付きで捨てる。`itemIds` は今回の新しい項目の id。
+  /// 期限・一覧に無い workspace・同じ項目への 2 つ目の候補は、理由付きで捨てる。`itemIds` は今回の新しい項目の id。
   static func readJudge(
-    _ rows: [AutomationRow], itemIds: Set<String>, open: [AutomationProposal]
+    _ rows: [AutomationRow], itemIds: Set<String>, choices: AutomationJudgeChoices
   ) -> (decisions: [AutomationDecision], rejected: AutomationRejections) {
     var rejected = AutomationRejections()
-    let openLinks = Set(open.map(\.item.link))
+    let openLinks = Set(choices.open.map(\.item.link))
     var proposed = Set<String>()
     var resolved = Set<String>()
     var decisions: [AutomationDecision] = []
@@ -199,11 +209,19 @@ enum AutomationPrompts {
           }
           due = parsed
         }
+        var workspace: UUID?
+        if let number = line.workspace {
+          guard let listed = choices.workspaces.first(where: { $0.id == number }) else {
+            rejected.add("propose \(id): workspace \(number) is not a listed workspace")
+            continue
+          }
+          workspace = listed.persistentId
+        }
         guard proposed.insert(id).inserted else {
           rejected.add("propose \(id): proposed twice")
           continue
         }
-        decisions.append(.propose(itemId: id, title: title, due: due))
+        decisions.append(.propose(itemId: id, title: title, due: due, workspace: workspace))
       case (nil, let link?):
         guard openLinks.contains(link), resolved.insert(link).inserted else {
           rejected.add("resolve \(link): not a waiting proposal")
@@ -270,4 +288,5 @@ private struct JudgeLine: Decodable {
   let resolve: String?
   let title: String?
   let due: String?
+  let workspace: Int?
 }

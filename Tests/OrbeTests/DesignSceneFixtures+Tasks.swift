@@ -223,7 +223,7 @@ extension DesignSceneFixtures {
       openLists: (openLists ?? taskOpenLists)(items.viewer), root: taskRoot,
       agents: taskAgents(), sessionTabs: sessionTabs,
       automations: automationRunner(automations ?? automationDesignFile()),
-      workspaces: workspaces ?? taskWorkspaces, now: taskToday, timeZone: taskCalendar.timeZone,
+      workspaces: { workspaces ?? taskWorkspaces }, now: taskToday, timeZone: taskCalendar.timeZone,
       clock: { _ in taskToday })
   }
 

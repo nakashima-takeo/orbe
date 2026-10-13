@@ -75,7 +75,7 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
       wc.automationStore, automation.id,
       DesignSceneFixtures.automationRun(at: Date(), items: 1, fresh: 1),
       fetched: [item],
-      decisions: [.propose(itemId: "a", title: "見積もりを送る", due: nil)])
+      decisions: [.propose(itemId: "a", title: "見積もりを送る", due: nil, workspace: nil)])
 
     let palette = try openTaskPalette(wc)
     palette.setTab(.automation)
@@ -83,6 +83,50 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
 
     XCTAssertEqual(
       wc.taskStore.tasks.first { $0.title == "見積もりを送る" }?.workspace,
+      try XCTUnwrap(wc.store.homeWorkspaceId))
+  }
+
+  /// 付け先を持つ候補の ⌘↵ は、その workspace のタスクにして、そのタスクのための ⌘T に差し替わる。
+  @MainActor
+  func testCommandEnterOnAProposalAttachesTheTaskToItsWorkspaceAndOpensItsWorktreePalette()
+    throws
+  {
+    let wc = try launchOnAnEmptyWorkspace()
+    let automation = try wc.automationRunner.set(nil, AutomationStoreTests.definition())
+    AutomationStoreTests.commit(
+      wc.automationStore, automation.id,
+      DesignSceneFixtures.automationRun(at: Date(), items: 1, fresh: 1),
+      fetched: [AutomationStoreTests.item("a")],
+      decisions: [.propose(itemId: "a", title: "main で直す", due: nil, workspace: mainId)])
+
+    let palette = try openTaskPalette(wc)
+    palette.setTab(.automation)
+    palette.automation.acceptAndOpen()
+
+    let task = try XCTUnwrap(wc.taskStore.tasks.first { $0.title == "main で直す" })
+    XCTAssertEqual(task.workspace, mainId, "開いた workspace（empty）ではなく付け先に付く")
+    XCTAssertEqual(wc.presentedOverlay, .worktreePalette)
+    XCTAssertEqual(wc.model.worktreePalette?.taskContextID, task.id)
+  }
+
+  /// ⌘⇧X を開いている間に付け先の workspace が消えたら、↵ の時点の値で解いて Home に付ける。
+  @MainActor func testAProposalWhoseWorkspaceWasDeletedWhileOpenGoesToHome() throws {
+    let wc = try launchOnAnEmptyWorkspace()
+    let automation = try wc.automationRunner.set(nil, AutomationStoreTests.definition())
+    AutomationStoreTests.commit(
+      wc.automationStore, automation.id,
+      DesignSceneFixtures.automationRun(at: Date(), items: 1, fresh: 1),
+      fetched: [AutomationStoreTests.item("a")],
+      decisions: [.propose(itemId: "a", title: "main で直す", due: nil, workspace: mainId)])
+    let palette = try openTaskPalette(wc)
+    palette.setTab(.automation)
+
+    let main = try XCTUnwrap(wc.workspaces.firstIndex { $0.persistentId == mainId })
+    wc.closeWorkspace(main, origin: .controlAPI)
+    palette.submit()
+
+    XCTAssertEqual(
+      wc.taskStore.tasks.first { $0.title == "main で直す" }?.workspace,
       try XCTUnwrap(wc.store.homeWorkspaceId))
   }
 

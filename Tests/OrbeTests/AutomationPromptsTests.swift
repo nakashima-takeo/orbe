@@ -63,7 +63,7 @@ final class AutomationPromptsTests: OrbeTestCase {
     [
       AutomationProposal(
         id: 1, automationId: 1, item: AutomationStoreTests.item("old"), title: "前の提案", due: nil,
-        proposedAt: Date(timeIntervalSince1970: 0), state: .open)
+        workspace: nil, proposedAt: Date(timeIntervalSince1970: 0), state: .open)
     ]
   }
 
@@ -82,12 +82,13 @@ final class AutomationPromptsTests: OrbeTestCase {
 
     let (rows, notJSON) = AutomationPrompts.readRows(text)
     let (decisions, rejected) = AutomationPrompts.readJudge(
-      rows, itemIds: Set(items.map(\.id)), open: open)
+      rows, itemIds: Set(items.map(\.id)),
+      choices: AutomationJudgeChoices(open: open, workspaces: []))
 
     XCTAssertEqual(
       decisions,
       [
-        .propose(itemId: "a", title: "レビューする", due: TaskItem.DueDate("2026-10-12")),
+        .propose(itemId: "a", title: "レビューする", due: TaskItem.DueDate("2026-10-12"), workspace: nil),
         .resolve(link: "https://example.com/old"),
       ])
     XCTAssertEqual(notJSON.reasons, ["line 9: not JSON"], "JSON でない行は段の読み取りで捨てる")
@@ -98,7 +99,8 @@ final class AutomationPromptsTests: OrbeTestCase {
   /// 判定の依頼文には、新しい項目・出ている提案・期限を決めるための今日と利用者の指示文が載る。
   func testJudgePromptCarriesTheNewItemsTheOpenProposalsAndToday() throws {
     let prompt = AutomationPrompts.judge(
-      instruction: "自分がやるべきことだけ", rows: [AutomationPrompts.row(items[0])], open: open,
+      instruction: "自分がやるべきことだけ", rows: [AutomationPrompts.row(items[0])],
+      choices: AutomationJudgeChoices(open: open, workspaces: [orbe]),
       now: Date(timeIntervalSince1970: 1_800_000_000),
       timeZone: try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo")))
 
@@ -108,5 +110,79 @@ final class AutomationPromptsTests: OrbeTestCase {
     XCTAssertTrue(prompt.contains(#""link":"https://example.com/old","title":"前の提案""#))
     XCTAssertTrue(prompt.contains("2027-01-15 17:00"), prompt)
     XCTAssertTrue(prompt.contains("Asia/Tokyo"))
+    XCTAssertTrue(prompt.contains(#"{"name":"orbe","root":"/src/orbe","workspace":3}"#))
+  }
+
+  /// 付け先にできる workspace が無ければ、一覧の節は (none) になる。
+  func testJudgePromptSaysNoneWithoutWorkspaces() throws {
+    let prompt = AutomationPrompts.judge(
+      instruction: "指示", rows: [AutomationPrompts.row(items[0])],
+      choices: AutomationJudgeChoices(open: [], workspaces: []),
+      now: Date(timeIntervalSince1970: 1_800_000_000),
+      timeZone: try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo")))
+
+    XCTAssertTrue(
+      prompt.contains(
+        "Workspaces the user works in (one JSON object per line; may be empty):\n(none)"),
+      prompt)
+  }
+
+  // MARK: - 付け先
+
+  private let orbe = AutomationWorkspace(
+    id: 3, persistentId: UUID(), name: "orbe", root: "/src/orbe")
+
+  private func judged(_ lines: [String]) -> ([AutomationDecision], AutomationRejections) {
+    let (rows, _) = AutomationPrompts.readRows(lines.joined(separator: "\n"))
+    return AutomationPrompts.readJudge(
+      rows, itemIds: Set(items.map(\.id)),
+      choices: AutomationJudgeChoices(open: [], workspaces: [orbe]))
+  }
+
+  /// 一覧の id は永続 ID に直して運び、書かなければ付け先なし。
+  func testJudgeTurnsAListedWorkspaceIntoItsPersistentId() {
+    let (decisions, rejected) = judged([
+      #"{"propose":"a","title":"orbe の作業","workspace":3}"#,
+      #"{"propose":"b","title":"どこでもない作業"}"#,
+    ])
+
+    XCTAssertEqual(
+      decisions,
+      [
+        .propose(itemId: "a", title: "orbe の作業", due: nil, workspace: orbe.persistentId),
+        .propose(itemId: "b", title: "どこでもない作業", due: nil, workspace: nil),
+      ])
+    XCTAssertEqual(rejected.count, 0)
+  }
+
+  /// 一覧に無い id・整数でない値（文字列・小数）の行は、候補にせず理由付きで捨てる。null は書かなかったのと同じ。
+  func testJudgeDropsLinesWithAnUnlistedOrNonIntegerWorkspace() {
+    let (decisions, rejected) = judged([
+      #"{"propose":"a","title":"知らない","workspace":4}"#,
+      #"{"propose":"a","title":"文字列","workspace":"3"}"#,
+      #"{"propose":"b","title":"小数","workspace":3.5}"#,
+      #"{"propose":"b","title":"null","workspace":null}"#,
+    ])
+
+    XCTAssertEqual(
+      decisions, [.propose(itemId: "b", title: "null", due: nil, workspace: nil)])
+    XCTAssertEqual(
+      rejected.reasons,
+      [
+        "propose a: workspace 4 is not a listed workspace",
+        "line 2: workspace has the wrong type",
+        "line 3: invalid value",
+      ])
+  }
+
+  /// 真偽値の true を id 1 と取り違えない（id 1 の workspace があっても付けない）。
+  func testJudgeDoesNotReadTrueAsWorkspaceOne() {
+    let one = AutomationWorkspace(id: 1, persistentId: UUID(), name: "one", root: "/one")
+    let (rows, _) = AutomationPrompts.readRows(#"{"propose":"a","title":"t","workspace":true}"#)
+    let (decisions, rejected) = AutomationPrompts.readJudge(
+      rows, itemIds: ["a"], choices: AutomationJudgeChoices(open: [], workspaces: [one]))
+
+    XCTAssertEqual(decisions, [])
+    XCTAssertEqual(rejected.reasons, ["line 1: workspace has the wrong type"])
   }
 }
