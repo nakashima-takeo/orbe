@@ -196,13 +196,7 @@ struct TaskPaletteFilterMenu: View {
     .scrollIndicators(.automatic)
     .frame(maxHeight: maxHeight)
     .fixedSize()
-    .background(
-      RoundedRectangle(cornerRadius: Theme.Radius.row).fill(Color.theme.bgBase)
-        .shadow(color: .black.opacity(0.3), radius: 12, y: 4)
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: Theme.Radius.row)
-        .strokeBorder(Color.theme.surface2, lineWidth: Theme.Stroke.hairline))
+    .floatingMenuCard()
   }
 
   /// メニューの行の並び（workspace は「なし」とサイドバーの順、優先度は高・中・低、期限は区切りの順）。
