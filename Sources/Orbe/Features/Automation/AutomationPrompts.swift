@@ -121,7 +121,7 @@ enum AutomationPrompts {
     \(rows.isEmpty ? "(none)" : rows.joined(separator: "\n"))
 
     Output only the report as plain text (no code fences), in the language of the user's instruction. \
-    The first line is the summary shown in the list and in the notification. Keep the whole report short \
+    The first line is the summary shown on the board's heading and in the notification. Keep the whole report short \
     (\(AutomationReportSinkRun.limit) characters at most). Output nothing when there is nothing to report.
     """
   }

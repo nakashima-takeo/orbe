@@ -77,6 +77,13 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     XCTAssertEqual(
       counts(run(14, 40, items: 6, fresh: 4, failure: "exited 1", failedInStep: true)),
       [nil, 6, 4, nil, nil], "段で落ちた回は、その段の手前まで")
+    var sinkFailed = run(
+      14, 40, items: 6, fresh: 4, steps: [3], failure: "the sink command ended: exited 1",
+      failedInStep: true)
+    sinkFailed.sink = .command(
+      AutomationCommandReport(commandLine: "~/bin/post.sh", ending: "exited 1", count: 3))
+    XCTAssertEqual(
+      counts(sinkFailed), [nil, 6, 4, 3, nil], "出力先で落ちた回は最後の段まで出し、出力先は出さない")
     XCTAssertEqual(
       counts(run(14, 40, items: 0, fresh: 0, failure: "exited 1")), [nil, nil, nil, nil, nil],
       "取得元で落ちた回は何も数えない")
@@ -139,8 +146,8 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     XCTAssertEqual(summary.last, "前回 今日 14:40　2件をタスク候補に追加")
   }
 
-  /// 出力先のコマンドは、手段の札・コマンドの全文・作業ディレクトリを出力先の段に出し、走った回を「完了」として出した回に
-  /// 数える。件数の列の出力先は渡した行の数。
+  /// 出力先のコマンドは、コマンドの全文・作業ディレクトリを出力先の段に出し（手段の札は題と同じ語なので出さない）、走った回を
+  /// 「完了」として出した回に数える。件数の列の出力先は渡した行の数で、新着の無い回は出力先へ届いていないので出さない。
   func testACommandOutputShowsItsCommandAndCountsRunsAsDone() throws {
     func ran(_ hour: Int, count: Int, sourced: Bool) -> AutomationRun {
       var run = DesignSceneFixtures.automationRun(
@@ -170,7 +177,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     XCTAssertEqual(alone.output, "コマンド")
     let output = try XCTUnwrap(alone.nodes.last)
     XCTAssertEqual(output.role, .output)
-    XCTAssertEqual(output.means, .command("コマンド"))
+    XCTAssertNil(output.means)
     XCTAssertEqual(output.source, "~/bin/daily-note.sh")
     XCTAssertEqual(output.notes, ["作業ディレクトリ  /Users/me"])
     XCTAssertEqual(alone.runs.map(\.result), ["完了"])
@@ -185,6 +192,11 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     XCTAssertEqual(sourced.nodes.map(\.count), [nil, 3, 3, 3])
     XCTAssertEqual(sourced.runs.map(\.result), ["完了", "新着なし"])
     XCTAssertEqual(sourced.runs.map(\.tone), [.produced, .quiet])
+
+    var nothingNew = run(22, 0, items: 3, fresh: 0)
+    nothingNew.sink = nil
+    let quiet = BoardAutomationSummary(commanding([nothingNew], sourced: true), text: text)
+    XCTAssertEqual(quiet.nodes.map(\.count), [nil, 3, 0, nil])
   }
 
   func testMarksOfALatestFailureAndOfNoRun() {

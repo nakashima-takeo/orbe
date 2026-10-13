@@ -68,12 +68,12 @@ final class AutomationTaskCandidates: AutomationSinkRun {
     let (decisions, rejected) = AutomationPrompts.readJudge(
       rows, itemIds: Set(fresh.map(\.id)), open: open)
     self.rejected.add(rejected)
-    return AutomationSinkReading(output: decisions, count: rows.count, rejected: malformed)
+    return .output(decisions, count: rows.count, rejected: malformed)
   }
 
   /// 候補は確定で覚えるので、届けはすぐ終わる。
   func deliver(
-    _ output: [AutomationDecision], completion: @escaping (String?) -> Void
+    _ output: [AutomationDecision], completion: @escaping (AutomationSinkFailure?) -> Void
   ) -> BackgroundRunHandle {
     completion(nil)
     return BackgroundRunHandle {}

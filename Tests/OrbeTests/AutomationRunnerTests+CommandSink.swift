@@ -107,6 +107,7 @@ extension AutomationRunnerTests {
     XCTAssertEqual(run.failure, "every line of the output of the last step was malformed")
     XCTAssertEqual(run.steps.map(\.count), [0])
     XCTAssertEqual(run.steps.map(\.rejected.count), [2])
+    XCTAssertNil(run.sink, "最後の段で落ちた回は出力先の記録を持たない")
     XCTAssertEqual(store.automation(automation.id)?.lastFetched, [], "項目は次の回にもう一度流れる")
 
     try runner.runNow(automation.id)
@@ -124,7 +125,8 @@ extension AutomationRunnerTests {
     XCTAssertEqual(input.stdin, Data(#"{"id":"b","summary":"b"}"#.appending("\n").utf8))
   }
 
-  /// 0 以外で終わった回は標準エラーの抜粋つきの失敗で、項目は次の回にもう一度流れる。上限は書いた分で経過と無出力の両方に当てる。
+  /// 0 以外で終わった回は標準エラーの抜粋つきの失敗で、出力先で落ちた印に出力先の記録を持ち、項目は次の回にもう一度流れる。
+  /// 上限は書いた分で経過と無出力の両方に当てる。
   func testAFailingCommandFailsTheRunAndTheItemsFlowAgain() throws {
     let automation = try create(commandDefinition(timeoutMinutes: 10))
     try runner.runNow(automation.id)
@@ -135,7 +137,9 @@ extension AutomationRunnerTests {
 
     let run = try XCTUnwrap(store.automation(automation.id)?.runs.first)
     XCTAssertEqual(run.failure, "the sink command ended: exited 1: rate limited")
-    XCTAssertNil(run.sink)
+    XCTAssertEqual(
+      run.sink,
+      .command(AutomationCommandReport(commandLine: "~/bin/post.sh", ending: "exited 1", count: 1)))
     try runner.runNow(automation.id)
     jobs.finish(2, fetched(["a"]))
     XCTAssertNotNil(sinkInput(3), "失敗した回の項目をもう一度渡す")

@@ -34,7 +34,7 @@ extension DesignSceneFixtures {
           - #416 依存の更新（自動マージ待ち）
           """),
       reportRun(daysAgo: 2, source: 2, report: "開いている PR は 2 件。どちらもレビュー済みでマージ待ち。"),
-      reportRun(daysAgo: 3, source: 0, report: nil),
+      reportRun(daysAgo: 3, source: 2, report: nil),
       reportRun(
         daysAgo: 4, source: 4, report: nil,
         failure: "the step \"要約\" ended: exited 1: Claude usage limit reached"),

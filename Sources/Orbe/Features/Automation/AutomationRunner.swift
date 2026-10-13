@@ -260,19 +260,27 @@ final class AutomationRunner {
   }
 
   /// 出力先に読ませて届ける。`text` は最後の段の出力（段が無ければ出力先が読む行）。最後の段の記録 `step` には、出力先が
-  /// 数えた数を載せて回の記録に足す。
+  /// 数えた数を載せて回の記録に足す。出力先で落ちた回は、出力先の記録も回の記録に残す。
   private func toSink<Sink>(_ text: String, step: AutomationStepReport?, _ pass: Pass<Sink>) {
-    let reading = pass.sink.read(text)
-    if var step {
-      step.count = reading.count
-      step.rejected = reading.rejected
-      pass.record.steps.append(step)
+    var step = step
+    let output: Sink.Output
+    switch pass.sink.read(text) {
+    case .failed(let reason, let rejected):
+      step?.rejected = rejected
+      if let step { pass.record.steps.append(step) }
+      fail(pass, reason)
+      return
+    case .output(let read, let count, let rejected):
+      step?.count = count
+      step?.rejected = rejected
+      if let step { pass.record.steps.append(step) }
+      output = read
     }
-    let output = reading.output
     pass.attempt.current = pass.sink.deliver(output) { [weak self] failure in
       guard !pass.attempt.cancelled else { return }
       if let failure {
-        self?.fail(pass, failure)
+        pass.record.sink = failure.report
+        self?.fail(pass, failure.reason)
       } else {
         self?.settle(pass, output)
       }

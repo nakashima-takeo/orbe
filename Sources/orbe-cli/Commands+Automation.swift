@@ -84,23 +84,25 @@ let automationUsage = """
              Items of a failed run flow again in the next run, mixed with new
              ones: skip them by each line's "id" (steps keep the id).
              timeoutMinutes (1-60, default 2) bounds both the run time and the
-             time without output. stdout is not read; discard large output
-             (over 1 MiB fails the run). Editing the definition does not make
+             time without output. stdout is not read. Over 1 MiB of stdout or
+             64 KiB of stderr cuts the command off and fails the run; send
+             large output to /dev/null. Editing the definition does not make
              the next run process every fetched item again.
              {"kind": "report"}
              The output of the last step is the report, kept as text (up to
              2000 characters) in the run record; a command last step prints
-             it on stdout. Its first line shows in the board list and in the
-             notification. An agent last step is told to keep it short and
+             it on stdout. Its first line shows on the board's heading and in
+             the notification. An agent last step is told to keep it short and
              to print nothing when there is nothing to report; a run with no
              report succeeds as "nothing to report". Editing the definition
              does not make the next run process every fetched item again.
     notify   "menuBar"  (any sink; omit to stay silent)
              When a run delivers something (a proposal, a command run, a
-             report) or fails, the menu bar shows the automation's name and
-             the result line with a sound; clicking it opens the
-             automation on Home's board. Runs that deliver nothing are not
-             notified. Changing only notify does not stop a running run.
+             report), or on the first of consecutive failed runs, the menu
+             bar shows the automation's name and the result line with a
+             sound; clicking it opens the automation on Home's board. Runs
+             that deliver nothing are not notified. Changing only notify does
+             not stop a running run.
   To edit, take .definition from list --json, change it and pipe it whole:
     orb automation list --json | jq '.automations[] |
       select(.automationId==3) | .definition' | … | orb automation set 3

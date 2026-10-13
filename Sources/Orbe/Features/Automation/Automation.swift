@@ -323,7 +323,8 @@ struct AutomationRun: Codable, Equatable {
   /// 枠の差分と出力先の取り込みを経て、段に回した項目の数。取得元から先へ進まなかった回は nil。
   var fresh: Int?
   var steps: [AutomationStepReport]
-  /// 確定した回のうち、出力先が記録を返した回だけが持つ（出力先のコマンドは走った回だけ、報告は最後の段の出力を読んだ回だけ）。
+  /// 確定した回のうち出力先が記録を返した回（出力先のコマンドは走った回だけ、報告は最後の段の出力を読んだ回だけ）と、
+  /// 出力先で落ちた回が持つ。失敗した回では、これがあることが出力先で落ちた印になる。
   var sink: AutomationSinkReport?
   /// 失敗した回の理由。失敗した回は前回の取得結果も出力先の状態も動かさない。
   var failure: String?
@@ -347,7 +348,7 @@ enum AutomationSinkReport: Equatable {
   case report(text: String?)
 }
 
-/// 出力先のコマンドが走った回の記録。
+/// 出力先のコマンドを走らせた回の記録（落ちた回も）。
 struct AutomationCommandReport: Codable, Equatable {
   var commandLine: String
   var ending: String

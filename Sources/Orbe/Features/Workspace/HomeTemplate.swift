@@ -125,10 +125,10 @@ enum HomeTemplate {
     - タスク候補: 人が ⌘⇧X の提案タブで受けた候補だけがタスクになる。Slack・メール・課題管理・GitHub などから拾うのが主な使い方。
     - コマンド: 届いた行を標準入力で受けて走る。取得元も段も無ければ、トリガーのたびに走る（例: 毎晩 23 時に \
     `~/bin/daily-note.sh` を実行する）。
-    - 報告: 最後の段が書いた短い文章を、その回の結果として残す（例: 毎日 18 時に開いている PR を要約する）。1 行目が一覧と\
-    通知に出る。言うことが無ければ何も出さない。
-    - 通知（`notify: "menuBar"`）: どの出力先にも付けられる。何かを出した回と失敗した回に、メニューバーへ名前と結果の 1 行が\
-    出る。押すと Home のボードでその自動化が開く。省略すると知らせない。
+    - 報告: 最後の段が書いた短い文章を、その回の結果として残す（例: 毎日 18 時に開いている PR を要約する）。1 行目がボードの\
+    見出しと通知に出る。言うことが無ければ何も出さない。
+    - 通知（`notify: "menuBar"`）: どの出力先にも付けられる。何かを出した回と、失敗が続くなら最初の失敗の回に、メニューバーへ\
+    名前と結果の 1 行が出る。押すと Home のボードでその自動化が開く。省略すると知らせない。
 
     Orbe の中で予定どおり繰り返し動くのは、待ちの条件の確認と自動化の 2 つ。
     """
@@ -146,11 +146,11 @@ enum HomeTemplate {
     - Command: it runs with the lines that reach it on stdin. With neither a source nor steps, it runs on every \
     trigger (e.g. run `~/bin/daily-note.sh` every night at 23:00).
     - Report: the short text the last step writes is kept as the result of the run (e.g. summarize the \
-    open PRs every day at 18:00). Its first line shows in the list and in the notification. With nothing \
-    to report, the last step prints nothing.
-    - Notify (`notify: "menuBar"`): any sink can have it. When a run delivers something or fails, the \
-    menu bar shows the name and the result line; clicking it opens the automation on Home's board. Omit \
-    it to stay silent.
+    open PRs every day at 18:00). Its first line shows on the board's heading and in the notification. With \
+    nothing to report, the last step prints nothing.
+    - Notify (`notify: "menuBar"`): any sink can have it. When a run delivers something, or on the first of \
+    consecutive failed runs, the menu bar shows the name and the result line; clicking it opens the \
+    automation on Home's board. Omit it to stay silent.
 
     Inside Orbe, the only things that run repeatedly on schedule are waiting-condition checks and automations.
     """

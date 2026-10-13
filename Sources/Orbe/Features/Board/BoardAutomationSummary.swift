@@ -139,8 +139,9 @@ extension BoardAutomationSummary {
     }
   }
 
-  /// 出力先の段。タイトルは出力先の種類の名前。タスク候補は採用・見送りの累計を注記に、コマンドはコマンドの段と同じ組み立てで
-  /// 出し、報告は定義に何も持たないので題だけ。通知の設定は、どの出力先でも注記のいちばん下に出す。
+  /// 出力先の段。タイトルは出力先の種類の名前。タスク候補は採用・見送りの累計を注記に、コマンドは全文と作業ディレクトリを
+  /// 出し（手段の札は題と同じ語になるので出さない）、報告は定義に何も持たないので題だけ。通知の設定は、どの出力先でも注記の
+  /// いちばん下に出す。
   private static func sink(_ automation: Automation, count: Int?, l10n: LocalizationStore)
     -> BoardFlowNode
   {
@@ -153,7 +154,7 @@ extension BoardAutomationSummary {
       }
     case .command(let sink):
       node.title = l10n.string(.boardOutputCommand)
-      command(&node, sink.command, l10n: l10n)
+      script(&node, sink.command, l10n: l10n)
     case .report:
       node.title = l10n.string(.boardOutputReport)
     }
@@ -169,6 +170,13 @@ extension BoardAutomationSummary {
     _ node: inout BoardFlowNode, _ command: BackgroundCommand, l10n: LocalizationStore
   ) {
     node.means = .command(l10n.string(.automationCommand))
+    script(&node, command, l10n: l10n)
+  }
+
+  /// コマンドの全文と作業ディレクトリ。
+  private static func script(
+    _ node: inout BoardFlowNode, _ command: BackgroundCommand, l10n: LocalizationStore
+  ) {
     node.source = command.script
     if let directory = command.directory {
       node.notes.append(l10n.string(.automationDirectory) + "  " + directory)
@@ -242,8 +250,9 @@ extension BoardAutomationSummary {
   }
 
   /// 回の記録の段ごとの件数を、届いた段まで並べる。取得元と既に見たものを除くは、取得元を通った回（新しい項目の数を持つ回）
-  /// だけが持つ。失敗した回は、記録の最後の段が落ちた段なので、その手前まで。出力先は、成功して最後の段（`stepCount` 番目）まで
-  /// 回り、新しい項目があった回だけが持つ——途中の段が 0 件を出した回・新しい項目が無かった回は、出力先へ届いていない。
+  /// だけが持つ。出力先で落ちた回（出力先の記録を持つ失敗）は最後の段まで、それ以外の失敗した回は記録の最後の段が落ちた段
+  /// なので、その手前まで。出力先は、成功して最後の段（`stepCount` 番目）まで回り、新しい項目があった回だけが持つ——途中の段が
+  /// 0 件を出した回・新しい項目が無かった回は、出力先へ届いていない。
   static func counts(_ run: AutomationRun, stepCount: Int) -> Counts {
     var counts = Counts()
     if let fresh = run.fresh {
@@ -252,7 +261,7 @@ extension BoardAutomationSummary {
     }
     counts.steps = run.steps.map(\.count)
     if run.failure != nil {
-      if !counts.steps.isEmpty { counts.steps.removeLast() }
+      if run.sink == nil, !counts.steps.isEmpty { counts.steps.removeLast() }
     } else if run.steps.count == stepCount, run.fresh != 0 {
       counts.output = delivered(run).count
     }

@@ -145,18 +145,15 @@ extension AutomationRunnerTests {
     var definition = AutomationStoreTests.definition(coverage: .newArrivals)
     definition.source?.method = AutomationStoreTests.agentSource()
     let automation = try create(definition)
+    let runStart = now
     try runner.runNow(automation.id)
     XCTAssertEqual(prompt(0), AutomationPrompts.fetch(request: "自分宛の DM"), "初回は目印なし")
-    let fetchStart = Date(timeIntervalSince1970: 1_800_000_000)
-    jobs.finish(
-      0,
-      BackgroundRunResult(
-        commandLine: "claude -p", startedAt: fetchStart,
-        endedAt: fetchStart.addingTimeInterval(600),
-        ending: .exited(0),
-        output: .agent(reply: BackgroundAgentReply(text: "", isError: false), stderr: .init())))
-    let succeeded = try XCTUnwrap(store.automation(automation.id)?.lastSucceededAt)
-    XCTAssertEqual(succeeded, fetchStart, "回の終わりでなく始まり——回の途中に届いた分を次の回で取りこぼさない")
+    now = runStart.addingTimeInterval(600)
+    jobs.finish(0, replied(""))
+    let stored = try XCTUnwrap(store.automation(automation.id))
+    XCTAssertEqual(stored.runs.first?.endedAt, runStart.addingTimeInterval(600))
+    let succeeded = try XCTUnwrap(stored.lastSucceededAt)
+    XCTAssertEqual(succeeded, runStart, "回の終わりでなく始まり——回の途中に届いた分を次の回で取りこぼさない")
 
     try runner.runNow(automation.id)
     XCTAssertTrue(prompt(1).contains(SessionEvent.iso8601(succeeded)), prompt(1))

@@ -3,12 +3,6 @@ import Foundation
 /// 出力先のコマンドの 1 回。届いた行をそのまま標準入力で渡し、回の ID を環境変数 `ORBE_RUN_ID` で渡す。項目の同一性は
 /// 確かめない（id の当て直しはタスク候補の規則で、コマンドは行をそのまま受ける役）。
 final class AutomationCommandSinkRun: AutomationSinkRun {
-  /// 最後の段の出力。読めた行か、出力があったのに 1 行も JSON のオブジェクトとして読めなかったか。
-  enum Output {
-    case rows([String])
-    case malformed
-  }
-
   /// 見直すと、指示文を直しただけで今の集合の全件がコマンドに渡り直し、副作用が二重に起きる。
   static let reviewsAfterRework = false
 
@@ -52,19 +46,18 @@ final class AutomationCommandSinkRun: AutomationSinkRun {
     AutomationPrompts.step(instruction: instruction, rows: rows, now: now, timeZone: timeZone)
   }
 
-  /// 中間の段と同じく、出力があったのに 1 行も読めなければ失敗の印を持つ。
-  func read(_ text: String) -> AutomationSinkReading<Output> {
+  /// 中間の段と同じく、出力があったのに 1 行も読めなければ回の失敗。
+  func read(_ text: String) -> AutomationSinkReading<[String]> {
     let (rows, rejected) = AutomationPrompts.readRows(text)
-    return AutomationSinkReading(
-      output: rows.isEmpty && rejected.count > 0 ? .malformed : .rows(rows.map(\.text)),
-      count: rows.count, rejected: rejected)
+    guard !rows.isEmpty || rejected.count == 0 else {
+      return .failed("every line of the output of the last step was malformed", rejected: rejected)
+    }
+    return .output(rows.map(\.text), count: rows.count, rejected: rejected)
   }
 
-  func deliver(_ output: Output, completion: @escaping (String?) -> Void) -> BackgroundRunHandle {
-    guard case .rows(let rows) = output else {
-      completion("every line of the output of the last step was malformed")
-      return BackgroundRunHandle {}
-    }
+  func deliver(_ rows: [String], completion: @escaping (AutomationSinkFailure?) -> Void)
+    -> BackgroundRunHandle
+  {
     guard !rows.isEmpty || !producesRows else {
       completion(nil)
       return BackgroundRunHandle {}
@@ -79,20 +72,24 @@ final class AutomationCommandSinkRun: AutomationSinkRun {
         elapsed: seconds, idle: seconds, output: BackgroundLimits.command.output,
         stderr: BackgroundLimits.command.stderr))
     return run(job) { result in
+      let report = AutomationCommandReport(
+        commandLine: result.commandLine, ending: result.ending.text, count: rows.count)
       guard result.ending == .exited(0) else {
         var stderr = Data()
         if case .command(_, let captured) = result.output { stderr = captured.data }
-        completion(AutomationRunOutput.failure("sink command", result.ending, detail: stderr))
+        completion(
+          AutomationSinkFailure(
+            reason: AutomationRunOutput.failure("sink command", result.ending, detail: stderr),
+            report: .command(report)))
         return
       }
-      self.report = AutomationCommandReport(
-        commandLine: result.commandLine, ending: result.ending.text, count: rows.count)
+      self.report = report
       completion(nil)
     }
   }
 
   func commit(
-    _ output: Output?, into book: inout AutomationProposalBook, automations: [Automation],
+    _ output: [String]?, into book: inout AutomationProposalBook, automations: [Automation],
     endedAt: Date
   ) -> AutomationSinkReport? {
     report.map(AutomationSinkReport.command)

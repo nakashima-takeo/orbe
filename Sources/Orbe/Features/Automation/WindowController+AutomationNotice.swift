@@ -9,7 +9,8 @@ extension WindowController {
     deliver(notification)
   }
 
-  /// 最新の回を知らせとして組む。自動化が消えている・通知が off・最新の回が何も出さなかった・その行を見ているときは nil。
+  /// 最新の回を知らせとして組む。自動化が消えている・通知が off・最新の回が何も出さなかった・前の回に続く失敗・その行を
+  /// 見ているときは nil。失敗は続く間の最初の回だけ知らせる——直るまで毎回鳴らすと、ピルと音を見なくなるため。
   ///
   /// 本文はボードの実行履歴の最新の行の 1 行目——ピルと、押した先の行を同じ文で語るため。設定は Home の実効設定（押した先が
   /// Home なので、発信元の workspace の値という読み方に揃う）。
@@ -23,6 +24,8 @@ extension WindowController {
     }
     let tone = BoardAutomationSummary.tone(latest)
     guard tone != .quiet else { return nil }
+    let previous = automation.runs.dropFirst().first.map(BoardAutomationSummary.tone)
+    guard tone != .failed || previous != .failed else { return nil }
     let text = board.automation.text(localization, now: automationRunner.now())
     guard let line = BoardAutomationSummary(automation, text: text).latestLine else { return nil }
     let home = store.homeIndex.map { workspaces[$0] }

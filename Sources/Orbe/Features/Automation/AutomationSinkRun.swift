@@ -22,8 +22,9 @@ protocol AutomationSinkRun: AnyObject {
   func prompt(instruction: String, rows: [String], now: Date, timeZone: TimeZone) -> String
   /// 最後の段の出力（段が無ければ `prepare` を経た行を 1 行ずつ並べた文字列）を読む。
   func read(_ text: String) -> AutomationSinkReading<Output>
-  /// 読んだ出力を届ける。終わったら失敗の理由（届いたら nil）を main で 1 度だけ返す。返る手で止める。
-  func deliver(_ output: Output, completion: @escaping (String?) -> Void) -> BackgroundRunHandle
+  /// 読んだ出力を届ける。終わったら出力先で落ちたこと（届いたら nil）を main で 1 度だけ返す。返る手で止める。
+  func deliver(_ output: Output, completion: @escaping (AutomationSinkFailure?) -> Void)
+    -> BackgroundRunHandle
   /// 成功した回の確定。この時点の候補に当て直して、記録があれば返す。出力先へ届かなかった回の `output` は nil。
   func commit(
     _ output: Output?, into book: inout AutomationProposalBook, automations: [Automation],
@@ -33,8 +34,14 @@ protocol AutomationSinkRun: AnyObject {
 
 /// 出力先が最後の段の出力を読んだもの。`count`・`rejected` は最後の段の記録に載せる数で、何を 1 つと数えるかは出力の形を
 /// 決める出力先が決める。
-struct AutomationSinkReading<Output> {
-  let output: Output
-  let count: Int
-  let rejected: AutomationRejections
+enum AutomationSinkReading<Output> {
+  case output(Output, count: Int, rejected: AutomationRejections)
+  /// 出力を受けられず、回を失敗にする（最後の段で落ちた回になる）。
+  case failed(String, rejected: AutomationRejections)
+}
+
+/// 出力先で落ちた回の理由と、落ちた出力先の記録。記録は回の記録に残り、段で落ちた回と見分ける印になる。
+struct AutomationSinkFailure {
+  let reason: String
+  let report: AutomationSinkReport
 }

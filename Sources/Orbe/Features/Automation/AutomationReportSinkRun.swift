@@ -32,17 +32,18 @@ final class AutomationReportSinkRun: AutomationSinkRun {
   /// 前後の空白を除き、上限を超えれば切る。最後の段の記録に載せる数は、報告があれば 1。
   func read(_ text: String) -> AutomationSinkReading<Output> {
     let output = Output(text: Self.report(text))
-    return AutomationSinkReading(
-      output: output, count: output.text == nil ? 0 : 1, rejected: AutomationRejections())
+    return .output(output, count: output.text == nil ? 0 : 1, rejected: AutomationRejections())
   }
 
-  static func report(_ text: String) -> String? {
+  private static func report(_ text: String) -> String? {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
     return trimmed.count > limit ? String(trimmed.prefix(limit)) + "…" : trimmed
   }
 
-  func deliver(_ output: Output, completion: @escaping (String?) -> Void) -> BackgroundRunHandle {
+  func deliver(_ output: Output, completion: @escaping (AutomationSinkFailure?) -> Void)
+    -> BackgroundRunHandle
+  {
     completion(nil)
     return BackgroundRunHandle {}
   }
