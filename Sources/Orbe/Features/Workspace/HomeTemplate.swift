@@ -116,19 +116,32 @@ enum HomeTemplate {
 
   /// 自動化の節。
   private static let automationJa = """
-    ## 予定どおり何かを拾い、絞り・判断してタスクの候補にするか、コマンドを走らせるか、報告する
+    ## 予定どおり何かを拾い、絞り・判断してタスクの候補にするか、コマンドを走らせるか、報告するか、agent に仕事をさせる
 
     - 自動化（`set_automation`・`list_automations`・`run_automation`・`pause_automation`・`delete_automation`・\
     `list_automation_proposals`）。
     - トリガー（間隔か毎日の時刻）ごとに、取得元（コマンドか軽い agent）が項目を取り、処理の段（コマンドか agent）が順に\
-    絞り・判断して、出力先へ出す。出力先はタスク候補・コマンド・報告の 3 つ。
+    絞り・判断して、出力先へ出す。出力先はタスク候補・コマンド・報告・agent の 4 つ。
     - 名前は「出どころ: 何を取るか」の 1 行（例「GitHub: 自分へのレビュー依頼」）。取得元が無ければ、何をするかの 1 行\
     （例「日報の下書き」）。
     - タスク候補: 人が ⌘⇧X の提案タブで受けた候補だけがタスクになる。Slack・メール・課題管理・GitHub などから拾うのが主な使い方。
     - コマンド: 届いた行を標準入力で受けて走る。取得元も段も無ければ、トリガーのたびに走る（例: 毎晩 23 時に \
     `~/bin/daily-note.sh` を実行する）。
     - 報告: 最後の段が書いた短い文章を、その回の結果として残す（例: 毎日 18 時に開いている PR を要約する）。1 行目がボードの\
-    見出しと通知に出る。言うことが無ければ何も出さない。
+    見出しと通知に出る。言うことが無い回は「報告なし」になり、知らせない。
+    - agent: 回ごとに裏で使い捨ての claude を起こし、定義の依頼文と名指ししたツールだけで仕事をさせる（例: 毎日 9:00 に、\
+    レビュー待ちの PR をまとめて Slack の自分宛てに投稿する）。取得元か段があれば届いた行が 1 行以上ある回だけ、無ければトリガーの\
+    たびに起きる。ツールを使って何かをしてほしいときはこれを使い、コマンドの出力先の中で `claude -p` を起こさない（Orbe の\
+    絞り込みが掛からない）。応答の 1 行目がボードの見出しと通知に出る。することが無い回は agent がそう申告して終わり、知らせない。
+    - agent の名指しは MCP のツールの完全名か `Bash(<コマンドの接頭>:*)`（例 `Bash(gh search prs:*)`）だけで、最小にする。\
+    agent は回ごとに作る空のディレクトリを作業ディレクトリにして起きる（ディレクトリに結び付く登録〔claude の local・project\
+    スコープ〕の MCP サーバーは使えない）。Bash の規則だけなら、利用者の設定を読まずに走り、作業ディレクトリの外のファイルを引数に\
+    取って読むコマンドは、名指しの規則に一致していても claude が拒否する（外のファイルを読ませたいなら、それを読むコマンド〔スクリプト\
+    など〕を名指しする）。MCP を混ぜると、利用者の設定を読むので、利用者が claude で「常に許可」にしたツール（MCP も Bash のコマンドも）と\
+    hook も効き、設定の additionalDirectories の下も名指しなしで読める。\
+    agent がツールで読んだ外の文面に仕込まれた指示で、名指しした書き込みのツールが使われうる。
+    - agent には届いた行も件数も渡らない。対象が要る仕事なら、依頼文で agent 自身に調べさせる。失敗した回は次の回でもう一度\
+    起きる（投稿が二重になりうる）。依頼文は automations.json に残るので秘密を書かない。
     - 通知（`notify: "menuBar"` か `"notificationCenter"`）: どの出力先にも付けられる。何かを出した回と、失敗が続くなら最初の\
     失敗の回に、メニューバーか macOS の通知センターへ名前と結果の 1 行が出る。通知センターの通知は自動化ごとに 1 つで、新しい回が\
     差し替える。`notificationCenter` を書くと、Orbe の通知の許可がまだ決まっていなければ OS が許可を問う。許可が無い回は\
@@ -138,13 +151,13 @@ enum HomeTemplate {
     """
 
   private static let automationEn = """
-    ## Pick things up on a schedule, narrow and judge them into task candidates, run a command, or report
+    ## On a schedule, pick things up into task candidates, run a command, report, or have an agent act
 
     - Automation (`set_automation`, `list_automations`, `run_automation`, `pause_automation`, \
     `delete_automation`, `list_automation_proposals`).
     - On each trigger (an interval or daily times), the source (a command or a light agent) gets items, the \
     steps (commands or agents) narrow and judge them in order, and the sink receives the result. There are \
-    three sinks: task candidates, a command, and a report.
+    four sinks: task candidates, a command, a report, and an agent.
     - Name it in one line, "<source>: <what it gets>" (e.g. "GitHub: review requests for me"); without a \
     source, say what it does (e.g. "Daily note draft").
     - Task candidates: only candidates the user accepts in the Proposals tab of ⌘⇧X become tasks. The main use \
@@ -152,8 +165,27 @@ enum HomeTemplate {
     - Command: it runs with the lines that reach it on stdin. With neither a source nor steps, it runs on every \
     trigger (e.g. run `~/bin/daily-note.sh` every night at 23:00).
     - Report: the short text the last step writes is kept as the result of the run (e.g. summarize the \
-    open PRs every day at 18:00). Its first line shows on the board's heading and in the notification. With \
-    nothing to report, the last step prints nothing.
+    open PRs every day at 18:00). Its first line shows on the board's heading and in the notification. A run \
+    with nothing to report shows "nothing to report", and nobody is notified.
+    - Agent: each run starts a throwaway claude in the background that does the job with only the \
+    definition's request and the tools it names (e.g. every day at 9:00, post a digest of the PRs waiting for \
+    my review to myself on Slack). With a source or steps it starts only when at least one line arrives; \
+    without them, on every trigger. Use it when you want something done with tools; never start `claude -p` \
+    inside a command sink (Orbe's limits do not apply there). The first line of its reply shows on the \
+    board's heading and in the notification. When there is nothing to do, the agent says so and ends, and \
+    nobody is notified.
+    - An agent may name only full MCP tool names and `Bash(<command prefix>:*)` rules (e.g. \
+    `Bash(gh search prs:*)`); name as few as possible. Each run starts in a fresh empty directory (MCP servers \
+    registered to a directory, in claude's local and project scopes, are unavailable). With Bash rules only, \
+    it runs without reading the user's settings, and claude refuses commands that read a file outside that \
+    directory given as an argument, even when they match a named rule (to have it read such a file, name a \
+    command that reads it, such as a script). Once an MCP tool is named, it reads the user's settings, so the \
+    tools the user always allows in claude (MCP tools and Bash commands) and their hooks apply too, and it can \
+    read under the settings' additionalDirectories without naming anything. Instructions hidden in outside \
+    text the agent reads with its tools can make it use a writing tool it was given.
+    - The agent gets neither the lines that arrived nor their count; when the job needs targets, have the \
+    agent look them up itself in the request. A failed run starts the agent again on the next run (a post \
+    can be doubled). The request stays in automations.json, so never put secrets in it.
     - Notify (`notify: "menuBar"` or `"notificationCenter"`): any sink can have it. When a run delivers \
     something, or on the first of consecutive failed runs, the name and the result line show in the menu bar \
     or in macOS Notification Center. Notification Center keeps one notification per automation; a new run \

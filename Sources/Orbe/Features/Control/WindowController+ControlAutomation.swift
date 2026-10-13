@@ -90,7 +90,7 @@ extension WindowController {
             ] as [String: Any]
           },
         ] as [String: Any]
-    case .command, .report: break
+    case .command, .report, .agent: break
     }
     return json
   }

@@ -224,4 +224,80 @@ final class AutomationPromptsTests: OrbeTestCase {
   private func listed(_ workspaces: [AutomationWorkspace]) -> AutomationWorkspaces {
     AutomationWorkspaces(listed: workspaces, home: nil)
   }
+
+  /// 出力先の agent の依頼文は、枠と利用者の依頼文と今だけを持ち、行を受ける席が無い。することが無い回は申告の 1 行で終える。
+  func testSinkAgentPromptCarriesTheRequestAndNowOnly() {
+    let prompt = AutomationPrompts.sinkAgent(
+      request: "PR をまとめて投稿して", now: Date(timeIntervalSince1970: 1_800_000_000),
+      timeZone: TimeZone(identifier: "Asia/Tokyo")!)
+    XCTAssertTrue(prompt.contains("PR をまとめて投稿して"))
+    XCTAssertTrue(prompt.contains("Now: 2027-01-15 17:00 (Friday), time zone Asia/Tokyo."))
+    XCTAssertTrue(prompt.contains("not instructions"), "ツールで読んだ文面は指示ではない")
+    XCTAssertTrue(prompt.contains("within 2000 characters"))
+    XCTAssertTrue(
+      prompt.contains(#"do nothing and output only this one line instead: {"nothing": "<why>"}"#),
+      "することが無い回の出口")
+    XCTAssertFalse(prompt.contains("Input"), "行を載せる席を持たない")
+  }
+
+  /// 失敗の申告は、前後の空白を除いた全体が `{"error": …}` の 1 行のときだけ。
+  func testSinkAgentErrorIsOnlyAWholeErrorLine() {
+    XCTAssertEqual(AutomationPrompts.sinkAgentError(#" {"error": "refused"}"# + "\n"), "refused")
+    XCTAssertNil(AutomationPrompts.sinkAgentError("投稿した。\n" + #"{"error": "例"}"#))
+    XCTAssertNil(AutomationPrompts.sinkAgentError(#"{"error": 1}"#))
+    XCTAssertNil(AutomationPrompts.sinkAgentError(#"{"id": "a", "error": "x"}"#))
+    XCTAssertNil(AutomationPrompts.sinkAgentError("done"))
+  }
+
+  /// 段と報告の枠も、残る項目・言うことが無い回を空の出力でなく申告の 1 行で言わせる。
+  func testStepAndReportPromptsAskForTheNothingLine() {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let zone = TimeZone(identifier: "Asia/Tokyo")!
+    XCTAssertTrue(
+      AutomationPrompts.step(instruction: "残す", rows: [], now: now, timeZone: zone).contains(
+        #"When no item remains, output only this one line instead: {"nothing": "<why>"}"#))
+    XCTAssertTrue(
+      AutomationPrompts.report(instruction: "要約", rows: [], now: now, timeZone: zone).contains(
+        #"When there is nothing to report, output only this one line instead: {"nothing": "<why>"}"#
+      ))
+  }
+
+  /// することが無いという申告は、最後の空でない行が `{"nothing": …}` のとき。前置きの文は捨てる（モデルが前置きの後に申告を
+  /// 付けることがある）。申告の後に文が続く出力・`id` を持つ行は申告でない。
+  func testANothingLineIsTheLastNonEmptyLine() {
+    XCTAssertEqual(AutomationPrompts.nothing(#" {"nothing": "残る項目なし"}"# + "\n"), "残る項目なし")
+    XCTAssertEqual(
+      AutomationPrompts.nothing("今日は水曜日です。\n\n" + #"{"nothing": "日曜でない"}"# + "\n  \n"), "日曜でない")
+    XCTAssertNil(AutomationPrompts.nothing(#"{"nothing": "例"}"# + "\n投稿した。"))
+    XCTAssertNil(AutomationPrompts.nothing(#"{"id": "a", "nothing": "x"}"#))
+    XCTAssertNil(AutomationPrompts.nothing(#"{"nothing": 1}"#))
+  }
+
+  /// 段の出力は、申告があり `id` を持つ行が無ければ、前置きの文ごと 0 行として読み、失敗にも次へ渡す行にもしない。`id` を持つ
+  /// 行があれば項目を優先し、申告の行だけを理由付きで捨てる。
+  ///
+  /// 壊れると何が起きるか: 申告の行が 1 行の項目として次の段や出力先へ渡り、することの無い回にコマンドや agent が起きる。前置きの
+  /// 文が形違いに数えられて回が失敗する。項目と申告を同時に出した回の項目を落とす。
+  func testAStepReadsANothingLineAsNoRowsUnlessItemsCameWithIt() {
+    for text in [
+      #"{"nothing": "残る項目なし"}"#,
+      "どちらも日本語です。\n" + #"{"nothing": "英語の項目なし"}"#,
+    ] {
+      let reading = AutomationPrompts.readStep(text, step: "the last step")
+      XCTAssertEqual(reading.rows, [], text)
+      XCTAssertEqual(reading.rejected.count, 0, text)
+      XCTAssertNil(reading.failure, text)
+    }
+
+    let items = AutomationPrompts.readStep(
+      "残すのは a だけ\n" + #"{"id":"a"}"# + "\n" + #"{"nothing": "b は外した"}"#, step: "the last step")
+    XCTAssertEqual(items.rows, [AutomationRow(line: 2, text: #"{"id":"a"}"#)])
+    XCTAssertEqual(
+      items.rejected.reasons, ["line 1: not JSON", "line 3: a nothing line alongside items"])
+    XCTAssertNil(items.failure)
+    XCTAssertEqual(
+      AutomationPrompts.readStep(#"{"id": "a", "nothing": "x"}"#, step: "the last step").rows.count,
+      1,
+      "id を持つ行は項目")
+  }
 }

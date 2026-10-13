@@ -242,6 +242,30 @@ final class BackgroundRunsTests: OrbeTestCase {
     XCTAssertTrue(result.commandLine.contains("--setting-sources '' "), result.commandLine)
   }
 
+  /// agent は回ごとに作る空のディレクトリで起き、そのディレクトリは中に書いたものごと回の後に消える。claude は作業ディレクトリの
+  /// 中の読み取り専用のコマンドを許可の規則と関係なく走らせるので、崩れると名指ししていないコマンドで手元のファイルを読める。
+  func testAgentRunsInAFreshEmptyDirectoryRemovedAfterTheRun() throws {
+    try placeClaude(
+      #"""
+      { pwd -P; ls -A; } >> "$dir/cwd"
+      touch left-behind
+      echo '{"type":"result","is_error":false,"result":"ok"}'
+      """#)
+    let runs = runs()
+
+    for _ in 0..<2 {
+      XCTAssertEqual(try run(runs, agent(tools: ["Bash(gh search prs:*)"])).ending, .exited(0))
+    }
+
+    let directories = try String(contentsOf: bin.appendingPathComponent("cwd"), encoding: .utf8)
+      .split(separator: "\n").map(String.init)
+    XCTAssertEqual(directories.count, 2, "どちらの回も作業ディレクトリは空: \(directories)")
+    XCTAssertEqual(Set(directories).count, 2, "回ごとに別のディレクトリ")
+    for directory in directories {
+      XCTAssertFalse(FileManager.default.fileExists(atPath: directory), "回の後に消える: \(directory)")
+    }
+  }
+
   /// 指定した MCP のツールが始まりの時点で揃っていなければ、モデルを呼ぶ前に止め、揃わなかった名前を返す。
   func testMissingMCPToolStopsBeforeTheModelRuns() throws {
     let replied = bin.appendingPathComponent("replied").path

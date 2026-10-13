@@ -86,6 +86,26 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertFalse(last.contains("fetched"), last)
   }
 
+  /// 出力先の agent の前回は「agent の終わり方」で出る。agent は起こさず、回の記録を直に積む。
+  func testListShowsTheEndingOfAnAgentSink() throws {
+    let control = try startControlProcess()
+    let id = try XCTUnwrap(
+      Int(
+        run(
+          control, ["set"],
+          stdin: #"{"name": "PR を Slack へ", "trigger": {"dailyAt": ["09:00"]}, "steps": [], "#
+            + #""sink": {"kind": "agent", "tools": ["Bash(gh search prs:*)"], "request": "投稿して"}}"#
+        )))
+    var record = AutomationStoreTests.run(at: Date())
+    record.source = nil
+    record.fresh = nil
+    control.target.automationStore.commit(id, record, fetched: []) { _, _ in
+      .agent(AutomationAgentReport(commandLine: "claude -p", ending: "exited 0", text: "投稿した"))
+    }
+    let last = row(control)[5]
+    XCTAssertTrue(last.hasSuffix(" agent exited 0"), last)
+  }
+
   /// `proposals <id>` はその自動化の棚の提案だけを、`proposals` は全部を 1 行 1 提案で出す。
   func testProposalsListsTheShelfOfTheGivenAutomation() throws {
     let control = try startControlProcess()
