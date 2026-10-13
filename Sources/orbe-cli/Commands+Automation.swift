@@ -44,7 +44,9 @@ let automationUsage = """
              tools, whole servers and wildcards are refused. Name only
              tools that read the source (never ones that send, update or
              delete, nor Orbe's own tools): the name is checked, not what
-             the tool does.
+             the tool does. Background agents start in a fresh empty directory
+             on each run, so MCP servers registered to a directory (claude's
+             local and project scopes) are unavailable.
              A command prints one JSON object per item:
              {"id","link","body","time"} (link http(s), time ISO 8601),
              and fails with a non-zero exit or a single {"error": "…"} line.
@@ -125,31 +127,34 @@ let automationUsage = """
              targets itself. tools names full MCP tool names and
              Bash(<command prefix>:*) rules only (the prefix has no , ( ) *);
              bare built-in tools, whole servers and wildcards are refused.
-             Name as few as possible. With Bash rules only, claude reads none
-             of your settings and refuses everything else. Once an MCP tool
-             is named, it reads your settings to reach your MCP servers, so
-             the tools you always allow in claude (MCP tools and Bash
+             Name as few as possible. Each run starts in a fresh empty
+             directory, and reads outside it follow the named rules too. With
+             Bash rules only, claude reads none of your settings. Once an MCP
+             tool is named, it reads your settings to reach your MCP servers,
+             so the tools you always allow in claude (MCP tools and Bash
              commands) and your hooks apply too. Instructions hidden in
              outside text the agent reads with its tools can make it use a
              writing tool it was given. Without model it runs sonnet; it is
-             cut off after 10 minutes, or 3 minutes without output. Its
-             final reply is kept as the result of the run (the first line
-             shows on the board's heading and in the notification). A run
-             fails when the agent replies only {"error": "…"}, crashes, hits
-             its limit, or a named MCP tool is unavailable. A failed run, or
-             one Orbe did not finish, starts the agent again on the next run
-             (a post can be doubled). Editing the definition does not make
-             the next run process every fetched item again. The request
-             stays in automations.json; never put secrets in it.
+             cut off after 10 minutes, or 3 minutes without output. Its final
+             reply is kept as the result of the run (the first line shows on
+             the board's heading and in the notification). Orbe tells it to
+             print nothing when there is nothing to do; a run with an empty
+             reply delivers nothing. A run fails when the agent replies only
+             {"error": "…"}, crashes, hits its limit, or a named MCP tool is
+             unavailable. A failed run, or one Orbe did not finish, starts the
+             agent again on the next run (a post can be doubled). Editing the
+             definition does not make the next run process every fetched item
+             again. The request stays in automations.json; never put secrets
+             in it.
     notify   "menuBar" or "notificationCenter"  (any sink; omit to stay
              silent)
              When a run delivers something (a proposal, a command run, a
-             report, an agent run), or on the first of consecutive failed runs, the
-             automation's name and the result line show with a sound: in the
-             menu bar, or in macOS Notification Center. Notification Center
-             keeps one notification per automation; a new run replaces it.
-             Setting notificationCenter makes macOS ask for Orbe's
-             notification permission if it is not decided yet; without
+             report, an agent's reply), or on the first of consecutive failed
+             runs, the automation's name and the result line show with a
+             sound: in the menu bar, or in macOS Notification Center.
+             Notification Center keeps one notification per automation; a new
+             run replaces it. Setting notificationCenter makes macOS ask for
+             Orbe's notification permission if it is not decided yet; without
              permission, the run shows in the menu bar. Clicking either opens
              the automation on Home's board. Runs that deliver nothing are not
              notified. Changing only notify does not stop a running run.
