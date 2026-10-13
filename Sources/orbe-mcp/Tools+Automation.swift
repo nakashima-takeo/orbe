@@ -42,7 +42,7 @@ let automationTools: [[String: Any]] = [
     (
       "description",
       "自動化（外の出どころから項目を予定どおり取り、処理の段で絞り・判断して、出力先へ出す仕組み）を ID 順に返す {automations}。"
-        + "各要素は automationId・definition（set_automation と同じ定義を保存のまま。省略したものは省略のまま）・"
+        + "各要素は automationId・definition（set_automation と同じ定義を保存のまま。省略したモデルは省略のまま）・"
         + "paused（予定を止めているか）・running（回が走っているか）・nextRunAt（次に予定で回る時刻。止めていれば無い）・lastRunAt・"
         + "runs（回の記録）。出力先がタスク候補の自動化だけが taskCandidates {openProposals"
         + "（この自動化の棚に出ている候補の数）, overlaps（前回の取得結果が他の自動化と重なっているリンクの数 "

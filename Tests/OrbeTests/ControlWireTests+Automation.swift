@@ -98,6 +98,10 @@ extension ControlWireTests {
       ),
       ("取得の性質が無い", with("source", ["command": "gh api notifications"]), "missing source.coverage"),
       (
+        "知らない取得の性質", with("source", ["command": "gh api notifications", "coverage": "all"]),
+        "invalid source.coverage: pass newArrivals, currentSet or everything"
+      ),
+      (
         "段にツール", with("steps", [["name": "判定", "instruction": "x", "tools": ["Read"]]]),
         "invalid steps[0].tools: a step has no tools"
       ),

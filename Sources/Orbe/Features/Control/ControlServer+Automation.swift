@@ -132,7 +132,7 @@ private struct AutomationParams {
     }
   }
 
-  /// `definition.steps[0].instruction` の形。
+  /// `steps[0].instruction` の形（`definition` の中の場所）。
   private func path(_ keys: [CodingKey]) -> String {
     keys.reduce(into: "") { path, key in
       if let index = key.intValue {

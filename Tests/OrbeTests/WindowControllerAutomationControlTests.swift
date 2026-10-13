@@ -112,11 +112,11 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertEqual(shelved.first?["automationId"] as? Int, second)
     XCTAssertEqual(shelved.first?["automationName"] as? String, "受信 2")
 
-    let candidates = try listed(wc).mapValues { $0["taskCandidates"] as? [String: Any] }
-    XCTAssertEqual(candidates[first]??["openProposals"] as? Int, 1)
-    XCTAssertEqual(candidates[second]??["openProposals"] as? Int, 1)
+    let candidates = try listed(wc).compactMapValues { $0["taskCandidates"] as? [String: Any] }
+    XCTAssertEqual(candidates[first]?["openProposals"] as? Int, 1)
+    XCTAssertEqual(candidates[second]?["openProposals"] as? Int, 1)
     for (id, other, name) in [(first, second, "受信 2"), (second, first, "受信 1")] {
-      let overlaps = candidates[id]??["overlaps"] as? [[String: Any]]
+      let overlaps = candidates[id]?["overlaps"] as? [[String: Any]]
       XCTAssertEqual(
         overlaps?.map { $0["automationId"] as? Int }, [other], "自動化 \(id) に相手が出る")
       XCTAssertEqual(overlaps?.first?["name"] as? String, name)
