@@ -71,7 +71,7 @@ updated: 2026-10-13
 
 [自動化](../platform/automation.md)を作り・直し・回し・結果を読む。各サブコマンドは同名の制御 API の動詞へそのまま乗る。
 
-- `orb automation list [--json]` … ID 順に 1 行 1 自動化（`id 状態 名前 トリガー 次の時刻 前回` のタブ区切り。名前とトリガーは定義から読む。状態は `active` / `paused` / `running`、トリガーは `every 30m` / `daily 09:00,13:00`、前回は `<開始> 12 fetched, 3 new, 1 proposed`〔取得元の数・段に回した数・出力先が受けた候補の数〕か `<開始> failed: <理由>`。無い値は `-`。段ごとの件数は `--json` で読む。制御文字の扱いは `task list` と同じ）。
+- `orb automation list [--json]` … ID 順に 1 行 1 自動化（`id 状態 名前 トリガー 次の時刻 前回` のタブ区切り。名前とトリガーは定義から読む。状態は `active` / `paused` / `running`、トリガーは `every 30m` / `daily 09:00,13:00`、前回は回の記録だけから組み、定義は見ない——`<開始> failed: <理由>`、または `<開始>` に、取得元の記録があれば `12 fetched, 3 new`〔取得元の数・段に回した数〕、出力先の記録があれば `1 proposed`〔タスク候補が受けた候補の数〕か `command exited 0`〔コマンドの終わり方〕を `, ` でつないで続ける（例 `<開始> 12 fetched, 3 new, 1 proposed`・`<開始> command exited 0`）。無い値は `-`。段ごとの件数は `--json` で読む。制御文字の扱いは `task list` と同じ）。
 - `orb automation proposals [<id>] [--json]` … 覚えている候補を 1 行 1 つ（`id 状態 自動化の id 期限 タイトル リンク`）。`<id>` でその自動化の棚の分だけ。
 - `orb automation set [<id>] [--json]` … 標準入力の JSON（MCP の `set_automation` の `definition` と同じ形の `name`・`trigger`・`source`・`steps`・`sink`）を `definition` に入れて送り、`<id>` が無ければ作って新しい ID だけを出し、あれば丸ごと置き換える。`orb automation list --json` の `definition` を取り出して直し、そのまま流す往復がつながる。定義をフラグに割らないのは、取得元や段がコマンドか agent かで項目が入れ子になり、検証が CLI と control の 2 か所に割れるため。標準入力が空・JSON オブジェクトでないは usage エラー（exit 2）、定義の検証は control が持つ（違反は exit 1）。
 - `orb automation run <id> [--json]` … 今すぐ回す（止めた自動化も受ける）。回の終わりを待たずに返る。

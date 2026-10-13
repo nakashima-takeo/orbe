@@ -103,9 +103,14 @@ extension DesignGallerySnapshotTests {
     // 見本『段の多い例』『一番単純な例』。どちらも回の記録から読み替えた本物の値で描く。
     let examples = DesignSceneFixtures.boardAutomationFile([
       DesignSceneFixtures.boardStepsExample(), DesignSceneFixtures.boardSimpleExample(),
+      DesignSceneFixtures.boardDailyNoteExample(), DesignSceneFixtures.boardMergedPostExample(),
     ])
     try write("board_automation_steps.png", board(examples))
     try write("board_automation_simple.png", board(examples, row: 1))
+    // 見本『日報の下書き』（取得元も段も無い出力先コマンド）と、取得元のある出力先コマンド。
+    try write("board_automation_command.png", board(examples, row: 2))
+    try write("board_automation_command_en.png", board(examples, row: 2), .en)
+    try write("board_automation_command_sourced.png", board(examples, row: 3))
     try renderBoardRequestSnapshots(write: write, board: { board($0) })
   }
 

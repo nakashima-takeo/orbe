@@ -44,13 +44,15 @@ enum HomeTemplate {
     - タスクを待ちにし、解ける条件（説明・確認のコマンド・間隔・期限）を `set_wait_condition` で付ける。
     - Orbe が確認のコマンドを人の承認なしに裏で予定どおり繰り返し走らせ、満たすか期限が来たら待ちを外して人に知らせる。
 
-    ## 予定どおり何かを拾い、絞り・判断してタスクの候補にする
+    ## 予定どおり何かを拾い、絞り・判断してタスクの候補にするか、コマンドを走らせる
 
     - 自動化（`set_automation`・`list_automations`・`run_automation`・`pause_automation`・`delete_automation`・\
     `list_automation_proposals`）。
     - トリガー（間隔か毎日の時刻）ごとに、取得元（コマンドか軽い agent）が項目を取り、処理の段（コマンドか agent）が順に\
-    絞り・判断して、出力先へ出す。今の出力先はタスク候補だけ。
-    - 人が ⌘⇧X の提案タブで受けた候補だけがタスクになる。Slack・メール・課題管理・GitHub などから拾うのが主な使い方。
+    絞り・判断して、出力先へ出す。出力先はタスク候補とコマンドの 2 つ。
+    - タスク候補: 人が ⌘⇧X の提案タブで受けた候補だけがタスクになる。Slack・メール・課題管理・GitHub などから拾うのが主な使い方。
+    - コマンド: 届いた行を標準入力で受けて走る。取得元も段も無ければ、トリガーのたびに走る（例: 毎晩 23 時に \
+    `~/bin/daily-note.sh` を実行する）。
 
     Orbe の中で予定どおり繰り返し動くのは、待ちの条件の確認と自動化の 2 つ。
 
@@ -101,15 +103,17 @@ enum HomeTemplate {
     - Orbe runs the check command in the background on schedule, repeatedly and without asking the user, \
     and clears the wait and notifies the user when it holds or the deadline comes.
 
-    ## Pick things up on a schedule, narrow and judge them into task candidates
+    ## Pick things up on a schedule, narrow and judge them into task candidates, or run a command
 
     - Automation (`set_automation`, `list_automations`, `run_automation`, `pause_automation`, \
     `delete_automation`, `list_automation_proposals`).
     - On each trigger (an interval or daily times), the source (a command or a light agent) gets items, the \
-    steps (commands or agents) narrow and judge them in order, and the sink receives the result. The only \
-    sink today is task candidates.
-    - Only candidates the user accepts in the Proposals tab of ⌘⇧X become tasks. The main use is picking things \
-    up from Slack, mail, issue trackers, GitHub, and the like.
+    steps (commands or agents) narrow and judge them in order, and the sink receives the result. There are \
+    two sinks: task candidates and a command.
+    - Task candidates: only candidates the user accepts in the Proposals tab of ⌘⇧X become tasks. The main use \
+    is picking things up from Slack, mail, issue trackers, GitHub, and the like.
+    - Command: it runs with the lines that reach it on stdin. With neither a source nor steps, it runs on every \
+    trigger (e.g. run `~/bin/daily-note.sh` every night at 23:00).
 
     Inside Orbe, the only things that run repeatedly on schedule are waiting-condition checks and automations.
 
