@@ -96,7 +96,7 @@ struct TaskPaletteCard: View {
             .contentShape(Rectangle())
             .onTapGesture { model.closeFilterMenu() }
           TaskPaletteFilterMenu(
-            model: model, kind: kind, maxHeight: proxy.size.height - top - Theme.Space.beat
+            model: model, kind: kind, maxHeight: max(0, proxy.size.height - top - Theme.Space.beat)
           )
           .offset(x: chip.minX, y: top)
         }
