@@ -3,7 +3,7 @@ import XCTest
 
 @testable import Orbe
 
-/// ボードの flow。タブ行の横スクロール（`testBoardScroll`）と、自動追加の部品のキー操作（`testBoardAutomation`）と、依頼の欄
+/// ボードの flow。タブ行の横スクロール（`testBoardScroll`）と、自動化の部品のキー操作（`testBoardAutomation`）と、依頼の欄
 /// （`testBoardRequest`）と、部品の並びの変化（`testBoardParts`）。
 /// タブ行の横スクロール: 選択が右端のタブへ移るとタブ列だけがスクロールし、ボードのセルは左端に残る。
 /// スクロール位置は描画を跨いで持つ状態なので、1 枚の host を使い回して選択を変えるたびに撮る（`flow` は毎回 host を
@@ -50,14 +50,14 @@ extension DesignFlowSnapshotTests {
     }
   }
 
-  /// 部品の並び: 自動追加の部品 → 外すと中央の一文だけ（フッターも出ない） → 置くと部品とフッターが戻る。
+  /// 部品の並び: 自動化の部品 → 外すと中央の一文だけ（フッターも出ない） → 置くと部品とフッターが戻る。
   func testBoardParts() throws {
     let model = BoardModel(
       automation: BoardAutomationModel(
         runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationFile())),
       parts: [.automation])
     try flow(
-      "board_parts", size: NSSize(width: 1440, height: 826),
+      "board_parts", size: NSSize(width: 1440, height: 844),
       render: {
         BoardRoot(
           model: model, translucency: ChromeTranslucency(),
@@ -70,7 +70,7 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
-  /// ボードの自動追加: 欄から ↓ で一覧の先頭 → ↓ で選ぶ → space で止める（行が末尾へ沈み、選択は付いていく）→ space で再開 → ↵ で実行中… → ↵ で赤の
+  /// ボードの自動化: 欄から ↓ で一覧の先頭 → ↓ で選ぶ → space で止める（行が末尾へ沈み、選択は付いていく）→ space で再開 → ↵ で実行中… → ↵ で赤の
   /// 断り → ⌘⌫ で消え、同じ位置の行が選ばれる。
   func testBoardAutomation() throws {
     let model = BoardModel(
@@ -79,7 +79,7 @@ extension DesignFlowSnapshotTests {
       parts: [.automation])
     let automation = model.automation
     try flow(
-      "board_automation", size: NSSize(width: 1440, height: 826),
+      "board_automation", size: NSSize(width: 1440, height: 844),
       render: {
         BoardRoot(
           model: model, translucency: ChromeTranslucency(),
@@ -108,7 +108,7 @@ extension DesignFlowSnapshotTests {
     let automation = model.automation
     automation.onAsk = { _ in nil }
     try flow(
-      "board_request", size: NSSize(width: 1440, height: 826),
+      "board_request", size: NSSize(width: 1440, height: 844),
       render: {
         BoardRoot(
           model: model, translucency: ChromeTranslucency(),

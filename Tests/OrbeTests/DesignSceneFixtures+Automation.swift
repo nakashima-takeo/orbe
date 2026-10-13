@@ -2,7 +2,16 @@ import Foundation
 
 @testable import Orbe
 
-/// 受信タブの fixture（見本 R3Inbox.png と同じ並び）。今日はタスク画面と同じ 2025-10-04、走らせ役の今は同じ日の 15:00 に
+extension Automation {
+  /// 定義の一部を書き換える（出力先ごとの状態は `redefine` が合わせる）。
+  mutating func redefine(_ edit: (inout AutomationDefinition) -> Void) {
+    var definition = definition
+    edit(&definition)
+    redefine(definition)
+  }
+}
+
+/// 提案タブの fixture（見本 R3Inbox.png と同じ並び）。今日はタスク画面と同じ 2025-10-04、走らせ役の今は同じ日の 15:00 に
 /// 固定し、次の時刻と回の時刻を決定論にする。取得は始まっても終わらない（実行中のまま）——実物の claude は起こさない。
 extension DesignSceneFixtures {
   static func automationAt(_ hour: Int, _ minute: Int = 0, daysAgo: Int = 0) -> Date {
@@ -20,7 +29,7 @@ extension DesignSceneFixtures {
     scheduler.arm = { _, _ in {} }
     let runner = AutomationRunner(
       store: AutomationStore(file: file), scheduler: scheduler,
-      run: { _, _ in BackgroundRunHandle {} })
+      run: { _, _ in BackgroundRunHandle {} }, recorded: { _ in }, deleted: { _ in })
     runner.now = { automationNow }
     runner.calendar = { taskCalendar }
     runner.start()
@@ -32,29 +41,40 @@ extension DesignSceneFixtures {
   }
 
   static func automationRun(
-    at start: Date, items: Int, newItems: Int, proposed: Int = 0, failure: String? = nil
+    at start: Date, items: Int, fresh: Int, proposed: Int = 0, failure: String? = nil
   ) -> AutomationRun {
     AutomationRun(
       startedAt: start, endedAt: start.addingTimeInterval(60), trigger: .schedule,
-      fetch: AutomationFetchReport(
-        commandLine: "fetch", ending: failure == nil ? "exited 0" : "exited 1", items: items,
-        rejected: AutomationRejections()),
-      newItems: newItems,
-      judge: newItems == 0 || failure != nil
-        ? nil
-        : AutomationJudgeReport(
-          commandLine: "claude -p", ending: "exited 0", proposed: proposed, resolved: 0,
-          rejected: AutomationRejections()),
-      withdrawn: 0, failure: failure)
+      source: AutomationStepReport(
+        name: nil, commandLine: "fetch", ending: failure == nil ? "exited 0" : "exited 1",
+        count: items, rejected: AutomationRejections()),
+      fresh: failure == nil ? fresh : nil,
+      steps: fresh == 0 || failure != nil
+        ? []
+        : [
+          AutomationStepReport(
+            name: "判定", commandLine: "claude -p", ending: "exited 0", count: proposed,
+            rejected: AutomationRejections())
+        ],
+      lastStepCountedBySink: fresh != 0 && failure == nil,
+      sink: failure == nil
+        ? .taskCandidates(AutomationTaskCandidatesReport(proposed: proposed)) : nil,
+      failure: failure)
   }
 
   static func automationDefinition(
-    _ name: String, fetch: AutomationFetch, when: BackgroundTiming,
+    _ name: String, source: AutomationSource, trigger: BackgroundTiming,
     instruction: String = "自分が何かを頼まれている・期限がある項目だけをタスクにする。"
   ) -> AutomationDefinition {
     AutomationDefinition(
-      name: name, fetch: fetch,
-      judge: AutomationJudge(cli: "claude", model: "sonnet", instruction: instruction), when: when)
+      name: name, trigger: trigger, source: source,
+      steps: [
+        AutomationStep(
+          name: "判定",
+          method: .agent(
+            AutomationStepAgent(cli: "claude", model: "sonnet", instruction: instruction)))
+      ],
+      sink: .taskCandidates)
   }
 
   /// 見本の 3 項目（見積もり・オンボーディング・週報）。
@@ -81,58 +101,58 @@ extension DesignSceneFixtures {
     )
     let seen = { (item: AutomationItem) in AutomationSeen(id: item.id, link: item.link) }
     let command = { (script: String, coverage: AutomationCoverage) in
-      AutomationFetch(
+      AutomationSource(
         method: .command(BackgroundCommand(script: script, directory: nil)), coverage: coverage)
     }
     return [
       Automation(
         id: 1,
         definition: automationDefinition(
-          "Slack: 自分宛の DM・メンション", fetch: command("~/bin/slack-mentions --since 1d", .newArrivals),
-          when: .daily([
+          "Slack: 自分宛の DM・メンション", source: command("~/bin/slack-mentions --since 1d", .newArrivals),
+          trigger: .daily([
             .init(hour: 9, minute: 0), .init(hour: 13, minute: 0), .init(hour: 17, minute: 0),
           ])),
         paused: false, createdAt: automationAt(9, daysAgo: 3),
         lastFetched: [seen(estimate), seen(onboarding)], reviewAll: false,
         lastRunAt: automationAt(13),
-        runs: [automationRun(at: automationAt(13), items: 9, newItems: 4, proposed: 2)]),
+        runs: [automationRun(at: automationAt(13), items: 9, fresh: 4, proposed: 2)]),
       Automation(
         id: 2,
         definition: automationDefinition(
-          "Slack: 自分の発言", fetch: command("~/bin/slack-mine --since 1d", .newArrivals),
-          when: .daily([.init(hour: 18, minute: 0)])),
+          "Slack: 自分の発言", source: command("~/bin/slack-mine --since 1d", .newArrivals),
+          trigger: .daily([.init(hour: 18, minute: 0)])),
         paused: false, createdAt: automationAt(9, daysAgo: 3),
         lastFetched: [seen(weekly), seen(onboarding)], reviewAll: false,
         lastRunAt: automationAt(13),
-        runs: [automationRun(at: automationAt(13), items: 3, newItems: 1, proposed: 1)]),
+        runs: [automationRun(at: automationAt(13), items: 3, fresh: 1, proposed: 1)]),
       Automation(
         id: 3,
         definition: automationDefinition(
           "Backlog: 自分が担当の未完了課題",
-          fetch: AutomationFetch(
+          source: AutomationSource(
             method: .agent(
-              AutomationAgentFetch(
+              AutomationSourceAgent(
                 cli: "claude", model: "haiku", tools: ["mcp__backlog__get_issues"],
                 request: "自分が担当の未完了の課題を、更新の新しい順に 30 件取る。")),
             coverage: .currentSet),
-          when: .every(1800)),
+          trigger: .every(1800)),
         paused: false, createdAt: automationAt(9, daysAgo: 3),
         lastFetched: [
           AutomationSeen(id: "ORBE-12", link: "https://example.backlog.com/view/ORBE-12")
         ],
         reviewAll: false, lastRunAt: automationAt(15),
-        runs: [automationRun(at: automationAt(15), items: 14, newItems: 0)]),
+        runs: [automationRun(at: automationAt(15), items: 14, fresh: 0)]),
       Automation(
         id: 4,
         definition: automationDefinition(
           "GitHub: 自分へのレビュー依頼",
-          fetch: command("gh search prs --review-requested=@me --json url", .currentSet),
-          when: .every(3600)),
+          source: command("gh search prs --review-requested=@me --json url", .currentSet),
+          trigger: .every(3600)),
         paused: true, createdAt: automationAt(9, daysAgo: 3), lastFetched: [], reviewAll: false,
         lastRunAt: automationAt(9),
         runs: [
           automationRun(
-            at: automationAt(9), items: 0, newItems: 0,
+            at: automationAt(9), items: 0, fresh: 0,
             failure: "the fetch ended: exited 1: gh: Not Found (HTTP 404)")
         ]),
     ]
@@ -197,28 +217,35 @@ extension DesignSceneFixtures {
   static func automationLongFile() -> AutomationsFile {
     var long = automationDesignFile()
     if let agentIndex = long.automations.firstIndex(where: { $0.id == 3 }) {
-      long.automations[agentIndex].definition.fetch.method = .agent(
-        AutomationAgentFetch(
-          cli: "claude", model: "haiku",
-          tools: [
-            "mcp__backlog__get_issues", "mcp__backlog__get_issue_comments",
-            "mcp__backlog__get_project_list", "mcp__backlog__get_users",
-            "mcp__backlog__get_notifications", "mcp__backlog__get_wiki_pages",
-          ],
-          request: (1...9).map { "\($0). 自分が担当の未完了の課題を、更新の新しい順に 30 件取る。期限の近いものを先に。" }
-            .joined(separator: "\n")))
-      long.automations[agentIndex].definition.judge.instruction =
-        (1...8).map { "\($0). 今日中に自分が手を動かす必要があるものだけをタスクにする。" }.joined(separator: "\n")
+      long.automations[agentIndex].redefine {
+        $0.source?.method = .agent(
+          AutomationSourceAgent(
+            cli: "claude", model: "haiku",
+            tools: [
+              "mcp__backlog__get_issues", "mcp__backlog__get_issue_comments",
+              "mcp__backlog__get_project_list", "mcp__backlog__get_users",
+              "mcp__backlog__get_notifications", "mcp__backlog__get_wiki_pages",
+            ],
+            request: (1...9).map { "\($0). 自分が担当の未完了の課題を、更新の新しい順に 30 件取る。期限の近いものを先に。" }
+              .joined(separator: "\n")))
+        $0.steps[0].method = .agent(
+          AutomationStepAgent(
+            cli: "claude", model: "sonnet",
+            instruction: (1...8).map { "\($0). 今日中に自分が手を動かす必要があるものだけをタスクにする。" }
+              .joined(separator: "\n")))
+      }
     }
     if let commandIndex = long.automations.firstIndex(where: { $0.id == 1 }) {
-      long.automations[commandIndex].definition.fetch.method = .command(
-        BackgroundCommand(
-          script: (1...8).map {
-            "gh search prs --review-requested=@me --json url,title,body --limit \($0 * 10) \\"
-          }
-          .joined(separator: "\n") + "\n  | jq -c '.[] | {id: .url, link: .url, body: .title}'",
-          directory:
-            "/Users/someone/work/very/long/path/to/the/repository/that/wraps/onto/the/next/line"))
+      long.automations[commandIndex].redefine {
+        $0.source?.method = .command(
+          BackgroundCommand(
+            script: (1...8).map {
+              "gh search prs --review-requested=@me --json url,title,body --limit \($0 * 10) \\"
+            }
+            .joined(separator: "\n") + "\n  | jq -c '.[] | {id: .url, link: .url, body: .title}'",
+            directory:
+              "/Users/someone/work/very/long/path/to/the/repository/that/wraps/onto/the/next/line"))
+      }
     }
     return long
   }

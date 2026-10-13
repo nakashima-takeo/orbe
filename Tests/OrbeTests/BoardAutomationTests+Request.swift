@@ -3,10 +3,10 @@ import XCTest
 
 @testable import Orbe
 
-/// 自動追加の部品の依頼——欄の ↵ で頼む・一覧の ⌘↵ で直しを頼む・ボードの断り。本物の `BoardView` を実窓に載せ、実 `NSEvent`
+/// 自動化の部品の依頼——欄の ↵ で頼む・一覧の ⌘↵ で直しを頼む・ボードの断り。本物の `BoardView` を実窓に載せ、実 `NSEvent`
 /// のキーを届ける。秘書の口は頼みを記録する閉包で、本物の秘書・claude は起きない。
 ///
-/// 壊れると何が起きるか: 頼んだのに欄が残って二度送る。消えた自動追加の直しを秘書へ渡す。claude が無いのに打った文が消える。
+/// 壊れると何が起きるか: 頼んだのに欄が残って二度送る。消えた自動化の直しを秘書へ渡す。claude が無いのに打った文が消える。
 /// ↵・⌘↵ を押し続けて同じ頼みで何本も claude が起きる。
 extension BoardAutomationTests {
   private func recording(
@@ -34,8 +34,8 @@ extension BoardAutomationTests {
     XCTAssertNil(model.refusal)
   }
 
-  /// ⌘↵ は選んでいる自動追加の直しをその場で頼み、焦点は一覧に残る。押し続けても 1 回。
-  func testCommandEnterAsksToFixTheSelectedAutoAddAtOnce() throws {
+  /// ⌘↵ は選んでいる自動化の直しをその場で頼み、焦点は一覧に残る。押し続けても 1 回。
+  func testCommandEnterAsksToFixTheSelectedAutomationAtOnce() throws {
     let model = board()
     let automation = model.automation
     let asks = recording(model)
@@ -51,8 +51,8 @@ extension BoardAutomationTests {
     XCTAssertNil(model.refusal)
   }
 
-  /// 選んでいる自動追加が頼む前に消えていたら、係へ渡さずに赤で断る。
-  func testAFixWhoseAutoAddWasDeletedIsRefused() throws {
+  /// 選んでいる自動化が頼む前に消えていたら、係へ渡さずに赤で断る。
+  func testAFixWhoseAutomationWasDeletedIsRefused() throws {
     let model = board()
     let automation = model.automation
     let asks = recording(model)

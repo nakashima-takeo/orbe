@@ -132,7 +132,7 @@ enum TestIsolation {
     GuiConfig.fileURLOverride = dir.appendingPathComponent("gui.conf")
     AgentSessionLog.fileURLOverride = dir.appendingPathComponent("agent-sessions.jsonl")
     TaskPersistence.fileURLOverride = dir.appendingPathComponent("tasks.json")
-    AutomationPersistence.fileURLOverride = dir.appendingPathComponent("intakes.json")
+    AutomationPersistence.fileURLOverride = dir.appendingPathComponent("automations.json")
 
     // 同梱リソースの探索根。既定は Xcode の bin を指しており空でも中立でもないため、管理下の
     // 空ディレクトリを用意する（層1 の `orbe-defaults.conf` は不在になる）。テストが同梱物を
@@ -153,6 +153,10 @@ enum TestIsolation {
     // 通知音の再生層。スピーカーは実 state dir と同じく管理外の実環境なので、記録だけするフェイクへ
     // 向ける（`WindowController` を立てるテストは軒並み agent の状態報告を流すため、張らないと鳴る）。
     AgentSoundOutput.makeOverride = { SoundPlayerFake() }
+
+    // 通知センター。テストの実行体はアプリのバンドルでないので生成点が「使えない」部品にするが、通知センターは人の
+    // システム設定に項目が残る実環境なので、ここでも記録だけするフェイクへ向ける。
+    SystemNotifierOutput.makeOverride = { SystemNotifierFake() }
 
     // 取り込んだカスタム音源の置き場。既定は `ORBE_STATE_DIR` 直下＝テスト間で共有される根なので、
     // 書いたファイルが次のテストへ残る。他の永続と同じく caseDir の下へ張り直す。

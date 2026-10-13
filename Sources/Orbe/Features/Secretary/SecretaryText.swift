@@ -5,7 +5,7 @@ import Foundation
 enum SecretaryAsk: Equatable {
   /// 打った文（⌘⇧X の入力の行き先・ボードの依頼の欄）。
   case text(String)
-  /// タスクの自動追加の直し。
+  /// 自動化の直し。
   case automationFix(Automation)
 }
 

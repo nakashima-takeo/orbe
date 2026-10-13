@@ -5,7 +5,7 @@ import Foundation
 /// 同時に走る数は種類ごとの別々の枠で絞り、溢れた分は来た順に待つ（軽いコマンドが重い agent の後ろで待たされない）。
 /// 予定から来た実行も、予定ではない単発の実行も、ここを通る。終了時の全停止もここが受け持つ。
 ///
-/// 子の環境は「プロセスの環境＋子プロセス PATH」。PATH と agent の絶対パスは実行のたびに裏で解決し、PATH の確定を待つ
+/// 子の環境は「プロセスの環境＋子プロセス PATH」（コマンドは 1 回分の入力の変数を足す）。PATH と agent の絶対パスは実行のたびに裏で解決し、PATH の確定を待つ
 /// ——起動直後の「検出中」を「無い」と取り違えず、後から入れた CLI も拾うため。
 final class BackgroundRuns {
   static let shared = BackgroundRuns()
@@ -155,14 +155,15 @@ final class BackgroundRuns {
       return .failure(.invalid(error))
     }
     switch job.work {
-    case .command(let command):
+    case .command(let command, let input):
       let directory = command.directory ?? NSHomeDirectory()
       var isDirectory: ObjCBool = false
       guard FileManager.default.fileExists(atPath: directory, isDirectory: &isDirectory),
         isDirectory.boolValue
       else { return .failure(.directoryMissing(directory)) }
       return .success(
-        .command(command, directory: directory, limits: job.limits, env: environment()))
+        .command(
+          command, input: input, directory: directory, limits: job.limits, env: environment()))
     case .agent(let call):
       let cli: HeadlessCLI
       switch AgentCatalog.profile(call.cli)?.headless {
@@ -190,7 +191,7 @@ final class BackgroundRuns {
   /// 走らせる前に終わった回の表示用のコマンド行。
   private static func describe(_ job: BackgroundJob) -> String {
     switch job.work {
-    case .command(let command): command.script
+    case .command(let command, _): command.script
     case .agent(let call): call.cli
     }
   }
@@ -231,12 +232,13 @@ private struct Prepared {
     (BackgroundProcess.Outcome, _ startedAt: Date, _ endedAt: Date) -> BackgroundRunResult
 
   static func command(
-    _ command: BackgroundCommand, directory: String, limits: BackgroundLimits,
-    env: [String: String]
+    _ command: BackgroundCommand, input: BackgroundInput, directory: String,
+    limits: BackgroundLimits, env: [String: String]
   ) -> Prepared {
     let spec = BackgroundProcess.Spec(
-      executable: "/bin/sh", arguments: ["-c", command.script], environment: env,
-      directory: directory, stdin: nil, elapsedLimit: limits.elapsed, idleLimit: limits.idle,
+      executable: "/bin/sh", arguments: ["-c", command.script],
+      environment: env.merging(input.environment) { $1 }, directory: directory,
+      stdin: input.stdin, elapsedLimit: limits.elapsed, idleLimit: limits.idle,
       stdout: .collect(.init(limit: limits.output, overflowStops: true)),
       stderr: .init(limit: limits.stderr, overflowStops: true))
     return Prepared(commandLine: command.script, spec: spec) { outcome, startedAt, endedAt in

@@ -9,9 +9,7 @@ extension L10n {
       "Work on task %1$@ “%2$@”. Read its details with Orbe’s MCP (list_tasks)."
     ),
     .secretaryRequestInput: ("依頼: %@", "Request: %@"),
-    .secretaryAutomationFixInput: (
-      "タスクの自動追加 %1$@「%2$@」を直す。", "Fix task auto-add %1$@ “%2$@”."
-    ),
+    .secretaryAutomationFixInput: ("自動化 %1$@「%2$@」を直す。", "Fix automation %1$@ “%2$@”."),
     .taskPaletteAddToTasks: ("タスクに追加", "Add a task"),
     .taskPaletteHandToAgent: ("agent に任せる", "Hand to an agent"),
     .taskPaletteHintOpenAgent: ("agent を開く", "Open agent"),

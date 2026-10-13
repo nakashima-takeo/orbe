@@ -1,12 +1,23 @@
 import Foundation
 import Observation
 
-/// メニューバー②が映す中身。agent のタブ由来か、タスク由来か。
+/// メニューバー②が映す中身。agent のタブ・タスク・自動化のどれに由来するか。
 enum MenuBarNotice {
   /// 見ていないタブの状態変化。Attention 一覧の投影なので、投影元が消えれば取り下げる。
   case agent(AttentionRow)
   /// 待ちの条件が解けた瞬間。一覧の投影ではない出来事の知らせなので、取り下げは無い。
   case task(TaskNotice)
+  /// 通知を on にした自動化が、出した回か失敗した回を記録した。取り下げは無い。
+  case automation(AutomationNotice)
+}
+
+/// 自動化の知らせの中身。押すと Home のボードでその自動化を開く。
+struct AutomationNotice: Equatable {
+  let automationId: Int
+  let name: String
+  /// 結果の 1 行。到来の時点の UI の言語で、ボードの実行履歴の最新の行と同じ文。
+  let text: String
+  let failed: Bool
 }
 
 /// タスク由来の知らせの中身。本文は到来の時点の UI の言語で組んだもの。

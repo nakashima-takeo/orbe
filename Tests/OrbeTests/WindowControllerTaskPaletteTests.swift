@@ -66,14 +66,15 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
       "workspace をその workspace だけに絞っていれば、その workspace に付く")
   }
 
-  /// 受信タブで提案をタスクにすると、開いた workspace ではなく Home に付く。
+  /// 提案タブで提案をタスクにすると、開いた workspace ではなく Home に付く。
   @MainActor func testAcceptingAProposalInTheAutomationTabAttachesTheTaskToHome() throws {
     let wc = try launchOnAnEmptyWorkspace()
     let automation = try wc.automationRunner.set(nil, AutomationStoreTests.definition())
     let item = AutomationStoreTests.item("a")
-    wc.automationStore.commit(
-      automation.id, DesignSceneFixtures.automationRun(at: Date(), items: 1, newItems: 1),
-      fetched: [item], judged: [item],
+    AutomationStoreTests.commit(
+      wc.automationStore, automation.id,
+      DesignSceneFixtures.automationRun(at: Date(), items: 1, fresh: 1),
+      fetched: [item],
       decisions: [.propose(itemId: "a", title: "見積もりを送る", due: nil)])
 
     let palette = try openTaskPalette(wc)

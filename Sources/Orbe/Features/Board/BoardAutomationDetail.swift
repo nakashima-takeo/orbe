@@ -1,101 +1,100 @@
 import SwiftUI
 
-/// 選んだ自動追加の詳細（右）。名前・取得・判定・いつ・回の記録。取得と判定は 1 行の要約にせず全文を出す——承認なしで
-/// 裏で走るもの（使えるツール・コマンド・作業ディレクトリ）を、いつも確かめられるため。原文も素の文字で描き、欄全体が縦に
-/// スクロールする（選択が替わると先頭へ戻る）。
+/// 選んだ自動化の詳細（右の欄）。見出し（名前・前回・次回）と、左に流れ・右に実行履歴。幅が足りなければ実行履歴を流れの下へ
+/// 回す——一覧と実行履歴の幅は固定なので、狭い窓で流れの原文が読めない幅まで潰れないため。長ければ欄全体が縦にスクロール
+/// する（選択が替わると先頭へ戻る）。
 struct BoardAutomationDetail: View {
-  let automation: Automation
+  let standing: BoardAutomationStanding
+  let summary: BoardAutomationSummary
   let text: AutomationText
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: Theme.Space.bar) {
-        fontResolver.text(automation.definition.name, base: Theme.Typography.boardDetailTitle)
-          .font(Font.theme.boardDetailTitle)
-          .foregroundStyle(Color.theme.textPrimary)
-          .fixedSize(horizontal: false, vertical: true)
-        field(.automationFetch) { lines(text.fetch(automation.definition.fetch)) }
-        field(.automationJudge) { lines(text.judge(automation.definition.judge)) }
-        field(.boardAutomationWhen) {
-          value(
-            text.when(automation.definition.when)
-              + (automation.paused ? l10n.string(.boardAutomationPausedNote) : ""))
+    GeometryReader { geometry in
+      let width = geometry.size.width - Self.inset.leading - Self.inset.trailing
+      let wide = width >= Self.flowMinWidth + Self.columnGap + BoardAutomationHistory.width
+      ScrollView {
+        VStack(alignment: .leading, spacing: Self.headingGap) {
+          heading
+          if wide {
+            HStack(alignment: .top, spacing: Self.columnGap) {
+              BoardAutomationFlowView(summary: summary)
+              BoardAutomationHistory(summary: summary).frame(width: BoardAutomationHistory.width)
+            }
+          } else {
+            VStack(alignment: .leading, spacing: Self.headingGap) {
+              BoardAutomationFlowView(summary: summary)
+              BoardAutomationHistory(summary: summary)
+            }
+          }
         }
-        runs
+        .padding(Self.inset)
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
-      .padding(.vertical, Theme.Space.bar)
-      .padding(.horizontal, Theme.Space.bar + Theme.Space.hair)
+      .id(standing.id)
+      .scrollIndicators(.automatic)
+    }
+  }
+
+  private var heading: some View {
+    HStack(alignment: .top, spacing: Theme.Space.bar) {
+      VStack(alignment: .leading, spacing: Theme.Space.tick) {
+        fontResolver.text(standing.name, base: Theme.Typography.title)
+          .font(Font(Theme.Typography.title.monospacedWeight(.semibold)))
+          .foregroundStyle(Color.theme.textPrimary)
+          .frame(minHeight: Self.nameLine)
+        Text(summary.last)
+          .font(Font.theme.codeSmall)
+          .foregroundStyle(Color.theme.textMuted)
+          .frame(minHeight: Self.lastLine)
+      }
+      .fixedSize(horizontal: false, vertical: true)
       .frame(maxWidth: .infinity, alignment: .leading)
-    }
-    .id(automation.id)
-    .scrollIndicators(.automatic)
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    .background(Color.theme.surfaceInk.opacity(0.025))
-    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card))
-    .overlay(
-      RoundedRectangle(cornerRadius: Theme.Radius.card)
-        .strokeBorder(Color.theme.borderInk.opacity(0.06), lineWidth: Theme.Stroke.hairline))
-  }
-
-  private func field<Content: View>(_ label: L10nKey, @ViewBuilder content: () -> Content)
-    -> some View
-  {
-    VStack(alignment: .leading, spacing: Theme.Space.tick) {
-      Text(l10n.string(label))
-        .font(Font.theme.workspaceName)
+      Text(upcoming)
+        .font(Font.theme.codeSmall)
         .foregroundStyle(Color.theme.textSecondary)
-      VStack(alignment: .leading, spacing: 0) { content() }
+        .frame(height: Self.upcomingLine)
+        .fixedSize()
     }
   }
 
-  private func lines(_ lines: [AutomationText.Line]) -> some View {
-    ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-      switch line {
-      case .plain(let line), .source(let line): value(line)
-      }
-    }
+  /// 「次回 16:50」。止めていれば「停止中」。
+  private var upcoming: String {
+    if standing.paused { return l10n.string(.automationPaused) }
+    return standing.next.map(text.next) ?? ""
   }
 
-  private func value(_ value: String) -> some View {
-    fontResolver.text(value, base: Theme.Typography.boardValue)
-      .font(Font.theme.boardValue)
-      .foregroundStyle(Color.theme.textPrimary)
-      .lineSpacing(Self.valueLeading)
-      .padding(.vertical, Self.valueLeading / 2)
-      .fixedSize(horizontal: false, vertical: true)
-  }
+  private static let inset = EdgeInsets(top: 20, leading: 32, bottom: 20, trailing: 32)
+  private static let headingGap: CGFloat = 22
+  private static let columnGap: CGFloat = 40
+  private static let upcomingLine: CGFloat = 20
+  /// 名前と前回の 1 行の行箱（見本の描画の、日本語の字の行箱）。
+  private static let nameLine: CGFloat = 21
+  private static let lastLine: CGFloat = 17
+  /// 流れの原文の箱が読める幅。これに満たなければ実行履歴を下へ回す。
+  private static let flowMinWidth: CGFloat = 420
+}
 
-  /// 回の記録（新しい順・最大 20 件）。失敗は理由の全文を赤で折り返す。
-  private var runs: some View {
-    VStack(alignment: .leading, spacing: Theme.Space.note) {
-      Text(l10n.string(.boardAutomationRuns))
-        .font(Font.theme.workspaceName)
+/// 詳細の欄の見出し（「流れ」「実行履歴」）。右に欄ごとの添え物を置き、下に罫線を引く。
+struct BoardSectionHeader<Trailing: View>: View {
+  let title: L10nKey
+  @ViewBuilder let trailing: Trailing
+  @Environment(\.localization) private var l10n
+
+  var body: some View {
+    HStack(spacing: 10) {
+      Text(l10n.string(title))
+        .font(Font(Theme.Typography.caption.monospacedWeight(.semibold)))
         .foregroundStyle(Color.theme.textSecondary)
-      if automation.runs.isEmpty {
-        log(l10n.string(.automationNeverRan), color: Color.theme.textMuted)
-      }
-      ForEach(Array(automation.runs.enumerated()), id: \.offset) { _, run in
-        log(
-          text.runLine(run),
-          color: run.failure == nil ? Color.theme.textSecondary : Color.theme.danger)
-      }
+        .frame(minHeight: 17)
+      Spacer(minLength: 0)
+      trailing
+    }
+    .font(Font.theme.codeSmall)
+    .padding(.bottom, 10 + Theme.Stroke.hairline)
+    .overlay(alignment: .bottom) {
+      Rectangle().fill(Color.theme.borderInk.opacity(0.06)).frame(height: Theme.Stroke.hairline)
     }
   }
-
-  private func log(_ value: String, color: Color) -> some View {
-    fontResolver.text(value, base: Theme.Typography.workspaceName)
-      .font(Font.theme.workspaceName)
-      .foregroundStyle(color)
-      .lineSpacing(Self.logLeading)
-      .padding(.vertical, Self.logLeading / 2)
-      .fixedSize(horizontal: false, vertical: true)
-  }
-
-  /// 行高 1.6 に当たる行間。1 行目の上と最終行の下にも半分ずつ置く（CSS の line-height と同じ組み方）。
-  private static let valueLeading = Theme.Typography.boardValue.extraLeading(
-    lineHeight: Theme.Typography.lineBody)
-  private static let logLeading = Theme.Typography.workspaceName.extraLeading(
-    lineHeight: Theme.Typography.lineBody)
 }

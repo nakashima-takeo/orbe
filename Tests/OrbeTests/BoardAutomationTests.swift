@@ -3,12 +3,12 @@ import XCTest
 
 @testable import Orbe
 
-/// ボードの自動追加の部品——一覧の並びと、選んだ自動追加へのキー。本物の `BoardView`（中身は SwiftUI）を実窓に載せ、実
+/// ボードの自動化の部品——一覧の並びと、選んだ自動化へのキー。本物の `BoardView`（中身は SwiftUI）を実窓に載せ、実
 /// `NSEvent` のキーを届ける。走らせ役は取得が終わらない偽物で、本物の claude は起きない。
 ///
-/// 壊れると何が起きるか: 前回が失敗した自動追加が一覧の上に来ず、壊れた取得に気づけない。走り出すたびに行が跳ね、↵ を押した
-/// 直後に選択の位置が狂う。⌘⌫ を押し続けたリピートで次の自動追加まで消える（戻せない）。space のリピートで止める ⇄ 再開が
-/// 往復し、どちらになったか分からない。⌘↵ で今すぐ実行が走る。AI や ⌘⇧X が選んでいる自動追加を消すと選択が宙に浮き、
+/// 壊れると何が起きるか: 前回が失敗した自動化が一覧の上に来ず、壊れた取得に気づけない。走り出すたびに行が跳ね、↵ を押した
+/// 直後に選択の位置が狂う。⌘⌫ を押し続けたリピートで次の自動化まで消える（戻せない）。space のリピートで止める ⇄ 再開が
+/// 往復し、どちらになったか分からない。⌘↵ で今すぐ実行が走る。AI や ⌘⇧X が選んでいる自動化を消すと選択が宙に浮き、
 /// 詳細が消えてキーが効かなくなる。
 @MainActor
 final class BoardAutomationTests: PaletteCardWindowTestCase {
@@ -101,7 +101,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
 
     send(Key.space, " ", to: window)
     XCTAssertEqual(automation.store.automation(Self.slack)?.paused, true)
-    XCTAssertEqual(automation.selectedAutomation?.id, Self.slack, "末尾へ沈んでも選択は同じ自動追加")
+    XCTAssertEqual(automation.selectedAutomation?.id, Self.slack, "末尾へ沈んでも選択は同じ自動化")
     send(Key.space, " ", to: window)
     XCTAssertEqual(automation.store.automation(Self.slack)?.paused, false)
 
@@ -161,7 +161,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
 
   // MARK: - 追従
 
-  /// ほかの口（AI・⌘⇧X）が選んでいる自動追加を消すと、ボードは同じ位置の行を選び、キーはその行に効く。
+  /// ほかの口（AI・⌘⇧X）が選んでいる自動化を消すと、ボードは同じ位置の行を選び、キーはその行に効く。
   func testDeletionElsewhereMovesTheSelectionToTheSamePosition() throws {
     let model = board()
     let automation = model.automation

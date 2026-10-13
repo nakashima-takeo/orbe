@@ -300,14 +300,14 @@ final class FakeControlTarget: ControlTarget {
   }
 
   func controlListAutomations() -> Result<Any, ControlError> {
-    outcome(["intakes": [Any]()])
+    outcome(["automations": [Any]()])
   }
 
   func controlSetAutomation(automationId: Int?, _ definition: AutomationDefinition) -> Result<
     Any, ControlError
   > {
     setAutomations.append((automationId, definition))
-    return outcome(["intake": ["intakeId": automationId ?? 1]])
+    return outcome(["automation": ["automationId": automationId ?? 1]])
   }
 
   func controlRunAutomation(automationId: Int) -> Result<Any, ControlError> {
@@ -317,7 +317,7 @@ final class FakeControlTarget: ControlTarget {
 
   func controlPauseAutomation(automationId: Int, paused: Bool) -> Result<Any, ControlError> {
     pausedAutomations.append((automationId, paused))
-    return outcome(["intake": ["intakeId": automationId]])
+    return outcome(["automation": ["automationId": automationId]])
   }
 
   func controlDeleteAutomation(automationId: Int) -> Result<Any, ControlError> {
@@ -332,12 +332,12 @@ final class FakeControlTarget: ControlTarget {
 
   func controlListBoardParts(workspaceId: Int) -> Result<Any, ControlError> {
     boardLists.append(workspaceId)
-    return outcome(["parts": [["kind": "intake"]]])
+    return outcome(["parts": [["kind": "automation"]]])
   }
 
   func controlAddBoardPart(workspaceId: Int, part: BoardPart) -> Result<Any, ControlError> {
     addedBoardParts.append((workspaceId, part))
-    return outcome(["parts": [["kind": "intake"]]])
+    return outcome(["parts": [["kind": "automation"]]])
   }
 
   func controlRemoveBoardPart(workspaceId: Int, part: BoardPart) -> Result<Any, ControlError> {

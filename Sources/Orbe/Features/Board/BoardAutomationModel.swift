@@ -1,7 +1,7 @@
 import Observation
 import SwiftUI
 
-/// ボードの自動追加の部品の状態（@Observable）。部品は見出し・依頼の欄・一覧・詳細で 1 つ。自動追加・回・走っているか・次の
+/// ボードの自動化の部品の状態（@Observable）。部品は依頼の欄・一覧・右の欄（詳細か案内）で 1 つ。自動化・回・走っているか・次の
 /// 時刻は唯一の正（走らせ役とストア）から毎回読み、写さない。持つのは選択（同一性）と欄の中身だけ。ストアが変わったら
 /// `reconcile()` で選択を付け直す（ビューの `.onChange` が届ける）。だから裏の回・AI の変更・⌘⇧X での操作がそのまま映る。
 ///
@@ -15,7 +15,7 @@ import SwiftUI
     case list
   }
 
-  /// 選べる段: 欄か、一覧の自動追加の行。
+  /// 選べる段: 欄か、一覧の自動化の行。
   enum Stop: Hashable {
     case request
     case automation(Int)
@@ -44,7 +44,7 @@ import SwiftUI
 
   var store: AutomationStore { runner.store }
 
-  /// `now` での立ち位置で並べた自動追加: 前回が失敗（止めていない）→ それ以外（止めていない）→ 止めている。群の中は ID 順。
+  /// `now` での立ち位置で並べた自動化: 前回が失敗（止めていない）→ それ以外（止めていない）→ 止めている。群の中は ID 順。
   /// 描く経路は描くときの今を、描かない経路は走らせ役の今を渡す。
   func standings(at now: Date) -> [BoardAutomationStanding] {
     store.automations.map { BoardAutomationStanding($0, runner: runner, now: now) }
@@ -60,10 +60,15 @@ import SwiftUI
     if case .automation = list.selectedID { .list } else { .request }
   }
 
-  /// 選んでいる自動追加。欄を選んでいる間は nil（詳細を出さない）。
+  /// 選んでいる自動化。欄を選んでいる間は nil（詳細の代わりに案内を出す）。
   var selectedAutomation: Automation? {
     guard case .automation(let id) = list.selectedID else { return nil }
     return store.automation(id)
+  }
+
+  /// 自動化 1 つのボードの描画用の値。ビューは自動化そのものに触れず、これと立ち位置だけを読む。
+  func summary(_ id: Int, text: AutomationText) -> BoardAutomationSummary? {
+    store.automation(id).map { BoardAutomationSummary($0, text: text) }
   }
 
   /// 描くときの文。暦の今日は描くときの今から導く（開きっぱなしの画面で日をまたいでも「今日」が古くならない）。
@@ -97,6 +102,14 @@ import SwiftUI
     focusToken &+= 1
   }
 
+  /// 外から行き先を指して入る（ピル・通知センターのクリックから）。入り方の既定（欄から）の後に呼び、行き先の指定がそれに
+  /// 勝つ。自動化が在ればその行を選んで焦点を一覧へ、無ければ欄を選ぶ。
+  func open(_ id: Int) {
+    onRefusal(nil)
+    if !list.select(.automation(id), in: stops) { list.select(.request, in: stops) }
+    focusToken &+= 1
+  }
+
   /// 中での当て直し。選んでいる場所へ戻る。
   func refocus() {
     focusToken &+= 1
@@ -110,7 +123,7 @@ import SwiftUI
     return place
   }
 
-  /// フッターの左に出すキー。欄では送る・一覧へ移るキー（一覧が空なら移る先が無いので出さない）、一覧では選んだ自動追加で効く
+  /// フッターの左に出すキー。欄では送る・一覧へ移るキー（一覧が空なら移る先が無いので出さない）、一覧では選んだ自動化で効く
   /// キー。
   var hints: [BoardKeyHint] {
     guard let selectedAutomation else {
@@ -144,7 +157,7 @@ import SwiftUI
     focusToken &+= 1
   }
 
-  /// 選んでいる自動追加への手の操作。止める ⇄ 再開で行が沈んでも浮いても、選択は同じ自動追加に付いていく。
+  /// 選んでいる自動化への手の操作。止める ⇄ 再開で行が沈んでも浮いても、選択は同じ自動化に付いていく。
   func perform(_ operation: AutomationHand.Operation) {
     guard let automation = selectedAutomation else { return }
     onRefusal(nil)
@@ -155,7 +168,7 @@ import SwiftUI
     list.follow()
   }
 
-  /// ⌘↵。選んでいる自動追加の直しをその場で頼む。頼む相手は今のストアから引き、もう無ければ頼まずに断る。
+  /// ⌘↵。選んでいる自動化の直しをその場で頼む。頼む相手は今のストアから引き、もう無ければ頼まずに断る。
   func askFix() {
     guard case .automation(let id) = list.selectedID else { return }
     onRefusal(nil)

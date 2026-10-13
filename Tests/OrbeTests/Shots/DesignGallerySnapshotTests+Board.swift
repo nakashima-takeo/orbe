@@ -4,8 +4,8 @@ import XCTest
 @testable import Orbe
 
 /// ボードの gallery。Home のタブ行（左端に固定のボードのセル）を、ボード選択中・タブ選択中・タブが溢れて横スクロールへ
-/// 回る段で撮り、部品を持たないボードの一文と、自動追加の部品（見本『Home』。依頼の欄を含む）を撮る。タブ行の見本は §5 Tab 契約・§5.1 TabBar
-/// （ボードのセルは単独タブの器）。
+/// 回る段で撮り、部品を持たないボードの一文と、自動化の部品（見本『Home 自動化』。依頼の欄を含む）を撮る。タブ行の見本は
+/// §5 Tab 契約・§5.1 TabBar（ボードのセルは単独タブの器）。
 extension DesignGallerySnapshotTests {
   func renderBoardSnapshots(dir: URL) throws {
     let rowStage = NSSize(width: 640, height: 520)
@@ -51,11 +51,11 @@ extension DesignGallerySnapshotTests {
     try renderBoardAutomationSnapshots(dir: dir)
   }
 
-  /// 見本『Home』のボードの面（窓の chrome とタブ行を除いた 1440×826）。
+  /// 見本『Home 自動化』のボードの面（窓の飾りとタブ行を除いた 1440×844）。
   private func renderBoardAutomationSnapshots(dir: URL) throws {
+    let size = NSSize(width: 1440, height: 844)
     func write(
-      _ name: String, _ model: BoardModel, _ language: Language = .ja,
-      _ size: NSSize = NSSize(width: 1440, height: 826)
+      _ name: String, _ model: BoardModel, _ language: Language = .ja, _ size: NSSize = size
     ) throws {
       try writePNG(
         BoardRoot(
@@ -63,28 +63,31 @@ extension DesignGallerySnapshotTests {
           localization: LocalizationStore(language: language), fontResolver: ChromeFontResolver()),
         size: size, name: name, dir: dir)
     }
-    /// 一覧の先頭の行を選んだ状態（見本『Home』と突き合わせる。0 件なら欄のまま）。
-    func board(_ file: AutomationsFile? = nil) -> BoardModel {
+    /// 一覧の `row` 行目（0 始まり）を選んだ状態。0 件なら欄のまま。
+    func board(_ file: AutomationsFile? = nil, row: Int = 0) -> BoardModel {
       let model = BoardModel(
         automation: BoardAutomationModel(
           runner: DesignSceneFixtures.automationRunner(
-            file ?? DesignSceneFixtures.boardAutomationFile())),
+            file ?? DesignSceneFixtures.boardDesignFile())),
         parts: [.automation])
-      model.automation.move(1)
+      for _ in 0...row { model.automation.move(1) }
       return model
     }
 
-    try write("board_automation.png", board())
-    try write("board_automation_en.png", board(), .en)
+    // 並びは 前回が失敗（Backlog）→ Slack → GitHub → まだ回っていない → 止めている（Gmail）。
+    try write("board_automation.png", board(row: 1))
+    try write("board_automation_en.png", board(row: 1), .en)
+    try write("board_automation_failed.png", board())
+    try write("board_automation_quiet.png", board(row: 2))
+    try write("board_automation_never_ran.png", board(row: 3))
+    try write("board_automation_paused.png", board(row: 4))
 
-    let paused = board()
-    paused.automation.move(1)
-    paused.automation.move(1)
-    paused.automation.move(1)
-    try write("board_automation_paused.png", paused)
+    let field = board()
+    field.automation.go(.request)
+    try write("board_automation_field.png", field)
+    try write("board_automation_field_en.png", field, .en)
 
-    let running = board()
-    running.automation.move(1)
+    let running = board(row: 1)
     running.automation.perform(.runNow)
     running.automation.perform(.runNow)
     try write("board_automation_running.png", running)
@@ -97,9 +100,42 @@ extension DesignGallerySnapshotTests {
     long.automation.move(1)
     try write("board_automation_long_command.png", long)
 
-    try write("board_automation_narrow.png", board(), .ja, NSSize(width: 800, height: 480))
+    try write("board_automation_narrow.png", board(row: 1), .ja, NSSize(width: 800, height: 600))
+    try write("board_automation_narrow_failed.png", board(), .ja, NSSize(width: 800, height: 600))
 
-    try renderBoardRequestSnapshots(write: write, board: board)
+    // 見本『段の多い例』『一番単純な例』。どちらも回の記録から読み替えた本物の値で描く。
+    let examples = DesignSceneFixtures.boardAutomationFile([
+      DesignSceneFixtures.boardStepsExample(), DesignSceneFixtures.boardSimpleExample(),
+      DesignSceneFixtures.boardDailyNoteExample(), DesignSceneFixtures.boardMergedPostExample(),
+    ])
+    try write("board_automation_steps.png", board(examples))
+    try write("board_automation_simple.png", board(examples, row: 1))
+    // 見本『日報の下書き』（取得元も段も無い出力先コマンド）と、取得元のある出力先コマンド。
+    try write("board_automation_command.png", board(examples, row: 2))
+    try write("board_automation_command_en.png", board(examples, row: 2), .en)
+    try write("board_automation_command_sourced.png", board(examples, row: 3))
+    try renderBoardReportSnapshots(write: write, board: { board($0, row: $1) })
+    try renderBoardRequestSnapshots(write: write, board: { board($0) })
+  }
+
+  /// 見本 B2『開いている PR の要約』（出力先は報告・通知はメニューバー）と、累計と通知の注記が並ぶタスク候補。通知先が
+  /// 通知センターの報告。
+  private func renderBoardReportSnapshots(
+    write: (String, BoardModel, Language, NSSize) throws -> Void,
+    board: (AutomationsFile?, Int) -> BoardModel
+  ) throws {
+    let size = NSSize(width: 1440, height: 844)
+    let reports = DesignSceneFixtures.boardAutomationFile([
+      DesignSceneFixtures.boardStepsNotifyExample(), DesignSceneFixtures.boardReportExample(),
+    ])
+    try write("board_automation_report.png", board(reports, 1), .ja, size)
+    try write("board_automation_report_en.png", board(reports, 1), .en, size)
+    try write("board_automation_steps_notify.png", board(reports, 0), .ja, size)
+    let center = DesignSceneFixtures.boardAutomationFile([
+      DesignSceneFixtures.boardReportNotificationCenterExample()
+    ])
+    try write("board_automation_report_center.png", board(center, 0), .ja, size)
+    try write("board_automation_report_center_en.png", board(center, 0), .en, size)
   }
 
   /// 依頼の欄: 文字あり（欄に焦点・フッターが欄のキー）・断り 2 種。秘書の口は閉包の差し替えで、本物の秘書・claude は起きない。
@@ -107,14 +143,16 @@ extension DesignGallerySnapshotTests {
     write: (String, BoardModel, Language, NSSize) throws -> Void,
     board: (AutomationsFile?) -> BoardModel
   ) throws {
-    let size = NSSize(width: 1440, height: 826)
+    let size = NSSize(width: 1440, height: 844)
 
     for language in [Language.ja, .en] {
       let suffix = language == .ja ? "" : "_en"
       let typed = board(nil)
       typed.automation.go(.request)
       typed.automation.requestText =
-        language == .ja ? "Slack の自分宛ての DM をタスクの候補にして" : "Turn my Slack DMs into task candidates"
+        language == .ja
+        ? "平日の18時に、その日マージした PR の一覧を自分宛てに送る"
+        : "Every weekday at 18:00, send me the PRs merged that day"
       try write("board_request_typed\(suffix).png", typed, language, size)
     }
 
