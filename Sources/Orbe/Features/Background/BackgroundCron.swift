@@ -27,9 +27,11 @@ struct BackgroundCron: Equatable {
     else { throw .neverMatches }
   }
 
-  /// `anchor` より後で、かつ `floor` 以降の最初の該当時刻（秒 0）。暦は `calendar` のタイムゾーンで数える。夏時間で存在しない
-  /// 時刻は次に存在する時刻へ、繰り返す時刻は最初の方を取る。
-  func next(after anchor: Date, notBefore floor: Date, calendar: Calendar) -> Date {
+  /// `anchor` より後で、かつ `floor` 以降の最初の該当時刻（秒 0）。`zoned` からはタイムゾーンだけを使い、暦は利用者の暦法に
+  /// 依らず西暦で数える——式の日・月は西暦の日・月。夏時間で存在しない時刻は次に存在する時刻へ、繰り返す時刻は最初の方を取る。
+  func next(after anchor: Date, notBefore floor: Date, calendar zoned: Calendar) -> Date {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = zoned.timeZone
     let hours = hours.sorted()
     let minutes = minutes.sorted()
     var day = calendar.startOfDay(for: max(anchor, floor))

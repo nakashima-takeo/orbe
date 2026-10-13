@@ -5,7 +5,7 @@ import XCTest
 /// 次の時刻の規則（「数え始めより後の最初の回」1 つ）と値の検証。番人も使い手の画面（「次は 7 分後」）もこの関数を読む。
 ///
 /// 壊れると何が起きるか。スリープ明けに過ぎた回の数だけ走る、または 1 回も走らない。cron の予定が眠っていた間に過ぎた時刻を
-/// 起きてから回す、または予約の発火で回るべき回を飛ばす。cron の時刻がタイムゾーンや夏時間でずれる。期限を過ぎた待ちが
+/// 起きてから回す、または予約の発火で回るべき回を飛ばす。cron の時刻がタイムゾーン・夏時間・利用者の暦法でずれる。期限を過ぎた待ちが
 /// 最後の確認を走らせてから外れる。秒単位の間隔で外部のサービスを叩き続ける。
 final class BackgroundTimingTests: OrbeTestCase {
   private func calendar(_ zone: String) throws -> Calendar {
@@ -166,6 +166,22 @@ final class BackgroundTimingTests: OrbeTestCase {
       after: anchor, deadline: nil, now: anchor, calendar: utc)
 
     XCTAssertEqual(next, .run(try date(utc, "2028-02-29 00:00")))
+  }
+
+  /// 日・月は利用者の暦法に依らず西暦で数え、渡された暦からはタイムゾーンだけを使う。
+  func testCronCountsDaysInTheGregorianCalendarWhateverCalendarIsGiven() throws {
+    let tokyo = try calendar("Asia/Tokyo")
+    var islamic = Calendar(identifier: .islamicUmmAlQura)
+    islamic.timeZone = tokyo.timeZone
+    let anchor = try date(tokyo, "2026-10-14 00:00")
+
+    let first = try cron("0 9 1 * *").next(
+      after: anchor, deadline: nil, now: anchor, calendar: islamic)
+    let thirtyFirst = try cron("0 9 31 * *").next(
+      after: anchor, deadline: nil, now: anchor, calendar: islamic)
+
+    XCTAssertEqual(first, .run(try date(tokyo, "2026-11-01 09:00")))
+    XCTAssertEqual(thirtyFirst, .run(try date(tokyo, "2026-10-31 09:00")))
   }
 
   // MARK: - 期限
