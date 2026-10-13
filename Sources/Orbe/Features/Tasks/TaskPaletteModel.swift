@@ -10,6 +10,8 @@ struct TaskPaletteTaskList {
   }
   /// 表に載せたタスクの ID（表の並びの順）。書くのは `TaskPaletteRows.listing` の結果だけ。
   var listed: [Int] = []
+  /// 結び付けるタスクを選ぶ状態の一覧か。
+  let picking: Bool
 }
 
 /// ⌘⇧X タスク画面の状態（@Observable）。タスクの値は写さずストア（唯一の正）を直接読み書きし、GitHub の値も
@@ -40,7 +42,7 @@ struct TaskPaletteTaskList {
 
   /// タスクのタブが持つ一覧の状態。読み書きは選ぶ状態を振り分ける `taskList` を通す（選ぶ状態の間に
   /// 隠れたタブの一覧を書き換えないため、ここ以外から触れないようにしておく）。
-  private var tabTaskList = TaskPaletteTaskList() {
+  private var tabTaskList = TaskPaletteTaskList(picking: false) {
     didSet {
       if tabTaskList.state.selectedID != oldValue.state.selectedID { openedConditionParts = [] }
     }
@@ -155,13 +157,30 @@ struct TaskPaletteTaskList {
     }
   }
 
-  /// リストの更新（絞り込み・並びの変化）。タスクのタブと選ぶ状態の両方の載せた並びを空にする——絞り込みと
-  /// 並びは両方が共有するので、見えている方だけを空にすると、抜けた後の表が古い絞り込みと並びのまま残る。
-  func clearListings() {
-    tabTaskList.listed = []
+  /// リストの更新（絞り込み・並びの変化）。絞り込みと並びはタスクのタブと選ぶ状態が共有するので、両方の一覧を
+  /// 組み直す——見えている方だけだと、抜けた後の表が古い絞り込みと並びのまま残る。選択は、見えている一覧は
+  /// `selectingFirst` なら先頭の行を選ぶ。それ以外（見えていない一覧も）は、選んでいた行が組み直した表に残れば
+  /// そのまま、消えていれば先頭の行を選ぶ——並びが変わった後の同じ位置は関係のない行で、次の space がそこに当たるため。
+  func relist(selectingFirst: Bool) {
     if case .task(let link, var list) = pick {
-      list.listed = []
+      relist(&list, selectingFirst: selectingFirst)
       pick = .task(for: link, list: list)
+      relist(&tabTaskList, selectingFirst: false)
+    } else {
+      relist(&tabTaskList, selectingFirst: selectingFirst)
+    }
+    reconcile()
+  }
+
+  private func relist(_ list: inout TaskPaletteTaskList, selectingFirst: Bool) {
+    list.listed = []
+    list.listed = TaskPaletteRows.listing(rowsInput(for: list))
+    let ids = selectableIDs(for: list)
+    if !selectingFirst, let id = list.state.selectedID, ids.contains(id) {
+      list.state.reconcile(ids)
+      list.state.follow()
+    } else {
+      list.state.selectFirst(in: ids)
     }
   }
 
@@ -182,10 +201,12 @@ struct TaskPaletteTaskList {
 
   var counts: TaskPaletteCounts { TaskPaletteCounts(store.tasks) }
 
-  var rowsInput: TaskPaletteRows.Input {
+  var rowsInput: TaskPaletteRows.Input { rowsInput(for: taskList) }
+
+  func rowsInput(for list: TaskPaletteTaskList) -> TaskPaletteRows.Input {
     TaskPaletteRows.Input(
-      tasks: store.tasks, query: taskList.state.query, picking: pick != nil, filter: filter,
-      sort: sort, listed: taskList.listed, workspaces: workspaces, today: today,
+      tasks: store.tasks, query: list.state.query, picking: list.picking, filter: filter,
+      sort: sort, listed: list.listed, workspaces: workspaces, today: today,
       timeZone: timeZone, items: githubItems.answers, viewerLogin: viewer.login,
       agents: agents.agents)
   }
@@ -204,9 +225,11 @@ struct TaskPaletteTaskList {
     githubItems.ensure(visibleLinkIDs)
   }
 
+  var selectableIDs: [TaskPaletteRowID] { selectableIDs(for: taskList) }
+
   /// 選べる行（入力があれば先頭に入力の行き先、続いて表の行）。
-  var selectableIDs: [TaskPaletteRowID] {
-    let input = rowsInput
+  func selectableIDs(for list: TaskPaletteTaskList) -> [TaskPaletteRowID] {
+    let input = rowsInput(for: list)
     return (TaskPaletteRows.addTitle(input) == nil ? [] : [.add])
       + TaskPaletteRows.build(input).compactMap(\.selectableID)
   }

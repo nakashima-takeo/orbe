@@ -22,16 +22,12 @@ extension TaskPaletteModel {
     changeFilter { $0.dues.formSymmetricDifference([bucket]) }
   }
 
-  /// 列の見出しのクリック。選んでいた行が組み直しで消えたら（暗かった行）、同じ位置ではなく先頭の行を選ぶ——
-  /// 並びが変わった後の同じ位置は関係のない行で、次の space がそこに当たるため。
+  /// 列の見出しのクリック。
   func setSort(_ column: TaskPaletteSort.Column) {
     leaveEditingForAction()
     area = .list
-    let previous = selectedID
     sort = sort.tapped(column)
-    clearListings()
-    reconcile()
-    if selectedID == previous { taskList.state.follow() } else { selectFirstTask() }
+    relist(selectingFirst: false)
   }
 
   /// 絞り込みのドロップダウンのクリック。開いているメニューのドロップダウンなら閉じる。
@@ -50,8 +46,6 @@ extension TaskPaletteModel {
     leaveEditingForAction()
     area = .list
     change(&filter)
-    clearListings()
-    reconcile()
-    selectFirstTask()
+    relist(selectingFirst: true)
   }
 }

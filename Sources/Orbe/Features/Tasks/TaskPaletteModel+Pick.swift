@@ -17,7 +17,7 @@ extension TaskPaletteModel {
     guard pick == nil, let row = selectedGitHubRow else { return }
     leaveEditingForAction()
     area = .list
-    pick = .task(for: TaskLink(item: row.id, kind: row.item.kind), list: .init())
+    pick = .task(for: TaskLink(item: row.id, kind: row.item.kind), list: .init(picking: true))
     reconcile()
     focus()
   }
