@@ -75,7 +75,7 @@ final class TaskPaletteRowsTests: OrbeTestCase {
 
     XCTAssertEqual(
       taskIDs(rows), [5, 4, 2, 1], "保存の順に依らず作成の新しい順（同時刻は ID の大きい方が先）。完了は既定の絞り込みで出ない")
-    XCTAssertEqual(rows.count, 4, "区分の見出しは無い")
+    XCTAssertEqual(rows.count, 4, "タスクの行のほかに行は無い")
   }
 
   func testStateFilterIncludingDoneListsDoneTasksAmongTheOthers() {
@@ -144,6 +144,20 @@ final class TaskPaletteRowsTests: OrbeTestCase {
 
     XCTAssertEqual(ids(reversed: false), [3, 4, 1, 5, 2], "近い順")
     XCTAssertEqual(ids(reversed: true), [4, 1, 3, 5, 2], "遠い順")
+  }
+
+  /// 状態の列の既定の向きは 進行中 → 待ち → 未着手 → 完了。
+  func testSortingByStateListsInProgressWaitingTodoThenDone() {
+    let waiting = TaskItem.Waiting(reason: "返事", since: now)
+    let tasks = [
+      task(1, "a", .inProgress), task(2, "b", .done), task(3, "c", .todo),
+      task(4, "d", .todo) { $0.wait = .waiting(waiting) },
+    ]
+
+    let rows = TaskPaletteRows.build(
+      input(tasks, filter: everything, sort: TaskPaletteSort(column: .state)))
+
+    XCTAssertEqual(taskIDs(rows), [1, 4, 3, 2])
   }
 
   func testNoTasksAndNoQueryShowsTheEmptyInfoRowOnly() {

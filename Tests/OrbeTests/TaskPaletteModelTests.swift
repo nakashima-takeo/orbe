@@ -77,10 +77,14 @@ final class TaskPaletteModelTests: OrbeTestCase {
     palette.toggleWorkspaceFilter(openedWorkspace.id)
     palette.query = "orbe で足す"
     palette.submit()
+    palette.toggleWorkspaceFilter(TaskPaletteSamples.other.id)
+    palette.query = "2 つで絞って足す"
+    palette.submit()
 
     let byTitle = Dictionary(uniqueKeysWithValues: palette.store.tasks.map { ($0.title, $0) })
     XCTAssertNil(try XCTUnwrap(byTitle["絞らずに足す"]).workspace, "workspace で絞っていなければなし")
     XCTAssertEqual(try XCTUnwrap(byTitle["orbe で足す"]).workspace, openedWorkspace.id)
+    XCTAssertNil(try XCTUnwrap(byTitle["2 つで絞って足す"]).workspace, "2 つ以上で絞っていればなし")
   }
 
   /// 入力に文字があっても、↵ は選ばれている行の操作（↓ で一致したタスクを選べば、そのタスクを完了）。
