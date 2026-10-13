@@ -1,7 +1,7 @@
 ---
 title: レイアウト
 description: window の SwiftUI ホスト構成・workspace / 連 / タブ / 面 / surface の構造・content の照合・一方向参照・フォーカス管理・ショートカット・オーバーレイ提示機構
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # レイアウト
@@ -12,12 +12,13 @@ updated: 2026-10-12
 
 host 所有。`window.contentView` は SwiftUI ルート `ChromeHostingView`。ルートビュー `AppShell` は最背面に装飾層 `BackgroundGlow`（accent＋working のラジアル・非対話）を敷き、その上に上段 chrome ＋下段 content を置く。
 
-- `BackgroundGlow` の地は透過状態で変わる: **不透明時（100%・フルスクリーン）は不透明な地を敷き**、**透過時は地を敷かず clear** にする——端末の透明ピクセルをデスクトップまで抜くため。glow ラジアル自体は透過時も残る。
+- `BackgroundGlow` の地は透過状態で変わる: **不透明時（100%・フルスクリーン）は不透明な地を敷き**、**透過時は地を敷かず clear** にする——端末の透明ピクセルをデスクトップまで抜くため。glow ラジアル自体は透過時も残る。窓が main でない間は glow を描かない（地の扱いは同じ）（→ [chrome](chrome.md)）。
 - content の不透明な地は通常は各端末 surface（ボードを選んでいればボードの面）が描くため、**選択が空（タブが 0 でボードも無い）のときだけ** content を薄めた地で埋める。透過ウィンドウ越しにデスクトップが透けるのを防ぐ backstop で、背景不透明度の設定変更にライブ追従する。タブかボードが出ているときは出さず二重 veil を避ける。
 - 上段 chrome はネイティブ SwiftUI。content（連の器とボードの面）は既存 AppKit ビューを passthrough representable で内包する。
 - content に載る表示単位は**面の器**——エディター面と端末面を横に並べ、境に引き手・継ぎ目を重ねた 1 枚（→ [editor/faces](../editor/faces.md)）。器は連（同じ worktree のタブ → [chrome](chrome.md)）ごとにあり、連ごとの配置（どの面がどれだけ見えているか）を持つ。端末面には選んでいるタブの端末が出る。エディター面の地は chrome と同じ veil で塗り、端末面の地は端末 surface が描く。分割中は境に継ぎ目が立つ。
 - ボードを持つ workspace が前面の間は、ボードの面（窓に 1 枚。前面の workspace のボードを映す）も連の器と並べて content に載り、ボードを選んでいる間だけ見える（→ [board](board.md)）。
 - 配置状態（content とその空判定）と上段 chrome の状態は薄い `@Observable` モデル経由で `WindowController` が所有・駆動する（状態の正は WindowController）。
+- 窓が main window かも同じモデルが持つ。`WindowController` が窓の main の得失を受けて書き写し（生成時は main でない）、`AppShell` が根で Environment として注入して、上段・タブ行・`BackgroundGlow` が読む。未注入の根（見本系・メニューバー）は main 扱いで前面の姿に描く。DS 部品（タブのセル・件数ストリップ）は窓を知らず、退いた姿で描くかを引数で受ける。
 - 背景透過／ブラーは `WindowController` が所有する `ChromeTranslucency` を各 SwiftUI root へ Environment 注入して chrome 各面へ配り、各面が自分の地を同じ実効不透明度で薄める——端末面と veil 濃度を揃えるため。端末領域には塗らず二重 veil を避ける（値更新は窓の不透明度同期と同一 tick）。
 - 窓ドラッグは chrome 背景の透明 NSView が `mouseDown` で処理する。1 クリックは `window.performDrag(with:)` で Window Server へ委譲し（Space 切替等に参加させるため）、ダブルクリックはシステム設定 `AppleActionOnDoubleClick` を読んで zoom / miniaturize / 無効を明示実行する。タブ／＋ は前面で tap を持つため空き領域だけを拾う。
 - 信号機ボタンが chrome の上にあるか・あるならその縦位置は、殻（`AppShell`）が付けた極小 representable が実窓から読み、上段の左余白と縦中心へ反映する（→ [chrome](chrome.md)）。実窓を読むのはここだけで、見本系（preview・gallery）は probe を持たず「信号機が上段の縦中央にある（寄せ量 0）」既定で決定的に描く。読み直す契機は窓への配置・レイアウト・**フルスクリーン遷移の完了**——遷移の最中はレイアウトと macOS によるボタンの移動の前後関係が定まらないため、幾何が確定した時点で決め直す。

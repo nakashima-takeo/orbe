@@ -5,6 +5,8 @@ import SwiftUI
 /// 左区切り線だけを持つ。非選択=地 透明・文字 textSecondary・状態色グリフ 12px。
 /// 選択=地 textPrimary（前景色反転）・文字 tabActiveText・対テーマ状態色グリフ
 /// （done の check 線のみ textPrimary）。タブ背景を状態色で塗らない。idle/nil はグリフ非表示。
+/// `receded`（窓が main でない間）は反転をやめる: 選択=地 tabActiveBgInactive・文字 textPrimary・通常の状態色グリフ、
+/// 非選択=文字 textMuted。
 /// `editing` のときはタイトルを裸の `TextField` へ差し替え、選択面のまま field editor でその場編集する
 /// （Cmd+R インライン改名。SSOT・確定/取消・focus 駆動は app 層が握り、DS は与えられた状態を描くだけ）。
 struct DSTab: View {
@@ -22,6 +24,8 @@ struct DSTab: View {
   /// 左端に 1pt の区切り線（tabDivider）を持つ（2 枚以上のセグメントの各セル）。セル幅の内側に描き、
   /// 選択セルでも残る（選択面がその 1pt を空ける）。
   var divided: Bool = false
+  /// 退いた姿で描く（app 層が窓の main の得失から決める）。
+  var receded: Bool = false
 
   /// インライン改名の編集バリアント（app 層が駆動）。true でタイトルを `TextField` へ差し替える。
   var editing: Bool = false
@@ -47,30 +51,38 @@ struct DSTab: View {
   /// 状態グリフの描画サイズ（SegmentGlyph）。
   private let glyphSize: CGFloat = 12
 
-  /// 選択面（地 textPrimary・文字 tabActiveText）。編集タブは常に選択面で描く。
+  /// 選択面。編集タブは常に選択面で描く。
   private var selected: Bool { active || editing }
+  /// 選択面が前景色の反転か（退いた姿では反転しない）。
+  private var inverted: Bool { selected && !receded }
+  private var selectedFill: Color {
+    receded ? Color.theme.tabActiveBgInactive : Color.theme.textPrimary
+  }
+  private var selectedText: Color { receded ? Color.theme.textPrimary : Color.theme.tabActiveText }
 
   var body: some View {
     HStack(spacing: Theme.Space.note) {
       if let stateGlyph {
         StatusGlyphView(
           kind: stateGlyph, size: glyphSize, workingStroke: 1.6,
-          color: selected ? stateGlyph.inverseColor : nil,
-          checkStroke: selected ? Color.theme.textPrimary : nil,
+          color: inverted ? stateGlyph.inverseColor : nil,
+          checkStroke: inverted ? Color.theme.textPrimary : nil,
           symbol: stateSymbol)
       } else if let leadingSymbol {
         Image(systemName: leadingSymbol)
           .resizable()
           .scaledToFit()
           .frame(width: glyphSize, height: glyphSize)
-          .foregroundStyle(selected ? Color.theme.tabActiveText : Color.theme.textMuted)
+          .foregroundStyle(selected ? selectedText : Color.theme.textMuted)
       }
       if editing {
         titleField
       } else {
         Text(fontResolver.attributed(title, base: fontResolver.tabTitleFont))
           .font(Font(fontResolver.tabTitleFont as CTFont))
-          .foregroundStyle(selected ? Color.theme.tabActiveText : Color.theme.textSecondary)
+          .foregroundStyle(
+            selected ? selectedText : receded ? Color.theme.textMuted : Color.theme.textSecondary
+          )
           .lineLimit(1)
           .truncationMode(.tail)
       }
@@ -81,7 +93,7 @@ struct DSTab: View {
     .frame(maxWidth: Chrome.tabMaxWidth, maxHeight: .infinity, alignment: .leading)
     // 選択面は区切り線ぶん右から始める（塗りが線を覆って溶けるのを避ける）。文字・グリフは動かさない。
     .background(
-      Rectangle().fill(selected ? Color.theme.textPrimary : .clear)
+      Rectangle().fill(selected ? selectedFill : .clear)
         .padding(.leading, divided ? Theme.Stroke.hairline : 0)
     )
     .overlay(alignment: .leading) {
@@ -101,7 +113,7 @@ struct DSTab: View {
     TextField("", text: editingText)
       .textFieldStyle(.plain)
       .font(Font(fontResolver.tabTitleFont as CTFont))
-      .foregroundStyle(Color.theme.tabActiveText)
+      .foregroundStyle(selectedText)
       .tint(Color.theme.accentPrimary)  // 挿入点（カーソル）・選択ハイライト色
       .lineLimit(1)
       .focused($focused)

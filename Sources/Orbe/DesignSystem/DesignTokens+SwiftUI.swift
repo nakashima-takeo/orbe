@@ -23,6 +23,7 @@ struct ThemeColors {
   let textSecondary = Color(nsColor: Theme.Color.textSecondary)
   let textTertiary = Color(nsColor: Theme.Color.textTertiary)
   let textMuted = Color(nsColor: Theme.Color.textMuted)
+  let textMutedInactive = Color(nsColor: Theme.Color.textMutedInactive)
   // アクセント
   let accentPrimary = Color(nsColor: Theme.Color.accentPrimary)
   let accentFocus = Color(nsColor: Theme.Color.accentFocus)
@@ -61,6 +62,7 @@ struct ThemeColors {
   let tabRowBg = Color(nsColor: Theme.Color.tabRowBg)
   let tabSegBg = Color(nsColor: Theme.Color.tabSegBg)
   let tabActiveText = Color(nsColor: Theme.Color.tabActiveText)
+  let tabActiveBgInactive = Color(nsColor: Theme.Color.tabActiveBgInactive)
   let worktreeBar = Theme.Color.worktreeBar.map { Color(nsColor: $0) }
   let tabGroupBg = Color(nsColor: Theme.Color.tabGroupBg)
   let worktreeTint = Theme.Color.worktreeTint.map { Color(nsColor: $0) }

@@ -27,8 +27,9 @@ final class TtyDumpTab {
   /// その応答が届いた時点で書き込みが処理済みであることを測れるようにする。
   /// `kittyWrite*` は Kitty clipboard の書き込みを 1 件（本文 `kittyWrittenText`）、モード名が示す MIME で出す。
   /// `kittyWriteUTF16` の本文は BOM 無しの UTF-16LE（ASCII の本文でも NUL 混じりのバイト列になる）。
+  /// `focusReport` は focus reporting（`ESC[?1004h`）を有効にし、フォーカスの得失を `ESC[I` / `ESC[O` で受ける。
   enum Mode: String {
-    case legacy, paste, kitty, osc52Read, osc52Write, kittyRead, kittyReadPrimary
+    case legacy, paste, kitty, focusReport, osc52Read, osc52Write, kittyRead, kittyReadPrimary
     case kittyWriteCharset, kittyWriteSpacedCharset, kittyWriteUTF16
   }
 
@@ -55,6 +56,7 @@ final class TtyDumpTab {
         "legacy": "",
         "paste": "\\x1b[?2004h",
         "kitty": "\\x1b[>1u",
+        "focusReport": "\\x1b[?1004h",
         "osc52Read": "\\x1b]52;c;?\\x07" + kitty_read,
         "osc52Write": "\\x1b]52;c;" + b64("\(osc52WrittenText)") + "\\x07" + kitty_read,
         "kittyRead": kitty_read,

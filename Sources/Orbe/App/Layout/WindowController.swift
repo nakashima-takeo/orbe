@@ -347,4 +347,13 @@ final class WindowController: NSObject, NSWindowDelegate {
     syncWindowBlur()  // 可視後の初回適用（起動時 init は windowNumber 未確定で CGS ブラーが効かない）
   }
 
+  // chrome の前面／退いた姿は key でなく main で決める（Orbe のメニューやダイアログが key の間も窓は前面）。
+  func windowDidBecomeMain(_ notification: Notification) {
+    model.windowIsMain = window.isMainWindow
+  }
+
+  func windowDidResignMain(_ notification: Notification) {
+    model.windowIsMain = window.isMainWindow
+  }
+
 }
