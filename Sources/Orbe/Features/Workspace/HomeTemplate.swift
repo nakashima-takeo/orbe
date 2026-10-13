@@ -127,8 +127,10 @@ enum HomeTemplate {
     `~/bin/daily-note.sh` を実行する）。
     - 報告: 最後の段が書いた短い文章を、その回の結果として残す（例: 毎日 18 時に開いている PR を要約する）。1 行目がボードの\
     見出しと通知に出る。言うことが無ければ何も出さない。
-    - 通知（`notify: "menuBar"`）: どの出力先にも付けられる。何かを出した回と、失敗が続くなら最初の失敗の回に、メニューバーへ\
-    名前と結果の 1 行が出る。押すと Home のボードでその自動化が開く。省略すると知らせない。
+    - 通知（`notify: "menuBar"` か `"notificationCenter"`）: どの出力先にも付けられる。何かを出した回と、失敗が続くなら最初の\
+    失敗の回に、メニューバーか macOS の通知センターへ名前と結果の 1 行が出る。通知センターの通知は自動化ごとに 1 つで、新しい回が\
+    差し替える。`notificationCenter` を書くと、Orbe の通知の許可がまだ決まっていなければ OS が許可を問う。許可が無い回は\
+    メニューバーに出る。押すと Home のボードでその自動化が開く。省略すると知らせない。
 
     Orbe の中で予定どおり繰り返し動くのは、待ちの条件の確認と自動化の 2 つ。
     """
@@ -148,9 +150,12 @@ enum HomeTemplate {
     - Report: the short text the last step writes is kept as the result of the run (e.g. summarize the \
     open PRs every day at 18:00). Its first line shows on the board's heading and in the notification. With \
     nothing to report, the last step prints nothing.
-    - Notify (`notify: "menuBar"`): any sink can have it. When a run delivers something, or on the first of \
-    consecutive failed runs, the menu bar shows the name and the result line; clicking it opens the \
-    automation on Home's board. Omit it to stay silent.
+    - Notify (`notify: "menuBar"` or `"notificationCenter"`): any sink can have it. When a run delivers \
+    something, or on the first of consecutive failed runs, the name and the result line show in the menu bar \
+    or in macOS Notification Center. Notification Center keeps one notification per automation; a new run \
+    replaces it. Setting `notificationCenter` makes macOS ask for Orbe's notification permission if it is not \
+    decided yet; without permission, the run shows in the menu bar. Clicking either opens the automation on \
+    Home's board. Omit it to stay silent.
 
     Inside Orbe, the only things that run repeatedly on schedule are waiting-condition checks and automations.
     """

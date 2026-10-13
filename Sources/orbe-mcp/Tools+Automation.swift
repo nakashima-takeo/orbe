@@ -50,9 +50,12 @@ private let definitionShape =
   + "指示文には何をどうまとめるかを書く。最後の段がコマンドなら、標準出力がそのまま報告になる。"
   + "最後の段が何も出さない回は「報告なし」の成功になる。報告の自動化は、定義を書き換えても全件を見直さない"
   + "（毎回全体をまとめたいなら、取得元の coverage を everything にする）。"
-  + "notify は任意で、値は \"menuBar\" だけ（省略すると知らせない）。どの出力先にも付けられ、出力先へ何かを出した回"
-  + "（候補を受けた・コマンドが走った・報告があった）と、失敗が続くなら最初の失敗の回に、メニューバーへ自動化の名前と結果の 1 行が出て音が鳴る。"
-  + "押すと Home のボードでその自動化が開く。何も出さなかった回は知らせない。"
+  + "notify は任意で、値は \"menuBar\" か \"notificationCenter\"（省略すると知らせない）。どの出力先にも付けられ、出力先へ何かを出した回"
+  + "（候補を受けた・コマンドが走った・報告があった）と、失敗が続くなら最初の失敗の回に、自動化の名前と結果の 1 行が出て音が鳴る。"
+  + "menuBar はメニューバーに、notificationCenter は macOS の通知センターに出す。通知センターの通知は自動化ごとに 1 つで、新しい回が前の通知を差し替える。"
+  + "notificationCenter を書くと、Orbe の通知の許可がまだ決まっていなければ、その場で OS が許可を問う。"
+  + "許可が無い回はメニューバーに出る。"
+  + "どちらも押すと Home のボードでその自動化が開く。何も出さなかった回は知らせない。"
   + "例: {\"name\": \"GitHub: 自分へのレビュー依頼\", \"trigger\": {\"everyMinutes\": 30}, "
   + "\"source\": {\"command\": \"gh api …\", \"coverage\": \"currentSet\"}, "
   + "\"steps\": [{\"name\": \"絞り込み\", \"command\": \"jq -c 'select(…)'\"}, "
@@ -107,7 +110,7 @@ let automationTools: [[String: Any]] = [
               + "source は {command, directory?, coverage} か {agent?, model?, tools, request, coverage}、"
               + "steps は [{name, command, directory?} か {name, agent?, model?, instruction}]、"
               + "sink は {\"kind\": \"taskCandidates\"}・{\"kind\": \"command\", command, directory?, timeoutMinutes?}・"
-              + "{\"kind\": \"report\"} のどれか、notify は \"menuBar\"（省略で知らせない）",
+              + "{\"kind\": \"report\"} のどれか、notify は \"menuBar\" か \"notificationCenter\"（省略で知らせない）",
           ],
         ], required: ["definition"])
     ),
