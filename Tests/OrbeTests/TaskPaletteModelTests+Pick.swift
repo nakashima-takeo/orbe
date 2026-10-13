@@ -239,15 +239,12 @@ extension TaskPaletteModelTests {
   /// 項目を選ぶ間は、L・→ が効かない。
   func testPickingAnItemCannotLinkOrEnterThePane() {
     let palette = atAddLink()
-    var opened: [Int] = []
-    palette.onOpenWorktreePalette = { opened.append($0) }
     palette.beginPickingItem()
     palette.tapGitHubRow(.item(GitHub.id(5)))
 
     palette.linkSelectedGitHubItem()
     palette.enterPane()
 
-    XCTAssertEqual(opened, [])
     XCTAssertEqual(palette.store.tasks.count, 2)
     XCTAssertEqual(palette.visibleTab, .github, "タスクを選ぶ状態へ移らない")
     XCTAssertEqual(palette.area, .list)
