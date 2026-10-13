@@ -61,6 +61,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   private(set) lazy var automationRunner = AutomationRunner(
     store: AutomationStore(), workspaces: { [store] in AutomationWorkspaces(store) },
     recorded: { [weak self] in self?.notifyAutomationRecorded($0) },
+    defined: { [weak self] in self?.automationDefined($0) },
     deleted: { [weak self] in self?.automationDeleted($0) })
   var automationStore: AutomationStore { automationRunner.store }
   // worktree ごとに動いている agent の索引。flushChrome が作り直し、タスク画面と ⌘T が読む。

@@ -157,10 +157,8 @@ extension BoardAutomationSummary {
     case .report:
       node.title = l10n.string(.boardOutputReport)
     }
-    switch automation.definition.notify {
-    case .menuBar: node.notes.append(l10n.string(.boardOutputNotifyMenuBar))
-    case .notificationCenter: node.notes.append(l10n.string(.boardOutputNotifyNotificationCenter))
-    case nil: break
+    if let notify = automation.definition.notify {
+      node.notes.append(l10n.format(.boardOutputNotify, l10n.string(notify.labelKey)))
     }
     return node
   }
