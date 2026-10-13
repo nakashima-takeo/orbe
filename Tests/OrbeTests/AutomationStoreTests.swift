@@ -64,7 +64,8 @@ final class AutomationStoreTests: OrbeTestCase {
     _ store: AutomationStore, _ id: Int, _ run: AutomationRun, fetched: [AutomationItem],
     decisions: [AutomationDecision]
   ) {
-    let sink = AutomationTaskCandidates(store: store, automationId: id, workspaces: { [] })
+    let sink = AutomationTaskCandidates(
+      store: store, automationId: id, workspaces: { AutomationWorkspaces(listed: [], home: nil) })
     _ = sink.admit(fetched, fetched: fetched)
     store.commit(id, run, fetched: fetched) {
       sink.commit(decisions, into: &$0, automations: $1, endedAt: run.endedAt)
@@ -97,8 +98,10 @@ final class AutomationStoreTests: OrbeTestCase {
   private func newItems(
     _ store: AutomationStore, _ id: Int, _ fetched: [AutomationItem]
   ) -> [AutomationItem] {
-    AutomationTaskCandidates(store: store, automationId: id, workspaces: { [] })
-      .admit(store.unseen(of: id, in: fetched), fetched: fetched)
+    AutomationTaskCandidates(
+      store: store, automationId: id, workspaces: { AutomationWorkspaces(listed: [], home: nil) }
+    )
+    .admit(store.unseen(of: id, in: fetched), fetched: fetched)
   }
 
   func testNewItemsSkipThePreviousFetchExistingProposalsAndRepeatedLinks() throws {
@@ -141,7 +144,8 @@ final class AutomationStoreTests: OrbeTestCase {
   func testOneProposalPerLinkAcrossAutomations() throws {
     let store = try store(automations: 2)
     let shared = Self.item("m", link: "https://example.com/shared")
-    let second = AutomationTaskCandidates(store: store, automationId: 2, workspaces: { [] })
+    let second = AutomationTaskCandidates(
+      store: store, automationId: 2, workspaces: { AutomationWorkspaces(listed: [], home: nil) })
     XCTAssertEqual(second.admit([shared], fetched: [shared]), [shared], "まだ候補が無いので受ける")
     commit(store, 1, fetched: [shared], proposing: [shared])
 

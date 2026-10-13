@@ -36,7 +36,7 @@ final class AutomationRunnerTests: OrbeTestCase {
     }
     let runner = AutomationRunner(
       store: store, scheduler: scheduler, run: jobs.run,
-      workspaces: { [unowned self] in workspaces },
+      workspaces: { [unowned self] in AutomationWorkspaces(listed: workspaces, home: nil) },
       recorded: { [unowned self] in recorded.append($0) }, deleted: { _ in })
     runner.now = { [unowned self] in now }
     return runner

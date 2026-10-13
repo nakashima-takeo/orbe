@@ -4,11 +4,12 @@ import XCTest
 
 /// 自動化の 6 動詞のドメイン側を、実 `WindowController` 越しに固定する。起動で保存済みの自動化が番人に載ること、
 /// 提案と重なりが棚に出す自動化の側に出ること、拒否が制御 API の語彙になること、一覧の定義を `set_automation` へ戻せること、
-/// 一覧の回の記録が保存と同じ形であること。
+/// 一覧の回の記録が保存と同じ形であること。候補の付け先は今ある workspace に解けるときだけ起動ごとの id と名前で出ること。
 ///
 /// 壊れると何が起きるか: Orbe を再起動しただけで全自動化が黙って回らなくなる。AI が自動化の棚を読んでも、提案した自動化が
 /// もう取っていない提案が混ざる・取っている自動化に出ない。走っている自動化への `run_automation` が別の誤りに化ける。
 /// 一覧の定義を書き換えて戻すと、間隔や取得元が別物になる。回の記録を読む AI・秘書が、段ごとの件数や出力先の結果を読めなくなる。
+/// AI が候補の付け先を読めない、または消えた workspace を付け先として読む。
 ///
 /// 重要: 実 NSWindow に SurfaceView を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerAutomationControlTests: OrbeTestCase {
@@ -126,9 +127,6 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     }
   }
 
-  // MARK: - 拒否
-
-  /// 走っている回がある間は一覧にそう出て、`run_automation` は「実行できない」で断られる。
   /// 候補は付け先が今ある workspace に解けるときだけ、起動ごとの id と名前を持つ（永続 ID は出さない）。付け先が無い・
   /// 消えた候補はキーごと出さない。
   func testProposalsCarryTheirWorkspaceOnlyWhenItResolves() throws {
@@ -155,6 +153,9 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     }
   }
 
+  // MARK: - 拒否
+
+  /// 走っている回がある間は一覧にそう出て、`run_automation` は「実行できない」で断られる。
   func testRunningAutomationIsListedAsRunningAndRefusesRunNow() throws {
     let wc = try launch()
     let id = try set(wc, AutomationStoreTests.definition(script: "sleep 30"))

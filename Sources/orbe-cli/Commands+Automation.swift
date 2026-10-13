@@ -83,7 +83,8 @@ let automationUsage = """
              gets neither the open proposals nor the workspace list, so it
              cannot resolve; workspace ids change on every launch, so look
              them up on each run instead of writing them into the command).
-             A line naming an unlisted workspace is dropped.
+             Home's id or no workspace sends the task to Home. A line naming
+             an id that is not a current workspace is dropped.
              {"kind": "command", "command": "…", "directory": "/abs",
               "timeoutMinutes": 10}
              The command gets the lines that reach it on stdin, one JSON

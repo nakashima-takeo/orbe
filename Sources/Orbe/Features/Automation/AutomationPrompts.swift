@@ -138,7 +138,7 @@ enum AutomationPrompts {
       if let due = proposal.due { entry["due"] = due.text }
       return jsonLine(entry)
     }.joined(separator: "\n")
-    let workspaceLines = choices.workspaces.map {
+    let workspaceLines = choices.workspaces.listed.map {
       jsonLine(["workspace": $0.id, "name": $0.name, "root": $0.root] as [String: Any])
     }.joined(separator: "\n")
     return """
@@ -174,7 +174,8 @@ enum AutomationPrompts {
   }
 
   /// 最後の段の行を判定の出力として読む。propose・resolve の形でない行・知らない項目や候補を指す行・不正なタイトルや
-  /// 期限・一覧に無い workspace・同じ項目への 2 つ目の候補は、理由付きで捨てる。`itemIds` は今回の新しい項目の id。
+  /// 期限・一覧に無い workspace・同じ項目への 2 つ目の候補は、理由付きで捨てる。Home の workspace は付け先なしとして受ける。
+  /// `itemIds` は今回の新しい項目の id。
   static func readJudge(
     _ rows: [AutomationRow], itemIds: Set<String>, choices: AutomationJudgeChoices
   ) -> (decisions: [AutomationDecision], rejected: AutomationRejections) {
@@ -210,8 +211,8 @@ enum AutomationPrompts {
           due = parsed
         }
         var workspace: UUID?
-        if let number = line.workspace {
-          guard let listed = choices.workspaces.first(where: { $0.id == number }) else {
+        if let number = line.workspace, number != choices.workspaces.home {
+          guard let listed = choices.workspaces.listed.first(where: { $0.id == number }) else {
             rejected.add("propose \(id): workspace \(number) is not a listed workspace")
             continue
           }

@@ -14,7 +14,8 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
   func palette() -> TaskPaletteModel {
     let palette = TaskPaletteSamples.model(
       [TaskPaletteSamples.task(1, "a")],
-      automations: DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignFile()))
+      automations: DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignFile()),
+      workspaces: { DesignSceneFixtures.taskWorkspaces })
     palette.setTab(.automation)
     return palette
   }
@@ -87,7 +88,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
 
   // MARK: - さばく
 
-  func testEnterMakesATodoTaskOnHomeAndSelectsTheSamePosition() throws {
+  func testEnterMakesATodoTaskOnTheProposalsWorkspaceAndSelectsTheSamePosition() throws {
     let palette = palette()
     let tasks = palette.store.tasks.count
 
@@ -98,12 +99,19 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertEqual(task.title, "見積もりを山田さんに送る")
     XCTAssertEqual(task.status, .todo)
     XCTAssertEqual(task.due, TaskItem.DueDate("2025-10-10"))
-    XCTAssertEqual(task.workspace, TaskPaletteSamples.home, "Home に付く")
+    XCTAssertEqual(task.workspace, DesignSceneFixtures.taskWorkspaces.all[0].id, "付け先に付く")
     XCTAssertTrue(task.description.hasPrefix("https://example.slack.com/archives/D01-1\n\n"))
     XCTAssertEqual(palette.automation.store.proposals[0].state, .accepted(taskId: task.id))
     XCTAssertEqual(palette.automation.proposalIDs, [2, 3])
     XCTAssertEqual(palette.automation.proposalList.selectedID, 2)
     XCTAssertNil(palette.automation.error)
+
+    palette.submit()
+
+    let homeTask = try XCTUnwrap(
+      palette.store.tasks.first { $0.title == "オンボーディングの環境構築手順を見る" })
+    XCTAssertEqual(
+      homeTask.workspace, DesignSceneFixtures.taskWorkspaces.home, "付け先を持たない提案は Home に付く")
   }
 
   /// 付け先は今の workspace で解く。解ければそこ、付け先が無いか解けなければ Home。詳細の表示と ↵ が同じ付け先を使う。

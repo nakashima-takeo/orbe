@@ -15,15 +15,15 @@ final class AutomationRunner {
 
   private let scheduler: BackgroundScheduler
   private let run: BackgroundScheduler.Run
-  private let workspaces: () -> [AutomationWorkspace]
+  private let workspaces: () -> AutomationWorkspaces
   private let recorded: (Int) -> Void
   private let deleted: (Int) -> Void
 
-  /// `workspaces` はタスク候補の付け先にできる今の workspace（Home を除く）。タスク候補の出力先にだけ渡す。
+  /// `workspaces` はタスク候補の付け先にできる今の workspace。タスク候補の出力先にだけ渡す。
   init(
     store: AutomationStore, scheduler: BackgroundScheduler = BackgroundScheduler(),
     run: @escaping BackgroundScheduler.Run = { BackgroundRuns.shared.run($0, completion: $1) },
-    workspaces: @escaping () -> [AutomationWorkspace],
+    workspaces: @escaping () -> AutomationWorkspaces,
     recorded: @escaping (Int) -> Void, deleted: @escaping (Int) -> Void
   ) {
     self.store = store

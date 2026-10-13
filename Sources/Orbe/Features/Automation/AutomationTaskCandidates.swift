@@ -5,15 +5,16 @@ import Foundation
 final class AutomationTaskCandidates: AutomationSinkRun {
   private let store: AutomationStore
   private let automationId: Int
-  private let workspaces: () -> [AutomationWorkspace]
+  private let workspaces: () -> AutomationWorkspaces
   private var fetched: [AutomationItem] = []
   private var fresh: [AutomationItem] = []
-  private var choices = AutomationJudgeChoices(open: [], workspaces: [])
+  private var choices = AutomationJudgeChoices(
+    open: [], workspaces: AutomationWorkspaces(listed: [], home: nil))
   private var rejected = AutomationRejections()
 
-  /// `workspaces` は候補の付け先にできる今の workspace（Home を除く）。
+  /// `workspaces` は候補の付け先にできる今の workspace。
   init(
-    store: AutomationStore, automationId: Int, workspaces: @escaping () -> [AutomationWorkspace]
+    store: AutomationStore, automationId: Int, workspaces: @escaping () -> AutomationWorkspaces
   ) {
     self.store = store
     self.automationId = automationId
@@ -134,8 +135,16 @@ enum AutomationDecision: Equatable {
 struct AutomationJudgeChoices: Equatable {
   /// 判断待ちの候補（resolve の相手）。
   let open: [AutomationProposal]
-  /// 付け先にできる workspace（Home を除く）。
-  let workspaces: [AutomationWorkspace]
+  let workspaces: AutomationWorkspaces
+}
+
+/// 候補の付け先にできる workspace。
+struct AutomationWorkspaces: Equatable {
+  /// 判定に見せる workspace（Home を除く。サイドバーの順）。
+  let listed: [AutomationWorkspace]
+  /// Home の起動ごとの ID。付け先にこれを書いた行は付け先なし（Home に付く）として受ける——コマンドの段は
+  /// `orb ws list --json` から Home の ID を書きうる。
+  let home: Int?
 }
 
 /// 判定に付け先として見せる workspace 1 つ。`id` は起動ごとの ID で、1 回の中でしか使わず保存しない。

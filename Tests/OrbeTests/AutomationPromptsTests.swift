@@ -4,9 +4,12 @@ import XCTest
 
 /// 取得と判定の出力の関門——取得役の `{"error":…}`・全行が形違いは失敗、同じ id の 2 度目は捨てる。判定の行は、今回渡した
 /// 新しい項目・出ている提案だけを指し、タイトルと期限がタスクの規則に合うものだけを受ける。依頼文には新しい項目だけが載る。
+/// 付け先は依頼文に載せた workspace の一覧の id だけを受けて永続 ID に直して運び、Home の id は付け先なしとして受ける。
 ///
 /// 壊れると何が起きるか。取得役が「ツールが使えない」と言った回を 0 件と読み、提案が一斉に下がる。判定が別の受信の項目や
-/// 存在しない提案を指しても通り、タスクにできないタイトルの提案が棚に並ぶ。
+/// 存在しない提案を指しても通り、タスクにできないタイトルの提案が棚に並ぶ。判定が一覧に無い workspace や true を付け先に
+/// 書いても通り、候補が別の workspace や行き場の無い付け先を持つ。`orb ws list --json` の Home の id を書いたコマンドの段の
+/// 候補が捨てられ、二度と出ない。
 final class AutomationPromptsTests: OrbeTestCase {
   private let line =
     #"{"id":"1","link":"https://example.com/1","body":"本文","time":"2026-10-10T09:00:00Z"}"#
@@ -66,6 +69,8 @@ final class AutomationPromptsTests: OrbeTestCase {
         workspace: nil, proposedAt: Date(timeIntervalSince1970: 0), state: .open)
     ]
   }
+  private let orbe = AutomationWorkspace(
+    id: 3, persistentId: UUID(), name: "orbe", root: "/src/orbe")
 
   func testJudgeKeepsOnlyLinesThatPointAtWhatWasGiven() {
     let text = [
@@ -83,7 +88,7 @@ final class AutomationPromptsTests: OrbeTestCase {
     let (rows, notJSON) = AutomationPrompts.readRows(text)
     let (decisions, rejected) = AutomationPrompts.readJudge(
       rows, itemIds: Set(items.map(\.id)),
-      choices: AutomationJudgeChoices(open: open, workspaces: []))
+      choices: AutomationJudgeChoices(open: open, workspaces: listed([])))
 
     XCTAssertEqual(
       decisions,
@@ -100,7 +105,7 @@ final class AutomationPromptsTests: OrbeTestCase {
   func testJudgePromptCarriesTheNewItemsTheOpenProposalsAndToday() throws {
     let prompt = AutomationPrompts.judge(
       instruction: "自分がやるべきことだけ", rows: [AutomationPrompts.row(items[0])],
-      choices: AutomationJudgeChoices(open: open, workspaces: [orbe]),
+      choices: AutomationJudgeChoices(open: open, workspaces: listed([orbe])),
       now: Date(timeIntervalSince1970: 1_800_000_000),
       timeZone: try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo")))
 
@@ -117,7 +122,7 @@ final class AutomationPromptsTests: OrbeTestCase {
   func testJudgePromptSaysNoneWithoutWorkspaces() throws {
     let prompt = AutomationPrompts.judge(
       instruction: "指示", rows: [AutomationPrompts.row(items[0])],
-      choices: AutomationJudgeChoices(open: [], workspaces: []),
+      choices: AutomationJudgeChoices(open: [], workspaces: listed([])),
       now: Date(timeIntervalSince1970: 1_800_000_000),
       timeZone: try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo")))
 
@@ -129,14 +134,11 @@ final class AutomationPromptsTests: OrbeTestCase {
 
   // MARK: - 付け先
 
-  private let orbe = AutomationWorkspace(
-    id: 3, persistentId: UUID(), name: "orbe", root: "/src/orbe")
-
   private func judged(_ lines: [String]) -> ([AutomationDecision], AutomationRejections) {
     let (rows, _) = AutomationPrompts.readRows(lines.joined(separator: "\n"))
     return AutomationPrompts.readJudge(
       rows, itemIds: Set(items.map(\.id)),
-      choices: AutomationJudgeChoices(open: [], workspaces: [orbe]))
+      choices: AutomationJudgeChoices(open: [], workspaces: listed([orbe])))
   }
 
   /// 一覧の id は永続 ID に直して運び、書かなければ付け先なし。
@@ -180,9 +182,46 @@ final class AutomationPromptsTests: OrbeTestCase {
     let one = AutomationWorkspace(id: 1, persistentId: UUID(), name: "one", root: "/one")
     let (rows, _) = AutomationPrompts.readRows(#"{"propose":"a","title":"t","workspace":true}"#)
     let (decisions, rejected) = AutomationPrompts.readJudge(
-      rows, itemIds: ["a"], choices: AutomationJudgeChoices(open: [], workspaces: [one]))
+      rows, itemIds: ["a"], choices: AutomationJudgeChoices(open: [], workspaces: listed([one])))
 
     XCTAssertEqual(decisions, [])
     XCTAssertEqual(rejected.reasons, ["line 1: workspace has the wrong type"])
+  }
+
+  /// Home は依頼文の一覧に載らず、Home の id を書いた行は付け先なし（Home に付く）として受ける——コマンドの段は
+  /// `orb ws list --json` から Home の id を書きうる。
+  func testHomeIsNotListedAndItsIdMeansNoWorkspace() throws {
+    let session = SessionStore()
+    let repo = Workspace(name: "orbe", rootPath: "/src/orbe")
+    session.load(workspaces: [repo], activeWorkspace: 0)
+    session.ensureHome(rootPath: "/state/home")
+    let home = try XCTUnwrap(session.homeIndex.map { session.workspaces[$0] })
+    let choices = AutomationJudgeChoices(open: [], workspaces: AutomationWorkspaces(session))
+
+    let prompt = AutomationPrompts.judge(
+      instruction: "指示", rows: [AutomationPrompts.row(items[0])], choices: choices,
+      now: Date(timeIntervalSince1970: 1_800_000_000),
+      timeZone: try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo")))
+    let (rows, _) = AutomationPrompts.readRows(
+      [
+        #"{"propose":"a","title":"Home の作業","workspace":\#(home.id)}"#,
+        #"{"propose":"b","title":"orbe の作業","workspace":\#(repo.id)}"#,
+      ].joined(separator: "\n"))
+    let (decisions, rejected) = AutomationPrompts.readJudge(
+      rows, itemIds: Set(items.map(\.id)), choices: choices)
+
+    XCTAssertTrue(prompt.contains(#""name":"orbe""#), prompt)
+    XCTAssertFalse(prompt.contains("/state/home"), "Home は付け先の一覧に載せない")
+    XCTAssertEqual(
+      decisions,
+      [
+        .propose(itemId: "a", title: "Home の作業", due: nil, workspace: nil),
+        .propose(itemId: "b", title: "orbe の作業", due: nil, workspace: repo.persistentId),
+      ])
+    XCTAssertEqual(rejected.count, 0)
+  }
+
+  private func listed(_ workspaces: [AutomationWorkspace]) -> AutomationWorkspaces {
+    AutomationWorkspaces(listed: workspaces, home: nil)
   }
 }
