@@ -5,7 +5,7 @@ import Foundation
 
 private let boardIntro =
   "ボードは workspace の画面で、ターミナルのタブとは別の 1 枚。宛先は list_workspaces で hasBoard が true の workspace"
-  + "（それ以外は断られる）。部品の種類は automation（自動化の部品: 見出し・依頼の欄・一覧・詳細）だけ。"
+  + "（それ以外は断られる）。部品の種類は automation（自動化の部品: 依頼の欄・一覧・右の欄）だけ。"
 
 private let boardChange =
   "人の選択・焦点・前面の workspace は動かさない。開いていればボードにすぐ映り、再起動しても残る。"

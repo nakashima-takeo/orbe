@@ -65,6 +65,12 @@ let automationUsage = """
              Without model, the last step runs sonnet and the other steps
              and the source run haiku; an omitted model stays omitted, so
              reordering steps moves the default with them.
+             The lines a step command or the sink command receives are text
+             from outside, or what steps made from it, so instructions hidden
+             in that text can reshape them, and Orbe does not check what they
+             say: never evaluate their values as shell, nor pass them to an
+             agent (claude -p and the like). To have an agent read them, make
+             it a step (Orbe runs a step agent without tools).
     sink     {"kind": "taskCandidates"}
              An agent last step is told the output form by Orbe: write in
              its instruction what makes a task and how to title and date

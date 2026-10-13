@@ -92,16 +92,16 @@ struct BoardFlowNodeRow: View {
             .font(Font.theme.code)
             .foregroundStyle(Color.theme.textPrimary)
         }
-        if let means = node.means { BoardFlowChip(means: means).fixedSize() }
+        if let means = node.means { Self.chip(means).fixedSize() }
       }
       .frame(minHeight: Self.titleLine)
       Group {
-        if let source = node.source {
-          fontResolver.text(source, base: Theme.Typography.codeCompact)
+        if let verbatim = node.verbatim {
+          fontResolver.text(verbatim, base: Theme.Typography.codeCompact)
             .font(Font.theme.codeCompact)
             .foregroundStyle(Color.theme.textPrimary)
-            .lineSpacing(Self.sourceLeading)
-            .padding(.vertical, Self.sourceLeading / 2)
+            .lineSpacing(Self.verbatimLeading)
+            .padding(.vertical, Self.verbatimLeading / 2)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.vertical, Theme.Space.note)
             .padding(.horizontal, Self.boxInset)
@@ -113,7 +113,7 @@ struct BoardFlowNodeRow: View {
         }
         if !node.tools.isEmpty {
           BoardChipFlow(spacing: Theme.Space.tick) {
-            ForEach(node.tools, id: \.self) { BoardFlowChip(means: .command($0)) }
+            ForEach(node.tools, id: \.self) { BoardFlowChip(text: $0, emphasized: false) }
           }
         }
         ForEach(Array(node.notes.enumerated()), id: \.offset) { _, note in
@@ -127,6 +127,13 @@ struct BoardFlowNodeRow: View {
     }
     .padding(.bottom, below)
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private static func chip(_ means: BoardFlowMeans) -> BoardFlowChip {
+    switch means {
+    case .command(let label): BoardFlowChip(text: label, emphasized: false)
+    case .model(let name): BoardFlowChip(text: name, emphasized: true)
+    }
   }
 
   private var count: some View {
@@ -182,27 +189,24 @@ struct BoardFlowNodeRow: View {
   private static let countWidth: CGFloat = 26
   private static let barMax: CGFloat = 96
   /// 行高 1.6 に当たる行間。1 行目の上と最終行の下にも半分ずつ置く（CSS の line-height と同じ組み方）。
-  private static let sourceLeading = Theme.Typography.codeCompact.extraLeading(
+  private static let verbatimLeading = Theme.Typography.codeCompact.extraLeading(
     lineHeight: Theme.Typography.lineBody)
 }
 
-/// 手段の札。モデルは強調の地、コマンド（と使えるツール）は無彩の地。名前は切らない（使えるツールは裏で承認なしに使われる）。
+/// 流れの札（段の手段・使えるツール）。強調はモデル、無彩はコマンドと使えるツール。名前は切らない（使えるツールは裏で承認
+/// なしに使われる）。
 struct BoardFlowChip: View {
-  let means: BoardFlowMeans
+  let text: String
+  let emphasized: Bool
 
   var body: some View {
-    let (label, model): (String, Bool) =
-      switch means {
-      case .command(let label): (label, false)
-      case .model(let name): (name, true)
-      }
-    Text(label)
+    Text(text)
       .font(Font.theme.meta)
-      .foregroundStyle(model ? Color.theme.accentBright : Color.theme.textSecondary)
+      .foregroundStyle(emphasized ? Color.theme.accentBright : Color.theme.textSecondary)
       .padding(.horizontal, 7)
       .frame(minHeight: 18)
       .background(
-        model ? Color.theme.accentPrimary.opacity(0.16) : Color.theme.plainPillFill,
+        emphasized ? Color.theme.accentPrimary.opacity(0.16) : Color.theme.plainPillFill,
         in: RoundedRectangle(cornerRadius: Theme.Radius.sm))
   }
 }

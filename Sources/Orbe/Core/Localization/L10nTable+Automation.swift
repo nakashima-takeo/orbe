@@ -1,6 +1,6 @@
 import Foundation
 
-/// 自動追加の文言分冊（⌘⇧X の提案タブの文と、⌘⇧X とボードが共有する自動追加の文）。本体 `L10n.table` が結合する。
+/// 自動化の文言分冊（⌘⇧X の提案タブの文と、⌘⇧X とボードが共有する自動化の文）。本体 `L10n.table` が結合する。
 extension L10n {
   static let automationTable: [L10nKey: (ja: String, en: String)] = [
     .taskPaletteTabAutomation: ("提案", "Proposals"),
@@ -31,7 +31,7 @@ extension L10n {
     ),
     .taskPaletteAutomationErrAccept: ("タスクにできませんでした", "Couldn’t make it a task"),
 
-    // MARK: 自動追加の共有の文
+    // MARK: 自動化の共有の文
     .automationFetch: ("取得", "Fetch"),
     .automationSteps: ("処理", "Steps"),
     .automationNext: ("次回 %@", "next %@"),

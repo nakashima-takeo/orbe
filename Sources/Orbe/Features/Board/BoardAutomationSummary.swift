@@ -22,7 +22,7 @@ struct BoardFlowNode: Equatable {
   var title = ""
   var means: BoardFlowMeans?
   /// 実行されるとおりの原文（コマンド・依頼文・指示文）。切らずに全文を出す——承認なしで裏で走るものを、いつも確かめられるため。
-  var source: String?
+  var verbatim: String?
   var tools: [String] = []
   /// 注記。出どころごとに 1 行。
   var notes: [String] = []
@@ -83,8 +83,7 @@ extension BoardAutomationSummary {
     let l10n = text.l10n
     let definition = automation.definition
     let when = text.when(definition.trigger)
-    let stepCount = definition.steps.count
-    let counts = automation.runs.first.map { Self.counts($0, stepCount: stepCount) } ?? Counts()
+    let counts = automation.runs.first.map { Self.counts($0, of: definition) } ?? Counts()
     let sink = Self.sink(automation, count: counts.output, l10n: l10n)
     let output = sink.title
     self.output = output
@@ -107,7 +106,7 @@ extension BoardAutomationSummary {
       case .taskCandidates, nil: break
       }
       if run.fresh == 0 { return l10n.string(.boardRunNothingNew) }
-      if let step = Self.counts(run, stepCount: stepCount).steps.firstIndex(of: 0) {
+      if let step = run.steps.firstIndex(where: { $0.count == 0 }) {
         return l10n.format(.boardRunAllDropped, step + 1)
       }
       return l10n.string(.boardRunNoneAdded)
@@ -178,7 +177,7 @@ extension BoardAutomationSummary {
   private static func script(
     _ node: inout BoardFlowNode, _ command: BackgroundCommand, l10n: LocalizationStore
   ) {
-    node.source = command.script
+    node.verbatim = command.script
     if let directory = command.directory {
       node.notes.append(l10n.string(.automationDirectory) + "  " + directory)
     }
@@ -194,7 +193,7 @@ extension BoardAutomationSummary {
       switch source.method {
       case .agent(let agent):
         node.means = .model(AutomationDefinition.model(agent.model, finalStep: false))
-        node.source = agent.request
+        node.verbatim = agent.request
         node.tools = agent.tools
       case .command(let script): command(&node, script, l10n: l10n)
       }
@@ -209,7 +208,7 @@ extension BoardAutomationSummary {
       switch step.method {
       case .agent(let agent):
         node.means = .model(definition.model(of: agent, at: index))
-        node.source = agent.instruction
+        node.verbatim = agent.instruction
       case .command(let script): command(&node, script, l10n: l10n)
       }
       nodes.append(node)
@@ -241,6 +240,14 @@ extension BoardAutomationSummary {
     }
   }
 
+  /// 出力先の記録が、定義の出力先と同じ種類か。
+  private static func same(_ report: AutomationSinkReport, _ sink: AutomationSink) -> Bool {
+    switch (report, sink) {
+    case (.taskCandidates, .taskCandidates), (.command, .command), (.report, .report): true
+    case (.taskCandidates, _), (.command, _), (.report, _): false
+    }
+  }
+
   /// 1 回で各段を出た件数。
   struct Counts: Equatable {
     var source: Int?
@@ -251,19 +258,34 @@ extension BoardAutomationSummary {
   }
 
   /// 回の記録の段ごとの件数を、届いた段まで並べる。取得元と既に見たものを除くは、取得元を通った回（新しい項目の数を持つ回）
-  /// だけが持つ。出力先で落ちた回（出力先の記録を持つ失敗）は最後の段まで、それ以外の失敗した回は記録の最後の段が落ちた段
-  /// なので、その手前まで。出力先は、成功して最後の段（`stepCount` 番目）まで回り、新しい項目があった回だけが持つ——途中の段が
-  /// 0 件を出した回・新しい項目が無かった回は、出力先へ届いていない。
-  static func counts(_ run: AutomationRun, stepCount: Int) -> Counts {
+  /// だけが持つ。段で落ちた回（出力先の記録を持たない失敗）は、記録の最後の段が落ちた段なので、その手前まで。出力先は、成功して
+  /// 出力先が最後の出力を読んだ回だけが持つ——途中の段が 0 件を出した回・新しい項目が無かった回は、出力先へ届いていない。
+  ///
+  /// 書き換えても回の記録は残るので、記録が今の定義の段で走ったものかを照合し、合わない段には数を出さない——位置だけで当てると、
+  /// 走っていない段や別の出力先に前回の数が付くため。段名は先頭から照合し、最初に食い違った段から先は出さない（前回その先の段が
+  /// 受けた入力は、今の並びで受けるものと違う）。最後の段の数は出力先が数えた数（報告なら報告の有無の 1・0）なので、記録で
+  /// 出力先が数えた段と今の最後の段が同じ段で、出力先の種類も同じときだけ出す。出力先は、段の並びがすべて合い、種類も同じときだけ。
+  private static func counts(_ run: AutomationRun, of definition: AutomationDefinition) -> Counts {
     var counts = Counts()
     if let fresh = run.fresh {
       counts.source = run.source?.count
       counts.orbe = fresh
     }
-    counts.steps = run.steps.map(\.count)
-    if run.failure != nil {
-      if run.sink == nil, !counts.steps.isEmpty { counts.steps.removeLast() }
-    } else if run.steps.count == stepCount, run.fresh != 0 {
+    let named = zip(run.steps, definition.steps).prefix { $0.name == $1.name }.count
+    let sameSink = run.sink.map { same($0, definition.sink) } ?? true
+    var steps = run.steps.map(\.count)
+    if run.failure != nil, run.sink == nil, !steps.isEmpty { steps.removeLast() }
+    steps = Array(steps.prefix(named))
+    if let index = steps.indices.last {
+      let countedBySink = run.lastStepCountedBySink && index == run.steps.count - 1
+      let lastNow = index == definition.steps.count - 1
+      if countedBySink != lastNow || (countedBySink && !sameSink) { steps.removeLast() }
+    }
+    counts.steps = steps
+    let reached = run.steps.isEmpty ? run.fresh != 0 : run.lastStepCountedBySink
+    if run.failure == nil, reached, named == run.steps.count,
+      run.steps.count == definition.steps.count, sameSink
+    {
       counts.output = delivered(run).count
     }
     return counts

@@ -276,7 +276,10 @@ final class AutomationRunner {
     case .output(let read, let count, let rejected):
       step?.count = count
       step?.rejected = rejected
-      if let step { pass.record.steps.append(step) }
+      if let step {
+        pass.record.steps.append(step)
+        pass.record.lastStepCountedBySink = true
+      }
       output = read
     }
     pass.attempt.current = pass.sink.deliver(output) { [weak self] failure in
@@ -357,7 +360,7 @@ final class AutomationRunner {
       self.sink = sink
       record = AutomationRun(
         startedAt: attempt.startedAt, endedAt: attempt.startedAt, trigger: attempt.trigger,
-        source: nil, fresh: nil, steps: [], sink: nil, failure: nil)
+        source: nil, fresh: nil, steps: [], lastStepCountedBySink: false, sink: nil, failure: nil)
     }
   }
 }

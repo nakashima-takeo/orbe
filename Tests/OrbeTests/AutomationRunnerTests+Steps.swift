@@ -46,6 +46,7 @@ extension AutomationRunnerTests {
     XCTAssertEqual(run.fresh, 3)
     XCTAssertEqual(run.steps.map(\.name), ["絞り込み", "判定"])
     XCTAssertEqual(run.steps.map(\.count), [1, 1])
+    XCTAssertTrue(run.lastStepCountedBySink, "最後の段の数は出力先が数えた")
     XCTAssertEqual(run.steps[0].rejected.count, 1)
     XCTAssertEqual(AutomationStoreTests.candidates(run)?.proposed, 1)
     XCTAssertEqual(store.proposals.map(\.item.link), ["https://example.com/b"], "リンクは取得元の項目から")
@@ -90,7 +91,7 @@ extension AutomationRunnerTests {
     XCTAssertEqual(call.model, "sonnet")
   }
 
-  /// 中間の段が何も残さなければ、最後の段を起こさずに成功として確定する。
+  /// 中間の段が何も残さなければ、最後の段を起こさずに成功として確定する。記録の最後の段は 0 行を出した段で、出力先は数えていない。
   func testAnEmptyMiddleStepCommitsWithoutTheLastStep() throws {
     let automation = try create(filtered())
     try runner.runNow(automation.id)
@@ -98,7 +99,10 @@ extension AutomationRunnerTests {
     jobs.finish(1, printed(""))
 
     XCTAssertEqual(jobs.calls.count, 2)
-    XCTAssertNil(store.automation(automation.id)?.runs.first?.failure)
+    let run = try XCTUnwrap(store.automation(automation.id)?.runs.first)
+    XCTAssertNil(run.failure)
+    XCTAssertEqual(run.steps.map(\.count), [0])
+    XCTAssertFalse(run.lastStepCountedBySink)
     XCTAssertEqual(store.automation(automation.id)?.lastFetched.map(\.id), ["a"])
   }
 

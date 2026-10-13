@@ -23,7 +23,7 @@ extension BoardAutomationSummaryTests {
     let output = try XCTUnwrap(summary.nodes.last)
     XCTAssertEqual(output.title, "報告")
     XCTAssertNil(output.means)
-    XCTAssertNil(output.source)
+    XCTAssertNil(output.verbatim)
     XCTAssertEqual(output.notes, ["通知：メニューバー"])
     XCTAssertEqual(output.count, 1)
   }
@@ -44,7 +44,7 @@ extension BoardAutomationSummaryTests {
       AutomationRun(
         startedAt: DesignSceneFixtures.automationAt(14),
         endedAt: DesignSceneFixtures.automationAt(14),
-        trigger: .now, source: nil, fresh: nil, steps: [], sink: nil,
+        trigger: .now, source: nil, fresh: nil, steps: [], lastStepCountedBySink: false, sink: nil,
         failure: "the fetch ended: exited 1: line one\nline two"),
       at: 0)
     let summary = BoardAutomationSummary(automation, text: text)

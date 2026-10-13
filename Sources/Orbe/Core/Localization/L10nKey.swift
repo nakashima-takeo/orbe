@@ -368,7 +368,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAutomationOverlapCount
   case taskPaletteAutomationRewriteNote
   case taskPaletteAutomationErrAccept
-  // MARK: - 自動追加の共有の文（L10nTable+Automation）
+  // MARK: - 自動化の共有の文（L10nTable+Automation）
   case automationFetch
   case automationSteps
   case automationNext
