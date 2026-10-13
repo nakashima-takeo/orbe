@@ -122,6 +122,8 @@ enum HomeTemplate {
     `list_automation_proposals`）。
     - トリガー（間隔か毎日の時刻）ごとに、取得元（コマンドか軽い agent）が項目を取り、処理の段（コマンドか agent）が順に\
     絞り・判断して、出力先へ出す。出力先はタスク候補・コマンド・報告の 3 つ。
+    - 名前は「出どころ: 何を取るか」の 1 行（例「GitHub: 自分へのレビュー依頼」）。取得元が無ければ、何をするかの 1 行\
+    （例「日報の下書き」）。
     - タスク候補: 人が ⌘⇧X の提案タブで受けた候補だけがタスクになる。Slack・メール・課題管理・GitHub などから拾うのが主な使い方。
     - コマンド: 届いた行を標準入力で受けて走る。取得元も段も無ければ、トリガーのたびに走る（例: 毎晩 23 時に \
     `~/bin/daily-note.sh` を実行する）。
@@ -143,6 +145,8 @@ enum HomeTemplate {
     - On each trigger (an interval or daily times), the source (a command or a light agent) gets items, the \
     steps (commands or agents) narrow and judge them in order, and the sink receives the result. There are \
     three sinks: task candidates, a command, and a report.
+    - Name it in one line, "<source>: <what it gets>" (e.g. "GitHub: review requests for me"); without a \
+    source, say what it does (e.g. "Daily note draft").
     - Task candidates: only candidates the user accepts in the Proposals tab of ⌘⇧X become tasks. The main use \
     is picking things up from Slack, mail, issue trackers, GitHub, and the like.
     - Command: it runs with the lines that reach it on stdin. With neither a source nor steps, it runs on every \

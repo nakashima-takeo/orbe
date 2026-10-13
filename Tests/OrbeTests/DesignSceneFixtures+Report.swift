@@ -20,6 +20,7 @@ extension DesignSceneFixtures {
           name: "要約", commandLine: "claude -p", ending: failure == nil ? "exited 0" : "exited 1",
           count: report == nil ? 0 : 1, rejected: AutomationRejections())
       ],
+      lastStepCountedBySink: failure == nil,
       sink: failure == nil ? .report(text: report) : nil, failure: failure)
   }
 

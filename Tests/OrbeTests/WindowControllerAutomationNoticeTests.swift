@@ -71,7 +71,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
   ) {
     let run = AutomationRun(
       startedAt: Date(), endedAt: Date(), trigger: .now, source: nil, fresh: nil, steps: [],
-      sink: nil, failure: failure)
+      lastStepCountedBySink: false, sink: nil, failure: failure)
     if failure != nil {
       wc.automationStore.recordFailure(of: id, run)
     } else {

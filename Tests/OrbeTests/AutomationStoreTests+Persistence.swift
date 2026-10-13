@@ -59,7 +59,7 @@ extension AutomationStoreTests {
                 "commandLine": "gh api notifications", "ending": "exited 1", "count": 0,
                 "rejected": {"count": 0, "reasons": []}
               },
-              "steps": [],
+              "steps": [], "lastStepCountedBySink": false,
               "failure": "the source exited 1"
             },
             {
@@ -80,6 +80,7 @@ extension AutomationStoreTests {
                   "rejected": {"count": 0, "reasons": []}
                 }
               ],
+              "lastStepCountedBySink": true,
               "sink": {
                 "kind": "taskCandidates", "proposed": 1, "resolved": 0, "withdrawn": 1,
                 "rejected": {"count": 0, "reasons": []}
@@ -106,7 +107,7 @@ extension AutomationStoreTests {
           "runs": [
             {
               "startedAt": "2026-10-01T14:00:00.000Z", "endedAt": "2026-10-01T14:00:02.000Z",
-              "trigger": "schedule", "steps": [],
+              "trigger": "schedule", "steps": [], "lastStepCountedBySink": false,
               "sink": {"kind": "command", "commandLine": "~/bin/daily-note.sh", "ending": "exited 0", "count": 0}
             }
           ]
@@ -152,6 +153,7 @@ extension AutomationStoreTests {
                   "rejected": {"count": 0, "reasons": []}
                 }
               ],
+              "lastStepCountedBySink": true,
               "sink": {"kind": "report"}
             },
             {
@@ -163,6 +165,7 @@ extension AutomationStoreTests {
                   "rejected": {"count": 0, "reasons": []}
                 }
               ],
+              "lastStepCountedBySink": true,
               "sink": {"kind": "report", "text": "開いている PR は 2 件。\n- #412 レビュー待ち"}
             }
           ]

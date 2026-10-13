@@ -243,7 +243,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
 
   /// ボードの上に ⌘⇧X を開いている間に自動化がすべて消えても（⌘⇧X で最後の 1 件を消す）、ボードの欄は焦点を奪わず、
   /// 打鍵は ⌘⇧X の入力欄に届いたまま。
-  @MainActor func testAutoAddsVanishingUnderThePaletteLeaveTheFocusInThePalette() throws {
+  @MainActor func testAutomationsVanishingUnderThePaletteLeaveTheFocusInThePalette() throws {
     savePausedAutomations()
     let wc = WindowController()
     show(wc)

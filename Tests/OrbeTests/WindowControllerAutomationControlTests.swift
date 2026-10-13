@@ -196,6 +196,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
         name: "判定", commandLine: "claude -p", ending: "exited 0", count: 1,
         rejected: AutomationRejections())
     ]
+    run.lastStepCountedBySink = true
     AutomationStoreTests.commit(
       wc.automationStore, id, run, fetched: [a],
       decisions: [.propose(itemId: "a", title: "対応する", due: nil)])
@@ -203,12 +204,17 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let listedRun = try XCTUnwrap((try listed(wc)[id]?["runs"] as? [[String: Any]])?.first)
 
     XCTAssertEqual(
-      Set(listedRun.keys), ["startedAt", "endedAt", "trigger", "source", "fresh", "steps", "sink"])
+      Set(listedRun.keys),
+      [
+        "startedAt", "endedAt", "trigger", "source", "fresh", "steps", "lastStepCountedBySink",
+        "sink",
+      ])
     XCTAssertEqual((listedRun["source"] as? [String: Any])?["count"] as? Int, 1)
     XCTAssertEqual(listedRun["fresh"] as? Int, 1)
     let step = try XCTUnwrap((listedRun["steps"] as? [[String: Any]])?.first)
     XCTAssertEqual(step["name"] as? String, "判定")
     XCTAssertEqual(step["commandLine"] as? String, "claude -p")
+    XCTAssertEqual(listedRun["lastStepCountedBySink"] as? Bool, true)
     let sink = try XCTUnwrap(listedRun["sink"] as? [String: Any])
     XCTAssertEqual(sink["kind"] as? String, "taskCandidates")
     XCTAssertEqual(sink["proposed"] as? Int, 1)

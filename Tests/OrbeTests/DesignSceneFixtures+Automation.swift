@@ -56,6 +56,7 @@ extension DesignSceneFixtures {
             name: "判定", commandLine: "claude -p", ending: "exited 0", count: proposed,
             rejected: AutomationRejections())
         ],
+      lastStepCountedBySink: fresh != 0 && failure == nil,
       sink: failure == nil
         ? .taskCandidates(AutomationTaskCandidatesReport(proposed: proposed)) : nil,
       failure: failure)

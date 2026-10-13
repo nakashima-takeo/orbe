@@ -258,33 +258,35 @@ extension BoardAutomationSummary {
   }
 
   /// 回の記録の段ごとの件数を、届いた段まで並べる。取得元と既に見たものを除くは、取得元を通った回（新しい項目の数を持つ回）
-  /// だけが持つ。出力先で落ちた回（出力先の記録を持つ失敗）は最後の段まで、それ以外の失敗した回は記録の最後の段が落ちた段
-  /// なので、その手前まで。出力先は、成功して定義の最後の段まで回り、新しい項目があった回だけが持つ——途中の段が 0 件を
-  /// 出した回・新しい項目が無かった回は、出力先へ届いていない。
+  /// だけが持つ。段で落ちた回（出力先の記録を持たない失敗）は、記録の最後の段が落ちた段なので、その手前まで。出力先は、成功して
+  /// 出力先が最後の出力を読んだ回だけが持つ——途中の段が 0 件を出した回・新しい項目が無かった回は、出力先へ届いていない。
   ///
-  /// 書き換えても回の記録は残るので、記録が今の定義の段で走ったものかを段名の並びと出力先の種類で照合し、合わない段には数を
-  /// 出さない——位置だけで当てると、走っていない段や別の出力先に前回の数が付くため。段名は先頭から照合し、最初に食い違った段
-  /// から先は出さない（前回その先の段が受けた入力は、今の並びで受けるものと違う）。出力先の種類が違えば、出力先と、出力先が
-  /// 数えた最後の段の数を出さない。
+  /// 書き換えても回の記録は残るので、記録が今の定義の段で走ったものかを照合し、合わない段には数を出さない——位置だけで当てると、
+  /// 走っていない段や別の出力先に前回の数が付くため。段名は先頭から照合し、最初に食い違った段から先は出さない（前回その先の段が
+  /// 受けた入力は、今の並びで受けるものと違う）。最後の段の数は出力先が数えた数（報告なら報告の有無の 1・0）なので、記録で
+  /// 出力先が数えた段と今の最後の段が同じ段で、出力先の種類も同じときだけ出す。出力先は、段の並びがすべて合い、種類も同じときだけ。
   private static func counts(_ run: AutomationRun, of definition: AutomationDefinition) -> Counts {
-    let stepCount = definition.steps.count
     var counts = Counts()
     if let fresh = run.fresh {
       counts.source = run.source?.count
       counts.orbe = fresh
     }
-    counts.steps = run.steps.map(\.count)
-    if run.failure != nil {
-      if run.sink == nil, !counts.steps.isEmpty { counts.steps.removeLast() }
-    } else if run.steps.count == stepCount, run.fresh != 0 {
-      counts.output = delivered(run).count
-    }
     let named = zip(run.steps, definition.steps).prefix { $0.name == $1.name }.count
-    if named < run.steps.count { counts.output = nil }
-    counts.steps = Array(counts.steps.prefix(named))
-    if let report = run.sink, !same(report, definition.sink) {
-      counts.output = nil
-      if counts.steps.count == stepCount, stepCount > 0 { counts.steps.removeLast() }
+    let sameSink = run.sink.map { same($0, definition.sink) } ?? true
+    var steps = run.steps.map(\.count)
+    if run.failure != nil, run.sink == nil, !steps.isEmpty { steps.removeLast() }
+    steps = Array(steps.prefix(named))
+    if let index = steps.indices.last {
+      let countedBySink = run.lastStepCountedBySink && index == run.steps.count - 1
+      let lastNow = index == definition.steps.count - 1
+      if countedBySink != lastNow || (countedBySink && !sameSink) { steps.removeLast() }
+    }
+    counts.steps = steps
+    let reached = run.steps.isEmpty ? run.fresh != 0 : run.lastStepCountedBySink
+    if run.failure == nil, reached, named == run.steps.count,
+      run.steps.count == definition.steps.count, sameSink
+    {
+      counts.output = delivered(run).count
     }
     return counts
   }

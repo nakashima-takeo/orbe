@@ -108,7 +108,7 @@ extension BoardAutomationTests {
   }
 
   /// 自動化が 0 件なら、欄の ↑↓ は何もしない（移る行が無い）。
-  func testWithNoAutoAddsTheFieldIsTheOnlyStop() {
+  func testWithNoAutomationsTheFieldIsTheOnlyStop() {
     let model = BoardModel(
       automation: BoardAutomationModel(
         runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationEmptyFile())),

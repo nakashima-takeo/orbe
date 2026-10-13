@@ -201,6 +201,7 @@ extension DesignSceneFixtures {
           name: "要約", commandLine: "claude -p", ending: "exited 0", count: $0,
           rejected: AutomationRejections())
       },
+      lastStepCountedBySink: !steps.isEmpty && failure == nil,
       sink: count.map {
         .command(
           AutomationCommandReport(commandLine: "~/bin/post.sh", ending: "exited 0", count: $0))
@@ -283,6 +284,7 @@ extension DesignSceneFixtures {
           count: count,
           rejected: AutomationRejections())
       },
+      lastStepCountedBySink: steps.count == boardStepNames.count && failure == nil,
       sink: failure == nil
         ? .taskCandidates(AutomationTaskCandidatesReport(proposed: proposed)) : nil,
       failure: failure)
@@ -339,7 +341,8 @@ extension DesignSceneFixtures {
       AutomationRun(
         startedAt: automationAt(9, 0, daysAgo: daysAgo),
         endedAt: automationAt(9, 1, daysAgo: daysAgo), trigger: .schedule, source: nil,
-        fresh: nil, steps: [], sink: .taskCandidates(AutomationTaskCandidatesReport(proposed: 1)),
+        fresh: nil, steps: [], lastStepCountedBySink: false,
+        sink: .taskCandidates(AutomationTaskCandidatesReport(proposed: 1)),
         failure: nil)
     }
     return Automation(

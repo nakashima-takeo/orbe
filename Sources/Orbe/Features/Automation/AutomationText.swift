@@ -1,6 +1,6 @@
 import Foundation
 
-/// 自動追加を人に見せる文（時刻・回の要約・いつ・取得元と処理の段の行の並び）。何をどの順に、どこを原文として出すかまでを決め、
+/// 自動化を人に見せる文（時刻・回の要約・いつ・取得元と処理の段の行の並び）。何をどの順に、どこを原文として出すかまでを決め、
 /// 描き方（字の大きさ・箱）は使う画面が決める。暦日は渡された今日とタイムゾーンで決める。
 struct AutomationText {
   let l10n: LocalizationStore
@@ -11,7 +11,7 @@ struct AutomationText {
   /// 裏で走るもの（使えるツール・作業ディレクトリ・コマンド）を、画面でいつも確かめられるため。
   enum Line: Equatable {
     case plain(String)
-    case source(String)
+    case verbatim(String)
   }
 
   /// 「9:12」。
@@ -85,10 +85,10 @@ struct AutomationText {
       lines = [
         .plain([l10n.string(.automationAgentFetch), agent.cli, model].joined(separator: " · ")),
         .plain(l10n.string(.automationTools) + "  " + agent.tools.joined(separator: ", ")),
-        .source(agent.request),
+        .verbatim(agent.request),
       ]
     case .command(let command):
-      lines = [.plain(l10n.string(.automationCommand)), .source(command.script)]
+      lines = [.plain(l10n.string(.automationCommand)), .verbatim(command.script)]
       lines += directory(command)
     }
     lines.append(.plain(coverage(source.coverage)))
@@ -104,12 +104,12 @@ struct AutomationText {
         return [
           .plain(
             [step.name, agent.cli, definition.model(of: agent, at: index)].joined(separator: " · ")),
-          .source(agent.instruction),
+          .verbatim(agent.instruction),
         ]
       case .command(let command):
         return [
           .plain([step.name, l10n.string(.automationCommand)].joined(separator: " · ")),
-          .source(command.script),
+          .verbatim(command.script),
         ] + directory(command)
       }
     }

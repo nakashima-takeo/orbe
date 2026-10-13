@@ -97,7 +97,7 @@ struct TaskPaletteAutomationContents: View {
     ForEach(Array(lines.enumerated()), id: \.offset) { _, value in
       switch value {
       case .plain(let value): line(value)
-      case .source(let value): quote(value)
+      case .verbatim(let value): quote(value)
       }
     }
   }

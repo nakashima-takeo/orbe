@@ -50,7 +50,7 @@ final class AutomationStoreTests: OrbeTestCase {
       source: AutomationStepReport(
         name: nil, commandLine: "fetch", ending: "exited 0", count: 0,
         rejected: AutomationRejections()),
-      fresh: 0, steps: [], sink: nil, failure: failure)
+      fresh: 0, steps: [], lastStepCountedBySink: false, sink: nil, failure: failure)
   }
 
   /// 確定した回の出力先の記録。

@@ -20,7 +20,7 @@ extension BoardAutomationTests {
     return { asks }
   }
 
-  func testEnterInTheFieldAsksForANewAutoAddAndEmptiesTheField() {
+  func testEnterInTheFieldAsksForANewAutomationAndEmptiesTheField() {
     let model = board()
     let asks = recording(model)
     let window = mount(model)
@@ -35,7 +35,7 @@ extension BoardAutomationTests {
   }
 
   /// ⌘↵ は選んでいる自動化の直しをその場で頼み、焦点は一覧に残る。押し続けても 1 回。
-  func testCommandEnterAsksToFixTheSelectedAutoAddAtOnce() throws {
+  func testCommandEnterAsksToFixTheSelectedAutomationAtOnce() throws {
     let model = board()
     let automation = model.automation
     let asks = recording(model)
@@ -52,7 +52,7 @@ extension BoardAutomationTests {
   }
 
   /// 選んでいる自動化が頼む前に消えていたら、係へ渡さずに赤で断る。
-  func testAFixWhoseAutoAddWasDeletedIsRefused() throws {
+  func testAFixWhoseAutomationWasDeletedIsRefused() throws {
     let model = board()
     let automation = model.automation
     let asks = recording(model)
