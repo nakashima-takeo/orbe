@@ -130,8 +130,14 @@ extension TaskPaletteModel {
     switch press.key {
     case .upArrow: moveField(-1)
     case .downArrow: moveField(1)
-    case .leftArrow: if !changeValue(-1) { leaveDetail() }
-    case .rightArrow: changeValue(1)
+    case .leftArrow, .rightArrow:
+      // 押し続けたキーリピートで、ステータスが完了に入って待ちを消さない。
+      if stop == .field(.status), press.phase != .down { break }
+      if press.key == .rightArrow {
+        changeValue(1)
+      } else if !changeValue(-1) {
+        leaveDetail()
+      }
     case .return: activate(stop, press)
     case .space:
       if press.phase == .down, let task = selectedTask { toggleDone(task.id) }

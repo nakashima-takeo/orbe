@@ -131,10 +131,12 @@ extension TaskPaletteModel {
     error = nil
     switch field {
     case .status:
-      // 表の状態ではなくストアのステータスを一周する（待ちのタスクの札は元のステータス）。
-      let options: [TaskItem.Status] = [.todo, .inProgress, .done]
-      let current = options.firstIndex(of: task.status)!
-      setStatus(options[(current + direction + options.count) % options.count])
+      // 表の状態ではなくストアのステータスを動かす（待ちのタスクの札は元のステータス）。完了は待ちを消すので、
+      // 一周させず端で止め、未着手からの ← で完了に入らないようにする。
+      let options = TaskItem.Status.allCases
+      let index = options.firstIndex(of: task.status)!
+      let next = options[min(max(index + direction, 0), options.count - 1)]
+      if next != task.status { setStatus(next) }
     case .priority:
       let options: [TaskItem.Priority] = [.high, .medium, .low]
       let index = options.firstIndex(of: task.priority)!

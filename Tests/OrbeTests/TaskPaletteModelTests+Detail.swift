@@ -56,9 +56,11 @@ extension TaskPaletteModelTests {
 
   // MARK: - 選択式の値
 
-  func testStatusChoiceCyclesTodoInProgressDoneAndStaysOnTheTask() throws {
+  func testStatusChoiceStepsTodoInProgressDoneStopsAtTheEndsAndStaysOnTheTask() throws {
     let palette = detailOfFirst()
 
+    palette.changeValue(-1)
+    XCTAssertEqual(try storedTask(palette, 1).status, .todo, "未着手の ← は完了に入らない")
     palette.changeValue(1)
     XCTAssertEqual(try storedTask(palette, 1).status, .inProgress)
     palette.changeValue(1)
@@ -66,9 +68,9 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.area, .detail(.field(.status)), "完了に入っても右の欄に居続ける")
     XCTAssertEqual(palette.selectedTask?.id, 1)
     palette.changeValue(1)
-    XCTAssertEqual(try storedTask(palette, 1).status, .todo)
-    palette.changeValue(-1)
     XCTAssertEqual(try storedTask(palette, 1).status, .done)
+    palette.changeValue(-1)
+    XCTAssertEqual(try storedTask(palette, 1).status, .inProgress)
   }
 
   func testPriorityChoiceStepsHighMediumLowAndStopsAtTheEnds() throws {
