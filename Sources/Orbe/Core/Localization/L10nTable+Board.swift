@@ -19,8 +19,12 @@ extension L10n {
     .boardOutputTaskCandidates: ("タスク候補", "Task candidates"),
     .boardOutputCommand: ("コマンド", "Command"),
     .boardOutputReport: ("報告", "Report"),
-    .boardOutputNotifyMenuBar: ("通知：メニューバー", "Notify: menu bar"),
-    .boardOutputNotifyNotificationCenter: ("通知：通知センター", "Notify: Notification Center"),
+    .boardOutputAgent: ("agent", "Agent"),
+    .boardOutputNotify: ("通知：%@", "Notify: %@"),
+    .boardNotifyTitle: ("通知", "Notifications"),
+    .boardNotifyOff: ("通知しない", "Off"),
+    .boardNotifyMenuBar: ("メニューバー", "Menu bar"),
+    .boardNotifyNotificationCenter: ("通知センター", "Notification Center"),
     .boardOutputTally: (
       "これまでに採用 %1$lld件 / 見送り %2$lld件", "So far %1$lld accepted / %2$lld dismissed"
     ),
@@ -33,6 +37,8 @@ extension L10n {
     .boardRunNoneAdded: ("追加なし", "none added"),
     .boardRunDone: ("完了", "done"),
     .boardRunNothingToReport: ("報告なし", "nothing to report"),
+    .boardRunNothingDone: ("何もしなかった", "nothing done"),
+    .boardRunNothingDoneBecause: ("何もしなかった：%@", "nothing done: %@"),
     .boardRunMark: ("%1$@ に%2$@", "%2$@ at %1$@"),
     .boardRunMarkAdded: ("%1$@ に %2$lld件を追加", "added %2$lld at %1$@"),
     .boardRunMarkReported: ("%@ に報告", "reported at %@"),
@@ -45,15 +51,17 @@ extension L10n {
       "自分宛ての Slack DM を10分ごとに確認して、依頼だけをタスク候補にする",
       "Check my Slack DMs every 10 minutes and make only the requests task candidates"
     ),
-    .boardExampleGitHub: (
-      "毎日 9:00 と 13:00 に、レビューを頼まれた GitHub の PR をタスク候補にする",
-      "At 9:00 and 13:00 every day, make the GitHub PRs I’m asked to review task candidates"
+    .boardExampleReviewDigest: (
+      "平日 9:00 に、レビュー待ちの PR をまとめて Slack の #dev-me に投稿する",
+      "At 9:00 on weekdays, post a digest of the PRs waiting for my review to #dev-me on Slack"
     ),
     .boardExampleDailyNote: (
       "毎晩23時に ~/bin/daily-note.sh を実行する", "Run ~/bin/daily-note.sh every night at 23:00"
     ),
     .boardHintSelect: ("移動", "move"),
     .boardHintToList: ("一覧へ", "to list"),
+    .boardHintChoose: ("決定", "Choose"),
+    .boardHintBack: ("戻る", "Back"),
     .boardAskPlaceholder: ("自動化したいことを入力（例：%@）", "Describe what to automate (e.g. %@)"),
     .boardAskHint: ("依頼する", "ask"),
     .boardAskFixHint: ("修正を依頼", "ask to fix"),

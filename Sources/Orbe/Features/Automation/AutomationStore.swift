@@ -204,6 +204,9 @@ import Observation
     case .taskCandidates: try AutomationTaskCandidates.check(definition)
     case .command(let command): try AutomationCommandSinkRun.check(command)
     case .report: try AutomationReportSinkRun.check(definition)
+    case .agent(let agent):
+      try checkAgent(agent.cli, model: agent.model, "sink")
+      try AutomationAgentSinkRun.check(agent)
     }
     do throws(BackgroundJobError) {
       try definition.trigger.validate()
@@ -219,6 +222,7 @@ import Observation
     case .taskCandidates: AutomationTaskCandidates.reviewsAfterRework
     case .command: AutomationCommandSinkRun.reviewsAfterRework
     case .report: AutomationReportSinkRun.reviewsAfterRework
+    case .agent: AutomationAgentSinkRun.reviewsAfterRework
     }
   }
 
@@ -251,7 +255,8 @@ import Observation
     }
   }
 
-  /// モデルは省略できる（既定は `AutomationDefinition.model`）。書くなら空でないこと。
+  /// モデルは省略できる（既定は段・取得元なら `AutomationDefinition.model`、出力先の agent なら
+  /// `AutomationSinkAgent.resolvedModel`）。書くなら空でないこと。
   private static func checkAgent(_ cli: String, model: String?, _ role: String)
     throws(AutomationError)
   {
@@ -264,10 +269,9 @@ import Observation
     if let model, isBlank(model) { throw .invalid("\(role): model is empty") }
   }
 
-  /// 取得役は外から届いた文面を読むので、書き込みの手段を渡さないよう、使えるツールを名指しした MCP のツールに限る。
-  /// 文字はツール名に使えるもの（英数字・`_`・`-`）だけ——`,` を通すと `--allowedTools` で連結されてサーバー単位の許可に
-  /// なり、空白も同じく区切りになる。
-  private static func isMCPToolName(_ name: String) -> Bool {
+  /// MCP のツールの完全名（`mcp__<サーバー>__<ツール>`）か。文字はツール名に使えるもの（英数字・`_`・`-`）だけ——`,` を
+  /// 通すと `--allowedTools` で連結されてサーバー単位の許可になり、空白も同じく区切りになる。
+  static func isMCPToolName(_ name: String) -> Bool {
     guard name.hasPrefix("mcp__"),
       name.unicodeScalars.allSatisfy({
         ("a"..."z").contains($0) || ("A"..."Z").contains($0) || ("0"..."9").contains($0)

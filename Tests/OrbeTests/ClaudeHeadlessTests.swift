@@ -39,6 +39,27 @@ final class ClaudeHeadlessTests: OrbeTestCase {
     XCTAssertTrue(args.contains("--no-session-persistence"))
   }
 
+  /// `Bash(<接頭>:*)` の規則は、ツール名だけを `--tools` に（重ねず）、規則そのものを `--allowedTools` に渡す——Bash を持たせて
+  /// 名指しの接頭のコマンドだけを許す。MCP を含まなければ閉じたまま。
+  func testBashRulesGiveBashButAllowOnlyTheNamedPrefixes() {
+    XCTAssertEqual(
+      ClaudeHeadless.arguments(
+        model: "sonnet", tools: ["Bash(gh search prs:*)", "Bash(date -u:*)"]),
+      [
+        "-p", "--model", "sonnet", "--tools", "Bash", "--allowedTools",
+        "Bash(gh search prs:*),Bash(date -u:*)", "--permission-mode", "dontAsk",
+        "--no-session-persistence", "--output-format", "stream-json", "--verbose",
+        "--setting-sources", "", "--strict-mcp-config",
+      ])
+
+    let mixed = ClaudeHeadless.arguments(
+      model: "sonnet", tools: ["Bash(gh search prs:*)", "mcp__slack__post"])
+    XCTAssertEqual(
+      Array(mixed[3...6]),
+      ["--tools", "Bash", "--allowedTools", "Bash(gh search prs:*),mcp__slack__post"])
+    XCTAssertFalse(mixed.contains("--strict-mcp-config"), "MCP を混ぜると利用者の MCP サーバーを読む")
+  }
+
   /// 利用者の CLAUDE.md と auto memory は、設定を読む呼び出しでも混ぜない（外部の文面を判定する役の判断が揺れる）。
   func testUserMemoryIsNeverLoaded() {
     XCTAssertEqual(

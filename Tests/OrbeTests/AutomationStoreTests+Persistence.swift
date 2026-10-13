@@ -31,7 +31,7 @@ extension AutomationStoreTests {
 extension AutomationStoreTests {
   private static let frozenFile = #"""
     {
-      "version": 1, "nextAutomationId": 5, "nextProposalId": 5,
+      "version": 1, "nextAutomationId": 6, "nextProposalId": 5,
       "automations": [
         {
           "id": 1,
@@ -167,6 +167,49 @@ extension AutomationStoreTests {
               ],
               "lastStepCountedBySink": true,
               "sink": {"kind": "report", "text": "開いている PR は 2 件。\n- #412 レビュー待ち"}
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "definition": {
+            "name": "レビュー待ちの PR を Slack へ",
+            "trigger": {"cron": "0 9 * * *"},
+            "steps": [],
+            "sink": {
+              "kind": "agent", "agent": "claude", "model": "sonnet",
+              "tools": ["Bash(gh search prs:*)", "mcp__slack__post"],
+              "request": "レビュー待ちの PR をまとめて Slack に投稿して"
+            },
+            "notify": "notificationCenter"
+          },
+          "paused": false, "reviewAll": false,
+          "createdAt": "2026-10-01T12:00:00.000Z",
+          "lastRunAt": "2026-10-03T00:00:00.000Z",
+          "lastSucceededAt": "2026-10-02T00:00:00.000Z",
+          "lastFetched": [],
+          "runs": [
+            {
+              "startedAt": "2026-10-03T00:00:00.000Z", "endedAt": "2026-10-03T00:01:00.000Z",
+              "trigger": "schedule", "steps": [], "lastStepCountedBySink": false,
+              "sink": {"kind": "agent", "commandLine": "claude -p --model sonnet", "ending": "exited 1"},
+              "failure": "the sink ended: exited 1: boom"
+            },
+            {
+              "startedAt": "2026-10-02T00:00:00.000Z", "endedAt": "2026-10-02T00:01:10.000Z",
+              "trigger": "schedule", "steps": [], "lastStepCountedBySink": false,
+              "sink": {
+                "kind": "agent", "commandLine": "claude -p --model sonnet", "ending": "exited 0",
+                "text": "レビュー待ちの PR 2 件を投稿した。"
+              }
+            },
+            {
+              "startedAt": "2026-10-01T23:00:00.000Z", "endedAt": "2026-10-01T23:00:40.000Z",
+              "trigger": "schedule", "steps": [], "lastStepCountedBySink": false,
+              "sink": {
+                "kind": "agent", "commandLine": "claude -p --model sonnet", "ending": "exited 0",
+                "nothing": "レビュー待ちの PR は無かった"
+              }
             }
           ]
         }

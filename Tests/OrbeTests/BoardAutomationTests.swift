@@ -22,6 +22,8 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     static let enter: UInt16 = 36
     static let down: UInt16 = 125
     static let up: UInt16 = 126
+    static let left: UInt16 = 123
+    static let right: UInt16 = 124
   }
 
   // 見本『Home』の 4 件（DesignSceneFixtures+Board）。
@@ -38,10 +40,12 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     super.tearDown()
   }
 
-  func board() -> BoardModel {
+  /// `automations` を省くと見本の 4 件。
+  func board(_ automations: [Automation]? = nil) -> BoardModel {
     BoardModel(
       automation: BoardAutomationModel(
-        runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationFile())),
+        runner: DesignSceneFixtures.automationRunner(
+          DesignSceneFixtures.boardAutomationFile(automations))),
       parts: [.automation])
   }
 
@@ -69,6 +73,14 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
 
   func up(_ window: NSWindow) {
     send(Key.up, "\u{F700}", [.numericPad, .function], to: window)
+  }
+
+  func right(_ window: NSWindow) {
+    send(Key.right, "\u{F703}", [.numericPad, .function], to: window)
+  }
+
+  func left(_ window: NSWindow) {
+    send(Key.left, "\u{F702}", [.numericPad, .function], to: window)
   }
 
   // MARK: - 並び

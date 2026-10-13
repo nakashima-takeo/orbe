@@ -72,7 +72,7 @@ struct AutomationText {
   private static func proposed(_ run: AutomationRun) -> Int {
     switch run.sink {
     case .taskCandidates(let report): report.proposed
-    case .command, .report, nil: 0
+    case .command, .report, .agent, nil: 0
     }
   }
 

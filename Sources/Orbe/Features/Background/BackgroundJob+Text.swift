@@ -52,6 +52,7 @@ extension BackgroundStartFailure {
       "\(cli) cannot run in the background: \(reason.message)"
     case .agentNotFound(let cli): "\(cli) is not installed"
     case .directoryMissing(let directory): "directory missing: \(directory)"
+    case .workDirectoryFailed(let directory): "could not create the work directory: \(directory)"
     case .launchFailed(let code): "launch failed: \(String(cString: strerror(code)))"
     }
   }

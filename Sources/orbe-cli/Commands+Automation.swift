@@ -24,12 +24,14 @@ let automationUsage = """
 
   An automation runs trigger -> source (optional) -> steps (zero or more)
   -> sink. Only items not seen in its previous run reach the steps. There
-  are three sinks. Task candidates: the last step proposes tasks for you to
+  are four sinks. Task candidates: the last step proposes tasks for you to
   accept or dismiss in Orbe; it needs a source (currentSet or newArrivals)
   and at least one step, and a proposal belongs to its link across all
   automations. Command: a command receives the lines that reach the sink;
   the source and the steps are optional. Report: the text the last step
   writes is kept as the result of the run; it needs at least one step.
+  Agent: a throwaway claude does a job with the tools it names; the source
+  and the steps are optional.
   set reads the definition from stdin, the same JSON as the definition of
   the MCP tool set_automation:
   {"name", "trigger", "source", "steps", "sink", "notify"}; source and
@@ -53,7 +55,9 @@ let automationUsage = """
              tools, whole servers and wildcards are refused. Name only
              tools that read the source (never ones that send, update or
              delete, nor Orbe's own tools): the name is checked, not what
-             the tool does.
+             the tool does. Background agents start in a fresh empty directory
+             on each run, so MCP servers registered to a directory (claude's
+             local and project scopes) are unavailable.
              A command prints one JSON object per item:
              {"id","link","body","time"} (link http(s), time ISO 8601),
              and fails with a non-zero exit or a single {"error": "…"} line.
@@ -81,7 +85,9 @@ let automationUsage = """
              in that text can reshape them, and Orbe does not check what they
              say: never evaluate their values as shell, nor pass them to an
              agent (claude -p and the like). To have an agent read them, make
-             it a step (Orbe runs a step agent without tools).
+             it a step (Orbe runs a step agent without tools). To have
+             something done with tools, use the agent sink: Orbe's limits do
+             not apply to claude -p started inside a command sink.
     sink     {"kind": "taskCandidates"}
              An agent last step is told the output form by Orbe: write in
              its instruction what makes a task and how to title and date
@@ -118,21 +124,57 @@ let automationUsage = """
              2000 characters) in the run record; a command last step prints
              it on stdout. Its first line shows on the board's heading and in
              the notification. An agent last step is told to keep it short and
-             to print nothing when there is nothing to report; a run with no
-             report succeeds as "nothing to report". Editing the definition
-             does not make the next run process every fetched item again.
+             to print only {"nothing": "…"} when there is nothing to report;
+             a run with no report succeeds as "nothing to report". Editing
+             the definition does not make the next run process every fetched
+             item again.
+             {"kind": "agent", "agent": "claude", "model": "…",
+              "tools": ["Bash(gh search prs:*)", "mcp__<server>__<tool>"],
+              "request": "…"}
+             Each run starts a throwaway claude in the background (no tab)
+             with Orbe's fixed frame and the request, and only the named
+             tools. It starts only when at least one line reaches the sink (on
+             every trigger with neither a source nor steps); the lines and
+             their count never reach the agent, so have it look up its targets
+             itself. tools names full MCP tool names and
+             Bash(<command prefix>:*) rules only (the prefix has no , ( ) *);
+             bare built-in tools, whole servers and wildcards are refused.
+             Name as few as possible. Each run starts in a fresh empty
+             directory. With Bash rules only, claude reads none of your
+             settings, and it refuses commands that read a file outside that
+             directory given as an argument, even when they match a named
+             rule; to read such a file, name a command that reads it, such as
+             a script. Once an MCP tool is named, it reads your settings to
+             reach your MCP servers, so the tools you always allow in claude
+             (MCP tools and Bash commands) and your hooks apply too, and it
+             can read under your settings' additionalDirectories without
+             naming anything. Instructions hidden in outside text the agent
+             reads with its tools can make it use a writing tool it was given.
+             Without model it runs sonnet; it is cut off after 10 minutes, or
+             3 minutes without output. Its final reply is kept as the result
+             of the run (the first line shows on the board's heading and in
+             the notification). Orbe tells it to reply only {"nothing": "…"}
+             when there is nothing to do; a run whose reply ends with that
+             line delivers nothing (an empty reply counts as done). A run
+             fails when the agent replies only {"error": "…"}, crashes, hits
+             its limit, or a named MCP tool is unavailable. A failed run, or
+             one Orbe did not finish, starts the agent again on the next run
+             (a post can be doubled). Editing the definition does not make the
+             next run process every fetched item again. The request stays in
+             automations.json; never put secrets in it.
     notify   "menuBar" or "notificationCenter"  (any sink; omit to stay
              silent)
              When a run delivers something (a proposal, a command run, a
-             report), or on the first of consecutive failed runs, the
-             automation's name and the result line show with a sound: in the
-             menu bar, or in macOS Notification Center. Notification Center
-             keeps one notification per automation; a new run replaces it.
-             Setting notificationCenter makes macOS ask for Orbe's
-             notification permission if it is not decided yet; without
-             permission, the run shows in the menu bar. Clicking either opens
-             the automation on Home's board. Runs that deliver nothing are not
-             notified. Changing only notify does not stop a running run.
+             report, an agent run that had something to do), or on the first
+             of consecutive failed runs, the automation's name and the result
+             line show with a sound: in the menu bar, or in macOS Notification
+             Center. Notification Center keeps one notification per
+             automation; a new run replaces it. Setting notificationCenter
+             makes macOS ask for Orbe's notification permission if it is not
+             decided yet; without permission, the run shows in the menu bar.
+             Clicking either opens the automation on Home's board. Runs that
+             deliver nothing are not notified. Changing only notify does not
+             stop a running run.
   To edit, take .definition from list --json, change it and pipe it whole:
     orb automation list --json | jq '.automations[] |
       select(.automationId==3) | .definition' | … | orb automation set 3
@@ -147,7 +189,8 @@ let automationUsage = """
   list prints one automation per line: id, state (active / paused /
   running), name, trigger, next run, last run (from the run record:
   fetched and new when it has a source, then proposed, the command's
-  ending, reported or nothing to report when the sink recorded one).
+  ending, reported or nothing to report, or the agent's ending when the
+  sink recorded one).
   Per-step counts are in list --json.
   proposals prints one proposal per line: id, state, automation id, due,
   title, link.
@@ -220,7 +263,7 @@ private func triggerCell(_ raw: Any?) -> String? {
 
 /// 前回の要約。回の記録だけから組む: `<開始> failed: <理由>`、または `<開始>` に、取得元の記録があれば
 /// `12 fetched, 3 new`、出力先の記録があれば `1 proposed`（タスク候補）・`command exited 0`（コマンド）・`reported` か
-/// `nothing to report`（報告）を続ける。
+/// `nothing to report`（報告）・`agent exited 0`（agent）を続ける。
 private func runCell(_ run: [String: Any]) -> String {
   let started = run["startedAt"].map(display) ?? "?"
   if let failure = run["failure"] as? String { return "\(started) failed: \(failure)" }
@@ -234,6 +277,7 @@ private func runCell(_ run: [String: Any]) -> String {
     case "taskCandidates": parts.append("\(sink["proposed"].map(display) ?? "0") proposed")
     case "command": parts.append("command \(sink["ending"].map(display) ?? "?")")
     case "report": parts.append(sink["text"] == nil ? "nothing to report" : "reported")
+    case "agent": parts.append("agent \(sink["ending"].map(display) ?? "?")")
     default: break
     }
   }
