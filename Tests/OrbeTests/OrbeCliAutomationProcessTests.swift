@@ -94,7 +94,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
       Int(
         run(
           control, ["set"],
-          stdin: #"{"name": "PR を Slack へ", "trigger": {"cron": "0 9 * * *"}, "steps": [], "#
+          stdin: #"{"name": "PR を Slack へ", "trigger": {"cron": "0 9 * * 1-5"}, "steps": [], "#
             + #""sink": {"kind": "agent", "tools": ["Bash(gh search prs:*)"], "request": "投稿して"}}"#
         )))
     var record = AutomationStoreTests.run(at: Date())

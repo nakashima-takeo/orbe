@@ -129,7 +129,7 @@ enum HomeTemplate {
     `~/bin/daily-note.sh` を実行する）。
     - 報告: 最後の段が書いた短い文章を、その回の結果として残す（例: 毎日 18 時に開いている PR を要約する）。1 行目がボードの\
     見出しと通知に出る。言うことが無い回は「報告なし」になり、知らせない。
-    - agent: 回ごとに裏で使い捨ての claude を起こし、定義の依頼文と名指ししたツールだけで仕事をさせる（例: 毎日 9:00 に、\
+    - agent: 回ごとに裏で使い捨ての claude を起こし、定義の依頼文と名指ししたツールだけで仕事をさせる（例: 平日 9:00 に、\
     レビュー待ちの PR をまとめて Slack の自分宛てに投稿する）。取得元か段があれば届いた行が 1 行以上ある回だけ、無ければトリガーの\
     たびに起きる。ツールを使って何かをしてほしいときはこれを使い、コマンドの出力先の中で `claude -p` を起こさない（Orbe の\
     絞り込みが掛からない）。応答の 1 行目がボードの見出しと通知に出る。することが無い回は agent がそう申告して終わり、知らせない。
@@ -168,7 +168,7 @@ enum HomeTemplate {
     open PRs every day at 18:00). Its first line shows on the board's heading and in the notification. A run \
     with nothing to report shows "nothing to report", and nobody is notified.
     - Agent: each run starts a throwaway claude in the background that does the job with only the \
-    definition's request and the tools it names (e.g. every day at 9:00, post a digest of the PRs waiting for \
+    definition's request and the tools it names (e.g. at 9:00 on weekdays, post a digest of the PRs waiting for \
     my review to myself on Slack). With a source or steps it starts only when at least one line arrives; \
     without them, on every trigger. Use it when you want something done with tools; never start `claude -p` \
     inside a command sink (Orbe's limits do not apply there). The first line of its reply shows on the \

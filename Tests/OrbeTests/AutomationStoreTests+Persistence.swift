@@ -174,7 +174,7 @@ extension AutomationStoreTests {
           "id": 5,
           "definition": {
             "name": "レビュー待ちの PR を Slack へ",
-            "trigger": {"cron": "0 9 * * *"},
+            "trigger": {"cron": "0 9 * * 1-5"},
             "steps": [],
             "sink": {
               "kind": "agent", "agent": "claude", "model": "sonnet",

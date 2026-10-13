@@ -13,13 +13,14 @@ extension BoardAutomationSummaryTests {
   func testAnAgentSinkShowsItsModelRequestAndTools() throws {
     let summary = BoardAutomationSummary(DesignSceneFixtures.boardAgentExample(), text: text)
     XCTAssertEqual(summary.output, "agent")
+    XCTAssertEqual(summary.when, "平日 9:00")
     XCTAssertFalse(summary.counted, "取得元が無ければ件数を持たない")
     let output = try XCTUnwrap(summary.nodes.last)
     XCTAssertEqual(output.role, .output)
     XCTAssertEqual(output.title, "agent")
     XCTAssertEqual(output.means, .model("sonnet"), "省略したモデルは解いて出す")
     XCTAssertEqual(
-      output.verbatim, "自分がレビュー待ちの open な PR を gh で調べてまとめ、Slack の #dev-me に投稿して。土日なら何もしない。")
+      output.verbatim, "自分がレビュー待ちの open な PR を gh で調べてまとめ、Slack の #dev-me に投稿して。")
     XCTAssertEqual(output.tools, ["Bash(gh search prs:*)", "mcp__slack__slack_send_message"])
     XCTAssertEqual(output.notes, ["通知：メニューバー"])
     XCTAssertEqual(summary.nodes.map(\.role), [.trigger, .output])
@@ -35,8 +36,8 @@ extension BoardAutomationSummaryTests {
     XCTAssertEqual(
       summary.runs[2].result,
       "失敗：the sink agent reported an error: mcp__slack__slack_send_message was refused")
-    XCTAssertEqual(summary.mark, "9:00 に完了", "応答があっても右端は「完了」")
-    XCTAssertEqual(summary.last, "前回 今日 9:00　レビュー待ちの PR 2 件を #dev-me に投稿した。")
+    XCTAssertEqual(summary.mark, "10/3 9:00 に完了", "応答があっても右端は「完了」")
+    XCTAssertEqual(summary.last, "前回 10/3 9:00　レビュー待ちの PR 2 件を #dev-me に投稿した。")
     XCTAssertEqual(summary.latestLine, "レビュー待ちの PR 2 件を #dev-me に投稿した。")
   }
 
@@ -50,7 +51,7 @@ extension BoardAutomationSummaryTests {
       AutomationAgentReport(commandLine: "claude -p --model sonnet", ending: "exited 0", text: nil))
     let done = BoardAutomationSummary(automation, text: text)
     XCTAssertEqual(done.nodes.last?.count, 1)
-    XCTAssertEqual(done.mark, "9:00 に完了")
+    XCTAssertEqual(done.mark, "10/3 9:00 に完了")
     XCTAssertEqual(done.latestLine, "完了")
 
     automation.runs[0].sink = .agent(
@@ -58,8 +59,8 @@ extension BoardAutomationSummaryTests {
         commandLine: "claude -p --model sonnet", ending: "exited 0", text: nil, nothing: "無い"))
     let quiet = BoardAutomationSummary(automation, text: text)
     XCTAssertEqual(quiet.nodes.last?.count, 0)
-    XCTAssertEqual(quiet.mark, "9:00 に何もしなかった")
-    XCTAssertEqual(quiet.last, "前回 今日 9:00　何もしなかった")
+    XCTAssertEqual(quiet.mark, "10/3 9:00 に何もしなかった")
+    XCTAssertEqual(quiet.last, "前回 10/3 9:00　何もしなかった")
 
     automation.runs.insert(
       AutomationRun(
