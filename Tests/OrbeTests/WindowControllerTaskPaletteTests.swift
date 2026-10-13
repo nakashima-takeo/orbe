@@ -5,11 +5,11 @@ import XCTest
 @testable import Orbe
 
 /// ⌘⇧X のタスク画面を実 `WindowController` から開き・閉じる配線を固定する。開いた workspace の写しと、
-/// 画面を閉じる・別の画面へ差し替わるときの打ちかけの編集の確定。
+/// 画面を閉じる・別の画面へ差し替わるときの打ちかけの編集の確定、⌘↵ で ⌘T の画面へ差し替わること。
 ///
 /// 壊れると何が起きるか: タブが 0 枚の workspace でタスク画面が開かない。画面で足したタスクが、見ている
 /// workspace ではなく別の workspace に付く。受信の提案から足したタスクが Home に付かず、秘書がそこから始められない。詳細を打ちかけのまま esc 以外で画面を閉じたり ⌘⌘ で
-/// 差し替えたりすると、打った内容が黙って消える。
+/// 差し替えたりすると、打った内容が黙って消える。⌘↵ で開いた ⌘T がそのタスクに結び付かず、タスクの文脈の無い agent が起きる。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerTaskPaletteTests: OrbeTestCase {
@@ -120,6 +120,20 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
 
     XCTAssertFalse(wc.handleWindowKeyCommand(.showWorktreePalette))
     XCTAssertEqual(wc.presentedOverlay, .taskPalette)
+  }
+
+  /// タスクの agent を開く（⌘↵）と、タスク画面を畳んで、そのタスクのための ⌘T に差し替わる。
+  func testOpeningTheAgentOfATaskSwapsToTheWorktreePaletteForThatTask() throws {
+    let wc = try launchOnAnEmptyWorkspace()
+    let palette = try openTaskPalette(wc)
+    let task = try palette.store.add(TaskDraft(title: "見積もりを出す"))
+    palette.reconcile()
+
+    palette.openAgent(forTask: task.id)
+
+    XCTAssertEqual(wc.presentedOverlay, .worktreePalette)
+    XCTAssertNil(wc.model.taskPalette, "タスク画面は畳まれる")
+    XCTAssertEqual(wc.model.worktreePalette?.taskContextID, task.id)
   }
 
   func testClosingTheScreenCommitsTheEditInProgress() throws {
