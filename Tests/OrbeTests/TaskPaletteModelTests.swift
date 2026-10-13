@@ -97,6 +97,8 @@ final class TaskPaletteModelTests: OrbeTestCase {
 
     XCTAssertEqual(try storedTask(palette, 2).status, .done)
     XCTAssertEqual(palette.store.tasks.count, 3, "追加はしない")
+    XCTAssertEqual(
+      palette.rows.compactMap(\.selectableID), [.task(2)], "入力で組み直した表でも、完了にした行は残る")
   }
 
   // MARK: - 完了・削除
