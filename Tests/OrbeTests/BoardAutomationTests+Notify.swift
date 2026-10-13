@@ -9,24 +9,11 @@ import XCTest
 /// space・↵・⌘⌫ が下の一覧へ抜けて、止める・今すぐ実行・削除が起きる。選んでいる行が替わってもメニューが残り、別の自動化の
 /// 横で決めてしまう。外のクリックが下の行まで届き、閉じるつもりで選択が動く。
 extension BoardAutomationTests {
-  private enum NotifyKey {
-    static let left: UInt16 = 123
-    static let right: UInt16 = 124
-  }
-
   /// 先頭の行（失敗の Backlog）を選んで開いたときの、メニューの行と外の窓の中の点（1200×700 の窓）。
   private enum NotifyPoint {
     static let menuBarRow = NSPoint(x: 430, y: 548)
     /// メニューの外で、一覧の 2 行目。
     static let secondRow = NSPoint(x: 120, y: 536)
-  }
-
-  func right(_ window: NSWindow) {
-    send(NotifyKey.right, "\u{F703}", [.numericPad, .function], to: window)
-  }
-
-  func left(_ window: NSWindow) {
-    send(NotifyKey.left, "\u{F702}", [.numericPad, .function], to: window)
   }
 
   private func outputNotes(_ automation: BoardAutomationModel, _ id: Int) -> [String] {
