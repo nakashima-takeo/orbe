@@ -243,7 +243,7 @@ extension TaskPaletteModelTests {
 
   // MARK: - 結び付いている行
 
-  /// ↵ でタスクのタブのそのタスクへ移る。絞り込みと入力は変えず、合わなくてもそのタスクを残して選ぶ。
+  /// ↵ でタスクのタブのそのタスクへ移る。絞り込みと入力は変えず、合わなくてもそのタスクを表に入れて選ぶ。
   func testEnterOnALinkedItemRevealsItsTaskOnTheTasksTab() throws {
     let palette = GitHub.model(
       [
@@ -264,7 +264,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.filter.workspaces, [self.openedWorkspace.id], "絞り込みは緩めない")
     XCTAssertEqual(palette.query, "zzz", "入力も消さない")
     XCTAssertEqual(palette.selectedID, .task(2))
-    XCTAssertEqual(palette.rows.compactMap(\.selectableID), [.task(2)], "合わないタスクを残して見せる")
+    XCTAssertEqual(palette.rows.compactMap(\.selectableID), [.task(2)], "合わないタスクを表に入れる")
   }
 
   /// ⌘⌫ で結び付きを外す（外した項目に記録する）。行は結び付いていない側へ戻り、選択はその行に残る。
@@ -314,7 +314,7 @@ extension TaskPaletteModelTests {
 
   // MARK: - 絞り込み・さらに
 
-  /// 札は入れ切りで、入れるたび・切るたびに一覧の先頭を選ぶ。
+  /// 札はオン・オフで、オンにするたび・オフにするたびに一覧の先頭を選ぶ。
   func testTogglingRelationChipsSelectsTheFirstRow() {
     let palette = GitHub.model(
       [],

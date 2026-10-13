@@ -59,9 +59,10 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
-  /// 表: 完了の札を入れる（完了の行は沈む）・優先度の面を開いて値を入れる（面は開いたまま）・面を閉じる・
-  /// 件名の列で並べてもう一度押して逆にする・右の欄で完了まで巡っても行が残る・↓ で離れると残した行が消える・
-  /// ⇥ で次のタブ、までを撮る。
+  /// 表: 完了の札をオンにする（完了の行は暗い）・優先度のメニューを開いて値をオンにする（メニューは開いたまま）・
+  /// メニューを閉じる・件名の列で並べてもう一度押して逆にする・右の欄で完了まで巡ると行が暗くなって同じ場所に残る・
+  /// ↓ で離れても暗い行は残る・space で完了にした行は選んだまま暗くなる・もう一度 space で戻る・列の見出しを押すと
+  /// 暗い行が消える・⇥ で次のタブ、までを撮る。
   func testTaskPaletteTable() throws {
     let palette = DesignSceneFixtures.taskPaletteModel()
     try flow(
@@ -88,17 +89,20 @@ extension DesignFlowSnapshotTests {
         ),
         ("sorted_title_reversed", { palette.setSort(.title) }),
         (
-          "status_done_kept",
+          "status_done_dimmed",
           {
             palette.enterDetail(); palette.changeValue(1); palette.changeValue(1)
           }
         ),
         (
-          "kept_released",
+          "dimmed_left",
           {
             palette.leaveDetail(); palette.move(1)
           }
         ),
+        ("space_done_dimmed", { palette.submit() }),
+        ("space_undone", { palette.submit() }),
+        ("refreshed", { palette.setSort(.title) }),
         ("next_tab", { palette.setTab(palette.tab.next) }),
       ])
   }

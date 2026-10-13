@@ -14,7 +14,7 @@ enum TaskDueBucket: CaseIterable, Hashable {
   }
 }
 
-/// 値を選んで絞り込む種類（札を押して開く面）。
+/// 値を選んで絞り込む種類（押して開くドロップダウン）。
 enum TaskPaletteFilterKind: CaseIterable, Hashable {
   case workspace, priority, due
 }

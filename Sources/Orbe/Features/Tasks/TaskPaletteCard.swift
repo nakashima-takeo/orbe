@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// タスク画面のカード本体。ヘッダー（❯＋入力欄・タブ）＋選ぶ状態の帯＋本体（左に絞り込みの段と表・右の欄にタスク。
+/// タスク画面のカード本体。ヘッダー（❯＋入力欄・タブ）＋選ぶ状態の帯＋本体（左に絞り込みの行と表・右の欄にタスク。
 /// GitHub タブは左に open な Issue・PR、右の欄に項目。受信タブは棚・提案・詳細の 3 列）＋フッター（主な操作の 1 行・
-/// キーヒント）。絞り込みの面はカードの上に重ねる。焦点の行き先（入力欄 / 右の欄の項目 / 右の欄の編集欄）はモデルの
+/// キーヒント）。絞り込みのメニューはカードの上に重ねる。焦点の行き先（入力欄 / 右の欄の項目 / 右の欄の編集欄）はモデルの
 /// `focusTarget` から一方向に写し、カード内のクリックでも当て直す（⌘T 画面と同じ契約）。
 struct TaskPaletteCard: View {
   @Bindable var model: TaskPaletteModel
@@ -82,7 +82,8 @@ struct TaskPaletteCard: View {
     Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
   }
 
-  /// 開いている絞り込みの面を、その札の直下に重ねる。面の外のクリックは面を閉じるだけで、下へは届かない。
+  /// 開いている絞り込みのメニューを、そのドロップダウンの直下に重ねる。メニューの外のクリックはメニューを閉じるだけで、
+  /// 下へは届かない。
   @ViewBuilder private func filterMenu(_ anchors: [TaskPaletteFilterKind: Anchor<CGRect>])
     -> some View
   {
@@ -184,11 +185,11 @@ struct TaskPaletteCard: View {
 
   /// ヘッダーの高さ。⌘⇧S のヘッダー（上下 16 ＋ 14pt の 1 行）と同じ。札の組はこの中に収まる。
   private static let headerHeight: CGFloat = 48
-  /// 入力欄の箱の高さ（打っている間に地を敷く範囲）。
+  /// 入力欄の背景の高さ（打っている間に地を敷く範囲）。
   private static let inputHeight: CGFloat = 34
 }
 
-/// 入力欄の中の行き先のヒント（「↵ タスクに追加」「⌘↵ agent に任せる」）。キーは枠で囲み、光っている間は accent の
+/// 入力欄のキーの案内（「↵ タスクに追加」「⌘↵ agent に任せる」）。キーは枠で囲み、光っている間は accent の
 /// 枠。クリックで効く。焦点は取らない。
 struct TaskPaletteInputAction: View {
   let key: String

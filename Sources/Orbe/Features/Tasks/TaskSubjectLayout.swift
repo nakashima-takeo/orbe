@@ -34,7 +34,7 @@ struct TaskSubjectLayout: Layout {
   }
 
   /// 子ごとの幅（0 は出さない）。子は番号・タイトル・続く札と補足の順で、`dropOrders` は札の外す順（札でない子は
-  /// nil）。番号は理想の幅、札は理想の幅か 0、タイトルは最小幅を下回らない範囲で残りを取り、札でない補足はその残り。
+  /// nil）。番号は本来の幅、札は本来の幅か 0、タイトルは最小幅を下回らない範囲で残りを取り、札でない補足はその残り。
   func widths(ideals: [CGFloat], dropOrders: [Int?], available: CGFloat) -> [CGFloat] {
     guard ideals.count >= 2 else { return ideals }
     let items = ideals.indices.dropFirst(2).filter { ideals[$0] > 0 }

@@ -11,7 +11,7 @@ enum SecretaryAsk: Equatable {
 
 /// 起こした claude の最初の入力と役目の指示（Orbe が UI の言語で組む）。
 enum SecretaryText {
-  /// 出どころが決める、最初の入力の頭と役目の指示（日・英）。
+  /// 出どころが決める、最初の入力の先頭に付ける語（「依頼: 」）と役目の指示（日・英）。
   private struct Role {
     let head: L10nKey
     let ja: String
@@ -25,8 +25,8 @@ enum SecretaryText {
     }
   }
 
-  /// 最初の入力（出どころの頭を付けた頼み）。頭は中身によらず常に付ける——先頭が `/` の文を claude がスラッシュコマンド
-  /// として実行しないため。頼める中身が無ければ nil。
+  /// 最初の入力（出どころが決める語を先頭に付けた頼み）。その語は中身によらず常に付ける——先頭が `/` の文を claude が
+  /// スラッシュコマンドとして実行しないため。頼める中身が無ければ nil。
   static func firstInput(_ ask: SecretaryAsk, from origin: SecretaryOrigin, l10n: LocalizationStore)
     -> String?
   {

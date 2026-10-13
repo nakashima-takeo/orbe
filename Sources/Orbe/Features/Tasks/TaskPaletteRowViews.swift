@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// タスクのタブの左の一覧。上に絞り込みの段、その下に表の見出しと行。行は `TaskPaletteRows` が組んだ値をそのまま
+/// タスクのタブの左の一覧。上に絞り込みの行、その下に表の見出しと行。行は `TaskPaletteRows` が組んだ値をそのまま
 /// 描き、選択は行の同一性で光らせる。
 struct TaskPaletteList: View {
   @Bindable var model: TaskPaletteModel
@@ -32,7 +32,7 @@ struct TaskPaletteList: View {
     }
   }
 
-  /// 最小の量だけ送る（見えていれば動かない）。入力の行き先は表の行ではないので、表の先頭を見せる。
+  /// 最小の量だけスクロールする（見えていれば動かない）。入力の行き先は表の行ではないので、表の先頭を見せる。
   private func scroll(_ proxy: ScrollViewProxy, to id: TaskPaletteRowID?, _ rows: [TaskPaletteRow])
   {
     guard let id else { return }
@@ -88,7 +88,7 @@ struct TaskPaletteTableColumns<State: View, Title: View, Rest: View>: View {
   }
 }
 
-/// 表の見出し。押すとその列で並べ、並べている列は前景を一段上げて向きの矢印（既定の向きは ↓、逆は ↑）を添える。
+/// 表の見出し。押すとその列で並べ、並べている列は文字を濃くして向きの矢印（既定の向きは ↓、逆は ↑）を添える。
 /// 焦点は取らない。
 struct TaskPaletteTableHeader: View {
   @Bindable var model: TaskPaletteModel
@@ -156,7 +156,8 @@ struct TaskPaletteRowFrame<Content: View>: View {
 }
 
 /// 表のタスクの行。状態の札（クリックで完了 ⇄ 未着手）・件名（主の番号・タイトル・「レビュー」・PR の札・補足）・
-/// 優先度・期限・workspace・作成。縮むのはタイトルが先。完了のタスクは行ごと沈める。
+/// 優先度・期限・workspace・作成。縮むのはタイトルが先。完了か絞り込みに合わない行は中身だけを暗くし、選択の
+/// 地は普段の濃さのまま（space で完了にした結果を、選んだまま確かめられるように）。暗くなる・戻るときはフェードする。
 struct TaskPaletteTaskRowView: View {
   let row: TaskPaletteTaskRow
   let selected: Bool
@@ -167,8 +168,10 @@ struct TaskPaletteTaskRowView: View {
   let onHoverEnter: () -> Void
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
+    let dimmed = row.state == .done || !row.matches
     TaskPaletteTableColumns(
       state: {
         TaskStateChip(state: row.state)
@@ -179,6 +182,7 @@ struct TaskPaletteTaskRowView: View {
       title: { subject },
       rest: { cell($0) }
     )
+    .animation(fade) { $0.opacity(dimmed ? Theme.Opacity.dormant : 1) }
     .frame(height: TaskPaletteRowMetrics.row)
     .background(
       RoundedRectangle(cornerRadius: Theme.Radius.row)
@@ -187,7 +191,12 @@ struct TaskPaletteTaskRowView: View {
     .contentShape(Rectangle())
     .onTapGesture(perform: onTap)
     .onHover { if $0 { onHoverEnter() } }
-    .opacity(row.state == .done ? Theme.Opacity.dormant : 1)
+  }
+
+  private var fade: Animation? {
+    guard !reduceMotion else { return nil }
+    let (p1, p2) = Theme.Motion.easing
+    return .timingCurve(p1.x, p1.y, p2.x, p2.y, duration: Theme.Motion.slow)
   }
 
   private var subject: some View {
@@ -270,7 +279,7 @@ struct TaskPaletteTaskRowView: View {
   }
 }
 
-/// 表の状態の札（同じ幅。未着手と完了は中立、進行中と待ちは状態の色）。
+/// 表に出す状態の札（同じ幅。未着手と完了は中立、進行中と待ちは状態の色）。
 struct TaskStateChip: View {
   let state: TaskItem.DisplayState
   @Environment(\.localization) private var l10n

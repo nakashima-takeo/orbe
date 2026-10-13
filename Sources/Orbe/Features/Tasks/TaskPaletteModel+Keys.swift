@@ -64,7 +64,7 @@ extension TaskPaletteModel {
     return .handled
   }
 
-  /// タスクのタブの一覧の esc。絞り込みの面が開いていればまずそれだけを閉じ、選ぶ状態ならやめ、どちらでもなければ
+  /// タスクのタブの一覧の esc。絞り込みのメニューが開いていればまずそれだけを閉じ、選ぶ状態ならやめ、どちらでもなければ
   /// 画面を閉じる。
   private func escapeTaskList() {
     if openFilterMenu != nil {

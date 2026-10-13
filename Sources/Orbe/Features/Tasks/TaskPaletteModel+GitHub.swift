@@ -142,7 +142,7 @@ extension TaskPaletteModel {
     gitHubList.hoverSelect(id, in: gitHubSelectableIDs)
   }
 
-  /// 札のクリック。入れ切りし、一覧は先頭の行から選び直す。
+  /// 札のクリック。オン・オフし、一覧は先頭の行から選び直す。
   func toggleGitHubFilter(_ filter: TaskGitHubFilter) {
     leaveEditingForAction()
     area = .list

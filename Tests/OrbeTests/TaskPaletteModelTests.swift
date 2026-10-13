@@ -8,7 +8,7 @@ import XCTest
 /// 壊れると何が起きるか: space や ⌘⌫ が、光っている行とは別のタスクを完了・削除する（agent が上に行を
 /// 足した直後など）。足したタスクが別の workspace に付く、または選ばれず見失う。
 /// 右の欄に居る間に agent がそのタスクを消すと、消えたタスクの右の欄と下書きが残る。絞り込みを変えたのに外した
-/// はずの行が残る、または選んでいた行が残らず右の欄で完了にした途端に消える。
+/// はずの行が残る、または完了にした行がその場で消えて、次の space が別のタスクに当たる。
 ///
 /// タスク一覧の変化はカードの `.onChange(of: store.tasks)` が `reconcile()` へ届けるので、agent の変更はストアを
 /// 直接変えてから `reconcile()` を呼んで再現する。
@@ -97,11 +97,14 @@ final class TaskPaletteModelTests: OrbeTestCase {
 
     XCTAssertEqual(try storedTask(palette, 2).status, .done)
     XCTAssertEqual(palette.store.tasks.count, 3, "追加はしない")
+    XCTAssertEqual(
+      palette.rows.compactMap(\.selectableID), [.task(2)], "入力で組み直した表でも、完了にした行は残る")
   }
 
   // MARK: - 完了・削除
 
-  func testCompletingMovesTheSelectionToTheRowAtTheSamePosition() throws {
+  /// 完了にした行は絞り込みから外れても同じ場所に残り、選択も留まるので、もう一度 space で取り消せる。
+  func testCompletingKeepsTheRowInPlaceAndSelectedSoItCanBeUndone() throws {
     let palette = threeTodos()
     palette.move(1)
     XCTAssertEqual(palette.selectedID, .task(2), "前提")
@@ -109,7 +112,13 @@ final class TaskPaletteModelTests: OrbeTestCase {
     palette.submit()
 
     XCTAssertEqual(try storedTask(palette, 2).status, .done)
-    XCTAssertEqual(palette.selectedID, .task(1), "完了にしたタスクを残して追わず、同じ位置に来た行を選ぶ")
+    XCTAssertEqual(palette.selectedID, .task(2), "完了にしたタスクを選んだまま")
+    XCTAssertEqual(
+      palette.rows.compactMap(\.selectableID), [.task(3), .task(2), .task(1)], "行は同じ場所")
+
+    palette.submit()
+
+    XCTAssertEqual(try storedTask(palette, 2).status, .todo, "もう一度で取り消せる")
   }
 
   /// 行のアイコンのクリックで、選んでいない（上の）行を完了にしても、選んでいるタスクは変わらない。
@@ -120,7 +129,7 @@ final class TaskPaletteModelTests: OrbeTestCase {
     palette.toggleDone(1)
 
     XCTAssertEqual(try storedTask(palette, 1).status, .done)
-    XCTAssertEqual(palette.selectedID, .task(2), "行が詰まっても、選んでいた b のまま")
+    XCTAssertEqual(palette.selectedID, .task(2), "選んでいた b のまま")
   }
 
   func testReopeningADoneTaskAlwaysReturnsItToTodo() throws {
@@ -175,6 +184,37 @@ final class TaskPaletteModelTests: OrbeTestCase {
     palette.reconcile()
 
     XCTAssertEqual(palette.selectedID, .task(2), "位置ではなく同じタスクを選んだまま")
+  }
+
+  /// agent が絞り込みから外したタスクも、次のリストの更新まで同じ場所に残り、暗いのはその行だけ。
+  func testTaskTakenOutOfTheFilterByAgentStaysInPlaceAndOnlyItIsDimmed() throws {
+    let palette = threeTodos()
+    var update = TaskUpdate()
+    update.status = .done
+
+    _ = try palette.store.update(2, update)
+    palette.reconcile()
+
+    XCTAssertEqual(palette.rows.compactMap(\.selectableID), [.task(3), .task(2), .task(1)])
+    let dimmed = palette.rows.compactMap { row -> Int? in
+      guard case .task(let task) = row, !task.matches else { return nil }
+      return task.id
+    }
+    XCTAssertEqual(dimmed, [2])
+  }
+
+  /// agent が足したタスク・絞り込みに合うようにしたタスクは、並びの規則の位置に入る（既定の並びなら新しい順）。
+  func testTasksAgentMakesMatchAreInsertedWhereTheSortPutsThem() throws {
+    let palette = model([task(1, "a"), task(2, "b", .done), task(3, "c")])
+    var reopen = TaskUpdate()
+    reopen.status = .todo
+
+    _ = try palette.store.update(2, reopen)
+    let added = try palette.store.add(TaskDraft(title: "agent が足した")).id
+    palette.reconcile()
+
+    XCTAssertEqual(
+      palette.rows.compactMap(\.selectableID), [.task(added), .task(3), .task(2), .task(1)])
   }
 
   func testSelectedTaskDeletedByAgentMovesTheSelectionToTheSamePosition() throws {

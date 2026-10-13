@@ -4,7 +4,7 @@ import Foundation
 /// 絞り込みと選択が消える。
 enum TaskPalettePick {
   /// GitHub の項目を結び付けるタスクを選ぶ（GitHub タブの ⌘L から。タスクのタブの行で選ぶ）。
-  case task(for: TaskLink, list: ListState<TaskPaletteRowID>)
+  case task(for: TaskLink, list: TaskPaletteTaskList)
   /// タスクに結び付ける項目を選ぶ（右の欄の「＋ 結び付ける」から。GitHub タブの行で選ぶ）。
   case item(for: Int, list: ListState<TaskPaletteGitHubRowID>)
 }
@@ -17,7 +17,7 @@ extension TaskPaletteModel {
     guard pick == nil, let row = selectedGitHubRow else { return }
     leaveEditingForAction()
     area = .list
-    pick = .task(for: TaskLink(item: row.id, kind: row.item.kind), list: .init())
+    pick = .task(for: TaskLink(item: row.id, kind: row.item.kind), list: .init(picking: true))
     reconcile()
     focus()
   }

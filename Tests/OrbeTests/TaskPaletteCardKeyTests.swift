@@ -327,7 +327,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
 
     press(Key.escape, "\u{1B}", to: window)
     XCTAssertNil(model.openFilterMenu)
-    XCTAssertFalse(dismissed, "面だけを閉じる")
+    XCTAssertFalse(dismissed, "メニューだけを閉じる")
 
     press(Key.escape, "\u{1B}", to: window)
     XCTAssertTrue(dismissed)

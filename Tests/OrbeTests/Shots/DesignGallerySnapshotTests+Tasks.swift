@@ -18,7 +18,7 @@ extension DesignGallerySnapshotTests {
         .environment(\.localization, LocalizationStore(language: .ja)),
         size: NSSize(width: w, height: h), name: name, dir: dir)
     }
-    // List: 開いた直後（完了の札だけが切れている・作成 ↓）。
+    // List: 開いた直後（完了の札だけ外れている・作成 ↓）。
     try write("tasks_design.png", DesignSceneFixtures.taskPaletteModel())
 
     try renderTaskTableSnapshots(write)
@@ -75,7 +75,7 @@ extension DesignGallerySnapshotTests {
 }
 
 extension DesignGallerySnapshotTests {
-  /// 表（見本 Wait.png・Main.png）と、絞り込みの面・並べ替え・完了の札・右の欄で完了まで巡った状態。
+  /// 表（見本 Wait.png・Main.png）と、絞り込みのメニュー・並べ替え・完了の札・右の欄で完了まで巡った状態。
   func renderTaskTableSnapshots(
     _ write: (String, TaskPaletteModel, CGFloat, CGFloat) throws -> Void
   ) throws {
@@ -94,7 +94,7 @@ extension DesignGallerySnapshotTests {
     typing.query = "請求書を送る"
     try write("tasks_typing.png", typing, 1440, 900)
 
-    // 絞り込みの面（workspace）を開き、orbe と work を入れた（札は「workspace: 2」）。
+    // 絞り込みのメニュー（workspace）を開き、orbe と work をオンにした（札は「workspace: 2」）。
     let menu = DesignSceneFixtures.taskPaletteModel()
     menu.toggleFilterMenu(.workspace)
     menu.toggleWorkspaceFilter(DesignSceneFixtures.taskWorkspaces.all[0].id)
@@ -111,18 +111,18 @@ extension DesignGallerySnapshotTests {
     sorted.setSort(.due)
     try write("tasks_sorted_due.png", sorted, 1440, 900)
 
-    // 完了の札を入れ、完了のタスクを選ぶ: 行が沈み、フッターに「⌘↵ agent を開く」が出る（未完了のタスクと同じ）。
+    // 完了の札をオンにし、完了のタスクを選ぶ: 行は暗く、フッターに「⌘↵ agent を開く」が出る（未完了のタスクと同じ）。
     let doneSelected = DesignSceneFixtures.taskPaletteModel()
     doneSelected.toggleState(.done)
     doneSelected.tapRow(.task(8))
     try write("tasks_done_selected.png", doneSelected, 1440, 900)
 
-    // 右の欄で完了まで巡る: 行は絞り込みに合わなくなっても残り、右の欄に居続ける。
+    // 右の欄で完了まで巡る: 行は絞り込みに合わなくなっても暗くなって同じ場所に残り、右の欄に居続ける。
     let cycled = DesignSceneFixtures.taskPaletteModel()
     cycled.enterDetail()
     cycled.changeValue(1)
     cycled.changeValue(1)
-    try write("tasks_status_done_kept.png", cycled, 1440, 900)
+    try write("tasks_status_done_dimmed.png", cycled, 1440, 900)
   }
 }
 
@@ -154,7 +154,7 @@ extension DesignGallerySnapshotTests {
     team.movePaneStop(1)
     try write("tasks_github_reviewer.png", team, 1440, 900)
 
-    // 「レビュー依頼」と「担当が自分」の札を入れる（どちらかに当たる項目）。
+    // 「レビュー依頼」と「担当が自分」の札をオンにする（どちらかに当たる項目）。
     let filtered = DesignSceneFixtures.taskPaletteModel()
     filtered.setTab(filtered.tab.next)
     filtered.toggleGitHubFilter(.reviewRequested)

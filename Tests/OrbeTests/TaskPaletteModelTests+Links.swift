@@ -64,7 +64,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(log.requested, [[link(.issue, 1).item], [link(.issue, 1).item]])
   }
 
-  /// 完了の札を入れる・agent が結び付けるなどで新しく出た項目は、この開いている間に 1 回だけ取る。
+  /// 完了の札をオンにする・agent が結び付けるなどで新しく出た項目は、この開いている間に 1 回だけ取る。
   /// 前に開いたときの答えがあっても、この開いている間にまだ試していなければ取る。
   func testNewlyVisibleLinksAreFetchedOnceWhileOpenEvenWithAnEarlierAnswer() throws {
     let log = FetchLog()

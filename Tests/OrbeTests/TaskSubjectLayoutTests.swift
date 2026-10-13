@@ -28,7 +28,7 @@ final class TaskSubjectLayoutTests: OrbeTestCase {
     // 番号とタイトルの最小幅の分。札は間 4 を足して数える。
     let floor: CGFloat = 24 + 100
 
-    XCTAssertEqual(widths(1000), ideals, "入るなら理想の幅のまま")
+    XCTAssertEqual(widths(1000), ideals, "入るなら本来の幅のまま")
     XCTAssertEqual(widths(floor + 64 + 44 + 54), [20, 100, 0, 60, 40, 50])
     XCTAssertEqual(widths(floor + 44 + 54), [20, 100, 0, 0, 40, 50])
     XCTAssertEqual(widths(floor + 54), [20, 100, 0, 0, 0, 50])

@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// タスクのタブの絞り込みの段（「状態」と状態の札 4 つ・区切り・workspace / 優先度 / 期限の札）。札は押して
-/// 入れ切りし、値を選ぶ札は押すとカードの中に面を開く（面はカードが重ねる）。焦点は取らない。幅に収まらなければ
-/// 折り返す（札の表記は入れた値で伸びる）。
+/// タスクのタブの絞り込みの行（「状態」と状態の札 4 つ・区切り・workspace / 優先度 / 期限のドロップダウン）。札は
+/// 押してオン・オフし、ドロップダウンは押すとカードの中にメニューを開く（メニューはカードが重ねる）。焦点は取らない。
+/// 幅に収まらなければ折り返す（ドロップダウンの表記はオンにした値で伸びる）。
 struct TaskPaletteFilterBar: View {
   @Bindable var model: TaskPaletteModel
   @Environment(\.localization) private var l10n
@@ -30,7 +30,7 @@ struct TaskPaletteFilterBar: View {
     .padding(.bottom, Theme.Space.step + Theme.Space.hair)
   }
 
-  /// 何も入っていなければ「workspace」、1 つなら「workspace: orbe」、複数なら「workspace: 2」。
+  /// 何もオンにしていなければ「workspace」、1 つなら「workspace: orbe」、複数なら「workspace: 2」。
   private func menuChip(_ kind: TaskPaletteFilterKind) -> some View {
     let values = TaskPaletteFilterMenu.values(kind, model, l10n).filter(\.on).map(\.title)
     let title = l10n.string(kind.labelKey)
@@ -43,7 +43,7 @@ struct TaskPaletteFilterBar: View {
   }
 }
 
-/// 子を理想の大きさで左から並べ、提案された幅を超える子は次の行へ送る。行の中は縦の中央で揃える。
+/// 子を本来の大きさで左から並べ、提案された幅を超える子は折り返す。行の中は縦の中央で揃える。
 struct TaskPaletteWrapLayout: Layout {
   let spacing: CGFloat
   let lineSpacing: CGFloat
@@ -96,7 +96,8 @@ struct TaskPaletteWrapLayout: Layout {
   }
 }
 
-/// 絞り込みの札（入っている札は accent の地と枠）。タスクのタブの状態・値を選ぶ札と、GitHub タブの関係の札が使う。
+/// 絞り込みの札（オンの札は accent の地と枠）。タスクのタブの状態の札・ドロップダウンと、GitHub タブの関係の札が
+/// 使う。
 struct TaskPaletteFilterChip: View {
   let title: String
   let count: Int?
@@ -138,7 +139,7 @@ struct TaskPaletteFilterChip: View {
   static let height: CGFloat = 22
 }
 
-/// 値を選ぶ札の位置（カードが面をその直下に重ねる）。
+/// ドロップダウンの位置（カードがメニューをその直下に重ねる）。
 struct TaskPaletteFilterMenuAnchor: PreferenceKey {
   static let defaultValue: [TaskPaletteFilterKind: Anchor<CGRect>] = [:]
 
@@ -150,7 +151,8 @@ struct TaskPaletteFilterMenuAnchor: PreferenceKey {
   }
 }
 
-/// 絞り込みの面（値ごとに 1 行、チェックの印と名前）。行のクリックは値を入れ切りし、面は開いたまま。焦点は取らない。
+/// 絞り込みのメニュー（値ごとに 1 行、チェックの印と名前）。行のクリックは値をオン・オフし、メニューは開いたまま。
+/// 焦点は取らない。
 struct TaskPaletteFilterMenu: View {
   struct Value: Identifiable {
     let id: Int
@@ -198,7 +200,7 @@ struct TaskPaletteFilterMenu: View {
         .strokeBorder(Color.theme.surface2, lineWidth: Theme.Stroke.hairline))
   }
 
-  /// 面の行の並び（workspace は「なし」とサイドバーの順、優先度は高・中・低、期限は区切りの順）。
+  /// メニューの行の並び（workspace は「なし」とサイドバーの順、優先度は高・中・低、期限は区切りの順）。
   static func values(
     _ kind: TaskPaletteFilterKind, _ model: TaskPaletteModel, _ l10n: LocalizationStore
   ) -> [Value] {

@@ -18,6 +18,6 @@ extension L10n {
     .taskPaletteErrSecretaryClaude: (
       "claude が見つからないので agent に任せられない", "Can’t hand to an agent: claude was not found"
     ),
-    .taskPaletteErrSecretaryUnavailable: ("agent を起こせなかった", "Couldn’t start an agent"),
+    .taskPaletteErrSecretaryUnavailable: ("agent を起動できなかった", "Couldn’t start an agent"),
   ]
 }

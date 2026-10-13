@@ -131,7 +131,7 @@ extension TaskPaletteModel {
     error = nil
     switch field {
     case .status:
-      // 表の状態ではなくストアのステータスを動かす（待ちのタスクの札は元のステータス）。完了は待ちを消すので、
+      // 表に出す状態ではなくストアのステータスを動かす（待ちのタスクの札は元のステータス）。完了は待ちを消すので、
       // 一周させず端で止め、未着手からの ← で完了に入らないようにする。
       let options = TaskItem.Status.allCases
       let index = options.firstIndex(of: task.status)!
