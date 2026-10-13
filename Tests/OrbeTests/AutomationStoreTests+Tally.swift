@@ -46,6 +46,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.shelf(of: store.proposals[0])?.id, 2)
 
     try store.dismiss(store.proposals[0].id)
+    XCTAssertEqual(tally(store, 1), AutomationTaskCandidatesState(dismissed: 1))
     try store.delete(1)
     try accept(store, store.proposals[1].id)
 
