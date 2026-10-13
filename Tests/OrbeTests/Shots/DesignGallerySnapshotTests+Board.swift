@@ -117,6 +117,26 @@ extension DesignGallerySnapshotTests {
     try renderBoardReportSnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardRequestSnapshots(write: write, board: { board($0) })
     try renderBoardNotifySnapshots(write: write, board: { board($0, row: $1) })
+    try renderBoardCronSnapshots(write: write, board: { board($0, row: $1) })
+  }
+
+  /// いつの言葉が長い自動化と、式のまま出る自動化。一覧の 2 段目と詳細のいつを、広い面・狭い面・英語で撮る。並びは
+  /// Backlog → Slack → GitHub → 長い言い回し → 式のまま → 止めている Gmail。
+  private func renderBoardCronSnapshots(
+    write: (String, BoardModel, Language, NSSize) throws -> Void,
+    board: (AutomationsFile?, Int) -> BoardModel
+  ) throws {
+    let wide = NSSize(width: 1440, height: 844)
+    let narrow = NSSize(width: 800, height: 600)
+    let file = DesignSceneFixtures.boardAutomationFile(
+      DesignSceneFixtures.boardAutomations() + DesignSceneFixtures.boardCronExamples())
+    for language in [Language.ja, .en] {
+      let suffix = language == .ja ? "" : "_en"
+      try write("board_automation_cron_phrase\(suffix).png", board(file, 3), language, wide)
+      try write("board_automation_cron_raw\(suffix).png", board(file, 4), language, wide)
+    }
+    try write("board_automation_cron_phrase_narrow.png", board(file, 3), .ja, narrow)
+    try write("board_automation_cron_raw_narrow.png", board(file, 4), .ja, narrow)
   }
 
   /// サブメニュー「通知」: 通知しない自動化で開いた直後（印と選びが同じ行）・メニューバーの自動化で通知センターへ選びを
