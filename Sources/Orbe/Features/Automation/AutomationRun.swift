@@ -18,7 +18,7 @@ struct AutomationRun: Codable, Equatable {
   /// `steps` の最後の段の `count` を出力先が数えたか。数えるのは出力先が最後の段の出力を読めた回だけで、ほかの回の最後の段は
   /// 0 行を出して止めた段か落ちた段。
   var lastStepCountedBySink: Bool
-  /// 確定した回のうち出力先が記録を返した回（出力先のコマンドは走った回だけ、報告は最後の段の出力を読んだ回だけ）と、
+  /// 確定した回のうち出力先が記録を返した回（出力先のコマンドと agent は起こした回だけ、報告は最後の段の出力を読んだ回だけ）と、
   /// 出力先で落ちた回が持つ。失敗した回では、これがあることが出力先で落ちた印になる。
   var sink: AutomationSinkReport?
   /// 失敗した回の理由。失敗した回は前回の取得結果も出力先の状態も動かさない。
@@ -42,6 +42,15 @@ enum AutomationSinkReport: Equatable {
   case command(AutomationCommandReport)
   /// 最後の段の出力を読んだ回はいつも持つ。`text` は報告の文で、言うことが無かった回は nil。
   case report(text: String?)
+  case agent(AutomationAgentReport)
+}
+
+/// 出力先の agent を起こした回の記録（落ちた回も）。
+struct AutomationAgentReport: Codable, Equatable {
+  var commandLine: String
+  var ending: String
+  /// agent の報告の文。言うことが無かった回と落ちた回は nil。
+  var text: String?
 }
 
 /// 出力先のコマンドを走らせた回の記録（落ちた回も）。

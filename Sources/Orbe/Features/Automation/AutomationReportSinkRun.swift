@@ -31,11 +31,12 @@ final class AutomationReportSinkRun: AutomationSinkRun {
 
   /// 前後の空白を除き、上限を超えれば切る。最後の段の記録に載せる数は、報告があれば 1。
   func read(_ text: String) -> AutomationSinkReading<Output> {
-    let output = Output(text: Self.report(text))
+    let output = Output(text: Self.kept(text))
     return .output(output, count: output.text == nil ? 0 : 1, rejected: AutomationRejections())
   }
 
-  private static func report(_ text: String) -> String? {
+  /// 残す報告の文。前後の空白を除いて上限で切り、空なら nil。
+  static func kept(_ text: String) -> String? {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
     return trimmed.count > limit ? String(trimmed.prefix(limit)) + "…" : trimmed

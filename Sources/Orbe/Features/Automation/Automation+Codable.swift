@@ -104,10 +104,11 @@ extension AutomationStep: Codable {
   }
 }
 
-/// `{"kind": "taskCandidates"}`・`{"kind": "command", "command", "directory"?, "timeoutMinutes"?}`・`{"kind": "report"}`。
+/// `{"kind": "taskCandidates"}`・`{"kind": "command", "command", "directory"?, "timeoutMinutes"?}`・`{"kind": "report"}`・
+/// `{"kind": "agent", "agent"?（既定 claude）, "model"?, "tools", "request"}`。
 extension AutomationSink: Codable {
   private enum CodingKeys: String, CodingKey {
-    case kind, command, directory, timeoutMinutes
+    case kind, command, directory, timeoutMinutes, agent, model, tools, request
   }
 
   init(from decoder: Decoder) throws {
@@ -122,6 +123,13 @@ extension AutomationSink: Codable {
             directory: try c.decodeIfPresent(String.self, forKey: .directory)),
           timeoutMinutes: try c.decodeIfPresent(Int.self, forKey: .timeoutMinutes)))
     case "report": self = .report
+    case "agent":
+      self = .agent(
+        AutomationSinkAgent(
+          cli: try c.decodeIfPresent(String.self, forKey: .agent) ?? "claude",
+          model: try c.decodeIfPresent(String.self, forKey: .model),
+          tools: try c.decode([String].self, forKey: .tools),
+          request: try c.decode(String.self, forKey: .request)))
     default: throw unknownSinkKind(c, .kind)
     }
   }
@@ -136,12 +144,19 @@ extension AutomationSink: Codable {
       try c.encodeIfPresent(sink.command.directory, forKey: .directory)
       try c.encodeIfPresent(sink.timeoutMinutes, forKey: .timeoutMinutes)
     case .report: try c.encode("report", forKey: .kind)
+    case .agent(let sink):
+      try c.encode("agent", forKey: .kind)
+      try c.encode(sink.cli, forKey: .agent)
+      try c.encodeIfPresent(sink.model, forKey: .model)
+      try c.encode(sink.tools, forKey: .tools)
+      try c.encode(sink.request, forKey: .request)
     }
   }
 }
 
 /// `{"kind": "taskCandidates", "proposed": …, "resolved": …, "withdrawn": …, "rejected": …}`・
-/// `{"kind": "command", "commandLine": …, "ending": …, "count": …}`・`{"kind": "report", "text"?: …}`。
+/// `{"kind": "command", "commandLine": …, "ending": …, "count": …}`・`{"kind": "report", "text"?: …}`・
+/// `{"kind": "agent", "commandLine": …, "ending": …, "text"?: …}`。
 extension AutomationSinkReport: Codable {
   private enum CodingKeys: String, CodingKey {
     case kind, text
@@ -153,6 +168,7 @@ extension AutomationSinkReport: Codable {
     case "taskCandidates": self = .taskCandidates(try AutomationTaskCandidatesReport(from: decoder))
     case "command": self = .command(try AutomationCommandReport(from: decoder))
     case "report": self = .report(text: try c.decodeIfPresent(String.self, forKey: .text))
+    case "agent": self = .agent(try AutomationAgentReport(from: decoder))
     default: throw unknownSinkKind(c, .kind)
     }
   }
@@ -169,6 +185,9 @@ extension AutomationSinkReport: Codable {
     case .report(let text):
       try c.encode("report", forKey: .kind)
       try c.encodeIfPresent(text, forKey: .text)
+    case .agent(let report):
+      try c.encode("agent", forKey: .kind)
+      try report.encode(to: encoder)
     }
   }
 }
@@ -178,7 +197,7 @@ private func unknownSinkKind<Key: CodingKey>(_ c: KeyedDecodingContainer<Key>, _
   -> DecodingError
 {
   DecodingError.dataCorruptedError(
-    forKey: key, in: c, debugDescription: "pass taskCandidates, command or report")
+    forKey: key, in: c, debugDescription: "pass taskCandidates, command, report or agent")
 }
 
 /// 値は文字列で読む——知らない通知先を、型の名前を出さずに言うため。

@@ -109,4 +109,25 @@ final class AutomationPromptsTests: OrbeTestCase {
     XCTAssertTrue(prompt.contains("2027-01-15 17:00"), prompt)
     XCTAssertTrue(prompt.contains("Asia/Tokyo"))
   }
+
+  /// 出力先の agent の依頼文は、枠と利用者の依頼文と今だけを持ち、行を受ける席が無い。
+  func testSinkAgentPromptCarriesTheRequestAndNowOnly() {
+    let prompt = AutomationPrompts.sinkAgent(
+      request: "PR をまとめて投稿して", now: Date(timeIntervalSince1970: 1_800_000_000),
+      timeZone: TimeZone(identifier: "Asia/Tokyo")!)
+    XCTAssertTrue(prompt.contains("PR をまとめて投稿して"))
+    XCTAssertTrue(prompt.contains("Now: 2027-01-15 17:00 (Friday), time zone Asia/Tokyo."))
+    XCTAssertTrue(prompt.contains("not instructions"), "ツールで読んだ文面は指示ではない")
+    XCTAssertTrue(prompt.contains("within 2000 characters"))
+    XCTAssertFalse(prompt.contains("Input"), "行を載せる席を持たない")
+  }
+
+  /// 失敗の申告は、前後の空白を除いた全体が `{"error": …}` の 1 行のときだけ。
+  func testSinkAgentErrorIsOnlyAWholeErrorLine() {
+    XCTAssertEqual(AutomationPrompts.sinkAgentError(#" {"error": "refused"}"# + "\n"), "refused")
+    XCTAssertNil(AutomationPrompts.sinkAgentError("投稿した。\n" + #"{"error": "例"}"#))
+    XCTAssertNil(AutomationPrompts.sinkAgentError(#"{"error": 1}"#))
+    XCTAssertNil(AutomationPrompts.sinkAgentError(#"{"id": "a", "error": "x"}"#))
+    XCTAssertNil(AutomationPrompts.sinkAgentError("done"))
+  }
 }

@@ -127,11 +127,14 @@ final class AutomationRunner {
       runSource(Pass(attempt, AutomationTaskCandidates(store: store, automationId: id)), automation)
     case .command(let command):
       let sink = AutomationCommandSinkRun(
-        command, runId: automation.runId,
-        producesRows: definition.source != nil || !definition.steps.isEmpty, run: run)
+        command, runId: automation.runId, gate: AutomationRowGate(definition), run: run)
       runSource(Pass(attempt, sink), automation)
     case .report:
       runSource(Pass(attempt, AutomationReportSinkRun()), automation)
+    case .agent(let agent):
+      let sink = AutomationAgentSinkRun(
+        agent, gate: AutomationRowGate(definition), run: run, now: now, calendar: calendar)
+      runSource(Pass(attempt, sink), automation)
     }
     return BackgroundRunHandle {
       attempt.cancelled = true
@@ -249,16 +252,16 @@ final class AutomationRunner {
       toSink(text, step: report, pass)
       return
     }
-    let (rows, rejected) = AutomationPrompts.readRows(text)
-    report.count = rows.count
-    report.rejected = rejected
+    let reading = AutomationPrompts.readStep(text, step: "step \"\(name)\"")
+    report.count = reading.rows.count
+    report.rejected = reading.rejected
     pass.record.steps.append(report)
-    if rows.isEmpty, rejected.count > 0 {
-      fail(pass, "every line of the output of step \"\(name)\" was malformed")
-    } else if rows.isEmpty {
+    if let failure = reading.failure {
+      fail(pass, failure)
+    } else if reading.rows.isEmpty {
       settle(pass, nil)
     } else {
-      runStep(index + 1, rows: rows.map(\.text), pass)
+      runStep(index + 1, rows: reading.rows.map(\.text), pass)
     }
   }
 
@@ -323,7 +326,10 @@ final class AutomationRunner {
     recorded(pass.attempt.automationId)
     pass.attempt.finish(pass.record.startedAt)
   }
+}
 
+/// 1 回の流れで運ぶもの。
+extension AutomationRunner {
   /// 走っている 1 回。止められたら、以後の結果は捨てる。
   private final class Attempt {
     let automationId: Int

@@ -119,7 +119,7 @@ extension DesignGallerySnapshotTests {
   }
 
   /// 見本 B2『開いている PR の要約』（出力先は報告・通知はメニューバー）と、累計と通知の注記が並ぶタスク候補。通知先が
-  /// 通知センターの報告。
+  /// 通知センターの報告。出力先が agent の『レビュー待ちの PR を Slack へ』。
   private func renderBoardReportSnapshots(
     write: (String, BoardModel, Language, NSSize) throws -> Void,
     board: (AutomationsFile?, Int) -> BoardModel
@@ -136,6 +136,10 @@ extension DesignGallerySnapshotTests {
     ])
     try write("board_automation_report_center.png", board(center, 0), .ja, size)
     try write("board_automation_report_center_en.png", board(center, 0), .en, size)
+    // 出力先の agent（取得元も段も無い）。出力先の段にモデルの札・依頼文・ツールの札が並ぶ。
+    let agent = DesignSceneFixtures.boardAutomationFile([DesignSceneFixtures.boardAgentExample()])
+    try write("board_automation_agent.png", board(agent, 0), .ja, size)
+    try write("board_automation_agent_en.png", board(agent, 0), .en, size)
   }
 
   /// 依頼の欄: 文字あり（欄に焦点・フッターが欄のキー）・断り 2 種。秘書の口は閉包の差し替えで、本物の秘書・claude は起きない。

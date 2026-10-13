@@ -19,6 +19,7 @@ extension L10n {
     .boardOutputTaskCandidates: ("タスク候補", "Task candidates"),
     .boardOutputCommand: ("コマンド", "Command"),
     .boardOutputReport: ("報告", "Report"),
+    .boardOutputAgent: ("agent", "Agent"),
     .boardOutputNotifyMenuBar: ("通知：メニューバー", "Notify: menu bar"),
     .boardOutputNotifyNotificationCenter: ("通知：通知センター", "Notify: Notification Center"),
     .boardOutputTally: (
@@ -45,9 +46,9 @@ extension L10n {
       "自分宛ての Slack DM を10分ごとに確認して、依頼だけをタスク候補にする",
       "Check my Slack DMs every 10 minutes and make only the requests task candidates"
     ),
-    .boardExampleGitHub: (
-      "毎日 9:00 と 13:00 に、レビューを頼まれた GitHub の PR をタスク候補にする",
-      "At 9:00 and 13:00 every day, make the GitHub PRs I’m asked to review task candidates"
+    .boardExampleReviewDigest: (
+      "平日 9:00 に、レビュー待ちの PR をまとめて Slack の #dev-me に投稿する",
+      "At 9:00 on weekdays, post a digest of the PRs waiting for my review to #dev-me on Slack"
     ),
     .boardExampleDailyNote: (
       "毎晩23時に ~/bin/daily-note.sh を実行する", "Run ~/bin/daily-note.sh every night at 23:00"

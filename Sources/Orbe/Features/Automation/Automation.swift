@@ -89,6 +89,7 @@ extension Automation: Codable {
         .map(AutomationSinkState.taskCandidates) ?? .initial(for: definition.sink)
     case .command: sinkState = .command
     case .report: sinkState = .report
+    case .agent: sinkState = .agent
     }
     paused = try c.decodeIfPresent(Bool.self, forKey: .paused) ?? false
     createdAt = try c.decode(Date.self, forKey: .createdAt)
@@ -106,7 +107,7 @@ extension Automation: Codable {
     try c.encode(definition, forKey: .definition)
     switch sinkState {
     case .taskCandidates(let state): try c.encode(state, forKey: .sinkState)
-    case .command, .report: break
+    case .command, .report, .agent: break
     }
     try c.encode(paused, forKey: .paused)
     try c.encode(createdAt, forKey: .createdAt)
@@ -139,7 +140,7 @@ struct AutomationDefinition: Equatable, Codable {
     Self.model(agent.model, finalStep: index == steps.count - 1)
   }
 
-  /// 何をするか。名前・トリガー・取得の性質・段の名前を除き、モデルと出力先のコマンドの上限は解いた値で持つ。これが変わる書き換えはやり直しになる。
+  /// 何をするか。名前・トリガー・取得の性質・段の名前を除き、モデル（出力先の agent も）と出力先のコマンドの上限は解いた値で持つ。これが変わる書き換えはやり直しになる。
   var work: Work {
     var source = source?.method
     if case .agent(var agent) = source {
@@ -152,9 +153,14 @@ struct AutomationDefinition: Equatable, Codable {
       return .agent(agent)
     }
     var sink = sink
-    if case .command(var command) = sink {
+    switch sink {
+    case .command(var command):
       command.timeoutMinutes = command.resolvedTimeoutMinutes
       sink = .command(command)
+    case .agent(var agent):
+      agent.model = agent.resolvedModel
+      sink = .agent(agent)
+    case .taskCandidates, .report: break
     }
     return Work(source: source, steps: steps, sink: sink)
   }
@@ -230,6 +236,8 @@ enum AutomationSink: Equatable {
   case command(AutomationSinkCommand)
   /// 最後の段が書いた文章を、その回の結果として残す。
   case report
+  /// 裏で使い捨ての agent を起こし、定義の依頼文と名指しのツールだけで仕事をさせる。
+  case agent(AutomationSinkAgent)
 }
 
 /// 出力先のコマンド。上限は経過時間と出力の無い時間の両方に当てる。
@@ -244,25 +252,42 @@ struct AutomationSinkCommand: Equatable {
   var resolvedTimeoutMinutes: Int { timeoutMinutes ?? 2 }
 }
 
+/// 出力先の agent。届いた行は起こすかを決めるだけで、依頼文には入らない。
+struct AutomationSinkAgent: Equatable {
+  var cli: String
+  /// 省略は `resolvedModel` が解く。
+  var model: String?
+  /// 許可の規則。MCP のツールの完全名か `Bash(<コマンドの接頭>:*)`。
+  var tools: [String]
+  var request: String
+
+  /// 省略を解いたモデル。走らせるときも、画面も、やり直しの比較もここを通す。
+  var resolvedModel: String { model ?? "sonnet" }
+}
+
 /// 出力先ごとの状態。種類は `AutomationSink` と同じ並びで、出力先の種類を足すときはここにも足す。
 enum AutomationSinkState: Equatable {
   case taskCandidates(AutomationTaskCandidatesState)
   case command
   case report
+  case agent
 
   static func initial(for sink: AutomationSink) -> Self {
     switch sink {
     case .taskCandidates: .taskCandidates(AutomationTaskCandidatesState())
     case .command: .command
     case .report: .report
+    case .agent: .agent
     }
   }
 
   /// `sink` の種類の状態か。
   func belongs(to sink: AutomationSink) -> Bool {
     switch (self, sink) {
-    case (.taskCandidates, .taskCandidates), (.command, .command), (.report, .report): true
-    case (.taskCandidates, _), (.command, _), (.report, _): false
+    case (.taskCandidates, .taskCandidates), (.command, .command), (.report, .report),
+      (.agent, .agent):
+      true
+    case (.taskCandidates, _), (.command, _), (.report, _), (.agent, _): false
     }
   }
 }

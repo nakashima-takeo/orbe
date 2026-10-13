@@ -149,7 +149,7 @@ struct AutomationProposalBook: Equatable {
         || (automation.definition.source?.coverage == .newArrivals
           && automation.id == proposal.automationId
           && proposal.state == .open)
-    case .command, .report: false
+    case .command, .report, .agent: false
     }
   }
 }

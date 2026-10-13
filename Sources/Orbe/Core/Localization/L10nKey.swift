@@ -588,6 +588,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardOutputTaskCandidates
   case boardOutputCommand
   case boardOutputReport
+  case boardOutputAgent
   case boardOutputTally
   case boardOutputNotifyMenuBar
   case boardOutputNotifyNotificationCenter
@@ -606,7 +607,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardGuideLead
   case boardGuideExamples
   case boardExampleSlack
-  case boardExampleGitHub
+  case boardExampleReviewDigest
   case boardExampleDailyNote
   case boardHintSelect
   case boardHintToList

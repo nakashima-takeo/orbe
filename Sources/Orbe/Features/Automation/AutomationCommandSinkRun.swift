@@ -8,18 +8,17 @@ final class AutomationCommandSinkRun: AutomationSinkRun {
 
   private let sink: AutomationSinkCommand
   private let runId: String
-  /// 行を作るもの（取得元か段）があるか。無ければ届いた行が 0 でも走る。
-  private let producesRows: Bool
+  private let gate: AutomationRowGate
   private let run: BackgroundScheduler.Run
   private var report: AutomationCommandReport?
 
   init(
-    _ sink: AutomationSinkCommand, runId: String, producesRows: Bool,
+    _ sink: AutomationSinkCommand, runId: String, gate: AutomationRowGate,
     run: @escaping BackgroundScheduler.Run
   ) {
     self.sink = sink
     self.runId = runId
-    self.producesRows = producesRows
+    self.gate = gate
     self.run = run
   }
 
@@ -46,19 +45,12 @@ final class AutomationCommandSinkRun: AutomationSinkRun {
     AutomationPrompts.step(instruction: instruction, rows: rows, now: now, timeZone: timeZone)
   }
 
-  /// 中間の段と同じく、出力があったのに 1 行も読めなければ回の失敗。
-  func read(_ text: String) -> AutomationSinkReading<[String]> {
-    let (rows, rejected) = AutomationPrompts.readRows(text)
-    guard !rows.isEmpty || rejected.count == 0 else {
-      return .failed("every line of the output of the last step was malformed", rejected: rejected)
-    }
-    return .output(rows.map(\.text), count: rows.count, rejected: rejected)
-  }
+  func read(_ text: String) -> AutomationSinkReading<[String]> { gate.read(text) }
 
   func deliver(_ rows: [String], completion: @escaping (AutomationSinkFailure?) -> Void)
     -> BackgroundRunHandle
   {
-    guard !rows.isEmpty || !producesRows else {
+    guard gate.opens(rows) else {
       completion(nil)
       return BackgroundRunHandle {}
     }
