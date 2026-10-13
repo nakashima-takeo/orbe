@@ -67,10 +67,11 @@ struct TaskPaletteTableColumns<State: View, Title: View, Rest: View>: View {
   @ViewBuilder let title: () -> Title
   /// 件名より右の列の中身（優先度・期限・workspace・作成）。
   let rest: (TaskPaletteSort.Column) -> Rest
+  @Environment(\.localization) private var l10n
 
   var body: some View {
     HStack(spacing: TaskPaletteRowMetrics.columnGap) {
-      column(TaskPaletteRowMetrics.stateColumn, state)
+      column(TaskPaletteRowMetrics.stateColumn(l10n.language), state)
       // 件名は残りの幅だけを取り、収まらない中身は切る（ほかの列を押し出さない）。
       title().frame(minWidth: 0, maxWidth: .infinity, alignment: .leading).clipped()
       column(TaskPaletteRowMetrics.priorityColumn) { rest(.priority) }
@@ -354,14 +355,12 @@ struct TaskStateChip: View {
   @Environment(\.localization) private var l10n
 
   var body: some View {
+    let size = TaskPaletteRowMetrics.stateChip(l10n.language)
     Text(l10n.string(state.labelKey))
       .font(Font.theme.meta)
       .foregroundStyle(foreground)
       .lineLimit(1)
-      .frame(
-        width: TaskPaletteRowMetrics.stateChip.width,
-        height: TaskPaletteRowMetrics.stateChip.height
-      )
+      .frame(width: size.width, height: size.height)
       .background(RoundedRectangle(cornerRadius: Theme.Radius.sm + Theme.Space.hair).fill(fill))
   }
 

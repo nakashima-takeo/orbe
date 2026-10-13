@@ -95,8 +95,8 @@ enum TaskPaletteRow: Equatable, Identifiable {
 }
 
 /// 表の寸法。行の高さは 1 種類。優先度・workspace の列の幅は見本の比率（44 / 80、間 12）を本番の字の
-/// 大きさ（行 12pt・欄 10pt）に合わせて丸めたもの。件名は残りの幅、状態は最も長い状態の名前、期限・作成は最も長い
-/// 書式から測る。
+/// 大きさ（行 12pt・欄 10pt）に合わせて丸めたもの。件名は残りの幅。状態は今の UI 言語の最も長い状態の名前、
+/// 期限・作成は最も長い書式から測る。
 enum TaskPaletteRowMetrics {
   /// 札の 1 行（GitHub タブ・選ぶ状態の帯）の高さ。⌘⇧S の行（上下 4 ＋ 16pt の 1 行）と同じ。
   static let line: CGFloat = 24
@@ -111,7 +111,9 @@ enum TaskPaletteRowMetrics {
   /// 表の列の間。
   static let columnGap: CGFloat = Theme.Space.step
   /// 状態の列。札に左右の余白を足した幅。
-  static let stateColumn: CGFloat = stateChip.width + Theme.Space.tick
+  static func stateColumn(_ language: Language) -> CGFloat {
+    stateChip(language).width + Theme.Space.tick
+  }
   static let priorityColumn: CGFloat = 36
   /// 期限の列。最も長い書式（年の付いた「2026/12/31」と、どの UI 言語でも最も幅のある曜日名）が収まる幅。
   static let dueColumn: CGFloat = {
@@ -123,14 +125,13 @@ enum TaskPaletteRowMetrics {
   static let createdColumn: CGFloat = ceil(cellWidth("0000/00/00"))
   /// 件名のタイトルの最小幅（日本語で 8 文字前後）。これより狭くなるときは、続く札と補足の側を切り詰める。
   static let titleMinWidth: CGFloat = 100
-  /// 状態の札（同じ幅）。どの UI 言語でも最も長い状態の名前に、行の札と同じ左右の内側の余白を足した幅。
-  static let stateChip: CGSize = {
-    let labels = Language.allCases.flatMap { language in
-      TaskItem.DisplayState.allCases.map { L10n.string($0.labelKey, language) }
-    }
-    let width = ceil(labels.map(cellWidth).max() ?? 0) + 2 * Theme.Space.note
-    return CGSize(width: width, height: 18)
-  }()
+  /// 状態の札（同じ幅）。その UI 言語の状態の名前のうち最も長いものに、左右の内側の余白を足した幅。余白は見本の
+  /// 札（字の幅に対して左右にゆったり取る）に合わせる。
+  static func stateChip(_ language: Language) -> CGSize {
+    let labels = TaskItem.DisplayState.allCases.map { L10n.string($0.labelKey, language) }
+    let widest = ceil(labels.map(cellWidth).max() ?? 0)
+    return CGSize(width: widest + 2 * Theme.Space.beat, height: 18)
+  }
   /// 行の札のうち、人や agent の文字を出す札（起きたこと）の文字の上限幅。
   static let textBadgeMaxWidth: CGFloat = 180
   /// GitHub タブの行の先頭のアイコンの列の幅。
