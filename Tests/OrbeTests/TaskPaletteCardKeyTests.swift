@@ -314,6 +314,21 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertTrue(dismissed)
   }
 
+  func testEscapeClosesTheOpenFilterMenuBeforeTheScreen() {
+    let model = model()
+    var dismissed = false
+    model.onDismiss = { dismissed = true }
+    model.toggleFilterMenu(.workspace)
+    let window = mount(model)
+
+    press(Key.escape, "\u{1B}", to: window)
+    XCTAssertNil(model.openFilterMenu)
+    XCTAssertFalse(dismissed, "面だけを閉じる")
+
+    press(Key.escape, "\u{1B}", to: window)
+    XCTAssertTrue(dismissed)
+  }
+
   /// agent の変更（ストアの直接の変異）は、カードが付け直しへ届ける。選んでいたタスクが消えたら、
   /// 直後の space は同じ位置に来た行に効き、消えたタスクの ID には向かわない。
   func testAgentDeletingTheSelectedTaskMovesTheSelectionBeforeTheNextKey() throws {
