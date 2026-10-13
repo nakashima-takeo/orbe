@@ -134,7 +134,6 @@ struct TaskPaletteTableHeader: View {
 /// GitHub タブの一覧の選べる行の骨格。選択行は accent の淡塗り。先頭の 22 は行頭の余白。
 struct TaskPaletteRowFrame<Content: View>: View {
   let selected: Bool
-  var height = TaskPaletteRowMetrics.line
   let onTap: () -> Void
   let onHoverEnter: () -> Void
   @ViewBuilder let content: () -> Content
@@ -143,7 +142,7 @@ struct TaskPaletteRowFrame<Content: View>: View {
     HStack(spacing: 0, content: content)
       .padding(.leading, 22)
       .padding(.trailing, Theme.Space.step + Theme.Space.hair)
-      .frame(height: height)
+      .frame(height: TaskPaletteRowMetrics.line)
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
         RoundedRectangle(cornerRadius: Theme.Radius.row)
