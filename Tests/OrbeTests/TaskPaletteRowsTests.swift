@@ -65,7 +65,6 @@ final class TaskPaletteRowsTests: OrbeTestCase {
   // MARK: - 並びと絞り込み
 
   func testRowsAreFlatNewestFirstAndHideDoneByDefault() {
-    // 保存の順は作成の順と逆。
     let tasks = [
       task(1, "a", .todo), task(2, "b", .inProgress), task(4, "d", .todo),
       task(5, "e", .inProgress), task(3, "c", .done),

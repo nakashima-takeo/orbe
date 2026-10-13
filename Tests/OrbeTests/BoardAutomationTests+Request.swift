@@ -26,8 +26,8 @@ extension BoardAutomationTests {
     let window = mount(model)
 
     type("abc", to: window)
-    press(Key.enter, "\r", to: window)
-    press(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", repeating: true, to: window)
 
     XCTAssertEqual(asks(), [.text("abc")], "押し続けても 1 回")
     XCTAssertEqual(model.automation.requestText, "")
@@ -42,8 +42,8 @@ extension BoardAutomationTests {
     let window = mount(model)
     down(window)
 
-    press(Key.enter, "\r", .command, to: window)
-    press(Key.enter, "\r", .command, repeating: true, to: window)
+    send(Key.enter, "\r", .command, to: window)
+    send(Key.enter, "\r", .command, repeating: true, to: window)
 
     let target = try XCTUnwrap(automation.store.automation(Self.failingBacklog))
     XCTAssertEqual(asks(), [.automationFix(target)])
@@ -73,7 +73,7 @@ extension BoardAutomationTests {
     let window = mount(model)
 
     type("a", to: window)
-    press(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", to: window)
 
     XCTAssertEqual(model.refusal, .boardAskClaudeMissing)
     XCTAssertEqual(model.automation.requestText, "a")
@@ -81,7 +81,7 @@ extension BoardAutomationTests {
     XCTAssertNil(model.refusal, "欄に打つと消える")
 
     down(window)
-    press(Key.enter, "\r", .command, to: window)
+    send(Key.enter, "\r", .command, to: window)
     XCTAssertEqual(model.refusal, .boardAskClaudeMissing, "⌘↵ の直しも同じく断る")
     down(window)
     XCTAssertNil(model.refusal, "↓ で消える")

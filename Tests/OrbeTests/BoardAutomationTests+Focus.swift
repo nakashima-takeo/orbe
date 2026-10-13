@@ -21,7 +21,7 @@ extension BoardAutomationTests {
 
   func type(_ text: String, to window: NSWindow) {
     for character in text {
-      press(Key.a, String(character), to: window)
+      send(Key.a, String(character), to: window)
     }
   }
 
@@ -65,13 +65,13 @@ extension BoardAutomationTests {
     XCTAssertEqual(automation.requestText, "a b", "space は欄の文字になる")
     XCTAssertEqual(
       automation.store.automations, DesignSceneFixtures.boardAutomations(), "space は一覧の止めるにならない")
-    press(Key.tab, "\t", to: window)
+    send(Key.tab, "\t", to: window)
     XCTAssertEqual(automation.place, .request, "欄の ⇥ は何もしない")
 
     down(window)
     XCTAssertEqual(automation.place, .list, "欄の ↓ で一覧へ")
     XCTAssertEqual(automation.selectedAutomation?.id, Self.failingBacklog, "一覧の先頭")
-    press(Key.tab, "\t", to: window)
+    send(Key.tab, "\t", to: window)
     XCTAssertEqual(automation.place, .list, "一覧の ⇥ は何もしない")
     down(window)
     XCTAssertEqual(automation.selectedAutomation?.id, Self.slack, "一覧のキーが効く")
@@ -85,7 +85,7 @@ extension BoardAutomationTests {
     down(window)
     XCTAssertEqual(automation.place, .request, "末尾の行の ↓ で巡回して欄へ")
 
-    press(Key.escape, "\u{1B}", to: window)
+    send(Key.escape, "\u{1B}", to: window)
     XCTAssertEqual(automation.place, .list, "欄の esc で一覧へ")
     XCTAssertEqual(automation.selectedAutomation?.id, Self.failingBacklog, "esc は ↓ と同じく一覧の先頭")
     XCTAssertEqual(automation.requestText, "a b", "打った文字は残る")
@@ -150,7 +150,7 @@ extension BoardAutomationTests {
     click(Point.secondRow, in: window)
     XCTAssertEqual(automation.place, .list)
     XCTAssertEqual(automation.selectedAutomation?.id, Self.slack)
-    press(Key.space, " ", to: window)
+    send(Key.space, " ", to: window)
     XCTAssertEqual(automation.store.automation(Self.slack)?.paused, true, "行のクリックの直後の space は一覧に効く")
     XCTAssertEqual(automation.requestText, "b")
 
@@ -160,7 +160,7 @@ extension BoardAutomationTests {
     type("c", to: window)
     XCTAssertEqual(automation.requestText, "c", "欄へ戻ると全文が選ばれているので、打てば置き換わる")
 
-    press(Key.escape, "\u{1B}", to: window)
+    send(Key.escape, "\u{1B}", to: window)
     click(Point.ground, in: window)
     XCTAssertEqual(automation.place, .list)
     let before = automation.selectedAutomation?.id
@@ -175,7 +175,7 @@ extension BoardAutomationTests {
     let window = mount(model)
 
     for point in Point.fieldMargins {
-      press(Key.escape, "\u{1B}", to: window)
+      send(Key.escape, "\u{1B}", to: window)
       XCTAssertEqual(automation.place, .list)
       click(point, in: window)
       XCTAssertEqual(automation.place, .request, "\(point)")

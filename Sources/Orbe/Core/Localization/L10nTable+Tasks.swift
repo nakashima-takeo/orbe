@@ -6,7 +6,6 @@ extension L10n {
     .taskPalettePlaceholder: ("タスクを追加・絞り込み", "Add or filter tasks"),
     .taskPaletteGitHubPlaceholder: ("Issue・PR を絞り込み", "Filter issues and PRs"),
     .taskPaletteTabTasks: ("タスク", "Tasks"),
-    .taskPaletteScopeAll: ("すべて", "All"),
     .taskPaletteStateInProgress: ("進行中", "In progress"),
     .taskPaletteStateTodo: ("未着手", "To do"),
     .taskPaletteStateWaiting: ("待ち", "Waiting"),

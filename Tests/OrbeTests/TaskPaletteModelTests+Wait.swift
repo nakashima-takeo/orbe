@@ -124,7 +124,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.error, .failed, "届けられなかった理由はフッターに出す")
   }
 
-  /// 続きから始められない（作業ディレクトリ・CLI が無い）なら、⌘↵ はいつもの ⌘T を開き、理由を出し続ける。
+  /// 続きから始められない（作業ディレクトリ・CLI が無い）なら、⌘↵ はそのタスクのための ⌘T を開き、理由を出し続ける。
   func testOpeningTheAgentOfAResolvedWaitThatCannotContinueOpensTheWorktreePalette() {
     let palette = model([
       task(1, "a", .inProgress) { $0.wait = self.resolved(conversation: self.conversation) }
@@ -143,7 +143,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.continuation(of: palette.store.tasks[0]), .blocked(.directoryMissing))
   }
 
-  /// 会話の記録が無い解けた待ち（タブの外から付けた条件）の ⌘↵ は、いつもの ⌘T を開く。
+  /// 会話の記録が無い解けた待ち（タブの外から付けた条件）の ⌘↵ は、そのタスクのための ⌘T を開く。
   func testOpeningTheAgentOfAResolvedWaitWithoutAConversationOpensTheWorktreePalette() {
     let palette = model([task(1, "a", .inProgress) { $0.wait = self.resolved(conversation: nil) }])
     var opened: [Int] = []

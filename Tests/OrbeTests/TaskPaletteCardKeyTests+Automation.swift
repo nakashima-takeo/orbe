@@ -25,15 +25,15 @@ extension TaskPaletteCardKeyTests {
 
     type("x", into: window)
     XCTAssertEqual(model.query, "x")
-    press(Key.delete, "\u{7F}", .command, to: window)
+    send(Key.delete, "\u{7F}", .command, to: window)
     XCTAssertEqual(model.query, "")
     XCTAssertEqual(model.automation.store.proposals.map(\.state), [.open, .open, .open])
 
-    press(Key.delete, "\u{7F}", .command, to: window)
+    send(Key.delete, "\u{7F}", .command, to: window)
     XCTAssertEqual(model.automation.store.proposals[0].state, .dismissed)
     XCTAssertEqual(model.automation.proposalList.selectedID, 2)
 
-    press(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", to: window)
     XCTAssertTrue(model.store.tasks.contains { $0.title == "オンボーディングの環境構築手順を見る" })
   }
 
@@ -43,9 +43,9 @@ extension TaskPaletteCardKeyTests {
     let window = mount(model)
     type("x", into: window)
 
-    press(Key.delete, "\u{7F}", .command, to: window)
-    press(Key.delete, "\u{7F}", .command, repeating: true, to: window)
-    press(Key.delete, "\u{7F}", .command, repeating: true, to: window)
+    send(Key.delete, "\u{7F}", .command, to: window)
+    send(Key.delete, "\u{7F}", .command, repeating: true, to: window)
+    send(Key.delete, "\u{7F}", .command, repeating: true, to: window)
 
     XCTAssertEqual(model.query, "")
     XCTAssertEqual(model.automation.store.proposals.map(\.state), [.open, .open, .open])
@@ -58,7 +58,7 @@ extension TaskPaletteCardKeyTests {
     model.onOpenURL = { opened.append($0.absoluteString) }
     let window = mount(model)
 
-    press(Key.enter, "\r", .command, to: window)
+    send(Key.enter, "\r", .command, to: window)
 
     XCTAssertEqual(opened, ["https://example.slack.com/archives/D01-1"])
     XCTAssertEqual(model.store.tasks.count, 1, "タスクにしない")
@@ -72,21 +72,21 @@ extension TaskPaletteCardKeyTests {
     model.onOpenURL = { opened.append($0.absoluteString) }
     let window = mount(model)
 
-    press(Key.enter, "\r", .command, to: window)
-    press(Key.enter, "\r", .command, repeating: true, to: window)
-    press(Key.enter, "\r", .command, repeating: true, to: window)
+    send(Key.enter, "\r", .command, to: window)
+    send(Key.enter, "\r", .command, repeating: true, to: window)
+    send(Key.enter, "\r", .command, repeating: true, to: window)
     XCTAssertEqual(opened.count, 1, "ブラウザを 1 つだけ開く")
 
     arrow(Key.left, to: window)
     arrow(Key.down, to: window)
     arrow(Key.right, to: window)
     arrow(Key.right, to: window)
-    press(Key.space, " ", to: window)
-    press(Key.space, " ", repeating: true, to: window)
+    send(Key.space, " ", to: window)
+    send(Key.space, " ", repeating: true, to: window)
     XCTAssertEqual(model.automation.selectedAutomation?.paused, true, "止める ⇄ 再開は 1 回だけ（往復しない）")
 
-    press(Key.enter, "\r", to: window)
-    press(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", repeating: true, to: window)
     XCTAssertTrue(model.automation.runner.isRunning(1))
     XCTAssertNil(model.automation.error, "リピートで「実行中のため今すぐ実行できません」の赤を出さない")
   }
@@ -98,7 +98,7 @@ extension TaskPaletteCardKeyTests {
 
     arrow(Key.left, to: window)
     XCTAssertEqual(model.automation.place, .shelf)
-    press(Key.tab, "\u{19}", .shift, to: window)
+    send(Key.tab, "\u{19}", .shift, to: window)
     XCTAssertEqual(model.visibleTab, .automation, "棚では ⇧⇥ でタブを替えない")
     arrow(Key.down, to: window)
     XCTAssertEqual(model.automation.shelfList.selectedID, .automation(1))
@@ -107,10 +107,10 @@ extension TaskPaletteCardKeyTests {
 
     arrow(Key.right, to: window)
     XCTAssertEqual(model.automation.place, .contents)
-    press(Key.space, " ", to: window)
+    send(Key.space, " ", to: window)
     XCTAssertEqual(model.automation.selectedAutomation?.paused, true)
     XCTAssertEqual(model.query, "", "空白は入力欄に入らない")
-    press(Key.escape, "\u{1B}", to: window)
+    send(Key.escape, "\u{1B}", to: window)
     XCTAssertEqual(model.automation.place, .proposals)
 
     type("a", into: window)
@@ -128,11 +128,11 @@ extension TaskPaletteCardKeyTests {
     arrow(Key.right, to: window)
     XCTAssertEqual(model.automation.place, .contents)
 
-    press(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", to: window)
     XCTAssertTrue(model.automation.runner.isRunning(1))
     XCTAssertEqual(model.store.tasks.count, 1, "提案をタスクにしない")
 
-    press(Key.delete, "\u{7F}", .command, to: window)
+    send(Key.delete, "\u{7F}", .command, to: window)
     XCTAssertNil(model.automation.store.automation(1))
     XCTAssertEqual(model.automation.place, .proposals)
     XCTAssertFalse(
@@ -146,7 +146,7 @@ extension TaskPaletteCardKeyTests {
     model.onDismiss = { dismissed = true }
     let window = mount(model)
 
-    press(Key.escape, "\u{1B}", to: window)
+    send(Key.escape, "\u{1B}", to: window)
 
     XCTAssertTrue(dismissed)
   }
@@ -177,7 +177,7 @@ extension TaskPaletteCardKeyTests {
     flush(window)
 
     XCTAssertEqual(model.automation.proposalList.selectedID, 2)
-    press(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", to: window)
     XCTAssertTrue(model.store.tasks.contains { $0.title == "オンボーディングの環境構築手順を見る" })
   }
 }

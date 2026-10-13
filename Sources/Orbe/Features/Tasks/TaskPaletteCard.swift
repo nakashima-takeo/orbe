@@ -82,22 +82,13 @@ struct TaskPaletteCard: View {
     Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
   }
 
-  /// 開いている絞り込みのメニューを、そのドロップダウンの直下に重ねる。メニューの外のクリックはメニューを閉じるだけで、
-  /// 下へは届かない。
+  /// 開いている絞り込みのメニューを重ねる。メニューの外のクリックはメニューを閉じるだけで、下へは届かない。
   @ViewBuilder private func filterMenu(_ anchors: [TaskPaletteFilterKind: Anchor<CGRect>])
     -> some View
   {
     if let kind = model.openFilterMenu, let anchor = anchors[kind] {
-      GeometryReader { proxy in
-        let chip = proxy[anchor]
-        ZStack(alignment: .topLeading) {
-          Color.clear
-            .contentShape(Rectangle())
-            .onTapGesture { model.closeFilterMenu() }
-          TaskPaletteFilterMenu(model: model, kind: kind)
-            .offset(x: chip.minX, y: chip.maxY + Theme.Space.tick)
-        }
-      }
+      TaskPaletteFilterMenuLayer(model: model, kind: kind, anchor: anchor)
+        .id(kind)
     }
   }
 
@@ -187,6 +178,34 @@ struct TaskPaletteCard: View {
   private static let headerHeight: CGFloat = 48
   /// 入力欄の背景の高さ（打っている間に地を敷く範囲）。
   private static let inputHeight: CGFloat = 34
+}
+
+/// 絞り込みのメニューを、開いた時点のドロップダウンの直下に置き、カードの下端の手前までに収める。開いている間は
+/// 位置を動かさない——値をオンにすると表記が伸びてドロップダウンが折り返すので、追うとメニューが押した場所から
+/// 逃げ、続けて選ぶクリックがメニューの外に当たって閉じてしまう。
+private struct TaskPaletteFilterMenuLayer: View {
+  @Bindable var model: TaskPaletteModel
+  let kind: TaskPaletteFilterKind
+  let anchor: Anchor<CGRect>
+  @State private var pinned: CGPoint?
+
+  var body: some View {
+    GeometryReader { proxy in
+      let chip = proxy[anchor]
+      let origin = pinned ?? CGPoint(x: chip.minX, y: chip.maxY + Theme.Space.tick)
+      ZStack(alignment: .topLeading) {
+        Color.clear
+          .contentShape(Rectangle())
+          .onTapGesture { model.closeFilterMenu() }
+        TaskPaletteFilterMenu(
+          model: model, kind: kind,
+          maxHeight: max(0, proxy.size.height - origin.y - Theme.Space.beat)
+        )
+        .offset(x: origin.x, y: origin.y)
+      }
+      .onAppear { pinned = origin }
+    }
+  }
 }
 
 /// 入力欄のキーの案内（「↵ タスクに追加」「⌘↵ agent に任せる」）。キーは枠で囲み、光っている間は accent の

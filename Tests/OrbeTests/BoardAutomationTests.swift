@@ -62,34 +62,13 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     return window
   }
 
-  /// 実アプリと同じく、キューから取り出してから配る（SwiftUI はキーリピートかをそのキーから読む）。
-  func press(
-    _ keyCode: UInt16, _ characters: String, _ flags: NSEvent.ModifierFlags = [],
-    repeating: Bool = false, to window: NSWindow
-  ) {
-    guard
-      let event = NSEvent.keyEvent(
-        with: .keyDown, location: .zero, modifierFlags: flags,
-        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-        context: nil, characters: characters, charactersIgnoringModifiers: characters,
-        isARepeat: repeating, keyCode: keyCode)
-    else { return XCTFail("キーイベントを作れない") }
-    NSApp.postEvent(event, atStart: true)
-    guard
-      let dequeued = NSApp.nextEvent(
-        matching: .keyDown, until: Date().addingTimeInterval(1), inMode: .default, dequeue: true)
-    else { return XCTFail("キーイベントがキューから取れない") }
-    NSApp.sendEvent(dequeued)
-    pump(0.15)
-  }
-
   /// 実機の矢印キーは numericPad と function の修飾を伴って届く。
   func down(_ window: NSWindow) {
-    press(Key.down, "\u{F701}", [.numericPad, .function], to: window)
+    send(Key.down, "\u{F701}", [.numericPad, .function], to: window)
   }
 
   func up(_ window: NSWindow) {
-    press(Key.up, "\u{F700}", [.numericPad, .function], to: window)
+    send(Key.up, "\u{F700}", [.numericPad, .function], to: window)
   }
 
   // MARK: - 並び
@@ -120,21 +99,21 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     down(window)
     XCTAssertEqual(automation.selectedAutomation?.id, Self.slack)
 
-    press(Key.space, " ", to: window)
+    send(Key.space, " ", to: window)
     XCTAssertEqual(automation.store.automation(Self.slack)?.paused, true)
     XCTAssertEqual(automation.selectedAutomation?.id, Self.slack, "末尾へ沈んでも選択は同じ自動追加")
-    press(Key.space, " ", to: window)
+    send(Key.space, " ", to: window)
     XCTAssertEqual(automation.store.automation(Self.slack)?.paused, false)
 
-    press(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", to: window)
     XCTAssertTrue(automation.runner.isRunning(Self.slack))
-    press(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", to: window)
     XCTAssertEqual(model.refusal, .automationErrRunning, "走っている間の ↵ は赤で断る")
 
     down(window)
     XCTAssertNil(model.refusal, "↓ で消える")
     XCTAssertEqual(automation.selectedAutomation?.id, Self.github, "前提")
-    press(Key.delete, "\u{7F}", .command, to: window)
+    send(Key.delete, "\u{7F}", .command, to: window)
     XCTAssertNil(automation.store.automation(Self.github))
     XCTAssertEqual(automation.selectedAutomation?.id, Self.pausedGmail, "同じ位置の行")
   }
@@ -147,18 +126,18 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     down(window)
     down(window)
 
-    press(Key.space, " ", to: window)
-    press(Key.space, " ", repeating: true, to: window)
+    send(Key.space, " ", to: window)
+    send(Key.space, " ", repeating: true, to: window)
     XCTAssertEqual(automation.store.automation(Self.slack)?.paused, true, "止める ⇄ 再開は 1 回だけ（往復しない）")
 
-    press(Key.enter, "\r", to: window)
-    press(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", repeating: true, to: window)
     XCTAssertTrue(automation.runner.isRunning(Self.slack))
     XCTAssertNil(model.refusal, "リピートで「実行中のため今すぐ実行できません」の赤を出さない")
 
-    press(Key.delete, "\u{7F}", .command, to: window)
-    press(Key.delete, "\u{7F}", .command, repeating: true, to: window)
-    press(Key.delete, "\u{7F}", .command, repeating: true, to: window)
+    send(Key.delete, "\u{7F}", .command, to: window)
+    send(Key.delete, "\u{7F}", .command, repeating: true, to: window)
+    send(Key.delete, "\u{7F}", .command, repeating: true, to: window)
     XCTAssertEqual(
       automation.store.automations.map(\.id), [Self.github, Self.failingBacklog, Self.pausedGmail],
       "消えるのは 1 件だけ")
@@ -171,8 +150,8 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     let window = mount(model)
     down(window)
 
-    press(Key.enter, "\r", .shift, to: window)
-    press(Key.x, "x", to: window)
+    send(Key.enter, "\r", .shift, to: window)
+    send(Key.x, "x", to: window)
 
     XCTAssertFalse(
       automation.store.automations.contains { automation.runner.isRunning($0.id) }, "どれも走らない")
@@ -195,7 +174,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     flush(window)
 
     XCTAssertEqual(automation.selectedAutomation?.id, Self.github)
-    press(Key.space, " ", to: window)
+    send(Key.space, " ", to: window)
     XCTAssertEqual(automation.store.automation(Self.github)?.paused, true)
   }
 }

@@ -13,7 +13,7 @@ enum TaskStoreError: Error, Equatable {
 /// 同じ変異メソッドを呼ぶ——値の検証と不変条件はここだけが持つ。変異が成功するたびに即座に保存するので、
 /// 呼び出し側に保存の責務は無い。
 @Observable final class TaskStore {
-  /// 足した順に持つ。並びに意味は持たせない——一覧の並びは読む側が `TaskItem.newerFirst` で決める。
+  /// 並びに意味は持たせない——一覧の並びは読む側が `TaskItem.newerFirst` で決める。
   private(set) var tasks: [TaskItem]
   private var nextId: Int
 

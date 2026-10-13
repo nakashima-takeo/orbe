@@ -68,11 +68,11 @@ extension TaskPaletteCardKeyTests {
     let window = mount(model)
     enterDetail(model, at: .status, in: window)
 
-    press(Key.escape, "\u{1B}", to: window)
+    send(Key.escape, "\u{1B}", to: window)
     XCTAssertEqual(model.area, .list, "右の欄の esc は一覧へ戻る")
 
     enterDetail(model, at: .priority, in: window)
-    press(Key.space, " ", to: window)
+    send(Key.space, " ", to: window)
     XCTAssertEqual(status(model, 3), .done, "右の欄でも space はそのタスクに効く")
     XCTAssertEqual(model.area, .detail(.field(.priority)), "右の欄に居たまま")
   }
@@ -82,7 +82,7 @@ extension TaskPaletteCardKeyTests {
     let window = mount(model)
     enterDetail(model, at: .priority, in: window)
 
-    press(Key.space, " ", repeating: true, to: window)
+    send(Key.space, " ", repeating: true, to: window)
 
     XCTAssertEqual(model.store.tasks.map(\.status), [.todo, .todo, .todo])
     XCTAssertEqual(model.area, .detail(.field(.priority)))
@@ -93,7 +93,7 @@ extension TaskPaletteCardKeyTests {
     let model = model()
     let window = mount(model)
     enterDetail(model, at: .description, in: window)
-    press(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", to: window)
     type("abc", into: window)
     XCTAssertNotNil(model.draft, "前提: 詳細の欄を編集中")
     flush(window)
@@ -112,17 +112,17 @@ extension TaskPaletteCardKeyTests {
     let window = mount(model)
     enterDetail(model, at: .waiting, in: window)
 
-    press(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", to: window)
     type("review", into: window)
     XCTAssertEqual(model.query, "", "打った文字は一覧の入力に入らない")
-    press(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", to: window)
 
     XCTAssertEqual(model.store.tasks.first { $0.id == 3 }?.waiting?.reason, "review")
     XCTAssertNil(model.draft)
 
-    press(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", to: window)
     type("x", into: window)
-    press(Key.escape, "\u{1B}", to: window)
+    send(Key.escape, "\u{1B}", to: window)
     XCTAssertEqual(
       model.store.tasks.first { $0.id == 3 }?.waiting?.reason, "review", "esc は編集を取り消す")
     XCTAssertEqual(model.area, .detail(.field(.waiting)), "取り消した後も項目に居る")
@@ -137,9 +137,9 @@ extension TaskPaletteCardKeyTests {
     let window = mount(model)
     enterDetail(model, at: .waiting, in: window)
 
-    press(Key.enter, "\r", to: window)
-    press(Key.enter, "\r", repeating: true, to: window)
-    press(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", repeating: true, to: window)
 
     XCTAssertNotNil(model.draft, "リピートで確定しない")
   }
@@ -149,7 +149,7 @@ extension TaskPaletteCardKeyTests {
     let window = mount(model)
     enterDetail(model, at: .waiting, in: window)
 
-    press(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", repeating: true, to: window)
 
     XCTAssertNil(model.draft)
   }
@@ -164,7 +164,7 @@ extension TaskPaletteCardKeyTests {
 
     for field in [TaskDetailField.title, .description] {
       enterDetail(model, at: field, in: window)
-      press(Key.enter, "\r", .command, to: window)
+      send(Key.enter, "\r", .command, to: window)
       XCTAssertNil(model.draft, "\(field): 編集は始めない")
       XCTAssertEqual(opened.last, model.selectedTask?.id, "\(field): agent を開く")
     }
@@ -177,19 +177,19 @@ extension TaskPaletteCardKeyTests {
     let window = mount(model)
     enterDetail(model, at: .description, in: window)
 
-    press(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", to: window)
     type("1", into: window)
-    press(Key.enter, "\r", to: window)
-    press(Key.enter, "\r", repeating: true, to: window)
-    press(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", repeating: true, to: window)
     type("2", into: window)
-    press(Key.escape, "\u{1B}", to: window)
+    send(Key.escape, "\u{1B}", to: window)
 
     XCTAssertEqual(model.store.tasks.first { $0.id == 3 }?.description, "1\n\n\n2")
     XCTAssertNil(model.draft)
     XCTAssertEqual(model.area, .detail(.field(.description)))
 
-    press(Key.escape, "\u{1B}", to: window)
+    send(Key.escape, "\u{1B}", to: window)
     XCTAssertEqual(model.area, .list)
   }
 
@@ -198,15 +198,15 @@ extension TaskPaletteCardKeyTests {
     let model = model()
     let window = mount(model)
     enterDetail(model, at: .description, in: window)
-    press(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", to: window)
     type("1", into: window)
 
-    press(Key.enter, "\r", .command, to: window)
+    send(Key.enter, "\r", .command, to: window)
 
     XCTAssertNotNil(model.draft, "編集が続く")
     XCTAssertEqual(model.store.tasks.first { $0.id == 3 }?.description, "", "確定しない")
     type("2", into: window)
-    press(Key.escape, "\u{1B}", to: window)
+    send(Key.escape, "\u{1B}", to: window)
     XCTAssertEqual(model.store.tasks.first { $0.id == 3 }?.description, "12", "同じ編集が続き、改行は入らない")
   }
 }

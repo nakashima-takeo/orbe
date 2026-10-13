@@ -24,6 +24,15 @@ extension DesignSceneFixtures {
     return TaskPaletteWorkspaces(opened: all[0], all: all, home: all[2].id)
   }()
 
+  /// 見本の 3 つの後に 33 個を足した 36 個（workspace のメニューがカードに収まらない数）。
+  static let taskManyWorkspaces: TaskPaletteWorkspaces = {
+    let all =
+      taskWorkspaces.all
+      + (1...33).map { TaskPaletteWorkspaces.Entry(id: UUID(), name: "client-\($0)") }
+    return TaskPaletteWorkspaces(
+      opened: taskWorkspaces.opened, all: all, home: taskWorkspaces.home)
+  }()
+
   /// 見本の 7 件（未着手 4・進行中 1・待ち 2）と完了 3 件。ID は作成の順。
   static func taskDesignFile() -> TasksFile {
     let ws = taskWorkspaces.all.map(\.id)
@@ -205,7 +214,8 @@ extension DesignSceneFixtures {
 
   static func taskPaletteModel(
     _ file: TasksFile? = nil, openLists: ((GitHubViewer) -> GitHubOpenLists)? = nil,
-    sessionTabs: AgentSessionTabs = AgentSessionTabs(), automations: AutomationsFile? = nil
+    sessionTabs: AgentSessionTabs = AgentSessionTabs(), automations: AutomationsFile? = nil,
+    workspaces: TaskPaletteWorkspaces? = nil
   ) -> TaskPaletteModel {
     let items = taskGitHubItems()
     return TaskPaletteModel(
@@ -213,7 +223,7 @@ extension DesignSceneFixtures {
       openLists: (openLists ?? taskOpenLists)(items.viewer), root: taskRoot,
       agents: taskAgents(), sessionTabs: sessionTabs,
       automations: automationRunner(automations ?? automationDesignFile()),
-      workspaces: taskWorkspaces, now: taskToday, timeZone: taskCalendar.timeZone,
+      workspaces: workspaces ?? taskWorkspaces, now: taskToday, timeZone: taskCalendar.timeZone,
       clock: { _ in taskToday })
   }
 

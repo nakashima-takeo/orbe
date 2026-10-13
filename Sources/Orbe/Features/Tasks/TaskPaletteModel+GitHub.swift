@@ -271,7 +271,7 @@ extension TaskPaletteModel {
   @discardableResult func changePaneValue(_ direction: Int) -> Bool {
     guard area == .pane(.priority) else { return false }
     error = nil
-    let options: [TaskItem.Priority] = [.high, .medium, .low]
+    let options = TaskItem.Priority.allCases
     let index = options.firstIndex(of: pane.priority)!
     pane.priority = options[min(max(index + direction, 0), options.count - 1)]
     return true

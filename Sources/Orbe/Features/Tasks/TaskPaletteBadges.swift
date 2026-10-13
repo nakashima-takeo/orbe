@@ -24,31 +24,19 @@ struct TaskPullRequestBadge: View {
   }
 }
 
-/// 行の札（優先度・期限・待ち・workspace）。
+/// 札（提案の行の期限・右の欄の開いた workspace）。
 struct TaskPaletteBadge: View {
-  var symbol: String?
   let text: String
   let foreground: Color
   let fill: Color
-  var capsule = false
-  /// 文字の上限幅（超えれば末尾を省略する）。nil は全部出す。
-  var maxWidth: CGFloat?
 
   var body: some View {
-    HStack(spacing: Theme.Space.tick) {
-      if let symbol {
-        Image(systemName: symbol).font(.system(size: 8, weight: .medium))
-      }
-      Text(text).lineLimit(1).truncationMode(.tail)
-        .frame(maxWidth: maxWidth, alignment: .leading)
-    }
-    .font(Font.theme.meta)
-    .foregroundStyle(foreground)
-    .fixedSize()
-    .padding(.horizontal, capsule ? Theme.Space.step : Theme.Space.note)
-    .frame(height: TaskPaletteRowMetrics.badge)
-    .background(
-      RoundedRectangle(cornerRadius: capsule ? Theme.Radius.pill : Theme.Radius.sm + 1)
-        .fill(fill))
+    Text(text).lineLimit(1)
+      .font(Font.theme.meta)
+      .foregroundStyle(foreground)
+      .fixedSize()
+      .padding(.horizontal, Theme.Space.note)
+      .frame(height: TaskPaletteRowMetrics.badge)
+      .background(RoundedRectangle(cornerRadius: Theme.Radius.sm + 1).fill(fill))
   }
 }

@@ -31,8 +31,9 @@ let taskUsage = """
 
   STATUSES: \(taskStatusNames.joined(separator: ", "))
   PRIORITIES: \(taskPriorityNames.joined(separator: ", ")) (default medium)
-  list prints the tasks of all workspaces, newest first (by creation time;
-  ties go to the higher id). add prints the new task id. Ids are never reused.
+  list prints the tasks of all workspaces unless --workspace is given, newest
+  first (by creation time; ties go to the higher id). add prints the new task
+  id. Ids are never reused.
   add without --workspace attaches the task to the workspace of the tab you run
   it in (ORBE_TAB), or to no workspace outside a Orbe tab. --workspace current
   means the workspace in front, which is not necessarily your tab's.

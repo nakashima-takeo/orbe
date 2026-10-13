@@ -36,16 +36,7 @@ final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
   }
 
   private func sendTab(shift: Bool, to window: NSWindow) {
-    let characters = shift ? "\u{19}" : "\t"
-    guard
-      let event = NSEvent.keyEvent(
-        with: .keyDown, location: .zero, modifierFlags: shift ? [.shift] : [],
-        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-        context: nil, characters: characters, charactersIgnoringModifiers: characters,
-        isARepeat: false, keyCode: 48)
-    else { return XCTFail("キーイベントを作れない") }
-    NSApp.sendEvent(event)
-    pump(0.15)
+    send(48, shift ? "\u{19}" : "\t", shift ? [.shift] : [], to: window)
   }
 
   /// 作成行の選択中、⇧⇥ はベースだけを回し、⇥ は起動先だけを回す。
@@ -126,15 +117,7 @@ final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
   }
 
   private func backspace(repeating: Bool = false, to window: NSWindow) {
-    guard
-      let event = NSEvent.keyEvent(
-        with: .keyDown, location: .zero, modifierFlags: [],
-        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-        context: nil, characters: "\u{7F}", charactersIgnoringModifiers: "\u{7F}",
-        isARepeat: repeating, keyCode: 51)
-    else { return XCTFail("キーイベントを作れない") }
-    NSApp.sendEvent(event)
-    pump(0.15)
+    send(51, "\u{7F}", repeating: repeating, to: window)
   }
 
   /// タスクから開いた ⌘T の ⌫ は、打った文字を先に消し、入力欄が空になってから押した ⌫ でタスクの札を外す。
@@ -155,24 +138,6 @@ final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertNil(model.taskContextID, "空の入力欄の ⌫ で外す")
   }
 
-  /// 実アプリと同じく、キューから取り出してから配る（確定の入口はキーリピートかを `NSApp.currentEvent` で見る）。
-  private func enter(repeating: Bool = false, to window: NSWindow) {
-    guard
-      let event = NSEvent.keyEvent(
-        with: .keyDown, location: .zero, modifierFlags: [],
-        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-        context: nil, characters: "\r", charactersIgnoringModifiers: "\r",
-        isARepeat: repeating, keyCode: 36)
-    else { return XCTFail("キーイベントを作れない") }
-    NSApp.postEvent(event, atStart: true)
-    guard
-      let dequeued = NSApp.nextEvent(
-        matching: .keyDown, until: Date().addingTimeInterval(1), inMode: .default, dequeue: true)
-    else { return XCTFail("キーイベントがキューから取れない") }
-    NSApp.sendEvent(dequeued)
-    pump(0.15)
-  }
-
   /// 別の画面で押し始めた ↵ を押し続け、この画面に差し替わった後のリピートだけが入力欄に届いても、人が行を選ぶ前に
   /// 実行しない。押した瞬間の ↵ は実行する。
   func testEnterKeyRepeatFromAnotherScreenDoesNotExecute() {
@@ -181,11 +146,11 @@ final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
     model.onExecute = { executed.append($0) }
     let window = mount(model)
 
-    enter(repeating: true, to: window)
-    enter(repeating: true, to: window)
+    send(36, "\r", repeating: true, to: window)
+    send(36, "\r", repeating: true, to: window)
     XCTAssertEqual(executed, [])
 
-    enter(to: window)
+    send(36, "\r", to: window)
     XCTAssertEqual(executed.count, 1)
   }
 

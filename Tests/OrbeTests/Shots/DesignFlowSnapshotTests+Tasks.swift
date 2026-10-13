@@ -108,11 +108,13 @@ extension DesignFlowSnapshotTests {
   }
 
   /// 待ちの条件: 見積もり（待っている）を選ぶ → → で右の欄 → ↓ で確認のコマンド → ↵ で開く → ↓ で実行の記録 → ↵ で
-  /// 開く → 一覧へ戻り、確認が成功して解けた見積もりを選んだまま（フッターの「⌘T … を claude で続きから」）、までを撮る。
+  /// 開く → 一覧へ戻り、確認が成功して解けた見積もりを選んだまま（フッターの「⌘↵ … を claude で続きから」）→ 見積もりに
+  /// #221 を結び付けて GitHub タブでその行を選ぶ（フッターは同じく「⌘↵ … を claude で続きから」）、までを撮る。
   func testTaskWaitCondition() throws {
     let palette = DesignSceneFixtures.taskPaletteModel(
       DesignSceneFixtures.taskWaitConditionFile(),
       sessionTabs: DesignSceneFixtures.taskSessionTabs())
+    let issue221 = DesignSceneFixtures.taskLink(.issue, "orbe", 221)
     try flow(
       "task_wait_condition", size: NSSize(width: 1440, height: 900),
       render: {
@@ -148,6 +150,14 @@ extension DesignFlowSnapshotTests {
                   stdout: .init(data: Data(DesignSceneFixtures.taskWaitOutput.utf8)),
                   stderr: .init())))
             palette.reconcile()
+          }
+        ),
+        (
+          "resolved_github",
+          {
+            _ = try? palette.store.update(3, TaskUpdate(links: [issue221]))
+            palette.setTab(.github)
+            palette.tapGitHubRow(.item(issue221.item))
           }
         ),
       ])
@@ -311,15 +321,20 @@ extension DesignFlowSnapshotTests {
 
   /// いちばん右のスクロール（GitHub タブの右の欄）を下端まで送る。
   private func scrollRightmostToBottom(in host: NSView) {
+    scrollToBottom(in: host) { views in
+      views.max(by: {
+        $0.convert($0.bounds, to: host).minX < $1.convert($1.bounds, to: host).minX
+      })
+    }
+  }
+
+  /// `pick` が選んだスクロール（引数は view の木を深さ優先でたどった順）を下端まで送る。
+  func scrollToBottom(in host: NSView, pick: ([NSScrollView]) -> NSScrollView?) {
     func scrollViews(_ view: NSView) -> [NSScrollView] {
       (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap(scrollViews)
     }
-    guard
-      let pane = scrollViews(host).max(by: {
-        $0.convert($0.bounds, to: host).minX < $1.convert($1.bounds, to: host).minX
-      }),
-      let document = pane.documentView
-    else { return XCTFail("右の欄のスクロールが見つからない") }
+    guard let pane = pick(scrollViews(host)), let document = pane.documentView
+    else { return XCTFail("スクロールが見つからない") }
     let bottom = document.isFlipped ? document.bounds.height - pane.contentView.bounds.height : 0
     pane.contentView.scroll(to: NSPoint(x: 0, y: bottom))
     pane.reflectScrolledClipView(pane.contentView)
