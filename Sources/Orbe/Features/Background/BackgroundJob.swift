@@ -201,6 +201,8 @@ enum BackgroundStartFailure: Error, Equatable {
   case agentUnsupported(cli: String, reason: HeadlessRefusal)
   case agentNotFound(String)
   case directoryMissing(String)
+  /// agent の回の作業ディレクトリを作れなかった（そのパス）。
+  case workDirectoryFailed(String)
   /// `posix_spawn` の失敗（errno）。
   case launchFailed(Int32)
 }

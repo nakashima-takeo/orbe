@@ -7,6 +7,8 @@ import Foundation
 ///
 /// 子の環境は「プロセスの環境＋子プロセス PATH」（コマンドは 1 回分の入力の変数を足す）。PATH と agent の絶対パスは実行のたびに裏で解決し、PATH の確定を待つ
 /// ——起動直後の「検出中」を「無い」と取り違えず、後から入れた CLI も拾うため。
+/// agent は回ごとに作る空のディレクトリで起こし、回の後に消す——claude は作業ディレクトリの中の読み取り専用のコマンドを許可の
+/// 規則と関係なく走らせるので、読める範囲を空にする。
 final class BackgroundRuns {
   static let shared = BackgroundRuns()
 
@@ -123,6 +125,7 @@ final class BackgroundRuns {
         commandLine: Self.describe(entry.job), startedAt: startedAt, endedAt: Date(),
         ending: .notStarted(failure), output: .none)
     case .success(let prepared):
+      defer { prepared.removeWorkDirectory() }
       let process = BackgroundProcess(prepared.spec)
       let proceed = lock.withLock {
         guard !entry.stopRequested else { return false }
@@ -177,8 +180,12 @@ final class BackgroundRuns {
           $0.command == call.cli
         })
       else { return .failure(.agentNotFound(call.cli)) }
-      return .success(
-        .agent(call, cli: cli, executable: found.path, limits: job.limits, env: env))
+      do {
+        return .success(
+          try Prepared.agent(call, cli: cli, executable: found.path, limits: job.limits, env: env))
+      } catch {
+        return .failure(error)
+      }
     }
   }
 
@@ -228,8 +235,15 @@ final class BackgroundRunHandle {
 private struct Prepared {
   let commandLine: String
   let spec: BackgroundProcess.Spec
+  /// 回のために作り、回の後に消す作業ディレクトリ。
+  let workDirectory: URL?
   let makeResult:
     (BackgroundProcess.Outcome, _ startedAt: Date, _ endedAt: Date) -> BackgroundRunResult
+
+  func removeWorkDirectory() {
+    guard let workDirectory else { return }
+    try? FileManager.default.removeItem(at: workDirectory)
+  }
 
   static func command(
     _ command: BackgroundCommand, input: BackgroundInput, directory: String,
@@ -241,7 +255,9 @@ private struct Prepared {
       stdin: input.stdin, elapsedLimit: limits.elapsed, idleLimit: limits.idle,
       stdout: .collect(.init(limit: limits.output, overflowStops: true)),
       stderr: .init(limit: limits.stderr, overflowStops: true))
-    return Prepared(commandLine: command.script, spec: spec) { outcome, startedAt, endedAt in
+    return Prepared(
+      commandLine: command.script, spec: spec, workDirectory: nil
+    ) { outcome, startedAt, endedAt in
       BackgroundRunResult(
         commandLine: command.script, startedAt: startedAt, endedAt: endedAt,
         ending: ending(outcome.ending),
@@ -250,17 +266,25 @@ private struct Prepared {
     }
   }
 
+  /// 作業ディレクトリをこの回のために作る。作れなければ始めない。
   static func agent(
     _ call: BackgroundAgentCall, cli: HeadlessCLI, executable: String, limits: BackgroundLimits,
     env: [String: String]
-  ) -> Prepared {
+  ) throws(BackgroundStartFailure) -> Prepared {
+    let directory = FileManager.default.temporaryDirectory
+      .appendingPathComponent("orbe-agent-\(UUID().uuidString)")
+    do {
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+    } catch {
+      throw .workDirectoryFailed(directory.path)
+    }
     let arguments = cli.arguments(call.model, call.tools)
     let commandLine = ([executable] + arguments).map(ShellWord.quoted).joined(separator: " ")
     let box = ReplyBox()
     let watched = call.tools.filter { $0.hasPrefix("mcp__") }
     let spec = BackgroundProcess.Spec(
       executable: executable, arguments: arguments,
-      environment: env.merging(cli.environment(call.tools)) { $1 }, directory: NSHomeDirectory(),
+      environment: env.merging(cli.environment(call.tools)) { $1 }, directory: directory.path,
       stdin: Data(call.prompt.utf8), elapsedLimit: limits.elapsed,
       idleLimit: limits.idle,
       stdout: .lines(maxLength: BackgroundRuns.eventLineLimit) { line in
@@ -280,7 +304,9 @@ private struct Prepared {
       },
       // agent の標準エラーは成果ではない。上限は貯める量だけを抑え、走らせ続ける。
       stderr: .init(limit: limits.stderr, overflowStops: false))
-    return Prepared(commandLine: commandLine, spec: spec) { outcome, startedAt, endedAt in
+    return Prepared(
+      commandLine: commandLine, spec: spec, workDirectory: directory
+    ) { outcome, startedAt, endedAt in
       var result = ending(outcome.ending)
       if let missing = box.missingTools {
         result = .toolsUnavailable(missing)
