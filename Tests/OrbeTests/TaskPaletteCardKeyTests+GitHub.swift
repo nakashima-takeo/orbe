@@ -11,7 +11,7 @@ private typealias GitHub = TaskPaletteGitHubSamples
 /// ⌘⌫・↵ が、押した行の先まで外す・タスクにする（未確認の項目に自分をアサインする）。⇥ が絞り込みでなく範囲を
 /// 切り替える。選ぶ状態の esc で画面ごと閉じる。項目を選ぶ間の ⌘⌫ で、別のタスクの結び付きが外れる。右の欄の
 /// 期限で打った日付が絞り込みに入る、期限の ↵ でタスクができる。一覧が取り直されて行が消えても、消えた行を
-/// 選んだまま ↵ が空振りする。
+/// 選んだまま ↵ が空振りする。⌘↵ で項目がタスクにならず agent も開かない。
 extension TaskPaletteCardKeyTests {
   private enum GitHubKey {
     static let l: UInt16 = 37
@@ -164,6 +164,39 @@ extension TaskPaletteCardKeyTests {
     pump(0.3)
 
     XCTAssertEqual(model.selectedGitHubID, .item(GitHub.id(5)))
+  }
+
+  // MARK: - タスクにして開く（⌘↵）
+
+  /// 一覧でも右の欄でも、⌘↵ は結び付いていない項目をタスクにしてからそのタスクで、結び付いている項目はそのタスクで
+  /// agent を開く。ブラウザでは開かない。
+  func testCommandEnterOpensTheSelectedItemAsATaskFromTheListAndThePane() throws {
+    let model = GitHub.model(
+      [TaskPaletteSamples.task(1, "a") { $0.links = [GitHub.link(6)] }],
+      issues: [GitHub.issue(6), GitHub.issue(5)], pullRequests: [GitHub.pullRequest(9)])
+    var opened: [Int] = []
+    var browsed: [URL] = []
+    model.onOpenWorktreePalette = { opened.append($0) }
+    model.onOpenURL = { browsed.append($0) }
+    let window = mount(model)
+
+    for id in [GitHub.id(6), GitHub.id(5)] {
+      model.tapGitHubRow(.item(id))
+      flush(window)
+      press(Key.enter, "\r", .command, to: window)
+    }
+    model.tapGitHubRow(.item(GitHub.id(9)))
+    flush(window)
+    arrow(Key.right, to: window)
+    XCTAssertEqual(model.area, .pane(.assign), "前提: 結び付いていない PR の右の欄")
+    press(Key.enter, "\r", .command, to: window)
+
+    let issueTask = try XCTUnwrap(
+      model.store.tasks.first { $0.links.map(\.item) == [GitHub.id(5)] })
+    let prTask = try XCTUnwrap(model.store.tasks.first { $0.links.map(\.item) == [GitHub.id(9)] })
+    XCTAssertEqual(opened, [1, issueTask.id, prTask.id])
+    XCTAssertEqual(model.store.tasks.count, 3, "結び付いている項目はタスクを足さない")
+    XCTAssertEqual(browsed, [])
   }
 
   // MARK: - ブラウザで開く（⌘O）
