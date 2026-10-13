@@ -397,7 +397,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationWeekdays
   case automationWeekends
   case automationWeekly
-  case automationMonthly
+  case automationMonthlyOne
+  case automationMonthlyOther
   case automationMonthDay
   case automationListSeparator
   case automationAt

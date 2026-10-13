@@ -2,10 +2,12 @@ import XCTest
 
 @testable import Orbe
 
-/// 提案タブの文——回の要約（処理した回・新しい項目が無かった回・失敗した回・まだ回っていない）と、時刻の今日 / ほかの日。
+/// 提案タブの文——回の要約（処理した回・新しい項目が無かった回・失敗した回・まだ回っていない）、時刻の今日 / ほかの日、
+/// いつ（cron の言い換え）。
 ///
 /// 壊れると何が起きるか。新しい項目が無かった回が「新しい 0 件を処理 → 候補 0」と読め、処理が走ったように見える。失敗した回が
-/// 件数で出て、壊れた受信に気づけない。昨日の回が今日の時刻に見える。
+/// 件数で出て、壊れた受信に気づけない。昨日の回が今日の時刻に見える。cron の言い換えが元の時刻と食い違い、表示と違う時刻に
+/// 走ると読ませる（1・7 月だけの式が「毎日」に見える）。
 @MainActor
 final class AutomationTextTests: OrbeTestCase {
   private let text = automationText(.ja)
@@ -68,7 +70,7 @@ final class AutomationTextTests: OrbeTestCase {
       ("0 10 * * 1", "毎週月曜 10:00"),
       ("0 10 * * 1,4", "毎週月・木曜 10:00"),
       ("0 9 1,15 * *", "毎月1日・15日 9:00"),
-      ("*/30 * * * *", "30分ごと"),
+      ("*/30 * * * *", "0:00〜23:30 の30分ごと"),
       ("*/10 9-18 * * 1-5", "平日 9:00〜18:50 の10分ごと"),
       ("*/10 9-18 * * *", "9:00〜18:50 の10分ごと"),
       ("5 * * * *", "毎時5分"),
@@ -80,13 +82,15 @@ final class AutomationTextTests: OrbeTestCase {
     }
   }
 
-  /// 言い換えが元の時刻を一意に表せない形は、式のまま出す。
+  /// 言い換えが元の時刻を一意に表せない形は、式のまま出す。式は途中で折れないよう、欄の間を改行しない空白でつなぐ。
   func testCronThatHasNoWordsShowsTheExpression() {
     for expression in [
       "0 9 * 1,7 *", "0,20,45 * * * *", "0/7 9 * * *", "0 1,2,3,5,8 * * *",
       "*/10 9-11,14-16 * * *",
     ] {
-      XCTAssertEqual(text.when(DesignSceneFixtures.cron(expression)), "cron " + expression)
+      XCTAssertEqual(
+        text.when(DesignSceneFixtures.cron(expression)),
+        "cron " + expression.replacingOccurrences(of: " ", with: "\u{00A0}"))
     }
   }
 
@@ -97,6 +101,7 @@ final class AutomationTextTests: OrbeTestCase {
       ("0 9 * * 1-5", "weekdays at 9:00"),
       ("0 10 * * 1,4", "every Mon, Thu at 10:00"),
       ("0 9 1 * *", "monthly on day 1 at 9:00"),
+      ("0 9 1,15 * *", "monthly on days 1, 15 at 9:00"),
       ("*/10 9-18 * * 1-5", "weekdays every 10 min, 9:00–18:50"),
       ("5 * * * *", "hourly at :05"),
     ]

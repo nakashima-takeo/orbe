@@ -128,11 +128,15 @@ struct AutomationText {
     }
   }
 
-  /// 「30分ごと」「平日 9:00」「平日 9:00〜18:50 の10分ごと」。言葉にしない cron 式は「cron <式>」。
+  /// 「30分ごと」「平日 9:00」「平日 9:00〜18:50 の10分ごと」。言葉にしない cron 式は「cron <式>」で、式の欄の間は
+  /// 改行しない空白にする——狭い面で式の途中で折れると、欄が別の行に分かれて読み違える。
   func when(_ timing: BackgroundTiming) -> String {
     switch timing {
     case .every(let interval): l10n.format(.automationEvery, Int(interval / 60))
-    case .cron(let cron): words(cron) ?? "cron " + cron.expression
+    case .cron(let cron):
+      words(cron)
+        ?? "cron "
+        + cron.expression.split(whereSeparator: \.isWhitespace).joined(separator: "\u{00A0}")
     }
   }
 

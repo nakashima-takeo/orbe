@@ -23,7 +23,7 @@ extension AutomationText {
     if cron.days != Set(1...31) {
       return .some(
         l10n.format(
-          .automationMonthly,
+          cron.days.count == 1 ? .automationMonthlyOne : .automationMonthlyOther,
           cron.days.sorted().map { l10n.format(.automationMonthDay, $0) }.joined(
             separator: separator)))
     }
@@ -48,18 +48,16 @@ extension AutomationText {
       let times = hours.flatMap { hour in minutes.map { clock(hour, $0) } }
       return (l10n.format(.automationAt, times.joined(separator: " / ")), false)
     }
-    let allHours = hours.count == 24
     if minutes.count > 1 {
       let step = minutes[1]
       guard 60 % step == 0, minutes == Array(stride(from: 0, to: 60, by: step)) else { return nil }
-      if allHours { return (l10n.format(.automationEvery, step), true) }
       guard hours == Array(hours[0]...hours[hours.count - 1]) else { return nil }
       let first = clock(hours[0], 0)
       let last = clock(hours[hours.count - 1], minutes[minutes.count - 1])
       return (l10n.format(.automationEveryMinutesBetween, first, last, step), true)
     }
     let minute = minutes[0]
-    if allHours { return (l10n.format(.automationHourly, minute), true) }
+    if hours.count == 24 { return (l10n.format(.automationHourly, minute), true) }
     let step = hours[1] - hours[0]
     guard hours == Array(stride(from: hours[0], through: hours[hours.count - 1], by: step)) else {
       return nil
