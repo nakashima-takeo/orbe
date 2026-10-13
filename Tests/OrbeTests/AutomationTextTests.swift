@@ -56,8 +56,52 @@ final class AutomationTextTests: OrbeTestCase {
 
   func testWhen() {
     XCTAssertEqual(text.when(.every(1800)), "30分ごと")
-    XCTAssertEqual(
-      text.when(.daily([.init(hour: 13, minute: 0), .init(hour: 9, minute: 5)])), "毎日 9:05 / 13:00")
     XCTAssertEqual(text.next(DesignSceneFixtures.automationAt(17, 0)), "次回 17:00")
+  }
+
+  /// よくある形だけを言葉にし、言葉は元の時刻の集合を一意に表す（範囲は最初と最後の該当時刻）。
+  func testCronInWords() {
+    let cases: [(String, String)] = [
+      ("5 9,13 * * *", "毎日 9:05 / 13:05"),
+      ("0 9 * * 1-5", "平日 9:00"),
+      ("0 10 * * 0,6", "土日 10:00"),
+      ("0 10 * * 1", "毎週月曜 10:00"),
+      ("0 10 * * 1,4", "毎週月・木曜 10:00"),
+      ("0 9 1,15 * *", "毎月1日・15日 9:00"),
+      ("*/30 * * * *", "30分ごと"),
+      ("*/10 9-18 * * 1-5", "平日 9:00〜18:50 の10分ごと"),
+      ("*/10 9-18 * * *", "9:00〜18:50 の10分ごと"),
+      ("5 * * * *", "毎時5分"),
+      ("0 9-18 * * 1-5", "平日 9:00〜18:00 の1時間ごと"),
+      ("0 */2 * * *", "0:00〜22:00 の2時間ごと"),
+    ]
+    for (expression, words) in cases {
+      XCTAssertEqual(text.when(DesignSceneFixtures.cron(expression)), words, expression)
+    }
+  }
+
+  /// 言い換えが元の時刻を一意に表せない形は、式のまま出す。
+  func testCronThatHasNoWordsShowsTheExpression() {
+    for expression in [
+      "0 9 * 1,7 *", "0,20,45 * * * *", "0/7 9 * * *", "0 1,2,3,5,8 * * *",
+      "*/10 9-11,14-16 * * *",
+    ] {
+      XCTAssertEqual(text.when(DesignSceneFixtures.cron(expression)), "cron " + expression)
+    }
+  }
+
+  func testCronInEnglish() {
+    let en = Self.automationText(.en)
+    let cases: [(String, String)] = [
+      ("0 9,13 * * *", "daily at 9:00 / 13:00"),
+      ("0 9 * * 1-5", "weekdays at 9:00"),
+      ("0 10 * * 1,4", "every Mon, Thu at 10:00"),
+      ("0 9 1 * *", "monthly on day 1 at 9:00"),
+      ("*/10 9-18 * * 1-5", "weekdays every 10 min, 9:00–18:50"),
+      ("5 * * * *", "hourly at :05"),
+    ]
+    for (expression, words) in cases {
+      XCTAssertEqual(en.when(DesignSceneFixtures.cron(expression)), words, expression)
+    }
   }
 }

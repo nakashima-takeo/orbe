@@ -92,8 +92,6 @@ struct BackgroundLimits: Equatable {
 enum BackgroundJobError: Error, Equatable {
   case intervalTooShort
   case intervalTooLong
-  case noTimesOfDay
-  case invalidTimeOfDay
   case emptyCommand
   case relativeDirectory
   case unknownAgent(String)
@@ -108,8 +106,8 @@ enum BackgroundJobError: Error, Equatable {
 enum BackgroundTiming: Equatable {
   /// 最後に走った時刻から、この間隔の後。
   case every(TimeInterval)
-  /// 毎日この時刻に（その時点のタイムゾーンで数える）。
-  case daily(Set<BackgroundTimeOfDay>)
+  /// cron 式に該当する時刻に（その時点のタイムゾーンで数える）。
+  case cron(BackgroundCron)
 
   static let minimumInterval: TimeInterval = 60
   /// 7 日。番人の時計は秒を整数で持つので、桁あふれする間隔を予定に入れないため。
@@ -120,41 +118,30 @@ enum BackgroundTiming: Equatable {
     case .every(let interval):
       guard interval >= Self.minimumInterval else { throw BackgroundJobError.intervalTooShort }
       guard interval <= Self.maximumInterval else { throw BackgroundJobError.intervalTooLong }
-    case .daily(let times):
-      guard !times.isEmpty else { throw BackgroundJobError.noTimesOfDay }
-      guard times.allSatisfy({ (0...23).contains($0.hour) && (0...59).contains($0.minute) }) else {
-        throw BackgroundJobError.invalidTimeOfDay
-      }
+    case .cron:
+      break
     }
   }
 
   /// 次の出来事。規則は「数え始め（`anchor`）より後の最初の回」1 つで、初回・スリープ明け・再起動・時計の変更を同じに扱う。
-  /// 返る回は今以前（過ぎている）でありうる。期限がその回以前、または期限が今以前なら「期限が来た」になる。
+  /// 間隔の回は今以前（過ぎている）でありうる。cron の回は今の分の始まりより前にならない——cron と同じく「その時刻にだけ
+  /// 回る」ので、眠っていた間に過ぎた時刻は回さない。今の分に入っている該当時刻は今の回として返す（予約は該当時刻ちょうどに
+  /// 発火し、数え直す時点の今はわずかに過ぎている）。
+  /// 期限がその回以前、または期限が今以前なら「期限が来た」になる。
   /// 時計が戻って数え始めが未来になっていたら、今から数える（そのままでは次の回が戻った分だけ遠のき、予定が止まる）。
   func next(after anchor: Date, deadline: Date?, now: Date, calendar: Calendar) -> BackgroundNext {
-    let occurrence = firstOccurrence(after: min(anchor, now), calendar: calendar)
+    let anchor = min(anchor, now)
+    let occurrence: Date
+    switch self {
+    case .every(let interval):
+      occurrence = anchor.addingTimeInterval(interval)
+    case .cron(let cron):
+      let minute = calendar.dateInterval(of: .minute, for: now)?.start ?? now
+      occurrence = cron.next(after: anchor, notBefore: minute, calendar: calendar)
+    }
     if let deadline, deadline <= max(occurrence, now) { return .expire(deadline) }
     return .run(occurrence)
   }
-
-  private func firstOccurrence(after anchor: Date, calendar: Calendar) -> Date {
-    switch self {
-    case .every(let interval):
-      return anchor.addingTimeInterval(interval)
-    case .daily(let times):
-      // 夏時間で存在しない時刻は、次に存在する時刻へずらす（`.nextTime`）。
-      return times.compactMap {
-        calendar.nextDate(
-          after: anchor, matching: DateComponents(hour: $0.hour, minute: $0.minute, second: 0),
-          matchingPolicy: .nextTime, repeatedTimePolicy: .first)
-      }.min() ?? .distantFuture
-    }
-  }
-}
-
-struct BackgroundTimeOfDay: Hashable {
-  var hour: Int
-  var minute: Int
 }
 
 enum BackgroundNext: Equatable {

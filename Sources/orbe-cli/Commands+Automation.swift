@@ -34,7 +34,18 @@ let automationUsage = """
   the MCP tool set_automation:
   {"name", "trigger", "source", "steps", "sink", "notify"}; source and
   notify are optional.
-    trigger  {"everyMinutes": 30}  or  {"dailyAt": ["09:00", "13:00"]}
+    trigger  {"everyMinutes": 30}  or  {"cron": "0 9 * * 1-5"}
+             everyMinutes runs N minutes after the last run; one missed
+             while the Mac slept or Orbe was not running runs once on
+             waking. cron is "minute hour day month weekday" in the Mac's
+             time zone and runs only at those times; a time missed while
+             asleep is skipped. Fields take *, numbers, ranges a-b, steps
+             */n, a-b/n and a/n, and lists with commas; months and
+             weekdays also take names (JAN, MON; weekday 0 and 7 are
+             Sunday). No @daily shorthands, no L W # ?. Leave the day or
+             the weekday as *; an expression that never matches is
+             refused. Weekdays at 9:00 is "0 9 * * 1-5"; every 10 minutes
+             from 9:00 to 18:50 on weekdays is "*/10 9-18 * * 1-5".
     source   {"command": "…", "directory": "/abs", "coverage": "…"}  or
              {"agent": "claude", "model": "…", "tools": ["mcp__<server>__<tool>"],
               "request": "…", "coverage": "…"}
@@ -199,11 +210,11 @@ private func automationList(_ rest: [String]) -> Never {
   exit(0)
 }
 
-/// `every 30m` / `daily 09:00,13:00`。
+/// `every 30m` / `cron 0 9 * * 1-5`。
 private func triggerCell(_ raw: Any?) -> String? {
   guard let trigger = raw as? [String: Any] else { return nil }
   if let minutes = trigger["everyMinutes"] { return "every \(display(minutes))m" }
-  if let times = trigger["dailyAt"] as? [String] { return "daily " + times.joined(separator: ",") }
+  if let cron = trigger["cron"] as? String { return "cron " + cron }
   return nil
 }
 

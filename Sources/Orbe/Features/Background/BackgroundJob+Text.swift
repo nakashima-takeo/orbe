@@ -7,14 +7,23 @@ extension BackgroundJobError {
     switch self {
     case .intervalTooShort: "the interval must be at least 1 minute"
     case .intervalTooLong: "the interval must be at most 10080 minutes (7 days)"
-    case .noTimesOfDay: "no times of day"
-    case .invalidTimeOfDay: "a time of day is out of range"
     case .emptyCommand: "command is empty"
     case .relativeDirectory: "directory is not an absolute path"
     case .unknownAgent(let cli): "agent \(cli) is not supported"
     case .emptyModel: "model is empty"
     case .emptyPrompt: "prompt is empty"
     case .emptyToolName: "a tool name is empty"
+    }
+  }
+}
+
+extension BackgroundCronError {
+  var message: String {
+    switch self {
+    case .fieldCount: "expected 5 fields: minute hour day month weekday"
+    case .invalidField(let field, let text): "invalid \(field.rawValue) field: \(text)"
+    case .dayAndWeekday: "leave the day of month or the weekday as *"
+    case .neverMatches: "never matches"
     }
   }
 }

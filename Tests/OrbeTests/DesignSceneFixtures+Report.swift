@@ -44,7 +44,7 @@ extension DesignSceneFixtures {
     return Automation(
       id: 5,
       definition: AutomationDefinition(
-        name: "開いている PR の要約", trigger: .daily([.init(hour: 18, minute: 0)]),
+        name: "開いている PR の要約", trigger: cron("0 18 * * *"),
         source: AutomationSource(
           method: .command(
             BackgroundCommand(

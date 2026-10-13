@@ -198,30 +198,27 @@ extension AutomationNotify: Codable {
   }
 }
 
-/// いつの形は `{"everyMinutes": 30}` か `{"dailyAt": ["09:00", "13:00"]}`。
+/// いつの形は `{"everyMinutes": 30}` か `{"cron": "0 9 * * 1-5"}`。cron 式は受けた時点で解析し、正しくなければ断る。
 extension BackgroundTiming: Codable {
   private enum CodingKeys: String, CodingKey {
-    case everyMinutes, dailyAt
+    case everyMinutes, cron
   }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
-    switch (c.contains(.everyMinutes), c.contains(.dailyAt)) {
+    switch (c.contains(.everyMinutes), c.contains(.cron)) {
     case (true, false):
       self = .every(TimeInterval(try c.decode(Int.self, forKey: .everyMinutes)) * 60)
     case (false, true):
-      var times = Set<BackgroundTimeOfDay>()
-      for text in try c.decode([String].self, forKey: .dailyAt) {
-        guard let time = BackgroundTimeOfDay(text) else {
-          throw DecodingError.dataCorruptedError(
-            forKey: .dailyAt, in: c, debugDescription: "not HH:MM: \(text)")
-        }
-        times.insert(time)
+      do {
+        self = .cron(try BackgroundCron(try c.decode(String.self, forKey: .cron)))
+      } catch let error as BackgroundCronError {
+        throw DecodingError.dataCorruptedError(
+          forKey: .cron, in: c, debugDescription: error.message)
       }
-      self = .daily(times)
     default:
       throw DecodingError.dataCorrupted(
-        .init(codingPath: c.codingPath, debugDescription: "pass either everyMinutes or dailyAt"))
+        .init(codingPath: c.codingPath, debugDescription: "pass either everyMinutes or cron"))
     }
   }
 
@@ -230,24 +227,10 @@ extension BackgroundTiming: Codable {
     switch self {
     case .every(let interval):
       try c.encode(Int(interval / 60), forKey: .everyMinutes)
-    case .daily(let times):
-      try c.encode(
-        times.sorted { ($0.hour, $0.minute) < ($1.hour, $1.minute) }.map(\.text), forKey: .dailyAt)
+    case .cron(let cron):
+      try c.encode(cron.expression, forKey: .cron)
     }
   }
-}
-
-extension BackgroundTimeOfDay {
-  /// `HH:MM`（2 桁ずつ）。範囲は `BackgroundTiming.validate` が見る。
-  init?(_ text: String) {
-    let parts = text.split(separator: ":", omittingEmptySubsequences: false)
-    guard parts.count == 2, parts.allSatisfy({ $0.count == 2 && $0.allSatisfy(\.isASCII) }),
-      let hour = Int(parts[0]), let minute = Int(parts[1])
-    else { return nil }
-    self.init(hour: hour, minute: minute)
-  }
-
-  var text: String { String(format: "%02d:%02d", hour, minute) }
 }
 
 extension AutomationItem: Codable {

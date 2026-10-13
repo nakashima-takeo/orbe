@@ -74,8 +74,9 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     let control = try startControlProcess()
     let id = run(
       control, ["set"],
-      stdin: #"{"name": "日報", "trigger": {"dailyAt": ["23:00"]}, "steps": [], "#
+      stdin: #"{"name": "日報", "trigger": {"cron": "0 23 * * *"}, "steps": [], "#
         + #""sink": {"kind": "command", "command": "cat >/dev/null"}}"#)
+    XCTAssertEqual(row(control)[3], "cron 0 23 * * *", "cron のトリガーは式のまま出る")
 
     XCTAssertEqual(run(control, ["run", id]), "started automation \(id)")
     XCTAssertTrue(

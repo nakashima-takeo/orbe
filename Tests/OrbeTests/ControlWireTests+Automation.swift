@@ -35,7 +35,7 @@ extension ControlWireTests {
   private var definition: [String: Any] {
     [
       "name": "Slack: 自分宛",
-      "trigger": ["dailyAt": ["13:00", "09:00"]],
+      "trigger": ["cron": " */10 9-18 * * 1-5 "],
       "source": [
         "agent": "claude", "tools": ["mcp__slack__search"], "request": "DM",
         "coverage": "newArrivals",
@@ -48,7 +48,8 @@ extension ControlWireTests {
     ]
   }
 
-  func testSetAutomationCarriesTheDefinitionToTheTarget() {
+  /// cron 式は前後の空白を除いて受けたまま運ぶ（一覧はそのまま返す）。
+  func testSetAutomationCarriesTheDefinitionToTheTarget() throws {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
     let params: [String: Any] = ["automationId": 3, "callerTabId": 7, "definition": definition]
@@ -61,7 +62,7 @@ extension ControlWireTests {
       fake.setAutomations.last?.definition,
       AutomationDefinition(
         name: "Slack: 自分宛",
-        trigger: .daily([.init(hour: 9, minute: 0), .init(hour: 13, minute: 0)]),
+        trigger: .cron(try BackgroundCron("*/10 9-18 * * 1-5")),
         source: AutomationSource(
           method: .agent(
             AutomationSourceAgent(
@@ -110,8 +111,16 @@ extension ControlWireTests {
         "invalid steps[0]: pass either command (a shell command) or instruction (an agent step)"
       ),
       (
-        "HH:MM でない", with("trigger", ["dailyAt": ["9:00"]]),
-        "invalid trigger.dailyAt: not HH:MM: 9:00"
+        "cron の欄が範囲外", with("trigger", ["cron": "0 24 * * *"]),
+        "invalid trigger.cron: invalid hour field: 24"
+      ),
+      (
+        "cron で日と曜日の両方", with("trigger", ["cron": "0 9 1 * 1"]),
+        "invalid trigger.cron: leave the day of month or the weekday as *"
+      ),
+      (
+        "間隔と cron の両方", with("trigger", ["everyMinutes": 30, "cron": "0 9 * * *"]),
+        "invalid trigger: pass either everyMinutes or cron"
       ),
       ("間隔が文字列", with("trigger", ["everyMinutes": "30"]), "invalid trigger.everyMinutes"),
     ] {

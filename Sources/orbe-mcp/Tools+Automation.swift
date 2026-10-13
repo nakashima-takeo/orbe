@@ -10,7 +10,13 @@ private let definitionShape =
   + "タスク候補には取得元（coverage は currentSet か newArrivals）と段 1 つ以上が要る。コマンドでは取得元も段も省略できる。"
   + "報告には段 1 つ以上が要り、取得元は省略できる。"
   + "name は「出どころ: 何を取るか」の 1 行（例「GitHub: 自分へのレビュー依頼」）。取得元が無ければ何をするかの 1 行（例「日報の下書き」）。"
-  + "trigger は {everyMinutes: 1〜10080（7 日）} か {dailyAt: [\"09:00\", \"13:00\"]}。"
+  + "trigger は {everyMinutes: 1〜10080（7 日）} か {cron: \"分 時 日 月 曜日\"}。everyMinutes は最後に回ってから N 分後に回り、"
+  + "Mac が眠っていた・Orbe が動いていなかった間に過ぎていれば、起きたときに 1 回回る。cron は Mac のタイムゾーンでその時刻にだけ回り、"
+  + "眠っていた間・Orbe が動いていなかった間に過ぎた時刻は回さず、次の時刻を待つ。"
+  + "cron の各欄は *・数・範囲 a-b・刻み */n, a-b/n, a/n・それらの , 区切りで、月と曜日は英名（JAN・MON など）も書ける（曜日の 0 と 7 は日曜）。"
+  + "@daily などの略記と L W # ? は使えない。日と曜日はどちらか一方を * のままにする（両方を書くと断られる）。一度も来ない式も断られる。"
+  + "例: 平日 9:00 は \"0 9 * * 1-5\"、毎週月曜 10:00 は \"0 10 * * 1\"、平日 9:00〜18:50 の 10 分ごとは \"*/10 9-18 * * 1-5\"。"
+  + "新着の流れ（newArrivals）は、どちらでも次の回が前回成功した回以降を取るので、過ぎた回が飛んでも項目は落ちない。"
   + "source はコマンド {command, directory?, coverage}（/bin/sh -c で走る。directory は絶対パス、既定はホーム）か、"
   + "軽い agent {agent?（既定 claude）, model?, tools（使ってよい MCP のツールの完全名 mcp__<サーバー>__<ツール> を 1 つ以上）, "
   + "request（何を取るか）, coverage}。範囲は取得の条件（検索語・期間・宛先）で切る。広すぎる取得は段の依頼文を大きくし、失敗の元になる。"
@@ -44,7 +50,7 @@ private let definitionShape =
   + "出力先がコマンドのとき、出力先に届いた行が 1 行 1 JSON オブジェクトで標準入力に渡る（段が 0 個なら取得元の項目の形）。"
   + "コマンドは届いた行が 1 行以上ある回だけ走り、取得元も段も無ければトリガーのたびに空の標準入力で走る"
   + "（例「毎晩 23 時に ~/bin/daily-note.sh を実行する」は {\"name\": \"日報の下書き\", "
-  + "\"trigger\": {\"dailyAt\": [\"23:00\"]}, \"steps\": [], "
+  + "\"trigger\": {\"cron\": \"0 23 * * *\"}, \"steps\": [], "
   + "\"sink\": {\"kind\": \"command\", \"command\": \"~/bin/daily-note.sh\"}}）。"
   + "最後の段が行を出したのに 1 行も JSON オブジェクトとして読めなかった回と、コマンドが 0 以外で終わった・上限で止まった回は失敗になる。"
   + "最後の段が agent なら、Orbe は中間の段と同じ枠（JSON の行を受けて JSON の行を出す）を指示する。"
@@ -115,7 +121,7 @@ let automationTools: [[String: Any]] = [
           "definition": [
             "type": "object",
             "description":
-              "{name, trigger, source?, steps, sink, notify?}。trigger は {everyMinutes: n} か {dailyAt: [\"HH:MM\", …]}、"
+              "{name, trigger, source?, steps, sink, notify?}。trigger は {everyMinutes: n} か {cron: \"分 時 日 月 曜日\"}、"
               + "source は {command, directory?, coverage} か {agent?, model?, tools, request, coverage}、"
               + "steps は [{name, command, directory?} か {name, agent?, model?, instruction}]、"
               + "sink は {\"kind\": \"taskCandidates\"}・{\"kind\": \"command\", command, directory?, timeoutMinutes?}・"

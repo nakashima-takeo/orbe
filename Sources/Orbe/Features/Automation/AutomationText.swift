@@ -128,16 +128,11 @@ struct AutomationText {
     }
   }
 
-  /// 「30分ごと」「毎日 9:00 / 13:00」。
+  /// 「30分ごと」「平日 9:00」「平日 9:00〜18:50 の10分ごと」。言葉にしない cron 式は「cron <式>」。
   func when(_ timing: BackgroundTiming) -> String {
     switch timing {
-    case .every(let interval):
-      return l10n.format(.automationEvery, Int(interval / 60))
-    case .daily(let times):
-      let sorted = times.sorted { ($0.hour, $0.minute) < ($1.hour, $1.minute) }
-      return l10n.format(
-        .automationDaily,
-        sorted.map { Self.clock(hour: $0.hour, minute: $0.minute) }.joined(separator: " / "))
+    case .every(let interval): l10n.format(.automationEvery, Int(interval / 60))
+    case .cron(let cron): words(cron) ?? "cron " + cron.expression
     }
   }
 
@@ -158,7 +153,7 @@ struct AutomationText {
     URL(string: link)?.host ?? link
   }
 
-  private static func clock(hour: Int, minute: Int) -> String {
+  static func clock(hour: Int, minute: Int) -> String {
     String(format: "%d:%02d", hour, minute)
   }
 }

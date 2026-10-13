@@ -120,7 +120,7 @@ enum HomeTemplate {
 
     - 自動化（`set_automation`・`list_automations`・`run_automation`・`pause_automation`・`delete_automation`・\
     `list_automation_proposals`）。
-    - トリガー（間隔か毎日の時刻）ごとに、取得元（コマンドか軽い agent）が項目を取り、処理の段（コマンドか agent）が順に\
+    - トリガー（間隔か cron 式）ごとに、取得元（コマンドか軽い agent）が項目を取り、処理の段（コマンドか agent）が順に\
     絞り・判断して、出力先へ出す。出力先はタスク候補・コマンド・報告の 3 つ。
     - 名前は「出どころ: 何を取るか」の 1 行（例「GitHub: 自分へのレビュー依頼」）。取得元が無ければ、何をするかの 1 行\
     （例「日報の下書き」）。
@@ -142,7 +142,7 @@ enum HomeTemplate {
 
     - Automation (`set_automation`, `list_automations`, `run_automation`, `pause_automation`, \
     `delete_automation`, `list_automation_proposals`).
-    - On each trigger (an interval or daily times), the source (a command or a light agent) gets items, the \
+    - On each trigger (an interval or a cron expression), the source (a command or a light agent) gets items, the \
     steps (commands or agents) narrow and judge them in order, and the sink receives the result. There are \
     three sinks: task candidates, a command, and a report.
     - Name it in one line, "<source>: <what it gets>" (e.g. "GitHub: review requests for me"); without a \

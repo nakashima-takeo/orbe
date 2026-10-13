@@ -394,6 +394,16 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationDirectory
   case automationEvery
   case automationDaily
+  case automationWeekdays
+  case automationWeekends
+  case automationWeekly
+  case automationMonthly
+  case automationMonthDay
+  case automationListSeparator
+  case automationAt
+  case automationHourly
+  case automationEveryMinutesBetween
+  case automationEveryHoursBetween
   case automationRunNow
   case automationPause
   case automationResume
