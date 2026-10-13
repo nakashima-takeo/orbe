@@ -2,8 +2,6 @@ import Foundation
 
 @testable import Orbe
 
-/// 提案タブの fixture（見本 R3Inbox.png と同じ並び）。今日はタスク画面と同じ 2025-10-04、走らせ役の今は同じ日の 15:00 に
-/// 固定し、次の時刻と回の時刻を決定論にする。取得は始まっても終わらない（実行中のまま）——実物の claude は起こさない。
 extension Automation {
   /// 定義の一部を書き換える（出力先ごとの状態は `redefine` が合わせる）。
   mutating func redefine(_ edit: (inout AutomationDefinition) -> Void) {
@@ -13,6 +11,8 @@ extension Automation {
   }
 }
 
+/// 提案タブの fixture（見本 R3Inbox.png と同じ並び）。今日はタスク画面と同じ 2025-10-04、走らせ役の今は同じ日の 15:00 に
+/// 固定し、次の時刻と回の時刻を決定論にする。取得は始まっても終わらない（実行中のまま）——実物の claude は起こさない。
 extension DesignSceneFixtures {
   static func automationAt(_ hour: Int, _ minute: Int = 0, daysAgo: Int = 0) -> Date {
     let day = taskCalendar.date(byAdding: .day, value: -daysAgo, to: taskToday)!
