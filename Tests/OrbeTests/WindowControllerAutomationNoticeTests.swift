@@ -27,7 +27,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     super.tearDown()
   }
 
-  @MainActor private func controller() -> WindowController {
+  @MainActor func controller() -> WindowController {
     AutomationPersistence.save(DesignSceneFixtures.automationEmptyFile())
     let wc = WindowController()
     shown = wc
@@ -35,7 +35,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     return wc
   }
 
-  @MainActor private func key(_ wc: WindowController) {
+  @MainActor func key(_ wc: WindowController) {
     NSApplication.shared.setActivationPolicy(.accessory)
     wc.window.makeKeyAndOrderFront(nil)
     NSApplication.shared.activate(ignoringOtherApps: true)
@@ -51,7 +51,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
   }
 
   /// 通知 `notify` の報告の自動化を作り、`report` の回（`failure` なら失敗の回）を記録する。
-  @MainActor private func recorded(
+  @MainActor func recorded(
     _ wc: WindowController, name: String = "開いている PR の要約",
     notify: AutomationNotify? = .menuBar, report: String? = "PR は 3 件\n- #1",
     failure: String? = nil
@@ -65,7 +65,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
   }
 
   /// `id` の自動化に `report` の回（`failure` なら失敗の回）を記録する。
-  @MainActor private func record(
+  @MainActor func record(
     _ wc: WindowController, _ id: Int, report: String? = "PR は 3 件\n- #1",
     failure: String? = nil
   ) {
@@ -79,7 +79,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     }
   }
 
-  @MainActor private func standing(_ wc: WindowController) -> AutomationNotice? {
+  @MainActor func standing(_ wc: WindowController) -> AutomationNotice? {
     guard case .automation(let notice) = wc.attentionStore.transient?.notice else { return nil }
     return notice
   }

@@ -170,6 +170,8 @@ struct AutomationDefinition: Equatable, Codable {
 enum AutomationNotify: String {
   /// メニューバーのピルと音。
   case menuBar
+  /// macOS の通知センターと音。許可が無い回はメニューバーのピルに出る。
+  case notificationCenter
 }
 
 /// 何をどう取るかと、取れたものが何を表すか。

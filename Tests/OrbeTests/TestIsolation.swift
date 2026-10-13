@@ -155,6 +155,10 @@ enum TestIsolation {
     // 向ける（`WindowController` を立てるテストは軒並み agent の状態報告を流すため、張らないと鳴る）。
     AgentSoundOutput.makeOverride = { SoundPlayerFake() }
 
+    // 通知センター。テストの実行体はアプリのバンドルでないので生成点が「使えない」部品にするが、通知センターは人の
+    // システム設定に項目が残る実環境なので、ここでも記録だけするフェイクへ向ける。
+    SystemNotifierOutput.makeOverride = { SystemNotifierFake() }
+
     // 取り込んだカスタム音源の置き場。既定は `ORBE_STATE_DIR` 直下＝テスト間で共有される根なので、
     // 書いたファイルが次のテストへ残る。他の永続と同じく caseDir の下へ張り直す。
     CustomSoundStore.directoryURLOverride = dir.appendingPathComponent("sounds", isDirectory: true)

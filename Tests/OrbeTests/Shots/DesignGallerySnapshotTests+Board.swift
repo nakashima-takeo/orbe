@@ -111,14 +111,28 @@ extension DesignGallerySnapshotTests {
     try write("board_automation_command.png", board(examples, row: 2))
     try write("board_automation_command_en.png", board(examples, row: 2), .en)
     try write("board_automation_command_sourced.png", board(examples, row: 3))
-    // 見本 B2『開いている PR の要約』（出力先は報告・通知はメニューバー）と、累計と通知の注記が並ぶタスク候補。
+    try renderBoardReportSnapshots(write: write, board: { board($0, row: $1) })
+    try renderBoardRequestSnapshots(write: write, board: { board($0) })
+  }
+
+  /// 見本 B2『開いている PR の要約』（出力先は報告・通知はメニューバー）と、累計と通知の注記が並ぶタスク候補。通知先が
+  /// 通知センターの報告。
+  private func renderBoardReportSnapshots(
+    write: (String, BoardModel, Language, NSSize) throws -> Void,
+    board: (AutomationsFile?, Int) -> BoardModel
+  ) throws {
+    let size = NSSize(width: 1440, height: 844)
     let reports = DesignSceneFixtures.boardAutomationFile([
       DesignSceneFixtures.boardStepsNotifyExample(), DesignSceneFixtures.boardReportExample(),
     ])
-    try write("board_automation_report.png", board(reports, row: 1))
-    try write("board_automation_report_en.png", board(reports, row: 1), .en)
-    try write("board_automation_steps_notify.png", board(reports))
-    try renderBoardRequestSnapshots(write: write, board: { board($0) })
+    try write("board_automation_report.png", board(reports, 1), .ja, size)
+    try write("board_automation_report_en.png", board(reports, 1), .en, size)
+    try write("board_automation_steps_notify.png", board(reports, 0), .ja, size)
+    let center = DesignSceneFixtures.boardAutomationFile([
+      DesignSceneFixtures.boardReportNotificationCenterExample()
+    ])
+    try write("board_automation_report_center.png", board(center, 0), .ja, size)
+    try write("board_automation_report_center_en.png", board(center, 0), .en, size)
   }
 
   /// 依頼の欄: 文字あり（欄に焦点・フッターが欄のキー）・断り 2 種。秘書の口は閉包の差し替えで、本物の秘書・claude は起きない。

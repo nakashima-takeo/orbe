@@ -1,7 +1,7 @@
 ---
 title: ビルドチャネル
 description: dev / release の 2 チャネル。ORBE_CHANNEL を唯一の入力に identity を全導出し、dev は「Orbe Dev」として本番と併存する
-updated: 2026-10-10
+updated: 2026-10-13
 ---
 
 # ビルドチャネル
@@ -24,3 +24,4 @@ updated: 2026-10-10
 - **バンドルを持たない実行体（`orb`・`orbe-mcp`）は `Bundle.main.bundleIdentifier` が取れない**ため、fallback bundle ID を同じ定義から焼く（`OrbePaths.fallbackBundleId`）。同一チャネルでビルドされた GUI と CLI は必ず同じ state / control.sock を解決する。
 - **state は bundle ID 由来で全分離**（[persistence](persistence.md)）。dev と release は workspaces・settings・control.sock・UserDefaults を共有せず、同時起動できる。
 - dev は Sparkle の更新確認に行かない（[update](update.md) の起動ゲート）。
+- **通知センターの許可は bundle ID ごと**（[automation](automation.md#通知センター)）。dev と release は別々に、それぞれ初回に 1 回問う。隔離起動（`sandbox-run`）は dev の `.app` を起こすので、dev と許可を共有する。

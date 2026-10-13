@@ -96,13 +96,18 @@ let automationUsage = """
              to print nothing when there is nothing to report; a run with no
              report succeeds as "nothing to report". Editing the definition
              does not make the next run process every fetched item again.
-    notify   "menuBar"  (any sink; omit to stay silent)
+    notify   "menuBar" or "notificationCenter"  (any sink; omit to stay
+             silent)
              When a run delivers something (a proposal, a command run, a
-             report), or on the first of consecutive failed runs, the menu
-             bar shows the automation's name and the result line with a
-             sound; clicking it opens the automation on Home's board. Runs
-             that deliver nothing are not notified. Changing only notify does
-             not stop a running run.
+             report), or on the first of consecutive failed runs, the
+             automation's name and the result line show with a sound: in the
+             menu bar, or in macOS Notification Center. Notification Center
+             keeps one notification per automation; a new run replaces it.
+             Setting notificationCenter makes macOS ask for Orbe's
+             notification permission if it is not decided yet; without
+             permission, the run shows in the menu bar. Clicking either opens
+             the automation on Home's board. Runs that deliver nothing are not
+             notified. Changing only notify does not stop a running run.
   To edit, take .definition from list --json, change it and pipe it whole:
     orb automation list --json | jq '.automations[] |
       select(.automationId==3) | .definition' | … | orb automation set 3

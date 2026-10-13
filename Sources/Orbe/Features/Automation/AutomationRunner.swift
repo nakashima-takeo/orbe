@@ -7,7 +7,7 @@ import OrbeSessionLog
 /// 1 回が終わるまで同じ自動化の次の回は始まらない（重ねない保証・「今すぐ」・走っているかは番人が持つ）。番人が回を止めたら
 /// （何をするかの書き換え・削除）、走っている段か届けを止め、以後の確定を行わない。定義の変異はここを通し、番人の登録を
 /// 合わせる。状態を読み書きするのは枠（ストア）と出力先だけで、段は状態を持たない。回を記録するたびに `recorded` で
-/// 自動化の ID を知らせる（知らせるかどうか・何を出すかは受けた側がストアの今の値から決める）。
+/// 自動化の ID を知らせる（知らせるかどうか・何を出すかは受けた側がストアの今の値から決める）。消したら `deleted` で知らせる。
 final class AutomationRunner {
   let store: AutomationStore
   var now: () -> Date = Date.init
@@ -16,16 +16,18 @@ final class AutomationRunner {
   private let scheduler: BackgroundScheduler
   private let run: BackgroundScheduler.Run
   private let recorded: (Int) -> Void
+  private let deleted: (Int) -> Void
 
   init(
     store: AutomationStore, scheduler: BackgroundScheduler = BackgroundScheduler(),
     run: @escaping BackgroundScheduler.Run = { BackgroundRuns.shared.run($0, completion: $1) },
-    recorded: @escaping (Int) -> Void
+    recorded: @escaping (Int) -> Void, deleted: @escaping (Int) -> Void
   ) {
     self.store = store
     self.scheduler = scheduler
     self.run = run
     self.recorded = recorded
+    self.deleted = deleted
   }
 
   /// 起動時に一度、全自動化を番人へ載せる（止めた自動化は予定なしで）。
@@ -59,6 +61,7 @@ final class AutomationRunner {
   func delete(_ id: Int) throws(AutomationError) {
     try store.delete(id)
     scheduler.remove(id: Self.key(id))
+    deleted(id)
   }
 
   /// 今すぐ回す（止めた自動化も受ける）。走っている回があれば断る。

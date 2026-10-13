@@ -2,8 +2,8 @@ import XCTest
 
 @testable import Orbe
 
-/// 報告と通知の読み替え。報告のある回は「出した」で全文を折り返し、報告の無い回は「報告なし」（「すべて除外」と読まない）。通知が
-/// メニューバーなら、どの出力先でも出力先の段の注記のいちばん下に出る。
+/// 報告と通知の読み替え。報告のある回は「出した」で全文を折り返し、報告の無い回は「報告なし」（「すべて除外」と読まない）。通知は
+/// 通知先の言葉で、どの出力先でも出力先の段の注記のいちばん下に出る。
 ///
 /// 壊れると何が起きるか: 言うことが無かった回が「処理 1 ですべて除外」と読め、指示文の誤りと取り違える。報告が 1 行で省かれ、
 /// ボードで読めなくなる。ピルと押した先の行が別の文になる。
@@ -33,6 +33,9 @@ extension BoardAutomationSummaryTests {
       DesignSceneFixtures.boardStepsNotifyExample(), text: text)
     XCTAssertEqual(
       summary.nodes.last?.notes, ["これまでに採用 9件 / 見送り 3件", "通知：メニューバー"])
+    let center = BoardAutomationSummary(
+      DesignSceneFixtures.boardReportNotificationCenterExample(), text: text)
+    XCTAssertEqual(center.nodes.last?.notes, ["通知：通知センター"])
   }
 
   func testTheLatestLineOfAFailureIsItsFirstLine() throws {

@@ -609,6 +609,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardOutputReport
   case boardOutputTally
   case boardOutputNotifyMenuBar
+  case boardOutputNotifyNotificationCenter
   case boardRunFailed
   case boardRunFailedShort
   case boardRunAdded
