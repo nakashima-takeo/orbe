@@ -3,7 +3,7 @@ import Foundation
 /// タスクのタブの行の操作（足す・完了 ⇄ 未着手・消す）。変異はストアのメソッドをそのまま呼び、
 /// 検証はストアに任せる。選ぶ状態の間は、選ぶこと以外でタスクを変えない。
 extension TaskPaletteModel {
-  /// 入力のタイトルで未着手のタスクを足し、入力を空にして「今足した」印を付け、絞り込みに合わなくても選ぶ。
+  /// 入力のタイトルで未着手のタスクを足し、入力を空にして今足したタスクとして覚え、絞り込みに合わなくても選ぶ。
   /// workspace は絞り込みで決める（`addedWorkspace`）。足したタスクの ID を返す。
   @discardableResult func addFromQuery() -> Int? {
     let title = query.trimmingCharacters(in: .whitespacesAndNewlines)

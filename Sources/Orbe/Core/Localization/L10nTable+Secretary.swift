@@ -1,6 +1,6 @@
 import Foundation
 
-/// 秘書の係（行き先の段の ⌘↵・行の ⌘↵・最初の入力）と、タスクから作業を始める（`start_task`）の文言分冊。
+/// 秘書の係（入力欄の中の「⌘↵ agent に任せる」・行の ⌘↵・最初の入力）と、タスクから作業を始める（`start_task`）の文言分冊。
 /// 本体 `L10n.table` が結合する。
 extension L10n {
   static let secretaryTable: [L10nKey: (ja: String, en: String)] = [
