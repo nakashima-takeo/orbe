@@ -199,6 +199,7 @@ enum TaskPaletteRows {
       !present.contains($0.id) && (including.contains($0.id) || matches($0, input))
     }
     .sorted { input.sort.areInIncreasingOrder($0, $1, workspaces: input.workspaces) }
+    guard !listed.isEmpty else { return arrivals.map(\.id) }
     for task in arrivals {
       let index = listed.firstIndex {
         tasks[$0].map { input.sort.areInIncreasingOrder(task, $0, workspaces: input.workspaces) }
