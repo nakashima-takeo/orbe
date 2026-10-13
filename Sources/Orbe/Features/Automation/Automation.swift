@@ -298,6 +298,8 @@ struct AutomationProposal: Equatable, Identifiable {
   let item: AutomationItem
   let title: String
   let due: TaskItem.DueDate?
+  /// 付け先の `Workspace.persistentId`（判定が決める）。解決できない参照は「なし」と同じに扱う。
+  let workspace: UUID?
   let proposedAt: Date
   var state: State
 

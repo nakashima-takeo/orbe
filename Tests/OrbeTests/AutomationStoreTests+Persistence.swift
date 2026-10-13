@@ -174,6 +174,7 @@ extension AutomationStoreTests {
       "proposals": [
         {
           "id": 1, "automationId": 1, "title": "a に返信する", "due": "2026-10-05",
+          "workspace": "6F9619FF-8B86-D011-B42D-00C04FC964FF",
           "item": {"id": "a", "link": "https://example.com/a", "body": "a の本文", "time": "2026-10-02T08:00:00.000Z"},
           "proposedAt": "2026-10-02T09:00:05.000Z", "state": "open"
         },

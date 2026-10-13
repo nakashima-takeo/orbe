@@ -294,7 +294,7 @@ extension AutomationItem: Codable {
 
 extension AutomationProposal: Codable {
   private enum CodingKeys: String, CodingKey {
-    case id, automationId, item, title, due, proposedAt, state, taskId
+    case id, automationId, item, title, due, workspace, proposedAt, state, taskId
   }
 
   private enum StateName: String, Codable {
@@ -308,6 +308,7 @@ extension AutomationProposal: Codable {
     item = try c.decode(AutomationItem.self, forKey: .item)
     title = try c.decode(String.self, forKey: .title)
     due = try c.decodeIfPresent(TaskItem.DueDate.self, forKey: .due)
+    workspace = try c.decodeIfPresent(UUID.self, forKey: .workspace)
     proposedAt = try c.decode(Date.self, forKey: .proposedAt)
     switch try c.decode(StateName.self, forKey: .state) {
     case .open: state = .open
@@ -324,6 +325,7 @@ extension AutomationProposal: Codable {
     try c.encode(item, forKey: .item)
     try c.encode(title, forKey: .title)
     try c.encodeIfPresent(due, forKey: .due)
+    try c.encodeIfPresent(workspace, forKey: .workspace)
     try c.encode(proposedAt, forKey: .proposedAt)
     try c.encode(state.name, forKey: .state)
     if case .accepted(let taskId) = state { try c.encode(taskId, forKey: .taskId) }
