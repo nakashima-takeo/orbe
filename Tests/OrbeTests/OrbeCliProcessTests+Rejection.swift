@@ -103,7 +103,7 @@ extension OrbeCliProcessTests {
   /// `orb tab list 2` は絞り込みが効かず全 WS のタブが出て、`orb tab close 5 6` は 6 に触れない。
   /// いずれも exit 0 で、終了コードにも stdout にも stderr にも現れない。
   ///
-  /// 28 サブコマンド（`session restore` は位置引数が可変長で溢れが無い）を全て並べるのは、席の数が
+  /// 29 サブコマンド（`session restore` は位置引数が可変長で溢れが無い）を全て並べるのは、席の数が
   /// 各コマンドの申告制だから——1 つ書き忘れても他が緑なら気づけない。`ORBE_TAB` を置くのは、tab 系が既定へ逸れる前に落ちることを見るため。
   func testExcessPositionalsAreRejectedInsteadOfSilentlyDropped() {
     for args in [
@@ -134,6 +134,7 @@ extension OrbeCliProcessTests {
       ["task", "list", "3"],
       ["task", "add", "経費", "精算"],  // 引用符の付け忘れ
       ["task", "set", "1", "2", "--title", "t"],
+      ["task", "condition", "1", "2", "--no-condition"],
       ["task", "rm", "1", "2"],
     ] {
       failure(
