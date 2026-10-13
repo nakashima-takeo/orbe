@@ -108,7 +108,7 @@ extension DesignFlowSnapshotTests {
   }
 
   /// 待ちの条件: 見積もり（待っている）を選ぶ → → で右の欄 → ↓ で確認のコマンド → ↵ で開く → ↓ で実行の記録 → ↵ で
-  /// 開く → 一覧へ戻り、確認が成功して解けた見積もりを選んだまま（フッターの「⌘T … を claude で続きから」）、までを撮る。
+  /// 開く → 一覧へ戻り、確認が成功して解けた見積もりを選んだまま（フッターの「⌘↵ … を claude で続きから」）、までを撮る。
   func testTaskWaitCondition() throws {
     let palette = DesignSceneFixtures.taskPaletteModel(
       DesignSceneFixtures.taskWaitConditionFile(),

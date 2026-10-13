@@ -230,7 +230,7 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
     XCTAssertEqual(try conversationTabs(wc).count, before + 1, "開くのは 1 つだけ")
   }
 
-  /// 続きから始められない（作業ディレクトリが無い）タスクの ⌘↵ は、いつもの ⌘T（worktree パレット）を開き、タブは
+  /// 続きから始められない（作業ディレクトリが無い）タスクの ⌘↵ は、そのタスクのための ⌘T（worktree パレット）を開き、タブは
   /// 開かず、起きたことも残す。
   func testOpeningTheAgentOfAConversationThatCannotContinueOpensTheUsualWorktreePalette() throws {
     _ = try stageFakeAgent("claude")
@@ -247,7 +247,7 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
 
     palette.openAgent(forTask: id)
 
-    XCTAssertEqual(wc.presentedOverlay, .worktreePalette, "いつもの ⌘T")
+    XCTAssertEqual(wc.presentedOverlay, .worktreePalette, "そのタスクのための ⌘T")
     XCTAssertEqual(wc.workspaces.map { $0.tabs.map(\.id) }, before, "タブは開かない")
     XCTAssertNotNil(resolution(wc, id), "起きたことは残る")
   }
