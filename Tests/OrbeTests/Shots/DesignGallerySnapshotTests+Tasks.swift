@@ -111,7 +111,7 @@ extension DesignGallerySnapshotTests {
     sorted.setSort(.due)
     try write("tasks_sorted_due.png", sorted, 1440, 900)
 
-    // 完了の札をオンにし、完了のタスクを選ぶ: 行が沈み、フッターに「⌘↵ agent を開く」が出る（未完了のタスクと同じ）。
+    // 完了の札をオンにし、完了のタスクを選ぶ: 行は暗く、フッターに「⌘↵ agent を開く」が出る（未完了のタスクと同じ）。
     let doneSelected = DesignSceneFixtures.taskPaletteModel()
     doneSelected.toggleState(.done)
     doneSelected.tapRow(.task(8))

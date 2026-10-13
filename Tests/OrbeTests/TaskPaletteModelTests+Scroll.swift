@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 一覧を見える所まで送る先（`scrollTarget`）。一覧は送り先の変化を受けて、その行まで最小の量だけ送る。
+/// 一覧をスクロールする先（`scrollTarget`）。一覧はスクロール先の変化を受けて、その行まで最小の量だけスクロールする。
 ///
 /// 壊れると何が起きるか: ↑↓ で選んだ行が一覧の見えている範囲の外へ出て見失う。⌘↓ を続けて押すと 2 回目から
 /// スクロールしない。逆に、人が流して読んでいる一覧が、agent が上にタスクを足しただけで選んだ行へ引き戻される。
@@ -30,7 +30,7 @@ extension TaskPaletteModelTests {
     XCTAssertGreaterThan(scrollSerial(palette), first, "同じ行でもスクロールし直す")
   }
 
-  /// 付け直しは選んだタスクを保つが、その一覧の中の位置がずれても送り先は決め直さない。
+  /// 付け直しは選んだタスクを保つが、その一覧の中の位置がずれてもスクロール先は決め直さない。
   func testAgentChangeReconciledAloneDoesNotSendTheList() throws {
     let palette = threeTodos()
     palette.move(1)
