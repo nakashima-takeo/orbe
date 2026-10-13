@@ -45,6 +45,7 @@ extension AutomationStoreTests {
             ],
             "sink": {"kind": "taskCandidates"}
           },
+          "sinkState": {"accepted": 1, "dismissed": 0},
           "paused": false, "reviewAll": false,
           "createdAt": "2026-10-01T09:00:00.000Z",
           "lastRunAt": "2026-10-02T09:30:00.000Z",
@@ -98,6 +99,7 @@ extension AutomationStoreTests {
             "steps": [{"name": "判定", "agent": "claude", "model": "opus", "instruction": "返事が要るもの"}],
             "sink": {"kind": "taskCandidates"}
           },
+          "sinkState": {"accepted": 0, "dismissed": 1},
           "paused": true, "reviewAll": true,
           "createdAt": "2026-10-01T10:00:00.000Z",
           "lastFetched": [], "runs": []

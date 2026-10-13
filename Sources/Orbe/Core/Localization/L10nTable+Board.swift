@@ -17,6 +17,9 @@ extension L10n {
     .boardRoleOutput: ("出力先", "Output"),
     .boardOrbeSeen: ("既に見たものを除く", "Skip what was already seen"),
     .boardOutputTaskCandidates: ("タスク候補", "Task candidates"),
+    .boardOutputTally: (
+      "これまでに採用 %1$lld件 / 見送り %2$lld件", "So far %1$lld accepted / %2$lld dismissed"
+    ),
     .boardRunFailed: ("失敗：%@", "failed: %@"),
     .boardRunFailedShort: ("失敗", "failed"),
     .boardRunAdded: ("%lld件を追加", "added %lld"),

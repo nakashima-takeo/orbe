@@ -45,7 +45,7 @@ import Observation
     }
     let definition = try Self.valid(definition)
     let reworked = automations[index].definition.work != definition.work
-    automations[index].definition = definition
+    automations[index].redefine(definition)
     if reworked { automations[index].reviewAll = true }
     _ = book.forgetUnheld(by: automations)
     persist()
@@ -116,7 +116,7 @@ import Observation
 
   // MARK: - 候補をさばく
 
-  /// 出ている候補を、`workspace` に付けてタスク一覧の `position` へ未着手で足す。追加が拒否されたら候補は変わらない。
+  /// 出ている候補を、`workspace` に付けてタスク一覧の `position` へ未着手で足す。追加が拒否されたら候補も累計も変わらない。
   func accept(
     _ proposalId: Int, into tasks: TaskStore, workspace: UUID?, at position: TaskStore.AddPosition
   ) throws(AutomationError) -> TaskItem {
@@ -136,6 +136,7 @@ import Observation
       }
     }
     book.proposals[index].state = .accepted(taskId: task.id)
+    tally(proposal, \.accepted)
     persist()
     return task
   }
@@ -143,7 +144,18 @@ import Observation
   func dismiss(_ proposalId: Int) throws(AutomationError) {
     let index = try openIndex(proposalId)
     book.proposals[index].state = .dismissed
+    tally(proposals[index], \.dismissed)
     persist()
+  }
+
+  /// さばいた候補を、出した自動化の累計に数える（棚に出していた自動化ではなく）。出した自動化が居なければ数えない。
+  private func tally(
+    _ proposal: AutomationProposal, _ outcome: WritableKeyPath<AutomationTaskCandidatesState, Int>
+  ) {
+    guard let index = automations.firstIndex(where: { $0.id == proposal.automationId }) else {
+      return
+    }
+    automations[index].tally(outcome)
   }
 
   private func openIndex(_ proposalId: Int) throws(AutomationError) -> Int {

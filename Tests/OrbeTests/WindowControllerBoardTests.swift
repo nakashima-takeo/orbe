@@ -43,8 +43,9 @@ final class WindowControllerBoardTests: OrbeTestCase {
     let automations = DesignSceneFixtures.boardAutomations().prefix(2).map {
       var automation = $0
       automation.paused = true
-      automation.definition.source?.method = .command(
-        BackgroundCommand(script: "true", directory: nil))
+      automation.redefine {
+        $0.source?.method = .command(BackgroundCommand(script: "true", directory: nil))
+      }
       return automation
     }
     AutomationPersistence.save(DesignSceneFixtures.boardAutomationFile(Array(automations)))

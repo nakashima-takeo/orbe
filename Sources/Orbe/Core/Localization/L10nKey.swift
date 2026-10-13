@@ -605,6 +605,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardRoleOutput
   case boardOrbeSeen
   case boardOutputTaskCandidates
+  case boardOutputTally
   case boardRunFailed
   case boardRunFailedShort
   case boardRunAdded

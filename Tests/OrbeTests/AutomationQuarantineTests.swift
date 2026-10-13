@@ -69,8 +69,10 @@ final class AutomationQuarantineTests: OrbeTestCase {
 
   func testInvalidDefinitionIsQuarantined() throws {
     try assertQuarantined("取得役に組み込みのツール") {
-      $0.automations[0].definition.source?.method = .agent(
-        AutomationSourceAgent(cli: "claude", model: "haiku", tools: ["Read"], request: "DM"))
+      $0.automations[0].redefine {
+        $0.source?.method = .agent(
+          AutomationSourceAgent(cli: "claude", model: "haiku", tools: ["Read"], request: "DM"))
+      }
     }
   }
 }

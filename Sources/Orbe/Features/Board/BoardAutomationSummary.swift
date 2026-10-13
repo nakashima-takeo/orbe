@@ -79,13 +79,18 @@ extension BoardAutomationSummary {
       case .taskCandidates: l10n.string(.boardOutputTaskCandidates)
       }
     let when = text.when(definition.trigger)
+    let tally =
+      switch automation.sinkState {
+      case .taskCandidates(let state):
+        l10n.format(.boardOutputTally, state.accepted, state.dismissed)
+      }
     let stepCount = definition.steps.count
+    let counts = automation.runs.first.map { Self.counts($0, stepCount: stepCount) } ?? Counts()
     self.output = output
     self.when = when
-    nodes = Self.nodes(
-      definition,
-      counts: automation.runs.first.map { Self.counts($0, stepCount: stepCount) } ?? Counts(),
-      when: when, output: output, l10n: l10n)
+    nodes =
+      Self.nodes(definition, counts: counts, when: when, l10n: l10n)
+      + [BoardFlowNode(role: .output, title: output, note: tally, count: counts.output)]
 
     func result(_ run: AutomationRun, heading: Bool) -> String {
       if let failure = run.failure {
@@ -128,10 +133,9 @@ extension BoardAutomationSummary {
     }
   }
 
-  /// 段の並び。件数は最新の回のもの。モデルは省略なら解いた既定を出す。
+  /// 出力先の手前までの段の並び。件数は最新の回のもの。モデルは省略なら解いた既定を出す。
   private static func nodes(
-    _ definition: AutomationDefinition, counts: Counts, when: String, output: String,
-    l10n: LocalizationStore
+    _ definition: AutomationDefinition, counts: Counts, when: String, l10n: LocalizationStore
   ) -> [BoardFlowNode] {
     func command(_ node: inout BoardFlowNode, _ command: BackgroundCommand) {
       node.means = .command(l10n.string(.automationCommand))
@@ -165,7 +169,6 @@ extension BoardAutomationSummary {
       }
       nodes.append(node)
     }
-    nodes.append(BoardFlowNode(role: .output, title: output, count: counts.output))
     return nodes
   }
 

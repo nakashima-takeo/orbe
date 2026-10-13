@@ -100,6 +100,21 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     XCTAssertEqual(summary.runs.map(\.result), ["処理 2 ですべて除外"])
   }
 
+  /// タスク候補の出力先は、0 件でも採用・見送りの累計を出力先の段の注記に出す。
+  func testTheTaskCandidatesOutputNotesTheTally() throws {
+    var counted = automation([])
+    XCTAssertEqual(
+      BoardAutomationSummary(counted, text: text).nodes.last?.note, "これまでに採用 0件 / 見送り 0件")
+
+    counted = Automation(
+      id: 1, definition: counted.definition,
+      sinkState: .taskCandidates(AutomationTaskCandidatesState(accepted: 9, dismissed: 3)),
+      paused: false, createdAt: counted.createdAt, lastFetched: [], reviewAll: false, runs: [])
+    let output = try XCTUnwrap(BoardAutomationSummary(counted, text: text).nodes.last)
+    XCTAssertEqual(output.role, .output)
+    XCTAssertEqual(output.note, "これまでに採用 9件 / 見送り 3件")
+  }
+
   func testAnAutomationWithoutASourceIsTriggerThenOutput() {
     let summary = BoardAutomationSummary(automation([], steps: [], sourced: false), text: text)
     XCTAssertEqual(summary.nodes.map(\.role), [.trigger, .output])

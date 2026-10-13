@@ -128,6 +128,16 @@ extension AutomationSink: Codable {
   }
 }
 
+/// 中身だけを書く（タスク候補なら `{"accepted": …, "dismissed": …}`）。種類は定義の出力先が言うので書かず、読むのは定義を
+/// 先に読む `Automation` が受け持つ。
+extension AutomationSinkState: Encodable {
+  func encode(to encoder: Encoder) throws {
+    switch self {
+    case .taskCandidates(let state): try state.encode(to: encoder)
+    }
+  }
+}
+
 /// `{"kind": "taskCandidates", "proposed": …, "resolved": …, "withdrawn": …, "rejected": …}`。
 extension AutomationSinkReport: Codable {
   private enum CodingKeys: String, CodingKey {
