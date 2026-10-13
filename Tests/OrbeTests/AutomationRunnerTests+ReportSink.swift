@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 出力先の報告。最後の段の出力を JSON の行として読まず、文章のまま回の記録に残す。空か `{"nothing": …}` の 1 行だけを出した回は
+/// 出力先の報告。最後の段の出力を JSON の行として読まず、文章のまま回の記録に残す。空か、最後の行が `{"nothing": …}` の回は
 /// 「報告なし」の記録を持ち、2,000 字を超える報告は切る。回を記録するたびに走らせ役が自動化の ID を知らせる。
 ///
 /// 壊れると何が起きるか: 報告の各行が形違いとして捨てられ、報告が残らない。何も言うことが無かった回が「すべて除外」と読まれる。
@@ -31,10 +31,13 @@ extension AutomationRunnerTests {
     XCTAssertEqual(recorded, [automation.id])
   }
 
-  /// 空の出力と、`{"nothing": …}` の 1 行だけの出力は「報告なし」。
+  /// 空の出力と、最後の空でない行が `{"nothing": …}` の出力（前置きの文があっても）は「報告なし」。
   func testAnEmptyOrNothingLastStepIsNothingToReport() throws {
     let automation = try create(reportDefinition())
-    for (index, output) in ["  \n", #" {"nothing": "変化なし"}"# + "\n"].enumerated() {
+    let outputs = [
+      "  \n", #" {"nothing": "変化なし"}"# + "\n", "障害はありません。\n" + #"{"nothing": "変化なし"}"#,
+    ]
+    for (index, output) in outputs.enumerated() {
       try runner.runNow(automation.id)
       jobs.finish(index * 2, fetched(["a"]))
       jobs.finish(index * 2 + 1, replied(output))

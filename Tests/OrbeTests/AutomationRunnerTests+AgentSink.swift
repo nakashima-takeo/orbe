@@ -3,7 +3,7 @@ import XCTest
 @testable import Orbe
 
 /// 出力先の agent。届いた行は「起こすか」を決めるだけで、依頼文は Orbe の枠と定義の依頼文だけ。名指しの規則をそのまま裏の
-/// agent に渡し、最終応答を報告と同じく回の結果に残す。`{"nothing": …}` の 1 行はすることが無いという申告。`{"error": …}` の
+/// agent に渡し、最終応答を報告と同じく回の結果に残す。最後の行の `{"nothing": …}` はすることが無いという申告。`{"error": …}` の
 /// 1 行・落ちた・揃わなかった回は失敗で、項目は次の回にもう一度流れる。
 ///
 /// 壊れると何が起きるか: 取得した外の文面が、書き込みのツールを持つ agent の依頼文に入り、仕込まれた指示で投稿される。新着の
@@ -67,13 +67,13 @@ extension AutomationRunnerTests {
     XCTAssertEqual(recorded, [automation.id])
   }
 
-  /// 全体が `{"nothing": …}` の 1 行の応答は、することが無いという申告で、理由を記録に残す。空の応答は文の無い成功。長い応答は
-  /// 報告と同じく切る。
+  /// 最後の空でない行が `{"nothing": …}` の応答は、することが無いという申告で、前置きの文を捨てて理由を記録に残す。空の応答は
+  /// 文の無い成功。長い応答は報告と同じく切る。
   func testANothingLineIsRecordedAndAnEmptyReplyLeavesNoTextAndALongReplyIsCut() throws {
     let automation = try create(agentDefinition())
     try runner.runNow(automation.id)
     XCTAssertTrue(prompt(0).contains(#"{"nothing": "<why>"}"#))
-    jobs.finish(0, replied(#" {"nothing": "土曜なので投稿しない"}"# + "\n"))
+    jobs.finish(0, replied("今日は土曜日です。\n\n" + #" {"nothing": "土曜なので投稿しない"}"# + "\n"))
     var run = try XCTUnwrap(store.automation(automation.id)?.runs.first)
     XCTAssertNil(run.failure)
     XCTAssertEqual(

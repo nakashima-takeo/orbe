@@ -112,13 +112,17 @@ enum AutomationPrompts {
     let failure: String?
   }
 
-  /// 次へ渡す段の出力を読む。全体が `{"nothing": …}` の 1 行なら 0 行。出力があったのに 1 行も読めなければ失敗。`step` は
-  /// 失敗の文でどの段かを言う語（`step "<名前>"`・`the last step`）。
+  /// 次へ渡す段の出力を読む。最後の空でない行が `{"nothing": …}` なら、`id` を持つ行が無ければ前置きの文ごと 0 行、あれば
+  /// その行を捨てて項目を読む。出力があったのに 1 行も読めなければ失敗。`step` は失敗の文でどの段かを言う語
+  /// （`step "<名前>"`・`the last step`）。
   static func readStep(_ text: String, step: String) -> StepReading {
-    if nothing(text) != nil {
-      return StepReading(rows: [], rejected: AutomationRejections(), failure: nil)
+    var (rows, rejected) = readRows(text)
+    if nothing(text) != nil, let marker = rows.popLast() {
+      guard rows.contains(where: { id(of: $0.text) != nil }) else {
+        return StepReading(rows: [], rejected: AutomationRejections(), failure: nil)
+      }
+      rejected.add("line \(marker.line): a nothing line alongside items")
     }
-    let (rows, rejected) = readRows(text)
     let malformed = rows.isEmpty && rejected.count > 0
     return StepReading(
       rows: rows, rejected: rejected,
@@ -181,18 +185,28 @@ enum AutomationPrompts {
   /// することが無い回も 1 行で言わせる。
   private static let nothingLine = #"{"nothing": "<why>"}"#
 
-  /// 出力がすることが無いという申告なら、その理由。
+  /// 出力の最後の空でない行がすることが無いという申告なら、その理由。前置きの文は捨てる——モデルは前置きの後に申告を付けることが
+  /// ある。
   static func nothing(_ text: String) -> String? {
-    only(ReportedNothing.self, text)?.nothing
+    last(ReportedNothing.self, text)?.nothing
   }
 
-  /// 前後の空白を除いた全体が `T` の 1 行なら、それ——文章や行の中に JSON の例を書いた出力を申告と読み違えないため。
-  private static func only<T: Decodable>(_: T.Type, _ text: String) -> T? {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.contains(where: \.isNewline),
-      case .success(let line) = JSONLines<T>.decode(trimmed)
+  /// 前後の空白を除いた全体が `T` の 1 行なら、それ——報告の中に JSON の例を書いた出力を申告と読み違えないため。
+  private static func only<T: Decodable>(_ type: T.Type, _ text: String) -> T? {
+    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).contains(where: \.isNewline)
     else { return nil }
-    return line
+    return last(type, text)
+  }
+
+  /// 最後の空でない行が `T` なら、それ。
+  private static func last<T: Decodable>(_: T.Type, _ text: String) -> T? {
+    guard
+      let line = text.split(whereSeparator: \.isNewline).last(where: {
+        !$0.allSatisfy(\.isWhitespace)
+      }),
+      case .success(let item) = JSONLines<T>.decode(line.trimmingCharacters(in: .whitespaces))
+    else { return nil }
+    return item
   }
 
   // MARK: - 判定

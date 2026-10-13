@@ -141,14 +141,14 @@ let automationUsage = """
              3 minutes without output. Its final reply is kept as the result
              of the run (the first line shows on the board's heading and in
              the notification). Orbe tells it to reply only {"nothing": "…"}
-             when there is nothing to do; such a run delivers nothing (an
-             empty reply counts as done). A run fails when the agent replies
-             only {"error": "…"}, crashes, hits its limit, or a named MCP tool
-             is unavailable. A failed run, or one Orbe did not finish, starts
-             the agent again on the next run (a post can be doubled). Editing
-             the definition does not make the next run process every fetched
-             item again. The request stays in automations.json; never put
-             secrets in it.
+             when there is nothing to do; a run whose reply ends with that
+             line delivers nothing (an empty reply counts as done). A run
+             fails when the agent replies only {"error": "…"}, crashes, hits
+             its limit, or a named MCP tool is unavailable. A failed run, or
+             one Orbe did not finish, starts the agent again on the next run
+             (a post can be doubled). Editing the definition does not make the
+             next run process every fetched item again. The request stays in
+             automations.json; never put secrets in it.
     notify   "menuBar" or "notificationCenter"  (any sink; omit to stay
              silent)
              When a run delivers something (a proposal, a command run, a

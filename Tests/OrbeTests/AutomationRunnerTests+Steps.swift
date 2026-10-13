@@ -91,7 +91,7 @@ extension AutomationRunnerTests {
     XCTAssertEqual(call.model, "sonnet")
   }
 
-  /// 中間の段が何も残さなければ（空か `{"nothing": …}` の 1 行）、最後の段を起こさずに成功として確定する。記録の最後の段は
+  /// 中間の段が何も残さなければ（空か、最後の行が `{"nothing": …}`）、最後の段を起こさずに成功として確定する。記録の最後の段は
   /// 0 行を出した段で、出力先は数えていない。
   func testAnEmptyMiddleStepCommitsWithoutTheLastStep() throws {
     let automation = try create(filtered())

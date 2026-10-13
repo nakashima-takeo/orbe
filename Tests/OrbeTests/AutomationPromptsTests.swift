@@ -262,21 +262,39 @@ final class AutomationPromptsTests: OrbeTestCase {
       ))
   }
 
-  /// することが無いという申告は、前後の空白を除いた全体が `{"nothing": …}` の 1 行のときだけ。段の出力では 0 行として読み、
-  /// 失敗にも、次へ渡す行にもしない。
-  ///
-  /// 壊れると何が起きるか: 申告の行が 1 行の項目として次の段や出力先へ渡り、することの無い回にコマンドや agent が起きる。
-  /// id を持つ項目の行や、報告の中の JSON の例を申告と読み違えて捨てる。
-  func testANothingLineIsOnlyAWholeLineAndReadsAsNoRows() {
+  /// することが無いという申告は、最後の空でない行が `{"nothing": …}` のとき。前置きの文は捨てる（モデルが前置きの後に申告を
+  /// 付けることがある）。申告の後に文が続く出力・`id` を持つ行は申告でない。
+  func testANothingLineIsTheLastNonEmptyLine() {
     XCTAssertEqual(AutomationPrompts.nothing(#" {"nothing": "残る項目なし"}"# + "\n"), "残る項目なし")
-    XCTAssertNil(AutomationPrompts.nothing("無かった。\n" + #"{"nothing": "例"}"#))
+    XCTAssertEqual(
+      AutomationPrompts.nothing("今日は水曜日です。\n\n" + #"{"nothing": "日曜でない"}"# + "\n  \n"), "日曜でない")
+    XCTAssertNil(AutomationPrompts.nothing(#"{"nothing": "例"}"# + "\n投稿した。"))
     XCTAssertNil(AutomationPrompts.nothing(#"{"id": "a", "nothing": "x"}"#))
     XCTAssertNil(AutomationPrompts.nothing(#"{"nothing": 1}"#))
+  }
 
-    let reading = AutomationPrompts.readStep(#"{"nothing": "残る項目なし"}"#, step: "the last step")
-    XCTAssertEqual(reading.rows, [])
-    XCTAssertEqual(reading.rejected.count, 0)
-    XCTAssertNil(reading.failure)
+  /// 段の出力は、申告があり `id` を持つ行が無ければ、前置きの文ごと 0 行として読み、失敗にも次へ渡す行にもしない。`id` を持つ
+  /// 行があれば項目を優先し、申告の行だけを理由付きで捨てる。
+  ///
+  /// 壊れると何が起きるか: 申告の行が 1 行の項目として次の段や出力先へ渡り、することの無い回にコマンドや agent が起きる。前置きの
+  /// 文が形違いに数えられて回が失敗する。項目と申告を同時に出した回の項目を落とす。
+  func testAStepReadsANothingLineAsNoRowsUnlessItemsCameWithIt() {
+    for text in [
+      #"{"nothing": "残る項目なし"}"#,
+      "どちらも日本語です。\n" + #"{"nothing": "英語の項目なし"}"#,
+    ] {
+      let reading = AutomationPrompts.readStep(text, step: "the last step")
+      XCTAssertEqual(reading.rows, [], text)
+      XCTAssertEqual(reading.rejected.count, 0, text)
+      XCTAssertNil(reading.failure, text)
+    }
+
+    let items = AutomationPrompts.readStep(
+      "残すのは a だけ\n" + #"{"id":"a"}"# + "\n" + #"{"nothing": "b は外した"}"#, step: "the last step")
+    XCTAssertEqual(items.rows, [AutomationRow(line: 2, text: #"{"id":"a"}"#)])
+    XCTAssertEqual(
+      items.rejected.reasons, ["line 1: not JSON", "line 3: a nothing line alongside items"])
+    XCTAssertNil(items.failure)
     XCTAssertEqual(
       AutomationPrompts.readStep(#"{"id": "a", "nothing": "x"}"#, step: "the last step").rows.count,
       1,
