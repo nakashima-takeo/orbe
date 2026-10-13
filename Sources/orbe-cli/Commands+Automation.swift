@@ -130,13 +130,15 @@ let automationUsage = """
              bare built-in tools, whole servers and wildcards are refused.
              Name as few as possible. Each run starts in a fresh empty
              directory. With Bash rules only, claude reads none of your
-             settings, and reads outside that directory follow the named rules
-             too. Once an MCP tool is named, it reads your settings to reach
-             your MCP servers, so the tools you always allow in claude (MCP
-             tools and Bash commands) and your hooks apply too, and it can
-             read under your settings' additionalDirectories without naming
-             anything. Instructions hidden in outside text the agent reads
-             with its tools can make it use a writing tool it was given.
+             settings, and it refuses commands that read a file outside that
+             directory given as an argument, even when they match a named
+             rule; to read such a file, name a command that reads it, such as
+             a script. Once an MCP tool is named, it reads your settings to
+             reach your MCP servers, so the tools you always allow in claude
+             (MCP tools and Bash commands) and your hooks apply too, and it
+             can read under your settings' additionalDirectories without
+             naming anything. Instructions hidden in outside text the agent
+             reads with its tools can make it use a writing tool it was given.
              Without model it runs sonnet; it is cut off after 10 minutes, or
              3 minutes without output. Its final reply is kept as the result
              of the run (the first line shows on the board's heading and in

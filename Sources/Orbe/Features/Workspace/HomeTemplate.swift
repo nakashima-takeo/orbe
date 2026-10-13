@@ -135,8 +135,9 @@ enum HomeTemplate {
     絞り込みが掛からない）。応答の 1 行目がボードの見出しと通知に出る。することが無い回は agent がそう申告して終わり、知らせない。
     - agent の名指しは MCP のツールの完全名か `Bash(<コマンドの接頭>:*)`（例 `Bash(gh search prs:*)`）だけで、最小にする。\
     agent は回ごとに作る空のディレクトリを作業ディレクトリにして起きる（ディレクトリに結び付く登録〔claude の local・project\
-    スコープ〕の MCP サーバーは使えない）。Bash の規則だけなら、利用者の設定を読まずに走り、作業ディレクトリの外の読み取りも名指しの\
-    規則に従う。MCP を混ぜると、利用者の設定を読むので、利用者が claude で「常に許可」にしたツール（MCP も Bash のコマンドも）と\
+    スコープ〕の MCP サーバーは使えない）。Bash の規則だけなら、利用者の設定を読まずに走り、作業ディレクトリの外のファイルを引数に\
+    取って読むコマンドは、名指しの規則に一致していても claude が拒否する（外のファイルを読ませたいなら、それを読むコマンド〔スクリプト\
+    など〕を名指しする）。MCP を混ぜると、利用者の設定を読むので、利用者が claude で「常に許可」にしたツール（MCP も Bash のコマンドも）と\
     hook も効き、設定の additionalDirectories の下も名指しなしで読める。\
     agent がツールで読んだ外の文面に仕込まれた指示で、名指しした書き込みのツールが使われうる。
     - agent には届いた行も件数も渡らない。対象が要る仕事なら、依頼文で agent 自身に調べさせる。失敗した回は次の回でもう一度\
@@ -174,13 +175,14 @@ enum HomeTemplate {
     board's heading and in the notification. When there is nothing to do, the agent says so and ends, and \
     nobody is notified.
     - An agent may name only full MCP tool names and `Bash(<command prefix>:*)` rules (e.g. \
-    `Bash(gh search prs:*)`); name as few as possible. Each run starts in a fresh empty directory (MCP \
-    servers registered to a directory, in claude's local and project scopes, are unavailable). With Bash \
-    rules only, it runs without reading the user's settings, and reads outside that directory follow the \
-    named rules too. Once an MCP tool is named, it reads the user's settings, so the tools the user always \
-    allows in claude (MCP tools and Bash commands) and their hooks apply too, and it can read under the \
-    settings' additionalDirectories without naming anything. Instructions hidden in outside text the agent \
-    reads with its tools can make it use a writing tool it was given.
+    `Bash(gh search prs:*)`); name as few as possible. Each run starts in a fresh empty directory (MCP servers \
+    registered to a directory, in claude's local and project scopes, are unavailable). With Bash rules only, \
+    it runs without reading the user's settings, and claude refuses commands that read a file outside that \
+    directory given as an argument, even when they match a named rule (to have it read such a file, name a \
+    command that reads it, such as a script). Once an MCP tool is named, it reads the user's settings, so the \
+    tools the user always allows in claude (MCP tools and Bash commands) and their hooks apply too, and it can \
+    read under the settings' additionalDirectories without naming anything. Instructions hidden in outside \
+    text the agent reads with its tools can make it use a writing tool it was given.
     - The agent gets neither the lines that arrived nor their count; when the job needs targets, have the \
     agent look them up itself in the request. A failed run starts the agent again on the next run (a post \
     can be doubled). The request stays in automations.json, so never put secrets in it.
