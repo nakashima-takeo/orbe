@@ -111,7 +111,7 @@ final class OrbeMcpProcessTests: OrbeTestCase {
         .contains("\(SessionLogLimits.restoreMaxIds) 件"),
       "sessionIds の上限を写す")
     XCTAssertTrue(
-      description(try tool("list_intakes")).contains("新しい順に \(Automation.retainedRuns) 件まで。"),
+      description(try tool("list_automations")).contains("新しい順に \(Automation.retainedRuns) 件まで。"),
       "回の記録を残す件数を写す")
   }
 
@@ -153,9 +153,10 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       }
     }
 
-    XCTAssertEqual(kinds("list_board_parts", ["workspaceId": home]), ["intake"], "決めていなければ既定")
-    XCTAssertEqual(kinds("remove_board_part", ["workspaceId": home, "kind": "intake"]), [])
-    XCTAssertEqual(kinds("add_board_part", ["workspaceId": home, "kind": "intake"]), ["intake"])
+    XCTAssertEqual(kinds("list_board_parts", ["workspaceId": home]), ["automation"], "決めていなければ既定")
+    XCTAssertEqual(kinds("remove_board_part", ["workspaceId": home, "kind": "automation"]), [])
+    XCTAssertEqual(
+      kinds("add_board_part", ["workspaceId": home, "kind": "automation"]), ["automation"])
   }
 
   /// 背景 workspace を `activate_workspace` すると、返る `tabIds` の先頭が実際に読めるタブになる

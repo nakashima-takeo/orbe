@@ -2,13 +2,13 @@ import XCTest
 
 @testable import Orbe
 
-/// 受信の 6 動詞のドメイン側を、実 `WindowController` 越しに固定する。起動で保存済みの受信が番人に載ること、
-/// 提案と重なりが棚に出す受信の側に出ること、拒否が制御 API の語彙になること、一覧の定義を `set_intake` へ戻せること、
-/// 一覧の回の記録が旧い形のままであること。
+/// 自動化の 6 動詞のドメイン側を、実 `WindowController` 越しに固定する。起動で保存済みの自動化が番人に載ること、
+/// 提案と重なりが棚に出す自動化の側に出ること、拒否が制御 API の語彙になること、一覧の定義を `set_automation` へ戻せること、
+/// 一覧の回の記録が保存と同じ形であること。
 ///
-/// 壊れると何が起きるか: Orbe を再起動しただけで全受信が黙って回らなくなる。AI が受信の棚を読んでも、提案した受信が
-/// もう取っていない提案が混ざる・取っている受信に出ない。走っている受信への `run_intake` が別の誤りに化ける。一覧の定義を
-/// 書き換えて戻すと、間隔や取得役が別物になる。回の記録を読む AI・秘書が、件数や判定の結果を読めなくなる。
+/// 壊れると何が起きるか: Orbe を再起動しただけで全自動化が黙って回らなくなる。AI が自動化の棚を読んでも、提案した自動化が
+/// もう取っていない提案が混ざる・取っている自動化に出ない。走っている自動化への `run_automation` が別の誤りに化ける。
+/// 一覧の定義を書き換えて戻すと、間隔や取得元が別物になる。回の記録を読む AI・秘書が、段ごとの件数や出力先の結果を読めなくなる。
 ///
 /// 重要: 実 NSWindow に SurfaceView を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerAutomationControlTests: OrbeTestCase {
@@ -43,8 +43,9 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
   private func listed(_ wc: WindowController) throws -> [Int: [String: Any]] {
     let automations = try XCTUnwrap(
-      success(wc.controlListAutomations())["intakes"] as? [[String: Any]])
-    return Dictionary(uniqueKeysWithValues: automations.map { ($0["intakeId"] as? Int ?? 0, $0) })
+      success(wc.controlListAutomations())["automations"] as? [[String: Any]])
+    return Dictionary(
+      uniqueKeysWithValues: automations.map { ($0["automationId"] as? Int ?? 0, $0) })
   }
 
   private func proposals(_ wc: WindowController, of automationId: Int) throws -> [[String: Any]] {
@@ -55,8 +56,8 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
   private func set(_ wc: WindowController, _ definition: AutomationDefinition) throws -> Int {
     try XCTUnwrap(
-      (success(wc.controlSetAutomation(automationId: nil, definition))["intake"] as? [String: Any])?[
-        "intakeId"] as? Int)
+      (success(wc.controlSetAutomation(automationId: nil, definition))["automation"]
+        as? [String: Any])?["automationId"] as? Int)
   }
 
   /// 成功した回を確定する（`proposing` の項目に提案を出す）。
@@ -108,15 +109,16 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let shelved = try proposals(wc, of: second)
     XCTAssertEqual(
       shelved.map { $0["link"] as? String }, [moved.link], "提案した受信が取らなくなったら、取っている受信の棚へ")
-    XCTAssertEqual(shelved.first?["intakeId"] as? Int, second)
-    XCTAssertEqual(shelved.first?["intakeName"] as? String, "受信 2")
+    XCTAssertEqual(shelved.first?["automationId"] as? Int, second)
+    XCTAssertEqual(shelved.first?["automationName"] as? String, "受信 2")
 
-    let automations = try listed(wc)
-    XCTAssertEqual(automations[first]?["openProposals"] as? Int, 1)
-    XCTAssertEqual(automations[second]?["openProposals"] as? Int, 1)
+    let candidates = try listed(wc).compactMapValues { $0["taskCandidates"] as? [String: Any] }
+    XCTAssertEqual(candidates[first]?["openProposals"] as? Int, 1)
+    XCTAssertEqual(candidates[second]?["openProposals"] as? Int, 1)
     for (id, other, name) in [(first, second, "受信 2"), (second, first, "受信 1")] {
-      let overlaps = automations[id]?["overlaps"] as? [[String: Any]]
-      XCTAssertEqual(overlaps?.map { $0["intakeId"] as? Int }, [other], "受信 \(id) に相手が出る")
+      let overlaps = candidates[id]?["overlaps"] as? [[String: Any]]
+      XCTAssertEqual(
+        overlaps?.map { $0["automationId"] as? Int }, [other], "自動化 \(id) に相手が出る")
       XCTAssertEqual(overlaps?.first?["name"] as? String, name)
       XCTAssertEqual(overlaps?.first?["count"] as? Int, 1)
     }
@@ -124,7 +126,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
   // MARK: - 拒否
 
-  /// 走っている回がある間は一覧にそう出て、`run_intake` は「実行できない」で断られる。
+  /// 走っている回がある間は一覧にそう出て、`run_automation` は「実行できない」で断られる。
   func testRunningAutomationIsListedAsRunningAndRefusesRunNow() throws {
     let wc = try launch()
     let id = try set(wc, AutomationStoreTests.definition(script: "sleep 30"))
@@ -157,24 +159,32 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
   // MARK: - 定義の往復
 
-  /// 一覧の定義は `set_intake` と同じ形で、そのまま読み戻すと同じ定義になる（AI が読んで直して戻せる）。
+  /// 一覧の定義は `set_automation` と同じ形で、そのまま読み戻すと同じ定義になる（AI が読んで直して戻せる）。省略した
+  /// モデルは省略のまま返る——解いた値で返すと、書き戻した定義のモデルが固定され、段を並べ替えても既定が追従しない。
   func testListedDefinitionReadsBackAsTheSameDefinition() throws {
     let wc = try launch()
     var definition = AutomationStoreTests.definition(
       trigger: .daily([.init(hour: 13, minute: 30), .init(hour: 9, minute: 0)]))
-    definition.source?.method = AutomationStoreTests.agentSource()
+    definition.source?.method = .agent(
+      AutomationSourceAgent(
+        cli: "claude", model: nil, tools: ["mcp__slack__search"], request: "自分宛の DM"))
+    definition.steps = [
+      AutomationStep(name: "絞り込み", method: .command(BackgroundCommand(script: "jq -c ."))),
+      AutomationStep(
+        name: "判定",
+        method: .agent(AutomationStepAgent(cli: "claude", model: nil, instruction: "判定して"))),
+    ]
     let id = try set(wc, definition)
 
-    let entry = try XCTUnwrap(try listed(wc)[id])
-    let data = try JSONSerialization.data(withJSONObject: entry)
+    let listedDefinition = try XCTUnwrap(try listed(wc)[id]?["definition"])
+    let data = try JSONSerialization.data(withJSONObject: listedDefinition)
 
     XCTAssertEqual(
-      try AutomationWire.decoder.decode(AutomationLegacyDefinition.self, from: data).definition,
-      definition)
+      try AutomationWire.decoder.decode(AutomationDefinition.self, from: data), definition)
   }
 
-  /// 一覧の回の記録は旧い形（取得・新しい件数・判定・下げた数）のまま。
-  func testListedRunsKeepTheLegacyShape() throws {
+  /// 一覧の回の記録は保存と同じ形（取得元・新しい件数・各段・出力先）。
+  func testListedRunsKeepTheStoredShape() throws {
     let wc = try launch()
     let id = try set(wc, AutomationStoreTests.definition())
     let a = AutomationStoreTests.item("a")
@@ -193,12 +203,14 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let listedRun = try XCTUnwrap((try listed(wc)[id]?["runs"] as? [[String: Any]])?.first)
 
     XCTAssertEqual(
-      Set(listedRun.keys),
-      ["startedAt", "endedAt", "trigger", "fetch", "newItems", "judge", "withdrawn"])
-    XCTAssertEqual((listedRun["fetch"] as? [String: Any])?["items"] as? Int, 1)
-    XCTAssertEqual(listedRun["newItems"] as? Int, 1)
-    let judge = try XCTUnwrap(listedRun["judge"] as? [String: Any])
-    XCTAssertEqual(judge["commandLine"] as? String, "claude -p")
-    XCTAssertEqual(judge["proposed"] as? Int, 1)
+      Set(listedRun.keys), ["startedAt", "endedAt", "trigger", "source", "fresh", "steps", "sink"])
+    XCTAssertEqual((listedRun["source"] as? [String: Any])?["count"] as? Int, 1)
+    XCTAssertEqual(listedRun["fresh"] as? Int, 1)
+    let step = try XCTUnwrap((listedRun["steps"] as? [[String: Any]])?.first)
+    XCTAssertEqual(step["name"] as? String, "判定")
+    XCTAssertEqual(step["commandLine"] as? String, "claude -p")
+    let sink = try XCTUnwrap(listedRun["sink"] as? [String: Any])
+    XCTAssertEqual(sink["kind"] as? String, "taskCandidates")
+    XCTAssertEqual(sink["proposed"] as? Int, 1)
   }
 }

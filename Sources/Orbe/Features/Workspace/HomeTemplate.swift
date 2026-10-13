@@ -44,19 +44,21 @@ enum HomeTemplate {
     - タスクを待ちにし、解ける条件（説明・確認のコマンド・間隔・期限）を `set_wait_condition` で付ける。
     - Orbe が確認のコマンドを人の承認なしに裏で予定どおり繰り返し走らせ、満たすか期限が来たら待ちを外して人に知らせる。
 
-    ## 予定どおり何かを拾ってタスクの候補にする
+    ## 予定どおり何かを拾い、絞り・判断してタスクの候補にする
 
-    - タスクの自動追加（`set_intake`・`list_intakes`・`run_intake`・`pause_intake`・`delete_intake`・`list_intake_proposals`）。
-    - 予定（間隔か毎日の時刻）ごとに、取得（コマンドか軽い agent）が項目を取り、判定（agent）が指示文に照らして候補を出す。
+    - 自動化（`set_automation`・`list_automations`・`run_automation`・`pause_automation`・`delete_automation`・\
+    `list_automation_proposals`）。
+    - トリガー（間隔か毎日の時刻）ごとに、取得元（コマンドか軽い agent）が項目を取り、処理の段（コマンドか agent）が順に\
+    絞り・判断して、出力先へ出す。今の出力先はタスク候補だけ。
     - 人が ⌘⇧X の提案タブで受けた候補だけがタスクになる。Slack・メール・課題管理・GitHub などから拾うのが主な使い方。
 
-    Orbe の中で予定どおり繰り返し動くのは、待ちの条件の確認とタスクの自動追加の 2 つ。
+    Orbe の中で予定どおり繰り返し動くのは、待ちの条件の確認と自動化の 2 つ。
 
     ## Home のボード（画面）に出すものを変える
 
     - `list_board_parts`・`add_board_part`・`remove_board_part`。workspaceId は Home の id（`list_workspaces` で hasBoard が \
     true のもの）。
-    - 部品は `intake`（タスクの自動追加の一覧と依頼の欄）。外しても自動追加そのものは消えず、置けば戻る。
+    - 部品は `automation`（自動化の一覧と依頼の欄）。外しても自動化そのものは消えず、置けば戻る。
 
     ## タブと agent を操作する
 
@@ -99,23 +101,24 @@ enum HomeTemplate {
     - Orbe runs the check command in the background on schedule, repeatedly and without asking the user, \
     and clears the wait and notifies the user when it holds or the deadline comes.
 
-    ## Pick things up on a schedule as task candidates
+    ## Pick things up on a schedule, narrow and judge them into task candidates
 
-    - Task auto-add (`set_intake`, `list_intakes`, `run_intake`, `pause_intake`, `delete_intake`, \
-    `list_intake_proposals`).
-    - On each scheduled run (an interval or daily times), the fetch (a command or a light agent) gets items, \
-    and the judge (an agent) makes candidates against its instruction.
+    - Automation (`set_automation`, `list_automations`, `run_automation`, `pause_automation`, \
+    `delete_automation`, `list_automation_proposals`).
+    - On each trigger (an interval or daily times), the source (a command or a light agent) gets items, the \
+    steps (commands or agents) narrow and judge them in order, and the sink receives the result. The only \
+    sink today is task candidates.
     - Only candidates the user accepts in the Proposals tab of ⌘⇧X become tasks. The main use is picking things \
     up from Slack, mail, issue trackers, GitHub, and the like.
 
-    Inside Orbe, the only things that run repeatedly on schedule are waiting-condition checks and task auto-add.
+    Inside Orbe, the only things that run repeatedly on schedule are waiting-condition checks and automations.
 
     ## Change what Home's board (screen) shows
 
     - `list_board_parts`, `add_board_part`, `remove_board_part`. workspaceId is Home's id (the one with \
     hasBoard true in `list_workspaces`).
-    - The part is `intake` (the task auto-add list and its request field). Removing it keeps the auto-adds \
-    themselves; adding it brings the part back.
+    - The part is `automation` (the automation list and its request field). Removing it keeps the \
+    automations themselves; adding it brings the part back.
 
     ## Operate tabs and agents
 

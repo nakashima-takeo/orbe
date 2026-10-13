@@ -74,6 +74,22 @@ extension AutomationRunnerTests {
     XCTAssertTrue(call.prompt.contains(#"Keep the "id" of each item you pass on"#))
   }
 
+  /// 最後の段は判断を担うので、モデルを省略すると sonnet で走る。
+  func testTheLastAgentStepRunsOnSonnetWhenTheModelIsOmitted() throws {
+    var definition = AutomationStoreTests.definition()
+    definition.steps = [
+      AutomationStep(
+        name: "判定",
+        method: .agent(AutomationStepAgent(cli: "claude", model: nil, instruction: "判定して")))
+    ]
+    let automation = try create(definition)
+    try runner.runNow(automation.id)
+    jobs.finish(0, fetched(["a"]))
+
+    guard case .agent(let call) = jobs.calls[1].job.work else { return XCTFail("最後の段は agent") }
+    XCTAssertEqual(call.model, "sonnet")
+  }
+
   /// 中間の段が何も残さなければ、最後の段を起こさずに成功として確定する。
   func testAnEmptyMiddleStepCommitsWithoutTheLastStep() throws {
     let automation = try create(filtered())

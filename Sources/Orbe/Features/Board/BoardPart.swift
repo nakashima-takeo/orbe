@@ -1,10 +1,10 @@
 import Foundation
 
 /// ボードに置く部品。種類で指し、1 つのボードに同じ種類は 1 つまで（保証者は `SessionStore`）。外の表現（保存・制御 API）は
-/// `{"kind": "intake"}` のオブジェクトで、部品に設定が付いても外の形を壊さない。
+/// `{"kind": "automation"}` のオブジェクトで、部品に設定が付いても外の形を壊さない。
 enum BoardPart: String, CaseIterable, Codable {
-  /// タスクの自動追加の部品（見出し・依頼の欄・一覧・詳細）。
-  case automation = "intake"
+  /// タスクの自動追加の部品（依頼の欄・一覧・右の欄）。
+  case automation
 
   private enum CodingKeys: String, CodingKey {
     case kind
