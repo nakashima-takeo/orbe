@@ -16,6 +16,38 @@ extension BoardAutomationTests {
     static let secondRow = NSPoint(x: 120, y: 536)
   }
 
+  /// 見本の 4 件に、まだ回っていない自動化を足して一覧が見える範囲より長くなる並び。先頭の行は見本と同じ失敗の Backlog。
+  private func longBoard() -> BoardModel {
+    let extra = (5...24).map { id in
+      Automation(
+        id: id, definition: DesignSceneFixtures.boardAutomations()[0].definition, paused: false,
+        createdAt: Date(timeIntervalSince1970: 0), lastFetched: [], reviewAll: false, runs: [])
+    }
+    return board(DesignSceneFixtures.boardAutomations() + extra)
+  }
+
+  /// 一覧のスクロール（部品の左端にあるもの）。
+  private func listScroll(in window: NSWindow) throws -> NSScrollView {
+    func scrollViews(_ view: NSView) -> [NSScrollView] {
+      (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap(scrollViews)
+    }
+    let content = try XCTUnwrap(window.contentView)
+    return try XCTUnwrap(
+      scrollViews(content).min {
+        $0.convert($0.bounds, to: nil).minX < $1.convert($1.bounds, to: nil).minX
+      })
+  }
+
+  /// 一覧をホイールで流したのと同じく、末尾まで送る（選択は動かない）。
+  private func scrollToBottom(_ list: NSScrollView, in window: NSWindow) throws {
+    let document = try XCTUnwrap(list.documentView)
+    XCTAssertTrue(document.isFlipped, "前提: 上端が原点")
+    list.contentView.scroll(
+      to: NSPoint(x: 0, y: document.bounds.height - list.contentView.bounds.height))
+    list.reflectScrolledClipView(list.contentView)
+    flush(window)
+  }
+
   private func outputNotes(_ automation: BoardAutomationModel, _ id: Int) -> [String] {
     let text = automation.text(LocalizationStore(language: .ja), now: automation.runner.now())
     return automation.summary(id, text: text)?.nodes.last?.notes ?? []
@@ -162,5 +194,41 @@ extension BoardAutomationTests {
     XCTAssertNil(automation.notifyCursor)
     XCTAssertEqual(automation.store.automation(Self.failingBacklog)?.definition.notify, .menuBar)
     XCTAssertEqual(automation.place, .list)
+  }
+
+  /// 選んでいる行が一覧の見える範囲の外にあっても、→ は行を見える範囲へ引き寄せてから、その横に開く。
+  func testArrowRightBringsTheRowIntoViewAndOpensBesideIt() throws {
+    let model = longBoard()
+    let automation = model.automation
+    let window = mount(model)
+    down(window)
+    XCTAssertEqual(automation.selectedAutomation?.id, Self.failingBacklog)
+    let list = try listScroll(in: window)
+    try scrollToBottom(list, in: window)
+    XCTAssertGreaterThan(list.contentView.bounds.minY, 0, "前提: 先頭の行は見える範囲の外")
+
+    right(window)
+
+    XCTAssertEqual(automation.notifyCursor, 0)
+    XCTAssertEqual(list.contentView.bounds.minY, 0, "先頭の行が見える範囲へ戻る")
+    click(NotifyPoint.menuBarRow, in: window)
+    XCTAssertEqual(
+      automation.store.automation(Self.failingBacklog)?.definition.notify, .menuBar,
+      "メニューは選んでいる行の横に出る")
+  }
+
+  /// 開いている間に選んでいる行が一覧の見える範囲から外れると閉じる。
+  func testRowLeavingTheViewWhileOpenCloses() throws {
+    let model = longBoard()
+    let automation = model.automation
+    let window = mount(model)
+    down(window)
+    right(window)
+    XCTAssertEqual(automation.notifyCursor, 0, "前提: 開いている")
+
+    try scrollToBottom(try listScroll(in: window), in: window)
+
+    XCTAssertNil(automation.notifyCursor)
+    XCTAssertEqual(automation.selectedAutomation?.id, Self.failingBacklog, "選択は動かない")
   }
 }

@@ -60,6 +60,9 @@ struct BoardAutomationList: View {
         .padding(.horizontal, Theme.Space.note)
       }
       .scrollIndicators(.automatic)
+      .transformAnchorPreference(key: BoardAutomationNotifyAnchor.self, value: .bounds) {
+        $0.viewport = $1
+      }
       .onChange(of: model.list.scrollTarget) { _, target in
         guard let target else { return }
         proxy.scrollTo(target.id)

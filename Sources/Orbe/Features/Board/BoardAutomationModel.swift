@@ -10,7 +10,7 @@ import SwiftUI
 /// 部品へ入ると欄から始まり（⌘⇧X が開くと入力欄に焦点があるのと同じ）、中での当て直しは選んでいる場所へ戻る。
 ///
 /// 一覧の行の → で開くサブメニュー「通知」は、選んでいる行の付属で、焦点の場所を増やさない。対象はいつも選んでいる自動化で、
-/// 選んでいる段が変わると閉じる。
+/// 選んでいる段が変わると閉じる（行が一覧の見える範囲から外れたときはビューが閉じる）。
 @Observable final class BoardAutomationModel {
   /// 焦点の場所。
   enum Place: Hashable {
@@ -213,10 +213,12 @@ import SwiftUI
 
   // MARK: - 通知
 
-  /// 選んでいる自動化のサブメニューを開く。選んでいる行は今の設定から。
+  /// 選んでいる自動化のサブメニューを開く。選んでいる行を一覧の見える範囲へ引き寄せてから開く（メニューは行の横に出るので、
+  /// 行が見えていないと別の行の横に出る）。選んでいる行は今の設定から。
   func openNotify() {
     guard let automation = selectedAutomation else { return }
     onRefusal(nil)
+    list.follow()
     notifyCursor = Self.notifyChoices.firstIndex(of: automation.definition.notify) ?? 0
   }
 

@@ -10,10 +10,11 @@ extension AutomationNotify {
   }
 }
 
-/// サブメニュー「通知」を重ねる位置: 一覧の右端と、選んでいる行。一覧は ScrollView なので、行の中に重ねると一覧の幅で
-/// 切られる。部品の高さへ運んで重ねる。
+/// サブメニュー「通知」を重ねる位置: 一覧の右端と、一覧の見える範囲と、選んでいる行。一覧は ScrollView なので、行の中に
+/// 重ねると一覧の幅で切られる。部品の高さへ運んで重ねる。
 struct BoardAutomationNotifyAnchor: PreferenceKey {
   var list: Anchor<CGRect>?
+  var viewport: Anchor<CGRect>?
   var row: Anchor<CGRect>?
 
   static let defaultValue = BoardAutomationNotifyAnchor()
@@ -23,32 +24,47 @@ struct BoardAutomationNotifyAnchor: PreferenceKey {
   ) {
     let next = nextValue()
     value.list = next.list ?? value.list
+    value.viewport = next.viewport ?? value.viewport
     value.row = next.row ?? value.row
   }
 }
 
 /// 開いているサブメニュー「通知」を部品に重ねる層。選んでいる行の右、一覧の右の罫線の外に、行の上端に揃えて置き、開いている
-/// 間も行を追う（裏の回で並びが変わっても、別の行の横に残らない）。部品の端を越えるなら内側へずらす。メニューの外のクリックは
-/// 閉じるだけで、下へは届かない。
+/// 間も行を追う。部品の端を越えるなら内側へずらす。置くのは行が一覧の見える範囲に収まっている間だけで、開いている間に外れたら
+/// 閉じる——見えない行の横へずらして置くと、見えている別の行の通知を替えたと取り違えるため。開いた直後は行が見える範囲へ
+/// 流れてくる途中なので、外れていても閉じない。メニューの外のクリックは閉じるだけで、下へは届かない。
 struct BoardAutomationNotifyLayer: View {
   let model: BoardAutomationModel
   let anchors: BoardAutomationNotifyAnchor
 
   var body: some View {
-    if model.notifyCursor != nil, let list = anchors.list, let row = anchors.row {
+    if model.notifyCursor != nil, let list = anchors.list, let viewport = anchors.viewport,
+      let row = anchors.row
+    {
       GeometryReader { proxy in
+        let visible = Self.contains(proxy[viewport], proxy[row])
         ZStack(alignment: .topLeading) {
           Color.clear
             .contentShape(Rectangle())
             .onTapGesture { model.closeNotify() }
-          BoardAutomationNotifyPlacement(
-            origin: CGPoint(x: proxy[list].maxX + Theme.Space.tick, y: proxy[row].minY)
-          ) {
-            BoardAutomationNotifyMenu(model: model)
+          if visible {
+            BoardAutomationNotifyPlacement(
+              origin: CGPoint(x: proxy[list].maxX + Theme.Space.tick, y: proxy[row].minY)
+            ) {
+              BoardAutomationNotifyMenu(model: model)
+            }
           }
+        }
+        .onChange(of: visible) { was, now in
+          if was, !now { model.closeNotify() }
         }
       }
     }
+  }
+
+  /// 行の上下が見える範囲に収まっているか。
+  private static func contains(_ viewport: CGRect, _ row: CGRect) -> Bool {
+    row.minY >= viewport.minY && row.maxY <= viewport.maxY
   }
 }
 

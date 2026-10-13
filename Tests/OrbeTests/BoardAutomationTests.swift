@@ -40,10 +40,12 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     super.tearDown()
   }
 
-  func board() -> BoardModel {
+  /// `automations` を省くと見本の 4 件。
+  func board(_ automations: [Automation]? = nil) -> BoardModel {
     BoardModel(
       automation: BoardAutomationModel(
-        runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationFile())),
+        runner: DesignSceneFixtures.automationRunner(
+          DesignSceneFixtures.boardAutomationFile(automations))),
       parts: [.automation])
   }
 
