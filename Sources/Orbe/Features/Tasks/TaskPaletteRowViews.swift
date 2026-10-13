@@ -5,18 +5,24 @@ import SwiftUI
 struct TaskPaletteList: View {
   @Bindable var model: TaskPaletteModel
   @Environment(\.localization) private var l10n
+  /// 行の内容の幅。スクロールバーが場所を取る設定であふれると一覧の幅より狭くなるので、見出しをこれに揃える。
+  @State private var rowWidth: CGFloat?
 
   var body: some View {
     let rows = model.rows
     VStack(alignment: .leading, spacing: 0) {
       TaskPaletteFilterBar(model: model)
       TaskPaletteTableHeader(model: model)
+        .frame(width: rowWidth)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, TaskPaletteRowMetrics.listPadding)
       ScrollViewReader { proxy in
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 0) {
             ForEach(rows) { row($0) }
           }
+          .frame(maxWidth: .infinity)
+          .onGeometryChange(for: CGFloat.self, of: \.size.width) { rowWidth = $0 }
           .padding(TaskPaletteRowMetrics.listPadding)
         }
         .scrollIndicators(.automatic)
