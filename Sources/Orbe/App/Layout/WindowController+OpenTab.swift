@@ -63,11 +63,11 @@ extension WindowController {
     return OpenedTab(tabId: tab.id, workspaceId: workspaces[workspaceIndex].id)
   }
 
-  /// 既にあるタブ（休眠のタブを含む）の surface を、選ばずに起こす。休眠のタブは起こす時点で再開が走る。
+  /// `place` が足したばかりのタブの surface を、選ばずに起こす。
   /// 背景 workspace なら前面化せずに起こし（`materializeOffscreen`）、前面の workspace なら隠れタブとして mount する。
   /// 前面の workspace の選択がそのタブなら（空表示だった workspace に足したタブ）、隠すと「選んでいるタブが見えない」状態に
   /// なるので、選んで見せる。ボードを持つ workspace は空にならないので、そのタブはボードの裏で起きる。
-  func wakeUnselected(_ tab: TerminalTab) {
+  private func wakeUnselected(_ tab: TerminalTab) {
     guard
       let index = workspaces.firstIndex(where: { ws in ws.tabs.contains { $0 === tab } })
     else { return }
