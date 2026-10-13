@@ -24,8 +24,8 @@ extension TaskPaletteCardKeyTests {
     model.area = .detail(.agent)
     flush(window)
 
-    press(Key.enter, "\r", to: window)
-    press(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", repeating: true, to: window)
 
     XCTAssertEqual(focused, [42])
   }

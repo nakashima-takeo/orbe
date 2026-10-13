@@ -42,9 +42,9 @@ extension TaskPaletteCardKeyTests {
     let window = mount(model)
     type("見積もり", into: window)
 
-    press(Key.enter, "\r", .command, to: window)
-    press(Key.enter, "\r", .command, repeating: true, to: window)
-    press(Key.enter, "\r", .command, repeating: true, to: window)
+    send(Key.enter, "\r", .command, to: window)
+    send(Key.enter, "\r", .command, repeating: true, to: window)
+    send(Key.enter, "\r", .command, repeating: true, to: window)
 
     XCTAssertEqual(asks, [.text("見積もり")])
     XCTAssertEqual(opened, [], "空になった入力欄から先頭のタスクの agent を開かない")
@@ -57,9 +57,9 @@ extension TaskPaletteCardKeyTests {
     model.area = .detail(.condition(.log))
     flush(window)
 
-    press(Key.enter, "\r", to: window)
-    press(Key.enter, "\r", repeating: true, to: window)
-    press(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", repeating: true, to: window)
 
     XCTAssertTrue(model.isConditionPartOpen(.log), "開閉を繰り返さない")
   }
@@ -73,8 +73,8 @@ extension TaskPaletteCardKeyTests {
     model.area = .detail(.conversation)
     flush(window)
 
-    press(Key.enter, "\r", to: window)
-    press(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", repeating: true, to: window)
 
     XCTAssertEqual(focused, [7])
   }
