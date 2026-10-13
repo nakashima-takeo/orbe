@@ -126,7 +126,7 @@ extension WindowControllerReportAgentTests {
     XCTAssertEqual(sound.played.count, 1)
   }
 
-  /// ピルのクリックは ⌘⇧X を開いてそのタスクを選ぶ。絞り込みで隠れていても見えるようにする。
+  /// ピルのクリックは ⌘⇧X を開いてそのタスクを選ぶ。入力に合わなくても、入力は変えずに選んだ行として残して見せる。
   func testTaskPillClickSelectsTheTask() throws {
     let wc = try launchWithoutFirstRun()
     let (id, _) = try resolveTask(wc)
@@ -138,8 +138,9 @@ extension WindowControllerReportAgentTests {
 
     XCTAssertEqual(wc.presentedOverlay, .taskPalette)
     XCTAssertTrue(wc.model.taskPalette === palette, "開いている画面のまま選び直す")
-    XCTAssertEqual(palette.query, "")
+    XCTAssertEqual(palette.query, "一致しない")
     XCTAssertEqual(palette.selectedID, .task(id))
+    XCTAssertTrue(palette.rows.contains { $0.selectableID == .task(id) })
   }
 
   /// 差し替えてはならない画面（言語選択・オンボーディング・更新内容）の間は ⌘⇧X を開かない。
