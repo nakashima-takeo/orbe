@@ -25,7 +25,7 @@ import SwiftUI
   }
 
   /// サブメニュー「通知」の行の並び（通知しない・メニューバー・通知センター）。
-  static let notifyChoices: [AutomationNotify?] = [nil, .menuBar, .notificationCenter]
+  static let notifyChoices: [AutomationNotify?] = [nil] + AutomationNotify.allCases
 
   let runner: AutomationRunner
   private(set) var list = ListState<Stop>() {
@@ -195,8 +195,8 @@ import SwiftUI
   /// 一覧の器のキー。サブメニューを開いている間はそちらへ回す。↑↓・→・`AutomationHand.stroke` に任せるキー・⌘↵ のほかは
   /// 何も起こさず、どれも握る（⇥ で焦点をボードの外へ逃がさない）。
   func handleKey(_ press: KeyPress) -> KeyPress.Result {
-    if notifyCursor != nil {
-      handleNotifyKey(press)
+    if let cursor = notifyCursor {
+      handleNotifyKey(press, cursor)
     } else if press.key == .rightArrow, press.modifiers.isDisjoint(with: Self.chords) {
       if press.phase == .down { openNotify() }
     } else if let stroke = AutomationHand.stroke(press) {
@@ -245,8 +245,7 @@ import SwiftUI
   }
 
   /// サブメニューのキー。↑↓ は端で巡回し、↵ で決め、← / esc で何もせず閉じる。ほかは下の一覧の操作を起こさずに握る。
-  private func handleNotifyKey(_ press: KeyPress) {
-    guard let cursor = notifyCursor else { return }
+  private func handleNotifyKey(_ press: KeyPress, _ cursor: Int) {
     switch press.key {
     case .upArrow, .downArrow:
       guard !press.modifiers.contains(.command) else { return }

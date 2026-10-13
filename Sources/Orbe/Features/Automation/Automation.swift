@@ -167,7 +167,7 @@ struct AutomationDefinition: Equatable, Codable {
 }
 
 /// 回を知らせる先。
-enum AutomationNotify: String {
+enum AutomationNotify: String, CaseIterable {
   /// メニューバーのピルと音。
   case menuBar
   /// macOS の通知センターと音。許可が無い回はメニューバーのピルに出る。
