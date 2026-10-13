@@ -191,12 +191,12 @@ enum TaskPaletteRows {
   /// 表に出すタスクの ID の並び。載せた並びのうちストアにあるタスクをその順で残し、絞り込みと入力（タイトルの
   /// 部分一致）に合うのに並びに無いタスクと `including` のタスクを、並びの規則の順に「自分より後ろに来る最初の
   /// 行」の前へ差し込む（無ければ末尾）。結果を載せた並びとして渡し直しても同じ結果になる。
-  static func listing(_ input: Input, including: [Int] = []) -> [Int] {
+  static func listing(_ input: Input, including: Int? = nil) -> [Int] {
     let tasks = Dictionary(input.tasks.map { ($0.id, $0) }) { first, _ in first }
     var listed = input.listed.filter { tasks[$0] != nil }
     let present = Set(listed)
     let arrivals = input.tasks.filter {
-      !present.contains($0.id) && (including.contains($0.id) || matches($0, input))
+      !present.contains($0.id) && ($0.id == including || matches($0, input))
     }
     .sorted { input.sort.areInIncreasingOrder($0, $1, workspaces: input.workspaces) }
     guard !listed.isEmpty else { return arrivals.map(\.id) }

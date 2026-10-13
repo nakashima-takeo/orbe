@@ -236,7 +236,7 @@ struct TaskPaletteTaskList {
 
   /// そのタスクを、絞り込みと入力に合わなくても並びの規則の位置へ載せて選ぶ（足した直後・「タスクへ移る」・ピル）。
   func selectTask(_ id: Int) {
-    taskList.listed = TaskPaletteRows.listing(rowsInput, including: [id])
+    taskList.listed = TaskPaletteRows.listing(rowsInput, including: id)
     taskList.state.select(.task(id), in: selectableIDs)
   }
 
