@@ -2,11 +2,11 @@ import XCTest
 
 @testable import Orbe
 
-/// 右の欄の待ちの条件（会話の行・箱の開閉する部分の止まる場所）と、解けた待ちの ⌘T が worktree パレットを開かずに
+/// 右の欄の待ちの条件（会話の行・箱の開閉する部分の止まる場所）と、解けた待ちの ⌘↵ が worktree パレットを開かずに
 /// 続きから始めること。
 ///
 /// 壊れると何が起きるか: 実行の記録や確認のコマンドへ ↑↓ で辿り着けず、何が裏で走っているかを人が確かめられない。
-/// 会話のタブと agent の場所が同じタブを 2 度指す。解けたタスクの ⌘T が worktree を選ばせ、記録した会話とは別の場所で
+/// 会話のタブと agent の場所が同じタブを 2 度指す。解けたタスクの ⌘↵ が worktree を選ばせ、記録した会話とは別の場所で
 /// 新しい会話が始まる。開閉の状態が別のタスクへ持ち越される。
 extension TaskPaletteModelTests {
   private func waitCondition(conversation: WaitConversation? = nil) -> WaitCondition {
@@ -18,8 +18,8 @@ extension TaskPaletteModelTests {
       setAt: DesignSceneFixtures.taskToday)
   }
 
-  private var conversation: WaitConversation {
-    WaitConversation(command: "claude", sessionId: "s-1", workspace: nil, secretary: false)
+  var conversation: WaitConversation {
+    WaitConversation(command: "claude", sessionId: "s-1", workspace: nil)
   }
 
   private func waiting(_ condition: WaitCondition) -> TaskItem.Wait {
@@ -28,7 +28,7 @@ extension TaskPaletteModelTests {
     )
   }
 
-  private func resolved(conversation: WaitConversation?) -> TaskItem.Wait {
+  func resolved(conversation: WaitConversation?) -> TaskItem.Wait {
     .resolved(
       WaitResolution(
         waiting: TaskItem.Waiting(
@@ -58,6 +58,7 @@ extension TaskPaletteModelTests {
       task(1, "a", .inProgress) { $0.wait = self.waiting(self.waitCondition()) },
       task(2, "b", .inProgress),
     ])
+    palette.tapRow(.task(1))
 
     palette.toggleConditionPart(.log)
     XCTAssertTrue(palette.isConditionPartOpen(.log))
@@ -104,7 +105,7 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(focused, [7])
   }
 
-  func testCommandTOnAResolvedWaitContinuesTheConversationInsteadOfOpeningTheWorktreePalette() {
+  func testOpeningTheAgentOfAResolvedWaitContinuesTheConversationInsteadOfTheWorktreePalette() {
     let palette = model([
       task(1, "a", .inProgress) { $0.wait = self.resolved(conversation: self.conversation) }
     ])
@@ -116,15 +117,15 @@ extension TaskPaletteModelTests {
     }
     palette.onOpenWorktreePalette = { opened.append($0) }
 
-    palette.openWorktreePalette()
+    palette.openAgent(forTask: 1)
 
     XCTAssertEqual(continued, [1])
     XCTAssertEqual(opened, [])
     XCTAssertEqual(palette.error, .failed, "届けられなかった理由はフッターに出す")
   }
 
-  /// 続きから始められない（作業ディレクトリ・CLI が無い）なら、⌘T はいつもの ⌘T に戻り、理由を出し続ける。
-  func testCommandTOnAResolvedWaitThatCannotContinueOpensTheWorktreePalette() {
+  /// 続きから始められない（作業ディレクトリ・CLI が無い）なら、⌘↵ はそのタスクのための ⌘T を開き、理由を出し続ける。
+  func testOpeningTheAgentOfAResolvedWaitThatCannotContinueOpensTheWorktreePalette() {
     let palette = model([
       task(1, "a", .inProgress) { $0.wait = self.resolved(conversation: self.conversation) }
     ])
@@ -136,15 +137,14 @@ extension TaskPaletteModelTests {
     }
     palette.onOpenWorktreePalette = { opened.append($0) }
 
-    palette.openWorktreePalette()
-    palette.continueWait()
+    palette.openAgent(forTask: 1)
 
     XCTAssertEqual(opened, [1])
     XCTAssertEqual(palette.continuation(of: palette.store.tasks[0]), .blocked(.directoryMissing))
   }
 
-  /// 会話の記録が無い解けた待ち（タブの外から付けた条件）の ⌘T は、いつもの ⌘T。
-  func testCommandTOnAResolvedWaitWithoutAConversationOpensTheWorktreePalette() {
+  /// 会話の記録が無い解けた待ち（タブの外から付けた条件）の ⌘↵ は、そのタスクのための ⌘T を開く。
+  func testOpeningTheAgentOfAResolvedWaitWithoutAConversationOpensTheWorktreePalette() {
     let palette = model([task(1, "a", .inProgress) { $0.wait = self.resolved(conversation: nil) }])
     var opened: [Int] = []
     palette.onContinueWait = { _ in
@@ -153,7 +153,7 @@ extension TaskPaletteModelTests {
     }
     palette.onOpenWorktreePalette = { opened.append($0) }
 
-    palette.openWorktreePalette()
+    palette.openAgent(forTask: 1)
 
     XCTAssertEqual(opened, [1])
   }

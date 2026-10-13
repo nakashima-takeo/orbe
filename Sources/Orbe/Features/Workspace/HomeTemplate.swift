@@ -1,7 +1,7 @@
 /// Home の root に置くファイルの雛形。画面の文言ではなくファイルの中身なので、UI 文言の辞書には載せない。
 enum HomeTemplate {
-  /// Orbe の MCP の使い方（Orbe が持ち、起動のたびに書き直す）。Home で動く claude 全員——秘書もタスクの作業場で動く
-  /// claude も——が読むので、秘書の役割は書かない（秘書の役割は秘書の会話を起こすときにだけ渡す）。codex・agy は読まない。
+  /// Orbe の MCP の使い方（Orbe が持ち、起動のたびに書き直す）。Home で動く claude 全員——秘書の係が起こす claude も
+  /// タスクの作業場で動く claude も——が読むので、役目は書かない（役目は秘書の係が起こすときにだけ渡す）。codex・agy は読まない。
   /// `home` は Home の root。AI が `list_workspaces` から Home を一意に見分ける手掛かり（root の祖先かどうかでは、
   /// root が `~` の default workspace も当てはまる）。
   static func rules(_ language: Language, home: String) -> String {
@@ -28,9 +28,9 @@ enum HomeTemplate {
 
     「Orbe で〜できる？」と聞かれたら、まず下のやりたいことの一覧から Orbe の機能で答える。
 
-    ## タスクを足す・直す・並べる
+    ## タスクを足す・直す
 
-    - `list_tasks`・`add_task`・`update_task`・`move_task`。
+    - `list_tasks`・`add_task`・`update_task`。
     - `add_task` は workspaceId を省くと、呼び出し元タブの workspace（ここなら Home）に付く。
 
     ## タスクに作業を始めさせる
@@ -74,9 +74,9 @@ enum HomeTemplate {
 
     When asked "can Orbe do …?", answer first with Orbe's own features from the list of things to do below.
 
-    ## Add, edit, and order tasks
+    ## Add and edit tasks
 
-    - `list_tasks`, `add_task`, `update_task`, `move_task`.
+    - `list_tasks`, `add_task`, `update_task`.
     - Without workspaceId, `add_task` attaches the task to the calling tab's workspace (Home, when called \
     from here).
 

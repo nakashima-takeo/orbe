@@ -5,7 +5,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 解けた待ちの ⌘T（続きから）が、条件を付けた agent の会話へ起きたことを届ける振り分け——開いたままの会話のタブ
+/// 解けた待ちの ⌘↵（続きから）が、条件を付けた agent の会話へ起きたことを届ける振り分け——開いたままの会話のタブ
 /// （入力を受けられる／受けられない）、休眠のタブ、タブが無い。届いたかは、タブの PTY や再開した CLI の引数で見る。
 ///
 /// 壊れると何が起きるか: 手で起こした codex が去った後のシェルや作業中の agent に、外の人が書いた確認の出力が貼り付け
@@ -52,7 +52,7 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
         description: "PR-214-reviewed", command: "exit 1", everyMinutes: 10,
         deadline: Date().addingTimeInterval(3600), directory: directory,
         conversation: WaitConversation(
-          command: "claude", sessionId: "s-1", workspace: workspace, secretary: false)))
+          command: "claude", sessionId: "s-1", workspace: workspace)))
     let now = Date()
     wc.taskStore.recordCheck(
       task.id, condition: try XCTUnwrap(task.waiting?.condition?.id),
@@ -130,7 +130,7 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
 
       dump.tab.surface.controlSendText("x")
       XCTAssertEqual(dump.next(), TtyDumpTab.hex("x"), "\(state): 目印より先に何も届いていない")
-      XCTAssertNotNil(resolution(wc, id), "\(state): 起きたことは残る（もう一度 ⌘T を押せる）")
+      XCTAssertNotNil(resolution(wc, id), "\(state): 起きたことは残る（もう一度 ⌘↵ を押せる）")
     }
 
     wc.controlReportAgent(
@@ -149,7 +149,7 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
     XCTAssertNotNil(resolution(wc, id), "起きたことは残る")
   }
 
-  /// 確認の出力の制御文字（改行・タブ以外）は、会話へ届ける前に空白にする（起動引数の NUL が再開を壊さない）。
+  /// 確認の出力の制御文字（改行・タブ以外）は、会話へ届ける前に空白にする（貼る経路では端末の制御として届くため）。
   func testWhatHappenedReachesTheConversationWithoutControlCharacters() throws {
     let dump = try dump(.legacy)
     let id = try resolved(dump.controller, directory: nil, output: "a\u{0}b\u{1b}[31mc\td\ne")
@@ -186,9 +186,9 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
 
   // MARK: - タブが無い
 
-  /// ⌘⇧X で選んだ解けたタスクの ⌘T が、worktree パレットを開かず、条件を付けたタブの workspace と作業ディレクトリで
+  /// ⌘⇧X で選んだ解けたタスクの ⌘↵ が、worktree パレットを開かず、条件を付けたタブの workspace と作業ディレクトリで
   /// 会話を再開する（前面の workspace ではない）。
-  func testCommandTWithoutAConversationTabResumesItWhereTheConditionWasSet() throws {
+  func testOpeningTheAgentWithoutAConversationTabResumesItWhereTheConditionWasSet() throws {
     let fake = try stageFakeAgent("claude")
     let dir = try directory()
     let wc = try launch([TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)])
@@ -200,7 +200,7 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
     palette.reconcile()
     XCTAssertEqual(palette.selectedID, .task(id), "前提: 解けたタスクを選んでいる")
 
-    palette.openWorktreePalette()
+    palette.openAgent(forTask: id)
 
     XCTAssertNotEqual(wc.presentedOverlay, .worktreePalette, "worktree パレットは開かない")
     let opened = try XCTUnwrap(
@@ -230,9 +230,9 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
     XCTAssertEqual(try conversationTabs(wc).count, before + 1, "開くのは 1 つだけ")
   }
 
-  /// 続きから始められない（作業ディレクトリが無い）タスクの ⌘T は、いつもの ⌘T（worktree パレット）を開き、タブは
+  /// 続きから始められない（作業ディレクトリが無い）タスクの ⌘↵ は、そのタスクのための ⌘T（worktree パレット）を開き、タブは
   /// 開かず、起きたことも残す。
-  func testCommandTOfAConversationThatCannotContinueOpensTheUsualWorktreePalette() throws {
+  func testOpeningTheAgentOfAConversationThatCannotContinueOpensTheWorktreePalette() throws {
     _ = try stageFakeAgent("claude")
     let wc = try launch([TabState(cwd: "/tmp", agent: nil, explicitTitle: nil)])
     waitForDetection(wc)
@@ -245,9 +245,9 @@ final class WindowControllerWaitContinueTests: OrbeTestCase {
     palette.reconcile()
     XCTAssertEqual(palette.selectedID, .task(id), "前提: 解けたタスクを選んでいる")
 
-    palette.openWorktreePalette()
+    palette.openAgent(forTask: id)
 
-    XCTAssertEqual(wc.presentedOverlay, .worktreePalette, "いつもの ⌘T")
+    XCTAssertEqual(wc.presentedOverlay, .worktreePalette, "そのタスクのための ⌘T")
     XCTAssertEqual(wc.workspaces.map { $0.tabs.map(\.id) }, before, "タブは開かない")
     XCTAssertNotNil(resolution(wc, id), "起きたことは残る")
   }

@@ -264,7 +264,7 @@ final class AutomationStoreTests: OrbeTestCase {
 
   // MARK: - 提案をさばく
 
-  func testAcceptAppendsATodoTaskOnTheGivenWorkspaceAndMarksTheProposal() throws {
+  func testAcceptAddsATodoTaskOnTheGivenWorkspaceAndMarksTheProposal() throws {
     let store = try store()
     let tasks = TaskStore(file: nil)
     let a = Self.item("a", body: "レビューをお願いします")
@@ -273,9 +273,9 @@ final class AutomationStoreTests: OrbeTestCase {
       decisions: [.propose(itemId: "a", title: "レビューする", due: TaskItem.DueDate("2026-10-12"))])
 
     let home = UUID()
-    let task = try store.accept(store.proposals[0].id, into: tasks, workspace: home, at: .end)
+    let task = try store.accept(store.proposals[0].id, into: tasks, workspace: home)
 
-    XCTAssertEqual(tasks.tasks.last, task)
+    XCTAssertEqual(tasks.tasks, [task])
     XCTAssertEqual(task.title, "レビューする")
     XCTAssertEqual(task.status, .todo)
     XCTAssertEqual(task.due?.text, "2026-10-12")
@@ -286,7 +286,7 @@ final class AutomationStoreTests: OrbeTestCase {
     XCTAssertThrowsError(try store.dismiss(id), "さばいた提案はもうさばけない") {
       XCTAssertEqual($0 as? AutomationError, .proposalNotOpen(id), "値の不正とは分けて断る")
     }
-    XCTAssertThrowsError(try store.accept(id, into: tasks, workspace: home, at: .end)) {
+    XCTAssertThrowsError(try store.accept(id, into: tasks, workspace: home)) {
       XCTAssertEqual($0 as? AutomationError, .proposalNotOpen(id))
     }
     XCTAssertEqual(tasks.tasks.count, 1, "断った「タスクにする」はタスクを足さない")

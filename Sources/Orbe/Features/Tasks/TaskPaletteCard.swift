@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// タスク画面のカード本体。ヘッダー（❯＋入力欄・タブ・範囲）＋選ぶ状態の帯＋本体（左に一覧・右の欄にタスク。
-/// GitHub タブは左に open な Issue・PR、右の欄に項目。提案タブは棚・提案・詳細の 3 列）＋フッター（主な操作の 1 行・キーヒント）。焦点の行き先（入力欄 / 右の欄の項目 / 右の欄の編集欄）はモデルの
+/// タスク画面のカード本体。ヘッダー（❯＋入力欄・タブ）＋選ぶ状態の帯＋本体（左に絞り込みの行と表・右の欄にタスク。
+/// GitHub タブは左に open な Issue・PR、右の欄に項目。提案タブは棚・提案・詳細の 3 列）＋フッター（主な操作の 1 行・
+/// キーヒント）。絞り込みのメニューはカードの上に重ねる。焦点の行き先（入力欄 / 右の欄の項目 / 右の欄の編集欄）はモデルの
 /// `focusTarget` から一方向に写し、カード内のクリックでも当て直す（⌘T 画面と同じ契約）。
 struct TaskPaletteCard: View {
   @Bindable var model: TaskPaletteModel
@@ -17,10 +18,6 @@ struct TaskPaletteCard: View {
       VStack(spacing: 0) {
         header
         divider
-        if model.addTitle != nil {
-          TaskPaletteDestinationBar(model: model)
-          divider
-        }
         if model.pick != nil {
           TaskPalettePickBanner(model: model)
           divider
@@ -29,7 +26,7 @@ struct TaskPaletteCard: View {
           switch model.visibleTab {
           case .tasks:
             HStack(spacing: 0) {
-              TaskPaletteList(model: model, focus: $focus)
+              TaskPaletteList(model: model)
               // 入力の行き先を選んでいる間は、一覧を広く使う（右の欄に出すタスクが無い）。
               if model.selectedID != .add {
                 Rectangle().fill(Color.theme.surface1).frame(width: Theme.Stroke.hairline)
@@ -54,6 +51,9 @@ struct TaskPaletteCard: View {
         divider
         TaskPaletteFooter(model: model)
       }
+      .overlayPreferenceValue(TaskPaletteFilterMenuAnchor.self) { anchors in
+        filterMenu(anchors)
+      }
     }
     // 右の欄の項目に居る間はカードの器がキーを受ける。入力欄・編集欄に焦点がある間は、そこが先に受けて
     // 握らなかったキーだけがここへ来るので、器側は右の欄の項目に居るときしか握らない。
@@ -63,7 +63,7 @@ struct TaskPaletteCard: View {
     .onKeyPress { model.handleCardKey($0) }
     .simultaneousGesture(TapGesture().onEnded { model.focus() })
     .onChange(of: model.focusToken, initial: true) { focus = model.focusTarget }
-    // agent の変更を含む列の変化を、描画の外で付け直しへ届ける。
+    // agent の変更を含むタスク一覧の変化を、描画の外で付け直しへ届ける。
     .onChange(of: model.store.tasks) { model.reconcile() }
     // agent の状態が変わると右の欄の止まる場所（agent の場所）が増減するので、同じく付け直す。
     .onChange(of: model.agents.agents) { model.reconcile() }
@@ -71,7 +71,7 @@ struct TaskPaletteCard: View {
     .onChange(of: model.sessionTabs.tabs) { model.reconcile() }
     // GitHub タブの行はストア（結び付き）と一覧の置き場の両方で変わるので、行の変化でも付け直す。
     .onChange(of: model.gitHubRows) { model.reconcile() }
-    // 出ている行の結び付きが増えたら（agent の変更・完了の欄の開閉・範囲・入力）、その値を取りに行く。
+    // 出ている行の結び付きが増えたら（agent の変更・絞り込み・入力）、その値を取りに行く。
     .onChange(of: model.visibleLinkIDs) { model.ensureVisibleItems() }
     // 裏の回の確定や AI の変更で受信と提案が変わったら、提案タブの選択と居場所を付け直す。
     .onChange(of: model.automation.store.automations) { model.automation.reconcile() }
@@ -82,7 +82,41 @@ struct TaskPaletteCard: View {
     Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
   }
 
+  /// 開いている絞り込みのメニューを重ねる。メニューの外のクリックはメニューを閉じるだけで、下へは届かない。
+  @ViewBuilder private func filterMenu(_ anchors: [TaskPaletteFilterKind: Anchor<CGRect>])
+    -> some View
+  {
+    if let kind = model.openFilterMenu, let anchor = anchors[kind] {
+      TaskPaletteFilterMenuLayer(model: model, kind: kind, anchor: anchor)
+        .id(kind)
+    }
+  }
+
   private var header: some View {
+    HStack(spacing: Theme.Space.bar) {
+      input
+      TaskPaletteSegments(
+        segments: [
+          .init(
+            title: l10n.string(.taskPaletteTabTasks), count: model.counts.undone,
+            selected: model.visibleTab == .tasks, action: { model.setTab(.tasks) }),
+          .init(
+            title: "GitHub", count: model.gitHubCount, selected: model.visibleTab == .github,
+            action: { model.setTab(.github) }),
+          .init(
+            title: l10n.string(.taskPaletteTabAutomation), count: model.automation.openCount,
+            selected: model.visibleTab == .automation, action: { model.setTab(.automation) }),
+        ], font: Font.theme.chrome, height: 20, selectedFill: Color.theme.surfaceInk.opacity(0.08)
+      )
+      .fixedSize()
+    }
+    .padding(.horizontal, Theme.Space.beat)
+    .frame(height: Self.headerHeight)
+  }
+
+  /// ❯＋入力欄。打っている間（入力の行き先がある間）は箱に淡い地を敷き、右端に「↵ タスクに追加」「⌘↵ agent に
+  /// 任せる」を出す。「↵」は入力の行き先を選んでいる間だけ光る。
+  private var input: some View {
     HStack(spacing: 0) {
       Text("❯")
         .font(Font.theme.title)
@@ -111,28 +145,25 @@ struct TaskPaletteCard: View {
           }
         }
         .padding(.leading, Theme.Space.step + Theme.Space.hair)
-      Spacer(minLength: Theme.Space.step)
-      HStack(spacing: Theme.Space.step) {
-        TaskPaletteSegments(
-          segments: [
-            .init(
-              title: l10n.string(.taskPaletteTabTasks), count: model.counts.scoped,
-              selected: model.visibleTab == .tasks, action: { model.setTab(.tasks) }),
-            .init(
-              title: "GitHub", count: model.gitHubCount, selected: model.visibleTab == .github,
-              action: { model.setTab(.github) }),
-            .init(
-              title: l10n.string(.taskPaletteTabAutomation), count: model.automation.openCount,
-              selected: model.visibleTab == .automation, action: { model.setTab(.automation) }),
-          ], font: Font.theme.chrome, height: 20, selectedFill: Color.theme.surfaceInk.opacity(0.08)
-        )
-        // 範囲は受信に効かないので、提案タブでは出さない。
-        if model.visibleTab != .automation { scopeSegments }
+      if model.addTitle != nil {
+        HStack(spacing: Theme.Space.beat) {
+          TaskPaletteInputAction(
+            key: "↵", label: l10n.string(.taskPaletteAddToTasks), lit: model.selectedID == .add,
+            action: { model.tapRow(.add) })
+          TaskPaletteInputAction(
+            key: "⌘↵", label: l10n.string(.taskPaletteHandToAgent), lit: false,
+            action: { model.askWithQuery() })
+        }
+        .fixedSize()
+        .padding(.leading, Theme.Space.step)
       }
-      .fixedSize()
     }
-    .padding(.horizontal, Theme.Space.span)
-    .frame(height: Self.headerHeight)
+    .padding(.horizontal, Theme.Space.step)
+    .frame(height: Self.inputHeight)
+    .background(
+      RoundedRectangle(cornerRadius: Theme.Radius.row)
+        .fill(model.addTitle != nil ? Color.theme.surfaceInk.opacity(0.04) : .clear)
+    )
   }
 
   private var placeholderKey: L10nKey {
@@ -143,23 +174,73 @@ struct TaskPaletteCard: View {
     }
   }
 
-  private var scopeSegments: some View {
-    TaskPaletteSegments(
-      segments: [
-        .init(
-          title: l10n.string(.taskPaletteScopeAll), count: model.counts.all,
-          selected: model.scope == .all, action: { model.setScope(.all) }),
-        .init(
-          title: model.workspaces.opened.name, count: model.counts.opened,
-          selected: model.scope == .opened, action: { model.setScope(.opened) }),
-      ], font: Font.theme.chrome, height: 20, selectedFill: Color.theme.tintAccent)
-  }
-
   /// ヘッダーの高さ。⌘⇧S のヘッダー（上下 16 ＋ 14pt の 1 行）と同じ。札の組はこの中に収まる。
   private static let headerHeight: CGFloat = 48
+  /// 入力欄の背景の高さ（打っている間に地を敷く範囲）。
+  private static let inputHeight: CGFloat = 34
 }
 
-/// 切り替えの札の組（ヘッダーのタブ・範囲、右の欄の選択式の値）。焦点は取らない——クリックで入力欄から
+/// 絞り込みのメニューを、開いた時点のドロップダウンの直下に置き、カードの下端の手前までに収める。開いている間は
+/// 位置を動かさない——値をオンにすると表記が伸びてドロップダウンが折り返すので、追うとメニューが押した場所から
+/// 逃げ、続けて選ぶクリックがメニューの外に当たって閉じてしまう。
+private struct TaskPaletteFilterMenuLayer: View {
+  @Bindable var model: TaskPaletteModel
+  let kind: TaskPaletteFilterKind
+  let anchor: Anchor<CGRect>
+  @State private var pinned: CGPoint?
+
+  var body: some View {
+    GeometryReader { proxy in
+      let chip = proxy[anchor]
+      let origin = pinned ?? CGPoint(x: chip.minX, y: chip.maxY + Theme.Space.tick)
+      ZStack(alignment: .topLeading) {
+        Color.clear
+          .contentShape(Rectangle())
+          .onTapGesture { model.closeFilterMenu() }
+        TaskPaletteFilterMenu(
+          model: model, kind: kind,
+          maxHeight: max(0, proxy.size.height - origin.y - Theme.Space.beat)
+        )
+        .offset(x: origin.x, y: origin.y)
+      }
+      .onAppear { pinned = origin }
+    }
+  }
+}
+
+/// 入力欄のキーの案内（「↵ タスクに追加」「⌘↵ agent に任せる」）。キーは枠で囲み、光っている間は accent の
+/// 枠。クリックで効く。焦点は取らない。
+struct TaskPaletteInputAction: View {
+  let key: String
+  let label: String
+  let lit: Bool
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: Theme.Space.note) {
+        Text(key)
+          .foregroundStyle(lit ? Color.theme.accentBright : Color.theme.textSecondary)
+          .padding(.horizontal, Theme.Space.tick)
+          .frame(minWidth: 18, minHeight: 18)
+          .overlay(
+            RoundedRectangle(cornerRadius: Theme.Radius.sm)
+              .strokeBorder(
+                lit ? Color.theme.accentPrimary : Color.theme.surface2,
+                lineWidth: Theme.Stroke.hairline)
+          )
+        Text(label).foregroundStyle(lit ? Color.theme.textPrimary : Color.theme.textSecondary)
+      }
+      .font(Font.theme.chrome)
+      .lineLimit(1)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .focusable(false)
+  }
+}
+
+/// 切り替えの札の組（ヘッダーのタブ、右の欄の選択式の値）。焦点は取らない——クリックで入力欄から
 /// 焦点を奪わない。
 struct TaskPaletteSegments: View {
   struct Segment {

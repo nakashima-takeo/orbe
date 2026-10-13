@@ -1,21 +1,22 @@
 import Foundation
 
-/// 一覧を見える所まで送る先。同じ行へ続けて送るとき（⌥↑↓ を続けて押す）も変化として届くよう、決めるたびに
+/// 一覧をスクロールする先。同じ行へ続けてスクロールするとき（⌘↑ を続けて押す）も変化として届くよう、決めるたびに
 /// 進む番号を持つ。
 struct ListScrollTarget<ID: Hashable>: Equatable {
   let id: ID
   let serial: Int
 }
 
-/// 一覧 1 つの状態（絞り込みの文字・同一性での選択・最後の位置・送り先）と、それを動かす手続き。絞り込まない一覧は文字を
-/// 使わない。選択は行の同一性で持ち、位置は付け直しのときだけ使う。選べる行の並びは、呼び出し側がその時点の行から渡す。
+/// 一覧 1 つの状態（絞り込みの文字・同一性での選択・最後の位置・スクロール先）と、それを動かす手続き。
+/// 絞り込まない一覧は文字を使わない。選択は行の同一性で持ち、位置は付け直しのときだけ使う。選べる行の並びは、呼び出し側が
+/// その時点の行から渡す。
 struct ListState<ID: Hashable> {
   /// 入力欄の文字（その一覧の絞り込み）。
   var query = ""
   private var selection = ModalSelection<ID?>(nil)
   /// 選択が最後に居た位置（選べる行の並びでの番号）。
   private var position = 0
-  /// 一覧を送る先。人の操作のたびに今の選択で決め直す。付け直し（agent の変更）では決めない——人が流して
+  /// 一覧をスクロールする先。人の操作のたびに今の選択で決め直す。付け直し（agent の変更）では決めない——人が流して
   /// 読んでいる一覧を、選んだ行の位置がずれただけで引き戻さないため。
   private(set) var scrollTarget: ListScrollTarget<ID>?
 
@@ -54,7 +55,7 @@ struct ListState<ID: Hashable> {
     select(at: direction < 0 ? 0 : ids.count - 1, in: ids)
   }
 
-  /// 同一性で選んで送る。今の行に無ければ何もせず false。
+  /// 同一性で選び、その行までスクロールする。今の行に無ければ何もせず false。
   @discardableResult mutating func select(_ id: ID, in ids: [ID]) -> Bool {
     guard let index = ids.firstIndex(of: id) else { return false }
     select(at: index, in: ids)
@@ -84,7 +85,7 @@ struct ListState<ID: Hashable> {
     selection.restore(nil)
   }
 
-  /// 今の選択を送り先にする。
+  /// 今の選択をスクロール先にする。
   mutating func follow() {
     guard let id = selection.value else { return }
     scrollTarget = ListScrollTarget(id: id, serial: (scrollTarget?.serial ?? 0) &+ 1)

@@ -95,7 +95,7 @@ private struct TaskPaletteAutomationShelfRowView: View {
   }
 
   private var name: String {
-    row.automation?.definition.name ?? l10n.string(.taskPaletteScopeAll)
+    row.automation?.definition.name ?? l10n.string(.taskPaletteAutomationAll)
   }
 
   private var dimmed: Bool { row.automation != nil && row.count == 0 }

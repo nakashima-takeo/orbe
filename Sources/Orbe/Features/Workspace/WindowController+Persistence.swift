@@ -42,13 +42,10 @@ extension WindowController {
   /// TabState 1 枚から、所属の連 `group` のタブを起こして配線する。起動時復元（restore）・`restoreDormantTab`・`openResumedTab` の共通経路
   /// ——agent 付きは休眠チケットのまま起こし、resume 解決（と解決不能時の素シェル化）は
   /// タブ起床時に走る（`TerminalTab.recordMaterializationStarted`）。ここは resolver を渡すだけ。会話の再開の組み立ては
-  /// すべてこの resolver を通る。起こす会話が秘書の会話なら、秘書の係がそのタブを秘書として覚え、秘書の役割の指示を
-  /// 再開に添える（起こす時点の秘書の記録で決まる）。
+  /// すべてこの resolver を通る。
   func makeTab(from state: TabState, group: TabGroup) -> TerminalTab {
-    let resume: TerminalTab.ResumeSpawn = { [weak self, agentLauncher] tab, session, input in
-      agentLauncher.resumeSpawn(
-        for: session, arguments: self?.secretary.launching(session, in: tab) ?? [],
-        firstInput: input)
+    let resume: TerminalTab.ResumeSpawn = { [agentLauncher] session, input in
+      agentLauncher.resumeSpawn(for: session, firstInput: input)
     }
     return wire(TerminalTab(restoring: state, group: group, resumeSpawn: resume))
   }

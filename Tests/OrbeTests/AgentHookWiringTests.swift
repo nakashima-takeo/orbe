@@ -72,9 +72,9 @@ final class AgentHookWiringTests: OrbeTestCase {
   }
 
   /// API エラーで終わったターン（Stop の代わりに StopFailure）も、ターンの終わりとして done にする。配線しないと
-  /// working のまま残り、溜めた頼みが届かない。ただし usage limit（`rate_limit`）は終わりにしない——claude はその場で
-  /// リセットを待って自分で続けるので、done にすると待ちの間に溜めが次々貼られ、続きが打ち切られる。待ちが続きなしに
-  /// 終わったこと（Notification の `quota_auto_resume_disabled`）を終わりとする。
+  /// working のまま残り、会話へ貼ってよいタブにならない。ただし usage limit（`rate_limit`）は終わりにしない——claude は
+  /// その場でリセットを待って自分で続けるので、done にすると待ちの間に解けた待ちの続きが貼られ、続きが打ち切られる。
+  /// 待ちが続きなしに終わったこと（Notification の `quota_auto_resume_disabled`）を終わりとする。
   func testATurnThatEndsInAnAPIErrorIsDoneExceptAUsageLimit() throws {
     let claude = try XCTUnwrap(try definitions()["claude"])
     let failure = try XCTUnwrap(claude["StopFailure"])

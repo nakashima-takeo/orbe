@@ -1,7 +1,7 @@
 import Foundation
 import OrbeSessionLog
 
-/// タスク 1 件。一覧（`TaskStore.tasks`）は人と agent が共有する 1 本の列で、この値はその要素。
+/// タスク 1 件。一覧（`TaskStore.tasks`）は人と agent が共有し、`newerFirst` の順で読む。
 /// 不変条件（ID の一意・タイトルと待ちの理由が空でない・完了は待ちの席が空・待ちの条件は待っている間だけ・
 /// 結び付きの項目と worktree はそれぞれ 1 つのタスクにだけ現れる）は `TaskStore` が保証する。
 struct TaskItem: Codable, Equatable, Identifiable {
@@ -180,6 +180,26 @@ extension TaskItem {
   /// メモリ上の値と一致しない。
   static func storedInstant(_ date: Date) -> Date {
     SessionEvent.parseISO8601(SessionEvent.iso8601(date)) ?? date
+  }
+
+  /// 一覧の並び（作成の新しい順）。作成日時はミリ秒に丸めて持つので同時刻がありうる——そのときは ID の大きい方が先。
+  static func newerFirst(_ a: TaskItem, _ b: TaskItem) -> Bool {
+    a.createdAt != b.createdAt ? a.createdAt > b.createdAt : a.id > b.id
+  }
+
+  /// 表に出す状態（状態の札・状態の絞り込み・件数・状態の列の並べ替え・アイコン）。
+  enum DisplayState: CaseIterable, Hashable {
+    case todo, inProgress, waiting, done
+  }
+
+  /// 完了 → 待ち → 進行中 → 未着手 の順に決まる（待ちはステータスと独立した属性なので、完了以外で優先する）。
+  var displayState: DisplayState {
+    switch (status, waiting) {
+    case (.done, _): .done
+    case (_, .some): .waiting
+    case (.inProgress, nil): .inProgress
+    case (.todo, nil): .todo
+    }
   }
 }
 

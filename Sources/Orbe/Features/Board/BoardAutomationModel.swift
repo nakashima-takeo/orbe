@@ -32,7 +32,7 @@ import SwiftUI
   /// ボードが受け取った最後の合図（捨てたものを含む）。
   @ObservationIgnored private var deliveredFocusToken = 0
 
-  /// 自動化の新しい依頼か直しを頼む。ボードの配線が出どころを付けて秘書の口へ渡し、受けなければ断りを返す。
+  /// 依頼の欄の文か直しを頼む。ボードの配線が出どころを付けて秘書の口へ渡し、受けなければ断りを返す。
   @ObservationIgnored var onAsk: (SecretaryAsk) -> Secretary.Refusal? = { _ in .claudeMissing }
   /// ボードの断りの枠へ置く（nil は消す）。
   @ObservationIgnored var onRefusal: (L10nKey?) -> Void = { _ in }
@@ -209,17 +209,18 @@ import SwiftUI
     return .handled
   }
 
-  /// 欄の ↵。打った文を自動化の新しい依頼として頼み、受けたら欄を空にする。断られたら欄を残す。空の欄は黙る。
+  /// 欄の ↵。打った文を頼み、受けたら欄を空にする。断られたら欄を残す。空の欄は黙る。
   func send() {
     onRefusal(nil)
-    if ask(.automation(requestText)) { requestText = "" }
+    if ask(.text(requestText)) { requestText = "" }
   }
 
-  /// 頼んで、受けたかを返す。claude が無ければ断りを置く。空の頼みは黙って受けない。
+  /// 頼んで、受けたかを返す。受けられなければ断りを置く。空の頼みは黙って受けない。
   @discardableResult private func ask(_ ask: SecretaryAsk) -> Bool {
     switch onAsk(ask) {
     case nil: return true
     case .claudeMissing: onRefusal(.boardAskClaudeMissing)
+    case .unavailable: onRefusal(.boardAskUnavailable)
     case .empty: break
     }
     return false

@@ -37,7 +37,7 @@ extension ControlWireTests {
       "spawn_agent", "resume_agent", "prompt_agent",
       "config_list", "config_set", "create_workspace", "rename_workspace",
       "set_workspace_root", "remove_workspace", "restore_sessions",
-      "list_tasks", "add_task", "update_task", "move_task", "delete_task", "start_task",
+      "list_tasks", "add_task", "update_task", "delete_task", "start_task",
       "list_automations", "set_automation", "run_automation", "pause_automation",
       "delete_automation", "list_automation_proposals", "list_board_parts", "add_board_part",
       "remove_board_part",

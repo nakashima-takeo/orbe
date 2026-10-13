@@ -49,8 +49,6 @@ enum TaskPaletteFocusTarget: Hashable {
   case edit(TaskDetailField)
   /// GitHub タブの右の欄の期限の入力欄。
   case paneDue
-  /// 秘書に頼む欄の補足の入力欄。
-  case ask
 }
 
 /// 文字の項目の下書き。編集を始めたときの書き戻し先に結び付き、確定はそこへ書く。焦点・キー・変換中・確定の
@@ -61,8 +59,6 @@ struct TaskEditDraft: Equatable {
     case task(id: Int, field: TaskDetailField)
     /// GitHub タブの右の欄の期限（画面の値へ書く。ストアには「タスクにする」で初めて書く）。
     case paneDue
-    /// そのタスクを秘書に頼む欄の補足。書き戻し先は無く、↵ でだけ秘書へ出る（欄を離れたら送らずに捨てる）。
-    case ask(Int)
   }
 
   let target: Target
@@ -80,12 +76,10 @@ struct TaskEditDraft: Equatable {
   /// 複数行の項目の下書きか（esc で確定する）。
   var isMultiline: Bool { field?.isMultiline == true }
 
-  /// 対象のタスク（右の欄の項目・秘書に頼む欄）。
+  /// 対象のタスク（右の欄の項目）。
   var taskID: Int? {
-    switch target {
-    case .task(let id, _), .ask(let id): id
-    case .paneDue: nil
-    }
+    guard case .task(let id, _) = target else { return nil }
+    return id
   }
 }
 
@@ -137,14 +131,14 @@ extension TaskPaletteModel {
     error = nil
     switch field {
     case .status:
-      let options: [TaskItem.Status] = [.todo, .inProgress]
-      // 完了のタスクはどちらも選ばれていないので、押した向きの端の値に戻す。
-      let next =
-        options.firstIndex(of: task.status).map { min(max($0 + direction, 0), options.count - 1) }
-        ?? (direction < 0 ? 0 : options.count - 1)
-      if options[next] != task.status { setStatus(options[next]) }
+      // 表に出す状態ではなくストアのステータスを動かす（待ちのタスクの札は元のステータス）。完了は待ちを消すので、
+      // 一周させず端で止め、未着手からの ← で完了に入らないようにする。
+      let options = TaskItem.Status.allCases
+      let index = options.firstIndex(of: task.status)!
+      let next = options[min(max(index + direction, 0), options.count - 1)]
+      if next != task.status { setStatus(next) }
     case .priority:
-      let options: [TaskItem.Priority] = [.high, .medium, .low]
+      let options = TaskItem.Priority.allCases
       let index = options.firstIndex(of: task.priority)!
       let next = options[min(max(index + direction, 0), options.count - 1)]
       if next != task.priority { setPriority(next) }
@@ -265,9 +259,6 @@ extension TaskPaletteModel {
       (id, field) = (taskID, taskField)
     case .paneDue:
       return finishPaneDue(draft, commit: commit)
-    case .ask:
-      self.draft = nil
-      return true
     }
     guard commit, let task = store.tasks.first(where: { $0.id == id }),
       let pending = pendingUpdate(draft.text, draft.original, field, task)

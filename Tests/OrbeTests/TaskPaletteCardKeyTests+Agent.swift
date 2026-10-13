@@ -24,8 +24,8 @@ extension TaskPaletteCardKeyTests {
     model.area = .detail(.agent)
     flush(window)
 
-    press(Key.enter, "\r", to: window)
-    press(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", repeating: true, to: window)
 
     XCTAssertEqual(focused, [42])
   }
@@ -68,7 +68,7 @@ extension TaskPaletteCardKeyTests {
         description: "レビューが付いたら", command: "gh pr view 214", everyMinutes: 10,
         deadline: DesignSceneFixtures.taskToday.addingTimeInterval(86400),
         conversation: WaitConversation(
-          command: "claude", sessionId: "s-1", workspace: nil, secretary: false)),
+          command: "claude", sessionId: "s-1", workspace: nil)),
       setAt: DesignSceneFixtures.taskToday)
     let model = TaskPaletteSamples.model(
       [

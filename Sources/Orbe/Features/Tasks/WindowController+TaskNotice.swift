@@ -33,7 +33,7 @@ extension WindowController {
   }
 
   /// ⌘⇧X を開いてそのタスクを選ぶ（ピルのクリック）。差し替えてはならない画面の間は何もしない。
-  /// 絞り込み・範囲・畳んだ完了の欄で隠れていても見えるようにする。タスクが消えていれば開くだけ。
+  /// 絞り込みや入力に合わなくても、表に入れて選ぶ。タスクが消えていれば開くだけ。
   func showTaskPalette(selecting id: Int) {
     guard !model.overlay.isModal else { return }
     showTaskPalette()

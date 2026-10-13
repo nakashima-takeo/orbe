@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 提案タブのキー。↵（提案の一覧）は入力欄の `onSubmit`、esc（提案の一覧）と ⇧⇥ は画面のモデルが受ける。中身のキーは
+/// 提案タブのキー。↵（提案の一覧）は入力欄の `onSubmit`、esc（提案の一覧）と ⇥・⇧⇥ は画面のモデルが受ける。中身のキーは
 /// `AutomationHand.stroke` に任せる（ボードと同じ）。取り消せない操作（捨てる・削除）・タスクにして開く・ブラウザで開くは押した瞬間だけを
 /// 操作にし、押し続けたキーリピートは捨てる。
 extension TaskPaletteAutomationModel {
@@ -12,7 +12,7 @@ extension TaskPaletteAutomationModel {
       let direction = press.key == .upArrow ? -1 : 1
       if press.modifiers.contains(.command) {
         jumpProposal(direction)
-      } else if !press.modifiers.contains(.option) {
+      } else {
         moveProposal(direction)
       }
     case .return where press.modifiers.contains(.command):
@@ -28,8 +28,6 @@ extension TaskPaletteAutomationModel {
     case .leftArrow:
       guard TaskPaletteModel.isUnmodified(press), query.isEmpty else { return .ignored }
       enterShelf()
-    case .tab:
-      break
     default:
       return .ignored
     }

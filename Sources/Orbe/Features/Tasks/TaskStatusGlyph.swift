@@ -3,11 +3,11 @@ import SwiftUI
 /// タスクの状態のアイコン（未着手・進行中・待ち・完了）。形で区別し、色は補強に留める
 /// （未着手＝空の円、進行中＝◐ のブランドグリフ、待ち＝破線の円と時計の針、完了＝塗りの円に ✓）。
 struct TaskStatusGlyph: View {
-  let glyph: TaskPaletteTaskRow.Glyph
+  let state: TaskItem.DisplayState
   let size: CGFloat
 
   var body: some View {
-    if glyph == .inProgress {
+    if state == .inProgress {
       OrbeMarkShape()
         .fill(Color.theme.glyphGradient, style: FillStyle(eoFill: true))
         .frame(width: size, height: size)
@@ -20,7 +20,7 @@ struct TaskStatusGlyph: View {
     Canvas { context, canvasSize in
       let rect = CGRect(origin: .zero, size: canvasSize).insetBy(dx: 1, dy: 1)
       let ring = Path(ellipseIn: rect)
-      switch glyph {
+      switch state {
       case .todo:
         context.stroke(ring, with: .color(Color.theme.textMuted), lineWidth: 1.2)
       case .waiting:

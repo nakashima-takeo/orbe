@@ -65,8 +65,6 @@ enum TaskPaletteAutomationError: Equatable {
 
   /// 居場所が変わった（焦点の行き先が入力欄とカードの器の間で移る）。
   @ObservationIgnored var onPlaceChange: () -> Void = {}
-  /// 提案をタスクにする位置（付く workspace を渡す。`TaskPaletteModel.addPosition`）。
-  @ObservationIgnored var addPosition: (UUID?) -> TaskStore.AddPosition = { _ in .end }
   @ObservationIgnored var onOpenURL: (URL) -> Void = { _ in }
   /// そのタスクのための agent を開く口（タスクの ID）。
   @ObservationIgnored var onOpenTask: (Int) -> Void = { _ in }
@@ -264,8 +262,7 @@ enum TaskPaletteAutomationError: Equatable {
     error = nil
     var task: TaskItem?
     do throws(AutomationError) {
-      task = try store.accept(
-        proposal.id, into: tasks, workspace: home, at: addPosition(home))
+      task = try store.accept(proposal.id, into: tasks, workspace: home)
     } catch {
       if case .invalid = error { self.error = .accept }
     }

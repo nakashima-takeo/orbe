@@ -1,28 +1,21 @@
 import Foundation
 
-/// タスクの作業の場所に関わる操作（⌘T でそのタスクのための ⌘T を開く・agent のタブへ移る）。
+/// タスクの作業の場所に関わる操作（そのタスクのための agent を開く・agent のタブへ移る）。
 extension TaskPaletteModel {
   /// タスクの worktree で動いている agent（状態を問わない。右の欄の agent の場所と ↵ でタブへ移る先）。
   func agent(of task: TaskItem) -> WorktreeAgentActivity.Agent? {
     task.agent(in: agents.agents)
   }
 
-  /// ⌘T。選んでいるタスクのための ⌘T を開く（待ちが解けて会話を続きから始められるタスクなら、⌘T を開かずに
-  /// 続きから始める）。入力の行き先なら足してから開く。編集中なら確定してから選択で決める。完了の見出しでは何もしない。
-  /// GitHub タブは `openWorktreePaletteFromGitHub`。提案タブでは何もしない。
-  func openWorktreePalette() {
-    guard pick == nil, visibleTab != .automation else { return }
-    guard visibleTab == .tasks else { return openWorktreePaletteFromGitHub() }
+  /// そのタスクのための agent を開く（行と右の欄の ⌘↵、GitHub タブと提案タブの ⌘↵）。待ちが解けて会話を続きから始められる
+  /// タスクなら続きから始め、そうでなければそのタスクのための ⌘T を開く。完了のタスクでも同じ。選ぶ状態では何もしない。
+  func openAgent(forTask id: Int) {
+    guard pick == nil else { return }
     leaveEditingForAction()
-    switch selectedID {
-    case .task(let id):
-      if let task = selectedTask, case .ready = continuation(of: task) {
-        continueWait()
-      } else {
-        onOpenWorktreePalette(id)
-      }
-    case .add: if let id = addFromQuery() { onOpenWorktreePalette(id) }
-    case .doneHeader, nil: break
+    if let task = store.tasks.first(where: { $0.id == id }), case .ready = continuation(of: task) {
+      error = onContinueWait(id)
+    } else {
+      onOpenWorktreePalette(id)
     }
   }
 

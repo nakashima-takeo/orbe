@@ -5,6 +5,7 @@ extension L10n {
   static let automationTable: [L10nKey: (ja: String, en: String)] = [
     .taskPaletteTabAutomation: ("提案", "Proposals"),
     .taskPaletteAutomationPlaceholder: ("候補を絞り込み", "Filter candidates"),
+    .taskPaletteAutomationAll: ("すべて", "All"),
     .taskPaletteAutomationAskBoard: (
       "自動追加を足す・変えるのは Home のボードから頼む",
       "To add or change auto-adds, ask from the Home board"

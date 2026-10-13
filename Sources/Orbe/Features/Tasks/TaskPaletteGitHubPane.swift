@@ -113,9 +113,9 @@ struct TaskPaletteGitHubPane: View {
       }
       paneRow(.priority, label: .taskPaletteFieldPriority) {
         TaskPaletteSegments(
-          segments: [TaskItem.Priority.high, .medium, .low].map { priority in
+          segments: TaskItem.Priority.allCases.map { priority in
             TaskPaletteSegments.Segment(
-              title: l10n.string(Self.priorityKey(priority)), count: nil,
+              title: l10n.string(priority.labelKey), count: nil,
               selected: model.pane.priority == priority,
               action: { model.setPanePriority(priority) })
           }, font: Font.theme.workspaceName, height: TaskPaletteFieldMetrics.choiceHeight,
@@ -243,17 +243,13 @@ struct TaskPaletteGitHubPane: View {
     TaskPaneButton(key: "↵", title: l10n.string(.taskPaletteMakeTask), primary: true) {
       model.makeTask(row)
     }
-    TaskPaneButton(key: "⌘T", title: l10n.string(.taskPaletteMakeTaskOpen)) {
-      model.openWorktreePaletteFromGitHub()
+    TaskPaneButton(key: "⌘↵", title: l10n.string(.taskPaletteMakeTaskOpen)) {
+      model.openSelectedGitHubItemAsTask()
     }
   }
 
   private func unlinkedActions(_ row: TaskPaletteGitHubItemRow) -> some View {
     VStack(alignment: .leading, spacing: Theme.Space.step) {
-      Text(l10n.string(.taskPaletteMakeTaskNote))
-        .font(Font.theme.meta)
-        .foregroundStyle(Color.theme.textMuted)
-        .lineLimit(1)
       // 横に並びきらない狭い欄では縦に積む（ボタンの文字は縮めない）。
       ViewThatFits(in: .horizontal) {
         HStack(spacing: Theme.Space.step) { makeTaskButtons(row) }
@@ -292,7 +288,7 @@ extension TaskPaletteGitHubPane {
         .foregroundStyle(Color.theme.textMuted)
         HStack(spacing: Theme.Space.step) {
           TaskStatusGlyph(
-            glyph: TaskPaletteTaskRow.Glyph(task), size: TaskPaletteRowMetrics.glyphColumn)
+            state: task.displayState, size: TaskPaletteRowMetrics.glyphColumn)
           fontResolver.text(row.task?.label ?? task.title, base: Theme.Typography.workspaceName)
             .font(Font.theme.workspaceName)
             .foregroundStyle(Color.theme.textPrimary)
@@ -369,19 +365,11 @@ extension TaskPaletteGitHubPane {
     }
   }
 
-  private static func priorityKey(_ priority: TaskItem.Priority) -> L10nKey {
-    switch priority {
-    case .high: .taskPalettePriorityHigh
-    case .medium: .taskPalettePriorityMedium
-    case .low: .taskPalettePriorityLow
-    }
-  }
-
   private static func statusKey(_ status: TaskItem.Status) -> L10nKey {
     switch status {
-    case .todo: .taskPaletteSectionTodo
-    case .inProgress: .taskPaletteSectionInProgress
-    case .done: .taskPaletteSectionDone
+    case .todo: .taskPaletteStateTodo
+    case .inProgress: .taskPaletteStateInProgress
+    case .done: .taskPaletteStateDone
     }
   }
 }

@@ -10,7 +10,7 @@ extension WindowController {
       model.taskPalette?.focus()
       return
     }
-    // GitHub タブのリポジトリは ⌘T と同じ基点で決める（「⌘T タスクにして開く」が同じリポジトリを開くため）。
+    // GitHub タブのリポジトリは ⌘T と同じ基点で決める（「タスクにして開く」が同じリポジトリの ⌘T 画面を開くため）。
     let base = store.newTabCwd(inWorkspaceAt: store.activeWorkspace)
     let entry = { (ws: Workspace) in
       TaskPaletteWorkspaces.Entry(id: ws.persistentId, name: ws.name)
@@ -32,11 +32,12 @@ extension WindowController {
     p.onContinueWait = { [weak self] id in self?.continueWait(taskId: id) }
     p.continuationBlock = { [weak self] id in self?.continuationBlock(taskId: id) }
     p.onAskSecretary = { [weak self] ask in
-      guard let self else { return .failure(.claudeMissing) }
+      guard let self else { return .claudeMissing }
       do throws(Secretary.Refusal) {
-        return .success(try self.secretary.ask(ask, from: .palette))
+        try self.secretary.ask(ask, from: .palette)
+        return nil
       } catch {
-        return .failure(error)
+        return error
       }
     }
     model.taskPalette = p
@@ -75,7 +76,7 @@ extension WindowController {
     }
   }
 
-  /// タスク画面の ⌘T。タスク画面を確定して畳み、そのタスクのための ⌘T に差し替える。
+  /// タスク画面で agent を開く（⌘↵）。タスク画面を確定して畳み、そのタスクのための ⌘T に差し替える。
   func openWorktreePalette(forTask id: Int) {
     settleTaskPaletteEditing()
     model.taskPalette = nil

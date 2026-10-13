@@ -1,6 +1,6 @@
 import Foundation
 
-/// ヘッダーのタブ（⇧⇥ で並びの順に巡る）。
+/// ヘッダーのタブ（⇥ で並びの順に、⇧⇥ で逆に巡る）。
 enum TaskPaletteTab: Equatable {
   case tasks, github, automation
 
@@ -9,6 +9,14 @@ enum TaskPaletteTab: Equatable {
     case .tasks: .github
     case .github: .automation
     case .automation: .tasks
+    }
+  }
+
+  var previous: TaskPaletteTab {
+    switch self {
+    case .tasks: .automation
+    case .github: .tasks
+    case .automation: .github
     }
   }
 }
@@ -29,7 +37,7 @@ extension TaskPaletteModel {
   var query: String {
     get {
       switch visibleTab {
-      case .tasks: taskList.query
+      case .tasks: taskList.state.query
       case .github: gitHubList.query
       case .automation: automation.query
       }
@@ -37,7 +45,7 @@ extension TaskPaletteModel {
     set {
       guard newValue != query else { return }
       switch visibleTab {
-      case .tasks: taskList.query = newValue
+      case .tasks: taskList.state.query = newValue
       case .github: gitHubList.query = newValue
       case .automation: automation.query = newValue
       }
@@ -49,14 +57,14 @@ extension TaskPaletteModel {
   var inputModality: InputModality {
     get {
       switch visibleTab {
-      case .tasks: taskList.modality
+      case .tasks: taskList.state.modality
       case .github: gitHubList.modality
       case .automation: automation.modality
       }
     }
     set {
       switch visibleTab {
-      case .tasks: taskList.modality = newValue
+      case .tasks: taskList.state.modality = newValue
       case .github: gitHubList.modality = newValue
       case .automation: automation.modality = newValue
       }
@@ -68,14 +76,16 @@ extension TaskPaletteModel {
     if visibleTab == .automation { automation.showProposals() } else { leaveDetail() }
   }
 
-  /// 入力が変わったら、先頭の行（タスクのタブで入力があれば入力の行き先）を選ぶ。
+  /// 入力が変わったら、先頭の行（タスクのタブで入力があれば入力の行き先）を選ぶ。タスクの表は入力の変化で
+  /// 載せた並びが空になっているので、付け直して今の絞り込みと並びで組んだ並びを覚えてから選ぶ。
   private func queryChanged() {
     error = nil
     switch visibleTab {
-    case .tasks: taskList.selectFirst(in: selectableIDs)
+    case .tasks:
+      reconcile()
+      selectFirstTask()
     case .github: gitHubList.selectFirst(in: gitHubSelectableIDs)
     case .automation: break
     }
-    discardStaleDrag()
   }
 }

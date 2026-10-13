@@ -11,8 +11,10 @@ enum TaskPaletteError: Error, Equatable {
   case assign
   /// タスクにするを、ストアが受け付けなかった（間に agent がその項目を結び付けていた）。
   case link
-  /// claude が見つからないので秘書に頼めない。
+  /// claude が見つからないので agent に任せられない。
   case secretaryClaude
+  /// agent を起動できなかった。
+  case secretaryUnavailable
 }
 
 extension TaskPaletteError {
@@ -26,16 +28,9 @@ extension TaskPaletteError {
     case .assign: .taskPaletteErrAssign
     case .link: .taskPaletteErrLink
     case .secretaryClaude: .taskPaletteErrSecretaryClaude
+    case .secretaryUnavailable: .taskPaletteErrSecretaryUnavailable
     case .agentMissing: .taskPaletteErrAgentMissing
     case .directoryMissing: .taskPaletteErrDirectoryMissing
     }
   }
-}
-
-/// フッターの左に次の操作まで出す知らせ。
-enum TaskPaletteNotice: Equatable {
-  /// 秘書に頼んだ（届けたか、秘書が起きるのを待っている）。
-  case asked
-  /// 秘書に頼んだが、手が空いたら届く（溜めた）。
-  case askedQueued
 }

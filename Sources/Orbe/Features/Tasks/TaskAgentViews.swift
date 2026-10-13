@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// タスクの行の agent の札（「◌ claude 12分」「▪ claude 入力待ち」）。経過はその状態になった時刻から 1 分
+/// 表の行の件名に添える agent（「◌ claude 12分」「▪ claude 入力待ち」。状態の色の文字）。経過はその状態になった時刻から 1 分
 /// ごとに描き直す（その時刻が動けば、TimelineView は新しい予定で刻み直す）。
 struct TaskAgentBadge: View {
   let agent: WorktreeAgentActivity.Agent
@@ -20,10 +20,6 @@ struct TaskAgentBadge: View {
       .foregroundStyle(agent.state.stateColor)
       .lineLimit(1)
       .fixedSize()
-      .padding(.horizontal, Theme.Space.step)
-      .frame(height: TaskPaletteRowMetrics.firstLine)
-      .background(
-        RoundedRectangle(cornerRadius: Theme.Radius.pill).fill(TaskAgentColors.tint(agent.state)))
     }
   }
 }
@@ -78,18 +74,6 @@ struct TaskAgentDetail: View {
     case .waiting: .taskPaletteAgentWaiting
     case .done: .taskPaletteAgentDone
     case .idle, .dormant: .taskPaletteAgentIdle
-    }
-  }
-}
-
-/// 行の札の地（状態の淡い塗り）。文字とグリフの色は状態色（`AgentStateIcon.Kind.stateColor`）。
-enum TaskAgentColors {
-  static func tint(_ state: AgentStateIcon.Kind) -> Color {
-    switch state {
-    case .working: Color.theme.tintWorking
-    case .waiting: Color.theme.tintWaiting
-    case .done: Color.theme.tintDone
-    case .idle, .dormant: Color.theme.plainPillFill
     }
   }
 }

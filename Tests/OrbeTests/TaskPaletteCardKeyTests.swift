@@ -31,14 +31,16 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
 
   func model() -> TaskPaletteModel { TaskPaletteSamples.threeTodos() }
 
-  func mount(_ model: TaskPaletteModel) -> NSWindow {
+  func mount(
+    _ model: TaskPaletteModel, width: CGFloat = 960, detailWidth: CGFloat = 340
+  ) -> NSWindow {
     NSApplication.shared.setActivationPolicy(.accessory)
     let window = KeyDeliveryWindow(
-      contentRect: NSRect(x: -20000, y: -20000, width: 1000, height: 640),
+      contentRect: NSRect(x: -20000, y: -20000, width: width + 40, height: 640),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = FirstMouseHost(
-      rootView: TaskPaletteCard(model: model, detailWidth: 340)
-        .frame(width: 960, height: 600)
+      rootView: TaskPaletteCard(model: model, detailWidth: detailWidth)
+        .frame(width: width, height: 600)
         .environment(\.localization, LocalizationStore(language: .ja)))
     window.makeKeyAndOrderFront(nil)
     held.append(window)
@@ -60,34 +62,16 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     super.tearDown()
   }
 
-  /// 実アプリと同じく、キューから取り出してから配る（`NSApp.currentEvent` がそのキーを指す）。キーリピートかの
-  /// 判定は、届いたキーをここから引く。
-  func press(
-    _ keyCode: UInt16, _ characters: String, _ flags: NSEvent.ModifierFlags = [],
-    repeating: Bool = false, to window: NSWindow
-  ) {
-    guard
-      let event = NSEvent.keyEvent(
-        with: .keyDown, location: .zero, modifierFlags: flags,
-        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-        context: nil, characters: characters, charactersIgnoringModifiers: characters,
-        isARepeat: repeating, keyCode: keyCode)
-    else { return XCTFail("キーイベントを作れない") }
-    NSApp.postEvent(event, atStart: true)
-    guard
-      let dequeued = NSApp.nextEvent(
-        matching: .keyDown, until: Date().addingTimeInterval(1), inMode: .default, dequeue: true)
-    else { return XCTFail("キーイベントがキューから取れない") }
-    NSApp.sendEvent(dequeued)
-    pump(0.15)
-  }
-
-  /// ヘッダーの入力欄（カード左上の「❯」の右）を実 NSEvent のマウスでクリックする。窓はカードの
-  /// 大きさに揃うので、窓座標（原点は左下）でヘッダーの縦中央を叩く。離す方は先にキューへ入れておく
-  /// ——入力欄の文字の面が押下を受けると、離すまでキューを待つ追跡に入り、後から送ると戻ってこない。
+  /// ヘッダーの入力欄（カード左上の「❯」の右）をクリックする。窓はカードの大きさに揃うので、窓座標
+  /// （原点は左下）でヘッダーの縦中央を叩く。
   func click(atFieldOf window: NSWindow) throws {
     let content = try XCTUnwrap(window.contentView)
-    let point = NSPoint(x: 120, y: content.bounds.height - 28)
+    try click(NSPoint(x: 120, y: content.bounds.height - 28), in: window)
+  }
+
+  /// 窓座標（原点は左下）の 1 点を実 NSEvent のマウスでクリックする。離す方は先にキューへ入れておく——入力欄の
+  /// 文字の面が押下を受けると、離すまでキューを待つ追跡に入り、後から送ると戻ってこない。
+  func click(_ point: NSPoint, in window: NSWindow) throws {
     let make = { (type: NSEvent.EventType) in
       NSEvent.mouseEvent(
         with: type, location: point, modifierFlags: [],
@@ -107,7 +91,10 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     pump(0.3)
   }
 
-  func arrow(_ keyCode: UInt16, _ extra: NSEvent.ModifierFlags = [], to window: NSWindow) {
+  func arrow(
+    _ keyCode: UInt16, _ extra: NSEvent.ModifierFlags = [], repeating: Bool = false,
+    to window: NSWindow
+  ) {
     let character: NSEvent.SpecialKey =
       switch keyCode {
       case Key.left: .leftArrow
@@ -115,12 +102,13 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
       case Key.up: .upArrow
       default: .downArrow
       }
-    press(
-      keyCode, String(UnicodeScalar(character.rawValue)!), arrowFlags.union(extra), to: window)
+    send(
+      keyCode, String(UnicodeScalar(character.rawValue)!), arrowFlags.union(extra),
+      repeating: repeating, to: window)
   }
 
   func type(_ text: String, into window: NSWindow) {
-    for character in text { press(0, String(character), to: window) }
+    for character in text { send(0, String(character), to: window) }
   }
 
   func status(_ model: TaskPaletteModel, _ id: Int) -> TaskItem.Status? {
@@ -133,11 +121,11 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     let model = model()
     let window = mount(model)
 
-    press(Key.space, " ", to: window)
-    XCTAssertEqual(status(model, 1), .done, "空の入力欄の space は選んだタスクを完了にする")
+    send(Key.space, " ", to: window)
+    XCTAssertEqual(status(model, 3), .done, "空の入力欄の space は選んだタスクを完了にする")
 
     type("b", into: window)
-    press(Key.space, " ", to: window)
+    send(Key.space, " ", to: window)
     XCTAssertEqual(model.query, "b ", "文字があるときの space は空白を打つ")
     XCTAssertEqual(status(model, 2), .todo)
   }
@@ -146,50 +134,81 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     let model = model()
     let window = mount(model)
 
-    press(Key.space, " ", .capsLock, to: window)
+    send(Key.space, " ", .capsLock, to: window)
 
-    XCTAssertEqual(status(model, 1), .done)
+    XCTAssertEqual(status(model, 3), .done)
   }
 
   func testEnterCompletesTheSelectedTaskAndAddsFromTheAddRow() throws {
     let model = model()
     let window = mount(model)
 
-    press(Key.enter, "\r", to: window)
-    XCTAssertEqual(status(model, 1), .done)
+    send(Key.enter, "\r", to: window)
+    XCTAssertEqual(status(model, 3), .done)
 
     type("新しい", into: window)
-    press(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", to: window)
     XCTAssertTrue(model.store.tasks.contains { $0.title == "新しい" })
     XCTAssertEqual(model.query, "")
   }
 
-  /// 入力欄の ⌘↵ は onSubmit（↵ = 追加）へ流れず、打った文を秘書に頼む。タスクの行を選んで ⌘↵ なら、頼む欄が開いて
-  /// 補足の入力に焦点が移り、↵ でそのタスクを頼む。
-  func testCommandEnterInTheFieldAsksInsteadOfAddingAndOnARowOpensTheAsk() {
+  /// 入力欄の ⌘↵ は onSubmit（↵ = 追加）へ流れず、打った文を agent に任せる。タスクの行を選んで ⌘↵ なら、そのタスクの
+  /// agent を開く。
+  func testCommandEnterInTheFieldHandsTheTextOverAndOnARowOpensTheAgent() {
     let model = model()
     var asks: [SecretaryAsk] = []
     model.onAskSecretary = {
       asks.append($0)
-      return .success(.accepted)
+      return nil
     }
+    var opened: [Int] = []
+    model.onOpenWorktreePalette = { opened.append($0) }
     let window = mount(model)
 
     type("見積もり", into: window)
-    press(Key.enter, "\r", .command, to: window)
+    send(Key.enter, "\r", .command, to: window)
     XCTAssertEqual(asks, [.text("見積もり")])
     XCTAssertEqual(model.store.tasks.count, 3, "足さない")
 
-    press(Key.enter, "\r", .command, to: window)
-    XCTAssertEqual(model.askingTaskID, 1, "選んでいる行の直下に頼む欄")
-    type("直して", into: window)
-    press(Key.enter, "\r", .command, to: window)
-    XCTAssertEqual(asks.count, 1, "頼む欄の中の ⌘↵ は送らない")
-    XCTAssertEqual(model.askingTaskID, 1, "欄は開いたまま")
-    XCTAssertEqual(model.draftText, "直して", "補足も残る")
-    press(Key.enter, "\r", to: window)
-    XCTAssertEqual(asks.last, .task(model.store.tasks.first { $0.id == 1 }!, note: "直して"))
-    XCTAssertNil(model.draft)
+    send(Key.enter, "\r", .command, to: window)
+    XCTAssertEqual(opened, [3], "選んでいる行のタスクの agent を開く")
+    XCTAssertEqual(asks.count, 1)
+  }
+
+  /// 行の ⌘↵ は、待ちが解けたタスクなら、一覧でも右の欄でも ⌘T の画面を開かずに会話を続きから始める。
+  func testCommandEnterOnAResolvedWaitContinuesTheConversationFromTheListAndTheDetail() {
+    let condition = WaitCondition(
+      WaitConditionRequest(
+        description: "レビューが付いたら", command: "gh pr view 214", everyMinutes: 10,
+        deadline: DesignSceneFixtures.taskToday.addingTimeInterval(86400),
+        conversation: WaitConversation(command: "claude", sessionId: "s-1", workspace: nil)),
+      setAt: DesignSceneFixtures.taskToday)
+    let model = TaskPaletteSamples.model([
+      TaskPaletteSamples.task(1, "a", .inProgress) {
+        $0.wait = .resolved(
+          WaitResolution(
+            waiting: TaskItem.Waiting(
+              reason: "レビュー待ち", since: DesignSceneFixtures.taskToday, condition: condition),
+            how: .satisfied(output: "レビューが付いた"), at: DesignSceneFixtures.taskToday))
+      }
+    ])
+    var continued: [Int] = []
+    var opened: [Int] = []
+    model.onContinueWait = {
+      continued.append($0)
+      return nil
+    }
+    model.onOpenWorktreePalette = { opened.append($0) }
+    let window = mount(model)
+    XCTAssertEqual(model.selectedID, .task(1), "前提")
+
+    send(Key.enter, "\r", .command, to: window)
+    model.enterDetail()
+    flush(window)
+    send(Key.enter, "\r", .command, to: window)
+
+    XCTAssertEqual(continued, [1, 1])
+    XCTAssertEqual(opened, [])
   }
 
   /// 押し始めを見ていない ↵ のリピートだけが入力欄に届いても、完了にも追加にもならない。
@@ -197,9 +216,9 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     let model = model()
     let window = mount(model)
 
-    press(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", repeating: true, to: window)
     type("新しい", into: window)
-    press(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", repeating: true, to: window)
 
     XCTAssertEqual(model.store.tasks.map(\.status), [.todo, .todo, .todo], "完了にしない")
     XCTAssertEqual(model.store.tasks.count, 3, "追加しない")
@@ -210,22 +229,22 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     let model = model()
     let window = mount(model)
 
-    press(Key.delete, "\u{7F}", .command, to: window)
-    press(Key.delete, "\u{7F}", .command, repeating: true, to: window)
-    press(Key.delete, "\u{7F}", .command, repeating: true, to: window)
+    send(Key.delete, "\u{7F}", .command, to: window)
+    send(Key.delete, "\u{7F}", .command, repeating: true, to: window)
+    send(Key.delete, "\u{7F}", .command, repeating: true, to: window)
 
-    XCTAssertEqual(model.store.tasks.map(\.id), [2, 3], "消えるのは押した 1 件だけ")
+    XCTAssertEqual(model.store.tasks.map(\.id), [1, 2], "消えるのは押した 1 件だけ")
   }
 
   func testSpaceHeldDownCompletesOneTaskAndTypesNoSpace() {
     let model = model()
     let window = mount(model)
 
-    press(Key.space, " ", to: window)
-    press(Key.space, " ", repeating: true, to: window)
-    press(Key.space, " ", repeating: true, to: window)
+    send(Key.space, " ", to: window)
+    send(Key.space, " ", repeating: true, to: window)
+    send(Key.space, " ", repeating: true, to: window)
 
-    XCTAssertEqual(model.store.tasks.map(\.status), [.done, .todo, .todo], "完了は押した 1 件だけ")
+    XCTAssertEqual(model.store.tasks.map(\.status), [.todo, .todo, .done], "完了は押した 1 件だけ")
     XCTAssertEqual(model.query, "", "リピートは入力欄に空白を入れない")
   }
 
@@ -236,38 +255,43 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     arrow(Key.down, to: window)
     XCTAssertEqual(model.selectedID, .task(1), "前提: 一致したタスクを選んだ")
 
-    press(Key.delete, "\u{7F}", .command, to: window)
+    send(Key.delete, "\u{7F}", .command, to: window)
 
     XCTAssertEqual(model.store.tasks.count, 3, "文字があるときはタスクを消さない")
     XCTAssertEqual(model.query, "", "入力欄の文字を行頭まで消す")
   }
 
-  func testOptionArrowsReorderAndCommandArrowsJump() {
+  func testOptionArrowsMoveLikeArrowsAndCommandArrowsJump() {
     let model = model()
     let window = mount(model)
 
     arrow(Key.down, .command, to: window)
-    XCTAssertEqual(model.selectedID, .task(3), "⌘↓ で末尾へ")
+    XCTAssertEqual(model.selectedID, .task(1), "⌘↓ で末尾へ")
 
     arrow(Key.up, .option, to: window)
-    XCTAssertEqual(model.store.tasks.map(\.id), [1, 3, 2], "⌥↑ で前のタスクの前へ")
-    XCTAssertEqual(model.selectedID, .task(3))
+    XCTAssertEqual(model.selectedID, .task(2), "⌥↑ は ↑ と同じく前の行へ")
   }
 
-  func testTabSwitchesScopeAndShiftTabSwitchesTabWhileTheFieldKeepsTheKeys() {
+  func testTabAndShiftTabCycleTheTabsWhileTheFieldKeepsTheKeys() {
     let model = model()
     let window = mount(model)
 
-    press(Key.tab, "\t", to: window)
-    XCTAssertEqual(model.scope, .opened)
-
-    press(Key.tab, "\u{19}", .shift, to: window)
+    send(Key.tab, "\t", to: window)
     XCTAssertEqual(model.tab, .github)
 
-    press(Key.tab, "\u{19}", .shift, to: window)
-    XCTAssertEqual(model.tab, .automation, "3 つのタブを巡る")
+    send(Key.tab, "\t", to: window)
+    XCTAssertEqual(model.tab, .automation)
 
-    press(Key.tab, "\u{19}", .shift, to: window)
+    send(Key.tab, "\t", to: window)
+    XCTAssertEqual(model.tab, .tasks, "3 つのタブを巡る")
+
+    send(Key.tab, "\u{19}", .shift, to: window)
+    XCTAssertEqual(model.tab, .automation, "⇧⇥ は逆に巡る")
+
+    send(Key.tab, "\u{19}", .shift, to: window)
+    XCTAssertEqual(model.tab, .github)
+
+    send(Key.tab, "\u{19}", .shift, to: window)
     type("x", into: window)
     XCTAssertEqual(model.tab, .tasks)
     XCTAssertEqual(model.query, "x", "焦点は入力欄に残り、続けて打てる")
@@ -279,9 +303,55 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     model.onDismiss = { dismissed = true }
     let window = mount(model)
 
-    press(Key.escape, "\u{1B}", to: window)
+    send(Key.escape, "\u{1B}", to: window)
 
     XCTAssertTrue(dismissed)
+  }
+
+  func testEscapeClosesTheOpenFilterMenuBeforeTheScreen() {
+    let model = model()
+    var dismissed = false
+    model.onDismiss = { dismissed = true }
+    model.toggleFilterMenu(.workspace)
+    let window = mount(model)
+
+    send(Key.escape, "\u{1B}", to: window)
+    XCTAssertNil(model.openFilterMenu)
+    XCTAssertFalse(dismissed, "メニューだけを閉じる")
+
+    send(Key.escape, "\u{1B}", to: window)
+    XCTAssertTrue(dismissed)
+  }
+
+  /// 期限のメニューの値を上から 3 つ続けてクリックすると、3 つともオンになり、メニューは開いたまま。カードは窓が
+  /// 広いときの最大の寸法（880 幅・右の欄は 1/3）で、1 つ目をオンにするとドロップダウンの表記が伸びて次の行へ
+  /// 折り返す。メニューがドロップダウンを追って動くと、2 つ目のクリックがメニューの外に当たって閉じる。
+  func testClickingThreeValuesInARowKeepsTheFilterMenuOpenAndTurnsAllOn() throws {
+    let model = model()
+    model.toggleFilterMenu(.due)
+    let window = mount(model, width: 880, detailWidth: 880 / 3)
+    let content = try XCTUnwrap(window.contentView)
+    let table = try XCTUnwrap(scrollViews(in: content).first)
+    let tableTop = table.convert(table.bounds, to: nil).maxY
+    let menu = try XCTUnwrap(scrollViews(in: content).last)
+    let frame = menu.convert(menu.bounds, to: nil)
+
+    for (row, bucket) in [TaskDueBucket.overdue, .today, .withinWeek].enumerated() {
+      let y =
+        frame.maxY - Theme.Space.tick - TaskPaletteRowMetrics.line * (CGFloat(row) + 0.5)
+      try click(NSPoint(x: frame.minX + 40, y: y), in: window)
+      if row == 0 {
+        XCTAssertLessThan(
+          table.convert(table.bounds, to: nil).maxY, tableTop, "前提: ドロップダウンが次の行へ折り返す")
+      }
+      XCTAssertEqual(model.openFilterMenu, .due, "\(row + 1) つ目のクリックの後も開いたまま")
+      XCTAssertTrue(model.filter.dues.contains(bucket), "\(row + 1) つ目の値がオン")
+    }
+  }
+
+  /// view の木を深さ優先でたどった順のスクロール。先頭が表で、絞り込みのメニューはカードの最後に重ねるので末尾。
+  private func scrollViews(in view: NSView) -> [NSScrollView] {
+    (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap { scrollViews(in: $0) }
   }
 
   /// agent の変更（ストアの直接の変異）は、カードが付け直しへ届ける。選んでいたタスクが消えたら、
@@ -294,8 +364,8 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
 
     try model.store.delete(2)
     flush(window)
-    press(Key.space, " ", to: window)
+    send(Key.space, " ", to: window)
 
-    XCTAssertEqual(status(model, 3), .done, "同じ位置に来た c を完了にする")
+    XCTAssertEqual(status(model, 1), .done, "同じ位置に来た a を完了にする")
   }
 }

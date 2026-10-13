@@ -270,7 +270,7 @@ let tools: [[String: Any]] =
       ("name", "list_tasks"),
       (
         "description",
-        "人と agent が共有するタスク一覧を、ユーザーが決めた列の順で返す。各要素は taskId・title・status"
+        "人と agent が共有するタスク一覧を、作成の新しい順（createdAt の新しい順。同時刻は taskId の大きい方が先）で返す。各要素は taskId・title・status"
           + "（todo / in_progress / done）・priority（high / medium / low）・description・createdAt、あれば waiting"
           + "{reason,since}・due（YYYY-MM-DD）・workspaceId と workspaceName・createdBy（追加した agent）・"
           + "links（結び付いた GitHub の Issue・PR の列 [{kind: issue / pr, repo: owner/name, number}]。先頭が主）・"
@@ -290,7 +290,7 @@ let tools: [[String: Any]] =
       ("name", "add_task"),
       (
         "description",
-        "タスクを列の末尾に足し、足したタスクを返す（taskId は使い回されない短い整数）。workspaceId を省くと、"
+        "タスクを足し、足したタスクを返す（taskId は使い回されない短い整数）。workspaceId を省くと、"
           + "呼び出し元タブ（この MCP を起こした agent のタブ）の workspace に付く。null で「workspace なし」。"
           + "呼び出し元タブが分かるのは、この MCP サーバーが Orbe のタブの環境（ORBE_TAB）を受け継いでいるときだけで、"
           + "受け継がない MCP クライアントからは workspace を省くと「workspace なし」になる。"
@@ -352,22 +352,6 @@ let tools: [[String: Any]] =
             "workspaceId": [
               "type": ["integer", "null"], "description": "付ける workspace（null でなし）",
             ],
-          ], required: ["taskId"])
-      ),
-    ]),
-    obj([
-      ("name", "move_task"),
-      (
-        "description",
-        "タスクを、他のタスクの前（beforeTaskId）か後（afterTaskId）へ移す。どちらか 1 つを渡す。"
-      ),
-      (
-        "inputSchema",
-        schema(
-          [
-            "taskId": intProp("移すタスク"),
-            "beforeTaskId": intProp("このタスクの前へ"),
-            "afterTaskId": intProp("このタスクの後へ"),
           ], required: ["taskId"])
       ),
     ]),

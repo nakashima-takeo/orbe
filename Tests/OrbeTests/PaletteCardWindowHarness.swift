@@ -37,16 +37,26 @@ class PaletteCardWindowTestCase: OrbeTestCase {
     }
   }
 
-  /// keyDown を窓へ送る（keyCode は macOS の仮想キーコード）。
-  func send(_ keyCode: UInt16, _ characters: String, to window: NSWindow) {
+  /// keyDown を窓へ送る（keyCode は macOS の仮想キーコード）。実アプリと同じくキューから取り出してから配る——
+  /// 入力欄の確定はキーリピートかを `NSApp.currentEvent` で見るので、取り出さずに配ると前に取り出したキーが残って
+  /// 判定を狂わせる。
+  func send(
+    _ keyCode: UInt16, _ characters: String, _ flags: NSEvent.ModifierFlags = [],
+    repeating: Bool = false, to window: NSWindow
+  ) {
     guard
       let event = NSEvent.keyEvent(
-        with: .keyDown, location: .zero, modifierFlags: [],
+        with: .keyDown, location: .zero, modifierFlags: flags,
         timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
         context: nil, characters: characters, charactersIgnoringModifiers: characters,
-        isARepeat: false, keyCode: keyCode)
+        isARepeat: repeating, keyCode: keyCode)
     else { return XCTFail("キーイベントを作れない") }
-    NSApp.sendEvent(event)
+    NSApp.postEvent(event, atStart: true)
+    guard
+      let dequeued = NSApp.nextEvent(
+        matching: .keyDown, until: Date().addingTimeInterval(1), inMode: .default, dequeue: true)
+    else { return XCTFail("キーイベントがキューから取れない") }
+    NSApp.sendEvent(dequeued)
     pump(0.15)
   }
 

@@ -5,13 +5,14 @@ import XCTest
 private typealias GitHub = TaskPaletteGitHubSamples
 
 /// GitHub タブ（⌘T と同じ基点で解決したリポジトリの open な Issue・PR）の操作: 本体の出し方、タスクにする（右の欄の
-/// 値と、自分を GitHub に足す書き込み）、⌘T、結び付いたタスクへ移る・外す、絞り込み、「さらに」、右の欄、
+/// 値と、自分を GitHub に足す書き込み）、タスクにして開く、結び付いたタスクへ移る・外す、絞り込み、「さらに」、右の欄、
 /// タブごとの入力と選択、agent の変更への追従。
 ///
 /// 壊れると何が起きるか: ↵ で作ったタスクが別の workspace・別の項目に付く、右の欄で選んだ優先度や期限が
 /// 落ちる。選択が動いた後に裏の書き込みが別の項目へアサインする。アサインが黙って捨てられても何も言わない。
 /// 前回の一覧があるのに「取得できませんでした」で隠れる。タブを移るたびに絞り込みと選んだ行が消える。agent が
-/// 結び付けた直後に、右の欄の値が別の行のものとして残る。
+/// 結び付けた直後に、右の欄の値が別の行のものとして残る。待ちの解けたタスクの ⌘↵ が、記録した会話を続けずに別の
+/// 場所で新しい会話を始める。
 extension TaskPaletteModelTests {
   // MARK: - 本体
 
@@ -67,7 +68,7 @@ extension TaskPaletteModelTests {
         [TaskPaletteSamples.root: .init(resolution: .resolved, repo: GitHub.repo)],
         [GitHub.repo: repository])
       let palette = TaskPaletteSamples.model([], openLists: lists)
-      palette.toggleTab()
+      palette.setTab(palette.tab.next)
       palette.query = query
       return palette.gitHubRows.map(\.id)
     }
@@ -98,19 +99,10 @@ extension TaskPaletteModelTests {
 
   // MARK: - タスクにする
 
-  /// ↵ で、開いた workspace の未着手のタスクを、右の欄の優先度と期限、その項目を主の結び付きとして、入力欄から
-  /// 足すのと同じ位置（その優先度の未着手の先頭）に足す。行は結び付いた行として区分の上へ移り、選択はその行を追い、
-  /// 右の欄は既定に戻る。
+  /// ↵ で、開いた workspace の未着手のタスクを、右の欄の優先度と期限、その項目を主の結び付きとして足す。行は
+  /// 結び付いた行として区分の上へ移り、選択はその行を追い、右の欄は既定に戻る。
   func testEnterOnAnUnlinkedItemMakesATodoTaskWithThePaneValues() throws {
-    let existing = [
-      TaskPaletteSamples.task(1, "高") {
-        $0.priority = .high
-        $0.workspace = openedWorkspace.id
-      },
-      TaskPaletteSamples.task(2, "中") { $0.workspace = openedWorkspace.id },
-    ]
-    let palette = GitHub.model(
-      existing, issues: [GitHub.issue(7), GitHub.issue(5, "ログの保存先")])
+    let palette = GitHub.model([], issues: [GitHub.issue(7), GitHub.issue(5, "ログの保存先")])
     palette.tapGitHubRow(.item(GitHub.id(5)))
     palette.enterPane()
     palette.movePaneStop(1)
@@ -122,7 +114,6 @@ extension TaskPaletteModelTests {
     palette.submit()
 
     let made = try XCTUnwrap(palette.store.tasks.first { $0.title == "ログの保存先" })
-    XCTAssertEqual(palette.store.tasks.map(\.id), [made.id, 1, 2], "高の未着手の先頭")
     XCTAssertEqual(made.status, .todo)
     XCTAssertEqual(made.workspace, openedWorkspace.id)
     XCTAssertEqual(made.priority, .high)
@@ -206,17 +197,17 @@ extension TaskPaletteModelTests {
     XCTAssertTrue(source.writes.isEmpty, "GitHub にも書かない")
   }
 
-  // MARK: - ⌘T
+  // MARK: - タスクにして開く（⌘↵）
 
-  /// 結び付いていない行の ⌘T はタスクにしてからそのタスクで開く。アサインの失敗は、画面を閉じた後でも
-  /// 次に開いた画面でその項目に見える。
-  func testCommandTOnAnUnlinkedItemMakesTheTaskThenOpensIt() throws {
+  /// 結び付いていない行の「タスクにして開く」はタスクにしてからそのタスクで開く。アサインの失敗は、画面を
+  /// 閉じた後でも次に開いた画面でその項目に見える。
+  func testOpeningAnUnlinkedItemAsATaskMakesTheTaskThenOpensIt() throws {
     let source = GitHub.Source()
     let palette = GitHub.model([], issues: [GitHub.issue(5)], source: source)
     var opened: [Int] = []
     palette.onOpenWorktreePalette = { opened.append($0) }
 
-    palette.openWorktreePalette()
+    palette.openSelectedGitHubItemAsTask()
     try XCTUnwrap(source.writes.first).completion(nil)
 
     XCTAssertEqual(opened, palette.store.tasks.map(\.id))
@@ -225,21 +216,34 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(reopened.writeFailure(GitHub.id(5)), .assignee)
   }
 
-  func testCommandTOnALinkedItemOpensItsTask() {
+  /// 結び付いている行の「タスクにして開く」はそのタスクで開く。タスクのタブの ⌘↵ と同じく、待ちが解けていれば
+  /// ⌘T の画面を開かずに会話を続きから始める。
+  func testOpeningALinkedItemAsATaskWithAResolvedWaitContinuesItsTasksConversation() {
     let palette = GitHub.model(
-      [task(4, "a") { $0.links = [GitHub.link(5)] }], issues: [GitHub.issue(5)])
+      [
+        task(4, "a", .inProgress) {
+          $0.links = [GitHub.link(5)]
+          $0.wait = self.resolved(conversation: self.conversation)
+        }
+      ], issues: [GitHub.issue(5)])
+    var continued: [Int] = []
     var opened: [Int] = []
+    palette.onContinueWait = {
+      continued.append($0)
+      return nil
+    }
     palette.onOpenWorktreePalette = { opened.append($0) }
 
-    palette.openWorktreePalette()
+    palette.openSelectedGitHubItemAsTask()
 
-    XCTAssertEqual(opened, [4])
+    XCTAssertEqual(continued, [4])
+    XCTAssertEqual(opened, [])
     XCTAssertEqual(palette.store.tasks.count, 1, "タスクを足さない")
   }
 
   // MARK: - 結び付いている行
 
-  /// ↵ でタスクのタブのそのタスクへ移る。範囲・入力・完了の欄で隠れていれば見えるように切り替える。
+  /// ↵ でタスクのタブのそのタスクへ移る。絞り込みと入力は変えず、合わなくてもそのタスクを表に入れて選ぶ。
   func testEnterOnALinkedItemRevealsItsTaskOnTheTasksTab() throws {
     let palette = GitHub.model(
       [
@@ -250,17 +254,17 @@ extension TaskPaletteModelTests {
         },
       ], issues: [GitHub.issue(5)])
     palette.setTab(.tasks)
-    palette.setScope(.opened)
+    palette.toggleWorkspaceFilter(self.openedWorkspace.id)
     palette.query = "zzz"
     palette.setTab(.github)
 
     palette.submit()
 
     XCTAssertEqual(palette.visibleTab, .tasks)
-    XCTAssertEqual(palette.scope, .all)
-    XCTAssertTrue(palette.doneExpanded)
-    XCTAssertEqual(palette.query, "")
+    XCTAssertEqual(palette.filter.workspaces, [self.openedWorkspace.id], "絞り込みは緩めない")
+    XCTAssertEqual(palette.query, "zzz", "入力も消さない")
     XCTAssertEqual(palette.selectedID, .task(2))
+    XCTAssertEqual(palette.rows.compactMap(\.selectableID), [.task(2)], "合わないタスクを表に入れる")
   }
 
   /// ⌘⌫ で結び付きを外す（外した項目に記録する）。行は結び付いていない側へ戻り、選択はその行に残る。
@@ -310,23 +314,23 @@ extension TaskPaletteModelTests {
 
   // MARK: - 絞り込み・さらに
 
-  /// ⇥ は札を「すべて → 担当が自分 → 作成者が自分 → レビュー依頼」と巡回し、一覧の先頭を選ぶ。
-  func testTabCyclesTheFiltersAndSelectsTheFirstRow() {
+  /// 札はオン・オフで、オンにするたび・オフにするたびに一覧の先頭を選ぶ。
+  func testTogglingRelationChipsSelectsTheFirstRow() {
     let palette = GitHub.model(
       [],
       issues: [GitHub.issue(7), GitHub.issue(6, author: "me"), GitHub.issue(5, assignees: ["me"])],
       pullRequests: [GitHub.pullRequest(9)], reviewRequests: [9])
-    var seen: [(TaskGitHubFilter, TaskPaletteGitHubRowID?)] = []
+    var seen: [TaskPaletteGitHubRowID?] = []
 
-    for _ in 0..<4 {
-      palette.cycleGitHubFilter()
-      seen.append((palette.githubFilter, palette.selectedGitHubID))
+    for filter in [TaskGitHubFilter.assigned, .authored, .assigned, .authored] {
+      palette.toggleGitHubFilter(filter)
+      seen.append(palette.selectedGitHubID)
     }
 
-    XCTAssertEqual(seen.map(\.0), [.assigned, .authored, .reviewRequested, .all])
     XCTAssertEqual(
-      seen.map(\.1),
-      [.item(GitHub.id(5)), .item(GitHub.id(6)), .item(GitHub.id(9)), .item(GitHub.id(7))])
+      seen,
+      [.item(GitHub.id(5)), .item(GitHub.id(6)), .item(GitHub.id(6)), .item(GitHub.id(7))])
+    XCTAssertEqual(palette.githubFilters, [])
   }
 
   /// 「さらに」の ↵ で区分の残りを出し、選択は同じ位置の行（出てきた最初の行）へ移る。
@@ -357,6 +361,6 @@ extension TaskPaletteModelTests {
 
     palette.setTab(.tasks)
     XCTAssertEqual(palette.query, "")
-    XCTAssertEqual(palette.selectedID, .task(2))
+    XCTAssertEqual(palette.selectedID, .task(1))
   }
 }

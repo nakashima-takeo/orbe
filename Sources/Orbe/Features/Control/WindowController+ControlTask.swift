@@ -1,7 +1,7 @@
 import Foundation
 import OrbeSessionLog
 
-/// タスクの動詞（5 動詞と `set_wait_condition`）の domain 側。外に見せる起動ごとの workspaceId とタスクが持つ永続 ID の相互変換・
+/// タスクの動詞（4 動詞と `set_wait_condition`）の domain 側。外に見せる起動ごとの workspaceId とタスクが持つ永続 ID の相互変換・
 /// 呼び出し元タブの解決をここで行い、検証と変異は `TaskStore` に任せる。
 extension WindowController {
   func controlListTasks(workspaceId: Int?) -> Result<Any, ControlError> {
@@ -12,7 +12,7 @@ extension WindowController {
       }
       tasks = tasks.filter { $0.workspace == ws.persistentId }
     }
-    return .success(["tasks": tasks.map(taskJSON)])
+    return .success(["tasks": tasks.sorted(by: TaskItem.newerFirst).map(taskJSON)])
   }
 
   func controlAddTask(
@@ -96,15 +96,6 @@ extension WindowController {
     }
   }
 
-  func controlMoveTask(taskId: Int, _ placement: TaskStore.Placement, anchorTaskId: Int)
-    -> Result<Any, ControlError>
-  {
-    taskResult { () throws(TaskStoreError) in
-      try taskStore.move(taskId, placement, anchorTaskId)
-      return ["ok": true]
-    }
-  }
-
   func controlDeleteTask(taskId: Int) -> Result<Any, ControlError> {
     taskResult { () throws(TaskStoreError) in
       try taskStore.delete(taskId)
@@ -127,8 +118,7 @@ extension WindowController {
     {
       request.conversation = WaitConversation(
         command: session.command, sessionId: sessionId,
-        workspace: workspaces.first { $0.tabs.contains { $0 === caller } }?.persistentId,
-        secretary: secretary.isSecretary(caller))
+        workspace: workspaces.first { $0.tabs.contains { $0 === caller } }?.persistentId)
     }
     return request
   }

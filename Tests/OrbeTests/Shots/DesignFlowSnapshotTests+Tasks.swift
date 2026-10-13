@@ -6,7 +6,7 @@ import XCTest
 /// タスク画面の flow（ファイル分割の拡張）。撮り方・出力先は本体の `flow` を共有する。
 extension DesignFlowSnapshotTests {
   /// 打って絞り込み・↵ で追加・space で完了・→ で右の欄・期限の編集（読めない入力は赤）・esc で一覧、
-  /// agent が上の欄に足しても選択が動かない・完了の欄を開く（詳細のある完了の行も沈む）、までを撮る。
+  /// agent が足しても選択が動かない、までを撮る。
   func testTaskPalette() throws {
     let palette = DesignSceneFixtures.taskPaletteModel()
     try flow(
@@ -52,21 +52,69 @@ extension DesignFlowSnapshotTests {
         (
           "agent_inserted",
           {
-            let item = try? palette.store.add(TaskDraft(title: "agent が足した", status: .inProgress))
-            if let item { try? palette.store.move(item.id, .before, 1) }
+            _ = try? palette.store.add(TaskDraft(title: "agent が足した", status: .inProgress))
             palette.reconcile()
           }
         ),
-        ("done_expanded", { palette.toggleDoneExpanded() }),
       ])
   }
 
-  /// 待ちの条件: #214（待っている）を選ぶ → → で右の欄 → ↓ で確認のコマンド → ↵ で開く → ↓ で実行の記録 → ↵ で開く →
-  /// 一覧へ戻り、確認が成功して解けた #214 を選んだまま（フッターの「⌘T … を claude で続きから」）、までを撮る。
+  /// 表: 完了の札をオンにする（完了の行は暗い）・優先度のメニューを開いて値をオンにする（メニューは開いたまま）・
+  /// メニューを閉じる・件名の列で並べてもう一度押して逆にする・右の欄で完了まで巡ると行が暗くなって同じ場所に残る・
+  /// ↓ で離れても暗い行は残る・space で完了にした行は選んだまま暗くなる・もう一度 space で戻る・列の見出しを押すと
+  /// 暗い行が消える・⇥ で次のタブ、までを撮る。
+  func testTaskPaletteTable() throws {
+    let palette = DesignSceneFixtures.taskPaletteModel()
+    try flow(
+      "task_palette_table", size: NSSize(width: 1440, height: 900),
+      render: {
+        ZStack {
+          BackgroundGlow()
+          TaskPaletteOverlay(model: palette)
+        }
+        .environment(\.localization, LocalizationStore(language: .ja))
+      },
+      steps: [
+        ("start", {}),
+        ("filter_done", { palette.toggleState(.done) }),
+        ("filter_menu", { palette.toggleFilterMenu(.priority) }),
+        ("filter_menu_high", { palette.togglePriorityFilter(.high) }),
+        ("filter_menu_closed", { palette.closeFilterMenu() }),
+        (
+          "sorted_title",
+          {
+            palette.togglePriorityFilter(.high); palette.toggleState(.done)
+            palette.setSort(.title)
+          }
+        ),
+        ("sorted_title_reversed", { palette.setSort(.title) }),
+        (
+          "status_done_dimmed",
+          {
+            palette.enterDetail(); palette.changeValue(1); palette.changeValue(1)
+          }
+        ),
+        (
+          "dimmed_left",
+          {
+            palette.leaveDetail(); palette.move(1)
+          }
+        ),
+        ("space_done_dimmed", { palette.submit() }),
+        ("space_undone", { palette.submit() }),
+        ("refreshed", { palette.setSort(.title) }),
+        ("next_tab", { palette.setTab(palette.tab.next) }),
+      ])
+  }
+
+  /// 待ちの条件: 見積もり（待っている）を選ぶ → → で右の欄 → ↓ で確認のコマンド → ↵ で開く → ↓ で実行の記録 → ↵ で
+  /// 開く → 一覧へ戻り、確認が成功して解けた見積もりを選んだまま（フッターの「⌘↵ … を claude で続きから」）→ 見積もりに
+  /// #221 を結び付けて GitHub タブでその行を選ぶ（フッターは同じく「⌘↵ … を claude で続きから」）、までを撮る。
   func testTaskWaitCondition() throws {
     let palette = DesignSceneFixtures.taskPaletteModel(
       DesignSceneFixtures.taskWaitConditionFile(),
       sessionTabs: DesignSceneFixtures.taskSessionTabs())
+    let issue221 = DesignSceneFixtures.taskLink(.issue, "orbe", 221)
     try flow(
       "task_wait_condition", size: NSSize(width: 1440, height: 900),
       render: {
@@ -77,12 +125,7 @@ extension DesignFlowSnapshotTests {
         .environment(\.localization, LocalizationStore(language: .ja))
       },
       steps: [
-        (
-          "selected",
-          {
-            palette.move(1); palette.move(1)
-          }
-        ),
+        ("selected", { palette.tapRow(.task(3)) }),
         ("detail", { palette.enterDetail() }),
         (
           "command",
@@ -109,6 +152,14 @@ extension DesignFlowSnapshotTests {
             palette.reconcile()
           }
         ),
+        (
+          "resolved_github",
+          {
+            _ = try? palette.store.update(3, TaskUpdate(links: [issue221]))
+            palette.setTab(.github)
+            palette.tapGitHubRow(.item(issue221.item))
+          }
+        ),
       ])
   }
 
@@ -123,7 +174,7 @@ extension DesignFlowSnapshotTests {
         (
           "command",
           { _ in
-            palette.move(1); palette.move(1); palette.enterDetail()
+            palette.tapRow(.task(3)); palette.enterDetail()
             palette.moveField(1); palette.moveField(1)
           }
         ),
@@ -151,7 +202,8 @@ extension DesignFlowSnapshotTests {
         (
           "link_focused",
           {
-            palette.enterDetail(); palette.moveField(-1); palette.moveField(-1)
+            palette.tapRow(.task(4)); palette.enterDetail(); palette.moveField(-1)
+            palette.moveField(-1)
           }
         ),
         ("unlinked", { palette.unlink(palette.selectedTask!.links[0].item) }),
@@ -161,33 +213,10 @@ extension DesignFlowSnapshotTests {
             var update = TaskUpdate()
             update.links =
               palette.selectedTask!.links + [DesignSceneFixtures.taskLink(.issue, "orbe", 230)]
-            _ = try? palette.store.update(1, update)
+            _ = try? palette.store.update(4, update)
             palette.reconcile()
           }
         ),
-      ])
-  }
-
-  /// 選んだ未完了の行の取っ手・掴んで下へ動かした途中（行のずれと落ちる位置の線）・欄の端で止まる掴んだ
-  /// 行・離して並びが変わった後、を撮る。
-  func testTaskPaletteDrag() throws {
-    let palette = DesignSceneFixtures.taskPaletteModel()
-    let height = TaskPaletteRowMetrics.line
-    let start = CGPoint(x: 200, y: 300)
-    try flow(
-      "task_palette_drag", size: NSSize(width: 1440, height: 900),
-      render: {
-        ZStack {
-          BackgroundGlow()
-          TaskPaletteOverlay(model: palette)
-        }
-        .environment(\.localization, LocalizationStore(language: .ja))
-      },
-      steps: [
-        ("grip", {}),
-        ("grabbed_down", { palette.dragChanged(6, start: start, translation: height * 2.4) }),
-        ("grabbed_up_edge", { palette.dragChanged(6, start: start, translation: -height * 5) }),
-        ("dropped", { palette.dragEnded() }),
       ])
   }
 
@@ -209,7 +238,7 @@ extension DesignFlowSnapshotTests {
         (
           "start",
           {
-            palette.toggleTab(); palette.tapGitHubRow(issue221)
+            palette.setTab(palette.tab.next); palette.tapGitHubRow(issue221)
           }
         ),
         (
@@ -276,7 +305,7 @@ extension DesignFlowSnapshotTests {
         (
           "pane_assign",
           { _ in
-            palette.toggleTab(); palette.tapGitHubRow(issue221); palette.enterPane()
+            palette.setTab(palette.tab.next); palette.tapGitHubRow(issue221); palette.enterPane()
           }
         ),
         (
@@ -292,15 +321,20 @@ extension DesignFlowSnapshotTests {
 
   /// いちばん右のスクロール（GitHub タブの右の欄）を下端まで送る。
   private func scrollRightmostToBottom(in host: NSView) {
+    scrollToBottom(in: host) { views in
+      views.max(by: {
+        $0.convert($0.bounds, to: host).minX < $1.convert($1.bounds, to: host).minX
+      })
+    }
+  }
+
+  /// `pick` が選んだスクロール（引数は view の木を深さ優先でたどった順）を下端まで送る。
+  func scrollToBottom(in host: NSView, pick: ([NSScrollView]) -> NSScrollView?) {
     func scrollViews(_ view: NSView) -> [NSScrollView] {
       (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap(scrollViews)
     }
-    guard
-      let pane = scrollViews(host).max(by: {
-        $0.convert($0.bounds, to: host).minX < $1.convert($1.bounds, to: host).minX
-      }),
-      let document = pane.documentView
-    else { return XCTFail("右の欄のスクロールが見つからない") }
+    guard let pane = pick(scrollViews(host)), let document = pane.documentView
+    else { return XCTFail("スクロールが見つからない") }
     let bottom = document.isFlipped ? document.bounds.height - pane.contentView.bounds.height : 0
     pane.contentView.scroll(to: NSPoint(x: 0, y: bottom))
     pane.reflectScrolledClipView(pane.contentView)

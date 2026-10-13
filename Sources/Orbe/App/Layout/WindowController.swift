@@ -95,7 +95,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     automation.onAsk = { [weak self] ask in
       guard let self else { return .claudeMissing }
       do throws(Secretary.Refusal) {
-        _ = try self.secretary.ask(ask, from: .board)
+        try self.secretary.ask(ask, from: .board)
         return nil
       } catch {
         return error
@@ -172,7 +172,6 @@ final class WindowController: NSObject, NSWindowDelegate {
     agentLauncher.appModel = model
     agentLauncher.localization = localization  // 起動パレット・オンボーディングの文言引き用
     configureAgentDefaults()
-    resumeSecretaryAtLaunch()
     // 起動パレット・Cmd+Shift+C の起動。アクティブ workspace の新タブで agent の絶対パスを起こす。
     agentLauncher.onLaunch = { [weak self] agent, env in
       guard let self else { return }
@@ -312,8 +311,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     refreshClosedAgentsPalette()  // ⇧⌘T の一覧も同じ契機で追従（WindowController+ClosedAgents）
     refreshWorkspacePaletteLiveStates()  // 表示中の workspace パレットの行チップも同じ契機で追従
     refreshWorktreeAgents()  // タスク画面と ⌘T の agent の札も同じ契機で追従
-    refreshAgentSessionTabs()  // タスク画面の会話の行と解けた待ちの ⌘T も同じ契機で追従
-    secretary.cycle(mayLaunch: false)  // 索引の後に。秘書のタブを探し直し、手が空いていれば 1 件届ける
+    refreshAgentSessionTabs()  // タスク画面の会話の行と解けた待ちの ⌘↵ も同じ契機で追従
   }
 
   /// OSC 7 の cwd 報告を受けた。根が変わっていれば連を付け替え（`moveToGroup`）、隣接不変条件が破れていれば

@@ -13,7 +13,7 @@ extension AutomationStoreTests {
   }
 
   private func accept(_ store: AutomationStore, _ proposalId: Int) throws {
-    _ = try store.accept(proposalId, into: TaskStore(file: nil), workspace: nil, at: .end)
+    _ = try store.accept(proposalId, into: TaskStore(file: nil), workspace: nil)
   }
 
   /// さばくたびに出した自動化の数が 1 増え、候補を忘れても減らず、再起動しても残る。

@@ -46,13 +46,13 @@ final class TaskStoreTests: OrbeTestCase {
 
   // MARK: - 追加
 
-  func testAddAppendsToTheEndWithDefaultsAndTrimmedTitle() throws {
+  func testAddNumbersTheTaskWithDefaultsAndTrimmedTitle() throws {
     let store = TaskStore()
 
     let first = try store.add(draft("経費精算を出す"))
     let second = try store.add(draft("  レビューを返す \n"))
 
-    XCTAssertEqual(store.tasks.map(\.id), [first.id, second.id], "新しいタスクは列の末尾に入る")
+    XCTAssertEqual(Set(store.tasks.map(\.id)), [first.id, second.id], "足したタスクは一覧に入る")
     XCTAssertEqual(second.id, first.id + 1)
     XCTAssertEqual(second.title, "レビューを返す", "タイトルは前後の空白を除いて持つ")
     XCTAssertEqual(second.status, .todo, "ステータスの既定は未着手")
@@ -60,48 +60,6 @@ final class TaskStoreTests: OrbeTestCase {
     XCTAssertNil(second.waiting)
     XCTAssertNil(second.due)
     XCTAssertEqual(second.description, "")
-  }
-
-  /// 「その優先度の未着手の先頭」は、未着手の欄で同じか低い優先度の最初のタスクの直前。進行中・完了・高い優先度の
-  /// 未着手は越える。該当が無ければ列の末尾。1 回の変異で入る（保存も 1 回）。
-  func testPriorityHeadGoesBeforeTheFirstTodoOfTheSameOrLowerPriority() throws {
-    let store = TaskStore()
-    let progress = try store.add(draft("進行中") { $0.status = .inProgress })
-    let high = try store.add(draft("高") { $0.priority = .high })
-    let low = try store.add(draft("低") { $0.priority = .low })
-    let done = try store.add(draft("完了") { $0.status = .done })
-
-    let medium = try store.add(draft("中"), at: .priorityHead(workspace: nil))
-    let urgent = try store.add(
-      draft("急ぎ") { $0.priority = .high }, at: .priorityHead(workspace: nil))
-    let later = try store.add(draft("後で") { $0.priority = .low }, at: .priorityHead(workspace: nil))
-
-    XCTAssertEqual(
-      store.tasks.map(\.id),
-      [progress.id, urgent.id, high.id, medium.id, later.id, low.id, done.id])
-    XCTAssertEqual(TaskPersistence.load()?.tasks.map(\.id), store.tasks.map(\.id), "保存も同じ並び")
-
-    let empty = TaskStore(file: nil)
-    let only = try empty.add(draft("ひとつ"), at: .priorityHead(workspace: nil))
-    XCTAssertEqual(empty.tasks.map(\.id), [only.id], "該当が無ければ末尾")
-  }
-
-  /// 範囲で絞った欄から足すと、見ている欄のタスクだけを基準にする（見えていない workspace の同じ優先度のタスクの
-  /// 前には入らず、見えている高い優先度のタスクを越えない）。
-  func testPriorityHeadCountsOnlyTheTasksOfTheWorkspaceInView() throws {
-    let store = TaskStore()
-    let (seen, other) = (UUID(), UUID())
-    let elsewhere = try store.add(draft("別の workspace") { $0.workspace = other })
-    let high = try store.add(
-      draft("高") {
-        $0.priority = .high; $0.workspace = seen
-      })
-    let medium = try store.add(draft("中") { $0.workspace = seen })
-
-    let added = try store.add(
-      draft("足す") { $0.workspace = seen }, at: .priorityHead(workspace: seen))
-
-    XCTAssertEqual(store.tasks.map(\.id), [elsewhere.id, high.id, added.id, medium.id])
   }
 
   func testAddWithWaitingReasonStartsWaiting() throws {
@@ -248,30 +206,7 @@ final class TaskStoreTests: OrbeTestCase {
     assertRejected(.notFound(9)) { _ = try store.update(9, TaskUpdate(title: "a")) }
   }
 
-  // MARK: - 並べ替え・削除
-
-  func testMoveBeforeAndAfterAnotherTaskReordersTheList() throws {
-    let store = TaskStore()
-    let ids = try ["1", "2", "3", "4"].map { try store.add(draft($0)).id }
-
-    try store.move(ids[3], .before, ids[1])
-    XCTAssertEqual(store.tasks.map(\.id), [ids[0], ids[3], ids[1], ids[2]], "指したタスクの直前へ入る")
-
-    try store.move(ids[0], .after, ids[2])
-    XCTAssertEqual(store.tasks.map(\.id), [ids[3], ids[1], ids[2], ids[0]], "指したタスクの直後へ入る")
-  }
-
-  func testMoveRelativeToItselfOrAnUnknownTaskIsRejectedAndKeepsTheOrder() throws {
-    let store = TaskStore()
-    let a = try store.add(draft("a")).id
-    let b = try store.add(draft("b")).id
-
-    assertInvalid({ try store.move(a, .before, a) })
-    assertRejected(.notFound(99)) { try store.move(a, .after, 99) }
-    assertRejected(.notFound(99)) { try store.move(99, .after, a) }
-
-    XCTAssertEqual(store.tasks.map(\.id), [a, b])
-  }
+  // MARK: - 削除
 
   func testDeleteRemovesTheTaskAndItsIdIsNeverReused() throws {
     let store = TaskStore()
@@ -306,8 +241,6 @@ final class TaskStoreTests: OrbeTestCase {
     XCTAssertEqual(relaunched().tasks, store.tasks, "追加は即座にディスクへ届き、全項目が往復で保たれる")
 
     let b = try store.add(draft("b"))
-    try store.move(b.id, .before, a.id)
-    XCTAssertEqual(relaunched().tasks.map(\.id), [b.id, a.id], "並べ替えは即座にディスクへ届く")
 
     _ = try store.update(a.id, TaskUpdate(status: .done))
     XCTAssertEqual(relaunched().tasks, store.tasks, "変更は即座にディスクへ届く")

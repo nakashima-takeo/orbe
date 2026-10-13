@@ -29,6 +29,6 @@ extension TaskPaletteRowsTests {
       if case .task(let row) = row { row } else { nil }
     }.map { $0.agent?.tabId }
 
-    XCTAssertEqual(tabs, [1, 2, nil, nil, nil], "worktree が一致し、作業中か入力待ちの agent だけ")
+    XCTAssertEqual(tabs, [nil, nil, nil, 2, 1], "worktree が一致し、作業中か入力待ちの agent だけ")
   }
 }
