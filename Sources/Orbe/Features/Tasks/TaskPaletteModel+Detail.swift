@@ -138,7 +138,7 @@ extension TaskPaletteModel {
       let next = options[min(max(index + direction, 0), options.count - 1)]
       if next != task.status { setStatus(next) }
     case .priority:
-      let options: [TaskItem.Priority] = [.high, .medium, .low]
+      let options = TaskItem.Priority.allCases
       let index = options.firstIndex(of: task.priority)!
       let next = options[min(max(index + direction, 0), options.count - 1)]
       if next != task.priority { setPriority(next) }
