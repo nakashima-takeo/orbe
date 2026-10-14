@@ -11,25 +11,9 @@ enum SecretaryAsk: Equatable {
 
 /// 起こした claude の最初の入力と役目の指示（Orbe が UI の言語で組む）。
 enum SecretaryText {
-  /// 出どころが決める、最初の入力の先頭に付ける語（「依頼: 」）と役目の指示（日・英）。
-  private struct Role {
-    let head: L10nKey
-    let ja: String
-    let en: String
-  }
-
-  private static func role(_ origin: SecretaryOrigin) -> Role {
-    switch origin {
-    case .palette: Role(head: .secretaryRequestInput, ja: paletteJa, en: paletteEn)
-    case .board: Role(head: .secretaryRequestInput, ja: boardJa, en: boardEn)
-    }
-  }
-
-  /// 最初の入力（出どころが決める語を先頭に付けた頼み）。その語は中身によらず常に付ける——先頭が `/` の文を claude が
+  /// 最初の入力（「依頼: 」を先頭に付けた頼み）。その語は中身によらず常に付ける——先頭が `/` の文を claude が
   /// スラッシュコマンドとして実行しないため。頼める中身が無ければ nil。
-  static func firstInput(_ ask: SecretaryAsk, from origin: SecretaryOrigin, l10n: LocalizationStore)
-    -> String?
-  {
+  static func firstInput(_ ask: SecretaryAsk, l10n: LocalizationStore) -> String? {
     let body: String
     switch ask {
     case .text(let text):
@@ -40,17 +24,18 @@ enum SecretaryText {
       body = l10n.format(
         .secretaryAutomationFixInput, "\(automation.id)", automation.definition.name)
     }
-    return l10n.format(role(origin).head, body)
+    return l10n.format(.secretaryRequestInput, body)
   }
 
   /// 出どころの役目の指示。起こすときにだけ claude の起動に添える（Home の rules は Home で動く claude 全員が読むので、
   /// ここに置くと作業用の agent まで同じ役目だと思う）。画面の文言ではなく agent への指示なので、UI 文言の辞書には
   /// 載せない。
   static func instructions(for origin: SecretaryOrigin, _ language: Language) -> String {
-    let role = role(origin)
-    switch language {
-    case .ja: return role.ja
-    case .en: return role.en
+    switch (origin, language) {
+    case (.palette, .ja): paletteJa
+    case (.palette, .en): paletteEn
+    case (.board, .ja): boardJa
+    case (.board, .en): boardEn
     }
   }
 

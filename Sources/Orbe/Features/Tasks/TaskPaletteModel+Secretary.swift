@@ -7,8 +7,8 @@ extension TaskPaletteModel {
     visibleTab == .tasks ? TaskPaletteRows.addTitle(rowsInput) : nil
   }
 
-  /// 打った文を agent に任せる。受けたら入力欄を空にする（受けると画面は閉じるが、閉じるかは見せ方の結果で、ここは
-  /// 頼らない）。受けなければ入力をそのまま残し、理由を出す（空の頼みは黙る）。
+  /// 打った文を agent に任せる。受けたら入力欄を空にする（受けると窓が画面を閉じるが、ここはそれに頼らない）。
+  /// 受けなければ入力をそのまま残し、理由を出す（空の頼みは黙る）。
   func askWithQuery() {
     guard let title = addTitle else { return }
     leaveEditingForAction()

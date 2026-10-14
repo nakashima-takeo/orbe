@@ -6,16 +6,13 @@ extension WindowController: SecretaryHost {
     agentLauncher.detectedAgents.first { $0.command == "claude" }
   }
 
-  func secretaryOpen(command: String, shows: Bool) -> Bool {
+  func secretaryOpen(command: String) -> Bool {
     guard let index = store.homeIndex, let home = HomeFolder.url?.path,
       let opened = openTab(
-        workspaceIndex: index, cwd: home, command: command, env: agentLauncher.launchEnvironment,
-        selects: shows)
+        workspaceIndex: index, cwd: home, command: command, env: agentLauncher.launchEnvironment)
     else { return false }
-    if shows {
-      dismissPalette()
-      _ = controlFocusTab(tabId: opened.tabId)
-    }
+    dismissPalette()
+    _ = controlFocusTab(tabId: opened.tabId)
     return true
   }
 }
