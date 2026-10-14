@@ -21,7 +21,11 @@ final class BackgroundSchedulerTests: OrbeTestCase {
     runner = FakeJobs()
     scheduler = BackgroundScheduler(run: runner.run)
     scheduler.now = { [unowned self] in now }
-    scheduler.calendar = { Calendar(identifier: .gregorian) }
+    scheduler.calendar = {
+      var calendar = Calendar(identifier: .gregorian)
+      calendar.timeZone = .gmt
+      return calendar
+    }
     scheduler.arm = { [unowned self] date, fire in
       armed = (date, fire)
       return { [unowned self] in armed = nil }
@@ -47,6 +51,13 @@ final class BackgroundSchedulerTests: OrbeTestCase {
     }
     try scheduler.register(
       id: id, schedule: schedule ?? self.schedule(), anchor: anchor ?? now, onEvent: record)
+  }
+
+  private func registerCron(_ expression: String) throws {
+    try register(
+      BackgroundSchedule(
+        job: .command(.init(script: "true")), timing: .cron(try BackgroundCron(expression)),
+        deadline: nil))
   }
 
   /// 時計を進め、張られた予約が来ていれば発火させる。
@@ -134,8 +145,8 @@ final class BackgroundSchedulerTests: OrbeTestCase {
     XCTAssertEqual(armed?.date, now.addingTimeInterval(60))
   }
 
-  /// タイムゾーンが変わったら、毎日の時刻を新しいタイムゾーンで数え直す（予約の発火を待たない）。
-  func testTimeZoneChangeRecountsDailyTimesInTheNewZone() throws {
+  /// タイムゾーンが変わったら、cron の時刻を新しいタイムゾーンで数え直す（予約の発火を待たない）。
+  func testTimeZoneChangeRecountsCronTimesInTheNewZone() throws {
     var zone = try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo"))
     scheduler.calendar = {
       var calendar = Calendar(identifier: .gregorian)
@@ -143,16 +154,34 @@ final class BackgroundSchedulerTests: OrbeTestCase {
       return calendar
     }
     // start は 08:00 UTC（17:00 JST）。
-    try register(
-      BackgroundSchedule(
-        job: .command(.init(script: "true")),
-        timing: .daily([BackgroundTimeOfDay(hour: 9, minute: 0)]), deadline: nil))
+    try registerCron("0 9 * * *")
     XCTAssertEqual(armed?.date, start.addingTimeInterval(16 * 3600), "前提: 翌日 9:00 JST")
 
     zone = try XCTUnwrap(TimeZone(identifier: "UTC"))
     NotificationCenter.default.post(name: .NSSystemTimeZoneDidChange, object: nil)
 
     XCTAssertEqual(armed?.date, start.addingTimeInterval(1 * 3600), "当日 9:00 UTC")
+  }
+
+  /// 予約は該当時刻ちょうどに発火し、数え直す時点の今はわずかに過ぎている。それでもその回は走る。
+  func testCronRunsWhenTheReservationFiresJustAfterTheTime() throws {
+    // start は 08:00 UTC。
+    try registerCron("0 9 * * *")
+    XCTAssertEqual(armed?.date, start.addingTimeInterval(3600), "前提: 当日 9:00 UTC")
+
+    advance(to: start.addingTimeInterval(3600.5))
+
+    XCTAssertEqual(runner.calls.count, 1)
+  }
+
+  /// 眠っていた間に過ぎた cron の時刻は、起きても走らせず次の時刻を待つ（間隔の予定は 1 回走る）。
+  func testCronSkipsATimePassedWhileAsleep() throws {
+    try registerCron("0 9 * * *")
+
+    advance(to: start.addingTimeInterval(3600 + 90))
+
+    XCTAssertEqual(runner.calls.count, 0, "9:00 の分を過ぎて起きたら、その回は走らない")
+    XCTAssertEqual(armed?.date, start.addingTimeInterval(25 * 3600), "翌日 9:00 UTC を待つ")
   }
 
   /// 予定が複数あれば、最も早い回に合わせて待つ。

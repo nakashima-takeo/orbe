@@ -65,6 +65,15 @@ extension DesignSceneFixtures {
       failure: failure)
   }
 
+  /// 見本の cron のいつ。見本には正しい式だけを書く。
+  static func cron(_ expression: String) -> BackgroundTiming {
+    do {
+      return .cron(try BackgroundCron(expression))
+    } catch {
+      preconditionFailure("\(expression): \(error.message)")
+    }
+  }
+
   static func automationDefinition(
     _ name: String, source: AutomationSource, trigger: BackgroundTiming,
     instruction: String = "自分が何かを頼まれている・期限がある項目だけをタスクにする。"
@@ -112,9 +121,7 @@ extension DesignSceneFixtures {
         id: 1,
         definition: automationDefinition(
           "Slack: 自分宛の DM・メンション", source: command("~/bin/slack-mentions --since 1d", .newArrivals),
-          trigger: .daily([
-            .init(hour: 9, minute: 0), .init(hour: 13, minute: 0), .init(hour: 17, minute: 0),
-          ])),
+          trigger: cron("0 9,13,17 * * *")),
         paused: false, createdAt: automationAt(9, daysAgo: 3),
         lastFetched: [seen(estimate), seen(onboarding)], reviewAll: false,
         lastRunAt: automationAt(13),
@@ -123,7 +130,7 @@ extension DesignSceneFixtures {
         id: 2,
         definition: automationDefinition(
           "Slack: 自分の発言", source: command("~/bin/slack-mine --since 1d", .newArrivals),
-          trigger: .daily([.init(hour: 18, minute: 0)])),
+          trigger: cron("0 18 * * *")),
         paused: false, createdAt: automationAt(9, daysAgo: 3),
         lastFetched: [seen(weekly), seen(onboarding)], reviewAll: false,
         lastRunAt: automationAt(13),
@@ -161,7 +168,7 @@ extension DesignSceneFixtures {
     ]
   }
 
-  /// 受信 4 つ（Slack の 2 つは毎日の時刻で提案あり・Backlog は 30 分ごとの軽い agent で提案なし・GitHub は止めていて
+  /// 受信 4 つ（Slack の 2 つは cron の時刻で提案あり・Backlog は 30 分ごとの軽い agent で提案なし・GitHub は止めていて
   /// 前回が失敗）と、判断待ちの提案 3 件（期限あり / なし、付け先が orbe / Home / work）。Slack の 2 つは 1 件のリンクを
   /// 重ねて取っている。
   static func automationDesignFile() -> AutomationsFile {

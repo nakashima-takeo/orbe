@@ -92,7 +92,7 @@ extension AutomationStoreTests {
           "id": 2,
           "definition": {
             "name": "日報の下書き",
-            "trigger": {"dailyAt": ["23:00"]},
+            "trigger": {"cron": "0 23 * * *"},
             "steps": [],
             "sink": {
               "kind": "command", "command": "~/bin/daily-note.sh", "directory": "/Users/me",
@@ -116,7 +116,7 @@ extension AutomationStoreTests {
           "id": 3,
           "definition": {
             "name": "Slack: 自分宛",
-            "trigger": {"dailyAt": ["09:00", "13:00"]},
+            "trigger": {"cron": "*/10 9-18 * * MON-FRI"},
             "source": {
               "agent": "claude", "model": "haiku", "tools": ["mcp__slack__search"],
               "request": "自分宛の DM", "coverage": "newArrivals"
@@ -133,7 +133,7 @@ extension AutomationStoreTests {
           "id": 4,
           "definition": {
             "name": "開いている PR の要約",
-            "trigger": {"dailyAt": ["18:00"]},
+            "trigger": {"cron": "0 18 * * 1-5"},
             "steps": [{"name": "要約", "agent": "claude", "instruction": "開いている PR を要約する"}],
             "sink": {"kind": "report"},
             "notify": "menuBar"
@@ -174,7 +174,7 @@ extension AutomationStoreTests {
           "id": 5,
           "definition": {
             "name": "レビュー待ちの PR を Slack へ",
-            "trigger": {"dailyAt": ["09:00"]},
+            "trigger": {"cron": "0 9 * * 1-5"},
             "steps": [],
             "sink": {
               "kind": "agent", "agent": "claude", "model": "sonnet",

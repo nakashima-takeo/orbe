@@ -193,7 +193,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
   func testListedDefinitionReadsBackAsTheSameDefinition() throws {
     let wc = try launch()
     var definition = AutomationStoreTests.definition(
-      trigger: .daily([.init(hour: 13, minute: 30), .init(hour: 9, minute: 0)]))
+      trigger: .cron(try BackgroundCron("30 9 * * mon-fri")))
     definition.source?.method = .agent(
       AutomationSourceAgent(
         cli: "claude", model: nil, tools: ["mcp__slack__search"], request: "自分宛の DM"))

@@ -90,7 +90,7 @@ extension DesignSceneFixtures {
         "Backlog: 担当課題",
         source: agentFetch(
           "mcp__backlog__get_issues", "自分が担当の未完了の課題を、更新の新しい順に 30 件取る。", .currentSet),
-        trigger: .daily([.init(hour: 9, minute: 0), .init(hour: 13, minute: 0)]),
+        trigger: cron("0 9,13 * * *"),
         instruction: "期限のある課題と、自分がコメントで頼まれた課題をタスクにする。"),
       paused: false, createdAt: boardCreated, lastFetched: [], reviewAll: false,
       lastRunAt: at(13, 0, 0),
@@ -112,7 +112,7 @@ extension DesignSceneFixtures {
         "Gmail: 請求書",
         source: agentFetch(
           "mcp__gmail__search_threads", "請求書と支払い依頼のメールを、直近 3 日分取る。", .newArrivals),
-        trigger: .daily([.init(hour: 10, minute: 0)]),
+        trigger: cron("0 10 * * 1-5"),
         instruction: "請求書の受領と支払い依頼をタスクにし、支払期日を期限にする。"),
       paused: true, createdAt: boardCreated, lastFetched: [], reviewAll: false,
       lastRunAt: at(10, 0, 1),
@@ -129,7 +129,7 @@ extension DesignSceneFixtures {
           method: .command(
             BackgroundCommand(script: "~/bin/daily-notes.sh --today", directory: "~/notes")),
           coverage: .newArrivals),
-        trigger: .daily([.init(hour: 23, minute: 0)])),
+        trigger: cron("0 23 * * *")),
       paused: false, createdAt: automationAt(14, 50), lastFetched: [], reviewAll: false,
       lastRunAt: nil, runs: [])
   }
@@ -218,7 +218,7 @@ extension DesignSceneFixtures {
     return Automation(
       id: 3,
       definition: AutomationDefinition(
-        name: "日報の下書き", trigger: .daily([.init(hour: 23, minute: 0)]), source: nil, steps: [],
+        name: "日報の下書き", trigger: cron("0 23 * * *"), source: nil, steps: [],
         sink: .command(
           AutomationSinkCommand(
             command: BackgroundCommand(script: "~/bin/daily-note.sh", directory: "/Users/me/notes"),
@@ -348,7 +348,7 @@ extension DesignSceneFixtures {
     return Automation(
       id: 2,
       definition: AutomationDefinition(
-        name: "毎朝の PR 報告", trigger: .daily([.init(hour: 9, minute: 0)]), source: nil, steps: [],
+        name: "毎朝の PR 報告", trigger: cron("0 9 * * *"), source: nil, steps: [],
         sink: .taskCandidates),
       paused: false, createdAt: boardCreated, lastFetched: [], reviewAll: false,
       lastRunAt: automationAt(9, 0), runs: runs)

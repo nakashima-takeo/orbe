@@ -192,7 +192,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     showFirstRunFlow()  // 初回言語選択（preferredLanguage 未設定時）→ 既存 Onboarding（各 CLI へ導入）
     cleanupLegacyCompletionIfNeeded()  // 旧方式が zshrc へ書いた managed block を一度だけ除去
     wireUpdateUI()  // アップデート提示導線を配線し、ゲートを通れば update サイクル開始
-    automationRunner.start()  // 全自動化を番人へ載せる（過ぎていた回はここで 1 回だけ走る）
+    automationRunner.start()  // 全自動化を番人へ載せる（過ぎていた間隔の回はここで 1 回だけ走る）
     waitConditions.start()
     window.center()
   }

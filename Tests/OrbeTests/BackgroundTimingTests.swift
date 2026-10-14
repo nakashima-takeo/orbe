@@ -4,8 +4,9 @@ import XCTest
 
 /// 次の時刻の規則（「数え始めより後の最初の回」1 つ）と値の検証。番人も使い手の画面（「次は 7 分後」）もこの関数を読む。
 ///
-/// 壊れると何が起きるか。スリープ明けに過ぎた回の数だけ走る、または 1 回も走らない。毎日の時刻がタイムゾーンや夏時間で
-/// ずれる。期限を過ぎた待ちが最後の確認を走らせてから外れる。秒単位の間隔で外部のサービスを叩き続ける。
+/// 壊れると何が起きるか。スリープ明けに過ぎた回の数だけ走る、または 1 回も走らない。cron の予定が眠っていた間に過ぎた時刻を
+/// 起きてから回す、または予約の発火で回るべき回を飛ばす。cron の時刻がタイムゾーン・夏時間・利用者の暦法でずれる。期限を過ぎた待ちが
+/// 最後の確認を走らせてから外れる。秒単位の間隔で外部のサービスを叩き続ける。
 final class BackgroundTimingTests: OrbeTestCase {
   private func calendar(_ zone: String) throws -> Calendar {
     var calendar = Calendar(identifier: .gregorian)
@@ -22,8 +23,8 @@ final class BackgroundTimingTests: OrbeTestCase {
     return try XCTUnwrap(formatter.date(from: text))
   }
 
-  private func daily(_ times: (Int, Int)...) -> BackgroundTiming {
-    .daily(Set(times.map { BackgroundTimeOfDay(hour: $0.0, minute: $0.1) }))
+  private func cron(_ expression: String) throws -> BackgroundTiming {
+    .cron(try BackgroundCron(expression))
   }
 
   // MARK: - 間隔
@@ -58,50 +59,129 @@ final class BackgroundTimingTests: OrbeTestCase {
     XCTAssertEqual(next, .run(now.addingTimeInterval(600)))
   }
 
-  // MARK: - 毎日の時刻
+  // MARK: - cron
 
-  func testDailyPicksTheFirstTimeAfterAnchor() throws {
+  func testCronPicksTheFirstMatchAfterAnchor() throws {
     let tokyo = try calendar("Asia/Tokyo")
     let anchor = try date(tokyo, "2026-10-10 10:00")
 
-    let next = daily((9, 0), (13, 0)).next(
+    let next = try cron("0 9,13 * * *").next(
       after: anchor, deadline: nil, now: anchor, calendar: tokyo)
 
     XCTAssertEqual(next, .run(try date(tokyo, "2026-10-10 13:00")))
   }
 
   /// 数え始めちょうどの時刻は含めない（走った回をもう 1 度走らせない）。
-  func testDailyIsStrictlyAfterAnchor() throws {
+  func testCronIsStrictlyAfterAnchor() throws {
     let tokyo = try calendar("Asia/Tokyo")
     let anchor = try date(tokyo, "2026-10-10 13:00")
 
-    let next = daily((9, 0), (13, 0)).next(
+    let next = try cron("0 9,13 * * *").next(
       after: anchor, deadline: nil, now: anchor, calendar: tokyo)
 
     XCTAssertEqual(next, .run(try date(tokyo, "2026-10-11 09:00")))
   }
 
-  /// 毎日の時刻は、その時点のタイムゾーンで数える。
-  func testDailyCountsInTheGivenTimeZone() throws {
+  /// 日・曜日・月・時・分はすべて「かつ」。金曜 9:00 の次の平日 9:00 は月曜。
+  func testCronWeekdaysSkipTheWeekend() throws {
+    let tokyo = try calendar("Asia/Tokyo")
+    let anchor = try date(tokyo, "2026-10-09 09:00")
+
+    let next = try cron("0 9 * * 1-5").next(
+      after: anchor, deadline: nil, now: anchor, calendar: tokyo)
+
+    XCTAssertEqual(next, .run(try date(tokyo, "2026-10-12 09:00")))
+  }
+
+  func testCronWithinARangeOfHours() throws {
+    let tokyo = try calendar("Asia/Tokyo")
+    let expression = try cron("*/10 9-18 * * 1-5")
+
+    let lastOfFriday = try date(tokyo, "2026-10-09 18:50")
+    let mondayMorning = try date(tokyo, "2026-10-12 09:05")
+
+    XCTAssertEqual(
+      expression.next(after: lastOfFriday, deadline: nil, now: lastOfFriday, calendar: tokyo),
+      .run(try date(tokyo, "2026-10-12 09:00")))
+    XCTAssertEqual(
+      expression.next(after: mondayMorning, deadline: nil, now: mondayMorning, calendar: tokyo),
+      .run(try date(tokyo, "2026-10-12 09:10")))
+  }
+
+  /// 該当時刻を過ぎて起きたら（Mac が眠っていた・Orbe が落ちていた）、その回は回さず次の該当時刻を待つ。
+  func testCronDoesNotRunATimePassedBeforeTheCurrentMinute() throws {
+    let tokyo = try calendar("Asia/Tokyo")
+    let anchor = try date(tokyo, "2026-10-09 08:00")
+    let now = try date(tokyo, "2026-10-09 09:01")
+
+    let next = try cron("0 9 * * 1-5").next(
+      after: anchor, deadline: nil, now: now, calendar: tokyo)
+
+    XCTAssertEqual(next, .run(try date(tokyo, "2026-10-12 09:00")))
+  }
+
+  /// 今の分に入っている該当時刻は今の回として返す——予約は該当時刻ちょうどに発火し、数え直す時点の今はわずかに過ぎている。
+  func testCronRunsTheMatchInTheCurrentMinute() throws {
+    let tokyo = try calendar("Asia/Tokyo")
+    let anchor = try date(tokyo, "2026-10-09 08:00")
+    let nine = try date(tokyo, "2026-10-09 09:00")
+
+    let next = try cron("0 9 * * 1-5").next(
+      after: anchor, deadline: nil, now: nine.addingTimeInterval(59), calendar: tokyo)
+
+    XCTAssertEqual(next, .run(nine))
+  }
+
+  /// cron の時刻は、その時点のタイムゾーンで数える。
+  func testCronCountsInTheGivenTimeZone() throws {
     let tokyo = try calendar("Asia/Tokyo")
     let utc = try calendar("UTC")
     let anchor = try date(utc, "2026-10-10 00:00")
 
-    let inTokyo = daily((9, 0)).next(after: anchor, deadline: nil, now: anchor, calendar: tokyo)
-    let inUTC = daily((9, 0)).next(after: anchor, deadline: nil, now: anchor, calendar: utc)
+    let inTokyo = try cron("0 9 * * *").next(
+      after: anchor, deadline: nil, now: anchor, calendar: tokyo)
+    let inUTC = try cron("0 9 * * *").next(after: anchor, deadline: nil, now: anchor, calendar: utc)
 
     XCTAssertEqual(inTokyo, .run(try date(tokyo, "2026-10-11 09:00")))
     XCTAssertEqual(inUTC, .run(try date(utc, "2026-10-10 09:00")))
   }
 
   /// 夏時間で存在しない時刻は、次に存在する時刻へずらす（その日を飛ばさない）。
-  func testDailyTimeInDSTGapMovesToNextValidTime() throws {
+  func testCronTimeInDSTGapMovesToNextValidTime() throws {
     let newYork = try calendar("America/New_York")
     let anchor = try date(newYork, "2026-03-08 00:00")
 
-    let next = daily((2, 30)).next(after: anchor, deadline: nil, now: anchor, calendar: newYork)
+    let next = try cron("30 2 * * *").next(
+      after: anchor, deadline: nil, now: anchor, calendar: newYork)
 
     XCTAssertEqual(next, .run(try date(newYork, "2026-03-08 03:00")))
+  }
+
+  /// 2 月 29 日だけの式は閏年に来る。
+  func testCronOnLeapDayWaitsForTheLeapYear() throws {
+    let utc = try calendar("UTC")
+    let anchor = try date(utc, "2026-03-01 00:00")
+
+    let next = try cron("0 0 29 2 *").next(
+      after: anchor, deadline: nil, now: anchor, calendar: utc)
+
+    XCTAssertEqual(next, .run(try date(utc, "2028-02-29 00:00")))
+  }
+
+  /// 日・月は利用者の暦法に依らず西暦で数え、渡された暦からはタイムゾーンだけを使う。
+  func testCronCountsDaysInTheGregorianCalendarWhateverCalendarIsGiven() throws {
+    let tokyo = try calendar("Asia/Tokyo")
+    var islamic = Calendar(identifier: .islamicUmmAlQura)
+    islamic.timeZone = tokyo.timeZone
+    let anchor = try date(tokyo, "2026-10-14 00:00")
+
+    let first = try cron("0 9 1 * *").next(
+      after: anchor, deadline: nil, now: anchor, calendar: islamic)
+    let thirtyFirst = try cron("0 9 31 * *").next(
+      after: anchor, deadline: nil, now: anchor, calendar: islamic)
+
+    XCTAssertEqual(first, .run(try date(tokyo, "2026-11-01 09:00")))
+    XCTAssertEqual(thirtyFirst, .run(try date(tokyo, "2026-10-31 09:00")))
   }
 
   // MARK: - 期限
@@ -166,19 +246,6 @@ final class BackgroundTimingTests: OrbeTestCase {
       }
     }
     XCTAssertNoThrow(try BackgroundTiming.every(7 * 86400).validate())
-  }
-
-  func testDailyTimesAreValidated() {
-    XCTAssertThrowsError(try BackgroundTiming.daily([]).validate()) {
-      XCTAssertEqual($0 as? BackgroundJobError, .noTimesOfDay)
-    }
-    XCTAssertThrowsError(try daily((24, 0)).validate()) {
-      XCTAssertEqual($0 as? BackgroundJobError, .invalidTimeOfDay)
-    }
-    XCTAssertThrowsError(try daily((9, 60)).validate()) {
-      XCTAssertEqual($0 as? BackgroundJobError, .invalidTimeOfDay)
-    }
-    XCTAssertNoThrow(try daily((0, 0), (23, 59)).validate())
   }
 
   func testCommandJobIsValidated() {

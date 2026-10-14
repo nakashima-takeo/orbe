@@ -71,7 +71,7 @@ extension AutomationStoreTests {
   /// 定義の形は `agent` の省略で claude、モデルは省略のまま往復する。回の記録も種類ごと往復する。
   func testTheAgentSinkAndItsRecordRoundTrip() throws {
     let json =
-      #"{"name": "n", "trigger": {"dailyAt": ["09:00"]}, "steps": [], "sink": {"kind": "agent", "#
+      #"{"name": "n", "trigger": {"cron": "0 9 * * *"}, "steps": [], "sink": {"kind": "agent", "#
       + #""tools": ["Bash(gh search prs:*)"], "request": "投稿して"}}"#
     let definition = try AutomationWire.decoder.decode(
       AutomationDefinition.self, from: Data(json.utf8))
