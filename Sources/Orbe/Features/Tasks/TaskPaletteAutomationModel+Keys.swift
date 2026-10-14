@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// 提案タブのキー。↵（提案の一覧）は入力欄の `onSubmit`、esc（提案の一覧）と ⇥・⇧⇥ は画面のモデルが受ける。中身のキーは
-/// `AutomationHand.stroke` に任せる（ボードと同じ）。取り消せない操作（捨てる・削除）・タスクにして開く・ブラウザで開くは押した瞬間だけを
-/// 操作にし、押し続けたキーリピートは捨てる。
+/// 提案タブのキー。↵（提案の一覧）は入力欄の `onSubmit`、esc（提案の一覧）は画面のモデルが、⇥・⇧⇥ はカードの入口が
+/// 受ける。中身のキーは `AutomationHand.stroke` に任せる（ボードと同じ）。取り消せない操作（捨てる・削除）・タスクにして
+/// 開く・ブラウザで開くは押した瞬間だけを操作にし、押し続けたキーリピートは捨てる。
 extension TaskPaletteAutomationModel {
   /// 入力欄（提案の一覧）。捨てるは ⌘⌫ で、入力欄が空のときだけ効く（文字があれば行頭まで消す）——焦点が絞り込み欄に
   /// あるので、単キーにすると絞り込みのつもりで打った 1 文字で提案が消える。
@@ -34,8 +34,8 @@ extension TaskPaletteAutomationModel {
     return .handled
   }
 
-  /// カードの器（棚と中身）。⇥・⇧⇥ は握るだけ（焦点を逃がさず、タブも替えない）。
-  func handleCardKey(_ press: KeyPress) -> KeyPress.Result {
+  /// 棚と中身。
+  func handlePlaceKey(_ press: KeyPress) -> KeyPress.Result {
     switch place {
     case .proposals: return .ignored
     case .shelf: return handleShelfKey(press)
@@ -49,7 +49,6 @@ extension TaskPaletteAutomationModel {
       let direction = press.key == .upArrow ? -1 : 1
       if press.modifiers.contains(.command) { jumpShelf(direction) } else { moveShelf(direction) }
     case .rightArrow, .return, .escape: showProposals()
-    case .tab, .backtab: break
     default: return .ignored
     }
     return .handled
@@ -62,7 +61,7 @@ extension TaskPaletteAutomationModel {
     }
     switch press.key {
     case .leftArrow, .escape: showProposals()
-    case .return, .tab, .backtab: break
+    case .return: break
     default: return .ignored
     }
     return .handled

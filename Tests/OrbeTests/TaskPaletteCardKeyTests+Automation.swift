@@ -124,8 +124,6 @@ extension TaskPaletteCardKeyTests {
 
     arrow(Key.left, to: window)
     XCTAssertEqual(model.automation.place, .shelf)
-    send(Key.tab, "\u{19}", .shift, to: window)
-    XCTAssertEqual(model.visibleTab, .automation, "棚では ⇧⇥ でタブを替えない")
     arrow(Key.down, to: window)
     XCTAssertEqual(model.automation.shelfList.selectedID, .automation(1))
     arrow(Key.right, to: window)
@@ -142,6 +140,28 @@ extension TaskPaletteCardKeyTests {
     type("a", into: window)
     arrow(Key.left, to: window)
     XCTAssertEqual(model.automation.place, .proposals, "文字があるときの ← は文字の間を動く")
+  }
+
+  /// 棚と中身でも ⇥・⇧⇥ でタブを巡り、戻ると居場所が残る。移った先では入力欄がキーを受ける。
+  func testTabOnTheShelfAndContentsCyclesTheTabsAndKeepsThePlace() {
+    let model = automationModel()
+    let window = mount(model)
+    arrow(Key.left, to: window)
+
+    send(Key.tab, "\u{19}", .shift, to: window)
+    XCTAssertEqual(model.tab, .github)
+    send(Key.tab, "\t", to: window)
+    XCTAssertEqual(model.tab, .automation)
+    XCTAssertEqual(model.automation.place, .shelf, "戻ると棚に居る")
+
+    arrow(Key.down, to: window)
+    arrow(Key.right, to: window)
+    arrow(Key.right, to: window)
+    XCTAssertEqual(model.automation.place, .contents)
+    send(Key.tab, "\t", to: window)
+    XCTAssertEqual(model.tab, .tasks)
+    type("x", into: window)
+    XCTAssertEqual(model.query, "x", "移った先の入力欄が続く打鍵を受ける")
   }
 
   /// 中身の ↵ は今すぐ実行、⌘⌫ は確認なしで受信を消して提案の一覧へ戻る。どちらも提案には触れない。

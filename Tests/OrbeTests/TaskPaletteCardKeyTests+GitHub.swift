@@ -112,6 +112,26 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.githubFilters, [])
   }
 
+  /// 右の欄の項目でも ⇥ で次のタブへ移る。期限を打っている間は何もせず、打った文字が残る。
+  func testTabInThePaneMovesToTheNextTabButNotWhileTypingTheDue() {
+    let model = GitHub.model([], issues: [GitHub.issue(5)])
+    let window = mount(model)
+    arrow(Key.right, to: window)
+    arrow(Key.down, to: window)
+    arrow(Key.down, to: window)
+    send(Key.enter, "\r", to: window)
+    type("10/6", into: window)
+
+    send(Key.tab, "\t", to: window)
+    XCTAssertEqual(model.tab, .github)
+    XCTAssertEqual(model.draft?.text, "10/6")
+
+    send(Key.escape, "\u{1B}", to: window)
+    XCTAssertEqual(model.area, .pane(.due), "前提: 期限の項目に居る")
+    send(Key.tab, "\t", to: window)
+    XCTAssertEqual(model.tab, .automation)
+  }
+
   /// → で右の欄へ入り、space でチェックを切り替え、← で一覧へ戻る。
   func testArrowKeysEnterAndLeaveThePaneAndSpaceTogglesTheCheck() {
     let model = GitHub.model([], issues: [GitHub.issue(5)])

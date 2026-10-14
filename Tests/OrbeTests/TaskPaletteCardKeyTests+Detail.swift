@@ -209,4 +209,36 @@ extension TaskPaletteCardKeyTests {
     send(Key.escape, "\u{1B}", to: window)
     XCTAssertEqual(model.store.tasks.first { $0.id == 3 }?.description, "12", "同じ編集が続き、改行は入らない")
   }
+
+  /// 右の欄の項目でも ⇥ で次のタブへ移り、移った先では入力欄が続く打鍵を受ける。
+  func testTabInTheDetailMovesToTheNextTab() {
+    let model = model()
+    let window = mount(model)
+    enterDetail(model, at: .status, in: window)
+
+    send(Key.tab, "\t", to: window)
+
+    XCTAssertEqual(model.tab, .github)
+    type("x", into: window)
+    XCTAssertEqual(model.query, "x")
+  }
+
+  /// 編集中の ⇥・⇧⇥ は何もしない——タブは変わらず、同じ編集が続き、詳細の欄にもタブ文字は入らない。
+  func testTabWhileEditingKeepsTheTabAndTheEdit() {
+    let model = model()
+    let window = mount(model)
+
+    for field in [TaskDetailField.waiting, .description] {
+      enterDetail(model, at: field, in: window)
+      send(Key.enter, "\r", to: window)
+      type("a", into: window)
+      send(Key.tab, "\t", to: window)
+      send(Key.tab, "\u{19}", .shift, to: window)
+      type("b", into: window)
+
+      XCTAssertEqual(model.tab, .tasks, "\(field)")
+      XCTAssertEqual(model.draft?.text, "ab", "\(field)")
+      send(Key.escape, "\u{1B}", to: window)
+    }
+  }
 }
