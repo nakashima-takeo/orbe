@@ -35,33 +35,36 @@ struct TaskPaletteAutomationAction: View {
 /// 提案タブのフッターの右のヒント。
 struct TaskPaletteAutomationHints: View {
   @Bindable var model: TaskPaletteAutomationModel
+  let cyclesTabs: Bool
   @Environment(\.localization) private var l10n
 
   var body: some View {
     switch model.place {
     case .proposals:
-      if model.selectedProposal != nil {
-        PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteMakeTaskOpen))
-        PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteAutomationDismiss))
-        PaletteKeyHint(key: "⌘O", label: l10n.string(.taskPaletteHintOpenInBrowser))
+      TaskPaletteHintRow(cyclesTabs: cyclesTabs, escape: .taskPaletteHintClose) {
+        if model.selectedProposal != nil {
+          PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteMakeTaskOpen))
+          PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteAutomationDismiss))
+          PaletteKeyHint(key: "⌘O", label: l10n.string(.taskPaletteHintOpenInBrowser))
+        }
+        if model.selectedAutomation != nil {
+          PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteAutomationContents))
+        }
+        PaletteKeyHint(key: "←", label: l10n.string(.taskPaletteAutomationHintShelf))
       }
-      if model.selectedAutomation != nil {
-        PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteAutomationContents))
-      }
-      PaletteKeyHint(key: "←", label: l10n.string(.taskPaletteAutomationHintShelf))
-      PaletteKeyHint(key: "⇥", label: l10n.string(.taskPaletteHintTab))
-      PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintClose))
     case .shelf:
-      PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteAutomationHintPick))
-      PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteAutomationHintBack))
+      TaskPaletteHintRow(cyclesTabs: cyclesTabs, escape: .taskPaletteAutomationHintBack) {
+        PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteAutomationHintPick))
+      }
     case .contents:
-      if let automation = model.selectedAutomation {
-        ForEach([AutomationHand.Operation.togglePause, .delete], id: \.self) { operation in
-          PaletteKeyHint(
-            key: operation.key, label: l10n.string(operation.title(paused: automation.paused)))
+      TaskPaletteHintRow(cyclesTabs: cyclesTabs, escape: .taskPaletteAutomationHintBack) {
+        if let automation = model.selectedAutomation {
+          ForEach([AutomationHand.Operation.togglePause, .delete], id: \.self) { operation in
+            PaletteKeyHint(
+              key: operation.key, label: l10n.string(operation.title(paused: automation.paused)))
+          }
         }
       }
-      PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteAutomationHintBack))
     }
   }
 }
