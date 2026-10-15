@@ -71,44 +71,37 @@ extension GitRepo {
   /// HEAD のツリーにある blob の OID（相対パス → OID。無いもの・ファイルでないもの（submodule・ディレクトリ）は含まない。
   /// 初回コミット前は空）。空の問い合わせは git を起こさない。git が失敗したら nil。
   ///
-  /// 名前は `HEAD:<パス>` で cat-file に問う——pathspec を通らないので、パスが magic・glob に解釈されない。答えは問いの順に
-  /// 1 行ずつで、無ければ `<名前> missing`。パスは改行を含みうるので、行で割らず問いの名前で前から読む。
+  /// パスは `indexEntries` と同じく `:(literal)` を前置した pathspec で argv に渡す——macOS の git は argv のパスを
+  /// `core.precomposeunicode` で NFC に揃えて照合するので、ディスク上の NFD の綴りでも index と同じく引ける。
+  /// 初回コミット前は HEAD が無くて失敗するので、そのときは HEAD が無いことを確かめて空にする。
   func headEntries(relativePaths: [String], completion: @escaping ([String: String]?) -> Void) {
     guard !relativePaths.isEmpty else {
       completion([:])
       return
     }
-    let names = relativePaths.map { "HEAD:" + $0 }
     runner.run(
-      ["cat-file", "-z", "--batch-check=%(objectname) %(objecttype)"], cwd: root,
-      stdin: Data(names.map { $0 + "\0" }.joined().utf8)
-    ) { output in
-      guard output.isSuccess else { return completion(nil) }
-      completion(Self.blobAnswers(output.stdout, names: names, paths: relativePaths))
-    }
-  }
-
-  /// `cat-file --batch-check=%(objectname) %(objecttype)` の答えを問いの順に読む（blob だけ）。形が崩れていれば nil。
-  static func blobAnswers(_ data: Data, names: [String], paths: [String]) -> [String: String]? {
-    let bytes = [UInt8](data)
-    var at = 0
-    var entries: [String: String] = [:]
-    for (name, path) in zip(names, paths) {
-      let missing = Array((name + " missing\n").utf8)
-      if bytes.count - at >= missing.count, bytes[at..<(at + missing.count)].elementsEqual(missing)
-      {
-        at += missing.count
-        continue
+      ["ls-tree", "-z", "--full-tree", "HEAD", "--"] + relativePaths.map { ":(literal)" + $0 },
+      cwd: root
+    ) { [runner, root] output in
+      guard output.isSuccess else {
+        // `rev-parse -q --verify` は、HEAD が無い（初回コミット前）ときだけ黙って 1 で終わる。
+        runner.run(["rev-parse", "-q", "--verify", "HEAD"], cwd: root) { probe in
+          completion(probe.exited && probe.status == 1 ? [:] : nil)
+        }
+        return
       }
-      guard let end = bytes[at...].firstIndex(of: 0x0A),
-        let line = String(bytes: bytes[at..<end], encoding: .utf8)
-      else { return nil }
-      at = end + 1
-      let fields = line.split(separator: " ")
-      guard fields.count == 2, fields[0].allSatisfy(\.isHexDigit) else { return nil }
-      if fields[1] == "blob" { entries[path] = String(fields[0]) }
+      var entries: [String: String] = [:]
+      for record in output.stdout.split(separator: 0) {
+        // `<mode> <type> <oid>\t<path>`
+        guard let line = String(bytes: record, encoding: .utf8),
+          let tab = line.firstIndex(of: "\t")
+        else { continue }
+        let fields = line[..<tab].split(separator: " ")
+        guard fields.count == 3, fields[1] == "blob" else { continue }
+        entries[String(line[line.index(after: tab)...])] = String(fields[2])
+      }
+      completion(entries)
     }
-    return entries
   }
 
   /// blob を作業ツリーに出したときの中身——`relativePath` の属性で smudge filter と eol 変換を掛けた
