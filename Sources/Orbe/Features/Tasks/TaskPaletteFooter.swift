@@ -236,7 +236,7 @@ private struct TaskPaletteGitHubHints: View {
   @Bindable var model: TaskPaletteModel
   @Environment(\.localization) private var l10n
 
-  @ViewBuilder var body: some View {
+  var body: some View {
     if case .pane(let stop) = model.area {
       TaskPaletteHintRow(cyclesTabs: model.cyclesTabs, escape: .taskPaletteHintBack) {
         // 期限の ↵ は期限を打つ（左の 1 行が言う）。
