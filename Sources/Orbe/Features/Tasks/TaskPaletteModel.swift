@@ -85,6 +85,8 @@ struct TaskPaletteTaskList {
   var draft: TaskEditDraft? {
     didSet { if draft?.target != oldValue?.target { focus() } }
   }
+  /// 押しているキーを押し始めたときの焦点の宛先。書くのはキーの入口（`handleKey`）だけ。
+  @ObservationIgnored var keyDownTarget: TaskPaletteFocusTarget?
   /// 書くのはモデル（拡張を含む）だけ。
   var error: TaskPaletteError?
   /// 画面を開いている間に入力欄から最後に足したタスク（右の欄の見出し「タスク · 今 ⌘⇧X から足した」）。書くのは

@@ -12,6 +12,14 @@ extension TaskPaletteModel {
       if cyclesTabs { setTab(press.key == .tab ? tab.next : tab.previous) }
       return .handled
     }
+    // 入口が 1 つなので、押し始めを受けたここへキーリピートも届き続ける。押し始めと違う場所に届いたリピートは場所の
+    // キーにせず、焦点の持ち主（編集欄なら文字入力）へ流す（esc を押し続けて一段より深く抜けない・→ を押し続けて
+    // 棚から中身まで入らない。詳細の ↵ を押し続けると、編集を始めた後のリピートは改行になる）。
+    if press.phase == .down {
+      keyDownTarget = focusTarget
+    } else if keyDownTarget != focusTarget {
+      return .ignored
+    }
     switch focusTarget {
     case .field: return handleFieldKey(press)
     case .card: return handlePlaceKey(press)
