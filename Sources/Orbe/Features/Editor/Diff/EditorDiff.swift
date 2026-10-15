@@ -311,7 +311,7 @@ final class EditorDiff: RootFilesObserver {
     guard oldSource != .some(head.text) || newSource != .some(index.text) else { return .ready }
     let request = stagedRequest
     let (oldText, newText, limit) = (head.text, index.text, Self.hunkLimit)
-    Task.detached(priority: .userInitiated) {
+    Task.detached(priority: .userInitiated) { [weak self] in
       let (old, new) = (TextRope(oldText ?? ""), TextRope(newText ?? ""))
       let hunks =
         oldText != nil && newText != nil
