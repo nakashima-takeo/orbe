@@ -22,26 +22,19 @@ public final class RevisionDocument {
   public var onFocusChange: ((Bool) -> Void)?
   /// 結んだ面の見えている範囲が変わった。
   public var onViewportChange: (() -> Void)?
-  /// 結んだ面の選択が変わった。
-  public var onSelectionChange: (() -> Void)?
 
   private let inbox = AnalysisInbox()
   private var reception: SyntaxReception
-  private let log = EditLog()
 
   /// 本文 `text` の、名前 `name` から言語を決めた文書。構文の裏の仕事はここで起きる（待たない）。
-  public convenience init(text: String, name: URL, registry: LanguageRegistry) {
-    self.init(text: text, name: name, registry: registry, quietDelay: SyntaxWorker.quietDelay)
-  }
-
-  init(text: String, name: URL, registry: LanguageRegistry, quietDelay: DispatchTimeInterval) {
+  public init(text: String, name: URL, registry: LanguageRegistry) {
     language = SyntaxLanguage.detect(url: name)
     let rope = TextRope(text)
     self.text = rope
     roles = RoleRuns(length: rope.length)
     reception = SyntaxReception(
       text: rope, version: 0, language: language, registry: registry, inbox: inbox,
-      quietDelay: quietDelay)
+      quietDelay: SyntaxWorker.quietDelay)
     inbox.setWake { [weak self] in self?.receive() }
   }
 
@@ -103,7 +96,7 @@ public final class RevisionDocument {
 
   private func receive() {
     let contents = inbox.take()
-    let changed = reception.receive(contents.syntax, roles: &roles) { log.edits(since: $0) }
+    let changed = reception.receive(contents.syntax, roles: &roles) { $0 == 0 ? [] : nil }
     guard !changed.isEmpty else { return }
     surface?.rolesDidChange(changed)
     onRolesChange?(changed)
@@ -125,9 +118,7 @@ extension RevisionDocument: TextSurfaceDelegate {
     onViewportChange?()
   }
 
-  public func surfaceDidChangeSelection(_ surface: any TextSurface) {
-    onSelectionChange?()
-  }
+  public func surfaceDidChangeSelection(_ surface: any TextSurface) {}
 
   public func surfaceContent(_ surface: any TextSurface) -> SurfaceContent {
     rowSourceContent

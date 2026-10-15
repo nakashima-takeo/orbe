@@ -80,7 +80,7 @@ public enum LineDiff {
 
   /// 編集の数が `maximum` 以下か。前進だけの Myers（対角線ごとに届いた最も遠い位置だけを持つ）で、編集の数を 1 ずつ
   /// 増やしながら両端の終わりに届くまで進め、`maximum` を越えたら打ち切る。時間は O((N+M)·maximum)、記憶は O(maximum)。
-  static func withinEdits(_ old: [Int], _ new: [Int], _ maximum: Int) -> Bool {
+  private static func withinEdits(_ old: [Int], _ new: [Int], _ maximum: Int) -> Bool {
     let (n, m) = (old.count, new.count)
     let bound = min(maximum, n + m)
     let offset = bound + 1
@@ -152,15 +152,6 @@ public enum LineDiff {
   private struct Line: Hashable {
     let body: ArraySlice<UInt16>
     let terminated: Bool
-
-    static func == (lhs: Line, rhs: Line) -> Bool {
-      lhs.terminated == rhs.terminated && lhs.body.elementsEqual(rhs.body)
-    }
-
-    func hash(into hasher: inout Hasher) {
-      hasher.combine(terminated)
-      for unit in body { hasher.combine(unit) }
-    }
   }
 
   private static func lines(of units: ContiguousArray<UInt16>) -> [Line] {

@@ -41,12 +41,11 @@ final class RevisionDocumentTests: XCTestCase {
     XCTAssertTrue(document.roles.roles(in: NSRange(location: 0, length: 6)).isEmpty)
   }
 
-  /// 面が無くても、渡した見えている範囲を先に色付けする（打鍵の止むのを待つ見えていない範囲より前）。
+  /// 面が無くても、渡した見えている範囲を先に色付けする。
   func testVisibleLinesAreColoredFirstWithoutASurface() throws {
     let lines = (0..<20_000).map { "let value\($0) = \($0)" }.joined(separator: "\n")
     let document = RevisionDocument(
-      text: lines, name: URL(fileURLWithPath: "/x/big.swift"), registry: registry,
-      quietDelay: .seconds(60))
+      text: lines, name: URL(fileURLWithPath: "/x/big.swift"), registry: registry)
     document.setVisible(lines: 15_000...15_040)
     let start = document.text.lineStart(15_020)
     let deadline = Date().addingTimeInterval(30)

@@ -30,7 +30,7 @@ final class EditorDocumentBackgroundTests: XCTestCase {
   // MARK: - 古い版の結果
 
   /// 行差分の上限は文書が受け取る値で、変えると裏へ頼み直し、既定（ガター）では 1 区間に畳む大きな書き換えも行ごとの区間に
-  /// なる。上限を戻せば畳んだ区間に戻る。ハンクが今の底に対する結果かは、底を置き直したときだけ届くまで偽になる。
+  /// なる。上限を戻せば畳んだ区間に戻る。ハンクの底（`hunksBase`）は、底を置き直したときだけ、届くまで前の底のまま。
   func testTheHunkLimitIsTheDocumentsAndRequestsAgain() throws {
     let n = LineDiff.maximumComparedLines
     let old = (0..<n).map { "old \($0)\n" }.joined()
