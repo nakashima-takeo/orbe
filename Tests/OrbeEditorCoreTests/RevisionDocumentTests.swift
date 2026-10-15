@@ -5,14 +5,15 @@ import os
 
 @testable import OrbeEditorCore
 
-/// 版の本文を読むだけで持つ文書——名前から言語を決めて構文の色を裏で作り、結んだ面と差し込みの出どころの読み手へ知らせ、
+/// 版の本文を読むだけで持つ文書——名前から言語を決めて構文の色を裏で作って main へ届け、結んだ面と差し込みの出どころの読み手へ知らせ、
 /// 面は読むだけにし、閉じたら大きな部品を裏で手放す。壊れると、diff の古い側が素の字のまま・遅れて色が付いても削除行が
 /// 描き直されない・閉じると main が止まる。
 @MainActor
 final class RevisionDocumentTests: XCTestCase {
   private let registry = LanguageRegistry(queriesRoot: Queries.root)
 
-  /// 名前の拡張子で言語を決め、写しの役割の並びに構文の色が付く。結んだ面は読むだけになり、写しを引き、役割の変化を受ける。
+  /// 名前の拡張子で言語を決め、写しの役割の並びに構文の色が付く——待たなくても、裏で作った色は main に届いて載る。結んだ面は
+  /// 読むだけになり、写しを引き、役割の変化を受ける。
   func testColorsTheTextAndNotifiesTheAttachedSurface() throws {
     let document = RevisionDocument(
       text: "let a = 1\nfunc f() {}\n", name: URL(fileURLWithPath: "/x/a.swift"),
@@ -23,7 +24,11 @@ final class RevisionDocumentTests: XCTestCase {
     document.onRolesChange = { notified.append($0) }
     document.attach(surface)
     XCTAssertFalse(surface.isEditable, "結んだ面は読むだけ")
-    XCTAssertTrue(document.waitUntilCaughtUp(timeout: 30))
+    // 追いつくのを待つ口（自分で受け取る）を使わず、main を回すだけで届くのを待つ。
+    let deadline = Date().addingTimeInterval(10)
+    while !surface.texts(of: .keyword).contains("func"), Date() < deadline {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    }
     let keywords = surface.texts(of: .keyword)
     XCTAssertTrue(keywords.contains("let") && keywords.contains("func"), "\(keywords)")
     XCTAssertFalse(surface.changedRoles.isEmpty, "結んだ面へ役割の変化を知らせる")
