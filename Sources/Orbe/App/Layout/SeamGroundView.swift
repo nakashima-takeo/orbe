@@ -1,6 +1,6 @@
 import AppKit
 
-/// 継ぎ目の地で自分の bounds を塗る view。器が両面の間の列（形が移る途中に開く幅 0〜取っ手の幅）に置き、取っ手の上下が
+/// 継ぎ目の地を層の背景色に持つ view。器が両面の間の列（形が移る途中に開く幅 0〜取っ手の幅）に置き、取っ手の上下が
 /// 窓の奥まで透けないようにする。当たりは取らない。
 final class SeamGroundView: NSView {
   /// 透過設定。実効不透明度の変化を観測して描き直す。
@@ -24,11 +24,6 @@ final class SeamGroundView: NSView {
     needsDisplay = true
   }
 
-  override func setFrameSize(_ newSize: NSSize) {
-    super.setFrameSize(newSize)
-    needsDisplay = true
-  }
-
   private func observeTranslucency() {
     guard let translucency else { return }
     withObservationTracking {
@@ -41,9 +36,12 @@ final class SeamGroundView: NSView {
     }
   }
 
-  override func draw(_ dirtyRect: NSRect) {
-    Self.ground(veil: translucency?.effectiveOpacity ?? 1).setFill()
-    bounds.fill(using: .sourceOver)
+  override var wantsUpdateLayer: Bool { true }
+
+  override func updateLayer() {
+    effectiveAppearance.performAsCurrentDrawingAppearance {
+      layer?.backgroundColor = Self.ground(veil: translucency?.effectiveOpacity ?? 1).cgColor
+    }
   }
 
   /// 継ぎ目の地: veil（`bgBase` × 透過の実効不透明度）に端末のキー色 α `faceSeamGround` を重ね、1 色に合成した色。
