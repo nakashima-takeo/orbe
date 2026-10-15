@@ -38,16 +38,13 @@ extension EditorDiff {
     revealFirstChange(on: surface)
   }
 
-  /// 作り直した新しい側の面で、前の面の先頭の行を先頭に見せる（見えている高さより高い区間は先頭の行が上端に来る）。
+  /// 作り直した新しい側の面で、前の面の先頭の行を先頭に見せる。
   private func carryTop(to surface: any TextSurface) {
-    guard let (row, lines) = carriedTop, let text = newRevision?.text else { return }
+    guard let row = carriedTop, let text = newRevision?.text else { return }
     carriedTop = nil
     revealed = true
-    let from = min(row, text.lineCount - 1)
-    let to = min(from + max(lines, 1), text.lineCount - 1)
     surface.reveal(
-      NSRange(location: text.lineStart(from), length: text.lineEnd(to) - text.lineStart(from)),
-      policy: .center)
+      NSRange(location: text.lineStart(min(row, text.lineCount - 1)), length: 0), policy: .top)
   }
 
   /// 今の古い側と新しい側の本文に対して正しいと分かっている行差分と、新しい側の大きさ。作業ツリー diff の新しい側の文書は

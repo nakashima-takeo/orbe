@@ -56,8 +56,8 @@ final class EditorDiff: RootFilesObserver {
   var revealed = false
   /// 面を置き換えた・外した（pane が本体を置き直す）。
   var surfacesChanged = false
-  /// 新しい側の版の面を作り直したとき、新しい面で先頭に見せる行と、見えていた行の数。
-  var carriedTop: (row: Int, lines: Int)?
+  /// 新しい側の版の面を作り直したとき、新しい面で先頭に見せる行。
+  var carriedTop: Int?
 
   /// 作業ツリー diff は `documents`（セッション）から新しい側の文書を引く。テキスト面を作れなければ
   /// `EditorSurfaceError.noMetalDevice` で失敗する。
@@ -355,11 +355,7 @@ final class EditorDiff: RootFilesObserver {
     guard newSource != .some(text) else { return }
     newSource = .some(text)
     if let previous = newRevisionSurface, let before = newRevision {
-      let viewport = previous.viewport
-      carriedTop = (
-        before.text.row(containing: viewport.firstVisible),
-        Int(viewport.visibleLines.rounded(.up)) + 1
-      )
+      carriedTop = before.text.row(containing: previous.viewport.firstVisible)
       dropOldSurface()
       surfacesChanged = true
     }
