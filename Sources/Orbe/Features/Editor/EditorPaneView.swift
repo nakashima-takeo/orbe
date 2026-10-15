@@ -119,7 +119,7 @@ final class EditorPaneView: NSView {
 
   override var isFlipped: Bool { true }
 
-  /// 窓の環境（透過・言語・フォント割り当て・サイドバーの状態）を面へ配る。別 root は Environment を継承
+  /// 窓の環境（透過・言語・フォント割り当て・サイドバーの状態・diff の見せ方）を面へ配る。別 root は Environment を継承
   /// しないので root を作り直す。
   func configure(
     translucency: ChromeTranslucency, localization: LocalizationStore,

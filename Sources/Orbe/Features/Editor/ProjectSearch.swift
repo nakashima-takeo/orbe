@@ -64,7 +64,7 @@ final class ProjectSearch {
 
   /// 根（正規形）。
   @ObservationIgnored private(set) var root: String
-  /// 範囲に入りうる開いている文書（タブのセッションの列）。
+  /// 範囲に入りうる開いている文書（連のセッションの列）。
   @ObservationIgnored var documents: () -> [EditorDocument] = { [] }
   /// 一致を開く。呼ぶのは出口（`open(_:_:)`）だけ。
   @ObservationIgnored var onOpen: (RowID, Opening) -> Void = { _, _ in }

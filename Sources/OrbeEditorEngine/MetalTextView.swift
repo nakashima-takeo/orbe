@@ -13,7 +13,7 @@ import QuartzCore
 /// 場の編集係の IME の入口へ
 /// （→ `MetalTextView+Input`）、届いた標準のセレクタは編集のコマンドへ写す（→ `MetalTextView+Commands`）。マウスは
 /// `MouseSelection` が持ち、変換中はまず IME へ渡す。クリップボード・サービス・右クリックは `MetalTextView+Pasteboard`、
-/// ドラッグ＆ドロップは `MetalTextView+Drag`。
+/// ドラッグ＆ドロップは `MetalTextView+Drag`、ポインタの形とホバーは `MetalTextView+Pointer`。
 final class MetalTextView: TextSurfaceInputView {
   weak var surface: MetalTextSurface? {
     didSet {
