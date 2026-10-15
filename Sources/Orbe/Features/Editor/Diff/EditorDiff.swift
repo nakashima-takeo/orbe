@@ -342,8 +342,8 @@ final class EditorDiff: RootFilesObserver {
     dropOldSurface()
     let revision = RevisionDocument(text: text ?? "", name: id.url, registry: surfaces.registry)
     revision.onRolesChange = { [weak self] ranges in
-      guard let self, presented == .inline, let surface = newSurface else { return }
-      surface.rowSourceRolesDidChange(ranges)
+      guard let self else { return }
+      (document?.surface ?? newRevisionSurface)?.rowSourceRolesDidChange(ranges)
     }
     revision.onFocusChange = { [weak self] focused in self?.onFocusChange?(focused) }
     old = revision
