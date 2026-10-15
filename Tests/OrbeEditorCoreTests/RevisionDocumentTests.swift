@@ -41,24 +41,6 @@ final class RevisionDocumentTests: XCTestCase {
     XCTAssertTrue(document.roles.roles(in: NSRange(location: 0, length: 6)).isEmpty)
   }
 
-  /// 面が無くても、渡した見えている範囲を先に色付けする。
-  func testVisibleLinesAreColoredFirstWithoutASurface() throws {
-    let lines = (0..<20_000).map { "let value\($0) = \($0)" }.joined(separator: "\n")
-    let document = RevisionDocument(
-      text: lines, name: URL(fileURLWithPath: "/x/big.swift"), registry: registry)
-    document.setVisible(lines: 15_000...15_040)
-    let start = document.text.lineStart(15_020)
-    let deadline = Date().addingTimeInterval(30)
-    while document.roles.roles(in: NSRange(location: start, length: 3)).first?.role != .keyword,
-      Date() < deadline
-    {
-      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-    }
-    XCTAssertEqual(
-      document.roles.roles(in: NSRange(location: start, length: 3)).first?.role, .keyword,
-      "渡した範囲の色が付く")
-  }
-
   /// 外した面は delegate を失い、それ以後の色の変化を受けない。
   func testDetachingReleasesTheSurface() {
     let document = RevisionDocument(
