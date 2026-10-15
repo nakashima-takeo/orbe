@@ -154,6 +154,25 @@ extension TaskPaletteCardKeyTests {
     XCTAssertNil(model.draft)
   }
 
+  /// 編集中に esc を押し続けても、押し始めの esc で編集を終えて項目に留まる——続くリピートで一覧へ抜けたり画面を
+  /// 閉じたりしない。
+  func testEscapeHeldWhileEditingOnlyEndsTheEdit() {
+    let model = model()
+    var dismissed = false
+    model.onDismiss = { dismissed = true }
+    let window = mount(model)
+    enterDetail(model, at: .waiting, in: window)
+    send(Key.enter, "\r", to: window)
+
+    send(Key.escape, "\u{1B}", to: window)
+    send(Key.escape, "\u{1B}", repeating: true, to: window)
+    send(Key.escape, "\u{1B}", repeating: true, to: window)
+
+    XCTAssertNil(model.draft)
+    XCTAssertEqual(model.area, .detail(.field(.waiting)))
+    XCTAssertFalse(dismissed)
+  }
+
   /// ⌘↵ は 1 行の項目の確定のキーなので、文字の項目（編集していない状態）で押しても編集を始めない。そのタスクの
   /// agent を開くキーとして働く。
   func testCommandEnterOnATextFieldOpensTheAgentInsteadOfEditing() {
