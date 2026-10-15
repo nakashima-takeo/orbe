@@ -83,32 +83,13 @@ final class EditorDiff: RootFilesObserver {
     return document?.surface ?? newRevisionSurface
   }
 
-  /// 作業ツリーの姿を読み直す——在るか・シンボリックリンクか・UTF-8 か。文書として読めれば新しい側はその文書（`documents`
-  /// が実体ごとに 1 つ持つ。開いていればそれ）。文書が替われば、前の文書をファイルタブの見え方に戻して手放す。
-  /// `throwing` なら、テキスト面を作れないことを投げる（開くとき）。
+  /// 作業ツリーの姿を読み直し、新しい側の文書を合わせる。文書が替われば、前の文書をファイルタブの見え方に戻して手放す。
+  /// 今の文書が未保存なら、作業ツリーの姿が変わっても手放さず新しい側のまま——未保存の本文を確認なしに失わない（ファイル
+  /// タブが、消えたファイルの未保存の本文を保つのと同じ）。`throwing` なら、テキスト面を作れないことを投げる（開くとき）。
   private func updateWorkingSide(throwing: Bool) throws {
     workingStale = false
-    let url = id.url
-    let next: WorkingSide
-    if let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) {
-      if attributes[.type] as? FileAttributeType == .typeSymbolicLink {
-        next = .unavailable(.symlink)
-      } else {
-        do {
-          // 開いている文書は読み直さないので、UTF-8 かはファイルから確かめる。
-          _ = try EditorDocument.read(url)
-          next = .document(try documents.open(url.resolvingSymlinksInPath()))
-        } catch EditorSurfaceError.noMetalDevice where throwing {
-          throw EditorSurfaceError.noMetalDevice
-        } catch EditorDocumentError.notUTF8 {
-          next = .unavailable(.notText)
-        } catch {
-          next = .unavailable(.failed)
-        }
-      }
-    } else {
-      next = .missing
-    }
+    if document?.isDirty == true { return }
+    let next = try readWorkingTree(throwing: throwing)
     working = next
     var nextDocument: EditorDocument?
     if case .document(let opened) = next { nextDocument = opened }
@@ -123,6 +104,29 @@ final class EditorDiff: RootFilesObserver {
     guard presented != nil, let nextDocument else { return }
     nextDocument.onHunksChange = { [weak self] in self?.sourcesDidChange() }
     nextDocument.hunkLimit = Self.hunkLimit
+  }
+
+  /// 作業ツリーの姿——在るか・シンボリックリンクか・UTF-8 か。文書として読めればその文書（`documents` が実体ごとに 1 つ
+  /// 持つ。開いていればそれ）。
+  private func readWorkingTree(throwing: Bool) throws -> WorkingSide {
+    let url = id.url
+    guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else {
+      return .missing
+    }
+    if attributes[.type] as? FileAttributeType == .typeSymbolicLink {
+      return .unavailable(.symlink)
+    }
+    do {
+      // 開いている文書は読み直さないので、UTF-8 かはファイルから確かめる。
+      _ = try EditorDocument.read(url)
+      return .document(try documents.open(url.resolvingSymlinksInPath()))
+    } catch EditorSurfaceError.noMetalDevice where throwing {
+      throw EditorSurfaceError.noMetalDevice
+    } catch EditorDocumentError.notUTF8 {
+      return .unavailable(.notText)
+    } catch {
+      return .unavailable(.failed)
+    }
   }
 
   /// HEAD の版を引くパス（ステージ済みの rename なら元のパス）。
