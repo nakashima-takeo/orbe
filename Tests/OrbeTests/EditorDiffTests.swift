@@ -245,6 +245,22 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertTrue(tab.editor.documents.isEmpty)
   }
 
+  /// 未保存の文書を diff タブだけが使っているときに作業ツリーのファイルが消えても、文書は手放さず（閉じれば失われる文書に
+  /// 数えたまま）、diff の新しい側に残る。
+  func testAnUnsavedDocumentHeldOnlyByTheDiffOutlivesTheFile() throws {
+    let (tab, _) = tab()
+    let document = try tab.editor.open(repo.url("a.txt"), as: .pinned)
+    document.surface.responder.perform(Selector(("insertText:")), with: "Z")
+    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    tab.view.editor.shell.requestClose(.document(document.url))
+    waitRows(diff, "変更が出る") { !$0.isEmpty }
+    try FileManager.default.removeItem(at: repo.url("a.txt"))
+    // status は、消えたことの知らせ（diff が作業ツリーを読み直すきっかけ）の後に取り直される。
+    pumpMain(until: { diff.files.status?.entries["a.txt"]?.unstaged == .deleted }, "消えた")
+    XCTAssertTrue(diff.document === document)
+    XCTAssertEqual(tab.unsavedDocuments().count, 1, "閉じれば失われる文書に数える")
+  }
+
   /// 仮のタブの枠は文書と diff で 1 つ——仮で開いた diff は、次に仮で開いた文書に同じ位置で入れ替わる。
   func testTheTemporaryTabSlotIsSharedByDocumentsAndDiffs() throws {
     try repo.write("b.txt", "b\n")

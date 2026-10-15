@@ -97,13 +97,13 @@ extension EditorDiffTests {
   }
 
   /// index が変わってステージ済み diff の新しい側が替わっても（並びの形は同じでも）、面は新しい index の本文を、同じ diff
-  /// を開き直したのと同じ絵で描き、見えていた先頭の行を先頭に保つ。
+  /// を開き直したのと同じ絵で描き、見えていた先頭の行を先頭に保つ（末尾が見えている位置でも）。
   func testAStagedDiffFollowsTheIndexAndKeepsTheTopLine() throws {
     var lines = (0..<200).map { "line \($0)" }
     try repo.write("long.txt", lines.joined(separator: "\n") + "\n")
     XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
     XCTAssertTrue(repo.git(["commit", "-qm", "long"]).isSuccess)
-    lines[120] = "changed 120"
+    lines[195] = "changed 195"
     try repo.write("long.txt", lines.joined(separator: "\n") + "\n")
     XCTAssertTrue(repo.git(["add", "long.txt"]).isSuccess)
     let (tab, _) = tab()
@@ -115,7 +115,7 @@ extension EditorDiffTests {
     XCTAssertGreaterThan(top, 0, "前提: 最初の変更区間へ送られている")
     let stale = try textPixels(before)  // 前の本文を一度描かせる（描いた行は面が持ち続ける）
 
-    lines[120] = "again 120, now a longer line"
+    lines[195] = "again 195, now a longer line"
     let staged = lines.joined(separator: "\n") + "\n"
     try repo.write("long.txt", staged)
     XCTAssertTrue(repo.git(["add", "long.txt"]).isSuccess)
@@ -155,6 +155,21 @@ extension EditorDiffTests {
     return (0..<image.height).flatMap { row in
       bytes[(row * image.width * 4)..<(row * image.width * 4 + width * 4)]
     }
+  }
+
+  /// 並列のまま作業ツリーのファイルが消えて新しい側の面が替わっても、左右の面はスクロールを共にし続ける。
+  func testSideBySideKeepsSharingTheScrollWhenTheFileIsRemoved() throws {
+    try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
+    let (tab, _) = tab()
+    tab.view.editor.configure(
+      translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
+      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(),
+      diffModes: EditorDiffModeState(mode: .side))
+    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    pumpMain(until: { diff.content == .ready && diff.oldSurface != nil }, "並列")
+    try FileManager.default.removeItem(at: repo.url("a.txt"))
+    pumpMain(until: { diff.document == nil && diff.oldSurface != nil }, "消えたファイルの並列")
+    XCTAssertTrue(try engine(diff.oldSurface).partner === diff.newSurface as? MetalTextSurface)
   }
 
   /// 並列で左の面に焦点があるまま index が変わって左の面を作り直しても、焦点は diff の面に残る（窓へ落ちない）。
