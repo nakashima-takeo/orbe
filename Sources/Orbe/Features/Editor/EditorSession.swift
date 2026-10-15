@@ -182,11 +182,7 @@ final class EditorSession {
     guard !other.tabs.isEmpty else { return }
     let wasEmpty = tabs.isEmpty
     let winners = settleDocuments(from: other)
-    for tab in other.tabs {
-      guard self.tab(tab.id) == nil else {
-        if case .diff(let diff) = tab { diff.dismiss() }
-        continue
-      }
+    for tab in other.tabs where self.tab(tab.id) == nil {
       if case .diff(let diff) = tab { diff.rebind(diffDocuments) }
       tabs.append(tab)
       if tab.id == other.previewID, previewID == nil { previewID = tab.id }
