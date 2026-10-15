@@ -96,6 +96,7 @@ final class EditorDiff: RootFilesObserver {
     guard nextDocument !== document else { return }
     let previous = document
     document = nextDocument
+    dropOldSurface()
     surfacesChanged = true
     if let previous {
       if presented != nil { restoreCode(previous) }
