@@ -140,6 +140,7 @@ final class EditorSession {
     }
     if mode == .preview { previewID = tab.id }
     activeID = tab.id
+    settlePreview()
     onChange?()
   }
 
