@@ -170,6 +170,7 @@ enum TestIsolation {
 
     // 未追跡の破棄の行き先。既定は利用者の実ゴミ箱で、落ちたテストは移したファイルを戻せない。
     GitRepo.trashDirectoryOverride = dir.appendingPathComponent("trash", isDirectory: true)
+
     // Home のフォルダ。既定は `ORBE_STATE_DIR` 直下＝テスト間で共有される根なので、
     // 一度作ると以降のテストで「あれば触らない」が効いてしまう。caseDir の下へ張り直す。
     HomeFolder.urlOverride = dir.appendingPathComponent(
