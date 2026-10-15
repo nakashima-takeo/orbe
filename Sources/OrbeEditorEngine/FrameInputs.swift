@@ -280,7 +280,7 @@ struct FrameMaterial: Sendable {
   /// 縦の並び（写しと同じ書き込みで置く——描画スレッドは引き取った写しの行の並びで描く）。
   var rows = RowLayout(lineHeight: 1)
   /// 差し込んだ行の出どころの写し（並びと同じ書き込みで置き、出どころの役割が変われば置き直す）。
-  var rowSource: SurfaceContent?
+  var rowSourceContent: SurfaceContent?
   /// 表示の構成のうち、配置と描き方に効くもの。
   var arrangement = SurfaceArrangement()
   /// 区画の描く材料（区画の同一性で引く。並びの塊の中身と同じ書き込みで置く）。
@@ -341,7 +341,7 @@ final class MaterialBox: Sendable {
   @discardableResult
   func update(_ body: @Sendable (inout FrameMaterial) -> Void) -> Int {
     let (revision, before) = state.withLock { material in
-      let before = Copies(content: material.content, rowSource: material.rowSource)
+      let before = Copies(content: material.content, rowSourceContent: material.rowSourceContent)
       body(&material)
       material.revision += 1
       return (material.revision, before)
@@ -354,7 +354,7 @@ final class MaterialBox: Sendable {
   /// 書き換える前の写し（裏で手放す。配列にしない——打鍵ごとの書き換えで main に確保を足さない）。
   private struct Copies: Sendable {
     let content: SurfaceContent?
-    let rowSource: SurfaceContent?
+    let rowSourceContent: SurfaceContent?
   }
 
   func read() -> FrameMaterial { state.withLock { $0 } }

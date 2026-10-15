@@ -79,7 +79,7 @@ extension FrameBuilder {
     let g = c.g
     let baseline = (Double(c.config.baseline) * g.scale).rounded()
     let numberFont = c.fonts.id(c.config.gutterFont)
-    let origin = source.material.rowSource
+    let origin = source.material.rowSourceContent
     for index in blocks {
       guard case .lines(let lines) = g.rows.contents[index] else { continue }
       for (offset, line) in lines.enumerated() {
@@ -95,12 +95,9 @@ extension FrameBuilder {
         if c.gutter.other != nil {
           drawNumber(row + 1, rowTop: top, inset: c.gutter.otherInset, font: numberFont, c)
         }
-        let text = origin.text
-        let start = text.lineStart(row)
-        let next = row + 1 < text.lineCount ? text.lineStart(row + 1) : nil
+        let (lineSource, start) = LineShaper.source(row: row, in: origin.text)
         let laid = cache.line(
-          LineShaper.source(start: start, next: next, in: text),
-          tabColumns: source.material.tabColumns, config: c.config, fonts: c.fonts)
+          lineSource, tabColumns: source.material.tabColumns, config: c.config, fonts: c.fonts)
         let visible = visibleGlyphs(laid, c)
         drawWhitespace(laid, rowTop: top, window: visible.offsets, c)
         var roles = origin.roles.cursor(from: start)

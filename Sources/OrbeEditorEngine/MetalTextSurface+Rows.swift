@@ -36,7 +36,7 @@ extension MetalTextSurface {
     transact {
       noteRowsChange()
       rowSource = rows.source
-      write { $0.rowSource = sourceContent }
+      write { $0.rowSourceContent = sourceContent }
       syncZones(zoneList)
       let lineHeight = Double(config.lineHeight)
       self.rows.replace(
@@ -59,7 +59,7 @@ extension MetalTextSurface {
   /// 出どころの役割が変わった。写しを引き直して材料に置く（差し込んだ行の色は描くたびに写しから引くので、置けば描き直る）。
   func rowSourceRolesDidChange(_ ranges: IndexSet) {
     guard let content = rowSource?.rowSourceContent else { return }
-    write { $0.rowSource = content }
+    write { $0.rowSourceContent = content }
   }
 
   func setPresentation(_ presentation: SurfacePresentation) {
