@@ -40,18 +40,18 @@ extension MetalTextView {
   }
 
   override func mouseMoved(with event: NSEvent) {
-    hover(
-      at: event.locationInWindow,
-      inside: trackPointer(at: event.locationInWindow, flags: event.modifierFlags))
+    let inside = trackPointer(at: event.locationInWindow, flags: event.modifierFlags)
+    surface?.inputScope { hover(at: event.locationInWindow, inside: inside) }
   }
 
   override func mouseEntered(with event: NSEvent) {
-    hover(at: event.locationInWindow, inside: ownsPointer(at: event.locationInWindow))
+    let inside = ownsPointer(at: event.locationInWindow)
+    surface?.inputScope { hover(at: event.locationInWindow, inside: inside) }
   }
 
   override func mouseExited(with event: NSEvent) {
     surface?.setLinkPointer(nil)
-    hover(at: event.locationInWindow, inside: false)
+    surface?.inputScope { hover(at: event.locationInWindow, inside: false) }
   }
 
   /// 窓の今のポインタの位置で、ポインタの形とホバーを引き直す（ポインタの下で押せる場所が動いた）。tracking area と同じく
@@ -64,10 +64,11 @@ extension MetalTextView {
     hover(at: windowPoint, inside: inside)
   }
 
-  /// 俯瞰の上のポインタと、区画の押せる場所のホバー。
+  /// 俯瞰の上のポインタと、区画の押せる場所のホバー。出すきっかけは呼び手が決める——出来事の入口は処理の終わり、
+  /// Orbe から始まる `refreshPointer` は runloop の 1 周の終わり。
   private func hover(at windowPoint: NSPoint, inside: Bool) {
     let point = convert(windowPoint, from: nil)
-    surface?.inputScope { overview.pointerMoved(to: point, inside: inside) }
+    overview.pointerMoved(to: point, inside: inside)
     surface?.hover(at: inside ? point : nil)
   }
 
