@@ -262,6 +262,9 @@ final class EditorDiff: RootFilesObserver {
 
   /// 中身を決め、見せられるなら側と行差分を今の版に合わせる。
   private func resolve() -> Content {
+    // 走っている（前の本文の）ステージ済みの依頼は、ここでどの中身に決まっても捨てる——表示できないに決まった後に
+    // 届いて上書きしない。
+    stagedRequest += 1
     if files.status?.entries[id.path]?.isConflicted == true { return .unavailable(.conflicted) }
     switch id.kind {
     case .workingTree: return resolveWorkingTree()
@@ -297,8 +300,6 @@ final class EditorDiff: RootFilesObserver {
 
   /// ステージ済みは、両側の本文と行差分を裏で揃えてから一緒に入れ替える（届くまでは前の側と並びのまま）。
   private func resolveStaged() -> Content {
-    // 走っている（前の本文の）依頼は、ここでどの中身に決まっても捨てる——表示できないに決まった後に届いて上書きしない。
-    stagedRequest += 1
     let head = files.state(of: RootFiles.Version(path: headPath, revision: .head))
     let index = files.state(of: RootFiles.Version(path: id.path, revision: .index))
     guard let head, let index else { return content == .ready ? .ready : .loading }
