@@ -55,12 +55,12 @@ struct TaskPaletteCard: View {
         filterMenu(anchors)
       }
     }
-    // 右の欄の項目に居る間はカードの器がキーを受ける。入力欄・編集欄に焦点がある間は、そこが先に受けて
-    // 握らなかったキーだけがここへ来るので、器側は右の欄の項目に居るときしか握らない。
+    // 器は焦点がどこにあっても全キーを最初に受ける（`onKeyPress` は祖先から順に配られる）唯一の入口で、
+    // モデルの `handleKey` が振り分ける。
     .focusable()
     .focusEffectDisabled()
     .focused($focus, equals: .card)
-    .onKeyPress { model.handleCardKey($0) }
+    .onKeyPress { model.handleKey($0) }
     .simultaneousGesture(TapGesture().onEnded { model.focus() })
     .onChange(of: model.focusToken, initial: true) { focus = model.focusTarget }
     // agent の変更を含むタスク一覧の変化を、描画の外で付け直しへ届ける。
@@ -133,7 +133,6 @@ struct TaskPaletteCard: View {
           color: Color.theme.textMuted
         )
         .onSubmitIgnoringKeyRepeat { model.submit() }
-        .onKeyPress { model.handleFieldKey($0) }
         // 右の欄に居る間は入力欄自身にクリックを渡さず（渡すと焦点だけが入力欄へ移り、モデルの居場所と
         // 食い違う）、上に被せた面で受けて一覧へ戻る操作としてモデルに伝える。焦点はモデルから写る。
         .allowsHitTesting(model.focusTarget == .field)

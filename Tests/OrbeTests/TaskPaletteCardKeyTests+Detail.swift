@@ -154,6 +154,25 @@ extension TaskPaletteCardKeyTests {
     XCTAssertNil(model.draft)
   }
 
+  /// 編集中に esc を押し続けても、押し始めの esc で編集を終えて項目に留まる——続くリピートで一覧へ抜けたり画面を
+  /// 閉じたりしない。
+  func testEscapeHeldWhileEditingOnlyEndsTheEdit() {
+    let model = model()
+    var dismissed = false
+    model.onDismiss = { dismissed = true }
+    let window = mount(model)
+    enterDetail(model, at: .waiting, in: window)
+    send(Key.enter, "\r", to: window)
+
+    send(Key.escape, "\u{1B}", to: window)
+    send(Key.escape, "\u{1B}", repeating: true, to: window)
+    send(Key.escape, "\u{1B}", repeating: true, to: window)
+
+    XCTAssertNil(model.draft)
+    XCTAssertEqual(model.area, .detail(.field(.waiting)))
+    XCTAssertFalse(dismissed)
+  }
+
   /// ⌘↵ は 1 行の項目の確定のキーなので、文字の項目（編集していない状態）で押しても編集を始めない。そのタスクの
   /// agent を開くキーとして働く。
   func testCommandEnterOnATextFieldOpensTheAgentInsteadOfEditing() {
@@ -208,5 +227,37 @@ extension TaskPaletteCardKeyTests {
     type("2", into: window)
     send(Key.escape, "\u{1B}", to: window)
     XCTAssertEqual(model.store.tasks.first { $0.id == 3 }?.description, "12", "同じ編集が続き、改行は入らない")
+  }
+
+  /// 右の欄の項目でも ⇥ で次のタブへ移り、移った先では入力欄が続く打鍵を受ける。
+  func testTabInTheDetailMovesToTheNextTab() {
+    let model = model()
+    let window = mount(model)
+    enterDetail(model, at: .status, in: window)
+
+    send(Key.tab, "\t", to: window)
+
+    XCTAssertEqual(model.tab, .github)
+    type("x", into: window)
+    XCTAssertEqual(model.query, "x")
+  }
+
+  /// 編集中の ⇥・⇧⇥ は何もしない——タブは変わらず、同じ編集が続き、詳細の欄にもタブ文字は入らない。
+  func testTabWhileEditingKeepsTheTabAndTheEdit() {
+    let model = model()
+    let window = mount(model)
+
+    for field in [TaskDetailField.waiting, .description] {
+      enterDetail(model, at: field, in: window)
+      send(Key.enter, "\r", to: window)
+      type("a", into: window)
+      send(Key.tab, "\t", to: window)
+      send(Key.tab, "\u{19}", .shift, to: window)
+      type("b", into: window)
+
+      XCTAssertEqual(model.tab, .tasks, "\(field)")
+      XCTAssertEqual(model.draft?.text, "ab", "\(field)")
+      send(Key.escape, "\u{1B}", to: window)
+    }
   }
 }

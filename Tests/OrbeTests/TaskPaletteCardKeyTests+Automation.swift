@@ -9,7 +9,7 @@ import XCTest
 /// リンクを開くつもりの ⌘O が提案をタスクにする。⌘↵ でタスクになっても agent を開く画面が出ない、押し続けるとタスクが
 /// いくつもできる。← で文字の間を動けない、または棚へ入れない。中身の space が入力欄に
 /// 空白を打つ。⇧⇥ で棚から焦点が逃げる。中身の ↵ が今すぐ実行にならず提案をタスクにする、⌘⌫ が受信でなく提案を捨てる。
-/// 提案の一覧の esc で画面が閉じない。
+/// 提案の一覧の esc で画面が閉じない。棚で → を押し続けると中身まで入る。
 extension TaskPaletteCardKeyTests {
   private enum AutomationKey {
     static let o: UInt16 = 31
@@ -124,8 +124,6 @@ extension TaskPaletteCardKeyTests {
 
     arrow(Key.left, to: window)
     XCTAssertEqual(model.automation.place, .shelf)
-    send(Key.tab, "\u{19}", .shift, to: window)
-    XCTAssertEqual(model.visibleTab, .automation, "棚では ⇧⇥ でタブを替えない")
     arrow(Key.down, to: window)
     XCTAssertEqual(model.automation.shelfList.selectedID, .automation(1))
     arrow(Key.right, to: window)
@@ -142,6 +140,42 @@ extension TaskPaletteCardKeyTests {
     type("a", into: window)
     arrow(Key.left, to: window)
     XCTAssertEqual(model.automation.place, .proposals, "文字があるときの ← は文字の間を動く")
+  }
+
+  /// 棚で → を押し続けても、押し始めの → で候補の一覧へ戻って止まる——続くリピートで中身へ入らない。
+  func testAutomationRightArrowHeldOnTheShelfStopsAtTheProposals() {
+    let model = automationModel()
+    let window = mount(model)
+    arrow(Key.left, to: window)
+    arrow(Key.down, to: window)
+
+    arrow(Key.right, to: window)
+    arrow(Key.right, repeating: true, to: window)
+    arrow(Key.right, repeating: true, to: window)
+
+    XCTAssertEqual(model.automation.place, .proposals)
+  }
+
+  /// 棚と中身でも ⇥・⇧⇥ でタブを巡り、戻ると居場所が残る。移った先では入力欄がキーを受ける。
+  func testTabOnTheShelfAndContentsCyclesTheTabsAndKeepsThePlace() {
+    let model = automationModel()
+    let window = mount(model)
+    arrow(Key.left, to: window)
+
+    send(Key.tab, "\u{19}", .shift, to: window)
+    XCTAssertEqual(model.tab, .github)
+    send(Key.tab, "\t", to: window)
+    XCTAssertEqual(model.tab, .automation)
+    XCTAssertEqual(model.automation.place, .shelf, "戻ると棚に居る")
+
+    arrow(Key.down, to: window)
+    arrow(Key.right, to: window)
+    arrow(Key.right, to: window)
+    XCTAssertEqual(model.automation.place, .contents)
+    send(Key.tab, "\t", to: window)
+    XCTAssertEqual(model.tab, .tasks)
+    type("x", into: window)
+    XCTAssertEqual(model.query, "x", "移った先の入力欄が続く打鍵を受ける")
   }
 
   /// 中身の ↵ は今すぐ実行、⌘⌫ は確認なしで受信を消して提案の一覧へ戻る。どちらも提案には触れない。

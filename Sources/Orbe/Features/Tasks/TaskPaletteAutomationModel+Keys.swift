@@ -34,8 +34,8 @@ extension TaskPaletteAutomationModel {
     return .handled
   }
 
-  /// カードの器（棚と中身）。⇥・⇧⇥ は握るだけ（焦点を逃がさず、タブも替えない）。
-  func handleCardKey(_ press: KeyPress) -> KeyPress.Result {
+  /// 棚と中身。
+  func handlePlaceKey(_ press: KeyPress) -> KeyPress.Result {
     switch place {
     case .proposals: return .ignored
     case .shelf: return handleShelfKey(press)
@@ -49,7 +49,6 @@ extension TaskPaletteAutomationModel {
       let direction = press.key == .upArrow ? -1 : 1
       if press.modifiers.contains(.command) { jumpShelf(direction) } else { moveShelf(direction) }
     case .rightArrow, .return, .escape: showProposals()
-    case .tab, .backtab: break
     default: return .ignored
     }
     return .handled
@@ -62,7 +61,7 @@ extension TaskPaletteAutomationModel {
     }
     switch press.key {
     case .leftArrow, .escape: showProposals()
-    case .return, .tab, .backtab: break
+    case .return: break
     default: return .ignored
     }
     return .handled

@@ -1,19 +1,35 @@
 import SwiftUI
 
-/// 焦点ごとのキーの意味。⇥・⇧⇥ はどの焦点でも握る（握らないと焦点がカードの外へ逃げ、以後のキーが
-/// 届かない）。入力欄ではタブを巡り、ほかの焦点では何もしない。矢印は単一の catch-all で修飾の有無を分ける。
+/// カードのキー。カードの入口が全キーを受け、カード全体のキー（⇥・⇧⇥）を先に、残りを焦点の行き先の場所の
+/// キーへ振り分ける。どの場所も握らないキーは文字入力・`onSubmit` へ落ちる。矢印は単一の catch-all で修飾の有無を分ける。
 extension TaskPaletteModel {
+  /// タブを巡れるか（編集中でも選ぶ状態でもない）。⇥・⇧⇥ とフッターの「⇥ タブ」が見る。
+  var cyclesTabs: Bool { draft == nil && pick == nil }
+
+  /// カードの唯一のキーの入口。⇥・⇧⇥ は巡れなくても握る（握らないと焦点がカードの外へ逃げ、以後のキーが届かない）。
+  func handleKey(_ press: KeyPress) -> KeyPress.Result {
+    if press.key == .tab || press.key == .backtab {
+      if cyclesTabs { setTab(press.key == .tab ? tab.next : tab.previous) }
+      return .handled
+    }
+    // 入口が 1 つなので、押し始めを受けたここへキーリピートも届き続ける。押し始めと違う場所に届いたリピートは場所の
+    // キーにせず、焦点の持ち主（編集欄なら文字入力）へ流す（esc を押し続けて一段より深く抜けない・→ を押し続けて
+    // 棚から中身まで入らない。詳細の ↵ を押し続けると、編集を始めた後のリピートは改行になる）。
+    if press.phase == .down {
+      keyDownTarget = focusTarget
+    } else if keyDownTarget != focusTarget {
+      return .ignored
+    }
+    switch focusTarget {
+    case .field: return handleFieldKey(press)
+    case .card: return handlePlaceKey(press)
+    case .edit, .paneDue: return handleEditKey(press)
+    }
+  }
+
   /// ヘッダーの入力欄（一覧）。↵ は `onSubmit` が受ける（変換確定の ↵ では発火しない。押し続けたキーリピート
   /// は確定の入口が捨てる——押し続けて次々に完了にする・タスクにしない）。
-  func handleFieldKey(_ press: KeyPress) -> KeyPress.Result {
-    if press.key == .backtab {
-      setTab(tab.previous)
-      return .handled
-    }
-    if press.key == .tab {
-      setTab(tab.next)
-      return .handled
-    }
+  private func handleFieldKey(_ press: KeyPress) -> KeyPress.Result {
     switch visibleTab {
     case .tasks: return handleTaskFieldKey(press)
     case .github: return handleGitHubFieldKey(press)
@@ -111,10 +127,9 @@ extension TaskPaletteModel {
     return .handled
   }
 
-  /// カードの器（右の欄の項目に居て、編集していない間）。
-  func handleCardKey(_ press: KeyPress) -> KeyPress.Result {
-    guard draft == nil else { return .ignored }
-    if visibleTab == .automation { return automation.handleCardKey(press) }
+  /// 右の欄の項目・提案タブの棚と中身。
+  private func handlePlaceKey(_ press: KeyPress) -> KeyPress.Result {
+    if visibleTab == .automation { return automation.handlePlaceKey(press) }
     switch area {
     case .list: return .ignored
     case .pane(let stop): return handlePaneKey(press, stop)
@@ -148,7 +163,6 @@ extension TaskPaletteModel {
       guard case .link(let item) = stop else { return .ignored }
       if press.phase == .down { unlink(item) }
     case .escape: leaveDetail()
-    case .tab, .backtab: break
     default: return .ignored
     }
     return .handled
@@ -192,7 +206,6 @@ extension TaskPaletteModel {
     case _ where Self.isOpenInBrowserKey(press):
       if press.phase == .down { openSelectedGitHubItemInBrowser() }
     case .escape: leavePane()
-    case .tab, .backtab: break
     default: return .ignored
     }
     return .handled
@@ -202,13 +215,12 @@ extension TaskPaletteModel {
   /// 捨てる——押し続けて確定と編集の開始を繰り返さない）、esc で取り消す。⌘↵ も確定で、GitHub タブの右の欄の
   /// 期限ではタスクにして開かない。複数行の項目は ↵ を改行に使う（リピートも改行）ので、esc で確定し、⌘↵ では
   /// 何もしない。
-  func handleEditKey(_ press: KeyPress) -> KeyPress.Result {
+  private func handleEditKey(_ press: KeyPress) -> KeyPress.Result {
     guard let draft else { return .ignored }
     switch press.key {
     case .escape: endEditing(commit: draft.isMultiline)
     case .return where press.modifiers.contains(.command):
       if !draft.isMultiline { endEditing(commit: true) }
-    case .tab, .backtab: break
     default: return .ignored
     }
     return .handled
