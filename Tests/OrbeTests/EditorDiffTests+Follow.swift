@@ -96,6 +96,26 @@ extension EditorDiffTests {
     XCTAssertNil(surface.view.superview, "面は本体から外れる")
   }
 
+  /// 未保存の間にファイルが消えても文書は手放さないが、未保存でなくなれば（undo で戻した）、見せ直した diff は作業ツリーの
+  /// 今の姿（消えた）に戻る。
+  func testADiffCatchesUpWithTheWorkingTreeOnceTheDocumentIsNoLongerUnsaved() throws {
+    let (tab, _) = tab()
+    let document = try tab.editor.open(repo.url("a.txt"), as: .pinned)
+    let responder = document.surface.responder
+    responder.perform(Selector(("insertText:")), with: "Z")
+    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    waitRows(diff, "変更が出る") { !$0.isEmpty }
+    try FileManager.default.removeItem(at: repo.url("a.txt"))
+    pumpMain(until: { diff.files.status?.entries["a.txt"]?.unstaged == .deleted }, "消えた")
+    XCTAssertTrue(diff.document === document, "前提: 未保存の間は手放さない")
+
+    tab.editor.activate(document)
+    try XCTUnwrap(responder.undoManager).undo()
+    pumpMain(until: { !document.isDirty }, "undo で未保存でなくなる")
+    tab.editor.activate(.diff(id("a.txt", .workingTree)))
+    pumpMain(until: { diff.document == nil }, "消えたファイルの diff になる")
+  }
+
   /// index が変わってステージ済み diff の新しい側が替わっても（並びの形は同じでも）、面は新しい index の本文を、同じ diff
   /// を開き直したのと同じ絵で描き、見えていた先頭の行を先頭に保つ（末尾が見えている位置でも）。
   func testAStagedDiffFollowsTheIndexAndKeepsTheTopLine() throws {
