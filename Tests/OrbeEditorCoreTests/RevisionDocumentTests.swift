@@ -6,9 +6,8 @@ import os
 @testable import OrbeEditorCore
 
 /// 版の本文を読むだけで持つ文書——名前から言語を決めて構文の色を裏で作り、結んだ面と差し込みの出どころの読み手へ知らせ、
-/// 面は読むだけにし、見えている範囲（面が無くても）を先に色付けし、閉じたら大きな部品を裏で手放す。壊れると、diff の
-/// 古い側が素の字のまま・遅れて色が付いても削除行が描き直されない・遠くの削除行の色がいつまでも付かない・閉じると main が
-/// 止まる。
+/// 面は読むだけにし、閉じたら大きな部品を裏で手放す。壊れると、diff の古い側が素の字のまま・遅れて色が付いても削除行が
+/// 描き直されない・閉じると main が止まる。
 @MainActor
 final class RevisionDocumentTests: XCTestCase {
   private let registry = LanguageRegistry(queriesRoot: Queries.root)
