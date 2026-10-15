@@ -84,10 +84,11 @@ final class EditorDiff: RootFilesObserver {
 
   /// 作業ツリーの姿を読み直し、新しい側の文書を合わせる。文書が替われば、前の文書をファイルタブの見え方に戻して手放す。
   /// 今の文書が未保存なら、作業ツリーの姿が変わっても手放さず新しい側のまま——未保存の本文を確認なしに失わない（ファイル
-  /// タブが、消えたファイルの未保存の本文を保つのと同じ）。`throwing` なら、テキスト面を作れないことを投げる（開くとき）。
+  /// タブが、消えたファイルの未保存の本文を保つのと同じ）。読み直しは保留のまま残し、未保存でなくなった後の作り直しで
+  /// 行う。`throwing` なら、テキスト面を作れないことを投げる（開くとき）。
   private func updateWorkingSide(throwing: Bool) throws {
-    workingStale = false
     if document?.isDirty == true { return }
+    workingStale = false
     let next = try readWorkingTree(throwing: throwing)
     working = next
     var nextDocument: EditorDocument?
