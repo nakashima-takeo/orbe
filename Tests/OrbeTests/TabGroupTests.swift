@@ -163,6 +163,21 @@ final class TabGroupTests: OrbeTestCase {
     XCTAssertTrue(dest.editor.preview === p)
   }
 
+  /// 行き先の仮のタブの文書が元の未保存の文書に替われば、仮でなくなる——次に仮で開いたファイルが入れ替えで黙って捨てない。
+  func testAbsorbPinsTheTemporaryTabThatTakesOverAnUnsavedDocument() throws {
+    let dest = group()
+    let from = group()
+    let url = try file("a.txt")
+    _ = try dest.editor.open(url, as: .preview)
+    let edited = try from.editor.open(url, as: .pinned)
+    edited.surface.responder.perform(Selector(("insertText:")), with: "y")
+
+    dest.absorb(from)
+    _ = try dest.editor.open(try file("b.txt"), as: .preview)
+
+    XCTAssertTrue(dest.editor.documents.contains { $0 === edited })
+  }
+
   /// 移った文書は外のファイルに付いていき続ける——未保存のまま外で書き換えられれば印が立ち、その変化は行き先の連の
   /// 通知に載る。
   func testAbsorbedDocumentKeepsFollowingItsFile() throws {
