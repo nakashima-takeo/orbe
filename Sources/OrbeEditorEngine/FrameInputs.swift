@@ -346,7 +346,7 @@ final class MaterialBox: Sendable {
       material.revision += 1
       return (material.revision, before)
     }
-    let parcel = OSAllocatedUnfairLock<Copies?>(initialState: before)
+    let parcel = OSAllocatedUnfairLock<Copies?>(initialState: consume before)
     DispatchQueue.global(qos: .utility).async { parcel.withLock { $0 = nil } }
     return revision
   }
