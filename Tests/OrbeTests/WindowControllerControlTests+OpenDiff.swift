@@ -34,6 +34,28 @@ extension WindowControllerControlTests {
     XCTAssertEqual(MainActor.assumeIsolated { tab.editor.tabs.count }, 1, "同じ diff はタブを増やさない")
   }
 
+  /// 根の下の階層にあるファイルは、親ごと消えていても、`/private` を含む綴りでも、根と根からの相対パスの diff になる。
+  func testOpenDiffTakesAFileGoneWithItsParentDirectory() throws {
+    let repo = try TempGitRepo()
+    XCTAssertTrue(repo.root.hasPrefix("/var/"), "前提: 根は /private を畳んだ綴り")
+    try repo.write("sub/b.txt", "b\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "sub"]).isSuccess)
+    try FileManager.default.removeItem(at: repo.dir.appendingPathComponent("sub"))
+    let wc = try restore(
+      activeWorkspace: 0,
+      [tabbed("main", tabs: [TabState(cwd: repo.root, agent: nil, explicitTitle: nil)])])
+    let tabId = try XCTUnwrap(wc.controlListTabs()[0]["tabId"] as? Int)
+    let tab = try XCTUnwrap(wc.controlResolveTab(tabId))
+
+    let result = wc.controlOpenDiff(
+      tabId: tabId, path: "/private" + repo.root + "/sub/b.txt", kind: .workingTree)
+    guard case .success = result else { return XCTFail("\(result)") }
+    XCTAssertEqual(
+      MainActor.assumeIsolated { tab.editor.activeID },
+      .diff(EditorDiff.Key(root: repo.root, path: "sub/b.txt", kind: .workingTree)))
+  }
+
   func testOpenDiffErrors() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main")])
     let tabId = try XCTUnwrap(wc.controlListTabs()[0]["tabId"] as? Int)
