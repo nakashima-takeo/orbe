@@ -157,7 +157,7 @@ final class EditorRowsTrialTests: OrbeTestCase {
     surface.setPresentation(SurfacePresentation(showsMinimap: false))
     let (insertions, threads) = insertions(lineCount: document.text.lineCount)
     for thread in threads { thread.surface = surface }
-    surface.setRows(SurfaceRows(insertions: insertions))
+    surface.setRows(SurfaceRows(insertions: insertions, source: Self.removedLines))
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
     window.makeFirstResponder(surface.responder)
@@ -165,6 +165,9 @@ final class EditorRowsTrialTests: OrbeTestCase {
     XCTAssertTrue(surface.material.read().visible, "前提: 窓が見えていると面が知っている")
     return Shown(window: window, surface: surface)
   }
+
+  /// 文書に無い行の字。
+  private static let removedLines = TextRowSource("-   removed line\n-   // gone")
 
   /// 30 行ごとの試しのスレッドと、13 行ごとの文書に無い行 2 行（区画と同じ境には置かない）。
   private func insertions(lineCount: Int) -> ([RowInsertion], [SampleThreadZone]) {
@@ -175,8 +178,7 @@ final class EditorRowsTrialTests: OrbeTestCase {
         result.append(
           RowInsertion(
             line: line,
-            content: .lines([InsertedLine("-   removed line \(line)"), InsertedLine("-   // gone")])
-          ))
+            content: .lines([InsertedLine(line: 0), InsertedLine(line: 1)])))
       }
       if line % Self.zoneEvery == 0 {
         let thread = SampleThreadZone.sample(line: line, id: "reply-\(line)")

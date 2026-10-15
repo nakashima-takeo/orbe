@@ -1,8 +1,8 @@
 import AppKit
 import OrbeEditorCore
 
-/// 焦点とキー。焦点の行き先は文書があればそのテキスト面、無ければ面自身。chrome キーは first responder が自分か配下の
-/// ときだけ先取りする。
+/// 焦点とキー。焦点の行き先は本体の面（文書の面・diff の面——並列なら最後に焦点のあった側）、面が無ければ pane 自身。
+/// chrome キーは first responder が自分か配下のときだけ先取りする。
 extension EditorPaneView {
   /// first responder が自分か配下にあるか。
   var focusIsInside: Bool {
@@ -10,16 +10,26 @@ extension EditorPaneView {
     return responder === self || responder.isDescendant(of: self)
   }
 
-  /// 焦点の行き先。文書があればそのテキスト面、無ければ自分。
-  var focusTarget: NSView { document?.surface.responder ?? self }
+  /// 焦点の行き先。文書の本体ならそのテキスト面、diff の本体なら見せている面（並列なら最後に焦点のあった側、既定は右）、
+  /// 面が無ければ自分。
+  var focusTarget: NSView {
+    switch body {
+    case .document(let document): return document.surface.responder
+    case .diff(let diff):
+      let surfaces = diffSurfaces(diff)
+      let surface = diffFocusesLeft ? surfaces.first : surfaces.last
+      return surface?.responder ?? self
+    case .empty: return self
+    }
+  }
 
   override var acceptsFirstResponder: Bool { true }
 
-  /// 空状態の中身は静止しているので、本体のどこを押しても面自身が受ける（焦点を取る）。骨の host は
-  /// 自分で受ける。
+  /// 文字だけの器（空状態・diff の一文）の中身は静止しているので、本体のどこを押しても面自身が受ける（焦点を取る）。骨の
+  /// host は自分で受ける。
   override func hitTest(_ point: NSPoint) -> NSView? {
     let hit = super.hitTest(point)
-    guard document == nil, let hit else { return hit }
+    guard !emptyHost.isHidden, let hit else { return hit }
     return hit.isDescendant(of: emptyHost) ? self : hit
   }
 
@@ -36,6 +46,7 @@ extension EditorPaneView {
     guard focusIsInside, let action = Keybindings.chromeAction(for: event)
     else { return super.performKeyEquivalent(with: event) }
     document?.surface.commitMarkedText()
+    diff.map(diffSurfaces)?.forEach { $0.commitMarkedText() }
     switch action.owner {
     case .window:
       if let command = action.windowCommand { tab?.requestWindowCommand(command) }
@@ -52,7 +63,7 @@ extension EditorPaneView {
     }
   }
 
-  /// 空状態で通常の打鍵を飲む（文書があれば打鍵はテキスト面に届き、ここへは来ない）。
+  /// 面の無い本体で通常の打鍵を飲む（面があれば打鍵はテキスト面に届き、ここへは来ない）。
   override func keyDown(with event: NSEvent) {}
 
   /// ⌘S。ディスクが変わっていて失敗したら「上書き／キャンセル」を sheet で出し、上書きで force 保存する。

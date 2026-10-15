@@ -126,16 +126,15 @@ struct FramePalette: Equatable, Sendable {
     let gutterText = gutterText
     self.lineStyles = lineStyles.map { line in
       LineInk(
-        background: line.background.map(resolve), text: line.text.map(ink), sign: line.sign,
+        background: line.background.map(resolve), sign: line.sign,
         signInk: line.signColor.map(ink) ?? gutterText)
     }
   }
 }
 
-/// 行の型を外観で解いた色——行の地・字の色（あれば構文の色に代わる）・記号の字とその色。
+/// 行の型を外観で解いた色——行の地・記号の字とその色。
 struct LineInk: Equatable, Sendable {
   var background: FrameColor?
-  var text: InkColor?
   var sign: String?
   var signInk: InkColor
 }

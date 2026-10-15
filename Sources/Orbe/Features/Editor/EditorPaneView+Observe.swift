@@ -39,7 +39,14 @@ extension EditorPaneView {
   /// 同じターンの後で決まるので、次のターンで今の焦点を読み直す。
   func focusDidChange() {
     DispatchQueue.main.async { [weak self] in
-      guard let self, let document else { return }
+      guard let self else { return }
+      if let diff, let responder = window?.firstResponder as? NSView {
+        let surfaces = diffSurfaces(diff)
+        if let index = surfaces.firstIndex(where: { $0.responder === responder }) {
+          diffFocusesLeft = surfaces.count == 2 && index == 0
+        }
+      }
+      guard let document else { return }
       occurrences.focusDidChange(
         surfaceFocused: window?.firstResponder === document.surface.responder,
         insideFace: focusIsOnTextOrFindBar)

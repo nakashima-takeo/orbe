@@ -13,9 +13,9 @@ final class RowLayoutTests: XCTestCase {
     var rows = RowLayout(lineHeight: lineHeight)
     rows.replace(
       [
-        .init(line: 2, height: 36, content: .lines([InsertedLine("a"), InsertedLine("b")])),
+        .init(line: 2, height: 36, content: .lines([InsertedLine(), InsertedLine()])),
         .init(line: 5, height: 30, content: .zone(ObjectIdentifier(NSObject()))),
-        .init(line: 10, height: 18, content: .lines([InsertedLine("tail")])),
+        .init(line: 10, height: 18, content: .lines([InsertedLine()])),
       ], spans: [])
     return rows
   }
@@ -79,7 +79,7 @@ final class RowLayoutTests: XCTestCase {
   func testLineSpansIndexTheLinesAndTheLargestOtherNumber() {
     var rows = RowLayout(lineHeight: lineHeight)
     let inserted = RowLayout.Block(
-      line: 4, height: lineHeight, content: .lines([InsertedLine("gone", number: 100)]))
+      line: 4, height: lineHeight, content: .lines([InsertedLine(line: 99)]))
     rows.replace(
       [inserted],
       spans: [

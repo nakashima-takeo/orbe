@@ -27,7 +27,7 @@ final class EditorPaneViewCloseTests: OrbeTestCase {
     let b = try tab.editor.open(try caseFile("b.txt", "b"), as: .pinned)
     XCTAssertTrue(pane.document === b)
 
-    pane.shell.requestClose(b.url)
+    pane.shell.requestClose(.document(b.url))
 
     XCTAssertTrue(pane.document === a, "焦点の文書を閉じれば隣の文書が見える")
     let responder = try XCTUnwrap(window.firstResponder as? NSView)

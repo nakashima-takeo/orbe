@@ -143,6 +143,26 @@ enum L10n {
     .editorEmptySearchProject: ("プロジェクト全体を検索", "Search the whole project"),
     .editorEmptyBackToTerminal: ("ターミナルへ戻る", "Back to terminal"),
 
+    // MARK: Editor 面（diff）
+    .editorDiffWorkingTree: ("（作業ツリー）", "(Working Tree)"),
+    .editorDiffStaged: ("（ステージ済み）", "(Staged)"),
+    .editorDiffInline: ("インライン", "Inline"),
+    .editorDiffSide: ("並列", "Side by Side"),
+    .editorDiffNotText: (
+      "バイナリか UTF-8 でないファイルのため、差分を表示できません",
+      "Can't show the diff: the file is binary or not UTF-8"
+    ),
+    .editorDiffSymlink: (
+      "シンボリックリンクのため、差分を表示できません", "Can't show the diff: the file is a symbolic link"
+    ),
+    .editorDiffConflicted: (
+      "競合中のため、差分を表示できません", "Can't show the diff: the file has merge conflicts"
+    ),
+    .editorDiffFailed: (
+      "git から版を取得できないため、差分を表示できません",
+      "Can't show the diff: git couldn't read the file's versions"
+    ),
+
     // MARK: Editor 面（骨: エクスプローラー）
     .editorExplorerTitle: ("エクスプローラー", "Explorer"),
     .editorNewFile: ("新規ファイル", "New File"),

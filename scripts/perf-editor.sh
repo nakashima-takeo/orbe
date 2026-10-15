@@ -11,6 +11,6 @@ swift build --build-tests -c release -Xswiftc -enable-testing -Xswiftc -DDEBUG 2
 xctest=$(xcrun --find xctest)
 
 ORBE_EDITOR_PERF=1 "$xctest" \
-  -XCTest OrbeTests.EditorTypingPerfTests,OrbeTests.EditorSyntaxPerfTests,OrbeTests.ProjectSearchArrowPerfTests \
+  -XCTest OrbeTests.EditorTypingPerfTests,OrbeTests.EditorSyntaxPerfTests,OrbeTests.ProjectSearchArrowPerfTests,OrbeTests.EditorDiffPerfTests \
   .build/release/OrbeTests.xctest 2>&1 \
   | { grep -E "^PERF|error:|failed" || true; }

@@ -23,6 +23,7 @@ extension EditorPaneView {
   override func viewDidChangeEffectiveAppearance() {
     super.viewDidChangeEffectiveAppearance()
     needsDisplay = true
+    paintDiffDivider()
   }
 
   override func draw(_ dirtyRect: NSRect) {

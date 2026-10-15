@@ -31,7 +31,7 @@ final class TerminalTab {
   var onEditorChange: (() -> Void)?
   /// 未消費の復元状態（開いていた文書）。休眠チケットと同じく materialize で消費する。未消費のまま終了
   /// しても同じ形で書き戻す（一度も見なかったタブの文書は失われない）。
-  private var pendingDocuments: EditorState.OpenDocuments?
+  private(set) var pendingDocuments: EditorState.OpenDocuments?
 
   /// このタブが materialize 済み側にある現在状態。現仕様の遷移は false → true のみだが、
   /// 履歴bitではなく、将来の再休眠では false へ戻せる責務として扱う。
@@ -322,17 +322,6 @@ final class TerminalTab {
     setFaces(FaceLayout(editorRatio: faces.editorRatio, focus: face), animated: false)
   }
 
-  /// 閉じれば失われる文書（未保存の列）。閉じる・終了の確認が読む。
-  func unsavedDocuments() -> [EditorDocument] {
-    MainActor.assumeIsolated { editor.documentsToDiscard() }
-  }
-
-  /// エディターでファイルを普通のタブで開いて焦点の文書にする（制御 API の入口。エージェントが見せたファイルを人の次の
-  /// クリックが入れ替えない）。読めない・UTF-8 でない・テキスト面を作れない（Metal の装置が無い）は throw。
-  func openFile(_ url: URL) throws {
-    _ = try MainActor.assumeIsolated { try editor.open(url, as: .pinned) }
-  }
-
   /// 面（surface・エディター pane）からのウィンドウレベル chrome キー（タブ・workspace）を上位へ転送する。
   func requestWindowCommand(_ command: WindowCommand) {
     onWindowCommand?(command)
@@ -368,20 +357,6 @@ final class TerminalTab {
     TabState(
       cwd: cwd, agent: agentSlot.session.flatMap { $0.sessionId != nil ? $0 : nil },
       explicitTitle: explicitTitle, faces: faces, editor: editorState())
-  }
-
-  private func editorState() -> EditorState? {
-    MainActor.assumeIsolated {
-      let documents = editor.documents
-      let open =
-        documents.first.map { first in
-          EditorState.OpenDocuments(
-            open: documents.map(\.url.path), active: (editor.activeDocument ?? first).url.path,
-            preview: editor.preview?.url.path)
-        } ?? pendingDocuments
-      let state = EditorState(documents: open, search: view.editor.projectSearch.query)
-      return state.isEmpty ? nil : state
-    }
   }
 
   deinit {

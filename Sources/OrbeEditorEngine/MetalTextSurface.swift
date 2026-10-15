@@ -59,6 +59,8 @@ final class MetalTextSurface: TextSurface {
   private var highlights = Highlights()
   /// 縦の並び（main の最新。取引の中で置き・ずらし・測り直し、出すときに材料へ書く）。
   var rows: RowLayout
+  /// 差し込んだ行の出どころ（並びと一緒に置く）。
+  weak var rowSource: (any SurfaceRowSource)?
   /// 表示の構成と、そのうち配置と描き方に効くもの。
   var presentation = SurfacePresentation.code
   var arrangement = SurfaceArrangement()

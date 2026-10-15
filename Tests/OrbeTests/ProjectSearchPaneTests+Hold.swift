@@ -104,7 +104,7 @@ extension ProjectSearchPaneTests {
       let held = try holding(released: released)
       let hosted = held.hosted
       let x = hosted.repo.url("x.txt")
-      let index = try XCTUnwrap(hosted.pane.shell.tabs.firstIndex { $0.id == x })
+      let index = try XCTUnwrap(hosted.pane.shell.tabs.firstIndex { $0.id == .document(x) })
       try click(hosted.pane, at: fileTabSlotCenter(hosted.pane, index))
       pumpMain(until: { !hosted.tab.editor.documents.contains { $0.url == x } }, "× で閉じる")
       assertTheWaitingMatchStaysClosed(

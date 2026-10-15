@@ -312,7 +312,7 @@ final class FileTree: RootFilesObserver {
     if let status = files.status { self.status = status }
   }
 
-  func rootFiles(_ files: RootFiles, baselineDidChange url: URL) {}
+  func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version) {}
 
   // MARK: - パス
 

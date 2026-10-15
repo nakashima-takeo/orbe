@@ -109,7 +109,7 @@ enum EditorStyle {
   }
 
   /// 見本の hairline(α) を外観で換算した縁（`EditorInk.hairline` の NSColor 版）。
-  private static func hairline(_ alpha: Double) -> NSColor {
+  static func hairline(_ alpha: Double) -> NSColor {
     NSColor(name: nil) { appearance in
       Theme.Color.borderInk.withAlphaComponent(
         isDark(appearance) ? alpha : alpha * Theme.Opacity.editorHairlineLight)

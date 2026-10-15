@@ -207,6 +207,16 @@ final class GitRepoObserveTests: OrbeTestCase {
       "大小無視の照合は `:(literal)` を貫通する——別の綴りのキーで返さない")
   }
 
+  /// HEAD の版は、ディスク上の NFD の綴りで問うても引ける（index と同じ照合）。
+  func testHeadEntriesFindANameAskedInNFD() throws {
+    let git = try repo.open()
+    try repo.write("\u{304C}.txt", "ga\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "ga"]).isSuccess)
+    let nfd = "\u{304B}\u{3099}.txt"
+    XCTAssertEqual(try XCTUnwrap(headEntries(git, [nfd])).count, 1)
+  }
+
   private func status(_ git: GitRepo) -> GitStatus? {
     guard case .changed(let status) = read(git, comparedTo: nil) else { return nil }
     return status
@@ -216,6 +226,17 @@ final class GitRepoObserveTests: OrbeTestCase {
     var result: GitStatusRead?
     let done = expectation(description: "status")
     git.status(comparedTo: previous) {
+      result = $0
+      done.fulfill()
+    }
+    wait(for: [done], timeout: 20)
+    return result
+  }
+
+  private func headEntries(_ git: GitRepo, _ paths: [String]) -> [String: String]? {
+    var result: [String: String]?
+    let done = expectation(description: "ls-tree")
+    git.headEntries(relativePaths: paths) {
       result = $0
       done.fulfill()
     }

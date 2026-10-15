@@ -53,7 +53,7 @@ extension ControlServer {
     }
   }
 
-  /// タブ操作（focus_tab / close_tab / open_file）を解決する。タブの解決は target が持つ。
+  /// タブ操作（focus_tab / close_tab / open_file / open_diff）を解決する。タブの解決は target が持つ。
   /// 非該当は nil で次の解決（config / workspace）へ落とす。
   func tabHandler(for method: String) -> WindowedHandler? {
     switch method {
@@ -80,6 +80,21 @@ extension ControlServer {
           return .failure(ControlError(code: -32602, message: "missing path"))
         }
         return target.controlOpenFile(tabId: tid, path: path)
+      }
+    case "open_diff":
+      return { target, params in
+        guard let tid = params["tabId"] as? Int else {
+          return .failure(ControlError(code: -32602, message: "missing tabId"))
+        }
+        guard let path = params["path"] as? String, !path.isEmpty else {
+          return .failure(ControlError(code: -32602, message: "missing path"))
+        }
+        let kinds: [String: EditorDiff.Kind] = ["workingTree": .workingTree, "staged": .staged]
+        guard let kind = (params["kind"] as? String).flatMap({ kinds[$0] }) else {
+          return .failure(
+            ControlError(code: -32602, message: "kind must be workingTree or staged"))
+        }
+        return target.controlOpenDiff(tabId: tid, path: path, kind: kind)
       }
     default:
       return nil

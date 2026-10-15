@@ -424,6 +424,16 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorEmptySearchProject
   case editorEmptyBackToTerminal
 
+  // MARK: - Editor 面（diff）
+  case editorDiffWorkingTree
+  case editorDiffStaged
+  case editorDiffInline
+  case editorDiffSide
+  case editorDiffNotText
+  case editorDiffSymlink
+  case editorDiffConflicted
+  case editorDiffFailed
+
   // MARK: - Editor 面（骨: エクスプローラー）
   case editorExplorerTitle
   case editorNewFile

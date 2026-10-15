@@ -179,3 +179,29 @@ extension SurfaceConfig {
     ).width
   }
 }
+
+/// 差し込んだ行の出どころ（テスト）。`lines` で字の行を足し、その行を指す差し込んだ行を返す。役割は持たない（本文の色）。
+@MainActor
+final class InsertedText: SurfaceRowSource {
+  private var texts: [String] = []
+  private(set) var rowSourceContent = SurfaceContent(
+    text: TextRope(""), roles: RoleRuns(length: 0), version: 0)
+
+  func lines(_ added: [String], style: Int? = nil) -> [InsertedLine] {
+    let first = texts.count
+    texts += added
+    let text = TextRope(texts.joined(separator: "\n"))
+    rowSourceContent = SurfaceContent(text: text, roles: RoleRuns(length: text.length), version: 0)
+    return added.indices.map { InsertedLine(line: first + $0, style: style) }
+  }
+
+  /// 行 `line` の中身全体に役割 `role` を置き、役割の変わった区間を返す（面へは知らせない）。
+  func setRole(_ role: SyntaxRole, line: Int) -> IndexSet {
+    let text = rowSourceContent.text
+    var roles = rowSourceContent.roles
+    let range = NSRange(location: text.lineStart(line), length: texts[line].utf16.count)
+    let changed = roles.replace(range, with: [HighlightSpan(range: range, role: role)])
+    rowSourceContent = SurfaceContent(text: text, roles: roles, version: 0)
+    return changed
+  }
+}

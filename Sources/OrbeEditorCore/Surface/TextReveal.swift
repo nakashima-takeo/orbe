@@ -11,6 +11,8 @@ public enum TextReveal: Equatable, Sendable {
   case centerIfOutside
   /// 区間が縦に見えるところまで最小限。
   case minimal
+  /// 区間の先頭の行を上端へ（見えていても送る）。
+  case top
 
   /// 縦の範囲 `span`（区間の先頭の行の上端から終わりの行の下端まで）をこの方針で見せた後の先頭。`first` は今の先頭、
   /// `visible` は見えている高さ。どれも表示の単位。スクロールできる範囲には収めない（収めるのは呼び手）。
@@ -30,6 +32,8 @@ public enum TextReveal: Equatable, Sendable {
       return minimal(from: top < first || top >= first + visible ? centered : first)
     case .minimal:
       return minimal(from: first)
+    case .top:
+      return top
     }
   }
 }

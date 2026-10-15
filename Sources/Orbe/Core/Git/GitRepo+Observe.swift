@@ -68,6 +68,42 @@ extension GitRepo {
     }
   }
 
+  /// HEAD のツリーにある blob の OID（相対パス → OID。無いもの・ファイルでないもの（submodule・ディレクトリ）は含まない。
+  /// 初回コミット前は空）。空の問い合わせは git を起こさない。git が失敗したら nil。
+  ///
+  /// パスは `indexEntries` と同じく `:(literal)` を前置した pathspec で argv に渡す——macOS の git は argv のパスを
+  /// `core.precomposeunicode` で NFC に揃えて照合するので、ディスク上の NFD の綴りでも index と同じく引ける。
+  /// 初回コミット前は HEAD が無くて失敗するので、そのときは HEAD が無いことを確かめて空にする。
+  func headEntries(relativePaths: [String], completion: @escaping ([String: String]?) -> Void) {
+    guard !relativePaths.isEmpty else {
+      completion([:])
+      return
+    }
+    runner.run(
+      ["ls-tree", "-z", "--full-tree", "HEAD", "--"] + relativePaths.map { ":(literal)" + $0 },
+      cwd: root
+    ) { [runner, root] output in
+      guard output.isSuccess else {
+        // `rev-parse -q --verify` は、HEAD が無い（初回コミット前）ときだけ黙って 1 で終わる。
+        runner.run(["rev-parse", "-q", "--verify", "HEAD"], cwd: root) { probe in
+          completion(probe.exited && probe.status == 1 ? [:] : nil)
+        }
+        return
+      }
+      var entries: [String: String] = [:]
+      for record in output.stdout.split(separator: 0) {
+        // `<mode> <type> <oid>\t<path>`
+        guard let line = String(bytes: record, encoding: .utf8),
+          let tab = line.firstIndex(of: "\t")
+        else { continue }
+        let fields = line[..<tab].split(separator: " ")
+        guard fields.count == 3, fields[1] == "blob" else { continue }
+        entries[String(line[line.index(after: tab)...])] = String(fields[2])
+      }
+      completion(entries)
+    }
+  }
+
   /// blob を作業ツリーに出したときの中身——`relativePath` の属性で smudge filter と eol 変換を掛けた
   /// バイト列（clean と smudge が往復する filter なら、git が clean と言う姿と同じ底）。smudge の実行コマンドは
   /// config 側にしか書けないので、信頼できないリポジトリのコードが実行される面は checkout と同じ。textconv・

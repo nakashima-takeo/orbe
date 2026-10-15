@@ -27,7 +27,7 @@ extension UnsavedGateTests {
     let a = try tab.editor.open(repo.url("a.txt"), as: .pinned)
     edit(a)
 
-    tab.view.editor.shell.requestClose(a.url)
+    tab.view.editor.shell.requestClose(.document(a.url))
     try repo.write("b.txt", "b\n")
     let b = try tab.editor.open(repo.url("b.txt"), as: .pinned)  // sheet の間にエージェントが別の文書を開く
     window.endSheet(try XCTUnwrap(window.attachedSheet), returnCode: .alertSecondButtonReturn)

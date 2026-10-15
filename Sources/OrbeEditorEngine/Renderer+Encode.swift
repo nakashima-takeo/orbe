@@ -100,7 +100,7 @@ extension Renderer {
     return buffers.count - 1
   }
 
-  /// 1 コマの重ねる順（ここが唯一の置き場）。下から、行番号の列と本文の列に切り取って 行の型の地、本文の列に切り取って
+  /// 1 コマの重ねる順（ここが唯一の置き場）。下から、上端の余白の下に切り取って 行の型の地、本文の列に切り取って
   /// 選択の地・未確定の文字の地 → 強調の地 →
   /// 行の装備（空白の丸点・URL の下線）、行番号の列と本文の列に切り取って 区画の箱（影 → 塗り → 枠線。影は行番号の列にも
   /// 落ち、行番号と印がその上に出る）、本文の列に切り取って 区画の画像 → 区画の文の選択の地 → 本文の字と
@@ -137,7 +137,7 @@ extension Renderer {
     var viewport = SIMD2<Float>(Float(texture.width), Float(texture.height))
     encoder.setVertexBytes(&viewport, length: MemoryLayout<SIMD2<Float>>.size, index: 1)
     if !built.lineBackgrounds.isEmpty {
-      encoder.setScissorRect(built.zoneScissor)
+      encoder.setScissorRect(built.lineScissor)
       instances.shapes(built.lineBackgrounds, encoder, pass)
     }
     encoder.setScissorRect(built.textScissor)

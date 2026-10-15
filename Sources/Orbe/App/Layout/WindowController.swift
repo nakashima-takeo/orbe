@@ -31,6 +31,8 @@ final class WindowController: NSObject, NSWindowDelegate {
   // エディター面のサイドバーの幅と開閉。アプリ全体で 1 つ（タブ・workspace をまたいで同じ）で、
   // app-state から起こして各タブの面へ配る。
   let editorSidebar = MainActor.assumeIsolated { EditorSidebarState.loaded() }
+  // diff の見せ方（インライン / 並列）。サイドバーと同じくアプリ全体で 1 つで、app-state から起こす。
+  let editorDiffModes = MainActor.assumeIsolated { EditorDiffModeState.loaded() }
   // 現在の UI 言語ホルダー。起動時に app-state の preferredLanguage（未設定は OS 追従）で解決し、
   // NSHostingView root（AppShell）へ Environment 注入する。言語変更は初回言語画面と
   // 設定パレットの言語行が行い、@Observable 経由で全 chrome を一斉再描画する。
@@ -227,7 +229,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     }
     tab.view.configure(
       translucency: chromeTranslucency, localization: localization, fontResolver: fontResolver,
-      sidebar: editorSidebar)
+      sidebar: editorSidebar, diffModes: editorDiffModes)
     return tab
   }
 

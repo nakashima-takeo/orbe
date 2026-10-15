@@ -111,14 +111,14 @@ final class TabFacesView: NSView {
     }
   }
 
-  /// 窓の環境（透過・言語・フォント割り当て・サイドバーの状態）を面へ配る。
+  /// 窓の環境（透過・言語・フォント割り当て・サイドバーの状態・diff の見せ方）を面へ配る。
   func configure(
     translucency: ChromeTranslucency, localization: LocalizationStore,
-    fontResolver: ChromeFontResolver, sidebar: EditorSidebarState
+    fontResolver: ChromeFontResolver, sidebar: EditorSidebarState, diffModes: EditorDiffModeState
   ) {
     editor.configure(
       translucency: translucency, localization: localization, fontResolver: fontResolver,
-      sidebar: sidebar)
+      sidebar: sidebar, diffModes: diffModes)
     spine.translucency = translucency
   }
 

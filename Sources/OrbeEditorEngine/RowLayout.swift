@@ -41,7 +41,7 @@ struct RowLayout: Sendable {
   private var zoneBlocks: [ObjectIdentifier: Int] = [:]
   /// 文書の行の区間（始まりの行の昇順）。
   private(set) var spans: [LineSpan] = []
-  /// 差し込んだ行の番号と、最後の区間より前の区間の行のもう一方の番号の、最も大きいもの（無ければ 0）。最後の区間は
+  /// 差し込んだ行が指す出どころの行の番号と、最後の区間より前の区間の行のもう一方の番号の、最も大きいもの（無ければ 0）。最後の区間は
   /// 行数で決まるので、問われたときに足す（→ `otherNumberMax`）。
   private var settledNumberMax = 0
   /// 作り変えるたびに進む（並びから作るキャッシュの鍵）。
@@ -348,7 +348,7 @@ struct RowLayout: Sendable {
     var result = 0
     for content in contents {
       guard case .lines(let lines) = content else { continue }
-      for line in lines { result = max(result, line.number ?? 0) }
+      for line in lines { result = max(result, line.line.map { $0 + 1 } ?? 0) }
     }
     for (span, next) in zip(spans, spans.dropFirst()) {
       guard let number = span.otherNumber, next.line > span.line else { continue }

@@ -63,6 +63,7 @@ extension ControlWireTests {
       ("focus_tab", ["tabId": 8]),
       ("close_tab", ["tabId": 9]),
       ("open_file", ["tabId": 8, "path": "/tmp/f.txt"]),
+      ("open_diff", ["tabId": 8, "path": "/tmp/f.txt", "kind": "workingTree"]),
       (
         "report_agent",
         [
@@ -122,6 +123,9 @@ extension ControlWireTests {
       RequiredParam(method: "close_tab", key: "tabId", code: -32602),
       RequiredParam(method: "open_file", key: "tabId", code: -32602),
       RequiredParam(method: "open_file", key: "path", code: -32602),
+      RequiredParam(method: "open_diff", key: "tabId", code: -32602),
+      RequiredParam(method: "open_diff", key: "path", code: -32602),
+      RequiredParam(method: "open_diff", key: "kind", code: -32602),
       RequiredParam(method: "config_set", key: "key", code: -32602),
       RequiredParam(method: "config_set", key: "value", code: -32602),
       RequiredParam(method: "config_set", key: "scope", code: -32602),

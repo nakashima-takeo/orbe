@@ -37,6 +37,9 @@ protocol ControlTarget: ControlTaskTarget {
   /// 指定タブのエディターでファイルを開き、エディター面を見せてそのタブへフォーカスする（open_file）。
   /// 未解決は -32004、開けない（読めない・UTF-8 でない・Metal の装置が無くテキスト面を作れない）は -32000。
   func controlOpenFile(tabId: Int, path: String) -> Result<Any, ControlError>
+  /// 指定タブのエディターで diff を開き、エディター面を見せてそのタブへフォーカスする（open_diff）。未解決は -32004、
+  /// git 管理外のパス・Metal の装置が無くテキスト面を作れないは -32000。
+  func controlOpenDiff(tabId: Int, path: String, kind: EditorDiff.Kind) -> Result<Any, ControlError>
   /// 全設定項目の実効値・由来 scope・型・値域（domain）を列挙する（config CLI 用・読み取り専用）。
   /// workspaceId 指定でその WS の上書きを重ねる（未指定はアクティブ WS）。未知 id は -32004。
   func controlConfigList(workspaceId: Int?) -> Result<Any, ControlError>

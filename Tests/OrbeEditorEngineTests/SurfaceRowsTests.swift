@@ -18,8 +18,16 @@ final class SurfaceRowsTests: EngineTestCase {
     return opened
   }
 
+  /// 差し込んだ行の字の出どころ。
+  let inserted = InsertedText()
+
   func insert(_ lines: [String], at line: Int) -> RowInsertion {
-    RowInsertion(line: line, content: .lines(lines.map { InsertedLine($0) }))
+    RowInsertion(line: line, content: .lines(inserted.lines(lines)))
+  }
+
+  /// 差し込み `insertions`（字の出どころは `inserted`）の並び。
+  func placed(_ insertions: [RowInsertion]) -> SurfaceRows {
+    SurfaceRows(insertions: insertions, source: inserted)
   }
 
   /// 文書に無い行は本文の色で描かれ、行番号を持たない。下の文書の行（本文・行番号・git の印・選択の地・強調の地）は差し込みの
@@ -38,7 +46,7 @@ final class SurfaceRowsTests: EngineTestCase {
     opened.surface.setHighlights([NSRange(location: text.lineStart(5), length: 3)], for: .findMatch)
     let before = try pixelShot(opened)
     opened.surface.setRows(
-      SurfaceRows(insertions: [insert(["- removed one", "- removed two"], at: 3)]))
+      placed([insert(["- removed one", "- removed two"], at: 3)]))
     let after = try pixelShot(opened)
     let config = opened.surface.config
     let right = Int(opened.surface.surfaceLayout.text.maxX * 2)
@@ -64,7 +72,7 @@ final class SurfaceRowsTests: EngineTestCase {
   func testInsertedLinesHitTheStartOfTheNextLine() throws {
     let opened = try openRows(10)
     opened.surface.setRows(
-      SurfaceRows(insertions: [insert(["- gone"], at: 3), insert(["- tail"], at: 10)]))
+      placed([insert(["- gone"], at: 3), insert(["- tail"], at: 10)]))
     let config = opened.surface.config
     let inserted = CGPoint(
       x: config.columnWidth(lineCount: 10) + 2 * config.cell,
@@ -86,15 +94,15 @@ final class SurfaceRowsTests: EngineTestCase {
     surface.flush()
     let offset = surface.scrollPosition.y - surface.rows.y(ofLine: 30)
     let viewport = surface.viewport
-    surface.setRows(SurfaceRows(insertions: [insert(["a", "b", "c"], at: 10)]))
+    surface.setRows(placed([insert(["a", "b", "c"], at: 10)]))
     surface.flush()
     XCTAssertEqual(surface.scrollPosition.y - surface.rows.y(ofLine: 30), offset, accuracy: 1e-9)
     XCTAssertEqual(surface.viewport, viewport, "見えている範囲は同じ")
-    let placed = surface.scrollPosition.y
+    let top = surface.scrollPosition.y
     surface.setRows(
-      SurfaceRows(insertions: [insert(["a", "b", "c"], at: 10), insert(["d"], at: 70)]))
+      placed([insert(["a", "b", "c"], at: 10), insert(["d"], at: 70)]))
     surface.flush()
-    XCTAssertEqual(surface.scrollPosition.y, placed, "下の差し込みでは動かない")
+    XCTAssertEqual(surface.scrollPosition.y, top, "下の差し込みでは動かない")
     surface.setRows(SurfaceRows())
     surface.flush()
     XCTAssertEqual(surface.scrollPosition.y - surface.rows.y(ofLine: 30), offset, accuracy: 1e-9)
@@ -114,7 +122,7 @@ final class SurfaceRowsTests: EngineTestCase {
       ScrollInput(timestamp: 1.01, delta: SIMD2(0, -200), precise: true, phase: .changed))
     let beyond = surface.scrollPosition.y - surface.rows.y(ofLine: lineCount - 1)
     XCTAssertGreaterThan(beyond, 0, "前提: 最後の行より先へ引っ張っている")
-    surface.setRows(SurfaceRows(insertions: [insert(["a", "b"], at: 10)]))
+    surface.setRows(placed([insert(["a", "b"], at: 10)]))
     surface.flush()
     XCTAssertEqual(
       surface.scrollPosition.y - surface.rows.y(ofLine: lineCount - 1), beyond, accuracy: 1e-9,
@@ -131,7 +139,7 @@ final class SurfaceRowsTests: EngineTestCase {
   func testRowsFollowTheSurfaceEdits() throws {
     let opened = try openRows(20)
     let surface = opened.surface
-    surface.setRows(SurfaceRows(insertions: [insert(["a"], at: 5), insert(["b"], at: 12)]))
+    surface.setRows(placed([insert(["a"], at: 5), insert(["b"], at: 12)]))
     surface.selectedRange = NSRange(location: opened.document.text.lineStart(8), length: 0)
     surface.editor.perform(.insert("new\n"))
     XCTAssertEqual(surface.rows.boundaries, [5, 13])
@@ -155,7 +163,7 @@ final class SurfaceRowsTests: EngineTestCase {
     let surface = opened.surface
     let lineCount = opened.document.text.lineCount
     surface.setRows(
-      SurfaceRows(insertions: [
+      placed([
         insert(["a", "b", "c"], at: 20), insert(["x", "y"], at: lineCount),
       ])
     )
@@ -180,7 +188,7 @@ final class SurfaceRowsTests: EngineTestCase {
   func testPagingCountsTheInsertedRows() throws {
     let opened = try openRows()
     let surface = opened.surface
-    surface.setRows(SurfaceRows(insertions: [insert(["a", "b", "c", "d"], at: 5)]))
+    surface.setRows(placed([insert(["a", "b", "c", "d"], at: 5)]))
     surface.selectedRange = NSRange(location: 0, length: 0)
     let pageLines = try XCTUnwrap(surface.bodySite.editingEnvironment()).pageLines
     surface.editor.perform(.move(.pageDown, extending: false))
