@@ -4,7 +4,8 @@ import SwiftUI
 ///
 /// - 一覧: 入力で絞り込み、↑↓ で選択、Enter で切替（末尾の作成導線行なら作成フォームへ）、
 ///   選択 workspace 行で → を押すと同じカードが詳細メニューに潜る、Esc で閉じる。
-/// - 詳細メニュー（改名 / ディレクトリ / 削除）: ↑↓ で選択、Enter で実行、← か Esc で一覧へ戻る。
+/// - 詳細メニュー（改名 / ディレクトリ / 削除。後ろ 2 つは行の `canSetDir` / `canClose` が真のときだけ）:
+///   ↑↓ で選択、Enter で実行、← か Esc で一覧へ戻る。
 /// - 改名 / ディレクトリ: 入力欄に現値をプリフィルし Enter で確定、Esc で詳細メニューへ戻る。
 ///
 /// 描画は `PaletteOverlay`/`PaletteCard`（`AppShell` の `.overlay` が compose）。本モデルは
@@ -29,6 +30,9 @@ import SwiftUI
     let isActive: Bool
     /// この workspace のディレクトリ設定（rootPath）。詳細メニューの「ディレクトリ」編集にプリフィルする。
     let dir: String
+    /// 詳細メニューに「ディレクトリ」「削除」を出すか。判断は提示元が `SessionStore` の述語から詰める。
+    let canSetDir: Bool
+    let canClose: Bool
     var live: LiveState
   }
 
@@ -174,9 +178,11 @@ import SwiftUI
       // 末尾常設。入力が非空で完全同名が無ければ、その入力を作成フォームの名前として引き継ぐ。
       let seed = (!query.isEmpty && !items.contains { $0.name == query }) ? query : nil
       entries.append(.createFlow(seed: seed))
-    case .submenu:
-      entries = [.action(.rename), .action(.setDir)]
-      if items.count > 1 { entries.append(.action(.close)) }  // 最後の1つは削除メニューを出さない
+    case .submenu(let idx):
+      let item = items.first { $0.index == idx }
+      entries = [.action(.rename)]
+      if item?.canSetDir == true { entries.append(.action(.setDir)) }
+      if item?.canClose == true { entries.append(.action(.close)) }
     case .rename, .setDir:
       entries = []
     }

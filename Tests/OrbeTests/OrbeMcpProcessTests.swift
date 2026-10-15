@@ -54,6 +54,30 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     }
   }
 
+  /// Home の rules と秘書の役目の指示（日英）が名指しする MCP のツールは、どれも `tools/list` にある。どちらも claude が
+  /// 起動のたびに読む手引きで、orbe-mcp は別ターゲットなので、ツールを改名・削除してもコンパイルもほかのテストも通ってしまう。
+  func testAgentInstructionsNameOnlyToolsTheBridgeLists() throws {
+    let names = Set(ControlProcess.mcpToolsList().compactMap { $0["name"] as? String })
+    let pattern = try NSRegularExpression(pattern: "`([a-z]+(?:_[a-z]+)+|spawn)`")
+    for language in Language.allCases {
+      let texts = [
+        ("Home の rules", HomeTemplate.rules(language, home: "/home")),
+        ("⌘⇧X の役目の指示", SecretaryText.instructions(for: .palette, language)),
+        ("ボードの役目の指示", SecretaryText.instructions(for: .board, language)),
+      ]
+      for (label, text) in texts {
+        let named = pattern.matches(in: text, range: NSRange(text.startIndex..., in: text)).map {
+          String(text[Range($0.range(at: 1), in: text)!])
+        }
+        XCTAssertFalse(named.isEmpty, "\(language) の\(label): 前提: ツールを名指ししている")
+        for name in named {
+          XCTAssertTrue(
+            names.contains(name), "\(language) の\(label)が tools/list に無い \(name) を名指ししている")
+        }
+      }
+    }
+  }
+
   /// `tools/list` の description が写す既定・上限は control の正本（`WaitTimeout` / `SessionLogLimits`）と
   /// 同じ値。AI が timeoutMs・limit・一度に戻す件数を決める唯一の情報源なので、写しが古いと省略時の
   /// 待ち時間を誤って見積もり、上限を超えた要求を組む。数字の直後の区切りまで含めて比べる——部分一致だと
@@ -93,6 +117,9 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       description(try tool("restore_sessions"), property: "sessionIds")
         .contains("\(SessionLogLimits.restoreMaxIds) 件"),
       "sessionIds の上限を写す")
+    XCTAssertTrue(
+      description(try tool("list_automations")).contains("新しい順に \(Automation.retainedRuns) 件まで。"),
+      "回の記録を残す件数を写す")
   }
 
   /// `tools/list` に出る全ツールが control の method として通る。ブリッジはツール名をそのまま method 名へ
@@ -117,6 +144,26 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     XCTAssertTrue(rejected.isError, "control の拒否は isError:true になる")
     XCTAssertTrue(
       rejected.text.contains("workspace not found"), "error 本文に理由が残る: \(rejected.text)")
+  }
+
+  /// AI が MCP だけで、`hasBoard` の workspace（Home の root を知らなくても選べる）のボードの部品を読み・外し・置ける。
+  func testBoardPartsAreReachableByHasBoard() throws {
+    let control = try startControlProcess()
+    let workspaces = try XCTUnwrap(
+      control.mcpJSON("list_workspaces")["workspaces"] as? [[String: Any]])
+    let home = try XCTUnwrap(
+      workspaces.first { $0["hasBoard"] as? Bool == true }?["id"] as? Int,
+      "list_workspaces に hasBoard")
+    func kinds(_ tool: String, _ arguments: [String: Any]) -> [String]? {
+      (control.mcpJSON(tool, arguments)["parts"] as? [[String: Any]])?.compactMap {
+        $0["kind"] as? String
+      }
+    }
+
+    XCTAssertEqual(kinds("list_board_parts", ["workspaceId": home]), ["automation"], "決めていなければ既定")
+    XCTAssertEqual(kinds("remove_board_part", ["workspaceId": home, "kind": "automation"]), [])
+    XCTAssertEqual(
+      kinds("add_board_part", ["workspaceId": home, "kind": "automation"]), ["automation"])
   }
 
   /// 背景 workspace を `activate_workspace` すると、返る `tabIds` の先頭が実際に読めるタブになる

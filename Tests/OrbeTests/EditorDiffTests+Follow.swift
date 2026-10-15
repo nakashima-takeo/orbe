@@ -13,7 +13,7 @@ extension EditorDiffTests {
   func testAWorkingTreeDiffFollowsTheIndexAndExternalWrites() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let (tab, _) = tab()
-    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
     waitRows(diff, "変更が出る") { !$0.isEmpty }
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     waitRows(diff, "ステージすれば作業ツリーの変更は無い") { $0.isEmpty && $0.spans.allSatisfy { $0.style == nil } }
@@ -28,16 +28,16 @@ extension EditorDiffTests {
   func testEditsInTheFileTabShowInTheDiffOnComingBack() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let (tab, _) = tab()
-    let document = try tab.editor.open(repo.url("a.txt"), as: .pinned)
-    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let document = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
     waitRows(diff, "変更が出る") { $0.boundaries == [1] }
-    tab.editor.activate(document)
+    tab.group.editor.activate(document)
     let responder = document.surface.responder
     responder.perform(#selector(NSResponder.moveToBeginningOfDocument(_:)), with: nil)
     responder.perform(Selector(("insertText:")), with: "zero\n")
     XCTAssertEqual(document.text.lineCount, 6, "前提: 先頭に 1 行足した")
 
-    tab.editor.activate(.diff(id("a.txt", .workingTree)))
+    tab.group.editor.activate(.diff(id("a.txt", .workingTree)))
     let rows = try engine(diff.newSurface).rows
     XCTAssertEqual(rows.boundaries, [2], "削除行は 1 行下がった TWO の前")
     XCTAssertEqual(removedLines(rows), [1])
@@ -49,7 +49,7 @@ extension EditorDiffTests {
   func testTheRowsStayOnTheTextWhenItShrinksBeforeTheNewBaseArrives() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\nfive\nsix\nseven\n")
     let (tab, _) = tab()
-    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
     waitRows(diff, "変更が出る") { !$0.isEmpty }
     let document = try XCTUnwrap(diff.document)
     document.baseline = "zero\n"
@@ -69,7 +69,7 @@ extension EditorDiffTests {
   func testAWorkingTreeDiffFollowsTheFileBeingRemovedRestoredAndMadeBinary() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let (tab, _) = tab()
-    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
     waitRows(diff, "変更が出る") { $0.boundaries == [1] }
     try FileManager.default.removeItem(at: repo.url("a.txt"))
     waitRows(diff, "消せば全部が削除") { self.removedLines($0) == [0, 1, 2, 3] }
@@ -85,8 +85,8 @@ extension EditorDiffTests {
   func testADiffThatBecomesUnavailableShowsTheReasonInsteadOfTheSurface() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let (tab, _) = tab()
-    let pane = tab.view.editor
-    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let pane = tab.group.view.editor
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
     waitRows(diff, "変更が出る") { !$0.isEmpty }
     let surface = try engine(diff.newSurface)
     try Data([0xFF, 0xFE, 0x00, 0x01]).write(to: repo.url("a.txt"))
@@ -100,19 +100,19 @@ extension EditorDiffTests {
   /// 今の姿（消えた）に戻る。
   func testADiffCatchesUpWithTheWorkingTreeOnceTheDocumentIsNoLongerUnsaved() throws {
     let (tab, _) = tab()
-    let document = try tab.editor.open(repo.url("a.txt"), as: .pinned)
+    let document = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     let responder = document.surface.responder
     responder.perform(Selector(("insertText:")), with: "Z")
-    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
     waitRows(diff, "変更が出る") { !$0.isEmpty }
     try FileManager.default.removeItem(at: repo.url("a.txt"))
     pumpMain(until: { diff.files.status?.entries["a.txt"]?.unstaged == .deleted }, "消えた")
     XCTAssertTrue(diff.document === document, "前提: 未保存の間は手放さない")
 
-    tab.editor.activate(document)
+    tab.group.editor.activate(document)
     try XCTUnwrap(responder.undoManager).undo()
     pumpMain(until: { !document.isDirty }, "undo で未保存でなくなる")
-    tab.editor.activate(.diff(id("a.txt", .workingTree)))
+    tab.group.editor.activate(.diff(id("a.txt", .workingTree)))
     pumpMain(until: { diff.document == nil }, "消えたファイルの diff になる")
   }
 
@@ -127,7 +127,7 @@ extension EditorDiffTests {
     try repo.write("long.txt", lines.joined(separator: "\n") + "\n")
     XCTAssertTrue(repo.git(["add", "long.txt"]).isSuccess)
     let (tab, _) = tab()
-    let diff = try tab.editor.openDiff(id("long.txt", .staged), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("long.txt", .staged), as: .pinned)
     waitRows(diff, "変更が出る") { !$0.isEmpty }
     let before = try engine(diff.newSurface)
     before.flush()
@@ -147,7 +147,7 @@ extension EditorDiffTests {
     XCTAssertEqual(diff.newRevision?.text.row(containing: after.viewport.firstVisible), top)
 
     let (other, _) = self.tab()
-    let fresh = try other.editor.openDiff(id("long.txt", .staged), as: .pinned)
+    let fresh = try other.group.editor.openDiff(id("long.txt", .staged), as: .pinned)
     waitRows(fresh, "開き直した diff") { !$0.isEmpty }
     let freshSurface = try engine(fresh.newSurface)
     pumpMain(until: { freshSurface.viewport.firstVisible > 0 }, "面が大きさを持ち、最初の変更区間へ送られる")
@@ -181,11 +181,11 @@ extension EditorDiffTests {
   func testSideBySideKeepsSharingTheScrollWhenTheFileIsRemoved() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let (tab, _) = tab()
-    tab.view.editor.configure(
+    tab.group.view.editor.configure(
       translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
       fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(),
       diffModes: EditorDiffModeState(mode: .side))
-    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
     pumpMain(until: { diff.content == .ready && diff.oldSurface != nil }, "並列")
     try FileManager.default.removeItem(at: repo.url("a.txt"))
     pumpMain(until: { diff.document == nil && diff.oldSurface != nil }, "消えたファイルの並列")
@@ -197,10 +197,10 @@ extension EditorDiffTests {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let modes = EditorDiffModeState(mode: .side)
     let (tab, window) = tab()
-    tab.view.editor.configure(
+    tab.group.view.editor.configure(
       translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
       fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(), diffModes: modes)
-    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
     pumpMain(until: { diff.content == .ready && diff.oldSurface != nil }, "並列")
     let left = try XCTUnwrap(diff.oldSurface).responder
     window.makeFirstResponder(left)

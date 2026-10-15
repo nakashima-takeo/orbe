@@ -37,7 +37,7 @@ extension EditorPaneView {
     window?.makeFirstResponder(focusTarget)
   }
 
-  /// chrome キーの解決点。first responder が自分か配下のときだけ効く——隠れたタブの pane も窓に残るので、
+  /// chrome キーの解決点。first responder が自分か配下のときだけ効く——隠れた連の pane も窓に残るので、
   /// 焦点が自分か配下に無いときは素通しする。検索パネルの中のキーは chrome キーより先に見る。chrome キーを走らせる前に焦点の
   /// 文書の変換を確定する（⌘F の種の読み取りや焦点の移動の前に、変換の状態と IME の状態を揃える。未確定の文字は既に本文に
   /// あるので、⌘S は見えている本文を保存する）。
@@ -49,7 +49,7 @@ extension EditorPaneView {
     diff.map(diffSurfaces)?.forEach { $0.commitMarkedText() }
     switch action.owner {
     case .window:
-      if let command = action.windowCommand { tab?.requestWindowCommand(command) }
+      if let command = action.windowCommand { group?.requestWindowCommand(command) }
       return true
     case .editor:
       saveActiveDocument()
@@ -71,15 +71,15 @@ extension EditorPaneView {
   /// 差し替える）ので、応答時点の焦点ではなく出した時点の文書を束ね、まだ居ることを確かめてから書く
   /// （`requestClose` と同型）。それ以外の失敗は beep（`open` と同じ理由でエラー面は持たない）。
   private func saveActiveDocument() {
-    guard let tab else { return }
+    guard let group else { return }
     do {
-      try tab.editor.saveActive()
+      try group.editor.saveActive()
     } catch EditorDocumentError.diskChanged {
-      guard let window, let target = tab.editor.activeDocument else { return }
+      guard let window, let target = group.editor.activeDocument else { return }
       let alert = UnsavedGate.overwriteAlert(language: localization.language)
       alert.beginSheetModal(for: window) { [weak self, weak target] response in
-        guard let self, let tab = self.tab, let target,
-          tab.editor.documents.contains(where: { $0 === target }),
+        guard let self, let group = self.group, let target,
+          group.editor.documents.contains(where: { $0 === target }),
           UnsavedGate.shouldOverwrite(response)
         else { return }
         do {

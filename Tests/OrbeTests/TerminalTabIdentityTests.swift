@@ -23,7 +23,7 @@ final class TerminalTabIdentityTests: OrbeTestCase {
   // MARK: applyReport
 
   func testFirstReportWithSessionIdOpens() {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     let log = recording(tab)
     tab.applyReport(AgentHookReport(agent: "claude", state: "idle"))
     XCTAssertEqual(log(), [], "sessionId を運ぶ前の稼働はまだ同一性ではない")
@@ -34,7 +34,7 @@ final class TerminalTabIdentityTests: OrbeTestCase {
   }
 
   func testSessionSwitchClosesThenOpens() {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     tab.applyReport(AgentHookReport(agent: "claude", state: "idle", sessionId: "s-1"))
     let log = recording(tab)
     tab.applyReport(AgentHookReport(agent: "claude", state: "idle", sessionId: "s-2"))
@@ -47,7 +47,7 @@ final class TerminalTabIdentityTests: OrbeTestCase {
   }
 
   func testClearClosesWithReason() {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     tab.applyReport(AgentHookReport(agent: "claude", state: "idle", sessionId: "s-1"))
     let log = recording(tab)
     tab.applyReport(
@@ -62,10 +62,10 @@ final class TerminalTabIdentityTests: OrbeTestCase {
   }
 
   func testDormantDiscardsReportsWithoutTransition() {
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       restoring: TabState(
         cwd: "/tmp", agent: AgentSession(command: "claude", sessionId: "s-1"), explicitTitle: nil),
-      resumeSpawn: { _ in nil })
+      resumeSpawn: { _, _ in nil })
     let log = recording(tab)
     XCTAssertFalse(
       tab.applyReport(AgentHookReport(agent: "claude", state: "idle", sessionId: "s-9")))
@@ -74,7 +74,7 @@ final class TerminalTabIdentityTests: OrbeTestCase {
   }
 
   func testReturnValueIsTheRealStateChange() {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     XCTAssertTrue(
       tab.applyReport(AgentHookReport(agent: "claude", state: "working")))
     XCTAssertFalse(
@@ -91,10 +91,10 @@ final class TerminalTabIdentityTests: OrbeTestCase {
   // MARK: recordMaterializationStarted
 
   func testWakingResolvedTicketOpens() {
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       restoring: TabState(
         cwd: "/tmp", agent: AgentSession(command: "claude", sessionId: "s-1"), explicitTitle: nil),
-      resumeSpawn: { _ in ("claude --resume s-1", [:]) })
+      resumeSpawn: { _, _ in ("claude --resume s-1", [:]) })
     let log = recording(tab)
     tab.recordMaterializationStarted()
     XCTAssertEqual(log(), [.opened(claude)])
@@ -103,10 +103,10 @@ final class TerminalTabIdentityTests: OrbeTestCase {
   }
 
   func testWakingUnresolvedTicketClosesAsUnresolved() {
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       restoring: TabState(
         cwd: "/tmp", agent: AgentSession(command: "claude", sessionId: "s-1"), explicitTitle: nil),
-      resumeSpawn: { _ in nil })
+      resumeSpawn: { _, _ in nil })
     let log = recording(tab)
     tab.recordMaterializationStarted()
     XCTAssertEqual(log(), [.closed(claude, origin: .unresolved, reason: nil)])
@@ -120,7 +120,7 @@ final class TerminalTabIdentityTests: OrbeTestCase {
       (TabCloseOrigin.gesture, SessionEvent.CloseOrigin.gesture), (.process, .process),
       (.controlAPI, .controlAPI),
     ] {
-      let tab = TerminalTab(cwd: "/tmp")
+      let tab = TerminalTab.alone(cwd: "/tmp")
       tab.applyReport(AgentHookReport(agent: "claude", state: "idle", sessionId: "s-1"))
       let log = recording(tab)
       tab.recordDetached(origin: origin)
@@ -130,10 +130,10 @@ final class TerminalTabIdentityTests: OrbeTestCase {
   }
 
   func testDetachWithoutIdentityIsSilent() {
-    let plain = TerminalTab(cwd: "/tmp")
+    let plain = TerminalTab.alone(cwd: "/tmp")
     let plainLog = recording(plain)
     plain.recordDetached(origin: .gesture)
-    let unnamed = TerminalTab(cwd: "/tmp")
+    let unnamed = TerminalTab.alone(cwd: "/tmp")
     unnamed.applyReport(AgentHookReport(agent: "claude", state: "working"))
     let unnamedLog = recording(unnamed)
     unnamed.recordDetached(origin: .process)
@@ -142,7 +142,7 @@ final class TerminalTabIdentityTests: OrbeTestCase {
   }
 
   func testDetachAfterIdentityEndedIsSilent() {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     tab.applyReport(AgentHookReport(agent: "claude", state: "idle", sessionId: "s-1"))
     tab.applyReport(
       AgentHookReport(

@@ -24,8 +24,10 @@ struct TaskPaletteFooter: View {
   }
 
   @ViewBuilder private var actionLine: some View {
-    if let error = model.error {
-      Text(l10n.string(errorKey(error))).foregroundStyle(Color.theme.danger)
+    if model.visibleTab == .automation {
+      TaskPaletteAutomationAction(model: model.automation)
+    } else if let error = model.error {
+      Text(l10n.string(error.message)).foregroundStyle(Color.theme.danger)
     } else if let draft = model.draft {
       PaletteActionLine(
         key: draft.isMultiline ? "esc" : "↵", template: l10n.string(.taskPaletteActionCommit),
@@ -46,6 +48,13 @@ struct TaskPaletteFooter: View {
         PaletteActionLine(
           key: field.isText ? "↵" : "←→", template: l10n.string(fieldActionKey(field)), slots: [])
       }
+    } else if model.area == .detail(.conversation) {
+      if let task = model.selectedTask, let tab = model.conversationTab(of: task) {
+        PaletteActionLine(
+          key: "↵", template: l10n.string(.taskPaletteActionGoToTab), slots: [.emphasis(tab.title)])
+      }
+    } else if case .detail(.condition(let part)) = model.area {
+      PaletteActionLine(key: "↵", template: l10n.string(conditionActionKey(part)), slots: [])
     } else if model.area == .detail(.agent) {
       if let task = model.selectedTask, let agent = model.agent(of: task) {
         PaletteActionLine(
@@ -64,54 +73,78 @@ struct TaskPaletteFooter: View {
     } else {
       switch model.selectedID {
       case .add:
-        PaletteActionLine(
-          key: "↵", template: l10n.string(.taskPaletteAdd),
-          slots: [.emphasis(model.query.trimmingCharacters(in: .whitespacesAndNewlines))])
+        if let workspace = model.addedWorkspace {
+          PaletteActionLine(
+            key: "↵", template: l10n.string(.taskPaletteActionAddTo),
+            slots: [.plain(model.addTitle ?? ""), .plain(workspace.name)])
+        } else {
+          PaletteActionLine(
+            key: "↵", template: l10n.string(.taskPaletteActionAdd),
+            slots: [.plain(model.addTitle ?? "")])
+        }
+      case .task(let id) where id == model.justAdded:
+        PaletteActionLine(key: "→", template: l10n.string(.taskPaletteActionRefine), slots: [])
       case .task:
-        if let task = model.selectedTask {
+        if let task = model.selectedTask, case .blocked(let block) = model.continuation(of: task) {
+          PaletteActionLine(
+            key: nil, template: l10n.string(.taskPaletteContinueBlocked),
+            slots: [.emphasis(l10n.string(block.message))])
+        } else if let task = model.selectedTask,
+          case .ready(let conversation) = model.continuation(of: task)
+        {
+          PaletteActionLine(
+            key: "⌘↵", template: l10n.string(.taskPaletteActionContinue),
+            slots: [.emphasis(task.title), .emphasis(conversation.command)])
+        } else if let task = model.selectedTask {
           PaletteActionLine(
             key: model.query.isEmpty ? "space" : "↵",
             template: l10n.string(
               task.status == .done ? .taskPaletteActionReopen : .taskPaletteActionDone),
-            slots: [.emphasis(task.title)])
+            slots: [.plain(task.title)])
         }
-      case .doneHeader:
-        TaskPaletteDoneHeaderAction(model: model)
       case nil:
         EmptyView()
       }
     }
   }
 
-  private var hints: some View {
-    HStack(spacing: Theme.Space.beat + Theme.Space.hair) {
-      if let draft = model.draft {
-        // 複数行の項目は esc が確定（左の 1 行が言う）で、取り消しのキーは無い。
-        if !draft.isMultiline {
-          PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintCancel))
-        }
-      } else if model.pick != nil {
-        PaletteKeyHint(
-          key: "⇥",
-          label: l10n.string(
-            model.visibleTab == .tasks ? .taskPaletteHintScope : .taskPaletteHintFilter))
-        PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintStopPicking))
-      } else if model.visibleTab == .github {
-        TaskPaletteGitHubHints(model: model)
-      } else if case .detail(let stop) = model.area {
-        PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteHintOpenWorktree))
+  @ViewBuilder private var hints: some View {
+    if model.visibleTab == .automation {
+      TaskPaletteAutomationHints(model: model.automation, cyclesTabs: model.cyclesTabs)
+    } else if let draft = model.draft {
+      // 複数行の項目は esc が確定（左の 1 行が言う）で、取り消しのキーは無い。
+      TaskPaletteHintRow(
+        cyclesTabs: model.cyclesTabs, escape: draft.isMultiline ? nil : .taskPaletteHintCancel
+      ) {}
+    } else if model.pick != nil {
+      TaskPaletteHintRow(cyclesTabs: model.cyclesTabs, escape: .taskPaletteHintStopPicking) {}
+    } else if model.visibleTab == .github {
+      TaskPaletteGitHubHints(model: model)
+    } else if case .detail(let stop) = model.area {
+      TaskPaletteHintRow(cyclesTabs: model.cyclesTabs, escape: .taskPaletteHintBack) {
+        PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteHintOpenAgent))
         if case .link = stop {
           PaletteKeyHint(key: "⌫", label: l10n.string(.taskPaletteUnlink))
         }
         PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteHintField))
-        PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintBack))
-      } else {
-        PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteHintOpenWorktree))
-        PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintEdit))
-        PaletteKeyHint(key: "⌥↑↓", label: l10n.string(.taskPaletteHintReorder))
-        PaletteKeyHint(key: "⇥", label: l10n.string(.taskPaletteHintScope))
-        PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteDelete))
-        PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintClose))
+      }
+    } else if model.selectedID == .add {
+      TaskPaletteHintRow(cyclesTabs: model.cyclesTabs, escape: .taskPaletteHintClose) {
+        PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteHandToAgent))
+        if model.selectableIDs.count > 1 {
+          PaletteKeyHint(key: "↓", label: l10n.string(.taskPaletteHintToMatches))
+        }
+      }
+    } else {
+      TaskPaletteHintRow(cyclesTabs: model.cyclesTabs, escape: .taskPaletteHintClose) {
+        if model.selectedTask != nil {
+          PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintDetail))
+          PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteHintOpenAgent))
+          // 文字があるときの ⌘⌫ は入力欄の文字を消す。
+          if model.query.isEmpty {
+            PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteDelete))
+          }
+        }
       }
     }
   }
@@ -128,16 +161,14 @@ struct TaskPaletteFooter: View {
     }
   }
 
-  private func errorKey(_ error: TaskPaletteError) -> L10nKey {
-    switch error {
-    case .title: .taskPaletteErrTitle
-    case .waiting: .taskPaletteErrWaiting
-    case .due: .taskPaletteErrDue
-    case .failed: .taskPaletteErrFailed
-    case .assign: .taskPaletteErrAssign
-    case .link: .taskPaletteErrLink
+  private func conditionActionKey(_ part: TaskConditionPart) -> L10nKey {
+    let open = model.isConditionPartOpen(part)
+    switch part {
+    case .command: return open ? .taskPaletteActionHideCommand : .taskPaletteActionShowCommand
+    case .log: return open ? .taskPaletteActionHideLog : .taskPaletteActionShowLog
     }
   }
+
 }
 
 /// GitHub タブのフッターの左（選んだ行と右の欄の場所で、↵ が何をするか）。
@@ -164,7 +195,14 @@ private struct TaskPaletteGitHubAction: View {
       PaletteActionLine(
         key: "↵", template: l10n.string(.taskPaletteActionMore), slots: [.emphasis("\(count)")])
     } else if let row = model.selectedGitHubRow {
-      if let task = row.task {
+      // ⌘↵ が解けた待ちの続きから始めるなら（タスクのタブと同じく）それを先に言う。
+      if let linked = row.task, let task = model.store.tasks.first(where: { $0.id == linked.id }),
+        case .ready(let conversation) = model.continuation(of: task)
+      {
+        PaletteActionLine(
+          key: "⌘↵", template: l10n.string(.taskPaletteActionContinue),
+          slots: [.emphasis(task.title), .emphasis(conversation.command)])
+      } else if let task = row.task {
         PaletteActionLine(
           key: "↵", template: l10n.string(.taskPaletteActionOpenTask),
           slots: [.emphasis(task.label)])
@@ -200,27 +238,43 @@ private struct TaskPaletteGitHubHints: View {
 
   var body: some View {
     if case .pane(let stop) = model.area {
-      // 期限の ↵ は期限を打つ（左の 1 行が言う）。
-      if stop != .due { PaletteKeyHint(key: "↵", label: l10n.string(.taskPaletteMakeTask)) }
-      PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteHintOpenInBrowser))
-      PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteHintField))
-      PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintBack))
-    } else if let row = model.selectedGitHubRow {
-      if row.task == nil {
-        PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteMakeTaskOpen))
-        PaletteKeyHint(key: "⌘L", label: l10n.string(.taskPaletteHintLink))
-        PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteHintEdit))
-      } else {
-        PaletteKeyHint(key: "⌘T", label: l10n.string(.taskPaletteHintOpenWorktree))
-        PaletteKeyHint(key: "⌘L", label: l10n.string(.taskPaletteHintRelink))
-        PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteUnlink))
+      TaskPaletteHintRow(cyclesTabs: model.cyclesTabs, escape: .taskPaletteHintBack) {
+        // 期限の ↵ は期限を打つ（左の 1 行が言う）。
+        if stop != .due { PaletteKeyHint(key: "↵", label: l10n.string(.taskPaletteMakeTask)) }
+        PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteMakeTaskOpen))
+        PaletteKeyHint(key: "⌘O", label: l10n.string(.taskPaletteHintOpenInBrowser))
+        PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteHintField))
       }
-      PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteHintOpenInBrowser))
-      PaletteKeyHint(key: "⇥", label: l10n.string(.taskPaletteHintFilter))
-      PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintClose))
     } else {
-      PaletteKeyHint(key: "⇥", label: l10n.string(.taskPaletteHintFilter))
-      PaletteKeyHint(key: "esc", label: l10n.string(.taskPaletteHintClose))
+      TaskPaletteHintRow(cyclesTabs: model.cyclesTabs, escape: .taskPaletteHintClose) {
+        if let row = model.selectedGitHubRow {
+          if row.task == nil {
+            PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteMakeTaskOpen))
+            PaletteKeyHint(key: "⌘L", label: l10n.string(.taskPaletteHintLink))
+          } else {
+            PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteHintOpenAgent))
+            PaletteKeyHint(key: "⌘L", label: l10n.string(.taskPaletteHintRelink))
+            PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteUnlink))
+          }
+          PaletteKeyHint(key: "⌘O", label: l10n.string(.taskPaletteHintOpenInBrowser))
+        }
+      }
+    }
+  }
+}
+
+/// フッターの右のキーヒントの並び。場所のキー → ⇥（タブを巡れるとき）→ esc（その場所での意味。無ければ出さない）。
+struct TaskPaletteHintRow<Keys: View>: View {
+  let cyclesTabs: Bool
+  let escape: L10nKey?
+  @ViewBuilder let keys: Keys
+  @Environment(\.localization) private var l10n
+
+  var body: some View {
+    HStack(spacing: Theme.Space.beat + Theme.Space.hair) {
+      keys
+      if cyclesTabs { PaletteKeyHint(key: "⇥", label: l10n.string(.taskPaletteHintTab)) }
+      if let escape { PaletteKeyHint(key: "esc", label: l10n.string(escape)) }
     }
   }
 }
@@ -238,8 +292,6 @@ private struct TaskPalettePickAction: View {
         if let task = model.selectedTask {
           line(item: "#\(link.item.number)", to: task, owner: model.pickedItemOwner)
         }
-      case .doneHeader:
-        TaskPaletteDoneHeaderAction(model: model)
       case .add, nil:
         EmptyView()
       }
@@ -272,19 +324,5 @@ private struct TaskPalettePickAction: View {
         key: "↵", template: l10n.string(.taskPaletteActionLinkItem),
         slots: [.emphasis(item), .emphasis(task.title)])
     }
-  }
-}
-
-/// 完了の見出しのフッターの左（↵ で完了の欄を開閉する）。
-private struct TaskPaletteDoneHeaderAction: View {
-  @Bindable var model: TaskPaletteModel
-  @Environment(\.localization) private var l10n
-
-  var body: some View {
-    PaletteActionLine(
-      key: "↵",
-      template: l10n.string(
-        model.doneExpanded ? .taskPaletteActionHideDone : .taskPaletteActionShowDone),
-      slots: [])
   }
 }

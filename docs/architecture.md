@@ -1,7 +1,7 @@
 ---
 title: 全体構成
 description: 実行体と制御チャネル・state dir・Sources/ モジュール構成の一望図
-updated: 2026-10-06
+updated: 2026-10-10
 ---
 
 # 全体構成
@@ -18,7 +18,7 @@ flowchart LR
     end
     ORB["orb<br>（.app 同梱・全タブ PATH）"] -->|JSON-RPC| CS
     REP["orbe-report<br>（.app 同梱・agent hook が exec）"] -->|JSON-RPC| CS
-    MCP["orbe-mcp<br>（非同梱・MCP クライアントに手動登録）"] -->|JSON-RPC 転送| CS
+    MCP["orbe-mcp<br>（.app 同梱・agent プラグインの MCP シムが exec）"] -->|JSON-RPC 転送| CS
     AI["MCP クライアント<br>（エージェント）"] -->|stdio| MCP
     ZSH["zsh zle フック<br>（補完）"] -->|JSON-RPC| CS
     app --- STATE[("state dir<br>workspaces.json / settings.json<br>app-state.json / gui.conf")]

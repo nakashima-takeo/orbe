@@ -106,6 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // 終了時にデバウンス待ちの構成変更を取りこぼさず確定保存する。
   func applicationWillTerminate(_ notification: Notification) {
     ControlServer.shared.stop()
+    BackgroundRuns.shared.stopAll()
     windowController?.settleTaskPaletteEditing()  // タスクのストアは変異ごとに即時保存する
     windowController?.flushSave()
   }

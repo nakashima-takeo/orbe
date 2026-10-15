@@ -17,9 +17,9 @@ extension TerminalTabTests {
   // MARK: - agentStateKind
 
   func testGlyphNilWhenNoActiveState() {
-    let none = TerminalTab(cwd: "/tmp")
+    let none = TerminalTab.alone(cwd: "/tmp")
     XCTAssertNil(none.agentStateKind, "nil ならアイコン無し")
-    let idle = TerminalTab(cwd: "/tmp")
+    let idle = TerminalTab.alone(cwd: "/tmp")
     setReportedState(idle, "idle")
     XCTAssertNil(idle.agentStateKind, "idle はタブに出ない")
   }
@@ -28,7 +28,7 @@ extension TerminalTabTests {
     for (state, kind) in [
       ("waiting", AgentStateIcon.Kind.waiting), ("working", .working), ("done", .done),
     ] {
-      let tab = TerminalTab(cwd: "/tmp")
+      let tab = TerminalTab.alone(cwd: "/tmp")
       setReportedState(tab, state)
       XCTAssertEqual(tab.agentStateKind, kind)
     }
@@ -37,7 +37,7 @@ extension TerminalTabTests {
   // MARK: - consumeDoneState
 
   func testConsumeSettlesDoneToIdle() {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     setReportedState(tab, "done")
 
     tab.consumeDoneState()
@@ -48,7 +48,7 @@ extension TerminalTabTests {
 
   func testConsumeKeepsWaitingAndWorking() {
     for state in ["waiting", "working"] {
-      let tab = TerminalTab(cwd: "/tmp")
+      let tab = TerminalTab.alone(cwd: "/tmp")
       setReportedState(tab, state)
       tab.consumeDoneState()
       XCTAssertEqual(tab.agentState, state, "\(state) は消費しない")
@@ -56,7 +56,7 @@ extension TerminalTabTests {
   }
 
   func testConsumePreservesAgentSessionForResume() {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     let session = AgentSession(command: "claude", sessionId: "sess-1")
     setReportedState(tab, "done", command: "claude", sessionId: "sess-1")
 
@@ -70,7 +70,7 @@ extension TerminalTabTests {
 
   func testResetSettlesEveryReportedStateToIdle() {
     for state in ["waiting", "working", "done"] {
-      let tab = TerminalTab(cwd: "/tmp")
+      let tab = TerminalTab.alone(cwd: "/tmp")
       setReportedState(tab, state)
       XCTAssertNotNil(tab.agentStateKind, "前提: タブにグリフが出ている＝リセットできる")
 
@@ -82,7 +82,7 @@ extension TerminalTabTests {
   }
 
   func testResetPreservesIdentityMessageAndStateChangedAt() {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     let reportedAt = Date(timeIntervalSince1970: 1000)
     let question = AgentMessage(text: "approve?", source: "tool")
     let session = AgentSession(command: "claude", sessionId: "sess-1")
@@ -100,8 +100,8 @@ extension TerminalTabTests {
     let ticket = AgentSession(command: "claude", sessionId: "resume-1")
     let state = TabState(cwd: "/tmp", agent: ticket, explicitTitle: nil)
     let tabs = [
-      TerminalTab(cwd: "/tmp"),
-      TerminalTab(restoring: state, resumeSpawn: { _ in nil }),
+      TerminalTab.alone(cwd: "/tmp"),
+      TerminalTab.alone(restoring: state, resumeSpawn: { _, _ in nil }),
       liveUnreportedTab(session: ticket),
     ]
     for tab in tabs {
@@ -113,7 +113,7 @@ extension TerminalTabTests {
 
   /// グリフの出ていないタブはリセットするものを持たない（メニュー項目の無効条件と同じ集合）。
   func testGlyphlessTabHasNothingToReset() {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     let reportedAt = Date(timeIntervalSince1970: 1000)
     setReportedState(tab, "idle", at: reportedAt)
     XCTAssertNil(tab.agentStateKind, "前提: idle だけのタブにグリフは出ない")

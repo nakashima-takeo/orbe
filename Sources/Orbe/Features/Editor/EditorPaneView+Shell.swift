@@ -1,17 +1,17 @@
 import AppKit
 import OrbeEditorCore
 
-/// 骨の操作 → セッション。骨（タブ行・パンくず・ツリー・レール）の閉包を pane へ結び、pane がタブ経由でセッションに書く。
+/// 骨の操作 → セッション。骨（タブ行・パンくず・ツリー・レール）の閉包を pane へ結び、pane が連経由でセッションに書く。
 extension EditorPaneView {
   func wireShell() {
     shell.open = { [weak self] url, mode in self?.open(url, as: mode) }
     shell.activate = { [weak self] id in
-      guard let self, let tab, let opened = tab.editor.tab(id) else { return }
-      tab.editor.activate(id)
+      guard let self, let group, let opened = group.editor.tab(id) else { return }
+      group.editor.activate(id)
       tree.reveal(opened.url)
       focusEditor()
     }
-    shell.pin = { [weak self] id in self?.tab?.editor.pin(id) }
+    shell.pin = { [weak self] id in self?.group?.editor.pin(id) }
     shell.requestClose = { [weak self] id in self?.requestClose(id) }
     shell.selectDiffMode = { [weak self] mode in self?.diffModes.select(mode) }
     shell.revealDirectory = { [weak self] url in self?.tree.revealDirectory(url) }
@@ -36,10 +36,10 @@ extension EditorPaneView {
   /// 骨から `mode` で開く。読めないときは beep（`open_file` と同じ理由でエラー面は持たない）。開けたらその行を
   /// 選択して焦点を面へ——既に焦点の文書ならセッションは変わらないので、選択はここで明示に移す。
   func open(_ url: URL, as mode: EditorSession.OpenMode) {
-    guard let tab else { return }
+    guard let group else { return }
     let document: EditorDocument
     do {
-      document = try tab.editor.open(url, as: mode)
+      document = try group.editor.open(url, as: mode)
     } catch {
       NSSound.beep()
       return
@@ -52,18 +52,18 @@ extension EditorPaneView {
   /// 変更で失敗すれば閉じない）。ほかのタブ（同じ文書の diff・ファイルタブ）が使っていれば確認せずに閉じる——未保存の
   /// 文書は残ったタブに出る。応答が返るまでにタブが消えていれば何もしない。
   func requestClose(_ id: EditorTab.Key) {
-    guard let tab, tab.editor.tab(id) != nil else { return }
-    guard let document = tab.editor.documentClosed(byClosing: id), document.isDirty, let window
+    guard let group, group.editor.tab(id) != nil else { return }
+    guard let document = group.editor.documentClosed(byClosing: id), document.isDirty, let window
     else {
-      tab.editor.close(id)
+      group.editor.close(id)
       return
     }
     let alert = UnsavedGate.alert(count: 1, language: localization.language)
     alert.beginSheetModal(for: window) { [weak self, weak document] response in
-      guard let self, let tab = self.tab, let document, tab.editor.tab(id) != nil,
+      guard let self, let group = self.group, let document, group.editor.tab(id) != nil,
         UnsavedGate.proceed(response, discarding: [document])
       else { return }
-      tab.editor.close(id)
+      group.editor.close(id)
     }
   }
 

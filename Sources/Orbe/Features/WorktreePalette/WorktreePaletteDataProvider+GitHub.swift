@@ -1,86 +1,13 @@
 import Foundation
 
-/// gh レーンの取得と着地。probe（可否判定）→ 取得（remote の正式名・ブランチの PR）→
-/// 着地の規則（失敗は据え置き）までを持ち、描画は本体の `rebuild()` へ流す。gh の結果は clean の
-/// 判定材料と、タスクの欄の解決（remote の正式名・ローカルブランチの同一性）にだけ使う。
+/// clean の判定材料のうち gh から引くもの（worktree のブランチの PR）の取得と着地。gh の可用性と remote の台帳は
+/// 事実の層（`WorktreeRepoFacts`）が持ち、ここはその知らせを受けて引き、着地の規則（失敗は据え置き）までを持つ。
+/// 描画は本体の `rebuild()` へ流す。
 extension WorktreePaletteDataProvider {
-
-  func loadGitHub(_ repo: GitRepo) {
-    repo.originIsGitHub { [weak self] isGitHub in
-      guard let self else { return }
-      gitHub.probe(cwd: repo.root, isGitHub: isGitHub) { [weak self] state in
-        guard let self else { return }
-        self.probedGitHubState = state
-        if state == .ready {
-          self.resolveRemoteRepositories(repo)
-          self.loadBranchPullRequests(repo)
-        }
-        // 状態を問わず描き直す——clean の PR の事実と待機表示、タスクの欄の待ちは probe の結果から導かれる
-        // ので、`.ready` で着地しても、続く問い合わせが何も撃たない回（GitHub のブランチが無い等）では他に
-        // 描き直す契機が無い。
-        self.rebuild()
-      }
-    }
-  }
-
-  /// remote の一覧の読み取り結果。
-  enum RemoteListing: Equatable {
-    /// remote 名 → fetch の URL。
-    case read([String: String])
-    /// 読めなかった。どの remote が GitHub のどのリポジトリか分からないので、どの行も「確かめられない」
-    /// になる（空の一覧として確定させると、どの行も「GitHub の行でない」になり、clean が PR の事実を
-    /// 「確かめて 0 件」と読む）。
-    case unreadable
-  }
-
-  /// remote の台帳（**導出値**。保存しない）。remote の一覧が未着なら未確定。答えはキャッシュだけから
-  /// 読む——この回に問い直している名前も、前回の答えで先に描く。
-  var remoteLedger: GitHubRemoteLedger {
-    switch remoteListing {
-    case nil: return .pending
-    case .unreadable:
-      return GitHubRemoteLedger(remotes: nil, answers: cachedRepositoryNames)
-    case .read(let remotes):
-      return GitHubRemoteLedger(remotes: remotes, answers: cachedRepositoryNames)
-    }
-  }
-
-  var cachedRepositoryNames: [GitHubRepoName: GitHubRepositoryResolution] {
-    repo.flatMap { GitHubCache.shared.entry(for: $0.commonDir)?.repositoryNames } ?? [:]
-  }
-
-  /// GitHub の remote の正式名を問い合わせる（改名前の URL でも、行と PR が同じリポジトリと分かる）。
-  /// git レーン（remote の一覧）と gh レーン（認証確認）の両方が揃ってはじめて撃てるので、両側の
-  /// 着地点から同じこの入口を叩き、先に来た側は素通りする（`loadBranchPullRequests` と同じ形）。
-  /// キャッシュの答えが正式名でなく、この回まだ撃っていない名前だけを撃ち、記録は発行の時点で置く。
-  /// 「確かめられない」答えは、前回の値で先に描いたまま裏で問い直す（`gh auth switch` の後に開き直せば
-  /// 直る）。1 つずつ撃つのは、1 つの `NOT_FOUND` で他の remote の答えまで失わないため。
-  func resolveRemoteRepositories(_ repo: GitRepo) {
-    guard githubReady, case .read(let remotes) = remoteListing else { return }
-    let cached = cachedRepositoryNames
-    let pending = Set(remotes.values.compactMap(GitHubRepoName.init(remoteURL:)))
-      .filter { name in
-        if case .found = cached[name] { return false }
-        return !askedRepositories.contains(name)
-      }
-    for name in pending {
-      askedRepositories.insert(name)
-      // 比べる相手は、この provider が描いた値（発行時のキャッシュ）。同じリポジトリを開いた別の provider が
-      // 先に同じ答えを書いていても、この provider の描いた値から変われば反映する。
-      let previous = cached[name]
-      gitHub.resolveRepository(cwd: repo.root, name: name) { [weak self] resolution in
-        // キャッシュ書き込みは `self` の生存判定より前（`loadBranchPullRequests` と同じ理由）。
-        GitHubCache.shared.setRepositoryName(resolution, for: name, key: repo.commonDir)
-        guard resolution != previous else { return }
-        self?.applyResolvedRepository()
-      }
-    }
-  }
-
   /// 正式名の答えが変わった着地。行の同一性が変わるので、ブランチの PR を引き、比較先の変わった行の
   /// 分類を引き直してから描く（`applyFetchedBranchPRs` と同じ順序の理由）。
   func applyResolvedRepository() {
-    if let repo {
+    if let repo = facts.repo {
       loadBranchPullRequests(repo)
       startCleanProbe(repo, .changedTargets)
     }
@@ -107,9 +34,9 @@ extension WorktreePaletteDataProvider {
   /// いるので、方針を変えるならこの 1 行）。パレットは開くたびに provider ごと作り直されるため、
   /// 開き直せば再取得される。
   func loadBranchPullRequests(_ repo: GitRepo) {
-    guard githubReady, case .settled(let resolved) = remoteLedger else { return }
-    let identities = GitHubBranchIdentities(resolved: resolved, localBranches: localBranches)
-    let heads = Self.worktreeBranches(of: worktrees).filter { branch in
+    guard facts.githubReady, case .settled(let resolved) = facts.remoteLedger else { return }
+    let identities = GitHubBranchIdentities(resolved: resolved, localBranches: facts.localBranches)
+    let heads = Self.worktreeBranches(of: facts.worktrees).filter { branch in
       if case .ref = identities.local(branch) { return true }
       return false
     }
@@ -141,16 +68,16 @@ extension WorktreePaletteDataProvider {
   /// 6. 今回の取得の結果。未着地／失敗のブランチは、前回セッションの結果があればそれで確定させる
   ///    （stale-while-revalidate。「取得失敗は据え置き」をブランチ単位に保つ）
   var branchPRStates: [String: BranchPRState] {
-    let branches = Self.worktreeBranches(of: worktrees)
+    let branches = Self.worktreeBranches(of: facts.worktrees)
     func all(_ state: BranchPRState) -> [String: BranchPRState] {
       Dictionary(uniqueKeysWithValues: branches.map { ($0, state) })
     }
-    guard let probed = probedGitHubState else { return all(.fetching) }
+    guard let probed = facts.probedGitHubState else { return all(.fetching) }
     guard probed == .ready else { return all(.loaded([])) }
-    guard case .settled(let resolved) = remoteLedger else { return all(.fetching) }
-    let identities = GitHubBranchIdentities(resolved: resolved, localBranches: localBranches)
+    guard case .settled(let resolved) = facts.remoteLedger else { return all(.fetching) }
+    let identities = GitHubBranchIdentities(resolved: resolved, localBranches: facts.localBranches)
     let cached =
-      repo.flatMap { GitHubCache.shared.entry(for: $0.commonDir)?.branchPullRequests }
+      facts.repo.flatMap { GitHubCache.shared.entry(for: $0.commonDir)?.branchPullRequests }
       ?? [:]
     let states = branches.map { branch -> (String, BranchPRState) in
       let ref: GitHubBranchRef
@@ -201,7 +128,7 @@ extension WorktreePaletteDataProvider {
     // 消えたブランチ（削除された worktree）への遅着は捨てる。
     guard branchPRFetches[head] == .fetching else { return }
     branchPRFetches[head] = fetched.map(BranchPRState.loaded) ?? .failed
-    if let repo { startCleanProbe(repo, .changedTargets) }
+    if let repo = facts.repo { startCleanProbe(repo, .changedTargets) }
     rebuild()
   }
 }

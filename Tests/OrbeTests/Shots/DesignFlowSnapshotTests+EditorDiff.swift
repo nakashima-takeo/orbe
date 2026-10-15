@@ -78,7 +78,7 @@ private final class DiffStage {
   func open(_ path: String, _ kind: EditorDiff.Kind, as mode: EditorSession.OpenMode = .pinned)
     throws -> EditorDiff
   {
-    let diff = try scene.tab.editor.openDiff(scene.key(path, kind), as: mode)
+    let diff = try scene.group.editor.openDiff(scene.key(path, kind), as: mode)
     settle()
     return diff
   }
@@ -112,7 +112,7 @@ private final class DiffStage {
 
   /// ファイルタブで打って未保存にし、仮の diff タブを開いてから、未保存の印の付いた作業ツリー diff へ戻る。
   func previewAndDirty() throws {
-    let editor = scene.tab.editor
+    let editor = scene.group.editor
     let document = try editor.open(
       scene.directory.appendingPathComponent("Sources/HookBuffer.swift"), as: .pinned)
     document.surface.responder.perform(Selector(("insertText:")), with: "// ")

@@ -1,12 +1,19 @@
 {
   "name": "orbe-agent",
   "version": "0.1.0",
-  "description": "Orbe にエージェント状態と session_id を通知する状態追跡 hooks",
+  "description": "Orbe にエージェント状態と session_id を通知する状態追跡 hooks と、Orbe を操作する MCP サーバー",
   "author": { "name": "Orbe" },
   "hooks": "./hooks/codex-hooks.json",
+  "mcpServers": {
+    "orbe-agent": {
+      "command": "./mcp/orbe-mcp.sh",
+      "cwd": ".",
+      "env_vars": ["ORBE_MCP_BIN", "ORBE_BUNDLE_ID", "ORBE_TAB", "ORBE_SOCK"]
+    }
+  },
   "interface": {
-    "displayName": "Orbe agent status",
-    "shortDescription": "Orbe にエージェント状態と session_id を通知する",
+    "displayName": "Orbe agent",
+    "shortDescription": "Orbe にエージェント状態と session_id を通知する状態追跡 hooks と、Orbe を操作する MCP サーバー",
     "category": "Productivity",
     "capabilities": []
   }

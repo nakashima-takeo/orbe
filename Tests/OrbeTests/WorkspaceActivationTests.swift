@@ -6,11 +6,11 @@ import XCTest
 /// live 集計され、最後の live タブを閉じても workspace が起床済みと誤報する。
 @MainActor
 final class WorkspaceActivationTests: OrbeTestCase {
-  private let noResume: TerminalTab.ResumeSpawn = { _ in nil }
+  private let noResume: TerminalTab.ResumeSpawn = { _, _ in nil }
 
   /// resume 未対応 agent の復元タブ（消費時に素シェル化するが休眠チケットには数える）。
   private func restoredTab(agentId: String) -> TerminalTab {
-    TerminalTab(
+    TerminalTab.alone(
       restoring: TabState(
         cwd: "/tmp", agent: AgentSession(command: "unknown", sessionId: agentId),
         explicitTitle: nil),
@@ -19,9 +19,9 @@ final class WorkspaceActivationTests: OrbeTestCase {
 
   func testRestoredAgentProvenanceSurvivesResumeResolutionUntilMaterialization() throws {
     let session = AgentSession(command: "claude", sessionId: "resume-1")
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       restoring: TabState(cwd: "/tmp", agent: session, explicitTitle: nil),
-      resumeSpawn: { _ in (command: "claude --resume resume-1", env: ["PROBE": "1"]) })
+      resumeSpawn: { _, _ in (command: "claude --resume resume-1", env: ["PROBE": "1"]) })
 
     XCTAssertFalse(tab.activated)
     XCTAssertTrue(tab.isDormant)
@@ -39,9 +39,9 @@ final class WorkspaceActivationTests: OrbeTestCase {
   }
 
   func testRestoredPlainAndNewTabsDoNotCreateDormantAgentProvenance() {
-    let restoredPlain = TerminalTab(
+    let restoredPlain = TerminalTab.alone(
       restoring: TabState(cwd: "/tmp", agent: nil, explicitTitle: nil), resumeSpawn: noResume)
-    let new = TerminalTab(cwd: "/tmp")
+    let new = TerminalTab.alone(cwd: "/tmp")
     XCTAssertFalse(restoredPlain.isDormant)
     XCTAssertFalse(new.isDormant)
   }
@@ -51,7 +51,7 @@ final class WorkspaceActivationTests: OrbeTestCase {
     let target = restoredTab(agentId: "a")
     let sibling = restoredTab(agentId: "c")
     owned.tabs = [target, sibling]
-    owned.active = 1
+    owned.selection = .tab(owned.tabs[1])
     owned.lastUsedAt = Date(timeIntervalSinceReferenceDate: 123)
     let other = Workspace(name: "other", rootPath: "/tmp")
     let foreignTab = restoredTab(agentId: "d")
@@ -64,7 +64,7 @@ final class WorkspaceActivationTests: OrbeTestCase {
     XCTAssertFalse(target.isDormant)
     XCTAssertFalse(sibling.activated)
     XCTAssertTrue(sibling.isDormant)
-    XCTAssertEqual(owned.active, 1)
+    XCTAssertEqual(owned.selectedTabIndex, 1)
     XCTAssertEqual(owned.lastUsedAt, Date(timeIntervalSinceReferenceDate: 123))
 
     XCTAssertTrue(store.recordMaterialization(of: target, in: owned), "同じ遷移は冪等")
@@ -82,12 +82,12 @@ final class WorkspaceActivationTests: OrbeTestCase {
 
   func testSelectionAndWorkspaceUseDoNotMaterializeTabs() throws {
     let ws = Workspace(name: "w", rootPath: "/tmp")
-    ws.tabs = [TerminalTab(cwd: "/tmp"), TerminalTab(cwd: "/tmp")]
+    ws.tabs = [TerminalTab.alone(cwd: "/tmp"), TerminalTab.alone(cwd: "/tmp")]
     ws.lastUsedAt = Date(timeIntervalSinceReferenceDate: 1)
     let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
 
-    XCTAssertTrue(store.recordSelection(1))
-    XCTAssertEqual(ws.active, 1)
+    XCTAssertTrue(store.recordSelection(.tab(ws.tabs[1])))
+    XCTAssertEqual(ws.selectedTabIndex, 1)
     XCTAssertGreaterThan(try XCTUnwrap(ws.lastUsedAt), Date(timeIntervalSinceReferenceDate: 1))
     XCTAssertFalse(ws.activated)
     XCTAssertTrue(ws.tabs.allSatisfy { !$0.activated })
@@ -127,7 +127,7 @@ final class WorkspaceActivationTests: OrbeTestCase {
   func testLiveRollupCountsEachTabAndUsesCanonicalOrder() {
     let ws = Workspace(name: "live", rootPath: "/tmp")
     for state in ["idle", "done", "working", "waiting", "working"] {
-      let tab = TerminalTab(cwd: "/tmp")
+      let tab = TerminalTab.alone(cwd: "/tmp")
       tab.recordMaterializationStarted()
       setReportedState(tab, state)
       ws.tabs.append(tab)
@@ -141,12 +141,12 @@ final class WorkspaceActivationTests: OrbeTestCase {
 
   func testRemovingTabsImmediatelyRecomputesActivationAndDormantCount() {
     let active = Workspace(name: "front", rootPath: "/tmp")
-    active.tabs = [TerminalTab(cwd: "/tmp")]
+    active.tabs = [TerminalTab.alone(cwd: "/tmp")]
     active.tabs[0].recordMaterializationStarted()
 
     let background = Workspace(name: "back", rootPath: "/tmp")
-    let liveA = TerminalTab(cwd: "/tmp")
-    let liveB = TerminalTab(cwd: "/tmp")
+    let liveA = TerminalTab.alone(cwd: "/tmp")
+    let liveB = TerminalTab.alone(cwd: "/tmp")
     liveA.recordMaterializationStarted()
     liveB.recordMaterializationStarted()
     let dormant = restoredTab(agentId: "sleeping")
@@ -182,7 +182,8 @@ final class WorkspaceActivationTests: OrbeTestCase {
     ws.lastUsedAt = Date(timeIntervalSinceReferenceDate: 789)
     let store = SessionStore(workspaces: [ws], activeWorkspace: 0)
 
-    guard case .notFound = store.removeTab(TerminalTab(cwd: "/tmp"), origin: .controlAPI) else {
+    guard case .notFound = store.removeTab(TerminalTab.alone(cwd: "/tmp"), origin: .controlAPI)
+    else {
       return XCTFail("unknown tab")
     }
     XCTAssertEqual(ws.tabs.count, 1)

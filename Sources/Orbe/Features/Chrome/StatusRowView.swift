@@ -38,15 +38,17 @@ extension View {
 /// 最上段 chrome をネイティブ SwiftUI で描く（TopBar＋TabBar・§5.1）。
 /// 上段=現在地（workspace 名・build-id・焦点の面の現在地、左）とステータスストリップ（右端）、テキストは
 /// 信号機の縦中央へ整列・背景は透明（最背面の BackgroundGlow が見える）。下段=全幅セグメント形タブ行
-/// （地 tabRowBg・同 worktree のタブを連ねた DSTabSegment・shrink＋横スクロール・＋ボタン）と右端の
-/// 位置ドット（エディター・端末の焦点と可視）。
+/// （地 tabRowBg・ボードを持つ workspace では左端に固定のボードのセル・同 worktree のタブを連ねた DSTabSegment・
+/// shrink＋横スクロール・＋ボタン）と右端の位置ドット（エディター・端末の焦点と可視）。
 /// 罫線は持たない（tabRowBg の濃度差が境界）。背景に窓ドラッグ（タブ/ボタンのクリックは奪わない）。
+/// 窓が main でない間は文字とタブを退いた姿で描く（状態グリフの色は保つ）。
 struct StatusRowView: View {
   @Bindable var model: StatusRowModel
   @Environment(\.chromeTranslucency) private var translucency
   @Environment(\.agentIconResolver) private var iconResolver
   @Environment(\.localization) private var l10n
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.windowIsMain) private var windowIsMain
   // 寸法計算（StatusRowView+Metrics）が同じ resolver で幅を測るため internal。
   @Environment(\.chromeFontResolver) var fontResolver
 
@@ -102,7 +104,7 @@ struct StatusRowView: View {
     HStack(spacing: Theme.Space.beat) {
       fontResolver.text(model.workspace, base: Theme.Typography.chrome)
         .font(Font.theme.chrome)
-        .foregroundStyle(Color.theme.textPrimary)
+        .foregroundStyle(windowIsMain ? Color.theme.textPrimary : Color.theme.textMuted)
         .lineLimit(1)
         .layoutPriority(1)
       if let buildId = model.buildId {
@@ -116,8 +118,7 @@ struct StatusRowView: View {
         // 断片ごとの Text を 1 本に連結する（省略は全体で 1 回、末尾側を残す）。
         model.location.map { part in
           fontResolver.text(part.text, base: Theme.Typography.meta)
-            .foregroundStyle(
-              part.tone == .dim ? Color.theme.textMuted : Color.theme.statusText)
+            .foregroundStyle(locationColor(part.tone))
         }
         .reduce(Text(verbatim: ""), +)
         .font(Font.theme.meta)
@@ -129,7 +130,7 @@ struct StatusRowView: View {
 
       if !model.rollup.isEmpty {
         // クリックで Attention パレット。見た目は変えない（hover 装飾は足さない）。
-        StatusRollupView(rollup: model.rollup)
+        StatusRollupView(rollup: model.rollup, receded: !windowIsMain)
           .fixedSize()
           .contentShape(Rectangle())
           .onTapGesture { model.onAttentionTap() }
@@ -140,6 +141,16 @@ struct StatusRowView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     .offset(y: headerLayout.yShift)
     .animation(headerLayoutAnimation, value: model.trafficLights.isOverChrome)
+  }
+
+  /// 現在地の断片の色。退いた姿では 2 トーンの強弱を保ったまま両方一段沈める。
+  private func locationColor(_ tone: LocationPart.Tone) -> Color {
+    switch (tone, windowIsMain) {
+    case (.dim, true): Color.theme.textMuted
+    case (.text, true): Color.theme.statusText
+    case (.dim, false): Color.theme.textMutedInactive
+    case (.text, false): Color.theme.textMuted
+    }
   }
 
   // MARK: - 下段（セグメント形タブ行・全幅）
@@ -154,10 +165,16 @@ struct StatusRowView: View {
     GeometryReader { geo in
       let strip = model.strip
       let dots = model.faceDots
-      // 位置ドットは ScrollView の外（右端）に置き、その予約幅を行の利用可能幅から引く。
-      let available = geo.size.width - (dots == nil ? 0 : Chrome.faceDotsWidth)
+      let boardLabel = model.boardLabel
+      // ボードのセルと位置ドットは ScrollView の外（左端・右端）に置き、その予約幅を行の利用可能幅から引く。
+      // ボードはスクロールの外なので、横スクロールしても左端に残り、並び替えの幾何（x=0 起点）にも入らない。
+      let available =
+        geo.size.width - (dots == nil ? 0 : Chrome.faceDotsWidth) - boardReserve(boardLabel)
       let widths = tabWidths(strip, available: available)
       HStack(spacing: 0) {
+        if let boardLabel {
+          boardCell(boardLabel)
+        }
         ScrollViewReader { proxy in
           ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: Chrome.tabGap) {
@@ -206,7 +223,9 @@ struct StatusRowView: View {
           // これを切るので、クリップを外し、枠ぶんだけ広げた矩形で自分でクリップする。
           .scrollClipDisabled()
           .clipShape(Rectangle().inset(by: -DSTabSegmentMetrics.frameOutset))
-          .onChange(of: model.active) { _, new in proxy.scrollTo(new, anchor: .center) }
+          .onChange(of: model.selection) { _, new in
+            if case .tab(let i) = new { proxy.scrollTo(i, anchor: .center) }
+          }
           // 編集開始時、編集タブが横スクロール域外でも可視域へ入れる。
           .onChange(of: model.editingIndex) { _, new in
             if let n = new { proxy.scrollTo(n, anchor: .center) }
@@ -215,7 +234,7 @@ struct StatusRowView: View {
             // 掴み中にタブ集合・順序・連構造が変わったら（shell exit・cd 再判定等）掴み状態を破棄する。
             // 凍結した幾何が実体とずれ、掴んでいた View は構造ごと消えて onEnded が来ない。
             dragState.discard()
-            proxy.scrollTo(model.active, anchor: .center)
+            if case .tab(let i) = model.selection { proxy.scrollTo(i, anchor: .center) }
           }
         }
         if let dots {
@@ -234,11 +253,12 @@ struct StatusRowView: View {
     let isEditing = model.editingIndex == i
     let grabbed = drag.flatMap { $0.source == .tab(i) ? $0 : nil }
     return DSTab(
-      title: displayTitle(cell), active: i == model.active, stateGlyph: cell.glyph,
+      title: displayTitle(cell), active: model.selection == .tab(i), stateGlyph: cell.glyph,
       stateSymbol: cell.glyph.flatMap { iconResolver.symbol(for: $0) },
       action: { model.onSelect(i) },
       onMiddleClick: { model.onCloseTab(i) },
       divided: divided,
+      receded: !windowIsMain,
       editing: isEditing,
       editingText: $model.editingText,
       editFocusToken: model.editFocusToken,
@@ -257,7 +277,24 @@ struct StatusRowView: View {
     .offset(x: grabbed.map(Self.cellOffset) ?? 0)
     .zIndex(grabbed == nil ? 0 : 1)
     .opacity(grabbed == nil ? 1 : 0.85)
-    .id(i)  // scrollTo(active) は平坦 index
+    .id(i)  // scrollTo(選んでいるタブ) は平坦 index
+  }
+
+  /// ボードのセル（単独タブの器・家のグリフと workspace 名）と右の区切り。選ぶだけで、閉じる・動かす・メニューの
+  /// ジェスチャは付けない。
+  private func boardCell(_ label: String) -> some View {
+    HStack(spacing: Chrome.tabGap) {
+      DSTabSegment {
+        DSTab(
+          title: label, active: model.selection == .board, leadingSymbol: "house",
+          action: model.onSelectBoard, receded: !windowIsMain)
+      }
+      .frame(width: boardCellWidth(label))
+      Rectangle()
+        .fill(Color.theme.tabDivider)
+        .frame(width: Theme.Stroke.hairline, height: Chrome.tabHeight)
+    }
+    .padding(.trailing, Chrome.tabGap)
   }
 }
 

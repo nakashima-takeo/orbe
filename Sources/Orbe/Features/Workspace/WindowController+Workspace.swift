@@ -1,35 +1,35 @@
 import AppKit
 
-/// workspace の切替・作成・改名・ディレクトリ設定・削除と、空（0タブ）workspace のアクティブ化。
+/// workspace の切替・作成・改名・ディレクトリ設定・削除とアクティブ化。
 /// WindowController 本体からタブ管理・復元・chrome 更新と関心を分離する。
 extension WindowController {
+  /// Home がちょうど 1 つあり、root が専用フォルダを指す状態へそろえ、保存を予約する。
+  /// フォルダそのものの用意は UI 言語の確定を待つ（`prepareHomeFolder`）。
+  func ensureHome() {
+    guard let root = HomeFolder.url else {
+      NSLog("[home] state dir unresolved, Home not ensured")
+      return
+    }
+    store.ensureHome(rootPath: root.path)
+    scheduleSave()
+  }
+
+  /// Home のフォルダを現在の UI 言語の雛形で用意する（Orbe の操作の指示は書き直し、CLAUDE.md は無ければ作る）。
+  func prepareHomeFolder() {
+    HomeFolder.prepare(language: localization.language)
+  }
+
   func switchWorkspace(to index: Int) {
     guard store.setActiveWorkspace(index) else { return }
     activateCurrent()
     scheduleSave()
   }
 
-  /// アクティブ workspace が0タブのときの content 掃除。全 subview（前タブ/前 WS のビュー）を外し、
-  /// 除去済み surface に宙ぶらりんの first responder が残らないよう nil 化し、空状態の chrome を投影する。
-  /// シェルは起こさない。`closeTab`（本体）と `activateCurrent` の双方から呼ぶため internal。
-  func clearActiveContent() {
-    model.content.subviews.forEach { $0.removeFromSuperview() }
-    model.contentIsEmpty = true  // 0タブの地を AppShell が baseFill で埋める（透過越しの透け防止）
-    // overlay 非表示時のみ first responder を落とす（0タブ時 ⌘W が dangling surface に届かないことを保証）。
-    // overlay 表示中はパレットが first responder のため奪わない（select と同じ不変条件）。
-    if model.overlay == .none { window.makeFirstResponder(nil) }
-    refreshChrome()
-  }
-
-  /// アクティブ workspace を表示する。0タブなら空表示（シェルは起こさない）、非0タブなら select。
+  /// アクティブ workspace を表示する（選択をそのまま描く。空ならシェルは起こさない）。
   /// 切替・復元・明示削除後の MRU 繰上げの全アクティブ化経路がここを共有する。
   func activateCurrent() {
-    if current.tabs.isEmpty {
-      store.recordWorkspaceUse(current)
-      clearActiveContent()  // 0タブ WS のアクティブ化は空状態を表示する（自動シェル起こしはしない）
-    } else {
-      select(current.active)
-    }
+    store.recordWorkspaceUse(current)  // 前面へ出すこと自体が利用（空でも MRU を進める）
+    select(current.selection)
     applyActiveWorkspaceConfig()  // 実効設定（外観＋gui.conf）は0タブでも従来どおり反映する
   }
 
@@ -62,13 +62,14 @@ extension WindowController {
     scheduleSave()
   }
 
-  /// workspace を閉じる。最後の 1 つは残す。`origin` は呼び手が名乗る（WorkspacePalette の削除は
+  /// workspace を閉じる。`SessionStore.removalBlocker` があれば閉じない。`origin` は呼び手が名乗る（WorkspacePalette の削除は
   /// `.gesture`・`remove_workspace` は `.controlAPI`）——配下のタブが同一性の終わり方として写す。
-  /// 人の操作で、配下のタブのエディターに未保存の文書があれば合計で 1 回 sheet で確認する（`closeTab` と
+  /// 人の操作で、配下の連のエディターに未保存の文書があれば合計で 1 回 sheet で確認する（`closeTab` と
   /// 同じ関門。`store.closeWorkspace` はタブを直接外し `closeTab` を通らない）。
   func closeWorkspace(_ index: Int, origin: TabCloseOrigin) {
-    guard workspaces.indices.contains(index) else { return }
-    let unsaved = origin == .gesture ? workspaces[index].tabs.flatMap { $0.unsavedDocuments() } : []
+    guard workspaces.indices.contains(index), store.removalBlocker(index) == nil else { return }
+    let unsaved =
+      origin == .gesture ? workspaces[index].groups.flatMap { $0.unsavedDocuments() } : []
     guard !unsaved.isEmpty else {
       performCloseWorkspace(index, origin: origin)
       return
@@ -87,7 +88,7 @@ extension WindowController {
     case .invalid:
       return
     case .activeChanged:
-      activateCurrent()  // MRU 繰上げ先が0タブなら空表示（シェルは起こさない）
+      activateCurrent()  // MRU 繰上げ先が0タブならボードか空表示（シェルは起こさない）
     case .backgroundChanged:
       refreshChrome()  // 背景 workspace の畳み込みでも chrome 横断 rollup を同期する
     }

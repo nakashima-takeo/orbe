@@ -145,7 +145,7 @@ final class WorktreePaletteProviderTests: OrbeTestCase {
 
     provider.load()
     XCTAssertTrue(pump { !executed.isEmpty })
-    XCTAssertTrue(pump { provider.remoteFetchLanded })
+    XCTAssertTrue(pump { provider.facts.remoteFetchLanded })
     XCTAssertEqual(executed, [.directory(path: repo)])
   }
 

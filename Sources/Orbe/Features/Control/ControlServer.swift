@@ -1,70 +1,6 @@
 import Darwin
 import Foundation
 
-/// 外部やエージェントが Orbe を操作するための domain 操作（main スレッドでのみ呼ぶ）。
-/// 実体は WindowController。ControlServer がリクエストを main へ hop して叩く。
-protocol ControlTarget: ControlTaskTarget {
-  func controlListWorkspaces() -> [[String: Any]]
-  func controlListTabs() -> [[String: Any]]
-  /// 検出済みエージェント CLI を列挙する（読み取り専用）。
-  /// 検出未完了なら空配列（エラーにしない）。
-  func controlListAgents() -> [[String: Any]]
-  func controlResolveTab(_ id: Int) -> TerminalTab?
-  /// 新タブをアクティブ workspace（または指定 workspace）に開く。戻り値は新タブ ID。
-  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?) -> Int?
-  /// 検出済みエージェントを新タブで起こす（spawn_agent）。command 省略時は対象 workspace の
-  /// 実効 default-agent を解く。未知 workspaceId は -32004・未検出 command は -32602・
-  /// 検出ゼロは -32000。
-  func controlSpawnAgent(command: String?, workspaceId: Int?, cwd: String?)
-    -> Result<AgentLaunch, ControlError>
-  /// 既存セッションを resume してエージェントを新タブで起こす（resume_agent）。
-  /// 安全文字集合の外の sessionId は -32602。
-  func controlResumeAgent(command: String, sessionId: String, workspaceId: Int?, cwd: String?)
-    -> Result<AgentLaunch, ControlError>
-  /// タブのエージェントへ text を送って Enter を押す（prompt_agent）。入力欄が空いている状態
-  /// （idle / done / 報告なし）にだけ届く動詞で、working / waiting は -32000（何も送らない）、
-  /// 未 mount も -32000。成功は nil。
-  func controlPromptAgent(tab: TerminalTab, text: String) -> ControlError?
-  /// 背景/休眠 workspace を前面化し全タブを mount する。戻り値は activate 後の
-  /// activeWorkspaceId と当該 workspace のタブ ID 群。未知 id は nil（spawn と違いフォールバックしない）。
-  func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, tabIds: [Int])?
-  /// エージェント hook の状態報告を発信元タブへ適用する（report_agent）。
-  func controlReportAgent(tab: TerminalTab, report: AgentHookReport)
-  /// 指定タブへフォーカスする（focus_tab）。別 WS なら activate＋タブ選択も行う。未解決は -32004。
-  func controlFocusTab(tabId: Int) -> Result<Any, ControlError>
-  /// 指定タブ（TerminalTab.id）を閉じる（close_tab）。カスケードは GUI（Cmd+W）と一致。未解決は -32004。
-  func controlCloseTab(tabId: Int) -> Result<Any, ControlError>
-  /// 指定タブのエディターでファイルを開き、エディター面を見せてそのタブへフォーカスする（open_file）。
-  /// 未解決は -32004、開けない（読めない・UTF-8 でない・Metal の装置が無くテキスト面を作れない）は -32000。
-  func controlOpenFile(tabId: Int, path: String) -> Result<Any, ControlError>
-  /// 指定タブのエディターで diff を開き、エディター面を見せてそのタブへフォーカスする（open_diff）。未解決は -32004、
-  /// git 管理外のパス・Metal の装置が無くテキスト面を作れないは -32000。
-  func controlOpenDiff(tabId: Int, path: String, kind: EditorDiff.Kind) -> Result<Any, ControlError>
-  /// 全設定項目の実効値・由来 scope・型・値域（domain）を列挙する（config CLI 用・読み取り専用）。
-  /// workspaceId 指定でその WS の上書きを重ねる（未指定はアクティブ WS）。未知 id は -32004。
-  func controlConfigList(workspaceId: Int?) -> Result<Any, ControlError>
-  /// 設定 1 項目を global / workspace スコープへ設定しライブ反映する（config CLI 用）。
-  /// workspaceId 指定で対象 WS（未指定はアクティブ WS）の上書きへ書く。未知 id は -32004。
-  func controlConfigSet(key: String, value: Any, scope: String, workspaceId: Int?)
-    -> Result<Any, ControlError>
-  /// workspace を新規作成しアクティブ化する。戻り値は新 workspace の id・name・rootPath。
-  func controlCreateWorkspace(name: String, rootPath: String?) -> Result<Any, ControlError>
-  /// workspace を改名する（id 未発見 -32004・name 空 -32602）。
-  func controlRenameWorkspace(workspaceId: Int, name: String) -> Result<Any, ControlError>
-  /// workspace の rootPath を変更する（id 未発見 -32004・rootPath 空 -32602）。
-  func controlSetWorkspaceRoot(workspaceId: Int, rootPath: String) -> Result<Any, ControlError>
-  /// workspace を削除する（id 未発見 -32004・最後の 1 つは削除不可 -32000）。
-  func controlRemoveWorkspace(workspaceId: Int) -> Result<Any, ControlError>
-  /// 閉じたセッションを休眠チケットとして戻す（restore_sessions）。id ごとの status
-  /// （restored / already-present / unknown）を返す。窓は onWindow が保証する。
-  func controlRestoreSessions(sessionIds: [String]) -> Result<Any, ControlError>
-}
-
-struct ControlError: Error {
-  let code: Int
-  let message: String
-}
-
 /// 外部 → Orbe の制御チャネル（out-of-band）のトランスポート。
 /// Unix domain socket 上で改行区切り JSON-RPC 2.0 を喋る。受信は背景キュー、
 /// domain 操作は main へ hop する。MCP・orbe-report・`orb` CLI が共有する唯一の制御契約面。
@@ -241,30 +177,7 @@ final class ControlServer {
     let id = obj["id"]
     let params = obj["params"] as? [String: Any] ?? [:]
 
-    // main を要さない動詞（待機系＋ファイル読み）は queue が受け持つ。
-    switch method {
-    case "wait_for_event":
-      conn.waitForEvent(id: id, params: params)
-      return
-    case "session_log":
-      sessionLog(id: id, params: params, conn: conn)
-      return
-    case "prompt_agent":
-      promptAgent(id: id, params: params, conn: conn)
-      return
-    case "spawn_agent":
-      launchAgent(id: id, params: params, conn: conn) {
-        self.spawnAgent(params: params, target: $0)
-      }
-      return
-    case "resume_agent":
-      launchAgent(id: id, params: params, conn: conn) {
-        self.resumeAgent(params: params, target: $0)
-      }
-      return
-    default:
-      break
-    }
+    if respondsByConnection(method: method, id: id, params: params, conn: conn) { return }
 
     // 補完系は無応答契約（update/end は応答を書かない）を含むため、windowed の解決より先に分ける
     // （target==nil 時や未知扱いで update/end が応答を書くと、打鍵ぶんの行が accept 応答の前に積む）。
@@ -292,6 +205,42 @@ final class ControlServer {
     }
   }
 
+  /// 応答を接続ごとに自分で返す動詞（待機・ファイル読み・接続の向こうの報告者を使う報告・起動や作業開始の待ち合わせ）。
+  /// 引き受けたら true。
+  private func respondsByConnection(
+    method: String, id: Any?, params: [String: Any], conn: Connection
+  ) -> Bool {
+    switch method {
+    case "wait_for_event":
+      conn.waitForEvent(id: id, params: params)
+      return true
+    case "session_log":
+      sessionLog(id: id, params: params, conn: conn)
+      return true
+    case "prompt_agent":
+      promptAgent(id: id, params: params, conn: conn)
+      return true
+    case "spawn_agent":
+      launchAgent(id: id, params: params, conn: conn) {
+        self.spawnAgent(params: params, target: $0)
+      }
+      return true
+    case "resume_agent":
+      launchAgent(id: id, params: params, conn: conn) {
+        self.resumeAgent(params: params, target: $0)
+      }
+      return true
+    case "start_task":
+      startTask(id: id, params: params, conn: conn)
+      return true
+    case "report_agent":
+      reportAgent(id: id, params: params, conn: conn)
+      return true
+    default:
+      return false
+    }
+  }
+
   /// ウィンドウがあれば body を実行し、無ければ -32000 "no window"（main でのみ呼ぶ）。
   func onWindow<T>(_ body: (ControlTarget) -> Result<T, ControlError>) -> Result<T, ControlError> {
     dispatchPrecondition(condition: .onQueue(.main))
@@ -312,11 +261,18 @@ final class ControlServer {
       return { target, _ in .success(["agents": target.controlListAgents()]) }
     case "spawn":
       return { target, params in
+        let select = params["select"]
+        if let select,
+          (select as? NSNumber).map({ CFGetTypeID($0) == CFBooleanGetTypeID() }) != true
+        {
+          return .failure(ControlError(code: -32602, message: "invalid select"))
+        }
         guard
           let tid = target.controlSpawn(
             workspaceId: params["workspaceId"] as? Int,
             cwd: params["cwd"] as? String,
-            command: params["command"] as? String)
+            command: params["command"] as? String,
+            selects: select as? Bool ?? true)
         else { return .failure(ControlError(code: -32000, message: "spawn failed")) }
         return .success(["tabId": tid])
       }
@@ -331,13 +287,22 @@ final class ControlServer {
         return .success(["activeWorkspaceId": r.activeWorkspaceId, "tabIds": r.tabIds])
       }
     default:
-      // タブ宛て・config / workspace CRUD・セッション復元・タスクは拡張の解決
-      // （ControlServer+Dispatch / +Task）へ。いずれも非該当なら未知メソッド。
-      return resolvedTabHandler(for: method)
-        ?? tabHandler(for: method)
-        ?? configWorkspaceHandler(for: method)
-        ?? sessionHandler(for: method)
-        ?? taskHandler(for: method)
+      // タブ宛て・config / workspace CRUD・セッション復元・タスク・受信・ボードは拡張の解決
+      // （ControlServer+Dispatch / +Task / +Automation / +Board）へ順に問う。いずれも非該当なら未知メソッド。
+      // `??` で連ねると口の数とともに型推論が重くなるので、配列で順に問う。
+      let resolvers: [(String) -> WindowedHandler?] = [
+        { self.resolvedTabHandler(for: $0) },
+        { self.tabHandler(for: $0) },
+        { self.configWorkspaceHandler(for: $0) },
+        { self.sessionHandler(for: $0) },
+        { self.taskHandler(for: $0) },
+        { self.automationHandler(for: $0) },
+        { self.boardHandler(for: $0) },
+      ]
+      for resolve in resolvers {
+        if let handler = resolve(method) { return handler }
+      }
+      return nil
     }
   }
 

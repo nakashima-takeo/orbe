@@ -15,11 +15,11 @@ import SwiftUI
 /// セッションの変化は `sessionDidChange` 1 本で受け、写し → 面の差し替え → ツリーの追従の順に進める。
 /// ツリーとプロジェクト検索は面が画面に見えている間（窓に付き、隠れていない）だけ根のサービスを握る。
 ///
-/// chrome キーは `performKeyEquivalent` で先取りし、window コマンドはタブ経由で上位へ、⌘S は保存、
+/// chrome キーは `performKeyEquivalent` で先取りし、window コマンドは連経由で上位へ、⌘S は保存、
 /// 端末のキーは消し、両面のキーのうち ⌘F はファイル内検索、残り（⌘↑↓）と通常の打鍵はテキスト面へ流す。
 /// 空状態では通常の打鍵を飲む——エディター焦点中に端末へ届けない。
 final class EditorPaneView: NSView {
-  weak var tab: TerminalTab?
+  weak var group: TabGroup?
   /// 骨の写し（ファイルタブ行・パンくず）。
   let shell = EditorShellModel()
   /// エクスプローラーのツリー。根が変われば作り直す。
@@ -48,7 +48,7 @@ final class EditorPaneView: NSView {
   var searchBarTrailing: NSLayoutConstraint?
   /// 出現の強調の状態（pane ごと）。
   let occurrences = EditorOccurrences()
-  /// プロジェクト検索の状態（pane ごと＝タブごと）。
+  /// プロジェクト検索の状態（pane ごと＝連ごと）。
   let projectSearch: ProjectSearch
   /// 検索結果の列。検索パネルが隠れている間も持ち、出し直すたびに作り直さない。
   let searchResults: RowList<SearchResultsSource>
@@ -159,10 +159,10 @@ final class EditorPaneView: NSView {
   /// 祖先を開いてそのファイルを選択する。写しを `show` に相乗りさせない——同一タブの未保存・衝突の変化は `show` の
   /// guard で止まる。
   func sessionDidChange() {
-    guard let tab else { return }
-    let active = tab.editor.activeTab
+    guard let group else { return }
+    let active = group.editor.activeTab
     let changed = active?.id != shownID
-    shell.update(from: tab.editor, root: tree.root, diffMode: diffModes.mode)
+    shell.update(from: group.editor, root: tree.root, diffMode: diffModes.mode)
     show(Self.body(of: active))
     if changed, let url = active?.url { tree.reveal(url) }
   }
@@ -197,7 +197,7 @@ final class EditorPaneView: NSView {
   }
 
   /// 根が変わった（cd）。ツリーを作り直し、握っていたなら握り直す。プロジェクト検索は結果を捨て、この面の検索パネルが
-  /// 画面に見えていれば今の問いで検索し直す（裏のタブの cd で見えない根を探さない）。
+  /// 画面に見えていれば今の問いで検索し直す（裏の連の cd で見えない根を探さない）。
   func setRoot(_ root: String) {
     guard root != tree.root else { return }
     tree.cancelNew()
@@ -207,9 +207,9 @@ final class EditorPaneView: NSView {
     projectSearch.setRoot(root, searchNow: showsSearchPanel && projectSearch.isLive)
     updateLiveness()
     installRoots()
-    if let tab {
-      shell.update(from: tab.editor, root: root, diffMode: diffModes.mode)
-      if let url = tab.editor.activeTab?.url { tree.reveal(url) }
+    if let group {
+      shell.update(from: group.editor, root: root, diffMode: diffModes.mode)
+      if let url = group.editor.activeTab?.url { tree.reveal(url) }
     }
   }
 
@@ -223,16 +223,7 @@ final class EditorPaneView: NSView {
   func show(_ next: EditorBody) {
     guard !Self.same(next, body) else { return }
     let hadFocusInside = focusIsInside && !focusIsInSidebar
-    switch body {
-    case .document(let previous):
-      previous.surface.view.removeFromSuperview()
-      observe(previous, false)
-      previous.surface.setHighlights([], for: .findMatch)
-      previous.surface.setHighlights([], for: .currentFindMatch)
-    case .diff(let previous):
-      hideDiff(previous)
-    case .empty: break
-    }
+    unbind(body)
     body = next
     switch next {
     case .document(let document):
@@ -277,6 +268,30 @@ final class EditorPaneView: NSView {
     addSubview(view, positioned: .below, relativeTo: sidebarHandle)
   }
 
+  /// 見せている本体を、セッションに告げずに手放す（タブの列を別の連のセッションへ移す前に、この面の観測・テキスト面の親・
+  /// 一致の強調を外し、diff は見せるのをやめる。外さないと、この面の後片付けが移した先の文書や diff を壊す）。焦点は
+  /// 動かさない。
+  func releaseBody() {
+    unbind(body)
+    body = .empty
+    search.bind(nil)
+    occurrences.bind(nil)
+  }
+
+  /// 本体を外す——文書の面は外すだけで文書と一緒に生き続け、diff は見せるのをやめて面の見え方をコードへ戻す。
+  private func unbind(_ body: EditorBody) {
+    switch body {
+    case .document(let document):
+      document.surface.view.removeFromSuperview()
+      observe(document, false)
+      document.surface.setHighlights([], for: .findMatch)
+      document.surface.setHighlights([], for: .currentFindMatch)
+    case .diff(let diff):
+      hideDiff(diff)
+    case .empty: break
+    }
+  }
+
   // MARK: - 可視性（ツリーとプロジェクト検索が根のサービスを握る寿命）
 
   override func viewDidMoveToWindow() {
@@ -301,12 +316,12 @@ final class EditorPaneView: NSView {
     let live = window != nil && !isHiddenOrHasHiddenAncestor
     tree.isLive = live
     projectSearch.isLive = live
-    if live { tab?.editor.prepareSurfaces() }
+    if live { group?.editor.prepareSurfaces() }
     prepareBodyIfVisible()
   }
 
   /// 面が画面に見えていれば、本体の文書を初めて見せる前の上限つきの待ちを通す（2 回目以降は文書が何もしない）。畳まれた
-  /// 面・窓に無い面では待たず、面が見えたときに待つ——端末だけの配置のタブを復元しても main を止めない。
+  /// 面・窓に無い面では待たず、面が見えたときに待つ——端末だけの配置の連を復元しても main を止めない。
   func prepareBodyIfVisible() {
     guard window != nil, !isHiddenOrHasHiddenAncestor else { return }
     switch body {

@@ -32,11 +32,15 @@ final class Connection: Hashable {
   }
   private var pending: [PendingWait] = []
   private var waitGen = 0
+  /// 接続してきたプロセスから辿った、制御端末を持つプロセスのグループ（`ProcessGroup.terminalGroup`）。報告者が
+  /// 生きている接続の時点で取る。
+  let peerGroup: pid_t?
 
   init(fd: Int32, server: ControlServer, queue: DispatchQueue) {
     self.fd = fd
     self.server = server
     self.queue = queue
+    peerGroup = ProcessGroup.peer(of: fd).flatMap(ProcessGroup.terminalGroup)
   }
 
   func resume() {

@@ -5,7 +5,7 @@ import XCTest
 @testable import Orbe
 
 /// 実 `orb task`（`orbe-cli`）を子プロセスで起こし、実 `WindowController` の一覧を list → add → set →
-/// move → rm のライフサイクルで動かせること、タブの中から打った `add` がそのタブの workspace に付くことを固定する。
+/// rm のライフサイクルで動かせること、タブの中から打った `add` がそのタブの workspace に付くことを固定する。
 ///
 /// 1 本に束ねているのは、後段が前段で足したタスクを前提にする連鎖だから（`OrbeCliProcessTests` と同じ理由）。
 ///
@@ -56,14 +56,14 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
     XCTAssertEqual(
       rows(control),
       [
-        [first, "todo", "high", "2026-10-06", "-", "経費精算を出す", "-", "-", "-"],
         [second, "todo", "medium", "-", "-", "承認を取る", "部長の返事", "-", "-"],
-      ], "task list: 1 行 1 タスク（ID・ステータス・優先度・期限・workspace・タイトル・待ち・結び付き・worktree）で、追加順に末尾へ並ぶ")
-    XCTAssertEqual(try tasks(control)[1]["description"] as? String, "詳細", "task add --description")
+        [first, "todo", "high", "2026-10-06", "-", "経費精算を出す", "-", "-", "-"],
+      ], "task list: 1 行 1 タスク（ID・ステータス・優先度・期限・workspace・タイトル・待ち・結び付き・worktree）で、作成の新しい順に並ぶ")
+    XCTAssertEqual(try tasks(control)[0]["description"] as? String, "詳細", "task add --description")
 
     run(control, ["set", second, "--status", "done"])
-    XCTAssertEqual(rows(control).last?[1], "done", "task set --status")
-    XCTAssertEqual(rows(control).last?[6], "-", "task set --status done: 待ちが外れる")
+    XCTAssertEqual(rows(control).first?[1], "done", "task set --status")
+    XCTAssertEqual(rows(control).first?[6], "-", "task set --status done: 待ちが外れる")
 
     run(
       control,
@@ -72,7 +72,7 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
         "--workspace", String(background),
       ])
     XCTAssertEqual(
-      rows(control).first, [first, "todo", "low", "-", "background", "経費精算", "領収書", "-", "-"],
+      rows(control).last, [first, "todo", "low", "-", "background", "経費精算", "領収書", "-", "-"],
       "task set: 渡した項目だけ変わり、--no-due で期限が外れる")
     let filtered = try XCTUnwrap(
       control.orbJSON(["task", "list", "--workspace", String(background)])["tasks"]
@@ -84,15 +84,10 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
     run(control, ["set", first, "--no-waiting", "--no-workspace", "--status", "in_progress"])
     run(control, ["set", second, "--no-description"])
     let afterClear = try tasks(control)
-    XCTAssertNil(afterClear[0]["waiting"], "task set --no-waiting")
-    XCTAssertNil(afterClear[0]["workspaceId"], "task set --no-workspace")
-    XCTAssertEqual(afterClear[0]["status"] as? String, "in_progress")
-    XCTAssertEqual(afterClear[1]["description"] as? String, "", "task set --no-description")
-
-    run(control, ["move", second, "--before", first])
-    XCTAssertEqual(rows(control).map { $0[0] }, [second, first], "task move --before")
-    run(control, ["move", second, "--after", first])
-    XCTAssertEqual(rows(control).map { $0[0] }, [first, second], "task move --after")
+    XCTAssertNil(afterClear[1]["waiting"], "task set --no-waiting")
+    XCTAssertNil(afterClear[1]["workspaceId"], "task set --no-workspace")
+    XCTAssertEqual(afterClear[1]["status"] as? String, "in_progress")
+    XCTAssertEqual(afterClear[0]["description"] as? String, "", "task set --no-description")
 
     run(control, ["rm", first])
     XCTAssertEqual(rows(control).map { $0[0] }, [second], "task rm")
@@ -181,8 +176,8 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
     XCTAssertEqual(
       try tasks(control).map { $0["worktree"] as? String },
       [
-        GitWorktreeRoot.normalizedPath(plain + "/~/x"),
         GitWorktreeRoot.normalizedPath(plain + "/b"),
+        GitWorktreeRoot.normalizedPath(plain + "/~/x"),
       ])
   }
 
@@ -211,8 +206,40 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
     run(control, ["add", "タブの外"])
 
     let listed = try tasks(control)
-    XCTAssertEqual(listed.map { $0["workspaceName"] as? String }, ["background", "main", nil, nil])
-    XCTAssertEqual(listed.map { $0["createdBy"] as? String }, ["claude", "claude", "claude", nil])
+    XCTAssertEqual(listed.map { $0["workspaceName"] as? String }, [nil, nil, "main", "background"])
+    XCTAssertEqual(listed.map { $0["createdBy"] as? String }, [nil, "claude", "claude", "claude"])
+  }
+
+  /// `condition` は呼び出し元タブを送り、タブで作業中の agent が付けた条件にはその会話とタブの作業ディレクトリが入る。
+  /// `--no-condition` は条件だけを外す。
+  func testConditionSetInsideATabRecordsTheConversationAndCanBeRemoved() throws {
+    let control = try startControlProcess()
+    let tab = try XCTUnwrap(control.target.workspaces.first { $0.name == "background" }?.tabs.first)
+    control.target.controlReportAgent(
+      tab: tab, report: AgentHookReport(agent: "claude", state: "working", sessionId: "s-1"))
+    let inTab = ["ORBE_TAB": String(tab.id)]
+    let id = run(control, ["add", "レビュー待ち"]).trimmingCharacters(in: .whitespacesAndNewlines)
+
+    run(control, ["set", id, "--waiting", "レビュー"])
+    run(
+      control,
+      [
+        "condition", id, "--condition", "レビューが付いたら", "--check", "exit 1",
+        "--every", "10", "--deadline", "2099-01-01T09:00",
+      ], env: inTab)
+
+    let waiting = try XCTUnwrap(try tasks(control).first?["waiting"] as? [String: Any])
+    let condition = try XCTUnwrap(waiting["condition"] as? [String: Any])
+    XCTAssertEqual(condition["description"] as? String, "レビューが付いたら")
+    XCTAssertEqual(condition["everyMinutes"] as? Int, 10)
+    XCTAssertEqual(
+      condition["agent"] as? [String: String], ["command": "claude", "sessionId": "s-1"])
+    XCTAssertEqual(condition["directory"] as? String, tab.cwd)
+
+    run(control, ["condition", id, "--no-condition"])
+    let kept = try XCTUnwrap(try tasks(control).first?["waiting"] as? [String: Any])
+    XCTAssertEqual(kept["reason"] as? String, "レビュー")
+    XCTAssertNil(kept["condition"])
   }
 
   /// 引数だけで判る誤りは socket に触れる前に exit 2 で弾く。
@@ -231,11 +258,6 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
         ["task", "add", "a", "--workspace", "1", "--no-workspace"],
         "pass only one of --workspace / --no-workspace"
       ),
-      (["task", "move", "1"], "task move requires exactly one of --before / --after"),
-      (
-        ["task", "move", "1", "--before", "2", "--after", "3"],
-        "task move requires exactly one of --before / --after"
-      ),
       (
         ["task", "set", "1", "--issue", "o/n#1", "--no-links"],
         "pass only one of --issue / --pr / --no-links"
@@ -247,6 +269,23 @@ final class OrbeCliTaskProcessTests: OrbeTestCase {
         ["task", "set", "1", "--worktree", ".", "--no-worktree"],
         "pass only one of --worktree / --no-worktree"
       ),
+      (
+        ["task", "condition", "1", "--condition", "c", "--check", "true"],
+        "pass --condition, --check, --every and --deadline together"
+      ),
+      (
+        [
+          "task", "condition", "1", "--condition", "c", "--check", "true", "--every", "ten",
+          "--deadline", "2099-01-01T00:00",
+        ], "--every requires <minutes>: ten"
+      ),
+      (
+        [
+          "task", "condition", "1", "--condition", "c", "--check", "true", "--every", "10",
+          "--deadline", "2099-01-01T00:00", "--no-condition",
+        ], "pass only one of --condition / --no-condition"
+      ),
+      (["task", "condition", "1"], "task condition requires --condition ... or --no-condition"),
       (["task", "rm", "abc"], "invalid task id: abc"),
       (["task", "rm", "0"], "invalid task id: 0"),
     ] {

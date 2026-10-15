@@ -70,14 +70,14 @@
     }.joined(separator: "\n")
 
     @MainActor final class Scene {
-      let tab: TerminalTab
+      let group: TabGroup
       /// fixture のリポジトリ（置き場の下。消すのは置き場の持ち主）。
       let directory: URL
-      var pane: EditorPaneView { tab.view.editor }
+      var pane: EditorPaneView { group.view.editor }
       var root: String { GitWorktreeRoot.normalizedPath(directory.path) }
 
-      init(tab: TerminalTab, directory: URL) {
-        self.tab = tab
+      init(group: TabGroup, directory: URL) {
+        self.group = group
         self.directory = directory
       }
 
@@ -121,10 +121,10 @@
       try Data([0x89, 0x50, 0x4E, 0x47, 0xFF, 0xFE, 0x00]).write(
         to: dir.appendingPathComponent("icon.bin"))
       try git(["add", "icon.bin"])
-      let tab = TerminalTab(
-        cwd: dir.path,
+      let group = TabGroup(
+        key: GitWorktreeRoot.root(of: dir.path),
         editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot, language: { .ja }))
-      return Scene(tab: tab, directory: dir)
+      return Scene(group: group, directory: dir)
     }
   }
 #endif

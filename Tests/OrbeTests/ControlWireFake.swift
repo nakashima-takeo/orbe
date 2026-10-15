@@ -45,11 +45,13 @@ final class FakeControlTarget: ControlTarget {
     let messageText: String?
     let messageSource: String?
     let reason: String?
+    let reporterGroup: pid_t?
   }
   struct Spawn {
     let workspaceId: Int?
     let cwd: String?
     let command: String?
+    let selects: Bool
   }
   struct AgentSpawn {
     let command: String?
@@ -91,10 +93,10 @@ final class FakeControlTarget: ControlTarget {
     let workspaceId: ClearableValue<Int>?
     let worktree: ClearableValue<String>?
   }
-  struct MovedTask {
+  struct SetWaitCondition {
     let taskId: Int
-    let placement: TaskStore.Placement
-    let anchorTaskId: Int
+    let condition: ClearableValue<WaitConditionRequest>
+    let callerTabId: Int?
   }
 
   private(set) var reportedAgents: [ReportedAgent] = []
@@ -122,13 +124,22 @@ final class FakeControlTarget: ControlTarget {
   private(set) var taskLists: [Int?] = []
   private(set) var addedTasks: [AddedTask] = []
   private(set) var updatedTasks: [UpdatedTask] = []
-  private(set) var movedTasks: [MovedTask] = []
+  private(set) var setWaitConditions: [SetWaitCondition] = []
   private(set) var deletedTaskIds: [Int] = []
+  private(set) var startedTasks: [TaskStartRequest] = []
+  private(set) var setAutomations: [(automationId: Int?, definition: AutomationDefinition)] = []
+  private(set) var ranAutomationIds: [Int] = []
+  private(set) var pausedAutomations: [(automationId: Int, paused: Bool)] = []
+  private(set) var deletedAutomationIds: [Int] = []
+  private(set) var proposalLists: [Int?] = []
+  private(set) var boardLists: [Int] = []
+  private(set) var addedBoardParts: [(workspaceId: Int, part: BoardPart)] = []
+  private(set) var removedBoardParts: [(workspaceId: Int, part: BoardPart)] = []
 
   // MARK: - 宛先
 
   /// 解決可能な唯一のタブ。id は `IdGen` のプロセス単調増加なので、テストは必ずここから読む。
-  let tab = TerminalTab(cwd: "/tmp")
+  let tab = TerminalTab.alone(cwd: "/tmp")
   var tabId: Int { tab.id }
 
   func controlResolveTab(_ id: Int) -> TerminalTab? {
@@ -141,8 +152,8 @@ final class FakeControlTarget: ControlTarget {
   func controlListTabs() -> [[String: Any]] { tabs }
   func controlListAgents() -> [[String: Any]] { agents }
 
-  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?) -> Int? {
-    spawns.append(Spawn(workspaceId: workspaceId, cwd: cwd, command: command))
+  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?, selects: Bool) -> Int? {
+    spawns.append(Spawn(workspaceId: workspaceId, cwd: cwd, command: command, selects: selects))
     return spawnedTabId
   }
 
@@ -197,7 +208,7 @@ final class FakeControlTarget: ControlTarget {
       ReportedAgent(
         tabId: tab.id, agent: report.agent, state: report.state, sessionId: report.sessionId,
         messageText: report.message?.text, messageSource: report.message?.source,
-        reason: report.reason))
+        reason: report.reason, reporterGroup: report.reporterGroup))
   }
 
   func controlFocusTab(tabId: Int) -> Result<Any, ControlError> {
@@ -281,15 +292,69 @@ final class FakeControlTarget: ControlTarget {
     return outcome(["task": ["taskId": taskId]])
   }
 
-  func controlMoveTask(taskId: Int, _ placement: TaskStore.Placement, anchorTaskId: Int)
-    -> Result<Any, ControlError>
-  {
-    movedTasks.append(MovedTask(taskId: taskId, placement: placement, anchorTaskId: anchorTaskId))
-    return outcome(["ok": true])
+  func controlSetWaitCondition(
+    taskId: Int, _ condition: ClearableValue<WaitConditionRequest>, callerTabId: Int?
+  ) -> Result<Any, ControlError> {
+    setWaitConditions.append(
+      SetWaitCondition(taskId: taskId, condition: condition, callerTabId: callerTabId))
+    return outcome(["task": ["taskId": taskId]])
   }
 
   func controlDeleteTask(taskId: Int) -> Result<Any, ControlError> {
     deletedTaskIds.append(taskId)
     return outcome(["ok": true])
+  }
+
+  func controlStartTask(
+    _ request: TaskStartRequest, completion: @escaping (Result<Any, ControlError>) -> Void
+  ) {
+    startedTasks.append(request)
+    completion(outcome(["workdir": "/w"]))
+  }
+
+  func controlListAutomations() -> Result<Any, ControlError> {
+    outcome(["automations": [Any]()])
+  }
+
+  func controlSetAutomation(automationId: Int?, _ definition: AutomationDefinition) -> Result<
+    Any, ControlError
+  > {
+    setAutomations.append((automationId, definition))
+    return outcome(["automation": ["automationId": automationId ?? 1]])
+  }
+
+  func controlRunAutomation(automationId: Int) -> Result<Any, ControlError> {
+    ranAutomationIds.append(automationId)
+    return outcome(["ok": true])
+  }
+
+  func controlPauseAutomation(automationId: Int, paused: Bool) -> Result<Any, ControlError> {
+    pausedAutomations.append((automationId, paused))
+    return outcome(["automation": ["automationId": automationId]])
+  }
+
+  func controlDeleteAutomation(automationId: Int) -> Result<Any, ControlError> {
+    deletedAutomationIds.append(automationId)
+    return outcome(["ok": true])
+  }
+
+  func controlListAutomationProposals(automationId: Int?) -> Result<Any, ControlError> {
+    proposalLists.append(automationId)
+    return outcome(["proposals": [Any]()])
+  }
+
+  func controlListBoardParts(workspaceId: Int) -> Result<Any, ControlError> {
+    boardLists.append(workspaceId)
+    return outcome(["parts": [["kind": "automation"]]])
+  }
+
+  func controlAddBoardPart(workspaceId: Int, part: BoardPart) -> Result<Any, ControlError> {
+    addedBoardParts.append((workspaceId, part))
+    return outcome(["parts": [["kind": "automation"]]])
+  }
+
+  func controlRemoveBoardPart(workspaceId: Int, part: BoardPart) -> Result<Any, ControlError> {
+    removedBoardParts.append((workspaceId, part))
+    return outcome(["parts": [Any]()])
   }
 }

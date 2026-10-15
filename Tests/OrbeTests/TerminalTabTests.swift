@@ -15,7 +15,7 @@ final class TerminalTabTests: OrbeTestCase {
   /// 上位が surface を解放すると、戻った先が解放済みの view を触る。
   func testCloseFiresOnCloseCarryingOrigin() {
     for origin in [TabCloseOrigin.gesture, .process, .controlAPI] {
-      let tab = TerminalTab(cwd: "/tmp")
+      let tab = TerminalTab.alone(cwd: "/tmp")
       let exp = expectation(description: "onClose fires for \(origin)")
       var received: TabCloseOrigin?
       tab.onClose = {
@@ -29,10 +29,10 @@ final class TerminalTabTests: OrbeTestCase {
     }
   }
 
-  /// ⌘W（`.closeTab`）はタブ水準の window コマンドとして上位へ届く（端末・エディターのどちらの面からも
-  /// 同じ経路）。閉じる実体と発火源（`.gesture`）は `WindowController.handleWindowCommand` が持つ。
+  /// ⌘W（`.closeTab`）は端末面からタブ水準の window コマンドとして上位へ届く。閉じる実体と発火源（`.gesture`）は
+  /// `WindowController.handleWindowCommand` が持つ。
   func testCloseTabChromeActionRequestsWindowCommand() {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     var received: [WindowCommand] = []
     tab.onWindowCommand = { received.append($0) }
     tab.surface.perform(.closeTab)  // ⌘W の届き先（Keybindings → SurfaceView.perform）
@@ -41,7 +41,7 @@ final class TerminalTabTests: OrbeTestCase {
 
   /// 変化判定は値を持つ surface 側にある——同値の再代入は通知しない。
   func testPwdChangeForwardsOnlyOnRealChange() {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     var fired = 0
     tab.onPwdChange = { fired += 1 }
     tab.surface.currentPwd = "/work"
@@ -51,7 +51,7 @@ final class TerminalTabTests: OrbeTestCase {
   }
 
   func testTitleChangeForwardsOnlyOnRealChange() {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     var fired = 0
     tab.onTitleChange = { fired += 1 }
     tab.surface.title = "vim"
@@ -61,7 +61,7 @@ final class TerminalTabTests: OrbeTestCase {
 
   /// chrome の再投影はスロットの実変化で鳴る（状態語が同じでも文言・sessionId の更新は変化）。
   func testAgentSlotChangeFiresOnAgentStateChange() {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     var fired = 0
     tab.onAgentStateChange = { fired += 1 }
     let at = Date(timeIntervalSince1970: 1000)
@@ -75,7 +75,7 @@ final class TerminalTabTests: OrbeTestCase {
   // MARK: - displayTitle の precedence（① explicitTitle ?? ② title ?? ③ derived）
 
   func testDisplayTitleExplicitWins() {
-    let tab = TerminalTab(cwd: "/Users/me/proj/src")
+    let tab = TerminalTab.alone(cwd: "/Users/me/proj/src")
     tab.surface.title = "vim"
     tab.explicitTitle = "build"
     XCTAssertEqual(
@@ -83,7 +83,7 @@ final class TerminalTabTests: OrbeTestCase {
   }
 
   func testDisplayTitleEmptyExplicitFallsThrough() {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     tab.surface.title = "vim"
     tab.explicitTitle = ""  // 空は採用しない（②③へ戻る）
     XCTAssertEqual(tab.displayTitle(workspaceRoot: nil), "vim", "空の explicitTitle は無視し ② へ")
@@ -92,7 +92,7 @@ final class TerminalTabTests: OrbeTestCase {
   func testDisplayTitleIgnoresPwdFallbackTitle() {
     // libghostty は明示タイトル未受信の間、生 pwd を title に入れる（OSC 7 フォールバック）。
     // title == currentPwd ならそれは pwd フォールバックなので②を飛ばし③で圧縮整形する。
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     tab.surface.currentPwd = "/Users/me/proj/src/app"
     tab.surface.title = "/Users/me/proj/src/app"  // Ghostty の pwd フォールバックと同値
     XCTAssertEqual(
@@ -102,7 +102,7 @@ final class TerminalTabTests: OrbeTestCase {
 
   func testDisplayTitleKeepsAppTitleDifferingFromPwd() {
     // 本物のアプリタイトル（pwd と異なる）は②としてそのまま採用する。
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     tab.surface.currentPwd = "/Users/me/proj/src/app"
     tab.surface.title = "vim"
     XCTAssertEqual(
@@ -113,7 +113,7 @@ final class TerminalTabTests: OrbeTestCase {
   // MARK: - tabState（復元単位）
 
   func testTabStateCarriesCwdSessionAndExplicitTitle() {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     tab.surface.currentPwd = "/work"
     tab.explicitTitle = "api"
     let session = AgentSession(command: "claude", sessionId: "s-1")
@@ -123,7 +123,7 @@ final class TerminalTabTests: OrbeTestCase {
   }
 
   func testTabStateOmitsSessionWithoutId() {
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     setReportedState(tab, "working")  // sessionId 未確定
     XCTAssertNil(tab.tabState().agent, "resume 不能な同一性は書かない")
   }
@@ -131,7 +131,7 @@ final class TerminalTabTests: OrbeTestCase {
   func testRestoringStateSeedsDormantSlotAndTitle() {
     let state = TabState(
       cwd: "/work", agent: AgentSession(command: "claude", sessionId: "s-1"), explicitTitle: "api")
-    let tab = TerminalTab(restoring: state, resumeSpawn: { _ in nil })
+    let tab = TerminalTab.alone(restoring: state, resumeSpawn: { _, _ in nil })
     XCTAssertEqual(tab.surface.initialCwd, "/work")
     XCTAssertEqual(tab.explicitTitle, "api")
     XCTAssertTrue(tab.isDormant)

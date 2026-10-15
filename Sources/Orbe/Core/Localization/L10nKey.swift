@@ -177,13 +177,11 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPalettePlaceholder
   case taskPaletteGitHubPlaceholder
   case taskPaletteTabTasks
-  case taskPaletteScopeAll
-  case taskPaletteSectionInProgress
-  case taskPaletteSectionTodo
-  case taskPaletteSectionDone
-  case taskPaletteAdd
+  case taskPaletteStateInProgress
+  case taskPaletteStateTodo
+  case taskPaletteStateWaiting
+  case taskPaletteStateDone
   case taskPaletteEmpty
-  case taskPaletteAddedBy
   case taskPaletteToday
   case taskPaletteDays
   case taskPalettePriorityHigh
@@ -194,19 +192,15 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteFieldPriority
   case taskPaletteFieldDue
   case taskPaletteFieldWorkspace
-  case taskPaletteFieldAdded
+  case taskPaletteFieldCreated
   case taskPaletteDescriptionPlaceholder
   case taskPaletteAddReason
   case taskPaletteSetDue
   case taskPaletteClear
   case taskPaletteNoWorkspace
-  case taskPaletteMarkDone
-  case taskPaletteReopen
   case taskPaletteDelete
   case taskPaletteActionDone
   case taskPaletteActionReopen
-  case taskPaletteActionShowDone
-  case taskPaletteActionHideDone
   case taskPaletteActionChangeStatus
   case taskPaletteActionChangePriority
   case taskPaletteActionChangeWorkspace
@@ -215,9 +209,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteActionEditDue
   case taskPaletteActionEditDescription
   case taskPaletteActionCommit
-  case taskPaletteHintEdit
-  case taskPaletteHintReorder
-  case taskPaletteHintScope
+  case taskPaletteHintDetail
+  case taskPaletteHintTab
   case taskPaletteHintField
   case taskPaletteHintBack
   case taskPaletteHintCancel
@@ -249,7 +242,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAgentTab
   case taskPaletteAgentGoToTab
   case taskPaletteActionGoToTab
-  case taskPaletteHintOpenWorktree
   case taskPaletteGitHubFilterAssigned
   case taskPaletteGitHubFilterAuthored
   case taskPaletteGitHubFilterReview
@@ -272,7 +264,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteReviewSelfNote
   case taskPaletteAssignFailed
   case taskPaletteReviewFailed
-  case taskPaletteMakeTaskNote
   case taskPaletteMakeTask
   case taskPaletteMakeTaskOpen
   case taskPaletteLinkExisting
@@ -288,7 +279,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteActionToggle
   case taskPaletteHintLink
   case taskPaletteHintRelink
-  case taskPaletteHintFilter
   case taskPaletteHintOpenInBrowser
   case taskPaletteErrAssign
   case taskPaletteErrLink
@@ -301,6 +291,134 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAddLink
   case taskPaletteBranchPRAuto
   case taskPaletteActionAddLink
+  case taskPaletteErrAgentMissing
+  case taskPaletteErrDirectoryMissing
+  case taskPaletteActionContinue
+  case taskPaletteContinueBlocked
+  case taskPaletteActionShowCommand
+  case taskPaletteActionHideCommand
+  case taskPaletteActionShowLog
+  case taskPaletteActionHideLog
+  case taskWaitConditionLabel
+  case taskWaitCheckLabel
+  case taskWaitDeadlineLabel
+  case taskWaitEvery
+  case taskWaitNextIn
+  case taskWaitSoon
+  case taskWaitDeadline
+  case taskWaitCommand
+  case taskWaitLog
+  case taskWaitLogEmpty
+  case taskWaitResolvedChecks
+  case taskWaitContinue
+  case taskWaitEveryUntilDeadline
+  case taskWaitContinueNote
+  case taskWaitSatisfied
+  case taskWaitExpired
+  case taskWaitJustNow
+  case taskWaitAgo
+  case taskWaitConversationToday
+  case taskWaitConversationDays
+  case taskWaitResultSuccess
+  case taskWaitResultExited
+  case taskWaitResultSignaled
+  case taskWaitResultLimited
+  case taskWaitResultStopped
+  case taskWaitResultNotStarted
+  case waitContinueSatisfied
+  case waitContinueOutput
+  case waitContinueExpired
+
+  case taskPaletteActionAdd
+  case taskPaletteActionAddTo
+  case taskPaletteHintToMatches
+  case taskPaletteAddedHeading
+  case taskPaletteHeadingTask
+  case taskPaletteActionRefine
+  case taskPaletteCreatedByYou
+  case taskPaletteColumnState
+  case taskPaletteColumnTitle
+  case taskPaletteDueOverdue
+  case taskPaletteDueToday
+  case taskPaletteDueWithinWeek
+  case taskPaletteDueLater
+  case taskPaletteDueNone
+  // MARK: - タスク画面の提案タブ
+  case taskPaletteTabAutomation
+  case taskPaletteAutomationPlaceholder
+  case taskPaletteAutomationAll
+  case taskPaletteAutomationAskBoard
+  case taskPaletteAutomationNoProposals
+  case taskPaletteAutomationLastFailed
+  case taskPaletteAutomationContents
+  case taskPaletteAutomationEmpty
+  case taskPaletteAutomationOpenLink
+  case taskPaletteAutomationAsTask
+  case taskPaletteAutomationDismiss
+  case taskPaletteAutomationActionAccept
+  case taskPaletteAutomationActionProposals
+  case taskPaletteAutomationActionRunNow
+  case taskPaletteAutomationHintShelf
+  case taskPaletteAutomationHintPick
+  case taskPaletteAutomationHintBack
+  case taskPaletteAutomationLast
+  case taskPaletteAutomationOverlaps
+  case taskPaletteAutomationOverlapCount
+  case taskPaletteAutomationRewriteNote
+  case taskPaletteAutomationErrAccept
+  // MARK: - 自動化の共有の文（L10nTable+Automation）
+  case automationFetch
+  case automationSteps
+  case automationNext
+  case automationPaused
+  case automationRunning
+  case automationRunAt
+  case automationFetched
+  case automationProcessed
+  case automationProposedShortOne
+  case automationProposedShortOther
+  case automationProposedLongOne
+  case automationProposedLongOther
+  case automationNothingNew
+  case automationFailed
+  case automationNeverRan
+  case automationNowMark
+  case automationToday
+  case automationDue
+  case automationCurrentSet
+  case automationNewArrivals
+  case automationEverything
+  case automationAgentFetch
+  case automationCommand
+  case automationTools
+  case automationDirectory
+  case automationEvery
+  case automationDaily
+  case automationWeekdays
+  case automationWeekends
+  case automationWeekly
+  case automationMonthlyOne
+  case automationMonthlyOther
+  case automationMonthDay
+  case automationListSeparator
+  case automationAt
+  case automationHourly
+  case automationEveryMinutesBetween
+  case automationEveryHoursBetween
+  case automationRunNow
+  case automationPause
+  case automationResume
+  case automationDelete
+  case automationErrRunning
+  // MARK: - 秘書・作業を始める（L10nTable+Secretary）
+  case taskStartHomeTask
+  case secretaryRequestInput
+  case secretaryAutomationFixInput
+  case taskPaletteAddToTasks
+  case taskPaletteHandToAgent
+  case taskPaletteHintOpenAgent
+  case taskPaletteErrSecretaryClaude
+  case taskPaletteErrSecretaryUnavailable
 
   // MARK: - Onboarding
   case onboardingBegin
@@ -473,6 +591,60 @@ enum L10nKey: String, CaseIterable, Sendable {
 
   // MARK: - Editor 面（コード）
   case editorOmittedCharacters
+
+  // MARK: - ボード（L10nTable+Board）
+  case boardEmpty
+  case boardAutomationTitle
+  case boardAutomationEmpty
+  case boardAutomationLast
+  case boardAutomationFlow
+  case boardAutomationCounts
+  case boardAutomationRuns
+  case boardRoleTrigger
+  case boardRoleSource
+  case boardRoleOrbe
+  case boardRoleStep
+  case boardRoleOutput
+  case boardOrbeSeen
+  case boardOutputTaskCandidates
+  case boardOutputCommand
+  case boardOutputReport
+  case boardOutputAgent
+  case boardOutputTally
+  case boardOutputNotify
+  case boardNotifyTitle
+  case boardNotifyOff
+  case boardNotifyMenuBar
+  case boardNotifyNotificationCenter
+  case boardRunFailed
+  case boardRunFailedShort
+  case boardRunAdded
+  case boardRunAddedTo
+  case boardRunNothingNew
+  case boardRunAllDropped
+  case boardRunNoneAdded
+  case boardRunDone
+  case boardRunNothingToReport
+  case boardRunNothingDone
+  case boardRunNothingDoneBecause
+  case boardRunMark
+  case boardRunMarkAdded
+  case boardRunMarkReported
+  case boardGuideLead
+  case boardGuideExamples
+  case boardExampleSlack
+  case boardExampleReviewDigest
+  case boardExampleDailyNote
+  case boardHintSelect
+  case boardHintToList
+  case boardHintChoose
+  case boardHintBack
+  case boardAskPlaceholder
+  case boardAskHint
+  case boardAskFixHint
+  case boardAskClaudeMissing
+  case boardAskUnavailable
+  case boardAskFixGone
 
   // MARK: - Link（OSC 8 リンクの確認・ブロック）
   case linkConfirmTitle

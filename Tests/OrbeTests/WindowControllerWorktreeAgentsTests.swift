@@ -115,11 +115,11 @@ final class WindowControllerWorktreeAgentsTests: OrbeTestCase {
     palette.moveField(-1)
     palette.moveField(-1)
     XCTAssertEqual(palette.area, .detail(.agent), "前提: 右の欄の agent の場所にいる")
-    XCTAssertNotEqual(wc.current.active, 0, "前提: 前面は別のタブ")
+    XCTAssertNotEqual(wc.current.selectedTabIndex, 0, "前提: 前面は別のタブ")
 
     palette.focusAgentTab()
 
     XCTAssertEqual(wc.presentedOverlay, .none, "タスク画面を閉じる")
-    XCTAssertEqual(wc.current.active, 0, "agent のタブが前面になる")
+    XCTAssertEqual(wc.current.selectedTabIndex, 0, "agent のタブが前面になる")
   }
 }

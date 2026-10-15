@@ -8,7 +8,8 @@ import XCTest
 /// ⇧⇥ は AppKit では backtab の文字で届き、SwiftUI の `.tab` 判定だけでは拾えない形がある——拾えないと
 /// ⇧⇥ が起動先を回したり、焦点が入力欄から外へ逃げて ↑↓ と打鍵が効かなくなる。ベースを選ぶ画面は
 /// 入力欄を一覧と使い回すので、行き先の切り替えを誤ると、絞り込みが一覧の入力を書き換える・戻った後に
-/// キーが効かない・↵ が別の候補に決まる、のどれかになる。
+/// キーが効かない・↵ が別の候補に決まる、のどれかになる。別の画面で押し続けた ↵ のリピートが届くと、人が行を選ぶ前に
+/// 起動する。
 @MainActor
 final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
 
@@ -35,16 +36,7 @@ final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
   }
 
   private func sendTab(shift: Bool, to window: NSWindow) {
-    let characters = shift ? "\u{19}" : "\t"
-    guard
-      let event = NSEvent.keyEvent(
-        with: .keyDown, location: .zero, modifierFlags: shift ? [.shift] : [],
-        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-        context: nil, characters: characters, charactersIgnoringModifiers: characters,
-        isARepeat: false, keyCode: 48)
-    else { return XCTFail("キーイベントを作れない") }
-    NSApp.sendEvent(event)
-    pump(0.15)
+    send(48, shift ? "\u{19}" : "\t", shift ? [.shift] : [], to: window)
   }
 
   /// 作成行の選択中、⇧⇥ はベースだけを回し、⇥ は起動先だけを回す。
@@ -120,20 +112,26 @@ final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.selectedBaseChoice?.role, .previous, "⇧⇥ が末尾から先頭へ回る")
   }
 
+  /// 押し始めを見ていない ↵ のリピートだけが入力欄に届いても確定しない（⌘⇧X の ⌘↵ の押し始めでこの画面に替わり、
+  /// 残りのリピートが入力欄の確定へ届く経路）。押し直した ↵ では確定する。
+  func testEnterKeyRepeatAloneInTheFieldDecidesNothing() {
+    let model = DesignSceneFixtures.worktreePaletteBasePickerModel()
+    let window = mount(model)
+    type("origin", into: window)
+
+    send(36, "\r", repeating: true, to: window)
+    XCTAssertEqual(model.mode, .basePicker, "リピートでは決めない")
+
+    send(36, "\r", to: window)
+    XCTAssertEqual(model.mode, .list, "押し直した ↵ で決める")
+  }
+
   private func type(_ text: String, into window: NSWindow) {
     for character in text { send(0, String(character), to: window) }
   }
 
   private func backspace(repeating: Bool = false, to window: NSWindow) {
-    guard
-      let event = NSEvent.keyEvent(
-        with: .keyDown, location: .zero, modifierFlags: [],
-        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-        context: nil, characters: "\u{7F}", charactersIgnoringModifiers: "\u{7F}",
-        isARepeat: repeating, keyCode: 51)
-    else { return XCTFail("キーイベントを作れない") }
-    NSApp.sendEvent(event)
-    pump(0.15)
+    send(51, "\u{7F}", repeating: repeating, to: window)
   }
 
   /// タスクから開いた ⌘T の ⌫ は、打った文字を先に消し、入力欄が空になってから押した ⌫ でタスクの札を外す。
@@ -152,6 +150,22 @@ final class WorktreePaletteCardKeyTests: PaletteCardWindowTestCase {
 
     backspace(to: window)
     XCTAssertNil(model.taskContextID, "空の入力欄の ⌫ で外す")
+  }
+
+  /// 別の画面で押し始めた ↵ を押し続け、この画面に差し替わった後のリピートだけが入力欄に届いても、人が行を選ぶ前に
+  /// 実行しない。押した瞬間の ↵ は実行する。
+  func testEnterKeyRepeatFromAnotherScreenDoesNotExecute() {
+    let model = DesignSceneFixtures.worktreePalettePullRequestModel()
+    var executed: [WorktreePaletteDestination] = []
+    model.onExecute = { executed.append($0) }
+    let window = mount(model)
+
+    send(36, "\r", repeating: true, to: window)
+    send(36, "\r", repeating: true, to: window)
+    XCTAssertEqual(executed, [])
+
+    send(36, "\r", to: window)
+    XCTAssertEqual(executed.count, 1)
   }
 
   /// 開いている間にタスクや GitHub の値が変わると（PR のブランチ名が届く等）、カードが provider に組み直させる。

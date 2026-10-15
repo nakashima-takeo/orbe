@@ -25,11 +25,11 @@ final class WorktreeCreateTimeoutTests: OrbeTestCase {
       worktreeTemplate: "{parent}/wt-{slug}", runner: GitRunner(idleTimeout: 0.6))
     provider.load()
     XCTAssertTrue(
-      pumpMainUntil({ provider.repo != nil }, timeout: 10), "前提: リポジトリを解決できていること")
+      pumpMainUntil({ provider.facts.repo != nil }, timeout: 10), "前提: リポジトリを解決できていること")
 
-    var resolution: WorktreePaletteDataProvider.DirectoryResolution?
+    var resolution: WorktreeRepoFacts.DirectoryResolution?
     let done = expectation(description: "prepareDirectory")
-    provider.prepareDirectory(for: .newBranch(name: "issue/44", base: .defaultBranch)) {
+    provider.facts.prepareDirectory(for: .newBranch(name: "issue/44", base: .defaultBranch)) {
       if case .resolved(let resolved) = $0 { resolution = resolved }
       done.fulfill()
     }

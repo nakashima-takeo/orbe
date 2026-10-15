@@ -8,7 +8,7 @@ import XCTest
 final class WorkspacePersistenceTests: OrbeTestCase {
 
   /// テストの復元では resume を起こさない（agent 付きタブの検証のみ）。
-  private let noResume: TerminalTab.ResumeSpawn = { _ in nil }
+  private let noResume: TerminalTab.ResumeSpawn = { _, _ in nil }
 
   // MARK: - ウィンドウサイズ
 
@@ -80,9 +80,9 @@ final class WorkspacePersistenceTests: OrbeTestCase {
     var captured: AgentSession?
     let state = TabState(
       cwd: "/w", agent: AgentSession(command: "claude", sessionId: "abc-123"), explicitTitle: nil)
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       restoring: state,
-      resumeSpawn: { session in
+      resumeSpawn: { session, _ in
         captured = session
         return ("claude --resume abc-123", ["PATH": "/usr/bin"])
       })
@@ -104,7 +104,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   func testRestoreAgentTabFallsBackToShellWhenUnresolved() {
     let state = TabState(
       cwd: "/w", agent: AgentSession(command: "unknown", sessionId: "x"), explicitTitle: nil)
-    let tab = TerminalTab(restoring: state, resumeSpawn: noResume)
+    let tab = TerminalTab.alone(restoring: state, resumeSpawn: noResume)
     XCTAssertEqual(tab.tabState(), state, "休眠のあいだセッション記録は保持される")
 
     tab.recordMaterializationStarted()
@@ -121,7 +121,7 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   func testAgentWithoutSessionIdKeyLoadsAsNilIdentity() throws {
     let tmp = try workspacesFile()
     let json = """
-      {"version":4,"activeWorkspace":0,"workspaces":[\
+      {"version":\(WorkspacePersistence.version),"activeWorkspace":0,"workspaces":[\
       {"name":"default","rootPath":"/r","activeTab":0,"tabs":[\
       {"cwd":"/r/a","agent":{"command":"claude"}}]}]}
       """
@@ -139,13 +139,13 @@ final class WorkspacePersistenceTests: OrbeTestCase {
   /// sessionId を持たない同一性は、休眠でも稼働中でも tabState に書かない。resume 不能な記録を
   /// ディスクへ増やすと、次の起動で必ず素シェル化する死にチケットが永続する。
   func testTabStateDropsIdentitiesWithoutASessionId() {
-    let dormant = TerminalTab(
+    let dormant = TerminalTab.alone(
       restoring: TabState(
         cwd: "/w", agent: AgentSession(command: "claude", sessionId: nil), explicitTitle: nil),
       resumeSpawn: noResume)
     XCTAssertNil(dormant.tabState().agent, "sessionId 欠落のチケットは保存しない")
 
-    let live = TerminalTab(cwd: "/tmp")
+    let live = TerminalTab.alone(cwd: "/tmp")
     setReportedState(live, "working", command: "claude")
     XCTAssertEqual(
       live.agentSlot.session, AgentSession(command: "claude", sessionId: nil),
@@ -267,5 +267,40 @@ final class WorkspacePersistenceTests: OrbeTestCase {
     XCTAssertEqual(loaded.windowSize, WindowSize(width: 700, height: 400))
     XCTAssertEqual(loaded.workspaces[0].lastUsedAt, Date(timeIntervalSinceReferenceDate: 123))
     XCTAssertEqual(loaded.workspaces[1].tabs, [], "0 タブの休眠 workspace はそのまま")
+  }
+
+  // MARK: - ボードの選択
+
+  /// 「ボードを選んでいるか」の型の合わない値は「選んでいない」として読み、workspace は失わない。
+  func testMalformedBoardSelectionReadsAsNotSelected() throws {
+    let file = """
+      {"version":\(WorkspacePersistence.version),"activeWorkspace":0,"workspaces":[\
+      {"name":"a","rootPath":"/","activeTab":0,"boardSelected":"yes","tabs":[]}]}
+      """
+    try Data(file.utf8).write(to: workspacesFile())
+    let loaded = try XCTUnwrap(WorkspacePersistence.load())
+    XCTAssertEqual(loaded.workspaces.map(\.name), ["a"])
+    XCTAssertEqual(loaded.workspaces.map(\.boardSelected), [false])
+  }
+
+  // MARK: - 全キーの往復
+
+  /// 全フィールドを非既定にした WorkspaceState は、全キーが JSON に現れ、往復で等しい。
+  /// 壊れると、手書きの encode に書き忘れたフィールドが黙って保存されず、再起動で消える。
+  func testEveryWorkspaceStateCodingKeyRoundTrips() throws {
+    var override = SettingsLayer()
+    override[SettingKeys.fontSize] = 20
+    let full = WorkspaceState(
+      name: "w", rootPath: "/w", activeTab: 0, boardSelected: true,
+      tabs: [TabState(cwd: "/w", agent: nil, explicitTitle: nil)],
+      groups: [GroupState(root: "/w", faces: FaceLayout(editorRatio: 0.4, focus: .editor))],
+      lastUsedAt: Date(timeIntervalSinceReferenceDate: 123), settingsOverride: override,
+      lastWorktreeBase: "origin/main", boardParts: [.automation])
+    let data = try JSONEncoder().encode(full)
+    let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    for key in WorkspaceState.CodingKeys.allCases {
+      XCTAssertNotNil(object[key.rawValue], "\(key) が encode に現れない")
+    }
+    XCTAssertEqual(try JSONDecoder().decode(WorkspaceState.self, from: data), full)
   }
 }

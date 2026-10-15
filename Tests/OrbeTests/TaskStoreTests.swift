@@ -46,13 +46,13 @@ final class TaskStoreTests: OrbeTestCase {
 
   // MARK: - 追加
 
-  func testAddAppendsToTheEndWithDefaultsAndTrimmedTitle() throws {
+  func testAddNumbersTheTaskWithDefaultsAndTrimmedTitle() throws {
     let store = TaskStore()
 
     let first = try store.add(draft("経費精算を出す"))
     let second = try store.add(draft("  レビューを返す \n"))
 
-    XCTAssertEqual(store.tasks.map(\.id), [first.id, second.id], "新しいタスクは列の末尾に入る")
+    XCTAssertEqual(Set(store.tasks.map(\.id)), [first.id, second.id], "足したタスクは一覧に入る")
     XCTAssertEqual(second.id, first.id + 1)
     XCTAssertEqual(second.title, "レビューを返す", "タイトルは前後の空白を除いて持つ")
     XCTAssertEqual(second.status, .todo, "ステータスの既定は未着手")
@@ -175,7 +175,7 @@ final class TaskStoreTests: OrbeTestCase {
 
   func testChangingOnlyTheWaitingReasonKeepsWhenTheWaitStarted() throws {
     let waiting = TaskItem(
-      id: 1, title: "a", status: .todo, waiting: .init(reason: "返事", since: past),
+      id: 1, title: "a", status: .todo, wait: .waiting(.init(reason: "返事", since: past)),
       priority: .medium, due: nil, workspace: nil, description: "", createdAt: past, createdBy: nil)
     let store = TaskStore(
       file: TasksFile(version: TaskPersistence.version, nextId: 2, tasks: [waiting]))
@@ -206,30 +206,7 @@ final class TaskStoreTests: OrbeTestCase {
     assertRejected(.notFound(9)) { _ = try store.update(9, TaskUpdate(title: "a")) }
   }
 
-  // MARK: - 並べ替え・削除
-
-  func testMoveBeforeAndAfterAnotherTaskReordersTheList() throws {
-    let store = TaskStore()
-    let ids = try ["1", "2", "3", "4"].map { try store.add(draft($0)).id }
-
-    try store.move(ids[3], .before, ids[1])
-    XCTAssertEqual(store.tasks.map(\.id), [ids[0], ids[3], ids[1], ids[2]], "指したタスクの直前へ入る")
-
-    try store.move(ids[0], .after, ids[2])
-    XCTAssertEqual(store.tasks.map(\.id), [ids[3], ids[1], ids[2], ids[0]], "指したタスクの直後へ入る")
-  }
-
-  func testMoveRelativeToItselfOrAnUnknownTaskIsRejectedAndKeepsTheOrder() throws {
-    let store = TaskStore()
-    let a = try store.add(draft("a")).id
-    let b = try store.add(draft("b")).id
-
-    assertInvalid({ try store.move(a, .before, a) })
-    assertRejected(.notFound(99)) { try store.move(a, .after, 99) }
-    assertRejected(.notFound(99)) { try store.move(99, .after, a) }
-
-    XCTAssertEqual(store.tasks.map(\.id), [a, b])
-  }
+  // MARK: - 削除
 
   func testDeleteRemovesTheTaskAndItsIdIsNeverReused() throws {
     let store = TaskStore()
@@ -264,8 +241,6 @@ final class TaskStoreTests: OrbeTestCase {
     XCTAssertEqual(relaunched().tasks, store.tasks, "追加は即座にディスクへ届き、全項目が往復で保たれる")
 
     let b = try store.add(draft("b"))
-    try store.move(b.id, .before, a.id)
-    XCTAssertEqual(relaunched().tasks.map(\.id), [b.id, a.id], "並べ替えは即座にディスクへ届く")
 
     _ = try store.update(a.id, TaskUpdate(status: .done))
     XCTAssertEqual(relaunched().tasks, store.tasks, "変更は即座にディスクへ届く")

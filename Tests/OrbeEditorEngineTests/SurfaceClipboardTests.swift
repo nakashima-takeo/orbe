@@ -184,7 +184,7 @@ final class SurfaceClipboardTests: EngineTestCase {
     let menu = try XCTUnwrap(view.menu(for: try event(column: 5)))
     XCTAssertEqual(opened.surface.selectedRange, NSRange(location: 4, length: 3), "選択の中なら保つ")
     XCTAssertEqual(menu.items.map(\.title), ["Copy"])
-    if #available(macOS 15.2, *) { XCTAssertFalse(menu.automaticallyInsertsWritingToolsItems) }
+    XCTAssertFalse(menu.automaticallyInsertsWritingToolsItems)
     replay([.mark("x")], on: opened)
     _ = view.menu(for: try event(column: 1))
     XCTAssertFalse(view.hasMarkedText(), "先に確定する")

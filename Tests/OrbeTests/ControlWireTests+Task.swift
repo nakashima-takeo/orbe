@@ -3,9 +3,9 @@ import XCTest
 
 @testable import Orbe
 
-/// タスクの 5 動詞の params の語と型検査。method 名・必須キー・型違い・ドメイン失敗の素通しは
+/// タスクの 4 動詞の params の語と型検査。method 名・必須キー・型違い・ドメイン失敗の素通しは
 /// `+Params` / `+Methods` の表が持ち、ここはそれで測れない「キーが無い」と `null` の区別、
-/// 語彙の外の値、`move_task` の相対位置を見る。
+/// 語彙の外の値を見る。
 ///
 /// 壊れると何が起きるか: `null`（外す）を「キー無し（変えない）」と取り違えると、`orb task set --no-due`
 /// が成功を返しながら期限を残す。省いた workspace を「なし」と取り違えると、タブ内の agent が足した
@@ -146,27 +146,6 @@ extension ControlWireTests {
     XCTAssertEqual(set?.update.description, "", "空の詳細は「変えない」ではなく空への置き換え")
   }
 
-  func testMoveTaskTakesExactlyOneOfBeforeOrAfter() {
-    let fake = FakeControlTarget()
-    let wire = startWire(target: fake)
-
-    _ = wire.request(id: 1, method: "move_task", params: ["taskId": 7, "beforeTaskId": 8])
-    _ = wire.request(id: 2, method: "move_task", params: ["taskId": 9, "afterTaskId": 10])
-    XCTAssertEqual(fake.movedTasks.map(\.taskId), [7, 9])
-    XCTAssertEqual(fake.movedTasks.map(\.placement), [.before, .after])
-    XCTAssertEqual(fake.movedTasks.map(\.anchorTaskId), [8, 10])
-
-    XCTAssertEqual(
-      errorCode(wire.request(id: 3, method: "move_task", params: ["taskId": 7])), -32602,
-      "どちらも無ければ -32602")
-    XCTAssertEqual(
-      errorCode(
-        wire.request(
-          id: 4, method: "move_task", params: ["taskId": 7, "beforeTaskId": 8, "afterTaskId": 9])),
-      -32602, "両方あれば -32602")
-    XCTAssertEqual(fake.movedTasks.count, 2, "拒否した要求は target へ届かない")
-  }
-
   func testValuesOutsideTheVocabularyAreRejectedBeforeReachingTheTarget() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
@@ -181,8 +160,10 @@ extension ControlWireTests {
       ("update_task", ["taskId": 7, "due": "tomorrow"]),
       ("update_task", ["taskId": true, "description": "m"]),
       ("list_tasks", ["workspaceId": "3"]),
-      ("move_task", ["taskId": 7, "beforeTaskId": false]),
       ("delete_task", ["taskId": 7.5]),
+      ("start_task", ["taskId": "7"]),
+      ("start_task", ["taskId": 7, "branch": 1]),
+      ("start_task", ["taskId": 7, "prompt": NSNull()]),
     ]
 
     for (index, entry) in rejected.enumerated() {
@@ -193,8 +174,8 @@ extension ControlWireTests {
     XCTAssertTrue(fake.addedTasks.isEmpty)
     XCTAssertTrue(fake.updatedTasks.isEmpty)
     XCTAssertTrue(fake.taskLists.isEmpty)
-    XCTAssertTrue(fake.movedTasks.isEmpty)
     XCTAssertTrue(fake.deletedTaskIds.isEmpty)
+    XCTAssertTrue(fake.startedTasks.isEmpty)
   }
 
   /// `links` は `{kind, repo, number}` の配列で、順を保って届く。update では省略が「変えない」、`[]` が全部外す。
@@ -264,5 +245,26 @@ extension ControlWireTests {
 
     XCTAssertEqual(fake.taskLists, [nil, 6], "workspaceId の省略は絞り込まない")
     XCTAssertEqual(fake.deletedTaskIds, [11])
+  }
+
+  /// `start_task` は渡した項目だけを target へ届け、target の完了で 1 度だけ応答する。
+  func testStartTaskCarriesItsFieldsAndAnswersWithTheTargetsResult() {
+    let fake = FakeControlTarget()
+    let wire = startWire(target: fake)
+
+    let response = wire.request(
+      id: 1, method: "start_task",
+      params: [
+        "taskId": 7, "branch": "feat/x", "repo": "/r", "agent": "claude", "prompt": "直して",
+      ])
+    _ = wire.request(id: 2, method: "start_task", params: ["taskId": 8])
+
+    XCTAssertEqual((response?["result"] as? [String: Any])?["workdir"] as? String, "/w")
+    XCTAssertEqual(fake.startedTasks.map(\.taskId), [7, 8])
+    let full = fake.startedTasks[0]
+    XCTAssertEqual(
+      [full.branch, full.repo, full.agent, full.prompt], ["feat/x", "/r", "claude", "直して"])
+    let bare = fake.startedTasks[1]
+    XCTAssertEqual([bare.branch, bare.repo, bare.agent, bare.prompt], [nil, nil, nil, nil])
   }
 }

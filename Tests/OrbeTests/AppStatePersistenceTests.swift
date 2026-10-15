@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// `app-state.json` の読み書き。壊れると、1 箇所の書き込みが他の内部簿記（言語・プラグイン登録・
+/// `app-state.json` の読み書き。壊れると、1 箇所の書き込みが他の内部簿記（言語・プラグイン導入・
 /// PATH キャッシュ）を消す、または旧ファイルを読めずに初回扱いへ戻る。
 final class AppStatePersistenceTests: OrbeTestCase {
 
@@ -10,13 +10,12 @@ final class AppStatePersistenceTests: OrbeTestCase {
   func testUpdateChangesOnlyTheMutatedField() {
     AppStatePersistence.save(
       AppStateFile(
-        agentPluginsInstalled: true, registeredAgentPluginName: "orbe-agent",
-        completionInstalled: true, cachedShellPath: "/bin/zsh", preferredLanguage: nil))
+        agentPluginsInstalled: true, completionInstalled: true, cachedShellPath: "/bin/zsh",
+        preferredLanguage: nil))
     AppStatePersistence.update { $0.preferredLanguage = "ja" }
     let loaded = AppStatePersistence.load()
     XCTAssertEqual(loaded?.preferredLanguage, "ja")
     XCTAssertEqual(loaded?.agentPluginsInstalled, true, "他 field は保持")
-    XCTAssertEqual(loaded?.registeredAgentPluginName, "orbe-agent", "他 field は保持")
     XCTAssertEqual(loaded?.completionInstalled, true, "他 field は保持")
     XCTAssertEqual(loaded?.cachedShellPath, "/bin/zsh", "他 field は保持")
   }

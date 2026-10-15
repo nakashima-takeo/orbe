@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "orbe-agent": { "command": "./mcp/orbe-mcp.sh" }
+  }
+}

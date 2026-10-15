@@ -77,7 +77,7 @@ extension TaskPaletteModel {
     return TaskPaletteGitHubRows.Input(
       repo: repo, issues: repository.issues.items ?? [],
       pullRequests: repository.pullRequests.items ?? [], tasks: store.tasks, login: viewer.login,
-      reviewRequests: repository.reviewRequests, filter: githubFilter, query: gitHubList.query,
+      reviewRequests: repository.reviewRequests, filters: githubFilters, query: gitHubList.query,
       expanded: expandedKinds,
       loading: Set(
         [GitHubItemKind.issue, .pr].filter { kind in
@@ -142,16 +142,11 @@ extension TaskPaletteModel {
     gitHubList.hoverSelect(id, in: gitHubSelectableIDs)
   }
 
-  /// ⇥。絞り込みの札を巡回する。
-  func cycleGitHubFilter() {
-    setGitHubFilter(githubFilter.next)
-  }
-
-  /// 札のクリック。一覧は先頭の行から選び直す。
-  func setGitHubFilter(_ filter: TaskGitHubFilter) {
+  /// 札のクリック。オン・オフし、一覧は先頭の行から選び直す。
+  func toggleGitHubFilter(_ filter: TaskGitHubFilter) {
     leaveEditingForAction()
     area = .list
-    githubFilter = filter
+    githubFilters.formSymmetricDifference([filter])
     gitHubList.selectFirst(in: gitHubSelectableIDs)
   }
 
@@ -226,20 +221,20 @@ extension TaskPaletteModel {
     }
   }
 
-  /// ⌘↵（GitHub タブ）。選んでいる項目の GitHub のページをブラウザで開く（結び付きの有無を問わない）。
+  /// ⌘O（GitHub タブ）。選んでいる項目の GitHub のページをブラウザで開く（結び付きの有無を問わない）。
   func openSelectedGitHubItemInBrowser() {
     guard let row = selectedGitHubRow else { return }
     onOpenURL(TaskLink(item: row.id, kind: row.item.kind).url)
   }
 
-  /// ⌘T（GitHub タブ）。結び付いていない行はタスクにしてから、結び付いている行はそのタスクで、⌘T を開く。
-  func openWorktreePaletteFromGitHub() {
+  /// ⌘↵（GitHub タブ）・右の欄の ⌘↵・ボタン。結び付いていない行はタスクにしてから、結び付いている行はそのタスクで、
+  /// そのタスクのための agent を開く。
+  func openSelectedGitHubItemAsTask() {
     guard let row = selectedGitHubRow else { return }
     if let task = row.task {
-      leaveEditingForAction()
-      onOpenWorktreePalette(task.id)
+      openAgent(forTask: task.id)
     } else if let id = makeTask(row) {
-      onOpenWorktreePalette(id)
+      openAgent(forTask: id)
     }
   }
 
@@ -276,7 +271,7 @@ extension TaskPaletteModel {
   @discardableResult func changePaneValue(_ direction: Int) -> Bool {
     guard area == .pane(.priority) else { return false }
     error = nil
-    let options: [TaskItem.Priority] = [.high, .medium, .low]
+    let options = TaskItem.Priority.allCases
     let index = options.firstIndex(of: pane.priority)!
     pane.priority = options[min(max(index + direction, 0), options.count - 1)]
     return true

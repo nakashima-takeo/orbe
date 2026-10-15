@@ -39,7 +39,7 @@ extension WindowControllerControlTests {
   /// 未 mount（surface 無し）のタブは -32000 "tab not mounted"。休眠 workspace のタブがその形。
   func testPromptToAnUnmountedTabIsRefused() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("main"), tabbed("dormant")])
-    let tab = try XCTUnwrap(wc.workspaces.last?.tabs.first)
+    let tab = try XCTUnwrap(wc.regularWorkspaces.last?.tabs.first)
     XCTAssertNil(tab.surface.surfacePtr, "前提: 休眠 WS のタブは surface を持たない")
 
     let refusal = wc.controlPromptAgent(tab: tab, text: "hello")

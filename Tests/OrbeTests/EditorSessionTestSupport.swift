@@ -27,7 +27,7 @@ extension EditorShellModel {
 }
 
 @MainActor
-extension TabFacesView {
+extension GroupFacesView {
   /// diff の見せ方を既定にして窓の環境を配る。
   func configure(
     translucency: ChromeTranslucency, localization: LocalizationStore,

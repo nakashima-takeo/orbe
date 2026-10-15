@@ -19,12 +19,10 @@ final class EditorDiff: RootFilesObserver {
 
   let id: Key
   let files: RootFiles
-  /// 作業ツリー diff の新しい側の文書（作業ツリーの姿で変わる。無ければ nil）。
-  private(set) var document: EditorDocument?
   /// 作業ツリーの姿（ステージ済みなら nil）と、それを読み直すべきか（ファイルが変わった）。
   private var working: WorkingSide?
   private var workingStale = true
-  private let documents: Documents
+  private var documents: Documents
   let surfaces: EditorSurfaces
   /// 古い側と、新しい側が版の本文のときの新しい側（その面も diff が持つ）。その版に無い側は空の本文。
   private(set) var old: RevisionDocument?
@@ -76,6 +74,12 @@ final class EditorDiff: RootFilesObserver {
 
   // MARK: - 側
 
+  /// 作業ツリー diff の新しい側の文書（作業ツリーの姿で変わる。無ければ nil）。
+  var document: EditorDocument? {
+    if case .document(let document)? = working { return document }
+    return nil
+  }
+
   /// 新しい側の面（作業ツリーなら文書の面、ほかは diff が持つ面。中身が見せられなければ nil）。
   var newSurface: (any TextSurface)? {
     guard content == .ready else { return nil }
@@ -89,22 +93,44 @@ final class EditorDiff: RootFilesObserver {
   private func updateWorkingSide(throwing: Bool) throws {
     if document?.isDirty == true { return }
     workingStale = false
-    let next = try readWorkingTree(throwing: throwing)
-    working = next
-    var nextDocument: EditorDocument?
-    if case .document(let opened) = next { nextDocument = opened }
-    guard nextDocument !== document else { return }
     let previous = document
-    document = nextDocument
+    working = try readWorkingTree(throwing: throwing)
+    guard document !== previous else { return }
+    documentDidSwitch(from: previous)
+    if let previous { documents.release(previous) }
+  }
+
+  /// 新しい側の文書が `previous` から替わった——前の文書をファイルタブの見え方に戻し、今の文書のハンクを追う（見せて
+  /// いれば）。面が替わるので古い側の面も閉じ、pane に置き直させる。
+  private func documentDidSwitch(from previous: EditorDocument?) {
     dropOldSurface()
     surfacesChanged = true
-    if let previous {
-      if presented != nil { restoreCode(previous) }
-      documents.release(previous)
-    }
-    guard presented != nil, let nextDocument else { return }
-    nextDocument.onHunksChange = { [weak self] in self?.sourcesDidChange() }
-    nextDocument.hunkLimit = Self.hunkLimit
+    if presented != nil, let previous { restoreCode(previous) }
+    guard presented != nil, let document else { return }
+    document.onHunksChange = { [weak self] in self?.sourcesDidChange() }
+    document.hunkLimit = Self.hunkLimit
+  }
+
+  // MARK: - 付け替え（cd で連が畳まれた）
+
+  /// 新しい側の文書を引く口を `documents`（引き取ったセッション）に結び直す。
+  func rebind(_ documents: Documents) {
+    self.documents = documents
+  }
+
+  /// 新しい側の文書を、同じ実体の `next` に差し替える（セッションが勝ち負けを決めた勝者）。前の文書は手放さない（結線の
+  /// 後始末はセッションがまとめてする）。作り直しは積むだけで、見せていれば `settle` で行う。
+  func replaceDocument(with next: EditorDocument) {
+    guard let previous = document, previous !== next else { return }
+    working = .document(next)
+    documentDidSwitch(from: previous)
+    stale = true
+  }
+
+  /// 積んだ作り直しを、見せていれば今行う。
+  func settle() {
+    guard stale, presented != nil else { return }
+    refresh()
   }
 
   /// 作業ツリーの姿——在るか・シンボリックリンクか・UTF-8 か。文書として読めればその文書（`documents` が実体ごとに 1 つ

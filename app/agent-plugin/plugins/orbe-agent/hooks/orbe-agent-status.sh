@@ -14,7 +14,7 @@
 # Orbe が刻んだ自分の bundle ID、ORBE_BUNDLE_ID はタブを開いた Orbe が名乗る bundle ID。
 # $0 からの相対で引くのは、claude / codex が絶対パスで呼び agy は cwd＝ステージ済みプラグインルート
 # からの相対で呼ぶため。判定材料が片方でも欠けたら通す（状態追跡を黙って殺さない）。
-CHANNEL_FILE="$(dirname "$0")/channel"
+CHANNEL_FILE="$(dirname "$0")/../channel"
 if [ -n "$ORBE_BUNDLE_ID" ] && [ -r "$CHANNEL_FILE" ]; then
   read -r OWNER < "$CHANNEL_FILE"
   [ "$OWNER" = "$ORBE_BUNDLE_ID" ] || exit 0

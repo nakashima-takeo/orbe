@@ -1,6 +1,7 @@
+import CryptoKit
 import Foundation
 
-/// `.app` 同梱の状態追跡プラグインを、検出された各 CLI へ
+/// `.app` 同梱のエージェントプラグイン（状態追跡 hooks と MCP サーバー）を、検出された各 CLI へ
 /// 同梱の `install.sh` 経由で導入する。導入機構は各 CLI のプラグイン機構に委ね、ユーザー設定
 /// ファイルは直接書き換えない。`install.sh` が CLI ごとに出す 1 行を Event として流す。
 enum AgentPluginInstaller {
@@ -21,15 +22,14 @@ enum AgentPluginInstaller {
   }
 
   /// テスト用に実体化先を差し替える（設定時はこちらを使う）。本番は nil。
-  /// `stablePluginDir` は `ORBE_STATE_DIR` を見ない固定登録先なので、これが無いとテストの
-  /// `WindowController()` が起動同期で実ホームの application support を書き換える。
+  /// 張らないと、テストの `WindowController()` が起動同期でテスト間共有の state フォルダへ書く。
   static var stablePluginDirOverride: URL?
 
-  /// marketplace へ登録する安定パス（`ORBE_STATE_DIR` 非依存の application support 直下）。
-  /// ビルド固有 ephemeral パスを焼き付けないための固定登録先。
+  /// 実体化先。state フォルダの下に置くので、隔離起動のものは常用のものに触れない。常用の実体化先は marketplace への
+  /// 登録先でもあり、ビルド固有の ephemeral パスを焼き付けないための固定の置き場になる。
   static var stablePluginDir: URL? {
     if let stablePluginDirOverride { return stablePluginDirOverride }
-    return StateDir.appSupport()?.appendingPathComponent("agent-plugin", isDirectory: true)
+    return StateDir.base()?.appendingPathComponent("agent-plugin", isDirectory: true)
   }
 
   /// パッケージのプラグイン名（＝marketplace 名＝`plugins/` 直下の唯一のサブディレクトリ名）。
@@ -62,15 +62,15 @@ enum AgentPluginInstaller {
       .appendingPathComponent("agent-plugin.tmp-\(UUID().uuidString)", isDirectory: true)
     do {
       try fm.copyItem(at: src, to: tmp)
-      // 自分のチャネル（bundle ID）をシムの隣へ刻む。シムがこれとタブの ORBE_BUNDLE_ID を
-      // 突き合わせ、他チャネルの Orbe から来た呼び出しを落とす。差し替えの前に書くので、
-      // 実体化先が channel を持たない瞬間は生じない。
+      // 自分のチャネル（bundle ID）をプラグインのルートへ刻む。状態追跡と MCP の両シムがこれと
+      // タブの ORBE_BUNDLE_ID を突き合わせ、他チャネルの Orbe から来た呼び出しを通さない。
+      // 差し替えの前に書くので、実体化先が channel を持たない瞬間は生じない。
       guard let name = pluginName(in: tmp) else {
         try? fm.removeItem(at: tmp)
         return nil
       }
       try Data("\(StateDir.bundleId)\n".utf8).write(
-        to: tmp.appendingPathComponent("plugins/\(name)/hooks/channel"))
+        to: tmp.appendingPathComponent("plugins/\(name)/channel"))
       if fm.fileExists(atPath: dst.path) {
         _ = try fm.replaceItemAt(dst, withItemAt: tmp)
       } else {
@@ -83,13 +83,35 @@ enum AgentPluginInstaller {
     }
   }
 
+  /// 実体化したパッケージの中身の指紋（全ファイルの相対パスと中身から作る SHA-256）。
+  /// 名前も刻印もパッケージの中にあるので、CLI に登録するものが変わればこれも変わる。読めなければ nil。
+  static func digest(of packageDir: URL) -> String? {
+    let fm = FileManager.default
+    guard let walker = fm.enumerator(atPath: packageDir.path) else { return nil }
+    var entries: [(path: String, hash: String)] = []
+    while let rel = walker.nextObject() as? String {
+      guard walker.fileAttributes?[.type] as? FileAttributeType == .typeRegular else { continue }
+      guard let data = fm.contents(atPath: packageDir.appendingPathComponent(rel).path) else {
+        return nil
+      }
+      entries.append((rel, hex(SHA256.hash(data: data))))
+    }
+    guard !entries.isEmpty else { return nil }
+    let manifest = entries.sorted { $0.path < $1.path }.map { "\($0.path)\0\($0.hash)\n" }.joined()
+    return hex(SHA256.hash(data: Data(manifest.utf8)))
+  }
+
+  private static func hex(_ digest: SHA256Digest) -> String {
+    digest.map { String(format: "%02x", $0) }.joined()
+  }
+
   /// 同梱 `install.sh <pluginDir> <pluginName>` をバックグラウンド実行し、stdout の各行を Event として
   /// メインスレッドで `onEvent` に、読み切りを `onComplete` に流す。子プロセスは呼び出し側が
   /// 戻り値で保持する（実行中の Process 寿命を UI に紐付ける）。
   ///
   /// 完了は stdout の EOF で発火する: 全行を読み切ってから同じ読み取りキューで `onComplete` を
   /// main へ投入するので、`onComplete` は必ず最後の `onEvent` の後に届く。呼び出し側はこの順序に
-  /// 依って完了時点で失敗の有無を判定する（`AgentLauncher` は 1 つでも失敗すれば名前を記録しない）。
+  /// 依って完了時点で失敗の有無を判定する（`AgentLauncher` は 1 つでも失敗すれば指紋を記録しない）。
   @discardableResult
   static func run(
     pluginDir: URL, pluginName: String, shellPATH: String,

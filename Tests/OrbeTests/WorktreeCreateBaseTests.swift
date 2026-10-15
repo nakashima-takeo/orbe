@@ -74,7 +74,7 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
   func testNewBranchIsCutFromTheFetchedDefaultBranch() throws {
     let provider = try startWithSlowFetch()
     XCTAssertTrue(
-      pump({ provider.defaultBranchName == "origin/main" }), "前提: 既定ブランチの解決は着地している")
+      pump({ provider.facts.defaultBranchName == "origin/main" }), "前提: 既定ブランチの解決は着地している")
     let outcome = try prepare(provider, .newBranch(name: "issue/44", base: .defaultBranch))
     guard case .created(let path, let base) = outcome else {
       return XCTFail("新しいブランチの作成として返る: \(outcome)")
@@ -177,7 +177,7 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
     XCTAssertTrue(
       run(["symbolic-ref", "--delete", "refs/remotes/origin/HEAD"], cwd: local).isSuccess)
     let provider = try startWithSlowFetch()
-    XCTAssertEqual(provider.defaultBranchName, "main", "前提: 提示時の名前はフォールバック")
+    XCTAssertEqual(provider.facts.defaultBranchName, "main", "前提: 提示時の名前はフォールバック")
     let path = try resolve(
       provider, .newBranch(name: "issue/44", base: .defaultBranch))
     XCTAssertEqual(
@@ -252,10 +252,10 @@ final class WorktreeCreateBaseTests: OrbeTestCase {
 
   func prepare(_ provider: WorktreePaletteDataProvider, _ destination: WorktreePaletteDestination)
     throws
-    -> WorktreePaletteDataProvider.PrepareOutcome
+    -> WorktreeRepoFacts.PrepareOutcome
   {
-    var outcome: WorktreePaletteDataProvider.PrepareOutcome?
-    provider.prepareDirectory(for: destination) { outcome = $0 }
+    var outcome: WorktreeRepoFacts.PrepareOutcome?
+    provider.facts.prepareDirectory(for: destination) { outcome = $0 }
     XCTAssertTrue(pump({ outcome != nil }, timeout: 30), "解決が返らない")
     return try XCTUnwrap(outcome)
   }

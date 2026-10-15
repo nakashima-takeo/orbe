@@ -1,11 +1,11 @@
 import Foundation
 import OrbeEditorCore
 
-/// タブ 1 枚（端末のタブ）が持つ、エディター面のタブの列（文書のタブと diff のタブ）と焦点のタブ。文書は実体の URL ごとに
-/// 1 つで、テキスト面 1 つを開いてから閉じるまで対で持ち、その文書を使うタブ（ファイルタブと、それを新しい側に使う作業
-/// ツリー diff）が持ち主になる——最後の持ち主が離れたら閉じる。切り替えは「どのタブの本体を見せるか」を変えるだけなので、
-/// undo・選択・スクロールは文書ごとに残る（同じ文書のファイルタブと作業ツリー diff は、同じ面の位置・選択・undo を共有
-/// する）。変化は `onChange` 1 本でタブへ上がる。
+/// 連（`TabGroup`）1 つが持つ、エディター面のタブの列（文書のタブと diff のタブ）と焦点のタブ。連のタブはどれも同じ
+/// セッションを見る。文書は実体の URL ごとに 1 つで、テキスト面 1 つを開いてから閉じるまで対で持ち、その文書を使うタブ
+/// （ファイルタブと、それを新しい側に使う作業ツリー diff）が持ち主になる——最後の持ち主が離れたら閉じる。切り替えは
+/// 「どのタブの本体を見せるか」を変えるだけなので、undo・選択・スクロールは文書ごとに残る（同じ文書のファイルタブと作業
+/// ツリー diff は、同じ面の位置・選択・undo を共有する）。変化は `onChange` 1 本で連へ上がる。
 ///
 /// 列の中に仮のタブ（見るだけのタブ）を高々 1 つ持つ——文書と diff で枠は 1 つ。仮で開くと今の仮のタブをその位置で入れ替える
 /// ので、見て回るだけなら列が伸びない。仮のタブの文書は常に未保存でない——未保存になった瞬間に普通のタブへ戻すので、入れ替えで
@@ -103,12 +103,16 @@ final class EditorSession {
       focus(.diff(id), as: mode)
       return existing
     }
-    let documents = EditorDiff.Documents(
-      open: { [unowned self] url in try document(for: url) },
-      release: { [weak self] document in self?.documentLeft(document) })
-    let diff = try EditorDiff(id: id, documents: documents, surfaces: surfaces)
+    let diff = try EditorDiff(id: id, documents: diffDocuments, surfaces: surfaces)
     place(.diff(diff), as: mode)
     return diff
+  }
+
+  /// diff が新しい側の文書を引く口と手放す口（このセッション）。
+  private var diffDocuments: EditorDiff.Documents {
+    EditorDiff.Documents(
+      open: { [unowned self] url in try document(for: url) },
+      release: { [weak self] document in self?.documentLeft(document) })
   }
 
   /// diff が使わなくなった文書——ほかに使うタブが無ければ閉じる。
@@ -151,6 +155,12 @@ final class EditorSession {
     guard let surface = surfaces.make() else { throw EditorSurfaceError.noMetalDevice }
     let document = EditorDocument(
       url: url, contents: contents, surface: surface, registry: surfaces.registry)
+    own(document, link: DocumentLink(document: document))
+    return document
+  }
+
+  /// 文書の通知をこのセッションへ結び、結線を持つ。
+  private func own(_ document: EditorDocument, link: DocumentLink?) {
     document.onDirtyChange = { [weak self] _ in
       guard let self else { return }
       settlePreview()
@@ -158,8 +168,71 @@ final class EditorSession {
     }
     document.onDiskChange = { [weak self] _ in self?.onChange?() }
     document.onFocusChange = { [weak self] _ in self?.onFocusChange?() }
-    links[ObjectIdentifier(document)] = DocumentLink(document: document)
-    return document
+    links[ObjectIdentifier(document)] = link
+  }
+
+  /// 別のセッションのタブを列の末尾へ引き取る（cd で連が畳まれたとき）。文書（diff だけが使う文書を含む）は実体ごとに
+  /// 勝ち負けを決める——自分に無ければ結線ごと移す。あれば、`other` の文書だけが未保存のときに限り `other` の文書が
+  /// 勝ち、それ以外は自分の文書が勝つ（負けた側は未保存でも捨てる）。タブは `other` の列の順に見て、同じタブが自分に
+  /// あれば捨て、無ければ末尾へ足す。仮のタブは自分に仮が無いときだけ仮のまま移り、あれば普通のタブになる。足した後、
+  /// 列のすべての文書のタブと diff の新しい側を勝った文書に揃える。焦点は自分のものを保ち、自分にタブが無かったときだけ
+  /// `other` の焦点にする。`other` は通知なしに空になり、自分の変化は 1 本の通知で上げる。本体を見せていた pane は、
+  /// 呼ぶ前に手放しておく。
+  func adopt(from other: EditorSession) {
+    guard !other.tabs.isEmpty else { return }
+    let wasEmpty = tabs.isEmpty
+    let winners = settleDocuments(from: other)
+    for tab in other.tabs {
+      guard self.tab(tab.id) == nil else {
+        if case .diff(let diff) = tab { diff.dismiss() }
+        continue
+      }
+      if case .diff(let diff) = tab { diff.rebind(diffDocuments) }
+      tabs.append(tab)
+      if tab.id == other.previewID, previewID == nil { previewID = tab.id }
+    }
+    replaceLosers(with: winners)
+    if wasEmpty {
+      activeID = other.activeID.flatMap { tab($0)?.id } ?? tabs.first?.id
+    }
+    let used = Set(documents.map(ObjectIdentifier.init))
+    links = links.filter { used.contains($0.key) }
+    other.tabs = []
+    other.links = [:]
+    other.activeID = nil
+    other.previewID = nil
+    settlePreview()
+    for case .diff(let diff) in tabs { diff.settle() }
+    onChange?()
+  }
+
+  /// `other` の文書の勝ち負けを実体ごとに決め、移る文書（自分に無いもの・勝ったもの）を結線ごと引き取る。戻り値は両方に
+  /// あった実体の勝者。
+  private func settleDocuments(from other: EditorSession) -> [URL: EditorDocument] {
+    var winners: [URL: EditorDocument] = [:]
+    for document in other.documents {
+      let link = other.links[ObjectIdentifier(document)]
+      guard let mine = documents.first(where: { $0.url == document.url }) else {
+        own(document, link: link)
+        continue
+      }
+      let theirs = document.isDirty && !mine.isDirty
+      winners[document.url] = theirs ? document : mine
+      if theirs { own(document, link: link) }
+    }
+    return winners
+  }
+
+  /// 列の文書のタブと diff の新しい側を、その実体の勝者に揃える（文書のタブは同じ位置で置き換える）。
+  private func replaceLosers(with winners: [URL: EditorDocument]) {
+    for (index, tab) in tabs.enumerated() {
+      guard let document = tab.document, let winner = winners[document.url], winner !== document
+      else { continue }
+      switch tab {
+      case .document: tabs[index] = .document(winner)
+      case .diff(let diff): diff.replaceDocument(with: winner)
+      }
+    }
   }
 
   /// 仮のタブの文書が未保存なら普通のタブにする（入れ替えで中身を失わない）。

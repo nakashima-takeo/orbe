@@ -139,7 +139,7 @@ final class EditorRowsTrialTests: OrbeTestCase {
   /// 1200×800 の動かせる窓に `text` を開き、差し込みを置いて前面に出す。
   private func show(_ text: String) throws -> Shown {
     let queries = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: queries))
     let window = OrbeWindow(
@@ -148,11 +148,11 @@ final class EditorRowsTrialTests: OrbeTestCase {
     window.title = "区画の試しの場"
     window.isReleasedWhenClosed = false
     window.appearance = NSAppearance(named: .darkAqua)
-    window.contentView = tab.view
-    tab.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
-    let document = try tab.editor.open(try caseFile("trial.swift", text), as: .pinned)
+    window.contentView = tab.group.view
+    tab.group.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
+    let document = try tab.group.editor.open(try caseFile("trial.swift", text), as: .pinned)
     let surface = try engine(document)
-    tab.view.layoutSubtreeIfNeeded()
+    tab.group.view.layoutSubtreeIfNeeded()
     XCTAssertTrue(document.waitUntilCaughtUp(timeout: 60))
     surface.setPresentation(SurfacePresentation(showsMinimap: false))
     let (insertions, threads) = insertions(lineCount: document.text.lineCount)

@@ -7,15 +7,16 @@ extension TaskPaletteModelTests {
   /// 未着手 2 件（a・b）を開き、a の右の欄に入った状態。
   func detailOfFirst(_ tasks: [TaskItem]? = nil) -> TaskPaletteModel {
     let palette = model(tasks ?? [task(1, "a"), task(2, "b")])
+    palette.tapRow(.task(1))
     palette.enterDetail()
     XCTAssertEqual(palette.selectedTask?.id, 1, "前提: a の右の欄")
     return palette
   }
 
-  /// 完了のタスク 1 件だけを開き、完了の欄を開いてその右の欄に入った状態。
+  /// 完了のタスク 1 件だけを開き、完了の札をオンにしてその右の欄に入った状態。
   func detailOfDone() -> TaskPaletteModel {
     let palette = model([task(1, "a", .done)])
-    palette.toggleDoneExpanded()
+    palette.toggleState(.done)
     palette.jump(1)
     palette.enterDetail()
     XCTAssertEqual(palette.selectedTask?.status, .done, "前提: 完了のタスクの右の欄")
@@ -34,7 +35,7 @@ extension TaskPaletteModelTests {
     let palette = model([task(1, "a"), task(2, "b", .done)])
     palette.query = "a"
     palette.enterDetail()
-    XCTAssertEqual(palette.area, .list, "追加の行では入らない")
+    XCTAssertEqual(palette.area, .list, "入力の行き先では入らない")
 
     palette.query = ""
     palette.enterDetail()
@@ -55,27 +56,21 @@ extension TaskPaletteModelTests {
 
   // MARK: - 選択式の値
 
-  func testStatusChoiceMovesBetweenTodoAndInProgressAndStopsAtTheEnds() throws {
+  func testStatusChoiceStepsTodoInProgressDoneStopsAtTheEndsAndStaysOnTheTask() throws {
     let palette = detailOfFirst()
 
-    palette.changeValue(1)
-    XCTAssertEqual(try storedTask(palette, 1).status, .inProgress)
-    palette.changeValue(1)
-    XCTAssertEqual(try storedTask(palette, 1).status, .inProgress)
     palette.changeValue(-1)
-    XCTAssertEqual(try storedTask(palette, 1).status, .todo)
-    XCTAssertEqual(palette.area, .detail(.field(.status)), "値を変えても右の欄に居続ける")
+    XCTAssertEqual(try storedTask(palette, 1).status, .todo, "未着手の ← は完了に入らない")
+    palette.changeValue(1)
+    XCTAssertEqual(try storedTask(palette, 1).status, .inProgress)
+    palette.changeValue(1)
+    XCTAssertEqual(try storedTask(palette, 1).status, .done)
+    XCTAssertEqual(palette.area, .detail(.field(.status)), "完了に入っても右の欄に居続ける")
     XCTAssertEqual(palette.selectedTask?.id, 1)
-  }
-
-  func testStatusChoiceOnADoneTaskReturnsItToTheChosenEnd() throws {
-    let toLeft = detailOfDone()
-    toLeft.changeValue(-1)
-    XCTAssertEqual(try storedTask(toLeft, 1).status, .todo)
-
-    let toRight = detailOfDone()
-    toRight.changeValue(1)
-    XCTAssertEqual(try storedTask(toRight, 1).status, .inProgress)
+    palette.changeValue(1)
+    XCTAssertEqual(try storedTask(palette, 1).status, .done)
+    palette.changeValue(-1)
+    XCTAssertEqual(try storedTask(palette, 1).status, .inProgress)
   }
 
   func testPriorityChoiceStepsHighMediumLowAndStopsAtTheEnds() throws {
@@ -100,9 +95,11 @@ extension TaskPaletteModelTests {
     palette.changeValue(1)
     XCTAssertEqual(try storedTask(palette, 1).workspace, otherWorkspace.id)
     palette.changeValue(1)
+    XCTAssertEqual(try storedTask(palette, 1).workspace, TaskPaletteSamples.home)
+    palette.changeValue(1)
     XCTAssertNil(try storedTask(palette, 1).workspace, "末尾の次は「なし」へ回る")
     palette.changeValue(-1)
-    XCTAssertEqual(try storedTask(palette, 1).workspace, otherWorkspace.id)
+    XCTAssertEqual(try storedTask(palette, 1).workspace, TaskPaletteSamples.home)
   }
 
   /// 削除された workspace を指すタスクは「なし」として扱い、そこから巡回する。
@@ -235,16 +232,17 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.draft?.field, .description)
   }
 
-  func testSwitchingScopeOrTabCommitsTheEdit() throws {
+  func testSwitchingFilterOrTabCommitsTheEdit() throws {
     let palette = detailOfFirst()
-    edit(palette, .description, "範囲で抜ける")
-    palette.toggleScope()
-    XCTAssertEqual(try storedTask(palette, 1).description, "範囲で抜ける")
+    edit(palette, .description, "絞り込みで抜ける")
+    palette.toggleState(.done)
+    XCTAssertEqual(try storedTask(palette, 1).description, "絞り込みで抜ける")
 
-    palette.toggleScope()
+    palette.toggleState(.done)
+    palette.tapRow(.task(1))
     palette.enterDetail()
     edit(palette, .description, "タブで抜ける")
-    palette.toggleTab()
+    palette.setTab(palette.tab.next)
     XCTAssertEqual(try storedTask(palette, 1).description, "タブで抜ける")
   }
 
@@ -284,13 +282,15 @@ extension TaskPaletteModelTests {
     XCTAssertEqual(palette.selectedTask?.id, 2)
   }
 
-  func testCompletingFromDetailReturnsToTheListAtTheSamePosition() throws {
-    let palette = detailOfFirst()
+  /// 右の欄で完了にしても行は表に残るので、そのタスクの右の欄に居たまま。
+  func testCompletingFromDetailStaysInTheDetail() throws {
+    let palette = model([task(1, "a"), task(2, "b")])
+    palette.enterDetail()
 
-    palette.toggleDone(1)
+    palette.toggleDone(2)
 
-    XCTAssertEqual(try storedTask(palette, 1).status, .done)
-    XCTAssertEqual(palette.area, .list)
+    XCTAssertEqual(try storedTask(palette, 2).status, .done)
+    XCTAssertEqual(palette.area, .detail(.field(.status)))
     XCTAssertEqual(palette.selectedID, .task(2))
   }
 
@@ -349,8 +349,7 @@ extension TaskPaletteModelTests {
     let palette = detailOfFirst()
     edit(palette, .description, "書きかけ")
 
-    let inserted = try palette.store.add(TaskDraft(title: "agent が足した"))
-    try palette.store.move(inserted.id, .before, 1)
+    _ = try palette.store.add(TaskDraft(title: "agent が足した"))
     palette.reconcile()
 
     XCTAssertEqual(palette.selectedTask?.id, 1)

@@ -132,6 +132,9 @@ struct ExplorerView: View {
   let tree: FileTree
   @Environment(\.localization) private var l10n
 
+  /// ツリーの中身全体の id（つまみのドラッグが比の anchor で送る先。行の id と型で分ける）。
+  private enum Content: Hashable { case tree }
+
   var body: some View {
     EditorSidebarPanel {
       header
@@ -149,7 +152,12 @@ struct ExplorerView: View {
               }
             }
           }
+          // 最後の行の下に行 1 つ分の空き（末尾まで送っても最後の行が下端に付かない）。つまみが測る中身に含める。
+          .padding(.bottom, Theme.Layout.editorRow)
+          .sidebarScrollContent(id: Content.tree)
         }
+        .scrollIndicators(.never)
+        .sidebarScrollbar(proxy, contentID: Content.tree)
         // 行は遅延で生まれる（可視域外の行は無い）ので、入力行と選択行は可視位置へ送る。
         .onChange(of: tree.newEntry?.generation) { _, _ in
           if let entry = tree.newEntry { proxy.scrollTo(FileTree.inputRowID(entry)) }

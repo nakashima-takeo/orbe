@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// `AttentionStore` 自身が持つ不変条件——**②ピルは一覧（`listRows`）の投影である**——を固定する。
+/// `AttentionStore` 自身が持つ不変条件——**agent の②ピルは一覧（`listRows`）の投影である**——を固定する。
 /// 行 snapshot を差し替える唯一の入口 `apply(rows:)` が、投影元を失ったピルを取り下げる。
 /// 取り下げは `retracted` を立てるだけで `transient` は残す——収縮を描き切るための中身で、
 /// 落とすのは閉じ切った `MenuBarController`（②が消える見え方を収縮 1 つに保つ）。
@@ -23,10 +23,10 @@ final class AttentionStoreTests: OrbeTestCase {
   func testTransientSurvivesWhileProjected() {
     let store = AttentionStore()
     store.apply(rows: [row(tabId: 1, state: "waiting", message: "q")])
-    store.noteTransient(row(tabId: 1, state: "waiting", message: "q"), dwell: anyDwell)
+    store.noteTransient(.agent(row(tabId: 1, state: "waiting", message: "q")), dwell: anyDwell)
     store.apply(rows: [row(tabId: 1, state: "waiting", message: "別の文言")])
-    XCTAssertEqual(store.transient?.row.tabId, 1)
-    XCTAssertEqual(store.transient?.row.message, "q", "行が残っている間の中身は更新しない")
+    XCTAssertEqual(store.transient?.row?.tabId, 1)
+    XCTAssertEqual(store.transient?.row?.message, "q", "行が残っている間の中身は更新しない")
   }
 
   /// 同じタブでも状態が変われば取り下げる——判定は `tabId` だけでなく `state` も見る。
@@ -34,7 +34,7 @@ final class AttentionStoreTests: OrbeTestCase {
   /// `working` へ戻った場合も同じ判定で取り下がる（`working` は一覧にも居ない）。
   func testTransientWithdrawnWhenSameTabChangesState() {
     let store = AttentionStore()
-    store.noteTransient(row(tabId: 1, state: "waiting"), dwell: anyDwell)
+    store.noteTransient(.agent(row(tabId: 1, state: "waiting")), dwell: anyDwell)
     store.apply(rows: [row(tabId: 1, state: "done")])
     XCTAssertEqual(store.transient?.retracted, true)
   }
@@ -42,17 +42,17 @@ final class AttentionStoreTests: OrbeTestCase {
   /// 行そのものが消えれば（idle / clear / 閉じられた）取り下げる。中身は収縮のために残る。
   func testTransientWithdrawnWhenRowGone() {
     let store = AttentionStore()
-    store.noteTransient(row(tabId: 1, state: "waiting"), dwell: anyDwell)
+    store.noteTransient(.agent(row(tabId: 1, state: "waiting")), dwell: anyDwell)
     store.apply(rows: [])
     XCTAssertEqual(store.transient?.retracted, true)
-    XCTAssertEqual(store.transient?.row.tabId, 1, "収縮を描き切るまで中身は残る")
+    XCTAssertEqual(store.transient?.row?.tabId, 1, "収縮を描き切るまで中身は残る")
   }
 
   /// 取り下げは一度きり。閉じている間に一覧が何度差し替わっても印は立ち続け、判定を蒸し返さない
   /// （取り下げ後に行が戻っても、閉じかけのピルを開き直しはしない——立て直すのは report 経路）。
   func testRetractionIsStickyAcrossFurtherApplies() {
     let store = AttentionStore()
-    store.noteTransient(row(tabId: 1, state: "waiting"), dwell: anyDwell)
+    store.noteTransient(.agent(row(tabId: 1, state: "waiting")), dwell: anyDwell)
     store.apply(rows: [])
     store.apply(rows: [row(tabId: 1, state: "waiting")])
     XCTAssertEqual(store.transient?.retracted, true)
@@ -61,10 +61,33 @@ final class AttentionStoreTests: OrbeTestCase {
   /// 別タブの行が入れ替わってもピルは残る。
   func testTransientSurvivesUnrelatedRowChange() {
     let store = AttentionStore()
-    store.noteTransient(row(tabId: 1, state: "waiting"), dwell: anyDwell)
+    store.noteTransient(.agent(row(tabId: 1, state: "waiting")), dwell: anyDwell)
     store.apply(rows: [row(tabId: 1, state: "waiting"), row(tabId: 2, state: "done")])
-    XCTAssertEqual(store.transient?.row.tabId, 1)
+    XCTAssertEqual(store.transient?.row?.tabId, 1)
     store.apply(rows: [row(tabId: 1, state: "waiting")])
-    XCTAssertEqual(store.transient?.row.tabId, 1)
+    XCTAssertEqual(store.transient?.row?.tabId, 1)
+  }
+
+  /// タスクの知らせは一覧の投影ではないので、行の差し替えで取り下げない——取り下げると、立てた直後の
+  /// chrome の再投影（`flushChrome`）でタスクのピルが即座に閉じる。
+  func testTaskNoticeIsNeverWithdrawnByRows() {
+    let store = AttentionStore()
+    let notice = TaskNotice(taskId: 7, workspaceName: "orbe", text: "#214 レビューが付いた")
+    store.noteTransient(.task(notice), dwell: anyDwell)
+    store.apply(rows: [])
+    store.apply(rows: [row(tabId: 7, state: "done")])
+    XCTAssertEqual(store.transient?.retracted, false)
+  }
+}
+
+extension AttentionStore.Transient {
+  /// agent の中身（タスクの知らせなら nil）。
+  var row: AttentionRow? {
+    if case .agent(let row) = notice { row } else { nil }
+  }
+
+  /// タスクの知らせの中身（agent の中身なら nil）。
+  var taskNotice: TaskNotice? {
+    if case .task(let notice) = notice { notice } else { nil }
   }
 }
