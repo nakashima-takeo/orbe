@@ -297,8 +297,8 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     XCTAssertEqual(model.query, "x", "焦点は入力欄に残り、続けて打てる")
   }
 
-  /// 選ぶ状態の ⇥・⇧⇥ は何もせず、焦点も入力欄に残る。
-  func testTabWhilePickingDoesNothing() {
+  /// 選ぶ状態の ⇥・⇧⇥ は選ぶ状態を保ち、焦点も入力欄に残る（タブを替えないことはモデルのテストが守る）。
+  func testTabWhilePickingKeepsPickingAndTheFieldKeepsTheKeys() {
     let model = model()
     model.enterDetail()
     model.area = .detail(.addLink)
@@ -310,7 +310,6 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
     type("a", into: window)
 
     XCTAssertNotNil(model.pick)
-    XCTAssertEqual(model.visibleTab, .github)
     XCTAssertEqual(model.query, "a")
   }
 
