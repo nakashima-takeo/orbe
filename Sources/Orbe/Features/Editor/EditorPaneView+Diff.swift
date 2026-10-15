@@ -2,7 +2,7 @@ import AppKit
 import OrbeEditorCore
 
 /// diff の本体——インラインなら新しい側の面 1 枚、並列なら左右 2 面と境の線（1px）、表示できないなら理由の一文（空状態と
-/// 同じ器）。見え方の付け外しは diff の `present` / `dismiss` で、本体を置き換える 1 か所（`show`）からだけ呼ぶ。
+/// 同じ器）。見え方の付け外しは diff の `present` / `dismiss`。
 extension EditorPaneView {
   /// diff を本体に載せる——今の見せ方で見せ、面を置き、知らせを結ぶ。
   func showDiff(_ diff: EditorDiff) {
@@ -134,13 +134,9 @@ extension EditorPaneView {
       DispatchQueue.main.async { [weak self] in
         guard let self else { return }
         if let diff {
-          let hadFocus = focusIsInside && !focusIsInSidebar
           diff.present(diffModes.mode)
           installDiffSurfaces(diff)
           needsLayout = true
-          if hadFocus, window?.firstResponder !== focusTarget {
-            window?.makeFirstResponder(focusTarget)
-          }
         }
         shell.diffMode = diffModes.mode
         observeDiffModes()

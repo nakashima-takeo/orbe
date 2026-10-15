@@ -17,8 +17,8 @@ extension EditorDiff {
     case staged
   }
 
-  /// 見せ方（アプリ全体で 1 つ。→ `AppState.diffMode`）。
-  enum Mode: String, Codable {
+  /// 見せ方（アプリ全体で 1 つ。→ `EditorDiffModeState`）。
+  enum Mode: String {
     case inline
     case side
   }
