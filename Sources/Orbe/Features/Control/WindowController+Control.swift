@@ -160,7 +160,9 @@ extension WindowController: ControlTarget {
       return .failure(ControlError(code: -32004, message: "tab not found"))
     }
     let url = Self.controlURL(path, cwd: tab.cwd).standardizedFileURL
-    let directory = GitWorktreeRoot.normalizedPath(url.deletingLastPathComponent().path)
+    // 消したファイルは親ごと消えていることもあるので、実在する祖先まで解く（根は実在するので正準形で返る）。
+    let directory = GitWorktreeRoot.normalizedPath(
+      evenIfMissing: url.deletingLastPathComponent().path)
     guard let root = GitWorktreeRoot.locate(cwd: directory),
       directory == root || directory.hasPrefix(root + "/")
     else {

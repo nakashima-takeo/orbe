@@ -7,9 +7,24 @@ enum GitWorktreeRoot {
   /// 比較用の正準形（standardizingPath → resolvingSymlinksInPath）。symlink を解いたうえで先頭の
   /// `/private` を畳むので、返るのは実パスではなく短縮形（`/private/tmp` → `/tmp`）。OSC 7 の論理パス・
   /// 復元 cwd・`git worktree list` のパスを同じ土俵に乗せる唯一の実装（macOS では `/tmp` `/var` が symlink）。
-  /// どちらの変換も**実在する部分にしか効かない**ので、不在パスは末尾がそのまま残る。
+  /// symlink を解くのも `/private` を畳むのも**パス全体が実在するときだけ**効く——どこかが不在のパスは、
+  /// 実在する祖先の symlink も先頭の `/private` も残る（→ `normalizedPath(evenIfMissing:)`）。
   static func normalizedPath(_ path: String) -> String {
     ((path as NSString).standardizingPath as NSString).resolvingSymlinksInPath
+  }
+
+  /// 不在でありうるパスの正準形。実在する祖先までを `normalizedPath` で解き、まだ無い・もう無い末尾はそのまま足す——
+  /// これから作る場所や消えた場所も、実在するパスの正準形と同じ土俵で比べられる。
+  static func normalizedPath(evenIfMissing path: String) -> String {
+    var existing = path
+    var tail: [String] = []
+    while !FileManager.default.fileExists(atPath: existing) {
+      let parent = (existing as NSString).deletingLastPathComponent
+      guard parent != existing else { break }
+      tail.insert((existing as NSString).lastPathComponent, at: 0)
+      existing = parent
+    }
+    return tail.reduce(normalizedPath(existing)) { ($0 as NSString).appendingPathComponent($1) }
   }
 
   /// パスが属する根。「それを含む worktree のルート、git の外なら正規化したそのパス」の規則の唯一の置き場。
