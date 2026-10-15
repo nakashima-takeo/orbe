@@ -79,7 +79,7 @@ Orbe は AI コーディングエージェントのためのネイティブ macO
 | `editor.icon` | エディター面のアイコン・kbd の文字（dark / light とも `kbKeyText` と偶然同値だが別トークン） | `#a99fb8` | `#766e8d` |
 | `editor.text` | エディター面の 2 段目の文字——コードの素文字・ファイル名・タブ題・パンくずの末尾（dark / light とも `statusText` と偶然同値だが別トークン） | `#cdc7e2` | `#4d4368` |
 | `editor.tertiary` | エディター面の三次の文字——レールの非選択・パンくずの区切り（`text.tertiary` は `text.muted` の別名なので別値） | `#6d667a` | `#aca4bd` |
-| `editor.caution` | 注意の黄——外部変更で衝突中のタブのドット・検索の一致の地（dark は `conflict` と偶然同値だが light が違い、git 競合でもない） | `#e2cd6d` | `#a07f0c` |
+| `editor.caution` | 注意の黄——外部変更で衝突中のタブのドット・検索の一致の地・diff タブの種類の注記と選択の上縁（dark は `conflict` と偶然同値だが light が違い、git 競合でもない） | `#e2cd6d` | `#a07f0c` |
 | `diff.added` | git の追加（青）——ガター・A / U のバッジと名前・印・diff の記号と行の地の基 | `#5ea8ff` | `#0969da` |
 | `diff.removed` | git の削除（オレンジ）——ガターの三角・印・diff の記号と行の地の基 | `#f0883e` | `#bc4c00` |
 | `diff.modified` | git の変更（黄）——ガター・M のバッジと名前・印 | `#e2cd6d` | `#a07f0c` |
