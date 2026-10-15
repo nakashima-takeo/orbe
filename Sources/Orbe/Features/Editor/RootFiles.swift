@@ -66,7 +66,7 @@ final class RootFiles {
     case absent
     /// UTF-8 として読めない。
     case notText
-    /// git から取れない（取り直しの上限に達した）。
+    /// git から取れない（取り直しの上限に達した・まだ状態の無い版で、OID の一覧か本文を取れなかった）。
     case failed
 
     var text: String? {
@@ -133,7 +133,7 @@ final class RootFiles {
     let versions: Set<Version>
   }
 
-  /// 取り終えた版——OID（その版に無ければ nil）と本文の状態。
+  /// 取り終えた版——OID（その版に無い・まだ状態の無い版で取れなかったときは nil）と本文の状態。
   private struct Settled {
     let oid: String?
     let state: VersionState
@@ -355,9 +355,10 @@ final class RootFiles {
       guard let self else { return }
       var changed = changed
       let version = next.version
-      // git の失敗（smudge の失敗・打ち切り。一時的でありうる）は上限までは記録せず、次の取り直しで同じ OID を
-      // 取り直す。上限に達したら OID ごと「取れない」を焼き、OID が変わるまで諦める。UTF-8 でない中身は
-      // 恒久なので即座に OID ごと「読めない」を記録する。
+      // git の失敗（smudge の失敗・打ち切り。一時的でありうる）は上限までは OID を焼かず、次の取り直しで同じ OID を
+      // 取り直す——状態を持っている版は前を保ち、まだ状態の無い版は OID の無い「取れない」にする（関心を申告した者が、
+      // 決まらない状態のまま待ち続けない）。上限に達したら OID ごと「取れない」を焼き、OID が変わるまで諦める。
+      // UTF-8 でない中身は恒久なので即座に OID ごと「読めない」を記録する。
       let settled: Settled?
       if let data {
         blobFailures[version] = nil
@@ -368,7 +369,11 @@ final class RootFiles {
         let previous = blobFailures[version]
         let count = (previous?.oid == next.oid ? previous?.count ?? 0 : 0) + 1
         blobFailures[version] = (next.oid, count)
-        settled = count >= Self.blobFailureBudget ? Settled(oid: next.oid, state: .failed) : nil
+        if count >= Self.blobFailureBudget {
+          settled = Settled(oid: next.oid, state: .failed)
+        } else {
+          settled = versions[version] == nil ? Settled(oid: nil, state: .failed) : nil
+        }
       }
       if let settled {
         if versions[version]?.state != settled.state { changed.append(version) }

@@ -52,7 +52,8 @@ extension RootFilesTests {
   }
 
   /// blob の取得が git の失敗で落ちても OID は焼き付かず、次の取り直しで取り直す——smudge filter の一時失敗
-  /// （git-lfs のネットワーク等）で、そのファイルのガターが閉じ直すまで無言で死なない。
+  /// （git-lfs のネットワーク等）で、そのファイルのガターが閉じ直すまで無言で死なない。まだ状態の無い版はその間「取れない」
+  /// に決まって知らせが届く（関心を申告した者が、決まらない状態のまま待ち続けない）。
   func testATransientBlobFailureIsRetriedOnTheNextRefresh() throws {
     let allow = repo.dir.appendingPathComponent("smudge-allowed").path
     let tried = repo.dir.appendingPathComponent("smudge-tried").path
@@ -70,13 +71,14 @@ extension RootFilesTests {
     files.addObserver(recorder, interest: url)
     pumpMain(until: { FileManager.default.fileExists(atPath: tried) }, "smudge が 1 回失敗した")
     pumpMain(until: { files.status != nil })
-    XCTAssertNil(files.state(of: try XCTUnwrap(files.version(of: url, at: .index))), "一時失敗は焼かない")
-    XCTAssertEqual(recorder.versionChanges, [])
+    let version = try XCTUnwrap(files.version(of: url, at: .index))
+    pumpMain(until: { files.state(of: version) == .failed }, "まだ状態の無い版は取れないに決まる")
+    XCTAssertEqual(recorder.versionChanges, [version])
 
     try Data().write(to: URL(fileURLWithPath: allow))
     try repo.write("b.txt", "b\n")
     pumpMain(until: { files.baseline(for: url) == "one\n" }, timeout: 20, "次の取り直しで取り直す")
-    XCTAssertEqual(recorder.versionChanges, [files.version(of: url, at: .index)])
+    XCTAssertEqual(recorder.versionChanges, [version, version])
   }
 
   /// 版の OID の一覧を git から取れなければ、まだ状態の無い版は「取れない」に決まって知らせが届く（関心を申告した者が、
