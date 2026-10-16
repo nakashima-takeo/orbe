@@ -9,7 +9,7 @@ import AppKit
 /// 本文へ。見出しのクリックは開閉、「さらに表示」のクリックはグラフの件数を増やす。行の中のボタンは行のクリックにならない。
 final class ScmListSource: RowListSource {
   let panel: ScmPanel
-  /// 行の文言の言語（pane が窓の環境から配る）。
+  /// 行の文言の言語（列を載せる view が環境から写す）。
   var language = Language.systemDefault
 
   init(panel: ScmPanel) {

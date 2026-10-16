@@ -275,16 +275,24 @@ private struct ScmCommitButton: View {
   }
 }
 
-/// 列（pane が持つ `RowList`）を載せる。読む値（行の版・選択・焦点の要求・絵文字の字体）をここで読んで列へ渡す。
+/// 列（pane が持つ `RowList`）を載せる。読む値（行の版・選択・焦点の要求・絵文字の字体）をここで読んで列へ渡し、言語が
+/// 変われば行の文言を読み直させる。
 private struct ScmList: View {
   let panel: ScmPanel
   let list: RowList<ScmListSource>
   @Environment(\.chromeFontResolver) private var fontResolver
+  @Environment(\.localization) private var l10n
 
   var body: some View {
     RowListHost(
       list: list, rowsVersion: panel.rowsVersion, selection: panel.selection,
-      emoji: fontResolver.emojiFont, wantsFocus: panel.focusRequest == .list)
+      emoji: fontResolver.emojiFont, wantsFocus: panel.focusRequest == .list
+    )
+    .onChange(of: l10n.language, initial: true) { _, language in
+      guard list.list.source.language != language else { return }
+      list.list.source.language = language
+      list.list.reloadRows()
+    }
   }
 }
 

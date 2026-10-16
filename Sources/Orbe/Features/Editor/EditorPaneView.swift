@@ -147,10 +147,6 @@ final class EditorPaneView: NSView {
   }
 
   private func installRoots() {
-    if scmList.list.source.language != localization.language {
-      scmList.list.source.language = localization.language
-      scmList.list.reloadRows()
-    }
     sideHost.rootView = EditorSideRoot(
       shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
       scmList: scmList, sidebar: sidebar, localization: localization, fontResolver: fontResolver)
@@ -224,7 +220,6 @@ final class EditorPaneView: NSView {
     scm.isLive = false
     scm = ScmPanel(root: root)
     scmList = Self.scmList(scm)
-    scmList.list.source.language = localization.language
     wireSourceControl()
     projectSearch.setRoot(root, searchNow: showsSearchPanel && projectSearch.isLive)
     updateLiveness()
