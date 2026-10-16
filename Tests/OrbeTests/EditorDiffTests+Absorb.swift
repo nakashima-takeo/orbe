@@ -7,7 +7,8 @@ import XCTest
 
 /// cd で連が畳まれるとき（`TabGroup.absorb`）の diff タブ——行き先の列へ移り、元の連が消えた後も行き先で見せて追従し、同じ
 /// ファイルの文書はファイルタブと diff の両側で 1 つに揃う。壊れると、cd で diff タブが消える・元の連の解放後に作業ツリーが
-/// 変わると落ちる・ファイルタブと diff が別の文書を編集して未保存の印と確認が割れる。
+/// 変わると落ちる・ファイルタブと diff が別の文書を編集して未保存の印と確認が割れる・diff だけが使っていた未保存の編集が
+/// 確認なしに消える。
 extension EditorDiffTests {
   /// 窓に載せない連（畳まれる元の連）。
   private func bareGroup() -> TabGroup {
@@ -82,5 +83,28 @@ extension EditorDiffTests {
     XCTAssertEqual(
       dest.group.view.editor.shell.tabs.map(\.isDirty), [true, true, true, true], "未保存の印が割れない")
     XCTAssertEqual(dest.group.unsavedDocuments().count, 2, "確認は実体ごとに 1 件")
+  }
+
+  /// 行き先の同じ diff が文書を使っていない（見せていない間にファイルが消えて戻った）なら、元の diff だけが使っていた未保存の
+  /// 文書を、行き先の diff が新しい側に使う——未保存の本文は確認なしに消えない。
+  func testAnUnsavedDocumentOnlyTheMovedDiffUsedIsTakenByTheDestinationsDiff() throws {
+    try repo.write("b.txt", "b\n")
+    try FileManager.default.removeItem(at: repo.url("a.txt"))
+    let (dest, _) = tab()
+    let destDiff = try dest.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    try dest.group.editor.open(repo.url("b.txt"), as: .pinned)
+    try repo.write("a.txt", "one\ntwo\nthree\nfour\n")
+    let from = bareGroup()
+    let edited = try from.editor.open(repo.url("a.txt"), as: .pinned)
+    edited.surface.responder.perform(Selector(("insertText:")), with: "Z")
+    try from.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    from.editor.close(.document(edited.url))
+    XCTAssertNil(destDiff.document, "前提: 行き先の diff は文書を使っていない")
+
+    dest.group.absorb(from)
+
+    XCTAssertTrue(destDiff.document === edited, "行き先の diff が未保存の文書を使う")
+    XCTAssertTrue(
+      dest.group.unsavedDocuments().contains { $0 === edited }, "閉じれば失われる文書に数える")
   }
 }
