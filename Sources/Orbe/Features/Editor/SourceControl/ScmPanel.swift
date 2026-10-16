@@ -204,11 +204,10 @@ final class ScmPanel {
     self.branch = branch
     self.count = count
     if let changes, let layout {
-      let replaced = (self.changes, self.layout)
-      let previous = self.layout
+      let replaced = (changes: self.changes, layout: self.layout)
       self.changes = changes
       self.layout = layout
-      reselect(from: previous)
+      reselect(from: replaced.layout)
       rowsVersion &+= 1
       DispatchQueue.global(qos: .utility).async { withExtendedLifetime(replaced) {} }
     }
