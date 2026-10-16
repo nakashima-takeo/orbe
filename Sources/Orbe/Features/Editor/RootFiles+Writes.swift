@@ -22,7 +22,7 @@ extension RootFiles {
   final class Write {
     fileprivate let handle = GitRunner.Handle()
     fileprivate var dequeue: (() -> Void)?
-    private(set) var hasStarted = false
+    private var hasStarted = false
     private var onStart: (() -> Void)?
 
     func cancel() {
