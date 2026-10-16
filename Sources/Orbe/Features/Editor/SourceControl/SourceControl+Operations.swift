@@ -49,7 +49,7 @@ extension SourceControl {
     }
   }
 
-  /// プル → プッシュ（先行・遅れの数に依らず両方走らせる。VS Code と同じ）。
+  /// プル → プッシュ（先行・遅れの数に依らず両方走らせる）。
   func sync() {
     run(.sync, .pull) { [weak self] files, done, operation in
       self?.pull(files, operation) { failure in
