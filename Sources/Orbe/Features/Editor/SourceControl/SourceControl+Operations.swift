@@ -126,7 +126,7 @@ extension SourceControl {
     _ kind: Kind, _ step: Step,
     _ body: (RootFiles, @escaping (GitWriteFailure?) -> Void, Operation) -> Void
   ) {
-    let operation = enqueue(kind, step)
+    guard let operation = enqueue(kind, step) else { return }
     body(files(of: operation), { [weak self, operation] in self?.finish(operation, $0) }, operation)
   }
 }

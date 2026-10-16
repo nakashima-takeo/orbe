@@ -86,5 +86,9 @@ extension L10n {
     .editorScmFailureShallow: (
       "shallow clone の境界のコミットは取り消せません。", "The commit at the shallow clone boundary can't be undone."
     ),
+    .editorScmFailureNetworkBusy: (
+      "この worktree で別のプル・プッシュ・フェッチが走っていたため、始めませんでした。終わってからもう一度試してください。",
+      "Another pull, push, or fetch was running in this worktree, so this one didn't start. Try again when it finishes."
+    ),
   ]
 }

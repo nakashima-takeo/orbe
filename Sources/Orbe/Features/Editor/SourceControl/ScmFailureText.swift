@@ -3,7 +3,14 @@ import Foundation
 /// 失敗の分類 → 文（理由と次の一手）の写しの 1 か所。分類できない失敗は git の理由の行そのまま。止めた・管理外は文にしない
 /// （管理外はパネル全体が理由の一文になる）。
 enum ScmFailureText {
-  static func text(_ failure: GitWriteFailure, _ language: Language) -> String? {
+  static func text(_ cause: SourceControl.FailureCause, _ language: Language) -> String? {
+    switch cause {
+    case .git(let failure): text(failure, language)
+    case .networkBusy: L10n.string(.editorScmFailureNetworkBusy, language)
+    }
+  }
+
+  private static func text(_ failure: GitWriteFailure, _ language: Language) -> String? {
     switch failure {
     case .cancelled, .notManaged: nil
     case .authentication: L10n.string(.editorScmFailureAuthentication, language)

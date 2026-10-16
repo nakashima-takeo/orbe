@@ -7,7 +7,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか。コミットが通ってもメッセージが残る・コミットの間に打ち足した分まで消える・コミットしてプッシュが
 /// push しない・コミットが通らなかったのに前からある未 push のコミットを push する・失敗の文が次の操作でも残る・順番待ちの
-/// 操作が帯に出て、実際に止まっているコミットを隠す。
+/// 操作が帯に出て、実際に止まっているコミットを隠す・同じ worktree でネット操作が重なる。
 @MainActor
 final class SourceControlTests: OrbeTestCase {
   var repo: TempGitRepo!
@@ -128,6 +128,24 @@ final class SourceControlTests: OrbeTestCase {
     pumpMain(until: { self.files.status?.branch?.name == "lonely" }, "ブランチ")
     control.pull()
     idle("upstream の無いプル")
-    XCTAssertEqual(control.failure, SourceControl.Failure(kind: .pull, failure: .noUpstream))
+    XCTAssertEqual(control.failure, SourceControl.Failure(kind: .pull, cause: .git(.noUpstream)))
+  }
+
+  /// ネット操作が列にある間、次のネット操作は始めずに断り、失敗の文で知らせる——ボタンの可否に頼らない（メニューを開いている
+  /// 間に別の窓で始まった、などですり抜ける）。
+  func testANetworkOperationIsRefusedWhileAnotherIsQueued() throws {
+    let hook = repo.dir.appendingPathComponent(".git/hooks/pre-commit")
+    try Data("#!/bin/sh\nsleep 60\n".utf8).write(to: hook)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hook.path)
+    try repo.write("a.txt", "two\n")
+    XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
+    pumpMain(until: { self.files.status?.entries["a.txt"]?.staged != nil }, "ステージ済み")
+    control.message = "hang"
+    control.commitAndPush()
+    control.fetch()
+    XCTAssertEqual(control.operations.map(\.kind), [.commitAndPush])
+    XCTAssertEqual(control.failure, SourceControl.Failure(kind: .fetch, cause: .networkBusy))
+    control.operations.first?.stop()
+    idle("止めたコミットしてプッシュ")
   }
 }

@@ -10,7 +10,7 @@ protocol SourceControlObserver: AnyObject {
 /// worktree のソース管理の状態——打ちかけのメッセージ・操作の列（走っている操作と止める手）・最後の失敗。根（正準形の
 /// worktree ルート）ごとに 1 つで、アプリが動いている間持つ（レジストリは強参照。中身は小さい）。どれも面ではなく worktree の
 /// 事実なので、同じ worktree を 2 つの窓の面で見ても、cd で離れて戻っても、面を閉じても同じものが見える——「同じ worktree の
-/// ネット操作は 1 つずつ」もここで成り立つ。
+/// ネット操作は 1 つずつ」もここで成り立つ（ネット操作が列にある間は、次のネット操作を始めずに断る）。
 ///
 /// git の操作は全部根のサービスの口を呼ぶ（→ `SourceControl+Operations`）。前提（upstream・detached・操作の途中）の判定と
 /// 失敗の分類も根のサービスが持ち、ここは結果を記録するだけ。根のサービスは持たず、走っている操作が終わるまで握る。
@@ -81,10 +81,17 @@ final class SourceControl {
     }
   }
 
-  /// 最後の失敗（どの操作の、どの分類か）。止めた・管理外は記録しない。
+  /// 最後の失敗（どの操作の、なぜか）。止めた・管理外は記録しない。
   struct Failure: Equatable {
     let kind: Kind
-    let failure: GitWriteFailure
+    let cause: FailureCause
+  }
+
+  enum FailureCause: Equatable {
+    /// 根のサービスの書き込みの失敗。
+    case git(GitWriteFailure)
+    /// 同じ worktree で別のネット操作が列にあったので、始めなかった。
+    case networkBusy
   }
 
   /// 走り始めてから帯に出すまでの遅れ（短い操作で帯が点滅しない）。
@@ -134,8 +141,13 @@ final class SourceControl {
 
   // MARK: - 列（`SourceControl+Operations` が使う）
 
-  /// 操作を列に載せる（最後の失敗はここで消える——次の操作を始めると消える）。
-  func enqueue(_ kind: Kind, _ step: Step) -> Operation {
+  /// 操作を列に載せる（最後の失敗はここで消える——次の操作を始めると消える）。ネット操作が列にある間のネット操作は載せず、
+  /// 断った失敗を置いて nil を返す。
+  func enqueue(_ kind: Kind, _ step: Step) -> Operation? {
+    if kind.isNetwork && isNetworking {
+      failure = Failure(kind: kind, cause: .networkBusy)
+      return nil
+    }
     failure = nil
     let operation = Operation(kind: kind, step: step, files: RootFiles.shared(for: root))
     operations.append(operation)
@@ -175,7 +187,7 @@ final class SourceControl {
     operations.removeAll { $0 === operation }
     switch outcome {
     case nil, .cancelled?, .notManaged?: break
-    case let failure?: self.failure = Failure(kind: operation.kind, failure: failure)
+    case let failure?: self.failure = Failure(kind: operation.kind, cause: .git(failure))
     }
     for observer in observers { observer.value?.sourceControlOperationDidFinish(self) }
   }
