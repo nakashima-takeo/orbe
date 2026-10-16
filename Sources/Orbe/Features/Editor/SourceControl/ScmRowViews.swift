@@ -158,7 +158,7 @@ final class ScmRowView: ListRowView {
     switch content {
     case .header(let header): draw(header, colors, scm, in: context)
     case .file(let file): draw(file, colors, scm, in: context)
-    case .branch(let branch): draw(branch, scm, in: context)
+    case .branch(let branch): draw(branch, colors, scm, in: context)
     case .commit(let commit): draw(commit, colors, scm, in: context)
     case .more(let text):
       text.draw(

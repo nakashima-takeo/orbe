@@ -29,7 +29,7 @@ extension ScmRowView {
         colors.primary, context)
       if rects.isEmpty { right = badge.minX - Theme.Space.note }
     }
-    drawButtons(rects, tool: true, scm, in: context)
+    drawButtons(rects, tool: true, colors, scm, in: context)
     let x = Theme.Space.tick + chevron
     header.label.draw(
       at: x, top: snap(band.midY - header.label.height / 2), width: max(0, right - x),
@@ -52,7 +52,7 @@ extension ScmRowView {
     let color = scm.badge(file.badgeKind)
     file.badge.draw(at: badgeX, top: top(file.badge), color, context)
     let rects = buttonRects()
-    drawButtons(rects, tool: false, scm, in: context)
+    drawButtons(rects, tool: false, colors, scm, in: context)
     let limit = (rects.first?.1.minX ?? badgeX) - gap
     let nameWidth = min(snap(file.name.width, .up), max(0, limit - x))
     file.name.draw(at: x, top: top(file.name), width: nameWidth, color, context)
@@ -63,7 +63,7 @@ extension ScmRowView {
 
   /// ブランチの器（padding 0 12 6 の箱 24・radius 3・地 sunk .35・枠 hairline .10、中は padding 0 8・gap 6）: ブランチの印 9
   /// （accentBright）・名前と先行/遅れ（mono 11。数は tertiary）。
-  func draw(_ branch: Branch, _ scm: ScmRowColors, in context: CGContext) {
+  func draw(_ branch: Branch, _ colors: RowColors, _ scm: ScmRowColors, in context: CGContext) {
     let box = NSRect(
       x: 12, y: 0, width: max(0, bounds.width - 24), height: Theme.Layout.editorScmBranch)
     fill(box, radius: Theme.Radius.xs, scm.branchGround, in: context)
@@ -84,11 +84,12 @@ extension ScmRowView {
     let limit = box.maxX - Theme.Space.step
     let nameWidth = min(snap(branch.name.width, .up), max(0, limit - x))
     branch.name.draw(
-      at: x, top: snap(box.midY - branch.name.height / 2), width: nameWidth, scm.text, context)
+      at: x, top: snap(box.midY - branch.name.height / 2), width: nameWidth, colors.text, context)
     x += nameWidth + gap
     if let divergence = branch.divergence {
       divergence.draw(
-        at: x, top: snap(box.midY - divergence.height / 2), width: max(0, limit - x), scm.tertiary,
+        at: x, top: snap(box.midY - divergence.height / 2), width: max(0, limit - x),
+        colors.tertiary,
         context)
     }
   }
@@ -112,7 +113,7 @@ extension ScmRowView {
     if commit.isPushed {
       context.setFillColor(scm.ground)
       context.fillEllipse(in: dotRect)
-      context.setStrokeColor(scm.tertiary)
+      context.setStrokeColor(colors.tertiary)
       context.setLineWidth(1.5)
       context.strokeEllipse(in: dotRect.insetBy(dx: 0.75, dy: 0.75))
     } else {
@@ -136,10 +137,10 @@ extension ScmRowView {
     var right = limit
     for (ref, width) in zip(refs, widths).reversed() {
       drawRef(
-        ref.label, isLocal: ref.isLocal,
+        ref,
         in: NSRect(
           x: right - width, y: snap((bounds.height - Theme.Layout.editorScmRef) / 2), width: width,
-          height: Theme.Layout.editorScmRef), scm, in: context)
+          height: Theme.Layout.editorScmRef), colors, scm, in: context)
       right -= width + Theme.Space.tick
     }
     commit.subject.draw(
@@ -153,9 +154,11 @@ extension ScmRowView {
 
   /// ref の札 15（radius 3・padding 0 5・枠 1px）: ブランチの印 8 と名前（mono 9）。
   private func drawRef(
-    _ label: TextLine, isLocal: Bool, in rect: NSRect, _ scm: ScmRowColors, in context: CGContext
+    _ ref: (label: TextLine, isLocal: Bool), in rect: NSRect, _ colors: RowColors,
+    _ scm: ScmRowColors, in context: CGContext
   ) {
-    let color = isLocal ? scm.accent : scm.muted
+    let (label, isLocal) = ref
+    let color = isLocal ? scm.accent : colors.muted
     fill(
       rect, radius: Theme.Radius.xs, isLocal ? scm.localRefGround : scm.remoteRefGround, in: context
     )
@@ -177,7 +180,8 @@ extension ScmRowView {
   /// 行の中のボタン（見出しのツールは 20・radius 4・hover 地 fill .08 で字が上がる、行のボタンは 18・radius 3・hover 地
   /// fill .10）。押せない姿は字を薄くし、地を付けない。
   private func drawButtons(
-    _ rects: [(Button, NSRect)], tool: Bool, _ scm: ScmRowColors, in context: CGContext
+    _ rects: [(Button, NSRect)], tool: Bool, _ colors: RowColors, _ scm: ScmRowColors,
+    in context: CGContext
   ) {
     for (button, rect) in rects {
       let hovered = button.isEnabled && pointer.map(rect.contains) == true
@@ -187,7 +191,8 @@ extension ScmRowView {
           tool ? scm.toolHover : scm.buttonHover, in: context)
       }
       let color =
-        !button.isEnabled ? scm.disabled : tool ? (hovered ? scm.text : scm.muted) : scm.text
+        !button.isEnabled
+        ? scm.disabled : tool ? (hovered ? colors.text : colors.muted) : colors.text
       let size = Theme.Layout.editorScmGlyph
       drawGlyph(
         button.glyph,

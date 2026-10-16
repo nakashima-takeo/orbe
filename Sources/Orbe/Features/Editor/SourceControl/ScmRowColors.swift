@@ -44,9 +44,6 @@ enum ScmGlyphShape: Hashable {
 
 /// ソース管理の行だけが使う色（行に共通の色は `RowColors`）。外観ごとに 1 度だけ解いて使い回す。
 struct ScmRowColors {
-  let text: CGColor
-  let muted: CGColor
-  let tertiary: CGColor
   let icon: CGColor
   let accent: CGColor
   let disabled: CGColor
@@ -71,9 +68,6 @@ struct ScmRowColors {
   @MainActor static func of(_ appearance: NSAppearance) -> ScmRowColors { resolved(appearance) }
 
   private init() {
-    text = Theme.Color.editorText.cgColor
-    muted = Theme.Color.textMuted.cgColor
-    tertiary = Theme.Color.editorTertiary.cgColor
     icon = Theme.Color.editorIcon.cgColor
     accent = Theme.Color.accentBright.cgColor
     disabled = Theme.Color.editorText.withAlphaComponent(0.3).cgColor
