@@ -171,8 +171,8 @@ extension Theme.Typography {
 }
 
 extension Theme.Layout {
-  /// 骨の寸法（デザインキャンバス『CmdELayers』Main の値）。レール｜サイドバー｜列の頭（ファイルタブ行 →
-  /// パンくず）。レール・サイドバーの右、ファイルタブ行の下の hairline 1 はこれらの外側に足す。
+  /// 骨の寸法（デザインキャンバス『CmdELayers』Main の値）。レール｜サイドバー｜列の頭（タブ行 →
+  /// パンくず）。レール・サイドバーの右、タブ行の下の hairline 1 はこれらの外側に足す。
   static let editorRail: CGFloat = 36
   /// レールのアイコン。
   static let editorRailGlyph: CGFloat = 20

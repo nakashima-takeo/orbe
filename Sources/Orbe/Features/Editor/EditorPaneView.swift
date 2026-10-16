@@ -20,7 +20,7 @@ import SwiftUI
 /// 空状態では通常の打鍵を飲む——エディター焦点中に端末へ届けない。
 final class EditorPaneView: NSView {
   weak var group: TabGroup?
-  /// 骨の写し（ファイルタブ行・パンくず）。
+  /// 骨の写し（タブ行・パンくず）。
   let shell = EditorShellModel()
   /// エクスプローラーのツリー。根が変われば作り直す。
   private(set) var tree: FileTree

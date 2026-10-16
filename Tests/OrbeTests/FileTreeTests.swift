@@ -6,7 +6,7 @@ import XCTest
 /// ディレクトリだけを取り、変化を追い、status を最後に成功したもので保ち、祖先を開いて選択し、行内の新規作成が
 /// ファイルを作って開く。
 ///
-/// 壊れると何が起きるか。隠れたタブのツリーが監視を握り続けると全タブの根を常時監視する。握り直しで status を
+/// 壊れると何が起きるか。隠れた連のツリーが監視を握り続けると全連の根を常時監視する。握り直しで status を
 /// 写すとバッジが毎回消えて戻る。消えたディレクトリを畳まないと無いものが展開されたまま残る。
 @MainActor
 final class FileTreeTests: OrbeTestCase {
@@ -113,7 +113,7 @@ final class FileTreeTests: OrbeTestCase {
     XCTAssertNotNil(service, "前提: 握っている間は生きている")
 
     tree.isLive = false
-    pumpMain(until: { service == nil }, "離せば解放される（握り続けると全タブの根を常時監視する）")
+    pumpMain(until: { service == nil }, "離せば解放される（握り続けると全連の根を常時監視する）")
 
     let witness = FileTree(root: repo.root)  // 配達の目印を待つ立会人（同じ根を握り直す）
     witness.isLive = true
