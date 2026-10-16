@@ -33,25 +33,38 @@ extension EditorPaneView {
     layoutSubtreeIfNeeded()
   }
 
-  /// サイドバーの幅・開閉・パネルを観測して置き直す。閉じれば行内入力は終わり、検索パネルの見え隠れで一致の地を押し直す。
-  /// この面の検索パネルにあった焦点は、パネルが隠れたら面の行き先へ戻す（サイドバーはアプリ全体で 1 つなので、全連の面が
-  /// 同時に受ける——焦点を持っていた面だけが動く）。
+  /// サイドバーの幅・開閉・パネルを観測して置き直す。閉じれば行内入力は終わり、検索パネルの見え隠れで一致の地を押し直し、
+  /// ソース管理パネルの見え隠れで行とグラフを組むかを決め直す。この面のパネルにあった焦点は、そのパネルが隠れたら面の行き先へ
+  /// 戻す（サイドバーはアプリ全体で 1 つなので、全連の面が同時に受ける——焦点を持っていた面だけが動く）。
   func observeSidebar() {
     withObservationTracking {
       _ = sidebar.width
       _ = sidebar.isOpen
       _ = sidebar.panel
     } onChange: { [weak self] in
-      // 変わる直前に呼ばれるので、焦点が検索パネルにあったかはここで取る。
-      let hadPanelFocus = MainActor.assumeIsolated { self?.focusIsInSearchPanel == true }
+      // 変わる直前に呼ばれるので、焦点がどのパネルにあったかはここで取る。
+      let held = MainActor.assumeIsolated { self?.panelHoldingFocus }
       DispatchQueue.main.async {
         guard let self else { return }
         self.needsLayout = true
         if !self.sidebar.isOpen || self.sidebar.panel != .files { self.tree.cancelNew() }
-        if hadPanelFocus, !self.showsSearchPanel { self.reclaimSidebarFocus() }
+        if let held, !self.sidebar.isOpen || self.sidebar.panel != held {
+          self.reclaimSidebarFocus()
+        }
+        self.updateSourceControlShown()
         self.pushFindGround()
         self.observeSidebar()
       }
+    }
+  }
+
+  /// 焦点を持っているサイドバーのパネル（検索パネル・ソース管理パネルの入力欄か列）。
+  var panelHoldingFocus: EditorSidebarState.Panel? {
+    guard sidebar.isOpen, focusIsInSidebar else { return nil }
+    switch sidebar.panel {
+    case .files: return nil
+    case .search: return projectSearch.focusedArea != nil ? .search : nil
+    case .sourceControl: return scm.focusedArea != nil ? .sourceControl : nil
     }
   }
 

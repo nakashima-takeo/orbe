@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-/// エディター面のサイドバーの幅・開閉・出しているパネル（ファイル／検索）。アプリ全体で 1 つ（タブ・workspace を
+/// エディター面のサイドバーの幅・開閉・出しているパネル（ファイル／検索／ソース管理）。アプリ全体で 1 つ（タブ・workspace を
 /// またいで同じ）で、app-state に永続する（タブ単位の面の配置とは別）。幅の下限はここで守り、上限（本体に最低幅が
 /// 残る）は面の幅を知る pane が決める。
 @MainActor @Observable
@@ -10,6 +10,7 @@ final class EditorSidebarState {
   enum Panel: String, CaseIterable {
     case files
     case search
+    case sourceControl
   }
 
   private(set) var width: CGFloat
