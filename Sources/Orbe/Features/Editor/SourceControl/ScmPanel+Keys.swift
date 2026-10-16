@@ -102,7 +102,7 @@ extension ScmPanel {
       case .unstageAll where !files.isEmpty: self.control.unstage(files.map(\.row))
       case .stageAll where !files.isEmpty: self.control.stage(files.map(\.row))
       case .discardAll where !files.isEmpty: onDiscard(files)
-      case .refreshGraph: refresh()
+      case .refreshGraph: readGraphAndHead()
       default: break
       }
     case .file(_, let file):
