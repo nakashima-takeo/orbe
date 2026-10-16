@@ -16,17 +16,32 @@ import Foundation
 /// 崩れない（同じ根を握り直せば、まだ生きているこのサービスが返る）。返り終われば手放す。
 extension RootFiles {
   /// 書き込み 1 つの止める手。順番待ちなら、その場で行列から外して「止めた」で返す（前の書き込みの終わりを待たず、
-  /// git を起こさない）。走っていれば git を SIGTERM で止める。何度呼んでもよい。
+  /// git を起こさない）。走っていれば git を SIGTERM で止める。何度呼んでもよい。走り始めた（順番待ちを抜けた）ことも
+  /// 知らせる——順番待ちか走っているかは根のサービスの順番の中にしか無い。
   @MainActor
   final class Write {
     fileprivate let handle = GitRunner.Handle()
     fileprivate var dequeue: (() -> Void)?
+    private(set) var hasStarted = false
+    private var onStart: (() -> Void)?
 
     func cancel() {
       handle.cancel()
       guard let dequeue else { return }
       self.dequeue = nil
       dequeue()
+    }
+
+    /// 走り始めたら呼ぶ（もう走っていればその場で）。走る前に止めた書き込みでは呼ばない。
+    func whenStarted(_ body: @escaping () -> Void) {
+      if hasStarted { body() } else { onStart = body }
+    }
+
+    fileprivate func markStarted() {
+      hasStarted = true
+      let body = onStart
+      onStart = nil
+      body?()
     }
   }
 
@@ -130,6 +145,7 @@ extension RootFiles {
     let next = queuedWrites.removeFirst()
     next.write.dequeue = nil
     isWriting = true
+    next.write.markStarted()
     next.body(repo, next.write.handle) { [self] failure in
       isWriting = false
       startNextWrite()
@@ -142,6 +158,7 @@ extension RootFiles {
   ) -> Write {
     let write = Write()
     guard let repo else { return reject(write, completion) }
+    write.markStarted()
     body(repo, write.handle) { [self] failure in complete(failure, completion) }
     return write
   }
