@@ -5,7 +5,7 @@ import Foundation
 ///
 /// 面が見えている間（`isLive`）は根のサービスを握って status を受け、件数（レールのバッジ）を出す。行の組み立て・グラフ・
 /// HEAD の push 済みの読みは、パネルを出している間（`isShown`）だけ行う——レールの件数のためにパネルを開かせず、隠れた
-/// パネルのために git を起こさない。行の組み立ては裏で（世代つきで）済ませ、main は結果を差し替えて列に行の版を渡すだけ
+/// パネルのために git を起こさない。行の組み立ては裏で 1 本ずつ済ませ、main は結果を差し替えて列に行の版を渡すだけ
 /// （→ `ScmRows`）。
 @MainActor @Observable
 final class ScmPanel {
@@ -37,7 +37,7 @@ final class ScmPanel {
   private(set) var count = 0
   /// git 管理下か（nil = まだ分からない）。
   private(set) var isManaged: Bool?
-  /// 最後に受けた status のブランチ。
+  /// 今の行と件数を作った status のブランチ。
   private(set) var branch: GitStatus.Branch?
   private(set) var changes = ScmChanges.empty
   private(set) var layout = ScmLayout.empty
@@ -66,7 +66,9 @@ final class ScmPanel {
   /// キーで行へ動いたときの開きの間引き。
   @ObservationIgnored let navigation = RowNavigationThrottle()
   @ObservationIgnored private var files: RootFiles?
-  @ObservationIgnored private var buildGeneration = 0
+  @ObservationIgnored private var buildJob = Job()
+  /// 手元の 2 区分が今の status から作ったものでない（status が届いてから、行を作る組み立てがまだ始まっていない）。
+  @ObservationIgnored private var changesAreStale = true
   @ObservationIgnored private var graphLimit = ScmPanel.graphPage
   @ObservationIgnored private var graphJob = Job()
   @ObservationIgnored private var headJob = Job()
@@ -74,7 +76,7 @@ final class ScmPanel {
   /// パネルを出したときに根のサービスがまだ git 管理下と分かっていなかった（最初の status で読む）。
   @ObservationIgnored private var readsOnResolve = false
 
-  /// 読み 1 本の直列化。実行中に来た要求は「終わったらもう 1 回」に畳む。
+  /// 読み・組み立て 1 本の直列化。実行中に来た要求は「終わったらもう 1 回」に畳む。
   private struct Job {
     var isRunning = false
     var again = false
@@ -104,7 +106,7 @@ final class ScmPanel {
       guard isShown != oldValue else { return }
       if isShown {
         resolveManaged()
-        statusDidChange()
+        requestBuild()
         readGraphAndHead()
       } else {
         panelDidHide()
@@ -139,47 +141,51 @@ final class ScmPanel {
     }
   }
 
-  /// status が変わった（か読み直す）。件数は常に、行はパネルを出している間だけ裏で作る。
+  /// status が届いた（か、握り直した根のサービスの status を読む）。
   private func statusDidChange() {
-    guard let status = files?.status else { return }
+    guard files?.status != nil else { return }
     isManaged = true
-    branch = status.branch
     if readsOnResolve {
       readsOnResolve = false
       readGraphAndHead()
     }
-    buildGeneration += 1
-    let generation = buildGeneration
+    changesAreStale = true
+    requestBuild()
+  }
+
+  /// 件数と、パネルを出していれば行の組を、今の入力（status・グラフ・開閉）から裏で作り直す。組み立ては 1 本ずつで、
+  /// 走っている間の要求は「終わったらもう 1 回」に畳む——どの組み立ても始めた時点の最新の入力から作るので、届いた結果は
+  /// 捨てずに当てられ、最後に当たるのはいつも最新の入力から作った組になる。2 区分は status が変わったときだけ作り直し、
+  /// グラフ・開閉だけが変わったら手元の 2 区分を使う（直列なので、手元の 2 区分は前の組み立てが当てた最新のもの）。
+  private func requestBuild() {
+    if buildJob.isRunning {
+      buildJob.again = true
+      return
+    }
+    build()
+  }
+
+  private func build() {
+    guard let status = files?.status else { return }
+    buildJob.isRunning = true
     let rows = isShown
-    let branch = ScmBranch(status.branch)
+    let built = rows && !changesAreStale ? changes : nil
+    if rows { changesAreStale = false }
+    let branch = status.branch
     let graph = self.graph
     let collapsed = self.collapsed
     DispatchQueue.global(qos: .userInitiated).async { [weak self] in
       guard rows else {
         let count = ScmChanges.count(status)
-        return Self.deliver { self?.apply(generation, count: count, changes: nil, layout: nil) }
+        return Self.deliver {
+          self?.apply(branch: branch, count: count, changes: nil, layout: nil)
+        }
       }
-      let changes = ScmChanges.build(status)
-      let layout = ScmLayout.build(changes, branch: branch, graph: graph, collapsed: collapsed)
+      let changes = built ?? ScmChanges.build(status)
+      let layout = ScmLayout.build(
+        changes, branch: ScmBranch(branch), graph: graph, collapsed: collapsed)
       Self.deliver {
-        self?.apply(generation, count: changes.count, changes: changes, layout: layout)
-      }
-    }
-  }
-
-  /// グラフ・開閉が変わった。持っている 2 区分から行の組だけを作り直す。
-  private func rebuildLayout() {
-    guard isShown else { return }
-    buildGeneration += 1
-    let generation = buildGeneration
-    let changes = self.changes
-    let branch = ScmBranch(self.branch)
-    let graph = self.graph
-    let collapsed = self.collapsed
-    DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-      let layout = ScmLayout.build(changes, branch: branch, graph: graph, collapsed: collapsed)
-      Self.deliver {
-        self?.apply(generation, count: changes.count, changes: changes, layout: layout)
+        self?.apply(branch: branch, count: changes.count, changes: changes, layout: layout)
       }
     }
   }
@@ -189,19 +195,27 @@ final class ScmPanel {
     DispatchQueue.main.async { MainActor.assumeIsolated(body) }
   }
 
-  /// 裏の結果を差し替える（古い世代は捨てる）。選んでいた行が消えたら、同じ区分のその位置の行（無ければ前の行）を選ぶ
-  /// （開かない）。置き換えた行の組は裏で手放す（数万行の解放を main に載せない）。
-  private func apply(_ generation: Int, count: Int, changes: ScmChanges?, layout: ScmLayout?) {
-    guard generation == buildGeneration else { return }
+  /// 裏の結果を差し替え、待っている組み立てがあれば始める。選んでいた行が消えたら、同じ区分のその位置の行（無ければ
+  /// 前の行）を選ぶ（開かない）。置き換えた行の組は裏で手放す（数万行の解放を main に載せない）。
+  private func apply(
+    branch: GitStatus.Branch?, count: Int, changes: ScmChanges?, layout: ScmLayout?
+  ) {
+    buildJob.isRunning = false
+    self.branch = branch
     self.count = count
-    guard let changes, let layout else { return }
-    let replaced = (self.changes, self.layout)
-    let previous = self.layout
-    self.changes = changes
-    self.layout = layout
-    reselect(from: previous)
-    rowsVersion &+= 1
-    DispatchQueue.global(qos: .utility).async { withExtendedLifetime(replaced) {} }
+    if let changes, let layout {
+      let replaced = (self.changes, self.layout)
+      let previous = self.layout
+      self.changes = changes
+      self.layout = layout
+      reselect(from: previous)
+      rowsVersion &+= 1
+      DispatchQueue.global(qos: .utility).async { withExtendedLifetime(replaced) {} }
+    }
+    if buildJob.again {
+      buildJob.again = false
+      build()
+    }
   }
 
   private func reselect(from previous: ScmLayout) {
@@ -247,7 +261,7 @@ final class ScmPanel {
       graphJob.isRunning = false
       if let graph, graph != self.graph {
         self.graph = graph
-        rebuildLayout()
+        if isShown { requestBuild() }
       }
       if graphJob.again {
         graphJob.again = false
@@ -294,7 +308,7 @@ final class ScmPanel {
 
   func toggle(_ section: ScmSection) {
     if collapsed.remove(section) == nil { collapsed.insert(section) }
-    rebuildLayout()
+    if isShown { requestBuild() }
   }
 
   /// 行を選ぶ（nil で外す）。選択は行の同一性（区分・パス）で持ち、status の変化で行がずれても同じ行を指す。

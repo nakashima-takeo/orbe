@@ -69,6 +69,38 @@ final class ScmPanelTests: OrbeTestCase {
     XCTAssertEqual(opened, 0)
   }
 
+  /// 大きな変更（数千件）のある worktree でも、行と件数は最新の status に追いつく——行の組み立てより先にグラフの読み
+  /// （コミットのたびに git の状態が変わって起きる）が返っても、手元の古い行で組み直した結果が最新の status を退けない。
+  func testRowsCatchUpWithTheLatestStatusOnALargeWorktree() throws {
+    let untracked = 5000
+    for index in 0..<untracked { try repo.write("u/\(index).txt", "u\n") }
+    show(
+      until: { $0.changes.changes.count == untracked && $0.count == untracked },
+      "初めて出したパネルに全件の行と件数")
+
+    XCTAssertTrue(repo.git(["add", "u/0.txt"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "terminal"]).isSuccess)
+    settle(changes: untracked - 1, "端末でコミットした後")
+
+    panel.control.stage([GitStatus.Row(path: "u/1.txt", originalPath: nil)])
+    idle("ステージ")
+    pumpMain(until: { self.panel.changes.staged.count == 1 }, "u/1.txt がステージ済みへ")
+    panel.control.message = "panel"
+    panel.control.commit()
+    idle("コミット")
+    settle(changes: untracked - 2, "パネルでコミットした後")
+  }
+
+  /// HEAD のコミットをグラフが読み終え、行と件数がステージ済み 0・変更 `changes` 件に揃うまで待つ。
+  private func settle(changes: Int, _ message: String) {
+    pumpMain(
+      until: {
+        self.panel.graph?.commits.first?.oid == self.repo.head()
+          && self.panel.changes.staged.isEmpty && self.panel.changes.changes.count == changes
+          && self.panel.count == changes
+      }, timeout: 20, message)
+  }
+
   /// 「すべて破棄」「すべてステージ」は競合中のファイルを含めない（競合の行は 1 行ずつステージで解決済みにする）。
   func testBulkActionsLeaveConflictedFilesAlone() throws {
     try repo.write("b.txt", "b\n")
