@@ -118,10 +118,12 @@ final class EditorDiff: RootFilesObserver {
     self.documents = documents
   }
 
-  /// 新しい側の文書を、同じ実体の `next` に差し替える（セッションが勝ち負けを決めた勝者）。前の文書は手放さない（結線の
-  /// 後始末はセッションがまとめてする）。作り直しは積むだけで、見せていれば `settle` で行う。
+  /// 新しい側を、同じ実体の文書 `next` にする（セッションが勝ち負けを決めた勝者。文書を持っていなければ、作業ツリーの
+  /// 姿より未保存の `next` が先に立つ）。前の文書は手放さない（結線の後始末はセッションがまとめてする）。作り直しは
+  /// 積むだけで、見せていれば `settle` で行う。
   func replaceDocument(with next: EditorDocument) {
-    guard let previous = document, previous !== next else { return }
+    let previous = document
+    guard previous !== next else { return }
     working = .document(next)
     documentDidSwitch(from: previous)
     stale = true

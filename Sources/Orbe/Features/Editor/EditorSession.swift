@@ -174,15 +174,24 @@ final class EditorSession {
   /// 別のセッションのタブを列の末尾へ引き取る（cd で連が畳まれたとき）。文書（diff だけが使う文書を含む）は実体ごとに
   /// 勝ち負けを決める——自分に無ければ結線ごと移す。あれば、`other` の文書だけが未保存のときに限り `other` の文書が
   /// 勝ち、それ以外は自分の文書が勝つ（負けた側は未保存でも捨てる）。タブは `other` の列の順に見て、同じタブが自分に
-  /// あれば捨て、無ければ末尾へ足す。仮のタブは自分に仮が無いときだけ仮のまま移り、あれば普通のタブになる。足した後、
-  /// 列のすべての文書のタブと diff の新しい側を勝った文書に揃える。焦点は自分のものを保ち、自分にタブが無かったときだけ
-  /// `other` の焦点にする。`other` は通知なしに空になり、自分の変化は 1 本の通知で上げる。本体を見せていた pane は、
-  /// 呼ぶ前に手放しておく。
+  /// あれば捨て、無ければ末尾へ足す。捨てる diff の文書が未保存で、自分の同じ diff が文書を持たない（消えた・表示できない
+  /// と読んだまま）なら、自分の diff がその実体の勝者を新しい側に使う——未保存の本文は作業ツリーの姿より先に立つ。仮の
+  /// タブは自分に仮が無いときだけ仮のまま移り、あれば普通のタブになる。足した後、列のすべての文書のタブと diff の新しい
+  /// 側を勝った文書に揃える。焦点は自分のものを保ち、自分にタブが無かったときだけ `other` の焦点にする。`other` は
+  /// 通知なしに空になり、自分の変化は 1 本の通知で上げる。本体を見せていた pane は、呼ぶ前に手放しておく。
   func adopt(from other: EditorSession) {
     guard !other.tabs.isEmpty else { return }
     let wasEmpty = tabs.isEmpty
     let winners = settleDocuments(from: other)
-    for tab in other.tabs where self.tab(tab.id) == nil {
+    for tab in other.tabs {
+      if let mine = self.tab(tab.id) {
+        if case .diff(let diff) = mine, diff.document == nil, let theirs = tab.document,
+          theirs.isDirty
+        {
+          diff.replaceDocument(with: winners[theirs.url] ?? theirs)
+        }
+        continue
+      }
       if case .diff(let diff) = tab { diff.rebind(diffDocuments) }
       tabs.append(tab)
       if tab.id == other.previewID, previewID == nil { previewID = tab.id }
