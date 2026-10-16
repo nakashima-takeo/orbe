@@ -98,15 +98,12 @@ class ListRowView: NSView {
     context.restoreGState()
   }
 
-  /// 種別チップ（既定 14。角丸の地＋中央の字。`FileChipView` と同じ規則を AppKit で描く）を、左端 `x`・`midY`（既定は行の
-  /// 縦の中央）に描く。
+  /// 種別チップ（既定 14。角丸の地＋中央の字。`FileChipView` と同じ規則を AppKit で描く）を、左端 `x`・行の縦の中央に描く。
   final func drawChip(
     _ glyph: TextLine, _ tint: ChipTint, at x: CGFloat, size: CGFloat = Theme.Layout.editorChip,
-    midY: CGFloat? = nil, radius: CGFloat = Theme.Radius.xs, _ colors: RowColors,
-    in context: CGContext
+    radius: CGFloat = Theme.Radius.xs, _ colors: RowColors, in context: CGContext
   ) {
-    let rect = NSRect(
-      x: x, y: (midY ?? bounds.height / 2) - size / 2, width: size, height: size)
+    let rect = NSRect(x: x, y: (bounds.height - size) / 2, width: size, height: size)
     let chip = colors.chip(tint)
     fill(rect, radius: radius, chip.ground, in: context)
     glyph.draw(
