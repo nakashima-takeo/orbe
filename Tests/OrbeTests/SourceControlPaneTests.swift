@@ -4,10 +4,12 @@ import XCTest
 
 @testable import Orbe
 
-/// エディター面に結んだソース管理パネル——行は区分に合った diff を仮のタブで開き、メッセージ欄の ⌘↵ はコミットだけを起こす。
+/// エディター面に結んだソース管理パネル——行は区分に合った diff を仮のタブで開き、追跡中のファイルの破棄は確かめてから行い、
+/// メッセージ欄の ⌘↵ はコミットだけを起こす。
 ///
 /// 壊れると何が起きるか。「ステージされている変更」の行で作業ツリーの diff が開き、コミットする中身と違うものを見て確かめた
-/// ことになる。ボタンが「同期」の間に欄で ⌘↵ を打つと、キー 1 つで push が走る。
+/// ことになる。追跡中のファイルの編集が確認なしに消え、戻せない。ボタンが「同期」の間に欄で ⌘↵ を打つと、キー 1 つで
+/// push が走る。
 @MainActor
 final class SourceControlPaneTests: OrbeTestCase {
   struct Hosted {
@@ -59,6 +61,33 @@ final class SourceControlPaneTests: OrbeTestCase {
     XCTAssertEqual(editor.activeID, working)
     XCTAssertEqual(editor.previewID, working)
     XCTAssertEqual(editor.tabs.map(\.id), [working], "仮のタブを入れ替える")
+  }
+
+  /// 未追跡だけの破棄は確かめずにゴミ箱へ移す。追跡中のファイルの破棄は確認のシートを出し、「破棄」を押すまで作業ツリーに
+  /// 触らない。
+  func testDiscardingTrackedChangesWaitsForTheConfirmation() throws {
+    let repo = try TempGitRepo()
+    try repo.write("a.txt", "edited\n")
+    try repo.write("n.txt", "new\n")
+    let hosted = host(repo)
+    pumpMain(until: { hosted.scm.changes.changes.count == 2 }, "変更の行")
+    let untracked = repo.dir.appendingPathComponent("n.txt").path
+
+    hosted.scm.press(try row(hosted, .changes, "n.txt"), .discard)
+    XCTAssertNil(hosted.window.attachedSheet, "未追跡だけなら確かめない")
+    pumpMain(
+      until: {
+        hosted.scm.control.operations.isEmpty && !FileManager.default.fileExists(atPath: untracked)
+      },
+      "ゴミ箱へ")
+
+    hosted.scm.press(try row(hosted, .changes, "a.txt"), .discard)
+    let sheet = try XCTUnwrap(hosted.window.attachedSheet, "追跡中なら確かめる")
+    XCTAssertTrue(hosted.scm.control.operations.isEmpty, "確かめるまで捨て始めない")
+    hosted.window.endSheet(sheet, returnCode: .alertFirstButtonReturn)
+    pumpMain(
+      until: { (try? String(contentsOf: repo.url("a.txt"), encoding: .utf8)) == "one\n" },
+      "破棄を押すと index の版へ戻る")
   }
 
   /// ソース管理を開くとメッセージ欄に焦点が入る。欄の ⌘↵ はコミットだけ——ボタンが「同期」でもネット操作を起こさず、
