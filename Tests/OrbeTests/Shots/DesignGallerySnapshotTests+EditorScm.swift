@@ -16,5 +16,17 @@ extension DesignGallerySnapshotTests {
     scene.panel.select(ScmRowID(section: .changes, path: "src/agent/StateHooks.swift"))
     try writePNG(
       scene.view, size: NSSize(width: 1100, height: 640), name: "editor_scm.png", dir: dir)
+    try writePNG(
+      railBadges, size: NSSize(width: 200, height: 120), name: "editor_scm_rail.png", dir: dir)
+  }
+
+  /// レールの件数バッジ: 1 桁から最も幅を取る「999+」まで。
+  private var railBadges: some View {
+    HStack(spacing: 12) {
+      ForEach([3, 42, 999, 1000], id: \.self) { count in
+        RailView(selection: .sourceControl, sourceControlCount: count, onSelect: { _ in })
+      }
+    }
+    .padding(8)
   }
 }

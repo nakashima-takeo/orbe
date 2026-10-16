@@ -124,9 +124,9 @@ private struct RailBadge: View {
       .font(Font.theme.editorRailBadge)
       .foregroundStyle(Color.theme.tabActiveText)
       .lineLimit(1)
-      .fixedSize()
       .padding(.horizontal, 3)
       .frame(minWidth: Theme.Layout.editorRailBadge, minHeight: Theme.Layout.editorRailBadge)
+      .fixedSize()
       .background(Capsule().fill(Color.theme.accentPrimary))
       .offset(
         x: Theme.Layout.editorRailBadgeOffset.width, y: Theme.Layout.editorRailBadgeOffset.height)
