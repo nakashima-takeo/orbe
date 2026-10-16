@@ -106,7 +106,7 @@ extension EditorPaneView {
       ) { [weak self] event in
         guard let self, event.window === window else { return event }
         if event.type != .keyDown {
-          if !press(event, isIn: searchResults) { projectSearch.dropPendingNavigation() }
+          if !press(event, isIn: searchResults) { projectSearch.navigation.drop() }
           if !press(event, isIn: scmList) { scm.navigation.drop() }
           return event
         }

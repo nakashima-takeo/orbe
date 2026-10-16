@@ -64,7 +64,7 @@ extension ProjectSearchPaneTests {
     pumpMain(until: { hosted.pane.document?.url == url }, "\(message): 押したものが見える", line: line)
     let responder = hosted.window.firstResponder
     held.closeWindow()
-    hosted.search.navigationKeyDidRelease()
+    hosted.search.navigation.keyDidRelease()
     held.closeWindow()
     RunLoop.main.run(until: Date())
     XCTAssertEqual(

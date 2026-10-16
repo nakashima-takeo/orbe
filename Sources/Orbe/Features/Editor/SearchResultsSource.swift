@@ -48,7 +48,7 @@ final class SearchResultsSource: RowListSource {
     }
   }
 
-  func keyDidRelease() { search.navigationKeyDidRelease() }
+  func keyDidRelease() { search.navigation.keyDidRelease() }
 
   func click(_ row: Int) { search.click(search.row(at: row).id) }
 

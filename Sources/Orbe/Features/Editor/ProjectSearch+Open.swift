@@ -27,21 +27,6 @@ extension ProjectSearch {
     onOpen(id, opening)
   }
 
-  /// キーで選択を動かした（↑↓・→）。
-  func selectionDidNavigate(isRepeat: Bool) {
-    navigation.didNavigate(isRepeat: isRepeat)
-  }
-
-  /// 人の注意が結果から移った（結果の列から焦点が外れた・列の外を押した・パネルが隠れた）。待っている開きを捨てる。
-  func dropPendingNavigation() {
-    navigation.drop()
-  }
-
-  /// 結果の列のキーを離した。
-  func navigationKeyDidRelease() {
-    navigation.keyDidRelease()
-  }
-
   /// その時点の選択が一致なら仮で開く（見出し・選択なしは開かない）。
   func openSelectedMatch() {
     guard let selection, selection.match != nil else { return }
