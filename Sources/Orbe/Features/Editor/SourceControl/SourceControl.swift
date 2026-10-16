@@ -65,7 +65,7 @@ final class SourceControl {
     @ObservationIgnored fileprivate(set) var isStopped = false
     /// 始めたときの根のサービス。2 段の操作は全段が終わるまで握る——2 段目のために引き直すと、誰も握っていない瞬間に
     /// 新しいサービスができ、管理下かの判定の前に「管理外」で断られうる。
-    @ObservationIgnored fileprivate let files: RootFiles
+    @ObservationIgnored let files: RootFiles
     @ObservationIgnored fileprivate let longDelay = EditorDelay()
 
     fileprivate init(kind: Kind, step: Step, files: RootFiles) {
@@ -176,9 +176,6 @@ final class SourceControl {
     guard operation.step.reportsProgress else { return }
     operation.progress = line
   }
-
-  /// 根のサービスの口（その段の書き込みを始める）。
-  func files(of operation: Operation) -> RootFiles { operation.files }
 
   /// 操作を終える。止めた・管理外は失敗にしない。
   func finish(_ operation: Operation, _ outcome: GitWriteFailure?) {
