@@ -37,7 +37,8 @@ extension ScmRowView {
   }
 
   /// ファイル行 22（padding 0 12 0 20・gap 6）: 種別チップ 16・名前 13（バッジの色）・ディレクトリ 11 tertiary・右端に行の
-  /// ボタン 18（常に出す）とバッジの字。名前を先に取り、ディレクトリは残りに詰める。
+  /// ボタン 18（常に出す）とバッジの字。名前を先に取り、ディレクトリは残りに詰める（右のボタンとの間は、伸びる余白の両側の
+  /// gap で 12）。
   func draw(_ file: File, _ colors: RowColors, _ scm: ScmRowColors, in context: CGContext) {
     if isHovered, !isSelected {
       context.setFillColor(scm.fileHover)
@@ -53,7 +54,7 @@ extension ScmRowView {
     file.badge.draw(at: badgeX, top: top(file.badge), color, context)
     let rects = buttonRects()
     drawButtons(rects, tool: false, colors, scm, in: context)
-    let limit = (rects.first?.1.minX ?? badgeX) - gap
+    let limit = (rects.first?.1.minX ?? badgeX) - gap * 2
     let nameWidth = min(snap(file.name.width, .up), max(0, limit - x))
     file.name.draw(at: x, top: top(file.name), width: nameWidth, color, context)
     x += nameWidth + gap
@@ -95,7 +96,8 @@ extension ScmRowView {
   }
 
   /// コミット 22（padding 0 12 0 20・gap 6）: 点の列 16（未 push は塗り accentBright と地の輪、push 済みは中抜き tertiary）と
-  /// 縦の線・題 12（push 済みは muted）・右端に ref の札（local は accent、remote は無彩）。札が入らなければ末尾から省く。
+  /// 縦の線・題 12（push 済みは muted）・右端に ref の札（local は accent、remote は無彩）。札が入らなければ末尾から省く。題の
+  /// 右は伸びる余白の両側の gap を空ける（札との間 12、札が無ければ右端の padding との間 6）。
   func draw(
     _ commit: Commit, _ colors: RowColors, _ scm: ScmRowColors, in context: CGContext
   ) {
@@ -143,8 +145,9 @@ extension ScmRowView {
           height: Theme.Layout.editorScmRef), colors, scm, in: context)
       right -= width + Theme.Space.tick
     }
+    let subjectRight = refs.isEmpty ? limit - gap : right + Theme.Space.tick - gap * 2
     commit.subject.draw(
-      at: x, top: self.top(commit.subject), width: max(0, right + Theme.Space.tick - gap - x),
+      at: x, top: self.top(commit.subject), width: max(0, subjectRight - x),
       commit.isPushed ? colors.muted : colors.text, context)
   }
 
