@@ -6,7 +6,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか。ステージした後に編集したファイルが片方の区分にしか出ない・競合がステージ済みに並んで一括で
 /// 解決済みにされる・`git rm --cached` のファイルを解除できない・削除したファイルを「ファイルを開く」で開こうとする・
-/// 未追跡を確認なしで捨てる側に数える・パスの順に並ばない・レールの件数が行の数と食い違う・区間の高さがずれて押した行と
+/// 未追跡を確認なしで捨てる側に数える・パスの順に並ばない・レールの件数が行の数と食い違う・区間の表が行とずれて押した行と
 /// 違う行が開く。
 final class ScmRowsTests: OrbeTestCase {
   private func entry(
@@ -41,7 +41,8 @@ final class ScmRowsTests: OrbeTestCase {
     XCTAssertEqual(unstaged["src/b.swift"]?.badge, .modified)
     XCTAssertEqual(unstaged["conflict.txt"]?.badge, .conflicted)
     XCTAssertEqual(unstaged["new.txt"]?.badge, .untracked)
-    XCTAssertEqual(staged["moved.txt"]?.row, GitStatus.Row(path: "moved.txt", originalPath: "old.txt"))
+    XCTAssertEqual(
+      staged["moved.txt"]?.row, GitStatus.Row(path: "moved.txt", originalPath: "old.txt"))
     XCTAssertEqual(unstaged["new.txt"]?.isTracked, false)
     XCTAssertEqual(unstaged["cached.txt"]?.isTracked, false)
     XCTAssertEqual(unstaged["src/a2.swift"]?.isTracked, true)
@@ -51,25 +52,30 @@ final class ScmRowsTests: OrbeTestCase {
     XCTAssertEqual(ScmChanges.count(status), changes.count)
   }
 
-  /// 行が 0 の区分は見出しごと出ない。グラフの見出しは上の空きを含み、ブランチの器は下の空きを含む。区間の表は行を隙間なく
-  /// 覆い、索引は見出しとファイル行を指す。畳んだ区分のファイル行は出ない。
-  func testLayoutSegmentsAndIndex() {
+  /// 行が 0 の区分は見出しごと出ず、畳んだ区分のファイル行は出ない。区間の表は行を先頭から隙間なく覆う（列が位置から引く
+  /// 行と、源が描く行がずれない）。
+  func testEmptySectionsAndFoldedFilesAreNotRowsAndSegmentsCoverEveryRow() {
     let changes = ScmChanges(
       staged: [], changes: ScmChanges.build(status).changes.filter { $0.path.hasPrefix("src/") })
     let branch = ScmBranch(status.branch)
+    func rows(_ layout: ScmLayout) -> [ScmRowID] {
+      layout.items.indices.compactMap(layout.id(at:))
+    }
+    let header = { (section: ScmSection) in ScmRowID(section: section, path: nil) }
     let layout = ScmLayout.build(changes, branch: branch, graph: nil, collapsed: [])
-    XCTAssertEqual(layout.items.count, 1 + 3 + 1 + 1)
     XCTAssertEqual(
-      layout.segments,
-      [
-        RowListSegment(start: 0, count: 4, height: 22), RowListSegment(start: 4, count: 2, height: 30),
-      ])
-    XCTAssertEqual(layout.index[ScmRowID(section: .changes, path: nil)], 0)
-    XCTAssertEqual(layout.index[ScmRowID(section: .changes, path: "src/a10.swift")], 2)
-    XCTAssertNil(layout.index[ScmRowID(section: .staged, path: nil)])
-    XCTAssertEqual(layout.fileRanges[.changes], 1..<4)
-    let folded = ScmLayout.build(changes, branch: branch, graph: nil, collapsed: [.changes, .graph])
-    XCTAssertEqual(folded.items.count, 2)
-    XCTAssertNil(folded.index[ScmRowID(section: .changes, path: "src/a10.swift")])
+      rows(layout),
+      [header(.changes)]
+        + ["src/a2.swift", "src/a10.swift", "src/b.swift"].map {
+          ScmRowID(section: .changes, path: $0)
+        } + [header(.graph)])
+    var next = 0
+    for segment in layout.segments {
+      XCTAssertEqual(segment.start, next)
+      next += segment.count
+    }
+    XCTAssertEqual(next, layout.items.count)
+    let folded = ScmLayout.build(changes, branch: branch, graph: nil, collapsed: [.changes])
+    XCTAssertEqual(rows(folded), [header(.changes), header(.graph)])
   }
 }
