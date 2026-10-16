@@ -13,7 +13,7 @@ import QuartzCore
 /// 場の編集係の IME の入口へ
 /// （→ `MetalTextView+Input`）、届いた標準のセレクタは編集のコマンドへ写す（→ `MetalTextView+Commands`）。マウスは
 /// `MouseSelection` が持ち、変換中はまず IME へ渡す。クリップボード・サービス・右クリックは `MetalTextView+Pasteboard`、
-/// ドラッグ＆ドロップは `MetalTextView+Drag`。
+/// ドラッグ＆ドロップは `MetalTextView+Drag`、ポインタの形とホバーは `MetalTextView+Pointer`。
 final class MetalTextView: TextSurfaceInputView {
   weak var surface: MetalTextSurface? {
     didSet {
@@ -167,14 +167,12 @@ final class MetalTextView: TextSurfaceInputView {
       ) { [weak self] _ in
         MainActor.assumeIsolated { self?.reduceMotionDidChange() }
       })
-    if let blinking = CaretBlinking.didChangeNotification {
-      let changed: @Sendable (Notification) -> Void = { [weak self] _ in
+    observers.append(
+      NotificationCenter.default.addObserver(
+        forName: CaretBlinking.didChangeNotification, object: nil, queue: .main
+      ) { [weak self] _ in
         MainActor.assumeIsolated { self?.surface?.setCaretBlinks(CaretBlinking.systemPreference) }
-      }
-      observers.append(
-        NotificationCenter.default.addObserver(
-          forName: blinking, object: nil, queue: .main, using: changed))
-    }
+      })
   }
 
   override func viewDidMoveToWindow() {
@@ -275,57 +273,10 @@ final class MetalTextView: TextSurfaceInputView {
     }
   }
 
-  /// ポインタの形と、本体の上のポインタ（つまみの見え隠れと帯・つまみの濃さ）。ドラッグ中も出入りを受ける——つまみを
-  /// 押したまま本体の外で離せば、つまみが消える。
-  override func updateTrackingAreas() {
-    super.updateTrackingAreas()
-    for area in trackingAreas where area.owner === self { removeTrackingArea(area) }
-    addTrackingArea(
-      NSTrackingArea(
-        rect: .zero,
-        options: [
-          .cursorUpdate, .mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect,
-          .enabledDuringMouseDrag,
-        ],
-        owner: self))
-  }
-
-  override func cursorUpdate(with event: NSEvent) {
-    pointer.updatePointer(at: event.locationInWindow, flags: event.modifierFlags, in: self)
-  }
-
-  override func mouseMoved(with event: NSEvent) {
-    pointer.updatePointer(at: event.locationInWindow, flags: event.modifierFlags, in: self)
-    hover(event, inside: true)
-  }
-
-  override func mouseEntered(with event: NSEvent) {
-    hover(event, inside: true)
-  }
-
-  override func mouseExited(with event: NSEvent) {
-    surface?.setLinkPointer(nil)
-    hover(event, inside: false)
-  }
-
-  /// 俯瞰の上のポインタと、区画の押せる場所のホバー。
-  private func hover(_ event: NSEvent, inside: Bool) {
-    let point = convert(event.locationInWindow, from: nil)
-    surface?.inputScope { overview.pointerMoved(to: point, inside: inside) }
-    surface?.hover(at: inside ? point : nil)
-  }
-
   /// 動きを減らす設定を俯瞰へ写す。
   private func reduceMotionDidChange() {
     let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     surface?.inputScope { overview.setReduceMotion(reduce) }
-  }
-
-  override func flagsChanged(with event: NSEvent) {
-    guard let window else { return super.flagsChanged(with: event) }
-    pointer.updatePointer(
-      at: window.mouseLocationOutsideOfEventStream, flags: event.modifierFlags, in: self)
-    super.flagsChanged(with: event)
   }
 
   /// 打鍵を IME と macOS のキー割り当てに通す。1 打鍵を 1 つの取引にし、処理の終わりで出す——セレクタが 2 つ届く打鍵（⌥↓・⌃O・利用者の

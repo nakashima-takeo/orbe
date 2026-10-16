@@ -1,7 +1,7 @@
 import AppKit
 
-/// ⌘⇧X タスク画面の提示。画面はタスクのストア（唯一の正）を直接読み書きし、ここは開いた時点の
-/// workspace の写しと GitHub タブのリポジトリの基点、GitHub の値の置き場を渡して配線するだけ。
+/// ⌘⇧X タスク画面の提示。画面はタスクと受信のストア（唯一の正）を直接読み書きし、ここは workspace の値を返す口と
+/// GitHub タブのリポジトリの基点、GitHub の値の置き場、受信の走らせ役を渡して配線するだけ。
 extension WindowController {
   /// タスク画面を開く（開いていれば焦点をモデルが決めた行き先へ当て直すだけ）。タブが 0 枚の workspace でも開く。
   /// GitHub タブの一覧は、タスクのタブを開いていても取り直す（ヘッダーの「GitHub N」のため）。
@@ -10,15 +10,13 @@ extension WindowController {
       model.taskPalette?.focus()
       return
     }
-    // GitHub タブのリポジトリは ⌘T と同じ基点で決める（「⌘T タスクにして開く」が同じリポジトリを開くため）。
+    // GitHub タブのリポジトリは ⌘T と同じ基点で決める（「タスクにして開く」が同じリポジトリの ⌘T 画面を開くため）。
     let base = store.newTabCwd(inWorkspaceAt: store.activeWorkspace)
-    let entry = { (ws: Workspace) in
-      TaskPaletteWorkspaces.Entry(id: ws.persistentId, name: ws.name)
-    }
     let p = TaskPaletteModel(
       store: taskStore, githubItems: .shared, viewer: .shared, openLists: .shared,
-      root: base, agents: worktreeAgents,
-      workspaces: TaskPaletteWorkspaces(opened: entry(current), all: workspaces.map(entry)),
+      root: base, agents: worktreeAgents, sessionTabs: agentSessionTabs,
+      automations: automationRunner,
+      workspaces: { [store] in TaskPaletteWorkspaces(store) },
       now: Date(), timeZone: .current)
     p.onDismiss = { [weak self] in self?.dismissPalette() }
     p.onOpenURL = { NSWorkspace.shared.open($0) }
@@ -26,6 +24,17 @@ extension WindowController {
     p.onFocusTab = { [weak self] tabId in
       self?.dismissPalette()
       _ = self?.controlFocusTab(tabId: tabId)
+    }
+    p.onContinueWait = { [weak self] id in self?.continueWait(taskId: id) }
+    p.continuationBlock = { [weak self] id in self?.continuationBlock(taskId: id) }
+    p.onAskSecretary = { [weak self] ask in
+      guard let self else { return .claudeMissing }
+      do throws(Secretary.Refusal) {
+        try self.secretary.ask(ask, from: .palette)
+        return nil
+      } catch {
+        return error
+      }
     }
     model.taskPalette = p
     model.overlay = .taskPalette
@@ -63,7 +72,7 @@ extension WindowController {
     }
   }
 
-  /// タスク画面の ⌘T。タスク画面を確定して畳み、そのタスクのための ⌘T に差し替える。
+  /// タスク画面で agent を開く（⌘↵）。タスク画面を確定して畳み、そのタスクのための ⌘T に差し替える。
   func openWorktreePalette(forTask id: Int) {
     settleTaskPaletteEditing()
     model.taskPalette = nil
@@ -74,5 +83,15 @@ extension WindowController {
   /// どれでも、打った内容を失わない。
   func settleTaskPaletteEditing() {
     model.taskPalette?.leaveEditing()
+  }
+}
+
+extension TaskPaletteWorkspaces {
+  /// 今の workspace の値（画面を開いた workspace は今の workspace）。
+  init(_ session: SessionStore) {
+    let entry = { (ws: Workspace) in Entry(id: ws.persistentId, name: ws.name) }
+    self.init(
+      opened: entry(session.current), all: session.workspaces.map(entry),
+      home: session.homeWorkspaceId)
   }
 }

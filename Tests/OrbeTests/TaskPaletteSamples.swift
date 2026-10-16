@@ -8,6 +8,13 @@ import Foundation
 enum TaskPaletteSamples {
   static let opened = TaskPaletteWorkspaces.Entry(id: UUID(), name: "orbe")
   static let other = TaskPaletteWorkspaces.Entry(id: UUID(), name: "web-app")
+  /// Home（付け先を持たない候補をタスクにすると付く）。
+  static let home = UUID()
+  /// サイドバーの順は `opened`・`other`・Home。開いたのは `opened`。
+  nonisolated static var workspaces: TaskPaletteWorkspaces {
+    TaskPaletteWorkspaces(
+      opened: opened, all: [opened, other, .init(id: home, name: "Home")], home: home)
+  }
   /// 開いた workspace の root。
   static let root = "/work/orbe"
 
@@ -16,25 +23,27 @@ enum TaskPaletteSamples {
     _ mutate: (inout TaskItem) -> Void = { _ in }
   ) -> TaskItem {
     var item = TaskItem(
-      id: id, title: title, status: status, waiting: nil, priority: .medium, due: nil,
+      id: id, title: title, status: status, wait: nil, priority: .medium, due: nil,
       workspace: nil, description: "", createdAt: DesignSceneFixtures.taskToday, createdBy: nil)
     mutate(&item)
     return item
   }
 
-  /// `tasks` の列で開いたタスク画面。開いた workspace は `opened`、サイドバーの順は `opened`・`other`。
-  /// GitHub の値の置き場は、既定では何も取りに行かない。
+  /// `tasks` の列で開いたタスク画面。workspace は既定では `workspaces`。GitHub の値の置き場は、既定では何も取りに行かない。
   static func model(
     _ tasks: [TaskItem], githubItems: GitHubItemCache = GitHubItemCache(fetch: { _, _ in }),
-    openLists: GitHubOpenLists? = nil, agents: WorktreeAgentActivity = WorktreeAgentActivity()
+    openLists: GitHubOpenLists? = nil, agents: WorktreeAgentActivity = WorktreeAgentActivity(),
+    sessionTabs: AgentSessionTabs = AgentSessionTabs(), automations: AutomationRunner? = nil,
+    workspaces: @escaping () -> TaskPaletteWorkspaces = { Self.workspaces }
   ) -> TaskPaletteModel {
     let file = TasksFile(
       version: TaskPersistence.version, nextId: (tasks.map(\.id).max() ?? 0) + 1, tasks: tasks)
     return TaskPaletteModel(
       store: TaskStore(file: file), githubItems: githubItems, viewer: githubItems.viewer,
       openLists: openLists ?? GitHubOpenLists(source: .idle, viewer: githubItems.viewer),
-      root: root, agents: agents,
-      workspaces: TaskPaletteWorkspaces(opened: opened, all: [opened, other]),
+      root: root, agents: agents, sessionTabs: sessionTabs,
+      automations: automations ?? DesignSceneFixtures.automationRunner(nil),
+      workspaces: workspaces,
       now: DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone)
   }
 

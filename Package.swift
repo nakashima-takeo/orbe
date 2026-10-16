@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
   name: "Orbe",
-  platforms: [.macOS(.v14)],
+  platforms: [.macOS("15.7")],
   dependencies: [
     // CommonMark + GFM パーサ（公式）。リリースノートの markdown を AST へ起こし SwiftUI へ描画する。
     .package(url: "https://github.com/apple/swift-markdown.git", from: "0.6.0"),

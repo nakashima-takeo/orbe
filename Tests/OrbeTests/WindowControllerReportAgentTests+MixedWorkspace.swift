@@ -59,7 +59,7 @@ extension WindowControllerReportAgentTests {
     fixture.wc.flushChrome()
 
     XCTAssertEqual(fixture.wc.attentionStore.rows.map(\.tabId), [fixture.live.id])
-    XCTAssertEqual(fixture.wc.attentionStore.transient?.row.tabId, fixture.live.id)
+    XCTAssertEqual(fixture.wc.attentionStore.transient?.row?.tabId, fixture.live.id)
     XCTAssertEqual(sound.played.last?.event, .waiting)
     XCTAssertEqual(fixture.wc.statusModel.rollup.map(\.state), ["waiting"])
     XCTAssertEqual(fixture.wc.statusModel.rollup.map(\.count), [1])

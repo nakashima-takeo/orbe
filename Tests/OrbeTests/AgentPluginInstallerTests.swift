@@ -3,10 +3,11 @@ import XCTest
 
 @testable import Orbe
 
-/// パッケージのプラグイン名の導出規則（`AgentPluginInstaller.pluginName(in:)`）を固定する。
+/// パッケージのプラグイン名の導出規則（`AgentPluginInstaller.pluginName(in:)`）、中身の指紋、
+/// `run` の完了順序を固定する。
 /// 名前はビルド時にチャネルから導出されるため Swift には焼けず、`plugins/` 直下の唯一の
-/// サブディレクトリ名として読む。この 1 つの名前を marketplace 登録・登録済みの記録・
-/// channel の置き場所が共有するので、曖昧なパッケージでは nil を返す（誤った名前で登録しない）。
+/// サブディレクトリ名として読む。この 1 つの名前を marketplace 登録と channel の置き場所が
+/// 共有するので、曖昧なパッケージでは nil を返す（誤った名前で登録しない）。
 final class AgentPluginInstallerTests: OrbeTestCase {
   private var pkg: URL!
 
@@ -56,6 +57,37 @@ final class AgentPluginInstallerTests: OrbeTestCase {
     try makePluginsDir(subdirectories: ["orbe-agent-dev"])
     try Data().write(to: pkg.appendingPathComponent("plugins/.DS_Store"))
     XCTAssertEqual(AgentPluginInstaller.pluginName(in: pkg), "orbe-agent-dev")
+  }
+
+  // MARK: - 中身の指紋
+
+  /// 指紋は「CLI に登録するもの」が変われば変わり、変わらなければ同じ。起動時の入れ直しはこれだけで
+  /// 決まるので、変化を見逃すと codex / agy に古いコピーが残り、変化の無い起動で拾うと毎回入れ直す。
+  func testDigestTracksContentsPathsAndHiddenFiles() throws {
+    try write("plugins/orbe-agent-dev/.codex-plugin/plugin.json", "{}")
+    try write("plugins/orbe-agent-dev/channel", "dev.orbe.app.dev\n")
+    let base = try XCTUnwrap(AgentPluginInstaller.digest(of: pkg))
+
+    try write("plugins/orbe-agent-dev/channel", "dev.orbe.app\n")
+    XCTAssertNotEqual(AgentPluginInstaller.digest(of: pkg), base, "刻印の中身")
+    try write("plugins/orbe-agent-dev/channel", "dev.orbe.app.dev\n")
+    XCTAssertEqual(AgentPluginInstaller.digest(of: pkg), base)
+
+    try write("plugins/orbe-agent-dev/.codex-plugin/plugin.json", #"{"mcpServers":{}}"#)
+    XCTAssertNotEqual(AgentPluginInstaller.digest(of: pkg), base, "隠しディレクトリの中の定義")
+    try write("plugins/orbe-agent-dev/.codex-plugin/plugin.json", "{}")
+
+    try FileManager.default.moveItem(
+      at: pkg.appendingPathComponent("plugins/orbe-agent-dev"),
+      to: pkg.appendingPathComponent("plugins/orbe-agent"))
+    XCTAssertNotEqual(AgentPluginInstaller.digest(of: pkg), base, "名前（ディレクトリ名）")
+  }
+
+  private func write(_ rel: String, _ text: String) throws {
+    let url = pkg.appendingPathComponent(rel)
+    try FileManager.default.createDirectory(
+      at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data(text.utf8).write(to: url)
   }
 
   // MARK: - run の完了順序

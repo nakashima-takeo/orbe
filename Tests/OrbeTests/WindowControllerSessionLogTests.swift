@@ -139,7 +139,7 @@ final class WindowControllerSessionLogTests: OrbeTestCase {
     wc.showWorkspacePalette()
     try XCTUnwrap(wc.model.workspacePalette).onClose?(1)
 
-    XCTAssertEqual(wc.workspaces.map(\.name), ["main"])
+    XCTAssertEqual(wc.regularWorkspaces.map(\.name), ["main"])
     XCTAssertEqual(
       wc.sessionLog.lastEvent(sessionId: "g-1")?.closeOrigin, .gesture,
       "パレットからの削除は人の操作＝gesture")

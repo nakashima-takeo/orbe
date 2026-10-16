@@ -4,10 +4,11 @@ import XCTest
 
 /// SessionStore.closeWorkspace(_:origin:) の純ドメイン契約を固定する。
 ///
-/// 契約は3つ。①アクティブ workspace を削除したら MRU（`lastUsedAt` 最大の他 workspace）を次のアクティブに
+/// 契約は2つ。①アクティブ workspace を削除したら MRU（`lastUsedAt` 最大の他 workspace）を次のアクティブに
 /// する（作成順の隣ではない）。②背景 workspace を削除してもアクティブ workspace の同一性は保つ。
-/// ③最後の1つは削除しない（`.invalid`・配列不変）。併せて、アクティブ workspace の最後のタブを閉じても
-/// `removeTab` は退避せずその場で空を維持する（`.emptiedActive`）ことを固定する。
+/// 消せない workspace（Home・最後の通常 workspace）は `SessionStoreHomeTests` が持つ。
+/// 併せて、アクティブ workspace の最後のタブを閉じても `removeTab` は退避せずその場で空を維持する
+/// （ボードを持たなければ選択は空）ことを固定する。
 /// Workspace は参照型のため、アクティブの同一性は index ではなくオブジェクト参照で照合する。
 final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
 
@@ -53,32 +54,23 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
     XCTAssertEqual(store.activeWorkspace, 1, "前の削除で index を 2→1 に詰める")
   }
 
-  // MARK: - 契約3: 最後の1つ
-
-  func testCloseLastWorkspaceIsInvalidAndUnchanged() {
-    let only = ws("only", t1)
-    let store = SessionStore(workspaces: [only], activeWorkspace: 0)
-
-    XCTAssertEqual(store.closeWorkspace(0, origin: .gesture), .invalid, "最後の1つは削除できない")
-    XCTAssertEqual(store.workspaces.count, 1, "配列は不変")
-    XCTAssertTrue(store.current === only)
-  }
-
   // MARK: - removeTab のアクティブ0タブ化はその場で空維持（退避しない）
 
   /// アクティブ workspace の最後のタブを閉じて 0タブ化 → 他 workspace へ退避せず、その workspace が
-  /// 空のままアクティブで残る（`.emptiedActive`・単一/複数 workspace 問わず）。
+  /// 空のままアクティブで残る（単一/複数 workspace 問わず）。
   func testRemoveLastTabEmptiesActiveInPlace() {
     let active = ws("active", t3)
-    let tab = TerminalTab(cwd: "/tmp")
+    let tab = TerminalTab.alone(cwd: "/tmp")
     active.tabs = [tab]
+    active.selection = .tab(tab)
     let alpha = ws("Alpha", t1)  // 他 workspace があっても退避しない
     let beta = ws("Beta", t2)
     let store = SessionStore(workspaces: [active, alpha, beta], activeWorkspace: 0)
 
-    guard case .emptiedActive = store.removeTab(tab, origin: .gesture) else {
-      return XCTFail("アクティブ workspace の 0タブ化はその場で空維持（.emptiedActive）")
+    guard case .activeTabsChanged = store.removeTab(tab, origin: .gesture) else {
+      return XCTFail("アクティブ workspace の 0タブ化はその場で描き直す")
     }
+    XCTAssertEqual(store.current.selection, .empty, "ボードを持たない workspace は空表示")
     XCTAssertTrue(store.current === active, "退避せず同一 workspace がアクティブのまま")
     XCTAssertTrue(store.current.tabs.isEmpty, "その workspace は0タブの空状態で残る")
   }
@@ -92,22 +84,22 @@ final class SessionStoreCloseWorkspaceTests: OrbeTestCase {
   /// index を据え置く実装も、どちらの脚かで落ちる。
   func testRemovingAnotherTabKeepsTheSelectedTab() {
     let active = ws("active", t3)
-    let first = TerminalTab(cwd: "/a")
-    let viewed = TerminalTab(cwd: "/b")
-    let mid = TerminalTab(cwd: "/c")
-    let last = TerminalTab(cwd: "/d")
+    let first = TerminalTab.alone(cwd: "/a")
+    let viewed = TerminalTab.alone(cwd: "/b")
+    let mid = TerminalTab.alone(cwd: "/c")
+    let last = TerminalTab.alone(cwd: "/d")
     active.tabs = [first, viewed, mid, last]
-    active.active = 1
+    active.selection = .tab(active.tabs[1])
     let store = SessionStore(workspaces: [active], activeWorkspace: 0)
 
-    guard case .reselectActive(let afterLast) = store.removeTab(last, origin: .process) else {
-      return XCTFail("後方のタブを閉じたら残りを選び直す")
+    guard case .activeTabsChanged = store.removeTab(last, origin: .process) else {
+      return XCTFail("後方のタブを閉じたら描き直す")
     }
-    XCTAssertTrue(active.tabs[afterLast] === viewed, "後方が消えても見ていたタブが選択されたまま")
+    XCTAssertTrue(active.selectedTab === viewed, "後方が消えても見ていたタブが選択されたまま")
 
-    guard case .reselectActive(let afterFirst) = store.removeTab(first, origin: .process) else {
-      return XCTFail("前方のタブを閉じたら残りを選び直す")
+    guard case .activeTabsChanged = store.removeTab(first, origin: .process) else {
+      return XCTFail("前方のタブを閉じたら描き直す")
     }
-    XCTAssertTrue(active.tabs[afterFirst] === viewed, "前方が消えても見ていたタブが選択されたまま")
+    XCTAssertTrue(active.selectedTab === viewed, "前方が消えても見ていたタブが選択されたまま")
   }
 }

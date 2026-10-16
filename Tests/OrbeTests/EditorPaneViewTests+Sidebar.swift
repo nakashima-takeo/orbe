@@ -14,8 +14,8 @@ import XCTest
 final class EditorPaneViewSidebarTests: OrbeTestCase {
   func testSidebarStaysOpenInNarrowColumnsWithItsShownWidthTrimmed() throws {
     let root = TestScratch.caseDir.path  // 空の根（描画の標本がツリーに被らない）
-    let tab = TerminalTab(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let tab = TerminalTab.alone(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
 
@@ -27,13 +27,13 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     let railGround = try wide.rgb(18)
     let explorerGround = try wide.rgb(37 + 60)
 
-    let document = try tab.editor.open(try caseFile("a.swift", "let a = 1\n"), as: .pinned)
-    tab.view.layoutSubtreeIfNeeded()
+    let document = try tab.group.editor.open(try caseFile("a.swift", "let a = 1\n"), as: .pinned)
+    tab.group.view.layoutSubtreeIfNeeded()
     XCTAssertEqual(pane.bodyRect.minY, 29 + 20, "文書があればパンくずの分だけ下がる")
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
 
-    window.setContentSize(NSSize(width: 360 + FaceGeometry.spine, height: 400))
-    tab.view.layoutSubtreeIfNeeded()
+    window.setContentSize(NSSize(width: 360, height: 400))
+    tab.group.view.layoutSubtreeIfNeeded()
     XCTAssertTrue(pane.sidebar.isOpen, "狭い列でも隠れない")
     XCTAssertEqual(pane.shownSidebarWidth, 360 - 36 - 2 - 160, "本体に 160 残るまで表示幅を切り詰める")
     XCTAssertEqual(pane.bodyRect.minX, 37 + 162 + 1)
@@ -42,26 +42,26 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
     try assertSidebarContentFills(pane, width: 162)
 
-    window.setContentSize(NSSize(width: 120 + FaceGeometry.spine, height: 400))
-    tab.view.layoutSubtreeIfNeeded()
+    window.setContentSize(NSSize(width: 120, height: 400))
+    tab.group.view.layoutSubtreeIfNeeded()
     XCTAssertEqual(pane.shownSidebarWidth, 0, "極端な幅では残りをそのまま分け、0 まで縮む")
     XCTAssertTrue(pane.sidebar.isOpen, "見えるかは開閉だけで決まる（列幅は関係ない）")
     XCTAssertEqual(pane.bodyRect.minX, 37 + 1)
     try assertSidebarContentIsGone(pane, railGround: railGround, explorerGround: explorerGround)
 
-    window.setContentSize(NSSize(width: 900 + FaceGeometry.spine, height: 400))
-    tab.view.layoutSubtreeIfNeeded()
+    window.setContentSize(NSSize(width: 900, height: 400))
+    tab.group.view.layoutSubtreeIfNeeded()
     XCTAssertEqual(pane.shownSidebarWidth, 240, "広がれば記憶の幅に戻る")
     XCTAssertEqual(pane.bodyRect.minX, 37 + 241)
 
     pane.shell.selectPanel(.files)
-    tab.view.layoutSubtreeIfNeeded()
+    tab.group.view.layoutSubtreeIfNeeded()
     XCTAssertFalse(pane.sidebar.isOpen, "レールの選択中の項目を押すと閉じる")
     XCTAssertEqual(pane.bodyRect.minX, 37, "レールだけ残る")
     XCTAssertEqual(document.surface.view.frame, pane.bodyRect)
 
     pane.shell.selectPanel(.files)
-    tab.view.layoutSubtreeIfNeeded()
+    tab.group.view.layoutSubtreeIfNeeded()
     XCTAssertTrue(pane.sidebar.isOpen, "もう一度押すと開く")
     XCTAssertEqual(pane.bodyRect.minX, 37 + 241)
   }
@@ -70,8 +70,8 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
   /// 記憶に触れない。
   func testDraggingInATrimmedColumnStartsFromTheDrawnEdge() throws {
     let root = TestScratch.caseDir.path
-    let tab = TerminalTab(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let tab = TerminalTab.alone(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 360)
     defer { window.orderOut(nil) }
     XCTAssertEqual(pane.shownSidebarWidth, 162)
@@ -94,8 +94,8 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     pane.sidebar.setWidth(240)
     pane.sidebar.commit()
 
-    window.setContentSize(NSSize(width: 340 + FaceGeometry.spine, height: 400))
-    tab.view.layoutSubtreeIfNeeded()
+    window.setContentSize(NSSize(width: 340, height: 400))
+    tab.group.view.layoutSubtreeIfNeeded()
     XCTAssertEqual(pane.shownSidebarWidth, 142, "下限 160 を割って切り詰まる")
     XCTAssertTrue(handle.isHidden, "下限までも出せない列では当たりを出さない（レールの右 1pt を覆わない）")
     handle.mouseDown(with: .mouse(.leftMouseDown, at: panePoint(pane, 37 + 142), in: window))
@@ -112,14 +112,14 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
   func testDraggingTheHandleResizesTheSidebarWithinBounds() throws {
     let state = EditorSidebarState()
     let root = TestScratch.caseDir.path  // 空の根（描画の標本がツリーに被らない）
-    let tab = TerminalTab(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let other = TerminalTab(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let tab = TerminalTab.alone(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let other = TerminalTab.alone(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     for t in [tab, other] {
-      t.view.configure(
+      t.group.view.configure(
         translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
         fontResolver: ChromeFontResolver(), sidebar: state)
     }
-    let pane = tab.view.editor
+    let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
 
@@ -129,13 +129,13 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
       handle.frame, NSRect(x: 37 + 240 - 2, y: 0, width: 4, height: 400), "hairline を跨ぐ 4pt")
     let hit = pane.hitTest(pane.convert(NSPoint(x: 37 + 240, y: 200), to: pane.superview))
     XCTAssertTrue(hit === handle, "境は当たりが受ける")
-    let document = try tab.editor.open(try caseFile("a.swift", "let a = 1\n"), as: .pinned)
-    tab.view.layoutSubtreeIfNeeded()
+    let document = try tab.group.editor.open(try caseFile("a.swift", "let a = 1\n"), as: .pinned)
+    tab.group.view.layoutSubtreeIfNeeded()
     let edge = pane.hitTest(
       pane.convert(NSPoint(x: pane.bodyRect.minX + 0.5, y: 200), to: pane.superview))
     XCTAssertTrue(edge === handle, "文書を開いていても当たりの右 1pt はテキスト面に覆われない")
-    tab.editor.close(document)
-    tab.view.layoutSubtreeIfNeeded()
+    tab.group.editor.close(document)
+    tab.group.view.layoutSubtreeIfNeeded()
 
     func point(_ x: CGFloat) -> NSPoint { panePoint(pane, x) }
     handle.mouseDown(with: .mouse(.leftMouseDown, at: point(278), in: window))
@@ -152,7 +152,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
 
     let otherWindow = hostEditor(other, width: 900)
     defer { otherWindow.orderOut(nil) }
-    XCTAssertEqual(other.view.editor.bodyRect.minX, 37 + 702 + 1, "同じ状態を配られた面は同じ幅")
+    XCTAssertEqual(other.group.view.editor.bodyRect.minX, 37 + 702 + 1, "同じ状態を配られた面は同じ幅")
   }
 
   /// レールの「ファイル」で閉じれば SwiftUI の中身（エクスプローラーの地）も消えてレールの選択印（左縁の accent）が
@@ -160,8 +160,8 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
   /// エクスプローラーの地が本体に残る／開いた後に本体の地だけが見える。置き直しは観測の非同期ホップを待つ。
   func testRailToggleRemovesAndRestoresTheExplorerContentAndTheSelectionMark() throws {
     let root = TestScratch.caseDir.path
-    let tab = TerminalTab(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let tab = TerminalTab.alone(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
     let open = try probe(pane) { p in
@@ -176,7 +176,7 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     func settled(_ bodyMinX: CGFloat, _ message: String) {
       pumpMain(
         until: {
-          tab.view.layoutSubtreeIfNeeded()
+          tab.group.view.layoutSubtreeIfNeeded()
           return pane.bodyRect.minX == bodyMinX
         }, message)
     }
@@ -203,20 +203,20 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     try assertSidebarContentFills(pane, width: 240)
   }
 
-  /// 幅と開閉はアプリ全体で 1 つ——既に窓に載っている別のタブの面も、ドラッグと開閉に追随する（置き直しは
+  /// 幅と開閉はアプリ全体で 1 つ——既に窓に載っている別の連の面も、ドラッグと開閉に追随する（置き直しは
   /// 観測の非同期ホップ越し。自分でドラッグした面だけがその場で置き直す）。
   func testSharedSidebarStateMovesEveryHostedPane() throws {
     let state = EditorSidebarState()
     let root = TestScratch.caseDir.path
-    let tab = TerminalTab(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let other = TerminalTab(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let tab = TerminalTab.alone(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let other = TerminalTab.alone(cwd: root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     for t in [tab, other] {
-      t.view.configure(
+      t.group.view.configure(
         translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
         fontResolver: ChromeFontResolver(), sidebar: state)
     }
-    let pane = tab.view.editor
-    let otherPane = other.view.editor
+    let pane = tab.group.view.editor
+    let otherPane = other.group.view.editor
     let window = hostEditor(tab, width: 900)
     let otherWindow = hostEditor(other, width: 900)
     defer {
@@ -226,8 +226,8 @@ final class EditorPaneViewSidebarTests: OrbeTestCase {
     func settled(_ bodyMinX: CGFloat, _ message: String) {
       pumpMain(
         until: {
-          other.view.layoutSubtreeIfNeeded()
-          tab.view.layoutSubtreeIfNeeded()
+          other.group.view.layoutSubtreeIfNeeded()
+          tab.group.view.layoutSubtreeIfNeeded()
           return otherPane.bodyRect.minX == bodyMinX && pane.bodyRect.minX == bodyMinX
         }, message)
     }

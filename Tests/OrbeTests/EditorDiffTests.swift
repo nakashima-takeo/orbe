@@ -22,9 +22,9 @@ final class EditorDiffTests: OrbeTestCase {
   }
 
   func tab() -> (TerminalTab, NSWindow) {
-    let tab = TerminalTab(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900)
-    tab.view.editor.configure(
+    tab.group.view.editor.configure(
       translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
       fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(),
       diffModes: EditorDiffModeState())
@@ -67,9 +67,9 @@ final class EditorDiffTests: OrbeTestCase {
   func testAWorkingTreeDiffShowsTheIndexAgainstTheDocument() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\nfive\n")
     let (tab, _) = tab()
-    let pane = tab.view.editor
-    let document = try tab.editor.open(repo.url("a.txt"), as: .pinned)
-    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let pane = tab.group.view.editor
+    let document = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
     XCTAssertTrue(diff.document === document, "ファイルタブと同じ文書")
     XCTAssertTrue(pane.diff === diff, "本体は diff")
     waitRows(diff, "並びが届く") { !$0.isEmpty }
@@ -86,10 +86,10 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertTrue(pane.focusTarget === surface.responder, "焦点の行き先は diff の面")
     XCTAssertEqual(pane.shell.tabs.map(\.diffKind), [nil, .workingTree])
 
-    try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
-    XCTAssertEqual(tab.editor.tabs.count, 2, "同じ diff はタブを増やさない")
+    try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    XCTAssertEqual(tab.group.editor.tabs.count, 2, "同じ diff はタブを増やさない")
 
-    tab.editor.activate(document)
+    tab.group.editor.activate(document)
     XCTAssertTrue(pane.document === document)
     XCTAssertTrue(surface.isEditable, "ファイルタブではコードの見え方")
     XCTAssertTrue(surface.rows.isEmpty)
@@ -101,9 +101,9 @@ final class EditorDiffTests: OrbeTestCase {
   func testTheFocusMovesToTheDiffSurfaceWhenItArrives() throws {
     try repo.write("a.txt", "changed\n")
     let (tab, window) = tab()
-    let pane = tab.view.editor
+    let pane = tab.group.view.editor
     window.makeFirstResponder(pane)
-    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
     waitRows(diff, "並びが届く") { !$0.isEmpty }
     pumpMain(until: { window.firstResponder === diff.newSurface?.responder }, "焦点は面へ")
   }
@@ -112,11 +112,11 @@ final class EditorDiffTests: OrbeTestCase {
   func testOneSidedWorkingTreeDiffs() throws {
     try repo.write("new.txt", "x\ny\n")
     let (tab, _) = tab()
-    let added = try tab.editor.openDiff(id("new.txt", .workingTree), as: .pinned)
+    let added = try tab.group.editor.openDiff(id("new.txt", .workingTree), as: .pinned)
     waitRows(added, "未追跡は全部が追加") { $0.style(ofLine: 0) == DiffStyle.added }
     XCTAssertTrue(try engine(added.newSurface).rows.isEmpty)
     try FileManager.default.removeItem(at: repo.url("a.txt"))
-    let removed = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    let removed = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
     waitRows(removed, "消したファイルは全部が削除") { self.removedLines($0) == [0, 1, 2, 3] }
     XCTAssertNil(removed.document, "新しい側の文書は無い")
   }
@@ -128,11 +128,11 @@ final class EditorDiffTests: OrbeTestCase {
     try FileManager.default.createSymbolicLink(
       atPath: repo.url("link.txt").path, withDestinationPath: "a.txt")
     let (tab, _) = tab()
-    let pane = tab.view.editor
-    let binary = try tab.editor.openDiff(id("bin.dat", .workingTree), as: .pinned)
+    let pane = tab.group.view.editor
+    let binary = try tab.group.editor.openDiff(id("bin.dat", .workingTree), as: .pinned)
     pumpMain(until: { binary.content == .unavailable(.notText) }, "バイナリ")
     pumpMain(until: { pane.faceContent == .notice(.editorDiffNotText) && !pane.emptyHost.isHidden })
-    let link = try tab.editor.openDiff(id("link.txt", .workingTree), as: .pinned)
+    let link = try tab.group.editor.openDiff(id("link.txt", .workingTree), as: .pinned)
     pumpMain(until: { link.content == .unavailable(.symlink) }, "シンボリックリンク")
     XCTAssertTrue(pane.focusTarget === pane, "面が無ければ行き先は pane")
     XCTAssertEqual(
@@ -145,7 +145,7 @@ final class EditorDiffTests: OrbeTestCase {
     try repo.write("a.txt", "main\n")
     XCTAssertTrue(repo.git(["commit", "-qam", "main"]).isSuccess)
     XCTAssertFalse(repo.git(["merge", "other"]).isSuccess, "前提: 競合する")
-    let conflicted = try tab.editor.openDiff(id("a.txt", .staged), as: .pinned)
+    let conflicted = try tab.group.editor.openDiff(id("a.txt", .staged), as: .pinned)
     pumpMain(until: { conflicted.content == .unavailable(.conflicted) }, "競合中")
   }
 
@@ -157,14 +157,14 @@ final class EditorDiffTests: OrbeTestCase {
     try repo.write("b.txt", "one\ntwo\nthree\nfour\nfive\n")
     XCTAssertTrue(repo.git(["add", "b.txt"]).isSuccess)
     let (tab, _) = tab()
-    let staged = try tab.editor.openDiff(id("b.txt", .staged), as: .pinned)
+    let staged = try tab.group.editor.openDiff(id("b.txt", .staged), as: .pinned)
     waitRows(staged, "追加の 1 行") { $0.style(ofLine: 4) == DiffStyle.added }
     XCTAssertEqual(staged.old?.text.lineCount, 5, "古い側は a.txt の HEAD の版")
     XCTAssertEqual(staged.newRevision?.text.lineCount, 6)
     XCTAssertTrue(try engine(staged.newSurface).rows.boundaries.isEmpty, "削除行は無い")
-    let working = try tab.editor.openDiff(id("b.txt", .workingTree), as: .pinned)
+    let working = try tab.group.editor.openDiff(id("b.txt", .workingTree), as: .pinned)
     XCTAssertFalse(working === staged)
-    XCTAssertEqual(tab.editor.tabs.count, 2)
+    XCTAssertEqual(tab.group.editor.tabs.count, 2)
   }
 
   // MARK: - 並列
@@ -182,11 +182,11 @@ final class EditorDiffTests: OrbeTestCase {
     try repo.write("long.txt", changed.joined(separator: "\n") + "\n")
     let modes = EditorDiffModeState()
     let (tab, _) = tab()
-    let pane = tab.view.editor
+    let pane = tab.group.view.editor
     pane.configure(
       translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
       fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(), diffModes: modes)
-    let diff = try tab.editor.openDiff(id("long.txt", .workingTree), as: .pinned)
+    let diff = try tab.group.editor.openDiff(id("long.txt", .workingTree), as: .pinned)
     waitRows(diff, "インライン") { !$0.isEmpty }
     let right = try engine(diff.newSurface)
     right.flush()
@@ -226,53 +226,53 @@ final class EditorDiffTests: OrbeTestCase {
   /// その diff タブを閉じるときに確認が出る。
   func testTheUnsavedPromptComesOnlyWhenTheLastTabOfADocumentCloses() throws {
     let (tab, window) = tab()
-    let pane = tab.view.editor
-    let document = try tab.editor.open(repo.url("a.txt"), as: .pinned)
+    let pane = tab.group.view.editor
+    let document = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     document.surface.responder.perform(Selector(("insertText:")), with: "Z")
     XCTAssertTrue(document.isDirty)
-    try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
     pane.shell.requestClose(.document(document.url))
     XCTAssertNil(window.attachedSheet, "diff タブが使っていれば確認しない")
-    XCTAssertEqual(tab.editor.tabs.count, 1)
-    XCTAssertEqual(tab.editor.documents.count, 1, "文書は diff タブが持つ")
+    XCTAssertEqual(tab.group.editor.tabs.count, 1)
+    XCTAssertEqual(tab.group.editor.documents.count, 1, "文書は diff タブが持つ")
     XCTAssertEqual(pane.shell.tabs.map(\.isDirty), [true], "diff タブに未保存の印")
-    XCTAssertEqual(tab.unsavedDocuments().count, 1, "閉じれば失われる文書に数える")
+    XCTAssertEqual(tab.group.unsavedDocuments().count, 1, "閉じれば失われる文書に数える")
 
     pane.shell.requestClose(.diff(id("a.txt", .workingTree)))
     let sheet = try XCTUnwrap(window.attachedSheet, "最後のタブで確認")
     window.endSheet(sheet, returnCode: .alertSecondButtonReturn)
-    XCTAssertTrue(tab.editor.tabs.isEmpty)
-    XCTAssertTrue(tab.editor.documents.isEmpty)
+    XCTAssertTrue(tab.group.editor.tabs.isEmpty)
+    XCTAssertTrue(tab.group.editor.documents.isEmpty)
   }
 
   /// 未保存の文書を diff タブだけが使っているときに作業ツリーのファイルが消えても、文書は手放さず（閉じれば失われる文書に
   /// 数えたまま）、diff の新しい側に残る。
   func testAnUnsavedDocumentHeldOnlyByTheDiffOutlivesTheFile() throws {
     let (tab, _) = tab()
-    let document = try tab.editor.open(repo.url("a.txt"), as: .pinned)
+    let document = try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
     document.surface.responder.perform(Selector(("insertText:")), with: "Z")
-    let diff = try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
-    tab.view.editor.shell.requestClose(.document(document.url))
+    let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    tab.group.view.editor.shell.requestClose(.document(document.url))
     waitRows(diff, "変更が出る") { !$0.isEmpty }
     try FileManager.default.removeItem(at: repo.url("a.txt"))
     // status は、消えたことの知らせ（diff が作業ツリーを読み直すきっかけ）の後に取り直される。
     pumpMain(until: { diff.files.status?.entries["a.txt"]?.unstaged == .deleted }, "消えた")
     XCTAssertTrue(diff.document === document)
-    XCTAssertEqual(tab.unsavedDocuments().count, 1, "閉じれば失われる文書に数える")
+    XCTAssertEqual(tab.group.unsavedDocuments().count, 1, "閉じれば失われる文書に数える")
   }
 
   /// 仮のタブの枠は文書と diff で 1 つ——仮で開いた diff は、次に仮で開いた文書に同じ位置で入れ替わる。
   func testTheTemporaryTabSlotIsSharedByDocumentsAndDiffs() throws {
     try repo.write("b.txt", "b\n")
     let (tab, _) = tab()
-    try tab.editor.open(repo.url("b.txt"), as: .pinned)
-    try tab.editor.openDiff(id("a.txt", .workingTree), as: .preview)
-    XCTAssertEqual(tab.editor.previewID, .diff(id("a.txt", .workingTree)))
-    XCTAssertEqual(tab.view.editor.shell.tabs.map(\.isPreview), [false, true])
-    try tab.editor.open(repo.url("a.txt"), as: .preview)
+    try tab.group.editor.open(repo.url("b.txt"), as: .pinned)
+    try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .preview)
+    XCTAssertEqual(tab.group.editor.previewID, .diff(id("a.txt", .workingTree)))
+    XCTAssertEqual(tab.group.view.editor.shell.tabs.map(\.isPreview), [false, true])
+    try tab.group.editor.open(repo.url("a.txt"), as: .preview)
     XCTAssertEqual(
-      tab.editor.tabs.map(\.id), [.document(repo.url("b.txt")), .document(repo.url("a.txt"))])
-    XCTAssertEqual(tab.editor.previewID, .document(repo.url("a.txt")))
+      tab.group.editor.tabs.map(\.id), [.document(repo.url("b.txt")), .document(repo.url("a.txt"))])
+    XCTAssertEqual(tab.group.editor.previewID, .document(repo.url("a.txt")))
   }
 
   // MARK: - 永続と現在地
@@ -282,11 +282,11 @@ final class EditorDiffTests: OrbeTestCase {
   func testDiffTabsAreNotPersistedAndTheLocationIsTheFile() throws {
     try repo.write("b.txt", "b\n")
     let (tab, _) = tab()
-    try tab.editor.open(repo.url("b.txt"), as: .pinned)
-    try tab.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
-    try tab.editor.open(repo.url("a.txt"), as: .pinned)
-    tab.editor.activate(.diff(id("a.txt", .workingTree)))
-    let documents = try XCTUnwrap(tab.tabState().editor?.documents)
+    try tab.group.editor.open(repo.url("b.txt"), as: .pinned)
+    try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
+    try tab.group.editor.open(repo.url("a.txt"), as: .pinned)
+    tab.group.editor.activate(.diff(id("a.txt", .workingTree)))
+    let documents = try XCTUnwrap(tab.group.groupState()?.editor?.documents)
     XCTAssertEqual(documents.open, [repo.url("b.txt").path, repo.url("a.txt").path])
     XCTAssertEqual(documents.active, repo.url("a.txt").path, "閉じたときと同じく右隣の文書のタブ")
     XCTAssertEqual(tab.location, .file(root: repo.root, relative: "a.txt"))

@@ -5,11 +5,14 @@ import XCTest
 @testable import Orbe
 
 /// ⌘⇧X のタスク画面を実 `WindowController` から開き・閉じる配線を固定する。開いた workspace の写しと、
-/// 画面を閉じる・別の画面へ差し替わるときの打ちかけの編集の確定。
+/// 画面を閉じる・別の画面へ差し替わるときの打ちかけの編集の確定、⌘↵ で ⌘T の画面へ差し替わること。提案は付け先の
+/// workspace（↵ の時点で解けなければ Home）に付き、⌘↵ はそこに結び付く ⌘T を開くこと。
 ///
 /// 壊れると何が起きるか: タブが 0 枚の workspace でタスク画面が開かない。画面で足したタスクが、見ている
-/// workspace ではなく別の workspace に付く。詳細を打ちかけのまま esc 以外で画面を閉じたり ⌘⌘ で
-/// 差し替えたりすると、打った内容が黙って消える。
+/// workspace ではなく別の workspace に付く。付け先を持たない提案から足したタスクが Home に付かず、Home で動く claude が
+/// そこから始められない。付け先を持つ提案が Home や開いた workspace に付く。開いている間に消えた付け先に付き、行き場の無い
+/// タスクになる。詳細を打ちかけのまま esc 以外で画面を閉じたり ⌘⌘ で
+/// 差し替えたりすると、打った内容が黙って消える。⌘↵ で開いた ⌘T がそのタスクに結び付かず、タスクの文脈の無い agent が起きる。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerTaskPaletteTests: OrbeTestCase {
@@ -53,12 +56,81 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
     let wc = try launchOnAnEmptyWorkspace()
 
     let palette = try openTaskPalette(wc)
+    palette.toggleWorkspaceFilter(emptyId)
     palette.query = "見積もりを出す"
     palette.submit()
 
     XCTAssertEqual(palette.workspaces.opened, .init(id: emptyId, name: "empty"))
-    XCTAssertEqual(palette.workspaces.all.map(\.id), [mainId, emptyId], "サイドバーの順")
-    XCTAssertEqual(wc.taskStore.tasks.last?.workspace, emptyId, "画面を開いた workspace に付く")
+    XCTAssertEqual(
+      palette.workspaces.all.map(\.id), [mainId, emptyId, try XCTUnwrap(wc.store.homeWorkspaceId)],
+      "サイドバーの順（Home も選べる）")
+    XCTAssertEqual(
+      wc.taskStore.tasks.first { $0.title == "見積もりを出す" }?.workspace, emptyId,
+      "workspace をその workspace だけに絞っていれば、その workspace に付く")
+  }
+
+  /// 提案タブで提案をタスクにすると、開いた workspace ではなく Home に付く。
+  @MainActor func testAcceptingAProposalInTheAutomationTabAttachesTheTaskToHome() throws {
+    let wc = try launchOnAnEmptyWorkspace()
+    let automation = try wc.automationRunner.set(nil, AutomationStoreTests.definition())
+    let item = AutomationStoreTests.item("a")
+    AutomationStoreTests.commit(
+      wc.automationStore, automation.id,
+      DesignSceneFixtures.automationRun(at: Date(), items: 1, fresh: 1),
+      fetched: [item],
+      decisions: [.propose(itemId: "a", title: "見積もりを送る", due: nil, workspace: nil)])
+
+    let palette = try openTaskPalette(wc)
+    palette.setTab(.automation)
+    palette.submit()
+
+    XCTAssertEqual(
+      wc.taskStore.tasks.first { $0.title == "見積もりを送る" }?.workspace,
+      try XCTUnwrap(wc.store.homeWorkspaceId))
+  }
+
+  /// 付け先を持つ候補の ⌘↵ は、その workspace のタスクにして、そのタスクのための ⌘T に差し替わる。
+  @MainActor
+  func testCommandEnterOnAProposalAttachesTheTaskToItsWorkspaceAndOpensItsWorktreePalette()
+    throws
+  {
+    let wc = try launchOnAnEmptyWorkspace()
+    let automation = try wc.automationRunner.set(nil, AutomationStoreTests.definition())
+    AutomationStoreTests.commit(
+      wc.automationStore, automation.id,
+      DesignSceneFixtures.automationRun(at: Date(), items: 1, fresh: 1),
+      fetched: [AutomationStoreTests.item("a")],
+      decisions: [.propose(itemId: "a", title: "main で直す", due: nil, workspace: mainId)])
+
+    let palette = try openTaskPalette(wc)
+    palette.setTab(.automation)
+    palette.automation.acceptAndOpen()
+
+    let task = try XCTUnwrap(wc.taskStore.tasks.first { $0.title == "main で直す" })
+    XCTAssertEqual(task.workspace, mainId, "開いた workspace（empty）ではなく付け先に付く")
+    XCTAssertEqual(wc.presentedOverlay, .worktreePalette)
+    XCTAssertEqual(wc.model.worktreePalette?.taskContextID, task.id)
+  }
+
+  /// ⌘⇧X を開いている間に付け先の workspace が消えたら、↵ の時点の値で解いて Home に付ける。
+  @MainActor func testAProposalWhoseWorkspaceWasDeletedWhileOpenGoesToHome() throws {
+    let wc = try launchOnAnEmptyWorkspace()
+    let automation = try wc.automationRunner.set(nil, AutomationStoreTests.definition())
+    AutomationStoreTests.commit(
+      wc.automationStore, automation.id,
+      DesignSceneFixtures.automationRun(at: Date(), items: 1, fresh: 1),
+      fetched: [AutomationStoreTests.item("a")],
+      decisions: [.propose(itemId: "a", title: "main で直す", due: nil, workspace: mainId)])
+    let palette = try openTaskPalette(wc)
+    palette.setTab(.automation)
+
+    let main = try XCTUnwrap(wc.workspaces.firstIndex { $0.persistentId == mainId })
+    wc.closeWorkspace(main, origin: .controlAPI)
+    palette.submit()
+
+    XCTAssertEqual(
+      wc.taskStore.tasks.first { $0.title == "main で直す" }?.workspace,
+      try XCTUnwrap(wc.store.homeWorkspaceId))
   }
 
   /// GitHub タブのリポジトリは ⌘T と同じ基点（アクティブタブの cwd）で解決する——workspace の root が別の場所
@@ -88,25 +160,28 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
     XCTAssertNil(GitHubOpenLists.shared.roots[root])
   }
 
-  /// 日本語入力の変換中の ⌘T は、タスク画面が握らずに変換へ渡す（⌘T の画面へ切り替えて未確定の文字を
-  /// 捨てない）。変換中でなければ握る。
-  func testCommandTWhileComposingIsLeftToTheInputMethod() throws {
+  /// タスク画面の表示中の ⌘T は、ほかのパレットと同じく窓のキーとして効かない（画面は閉じず、⌘T の画面へ
+  /// 切り替わらない）。
+  func testCommandTDoesNothingWhileTheScreenIsShown() throws {
     let wc = try launchOnAnEmptyWorkspace()
     _ = try openTaskPalette(wc)
-    let editor = NSTextView(frame: NSRect(x: 0, y: 0, width: 200, height: 40))
-    wc.window.contentView?.addSubview(editor)
-    addTeardownBlock { @MainActor in editor.removeFromSuperview() }
-    XCTAssertTrue(wc.window.makeFirstResponder(editor), "前提: 主窓の焦点が入力欄")
-    editor.setMarkedText(
-      "か", selectedRange: NSRange(location: 1, length: 0),
-      replacementRange: NSRange(location: NSNotFound, length: 0))
-    XCTAssertNotNil(IMEComposition.composingTextView(in: wc.window), "前提: 主窓で変換中")
 
     XCTAssertFalse(wc.handleWindowKeyCommand(.showWorktreePalette))
-    XCTAssertEqual(wc.presentedOverlay, .taskPalette, "⌘T の画面へ切り替わらない")
+    XCTAssertEqual(wc.presentedOverlay, .taskPalette)
+  }
 
-    editor.unmarkText()
-    XCTAssertTrue(wc.handleWindowKeyCommand(.showWorktreePalette), "変換中でなければ握る")
+  /// タスクの agent を開く（⌘↵）と、タスク画面を畳んで、そのタスクのための ⌘T に差し替わる。
+  func testOpeningTheAgentOfATaskSwapsToTheWorktreePaletteForThatTask() throws {
+    let wc = try launchOnAnEmptyWorkspace()
+    let palette = try openTaskPalette(wc)
+    let task = try palette.store.add(TaskDraft(title: "見積もりを出す"))
+    palette.reconcile()
+
+    palette.openAgent(forTask: task.id)
+
+    XCTAssertEqual(wc.presentedOverlay, .worktreePalette)
+    XCTAssertNil(wc.model.taskPalette, "タスク画面は畳まれる")
+    XCTAssertEqual(wc.model.worktreePalette?.taskContextID, task.id)
   }
 
   func testClosingTheScreenCommitsTheEditInProgress() throws {

@@ -35,26 +35,27 @@ extension WorktreePaletteDataProvider {
   /// prune 前後の全量どうしを弾けないので、両方が要る。
   func startCleanProbe(_ repo: GitRepo, _ scope: CleanProbeScope) {
     let extra = WorktreeCleanClassifier.extraContainmentTargets(
-      worktrees: worktrees, branchPullRequests: landedBranchPRs,
-      remoteBranchNames: Set(remoteBranches.map(\.name)), defaultBranch: defaultBranchName)
+      worktrees: facts.worktrees, branchPullRequests: landedBranchPRs,
+      remoteBranchNames: Set(facts.remoteBranches.map(\.name)),
+      defaultBranch: facts.defaultBranchName)
     let prober = WorktreeCleanProber(
-      repo: repo, defaultBranch: defaultBranchName, extraContainmentTargets: extra)
+      repo: repo, defaultBranch: facts.defaultBranchName, extraContainmentTargets: extra)
     // 台帳は prober が実際に渡す比較先そのもの（合成点を 1 つにして、記録と実入力がずれないようにする）。
     let inputs = Dictionary(
-      uniqueKeysWithValues: worktrees.map { ($0.path, prober.targets(for: $0.path)) })
+      uniqueKeysWithValues: facts.worktrees.map { ($0.path, prober.targets(for: $0.path)) })
     let stale: [GitWorktree]
     switch scope {
     case .all:
       // 対象 0 本でも台帳は張る（＝分類は「全行ぶん済んだ」で着地する）。ここで返ると台帳が無いまま
       // 残り、`cleanProbes` も nil のままなので clean はスケルトンを回し続ける——全量発行の入口は
       // prune と削除の 2 つだけなので、そこから自力では抜けられない。
-      stale = worktrees
+      stale = facts.worktrees
       issuedProbeTargets = inputs
       probeGeneration += 1
     case .changedTargets:
       // 台帳が無い＝全量発行がまだ一度も走っていない（＝prune 前）。差分の前提そのものが無い。
       guard var ledger = issuedProbeTargets else { return }
-      stale = worktrees.filter { inputs[$0.path] != ledger[$0.path] }
+      stale = facts.worktrees.filter { inputs[$0.path] != ledger[$0.path] }
       guard !stale.isEmpty else { return }
       for worktree in stale { ledger[worktree.path] = inputs[worktree.path] }
       issuedProbeTargets = ledger

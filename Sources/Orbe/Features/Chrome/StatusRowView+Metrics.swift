@@ -37,6 +37,16 @@ extension StatusRowView {
     naturalWidth(text: editingMeasureText(), hasGlyph: hasGlyph)
   }
 
+  /// ボードのセルの幅（家のグリフ＋workspace 名。縮まない）。
+  func boardCellWidth(_ label: String) -> CGFloat {
+    min(Chrome.tabMaxWidth, max(Chrome.tabMinWidth, naturalWidth(text: label, hasGlyph: true)))
+  }
+
+  /// タブ行の左端にボードのセルと区切りが取る幅。タブに配る利用可能幅から先に引く。
+  func boardReserve(_ label: String?) -> CGFloat {
+    label.map { boardCellWidth($0) + Chrome.tabGap * 2 + Theme.Stroke.hairline } ?? 0
+  }
+
   /// 自然幅の共通式（タイトル＋状態グリフ＋左右余白）。基底は常にタブタイトル実効フォント（描画
   /// `DSTab` と同じ resolver）。インジケータ幅は DSTab の描画に揃える: グリフ 12pt＋gap 6、無しは 0。
   /// 左右 padding 8×2。通常タブと編集タブで唯一の寸法源とし、片方だけズレるのを防ぐ。

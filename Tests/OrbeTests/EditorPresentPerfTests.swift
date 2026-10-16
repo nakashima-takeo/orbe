@@ -43,7 +43,7 @@ final class EditorPresentPerfTests: OrbeTestCase {
   private func show() throws -> (NSWindow, EditorDocument) {
     let host = try editorWindow()
     host.window.orderFrontRegardless()
-    let document = try host.tab.editor.open(
+    let document = try host.tab.group.editor.open(
       try caseFile("big.swift", EditorTypingPerfTests.swiftSource(bytes: 1_000_000)), as: .pinned)
     host.pane.layoutSubtreeIfNeeded()
     XCTAssertTrue(document.waitUntilCaughtUp(timeout: 60))

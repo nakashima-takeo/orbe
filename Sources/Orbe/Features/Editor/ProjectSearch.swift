@@ -2,7 +2,7 @@ import Foundation
 import OrbeEditorCore
 import os
 
-/// プロジェクト検索の状態（タブごと。pane が 1 つ持つ）——問い・検索の進み・結果・平らな行・選択・折りたたみ。規則（問いの
+/// プロジェクト検索の状態（連ごと。pane が 1 つ持つ）——問い・検索の進み・結果・平らな行・選択・折りたたみ。規則（問いの
 /// 組み立て・行の中の一致・順序・上限）は Core、1 回の検索の裏の仕事は `ProjectSearchRun`。検索パネル（SwiftUI と結果の列）は
 /// これを読み、操作は閉包で pane へ戻る（開く・焦点）。
 ///
@@ -64,7 +64,7 @@ final class ProjectSearch {
 
   /// 根（正規形）。
   @ObservationIgnored private(set) var root: String
-  /// 範囲に入りうる開いている文書（タブのセッションの列）。
+  /// 範囲に入りうる開いている文書（連のセッションの列）。
   @ObservationIgnored var documents: () -> [EditorDocument] = { [] }
   /// 一致を開く。呼ぶのは出口（`open(_:_:)`）だけ。
   @ObservationIgnored var onOpen: (RowID, Opening) -> Void = { _, _ in }

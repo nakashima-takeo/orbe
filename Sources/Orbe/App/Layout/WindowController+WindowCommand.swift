@@ -2,8 +2,8 @@ import AppKit
 
 /// window コマンドのディスパッチ（面の経路・window レベル経路の共通実体）。
 extension WindowController {
-  /// 面の経路（`TerminalTab.onWindowCommand`）と window レベル経路
-  /// （`ChromeHostingView.performKeyEquivalent`）が共有する実体。
+  /// 面の経路（端末面の `TerminalTab.onWindowCommand`・エディター面の `TabGroup.onWindowCommand`）と
+  /// window レベル経路（`ChromeHostingView.performKeyEquivalent`）が共有する実体。
   func handleWindowCommand(_ command: WindowCommand) {
     switch command {
     case .closeTab: activeTab?.close(origin: .gesture)
@@ -48,13 +48,6 @@ extension WindowController {
     // （他 overlay 表示中は従来どおり不活性＝他パレットのキーと同じ規律）。
     if command == .toggleHelp, model.overlay == .help {
       dismissHelp()
-      return true
-    }
-    // タスク画面の ⌘T は、そのタスクのための ⌘T を開く（入力欄・右の欄・編集欄のどこに焦点があっても届く）。
-    // 日本語入力の変換中は握らず変換に渡す（開くと未確定の文字が捨てられる）。
-    if command == .showWorktreePalette, model.overlay == .taskPalette {
-      guard IMEComposition.composingTextView(in: window) == nil else { return false }
-      model.taskPalette?.openWorktreePalette()
       return true
     }
     guard model.overlay == .none, statusModel.editingIndex == nil else { return false }

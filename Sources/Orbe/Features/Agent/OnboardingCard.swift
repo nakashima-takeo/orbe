@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// 初回起動オンボーディングの状態（@Observable・§5.9）。検出した CLI を見せてデフォルトを選ばせ、
-/// 状態追跡プラグインの導入を per-CLI のライブ進捗で見せる。流れの駆動と導入実行は AgentLauncher が
+/// エージェントプラグインの導入を per-CLI のライブ進捗で見せる。流れの駆動と導入実行は AgentLauncher が
 /// 持ち、本モデルは表示状態と入力意味だけ。AgentCLI には依存せず command 文字列だけ持つ
 /// （View を app ロジックから切る）。描画は `OnboardingOverlay`（`AppShell` の `.overlay` が compose）。
 @Observable final class OnboardingModel {

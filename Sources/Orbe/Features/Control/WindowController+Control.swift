@@ -9,13 +9,13 @@ extension WindowController: ControlTarget {
       [
         "id": ws.id, "name": ws.name, "rootPath": ws.rootPath,
         "active": i == activeWorkspace, "tabCount": ws.tabs.count, "activated": ws.activated,
-        "dormantAgentCount": ws.dormantAgentCount(),
+        "dormantAgentCount": ws.dormantAgentCount(), "hasBoard": store.hasBoard(ws),
       ]
     }
   }
 
   /// 全タブを列挙する（list_tabs）。`active` は「その workspace で選択中のタブ」——背景 workspace でも
-  /// 1 枚 true で、前面かは `list_workspaces` の `active` で分かる。
+  /// 1 枚 true（ボードを選んでいる workspace ではどれも false）で、前面かは `list_workspaces` の `active` で分かる。
   func controlListTabs() -> [[String: Any]] {
     store.allTabs().map { ref in
       let ws = workspaces[ref.workspaceIndex]
@@ -26,7 +26,7 @@ extension WindowController: ControlTarget {
         "cwd": tab.cwd,
         "agentState": tab.agentState.map { $0 as Any } ?? NSNull(),
         "agentSessionId": tab.agentSlot.session?.sessionId.map { $0 as Any } ?? NSNull(),
-        "active": ref.tabIndex == ws.active,
+        "active": ref.tab === ws.selectedTab,
       ]
     }
   }
@@ -51,16 +51,16 @@ extension WindowController: ControlTarget {
     return nil
   }
 
-  /// エージェント hook の状態報告を発信元タブへ適用する。遷移表と同一性の寿命の判断はタブ
-  /// （`TerminalTab.applyReport`）が持ち、ここは waiting / done への実変化を 1 つの通知
+  /// エージェント hook の状態報告を発信元タブへ適用する。
+  /// 遷移表と同一性の寿命の判断はタブ（`TerminalTab.applyReport`）が持ち、ここは waiting / done への実変化を 1 つの通知
   /// （`agentNotification`）として成立させ、メニューバーの一過性表示と通知音という 2 つの面へ流す
   /// （成立条件——見ているタブ・未activatedタブでは通知しない——は通知側が 1 回だけ解く）。
   func controlReportAgent(tab: TerminalTab, report: AgentHookReport) {
-    guard tab.applyReport(report), report.state == "waiting" || report.state == "done",
+    let changed = tab.applyReport(report)
+    guard changed, report.state == "waiting" || report.state == "done",
       let notification = agentNotification(for: tab)
     else { return }
-    noteAttentionTransient(notification)
-    noteAgentSound(notification)
+    deliver(notification)
   }
 
   /// タブのエージェントへ text を送って Enter を押す（制御 API の prompt_agent）。届くのは入力欄が
@@ -86,14 +86,15 @@ extension WindowController: ControlTarget {
 
   /// 指定 workspace に新タブを開き、新タブ ID を返す（制御 API の spawn）。未知 workspaceId は
   /// アクティブへフォールバックする（`spawn_agent` / `resume_agent` は同じ形を継がず -32004 で弾く）。
-  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?) -> Int? {
+  func controlSpawn(workspaceId: Int?, cwd: String?, command: String?, selects: Bool = true) -> Int?
+  {
     let index =
       workspaceId.flatMap { wid in workspaces.firstIndex { $0.id == wid } } ?? activeWorkspace
-    return openTab(workspaceIndex: index, cwd: cwd, command: command)?.tabId
+    return openTab(workspaceIndex: index, cwd: cwd, command: command, selects: selects)?.tabId
   }
 
   /// 背景/休眠 workspace を前面化し全タブを mount する（制御 API の activate_workspace）。
-  /// 切替実体は `switchWorkspace(to:)` に委譲（既アクティブ no-op・0タブは空表示〔自動起動なし〕・mount・
+  /// 切替実体は `switchWorkspace(to:)` に委譲（既アクティブ no-op・0タブはボードか空表示〔自動起動なし〕・mount・
   /// フォーカス・保存を既存経路が担う）。
   func controlActivateWorkspace(workspaceId: Int) -> (activeWorkspaceId: Int, tabIds: [Int])? {
     guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else { return nil }
@@ -104,15 +105,15 @@ extension WindowController: ControlTarget {
 
   // MARK: - タブ操作（focus・close）
 
-  /// 指定タブへフォーカスする（focus_tab）。別 WS なら switchWorkspace で activate、その上でタブを選び
-  /// first responder を移す（既フォーカスでも成功＝冪等）。Attention / メニューバーの「そのタブへ移動」も
+  /// 指定タブへフォーカスする（focus_tab）。別 WS なら switchWorkspace で activate、その上でタブを選び（ボードを
+  /// 選んでいてもタブへ移る）first responder を移す（既フォーカスでも成功＝冪等）。Attention / メニューバーの「そのタブへ移動」も
   /// 同じ経路を通る。
   func controlFocusTab(tabId: Int) -> Result<Any, ControlError> {
     for (wi, ws) in workspaces.enumerated() {
-      for (ti, tab) in ws.tabs.enumerated() where tab.id == tabId {
+      for tab in ws.tabs where tab.id == tabId {
         if wi != activeWorkspace { switchWorkspace(to: wi) }
-        select(ti)
-        window.makeFirstResponder(tab.focusTarget)
+        select(.tab(tab))
+        focusSelection()
         return .success(["ok": true])
       }
     }
@@ -120,7 +121,7 @@ extension WindowController: ControlTarget {
   }
 
   /// 指定タブ（TerminalTab.id）を閉じる（close_tab）。id 解決の上で internal 化した closeTab へ
-  /// 素直に委譲し、カスケード（アクティブ WS 最後のタブは0タブ空維持）を GUI（Cmd+W）と完全一致させる。
+  /// 素直に委譲し、カスケード（最後のタブを閉じればボードか空表示）を GUI（Cmd+W）と完全一致させる。
   func controlCloseTab(tabId: Int) -> Result<Any, ControlError> {
     guard let tab = controlResolveTab(tabId) else {
       return .failure(ControlError(code: -32004, message: "tab not found"))
@@ -129,7 +130,7 @@ extension WindowController: ControlTarget {
     return .success(["ok": true])
   }
 
-  /// 指定タブのエディターでファイルを開く（open_file）。`path` は絶対か、`~` 展開の上でタブの実効 cwd
+  /// 指定タブの連のエディターでファイルを開く（open_file）。`path` は絶対か、`~` 展開の上でタブの実効 cwd
   /// からの相対。開けたら配置をエディターが見える正規形へ（隠れていれば全面・分割中は焦点だけ）、
   /// `focus_tab` と同じ経路でタブを選んで first responder を移す。
   func controlOpenFile(tabId: Int, path: String) -> Result<Any, ControlError> {
@@ -138,7 +139,7 @@ extension WindowController: ControlTarget {
     }
     let url = Self.controlURL(path, cwd: tab.cwd)
     do {
-      try tab.openFile(url)
+      try tab.group.openFile(url)
     } catch EditorDocumentError.notUTF8 {
       return .failure(ControlError(code: -32000, message: "not UTF-8: \(url.path)"))
     } catch EditorSurfaceError.noMetalDevice {
@@ -146,12 +147,12 @@ extension WindowController: ControlTarget {
     } catch {
       return .failure(ControlError(code: -32000, message: "cannot read: \(url.path)"))
     }
-    let ratio = tab.faces.editorRatio == 0 ? 1 : tab.faces.editorRatio
-    tab.setFaces(FaceLayout(editorRatio: ratio, focus: .editor), animated: true)
+    let ratio = tab.group.faces.editorRatio == 0 ? 1 : tab.group.faces.editorRatio
+    tab.group.setFaces(FaceLayout(editorRatio: ratio, focus: .editor), animated: true)
     return controlFocusTab(tabId: tabId)
   }
 
-  /// 指定タブのエディターで diff を開く（open_diff）。`path` は `open_file` と同じ解き方で、それを含む worktree の根と根から
+  /// 指定タブの連のエディターで diff を開く（open_diff）。`path` は `open_file` と同じ解き方で、それを含む worktree の根と根から
   /// の相対パスにする（ファイル自体の symlink は解かない——diff は git の座標の上のもの）。開けたら `open_file` と同じく
   /// エディターを見える配置にし、タブを選んで本体へ焦点を移す。
   func controlOpenDiff(tabId: Int, path: String, kind: EditorDiff.Kind) -> Result<Any, ControlError>
@@ -170,12 +171,12 @@ extension WindowController: ControlTarget {
     }
     let relative = String((directory + "/" + url.lastPathComponent).dropFirst(root.count + 1))
     do {
-      try tab.openDiff(EditorDiff.Key(root: root, path: relative, kind: kind))
+      try tab.group.openDiff(EditorDiff.Key(root: root, path: relative, kind: kind))
     } catch {
       return .failure(ControlError(code: -32000, message: "no Metal device: \(url.path)"))
     }
-    let ratio = tab.faces.editorRatio == 0 ? 1 : tab.faces.editorRatio
-    tab.setFaces(FaceLayout(editorRatio: ratio, focus: .editor), animated: true)
+    let ratio = tab.group.faces.editorRatio == 0 ? 1 : tab.group.faces.editorRatio
+    tab.group.setFaces(FaceLayout(editorRatio: ratio, focus: .editor), animated: true)
     return controlFocusTab(tabId: tabId)
   }
 
@@ -295,13 +296,13 @@ extension WindowController: ControlTarget {
 
   /// workspace を新規作成しアクティブ化する（config CLI `ws new`）。name 空は -32602。
   func controlCreateWorkspace(name: String, rootPath: String?) -> Result<Any, ControlError> {
-    // rootPath を渡すなら中身が要る。省略（nil）は既定導出だが、空白だけの文字列は非 nil として
+    // rootPath を渡すなら中身が要る。省略（nil）は既定（ホーム）だが、空白だけの文字列は非 nil として
     // 採られ、その WS の全タブの cwd と worktree の基点が空のまま作られてしまう。
     // `set_workspace_root` / `rename_workspace` と同じ形で弾く。
     if let rootPath, rootPath.trimmingCharacters(in: .whitespaces).isEmpty {
       return .failure(ControlError(code: -32602, message: "workspace rootPath is empty"))
     }
-    let root = rootPath ?? store.defaultNewWorkspaceRoot()
+    let root = rootPath ?? SessionStore.defaultNewWorkspaceRoot
     guard let id = createWorkspace(name: name, rootPath: root) else {
       return .failure(ControlError(code: -32602, message: "workspace name is empty"))
     }
@@ -321,11 +322,15 @@ extension WindowController: ControlTarget {
     return .success(["ok": true])
   }
 
-  /// workspace の rootPath を変更する（`ws dir`）。id 未発見 -32004・rootPath 空 -32602。
+  /// workspace の rootPath を変更する（`ws dir`）。id 未発見 -32004・Home -32000・rootPath 空 -32602。
   /// 意味論は GUI（パレットのディレクトリ変更）と同一: trim・`~` ホーム展開・実在チェックなし。
   func controlSetWorkspaceRoot(workspaceId: Int, rootPath: String) -> Result<Any, ControlError> {
     guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else {
       return .failure(ControlError(code: -32004, message: "workspace not found"))
+    }
+    guard store.canChangeDir(index) else {
+      return .failure(
+        ControlError(code: -32000, message: "cannot change Home's directory"))
     }
     guard !rootPath.trimmingCharacters(in: .whitespaces).isEmpty else {
       return .failure(ControlError(code: -32602, message: "workspace rootPath is empty"))
@@ -334,14 +339,20 @@ extension WindowController: ControlTarget {
     return .success(["ok": true])
   }
 
-  /// workspace を削除する（`ws rm`）。id 未発見 -32004・最後の 1 つは削除不可 -32000。
+  /// workspace を削除する（`ws rm`）。id 未発見 -32004・消せない workspace -32000（理由はメッセージ）。
   func controlRemoveWorkspace(workspaceId: Int) -> Result<Any, ControlError> {
     guard let index = workspaces.firstIndex(where: { $0.id == workspaceId }) else {
       return .failure(ControlError(code: -32004, message: "workspace not found"))
     }
-    // closeWorkspace は最後の 1 つ（.invalid）を no-op で握るため、CLI へ明示エラーを返すべく事前判定する。
-    guard workspaces.count > 1 else {
-      return .failure(ControlError(code: -32000, message: "cannot remove last workspace"))
+    // closeWorkspace は消せない workspace を no-op で握るため、CLI へ明示エラーを返すべく事前に理由を引く。
+    switch store.removalBlocker(index) {
+    case .home:
+      return .failure(ControlError(code: -32000, message: "cannot remove Home"))
+    case .lastRegularWorkspace:
+      return .failure(
+        ControlError(code: -32000, message: "cannot remove the last regular workspace"))
+    case nil:
+      break
     }
     closeWorkspace(index, origin: .controlAPI)
     return .success(["ok": true])

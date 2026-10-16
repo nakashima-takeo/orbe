@@ -27,19 +27,20 @@ extension TaskPaletteCardKeyTests {
     var opened: [URL] = []
     model.onOpenURL = { opened.append($0) }
     let window = mount(model)
+    model.tapRow(.task(1))
     model.enterDetail()
     model.area = .detail(.link(link(.issue, 1).item))
     flush(window)
 
-    press(Key.enter, "\r", to: window)
-    press(Key.enter, "\r", repeating: true, to: window)
-    press(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", repeating: true, to: window)
     XCTAssertEqual(
       opened.map(\.absoluteString), ["https://github.com/o/n/issues/1"], "押し続けても開くのは 1 回だけ")
 
-    press(Key.delete, "\u{7F}", to: window)
-    press(Key.delete, "\u{7F}", repeating: true, to: window)
-    press(Key.delete, "\u{7F}", repeating: true, to: window)
+    send(Key.delete, "\u{7F}", to: window)
+    send(Key.delete, "\u{7F}", repeating: true, to: window)
+    send(Key.delete, "\u{7F}", repeating: true, to: window)
 
     XCTAssertEqual(model.store.tasks.first?.links, [link(.pr, 2)], "外れるのは押した 1 件だけ")
     XCTAssertEqual(model.area, .detail(.link(link(.pr, 2).item)))

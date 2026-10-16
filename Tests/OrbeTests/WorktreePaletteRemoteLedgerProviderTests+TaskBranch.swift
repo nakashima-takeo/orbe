@@ -96,7 +96,7 @@ extension WorktreePaletteRemoteLedgerProviderTests {
       task { $0.links = [pr] }, items: items(pr, head: GitHubBranchRef(repo: mine, branch: "feat"))
     ) { executed.append($0) }
 
-    XCTAssertFalse(provider.remoteFetchLanded, "前提: fetch はまだ着地していない")
+    XCTAssertFalse(provider.facts.remoteFetchLanded, "前提: fetch はまだ着地していない")
     XCTAssertTrue(model.taskTargetPending, "手元に無いブランチは fetch の着地まで決めない")
     model.activate()
     XCTAssertEqual(executed, [], "↵ は預かる")

@@ -15,15 +15,30 @@ import SwiftUI
     case none, languageSelect, workspacePalette, workspaceCreate, agentPalette, worktreePalette,
       taskPalette, settingsPalette, onboarding, updateChanges, attentionPalette,
       closedAgentsPalette, help
+
+    /// 外からの入口（メニューバーのピル・ドロップダウン・⌘⌘）が差し替えてはならない画面。言語選択・
+    /// オンボーディング・更新内容は、応えるまで前面に居続ける真のモーダル。ピルやドロップダウンの
+    /// クリックはキー操作と違い、その画面が焦点を握っていても届くので、入口は必ずこれを読む。
+    var isModal: Bool {
+      switch self {
+      case .languageSelect, .onboarding, .updateChanges:
+        true
+      case .none, .workspacePalette, .workspaceCreate, .agentPalette, .worktreePalette,
+        .taskPalette, .settingsPalette, .attentionPalette, .closedAgentsPalette, .help:
+        false
+      }
+    }
   }
 
   /// 上段 chrome（ネイティブ SwiftUI `StatusRowView` の状態）。
   let statusModel: StatusRowModel
-  /// 端末の器（アクティブ workspace の全タブの view を WindowController が出し入れする）。
+  /// 端末の器（アクティブ workspace の全タブの view とボードの器を WindowController が出し入れする）。
   let content: NSView
-  /// アクティブ workspace が0タブ（surface が1枚も無い）か。true のとき content の地は端末が塗らないため、
+  /// アクティブ workspace の選択が空（タブが 0 でボードも無い）か。true のとき content の地は端末もボードも塗らないため、
   /// AppShell が baseFill（透過設定追従）で埋める（透過ウィンドウ越しにデスクトップが透けるのを防ぐ）。
   var contentIsEmpty = false
+  /// 窓が main window か（WindowController が main の得失で書く）。false の間 chrome は退いた姿で描く。
+  var windowIsMain = false
 
   /// 前面 overlay の種別と、その描画状態（@Observable モデル）。提示元が立て下げる。
   var overlay: Overlay = .none
@@ -52,7 +67,7 @@ import SwiftUI
   /// 現在の overlay の入力欄へ focus を再確定する（各モデルの focusToken を進め、描画後に `@FocusState` を
   /// 立て直す）。overlay 遷移（overlay→overlay・overlay→端末）では去りゆくカードの TextField（field editor）
   /// teardown が次 runloop tick に走り、同期で当てた新しい focus を奪い返す。その次 tick でここを呼び、
-  /// 遷移先 overlay の入力欄へ focus を取り戻して teardown に勝つ。`.none`（端末）は host（`focusActiveTab`）が担う。
+  /// 遷移先 overlay の入力欄へ focus を取り戻して teardown に勝つ。`.none`（端末）は host（`focusSelection`）が担う。
   func focusCurrentOverlayField() {
     switch overlay {
     case .none: break
@@ -96,8 +111,8 @@ struct AppShell: View {
           // 実窓の信号機を読むのは製品の殻だけ（見本系は既定値で描く）。
           .background(TrafficLightsProbe(model: model.statusModel))
         NSViewContainer(view: model.content)
-          // 0タブ時のみ端末と同濃度の地で埋める（surface が無く BackgroundGlow も透過時は塗らないため）。
-          // baseFill は effectiveOpacity 追従なので背景不透明度の設定変更にライブで従う。タブが載れば
+          // 空のときのみ端末と同濃度の地で埋める（surface が無く BackgroundGlow も透過時は塗らないため）。
+          // baseFill は effectiveOpacity 追従なので背景不透明度の設定変更にライブで従う。タブかボードが載れば
           // contentIsEmpty=false で clear に戻り二重 veil を避ける。
           .background(model.contentIsEmpty ? translucency.baseFill : Color.clear)
       }
@@ -124,6 +139,7 @@ struct AppShell: View {
     .environment(\.chromeFontResolver, fontResolver)
     // chrome 全面が現在言語を読む単一注入点。言語変更でこの root と全子孫が再描画される。
     .environment(\.localization, localization)
+    .environment(\.windowIsMain, model.windowIsMain)
   }
 
   @ViewBuilder private var overlayView: some View {
@@ -155,5 +171,19 @@ struct AppShell: View {
     case .help:
       if let help = model.help { HelpOverlay(model: help) }
     }
+  }
+}
+
+private struct WindowIsMainKey: EnvironmentKey {
+  /// 未注入（見本系・別の SwiftUI の根）は前面の姿で描く。
+  static let defaultValue = true
+}
+
+extension EnvironmentValues {
+  /// 窓が main window か。macOS が信号機に色を付ける条件と同じで、key でなくても main なら前面の姿で描く。
+  /// `AppShell` が根で注入し、上段とタブ行・グローが読む。
+  var windowIsMain: Bool {
+    get { self[WindowIsMainKey.self] }
+    set { self[WindowIsMainKey.self] = newValue }
   }
 }

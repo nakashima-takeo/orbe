@@ -205,10 +205,8 @@ final class SurfaceInputMethodTests: EngineTestCase {
     ] {
       XCTAssertEqual(trait, .no)
     }
-    if #available(macOS 15.0, *) {
-      XCTAssertEqual(view.writingToolsBehavior, .none)
-      XCTAssertEqual(view.mathExpressionCompletionType, .no)
-    }
+    XCTAssertEqual(view.writingToolsBehavior, .none)
+    XCTAssertEqual(view.mathExpressionCompletionType, .no)
   }
 
   /// 変換中の文字は本文と同じ 1 コマに描く——文節の下線（選んでいる文節は本文の色。透明な下線の色は指定が無いものとする）と、

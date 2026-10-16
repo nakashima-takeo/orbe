@@ -41,7 +41,7 @@ struct WorktreePaletteRowTaskBadge: View {
 
   var body: some View {
     HStack(spacing: Theme.Space.step) {
-      TaskStatusGlyph(glyph: TaskPaletteTaskRow.Glyph(task.task), size: 12)
+      TaskStatusGlyph(state: task.task.displayState, size: 12)
       if let primary = task.task.links.first {
         Text("#\(primary.item.number)").foregroundStyle(Color.theme.textMuted).fixedSize()
       }

@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// `.app` 同梱物の探索根 `BundledResources.root` と、そこへぶら下がる利用側の解決規則を固定する。
-/// 壊れると、同梱物に依る機能（エージェント hook・bare `orb`・zsh 補完 shim・補完エンジン・
+/// 壊れると、同梱物に依る機能（エージェント hook・MCP ブリッジ・bare `orb`・zsh 補完 shim・補完エンジン・
 /// プラグイン自動導入）が**無警告で丸ごと no-op へ倒れる**。どれも失敗を報せず「使っても何も
 /// 起きない」としか現れないので、ここが唯一の番人になる。
 ///
@@ -159,6 +159,7 @@ final class BundledResourcesTests: OrbeTestCase {
     try write(root.appendingPathComponent("zsh/.zshenv"))
     try write(root.appendingPathComponent("zsh/orbe-completion.zsh"))
     try write(root.appendingPathComponent("bin/orbe-report"), permissions: 0o755)
+    try write(root.appendingPathComponent("bin/orbe-mcp"), permissions: 0o755)
     try write(root.appendingPathComponent("bin/orb"), permissions: 0o755)
     return root
   }
@@ -187,6 +188,7 @@ final class BundledResourcesTests: OrbeTestCase {
       ("CompletionEngine.bundlePath", CompletionEngine.bundlePath),
       ("CompletionShim.directoryPath", CompletionShim.directoryPath),
       ("OrbeRuntimeEnv.reportBinaryPath", OrbeRuntimeEnv.reportBinaryPath),
+      ("OrbeRuntimeEnv.mcpBinaryPath", OrbeRuntimeEnv.mcpBinaryPath),
       ("OrbeRuntimeEnv.bundledBinDir", OrbeRuntimeEnv.bundledBinDir),
     ]
   }
@@ -198,6 +200,7 @@ final class BundledResourcesTests: OrbeTestCase {
       "CompletionEngine.bundlePath": root.appendingPathComponent("completion-engine.js").path,
       "CompletionShim.directoryPath": root.appendingPathComponent("zsh").path,
       "OrbeRuntimeEnv.reportBinaryPath": root.appendingPathComponent("bin/orbe-report").path,
+      "OrbeRuntimeEnv.mcpBinaryPath": root.appendingPathComponent("bin/orbe-mcp").path,
       "OrbeRuntimeEnv.bundledBinDir": root.appendingPathComponent("bin").path,
     ]
   }

@@ -1,0 +1,242 @@
+import AppKit
+import XCTest
+
+@testable import Orbe
+
+/// 連の器（`GroupFacesView`）が配置を子の frame へ写す規則——面の並び・隠れた面・端末の寸法の据え置き・
+/// 連の兄弟の端末の寸法・投影の差分通知・焦点の面の responder。窓に載せず、タブを直接組んで器の幅だけを与える。
+///
+/// 壊れると何が起きるか。面の並びや錨がずれると端末の中身が隣の面の下へ潜る、または面の外へはみ出す。取っ手の位置がずれると、引き手が
+/// 隠れた側の縁から外れ、継ぎ目が境から離れる。
+/// 隠れた面が isHidden にならないと libghostty の占有同期が「見えている」と誤り描画を続ける。
+/// 隠れた端末の寸法が据え置かれないと ⌘E のたびに pty が resize され scrollback が折り返し直される。
+/// 投影の通知が差分ゲートを失うとライブリサイズの毎フレームで全 workspace の chrome snapshot が組まれる。
+/// 焦点の面が幅で変わると、記憶した焦点と responder の行き先がずれる。
+final class GroupFacesViewTests: OrbeTestCase {
+  /// 取っ手の幅 12 を除いた位置の最大が 1000 になる器。
+  private let size = NSSize(width: 1012, height: 400)
+
+  private func laidOut(_ faces: FaceLayout, size: NSSize? = nil) -> TerminalTab {
+    let tab = TerminalTab.alone(cwd: "/tmp")
+    tab.group.setFaces(faces, animated: false)
+    tab.group.view.frame = NSRect(origin: .zero, size: size ?? self.size)
+    tab.group.view.layoutSubtreeIfNeeded()
+    return tab
+  }
+
+  /// 器の座標で見た中身の矩形。
+  private func rect(of view: NSView, in container: NSView) -> NSRect {
+    view.convert(view.bounds, to: container)
+  }
+
+  // MARK: - 面の並び
+
+  /// 分割中は左からエディター面・継ぎ目・端末面が並ぶ。中身は面いっぱいで、面の上端から置かれる。
+  func testSplitPlacesEditorSeamAndTerminalLeftToRight() {
+    let tab = laidOut(FaceLayout(editorRatio: 0.25, focus: .terminal))
+    let view = tab.group.view
+
+    XCTAssertEqual(rect(of: view.editor, in: view), NSRect(x: 0, y: 0, width: 250, height: 400))
+    XCTAssertEqual(view.handle.frame, NSRect(x: 250, y: 0, width: 12, height: 400))
+    XCTAssertEqual(
+      rect(of: tab.terminal, in: view), NSRect(x: 262, y: 0, width: 750, height: 400))
+    XCTAssertEqual(tab.surface.bounds.size, NSSize(width: 750, height: 400), "端末の中身も面と同じ寸法")
+  }
+
+  /// 端末だけの配置ではエディター面は隠れ、端末が器の幅を全部使い、左縁の縦中央にエディターの引き手が重なる。
+  func testTerminalOnlyHidesTheEditorFace() {
+    let tab = laidOut(.terminalOnly)
+    let view = tab.group.view
+
+    XCTAssertTrue(view.editor.isHiddenOrHasHiddenAncestor, "幅 0 の面は隠れる（占有同期に乗る）")
+    XCTAssertFalse(tab.terminal.isHiddenOrHasHiddenAncestor)
+    XCTAssertEqual(view.handle.frame, NSRect(x: 0, y: 176, width: 12, height: 48))
+    XCTAssertEqual(rect(of: tab.terminal, in: view), NSRect(origin: .zero, size: size))
+  }
+
+  /// エディター全面では端末面が隠れ、エディターが器の幅を全部使い、右縁の縦中央に端末の引き手が重なる。
+  func testEditorOnlyHidesTheTerminalFace() {
+    let tab = laidOut(FaceLayout(editorRatio: 1, focus: .editor))
+    let view = tab.group.view
+
+    XCTAssertTrue(tab.terminal.isHiddenOrHasHiddenAncestor)
+    XCTAssertFalse(view.editor.isHiddenOrHasHiddenAncestor)
+    XCTAssertEqual(view.handle.frame, NSRect(x: 1000, y: 176, width: 12, height: 48))
+    XCTAssertEqual(rect(of: view.editor, in: view), NSRect(origin: .zero, size: size))
+  }
+
+  // MARK: - 隠れた端末の寸法
+
+  /// 端末が隠れている間は器の幅が変わっても端末の寸法を変えず、戻したときに今の幅で置き直す。
+  /// 配置を変えるたびに layout を通すのは、窓の display サイクルが端末面の寸法を surface へ配るのと同じ手順。
+  func testHiddenTerminalKeepsItsLastVisibleSize() {
+    let tab = laidOut(FaceLayout(editorRatio: 0.5, focus: .terminal))
+    XCTAssertEqual(tab.surface.bounds.width, 500, "前提: 分割で端末が 500 幅")
+
+    tab.group.setFaces(FaceLayout(editorRatio: 1, focus: .editor), animated: false)
+    tab.group.view.layoutSubtreeIfNeeded()
+    XCTAssertEqual(tab.surface.bounds.size, NSSize(width: 500, height: 400), "隠した瞬間に縮めない")
+
+    tab.group.view.frame = NSRect(x: 0, y: 0, width: 1212, height: 600)
+    tab.group.view.layoutSubtreeIfNeeded()
+    XCTAssertEqual(
+      tab.surface.bounds.size, NSSize(width: 500, height: 400), "隠れている間の器の resize に追従しない")
+
+    tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .editor), animated: false)
+    tab.group.view.layoutSubtreeIfNeeded()
+    XCTAssertEqual(
+      tab.surface.bounds.size, NSSize(width: 600, height: 600), "戻したら今の器の大きさで置き直す")
+  }
+
+  /// 隠れたまま生まれた端末（エディター全面で復元）は、戻したときに得る幅＝器の幅で起きる。
+  func testTerminalBornHiddenWakesAtTheFullWidth() {
+    let group = TabGroup(
+      key: "/tmp",
+      state: GroupState(root: "/tmp", faces: FaceLayout(editorRatio: 1, focus: .editor)))
+    group.view.frame = NSRect(origin: .zero, size: size)
+    group.view.layoutSubtreeIfNeeded()
+    let tab = TerminalTab(cwd: "/tmp", group: group)
+    group.view.add(terminal: tab.terminal)
+    group.view.show(terminal: tab.terminal)
+
+    XCTAssertTrue(tab.terminal.isHiddenOrHasHiddenAncestor, "前提: 端末は隠れて生まれる")
+    XCTAssertEqual(tab.surface.bounds.size, size)
+  }
+
+  // MARK: - 連の兄弟の端末
+
+  /// 連の兄弟の端末は見せていなくても面の確定寸法を持ち（差した瞬間から・器の resize でも）、見せる端末を替えても寸法は
+  /// 変わらない——連の中の切替で pty の resize と再折り返しが起きない。
+  func testSiblingTerminalsShareTheCommittedSizeAndShowingDoesNotResize() {
+    let tab = laidOut(FaceLayout(editorRatio: 0.5, focus: .terminal))
+    let sibling = TerminalTab(cwd: "/tmp", group: tab.group)
+    let view = tab.group.view
+
+    view.add(terminal: sibling.terminal)
+    XCTAssertTrue(sibling.terminal.isHidden, "差した端末は隠れている")
+    XCTAssertTrue(view.shownTerminal === tab.terminal)
+    XCTAssertEqual(sibling.surface.bounds.size, NSSize(width: 500, height: 400), "差した瞬間から確定寸法")
+
+    view.frame = NSRect(x: 0, y: 0, width: 1212, height: 600)
+    view.layoutSubtreeIfNeeded()
+    XCTAssertEqual(sibling.surface.bounds.size, NSSize(width: 600, height: 600), "隠れた兄弟も確定寸法に従う")
+
+    view.show(terminal: sibling.terminal)
+    view.layoutSubtreeIfNeeded()
+    XCTAssertTrue(tab.terminal.isHidden)
+    XCTAssertFalse(sibling.terminal.isHidden)
+    XCTAssertEqual(sibling.surface.bounds.size, NSSize(width: 600, height: 600))
+    XCTAssertEqual(tab.surface.bounds.size, NSSize(width: 600, height: 600))
+    XCTAssertTrue(tab.focusTarget === tab.surface, "焦点の行き先はタブ自身の端末")
+    XCTAssertTrue(view.focusTarget === sibling.surface, "器の行き先は見せている端末")
+  }
+
+  // MARK: - 投影の通知
+
+  /// 投影（ドット・分割中か）が変わったときだけ通知し、同じ投影のまま layout が走っても黙る。
+  func testProjectionChangeFiresOnlyWhenTheProjectionDiffers() {
+    let tab = laidOut(.terminalOnly)
+    var fired = 0
+    tab.group.view.onProjectionChange = { fired += 1 }
+
+    tab.group.view.frame = NSRect(x: 0, y: 0, width: 1200, height: 400)
+    tab.group.view.layoutSubtreeIfNeeded()
+    XCTAssertEqual(fired, 0, "幅だけ変わっても投影は同じ")
+
+    tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
+    XCTAssertEqual(fired, 1, "分割になれば通知")
+
+    tab.group.setFaces(FaceLayout(editorRatio: 0.4, focus: .terminal), animated: false)
+    XCTAssertEqual(fired, 1, "分割のまま幅が変わっても投影は同じ")
+
+    tab.group.setFaces(FaceLayout(editorRatio: 0.4, focus: .editor), animated: false)
+    XCTAssertEqual(fired, 2, "焦点が移ればドットが変わる")
+  }
+
+  // MARK: - 焦点の印
+
+  /// 器を描いた 1 枚から、(x, y) の色を sRGB の RGBA（0…255）で引く。
+  private func pixel(_ view: NSView, x: CGFloat, y: CGFloat) throws -> [Int] {
+    let rep = try XCTUnwrap(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+    view.cacheDisplay(in: view.bounds, to: rep)
+    let scale = CGFloat(rep.pixelsWide) / view.bounds.width
+    let c = try XCTUnwrap(
+      rep.colorAt(x: Int(x * scale), y: Int(y * scale))?.usingColorSpace(.sRGB))
+    return [c.redComponent, c.greenComponent, c.blueComponent, c.alphaComponent].map {
+      Int(($0 * 255).rounded())
+    }
+  }
+
+  private func rgba(_ color: NSColor, in view: NSView) throws -> [Int] {
+    var resolved: NSColor?
+    view.effectiveAppearance.performAsCurrentDrawingAppearance {
+      resolved = color.usingColorSpace(.sRGB)
+    }
+    let c = try XCTUnwrap(resolved)
+    return [c.redComponent, c.greenComponent, c.blueComponent, c.alphaComponent].map {
+      Int(($0 * 255).rounded())
+    }
+  }
+
+  private func assertSame(
+    _ a: [Int], _ b: [Int], _ message: String, file: StaticString = #filePath, line: UInt = #line
+  ) {
+    XCTAssertTrue(
+      zip(a, b).allSatisfy { abs($0 - $1) <= 2 }, "\(message): \(a) ≠ \(b)", file: file, line: line)
+  }
+
+  /// 面の上辺は中身そのもの——全面表示では上端の行が中身の続き（すぐ下の行と同じ不透明な色）で、
+  /// 印も透明な隙間も無い。
+  func testFullFaceContentReachesTheTopEdge() throws {
+    let tab = laidOut(FaceLayout(editorRatio: 1, focus: .editor))
+    tab.group.view.appearance = NSAppearance(named: .darkAqua)
+
+    let top = try pixel(tab.group.view, x: 500, y: 0.5)
+    XCTAssertEqual(top[3], 255, "上端の行が透けている: \(top)")
+    assertSame(top, try pixel(tab.group.view, x: 500, y: 3.5), "上端の行がすぐ下の中身と続いていない")
+  }
+
+  /// 分割中は焦点の面の上辺に面のキー色の印が重なり、焦点を移しても中身は動かない。
+  func testFocusMarkOverlaysTheFocusedFaceWithoutMovingContent() throws {
+    let tab = laidOut(FaceLayout(editorRatio: 0.5, focus: .editor))
+    let view = tab.group.view
+    view.appearance = NSAppearance(named: .darkAqua)
+    let editorRect = rect(of: view.editor, in: view)
+    let terminalRect = rect(of: tab.terminal, in: view)
+    XCTAssertEqual(editorRect, NSRect(x: 0, y: 0, width: 500, height: 400), "中身は面の上端から")
+
+    assertSame(
+      try pixel(view, x: 250, y: 0.5), try rgba(Theme.Color.faceEditor, in: view), "焦点の面の上辺に印")
+
+    tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
+    view.layoutSubtreeIfNeeded()
+    XCTAssertEqual(rect(of: view.editor, in: view), editorRect, "焦点を移しても中身は動かない")
+    XCTAssertEqual(rect(of: tab.terminal, in: view), terminalRect)
+    let top = try pixel(view, x: 250, y: 0.5)
+    XCTAssertEqual(top[3], 255, "印の消えた上端が透けている: \(top)")
+    assertSame(top, try pixel(view, x: 250, y: 3.5), "焦点を外れた面の印は消え、上端は中身の続き")
+  }
+
+  /// 印は当たりを取らない——印の上の押下は下の中身へ届く。
+  func testFocusMarkPassesHitsToTheContent() throws {
+    let tab = laidOut(FaceLayout(editorRatio: 0.5, focus: .editor))
+    let face = try XCTUnwrap(tab.group.view.editor.superview)
+
+    let hit = try XCTUnwrap(face.hitTest(NSPoint(x: 250, y: 1)))
+    XCTAssertTrue(hit.isDescendant(of: tab.group.view.editor), "印の上の押下が中身に届かない: \(hit)")
+  }
+
+  // MARK: - 焦点の面
+
+  /// 焦点の面の responder は配置だけで決まり、器の幅（まだ 0 でも）に依らない。
+  func testFocusTargetFollowsTheLayoutNotTheWidth() {
+    let tab = TerminalTab.alone(cwd: "/tmp")
+    XCTAssertTrue(tab.focusTarget === tab.surface, "既定は端末")
+
+    tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .editor), animated: false)
+    XCTAssertTrue(tab.focusTarget === tab.group.view.editor, "幅 0 の器でもエディター焦点はエディター pane")
+
+    tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
+    XCTAssertTrue(tab.focusTarget === tab.surface)
+  }
+}

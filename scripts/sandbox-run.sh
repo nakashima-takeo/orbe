@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # 隔離した使い捨て Orbe を起こす・叩く・片付ける（.claude/skills/sandbox-run の実体）。
 #
-#   sandbox-run.sh start [<app>]                      隔離起動 → 煙探知 → state_dir / sock / pid / build_id を出す
+#   sandbox-run.sh start [<app>] [--seed <dir>]       隔離起動 → 煙探知 → state_dir / sock / pid / build_id を出す
+#                                                     （--seed: 起こす前に <dir> の中身を state dir へ写す）
 #   sandbox-run.sh rpc <state_dir> <method> [<params-json>] [<timeout-sec>]
 #                                                     隔離インスタンスの control.sock へ JSON-RPC を 1 本投げ result を出す
 #   sandbox-run.sh stop <state_dir>                   インスタンスを止め、state dir を消す
@@ -13,20 +14,22 @@
 #   GHOSTTY_* / TERMINFO（親バンドル）、ZDOTDIR（親の補完 shim）を外す。ORBE_STATE_DIR は state しか隔離せず
 #   プロセス環境は素通りするため、残すと隔離インスタンスが本物へ接続したり旧バンドルの資産を読んだりする。
 # - open は使わない: 起動中のインスタンスを前面化するだけで新ビルドに入れ替わらない。バイナリを直接起こす。
+#
+# 隔離インスタンスはエージェントプラグインを state dir の下へ実体化し、各 CLI へは登録しない（Orbe 側の規約）。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TTL_SEC=3600  # 片付けが走らなかったときの自壊時限（孤児化した GUI が CPU を食い続けないため）
 
 usage() {
-  sed -n '2,8p' "$0" >&2
+  sed -n '2,9p' "$0" >&2
   exit 2
 }
 
 # 隔離インスタンスの control.sock へ JSON-RPC を 1 本投げ、result を JSON で stdout に出す。
 # 応答の改行まで受信してから閉じる（ControlServer はクライアント側 EOF で接続を閉じるため、送信側が先に閉じると応答が取れない）。
 rpc_call() {
-  local sock="$1" method="$2" params="${3:-{\}}" timeout="${4:-5}"
+  local sock="$1" method="$2" params="${3:-"{}"}" timeout="${4:-5}"
   python3 - "$sock" "$method" "$params" "$timeout" <<'PY'
 import json
 import socket
@@ -72,7 +75,15 @@ do_stop() {
 }
 
 do_start() {
-  local app="${1:-$ROOT/build/Orbe.app}"
+  local app="" seed=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --seed) [ $# -ge 2 ] || usage; seed="$2"; shift 2 ;;
+      *) [ -z "$app" ] || usage; app="$1"; shift ;;
+    esac
+  done
+  app="${app:-$ROOT/build/Orbe.app}"
+  [ -z "$seed" ] || [ -d "$seed" ] || { echo "エラー: --seed のディレクトリ $seed が無い" >&2; exit 1; }
   local bin="$app/Contents/MacOS/Orbe"
   [ -x "$bin" ] || { echo "エラー: $bin が無い。./scripts/build-app.sh でビルドするか、起こす .app を渡せ" >&2; exit 1; }
   local build_id
@@ -80,6 +91,8 @@ do_start() {
 
   local state_dir; state_dir="$(mktemp -d)"
   local sock="$state_dir/control.sock" log="$state_dir/orbe.log"
+  # 見本の state（automations.json など）は起こす前に置く。起動時に読まれる。
+  [ -z "$seed" ] || cp -R "$seed/." "$state_dir/"
 
   local scrub=(env
     -u ORBE_STATE_DIR -u ORBE_SOCK -u ORBE_TAB
@@ -98,7 +111,7 @@ do_start() {
   "${scrub[@]}" ORBE_STATE_DIR="$state_dir" "$bin" >"$log" 2>&1 &
   local pid=$!
   echo "$pid" >"$state_dir/sandbox.pid"
-  ( sleep "$TTL_SEC"; kill "$pid" 2>/dev/null; sleep 1; rm -rf "$state_dir" ) >/dev/null 2>&1 &
+  ( sleep "$TTL_SEC"; kill "$pid" 2>/dev/null || true; sleep 1; rm -rf "$state_dir" ) >/dev/null 2>&1 &
   echo $! >"$state_dir/watchdog.pid"
 
   fail() {
@@ -113,15 +126,20 @@ do_start() {
   [ -S "$sock" ] || fail "control.sock が 10 秒で現れない（起動経路が ControlServer を張っていない）"
 
   # 煙探知: .app の起動経路と AppDelegate の配線は swift test の守備範囲外なので、ここで機械的に確かめる。
+  # 駆動するのは選ばずに起こした素のシェルタブで、確かめたら閉じる。復元されたタブは休眠のまま起きていないことが
+  # あり（前面でない workspace）、agent のタブもある。既存のタブを選んで起こすと、
+  # 人が見る前に復元された選択（前面の workspace・ボード・タブ）が変わる。
   # 目印をコマンド行の中で 2 つのリテラルに割り、シェルが引用符除去を評価した出力にしか現れない連結形を待つ
   # （入力行の描き返しでは合格にならないので、利用者の rc とテーマが走る実 .app でも判定が揺れない）。
-  local tab=""
+  local ready=""
   for _ in $(seq 1 40); do
-    tab="$(rpc_call "$sock" list_tabs '{}' 2>/dev/null | python3 -c 'import json,sys; t=json.load(sys.stdin)["tabs"]; print(t[0]["tabId"] if t else "")' 2>/dev/null || true)"
-    [ -n "$tab" ] && break
+    rpc_call "$sock" list_workspaces >/dev/null 2>&1 && { ready=1; break; }
     sleep 0.25
   done
-  [ -n "$tab" ] || fail "タブが 10 秒で現れない"
+  [ -n "$ready" ] || fail "ウィンドウが 10 秒で制御 API に繋がらない"
+  local tab
+  tab="$(rpc_call "$sock" spawn '{"select":false}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["tabId"])')" \
+    || fail "spawn に失敗"
   sleep 1  # シェルが立ち上がる猶予
   local marker="L4DONE_${RANDOM}${RANDOM}"
   rpc_call "$sock" send_text "{\"tabId\":$tab,\"text\":\"echo L4D\\\"\\\"ONE_${marker#L4DONE_}\"}" >/dev/null || fail "send_text に失敗"
@@ -132,6 +150,7 @@ do_start() {
     sleep 0.25
   done
   [ -n "$seen" ] || fail "煙探知の目印 $marker が 15 秒で出ない（制御 API から駆動できていない）"
+  rpc_call "$sock" close_tab "{\"tabId\":$tab}" >/dev/null || fail "煙探知のタブを閉じられない"
 
   cat <<EOF
 state_dir=$state_dir

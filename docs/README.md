@@ -2,7 +2,7 @@
 
 Orbe は、作業場所の準備・エージェントの起動・状態確認をまとめて扱う macOS ネイティブターミナル。この文書は構成・現状仕様・開発手順への入口。インストールと基本操作は[リポジトリの README](../README.md)を参照する。
 
-**技術スタック**: Swift 6 ツールチェーン（言語モード 5）/ macOS 14+ / SwiftPM（Xcode プロジェクトなし）/ AppKit + SwiftUI / ターミナルエンジンは [libghostty](spec/terminal/libghostty.md)（固定コミット・静的リンク・Metal 描画）。SwiftPM の依存とターゲットは [Package.swift](../Package.swift)、CI の lint・format・build・test は [ci.yml](../.github/workflows/ci.yml)を参照する。
+**技術スタック**: Swift 6 ツールチェーン（言語モード 5）/ macOS 15.7+ / SwiftPM（Xcode プロジェクトなし）/ AppKit + SwiftUI / ターミナルエンジンは [libghostty](spec/terminal/libghostty.md)（固定コミット・静的リンク・Metal 描画）。SwiftPM の依存とターゲットは [Package.swift](../Package.swift)、CI の lint・format・build・test は [ci.yml](../.github/workflows/ci.yml)を参照する。
 
 ## 地図
 
@@ -32,22 +32,25 @@ Orbe は、作業場所の準備・エージェントの起動・状態確認を
 **chrome/ — GUI の枠**
 
 - [chrome](spec/chrome/chrome.md) — 常駐 StatusRow（現在地・worktree ごとのタブグループ・状態インジケータ）
+- [board](spec/chrome/board.md) — workspace が持つタブでない面（今は Home。タブ行の左端に固定）
 - [layout](spec/chrome/layout.md) — ウィンドウ構成・1 タブ 1 端末のライフサイクル・ショートカット
 - [menubar](spec/chrome/menubar.md) — メニューバー投影（4 態のピル）
 - [help](spec/chrome/help.md) — ヘルプオーバーレイ（⌘H）
 
 **editor/ — エディター面**
 
-- [faces](spec/editor/faces.md) — 面の機構（⌘E の往復・背のクリック／ドラッグ・タブごとの配置の記憶）
-- [shell](spec/editor/shell.md) — 面の骨（レール・エクスプローラー・ファイルタブ行・パンくず・未保存の確認・復元）
+- [faces](spec/editor/faces.md) — 面の機構（⌘E の往復・引き手と継ぎ目・連ごとの配置の記憶）
+- [shell](spec/editor/shell.md) — 面の骨（レール・エクスプローラー・タブ行・パンくず・未保存の確認・復元）
 - [code](spec/editor/code.md) — 文書とテキスト面（開く/編集/保存・外部変更・色付け・ファイル内検索（⌘F）・キー）
 - [search](spec/editor/search.md) — プロジェクト検索（⌘⇧F・入力しながら検索・問いの規則・対象と除外・結果から一致へ飛ぶ）
-- [files](spec/editor/files.md) — ファイルと git（根のサービス・監視・status・baseline・外部変更）
+- [diff](spec/editor/diff.md) — diff タブ（作業ツリー / ステージ済み・インラインと並列・追従・文書の共有）
+- [files](spec/editor/files.md) — ファイルと git（根のサービス・監視・status・版の本文と baseline・git の書き込みの入口・外部変更）
 
 **palette/ — オーバーレイ型 UI**
 
 - [worktree](spec/palette/worktree.md) — worktree・ブランチを選んで新しいタブを開く（⌘T）
 - [tasks](spec/palette/tasks.md) — タスク画面（⌘⇧X）
+- [automation](spec/palette/automation.md) — タスク画面の提案タブ（候補をさばく）
 - [workspace](spec/palette/workspace.md) — workspace 切替・作成（⌘⇧S）・共有 PaletteCard 規律
 - [settings](spec/palette/settings.md) — 設定パレット（⌘,）
 - [attention](spec/palette/attention.md) — 対応すべきエージェントの一覧（⌘⌘）
@@ -91,7 +94,7 @@ Orbe は、作業場所の準備・エージェントの起動・状態確認を
 | workspace | プロジェクトごとにタブ・作業ディレクトリ・設定を束ねる名前付きコンテナ |
 | mount / 休眠 | mount はタブの端末をウィンドウ階層へ載せること。休眠タブは構成を保持し、端末をまだ起動していない状態。表示から外れた起動済みタブとは異なる |
 | worktree パレット | worktree・ブランチを選ぶか新しいブランチ名を打ち、エージェントを起動したタブを開くパレット（⌘T） |
-| タスク画面 | 人と agent が共有するタスク一覧を眺め、足し、片付け、並べ替える画面（⌘⇧X） |
+| タスク画面 | 人と agent が共有するタスク一覧を眺め、足し、片付ける画面（⌘⇧X） |
 | Attention | 起動済みエージェントの working / waiting / done を横断集約する単一情報源とその表示面。メニューバーの要対応件数は waiting / done のみ |
 | エージェント状態 | タブ単位の `working / waiting / done / idle`。hook 報告で遷移する |
 | チャネル | dev / release のビルド identity。bundle ID から state まで全分離 |

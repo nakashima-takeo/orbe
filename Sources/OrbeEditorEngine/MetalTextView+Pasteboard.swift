@@ -151,7 +151,7 @@ extension MetalTextView {
       }
     }
     let menu = host.contextMenu()
-    if #available(macOS 15.2, *) { menu.automaticallyInsertsWritingToolsItems = false }
+    menu.automaticallyInsertsWritingToolsItems = false
     if surface.primary == .zoneText {
       for item in menu.items.reversed() where item.action != #selector(copy(_:)) {
         menu.removeItem(item)

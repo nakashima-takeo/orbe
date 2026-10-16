@@ -98,7 +98,8 @@ extension ProjectSearchPaneTests {
     let first = try XCTUnwrap(rowView(list, 0))
     XCTAssertEqual(first.accessibilityLabel(), "a.txt, 1")
     XCTAssertEqual(rowView(list, 1)?.accessibilityLabel(), "alpha needle")
-    XCTAssertEqual(list.frame.height, Theme.Layout.editorSearchRow * 5, "行の高さは 1 つ")
+    XCTAssertEqual(
+      list.frame.height, Theme.Layout.editorSearchRow * 6, "行の高さは 1 つ・最後の行の下に 1 行分の空き")
 
     hosted.search.setPattern("beta")
     hosted.search.search()

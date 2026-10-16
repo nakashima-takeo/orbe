@@ -9,7 +9,7 @@
 
 **AI コーディングエージェントとの並列開発を支える、macOS ネイティブターミナル**
 
-[![CI](https://github.com/nakashima-takeo/orbe/actions/workflows/ci.yml/badge.svg)](https://github.com/nakashima-takeo/orbe/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/nakashima-takeo/orbe)](https://github.com/nakashima-takeo/orbe/releases/latest) [![macOS 14+](https://img.shields.io/badge/macOS-14.0%2B-000000?logo=apple)](#インストール) [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
+[![CI](https://github.com/nakashima-takeo/orbe/actions/workflows/ci.yml/badge.svg)](https://github.com/nakashima-takeo/orbe/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/nakashima-takeo/orbe)](https://github.com/nakashima-takeo/orbe/releases/latest) [![macOS 15.7+](https://img.shields.io/badge/macOS-15.7%2B-000000?logo=apple)](#インストール) [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
 [インストール](#インストール) · [機能](#機能) · [ショートカット](#キーボードショートカット) · [CLI・MCP](#cli-と-mcp) · [開発ドキュメント](docs/README.md)
 
@@ -33,7 +33,7 @@ Orbe は、作業場所の準備、エージェントの起動、入力待ち・
 
 ## インストール
 
-配布アプリの対象は **macOS 14.0 以降 / Apple Silicon** です。
+配布アプリの対象は **macOS 15.7 以降 / Apple Silicon** です。
 
 1. [最新リリース](https://github.com/nakashima-takeo/orbe/releases/latest)の Assets から `.dmg` をダウンロードします。
 2. DMG を開き、`Orbe.app` を「アプリケーション」へドラッグします。
@@ -53,7 +53,7 @@ Orbe は、作業場所の準備、エージェントの起動、入力待ち・
 
 ### 最初の作業を始める
 
-1. **Orbe を起動**し、表示言語とデフォルトエージェントを選びます。初回案内で、検出済み CLI に[状態追跡プラグイン](docs/spec/agent/plugin-package.md)を登録します。
+1. **Orbe を起動**し、表示言語とデフォルトエージェントを選びます。初回案内で、検出済み CLI に[エージェントプラグイン](docs/spec/agent/plugin-package.md)を登録します。
 2. **`⌘⇧S` でワークスペースを作成**します。パレット末尾の「＋ 新規ワークスペース」行から作成画面へ入り、既存フォルダを指定するか、リポジトリ URL から `git clone` できます。パレットに名前を打ってからこの行を選ぶと、その名前が作成画面へ引き継がれます。
 3. **`⌘T` で worktree パレットを開き**、worktree・ブランチを選ぶか、新しいブランチ名を打って **Enter**。必要な worktree が用意され、新しいタブでエージェントが起動します。そのまま Enter なら今の worktree で既定のエージェントが開きます。**Tab** で別のエージェントや通常のシェルに、**Shift+Tab** で新しいブランチのベースに切り替えられます。
 4. エージェントを複数動かしたら、**Command キーを単独で 2 回押す**（`⌘⌘`）と状態を一覧できます。行を選んで Enter を押すと、そのタブへ移動します。
@@ -134,9 +134,9 @@ orb --help                      # コマンド一覧
 
 `orb agent prompt` で別タブのエージェントへ指示して応答を待ち、`orb tab text` で端末の表示内容を取得できます。引数・終了コードは [CLI リファレンス](docs/spec/control/cli.md)を参照してください。
 
-MCP クライアントからも **`orbe-mcp`** を介してタブの起動・テキスト取得・入力・エージェントへの指示を行えます。ブリッジは配布アプリには同梱されず、リポジトリの [`scripts/orbe-mcp.sh`](scripts/orbe-mcp.sh) がソースからビルドして起動します。
+Orbe のタブで起こした claude / codex / agy からは、MCP ツールでタブの起動・テキスト取得・入力・エージェントへの指示・タスクの操作を行えます。設定は不要です。オンボーディングで導入するエージェントプラグインが MCP サーバー（`orbe-agent`）を持ち、アプリに同梱の MCP ブリッジ **`orbe-mcp`** へつなぎます。Orbe の外のターミナルでは、このサーバーはツールを出しません。公開ツールは [制御 API・MCP の仕様](docs/spec/control/api.md)にあります。
 
-利用する場合は、このスクリプトの絶対パスを MCP クライアントに stdio サーバーの起動コマンドとして登録してください。既定の接続先は **Orbe Dev**。配布版へ接続する場合は、MCP クライアントから `ORBE_SOCK` に配布版の `control.sock` の絶対パスを渡します。接続先の解決規則と公開ツールは [制御 API・MCP の仕様](docs/spec/control/api.md)にあります。
+開発中は、リポジトリの [`scripts/orbe-mcp.sh`](scripts/orbe-mcp.sh) を MCP クライアントに stdio サーバーの起動コマンドとして登録すると、Orbe を再起動せずにソースからビルドしたブリッジを試せます。既定の接続先は **Orbe Dev** です。
 
 ## ソースからビルド
 

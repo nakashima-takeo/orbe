@@ -6,13 +6,15 @@ extension WindowController {
   /// （close_surface_cb → onClose）が背景タブ・背景 workspace からも届くため、
   /// アクティブ文脈を前提にせず所属 workspace を特定して処理する。
   /// 制御 API（`close_tab`）も id 解決の上でここへ委譲する（WindowController+Control）ため internal。
-  /// 人の操作（`.gesture`）で、エディターに未保存の文書があれば sheet で確認してから閉じる——保存が
-  /// 外部変更で失敗すれば閉じない。シェル終了・制御 API は黙って捨てる。応答が返るまでにタブが消えて
+  /// 人の操作（`.gesture`）で連の最後のタブを閉じるとき、連のエディターに未保存の文書があれば sheet で確認してから
+  /// 閉じる——保存が外部変更で失敗すれば閉じない。連の途中のタブは問わない（エディターは残る）。シェル終了・制御 API で
+  /// 連の最後のタブが閉じたときは黙って捨てる。応答が返るまでにタブが消えて
   /// いれば（シェル終了）何もしない。`runModal` は使わない——`tab.close` は main-queue のブロックから
   /// 届き、その中のモーダルは端末描画と制御 API を止める（`WindowController+Quit` の注記）。
   func closeTab(_ tab: TerminalTab?, origin: TabCloseOrigin) {
     guard let tab else { return }
-    let unsaved = origin == .gesture ? tab.unsavedDocuments() : []
+    let unsaved =
+      origin == .gesture && isLastOfGroup(tab) ? tab.group.unsavedDocuments() : []
     guard !unsaved.isEmpty else {
       performClose(tab, origin: origin)
       return
@@ -23,6 +25,14 @@ extension WindowController {
     }
   }
 
+  /// タブが、所属の workspace の中で連の最後の 1 枚か。
+  private func isLastOfGroup(_ tab: TerminalTab) -> Bool {
+    guard let ws = workspaces.first(where: { $0.tabs.contains { $0 === tab } }) else {
+      return false
+    }
+    return !ws.tabs.contains { $0 !== tab && $0.group === tab.group }
+  }
+
   /// `origin` は判断せず store へ素通しする（同一性の終わり方としてタブがログへ写す）。
   func performClose(_ tab: TerminalTab, origin: TabCloseOrigin) {
     // タブ集合が変わると editingIndex（位置 index）が別タブを指しうる。編集中なら畳む
@@ -31,15 +41,12 @@ extension WindowController {
     switch store.removeTab(tab, origin: origin) {
     case .notFound:
       return
-    case .emptiedActive:
-      // アクティブ workspace が0タブ化。閉じたタブの view を content から外し空表示にする
-      // （従来 select が担う唯一のビュー除去経路をここで明示し surface leak を避ける）。
-      clearActiveContent()
-    case .reselectActive(let i):
-      // 閉じたタブの view を model.content から外す唯一の経路が select() の不要ビュー除去なので、
-      // 背景タブの close も必ず通す（通さないと外れた TerminalTab を retain し続け surface がリークする）。
-      select(i)
+    case .activeTabsChanged:
+      // 選択が動かなかった（隠れタブ・ボード選択中）close も必ず描き直す。照合が閉じたタブの端末を器から、空になった器を
+      // content から外し（外さないと外れたタブの端末を器が retain し続け surface がリークする）、焦点を選んでいるものへ戻す。
+      select(current.selection)
     case .backgroundChanged:
+      reconcileContent()  // 閉じたタブの端末を器から外す（外さないと surface がリークする）
       refreshChrome()  // 背景タブ/背景 workspace の空化でも chrome 横断 rollup を同期する
     }
     reloadPalette()  // パレット表示中の外因変異（shell exit でのタブ消滅・0タブ化）でも表示を実状態へ追従させる

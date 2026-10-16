@@ -15,7 +15,23 @@ final class Workspace {
   /// ——変異は SessionStore 経由（復元の組み立てだけは直接 append し、直後の `SessionStore.load` の
   /// 正規化を必ず通す）。
   var tabs: [TerminalTab] = []
-  var active = 0
+  /// 選んでいるもの。不変条件（`.tab` のタブは `tabs` にある・`.board` はボードを持つ workspace だけ・`.empty` はタブが 0 で
+  /// ボードを持たないときだけ）の保証者は `SessionStore`。
+  var selection: Selection = .empty
+  /// 選んでいるタブ。ボード・空なら nil。
+  var selectedTab: TerminalTab? {
+    if case .tab(let tab) = selection { return tab }
+    return nil
+  }
+  /// 選んでいるタブの位置。chrome・保存へ位置で出すときだけ使う。
+  var selectedTabIndex: Int? {
+    selectedTab.flatMap { tab in tabs.firstIndex { $0 === tab } }
+  }
+  /// 配下のタブが属する連（重複なし・タブ順）。
+  var groups: [TabGroup] {
+    var seen = Set<ObjectIdentifier>()
+    return tabs.compactMap { seen.insert(ObjectIdentifier($0.group)).inserted ? $0.group : nil }
+  }
   /// 配下に materialize 開始済みのタブが 1 枚以上あるか。
   /// タブ状態から導出する現在値で、0タブまたは全タブ未activatedなら false。永続化しない。
   var activated: Bool { tabs.contains(where: \.activated) }
@@ -27,6 +43,25 @@ final class Workspace {
   /// worktree パレットで前回新しいブランチを作ったときのベース（ブランチ名）。次の作成行で最初に選ぶ。
   /// 書き手は起動時の復元と `WindowController.rememberWorktreeBase` だけ。永続化する。
   var lastWorktreeBase: String?
+  /// ボードの部品の決めた並び。nil は一度も決めていない。ボードを持つか・既定・置ける／外せるかは `SessionStore` が決め、
+  /// 変異もそこを通す（復元の組み立てだけは直接入れ、直後の `SessionStore.load` の正規化を必ず通す）。永続化する。
+  var boardParts: [BoardPart]?
+
+  /// workspace の選択。タブは位置ではなくタブそのもので指す（並びが変わっても同じタブを指し続ける）。
+  enum Selection: Equatable {
+    /// タブが 0 で、ボードも無い。
+    case empty
+    case board
+    case tab(TerminalTab)
+
+    static func == (a: Selection, b: Selection) -> Bool {
+      switch (a, b) {
+      case (.empty, .empty), (.board, .board): return true
+      case (.tab(let x), .tab(let y)): return x === y
+      default: return false
+      }
+    }
+  }
 
   init(name: String, rootPath: String, persistentId: UUID = UUID()) {
     self.name = name

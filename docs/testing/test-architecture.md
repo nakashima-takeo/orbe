@@ -1,7 +1,7 @@
 ---
 title: テストアーキテクチャ
 description: Orbe のテストが従う層構成・横断方針・各層の責務
-updated: 2026-10-09
+updated: 2026-10-16
 ---
 
 # テストアーキテクチャ
@@ -22,7 +22,7 @@ updated: 2026-10-09
 | 永続化 | state dir の JSON（workspaces / settings / app-state / gui.conf） |
 | 生成物 | `.app` バンドル・agent-plugin パッケージ・L10n カタログ・`docs/design/tokens.json` |
 
-**スタック**: Swift 6.0（tools-version、言語モード v5）/ macOS 14+ / SwiftPM のみ（Xcode プロジェクトなし）/ AppKit + SwiftUI 混在 / libghostty を `binaryTarget` の xcframework で取り込み / 外部依存は swift-markdown・Sparkle・tree-sitter（C API を直接呼ぶ）と tree-sitter 文法 14 パッケージ / CI は GitHub Actions macos-26 で `swift build --build-tests` + `swift test --skip-build`。
+**スタック**: Swift 6.0（tools-version、言語モード v5）/ macOS 15.7+ / SwiftPM のみ（Xcode プロジェクトなし）/ AppKit + SwiftUI 混在 / libghostty を `binaryTarget` の xcframework で取り込み / 外部依存は swift-markdown・Sparkle・tree-sitter（C API を直接呼ぶ）と tree-sitter 文法 14 パッケージ / CI は GitHub Actions macos-26 で `swift build --build-tests` + `swift test --skip-build`。
 
 ## 2. テスト戦略
 

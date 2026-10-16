@@ -77,4 +77,61 @@ final class AgentCatalogTests: OrbeTestCase {
         forAgent: "claude", sessionId: "27d05777-57b4-4baa-9532-bc4cac1375cb"),
       "claude --resume 27d05777-57b4-4baa-9532-bc4cac1375cb", "UUID は許可")
   }
+
+  /// 会話の最初の入力は、その CLI の席に 1 つのシェルの単語として添える（位置引数ならオプションの終わり `--` の後ろ、
+  /// agy は `-i` の値）。`-` で始まる入力も、CLI のオプションとしては読まれない。
+  func testResumeCommandAddsTheFirstInputAtEachCLIsSeat() {
+    XCTAssertEqual(
+      AgentCatalog.resumeCommand(forAgent: "claude", sessionId: "s-1", firstInput: "解けた"),
+      "claude --resume s-1 -- '解けた'")
+    XCTAssertEqual(
+      AgentCatalog.resumeCommand(forAgent: "codex", sessionId: "s-1", firstInput: "done"),
+      "codex resume s-1 -- done")
+    XCTAssertEqual(
+      AgentCatalog.resumeCommand(forAgent: "agy", sessionId: "s-1", firstInput: "done"),
+      "agy --conversation s-1 -i done")
+    XCTAssertEqual(
+      AgentCatalog.startCommand(
+        AgentCLI(command: "claude", path: "/bin/claude"), firstInput: "- 箇条書き"),
+      "/bin/claude -- '- 箇条書き'")
+  }
+
+  /// 席に置けない制御文字（改行・タブ以外の C0・DEL・C1）は空白にして添える。NUL はコマンドの C 文字列をそこで切り、
+  /// 起動を壊す。新規起動でも再開でも同じ。
+  func testFirstInputControlCharactersOtherThanNewlineAndTabBecomeSpaces() {
+    let input = "a\u{0}b\u{1B}[1mc\u{7F}d\u{85}e\nf\tg"
+    let seated = "'a b [1mc d e\nf\tg'"
+    XCTAssertEqual(
+      AgentCatalog.startCommand(
+        AgentCLI(command: "claude", path: "/bin/claude"), firstInput: input),
+      "/bin/claude -- \(seated)")
+    XCTAssertEqual(
+      AgentCatalog.resumeCommand(forAgent: "claude", sessionId: "s-1", firstInput: input),
+      "claude --resume s-1 -- \(seated)")
+  }
+
+  /// 外の人が書いた文面（確認の出力）を含む入力でも、シェルは 1 語として読み、何も実行しない。
+  func testFirstInputReachesTheCLIAsOneWordWithoutRunningAnything() throws {
+    let input = "レビューが付いた\n@sato: it's $(touch pwned) `touch pwned2`; \"x\""
+    let command = try XCTUnwrap(
+      AgentCatalog.resumeCommand(forAgent: "codex", sessionId: "s-1", firstInput: input))
+    let dir = TestScratch.caseDir.appendingPathComponent("run")
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/sh")
+    process.arguments = [
+      "-c", "set -- " + command.dropFirst("codex ".count) + "; printf %s \"$4\"",
+    ]
+    process.currentDirectoryURL = dir
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    try process.run()
+    process.waitUntilExit()
+
+    XCTAssertEqual(
+      String(bytes: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8), input)
+    XCTAssertEqual(
+      try FileManager.default.contentsOfDirectory(atPath: dir.path), [],
+      "入力の中のコマンドは走らない")
+  }
 }

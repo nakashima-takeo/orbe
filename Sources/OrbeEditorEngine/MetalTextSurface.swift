@@ -352,21 +352,15 @@ final class MetalTextSurface: TextSurface {
   }
 }
 
-/// アクセシビリティの「点滅しない挿入ポイント」（macOS 15 以降）。独自のキャレットを描くアプリはこれに従う。
+/// アクセシビリティの「点滅しない挿入ポイント」。独自のキャレットを描くアプリはこれに従う。
 enum CaretBlinking {
   /// キャレットを点滅させるか。
   @MainActor static var systemPreference: Bool {
-    if #available(macOS 15, *) {
-      return !AccessibilitySettings.prefersNonBlinkingTextInsertionIndicator
-    }
-    return true
+    !AccessibilitySettings.prefersNonBlinkingTextInsertionIndicator
   }
 
-  /// 設定が変わった知らせ（macOS 15 より前は無い）。
-  static var didChangeNotification: Notification.Name? {
-    if #available(macOS 15, *) {
-      return AccessibilitySettings.prefersNonBlinkingTextInsertionIndicatorDidChangeNotification
-    }
-    return nil
+  /// 設定が変わった知らせ。
+  static var didChangeNotification: Notification.Name {
+    AccessibilitySettings.prefersNonBlinkingTextInsertionIndicatorDidChangeNotification
   }
 }

@@ -22,11 +22,11 @@ final class EditorZoneEditingMenuTests: OrbeTestCase {
   private static let source = "let a = 1\nlet b = 2\nlet c = 3\nlet d = 4\n"
 
   private func scene() throws -> Scene {
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900, height: 600)
-    let document = try tab.editor.open(try caseFile("menu.swift", Self.source), as: .pinned)
+    let document = try tab.group.editor.open(try caseFile("menu.swift", Self.source), as: .pinned)
     catchUp(document)
     let surface = try engine(document)
     surface.setPresentation(SurfacePresentation(showsMinimap: false))

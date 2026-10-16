@@ -1,15 +1,15 @@
 import Foundation
 
-/// タブの中の面。端末とエディターの 2 つで、焦点はどちらか一方にある。
+/// 連の器の中の面。端末とエディターの 2 つで、焦点はどちらか一方にある。
 enum Face: String, Codable, Equatable {
   case terminal
   case editor
 }
 
-/// タブ 1 枚の面の配置——エディター幅の割合と焦点の面。永続表現と同型。
+/// 連 1 本の面の配置——エディター幅の割合と焦点の面。永続表現と同型。
 ///
 /// 正規形: `editorRatio == 0` なら焦点は端末、`1` ならエディター。焦点の面は常に見えている面で、
-/// 書き手（背のドラッグ・永続の decode・pane の焦点通知）は `normalized` を通してから状態に置く。
+/// 書き手（取っ手を引く操作・永続の decode・pane の焦点通知）は `normalized` を通してから状態に置く。
 struct FaceLayout: Equatable, Codable {
   var editorRatio: Double
   var focus: Face

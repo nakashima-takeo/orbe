@@ -30,6 +30,8 @@ enum Theme {
     static let textSecondary = dyn(light: 0x5f5678, dark: 0xb8afc4)  // 通常ラベル・非選択タブ
     static let textMuted = dyn(light: 0x8d85a3, dark: 0x8b8397)  // 非アクティブ・補助・ヒント
     static let textTertiary = textMuted  // 三次（muted へ収束）
+    // 窓が main でない間、textMuted だった文字をさらに一段沈める色。kbKeyMutedText と偶然同値だが別トークン。
+    static let textMutedInactive = dyn(light: 0xa49cb5, dark: 0x6f6880)
 
     // アクセント（Orbe は focus 専用色が無く accent へ収束）
     static let accentPrimary = dyn(
@@ -85,6 +87,9 @@ enum Theme {
     static let tabRowBg = dynA(light: 0x3a3151, lightA: 0.08, dark: 0x000000, darkA: 0.28)
     static let tabSegBg = dynA(light: 0x3a3151, lightA: 0.06, dark: 0xffffff, darkA: 0.10)
     static let tabActiveText = dyn(light: 0xf3f0fa, dark: 0x171420)  // light は bgBase と別値
+    // 窓が main でない間の選択タブの地（反転をやめた控えめな地）。
+    static let tabActiveBgInactive = dynA(
+      light: 0x3a3151, lightA: 0.12, dark: 0xffffff, darkA: 0.16)
     /// worktree 識別バー（セグメント左端 3px）。番号は `WorktreeColor.index(forKey:)` でテーマ共通、
     /// 色はテーマごと（dark は暗い chrome の上で光り、light は紙面の上で沈むトーン）。
     static let worktreeBar: [NSColor] = worktreeColors { dyn(light: $0, dark: $1) }

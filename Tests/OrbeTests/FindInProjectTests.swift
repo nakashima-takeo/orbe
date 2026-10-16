@@ -28,10 +28,10 @@ final class FindInProjectTests: OrbeTestCase {
   func testFindInProjectShowsTheWholeEditorWithTheSearchFieldFocused() throws {
     let wc = windowController()
     let tab = try XCTUnwrap(wc.activeTab)
-    let pane = tab.view.editor
+    let pane = tab.group.view.editor
 
     wc.handleWindowCommand(.findInProject)
-    XCTAssertEqual(tab.faces, FaceLayout(editorRatio: 1, focus: .editor), "隠れていれば全面")
+    XCTAssertEqual(tab.group.faces, FaceLayout(editorRatio: 1, focus: .editor), "隠れていれば全面")
     XCTAssertTrue(pane.showsSearchPanel)
     pumpMain(until: { searchFieldIsFocused(pane) }, "入力欄に焦点")
   }
@@ -39,11 +39,11 @@ final class FindInProjectTests: OrbeTestCase {
   func testFindInProjectWhileSplitOnlyMovesFocus() throws {
     let wc = windowController()
     let tab = try XCTUnwrap(wc.activeTab)
-    tab.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
+    tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
 
     wc.handleWindowCommand(.findInProject)
-    XCTAssertEqual(tab.faces, FaceLayout(editorRatio: 0.5, focus: .editor), "分割は保つ")
-    pumpMain(until: { searchFieldIsFocused(tab.view.editor) }, "入力欄に焦点")
+    XCTAssertEqual(tab.group.faces, FaceLayout(editorRatio: 0.5, focus: .editor), "分割は保つ")
+    pumpMain(until: { searchFieldIsFocused(tab.group.view.editor) }, "入力欄に焦点")
   }
 
   func testFindInProjectWithoutTabsDoesNothing() throws {
@@ -61,20 +61,20 @@ final class FindInProjectTests: OrbeTestCase {
   func testFocusEnteringTheSearchFieldDirectlyMovesTheFaceMemory() throws {
     let wc = windowController()
     let tab = try XCTUnwrap(wc.activeTab)
-    let pane = tab.view.editor
-    tab.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
+    let pane = tab.group.view.editor
+    tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
     wc.window.contentView?.layoutSubtreeIfNeeded()
     pane.sidebar.show(.search)
     pumpMain(until: { textField(in: pane.sideHost) != nil }, "入力欄が出る")
     XCTAssertTrue(wc.window.firstResponder === tab.surface, "前提: 端末に焦点")
 
     wc.window.makeFirstResponder(try XCTUnwrap(textField(in: pane.sideHost)))
-    XCTAssertEqual(tab.faces.focus, .editor, "面の記憶がエディターへ")
+    XCTAssertEqual(tab.group.faces.focus, .editor, "面の記憶がエディターへ")
     RunLoop.main.run(until: Date().addingTimeInterval(0.1))
     XCTAssertTrue(pane.focusIsInSidebar, "焦点は入力欄に残る（本文へ奪わない）")
 
     wc.window.makeFirstResponder(tab.surface)
-    XCTAssertEqual(tab.faces.focus, .terminal, "端末へ戻れば記憶も端末へ")
+    XCTAssertEqual(tab.group.faces.focus, .terminal, "端末へ戻れば記憶も端末へ")
   }
 
   private func textField(in view: NSView) -> NSTextField? {
@@ -95,15 +95,15 @@ final class FindInProjectTests: OrbeTestCase {
   }
 
   private func hostWithDocument(_ text: String) throws -> Hosted {
-    let tab = TerminalTab(
+    let tab = TerminalTab.alone(
       cwd: TestScratch.caseDir.path,
       editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let window = hostEditor(tab, width: 900)
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
-    let document = try tab.editor.open(try caseFile("seed.txt", text), as: .pinned)
-    tab.view.editor.layoutSubtreeIfNeeded()
+    let document = try tab.group.editor.open(try caseFile("seed.txt", text), as: .pinned)
+    tab.group.view.editor.layoutSubtreeIfNeeded()
     window.makeFirstResponder(document.surface.responder)
-    tab.view.editor.projectSearch.restore(SearchQuery(pattern: "previous"))
+    tab.group.view.editor.projectSearch.restore(SearchQuery(pattern: "previous"))
     return Hosted(tab: tab, document: document, window: window)
   }
 
@@ -111,15 +111,15 @@ final class FindInProjectTests: OrbeTestCase {
   func testTheSelectionInTheTextSeedsTheSearch() throws {
     let hosted = try hostWithDocument("foo.bar\nnext\n")
     let (tab, document) = (hosted.tab, hosted.document)
-    let search = tab.view.editor.projectSearch
+    let search = tab.group.view.editor.projectSearch
     document.surface.selectedRange = NSRange(location: 0, length: 7)
-    tab.findInProject()
+    tab.group.findInProject()
     XCTAssertEqual(search.query.pattern, "foo.bar")
     XCTAssertNotEqual(search.phase, .idle, "種を入れたら即時に探す")
 
     search.toggle(.regex)
-    tab.view.window?.makeFirstResponder(document.surface.responder)
-    tab.findInProject()
+    tab.group.view.window?.makeFirstResponder(document.surface.responder)
+    tab.group.findInProject()
     XCTAssertEqual(search.query.pattern, #"foo\.bar"#)
   }
 
@@ -127,27 +127,27 @@ final class FindInProjectTests: OrbeTestCase {
   func testACaretOrAMultiLineSelectionDoesNotSeed() throws {
     let hosted = try hostWithDocument("foo\nbar\n")
     let (tab, document, window) = (hosted.tab, hosted.document, hosted.window)
-    let search = tab.view.editor.projectSearch
+    let search = tab.group.view.editor.projectSearch
     document.surface.selectedRange = NSRange(location: 1, length: 0)
-    tab.findInProject()
+    tab.group.findInProject()
     XCTAssertEqual(search.query.pattern, "previous", "キャレットの語は使わない")
 
     window.makeFirstResponder(document.surface.responder)
     document.surface.selectedRange = NSRange(location: 0, length: 6)
-    tab.findInProject()
+    tab.group.findInProject()
     XCTAssertEqual(search.query.pattern, "previous", "複数行は種にしない")
   }
 
   func testTheFindBarsNeedleSeedsTheSearch() throws {
     let hosted = try hostWithDocument("foo\n")
     let (tab, window) = (hosted.tab, hosted.window)
-    let pane = tab.view.editor
+    let pane = tab.group.view.editor
     pane.showSearch()
     let bar = try XCTUnwrap(pane.searchBar)
     bar.onNeedleChange?("oo")
     pumpMain(until: { (window.firstResponder as? NSView)?.isDescendant(of: bar) == true })
 
-    tab.findInProject()
+    tab.group.findInProject()
     XCTAssertEqual(pane.projectSearch.query.pattern, "oo")
   }
 
@@ -155,13 +155,13 @@ final class FindInProjectTests: OrbeTestCase {
   func testFindInProjectAgainSelectsTheWholePattern() throws {
     let hosted = try hostWithDocument("foo\n")
     let (tab, window) = (hosted.tab, hosted.window)
-    tab.findInProject()
-    pumpMain(until: { searchFieldIsFocused(tab.view.editor) }, "入力欄に焦点")
+    tab.group.findInProject()
+    pumpMain(until: { searchFieldIsFocused(tab.group.view.editor) }, "入力欄に焦点")
     let editor = try XCTUnwrap(window.firstResponder as? NSTextView)
     pumpMain(until: { editor.string == "previous" }, "入力欄に前の検索語")
     editor.setSelectedRange(NSRange(location: 3, length: 0))
 
-    tab.findInProject()
+    tab.group.findInProject()
     XCTAssertTrue(window.firstResponder === editor, "焦点は入力欄のまま")
     XCTAssertEqual(editor.selectedRange(), NSRange(location: 0, length: 8))
   }
@@ -170,15 +170,15 @@ final class FindInProjectTests: OrbeTestCase {
   func testNoSeedFromTheTerminalOrFromTheSearchPanel() throws {
     let hosted = try hostWithDocument("foo\n")
     let (tab, document, window) = (hosted.tab, hosted.document, hosted.window)
-    let search = tab.view.editor.projectSearch
+    let search = tab.group.view.editor.projectSearch
     document.surface.selectedRange = NSRange(location: 0, length: 3)
-    tab.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
+    tab.group.setFaces(FaceLayout(editorRatio: 0.5, focus: .terminal), animated: false)
     window.makeFirstResponder(tab.surface)
-    tab.findInProject()
+    tab.group.findInProject()
     XCTAssertEqual(search.query.pattern, "previous", "端末の焦点からは種にしない")
 
-    pumpMain(until: { searchFieldIsFocused(tab.view.editor) }, "入力欄に焦点")
-    tab.findInProject()
+    pumpMain(until: { searchFieldIsFocused(tab.group.view.editor) }, "入力欄に焦点")
+    tab.group.findInProject()
     XCTAssertEqual(search.query.pattern, "previous", "検索パネルの焦点からは種にしない")
   }
 }

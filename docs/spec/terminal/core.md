@@ -1,7 +1,7 @@
 ---
 title: ターミナル基盤
 description: libghostty の surface API を NSView に埋め込む土台 — 描画・入力・クリップボード・ライフサイクル・ビルド構成の契約
-updated: 2026-09-19
+updated: 2026-10-13
 ---
 
 # ターミナル基盤
@@ -49,11 +49,12 @@ surface の可視性はホストが `ghostty_surface_set_occlusion` へ同期す
 - **スクロール**: `scrollWheel` で受けた delta を即蓄積して返し、次 run loop tick の合体 flush で累積 delta と mods を 1 回だけ渡す。`scrollWheel` 内で同期呼び出しはせず、同一 tick の複数入力を 1 回に合体する（累積総量は保存される）。precision／momentum phase は AppKit イベント由来で mods に載せ、mods は最新を採る。
 - **キー入力**: `ghostty_surface_key_translation_mods`（`macos-option-as-alt`）で mods を翻訳したイベントを `interpretKeyEvents` へ渡す（mods 不変時は元イベントを再利用）。surface へ渡すキー入力の値（keycode・生成文字・無修飾文字・mods・消費された mods）は、物理キー経路と制御チャネルの `send_key`（→ [control/api](../control/api.md)）が同じ型で組み、送出の規則はそこに集まる: `key.text` は PUA 関数キー（0xF700–0xF8FF）を除外し、先頭バイトが 0x20 以上かつ DEL（0x7F）でないときだけ付与する。**C0 制御文字（Enter/Tab/Escape 等）と DEL は text を付けず keycode のみで送る**——特殊キー・制御の符号化は libghostty が keycode から行うため（text を載せると消費された修飾が差し引かれ、Shift+Enter や kitty 下の Shift+Backspace の修飾が落ちる）。`key.consumed_mods` は text を生成するために消費された修飾で、物理経路では翻訳 mods から control/command を除いた集合。
 - **ドラッグ&ドロップ**: Finder からのファイル／フォルダ（`.fileURL` のみ受理）は、ドロップ先の端末へフォーカスを移してから、各パスをシェルエスケープしスペース区切りでカーソル位置へ挿入する。Enter は送らない——実行するかはユーザーの判断に残す。
+- **フォーカス**: surface へ伝えるフォーカスは「その端末が first responder かつ窓が key window」。窓の key の得失・first responder の得失・窓への付け外し（祖先ごと外されると AppKit は resignFirstResponder を経ずに first responder を窓へ移すので、外された時点で導き直す）のたびに、今の事実から導いて `ghostty_surface_set_focus` へ送る。フォーカスの無い間はカーソルが中抜きになり、focus reporting（`ESC[?1004h`）を有効にした端末アプリには `ESC[O`（失う）／`ESC[I`（得る）が届く。基準を key にするのは、キー入力の行き先と揃えるため——Orbe のドロップダウンやダイアログが key の間は打鍵が端末に届かず、libghostty がフォーカスを失ったときに押されたままのキーを離す処理もこれに合わせて働く。chrome の見た目は main で決まる（→ [chrome](../chrome/chrome.md)）。
 - 日本語 IME は [ime](ime.md) が持つ。
 
 ## 面の中の端末
 
-各タブの surface は `NSScrollView` ラップ層に包まれ、その view がタブの器の**端末面**に載る（→ [editor/faces](../editor/faces.md)）。端末面が見えている間、surface のサイズは面の寸法と一致する（最小幅は無く、背の位置しだいで 80 桁を割る）。端末面が隠れている間は surface のサイズを変えない——見えていた最後の寸法で据え置き、隠れたまま生まれた端末は戻したときに得る寸法で起こす。幅 0 の面は不可視扱いで、可視性の同期（後述）どおり描画だけが止まり端末状態と pty は前進する。面の遷移では中身のサイズを遷移開始時に 1 回だけ確定し、動くのは面の clip と中身の位置だけ（フレームごとの pty resize をしない）。背のドラッグ中の resize は表示のフレーム単位に間引く。
+各タブの surface は `NSScrollView` ラップ層に包まれ、その view が所属の連（同じ worktree のタブ）の器の**端末面**に載る（→ [editor/faces](../editor/faces.md)）。端末面には連の起きているタブの端末がすべて入り、見えるのはアクティブなタブの 1 枚。見せていない兄弟の端末も端末面の確定寸法に従う（→ [editor/faces](../editor/faces.md) の端末面）。端末面が見えている間、surface のサイズは面の寸法と一致する（最小幅は無く、継ぎ目の位置しだいで 80 桁を割る）。端末面が隠れている間は surface のサイズを変えない——見えていた最後の寸法で据え置き、隠れたまま生まれた端末は戻したときに得る寸法で起こす。幅 0 の面は不可視扱いで、可視性の同期（後述）どおり描画だけが止まり端末状態と pty は前進する。面の動きでは中身のサイズを動きの始めか終わりの 1 回だけ変え、間に動くのは面の clip と中身の位置だけ（フレームごとの pty resize をしない）。引き手・継ぎ目を引いている間の resize は表示のフレーム単位に間引く。
 
 ## スクロールバー
 

@@ -31,7 +31,7 @@ extension DesignFlowSnapshotTests {
     let workspace = WorkspacePaletteModel(localization: LocalizationStore(language: .ja))
     let items = [
       WorkspacePaletteModel.Item(
-        index: 0, name: "⣷⣯⣷ spinner", isActive: true, dir: "/",
+        index: 0, name: "⣷⣯⣷ spinner", isActive: true, dir: "/", canSetDir: true, canClose: true,
         live: .init(rollup: [], dormant: false))
     ]
     try flow(

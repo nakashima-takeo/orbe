@@ -61,11 +61,11 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
     let provider = makeProvider(model)
     provider.load()
     // prune は数秒かかるので、worktree 一覧の着地だけを待てば「prune 未着地」の窓に居る。
-    XCTAssertTrue(pump({ !provider.worktrees.isEmpty }))
+    XCTAssertTrue(pump({ !provider.facts.worktrees.isEmpty }))
     XCTAssertNil(model.classification, "前提: まだ prune が着地していない")
 
     // ここから先は同期。completion はメインで返るので、この間に prune が割り込むことはない。
-    provider.probedGitHubState = .ready
+    provider.facts.probedGitHubState = .ready
     provider.branchPRFetches = ["feat/x": .fetching]
     provider.applyFetchedBranchPRs(
       head: "feat/x",
@@ -91,7 +91,7 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
     let provider = makeProvider(model)
     provider.load()
     XCTAssertTrue(pump({ model.classification != nil && !provider.classificationPending }))
-    let repo = try XCTUnwrap(provider.repo)
+    let repo = try XCTUnwrap(provider.facts.repo)
     // 比較は git が返した path そのもの（一時ディレクトリは symlink 越しに見える）。
     let path = try XCTUnwrap(row(model, branch: "feat/x")).id
     XCTAssertTrue(try XCTUnwrap(row(model, branch: "feat/x")).isReady, "前提: 一巡した行は確定している")
@@ -117,19 +117,19 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
     let provider = makeProvider(model)
     provider.load()
     XCTAssertTrue(pump({ model.classification != nil && !provider.classificationPending }))
-    let repo = try XCTUnwrap(provider.repo)
+    let repo = try XCTUnwrap(provider.facts.repo)
 
-    provider.probedGitHubState = nil
+    provider.facts.probedGitHubState = nil
     XCTAssertEqual(
       provider.branchPRStates, ["feat/x": .fetching, "feat/y": .fetching],
       "可否が未確定の間はどの head も取得中（確認前を「確かめた」と読まない）")
 
-    provider.probedGitHubState = .ghMissing
+    provider.facts.probedGitHubState = .ghMissing
     XCTAssertEqual(
       provider.branchPRStates, ["feat/x": .loaded([]), "feat/y": .loaded([])],
       "gh が使えないと確定したら確認対象そのものが無い")
 
-    provider.probedGitHubState = .ready
+    provider.facts.probedGitHubState = .ready
     settleRemoteLedger(provider, repo)
     provider.branchPRFetches = ["feat/x": .fetching, "feat/y": .fetching]
     let pr = GitHubBranchPR(
@@ -168,9 +168,10 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
     XCTAssertTrue(pump({ model.classification != nil && !provider.classificationPending }))
 
     XCTAssertEqual(
-      provider.worktrees.filter { $0.branch == "feat/x" }.count, 2, "前提: 同じ head の worktree が 2 本")
+      provider.facts.worktrees.filter { $0.branch == "feat/x" }.count, 2,
+      "前提: 同じ head の worktree が 2 本")
     XCTAssertEqual(
-      WorktreePaletteDataProvider.worktreeBranches(of: provider.worktrees), ["feat/x"],
+      WorktreePaletteDataProvider.worktreeBranches(of: provider.facts.worktrees), ["feat/x"],
       "問うブランチは 1 つに畳む")
     XCTAssertEqual(provider.branchPRStates.count, 1)
   }
@@ -182,7 +183,7 @@ final class WorktreeCleanFreshnessTests: OrbeTestCase {
   /// origin を GitHub の `o/r` とし、その正式名が分かっている（remote の台帳が確定した）状態にする。
   /// 実際の origin は持たせない（fetch や gh が本物の GitHub へ行かないように）。
   private func settleRemoteLedger(_ provider: WorktreePaletteDataProvider, _ repo: GitRepo) {
-    provider.remoteListing = .read(["origin": "https://github.com/o/r.git"])
+    provider.facts.remoteListing = .read(["origin": "https://github.com/o/r.git"])
     GitHubCache.shared.setRepositoryName(
       .found(Self.repository), for: Self.repository, key: repo.commonDir)
   }

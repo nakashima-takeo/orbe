@@ -16,8 +16,8 @@ enum ResolvedSource: Equatable, Hashable {
 
 /// 「鳴らすか・何を鳴らすか」の判断（純関数）。設定だけを見るのでテストで全組み合わせを機械検証できる。
 ///
-/// 「見ているタブか」だけはここに入れない——`WindowController` の窓とタブの状態に依存するため、
-/// 通知を組む側（`WindowController.agentNotification(for:)`）が `visibleTab` 判定で先に弾く。
+/// 「見ているか」と「どの音か」はここに入れない——窓とタブ・タスク画面の状態と知らせの種類に依存するため、
+/// 知らせを組む側（`WindowController.agentNotification(for:)` / `taskNotification`）が先に解く。
 enum AgentSoundDecision {
   struct Plan: Equatable {
     let source: ResolvedSource
@@ -25,10 +25,9 @@ enum AgentSoundDecision {
     let volume: Int
   }
 
-  /// waiting / done 以外の状態・通知音オフは鳴らさない（nil）。
+  /// 通知音オフは鳴らさない（nil）。
   /// 「鳴らない」の担体はオン/オフただ 1 つ——音量は 5% を下限に持ち、無音になる値を取らない。
-  static func plan(state: String, settings: EffectiveSettings) -> Plan? {
-    guard let event = AgentSoundEvent(rawValue: state) else { return nil }
+  static func plan(event: AgentSoundEvent, settings: EffectiveSettings) -> Plan? {
     guard settings[SettingKeys.notificationSoundEnabled] else { return nil }
     return Plan(
       source: source(event: event, settings: settings), event: event,

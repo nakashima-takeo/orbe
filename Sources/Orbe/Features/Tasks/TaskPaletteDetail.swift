@@ -16,14 +16,33 @@ struct TaskPaletteDetail: View {
         ScrollView {
           VStack(alignment: .leading, spacing: 0) {
             Color.clear.frame(height: Theme.Space.bar).id(Self.top)
-            if let primary = task.links.first {
-              TaskPrimaryLinkHeading(link: primary)
-                .padding(.bottom, Theme.Space.note)
+            Group {
+              if let primary = task.links.first {
+                TaskPrimaryLinkHeading(link: primary)
+              } else {
+                TaskHeading(justAdded: model.justAdded == task.id)
+              }
             }
+            .padding(.bottom, Theme.Space.note)
             titleField(task)
               .id(TaskDetailStop.field(.title))
               .padding(.bottom, Theme.Space.beat)
-            if let agent = model.agent(of: task) {
+            if let resolution = task.waitResolution {
+              TaskResolvedBox(
+                model: model, resolution: resolution, continuation: model.continuation(of: task)
+              )
+              .padding(.bottom, Theme.Space.beat)
+            } else if let conversation = model.conversation(of: task) {
+              TaskConversationRow(
+                conversation: conversation, tab: model.conversationTab(of: task),
+                days: model.days(since: task.waiting?.condition?.setAt ?? task.createdAt),
+                focused: model.area == .detail(.conversation),
+                onGoToTab: { model.focusConversationTab() }
+              )
+              .id(TaskDetailStop.conversation)
+              .padding(.bottom, Theme.Space.beat)
+            }
+            if let agent = model.detailAgent(of: task) {
               TaskAgentDetail(
                 agent: agent, focused: model.area == .detail(.agent),
                 onGoToTab: { model.focusAgentTab() }
@@ -37,6 +56,10 @@ struct TaskPaletteDetail: View {
             fieldRow(.status, label: .taskPaletteFieldStatus) { statusValue(task) }
             divider
             fieldRow(.waiting, label: .taskPaletteFieldWaiting) { waitingValue(task) }
+            if let condition = task.waiting?.condition {
+              TaskConditionBox(model: model, condition: condition)
+                .padding(.bottom, Theme.Space.step)
+            }
             divider
             fieldRow(.priority, label: .taskPaletteFieldPriority) { priorityValue(task) }
             divider
@@ -44,12 +67,10 @@ struct TaskPaletteDetail: View {
             divider
             fieldRow(.workspace, label: .taskPaletteFieldWorkspace) { workspaceValue(task) }
             divider
-            addedRow(task)
+            createdRow(task)
             divider
             descriptionField(task)
               .id(TaskDetailStop.field(.description))
-              .padding(.top, Theme.Space.beat)
-            TaskPaletteDetailActions(model: model, task: task)
               .padding(.top, Theme.Space.beat)
           }
           .padding(.horizontal, Theme.Space.span)
@@ -140,14 +161,13 @@ struct TaskPaletteDetail: View {
         .tint(Color.theme.accentPrimary)
         .focused(focus, equals: .edit(field))
         .onSubmitIgnoringKeyRepeat { model.endEditing(commit: true) }
-        .onKeyPress { model.handleEditKey($0) }
         .opacity(isEditing(field) ? 1 : 0)
         .allowsHitTesting(isEditing(field))
       if !isEditing(field) { display() }
     }
   }
 
-  /// 選択式の値（未着手 / 進行中、高 / 中 / 低）。
+  /// 選択式の値（未着手 / 進行中 / 完了、高 / 中 / 低）。
   private func choices(_ segments: [TaskPaletteSegments.Segment]) -> some View {
     TaskPaletteSegments(
       segments: segments, font: Font.theme.workspaceName,
@@ -162,21 +182,22 @@ struct TaskPaletteDetail: View {
       title: l10n.string(key), count: nil, selected: selected, action: action)
   }
 
+  /// ストアのステータス（待ちのタスクも元のステータスが選ばれる）。
   private func statusValue(_ task: TaskItem) -> some View {
     choices([
-      choice(.taskPaletteSectionTodo, task.status == .todo) { model.setStatus(.todo) },
-      choice(.taskPaletteSectionInProgress, task.status == .inProgress) {
+      choice(.taskPaletteStateTodo, task.status == .todo) { model.setStatus(.todo) },
+      choice(.taskPaletteStateInProgress, task.status == .inProgress) {
         model.setStatus(.inProgress)
       },
+      choice(.taskPaletteStateDone, task.status == .done) { model.setStatus(.done) },
     ])
   }
 
   private func priorityValue(_ task: TaskItem) -> some View {
-    choices([
-      choice(.taskPalettePriorityHigh, task.priority == .high) { model.setPriority(.high) },
-      choice(.taskPalettePriorityMedium, task.priority == .medium) { model.setPriority(.medium) },
-      choice(.taskPalettePriorityLow, task.priority == .low) { model.setPriority(.low) },
-    ])
+    choices(
+      TaskItem.Priority.allCases.map { priority in
+        choice(priority.labelKey, task.priority == priority) { model.setPriority(priority) }
+      })
   }
 
   /// 待ち。完了のタスクには入れられない（ストアの不変条件）ので、操作できない見た目にする。
@@ -232,23 +253,31 @@ struct TaskPaletteDetail: View {
     }
   }
 
-  private func workspaceValue(_ task: TaskItem) -> some View {
-    let entry = model.workspaces.entry(task.workspace)
-    return Text(entry?.name ?? l10n.string(.taskPaletteNoWorkspace))
-      .font(Font.theme.workspaceName)
-      .foregroundStyle(entry == nil ? Color.theme.textMuted : Color.theme.textPrimary)
-      .lineLimit(1)
+  /// 開いた workspace は accent の札、ほかは名前だけ、なしは空。
+  @ViewBuilder private func workspaceValue(_ task: TaskItem) -> some View {
+    if let entry = model.workspaces.entry(task.workspace) {
+      if entry.id == model.workspaces.opened.id {
+        TaskPaletteBadge(
+          text: entry.name, foreground: Color.theme.accentBright, fill: Color.theme.tintAccent)
+      } else {
+        Text(entry.name)
+          .font(Font.theme.workspaceName)
+          .foregroundStyle(Color.theme.textPrimary)
+          .lineLimit(1)
+      }
+    }
   }
 
-  private func addedRow(_ task: TaskItem) -> some View {
+  /// 「10/10 · あなた」「10/10 · claude」。
+  private func createdRow(_ task: TaskItem) -> some View {
     let date = TaskDueText.date(
       TaskItem.DueDate(task.createdAt, timeZone: model.timeZone), today: model.today)
     return HStack(spacing: 0) {
-      Text(l10n.string(.taskPaletteFieldAdded))
+      Text(l10n.string(.taskPaletteFieldCreated))
         .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.textMuted)
         .frame(width: TaskPaletteFieldMetrics.labelWidth, alignment: .leading)
-      Text(task.createdBy.map { "\(date) · \($0)" } ?? date)
+      Text("\(date) · \(task.createdBy ?? l10n.string(.taskPaletteCreatedByYou))")
         .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.textPrimary)
         .lineLimit(1)
@@ -266,7 +295,6 @@ struct TaskPaletteDetail: View {
         .tint(Color.theme.accentPrimary)
         .scrollContentBackground(.hidden)
         .focused(focus, equals: .edit(.description))
-        .onKeyPress { model.handleEditKey($0) }
         .opacity(isEditing(.description) ? 1 : 0)
         .allowsHitTesting(isEditing(.description))
       if !isEditing(.description) {
@@ -303,52 +331,6 @@ struct TaskPaletteDetail: View {
   }
 }
 
-/// 右の欄の末尾のボタン（「space 完了にする」「⌘⌫ 削除」）。
-private struct TaskPaletteDetailActions: View {
-  let model: TaskPaletteModel
-  let task: TaskItem
-  @Environment(\.localization) private var l10n
-
-  var body: some View {
-    HStack {
-      Button {
-        model.toggleDone(task.id)
-      } label: {
-        HStack(spacing: Theme.Space.step) {
-          Text("space").foregroundStyle(Color.theme.textMuted)
-          Text(l10n.string(task.status == .done ? .taskPaletteReopen : .taskPaletteMarkDone))
-            .foregroundStyle(Color.theme.textPrimary)
-        }
-        .font(Font.theme.workspaceName)
-        .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
-        .frame(height: TaskPaletteFieldMetrics.buttonHeight)
-        .background(
-          RoundedRectangle(cornerRadius: Theme.Radius.row)
-            .fill(Color.theme.surfaceInk.opacity(0.06))
-        )
-        .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .focusable(false)
-      Spacer(minLength: Theme.Space.step)
-      Button {
-        model.delete(task.id)
-      } label: {
-        HStack(spacing: Theme.Space.step) {
-          Text("⌘⌫").font(Font.theme.meta)
-          Text(l10n.string(.taskPaletteDelete)).font(Font.theme.workspaceName)
-        }
-        .foregroundStyle(Color.theme.danger)
-        .padding(.horizontal, Theme.Space.step + Theme.Space.hair)
-        .frame(height: TaskPaletteFieldMetrics.buttonHeight)
-        .contentShape(Rectangle())
-      }
-      .buttonStyle(.plain)
-      .focusable(false)
-    }
-  }
-}
-
 /// 右の欄（タスクのタブ・GitHub タブ）の項目の寸法。⌘⇧S の 12pt の行の尺度に合わせる。
 enum TaskPaletteFieldMetrics {
   /// 項目の行（ラベル＋値）。選択式の値の札の組（`choiceHeight` ＋ 上下 2）が収まる高さ。
@@ -359,6 +341,6 @@ enum TaskPaletteFieldMetrics {
   static let choiceHeight: CGFloat = 20
   /// 詳細の欄の入力の箱（12pt で 3 行と少し）。
   static let descriptionHeight: CGFloat = 72
-  /// ボタン（完了にする・削除・外す）。
+  /// ボタン（外す・タスクにする など）。
   static let buttonHeight: CGFloat = 24
 }

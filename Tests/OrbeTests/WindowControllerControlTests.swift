@@ -192,14 +192,41 @@ final class WindowControllerControlTests: OrbeTestCase {
     XCTAssertEqual(err.code, -32602, "invalid scope の invalid params")
   }
 
-  /// remove_workspace は最後の 1 つを -32000 で弾く（closeWorkspace の no-op を CLI へ明示エラー化）。
-  func testRemoveLastWorkspaceIsRejected() throws {
+  /// remove_workspace は最後の通常 workspace を -32000 で弾く（closeWorkspace の no-op を CLI へ明示エラー化）。
+  /// Home が残っていても数に入れない。
+  func testRemoveLastRegularWorkspaceIsRejected() throws {
     let wc = try restore(activeWorkspace: 0, [tabbed("solo")])
     let id = try XCTUnwrap(row(wc, name: "solo")?["id"] as? Int)
     guard case .failure(let err) = wc.controlRemoveWorkspace(workspaceId: id) else {
-      return XCTFail("最後の 1 つの削除は failure")
+      return XCTFail("最後の通常 workspace の削除は failure")
     }
-    XCTAssertEqual(err.code, -32000, "cannot remove last workspace")
+    XCTAssertEqual(err.code, -32000)
+    XCTAssertEqual(err.message, "cannot remove the last regular workspace")
+    XCTAssertEqual(wc.regularWorkspaces.map(\.name), ["solo"])
+  }
+
+  /// Home は remove_workspace も set_workspace_root も -32000 で弾き、一覧も root も変えない。改名は通る。
+  func testHomeRejectsRemoveAndSetRootButAcceptsRename() throws {
+    let wc = try restore(activeWorkspace: 0, [tabbed("main"), tabbed("other")])
+    let home = try XCTUnwrap(wc.workspaces.last)
+    let root = home.rootPath
+
+    guard case .failure(let removal) = wc.controlRemoveWorkspace(workspaceId: home.id) else {
+      return XCTFail("Home の削除は failure")
+    }
+    XCTAssertEqual(removal.code, -32000)
+    XCTAssertEqual(removal.message, "cannot remove Home")
+    guard
+      case .failure(let reroot) = wc.controlSetWorkspaceRoot(workspaceId: home.id, rootPath: "/tmp")
+    else { return XCTFail("Home の root 変更は failure") }
+    XCTAssertEqual(reroot.code, -32000)
+    XCTAssertTrue(wc.workspaces.contains { $0 === home })
+    XCTAssertEqual(home.rootPath, root)
+
+    guard case .success = wc.controlRenameWorkspace(workspaceId: home.id, name: "secretary") else {
+      return XCTFail("Home の改名は通る")
+    }
+    XCTAssertEqual(home.name, "secretary")
   }
 
   /// remove_workspace は未知 id を -32004 で弾く（workspace not found）。
@@ -261,12 +288,12 @@ final class WindowControllerControlTests: OrbeTestCase {
     XCTAssertEqual(wc.workspaces.count, before, "弾いた作成で workspace が増えない")
   }
 
-  /// rootPath を省略した create_workspace は、アクティブタブの cwd を root にして作る。
+  /// rootPath を省略した create_workspace は、アクティブタブの cwd に関わらずホームを root にして作る。
   ///
-  /// 壊れると何が起きるか: root を指定せず作った workspace が意図と別の場所に紐づき、そこで開く
-  /// タブもエージェントも別ディレクトリで走る。省略時の導出は API 側の契約なので、GUI の作成フォーム
+  /// 壊れると何が起きるか: root を指定せず作った workspace が今いる既存 workspace の中に紐づき、そこで
+  /// 開くタブもエージェントも別ディレクトリで走る。省略時の既定は API 側の契約なので、GUI の作成フォーム
   /// （root を必ず渡す）を直しても静かに割れる。
-  func testCreateWorkspaceWithoutRootPathUsesActiveTabCwd() throws {
+  func testCreateWorkspaceWithoutRootPathUsesHome() throws {
     let wc = try restore(
       activeWorkspace: 0,
       [
@@ -274,13 +301,13 @@ final class WindowControllerControlTests: OrbeTestCase {
           name: "main", rootPath: "/private/tmp/ws-root", activeTab: 0,
           tabs: [TabState(cwd: "/private/tmp", agent: nil, explicitTitle: nil)])
       ])
-    XCTAssertEqual(wc.store.activeTabCwd(), "/private/tmp", "前提: アクティブタブの cwd")
+    XCTAssertEqual(wc.store.activeTabCwd(), "/private/tmp", "前提: アクティブタブの cwd はホームと別")
     guard case .success(let value) = wc.controlCreateWorkspace(name: "proj", rootPath: nil) else {
       return XCTFail("rootPath 省略の作成は success")
     }
     XCTAssertEqual(
-      (value as? [String: Any])?["rootPath"] as? String, "/private/tmp",
-      "省略時の root はアクティブタブの cwd（作成元 workspace の rootPath ではない）")
+      (value as? [String: Any])?["rootPath"] as? String, NSHomeDirectory(),
+      "省略時の root はホーム（アクティブタブの cwd でも作成元 workspace の rootPath でもない）")
   }
 
   // MARK: - controlSpawn の cwd フォールバック（spawn）

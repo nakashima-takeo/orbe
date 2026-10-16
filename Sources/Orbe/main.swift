@@ -1,7 +1,7 @@
 import AppKit
 
-// 制御ソケットのクライアント（orbe-report 等）は応答を読まず即 close する fire-and-forget
-// があり、その後 Orbe 側が応答を write すると EPIPE → SIGPIPE で本体プロセスが落ちうる。
+// 制御ソケットのクライアントは応答を受ける前に切断しうる（待ちの上限で諦めた orbe-report 等）。
+// その後 Orbe 側が応答を write すると EPIPE → SIGPIPE で本体プロセスが落ちうる。
 // IPC サーバを内包するプロセスの定石として SIGPIPE を無視し、write は戻り値で扱う。
 signal(SIGPIPE, SIG_IGN)
 
@@ -19,7 +19,8 @@ let inheritedSessionMarkers = [
   "CLAUDE_EFFORT",
   "AI_AGENT",
 ]
-for key in inheritedSessionMarkers {
+// 親の Orbe がタブへ注入した印も同じく外す（`OrbeRuntimeEnv.markerNames`）。
+for key in inheritedSessionMarkers + OrbeRuntimeEnv.markerNames {
   unsetenv(key)
 }
 

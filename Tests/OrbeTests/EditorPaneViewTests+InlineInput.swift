@@ -22,8 +22,8 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
 
   func testTypedNameAndReturnCreateTheFileOpenItAndFocusTheTextSurface() throws {
     let dir = TestScratch.caseDir
-    let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
     window.makeFirstResponder(nil)
@@ -37,19 +37,19 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
     XCTAssertTrue(
       FileManager.default.fileExists(atPath: dir.appendingPathComponent("fresh.txt").path))
     XCTAssertEqual(pane.document?.url.lastPathComponent, "fresh.txt", "作ったファイルはそのまま開く")
-    XCTAssertNil(tab.editor.preview, "作ったファイルは普通のタブ")
+    XCTAssertNil(tab.group.editor.preview, "作ったファイルは普通のタブ")
     XCTAssertEqual(pane.tree.selected, "fresh.txt")
     XCTAssertTrue(window.firstResponder === pane.document?.surface.responder, "焦点はテキスト面へ")
-    XCTAssertEqual(tab.faces.focus, .editor)
+    XCTAssertEqual(tab.group.faces.focus, .editor)
   }
 
   func testEscapeCancelsTheInputAndReturnsTheFocusToThePane() throws {
     let dir = TestScratch.caseDir
-    let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
-    let document = try tab.editor.open(try caseFile("a.txt", "a"), as: .pinned)
+    let document = try tab.group.editor.open(try caseFile("a.txt", "a"), as: .pinned)
 
     pane.shell.createDirectory()
     let field = try inputField(pane, in: window)
@@ -65,12 +65,12 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
   /// 入力欄は面の配下なので、入力中も chrome キーは面が先取りして上位へ届き、通常の打鍵は入力欄に入る。
   func testChromeKeysStillWorkWhileTheInputHasTheFocus() throws {
     let dir = TestScratch.caseDir
-    let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
     var commands: [WindowCommand] = []
-    tab.onWindowCommand = { commands.append($0) }
+    tab.group.onWindowCommand = { commands.append($0) }
 
     pane.shell.createFile()
     let field = try inputField(pane, in: window)
@@ -84,12 +84,12 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
   /// 入力欄の外（端末）を押して抜ければ取り消しになるが、焦点はそこに居るので面へ引き戻さない。
   func testLeavingTheInputForAnotherViewCancelsWithoutPullingTheFocusBack() throws {
     let dir = TestScratch.caseDir
-    let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
     let outsider = NSTextField(frame: NSRect(x: 0, y: 0, width: 50, height: 20))
-    tab.view.addSubview(outsider)
+    tab.group.view.addSubview(outsider)
 
     pane.shell.createFile()
     _ = try inputField(pane, in: window)
@@ -113,8 +113,8 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
   /// 入力中に別種の「新規」を押すと、前の入力欄が焦点を手放し、新しい入力行が焦点を取って打鍵が入る。
   func testSwitchingTheKindWhileTypingFocusesTheNewInput() throws {
     let dir = TestScratch.caseDir
-    let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
 
@@ -135,13 +135,13 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
   /// すべて折りたたむ）、焦点は面に残らず文書のテキスト面へ移る。
   func testInputEndingBeforeTheRowTakesFocusHandsTheFocusToTheTextSurface() throws {
     let dir = TestScratch.caseDir
-    let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900)
     defer { window.orderOut(nil) }
-    let document = try tab.editor.open(try caseFile("a.txt", "a"), as: .pinned)
+    let document = try tab.group.editor.open(try caseFile("a.txt", "a"), as: .pinned)
     let outsider = NSTextField(frame: NSRect(x: 0, y: 0, width: 50, height: 20))
-    tab.view.addSubview(outsider)
+    tab.group.view.addSubview(outsider)
     XCTAssertTrue(window.makeFirstResponder(outsider))
 
     pane.shell.createFile()
@@ -161,8 +161,8 @@ final class EditorPaneViewInlineInputTests: OrbeTestCase {
         withIntermediateDirectories: true)
     }
     let deep = try caseFile("d19/deep.txt", "x")
-    let tab = TerminalTab(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
-    let pane = tab.view.editor
+    let tab = TerminalTab.alone(cwd: dir.path, editorSurfaces: EditorSurfaces(queriesRoot: nil))
+    let pane = tab.group.view.editor
     let window = hostEditor(tab, width: 900, height: 240)
     defer { window.orderOut(nil) }
     let scroll = try XCTUnwrap(scrollView(in: pane.sideHost))

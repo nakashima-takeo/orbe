@@ -2,7 +2,7 @@ import Foundation
 
 /// 骨（タブ行・パンくず）の写し。pane が所有し、セッションの変化のたびに
 /// `update` で無条件に組み直す。SwiftUI はこの写しだけを読み、`EditorSession` / `EditorDocument` を
-/// 直接観測しない。操作は閉包で pane へ戻り、pane がタブ経由でセッションに書く。
+/// 直接観測しない。操作は閉包で pane へ戻り、pane が連経由でセッションに書く。
 @MainActor @Observable
 final class EditorShellModel {
   /// タブ行のタブ 1 枚（文書のタブか diff のタブ）。

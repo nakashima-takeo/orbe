@@ -45,7 +45,7 @@ private struct LegacySettingsFile: Codable {
   }
 
   /// アプリ状態 3 項目を app-state.json の姿へ重ねる。旧形式が持たない項目
-  /// （preferredLanguage・registeredAgentPluginName）には触らない——全体上書きすると、
+  /// （preferredLanguage 等）には触らない——全体上書きすると、
   /// 移行が中断したファイルからの再移行がそれらを巻き戻す。マージなら再移行は冪等になる。
   func merge(into state: inout AppStateFile) {
     state.agentPluginsInstalled = agentPluginsInstalled ?? state.agentPluginsInstalled

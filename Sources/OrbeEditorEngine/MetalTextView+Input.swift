@@ -285,12 +285,10 @@ extension MetalTextView: @preconcurrency NSTextInputTraits {
     get { .no }
     set {}
   }
-  @available(macOS 15.0, *)
   var mathExpressionCompletionType: NSTextInputTraitType {
     get { .no }
     set {}
   }
-  @available(macOS 15.0, *)
   var writingToolsBehavior: NSWritingToolsBehavior {
     get { .none }
     set {}

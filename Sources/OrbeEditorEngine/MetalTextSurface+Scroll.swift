@@ -176,7 +176,7 @@ extension MetalTextSurface {
       return
     }
     context.invalidateCharacterCoordinates()
-    if #available(macOS 15.4, *) { context.textInputClientDidScroll() }
+    context.textInputClientDidScroll()
   }
 
   /// 見えている範囲。先頭は縦の並びで先頭に見えている文書の行（塊の上なら次の文書の行）で、端を越えて見せている分は端で

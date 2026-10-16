@@ -11,17 +11,15 @@ import XCTest
 /// 右端」からずれると、⌘T で開いたタブが隣の worktree の連に紛れ込む。active の参照追従が外れれば
 /// 挿入・並び替えの直後に別のタブへフォーカスが飛ぶ。
 ///
-/// TerminalTab は window 未接続なら libghostty surface を生成しないため、`groupKey` を直接注入した
-/// タブで配列ロジックだけを検証する（キーの導出そのものは `GitWorktreeRootTests` /
-/// `TerminalTabTests+GroupKey` が持つ）。
+/// TerminalTab は window 未接続なら libghostty surface を生成しないため、所属の連（`TabGroup(key:)`）を直接与えた
+/// タブで配列ロジックだけを検証する（キーの導出そのものは `GitWorktreeRootTests`・`WindowControllerTabGroupTests` が持つ）。
 final class SessionStoreTabGroupTests: OrbeTestCase {
 
   // MARK: - fixture
 
   /// 所属キー `key` のタブ。タイトルにもキーを置き、失敗メッセージで並びを読めるようにする。
   func tab(_ key: String) -> TerminalTab {
-    let tab = TerminalTab(cwd: "/tmp")
-    tab.groupKey = key
+    let tab = TerminalTab(cwd: "/tmp", group: TabGroup(key: key))
     tab.explicitTitle = key
     return tab
   }
@@ -30,7 +28,7 @@ final class SessionStoreTabGroupTests: OrbeTestCase {
   func workspace(_ keys: [String], active: Int = 0) -> Workspace {
     let ws = Workspace(name: "ws", rootPath: "/tmp")
     ws.tabs = keys.map(tab)
-    ws.active = active
+    ws.selection = .tab(ws.tabs[active])
     return ws
   }
 
@@ -41,7 +39,7 @@ final class SessionStoreTabGroupTests: OrbeTestCase {
 
   func keys(_ ws: Workspace) -> [String] { ws.tabs.map(\.groupKey) }
 
-  func activeTab(_ ws: Workspace) -> TerminalTab { ws.tabs[ws.active] }
+  func activeTab(_ ws: Workspace) -> TerminalTab { ws.selectedTab! }
 
   // MARK: - 導出（セグメント）
 
@@ -66,7 +64,7 @@ final class SessionStoreTabGroupTests: OrbeTestCase {
 
     XCTAssertEqual(keys(ws), ["a", "a", "b", "b", "c"], "初出順で連へ寄せる（安定分割）")
     XCTAssertTrue(activeTab(ws) === viewed, "active は正規化前と同じタブを指す")
-    XCTAssertEqual(ws.active, 1, "そのタブの新しい index")
+    XCTAssertEqual(ws.selectedTabIndex, 1, "そのタブの新しい index")
   }
 
   /// 既に隣接している配列は順序を変えない（正規化は不変条件が破れているときだけ効く）。
@@ -109,7 +107,7 @@ final class SessionStoreTabGroupTests: OrbeTestCase {
     _ = store.insertTab(tab("a"), intoWorkspaceAt: 0)  // active(1) より前へ挿さる
 
     XCTAssertTrue(activeTab(store.current) === viewed, "active は挿入前と同じタブ")
-    XCTAssertEqual(store.current.active, 2, "index は 1 つ繰り下がる")
+    XCTAssertEqual(store.current.selectedTabIndex, 2, "index は 1 つ繰り下がる")
   }
 
   /// 背景 workspace では挿したタブが active になる（制御 API の spawn がそのタブを見せる準備）。
@@ -124,7 +122,7 @@ final class SessionStoreTabGroupTests: OrbeTestCase {
     XCTAssertTrue(activeTab(background) === new, "背景 workspace の active は挿したタブ")
   }
 
-  // MARK: - 復元（insertRestoredTab）
+  // MARK: - 復元（insertTabUnselected）
 
   /// 復元した休眠チケットは同キーの連の右端へ入り、選択は挿す前と同じタブを指し続ける。
   /// 背景 workspace でも active を挿したタブへ動かさない（復元は見せる先を変えない）。
@@ -132,13 +130,13 @@ final class SessionStoreTabGroupTests: OrbeTestCase {
     let store = makeStore(["a", "b", "b"], active: 1)
     let before = activeTab(store.current)
 
-    XCTAssertEqual(store.insertRestoredTab(tab("a"), intoWorkspaceAt: 0), 1, "a の連の右端")
+    XCTAssertEqual(store.insertTabUnselected(tab("a"), intoWorkspaceAt: 0), 1, "a の連の右端")
     XCTAssertEqual(keys(store.current), ["a", "a", "b", "b"])
     XCTAssertTrue(activeTab(store.current) === before, "選択は同じタブのまま（index は 2 へ）")
 
     let background = workspace(["a"], active: 0)
     let two = SessionStore(workspaces: [workspace(["x"]), background], activeWorkspace: 0)
-    XCTAssertEqual(two.insertRestoredTab(tab("z"), intoWorkspaceAt: 1), 1, "同キーが無ければ末尾")
-    XCTAssertEqual(background.active, 0, "背景 workspace の active は動かない")
+    XCTAssertEqual(two.insertTabUnselected(tab("z"), intoWorkspaceAt: 1), 1, "同キーが無ければ末尾")
+    XCTAssertEqual(background.selectedTabIndex, 0, "背景 workspace の active は動かない")
   }
 }

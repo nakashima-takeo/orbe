@@ -30,8 +30,8 @@ final class SurfaceView: NSView {
   private var surface: ghostty_surface_t?
   /// occlusion 差分ゲート（前回送信値）。読み書きは main のみ（syncOcclusion 経由）。
   private var occlusionGate = SurfaceOcclusionGate()
-  /// 所属 window の occlusion 通知購読。viewDidMoveToWindow で付け替える。
-  private var occlusionObserver: NSObjectProtocol?
+  /// 所属 window の通知購読（occlusion・key の得失）。viewDidMoveToWindow で付け替える。
+  private var windowObservers: [NSObjectProtocol] = []
   /// 所属タブ。シェルが報告した事実（タイトル・cwd）と閉鎖要求の通知先。
   weak var tab: TerminalTab?
   /// シェルが報告するタイトル（OSC 0/2）。タブ表示に使う。
@@ -55,6 +55,13 @@ final class SurfaceView: NSView {
 
   /// 内部の surface ハンドル（制御チャネルの読み書きが参照する）。
   var surfacePtr: ghostty_surface_t? { surface }
+
+  /// pty の前面のプロセスグループ（libghostty が pty の親側で `tcgetpgrp` する）。surface が無い・取れなければ nil。
+  var foregroundProcessGroup: pid_t? {
+    guard let surface else { return nil }
+    let group = ghostty_surface_foreground_pid(surface)
+    return group > 0 ? pid_t(truncatingIfNeeded: group) : nil
+  }
 
   // MARK: - スクロールバー状態（更新ロジックは SurfaceView+Scrollbar.swift。ラップ層が読む）
 
@@ -104,27 +111,39 @@ final class SurfaceView: NSView {
 
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
-    rewireOcclusionObserver()
+    rewireWindowObservers()
     guard let win = window else {
       syncOcclusion()  // デタッチ（WS 切替）。不可視を送って描画を止める。
+      // 祖先ごと外されると AppKit は resignFirstResponder を呼ばずに first responder を窓へ移すので、ここで導き直す。
+      syncFocus()
       return
     }
     guard surface == nil else {
       // 再アタッチ（タブ切替等）。detach 中のリサイズで狂った scale/size を実 window 値で再同期。
       updateSize()
       syncOcclusion()
+      syncFocus()
       return
     }
     createSurface(in: win)
   }
 
-  /// window の occlusion 通知購読を付け替える（旧 window の購読を解除・新 window を購読）。
-  private func rewireOcclusionObserver() {
-    if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
-    occlusionObserver = window.map { win in
-      NotificationCenter.default.addObserver(
+  /// window の通知購読を付け替える（旧 window の購読を解除・新 window を購読）。
+  private func rewireWindowObservers() {
+    windowObservers.forEach { NotificationCenter.default.removeObserver($0) }
+    windowObservers = []
+    guard let win = window else { return }
+    let center = NotificationCenter.default
+    windowObservers = [
+      center.addObserver(
         forName: NSWindow.didChangeOcclusionStateNotification, object: win, queue: .main
       ) { [weak self] _ in self?.syncOcclusion() }
+    ]
+    for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
+      windowObservers.append(
+        center.addObserver(forName: name, object: win, queue: .main) { [weak self] _ in
+          self?.syncFocus()
+        })
     }
   }
 
@@ -159,7 +178,7 @@ final class SurfaceView: NSView {
     guard let surf else { return }
     surface = surf
     syncColorScheme()  // light:/dark: テーマ解決に現在の外観を通知（初期 LIGHT のままだと白くなる）
-    ghostty_surface_set_focus(surf, false)  // 初期は非フォーカス（becomeFirstResponder で点灯）
+    syncFocus()
     Ghostty.shared.register(surf, view: self)
     updateSize()
     // 生成時同期。renderer の visible 初期値は true のため、隠れ mount（viewDidHide は
@@ -214,7 +233,7 @@ final class SurfaceView: NSView {
   }
 
   deinit {
-    if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
+    windowObservers.forEach { NotificationCenter.default.removeObserver($0) }
     if let surface {
       Ghostty.shared.unregister(surface)
       ghostty_surface_free(surface)
@@ -268,15 +287,23 @@ final class SurfaceView: NSView {
 
   // MARK: - フォーカス
 
-  func setSurfaceFocus(_ focused: Bool) {
+  private func setSurfaceFocus(_ focused: Bool) {
     if let surface { ghostty_surface_set_focus(surface, focused) }
   }
 
+  /// 端末へ伝えるフォーカス（first responder かつ窓が key）を今の事実から導いて送る。
+  /// 同値の再送は libghostty が無視するので差分は持たない。
+  private func syncFocus() {
+    setSurfaceFocus(window?.isKeyWindow == true && window?.firstResponder === self)
+  }
+
   override func becomeFirstResponder() -> Bool {
-    setSurfaceFocus(true)
-    return super.becomeFirstResponder()
+    let result = super.becomeFirstResponder()
+    if result { syncFocus() }
+    return result
   }
   override func resignFirstResponder() -> Bool {
+    // この最中は window.firstResponder がまだ自分なので、導かずに false を送る。
     setSurfaceFocus(false)
     return super.resignFirstResponder()
   }

@@ -160,18 +160,18 @@ final class WindowControllerTabControlTests: OrbeTestCase {
     }
     XCTAssertEqual(wc.window.title, "background", "別 WS のタブ focus は当該 WS を activate する")
     XCTAssertTrue(
-      wc.window.firstResponder === wc.current.tabs[wc.current.active].surface,
+      wc.window.firstResponder === wc.current.selectedTab?.surface,
       "first responder はそのタブの surface へ移る")
   }
 
   /// 同じ WS の非選択タブを focus すると選択が移る。
   func testFocusTabSelectsWithinWorkspace() throws {
     let wc = try restore(activeWorkspace: 0, [twoTabbed("main")])
-    XCTAssertEqual(wc.current.active, 0)
+    XCTAssertEqual(wc.current.selectedTabIndex, 0)
     guard case .success = wc.controlFocusTab(tabId: wc.current.tabs[1].id) else {
       return XCTFail("focus_tab は success")
     }
-    XCTAssertEqual(wc.current.active, 1, "指したタブが選択される")
+    XCTAssertEqual(wc.current.selectedTabIndex, 1, "指したタブが選択される")
   }
 
   /// focus_tab は未知タブを -32004 で弾く。
@@ -198,7 +198,7 @@ final class WindowControllerTabControlTests: OrbeTestCase {
           tabs: [Self.plainTab, Self.plainTab]),
       ])
     let background = try XCTUnwrap(wc.workspaces.first { $0.name == "background" })
-    XCTAssertEqual(background.active, 1, "前提: 背景 WS は 2 枚目を選択中")
+    XCTAssertEqual(background.selectedTabIndex, 1, "前提: 背景 WS は 2 枚目を選択中")
     guard case .success = wc.controlFocusTab(tabId: wc.current.tabs[1].id) else {
       return XCTFail("focus_tab は success")
     }

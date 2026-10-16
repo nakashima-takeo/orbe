@@ -143,7 +143,7 @@ final class GitWorktreeExcludeIntegrationTests: OrbeTestCase {
     return try XCTUnwrap(opened)
   }
 
-  /// production（`WorktreePaletteDataProvider.createWorktree`）と同じ順序: 対象は作成前に決め、
+  /// production（`WorktreeRepoFacts.createWorktree`）と同じ順序: 対象は作成前に決め、
   /// 実際に worktree を作れたときだけ除外を入れる。
   private func createWorktree(at path: String, branch: String) {
     let entry = GitWorktreeExclude.entry(
@@ -227,11 +227,11 @@ final class GitWorktreeExcludeIntegrationTests: OrbeTestCase {
       cwd: repo.root, model: model, localization: LocalizationStore(language: .ja),
       worktreeTemplate: "{repo_path}/{slug}")
     provider.load()
-    XCTAssertTrue(pump { provider.repo != nil }, "前提: リポジトリを解決できている")
+    XCTAssertTrue(pump { provider.facts.repo != nil }, "前提: リポジトリを解決できている")
 
-    var outcome: WorktreePaletteDataProvider.PrepareOutcome?
+    var outcome: WorktreeRepoFacts.PrepareOutcome?
     // 作成先は既存の追跡済み `docs/` なので `git worktree add` が失敗する。
-    provider.prepareDirectory(for: .newBranch(name: "docs", base: .defaultBranch)) {
+    provider.facts.prepareDirectory(for: .newBranch(name: "docs", base: .defaultBranch)) {
       outcome = $0
     }
     XCTAssertTrue(pump { outcome != nil }, "解決が返らない")

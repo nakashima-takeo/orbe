@@ -4,7 +4,9 @@ import Foundation
 // Orbe エージェント状態の報告 CLI。各 CLI の hook（シム orbe-agent-status.sh）から
 // `orbe-report <agent> <state>` で呼ばれ、発信元タブの状態を Orbe の制御ソケットへ
 // JSON-RPC 1 行で送る。Orbe が注入する env（ORBE_TAB/ORBE_SOCK）が無ければ no-op。
-// 接続は orbe-mcp の connectControl と同型（1 リクエスト 1 接続・同期）。
+// Orbe は接続の向こうのプロセスから報告者のプロセスグループをたどるので、応答の 1 行を受けるまで
+// 接続を保つ（先に終了するとたどれない）。hook は claude のターンを同期で止めるため、送受信の待ちには
+// 上限を付け、Orbe が応答しなくても exit 0 で抜ける。
 
 let env = ProcessInfo.processInfo.environment
 
@@ -51,19 +53,33 @@ func connectControl() -> Int32? {
     close(fd)
     return nil
   }
+  var timeout = timeval(tv_sec: 2, tv_usec: 0)
+  let timeoutLength = socklen_t(MemoryLayout<timeval>.size)
+  _ = setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, timeoutLength)
+  _ = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, timeoutLength)
+  // Orbe が先に畳んでも書き込みを失敗として返させ、SIGPIPE で exit 0 の契約を破らない。
+  var noSigPipe: Int32 = 1
+  _ = setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
   return fd
 }
 
-func writeAll(_ fd: Int32, _ data: Data) {
-  data.withUnsafeBytes { raw in
+func writeAll(_ fd: Int32, _ data: Data) -> Bool {
+  data.withUnsafeBytes { raw -> Bool in
     var sent = 0
     let base = raw.bindMemory(to: UInt8.self).baseAddress!
     while sent < data.count {
       let n = write(fd, base + sent, data.count - sent)
-      if n <= 0 { return }
+      if n <= 0 { return false }
       sent += n
     }
+    return true
   }
+}
+
+/// 応答の 1 行が終わるか、切断・受信の上限が来るまで読み捨てる。
+func awaitResponseLine(_ fd: Int32) {
+  var byte: UInt8 = 0
+  while read(fd, &byte, 1) > 0, byte != 0x0A {}
 }
 
 // resume 用 ID: stdin JSON に無ければ env ANTIGRAVITY_CONVERSATION_ID（非空のみ）。
@@ -90,4 +106,4 @@ defer { close(fd) }
 let req: [String: Any] = ["jsonrpc": "2.0", "id": 1, "method": "report_agent", "params": params]
 guard var data = try? JSONSerialization.data(withJSONObject: req) else { exit(0) }
 data.append(0x0A)
-writeAll(fd, data)
+if writeAll(fd, data) { awaitResponseLine(fd) }

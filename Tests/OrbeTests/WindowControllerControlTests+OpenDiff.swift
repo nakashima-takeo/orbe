@@ -20,18 +20,19 @@ extension WindowControllerControlTests {
 
     let result = wc.controlOpenDiff(tabId: tabId, path: "a.txt", kind: .workingTree)
     guard case .success = result else { return XCTFail("\(result)") }
-    XCTAssertEqual(tab.faces, FaceLayout(editorRatio: 1, focus: .editor), "隠れていれば全面")
-    let active = MainActor.assumeIsolated { tab.editor.activeID }
+    XCTAssertEqual(tab.group.faces, FaceLayout(editorRatio: 1, focus: .editor), "隠れていれば全面")
+    let active = MainActor.assumeIsolated { tab.group.editor.activeID }
     XCTAssertEqual(
       active, .diff(EditorDiff.Key(root: repo.root, path: "a.txt", kind: .workingTree)),
       "根と根からの相対パスの diff")
     pumpMain(
-      until: { MainActor.assumeIsolated { tab.view.editor.diff?.content == .ready } }, "中身が届く")
+      until: { MainActor.assumeIsolated { tab.group.view.editor.diff?.content == .ready } },
+      "中身が届く")
     _ = wc.controlOpenDiff(tabId: tabId, path: repo.url("a.txt").path, kind: .workingTree)
     XCTAssertTrue(
-      wc.window.firstResponder === tab.focusTarget && tab.focusTarget !== tab.view.editor,
+      wc.window.firstResponder === tab.focusTarget && tab.focusTarget !== tab.group.view.editor,
       "開き直すと diff の面へフォーカス")
-    XCTAssertEqual(MainActor.assumeIsolated { tab.editor.tabs.count }, 1, "同じ diff はタブを増やさない")
+    XCTAssertEqual(MainActor.assumeIsolated { tab.group.editor.tabs.count }, 1, "同じ diff はタブを増やさない")
   }
 
   /// 根の下の階層にあるファイルは、親ごと消えていても、`/private` を含む綴りでも、根と根からの相対パスの diff になる。
@@ -52,7 +53,7 @@ extension WindowControllerControlTests {
       tabId: tabId, path: "/private" + repo.root + "/sub/b.txt", kind: .workingTree)
     guard case .success = result else { return XCTFail("\(result)") }
     XCTAssertEqual(
-      MainActor.assumeIsolated { tab.editor.activeID },
+      MainActor.assumeIsolated { tab.group.editor.activeID },
       .diff(EditorDiff.Key(root: repo.root, path: "sub/b.txt", kind: .workingTree)))
   }
 

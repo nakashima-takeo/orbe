@@ -1,37 +1,24 @@
 import AppKit
 import GhosttyKit
-import OrbeEditorCore
 import OrbeSessionLog
 
 /// タブ 1 枚。端末 surface 1 枚（`SurfaceView`）と「タブとしての状態」——制御チャネルの宛先 ID・
-/// エージェントスロット・明示タイトル・面の配置・復元単位——を所有する。外部から指す単位・エージェントが
-/// 走る単位・永続の単位はすべてこのタブで、`SurfaceView` はシェルが報告する事実（タイトル・cwd）と
-/// 端末 I/O だけを持つ。
+/// エージェントスロット・明示タイトル・復元単位——を所有し、所属の連（`TabGroup`）を指す。外部から指す単位・
+/// エージェントが走る単位・永続の単位はすべてこのタブで、`SurfaceView` はシェルが報告する事実（タイトル・cwd）と
+/// 端末 I/O だけを持つ。エディターと面の配置は連が持つ。
 ///
-/// `view`（`TabFacesView`）は AppKit の NSView として作り直さずに mount / 隠す / 外すだけを行う。
+/// `terminal` は AppKit の NSView として作り直さずに、連の器へ差す／隠す／外すだけを行う。
 /// SwiftUI に所有させて再生成すると scrollback と非アクティブ workspace の keep-alive
 /// （NSView 同一性に依存）を壊す（cf. ghostty-org/ghostty#9444）。
 final class TerminalTab {
   /// 制御チャネルの宛先 ID（外部からこのタブを一意に指す）。
   let id = IdGen.next()
-  /// mount 単位（エディター面・背・端末面の器）。`WindowController` が content へ載せる／隠す／外す。
-  let view: TabFacesView
-  var surface: SurfaceView { view.terminal.surfaceView }
+  /// このタブの端末。materialize 済みの間だけ、所属の連の器の端末面に差さる。
+  let terminal: SurfaceScrollView
+  var surface: SurfaceView { terminal.surfaceView }
 
-  /// 面の配置（エディター幅の割合・焦点の面）。正規形に限り、書き換えは `setFaces` だけが行う。
-  private(set) var faces: FaceLayout
-  /// 面の配置が変わった通知（永続保存・chrome 更新・焦点の追従は上位）。
-  var onFacesChange: (() -> Void)?
-
-  /// エディター面のセッション（開いた文書の列と焦点の文書）。書き手はタブとその pane（`EditorPaneView`）で、
-  /// 外（制御 API）は `openFile` を通る。エディターの型は UI に閉じた `@MainActor` で、タブはその外（main スレッド規律の
-  /// nonisolated）にいるため、タブの中でこのプロパティに触る箇所はいずれも `MainActor.assumeIsolated` で境を越える。
-  let editor: EditorSession
-  /// 開いた文書の列・焦点の文書・未保存の有無・検索の問いが変わった通知（chrome 更新・永続保存は上位）。
-  var onEditorChange: (() -> Void)?
-  /// 未消費の復元状態（開いていた文書）。休眠チケットと同じく materialize で消費する。未消費のまま終了
-  /// しても同じ形で書き戻す（一度も見なかったタブの文書は失われない）。
-  private(set) var pendingDocuments: EditorState.OpenDocuments?
+  /// 所属の連。init で必ず与え、付け替えるのは `WindowController` の cd の処理だけ。
+  var group: TabGroup
 
   /// このタブが materialize 済み側にある現在状態。現仕様の遷移は false → true のみだが、
   /// 履歴bitではなく、将来の再休眠では false へ戻せる責務として扱う。
@@ -89,18 +76,15 @@ final class TerminalTab {
   var agentState: String? { agentReport?.state }
   /// 未消費の復元チケット（休眠 agent）を持つか。
   var isDormant: Bool { agentSlot.isDormant }
+  private var wakeInput: String?
 
   /// 実効 cwd（OSC 7 報告前は起動時 cwd＝復元値）。永続・列挙・占有判定・タイトル導出・
   /// 新タブの cwd 継承はすべてこの 1 つの定義を読む。
   var cwd: String { surface.currentPwd ?? surface.initialCwd }
 
-  /// 所属セグメントのキー＝cwd の根（`GitWorktreeRoot.root(of:)`。属する git worktree ルート、
-  /// 管理外は cwd 自身の正準形パス）。エディター面の根も同じ値。
-  /// cwd が変わった時に 1 回だけ再計算し（`pwdChanged`）、永続しない（復元時に保存 cwd から同じ規則で
-  /// 再計算する）。同キーのタブが配列上で隣接する不変条件は `SessionStore` が保証する。
-  /// setter が internal なのは、不変条件の検証がキーの純配列ロジックで済むよう注入口を残すため
-  /// （書くのは init・`pwdChanged`・テストだけ）。
-  var groupKey: String
+  /// 所属の連のキー（`TabGroup.key`＝cwd の根。属する git worktree ルート、管理外は cwd 自身の正規形パス）。
+  /// 所属の正は `group` の 1 か所で、ここはそれを読むだけ。同キーのタブが配列上で隣接する不変条件は `SessionStore` が保証する。
+  var groupKey: String { group.key }
 
   /// このタブの表示タイトル。① explicitTitle ?? ② アプリ報告タイトル ?? ③ derived(cwd, root)。
   /// rootPath は所属 Workspace が持つため呼び出し側（WindowController）から渡す。
@@ -120,24 +104,22 @@ final class TerminalTab {
     return TabTitle.derive(pwd: cwd, root: workspaceRoot)
   }
 
-  /// 通常タブは cwd だけ。エージェント起動タブは起動コマンド・追加環境変数も指定して起こす。
-  init(
-    cwd: String, command: String? = nil, env: [String: String] = [:],
-    editorSurfaces: EditorSurfaces = .shared
-  ) {
+  /// 通常タブは cwd だけ。エージェント起動タブは起動コマンドと追加環境変数も指定する。所属の連は呼び出し側が
+  /// cwd の根で引くか作って渡す。
+  init(cwd: String, group: TabGroup, command: String? = nil, env: [String: String] = [:]) {
     resumeSpawn = nil
-    faces = .terminalOnly
-    editor = MainActor.assumeIsolated { EditorSession(surfaces: editorSurfaces) }
-    groupKey = GitWorktreeRoot.root(of: cwd)
-    view = Self.makeView(cwd: cwd, root: groupKey, faces: faces)
+    self.group = group
+    terminal = SurfaceScrollView(surfaceView: SurfaceView(frame: .zero, cwd: cwd))
     surface.initialCommand = command
     surface.initialEnv = env
-    wireView()
+    surface.tab = self
   }
 
-  /// 永続から復元した agent セッションを resume 起動の (command, env) に解決する。
+  /// 休眠のタブの agent セッションを resume 起動の (command, env) に解決する（2 つ目は会話の最初の入力）。
   /// 解決できなければ nil（呼び出し側は素のシェルで復元）。
-  typealias ResumeSpawn = (AgentSession) -> (command: String, env: [String: String])?
+  typealias ResumeSpawn = (AgentSession, String?) -> (
+    command: String, env: [String: String]
+  )?
 
   /// 休眠チケットの消費（materialize 開始）時に resume を解決する resolver。
   /// 復元時ではなく消費時に解決するため保持する（通常タブは nil）。
@@ -145,48 +127,13 @@ final class TerminalTab {
 
   /// 永続スナップショット（TabState）から起こす。agent 付きなら休眠チケット（`.dormant`）のまま
   /// 起こし、resume 解決は消費時（`recordMaterializationStarted`）まで遅延する。
-  init(
-    restoring state: TabState, resumeSpawn: @escaping ResumeSpawn,
-    editorSurfaces: EditorSurfaces = .shared
-  ) {
+  init(restoring state: TabState, group: TabGroup, resumeSpawn: @escaping ResumeSpawn) {
     self.resumeSpawn = resumeSpawn
-    faces = state.faces.normalized
-    editor = MainActor.assumeIsolated { EditorSession(surfaces: editorSurfaces) }
-    groupKey = GitWorktreeRoot.root(of: state.cwd)
-    view = Self.makeView(cwd: state.cwd, root: groupKey, faces: faces)
+    self.group = group
+    terminal = SurfaceScrollView(surfaceView: SurfaceView(frame: .zero, cwd: state.cwd))
     explicitTitle = state.explicitTitle
-    pendingDocuments = state.editor?.documents
     if let agent = state.agent { agentSlot = .dormant(agent) }
-    wireView()
-    if let editor = state.editor {
-      MainActor.assumeIsolated { view.editor.projectSearch.restore(editor.search) }
-    }
-  }
-
-  private static func makeView(cwd: String, root: String, faces: FaceLayout) -> TabFacesView {
-    TabFacesView(
-      terminal: SurfaceScrollView(surfaceView: SurfaceView(frame: .zero, cwd: cwd)),
-      editor: EditorPaneView(root: root), faces: faces)
-  }
-
-  /// 両面がタブを知り（事実の通知先）、背の求める配置がタブの状態を通って器へ戻るよう配線する。
-  /// セッションの変化は器（面の骨と中身）へ写してから上位へ 1 本で上げる。
-  private func wireView() {
     surface.tab = self
-    view.editor.tab = self
-    view.onFacesRequested = { [weak self] faces, animated in
-      self?.setFaces(faces, animated: animated)
-    }
-    view.onFaceFocused = { [weak self] face in self?.paneDidFocus(face) }
-    MainActor.assumeIsolated {
-      editor.onChange = { [weak self] in
-        guard let self else { return }
-        view.editor.sessionDidChange()
-        onEditorChange?()
-      }
-      view.editor.projectSearch.onQueryChange = { [weak self] in self?.onEditorChange?() }
-      editor.onFocusChange = { [weak self] in self?.view.editor.focusDidChange() }
-    }
   }
 
   /// materialize 開始を記録し、起動指示を確定する。休眠チケットは一度きり消費する——resume を
@@ -199,7 +146,7 @@ final class TerminalTab {
     activated = true
     if case .dormant(let session) = agentSlot {
       let identity = identity(of: agentSlot)
-      if let spawn = resumeSpawn?(session) {
+      if let spawn = resumeSpawn?(session, wakeInput.take()) {
         surface.initialCommand = spawn.command
         surface.initialEnv = spawn.env
         agentSlot = .live(session: session, report: nil)
@@ -212,12 +159,11 @@ final class TerminalTab {
       }
     }
     OrbeRuntimeEnv.inject(into: &surface.initialEnv, tabId: id)
-    if let pending = pendingDocuments {
-      pendingDocuments = nil
-      MainActor.assumeIsolated {
-        editor.restore(paths: pending.open, active: pending.active, preview: pending.preview)
-      }
-    }
+  }
+
+  /// 休眠チケットを起こすとき、再開に会話の最初の入力を 1 度だけ添える（起こす前だけ効く）。
+  func addWakeInput(_ input: String) {
+    if isDormant { wakeInput = input }
   }
 
   /// エージェント hook の状態報告を slot へ適用する（`report_agent`）。戻り値は state の実変化
@@ -230,7 +176,8 @@ final class TerminalTab {
   /// 同一性の更新は `AgentSession.updated` が持つ（command は常に上書き・sessionId は同じ CLI
   /// からの報告のあいだだけ sticky）。適用の前後で同一性を比べ、終わった同一性は `closed(agent)`
   /// （`reason` は hook が運ぶ終了理由）、得た同一性は `opened` として上位へ渡す——sessionId が
-  /// A→B へ変わる報告では `closed(A)` → `opened(B)` の順。
+  /// A→B へ変わる報告では `closed(A)` → `opened(B)` の順。報告ごとに、受けた時点の端末の前面のプロセスグループが
+  /// 報告者のグループなら、報告した agent の前面として添える（tmux の中の agent・前面が入れ替わった後の報告は添えない）。
   ///
   /// Attention 用の保持: stateChangedAt は **state の値が実際に変わったときだけ** `now` に更新する
   /// （working→working の連続報告で一覧の並びが暴れない）。message は state の遷移で確定し直し、
@@ -264,13 +211,14 @@ final class TerminalTab {
           session: session,
           report: AgentReport(
             state: report.state, message: keep ? prior.message : report.message,
-            stateChangedAt: prior.stateChangedAt))
+            stateChangedAt: prior.stateChangedAt, foregroundGroup: foreground(reportedBy: report)))
       } else {
         // 実変化（.none・report なしからの誕生を含む）。
         agentSlot = .live(
           session: session,
           report: AgentReport(
-            state: report.state, message: report.message, stateChangedAt: now))
+            state: report.state, message: report.message, stateChangedAt: now,
+            foregroundGroup: foreground(reportedBy: report)))
         changed = true
       }
     }
@@ -306,23 +254,7 @@ final class TerminalTab {
     return SessionEvent.Agent(command: session.command, sessionId: sessionId)
   }
 
-  /// 配置を書き換える唯一の口。正規化し、同じなら何もしない。器へ写し、上位へ通知する。
-  func setFaces(_ faces: FaceLayout, animated: Bool) {
-    let normalized = faces.normalized
-    guard normalized != self.faces else { return }
-    self.faces = normalized
-    view.set(normalized, animated: animated)
-    onFacesChange?()
-  }
-
-  /// first responder が面の配下に入った（器が告げる）。焦点の記憶を面に追従させる（面の外へ出ても触らない——パレットで
-  /// 一時的に焦点を失っても面の記憶は残る）。
-  func paneDidFocus(_ face: Face) {
-    guard faces.focus != face else { return }
-    setFaces(FaceLayout(editorRatio: faces.editorRatio, focus: face), animated: false)
-  }
-
-  /// 面（surface・エディター pane）からのウィンドウレベル chrome キー（タブ・workspace）を上位へ転送する。
+  /// surface からのウィンドウレベル chrome キー（タブ・workspace）を上位へ転送する。
   func requestWindowCommand(_ command: WindowCommand) {
     onWindowCommand?(command)
   }
@@ -334,11 +266,9 @@ final class TerminalTab {
   }
 
   /// surface が OSC 7 で cwd を報告した（`SurfaceView.currentPwd` の didSet が実変化時だけ呼ぶ）。
-  /// 根が変わればエディター面のツリーも作り直す。
+  /// 連の付け替えは上位（`WindowController`）が新しい根から決める。
   func pwdChanged() {
     ControlServer.shared.emit(.pwd(tabId: id, path: surface.currentPwd))
-    groupKey = GitWorktreeRoot.root(of: cwd)
-    view.editor.setRoot(groupKey)
     onPwdChange?()
   }
 
@@ -349,14 +279,13 @@ final class TerminalTab {
     DispatchQueue.main.async { [weak self] in self?.onClose?(origin) }
   }
 
-  /// このタブの復元単位（cwd・エージェントセッション・明示タイトル・面の配置・エディターの状態）。起動時の
-  /// 一括保存（WorkspacePersistence）が読み、復元は `TerminalTab(restoring:)` が同じ形を受ける。
-  /// 永続化するのは sessionId が確定している同一性だけ（resume 不能な記録を書かない）。文書は開いている
-  /// もの、無ければ未消費の復元状態。
+  /// このタブの復元単位（cwd・エージェントセッション・明示タイトル）。起動時の一括保存（WorkspacePersistence）が読み、
+  /// 復元は `TerminalTab(restoring:)` が同じ形を受ける。永続化するのは sessionId が確定している同一性だけ
+  /// （resume 不能な記録を書かない）。エディターと面の配置は連の状態（`TabGroup.groupState`）。
   func tabState() -> TabState {
     TabState(
       cwd: cwd, agent: agentSlot.session.flatMap { $0.sessionId != nil ? $0 : nil },
-      explicitTitle: explicitTitle, faces: faces, editor: editorState())
+      explicitTitle: explicitTitle)
   }
 
   deinit {

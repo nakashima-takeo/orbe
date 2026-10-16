@@ -199,22 +199,14 @@ extension MetalTextSurface {
     defer { hovering = false }
     let previous = hoveredButton
     hoveredButton = next
-    inputScope {
-      if let previous { zones[previous.zone]?.zone.zone(.exited(previous.id)) }
-      if let next { zones[next.zone]?.zone.zone(.entered(next.id)) }
-    }
+    if let previous { zones[previous.zone]?.zone.zone(.exited(previous.id)) }
+    if let next { zones[next.zone]?.zone.zone(.entered(next.id)) }
   }
 
   /// 窓の今のポインタの位置でホバーとポインタの形を引き直す（スクロール・並び・区画の絵が変わり、押せる場所がポインタの
   /// 下を動いた）。
   func refreshPointer() {
-    guard rows.hasZones || hoveredButton != nil, let window = textView.window else { return }
-    let point = textView.convert(window.mouseLocationOutsideOfEventStream, from: nil)
-    let inside = textView.bounds.contains(point) && window.isKeyWindow
-    hover(at: inside ? point : nil)
-    if inside {
-      textView.pointer.updatePointer(
-        at: window.mouseLocationOutsideOfEventStream, flags: NSEvent.modifierFlags, in: textView)
-    }
+    guard rows.hasZones || hoveredButton != nil else { return }
+    textView.refreshPointer()
   }
 }
