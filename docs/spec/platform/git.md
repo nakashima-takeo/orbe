@@ -26,7 +26,7 @@ hooks・署名がユーザーのシェル環境と同等に動くよう、全呼
 
 順番を作るのは、同じ worktree の index への Orbe 自身の書き込みだけ——git は `index.lock` を待たずに落ち、index を書くのはその worktree の根のサービスだけなので、**同じ worktree の index への書き込みの順番は根のサービスが持つ**（→ [editor/files](../editor/files.md)）。worktree パレットの書き込み（worktree 削除・ブランチ削除・ローカル ref の前進）は他の worktree の index を書かず、順序はコールバックの連鎖で付いている。
 
-それ以外は並ばないので、同じリポジトリで同時に走った書き込みが片方失敗しうるのを受け入れる。remote 追跡 ref を書く fetch・pull 同士は、先に更新した側と期待値（読んだ時点の値）が食い違い、後の側が落ちる（ref のロック待ちの再試行では救われない）。`.git/config` を書く操作同士（upstream を付ける push と、worktree 作成の追跡設定）は `config.lock` を待たずに落ちる。どれもやり直せば通る。同じ worktree の push・pull・fetch を 1 つずつにするのは面の側の役目。
+それ以外は並ばないので、同じリポジトリで同時に走った書き込みが片方失敗しうるのを受け入れる。remote 追跡 ref を書く fetch・pull 同士は、先に更新した側と期待値（読んだ時点の値）が食い違い、後の側が落ちる（ref のロック待ちの再試行では救われない）。`.git/config` を書く操作同士（upstream を付ける push と、worktree 作成の追跡設定）は `config.lock` を待たずに落ちる。どれもやり直せば通る。同じ worktree の push・pull・fetch を 1 つずつにするのは面の側の役目（→ [editor/source-control](../editor/source-control.md) のネット操作）。
 
 ## 無応答の打ち切り
 
