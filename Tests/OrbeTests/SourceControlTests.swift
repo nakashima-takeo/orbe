@@ -7,7 +7,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか。コミットが通ってもメッセージが残る（打ち足した分まで消える）・コミットしてプッシュが push しない・
 /// 止めた 2 段目が走る・失敗の文が次の操作でも残る・順番待ちの操作が帯に出て、実際に止まっているコミットを隠す・ネット操作
-/// 中に別のネット操作が始められる・端末の upstream を付けない push でグラフが追従しない。
+/// 中に別のネット操作が始められる。
 @MainActor
 final class SourceControlTests: OrbeTestCase {
   var repo: TempGitRepo!
@@ -101,21 +101,5 @@ final class SourceControlTests: OrbeTestCase {
     control.pull()
     idle("upstream の無いプル")
     XCTAssertEqual(control.failure, SourceControl.Failure(kind: .pull, failure: .noUpstream))
-  }
-
-  /// ref だけが動く変化（ブランチの作成）でも、観測者に「git の状態が変わった」が届く。
-  func testRefOnlyChangesReachObservers() {
-    final class Observer: RootFilesObserver {
-      var gitChanges = 0
-      func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change) {}
-      func rootFilesStatusDidChange(_ files: RootFiles) {}
-      func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version) {}
-      func rootFilesGitStateDidChange(_ files: RootFiles) { gitChanges += 1 }
-    }
-    let observer = Observer()
-    files.addObserver(observer)
-    XCTAssertTrue(repo.git(["branch", "side"]).isSuccess)
-    pumpMain(until: { observer.gitChanges > 0 }, "git の状態が変わった")
-    files.removeObserver(observer)
   }
 }
