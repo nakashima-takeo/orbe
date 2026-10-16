@@ -239,6 +239,7 @@ final class ScmPanel {
   func readGraphAndHead() {
     guard isShown else { return }
     guard files?.repo != nil else {
+      headPush = nil
       readsOnResolve = true
       return
     }
