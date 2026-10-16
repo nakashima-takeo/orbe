@@ -39,7 +39,7 @@ struct ScmMessageField: NSViewRepresentable {
     text.placeholder = placeholder
     let message = panel.control.message
     if text.string != message, !text.hasMarkedText() {
-      text.string = message
+      text.replaceDiscardingUndo(with: message)
     }
     if panel.focusRequest == .message {
       DispatchQueue.main.async { context.coordinator.applyFocusRequest() }
@@ -192,5 +192,13 @@ final class ScmMessageTextView: NSTextView {
   override func didChangeText() {
     super.didChangeText()
     needsDisplay = true
+  }
+
+  /// 中身を外から差し替える（コミット後に空にした・別の窓で打った）。差し替えは undo に積まず、それまでの取り消しも捨てる
+  /// ——古い履歴は今の文と食い違い、⌘Z が文の外の範囲を戻そうとする。
+  func replaceDiscardingUndo(with message: String) {
+    breakUndoCoalescing()
+    string = message
+    if let textStorage { undoManager?.removeAllActions(withTarget: textStorage) }
   }
 }
