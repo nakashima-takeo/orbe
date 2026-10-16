@@ -233,8 +233,8 @@ extension Theme.Layout {
   static let editorSearchCountWidth: CGFloat = 18
   static let editorSearchCountHeight: CGFloat = 16
   static let editorSearchChevron: CGFloat = 10
-  /// 検索中の進捗の細い線。
-  static let editorSearchProgress: CGFloat = 2
+  /// 進みの細い線（検索中・ソース管理の実行中）。
+  static let editorProgressLine: CGFloat = 2
   /// 引き手と継ぎ目の幅。
   static let faceHandle: CGFloat = 12
   /// 縁にいるときの引き手の高さ（縁から離れるにつれて全高へ伸びる）。

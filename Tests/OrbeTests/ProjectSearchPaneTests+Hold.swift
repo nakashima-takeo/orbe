@@ -34,7 +34,7 @@ extension ProjectSearchPaneTests {
     let list = try list(hosted)
     hosted.window.makeFirstResponder(list)
     var window: (() -> Void)?
-    hosted.search.navigationDelay.schedule = { _, fire in window = fire }
+    hosted.search.navigation.delay.schedule = { _, fire in window = fire }
     let arrow = String(UnicodeScalar(NSEvent.SpecialKey.downArrow.rawValue)!)
     hosted.search.select(RowID(path: "a.txt", match: nil))
     list.keyDown(with: .key(arrow, []))

@@ -18,6 +18,7 @@ final class RowListTests: OrbeTestCase {
   /// 源の偽物。行 r の中身は "row r"、選択の同一性は行の番号そのもの。受けた操作を記録する。
   final class Source: RowListSource {
     var rowCount = 200
+    var rowSegments: [RowListSegment] { [RowListSegment(start: 0, count: rowCount, height: 20)] }
     var wantsFocus = false
     private(set) var keys: [RowListKey] = []
     private(set) var releases = 0

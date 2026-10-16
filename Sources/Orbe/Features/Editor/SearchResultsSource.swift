@@ -14,6 +14,11 @@ final class SearchResultsSource: RowListSource {
 
   var rowCount: Int { search.rowCount }
 
+  /// 見出しも一致も同じ高さ（区間 1 つ）。
+  var rowSegments: [RowListSegment] {
+    [RowListSegment(start: 0, count: search.rowCount, height: Theme.Layout.editorSearchRow)]
+  }
+
   func makeRowView() -> SearchResultRowView { SearchResultRowView(frame: .zero) }
 
   func show(_ row: Int, in view: SearchResultRowView, emoji: NSFont?) {

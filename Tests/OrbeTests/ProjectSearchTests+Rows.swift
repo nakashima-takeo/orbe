@@ -31,7 +31,7 @@ extension ProjectSearchTests {
     var opened: [(RowID, ProjectSearch.Opening)] = []
     f.search.onOpen = { id, opening in opened.append((id, opening)) }
     var window: (() -> Void)?
-    f.search.navigationDelay.schedule = { _, fire in window = fire }
+    f.search.navigation.delay.schedule = { _, fire in window = fire }
     return RowsFixture(search: f.search, opened: { opened }, closeWindow: { window?() })
   }
 
