@@ -139,9 +139,9 @@ final class ScmRowView: ListRowView {
 
   /// ポインタが乗っている部分が変わったときだけ描き直す（行の地・ボタンの地・さらに表示の字）。
   override func pointerDidChange(from old: NSPoint?) {
-    let hovered = { (point: NSPoint?) -> Int? in
-      guard let point else { return nil }
-      return self.buttonRects().firstIndex { $0.1.contains(point) }.map { $0 + 1 } ?? 0
+    let hovered = { (point: NSPoint?) -> (band: Bool, button: Int?) in
+      guard let point else { return (false, nil) }
+      return (self.band.contains(point), self.buttonRects().firstIndex { $0.1.contains(point) })
     }
     if hovered(old) != hovered(pointer) { needsDisplay = true }
   }
