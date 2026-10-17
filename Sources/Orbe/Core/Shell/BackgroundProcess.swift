@@ -1,6 +1,6 @@
 import Foundation
 
-/// 裏の 1 回。子を専用のプロセスグループで起こし、経過時間・無出力・出力量の上限で打ち切り、グループごと片付けてから返る。
+/// 裏の 1 回。子を専用のプロセスグループで起こし、経過時間・無出力（任意）・出力量の上限で打ち切り、グループごと片付けてから返る。
 ///
 /// 実行の寿命＝グループの寿命。リーダーの終了は回収せずに観測し（`waitid` の `WNOWAIT`）、グループへ SIGTERM を送って
 /// 背景に残った孫を片付けてから、最後にリーダーを回収する。回収してから `killpg` すると、空いた pgid が再利用されたときに
@@ -59,7 +59,10 @@ final class BackgroundProcess {
     return queue.sync {
       Outcome(
         ending: ending ?? .stopped, stdout: stdoutCaptured, stderr: stderrCaptured,
-        droppedLines: lines?.dropped ?? 0)
+        droppedLines: lines?.dropped ?? 0,
+        elapsed: started
+          ? TimeInterval(DispatchTime.now().uptimeNanoseconds - startedAt.uptimeNanoseconds) / 1e9
+          : 0)
     }
   }
 
@@ -287,7 +290,8 @@ final class BackgroundProcess {
   }
 
   private func nextLimitDeadline() -> DispatchTime {
-    min(startedAt + spec.elapsedLimit, lastActivity + spec.idleLimit)
+    let elapsedDeadline = startedAt + spec.elapsedLimit
+    return spec.idleLimit.map { min(elapsedDeadline, lastActivity + $0) } ?? elapsedDeadline
   }
 
   /// 期限で目覚めたら測り直す。出力が来ていれば無出力の期限は延びている。
@@ -295,7 +299,7 @@ final class BackgroundProcess {
     let now = DispatchTime.now()
     if now >= startedAt + spec.elapsedLimit {
       terminate(.limited(.elapsed))
-    } else if now >= lastActivity + spec.idleLimit {
+    } else if let idle = spec.idleLimit, now >= lastActivity + idle {
       terminate(.limited(.idle))
     } else {
       limitTimer?.schedule(deadline: nextLimitDeadline())
@@ -338,62 +342,5 @@ final class BackgroundProcess {
   static func ending(fromWaitStatus status: Int32) -> Ending {
     let signal = status & 0x7f
     return signal == 0 ? .exited((status >> 8) & 0xff) : .signaled(signal)
-  }
-}
-
-extension BackgroundProcess {
-  struct Spec {
-    var executable: String
-    /// argv[1...]。
-    var arguments: [String]
-    var environment: [String: String]
-    var directory: String
-    var stdin: Data?
-    var elapsedLimit: TimeInterval
-    var idleLimit: TimeInterval
-    var stdout: Stdout
-    var stderr: Capture
-  }
-
-  /// 標準出力の扱い。
-  enum Stdout {
-    /// 上限まで貯める。
-    case collect(Capture)
-    /// 1 行ずつ渡し、貯めない。`maxLength` を超えた行は渡さずに捨て、`Outcome.droppedLines` に数える。
-    /// `onLine` が終わり方（出力量の上限・止めた）を返したら、それで打ち切る。nil なら続ける。呼ばれるのは裏の直列キュー。
-    case lines(maxLength: Int, onLine: (Data) -> Ending?)
-  }
-
-  /// 貯める出力の上限。`overflowStops` が偽なら、超えた分を捨てて走らせ続ける。
-  struct Capture {
-    var limit: Int
-    var overflowStops: Bool
-  }
-
-  struct Captured: Equatable {
-    var data = Data()
-    var truncated = false
-  }
-
-  enum Limit: Equatable, CaseIterable {
-    case elapsed
-    case idle
-    case output
-  }
-
-  enum Ending: Equatable {
-    case exited(Int32)
-    case signaled(Int32)
-    case limited(Limit)
-    case stopped
-    /// `posix_spawn` の失敗（errno）。
-    case launchFailed(Int32)
-  }
-
-  struct Outcome {
-    let ending: Ending
-    let stdout: Captured
-    let stderr: Captured
-    let droppedLines: Int
   }
 }

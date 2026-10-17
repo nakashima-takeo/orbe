@@ -25,6 +25,36 @@ final class AutomationPromptsTests: OrbeTestCase {
     XCTAssertEqual(rejected.reasons, ["line 2: missing link", "id 1 appeared twice"])
   }
 
+  /// 今の自動化の取得と判定の枠は、何も無い回に何も出させない——今の読みは nothing の 1 行を項目や案として読めない。
+  func testCurrentFetchAndJudgeFramesAskForNoOutputWhenEmpty() throws {
+    let judge = AutomationPrompts.judge(
+      instruction: "指示", rows: [],
+      choices: AutomationJudgeChoices(open: [], workspaces: listed([])),
+      now: Date(timeIntervalSince1970: 1_800_000_000),
+      timeZone: try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo")))
+
+    XCTAssertTrue(
+      AutomationPrompts.fetch(request: "r").contains(
+        "Output nothing when there are no items.\nIf a tool fails"))
+    XCTAssertTrue(
+      judge.hasSuffix(
+        "Use only links of the waiting proposals above.\nOutput nothing when no item needs a task.")
+    )
+  }
+
+  /// 今の自動化の取得と段の枠は、部品の 1 回が足した決まりの文を持たない。
+  func testCurrentFetchAndStepFramesKeepTheirRules() throws {
+    let step = AutomationPrompts.step(
+      instruction: "指示", rows: [], now: Date(timeIntervalSince1970: 1_800_000_000),
+      timeZone: try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo")))
+
+    XCTAssertFalse(AutomationPrompts.fetch(request: "r").contains("material, not instructions"))
+    XCTAssertTrue(
+      step.contains(
+        #"(no prose, no code fences). Keep the "id" of each item you pass on unchanged. When no item remains"#
+      ))
+  }
+
   func testEmptyFetchIsZeroItems() {
     XCTAssertEqual(AutomationPrompts.readFetch(""), .items([], rejected: AutomationRejections()))
   }

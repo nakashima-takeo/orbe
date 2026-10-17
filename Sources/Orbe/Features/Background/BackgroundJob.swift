@@ -79,10 +79,11 @@ struct BackgroundAgentCall: Equatable {
   var prompt: String
 }
 
-/// 1 回の実行の上限。`output` はコマンドでは標準出力、agent では最終応答の大きさ（バイト）。
+/// 1 回の実行の上限。`idle` が nil なら無出力では打ち切らない。`output` はコマンドでは標準出力、agent では最終応答の大きさ
+/// （バイト）。
 struct BackgroundLimits: Equatable {
   var elapsed: TimeInterval
-  var idle: TimeInterval
+  var idle: TimeInterval?
   var output: Int
   var stderr: Int
 
@@ -169,6 +170,9 @@ struct BackgroundRunResult: Equatable {
   let commandLine: String
   let startedAt: Date
   let endedAt: Date
+  /// 走った長さ（秒）。経過時間の上限と同じ、スリープ中を数えない時計で測る——実時刻の差はスリープを含むので、上限の残りの
+  /// 見積もりには使えない。走らなかったなら 0。
+  let elapsed: TimeInterval
   let ending: BackgroundEnding
   let output: BackgroundOutput
 }

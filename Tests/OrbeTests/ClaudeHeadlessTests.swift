@@ -69,12 +69,12 @@ final class ClaudeHeadlessTests: OrbeTestCase {
 
   /// MCP のツールを指定した呼び出しだけ、MCP サーバーの接続を待ってから始める（起動に数秒かかるサーバーのツールを失わない）。
   /// 待ちは無出力の上限より短い（待っている間に無出力で打ち切られない）。
-  func testMCPToolCallWaitsForServersWithinTheIdleLimit() {
+  func testMCPToolCallWaitsForServersWithinTheIdleLimit() throws {
     let env = ClaudeHeadless.environment(tools: ["mcp__slack__search"])
 
     XCTAssertEqual(env["CLAUDE_CODE_MCP_STARTUP_WAIT_MS"], "60000")
     XCTAssertEqual(env["CLAUDE_CODE_DISABLE_CLAUDE_MDS"], "1")
-    XCTAssertLessThan(ClaudeHeadless.mcpStartupWait, BackgroundLimits.agent.idle)
+    XCTAssertLessThan(ClaudeHeadless.mcpStartupWait, try XCTUnwrap(BackgroundLimits.agent.idle))
   }
 
   func testAvailableToolsComeFromTheInitEvent() {
