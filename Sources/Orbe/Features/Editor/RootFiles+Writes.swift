@@ -76,12 +76,16 @@ extension RootFiles {
     enqueue({ $0.discard(rows: rows, handle: $1, completion: $2) }, completion)
   }
 
-  /// ステージ済みの分をコミットする。`amend` でメッセージが空なら、前のメッセージのまま中身だけ差し替える。
+  /// `content` をコミットする。先にステージする行は、ステージとコミットを 1 つの書き込みとして続けて走らせる（間に別の
+  /// 書き込みが割り込まない）。index に競合が残っていれば何も書かずに `conflictsRemain`。amend でメッセージが空なら、前の
+  /// メッセージのまま中身だけ差し替える。
   @discardableResult
   func commit(
-    message: String, amend: Bool = false, completion: @escaping (GitWriteFailure?) -> Void
+    message: String, content: GitCommitContent = .staged,
+    completion: @escaping (GitWriteFailure?) -> Void
   ) -> Write {
-    enqueue({ $0.commit(message: message, amend: amend, handle: $1, completion: $2) }, completion)
+    enqueue(
+      { $0.commit(message: message, content: content, handle: $1, completion: $2) }, completion)
   }
 
   /// 最後のコミットを取り消す（中身はステージ済みに残る）。

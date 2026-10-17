@@ -162,7 +162,7 @@ final class SourceControlTests: OrbeTestCase {
     control.message = "hang"
 
     control.commitAndPush()
-    control.commit(amend: true)
+    control.commit(.amend)
     XCTAssertEqual(
       control.failure, SourceControl.Failure(kind: .amend, cause: .rewriteDuringNetwork))
     control.undoLastCommit()
@@ -172,7 +172,7 @@ final class SourceControlTests: OrbeTestCase {
     control.operations.first?.stop()
     idle("止めたコミットしてプッシュ")
 
-    control.commit(amend: true)
+    control.commit(.amend)
     control.push()
     XCTAssertEqual(control.failure, SourceControl.Failure(kind: .push, cause: .pushDuringRewrite))
     control.publish()

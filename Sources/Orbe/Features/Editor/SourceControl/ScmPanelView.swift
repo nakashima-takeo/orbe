@@ -111,7 +111,7 @@ private struct ScmControlsHead: View {
       HStack(spacing: 1) {
         ScmToolButton(
           glyph: EditorGlyphs.check, help: l10n.string(.editorScmCommit), isEnabled: state.canCommit
-        ) { panel.control.commit() }
+        ) { panel.commit() }
         ScmToolButton(
           glyph: EditorGlyphs.refresh, help: l10n.string(.editorScmRefresh), isEnabled: true,
           action: panel.refresh)
@@ -265,7 +265,7 @@ private struct ScmCommitButton: View {
 
   private func primary(_ primary: ScmCommitState.Primary) {
     switch primary {
-    case .commit: panel.control.commit()
+    case .commit: panel.commit()
     case .sync: panel.control.sync()
     case .publish: panel.control.publish()
     }
@@ -274,10 +274,10 @@ private struct ScmCommitButton: View {
   private func menu(_ state: ScmCommitState) -> NSMenu {
     ScmMenu.make([
       ScmMenu.Item(l10n.string(.editorScmAmend), state.canAmend) {
-        panel.control.commit(amend: true)
+        panel.control.commit(.amend)
       },
       ScmMenu.Item(
-        l10n.string(.editorScmCommitAndPush), state.canCommitAndPush, panel.control.commitAndPush),
+        l10n.string(.editorScmCommitAndPush), state.canCommitAndPush, panel.commitAndPush),
       nil,
       ScmMenu.Item(l10n.string(.editorScmUndo), state.canUndo, panel.control.undoLastCommit),
     ])

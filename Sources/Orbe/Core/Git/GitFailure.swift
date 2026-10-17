@@ -42,6 +42,8 @@ enum GitWriteFailure: Error, Equatable {
   case noPushDestination
   /// ブランチに居ない（detached HEAD）。push・pull と、初回コミットの取り消しが要る。
   case detached
+  /// コミットしようとした index に競合（unmerged のパス）が残っている。git はコミットを必ず断るので、何も書かずに返す。
+  case conflictsRemain
   /// 最後のコミットの親が手元に無い（shallow clone の境界）。取り消すと、ブランチを消して履歴とつながらない初回コミット前に
   /// 化けるので取り消さない。
   case shallowBoundary

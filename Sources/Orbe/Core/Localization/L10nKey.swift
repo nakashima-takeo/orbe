@@ -635,6 +635,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorScmFailureNoUpstream
   case editorScmFailureNoPushDestination
   case editorScmFailureShallow
+  case editorScmFailureConflictsRemain
   case editorScmFailureNetworkBusy
   case editorScmFailureRewriteDuringNetwork
   case editorScmFailurePushDuringRewrite

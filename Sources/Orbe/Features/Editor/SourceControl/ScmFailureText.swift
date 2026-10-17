@@ -25,6 +25,7 @@ enum ScmFailureText {
     case .detached: L10n.string(.editorScmFailureDetached, language)
     case .noUpstream: L10n.string(.editorScmFailureNoUpstream, language)
     case .noPushDestination: L10n.string(.editorScmFailureNoPushDestination, language)
+    case .conflictsRemain: L10n.string(.editorScmFailureConflictsRemain, language)
     case .shallowBoundary: L10n.string(.editorScmFailureShallow, language)
     case .reason(let reason): reason
     }

@@ -65,7 +65,7 @@ extension EditorPaneView {
         text.inputContext?.discardMarkedText()
       }
       if scm.commitState.canCommit {
-        scm.control.commit()
+        scm.commit()
       } else {
         NSSound.beep()
       }

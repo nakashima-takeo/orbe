@@ -6,7 +6,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか。変更があるのにボタンが同期に替わって押すとネット操作が走る・upstream の無いブランチで公開が
 /// 出ない・push 済みのコミットを amend で書き換えられる（Orbe の中では戻せない）・push 済みか分からない間に取り消せる・
-/// push と並んで amend・取り消しが走り、push したコミットを書き換える・ステージ済みが無いのにコミットが押せる。
+/// push と並んで amend・取り消しが走り、push したコミットを書き換える・競合だけなのにコミットが押せる。
 final class ScmCommitStateTests: OrbeTestCase {
   private func branch(
     name: String? = "feat", commit: String? = "abc", upstream: GitStatus.Upstream? = nil
@@ -20,19 +20,24 @@ final class ScmCommitStateTests: OrbeTestCase {
   }
 
   private func state(
-    staged: Int = 0, changes: Int = 0, branch: GitStatus.Branch?, blank: Bool = true,
-    networking: Bool = false, committing: Bool = false, pushed: Bool? = false
+    staged: Int = 0, changes: Int = 0, committable: Int? = nil, branch: GitStatus.Branch?,
+    blank: Bool = true, networking: Bool = false, committing: Bool = false, pushed: Bool? = false
   ) -> ScmCommitState {
     ScmCommitState(
-      staged: staged, changes: changes, branch: branch, messageIsBlank: blank,
+      staged: staged, changes: changes, committable: committable ?? changes, branch: branch,
+      messageIsBlank: blank,
       isNetworking: networking, isCommitting: committing, isHeadPushed: pushed)
   }
 
-  /// 変更が 1 つでもあればコミット。押せるのはステージ済みがあり、メッセージが空白だけでなく、コミット中でないとき。
-  func testCommitNeedsStagedChangesAndAMessage() {
+  /// 変更が 1 つでもあればコミット。押せるのはステージ済みか競合でない変更があり、メッセージが空白だけでなく、コミット中で
+  /// ないとき。範囲はステージ済みがあればそれだけ、無ければ全部。
+  func testCommitNeedsCommittableChangesAndAMessage() {
     let tracked = branch(upstream: upstream(ahead: 2, behind: 0))
     XCTAssertEqual(state(changes: 1, branch: tracked, blank: false).primary, .commit)
-    XCTAssertFalse(state(changes: 1, branch: tracked, blank: false).isPrimaryEnabled)
+    XCTAssertTrue(state(changes: 1, branch: tracked, blank: false).isPrimaryEnabled)
+    XCTAssertEqual(state(changes: 1, branch: tracked, blank: false).scope, .all)
+    XCTAssertFalse(state(changes: 1, committable: 0, branch: tracked, blank: false).canCommit)
+    XCTAssertEqual(state(staged: 1, changes: 1, branch: tracked, blank: false).scope, .staged)
     XCTAssertFalse(state(staged: 1, branch: tracked).canCommit)
     XCTAssertTrue(state(staged: 1, branch: tracked, blank: false).canCommit)
     XCTAssertFalse(state(staged: 1, branch: tracked, blank: false, committing: true).canCommit)

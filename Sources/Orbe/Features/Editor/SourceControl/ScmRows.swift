@@ -34,6 +34,14 @@ struct ScmChanges {
 
   let staged: [File]
   let changes: [File]
+  /// 「変更」のうち競合でない行の数（ステージ済みが無いときにコミットへ入る行）。
+  let committable: Int
+
+  init(staged: [File], changes: [File]) {
+    self.staged = staged
+    self.changes = changes
+    committable = changes.reduce(0) { $1.isConflicted ? $0 : $0 + 1 }
+  }
 
   static let empty = ScmChanges(staged: [], changes: [])
 
