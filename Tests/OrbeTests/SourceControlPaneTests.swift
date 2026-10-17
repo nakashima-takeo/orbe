@@ -7,14 +7,15 @@ import XCTest
 /// エディター面に結んだソース管理パネル——行は区分に合った diff を仮のタブで開き、追跡中のファイルの破棄は確かめてから行い、
 /// メッセージ欄の ⌘↵ はコミットだけを起こし、欄の中身が外から変わったら取り消しの履歴を捨て、取り消しはその欄の中で閉じる。
 /// パネルを出していなくても面が見えていれば件数は status に追いつき（行とグラフは作らない）、cd した後の列は新しい根の行を
-/// 出して押せば新しい根の diff を開く。
+/// 出して押せば新しい根の diff を開く。行の ＋ を同じ位置で続けて押すと、次の行が次々にステージされる。
 ///
 /// 壊れると何が起きるか。「ステージされている変更」の行で作業ツリーの diff が開き、コミットする中身と違うものを見て確かめた
 /// ことになる。追跡中のファイルの編集が確認なしに消え、戻せない。ボタンが「同期」の間に欄で ⌘↵ を打つと、キー 1 つで
 /// push が走る。コミットの後の ⌘Z が例外を投げ、欄の取り消しが壊れたまま残る。エクスプローラーを出している間、レールの
 /// 件数が古い数で止まる・隠れたパネルのために git を読む。cd した後も列が前の根の行を出し、押した行やボタンが前の
 /// worktree の diff を開く・前の worktree でステージや破棄をする。cd した・パネルを閉じた後の ⌘Z が、見えない欄の打鍵を
-/// 戻して前の worktree の打ちかけのメッセージや別の窓の打ち足しを黙って消す。
+/// 戻して前の worktree の打ちかけのメッセージや別の窓の打ち足しを黙って消す。＋ を続けて押すと、ステージ済みの区分が
+/// 現れて行がずれ、意図しない行をステージする。
 @MainActor
 final class SourceControlPaneTests: OrbeTestCase {
   struct Hosted {
@@ -26,7 +27,7 @@ final class SourceControlPaneTests: OrbeTestCase {
   }
 
   /// 根 `repo` の連の面だけを窓に載せ、ソース管理パネルを出す（`showsPanel` が false ならサイドバーは既定のエクスプローラー）。
-  private func host(_ repo: TempGitRepo, showsPanel: Bool = true) -> Hosted {
+  func host(_ repo: TempGitRepo, showsPanel: Bool = true) -> Hosted {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = NSWindow(
@@ -39,7 +40,7 @@ final class SourceControlPaneTests: OrbeTestCase {
     return Hosted(repo: repo, tab: tab, pane: pane, window: window)
   }
 
-  private func row(_ hosted: Hosted, _ section: ScmSection, _ path: String) throws -> Int {
+  func row(_ hosted: Hosted, _ section: ScmSection, _ path: String) throws -> Int {
     try XCTUnwrap(hosted.scm.layout.index[ScmRowID(section: section, path: path)])
   }
 
@@ -238,7 +239,7 @@ final class SourceControlPaneTests: OrbeTestCase {
   }
 
   /// 面に載っているソース管理の列のうち、今のパネルの行 `row` を描いている枠（今のパネルの列が載っていなければ nil）。
-  private func slot(_ row: Int, in pane: EditorPaneView) -> ScmRowView? {
+  func slot(_ row: Int, in pane: EditorPaneView) -> ScmRowView? {
     func lists(in view: NSView) -> [RowListView<ScmListSource>] {
       (view as? RowListView<ScmListSource>).map { [$0] } ?? view.subviews.flatMap(lists(in:))
     }
