@@ -4,7 +4,7 @@ import XCTest
 
 extension RootFilesWritesTests {
   /// 利用者の設定が `submodule.recurse=true` でも、サブモジュールの行の破棄はサブモジュールの中に触れない——中で作った
-  /// コミット（HEAD が記録済みのコミットへ戻って detached になると reflog からしか辿れない）も、中の未コミットの変更も残る。
+  /// コミットから中の HEAD を戻さず、中の未コミットの変更も残る。
   func testDiscardingASubmoduleLeavesItsInsideAloneEvenWhenTheUserRecursesIntoSubmodules() throws {
     try repo.addSubmodule("sub")
     XCTAssertTrue(repo.git(["config", "submodule.recurse", "true"]).isSuccess)
