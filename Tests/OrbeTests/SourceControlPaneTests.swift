@@ -5,15 +5,16 @@ import XCTest
 @testable import Orbe
 
 /// エディター面に結んだソース管理パネル——行は区分に合った diff を仮のタブで開き、追跡中のファイルの破棄は確かめてから行い、
-/// メッセージ欄の ⌘↵ はコミットだけを起こし、欄の中身が外から変わったら取り消しの履歴を捨てる。パネルを出していなくても
-/// 面が見えていれば件数は status に追いつき（行とグラフは作らない）、cd した後の列は新しい根の行を出して押せば新しい根の
-/// diff を開く。
+/// メッセージ欄の ⌘↵ はコミットだけを起こし、欄の中身が外から変わったら取り消しの履歴を捨て、取り消しはその欄の中で閉じる。
+/// パネルを出していなくても面が見えていれば件数は status に追いつき（行とグラフは作らない）、cd した後の列は新しい根の行を
+/// 出して押せば新しい根の diff を開く。
 ///
 /// 壊れると何が起きるか。「ステージされている変更」の行で作業ツリーの diff が開き、コミットする中身と違うものを見て確かめた
 /// ことになる。追跡中のファイルの編集が確認なしに消え、戻せない。ボタンが「同期」の間に欄で ⌘↵ を打つと、キー 1 つで
 /// push が走る。コミットの後の ⌘Z が例外を投げ、欄の取り消しが壊れたまま残る。エクスプローラーを出している間、レールの
 /// 件数が古い数で止まる・隠れたパネルのために git を読む。cd した後も列が前の根の行を出し、押した行やボタンが前の
-/// worktree の diff を開く・前の worktree でステージや破棄をする。
+/// worktree の diff を開く・前の worktree でステージや破棄をする。cd した・パネルを閉じた後の ⌘Z が、見えない欄の打鍵を
+/// 戻して前の worktree の打ちかけのメッセージや別の窓の打ち足しを黙って消す。
 @MainActor
 final class SourceControlPaneTests: OrbeTestCase {
   struct Hosted {
@@ -129,20 +130,52 @@ final class SourceControlPaneTests: OrbeTestCase {
   /// 文へ戻らず、今の文の外を戻そうとして例外を投げることもない。
   func testAnOutsideChangeOfTheMessageDiscardsTheFieldsUndo() throws {
     let hosted = host(try TempGitRepo())
-    func field(in view: NSView) -> ScmMessageTextView? {
-      (view as? ScmMessageTextView) ?? view.subviews.lazy.compactMap(field(in:)).first
-    }
-    pumpMain(until: { field(in: hosted.pane) != nil }, "メッセージ欄")
-    let text = try XCTUnwrap(field(in: hosted.pane))
-    hosted.window.makeFirstResponder(text)
-    text.insertText("typed message", replacementRange: NSRange(location: NSNotFound, length: 0))
-    pumpMain(until: { hosted.scm.control.message == "typed message" }, "打った文が欄の外へ届く")
+    let text = try type("typed message", in: hosted)
 
     hosted.scm.control.message = ""
     pumpMain(until: { text.string.isEmpty }, "外の変化が欄に届く")
     XCTAssertEqual(text.undoManager?.canUndo, false)
     text.undoManager?.undo()
     XCTAssertEqual(text.string, "")
+  }
+
+  /// 欄の取り消しはその欄の中で閉じる——cd で欄が作り直された後の ⌘Z は前の worktree のメッセージを戻さず、新しい欄の
+  /// 打鍵だけを戻す。
+  func testUndoInTheMessageAfterChangingTheRootLeavesThePreviousRootsMessage() throws {
+    let hosted = host(try TempGitRepo())
+    let old = try type("typed message", in: hosted)
+    let previous = hosted.scm.control
+    let other = try TempGitRepo(name: "orbe-scm-pane-other")
+
+    hosted.pane.setRoot(other.root)
+    pumpMain(
+      until: { self.messageField(in: hosted.pane).map { $0 !== old } ?? false }, "新しい根の欄")
+    let new = try type("new", in: hosted)
+    XCTAssertTrue(undo(in: hosted))
+    XCTAssertEqual(new.string, "")
+    XCTAssertEqual(hosted.scm.control.message, "")
+    _ = undo(in: hosted)
+    XCTAssertEqual(previous.message, "typed message", "新しい欄に戻すものが無ければ何も戻さない")
+  }
+
+  /// 窓から外れた欄の取り消しはどこにも効かない——パネルを閉じて開き直した欄の ⌘Z は、閉じている間に別の窓が打ち足した
+  /// 分も、閉じる前の打鍵も戻さない。
+  func testUndoInAReopenedMessageKeepsWhatAnotherWindowTyped() throws {
+    let repo = try TempGitRepo()
+    let first = host(repo)
+    let second = host(repo, showsPanel: false)
+    _ = try type("first", in: first)
+    first.pane.shell.selectPanel(.files)
+    pumpMain(until: { self.messageField(in: first.pane) == nil }, "閉じたパネルの欄が外れる")
+
+    second.pane.shell.selectPanel(.sourceControl)
+    _ = try type(" more", in: second)
+    first.pane.shell.selectPanel(.sourceControl)
+    pumpMain(until: { self.messageField(in: first.pane)?.string == "first more" }, "開き直した欄")
+    first.window.makeFirstResponder(try XCTUnwrap(messageField(in: first.pane)))
+    _ = undo(in: first)
+    XCTAssertEqual(first.scm.control.message, "first more")
+    XCTAssertEqual(messageField(in: first.pane)?.string, "first more")
   }
 
   /// パネルを出していない面でも、件数は status の変化に追いつく。その間、行の組とグラフは作らない。
@@ -180,6 +213,28 @@ final class SourceControlPaneTests: OrbeTestCase {
     XCTAssertEqual(
       hosted.tab.group.editor.activeID,
       .diff(EditorDiff.Key(root: other.root, path: "m.txt", kind: .workingTree)))
+  }
+
+  /// 面のメッセージ欄（載っていなければ nil）。
+  private func messageField(in view: NSView) -> ScmMessageTextView? {
+    (view as? ScmMessageTextView) ?? view.subviews.lazy.compactMap(messageField(in:)).first
+  }
+
+  /// メッセージ欄に焦点を入れ、末尾に `text` を打つ（打った文が欄の外へ届くまで待つ）。
+  @discardableResult
+  private func type(_ text: String, in hosted: Hosted) throws -> ScmMessageTextView {
+    pumpMain(until: { self.messageField(in: hosted.pane) != nil }, "メッセージ欄")
+    let field = try XCTUnwrap(messageField(in: hosted.pane))
+    hosted.window.makeFirstResponder(field)
+    let expected = field.string + text
+    field.insertText(text, replacementRange: NSRange(location: field.string.utf16.count, length: 0))
+    pumpMain(until: { hosted.scm.control.message == expected }, "打った文が欄の外へ届く")
+    return field
+  }
+
+  /// 編集メニューの「取り消す」と同じく、窓の焦点から ⌘Z の操作を送る（受け手が無ければ false）。
+  private func undo(in hosted: Hosted) -> Bool {
+    hosted.window.firstResponder?.tryToPerform(Selector(("undo:")), with: nil) ?? false
   }
 
   /// 面に載っているソース管理の列のうち、今のパネルの行 `row` を描いている枠（今のパネルの列が載っていなければ nil）。

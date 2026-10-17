@@ -3,8 +3,10 @@ import SwiftUI
 
 /// コミットメッセージの欄。↵ は改行（VS Code と同じ）、変換中の ↵ は変換の確定だけ（NSTextView のまま）。1 行のときの高さは
 /// 見本の 26 で、10 行まで伸び、その先はスクロールする。中身は worktree の状態（`SourceControl.message`）そのもので、同じ
-/// worktree を見る別の窓の欄とも同じ値になる。⌘↵ は pane が取る（→ `EditorPaneView+SourceControl`）。焦点の出入りは
-/// パネルへ写し、焦点の要求（ソース管理を開いた・列の先頭で ⌘↑）はここで当てる。
+/// worktree を見る別の窓の欄とも同じ値になる。取り消しの履歴は欄ごとに持ち、欄と一緒に消える——窓の履歴に積むと、作り
+/// 直された・隠れた欄の打鍵を別の欄の ⌘Z が戻し、見えない worktree のメッセージを書き換える。⌘↵ は pane が取る
+/// （→ `EditorPaneView+SourceControl`）。焦点の出入りはパネルへ写し、焦点の要求（ソース管理を開いた・列の先頭で ⌘↑）は
+/// ここで当てる。
 struct ScmMessageField: NSViewRepresentable {
   let panel: ScmPanel
   let placeholder: String
@@ -59,10 +61,13 @@ struct ScmMessageField: NSViewRepresentable {
   final class Coordinator: NSObject, NSTextViewDelegate {
     var field: ScmMessageField
     weak var text: ScmMessageTextView?
+    private let undo = UndoManager()
 
     init(_ field: ScmMessageField) {
       self.field = field
     }
+
+    func undoManager(for view: NSTextView) -> UndoManager? { undo }
 
     func textDidChange(_ notification: Notification) {
       guard let text = notification.object as? NSTextView else { return }
@@ -194,11 +199,11 @@ final class ScmMessageTextView: NSTextView {
     needsDisplay = true
   }
 
-  /// 中身を外から差し替える（コミット後に空にした・別の窓で打った）。差し替えは undo に積まず、それまでの取り消しも捨てる
+  /// 中身を外から差し替える（コミット後に空にした・別の窓で打った）。差し替えは undo に積まず、欄の取り消しの履歴も捨てる
   /// ——古い履歴は今の文と食い違い、⌘Z が文の外の範囲を戻そうとする。
   func replaceDiscardingUndo(with message: String) {
     breakUndoCoalescing()
     string = message
-    if let textStorage { undoManager?.removeAllActions(withTarget: textStorage) }
+    undoManager?.removeAllActions()
   }
 }
