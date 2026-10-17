@@ -50,12 +50,15 @@ struct BoardAutomationSummary: Equatable {
   let notes: [String]
   /// 新しい順。
   let runs: [BoardRunLine]
-  /// 帯。古い回が左。
+  /// 帯（直近の `stripLength` 回）。古い回が左。
   let strip: [BoardRunTone]
   /// 一覧の右端の、最新の回の文（「16:40 に 2件を追加」「13:00 に失敗」）。まだ回っていなければ nil。
   let mark: String?
   /// 詳細の見出しの前回（「前回 今日 16:40　判定: 2件をタスク候補に追加」）。失敗の理由は実行履歴だけが出す。
   let last: String
+
+  /// 帯に並べる回の数。
+  static let stripLength = 20
 
   /// 実行履歴の最新の行の 1 行目。まだ回っていなければ nil。
   var latestLine: String? {
@@ -102,7 +105,7 @@ extension BoardAutomationSummary {
           + Self.result(entry.run, heading: false, output: destinations, text: text),
         tone: Self.tone(entry.run), wraps: Self.wraps(entry.run))
     }
-    strip = keyed.reversed().map { Self.tone($0.run) }
+    strip = keyed.prefix(Self.stripLength).reversed().map { Self.tone($0.run) }
     guard let latest = keyed.first else {
       mark = nil
       last = l10n.string(.automationNeverRan)
