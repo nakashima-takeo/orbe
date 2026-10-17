@@ -36,8 +36,10 @@ final class TempGitRepo {
     return bare
   }
 
-  /// 別の clone から origin の main を 1 コミット進める（このリポジトリには取り込まない）。
-  func advanceOrigin(writing relativePath: String, _ text: String) throws {
+  /// 別の clone から、origin の `branch` を origin の main の 1 コミット先へ進める（このリポジトリには取り込まない）。
+  func advanceOrigin(writing relativePath: String, _ text: String, onto branch: String = "main")
+    throws
+  {
     let other = dir.path + "-other-\(UUID().uuidString)"
     XCTAssertTrue(git(["clone", "-q", dir.path + "-origin.git", other]).isSuccess)
     for args in [
@@ -48,7 +50,7 @@ final class TempGitRepo {
     try write(relativePath, text, in: other)
     XCTAssertTrue(git(["add", "-A"], in: other).isSuccess)
     XCTAssertTrue(git(["commit", "-qm", "from other"], in: other).isSuccess)
-    XCTAssertTrue(git(["push", "-q", "origin", "main"], in: other).isSuccess)
+    XCTAssertTrue(git(["push", "-q", "origin", "HEAD:" + branch], in: other).isSuccess)
   }
 
   /// HEAD のコミット。

@@ -63,11 +63,13 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
   }
 
   /// 出しているパネルで裏の fetch を走らせる。止めても終わりが遅れるように、ref を書く hook の最初の 1 回を、SIGTERM を
-  /// 無視して git の stderr を握ったまま数秒眠るものにする（自然に終わる）。origin は 1 コミット進んでいる。
-  private func panelWithAStubbornBackgroundFetch() throws -> (ScmPanel, ScmAutoFetch) {
+  /// 無視して git の stderr を握ったまま数秒眠るものにする（自然に終わる）。origin の `branch` が 1 コミット進んでいる。
+  private func panelWithAStubbornBackgroundFetch(
+    advancing branch: String = "main"
+  ) throws -> (ScmPanel, ScmAutoFetch) {
     let repo = try TempGitRepo()
     repo.addOrigin()
-    try repo.advanceOrigin(writing: "o.txt", "o\n")
+    try repo.advanceOrigin(writing: "o.txt", "o\n", onto: branch)
     let hooks = repo.root + "-hooks"
     let started = hooks + "/started"
     try FileManager.default.createDirectory(atPath: hooks, withIntermediateDirectories: true)
@@ -142,9 +144,10 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     XCTAssertEqual(autoFetch.rules.humans, 0)
   }
 
-  /// push の段の前の待ちも帯に出て止められ、止めればその場で終わる（コミットは残り、push はしない）。
+  /// push の段の前の待ちも帯に出て止められ、止めればその場で終わる（コミットは残り、裏の fetch が終わった後も push は
+  /// 走らない）。origin の main は進めない——走れば通る push にしておく。
   func testTheWaitBeforeThePushStepShowsTheBandAndStopsAtOnce() throws {
-    let (panel, autoFetch) = try panelWithAStubbornBackgroundFetch()
+    let (panel, autoFetch) = try panelWithAStubbornBackgroundFetch(advancing: "other")
     let repo = try XCTUnwrap(self.repo)
     try repo.write("a.txt", "edited\n")
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
@@ -165,6 +168,10 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     XCTAssertNil(panel.control.failure)
     XCTAssertEqual(autoFetch.rules.humans, 0)
     XCTAssertEqual(repo.git(["log", "-1", "--format=%s"]).stdoutText, "a\n")
+    pumpMain(until: { !autoFetch.rules.isRunning }, "裏の fetch が終わる")
+    // 取り下げ損ねた待ちは裏の fetch の終わりで push を起こすので、その push が返るだけ回してから見る。
+    let settled = Date().addingTimeInterval(1)
+    pumpMain(until: { Date() > settled }, "裏の fetch の終わりの後")
     XCTAssertEqual(repo.git(["ls-remote", "origin", "main"]).stdoutText, origin, "push しない")
   }
 }
