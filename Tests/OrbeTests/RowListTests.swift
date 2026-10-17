@@ -343,7 +343,10 @@ extension RowListTests {
   final class Source: RowListSource {
     var rowCount = 200
     var segments: [RowListSegment]?
-    var rowSegments: [RowListSegment] {
+    /// 組は自分自身（行をその場で変える源の型）。
+    var rows: Source { self }
+    func rowCount(in rows: Source) -> Int { rowCount }
+    func segments(in rows: Source) -> [RowListSegment] {
       segments ?? [RowListSegment(start: 0, count: rowCount, height: 20)]
     }
     var wantsFocus = false
@@ -357,26 +360,29 @@ extension RowListTests {
     private(set) var outOfRange = 0
 
     func makeRowView() -> Row { Row(frame: .zero) }
-    func show(_ row: Int, in view: Row, emoji: NSFont?) {
+    func show(_ row: Int, of rows: Source, in view: Row, emoji: NSFont?) {
       if row >= rowCount { outOfRange += 1 }
       view.show("row \(row)")
     }
-    func row(of selection: Int) -> Int? { selection < rowCount ? selection : nil }
+    func row(of selection: Int, in rows: Source) -> Int? { selection < rowCount ? selection : nil }
     func prepareRows(for appearance: NSAppearance) {}
     func focusRequestDidApply() {
       wantsFocus = false
       focusRequestsApplied += 1
     }
     func focusDidChange(_ focused: Bool) { focus.append(focused) }
-    func perform(_ key: RowListKey) { keys.append(key) }
+    func perform(_ key: RowListKey, in rows: Source) { keys.append(key) }
     func keyDidRelease() { releases += 1 }
-    func click(_ row: Int) {
+    func click(_ row: Int, in rows: Source) {
       if row >= rowCount { outOfRange += 1 }
       clicks.append("click \(row)")
     }
-    func doubleClick(_ row: Int) { clicks.append("double \(row)") }
-    func press(_ row: Int, control: Int) { clicks.append("press \(row) \(control)") }
-    func select(_ row: Int) { selected.append(row) }
+    func doubleClick(_ row: Int, in rows: Source) { clicks.append("double \(row)") }
+    func press(_ row: Int, control: Int, in rows: Source) -> RowListAnchor<Int>? {
+      clicks.append("press \(row) \(control)")
+      return nil
+    }
+    func select(_ row: Int, in rows: Source) { selected.append(row) }
   }
 
   /// 行の偽物。中身が変わったときだけ描き直す（描いた回数を数える）。右端 30pt に部品 0 を持つ。

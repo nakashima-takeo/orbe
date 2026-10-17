@@ -224,6 +224,27 @@ struct ScmLayout {
     return segments
   }
 
+  /// 区分 `section` のファイル行のうち `offset` 番目の位置に来る行（範囲の外なら最後の行）。`skipped` の行は数えない——その行が
+  /// 抜けた後の並びで引く。区分に行が無ければ nil。選んだ行・押した行が区分から抜けたときに、次に指す行（同じ区分のその位置の
+  /// 行、無ければ前の行）。
+  func fileID(in section: ScmSection, at offset: Int, skipping skipped: Int? = nil) -> ScmRowID? {
+    guard let range = fileRanges[section] else { return nil }
+    let skips = skipped.map(range.contains) ?? false
+    let count = range.count - (skips ? 1 : 0)
+    guard count > 0 else { return nil }
+    var row = range.lowerBound + min(max(0, offset), count - 1)
+    if skips, let skipped, row >= skipped { row += 1 }
+    return id(at: row)
+  }
+
+  /// ファイル行 `row` の部品を押した後に留める行（押した行と、それが抜けた後に同じ位置へ来る行）。区分に他の行が無ければ nil。
+  func anchor(pressing row: Int, in section: ScmSection) -> RowListAnchor<ScmRowID>? {
+    guard let pressed = id(at: row), let range = fileRanges[section],
+      let successor = fileID(in: section, at: row - range.lowerBound, skipping: row)
+    else { return nil }
+    return RowListAnchor(pressed: pressed, successor: successor)
+  }
+
   /// 行 `row` の同一性（区分見出しとファイル行だけ。ほかは nil）。
   func id(at row: Int) -> ScmRowID? {
     guard row >= 0, row < items.count else { return nil }

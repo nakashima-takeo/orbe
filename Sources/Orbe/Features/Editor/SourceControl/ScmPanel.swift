@@ -248,8 +248,7 @@ final class ScmPanel {
         ? ScmRowID(section: selection.section, path: nil) : nil
       return
     }
-    let offset = min(old - oldRange.lowerBound, range.count - 1)
-    self.selection = layout.id(at: range.lowerBound + offset)
+    self.selection = layout.fileID(in: selection.section, at: old - oldRange.lowerBound)
   }
 
   // MARK: - グラフと HEAD

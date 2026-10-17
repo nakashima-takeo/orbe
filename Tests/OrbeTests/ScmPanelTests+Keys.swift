@@ -46,7 +46,7 @@ extension ScmPanelTests {
     let opened = try keysPanel()
     var visited: [ScmRowID?] = []
     for _ in 0..<7 {
-      panel.moveSelection(by: 1, isRepeat: false)
+      panel.moveSelection(by: 1, isRepeat: false, in: panel.layout)
       visited.append(panel.selection)
     }
     XCTAssertEqual(
@@ -69,10 +69,10 @@ extension ScmPanelTests {
     XCTAssertEqual(panel.selection, id(.changes))
     panel.moveLeft()
     rebuilt("← で畳む") { $0.layout.fileRanges[.changes]?.isEmpty == true }
-    panel.moveRight(isRepeat: false)
+    panel.moveRight(isRepeat: false, in: panel.layout)
     rebuilt("→ で開く") { $0.layout.fileRanges[.changes]?.isEmpty == false }
     XCTAssertEqual(panel.selection, id(.changes), "開くだけでは動かない")
-    panel.moveRight(isRepeat: false)
+    panel.moveRight(isRepeat: false, in: panel.layout)
     XCTAssertEqual(panel.selection, id(.changes, "a.txt"))
     XCTAssertEqual(opened().last?.opening, .browse)
 

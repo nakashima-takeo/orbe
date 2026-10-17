@@ -10,13 +10,11 @@ extension ScmPanel {
     onOpenDiff(EditorDiff.Key(root: root, path: path, kind: kind), opening)
   }
 
-  /// 渡れる行（区分見出しとファイル行）の位置。
-  private func navigable(_ row: Int) -> Bool { layout.id(at: row) != nil }
-
-  /// ↑↓: 渡れる行だけを渡る。未選択なら先頭。ファイル行へ動けば仮で開く（間引く）。
-  func moveSelection(by delta: Int, isRepeat: Bool) {
+  /// ↑↓: 渡れる行（区分見出しとファイル行）だけを渡る。未選択なら先頭。ファイル行へ動けば仮で開く（間引く）。
+  func moveSelection(by delta: Int, isRepeat: Bool, in layout: ScmLayout) {
     let rows = layout.items.indices
     guard !rows.isEmpty else { return }
+    let navigable = { (row: Int) in layout.id(at: row) != nil }
     let before = selection
     var row: Int?
     if let selection, let current = layout.index[selection] {
@@ -41,7 +39,7 @@ extension ScmPanel {
   }
 
   /// →: 畳んだ見出しなら開き、開いた見出しなら最初のファイル行へ動いて仮で開く（間引く）。
-  func moveRight(isRepeat: Bool) {
+  func moveRight(isRepeat: Bool, in layout: ScmLayout) {
     guard let selection, selection.path == nil else { return }
     if !isOpen(selection.section) {
       toggle(selection.section)
@@ -63,14 +61,14 @@ extension ScmPanel {
 
   /// ⌘↑: 先頭の行（か未選択）ならメッセージ欄へ戻る。
   func returnToMessageIfAtTop() {
-    let top = layout.items.indices.first(where: navigable)
+    let top = layout.items.indices.first { layout.id(at: $0) != nil }
     guard selection.map({ layout.index[$0] == top }) ?? true, isControlsOpen else { return }
     requestFocus(.message)
   }
 
   // MARK: - 押下
 
-  func click(_ row: Int) {
+  func click(_ row: Int, in layout: ScmLayout) {
     guard row < layout.items.count else { return }
     switch layout.items[row] {
     case .header(let section, _, _):
@@ -86,15 +84,18 @@ extension ScmPanel {
     }
   }
 
-  func doubleClick(_ row: Int) {
+  func doubleClick(_ row: Int, in layout: ScmLayout) {
     guard row < layout.items.count, case .file = layout.items[row] else { return }
     select(layout.id(at: row))
     openSelection(.commit)
   }
 
-  /// 行の中の部品を押した。押せない姿の部品は何もしない。
-  func press(_ row: Int, _ control: ScmControl) {
-    guard row < layout.items.count else { return }
+  /// 行の中の部品を押した。押せない姿の部品は何もしない。ステージ・解除・確認を出さない破棄（未追跡だけ）は、押した行と
+  /// 後継の行（同じ区分の次の行。無ければ前の行）を錨として返す——同じ位置で続けて押すと、次の行が次々に処理される。確認の
+  /// シートを経る破棄と見出しの一括操作は返さない。
+  @discardableResult
+  func press(_ row: Int, _ control: ScmControl, in layout: ScmLayout) -> RowListAnchor<ScmRowID>? {
+    guard row < layout.items.count else { return nil }
     switch layout.items[row] {
     case .header(let section, _, _):
       let files = changes.files(in: section).filter { !$0.isConflicted }
@@ -105,18 +106,25 @@ extension ScmPanel {
       case .refreshGraph: readGraphAndHead()
       default: break
       }
-    case .file(_, let file):
+    case .file(let section, let file):
       switch control {
       case .openFile where file.existsInWorkingTree:
         onOpenFile(URL(fileURLWithPath: root).appendingPathComponent(file.path))
-      case .stage: self.control.stage([file.row])
-      case .unstage: self.control.unstage([file.row])
-      case .discard where !file.isConflicted: onDiscard([file])
+      case .stage:
+        self.control.stage([file.row])
+        return layout.anchor(pressing: row, in: section)
+      case .unstage:
+        self.control.unstage([file.row])
+        return layout.anchor(pressing: row, in: section)
+      case .discard where !file.isConflicted:
+        onDiscard([file])
+        return ScmDiscardGate.needsConfirmation([file]) ? nil : layout.anchor(pressing: row, in: section)
       default: break
       }
     default:
       break
     }
+    return nil
   }
 }
 

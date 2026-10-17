@@ -55,12 +55,12 @@ final class SourceControlPaneTests: OrbeTestCase {
       "両方の区分に a.txt")
     let editor = hosted.tab.group.editor
 
-    hosted.scm.click(try row(hosted, .staged, "a.txt"))
+    hosted.scm.click(try row(hosted, .staged, "a.txt"), in: hosted.scm.layout)
     let staged = EditorTab.Key.diff(EditorDiff.Key(root: repo.root, path: "a.txt", kind: .staged))
     XCTAssertEqual(editor.activeID, staged)
     XCTAssertEqual(editor.previewID, staged)
 
-    hosted.scm.click(try row(hosted, .changes, "a.txt"))
+    hosted.scm.click(try row(hosted, .changes, "a.txt"), in: hosted.scm.layout)
     let working = EditorTab.Key.diff(
       EditorDiff.Key(root: repo.root, path: "a.txt", kind: .workingTree))
     XCTAssertEqual(editor.activeID, working)
@@ -78,7 +78,7 @@ final class SourceControlPaneTests: OrbeTestCase {
     pumpMain(until: { hosted.scm.changes.changes.count == 2 }, "変更の行")
     let untracked = repo.dir.appendingPathComponent("n.txt").path
 
-    hosted.scm.press(try row(hosted, .changes, "n.txt"), .discard)
+    hosted.scm.press(try row(hosted, .changes, "n.txt"), .discard, in: hosted.scm.layout)
     XCTAssertNil(hosted.window.attachedSheet, "未追跡だけなら確かめない")
     pumpMain(
       until: {
@@ -86,7 +86,7 @@ final class SourceControlPaneTests: OrbeTestCase {
       },
       "ゴミ箱へ")
 
-    hosted.scm.press(try row(hosted, .changes, "a.txt"), .discard)
+    hosted.scm.press(try row(hosted, .changes, "a.txt"), .discard, in: hosted.scm.layout)
     let sheet = try XCTUnwrap(hosted.window.attachedSheet, "追跡中なら確かめる")
     XCTAssertTrue(hosted.scm.control.operations.isEmpty, "確かめるまで捨て始めない")
     hosted.window.endSheet(sheet, returnCode: .alertFirstButtonReturn)

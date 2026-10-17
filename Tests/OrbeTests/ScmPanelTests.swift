@@ -140,10 +140,10 @@ final class ScmPanelTests: OrbeTestCase {
 
     var discarding: [String] = []
     panel.onDiscard = { files in discarding += files.map(\.path) }
-    panel.press(header, .discardAll)
+    panel.press(header, .discardAll, in: panel.layout)
     XCTAssertEqual(discarding, ["b.txt"])
 
-    panel.press(header, .stageAll)
+    panel.press(header, .stageAll, in: panel.layout)
     idle("すべてステージ")
     pumpMain(until: { self.panel.changes.staged.map(\.path) == ["b.txt"] }, "b.txt だけがステージ済みへ")
     XCTAssertEqual(

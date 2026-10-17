@@ -12,20 +12,25 @@ final class SearchResultsSource: RowListSource {
     self.search = search
   }
 
-  var rowCount: Int { search.rowCount }
+  /// 組は model そのもの（行をその場で畳み替える。列は読み直すまでも今の行の数を上限に問う）。
+  var rows: ProjectSearch { search }
+
+  func rowCount(in search: ProjectSearch) -> Int { search.rowCount }
 
   /// 見出しも一致も同じ高さ（区間 1 つ）。
-  var rowSegments: [RowListSegment] {
+  func segments(in search: ProjectSearch) -> [RowListSegment] {
     [RowListSegment(start: 0, count: search.rowCount, height: Theme.Layout.editorSearchRow)]
   }
 
   func makeRowView() -> SearchResultRowView { SearchResultRowView(frame: .zero) }
 
-  func show(_ row: Int, in view: SearchResultRowView, emoji: NSFont?) {
+  func show(_ row: Int, of search: ProjectSearch, in view: SearchResultRowView, emoji: NSFont?) {
     view.show(search.row(at: row), emoji: emoji)
   }
 
-  func row(of selection: ProjectSearch.RowID) -> Int? { search.rowIndex(of: selection) }
+  func row(of selection: ProjectSearch.RowID, in search: ProjectSearch) -> Int? {
+    search.rowIndex(of: selection)
+  }
 
   func prepareRows(for appearance: NSAppearance) {
     SearchResultRowView.prepare(for: appearance)
@@ -37,7 +42,7 @@ final class SearchResultsSource: RowListSource {
 
   func focusDidChange(_ focused: Bool) { search.focusDidChange(.results, focused: focused) }
 
-  func perform(_ key: RowListKey) {
+  func perform(_ key: RowListKey, in search: ProjectSearch) {
     switch key.action {
     case .up: search.moveSelection(by: -1, isRepeat: key.isRepeat)
     case .down: search.moveSelection(by: 1, isRepeat: key.isRepeat)
@@ -50,9 +55,11 @@ final class SearchResultsSource: RowListSource {
 
   func keyDidRelease() { search.navigation.keyDidRelease() }
 
-  func click(_ row: Int) { search.click(search.row(at: row).id) }
+  func click(_ row: Int, in search: ProjectSearch) { search.click(search.row(at: row).id) }
 
-  func doubleClick(_ row: Int) { search.doubleClick(search.row(at: row).id) }
+  func doubleClick(_ row: Int, in search: ProjectSearch) {
+    search.doubleClick(search.row(at: row).id)
+  }
 
-  func select(_ row: Int) { search.select(search.row(at: row).id) }
+  func select(_ row: Int, in search: ProjectSearch) { search.select(search.row(at: row).id) }
 }
