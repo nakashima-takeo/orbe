@@ -90,5 +90,13 @@ extension L10n {
       "この worktree で別のプル・プッシュ・フェッチが走っていたため、始めませんでした。終わってからもう一度試してください。",
       "Another pull, push, or fetch was running in this worktree, so this one didn't start. Try again when it finishes."
     ),
+    .editorScmFailureRewriteDuringNetwork: (
+      "この worktree でプル・プッシュ・フェッチが走っていたため、コミットを書き換えませんでした。終わってからもう一度試してください。",
+      "A pull, push, or fetch was running in this worktree, so the commit wasn't rewritten. Try again when it finishes."
+    ),
+    .editorScmFailurePushDuringRewrite: (
+      "この worktree で amend か最後のコミットの取り消しが走っていたため、プッシュしませんでした。終わってからもう一度試してください。",
+      "An amend or undo was running in this worktree, so nothing was pushed. Try again when it finishes."
+    ),
   ]
 }

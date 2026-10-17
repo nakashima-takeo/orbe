@@ -6,7 +6,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか。変更があるのにボタンが同期に替わって押すとネット操作が走る・upstream の無いブランチで公開が
 /// 出ない・push 済みのコミットを amend で書き換えられる（Orbe の中では戻せない）・push 済みか分からない間に取り消せる・
-/// ステージ済みが無いのにコミットが押せる。
+/// push と並んで amend・取り消しが走り、push したコミットを書き換える・ステージ済みが無いのにコミットが押せる。
 final class ScmCommitStateTests: OrbeTestCase {
   private func branch(
     name: String? = "feat", commit: String? = "abc", upstream: GitStatus.Upstream? = nil
@@ -59,7 +59,7 @@ final class ScmCommitStateTests: OrbeTestCase {
     XCTAssertEqual(state(branch: branch(upstream: unknown)).primary, .commit)
   }
 
-  /// HEAD が push 済み・分からない・初回コミット前なら amend と取り消しは押せない。
+  /// HEAD が push 済み・分からない・初回コミット前、コミット中・ネット操作中なら amend と取り消しは押せない。
   func testRewritingNeedsAnUnpushedHead() {
     let head = branch()
     XCTAssertTrue(state(staged: 1, branch: head).canAmend)
@@ -71,5 +71,7 @@ final class ScmCommitStateTests: OrbeTestCase {
     }
     XCTAssertFalse(state(branch: branch(commit: nil)).canUndo)
     XCTAssertFalse(state(branch: head, committing: true).canUndo)
+    XCTAssertFalse(state(staged: 1, branch: head, networking: true).canAmend)
+    XCTAssertFalse(state(branch: head, networking: true).canUndo)
   }
 }

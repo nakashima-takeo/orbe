@@ -636,6 +636,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorScmFailureNoPushDestination
   case editorScmFailureShallow
   case editorScmFailureNetworkBusy
+  case editorScmFailureRewriteDuringNetwork
+  case editorScmFailurePushDuringRewrite
 
   // MARK: - Editor 面（未保存の確認・外部変更の上書き）
   case editorUnsavedTitle

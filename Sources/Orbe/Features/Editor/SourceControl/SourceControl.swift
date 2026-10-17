@@ -10,7 +10,7 @@ protocol SourceControlObserver: AnyObject {
 /// worktree のソース管理の状態——打ちかけのメッセージ・操作の列（走っている操作と止める手）・最後の失敗。根（正準形の
 /// worktree ルート）ごとに 1 つで、アプリが動いている間持つ（レジストリは強参照。中身は小さい）。どれも面ではなく worktree の
 /// 事実なので、同じ worktree を 2 つの窓の面で見ても、cd で離れて戻っても、面を閉じても同じものが見える——「同じ worktree の
-/// ネット操作は 1 つずつ」もここで成り立つ（ネット操作が列にある間は、次のネット操作を始めずに断る）。
+/// ネット操作は 1 つずつ」と「push と HEAD の書き換えは並ばない」もここで成り立つ（列にある操作と重なる操作は始めずに断る）。
 ///
 /// git の操作は全部根のサービスの口を呼ぶ（→ `SourceControl+Operations`）。前提（upstream・detached・操作の途中）の判定と
 /// 失敗の分類も根のサービスが持ち、ここは結果を記録するだけ。根のサービスは持たず、走っている操作が終わるまで握る。
@@ -35,6 +35,12 @@ final class SourceControl {
       default: false
       }
     }
+
+    /// HEAD を書き換える（amend・取り消し）。
+    var rewritesHead: Bool { self == .amend || self == .undo }
+
+    /// 1 段目で送る（push は index の書き込みの順番に並ばないので、列にある書き換えと並んで走る）。
+    var pushesFirst: Bool { self == .push || self == .publish }
   }
 
   /// 2 段の操作の今の段（1 段の操作はその段だけ）。
@@ -92,6 +98,10 @@ final class SourceControl {
     case git(GitWriteFailure)
     /// 同じ worktree で別のネット操作が列にあったので、始めなかった。
     case networkBusy
+    /// 同じ worktree でネット操作が列にあったので、HEAD を書き換えなかった（push したコミットを書き換えうる）。
+    case rewriteDuringNetwork
+    /// 同じ worktree で HEAD の書き換えが列にあったので、送らなかった（書き換える前のコミットを送りうる）。
+    case pushDuringRewrite
   }
 
   /// 走り始めてから帯に出すまでの遅れ（短い操作で帯が点滅しない）。
@@ -141,17 +151,28 @@ final class SourceControl {
 
   // MARK: - 列（`SourceControl+Operations` が使う）
 
-  /// 操作を列に載せる（最後の失敗はここで消える——次の操作を始めると消える）。ネット操作が列にある間のネット操作は載せず、
-  /// 断った失敗を置いて nil を返す。
+  /// 操作を列に載せる（最後の失敗はここで消える——次の操作を始めると消える）。列にある操作と重なる操作は載せず、断った
+  /// 失敗を置いて nil を返す。
   func enqueue(_ kind: Kind, _ step: Step) -> Operation? {
-    if kind.isNetwork && isNetworking {
-      failure = Failure(kind: kind, cause: .networkBusy)
+    if let cause = refusal(of: kind) {
+      failure = Failure(kind: kind, cause: cause)
       return nil
     }
     failure = nil
     let operation = Operation(kind: kind, step: step, files: RootFiles.shared(for: root))
     operations.append(operation)
     return operation
+  }
+
+  /// 列にある操作と重なるので `kind` を始めない理由。ネット操作が列にある間のネット操作と HEAD の書き換え、書き換えが列にある
+  /// 間に 1 段目で送る操作を断る。pull・同期・コミットしてプッシュは index の書き込みの順番で書き換えの後に走るので断らない。
+  private func refusal(of kind: Kind) -> FailureCause? {
+    if kind.isNetwork && isNetworking { return .networkBusy }
+    if kind.rewritesHead && isNetworking { return .rewriteDuringNetwork }
+    if kind.pushesFirst && operations.contains(where: { $0.kind.rewritesHead }) {
+      return .pushDuringRewrite
+    }
+    return nil
   }
 
   /// 段の書き込みを操作に結ぶ。走り始めたら帯の遅れを数え始め、進捗の行は段ごとに消す。
