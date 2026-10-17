@@ -11,6 +11,8 @@ import XCTest
 @MainActor
 final class ScmAutoFetchPanelTests: OrbeTestCase {
   private var panel: ScmPanel?
+  /// 裏の fetch を粘らせたリポジトリ（`panelWithAStubbornBackgroundFetch` が作る）。
+  private var repo: TempGitRepo?
 
   override func tearDown() {
     panel?.isShown = false
@@ -63,7 +65,7 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
 
   /// 出しているパネルで裏の fetch を走らせる。止めても終わりが遅れるように、ref を書く hook の最初の 1 回を、SIGTERM を
   /// 無視して git の stderr を握ったまま数秒眠るものにする（自然に終わる）。origin は 1 コミット進んでいる。
-  private func panelWithAStubbornBackgroundFetch() throws -> (ScmPanel, ScmAutoFetch, TempGitRepo) {
+  private func panelWithAStubbornBackgroundFetch() throws -> (ScmPanel, ScmAutoFetch) {
     let repo = try TempGitRepo()
     repo.addOrigin()
     try repo.advanceOrigin(writing: "o.txt", "o\n")
@@ -86,13 +88,14 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     pumpMain(
       until: { autoFetch.rules.isRunning && FileManager.default.fileExists(atPath: started) },
       "裏の fetch が ref を書き始める")
-    return (panel, autoFetch, repo)
+    self.repo = repo
+    return (panel, autoFetch)
   }
 
   /// 裏の fetch に譲って待つ人の操作は、待つ間も帯に出て止められる。止めると裏の fetch の終わりを待たずに「止めた」で
   /// 終わり、係の人の数は 0 に戻る。
   func testAHumanOperationWaitingForTheBackgroundFetchShowsTheBandAndStopsAtOnce() throws {
-    let (panel, autoFetch, _) = try panelWithAStubbornBackgroundFetch()
+    let (panel, autoFetch) = try panelWithAStubbornBackgroundFetch()
     panel.control.fetch()
     XCTAssertEqual(autoFetch.rules.humans, 1)
     let operation = try XCTUnwrap(panel.control.operations.first)
@@ -110,7 +113,7 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
 
   /// 止めなければ、裏の fetch が終わってから人の操作が走り、通る。
   func testAHumanOperationThatWaitedRunsAfterTheBackgroundFetch() throws {
-    let (panel, autoFetch, _) = try panelWithAStubbornBackgroundFetch()
+    let (panel, autoFetch) = try panelWithAStubbornBackgroundFetch()
     panel.control.fetch()
     let operation = try XCTUnwrap(panel.control.operations.first)
     pumpMain(until: { panel.control.bandOperation === operation }, timeout: 1.5, "待つ間も帯に出る")
@@ -124,7 +127,8 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
   /// コミットしてプッシュは押した時点でコミットを順番に入れ、裏の fetch に譲って待つのは push の段の前だけ——待つ間に
   /// 押したステージはコミットの後に走り、コミットの中身は押した時点の姿のまま。
   func testCommitAndPushCommitsWhatWasShownWhileTheBackgroundFetchRuns() throws {
-    let (panel, autoFetch, repo) = try panelWithAStubbornBackgroundFetch()
+    let (panel, autoFetch) = try panelWithAStubbornBackgroundFetch()
+    let repo = try XCTUnwrap(self.repo)
     try repo.write("a.txt", "edited\n")
     try repo.write("b.txt", "b\n")
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
@@ -141,7 +145,8 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
 
   /// push の段の前の待ちも帯に出て止められ、止めればその場で終わる（コミットは残り、push はしない）。
   func testTheWaitBeforeThePushStepShowsTheBandAndStopsAtOnce() throws {
-    let (panel, autoFetch, repo) = try panelWithAStubbornBackgroundFetch()
+    let (panel, autoFetch) = try panelWithAStubbornBackgroundFetch()
+    let repo = try XCTUnwrap(self.repo)
     try repo.write("a.txt", "edited\n")
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     pumpMain(until: { panel.changes.staged.count == 1 }, "a.txt がステージ済み")
