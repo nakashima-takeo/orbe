@@ -69,8 +69,8 @@ final class SourceControlPaneTests: OrbeTestCase {
     XCTAssertEqual(editor.tabs.map(\.id), [working], "仮のタブを入れ替える")
   }
 
-  /// 未追跡だけの破棄は確かめずにゴミ箱へ移す。追跡中のファイルの破棄は確認のシートを出し、「破棄」を押すまで作業ツリーに
-  /// 触らない。
+  /// 未追跡だけの破棄は確かめずにゴミ箱へ移し、同じ位置で続けて押せるように次の行を留める。追跡中のファイルの破棄は確認の
+  /// シートを出し、「破棄」を押すまで作業ツリーに触らない。
   func testDiscardingTrackedChangesWaitsForTheConfirmation() throws {
     let repo = try TempGitRepo()
     try repo.write("a.txt", "edited\n")
@@ -79,7 +79,9 @@ final class SourceControlPaneTests: OrbeTestCase {
     pumpMain(until: { hosted.scm.changes.changes.count == 2 }, "変更の行")
     let untracked = repo.dir.appendingPathComponent("n.txt").path
 
-    hosted.scm.press(try row(hosted, .changes, "n.txt"), .discard, in: hosted.scm.layout)
+    XCTAssertNotNil(
+      hosted.scm.press(try row(hosted, .changes, "n.txt"), .discard, in: hosted.scm.layout),
+      "未追跡だけなら次の行を留める")
     XCTAssertNil(hosted.window.attachedSheet, "未追跡だけなら確かめない")
     pumpMain(
       until: {

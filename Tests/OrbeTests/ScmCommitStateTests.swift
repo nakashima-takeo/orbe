@@ -90,6 +90,9 @@ final class ScmCommitStateTests: OrbeTestCase {
   /// ▾ は中の項目（amend・コミットしてプッシュ・取り消し）が 1 つでも押せれば開き、1 つも押せなければ開かない。
   func testTheMenuOpensOnlyWithAnItemToChoose() {
     XCTAssertTrue(state(changes: 1, branch: branch()).isMenuEnabled, "欄が空でも取り消しは押せる")
+    XCTAssertTrue(
+      state(changes: 1, branch: branch(), blank: false, pushed: true).isMenuEnabled,
+      "push 済みでもコミットしてプッシュは押せる")
     XCTAssertFalse(state(branch: branch(), pushed: true).isMenuEnabled, "push 済みで変更も無い")
   }
 }
