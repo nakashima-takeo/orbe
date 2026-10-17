@@ -1,6 +1,70 @@
 import Foundation
 
 extension AutomationPrompts {
+  /// タスク候補の出力先が最後の agent の段に渡す依頼文。`rows` は確かめた入力行。
+  static func judge(
+    instruction: String, rows: [String], choices: AutomationJudgeChoices, now: Date,
+    timeZone: TimeZone
+  ) -> String {
+    judgeFrame(instruction: instruction, rows: rows, choices: choices, now: now, timeZone: timeZone)
+      + WhenEmpty.silent.line("no item needs a task")
+  }
+
+  /// 部品の 1 回の判定の依頼文。propose も resolve も出さない回は nothing の 1 行を出させる——待っている候補を片付けるだけの
+  /// 回も、何も無い回ではない。
+  static func partJudge(
+    instruction: String, rows: [String], choices: AutomationJudgeChoices, now: Date,
+    timeZone: TimeZone
+  ) -> String {
+    judgeFrame(instruction: instruction, rows: rows, choices: choices, now: now, timeZone: timeZone)
+      + WhenEmpty.nothingLine.line("you output no propose or resolve line")
+  }
+
+  /// 判定の依頼文の、何も無い回の出し方の前まで（改行で終わる）。
+  private static func judgeFrame(
+    instruction: String, rows: [String], choices: AutomationJudgeChoices, now: Date,
+    timeZone: TimeZone
+  ) -> String {
+    let openLines = choices.open.map { proposal in
+      var entry: [String: Any] = ["link": proposal.item.link, "title": proposal.title]
+      if let due = proposal.due { entry["due"] = due.text }
+      return jsonLine(entry)
+    }.joined(separator: "\n")
+    let workspaceLines = choices.workspaces.listed.map {
+      jsonLine(["workspace": $0.id, "name": $0.name, "root": $0.root] as [String: Any])
+    }.joined(separator: "\n")
+    return """
+      You decide which incoming items should become tasks on the user's task list. You have no tools; \
+      read only what is below.
+
+      Now: \(local(now, timeZone)), time zone \(timeZone.identifier).
+
+      The user's instruction:
+      \(instruction)
+
+      New items (one JSON object per line):
+      \(rows.joined(separator: "\n"))
+
+      Proposals already waiting for the user (one JSON object per line; may be empty):
+      \(openLines.isEmpty ? "(none)" : openLines)
+
+      Workspaces the user works in (one JSON object per line; may be empty):
+      \(workspaceLines.isEmpty ? "(none)" : workspaceLines)
+
+      Output one JSON object per line and nothing else (no prose, no code fences):
+      - To propose a task for a new item: \
+      {"propose": "<item id>", "title": "<one-line task title>", "due": "YYYY-MM-DD", \
+      "workspace": <workspace number>}. \
+      Omit due when there is no deadline. At most one proposal per item; use only ids of the new items above. \
+      Write workspace only when the item clearly belongs to one of the workspaces above (by the user's \
+      instruction or by the item itself, such as its repository), using only numbers listed above; omit it \
+      when unsure, and the task goes to Home.
+      - When the new items show that a waiting proposal is already dealt with: {"resolve": "<link of that proposal>"}. \
+      Use only links of the waiting proposals above.
+
+      """
+  }
+
   /// 最後の段の行を判定の出力として読む。propose・resolve の形でない行・知らない項目や候補を指す行・不正なタイトルや
   /// 期限・一覧に無い workspace・同じ項目への 2 つ目の候補は、理由付きで捨てる。Home の workspace は付け先なしとして受ける。
   /// `itemIds` は今回の新しい項目の id。
