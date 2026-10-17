@@ -64,6 +64,10 @@
       let group = TabGroup(
         key: GitWorktreeRoot.root(of: dir.path),
         editorSurfaces: EditorSurfaces(queriesRoot: queriesRoot, language: { .ja }))
+      // 撮る姿が裏の fetch で動かないように止める。
+      var settings = SettingsLayer()
+      settings[SettingKeys.scmAutoFetch] = false
+      group.view.editor.settings = { EffectiveSettings(settings) }
       let tab = TerminalTab(cwd: dir.path, group: group)
       group.view.add(terminal: tab.terminal)
       group.view.show(terminal: tab.terminal)

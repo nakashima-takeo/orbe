@@ -322,6 +322,13 @@ enum SettingsRegistry {
       defaultValue: { .int(40) }, domain: .intRange(5...180, step: 5, unit: "s"),
       guiConf: nil,  // gui.conf 非経由（メニューバー chrome の尺で libghostty 設定ではない）
       display: secondsLabel, unsetPlaceholderKey: nil),
+    SettingDescriptor(
+      id: .scmAutoFetch, key: "scm-auto-fetch", labelKey: .settingsScmAutoFetch,
+      activation: .toggle,
+      // ssh-agent の承認を毎回求める人（1Password・Secretive・FIDO 鍵）が止められるように持つ。
+      defaultValue: { .bool(true) }, domain: .toggle,
+      guiConf: nil,  // gui.conf 非経由（ソース管理パネルが「欲しい」を決めるときに面の workspace の実効値を読む）
+      display: boolLabel, unsetPlaceholderKey: nil),
   ]
 
   /// 取り込み済み音源の実体（`sounds/` 配下のファイル）を指す項目。参照集合 GC の契機判定が読む。
@@ -339,14 +346,14 @@ enum SettingsRegistry {
 
   /// パレット root の表示順（fontSize → backgroundOpacity → backgroundBlur → cursorStyleBlink →
   /// theme → agent → fontFamily → tabTitleFontFamily → emojiFont → agentStateIcons →
-  /// worktreeDir → notificationSound → 音量 → オン/オフ → メニューバー通知の表示時間）。
+  /// worktreeDir → notificationSound → 音量 → オン/オフ → メニューバー通知の表示時間 → ソース管理の自動フェッチ）。
   /// 背景関連・フォント関連・通知音関連をそれぞれ隣接させる。
   static let rootOrder: [SettingDescriptor] =
     [
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
       .defaultAgent, .fontFamily, .tabTitleFontFamily, .emojiFont, .agentStateIcons,
       .worktreeDir, .notificationSound, .notificationSoundVolume,
-      .notificationSoundEnabled, .menuBarNotificationDuration,
+      .notificationSoundEnabled, .menuBarNotificationDuration, .scmAutoFetch,
     ].map { id in all.first { $0.id == id }! }
 
   static func descriptor(_ id: SettingID) -> SettingDescriptor { all.first { $0.id == id }! }

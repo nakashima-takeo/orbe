@@ -124,11 +124,24 @@ extension SourceControl {
   }
 
   /// 操作を列に載せて始める。`body` は段を結びながら（`attach`）書き込みを起こし、全段の終わりで `done` を 1 回呼ぶ。
+  /// ネット操作は、そのリポジトリの裏の fetch の係に届け出て、走っている裏の fetch が止まってから 1 段目を起こす（待つ間に
+  /// 止められたら起こさない）。根の git dir がまだ分からなければ届け出ずに起こす（その根の係はまだ欲しがられていない）。
   private func run(
     _ kind: Kind, _ step: Step,
-    _ body: (RootFiles, @escaping (GitWriteFailure?) -> Void, Operation) -> Void
+    _ body: @escaping (RootFiles, @escaping (GitWriteFailure?) -> Void, Operation) -> Void
   ) {
     guard let operation = enqueue(kind, step) else { return }
-    body(operation.files, { [weak self, operation] in self?.finish(operation, $0) }, operation)
+    let done: (GitWriteFailure?) -> Void = { [weak self, operation] failure in
+      self?.finish(operation, failure)
+    }
+    guard kind.isNetwork, let repo = operation.files.repo else {
+      return body(operation.files, done, operation)
+    }
+    let autoFetch = ScmAutoFetch.shared(for: repo)
+    operation.autoFetch = autoFetch
+    autoFetch.yield {
+      guard !operation.isStopped else { return done(.cancelled) }
+      body(operation.files, done, operation)
+    }
   }
 }

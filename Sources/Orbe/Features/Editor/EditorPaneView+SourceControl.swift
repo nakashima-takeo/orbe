@@ -7,6 +7,12 @@ extension EditorPaneView {
     scm.onOpenDiff = { [weak self] key, opening in self?.openScmDiff(key, opening) }
     scm.onOpenFile = { [weak self] url in self?.open(url, as: .pinned) }
     scm.onDiscard = { [weak self] files in self?.confirmDiscard(files) }
+    scm.autoFetchEnabled = { [weak self] in self?.settings()[SettingKeys.scmAutoFetch] ?? false }
+  }
+
+  /// 面の workspace の実効設定が変わった（出ているソース管理パネルは裏の fetch を欲しがるか決め直す）。
+  func settingsDidChange() {
+    scm.decideAutoFetch()
   }
 
   /// ソース管理パネルが見えている（サイドバーが開いていて、ソース管理のパネルを出している）。

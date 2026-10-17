@@ -66,6 +66,8 @@ final class EditorPaneView: NSView {
   let sidebarHandle = SidebarResizeHandle()
   private(set) var localization = LocalizationStore(language: .systemDefault)
   private var fontResolver = ChromeFontResolver()
+  /// 面の workspace の実効設定（使う時点で読む。窓が連を作るときに配る）。
+  var settings: () -> EffectiveSettings = { EffectiveSettings(SettingsLayer()) }
   /// 地の veil。設定パレットで不透明度を変えた直後も追従する（観測して再描画）。
   var translucency: ChromeTranslucency? {
     didSet { observeTranslucency() }

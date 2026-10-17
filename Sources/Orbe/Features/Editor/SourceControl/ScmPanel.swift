@@ -63,9 +63,14 @@ final class ScmPanel {
   @ObservationIgnored var onOpenFile: (URL) -> Void = { _ in }
   /// 破棄の確認を出す（確認が要らなければそのまま破棄する）。
   @ObservationIgnored var onDiscard: ([ScmChanges.File]) -> Void = { _ in }
+  /// 面の workspace の実効設定で、裏の fetch がオンか（使う時点で読む）。
+  @ObservationIgnored var autoFetchEnabled: () -> Bool = { true }
   /// キーで行へ動いたときの開きの間引き。
   @ObservationIgnored let navigation = RowNavigationThrottle()
-  @ObservationIgnored private var files: RootFiles?
+  /// 握っている根のサービス（面が見えている間だけ）。
+  @ObservationIgnored private(set) var liveFiles: RootFiles?
+  /// 欲しいと届けている裏の fetch の係。
+  @ObservationIgnored private var autoFetch: ScmAutoFetch?
   @ObservationIgnored private var buildJob = Job()
   /// 手元の 2 区分が今の status から作ったものでない（status が届いてから、行を作る組み立てがまだ始まっていない）。
   @ObservationIgnored private var changesAreStale = true
@@ -88,15 +93,16 @@ final class ScmPanel {
       guard isLive != oldValue else { return }
       if isLive {
         let files = RootFiles.shared(for: root)
-        self.files = files
+        liveFiles = files
         files.addObserver(self)
         resolveManaged()
         statusDidChange()
         if isShown { readGraphAndHead() }
       } else {
-        files?.removeObserver(self)
-        files = nil
+        liveFiles?.removeObserver(self)
+        liveFiles = nil
       }
+      decideAutoFetch()
     }
   }
 
@@ -111,6 +117,7 @@ final class ScmPanel {
       } else {
         panelDidHide()
       }
+      decideAutoFetch()
     }
   }
 
@@ -152,18 +159,30 @@ final class ScmPanel {
   // MARK: - 観測
 
   private func resolveManaged() {
-    guard let files else { return }
+    guard let files = liveFiles else { return }
     if files.repo != nil {
       isManaged = true
+      decideAutoFetch()
     } else if files.isResolved {
       isManaged = false
     }
   }
 
+  /// 裏の fetch を欲しがるか決め直し、そのリポジトリの係へ届ける。欲しがるのは、パネルを出していて、根の git dir が分かり、
+  /// 面の workspace の設定がオンの間。
+  func decideAutoFetch() {
+    let repo = isShown ? liveFiles?.repo : nil
+    let next = repo.map(ScmAutoFetch.shared(for:))
+    if let autoFetch, autoFetch !== next { autoFetch.setWanted(false, by: self) }
+    autoFetch = next
+    next?.setWanted(autoFetchEnabled(), by: self)
+  }
+
   /// status が届いた（か、握り直した根のサービスの status を読む）。
   private func statusDidChange() {
-    guard files?.status != nil else { return }
+    guard liveFiles?.status != nil else { return }
     isManaged = true
+    decideAutoFetch()
     if readsOnResolve {
       readsOnResolve = false
       readGraphAndHead()
@@ -185,7 +204,7 @@ final class ScmPanel {
   }
 
   private func build() {
-    guard let status = files?.status else { return }
+    guard let status = liveFiles?.status else { return }
     buildJob.isRunning = true
     let rows = isShown
     let built = rows && !changesAreStale ? changes : nil
@@ -256,7 +275,7 @@ final class ScmPanel {
   /// グラフと HEAD の push 済みを読み直す（パネルを出している間だけ）。
   func readGraphAndHead() {
     guard isShown else { return }
-    guard files?.repo != nil else {
+    guard liveFiles?.repo != nil else {
       headPush = nil
       readsOnResolve = true
       return
@@ -268,7 +287,7 @@ final class ScmPanel {
   /// グラフをいつも先頭から今の件数で読む（続きを継ぎ足さない——読みの間に HEAD が動くと重複・欠落する）。読めなければ
   /// 前の結果を保つ。
   private func readGraph() {
-    guard isShown, let repo = files?.repo else { return }
+    guard isShown, let repo = liveFiles?.repo else { return }
     if graphJob.isRunning {
       graphJob.again = true
       return
@@ -291,7 +310,7 @@ final class ScmPanel {
   /// HEAD 1 件をグラフの口で読み、push 済みか（どれかの remote 追跡ブランチから届くか）を読んだコミットと組で持つ。グラフの
   /// 50 件に HEAD が入る保証は無い（upstream が先に進んでいると上位を upstream が占める）ので、グラフの結果から拾わない。
   private func readHead() {
-    guard isShown, let repo = files?.repo else { return }
+    guard isShown, let repo = liveFiles?.repo else { return }
     if headJob.isRunning {
       headJob.again = true
       return
@@ -316,7 +335,7 @@ final class ScmPanel {
 
   /// 再読込: status を取り直し、グラフと HEAD の push 済みを読み直す。
   func refresh() {
-    files?.requestStatusRefresh()
+    liveFiles?.requestStatusRefresh()
     readGraphAndHead()
   }
 

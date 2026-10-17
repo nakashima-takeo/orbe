@@ -747,6 +747,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case settingsSoundCustomWaitingRow
   case settingsSoundCustomSameAsDone
   case settingsMenuBarNotificationDuration
+  case settingsScmAutoFetch
   case settingsSecondsValue
   case settingsUnset
   case settingsToggleOn

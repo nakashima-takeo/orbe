@@ -72,6 +72,8 @@ final class SourceControl {
     /// 始めたときの根のサービス。2 段の操作は全段が終わるまで握る——2 段目のために引き直すと、誰も握っていない瞬間に
     /// 新しいサービスができ、管理下かの判定の前に「管理外」で断られうる。
     @ObservationIgnored let files: RootFiles
+    /// 人のネット操作を届け出た、そのリポジトリの裏の fetch の係（始まりと終わりを 1 組で届ける）。
+    @ObservationIgnored var autoFetch: ScmAutoFetch?
     @ObservationIgnored fileprivate let longDelay = EditorDelay()
 
     fileprivate init(kind: Kind, step: Step, files: RootFiles) {
@@ -198,11 +200,13 @@ final class SourceControl {
     operation.progress = line
   }
 
-  /// 操作を終える。止めた・管理外は失敗にしない。
+  /// 操作を終える（全段の終わり）。止めた・管理外は失敗にしない。人のネット操作なら、裏の fetch の係へ終わりを届ける。
   func finish(_ operation: Operation, _ outcome: GitWriteFailure?) {
     operation.isRunning = false
     operation.longDelay.cancel()
     operations.removeAll { $0 === operation }
+    operation.autoFetch?.humanDidFinish(operation.kind, outcome)
+    operation.autoFetch = nil
     switch outcome {
     case nil, .cancelled?, .notManaged?: break
     case let failure?: self.failure = Failure(kind: operation.kind, cause: .git(failure))

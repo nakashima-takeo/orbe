@@ -30,6 +30,11 @@ extension WindowController {
     group.view.configure(
       translucency: chromeTranslucency, localization: localization, fontResolver: fontResolver,
       sidebar: editorSidebar, diffModes: editorDiffModes)
+    group.view.editor.settings = { [weak self, weak group] in
+      guard let self else { return EffectiveSettings(SettingsLayer()) }
+      let workspace = workspaces.first { $0.tabs.contains { $0.group === group } }
+      return settingsStore.effective(override: workspace?.settingsOverride)
+    }
     return group
   }
 
