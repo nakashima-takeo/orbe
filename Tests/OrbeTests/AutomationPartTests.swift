@@ -71,7 +71,6 @@ final class AutomationPartTests: OrbeTestCase {
       ),
       ("知らない取得の性質", manual, #""command": "x", "coverage": "all""#, "[1].coverage"),
       ("知らない行き先", manual, #""command": "x", "deliver": "slack""#, "[1].deliver"),
-      ("中身の空の溜まりの上限", manual, #""command": "x", "inboxLimit": {}"#, "[1].inboxLimit"),
     ] {
       let json =
         #"[{"key": "ok", "name": "ok", "trigger": {"kind": "manual"}, "command": "x"}, "#

@@ -156,7 +156,7 @@ extension AutomationPart.Trigger: Codable {
   }
 }
 
-/// `{"maxAgeHours"?: Int, "maxItems"?: Int}`。どちらも無いのは不正。
+/// `{"maxAgeHours"?: Int, "maxItems"?: Int}`。
 extension AutomationPart.InboxLimit: Codable {
   private enum CodingKeys: String, CodingKey {
     case maxAgeHours, maxItems
@@ -166,10 +166,6 @@ extension AutomationPart.InboxLimit: Codable {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     maxAgeHours = try c.decodeIfPresent(Int.self, forKey: .maxAgeHours)
     maxItems = try c.decodeIfPresent(Int.self, forKey: .maxItems)
-    guard maxAgeHours != nil || maxItems != nil else {
-      throw DecodingError.dataCorrupted(
-        .init(codingPath: c.codingPath, debugDescription: "pass maxAgeHours, maxItems or both"))
-    }
   }
 
   func encode(to encoder: Encoder) throws {
