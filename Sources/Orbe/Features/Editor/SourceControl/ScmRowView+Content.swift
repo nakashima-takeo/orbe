@@ -4,7 +4,8 @@ import AppKit
 extension ScmRowView {
   static func key(_ item: ScmLayout.Item, _ language: Language) -> String {
     switch item {
-    case .header(let section, let count, let isOpen): "h\(section)\(count)\(isOpen)\(language)"
+    case .header(let section, let count, let isOpen, let bulk):
+      "h\(section)\(count)\(isOpen)\(bulk.canStageAll)\(bulk.canDiscardAll)\(language)"
     case .file(let section, let file):
       "f\(section)\(file.path)\u{0}\(file.badge)\(file.existsInWorkingTree)\(file.canStage)"
         + "\(file.canDiscard)\(language)"
@@ -19,7 +20,7 @@ extension ScmRowView {
   /// VoiceOver に渡す中身の文字列。
   static func label(_ item: ScmLayout.Item, _ language: Language) -> String {
     switch item {
-    case .header(let section, let count, _):
+    case .header(let section, let count, _, _):
       section == .graph ? title(section, language) : "\(title(section, language)), \(count)"
     case .file(_, let file): file.path
     case .branch(let branch): branch.label
@@ -30,8 +31,8 @@ extension ScmRowView {
 
   static func content(_ item: ScmLayout.Item, _ language: Language, _ emoji: NSFont?) -> Content {
     switch item {
-    case .header(let section, let count, let isOpen):
-      .header(header(section, count: count, isOpen: isOpen, language))
+    case .header(let section, let count, let isOpen, let bulk):
+      .header(header(section, count: count, isOpen: isOpen, bulk: bulk, language))
     case .file(let section, let file): .file(self.file(section, file, language, emoji))
     case .branch(let branch):
       .branch(
@@ -62,22 +63,23 @@ extension ScmRowView {
     }
   }
 
-  /// 区分見出し: 「ステージされている変更」はすべて解除、「変更」はすべて破棄・すべてステージ、グラフは再読込。
+  /// 区分見出し: 「ステージされている変更」はすべて解除、「変更」はすべて破棄・すべてステージ、グラフは再読込。すべて破棄・
+  /// すべてステージは、入る行が無ければ押せない姿で置く（すべて解除の見出しは、行が 0 なら出ない）。
   private static func header(
-    _ section: ScmSection, count: Int, isOpen: Bool, _ language: Language
+    _ section: ScmSection, count: Int, isOpen: Bool, bulk: ScmLayout.Bulk, _ language: Language
   ) -> Header {
-    let button = { (control: ScmControl, glyph: ScmGlyphShape, help: L10nKey) in
-      Button(control: control, glyph: glyph, isEnabled: true, help: L10n.string(help, language))
+    let button = { (control: ScmControl, glyph: ScmGlyphShape, enabled: Bool, help: L10nKey) in
+      Button(control: control, glyph: glyph, isEnabled: enabled, help: L10n.string(help, language))
     }
     let buttons: [Button] =
       switch section {
-      case .staged: [button(.unstageAll, .minus, .editorScmUnstageAll)]
+      case .staged: [button(.unstageAll, .minus, true, .editorScmUnstageAll)]
       case .changes:
         [
-          button(.discardAll, .discard, .editorScmDiscardAll),
-          button(.stageAll, .plus, .editorScmStageAll),
+          button(.discardAll, .discard, bulk.canDiscardAll, .editorScmDiscardAll),
+          button(.stageAll, .plus, bulk.canStageAll, .editorScmStageAll),
         ]
-      case .graph: [button(.refreshGraph, .refresh, .editorScmRefresh)]
+      case .graph: [button(.refreshGraph, .refresh, true, .editorScmRefresh)]
       }
     return Header(
       section: section, isOpen: isOpen,

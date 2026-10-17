@@ -152,8 +152,16 @@ struct ScmBranch: Equatable {
 /// 列の行の組——行の列・区間の表・行の同一性の索引。status・グラフ・開閉が変わるたびに裏で 1 つの値として作り、main で
 /// 差し替える（行の数が数万でも、main の仕事は差し替えだけ）。
 struct ScmLayout {
+  /// 「変更」の見出しのすべてステージ・すべて破棄に入る行があるか。
+  struct Bulk {
+    let canStageAll: Bool
+    let canDiscardAll: Bool
+
+    static let none = Bulk(canStageAll: false, canDiscardAll: false)
+  }
+
   enum Item {
-    case header(ScmSection, count: Int, isOpen: Bool)
+    case header(ScmSection, count: Int, isOpen: Bool, bulk: Bulk = .none)
     case file(ScmSection, ScmChanges.File)
     case branch(ScmBranch)
     /// コミット（`isFirst` / `isLast` は縦の線の端）。
@@ -188,7 +196,12 @@ struct ScmLayout {
       guard !files.isEmpty else { continue }
       let isOpen = !collapsed.contains(section)
       index[ScmRowID(section: section, path: nil)] = items.count
-      items.append(.header(section, count: files.count, isOpen: isOpen))
+      let bulk =
+        section == .changes
+        ? Bulk(
+          canStageAll: !changes.committable.isEmpty, canDiscardAll: !changes.discardable.isEmpty)
+        : .none
+      items.append(.header(section, count: files.count, isOpen: isOpen, bulk: bulk))
       heights.append(row)
       let start = items.count
       if isOpen {
@@ -270,7 +283,7 @@ struct ScmLayout {
   func id(at row: Int) -> ScmRowID? {
     guard row >= 0, row < items.count else { return nil }
     switch items[row] {
-    case .header(let section, _, _): return ScmRowID(section: section, path: nil)
+    case .header(let section, _, _, _): return ScmRowID(section: section, path: nil)
     case .file(let section, let file): return ScmRowID(section: section, path: file.path)
     default: return nil
     }

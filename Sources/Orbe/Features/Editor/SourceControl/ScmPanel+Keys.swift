@@ -71,7 +71,7 @@ extension ScmPanel {
   func click(_ row: Int, in layout: ScmLayout) {
     guard row < layout.items.count else { return }
     switch layout.items[row] {
-    case .header(let section, _, _):
+    case .header(let section, _, _, _):
       select(ScmRowID(section: section, path: nil))
       toggle(section)
     case .file:

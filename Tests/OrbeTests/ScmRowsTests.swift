@@ -87,6 +87,28 @@ final class ScmRowsTests: OrbeTestCase {
     XCTAssertEqual(enabled(.content), [true, false, false])
   }
 
+  /// 「変更」の見出しのすべてステージ・すべて破棄は、入る行が無ければ押せない姿になる（競合とサブモジュールの行しか無い
+  /// とき、押せる姿のままだと何も起きない）。
+  @MainActor
+  func testBulkButtonsOfTheChangesHeaderAreDisabledWithoutRowsToTake() {
+    let view = ScmRowView(frame: .zero)
+    func enabled(_ entries: [String: GitStatus.Entry]) -> [Bool] {
+      let changes = ScmChanges.build(
+        GitStatus(entries: entries, untrackedDirectories: [], branch: nil))
+      let layout = ScmLayout.build(changes, branch: nil, graph: nil, collapsed: [])
+      guard let row = layout.index[ScmRowID(section: .changes, path: nil)] else { return [] }
+      view.show(layout.items[row], language: .en, emoji: nil)
+      guard case .header(let header) = view.content else { return [] }
+      return header.buttons.map(\.isEnabled)
+    }
+    let conflict = entry(.unmerged, .unmerged)
+    let content = GitStatus.Entry(staged: nil, unstaged: .modified, unstagedSubmodule: .content)
+    let moved = GitStatus.Entry(staged: nil, unstaged: .modified, unstagedSubmodule: .commit)
+    XCTAssertEqual(enabled(["c.txt": conflict, "sub": content]), [false, false], "すべて破棄・すべてステージ")
+    XCTAssertEqual(enabled(["c.txt": conflict, "sub": moved]), [false, true])
+    XCTAssertEqual(enabled(["c.txt": conflict, "a.txt": entry(nil, .modified)]), [true, true])
+  }
+
   /// 行が 0 の区分は見出しごと出ず、畳んだ区分のファイル行は出ない。区間の表は行を先頭から隙間なく覆う（列が位置から引く
   /// 行と、源が描く行がずれない）。
   func testEmptySectionsAndFoldedFilesAreNotRowsAndSegmentsCoverEveryRow() {
