@@ -25,6 +25,23 @@ final class AutomationPromptsTests: OrbeTestCase {
     XCTAssertEqual(rejected.reasons, ["line 2: missing link", "id 1 appeared twice"])
   }
 
+  /// 今の自動化の枠は、何も無い回に何も出させない——今の読みは nothing の 1 行を項目や案として読めない。
+  func testCurrentFramesAskForNoOutputWhenEmpty() throws {
+    let judge = AutomationPrompts.judge(
+      instruction: "指示", rows: [],
+      choices: AutomationJudgeChoices(open: [], workspaces: listed([])),
+      now: Date(timeIntervalSince1970: 1_800_000_000),
+      timeZone: try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo")))
+
+    XCTAssertTrue(
+      AutomationPrompts.fetch(request: "r").contains(
+        "Output nothing when there are no items.\nIf a tool fails"))
+    XCTAssertTrue(
+      judge.hasSuffix(
+        "Use only links of the waiting proposals above.\nOutput nothing when no item needs a task.")
+    )
+  }
+
   func testEmptyFetchIsZeroItems() {
     XCTAssertEqual(AutomationPrompts.readFetch(""), .items([], rejected: AutomationRejections()))
   }
