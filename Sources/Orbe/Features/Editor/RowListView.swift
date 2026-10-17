@@ -84,7 +84,7 @@ final class RowListView<Source: RowListSource>: NSView {
     contentHeight = top
     minimumHeight = segments.map(\.height).min() ?? rowHeight
     holdAnchor()
-    if anchor == nil { resizeDocument() }
+    resizeDocument()
     layoutRows()
   }
 
