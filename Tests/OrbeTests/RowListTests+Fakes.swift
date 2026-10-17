@@ -4,15 +4,21 @@ import XCTest
 @testable import Orbe
 
 extension RowListTests {
+  /// 源の偽物の行の組（版だけ）。
+  struct SourceRows {
+    let version: Int
+  }
+
   /// 源の偽物。行 r の中身は "row r"、選択の同一性は行の番号そのもの。受けた操作を記録する。行の高さは `segments`
   /// （無ければ全行 20 の区間 1 つ）。
   final class Source: RowListSource {
     var rowCount = 200
     var segments: [RowListSegment]?
-    /// 組は自分自身（行をその場で変える源の型）。
-    var rows: Source { self }
-    func rowCount(in rows: Source) -> Int { rowCount }
-    func segments(in rows: Source) -> [RowListSegment] {
+    /// 組の版。組は版だけを写す値で、行の数と高さは読み直さなくてもその場で変わる。
+    var version = 0
+    var rows: SourceRows { SourceRows(version: version) }
+    func rowCount(in rows: SourceRows) -> Int { rowCount }
+    func segments(in rows: SourceRows) -> [RowListSegment] {
       segments ?? [RowListSegment(start: 0, count: rowCount, height: 20)]
     }
     var wantsFocus = false
@@ -26,31 +32,36 @@ extension RowListTests {
     private(set) var outOfRange = 0
     /// 部品の押下に返す錨。
     var anchor: RowListAnchor<Int>?
+    /// 部品の押下で渡された組の版。
+    private(set) var pressedVersions: [Int] = []
 
     func makeRowView() -> Row { Row(frame: .zero) }
-    func show(_ row: Int, of rows: Source, in view: Row, emoji: NSFont?) {
+    func show(_ row: Int, of rows: SourceRows, in view: Row, emoji: NSFont?) {
       if row >= rowCount { outOfRange += 1 }
       view.show("row \(row)")
     }
-    func row(of selection: Int, in rows: Source) -> Int? { selection < rowCount ? selection : nil }
+    func row(of selection: Int, in rows: SourceRows) -> Int? {
+      selection < rowCount ? selection : nil
+    }
     func prepareRows(for appearance: NSAppearance) {}
     func focusRequestDidApply() {
       wantsFocus = false
       focusRequestsApplied += 1
     }
     func focusDidChange(_ focused: Bool) { focus.append(focused) }
-    func perform(_ key: RowListKey, in rows: Source) { keys.append(key) }
+    func perform(_ key: RowListKey, in rows: SourceRows) { keys.append(key) }
     func keyDidRelease() { releases += 1 }
-    func click(_ row: Int, in rows: Source) {
+    func click(_ row: Int, in rows: SourceRows) {
       if row >= rowCount { outOfRange += 1 }
       clicks.append("click \(row)")
     }
-    func doubleClick(_ row: Int, in rows: Source) { clicks.append("double \(row)") }
-    func press(_ row: Int, control: Int, in rows: Source) -> RowListAnchor<Int>? {
+    func doubleClick(_ row: Int, in rows: SourceRows) { clicks.append("double \(row)") }
+    func press(_ row: Int, control: Int, in rows: SourceRows) -> RowListAnchor<Int>? {
       clicks.append("press \(row) \(control)")
+      pressedVersions.append(rows.version)
       return anchor
     }
-    func select(_ row: Int, in rows: Source) { selected.append(row) }
+    func select(_ row: Int, in rows: SourceRows) { selected.append(row) }
   }
 
   /// 行の偽物。中身が変わったときだけ描き直す（描いた回数を数える）。右端 30pt に部品 0 を持つ。
