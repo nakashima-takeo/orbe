@@ -55,10 +55,11 @@ class AutomationPartPassTestCase: OrbeTestCase {
       }.joined(separator: "\n"))
   }
 
+  /// `took` は上限の時計で走った長さ。
   func replied(_ text: String, took seconds: TimeInterval = 0) -> BackgroundRunResult {
     BackgroundRunResult(
       commandLine: "claude -p", startedAt: now, endedAt: now.addingTimeInterval(seconds),
-      ending: .exited(0),
+      elapsed: seconds, ending: .exited(0),
       output: .agent(reply: BackgroundAgentReply(text: text, isError: false), stderr: .init()))
   }
 
