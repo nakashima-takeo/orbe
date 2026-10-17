@@ -207,7 +207,8 @@ final class ScmPanel {
   }
 
   /// 裏の結果を差し替え、待っている組み立てがあれば始める。選んでいた行が消えたら、同じ区分のその位置の行（無ければ
-  /// 前の行）を選ぶ（開かない）。置き換えた行の組は裏で手放す（数万行の解放を main に載せない）。
+  /// 前の行）を選ぶ（開かない）。置き換えた 2 区分と行の組は裏で手放す（数万行の解放を main に載せない。列が握る写しは
+  /// 列が裏で手放す）。
   private func apply(
     branch: GitStatus.Branch?, count: Int, changes: ScmChanges?, layout: ScmLayout?
   ) {

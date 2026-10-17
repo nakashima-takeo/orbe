@@ -70,9 +70,11 @@ final class RowListView<Source: RowListSource>: NSView {
   // MARK: - 行
 
   /// 行の組を写し直し、行の数・高さ・中身を読み直す。見えている行の枠は捨てずに中身だけを差し替える。錨があれば、留める行を
-  /// 押した行の高さへ送る。
+  /// 押した行の高さへ送る。前の写しは裏で手放す（列が最後の持ち主になりうるので、数万行の組の解放を main に載せない）。
   func reloadRows() {
+    let previous = drawn
     drawn = source.rows
+    DispatchQueue.global(qos: .utility).async { withExtendedLifetime(previous) {} }
     rowCount = source.rowCount(in: drawn)
     segments = source.segments(in: drawn)
     var top: CGFloat = 0

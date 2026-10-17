@@ -185,11 +185,6 @@ final class RowList<Source: RowListSource>: NSScrollView {
       position: contentView.bounds.minY, total: list.frame.height, visible: contentSize.height)
   }
 
-  override func setFrameOrigin(_ newOrigin: NSPoint) {
-    super.setFrameOrigin(newOrigin)
-    list.holdAnchor()
-  }
-
   override func scrollWheel(with event: NSEvent) {
     list.releaseAnchor()
     super.scrollWheel(with: event)
