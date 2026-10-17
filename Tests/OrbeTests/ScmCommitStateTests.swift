@@ -32,8 +32,8 @@ final class ScmCommitStateTests: OrbeTestCase {
       isHeadPushed: pushed)
   }
 
-  /// 変更が 1 つでもあればコミット。押せるのはステージ済みか競合でない変更があり、メッセージが空白だけでなく、コミット中で
-  /// ないとき。範囲はステージ済みがあればそれだけ、無ければ全部。
+  /// 変更が 1 つでもあればコミット。押せるのはステージ済みかコミットに入る変更（競合と中身だけ変わったサブモジュールを
+  /// 除く）があり、メッセージが空白だけでなく、コミット中でないとき。範囲はステージ済みがあればそれだけ、無ければ全部。
   func testCommitNeedsCommittableChangesAndAMessage() {
     let tracked = branch(upstream: upstream(ahead: 2, behind: 0))
     XCTAssertEqual(state(changes: 1, branch: tracked, blank: false).primary, .commit)

@@ -28,7 +28,7 @@ final class ScmAutoFetch {
   private(set) var rules: ScmAutoFetchRules
   /// 走っている裏の fetch の止める手。
   private var running: RootFiles.Write?
-  /// 裏の fetch の終わりを待っている人の操作の 1 段目。
+  /// 裏の fetch の終わりを待っている、人の操作のネットの段。
   private var yielded: [Yielded] = []
   private var wanting: [Wanting] = []
   private var timer: DispatchWorkItem?

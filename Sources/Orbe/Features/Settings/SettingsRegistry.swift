@@ -327,7 +327,7 @@ enum SettingsRegistry {
       activation: .toggle,
       // ssh-agent の承認を毎回求める人（1Password・Secretive・FIDO 鍵）が止められるように持つ。
       defaultValue: { .bool(true) }, domain: .toggle,
-      guiConf: nil,  // gui.conf 非経由（ソース管理パネルが「欲しい」を決めるときに面の workspace の実効値を読む）
+      guiConf: nil,  // gui.conf 非経由（面が裏の fetch を欲しがるか決めるときに面の workspace の実効値を読む）
       display: boolLabel, unsetPlaceholderKey: nil),
   ]
 
