@@ -19,8 +19,10 @@ extension DesignFlowSnapshotTests {
     var shown = AnyView(scene.view)
     let plain = try plainScene(queriesRoot: queriesRoot)
     defer { plain.cleanup() }
+    let panel = scene.panel
     try flow(
       "editor_scm", size: NSSize(width: 1100, height: 640), render: { shown },
+      until: { panel.isHeadPushed != nil || panel.branch?.commit == nil },
       steps: panelSteps(scene) + gitSteps(scene) + branchSteps(scene) + [
         ("not_managed", { shown = AnyView(plain.view) })
       ])
