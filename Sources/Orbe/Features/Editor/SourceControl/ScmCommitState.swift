@@ -1,7 +1,7 @@
 import Foundation
 
 /// コミットボタンと ▾ の項目の姿（純関数）。コミットできる変更が 1 つも無いとき、ボタンは「同期 ↑N ↓M」（pull → push）か、
-/// upstream の無いブランチでは「ブランチを公開」に替わる（VS Code と同じ）。HEAD が push 済みなら amend・取り消しは押せない
+/// コミットがあり upstream の無いブランチでは「ブランチを公開」に替わる。HEAD が push 済みなら amend・取り消しは押せない
 /// （force push を持たないので、書き換えたら Orbe の中では戻れない）。push 済みか分からない間も押せない側に倒す。
 struct ScmCommitState: Equatable {
   enum Primary: Equatable {

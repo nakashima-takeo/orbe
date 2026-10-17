@@ -296,7 +296,7 @@ final class ScmPanel {
     readGraph()
   }
 
-  /// 再読込: status を取り直し、グラフを読み直す。
+  /// 再読込: status を取り直し、グラフと HEAD の push 済みを読み直す。
   func refresh() {
     files?.requestStatusRefresh()
     readGraphAndHead()

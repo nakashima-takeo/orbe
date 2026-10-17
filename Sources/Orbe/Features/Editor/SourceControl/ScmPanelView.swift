@@ -89,7 +89,8 @@ private struct ScmBand: View {
 }
 
 /// 区分見出し「ソース管理」22（padding 0 8 0 4）: シェブロン（下の欄・ボタン・失敗の文を畳む）・題・右端に ✓（コミット。⌘↵ と
-/// 同じ条件）・再読込（status を取り直し、グラフを読み直す）・…（プル / プッシュ / フェッチ。ネット操作中は全部押せない）。
+/// 同じ条件）・再読込（status を取り直し、グラフと HEAD の push 済みを読み直す）・…（プル / プッシュ / フェッチ。
+/// ネット操作中は全部押せない）。
 private struct ScmControlsHead: View {
   let panel: ScmPanel
   @State private var hovering = false
