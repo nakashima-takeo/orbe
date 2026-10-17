@@ -38,7 +38,9 @@ extension FrameBuilder {
         drawNumber(other, rowTop: top, inset: c.gutter.otherInset, font: numberFont, c)
       }
     }
-    if c.gutter.marks > 0 { drawMarks(source.material.marks, rows: visibleRows, c) }
+    if c.gutter.marks > 0 {
+      drawMarks(source.material.marks, rows: visibleRows, lineCount: content.text.lineCount, c)
+    }
   }
 
   /// 行の型の地を、行番号の列の左端から面の右端（縦スクロールバーの列の下）まで塗る（切り取りは上端の余白の下）。

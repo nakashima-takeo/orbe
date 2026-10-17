@@ -13,7 +13,7 @@ import simd
 /// 伸びた入力欄と打った字が同じコマに出る。
 struct Transaction {
   /// 取引の中で届いた行の印。
-  var marks: LineMarkSpans?
+  var marks: LineMarks?
   /// 取引の中で頼まれた、材料のほかの欄（見え方・焦点・大きさ・区画）の書き込み。
   var writes: [@Sendable (inout FrameMaterial) -> Void] = []
   var reveal = Reveal.none
@@ -95,7 +95,7 @@ extension MetalTextSurface {
     let refocused = focused != finished.focused || primary != finished.primary
     let restarts =
       change.edited || cursors != change.cursors || composing || refocused
-    pending.writes.append(bodyWrite(change, finished, text: text, restarts: restarts))
+    pending.writes.append(bodyWrite(change, finished, restarts: restarts))
     commitFields(finished, refocused: refocused)
     flushLater()
     announce(
@@ -107,12 +107,12 @@ extension MetalTextSurface {
   /// 本文の場の確定を材料へ書く 1 つの書き込み——取引の書き込み・写し・行の印・変わった行・打鍵の時刻・横の「見えるところ
   /// まで」（本文の場が頼んだ見せ方だけ）・カーソル（変われば点滅を表示からやり直す）。
   private func bodyWrite(
-    _ change: SiteChange, _ finished: Transaction, text: TextRope?, restarts: Bool
+    _ change: SiteChange, _ finished: Transaction, restarts: Bool
   ) -> @Sendable (inout FrameMaterial) -> Void {
     let cursors = editor.state.cursors
     let caret = bodySite.caretMaterial(focused: bodyFocused, blinks: caretBlinks)
     let content = change.content
-    let marks = finished.marks.flatMap { spans in text.map { RowMarks(spans, in: $0) } }
+    let marks = finished.marks
     let rowEdits = change.rowEdits
     let writes = finished.writes
     let stroke = finished.keystroke

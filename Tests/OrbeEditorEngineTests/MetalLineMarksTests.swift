@@ -99,22 +99,26 @@ final class MetalLineMarksTests: EngineTestCase {
     XCTAssertTrue(isBlack(shot.rgb(shot.barX, rowMidY(4))))
   }
 
-  /// 印はエディターの行に付く——2 行以上の追加・変更が末尾の空の行で終われば、その空の行にも印が付く。
+  /// 印はエディターの行に付く——2 行以上の追加・変更が末尾の空の行で終われば、その空の行にも印が付き、末尾の空の行の下の
+  /// 削除はその行の下端に出る。
   func testMarksReachTheTrailingEmptyLine() throws {
     let opened = try open("a\nb\n", waitForColors: false)
     mark("a", on: opened)
     var shot = try shoot(opened)
     XCTAssertTrue(isGreen(shot.rgb(shot.barX, rowMidY(2))), "追加")
-    XCTExpectFailure("改行込みの区間を最後の字の行へ戻すので、2 行以上の区間の末尾の空の行が落ちる") {
-      XCTAssertTrue(isGreen(shot.rgb(shot.barX, rowMidY(3))), "追加の末尾の空の行")
-    }
+    XCTAssertTrue(isGreen(shot.rgb(shot.barX, rowMidY(3))), "追加の末尾の空の行")
 
     mark("a\nx", on: opened)
     shot = try shoot(opened)
     XCTAssertTrue(isBlue(shot.rgb(shot.barX, rowMidY(2))), "変更")
-    XCTExpectFailure("改行込みの区間を最後の字の行へ戻すので、2 行以上の区間の末尾の空の行が落ちる") {
-      XCTAssertTrue(isBlue(shot.rgb(shot.barX, rowMidY(3))), "変更の末尾の空の行")
-    }
+    XCTAssertTrue(isBlue(shot.rgb(shot.barX, rowMidY(3))), "変更の末尾の空の行")
+
+    mark("a\nb\n\nz", on: opened)
+    shot = try shoot(opened)
+    let tip = shot.column - style.marks.gutterWidth + style.marks.barInset + 2
+    let bottom = style.topInset + 3 * style.lineHeight
+    XCTAssertTrue(isRed(shot.rgb(tip, bottom - 2)), "空の行の下の削除は、その行の下端")
+    XCTAssertTrue(isBlack(shot.rgb(tip, bottom - style.lineHeight + 1)), "空の行の上端には出ない")
   }
 
   /// 先頭行の上の削除は、三角を上端から下向きに置く（境の y = 0 に中央合わせすると上半分が切れる）。

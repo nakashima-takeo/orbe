@@ -194,11 +194,11 @@ final class MetalTextSurface: TextSurface {
 
   /// 文書の写しを引いて箱に置く（結ばれたとき・役割が変わったとき・行の印を受けたとき）。取引の中なら、その取引の終わりに
   /// まとめて置く。
-  private func pullContent(marks spans: LineMarkSpans? = nil) {
+  private func pullContent(marks: LineMarks? = nil) {
     guard let delegate else { return }
     transact {
       bodySite.change?.content = delegate.surfaceContent(self)
-      if let spans { transaction?.marks = spans }
+      if let marks { transaction?.marks = marks }
     }
   }
 
@@ -218,9 +218,9 @@ final class MetalTextSurface: TextSurface {
     }
   }
 
-  /// 印は文書がオフセットで押してくる。引いた写しで行へ写してから箱に置く。
-  func setLineMarks(_ spans: LineMarkSpans) {
-    pullContent(marks: spans)
+  /// 印は、文書が押した時点の写しの行で書かれている。その写しを引き、同じ書き込みで箱に置く。
+  func setLineMarks(_ marks: LineMarks) {
+    pullContent(marks: marks)
   }
 
   /// 色付きで写す HTML の見え方（今の外観で sRGB に解いた色。HTML の色は sRGB）。

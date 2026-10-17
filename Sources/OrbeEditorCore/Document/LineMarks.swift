@@ -1,85 +1,48 @@
 import Foundation
 
-/// ハンクから導く行の印——行ごとの「追加／変更」と「この境の下に削除がある」。行は 1 始まり（`LineHunk`
-/// と同じ数え方）。文書が持ち、本文のロープでオフセット区間に写してテキスト面へ渡す（→ `LineMarkSpans`）。
+/// ハンクから導く行の印（git ガター）——行の区間ごとの「追加／変更」と、削除がある行の境。行は文書の行（0 始まり。
+/// エディターに見える行で、改行で終わる本文の末尾の空の行も 1 行）。文書がそのときの本文の行に収めて作り、テキスト面へ渡す。
 public struct LineMarks: Equatable, Sendable {
   public enum Kind: Equatable, Sendable {
     case added
     case modified
   }
 
-  /// 同じ印が続く行の区間。ハンクが昇順・非重複（`LineDiff` は両側を単調に進める）なので、そこから写した
-  /// run も昇順・非重複。
-  struct Run: Equatable, Sendable {
-    /// 1 始まりの行の区間。
-    let lines: Range<Int>
-    let kind: Kind
+  /// 同じ印が続く行の区間。
+  public struct Bar: Equatable, Sendable {
+    public let rows: ClosedRange<Int>
+    public let kind: Kind
   }
 
-  let runs: [Run]
-  /// 削除がある境。値 n は「n 行目の下」（0 は先頭行の上）。ハンクの順（昇順）。
-  let deletionsBelow: [Int]
-
-  /// 追加（old 側 0 件）はその新しい行、削除（new 側 0 件）はその境、両側にあれば新しい行が変更。
-  init(hunks: [LineHunk]) {
-    var runs: [Run] = []
-    var deletions: [Int] = []
-    for hunk in hunks {
-      if hunk.newCount == 0 {
-        deletions.append(hunk.newStart)
-      } else {
-        runs.append(
-          Run(
-            lines: hunk.newStart..<(hunk.newStart + hunk.newCount),
-            kind: hunk.oldCount == 0 ? .added : .modified))
-      }
-    }
-    self.runs = runs
-    deletionsBelow = deletions
-  }
-
-  /// 面へ渡す形。行の区間は改行込み（次の行頭まで、末尾なら本文の長さまで）、境は次の行の行頭のオフセット。
-  /// 本文に無い行（ずらした前のハンクが本文の外を指すとき）は落とす。
-  func spans(in text: TextRope) -> LineMarkSpans {
-    let end = { (row: Int) in row < text.lineCount ? text.lineStart(row) : text.length }
-    var marks: [LineMarkSpans.Mark] = []
-    for run in runs {
-      let firstRow = run.lines.lowerBound - 1
-      guard firstRow >= 0, firstRow < text.lineCount else { continue }
-      let start = text.lineStart(firstRow)
-      let stop = end(min(run.lines.upperBound - 1, text.lineCount))
-      marks.append(
-        LineMarkSpans.Mark(
-          range: NSRange(location: start, length: max(0, stop - start)), kind: run.kind))
-    }
-    let deletions = deletionsBelow.map(end)
-    return LineMarkSpans(marks: marks, deletions: deletions)
-  }
-}
-
-/// テキスト面が受け取る行の印（UTF-16 オフセット。契約の他の区間と同じ）。
-public struct LineMarkSpans: Equatable, Sendable {
-  public struct Mark: Equatable, Sendable {
-    /// 行の区間（改行込み）。昇順・重ならない。
-    public let range: NSRange
-    public let kind: LineMarks.Kind
-
-    public init(range: NSRange, kind: LineMarks.Kind) {
-      self.range = range
-      self.kind = kind
-    }
-  }
-
-  public let marks: [Mark]
-  /// 削除がある境のオフセット＝次の行の行頭（末尾なら本文の長さ）。昇順。
+  /// 昇順・重ならない（`LineDiff` は両側を単調に進める）。
+  public let bars: [Bar]
+  /// 削除がある境。値 n は n 行目の上端（0 は先頭行の上、行数なら最後の行の下端）。昇順。
   public let deletions: [Int]
 
-  public init(marks: [Mark], deletions: [Int]) {
-    self.marks = marks
+  public static let empty = LineMarks(bars: [], deletions: [])
+
+  public var isEmpty: Bool { bars.isEmpty && deletions.isEmpty }
+
+  init(bars: [Bar], deletions: [Int]) {
+    self.bars = bars
     self.deletions = deletions
   }
 
-  public static let empty = LineMarkSpans(marks: [], deletions: [])
-
-  public var isEmpty: Bool { marks.isEmpty && deletions.isEmpty }
+  /// 追加（old 側 0 件）はその新しい行、削除（new 側 0 件）はその境、両側にあれば新しい行が変更。`lineCount` 行の本文に
+  /// 無い行（ずらした前のハンクが本文の外を指すとき）は落とす。
+  init(hunks: [LineHunk], lineCount: Int) {
+    var bars: [Bar] = []
+    var deletions: [Int] = []
+    for hunk in hunks {
+      if hunk.newCount == 0 {
+        deletions.append(min(hunk.newStart, lineCount))
+        continue
+      }
+      let first = hunk.newStart - 1
+      guard first >= 0, first < lineCount else { continue }
+      let last = min(hunk.newStart + hunk.newCount - 1, lineCount) - 1
+      bars.append(Bar(rows: first...last, kind: hunk.oldCount == 0 ? .added : .modified))
+    }
+    self.init(bars: bars, deletions: deletions)
+  }
 }
