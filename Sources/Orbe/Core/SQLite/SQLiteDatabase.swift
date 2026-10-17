@@ -23,7 +23,7 @@ enum SQLiteValue: Equatable {
 
 /// SQLite の接続。解放で閉じる。main からだけ使う。
 final class SQLiteDatabase {
-  fileprivate let handle: OpaquePointer
+  private let handle: OpaquePointer
 
   /// 読み書きで開き、無ければ作る。読み取りしか許されないファイルは黙って読み取り専用で開くので、`isReadOnly` で見る。
   init(url: URL) throws {
