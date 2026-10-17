@@ -25,7 +25,7 @@ final class ScmPanelTests: OrbeTestCase {
   }
 
   /// パネルを出し、`ready` が成り立つまで待つ。
-  private func show(until ready: @escaping (ScmPanel) -> Bool, _ message: String) {
+  func show(until ready: @escaping (ScmPanel) -> Bool, _ message: String) {
     panel = ScmPanel(root: repo.root)
     panel.isLive = true
     panel.isShown = true
