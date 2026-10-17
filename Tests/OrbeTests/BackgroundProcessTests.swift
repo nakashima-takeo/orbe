@@ -8,7 +8,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか。返らない子を待つ予定が永久に止まる。打ち切ったはずの claude の子（MCP サーバー・ツールの実行）が
 /// 生き残る。正常に終わった実行が背景に残したプロセスが、Orbe を終えるまで積み上がる。出力の上限が効かず、暴走した出力で
-/// メモリを使い切る。無出力の上限を外した部品が、黙って考えている間に切られるか、経過時間を過ぎても止まらない。
+/// メモリを使い切る。無出力の上限を外した実行が、出力の無い間に切られるか、経過時間を過ぎても止まらない。
 final class BackgroundProcessTests: OrbeTestCase {
   private func spec(
     _ script: String, elapsed: TimeInterval = 30, idle: TimeInterval? = 30,
