@@ -15,7 +15,8 @@ extension DesignGallerySnapshotTests {
     pumpMain(until: { scene.isReady }, "行・グラフ・HEAD の push 済みが揃う")
     scene.panel.select(ScmRowID(section: .changes, path: "src/agent/StateHooks.swift"))
     try writePNG(
-      scene.view, size: NSSize(width: 1100, height: 640), name: "editor_scm.png", dir: dir)
+      scene.view, size: NSSize(width: 1100, height: 640), name: "editor_scm.png", dir: dir,
+      until: { scene.isReady })
     try writePNG(
       railBadges, size: NSSize(width: 200, height: 120), name: "editor_scm_rail.png", dir: dir)
   }

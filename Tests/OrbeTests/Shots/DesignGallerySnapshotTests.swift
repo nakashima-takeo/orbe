@@ -367,10 +367,12 @@ final class DesignGallerySnapshotTests: SnapshotTestCase {
   }
 
   /// dark は `name` のまま、light は `<base>_light.png` で書く（doc どおり両 appearance を出力）。
-  func writePNG<V: View>(_ view: V, size: NSSize, name: String, dir: URL) throws {
+  func writePNG<V: View>(
+    _ view: V, size: NSSize, name: String, dir: URL, until ready: (() -> Bool)? = nil
+  ) throws {
     let base = (name as NSString).deletingPathExtension
     for dark in [true, false] {
-      let data = try XCTUnwrap(renderPNG(view, size: size, dark: dark))
+      let data = try XCTUnwrap(renderPNG(view, size: size, dark: dark, until: ready))
       let url = dir.appendingPathComponent(dark ? name : "\(base)_light.png")
       try data.write(to: url)
       print("[gallery] wrote \(url.path)")
