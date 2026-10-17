@@ -125,7 +125,8 @@ extension SourceControl {
 
   /// 操作を列に載せて始める。`body` は段を結びながら（`attach`）書き込みを起こし、全段の終わりで `done` を 1 回呼ぶ。
   /// ネット操作は、そのリポジトリの裏の fetch の係に届け出て、走っている裏の fetch が止まってから 1 段目を起こす（待つ間に
-  /// 止められたら起こさない）。根の git dir がまだ分からなければ届け出ずに起こす（その根の係はまだ欲しがられていない）。
+  /// 止められたら、待ちを取り下げてその場で「止めた」で終える）。根の git dir がまだ分からなければ届け出ずに起こす（その根の
+  /// 係はまだ欲しがられていない）。
   private func run(
     _ kind: Kind, _ step: Step,
     _ body: @escaping (RootFiles, @escaping (GitWriteFailure?) -> Void, Operation) -> Void
@@ -139,9 +140,14 @@ extension SourceControl {
     }
     let autoFetch = ScmAutoFetch.shared(for: repo)
     operation.autoFetch = autoFetch
-    autoFetch.yield {
-      guard !operation.isStopped else { return done(.cancelled) }
+    let withdraw = autoFetch.yield { [weak self] in
+      self?.endYielding(operation)
       body(operation.files, done, operation)
+    }
+    guard let withdraw else { return }
+    beginYielding(operation) {
+      withdraw()
+      done(.cancelled)
     }
   }
 }

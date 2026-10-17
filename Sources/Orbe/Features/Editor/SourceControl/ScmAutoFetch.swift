@@ -15,13 +15,21 @@ final class ScmAutoFetch {
     weak var panel: ScmPanel?
   }
 
+  private final class Yielded {
+    let start: () -> Void
+
+    init(_ start: @escaping () -> Void) {
+      self.start = start
+    }
+  }
+
   /// 共通の git dir（正準形）。
   let key: String
-  private var rules: ScmAutoFetchRules
+  private(set) var rules: ScmAutoFetchRules
   /// 走っている裏の fetch の止める手。
   private var running: RootFiles.Write?
   /// 裏の fetch の終わりを待っている人の操作の 1 段目。
-  private var yielded: [() -> Void] = []
+  private var yielded: [Yielded] = []
   private var wanting: [Wanting] = []
   private var timer: DispatchWorkItem?
 
@@ -80,13 +88,19 @@ final class ScmAutoFetch {
 
   // MARK: - 人の操作
 
-  /// 人のネット操作を始める。走っている裏の fetch があれば止め、その終わりを待ってから `start`（1 段目）を呼ぶ。終わりは
-  /// `humanDidFinish` で必ず 1 回届ける（待つ間に止められた操作も）。
-  func yield(then start: @escaping () -> Void) {
+  /// 人のネット操作を始める。走っている裏の fetch があれば止め、その終わりを待ってから `start`（1 段目）を呼び、待たせた
+  /// ときは待ちを取り下げる手を返す（取り下げた `start` は呼ばない）。終わりは `humanDidFinish` で必ず 1 回届ける（取り下げた
+  /// 操作も）。
+  func yield(then start: @escaping () -> Void) -> (() -> Void)? {
     cancelTimer()
-    guard rules.humanWillStart() else { return start() }
-    yielded.append(start)
+    guard rules.humanWillStart() else {
+      start()
+      return nil
+    }
+    let waiting = Yielded(start)
+    yielded.append(waiting)
     running?.cancel()
+    return { [weak self] in self?.yielded.removeAll { $0 === waiting } }
   }
 
   /// 人のネット操作が終わった。
@@ -129,7 +143,7 @@ final class ScmAutoFetch {
   private func backgroundDidFinish(_ failure: GitWriteFailure?) {
     running = nil
     rules.backgroundDidFinish(failure, at: Date())
-    let starts = yielded
+    let starts = yielded.map(\.start)
     yielded = []
     for start in starts { start() }
     schedule()

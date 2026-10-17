@@ -58,9 +58,9 @@ final class SourceControl {
   final class Operation {
     let kind: Kind
     fileprivate(set) var step: Step
-    /// 実際に走っている（順番待ちを抜けた）。
+    /// 実際に走っている（順番待ちを抜けた）。裏の fetch に譲って待つ間も、走っている。
     fileprivate(set) var isRunning = false
-    /// 走り始めてから帯に出す遅れを越えてもまだ走っている。
+    /// 走り始めて（譲る待ちを含む）から帯に出す遅れを越えた。
     fileprivate(set) var isLong = false
     /// git の進捗の最新の行（push / pull / fetch の段だけ。git の語のまま）。
     fileprivate(set) var progress: String?
@@ -68,6 +68,8 @@ final class SourceControl {
     @ObservationIgnored fileprivate(set) var order = 0
     /// 今の段の止める手。
     @ObservationIgnored fileprivate var write: RootFiles.Write?
+    /// 裏の fetch に譲って待つ間の止める手（待ちを取り下げて「止めた」で終える）。
+    @ObservationIgnored fileprivate var withdraw: (() -> Void)?
     @ObservationIgnored fileprivate(set) var isStopped = false
     /// 始めたときの根のサービス。2 段の操作は全段が終わるまで握る——2 段目のために引き直すと、誰も握っていない瞬間に
     /// 新しいサービスができ、管理下かの判定の前に「管理外」で断られうる。
@@ -82,9 +84,13 @@ final class SourceControl {
       self.files = files
     }
 
-    /// 今の段を止め、次の段を起こさない。
+    /// 今の段を止め、次の段を起こさない。裏の fetch に譲って待っていれば、その終わりを待たずに終える。
     func stop() {
       isStopped = true
+      if let withdraw {
+        self.withdraw = nil
+        return withdraw()
+      }
       write?.cancel()
     }
   }
@@ -184,13 +190,32 @@ final class SourceControl {
     operation.progress = nil
     write.whenStarted { [weak self, weak operation] in
       guard let self, let operation, !operation.isRunning else { return }
-      nextOrder += 1
-      operation.order = nextOrder
-      operation.isRunning = true
-      operation.longDelay.run(after: Self.longAfter) { [weak operation] in
-        guard let operation, operation.isRunning else { return }
-        operation.isLong = true
-      }
+      begin(operation)
+    }
+  }
+
+  /// 人のネット操作が、走っている裏の fetch の終わりを待ち始めた。待つのは、人の操作を走らせるための一部なので、走っている
+  /// 操作として帯に出す——塞いでいる裏の fetch は見せず、人には止められない。止める手は `withdraw`。
+  func beginYielding(_ operation: Operation, withdraw: @escaping () -> Void) {
+    operation.withdraw = withdraw
+    begin(operation)
+  }
+
+  /// 譲る待ちが明けた。1 段目を結ぶ前に、走っている扱いを解く——1 段目が順番待ちに入れば、帯は塞いでいる操作を出す。
+  /// 帯に出す遅れはもう越えていれば、越えたままにする（走り始めたその場で帯に戻り、点滅しない）。
+  func endYielding(_ operation: Operation) {
+    operation.withdraw = nil
+    operation.isRunning = false
+    operation.longDelay.cancel()
+  }
+
+  private func begin(_ operation: Operation) {
+    nextOrder += 1
+    operation.order = nextOrder
+    operation.isRunning = true
+    operation.longDelay.run(after: Self.longAfter) { [weak operation] in
+      guard let operation, operation.isRunning else { return }
+      operation.isLong = true
     }
   }
 
