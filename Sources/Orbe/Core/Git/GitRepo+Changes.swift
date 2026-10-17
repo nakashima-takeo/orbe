@@ -38,6 +38,7 @@ extension GitRepo {
   /// 行の変更を捨てる。含めるパスは呼んだ時点の index と作業ツリーで選び直す（`selection`）。
   /// - 追跡中のパスは作業ツリーを index の版へ戻す（ステージ済みの分は残る）。サブモジュールの中は、利用者の
   ///   `submodule.recurse` に依らず触れない（従うと中の未コミットの作業と、中で作ったコミットへの道を消す）。
+  ///   戻す場所を塞いでいる未追跡のもの（`blockers`）は先にゴミ箱へ移す——git の restore はそれを黙って消す。
   /// - 未追跡のパスはゴミ箱へ移す（元に戻せる）。
   /// - intent-to-add（`git add -N`）のパスは、作業ツリーに在れば index から外してからゴミ箱へ——index の版は空なので、
   ///   戻すと中身を失う。作業ツリーから消えたものは index の版（空）へ戻る。
@@ -68,23 +69,28 @@ extension GitRepo {
       }
       let restore = selection.indexed.subtracting(intended)
       let trash = selection.paths.filter { !restore.contains($0) }
-      let checkout = ["restore", "--worktree", "--no-recurse-submodules"]
-      self.runOnPaths(checkout, paths: Array(restore), handle: handle) { restored in
-        if let restored { return completion(restored) }
-        let unindex = ["rm", "--cached", "-q"]
-        self.runOnPaths(unindex, paths: Array(intended), handle: handle) { removed in
-          if let removed { return completion(removed) }
-          self.moveToTrash(trash, handle: handle, completion: completion)
+      let blocking = { self.blockers(of: restore, submodules: selection.submodules) }
+      self.moveToTrash(blocking, handle: handle) { cleared in
+        if let cleared { return completion(cleared) }
+        let checkout = ["restore", "--worktree", "--no-recurse-submodules"]
+        self.runOnPaths(checkout, paths: Array(restore), handle: handle) { restored in
+          if let restored { return completion(restored) }
+          let unindex = ["rm", "--cached", "-q"]
+          self.runOnPaths(unindex, paths: Array(intended), handle: handle) { removed in
+            if let removed { return completion(removed) }
+            self.moveToTrash({ trash }, handle: handle, completion: completion)
+          }
         }
       }
     }
   }
 
-  /// ステージ・破棄に含めるパスと、そのうち呼んだ時点の index に載っているもの。`unmerged` は、その index に競合
-  /// （stage が 0 でないエントリ）が残っているか。
+  /// ステージ・破棄に含めるパスと、そのうち呼んだ時点の index に載っているもの・サブモジュールとして載っているもの。
+  /// `unmerged` は、その index に競合（stage が 0 でないエントリ）が残っているか。
   struct Selection {
     let paths: [String]
     let indexed: Set<String>
+    let submodules: Set<String>
     let unmerged: Bool
   }
 
@@ -106,6 +112,7 @@ extension GitRepo {
       transform: { listed -> Result<Selection, GitWriteFailure> in
         if let failure = GitWriteFailure.of(listed) { return .failure(failure) }
         var indexed = Set<String>()
+        var submodules = Set<String>()
         var unmerged = false
         // `<mode> <object> <stage>\t<path>`
         for entry in listed.stdout.split(separator: 0) {
@@ -115,6 +122,7 @@ extension GitRepo {
             asked.contains(path)
           {
             indexed.insert(path)
+            if entry.starts(with: Self.gitlinkMode) { submodules.insert(path) }
           }
         }
         var paths: [String] = []
@@ -124,7 +132,8 @@ extension GitRepo {
           }
           if let original = row.originalPath, indexed.contains(original) { paths.append(original) }
         }
-        return .success(Selection(paths: paths, indexed: indexed, unmerged: unmerged))
+        return .success(
+          Selection(paths: paths, indexed: indexed, submodules: submodules, unmerged: unmerged))
       }, completion: completion)
   }
 
@@ -150,15 +159,45 @@ extension GitRepo {
   /// ゴミ箱の行き先の差し替え（テスト用。隔離ハーネスが毎テスト caseDir の下へ張る）。nil なら利用者のゴミ箱。
   nonisolated(unsafe) static var trashDirectoryOverride: URL?
 
-  /// 裏のスレッドで 1 件ずつゴミ箱へ移し、その都度止められたかを見る。completion は main で返る。
+  /// index でサブモジュール（gitlink）のエントリの mode。
+  private static let gitlinkMode = Data("160000 ".utf8)
+
+  /// 戻すパス `paths` の場所を塞いでいる未追跡のもの——パスの場所にあるディレクトリ（サブモジュールの場所を除く。同じ名前の
+  /// ディレクトリ・入れ子のリポジトリ）と、ディレクトリでない親の階層（ファイル・symlink に置き換えた親）。裏のスレッドで呼ぶ。
+  private func blockers(of paths: Set<String>, submodules: Set<String>) -> [String] {
+    var found: [String] = []
+    var clear = Set<String>()
+    for path in paths.sorted() {
+      var parent = ""
+      var blocked = false
+      for component in path.split(separator: "/").dropLast() {
+        parent = parent.isEmpty ? String(component) : parent + "/" + component
+        guard !clear.contains(parent) else { continue }
+        let type = Self.type(of: url(of: parent))
+        guard type == nil || type == .typeDirectory else {
+          if !found.contains(parent) { found.append(parent) }
+          blocked = true
+          break
+        }
+        clear.insert(parent)
+        if type == nil { break }
+      }
+      if !blocked, !submodules.contains(path), Self.type(of: url(of: path)) == .typeDirectory {
+        found.append(path)
+      }
+    }
+    return found
+  }
+
+  /// 裏のスレッドで `paths` を引き、1 件ずつゴミ箱へ移し、その都度止められたかを見る。completion は main で返る。
   private func moveToTrash(
-    _ paths: [String], handle: GitRunner.Handle, completion: @escaping (GitWriteFailure?) -> Void
+    _ paths: @escaping () -> [String], handle: GitRunner.Handle,
+    completion: @escaping (GitWriteFailure?) -> Void
   ) {
-    let urls = paths.map(url(of:))
     DispatchQueue.global(qos: .userInitiated).async {
       var failure: GitWriteFailure?
       // 選んだ後に消えたパスは、捨てるものが無いので飛ばす。
-      for url in urls where Self.exists(url) {
+      for url in paths().map(self.url(of:)) where Self.exists(url) {
         guard !handle.isCancelled else {
           failure = .cancelled
           break
@@ -204,5 +243,10 @@ extension GitRepo {
   /// symlink を辿らずに在るか（壊れた symlink も在る）。
   private static func exists(_ url: URL) -> Bool {
     (try? FileManager.default.attributesOfItem(atPath: url.path)) != nil
+  }
+
+  /// symlink を辿らない種類（無ければ nil）。
+  private static func type(of url: URL) -> FileAttributeType? {
+    (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType
   }
 }
