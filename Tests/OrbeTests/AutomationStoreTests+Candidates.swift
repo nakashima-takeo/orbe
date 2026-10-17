@@ -1,0 +1,67 @@
+import XCTest
+
+@testable import Orbe
+
+/// 候補の保ち方——取得の性質ごとの下げ方と、判定の確定がその時点の候補に当て直されること。
+///
+/// 壊れると何が起きるか: 担当から外れた課題の候補が棚に残り続ける、または新着の DM の候補が次の取得で一斉に消える。同じリンクの
+/// 候補が自動化ごとに二重に出る。人がタスクにした・捨てた候補を、判定が対応済みで上書きする。
+extension AutomationStoreTests {
+  private func proposals(_ store: AutomationStore) -> [String: AutomationProposal.State] {
+    Dictionary(uniqueKeysWithValues: store.proposals.map { ($0.item.link, $0.state) })
+  }
+
+  /// 今の集合の取得から消えたリンクの候補は下げ、その取得の回に数える。戻ってきたリンクはまた候補にできる。
+  func testACurrentSetProposalIsWithdrawnWhenItsLinkLeavesAndCanBeProposedAgain() throws {
+    let store = AutomationStore()
+    let id = try store.create(Self.definition(coverage: .currentSet), now: Self.at).id
+    let a = Self.item("a")
+    try Self.fetch(store, id, [a])
+    try Self.judge(store, id, proposing: [a])
+
+    try Self.fetch(store, id, [])
+    XCTAssertEqual(proposals(store), [:])
+    XCTAssertEqual(store.automation(id)?.state("fetch").runs.first?.withdrawn, 1)
+
+    try Self.fetch(store, id, [a])
+    try Self.judge(store, id, proposing: [a])
+    XCTAssertEqual(proposals(store), [a.link: .open])
+  }
+
+  /// 新着の流れの候補は、取得から消えても判定が対応済みにするまで残り、対応済みになれば忘れる。
+  func testANewArrivalsProposalStaysUntilTheJudgeResolvesIt() throws {
+    let store = AutomationStore()
+    let id = try store.create(Self.definition(coverage: .newArrivals), now: Self.at).id
+    let a = Self.item("a")
+    try Self.fetch(store, id, [a])
+    try Self.judge(store, id, proposing: [a])
+
+    try Self.fetch(store, id, [])
+    XCTAssertEqual(proposals(store), [a.link: .open])
+
+    try Self.judge(store, id, resolving: [a.link])
+    XCTAssertEqual(proposals(store), [:])
+  }
+
+  /// 判定の確定はその時点の候補に当て直す: 別の自動化が先に候補にしたリンクの案は理由付きで捨て、人がさばいた候補を対応済みで
+  /// 上書きしない。
+  func testAJudgeCommitIsCheckedAgainstTheProposalsAtThatMoment() throws {
+    let store = AutomationStore()
+    let first = try store.create(Self.definition("一つ目"), now: Self.at).id
+    let second = try store.create(Self.definition("二つ目"), now: Self.at).id
+    let a = Self.item("a")
+    try Self.fetch(store, first, [a])
+    try Self.fetch(store, second, [a])
+    try Self.judge(store, first, proposing: [a])
+
+    try Self.judge(store, second, proposing: [a])
+    XCTAssertEqual(store.proposals.map(\.automationId), [first], "リンクの候補は全自動化を通じて 1 つ")
+    let run = store.automation(second)?.state("judge").runs.first
+    guard case .judge(0, 0, let rejected) = run?.result else { return XCTFail("二つ目の判定の回が記録されない") }
+    XCTAssertEqual(rejected.count, 1)
+
+    try store.dismiss(XCTUnwrap(store.proposals.first?.id))
+    try Self.judge(store, first, resolving: [a.link])
+    XCTAssertEqual(proposals(store), [a.link: .dismissed])
+  }
+}
