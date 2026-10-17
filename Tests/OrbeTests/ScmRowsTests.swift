@@ -52,6 +52,20 @@ final class ScmRowsTests: OrbeTestCase {
     XCTAssertEqual(ScmChanges.count(status), changes.count)
   }
 
+  /// すべてステージ・ステージ済みが無いときのコミットに入る行は「変更」の行から、競合と、ステージできないサブモジュールの
+  /// 中身だけの変化を除いたもの（行としては出る）。
+  func testCommittableRowsLeaveOutConflictsAndSubmoduleContent() {
+    let changes = ScmChanges.build(
+      GitStatus(
+        entries: [
+          "a.txt": entry(nil, .modified), "conflict.txt": entry(.unmerged, .unmerged),
+          "sub": GitStatus.Entry(
+            staged: nil, unstaged: .modified, unstagedIsSubmoduleContent: true),
+        ], untrackedDirectories: [], branch: nil))
+    XCTAssertEqual(changes.changes.map(\.path), ["a.txt", "conflict.txt", "sub"])
+    XCTAssertEqual(changes.committable.map(\.path), ["a.txt"])
+  }
+
   /// 行が 0 の区分は見出しごと出ず、畳んだ区分のファイル行は出ない。区間の表は行を先頭から隙間なく覆う（列が位置から引く
   /// 行と、源が描く行がずれない）。
   func testEmptySectionsAndFoldedFilesAreNotRowsAndSegmentsCoverEveryRow() {

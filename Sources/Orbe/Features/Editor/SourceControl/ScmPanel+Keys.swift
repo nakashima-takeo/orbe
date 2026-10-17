@@ -101,7 +101,8 @@ extension ScmPanel {
       let files = changes.files(in: section).filter { !$0.isConflicted }
       switch control {
       case .unstageAll where !files.isEmpty: self.control.unstage(files.map(\.row))
-      case .stageAll where !files.isEmpty: self.control.stage(files.map(\.row))
+      case .stageAll where !changes.committable.isEmpty:
+        self.control.stage(changes.committable.map(\.row))
       case .discardAll where !files.isEmpty: onDiscard(files)
       case .refreshGraph: readGraphAndHead()
       default: break

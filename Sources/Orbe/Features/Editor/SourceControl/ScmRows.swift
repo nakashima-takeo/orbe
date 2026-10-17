@@ -27,6 +27,19 @@ struct ScmChanges {
     let existsInWorkingTree: Bool
     /// 追跡中（破棄は作業ツリーを index の版へ戻す——戻せないので確かめる）。未追跡はゴミ箱へ移す。
     let isTracked: Bool
+    /// サブモジュールの中身だけの変化（`git add` ではステージできない）。
+    let isSubmoduleContent: Bool
+
+    init(
+      row: GitStatus.Row, badge: GitStatus.Badge, existsInWorkingTree: Bool, isTracked: Bool,
+      isSubmoduleContent: Bool = false
+    ) {
+      self.row = row
+      self.badge = badge
+      self.existsInWorkingTree = existsInWorkingTree
+      self.isTracked = isTracked
+      self.isSubmoduleContent = isSubmoduleContent
+    }
 
     var path: String { row.path }
     var isConflicted: Bool { badge == .conflicted }
@@ -34,13 +47,14 @@ struct ScmChanges {
 
   let staged: [File]
   let changes: [File]
-  /// 「変更」のうち競合でない行の数（ステージ済みが無いときにコミットへ入る行）。
-  let committable: Int
+  /// 「変更」のうち、すべてステージ・ステージ済みが無いときのコミットに入る行——競合と、ステージできないサブモジュールの
+  /// 中身だけの変化を除く。
+  let committable: [File]
 
   init(staged: [File], changes: [File]) {
     self.staged = staged
     self.changes = changes
-    committable = changes.reduce(0) { $1.isConflicted ? $0 : $0 + 1 }
+    committable = changes.filter { !$0.isConflicted && !$0.isSubmoduleContent }
   }
 
   static let empty = ScmChanges(staged: [], changes: [])
@@ -80,7 +94,8 @@ struct ScmChanges {
             key,
             File(
               row: row, badge: badge(change), existsInWorkingTree: exists,
-              isTracked: change != .untracked)
+              isTracked: change != .untracked,
+              isSubmoduleContent: entry.unstagedIsSubmoduleContent)
           ))
       }
     }

@@ -6,7 +6,7 @@ extension ScmPanel {
   var commitState: ScmCommitState {
     ScmCommitState(
       staged: changes.staged.count, changes: changes.changes.count,
-      committable: changes.committable, branch: branch,
+      committable: changes.committable.count, branch: branch,
       messageIsBlank: control.message.allSatisfy(\.isWhitespace),
       isNetworking: control.isNetworking, isCommitting: control.isCommitting,
       isHeadPushed: isHeadPushed)
@@ -22,11 +22,11 @@ extension ScmPanel {
     control.commitAndPush(commitContent)
   }
 
-  /// 押した時点の範囲の中身。全部なら「変更」の競合でない行を先にステージする（「すべてステージ」と同じ集め方）。
+  /// 押した時点の範囲の中身。全部なら「すべてステージ」と同じ行を先にステージする。
   private var commitContent: GitCommitContent {
     switch commitState.scope {
     case .staged: .staged
-    case .all: .staging(changes.changes.filter { !$0.isConflicted }.map(\.row))
+    case .all: .staging(changes.committable.map(\.row))
     }
   }
 }

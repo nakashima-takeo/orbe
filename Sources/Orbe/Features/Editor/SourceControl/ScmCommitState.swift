@@ -30,7 +30,7 @@ struct ScmCommitState: Equatable {
   /// プル・プッシュ・フェッチ（前提は根のサービスが判定する。同じ worktree のネット操作が走っている間だけ押せない）。
   let canNetwork: Bool
 
-  /// `committable` は「変更」のうち競合でない行の数。`isHeadPushed` は nil = 分からない。
+  /// `committable` はステージ済みが無いときにコミットへ入る行の数。`isHeadPushed` は nil = 分からない。
   init(
     staged: Int, changes: Int, committable: Int, branch: GitStatus.Branch?,
     messageIsBlank: Bool, isNetworking: Bool, isCommitting: Bool, isHeadPushed: Bool?

@@ -52,6 +52,24 @@ final class GitStatusTests: OrbeTestCase {
     XCTAssertEqual(status.entries.count, 6, "ヘッダ・不正なトークン・空は捨てる")
   }
 
+  /// サブモジュールの行は、作業ツリー側の変化がチェックアウトしたコミットの移動か、中身だけ（`git add` でステージできない）かを
+  /// 持つ。
+  func testASubmoduleWhoseOnlyChangeIsItsContentIsMarked() {
+    func submodule(_ xy: String, _ sub: String, _ path: String) -> String {
+      "1 \(xy) \(sub) 160000 160000 160000 \(zero) \(zero) \(path)"
+    }
+    let status = parse([
+      submodule(".M", "S.M.", "dirty"), submodule(".M", "S..U", "untracked"),
+      submodule(".M", "SCM.", "moved"), submodule("M.", "S.M.", "staged"),
+      ordinary(".M", "file.txt"),
+    ])
+    XCTAssertEqual(status.entries["dirty"]?.unstagedIsSubmoduleContent, true)
+    XCTAssertEqual(status.entries["untracked"]?.unstagedIsSubmoduleContent, true)
+    XCTAssertEqual(status.entries["moved"]?.unstagedIsSubmoduleContent, false, "コミットが動けばステージできる")
+    XCTAssertEqual(status.entries["staged"]?.unstagedIsSubmoduleContent, false, "作業ツリー側に変化が無い")
+    XCTAssertEqual(status.entries["file.txt"]?.unstagedIsSubmoduleContent, false)
+  }
+
   func testBadgeDerivation() {
     let status = parse([
       ordinary(".M", "m.txt"), ordinary("M.", "staged.txt"), ordinary("A.", "a.txt"),
