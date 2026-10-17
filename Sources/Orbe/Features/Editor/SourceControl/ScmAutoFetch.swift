@@ -62,14 +62,16 @@ final class ScmAutoFetch {
   private static func observeActivation() {
     guard activation.isEmpty else { return }
     let center = NotificationCenter.default
-    activation = [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification]
-      .map { name in
-        center.addObserver(forName: name, object: nil, queue: .main) { _ in
-          MainActor.assumeIsolated {
-            for fetcher in registry.values { fetcher.schedule() }
-          }
+    activation = [
+      NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification,
+    ]
+    .map { name in
+      center.addObserver(forName: name, object: nil, queue: .main) { _ in
+        MainActor.assumeIsolated {
+          for fetcher in registry.values { fetcher.schedule() }
         }
       }
+    }
   }
 
   // MARK: - 欲しがる面
@@ -146,9 +148,9 @@ final class ScmAutoFetch {
     guard running == nil, humans == 0,
       let files = wanting.lazy.compactMap({ $0.panel?.liveFiles }).first
     else { return }
-    running = files.fetch(unattended: true, onProgress: { _ in }) { [weak self] failure in
-      self?.backgroundDidFinish(failure)
-    }
+    running = files.fetch(
+      unattended: true, onProgress: { _ in },
+      completion: { [weak self] failure in self?.backgroundDidFinish(failure) })
   }
 
   /// 裏の fetch が終わった。通れば前回の時刻を今に、認証・ホスト鍵の失敗なら止まる、ほかの失敗は黙って時刻だけ進める、

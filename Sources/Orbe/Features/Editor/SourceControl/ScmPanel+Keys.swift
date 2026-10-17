@@ -118,7 +118,8 @@ extension ScmPanel {
         return layout.anchor(pressing: row, in: section)
       case .discard where !file.isConflicted:
         onDiscard([file])
-        return ScmDiscardGate.needsConfirmation([file]) ? nil : layout.anchor(pressing: row, in: section)
+        return ScmDiscardGate.needsConfirmation([file])
+          ? nil : layout.anchor(pressing: row, in: section)
       default: break
       }
     default:

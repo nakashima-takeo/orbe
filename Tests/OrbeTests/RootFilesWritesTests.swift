@@ -235,7 +235,9 @@ final class RootFilesWritesTests: OrbeTestCase {
     XCTAssertEqual(repo.git(["rev-list", "--count", "HEAD"]).stdoutText, "1\n", "積まずに差し替える")
     XCTAssertEqual(repo.git(["show", "HEAD:a.txt"]).stdoutText, "amended\n")
 
-    let renamed = finish(files) { files.commit(message: "renamed", content: .amend, completion: $0) }
+    let renamed = finish(files) {
+      files.commit(message: "renamed", content: .amend, completion: $0)
+    }
     XCTAssertNil(renamed.failure)
     XCTAssertEqual(repo.git(["log", "-1", "--format=%s"]).stdoutText, "renamed\n")
   }
