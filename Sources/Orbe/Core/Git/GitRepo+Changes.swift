@@ -50,7 +50,8 @@ extension GitRepo {
   }
 
   /// 行の変更を捨てる。含めるパスは呼んだ時点の index と作業ツリーで選び直す（`selection`）。
-  /// - 追跡中のパスは作業ツリーを index の版へ戻す（ステージ済みの分は残る）。
+  /// - 追跡中のパスは作業ツリーを index の版へ戻す（ステージ済みの分は残る）。サブモジュールの中は、利用者の
+  ///   `submodule.recurse` に依らず触れない（従うと中の未コミットの作業と、中で作ったコミットへの道を消す）。
   /// - 未追跡のパスはゴミ箱へ移す（元に戻せる）。
   /// - intent-to-add（`git add -N`）のパスは、作業ツリーに在れば index から外してからゴミ箱へ——index の版は空なので、
   ///   戻すと中身を失う。作業ツリーから消えたものは index の版（空）へ戻る。
@@ -81,7 +82,7 @@ extension GitRepo {
       }
       let restore = selection.indexed.subtracting(intended)
       let trash = selection.paths.filter { !restore.contains($0) }
-      let checkout = ["restore", "--worktree"]
+      let checkout = ["restore", "--worktree", "--no-recurse-submodules"]
       self.runOnPaths(checkout, paths: Array(restore), handle: handle) { restored in
         if let restored { return completion(restored) }
         let unindex = ["rm", "--cached", "-q"]

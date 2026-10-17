@@ -196,16 +196,7 @@ final class ScmPanelTests: OrbeTestCase {
   /// ——押せば、戻せない確認を通した後で空振りする）。中身だけ変わった行は ＋ も何も起こさず、中でコミットした（チェック
   /// アウトしているコミットが動いた）行は ＋ でステージできる。
   func testASubmoduleChangedInTheWorkingTreeIsNotDiscarded() throws {
-    let sub = repo.dir.path + "-sub"
-    for args in [
-      ["init", "-q", "-b", "main", sub], ["-C", sub, "commit", "-q", "--allow-empty", "-m", "s"],
-      ["-c", "protocol.file.allow=always", "submodule", "add", "-q", sub, "sub"],
-      ["commit", "-qm", "add submodule"],
-    ] {
-      XCTAssertTrue(
-        repo.git(["-c", "user.email=t@example.com", "-c", "user.name=t"] + args).isSuccess,
-        "前提: \(args)")
-    }
+    try repo.addSubmodule("sub")
     try repo.write("sub/inner.txt", "inner\n")
     try repo.write("a.txt", "edited\n")
     show(until: { $0.changes.changes.count == 2 }, "サブモジュールと変更の行")
@@ -222,11 +213,8 @@ final class ScmPanelTests: OrbeTestCase {
     XCTAssertEqual(discarding, ["a.txt"])
 
     // サブモジュールの中の git dir は監視しないので、再読込で取り直す。
-    for args in [["add", "inner.txt"], ["commit", "-qm", "inner"]] {
-      XCTAssertTrue(
-        repo.git(["-C", "sub", "-c", "user.email=t@example.com", "-c", "user.name=t"] + args)
-          .isSuccess, "前提: \(args)")
-    }
+    XCTAssertTrue(repo.git(["-C", "sub", "add", "inner.txt"]).isSuccess)
+    XCTAssertTrue(repo.git(["-C", "sub", "commit", "-qm", "inner"]).isSuccess)
     panel.refresh()
     pumpMain(
       until: { self.panel.changes.changes.first { $0.path == "sub" }?.submodule == .commit },

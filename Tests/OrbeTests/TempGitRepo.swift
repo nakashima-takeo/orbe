@@ -53,6 +53,23 @@ final class TempGitRepo {
     XCTAssertTrue(git(["push", "-q", "origin", "HEAD:" + branch], in: other).isSuccess)
   }
 
+  /// `t.txt` を 1 コミット持つ別のリポジトリを、サブモジュール `path` として足してコミットする。サブモジュールの中でも
+  /// 作者の設定を持たせる（`git -C <path>` でそのままコミットできる）。
+  func addSubmodule(_ path: String) throws {
+    let source = dir.path + "-\(path)"
+    try write("t.txt", "t\n", in: source)
+    for args in [
+      ["init", "-q", "-b", "main", source], ["-C", source, "add", "t.txt"],
+      ["-C", source, "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", "t"],
+      ["-c", "protocol.file.allow=always", "submodule", "add", "-q", source, path],
+      ["commit", "-qm", "add submodule"],
+      ["-C", path, "config", "user.email", "t@example.com"],
+      ["-C", path, "config", "user.name", "t"],
+    ] {
+      XCTAssertTrue(git(args).isSuccess, "\(args)")
+    }
+  }
+
   /// HEAD のコミット。
   func head() -> String {
     git(["rev-parse", "HEAD"]).stdoutText.trimmingCharacters(in: .whitespacesAndNewlines)
