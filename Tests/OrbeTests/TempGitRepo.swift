@@ -6,7 +6,7 @@ import XCTest
 
 /// テストの作業ディレクトリに作る実 git リポジトリ（初期コミット付き）。根のサービス・監視・観測のテストが共有する。
 /// `root` は根の正規形（`GitWorktreeRoot.normalizedPath`）で、タブの `groupKey` と同じ綴り。ref の形式は files に固定する
-/// （監視が remote 追跡 ref の変化を ref 名で見分けるのは files だけ。利用者の `init.defaultRefFormat` に左右されない）。
+/// （監視が remote 追跡 ref の変化を ref 名で見分けるのは files だけ。git の既定や環境変数に左右されない）。
 final class TempGitRepo {
   let dir: URL
   let root: String
