@@ -73,9 +73,9 @@ public enum LineDiff {
 
   private static let newline: UInt16 = 0x0A
 
-  /// 空の本文と空でない本文の行差分を、行を割らずに端の行だけで決める（片側が無い版の diff を、本文の大きさに依らない
-  /// 手間で出す）。空の本文の 1 行は、本文の先頭か末尾の空の行とだけ対応させる（途中の空の行には結ばない）。`isNew` なら
-  /// 本文が新しい側（両側とも空なら区間は無い）。
+  /// 空の本文と空でない本文の行差分を、行を割らずに端の行だけで決める（本文が写しなら、片側が無い版の diff を本文の
+  /// 大きさに依らない手間で出す）。空の本文の 1 行は、本文の先頭か末尾の空の行とだけ対応させる（途中の空の行には
+  /// 結ばない）。`isNew` なら本文が新しい側（両側とも空なら区間は無い）。
   private static func againstEmpty(_ text: Ends?, isNew: Bool) -> [LineHunk] {
     guard let text else { return [] }
     let firstIsEmpty = text.first == newline
@@ -209,7 +209,7 @@ public enum LineDiff {
   private static func lines(of units: ContiguousArray<UInt16>) -> [Line] {
     var result: [Line] = []
     var start = 0
-    for (index, unit) in units.enumerated() where unit == 0x0A {
+    for (index, unit) in units.enumerated() where unit == newline {
       result.append(units[start..<index])
       start = index + 1
     }

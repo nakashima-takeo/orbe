@@ -81,7 +81,7 @@ final class LineDiffTests: XCTestCase {
   }
 
   /// 改行で終わる本文どうしなら、末尾の空の行は両側で揃う——末尾に空の行で始まる塊を足すと、足した塊が追加になる
-  /// （VS Code・git と同じ位置）。
+  /// （git と同じ位置）。
   func testTheTrailingEmptyLinesOfNewlineEndedTextsPair() {
     XCTAssertEqual(LineDiff.hunks(base: "a\n", current: TextRope("a\n\nb\n")), [hunk(1, 0, 2, 2)])
     XCTAssertEqual(
