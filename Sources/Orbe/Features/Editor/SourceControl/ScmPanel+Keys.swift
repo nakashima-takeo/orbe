@@ -97,13 +97,13 @@ extension ScmPanel {
   func press(_ row: Int, _ control: ScmControl, in layout: ScmLayout) -> RowListAnchor<ScmRowID>? {
     guard row < layout.items.count else { return nil }
     switch layout.items[row] {
-    case .header(let section, _, _):
-      let files = changes.files(in: section).filter { !$0.isConflicted }
+    case .header:
       switch control {
-      case .unstageAll where !files.isEmpty: self.control.unstage(files.map(\.row))
+      case .unstageAll where !changes.staged.isEmpty:
+        self.control.unstage(changes.staged.map(\.row))
       case .stageAll where !changes.committable.isEmpty:
         self.control.stage(changes.committable.map(\.row))
-      case .discardAll where !files.isEmpty: onDiscard(files)
+      case .discardAll where !changes.committable.isEmpty: onDiscard(changes.committable)
       case .refreshGraph: readGraphAndHead(remoteRefsMayHaveMoved: true)
       default: break
       }
@@ -111,13 +111,13 @@ extension ScmPanel {
       switch control {
       case .openFile where file.existsInWorkingTree:
         onOpenFile(URL(fileURLWithPath: root).appendingPathComponent(file.path))
-      case .stage:
+      case .stage where !file.isSubmoduleContent:
         self.control.stage([file.row])
         return layout.anchor(pressing: row, in: section)
       case .unstage:
         self.control.unstage([file.row])
         return layout.anchor(pressing: row, in: section)
-      case .discard where !file.isConflicted:
+      case .discard where !file.isConflicted && !file.isSubmoduleContent:
         onDiscard([file])
         return ScmDiscardGate.needsConfirmation([file])
           ? nil : layout.anchor(pressing: row, in: section)

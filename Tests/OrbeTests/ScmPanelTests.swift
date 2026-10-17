@@ -302,6 +302,35 @@ final class ScmPanelTests: OrbeTestCase {
       }, timeout: 20, message)
   }
 
+  /// 中身だけ変わったサブモジュールの行は、＋ も破棄も押せない姿で、押しても何も起こさず、すべて破棄にも入らない（git の
+  /// add も restore も何も変えない——押せる姿のままだと、破棄は戻せない確認を通した後で空振りする）。
+  func testASubmoduleWhoseOnlyChangeIsItsContentCanNeitherBeStagedNorDiscarded() throws {
+    let sub = repo.dir.path + "-sub"
+    for args in [
+      ["init", "-q", "-b", "main", sub], ["-C", sub, "commit", "-q", "--allow-empty", "-m", "s"],
+      ["-c", "protocol.file.allow=always", "submodule", "add", "-q", sub, "sub"],
+      ["commit", "-qm", "add submodule"],
+    ] {
+      XCTAssertTrue(
+        repo.git(["-c", "user.email=t@example.com", "-c", "user.name=t"] + args).isSuccess,
+        "前提: \(args)")
+    }
+    try repo.write("sub/inner.txt", "inner\n")
+    try repo.write("a.txt", "edited\n")
+    show(until: { $0.changes.changes.count == 2 }, "サブモジュールと変更の行")
+    let row = try XCTUnwrap(panel.layout.index[ScmRowID(section: .changes, path: "sub")])
+    let header = try XCTUnwrap(panel.layout.index[ScmRowID(section: .changes, path: nil)])
+    var discarding: [String] = []
+    panel.onDiscard = { files in discarding += files.map(\.path) }
+
+    XCTAssertNil(panel.press(row, .stage, in: panel.layout))
+    XCTAssertNil(panel.press(row, .discard, in: panel.layout))
+    XCTAssertTrue(panel.control.operations.isEmpty, "＋ は何も起こさない")
+    XCTAssertEqual(discarding, [], "破棄は確認も出さない")
+    panel.press(header, .discardAll, in: panel.layout)
+    XCTAssertEqual(discarding, ["a.txt"])
+  }
+
   /// 「すべて破棄」「すべてステージ」は競合中のファイルを含めない（競合の行は 1 行ずつステージで解決済みにする）。
   func testBulkActionsLeaveConflictedFilesAlone() throws {
     try repo.write("b.txt", "b\n")

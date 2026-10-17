@@ -27,7 +27,7 @@ struct ScmChanges {
     let existsInWorkingTree: Bool
     /// 追跡中（破棄は作業ツリーを index の版へ戻す——戻せないので確かめる）。未追跡はゴミ箱へ移す。
     let isTracked: Bool
-    /// サブモジュールの中身だけの変化（`git add` ではステージできない）。
+    /// サブモジュールの中身だけの変化（`git add` でステージできず、`git restore` で戻らない）。
     let isSubmoduleContent: Bool
 
     init(
@@ -47,8 +47,8 @@ struct ScmChanges {
 
   let staged: [File]
   let changes: [File]
-  /// 「変更」のうち、すべてステージ・ステージ済みが無いときのコミットに入る行——競合と、ステージできないサブモジュールの
-  /// 中身だけの変化を除く。
+  /// 「変更」のうち、すべてステージ・すべて破棄・ステージ済みが無いときのコミットに入る行——競合と、ステージも破棄も
+  /// できない（git が何も変えない）サブモジュールの中身だけの変化を除く。
   let committable: [File]
 
   init(staged: [File], changes: [File]) {

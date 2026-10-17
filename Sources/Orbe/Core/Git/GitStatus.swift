@@ -13,7 +13,7 @@ struct GitStatus: Equatable {
     /// rename・copy の元パス。
     let originalPath: String?
     /// 作業ツリー側の変化が、サブモジュールの中身だけ（チェックアウトしているコミットは index と同じ）。`git add` では
-    /// ステージできない。
+    /// ステージできず、`git restore` でも戻らない。
     let unstagedIsSubmoduleContent: Bool
 
     init(
