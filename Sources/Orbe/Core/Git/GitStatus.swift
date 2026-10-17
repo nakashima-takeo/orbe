@@ -72,6 +72,15 @@ struct GitStatus: Equatable {
   let untrackedDirectories: [String]
   /// ブランチのヘッダが無い出力なら nil。
   let branch: Branch?
+  /// index 側の変化（競合を除く）が 1 つでもある。
+  let hasStagedChanges: Bool
+
+  init(entries: [String: Entry], untrackedDirectories: [String], branch: Branch?) {
+    self.entries = entries
+    self.untrackedDirectories = untrackedDirectories
+    self.branch = branch
+    hasStagedChanges = entries.values.contains { $0.staged != nil && !$0.isConflicted }
+  }
 
   /// その相対パスの行（rename・copy なら元パスも）。
   func row(_ path: String) -> Row {

@@ -9,7 +9,8 @@ extension ScmPanel {
       committable: changes.committable.count, branch: branch,
       messageIsBlank: control.message.allSatisfy(\.isWhitespace),
       isNetworking: control.isNetworking, isCommitting: control.isCommitting,
-      isStaging: control.isStaging, isHeadPushed: isHeadPushed)
+      hasStaged: control.isStaging || liveFiles?.status?.hasStagedChanges == true,
+      isHeadPushed: isHeadPushed)
   }
 
   /// コミットする（✓・ボタン・⌘↵）。何を入れるかは押した時点の姿で決める（見たものをコミットする）。

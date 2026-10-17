@@ -229,6 +229,47 @@ final class ScmPanelTests: OrbeTestCase {
     XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, " M a.txt\n")
   }
 
+  /// ステージが終わってから行の組み直しが当たるまでの間（status はもうステージ後の姿で、行はまだ「変更」のまま）に押しても、
+  /// コミット・amend・コミットしてプッシュは押した行だけを入れ、押していない変更と未追跡を入れない。
+  func testCommittingBeforeTheRowsCatchUpWithAStageTakesOnlyTheStagedRow() throws {
+    let actions: [(String, (ScmPanel) -> Void)] = [
+      ("commit", { $0.commit() }), ("amend", { $0.amend() }),
+      ("commitAndPush", { $0.commitAndPush() }),
+    ]
+    for (name, act) in actions {
+      if name != actions[0].0 {
+        panel.isShown = false
+        panel.isLive = false
+        repo = try TempGitRepo()
+      }
+      if name == "commitAndPush" { repo.addOrigin() }
+      try repo.write("a.txt", "edited\n")
+      try repo.write("n.txt", "new\n")
+      try repo.write("secret.env", "token\n")
+      show(until: { $0.changes.staged.isEmpty && $0.changes.changes.count == 3 }, "\(name): 変更の行")
+      panel.control.message = "only n"
+      var observed: (staged: Int, isStaging: Bool)?
+      let hook = StageFinishHook { [panel] in
+        guard let panel else { return }
+        observed = (panel.changes.staged.count, panel.control.isStaging)
+        act(panel)
+      }
+      panel.control.addObserver(hook)
+      withExtendedLifetime(hook) {
+        panel.control.stage([GitStatus.Row(path: "n.txt", originalPath: nil)])
+        pumpMain(until: { observed != nil }, "\(name): ステージが終わる")
+        idle("\(name): コミット")
+      }
+      XCTAssertNil(panel.control.failure, name)
+      XCTAssertEqual(observed?.staged, 0, "\(name): 前提: 行はまだ組み直されていない")
+      XCTAssertEqual(observed?.isStaging, false, "\(name): 前提: ステージは列から外れている")
+      XCTAssertEqual(
+        repo.git(["status", "--porcelain"]).stdoutText, " M a.txt\n?? secret.env\n", name)
+      XCTAssertTrue(
+        repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText.contains("n.txt"), name)
+    }
+  }
+
   /// 大きな変更（数千件）のある worktree でも、行と件数は最新の status に追いつく——行の組み立てより先にグラフの読み
   /// （コミットのたびに git の状態が変わって起きる）が返っても、手元の古い行で組み直した結果が最新の status を退けない。
   func testRowsCatchUpWithTheLatestStatusOnALargeWorktree() throws {
@@ -287,5 +328,21 @@ final class ScmPanelTests: OrbeTestCase {
     pumpMain(until: { self.panel.changes.staged.map(\.path) == ["b.txt"] }, "b.txt だけがステージ済みへ")
     XCTAssertEqual(
       repo.git(["diff", "--name-only", "--diff-filter=U"]).stdoutText, "a.txt\n", "競合のまま")
+  }
+}
+
+/// ステージが終わった知らせの中で 1 回だけ `body` を呼ぶ。
+@MainActor
+private final class StageFinishHook: SourceControlObserver {
+  private var body: (() -> Void)?
+
+  init(_ body: @escaping () -> Void) {
+    self.body = body
+  }
+
+  func sourceControl(_ control: SourceControl, operationDidFinish kind: SourceControl.Kind) {
+    guard kind == .stage, let body else { return }
+    self.body = nil
+    body()
   }
 }
