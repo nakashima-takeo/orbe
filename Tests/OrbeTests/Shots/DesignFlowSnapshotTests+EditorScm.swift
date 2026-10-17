@@ -59,7 +59,7 @@ extension DesignFlowSnapshotTests {
           panel.toggle(.graph)
           try? Self.hangingHook(in: scene.directory)
           control.message = "wip"
-          control.commit()
+          control.commit(.staged)
           pumpMain(until: { control.bandOperation != nil }, "帯が出る")
         }
       ),

@@ -2,14 +2,12 @@ import Foundation
 
 // MARK: - 変更の書き込み（ステージ・解除・破棄・コミット・取り消し）
 
-/// コミットの中身。
+/// コミットの中身（新しいコミットにも、amend にも入れる）。
 enum GitCommitContent: Equatable {
   /// ステージ済みの分。
   case staged
   /// 行を先にステージしてから（ステージ済みの分も入る）。
   case staging([GitStatus.Row])
-  /// 直前のコミットを、ステージ済みの分で差し替える。
-  case amend
 
   /// 先にステージする行。
   var stagedFirst: [GitStatus.Row] {
@@ -162,16 +160,16 @@ extension GitRepo {
       }, completion: completion)
   }
 
-  /// コミットする。中身は `content`——ステージ済みの分、先に行をステージしてから（同じ書き込みの中で `stage` と同じ規則で
-  /// 選び直す）、amend のどれか。どの中身でも、呼んだ時点の index に競合が残っていれば何も書かずに `conflictsRemain` で返す
-  /// （git はコミットを断るので、先にステージしたものが merge のコミットに混ざりうるだけになる）。ステージの後で止められたら
-  /// コミットしない。ステージが通ってコミットが落ちたら、ステージしたものは残る。
+  /// コミットする（`amend` なら直前のコミットを差し替える）。中身は `content`——ステージ済みの分か、先に行をステージして
+  /// から（同じ書き込みの中で `stage` と同じ規則で選び直す）。どの中身でも、呼んだ時点の index に競合が残っていれば何も
+  /// 書かずに `conflictsRemain` で返す（git はコミットを断るので、先にステージしたものが merge のコミットに混ざりうるだけに
+  /// なる）。ステージの後で止められたらコミットしない。ステージが通ってコミットが落ちたら、ステージしたものは残る。
   ///
-  /// メッセージは書いたまま残る（`#` 始まりの行も。前後の空行・行末の空白・続く空行だけ整える）。amend は直前のコミットを
-  /// 差し替え、メッセージが空なら前のメッセージを一字も変えずに中身だけ差し替える——整え方を明示しないと、利用者の
-  /// `commit.cleanup=strip` が前のメッセージの `#` の行を消す。ユーザーの hook・署名の設定はそのまま効く。
+  /// メッセージは書いたまま残る（`#` 始まりの行も。前後の空行・行末の空白・続く空行だけ整える）。amend でメッセージが空
+  /// なら、前のメッセージを一字も変えずに中身だけ差し替える——整え方を明示しないと、利用者の `commit.cleanup=strip` が
+  /// 前のメッセージの `#` の行を消す。ユーザーの hook・署名の設定はそのまま効く。
   func commit(
-    message: String, content: GitCommitContent, handle: GitRunner.Handle,
+    message: String, content: GitCommitContent, amend: Bool, handle: GitRunner.Handle,
     completion: @escaping (GitWriteFailure?) -> Void
   ) {
     select(content.stagedFirst, handle: handle) { selected in
@@ -182,8 +180,7 @@ extension GitRepo {
         self.runOnPaths(["add", "-A"], paths: selection.paths, handle: handle) { staged in
           if let staged { return completion(staged) }
           guard !handle.isCancelled else { return completion(.cancelled) }
-          self.commit(
-            message: message, amend: content == .amend, handle: handle, completion: completion)
+          self.commit(message: message, amend: amend, handle: handle, completion: completion)
         }
       }
     }

@@ -17,6 +17,11 @@ extension ScmPanel {
     control.commit(commitContent)
   }
 
+  /// 直前のコミットを差し替える（コミットと同じ範囲）。
+  func amend() {
+    control.amend(commitContent)
+  }
+
   /// コミットしてプッシュ（コミットと同じ範囲）。
   func commitAndPush() {
     control.commitAndPush(commitContent)

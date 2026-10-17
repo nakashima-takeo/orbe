@@ -120,6 +120,31 @@ final class ScmPanelTests: OrbeTestCase {
     XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, "")
   }
 
+  /// amend もコミットと同じ範囲で直前のコミットを差し替える——ステージ済みがあればそれだけ、無ければ「変更」の全部。
+  func testAmendTakesTheStagedPartOrElseEveryChange() throws {
+    try repo.write("a.txt", "edited\n")
+    try repo.write("s.txt", "staged\n")
+    XCTAssertTrue(repo.git(["add", "s.txt"]).isSuccess)
+    show(until: { $0.changes.staged.count == 1 && $0.changes.changes.count == 1 }, "両方の区分")
+    let commits = repo.git(["rev-list", "--count", "HEAD"]).stdoutText
+
+    panel.amend()
+    idle("ステージ済みの amend")
+    XCTAssertEqual(repo.git(["rev-list", "--count", "HEAD"]).stdoutText, commits, "積まずに差し替える")
+    XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, " M a.txt\n", "作業中の変更は残る")
+
+    try repo.write("n.txt", "new\n")
+    pumpMain(
+      until: { self.panel.changes.staged.isEmpty && self.panel.changes.changes.count == 2 },
+      "ステージ済みが無くなる")
+    panel.amend()
+    idle("全部の amend")
+    XCTAssertEqual(repo.git(["rev-list", "--count", "HEAD"]).stdoutText, commits)
+    XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, "")
+    XCTAssertEqual(
+      repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "a.txt\nn.txt\ns.txt\n")
+  }
+
   /// 大きな変更（数千件）のある worktree でも、行と件数は最新の status に追いつく——行の組み立てより先にグラフの読み
   /// （コミットのたびに git の状態が変わって起きる）が返っても、手元の古い行で組み直した結果が最新の status を退けない。
   func testRowsCatchUpWithTheLatestStatusOnALargeWorktree() throws {
@@ -137,7 +162,7 @@ final class ScmPanelTests: OrbeTestCase {
     idle("ステージ")
     pumpMain(until: { self.panel.changes.staged.count == 1 }, "u/1.txt がステージ済みへ")
     panel.control.message = "panel"
-    panel.control.commit()
+    panel.control.commit(.staged)
     idle("コミット")
     settle(changes: untracked - 2, "パネルでコミットした後")
   }

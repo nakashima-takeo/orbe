@@ -16,13 +16,20 @@ extension SourceControl {
     run(.discard, .discard) { files, done in files.discard(rows, completion: done) }
   }
 
-  /// `content` をコミットする（amend なら amend の操作）。通ればメッセージを空にする（コミットの間に打ち足していれば残す）。
-  func commit(_ content: GitCommitContent = .staged) {
+  /// `content` をコミットする。通ればメッセージを空にする（コミットの間に打ち足していれば残す）。
+  func commit(_ content: GitCommitContent) {
+    commit(content, amend: false)
+  }
+
+  /// `content` で直前のコミットを差し替える（メッセージが空なら前のメッセージのまま）。
+  func amend(_ content: GitCommitContent) {
+    commit(content, amend: true)
+  }
+
+  private func commit(_ content: GitCommitContent, amend: Bool) {
     let message = self.message
-    let kind: Kind = content == .amend ? .amend : .commit
-    let step: Step = content == .amend ? .amend : .commit
-    run(kind, step) { [weak self] files, done in
-      files.commit(message: message, content: content) { failure in
+    run(amend ? .amend : .commit, amend ? .amend : .commit) { [weak self] files, done in
+      files.commit(message: message, content: content, amend: amend) { failure in
         if failure == nil { self?.clearMessage(ifStill: message) }
         done(failure)
       }
@@ -67,7 +74,7 @@ extension SourceControl {
   }
 
   /// `content` をコミット → プッシュ。コミットが通ればメッセージを空にしてから送る。
-  func commitAndPush(_ content: GitCommitContent = .staged) {
+  func commitAndPush(_ content: GitCommitContent) {
     let message = self.message
     run(.commitAndPush, .commit) { [weak self] files, done, operation in
       guard let self else { return done(.cancelled) }

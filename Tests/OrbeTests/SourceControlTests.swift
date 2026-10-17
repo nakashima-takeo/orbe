@@ -30,7 +30,7 @@ final class SourceControlTests: OrbeTestCase {
   /// コミットが通ればメッセージは空になる。失敗ならメッセージも失敗の文も残り、次の操作を始めると失敗の文は消える。
   func testCommitClearsTheMessageAndFailuresClearOnTheNextOperation() throws {
     control.message = "nothing staged"
-    control.commit()
+    control.commit(.staged)
     idle("ステージ済みの無いコミット")
     XCTAssertEqual(control.message, "nothing staged")
     XCTAssertNotNil(control.failure)
@@ -39,7 +39,7 @@ final class SourceControlTests: OrbeTestCase {
     XCTAssertNil(control.failure)
     idle("ステージ")
     control.message = "second"
-    control.commit()
+    control.commit(.staged)
     idle("コミット")
     XCTAssertEqual(control.message, "")
     XCTAssertNil(control.failure)
@@ -52,7 +52,7 @@ final class SourceControlTests: OrbeTestCase {
     control.stage([GitStatus.Row(path: "a.txt", originalPath: nil)])
     idle("ステージ")
     control.message = "first"
-    control.commit()
+    control.commit(.staged)
     control.message = "first, then more"
     idle("コミット")
     XCTAssertEqual(repo.git(["log", "-1", "--format=%s"]).stdoutText, "first\n")
@@ -65,7 +65,7 @@ final class SourceControlTests: OrbeTestCase {
     control.stage([GitStatus.Row(path: "a.txt", originalPath: nil)])
     idle("ステージ")
     control.message = "pushed"
-    control.commitAndPush()
+    control.commitAndPush(.staged)
     XCTAssertTrue(control.isNetworking)
     idle("コミットしてプッシュ")
     XCTAssertNil(control.failure)
@@ -80,7 +80,7 @@ final class SourceControlTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["commit", "-qm", "unpushed"]).isSuccess)
     let origin = repo.git(["rev-parse", "origin/main"]).stdoutText
     control.message = "nothing staged"
-    control.commitAndPush()
+    control.commitAndPush(.staged)
     idle("ステージ済みの無いコミットしてプッシュ")
     XCTAssertEqual(control.failure?.kind, .commitAndPush)
     XCTAssertEqual(
@@ -98,7 +98,7 @@ final class SourceControlTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     pumpMain(until: { self.files.status?.entries["a.txt"]?.staged != nil }, "ステージ済み")
     control.message = "hang"
-    control.commit()
+    control.commit(.staged)
     control.stage([GitStatus.Row(path: "b.txt", originalPath: nil)])
     pumpMain(until: { self.control.bandOperation != nil }, "帯")
     XCTAssertEqual(control.bandOperation?.kind, .commit)
@@ -142,7 +142,7 @@ final class SourceControlTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     pumpMain(until: { self.files.status?.entries["a.txt"]?.staged != nil }, "ステージ済み")
     control.message = "hang"
-    control.commitAndPush()
+    control.commitAndPush(.staged)
     control.fetch()
     XCTAssertEqual(control.operations.map(\.kind), [.commitAndPush])
     XCTAssertEqual(control.failure, SourceControl.Failure(kind: .fetch, cause: .networkBusy))
@@ -161,8 +161,8 @@ final class SourceControlTests: OrbeTestCase {
     pumpMain(until: { self.files.status?.entries["a.txt"]?.staged != nil }, "ステージ済み")
     control.message = "hang"
 
-    control.commitAndPush()
-    control.commit(.amend)
+    control.commitAndPush(.staged)
+    control.amend(.staged)
     XCTAssertEqual(
       control.failure, SourceControl.Failure(kind: .amend, cause: .rewriteDuringNetwork))
     control.undoLastCommit()
@@ -172,7 +172,7 @@ final class SourceControlTests: OrbeTestCase {
     control.operations.first?.stop()
     idle("止めたコミットしてプッシュ")
 
-    control.commit(.amend)
+    control.amend(.staged)
     control.push()
     XCTAssertEqual(control.failure, SourceControl.Failure(kind: .push, cause: .pushDuringRewrite))
     control.publish()

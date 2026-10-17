@@ -18,13 +18,12 @@ extension RootFilesWritesTests {
     let files = repo.files()
     let (head, index) = (repo.head(), repo.git(["ls-files", "-s"]).stdoutText)
 
-    for content in [
-      GitCommitContent.staging([GitStatus.Row(path: "n.txt", originalPath: nil)]), .staged, .amend,
-    ] {
+    let staging = GitCommitContent.staging([GitStatus.Row(path: "n.txt", originalPath: nil)])
+    for (content, amend) in [(staging, false), (.staged, false), (staging, true), (.staged, true)] {
       let committed = finish(files) {
-        files.commit(message: "merge", content: content, completion: $0)
+        files.commit(message: "merge", content: content, amend: amend, completion: $0)
       }
-      XCTAssertEqual(committed.failure, .conflictsRemain, "\(content)")
+      XCTAssertEqual(committed.failure, .conflictsRemain, "\(content) amend: \(amend)")
     }
     XCTAssertEqual(repo.head(), head)
     XCTAssertEqual(repo.git(["ls-files", "-s"]).stdoutText, index, "index は押す前のまま")

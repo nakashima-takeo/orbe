@@ -11,7 +11,8 @@ struct ScmCommitState: Equatable {
     case publish
   }
 
-  /// コミットに入れる範囲。ステージ済みが 1 つでもあればそれだけ、0 なら「変更」の競合でない行の全部（確かめない）。
+  /// コミット・amend に入れる範囲。ステージ済みが 1 つでもあればそれだけ、0 なら「変更」のコミットに入る行の全部
+  /// （確かめない）。
   enum Scope: Equatable {
     case staged
     case all
@@ -58,7 +59,7 @@ struct ScmCommitState: Equatable {
     }
     let rewritable =
       branch?.commit != nil && isHeadPushed == false && !isCommitting && !isNetworking
-    canAmend = rewritable && (staged > 0 || !messageIsBlank)
+    canAmend = rewritable && (staged > 0 || committable > 0 || !messageIsBlank)
     canUndo = rewritable
     canCommitAndPush = canCommit && !isNetworking
     isMenuEnabled = canAmend || canCommitAndPush || canUndo

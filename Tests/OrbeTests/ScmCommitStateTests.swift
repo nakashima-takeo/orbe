@@ -71,6 +71,8 @@ final class ScmCommitStateTests: OrbeTestCase {
     XCTAssertTrue(state(staged: 1, branch: head).canAmend)
     XCTAssertTrue(state(branch: head).canUndo)
     XCTAssertFalse(state(branch: head, blank: true).canAmend)
+    XCTAssertTrue(state(changes: 1, branch: head).canAmend, "ステージ済みが無ければ変更の全部を入れる")
+    XCTAssertFalse(state(changes: 1, committable: 0, branch: head).canAmend, "競合だけでは入れるものが無い")
     for pushed in [true, nil] as [Bool?] {
       XCTAssertFalse(state(staged: 1, branch: head, pushed: pushed).canAmend)
       XCTAssertFalse(state(branch: head, pushed: pushed).canUndo)

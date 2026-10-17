@@ -273,9 +273,7 @@ private struct ScmCommitButton: View {
 
   private func menu(_ state: ScmCommitState) -> NSMenu {
     ScmMenu.make([
-      ScmMenu.Item(l10n.string(.editorScmAmend), state.canAmend) {
-        panel.control.commit(.amend)
-      },
+      ScmMenu.Item(l10n.string(.editorScmAmend), state.canAmend, panel.amend),
       ScmMenu.Item(
         l10n.string(.editorScmCommitAndPush), state.canCommitAndPush, panel.commitAndPush),
       nil,
