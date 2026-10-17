@@ -8,7 +8,8 @@ import XCTest
 ///
 /// 壊れると何が起きるか。ステージした行が「変更」に残る・rename を解除すると元パスの削除だけが index に残る・`*` を含む
 /// 名前で別のファイルがステージされる・破棄でステージ済みの分まで消える・未追跡の破棄で取り返しがつかない・`#` の行が
-/// メッセージから消える・取り消しで中身ごと失う・smudge が止まるとステージの完了が返らない。
+/// メッセージから消える・取り消しで中身ごと失う・smudge が止まるとステージの完了が返らない。競合の残る merge の途中で
+/// 押したコミットが関係の無い変更をステージし、merge のコミットに混ぜる。
 @MainActor
 final class RootFilesWritesTests: OrbeTestCase {
   var repo: TempGitRepo!
@@ -17,7 +18,7 @@ final class RootFilesWritesTests: OrbeTestCase {
     repo = try TempGitRepo()
   }
 
-  private func finish(
+  func finish(
     _ files: RootFiles, _ start: (@escaping (GitWriteFailure?) -> Void) -> RootFiles.Write,
     file: StaticString = #filePath, line: UInt = #line
   ) -> WriteOutcome {

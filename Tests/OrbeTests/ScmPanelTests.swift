@@ -4,11 +4,12 @@ import XCTest
 @testable import Orbe
 
 /// 面ごとのソース管理パネル（実 git）: HEAD が push 済みかの追従（隠れていた間の push を含む）・選んだ行が区分から消えた
-/// ときの選び直し・一括操作と競合。
+/// ときの選び直し・一括操作と競合・コミットの中身。
 ///
 /// 壊れると何が起きるか。端末で push したコミットを amend・取り消しで書き換えられる（force push を持たないので Orbe の中では
 /// 戻せない）。ステージした行の選択が消えて ↑↓ で見て回る位置を失う・選び直しで diff が勝手に開く。「すべてステージ」が
-/// 競合の印の残ったファイルを解決済みにする・「すべて破棄」が競合中のファイルを捨てる。
+/// 競合の印の残ったファイルを解決済みにする・「すべて破棄」が競合中のファイルを捨てる。ステージした分だけをコミットした
+/// つもりで作業中の変更まで入る・ステージせずに押したコミットに変更が入らない。
 @MainActor
 final class ScmPanelTests: OrbeTestCase {
   var repo: TempGitRepo!
@@ -88,6 +89,35 @@ final class ScmPanelTests: OrbeTestCase {
     pumpMain(until: { self.panel.changes.changes.count == 1 }, "x3 がステージ済みへ")
     XCTAssertEqual(panel.selection, ScmRowID(section: .changes, path: "x1.txt"))
     XCTAssertEqual(opened, 0)
+  }
+
+  /// コミットの中身は押した時点の姿で決まる——ステージ済みがあればそれだけ、無ければ「変更」の全部（変更・削除・未追跡）。
+  func testCommitTakesTheStagedPartOrElseEveryChange() throws {
+    try repo.write("b.txt", "b\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "b"]).isSuccess)
+    try repo.write("a.txt", "edited\n")
+    try FileManager.default.removeItem(atPath: repo.root + "/b.txt")
+    try repo.write("n.txt", "new\n")
+    try repo.write("s.txt", "staged\n")
+    XCTAssertTrue(repo.git(["add", "s.txt"]).isSuccess)
+    show(until: { $0.changes.staged.count == 1 && $0.changes.changes.count == 3 }, "両方の区分")
+
+    panel.control.message = "staged"
+    panel.commit()
+    idle("ステージ済みのコミット")
+    XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "s.txt\n")
+
+    pumpMain(
+      until: { self.panel.changes.staged.isEmpty && self.panel.changes.changes.count == 3 },
+      "ステージ済みが無くなる")
+    panel.control.message = "all"
+    panel.commit()
+    idle("全部のコミット")
+    XCTAssertEqual(
+      repo.git(["show", "--name-status", "--format=", "HEAD"]).stdoutText,
+      "M\ta.txt\nD\tb.txt\nA\tn.txt\n")
+    XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, "")
   }
 
   /// 大きな変更（数千件）のある worktree でも、行と件数は最新の status に追いつく——行の組み立てより先にグラフの読み
