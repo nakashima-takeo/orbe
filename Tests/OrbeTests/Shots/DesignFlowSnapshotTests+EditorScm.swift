@@ -5,9 +5,10 @@ import XCTest
 @testable import Orbe
 
 /// ソース管理パネルの flow（fixture は `ScmFixtures`——見本 `editor/data.ts` と同じ形の本物の git の場。状態は本物の操作が
-/// 生む）: 見本の姿（ステージ済み 1・変更 3・未 push 3 と origin 2 のグラフ、変更の行を選ぶ）→ 本文つきのメッセージで欄が
-/// 伸びる → 区分を畳む → 返らない pre-commit hook のコミットで実行中の帯 → 止める → upstream の無いブランチのプルの失敗の文 →
-/// 端末でコミットして変更なし（グラフだけ・同期 ↑N ↓M）→ upstream の無いブランチ（ブランチを公開）→ git 管理外。
+/// 生む）: 見本の姿（ステージ済み 1・変更 3・未 push 3 と origin 2 のグラフ、変更の行を選ぶ）→ グラフの見出しを選ぶ（地は
+/// 見出しの帯だけ）→ 本文つきのメッセージで欄が伸びる → 区分を畳む（欄が空で主の側が押せない）→ 返らない pre-commit hook の
+/// コミットで実行中の帯 → 止める → upstream の無いブランチのプルの失敗の文 → 端末でコミットして変更なし（グラフだけ・同期
+/// ↑N ↓M）→ push して先行も遅れも無い（主の側も ▾ も押せない）→ upstream の無いブランチ（ブランチを公開）→ git 管理外。
 extension DesignFlowSnapshotTests {
   func testEditorScm() throws {
     let queriesRoot = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
@@ -31,6 +32,7 @@ extension DesignFlowSnapshotTests {
     let control = panel.control
     return [
       ("open", { panel.select(ScmRowID(section: .changes, path: "src/agent/StateHooks.swift")) }),
+      ("graph_header", { panel.select(ScmRowID(section: .graph, path: nil)) }),
       ("message", { control.message = "StateHooks: emit を畳む\n\n連続する知らせを 1 つにまとめ、\n描画の遅れを減らす。" }),
       (
         "collapsed",
@@ -89,6 +91,15 @@ extension DesignFlowSnapshotTests {
           pumpMain(
             until: { panel.changes.count == 0 && panel.commitState.primary != .commit },
             "変更なしで同期のボタン")
+        }
+      ),
+      (
+        "idle",
+        {
+          try? git(["push", "-q", "origin", "HEAD:main"])
+          pumpMain(
+            until: { panel.commitState.primary == .commit && panel.isHeadPushed == true },
+            "先行も遅れも無い")
         }
       ),
       (
