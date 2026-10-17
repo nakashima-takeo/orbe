@@ -2,8 +2,9 @@ import XCTest
 
 @testable import Orbe
 
-/// コミット・amend・コミットしてプッシュの中身（実 git）——押した時点の範囲で、ステージ済みがあればそれだけ、無ければ
-/// 「変更」の全部。行の組み直しが status より遅れて当たる間に押しても、見えていなかった変更は入らない。
+/// コミット・amend・コミットしてプッシュの中身（実 git）——押した時点に見えている範囲で、ステージ済みがあればそれだけ、
+/// 無ければ「変更」の全部。行の組み直しが status より遅れて当たる間や、外の書き込みがまだ行に出ていない間に押すと、
+/// 何も書かずに断る。
 ///
 /// 壊れると何が起きるか。ステージした分だけをコミットしたつもりで、作業中の変更や未追跡（秘密のファイルを含みうる）まで
 /// 入り、コミットしてプッシュなら remote にも届く。ステージせずに押したコミットに変更が入らない。
@@ -62,125 +63,120 @@ extension ScmPanelTests {
       repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "a.txt\nn.txt\ns.txt\n")
   }
 
-  /// ステージ済みが 0 のときに行の ＋ を押し、そのステージが終わる前にコミットしても、押した行だけをコミットする（走っている・
-  /// 順番を待つステージは済んだものとして数える）。
-  func testCommittingRightAfterAStageTakesOnlyTheStagedRow() throws {
+  /// ステージ済みが 0 のときに行の ＋ を押し、そのステージが終わる前にコミットすると、何も書かずに断る（見えていなかった
+  /// ステージ済みが index にある）。行が追いついてから押し直せば、押した行だけが入る。
+  func testCommittingRightAfterAStageIsRefusedUntilTheRowsCatchUp() throws {
     try repo.write("a.txt", "edited\n")
     try repo.write("n.txt", "new\n")
     show(until: { $0.changes.staged.isEmpty && $0.changes.changes.count == 2 }, "変更の行")
+    let head = repo.head()
 
     panel.control.stage([GitStatus.Row(path: "n.txt", originalPath: nil)])
     panel.control.message = "only n"
     panel.commit()
     idle("ステージとコミット")
+    XCTAssertEqual(panel.control.failure?.cause, .git(.contentMismatch))
+    XCTAssertEqual(repo.head(), head)
+    XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, " M a.txt\nA  n.txt\n")
+
+    pumpMain(until: { self.panel.changes.staged.count == 1 }, "行が追いつく")
+    panel.commit()
+    idle("押し直したコミット")
+    XCTAssertNil(panel.control.failure)
     XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "n.txt\n")
     XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, " M a.txt\n")
   }
 
-  /// ステージが終わってから行の組み直しが当たるまでの間（status はもうステージ後の姿で、行はまだ「変更」のまま）に押しても、
-  /// コミット・amend・コミットしてプッシュは押した行だけを入れ、押していない変更と未追跡を入れない。
-  func testCommittingBeforeTheRowsCatchUpWithAStageTakesOnlyTheStagedRow() throws {
+  /// 行の組み直しが status に追いつく前に押したコミット・amend・コミットしてプッシュは、どれも何も書かずに断る——ステージ
+  /// の直後（行は「変更」のまま）でも、最後のステージ済みの解除の直後（行はステージ済みを見せたまま）でも。
+  func testCommittingBeforeTheRowsCatchUpIsRefusedAndWritesNothing() throws {
+    let n = GitStatus.Row(path: "n.txt", originalPath: nil)
     let actions: [(String, (ScmPanel) -> Void)] = [
       ("commit", { $0.commit() }), ("amend", { $0.amend() }),
       ("commitAndPush", { $0.commitAndPush() }),
     ]
-    for (name, act) in actions {
-      if name != actions[0].0 {
-        panel.isShown = false
-        panel.isLive = false
-        repo = try TempGitRepo()
+    for staged in [false, true] {
+      let (scene, kind) = staged ? ("解除の直後", SourceControl.Kind.unstage) : ("ステージの直後", .stage)
+      for (action, act) in actions {
+        let name = "\(scene) \(action)"
+        if panel != nil {
+          panel.isShown = false
+          panel.isLive = false
+          repo = try TempGitRepo()
+        }
+        if action == "commitAndPush" { repo.addOrigin() }
+        try repo.write("a.txt", "edited\n")
+        try repo.write("n.txt", "new\n")
+        try repo.write("secret.env", "token\n")
+        if staged { XCTAssertTrue(repo.git(["add", "n.txt"]).isSuccess) }
+        show(
+          until: { $0.changes.staged.count == (staged ? 1 : 0) && $0.changes.changes.count >= 2 },
+          "\(name): 行")
+        let head = repo.head()
+        panel.control.message = "m"
+        var observed: Int?
+        let hook = FinishHook(kind) { [panel] in
+          guard let panel else { return }
+          observed = panel.changes.staged.count
+          act(panel)
+        }
+        panel.control.addObserver(hook)
+        withExtendedLifetime(hook) {
+          if staged { panel.control.unstage([n]) } else { panel.control.stage([n]) }
+          pumpMain(until: { observed != nil }, "\(name): 書き込みが終わる")
+          idle("\(name): コミット")
+        }
+        XCTAssertEqual(observed, staged ? 1 : 0, "\(name): 前提: 行はまだ組み直されていない")
+        XCTAssertEqual(panel.control.failure?.cause, .git(.contentMismatch), name)
+        XCTAssertEqual(repo.head(), head, name)
+        XCTAssertEqual(
+          repo.git(["status", "--porcelain"]).stdoutText,
+          staged ? " M a.txt\n?? n.txt\n?? secret.env\n" : " M a.txt\nA  n.txt\n?? secret.env\n",
+          name)
       }
-      if name == "commitAndPush" { repo.addOrigin() }
-      try repo.write("a.txt", "edited\n")
-      try repo.write("n.txt", "new\n")
-      try repo.write("secret.env", "token\n")
-      show(until: { $0.changes.staged.isEmpty && $0.changes.changes.count == 3 }, "\(name): 変更の行")
-      panel.control.message = "only n"
-      var observed: (staged: Int, isStaging: Bool)?
-      let hook = FinishHook(.stage) { [panel] in
-        guard let panel else { return }
-        observed = (panel.changes.staged.count, panel.control.isStaging)
-        act(panel)
-      }
-      panel.control.addObserver(hook)
-      withExtendedLifetime(hook) {
-        panel.control.stage([GitStatus.Row(path: "n.txt", originalPath: nil)])
-        pumpMain(until: { observed != nil }, "\(name): ステージが終わる")
-        idle("\(name): コミット")
-      }
-      XCTAssertNil(panel.control.failure, name)
-      XCTAssertEqual(observed?.staged, 0, "\(name): 前提: 行はまだ組み直されていない")
-      XCTAssertEqual(observed?.isStaging, false, "\(name): 前提: ステージは列から外れている")
-      XCTAssertEqual(
-        repo.git(["status", "--porcelain"]).stdoutText, " M a.txt\n?? secret.env\n", name)
-      XCTAssertTrue(
-        repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText.contains("n.txt"), name)
     }
   }
 
-  /// 最後のステージ済みを解除し終えてから行の組み直しが当たるまでの間（status はもうステージ済み無しで、行はまだステージ
-  /// 済みを見せている）に押しても、コミット・amend・コミットしてプッシュは「変更」に見えていた変更と未追跡を入れない。
-  func testCommittingBeforeTheRowsCatchUpWithTheLastUnstageTakesNothingThatWasNotStaged() throws {
-    let actions: [(String, (ScmPanel) -> Void)] = [
-      ("commit", { $0.commit() }), ("amend", { $0.amend() }),
-      ("commitAndPush", { $0.commitAndPush() }),
-    ]
-    for (name, act) in actions {
-      if name != actions[0].0 {
+  /// 面を出し直して最初の status が届く前（新しく握った根のサービスが git dir を解き、status はまだ無い）に押すと、見えて
+  /// いたステージ済みだけをコミットする。隠している間に外でステージされていれば、何も書かずに断る。
+  func testCommittingBeforeTheFirstStatusAfterReappearingTakesOnlyWhatWasShown() throws {
+    for stagedOutside in [false, true] {
+      let name = stagedOutside ? "外でステージされた" : "そのまま"
+      if stagedOutside {
         panel.isShown = false
         panel.isLive = false
         repo = try TempGitRepo()
       }
-      if name == "commitAndPush" { repo.addOrigin() }
       try repo.write("a.txt", "edited\n")
       try repo.write("n.txt", "new\n")
       try repo.write("secret.env", "token\n")
       XCTAssertTrue(repo.git(["add", "n.txt"]).isSuccess)
       show(
-        until: { $0.changes.staged.count == 1 && $0.changes.changes.count == 2 },
-        "\(name): 両方の区分")
-      let tree = repo.git(["rev-parse", "HEAD^{tree}"]).stdoutText
-      panel.control.message = "only staged"
-      var observed: (staged: Int, statusHasStaged: Bool?)?
-      let hook = FinishHook(.unstage) { [panel] in
-        guard let panel else { return }
-        observed = (panel.changes.staged.count, panel.liveFiles?.status?.hasStagedChanges)
-        act(panel)
+        until: { $0.changes.staged.count == 1 && $0.changes.changes.count == 2 }, "\(name): 両方の区分")
+      let head = repo.head()
+
+      panel.isShown = false
+      panel.isLive = false
+      if stagedOutside { XCTAssertTrue(repo.git(["add", "secret.env"]).isSuccess) }
+      panel.isLive = true
+      panel.isShown = true
+      pumpMain(until: { self.panel.liveFiles?.repo != nil }, "\(name): 握り直した根のサービスが git dir を解く")
+      XCTAssertNil(panel.liveFiles?.status, "\(name): 前提: 最初の status はまだ届いていない")
+      panel.control.message = "only n"
+      panel.commit()
+      idle("\(name): コミット")
+      if stagedOutside {
+        XCTAssertEqual(panel.control.failure?.cause, .git(.contentMismatch))
+        XCTAssertEqual(repo.head(), head)
+        XCTAssertEqual(
+          repo.git(["status", "--porcelain"]).stdoutText, " M a.txt\nA  n.txt\nA  secret.env\n")
+      } else {
+        XCTAssertNil(panel.control.failure)
+        XCTAssertEqual(
+          repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "n.txt\n")
+        XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, " M a.txt\n?? secret.env\n")
       }
-      panel.control.addObserver(hook)
-      withExtendedLifetime(hook) {
-        panel.control.unstage([GitStatus.Row(path: "n.txt", originalPath: nil)])
-        pumpMain(until: { observed != nil }, "\(name): 解除が終わる")
-        idle("\(name): コミット")
-      }
-      XCTAssertEqual(observed?.staged, 1, "\(name): 前提: 行はまだ組み直されていない")
-      XCTAssertEqual(observed?.statusHasStaged, false, "\(name): 前提: status はもう解除の後")
-      XCTAssertEqual(repo.git(["rev-parse", "HEAD^{tree}"]).stdoutText, tree, name)
-      XCTAssertEqual(
-        repo.git(["status", "--porcelain"]).stdoutText, " M a.txt\n?? n.txt\n?? secret.env\n", name)
     }
-  }
-
-  /// 面を出し直して最初の status が届く前（新しく握った根のサービスが git dir を解き、status はまだ無い）に押しても、
-  /// 見えていたステージ済みだけをコミットする。
-  func testCommittingBeforeTheFirstStatusAfterReappearingTakesOnlyTheStagedRows() throws {
-    try repo.write("a.txt", "edited\n")
-    try repo.write("n.txt", "new\n")
-    try repo.write("secret.env", "token\n")
-    XCTAssertTrue(repo.git(["add", "n.txt"]).isSuccess)
-    show(until: { $0.changes.staged.count == 1 && $0.changes.changes.count == 2 }, "両方の区分")
-
-    panel.isShown = false
-    panel.isLive = false
-    panel.isLive = true
-    panel.isShown = true
-    pumpMain(until: { self.panel.liveFiles?.repo != nil }, "握り直した根のサービスが git dir を解く")
-    XCTAssertNil(panel.liveFiles?.status, "前提: 最初の status はまだ届いていない")
-    panel.control.message = "only n"
-    panel.commit()
-    idle("コミット")
-    XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "n.txt\n")
-    XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, " M a.txt\n?? secret.env\n")
   }
 }
 

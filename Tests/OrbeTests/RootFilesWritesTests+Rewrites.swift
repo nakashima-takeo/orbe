@@ -26,7 +26,9 @@ extension RootFilesWritesTests {
     XCTAssertEqual(repo.head(), pushed)
     XCTAssertEqual(repo.git(["ls-files", "-s"]).stdoutText, index, "index は押す前のまま")
 
-    let committed = finish(files) { files.commit(message: "local", completion: $0) }
+    let committed = finish(files) {
+      files.commit(message: "local", content: .staged("a.txt"), completion: $0)
+    }
     XCTAssertNil(committed.failure, "新しいコミットは書ける")
     let local = finish(files) { files.undoLastCommit(completion: $0) }
     XCTAssertNil(local.failure, "未 push の HEAD は取り消せる")

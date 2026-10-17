@@ -177,7 +177,7 @@ final class ScmPanelTests: OrbeTestCase {
     idle("ステージ")
     pumpMain(until: { self.panel.changes.staged.count == 1 }, "u/1.txt がステージ済みへ")
     panel.control.message = "panel"
-    panel.control.commit(.staged)
+    panel.control.commit(.staged("u/1.txt"))
     idle("コミット")
     settle(changes: untracked - 2, "パネルでコミットした後")
   }

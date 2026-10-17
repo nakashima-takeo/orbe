@@ -79,10 +79,11 @@ extension RootFiles {
 
   /// `content` をコミットする（`amend` なら直前のコミットを差し替える）。先にステージする行は、ステージとコミットを 1 つの
   /// 書き込みとして続けて走らせる（間に別の書き込みが割り込まない）。index に競合が残っていれば何も書かずに
-  /// `conflictsRemain`。amend でメッセージが空なら、前のメッセージのまま中身だけ差し替える。
+  /// `conflictsRemain`、コミットに入るパスが `content` の行と違えば何も書かずに `contentMismatch`。amend でメッセージが空
+  /// なら、前のメッセージのまま中身だけ差し替える。
   @discardableResult
   func commit(
-    message: String, content: GitCommitContent = .staged, amend: Bool = false,
+    message: String, content: GitCommitContent, amend: Bool = false,
     completion: @escaping (GitWriteFailure?) -> Void
   ) -> Write {
     enqueue(

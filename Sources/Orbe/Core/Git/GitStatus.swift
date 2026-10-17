@@ -81,9 +81,6 @@ struct GitStatus: Equatable {
   /// ブランチのヘッダが無い出力なら nil。
   let branch: Branch?
 
-  /// index 側の変化（競合を除く）が 1 つでもある。
-  var hasStagedChanges: Bool { entries.values.contains { $0.staged != nil && !$0.isConflicted } }
-
   /// その相対パスの行（rename・copy なら元パスも）。
   func row(_ path: String) -> Row {
     Row(path: path, originalPath: entries[path]?.originalPath)

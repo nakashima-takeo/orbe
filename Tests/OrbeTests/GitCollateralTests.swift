@@ -50,7 +50,7 @@ final class GitCollateralTests: OrbeTestCase {
     try "changed\n".write(toFile: root + "/a.txt", atomically: true, encoding: .utf8)
     XCTAssertTrue(fixture.git(["add", "a.txt"]).isSuccess)
     hangStarted = true
-    files.commit(message: "blocked") { [self] _ in hangReturned = true }
+    files.commit(message: "blocked", content: .staged("a.txt")) { [self] _ in hangReturned = true }
     XCTAssertTrue(fixture.pumpUntilHung(), "前提: pre-commit hook がハングしていること")
   }
 

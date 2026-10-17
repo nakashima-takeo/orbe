@@ -2,16 +2,23 @@ import Foundation
 
 // MARK: - 変更の書き込み（ステージ・解除・破棄・コミット・取り消し）
 
-/// コミットの中身（新しいコミットにも、amend にも入れる）。
+/// コミットの中身（新しいコミットにも、amend にも入れる）。どちらも押した時点に見えていた行を持ち、コミットに入るパスは
+/// その行のパスと一致しなければならない（→ `commit`）。
 enum GitCommitContent: Equatable {
-  /// ステージ済みの分。
-  case staged
-  /// 行を先にステージしてから（ステージ済みの分も入る）。
+  /// ステージ済みの分。行は見えていたステージ済みの行。
+  case staged([GitStatus.Row])
+  /// 行を先にステージしてから。見えていたステージ済みは無い。
   case staging([GitStatus.Row])
 
   /// 先にステージする行。
   var stagedFirst: [GitStatus.Row] {
     if case .staging(let rows) = self { return rows }
+    return []
+  }
+
+  /// 見えていたステージ済みのパス（rename は元パスも）。
+  var stagedPaths: Set<String> {
+    if case .staged(let rows) = self { return Set(rows.flatMap(\.paths)) }
     return []
   }
 }
@@ -164,8 +171,9 @@ extension GitRepo {
   /// コミットする（`amend` なら直前のコミットを差し替える）。中身は `content`——ステージ済みの分か、先に行をステージして
   /// から（同じ書き込みの中で `stage` と同じ規則で選び直す）。どの中身でも、呼んだ時点の index に競合が残っていれば何も
   /// 書かずに `conflictsRemain` で返す（git はコミットを断るので、先にステージしたものが merge のコミットに混ざりうるだけに
-  /// なる）。amend は、呼んだ時点の HEAD が push 済みなら何も書かずに `headPushed` で返す。ステージの後で止められたら
-  /// コミットしない。ステージが通ってコミットが落ちたら、ステージしたものは残る。
+  /// なる）。コミットに入るパスが `content` の行と違えば何も書かずに `contentMismatch` で返す。amend は、呼んだ時点の HEAD
+  /// が push 済みなら何も書かずに `headPushed` で返す。ステージの後で止められたらコミットしない。ステージが通ってコミットが
+  /// 落ちたら、ステージしたものは残る。
   ///
   /// メッセージは書いたまま残る（`#` 始まりの行も。前後の空行・行末の空白・続く空行だけ整える）。amend でメッセージが空
   /// なら、前のメッセージを一字も変えずに中身だけ差し替える——整え方を明示しないと、利用者の `commit.cleanup=strip` が
@@ -191,13 +199,46 @@ extension GitRepo {
       case .failure(let failure): completion(failure)
       case .success(let selection):
         guard !selection.unmerged else { return completion(.conflictsRemain) }
-        self.runOnPaths(["add", "-A"], paths: selection.paths, handle: handle) { staged in
-          if let staged { return completion(staged) }
-          guard !handle.isCancelled else { return completion(.cancelled) }
-          self.commit(message: message, amend: amend, handle: handle, completion: completion)
+        self.unlessContentDiffers(content, staging: selection.paths, handle: handle, completion) {
+          self.runOnPaths(["add", "-A"], paths: selection.paths, handle: handle) { staged in
+            if let staged { return completion(staged) }
+            guard !handle.isCancelled else { return completion(.cancelled) }
+            self.commit(message: message, amend: amend, handle: handle, completion: completion)
+          }
         }
       }
     }
+  }
+
+  /// コミットに入るパスが押した時点に見えていた行と違えば、何も書かずに `contentMismatch` で返し、同じなら `body` を続ける。
+  /// git のコミットは index 全体を入れるので、今 index が HEAD と違うパスが見えていたステージ済みと、先にステージする
+  /// パス（選び直した `staging`）が見えていた行と、それぞれ一致しなければならない。パネルの範囲は見えている行で決まり、
+  /// 行は status より遅れて当たり、外（端末）の書き込みは監視が届くまで行に出ない——そのずれの間にも押せてしまうので、
+  /// 書き込みの直前に照らす。
+  private func unlessContentDiffers(
+    _ content: GitCommitContent, staging: [String], handle: GitRunner.Handle,
+    _ completion: @escaping (GitWriteFailure?) -> Void, then body: @escaping () -> Void
+  ) {
+    let staged = [
+      "diff", "--cached", "--name-only", "-z", "--no-renames", "--ignore-submodules=none",
+    ]
+    runner.run(
+      staged, cwd: root, handle: handle,
+      transform: { listed -> Result<Bool, GitWriteFailure> in
+        if let failure = GitWriteFailure.of(listed) { return .failure(failure) }
+        let paths = Set(
+          listed.stdout.split(separator: 0).compactMap { String(bytes: $0, encoding: .utf8) })
+        return .success(
+          paths == content.stagedPaths
+            && Set(staging) == Set(content.stagedFirst.flatMap(\.paths)))
+      },
+      completion: { matched in
+        switch matched {
+        case .failure(let failure): completion(failure)
+        case .success(false): completion(.contentMismatch)
+        case .success(true): body()
+        }
+      })
   }
 
   private func commit(

@@ -94,6 +94,10 @@ extension L10n {
       "競合が残っています。競合を解決し、そのファイルをステージしてからコミットしてください。",
       "There are unresolved conflicts. Resolve them and stage those files before committing."
     ),
+    .editorScmFailureContentMismatch: (
+      "コミットに入る変更が画面の表示と食い違うため、コミットしませんでした。表示が追いつくのを待ってから、もう一度押してください。",
+      "The changes to commit didn't match the list, so nothing was committed. Wait for it to update, then retry."
+    ),
     .editorScmFailureNetworkBusy: (
       "この worktree で別のプル・プッシュ・フェッチが走っていたため、始めませんでした。終わってからもう一度試してください。",
       "Another pull, push, or fetch was running in this worktree, so this one didn't start. Try again when it finishes."

@@ -147,9 +147,6 @@ final class SourceControl {
   /// コミットの段（コミット・amend・取り消し・コミットしてプッシュのコミットの段）が列にある。
   var isCommitting: Bool { operations.contains { $0.step.isCommit } }
 
-  /// ステージが列にある（走っている・順番を待っている）。
-  var isStaging: Bool { operations.contains { $0.kind == .stage } }
-
   /// 帯に出す操作——遅れを越えて実際に走っている操作のうち、一番新しく走り始めたもの。順番待ちの操作は出さない。
   var bandOperation: Operation? {
     operations.filter { $0.isRunning && $0.isLong }.max { $0.order < $1.order }

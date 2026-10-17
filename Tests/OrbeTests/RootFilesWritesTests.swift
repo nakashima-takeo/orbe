@@ -196,7 +196,9 @@ final class RootFilesWritesTests: OrbeTestCase {
     let files = repo.files()
 
     let committed = finish(files) {
-      files.commit(message: "\n\nTitle  \n\n# not a comment\nbody\n\n", completion: $0)
+      files.commit(
+        message: "\n\nTitle  \n\n# not a comment\nbody\n\n", content: .staged("a.txt"),
+        completion: $0)
     }
     XCTAssertNil(committed.failure)
     XCTAssertEqual(
@@ -210,7 +212,9 @@ final class RootFilesWritesTests: OrbeTestCase {
   /// 何もステージしていないコミットは、git が stdout に言った理由で失敗する。
   func testCommittingNothingFailsWithGitsReason() throws {
     let files = repo.files()
-    let committed = finish(files) { files.commit(message: "empty", completion: $0) }
+    let committed = finish(files) {
+      files.commit(message: "empty", content: .staged(), completion: $0)
+    }
     guard case .reason(let reason) = committed.failure else {
       return XCTFail("理由つきの失敗: \(String(describing: committed.failure))")
     }
@@ -229,7 +233,9 @@ final class RootFilesWritesTests: OrbeTestCase {
     try repo.write("a.txt", "amended\n")
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
 
-    let kept = finish(files) { files.commit(message: "  \n", amend: true, completion: $0) }
+    let kept = finish(files) {
+      files.commit(message: "  \n", content: .staged("a.txt"), amend: true, completion: $0)
+    }
     XCTAssertNil(kept.failure)
     XCTAssertNotEqual(repo.head(), before)
     XCTAssertEqual(repo.git(["log", "-1", "--format=%B"]).stdoutText, message + "\n")
@@ -237,7 +243,7 @@ final class RootFilesWritesTests: OrbeTestCase {
     XCTAssertEqual(repo.git(["show", "HEAD:a.txt"]).stdoutText, "amended\n")
 
     let renamed = finish(files) {
-      files.commit(message: "renamed", amend: true, completion: $0)
+      files.commit(message: "renamed", content: .staged(), amend: true, completion: $0)
     }
     XCTAssertNil(renamed.failure)
     XCTAssertEqual(repo.git(["log", "-1", "--format=%s"]).stdoutText, "renamed\n")
@@ -290,7 +296,9 @@ final class RootFilesWritesTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     let files = repo.files()
 
-    let committed = finish(files) { files.commit(message: "signed", completion: $0) }
+    let committed = finish(files) {
+      files.commit(message: "signed", content: .staged("a.txt"), completion: $0)
+    }
     XCTAssertNil(committed.failure)
     XCTAssertTrue(FileManager.default.fileExists(atPath: marker), "pre-commit が走った")
     XCTAssertTrue(repo.git(["cat-file", "commit", "HEAD"]).stdoutText.contains("gpgsig"), "署名された")
@@ -362,6 +370,7 @@ final class RootFilesWritesTests: OrbeTestCase {
     let files = RootFiles(root: GitWorktreeRoot.normalizedPath(outside.path))
     pumpMain(until: { files.isResolved })
     XCTAssertEqual(
-      finish(files) { files.commit(message: "x", completion: $0) }.failure, .notManaged)
+      finish(files) { files.commit(message: "x", content: .staged(), completion: $0) }.failure,
+      .notManaged)
   }
 }

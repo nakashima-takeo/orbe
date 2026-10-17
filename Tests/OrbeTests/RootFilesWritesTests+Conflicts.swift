@@ -19,7 +19,9 @@ extension RootFilesWritesTests {
     let (head, index) = (repo.head(), repo.git(["ls-files", "-s"]).stdoutText)
 
     let staging = GitCommitContent.staging([GitStatus.Row(path: "n.txt", originalPath: nil)])
-    for (content, amend) in [(staging, false), (.staged, false), (staging, true), (.staged, true)] {
+    for (content, amend) in [
+      (staging, false), (.staged(), false), (staging, true), (.staged(), true),
+    ] {
       let committed = finish(files) {
         files.commit(message: "merge", content: content, amend: amend, completion: $0)
       }

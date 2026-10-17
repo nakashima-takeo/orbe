@@ -27,13 +27,10 @@ extension ScmPanel {
     control.commitAndPush(commitContent)
   }
 
-  /// 押した時点の範囲の中身。見えている行・根のサービスの今の status・列にあるステージのどれかがステージ済みを示せば
-  /// ステージ済みだけ。どれも示さなければ「すべてステージ」と同じ行を先にステージして入れる——行の組み直しは status より
-  /// 遅れて当たるので、ずれている間はステージ済みの側に倒す（見えていない変更は入らない）。
+  /// 押した時点の範囲の中身——見えているステージ済みの行があればそれだけ、無ければ「すべてステージ」と同じ行を先にステージ
+  /// して入れる。行が status に追いついていない間の食い違いは、根のサービスが書き込みの直前に照らして断る。
   private var commitContent: GitCommitContent {
-    let hasStaged =
-      !changes.staged.isEmpty || control.isStaging
-      || liveFiles?.status?.hasStagedChanges == true
-    return hasStaged ? .staged : .staging(changes.committable.map(\.row))
+    changes.staged.isEmpty
+      ? .staging(changes.committable.map(\.row)) : .staged(changes.staged.map(\.row))
   }
 }

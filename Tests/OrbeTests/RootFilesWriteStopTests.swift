@@ -62,7 +62,8 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     try stageChange()
     let files = managed()
     let outcome = WriteOutcome()
-    let write = files.commit(message: "blocked", completion: outcome.receive)
+    let write = files.commit(
+      message: "blocked", content: .staged("a.txt"), completion: outcome.receive)
     assertStopped(write, outcome)
   }
 
@@ -103,7 +104,8 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     let runner = GitRunner(idleTimeout: shortIdleTimeout)
     let files = managed(runner: runner)
     let outcome = WriteOutcome()
-    let write = files.commit(message: "slow hook", completion: outcome.receive)
+    let write = files.commit(
+      message: "slow hook", content: .staged("a.txt"), completion: outcome.receive)
     XCTAssertTrue(fixture.pumpUntilHung())
 
     let smudge = try fixture.installScript("smudge.sh", body: "sleep 30")
@@ -146,7 +148,7 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     weak let observed = held
     let committed = WriteOutcome()
     let queued = WriteOutcome()
-    held?.commit(message: "blocked", completion: committed.receive)
+    held?.commit(message: "blocked", content: .staged("a.txt"), completion: committed.receive)
     XCTAssertTrue(fixture.pumpUntilHung())
     let write = held?.stage(
       [GitStatus.Row(path: "a.txt", originalPath: nil)], completion: queued.receive)
@@ -167,7 +169,7 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     try stageChange()
     let files = managed()
     let first = WriteOutcome()
-    files.commit(message: "blocked", completion: first.receive)
+    files.commit(message: "blocked", content: .staged("a.txt"), completion: first.receive)
     XCTAssertTrue(fixture.pumpUntilHung())
     try "b\n".write(toFile: root + "/b.txt", atomically: true, encoding: .utf8)
     let queued = WriteOutcome()
