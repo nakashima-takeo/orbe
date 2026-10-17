@@ -83,6 +83,10 @@ extension L10n {
       "push 先の remote がありません。端末で remote を追加してください。",
       "There's no remote to push to. Add one in the terminal."
     ),
+    .editorScmFailureHeadPushed: (
+      "最後のコミットは push 済みのため、書き換えませんでした。直すなら新しいコミットにしてください。",
+      "The last commit has already been pushed, so it wasn't rewritten. Make a new commit to fix it."
+    ),
     .editorScmFailureShallow: (
       "shallow clone の境界のコミットは取り消せません。", "The commit at the shallow clone boundary can't be undone."
     ),

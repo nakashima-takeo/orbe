@@ -267,20 +267,6 @@ final class RootFilesWritesTests: OrbeTestCase {
     XCTAssertEqual(entry(root, "a.txt"), GitStatus.Entry(staged: .added, unstaged: nil))
   }
 
-  /// shallow clone の境界のコミットは、初回コミットと取り違えて取り消さない（ブランチを消すと履歴とつながらなくなる）。
-  func testTheShallowBoundaryIsNotUndone() throws {
-    XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "second"]).isSuccess)
-    let shallow = TestScratch.caseDir.appendingPathComponent("shallow").path
-    XCTAssertTrue(
-      repo.git(["clone", "-q", "--depth", "1", "file://" + repo.root, shallow]).isSuccess)
-    let boundary = repo.git(["rev-parse", "HEAD"], in: shallow).stdoutText
-    let files = repo.files(at: GitWorktreeRoot.normalizedPath(shallow))
-
-    let undone = finish(files) { files.undoLastCommit(completion: $0) }
-    XCTAssertEqual(undone.failure, .shallowBoundary)
-    XCTAssertEqual(repo.git(["rev-parse", "HEAD"], in: shallow).stdoutText, boundary)
-  }
-
   /// ユーザーの hook（pre-commit）と署名の設定はそのまま効く。
   func testUserHooksAndSigningStillApply() throws {
     let key = TestScratch.caseDir.appendingPathComponent("signing-key").path

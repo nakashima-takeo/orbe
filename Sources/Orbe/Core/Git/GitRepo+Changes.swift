@@ -163,12 +163,25 @@ extension GitRepo {
   /// コミットする（`amend` なら直前のコミットを差し替える）。中身は `content`——ステージ済みの分か、先に行をステージして
   /// から（同じ書き込みの中で `stage` と同じ規則で選び直す）。どの中身でも、呼んだ時点の index に競合が残っていれば何も
   /// 書かずに `conflictsRemain` で返す（git はコミットを断るので、先にステージしたものが merge のコミットに混ざりうるだけに
-  /// なる）。ステージの後で止められたらコミットしない。ステージが通ってコミットが落ちたら、ステージしたものは残る。
+  /// なる）。amend は、呼んだ時点の HEAD が push 済みなら何も書かずに `headPushed` で返す。ステージの後で止められたら
+  /// コミットしない。ステージが通ってコミットが落ちたら、ステージしたものは残る。
   ///
   /// メッセージは書いたまま残る（`#` 始まりの行も。前後の空行・行末の空白・続く空行だけ整える）。amend でメッセージが空
   /// なら、前のメッセージを一字も変えずに中身だけ差し替える——整え方を明示しないと、利用者の `commit.cleanup=strip` が
   /// 前のメッセージの `#` の行を消す。ユーザーの hook・署名の設定はそのまま効く。
   func commit(
+    message: String, content: GitCommitContent, amend: Bool, handle: GitRunner.Handle,
+    completion: @escaping (GitWriteFailure?) -> Void
+  ) {
+    let write = {
+      self.stageAndCommit(
+        message: message, content: content, amend: amend, handle: handle, completion: completion)
+    }
+    guard amend else { return write() }
+    unlessHeadIsPushed(handle: handle, completion, then: write)
+  }
+
+  private func stageAndCommit(
     message: String, content: GitCommitContent, amend: Bool, handle: GitRunner.Handle,
     completion: @escaping (GitWriteFailure?) -> Void
   ) {
@@ -201,8 +214,32 @@ extension GitRepo {
   }
 
   /// 最後のコミットを取り消す。HEAD が 1 つ戻り、中身はステージ済みに残る。初回コミットなら、HEAD のブランチの ref を
-  /// 消して初回コミット前へ戻す（index はそのまま＝全部ステージ済み）。shallow clone の境界のコミットは取り消さない。
+  /// 消して初回コミット前へ戻す（index はそのまま＝全部ステージ済み）。呼んだ時点の HEAD が push 済みのコミットと shallow
+  /// clone の境界のコミットは取り消さない。
   func undoLastCommit(handle: GitRunner.Handle, completion: @escaping (GitWriteFailure?) -> Void) {
+    unlessHeadIsPushed(handle: handle, completion) {
+      self.undoUnpushedLastCommit(handle: handle, completion: completion)
+    }
+  }
+
+  /// HEAD が push 済み（どれかの remote 追跡ブランチから届く——グラフの push 済みと同じ定義）なら書き換えずに `headPushed`
+  /// で返し、そうでなければ `body` を続ける。パネルの押せる・押せないは見せ方で、▾ を開いている間や外の push が監視に届く
+  /// までの間にも押せてしまうので、書き換えの直前に読む。
+  private func unlessHeadIsPushed(
+    handle: GitRunner.Handle, _ completion: @escaping (GitWriteFailure?) -> Void,
+    then body: @escaping () -> Void
+  ) {
+    let unpushed = ["rev-list", "-n", "1", "HEAD", "--not", "--remotes", "--"]
+    runner.run(unpushed, cwd: root, handle: handle) { listed in
+      if let failure = GitWriteFailure.of(listed) { return completion(failure) }
+      guard !listed.stdoutText.isEmpty else { return completion(.headPushed) }
+      body()
+    }
+  }
+
+  private func undoUnpushedLastCommit(
+    handle: GitRunner.Handle, completion: @escaping (GitWriteFailure?) -> Void
+  ) {
     let parents = ["rev-list", "--parents", "-n", "1", "HEAD"]
     runner.run(parents, cwd: root, handle: handle) { listed in
       if let failure = GitWriteFailure.of(listed) {
