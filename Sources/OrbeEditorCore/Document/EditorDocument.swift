@@ -265,9 +265,9 @@ public final class EditorDocument {
       generation: hunkRequest)
   }
 
-  /// 行の印を面へ押す。印はハンクが同じでも押す——同じ行の中の打鍵でハンクは変わらず区間のオフセットだけが動く。
+  /// 行の印を面へ押す。
   private func pushLineMarks() {
-    surface.setLineMarks(LineMarks(hunks: hunks).spans(in: text))
+    surface.setLineMarks(LineMarks(hunks: hunks, lineCount: text.lineCount))
     onHunksChange?()
   }
 

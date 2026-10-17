@@ -15,8 +15,6 @@ final class ProjectSearch {
   static let typingDelay: TimeInterval = 0.3
   static let progressDelay: TimeInterval = 0.3
   static let slowAfter: TimeInterval = 2
-  /// キーで一致へ動いたときの開きを間引く窓（VS Code の検索結果と同じ 75ms）。
-  static let navigationWindow: TimeInterval = 0.075
 
   enum Phase: Equatable {
     case idle
@@ -76,13 +74,8 @@ final class ProjectSearch {
   @ObservationIgnored let typingDelay = EditorDelay()
   @ObservationIgnored let progressDelay = EditorDelay()
   @ObservationIgnored let slowDelay = EditorDelay()
-  /// キーで一致へ動いたときの開きの窓（→ `ProjectSearch+Open`）。
-  @ObservationIgnored let navigationDelay = EditorDelay()
-  @ObservationIgnored var isNavigationWindowOpen = false
-  /// キーで動かした後、まだ離していない（押し続けている）。
-  @ObservationIgnored var isNavigationKeyHeld = false
-  /// 窓の中で動いた（窓が閉じたら、その時点の選択を開く）。
-  @ObservationIgnored var hasPendingNavigation = false
+  /// キーで一致へ動いたときの開きの間引き（→ `ProjectSearch+Open`）。
+  @ObservationIgnored let navigation = RowNavigationThrottle()
   @ObservationIgnored private var run: ProjectSearchRun?
   @ObservationIgnored private(set) var compiled: CompiledSearchQuery?
   @ObservationIgnored private(set) var generation = 0
@@ -107,6 +100,7 @@ final class ProjectSearch {
   init(root: String, runner: GitRunner = .shared) {
     self.root = root
     self.runner = runner
+    navigation.open = { [weak self] in self?.openSelectedMatch() }
   }
 
   /// タブを閉じたら走っている git も止める（裏の仕事はこの型を弱く持つので、止めなければ閉じた後も走り続ける）。
@@ -304,7 +298,7 @@ final class ProjectSearch {
   /// 入力欄か結果の列の焦点が入った・抜けた。焦点は片方ずつ入れ替わるので、抜けたほうが今の置き場のときだけ消す（入ったほうの
   /// 知らせが先に届いても上書きしない）。結果の列から抜けたら、待っている ↑↓ の開きを捨てる。
   func focusDidChange(_ area: Area, focused: Bool) {
-    if area == .results, !focused { dropPendingNavigation() }
+    if area == .results, !focused { navigation.drop() }
     if focused {
       focusedArea = area
     } else if focusedArea == area {
@@ -314,7 +308,7 @@ final class ProjectSearch {
 
   /// パネルが隠れた。焦点の置き場も消え（隠れた view は焦点が抜けたことを知らせない）、待っている ↑↓ の開きも捨てる。
   func panelDidHide() {
-    dropPendingNavigation()
+    navigation.drop()
     focusedArea = nil
   }
 }

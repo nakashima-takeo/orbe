@@ -2,7 +2,7 @@ import AppKit
 import OrbeEditorCore
 
 /// プロジェクト検索の結線——⌘⇧F とレールで検索パネルを出す・種・結果を開いて一致を選び中央へ・パネルの中のキー
-/// （⌘↓ / ⌘↑・⌥⌘C / W / R）・F4 / ⇧F4。
+/// （⌘↓ / ⌘↑・⌥⌘C / W / R）・F4 / ⇧F4。列の外の押下で待っている ↑↓ の開きを捨てる（ソース管理の列も同じ）。
 extension EditorPaneView {
   func wireProjectSearch() {
     projectSearch.documents = { [weak self] in self?.group?.editor.documents ?? [] }
@@ -23,10 +23,13 @@ extension EditorPaneView {
     showsSearchPanel && focusIsInSidebar && projectSearch.focusedArea != nil
   }
 
-  /// レールの項目を押した。検索のパネルを出したら入力欄に焦点を入れる（VS Code のアクティビティバーと同じ）。
+  /// レールの項目を押した。検索・ソース管理のパネルを出したら入力欄に焦点を入れる（VS Code のアクティビティバーと同じ）。
   func selectPanel(_ panel: EditorSidebarState.Panel) {
     sidebar.select(panel)
     if showsSearchPanel { projectSearch.requestFocus(.field) }
+    if showsSourceControl {
+      scm.requestFocus(scm.isControlsOpen ? .message : .list)
+    }
   }
 
   /// ⌘⇧F の種——押した時点の焦点がテキスト面で、選択が 1 行以内の非空ならその文字列、⌘F のバーの入力欄ならその
@@ -103,7 +106,8 @@ extension EditorPaneView {
       ) { [weak self] event in
         guard let self, event.window === window else { return event }
         if event.type != .keyDown {
-          if !pressIsInResults(event) { projectSearch.dropPendingNavigation() }
+          if !press(event, isIn: searchResults) { projectSearch.navigation.drop() }
+          if !press(event, isIn: scmList) { scm.navigation.drop() }
           return event
         }
         return handleStepKey(event) ? nil : event
@@ -111,10 +115,10 @@ extension EditorPaneView {
     }
   }
 
-  /// 押した点が検索結果の列（スクロールバーを含む）の上か。
-  private func pressIsInResults(_ event: NSEvent) -> Bool {
+  /// 押した点が列（スクロールバーを含む）の上か。
+  private func press(_ event: NSEvent, isIn list: NSView) -> Bool {
     guard let view = window?.contentView?.hitTest(event.locationInWindow) else { return false }
-    return view.isDescendant(of: searchResults)
+    return view.isDescendant(of: list)
   }
 
   /// エディター面（pane の配下）に焦点があるときの F4 / ⇧F4: 次・前の一致を開く（結果が無ければ素通し）。検索パネルが

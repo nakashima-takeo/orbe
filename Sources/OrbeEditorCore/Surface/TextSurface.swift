@@ -72,8 +72,8 @@ public protocol TextSurface: AnyObject {
   /// 役割が変わった（裏から届いた役割で）。面は区間に掛かる行を描き直す。
   func rolesDidChange(_ ranges: IndexSet)
 
-  /// 行の印（git ガター）。文書がハンクから作って押す（UTF-16 オフセット）。面は描くだけで規則を持たない。
-  func setLineMarks(_ spans: LineMarkSpans)
+  /// 行の印（git ガター）。文書がハンクから作り、押す時点の文書の写しの行で書いて押す。面は描くだけで規則を持たない。
+  func setLineMarks(_ marks: LineMarks)
 
   /// 縦の並びに差し込むもの（文書に無い行・区画）と文書の行の区間の見え方を丸ごと置く。同じ値の押し直しは何もしない。境と
   /// 区間の始まりは置く時点の文書の写しの行で書き、その行の範囲（境は `0...行数`、区間の始まりは `0..<行数` で昇順・重ねない）

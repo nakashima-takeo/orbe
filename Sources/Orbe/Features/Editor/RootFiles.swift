@@ -1,19 +1,8 @@
 import Foundation
 import OrbeEditorCore
 
-/// 根のサービスからの通知。(a) はデバウンス後すぐ、(b) は status が返った時点、(c) は版の本文の取り直しの完了後に届く。
-@MainActor
-protocol RootFilesObserver: AnyObject {
-  /// 根の下でファイルが変わった（git dir の中は含まない）。
-  func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change)
-  /// status が新しくなった（git 管理下のみ）。
-  func rootFilesStatusDidChange(_ files: RootFiles)
-  /// 関心を申告した版の本文の状態が変わった（その版に無くなった・取れなくなったも含む）。
-  func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version)
-}
-
 /// 根（`GitWorktreeRoot.root(of:)` の値）1 つにつき 1 つの、監視・git 状態・一覧・新規作成・版の本文・git の書き込みを
-/// 担うサービス。握る者（文書の結線・面のツリー・プロジェクト検索）がいる間だけ生き、離されれば監視が止まる。書き込みが
+/// 担うサービス。握る者（文書の結線・面のツリー・プロジェクト検索・diff・ソース管理パネル）がいる間だけ生き、離されれば監視が止まる。書き込みが
 /// 完了を返すまでは、その返りを待つ処理も握る（→ `RootFiles+Writes`）。
 ///
 /// git 管理下かどうかはここで決める: 根に `.git` があれば `GitRepo` を開き、git の綴りを正規形に揃えて根と
@@ -237,6 +226,9 @@ final class RootFiles {
       notify { $0.rootFiles(self, filesDidChange: .scanAll) }
     } else if !batch.paths.isEmpty {
       notify { $0.rootFiles(self, filesDidChange: .paths(batch.paths)) }
+    }
+    if repo != nil, batch.gitChanged || batch.scanAll {
+      notify { $0.rootFilesGitStateDidChange(self, remoteRefsChanged: batch.remoteRefsChanged) }
     }
     requestStatusRefresh()
     requestVersionRefresh()

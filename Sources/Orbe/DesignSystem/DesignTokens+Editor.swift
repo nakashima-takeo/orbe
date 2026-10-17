@@ -164,6 +164,26 @@ extension Theme.Typography {
   static let editorSearchMatch = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
   /// 件数・打ち切り・0 件・エラーの文（sans 11）。
   static let editorSearchNote = NSFont.systemFont(ofSize: 11, weight: .regular)
+  /// レールの件数バッジ（sans 9 bold）。
+  static let editorRailBadge = NSFont.systemFont(ofSize: 9, weight: .bold)
+  /// ソース管理（見本 ScmPanel の値）。区分見出し（sans 11 bold）・件数バッジ（sans 9.5）・ファイル行の名前（sans 13）と
+  /// ディレクトリ（sans 11）・メッセージ欄（sans 12）・コミットボタン（sans 12 semibold）・グラフのコミットの題（sans 12）・
+  /// ref の札（mono 9）・ブランチの器（mono 11）・「さらに表示」（sans 11.5）・失敗の文（sans 11）。
+  static let editorScmSection = NSFont.systemFont(ofSize: 11, weight: .bold)
+  static let editorScmCount = NSFont.systemFont(ofSize: 9.5, weight: .regular)
+  static let editorScmFile = NSFont.systemFont(ofSize: 13, weight: .regular)
+  static let editorScmDirectory = NSFont.systemFont(ofSize: 11, weight: .regular)
+  static let editorScmMessage = NSFont.systemFont(ofSize: 12, weight: .regular)
+  static let editorScmButton = NSFont.systemFont(ofSize: 12, weight: .semibold)
+  static let editorScmCommit = NSFont.systemFont(ofSize: 12, weight: .regular)
+  static let editorScmRef = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
+  static let editorScmBranch = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+  static let editorScmMore = NSFont.systemFont(ofSize: 11.5, weight: .regular)
+  static let editorScmNote = NSFont.systemFont(ofSize: 11, weight: .regular)
+  /// 実行中の帯の操作名（sans 12）・git の進捗の行（mono 10.5）・止める（sans 11）。見本に無い（決定の図の値）。
+  static let editorScmBandName = NSFont.systemFont(ofSize: 12, weight: .regular)
+  static let editorScmBandProgress = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
+  static let editorScmStop = NSFont.systemFont(ofSize: 11, weight: .regular)
   /// パネルヘッダーの題の字間。
   static let trackingPanelTitle: CGFloat = 0.5
   /// ルート行の字間。
@@ -233,8 +253,31 @@ extension Theme.Layout {
   static let editorSearchCountWidth: CGFloat = 18
   static let editorSearchCountHeight: CGFloat = 16
   static let editorSearchChevron: CGFloat = 10
-  /// 検索中の進捗の細い線。
-  static let editorSearchProgress: CGFloat = 2
+  /// 進みの細い線（検索中・ソース管理の実行中）。
+  static let editorProgressLine: CGFloat = 2
+  /// レールの件数バッジ（最小の幅と高さ）と、アイコンの右下からのはみ出し（右・下）。
+  static let editorRailBadge: CGFloat = 15
+  static let editorRailBadgeOffset = CGSize(width: 8, height: 4)
+  /// ソース管理（見本 ScmPanel の値）。行（区分見出し・ファイル・コミット・さらに表示）の高さ・種別チップ・行の中のボタンと
+  /// その印・見出しのツールの角・グラフ見出しの上の空き・ブランチの器の高さと下の空き・メッセージ欄の 1 行の高さ・コミット
+  /// ボタンの高さと ▾ の幅・ref の札の高さ・コミットの点・点の列の幅。
+  static let editorScmRow: CGFloat = 22
+  static let editorScmChip: CGFloat = 16
+  static let editorScmRowButton: CGFloat = 18
+  static let editorScmGlyph: CGFloat = 13
+  static let editorScmTool: CGFloat = 20
+  static let editorScmGraphGap: CGFloat = 8
+  static let editorScmBranch: CGFloat = 24
+  static let editorScmBranchGap: CGFloat = 6
+  static let editorScmMessage: CGFloat = 26
+  static let editorScmCommitButton: CGFloat = 26
+  static let editorScmCommitCaret: CGFloat = 24
+  static let editorScmRef: CGFloat = 15
+  static let editorScmDot: CGFloat = 7
+  static let editorScmDotColumn: CGFloat = 16
+  /// 実行中の帯の高さと「止める」の高さ（見本に無い。決定の図の値）。
+  static let editorScmBand: CGFloat = 28
+  static let editorScmStop: CGFloat = 20
   /// 引き手と継ぎ目の幅。
   static let faceHandle: CGFloat = 12
   /// 縁にいるときの引き手の高さ（縁から離れるにつれて全高へ伸びる）。

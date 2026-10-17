@@ -1,8 +1,8 @@
 import AppKit
 
-/// 行の列（`RowListView`）の行の view の基底。行の番号と選択（地は selectionFill。焦点の有無で色を変えない）を持ち、
-/// VoiceOver には行（AX の row）として何行目か・選択を渡す。中身は派生が `drawContent` で描き、中身の文字列（AX の
-/// ラベル）も派生が渡す。押下は列が受ける（行は素通し）。
+/// 行の列（`RowListView`）の行の view の基底。行の番号と選択（地は selectionFill。焦点の有無で色を変えない）とポインタの
+/// 位置を持ち、VoiceOver には行（AX の row）として何行目か・選択を渡す。中身は派生が `drawContent` で描き、中身の文字列（AX の
+/// ラベル）も派生が渡す。押下は列が受ける（行は素通し）——行の中に押せる部品を置く派生は、その位置を `control(at:)` で答える。
 class ListRowView: NSView {
   /// 描いている行の番号（列が枠を割り当てる）。
   var row: Int? {
@@ -15,6 +15,11 @@ class ListRowView: NSView {
       needsDisplay = true
       setAccessibilitySelected(isSelected)
     }
+  }
+
+  /// ポインタの位置（行の座標。ポインタがこの行に無ければ nil）。変われば `pointerDidChange` を呼ぶ。
+  var pointer: NSPoint? {
+    didSet { if pointer != oldValue { pointerDidChange(from: oldValue) } }
   }
 
   override init(frame: NSRect) {
@@ -44,6 +49,15 @@ class ListRowView: NSView {
 
   /// 中身を描く（選択の地の上に）。
   func drawContent(_ colors: RowColors, in context: CGContext) {}
+
+  /// ポインタが動いた・入った・出た（hover を描く派生が描き直しを決める）。
+  func pointerDidChange(from old: NSPoint?) {}
+
+  /// 行の座標 `point` にある押せる部品の番号（無ければ nil。押せない姿の部品も番号を返す——押して何もしないかは源が決める）。
+  func control(at point: NSPoint) -> Int? { nil }
+
+  /// 行の座標 `point` にある部品の説明（ツールチップ）。
+  func help(at point: NSPoint) -> String? { nil }
 
   // MARK: - 描画の小道具
 
@@ -84,12 +98,11 @@ class ListRowView: NSView {
     context.restoreGState()
   }
 
-  /// 種別チップ 14（角丸の地＋中央の字。`FileChipView` と同じ規則を AppKit で描く）を、左端 `x`・行の縦の中央に描く。
+  /// 種別チップ（既定 14。角丸の地＋中央の字。`FileChipView` と同じ規則を AppKit で描く）を、左端 `x`・行の縦の中央に描く。
   final func drawChip(
-    _ glyph: TextLine, _ tint: ChipTint, at x: CGFloat, radius: CGFloat = Theme.Radius.xs,
-    _ colors: RowColors, in context: CGContext
+    _ glyph: TextLine, _ tint: ChipTint, at x: CGFloat, size: CGFloat = Theme.Layout.editorChip,
+    radius: CGFloat = Theme.Radius.xs, _ colors: RowColors, in context: CGContext
   ) {
-    let size = Theme.Layout.editorChip
     let rect = NSRect(x: x, y: (bounds.height - size) / 2, width: size, height: size)
     let chip = colors.chip(tint)
     fill(rect, radius: radius, chip.ground, in: context)

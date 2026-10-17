@@ -4,68 +4,19 @@ import XCTest
 @testable import Orbe
 
 /// 行の列の部品（`RowList`）そのもの——検索に依らない最小の源で、枠の使い回しと新しく見えた行だけの描き直し、キーの
-/// 渡し方（Home / End・Page は列が送る）、押した行、選択が変わったときだけ見せること、焦点の要求、VoiceOver のリストを
-/// 固める。
+/// 渡し方（Home / End・Page は列が送る）、押した行と行の中の部品（高さの違う区間・区間の前の余白をまたいでも）、選択が変わったときだけ
+/// 見せること、焦点の要求、VoiceOver のリストを固める。
 ///
 /// 壊れると何が起きるか。送るたびに見えている行を全部描き直して重い、行の数が変わるたびに枠を作り直す。↑↓ や Enter が
-/// 源へ届かない、Home / End で送れない。押した行と違う行が開く。選んだ行が見えているのに送られる、見えていないのに
-/// 寄らない。結果が届くたびに選択の行へ引き戻される。末尾まで送っても最後の行が下端に付く。つまみを掴めない・引いても
-/// ポインタに付いてこない、消えているつまみや帯が行のクリックを奪う。
+/// 源へ届かない、Home / End で送れない。押した行と違う行が開く・区間の上の隙間を押しても行が開く・行の中のボタンを
+/// 押すと別の行のボタンになるか行のクリックになる。選んだ行が見えているのに送られる、見えていないのに寄らない。結果が
+/// 届くたびに選択の行へ引き戻される。末尾まで送っても最後の行が下端に付く。つまみを掴めない・引いてもポインタに付いてこない、
+/// 消えているつまみや帯が行のクリックを奪う。
 @MainActor
 final class RowListTests: OrbeTestCase {
-  private let rowHeight: CGFloat = 20
+  let rowHeight: CGFloat = 20
 
-  /// 源の偽物。行 r の中身は "row r"、選択の同一性は行の番号そのもの。受けた操作を記録する。
-  final class Source: RowListSource {
-    var rowCount = 200
-    var wantsFocus = false
-    private(set) var keys: [RowListKey] = []
-    private(set) var releases = 0
-    private(set) var clicks: [String] = []
-    private(set) var selected: [Int] = []
-    private(set) var focus: [Bool] = []
-    private(set) var focusRequestsApplied = 0
-    /// 今の行の数の外の行を問われた回数。
-    private(set) var outOfRange = 0
-
-    func makeRowView() -> Row { Row(frame: .zero) }
-    func show(_ row: Int, in view: Row, emoji: NSFont?) {
-      if row >= rowCount { outOfRange += 1 }
-      view.show("row \(row)")
-    }
-    func row(of selection: Int) -> Int? { selection < rowCount ? selection : nil }
-    func prepareRows(for appearance: NSAppearance) {}
-    func focusRequestDidApply() {
-      wantsFocus = false
-      focusRequestsApplied += 1
-    }
-    func focusDidChange(_ focused: Bool) { focus.append(focused) }
-    func perform(_ key: RowListKey) { keys.append(key) }
-    func keyDidRelease() { releases += 1 }
-    func click(_ row: Int) {
-      if row >= rowCount { outOfRange += 1 }
-      clicks.append("click \(row)")
-    }
-    func doubleClick(_ row: Int) { clicks.append("double \(row)") }
-    func select(_ row: Int) { selected.append(row) }
-  }
-
-  /// 行の偽物。中身が変わったときだけ描き直す（描いた回数を数える）。
-  final class Row: ListRowView {
-    private(set) var label: String?
-    private(set) var draws = 0
-
-    func show(_ label: String) {
-      guard label != self.label else { return }
-      self.label = label
-      setAccessibilityLabel(label)
-      needsDisplay = true
-    }
-
-    override func drawContent(_ colors: RowColors, in context: CGContext) { draws += 1 }
-  }
-
-  private struct Hosted {
+  struct Hosted {
     let source: Source
     let rows: RowList<Source>
     let window: NSWindow
@@ -73,9 +24,10 @@ final class RowListTests: OrbeTestCase {
   }
 
   /// 幅 200・高さ 100（5 行ぶん）の列を窓に載せ、行を読ませる。
-  private func host(rowCount: Int = 200) -> Hosted {
+  func host(rowCount: Int = 200, segments: [RowListSegment]? = nil) -> Hosted {
     let source = Source()
     source.rowCount = rowCount
+    source.segments = segments
     let rows = RowList(source: source, rowHeight: rowHeight)
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.borderless],
@@ -87,16 +39,16 @@ final class RowListTests: OrbeTestCase {
     return Hosted(source: source, rows: rows, window: window)
   }
 
-  private func slots(_ list: RowListView<Source>) -> [Row] {
+  func slots(_ list: RowListView<Source>) -> [Row] {
     list.subviews.compactMap { $0 as? Row }
   }
 
   /// 行 `row` を描いている枠（見えていなければ nil）。
-  private func slot(_ list: RowListView<Source>, _ row: Int) -> Row? {
+  func slot(_ list: RowListView<Source>, _ row: Int) -> Row? {
     slots(list).first { $0.row == row && !$0.isHidden }
   }
 
-  private func key(_ special: NSEvent.SpecialKey) -> NSEvent {
+  func key(_ special: NSEvent.SpecialKey) -> NSEvent {
     .key(String(UnicodeScalar(special.rawValue)!), [])
   }
 
@@ -106,10 +58,19 @@ final class RowListTests: OrbeTestCase {
     return slots(hosted.list).reduce(0) { $0 + $1.draws }
   }
 
-  private func scroll(_ hosted: Hosted, by step: CGFloat) {
+  func scroll(_ hosted: Hosted, by step: CGFloat) {
     let clip = hosted.rows.contentView
     clip.scroll(to: NSPoint(x: 0, y: clip.bounds.minY + step))
     hosted.rows.reflectScrolledClipView(clip)
+  }
+
+  /// 列の座標 `point` を押す。
+  func press(_ hosted: Hosted, at point: NSPoint, clickCount: Int = 1) {
+    hosted.list.mouseDown(
+      with: NSEvent.mouseEvent(
+        with: .leftMouseDown, location: hosted.list.convert(point, to: nil), modifierFlags: [],
+        timestamp: 0, windowNumber: hosted.window.windowNumber, context: nil, eventNumber: 0,
+        clickCount: clickCount, pressure: 1)!)
   }
 
   // MARK: - 枠
@@ -119,7 +80,7 @@ final class RowListTests: OrbeTestCase {
   func testSlotsAreReusedAndScrollingRedrawsOnlyTheNewlyVisibleRows() {
     let hosted = host()
     let list = hosted.list
-    XCTAssertEqual(list.frame.height, rowHeight * 201, "行の高さは 1 つ・最後の行の下に 1 行分の空き")
+    XCTAssertEqual(list.frame.height, rowHeight * 201, "区間 1 つの源では、行の数ぶん＋最後の行の下に 1 行分の空き")
     XCTAssertEqual(slots(list).count, 6, "見えている 5 行＋1 本")
     XCTAssertEqual(slot(list, 4)?.label, "row 4")
     XCTAssertNil(slot(list, 5), "見えていない行は描かない")
@@ -151,6 +112,19 @@ final class RowListTests: OrbeTestCase {
     XCTAssertEqual(list.rowCount, 3, "版が同じなら読み直さない")
   }
 
+  /// 見えている範囲の上端が区間の前の余白に入っても、余白の下の行から描く（列が空にならない）。
+  func testRowsBelowALeadingGapAreDrawnWhileTheTopIsInTheGap() {
+    // 行 1 は 20..<40、余白 40..<48、行 2 は 48..<68。
+    let hosted = host(
+      rowCount: 20,
+      segments: [
+        RowListSegment(start: 0, count: 2, height: 20),
+        RowListSegment(start: 2, count: 18, height: 20, leading: 8),
+      ])
+    scroll(hosted, by: 43)
+    XCTAssertEqual(slot(hosted.list, 2)?.label, "row 2")
+  }
+
   /// 源の行が減ってから列が読み直すまでの間に送る・押しても、源の今の行の数の外の行は問わない（イベントは SwiftUI の
   /// 更新より先に届きうる）。
   func testRowsOutsideTheSourcesCurrentCountAreNeverAsked() {
@@ -159,12 +133,7 @@ final class RowListTests: OrbeTestCase {
     hosted.source.rowCount = 2
     scroll(hosted, by: rowHeight)
     list.pageDown(nil)
-    list.mouseDown(
-      with: NSEvent.mouseEvent(
-        with: .leftMouseDown,
-        location: list.convert(NSPoint(x: 10, y: list.visibleRect.midY), to: nil),
-        modifierFlags: [], timestamp: 0, windowNumber: hosted.window.windowNumber, context: nil,
-        eventNumber: 0, clickCount: 1, pressure: 1)!)
+    press(hosted, at: NSPoint(x: 10, y: list.visibleRect.midY))
     XCTAssertEqual(hosted.source.outOfRange, 0)
     XCTAssertEqual(list.accessibilityRowCount(), 2)
   }
@@ -207,22 +176,30 @@ final class RowListTests: OrbeTestCase {
 
   // MARK: - マウス
 
-  /// 押すと焦点を取り、行の番号を源へ渡す（ダブルクリックは別の口）。行の無いところ（最後の行の下の空き）は渡さない。
-  func testClicksPassTheRow() {
-    let hosted = host(rowCount: 3)
+  /// 押すと焦点を取り、押した位置の行の番号を源へ渡す（ダブルクリックは別の口）——行の高さが区間ごとに違っても。行の
+  /// 中の部品の上なら、行のクリックではなく部品の押下として渡す。行の無いところ（区間の前の余白・最後の行の下の空き）は
+  /// 渡さない。
+  func testClicksPassTheRowAndPressesPassTheControl() {
+    // 行 0 は 0..<20、行 1 は 20..<52、余白 52..<60、行 2 は 60..<80、行 3 は 80..<100。
+    let hosted = host(
+      rowCount: 4,
+      segments: [
+        RowListSegment(start: 0, count: 1, height: 20),
+        RowListSegment(start: 1, count: 1, height: 32),
+        RowListSegment(start: 2, count: 2, height: 20, leading: 8),
+      ])
     let list = hosted.list
     func press(x: CGFloat, y: CGFloat, count: Int) {
-      list.mouseDown(
-        with: NSEvent.mouseEvent(
-          with: .leftMouseDown, location: list.convert(NSPoint(x: x, y: y), to: nil),
-          modifierFlags: [], timestamp: 0, windowNumber: hosted.window.windowNumber, context: nil,
-          eventNumber: 0, clickCount: count, pressure: 1)!)
+      self.press(hosted, at: NSPoint(x: x, y: y), clickCount: count)
     }
-    press(x: 13, y: 2.5 * rowHeight, count: 1)
+    press(x: 13, y: 50, count: 1)
     XCTAssertTrue(hosted.window.firstResponder === list, "押すと焦点を取る")
-    press(x: 150, y: 0.5 * rowHeight, count: 2)
-    press(x: 20, y: 3.5 * rowHeight, count: 1)  // 最後の行の下の空き
-    XCTAssertEqual(hosted.source.clicks, ["click 2", "double 0"])
+    press(x: 13, y: 55, count: 1)  // 区間の前の余白
+    press(x: 13, y: 61, count: 1)
+    press(x: 150, y: 10, count: 2)
+    press(x: 190, y: 90, count: 1)
+    press(x: 20, y: 105, count: 1)  // 最後の行の下の空き
+    XCTAssertEqual(hosted.source.clicks, ["click 1", "click 2", "double 0", "press 3 0"])
   }
 
   // MARK: - つまみ

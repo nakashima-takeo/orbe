@@ -29,7 +29,8 @@ extension FrameBuilder {
     }
   }
 
-  func drawMarks(_ marks: RowMarks, rows: ClosedRange<Int>, _ c: Context) {
+  /// `lineCount` は印を書いた写しの行数（行数の境は最後の行の下端）。
+  func drawMarks(_ marks: LineMarks, rows: ClosedRange<Int>, lineCount: Int, _ c: Context) {
     let g = c.g
     let config = c.config
     let palette = c.palette
@@ -40,16 +41,17 @@ extension FrameBuilder {
       marks.bars[$0].rows.upperBound >= rows.lowerBound
     }
     while index < marks.bars.count, marks.bars[index].rows.lowerBound <= rows.upperBound {
-      var bar = marks.bars[index]
+      let kind = marks.bars[index].kind
+      var joined = marks.bars[index].rows
       index += 1
-      while index < marks.bars.count, marks.bars[index].kind == bar.kind,
-        marks.bars[index].rows.lowerBound == bar.rows.upperBound + 1
+      while index < marks.bars.count, marks.bars[index].kind == kind,
+        marks.bars[index].rows.lowerBound == joined.upperBound + 1
       {
-        bar.rows = bar.rows.lowerBound...marks.bars[index].rows.upperBound
+        joined = joined.lowerBound...marks.bars[index].rows.upperBound
         index += 1
       }
-      let ink = bar.kind == .added ? palette.added : palette.modified
-      for piece in Self.pieces(bar.rows, g.rows) {
+      let ink = kind == .added ? palette.added : palette.modified
+      for piece in Self.pieces(joined, g.rows) {
         let top = g.rowTop(piece.lowerBound)
         let bottom = g.rowBottom(piece.upperBound)
         shapes.append(
@@ -60,15 +62,15 @@ extension FrameBuilder {
     }
     let size = Double(config.marks.triangleSize) * g.scale
     var deletion = Self.firstIndex(marks.deletions.count) {
-      marks.deletions[$0].row >= rows.lowerBound - 1
+      marks.deletions[$0] >= rows.lowerBound - 1
     }
-    while deletion < marks.deletions.count, marks.deletions[deletion].row <= rows.upperBound + 1 {
-      let mark = marks.deletions[deletion]
+    while deletion < marks.deletions.count, marks.deletions[deletion] <= rows.upperBound + 1 {
+      let boundary = marks.deletions[deletion]
       deletion += 1
       let y =
-        mark.atBottom
-        ? g.rows.y(ofLine: mark.row, scale: g.scale) + g.lineHeight
-        : g.rows.y(ofLine: mark.row, scale: g.scale)
+        boundary < lineCount
+        ? g.rows.y(ofLine: boundary, scale: g.scale)
+        : g.rows.y(ofLine: lineCount - 1, scale: g.scale) + g.lineHeight
       let center = g.top + max(y.rounded(), size / 2) - g.scrollY
       shapes.append(
         ShapeInstance(

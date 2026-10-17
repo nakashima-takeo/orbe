@@ -7,8 +7,9 @@ import Foundation
 /// 待たずに落ちる）。index を書く操作（ステージ・解除・破棄・コミット・amend・取り消し・pull）は投げた順に 1 つずつ
 /// 走り、fetch・push は並ばない。
 ///
-/// どの書き込みも無出力で打ち切らず、止める手（`Write`）を返す。完了は「書き込みの後に始まった status の取り直し」が
-/// 済んでから main で返る——完了が届いた時点で `status` はもう書き込み後の姿になっている（監視の到着を待たない）。
+/// どの書き込みも（人が見ていない裏の fetch を除き）無出力で打ち切らず、止める手（`Write`）を返す。完了は「書き込みの
+/// 後に始まった status の取り直し」が済んでから main で返る——完了が届いた時点で `status` はもう書き込み後の姿になって
+/// いる（監視の到着を待たない）。
 /// baseline の取り直しは待たない（smudge が詰まっても完了は遅れない）。git 管理外の根では呼べない（`notManaged`）。
 ///
 /// 完了を返すまでは、返りを待つ処理がサービスを強く握る——順番待ちは止める手（行列との輪）、走っている間は git の完了の
@@ -16,17 +17,32 @@ import Foundation
 /// 崩れない（同じ根を握り直せば、まだ生きているこのサービスが返る）。返り終われば手放す。
 extension RootFiles {
   /// 書き込み 1 つの止める手。順番待ちなら、その場で行列から外して「止めた」で返す（前の書き込みの終わりを待たず、
-  /// git を起こさない）。走っていれば git を SIGTERM で止める。何度呼んでもよい。
+  /// git を起こさない）。走っていれば git を SIGTERM で止める。何度呼んでもよい。走り始めた（順番待ちを抜けた）ことも
+  /// 知らせる——順番待ちか走っているかは根のサービスの順番の中にしか無い。
   @MainActor
   final class Write {
     fileprivate let handle = GitRunner.Handle()
     fileprivate var dequeue: (() -> Void)?
+    private var hasStarted = false
+    private var onStart: (() -> Void)?
 
     func cancel() {
       handle.cancel()
       guard let dequeue else { return }
       self.dequeue = nil
       dequeue()
+    }
+
+    /// 走り始めたら呼ぶ（もう走っていればその場で）。走る前に止めた書き込みでは呼ばない。
+    func whenStarted(_ body: @escaping () -> Void) {
+      if hasStarted { body() } else { onStart = body }
+    }
+
+    fileprivate func markStarted() {
+      hasStarted = true
+      let body = onStart
+      onStart = nil
+      body?()
     }
   }
 
@@ -61,12 +77,17 @@ extension RootFiles {
     enqueue({ $0.discard(rows: rows, handle: $1, completion: $2) }, completion)
   }
 
-  /// ステージ済みの分をコミットする。`amend` でメッセージが空なら、前のメッセージのまま中身だけ差し替える。
+  /// `content` をコミットする（`amend` なら直前のコミットを差し替える）。先にステージする行は、ステージとコミットを 1 つの
+  /// 書き込みとして続けて走らせる（間に別の書き込みが割り込まない）。index に競合が残っていれば何も書かずに
+  /// `conflictsRemain`。amend でメッセージが空なら、前のメッセージのまま中身だけ差し替える。
   @discardableResult
   func commit(
-    message: String, amend: Bool = false, completion: @escaping (GitWriteFailure?) -> Void
+    message: String, content: GitCommitContent = .staged, amend: Bool = false,
+    completion: @escaping (GitWriteFailure?) -> Void
   ) -> Write {
-    enqueue({ $0.commit(message: message, amend: amend, handle: $1, completion: $2) }, completion)
+    enqueue(
+      { $0.commit(message: message, content: content, amend: amend, handle: $1, completion: $2) },
+      completion)
   }
 
   /// 最後のコミットを取り消す（中身はステージ済みに残る）。
@@ -101,12 +122,15 @@ extension RootFiles {
       }, completion)
   }
 
-  /// 取ってくる。並ばない。
+  /// 取ってくる。並ばない。`unattended` は人が見ていない裏の fetch（無出力で打ち切り、askpass・資格情報の窓を出させない）。
   @discardableResult
   func fetch(
-    onProgress: @escaping (String) -> Void, completion: @escaping (GitWriteFailure?) -> Void
+    unattended: Bool = false, onProgress: @escaping (String) -> Void,
+    completion: @escaping (GitWriteFailure?) -> Void
   ) -> Write {
-    start({ $0.fetch(onProgress: onProgress, handle: $1, completion: $2) }, completion)
+    start(
+      { $0.fetch(unattended: unattended, onProgress: onProgress, handle: $1, completion: $2) },
+      completion)
   }
 
   // MARK: - 順番と完了
@@ -130,6 +154,7 @@ extension RootFiles {
     let next = queuedWrites.removeFirst()
     next.write.dequeue = nil
     isWriting = true
+    next.write.markStarted()
     next.body(repo, next.write.handle) { [self] failure in
       isWriting = false
       startNextWrite()
@@ -142,6 +167,7 @@ extension RootFiles {
   ) -> Write {
     let write = Write()
     guard let repo else { return reject(write, completion) }
+    write.markStarted()
     body(repo, write.handle) { [self] failure in complete(failure, completion) }
     return write
   }

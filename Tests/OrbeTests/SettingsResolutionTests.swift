@@ -89,6 +89,7 @@ final class SettingsResolutionTests: OrbeTestCase {
       "agent/sound: 入力待ちも完了と同じ音は既定オン")
     XCTAssertEqual(
       empty[SettingKeys.menuBarNotificationDuration], 40, "chrome/menubar: 表示時間は既定 40 秒")
+    XCTAssertEqual(empty[SettingKeys.scmAutoFetch], true, "editor/source-control: 自動 fetch は既定オン")
     var layer = SettingsLayer()
     layer[SettingKeys.theme] = .dark
     XCTAssertEqual(EffectiveSettings(layer)[SettingKeys.theme], .dark, "明示値が既定に勝つ")

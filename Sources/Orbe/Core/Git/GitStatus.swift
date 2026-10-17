@@ -12,11 +12,18 @@ struct GitStatus: Equatable {
     let unstaged: Change?
     /// rename・copy の元パス。
     let originalPath: String?
+    /// 作業ツリー側の変化が、サブモジュールの中身だけ（チェックアウトしているコミットは index と同じ）。`git add` では
+    /// ステージできず、`git restore` でも戻らない。
+    let unstagedIsSubmoduleContent: Bool
 
-    init(staged: Change?, unstaged: Change?, originalPath: String? = nil) {
+    init(
+      staged: Change?, unstaged: Change?, originalPath: String? = nil,
+      unstagedIsSubmoduleContent: Bool = false
+    ) {
       self.staged = staged
       self.unstaged = unstaged
       self.originalPath = originalPath
+      self.unstagedIsSubmoduleContent = unstagedIsSubmoduleContent
     }
 
     var isConflicted: Bool { staged == .unmerged || unstaged == .unmerged }
@@ -65,6 +72,15 @@ struct GitStatus: Equatable {
   let untrackedDirectories: [String]
   /// ブランチのヘッダが無い出力なら nil。
   let branch: Branch?
+  /// index 側の変化（競合を除く）が 1 つでもある。
+  let hasStagedChanges: Bool
+
+  init(entries: [String: Entry], untrackedDirectories: [String], branch: Branch?) {
+    self.entries = entries
+    self.untrackedDirectories = untrackedDirectories
+    self.branch = branch
+    hasStagedChanges = entries.values.contains { $0.staged != nil && !$0.isConflicted }
+  }
 
   /// その相対パスの行（rename・copy なら元パスも）。
   func row(_ path: String) -> Row {
@@ -141,7 +157,8 @@ struct GitStatus: Equatable {
     guard isUntracked(untracked) else { return entry }
     return Entry(
       staged: tracked.staged, unstaged: tracked.unstaged ?? .untracked,
-      originalPath: tracked.originalPath)
+      originalPath: tracked.originalPath,
+      unstagedIsSubmoduleContent: tracked.unstaged != nil && tracked.unstagedIsSubmoduleContent)
   }
 
   /// `# branch.oid <commit | (initial)>`・`# branch.head <name | (detached)>`・`# branch.upstream <name>`・
@@ -181,17 +198,19 @@ struct GitStatus: Equatable {
   /// `1 XY sub mH mI mW hH hI path`
   private static func ordinary(_ token: String) -> (String, Entry)? {
     let fields = token.split(separator: " ", maxSplits: 8, omittingEmptySubsequences: false)
-    guard fields.count == 9, let entry = pair(fields[1]) else { return nil }
+    guard fields.count == 9, let entry = pair(fields[1], sub: fields[2]) else { return nil }
     return (String(fields[8]), entry)
   }
 
   /// `2 XY sub mH mI mW hH hI Xscore path`（元パスは次のトークン）
   private static func renamed(_ token: String, from original: String) -> (String, Entry)? {
     let fields = token.split(separator: " ", maxSplits: 9, omittingEmptySubsequences: false)
-    guard fields.count == 10, let entry = pair(fields[1]) else { return nil }
+    guard fields.count == 10, let entry = pair(fields[1], sub: fields[2]) else { return nil }
     return (
       String(fields[9]),
-      Entry(staged: entry.staged, unstaged: entry.unstaged, originalPath: original)
+      Entry(
+        staged: entry.staged, unstaged: entry.unstaged, originalPath: original,
+        unstagedIsSubmoduleContent: entry.unstagedIsSubmoduleContent)
     )
   }
 
@@ -202,10 +221,19 @@ struct GitStatus: Equatable {
     return String(fields[10])
   }
 
-  private static func pair(_ xy: Substring) -> Entry? {
+  /// `sub` は `N...`（サブモジュールでない）か `S<c><m><u>`（`c` はチェックアウトしているコミットが変わったら `C`、`m` は
+  /// 中の追跡中のファイルが変わったら `M`、`u` は中に未追跡のファイルがあれば `U`）。中身だけの変化は `S.` に `M` か `U`
+  /// が続くもの——作業ツリーで消した・種類が変わったサブモジュール（`S...`）は含めない。
+  private static func pair(_ xy: Substring, sub: Substring) -> Entry? {
     let chars = Array(xy)
     guard chars.count == 2 else { return nil }
-    return Entry(staged: change(chars[0]), unstaged: change(chars[1]))
+    let unstaged = change(chars[1])
+    let flags = Array(sub)
+    let contentOnly =
+      flags.count == 4 && flags[0] == "S" && flags[1] == "." && (flags[2] == "M" || flags[3] == "U")
+    return Entry(
+      staged: change(chars[0]), unstaged: unstaged,
+      unstagedIsSubmoduleContent: unstaged != nil && contentOnly)
   }
 
   private static func change(_ c: Character) -> Change? {

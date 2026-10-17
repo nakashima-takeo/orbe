@@ -4,8 +4,8 @@ import XCTest
 
 @testable import OrbeEditorCore
 
-/// ハンク → 行の印 → オフセット区間。壊れると git ガターが違う行に出る・削除の三角が違う境に立つ・
-/// 打鍵した行の印の区間が古いオフセットのまま残る。
+/// ハンク → 行の印（文書の行）。壊れると git ガターが違う行に出る・末尾の空の行に印が付かない・削除の三角が違う境に
+/// 立つ・打鍵で行がずれても印が古い行に残る。
 @MainActor
 final class LineMarksTests: XCTestCase {
   private func hunk(_ oldStart: Int, _ oldCount: Int, _ newStart: Int, _ newCount: Int) -> LineHunk
@@ -13,49 +13,33 @@ final class LineMarksTests: XCTestCase {
     LineHunk(oldStart: oldStart, oldCount: oldCount, newStart: newStart, newCount: newCount)
   }
 
-  /// 追加は old 側 0 件でその新しい行、削除は new 側 0 件でその境、両側にあれば変更——面へ渡る区間で観る
-  /// （各行 1 字＋改行の本文なので、n 行目の行頭は 2(n−1)）。
+  private func bar(_ rows: ClosedRange<Int>, _ kind: LineMarks.Kind) -> LineMarks.Bar {
+    LineMarks.Bar(rows: rows, kind: kind)
+  }
+
+  /// 追加は old 側 0 件でその新しい行、削除は new 側 0 件でその境、両側にあれば変更。
   func testKindsFollowTheHunkShape() {
-    let text = (1...8).map { "\($0)\n" }.joined()
-    let rope = TextRope(text)
-    let spans = LineMarks(hunks: [hunk(2, 0, 3, 2), hunk(6, 1, 6, 0), hunk(8, 1, 7, 1)])
-      .spans(in: rope)
-    XCTAssertEqual(
-      spans.marks,
-      [
-        LineMarkSpans.Mark(range: NSRange(location: 4, length: 4), kind: .added),
-        LineMarkSpans.Mark(range: NSRange(location: 12, length: 2), kind: .modified),
-      ], "3〜4 行目が追加、7 行目が変更")
-    XCTAssertEqual(spans.deletions, [12], "6 行目の下（7 行目の行頭）に削除")
-    XCTAssertTrue(LineMarks(hunks: []).spans(in: rope).isEmpty)
+    let marks = LineMarks(
+      hunks: [hunk(2, 0, 3, 2), hunk(6, 1, 6, 0), hunk(8, 1, 7, 1)], lineCount: 9)
+    XCTAssertEqual(marks.bars, [bar(2...3, .added), bar(6...6, .modified)], "3〜4 行目が追加、7 行目が変更")
+    XCTAssertEqual(marks.deletions, [6], "6 行目の下（7 行目の上端）に削除")
+    XCTAssertTrue(LineMarks(hunks: [], lineCount: 9).isEmpty)
   }
 
-  /// 面へ渡す区間は改行込みで、削除の境は次の行の行頭。末尾は本文の長さ（末尾の改行の有無で同じ）。
-  func testSpansMapLinesToOffsetsThroughTheText() {
-    let text = "a\nbb\nccc\n"
-    let rope = TextRope(text)
-    let spans = LineMarks(hunks: [hunk(1, 0, 2, 1), hunk(2, 1, 3, 1), hunk(3, 1, 3, 0)])
-      .spans(in: rope)
-    XCTAssertEqual(
-      spans.marks,
-      [
-        LineMarkSpans.Mark(range: NSRange(location: 2, length: 3), kind: .added),
-        LineMarkSpans.Mark(range: NSRange(location: 5, length: 4), kind: .modified),
-      ])
-    XCTAssertEqual(spans.deletions, [9], "3 行目の下 = 本文の長さ（末尾の空行の行頭）")
+  /// 区間は末尾の空の行まで届き、本文に無い行は落ちる。境は 0（先頭の上）から行数（最後の行の下）まで。
+  func testMarksAreRowsOfTheTextIncludingTheTrailingEmptyLine() {
+    let marks = LineMarks(hunks: [hunk(1, 0, 2, 2), hunk(2, 1, 3, 0)], lineCount: 3)
+    XCTAssertEqual(marks.bars, [bar(1...2, .added)], "`a` → `a\nb\n` の 2 行の追加は末尾の空の行まで")
+    XCTAssertEqual(marks.deletions, [3], "最後の行（空の行）の下")
 
-    let unterminated = "a\nbb"
-    let tail = LineMarks(hunks: [hunk(2, 1, 2, 1), hunk(2, 1, 2, 0)])
-      .spans(in: TextRope(unterminated))
-    XCTAssertEqual(tail.marks.map(\.range), [NSRange(location: 2, length: 2)], "最後の行は本文の長さまで")
-    XCTAssertEqual(tail.deletions, [4])
-    XCTAssertEqual(
-      LineMarks(hunks: [hunk(1, 1, 0, 0)]).spans(in: rope).deletions,
-      [0],
-      "先頭の上は 0")
+    let outside = LineMarks(
+      hunks: [hunk(1, 1, 0, 0), hunk(1, 1, 2, 3), hunk(5, 0, 4, 1), hunk(6, 1, 9, 0)],
+      lineCount: 3)
+    XCTAssertEqual(outside.bars, [bar(1...2, .modified)], "本文を越える区間は最後の行で切り、本文に無い区間は落とす")
+    XCTAssertEqual(outside.deletions, [0, 3], "先頭の上は 0、本文を越える境は最後の行の下")
   }
 
-  /// 文書はハンクが届いたときと編集の後に印を面へ押し、同じ行の中の打鍵でも区間がその場で本文に追従する。
+  /// 文書はハンクが届いたときと編集の後に印を面へ押し、打鍵で行が増減すれば、差分が届く前に印がその場で追従する。
   func testDocumentPushesMarksToTheSurfaceAndKeepsThemInStepWithEdits() throws {
     let dir = TestScratch.caseDir
       .appendingPathComponent("orbe-marks-\(UUID().uuidString)", isDirectory: true)
@@ -70,23 +54,19 @@ final class LineMarksTests: XCTestCase {
 
     document.baseline = "a\nc\nd\n"
     XCTAssertTrue(document.waitUntilCaughtUp())
-    XCTAssertEqual(
-      surface.lineMarks.marks,
-      [LineMarkSpans.Mark(range: NSRange(location: 2, length: 2), kind: .added)],
-      "ハンクが届けば押す")
-    XCTAssertEqual(surface.lineMarks.deletions, [6], "d の削除は末尾の境")
+    XCTAssertEqual(surface.lineMarks.bars, [LineMarks.Bar(rows: 1...1, kind: .added)], "ハンクが届けば押す")
+    XCTAssertEqual(surface.lineMarks.deletions, [3], "d の削除は末尾の空の行の上")
 
-    surface.replace(NSRange(location: 2, length: 0), with: "xx")
+    surface.replace(NSRange(location: 0, length: 0), with: "z\n")
     XCTAssertEqual(
-      surface.lineMarks.marks.map(\.range), [NSRange(location: 2, length: 4)], "区間は打鍵にその場で追従する")
+      surface.lineMarks.bars, [LineMarks.Bar(rows: 2...2, kind: .added)], "印は打鍵の行の増減にその場で追従する")
+    XCTAssertEqual(surface.lineMarks.deletions, [4])
     XCTAssertTrue(document.waitUntilCaughtUp())
     XCTAssertEqual(
-      document.hunks,
-      [
-        LineHunk(oldStart: 1, oldCount: 0, newStart: 2, newCount: 1),
-        LineHunk(oldStart: 3, oldCount: 1, newStart: 3, newCount: 0),
-      ], "ハンクは同じ")
-    XCTAssertEqual(surface.lineMarks.marks.map(\.range), [NSRange(location: 2, length: 4)])
+      surface.lineMarks.bars,
+      [LineMarks.Bar(rows: 0...0, kind: .added), LineMarks.Bar(rows: 2...2, kind: .added)],
+      "差分が届けば追いつく")
+    XCTAssertEqual(surface.lineMarks.deletions, [4])
 
     document.baseline = nil
     XCTAssertTrue(surface.lineMarks.isEmpty, "baseline が消えれば印も消える")

@@ -18,9 +18,9 @@ enum GitRefreshFailure: Error, Equatable {
   case fastForward(GitFailure?)
 }
 
-/// 利用者が起こした書き込み（ステージ・解除・破棄・コミット・取り消し・pull・push・fetch）の失敗。**文言は持たない**。
-/// 書き込みは無出力で打ち切らない（止めるのは利用者）ので、打ち切りは無い。分類できない失敗は「その他」（`reason`）に
-/// 倒す——誤分類より安全。
+/// 書き込み（ステージ・解除・破棄・コミット・取り消し・pull・push・fetch）の失敗。**文言は持たない**。
+/// 無出力で打ち切るのは人が見ていない裏の fetch だけで、その失敗は人に見せないので、打ち切りは分けずに「その他」に入る。
+/// 分類できない失敗は「その他」（`reason`）に倒す——誤分類より安全。
 enum GitWriteFailure: Error, Equatable {
   /// 止めた。
   case cancelled
@@ -42,6 +42,11 @@ enum GitWriteFailure: Error, Equatable {
   case noPushDestination
   /// ブランチに居ない（detached HEAD）。push・pull と、初回コミットの取り消しが要る。
   case detached
+  /// コミットしようとした index に競合（unmerged のパス）が残っている。git はコミットを必ず断るので、何も書かずに返す。
+  case conflictsRemain
+  /// amend・取り消しで書き換えようとした HEAD が push 済み（どれかの remote 追跡ブランチから届く）。force push を持たない
+  /// ので、書き換えれば Orbe の中では戻せない。
+  case headPushed
   /// 最後のコミットの親が手元に無い（shallow clone の境界）。取り消すと、ブランチを消して履歴とつながらない初回コミット前に
   /// 化けるので取り消さない。
   case shallowBoundary

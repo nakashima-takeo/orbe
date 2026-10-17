@@ -13,7 +13,7 @@ import SwiftUI
 ///
 /// 骨の状態はセッションの写し（`EditorShellModel`）とツリー（`FileTree`）に持ち、SwiftUI はそれだけを読む。
 /// セッションの変化は `sessionDidChange` 1 本で受け、写し → 面の差し替え → ツリーの追従の順に進める。
-/// ツリーとプロジェクト検索は面が画面に見えている間（窓に付き、隠れていない）だけ根のサービスを握る。
+/// ツリー・プロジェクト検索・ソース管理パネルは面が画面に見えている間（窓に付き、隠れていない）だけ根のサービスを握る。
 ///
 /// chrome キーは `performKeyEquivalent` で先取りし、window コマンドは連経由で上位へ、⌘S は保存、
 /// 端末のキーは消し、両面のキーのうち ⌘F はファイル内検索、残り（⌘↑↓）と通常の打鍵はテキスト面へ流す。
@@ -52,6 +52,10 @@ final class EditorPaneView: NSView {
   let projectSearch: ProjectSearch
   /// 検索結果の列。検索パネルが隠れている間も持ち、出し直すたびに作り直さない。
   let searchResults: RowList<SearchResultsSource>
+  /// ソース管理パネルの状態（面ごと。根が変われば作り直す）。
+  private(set) var scm: ScmPanel
+  /// ソース管理の列（検索結果の列と同じく、パネルが隠れている間も持つ）。
+  private(set) var scmList: RowList<ScmListSource>
   /// F4 / ⇧F4 と結果の列の外の押下を拾うイベントの監視（窓に付いている間だけ）。
   var eventMonitor: Any?
   /// サイドバーの幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
@@ -62,6 +66,8 @@ final class EditorPaneView: NSView {
   let sidebarHandle = SidebarResizeHandle()
   private(set) var localization = LocalizationStore(language: .systemDefault)
   private var fontResolver = ChromeFontResolver()
+  /// 面の workspace の実効設定（使う時点で読む。窓が連を作るときに配る）。
+  var settings: () -> EffectiveSettings = { EffectiveSettings(SettingsLayer()) }
   /// 地の veil。設定パレットで不透明度を変えた直後も追従する（観測して再描画）。
   var translucency: ChromeTranslucency? {
     didSet { observeTranslucency() }
@@ -74,11 +80,14 @@ final class EditorPaneView: NSView {
     let searchResults = RowList(
       source: SearchResultsSource(search: projectSearch), rowHeight: Theme.Layout.editorSearchRow)
     self.searchResults = searchResults
+    let scm = ScmPanel(root: root)
+    self.scm = scm
+    let scmList = Self.scmList(scm)
+    self.scmList = scmList
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
-        shell: shell, tree: tree, search: projectSearch, searchResults: searchResults,
-        sidebar: sidebar,
-        localization: localization, fontResolver: fontResolver))
+        shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
+        scmList: scmList, sidebar: sidebar, localization: localization, fontResolver: fontResolver))
     headerHost = NSHostingView(
       rootView: EditorHeaderRoot(
         shell: shell, localization: localization, fontResolver: fontResolver))
@@ -107,6 +116,7 @@ final class EditorPaneView: NSView {
     wireShell()
     wireTree()
     wireProjectSearch()
+    wireSourceControl()
     observeSidebar()
     observeDiffModes()
     registerForDraggedTypes([.fileURL])
@@ -134,11 +144,14 @@ final class EditorPaneView: NSView {
     needsLayout = true
   }
 
+  private static func scmList(_ scm: ScmPanel) -> RowList<ScmListSource> {
+    RowList(source: ScmListSource(panel: scm), rowHeight: Theme.Layout.editorScmRow)
+  }
+
   private func installRoots() {
     sideHost.rootView = EditorSideRoot(
-      shell: shell, tree: tree, search: projectSearch, searchResults: searchResults,
-      sidebar: sidebar,
-      localization: localization, fontResolver: fontResolver)
+      shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
+      scmList: scmList, sidebar: sidebar, localization: localization, fontResolver: fontResolver)
     headerHost.rootView = EditorHeaderRoot(
       shell: shell, localization: localization, fontResolver: fontResolver)
     emptyHost.rootView = EditorFaceRoot(localization: localization, content: faceContent)
@@ -196,14 +209,20 @@ final class EditorPaneView: NSView {
     return nil
   }
 
-  /// 根が変わった（cd）。ツリーを作り直し、握っていたなら握り直す。プロジェクト検索は結果を捨て、この面の検索パネルが
-  /// 画面に見えていれば今の問いで検索し直す（裏の連の cd で見えない根を探さない）。
+  /// 根が変わった（cd）。ツリーとソース管理パネルを作り直し、握っていたなら握り直す（worktree の状態——メッセージ・操作・
+  /// 失敗——は worktree ごとに残るので、戻れば同じものが見える）。プロジェクト検索は結果を捨て、この面の検索パネルが画面に
+  /// 見えていれば今の問いで検索し直す（裏の連の cd で見えない根を探さない）。
   func setRoot(_ root: String) {
     guard root != tree.root else { return }
     tree.cancelNew()
     tree.isLive = false
     tree = FileTree(root: root)
     wireTree()
+    scm.isShown = false
+    scm.isLive = false
+    scm = ScmPanel(root: root)
+    scmList = Self.scmList(scm)
+    wireSourceControl()
     projectSearch.setRoot(root, searchNow: showsSearchPanel && projectSearch.isLive)
     updateLiveness()
     installRoots()
@@ -292,7 +311,7 @@ final class EditorPaneView: NSView {
     }
   }
 
-  // MARK: - 可視性（ツリーとプロジェクト検索が根のサービスを握る寿命）
+  // MARK: - 可視性（ツリー・プロジェクト検索・ソース管理パネルが根のサービスを握る寿命）
 
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
@@ -311,13 +330,20 @@ final class EditorPaneView: NSView {
   }
 
   /// 面が画面に見えているか（窓に付き、隠れていない）が変わりうる。見えていれば、テキスト面を描く用意も裏で始める（端末
-  /// だけを使う間は払わない）。
+  /// だけを使う間は払わない）。ソース管理パネルは、出しているときだけ行とグラフを組む。
   private func updateLiveness() {
     let live = window != nil && !isHiddenOrHasHiddenAncestor
     tree.isLive = live
     projectSearch.isLive = live
+    scm.isLive = live
+    updateSourceControlShown()
     if live { group?.editor.prepareSurfaces() }
     prepareBodyIfVisible()
+  }
+
+  /// ソース管理パネルを出しているか（面が見えていて、サイドバーがソース管理のパネルを出している）を写す。
+  func updateSourceControlShown() {
+    scm.isShown = window != nil && !isHiddenOrHasHiddenAncestor && showsSourceControl
   }
 
   /// 面が画面に見えていれば、本体の文書を初めて見せる前の上限つきの待ちを通す（2 回目以降は文書が何もしない）。畳まれた
