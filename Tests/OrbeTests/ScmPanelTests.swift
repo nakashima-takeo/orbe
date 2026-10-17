@@ -53,6 +53,46 @@ final class ScmPanelTests: OrbeTestCase {
     XCTAssertFalse(panel.commitState.canAmend)
   }
 
+  /// ステージ（index だけの変化）の間とその後の読み直しの間も、同じ HEAD なら push 済みかを前の値のまま使う——▾ が押せない
+  /// 姿へ点滅しない。
+  func testStagingKeepsKnowingWhetherTheHeadIsPushed() throws {
+    repo.addOrigin()
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    try repo.write("b.txt", "b\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "local"]).isSuccess)
+    try repo.write("c.txt", "c\n")
+    show(until: { $0.isHeadPushed == false && $0.changes.changes.count == 1 }, "未 push の HEAD と変更")
+
+    var unknown = 0
+    panel.control.stage([GitStatus.Row(path: "c.txt", originalPath: nil)])
+    let settled = Date().addingTimeInterval(1.5)
+    pumpMain(
+      until: {
+        if self.panel.isHeadPushed == nil { unknown += 1 }
+        return self.panel.control.operations.isEmpty && Date() > settled
+      }, "ステージと、index の変化の後の読み直し")
+    XCTAssertEqual(unknown, 0)
+    XCTAssertEqual(panel.changes.staged.map(\.path), ["c.txt"])
+  }
+
+  /// 自分の push が終わったその時点から、読み直し終わるまで amend と取り消しは押せない（push は HEAD を動かさないので、前の
+  /// 「未 push」を残すと push したコミットを書き換えられる）。
+  func testRightAfterItsOwnPushTheHeadCannotBeRewritten() throws {
+    repo.addOrigin()
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    try repo.write("b.txt", "b\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "local"]).isSuccess)
+    show(until: { $0.commitState.canUndo }, "未 push の HEAD は取り消せる")
+
+    panel.control.publish()
+    pumpMain(until: { self.panel.control.operations.isEmpty }, timeout: 20, "公開")
+    XCTAssertNil(panel.control.failure)
+    XCTAssertFalse(panel.commitState.canUndo, "push の終わりの時点で前の値を使わない")
+    pumpMain(until: { self.panel.isHeadPushed == true }, "push 済みと読む")
+  }
+
   /// 隠れている間に根のサービスが離され、その間に端末で push していても、出し直した直後（握り直したサービスが git 管理下と
   /// 分かる前）から amend と取り消しは押せない。
   func testAHeadPushedWhileThePanelWasHiddenCannotBeRewrittenRightAfterItReappears() throws {

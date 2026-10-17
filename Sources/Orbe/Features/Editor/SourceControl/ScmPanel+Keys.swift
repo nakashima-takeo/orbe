@@ -104,7 +104,7 @@ extension ScmPanel {
       case .stageAll where !changes.committable.isEmpty:
         self.control.stage(changes.committable.map(\.row))
       case .discardAll where !files.isEmpty: onDiscard(files)
-      case .refreshGraph: readGraphAndHead()
+      case .refreshGraph: readGraphAndHead(refsMayHaveMoved: true)
       default: break
       }
     case .file(let section, let file):

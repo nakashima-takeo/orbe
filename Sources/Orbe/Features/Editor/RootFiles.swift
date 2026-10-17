@@ -228,7 +228,7 @@ final class RootFiles {
       notify { $0.rootFiles(self, filesDidChange: .paths(batch.paths)) }
     }
     if repo != nil, batch.gitChanged || batch.scanAll {
-      notify { $0.rootFilesGitStateDidChange(self) }
+      notify { $0.rootFilesGitStateDidChange(self, refsChanged: batch.refsChanged) }
     }
     requestStatusRefresh()
     requestVersionRefresh()

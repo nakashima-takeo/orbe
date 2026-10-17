@@ -3,8 +3,8 @@ import Foundation
 /// 面の側が知らせを受ける者（同じ worktree を見ているソース管理パネル）。
 @MainActor
 protocol SourceControlObserver: AnyObject {
-  /// 操作が終わった（通った・止めた・失敗したのどれでも）。
-  func sourceControlOperationDidFinish(_ control: SourceControl)
+  /// 種類 `kind` の操作が終わった（通った・止めた・失敗したのどれでも）。
+  func sourceControl(_ control: SourceControl, operationDidFinish kind: SourceControl.Kind)
 }
 
 /// worktree のソース管理の状態——打ちかけのメッセージ・操作の列（走っている操作と止める手）・最後の失敗。根（正準形の
@@ -243,6 +243,8 @@ final class SourceControl {
     case nil, .cancelled?, .notManaged?: break
     case let failure?: self.failure = Failure(kind: operation.kind, cause: .git(failure))
     }
-    for observer in observers { observer.value?.sourceControlOperationDidFinish(self) }
+    for observer in observers {
+      observer.value?.sourceControl(self, operationDidFinish: operation.kind)
+    }
   }
 }

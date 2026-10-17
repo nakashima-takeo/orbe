@@ -66,10 +66,11 @@ final class RepoWatcherTests: OrbeTestCase {
     XCTAssertTrue(
       batches.allSatisfy { $0.paths.allSatisfy { !$0.contains("/.git/") } },
       "git dir の中はパスに出ない: \(batches)")
+    XCTAssertFalse(batches.contains { $0.refsChanged }, "index だけでは ref の変化ではない")
     batches.removeAll()
 
     XCTAssertTrue(repo.git(["commit", "-qm", "c"]).isSuccess)
-    pumpMain(until: { batches.contains { $0.gitChanged } }, "HEAD / refs の変化")
+    pumpMain(until: { batches.contains { $0.refsChanged } }, "HEAD / refs の変化")
     batches.removeAll()
 
     XCTAssertTrue(repo.git(["tag", "t"]).isSuccess)
@@ -96,6 +97,12 @@ final class RepoWatcherTests: OrbeTestCase {
       "/MERGE_HEAD", "/rebase-merge/done", "/sequencer/todo", "/AUTO_MERGE", "/some-new-state-file",
     ] {
       XCTAssertTrue(RepoWatcher.isGitStateChange(state), state)
+    }
+    for ref in ["/HEAD", "/refs/remotes/origin/main", "/packed-refs", "/reftable/tables.list"] {
+      XCTAssertTrue(RepoWatcher.isRefChange(ref), ref)
+    }
+    for state in ["/index", "/FETCH_HEAD", "/ORIG_HEAD", "/MERGE_HEAD", "/rebase-merge/done"] {
+      XCTAssertFalse(RepoWatcher.isRefChange(state), state)
     }
   }
 

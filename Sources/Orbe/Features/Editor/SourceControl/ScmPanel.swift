@@ -51,9 +51,10 @@ final class ScmPanel {
   private(set) var focusedArea: Area?
   /// 焦点を入れる要求。当てた後に残すと、パネルが次に現れたときに古い要求が焦点を奪う。
   private(set) var focusRequest: Area?
-  /// HEAD が push 済みか（nil = 分からない——読んでいる・読めない・今の HEAD と違うコミットを読んだ）。
+  /// HEAD が push 済みか（nil = 分からない——HEAD・remote 追跡 ref が動きうるきっかけの後で読み直している・読めない・今の
+  /// HEAD と違うコミットを読んだ）。index だけの変化やステージ等の終わりの読み直しの間は、同じ HEAD なら前の値を使う。
   var isHeadPushed: Bool? {
-    guard !headJob.isRunning, let headPush, headPush.commit == branch?.commit else { return nil }
+    guard !headPushIsStale, let headPush, headPush.commit == branch?.commit else { return nil }
     return headPush.isPushed
   }
 
@@ -76,9 +77,11 @@ final class ScmPanel {
   @ObservationIgnored private var changesAreStale = true
   @ObservationIgnored private var graphLimit = ScmPanel.graphPage
   @ObservationIgnored private var graphJob = Job()
-  /// HEAD の push 済みの読み（観測する——▾ の押せる姿が、読みの始まりと終わりに追従する）。
-  private var headJob = Job()
+  @ObservationIgnored private var headJob = Job()
   private var headPush: (commit: String, isPushed: Bool)?
+  /// HEAD・remote 追跡 ref が動きうるきっかけの後、その後に始めた読みが終わるまで（前の値を有効なまま残すと、自分の push の
+  /// 直後に amend・取り消しが押せる）。
+  private var headPushIsStale = false
   /// パネルを出したときに根のサービスがまだ git 管理下と分かっていなかった（最初の status で読む）。
   @ObservationIgnored private var readsOnResolve = false
 
@@ -99,7 +102,7 @@ final class ScmPanel {
         files.addObserver(self)
         resolveManaged()
         statusDidChange()
-        if isShown { readGraphAndHead() }
+        if isShown { readGraphAndHead(refsMayHaveMoved: true) }
       } else {
         liveFiles?.removeObserver(self)
         liveFiles = nil
@@ -115,7 +118,7 @@ final class ScmPanel {
       if isShown {
         resolveManaged()
         requestBuild()
-        readGraphAndHead()
+        readGraphAndHead(refsMayHaveMoved: true)
       } else {
         panelDidHide()
       }
@@ -158,7 +161,7 @@ final class ScmPanel {
     resolveManaged()
     if readsOnResolve {
       readsOnResolve = false
-      readGraphAndHead()
+      readGraphAndHead(refsMayHaveMoved: true)
     }
     changesAreStale = true
     requestBuild()
@@ -246,8 +249,9 @@ final class ScmPanel {
 
   // MARK: - グラフと HEAD
 
-  /// グラフと HEAD の push 済みを読み直す（パネルを出している間だけ）。
-  func readGraphAndHead() {
+  /// グラフと HEAD の push 済みを読み直す（パネルを出している間だけ）。`refsMayHaveMoved` なら、HEAD の push 済みは読み
+  /// 終わるまで分からないとする（パネルを出した・再読込・ref の変化・自分のネット操作の終わり）。
+  func readGraphAndHead(refsMayHaveMoved: Bool) {
     guard isShown else { return }
     guard liveFiles?.repo != nil else {
       headPush = nil
@@ -255,7 +259,7 @@ final class ScmPanel {
       return
     }
     readGraph()
-    readHead()
+    readHead(refsMayHaveMoved: refsMayHaveMoved)
   }
 
   /// グラフをいつも先頭から今の件数で読む（続きを継ぎ足さない——読みの間に HEAD が動くと重複・欠落する）。読めなければ
@@ -283,8 +287,12 @@ final class ScmPanel {
 
   /// HEAD 1 件をグラフの口で読み、push 済みか（どれかの remote 追跡ブランチから届くか）を読んだコミットと組で持つ。グラフの
   /// 50 件に HEAD が入る保証は無い（upstream が先に進んでいると上位を upstream が占める）ので、グラフの結果から拾わない。
-  private func readHead() {
+  ///
+  /// 分からないとした後は、その後に始めた読みが終わるまで分からないまま（走っている読みはきっかけより前を読んでいるかも
+  /// しれないので、終わったらもう 1 回読む）。
+  private func readHead(refsMayHaveMoved: Bool) {
     guard isShown, let repo = liveFiles?.repo else { return }
+    if refsMayHaveMoved { headPushIsStale = true }
     if headJob.isRunning {
       headJob.again = true
       return
@@ -296,7 +304,9 @@ final class ScmPanel {
       headPush = graph?.commits.first.map { ($0.oid, $0.isPushed) }
       if headJob.again {
         headJob.again = false
-        readHead()
+        readHead(refsMayHaveMoved: false)
+      } else {
+        headPushIsStale = false
       }
     }
   }
@@ -310,7 +320,7 @@ final class ScmPanel {
   /// 再読込: status を取り直し、グラフと HEAD の push 済みを読み直す。
   func refresh() {
     liveFiles?.requestStatusRefresh()
-    readGraphAndHead()
+    readGraphAndHead(refsMayHaveMoved: true)
   }
 
   // MARK: - 開閉
@@ -365,14 +375,16 @@ extension ScmPanel: RootFilesObserver {
 
   func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version) {}
 
-  func rootFilesGitStateDidChange(_ files: RootFiles) {
+  func rootFilesGitStateDidChange(_ files: RootFiles, refsChanged: Bool) {
     resolveManaged()
-    readGraphAndHead()
+    readGraphAndHead(refsMayHaveMoved: refsChanged)
   }
 }
 
 extension ScmPanel: SourceControlObserver {
-  func sourceControlOperationDidFinish(_ control: SourceControl) {
-    readGraphAndHead()
+  /// 自分のネット操作の終わりは remote 追跡 ref を動かしうる（push は HEAD を動かさないので、前の値を残すと push の直後に
+  /// amend・取り消しが押せる）。HEAD を動かす操作は、HEAD の違いで分からないになる。
+  func sourceControl(_ control: SourceControl, operationDidFinish kind: SourceControl.Kind) {
+    readGraphAndHead(refsMayHaveMoved: kind.isNetwork)
   }
 }

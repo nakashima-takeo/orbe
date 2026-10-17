@@ -15,6 +15,9 @@ final class RepoWatcher {
     var gitChanged = false
     /// 取りこぼし（イベントの drop・root の付け替え）。全部見直す。
     var scanAll = false
+    /// git の状態のうち ref（HEAD・refs・packed-refs・reftable）が変わった（`gitChanged` の一部。何を ref と見るかは
+    /// `isRefChange`）。
+    var refsChanged = false
 
     var isEmpty: Bool { paths.isEmpty && !gitChanged && !scanAll }
 
@@ -22,6 +25,7 @@ final class RepoWatcher {
       paths.formUnion(other.paths)
       gitChanged = gitChanged || other.gitChanged
       scanAll = scanAll || other.scanAll
+      refsChanged = refsChanged || other.refsChanged
     }
   }
 
@@ -98,12 +102,15 @@ final class RepoWatcher {
       if flag & Self.scanAllFlags != 0 {
         batch.scanAll = true
         batch.gitChanged = true
+        batch.refsChanged = true
         continue
       }
       let spelled = respell(path)
       if let gitDir = gitDirs.first(where: { spelled.hasPrefix($0 + "/") }) {
-        if Self.isGitStateChange(String(spelled.dropFirst(gitDir.count))) {
+        let sub = String(spelled.dropFirst(gitDir.count))
+        if Self.isGitStateChange(sub) {
           batch.gitChanged = true
+          if Self.isRefChange(sub) { batch.refsChanged = true }
         }
       } else if !spelled.contains("/.git/"), !spelled.hasSuffix("/.git") {
         batch.paths.insert(spelled)
@@ -135,6 +142,14 @@ final class RepoWatcher {
     guard !sub.hasSuffix(".lock") else { return false }
     return !ignoredGitDirEntries.contains(sub.dropFirst().prefix { $0 != "/" })
   }
+
+  /// git の状態の変化 `sub`（git dir からの相対パス）が ref の変化か——HEAD・refs・packed-refs・reftable。HEAD のコミットと
+  /// remote 追跡 ref はここでしか動かない（index・FETCH_HEAD・ORIG_HEAD・merge の進行状態は ref ではない）。
+  static func isRefChange(_ sub: String) -> Bool {
+    refEntries.contains(sub.dropFirst().prefix { $0 != "/" })
+  }
+
+  private static let refEntries: Set<Substring> = ["HEAD", "refs", "packed-refs", "reftable"]
 
   /// タイマーを `due` に張り直す（常に 1 本）。
   private func arm(at due: Date) {
