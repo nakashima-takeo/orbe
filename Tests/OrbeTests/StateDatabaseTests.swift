@@ -28,7 +28,8 @@ final class StateDatabaseTests: OrbeTestCase {
   /// 版 1 の DB を作り、行を書いて閉じる。
   private func seedVersion1(_ names: [String], in folder: URL? = nil) throws {
     let db = try XCTUnwrap(
-      StateDatabase.open(folder: folder ?? self.folder, version: 1, schema: Self.schemaV1))
+      StateDatabase.open(folder: folder ?? self.folder, version: 1, schema: Self.schemaV1) { _ in ()
+      }?.database)
     try db.transaction {
       for name in names {
         let insert = try db.prepare("INSERT INTO item VALUES (?)")
@@ -47,7 +48,9 @@ final class StateDatabaseTests: OrbeTestCase {
 
   private func names(inVersion1At folder: URL) throws -> [String] {
     try names(
-      XCTUnwrap(StateDatabase.open(folder: folder, version: 1, schema: Self.schemaV1)))
+      XCTUnwrap(
+        StateDatabase.open(folder: folder, version: 1, schema: Self.schemaV1) { _ in () }?.database)
+    )
   }
 
   /// DB のフォルダの中の、SQLite の付属ファイル（-wal・-shm）でない本体。閉じた後は中身が本体へ書き戻されている。
@@ -97,7 +100,8 @@ final class StateDatabaseTests: OrbeTestCase {
     let garbage = Data("これは SQLite の DB ではない".utf8)
     try garbage.write(to: databaseFile(in: folder))
 
-    let db = StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2)
+    let db = StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2) { _ in () }?
+      .database
 
     try assertStartsEmpty(db)
     let quarantined = try quarantinedFolders()
@@ -116,7 +120,8 @@ final class StateDatabaseTests: OrbeTestCase {
     try handle.write(contentsOf: Data(repeating: 0xFF, count: 4096))
     try handle.close()
 
-    let db = StateDatabase.open(folder: folder, version: 1, schema: Self.schemaV1)
+    let db = StateDatabase.open(folder: folder, version: 1, schema: Self.schemaV1) { _ in () }?
+      .database
 
     XCTAssertEqual(try quarantinedFolders().count, 1, "中の壊れも退避する")
     XCTAssertEqual(try names(XCTUnwrap(db)), [], "空で始まる")
@@ -125,7 +130,8 @@ final class StateDatabaseTests: OrbeTestCase {
   func testVersionMismatchIsQuarantinedWithReadableContent() throws {
     try seedVersion1(["版 1 の中身"])
 
-    let db = StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2)
+    let db = StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2) { _ in () }?
+      .database
 
     try assertStartsEmpty(db)
     let quarantined = try XCTUnwrap(quarantinedFolders().first)
@@ -141,7 +147,7 @@ final class StateDatabaseTests: OrbeTestCase {
     try Data("旧 JSON の退避物".utf8).write(to: jsonQuarantine)
     try seedVersion1(["版 1 の中身"])
 
-    _ = StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2)
+    _ = StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2) { _ in () }?.database
 
     let quarantined = try quarantinedFolders()
     XCTAssertEqual(quarantined.count, 1, "退避物のフォルダは最新 1 件だけ")
@@ -160,11 +166,12 @@ final class StateDatabaseTests: OrbeTestCase {
 
     try denyEntryCreation(in: parent)
     XCTAssertNil(
-      StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2),
+      StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2) { _ in () }?.database,
       "退避できなければ接続を返さない（原本に新しい版を作らない）")
 
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: parent.path)
-    let db = StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2)
+    let db = StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2) { _ in () }?
+      .database
 
     try assertStartsEmpty(db)
     let quarantined = try XCTUnwrap(
@@ -181,7 +188,8 @@ final class StateDatabaseTests: OrbeTestCase {
     let file = try databaseFile(in: folder)
     try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: file.path)
 
-    XCTAssertNil(StateDatabase.open(folder: folder, version: 1, schema: Self.schemaV1))
+    XCTAssertNil(
+      StateDatabase.open(folder: folder, version: 1, schema: Self.schemaV1) { _ in () }?.database)
 
     XCTAssertEqual(try quarantinedFolders(), [], "健全かもしれない原本を退避しない")
     try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)
@@ -199,7 +207,8 @@ final class StateDatabaseTests: OrbeTestCase {
       throw XCTSkip("ファイル権限が効かない環境（root 等）では開けない DB を作れない")
     }
 
-    XCTAssertNil(StateDatabase.open(folder: folder, version: 1, schema: Self.schemaV1))
+    XCTAssertNil(
+      StateDatabase.open(folder: folder, version: 1, schema: Self.schemaV1) { _ in () }?.database)
 
     XCTAssertEqual(try quarantinedFolders(), [], "確かめられなかっただけの原本を退避しない")
     try fm.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)

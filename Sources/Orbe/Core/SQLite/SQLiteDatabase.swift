@@ -11,6 +11,9 @@ struct SQLiteError: Error, CustomStringConvertible {
   var primaryCode: Int32 { code & 0xFF }
 
   var description: String { "SQLite \(code): \(message)" }
+
+  /// DB でない・壊れている（待っても直らない）。
+  var isBroken: Bool { primaryCode == SQLITE_NOTADB || primaryCode == SQLITE_CORRUPT }
 }
 
 /// 束縛する値。
@@ -44,6 +47,9 @@ final class SQLiteDatabase {
   }
 
   var isReadOnly: Bool { sqlite3_db_readonly(handle, "main") == 1 }
+
+  /// この接続で最後に足した行の rowid。
+  var lastInsertRowID: Int64 { sqlite3_last_insert_rowid(handle) }
 
   /// 行を返さない文（複数可）を流す。
   func exec(_ sql: String) throws {
@@ -150,3 +156,31 @@ final class SQLiteStatement {
 
 /// `SQLITE_TRANSIENT`（C のマクロなので Swift から見えない）。束縛した文字列を SQLite に複写させる。
 private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
+extension SQLiteDatabase {
+  /// 行を返さない文を 1 つ流す。
+  func run(_ sql: String, _ values: [SQLiteValue]) throws {
+    let statement = try prepare(sql)
+    try statement.bind(values)
+    while try statement.step() {}
+  }
+
+  /// 行ごとに `row` で読む。
+  func select<T>(
+    _ sql: String, _ values: [SQLiteValue], _ row: (SQLiteStatement) throws -> T
+  ) throws -> [T] {
+    let statement = try prepare(sql)
+    try statement.bind(values)
+    var rows: [T] = []
+    while try statement.step() { rows.append(try row(statement)) }
+    return rows
+  }
+}
+
+extension SQLiteStatement {
+  func int(at column: Int) -> Int { Int(int64(at: column)) }
+
+  func optionalInt64(at column: Int) -> Int64? {
+    isNull(at: column) ? nil : int64(at: column)
+  }
+}
