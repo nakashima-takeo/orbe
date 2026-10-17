@@ -130,9 +130,12 @@ extension ScmRowView {
     var refs = commit.refs
     var widths = refs.map { refWidth($0.label) }
     let minimumSubject: CGFloat = 48
-    while !refs.isEmpty,
-      limit - widths.reduce(0, +) - CGFloat(refs.count) * Theme.Space.tick - x < minimumSubject
-    {
+    func subjectRight(_ widths: [CGFloat]) -> CGFloat {
+      widths.isEmpty
+        ? limit - gap
+        : limit - widths.reduce(0, +) - CGFloat(widths.count - 1) * Theme.Space.tick - gap * 2
+    }
+    while !refs.isEmpty, subjectRight(widths) - x < minimumSubject {
       refs.removeLast()
       widths.removeLast()
     }
@@ -145,9 +148,8 @@ extension ScmRowView {
           height: Theme.Layout.editorScmRef), colors, scm, in: context)
       right -= width + Theme.Space.tick
     }
-    let subjectRight = refs.isEmpty ? limit - gap : right + Theme.Space.tick - gap * 2
     commit.subject.draw(
-      at: x, top: self.top(commit.subject), width: max(0, subjectRight - x),
+      at: x, top: self.top(commit.subject), width: max(0, subjectRight(widths) - x),
       commit.isPushed ? colors.muted : colors.text, context)
   }
 
