@@ -70,6 +70,26 @@ final class LineDiffTests: XCTestCase {
       LineDiff.hunks(old: TextRope("a\n"), new: empty, limit: .edits(10)), [hunk(1, 1, 0, 0)])
     XCTAssertEqual(
       LineDiff.hunks(old: TextRope("a"), new: empty, limit: .edits(10)), [hunk(1, 1, 1, 1)])
+    XCTAssertEqual(
+      LineDiff.hunks(base: "", current: TextRope("\na")), [hunk(1, 0, 2, 1)], "先頭の空の行と対応する")
+    XCTAssertEqual(
+      LineDiff.hunks(old: TextRope("\na"), new: empty, limit: .edits(10)), [hunk(2, 1, 1, 0)])
+    XCTAssertEqual(
+      LineDiff.hunks(base: "a\n\nb", current: empty), [hunk(1, 3, 1, 1)], "途中の空の行を空の本文に結ばない")
+    XCTAssertEqual(
+      LineDiff.hunks(old: TextRope("a\n\nb"), new: empty, limit: .edits(10)), [hunk(1, 3, 1, 1)])
+  }
+
+  /// 改行で終わる本文どうしなら、末尾の空の行は両側で揃う——末尾に空の行で始まる塊を足すと、足した塊が追加になる
+  /// （VS Code・git と同じ位置）。
+  func testTheTrailingEmptyLinesOfNewlineEndedTextsPair() {
+    XCTAssertEqual(LineDiff.hunks(base: "a\n", current: TextRope("a\n\nb\n")), [hunk(1, 0, 2, 2)])
+    XCTAssertEqual(
+      LineDiff.hunks(base: "func a() {}\n", current: TextRope("func a() {}\n\nfunc b() {}\n")),
+      [hunk(1, 0, 2, 2)])
+    XCTAssertEqual(
+      LineDiff.hunks(base: "a\nb\n", current: TextRope("a\nb\n\n")), [hunk(2, 0, 3, 1)])
+    XCTAssertEqual(LineDiff.hunks(base: "a\n\nb\n", current: TextRope("a\n")), [hunk(2, 2, 1, 0)])
   }
 
   /// 行の同一性はバイト列——正準等価（NFC の é と NFD の e + 結合アクセント）は違う行。git と同じ見方。
