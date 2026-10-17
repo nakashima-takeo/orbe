@@ -84,10 +84,15 @@ class AutomationPartPassTestCase: OrbeTestCase {
     return input
   }
 
-  var succeeded: AutomationPartPass.Output? {
-    guard case .succeeded(let output, _, _) = outcomes.first else { return nil }
-    return output
+  /// 返った順の成功の出力。失敗した回は nil。
+  var outputs: [AutomationPartPass.Output?] {
+    outcomes.map { outcome in
+      guard case .succeeded(let output, _, _) = outcome else { return nil }
+      return output
+    }
   }
+
+  var succeeded: AutomationPartPass.Output? { outputs.first ?? nil }
 
   var failed: String? {
     guard case .failed(let reason, _, _) = outcomes.first else { return nil }

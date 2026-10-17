@@ -2,11 +2,13 @@ import XCTest
 
 @testable import Orbe
 
-/// 取得と判定の何も無い回——依頼文は nothing の 1 行だけを出させ、読みは nothing の 1 行だけ・何も出さない出力を正しい 0 件と
-/// して受け、nothing の前の地の文と、項目と一緒の nothing の行は外れた行にする（処理は `AutomationPartPassTests`）。
+/// 何も無い回——取得と判定の依頼文は nothing の 1 行だけを出させ、読みは nothing の 1 行だけ・何も出さない出力を正しい 0 件と
+/// して受け、nothing の前の地の文と、項目と一緒の nothing の行は外れた行にする（処理は `AutomationPartPassTests`）。報告と仕事は
+/// 最後の空でない行が nothing なら、前置きの文ごと報告の文にしない。
 ///
 /// 壊れると何が起きるか: 何も無い回に黙ったモデルが催促されて地の文を返し、候補の無いよくある回に出し直しと通知が起きる。
-/// nothing の前の地の文や項目と一緒の申告を黙って捨て、出力の誤りに気づけない。
+/// nothing の前の地の文や項目と一緒の申告を黙って捨て、出力の誤りに気づけない。言うことの無い報告・何もしなかった仕事の
+/// nothing の 1 行が、報告の文としてボードと通知にそのまま出る。
 final class AutomationPartPassEmptyTests: AutomationPartPassTestCase {
   private static let nothing = #"{"nothing":"新しい項目が無い"}"#
 
@@ -71,5 +73,28 @@ final class AutomationPartPassEmptyTests: AutomationPartPassTestCase {
 
     XCTAssertEqual(breach?.lines.map(\.line), [3], "\(outcomes)")
     XCTAssertNotNil(failed)
+  }
+
+  func testReportKeepsItsTextButNotANothingLine() {
+    start(AutomationGraphTests.agent("r", from: ["f"]), .report, .report([row("a")]))
+    start(AutomationGraphTests.agent("r", from: ["f"]), .report, .report([row("a")]))
+
+    jobs.finish(0, replied("開いている PR は 2 件。\n"))
+    jobs.finish(1, replied("障害はありません。\n" + Self.nothing))
+
+    XCTAssertEqual(
+      outputs, [.report("開いている PR は 2 件。"), .report(nil)], "\(outcomes)")
+  }
+
+  func testWorkKeepsItsTextButANothingLineIsTheReasonItDidNothing() {
+    start(AutomationGraphTests.agent("w", tools: [Self.tool]), .work, .work)
+    start(AutomationGraphTests.agent("w", tools: [Self.tool]), .work, .work)
+
+    jobs.finish(0, replied("2 件を投稿した。\n"))
+    jobs.finish(1, replied("今日は土曜日です。\n\n" + #"{"nothing":"土曜なので投稿しない"}"#))
+
+    XCTAssertEqual(
+      outputs, [.work(.done("2 件を投稿した。")), .work(.nothing("土曜なので投稿しない"))],
+      "\(outcomes)")
   }
 }
