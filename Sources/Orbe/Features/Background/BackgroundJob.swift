@@ -79,10 +79,11 @@ struct BackgroundAgentCall: Equatable {
   var prompt: String
 }
 
-/// 1 回の実行の上限。`output` はコマンドでは標準出力、agent では最終応答の大きさ（バイト）。
+/// 1 回の実行の上限。`idle` が nil なら無出力では打ち切らない。`output` はコマンドでは標準出力、agent では最終応答の大きさ
+/// （バイト）。
 struct BackgroundLimits: Equatable {
   var elapsed: TimeInterval
-  var idle: TimeInterval
+  var idle: TimeInterval?
   var output: Int
   var stderr: Int
 

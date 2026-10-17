@@ -1,6 +1,6 @@
 import Foundation
 
-/// 裏の 1 回。子を専用のプロセスグループで起こし、経過時間・無出力・出力量の上限で打ち切り、グループごと片付けてから返る。
+/// 裏の 1 回。子を専用のプロセスグループで起こし、経過時間・無出力（任意）・出力量の上限で打ち切り、グループごと片付けてから返る。
 ///
 /// 実行の寿命＝グループの寿命。リーダーの終了は回収せずに観測し（`waitid` の `WNOWAIT`）、グループへ SIGTERM を送って
 /// 背景に残った孫を片付けてから、最後にリーダーを回収する。回収してから `killpg` すると、空いた pgid が再利用されたときに
@@ -287,7 +287,8 @@ final class BackgroundProcess {
   }
 
   private func nextLimitDeadline() -> DispatchTime {
-    min(startedAt + spec.elapsedLimit, lastActivity + spec.idleLimit)
+    let elapsed = startedAt + spec.elapsedLimit
+    return spec.idleLimit.map { min(elapsed, lastActivity + $0) } ?? elapsed
   }
 
   /// 期限で目覚めたら測り直す。出力が来ていれば無出力の期限は延びている。
@@ -295,7 +296,7 @@ final class BackgroundProcess {
     let now = DispatchTime.now()
     if now >= startedAt + spec.elapsedLimit {
       terminate(.limited(.elapsed))
-    } else if now >= lastActivity + spec.idleLimit {
+    } else if let idle = spec.idleLimit, now >= lastActivity + idle {
       terminate(.limited(.idle))
     } else {
       limitTimer?.schedule(deadline: nextLimitDeadline())
@@ -350,7 +351,7 @@ extension BackgroundProcess {
     var directory: String
     var stdin: Data?
     var elapsedLimit: TimeInterval
-    var idleLimit: TimeInterval
+    var idleLimit: TimeInterval?
     var stdout: Stdout
     var stderr: Capture
   }
