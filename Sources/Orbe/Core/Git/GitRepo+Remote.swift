@@ -2,19 +2,23 @@ import Foundation
 
 // MARK: - リモートとの書き込み（fetch・pull・push）
 
-/// 利用者が起こすリモートとの書き込み。無出力で打ち切らず `handle` で止め、進捗（git の語の行）を `onProgress` へ
+/// 利用者が起こすリモートとの書き込み。無出力で打ち切らず（裏の fetch を除く）`handle` で止め、進捗（git の語の行）を `onProgress` へ
 /// 届いた順に渡す。ユーザーの設定（既定の remote・prune・`pull.rebase`・`push.default`・`pushRemote`・
 /// `core.sshCommand`・credential helper）はそのまま効く。completion は main で返る。
 ///
 /// 前提（upstream・detached・push 先・止まった操作）は本体の git を起こす前に判定する。`branch` は呼んだ時点の status の
 /// ブランチで、nil（分からない）ならブランチに依る判定を飛ばして git に任せる。
 extension GitRepo {
+  /// `unattended` は人が見ていない実行（裏の fetch）——止められる人がいないので無出力で打ち切り（進捗の行が延命する）、
+  /// askpass・資格情報の窓を出させない。
   func fetch(
-    onProgress: @escaping (String) -> Void, handle: GitRunner.Handle,
+    unattended: Bool = false, onProgress: @escaping (String) -> Void, handle: GitRunner.Handle,
     completion: @escaping (GitWriteFailure?) -> Void
   ) {
     runner.run(
-      ["fetch", "--progress"], cwd: root, timesOut: false, onProgress: onProgress, handle: handle
+      ["fetch", "--progress"], cwd: root,
+      environment: unattended ? GitRunner.unattendedEnvironment : [:], timesOut: unattended,
+      onProgress: onProgress, handle: handle
     ) { completion(.ofRemote($0)) }
   }
 

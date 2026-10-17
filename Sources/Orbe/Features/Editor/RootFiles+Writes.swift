@@ -7,8 +7,9 @@ import Foundation
 /// 待たずに落ちる）。index を書く操作（ステージ・解除・破棄・コミット・amend・取り消し・pull）は投げた順に 1 つずつ
 /// 走り、fetch・push は並ばない。
 ///
-/// どの書き込みも無出力で打ち切らず、止める手（`Write`）を返す。完了は「書き込みの後に始まった status の取り直し」が
-/// 済んでから main で返る——完了が届いた時点で `status` はもう書き込み後の姿になっている（監視の到着を待たない）。
+/// どの書き込みも（人が見ていない裏の fetch を除き）無出力で打ち切らず、止める手（`Write`）を返す。完了は「書き込みの
+/// 後に始まった status の取り直し」が済んでから main で返る——完了が届いた時点で `status` はもう書き込み後の姿になって
+/// いる（監視の到着を待たない）。
 /// baseline の取り直しは待たない（smudge が詰まっても完了は遅れない）。git 管理外の根では呼べない（`notManaged`）。
 ///
 /// 完了を返すまでは、返りを待つ処理がサービスを強く握る——順番待ちは止める手（行列との輪）、走っている間は git の完了の
@@ -120,12 +121,15 @@ extension RootFiles {
       }, completion)
   }
 
-  /// 取ってくる。並ばない。
+  /// 取ってくる。並ばない。`unattended` は人が見ていない裏の fetch（無出力で打ち切り、askpass・資格情報の窓を出させない）。
   @discardableResult
   func fetch(
-    onProgress: @escaping (String) -> Void, completion: @escaping (GitWriteFailure?) -> Void
+    unattended: Bool = false, onProgress: @escaping (String) -> Void,
+    completion: @escaping (GitWriteFailure?) -> Void
   ) -> Write {
-    start({ $0.fetch(onProgress: onProgress, handle: $1, completion: $2) }, completion)
+    start(
+      { $0.fetch(unattended: unattended, onProgress: onProgress, handle: $1, completion: $2) },
+      completion)
   }
 
   // MARK: - 順番と完了
