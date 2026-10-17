@@ -5,21 +5,26 @@ import XCTest
 
 extension RootFilesWritesTests {
   /// HEAD が push 済み（どれかの remote 追跡ブランチから届く）なら、amend も取り消しも何も書かずに断る——パネルの押せる・
-  /// 押せないが遅れていても（▾ を開いている間の外の push）、push 済みのコミットを書き換えない。
+  /// 押せないが遅れていても（▾ を開いている間の外の push）、push 済みのコミットを書き換えず、amend の先にステージする行も
+  /// ステージしない。
   func testAPushedHeadIsNotRewritten() throws {
     repo.addOrigin()
     let files = repo.files()
     let pushed = repo.head()
     try repo.write("a.txt", "amended\n")
+    try repo.write("n.txt", "new\n")
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
+    let index = repo.git(["ls-files", "-s"]).stdoutText
 
-    let amended = finish(files) { files.commit(message: "reword", amend: true, completion: $0) }
+    let staging = GitCommitContent.staging([GitStatus.Row(path: "n.txt", originalPath: nil)])
+    let amended = finish(files) {
+      files.commit(message: "reword", content: staging, amend: true, completion: $0)
+    }
     XCTAssertEqual(amended.failure, .headPushed)
     let undone = finish(files) { files.undoLastCommit(completion: $0) }
     XCTAssertEqual(undone.failure, .headPushed)
     XCTAssertEqual(repo.head(), pushed)
-    let staged = undone.statusAtCompletion?.entries["a.txt"]
-    XCTAssertEqual(staged, GitStatus.Entry(staged: .modified, unstaged: nil), "ステージ済みは残る")
+    XCTAssertEqual(repo.git(["ls-files", "-s"]).stdoutText, index, "index は押す前のまま")
 
     let committed = finish(files) { files.commit(message: "local", completion: $0) }
     XCTAssertNil(committed.failure, "新しいコミットは書ける")
