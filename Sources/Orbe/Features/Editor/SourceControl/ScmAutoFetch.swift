@@ -1,9 +1,9 @@
 import AppKit
 
-/// リポジトリの裏の fetch の係。そのリポジトリのソース管理パネルを出していて設定がオンの面（欲しがる面）があり、Orbe が
-/// 前面にある間、前回の fetch・pull の終わりから `ScmAutoFetchRules.interval` ごとに裏で fetch する。共通の git dir（正準形）
-/// ごとに 1 つで、アプリが動いている間持つ——同じリポジトリの worktree は remote 追跡 ref を共有し、並んだ fetch・pull は
-/// 後の側が落ちる。
+/// リポジトリの裏の fetch の係。そのリポジトリのエディター面が見えていて設定がオンの面（欲しがる面）があり、Orbe が
+/// 前面にある間、前回の fetch・pull の終わりから `ScmAutoFetchRules.interval` ごとに裏で fetch する（ソース管理パネルを
+/// 出しているかに依らない）。共通の git dir（正準形）ごとに 1 つで、アプリが動いている間持つ——同じリポジトリの worktree は
+/// remote 追跡 ref を共有し、並んだ fetch・pull は後の側が落ちる。
 ///
 /// 裏の fetch は worktree の操作の列（`SourceControl`）に載らないので、帯・失敗の文・ボタンの可否に出ない。先行・遅れが
 /// 新しく見えるのは、ref が動いた後の監視が、そのリポジトリの見えている根に届くから。人のネット操作は、走っている裏の
@@ -73,7 +73,7 @@ final class ScmAutoFetch {
 
   // MARK: - 欲しがる面
 
-  /// 面 `panel` が欲しがる（パネルを出していて、根の git dir が分かり、設定がオン）かを決め直した。
+  /// 面 `panel` が欲しがる（面が見えていて、根の git dir が分かり、設定がオン）かを決め直した。
   func setWanted(_ wanted: Bool, by panel: ScmPanel) {
     wanting.removeAll { $0.panel == nil }
     let isWanting = wanting.contains { $0.panel === panel }

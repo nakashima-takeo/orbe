@@ -3,7 +3,8 @@ import XCTest
 
 @testable import Orbe
 
-/// 裏の fetch（実 git）: パネルを出していて Orbe が前面なら、手で何も押さなくても裏の fetch で先行・遅れが新しくなり、
+/// 裏の fetch（実 git）: エディター面が見えていて Orbe が前面なら（ソース管理パネルを出していなくても）、手で何も押さなくても
+/// 裏の fetch で先行・遅れが新しくなり、
 /// worktree の操作の列（帯・失敗の文・ボタンの可否）には出ない。
 ///
 /// 壊れると何が起きるか。別の clone で origin が進んでも「同期 ↓N」に気づけない・3 分ごとに帯や失敗の文が出入りする。
@@ -36,6 +37,28 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
       until: { panel.branch?.upstream?.divergence?.behind == 1 }, timeout: 20, "裏の fetch で遅れが 1")
     XCTAssertTrue(panel.control.operations.isEmpty, "操作の列に載らない")
     XCTAssertNil(panel.control.failure)
+  }
+
+  /// ソース管理パネルを出していなくても、エディター面が見えていれば裏の fetch を欲しがり、遅れが新しくなる（件数は追従し、
+  /// グラフと HEAD は読まない）。面が見えなくなれば欲しがらない。
+  func testAVisiblePaneWithoutTheSourceControlPanelSeesTheRemoteAdvance() throws {
+    let repo = try TempGitRepo()
+    repo.addOrigin()
+    try repo.advanceOrigin(writing: "o.txt", "o\n")
+    let panel = ScmPanel(root: repo.root)
+    self.panel = panel
+    panel.isLive = true
+    pumpMain(until: { panel.branch?.upstream?.divergence != nil }, "先行・遅れが出る")
+    let autoFetch = ScmAutoFetch.shared(for: try XCTUnwrap(panel.liveFiles?.repo))
+    XCTAssertTrue(autoFetch.rules.isWanted, "パネルを出していなくても欲しがる")
+
+    NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
+    pumpMain(
+      until: { panel.branch?.upstream?.divergence?.behind == 1 }, timeout: 20, "裏の fetch で遅れが 1")
+    XCTAssertNil(panel.graph, "パネルを出していない間はグラフを読まない")
+
+    panel.isLive = false
+    XCTAssertFalse(autoFetch.rules.isWanted, "面が見えなくなれば欲しがらない")
   }
 
   /// 出しているパネルで裏の fetch を走らせる。止めても終わりが遅れるように、ref を書く hook の最初の 1 回を、SIGTERM を

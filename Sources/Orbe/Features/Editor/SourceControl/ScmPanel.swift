@@ -88,7 +88,8 @@ final class ScmPanel {
     var again = false
   }
 
-  /// 面が見えている間 true。立てると根のサービスを握って status を受け、下ろすと離す（行と件数は保つ）。
+  /// 面が見えている間 true。立てると根のサービスを握って status を受け、下ろすと離す（行と件数は保つ）。裏の fetch を
+  /// 欲しがるのも、この間だけ。
   @ObservationIgnored var isLive = false {
     didSet {
       guard isLive != oldValue else { return }
@@ -102,8 +103,8 @@ final class ScmPanel {
       } else {
         liveFiles?.removeObserver(self)
         liveFiles = nil
+        decideAutoFetch()
       }
-      decideAutoFetch()
     }
   }
 
@@ -118,7 +119,6 @@ final class ScmPanel {
       } else {
         panelDidHide()
       }
-      decideAutoFetch()
     }
   }
 
@@ -131,6 +131,8 @@ final class ScmPanel {
 
   // MARK: - 観測
 
+  /// 根のサービスが git 管理下かを読む。管理下なら裏の fetch を欲しがるか決め直す——根のサービスから何か届くたびに呼ぶので、
+  /// status の取り直しが落ち続けていても、根の git dir が分かった後の知らせで決まる。
   private func resolveManaged() {
     guard let files = liveFiles else { return }
     if files.repo != nil {
@@ -141,11 +143,10 @@ final class ScmPanel {
     }
   }
 
-  /// 裏の fetch を欲しがるか決め直し、そのリポジトリの係へ届ける。欲しがるのは、パネルを出していて、根の git dir が分かり、
-  /// 面の workspace の設定がオンの間。
+  /// 裏の fetch を欲しがるか決め直し、そのリポジトリの係へ届ける。欲しがるのは、面が見えていて（ソース管理パネルを出して
+  /// いるかに依らない）、根の git dir が分かり、面の workspace の設定がオンの間。
   func decideAutoFetch() {
-    let repo = isShown ? liveFiles?.repo : nil
-    let next = repo.map(ScmAutoFetch.shared(for:))
+    let next = liveFiles?.repo.map(ScmAutoFetch.shared(for:))
     if let autoFetch, autoFetch !== next { autoFetch.setWanted(false, by: self) }
     autoFetch = next
     next?.setWanted(autoFetchEnabled(), by: self)
@@ -154,8 +155,7 @@ final class ScmPanel {
   /// status が届いた（か、握り直した根のサービスの status を読む）。
   private func statusDidChange() {
     guard liveFiles?.status != nil else { return }
-    isManaged = true
-    decideAutoFetch()
+    resolveManaged()
     if readsOnResolve {
       readsOnResolve = false
       readGraphAndHead()
@@ -366,6 +366,7 @@ extension ScmPanel: RootFilesObserver {
   func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version) {}
 
   func rootFilesGitStateDidChange(_ files: RootFiles) {
+    resolveManaged()
     readGraphAndHead()
   }
 }

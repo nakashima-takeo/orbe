@@ -10,7 +10,7 @@ extension EditorPaneView {
     scm.autoFetchEnabled = { [weak self] in self?.settings()[SettingKeys.scmAutoFetch] ?? false }
   }
 
-  /// 面の workspace の実効設定が変わった（出ているソース管理パネルは裏の fetch を欲しがるか決め直す）。
+  /// 面の workspace の実効設定が変わった（裏の fetch を欲しがるか決め直す）。
   func settingsDidChange() {
     scm.decideAutoFetch()
   }

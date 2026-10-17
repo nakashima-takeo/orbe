@@ -5,7 +5,7 @@ import XCTest
 /// 裏の fetch をいつ撃つか（時刻を引数で渡す）: 前回の fetch・pull の終わりから 180 秒、撃たない条件、認証の失敗での止まりと
 /// 手の操作での解除、時刻の進め方、人の操作に譲ること。
 ///
-/// 壊れると何が起きるか。パネルを閉じても背後に回っても fetch し続け、毎回承認を求める ssh-agent が 3 分ごとに割り込む・
+/// 壊れると何が起きるか。面が見えなくなっても背後に回っても fetch し続け、毎回承認を求める ssh-agent が 3 分ごとに割り込む・
 /// 認証に落ちる remote へ撃ち続ける・失敗のたびにすぐ撃ち直す・人の pull と裏の fetch が並んで後の側が落ちる。
 final class ScmAutoFetchRulesTests: OrbeTestCase {
   private let start = Date(timeIntervalSinceReferenceDate: 0)
