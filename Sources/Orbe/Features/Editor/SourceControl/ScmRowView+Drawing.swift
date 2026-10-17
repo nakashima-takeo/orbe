@@ -183,7 +183,7 @@ extension ScmRowView {
   }
 
   /// 行の中のボタン（見出しのツールは 20・radius 4・hover 地 fill .08 で字が上がる、行のボタンは 18・radius 3・hover 地
-  /// fill .10）。押せない姿は字を薄くし、地を付けない。
+  /// fill .10）。押せない姿は地を付けず、字をツールは muted .35、行のボタンは editor.text .3 にする。
   private func drawButtons(
     _ rects: [(Button, NSRect)], tool: Bool, _ colors: RowColors, _ scm: ScmRowColors,
     in context: CGContext
@@ -197,7 +197,8 @@ extension ScmRowView {
       }
       let color =
         !button.isEnabled
-        ? scm.disabled : tool ? (hovered ? colors.text : colors.muted) : colors.text
+        ? (tool ? scm.toolDisabled : scm.disabled)
+        : tool ? (hovered ? colors.text : colors.muted) : colors.text
       let size = Theme.Layout.editorScmGlyph
       drawGlyph(
         button.glyph,
