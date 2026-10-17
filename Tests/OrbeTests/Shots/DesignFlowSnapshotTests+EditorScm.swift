@@ -21,7 +21,7 @@ extension DesignFlowSnapshotTests {
     defer { plain.cleanup() }
     try flow(
       "editor_scm", size: NSSize(width: 1100, height: 640), render: { shown },
-      steps: panelSteps(scene) + gitSteps(scene) + [
+      steps: panelSteps(scene) + gitSteps(scene) + branchSteps(scene) + [
         ("not_managed", { shown = AnyView(plain.view) })
       ])
   }
@@ -46,7 +46,7 @@ extension DesignFlowSnapshotTests {
     ]
   }
 
-  /// 本物の git の操作で作る状態——実行中の帯と止める・失敗の文・同期・公開。
+  /// 本物の git の操作で作る状態——実行中の帯と止める・失敗の文。
   private func gitSteps(_ scene: ScmFixtures.Scene) -> [(label: String, action: () -> Void)] {
     let panel = scene.panel
     let control = panel.control
@@ -81,6 +81,15 @@ extension DesignFlowSnapshotTests {
           pumpMain(until: { control.failure != nil }, "失敗の文")
         }
       ),
+    ]
+  }
+
+  /// 本物の git の操作で作るブランチの姿——同期・先行も遅れも無い・公開。
+  private func branchSteps(_ scene: ScmFixtures.Scene) -> [(label: String, action: () -> Void)] {
+    let panel = scene.panel
+    let control = panel.control
+    let git = scene.git
+    return [
       (
         "sync",
         {
