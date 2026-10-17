@@ -41,8 +41,8 @@ enum AutomationPrompts {
   static func readFetch(_ text: String) -> FetchReading {
     let lines = JSONLines<AutomationItem>(text)
     var rejected = AutomationRejections()
-    if let error = JSONLines<ReportedError>(text).items.first {
-      return .failed("the fetch reported an error: \(error.error)", rejected: rejected)
+    if let error = reportedError(in: text) {
+      return .failed("the fetch reported an error: \(error)", rejected: rejected)
     }
     for rejection in lines.rejected {
       rejected.add("line \(rejection.line): \(rejection.reason.text)")
@@ -60,6 +60,11 @@ enum AutomationPrompts {
       items.append(item)
     }
     return .items(items, rejected: rejected)
+  }
+
+  /// 取得の出力にある失敗の申告（`id` を持たず文字列の `error` を持つ行）のうち最初のものの理由。
+  static func reportedError(in text: String) -> String? {
+    JSONLines<ReportedError>(text).items.first?.error
   }
 
   // MARK: - 段
@@ -97,12 +102,20 @@ enum AutomationPrompts {
 
   /// 段の出力を JSON オブジェクトの行として読む。読めた行はそのまま次へ渡し、読めない行は理由付きで捨てる。
   static func readRows(_ text: String) -> (rows: [AutomationRow], rejected: AutomationRejections) {
-    let lines = JSONLines<AnyObjectLine>(text)
+    let (rows, broken) = objectRows(text)
     var rejected = AutomationRejections()
-    for rejection in lines.rejected {
-      rejected.add("line \(rejection.line): \(rejection.reason.text)")
-    }
-    return (lines.accepted.map { AutomationRow(line: $0.line, text: $0.text) }, rejected)
+    for line in broken { rejected.add(line.text) }
+    return (rows, rejected)
+  }
+
+  /// 出力を JSON オブジェクトの行として読む。読めない行はすべて行番号と理由で返す。
+  static func objectRows(_ text: String) -> (rows: [AutomationRow], broken: [AutomationBrokenLine])
+  {
+    let lines = JSONLines<AnyObjectLine>(text)
+    return (
+      lines.accepted.map { AutomationRow(line: $0.line, text: $0.text) },
+      lines.rejected.map { AutomationBrokenLine(line: $0.line, reason: $0.reason.text) }
+    )
   }
 
   /// 段の出力を読んだもの。`failure` があれば回の失敗。
@@ -256,69 +269,6 @@ enum AutomationPrompts {
       """
   }
 
-  /// 最後の段の行を判定の出力として読む。propose・resolve の形でない行・知らない項目や候補を指す行・不正なタイトルや
-  /// 期限・一覧に無い workspace・同じ項目への 2 つ目の候補は、理由付きで捨てる。Home の workspace は付け先なしとして受ける。
-  /// `itemIds` は今回の新しい項目の id。
-  static func readJudge(
-    _ rows: [AutomationRow], itemIds: Set<String>, choices: AutomationJudgeChoices
-  ) -> (decisions: [AutomationDecision], rejected: AutomationRejections) {
-    var rejected = AutomationRejections()
-    let openLinks = Set(choices.open.map(\.item.link))
-    var proposed = Set<String>()
-    var resolved = Set<String>()
-    var decisions: [AutomationDecision] = []
-    for row in rows {
-      let line: JudgeLine
-      switch JSONLines<JudgeLine>.decode(row.text) {
-      case .success(let read): line = read
-      case .failure(let reason):
-        rejected.add("line \(row.line): \(reason.text)")
-        continue
-      }
-      switch (line.propose, line.resolve) {
-      case (let id?, nil):
-        guard itemIds.contains(id) else {
-          rejected.add("propose \(id): not a new item")
-          continue
-        }
-        guard let rawTitle = line.title, let title = try? TaskStore.validTitle(rawTitle) else {
-          rejected.add("propose \(id): title must be a single non-empty line")
-          continue
-        }
-        var due: TaskItem.DueDate?
-        if let rawDue = line.due {
-          guard let parsed = TaskItem.DueDate(rawDue) else {
-            rejected.add("propose \(id): due is not a YYYY-MM-DD date: \(rawDue)")
-            continue
-          }
-          due = parsed
-        }
-        var workspace: UUID?
-        if let number = line.workspace, number != choices.workspaces.home {
-          guard let listed = choices.workspaces.listed.first(where: { $0.id == number }) else {
-            rejected.add("propose \(id): workspace \(number) is not a listed workspace")
-            continue
-          }
-          workspace = listed.persistentId
-        }
-        guard proposed.insert(id).inserted else {
-          rejected.add("propose \(id): proposed twice")
-          continue
-        }
-        decisions.append(.propose(itemId: id, title: title, due: due, workspace: workspace))
-      case (nil, let link?):
-        guard openLinks.contains(link), resolved.insert(link).inserted else {
-          rejected.add("resolve \(link): not a waiting proposal")
-          continue
-        }
-        decisions.append(.resolve(link: link))
-      default:
-        rejected.add("a line must have exactly one of propose / resolve")
-      }
-    }
-    return (decisions, rejected)
-  }
-
   /// 「2026-10-13 09:00 (Tuesday)」。
   private static func local(_ now: Date, _ timeZone: TimeZone) -> String {
     let local = DateFormatter()
@@ -342,6 +292,15 @@ enum AutomationPrompts {
 struct AutomationRow: Equatable {
   let line: Int
   let text: String
+}
+
+/// 出力の中の、受け付けなかった 1 行。`line` は 1 始まりの行番号（空行も数える）。
+struct AutomationBrokenLine: Equatable {
+  let line: Int
+  let reason: String
+
+  /// 「line <n>: <理由>」。
+  var text: String { "line \(line): \(reason)" }
 }
 
 /// どんな JSON オブジェクトも受ける行（オブジェクトかは `JSONLines` が見る）。
@@ -381,13 +340,4 @@ private struct ReportedNothing: Decodable {
     }
     nothing = try c.decode(String.self, forKey: .nothing)
   }
-}
-
-/// 判定の出力 1 行。どちらの形かは `AutomationPrompts.readJudge` が決める。
-private struct JudgeLine: Decodable {
-  let propose: String?
-  let resolve: String?
-  let title: String?
-  let due: String?
-  let workspace: Int?
 }
