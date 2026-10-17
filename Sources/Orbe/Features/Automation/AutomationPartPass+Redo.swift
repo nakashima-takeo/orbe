@@ -4,7 +4,7 @@ import Foundation
 /// なるため。
 extension AutomationPartPass {
   /// 出し直しの呼び出し。1 回目と同じ CLI とモデルで、ツールは持たせない——前の出力には外の文面が入りうる。経過時間の上限は
-  /// 1 回目が使った残りで、残りが無ければ（またはコマンドなら）nil。
+  /// 1 回目が上限の時計で使った残りで、残りが無ければ（またはコマンドなら）nil。
   static func redoJob(
     _ first: BackgroundJob, _ node: AutomationGraph.Node, _ result: BackgroundRunResult,
     _ lines: [AutomationBrokenLine]
@@ -12,7 +12,7 @@ extension AutomationPartPass {
     guard case .agent(let call) = first.work, case .agent(let reply?, _) = result.output else {
       return nil
     }
-    let remaining = first.limits.elapsed - result.endedAt.timeIntervalSince(result.startedAt)
+    let remaining = first.limits.elapsed - result.elapsed
     guard remaining > 0 else { return nil }
     let fetch = if case .fetch = node.role { true } else { false }
     return BackgroundJob(

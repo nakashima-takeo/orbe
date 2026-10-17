@@ -85,6 +85,25 @@ final class AutomationPartPassRedoTests: AutomationPartPassTestCase {
     XCTAssertEqual(breach?.lines.count, 1)
   }
 
+  /// 上限の残りは上限と同じ時計（スリープ中を数えない）で測る——回の途中で Mac が眠っても、残りを少なく見積もらない。
+  func testRedoTimeLeftExcludesSleepDuringTheFirstCall() throws {
+    start(
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      .process([row("a")], feedsJudge: false))
+
+    jobs.finish(
+      0,
+      BackgroundRunResult(
+        commandLine: "claude -p", startedAt: now, endedAt: now.addingTimeInterval(3600),
+        elapsed: 200, ending: .exited(0),
+        output: .agent(
+          reply: BackgroundAgentReply(text: #"{"note":"id を落とした"}"#, isError: false),
+          stderr: .init())))
+
+    XCTAssertEqual(jobs.calls.count, 2, "眠っていた 1 時間は上限に数えない")
+    XCTAssertEqual(jobs.calls[1].job.limits.elapsed, 400)
+  }
+
   /// 取得の `{"error": …}` は申告の失敗で、形を外したのではない——出し直さない。
   func testFetchReportingAnErrorFailsWithoutARedo() throws {
     start(
