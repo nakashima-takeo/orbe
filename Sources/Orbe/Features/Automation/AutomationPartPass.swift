@@ -1,10 +1,12 @@
 import Foundation
 import OrbeSessionLog
 
-/// 部品の 1 回。部品と、その役割の入力を受けて手段を 1 回起こし、役割ごとに出力を読んで結果を返す。溜まり・保存・予定は
+/// 部品の 1 回。部品と、その役割の入力を受けて手段を起こし、役割ごとに出力を読んで結果を返す。溜まり・保存・予定は
 /// 持たない——何を取ったか・何を積むか・回の記録をどう確定するかは呼び手が決める。
 ///
-/// 上限は経過時間（`timeoutMinutes`）だけで、無出力では打ち切らない。
+/// 行を出す部品（取得・処理・判定）の出力に受け付けない行が 1 行でもあれば、決まりを外したものとする。agent の部品は同じ回の
+/// 中で 1 回だけ出し直させ、コマンドの部品は直ちに失敗にする。上限は経過時間（`timeoutMinutes`）だけで、出し直しと分け合う。
+/// 無出力では打ち切らない。
 struct AutomationPartPass {
   let run: BackgroundScheduler.Run
   /// 依頼文に載せる今の時刻とタイムゾーンの読み口。起こすときに読む。
@@ -17,7 +19,9 @@ struct AutomationPartPass {
     /// `since` は前回成功した回の開始時刻（新着の流れの取得にだけ渡す）。`lastOutput` は前回の出力の項目の id
     /// （接頭の無い元の id。空なら全件が新しい）。
     case fetch(since: Date?, lastOutput: Set<String>)
-    case process([AutomationPartRow])
+    /// `feedsJudge` は直下に判定の部品があるか。あれば、入力の行と `id` で照らせない出力の行も決まりを外した行になる——判定の
+    /// 溜まりには出どころのある行しか積めず、積む時点で黙って消えるため。
+    case process([AutomationPartRow], feedsJudge: Bool)
     /// 行はどれも出どころを持つ。`choices` は判断待ちの候補と付け先にできる workspace。
     case judge([AutomationSourcedRow], choices: AutomationJudgeChoices)
     /// 入力の無い報告は空。
@@ -28,24 +32,43 @@ struct AutomationPartPass {
   }
 
   /// 手段の実行の記録。`count` は読めた数——取得は項目、処理・判定は JSON の行、報告・仕事は文があれば 1、副作用は標準入力に
-  /// 渡した行。`rejected` は読めずに捨てた行。
+  /// 渡した行。
   struct Execution: Equatable {
     let commandLine: String
     let ending: String
     let count: Int
-    let rejected: AutomationRejections
   }
 
+  /// `Execution` は 1 回目の呼び出しの記録。出し直したなら、その記録は `breach` が持ち、成功の出力は出し直しの出力から読んだ
+  /// もの。`breach` は決まりを外した回だけにある。
   enum Outcome: Equatable {
-    case succeeded(Output, Execution)
-    /// 手段が終わった後に分かった失敗（終わり方・UTF-8 でない・申告されたエラー・読めない出力）。
-    case failed(String, Execution)
+    case succeeded(Output, Execution, breach: Breach?)
+    /// 手段が終わった後に分かった失敗（終わり方・UTF-8 でない・申告されたエラー・決まりを外したまま）。何も渡さない。
+    case failed(String, Execution, breach: Breach?)
 
     var execution: Execution {
       switch self {
-      case .succeeded(_, let execution), .failed(_, let execution): execution
+      case .succeeded(_, let execution, _), .failed(_, let execution, _): execution
       }
     }
+
+    var breach: Breach? {
+      switch self {
+      case .succeeded(_, _, let breach), .failed(_, _, let breach): breach
+      }
+    }
+  }
+
+  /// 行を出す部品の出力が決まりを外したこと。`lines` は 1 回目の出力の外れた行すべて。`redo` は出し直したときだけある。
+  struct Breach: Equatable {
+    let lines: [AutomationBrokenLine]
+    let redo: Redo?
+  }
+
+  /// 出し直しの呼び出し。`lines` は出し直しの出力でまだ外れていた行（通った、または読む前に失敗したなら空）。
+  struct Redo: Equatable {
+    let execution: Execution
+    let lines: [AutomationBrokenLine]
   }
 
   /// 役割ごとの成功の出力。
@@ -53,10 +76,10 @@ struct AutomationPartPass {
     /// `rows` は前回の出力に無かった項目（毎回全件なら全部）で、`id` は `<部品の鍵>:<元の id>`。`lastOutput` は今回取れた
     /// 全項目で、次の回の前回の出力になる。
     case fetch(rows: [AutomationPartRow], lastOutput: [AutomationSeen])
-    /// どの行も `id` を持つ。入力の行と `id` で照らせた行だけが出どころを持つ。
+    /// どの行も `id` を持ち、`id` は重ならない。入力の行と `id` で照らせた行だけが出どころを持つ。
     case process([AutomationPartRow])
-    /// `resolved` は対応済みにする判断待ちの候補のリンク。`rejected` は候補の案・対応済みとして受けられなかった行。
-    case judge(proposals: [Proposal], resolved: [String], rejected: AutomationRejections)
+    /// `resolved` は対応済みにする判断待ちの候補のリンク。
+    case judge(proposals: [Proposal], resolved: [String])
     /// 報告の文。言うことが無かった回は nil。
     case report(String?)
     case work(Work)
@@ -79,20 +102,47 @@ struct AutomationPartPass {
     case nothing(String)
   }
 
-  /// 手段を 1 回起こす。結果は main で 1 度だけ返る。返る手で止めると、結果は返らない。
+  /// 手段を起こす。結果は main で 1 度だけ返る。返る手で止めると、走っている呼び出し（1 回目か出し直し）を止め、結果は返らない。
   func start(
     _ node: AutomationGraph.Node, _ input: Input, completion: @escaping (Outcome) -> Void
   ) -> BackgroundRunHandle {
     precondition(input.fits(node.role), "the input must match the role of the part")
-    var stopped = false
-    let handle = run(Self.job(node, input, now: now(), timeZone: calendar().timeZone)) { result in
-      guard !stopped else { return }
-      completion(Self.read(result, node, input))
+    let job = Self.job(node, input, now: now(), timeZone: calendar().timeZone)
+    let calls = Calls()
+    calls.current = run(job) { result in
+      guard !calls.stopped else { return }
+      switch Self.read(result, node, input) {
+      case .failed(let reason):
+        completion(.failed(reason, Self.execution(result), breach: nil))
+      case .read(let output, let count, let lines) where lines.isEmpty:
+        completion(.succeeded(output, Self.execution(result, count: count), breach: nil))
+      case .read(_, let count, let lines):
+        let first = Self.execution(result, count: count)
+        guard let redo = Self.redoJob(job, node, result, lines) else {
+          completion(
+            .failed(Self.broke(node, lines), first, breach: Breach(lines: lines, redo: nil)))
+          return
+        }
+        calls.current = run(redo) { result in
+          guard !calls.stopped else { return }
+          completion(Self.redone(result, node, input, first: first, lines: lines))
+        }
+      }
     }
     return BackgroundRunHandle {
-      stopped = true
-      handle.stop()
+      calls.stopped = true
+      calls.current?.stop()
     }
+  }
+
+  /// 走っている呼び出しと、止められたか。
+  private final class Calls {
+    var current: BackgroundRunHandle?
+    var stopped = false
+  }
+
+  static func execution(_ result: BackgroundRunResult, count: Int = 0) -> Execution {
+    Execution(commandLine: result.commandLine, ending: result.ending.text, count: count)
   }
 
   private static func job(
@@ -128,7 +178,7 @@ struct AutomationPartPass {
     case .fetch(let since, _):
       guard let since = mark(node, since) else { return BackgroundInput() }
       return BackgroundInput(environment: ["ORBE_SINCE": SessionEvent.iso8601(since)])
-    case .process(let rows), .report(let rows):
+    case .process(let rows, _), .report(let rows):
       return BackgroundInput(stdin: stdin(rows.map(\.text)))
     case .judge(let rows, _):
       return BackgroundInput(stdin: stdin(rows.map(\.text)))
@@ -154,7 +204,7 @@ struct AutomationPartPass {
     switch input {
     case .fetch(let since, _):
       return AutomationPrompts.fetch(request: instruction, since: mark(node, since))
-    case .process(let rows):
+    case .process(let rows, _):
       return AutomationPrompts.step(
         instruction: instruction, rows: rows.map(\.text), now: now, timeZone: timeZone)
     case .judge(let rows, let choices):
