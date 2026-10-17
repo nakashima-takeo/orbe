@@ -5,11 +5,15 @@ import XCTest
 @testable import Orbe
 
 /// エディター面に結んだソース管理パネル——行は区分に合った diff を仮のタブで開き、追跡中のファイルの破棄は確かめてから行い、
-/// メッセージ欄の ⌘↵ はコミットだけを起こす。
+/// メッセージ欄の ⌘↵ はコミットだけを起こし、欄の中身が外から変わったら取り消しの履歴を捨てる。パネルを出していなくても
+/// 面が見えていれば件数は status に追いつき（行とグラフは作らない）、cd した後の列は新しい根の行を出して押せば新しい根の
+/// diff を開く。
 ///
 /// 壊れると何が起きるか。「ステージされている変更」の行で作業ツリーの diff が開き、コミットする中身と違うものを見て確かめた
 /// ことになる。追跡中のファイルの編集が確認なしに消え、戻せない。ボタンが「同期」の間に欄で ⌘↵ を打つと、キー 1 つで
-/// push が走る。
+/// push が走る。コミットの後の ⌘Z が例外を投げ、欄の取り消しが壊れたまま残る。エクスプローラーを出している間、レールの
+/// 件数が古い数で止まる・隠れたパネルのために git を読む。cd した後も列が前の根の行を出し、押した行やボタンが前の
+/// worktree の diff を開く・前の worktree でステージや破棄をする。
 @MainActor
 final class SourceControlPaneTests: OrbeTestCase {
   struct Hosted {
@@ -20,8 +24,8 @@ final class SourceControlPaneTests: OrbeTestCase {
     @MainActor var scm: ScmPanel { pane.scm }
   }
 
-  /// 根 `repo` の連の面だけを窓に載せ、ソース管理パネルを出す。
-  private func host(_ repo: TempGitRepo) -> Hosted {
+  /// 根 `repo` の連の面だけを窓に載せ、ソース管理パネルを出す（`showsPanel` が false ならサイドバーは既定のエクスプローラー）。
+  private func host(_ repo: TempGitRepo, showsPanel: Bool = true) -> Hosted {
     let tab = TerminalTab.alone(cwd: repo.root, editorSurfaces: EditorSurfaces(queriesRoot: nil))
     let pane = tab.group.view.editor
     let window = NSWindow(
@@ -30,7 +34,7 @@ final class SourceControlPaneTests: OrbeTestCase {
     window.contentView = pane
     pane.layoutSubtreeIfNeeded()
     addTeardownBlock { MainActor.assumeIsolated { window.orderOut(nil) } }
-    pane.shell.selectPanel(.sourceControl)
+    if showsPanel { pane.shell.selectPanel(.sourceControl) }
     return Hosted(repo: repo, tab: tab, pane: pane, window: window)
   }
 
@@ -119,5 +123,73 @@ final class SourceControlPaneTests: OrbeTestCase {
     pumpMain(until: { scm.control.operations.isEmpty }, timeout: 20, "コミット")
     XCTAssertEqual(repo.git(["log", "-1", "--format=%s"]).stdoutText, "typed\n")
     XCTAssertEqual(repo.git(["rev-parse", "origin/main"]).stdoutText, origin, "push しない")
+  }
+
+  /// メッセージ欄の中身が外から変わった（コミットで空になった）ら、それまでの取り消しの履歴は捨てる——⌘Z は差し替え前の
+  /// 文へ戻らず、今の文の外を戻そうとして例外を投げることもない。
+  func testAnOutsideChangeOfTheMessageDiscardsTheFieldsUndo() throws {
+    let hosted = host(try TempGitRepo())
+    func field(in view: NSView) -> ScmMessageTextView? {
+      (view as? ScmMessageTextView) ?? view.subviews.lazy.compactMap(field(in:)).first
+    }
+    pumpMain(until: { field(in: hosted.pane) != nil }, "メッセージ欄")
+    let text = try XCTUnwrap(field(in: hosted.pane))
+    hosted.window.makeFirstResponder(text)
+    text.insertText("typed message", replacementRange: NSRange(location: NSNotFound, length: 0))
+    pumpMain(until: { hosted.scm.control.message == "typed message" }, "打った文が欄の外へ届く")
+
+    hosted.scm.control.message = ""
+    pumpMain(until: { text.string.isEmpty }, "外の変化が欄に届く")
+    XCTAssertEqual(text.undoManager?.canUndo, false)
+    text.undoManager?.undo()
+    XCTAssertEqual(text.string, "")
+  }
+
+  /// パネルを出していない面でも、件数は status の変化に追いつく。その間、行の組とグラフは作らない。
+  func testTheCountFollowsTheStatusWhileThePanelIsNotShown() throws {
+    let repo = try TempGitRepo()
+    let hosted = host(repo, showsPanel: false)
+    try repo.write("a.txt", "edited\n")
+    pumpMain(until: { hosted.scm.count == 1 }, "編集で 1")
+    try repo.write("n.txt", "new\n")
+    pumpMain(until: { hosted.scm.count == 2 }, "未追跡を足して 2")
+    XCTAssertTrue(hosted.scm.layout.items.isEmpty, "行は組まない")
+    XCTAssertNil(hosted.scm.graph, "グラフは読まない")
+  }
+
+  /// パネルを出したまま cd すると、列は新しい根の行を出し、押した行は新しい根の diff を開く。
+  func testAfterChangingTheRootTheListShowsAndOpensTheNewRootsRows() throws {
+    let repo = try TempGitRepo()
+    try repo.write("a.txt", "edited\n")
+    let other = try TempGitRepo(name: "orbe-scm-pane-other")
+    try other.write("m.txt", "new\n")
+    let hosted = host(repo)
+    pumpMain(until: { hosted.scm.changes.changes.map(\.path) == ["a.txt"] }, "前の根の行")
+
+    hosted.pane.setRoot(other.root)
+    pumpMain(until: { hosted.scm.changes.changes.map(\.path) == ["m.txt"] }, "新しい根の行")
+    let row = try row(hosted, .changes, "m.txt")
+    XCTExpectFailure("setRoot が作り直した列を SwiftUI が載せ直さず、前の根のパネルの列が残る") {
+      pumpMain(
+        until: { self.slot(row, in: hosted.pane) != nil }, timeout: 3, "載っている列に新しい根の行")
+      guard let slot = slot(row, in: hosted.pane), let list = slot.superview else { return }
+      list.mouseDown(
+        with: NSEvent.mouseEvent(
+          with: .leftMouseDown, location: list.convert(NSPoint(x: 40, y: slot.frame.midY), to: nil),
+          modifierFlags: [], timestamp: 0, windowNumber: hosted.window.windowNumber, context: nil,
+          eventNumber: 0, clickCount: 1, pressure: 1)!)
+      XCTAssertEqual(
+        hosted.tab.group.editor.activeID,
+        .diff(EditorDiff.Key(root: other.root, path: "m.txt", kind: .workingTree)))
+    }
+  }
+
+  /// 面に載っているソース管理の列のうち、今のパネルの行 `row` を描いている枠（今のパネルの列が載っていなければ nil）。
+  private func slot(_ row: Int, in pane: EditorPaneView) -> ScmRowView? {
+    func lists(in view: NSView) -> [RowListView<ScmListSource>] {
+      (view as? RowListView<ScmListSource>).map { [$0] } ?? view.subviews.flatMap(lists(in:))
+    }
+    return lists(in: pane).first { $0.source.panel === pane.scm }?.subviews
+      .compactMap { $0 as? ScmRowView }.first { $0.row == row && !$0.isHidden }
   }
 }
