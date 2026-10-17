@@ -22,12 +22,13 @@ final class ScmCommitStateTests: OrbeTestCase {
 
   private func state(
     staged: Int = 0, changes: Int = 0, committable: Int? = nil, branch: GitStatus.Branch?,
-    blank: Bool = true, networking: Bool = false, committing: Bool = false, pushed: Bool? = false
+    blank: Bool = true, networking: Bool = false, committing: Bool = false, staging: Bool = false,
+    pushed: Bool? = false
   ) -> ScmCommitState {
     ScmCommitState(
       staged: staged, changes: changes, committable: committable ?? changes, branch: branch,
       messageIsBlank: blank,
-      isNetworking: networking, isCommitting: committing, isHeadPushed: pushed)
+      isNetworking: networking, isCommitting: committing, isStaging: staging, isHeadPushed: pushed)
   }
 
   /// 変更が 1 つでもあればコミット。押せるのはステージ済みか競合でない変更があり、メッセージが空白だけでなく、コミット中で
@@ -45,6 +46,9 @@ final class ScmCommitStateTests: OrbeTestCase {
     XCTAssertTrue(state(staged: 1, branch: tracked, blank: false, networking: true).canCommit)
     XCTAssertFalse(
       state(staged: 1, branch: tracked, blank: false, networking: true).canCommitAndPush)
+    XCTAssertEqual(
+      state(changes: 2, branch: tracked, blank: false, staging: true).scope, .staged,
+      "走っている・順番を待つステージは済んだものと数える")
   }
 
   /// 変更が無ければ、先行/遅れのある upstream で同期、upstream の無いブランチで公開。ネット操作中は押せず、⌘↵ の

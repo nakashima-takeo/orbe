@@ -11,8 +11,8 @@ struct ScmCommitState: Equatable {
     case publish
   }
 
-  /// コミット・amend に入れる範囲。ステージ済みが 1 つでもあればそれだけ、0 なら「変更」のコミットに入る行の全部
-  /// （確かめない）。
+  /// コミット・amend に入れる範囲。ステージ済みが 1 つでもあれば（走っている・順番を待っているステージも済んだものと
+  /// 数える）それだけ、0 なら「変更」のコミットに入る行の全部（確かめない）。
   enum Scope: Equatable {
     case staged
     case all
@@ -31,12 +31,14 @@ struct ScmCommitState: Equatable {
   /// プル・プッシュ・フェッチ（前提は根のサービスが判定する。同じ worktree のネット操作が走っている間だけ押せない）。
   let canNetwork: Bool
 
-  /// `committable` はステージ済みが無いときにコミットへ入る行の数。`isHeadPushed` は nil = 分からない。
+  /// `committable` はステージ済みが無いときにコミットへ入る行の数。`isStaging` はステージが列にある（押した直後の行は
+  /// まだ「変更」に見えるが、コミットより先にステージ済みになる）。`isHeadPushed` は nil = 分からない。
   init(
     staged: Int, changes: Int, committable: Int, branch: GitStatus.Branch?,
-    messageIsBlank: Bool, isNetworking: Bool, isCommitting: Bool, isHeadPushed: Bool?
+    messageIsBlank: Bool, isNetworking: Bool, isCommitting: Bool, isStaging: Bool,
+    isHeadPushed: Bool?
   ) {
-    scope = staged > 0 ? .staged : .all
+    scope = staged > 0 || isStaging ? .staged : .all
     canCommit = (staged > 0 || committable > 0) && !messageIsBlank && !isCommitting
     canNetwork = !isNetworking
     if staged + changes > 0 {

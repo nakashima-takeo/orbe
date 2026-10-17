@@ -145,6 +145,21 @@ final class ScmPanelTests: OrbeTestCase {
       repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "a.txt\nn.txt\ns.txt\n")
   }
 
+  /// ステージ済みが 0 のときに行の ＋ を押し、そのステージが終わる前にコミットしても、押した行だけをコミットする（走っている・
+  /// 順番を待つステージは済んだものとして数える）。
+  func testCommittingRightAfterAStageTakesOnlyTheStagedRow() throws {
+    try repo.write("a.txt", "edited\n")
+    try repo.write("n.txt", "new\n")
+    show(until: { $0.changes.staged.isEmpty && $0.changes.changes.count == 2 }, "変更の行")
+
+    panel.control.stage([GitStatus.Row(path: "n.txt", originalPath: nil)])
+    panel.control.message = "only n"
+    panel.commit()
+    idle("ステージとコミット")
+    XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "n.txt\n")
+    XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, " M a.txt\n")
+  }
+
   /// 大きな変更（数千件）のある worktree でも、行と件数は最新の status に追いつく——行の組み立てより先にグラフの読み
   /// （コミットのたびに git の状態が変わって起きる）が返っても、手元の古い行で組み直した結果が最新の status を退けない。
   func testRowsCatchUpWithTheLatestStatusOnALargeWorktree() throws {
