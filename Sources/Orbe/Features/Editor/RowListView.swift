@@ -141,13 +141,14 @@ final class RowListView<Source: RowListSource>: NSView {
     }
   }
 
-  /// 見えていなければ、見えるところまで最小限だけ送る（送るなら錨を外す）。
+  /// 見えていなければ、見えるところまで最小限だけ送る（送るなら錨を外し、空きを取った後の行の枠で送る）。
   func scrollRowToVisible(_ row: Int) {
     guard row < segments.last.map({ $0.start + $0.count }) ?? 0 else { return }
-    let rect = rect(ofRow: row)
+    let shown = rect(ofRow: row)
     let visible = visibleRect
-    guard rect.minY < visible.minY || rect.maxY > visible.maxY else { return }
+    guard shown.minY < visible.minY || shown.maxY > visible.maxY else { return }
     releaseAnchor()
+    let rect = rect(ofRow: row)
     scrollToVisible(NSRect(x: 0, y: rect.minY, width: 1, height: rect.height))
   }
 

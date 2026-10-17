@@ -24,6 +24,8 @@ extension RowListTests {
     private(set) var focusRequestsApplied = 0
     /// 今の行の数の外の行を問われた回数。
     private(set) var outOfRange = 0
+    /// 部品の押下に返す錨。
+    var anchor: RowListAnchor<Int>?
 
     func makeRowView() -> Row { Row(frame: .zero) }
     func show(_ row: Int, of rows: Source, in view: Row, emoji: NSFont?) {
@@ -46,7 +48,7 @@ extension RowListTests {
     func doubleClick(_ row: Int, in rows: Source) { clicks.append("double \(row)") }
     func press(_ row: Int, control: Int, in rows: Source) -> RowListAnchor<Int>? {
       clicks.append("press \(row) \(control)")
-      return nil
+      return anchor
     }
     func select(_ row: Int, in rows: Source) { selected.append(row) }
   }

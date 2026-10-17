@@ -189,6 +189,30 @@ final class RowListTests: OrbeTestCase {
     XCTAssertEqual(hosted.source.clicks, ["click 1", "click 2", "double 0", "press 3 0"])
   }
 
+  /// 錨の一時の空きがある間に選択を見せるときは、錨を外して空きを取った後の行の位置で送る——空きのぶん余計に送らない。
+  func testRevealingASelectionUnderATemporaryGapScrollsByTheRowsPositionAfterTheGapIsGone() {
+    let hosted = host(
+      rowCount: 10, segments: [RowListSegment(start: 0, count: 10, height: 20, leading: 40)])
+    let list = hosted.list
+    hosted.source.anchor = RowListAnchor(pressed: 2, successor: 3)
+    // 行 2 は 80..<100。部品を押して、その上端 80 に留める。
+    list.mouseDown(
+      with: NSEvent.mouseEvent(
+        with: .leftMouseDown, location: list.convert(NSPoint(x: 190, y: 85), to: nil),
+        modifierFlags: [], timestamp: 0, windowNumber: hosted.window.windowNumber, context: nil,
+        eventNumber: 0, clickCount: 1, pressure: 1)!)
+    // 余白が 10 に縮むと行 2 は 50 に上がり、上に 30 の空きを足して 80 に留める。
+    hosted.source.segments = [RowListSegment(start: 0, count: 10, height: 20, leading: 10)]
+    hosted.rows.update(rowsVersion: 1, selection: nil, emoji: nil, wantsFocus: false)
+    XCTAssertEqual(list.visibleRect.minY, 0, "前提: 空きで留めている")
+    XCTAssertEqual(list.frame.height, 30 + 10 + 200 + rowHeight, "前提: 上に 30 の空き")
+
+    // 行 3 は空きのある間 100..<120 で見えていないが、空きを取れば 70..<90 で見えている。
+    hosted.rows.update(rowsVersion: 1, selection: 3, emoji: nil, wantsFocus: false)
+    XCTAssertEqual(list.frame.height, 10 + 200 + rowHeight, "錨を外して空きを取る")
+    XCTAssertEqual(list.visibleRect.minY, 0, "空きを取った後に見えている行では送らない")
+  }
+
   // MARK: - つまみ
 
   /// 当たりは見えているつまみだけ——列を出しただけの（消えている）つまみも、帯のつまみの外も行へ通る。掴んで引くと、
