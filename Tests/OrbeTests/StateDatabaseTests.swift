@@ -175,7 +175,7 @@ final class StateDatabaseTests: OrbeTestCase {
       "失敗の間も原本は元のまま残り、やり直した退避で守られる")
   }
 
-  /// 使えると確かめられない DB は退避せず、接続も返さない。
+  /// 読み取り専用の DB は動かさず、接続も返さない。
   func testReadOnlyDatabaseIsNeitherMovedNorOpened() throws {
     try seedVersion1(["版 1 の中身"])
     let file = try databaseFile(in: folder)
@@ -185,6 +185,24 @@ final class StateDatabaseTests: OrbeTestCase {
 
     XCTAssertEqual(try quarantinedFolders(), [], "健全かもしれない原本を退避しない")
     try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)
+    XCTAssertEqual(try names(inVersion1At: folder), ["版 1 の中身"], "原本は元の場所に元のまま残る")
+  }
+
+  /// 開けずに使えると確かめられない DB は、健全かもしれないので退避せず、接続も返さない。
+  func testUnopenableDatabaseIsNeitherQuarantinedNorOpened() throws {
+    try seedVersion1(["版 1 の中身"])
+    let file = try databaseFile(in: folder)
+    let fm = FileManager.default
+    try fm.setAttributes([.posixPermissions: 0o000], ofItemAtPath: file.path)
+    if (try? FileHandle(forReadingFrom: file)) != nil {
+      try fm.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)
+      throw XCTSkip("ファイル権限が効かない環境（root 等）では開けない DB を作れない")
+    }
+
+    XCTAssertNil(StateDatabase.open(folder: folder, version: 1, schema: Self.schemaV1))
+
+    XCTAssertEqual(try quarantinedFolders(), [], "確かめられなかっただけの原本を退避しない")
+    try fm.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)
     XCTAssertEqual(try names(inVersion1At: folder), ["版 1 の中身"], "原本は元の場所に元のまま残る")
   }
 }
