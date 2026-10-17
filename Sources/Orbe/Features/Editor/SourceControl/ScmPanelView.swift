@@ -4,7 +4,8 @@ import SwiftUI
 /// サイドバー: ソース管理パネル（見本 ScmPanel）。上から、パネルヘッダー → 実行中の帯（0.3 秒を超えて走る操作があるときだけ）→
 /// 区分見出し「ソース管理」（✓ コミット・再読込・…（プル / プッシュ / フェッチ））→ メッセージ欄・コミットボタン・失敗の文 →
 /// 列（2 区分とグラフ。AppKit）。git 管理外の根では、ヘッダーの下に理由の一文だけ。部分ごとに別の view にして、読む値が
-/// 変わった部分だけを組み直す（status が届くたびに欄まで組み直さない）。
+/// 変わった部分だけを組み直す（status が届くたびに欄まで組み直さない）。根が変わると面は panel と列を組で作り直すので、中身は
+/// panel で同一視する（そうしないと載せた列・欄の AppKit と言語の追従が前の根のまま残る）。
 struct ScmPanelView: View {
   let panel: ScmPanel
   let list: RowList<ScmListSource>
@@ -28,6 +29,7 @@ struct ScmPanelView: View {
         ScmList(panel: panel, list: list)
       }
     }
+    .id(ObjectIdentifier(panel))
     .onDisappear(perform: panel.panelDidHide)
   }
 }

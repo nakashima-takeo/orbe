@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 /// 持ち主が持つ行の列（`RowList`）を SwiftUI に載せる。読む値は載せる側が model から読んで渡し、値が変わったときだけ
-/// 列を更新する。
+/// 列を更新する。列を載せるのは view の同一性ごとに 1 度だけなので、列を差し替える持ち主は載せる view を列で同一視する。
 struct RowListHost<Source: RowListSource>: NSViewRepresentable {
   let list: RowList<Source>
   let rowsVersion: Int

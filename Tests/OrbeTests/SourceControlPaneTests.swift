@@ -169,19 +169,17 @@ final class SourceControlPaneTests: OrbeTestCase {
     hosted.pane.setRoot(other.root)
     pumpMain(until: { hosted.scm.changes.changes.map(\.path) == ["m.txt"] }, "新しい根の行")
     let row = try row(hosted, .changes, "m.txt")
-    XCTExpectFailure("setRoot が作り直した列を SwiftUI が載せ直さず、前の根のパネルの列が残る") {
-      pumpMain(
-        until: { self.slot(row, in: hosted.pane) != nil }, timeout: 3, "載っている列に新しい根の行")
-      guard let slot = slot(row, in: hosted.pane), let list = slot.superview else { return }
-      list.mouseDown(
-        with: NSEvent.mouseEvent(
-          with: .leftMouseDown, location: list.convert(NSPoint(x: 40, y: slot.frame.midY), to: nil),
-          modifierFlags: [], timestamp: 0, windowNumber: hosted.window.windowNumber, context: nil,
-          eventNumber: 0, clickCount: 1, pressure: 1)!)
-      XCTAssertEqual(
-        hosted.tab.group.editor.activeID,
-        .diff(EditorDiff.Key(root: other.root, path: "m.txt", kind: .workingTree)))
-    }
+    pumpMain(until: { self.slot(row, in: hosted.pane) != nil }, timeout: 3, "載っている列に新しい根の行")
+    let slot = try XCTUnwrap(slot(row, in: hosted.pane))
+    let list = try XCTUnwrap(slot.superview)
+    list.mouseDown(
+      with: NSEvent.mouseEvent(
+        with: .leftMouseDown, location: list.convert(NSPoint(x: 40, y: slot.frame.midY), to: nil),
+        modifierFlags: [], timestamp: 0, windowNumber: hosted.window.windowNumber, context: nil,
+        eventNumber: 0, clickCount: 1, pressure: 1)!)
+    XCTAssertEqual(
+      hosted.tab.group.editor.activeID,
+      .diff(EditorDiff.Key(root: other.root, path: "m.txt", kind: .workingTree)))
   }
 
   /// 面に載っているソース管理の列のうち、今のパネルの行 `row` を描いている枠（今のパネルの列が載っていなければ nil）。
