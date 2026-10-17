@@ -62,22 +62,23 @@ final class LineDiffTests: XCTestCase {
   }
 
   /// 版が無い側（新しいファイル・消したファイル）は空の本文の 1 行として比べる——改行で終わる本文なら中身の行だけが
-  /// 追加・削除で、改行で終わらない本文は空の行がその行に替わった変更。
+  /// 追加・削除で、改行で終わらない本文は空の行がその行に替わった変更。空の本文の 1 行は先頭か末尾の空の行とだけ対応し、
+  /// 途中の空の行には結ばない。どの入口（ガターの底と本文・2 つの写し）のどちらの側が無くても同じ。
   func testAMissingSideIsTheEmptyTextOfOneLine() {
     let empty = TextRope()
-    XCTAssertEqual(LineDiff.hunks(base: "", current: TextRope("a")), [hunk(1, 1, 1, 1)])
-    XCTAssertEqual(
-      LineDiff.hunks(old: TextRope("a\n"), new: empty, limit: .edits(10)), [hunk(1, 1, 0, 0)])
-    XCTAssertEqual(
-      LineDiff.hunks(old: TextRope("a"), new: empty, limit: .edits(10)), [hunk(1, 1, 1, 1)])
-    XCTAssertEqual(
-      LineDiff.hunks(base: "", current: TextRope("\na")), [hunk(1, 0, 2, 1)], "先頭の空の行と対応する")
-    XCTAssertEqual(
-      LineDiff.hunks(old: TextRope("\na"), new: empty, limit: .edits(10)), [hunk(2, 1, 1, 0)])
-    XCTAssertEqual(
-      LineDiff.hunks(base: "a\n\nb", current: empty), [hunk(1, 3, 1, 1)], "途中の空の行を空の本文に結ばない")
-    XCTAssertEqual(
-      LineDiff.hunks(old: TextRope("a\n\nb"), new: empty, limit: .edits(10)), [hunk(1, 3, 1, 1)])
+    let cases: [(text: String, added: LineHunk)] = [
+      ("a", hunk(1, 1, 1, 1)), ("a\n", hunk(0, 0, 1, 1)), ("\na", hunk(1, 0, 2, 1)),
+      ("a\n\nb", hunk(1, 1, 1, 3)),
+    ]
+    for (text, added) in cases {
+      let removed = hunk(added.newStart, added.newCount, added.oldStart, added.oldCount)
+      XCTAssertEqual(LineDiff.hunks(base: "", current: TextRope(text)), [added], text)
+      XCTAssertEqual(LineDiff.hunks(base: text, current: empty), [removed], text)
+      XCTAssertEqual(
+        LineDiff.hunks(old: empty, new: TextRope(text), limit: .edits(10)), [added], text)
+      XCTAssertEqual(
+        LineDiff.hunks(old: TextRope(text), new: empty, limit: .edits(10)), [removed], text)
+    }
   }
 
   /// 改行で終わる本文どうしなら、末尾の空の行は両側で揃う——末尾に空の行で始まる塊を足すと、足した塊が追加になる
