@@ -49,10 +49,27 @@ final class LineDiffTests: XCTestCase {
       LineDiff.hunks(base: "a", current: TextRope("a\nb")), [hunk(1, 0, 2, 1)],
       "改行の無い最終行の後ろに足した行だけが追加")
     XCTAssertEqual(
+      LineDiff.hunks(base: "a", current: TextRope("a\n")), [hunk(1, 0, 2, 1)],
+      "末尾の改行を足すのは空の行の追加")
+    XCTAssertEqual(
+      LineDiff.hunks(base: "a\n", current: TextRope("a\nb")), [hunk(2, 1, 2, 1)],
+      "末尾の空の行に打てば、その行の変更")
+    XCTAssertEqual(
       LineDiff.hunks(base: "a\r\nb\r\n", current: TextRope("a\r\nb\r\n")), [], "CRLF はそのまま比べる")
     XCTAssertEqual(
       LineDiff.hunks(base: "a\r\nb\r\n", current: TextRope("a\nb\n")), [hunk(1, 2, 1, 2)],
       "CRLF と LF は違う行（正規化しない）")
+  }
+
+  /// 版が無い側（新しいファイル・消したファイル）は空の本文の 1 行として比べる——改行で終わる本文なら中身の行だけが
+  /// 追加・削除で、改行で終わらない本文は空の行がその行に替わった変更。
+  func testAMissingSideIsTheEmptyTextOfOneLine() {
+    let empty = TextRope()
+    XCTAssertEqual(LineDiff.hunks(base: "", current: TextRope("a")), [hunk(1, 1, 1, 1)])
+    XCTAssertEqual(
+      LineDiff.hunks(old: TextRope("a\n"), new: empty, limit: .edits(10)), [hunk(1, 1, 0, 0)])
+    XCTAssertEqual(
+      LineDiff.hunks(old: TextRope("a"), new: empty, limit: .edits(10)), [hunk(1, 1, 1, 1)])
   }
 
   /// 行の同一性はバイト列——正準等価（NFC の é と NFD の e + 結合アクセント）は違う行。git と同じ見方。
