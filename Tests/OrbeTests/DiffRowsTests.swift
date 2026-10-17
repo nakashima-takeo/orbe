@@ -28,8 +28,7 @@ final class DiffRowsTests: OrbeTestCase {
   /// 文脈の区間は旧番号。最後の空の行（改行で終わる本文）は両側で揃う。
   func testInlinePlacesRemovedLinesAsInsertionsPointingAtTheOldSide() {
     let (old, new) = sample
-    let rows = DiffRows.inline(
-      hunks(old, new), old: DiffRows.Side(TextRope(old)), new: DiffRows.Side(TextRope(new)))
+    let rows = DiffRows.inline(hunks(old, new), new: DiffRows.Side(TextRope(new)))
     XCTAssertEqual(
       rows.insertions,
       [
@@ -55,14 +54,12 @@ final class DiffRowsTests: OrbeTestCase {
     let text = TextRope(lines(["one", "two"]))
     let empty = TextRope()
     let added = DiffRows.inline(
-      LineDiff.hunks(old: empty, new: text, limit: EditorDiff.hunkLimit), old: DiffRows.Side(empty),
-      new: DiffRows.Side(text))
+      LineDiff.hunks(old: empty, new: text, limit: EditorDiff.hunkLimit), new: DiffRows.Side(text))
     XCTAssertEqual(added.insertions, [])
     XCTAssertEqual(
       added.spans, [LineSpan(line: 0, style: DiffStyle.added), LineSpan(line: 2, otherNumber: 1)])
     let removed = DiffRows.inline(
-      LineDiff.hunks(old: text, new: empty, limit: EditorDiff.hunkLimit), old: DiffRows.Side(text),
-      new: DiffRows.Side(empty))
+      LineDiff.hunks(old: text, new: empty, limit: EditorDiff.hunkLimit), new: DiffRows.Side(empty))
     XCTAssertEqual(
       removed.insertions,
       [
@@ -80,8 +77,7 @@ final class DiffRowsTests: OrbeTestCase {
   /// 末尾の改行を足すのは空の行の追加——足した行だけが追加で、元の最後の行は文脈のまま。
   func testAddingATrailingNewlineAddsTheEmptyRow() {
     let (old, new) = ("a\nb", "a\nb\nc\n")
-    let rows = DiffRows.inline(
-      hunks(old, new), old: DiffRows.Side(TextRope(old)), new: DiffRows.Side(TextRope(new)))
+    let rows = DiffRows.inline(hunks(old, new), new: DiffRows.Side(TextRope(new)))
     XCTAssertEqual(
       rows.spans, [LineSpan(line: 0, otherNumber: 1), LineSpan(line: 2, style: DiffStyle.added)])
   }

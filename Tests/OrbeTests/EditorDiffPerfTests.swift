@@ -47,7 +47,7 @@ final class EditorDiffPerfTests: OrbeTestCase {
       surface.viewStateDidChange(size: CGSize(width: 900, height: 700), scale: 2, visible: false)
       surface.setPresentation(DiffStyle.inline)
       started = CACurrentMediaTime()
-      var rows = DiffRows.inline(hunks, old: DiffRows.Side(oldRope), new: DiffRows.Side(newRope))
+      var rows = DiffRows.inline(hunks, new: DiffRows.Side(newRope))
       rows.source = source
       surface.setRows(rows)
       surface.flush()

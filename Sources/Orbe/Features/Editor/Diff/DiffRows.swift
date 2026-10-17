@@ -31,7 +31,7 @@ enum DiffRows {
 
   /// インライン——新しい側の面に、区間の削除行を「古い側の行を指す差し込み」として区間の新しい側の始まりの境に置き、追加の
   /// 区間に型「追加」、文脈の区間に旧番号の始まりを渡す（差し込みの出どころは呼び手が添える）。
-  static func inline(_ hunks: [LineHunk], old: Side, new: Side) -> SurfaceRows {
+  static func inline(_ hunks: [LineHunk], new: Side) -> SurfaceRows {
     var spans = Spans(limit: new.lines)
     var insertions: [RowInsertion] = []
     var oldNext = 0

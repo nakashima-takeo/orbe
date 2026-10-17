@@ -11,7 +11,7 @@ extension EditorDiff {
     else { return }
     switch mode {
     case .inline:
-      var rows = DiffRows.inline(hunks, old: oldSide, new: newSide)
+      var rows = DiffRows.inline(hunks, new: newSide)
       rows.source = old
       look(DiffStyle.inline, rows).apply(to: surface, document: document)
     case .side:
