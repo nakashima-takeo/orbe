@@ -4,85 +4,15 @@ import XCTest
 @testable import Orbe
 
 /// 部品の 1 回——役割どおりに手段を起こし（上限・目印・標準入力・回の ID・ツール）、役割ごとに出力を読む（取得の差分と接頭と
-/// 出どころ、処理の出どころの照らしと `id` の無い行、判定の候補の出どころ、仕事と副作用の失敗）。止めた回は何も返さない。
+/// 出どころ、処理の出どころの照らし、判定の候補の出どころ、仕事と副作用の失敗）。決まりを外した出力は、agent なら 1 回だけ
+/// ツール無しで出し直させ、コマンドなら失敗にする（出し直しの流れは `AutomationPartPassRedoTests`）。止めた回は何も返さない。
 ///
 /// 壊れると何が起きるか: 長く黙って考える agent が途中で切られる。今の集合の取得が前回以降の分だけを取り、候補が一斉に下がる。
 /// 副作用のやり直しに回の ID が渡らず二重に起きる。仕事の agent がツール無しで起き、何もせずに成功する。前回取れた項目が
-/// 毎回流れ直す、または出どころの id が接頭付きになり前回の出力と照らせない。`id` を落とした処理の行が黙って消える。候補に
-/// 別の項目のリンクが付く。失敗した取得・仕事・副作用が成功として確定する。止めた回の結果が書き換えた後の定義で確定する。
-final class AutomationPartPassTests: OrbeTestCase {
-  private static let tool = AutomationGraphTests.tool
-  private let now = Date(timeIntervalSince1970: 1_800_000_000)
-  private var jobs: FakeJobs!
-  private var pass: AutomationPartPass!
-  private var outcomes: [AutomationPartPass.Outcome] = []
-
-  override func setUp() {
-    jobs = FakeJobs()
-    pass = AutomationPartPass(
-      run: jobs.run, now: { [unowned self] in now },
-      calendar: { Calendar(identifier: .gregorian) })
-  }
-
-  @discardableResult
-  private func start(
-    _ part: AutomationPart, _ role: AutomationPartRole, _ input: AutomationPartPass.Input
-  ) -> BackgroundRunHandle {
-    pass.start(AutomationGraph.Node(part: part, role: role), input) { [unowned self] in
-      outcomes.append($0)
-    }
-  }
-
-  private func item(_ id: String) -> AutomationItem {
-    AutomationItem(id: id, link: "https://example.com/\(id)", body: "\(id) の本文", time: now)
-  }
-
-  private func origin(_ id: String) -> AutomationOrigin {
-    AutomationOrigin(part: "f", item: item(id))
-  }
-
-  /// 取得の部品 `f` を出た行。
-  private func row(_ id: String) -> AutomationPartRow {
-    AutomationPartRow(id: "f:\(id)", text: #"{"id":"f:\#(id)"}"#, origin: origin(id))
-  }
-
-  private func printed(_ stdout: String, exit: Int32 = 0, stderr: String = "")
-    -> BackgroundRunResult
-  {
-    BackgroundRunResult(
-      commandLine: "run", startedAt: now, endedAt: now, ending: .exited(exit),
-      output: .command(
-        stdout: .init(data: Data(stdout.utf8)), stderr: .init(data: Data(stderr.utf8))))
-  }
-
-  private func fetched(_ ids: [String]) -> BackgroundRunResult {
-    printed(
-      ids.map {
-        #"{"id":"\#($0)","link":"https://example.com/\#($0)","body":"\#($0) の本文","time":"2026-10-10T09:00:00Z"}"#
-      }.joined(separator: "\n"))
-  }
-
-  private func replied(_ text: String) -> BackgroundRunResult {
-    BackgroundRunResult(
-      commandLine: "claude -p", startedAt: now, endedAt: now, ending: .exited(0),
-      output: .agent(reply: BackgroundAgentReply(text: text, isError: false), stderr: .init()))
-  }
-
-  private func commandInput(_ index: Int) -> BackgroundInput? {
-    guard case .command(_, let input) = jobs.calls[index].job.work else { return nil }
-    return input
-  }
-
-  private var succeeded: AutomationPartPass.Output? {
-    guard case .succeeded(let output, _) = outcomes.first else { return nil }
-    return output
-  }
-
-  private var failed: String? {
-    guard case .failed(let reason, _) = outcomes.first else { return nil }
-    return reason
-  }
-
+/// 毎回流れ直す、または出どころの id が接頭付きになり前回の出力と照らせない。照らせない・重なった処理の行や、地の文だけの判定が
+/// 黙って消える。候補に別の項目のリンクが付く。失敗した取得・仕事・副作用が成功として確定する。止めた回の結果が書き換えた
+/// 後の定義で確定する。
+final class AutomationPartPassTests: AutomationPartPassTestCase {
   // MARK: - 起こし方
 
   /// 上限は部品の経過時間だけで、無出力では打ち切らない——黙って長く考える agent を切らないため。
@@ -189,7 +119,7 @@ final class AutomationPartPassTests: OrbeTestCase {
   func testProcessCarriesTheOriginById() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
-      .process([row("a"), row("b")]))
+      .process([row("a"), row("b")], feedsJudge: false))
 
     jobs.finish(0, replied(#"{"id":"f:b","note":"x"}"# + "\n" + #"{"id":"new"}"#))
 
@@ -200,45 +130,71 @@ final class AutomationPartPassTests: OrbeTestCase {
     XCTAssertEqual(rows.map(\.origin), [origin("b"), nil])
   }
 
-  /// `id` の無い行が 1 行でもあれば、その回は失敗で何も渡さない——その行だけ捨てると、捨てた分に気づけない。
-  func testProcessOutputWithARowWithoutIdFailsAndPassesNothing() throws {
+  /// 判定へ渡す処理の行は、どれも入力の行と `id` で照らせなければならない——照らせない行は判定の溜まりに積めず、黙って消える。
+  func testProcessFeedingAJudgeBreaksTheRulesWithARowItCannotTrace() throws {
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
-      .process([row("a"), row("b")]))
+      AutomationGraphTests.command("p", from: ["f"], deliver: .nextPart), .process,
+      .process([row("a")], feedsJudge: true))
 
-    jobs.finish(0, replied(#"{"id":"f:a"}"# + "\n" + #"{"note":"id を落とした"}"#))
+    jobs.finish(0, printed(#"{"id":"f:a"}"# + "\n" + #"{"id":"new"}"#))
 
-    XCTAssertTrue(try XCTUnwrap(failed, "\(outcomes)").contains("line 2"), "定義を直せるよう、どの行かを言う")
+    XCTAssertEqual(breach?.lines.map(\.line), [2], "\(outcomes)")
+    XCTAssertNotNil(failed)
+  }
+
+  /// 同じ `id` の 2 つ目の行は外れた行——積むときに前の行を置き換え、前の行が黙って消える。
+  func testProcessRowWithARepeatedIdBreaksTheRules() throws {
+    start(
+      AutomationGraphTests.command("p", from: ["f"], deliver: .nextPart), .process,
+      .process([row("a")], feedsJudge: false))
+
+    jobs.finish(0, printed(#"{"id":"f:a"}"# + "\n" + #"{"id":"f:a","note":"2 度目"}"#))
+
+    XCTAssertEqual(breach?.lines.map(\.line), [2], "\(outcomes)")
   }
 
   // MARK: - 判定
 
-  /// 候補の案には指した行の出どころが付く。取った行に無い `id` を指す案は理由付きで捨てる。
+  /// 候補の案には指した行の出どころが付く。
   func testJudgeProposalsCarryTheOriginOfTheRowTheyPointTo() throws {
-    let rows = ["a", "b"].map {
-      AutomationSourcedRow(id: "f:\($0)", text: #"{"id":"f:\#($0)"}"#, origin: origin($0))
-    }
     start(
       AutomationGraphTests.agent("j", from: ["f"], deliver: .taskCandidates), .judge,
-      .judge(
-        rows,
-        choices: AutomationJudgeChoices(
-          open: [], workspaces: AutomationWorkspaces(listed: [], home: nil))))
+      judgeInput(["a", "b"]))
 
-    jobs.finish(
-      0,
-      replied(
-        #"{"propose":"f:b","title":"b に返信する"}"# + "\n" + #"{"propose":"f:z","title":"z"}"#))
+    jobs.finish(0, replied(#"{"propose":"f:b","title":"b に返信する"}"#))
 
-    guard case .judge(let proposals, _, let rejected) = try XCTUnwrap(succeeded, "\(outcomes)")
-    else {
+    guard case .judge(let proposals, _) = try XCTUnwrap(succeeded, "\(outcomes)") else {
       return XCTFail("\(outcomes)")
     }
     XCTAssertEqual(
       proposals,
       [AutomationPartPass.Proposal(origin: origin("b"), title: "b に返信する", due: nil, workspace: nil)]
     )
-    XCTAssertEqual(rejected.count, 1)
+    XCTAssertNil(breach)
+  }
+
+  /// 地の文だけの応答は、候補なしの成功ではなく決まりを外した出力——判定が壊れても気づけるように。
+  func testJudgeReplyOfOnlyProseBreaksTheRules() throws {
+    start(
+      AutomationGraphTests.agent("j", from: ["f"], deliver: .taskCandidates), .judge,
+      judgeInput(["a"]))
+
+    jobs.finish(0, replied("タスクにすべき項目はありません。"))
+
+    XCTAssertEqual(jobs.calls.count, 2, "出し直させる")
+    XCTAssertEqual(outcomes, [])
+  }
+
+  /// 取った行に無い `id`（接頭の無い元の `id` を含む）への案は外れた行。
+  func testJudgeProposalForAnIdOutsideTheRowsBreaksTheRules() throws {
+    start(
+      AutomationGraphTests.command("j", from: ["f"], deliver: .taskCandidates), .judge,
+      judgeInput(["a"]))
+
+    jobs.finish(0, printed(#"{"propose":"a","title":"a"}"#))
+
+    XCTAssertEqual(breach?.lines.map(\.line), [1], "\(outcomes)")
+    XCTAssertNotNil(failed)
   }
 
   // MARK: - 仕事・副作用
