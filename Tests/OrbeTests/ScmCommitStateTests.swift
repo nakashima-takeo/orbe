@@ -6,7 +6,8 @@ import XCTest
 ///
 /// 壊れると何が起きるか。変更があるのにボタンが同期に替わって押すとネット操作が走る・upstream の無いブランチで公開が
 /// 出ない・push 済みのコミットを amend で書き換えられる（Orbe の中では戻せない）・push 済みか分からない間に取り消せる・
-/// push と並んで amend・取り消しが走り、push したコミットを書き換える・競合だけなのにコミットが押せる。
+/// push と並んで amend・取り消しが走り、push したコミットを書き換える・競合だけなのにコミットが押せる・取り消せるのに ▾ が
+/// 開かない。
 final class ScmCommitStateTests: OrbeTestCase {
   private func branch(
     name: String? = "feat", commit: String? = "abc", upstream: GitStatus.Upstream? = nil
@@ -78,5 +79,11 @@ final class ScmCommitStateTests: OrbeTestCase {
     XCTAssertFalse(state(branch: head, committing: true).canUndo)
     XCTAssertFalse(state(staged: 1, branch: head, networking: true).canAmend)
     XCTAssertFalse(state(branch: head, networking: true).canUndo)
+  }
+
+  /// ▾ は中の項目（amend・コミットしてプッシュ・取り消し）が 1 つでも押せれば開き、1 つも押せなければ開かない。
+  func testTheMenuOpensOnlyWithAnItemToChoose() {
+    XCTAssertTrue(state(changes: 1, branch: branch()).isMenuEnabled, "欄が空でも取り消しは押せる")
+    XCTAssertFalse(state(branch: branch(), pushed: true).isMenuEnabled, "push 済みで変更も無い")
   }
 }
