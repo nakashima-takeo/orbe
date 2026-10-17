@@ -5,12 +5,14 @@ import XCTest
 @testable import Orbe
 
 /// 自動化の知らせ。通知をメニューバーにした自動化の部品が出した回・失敗した回を記録すると、名前と「部品: 結果」の 1 行のピルが
-/// Home の設定で立ち、出した回は完了の音・失敗は入力待ちの音が鳴る。失敗は部品ごとに続く間の最初の回だけ。off・何も出さなかった回・その行を見ている
-/// ときは出ない。ピルのクリックは Home のボードでその自動化の行を選び、焦点を一覧へ置く。
+/// Home の設定で立ち、出した回は完了の音・失敗は入力待ちの音が鳴る。失敗は部品ごとに続く間の最初の回だけ、出力が決まりを外した
+/// ことは部品ごとに最初の回だけ。off・何も出さなかった回・その行を見ているときは出ない。ピルのクリックは Home のボードでその
+/// 自動化の行を選び、焦点を一覧へ置く。
 ///
 /// 壊れると何が起きるか: 通知を付けていない自動化や、新着の無い 10 分ごとの回でピルが出続ける。認証切れで失敗し続ける自動化が
-/// 回ごとに鳴る。見ている行の回でも鳴る。Home のボードを開いているだけで、ほかの自動化の知らせが消える。ピルを押してもボードの
-/// 欄が選ばれ、どの自動化の知らせだったかを探し直すことになる。
+/// 回ごとに鳴る。出力の形が崩れた取得に気づけない、または崩れたままの間ずっと鳴る。見ている行の回でも鳴る。Home のボードを
+/// 開いているだけで、ほかの自動化の知らせが消える。ピルを押してもボードの欄が選ばれ、どの自動化の知らせだったかを探し直す
+/// ことになる。
 ///
 /// 重要: 実 NSWindow に WindowController を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerAutomationNoticeTests: OrbeTestCase {
@@ -157,6 +159,45 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     wc.notifyAutomationRecorded(try recorded(wc, report: nil), "digest")
     XCTAssertNil(wc.attentionStore.transient)
     XCTAssertTrue(sound.played.isEmpty)
+  }
+
+  /// 部品の出力が決まりを外した最初の回は外したことを知らせ、その回の失敗も同じ 1 つの知らせで言う。印がある間は、外しても
+  /// 外したことは知らせない（失敗の続きの最初としては知らせる）。
+  @MainActor func testOnlyTheFirstBreachIsToldAndItsFailureRidesOnIt() throws {
+    let wc = controller()
+    let store = wc.automationStore
+    let id = try store.create(
+      DesignSceneFixtures.candidatesDefinition(
+        "受信",
+        fetch: DesignSceneFixtures.commandPart(
+          "fetch", "取る", .scheduled(.every(1800)), script: "fetch", coverage: .currentSet),
+        notify: .menuBar), now: Date()
+    ).id
+    let breachedFailure = AutomationPartPass.Outcome.failed(
+      "the output of part \"fetch\" broke the rules: line 3: missing link",
+      DesignSceneFixtures.execution(1, ending: "exited 0"),
+      breach: AutomationPartPass.Breach(
+        lines: [AutomationBrokenLine(line: 3, reason: "missing link")], redo: nil))
+    var at = Date()
+    func record(_ outcome: AutomationPartPass.Outcome) throws {
+      at = at.addingTimeInterval(60)
+      _ = try store.record(
+        AutomationPassEnd(
+          automationId: id, part: "fetch", trigger: .schedule, startedAt: at, endedAt: at,
+          take: nil, outcome: outcome))
+    }
+
+    try record(breachedFailure)
+    let first = try XCTUnwrap(wc.automationNotification(id, "fetch"))
+    guard case .automation(let told) = first.notice else { return XCTFail("\(first)") }
+    XCTAssertTrue(told.text.contains("決まりを外した — line 3: missing link"), told.text)
+    XCTAssertTrue(told.failed)
+
+    try record(DesignSceneFixtures.fetched("fetch", []))
+    try record(breachedFailure)
+    let again = try XCTUnwrap(wc.automationNotification(id, "fetch"), "失敗の続きの最初は知らせる")
+    guard case .automation(let failure) = again.notice else { return XCTFail("\(again)") }
+    XCTAssertFalse(failure.text.contains("決まりを外した"), failure.text)
   }
 
   /// 選んでいる行の回は出ず、同じボードで選んでいない自動化の回は出る。
