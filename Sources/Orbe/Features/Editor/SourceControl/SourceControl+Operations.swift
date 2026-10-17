@@ -50,11 +50,10 @@ extension SourceControl {
 
   func fetch() {
     run(.fetch, .fetch) { [weak self] files, done, operation in
-      guard let self else { return done(.cancelled) }
-      attach(
+      self?.network(.fetch, of: operation, done) {
         files.fetch(
-          onProgress: { [weak self] in self?.report($0, of: operation) }, completion: done),
-        step: .fetch, to: operation)
+          onProgress: { [weak self] in self?.report($0, of: operation) }, completion: done)
+      }
     }
   }
 
@@ -93,17 +92,36 @@ extension SourceControl {
   private func pull(
     _ files: RootFiles, _ operation: Operation, _ done: @escaping (GitWriteFailure?) -> Void
   ) {
-    attach(
-      files.pull(onProgress: { [weak self] in self?.report($0, of: operation) }, completion: done),
-      step: .pull, to: operation)
+    network(.pull, of: operation, done) {
+      files.pull(onProgress: { [weak self] in self?.report($0, of: operation) }, completion: done)
+    }
   }
 
   private func push(
     _ files: RootFiles, _ operation: Operation, _ done: @escaping (GitWriteFailure?) -> Void
   ) {
-    attach(
-      files.push(onProgress: { [weak self] in self?.report($0, of: operation) }, completion: done),
-      step: .push, to: operation)
+    network(.push, of: operation, done) {
+      files.push(onProgress: { [weak self] in self?.report($0, of: operation) }, completion: done)
+    }
+  }
+
+  /// ネットの段（`write` が起こす書き込み）を起こして結ぶ。そのリポジトリの裏の fetch が走っていれば、止めてその終わりを
+  /// 待ってから起こす——待つ間も操作は走っている扱いで帯に出し、止められたら待ちを取り下げてその場で「止めた」で終える。
+  /// 譲るのはネットの段の直前だけ（コミットしてプッシュのコミットは押した時点で順番に入り、待つ間に押した操作が先に走らない）。
+  private func network(
+    _ step: Step, of operation: Operation, _ done: @escaping (GitWriteFailure?) -> Void,
+    _ write: @escaping () -> RootFiles.Write
+  ) {
+    guard let autoFetch = operation.autoFetch,
+      let withdraw = autoFetch.yield(then: { [weak self] in
+        self?.endYielding(operation)
+        self?.attach(write(), step: step, to: operation)
+      })
+    else { return attach(write(), step: step, to: operation) }
+    beginYielding(operation, before: step) {
+      withdraw()
+      done(.cancelled)
+    }
   }
 
   /// 1 段目が通り、止められていなければ 2 段目を起こす。そうでなければ 1 段目の結果で終える。
@@ -130,10 +148,10 @@ extension SourceControl {
     }
   }
 
-  /// 操作を列に載せて始める。`body` は段を結びながら（`attach`）書き込みを起こし、全段の終わりで `done` を 1 回呼ぶ。
-  /// ネット操作は、そのリポジトリの裏の fetch の係に届け出て、走っている裏の fetch が止まってから 1 段目を起こす（待つ間に
-  /// 止められたら、待ちを取り下げてその場で「止めた」で終える）。根の git dir がまだ分からなければ届け出ずに起こす（その根の
-  /// 係はまだ欲しがられていない）。
+  /// 操作を列に載せて始める。`body` は段を結びながら（`attach`・ネットの段は `network`）書き込みを起こし、全段の終わりで
+  /// `done` を 1 回呼ぶ。ネット操作は、始まりでそのリポジトリの裏の fetch の係に届け出る（届け出ている間は裏の fetch を撃た
+  /// ない）。根の git dir がまだ分からなければ届け出ない（書き込みは git を起こさずに「管理外」で返るので、裏の fetch と
+  /// 競らない）。
   private func run(
     _ kind: Kind, _ step: Step,
     _ body: @escaping (RootFiles, @escaping (GitWriteFailure?) -> Void, Operation) -> Void
@@ -142,19 +160,11 @@ extension SourceControl {
     let done: (GitWriteFailure?) -> Void = { [weak self, operation] failure in
       self?.finish(operation, failure)
     }
-    guard kind.isNetwork, let repo = operation.files.repo else {
-      return body(operation.files, done, operation)
+    if kind.isNetwork, let repo = operation.files.repo {
+      let autoFetch = ScmAutoFetch.shared(for: repo)
+      autoFetch.humanWillStart()
+      operation.autoFetch = autoFetch
     }
-    let autoFetch = ScmAutoFetch.shared(for: repo)
-    operation.autoFetch = autoFetch
-    let withdraw = autoFetch.yield { [weak self] in
-      self?.endYielding(operation)
-      body(operation.files, done, operation)
-    }
-    guard let withdraw else { return }
-    beginYielding(operation) {
-      withdraw()
-      done(.cancelled)
-    }
+    body(operation.files, done, operation)
   }
 }

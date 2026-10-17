@@ -68,7 +68,7 @@ final class SourceControl {
     @ObservationIgnored fileprivate(set) var order = 0
     /// 今の段の止める手。
     @ObservationIgnored fileprivate var write: RootFiles.Write?
-    /// 裏の fetch に譲って待つ間の止める手（待ちを取り下げて「止めた」で終える）。
+    /// ネットの段の前で裏の fetch に譲って待つ間の止める手（待ちを取り下げて「止めた」で終える）。
     @ObservationIgnored fileprivate var withdraw: (() -> Void)?
     @ObservationIgnored fileprivate(set) var isStopped = false
     /// 始めたときの根のサービス。2 段の操作は全段が終わるまで握る——2 段目のために引き直すと、誰も握っていない瞬間に
@@ -197,14 +197,18 @@ final class SourceControl {
     }
   }
 
-  /// 人のネット操作が、走っている裏の fetch の終わりを待ち始めた。待つのは、人の操作を走らせるための一部なので、走っている
-  /// 操作として帯に出す——塞いでいる裏の fetch は見せず、人には止められない。止める手は `withdraw`。
-  func beginYielding(_ operation: Operation, withdraw: @escaping () -> Void) {
+  /// 人のネット操作が、ネットの段 `step` の前で、走っている裏の fetch の終わりを待ち始めた。待つのは、人の操作を走らせる
+  /// ための一部なので、その段を走っている操作として帯に出す——塞いでいる裏の fetch は見せず、人には止められない。止める手は
+  /// `withdraw`。
+  func beginYielding(_ operation: Operation, before step: Step, withdraw: @escaping () -> Void) {
+    operation.step = step
+    operation.write = nil
+    operation.progress = nil
     operation.withdraw = withdraw
-    begin(operation)
+    if !operation.isRunning { begin(operation) }
   }
 
-  /// 譲る待ちが明けた。1 段目を結ぶ前に、走っている扱いを解く——1 段目が順番待ちに入れば、帯は塞いでいる操作を出す。
+  /// 譲る待ちが明けた。段を結ぶ前に、走っている扱いを解く——段が順番待ちに入れば、帯は塞いでいる操作を出す。
   /// 帯に出す遅れはもう越えていれば、越えたままにする（走り始めたその場で帯に戻り、点滅しない）。
   func endYielding(_ operation: Operation) {
     operation.withdraw = nil

@@ -42,7 +42,7 @@ final class ScmAutoFetchRulesTests: OrbeTestCase {
     rules.backgroundDidStart()
     XCTAssertNil(rules.delay(at: start), "裏の fetch が走っている")
     rules = wanted()
-    _ = rules.humanWillStart()
+    rules.humanWillStart()
     XCTAssertNil(rules.delay(at: start), "人のネット操作がある")
     rules.humanDidFinish(.push, .cancelled, at: start)
     XCTAssertEqual(rules.delay(at: start), 0, "人の操作が終われば撃てる")
@@ -69,10 +69,10 @@ final class ScmAutoFetchRulesTests: OrbeTestCase {
       rules.backgroundDidFinish(failure, at: start)
       XCTAssertNil(rules.delay(at: at(interval * 10)), "\(failure)")
 
-      _ = rules.humanWillStart()
+      rules.humanWillStart()
       rules.humanDidFinish(.pull, .authentication, at: at(10))
       XCTAssertNil(rules.delay(at: at(interval * 10)), "手の操作が落ちたなら止まったまま")
-      _ = rules.humanWillStart()
+      rules.humanWillStart()
       rules.humanDidFinish(.push, nil, at: at(10))
       XCTAssertEqual(rules.delay(at: at(10)), 0, "push が通れば解ける（前回の時刻は無いまま）")
     }
@@ -80,20 +80,19 @@ final class ScmAutoFetchRulesTests: OrbeTestCase {
     var rules = wanted()
     rules.backgroundDidStart()
     rules.backgroundDidFinish(.authentication, at: start)
-    _ = rules.humanWillStart()
+    rules.humanWillStart()
     rules.humanDidFinish(.fetch, nil, at: at(10))
     XCTAssertEqual(rules.delay(at: at(10)), interval, "fetch が通れば解けて、そこから数える")
   }
 
-  /// 人のネット操作は、裏の fetch が走っていなければすぐ起こし、走っていれば止めて終わりを待たせる。
-  func testAHumanOperationWaitsOnlyForARunningBackgroundFetch() {
+  /// 人のネット操作の間は、裏の fetch が終わっても撃たない。
+  func testItDoesNotFireUntilTheHumanOperationEndsEvenAfterTheBackgroundFetchEnds() {
     var rules = wanted()
-    XCTAssertFalse(rules.humanWillStart(), "走っていなければすぐ")
-    rules.humanDidFinish(.fetch, nil, at: start)
-
     rules.backgroundDidStart()
-    XCTAssertTrue(rules.humanWillStart(), "走っていれば止めて待たせる")
+    rules.humanWillStart()
     rules.backgroundDidFinish(.cancelled, at: at(1))
     XCTAssertNil(rules.delay(at: at(interval * 2)), "人の操作が終わるまで撃たない")
+    rules.humanDidFinish(.fetch, nil, at: at(2))
+    XCTAssertEqual(rules.delay(at: at(2)), interval)
   }
 }

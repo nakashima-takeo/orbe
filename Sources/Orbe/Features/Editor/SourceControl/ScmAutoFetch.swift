@@ -88,15 +88,17 @@ final class ScmAutoFetch {
 
   // MARK: - 人の操作
 
-  /// 人のネット操作を始める。走っている裏の fetch があれば止め、その終わりを待ってから `start`（1 段目）を呼び、待たせた
-  /// ときは待ちを取り下げる手を返す（取り下げた `start` は呼ばない）。終わりは `humanDidFinish` で必ず 1 回届ける（取り下げた
-  /// 操作も）。
-  func yield(then start: @escaping () -> Void) -> (() -> Void)? {
+  /// 人のネット操作が始まった。届け出ている間は裏の fetch を撃たない（走っているものは、ネットの段の前の `yield` が
+  /// 止める）。終わりは `humanDidFinish` で必ず 1 回届ける。
+  func humanWillStart() {
     cancelTimer()
-    guard rules.humanWillStart() else {
-      start()
-      return nil
-    }
+    rules.humanWillStart()
+  }
+
+  /// 人の操作のネットの段を起こす前に譲る。裏の fetch が走っていれば止め、その終わりを待ってから `start` を呼び、待ちを
+  /// 取り下げる手を返す（取り下げた `start` は呼ばない）。走っていなければ `start` を呼ばずに nil を返す（そのまま起こせる）。
+  func yield(then start: @escaping () -> Void) -> (() -> Void)? {
+    guard rules.isRunning else { return nil }
     let waiting = Yielded(start)
     yielded.append(waiting)
     running?.cancel()
@@ -150,8 +152,7 @@ final class ScmAutoFetch {
   }
 }
 
-/// 裏の fetch の係の判断（時刻を引数で受ける状態機械）——いつ撃つか、人の操作をすぐ起こすか裏の fetch を止めて待たせるか、
-/// 終わりで何を記録するか。
+/// 裏の fetch の係の判断（時刻を引数で受ける状態機械）——いつ撃つか、終わりで何を記録するか。
 struct ScmAutoFetchRules {
   /// 前回の fetch・pull の終わりから次の裏の fetch までの間。
   static let interval: TimeInterval = 180
@@ -186,10 +187,9 @@ struct ScmAutoFetchRules {
     isRunning = true
   }
 
-  /// 人のネット操作が始まる。裏の fetch が走っていれば true——それを止め、その終わりを待ってから人の操作を起こす。
-  mutating func humanWillStart() -> Bool {
+  /// 人のネット操作が始まった。
+  mutating func humanWillStart() {
     humans += 1
-    return isRunning
   }
 
   /// 人のネット操作が終わった。fetch・pull・同期が通れば前回の時刻を今にして止まりを解き、push の類が通れば止まりだけを
