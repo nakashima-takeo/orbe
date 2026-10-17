@@ -4,67 +4,16 @@ import XCTest
 @testable import Orbe
 
 /// 行の列の部品（`RowList`）そのもの——検索に依らない最小の源で、枠の使い回しと新しく見えた行だけの描き直し、キーの
-/// 渡し方（Home / End・Page は列が送る）、押した行、選択が変わったときだけ見せること、焦点の要求、VoiceOver のリストを
-/// 固める。
+/// 渡し方（Home / End・Page は列が送る）、押した行と行の中の部品（高さの違う区間をまたいでも）、選択が変わったときだけ
+/// 見せること、焦点の要求、VoiceOver のリストを固める。
 ///
 /// 壊れると何が起きるか。送るたびに見えている行を全部描き直して重い、行の数が変わるたびに枠を作り直す。↑↓ や Enter が
-/// 源へ届かない、Home / End で送れない。押した行と違う行が開く。選んだ行が見えているのに送られる、見えていないのに
+/// 源へ届かない、Home / End で送れない。押した行と違う行が開く・行の中のボタンを押すと別の行のボタンになるか行のクリックになる。選んだ行が見えているのに送られる、見えていないのに
 /// 寄らない。結果が届くたびに選択の行へ引き戻される。末尾まで送っても最後の行が下端に付く。つまみを掴めない・引いても
 /// ポインタに付いてこない、消えているつまみや帯が行のクリックを奪う。
 @MainActor
 final class RowListTests: OrbeTestCase {
   private let rowHeight: CGFloat = 20
-
-  /// 源の偽物。行 r の中身は "row r"、選択の同一性は行の番号そのもの。受けた操作を記録する。
-  final class Source: RowListSource {
-    var rowCount = 200
-    var rowSegments: [RowListSegment] { [RowListSegment(start: 0, count: rowCount, height: 20)] }
-    var wantsFocus = false
-    private(set) var keys: [RowListKey] = []
-    private(set) var releases = 0
-    private(set) var clicks: [String] = []
-    private(set) var selected: [Int] = []
-    private(set) var focus: [Bool] = []
-    private(set) var focusRequestsApplied = 0
-    /// 今の行の数の外の行を問われた回数。
-    private(set) var outOfRange = 0
-
-    func makeRowView() -> Row { Row(frame: .zero) }
-    func show(_ row: Int, in view: Row, emoji: NSFont?) {
-      if row >= rowCount { outOfRange += 1 }
-      view.show("row \(row)")
-    }
-    func row(of selection: Int) -> Int? { selection < rowCount ? selection : nil }
-    func prepareRows(for appearance: NSAppearance) {}
-    func focusRequestDidApply() {
-      wantsFocus = false
-      focusRequestsApplied += 1
-    }
-    func focusDidChange(_ focused: Bool) { focus.append(focused) }
-    func perform(_ key: RowListKey) { keys.append(key) }
-    func keyDidRelease() { releases += 1 }
-    func click(_ row: Int) {
-      if row >= rowCount { outOfRange += 1 }
-      clicks.append("click \(row)")
-    }
-    func doubleClick(_ row: Int) { clicks.append("double \(row)") }
-    func select(_ row: Int) { selected.append(row) }
-  }
-
-  /// 行の偽物。中身が変わったときだけ描き直す（描いた回数を数える）。
-  final class Row: ListRowView {
-    private(set) var label: String?
-    private(set) var draws = 0
-
-    func show(_ label: String) {
-      guard label != self.label else { return }
-      self.label = label
-      setAccessibilityLabel(label)
-      needsDisplay = true
-    }
-
-    override func drawContent(_ colors: RowColors, in context: CGContext) { draws += 1 }
-  }
 
   private struct Hosted {
     let source: Source
@@ -74,9 +23,10 @@ final class RowListTests: OrbeTestCase {
   }
 
   /// 幅 200・高さ 100（5 行ぶん）の列を窓に載せ、行を読ませる。
-  private func host(rowCount: Int = 200) -> Hosted {
+  private func host(rowCount: Int = 200, segments: [RowListSegment]? = nil) -> Hosted {
     let source = Source()
     source.rowCount = rowCount
+    source.segments = segments
     let rows = RowList(source: source, rowHeight: rowHeight)
     let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.borderless],
@@ -120,7 +70,7 @@ final class RowListTests: OrbeTestCase {
   func testSlotsAreReusedAndScrollingRedrawsOnlyTheNewlyVisibleRows() {
     let hosted = host()
     let list = hosted.list
-    XCTAssertEqual(list.frame.height, rowHeight * 201, "行の高さは 1 つ・最後の行の下に 1 行分の空き")
+    XCTAssertEqual(list.frame.height, rowHeight * 201, "区間 1 つの源では、行の数ぶん＋最後の行の下に 1 行分の空き")
     XCTAssertEqual(slots(list).count, 6, "見えている 5 行＋1 本")
     XCTAssertEqual(slot(list, 4)?.label, "row 4")
     XCTAssertNil(slot(list, 5), "見えていない行は描かない")
@@ -208,9 +158,17 @@ final class RowListTests: OrbeTestCase {
 
   // MARK: - マウス
 
-  /// 押すと焦点を取り、行の番号を源へ渡す（ダブルクリックは別の口）。行の無いところ（最後の行の下の空き）は渡さない。
-  func testClicksPassTheRow() {
-    let hosted = host(rowCount: 3)
+  /// 押すと焦点を取り、押した位置の行の番号を源へ渡す（ダブルクリックは別の口）——行の高さが区間ごとに違っても。行の
+  /// 中の部品の上なら、行のクリックではなく部品の押下として渡す。行の無いところ（最後の行の下の空き）は渡さない。
+  func testClicksPassTheRowAndPressesPassTheControl() {
+    // 行 0 は 0..<20、行 1 は 20..<52、行 2 は 52..<72、行 3 は 72..<92。
+    let hosted = host(
+      rowCount: 4,
+      segments: [
+        RowListSegment(start: 0, count: 1, height: 20),
+        RowListSegment(start: 1, count: 1, height: 32),
+        RowListSegment(start: 2, count: 2, height: 20),
+      ])
     let list = hosted.list
     func press(x: CGFloat, y: CGFloat, count: Int) {
       list.mouseDown(
@@ -219,11 +177,13 @@ final class RowListTests: OrbeTestCase {
           modifierFlags: [], timestamp: 0, windowNumber: hosted.window.windowNumber, context: nil,
           eventNumber: 0, clickCount: count, pressure: 1)!)
     }
-    press(x: 13, y: 2.5 * rowHeight, count: 1)
+    press(x: 13, y: 50, count: 1)
     XCTAssertTrue(hosted.window.firstResponder === list, "押すと焦点を取る")
-    press(x: 150, y: 0.5 * rowHeight, count: 2)
-    press(x: 20, y: 3.5 * rowHeight, count: 1)  // 最後の行の下の空き
-    XCTAssertEqual(hosted.source.clicks, ["click 2", "double 0"])
+    press(x: 13, y: 53, count: 1)
+    press(x: 150, y: 10, count: 2)
+    press(x: 190, y: 85, count: 1)
+    press(x: 20, y: 95, count: 1)  // 最後の行の下の空き
+    XCTAssertEqual(hosted.source.clicks, ["click 1", "click 2", "double 0", "press 3 0"])
   }
 
   // MARK: - つまみ
@@ -373,5 +333,67 @@ final class RowListTests: OrbeTestCase {
     XCTAssertTrue(rows[2].isAccessibilitySelected())
     list.setAccessibilitySelectedRows([rows[4]])
     XCTAssertEqual(hosted.source.selected, [4], "リストの行を選ぶと源の選択")
+  }
+}
+
+extension RowListTests {
+  /// 源の偽物。行 r の中身は "row r"、選択の同一性は行の番号そのもの。受けた操作を記録する。行の高さは `segments`
+  /// （無ければ全行 20 の区間 1 つ）。
+  final class Source: RowListSource {
+    var rowCount = 200
+    var segments: [RowListSegment]?
+    var rowSegments: [RowListSegment] {
+      segments ?? [RowListSegment(start: 0, count: rowCount, height: 20)]
+    }
+    var wantsFocus = false
+    private(set) var keys: [RowListKey] = []
+    private(set) var releases = 0
+    private(set) var clicks: [String] = []
+    private(set) var selected: [Int] = []
+    private(set) var focus: [Bool] = []
+    private(set) var focusRequestsApplied = 0
+    /// 今の行の数の外の行を問われた回数。
+    private(set) var outOfRange = 0
+
+    func makeRowView() -> Row { Row(frame: .zero) }
+    func show(_ row: Int, in view: Row, emoji: NSFont?) {
+      if row >= rowCount { outOfRange += 1 }
+      view.show("row \(row)")
+    }
+    func row(of selection: Int) -> Int? { selection < rowCount ? selection : nil }
+    func prepareRows(for appearance: NSAppearance) {}
+    func focusRequestDidApply() {
+      wantsFocus = false
+      focusRequestsApplied += 1
+    }
+    func focusDidChange(_ focused: Bool) { focus.append(focused) }
+    func perform(_ key: RowListKey) { keys.append(key) }
+    func keyDidRelease() { releases += 1 }
+    func click(_ row: Int) {
+      if row >= rowCount { outOfRange += 1 }
+      clicks.append("click \(row)")
+    }
+    func doubleClick(_ row: Int) { clicks.append("double \(row)") }
+    func press(_ row: Int, control: Int) { clicks.append("press \(row) \(control)") }
+    func select(_ row: Int) { selected.append(row) }
+  }
+
+  /// 行の偽物。中身が変わったときだけ描き直す（描いた回数を数える）。右端 30pt に部品 0 を持つ。
+  final class Row: ListRowView {
+    private(set) var label: String?
+    private(set) var draws = 0
+
+    func show(_ label: String) {
+      guard label != self.label else { return }
+      self.label = label
+      setAccessibilityLabel(label)
+      needsDisplay = true
+    }
+
+    override func drawContent(_ colors: RowColors, in context: CGContext) { draws += 1 }
+
+    override func control(at point: NSPoint) -> Int? {
+      bounds.contains(point) && point.x >= bounds.maxX - 30 ? 0 : nil
+    }
   }
 }
