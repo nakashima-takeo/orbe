@@ -203,14 +203,14 @@ private struct ScmMessageBox: View {
 }
 
 /// コミットボタン（見本 primaryButton 26・radius 3・地 accent・字 tabActiveText 12 semibold）: 主の働き（コミット / 同期 ↑N ↓M /
-/// ブランチを公開）＋縦線 ＋ ▾（コミット (amend) / コミットしてプッシュ / ─ / 最後のコミットを取り消す）。主の働きが押せない
-/// 間は箱ごと薄くする（▾ は押せる）。
+/// ブランチを公開）＋縦線 ＋ ▾（コミット (amend) / コミットしてプッシュ / ─ / 最後のコミットを取り消す）。地は側ごとに持ち、
+/// 押せない側は地ごと design-system の disabled にする（字だけ薄くすると、紫の地が押せる姿のまま残る）。▾ は中の項目が
+/// 1 つも押せないときだけ押せない姿で、開かない。
 private struct ScmCommitButton: View {
   let panel: ScmPanel
   @Environment(\.localization) private var l10n
 
   private static let dividerAlpha = 0.25
-  private static let disabledOpacity = 0.5
 
   var body: some View {
     let state = panel.commitState
@@ -223,21 +223,27 @@ private struct ScmCommitButton: View {
           .lineLimit(1)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(Color.theme.accentPrimary)
       .contentShape(Rectangle())
       .onTapGesture { if state.isPrimaryEnabled { primary(state.primary) } }
-      .opacity(state.isPrimaryEnabled ? 1 : Self.disabledOpacity)
-      Rectangle()
-        .fill(Color.theme.bgBase.opacity(Self.dividerAlpha))
-        .frame(width: Theme.Stroke.hairline)
-      EditorGlyphView(glyph: EditorGlyphs.chevronDown, size: 12, color: Color.theme.tabActiveText)
-        .frame(width: Theme.Layout.editorScmCommitCaret)
-        .frame(maxHeight: .infinity)
-        .overlay {
-          ScmMenuAnchor(help: l10n.string(.editorScmCommitActions)) { menu(panel.commitState) }
-        }
+      .opacity(state.isPrimaryEnabled ? 1 : Theme.Opacity.disabled)
+      HStack(spacing: 0) {
+        Rectangle()
+          .fill(Color.theme.bgBase.opacity(Self.dividerAlpha))
+          .frame(width: Theme.Stroke.hairline)
+        EditorGlyphView(glyph: EditorGlyphs.chevronDown, size: 12, color: Color.theme.tabActiveText)
+          .frame(width: Theme.Layout.editorScmCommitCaret)
+          .frame(maxHeight: .infinity)
+      }
+      .background(Color.theme.accentPrimary)
+      .opacity(state.isMenuEnabled ? 1 : Theme.Opacity.disabled)
+      .overlay {
+        ScmMenuAnchor(
+          help: l10n.string(.editorScmCommitActions), isEnabled: state.isMenuEnabled
+        ) { menu(panel.commitState) }
+      }
     }
     .frame(height: Theme.Layout.editorScmCommitButton)
-    .background(Color.theme.accentPrimary)
     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.xs))
   }
 

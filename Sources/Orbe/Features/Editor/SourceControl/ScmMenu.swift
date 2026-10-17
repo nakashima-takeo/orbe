@@ -2,15 +2,16 @@ import AppKit
 import SwiftUI
 
 /// 押すと OS のメニューを自分の下に出す透明な当たり（SwiftUI の Menu は見本の姿に描けないため、見た目は SwiftUI、押下と
-/// メニューは AppKit）。
+/// メニューは AppKit）。押せない間はメニューを開かない。
 struct ScmMenuAnchor: NSViewRepresentable {
   let help: String
+  var isEnabled = true
   let menu: () -> NSMenu
 
   func makeNSView(context: Context) -> AnchorView { AnchorView() }
 
   func updateNSView(_ view: AnchorView, context: Context) {
-    view.menuMaker = menu
+    view.menuMaker = isEnabled ? menu : nil
     view.toolTip = help
   }
 

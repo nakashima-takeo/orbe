@@ -18,6 +18,8 @@ struct ScmCommitState: Equatable {
   let canAmend: Bool
   let canCommitAndPush: Bool
   let canUndo: Bool
+  /// ▾ が開く（中の項目が 1 つでも押せる）。
+  let isMenuEnabled: Bool
   /// プル・プッシュ・フェッチ（前提は根のサービスが判定する。同じ worktree のネット操作が走っている間だけ押せない）。
   let canNetwork: Bool
 
@@ -51,5 +53,6 @@ struct ScmCommitState: Equatable {
     canAmend = rewritable && (staged > 0 || !messageIsBlank)
     canUndo = rewritable
     canCommitAndPush = canCommit && !isNetworking
+    isMenuEnabled = canAmend || canCommitAndPush || canUndo
   }
 }
