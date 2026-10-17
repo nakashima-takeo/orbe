@@ -19,3 +19,15 @@ final class FakeJobs {
     calls[index].completion(result)
   }
 }
+
+extension BackgroundRunResult {
+  /// 走った長さを始まりと終わりの実時刻の差とみなす（スリープを挟まない回）。
+  init(
+    commandLine: String, startedAt: Date, endedAt: Date, ending: BackgroundEnding,
+    output: BackgroundOutput
+  ) {
+    self.init(
+      commandLine: commandLine, startedAt: startedAt, endedAt: endedAt,
+      elapsed: endedAt.timeIntervalSince(startedAt), ending: ending, output: output)
+  }
+}

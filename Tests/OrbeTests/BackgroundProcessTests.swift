@@ -93,6 +93,17 @@ final class BackgroundProcessTests: OrbeTestCase {
     XCTAssertEqual(try run(bad).outcome.ending, .launchFailed(ENOENT))
   }
 
+  /// 走った長さは起こしてから終わるまでで、起こさなかった回は 0。
+  func testElapsedRunsFromLaunchToEnd() throws {
+    let result = try run(spec("sleep 0.3"))
+    var bad = spec("true")
+    bad.executable = TestScratch.caseDir.appendingPathComponent("missing").path
+
+    XCTAssertGreaterThanOrEqual(result.outcome.elapsed, 0.3)
+    XCTAssertLessThanOrEqual(result.outcome.elapsed, result.elapsed)
+    XCTAssertEqual(try run(bad).outcome.elapsed, 0)
+  }
+
   func testStdinIsDeliveredAndClosed() throws {
     let result = try run(spec("cat", stdin: Data("依頼文".utf8)))
 

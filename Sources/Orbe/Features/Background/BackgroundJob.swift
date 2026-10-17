@@ -170,6 +170,9 @@ struct BackgroundRunResult: Equatable {
   let commandLine: String
   let startedAt: Date
   let endedAt: Date
+  /// 走った長さ（秒）。経過時間の上限と同じ、スリープ中を数えない時計で測る——実時刻の差はスリープを含むので、上限の残りの
+  /// 見積もりには使えない。走らなかったなら 0。
+  let elapsed: TimeInterval
   let ending: BackgroundEnding
   let output: BackgroundOutput
 }

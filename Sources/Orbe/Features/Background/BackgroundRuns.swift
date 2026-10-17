@@ -107,7 +107,8 @@ final class BackgroundRuns {
     case .dropWaiting:
       let now = Date()
       let result = BackgroundRunResult(
-        commandLine: Self.describe(entry.job), startedAt: now, endedAt: now, ending: .stopped,
+        commandLine: Self.describe(entry.job), startedAt: now, endedAt: now, elapsed: 0,
+        ending: .stopped,
         output: .none)
       DispatchQueue.main.async { entry.completion(result) }
     case .stopProcess(let process): process.stop()
@@ -122,7 +123,7 @@ final class BackgroundRuns {
     switch prepare(entry.job) {
     case .failure(let failure):
       result = BackgroundRunResult(
-        commandLine: Self.describe(entry.job), startedAt: startedAt, endedAt: Date(),
+        commandLine: Self.describe(entry.job), startedAt: startedAt, endedAt: Date(), elapsed: 0,
         ending: .notStarted(failure), output: .none)
     case .success(let prepared):
       defer { prepared.removeWorkDirectory() }
@@ -137,7 +138,7 @@ final class BackgroundRuns {
         result = prepared.makeResult(outcome, startedAt, Date())
       } else {
         result = BackgroundRunResult(
-          commandLine: prepared.commandLine, startedAt: startedAt, endedAt: Date(),
+          commandLine: prepared.commandLine, startedAt: startedAt, endedAt: Date(), elapsed: 0,
           ending: .stopped, output: .none)
       }
     }
@@ -260,7 +261,7 @@ private struct Prepared {
     ) { outcome, startedAt, endedAt in
       BackgroundRunResult(
         commandLine: command.script, startedAt: startedAt, endedAt: endedAt,
-        ending: ending(outcome.ending),
+        elapsed: outcome.elapsed, ending: ending(outcome.ending),
         output: launched(outcome)
           ? .command(stdout: outcome.stdout, stderr: outcome.stderr) : .none)
     }
@@ -315,7 +316,8 @@ private struct Prepared {
         result = .limited(.output)
       }
       return BackgroundRunResult(
-        commandLine: commandLine, startedAt: startedAt, endedAt: endedAt, ending: result,
+        commandLine: commandLine, startedAt: startedAt, endedAt: endedAt,
+        elapsed: outcome.elapsed, ending: result,
         output: launched(outcome) ? .agent(reply: box.reply, stderr: outcome.stderr) : .none)
     }
   }

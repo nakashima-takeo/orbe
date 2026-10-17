@@ -88,6 +88,14 @@ final class BackgroundRunsTests: OrbeTestCase {
     XCTAssertEqual(stdout(result), "\(physical)\n\(bin.path):/usr/bin:/bin")
   }
 
+  /// 結果は、走った長さを上限の時計で測った値を持つ（使い手が上限の残りを見積もる）。
+  func testResultCarriesTheElapsedTimeOfTheRun() throws {
+    let result = try run(runs(), command("sleep 0.2"))
+
+    XCTAssertGreaterThanOrEqual(result.elapsed, 0.2)
+    XCTAssertLessThanOrEqual(result.elapsed, result.endedAt.timeIntervalSince(result.startedAt))
+  }
+
   func testCommandDefaultsToHome() throws {
     let result = try run(runs(), command("pwd"))
 
