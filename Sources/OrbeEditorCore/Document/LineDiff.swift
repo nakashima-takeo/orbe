@@ -17,7 +17,9 @@ public struct LineHunk: Equatable, Sendable {
   }
 }
 
-/// 行差分の純関数。行は `\n` で割り（`\r` は行の中身に残す）、末尾の改行の有無も行の違いとして扱う。
+/// 行差分の純関数。行はエディターの行——`\n` で割り（`\r` は行の中身に残す）、改行で終わる本文は末尾に空の行を持ち、
+/// 空の本文は空の行 1 つ（行の数は `TextRope.lineCount` と常に等しい）。末尾の改行を足す・消すのは、空の行の追加・削除に
+/// なる。片側が空の本文なら、共通の端の外を 1 つの区間にする（空の本文の 1 行を、本文の途中の空の行に対応させない）。
 public enum LineDiff {
   /// 差分を取る手間の上限。超えれば、共通の先頭・末尾を落とした残り全体を 1 つの変更区間にする（時間を有界にする）。
   public enum Limit: Equatable, Sendable {
@@ -34,12 +36,34 @@ public enum LineDiff {
 
   /// 本文の写しは、差分を取る間だけ連続した UTF-16 の列に写す（Myers が行を任意の順に引くため。取り終えたら手放す）。
   public static func hunks(base: String, current: TextRope, limit: Limit = gutter) -> [LineHunk] {
-    hunks(ContiguousArray(base.utf16), current.contiguousUnits(), limit: limit)
+    if base.isEmpty { return againstEmpty(current, isNew: true) }
+    return hunks(ContiguousArray(base.utf16), current.contiguousUnits(), limit: limit)
   }
 
   /// 2 つの写しの行差分（`old` が底）。
   public static func hunks(old: TextRope, new: TextRope, limit: Limit) -> [LineHunk] {
-    hunks(old.contiguousUnits(), new.contiguousUnits(), limit: limit)
+    if old.length == 0 { return againstEmpty(new, isNew: true) }
+    if new.length == 0 { return againstEmpty(old, isNew: false) }
+    return hunks(old.contiguousUnits(), new.contiguousUnits(), limit: limit)
+  }
+
+  /// 空の本文と `text` の行差分を、行を割らずに端の行だけで決める（一般の道と同じ結果。片側が無い版の diff を、本文の大きさに
+  /// 依らない手間で出す）。`isNew` なら `text` が新しい側。
+  private static func againstEmpty(_ text: TextRope, isNew: Bool) -> [LineHunk] {
+    guard text.length > 0 else { return [] }
+    let newline: UInt16 = 0x0A
+    let firstIsEmpty = text.units(in: NSRange(location: 0, length: 1)).first == newline
+    let lastIsEmpty =
+      text.units(in: NSRange(location: text.length - 1, length: 1)).first == newline
+    let shared = firstIsEmpty || lastIsEmpty ? 1 : 0
+    let start = firstIsEmpty ? 1 : 0
+    let emptyRest = 1 - shared
+    let textRest = text.lineCount - shared
+    return [
+      isNew
+        ? hunk(oldStart: start, oldCount: emptyRest, newStart: start, newCount: textRest)
+        : hunk(oldStart: start, oldCount: textRest, newStart: start, newCount: emptyRest)
+    ]
   }
 
   private static func hunks(
@@ -54,6 +78,7 @@ public enum LineDiff {
     let whole = [
       hunk(oldStart: prefix, oldCount: oldRest.count, newStart: prefix, newCount: newRest.count)
     ]
+    if old == [[]] || new == [[]] { return whole }
     if case .lines(let maximum) = limit, oldRest.count + newRest.count > maximum { return whole }
     let (oldIDs, newIDs) = identities(oldRest, newRest)
     if case .edits(let maximum) = limit, !withinEdits(oldIDs, newIDs, maximum) { return whole }
@@ -147,23 +172,18 @@ public enum LineDiff {
       newStart: newCount == 0 ? newStart : newStart + 1, newCount: newCount)
   }
 
-  /// 行の中身と、改行で終わっているか。最後の行だけ改行を欠きうる。行の同一性は UTF-16 の単位の列——`String ==` の
-  /// 正準等価（NFC と NFD を同じとみなす）ではなく、git が違うと言う行をここも違うと言う。
-  private struct Line: Hashable {
-    let body: ArraySlice<UInt16>
-    let terminated: Bool
-  }
+  /// 行の中身（改行を含まない）。行の同一性は UTF-16 の単位の列——`String ==` の正準等価（NFC と NFD を同じとみなす）では
+  /// なく、git が違うと言う行をここも違うと言う。
+  private typealias Line = ArraySlice<UInt16>
 
   private static func lines(of units: ContiguousArray<UInt16>) -> [Line] {
     var result: [Line] = []
     var start = 0
     for (index, unit) in units.enumerated() where unit == 0x0A {
-      result.append(Line(body: ArraySlice(units[start..<index]), terminated: true))
+      result.append(units[start..<index])
       start = index + 1
     }
-    if start < units.count {
-      result.append(Line(body: ArraySlice(units[start...]), terminated: false))
-    }
+    result.append(units[start...])
     return result
   }
 }

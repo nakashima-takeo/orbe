@@ -55,7 +55,9 @@ extension EditorDiff {
     guard let document else { return (revisionHunks, newSide) }
     let side = DiffRows.Side(document.text)
     guard let oldSource else { return nil }
-    guard let base = oldSource else { return (DiffRows.wholeHunks(old: .absent, new: side), side) }
+    guard let base = oldSource else {
+      return (LineDiff.hunks(old: TextRope(), new: document.text, limit: Self.hunkLimit), side)
+    }
     guard document.hunksBase == base else { return nil }
     return (document.hunks, side)
   }

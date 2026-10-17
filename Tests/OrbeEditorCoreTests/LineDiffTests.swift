@@ -43,8 +43,11 @@ final class LineDiffTests: XCTestCase {
 
   func testTrailingNewlineAndCarriageReturnCount() {
     XCTAssertEqual(
-      LineDiff.hunks(base: "a\nb\n", current: TextRope("a\nb")), [hunk(2, 1, 2, 1)],
-      "末尾の改行の有無は最後の行の違い")
+      LineDiff.hunks(base: "a\nb\n", current: TextRope("a\nb")), [hunk(3, 1, 2, 0)],
+      "末尾の改行を消すのは最後の空の行の削除")
+    XCTAssertEqual(
+      LineDiff.hunks(base: "a", current: TextRope("a\nb")), [hunk(1, 0, 2, 1)],
+      "改行の無い最終行の後ろに足した行だけが追加")
     XCTAssertEqual(
       LineDiff.hunks(base: "a\r\nb\r\n", current: TextRope("a\r\nb\r\n")), [], "CRLF はそのまま比べる")
     XCTAssertEqual(

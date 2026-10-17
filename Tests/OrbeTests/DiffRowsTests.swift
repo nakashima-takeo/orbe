@@ -7,8 +7,7 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// diff の並びの純関数——インライン（削除行は古い側の行を指す差し込み・追加は型・文脈は旧番号）と並列（区間の削除と追加を
-/// 同じ行から並べ、短い側に詰め物）。壊れると、削除行が別の行に出る・旧番号がずれる・最後の空の行に番号が付く・並列の
-/// 両側が揃わず見比べられない。
+/// 同じ行から並べ、短い側に詰め物）。壊れると、削除行が別の行に出る・旧番号がずれる・並列の両側が揃わず見比べられない。
 @MainActor
 final class DiffRowsTests: OrbeTestCase {
   private func hunks(_ old: String, _ new: String) -> [LineHunk] {
@@ -50,19 +49,20 @@ final class DiffRowsTests: OrbeTestCase {
       ])
   }
 
-  /// 片側だけ（未追跡・追加）なら全部の行が追加で、古い側の番号は無い（最後の空の行にも付かない）。削除なら全部の行が
-  /// 古い側の行を指す差し込みで、新しい側は 0 行。
-  func testOneSidedDiffsAreWhollyAddedOrRemoved() {
+  /// 片側だけ（未追跡・追加）は、無い側を空の本文として比べる——本文の行が追加で、末尾の空の行は古い側の空の行と揃う。
+  /// 削除なら本文の行が古い側の行を指す差し込みで、新しい側の空の行が古い側の末尾の空の行と揃う。
+  func testOneSidedDiffsCompareAgainstTheEmptyText() {
     let text = TextRope(lines(["one", "two"]))
+    let empty = TextRope()
     let added = DiffRows.inline(
-      DiffRows.wholeHunks(old: .absent, new: DiffRows.Side(text)), old: .absent,
+      LineDiff.hunks(old: empty, new: text, limit: EditorDiff.hunkLimit), old: DiffRows.Side(empty),
       new: DiffRows.Side(text))
     XCTAssertEqual(added.insertions, [])
     XCTAssertEqual(
-      added.spans, [LineSpan(line: 0, style: DiffStyle.added), LineSpan(line: 2, otherNumber: nil)])
+      added.spans, [LineSpan(line: 0, style: DiffStyle.added), LineSpan(line: 2, otherNumber: 1)])
     let removed = DiffRows.inline(
-      DiffRows.wholeHunks(old: DiffRows.Side(text), new: .absent), old: DiffRows.Side(text),
-      new: .absent)
+      LineDiff.hunks(old: text, new: empty, limit: EditorDiff.hunkLimit), old: DiffRows.Side(text),
+      new: DiffRows.Side(empty))
     XCTAssertEqual(
       removed.insertions,
       [
@@ -73,16 +73,17 @@ final class DiffRowsTests: OrbeTestCase {
             InsertedLine(line: 1, style: DiffStyle.removed),
           ]))
       ])
-    XCTAssertEqual(removed.spans, [])
-    XCTAssertEqual(DiffRows.wholeHunks(old: .absent, new: .absent), [])
+    XCTAssertEqual(removed.spans, [LineSpan(line: 0, otherNumber: 3)])
+    XCTAssertEqual(LineDiff.hunks(old: empty, new: empty, limit: EditorDiff.hunkLimit), [])
   }
 
-  /// 末尾の改行が片側にだけあれば、新しい側にだけある最後の空の行は旧番号を持たない。
-  func testATrailingRowOnlyOnTheNewSideHasNoOldNumber() {
+  /// 末尾の改行を足すのは空の行の追加——足した行だけが追加で、元の最後の行は文脈のまま。
+  func testAddingATrailingNewlineAddsTheEmptyRow() {
     let (old, new) = ("a\nb", "a\nb\nc\n")
     let rows = DiffRows.inline(
       hunks(old, new), old: DiffRows.Side(TextRope(old)), new: DiffRows.Side(TextRope(new)))
-    XCTAssertEqual(rows.spans.last, LineSpan(line: 3, otherNumber: nil), "\(rows.spans)")
+    XCTAssertEqual(
+      rows.spans, [LineSpan(line: 0, otherNumber: 1), LineSpan(line: 2, style: DiffStyle.added)])
   }
 
   /// 並列は変わった区間の削除と追加を上から同じ行（同じ y）に並べ、行の数の差の分だけ短い側の区間の後に詰め物が入り、
