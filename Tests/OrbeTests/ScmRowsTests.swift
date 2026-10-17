@@ -6,8 +6,8 @@ import XCTest
 ///
 /// 壊れると何が起きるか。ステージした後に編集したファイルが片方の区分にしか出ない・競合がステージ済みに並んで一括で
 /// 解決済みにされる・`git rm --cached` のファイルを解除できない・削除したファイルを「ファイルを開く」で開こうとする・
-/// 未追跡を確認なしで捨てる側に数える・git が何も変えない行を一括操作に数える・パスの順に並ばない・
-/// レールの件数が行の数と食い違う・区間の表が行とずれて押した行と違う行が開く。
+/// 未追跡を確認なしで捨てる側に数える・git が何も変えない行を一括操作に数える・ボタンの姿が古い行のまま残る・パスの順に
+/// 並ばない・レールの件数が行の数と食い違う・区間の表が行とずれて押した行と違う行が開く。
 final class ScmRowsTests: OrbeTestCase {
   private func entry(
     _ staged: GitStatus.Change?, _ unstaged: GitStatus.Change?, from original: String? = nil
@@ -66,6 +66,25 @@ final class ScmRowsTests: OrbeTestCase {
     XCTAssertEqual(changes.changes.map(\.path), ["a.txt", "conflict.txt", "content", "moved"])
     XCTAssertEqual(changes.committable.map(\.path), ["a.txt", "moved"])
     XCTAssertEqual(changes.discardable.map(\.path), ["a.txt"])
+  }
+
+  /// 同じ行の枠に、ボタンの押せる・押せないだけが違う行を描き直させると、ボタンの姿が入れ替わる（パス・印は同じなので、
+  /// 中身の同一性にボタンの可否が入っていないと前の姿のまま残る）。
+  @MainActor
+  func testARowRedrawnWithOnlyItsButtonsChangedShowsTheNewButtons() {
+    let view = ScmRowView(frame: .zero)
+    func enabled(_ submodule: GitStatus.SubmoduleChange?) -> [Bool] {
+      let file = ScmChanges.File(
+        row: GitStatus.Row(path: "sub", originalPath: nil), badge: .modified,
+        existsInWorkingTree: true, isTracked: true, submodule: submodule)
+      view.show(.file(.changes, file), language: .en, emoji: nil)
+      guard case .file(let content) = view.content else { return [] }
+      return content.buttons.map(\.isEnabled)
+    }
+    XCTAssertEqual(enabled(.content), [true, false, false], "開く・破棄・ステージ")
+    XCTAssertEqual(enabled(.commit), [true, false, true])
+    XCTAssertEqual(enabled(nil), [true, true, true])
+    XCTAssertEqual(enabled(.content), [true, false, false])
   }
 
   /// 行が 0 の区分は見出しごと出ず、畳んだ区分のファイル行は出ない。区間の表は行を先頭から隙間なく覆う（列が位置から引く

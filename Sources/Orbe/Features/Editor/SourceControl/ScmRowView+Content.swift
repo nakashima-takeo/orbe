@@ -6,7 +6,8 @@ extension ScmRowView {
     switch item {
     case .header(let section, let count, let isOpen): "h\(section)\(count)\(isOpen)\(language)"
     case .file(let section, let file):
-      "f\(section)\(file.path)\u{0}\(file.badge)\(file.existsInWorkingTree)\(language)"
+      "f\(section)\(file.path)\u{0}\(file.badge)\(file.existsInWorkingTree)\(file.canStage)"
+        + "\(file.canDiscard)\(language)"
     case .branch(let branch):
       "b\(branch.label)\u{0}\(branch.divergence?.arrows ?? "")"
     case .commit(let commit, let isFirst, let isLast):
