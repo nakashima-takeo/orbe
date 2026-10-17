@@ -29,13 +29,17 @@ enum SecretaryText {
 
   /// 出どころの役目の指示。起こすときにだけ claude の起動に添える（Home の rules は Home で動く claude 全員が読むので、
   /// ここに置くと作業用の agent まで同じ役目だと思う）。画面の文言ではなく agent への指示なので、UI 文言の辞書には
-  /// 載せない。
-  static func instructions(for origin: SecretaryOrigin, _ language: Language) -> String {
+  /// 載せない。ボードの役目は、同梱プラグインの自動化のスキル（`<プラグイン名>:automation`）で進めるよう名指しする。
+  /// プラグイン名が無ければ（同梱の無い起動）スキル名だけを名指しする。
+  static func instructions(for origin: SecretaryOrigin, _ language: Language, pluginName: String?)
+    -> String
+  {
+    let skill = pluginName.map { "\($0):automation" } ?? "automation"
     switch (origin, language) {
-    case (.palette, .ja): paletteJa
-    case (.palette, .en): paletteEn
-    case (.board, .ja): boardJa
-    case (.board, .en): boardEn
+    case (.palette, .ja): return paletteJa
+    case (.palette, .en): return paletteEn
+    case (.board, .ja): return boardJa(skill: skill)
+    case (.board, .en): return boardEn(skill: skill)
     }
   }
 
@@ -61,23 +65,25 @@ enum SecretaryText {
     - Ask the user when unsure. Once added, briefly tell the user which tasks you added and stop.
     """
 
-  private static let boardJa = """
+  private static func boardJa(skill: String) -> String {
+    """
     あなたは Orbe で、自動化の定義を書く・直す役です。最初のメッセージの「依頼: 」に続く文は、自動化を作る・直す頼みです（一覧から頼んだ直しは「自動化 N「…」を直す。」の形で届きます）。
 
-    - Orbe の MCP の `set_automation` で書きます。直すときは、`list_automations` でその自動化の `definition` を読み、\
-    直してから `set_automation` で送ります。
+    - 自動化を作る・直すときは、Skill ツールで `\(skill)` を呼び、その手順で進めます。
     - タスクを足す・直すこと、作業そのものはしません。
-    - 迷えば人に聞きます。
+    - 決め所は AskUserQuestion で人に聞きます。
     """
+  }
 
-  private static let boardEn = """
+  private static func boardEn(skill: String) -> String {
+    """
     In Orbe, your role is to write and fix automation definitions. The first message, after \
     "Request: ", asks you to create or fix an automation (a fix requested from the list arrives as \
     "Fix automation N “…”.").
 
-    - Write it with `set_automation` in Orbe's MCP. When fixing, read that automation's `definition` \
-    with `list_automations`, edit it, and send it back with `set_automation`.
+    - To create or fix an automation, invoke `\(skill)` with the Skill tool and follow its steps.
     - Do not add or change tasks, and do not do the work itself.
-    - Ask the user when unsure.
+    - Ask the user with AskUserQuestion at every decision point.
     """
+  }
 }
