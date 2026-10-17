@@ -4,13 +4,13 @@ import XCTest
 @testable import Orbe
 
 /// 行の列の部品（`RowList`）そのもの——検索に依らない最小の源で、枠の使い回しと新しく見えた行だけの描き直し、キーの
-/// 渡し方（Home / End・Page は列が送る）、押した行と行の中の部品（高さの違う区間をまたいでも）、選択が変わったときだけ
+/// 渡し方（Home / End・Page は列が送る）、押した行と行の中の部品（高さの違う区間・区間の前の余白をまたいでも）、選択が変わったときだけ
 /// 見せること、焦点の要求、VoiceOver のリストを固める。
 ///
 /// 壊れると何が起きるか。送るたびに見えている行を全部描き直して重い、行の数が変わるたびに枠を作り直す。↑↓ や Enter が
-/// 源へ届かない、Home / End で送れない。押した行と違う行が開く・行の中のボタンを押すと別の行のボタンになるか
-/// 行のクリックになる。選んだ行が見えているのに送られる、見えていないのに寄らない。結果が届くたびに選択の行へ
-/// 引き戻される。末尾まで送っても最後の行が下端に付く。つまみを掴めない・引いてもポインタに付いてこない、
+/// 源へ届かない、Home / End で送れない。押した行と違う行が開く・区間の上の隙間を押しても行が開く・行の中のボタンを
+/// 押すと別の行のボタンになるか行のクリックになる。選んだ行が見えているのに送られる、見えていないのに寄らない。結果が
+/// 届くたびに選択の行へ引き戻される。末尾まで送っても最後の行が下端に付く。つまみを掴めない・引いてもポインタに付いてこない、
 /// 消えているつまみや帯が行のクリックを奪う。
 @MainActor
 final class RowListTests: OrbeTestCase {
@@ -160,15 +160,16 @@ final class RowListTests: OrbeTestCase {
   // MARK: - マウス
 
   /// 押すと焦点を取り、押した位置の行の番号を源へ渡す（ダブルクリックは別の口）——行の高さが区間ごとに違っても。行の
-  /// 中の部品の上なら、行のクリックではなく部品の押下として渡す。行の無いところ（最後の行の下の空き）は渡さない。
+  /// 中の部品の上なら、行のクリックではなく部品の押下として渡す。行の無いところ（区間の前の余白・最後の行の下の空き）は
+  /// 渡さない。
   func testClicksPassTheRowAndPressesPassTheControl() {
-    // 行 0 は 0..<20、行 1 は 20..<52、行 2 は 52..<72、行 3 は 72..<92。
+    // 行 0 は 0..<20、行 1 は 20..<52、余白 52..<60、行 2 は 60..<80、行 3 は 80..<100。
     let hosted = host(
       rowCount: 4,
       segments: [
         RowListSegment(start: 0, count: 1, height: 20),
         RowListSegment(start: 1, count: 1, height: 32),
-        RowListSegment(start: 2, count: 2, height: 20),
+        RowListSegment(start: 2, count: 2, height: 20, leading: 8),
       ])
     let list = hosted.list
     func press(x: CGFloat, y: CGFloat, count: Int) {
@@ -180,10 +181,11 @@ final class RowListTests: OrbeTestCase {
     }
     press(x: 13, y: 50, count: 1)
     XCTAssertTrue(hosted.window.firstResponder === list, "押すと焦点を取る")
-    press(x: 13, y: 53, count: 1)
+    press(x: 13, y: 55, count: 1)  // 区間の前の余白
+    press(x: 13, y: 61, count: 1)
     press(x: 150, y: 10, count: 2)
-    press(x: 190, y: 85, count: 1)
-    press(x: 20, y: 95, count: 1)  // 最後の行の下の空き
+    press(x: 190, y: 90, count: 1)
+    press(x: 20, y: 105, count: 1)  // 最後の行の下の空き
     XCTAssertEqual(hosted.source.clicks, ["click 1", "click 2", "double 0", "press 3 0"])
   }
 
