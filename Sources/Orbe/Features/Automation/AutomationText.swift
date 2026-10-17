@@ -1,18 +1,11 @@
 import Foundation
 
-/// 自動化を人に見せる文（時刻・回の要約・いつ・取得元と処理の段の行の並び）。何をどの順に、どこを原文として出すかまでを決め、
-/// 描き方（字の大きさ・箱）は使う画面が決める。暦日は渡された今日とタイムゾーンで決める。
+/// 自動化を人に見せる文（時刻・部品の役割と予定・部品の回の要約・いつ）。何をどの順に出すかまでを決め、描き方（字の大きさ・箱）は
+/// 使う画面が決める。暦日は渡された今日とタイムゾーンで決める。
 struct AutomationText {
   let l10n: LocalizationStore
   let today: TaskItem.DueDate
   let timeZone: TimeZone
-
-  /// 取得元・段の 1 行。原文（依頼文・コマンド・指示文）は実行されるとおりの文字。どれも切らずに全文を出す——承認なしで
-  /// 裏で走るもの（使えるツール・作業ディレクトリ・コマンド）を、画面でいつも確かめられるため。
-  enum Line: Equatable {
-    case plain(String)
-    case verbatim(String)
-  }
 
   /// 「9:12」。
   private func clock(_ date: Date) -> String {
@@ -39,93 +32,59 @@ struct AutomationText {
     return day == today ? clock(date) : TaskDueText.date(day, today: today)
   }
 
-  /// 候補の一覧の頭。「13:00 の回 · 9 件取得 → 新しい 4 件を処理 → 候補 2」。
-  func runHeadline(_ run: AutomationRun?) -> String {
-    guard let run else { return l10n.string(.automationNeverRan) }
-    return l10n.format(.automationRunAt, stamp(run.startedAt)) + " · "
-      + summary(
-        run, proposedOne: .automationProposedShortOne, proposedOther: .automationProposedShortOther)
+  /// 部品の役割の名前（「取得」「判定」）。
+  func role(_ role: AutomationPartRole) -> String {
+    switch role {
+    case .fetch: l10n.string(.automationRoleFetch)
+    case .process: l10n.string(.automationRoleProcess)
+    case .judge: l10n.string(.automationRoleJudge)
+    case .report: l10n.string(.automationRoleReport)
+    case .work: l10n.string(.automationRoleWork)
+    case .sideEffect: l10n.string(.automationRoleSideEffect)
+    }
   }
 
-  /// 自動追加の中身の前回。「今日 9:12 · 14 件取得 → 新しい 3 件を処理 → 候補 1 件」。
-  func runDetail(_ run: AutomationRun?) -> String {
-    guard let run else { return l10n.string(.automationNeverRan) }
-    return moment(run.startedAt) + " · "
-      + summary(
-        run, proposedOne: .automationProposedLongOne, proposedOther: .automationProposedLongOther)
+  /// 部品の予定の札（「30分ごと」「平日 9:00」「手動」「届いたら」）。
+  func schedule(_ trigger: AutomationPart.Trigger) -> String {
+    switch trigger {
+    case .scheduled(let timing): when(timing)
+    case .manual: l10n.string(.automationManual)
+    case .arrival: l10n.string(.automationArrival)
+    }
   }
 
-  private func summary(_ run: AutomationRun, proposedOne: L10nKey, proposedOther: L10nKey) -> String
-  {
+  /// 部品の回の結果の要約（「12 件取得 → 新しい 3 件」「12 件 → 候補 2」「失敗 — <理由>」）。報告・仕事の文は 1 行目。
+  func outcome(_ run: AutomationPartRun) -> String {
     if let failure = run.failure { return l10n.format(.automationFailed, failure) }
-    var parts = [l10n.format(.automationFetched, run.source?.count ?? 0)]
-    let fresh = run.fresh ?? 0
-    if fresh == 0 {
-      parts.append(l10n.string(.automationNothingNew))
-    } else {
-      parts.append(l10n.format(.automationProcessed, fresh))
-      parts.append(l10n.plural(Self.proposed(run), one: proposedOne, other: proposedOther))
-    }
-    return parts.joined(separator: " → ")
-  }
-
-  private static func proposed(_ run: AutomationRun) -> Int {
-    switch run.sink {
-    case .taskCandidates(let report): report.proposed
-    case .command, .report, .agent, nil: 0
-    }
-  }
-
-  /// 取得元の行の並び: やり方・使えるツール・依頼文かコマンド・作業ディレクトリ・取得の性質。いつは含めない。
-  func source(_ source: AutomationSource) -> [Line] {
-    var lines: [Line]
-    switch source.method {
-    case .agent(let agent):
-      let model = AutomationDefinition.model(agent.model, finalStep: false)
-      lines = [
-        .plain([l10n.string(.automationAgentFetch), agent.cli, model].joined(separator: " · ")),
-        .plain(l10n.string(.automationTools) + "  " + agent.tools.joined(separator: ", ")),
-        .verbatim(agent.request),
-      ]
-    case .command(let command):
-      lines = [.plain(l10n.string(.automationCommand)), .verbatim(command.script)]
-      lines += directory(command)
-    }
-    lines.append(.plain(coverage(source.coverage)))
-    return lines
-  }
-
-  /// 処理の段の行の並び。agent の段は「名前 · CLI · モデル」と指示文、コマンドの段は「名前 · コマンド」とコマンドと作業
-  /// ディレクトリ。
-  func steps(_ definition: AutomationDefinition) -> [Line] {
-    definition.steps.enumerated().flatMap { index, step -> [Line] in
-      switch step.method {
-      case .agent(let agent):
-        return [
-          .plain(
-            [step.name, agent.cli, definition.model(of: agent, at: index)].joined(separator: " · ")),
-          .verbatim(agent.instruction),
-        ]
-      case .command(let command):
-        return [
-          .plain([step.name, l10n.string(.automationCommand)].joined(separator: " · ")),
-          .verbatim(command.script),
-        ] + directory(command)
-      }
+    let taken = run.taken ?? 0
+    switch run.result {
+    case .fetch(let fresh):
+      return l10n.format(.automationFetchedFresh, run.execution.count, fresh)
+    case .process:
+      return l10n.format(.automationTakenTo, taken, run.execution.count)
+    case .judge(let proposed, _, _):
+      return l10n.format(.automationTakenProposed, taken, proposed)
+    case .report(let text?), .work(let text?, _):
+      return String(text.prefix { !$0.isNewline })
+    case .report(nil):
+      return l10n.string(.boardRunNothingToReport)
+    case .work(nil, .some):
+      return l10n.string(.boardRunNothingDone)
+    case .work(nil, nil), .sideEffect, nil:
+      return l10n.string(.boardRunDone)
     }
   }
 
-  private func directory(_ command: BackgroundCommand) -> [Line] {
-    command.directory.map { [.plain(l10n.string(.automationDirectory) + "  " + $0)] } ?? []
+  /// 候補の一覧の頭。「9:00 判定 · 12 件 → 候補 2」。
+  func runHeadline(part name: String, _ run: AutomationPartRun?) -> String {
+    guard let run else { return l10n.string(.automationNeverRan) }
+    return stamp(run.startedAt) + " " + name + " · " + outcome(run)
   }
 
-  /// 取得の性質と、それで候補がいつ下がるか。
-  private func coverage(_ coverage: AutomationCoverage) -> String {
-    switch coverage {
-    case .currentSet: l10n.string(.automationCurrentSet)
-    case .newArrivals: l10n.string(.automationNewArrivals)
-    case .everything: l10n.string(.automationEverything)
-    }
+  /// 自動追加の中身の前回。「今日 9:12 判定 · 12 件 → 候補 2」。
+  func runDetail(part name: String, _ run: AutomationPartRun?) -> String {
+    guard let run else { return l10n.string(.automationNeverRan) }
+    return moment(run.startedAt) + " " + name + " · " + outcome(run)
   }
 
   /// 「30分ごと」「平日 9:00」「平日 9:00〜18:50 の10分ごと」。言葉にしない cron 式は「cron <式>」で、式の欄の間は

@@ -99,7 +99,7 @@ struct BoardAutomationNotifyMenu: View {
   @Environment(\.localization) private var l10n
 
   var body: some View {
-    let current = model.selectedAutomation?.definition.notify
+    let current = model.selectedAutomation?.notify
     VStack(alignment: .leading, spacing: 0) {
       Text(l10n.string(.boardNotifyTitle))
         .font(Font(Theme.Typography.caption.monospacedWeight(.semibold)))

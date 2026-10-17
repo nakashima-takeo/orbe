@@ -2,13 +2,13 @@ import XCTest
 
 @testable import Orbe
 
-/// 自動化の 6 動詞のドメイン側を、実 `WindowController` 越しに固定する。起動で保存済みの自動化が番人に載ること、
+/// 自動化の 6 動詞のドメイン側を、実 `WindowController` 越しに固定する。起動で保存済みの部品が番人に載ること、
 /// 提案と重なりが棚に出す自動化の側に出ること、拒否が制御 API の語彙になること、一覧の定義を `set_automation` へ戻せること、
-/// 一覧の回の記録が保存と同じ形であること。候補の付け先は今ある workspace に解けるときだけ起動ごとの id と名前で出ること。
+/// 一覧の部品の回の記録が保存と同じ形であること。候補の付け先は今ある workspace に解けるときだけ起動ごとの id と名前で出ること。
 ///
 /// 壊れると何が起きるか: Orbe を再起動しただけで全自動化が黙って回らなくなる。AI が自動化の棚を読んでも、提案した自動化が
 /// もう取っていない提案が混ざる・取っている自動化に出ない。走っている自動化への `run_automation` が別の誤りに化ける。
-/// 一覧の定義を書き換えて戻すと、間隔や取得元が別物になる。回の記録を読む AI・秘書が、段ごとの件数や出力先の結果を読めなくなる。
+/// 一覧の定義を書き換えて戻すと、予定や部品が別物になる。回の記録を読む AI・秘書が、部品ごとの件数や結果を読めなくなる。
 /// AI が候補の付け先を読めない、または消えた workspace を付け先として読む。
 ///
 /// 重要: 実 NSWindow に SurfaceView を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
@@ -61,52 +61,79 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
         as? [String: Any])?["automationId"] as? Int)
   }
 
-  /// 成功した回を確定する（`proposing` の項目に提案を出す）。
-  private func commit(
-    _ wc: WindowController, _ id: Int, fetched: [AutomationItem], proposing: [AutomationItem] = []
-  ) {
-    AutomationStoreTests.commit(
-      wc.automationStore, id, AutomationStoreTests.run(at: Date()), fetched: fetched,
-      decisions: proposing.map {
-        .propose(itemId: $0.id, title: "対応: \($0.id)", due: nil, workspace: nil)
-      })
+  /// 今の集合を取る取得の部品 `fetch` と、届いたらタスク候補を出す判定の部品 `judge`。
+  static func definition(_ name: String = "受信", script: String = "true") -> AutomationDefinition {
+    DesignSceneFixtures.candidatesDefinition(
+      name,
+      fetch: DesignSceneFixtures.commandPart(
+        "fetch", "取る", .scheduled(.every(1800)), script: script, coverage: .currentSet))
+  }
+
+  static func item(_ id: String) -> AutomationItem {
+    AutomationItem(id: id, link: "https://example.com/\(id)", body: "\(id) の本文", time: Date())
+  }
+
+  /// 取得の回を確定し、`proposing` があれば溜まりをすべて取った判定の回で候補にする（タイトルは `titles`、付け先は
+  /// `workspaces` の順。省けば「対応: <id>」・付け先なし）。
+  static func round(
+    _ store: AutomationStore, _ id: Int, fetched items: [AutomationItem],
+    proposing: [AutomationItem] = [], titles: [String]? = nil, workspaces: [UUID?]? = nil
+  ) throws {
+    let now = Date()
+    _ = try store.record(
+      AutomationPassEnd(
+        automationId: id, part: "fetch", trigger: .schedule, startedAt: now, endedAt: now,
+        take: nil, outcome: DesignSceneFixtures.fetched("fetch", items)))
+    guard !proposing.isEmpty else { return }
+    let taken = try store.inbox(of: "judge", in: id).map(\.seq)
+    _ = try store.record(
+      AutomationPassEnd(
+        automationId: id, part: "judge", trigger: .arrival, startedAt: now, endedAt: now,
+        take: AutomationInbox.Take(taken: taken, dropped: []),
+        outcome: DesignSceneFixtures.judged(
+          proposing.enumerated().map { index, item in
+            DesignSceneFixtures.proposal(
+              item, titles?[index] ?? "対応: \(item.id)", workspace: workspaces?[index] ?? nil)
+          }, rows: taken.count)))
   }
 
   // MARK: - 起動
 
-  /// 起動で保存済みの受信を番人へ載せ、過ぎていた回を走らせる。止めた受信は予定では走らない。
+  /// 起動で保存済みの部品を番人へ載せ、過ぎていた回を走らせる。止めた自動化の部品は予定では走らない。
   func testLaunchSchedulesStoredAutomationsExceptPausedOnes() throws {
     let longAgo = Date().addingTimeInterval(-86400)
-    let saved = AutomationStore(file: nil)
-    let active = try saved.create(
-      AutomationStoreTests.definition("動いている", script: "true"), now: longAgo)
-    let paused = try saved.create(
-      AutomationStoreTests.definition("止めた", script: "true"), now: longAgo)
-    _ = try saved.setPaused(paused.id, true)
+    let (active, paused) = try {
+      let saved = AutomationStore()
+      let active = try saved.create(Self.definition("動いている"), now: longAgo)
+      let paused = try saved.create(Self.definition("止めた"), now: longAgo)
+      _ = try saved.setPaused(paused.id, true)
+      return (active, paused)
+    }()
 
     let wc = try launch()
 
     XCTAssertTrue(wc.automationRunner.isRunning(active.id), "過ぎていた回が起動で始まる")
-    XCTAssertFalse(wc.automationRunner.isRunning(paused.id), "止めた受信は予定では走らない")
+    XCTAssertFalse(wc.automationRunner.isRunning(paused.id), "止めた自動化は予定では走らない")
     XCTAssertTrue(
       waitUntil(10) { wc.automationStore.automation(active.id)?.runs.isEmpty == false },
       "起動で始まった回が確定しない")
-    XCTAssertEqual(wc.automationStore.automation(active.id)?.runs.first?.trigger, .schedule)
+    XCTAssertEqual(wc.automationStore.automation(active.id)?.runs.first?.run.trigger, .schedule)
   }
 
   // MARK: - 棚と重なり
 
-  /// 提案は棚に出す受信の側に出る。提案した受信が取らなくなった提案は、まだ取っている受信の棚へ移り、
-  /// 重なりは両方の受信に相手と件数で出る。
+  /// 提案は棚に出す自動化の側に出る。提案した自動化が取らなくなった提案は、まだ取っている自動化の棚へ移り、
+  /// 重なりは両方の自動化に相手と件数で出る。
   func testProposalsAndOverlapsAppearOnTheShelfAutomation() throws {
     let wc = try launch()
-    let first = try set(wc, AutomationStoreTests.definition("受信 1"))
-    let second = try set(wc, AutomationStoreTests.definition("受信 2"))
-    let kept = AutomationStoreTests.item("kept")
-    let moved = AutomationStoreTests.item("moved")
-    commit(wc, first, fetched: [kept, moved], proposing: [kept, moved])
-    commit(wc, second, fetched: [moved, kept])
-    commit(wc, first, fetched: [kept])
+    let store = wc.automationStore
+    let first = try set(wc, Self.definition("受信 1"))
+    let second = try set(wc, Self.definition("受信 2"))
+    let kept = Self.item("kept")
+    let moved = Self.item("moved")
+    try Self.round(store, first, fetched: [kept, moved], proposing: [kept, moved])
+    try Self.round(store, second, fetched: [moved, kept])
+    try Self.round(store, first, fetched: [kept])
 
     XCTAssertEqual(try proposals(wc, of: first).map { $0["link"] as? String }, [kept.link])
     let shelved = try proposals(wc, of: second)
@@ -131,23 +158,21 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
   /// 消えた候補はキーごと出さない。
   func testProposalsCarryTheirWorkspaceOnlyWhenItResolves() throws {
     let wc = try launch()
-    let id = try set(wc, AutomationStoreTests.definition())
+    let id = try set(wc, Self.definition())
     let main = try XCTUnwrap(wc.workspaces.first { $0.name == "main" })
-    let items = ["a", "b", "c"].map { AutomationStoreTests.item($0) }
-    AutomationStoreTests.commit(
-      wc.automationStore, id, AutomationStoreTests.run(at: Date()), fetched: items,
-      decisions: [
-        .propose(itemId: "a", title: "main の作業", due: nil, workspace: main.persistentId),
-        .propose(itemId: "b", title: "付け先なし", due: nil, workspace: nil),
-        .propose(itemId: "c", title: "消えた付け先", due: nil, workspace: UUID()),
-      ])
+    let items = ["a", "b", "c"].map { Self.item($0) }
+    try Self.round(
+      wc.automationStore, id, fetched: items, proposing: items,
+      workspaces: [main.persistentId, nil, UUID()])
 
     let listed = Dictionary(
       uniqueKeysWithValues: try proposals(wc, of: id).map { ($0["title"] as? String ?? "", $0) })
 
-    XCTAssertEqual(listed["main の作業"]?["workspaceId"] as? Int, main.id)
-    XCTAssertEqual(listed["main の作業"]?["workspaceName"] as? String, "main")
-    for title in ["付け先なし", "消えた付け先"] {
+    XCTAssertEqual(listed["対応: a"]?["workspaceId"] as? Int, main.id)
+    XCTAssertEqual(listed["対応: a"]?["workspaceName"] as? String, "main")
+    XCTAssertEqual(listed["対応: a"]?["partKey"] as? String, "judge")
+    XCTAssertEqual(listed["対応: a"]?["sourcePartKey"] as? String, "fetch")
+    for title in ["対応: b", "対応: c"] {
       XCTAssertNil(listed[title]?["workspaceId"], title)
       XCTAssertNil(listed[title]?["workspaceName"], title)
     }
@@ -155,54 +180,58 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
   // MARK: - 拒否
 
-  /// 走っている回がある間は一覧にそう出て、`run_automation` は「実行できない」で断られる。
+  /// 入力の無い部品が走っている間は一覧の部品にそう出て、`run_automation` は「実行できない」で断られる。
   func testRunningAutomationIsListedAsRunningAndRefusesRunNow() throws {
     let wc = try launch()
-    let id = try set(wc, AutomationStoreTests.definition(script: "sleep 30"))
+    let id = try set(wc, Self.definition(script: "sleep 30"))
     addTeardownBlock { _ = wc.controlDeleteAutomation(automationId: id) }
 
     _ = try success(wc.controlRunAutomation(automationId: id))
 
-    XCTAssertEqual(try listed(wc)[id]?["running"] as? Bool, true)
+    let parts = try XCTUnwrap(try listed(wc)[id]?["parts"] as? [String: [String: Any]])
+    XCTAssertEqual(parts["fetch"]?["running"] as? Bool, true)
+    XCTAssertEqual(parts["judge"]?["running"] as? Bool, false)
     XCTAssertEqual(code(wc.controlRunAutomation(automationId: id)), -32000)
   }
 
   /// 未知の ID は -32004、不変条件に反する定義は -32602 で、受信は変わらない。
   func testRejectionsMapToTheControlVocabulary() throws {
     let wc = try launch()
-    let id = try set(wc, AutomationStoreTests.definition())
-    var codex = AutomationStoreTests.definition("codex に判定させる")
-    codex.steps = [AutomationStoreTests.judgeStep(cli: "codex")]
+    let id = try set(wc, Self.definition())
+    var codex = Self.definition("codex に判定させる")
+    if case .agent(var agent) = codex.parts[1].method {
+      agent.cli = "codex"
+      codex.parts[1].method = .agent(agent)
+    }
 
     XCTAssertEqual(code(wc.controlRunAutomation(automationId: 99)), -32004)
     XCTAssertEqual(code(wc.controlPauseAutomation(automationId: 99, paused: true)), -32004)
     XCTAssertEqual(code(wc.controlDeleteAutomation(automationId: 99)), -32004)
     XCTAssertEqual(code(wc.controlListAutomationProposals(automationId: 99)), -32004)
     XCTAssertEqual(
-      code(wc.controlSetAutomation(automationId: 99, AutomationStoreTests.definition())), -32004)
+      code(wc.controlSetAutomation(automationId: 99, Self.definition())), -32004)
     XCTAssertEqual(code(wc.controlSetAutomation(automationId: id, codex)), -32602)
     XCTAssertEqual(code(wc.controlSetAutomation(automationId: nil, codex)), -32602)
-    XCTAssertEqual(
-      wc.automationStore.automations.map(\.definition), [AutomationStoreTests.definition()])
+    XCTAssertEqual(wc.automationStore.automations.map(\.definition), [Self.definition()])
   }
 
   // MARK: - 定義の往復
 
   /// 一覧の定義は `set_automation` と同じ形で、そのまま読み戻すと同じ定義になる（AI が読んで直して戻せる）。省略した
-  /// モデルは省略のまま返る——解いた値で返すと、書き戻した定義のモデルが固定され、段を並べ替えても既定が追従しない。
+  /// モデルは省略のまま返る——解いた値で返すと、書き戻した定義のモデルが固定され、役割が変わっても既定が追従しない。
   func testListedDefinitionReadsBackAsTheSameDefinition() throws {
     let wc = try launch()
-    var definition = AutomationStoreTests.definition(
-      trigger: .cron(try BackgroundCron("30 9 * * mon-fri")))
-    definition.source?.method = .agent(
-      AutomationSourceAgent(
-        cli: "claude", model: nil, tools: ["mcp__slack__search"], request: "自分宛の DM"))
-    definition.steps = [
-      AutomationStep(name: "絞り込み", method: .command(BackgroundCommand(script: "jq -c ."))),
-      AutomationStep(
-        name: "判定",
-        method: .agent(AutomationStepAgent(cli: "claude", model: nil, instruction: "判定して"))),
-    ]
+    let definition = AutomationDefinition(
+      name: "Slack", notify: .menuBar,
+      parts: [
+        DesignSceneFixtures.agentPart(
+          "slack", "取る", .scheduled(.cron(try BackgroundCron("30 9 * * mon-fri"))),
+          tools: ["mcp__slack__search"], instruction: "自分宛の DM", coverage: .newArrivals),
+        DesignSceneFixtures.commandPart(
+          "narrow", "絞り込み", .arrival, from: ["slack"], script: "jq -c ."),
+        DesignSceneFixtures.agentPart(
+          "judge", "判定", .manual, from: ["narrow"], instruction: "判定して", deliver: .taskCandidates),
+      ])
     let id = try set(wc, definition)
 
     let listedDefinition = try XCTUnwrap(try listed(wc)[id]?["definition"])
@@ -212,40 +241,24 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
       try AutomationWire.decoder.decode(AutomationDefinition.self, from: data), definition)
   }
 
-  /// 一覧の回の記録は保存と同じ形（取得元・新しい件数・各段・出力先）。
+  /// 一覧の回の記録は部品ごとに、保存と同じ形（取った件数・実行の記録・役割ごとの結果）。
   func testListedRunsKeepTheStoredShape() throws {
     let wc = try launch()
-    let id = try set(wc, AutomationStoreTests.definition())
-    let a = AutomationStoreTests.item("a")
-    var run = AutomationStoreTests.run(at: Date())
-    run.source?.count = 1
-    run.fresh = 1
-    run.steps = [
-      AutomationStepReport(
-        name: "判定", commandLine: "claude -p", ending: "exited 0", count: 1,
-        rejected: AutomationRejections())
-    ]
-    run.lastStepCountedBySink = true
-    AutomationStoreTests.commit(
-      wc.automationStore, id, run, fetched: [a],
-      decisions: [.propose(itemId: "a", title: "対応する", due: nil, workspace: nil)])
+    let id = try set(wc, Self.definition())
+    let a = Self.item("a")
+    try Self.round(wc.automationStore, id, fetched: [a], proposing: [a])
 
-    let listedRun = try XCTUnwrap((try listed(wc)[id]?["runs"] as? [[String: Any]])?.first)
+    let parts = try XCTUnwrap(try listed(wc)[id]?["parts"] as? [String: [String: Any]])
+    let judged = try XCTUnwrap((parts["judge"]?["runs"] as? [[String: Any]])?.first)
 
     XCTAssertEqual(
-      Set(listedRun.keys),
-      [
-        "startedAt", "endedAt", "trigger", "source", "fresh", "steps", "lastStepCountedBySink",
-        "sink",
-      ])
-    XCTAssertEqual((listedRun["source"] as? [String: Any])?["count"] as? Int, 1)
-    XCTAssertEqual(listedRun["fresh"] as? Int, 1)
-    let step = try XCTUnwrap((listedRun["steps"] as? [[String: Any]])?.first)
-    XCTAssertEqual(step["name"] as? String, "判定")
-    XCTAssertEqual(step["commandLine"] as? String, "claude -p")
-    XCTAssertEqual(listedRun["lastStepCountedBySink"] as? Bool, true)
-    let sink = try XCTUnwrap(listedRun["sink"] as? [String: Any])
-    XCTAssertEqual(sink["kind"] as? String, "taskCandidates")
-    XCTAssertEqual(sink["proposed"] as? Int, 1)
+      Set(judged.keys), ["startedAt", "endedAt", "trigger", "taken", "execution", "result"])
+    XCTAssertEqual(judged["taken"] as? Int, 1)
+    XCTAssertEqual((judged["execution"] as? [String: Any])?["commandLine"] as? String, "claude -p")
+    let result = try XCTUnwrap(judged["result"] as? [String: Any])
+    XCTAssertEqual(result["kind"] as? String, "judge")
+    XCTAssertEqual(result["proposed"] as? Int, 1)
+    XCTAssertEqual(parts["judge"]?["inbox"] as? Int, 0)
+    XCTAssertNil(parts["fetch"]?["inbox"], "入力の無い部品は溜まりを持たない")
   }
 }

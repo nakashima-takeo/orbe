@@ -124,7 +124,8 @@ final class OrbeMcpProcessTests: OrbeTestCase {
         .contains("\(SessionLogLimits.restoreMaxIds) 件"),
       "sessionIds の上限を写す")
     XCTAssertTrue(
-      description(try tool("list_automations")).contains("新しい順に \(Automation.retainedRuns) 件まで。"),
+      description(try tool("list_automations")).contains(
+        "新しい順に \(AutomationPartState.retainedRuns) 件まで。"),
       "回の記録を残す件数を写す")
   }
 

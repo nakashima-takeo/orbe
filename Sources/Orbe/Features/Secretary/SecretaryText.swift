@@ -22,7 +22,7 @@ enum SecretaryText {
       if body.isEmpty { return nil }
     case .automationFix(let automation):
       body = l10n.format(
-        .secretaryAutomationFixInput, "\(automation.id)", automation.definition.name)
+        .secretaryAutomationFixInput, "\(automation.id)", automation.name)
     }
     return l10n.format(.secretaryRequestInput, body)
   }

@@ -26,8 +26,7 @@ extension AutomationPartPass {
       return reading(result, word) { declaringNothing($0) { judged($0, rows, choices) } }
     case .report:
       return reading(result, word) { text in
-        let report =
-          AutomationPrompts.nothing(text) == nil ? AutomationReportSinkRun.kept(text) : nil
+        let report = AutomationPrompts.nothing(text) == nil ? kept(text) : nil
         return .read(.report(report), count: report == nil ? 0 : 1, lines: [])
       }
     case .work:
@@ -35,6 +34,16 @@ extension AutomationPartPass {
     case .sideEffect(let rows, _):
       return sideEffected(result, count: rows.count, word)
     }
+  }
+
+  /// 残す報告の上限（字）。回の記録は部品ごとに 20 回残る。
+  static let reportLimit = 2000
+
+  /// 残す報告・仕事の文。前後の空白を除いて上限で切り（切ったら「…」を付ける）、空なら nil。
+  static func kept(_ text: String) -> String? {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    return trimmed.count > reportLimit ? String(trimmed.prefix(reportLimit)) + "…" : trimmed
   }
 
   /// 「the output of part "<鍵>" broke the rules: line <n>: <理由>」。最初の外れた行を言う。
@@ -170,13 +179,13 @@ extension AutomationPartPass {
 
   /// 全体が `{"error": …}` の 1 行なら失敗、最後の空でない行が `{"nothing": …}` なら何もしなかった回、ほかは報告の文。
   private static func worked(_ text: String, _ word: String) -> Reading {
-    if let error = AutomationPrompts.sinkAgentError(text) {
+    if let error = AutomationPrompts.workError(text) {
       return .failed("the \(word) reported an error: \(error)")
     }
     if let nothing = AutomationPrompts.nothing(text) {
       return .read(.work(.nothing(nothing)), count: 0, lines: [])
     }
-    let report = AutomationReportSinkRun.kept(text)
+    let report = kept(text)
     return .read(.work(.done(report)), count: report == nil ? 0 : 1, lines: [])
   }
 

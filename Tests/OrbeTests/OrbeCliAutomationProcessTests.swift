@@ -4,21 +4,23 @@ import XCTest
 @testable import Orbe
 
 /// 実 `orb automation`（`orbe-cli`）を子プロセスで起こし、実 `WindowController` の自動化を set（標準入力の JSON）→ list →
-/// pause → run → resume → rm のライフサイクルで動かせること、proposals が自動化の棚の提案を出すことを固定する。取得元も
-/// 段もコマンドなので、agent は起きない。
+/// pause → run → resume → rm のライフサイクルで動かせること、proposals が自動化の棚の提案を出すことを固定する。部品は
+/// どれもコマンドなので、agent は起きない。
 ///
 /// 壊れると何が起きるか: CLI が組み立てる control メソッド名・params の語（`pause` / `resume` の `paused`、`set` と
 /// `proposals` の `automationId`、`set` の `definition`）はここでしか測れない。`resume` が `paused:true` を送ると、exit 0 を返しながら止まったままになる。
 ///
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliAutomationProcessTests: OrbeTestCase {
-  /// 回すと項目 a を 1 つ取り、最後の段（コマンド）が a を候補に出す。
+  /// 回すと取得の部品が項目 a を 1 つ取り、届いたら判定の部品（コマンド）が a を候補に出す。
   private let definition = #"""
-    {"name": "GitHub: 通知", "trigger": {"everyMinutes": 30},
-     "source": {"coverage": "currentSet", "command":
+    {"name": "GitHub: 通知", "parts": [
+      {"key": "fetch", "name": "取る", "trigger": {"kind": "interval", "minutes": 30},
+       "coverage": "currentSet", "command":
        "echo '{\"id\":\"a\",\"link\":\"https://x.test/a\",\"body\":\"a\",\"time\":\"2026-01-01T00:00:00Z\"}'"},
-     "steps": [{"name": "判定", "command": "cat >/dev/null; echo '{\"propose\":\"a\",\"title\":\"a を見る\"}'"}],
-     "sink": {"kind": "taskCandidates"}}
+      {"key": "judge", "name": "判定", "trigger": {"kind": "arrival"}, "from": ["fetch"],
+       "deliver": "taskCandidates",
+       "command": "cat >/dev/null; echo '{\"propose\":\"fetch:a\",\"title\":\"a を見る\"}'"}]}
     """#
 
   private func run(
@@ -54,9 +56,10 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
 
     XCTAssertEqual(run(control, ["run", id]), "started automation \(id)", "止めた自動化も今すぐは受ける")
     XCTAssertTrue(
-      waitUntil(10) { control.target.automationStore.automation(Int(id)!)?.runs.isEmpty == false },
-      "今すぐの回が記録に残らない")
-    XCTAssertTrue(row(control)[5].hasSuffix("1 fetched, 1 new, 1 proposed"), row(control)[5])
+      waitUntil(10) {
+        control.target.automationStore.automation(Int(id)!)?.parts["judge"]?.runs.isEmpty == false
+      }, "今すぐの回の後に、届いたら判定の回が記録に残らない")
+    XCTAssertTrue(row(control)[5].hasSuffix(" judge: 1 proposed"), row(control)[5])
 
     XCTAssertEqual(run(control, ["resume", id]), "resumed automation \(id)")
     XCTAssertEqual(row(control)[1], "active")
@@ -69,42 +72,46 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertEqual(run(control, ["list"]), "")
   }
 
-  /// 取得元の無いコマンドの自動化の前回は、回の記録だけから「コマンドの終わり方」で出る（取得の数を出さない）。
-  func testListShowsTheEndingOfACommandSink() throws {
+  /// 入力の無い副作用のコマンドの前回は、回の記録だけから「コマンドの終わり方」で出る（取得の数を出さない）。
+  func testListShowsTheEndingOfASideEffectCommand() throws {
     let control = try startControlProcess()
     let id = run(
       control, ["set"],
-      stdin: #"{"name": "日報", "trigger": {"cron": "0 23 * * *"}, "steps": [], "#
-        + #""sink": {"kind": "command", "command": "cat >/dev/null"}}"#)
-    XCTAssertEqual(row(control)[3], "cron 0 23 * * *", "cron のトリガーは式のまま出る")
+      stdin: #"{"name": "日報", "parts": [{"key": "note", "name": "日報", "#
+        + #""trigger": {"kind": "cron", "expression": "0 23 * * *"}, "#
+        + #""command": "cat >/dev/null", "deliver": "none"}]}"#)
+    XCTAssertEqual(row(control)[3], "cron 0 23 * * *", "cron の予定は式のまま出る")
 
     XCTAssertEqual(run(control, ["run", id]), "started automation \(id)")
     XCTAssertTrue(
       waitUntil(10) { control.target.automationStore.automation(Int(id)!)?.runs.isEmpty == false },
       "今すぐの回が記録に残らない")
     let last = row(control)[5]
-    XCTAssertTrue(last.hasSuffix(" command exited 0"), last)
+    XCTAssertTrue(last.hasSuffix(" note: command exited 0"), last)
     XCTAssertFalse(last.contains("fetched"), last)
   }
 
-  /// 出力先の agent の前回は「agent の終わり方」で出る。agent は起こさず、回の記録を直に積む。
-  func testListShowsTheEndingOfAnAgentSink() throws {
+  /// 仕事の部品の前回は「agent の終わり方」で出る。agent は起こさず、回の記録を直に積む。
+  func testListShowsTheEndingOfAWorkPart() throws {
     let control = try startControlProcess()
     let id = try XCTUnwrap(
       Int(
         run(
           control, ["set"],
-          stdin: #"{"name": "PR を Slack へ", "trigger": {"cron": "0 9 * * 1-5"}, "steps": [], "#
-            + #""sink": {"kind": "agent", "tools": ["Bash(gh search prs:*)"], "request": "投稿して"}}"#
+          stdin: #"{"name": "PR を Slack へ", "parts": [{"key": "post", "name": "投稿", "#
+            + #""trigger": {"kind": "cron", "expression": "0 9 * * 1-5"}, "#
+            + #""tools": ["Bash(gh search prs:*)"], "instruction": "投稿して", "deliver": "report"}]}"#
         )))
-    var record = AutomationStoreTests.run(at: Date())
-    record.source = nil
-    record.fresh = nil
-    control.target.automationStore.commit(id, record, fetched: []) { _, _ in
-      .agent(AutomationAgentReport(commandLine: "claude -p", ending: "exited 0", text: "投稿した"))
-    }
+    _ = try control.target.automationStore.record(
+      AutomationPassEnd(
+        automationId: id, part: "post", trigger: .schedule, startedAt: Date(), endedAt: Date(),
+        take: nil,
+        outcome: .succeeded(
+          .work(.done("投稿した")),
+          AutomationPartPass.Execution(commandLine: "claude -p", ending: "exited 0", count: 1),
+          breach: nil)))
     let last = row(control)[5]
-    XCTAssertTrue(last.hasSuffix(" agent exited 0"), last)
+    XCTAssertTrue(last.hasSuffix(" post: agent exited 0"), last)
   }
 
   /// `proposals <id>` はその自動化の棚の提案だけを、`proposals` は全部を 1 行 1 提案で出す。
@@ -114,11 +121,11 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     let first = try XCTUnwrap(Int(run(control, ["set"], stdin: definition)))
     let second = try XCTUnwrap(Int(run(control, ["set"], stdin: definition)))
     for (id, item) in [
-      (first, AutomationStoreTests.item("a")), (second, AutomationStoreTests.item("b")),
+      (first, WindowControllerAutomationControlTests.item("a")),
+      (second, WindowControllerAutomationControlTests.item("b")),
     ] {
-      AutomationStoreTests.commit(
-        store, id, AutomationStoreTests.run(at: Date()), fetched: [item],
-        decisions: [.propose(itemId: item.id, title: "対応: \(item.id)", due: nil, workspace: nil)])
+      try WindowControllerAutomationControlTests.round(
+        store, id, fetched: [item], proposing: [item])
     }
     let b = try XCTUnwrap(store.proposals.first { $0.item.id == "b" })
 
@@ -138,7 +145,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
 
     let missing = control.orb(["automation", "set"], stdin: #"{"name": "x"}"#)
     XCTAssertEqual(missing.status, 1)
-    XCTAssertTrue(missing.stderr.contains("error -32602: missing trigger"), missing.stderr)
+    XCTAssertTrue(missing.stderr.contains("error -32602: missing parts"), missing.stderr)
     XCTAssertTrue(control.target.automationStore.automations.isEmpty)
   }
 

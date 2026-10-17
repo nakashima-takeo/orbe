@@ -39,7 +39,7 @@ struct TaskPaletteAutomationDetail: View {
       Image(systemName: "tray.and.arrow.down")
         .font(.system(size: 10, weight: .medium))
         .foregroundStyle(Color.theme.accentBright)
-      if let name = model.store.shelf(of: proposal)?.definition.name {
+      if let name = model.store.shelf(of: proposal)?.name {
         TruncatingSlot(name) { fontResolver.text($0, base: Theme.Typography.meta) }
         Text("·")
       }

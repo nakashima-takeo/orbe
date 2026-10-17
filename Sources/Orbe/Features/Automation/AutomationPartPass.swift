@@ -34,7 +34,7 @@ struct AutomationPartPass {
 
   /// 手段の実行の記録。`count` は読めた数——取得は項目、処理・判定は JSON の行、報告・仕事は文があれば 1、副作用は標準入力に
   /// 渡した行。
-  struct Execution: Equatable {
+  struct Execution: Equatable, Codable {
     let commandLine: String
     let ending: String
     let count: Int
@@ -205,20 +205,20 @@ struct AutomationPartPass {
   ) -> String {
     switch input {
     case .fetch(let since, _):
-      return AutomationPrompts.partFetch(request: instruction, since: mark(node, since))
+      return AutomationPrompts.fetch(instruction: instruction, since: mark(node, since))
     case .process(let rows, let reachesJudge):
-      return AutomationPrompts.partStep(
+      return AutomationPrompts.process(
         instruction: instruction, rows: rows.map(\.text), now: now, timeZone: timeZone,
         reachesJudge: reachesJudge)
     case .judge(let rows, let choices):
-      return AutomationPrompts.partJudge(
+      return AutomationPrompts.judge(
         instruction: instruction, rows: rows.map(\.text), choices: choices, now: now,
         timeZone: timeZone)
     case .report(let rows):
       return AutomationPrompts.report(
         instruction: instruction, rows: rows.map(\.text), now: now, timeZone: timeZone)
     case .work:
-      return AutomationPrompts.sinkAgent(request: instruction, now: now, timeZone: timeZone)
+      return AutomationPrompts.work(instruction: instruction, now: now, timeZone: timeZone)
     case .sideEffect:
       preconditionFailure("a side effect part is a command")
     }

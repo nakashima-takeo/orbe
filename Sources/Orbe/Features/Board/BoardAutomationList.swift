@@ -75,7 +75,7 @@ struct BoardAutomationList: View {
   private static let headerHeight: CGFloat = 32
 }
 
-/// 一覧の 1 行。上段に点・名前・右端の文、下段に出力先の種類といつ。点・名前・右端の色と種類は立ち位置から、文は読み替えから
+/// 一覧の 1 行。上段に点・名前・右端の文、下段に Orbe へ渡す先の種類といつ。点・名前・右端の色と種類は立ち位置から、文は読み替えから
 /// 読む。
 struct BoardAutomationRow: View {
   let standing: BoardAutomationStanding

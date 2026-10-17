@@ -67,7 +67,7 @@ extension BoardAutomationTests {
     type("a b", to: window)
     XCTAssertEqual(automation.requestText, "a b", "space は欄の文字になる")
     XCTAssertEqual(
-      automation.store.automations, DesignSceneFixtures.boardAutomations(), "space は一覧の止めるにならない")
+      automation.store.automations, untouched, "space は一覧の止めるにならない")
     send(Key.tab, "\t", to: window)
     XCTAssertEqual(automation.place, .request, "欄の ⇥ は何もしない")
 
@@ -111,7 +111,7 @@ extension BoardAutomationTests {
   func testWithNoAutomationsTheFieldIsTheOnlyStop() {
     let model = BoardModel(
       automation: BoardAutomationModel(
-        runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationEmptyFile())),
+        runner: DesignSceneFixtures.automationRunner([])),
       parts: [.automation])
     let automation = model.automation
     let window = mount(model)

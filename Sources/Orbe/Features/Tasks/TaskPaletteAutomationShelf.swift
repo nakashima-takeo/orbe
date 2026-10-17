@@ -95,7 +95,7 @@ private struct TaskPaletteAutomationShelfRowView: View {
   }
 
   private var name: String {
-    row.automation?.definition.name ?? l10n.string(.taskPaletteAutomationAll)
+    row.automation?.name ?? l10n.string(.taskPaletteAutomationAll)
   }
 
   private var dimmed: Bool { row.automation != nil && row.count == 0 }
@@ -113,7 +113,7 @@ private struct TaskPaletteAutomationShelfRowView: View {
       parts.append(muted(text.next(next)))
     }
     if row.count == 0 { parts.append(muted(l10n.string(.taskPaletteAutomationNoProposals))) }
-    if automation.runs.first?.failure != nil {
+    if automation.runs.first?.run.failed == true {
       parts.append(
         Text(l10n.string(.taskPaletteAutomationLastFailed)).foregroundStyle(Color.theme.danger))
     }

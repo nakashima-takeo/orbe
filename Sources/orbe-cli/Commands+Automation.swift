@@ -1,7 +1,7 @@
 import Foundation
 
 // `orb automation <サブコマンド>` の実装と usage。定義は MCP の set_automation の definition と同じ形の JSON を標準入力で
-// 受け、検証は control に任せる（取得元や段はコマンドか agent かで項目が入れ子になるので、フラグに割ると検証が 2 か所に割れる）。
+// 受け、検証は control に任せる（部品はコマンドか agent かで項目が入れ子になるので、フラグに割ると検証が 2 か所に割れる）。
 
 // MARK: - usage
 
@@ -238,50 +238,67 @@ private func automationList(_ rest: [String]) -> Never {
   }
   let automations = (result as? [String: Any])?["automations"] as? [[String: Any]] ?? []
   for automation in automations {
+    let parts = automation["parts"] as? [String: [String: Any]] ?? [:]
     let state =
-      automation["running"] as? Bool == true
+      parts.values.contains { $0["running"] as? Bool == true }
       ? "running" : automation["paused"] as? Bool == true ? "paused" : "active"
     let definition = automation["definition"] as? [String: Any]
-    let runs = automation["runs"] as? [[String: Any]] ?? []
+    let next = parts.compactMap { key, part in
+      (part["nextRunAt"] as? String).map { (key: key, at: $0) }
+    }.min { $0.at < $1.at }
     print(
       [
-        automation["automationId"], state, definition?["name"], triggerCell(definition?["trigger"]),
-        automation["nextRunAt"],
-        runs.first.map(runCell),
+        automation["automationId"], state, definition?["name"],
+        scheduleCell(definition?["parts"] as? [[String: Any]] ?? [], next: next?.key),
+        next?.at, lastRunCell(parts),
       ].map { $0.map(display) ?? "-" }.map(tsvCell).joined(separator: "\t"))
   }
   exit(0)
 }
 
-/// `every 30m` / `cron 0 9 * * 1-5`。
-private func triggerCell(_ raw: Any?) -> String? {
-  guard let trigger = raw as? [String: Any] else { return nil }
-  if let minutes = trigger["everyMinutes"] { return "every \(display(minutes))m" }
-  if let cron = trigger["cron"] as? String { return "cron " + cron }
-  return nil
-}
-
-/// 前回の要約。回の記録だけから組む: `<開始> failed: <理由>`、または `<開始>` に、取得元の記録があれば
-/// `12 fetched, 3 new`、出力先の記録があれば `1 proposed`（タスク候補）・`command exited 0`（コマンド）・`reported` か
-/// `nothing to report`（報告）・`agent exited 0`（agent）を続ける。
-private func runCell(_ run: [String: Any]) -> String {
-  let started = run["startedAt"].map(display) ?? "?"
-  if let failure = run["failure"] as? String { return "\(started) failed: \(failure)" }
-  var parts: [String] = []
-  if let source = run["source"] as? [String: Any] {
-    let fetched = source["count"].map(display) ?? "0"
-    parts.append("\(fetched) fetched, \(run["fresh"].map(display) ?? "0") new")
-  }
-  if let sink = run["sink"] as? [String: Any] {
-    switch sink["kind"] as? String {
-    case "taskCandidates": parts.append("\(sink["proposed"].map(display) ?? "0") proposed")
-    case "command": parts.append("command \(sink["ending"].map(display) ?? "?")")
-    case "report": parts.append(sink["text"] == nil ? "nothing to report" : "reported")
-    case "agent": parts.append("agent \(sink["ending"].map(display) ?? "?")")
-    default: break
+/// 次に来る部品の予定（`every 30m` / `cron 0 9 * * 1-5`）。ほかに予定のある部品があれば ` +N`、予定のある部品が無ければ
+/// `manual`。
+private func scheduleCell(_ parts: [[String: Any]], next: String?) -> String {
+  let scheduled = parts.compactMap { part -> (key: String, words: String)? in
+    guard let trigger = part["trigger"] as? [String: Any], let key = part["key"] as? String else {
+      return nil
+    }
+    switch trigger["kind"] as? String {
+    case "interval": return (key, "every \(trigger["minutes"].map(display) ?? "?")m")
+    case "cron": return (key, "cron " + ((trigger["expression"] as? String) ?? "?"))
+    default: return nil
     }
   }
-  return parts.isEmpty ? started : "\(started) " + parts.joined(separator: ", ")
+  guard let first = scheduled.first else { return "manual" }
+  let shown = scheduled.first { $0.key == next } ?? first
+  return scheduled.count == 1 ? shown.words : "\(shown.words) +\(scheduled.count - 1)"
+}
+
+/// 最新の部品の回の要約。回の記録だけから組む: `<開始> <鍵> failed: <理由>`、または `<開始> <鍵>: ` に、取得は
+/// `12 fetched, 3 new`、処理は `12 in, 4 out`、判定は `2 proposed`、報告は `reported` か `nothing to report`、副作用は
+/// `command exited 0`、仕事は `agent exited 0` を続ける。
+private func lastRunCell(_ parts: [String: [String: Any]]) -> String? {
+  let latest = parts.compactMap { key, part in
+    ((part["runs"] as? [[String: Any]])?.first).map { (key: key, run: $0) }
+  }.max { ($0.run["startedAt"] as? String ?? "") < ($1.run["startedAt"] as? String ?? "") }
+  guard let (key, run) = latest.map({ ($0.key, $0.run) }) else { return nil }
+  let started = run["startedAt"].map(display) ?? "?"
+  if let failure = run["failure"] as? String { return "\(started) \(key) failed: \(failure)" }
+  let execution = run["execution"] as? [String: Any]
+  let count = execution?["count"].map(display) ?? "0"
+  let ending = execution?["ending"].map(display) ?? "?"
+  let result = run["result"] as? [String: Any]
+  let summary: String
+  switch result?["kind"] as? String {
+  case "fetch": summary = "\(count) fetched, \(result?["fresh"].map(display) ?? "0") new"
+  case "process": summary = "\(run["taken"].map(display) ?? "0") in, \(count) out"
+  case "judge": summary = "\(result?["proposed"].map(display) ?? "0") proposed"
+  case "report": summary = result?["text"] == nil ? "nothing to report" : "reported"
+  case "sideEffect": summary = "command \(ending)"
+  case "work": summary = "agent \(ending)"
+  default: summary = ending
+  }
+  return "\(started) \(key): \(summary)"
 }
 
 private func automationProposals(_ rest: [String]) -> Never {

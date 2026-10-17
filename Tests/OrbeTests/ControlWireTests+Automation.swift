@@ -3,28 +3,18 @@ import XCTest
 
 @testable import Orbe
 
-/// 自動化の 6 動詞の params の語と型検査。定義は `definition` の欄を保存と同じ形で読み、読めない箇所を -32602 の文に入れる。
+/// 自動化の 6 動詞の params の語と型検査。定義は `definition` の欄を保存と同じ形で読み、読めない箇所を定義の中の場所付きで
+/// -32602 の文に入れる。値と組み合わせ（グラフ）の検証は target が持つ。
 ///
-/// 壊れると何が起きるか: 段や出力先の書き忘れが形の上で通り、何も出さない自動化ができる。取得元がコマンドと agent の
-/// 両方の形を持っても黙ってどちらかに落ちる。取得の性質の書き忘れが黙ってどちらかに落ち、候補が下がる・下がらないが
-/// AI の意図と食い違う。段にツールを渡せてしまう。`paused` に文字列を渡して止めたつもりが再開になる。
+/// 壊れると何が起きるか: 部品の書き忘れが形の上で通り、何もしない自動化ができる。部品がコマンドと agent の両方の形を持っても
+/// 黙ってどちらかに落ちる。取得の性質や予定の書き損じが黙ってどちらかに落ち、AI の意図と違う予定で回る。断りの文が定義の
+/// どこを直せばよいかを言わず、AI が直せない。`paused` に文字列を渡して止めたつもりが再開になる。
 extension ControlWireTests {
   /// 自動化の 6 動詞の正しい params 一式（`validRequests` の一部）。
   var automationRequests: [(method: String, params: [String: Any])] {
     [
       ("list_automations", [:]),
-      (
-        "set_automation",
-        [
-          "definition": [
-            "name": "GitHub: レビュー依頼",
-            "trigger": ["everyMinutes": 30],
-            "source": ["command": "gh api notifications", "coverage": "currentSet"],
-            "steps": [["name": "判定", "instruction": "自分がやること"]],
-            "sink": ["kind": "taskCandidates"],
-          ]
-        ]
-      ),
+      ("set_automation", ["definition": definition]),
       ("run_automation", ["automationId": 2]),
       ("pause_automation", ["automationId": 2, "paused": true]),
       ("delete_automation", ["automationId": 2]),
@@ -32,20 +22,24 @@ extension ControlWireTests {
     ]
   }
 
-  private var definition: [String: Any] {
+  private var fetch: [String: Any] {
     [
-      "name": "Slack: 自分宛",
-      "trigger": ["cron": " */10 9-18 * * 1-5 "],
-      "source": [
-        "agent": "claude", "tools": ["mcp__slack__search"], "request": "DM",
-        "coverage": "newArrivals",
-      ],
-      "steps": [
-        ["name": "絞り込み", "command": "jq -c ."],
-        ["name": "判定", "model": "opus", "instruction": "自分がやること"],
-      ],
-      "sink": ["kind": "taskCandidates"],
+      "key": "slack", "name": "Slack: 自分宛",
+      "trigger": ["kind": "cron", "expression": " */10 9-18 * * 1-5 "],
+      "agent": "claude", "tools": ["mcp__slack__search"], "instruction": "DM",
+      "coverage": "newArrivals",
     ]
+  }
+
+  private var judge: [String: Any] {
+    [
+      "key": "judge", "name": "判定", "trigger": ["kind": "arrival"], "from": ["slack"],
+      "model": "opus", "instruction": "自分がやること", "deliver": "taskCandidates",
+    ]
+  }
+
+  private var definition: [String: Any] {
+    ["name": "Slack: 自分宛", "parts": [fetch, judge]]
   }
 
   /// cron 式は前後の空白を除いて受けたまま運ぶ。
@@ -61,68 +55,58 @@ extension ControlWireTests {
     XCTAssertEqual(
       fake.setAutomations.last?.definition,
       AutomationDefinition(
-        name: "Slack: 自分宛",
-        trigger: .cron(try BackgroundCron("*/10 9-18 * * 1-5")),
-        source: AutomationSource(
-          method: .agent(
-            AutomationSourceAgent(
-              cli: "claude", model: nil, tools: ["mcp__slack__search"], request: "DM")),
-          coverage: .newArrivals),
-        steps: [
-          AutomationStep(
-            name: "絞り込み", method: .command(BackgroundCommand(script: "jq -c ."))),
-          AutomationStep(
-            name: "判定",
+        name: "Slack: 自分宛", notify: nil,
+        parts: [
+          AutomationPart(
+            key: "slack", name: "Slack: 自分宛",
+            trigger: .scheduled(.cron(try BackgroundCron("*/10 9-18 * * 1-5"))), inputs: [],
             method: .agent(
-              AutomationStepAgent(cli: "claude", model: "opus", instruction: "自分がやること"))),
-        ],
-        sink: .taskCandidates),
-      "段の agent は省略で claude・モデルは省略のまま")
+              AutomationPartAgent(
+                cli: "claude", model: nil, tools: ["mcp__slack__search"], instruction: "DM")),
+            timeoutMinutes: nil, coverage: .newArrivals, destination: .nextPart, inboxLimit: nil),
+          AutomationPart(
+            key: "judge", name: "判定", trigger: .arrival, inputs: ["slack"],
+            method: .agent(
+              AutomationPartAgent(
+                cli: "claude", model: "opus", tools: [], instruction: "自分がやること")),
+            timeoutMinutes: nil, coverage: nil, destination: .taskCandidates, inboxLimit: nil),
+        ]),
+      "agent は省略で claude・モデルは省略のまま")
   }
 
   func testSetAutomationRejectsAnIncompleteOrAmbiguousDefinition() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
     func with(_ key: String, _ value: Any?) -> [String: Any] {
-      var changed = definition
+      var changed = fetch
       changed[key] = value
-      return ["definition": changed]
+      return ["definition": ["name": "x", "parts": [changed, judge]]]
     }
 
     for (label, params, message) in [
       ("定義がオブジェクトでない", ["definition": "x"], "invalid definition"),
-      ("段が無い", with("steps", nil), "missing steps"),
-      ("出力先が無い", with("sink", nil), "missing sink"),
+      ("部品が無い", ["definition": ["name": "x"]], "missing parts"),
+      ("予定が無い", with("trigger", nil), "missing parts[0].trigger"),
       (
-        "取得元が 2 つの形", with("source", ["command": "gh api", "request": "x", "tools": ["Read"]]),
-        "invalid source: pass either command (a shell command) or request (an agent fetch)"
-      ),
-      ("取得の性質が無い", with("source", ["command": "gh api notifications"]), "missing source.coverage"),
-      (
-        "知らない取得の性質", with("source", ["command": "gh api notifications", "coverage": "all"]),
-        "invalid source.coverage: pass newArrivals, currentSet or everything"
+        "部品が 2 つの形", with("command", "gh api"),
+        "invalid parts[0]: pass either command (a shell command) or instruction (an agent)"
       ),
       (
-        "段にツール", with("steps", [["name": "判定", "instruction": "x", "tools": ["Read"]]]),
-        "invalid steps[0].tools: a step has no tools"
+        "知らない取得の性質", with("coverage", "all"),
+        "invalid parts[0].coverage: pass currentSet, newArrivals or everything"
       ),
       (
-        "段が 2 つの形", with("steps", [["name": "判定", "command": "jq", "instruction": "x"]]),
-        "invalid steps[0]: pass either command (a shell command) or instruction (an agent step)"
+        "知らない予定の種類", with("trigger", ["kind": "daily"]),
+        "invalid parts[0].trigger.kind: pass interval, cron, manual or arrival"
       ),
       (
-        "cron の欄が範囲外", with("trigger", ["cron": "0 24 * * *"]),
-        "invalid trigger.cron: invalid hour field: 24"
+        "cron の欄が範囲外", with("trigger", ["kind": "cron", "expression": "0 24 * * *"]),
+        "invalid parts[0].trigger.expression: invalid hour field: 24"
       ),
       (
-        "cron で日と曜日の両方", with("trigger", ["cron": "0 9 1 * 1"]),
-        "invalid trigger.cron: leave the day of month or the weekday as *"
+        "間隔が文字列", with("trigger", ["kind": "interval", "minutes": "30"]),
+        "invalid parts[0].trigger.minutes"
       ),
-      (
-        "間隔と cron の両方", with("trigger", ["everyMinutes": 30, "cron": "0 9 * * *"]),
-        "invalid trigger: pass either everyMinutes or cron"
-      ),
-      ("間隔が文字列", with("trigger", ["everyMinutes": "30"]), "invalid trigger.everyMinutes"),
     ] {
       let response = wire.request(id: 1, method: "set_automation", params: params)
       XCTAssertEqual(errorCode(response), -32602, label)

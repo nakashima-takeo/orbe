@@ -44,13 +44,14 @@ extension WindowController {
       if let automationId, shelf?.id != automationId { return nil }
       var json: [String: Any] = [
         "proposalId": proposal.id, "state": proposal.state.name, "title": proposal.title,
+        "partKey": proposal.partKey, "sourcePartKey": proposal.sourcePartKey,
         "link": proposal.item.link, "body": proposal.item.body,
         "time": SessionEvent.iso8601(proposal.item.time),
         "proposedAt": SessionEvent.iso8601(proposal.proposedAt),
       ]
       if let shelf {
         json["automationId"] = shelf.id
-        json["automationName"] = shelf.definition.name
+        json["automationName"] = shelf.name
       }
       if let due = proposal.due { json["due"] = due.text }
       if let ws = proposal.workspace.flatMap({ id in workspaces.first { $0.persistentId == id } }) {
@@ -63,34 +64,41 @@ extension WindowController {
     return .success(["proposals": proposals])
   }
 
-  /// 定義（保存のまま）に、止めているか・走っているか・次の時刻・前回・出力先ごとの欄・回の記録（保存と同じ形）を足す。
+  /// 定義（保存のまま）に、止めているか・部品の鍵ごとの状態（走っているか・次の時刻・最後に回った時刻・溜まりの件数・決まりを
+  /// 外した印・回の記録〔保存と同じ形〕）を足す。判定の部品を持つ自動化にだけタスク候補の欄を付ける。
   private func automationJSON(_ automation: Automation) -> [String: Any] {
+    var parts: [String: Any] = [:]
+    for node in automation.graph.nodes {
+      let state = automation.state(node.key)
+      var part: [String: Any] = [
+        "running": automationRunner.isRunning(automation.id, node.key),
+        "runs": AutomationWire.object(state.runs),
+      ]
+      if let next = automationRunner.nextRunAt(automation, part: node.key) {
+        part["nextRunAt"] = SessionEvent.iso8601(next)
+      }
+      if let last = state.lastRunAt { part["lastRunAt"] = SessionEvent.iso8601(last) }
+      if !node.part.inputs.isEmpty { part["inbox"] = state.inbox }
+      if let breach = state.breach { part["breach"] = AutomationWire.object(breach) }
+      parts[node.key] = part
+    }
     var json: [String: Any] = [
       "automationId": automation.id,
       "definition": AutomationWire.object(automation.definition),
       "paused": automation.paused,
-      "running": automationRunner.isRunning(automation.id),
-      "runs": AutomationWire.object(automation.runs),
+      "parts": parts,
     ]
-    if let next = automationRunner.nextRunAt(automation) {
-      json["nextRunAt"] = SessionEvent.iso8601(next)
-    }
-    if let last = automation.lastRunAt { json["lastRunAt"] = SessionEvent.iso8601(last) }
-    switch automation.definition.sink {
-    case .taskCandidates:
+    if automation.judges {
       json["taskCandidates"] =
         [
           "openProposals": automationStore.proposals.filter {
             $0.state == .open && automationStore.shelf(of: $0)?.id == automation.id
           }.count,
           "overlaps": automationStore.overlaps(of: automation.id).map {
-            [
-              "automationId": $0.automation.id, "name": $0.automation.definition.name,
-              "count": $0.count,
-            ] as [String: Any]
+            ["automationId": $0.automation.id, "name": $0.automation.name, "count": $0.count]
+              as [String: Any]
           },
         ] as [String: Any]
-    case .command, .report, .agent: break
     }
     return json
   }
@@ -99,7 +107,7 @@ extension WindowController {
     ControlError(code: -32004, message: "automation not found: \(id)")
   }
 
-  /// ドメインエラーを制御エラーの語彙へ写す（未知 → -32004・不正な値 → -32602・走っている → -32000）。
+  /// ドメインエラーを制御エラーの語彙へ写す（未知 → -32004・不正な値 → -32602・走っている・使えない → -32000）。
   private func automationResult(_ body: () throws(AutomationError) -> [String: Any]) -> Result<
     Any, ControlError
   > {
@@ -114,7 +122,11 @@ extension WindowController {
         return .failure(ControlError(code: -32602, message: "proposal \(id) is not open"))
       case .invalid(let message): return .failure(ControlError(code: -32602, message: message))
       case .running(let id):
-        return .failure(ControlError(code: -32000, message: "automation \(id) is running"))
+        return .failure(
+          ControlError(
+            code: -32000, message: "every part of automation \(id) without from is running"))
+      case .unavailable(let message):
+        return .failure(ControlError(code: -32000, message: message))
       }
     }
   }

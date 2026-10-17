@@ -1,18 +1,27 @@
 import Foundation
+import OrbeTestSupport
 
 @testable import Orbe
 
-extension Automation {
-  /// 定義の一部を書き換える（出力先ごとの状態は `redefine` が合わせる）。
-  mutating func redefine(_ edit: (inout AutomationDefinition) -> Void) {
-    var definition = definition
-    edit(&definition)
-    redefine(definition)
-  }
+/// 見本の自動化 1 つ。ストアの変異の口（作る・部品の回の確定・止める）を通して DB に置く——見本専用の口を本番に足さない。
+struct AutomationSample {
+  var definition: AutomationDefinition
+  var createdAt: Date
+  var paused = false
+  /// 古い順に確定する部品の回。
+  var passes: [AutomationSamplePass] = []
+}
+
+/// 見本の部品の 1 回。入力のある部品の回は、その時点の溜まりをすべて取った回にする。
+struct AutomationSamplePass {
+  let part: String
+  let at: Date
+  var trigger: AutomationPartRun.Trigger = .schedule
+  let outcome: AutomationPartPass.Outcome
 }
 
 /// 提案タブの fixture（見本 R3Inbox.png と同じ並び）。今日はタスク画面と同じ 2025-10-04、走らせ役の今は同じ日の 15:00 に
-/// 固定し、次の時刻と回の時刻を決定論にする。取得は始まっても終わらない（実行中のまま）——実物の claude は起こさない。
+/// 固定し、次の時刻と回の時刻を決定論にする。部品は始まっても終わらない（実行中のまま）——実物の claude は起こさない。
 extension DesignSceneFixtures {
   static func automationAt(_ hour: Int, _ minute: Int = 0, daysAgo: Int = 0) -> Date {
     let day = taskCalendar.date(byAdding: .day, value: -daysAgo, to: taskToday)!
@@ -21,52 +30,68 @@ extension DesignSceneFixtures {
 
   static var automationNow: Date { automationAt(15) }
 
-  /// 番人も取得も止まった走らせ役。`file` が nil なら受信は 0 件。
-  static func automationRunner(_ file: AutomationsFile?) -> AutomationRunner {
+  /// 見本を置いたストア。DB はこの呼び出しだけの新しいフォルダに作る（同じテストで見本を何度作っても、DB の排他でぶつからない）。
+  static func automationStore(_ samples: [AutomationSample]) -> AutomationStore {
+    let previous = AutomationPersistence.folderOverride
+    AutomationPersistence.folderOverride = TestScratch.caseDir.appendingPathComponent(
+      "automations-\(UUID().uuidString.prefix(8))", isDirectory: true)
+    defer { AutomationPersistence.folderOverride = previous }
+    let store = AutomationStore()
+    seed(samples, into: store)
+    return store
+  }
+
+  /// 窓が開く既定の DB に見本を置き、閉じる（窓を作る前に呼ぶ）。
+  static func seedAutomations(_ samples: [AutomationSample]) {
+    seed(samples, into: AutomationStore())
+  }
+
+  private static func seed(_ samples: [AutomationSample], into store: AutomationStore) {
+    do {
+      for sample in samples {
+        let id = try store.create(sample.definition, now: sample.createdAt).id
+        for pass in sample.passes {
+          guard let node = store.automation(id)?.graph.node(pass.part) else {
+            preconditionFailure("no part \(pass.part) in the sample")
+          }
+          var take: AutomationInbox.Take?
+          if !node.part.inputs.isEmpty {
+            take = AutomationInbox.Take(
+              taken: try store.inbox(of: pass.part, in: id).map(\.seq), dropped: [])
+          }
+          _ = try store.record(
+            AutomationPassEnd(
+              automationId: id, part: pass.part, trigger: pass.trigger, startedAt: pass.at,
+              endedAt: pass.at.addingTimeInterval(60), take: take, outcome: pass.outcome))
+        }
+        if sample.paused { _ = try store.setPaused(id, true) }
+      }
+    } catch {
+      preconditionFailure("the samples are valid: \(error)")
+    }
+  }
+
+  /// 番人も部品の回も止まった走らせ役。
+  static func automationRunner(_ samples: [AutomationSample] = []) -> AutomationRunner {
     let scheduler = BackgroundScheduler { _, _ in BackgroundRunHandle {} }
     scheduler.now = { automationNow }
     scheduler.calendar = { taskCalendar }
     scheduler.arm = { _, _ in {} }
     let runner = AutomationRunner(
-      store: AutomationStore(file: file), scheduler: scheduler,
+      store: automationStore(samples), scheduler: scheduler,
       run: { _, _ in BackgroundRunHandle {} },
-      workspaces: { AutomationWorkspaces(listed: [], home: nil) }, recorded: { _ in },
-      defined: { _ in },
-      deleted: { _ in })
+      workspaces: { AutomationWorkspaces(listed: [], home: nil) }, recorded: { _, _ in },
+      defined: { _ in }, deleted: { _ in })
     runner.now = { automationNow }
     runner.calendar = { taskCalendar }
     runner.start()
     return runner
   }
 
-  static func automationItem(_ id: String, _ body: String, at time: Date) -> AutomationItem {
-    AutomationItem(id: id, link: "https://example.slack.com/archives/\(id)", body: body, time: time)
-  }
-
-  static func automationRun(
-    at start: Date, items: Int, fresh: Int, proposed: Int = 0, failure: String? = nil
-  ) -> AutomationRun {
-    AutomationRun(
-      startedAt: start, endedAt: start.addingTimeInterval(60), trigger: .schedule,
-      source: AutomationStepReport(
-        name: nil, commandLine: "fetch", ending: failure == nil ? "exited 0" : "exited 1",
-        count: items, rejected: AutomationRejections()),
-      fresh: failure == nil ? fresh : nil,
-      steps: fresh == 0 || failure != nil
-        ? []
-        : [
-          AutomationStepReport(
-            name: "判定", commandLine: "claude -p", ending: "exited 0", count: proposed,
-            rejected: AutomationRejections())
-        ],
-      lastStepCountedBySink: fresh != 0 && failure == nil,
-      sink: failure == nil
-        ? .taskCandidates(AutomationTaskCandidatesReport(proposed: proposed)) : nil,
-      failure: failure)
-  }
+  // MARK: - 部品
 
   /// 見本の cron のいつ。見本には正しい式だけを書く。
-  static func cron(_ expression: String) -> BackgroundTiming {
+  nonisolated static func cron(_ expression: String) -> BackgroundTiming {
     do {
       return .cron(try BackgroundCron(expression))
     } catch {
@@ -74,192 +99,146 @@ extension DesignSceneFixtures {
     }
   }
 
-  static func automationDefinition(
-    _ name: String, source: AutomationSource, trigger: BackgroundTiming,
-    instruction: String = "自分が何かを頼まれている・期限がある項目だけをタスクにする。"
+  nonisolated static func commandPart(
+    _ key: String, _ name: String, _ trigger: AutomationPart.Trigger, from inputs: [String] = [],
+    script: String, directory: String? = nil, coverage: AutomationCoverage? = nil,
+    deliver: AutomationPart.Destination = .nextPart
+  ) -> AutomationPart {
+    AutomationPart(
+      key: key, name: name, trigger: trigger, inputs: inputs,
+      method: .command(BackgroundCommand(script: script, directory: directory)),
+      timeoutMinutes: nil, coverage: coverage, destination: deliver, inboxLimit: nil)
+  }
+
+  nonisolated static func agentPart(
+    _ key: String, _ name: String, _ trigger: AutomationPart.Trigger, from inputs: [String] = [],
+    model: String? = nil, tools: [String] = [], instruction: String,
+    coverage: AutomationCoverage? = nil, deliver: AutomationPart.Destination = .nextPart
+  ) -> AutomationPart {
+    AutomationPart(
+      key: key, name: name, trigger: trigger, inputs: inputs,
+      method: .agent(
+        AutomationPartAgent(cli: "claude", model: model, tools: tools, instruction: instruction)),
+      timeoutMinutes: nil, coverage: coverage, destination: deliver, inboxLimit: nil)
+  }
+
+  /// 取得の部品 `fetch` と、届いたらタスク候補を出す判定の部品 `judge`。
+  nonisolated static func candidatesDefinition(
+    _ name: String, fetch: AutomationPart,
+    instruction: String = "自分が何かを頼まれている・期限がある項目だけをタスクにする。",
+    notify: AutomationNotify? = nil
   ) -> AutomationDefinition {
     AutomationDefinition(
-      name: name, trigger: trigger, source: source,
-      steps: [
-        AutomationStep(
-          name: "判定",
-          method: .agent(
-            AutomationStepAgent(cli: "claude", model: "sonnet", instruction: instruction)))
-      ],
-      sink: .taskCandidates)
+      name: name, notify: notify,
+      parts: [
+        fetch,
+        agentPart(
+          "judge", "判定", .arrival, from: [fetch.key], model: "sonnet", instruction: instruction,
+          deliver: .taskCandidates),
+      ])
   }
 
-  /// 見本の 3 項目（見積もり・オンボーディング・週報）。
-  static var automationEstimate: AutomationItem {
-    automationItem(
-      "D01-1", "@yamada · DM「見積もり、金曜までに送ってもらえますか？数字は先週の版で大丈夫です。」",
-      at: automationAt(10, 24))
+  // MARK: - 回
+
+  nonisolated static func execution(_ count: Int, ending: String = "exited 0")
+    -> AutomationPartPass.Execution
+  {
+    AutomationPartPass.Execution(commandLine: "claude -p", ending: ending, count: count)
   }
 
-  static var automationOnboarding: AutomationItem {
-    automationItem(
-      "C02-7", "@tanaka · #general「@nakatake 来週のオンボーディング、環境構築の手順を一度見てもらえますか」",
-      at: automationAt(12, 41))
-  }
-
-  static var automationWeekly: AutomationItem {
-    automationItem("C03-2", "#team-orbe「今週の進捗、金曜までに週報へお願いします」", at: automationAt(11, 5))
-  }
-
-  /// 見本の受信 4 つ。
-  static func automationDesignAutomations() -> [Automation] {
-    let (estimate, onboarding, weekly) = (
-      automationEstimate, automationOnboarding, automationWeekly
-    )
-    let seen = { (item: AutomationItem) in AutomationSeen(id: item.id, link: item.link) }
-    let command = { (script: String, coverage: AutomationCoverage) in
-      AutomationSource(
-        method: .command(BackgroundCommand(script: script, directory: nil)), coverage: coverage)
+  /// 取得の回。`fresh` を省けば全項目が新しい。
+  nonisolated static func fetched(
+    _ part: String, _ items: [AutomationItem], fresh: [AutomationItem]? = nil
+  ) -> AutomationPartPass.Outcome {
+    let rows = (fresh ?? items).map { item in
+      let id = "\(part):\(item.id)"
+      return AutomationPartRow(
+        id: id,
+        text: AutomationPrompts.row(
+          AutomationItem(id: id, link: item.link, body: item.body, time: item.time)),
+        origin: AutomationOrigin(part: part, item: item))
     }
-    return [
-      Automation(
-        id: 1,
-        definition: automationDefinition(
-          "Slack: 自分宛の DM・メンション", source: command("~/bin/slack-mentions --since 1d", .newArrivals),
-          trigger: cron("0 9,13,17 * * *")),
-        paused: false, createdAt: automationAt(9, daysAgo: 3),
-        lastFetched: [seen(estimate), seen(onboarding)], reviewAll: false,
-        lastRunAt: automationAt(13),
-        runs: [automationRun(at: automationAt(13), items: 9, fresh: 4, proposed: 2)]),
-      Automation(
-        id: 2,
-        definition: automationDefinition(
-          "Slack: 自分の発言", source: command("~/bin/slack-mine --since 1d", .newArrivals),
-          trigger: cron("0 18 * * *")),
-        paused: false, createdAt: automationAt(9, daysAgo: 3),
-        lastFetched: [seen(weekly), seen(onboarding)], reviewAll: false,
-        lastRunAt: automationAt(13),
-        runs: [automationRun(at: automationAt(13), items: 3, fresh: 1, proposed: 1)]),
-      Automation(
-        id: 3,
-        definition: automationDefinition(
-          "Backlog: 自分が担当の未完了課題",
-          source: AutomationSource(
-            method: .agent(
-              AutomationSourceAgent(
-                cli: "claude", model: "haiku", tools: ["mcp__backlog__get_issues"],
-                request: "自分が担当の未完了の課題を、更新の新しい順に 30 件取る。")),
-            coverage: .currentSet),
-          trigger: .every(1800)),
-        paused: false, createdAt: automationAt(9, daysAgo: 3),
-        lastFetched: [
-          AutomationSeen(id: "ORBE-12", link: "https://example.backlog.com/view/ORBE-12")
-        ],
-        reviewAll: false, lastRunAt: automationAt(15),
-        runs: [automationRun(at: automationAt(15), items: 14, fresh: 0)]),
-      Automation(
-        id: 4,
-        definition: automationDefinition(
-          "GitHub: 自分へのレビュー依頼",
-          source: command("gh search prs --review-requested=@me --json url", .currentSet),
-          trigger: .every(3600)),
-        paused: true, createdAt: automationAt(9, daysAgo: 3), lastFetched: [], reviewAll: false,
-        lastRunAt: automationAt(9),
-        runs: [
-          automationRun(
-            at: automationAt(9), items: 0, fresh: 0,
-            failure: "the fetch ended: exited 1: gh: Not Found (HTTP 404)")
-        ]),
+    return .succeeded(
+      .fetch(rows: rows, lastOutput: items.map { AutomationSeen(id: $0.id, link: $0.link) }),
+      execution(items.count), breach: nil)
+  }
+
+  /// 取得の部品 `fetch` の項目への候補の案。
+  nonisolated static func proposal(
+    _ item: AutomationItem, _ title: String, due: TaskItem.DueDate? = nil, workspace: UUID? = nil
+  ) -> AutomationPartPass.Proposal {
+    AutomationPartPass.Proposal(
+      origin: AutomationOrigin(part: "fetch", item: item), title: title, due: due,
+      workspace: workspace)
+  }
+
+  /// 判定の回。`rows` は読めた行の数。
+  nonisolated static func judged(_ proposals: [AutomationPartPass.Proposal], rows: Int)
+    -> AutomationPartPass.Outcome
+  {
+    .succeeded(.judge(proposals: proposals, resolved: []), execution(rows), breach: nil)
+  }
+
+  nonisolated static func failed(_ reason: String, count: Int = 0) -> AutomationPartPass.Outcome {
+    .failed(reason, execution(count, ending: "exited 1"), breach: nil)
+  }
+
+  nonisolated static func reported(_ text: String?) -> AutomationPartPass.Outcome {
+    .succeeded(.report(text), execution(text == nil ? 0 : 1), breach: nil)
+  }
+
+  nonisolated static func worked(_ work: AutomationPartPass.Work) -> AutomationPartPass.Outcome {
+    let count = if case .done(.some) = work { 1 } else { 0 }
+    return .succeeded(.work(work), execution(count), breach: nil)
+  }
+
+  nonisolated static func sideEffected(_ count: Int) -> AutomationPartPass.Outcome {
+    .succeeded(.sideEffect, execution(count), breach: nil)
+  }
+
+  nonisolated static func processed(_ rows: [AutomationPartRow], read: Int)
+    -> AutomationPartPass.Outcome
+  {
+    .succeeded(.process(rows), execution(read), breach: nil)
+  }
+
+  /// `source` の `count` 項目（id は回の時刻と番号）。リンクは出どころと id で一意。
+  nonisolated static func sampleItems(_ source: String, _ count: Int, at time: Date)
+    -> [AutomationItem]
+  {
+    let stamp = Int(time.timeIntervalSince1970)
+    return (0..<count).map { n in
+      AutomationItem(
+        id: "\(stamp)-\(n)", link: "https://example.com/\(source)/\(stamp)-\(n)",
+        body: "\(source) の項目 \(n)", time: time)
+    }
+  }
+
+  /// 取得の回と、その後の届いたらの判定の回。新しい `fresh` 項目のうち先頭の `proposed` 件を候補にする。取得が失敗した回は
+  /// 判定を起こさない。
+  nonisolated static func round(
+    _ source: String, at time: Date, items: Int, fresh: Int, proposed: Int = 0,
+    trigger: AutomationPartRun.Trigger = .schedule, failure: String? = nil
+  ) -> [AutomationSamplePass] {
+    if let failure {
+      return [
+        AutomationSamplePass(part: "fetch", at: time, trigger: trigger, outcome: failed(failure))
+      ]
+    }
+    let all = sampleItems(source, items, at: time)
+    let new = Array(all.suffix(fresh))
+    var passes = [
+      AutomationSamplePass(
+        part: "fetch", at: time, trigger: trigger, outcome: fetched("fetch", all, fresh: new))
     ]
-  }
-
-  /// 受信 4 つ（Slack の 2 つは cron の時刻で提案あり・Backlog は 30 分ごとの軽い agent で提案なし・GitHub は止めていて
-  /// 前回が失敗）と、判断待ちの提案 3 件（期限あり / なし、付け先が orbe / Home / work）。Slack の 2 つは 1 件のリンクを
-  /// 重ねて取っている。
-  static func automationDesignFile() -> AutomationsFile {
-    let (estimate, onboarding, weekly) = (
-      automationEstimate, automationOnboarding, automationWeekly
-    )
-    let automations = automationDesignAutomations()
-    let proposedAt = automationAt(13, 1)
-    let proposals = [
-      AutomationProposal(
-        id: 1, automationId: 1, item: estimate, title: "見積もりを山田さんに送る",
-        due: TaskItem.DueDate("2025-10-10"), workspace: taskWorkspaces.all[0].id,
-        proposedAt: proposedAt, state: .open),
-      AutomationProposal(
-        id: 2, automationId: 1, item: onboarding, title: "オンボーディングの環境構築手順を見る", due: nil,
-        workspace: nil, proposedAt: proposedAt, state: .open),
-      AutomationProposal(
-        id: 3, automationId: 2, item: weekly, title: "週報に今週の進捗を書く",
-        due: TaskItem.DueDate("2025-10-10"), workspace: taskWorkspaces.all[1].id,
-        proposedAt: proposedAt, state: .open),
-    ]
-    return AutomationsFile(
-      version: AutomationPersistence.version, nextAutomationId: 5, nextProposalId: 4,
-      automations: automations,
-      proposals: proposals)
-  }
-
-  /// 長いタイトル・長い本文・多い提案（棚の 1 つ目に 14 件）。
-  static func automationCrowdedFile() -> AutomationsFile {
-    var file = automationDesignFile()
-    let long =
-      "@sato · #incident「本番のログイン直後に白画面になる件、再現手順と影響範囲をまとめて、明日の朝会までに"
-      + "共有してもらえますか。顧客からの問い合わせが 3 件来ています。ログは添付のとおりで、Safari だけで起きているようです。」"
-    for n in 0..<12 {
-      let item = automationItem(
-        "L\(n)", n == 0 ? long : "@user\(n) · DM「確認をお願いします \(n)」", at: automationAt(9, n))
-      file.automations[0].lastFetched.append(AutomationSeen(id: item.id, link: item.link))
-      file.proposals.append(
-        AutomationProposal(
-          id: file.nextProposalId, automationId: 1, item: item,
-          title: n == 0
-            ? "本番のログイン直後に白画面になる件の再現手順と影響範囲をまとめて朝会で共有する" : "確認の依頼 \(n) に返事をする",
-          due: n.isMultiple(of: 3) ? TaskItem.DueDate("2025-10-06") : nil, workspace: nil,
-          proposedAt: automationAt(9, 1), state: .open))
-      file.nextProposalId += 1
+    if !new.isEmpty {
+      passes.append(
+        AutomationSamplePass(
+          part: "judge", at: time.addingTimeInterval(60), trigger: .arrival,
+          outcome: judged(
+            new.prefix(proposed).map { proposal($0, "\($0.body)に対応する") },
+            rows: new.count)))
     }
-    return file
-  }
-
-  static func automationEmptyFile() -> AutomationsFile {
-    AutomationsFile(
-      version: AutomationPersistence.version, nextAutomationId: 1, nextProposalId: 1,
-      automations: [],
-      proposals: [])
-  }
-
-  /// 受信の中身を行数で切らないことを見る見本: Backlog（3）の取得役に長い依頼文と多くのツール・長い判定の指示文、
-  /// Slack（1）に長い取得のコマンドと作業ディレクトリ。
-  static func automationLongFile() -> AutomationsFile {
-    var long = automationDesignFile()
-    if let agentIndex = long.automations.firstIndex(where: { $0.id == 3 }) {
-      long.automations[agentIndex].redefine {
-        $0.source?.method = .agent(
-          AutomationSourceAgent(
-            cli: "claude", model: "haiku",
-            tools: [
-              "mcp__backlog__get_issues", "mcp__backlog__get_issue_comments",
-              "mcp__backlog__get_project_list", "mcp__backlog__get_users",
-              "mcp__backlog__get_notifications", "mcp__backlog__get_wiki_pages",
-            ],
-            request: (1...9).map { "\($0). 自分が担当の未完了の課題を、更新の新しい順に 30 件取る。期限の近いものを先に。" }
-              .joined(separator: "\n")))
-        $0.steps[0].method = .agent(
-          AutomationStepAgent(
-            cli: "claude", model: "sonnet",
-            instruction: (1...8).map { "\($0). 今日中に自分が手を動かす必要があるものだけをタスクにする。" }
-              .joined(separator: "\n")))
-      }
-    }
-    if let commandIndex = long.automations.firstIndex(where: { $0.id == 1 }) {
-      long.automations[commandIndex].redefine {
-        $0.source?.method = .command(
-          BackgroundCommand(
-            script: (1...8).map {
-              "gh search prs --review-requested=@me --json url,title,body --limit \($0 * 10) \\"
-            }
-            .joined(separator: "\n") + "\n  | jq -c '.[] | {id: .url, link: .url, body: .title}'",
-            directory:
-              "/Users/someone/work/very/long/path/to/the/repository/that/wraps/onto/the/next/line"))
-      }
-    }
-    return long
+    return passes
   }
 }

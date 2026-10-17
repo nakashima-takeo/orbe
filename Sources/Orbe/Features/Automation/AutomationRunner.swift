@@ -1,13 +1,20 @@
 import Foundation
 
-/// 自動化を番人に載せ、1 回（取得元 → 枠の差分 → 出力先の取り込み → 段を 1 つずつ → 出力先が読む・届ける → 確定）を
-/// まるごと番人の 1 回として進める。main で使う。
+/// 自動化の部品を 1 つずつ番人に載せ、部品の契機ごとに「溜まりから取る → 部品の 1 回 → 確定」を回す。main で使う。
 ///
-/// 1 回が終わるまで同じ自動化の次の回は始まらない（重ねない保証・「今すぐ」・走っているかは番人が持つ）。番人が回を止めたら
-/// （何をするかの書き換え・削除）、走っている段か届けを止め、以後の確定を行わない。定義の変異はここを通し、番人の登録を
-/// 合わせる。状態を読み書きするのは枠（ストア）と出力先だけで、段は状態を持たない。回を記録するたびに `recorded` で
-/// 自動化の ID を知らせる（知らせるかどうか・何を出すかは受けた側がストアの今の値から決める）。定義を書いたら `defined`、
-/// 消したら `deleted` で知らせる。
+/// 番人の鍵は `automation:<id>/<部品の鍵>`。間隔・cron の部品は止めていなければ「いつ」付きで、それ以外（手動・届いたら・
+/// 止めた自動化の部品）は「いつ」なしで載せる。同じ部品の契機は重ならない（重ねない保証・「今すぐ」・走っているかは番人が
+/// 持つ）。1 つの契機の中では、契機の始まりの時点で溜まっていた行を取り切るまで続けて回し、回が失敗するか書けなければ
+/// その契機を終える。
+///
+/// 「届いたら」の部品を起こす決まりは 1 つ: 前の契機の始まりの時点の最も新しい通し番号より新しい行が溜まりにあり、走って
+/// いなければ起こす。この決まりは、その部品の溜まりが増えたとき（上流の確定）・登録したとき（起動・書き換え・再開。止めた
+/// 自動化は除く）・その部品の契機が終わったときに見る。失敗した契機の行は前の契機の番号以下なので、この決まりでは起こさない
+/// （同じ行で失敗をすぐ繰り返さない）。代わりに、「届いたら」でない部品の契機が終わるたびに、下流の「届いたら」の部品を
+/// 溜まりがあればすべて起こす（祖先の予定の間隔でやり直す）。
+///
+/// 部品の回を記録するたびに `recorded` で自動化と部品の鍵を知らせる（知らせるかどうか・何を出すかは受けた側がストアの今の値
+/// から決める）。定義を書いたら `defined`、消したら `deleted` で知らせる。
 final class AutomationRunner {
   let store: AutomationStore
   var now: () -> Date = Date.init
@@ -16,16 +23,22 @@ final class AutomationRunner {
   private let scheduler: BackgroundScheduler
   private let run: BackgroundScheduler.Run
   private let workspaces: () -> AutomationWorkspaces
-  private let recorded: (Int) -> Void
+  private let recorded: (Int, String) -> Void
   private let defined: (Int) -> Void
   private let deleted: (Int) -> Void
+  /// 番人に載せている鍵。
+  private var registered = Set<String>()
+  /// 部品ごとの、前の契機の始まりの時点の最も新しい通し番号（メモリだけ。無ければ溜まりの行はすべて新しい）。
+  private var marks: [String: Int] = [:]
+  /// 部品ごとの、番人に最後に返した数え始め。記録の無い契機（取る行が 0 件）でも進むので、次の時刻はこれから数える。
+  private var anchors: [String: Date] = [:]
 
-  /// `workspaces` はタスク候補の付け先にできる今の workspace。タスク候補の出力先にだけ渡す。
+  /// `workspaces` はタスク候補の付け先にできる今の workspace。判定の部品にだけ渡す。
   init(
     store: AutomationStore, scheduler: BackgroundScheduler = BackgroundScheduler(),
     run: @escaping BackgroundScheduler.Run = { BackgroundRuns.shared.run($0, completion: $1) },
     workspaces: @escaping () -> AutomationWorkspaces,
-    recorded: @escaping (Int) -> Void, defined: @escaping (Int) -> Void,
+    recorded: @escaping (Int, String) -> Void, defined: @escaping (Int) -> Void,
     deleted: @escaping (Int) -> Void
   ) {
     self.store = store
@@ -35,350 +48,330 @@ final class AutomationRunner {
     self.recorded = recorded
     self.defined = defined
     self.deleted = deleted
+    store.onUnavailable = { [weak self] in self?.unregisterAll() }
   }
 
-  /// 起動時に一度、全自動化を番人へ載せる（止めた自動化は予定なしで）。
+  /// 起動時に一度、全部品を番人へ載せ、止めていない自動化の「届いたら」の部品に起こす決まりを見る（過ぎていた間隔の回は
+  /// ここで 1 回だけ走る）。
   func start() {
     for automation in store.automations { register(automation) }
   }
 
+  /// どれかの部品が走っているか。
   func isRunning(_ id: Int) -> Bool {
-    scheduler.isRunning(id: Self.key(id))
+    store.automation(id)?.graph.nodes.contains { isRunning(id, $0.key) } ?? false
   }
 
-  /// `now`（渡さなければ走らせ役の今）から見て次に予定で回る時刻（止めていれば nil）。過ぎていれば `now` 以前の時刻を返す。
+  func isRunning(_ id: Int, _ key: String) -> Bool {
+    scheduler.isRunning(id: Self.key(id, key))
+  }
+
+  /// `now`（渡さなければ走らせ役の今）から見て、どれかの部品が次に予定で回る時刻（止めていれば nil）。
   func nextRunAt(_ automation: Automation, now: Date? = nil) -> Date? {
-    guard !automation.paused else { return nil }
-    switch automation.definition.trigger.next(
-      after: automation.anchor, deadline: nil, now: now ?? self.now(), calendar: calendar())
-    {
+    automation.graph.nodes.compactMap { nextRunAt(automation, part: $0.key, now: now) }.min()
+  }
+
+  /// 部品が次に予定で回る時刻。止めている・予定の無い部品は nil。過ぎていれば `now` 以前の時刻を返す。
+  func nextRunAt(_ automation: Automation, part key: String, now: Date? = nil) -> Date? {
+    guard !automation.paused, let node = automation.graph.node(key),
+      case .scheduled(let timing) = node.part.trigger
+    else { return nil }
+    let anchor = anchors[Self.key(automation.id, key)] ?? automation.state(key).anchor
+    switch timing.next(after: anchor, deadline: nil, now: now ?? self.now(), calendar: calendar()) {
     case .run(let date): return date
     case .expire: return nil
     }
   }
 
-  // MARK: - 1 回
+  // MARK: - 定義の変異
 
-  private func begin(
-    _ id: Int, trigger: BackgroundScheduler.Trigger, finish: @escaping (Date) -> Void
-  ) -> BackgroundRunHandle {
-    // 番人の上に「走っている」を残さないよう、自動化が無ければ回はすぐ終わったものとして知らせる。
-    guard let automation = store.automation(id) else {
-      finish(now())
-      return BackgroundRunHandle {}
-    }
-    let definition = automation.definition
-    let attempt = Attempt(
-      automationId: id, definition: definition, trigger: trigger == .now ? .now : .schedule,
-      startedAt: now(), finish: finish)
-    switch definition.sink {
-    case .taskCandidates:
-      let sink = AutomationTaskCandidates(store: store, automationId: id, workspaces: workspaces)
-      runSource(Pass(attempt, sink), automation)
-    case .command(let command):
-      let sink = AutomationCommandSinkRun(
-        command, runId: automation.runId, gate: AutomationRowGate(definition), run: run)
-      runSource(Pass(attempt, sink), automation)
-    case .report:
-      runSource(Pass(attempt, AutomationReportSinkRun()), automation)
-    case .agent(let agent):
-      let sink = AutomationAgentSinkRun(
-        agent, gate: AutomationRowGate(definition), run: run, now: now, calendar: calendar)
-      runSource(Pass(attempt, sink), automation)
-    }
-    return BackgroundRunHandle {
-      attempt.cancelled = true
-      attempt.current?.stop()
-    }
-  }
-
-  /// 新着の流れの取得元にだけ、前回成功した回の開始時刻を目印として渡す。
-  private func runSource<Sink>(_ pass: Pass<Sink>, _ automation: Automation) {
-    guard let source = automation.definition.source else {
-      forward([], pass)
-      return
-    }
-    let since = source.coverage == .newArrivals ? automation.lastSucceededAt : nil
-    launch(Self.sourceJob(source, since: since), pass) { [weak self] result in
-      self?.sourced(result, pass)
-    }
-  }
-
-  private func sourced<Sink>(_ result: BackgroundRunResult, _ pass: Pass<Sink>) {
-    var report = AutomationStepReport(
-      name: nil, commandLine: result.commandLine, ending: result.ending.text, count: 0,
-      rejected: AutomationRejections())
-    let fetched: [AutomationItem]
-    switch Self.readSource(result) {
-    case .failed(let reason, let rejected):
-      report.rejected = rejected
-      pass.record.source = report
-      fail(pass, reason)
-      return
-    case .items(let items, let rejected):
-      report.count = items.count
-      report.rejected = rejected
-      fetched = items
-    }
-    pass.record.source = report
-    pass.fetched = fetched
-    let fresh = pass.sink.admit(
-      store.unseen(of: pass.attempt.automationId, in: fetched), fetched: fetched)
-    pass.record.fresh = fresh.count
-    guard !fresh.isEmpty else {
-      settle(pass, nil)
-      return
-    }
-    forward(fresh.map(AutomationPrompts.row), pass)
-  }
-
-  /// 決まった行を、段があれば最初の段へ、無ければ出力先へ渡す。
-  private func forward<Sink>(_ rows: [String], _ pass: Pass<Sink>) {
-    guard pass.attempt.definition.steps.isEmpty else {
-      runStep(0, rows: rows, pass)
-      return
-    }
-    guard let rows = prepared(rows, pass) else { return }
-    toSink(rows.map { $0 + "\n" }.joined(), step: nil, pass)
-  }
-
-  /// 出力先へ向かう最後の入力を出力先に確かめさせる。行があったのに全部外れたら回を失敗にして nil を返す。
-  private func prepared<Sink>(_ rows: [String], _ pass: Pass<Sink>) -> [String]? {
-    let checked = pass.sink.prepare(rows)
-    guard checked.count > 0 || rows.isEmpty else {
-      fail(pass, "no line passed to the last step has the id of a new item")
-      return nil
-    }
-    return checked
-  }
-
-  private func runStep<Sink>(_ index: Int, rows: [String], _ pass: Pass<Sink>) {
-    let definition = pass.attempt.definition
-    let last = index == definition.steps.count - 1
-    var rows = rows
-    if last {
-      guard let checked = prepared(rows, pass) else { return }
-      rows = checked
-    }
-    let job: BackgroundJob
-    switch definition.steps[index].method {
-    case .command(let command):
-      job = .command(
-        command, input: BackgroundInput(stdin: Data(rows.map { $0 + "\n" }.joined().utf8)))
-    case .agent(let agent):
-      let instruction = agent.instruction
-      let prompt =
-        last
-        ? pass.sink.prompt(
-          instruction: instruction, rows: rows, now: now(), timeZone: calendar().timeZone)
-        : AutomationPrompts.step(
-          instruction: instruction, rows: rows, now: now(), timeZone: calendar().timeZone)
-      job = .agent(
-        BackgroundAgentCall(
-          cli: agent.cli, model: definition.model(of: agent, at: index), tools: [],
-          prompt: prompt))
-    }
-    launch(job, pass) { [weak self] result in
-      self?.stepped(result, index, pass)
-    }
-  }
-
-  private func stepped<Sink>(_ result: BackgroundRunResult, _ index: Int, _ pass: Pass<Sink>) {
-    let definition = pass.attempt.definition
-    let name = definition.steps[index].name
-    var report = AutomationStepReport(
-      name: name, commandLine: result.commandLine, ending: result.ending.text, count: 0,
-      rejected: AutomationRejections())
-    let text: String
-    switch AutomationRunOutput.text(result, role: "step \"\(name)\"") {
-    case .failure(let failure):
-      pass.record.steps.append(report)
-      fail(pass, failure.reason)
-      return
-    case .success(let output):
-      text = output
-    }
-    guard index < definition.steps.count - 1 else {
-      toSink(text, step: report, pass)
-      return
-    }
-    let reading = AutomationPrompts.readStep(text, step: "step \"\(name)\"")
-    report.count = reading.rows.count
-    report.rejected = reading.rejected
-    pass.record.steps.append(report)
-    if let failure = reading.failure {
-      fail(pass, failure)
-    } else if reading.rows.isEmpty {
-      settle(pass, nil)
-    } else {
-      runStep(index + 1, rows: reading.rows.map(\.text), pass)
-    }
-  }
-
-  /// 出力先に読ませて届ける。`text` は最後の段の出力（段が無ければ出力先が読む行）。最後の段の記録 `step` には、出力先が
-  /// 数えた数を載せて回の記録に足す。出力先で落ちた回は、出力先の記録も回の記録に残す。
-  private func toSink<Sink>(_ text: String, step: AutomationStepReport?, _ pass: Pass<Sink>) {
-    var step = step
-    let output: Sink.Output
-    switch pass.sink.read(text) {
-    case .failed(let reason, let rejected):
-      step?.rejected = rejected
-      if let step { pass.record.steps.append(step) }
-      fail(pass, reason)
-      return
-    case .output(let read, let count, let rejected):
-      step?.count = count
-      step?.rejected = rejected
-      if let step {
-        pass.record.steps.append(step)
-        pass.record.lastStepCountedBySink = true
-      }
-      output = read
-    }
-    pass.attempt.current = pass.sink.deliver(output) { [weak self] failure in
-      guard !pass.attempt.cancelled else { return }
-      if let failure {
-        pass.record.sink = failure.report
-        self?.fail(pass, failure.reason)
-      } else {
-        self?.settle(pass, output)
-      }
-    }
-  }
-
-  /// 走らせ、止められていなければ結果を渡す。
-  private func launch<Sink>(
-    _ job: BackgroundJob, _ pass: Pass<Sink>, then: @escaping (BackgroundRunResult) -> Void
-  ) {
-    pass.attempt.current = run(job) { result in
-      guard !pass.attempt.cancelled else { return }
-      then(result)
-    }
-  }
-
-  /// 確定（成功）。
-  private func settle<Sink>(_ pass: Pass<Sink>, _ output: Sink.Output?) {
-    let sink = pass.sink
-    let endedAt = now()
-    pass.record.endedAt = endedAt
-    store.commit(pass.attempt.automationId, pass.record, fetched: pass.fetched) {
-      sink.commit(output, into: &$0, automations: $1, endedAt: endedAt)
-    }
-    recorded(pass.attempt.automationId)
-    pass.attempt.finish(pass.record.startedAt)
-  }
-
-  /// 失敗した回。記録と最後に回った時刻だけを進める。
-  private func fail<Sink>(_ pass: Pass<Sink>, _ reason: String) {
-    pass.record.endedAt = now()
-    pass.record.failure = reason
-    store.recordFailure(of: pass.attempt.automationId, pass.record)
-    recorded(pass.attempt.automationId)
-    pass.attempt.finish(pass.record.startedAt)
-  }
-}
-
-/// 1 回の流れで運ぶもの。
-extension AutomationRunner {
-  /// 走っている 1 回。止められたら、以後の結果は捨てる。
-  private final class Attempt {
-    let automationId: Int
-    let definition: AutomationDefinition
-    let trigger: AutomationRun.Trigger
-    /// Orbe が回を始めた時刻。
-    let startedAt: Date
-    let finish: (Date) -> Void
-    var current: BackgroundRunHandle?
-    var cancelled = false
-
-    init(
-      automationId: Int, definition: AutomationDefinition, trigger: AutomationRun.Trigger,
-      startedAt: Date, finish: @escaping (Date) -> Void
-    ) {
-      self.automationId = automationId
-      self.definition = definition
-      self.trigger = trigger
-      self.startedAt = startedAt
-      self.finish = finish
-    }
-  }
-
-  /// 1 回の流れで持ち越すもの。出力先の型を型引数に持つので、読んだ出力を型を消さずに確定まで運ぶ。
-  private final class Pass<Sink: AutomationSinkRun> {
-    let attempt: Attempt
-    let sink: Sink
-    var record: AutomationRun
-    var fetched: [AutomationItem] = []
-
-    /// 終わりは確定か失敗のときに入る。
-    init(_ attempt: Attempt, _ sink: Sink) {
-      self.attempt = attempt
-      self.sink = sink
-      record = AutomationRun(
-        startedAt: attempt.startedAt, endedAt: attempt.startedAt, trigger: attempt.trigger,
-        source: nil, fresh: nil, steps: [], lastStepCountedBySink: false, sink: nil, failure: nil)
-    }
-  }
-}
-
-/// 定義の変異。
-extension AutomationRunner {
-  /// `id` が nil なら作り、あれば丸ごと置き換える。何をするかが変われば走っている回を止めて載せ直し、名前・トリガー・
-  /// 取得の性質・段の名前だけなら予定だけを差し替える（走っている回は最後まで走る）。
+  /// `id` が nil なら作り、あれば丸ごと置き換える。何をするかが変わった部品は走っている回を止めて載せ直し（結果は捨てる）、
+  /// 消えた部品は外し、足した部品は足した時刻から数える。名前・予定・取得の性質・溜まりの上限・通知だけなら予定だけを
+  /// 差し替える（走っている回は最後まで走る）。
   func set(_ id: Int?, _ definition: AutomationDefinition) throws(AutomationError) -> Automation {
+    try checkAvailable()
     guard let id else {
       let automation = try store.create(definition, now: now())
       register(automation)
       defined(automation.id)
       return automation
     }
-    let (automation, reworked) = try store.replace(id, with: definition)
-    if reworked { register(automation) } else { retime(automation) }
-    defined(automation.id)
+    let replaced = try store.replace(id, with: definition, now: now())
+    let automation = replaced.automation
+    for key in replaced.removed { unregister(id, key) }
+    for key in replaced.reworked + replaced.added { unregister(id, key) }
+    register(automation)
+    defined(id)
     return automation
   }
 
-  /// 止めるのは予定だけ。走っている回は止めない。
+  /// 止めるのは時刻による予定と起動時の起こしだけ。走っている回は止めない。再開したら起こす決まりを見る。
   func pause(_ id: Int, _ paused: Bool) throws(AutomationError) -> Automation {
+    try checkAvailable()
     let automation = try store.setPaused(id, paused)
-    retime(automation)
+    register(automation)
     return automation
   }
 
   /// 消す。走っている回は止め、その結果は捨てる。
   func delete(_ id: Int) throws(AutomationError) {
+    try checkAvailable()
+    let keys = store.automation(id)?.graph.nodes.map(\.key) ?? []
     try store.delete(id)
-    scheduler.remove(id: Self.key(id))
+    for key in keys { unregister(id, key) }
     deleted(id)
   }
 
-  /// 今すぐ回す（止めた自動化も受ける）。走っている回があれば断る。
+  /// 入力の無い部品のうち走っていないものを今すぐ起こす（止めた自動化も受ける）。1 つも起こせなければ断る。
   func runNow(_ id: Int) throws(AutomationError) {
-    guard store.automation(id) != nil else { throw .automationNotFound(id) }
-    guard !isRunning(id) else { throw .running(id) }
-    scheduler.runNow(id: Self.key(id))
+    try checkAvailable()
+    guard let automation = store.automation(id) else { throw .automationNotFound(id) }
+    let starts = automation.graph.nodes.filter { $0.part.inputs.isEmpty && !isRunning(id, $0.key) }
+    guard !starts.isEmpty else { throw .running(id) }
+    for node in starts { scheduler.runNow(id: Self.key(id, node.key)) }
+  }
+
+  private func checkAvailable() throws(AutomationError) {
+    guard store.available else {
+      throw .unavailable(
+        "automations are unavailable in this session (another Orbe holds them, or their database "
+          + "could not be opened); see the log")
+    }
+  }
+
+  // MARK: - 番人への登録
+
+  static func key(_ id: Int, _ key: String) -> String { "automation:\(id)/\(key)" }
+
+  /// 全部品を番人に合わせる。載っていない部品は載せ（数え始めは部品の最後に回った時刻、無ければ足した時刻）、載っている部品は
+  /// 予定だけを差し替える。止めていなければ「届いたら」の部品に起こす決まりを見る。
+  private func register(_ automation: Automation) {
+    let id = automation.id
+    for node in automation.graph.nodes {
+      let key = Self.key(id, node.key)
+      var timing: BackgroundTiming?
+      if !automation.paused, case .scheduled(let scheduled) = node.part.trigger {
+        timing = scheduled
+      }
+      if registered.contains(key) {
+        try? scheduler.retime(id: key, timing: timing)
+        continue
+      }
+      let part = node.key
+      let start: BackgroundScheduler.Start = { [weak self] trigger, finish in
+        self?.begin(id, part, trigger, finish) ?? BackgroundRunHandle {}
+      }
+      try? scheduler.register(
+        id: key, timing: timing, anchor: automation.state(part).anchor, start: start)
+      registered.insert(key)
+    }
+    guard !automation.paused else { return }
+    for node in automation.graph.nodes { wake(id, node.key) }
+  }
+
+  /// 外す。走っている回は止め、その結果は捨てる。起こす決まりの番号と数え始めも忘れる。
+  private func unregister(_ id: Int, _ part: String) {
+    let key = Self.key(id, part)
+    scheduler.remove(id: key)
+    registered.remove(key)
+    marks[key] = nil
+    anchors[key] = nil
+  }
+
+  private func unregisterAll() {
+    for key in registered { scheduler.remove(id: key) }
+    registered = []
+    marks = [:]
+    anchors = [:]
+  }
+
+  /// 起こす決まり。「届いたら」の部品に、前の契機の始まりの時点より新しい行が溜まりにあり、走っていなければ起こす。
+  private func wake(_ id: Int, _ part: String) {
+    guard let automation = store.automation(id), let node = automation.graph.node(part),
+      node.part.trigger == .arrival
+    else { return }
+    let key = Self.key(id, part)
+    guard automation.state(part).newestSeq > marks[key] ?? 0, !scheduler.isRunning(id: key) else {
+      return
+    }
+    scheduler.runNow(id: key)
+  }
+
+  /// 失敗のやり直し。「届いたら」でない部品の契機が終わったら、下流の「届いたら」の部品を溜まりがあればすべて起こす。
+  private func retry(below part: String, in id: Int) {
+    guard let automation = store.automation(id) else { return }
+    for node in automation.graph.descendants(of: part)
+    where node.part.trigger == .arrival && automation.state(node.key).inbox > 0 {
+      scheduler.runNow(id: Self.key(id, node.key))
+    }
   }
 }
 
-/// 番人への登録。
+/// 部品の契機。
 extension AutomationRunner {
-  private static func key(_ id: Int) -> String { "automation:\(id)" }
+  /// 走っている契機。止められたら、以後の結果は捨てる。
+  private final class Trigger {
+    let automationId: Int
+    let part: String
+    let kind: AutomationPartRun.Trigger
+    let startedAt: Date
+    let finish: (Date) -> Void
+    /// 契機の始まりの時点の、溜まりの最も新しい通し番号。これ以下の行を取り切るまで続ける。
+    var mark = 0
+    /// 最後の回の始まり。
+    var lastStart: Date?
+    var current: BackgroundRunHandle?
+    var cancelled = false
 
-  private func timing(_ automation: Automation) -> BackgroundTiming? {
-    automation.paused ? nil : automation.definition.trigger
-  }
-
-  /// ストアの定義は検証済みなので、番人の検証で落ちることはない。
-  private func register(_ automation: Automation) {
-    let id = automation.id
-    let start: BackgroundScheduler.Start = { [weak self] trigger, finish in
-      self?.begin(id, trigger: trigger, finish: finish) ?? BackgroundRunHandle {}
+    init(
+      automationId: Int, part: String, kind: AutomationPartRun.Trigger, startedAt: Date,
+      finish: @escaping (Date) -> Void
+    ) {
+      self.automationId = automationId
+      self.part = part
+      self.kind = kind
+      self.startedAt = startedAt
+      self.finish = finish
     }
-    try? scheduler.register(
-      id: Self.key(id), timing: timing(automation), anchor: automation.anchor, start: start)
   }
 
-  private func retime(_ automation: Automation) {
-    try? scheduler.retime(id: Self.key(automation.id), timing: timing(automation))
+  private func begin(
+    _ id: Int, _ part: String, _ kind: BackgroundScheduler.Trigger,
+    _ finish: @escaping (Date) -> Void
+  ) -> BackgroundRunHandle {
+    // 番人の上に「走っている」を残さないよう、部品が無ければ契機はすぐ終わったものとして知らせる。
+    guard let node = store.automation(id)?.graph.node(part) else {
+      finish(now())
+      return BackgroundRunHandle {}
+    }
+    let trigger = Trigger(
+      automationId: id, part: part,
+      kind: node.part.trigger == .arrival ? .arrival : kind == .now ? .now : .schedule,
+      startedAt: now(), finish: finish)
+    if node.part.inputs.isEmpty {
+      pass(trigger, take: nil)
+    } else {
+      trigger.mark = store.automation(id)?.state(part).newestSeq ?? 0
+      marks[Self.key(id, part)] = trigger.mark
+      takeNext(trigger)
+    }
+    return BackgroundRunHandle {
+      trigger.cancelled = true
+      trigger.current?.stop()
+    }
+  }
+
+  /// 契機の始まりの時点の行から、u2 の取る計算で取る行を選ぶ。取る行が 0 件なら手段を起こさず、捨てる行だけを捨てて終える。
+  private func takeNext(_ trigger: Trigger) {
+    guard !trigger.cancelled else { return }
+    guard let automation = store.automation(trigger.automationId),
+      let node = automation.graph.node(trigger.part),
+      let rows = try? store.inbox(of: trigger.part, in: trigger.automationId)
+    else { return end(trigger) }
+    let proposed = Set(store.proposals.map(\.item.link))
+    let context = AutomationInbox.Context(
+      graph: automation.graph,
+      lastOutputs: automation.parts.mapValues { Set($0.lastOutput.map(\.id)) },
+      proposed: { proposed.contains($0) }, now: now())
+    let take = AutomationInbox.take(
+      by: node, from: rows.filter { $0.seq <= trigger.mark }, in: context)
+    guard !take.taken.isEmpty else {
+      try? store.discard(take.dropped, of: trigger.part, in: trigger.automationId)
+      return end(trigger)
+    }
+    pass(trigger, take: take)
+  }
+
+  /// 部品の 1 回。役割の入力を組み、u3a の部品の 1 回に任せ、終わったら確定する。
+  private func pass(_ trigger: Trigger, take: AutomationInbox.Take?) {
+    guard let automation = store.automation(trigger.automationId),
+      let node = automation.graph.node(trigger.part),
+      let input = try? input(node, automation, take)
+    else { return end(trigger) }
+    let startedAt = now()
+    trigger.lastStart = startedAt
+    let pass = AutomationPartPass(run: run, now: now, calendar: calendar)
+    trigger.current = pass.start(node, input) { [weak self] outcome in
+      guard let self, !trigger.cancelled else { return }
+      ended(trigger, take, startedAt, outcome)
+    }
+  }
+
+  private func ended(
+    _ trigger: Trigger, _ take: AutomationInbox.Take?, _ startedAt: Date,
+    _ outcome: AutomationPartPass.Outcome
+  ) {
+    let end = AutomationPassEnd(
+      automationId: trigger.automationId, part: trigger.part, trigger: trigger.kind,
+      startedAt: startedAt, endedAt: now(), take: take, outcome: outcome)
+    let grew: [String]
+    do throws(AutomationError) {
+      grew = try store.record(end)
+    } catch {
+      NSLog("[automation] dropped the result of part \(trigger.part): \(error)")
+      return self.end(trigger)
+    }
+    recorded(trigger.automationId, trigger.part)
+    for part in grew { wake(trigger.automationId, part) }
+    guard case .succeeded = outcome, take != nil else { return self.end(trigger) }
+    takeNext(trigger)
+  }
+
+  /// 契機を終える。番人へ返す数え始めは最後の回の始まり（回が無ければ契機の始まり）。終えた後に、「届いたら」の部品なら
+  /// 走っている間に届いた行を起こす決まりを見て、そうでなければ下流をやり直す。
+  private func end(_ trigger: Trigger) {
+    let anchor = trigger.lastStart ?? trigger.startedAt
+    anchors[Self.key(trigger.automationId, trigger.part)] = anchor
+    trigger.finish(anchor)
+    guard let node = store.automation(trigger.automationId)?.graph.node(trigger.part) else {
+      return
+    }
+    if node.part.trigger == .arrival {
+      wake(trigger.automationId, trigger.part)
+    } else {
+      retry(below: trigger.part, in: trigger.automationId)
+    }
+  }
+
+  /// 役割の入力を組む唯一の場所。取得と仕事は行の席を持たない入力なので、ツールを持ちうる agent へ溜まりの行は渡らない
+  /// （溜まりは起こすかの門にだけ使う）。
+  private func input(
+    _ node: AutomationGraph.Node, _ automation: Automation, _ take: AutomationInbox.Take?
+  ) throws(AutomationError) -> AutomationPartPass.Input {
+    let state = automation.state(node.key)
+    func rows() throws(AutomationError) -> [AutomationPartRow] {
+      guard let take else { return [] }
+      let rows = try store.rows(take.taken)
+      guard !rows.isEmpty else { throw .invalid("the taken rows are gone") }
+      return rows
+    }
+    switch node.role {
+    case .fetch:
+      return .fetch(since: state.succeededAt, lastOutput: Set(state.lastOutput.map(\.id)))
+    case .work:
+      return .work
+    case .process:
+      return .process(
+        try rows(), reachesJudge: automation.graph.reachesTaskCandidates(node.key))
+    case .judge:
+      let sourced = try rows().compactMap { row in
+        row.origin.map { AutomationSourcedRow(id: row.id, text: row.text, origin: $0) }
+      }
+      return .judge(
+        sourced,
+        choices: AutomationJudgeChoices(
+          open: store.openProposals(of: automation.id, judge: node.key),
+          workspaces: workspaces()))
+    case .report:
+      return .report(try rows())
+    case .sideEffect:
+      return .sideEffect(try rows(), runId: Self.runId(automation.id, node.key, state.anchor))
+    }
+  }
+
+  /// 回の ID（`<自動化 ID>-<部品の鍵>-<数え始めのミリ秒>`）。数え始めは記録された回でだけ進むので、止めた回・書けなかった回の
+  /// やり直しは同じ ID になる。
+  static func runId(_ id: Int, _ part: String, _ anchor: Date) -> String {
+    "\(id)-\(part)-\(AutomationPersistence.millis(anchor))"
   }
 }

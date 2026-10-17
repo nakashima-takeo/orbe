@@ -55,7 +55,7 @@ extension DesignFlowSnapshotTests {
   func testBoardParts() throws {
     let model = BoardModel(
       automation: BoardAutomationModel(
-        runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationFile())),
+        runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationSamples())),
       parts: [.automation])
     try flow(
       "board_parts", size: NSSize(width: 1440, height: 844),
@@ -76,7 +76,7 @@ extension DesignFlowSnapshotTests {
   func testBoardAutomation() throws {
     let model = BoardModel(
       automation: BoardAutomationModel(
-        runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationFile())),
+        runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationSamples())),
       parts: [.automation])
     let automation = model.automation
     try flow(
@@ -104,7 +104,7 @@ extension DesignFlowSnapshotTests {
   func testBoardRequest() throws {
     let model = BoardModel(
       automation: BoardAutomationModel(
-        runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationFile())),
+        runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationSamples())),
       parts: [.automation])
     let automation = model.automation
     automation.onAsk = { _ in nil }
@@ -131,7 +131,7 @@ extension DesignFlowSnapshotTests {
   func testBoardNotify() throws {
     let model = BoardModel(
       automation: BoardAutomationModel(
-        runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationFile())),
+        runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationSamples())),
       parts: [.automation])
     let automation = model.automation
     try flow(
@@ -162,7 +162,7 @@ extension DesignFlowSnapshotTests {
   func testBoardNotifyLow() throws {
     let model = BoardModel(
       automation: BoardAutomationModel(
-        runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationFile())),
+        runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationSamples())),
       parts: [.automation])
     let automation = model.automation
     try flow(

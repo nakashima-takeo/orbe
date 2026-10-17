@@ -78,7 +78,11 @@ import SwiftUI
 
   /// 自動化 1 つのボードの描画用の値。ビューは自動化そのものに触れず、これと立ち位置だけを読む。
   func summary(_ id: Int, text: AutomationText) -> BoardAutomationSummary? {
-    store.automation(id).map { BoardAutomationSummary($0, text: text) }
+    guard let automation = store.automation(id) else { return nil }
+    let next = automation.graph.nodes.compactMap { node in
+      runner.nextRunAt(automation, part: node.key).map { (key: node.key, at: $0) }
+    }.min { $0.at < $1.at }
+    return BoardAutomationSummary(automation, text: text, next: next?.key)
   }
 
   /// 描くときの文。暦の今日は描くときの今から導く（開きっぱなしの画面で日をまたいでも「今日」が古くならない）。
@@ -219,7 +223,7 @@ import SwiftUI
     guard let automation = selectedAutomation else { return }
     onRefusal(nil)
     list.follow()
-    notifyCursor = Self.notifyChoices.firstIndex(of: automation.definition.notify) ?? 0
+    notifyCursor = Self.notifyChoices.firstIndex(of: automation.notify) ?? 0
   }
 
   /// サブメニューの ↑↓。端で巡回する。
@@ -237,7 +241,7 @@ import SwiftUI
   /// 何をするかに入らないので、走っている回は止まらない）。同じ値なら書かない。消えていたら黙る（行き違い）。
   func chooseNotify(_ notify: AutomationNotify?) {
     notifyCursor = nil
-    guard let automation = selectedAutomation, automation.definition.notify != notify else {
+    guard let automation = selectedAutomation, automation.notify != notify else {
       return
     }
     var definition = automation.definition

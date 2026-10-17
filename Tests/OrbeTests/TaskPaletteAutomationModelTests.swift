@@ -14,7 +14,8 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
   func palette() -> TaskPaletteModel {
     let palette = TaskPaletteSamples.model(
       [TaskPaletteSamples.task(1, "a")],
-      automations: DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignFile()),
+      automations: DesignSceneFixtures.automationRunner(
+        DesignSceneFixtures.automationDesignSamples()),
       workspaces: { DesignSceneFixtures.taskWorkspaces })
     palette.setTab(.automation)
     return palette
@@ -34,11 +35,12 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertEqual(automation.place, .proposals)
   }
 
-  /// 棚は候補を出す自動化だけを並べる。出力先がコマンドの自動化は候補を出さないので出さない。
+  /// 棚は判定の部品を持つ自動化だけを並べる。副作用のコマンドで終わる自動化は候補を出さないので出さない。
   func testTheShelfListsOnlyTaskCandidateAutomations() throws {
-    let runner = DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignFile())
+    let runner = DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignSamples())
     var command = runner.store.automation(4)!.definition
-    command.sink = AutomationRunnerTests.commandSink()
+    command.parts[1] = DesignSceneFixtures.commandPart(
+      "judge", "投稿", .arrival, from: ["fetch"], script: "cat", deliver: .sideEffect)
     _ = try runner.set(4, command)
     let palette = TaskPaletteSamples.model([], automations: runner)
 
@@ -47,16 +49,14 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
   }
 
   func testProposalsOfALaterRunComeFirst() throws {
-    let runner = DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignFile())
+    let runner = DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignSamples())
     let item = DesignSceneFixtures.automationItem(
       "C03-9", "後の回", at: DesignSceneFixtures.automationNow)
-    AutomationStoreTests.commit(
-      runner.store, 2,
-      DesignSceneFixtures.automationRun(
-        at: DesignSceneFixtures.automationNow, items: 3, fresh: 1),
-      fetched: runner.store.automation(2)!.lastFetched.map {
-        AutomationItem(id: $0.id, link: $0.link, body: "", time: DesignSceneFixtures.automationNow)
-      } + [item], decisions: [.propose(itemId: "C03-9", title: "後の提案", due: nil, workspace: nil)])
+    let fetched = runner.store.automation(2)!.state("fetch").lastOutput.map {
+      AutomationItem(id: $0.id, link: $0.link, body: "", time: DesignSceneFixtures.automationNow)
+    }
+    try WindowControllerAutomationControlTests.round(
+      runner.store, 2, fetched: fetched + [item], proposing: [item], titles: ["後の提案"])
     let palette = TaskPaletteSamples.model([], automations: runner)
 
     XCTAssertEqual(palette.automation.proposalIDs, [4, 1, 2, 3])
@@ -116,17 +116,11 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
 
   /// 付け先は今の workspace で解く。解ければそこ、付け先が無いか解けなければ Home。詳細の表示と ↵ が同じ付け先を使う。
   func testEnterAttachesTheTaskToTheProposalsWorkspaceOrElseHome() throws {
-    var file = DesignSceneFixtures.automationDesignFile()
-    let proposals = file.proposals
-    let workspaces: [UUID?] = [TaskPaletteSamples.other.id, nil, UUID()]
-    file.proposals = zip(proposals, workspaces).map { proposal, workspace in
-      AutomationProposal(
-        id: proposal.id, automationId: proposal.automationId, item: proposal.item,
-        title: proposal.title, due: proposal.due, workspace: workspace,
-        proposedAt: proposal.proposedAt, state: .open)
-    }
-    let palette = TaskPaletteSamples.model(
-      [], automations: DesignSceneFixtures.automationRunner(file))
+    let runner = DesignSceneFixtures.automationRunner(
+      DesignSceneFixtures.automationDesignSamples(
+        workspaces: [TaskPaletteSamples.other.id, nil, UUID()]))
+    let proposals = runner.store.proposals
+    let palette = TaskPaletteSamples.model([], automations: runner)
     palette.setTab(.automation)
     let automation = palette.automation
 
@@ -144,17 +138,13 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
 
   /// 付け先は開いた時点の写しではなく ↵ の時点の値で解く。開いている間に付け先が消えたら Home に付く。
   func testEnterUsesTheWorkspacesAtThatMomentNotWhenOpened() throws {
-    var file = DesignSceneFixtures.automationDesignFile()
-    let first = file.proposals[0]
-    file.proposals = [
-      AutomationProposal(
-        id: first.id, automationId: first.automationId, item: first.item, title: first.title,
-        due: first.due, workspace: TaskPaletteSamples.other.id, proposedAt: first.proposedAt,
-        state: .open)
-    ]
     var current = TaskPaletteSamples.workspaces
     let palette = TaskPaletteSamples.model(
-      [], automations: DesignSceneFixtures.automationRunner(file), workspaces: { current })
+      [],
+      automations: DesignSceneFixtures.automationRunner(
+        DesignSceneFixtures.automationDesignSamples(
+          workspaces: [TaskPaletteSamples.other.id, nil, nil])),
+      workspaces: { current })
     palette.setTab(.automation)
     let proposal = try XCTUnwrap(palette.automation.selectedProposal)
     XCTAssertEqual(palette.automation.destination(of: proposal)?.name, "web-app")
@@ -192,13 +182,10 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
 
   /// タスクのストアが断ったら、タスクにならず agent も開かず、赤を出す。
   func testAcceptAndOpenRefusedByTheTaskStoreOpensNothing() {
-    var file = DesignSceneFixtures.automationDesignFile()
-    let first = file.proposals[0]
-    file.proposals[0] = AutomationProposal(
-      id: first.id, automationId: first.automationId, item: first.item, title: "改行\nを含む",
-      due: first.due, workspace: first.workspace, proposedAt: first.proposedAt, state: .open)
     let palette = TaskPaletteSamples.model(
-      [TaskPaletteSamples.task(1, "a")], automations: DesignSceneFixtures.automationRunner(file))
+      [TaskPaletteSamples.task(1, "a")],
+      automations: DesignSceneFixtures.automationRunner(
+        DesignSceneFixtures.automationDesignSamples(estimateTitle: "改行\nを含む")))
     palette.setTab(.automation)
     var opened: [Int] = []
     palette.onOpenWorktreePalette = { opened.append($0) }

@@ -1,41 +1,56 @@
 import AppKit
 
-/// 自動化の知らせ。走らせ役が回を記録したことを知らせ、窓がその自動化の定義と最新の回から 1 つの知らせに組んで、通知音と、
+/// 自動化の知らせ。走らせ役が部品の回を記録したことを知らせ、窓がその部品の最新の回から 1 つの知らせに組んで、通知音と、
 /// 通知先に応じてメニューバー②か通知センターへ流す。ピルや通知のクリックは Home のボードでその自動化を開く。
 extension WindowController {
-  /// 回を記録した（走らせ役から）。
-  func notifyAutomationRecorded(_ id: Int) {
-    guard let notification = automationNotification(id) else { return }
+  /// 部品の回を記録した（走らせ役から）。
+  func notifyAutomationRecorded(_ id: Int, _ part: String) {
+    guard let notification = automationNotification(id, part) else { return }
     deliver(notification)
   }
 
-  /// 最新の回を知らせとして組む。自動化が消えている・通知が off・最新の回が何も出さなかった・前の回に続く失敗・その行を
-  /// 見ているときは nil。失敗は続く間の最初の回だけ知らせる——直るまで毎回鳴らすと、ピルと音を見なくなるため。
+  /// 部品の最新の回を知らせとして組む。1 回の記録に知らせは 1 つで、順は「出力が決まりを外した最初の回」→「失敗の続きの最初の
+  /// 回」→「Orbe へ何かを渡した回」。自動化が消えている・通知が off・どれにも当たらない・その自動化を見ているときは nil。
+  /// 失敗は続く間の最初の回だけ、決まりを外したことは部品の印が無かった回（何をするかが変わるまでに 1 度）だけ知らせる——
+  /// 毎回鳴らすと、ピルと音を見なくなるため。外して失敗した回は、外したことの文で失敗も言う。
   ///
-  /// 本文はボードの実行履歴の最新の行の 1 行目——ピルと、押した先の行を同じ文で語るため。設定は Home の実効設定（押した先が
-  /// Home なので、発信元の workspace の値という読み方に揃う）。
-  func automationNotification(_ id: Int) -> ChromeNotification? {
-    guard let automation = automationStore.automation(id), let latest = automation.runs.first,
-      !isViewingAutomation(id)
+  /// 本文は実行履歴のその回の行の 1 行目——ピルと、押した先の行を同じ文で語るため。設定は Home の実効設定（押した先が Home
+  /// なので、発信元の workspace の値という読み方に揃う）。
+  func automationNotification(_ id: Int, _ part: String) -> ChromeNotification? {
+    guard let automation = automationStore.automation(id), let notify = automation.notify,
+      let state = automation.parts[part], let latest = state.runs.first, !isViewingAutomation(id)
     else { return nil }
-    guard let notify = automation.definition.notify else { return nil }
     let tone = BoardAutomationSummary.tone(latest)
-    guard tone != .quiet else { return nil }
-    let previous = automation.runs.dropFirst().first.map(BoardAutomationSummary.tone)
-    guard tone != .failed || previous != .failed else { return nil }
     let text = board.automation.text(localization, now: automationRunner.now())
-    guard let line = BoardAutomationSummary(automation, text: text).latestLine else { return nil }
+    let line: String
+    if let breach = state.breach, breach.at == latest.startedAt {
+      line = breachLine(breach, part: automation.graph.node(part)?.part.name ?? part)
+    } else if tone == .failed, state.runs.dropFirst().first?.failed != true {
+      line = BoardAutomationSummary.line(latest, part: part, in: automation, text: text)
+    } else if tone == .produced {
+      line = BoardAutomationSummary.line(latest, part: part, in: automation, text: text)
+    } else {
+      return nil
+    }
     let home = store.homeIndex.map { workspaces[$0] }
-    let name = automation.definition.name
     return ChromeNotification(
       notice: .automation(
-        AutomationNotice(automationId: id, name: name, text: line, failed: tone == .failed)),
+        AutomationNotice(
+          automationId: id, name: automation.name, text: line, failed: tone == .failed)),
       settings: settingsStore.effective(override: home?.settingsOverride),
       systemNotification: notify == .notificationCenter
         ? SystemNotificationContent(
-          identifier: Self.systemNotificationIdentifier(id), title: name, body: line,
+          identifier: Self.systemNotificationIdentifier(id), title: automation.name, body: line,
           automationId: id)
         : nil)
+  }
+
+  /// 「<部品>の出力が決まりを外した — line 3: missing link（2 行）· 出し直しで通った」。
+  private func breachLine(_ breach: AutomationBreachMark, part name: String) -> String {
+    localization.format(
+      .automationBreach, name, breach.lines.reasons.first ?? "", breach.lines.count)
+      + " · "
+      + localization.string(breach.passed ? .automationBreachPassed : .automationBreachFailed)
   }
 
   /// 通知センターでの自動化の通知の識別子。自動化ごとに 1 つなので、新しい回が前の通知を差し替える。
@@ -44,7 +59,7 @@ extension WindowController {
   /// 定義を書いた（走らせ役から。AI の口でもボードでも通る）。通知先が通知センターなら、書いたその場で OS に許可を問う
   /// （未確認のときだけ）。
   func automationDefined(_ id: Int) {
-    guard automationStore.automation(id)?.definition.notify == .notificationCenter else { return }
+    guard automationStore.automation(id)?.notify == .notificationCenter else { return }
     systemNotifier.requestAuthorizationIfUndetermined()
   }
 

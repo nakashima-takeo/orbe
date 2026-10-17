@@ -18,12 +18,12 @@ extension BoardAutomationTests {
 
   /// 見本の 4 件に、まだ回っていない自動化を足して一覧が見える範囲より長くなる並び。先頭の行は見本と同じ失敗の Backlog。
   private func longBoard() -> BoardModel {
-    let extra = (5...24).map { id in
-      Automation(
-        id: id, definition: DesignSceneFixtures.boardAutomations()[0].definition, paused: false,
-        createdAt: Date(timeIntervalSince1970: 0), lastFetched: [], reviewAll: false, runs: [])
+    let samples = DesignSceneFixtures.boardAutomationSamples()
+    let extra = (5...24).map { _ in
+      AutomationSample(
+        definition: samples[0].definition, createdAt: Date(timeIntervalSince1970: 0))
     }
-    return board(DesignSceneFixtures.boardAutomations() + extra)
+    return board(samples + extra)
   }
 
   /// 一覧のスクロール（部品の左端にあるもの）。
@@ -77,7 +77,7 @@ extension BoardAutomationTests {
 
   private func outputNotes(_ automation: BoardAutomationModel, _ id: Int) -> [String] {
     let text = automation.text(LocalizationStore(language: .ja), now: automation.runner.now())
-    return automation.summary(id, text: text)?.nodes.last?.notes ?? []
+    return automation.summary(id, text: text)?.notes ?? []
   }
 
   /// → で開くと今の設定（通知しない）の行から。↓ ↵ でその自動化の通知だけがメニューバーに替わり、注記が追従して閉じる。
@@ -132,7 +132,7 @@ extension BoardAutomationTests {
     send(Key.escape, "\u{1B}", to: window)
     XCTAssertNil(automation.notifyCursor)
 
-    XCTAssertEqual(automation.store.automations, DesignSceneFixtures.boardAutomations())
+    XCTAssertEqual(automation.store.automations, untouched)
     XCTAssertEqual(automation.place, .list, "esc は欄へ移らない")
   }
 
@@ -158,7 +158,7 @@ extension BoardAutomationTests {
 
     XCTAssertEqual(automation.notifyCursor, 1, "↓ はメニューの中を動き、ほかのキーは握られる")
     XCTAssertEqual(automation.selectedAutomation?.id, selected)
-    XCTAssertEqual(automation.store.automations, DesignSceneFixtures.boardAutomations(), "どれも変わらない")
+    XCTAssertEqual(automation.store.automations, untouched, "どれも変わらない")
     XCTAssertFalse(automation.store.automations.contains { automation.runner.isRunning($0.id) })
     XCTAssertFalse(asked, "⌘↵ で直しを頼まない")
   }

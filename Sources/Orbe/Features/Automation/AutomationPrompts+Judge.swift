@@ -1,27 +1,9 @@
 import Foundation
 
 extension AutomationPrompts {
-  /// タスク候補の出力先が最後の agent の段に渡す依頼文。`rows` は確かめた入力行。
+  /// 判定の依頼文。propose も resolve も出さない回は nothing の 1 行を出させる——待っている候補を片付けるだけの回も、何も無い回
+  /// ではない。
   static func judge(
-    instruction: String, rows: [String], choices: AutomationJudgeChoices, now: Date,
-    timeZone: TimeZone
-  ) -> String {
-    judgeFrame(instruction: instruction, rows: rows, choices: choices, now: now, timeZone: timeZone)
-      + WhenEmpty.silent.line("no item needs a task")
-  }
-
-  /// 部品の 1 回の判定の依頼文。propose も resolve も出さない回は nothing の 1 行を出させる——待っている候補を片付けるだけの
-  /// 回も、何も無い回ではない。
-  static func partJudge(
-    instruction: String, rows: [String], choices: AutomationJudgeChoices, now: Date,
-    timeZone: TimeZone
-  ) -> String {
-    judgeFrame(instruction: instruction, rows: rows, choices: choices, now: now, timeZone: timeZone)
-      + WhenEmpty.nothingLine.line("you output no propose or resolve line")
-  }
-
-  /// 判定の依頼文の、何も無い回の出し方の前まで（改行で終わる）。
-  private static func judgeFrame(
     instruction: String, rows: [String], choices: AutomationJudgeChoices, now: Date,
     timeZone: TimeZone
   ) -> String {
@@ -62,25 +44,7 @@ extension AutomationPrompts {
       - When the new items show that a waiting proposal is already dealt with: {"resolve": "<link of that proposal>"}. \
       Use only links of the waiting proposals above.
 
-      """
-  }
-
-  /// 最後の段の行を判定の出力として読む。propose・resolve の形でない行・知らない項目や候補を指す行・不正なタイトルや
-  /// 期限・一覧に無い workspace・同じ項目への 2 つ目の候補は、理由付きで捨てる。Home の workspace は付け先なしとして受ける。
-  /// `itemIds` は今回の新しい項目の id。
-  static func readJudge(
-    _ rows: [AutomationRow], itemIds: Set<String>, choices: AutomationJudgeChoices
-  ) -> (decisions: [AutomationDecision], rejected: AutomationRejections) {
-    var rejected = AutomationRejections()
-    var decisions: [AutomationDecision] = []
-    for (row, reading) in judgeRows(rows, itemIds: itemIds, choices: choices) {
-      switch reading {
-      case .success(let decision): decisions.append(decision)
-      case .failure(.malformed(let reason)): rejected.add("line \(row.line): \(reason)")
-      case .failure(.refused(let reason)): rejected.add(reason)
-      }
-    }
-    return (decisions, rejected)
+      """ + whenEmpty("you output no propose or resolve line")
   }
 
   /// 判定の出力の行ごとの読み。受けた決定か、受けられない理由。

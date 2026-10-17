@@ -40,13 +40,18 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     super.tearDown()
   }
 
-  /// `automations` を省くと見本の 4 件。
-  func board(_ automations: [Automation]? = nil) -> BoardModel {
+  /// `samples` を省くと見本の 4 件。
+  func board(_ samples: [AutomationSample]? = nil) -> BoardModel {
     BoardModel(
       automation: BoardAutomationModel(
         runner: DesignSceneFixtures.automationRunner(
-          DesignSceneFixtures.boardAutomationFile(automations))),
+          samples ?? DesignSceneFixtures.boardAutomationSamples())),
       parts: [.automation])
+  }
+
+  /// 見本の 4 件を置いたままの自動化（置き方は決定論なので、別の DB に置いても同じ値になる）。
+  var untouched: [Automation] {
+    DesignSceneFixtures.automationStore(DesignSceneFixtures.boardAutomationSamples()).automations
   }
 
   /// ボードを実窓に載せ、ボードを選んだときと同じ当て直し（`focus()`）で焦点を中へ入れる。部品は欄から始まる。
@@ -167,7 +172,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
 
     XCTAssertFalse(
       automation.store.automations.contains { automation.runner.isRunning($0.id) }, "どれも走らない")
-    XCTAssertEqual(automation.store.automations, DesignSceneFixtures.boardAutomations(), "どれも変わらない")
+    XCTAssertEqual(automation.store.automations, untouched, "どれも変わらない")
     XCTAssertEqual(automation.selectedAutomation?.id, Self.failingBacklog, "選択も動かない")
   }
 

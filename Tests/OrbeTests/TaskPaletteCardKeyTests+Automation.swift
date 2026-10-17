@@ -18,7 +18,8 @@ extension TaskPaletteCardKeyTests {
   private func automationModel() -> TaskPaletteModel {
     let model = TaskPaletteSamples.model(
       [TaskPaletteSamples.task(1, "a")],
-      automations: DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignFile()),
+      automations: DesignSceneFixtures.automationRunner(
+        DesignSceneFixtures.automationDesignSamples()),
       workspaces: { DesignSceneFixtures.taskWorkspaces })
     model.setTab(.automation)
     return model
