@@ -212,12 +212,16 @@ struct GitStatus: Equatable {
     return String(fields[10])
   }
 
-  /// `sub` は `N...`（サブモジュールでない）か `S<c><m><u>`（`c` はチェックアウトしているコミットが変わったら `C`）。
+  /// `sub` は `N...`（サブモジュールでない）か `S<c><m><u>`（`c` はチェックアウトしているコミットが変わったら `C`、`m` は
+  /// 中の追跡中のファイルが変わったら `M`、`u` は中に未追跡のファイルがあれば `U`）。中身だけの変化は `S.` に `M` か `U`
+  /// が続くもの——作業ツリーで消した・種類が変わったサブモジュール（`S...`）は含めない。
   private static func pair(_ xy: Substring, sub: Substring) -> Entry? {
     let chars = Array(xy)
     guard chars.count == 2 else { return nil }
     let unstaged = change(chars[1])
-    let contentOnly = sub.count == 4 && sub.hasPrefix("S") && sub.dropFirst().first == "."
+    let flags = Array(sub)
+    let contentOnly =
+      flags.count == 4 && flags[0] == "S" && flags[1] == "." && (flags[2] == "M" || flags[3] == "U")
     return Entry(
       staged: change(chars[0]), unstaged: unstaged,
       unstagedIsSubmoduleContent: unstaged != nil && contentOnly)

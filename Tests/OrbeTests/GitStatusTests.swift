@@ -61,12 +61,17 @@ final class GitStatusTests: OrbeTestCase {
     let status = parse([
       submodule(".M", "S.M.", "dirty"), submodule(".M", "S..U", "untracked"),
       submodule(".M", "SCM.", "moved"), submodule("M.", "S.M.", "staged"),
+      submodule(".D", "S...", "removed"), submodule(".T", "S...", "replaced"),
       ordinary(".M", "file.txt"),
     ])
     XCTAssertEqual(status.entries["dirty"]?.unstagedIsSubmoduleContent, true)
     XCTAssertEqual(status.entries["untracked"]?.unstagedIsSubmoduleContent, true)
     XCTAssertEqual(status.entries["moved"]?.unstagedIsSubmoduleContent, false, "コミットが動けばステージできる")
     XCTAssertEqual(status.entries["staged"]?.unstagedIsSubmoduleContent, false, "作業ツリー側に変化が無い")
+    XCTAssertEqual(
+      status.entries["removed"]?.unstagedIsSubmoduleContent, false, "消したサブモジュールはステージできる")
+    XCTAssertEqual(
+      status.entries["replaced"]?.unstagedIsSubmoduleContent, false, "ファイルに置き換えたサブモジュールはステージできる")
     XCTAssertEqual(status.entries["file.txt"]?.unstagedIsSubmoduleContent, false)
   }
 
