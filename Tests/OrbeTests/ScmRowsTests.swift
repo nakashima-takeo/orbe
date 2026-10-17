@@ -6,8 +6,8 @@ import XCTest
 ///
 /// 壊れると何が起きるか。ステージした後に編集したファイルが片方の区分にしか出ない・競合がステージ済みに並んで一括で
 /// 解決済みにされる・`git rm --cached` のファイルを解除できない・削除したファイルを「ファイルを開く」で開こうとする・
-/// 未追跡を確認なしで捨てる側に数える・パスの順に並ばない・レールの件数が行の数と食い違う・区間の表が行とずれて押した行と
-/// 違う行が開く。
+/// 未追跡を確認なしで捨てる側に数える・git が何も変えない行を一括操作に数える・パスの順に並ばない・
+/// レールの件数が行の数と食い違う・区間の表が行とずれて押した行と違う行が開く。
 final class ScmRowsTests: OrbeTestCase {
   private func entry(
     _ staged: GitStatus.Change?, _ unstaged: GitStatus.Change?, from original: String? = nil
@@ -52,18 +52,20 @@ final class ScmRowsTests: OrbeTestCase {
     XCTAssertEqual(ScmChanges.count(status), changes.count)
   }
 
-  /// すべてステージ・ステージ済みが無いときのコミットに入る行は「変更」の行から、競合と、ステージできないサブモジュールの
-  /// 中身だけの変化を除いたもの（行としては出る）。
-  func testCommittableRowsLeaveOutConflictsAndSubmoduleContent() {
+  /// すべてステージ・ステージ済みが無いときのコミットに入る行は「変更」の行から、競合と中身だけ変わったサブモジュールを
+  /// 除いたもの。すべて破棄に入る行は、競合とサブモジュールのままの変化（コミットが動いたものも）を除いたもの。どれも行と
+  /// しては出る。
+  func testBulkRowsLeaveOutConflictsAndSubmodulesGitDoesNotChange() {
     let changes = ScmChanges.build(
       GitStatus(
         entries: [
           "a.txt": entry(nil, .modified), "conflict.txt": entry(.unmerged, .unmerged),
-          "sub": GitStatus.Entry(
-            staged: nil, unstaged: .modified, unstagedIsSubmoduleContent: true),
+          "content": GitStatus.Entry(staged: nil, unstaged: .modified, unstagedSubmodule: .content),
+          "moved": GitStatus.Entry(staged: nil, unstaged: .modified, unstagedSubmodule: .commit),
         ], untrackedDirectories: [], branch: nil))
-    XCTAssertEqual(changes.changes.map(\.path), ["a.txt", "conflict.txt", "sub"])
-    XCTAssertEqual(changes.committable.map(\.path), ["a.txt"])
+    XCTAssertEqual(changes.changes.map(\.path), ["a.txt", "conflict.txt", "content", "moved"])
+    XCTAssertEqual(changes.committable.map(\.path), ["a.txt", "moved"])
+    XCTAssertEqual(changes.discardable.map(\.path), ["a.txt"])
   }
 
   /// 行が 0 の区分は見出しごと出ず、畳んだ区分のファイル行は出ない。区間の表は行を先頭から隙間なく覆う（列が位置から引く

@@ -192,9 +192,10 @@ final class ScmPanelTests: OrbeTestCase {
       }, timeout: 20, message)
   }
 
-  /// 中身だけ変わったサブモジュールの行は、＋ も破棄も押せない姿で、押しても何も起こさず、すべて破棄にも入らない（git の
-  /// add も restore も何も変えない——押せる姿のままだと、破棄は戻せない確認を通した後で空振りする）。
-  func testASubmoduleWhoseOnlyChangeIsItsContentCanNeitherBeStagedNorDiscarded() throws {
+  /// サブモジュールのままの変化の行は、破棄を押しても何も起こさず、すべて破棄にも入らない（git の restore は何も変えない
+  /// ——押せば、戻せない確認を通した後で空振りする）。中身だけ変わった行は ＋ も何も起こさず、中でコミットした（チェック
+  /// アウトしているコミットが動いた）行は ＋ でステージできる。
+  func testASubmoduleChangedInTheWorkingTreeIsNotDiscarded() throws {
     let sub = repo.dir.path + "-sub"
     for args in [
       ["init", "-q", "-b", "main", sub], ["-C", sub, "commit", "-q", "--allow-empty", "-m", "s"],
@@ -215,10 +216,29 @@ final class ScmPanelTests: OrbeTestCase {
 
     XCTAssertNil(panel.press(row, .stage, in: panel.layout))
     XCTAssertNil(panel.press(row, .discard, in: panel.layout))
-    XCTAssertTrue(panel.control.operations.isEmpty, "＋ は何も起こさない")
+    XCTAssertTrue(panel.control.operations.isEmpty, "中身だけの ＋ は何も起こさない")
     XCTAssertEqual(discarding, [], "破棄は確認も出さない")
     panel.press(header, .discardAll, in: panel.layout)
     XCTAssertEqual(discarding, ["a.txt"])
+
+    // サブモジュールの中の git dir は監視しないので、再読込で取り直す。
+    for args in [["add", "inner.txt"], ["commit", "-qm", "inner"]] {
+      XCTAssertTrue(
+        repo.git(["-C", "sub", "-c", "user.email=t@example.com", "-c", "user.name=t"] + args)
+          .isSuccess, "前提: \(args)")
+    }
+    panel.refresh()
+    pumpMain(
+      until: { self.panel.changes.changes.first { $0.path == "sub" }?.submodule == .commit },
+      "中でコミットしたサブモジュールの行")
+    discarding = []
+    let moved = try XCTUnwrap(panel.layout.index[ScmRowID(section: .changes, path: "sub")])
+    XCTAssertNil(panel.press(moved, .discard, in: panel.layout))
+    panel.press(header, .discardAll, in: panel.layout)
+    XCTAssertEqual(discarding, ["a.txt"], "コミットが動いた行も破棄しない")
+    panel.press(moved, .stage, in: panel.layout)
+    idle("ステージ")
+    XCTAssertEqual(repo.git(["diff", "--cached", "--name-only"]).stdoutText, "sub\n")
   }
 
   /// 「すべて破棄」「すべてステージ」は競合中のファイルを含めない（競合の行は 1 行ずつステージで解決済みにする）。

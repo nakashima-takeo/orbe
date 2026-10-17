@@ -103,7 +103,7 @@ extension ScmPanel {
         self.control.unstage(changes.staged.map(\.row))
       case .stageAll where !changes.committable.isEmpty:
         self.control.stage(changes.committable.map(\.row))
-      case .discardAll where !changes.committable.isEmpty: onDiscard(changes.committable)
+      case .discardAll where !changes.discardable.isEmpty: onDiscard(changes.discardable)
       case .refreshGraph: readGraphAndHead(remoteRefsMayHaveMoved: true)
       default: break
       }
@@ -111,13 +111,13 @@ extension ScmPanel {
       switch control {
       case .openFile where file.existsInWorkingTree:
         onOpenFile(URL(fileURLWithPath: root).appendingPathComponent(file.path))
-      case .stage where !file.isSubmoduleContent:
+      case .stage where file.canStage:
         self.control.stage([file.row])
         return layout.anchor(pressing: row, in: section)
       case .unstage:
         self.control.unstage([file.row])
         return layout.anchor(pressing: row, in: section)
-      case .discard where !file.isConflicted && !file.isSubmoduleContent:
+      case .discard where file.canDiscard:
         onDiscard([file])
         return ScmDiscardGate.needsConfirmation([file])
           ? nil : layout.anchor(pressing: row, in: section)

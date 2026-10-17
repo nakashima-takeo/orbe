@@ -86,8 +86,8 @@ extension ScmRowView {
   }
 
   /// ファイル行: ステージ済みは ファイルを開く・ステージを解除、変更は ファイルを開く・変更を破棄・ステージ。作業ツリーに無い
-  /// ファイルの「ファイルを開く」、競合の「変更を破棄」、中身だけ変わったサブモジュールの「変更を破棄」「ステージ」（git は
-  /// どちらも何も変えない）は押せない姿で置く（ボタンの位置は行どうしで揃う）。
+  /// ファイルの「ファイルを開く」と、git が何も変えない「変更を破棄」「ステージ」は押せない姿で置く（ボタンの位置は行どうし
+  /// で揃う）。
   private static func file(
     _ section: ScmSection, _ file: ScmChanges.File, _ language: Language, _ emoji: NSFont?
   ) -> File {
@@ -100,9 +100,8 @@ extension ScmRowView {
       ? [open, button(.unstage, .minus, true, .editorScmUnstage)]
       : [
         open,
-        button(
-          .discard, .discard, !file.isConflicted && !file.isSubmoduleContent, .editorScmDiscard),
-        button(.stage, .plus, !file.isSubmoduleContent, .editorScmStage),
+        button(.discard, .discard, file.canDiscard, .editorScmDiscard),
+        button(.stage, .plus, file.canStage, .editorScmStage),
       ]
     let name = (file.path as NSString).lastPathComponent
     let chip = FileChip.resolve(URL(fileURLWithPath: name))

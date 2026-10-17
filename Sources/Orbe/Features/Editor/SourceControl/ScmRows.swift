@@ -27,34 +27,40 @@ struct ScmChanges {
     let existsInWorkingTree: Bool
     /// 追跡中（破棄は作業ツリーを index の版へ戻す——戻せないので確かめる）。未追跡はゴミ箱へ移す。
     let isTracked: Bool
-    /// サブモジュールの中身だけの変化（`git add` でステージできず、`git restore` で戻らない）。
-    let isSubmoduleContent: Bool
+    /// サブモジュールのままの変化なら、その変わり方。
+    let submodule: GitStatus.SubmoduleChange?
 
     init(
       row: GitStatus.Row, badge: GitStatus.Badge, existsInWorkingTree: Bool, isTracked: Bool,
-      isSubmoduleContent: Bool = false
+      submodule: GitStatus.SubmoduleChange? = nil
     ) {
       self.row = row
       self.badge = badge
       self.existsInWorkingTree = existsInWorkingTree
       self.isTracked = isTracked
-      self.isSubmoduleContent = isSubmoduleContent
+      self.submodule = submodule
     }
 
     var path: String { row.path }
     var isConflicted: Bool { badge == .conflicted }
+    /// 「変更」の行のステージで git が何か変える（中身だけ変わったサブモジュールは add しても何も変わらない）。
+    var canStage: Bool { submodule != .content }
+    /// 「変更」の行の破棄で git が何か変える（競合は破棄しない。サブモジュールのままの変化は restore しても何も変わらない）。
+    var canDiscard: Bool { !isConflicted && submodule == nil }
   }
 
   let staged: [File]
   let changes: [File]
-  /// 「変更」のうち、すべてステージ・すべて破棄・ステージ済みが無いときのコミットに入る行——競合と、ステージも破棄も
-  /// できない（git が何も変えない）サブモジュールの中身だけの変化を除く。
+  /// 「変更」のうち、すべてステージ・ステージ済みが無いときのコミットに入る行——競合と、ステージできない行を除く。
   let committable: [File]
+  /// 「変更」のうち、すべて破棄に入る行（破棄できる行）。
+  let discardable: [File]
 
   init(staged: [File], changes: [File]) {
     self.staged = staged
     self.changes = changes
-    committable = changes.filter { !$0.isConflicted && !$0.isSubmoduleContent }
+    committable = changes.filter { !$0.isConflicted && $0.canStage }
+    discardable = changes.filter(\.canDiscard)
   }
 
   static let empty = ScmChanges(staged: [], changes: [])
@@ -95,7 +101,7 @@ struct ScmChanges {
             File(
               row: row, badge: badge(change), existsInWorkingTree: exists,
               isTracked: change != .untracked,
-              isSubmoduleContent: entry.unstagedIsSubmoduleContent)
+              submodule: entry.unstagedSubmodule)
           ))
       }
     }

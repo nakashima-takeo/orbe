@@ -7,23 +7,31 @@ struct GitStatus: Equatable {
     case modified, added, deleted, renamed, copied, typeChanged, unmerged, untracked
   }
 
+  /// サブモジュールのまま作業ツリー側で変わったときの変わり方。どちらも `git restore` では戻らない（サブモジュールの
+  /// HEAD も中のファイルも動かさない）。作業ツリーで消した・ファイルに置き換えたサブモジュールはこれに当たらない。
+  enum SubmoduleChange: Equatable {
+    /// チェックアウトしているコミットが index と違う（中のファイルの変化を伴うこともある）。`git add` でステージできる。
+    case commit
+    /// 中のファイルだけが変わった・増えた。`git add` でもステージできない。
+    case content
+  }
+
   struct Entry: Equatable {
     let staged: Change?
     let unstaged: Change?
     /// rename・copy の元パス。
     let originalPath: String?
-    /// 作業ツリー側の変化が、サブモジュールの中身だけ（チェックアウトしているコミットは index と同じ）。`git add` では
-    /// ステージできず、`git restore` でも戻らない。
-    let unstagedIsSubmoduleContent: Bool
+    /// 作業ツリー側の変化がサブモジュールのままの変化なら、その変わり方。
+    let unstagedSubmodule: SubmoduleChange?
 
     init(
       staged: Change?, unstaged: Change?, originalPath: String? = nil,
-      unstagedIsSubmoduleContent: Bool = false
+      unstagedSubmodule: SubmoduleChange? = nil
     ) {
       self.staged = staged
       self.unstaged = unstaged
       self.originalPath = originalPath
-      self.unstagedIsSubmoduleContent = unstagedIsSubmoduleContent
+      self.unstagedSubmodule = unstagedSubmodule
     }
 
     var isConflicted: Bool { staged == .unmerged || unstaged == .unmerged }
@@ -152,7 +160,7 @@ struct GitStatus: Equatable {
     return Entry(
       staged: tracked.staged, unstaged: tracked.unstaged ?? .untracked,
       originalPath: tracked.originalPath,
-      unstagedIsSubmoduleContent: tracked.unstaged != nil && tracked.unstagedIsSubmoduleContent)
+      unstagedSubmodule: tracked.unstaged == nil ? nil : tracked.unstagedSubmodule)
   }
 
   /// `# branch.oid <commit | (initial)>`・`# branch.head <name | (detached)>`・`# branch.upstream <name>`・
@@ -204,7 +212,7 @@ struct GitStatus: Equatable {
       String(fields[9]),
       Entry(
         staged: entry.staged, unstaged: entry.unstaged, originalPath: original,
-        unstagedIsSubmoduleContent: entry.unstagedIsSubmoduleContent)
+        unstagedSubmodule: entry.unstagedSubmodule)
     )
   }
 
@@ -216,18 +224,17 @@ struct GitStatus: Equatable {
   }
 
   /// `sub` は `N...`（サブモジュールでない）か `S<c><m><u>`（`c` はチェックアウトしているコミットが変わったら `C`、`m` は
-  /// 中の追跡中のファイルが変わったら `M`、`u` は中に未追跡のファイルがあれば `U`）。中身だけの変化は `S.` に `M` か `U`
-  /// が続くもの——作業ツリーで消した・種類が変わったサブモジュール（`S...`）は含めない。
+  /// 中の追跡中のファイルが変わったら `M`、`u` は中に未追跡のファイルがあれば `U`）。サブモジュールのままの変化は作業ツリー
+  /// 側が `M` のもの——作業ツリーで消した・種類が変わったサブモジュール（`D`・`T`）は含めない。
   private static func pair(_ xy: Substring, sub: Substring) -> Entry? {
     let chars = Array(xy)
     guard chars.count == 2 else { return nil }
     let unstaged = change(chars[1])
     let flags = Array(sub)
-    let contentOnly =
-      flags.count == 4 && flags[0] == "S" && flags[1] == "." && (flags[2] == "M" || flags[3] == "U")
-    return Entry(
-      staged: change(chars[0]), unstaged: unstaged,
-      unstagedIsSubmoduleContent: unstaged != nil && contentOnly)
+    let submodule: SubmoduleChange? =
+      unstaged == .modified && flags.count == 4 && flags[0] == "S"
+      ? (flags[1] == "C" ? .commit : .content) : nil
+    return Entry(staged: change(chars[0]), unstaged: unstaged, unstagedSubmodule: submodule)
   }
 
   private static func change(_ c: Character) -> Change? {
