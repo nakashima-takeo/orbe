@@ -26,9 +26,14 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
     XCTAssertNil(jobs.calls[0].job.limits.idle)
   }
 
-  /// 前回成功の目印は新着の流れの取得にだけ渡る。今の集合に渡すと前回以降の分だけが取れ、取得から消えたものとして候補が下がる。
+  /// 前回成功の目印は新着の流れの取得にだけ渡る（コマンドは `ORBE_SINCE`、agent は依頼文）。今の集合に渡すと前回以降の分だけが
+  /// 取れ、取得から消えたものとして候補が下がる。
   func testOnlyNewArrivalsFetchGetsTheMark() throws {
     let since = now.addingTimeInterval(-3600)
+    let mark = SessionEvent.iso8601(since)
+    func agent(_ coverage: AutomationCoverage) -> AutomationPart {
+      AutomationGraphTests.agent("f", tools: [Self.tool], deliver: .nextPart, coverage: coverage)
+    }
 
     start(
       AutomationGraphTests.fetch("f", .newArrivals), .fetch(.newArrivals),
@@ -36,10 +41,13 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
     start(
       AutomationGraphTests.fetch("f", .currentSet), .fetch(.currentSet),
       .fetch(since: since, lastOutput: []))
+    start(agent(.newArrivals), .fetch(.newArrivals), .fetch(since: since, lastOutput: []))
+    start(agent(.currentSet), .fetch(.currentSet), .fetch(since: since, lastOutput: []))
 
-    XCTAssertEqual(
-      try XCTUnwrap(commandInput(0)).environment, ["ORBE_SINCE": SessionEvent.iso8601(since)])
+    XCTAssertEqual(try XCTUnwrap(commandInput(0)).environment, ["ORBE_SINCE": mark])
     XCTAssertEqual(try XCTUnwrap(commandInput(1)).environment, [:])
+    XCTAssertTrue(try XCTUnwrap(agentCall(2)).prompt.contains(mark))
+    XCTAssertFalse(try XCTUnwrap(agentCall(3)).prompt.contains(mark))
   }
 
   /// 副作用のコマンドは取った行を 1 行 1 オブジェクトで標準入力に受け、回の ID を `ORBE_RUN_ID` で受ける。
