@@ -115,6 +115,30 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
 
   // MARK: - 処理
 
+  /// nothing の 1 行だけなら、正しい 0 行。
+  func testProcessOutputOfOnlyANothingLinePassesNoRows() throws {
+    start(
+      AutomationGraphTests.command("p", from: ["f"], deliver: .nextPart), .process,
+      .process([row("a")], feedsJudge: false))
+
+    jobs.finish(0, printed(#"{"nothing":"残る項目が無い"}"#))
+
+    XCTAssertEqual(succeeded, .process([]), "\(outcomes)")
+    XCTAssertNil(breach)
+  }
+
+  /// nothing の前の地の文は外れた行——依頼文は地の文を出さないよう言っており、受け付けない行を黙って捨てない。
+  func testProseBeforeANothingLineBreaksTheRules() throws {
+    start(
+      AutomationGraphTests.command("p", from: ["f"], deliver: .nextPart), .process,
+      .process([row("a")], feedsJudge: false))
+
+    jobs.finish(0, printed("どれも条件に合いませんでした。\n" + #"{"nothing":"残る項目が無い"}"#))
+
+    XCTAssertEqual(breach?.lines.map(\.line), [1], "\(outcomes)")
+    XCTAssertNotNil(failed)
+  }
+
   /// 出力の行は `id` で入力の行と照らして出どころを引き継ぎ、照らせない行は出どころを持たない。
   func testProcessCarriesTheOriginById() throws {
     start(

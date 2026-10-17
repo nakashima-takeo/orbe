@@ -88,17 +88,14 @@ extension AutomationPartPass {
       count: items.count, lines: lines.sorted { $0.line < $1.line })
   }
 
-  /// 最後の空でない行が `{"nothing": …}` で `id` を持つ行が無ければ、前置きの文ごと 0 行。出どころは `id` で入力の行と
-  /// 照らして引き継ぐ。`id` の無い行・同じ `id` の 2 つ目の行・項目と一緒に出た nothing の行・判定へ渡すときの照らせない行は
-  /// 外れた行。
+  /// 最後の空でない行が `{"nothing": …}` なら 0 行。ほかの行は前置きの文も含めて外れた行。出どころは `id` で入力の行と照らして
+  /// 引き継ぐ。`id` の無い行・同じ `id` の 2 つ目の行・項目と一緒に出た nothing の行・判定へ渡すときの照らせない行は外れた行。
   private static func processed(
     _ text: String, _ input: [AutomationPartRow], feedsJudge: Bool
   ) -> Reading {
     var (rows, lines) = AutomationPrompts.objectRows(text)
     if AutomationPrompts.nothing(text) != nil, let marker = rows.popLast() {
-      guard rows.contains(where: { AutomationPrompts.id(of: $0.text) != nil }) else {
-        return .read(.process([]), count: 0, lines: [])
-      }
+      guard !rows.isEmpty else { return .read(.process([]), count: 0, lines: lines) }
       lines.append(
         AutomationBrokenLine(line: marker.line, reason: "a nothing line alongside items"))
     }
