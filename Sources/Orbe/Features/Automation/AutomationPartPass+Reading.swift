@@ -15,11 +15,15 @@ extension AutomationPartPass {
     let word = word(node)
     switch input {
     case .fetch(_, let lastOutput):
-      return reading(result, word) { fetched($0, node, lastOutput: lastOutput, word) }
+      return reading(result, word) {
+        declaringNothing($0) { fetched($0, node, lastOutput: lastOutput, word) }
+      }
     case .process(let rows, let feedsJudge):
-      return reading(result, word) { processed($0, rows, feedsJudge: feedsJudge) }
+      return reading(result, word) {
+        declaringNothing($0) { processed($0, rows, feedsJudge: feedsJudge) }
+      }
     case .judge(let rows, let choices):
-      return reading(result, word) { judged($0, rows, choices) }
+      return reading(result, word) { declaringNothing($0) { judged($0, rows, choices) } }
     case .report:
       return reading(result, word) { text in
         let report =
@@ -50,6 +54,24 @@ extension AutomationPartPass {
     case .failure(let failure): .failed(failure.reason)
     case .success(let text): body(text)
     }
+  }
+
+  /// 行を出す部品の出力を、何も無い回の申告と分けて読む。最後の空でない行が `{"nothing": …}` なら、その行を空行にして
+  /// （行番号は変わらない）残りを読む。残りに読めた行が無ければ正しい 0 件、あれば申告の行も外れた行。前置きの文は残りの
+  /// 読みが外れた行にする。
+  private static func declaringNothing(_ text: String, _ body: (String) -> Reading) -> Reading {
+    var lines = text.split(omittingEmptySubsequences: false) { $0 == "\n" || $0 == "\r\n" }
+    guard
+      let last = lines.lastIndex(where: {
+        !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      }),
+      AutomationPrompts.nothing(String(lines[last])) != nil
+    else { return body(text) }
+    lines[last] = ""
+    let reading = body(lines.joined(separator: "\n"))
+    guard case .read(let output, let count, var broken) = reading, count > 0 else { return reading }
+    broken.append(AutomationBrokenLine(line: last + 1, reason: "a nothing line alongside items"))
+    return .read(output, count: count, lines: broken.sorted { $0.line < $1.line })
   }
 
   /// `{"error": …}` の行は申告の失敗。項目として読めない行と、同じ `id` の 2 つ目の行は外れた行。前回の出力に無い項目
@@ -88,17 +110,12 @@ extension AutomationPartPass {
       count: items.count, lines: lines.sorted { $0.line < $1.line })
   }
 
-  /// 最後の空でない行が `{"nothing": …}` なら 0 行。ほかの行は前置きの文も含めて外れた行。出どころは `id` で入力の行と照らして
-  /// 引き継ぐ。`id` の無い行・同じ `id` の 2 つ目の行・項目と一緒に出た nothing の行・判定へ渡すときの照らせない行は外れた行。
+  /// 出どころは `id` で入力の行と照らして引き継ぐ。`id` の無い行・同じ `id` の 2 つ目の行・判定へ渡すときの照らせない行は
+  /// 外れた行。
   private static func processed(
     _ text: String, _ input: [AutomationPartRow], feedsJudge: Bool
   ) -> Reading {
     var (rows, lines) = AutomationPrompts.objectRows(text)
-    if AutomationPrompts.nothing(text) != nil, let marker = rows.popLast() {
-      guard !rows.isEmpty else { return .read(.process([]), count: 0, lines: lines) }
-      lines.append(
-        AutomationBrokenLine(line: marker.line, reason: "a nothing line alongside items"))
-    }
     let origins = Dictionary(
       input.compactMap { row in row.origin.map { (row.id, $0) } }, uniquingKeysWith: { $1 })
     var ids = Set<String>()

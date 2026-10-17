@@ -203,12 +203,12 @@ struct AutomationPartPass {
   ) -> String {
     switch input {
     case .fetch(let since, _):
-      return AutomationPrompts.fetch(request: instruction, since: mark(node, since))
+      return AutomationPrompts.partFetch(request: instruction, since: mark(node, since))
     case .process(let rows, _):
       return AutomationPrompts.step(
         instruction: instruction, rows: rows.map(\.text), now: now, timeZone: timeZone)
     case .judge(let rows, let choices):
-      return AutomationPrompts.judge(
+      return AutomationPrompts.partJudge(
         instruction: instruction, rows: rows.map(\.text), choices: choices, now: now,
         timeZone: timeZone)
     case .report(let rows):

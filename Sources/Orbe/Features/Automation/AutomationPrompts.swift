@@ -4,10 +4,34 @@ import OrbeSessionLog
 /// 取得元・段・判定の依頼文と、その出力の読み取り。入出力の形は Orbe が固定の枠で持つ——利用者の依頼文・指示文が形まで
 /// 決めると、自動化ごとに形が割れて検証できないため。
 enum AutomationPrompts {
+  /// 何も無い回の出し方。今の自動化の枠は何も出させず、部品の 1 回の枠は `{"nothing": "<why>"}` の 1 行だけを出させる——
+  /// 目に見える出力なしで終えたモデルを claude が催促すると地の文が返りえ、部品の 1 回はそれを決まりを外した行に数えるため。
+  private enum WhenEmpty {
+    case silent
+    case nothingLine
+
+    func line(_ condition: String) -> String {
+      switch self {
+      case .silent: "Output nothing when \(condition)."
+      case .nothingLine:
+        "When \(condition), output only this one line instead: \(AutomationPrompts.nothingLine)"
+      }
+    }
+  }
+
   // MARK: - 取得
 
   /// `since` は新着の流れの目印（前回成功した回の開始時刻）。無ければ目印の文を載せない。
   static func fetch(request: String, since: Date? = nil) -> String {
+    fetch(request: request, since: since, empty: .silent)
+  }
+
+  /// 部品の 1 回の取得の依頼文。何も無い回は nothing の 1 行を出させる。
+  static func partFetch(request: String, since: Date?) -> String {
+    fetch(request: request, since: since, empty: .nothingLine)
+  }
+
+  private static func fetch(request: String, since: Date?, empty: WhenEmpty) -> String {
     let mark =
       since.map {
         """
@@ -26,7 +50,7 @@ enum AutomationPrompts {
       Output one JSON object per line and nothing else (no prose, no code fences):
       {"id": "<stable id of the item within this source>", "link": "<http(s) URL of the item>", \
       "body": "<the item's text>", "time": "<ISO 8601 time of the item>"}
-      Output nothing when there are no items.
+      \(empty.line("there are no items"))
       If a tool fails or is unavailable, output only this one line instead: {"error": "<what went wrong>"}
       """
   }
@@ -229,6 +253,24 @@ enum AutomationPrompts {
     instruction: String, rows: [String], choices: AutomationJudgeChoices, now: Date,
     timeZone: TimeZone
   ) -> String {
+    judgeFrame(instruction: instruction, rows: rows, choices: choices, now: now, timeZone: timeZone)
+      + WhenEmpty.silent.line("no item needs a task")
+  }
+
+  /// 部品の 1 回の判定の依頼文。何も無い回は nothing の 1 行を出させる。
+  static func partJudge(
+    instruction: String, rows: [String], choices: AutomationJudgeChoices, now: Date,
+    timeZone: TimeZone
+  ) -> String {
+    judgeFrame(instruction: instruction, rows: rows, choices: choices, now: now, timeZone: timeZone)
+      + WhenEmpty.nothingLine.line("no item needs a task")
+  }
+
+  /// 判定の依頼文の、何も無い回の出し方の前まで（改行で終わる）。
+  private static func judgeFrame(
+    instruction: String, rows: [String], choices: AutomationJudgeChoices, now: Date,
+    timeZone: TimeZone
+  ) -> String {
     let openLines = choices.open.map { proposal in
       var entry: [String: Any] = ["link": proposal.item.link, "title": proposal.title]
       if let due = proposal.due { entry["due"] = due.text }
@@ -265,7 +307,7 @@ enum AutomationPrompts {
       when unsure, and the task goes to Home.
       - When the new items show that a waiting proposal is already dealt with: {"resolve": "<link of that proposal>"}. \
       Use only links of the waiting proposals above.
-      Output nothing when no item needs a task.
+
       """
   }
 
