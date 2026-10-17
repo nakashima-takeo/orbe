@@ -9,9 +9,9 @@ import XCTest
 ///
 /// 壊れると何が起きるか: 長く黙って考える agent が途中で切られる。今の集合の取得が前回以降の分だけを取り、候補が一斉に下がる。
 /// 副作用のやり直しに回の ID が渡らず二重に起きる。仕事の agent がツール無しで起き、何もせずに成功する。前回取れた項目が
-/// 毎回流れ直す、または出どころの id が接頭付きになり前回の出力と照らせない。照らせない・重なった処理の行や、地の文だけの判定が
-/// 黙って消える。候補に別の項目のリンクが付く。失敗した取得・仕事・副作用が成功として確定する。止めた回の結果が書き換えた
-/// 後の定義で確定する。
+/// 毎回流れ直す、または出どころの id が接頭付きになり前回の出力と照らせない。照らせない・重なった・nothing と一緒に出た
+/// 処理の行や、地の文だけの判定が黙って消える。候補の無い判定の回が失敗になる。候補に別の項目のリンクが付く。失敗した取得・
+/// 仕事・副作用が成功として確定する。止めた回の結果が書き換えた後の定義で確定する。
 final class AutomationPartPassTests: AutomationPartPassTestCase {
   // MARK: - 起こし方
 
@@ -139,6 +139,18 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
     XCTAssertNotNil(failed)
   }
 
+  /// 項目と一緒に出た nothing の行は外れた行——0 行と読むと、一緒に出た項目が黙って消える。
+  func testNothingLineAlongsideItemsBreaksTheRules() throws {
+    start(
+      AutomationGraphTests.command("p", from: ["f"], deliver: .nextPart), .process,
+      .process([row("a")], feedsJudge: false))
+
+    jobs.finish(0, printed(#"{"id":"f:a"}"# + "\n" + #"{"nothing":"b は外した"}"#))
+
+    XCTAssertEqual(breach?.lines.map(\.line), [2], "\(outcomes)")
+    XCTAssertNotNil(failed)
+  }
+
   /// 出力の行は `id` で入力の行と照らして出どころを引き継ぎ、照らせない行は出どころを持たない。
   func testProcessCarriesTheOriginById() throws {
     start(
@@ -207,6 +219,18 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
 
     XCTAssertEqual(jobs.calls.count, 2, "出し直させる")
     XCTAssertEqual(outcomes, [])
+  }
+
+  /// 何も出さない判定は、候補なしの正しい成功——候補にすべき項目が無い回のたびに失敗しない。
+  func testJudgeOutputOfNothingSucceedsWithoutCandidates() throws {
+    start(
+      AutomationGraphTests.command("j", from: ["f"], deliver: .taskCandidates), .judge,
+      judgeInput(["a"]))
+
+    jobs.finish(0, printed(""))
+
+    XCTAssertEqual(succeeded, .judge(proposals: [], resolved: []), "\(outcomes)")
+    XCTAssertNil(breach)
   }
 
   /// 取った行に無い `id`（接頭の無い元の `id` を含む）への案は外れた行。
