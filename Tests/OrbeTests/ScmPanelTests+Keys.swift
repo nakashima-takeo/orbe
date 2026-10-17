@@ -23,7 +23,8 @@ extension ScmPanelTests {
     show(
       until: { panel in
         panel.changes.staged.count == 1 && panel.changes.changes.count == 2
-          && panel.graph != nil && panel.layout.items.contains { if case .commit = $0 { true } else { false } }
+          && panel.graph != nil
+          && panel.layout.items.contains { if case .commit = $0 { true } else { false } }
       }, "2 区分とグラフの行")
     panel.navigation.delay.schedule = { _, fire in fire() }
     var opened: [Opened] = []
