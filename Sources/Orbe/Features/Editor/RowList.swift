@@ -10,7 +10,7 @@ protocol RowListSource: AnyObject {
 
   /// 行の数。列は行を問う上限にもこの今の値を使う（行の数は列が読み直すより先に変わりうる）。
   var rowCount: Int { get }
-  /// 行の高さ——同じ高さの行が続く区間の表（先頭から順に `0..<rowCount` を隙間なく覆う）。列は読み直すたびに写し、
+  /// 行の高さ——同じ高さの行が続く区間の表（先頭から順に `0..<rowCount` を隙間なく覆う。区間の前の余白は行の外）。列は読み直すたびに写し、
   /// 位置と行の引き当てを区間の数に比例する手間で済ませる（行の数に依らない）。
   var rowSegments: [RowListSegment] { get }
   /// 枠を 1 つ作る。列は見えている行の数＋1 本まで作って使い回す。
@@ -49,11 +49,19 @@ extension RowListSource {
   func press(_ row: Int, control: Int) {}
 }
 
-/// 同じ高さの行が続く区間。
+/// 同じ高さの行が続く区間。`leading` は区間の前の余白（行ではないので、押しても乗っても何も起きない）。
 struct RowListSegment: Equatable {
   let start: Int
   let count: Int
   let height: CGFloat
+  let leading: CGFloat
+
+  init(start: Int, count: Int, height: CGFloat, leading: CGFloat = 0) {
+    self.start = start
+    self.count = count
+    self.height = height
+    self.leading = leading
+  }
 }
 
 /// 列が源へ渡すキーの操作。

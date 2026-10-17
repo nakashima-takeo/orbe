@@ -81,11 +81,9 @@ final class ScmRowView: ListRowView {
 
   // MARK: - 寸法
 
-  /// 中身の帯（グラフの見出しは上の空きの下、ブランチの器は下の空きの上）。
+  /// 中身の帯（ブランチの器は下の空きの上）。
   var band: NSRect {
     switch content {
-    case .header(let header) where header.section == .graph:
-      NSRect(x: 0, y: Theme.Layout.editorScmGraphGap, width: bounds.width, height: Self.rowHeight)
     case .branch:
       NSRect(x: 0, y: 0, width: bounds.width, height: Theme.Layout.editorScmBranch)
     default:

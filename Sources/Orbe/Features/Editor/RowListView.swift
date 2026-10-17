@@ -62,6 +62,7 @@ final class RowListView<Source: RowListSource>: NSView {
     segments = source.rowSegments
     var top: CGFloat = 0
     segmentTops = segments.map { segment in
+      top += segment.leading
       defer { top += CGFloat(segment.count) * segment.height }
       return top
     }
@@ -87,7 +88,7 @@ final class RowListView<Source: RowListSource>: NSView {
       slots.append(slot)
     }
     let count = min(source.rowCount, segments.last.map { $0.start + $0.count } ?? 0)
-    let first = row(atY: max(0, visible.minY)) ?? count
+    let first = min(firstRow(from: max(0, visible.minY)), count)
     var shown = Set<Int>()
     var row = first
     while row < count {
@@ -132,18 +133,34 @@ final class RowListView<Source: RowListSource>: NSView {
       width: bounds.width, height: segment.height)
   }
 
-  /// 高さ `y` の行（区間の表の外なら nil）。
+  /// 高さ `y` の行（区間の表の外・区間の前の余白なら nil）。
   private func row(atY y: CGFloat) -> Int? {
+    guard let low = segment(atY: y), y >= segmentTops[low] else { return nil }
+    let segment = segments[low]
+    let offset = Int((y - segmentTops[low]) / segment.height)
+    return offset < segment.count ? segment.start + offset : nil
+  }
+
+  /// 下端が `y` より下にある最初の行（余白の上なら、その下の行）。
+  private func firstRow(from y: CGFloat) -> Int {
+    guard let low = segment(atY: y) else { return 0 }
+    let segment = segments[low]
+    guard y >= segmentTops[low] else { return segment.start }
+    let offset = Int((y - segmentTops[low]) / segment.height)
+    if offset < segment.count { return segment.start + offset }
+    return low + 1 < segments.count ? segments[low + 1].start : segment.start + segment.count
+  }
+
+  /// 高さ `y` を含む区間（前の余白を含めて、上端が `y` 以下の最後の区間）。最初の区間の余白の上も最初の区間。
+  private func segment(atY y: CGFloat) -> Int? {
     guard y >= 0, !segments.isEmpty else { return nil }
     var low = 0
     var high = segmentTops.count
     while high - low > 1 {
       let mid = (low + high) / 2
-      if segmentTops[mid] <= y { low = mid } else { high = mid }
+      if segmentTops[mid] - segments[mid].leading <= y { low = mid } else { high = mid }
     }
-    let segment = segments[low]
-    let offset = Int((y - segmentTops[low]) / segment.height)
-    return offset < segment.count ? segment.start + offset : nil
+    return low
   }
 
   private func row(at point: NSPoint) -> Int? {

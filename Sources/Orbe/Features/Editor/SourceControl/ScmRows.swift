@@ -148,6 +148,7 @@ struct ScmLayout {
   ) -> ScmLayout {
     var items: [Item] = []
     var heights: [CGFloat] = []
+    var leadings: [Int: CGFloat] = [:]
     var index: [ScmRowID: Int] = [:]
     var ranges: [ScmSection: Range<Int>] = [:]
     items.reserveCapacity(changes.count + 4)
@@ -173,8 +174,9 @@ struct ScmLayout {
     if let branch {
       let isOpen = !collapsed.contains(.graph)
       index[ScmRowID(section: .graph, path: nil)] = items.count
+      leadings[items.count] = Theme.Layout.editorScmGraphGap
       items.append(.header(.graph, count: 0, isOpen: isOpen))
-      heights.append(Theme.Layout.editorScmGraphGap + row)
+      heights.append(row)
       if isOpen {
         items.append(.branch(branch))
         heights.append(Theme.Layout.editorScmBranch + Theme.Layout.editorScmBranchGap)
@@ -190,21 +192,27 @@ struct ScmLayout {
       }
     }
     return ScmLayout(
-      items: items, segments: segments(heights), index: index, fileRanges: ranges)
+      items: items, segments: segments(heights, leadings: leadings), index: index,
+      fileRanges: ranges)
   }
 
-  /// 高さの列を、同じ高さの続く区間に畳む。
-  private static func segments(_ heights: [CGFloat]) -> [RowListSegment] {
+  /// 高さの列を、同じ高さの続く区間に畳む。前の余白を持つ行は区間の頭にする。
+  private static func segments(
+    _ heights: [CGFloat], leadings: [Int: CGFloat]
+  ) -> [RowListSegment] {
     var segments: [RowListSegment] = []
     var start = 0
-    for (row, height) in heights.enumerated() where row > 0 && height != heights[row - 1] {
-      segments.append(RowListSegment(start: start, count: row - start, height: heights[start]))
+    func close(_ end: Int) {
+      segments.append(
+        RowListSegment(
+          start: start, count: end - start, height: heights[start], leading: leadings[start] ?? 0))
+    }
+    for (row, height) in heights.enumerated()
+    where row > 0 && (height != heights[row - 1] || leadings[row] != nil) {
+      close(row)
       start = row
     }
-    if start < heights.count {
-      segments.append(
-        RowListSegment(start: start, count: heights.count - start, height: heights[start]))
-    }
+    if start < heights.count { close(heights.count) }
     return segments
   }
 
