@@ -31,7 +31,7 @@ updated: 2026-10-17
 - **ファイルが変わった** — 変わったパスの集合（根の綴りの絶対パス）。取りこぼしがあれば「全部見直せ」。git dir の中は含まない。
 - **status が変わった** — git 管理下のみ。取り直しの結果が前と違うとき。status はブランチ・HEAD・upstream を含むので、作業ツリーが変わらなくても HEAD や upstream が動けば届く（コミット・fetch・push）。git の一時失敗では変えない——status は「最後に成功した取り直しの結果」で、失敗のたびに印が消えて戻ることはない。
 - **版の本文が変わった** — 関心のある版（パスと index / HEAD）について、本文の状態が変わったとき。状態が初めて決まったとき（その版に無い・読めないと分かったときも）と、その版から消えたときを含む。
-- **git の状態が変わった** — git 管理下のみ。git dir の中の変化（refs・HEAD・index など。拾う範囲は下の段落）を含む監視の 1 バッチに 1 回（取りこぼしのときも）。status に映らない ref だけの変化——upstream を付けない push・ブランチの作成や削除——も届く。ref（HEAD・refs・packed-refs・reftable）も変わったかを添える（index だけの変化なら変わっていない。取りこぼしなら変わったとする）。グラフや「HEAD が push 済みか」のように ref を読む者が、自分で git dir を見張らずに読み直せ、ref が動いていなければ前の読みを使い続けられるため（→ [source-control](source-control.md)）。
+- **git の状態が変わった** — git 管理下のみ。git dir の中の変化（refs・HEAD・index など。拾う範囲は下の段落）を含む監視の 1 バッチに 1 回（取りこぼしのときも）。status に映らない ref だけの変化——upstream を付けない push・ブランチの作成や削除——も届く。remote 追跡 ref が動いたかもしれないかを添える（`refs/remotes` の下か、どの ref かを名前で分けられない packed-refs・reftable が変わった。取りこぼしなら動いたとする。HEAD・ローカルのブランチ・index だけなら動いていない）。グラフや「HEAD が push 済みか」のように ref を読む者が、自分で git dir を見張らずに読み直せ、remote 追跡 ref が動いていなければ同じ HEAD の前の読みを使い続けられるため（→ [source-control](source-control.md)）。
 
 git dir の中は、objects・reflog・他の worktree の私有状態・submodule の内部・`.lock` の出入りと、git 自身の読み取りが生む副産物（fsmonitor デーモンの cookie——拾うと自分の status が自分を呼び戻す）を除いて拾う（index・HEAD・refs・packed-refs・merge / rebase の進行状態——拾う側を列挙せず、git が足す状態ファイルは拾う側に倒す）。監視は連続する変化の間は待つが、最初の保留から 1 秒経てば続いていても出す——ビルドのように変わり続ける間も通知は 1 秒に 1 回は出る。根が管理下と分かったときに根の監視を張り替えない（張り替えの隙間に届いた変化が落ちる）。
 
