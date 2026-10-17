@@ -290,8 +290,8 @@ final class BackgroundProcess {
   }
 
   private func nextLimitDeadline() -> DispatchTime {
-    let elapsed = startedAt + spec.elapsedLimit
-    return spec.idleLimit.map { min(elapsed, lastActivity + $0) } ?? elapsed
+    let elapsedDeadline = startedAt + spec.elapsedLimit
+    return spec.idleLimit.map { min(elapsedDeadline, lastActivity + $0) } ?? elapsedDeadline
   }
 
   /// 期限で目覚めたら測り直す。出力が来ていれば無出力の期限は延びている。
