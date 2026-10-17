@@ -1,12 +1,12 @@
 ---
 title: エージェントプラグイン（配布物）
 description: claude / codex / agy 兼用プラグインパッケージ app/agent-plugin/ の構造・各 CLI の導入契約・チャネル別のプラグイン名・MCP サーバー・.app 同梱と毎起動の実体化・中身の指紋による入れ直し
-updated: 2026-10-13
+updated: 2026-10-14
 ---
 
 # エージェントプラグイン（配布物）
 
-`app/agent-plugin/` は claude / codex / agy を 1 ディレクトリで兼ねるプラグインパッケージ。2 つのものを各 CLI へ届ける。1 つは状態追跡の hook で、Orbe の状態報告シムを呼び、[notify](notify.md) の制御ソケット経路に乗せる。もう 1 つは MCP サーバーで、Orbe のタブで起こした agent に Orbe の MCP ツール（[api](../control/api.md) の MCP ブリッジ）を出す。利用者は何も設定しない。プラグインには binary を入れず純テキストのまま保つ（シムが `.app` 同梱の `orbe-report` / `orbe-mcp` を env パスで指す）。プラグイン本体は `plugins/<プラグイン名>/` に 1 箇所だけ置き（スクリプト重複なし）、claude/codex の marketplace 定義をルートからそこへ向ける。パッケージルートには各 CLI の marketplace 定義と、各 CLI へ冪等導入する `install.sh` を置く。
+`app/agent-plugin/` は claude / codex / agy を 1 ディレクトリで兼ねるプラグインパッケージ。3 つのものを各 CLI へ届ける。1 つは状態追跡の hook で、Orbe の状態報告シムを呼び、[notify](notify.md) の制御ソケット経路に乗せる。もう 1 つは MCP サーバーで、Orbe のタブで起こした agent に Orbe の MCP ツール（[api](../control/api.md) の MCP ブリッジ）を出す。もう 1 つは claude のスキル（→ [自動化のスキル](#自動化のスキル)）。利用者は何も設定しない。プラグインには binary を入れず純テキストのまま保つ（シムが `.app` 同梱の `orbe-report` / `orbe-mcp` を env パスで指す）。プラグイン本体は `plugins/<プラグイン名>/` に 1 箇所だけ置き（スクリプト重複なし）、claude/codex の marketplace 定義をルートからそこへ向ける。パッケージルートには各 CLI の marketplace 定義と、各 CLI へ冪等導入する `install.sh` を置く。
 
 ## チャネル別のプラグイン名
 
@@ -46,6 +46,12 @@ hook からシムを呼ぶ経路も CLI ごとに違う: claude / codex はそ�
 MCP シムは、`ORBE_MCP_BIN` が実行可能でチャネル判定に通れば、タブの `.app` 同梱の `orbe-mcp` へ exec する。ブリッジはタブの env（`ORBE_SOCK`・`ORBE_TAB`）でそのタブの Orbe にだけつながり、呼び出し元のタブを名乗る。プラグインにバイナリを入れないのは、ブリッジのツール定義とつなぐ先の制御 API の版をそろえるため——実体化先や codex / agy のコピーは同じチャネルの別ビルドと共有され、古いまま残りうる。
 
 それ以外（Orbe の外・別チャネルの Orbe のタブ・同梱の無い Orbe）では、シムは**ツール 0 個の空サーバー**（`mcp/empty-server.pl`）へ exec する。即終了させないのは、CLI がプラグインの MCP サーバーを全セッションで起こし、接続失敗を毎回警告するため。Orbe の外にはバイナリが無いので、空サーバーは macOS 標準の perl で書く。改行区切りの JSON-RPC を読み、initialize には tools を名乗らない capabilities で、tools/list には空の一覧で、ping には空で応え、それ以外の要求は method not found を返す。通知と読めない行には応えない。
+
+## 自動化のスキル
+
+プラグインは `skills/automation/` に、Orbe の[自動化](../platform/automation.md)を人の一言から作る・直すスキルを 1 つ持つ（claude が読む形式。codex / agy には届かない）。スキルが持つのは進め方で、調べる → 案を立てる → 決め所（出どころと範囲・判定の基準・間隔・型から外れること・有効にすること）を AskUserQuestion で聞く → 作る・直す → 1 回回す → 結果を読む → 見せて聞く、を人が「このまま」と言うまで繰り返す。判定の基準は出どころごとに別の質問で聞く。設計の参考として型（見張ってタスク候補・MCP でしか読めない出どころを見張ってタスク候補・定時のまとめ・定時にツールで仕事・定時のコマンド）を骨の JSON とともに `references/` に持つ。型は参考で、頼みに合わなければ外れてよい。定義の項目と仕組みは MCP の `set_automation` の説明が持つので、スキルには写さない。
+
+[秘書](secretary.md#役目の指示)はこのスキルを役目の指示で名指しする。Orbe のプラグインが入っている claude なら、人が手で起こしたものでも、スキルの説明（description）から同じ進め方で自動化を書ける。スキルの本文は日本語 1 つで、人とのやり取りは頼みの言語に合わせる。
 
 ## event→state 対応
 
