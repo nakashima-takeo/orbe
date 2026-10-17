@@ -53,11 +53,8 @@ struct AutomationGraph: Equatable {
 
     /// 行を依頼文に入れる agent か（入力があり、ツールを持たない）。1 回で取る量の上限はこれにだけ掛かる。
     var putsRowsInPrompt: Bool {
-      guard case .agent = part.method, !part.inputs.isEmpty else { return false }
-      switch role {
-      case .process, .judge, .report: return true
-      case .fetch, .work, .sideEffect: return false
-      }
+      guard case .agent = part.method else { return false }
+      return part.readsRows
     }
 
     /// 何をするか。名前・予定・取得の性質・溜まりの上限を除き、モデルと上限は解いた値で持つ。
@@ -95,7 +92,8 @@ struct AutomationGraph: Equatable {
       depths[index] = value
       return value
     }
-    return nodes.indices.sorted { (depth($0), $0) < (depth($1), $1) }.map { nodes[$0] }
+    let depthOf = nodes.indices.map(depth)
+    return nodes.indices.sorted { (depthOf[$0], $0) < (depthOf[$1], $1) }.map { nodes[$0] }
   }
 
   /// `key` の部品が出した行が、途中で取得の部品を通らずに判定の部品へ届くか（タスク候補へ至るか）。入力を持つツールの agent は

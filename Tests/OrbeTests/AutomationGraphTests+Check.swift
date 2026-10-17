@@ -73,18 +73,18 @@ extension AutomationGraphTests {
         "件数の上限が 0", changing(1) { $0.inboxLimit = .init(maxAgeHours: nil, maxItems: 0) },
         "parts[1].inboxLimit"
       ),
-      ("① 入力の無い部品が届いたら", changing(0) { $0.trigger = .arrival }, "parts[0].trigger"),
+      ("入力の無い部品が届いたら", changing(0) { $0.trigger = .arrival }, "parts[0].trigger"),
       (
-        "④ ツールを持つ agent がタスク候補へ",
+        "ツールを持つ agent がタスク候補へ",
         changing(1) {
           $0 = Self.agent("r", from: ["f"], tools: [Self.tool], deliver: .taskCandidates)
         }, "parts[1].deliver"
       ),
       (
-        "④ 入力の無い部品がタスク候補へ",
+        "入力の無い部品がタスク候補へ",
         [Self.agent("j", deliver: .taskCandidates)], "parts[0].deliver"
       ),
-      ("⑤ agent の行き先が副作用だけ", changing(1) { $0.destination = .sideEffect }, "parts[1].deliver"),
+      ("agent の行き先が副作用だけ", changing(1) { $0.destination = .sideEffect }, "parts[1].deliver"),
       ("取得の部品に性質が無い", changing(0) { $0.coverage = nil }, "parts[0].coverage"),
       ("取得でない部品に性質", changing(1) { $0.coverage = .currentSet }, "parts[1].coverage"),
     ] {
@@ -131,16 +131,16 @@ extension AutomationGraphTests {
         ], "parts[1].from"
       ),
       (
-        "② 行き先が次の部品なのに誰も名指さない",
+        "行き先が次の部品なのに誰も名指さない",
         [Self.fetch("f"), Self.fetch("g"), Self.agent("r", from: ["f"])], "parts[1].deliver"
       ),
       (
-        "③ 行き先が次の部品でない部品を名指すのは名指した側を指す",
+        "行き先が次の部品でない部品を名指すのは名指した側を指す",
         [Self.fetch("f"), Self.agent("r", from: ["f"]), Self.agent("x", from: ["r"])],
         "parts[2].from"
       ),
       (
-        "⑥ 毎回全件の取得の行が処理を通って判定へ届く",
+        "毎回全件の取得の行が処理を通って判定へ届く",
         [
           Self.fetch("f", .everything), Self.agent("p", from: ["f"], deliver: .nextPart),
           Self.agent("j", from: ["p"], deliver: .taskCandidates),

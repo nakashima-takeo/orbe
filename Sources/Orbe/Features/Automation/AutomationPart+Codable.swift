@@ -2,8 +2,8 @@ import Foundation
 
 // 部品の JSON の形。読むときに断るのは形の誤りだけで、値と組み合わせは `AutomationGraph` が検証する。
 
-/// `command`（＋`directory`）か `instruction`（＋`agent`〔既定 claude〕・`model`・`tools`）のちょうど一方。`from`・`tools` の
-/// 空の配列は書かないのと同じで、`deliver` の省略は次の部品。
+/// `command`（＋`directory`）か `instruction`（＋`agent`〔既定 claude〕・`model`・`tools`）のちょうど一方。`from` と agent の
+/// `tools` の空の配列は書かないのと同じで、`deliver` の省略は次の部品。
 extension AutomationPart: Codable {
   private enum CodingKeys: String, CodingKey {
     case key, name, trigger, from, command, directory, agent, model, tools, instruction

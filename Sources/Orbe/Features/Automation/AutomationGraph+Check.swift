@@ -75,7 +75,7 @@ extension AutomationGraph {
     }
   }
 
-  /// ② 行き先が次の部品なのに誰も名指さない → ③ 行き先が次の部品でない部品を名指す（名指した側を指す）。
+  /// 行き先が次の部品なのに誰も名指さない → 行き先が次の部品でない部品を名指す（名指した側を指す）。
   static func checkDestinations(_ nodes: [Node], _ upstream: [[Int]], _ downstream: [[Int]])
     throws(AutomationError)
   {
@@ -95,7 +95,7 @@ extension AutomationGraph {
     }
   }
 
-  /// ⑥ タスク候補へ至る取得の部品は毎回全件にできない（取得から消えたリンクの候補を下げる規則が成り立たない）。
+  /// タスク候補へ至る取得の部品は毎回全件にできない（取得から消えたリンクの候補を下げる規則が成り立たない）。
   static func checkCoverage(_ nodes: [Node], _ downstream: [[Int]]) throws(AutomationError) {
     for (index, node) in nodes.enumerated()
     where node.role == .fetch(.everything) && reachesJudge(from: index, nodes, downstream) {
@@ -105,7 +105,7 @@ extension AutomationGraph {
     }
   }
 
-  /// 役割を導く。④ タスク候補を行き先にする部品が行を見ない・⑤ agent の行き先が副作用だけ・取得の性質の有無を断る。
+  /// 役割を導く。タスク候補を行き先にする部品が行を見ない・agent の行き先が副作用だけ・取得の性質の有無を断る。
   private static func role(of part: AutomationPart, _ path: String) throws(AutomationError)
     -> AutomationPartRole
   {
