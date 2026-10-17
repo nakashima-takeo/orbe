@@ -76,8 +76,9 @@ final class ScmPanel {
   @ObservationIgnored private var changesAreStale = true
   @ObservationIgnored private var graphLimit = ScmPanel.graphPage
   @ObservationIgnored private var graphJob = Job()
-  @ObservationIgnored private var headJob = Job()
-  @ObservationIgnored private var headPush: (commit: String, isPushed: Bool)?
+  /// HEAD の push 済みの読み（観測する——▾ の押せる姿が、読みの始まりと終わりに追従する）。
+  private var headJob = Job()
+  private var headPush: (commit: String, isPushed: Bool)?
   /// パネルを出したときに根のサービスがまだ git 管理下と分かっていなかった（最初の status で読む）。
   @ObservationIgnored private var readsOnResolve = false
 
