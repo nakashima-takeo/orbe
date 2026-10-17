@@ -27,8 +27,7 @@ final class ScmCommitStateTests: OrbeTestCase {
     ScmCommitState(
       staged: staged, changes: changes, committable: committable ?? changes, branch: branch,
       messageIsBlank: blank,
-      isNetworking: networking, isCommitting: committing, hasStaged: staged > 0,
-      isHeadPushed: pushed)
+      isNetworking: networking, isCommitting: committing, isHeadPushed: pushed)
   }
 
   /// 変更が 1 つでもあればコミット。押せるのはステージ済みかコミットに入る変更（競合と中身だけ変わったサブモジュールを

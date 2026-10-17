@@ -11,15 +11,7 @@ struct ScmCommitState: Equatable {
     case publish
   }
 
-  /// コミット・amend に入れる範囲。ステージ済みがあれば（`hasStaged`）それだけ、無ければ「変更」のコミットに入る行の
-  /// 全部（確かめない）。
-  enum Scope: Equatable {
-    case staged
-    case all
-  }
-
   let primary: Primary
-  let scope: Scope
   let isPrimaryEnabled: Bool
   /// コミットだけの入口（✓・⌘↵）が押せる。ボタンが同期・公開でもネット操作は起こさない。
   let canCommit: Bool
@@ -32,14 +24,11 @@ struct ScmCommitState: Equatable {
   let canNetwork: Bool
 
   /// `staged`・`changes`・`committable` は見えている行の数（`committable` はステージ済みが無いときにコミットへ入る行）。
-  /// `hasStaged` は押せばコミットより先にステージ済みになっているものがあるか——根のサービスの今の status か、列にある
-  /// ステージ（行の組み直しは status より遅れて当たるので、見えている行の数では決めない）。`isHeadPushed` は nil = 分からない。
+  /// `isHeadPushed` は nil = 分からない。
   init(
     staged: Int, changes: Int, committable: Int, branch: GitStatus.Branch?,
-    messageIsBlank: Bool, isNetworking: Bool, isCommitting: Bool, hasStaged: Bool,
-    isHeadPushed: Bool?
+    messageIsBlank: Bool, isNetworking: Bool, isCommitting: Bool, isHeadPushed: Bool?
   ) {
-    scope = hasStaged ? .staged : .all
     canCommit = (staged > 0 || committable > 0) && !messageIsBlank && !isCommitting
     canNetwork = !isNetworking
     if staged + changes > 0 {
