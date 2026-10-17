@@ -7,7 +7,7 @@ struct GitStatus: Equatable {
     case modified, added, deleted, renamed, copied, typeChanged, unmerged, untracked
   }
 
-  /// サブモジュールのまま作業ツリー側で変わったときの変わり方。どちらも `git restore` では戻らない（サブモジュールの
+  /// 作業ツリー側もサブモジュールのまま変わったときの変わり方。どちらも `git restore` では戻らない（サブモジュールの
   /// HEAD も中のファイルも動かさない）。作業ツリーで消した・ファイルに置き換えたサブモジュールはこれに当たらない。
   enum SubmoduleChange: Equatable {
     /// チェックアウトしているコミットが index と違う（中のファイルの変化を伴うこともある）。`git add` でステージできる。
@@ -221,8 +221,10 @@ struct GitStatus: Equatable {
   }
 
   /// `sub` は `N...`（サブモジュールでない）か `S<c><m><u>`（`c` はチェックアウトしているコミットが変わったら `C`、`m` は
-  /// 中の追跡中のファイルが変わったら `M`、`u` は中に未追跡のファイルがあれば `U`）。サブモジュールのままの変化は作業ツリー
-  /// 側が `M` のもの——作業ツリーで消した・種類が変わったサブモジュール（`D`・`T`）は含めない。
+  /// 中の追跡中のファイルが変わったら `M`、`u` は中に未追跡のファイルがあれば `U`）。`S` は HEAD・index・作業ツリーのどれか
+  /// 1 つでもサブモジュールなら付く。サブモジュールのままの変化は、作業ツリー側が `M` で `C`・`M`・`U` のどれかが立つもの
+  /// ——作業ツリーで消した・種類が変わったサブモジュール（`D`・`T`）と、ファイルに置き換えてから編集したもの（`S...`）は
+  /// 含めない。
   private static func pair(_ xy: Substring, sub: Substring) -> Entry? {
     let chars = Array(xy)
     guard chars.count == 2 else { return nil }
@@ -230,7 +232,7 @@ struct GitStatus: Equatable {
     let flags = Array(sub)
     let submodule: SubmoduleChange? =
       unstaged == .modified && flags.count == 4 && flags[0] == "S"
-      ? (flags[1] == "C" ? .commit : .content) : nil
+      ? (flags[1] == "C" ? .commit : (flags[2] == "M" || flags[3] == "U") ? .content : nil) : nil
     return Entry(staged: change(chars[0]), unstaged: unstaged, unstagedSubmodule: submodule)
   }
 

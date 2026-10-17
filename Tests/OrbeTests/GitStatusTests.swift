@@ -62,7 +62,8 @@ final class GitStatusTests: OrbeTestCase {
       submodule(".M", "S.M.", "dirty"), submodule(".M", "S..U", "untracked"),
       submodule(".M", "SCM.", "moved"), submodule(".M", "SC..", "committed"),
       submodule("M.", "S.M.", "staged"), submodule(".D", "S...", "removed"),
-      submodule(".T", "S...", "replaced"), ordinary(".M", "file.txt"),
+      submodule(".T", "S...", "replaced"), submodule("TM", "S...", "retyped"),
+      ordinary(".M", "file.txt"),
     ])
     let marks = status.entries.mapValues(\.unstagedSubmodule)
     XCTAssertEqual(marks["dirty"], .content)
@@ -72,6 +73,7 @@ final class GitStatusTests: OrbeTestCase {
     XCTAssertEqual(marks["staged"], .some(nil), "作業ツリー側に変化が無い")
     XCTAssertEqual(marks["removed"], .some(nil), "消したサブモジュールは restore で戻る")
     XCTAssertEqual(marks["replaced"], .some(nil), "ファイルに置き換えたサブモジュールは restore で戻る")
+    XCTAssertEqual(marks["retyped"], .some(nil), "ファイルに置き換えてステージした後の編集は普通のファイルの変化")
     XCTAssertEqual(marks["file.txt"], .some(nil))
   }
 
