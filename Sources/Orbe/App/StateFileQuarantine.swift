@@ -1,7 +1,7 @@
 import Foundation
 
-/// 人が積み上げた内容を持つ state ファイル（workspaces.json・tasks.json）の、「在るのに使えなかった原本」を
-/// 守る規律。退避 → 最新 1 件だけ残す → 退避できなければその場所へ書かない、を 1 か所で持つ。
+/// 人が積み上げた内容を持つ state の原本（workspaces.json・tasks.json・automations.json と、DB を入れたフォルダ）の、
+/// 「在るのに使えなかった原本」を守る規律。退避 → 最新 1 件だけ残す → 退避できなければその場所へ書かない、を 1 か所で持つ。
 ///
 /// 読み手は使えなかった原本を見つけたら `quarantine(_:)` を呼び、書き手は `permitsWrite(to:)` を通す。
 /// 直後の既定起動が打つ `.atomic` write は原本を完全に潰すので、退避しないと復元手段が消える。
@@ -19,7 +19,8 @@ struct StateFileQuarantine {
     url != unsalvagedOriginal
   }
 
-  /// 使えなかった原本を隣の `<名前>-broken-<日時>.<拡張子>` へ退避する（最新 1 件だけ残す）。
+  /// 使えなかった原本を隣の `<名前>-broken-<日時>.<拡張子>`（拡張子が無ければ `<名前>-broken-<日時>`）へ退避する
+  /// （最新 1 件だけ残す）。フォルダも 1 回の move で動く。
   /// 先に古い退避物を消してから move するので、退避先の名前は常に空いている——秒精度の
   /// タイムスタンプが同一秒で衝突する問題を構造的に持たない。消えるのは常により古い控えで、
   /// 退避が 2 回起きる系列では 1 件目（＝ユーザーの内容）が消えて 2 件目（＝1 回目の後に書かれた
@@ -29,9 +30,13 @@ struct StateFileQuarantine {
     let fm = FileManager.default
     let dir = url.deletingLastPathComponent()
     let prefix = url.deletingPathExtension().lastPathComponent + "-broken-"
-    let suffix = "." + url.pathExtension
+    let suffix = url.pathExtension.isEmpty ? "" : "." + url.pathExtension
+    // 同じ名前の拡張子違い（`automations-broken-<日時>.json` と `automations-broken-<日時>`）を互いに消さないよう、形の完全一致で選ぶ。
+    let staleName =
+      "^" + NSRegularExpression.escapedPattern(for: prefix) + #"\d{8}-\d{6}"#
+      + NSRegularExpression.escapedPattern(for: suffix) + "$"
     let names = (try? fm.contentsOfDirectory(atPath: dir.path)) ?? []
-    for name in names where name.hasPrefix(prefix) && name.hasSuffix(suffix) {
+    for name in names where name.range(of: staleName, options: .regularExpression) != nil {
       try? fm.removeItem(at: dir.appendingPathComponent(name))
     }
 
