@@ -8,10 +8,10 @@ import XCTest
 ///
 /// 壊れると何が起きるか。返らない子を待つ予定が永久に止まる。打ち切ったはずの claude の子（MCP サーバー・ツールの実行）が
 /// 生き残る。正常に終わった実行が背景に残したプロセスが、Orbe を終えるまで積み上がる。出力の上限が効かず、暴走した出力で
-/// メモリを使い切る。
+/// メモリを使い切る。無出力の上限を外した部品が、黙って考えている間に切られるか、経過時間を過ぎても止まらない。
 final class BackgroundProcessTests: OrbeTestCase {
   private func spec(
-    _ script: String, elapsed: TimeInterval = 30, idle: TimeInterval = 30,
+    _ script: String, elapsed: TimeInterval = 30, idle: TimeInterval? = 30,
     stdout: BackgroundProcess.Stdout = .collect(.init(limit: 1 << 20, overflowStops: true)),
     stderr: BackgroundProcess.Capture = .init(limit: 1 << 20, overflowStops: true),
     stdin: Data? = nil
@@ -134,6 +134,14 @@ final class BackgroundProcessTests: OrbeTestCase {
     let result = try run(spec("sleep 30", idle: 0.5))
 
     XCTAssertEqual(result.outcome.ending, .limited(.idle))
+    XCTAssertLessThan(result.elapsed, 5)
+  }
+
+  /// 無出力の上限を外した実行は、黙っていても切らず、経過時間の上限で止まる。
+  func testWithoutIdleLimitSilentChildRunsUntilTheElapsedLimit() throws {
+    let result = try run(spec("sleep 30", elapsed: 1, idle: nil))
+
+    XCTAssertEqual(result.outcome.ending, .limited(.elapsed))
     XCTAssertLessThan(result.elapsed, 5)
   }
 
