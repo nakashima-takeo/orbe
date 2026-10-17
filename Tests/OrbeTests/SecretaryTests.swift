@@ -83,9 +83,10 @@ final class SecretaryTests: OrbeTestCase {
     let tab = try XCTUnwrap(try homeTabs(wc).first, "Home に claude のタブが起きる")
     XCTAssertEqual(wc.activeTab?.id, tab.id, "そのタブへ移る")
     let command = try XCTUnwrap(tab.surface.initialCommand)
+    let skill = (wc.secretaryPluginName.map { "\($0):" } ?? "") + "automation"
     XCTAssertTrue(
-      command.contains("set_automation") && !command.contains("add_task"),
-      "自動化の定義を書く役目を添える: \(command)")
+      command.contains("`\(skill)`") && !command.contains("add_task"),
+      "自動化のスキルを名指しする役目を添える: \(command)")
     XCTAssertTrue(command.hasSuffix(" -- '依頼: DM を候補に'"), "欄の文は最初の入力: \(command)")
   }
 
