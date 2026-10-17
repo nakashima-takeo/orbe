@@ -19,9 +19,10 @@ struct AutomationPartPass {
     /// `since` は前回成功した回の開始時刻（新着の流れの取得にだけ渡す）。`lastOutput` は前回の出力の項目の id
     /// （接頭の無い元の id。空なら全件が新しい）。
     case fetch(since: Date?, lastOutput: Set<String>)
-    /// `feedsJudge` は直下に判定の部品があるか。あれば、入力の行と `id` で照らせない出力の行も決まりを外した行になる——判定の
-    /// 溜まりには出どころのある行しか積めず、積む時点で黙って消えるため。
-    case process([AutomationPartRow], feedsJudge: Bool)
+    /// `reachesJudge` は、出した行が途中で取得の部品を通らずに判定の部品へ届くか（`AutomationGraph.reachesTaskCandidates`）。
+    /// 届くなら、入力の行と `id` で照らせない出力の行も決まりを外した行になる——判定の溜まりには出どころのある行しか積めず、
+    /// 届いた先で黙って消えるため。処理が続くなら、照らせない行を初めに出した処理が外したことになる。
+    case process([AutomationPartRow], reachesJudge: Bool)
     /// 行はどれも出どころを持つ。`choices` は判断待ちの候補と付け先にできる workspace。
     case judge([AutomationSourcedRow], choices: AutomationJudgeChoices)
     /// 入力の無い報告は空。
@@ -204,9 +205,10 @@ struct AutomationPartPass {
     switch input {
     case .fetch(let since, _):
       return AutomationPrompts.partFetch(request: instruction, since: mark(node, since))
-    case .process(let rows, _):
-      return AutomationPrompts.step(
-        instruction: instruction, rows: rows.map(\.text), now: now, timeZone: timeZone)
+    case .process(let rows, let reachesJudge):
+      return AutomationPrompts.partStep(
+        instruction: instruction, rows: rows.map(\.text), now: now, timeZone: timeZone,
+        reachesJudge: reachesJudge)
     case .judge(let rows, let choices):
       return AutomationPrompts.partJudge(
         instruction: instruction, rows: rows.map(\.text), choices: choices, now: now,

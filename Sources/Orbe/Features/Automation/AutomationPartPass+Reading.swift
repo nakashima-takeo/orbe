@@ -18,9 +18,9 @@ extension AutomationPartPass {
       return reading(result, word) {
         declaringNothing($0) { fetched($0, node, lastOutput: lastOutput, word) }
       }
-    case .process(let rows, let feedsJudge):
+    case .process(let rows, let reachesJudge):
       return reading(result, word) {
-        declaringNothing($0) { processed($0, rows, feedsJudge: feedsJudge) }
+        declaringNothing($0) { processed($0, rows, reachesJudge: reachesJudge) }
       }
     case .judge(let rows, let choices):
       return reading(result, word) { declaringNothing($0) { judged($0, rows, choices) } }
@@ -110,10 +110,10 @@ extension AutomationPartPass {
       count: items.count, lines: lines.sorted { $0.line < $1.line })
   }
 
-  /// 出どころは `id` で入力の行と照らして引き継ぐ。`id` の無い行・同じ `id` の 2 つ目の行・判定へ渡すときの照らせない行は
+  /// 出どころは `id` で入力の行と照らして引き継ぐ。`id` の無い行・同じ `id` の 2 つ目の行・判定へ届くときの照らせない行は
   /// 外れた行。
   private static func processed(
-    _ text: String, _ input: [AutomationPartRow], feedsJudge: Bool
+    _ text: String, _ input: [AutomationPartRow], reachesJudge: Bool
   ) -> Reading {
     var (rows, lines) = AutomationPrompts.objectRows(text)
     let origins = Dictionary(
@@ -129,7 +129,7 @@ extension AutomationPartPass {
         lines.append(AutomationBrokenLine(line: row.line, reason: "id \(id) appeared twice"))
         continue
       }
-      guard !feedsJudge || origins[id] != nil else {
+      guard !reachesJudge || origins[id] != nil else {
         lines.append(
           AutomationBrokenLine(line: row.line, reason: "id \(id) is not the id of an input item"))
         continue
@@ -153,7 +153,9 @@ extension AutomationPartPass {
     {
       switch reading {
       case .success(.propose(let itemId, let title, let due, let workspace)):
-        guard let origin = origins[itemId] else { continue }
+        guard let origin = origins[itemId] else {
+          preconditionFailure("an accepted proposal points at one of the rows")
+        }
         proposals.append(Proposal(origin: origin, title: title, due: due, workspace: workspace))
       case .success(.resolve(let link)):
         resolved.append(link)

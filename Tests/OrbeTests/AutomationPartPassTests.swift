@@ -119,7 +119,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
   func testProcessOutputOfOnlyANothingLinePassesNoRows() throws {
     start(
       AutomationGraphTests.command("p", from: ["f"], deliver: .nextPart), .process,
-      .process([row("a")], feedsJudge: false))
+      .process([row("a")], reachesJudge: false))
 
     jobs.finish(0, printed(#"{"nothing":"残る項目が無い"}"#))
 
@@ -131,7 +131,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
   func testProseBeforeANothingLineBreaksTheRules() throws {
     start(
       AutomationGraphTests.command("p", from: ["f"], deliver: .nextPart), .process,
-      .process([row("a")], feedsJudge: false))
+      .process([row("a")], reachesJudge: false))
 
     jobs.finish(0, printed("どれも条件に合いませんでした。\n" + #"{"nothing":"残る項目が無い"}"#))
 
@@ -143,7 +143,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
   func testNothingLineAlongsideItemsBreaksTheRules() throws {
     start(
       AutomationGraphTests.command("p", from: ["f"], deliver: .nextPart), .process,
-      .process([row("a")], feedsJudge: false))
+      .process([row("a")], reachesJudge: false))
 
     jobs.finish(0, printed(#"{"id":"f:a"}"# + "\n" + #"{"nothing":"b は外した"}"#))
 
@@ -155,7 +155,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
   func testProcessCarriesTheOriginById() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
-      .process([row("a"), row("b")], feedsJudge: false))
+      .process([row("a"), row("b")], reachesJudge: false))
 
     jobs.finish(0, replied(#"{"id":"f:b","note":"x"}"# + "\n" + #"{"id":"new"}"#))
 
@@ -166,11 +166,17 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
     XCTAssertEqual(rows.map(\.origin), [origin("b"), nil])
   }
 
-  /// 判定へ渡す処理の行は、どれも入力の行と `id` で照らせなければならない——照らせない行は判定の溜まりに積めず、黙って消える。
-  func testProcessFeedingAJudgeBreaksTheRulesWithARowItCannotTrace() throws {
-    start(
-      AutomationGraphTests.command("p", from: ["f"], deliver: .nextPart), .process,
-      .process([row("a")], feedsJudge: true))
+  /// 取得 → 処理 a → 処理 b → 判定 では、a の行も判定へ届く。照らせない行は判定の溜まりに積めず黙って消えるので、それを
+  /// 初めに出した a が外したことになる——下流の b には直しようがない。
+  func testProcessWhoseRowsReachAJudgeBreaksTheRulesWithARowItCannotTrace() throws {
+    let graph = try AutomationGraph([
+      AutomationGraphTests.fetch("f"),
+      AutomationGraphTests.command("a", from: ["f"], deliver: .nextPart),
+      AutomationGraphTests.command("b", from: ["a"], deliver: .nextPart),
+      AutomationGraphTests.agent("j", from: ["b"], deliver: .taskCandidates),
+    ])
+    let a = try XCTUnwrap(graph.nodes.first { $0.key == "a" })
+    start(a.part, a.role, .process([row("a")], reachesJudge: graph.reachesTaskCandidates("a")))
 
     jobs.finish(0, printed(#"{"id":"f:a"}"# + "\n" + #"{"id":"new"}"#))
 
@@ -182,7 +188,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
   func testProcessRowWithARepeatedIdBreaksTheRules() throws {
     start(
       AutomationGraphTests.command("p", from: ["f"], deliver: .nextPart), .process,
-      .process([row("a")], feedsJudge: false))
+      .process([row("a")], reachesJudge: false))
 
     jobs.finish(0, printed(#"{"id":"f:a"}"# + "\n" + #"{"id":"f:a","note":"2 度目"}"#))
 

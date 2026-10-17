@@ -48,7 +48,7 @@ final class AutomationPartPassRedoTests: AutomationPartPassTestCase {
   func testRedoThatStillBreaksTheRulesFails() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
-      .process([row("a")], feedsJudge: false))
+      .process([row("a")], reachesJudge: false))
 
     jobs.finish(0, replied(#"{"note":"id を落とした"}"#))
     jobs.finish(1, replied(#"{"id":"f:a"}"# + "\n" + #"{"note":"まだ落とした"}"#))
@@ -63,7 +63,7 @@ final class AutomationPartPassRedoTests: AutomationPartPassTestCase {
   func testCommandOutputThatBreaksTheRulesFailsWithoutARedo() throws {
     start(
       AutomationGraphTests.command("p", from: ["f"], deliver: .nextPart), .process,
-      .process([row("a")], feedsJudge: false))
+      .process([row("a")], reachesJudge: false))
 
     jobs.finish(0, printed(#"{"id":"f:a"}"# + "\n" + #"{"note":"id を落とした"}"#))
 
@@ -76,7 +76,7 @@ final class AutomationPartPassRedoTests: AutomationPartPassTestCase {
   func testNoRedoWhenTheFirstCallUsedUpTheTime() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
-      .process([row("a")], feedsJudge: false))
+      .process([row("a")], reachesJudge: false))
 
     jobs.finish(0, replied(#"{"note":"id を落とした"}"#, took: 600))
 
@@ -89,7 +89,7 @@ final class AutomationPartPassRedoTests: AutomationPartPassTestCase {
   func testRedoTimeLeftExcludesSleepDuringTheFirstCall() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
-      .process([row("a")], feedsJudge: false))
+      .process([row("a")], reachesJudge: false))
 
     jobs.finish(
       0,
@@ -122,7 +122,7 @@ final class AutomationPartPassRedoTests: AutomationPartPassTestCase {
   func testStoppingDuringARedoStopsTheRedo() {
     let handle = start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
-      .process([row("a")], feedsJudge: false))
+      .process([row("a")], reachesJudge: false))
     jobs.finish(0, replied(#"{"note":"id を落とした"}"#))
 
     handle.stop()
