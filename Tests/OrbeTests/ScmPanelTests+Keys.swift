@@ -8,7 +8,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか。↓ がグラフのブランチやコミットの行に止まり、Enter も ← → も効かない行に選択が残る。見出しへ動いた
 /// だけで diff が開く。Enter で開いても焦点が列に残る。畳んだ区分「ソース管理」へ ⌘↑ が焦点を送り、焦点の要求が残って次に
-/// パネルが現れたとき焦点を奪う。
+/// 区分「ソース管理」を開いたとき欄が焦点を奪う。
 extension ScmPanelTests {
   /// 開いた diff と開き方。
   typealias Opened = (key: EditorDiff.Key, opening: ScmPanel.Opening)
