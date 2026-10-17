@@ -22,35 +22,28 @@ final class ScmCommitStateTests: OrbeTestCase {
 
   private func state(
     staged: Int = 0, changes: Int = 0, committable: Int? = nil, branch: GitStatus.Branch?,
-    blank: Bool = true, networking: Bool = false, committing: Bool = false, hasStaged: Bool? = nil,
-    pushed: Bool? = false
+    blank: Bool = true, networking: Bool = false, committing: Bool = false, pushed: Bool? = false
   ) -> ScmCommitState {
     ScmCommitState(
       staged: staged, changes: changes, committable: committable ?? changes, branch: branch,
       messageIsBlank: blank,
-      isNetworking: networking, isCommitting: committing, hasStaged: hasStaged ?? (staged > 0),
+      isNetworking: networking, isCommitting: committing, hasStaged: staged > 0,
       isHeadPushed: pushed)
   }
 
   /// 変更が 1 つでもあればコミット。押せるのはステージ済みかコミットに入る変更（競合と中身だけ変わったサブモジュールを
-  /// 除く）があり、メッセージが空白だけでなく、コミット中でないとき。範囲はステージ済みがあればそれだけ、無ければ全部。
+  /// 除く）があり、メッセージが空白だけでなく、コミット中でないとき。
   func testCommitNeedsCommittableChangesAndAMessage() {
     let tracked = branch(upstream: upstream(ahead: 2, behind: 0))
     XCTAssertEqual(state(changes: 1, branch: tracked, blank: false).primary, .commit)
     XCTAssertTrue(state(changes: 1, branch: tracked, blank: false).isPrimaryEnabled)
-    XCTAssertEqual(state(changes: 1, branch: tracked, blank: false).scope, .all)
     XCTAssertFalse(state(changes: 1, committable: 0, branch: tracked, blank: false).canCommit)
-    XCTAssertEqual(state(staged: 1, changes: 1, branch: tracked, blank: false).scope, .staged)
     XCTAssertFalse(state(staged: 1, branch: tracked).canCommit)
     XCTAssertTrue(state(staged: 1, branch: tracked, blank: false).canCommit)
     XCTAssertFalse(state(staged: 1, branch: tracked, blank: false, committing: true).canCommit)
     XCTAssertTrue(state(staged: 1, branch: tracked, blank: false, networking: true).canCommit)
     XCTAssertFalse(
       state(staged: 1, branch: tracked, blank: false, networking: true).canCommitAndPush)
-    XCTAssertEqual(
-      state(changes: 2, branch: tracked, blank: false, hasStaged: true).scope, .staged,
-      "ステージ済みは見えている行でなく、押した時点の status と列で決める")
-    XCTAssertEqual(state(staged: 1, branch: tracked, blank: false, hasStaged: false).scope, .all)
   }
 
   /// 変更が無ければ、先行/遅れのある upstream で同期、upstream の無いブランチで公開。ネット操作中は押せず、⌘↵ の

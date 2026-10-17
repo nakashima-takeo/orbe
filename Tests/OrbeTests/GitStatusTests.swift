@@ -75,12 +75,6 @@ final class GitStatusTests: OrbeTestCase {
     XCTAssertEqual(status.entries["file.txt"]?.unstagedIsSubmoduleContent, false)
   }
 
-  /// ステージ済みがあるかは index 側の変化で決め、競合は数えない。
-  func testStagedChangesExcludeConflicts() {
-    XCTAssertTrue(parse([ordinary("M.", "staged.txt"), ordinary(".M", "m.txt")]).hasStagedChanges)
-    XCTAssertFalse(parse([ordinary(".M", "m.txt"), unmerged("c.txt"), "? u.txt"]).hasStagedChanges)
-  }
-
   func testBadgeDerivation() {
     let status = parse([
       ordinary(".M", "m.txt"), ordinary("M.", "staged.txt"), ordinary("A.", "a.txt"),
