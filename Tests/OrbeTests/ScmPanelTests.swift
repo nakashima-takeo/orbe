@@ -3,7 +3,8 @@ import XCTest
 
 @testable import Orbe
 
-/// 面ごとのソース管理パネル（実 git）: HEAD が push 済みかの追従・選んだ行が区分から消えたときの選び直し・一括操作と競合。
+/// 面ごとのソース管理パネル（実 git）: HEAD が push 済みかの追従（隠れていた間の push を含む）・選んだ行が区分から消えた
+/// ときの選び直し・一括操作と競合。
 ///
 /// 壊れると何が起きるか。端末で push したコミットを amend・取り消しで書き換えられる（force push を持たないので Orbe の中では
 /// 戻せない）。ステージした行の選択が消えて ↑↓ で見て回る位置を失う・選び直しで diff が勝手に開く。「すべてステージ」が
@@ -49,6 +50,26 @@ final class ScmPanelTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["push", "-q", "origin", "feat"]).isSuccess)
     pumpMain(until: { !self.panel.commitState.canUndo }, "push 済みの HEAD は取り消せない")
     XCTAssertFalse(panel.commitState.canAmend)
+  }
+
+  /// 隠れている間に根のサービスが離され、その間に端末で push していても、出し直した直後（握り直したサービスが git 管理下と
+  /// 分かる前）から amend と取り消しは押せない。
+  func testAHeadPushedWhileThePanelWasHiddenCannotBeRewrittenRightAfterItReappears() throws {
+    repo.addOrigin()
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    try repo.write("b.txt", "b\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "local"]).isSuccess)
+    show(until: { $0.commitState.canUndo }, "未 push の HEAD は取り消せる")
+
+    panel.isShown = false
+    panel.isLive = false
+    XCTAssertTrue(repo.git(["push", "-q", "origin", "feat"]).isSuccess)
+    panel.isLive = true
+    panel.isShown = true
+    XCTAssertFalse(panel.commitState.canUndo, "読み直すまでは分からないとして押せない")
+    pumpMain(until: { self.panel.isHeadPushed == true }, "push 済みと読む")
+    XCTAssertFalse(panel.commitState.canUndo)
   }
 
   /// 選んだ行がステージで区分から消えたら、同じ区分のその位置の行（末尾なら前の行）が選ばれ、diff は開かない。
