@@ -40,8 +40,8 @@ struct AutomationPartPass {
     let count: Int
   }
 
-  /// `Execution` は 1 回目の呼び出しの記録。出し直したなら、その記録は `breach` が持ち、成功の出力は出し直しの出力から読んだ
-  /// もの。`breach` は決まりを外した回だけにある。
+  /// `Execution` は最後の呼び出し（出し直したなら出し直し）の記録で、成功の出力はその出力から読んだもの。出し直したなら、
+  /// 1 回目の記録は `breach` が持つ。`breach` は決まりを外した回だけにある。
   enum Outcome: Equatable {
     case succeeded(Output, Execution, breach: Breach?)
     /// 手段が終わった後に分かった失敗（終わり方・UTF-8 でない・申告されたエラー・決まりを外したまま）。何も渡さない。
@@ -66,9 +66,10 @@ struct AutomationPartPass {
     let redo: Redo?
   }
 
-  /// 出し直しの呼び出し。`lines` は出し直しの出力でまだ外れていた行（通った、または読む前に失敗したなら空）。
+  /// 出し直したこと。`firstCall` は 1 回目の呼び出しの記録（結果の `Execution` は出し直しのもの）。`lines` は出し直しの出力で
+  /// まだ外れていた行（通った、または読む前に失敗したなら空）。
   struct Redo: Equatable {
-    let execution: Execution
+    let firstCall: Execution
     let lines: [AutomationBrokenLine]
   }
 

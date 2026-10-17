@@ -31,13 +31,13 @@ extension AutomationPartPass {
   ) -> Outcome {
     switch read(result, node, input) {
     case .failed(let reason):
-      let redo = Redo(execution: execution(result), lines: [])
-      return .failed(reason, first, breach: Breach(lines: lines, redo: redo))
+      let breach = Breach(lines: lines, redo: Redo(firstCall: first, lines: []))
+      return .failed(reason, execution(result), breach: breach)
     case .read(let output, let count, let still):
-      let breach = Breach(
-        lines: lines, redo: Redo(execution: execution(result, count: count), lines: still))
-      guard still.isEmpty else { return .failed(broke(node, still), first, breach: breach) }
-      return .succeeded(output, first, breach: breach)
+      let breach = Breach(lines: lines, redo: Redo(firstCall: first, lines: still))
+      let last = execution(result, count: count)
+      guard still.isEmpty else { return .failed(broke(node, still), last, breach: breach) }
+      return .succeeded(output, last, breach: breach)
     }
   }
 
