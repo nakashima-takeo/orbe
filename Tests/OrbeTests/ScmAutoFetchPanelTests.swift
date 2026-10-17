@@ -170,8 +170,7 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     XCTAssertEqual(repo.git(["log", "-1", "--format=%s"]).stdoutText, "a\n")
     pumpMain(until: { !autoFetch.rules.isRunning }, "裏の fetch が終わる")
     // 取り下げ損ねた待ちは裏の fetch の終わりで push を起こすので、その push が返るだけ回してから見る。
-    let settled = Date().addingTimeInterval(1)
-    pumpMain(until: { Date() > settled }, "裏の fetch の終わりの後")
+    RunLoop.main.run(until: Date().addingTimeInterval(1))
     XCTAssertEqual(repo.git(["ls-remote", "origin", "main"]).stdoutText, origin, "push しない")
   }
 }
