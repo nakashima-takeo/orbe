@@ -15,9 +15,9 @@ final class RepoWatcher {
     var gitChanged = false
     /// 取りこぼし（イベントの drop・root の付け替え）。全部見直す。
     var scanAll = false
-    /// git の状態のうち ref（HEAD・refs・packed-refs・reftable）が変わった（`gitChanged` の一部。何を ref と見るかは
-    /// `isRefChange`）。
-    var refsChanged = false
+    /// git の状態のうち remote 追跡 ref が動いたかもしれない（`gitChanged` の一部。何をそう見るかは
+    /// `isRemoteRefChange`）。
+    var remoteRefsChanged = false
 
     var isEmpty: Bool { paths.isEmpty && !gitChanged && !scanAll }
 
@@ -25,7 +25,7 @@ final class RepoWatcher {
       paths.formUnion(other.paths)
       gitChanged = gitChanged || other.gitChanged
       scanAll = scanAll || other.scanAll
-      refsChanged = refsChanged || other.refsChanged
+      remoteRefsChanged = remoteRefsChanged || other.remoteRefsChanged
     }
   }
 
@@ -102,7 +102,7 @@ final class RepoWatcher {
       if flag & Self.scanAllFlags != 0 {
         batch.scanAll = true
         batch.gitChanged = true
-        batch.refsChanged = true
+        batch.remoteRefsChanged = true
         continue
       }
       let spelled = respell(path)
@@ -110,7 +110,7 @@ final class RepoWatcher {
         let sub = String(spelled.dropFirst(gitDir.count))
         if Self.isGitStateChange(sub) {
           batch.gitChanged = true
-          if Self.isRefChange(sub) { batch.refsChanged = true }
+          if Self.isRemoteRefChange(sub) { batch.remoteRefsChanged = true }
         }
       } else if !spelled.contains("/.git/"), !spelled.hasSuffix("/.git") {
         batch.paths.insert(spelled)
@@ -143,13 +143,13 @@ final class RepoWatcher {
     return !ignoredGitDirEntries.contains(sub.dropFirst().prefix { $0 != "/" })
   }
 
-  /// git の状態の変化 `sub`（git dir からの相対パス）が ref の変化か——HEAD・refs・packed-refs・reftable。HEAD のコミットと
-  /// remote 追跡 ref はここでしか動かない（index・FETCH_HEAD・ORIG_HEAD・merge の進行状態は ref ではない）。
-  static func isRefChange(_ sub: String) -> Bool {
-    refEntries.contains(sub.dropFirst().prefix { $0 != "/" })
+  /// git の状態の変化 `sub`（git dir からの相対パス）で remote 追跡 ref が動いたかもしれないか——`refs/remotes` の下と、
+  /// どの ref が動いたかを名前で分けられない packed-refs・reftable。HEAD・ローカルのブランチ・タグ・index・FETCH_HEAD は
+  /// remote 追跡 ref ではない。
+  static func isRemoteRefChange(_ sub: String) -> Bool {
+    sub.hasPrefix("/refs/remotes/") || sub == "/refs/remotes" || sub == "/packed-refs"
+      || sub == "/reftable" || sub.hasPrefix("/reftable/")
   }
-
-  private static let refEntries: Set<Substring> = ["HEAD", "refs", "packed-refs", "reftable"]
 
   /// タイマーを `due` に張り直す（常に 1 本）。
   private func arm(at due: Date) {

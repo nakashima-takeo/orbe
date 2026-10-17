@@ -76,6 +76,35 @@ final class ScmPanelTests: OrbeTestCase {
     XCTAssertEqual(panel.changes.staged.map(\.path), ["c.txt"])
   }
 
+  /// 自分のコミットの後、新しい HEAD を読み終えたら、その後に届くコミットの ref の変化（HEAD・ローカルのブランチ）では
+  /// push 済みかを分からないに戻さない——remote 追跡 ref が動いていなければ、同じ HEAD の push 済みは変わらない。
+  func testOwnCommitDoesNotMakeThePushStateUnknownAgain() throws {
+    repo.addOrigin()
+    XCTAssertTrue(repo.git(["switch", "-q", "-c", "feat"]).isSuccess)
+    try repo.write("b.txt", "b\n")
+    show(until: { $0.isHeadPushed == true && $0.changes.changes.count == 1 }, "push 済みの HEAD と変更")
+
+    panel.control.message = "local"
+    panel.commit()
+    idle("コミット")
+    let head = repo.head()
+    pumpMain(until: { self.panel.isHeadPushed == false }, "新しい HEAD は未 push と読む")
+    XCTAssertEqual(panel.branch?.commit, head)
+    var unknown = 0
+    let settled = Date().addingTimeInterval(1.5)
+    pumpMain(
+      until: {
+        if self.panel.isHeadPushed == nil { unknown += 1 }
+        return Date() > settled
+      }, "コミットの ref の変化が監視から届いた後")
+    XCTAssertEqual(unknown, 0)
+    XCTAssertTrue(panel.commitState.canUndo)
+
+    XCTAssertTrue(repo.git(["push", "-q", "origin", "feat"]).isSuccess)
+    pumpMain(until: { !self.panel.commitState.canUndo }, "端末で push した後は取り消せない")
+    XCTAssertFalse(panel.commitState.canAmend)
+  }
+
   /// 自分の push が終わったその時点から、読み直し終わるまで amend と取り消しは押せない（push は HEAD を動かさないので、前の
   /// 「未 push」を残すと push したコミットを書き換えられる）。
   func testRightAfterItsOwnPushTheHeadCannotBeRewritten() throws {

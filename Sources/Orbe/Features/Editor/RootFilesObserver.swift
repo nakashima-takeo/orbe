@@ -10,11 +10,12 @@ protocol RootFilesObserver: AnyObject {
   /// (c) 関心を申告した版の本文の状態が変わった（その版に無くなった・取れなくなったも含む）。
   func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version)
   /// (d) git の状態（ref・HEAD・index など git dir の中）が変わった（監視の 1 バッチに 1 回。取りこぼしでも）。status
-  /// に映らない ref だけの変化（upstream を付けない push・ブランチの作成や削除）も届く。`refsChanged` は ref（HEAD・
-  /// refs・packed-refs・reftable）も変わったか（index だけの変化なら false。取りこぼしなら true）。
-  func rootFilesGitStateDidChange(_ files: RootFiles, refsChanged: Bool)
+  /// に映らない ref だけの変化（upstream を付けない push・ブランチの作成や削除）も届く。`remoteRefsChanged` は remote
+  /// 追跡 ref が動いたかもしれないか（`refs/remotes` の下か、名前で分けられない packed-refs・reftable が変わった。取り
+  /// こぼしなら true。HEAD・ローカルのブランチ・index だけなら false）。
+  func rootFilesGitStateDidChange(_ files: RootFiles, remoteRefsChanged: Bool)
 }
 
 extension RootFilesObserver {
-  func rootFilesGitStateDidChange(_ files: RootFiles, refsChanged: Bool) {}
+  func rootFilesGitStateDidChange(_ files: RootFiles, remoteRefsChanged: Bool) {}
 }
