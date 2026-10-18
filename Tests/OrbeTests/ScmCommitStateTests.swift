@@ -44,7 +44,7 @@ final class ScmCommitStateTests: OrbeTestCase {
       state(staged: 1, branch: tracked, blank: false, networking: true).canCommitAndPush)
   }
 
-  /// 変更が無ければ、先行/遅れのある upstream で同期、upstream の無いブランチで公開。ネット操作中は押せず、⌘↵ の
+  /// 変更が無ければ、先行/遅れのある upstream で同期、upstream の無いブランチで公開。ネット操作中は押せず、↵ の
   /// コミットはどちらでも起きない。
   func testSyncAndPublishReplaceTheButtonOnlyWithoutChanges() {
     let ahead = state(branch: branch(upstream: upstream(ahead: 2, behind: 1)))
