@@ -29,6 +29,10 @@ public protocol TextSurface: AnyObject {
   /// 行う。選択は動かさない。
   func reveal(_ range: NSRange, policy: TextReveal)
 
+  /// 文書の先頭——先頭の行の前の差し込みの上端と左端——へ送る。区間を見せる口は行の上端から見せるので、先頭の行の前の
+  /// 差し込みから見せるのはこの口。
+  func scrollToStart()
+
   /// 選択（UTF-16）。置いても見せない——見せるのは `reveal`。置くと本文が主になる（区画の文の選択と入力欄から本文へ
   /// 戻る。同じ値でも）。
   var selectedRange: NSRange { get set }

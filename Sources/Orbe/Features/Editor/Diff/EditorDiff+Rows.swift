@@ -82,14 +82,16 @@ extension EditorDiff {
   }
 
   /// 初めて並びを置いたときに、最初の変更区間が見える位置へ送る——区間の上の文脈の行から区間の終わりまで（インラインの
-  /// 削除行はその間に差し込まれる）を、中央から、収まらなければ上端から見せる。区間が先頭の行から始まるなら上の文脈の行は
-  /// 無く、削除行は文書の先頭の前に差し込まれる——中央へ送る位置は端の手前に収まり、先頭の差し込みごと見える。
+  /// 削除行はその間に差し込まれる）を、中央から、収まらなければ上端から見せる。区間が先頭の行から始まるなら、削除行は
+  /// 先頭の行の前に差し込まれ、どちらの着地も文書の先頭になる。区間を見せる口は先頭の行の上端から見せ、長い削除行の頭を
+  /// 上へ外すので、文書の先頭へ送る口で送る。
   private func revealFirstChange(on surface: any TextSurface) {
     guard !revealed, let first = currentRows?.hunks.first else { return }
     revealed = true
-    let text = document?.text ?? newRevision?.text ?? TextRope()
     let start = first.newCount > 0 ? first.newStart - 1 : first.newStart
-    let from = min(max(0, start - 1), text.lineCount - 1)
+    guard start > 0 else { return surface.scrollToStart() }
+    let text = document?.text ?? newRevision?.text ?? TextRope()
+    let from = min(start - 1, text.lineCount - 1)
     let to = min(max(from, start + first.newCount - 1), text.lineCount - 1)
     surface.reveal(
       NSRange(location: text.lineStart(from), length: text.lineEnd(to) - text.lineStart(from)),
