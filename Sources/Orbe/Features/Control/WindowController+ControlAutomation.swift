@@ -44,11 +44,19 @@ extension WindowController {
       if let automationId, shelf?.id != automationId { return nil }
       var json: [String: Any] = [
         "proposalId": proposal.id, "state": proposal.state.name, "title": proposal.title,
-        "partKey": proposal.partKey, "sourcePartKey": proposal.sourcePartKey,
         "link": proposal.item.link, "body": proposal.item.body,
         "time": SessionEvent.iso8601(proposal.item.time),
         "proposedAt": SessionEvent.iso8601(proposal.proposedAt),
       ]
+      // 出した自動化と部品の鍵は組で出す——棚の自動化（`automationId`）と別のことがあり、鍵だけでは取り違える。出した自動化が
+      // 消えた後は、指す先が無いので出さない。
+      if automationStore.automation(proposal.automationId) != nil {
+        json["proposedBy"] =
+          [
+            "automationId": proposal.automationId, "partKey": proposal.partKey,
+            "sourcePartKey": proposal.sourcePartKey,
+          ] as [String: Any]
+      }
       if let shelf {
         json["automationId"] = shelf.id
         json["automationName"] = shelf.name

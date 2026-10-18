@@ -154,6 +154,27 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     }
   }
 
+  /// 候補を出した自動化と部品の鍵は組（`proposedBy`）で出し、棚の自動化と取り違えない。出した自動化を消した後は、棚が残っても
+  /// 指す先が無いので出さない。
+  func testProposedByNamesTheProposingAutomationApartFromTheShelf() throws {
+    let wc = try launch()
+    let store = wc.automationStore
+    let first = try set(wc, Self.definition("受信 1"))
+    let second = try set(wc, Self.definition("受信 2"))
+    let moved = Self.item("moved")
+    try Self.round(store, first, fetched: [moved], proposing: [moved])
+    try Self.round(store, second, fetched: [moved])
+    try Self.round(store, first, fetched: [])
+
+    var shelved = try XCTUnwrap(try proposals(wc, of: second).first)
+    XCTAssertEqual(shelved["automationId"] as? Int, second)
+    XCTAssertEqual((shelved["proposedBy"] as? [String: Any])?["automationId"] as? Int, first)
+
+    _ = wc.controlDeleteAutomation(automationId: first)
+    shelved = try XCTUnwrap(try proposals(wc, of: second).first)
+    XCTAssertNil(shelved["proposedBy"])
+  }
+
   /// 候補は付け先が今ある workspace に解けるときだけ、起動ごとの id と名前を持つ（永続 ID は出さない）。付け先が無い・
   /// 消えた候補はキーごと出さない。
   func testProposalsCarryTheirWorkspaceOnlyWhenItResolves() throws {
@@ -170,8 +191,10 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
     XCTAssertEqual(listed["対応: a"]?["workspaceId"] as? Int, main.id)
     XCTAssertEqual(listed["対応: a"]?["workspaceName"] as? String, "main")
-    XCTAssertEqual(listed["対応: a"]?["partKey"] as? String, "judge")
-    XCTAssertEqual(listed["対応: a"]?["sourcePartKey"] as? String, "fetch")
+    let proposedBy = listed["対応: a"]?["proposedBy"] as? [String: Any]
+    XCTAssertEqual(proposedBy?["automationId"] as? Int, id)
+    XCTAssertEqual(proposedBy?["partKey"] as? String, "judge")
+    XCTAssertEqual(proposedBy?["sourcePartKey"] as? String, "fetch")
     for title in ["対応: b", "対応: c"] {
       XCTAssertNil(listed[title]?["workspaceId"], title)
       XCTAssertNil(listed[title]?["workspaceName"], title)

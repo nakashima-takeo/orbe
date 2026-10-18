@@ -274,14 +274,16 @@ private func scheduleCell(_ parts: [[String: Any]], next: String?) -> String {
   return scheduled.count == 1 ? shown.words : "\(shown.words) +\(scheduled.count - 1)"
 }
 
-/// 最新の部品の回の要約。回の記録だけから組む: `<開始> <鍵> failed: <理由>`、または `<開始> <鍵>: ` に、取得は
-/// `12 fetched, 3 new`、処理は `12 in, 4 out`、判定は `2 proposed`、報告は `reported` か `nothing to report`、副作用は
-/// `command exited 0`、仕事は `agent exited 0` を続ける。
+/// 最新の部品の回の要約（時刻が同じなら鍵の大きい方。アプリの部品の回の並びと揃える）。回の記録だけから組む:
+/// `<開始> <鍵> failed: <理由>`、または `<開始> <鍵>: ` に、取得は `12 fetched, 3 new`、処理は `12 in, 4 out`、判定は
+/// `2 proposed`、報告は `reported` か `nothing to report`、副作用は `command exited 0`、仕事は `agent exited 0` を続ける。
 private func lastRunCell(_ parts: [String: [String: Any]]) -> String? {
   let latest = parts.compactMap { key, part in
     ((part["runs"] as? [[String: Any]])?.first).map { (key: key, run: $0) }
-  }.max { ($0.run["startedAt"] as? String ?? "") < ($1.run["startedAt"] as? String ?? "") }
-  guard let (key, run) = latest.map({ ($0.key, $0.run) }) else { return nil }
+  }.max {
+    ($0.run["startedAt"] as? String ?? "", $0.key) < ($1.run["startedAt"] as? String ?? "", $1.key)
+  }
+  guard let (key, run) = latest else { return nil }
   let started = run["startedAt"].map(display) ?? "?"
   if let failure = run["failure"] as? String { return "\(started) \(key) failed: \(failure)" }
   let execution = run["execution"] as? [String: Any]
