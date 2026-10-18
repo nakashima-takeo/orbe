@@ -158,6 +158,47 @@ extension EditorDiffTests {
     XCTAssertTrue(try textPixels(after) == expected, "開き直した diff と同じ絵")
   }
 
+  /// 先頭の行の前の削除行を見ている間に index が変わってステージ済み diff の新しい側が替わっても、新しい面は削除行の頭から
+  /// 見せる（先頭の行へ送り直して、削除行を上へ外さない）。インラインでも並列でも同じ。
+  func testAStagedDiffFollowingTheIndexKeepsTheDeletionBeforeTheFirstLineInView() throws {
+    let lines = (0..<200).map { "line \($0)" }
+    try repo.write("head.txt", lines.joined(separator: "\n") + "\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "long"]).isSuccess)
+    var kept = Array(lines[100...])
+    try repo.write("head.txt", kept.joined(separator: "\n") + "\n")
+    XCTAssertTrue(repo.git(["add", "head.txt"]).isSuccess)
+    let modes = EditorDiffModeState()
+    let (tab, _) = tab()
+    tab.group.view.editor.configure(
+      translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
+      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(), diffModes: modes)
+    for mode in [EditorDiff.Mode.inline, .side] {
+      modes.select(mode)
+      let diff = try tab.group.editor.openDiff(id("head.txt", .staged), as: .pinned)
+      pumpMain(until: { diff.revealed }, "\(mode): 最初の変更区間へ送る")
+      let before = try engine(diff.newSurface)
+      before.flush()
+      XCTAssertEqual(before.viewportLines.first, 0, "前提: \(mode): 削除行の頭から見える")
+
+      kept[90] = "changed \(mode)"
+      let staged = kept.joined(separator: "\n") + "\n"
+      try repo.write("head.txt", staged)
+      XCTAssertTrue(repo.git(["add", "head.txt"]).isSuccess)
+      pumpMain(
+        until: {
+          diff.newRevision?.text.contiguousUnits().count == staged.utf16.count
+            && diff.carriedTop == nil
+        }, "\(mode): 新しい index の本文が届き、先頭を引き継ぐ")
+      let after = try engine(diff.newSurface)
+      XCTAssertFalse(after === before, "前提: \(mode): 面が作り直される")
+      after.flush()
+      XCTAssertLessThan(after.viewportLines.visible, 100, "前提: 削除行は見えている高さより長い")
+      XCTAssertEqual(after.viewportLines.first, 0, "\(mode): 削除行の頭から見え続ける")
+      tab.group.editor.close(.diff(id("head.txt", .staged)))
+    }
+  }
+
   /// 面の絵の画素（縦スクロールバーの列を除く——つまみの見え方は時間で変わる）。
   private func textPixels(_ surface: MetalTextSurface) throws -> [UInt8] {
     surface.flush()

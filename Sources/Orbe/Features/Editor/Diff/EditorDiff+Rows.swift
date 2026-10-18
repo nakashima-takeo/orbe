@@ -41,11 +41,13 @@ extension EditorDiff {
     revealFirstChange(on: surface)
   }
 
-  /// 作り直した新しい側の面で、前の面の先頭の行を先頭に見せる。
+  /// 作り直した新しい側の面で、前の面の先頭の行を先頭に見せる。先頭の行なら、その前に差し込んだ削除行を上へ外さない
+  /// よう、文書の先頭へ送る。
   private func carryTop(to surface: any TextSurface) {
     guard let row = carriedTop, let text = newRevision?.text else { return }
     carriedTop = nil
     revealed = true
+    guard row > 0 else { return surface.scrollToStart() }
     surface.reveal(
       NSRange(location: text.lineStart(min(row, text.lineCount - 1)), length: 0), policy: .top)
   }
