@@ -53,7 +53,7 @@ enum AutomationEnding: Equatable {
     case .agentMissing(let cli): "not started (\(cli) is not installed)"
     case .directoryMissing(let directory): "not started (directory missing: \(directory))"
     case .notStarted(let reason): "not started (\(reason))"
-    case .toolsUnavailable(let tools): "tools unavailable: \(tools.joined(separator: ", "))"
+    case .toolsUnavailable(let tools): BackgroundEnding.unavailable(tools)
     case .heldByTrial: "held by the trial"
     case .givenToTrial: "rows given to the trial"
     }
