@@ -78,6 +78,7 @@ final class AutomationTrial {
   private(set) var endedAt: Date?
   /// 流す前に終わった理由（写している間に範囲の部品が消えた など）。
   private(set) var failure: String?
+  /// 部品ごとの回（本番の `runs` と同じく新しい順）。
   private(set) var passes: [String: [Pass]] = [:]
 
   private let source: AutomationRunner
@@ -325,7 +326,7 @@ final class AutomationTrial {
     case .fetch, .process, .judge, .report:
       content = run.failed ? .none : Self.content(of: record.end.outcome)
     }
-    passes[key, default: []].append(Pass(run: run, content: content))
+    passes[key, default: []].insert(Pass(run: run, content: content), at: 0)
   }
 
   private static func content(of outcome: AutomationPartPass.Outcome) -> Content {

@@ -213,6 +213,31 @@ final class AutomationTrialTests: OrbeTestCase {
     XCTAssertEqual(trial.passes["p"]?.first?.content, AutomationTrial.Content.none)
   }
 
+  /// 1 つの部品が何度も回ると、回は本番の `runs` と同じく新しい順に並ぶ。
+  func testRunsOfAPartAreNewestFirstAsInProduction() throws {
+    let id = try define([
+      fetch("gh"), fetch("backlog"),
+      part("digest", .arrival, from: ["gh", "backlog"], deliver: .report),
+    ])
+    let trial = try trials.start(id, .init())
+    waitCalls("backlog", 1)
+    finish("gh", fetched(["a"]))
+    waitCalls("digest", 1)
+    finish("digest", "1 回目")
+    finish("backlog", fetched(["b"]))
+    waitCalls("digest", 2)
+    finish("digest", "2 回目")
+    ended(trial)
+
+    XCTAssertEqual(
+      trial.passes["digest"]?.map(\.run.result), [.report(text: "2 回目"), .report(text: "1 回目")])
+    let parts = try XCTUnwrap(trial.json { _ in nil }["parts"] as? [[String: Any]])
+    let runs = try XCTUnwrap(
+      parts.first { $0["key"] as? String == "digest" }?["runs"] as? [[String: Any]])
+    XCTAssertEqual(
+      runs.map { ($0["result"] as? [String: Any])?["text"] as? String }, ["2 回目", "1 回目"])
+  }
+
   // MARK: - 止める部品・与える行・limit
 
   /// 副作用は手段を起こさず、渡るはずだった行を止めた行として返す。

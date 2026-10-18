@@ -206,7 +206,7 @@ let automationTools: [[String: Any]] = [
     (
       "description",
       "自動化の最新の試走を読む。部品ごとに state（waiting / running / done / held / untouched）と回の列を返す。"
-        + "回は list_automations の runs と同じ形に、取得・処理は rows（下流へ渡す行）、判定は proposals と resolved を足す。"
+        + "回は list_automations の runs と同じ形・同じ新しい順に、取得・処理は rows（下流へ渡す行）、判定は proposals と resolved を足す。"
         + "止めた副作用・仕事の回は held.rows（渡るはずだった行）だけ。wait: true なら試走の終わりまで待ち、"
         + "timeoutMs（既定 3600000・上限 86400000）を過ぎたらその時点の結果に timedOut:true を付けて返す。"
     ),

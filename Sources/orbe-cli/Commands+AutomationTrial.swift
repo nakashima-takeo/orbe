@@ -78,7 +78,7 @@ func automationTrial(_ rest: [String]) -> Never {
   if let failure = trial?["failure"] as? String { print("failed: \(failure)") }
   for part in trial?["parts"] as? [[String: Any]] ?? [] {
     let key = part["key"] as? String ?? "?"
-    let cell = (part["runs"] as? [[String: Any]])?.last.map { run in
+    let cell = (part["runs"] as? [[String: Any]])?.first.map { run in
       guard let held = run["held"] as? [String: Any] else { return runCell(key, run) }
       return "held \((held["rows"] as? [Any])?.count ?? 0) rows"
     }
