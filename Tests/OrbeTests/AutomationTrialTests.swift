@@ -167,6 +167,28 @@ final class AutomationTrialTests: OrbeTestCase {
     XCTAssertEqual(ids("p"), ["gh:b"])
   }
 
+  /// 写しの中のほかの自動化は、試走の道と同じ鍵の部品でも、溜まりに行のある「届いたら」の部品でも起こさない（写しでも手段は
+  /// 本物）。手段のスクリプトは x・y で、試走する自動化の部品と見分ける。
+  func testATrialDoesNotWakeOtherAutomationsInTheCopy() throws {
+    let other = try define([
+      DesignSceneFixtures.commandPart(
+        "gh", "gh", .scheduled(.every(Self.far)), script: "x", coverage: .currentSet),
+      DesignSceneFixtures.commandPart(
+        "d", "d", .arrival, from: ["gh"], script: "y", deliver: .report),
+    ])
+    try runner.flow(other, to: .part("gh"))
+    finish("x", fetched(["a"]))
+    XCTAssertEqual(calls("y").count, 1, "前提: 本番の y が走っていて、取った行はまだ溜まりにある")
+    let id = try define([fetch("gh"), part("d", from: ["gh"], deliver: .report)])
+
+    let trial = try trials.start(id, .init())
+    waitCalls("gh", 1)
+    finish("gh", fetched([]))
+    ended(trial)
+
+    XCTAssertEqual(calls("y").count, 1)
+  }
+
   /// 処理が `id` の無い行を出すと、試走の回は本番の回と同じ失敗の理由と外した行の記録で返る。
   func testABreachInATrialReadsTheSameAsInProduction() throws {
     let id = try define([
