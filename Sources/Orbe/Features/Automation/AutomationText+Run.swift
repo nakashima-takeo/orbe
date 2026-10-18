@@ -1,8 +1,9 @@
 import Foundation
 
 /// 回の失敗と外れた行の、画面の言い方。種類から説明を引き、日本語の画面では AI が読む英文（原文）を括弧で添える。原文は
-/// 英語なので、英語の画面では説明と同じことを 2 度言わないよう添えない。Orbe が種類を決められない文（部品の申告・CLI の
-/// エラー）は、説明の頭の後に文をそのまま添え、原文を重ねない。
+/// 英語なので、英語の画面では原文を重ねず（説明と同じことを 2 度言うため）、原文にだけある抜粋（標準エラー・最初の外れた
+/// 行）を「説明: 抜粋」で添える。Orbe が種類を決められない文（部品の申告・CLI のエラー）は、説明の頭の後に文をそのまま
+/// 添え、原文を重ねない。
 extension AutomationText {
   /// 「制限時間内に終わらなかった（the part "x" ended: stopped at the time limit）」。
   func failure(_ run: AutomationPartRun, node: AutomationGraph.Node) -> String? {
@@ -10,10 +11,23 @@ extension AutomationText {
     let head = failureHead(failure, ending: run.execution.ending, node: node)
     switch failure {
     case .agentError, .reported: return head
-    case _ where l10n.language == .en: return head
+    case _ where l10n.language == .en:
+      return excerpt(failure, breach: run.breach).map {
+        l10n.format(.automationFailureExcerpt, head, $0)
+      } ?? head
     default:
       let original = failure.text(part: node.key, ending: run.execution.ending, breach: run.breach)
       return l10n.format(.automationWithOriginal, head, original)
+    }
+  }
+
+  /// 説明が言わず、原文にだけある抜粋（標準エラーか応答の抜粋・最初の外れた行）。無ければ nil。
+  private func excerpt(_ failure: AutomationFailure, breach: AutomationPartRun.Breach?) -> String? {
+    switch failure {
+    case .ended(let detail), .noReply(let detail): detail.isEmpty ? nil : detail
+    case .brokeRules:
+      breach.flatMap { $0.redo?.lines.lines.first ?? $0.lines.lines.first }.map(line)
+    case .notUTF8, .agentError, .reported, .unsourced: nil
     }
   }
 

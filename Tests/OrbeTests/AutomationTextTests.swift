@@ -41,8 +41,8 @@ final class AutomationTextTests: OrbeTestCase {
     return node
   }
 
-  /// 失敗は日本語の説明に原文を括弧で添える。部品の申告は説明の頭に文を添え、原文を重ねない。英語の画面は原文を添えない
-  /// （説明も原文も英語で、同じことを 2 度言うため）。
+  /// 失敗は日本語の説明に原文を括弧で添える。部品の申告は説明の頭に文を添え、原文を重ねない。英語の画面は原文を重ねず
+  /// （説明も原文も英語で、同じことを 2 度言うため）、原文にだけある抜粋（標準エラー・最初の外れた行）だけを添える。
   func testFailureSaysTheKindWithTheOriginal() {
     XCTAssertEqual(
       text.failure(failed(.ended(detail: ""), ending: .timeLimit), node: Self.judge),
@@ -57,6 +57,19 @@ final class AutomationTextTests: OrbeTestCase {
       Self.automationText(.en).failure(
         failed(.ended(detail: ""), ending: .timeLimit), node: Self.judge),
       "didn’t finish within the time limit")
+    XCTAssertEqual(
+      Self.automationText(.en).failure(
+        failed(.ended(detail: "boom"), ending: .exited(1)), node: Self.judge),
+      "exited with code 1: boom")
+    var broke = failed(.brokeRules, ending: .exited(0))
+    broke.breach = AutomationPartRun.Breach(
+      lines: AutomationRejections([AutomationBrokenLine(line: 2, fault: .notJSON)]),
+      redo: AutomationPartRun.Redo(
+        firstCall: broke.execution,
+        lines: AutomationRejections([AutomationBrokenLine(line: 3, fault: .missingKey("link"))])))
+    XCTAssertEqual(
+      Self.automationText(.en).failure(broke, node: Self.judge),
+      "output format errors weren’t fixed: line 3: missing link", "出し直しでも外れていた最初の行")
   }
 
   /// 外れた行は「n 行目：<説明>」。

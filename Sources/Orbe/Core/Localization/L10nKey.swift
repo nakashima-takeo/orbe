@@ -412,6 +412,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationBreachFailed
   case automationYesterday
   case automationWithOriginal
+  case automationFailureExcerpt
   case automationEndExited
   case automationEndSignaled
   case automationEndTimeLimit

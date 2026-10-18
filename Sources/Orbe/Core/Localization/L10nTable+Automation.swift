@@ -81,6 +81,7 @@ extension L10n {
     .automationBreachFailed: ("失敗した", "failed"),
     .automationYesterday: ("昨日 %@", "yesterday %@"),
     .automationWithOriginal: ("%1$@（%2$@）", "%1$@ (%2$@)"),
+    .automationFailureExcerpt: ("%1$@：%2$@", "%1$@: %2$@"),
     .automationEndExited: ("終了コード %lld で終わった", "exited with code %lld"),
     .automationEndSignaled: ("途中で止められた（シグナル %lld）", "stopped midway (signal %lld)"),
     .automationEndTimeLimit: ("制限時間内に終わらなかった", "didn’t finish within the time limit"),
