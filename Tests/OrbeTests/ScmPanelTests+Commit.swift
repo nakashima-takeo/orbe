@@ -245,7 +245,8 @@ extension ScmPanelTests {
       })
     XCTAssertNil(panel.control.failure)
     XCTAssertEqual(repo.git(["rev-parse", "HEAD~1"]).stdoutText, parent)
-    XCTAssertEqual(repo.git(["show", "--name-only", "--format=%s", "HEAD"]).stdoutText, "again\n\na.txt\n")
+    XCTAssertEqual(
+      repo.git(["show", "--name-only", "--format=%s", "HEAD"]).stdoutText, "again\n\na.txt\n")
   }
 
   /// 自分のコミットが終わって行に出る前に外でコミットされると、その後に押した amend は、自分が動かした先と違う HEAD として
@@ -284,7 +285,8 @@ extension ScmPanelTests {
     idle("プルとコミット")
     XCTAssertNil(panel.control.failure)
     XCTAssertEqual(
-      repo.git(["rev-parse", "HEAD~1"]).stdoutText, repo.git(["rev-parse", "origin/main"]).stdoutText)
+      repo.git(["rev-parse", "HEAD~1"]).stdoutText,
+      repo.git(["rev-parse", "origin/main"]).stdoutText)
     XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "s.txt\n")
   }
 

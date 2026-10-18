@@ -227,7 +227,8 @@ struct GitStatus: Equatable {
     let fields = token.split(separator: " ", maxSplits: 8, omittingEmptySubsequences: false)
     guard fields.count == 9, let entry = pair(fields[1], sub: fields[2]) else { return nil }
     return Line(
-      path: String(fields[8]), entry: entry, index: IndexVersion(mode: fields[4], object: fields[7]))
+      path: String(fields[8]), entry: entry,
+      index: IndexVersion(mode: fields[4], object: fields[7]))
   }
 
   /// `2 XY sub mH mI mW hH hI Xscore path`（元パスは次のトークン）
