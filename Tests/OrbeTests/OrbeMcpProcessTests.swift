@@ -109,6 +109,10 @@ final class OrbeMcpProcessTests: OrbeTestCase {
         && description(prompt, property: "timeoutMs")
           .contains("既定 \(WaitTimeout.promptDefaultMs)・上限 \(WaitTimeout.maxMs)"),
       "prompt_agent の既定 / 上限が WaitTimeout と食い違っている: \(description(prompt))")
+    XCTAssertTrue(
+      description(try tool("get_automation_trial")).contains(
+        "timeoutMs（既定 \(WaitTimeout.promptDefaultMs)・上限 \(WaitTimeout.maxMs)）"),
+      "get_automation_trial の既定 / 上限が WaitTimeout と食い違っている")
     for name in ["spawn_agent", "resume_agent"] {
       XCTAssertTrue(
         description(try tool(name), property: "timeoutMs")
