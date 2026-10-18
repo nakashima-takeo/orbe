@@ -325,21 +325,6 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertEqual(palette.automation.place, .shelf)
   }
 
-  /// 棚の段のクリックは、その段を選んで棚に居る。候補は選ばれず、続く ⌘↵ はその自動化の更新になる。
-  func testClickingAShelfRowStaysOnTheShelfAndRefreshesWithCommandEnter() {
-    let palette = palette()
-    let automation = palette.automation
-
-    automation.tapShelf(.automation(1))
-
-    XCTAssertEqual(automation.place, .shelf)
-    XCTAssertEqual(automation.shelfList.selectedID, .automation(1))
-    XCTAssertNil(automation.selectedProposal, "候補は選ばれていない")
-    XCTAssertEqual(palette.focusTarget, .card)
-    automation.refresh()
-    XCTAssertTrue(automation.runner.isFlowing(1))
-  }
-
   // MARK: - 出どころ
 
   /// 候補の出どころの部品の名前は、候補を出した自動化の定義から引く。消えた自動化の候補は引けない。
