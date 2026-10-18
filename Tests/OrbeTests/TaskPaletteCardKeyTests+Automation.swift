@@ -147,6 +147,19 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.automation.place, .field, "文字があるときの ← は文字の間を動く")
   }
 
+  /// 候補の一覧の → は何もしない（居場所も選んでいる行も変わらない）。
+  func testAutomationRightArrowOnTheProposalsDoesNothing() {
+    let model = listedAutomationModel()
+    let window = mount(model)
+    arrow(Key.down, to: window)
+
+    arrow(Key.right, to: window)
+
+    XCTAssertEqual(model.automation.place, .proposals)
+    XCTAssertEqual(model.automation.selectedProposal?.id, 2)
+    XCTAssertEqual(model.query, "")
+  }
+
   /// 棚で ↵ を押し続けても、押し始めの ↵ で候補の一覧へ入って止まる——続くリピートで候補をタスクにしない。
   func testAutomationEnterHeldOnTheShelfStopsAtTheProposals() {
     let model = automationModel()

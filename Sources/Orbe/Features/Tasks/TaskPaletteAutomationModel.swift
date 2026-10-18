@@ -240,8 +240,9 @@ enum TaskPaletteAutomationError: Equatable {
 
   func jumpShelf(_ direction: Int) {
     error = nil
+    let previous = shelfList.selectedID
     shelfList.jump(direction, in: shelfIDs)
-    proposalList.selectFirst(in: proposalIDs)
+    if shelfList.selectedID != previous { proposalList.selectFirst(in: proposalIDs) }
   }
 
   /// 棚の段のクリック。選んで候補の一覧に入る。

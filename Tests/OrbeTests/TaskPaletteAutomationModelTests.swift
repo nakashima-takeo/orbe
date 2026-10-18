@@ -293,6 +293,27 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertEqual(automation.selectedProposal?.id, 1)
   }
 
+  /// 棚の端の ⌘↑ / ⌘↓ で段が変わらなければ、覚えている行は残る。
+  func testJumpingTheShelfWithoutChangingTheRowKeepsTheRememberedRow() throws {
+    let automation = listed().automation
+    automation.moveProposal(1)
+    automation.enterShelf()
+
+    automation.jumpShelf(-1)
+    automation.enterProposals()
+    XCTAssertEqual(automation.selectedProposal?.id, 2, "先頭の段で ⌘↑")
+
+    for id in [2, 3, 4] { try automation.runner.delete(id) }
+    automation.reconcile()
+    automation.tapShelf(.automation(1))
+    automation.moveProposal(1)
+    automation.enterShelf()
+    automation.jumpShelf(1)
+    automation.enterProposals()
+    XCTAssertEqual(automation.shelfList.selectedID, .automation(1), "前提: 末尾の段")
+    XCTAssertEqual(automation.selectedProposal?.id, 2, "末尾の段で ⌘↓")
+  }
+
   func testSwitchingTabsKeepsTheAutomationState() {
     let palette = palette()
     palette.automation.tapShelf(.automation(2))
