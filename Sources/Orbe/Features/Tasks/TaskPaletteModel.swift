@@ -263,7 +263,7 @@ struct TaskPaletteTaskList {
   }
 
   var focusTarget: TaskPaletteFocusTarget {
-    if visibleTab == .automation { return automation.place == .proposals ? .field : .card }
+    if visibleTab == .automation { return automation.place == .shelf ? .card : .field }
     switch draft?.target {
     case .task(_, let field): return .edit(field)
     case .paneDue: return .paneDue

@@ -23,12 +23,21 @@ struct Automation: Equatable, Identifiable {
   }
 
   /// 判定の部品を持つか。タスク候補の棚・累計・重なりはこれを持つ自動化の単位。
-  var judges: Bool { graph.nodes.contains { $0.role == .judge } }
+  var judges: Bool { !graph.judges.isEmpty }
 
   /// 部品の状態。グラフの部品はいつも状態を持つ。
   func state(_ key: String) -> AutomationPartState {
     guard let state = parts[key] else { preconditionFailure("every part has a state: \(key)") }
     return state
+  }
+
+  /// 最後の回が失敗した部品（その失敗の新しい順）。
+  var failedParts: [AutomationGraph.Node] {
+    graph.nodes.compactMap { node in
+      state(node.key).runs.first.flatMap { $0.failed ? (node: node, at: $0.startedAt) : nil }
+    }
+    .sorted { ($0.at, $0.node.key) > ($1.at, $1.node.key) }
+    .map(\.node)
   }
 
   /// 部品の回をすべて、新しい順に混ぜたもの。
@@ -175,8 +184,9 @@ enum AutomationError: Error, Equatable {
   case proposalNotOpen(Int)
   /// 値か組み合わせが不変条件に反する。
   case invalid(String)
-  /// 起こせる部品が無い（入力の無い部品がどれも走っている）。
-  case running(Int)
+  case partNotFound(Int, String)
+  /// 流している途中に流そうとした。
+  case flowing(Int)
   /// 自動化の DB を使えない、または書けなかった。
   case unavailable(String)
 }

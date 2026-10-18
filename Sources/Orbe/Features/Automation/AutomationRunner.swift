@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// 自動化の部品を 1 つずつ番人に載せ、部品の契機ごとに「溜まりから取る → 部品の 1 回 → 確定」を回す。main で使う。
 ///
@@ -13,25 +14,32 @@ import Foundation
 /// （同じ行で失敗をすぐ繰り返さない）。代わりに、「届いたら」でない部品の契機が終わるたびに、下流の「届いたら」の部品を
 /// 溜まりがあればすべて起こす（祖先の予定の間隔でやり直す）。
 ///
+/// 流す（`flow`）は、部品を指してそこに至る道の上の部品を 1 回ずつ回す（`AutomationFlow`）。一巡は自動化ごとに高々 1 つで、
+/// メモリだけに持つ。走らせ役は契機の始まりと終わりを一巡へ知らせ、返った部品を「今すぐ」で起こす。道の上の部品を番人から
+/// 外すと一巡を打ち切る——待っている回の終わりが来なくなるので。観測に載せるのは一巡だけで（画面が一巡の有無を読む）、他の
+/// 持ち物は部品の回のたびに変わるので観測から外す。
+///
 /// 部品の回を記録するたびに `recorded` で自動化と部品の鍵を知らせる（知らせるかどうか・何を出すかは受けた側がストアの今の値
 /// から決める）。定義を書いたら `defined`、消したら `deleted` で知らせる。
-final class AutomationRunner {
+@Observable final class AutomationRunner {
   let store: AutomationStore
-  var now: () -> Date = Date.init
-  var calendar: () -> Calendar = { Calendar.current }
+  @ObservationIgnored var now: () -> Date = Date.init
+  @ObservationIgnored var calendar: () -> Calendar = { Calendar.current }
 
   private let scheduler: BackgroundScheduler
   private let run: BackgroundScheduler.Run
-  private let workspaces: () -> AutomationWorkspaces
+  let workspaces: () -> AutomationWorkspaces
   private let recorded: (Int, String) -> Void
   private let defined: (Int) -> Void
   private let deleted: (Int) -> Void
   /// 番人に載せている鍵。
-  private var registered = Set<String>()
+  @ObservationIgnored private var registered = Set<String>()
   /// 部品ごとの、前の契機の始まりの時点の最も新しい通し番号（メモリだけ。無ければ溜まりの行はすべて新しい）。
-  private var marks: [String: Int] = [:]
+  @ObservationIgnored private var marks: [String: Int] = [:]
   /// 部品ごとの、番人に最後に返した数え始め。記録の無い契機（取る行が 0 件）でも進むので、次の時刻はこれから数える。
-  private var anchors: [String: Date] = [:]
+  @ObservationIgnored private var anchors: [String: Date] = [:]
+  /// 自動化ごとの、流している途中の一巡。
+  private var flows: [Int: AutomationFlow] = [:]
 
   /// `workspaces` はタスク候補の付け先にできる今の workspace。判定の部品にだけ渡す。
   init(
@@ -64,6 +72,11 @@ final class AutomationRunner {
 
   func isRunning(_ id: Int, _ key: String) -> Bool {
     scheduler.isRunning(id: Self.key(id, key))
+  }
+
+  /// 流している途中か（一巡があるか）。
+  func isFlowing(_ id: Int) -> Bool {
+    flows[id] != nil
   }
 
   /// `now`（渡さなければ走らせ役の今）から見て、どれかの部品が次に予定で回る時刻（止めていれば nil）。
@@ -122,13 +135,29 @@ final class AutomationRunner {
     deleted(id)
   }
 
-  /// 入力の無い部品のうち走っていないものを今すぐ起こす（止めた自動化も受ける）。1 つも起こせなければ断る。
-  func runNow(_ id: Int) throws(AutomationError) {
+  /// 指した部品まで流す（止めた自動化も受ける）。流している途中なら断る。指す部品が無ければ一巡を置かない（置くと終わりの
+  /// 知らせが来ず、以後ずっと断る）。
+  func flow(_ id: Int, to target: AutomationFlow.Target) throws(AutomationError) {
     try checkAvailable()
     guard let automation = store.automation(id) else { throw .automationNotFound(id) }
-    let starts = automation.graph.nodes.filter { $0.part.inputs.isEmpty && !isRunning(id, $0.key) }
-    guard !starts.isEmpty else { throw .running(id) }
-    for node in starts { scheduler.runNow(id: Self.key(id, node.key)) }
+    let targets: [String]
+    switch target {
+    case .part(let key):
+      guard automation.graph.node(key) != nil else { throw .partNotFound(id, key) }
+      targets = [key]
+    case .ends:
+      targets = automation.graph.ends.map(\.key)
+    case .judges:
+      targets = automation.graph.judges.map(\.key)
+    }
+    guard flows[id] == nil else { throw .flowing(id) }
+    guard !targets.isEmpty else { return }
+    let (flow, wake) = AutomationFlow.start(to: targets, in: automation.graph) {
+      isRunning(id, $0)
+    }
+    // 「今すぐ」の中で契機が同期に始まり終わりうるので、起こす前に一巡を置く。
+    flows[id] = flow
+    for part in wake { scheduler.runNow(id: Self.key(id, part)) }
   }
 
   private func checkAvailable() throws(AutomationError) {
@@ -165,9 +194,10 @@ final class AutomationRunner {
     for node in automation.graph.nodes { wake(id, node.key) }
   }
 
-  /// 外す。走っている回は止め、その結果は捨てる。起こす決まりの番号と数え始めも忘れる。
+  /// 外す。走っている回は止め、その結果は捨てる。起こす決まりの番号と数え始めも忘れ、この部品を道に含む一巡を打ち切る。
   private func unregister(_ id: Int, _ part: String) {
     let key = Self.key(id, part)
+    if flows[id]?.path.contains(part) == true { flows[id] = nil }
     scheduler.remove(id: key)
     registered.remove(key)
     marks[key] = nil
@@ -175,6 +205,7 @@ final class AutomationRunner {
   }
 
   private func unregisterAll() {
+    flows = [:]
     for key in registered { scheduler.remove(id: key) }
     registered = []
     marks = [:]
@@ -218,6 +249,8 @@ extension AutomationRunner {
     var lastStart: Date?
     var current: BackgroundRunHandle?
     var cancelled = false
+    /// 一巡の分として受け取った契機か。
+    var flowed = false
 
     init(
       automationId: Int, part: String, kind: AutomationPartRun.Trigger, startedAt: Date,
@@ -236,7 +269,7 @@ extension AutomationRunner {
     _ finish: @escaping (Date) -> Void
   ) -> BackgroundRunHandle {
     // 番人の上に「走っている」を残さないよう、部品が無ければ契機はすぐ終わったものとして知らせる。
-    guard let node = store.automation(id)?.graph.node(part) else {
+    guard let automation = store.automation(id), let node = automation.graph.node(part) else {
       finish(now())
       return BackgroundRunHandle {}
     }
@@ -244,6 +277,11 @@ extension AutomationRunner {
       automationId: id, part: part,
       kind: node.part.trigger == .arrival ? .arrival : kind == .now ? .now : .schedule,
       startedAt: now(), finish: finish)
+    // 一巡があるときだけ触れる（触れるだけで観測が切れ、流していない自動化の回のたびに画面が描き直される）。
+    if var flow = flows[id] {
+      trigger.flowed = flow.started(part, in: automation.graph)
+      flows[id] = flow
+    }
     if node.part.inputs.isEmpty {
       pass(trigger, take: nil)
     } else {
@@ -326,7 +364,8 @@ extension AutomationRunner {
   }
 
   /// 契機を終える。番人へ返す数え始めは最後の回の始まり（回が無ければ契機の始まり）。終えた後に、「届いたら」の部品なら
-  /// 走っている間に届いた行を起こす決まりを見て、そうでなければ下流をやり直す。
+  /// 走っている間に届いた行を起こす決まりを見て、そうでなければ下流をやり直す。一巡へはその後に知らせる——「届いたら」の
+  /// 部品が普段の決まりで起き直さなかったことを見てから終わりと数えるため。
   private func end(_ trigger: Trigger) {
     let anchor = trigger.lastStart ?? trigger.startedAt
     anchors[Self.key(trigger.automationId, trigger.part)] = anchor
@@ -339,51 +378,14 @@ extension AutomationRunner {
     } else {
       retry(below: trigger.part, in: trigger.automationId)
     }
+    flowEnded(trigger)
   }
 
-  /// 役割の入力を組む唯一の場所。取得と仕事は行の席を持たない入力なので、ツールを持ちうる agent へ溜まりの行は渡らない
-  /// （溜まりは起こすかの門にだけ使う）。行を読む役割で、取った行が 1 つも読めなければ nil。
-  private func input(
-    _ node: AutomationGraph.Node, _ automation: Automation, _ take: AutomationInbox.Take?
-  ) throws(AutomationError) -> AutomationPartPass.Input? {
-    let state = automation.state(node.key)
-    var rows: [AutomationPartRow] = []
-    switch node.role {
-    case .process, .judge, .report, .sideEffect:
-      if let take {
-        rows = try store.rows(take.taken)
-        guard !rows.isEmpty else { return nil }
-      }
-    case .fetch, .work:
-      break
-    }
-    switch node.role {
-    case .fetch:
-      return .fetch(since: state.succeededAt, lastOutput: Set(state.lastOutput.map(\.id)))
-    case .work:
-      return .work
-    case .process:
-      return .process(rows, reachesJudge: automation.graph.reachesTaskCandidates(node.key))
-    case .judge:
-      // 判定の溜まりの出どころの無い行は、取るときに捨ててある。
-      let sourced = rows.compactMap { row in
-        row.origin.map { AutomationSourcedRow(id: row.id, text: row.text, origin: $0) }
-      }
-      return .judge(
-        sourced,
-        choices: AutomationJudgeChoices(
-          open: store.openProposals(of: automation.id, judge: node.key),
-          workspaces: workspaces()))
-    case .report:
-      return .report(rows)
-    case .sideEffect:
-      return .sideEffect(rows, runId: Self.runId(automation.id, node.key, state.anchor))
-    }
-  }
-
-  /// 回の ID（`<自動化 ID>-<部品の鍵>-<数え始めのミリ秒>`）。数え始めは記録された回でだけ進むので、止めた回・書けなかった回の
-  /// やり直しは同じ ID になる。
-  static func runId(_ id: Int, _ part: String, _ anchor: Date) -> String {
-    "\(id)-\(part)-\(AutomationPersistence.millis(anchor))"
+  private func flowEnded(_ trigger: Trigger) {
+    let id = trigger.automationId
+    guard var flow = flows[id], let graph = store.automation(id)?.graph else { return }
+    let wake = flow.ended(trigger.part, flowed: trigger.flowed, in: graph) { isRunning(id, $0) }
+    flows[id] = flow.finished ? nil : flow
+    for part in wake { scheduler.runNow(id: Self.key(id, part)) }
   }
 }

@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 提案タブの左の棚。先頭に「すべて」、続いて受信ごとに名前・件数・2 行目（次の時刻 / 停止中 / 実行中…）。提案の無い受信は
-/// 減光する。下に、受信を足す・変える口が Home のボードであることを添える（この画面では定義を変えない）。
+/// 提案タブの左の棚。先頭に「すべて」、続いて自動化ごとに名前・件数・2 行目（次の判定 / 停止中 / 更新中…と、失敗した部品）。
+/// 候補の無い自動化は減光する。下に、自動化を足す・変える口が Home のボードであることを添える（この画面では定義を変えない）。
 struct TaskPaletteAutomationShelf: View {
   @Bindable var model: TaskPaletteAutomationModel
   @Environment(\.localization) private var l10n
@@ -33,10 +33,9 @@ struct TaskPaletteAutomationShelf: View {
 
   private func row(_ row: TaskPaletteAutomationShelfRow) -> some View {
     TaskPaletteAutomationShelfRowView(
-      row: row, running: row.automation.map(model.isRunning) ?? false,
-      next: row.automation.flatMap(model.nextRunAt),
+      row: row, status: row.automation.map { model.status(of: $0, count: row.count) },
       text: AutomationText(l10n: l10n, today: model.today, timeZone: model.timeZone),
-      selected: model.shelfList.selectedID == row.id
+      selected: model.shelfList.selectedID == row.id, focused: model.place == .shelf
     )
     .contentShape(Rectangle())
     .onTapGesture { model.tapShelf(row.id) }
@@ -45,13 +44,14 @@ struct TaskPaletteAutomationShelf: View {
   }
 }
 
-/// 棚の 1 段。印はどの受信も共通（出どころの種類は知らない）。
+/// 棚の 1 段。印はどの受信も共通（出どころの種類は知らない）。棚に焦点が無い間は、選択の地を薄くする（選んでいるが、
+/// キーが届く場所ではない）。
 private struct TaskPaletteAutomationShelfRowView: View {
   let row: TaskPaletteAutomationShelfRow
-  let running: Bool
-  let next: Date?
+  let status: TaskPaletteAutomationShelfStatus?
   let text: AutomationText
   let selected: Bool
+  let focused: Bool
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
@@ -79,8 +79,8 @@ private struct TaskPaletteAutomationShelfRowView: View {
             .font(Font.theme.workspaceName)
             .foregroundStyle(Color.theme.textMuted)
         }
-        if let automation = row.automation {
-          status(automation)
+        if let status {
+          line(status)
             .font(Font.theme.meta)
             .lineLimit(2)
         }
@@ -91,7 +91,10 @@ private struct TaskPaletteAutomationShelfRowView: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
       RoundedRectangle(cornerRadius: Theme.Radius.row)
-        .fill(selected ? Color.theme.selectionFill : .clear))
+        .fill(
+          selected
+            ? (focused ? Color.theme.selectionFill : Color.theme.surfaceInk.opacity(0.06))
+            : .clear))
   }
 
   private var name: String {
@@ -100,22 +103,25 @@ private struct TaskPaletteAutomationShelfRowView: View {
 
   private var dimmed: Bool { row.automation != nil && row.count == 0 }
 
-  /// 「次回 17:00 · 候補なし · 前回は失敗」。実行中は強調色、前回の失敗は赤（どちらも文字でも言う）。
-  private func status(_ automation: Automation) -> Text {
+  /// 「次の判定 9:00 · 候補なし · 判定: 連絡 · 失敗」。更新中は強調色でそれだけ、失敗した部品は赤（どちらも文字でも言う）。
+  private func line(_ status: TaskPaletteAutomationShelfStatus) -> Text {
     let muted = { (value: String) in Text(value).foregroundStyle(Color.theme.textMuted) }
-    var parts: [Text] = []
-    if running {
-      parts.append(
-        Text(l10n.string(.automationRunning)).foregroundStyle(Color.theme.accentBright))
-    } else if automation.paused {
-      parts.append(muted(l10n.string(.automationPaused)))
-    } else if let next {
-      parts.append(muted(text.next(next)))
+    guard case .standing(let plan, let noCandidates, let failed) = status else {
+      return Text(l10n.string(.taskPaletteAutomationRefreshing))
+        .foregroundStyle(Color.theme.accentBright)
     }
-    if row.count == 0 { parts.append(muted(l10n.string(.taskPaletteAutomationNoProposals))) }
-    if automation.runs.first?.run.failed == true {
-      parts.append(
-        Text(l10n.string(.taskPaletteAutomationLastFailed)).foregroundStyle(Color.theme.danger))
+    var parts: [Text] = []
+    switch plan {
+    case .paused: parts.append(muted(l10n.string(.automationPaused)))
+    case .at(let date):
+      parts.append(muted(l10n.format(.taskPaletteAutomationNextJudge, text.stamp(date))))
+    case .onArrival: parts.append(muted(l10n.string(.taskPaletteAutomationJudgeOnArrival)))
+    case .manual: parts.append(muted(l10n.string(.taskPaletteAutomationJudgeManual)))
+    case nil: break
+    }
+    if noCandidates { parts.append(muted(l10n.string(.taskPaletteAutomationNoProposals))) }
+    if let failed = text.failed(failed) {
+      parts.append(Text(failed).foregroundStyle(Color.theme.danger))
     }
     guard let first = parts.first else { return Text("") }
     return parts.dropFirst().reduce(first) { $0 + muted(" · ") + $1 }

@@ -2,13 +2,14 @@ import XCTest
 
 @testable import Orbe
 
-/// ⌘⇧X の提案タブ——棚と提案の一覧を同一性で選び、居場所（提案の一覧・棚・中身）を移り、提案をタスクにする・捨てる、受信を
-/// 今すぐ実行・止める・消す。本物の `AutomationStore`・`AutomationRunner`・`TaskStore` を読み書きする（取得は始まっても終わらない）。
+/// ⌘⇧X の提案タブ——棚と候補の一覧を同一性で選び、居場所（絞り込み欄・棚・候補の一覧）を移り、候補をタスクにする・捨てる、
+/// 自動化の候補を今すぐ更新する。本物の `AutomationStore`・`AutomationRunner`・`TaskStore` を読み書きする（部品の回は始まっても
+/// 終わらない）。
 ///
-/// 壊れると何が起きるか。↵ や ⌘⌫ が光っている行とは別の提案に当たる（タスクにした・捨てた直後や、裏の回が確定した直後）。
-/// タスクにした提案が付け先（無ければ Home）に付かず、期限やリンクを失う。開いている間に消えた付け先に付き、行き場の無い
-/// タスクになる。消えた受信の中身が残り、⌘⌫ が別の受信を消す。
-/// 走っている受信の今すぐ実行が黙って無視される。
+/// 壊れると何が起きるか。↵ や ⌘⌫ が光っている行とは別の候補に当たる（タスクにした・捨てた直後や、裏の回が確定した直後）。
+/// 印の無い候補が絞り込み欄の ↵ でタスクになる。タスクにした候補が付け先（無ければ Home）に付かず、期限やリンクを失う。
+/// 開いている間に消えた付け先に付き、行き場の無いタスクになる。更新中の自動化の ⌘↵ が黙って無視される。棚の 2 行目が
+/// 次に候補が来うる時を言わない。
 @MainActor
 final class TaskPaletteAutomationModelTests: OrbeTestCase {
   func palette() -> TaskPaletteModel {
@@ -18,6 +19,13 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
         DesignSceneFixtures.automationDesignSamples()),
       workspaces: { DesignSceneFixtures.taskWorkspaces })
     palette.setTab(.automation)
+    return palette
+  }
+
+  /// 候補の一覧に居る提案タブ。
+  func listed() -> TaskPaletteModel {
+    let palette = palette()
+    palette.automation.enterProposals()
     return palette
   }
 
@@ -31,8 +39,9 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertEqual(automation.shelfRows.map(\.count), [3, 2, 1, 0, 0])
     XCTAssertEqual(automation.shelfList.selectedID, .all)
     XCTAssertEqual(automation.proposalIDs, [1, 2, 3], "同じ回の中は判定の出力順")
-    XCTAssertEqual(automation.proposalList.selectedID, 1)
-    XCTAssertEqual(automation.place, .proposals)
+    XCTAssertEqual(automation.proposalList.selectedID, 1, "覚えている行は先頭")
+    XCTAssertEqual(automation.place, .field)
+    XCTAssertNil(automation.selectedProposal, "開いた直後は候補が選ばれていない")
   }
 
   /// 棚は判定の部品を持つ自動化だけを並べる。副作用のコマンドで終わる自動化は候補を出さないので出さない。
@@ -63,7 +72,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
   }
 
   func testShelfSelectionFiltersProposalsAndSelectsTheFirst() {
-    let automation = palette().automation
+    let automation = listed().automation
     automation.moveProposal(1)
 
     automation.moveShelf(1)
@@ -89,7 +98,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
   // MARK: - さばく
 
   func testEnterMakesATodoTaskOnTheProposalsWorkspaceAndSelectsTheSamePosition() throws {
-    let palette = palette()
+    let palette = listed()
     let tasks = palette.store.tasks.count
 
     palette.submit()
@@ -123,6 +132,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     let palette = TaskPaletteSamples.model([], automations: runner)
     palette.setTab(.automation)
     let automation = palette.automation
+    automation.enterProposals()
 
     XCTAssertEqual(
       automation.proposals.map { automation.destination(of: $0)?.name },
@@ -146,6 +156,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
           workspaces: [TaskPaletteSamples.other.id, nil, nil])),
       workspaces: { current })
     palette.setTab(.automation)
+    palette.automation.enterProposals()
     let proposal = try XCTUnwrap(palette.automation.selectedProposal)
     XCTAssertEqual(palette.automation.destination(of: proposal)?.name, "web-app")
 
@@ -158,7 +169,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
   }
 
   func testDismissMakesNoTaskAndSelectsTheSamePosition() {
-    let palette = palette()
+    let palette = listed()
     palette.automation.moveProposal(1)
 
     palette.automation.dismiss()
@@ -171,7 +182,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
 
   /// 選んでいる提案が付け直しの前にさばかれていた（判定の確定や別の口と行き違った）なら、↵ は何もせず赤も出さない。
   func testEnterOnAProposalThatIsNoLongerOpenDoesNothing() throws {
-    let palette = palette()
+    let palette = listed()
     try palette.automation.store.dismiss(1)
 
     palette.submit()
@@ -187,6 +198,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
       automations: DesignSceneFixtures.automationRunner(
         DesignSceneFixtures.automationDesignSamples(estimateTitle: "改行\nを含む")))
     palette.setTab(.automation)
+    palette.automation.enterProposals()
     var opened: [Int] = []
     palette.onOpenWorktreePalette = { opened.append($0) }
 
@@ -199,13 +211,33 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
   }
 
   func testOpenLinkOpensTheProposalLink() {
-    let palette = palette()
+    let palette = listed()
     var opened: [URL] = []
     palette.onOpenURL = { opened.append($0) }
 
     palette.automation.openLink()
 
     XCTAssertEqual(opened, [URL(string: "https://example.slack.com/archives/D01-1")!])
+  }
+
+  /// 絞り込み欄と棚では、覚えている行は選ばれていないので、↵・⌘↵・⌘⌫・⌘O は候補に効かない。
+  func testProposalKeysDoNothingOutsideTheList() {
+    let palette = palette()
+    var opened: [URL] = []
+    palette.onOpenURL = { opened.append($0) }
+    let automation = palette.automation
+
+    for place in [automation.enterField, automation.enterShelf] {
+      place()
+      palette.submit()
+      automation.acceptAndOpen()
+      automation.dismiss()
+      automation.openLink()
+    }
+
+    XCTAssertEqual(palette.store.tasks.count, 1, "タスクは足さない")
+    XCTAssertEqual(automation.store.proposals.map(\.state), [.open, .open, .open])
+    XCTAssertEqual(opened, [])
   }
 
   // MARK: - 居場所
@@ -215,20 +247,71 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     let automation = palette.automation
     XCTAssertEqual(palette.focusTarget, .field)
 
-    automation.enterContents()
-    XCTAssertEqual(automation.place, .proposals, "「すべて」に中身は無い")
-
     automation.enterShelf()
     XCTAssertEqual(palette.focusTarget, .card)
     automation.moveShelf(1)
-    automation.showProposals()
-    automation.enterContents()
-    XCTAssertEqual(automation.place, .contents)
-    XCTAssertEqual(palette.focusTarget, .card)
-
-    palette.returnToField()
+    automation.enterProposals()
     XCTAssertEqual(automation.place, .proposals)
     XCTAssertEqual(palette.focusTarget, .field)
+    XCTAssertEqual(automation.selectedProposal?.id, 1)
+
+    automation.enterShelf()
+    palette.returnToField()
+    XCTAssertEqual(automation.place, .field, "棚から入力欄のクリックで絞り込み欄へ")
+    XCTAssertEqual(palette.focusTarget, .field)
+  }
+
+  /// 棚は端で巡回しない。先頭の ↑ は絞り込み欄へ戻り、末尾の ↓ はそこで止まる。
+  func testTheShelfStopsAtItsEndsAndItsTopLeadsToTheField() {
+    let automation = palette().automation
+    automation.enterShelf()
+
+    automation.moveShelf(-1)
+    XCTAssertEqual(automation.place, .field)
+    XCTAssertEqual(automation.shelfList.selectedID, .all)
+
+    automation.enterShelf()
+    automation.jumpShelf(1)
+    automation.moveShelf(1)
+    XCTAssertEqual(automation.shelfList.selectedID, .automation(4))
+    XCTAssertEqual(automation.place, .shelf)
+  }
+
+  /// 候補の一覧の位置は覚えて戻る。棚の段を替えたらその段の先頭。
+  func testTheListRemembersItsRowAcrossTheShelf() {
+    let automation = listed().automation
+    automation.moveProposal(1)
+
+    automation.enterShelf()
+    XCTAssertNil(automation.selectedProposal)
+    automation.enterProposals()
+    XCTAssertEqual(automation.selectedProposal?.id, 2)
+
+    automation.enterShelf()
+    automation.moveShelf(1)
+    automation.enterProposals()
+    XCTAssertEqual(automation.selectedProposal?.id, 1)
+  }
+
+  /// 棚の端の ⌘↑ / ⌘↓ で段が変わらなければ、覚えている行は残る。
+  func testJumpingTheShelfWithoutChangingTheRowKeepsTheRememberedRow() throws {
+    let automation = listed().automation
+    automation.moveProposal(1)
+    automation.enterShelf()
+
+    automation.jumpShelf(-1)
+    automation.enterProposals()
+    XCTAssertEqual(automation.selectedProposal?.id, 2, "先頭の段で ⌘↑")
+
+    for id in [2, 3, 4] { try automation.runner.delete(id) }
+    automation.reconcile()
+    automation.tapShelf(.automation(1))
+    automation.moveProposal(1)
+    automation.enterShelf()
+    automation.jumpShelf(1)
+    automation.enterProposals()
+    XCTAssertEqual(automation.shelfList.selectedID, .automation(1), "前提: 末尾の段")
+    XCTAssertEqual(automation.selectedProposal?.id, 2, "末尾の段で ⌘↓")
   }
 
   func testSwitchingTabsKeepsTheAutomationState() {
@@ -239,58 +322,21 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     palette.setTab(.automation)
 
     XCTAssertEqual(palette.automation.shelfList.selectedID, .automation(2))
+    XCTAssertEqual(palette.automation.place, .shelf)
   }
 
-  // MARK: - 受信の中身
+  // MARK: - 出どころ
 
-  func testRunNowShowsRunningAndRefusesWhileRunning() {
-    let automation = palette().automation
+  /// 候補の出どころの部品の名前は、候補を出した自動化の定義から引く。消えた自動化の候補は引けない。
+  func testSourceNameComesFromTheProposingAutomation() {
+    let palette = TaskPaletteSamples.model(
+      [],
+      automations: DesignSceneFixtures.automationRunner(
+        DesignSceneFixtures.automationShelfSamples()))
+    let automation = palette.automation
     automation.tapShelf(.automation(1))
-    automation.enterContents()
 
-    automation.perform(.runNow)
-    XCTAssertTrue(automation.isRunning(automation.selectedAutomation!))
-    XCTAssertNil(automation.error)
-
-    automation.perform(.runNow)
-    XCTAssertEqual(automation.error, .refused(.running), "走っている間は赤で断る")
-  }
-
-  /// 提案タブの赤は、タブを替えた操作の境目で消える（戻ったときに当てはまらない赤が残らない）。
-  func testLeavingTheTabClearsItsError() {
-    let palette = palette()
-    palette.automation.tapShelf(.automation(1))
-    palette.automation.enterContents()
-    palette.automation.perform(.runNow)
-    palette.automation.perform(.runNow)
-    XCTAssertEqual(palette.automation.error, .refused(.running))
-
-    palette.setTab(.tasks)
-    palette.setTab(.automation)
-
-    XCTAssertNil(palette.automation.error)
-  }
-
-  func testSpaceTogglesPause() {
-    let automation = palette().automation
-    automation.tapShelf(.automation(4))
-
-    automation.perform(.togglePause)
-    XCTAssertEqual(automation.selectedAutomation?.paused, false)
-    XCTAssertNotNil(automation.nextRunAt(automation.selectedAutomation!), "再開すれば次の時刻が出る")
-    automation.perform(.togglePause)
-    XCTAssertEqual(automation.selectedAutomation?.paused, true)
-  }
-
-  func testDeleteReturnsToProposalsAndSelectsTheSameShelfPosition() {
-    let automation = palette().automation
-    automation.tapShelf(.automation(2))
-    automation.enterContents()
-
-    automation.perform(.delete)
-
-    XCTAssertNil(automation.store.automation(2))
-    XCTAssertEqual(automation.place, .proposals)
-    XCTAssertEqual(automation.shelfList.selectedID, .automation(3))
+    XCTAssertEqual(
+      automation.proposals.map(automation.sourceName(of:)), ["GitHub", "Backlog", nil])
   }
 }

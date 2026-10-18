@@ -11,26 +11,24 @@ extension L10n {
       "To add or change auto-adds, ask from the Home board"
     ),
     .taskPaletteAutomationNoProposals: ("候補なし", "no candidates"),
-    .taskPaletteAutomationLastFailed: ("前回は失敗", "last run failed"),
-    .taskPaletteAutomationContents: ("中身", "Details"),
+    .taskPaletteAutomationNextJudge: ("次の判定 %@", "next judge %@"),
+    .taskPaletteAutomationJudgeOnArrival: ("新着が届くたびに判定", "judges each new arrival"),
+    .taskPaletteAutomationJudgeManual: ("判定は手動（⌘↵ で更新）", "manual judge (⌘↵ to refresh)"),
+    .taskPaletteAutomationRefreshing: ("更新中…", "refreshing…"),
     .taskPaletteAutomationEmpty: ("候補はありません", "No candidates"),
     .taskPaletteAutomationOpenLink: ("%@ で開く", "Open on %@"),
     .taskPaletteAutomationAsTask: ("タスクにすると", "As a task"),
     .taskPaletteAutomationDismiss: ("捨てる", "Dismiss"),
     .taskPaletteAutomationActionAccept: ("%1$@ をタスクにする", "Make %1$@ a task"),
-    .taskPaletteAutomationActionProposals: ("候補の一覧へ", "Back to candidates"),
-    .taskPaletteAutomationActionRunNow: ("%1$@ を今すぐ実行", "Run %1$@ now"),
+    .taskPaletteAutomationActionProposals: ("候補の一覧へ", "Go to candidates"),
+    .taskPaletteAutomationActionRefresh: ("%1$@ の候補を今すぐ更新", "Refresh candidates of %1$@ now"),
     .taskPaletteAutomationHintShelf: ("棚へ", "shelf"),
     .taskPaletteAutomationHintPick: ("自動追加", "auto-add"),
-    .taskPaletteAutomationHintBack: ("候補へ", "candidates"),
-    .taskPaletteAutomationLast: ("前回", "Last run"),
-    .taskPaletteAutomationOverlaps: ("重なり", "Overlaps"),
-    .taskPaletteAutomationOverlapCount: ("%1$@ と %2$lld 件", "%2$lld with %1$@"),
-    .taskPaletteAutomationRewriteNote: (
-      "名前・部品は、ボードから頼むと agent がまとめて書き換える",
-      "Ask from the board, and an agent rewrites the name and the parts together"
-    ),
+    .taskPaletteAutomationHintProposals: ("候補へ", "candidates"),
     .taskPaletteAutomationErrAccept: ("タスクにできませんでした", "Couldn’t make it a task"),
+    .taskPaletteAutomationErrRefreshing: (
+      "更新中のため、今は更新できません", "Already refreshing — can’t refresh now"
+    ),
 
     // MARK: 自動化の共有の文
     .automationNext: ("次回 %@", "next %@"),
@@ -38,6 +36,8 @@ extension L10n {
     .automationRunning: ("実行中…", "running…"),
     .automationFailed: ("失敗 — %@", "failed — %@"),
     .automationNeverRan: ("まだ回っていない", "not run yet"),
+    .automationFailedPart: ("%@ · 失敗", "%@ · failed"),
+    .automationFailedParts: ("%1$@ ほか %2$lld 件 · 失敗", "%1$@ +%2$lld · failed"),
     .automationNowMark: ("今すぐ", "now"),
     .automationToday: ("今日", "today"),
     .automationDue: ("期限 %1$@（%2$@）", "Due %1$@ (%2$@)"),
@@ -67,7 +67,6 @@ extension L10n {
     .automationRoleSideEffect: ("副作用", "Side effect"),
     .automationManual: ("手動", "manual"),
     .automationArrival: ("届いたら", "on arrival"),
-    .automationParts: ("部品", "Parts"),
     .automationFetchedFresh: ("%1$lld 件取得 → 新しい %2$lld 件", "fetched %1$lld → %2$lld new"),
     .automationTakenTo: ("%1$lld 件 → %2$lld 件", "%1$lld → %2$lld"),
     .automationTakenProposedOne: ("%1$lld 件 → 候補 %2$lld", "%1$lld → %2$lld candidate"),

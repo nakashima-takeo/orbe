@@ -5,11 +5,12 @@ import XCTest
 
 /// 提案タブの flow（ファイル分割の拡張）。撮り方・出力先は本体の `flow` を共有する。
 extension DesignFlowSnapshotTests {
-  /// ⇥ で GitHub タブ・提案タブへ・打って絞り込み・⌘⌫ で捨てる（同じ位置の行が選ばれる）・↵ でタスクにする・← で棚・受信を選ぶ・
-  /// → で中身（コマンドの受信と軽い agent の受信）・今すぐ実行（実行中…と、走っている間の断り）・space で止める・
-  /// ⌘⌫ で削除・タスクのタブでタスクが Home に付いている、までを撮る。
+  /// ⇥ で GitHub タブ・提案タブへ（絞り込み欄に居て候補は選ばれていない）・打って絞り込み・↓ で棚・段を移る・⌘↵ で更新中…・
+  /// 更新中の ⌘↵ の断り・→ で候補の一覧（先頭が選ばれる）・↓ で 2 行目・← で棚・→ で同じ行・⌘⌫ で捨てる（同じ位置の行が
+  /// 選ばれる）・↵ でタスクにする・← と ↑ で絞り込み欄・タスクのタブでタスクが Home に付いている、までを撮る。
   func testTaskPaletteAutomation() throws {
-    let palette = DesignSceneFixtures.taskPaletteModel()
+    let palette = DesignSceneFixtures.taskPaletteModel(
+      automations: DesignSceneFixtures.automationShelfSamples())
     let automation = palette.automation
     try flow(
       "task_palette_automation", size: NSSize(width: 1440, height: 900),
@@ -24,30 +25,24 @@ extension DesignFlowSnapshotTests {
         ("start", {}),
         ("tab_github", { palette.setTab(palette.tab.next) }),
         ("tab_automation", { palette.setTab(palette.tab.next) }),
-        ("filtered", { palette.query = "週報" }),
+        ("filtered", { palette.query = "直す" }),
         ("cleared", { palette.query = "" }),
-        ("dismissed", { automation.dismiss() }),
-        ("accepted", { palette.submit() }),
         ("shelf", { automation.enterShelf() }),
         ("shelf_down", { automation.moveShelf(1) }),
+        ("refreshing", { automation.refresh() }),
+        ("refresh_refused", { automation.refresh() }),
+        ("proposals", { automation.enterProposals() }),
+        ("proposals_down", { automation.moveProposal(1) }),
+        ("back_to_shelf", { automation.enterShelf() }),
+        ("same_row", { automation.enterProposals() }),
+        ("dismissed", { automation.dismiss() }),
+        ("accepted", { palette.submit() }),
         (
-          "contents_command",
+          "field",
           {
-            automation.showProposals(); automation.enterContents()
+            automation.enterShelf(); automation.moveShelf(-1); automation.moveShelf(-1)
           }
         ),
-        ("run_now", { automation.perform(.runNow) }),
-        ("run_refused", { automation.perform(.runNow) }),
-        (
-          "contents_agent",
-          {
-            automation.showProposals(); automation.enterShelf()
-            automation.moveShelf(1); automation.moveShelf(1)
-            automation.showProposals(); automation.enterContents()
-          }
-        ),
-        ("paused", { automation.perform(.togglePause) }),
-        ("deleted", { automation.perform(.delete) }),
         ("tasks_tab", { palette.setTab(.tasks) }),
       ])
   }

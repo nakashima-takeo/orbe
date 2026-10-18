@@ -13,8 +13,8 @@ extension TaskPaletteModel {
       return .handled
     }
     // 入口が 1 つなので、押し始めを受けたここへキーリピートも届き続ける。押し始めと違う場所に届いたリピートは場所の
-    // キーにせず、焦点の持ち主（編集欄なら文字入力）へ流す（esc を押し続けて一段より深く抜けない・→ を押し続けて
-    // 棚から中身まで入らない。詳細の ↵ を押し続けると、編集を始めた後のリピートは改行になる）。
+    // キーにせず、焦点の持ち主（編集欄なら文字入力）へ流す（esc を押し続けて一段より深く抜けない・棚で ↵ を押し続けて
+    // 候補をタスクにしない。詳細の ↵ を押し続けると、編集を始めた後のリピートは改行になる）。
     if press.phase == .down {
       keyDownTarget = focusTarget
     } else if keyDownTarget != focusTarget {
@@ -127,9 +127,13 @@ extension TaskPaletteModel {
     return .handled
   }
 
-  /// 右の欄の項目・提案タブの棚と中身。
+  /// 右の欄の項目・提案タブの棚。
   private func handlePlaceKey(_ press: KeyPress) -> KeyPress.Result {
-    if visibleTab == .automation { return automation.handlePlaceKey(press) }
+    if visibleTab == .automation {
+      guard press.key == .escape else { return automation.handleShelfKey(press) }
+      onDismiss()
+      return .handled
+    }
     switch area {
     case .list: return .ignored
     case .pane(let stop): return handlePaneKey(press, stop)
