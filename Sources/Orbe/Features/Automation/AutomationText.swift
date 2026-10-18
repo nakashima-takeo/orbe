@@ -34,10 +34,9 @@ struct AutomationText {
 
   /// 一覧・地図の時刻。今日なら「16:41」、昨日なら「昨日 23:00」、ほかは「10/12 10:00」。
   func recent(_ date: Date) -> String {
-    let day = TaskItem.DueDate(date, timeZone: timeZone)
-    guard day != today,
-      TaskItem.DueDate(date.addingTimeInterval(86_400), timeZone: timeZone) == today
-    else { return stamp(date) }
+    guard TaskItem.DueDate(date, timeZone: timeZone).days(to: today) == 1 else {
+      return stamp(date)
+    }
     return l10n.format(.automationYesterday, clock(date))
   }
 
