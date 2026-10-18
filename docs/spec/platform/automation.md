@@ -265,7 +265,7 @@ Orbe が回の途中で終わったら最後に回った時刻は進んでいな
 | 失敗: 形式エラーが直らない | `the output of part "x" broke the rules: <最初の外れた行>` | 出力の形式エラーが直らなかった |
 | 失敗: 判定へ渡す行に出どころが無い | `no row passed to part "<判定>" has an origin (it did not come from a fetch part)` | 判定へ渡す行が、どの取得から来たか分からない |
 | 外れた行 | `line 3: missing link` など（行番号と理由） | 3 行目：link が無い（JSON として読めない・JSON のオブジェクトでない・<欄> が無い / が空 / の形が違う / の値が正しくない・id <x> が 2 回出た・id <x> は受け取った行に無い・「何も無い」の行と項目が一緒に出た・id <x> は今回の項目でない・id <x> を 2 回候補にした・propose と resolve のどちらか 1 つだけを書く・タイトルが 1 行でない・期限が日付（YYYY-MM-DD）でない・付け先の workspace が一覧に無い・対応済みにした候補が見つからない） |
-| 確定で捨てた案 | `propose <リンク>: already proposed`・`resolve <リンク>: no open proposal` | 既に候補にあるので捨てた・対応済みにする候補が無いので捨てた |
+| 確定で捨てた案 | `propose <リンク>: already proposed`・`resolve <リンク>: no open proposal` | 既に候補にあるので N 件を捨てた・対応済みにする候補が無いので N 件を捨てた（理由ごとに数え、実行履歴の行の末尾に添える） |
 
 画面は失敗を「日本語の説明（英文）」で出す。Orbe が種類を決められない文（部品の申告・CLI のエラー）は、日本語の頭の後に文をそのまま添え、英文を重ねない。
 
