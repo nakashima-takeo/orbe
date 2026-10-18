@@ -7,6 +7,12 @@ enum BoardSegmentLook: Equatable {
   case emphasized
 }
 
+/// 部品どうしの流れの向き（入力元は入ってくる、出力先は出ていく）。
+enum BoardFlowDirection: Equatable {
+  case incoming
+  case outgoing
+}
+
 /// 選んだ部品のカードの値。地図に出さない部品の中身（手段・モデル・ツール・指示文・取り方・上限・制限時間・場所・回の記録）を
 /// 出すのはここだけ。
 struct BoardAutomationPartValue: Equatable {
@@ -26,9 +32,10 @@ struct BoardAutomationPartValue: Equatable {
   /// この部品の実行履歴（新しい順）。
   let runs: [BoardRunLine]
 
-  /// 項目 1 つ。値は見え方の違う切れの並び（「8 件」＋「上限なし」）。
+  /// 項目 1 つ。値は見え方の違う切れの並び（「8 件」＋「上限なし」）。部品どうしをつなぐ入力元・出力先は頭に向きの矢印を置く。
   struct Fact: Equatable {
     let label: L10nKey
+    let flow: BoardFlowDirection?
     let value: [Segment]
   }
 
@@ -111,8 +118,8 @@ extension BoardAutomationPartValue {
     let state = automation.state(node.key)
     let separator = l10n.string(.automationListSeparator)
     var facts: [Fact] = []
-    func fact(_ label: L10nKey, _ value: String) {
-      facts.append(Fact(label: label, value: [Segment(text: value, look: .plain)]))
+    func fact(_ label: L10nKey, _ value: String, flow: BoardFlowDirection? = nil) {
+      facts.append(Fact(label: label, flow: flow, value: [Segment(text: value, look: .plain)]))
     }
     switch part.method {
     case .agent(let agent):
@@ -130,13 +137,14 @@ extension BoardAutomationPartValue {
     if !part.inputs.isEmpty {
       fact(
         .boardPartFrom,
-        "← " + part.inputs.map { graph.node($0)?.part.name ?? $0 }.joined(separator: separator))
+        part.inputs.map { graph.node($0)?.part.name ?? $0 }.joined(separator: separator),
+        flow: .incoming)
     }
     switch part.destination {
     case .nextPart:
       fact(
-        .boardPartTo,
-        "→ " + graph.downstream(of: node.key).map(\.part.name).joined(separator: separator))
+        .boardPartTo, graph.downstream(of: node.key).map(\.part.name).joined(separator: separator),
+        flow: .outgoing)
     case .taskCandidates: fact(.boardPartTo, l10n.format(.boardPartTaskCandidates, open))
     case .report: fact(.boardPartTo, BoardAutomationDetailValue.reports(automation.notify, l10n))
     case .sideEffect: fact(.boardPartTo, l10n.string(.boardPartNothing))
@@ -145,6 +153,7 @@ extension BoardAutomationPartValue {
       facts.append(
         Fact(
           label: .boardPartPending,
+          flow: nil,
           value: [
             Segment(
               text: l10n.format(.boardPartCount, state.inbox),

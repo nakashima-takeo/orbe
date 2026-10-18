@@ -125,7 +125,8 @@ struct BoardMapRowView: View {
         .fixedSize()
       }
       if let inputs = part.inputs {
-        fontResolver.text("← " + inputs, base: Theme.Typography.codeSmall)
+        (BoardFlowDirection.incoming.lead
+          + fontResolver.text(inputs, base: Theme.Typography.codeSmall))
           .font(Font.theme.codeSmall)
           .foregroundStyle(Color.theme.textMuted)
           .truncationMode(.tail)
@@ -319,5 +320,13 @@ enum BoardRunColors {
     case .sunk: Color.theme.textMuted
     case .failed: Color.theme.danger
     }
+  }
+}
+
+extension BoardFlowDirection {
+  /// 部品の名前の頭に置く向きの矢印と空き（`codeSmall` の文に混ぜる）。
+  var lead: Text {
+    let arrow: MarkGlyphKind = self == .incoming ? .arrowLeft : .arrowRight
+    return arrow.inline(Theme.Typography.codeSmall) + Text(verbatim: " ")
   }
 }

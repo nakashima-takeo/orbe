@@ -65,7 +65,7 @@ struct BoardAutomationPartCard: View {
           Text(l10n.string(fact.label))
             .foregroundStyle(Color.theme.textMuted)
             .frame(width: 64, alignment: .leading)
-          fact.value.reduce(Text(verbatim: "")) { line, segment in
+          fact.value.reduce(fact.flow?.lead ?? Text(verbatim: "")) { line, segment in
             line
               + fontResolver.text(segment.text, base: Theme.Typography.codeSmall)
               .foregroundStyle(Self.color(segment.look))

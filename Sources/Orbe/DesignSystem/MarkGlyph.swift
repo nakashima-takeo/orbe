@@ -19,6 +19,10 @@ enum MarkGlyphKind: Equatable {
   case tray
   /// 外へ開く（右上向きの矢印）。viewBox 9×9。
   case openOut
+  /// 左向きの矢印。viewBox 10×8。
+  case arrowLeft
+  /// 右向きの矢印。viewBox 10×8。
+  case arrowRight
 
   fileprivate var box: CGSize {
     switch self {
@@ -26,6 +30,7 @@ enum MarkGlyphKind: Equatable {
     case .bandFailure: CGSize(width: 8, height: 12)
     case .tray: CGSize(width: 12, height: 18)
     case .openOut: CGSize(width: 9, height: 9)
+    case .arrowLeft, .arrowRight: CGSize(width: 10, height: 8)
     }
   }
 
@@ -33,7 +38,7 @@ enum MarkGlyphKind: Equatable {
     switch self {
     case .success, .failure, .paused, .bandFailure: 1.6
     case .tray: 1.3
-    case .openOut: 1.2
+    case .openOut, .arrowLeft, .arrowRight: 1.2
     }
   }
 
@@ -51,7 +56,37 @@ enum MarkGlyphKind: Equatable {
         [p(1.5, 10), p(1.5, 13.5), p(10.5, 13.5), p(10.5, 10)],
       ]
     case .openOut: return [[p(2.5, 6.5), p(6.5, 2.5)], [p(3.3, 2.5), p(6.5, 2.5), p(6.5, 5.7)]]
+    case .arrowLeft: return [[p(9, 4), p(1, 4)], [p(4, 1), p(1, 4), p(4, 7)]]
+    case .arrowRight: return [[p(1, 4), p(9, 4)], [p(6, 1), p(9, 4), p(6, 7)]]
     }
+  }
+
+  /// viewBox の座標を `k` 倍した折れ線と、その線の描き方。
+  fileprivate func stroke(scale k: CGFloat) -> (path: Path, style: StrokeStyle) {
+    var path = Path()
+    for line in strokes {
+      guard let first = line.first else { continue }
+      path.move(to: CGPoint(x: first.x * k, y: first.y * k))
+      for point in line.dropFirst() { path.addLine(to: CGPoint(x: point.x * k, y: point.y * k)) }
+    }
+    return (path, StrokeStyle(lineWidth: lineWidth * k, lineCap: .round, lineJoin: .round))
+  }
+
+  /// 文の中に置く印。文の 1 字として並ぶので、文の色に染まり、幅に収まらなければ文の末尾と一緒に省かれる。`font` の大文字の
+  /// 高さの中ほどに揃える。
+  func inline(_ font: NSFont) -> Text {
+    let box = self.box
+    let image = NSImage(size: box, flipped: true) { _ in
+      guard let context = NSGraphicsContext.current?.cgContext else { return false }
+      let (path, style) = stroke(scale: 1)
+      context.addPath(path.strokedPath(style).cgPath)
+      context.setFillColor(NSColor.black.cgColor)
+      context.fillPath()
+      return true
+    }
+    image.isTemplate = true
+    return Text(Image(nsImage: image).renderingMode(.template))
+      .baselineOffset((font.capHeight - box.height) / 2)
   }
 }
 
@@ -65,15 +100,8 @@ struct MarkGlyph: View {
     let box = kind.box
     let k = (width ?? box.width) / box.width
     Canvas { context, _ in
-      var path = Path()
-      for line in kind.strokes {
-        guard let first = line.first else { continue }
-        path.move(to: CGPoint(x: first.x * k, y: first.y * k))
-        for point in line.dropFirst() { path.addLine(to: CGPoint(x: point.x * k, y: point.y * k)) }
-      }
-      context.stroke(
-        path, with: .color(color),
-        style: StrokeStyle(lineWidth: kind.lineWidth * k, lineCap: .round, lineJoin: .round))
+      let (path, style) = kind.stroke(scale: k)
+      context.stroke(path, with: .color(color), style: style)
     }
     .frame(width: box.width * k, height: box.height * k)
     .accessibilityHidden(true)
