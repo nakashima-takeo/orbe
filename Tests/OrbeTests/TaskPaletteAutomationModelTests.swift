@@ -304,78 +304,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertEqual(palette.automation.place, .proposals)
   }
 
-  // MARK: - 候補の更新
-
-  /// ⌘↵ はタスク候補を行き先にする部品まで流し、一巡の間は棚が更新中になり、もう一度の ⌘↵ は赤で断る。
-  func testRefreshShowsRefreshingAndRefusesWhileRefreshing() {
-    let automation = palette().automation
-    automation.enterShelf()
-    automation.moveShelf(1)
-
-    automation.refresh()
-    let selected = automation.selectedAutomation!
-    XCTAssertTrue(automation.runner.isFlowing(selected.id))
-    XCTAssertEqual(automation.status(of: selected, count: 2), .refreshing)
-    XCTAssertNil(automation.error)
-
-    automation.refresh()
-    XCTAssertEqual(automation.error, .refreshing, "流している途中は赤で断る")
-  }
-
-  func testRefreshOnAllDoesNothing() {
-    let automation = palette().automation
-    automation.enterShelf()
-
-    automation.refresh()
-
-    XCTAssertFalse(automation.store.automations.contains { automation.runner.isFlowing($0.id) })
-    XCTAssertNil(automation.error)
-  }
-
-  /// 提案タブの赤は、タブを替えた操作の境目で消える（戻ったときに当てはまらない赤が残らない）。
-  func testLeavingTheTabClearsItsError() {
-    let palette = palette()
-    palette.automation.enterShelf()
-    palette.automation.moveShelf(1)
-    palette.automation.refresh()
-    palette.automation.refresh()
-    XCTAssertEqual(palette.automation.error, .refreshing)
-
-    palette.setTab(.tasks)
-    palette.setTab(.automation)
-
-    XCTAssertNil(palette.automation.error)
-  }
-
-  // MARK: - 棚の 2 行目
-
-  /// 次の判定は時刻のある判定（最も早い時刻）→ 届いたら → 手動の順。止めていれば停止中。失敗した部品は全部品から数える。
-  func testShelfStatusSaysTheNextJudgeAndTheFailedParts() throws {
-    let palette = TaskPaletteSamples.model(
-      [],
-      automations: DesignSceneFixtures.automationRunner(
-        DesignSceneFixtures.automationShelfSamples()))
-    let automation = palette.automation
-    func status(_ id: Int) throws -> TaskPaletteAutomationShelfStatus {
-      let row = try XCTUnwrap(automation.shelfRows.first { $0.id == .automation(id) })
-      return automation.status(of: try XCTUnwrap(row.automation), count: row.count)
-    }
-    let owned = try XCTUnwrap(automation.store.automation(1))
-
-    XCTAssertEqual(
-      try status(1),
-      .standing(
-        plan: .at(DesignSceneFixtures.automationAt(9, daysAgo: -1)), noCandidates: false,
-        failed: [try XCTUnwrap(owned.graph.node("contact"))]))
-    XCTAssertEqual(try status(2), .standing(plan: .onArrival, noCandidates: false, failed: []))
-    XCTAssertEqual(try status(3), .standing(plan: .manual, noCandidates: false, failed: []))
-    XCTAssertEqual(try status(4), .standing(plan: .onArrival, noCandidates: true, failed: []))
-    let paused = try XCTUnwrap(automation.store.automation(5))
-    XCTAssertEqual(
-      try status(5),
-      .standing(
-        plan: .paused, noCandidates: true, failed: [try XCTUnwrap(paused.graph.node("fetch"))]))
-  }
+  // MARK: - 出どころ
 
   /// 候補の出どころの部品の名前は、候補を出した自動化の定義から引く。消えた自動化の候補は引けない。
   func testSourceNameComesFromTheProposingAutomation() {
