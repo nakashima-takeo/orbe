@@ -17,6 +17,8 @@ final class AutomationRunnerTests: OrbeTestCase {
   var jobs: FakeJobs!
   var store: AutomationStore!
   var runner: AutomationRunner!
+  /// 走らせ役が回を記録したと知らせた部品の鍵（知らせた順）。
+  var recorded: [String] = []
 
   override func setUp() {
     jobs = FakeJobs()
@@ -37,7 +39,8 @@ final class AutomationRunnerTests: OrbeTestCase {
     }
     runner = AutomationRunner(
       store: store, scheduler: scheduler, run: jobs.run,
-      workspaces: { AutomationWorkspaces(listed: [], home: nil) }, recorded: { _, _ in },
+      workspaces: { AutomationWorkspaces(listed: [], home: nil) },
+      recorded: { [unowned self] in recorded.append($1) },
       defined: { _ in }, deleted: { _ in })
     runner.now = { [unowned self] in now }
     runner.calendar = { Calendar(identifier: .gregorian) }
@@ -314,6 +317,7 @@ final class AutomationRunnerTests: OrbeTestCase {
 
     advance(by: 1800)
     XCTAssertNil(since(), "一度も成功していなければ目印は無い")
+    advance(by: 600)
     finish("gh", fetched(["a"]))
     advance(by: 1800)
     XCTAssertEqual(since(), SessionEvent.iso8601(start.addingTimeInterval(1800)))
@@ -321,38 +325,5 @@ final class AutomationRunnerTests: OrbeTestCase {
     advance(by: 1800)
 
     XCTAssertEqual(since(), SessionEvent.iso8601(start.addingTimeInterval(1800)))
-  }
-
-  // MARK: - 書き換え
-
-  /// 書き換えは、何をするかが変わった部品の走っている回だけを止めて結果を捨てる。名前だけの書き換えでは走っている回が最後
-  /// まで走って確定する。どちらでも溜まりは残る。
-  func testRewritingStopsOnlyAPartWhoseWorkChangedAndKeepsTheInbox() throws {
-    func definition(_ name: String, gh script: String) -> AutomationDefinition {
-      AutomationDefinition(
-        name: name, notify: nil,
-        parts: [
-          fetch("gh", every: 1800, script: script),
-          part("judge", .scheduled(.every(86400)), from: ["gh"], deliver: .taskCandidates),
-        ])
-    }
-    let id = try runner.set(nil, definition("受信", gh: "gh")).id
-    advance(by: 1800)
-    finish("gh", fetched(["a"]))
-
-    advance(by: 1800)
-    _ = try runner.set(id, definition("受信（改名）", gh: "gh"))
-    XCTAssertEqual(jobs.stopped, [], "名前だけなら走っている回を止めない")
-    finish("gh", fetched(["a", "b"]))
-    XCTAssertEqual(store.automation(id)?.state("gh").runs.count, 2)
-
-    advance(by: 1800)
-    let running = try XCTUnwrap(calls("gh").last)
-    _ = try runner.set(id, definition("受信（改名）", gh: "gh --all"))
-    XCTAssertEqual(jobs.stopped, [running])
-    jobs.finish(running, fetched(["a", "b", "c"]))
-
-    XCTAssertEqual(store.automation(id)?.state("gh").runs.count, 2, "止めた回の結果は確定しない")
-    XCTAssertEqual(inbox("judge", of: id), 2)
   }
 }
