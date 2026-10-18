@@ -144,7 +144,8 @@ extension BoardAutomationTests {
     XCTAssertEqual(automation.requestText, "a")
   }
 
-  /// 欄のクリックで欄、行や一覧の下の空きのクリックで一覧、地のクリックで最後に居た場所へ移り、直後のキーがそこに届く。
+  /// 欄のクリックで欄、行や一覧の下の空きのクリックで一覧へ移る。右の地のクリックは、欄に居れば欄のまま、自動化を選んで
+  /// いれば地図へ入る。直後のキーはそこに届く。
   func testClicksMoveTheFocusAndTheNextKeyArrivesThere() {
     let model = board()
     let automation = model.automation
@@ -169,11 +170,13 @@ extension BoardAutomationTests {
     XCTAssertEqual(automation.requestText, "c", "欄へ戻ると全文が選ばれているので、打てば置き換わる")
 
     send(Key.escape, "\u{1B}", to: window)
+    let chosen = automation.selectedAutomation?.id
     click(Point.ground, in: window)
-    XCTAssertEqual(automation.place, .list)
-    let before = automation.selectedAutomation?.id
+    XCTAssertEqual(automation.place, .map, "自動化を選んでいれば、地図の地は地図")
+    let before = automation.selectedMapStop
     down(window)
-    XCTAssertNotEqual(automation.selectedAutomation?.id, before, "地のクリックの直後の ↓ は一覧に効く")
+    XCTAssertNotEqual(automation.selectedMapStop, before, "地のクリックの直後の ↓ は地図に効く")
+    XCTAssertEqual(automation.selectedAutomation?.id, chosen, "一覧の選択は動かない")
 
     click(Point.field, in: window)
     click(Point.listGround, in: window)
