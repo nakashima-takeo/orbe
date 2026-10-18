@@ -207,9 +207,12 @@ extension DesignSceneFixtures {
     let at = { (minutes: Int) in
       automationAt(14, 55).addingTimeInterval(TimeInterval(-60 * minutes))
     }
-    let passes = (0..<20).reversed().flatMap { n -> [AutomationSamplePass] in
-      let fresh = n.isMultiple(of: 3) ? 2 : 0
-      return round("dm", at: at(n * 10), items: 6, fresh: fresh, proposed: fresh / 2)
+    // 取得の回だけを置く（判定は処理の部品の先にあり、取得の行は処理の溜まりに溜まる）。
+    let passes = (0..<20).reversed().map { n -> AutomationSamplePass in
+      let all = sampleItems("dm", 6, at: at(n * 10))
+      return AutomationSamplePass(
+        part: "fetch", at: at(n * 10),
+        outcome: fetched("fetch", all, fresh: Array(all.suffix(n.isMultiple(of: 3) ? 2 : 0))))
     }
     return AutomationSample(
       definition: AutomationDefinition(
@@ -228,7 +231,7 @@ extension DesignSceneFixtures {
             deliver: .taskCandidates),
         ]),
       createdAt: boardCreated,
-      passes: passes.filter { $0.part == "fetch" })
+      passes: passes)
   }
 
   static func boardSimpleExample() -> AutomationSample {
