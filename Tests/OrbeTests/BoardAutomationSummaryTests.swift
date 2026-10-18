@@ -2,11 +2,12 @@ import XCTest
 
 @testable import Orbe
 
-/// ボードの読み替え——一覧の行（状態と、それと混ぜない前回の成否と時刻）と、地図の溝の線の割り当て。
+/// ボードの読み替え——一覧の行（状態と、それと混ぜない前回の成否と時刻）と、地図の溝の線の割り当て、カードの実行履歴の文。
 ///
 /// 壊れると何が起きるか: 失敗した部品があるのに一覧の印が成功に見え、壊れた部品に気づけない。流している間や止めている間に
 /// 前回の結果が見えなくなる。地図の線が入力と違う行へつながり、
-/// どの部品の出力がどこへ行くかを読み違える。
+/// どの部品の出力がどこへ行くかを読み違える。英語の実行履歴と知らせが「judged 1 items」と言う。新着なしの回が他の回を
+/// 押し出す、または畳んではいけない回（新着のある回・出し直した回）が畳まれて見えなくなる。
 @MainActor
 final class BoardAutomationSummaryTests: OrbeTestCase {
   private let text = AutomationText(
@@ -14,6 +15,16 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     today: .today(
       DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone),
     timeZone: DesignSceneFixtures.taskCalendar.timeZone)
+
+  /// カードの実行履歴の各行の文（畳んだ行は期間の文）。
+  private func said(_ lines: [BoardRunLine]) -> [String] {
+    lines.map {
+      switch $0 {
+      case .run(let entry): entry.result
+      case .fold(let span): span
+      }
+    }
+  }
 
   private func automations() -> [Automation] {
     DesignSceneFixtures.automationStore(DesignSceneFixtures.boardMapSamples()).automations
@@ -123,5 +134,44 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
 
     XCTAssertEqual(try mark(["broken"]), .failure)
     XCTAssertEqual(try mark([]), .success, "失敗の後に成功した部品は数えない")
+  }
+
+  /// 英語の判定の回は、判定した件数が 1 なら単数で言う。
+  func testJudgedRunSaysItemsInTheSingularWhenOneInEnglish() throws {
+    let at = { (hour: Int) in DesignSceneFixtures.automationAt(hour) }
+    let sample = AutomationSample(
+      definition: DesignSceneFixtures.candidatesDefinition(
+        "判定",
+        fetch: DesignSceneFixtures.commandPart(
+          "fetch", "取得", .scheduled(.every(3600)), script: "f", coverage: .newArrivals)),
+      createdAt: at(8),
+      passes: DesignSceneFixtures.round("one", at: at(9), items: 1, fresh: 1, proposed: 1)
+        + DesignSceneFixtures.round("three", at: at(10), items: 3, fresh: 3, proposed: 2))
+    let automation = try XCTUnwrap(DesignSceneFixtures.automationStore([sample]).automations.first)
+    let english = AutomationText(
+      l10n: LocalizationStore(language: .en), today: text.today, timeZone: text.timeZone)
+
+    let card = try XCTUnwrap(
+      BoardAutomationPartValue(
+        automation, part: "judge", text: english, running: false, next: nil, open: 0))
+
+    XCTAssertEqual(said(card.runs), ["judged 3 items, 2 proposed", "judged 1 item, 1 proposed"])
+  }
+
+  /// カードの実行履歴は、添え書きの無い新着なしが 3 回以上続く区間だけを期間の 1 行に畳む。1 回だけの新着なしと、出し直して
+  /// 通った回（末尾に添え書き）は 1 行ずつ残す。
+  func testCardHistoryFoldsOnlyLongStretchesOfNothingNew() throws {
+    let automation = automations()[0]
+    func card(_ part: String) throws -> [String] {
+      said(
+        try XCTUnwrap(
+          BoardAutomationPartValue(
+            automation, part: part, text: text, running: false, next: nil, open: 0)
+        ).runs)
+    }
+
+    XCTAssertEqual(
+      try card("slack"), ["13:10〜14:55 は新着なし", "新着 4 件", "新着 5 件", "新着 6 件"])
+    XCTAssertEqual(try card("mail"), ["新着 2 件（出し直して通った）", "新着なし", "新着 1 件"])
   }
 }
