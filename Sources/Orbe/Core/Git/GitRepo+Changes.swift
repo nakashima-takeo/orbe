@@ -176,7 +176,7 @@ extension GitRepo {
       for component in path.split(separator: "/").dropLast() {
         parent = parent.isEmpty ? String(component) : parent + "/" + component
         guard !clear.contains(parent) else { continue }
-        let type = Self.type(of: url(of: parent))
+        let type = Self.fileType(at: url(of: parent))
         guard type == nil || type == .typeDirectory else {
           if !found.contains(parent) { found.append(parent) }
           blocked = true
@@ -185,7 +185,7 @@ extension GitRepo {
         clear.insert(parent)
         if type == nil { break }
       }
-      if !blocked, !submodules.contains(path), Self.type(of: url(of: path)) == .typeDirectory {
+      if !blocked, !submodules.contains(path), Self.fileType(at: url(of: path)) == .typeDirectory {
         found.append(path)
       }
     }
@@ -249,7 +249,7 @@ extension GitRepo {
   }
 
   /// symlink を辿らない種類（無ければ nil）。
-  private static func type(of url: URL) -> FileAttributeType? {
+  private static func fileType(at url: URL) -> FileAttributeType? {
     (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType
   }
 }
