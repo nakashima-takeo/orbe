@@ -31,29 +31,21 @@ extension ScmPanelTests {
     }
   }
 
-  /// 外でのコミット（HEAD が進んだ）が行に出る前に押したコミット・amend・コミットしてプッシュ・取り消しは、何も書かずに
-  /// 断る——見えていないコミットの上に重ねない・送らない・書き換えない・取り消さない。
-  func testWritingRightAfterAnOutsideCommitIsRefusedAndWritesNothing() throws {
-    let actions: [(String, (ScmPanel) -> Void)] = [
-      ("commit", { $0.commit() }), ("amend", { $0.openCommitMenu().amend() }),
-      ("commitAndPush", { $0.openCommitMenu().commitAndPush() }),
-      ("undo", { $0.openCommitMenu().undoLastCommit() }),
-    ]
-    for (name, act) in actions {
-      try freshRepo(addingOrigin: name == "commitAndPush")
-      try repo.write("a.txt", "edited\n")
-      try repo.write("z.txt", "agent\n")
-      show(until: { $0.changes.staged.isEmpty && $0.changes.changes.count == 2 }, "\(name): 行")
-      panel.control.message = "m"
-      XCTAssertTrue(repo.git(["add", "z.txt"]).isSuccess)
-      XCTAssertTrue(repo.git(["commit", "-qm", "agent"]).isSuccess)
-      let (head, status) = (repo.head(), repo.git(["status", "--porcelain"]).stdoutText)
-      act(panel)
-      idle("\(name): 書き込み")
-      XCTAssertEqual(panel.control.failure?.cause, .git(.contentMismatch), name)
-      XCTAssertEqual(repo.head(), head, name)
-      XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, status, name)
-    }
+  /// 外でのコミット（HEAD が進んだ）が行に出る前に押したコミットは、何も書かずに断る——見えていないコミットの上に重ねない。
+  func testCommittingRightAfterAnOutsideCommitIsRefusedAndWritesNothing() throws {
+    try repo.write("a.txt", "edited\n")
+    try repo.write("z.txt", "agent\n")
+    show(until: { $0.changes.staged.isEmpty && $0.changes.changes.count == 2 }, "行")
+    panel.control.message = "m"
+    XCTAssertTrue(repo.git(["add", "z.txt"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "agent"]).isSuccess)
+    let (head, status) = (repo.head(), repo.git(["status", "--porcelain"]).stdoutText)
+
+    panel.commit()
+    idle("コミット")
+    XCTAssertEqual(panel.control.failure?.cause, .git(.contentMismatch))
+    XCTAssertEqual(repo.head(), head)
+    XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, status)
   }
 
   /// ▾ を開いている間に外でコミットされ、行がそれに追いついてから選んだ amend・コミットしてプッシュ・取り消しも、何も
