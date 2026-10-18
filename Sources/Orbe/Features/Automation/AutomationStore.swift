@@ -245,7 +245,7 @@ extension AutomationStore {
 
     /// 1 区切り写す。写し終えたら写しのストアを返す。写しのストアのメモリは元のメモリをそのまま使う——元は「DB に書けてから
     /// メモリを進める」を同じ main で行うので、写し終えた時点の元のメモリはその時点の DB と一致する（写しの DB を読み直すと、
-    /// 溜まりの件数を数える読みが溜まりの行の数に比例して main を止める）。
+    /// 溜まりの件数を数える読みが溜まりの行の数に比例して main を止める）。写し終えた後には呼ばない。
     func step() throws(AutomationError) -> AutomationStore? {
       guard source.available else { throw AutomationStore.unavailableError }
       do {

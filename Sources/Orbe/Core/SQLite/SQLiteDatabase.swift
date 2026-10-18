@@ -99,11 +99,14 @@ final class SQLiteDatabase {
 }
 
 /// 接続の DB（main）を別の接続の DB へ写すバックアップ。区切りごとに `step` で進める。写す元を同じ接続で書き換えると、SQLite が
-/// 写しにも同時に反映する（写し直しにならない）。両方の接続を強参照で持ち、解放で打ち切る。
+/// 写しにも同時に反映する（写し直しにならない）。両方の接続を強参照で持つ。写し終えるか誤りで止まったら、`step` がその場で
+/// 終える（`sqlite3_backup_finish`）——SQLite は、終えるまで写し先の接続を他に使うことを禁じているので、写し終えたと返した
+/// 時点で写し先を使えるようにする。途中で解放すれば打ち切る。
 final class SQLiteBackup {
   private let source: SQLiteDatabase
   private let destination: SQLiteDatabase
-  private let handle: OpaquePointer
+  /// 終えたら nil。
+  private var handle: OpaquePointer?
 
   init(from source: SQLiteDatabase, to destination: SQLiteDatabase) throws {
     guard let backup = sqlite3_backup_init(destination.handle, "main", source.handle, "main") else {
@@ -115,16 +118,27 @@ final class SQLiteBackup {
   }
 
   deinit {
-    sqlite3_backup_finish(handle)
+    if let handle { sqlite3_backup_finish(handle) }
   }
 
-  /// `pages` ページだけ写す。写し終えたら true。元が使用中（BUSY・LOCKED）なら写さずに false。
+  /// `pages` ページだけ写す。写し終えたら true。元が使用中（BUSY・LOCKED）なら写さずに false。終えた後には呼ばない。
   func step(pages: Int32) throws -> Bool {
+    guard let handle else { preconditionFailure("the backup has already finished") }
     let rc = sqlite3_backup_step(handle, pages)
     switch rc & 0xFF {
-    case SQLITE_DONE: return true
-    case SQLITE_OK, SQLITE_BUSY, SQLITE_LOCKED: return false
-    default: throw SQLiteError(code: rc, message: String(cString: sqlite3_errstr(rc)))
+    case SQLITE_OK, SQLITE_BUSY, SQLITE_LOCKED:
+      return false
+    case SQLITE_DONE:
+      self.handle = nil
+      let finished = sqlite3_backup_finish(handle)
+      guard finished == SQLITE_OK else {
+        throw SQLiteError(code: finished, message: String(cString: sqlite3_errstr(finished)))
+      }
+      return true
+    default:
+      self.handle = nil
+      sqlite3_backup_finish(handle)
+      throw SQLiteError(code: rc, message: String(cString: sqlite3_errstr(rc)))
     }
   }
 }
