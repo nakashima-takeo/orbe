@@ -89,4 +89,39 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
       card.facts.first { $0.label == .boardPartTools }?.value.map(\.text),
       ["Gmail（MCP）・Backlog（MCP）・npm run test:unit コマンド"])
   }
+
+  /// 一覧の失敗の印は、最後の回が失敗した部品だけで決まる。失敗の後に成功した部品は数えない。
+  func testListMarkCountsOnlyPartsWhoseLatestRunFailed() throws {
+    let at = { (hour: Int) in DesignSceneFixtures.automationAt(hour) }
+    func fetch(_ key: String) -> AutomationPart {
+      DesignSceneFixtures.commandPart(
+        key, key, .scheduled(.every(3600)), script: key, coverage: .newArrivals)
+    }
+    func mark(_ failing: [String]) throws -> BoardRunMark? {
+      let failed = DesignSceneFixtures.failed("boom")
+      let sample = AutomationSample(
+        definition: AutomationDefinition(
+          name: "失敗", notify: nil,
+          parts: [
+            fetch("broken"), fetch("recovered"),
+            DesignSceneFixtures.agentPart(
+              "judge", "判定", .manual, from: ["broken", "recovered"], instruction: "i",
+              deliver: .taskCandidates),
+          ]),
+        createdAt: DesignSceneFixtures.automationAt(9, daysAgo: 3),
+        passes: failing.map { AutomationSamplePass(part: $0, at: at(9), outcome: failed) } + [
+          AutomationSamplePass(part: "recovered", at: at(8), outcome: failed),
+          AutomationSamplePass(
+            part: "recovered", at: at(10),
+            outcome: DesignSceneFixtures.fetched(
+              "recovered", DesignSceneFixtures.sampleItems("recovered", 1, at: at(10)))),
+        ])
+      let automation = try XCTUnwrap(
+        DesignSceneFixtures.automationStore([sample]).automations.first)
+      return BoardAutomationSummary(automation, text: text, next: nil).mark
+    }
+
+    XCTAssertEqual(try mark(["broken"]), .failure)
+    XCTAssertEqual(try mark([]), .success, "失敗の後に成功した部品は数えない")
+  }
 }

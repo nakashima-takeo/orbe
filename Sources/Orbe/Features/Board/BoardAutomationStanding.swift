@@ -43,6 +43,6 @@ extension BoardAutomationStanding {
     self.init(
       id: automation.id, name: automation.name, paused: automation.paused,
       running: runner.isRunning(automation.id) || runner.isFlowing(automation.id),
-      next: runner.nextRunAt(automation, now: now), failing: !automation.failedParts.isEmpty)
+      next: runner.nextRunAt(automation, now: now), failing: automation.failing)
   }
 }

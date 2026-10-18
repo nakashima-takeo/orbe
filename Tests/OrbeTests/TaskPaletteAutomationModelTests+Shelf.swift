@@ -95,36 +95,4 @@ extension TaskPaletteAutomationModelTests {
       "連絡の判定（13:00 に失敗）が開発の判定（9:00）より新しい")
     XCTAssertEqual(try status(5).state, .paused)
   }
-
-  /// 失敗した部品は最後の回が失敗した部品だけで、新しい失敗が先（定義の順ではない）。失敗の後に成功した部品は数えない。
-  func testFailedPartsCountOnlyLatestFailuresNewestFirst() throws {
-    let at = { (hour: Int) in DesignSceneFixtures.automationAt(hour) }
-    func fetch(_ key: String) -> AutomationPart {
-      DesignSceneFixtures.commandPart(
-        key, key, .scheduled(.every(3600)), script: key, coverage: .newArrivals)
-    }
-    let failed = DesignSceneFixtures.failed("boom")
-    let sample = AutomationSample(
-      definition: AutomationDefinition(
-        name: "失敗", notify: nil,
-        parts: [
-          fetch("older"), fetch("newer"), fetch("recovered"),
-          DesignSceneFixtures.agentPart(
-            "judge", "判定", .manual, from: ["older", "newer", "recovered"], instruction: "i",
-            deliver: .taskCandidates),
-        ]),
-      createdAt: DesignSceneFixtures.automationAt(9, daysAgo: 3),
-      passes: [
-        AutomationSamplePass(part: "recovered", at: at(8), outcome: failed),
-        AutomationSamplePass(part: "older", at: at(9), outcome: failed),
-        AutomationSamplePass(part: "newer", at: at(10), outcome: failed),
-        AutomationSamplePass(
-          part: "recovered", at: at(11),
-          outcome: DesignSceneFixtures.fetched(
-            "recovered", DesignSceneFixtures.sampleItems("recovered", 1, at: at(11)))),
-      ])
-    let owner = try XCTUnwrap(DesignSceneFixtures.automationStore([sample]).automations.first)
-
-    XCTAssertEqual(owner.failedParts.map(\.key), ["newer", "older"])
-  }
 }

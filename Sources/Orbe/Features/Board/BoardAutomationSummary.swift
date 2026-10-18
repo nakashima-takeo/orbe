@@ -41,7 +41,7 @@ extension BoardAutomationSummary {
   init(_ automation: Automation, text: AutomationText, next: Date?) {
     let l10n = text.l10n
     if let latest = automation.runs.first?.run {
-      mark = automation.failedParts.isEmpty ? .success : .failure
+      mark = automation.failing ? .failure : .success
       last = l10n.format(.boardListLast, text.recent(latest.startedAt))
     } else {
       mark = nil
