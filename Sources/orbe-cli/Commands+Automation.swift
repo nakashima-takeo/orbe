@@ -10,6 +10,8 @@ let automationUsageLines = [
   "orb automation proposals [<id>] [--json]",
   "orb automation set [<id>] [--json]   (definition JSON on stdin)",
   "orb automation run <id> [--part <key>] [--json]",
+  "orb automation try <id> [--from <key>]... [--to <key>]... [--rows <file|->] [--limit <n>] [--json]",
+  "orb automation trial <id> [--wait] [--timeout-ms <ms>] [--json]",
   "orb automation pause <id> [--json]",
   "orb automation resume <id> [--json]",
   "orb automation rm <id> [--json]",
@@ -186,6 +188,8 @@ let automationUsage = """
   run starts a run now (paused automations too) and returns at once; the
   result shows up in list. pause stops only the schedule; resume restarts
   it.
+  try runs the parts on a copy and returns at once (nothing saved or notified;
+  side effects are held). trial reads it per part; --wait exits 124 on timeout.
   list prints one automation per line: id, state (active / paused /
   running), name, trigger, next run, last run (from the run record:
   fetched and new when it has a source, then proposed, the command's
@@ -205,6 +209,8 @@ func runAutomation(_ args: [String]) -> Never {
   case "proposals": automationProposals(rest)
   case "set": automationSet(rest)
   case "run": automationRun(rest)
+  case "try": automationTry(rest)
+  case "trial": automationTrial(rest)
   case "pause": automationPause(rest, paused: true)
   case "resume": automationPause(rest, paused: false)
   case "rm":
@@ -273,16 +279,20 @@ private func scheduleCell(_ parts: [[String: Any]], next: String?) -> String {
   return scheduled.count == 1 ? shown.words : "\(shown.words) +\(scheduled.count - 1)"
 }
 
-/// 最新の部品の回の要約（時刻が同じなら鍵の大きい方。アプリの部品の回の並びと揃える）。回の記録だけから組む:
-/// `<開始> <鍵> failed: <理由>`、または `<開始> <鍵>: ` に、取得は `12 fetched, 3 new`、処理は `12 in, 4 out`、判定は
-/// `2 proposed`、報告は `reported` か `nothing to report`、副作用は `command exited 0`、仕事は `agent exited 0` を続ける。
+/// 最新の部品の回の要約（時刻が同じなら鍵の大きい方。アプリの部品の回の並びと揃える）。
 private func lastRunCell(_ parts: [String: [String: Any]]) -> String? {
   let latest = parts.compactMap { key, part in
     ((part["runs"] as? [[String: Any]])?.first).map { (key: key, run: $0) }
   }.max {
     ($0.run["startedAt"] as? String ?? "", $0.key) < ($1.run["startedAt"] as? String ?? "", $1.key)
   }
-  guard let (key, run) = latest else { return nil }
+  return latest.map { runCell($0.key, $0.run) }
+}
+
+/// 部品の回の要約。回の記録だけから組む: `<開始> <鍵> failed: <理由>`、または `<開始> <鍵>: ` に、取得は
+/// `12 fetched, 3 new`、処理は `12 in, 4 out`、判定は `2 proposed`、報告は `reported` か `nothing to report`、副作用は
+/// `command exited 0`、仕事は `agent exited 0` を続ける。
+func runCell(_ key: String, _ run: [String: Any]) -> String {
   let started = run["startedAt"].map(display) ?? "?"
   if let failure = run["failure"] as? String { return "\(started) \(key) failed: \(failure)" }
   let execution = run["execution"] as? [String: Any]
@@ -383,7 +393,7 @@ private func automationSimple(_ rest: [String], verb: String, method: String, do
 }
 
 /// 位置引数の automation id（正の整数）。
-private func automationIdArg(_ args: [String], verb: String) -> Int {
+func automationIdArg(_ args: [String], verb: String) -> Int {
   guard let raw = args.first else { usageDie("automation \(verb) requires <id>") }
   guard let id = Int(raw), id >= 1 else { usageDie("invalid automation id: \(raw)") }
   return id

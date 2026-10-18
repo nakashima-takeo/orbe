@@ -39,8 +39,8 @@ extension ControlWireTests {
       "set_workspace_root", "remove_workspace", "restore_sessions",
       "list_tasks", "add_task", "update_task", "delete_task", "start_task",
       "list_automations", "set_automation", "run_automation", "pause_automation",
-      "delete_automation", "list_automation_proposals", "list_board_parts", "add_board_part",
-      "remove_board_part",
+      "delete_automation", "list_automation_proposals", "try_automation", "get_automation_trial",
+      "list_board_parts", "add_board_part", "remove_board_part",
     ]
     let fixtures = fixtures(fake)
 

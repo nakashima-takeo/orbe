@@ -3,14 +3,14 @@ import XCTest
 
 @testable import Orbe
 
-/// 自動化の 6 動詞の params の語と型検査。定義は `definition` の欄を保存と同じ形で読み、読めない箇所を定義の中の場所付きで
+/// 自動化の 8 動詞の params の語と型検査。定義は `definition` の欄を保存と同じ形で読み、読めない箇所を定義の中の場所付きで
 /// -32602 の文に入れる。値と組み合わせ（グラフ）の検証は target が持つ。
 ///
 /// 壊れると何が起きるか: 部品の書き忘れが形の上で通り、何もしない自動化ができる。部品がコマンドと agent の両方の形を持っても
 /// 黙ってどちらかに落ちる。取得の性質や予定の書き損じが黙ってどちらかに落ち、AI の意図と違う予定で回る。断りの文が定義の
 /// どこを直せばよいかを言わず、AI が直せない。`paused` に文字列を渡して止めたつもりが再開になる。
 extension ControlWireTests {
-  /// 自動化の 6 動詞の正しい params 一式（`validRequests` の一部）。
+  /// 自動化の 8 動詞の正しい params 一式（`validRequests` の一部）。
   var automationRequests: [(method: String, params: [String: Any])] {
     [
       ("list_automations", [:]),
@@ -19,6 +19,14 @@ extension ControlWireTests {
       ("pause_automation", ["automationId": 2, "paused": true]),
       ("delete_automation", ["automationId": 2]),
       ("list_automation_proposals", ["automationId": 2]),
+      (
+        "try_automation",
+        [
+          "automationId": 2, "from": ["slack"], "to": ["judge"],
+          "rows": [["id": "a", "link": "https://example.com/a"]], "limit": 3,
+        ]
+      ),
+      ("get_automation_trial", ["automationId": 2, "wait": true, "timeoutMs": 500]),
     ]
   }
 
@@ -153,5 +161,52 @@ extension ControlWireTests {
     XCTAssertEqual(fake.ranAutomations.map(\.partKey), [nil, "judge"])
     XCTAssertEqual(fake.deletedAutomationIds, [2])
     XCTAssertEqual(fake.proposalLists, [nil, 2])
+  }
+
+  /// 試走の範囲は鍵の列、与える行は JSON オブジェクトの列で受け、1 要素 1 行の JSON にして運ぶ。待つ上限の既定は 1 時間。
+  func testTrialVerbsCarryTheirParams() {
+    let fake = FakeControlTarget()
+    let wire = startWire(target: fake)
+
+    for (index, params) in [
+      ["automationId": 2, "from": "slack"], ["automationId": 2, "to": [1]],
+      ["automationId": 2, "rows": ["a"]], ["automationId": 2, "limit": true],
+    ].enumerated() {
+      XCTAssertEqual(
+        errorCode(wire.request(id: index + 1, method: "try_automation", params: params)), -32602,
+        "\(params)")
+    }
+    XCTAssertEqual(
+      errorCode(
+        wire.request(
+          id: 10, method: "get_automation_trial", params: ["automationId": 2, "wait": 1])),
+      -32602)
+    XCTAssertEqual(
+      errorCode(
+        wire.request(
+          id: 11, method: "get_automation_trial", params: ["automationId": 2, "timeoutMs": 0])),
+      -32602)
+    XCTAssertTrue(fake.triedAutomations.isEmpty)
+    XCTAssertTrue(fake.readTrials.isEmpty)
+
+    _ = wire.request(
+      id: 12, method: "try_automation",
+      params: [
+        "automationId": 2, "from": ["slack"],
+        "rows": [["link": "https://example.com/a", "id": "a"]],
+      ])
+    _ = wire.request(id: 13, method: "try_automation", params: ["automationId": 3])
+    _ = wire.request(id: 14, method: "get_automation_trial", params: ["automationId": 2])
+
+    XCTAssertEqual(
+      fake.triedAutomations.map(\.request),
+      [
+        AutomationTrial.Request(
+          from: ["slack"], to: nil, rows: [#"{"id":"a","link":"https://example.com/a"}"#],
+          limit: nil),
+        AutomationTrial.Request(),
+      ])
+    XCTAssertEqual(fake.readTrials.last?.wait, false)
+    XCTAssertEqual(fake.readTrials.last?.timeoutMs, WaitTimeout.promptDefaultMs)
   }
 }

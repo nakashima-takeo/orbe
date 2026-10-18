@@ -189,4 +189,6 @@ enum AutomationError: Error, Equatable {
   case flowing(Int)
   /// 自動化の DB を使えない、または書けなかった。
   case unavailable(String)
+  /// その自動化の試走が無い。
+  case trialNotFound(Int)
 }

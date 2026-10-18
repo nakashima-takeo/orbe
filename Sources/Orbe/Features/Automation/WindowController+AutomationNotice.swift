@@ -64,9 +64,10 @@ extension WindowController {
     systemNotifier.requestAuthorizationIfUndetermined()
   }
 
-  /// 自動化を消した（走らせ役から。どの経路で消しても通る）。その自動化の通知を通知センターから取り下げる。
+  /// 自動化を消した（走らせ役から。どの経路で消しても通る）。その自動化の通知を通知センターから取り下げ、試走を止める。
   func automationDeleted(_ id: Int) {
     systemNotifier.remove(identifier: Self.systemNotificationIdentifier(id))
+    automationTrials.discard(id)
   }
 
   /// 通知センターの通知のクリック。ピルのクリックと同じく、前面化してから Home のボードでその自動化を開く。

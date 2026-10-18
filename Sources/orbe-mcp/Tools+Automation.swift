@@ -1,6 +1,6 @@
 import Foundation
 
-// 自動化の 6 動詞の MCP ツール定義。秘書の AI が自動化を作り・直し・結果を読むための説明をここに持つ。
+// 自動化の 8 動詞の MCP ツール定義。秘書の AI が自動化を作り・直し・結果を読むための説明をここに持つ。
 // 候補をタスクにする・捨てるは人の判断なので、AI には出さない。
 
 private let definitionShape =
@@ -172,6 +172,51 @@ let automationTools: [[String: Any]] = [
         [
           "automationId": intProp("回す自動化"),
           "partKey": strProp("この部品まで流す（省略で終わりの部品すべてまで）"),
+        ], required: ["automationId"])
+    ),
+  ]),
+  obj([
+    ("name", "try_automation"),
+    (
+      "description",
+      "自動化の部品を、本番を汚さずに試す（試走）。本番の DB の写しの上で本番と同じ流しを動かし、すぐ返る。結果は"
+        + " get_automation_trial で読む。DB には何も書かず、通知もしない。from（入口の部品の鍵）から to（行き先の部品の鍵）"
+        + "への道の上の部品だけが動く。from を省けば入力の無い部品すべて、to を省けば入口から届く終わりの部品すべて。"
+        + "副作用・仕事の部品は動かさず、渡るはずだった行を返す。取得は本当に走る。rows は入口が 1 つのときだけ与えられ、"
+        + "取得の入口なら取った項目、入力のある入口なら溜まりに届いた行になる（判定の入口は断られる）。limit は各取得が"
+        + "下流へ渡す新しい項目を先頭から N 行に絞る。同じ自動化の試走は 1 つで、始め直すと前の試走を止めて置き換える。"
+    ),
+    (
+      "inputSchema",
+      schema(
+        [
+          "automationId": intProp("試す自動化"),
+          "from": strArrayProp("入口の部品の鍵"),
+          "to": strArrayProp("行き先の部品の鍵"),
+          "rows": [
+            "type": "array", "items": ["type": "object"],
+            "description": "入口に与える行（JSON オブジェクト）",
+          ],
+          "limit": intProp("各取得が下流へ渡す新しい項目の上限"),
+        ], required: ["automationId"])
+    ),
+  ]),
+  obj([
+    ("name", "get_automation_trial"),
+    (
+      "description",
+      "自動化の最新の試走を読む。部品ごとに state（waiting / running / done / held / untouched）と回の列を返す。"
+        + "回は list_automations の runs と同じ形に、取得・処理は rows（下流へ渡す行）、判定は proposals と resolved を足す。"
+        + "止めた副作用・仕事の回は held.rows（渡るはずだった行）だけ。wait: true なら試走の終わりまで待ち、"
+        + "timeoutMs（既定 3600000・上限 86400000）を過ぎたらその時点の結果に timedOut:true を付けて返す。"
+    ),
+    (
+      "inputSchema",
+      schema(
+        [
+          "automationId": intProp("試走を読む自動化"),
+          "wait": boolProp("true で試走の終わりまで待つ"),
+          "timeoutMs": intProp("待つ上限 ミリ秒（既定 3600000）"),
         ], required: ["automationId"])
     ),
   ]),

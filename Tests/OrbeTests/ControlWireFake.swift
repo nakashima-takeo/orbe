@@ -37,6 +37,12 @@ final class FakeControlTarget: ControlTarget {
 
   // MARK: - 記録
 
+  struct ReadTrial {
+    let automationId: Int
+    let wait: Bool
+    let timeoutMs: Int
+  }
+
   struct ReportedAgent {
     let tabId: Int
     let agent: String
@@ -125,6 +131,8 @@ final class FakeControlTarget: ControlTarget {
   private(set) var pausedAutomations: [(automationId: Int, paused: Bool)] = []
   private(set) var deletedAutomationIds: [Int] = []
   private(set) var proposalLists: [Int?] = []
+  private(set) var triedAutomations: [(automationId: Int, request: AutomationTrial.Request)] = []
+  private(set) var readTrials: [ReadTrial] = []
   private(set) var boardLists: [Int] = []
   private(set) var addedBoardParts: [(workspaceId: Int, part: BoardPart)] = []
   private(set) var removedBoardParts: [(workspaceId: Int, part: BoardPart)] = []
@@ -328,6 +336,21 @@ final class FakeControlTarget: ControlTarget {
   func controlListAutomationProposals(automationId: Int?) -> Result<Any, ControlError> {
     proposalLists.append(automationId)
     return outcome(["proposals": [Any]()])
+  }
+
+  func controlTryAutomation(automationId: Int, _ request: AutomationTrial.Request) -> Result<
+    Any, ControlError
+  > {
+    triedAutomations.append((automationId, request))
+    return outcome(["trial": [String: Any]()])
+  }
+
+  func controlAutomationTrial(
+    automationId: Int, wait: Bool, timeoutMs: Int,
+    completion: @escaping (Result<Any, ControlError>) -> Void
+  ) {
+    readTrials.append(ReadTrial(automationId: automationId, wait: wait, timeoutMs: timeoutMs))
+    completion(outcome(["trial": [String: Any]()]))
   }
 
   func controlListBoardParts(workspaceId: Int) -> Result<Any, ControlError> {

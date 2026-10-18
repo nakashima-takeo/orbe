@@ -16,38 +16,48 @@ import Observation
 ///
 /// 流す（`flow`）は、部品を指してそこに至る道の上の部品を 1 回ずつ回す（`AutomationFlow`）。一巡は自動化ごとに高々 1 つで、
 /// メモリだけに持つ。走らせ役は契機の始まりと終わりを一巡へ知らせ、返った部品を「今すぐ」で起こす。道の上の部品を番人から
-/// 外すと一巡を打ち切る——待っている回の終わりが来なくなるので。観測に載せるのは一巡だけで（画面が一巡の有無を読む）、他の
-/// 持ち物は部品の回のたびに変わるので観測から外す。
+/// 外すと一巡を打ち切る——待っている回の終わりが来なくなるので。一巡が終わるか打ち切られたら `flowEnded` で知らせる。観測に
+/// 載せるのは一巡だけで（画面が一巡の有無を読む）、他の持ち物は部品の回のたびに変わるので観測から外す。
 ///
-/// 部品の回を記録するたびに `recorded` で自動化と部品の鍵を知らせる（知らせるかどうか・何を出すかは受けた側がストアの今の値
-/// から決める）。定義を書いたら `defined`、消したら `deleted` で知らせる。
+/// 部品の回を記録するたびに `recorded` で、その回の終わり（取ったもの・部品の 1 回の結果）と書いた記録を知らせる（知らせるか
+/// どうか・何を出すかは受けた側が決める）。定義を書いたら `defined`、消したら `deleted` で知らせる。
+///
+/// 使い手は、部品の 1 回の起こし方（`startPass`。既定は部品の 1 回をそのまま起こす）と、番人に載せる部品（`admits`。既定は
+/// 全部品）を差し替えられる。試走が、DB の写しの上で手段の起こし方と動かす部品だけを変えて、同じ流しを動かすため。
 @Observable final class AutomationRunner {
   let store: AutomationStore
   @ObservationIgnored var now: () -> Date = Date.init
   @ObservationIgnored var calendar: () -> Calendar = { Calendar.current }
 
-  private let scheduler: BackgroundScheduler
-  private let run: BackgroundScheduler.Run
+  /// 番人（一巡が部品を起こす）。
+  let scheduler: BackgroundScheduler
+  let run: BackgroundScheduler.Run
   let workspaces: () -> AutomationWorkspaces
-  private let recorded: (Int, String) -> Void
+  private let recorded: (AutomationPassRecord) -> Void
   private let defined: (Int) -> Void
   private let deleted: (Int) -> Void
+  private let startPass: StartPass
+  private let admits: (Int, String) -> Bool
+  private let flowEnded: (Int, AutomationFlow) -> Void
   /// 番人に載せている鍵。
   @ObservationIgnored private var registered = Set<String>()
   /// 部品ごとの、前の契機の始まりの時点の最も新しい通し番号（メモリだけ。無ければ溜まりの行はすべて新しい）。
   @ObservationIgnored private var marks: [String: Int] = [:]
   /// 部品ごとの、番人に最後に返した数え始め。記録の無い契機（取る行が 0 件）でも進むので、次の時刻はこれから数える。
   @ObservationIgnored private var anchors: [String: Date] = [:]
-  /// 自動化ごとの、流している途中の一巡。
-  private var flows: [Int: AutomationFlow] = [:]
+  /// 自動化ごとの、流している途中の一巡（置くのは `flow`）。
+  var flows: [Int: AutomationFlow] = [:]
 
-  /// `workspaces` はタスク候補の付け先にできる今の workspace。判定の部品にだけ渡す。
+  /// `workspaces` はタスク候補の付け先にできる今の workspace。判定の部品にだけ渡す。`admits` は自動化の ID と部品の鍵から、
+  /// 番人に載せるかを決める。
   init(
     store: AutomationStore, scheduler: BackgroundScheduler = BackgroundScheduler(),
     run: @escaping BackgroundScheduler.Run = { BackgroundRuns.shared.run($0, completion: $1) },
     workspaces: @escaping () -> AutomationWorkspaces,
-    recorded: @escaping (Int, String) -> Void, defined: @escaping (Int) -> Void,
-    deleted: @escaping (Int) -> Void
+    recorded: @escaping (AutomationPassRecord) -> Void, defined: @escaping (Int) -> Void,
+    deleted: @escaping (Int) -> Void, startPass: @escaping StartPass = AutomationRunner.startPass,
+    admits: @escaping (Int, String) -> Bool = { _, _ in true },
+    flowEnded: @escaping (Int, AutomationFlow) -> Void = { _, _ in }
   ) {
     self.store = store
     self.scheduler = scheduler
@@ -56,7 +66,10 @@ import Observation
     self.recorded = recorded
     self.defined = defined
     self.deleted = deleted
-    store.onUnavailable = { [weak self] in self?.unregisterAll() }
+    self.startPass = startPass
+    self.admits = admits
+    self.flowEnded = flowEnded
+    store.onUnavailable = { [weak self] in self?.stopAll() }
   }
 
   /// 起動時に一度、全部品を番人へ載せ、止めていない自動化の「届いたら」の部品に起こす決まりを見る（過ぎていた間隔の回は
@@ -72,11 +85,6 @@ import Observation
 
   func isRunning(_ id: Int, _ key: String) -> Bool {
     scheduler.isRunning(id: Self.key(id, key))
-  }
-
-  /// 流している途中か（一巡があるか）。
-  func isFlowing(_ id: Int) -> Bool {
-    flows[id] != nil
   }
 
   /// `now`（渡さなければ走らせ役の今）から見て、どれかの部品が次に予定で回る時刻（止めていれば nil）。
@@ -135,32 +143,7 @@ import Observation
     deleted(id)
   }
 
-  /// 指した部品まで流す（止めた自動化も受ける）。流している途中なら断る。指す部品が無ければ一巡を置かない（置くと終わりの
-  /// 知らせが来ず、以後ずっと断る）。
-  func flow(_ id: Int, to target: AutomationFlow.Target) throws(AutomationError) {
-    try checkAvailable()
-    guard let automation = store.automation(id) else { throw .automationNotFound(id) }
-    let targets: [String]
-    switch target {
-    case .part(let key):
-      guard automation.graph.node(key) != nil else { throw .partNotFound(id, key) }
-      targets = [key]
-    case .ends:
-      targets = automation.graph.ends.map(\.key)
-    case .judges:
-      targets = automation.graph.judges.map(\.key)
-    }
-    guard flows[id] == nil else { throw .flowing(id) }
-    guard !targets.isEmpty else { return }
-    let (flow, wake) = AutomationFlow.start(to: targets, in: automation.graph) {
-      isRunning(id, $0)
-    }
-    // 「今すぐ」の中で契機が同期に始まり終わりうるので、起こす前に一巡を置く。
-    flows[id] = flow
-    for part in wake { scheduler.runNow(id: Self.key(id, part)) }
-  }
-
-  private func checkAvailable() throws(AutomationError) {
+  func checkAvailable() throws(AutomationError) {
     guard store.available else { throw AutomationStore.unavailableError }
   }
 
@@ -172,7 +155,7 @@ import Observation
   /// 予定だけを差し替える。止めていなければ「届いたら」の部品に起こす決まりを見る。
   private func register(_ automation: Automation) {
     let id = automation.id
-    for node in automation.graph.nodes {
+    for node in automation.graph.nodes where admits(id, node.key) {
       let key = Self.key(id, node.key)
       var timing: BackgroundTiming?
       if !automation.paused, case .scheduled(let scheduled) = node.part.trigger {
@@ -197,15 +180,21 @@ import Observation
   /// 外す。走っている回は止め、その結果は捨てる。起こす決まりの番号と数え始めも忘れ、この部品を道に含む一巡を打ち切る。
   private func unregister(_ id: Int, _ part: String) {
     let key = Self.key(id, part)
-    if flows[id]?.path.contains(part) == true { flows[id] = nil }
+    if let flow = flows[id], flow.path.contains(part) {
+      flows[id] = nil
+      flowEnded(id, flow)
+    }
     scheduler.remove(id: key)
     registered.remove(key)
     marks[key] = nil
     anchors[key] = nil
   }
 
-  private func unregisterAll() {
+  /// 全部品を番人から外す（走っている回は止め、その結果は捨てる）。一巡は打ち切る。
+  func stopAll() {
+    let cut = flows
     flows = [:]
+    for (id, flow) in cut { flowEnded(id, flow) }
     for key in registered { scheduler.remove(id: key) }
     registered = []
     marks = [:]
@@ -336,8 +325,10 @@ extension AutomationRunner {
     }
     let startedAt = now()
     trigger.lastStart = startedAt
-    let pass = AutomationPartPass(run: run, now: now, calendar: calendar)
-    trigger.current = pass.start(node, input) { [weak self] outcome in
+    let start = AutomationPassStart(
+      automationId: trigger.automationId, node: node, input: input, take: take,
+      pass: AutomationPartPass(run: run, now: now, calendar: calendar))
+    trigger.current = startPass(start) { [weak self] outcome in
       guard let self, !trigger.cancelled else { return }
       ended(trigger, take, startedAt, outcome)
     }
@@ -357,7 +348,7 @@ extension AutomationRunner {
       NSLog("[automation] dropped the result of part \(trigger.part): \(error)")
       return end(trigger)
     }
-    recorded(trigger.automationId, trigger.part)
+    recorded(AutomationPassRecord(end: passEnd, run: result.run))
     for part in result.grew { wake(trigger.automationId, part) }
     guard !result.failed, take != nil else { return end(trigger) }
     takeNext(trigger)
@@ -386,6 +377,7 @@ extension AutomationRunner {
     guard var flow = flows[id], let graph = store.automation(id)?.graph else { return }
     let wake = flow.ended(trigger.part, flowed: trigger.flowed, in: graph) { isRunning(id, $0) }
     flows[id] = flow.finished ? nil : flow
+    if flow.finished { flowEnded(id, flow) }
     for part in wake { scheduler.runNow(id: Self.key(id, part)) }
   }
 }

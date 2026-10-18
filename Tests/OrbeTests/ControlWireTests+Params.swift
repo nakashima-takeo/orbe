@@ -142,6 +142,8 @@ extension ControlWireTests {
       RequiredParam(method: "pause_automation", key: "automationId", code: -32602),
       RequiredParam(method: "pause_automation", key: "paused", code: -32602),
       RequiredParam(method: "delete_automation", key: "automationId", code: -32602),
+      RequiredParam(method: "try_automation", key: "automationId", code: -32602),
+      RequiredParam(method: "get_automation_trial", key: "automationId", code: -32602),
       RequiredParam(method: "list_board_parts", key: "workspaceId", code: -32602),
       RequiredParam(method: "add_board_part", key: "workspaceId", code: -32602),
       RequiredParam(method: "add_board_part", key: "kind", code: -32602),
