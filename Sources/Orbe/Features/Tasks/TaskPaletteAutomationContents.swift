@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 自動追加の中身（真ん中と右をまたぐ 1 枚）。名前と状態、取得（やり方といつ）・処理・前回の回・重なり、定義を書き換える口が
-/// ボードであること、操作（`AutomationHand`）。値は走らせ役とストアから毎回読むので、裏の回が確定すると
+/// 自動追加の中身（真ん中と右をまたぐ 1 枚）。名前と状態、部品の一覧（役割・名前・予定）・最新の部品の回・重なり、定義を
+/// 書き換える口がボードであること、操作（`AutomationHand`）。値は走らせ役とストアから毎回読むので、裏の回が確定すると
 /// そのまま映る。
 struct TaskPaletteAutomationContents: View {
   @Bindable var model: TaskPaletteAutomationModel
@@ -14,8 +14,7 @@ struct TaskPaletteAutomationContents: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 0) {
           heading
-          section(.automationFetch) { fetch }
-          section(.automationSteps) { steps }
+          section(.automationParts) { parts }
           section(.taskPaletteAutomationLast) { last }
           let overlaps = model.store.overlaps(of: automation.id)
           if !overlaps.isEmpty {
@@ -23,7 +22,7 @@ struct TaskPaletteAutomationContents: View {
               ForEach(overlaps, id: \.automation.id) { overlap in
                 fontResolver.text(
                   l10n.format(
-                    .taskPaletteAutomationOverlapCount, overlap.automation.definition.name,
+                    .taskPaletteAutomationOverlapCount, overlap.automation.name,
                     overlap.count),
                   base: Theme.Typography.workspaceName
                 )
@@ -54,7 +53,7 @@ struct TaskPaletteAutomationContents: View {
 
   private var heading: some View {
     VStack(alignment: .leading, spacing: Theme.Space.note) {
-      fontResolver.text(automation.definition.name, base: Theme.Typography.title)
+      fontResolver.text(automation.name, base: Theme.Typography.title)
         .font(Font.theme.title)
         .foregroundStyle(Color.theme.textPrimary)
         .fixedSize(horizontal: false, vertical: true)
@@ -84,31 +83,24 @@ struct TaskPaletteAutomationContents: View {
     .padding(.top, Theme.Space.span)
   }
 
-  @ViewBuilder private var fetch: some View {
-    if let source = automation.definition.source { lines(text.source(source)) }
-    line(text.when(automation.definition.trigger))
-  }
-
-  private var steps: some View {
-    lines(text.steps(automation.definition))
-  }
-
-  private func lines(_ lines: [AutomationText.Line]) -> some View {
-    ForEach(Array(lines.enumerated()), id: \.offset) { _, value in
-      switch value {
-      case .plain(let value): line(value)
-      case .verbatim(let value): quote(value)
-      }
+  private var parts: some View {
+    ForEach(automation.graph.byDepth, id: \.key) { node in
+      line(
+        [text.role(node.role), node.part.name, text.schedule(node.part.trigger)].joined(
+          separator: " · "))
     }
   }
 
   private var last: some View {
-    let run = automation.runs.first
-    return fontResolver.text(text.runDetail(run), base: Theme.Typography.workspaceName)
-      .font(Font.theme.workspaceName)
-      .foregroundStyle(run?.failure == nil ? Color.theme.textSecondary : Color.theme.danger)
-      .lineLimit(4)
-      .fixedSize(horizontal: false, vertical: true)
+    let latest = automation.runs.first
+    let name = latest.flatMap { automation.graph.node($0.part)?.part.name } ?? ""
+    return fontResolver.text(
+      text.runDetail(part: name, latest?.run), base: Theme.Typography.workspaceName
+    )
+    .font(Font.theme.workspaceName)
+    .foregroundStyle(latest?.run.failed == true ? Color.theme.danger : Color.theme.textSecondary)
+    .lineLimit(4)
+    .fixedSize(horizontal: false, vertical: true)
   }
 
   private func line(_ value: String) -> some View {
@@ -116,20 +108,6 @@ struct TaskPaletteAutomationContents: View {
       .font(Font.theme.workspaceName)
       .foregroundStyle(Color.theme.textSecondary)
       .fixedSize(horizontal: false, vertical: true)
-  }
-
-  /// 原文は箱で囲む。
-  private func quote(_ value: String) -> some View {
-    fontResolver.text(value, base: Theme.Typography.workspaceName)
-      .font(Font.theme.workspaceName)
-      .foregroundStyle(Color.theme.textPrimary)
-      .fixedSize(horizontal: false, vertical: true)
-      .padding(.vertical, Theme.Space.step)
-      .padding(.horizontal, Theme.Space.beat)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .background(
-        RoundedRectangle(cornerRadius: Theme.Radius.md)
-          .fill(Color.theme.surfaceInk.opacity(0.04)))
   }
 
   private var buttons: some View {

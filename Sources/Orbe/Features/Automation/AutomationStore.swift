@@ -2,127 +2,131 @@ import Foundation
 import Observation
 
 /// 自動化と候補の唯一の正（@Observable・main のみ）。`WindowController` が 1 個所有し、制御 API・走らせ役・画面が同じ変異
-/// メソッドを呼ぶ——値の検証と不変条件はここだけが持つ。変異が成功するたびに即座に保存する。候補の保ち方は
-/// `AutomationProposalBook`（タスク候補の出力先）が持つ。
+/// メソッドを呼ぶ——値の検証と不変条件はここだけが持つ。
+///
+/// 変異はどれも「変わる行を DB に 1 トランザクションで書き、通ってからメモリを進める」の 1 経路で行う。書けなければメモリは
+/// 変わらず、呼び手に `.unavailable` を返す——逆だと、書けなかった変化が画面にだけ残り、再起動で巻き戻る。溜まりの行の本文は
+/// DB にだけ置き、メモリは件数だけを持つ。
+///
+/// DB を開けなかった（別の Orbe が持つ・確かめられない）か、運転中に壊れを見つけたストアは使えない: 自動化 0 件として描き、
+/// 変異を断る。壊れの退避は次の起動の検査に任せる。
 @Observable final class AutomationStore {
-  private(set) var automations: [Automation]
-  private var book: AutomationProposalBook
-  private var nextAutomationId: Int
+  private(set) var automations: [Automation] = []
+  private(set) var proposals: [AutomationProposal] = []
+  private var database: AutomationDatabase?
+  /// DB を開けていて、壊れを見つけていない。
+  var available: Bool { database != nil }
+  /// 運転中に使えなくなった（走らせ役が全部品の予定を外す）。
+  @ObservationIgnored var onUnavailable: () -> Void = {}
 
-  var proposals: [AutomationProposal] { book.proposals }
-
-  init(file: AutomationsFile? = AutomationPersistence.load()) {
-    automations = file?.automations ?? []
-    book = AutomationProposalBook(
-      proposals: file?.proposals ?? [], nextId: file?.nextProposalId ?? 1)
-    nextAutomationId = file?.nextAutomationId ?? 1
+  init(opened: AutomationDatabase.Opened? = AutomationPersistence.open()) {
+    database = opened?.database
+    automations = opened?.snapshot.automations ?? []
+    proposals = opened?.snapshot.proposals ?? []
   }
 
   func automation(_ id: Int) -> Automation? {
     automations.first { $0.id == id }
   }
 
+  func index(_ id: Int) throws(AutomationError) -> Int {
+    guard let index = automations.firstIndex(where: { $0.id == id }) else {
+      throw .automationNotFound(id)
+    }
+    return index
+  }
+
   // MARK: - 定義
 
   func create(_ definition: AutomationDefinition, now: Date) throws(AutomationError) -> Automation {
-    let automation = Automation(
-      id: nextAutomationId, definition: try Self.valid(definition), paused: false,
-      createdAt: TaskItem.storedInstant(now), lastFetched: [], reviewAll: false, lastRunAt: nil,
-      lastSucceededAt: nil, runs: [])
-    nextAutomationId += 1
-    automations.append(automation)
-    persist()
-    return automation
+    let (name, graph) = try definition.checked()
+    let at = TaskItem.storedInstant(now)
+    let parts = Dictionary(
+      uniqueKeysWithValues: graph.nodes.map { ($0.key, AutomationPartState(addedAt: at)) })
+    let draft = Automation(
+      id: 0, name: name, notify: definition.notify, graph: graph, paused: false, createdAt: at,
+      tally: AutomationTally(), parts: parts)
+    return try commit { db, memory in
+      let id = try db.insert(draft)
+      for (key, state) in parts { try db.put(part: key, of: id, state) }
+      let automation = Automation(
+        id: id, name: name, notify: definition.notify, graph: graph, paused: false, createdAt: at,
+        tally: AutomationTally(), parts: parts)
+      memory.automations.append(automation)
+      return automation
+    }
   }
 
-  /// 定義を丸ごと置き換える。何をするか（`AutomationDefinition.work`）が変わったら（`reworked`）、見直しを受ける出力先なら
-  /// 次の回は枠の差分を掛けずに見直す。全件見直しの印は新しい出力先で決め直す——見直しを受けない出力先へ替えたら、前から
-  /// 立っていた印も下ろす。止めているかは変えない。誰も持たなくなった候補は、その場で忘れる。
-  func replace(_ id: Int, with definition: AutomationDefinition) throws(AutomationError) -> (
-    automation: Automation, reworked: Bool
-  ) {
-    guard let index = automations.firstIndex(where: { $0.id == id }) else {
-      throw .automationNotFound(id)
+  /// 定義を丸ごと置き換えたときの、部品ごとの変化。
+  struct Replaced {
+    let automation: Automation
+    /// 何をするかが変わった部品。決まりを外した印を下ろした。
+    let reworked: [String]
+    /// 消した部品。状態・溜まり・記録を消した。
+    let removed: [String]
+  }
+
+  /// 定義を丸ごと置き換える。残る部品の前回の出力と溜まりには触れない（ほかの部品の溜まりにある、消えた部品から来た行も
+  /// そのまま）。判定の部品が 1 つも無くなれば累計を 0 に戻す。誰も持たなくなった候補は、その場で忘れる。止めているかは変えない。
+  func replace(_ id: Int, with definition: AutomationDefinition, now: Date) throws(AutomationError)
+    -> Replaced
+  {
+    let index = try index(id)
+    let (name, graph) = try definition.checked()
+    let old = automations[index]
+    let reworked = AutomationGraph.reworked(from: old.graph, to: graph)
+    let removed = old.graph.nodes.map(\.key).filter { graph.node($0) == nil }
+    let added = graph.nodes.map(\.key).filter { old.graph.node($0) == nil }
+    var next = old
+    next.name = name
+    next.notify = definition.notify
+    next.graph = graph
+    for key in removed { next.parts[key] = nil }
+    let at = TaskItem.storedInstant(now)
+    for key in added { next.parts[key] = AutomationPartState(addedAt: at) }
+    let unmarked = reworked.filter { next.parts[$0]?.breach != nil }
+    for key in unmarked { next.parts[key]?.breach = nil }
+    if !next.judges { next.tally = AutomationTally() }
+    try commit { db, memory in
+      memory.automations[index] = next
+      try db.update(next)
+      for key in removed { try db.delete(part: key, of: id) }
+      for key in added + unmarked { try db.put(part: key, of: id, next.state(key)) }
+      try memory.forgetUnheld(db)
     }
-    let definition = try Self.valid(definition)
-    let reworked = automations[index].definition.work != definition.work
-    automations[index].redefine(definition)
-    automations[index].reviewAll =
-      Self.reviewsAfterRework(definition.sink) && (automations[index].reviewAll || reworked)
-    _ = book.forgetUnheld(by: automations)
-    persist()
-    return (automations[index], reworked)
+    return Replaced(automation: next, reworked: reworked, removed: removed)
   }
 
   func setPaused(_ id: Int, _ paused: Bool) throws(AutomationError) -> Automation {
-    guard let index = automations.firstIndex(where: { $0.id == id }) else {
-      throw .automationNotFound(id)
+    let index = try index(id)
+    var next = automations[index]
+    next.paused = paused
+    try commit { db, memory in
+      try db.update(next)
+      memory.automations[index] = next
     }
-    automations[index].paused = paused
-    persist()
-    return automations[index]
+    return next
   }
 
-  /// 消す。その自動化だけが持っていた候補は忘れる。
+  /// 消す。その部品の状態・溜まり・記録も消え、その自動化だけが持っていた候補は忘れる。
   func delete(_ id: Int) throws(AutomationError) {
-    guard let index = automations.firstIndex(where: { $0.id == id }) else {
-      throw .automationNotFound(id)
+    let index = try index(id)
+    try commit { db, memory in
+      try db.delete(automation: id)
+      memory.automations.remove(at: index)
+      try memory.forgetUnheld(db)
     }
-    automations.remove(at: index)
-    _ = book.forgetUnheld(by: automations)
-    persist()
-  }
-
-  // MARK: - 1 回
-
-  /// 枠の差分。この自動化の前回の取得結果に id が無い項目。全件見直しの回と、毎回全件の取得元では掛けない。
-  func unseen(of id: Int, in fetched: [AutomationItem]) -> [AutomationItem] {
-    guard let automation = automation(id) else { return [] }
-    guard !automation.reviewAll, automation.definition.source?.coverage != .everything else {
-      return fetched
-    }
-    let seen = Set(automation.lastFetched.map(\.id))
-    return fetched.filter { !seen.contains($0.id) }
-  }
-
-  /// 失敗した回。記録と最後に回った時刻だけを進め、取得済みも候補も動かさない。
-  func recordFailure(of id: Int, _ run: AutomationRun) {
-    guard let index = automations.firstIndex(where: { $0.id == id }) else { return }
-    record(run, at: index)
-    persist()
-  }
-
-  /// 成功した回を確定する。前回の取得結果・全件見直しの印・前回成功の目印を進め、出力先の確定（`sink`。この時点の候補と
-  /// 自動化を受けて記録を返す）と回の記録を 1 度に保存する。
-  func commit(
-    _ id: Int, _ run: AutomationRun, fetched: [AutomationItem],
-    sink: (inout AutomationProposalBook, [Automation]) -> AutomationSinkReport?
-  ) {
-    guard let index = automations.firstIndex(where: { $0.id == id }) else { return }
-    var run = run
-    automations[index].lastFetched = fetched.map { AutomationSeen(id: $0.id, link: $0.link) }
-    automations[index].reviewAll = false
-    automations[index].lastSucceededAt = run.startedAt
-    run.sink = sink(&book, automations)
-    record(run, at: index)
-    persist()
-  }
-
-  private func record(_ run: AutomationRun, at index: Int) {
-    automations[index].runs.insert(run, at: 0)
-    if automations[index].runs.count > Automation.retainedRuns {
-      automations[index].runs.removeLast(automations[index].runs.count - Automation.retainedRuns)
-    }
-    automations[index].lastRunAt = run.startedAt
   }
 
   // MARK: - 候補をさばく
 
-  /// 出ている候補を、`workspace` に付けてタスク一覧へ未着手で足す。追加が拒否されたら候補も累計も変わらない。
+  /// 出ている候補を、`workspace` に付けてタスク一覧へ未着手で足す。追加が拒否されたら候補も累計も変わらない。タスクを足した後に
+  /// 候補を書けなければ、候補は判断待ちのまま残る（タスクと自動化は別の原本）。
   func accept(_ proposalId: Int, into tasks: TaskStore, workspace: UUID?) throws(AutomationError)
     -> TaskItem
   {
     let index = try openIndex(proposalId)
+    guard database != nil else { throw Self.unavailableError }
     let proposal = proposals[index]
     var draft = TaskDraft(title: proposal.title)
     draft.due = proposal.due
@@ -137,27 +141,33 @@ import Observation
       case .notFound(let id): throw .invalid("task not found: \(id)")
       }
     }
-    book.proposals[index].state = .accepted(taskId: task.id)
-    tally(proposal, \.accepted)
-    persist()
+    do throws(AutomationError) {
+      try decide(index, as: .accepted(taskId: task.id), \.accepted)
+    } catch {
+      NSLog("[automation] the task \(task.id) was added but the proposal stays open: \(error)")
+    }
     return task
   }
 
   func dismiss(_ proposalId: Int) throws(AutomationError) {
-    let index = try openIndex(proposalId)
-    book.proposals[index].state = .dismissed
-    tally(proposals[index], \.dismissed)
-    persist()
+    try decide(try openIndex(proposalId), as: .dismissed, \.dismissed)
   }
 
-  /// さばいた候補を、出した自動化の累計に数える（棚に出していた自動化ではなく）。出した自動化が居なければ数えない。
-  private func tally(
-    _ proposal: AutomationProposal, _ outcome: WritableKeyPath<AutomationTaskCandidatesState, Int>
-  ) {
-    guard let index = automations.firstIndex(where: { $0.id == proposal.automationId }) else {
-      return
+  /// さばいた候補を、出した自動化の累計に数える（棚に出していた自動化ではなく）。出した自動化が居ない・判定の部品を持たなく
+  /// なっていれば数えない。
+  private func decide(
+    _ index: Int, as state: AutomationProposal.State,
+    _ outcome: WritableKeyPath<AutomationTally, Int>
+  ) throws(AutomationError) {
+    try commit { db, memory in
+      memory.proposals[index].state = state
+      try db.update(proposal: memory.proposals[index])
+      let issuer = memory.proposals[index].automationId
+      guard let owner = memory.automations.firstIndex(where: { $0.id == issuer && $0.judges })
+      else { return }
+      memory.automations[owner].tally[keyPath: outcome] += 1
+      try db.update(memory.automations[owner])
     }
-    automations[index].tally(outcome)
   }
 
   private func openIndex(_ proposalId: Int) throws(AutomationError) -> Int {
@@ -168,122 +178,56 @@ import Observation
     return index
   }
 
-  private func persist() {
-    AutomationPersistence.save(
-      AutomationsFile(
-        version: AutomationPersistence.version, nextAutomationId: nextAutomationId,
-        nextProposalId: book.nextId, automations: automations, proposals: book.proposals))
-  }
+  // MARK: - 書き込み
 
-  // MARK: - 検証
+  static let unavailableError = AutomationError.unavailable(
+    "automations are unavailable in this session (another Orbe holds them, their database could "
+      + "not be opened, or it broke while running); see the log")
 
-  /// 名前と段の名前はタスクのタイトルと同じ 1 行の規則（前後の空白を除いて保存）。agent は裏で回せる CLI だけ。取得元の
-  /// agent のツールは MCP のツールの完全名だけ。出力先ごとの要件はその出力先が見る。
-  static func valid(_ definition: AutomationDefinition) throws(AutomationError)
-    -> AutomationDefinition
+  /// 変異の 1 経路。`body` はメモリの写しを進めながら、変わる行を DB に書く（1 トランザクション）。通ったら写しをメモリにし、
+  /// 通らなければメモリは変わらない。壊れを見つけたら接続を手放してストアを使えなくする。検証は呼ぶ前に済ませる（`body` が
+  /// 投げたものはどれも書けなかったことになる）。
+  func commit<T>(_ body: (AutomationDatabase, inout AutomationMemory) throws -> T)
+    throws(AutomationError) -> T
   {
-    var definition = definition
-    definition.name = try line(definition.name, "name")
-    if let source = definition.source { try check(source) }
-    for (index, step) in definition.steps.enumerated() {
-      let role = "steps[\(index)]"
-      definition.steps[index].name = try line(step.name, "\(role).name")
-      switch step.method {
-      case .command(let command):
-        do throws(BackgroundJobError) {
-          try BackgroundJob.command(command).validate()
-        } catch {
-          throw .invalid("\(role): \(error.message)")
-        }
-      case .agent(let agent):
-        try checkAgent(agent.cli, model: agent.model, role)
-        guard !isBlank(agent.instruction) else { throw .invalid("\(role): instruction is empty") }
-      }
-    }
-    switch definition.sink {
-    case .taskCandidates: try AutomationTaskCandidates.check(definition)
-    case .command(let command): try AutomationCommandSinkRun.check(command)
-    case .report: try AutomationReportSinkRun.check(definition)
-    case .agent(let agent):
-      try checkAgent(agent.cli, model: agent.model, "sink")
-      try AutomationAgentSinkRun.check(agent)
-    }
-    do throws(BackgroundJobError) {
-      try definition.trigger.validate()
+    guard let database else { throw Self.unavailableError }
+    var memory = AutomationMemory(automations: automations, proposals: proposals)
+    let result: T
+    do {
+      result = try database.transaction { try body(database, &memory) }
     } catch {
-      throw .invalid("trigger: \(error.message)")
+      throw fault(error)
     }
-    return definition
+    if memory.automations != automations { automations = memory.automations }
+    if memory.proposals != proposals { proposals = memory.proposals }
+    return result
   }
 
-  /// 書き換えの後に全件を見直す出力先か。
-  private static func reviewsAfterRework(_ sink: AutomationSink) -> Bool {
-    switch sink {
-    case .taskCandidates: AutomationTaskCandidates.reviewsAfterRework
-    case .command: AutomationCommandSinkRun.reviewsAfterRework
-    case .report: AutomationReportSinkRun.reviewsAfterRework
-    case .agent: AutomationAgentSinkRun.reviewsAfterRework
-    }
-  }
-
-  private static func check(_ source: AutomationSource) throws(AutomationError) {
-    switch source.method {
-    case .command(let command):
-      do throws(BackgroundJobError) {
-        try BackgroundJob.command(command).validate()
-      } catch {
-        throw .invalid("source: \(error.message)")
-      }
-    case .agent(let agent):
-      try checkAgent(agent.cli, model: agent.model, "source")
-      guard !agent.tools.isEmpty else { throw .invalid("source: tools are empty") }
-      if let tool = agent.tools.first(where: { !isMCPToolName($0) }) {
-        throw .invalid(
-          "source: \(tool) is not a full MCP tool name (mcp__<server>__<tool>); built-in tools, "
-            + "whole servers and wildcards are refused so that fetched text cannot make the "
-            + "fetcher write anything")
-      }
-      guard !isBlank(agent.request) else { throw .invalid("source: request is empty") }
-    }
-  }
-
-  private static func line(_ text: String, _ field: String) throws(AutomationError) -> String {
-    do throws(TaskStoreError) {
-      return try TaskStore.validTitle(text)
+  /// トランザクションの外で読む。
+  func read<T>(_ body: (AutomationDatabase) throws -> T) throws(AutomationError) -> T {
+    guard let database else { throw Self.unavailableError }
+    do {
+      return try body(database)
     } catch {
-      throw .invalid("\(field) must be a single non-empty line")
+      throw fault(error)
     }
   }
 
-  /// モデルは省略できる（既定は段・取得元なら `AutomationDefinition.model`、出力先の agent なら
-  /// `AutomationSinkAgent.resolvedModel`）。書くなら空でないこと。
-  private static func checkAgent(_ cli: String, model: String?, _ role: String)
-    throws(AutomationError)
-  {
-    switch AgentCatalog.profile(cli)?.headless {
-    case .runs: break
-    case .refuses(let reason):
-      throw .invalid("\(role): \(cli) cannot run in the background (\(reason.message))")
-    case nil: throw .invalid("\(role): agent \(cli) is not supported")
+  private func fault(_ error: Error) -> AutomationError {
+    NSLog("[automation] cannot read or save automations: \(error)")
+    if let error = error as? SQLiteError, error.isBroken {
+      database = nil
+      automations = []
+      proposals = []
+      onUnavailable()
+      return Self.unavailableError
     }
-    if let model, isBlank(model) { throw .invalid("\(role): model is empty") }
+    return .unavailable("could not read or save automations: \(error)")
   }
+}
 
-  /// MCP のツールの完全名（`mcp__<サーバー>__<ツール>`）か。文字はツール名に使えるもの（英数字・`_`・`-`）だけ——`,` を
-  /// 通すと `--allowedTools` で連結されてサーバー単位の許可になり、空白も同じく区切りになる。
-  static func isMCPToolName(_ name: String) -> Bool {
-    guard name.hasPrefix("mcp__"),
-      name.unicodeScalars.allSatisfy({
-        ("a"..."z").contains($0) || ("A"..."Z").contains($0) || ("0"..."9").contains($0)
-          || $0 == "_" || $0 == "-"
-      })
-    else { return false }
-    let rest = name.dropFirst("mcp__".count)
-    guard let separator = rest.range(of: "__") else { return false }
-    return separator.lowerBound > rest.startIndex && separator.upperBound < rest.endIndex
-  }
-
-  private static func isBlank(_ text: String) -> Bool {
-    text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-  }
+/// 変異の間のメモリの写し（`AutomationStore.commit`）。
+struct AutomationMemory {
+  var automations: [Automation]
+  var proposals: [AutomationProposal]
 }

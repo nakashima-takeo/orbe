@@ -8,7 +8,7 @@ extension DesignGallerySnapshotTests {
   func renderTaskPaletteAutomationSnapshots(
     _ write: (String, TaskPaletteModel, CGFloat, CGFloat) throws -> Void
   ) throws {
-    func model(_ file: AutomationsFile? = nil) -> TaskPaletteModel {
+    func model(_ file: [AutomationSample]? = nil) -> TaskPaletteModel {
       let palette = DesignSceneFixtures.taskPaletteModel(automations: file)
       palette.setTab(.automation)
       return palette
@@ -43,7 +43,7 @@ extension DesignGallerySnapshotTests {
     try write("automation_contents_agent.png", agent, 1440, 900)
 
     // 取得と判定の中身は行数で切らず、折り返して全文を出す（長い依頼文・使えるツール・指示文・コマンドと作業ディレクトリ）。
-    let long = DesignSceneFixtures.automationLongFile()
+    let long = DesignSceneFixtures.automationLongSamples()
     let longAgent = model(long)
     longAgent.automation.tapShelf(.automation(3))
     longAgent.automation.enterContents()
@@ -61,12 +61,12 @@ extension DesignGallerySnapshotTests {
     refused.automation.perform(.runNow)
     try write("automation_contents_running.png", refused, 1440, 900)
 
-    let crowded = model(DesignSceneFixtures.automationCrowdedFile())
+    let crowded = model(DesignSceneFixtures.automationCrowdedSamples())
     crowded.automation.tapShelf(.automation(1))
     crowded.automation.jumpProposal(1)
     try write("automation_crowded.png", crowded, 1440, 900)
 
-    try write("automation_empty.png", model(DesignSceneFixtures.automationEmptyFile()), 1440, 900)
+    try write("automation_empty.png", model([]), 1440, 900)
 
     let small = model()
     small.automation.tapShelf(.automation(1))

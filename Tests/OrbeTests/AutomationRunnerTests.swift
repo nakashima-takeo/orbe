@@ -1,32 +1,35 @@
+import OrbeSessionLog
 import XCTest
 
 @testable import Orbe
 
-/// 受信の走らせ役——取得 → 新しい項目 → 判定 → 確定を番人の 1 回として進める。新しい項目が無ければ判定を起こさない、
-/// 走っている間の「今すぐ」は断る、取得か判定の書き換え・削除は走っている回を止めて結果を捨てる、名前やいつの書き換え・
-/// 止める／再開は走っている回を止めない、失敗した回は何も進めない。
+/// 走らせ役——部品ごとの予定、溜まりから取って部品の 1 回に渡すこと、「届いたら」の部品の起こし方、1 つの契機での取り切り、
+/// 書き換え。番人の時計と手段の実行だけを差し替え、ストアと DB と部品の 1 回は本物で回す。
 ///
-/// 壊れると何が起きるか。新しいものが無い回にも claude が立ち上がる。止める／再開で取得中の回が殺される。書き換える前の
-/// 取得の結果が新しい定義の回として確定する。ツールが使えなかった回を 0 件と読み、提案が一斉に下がる。
+/// 壊れると何が起きるか: 取得が溜めた項目が判定に届かない・判定の失敗で消える・同じ項目が二度判定に渡る。「届いたら」の部品が
+/// 溜まりを抱えたまま誰にも起こされず、次の上流の回（毎日の取得なら 1 日）まで止まる。失敗した行で agent が即座に回り続ける。
+/// 1 日に溜まる量が 1 回の上限を超えると、溜まりが日ごとに伸び続ける。新着の流れの取得が目印を失い、同じ項目を取り直すか取り
+/// 逃す。書き換えた前の定義の結果が新しい定義の回として確定する、名前を変えただけで走っている回が殺される。
 final class AutomationRunnerTests: OrbeTestCase {
-  private let start = Date(timeIntervalSince1970: 1_800_000_000)
+  let start = Date(timeIntervalSince1970: 1_800_000_000)
   var now = Date(timeIntervalSince1970: 1_800_000_000)
   private var armed: (date: Date, fire: () -> Void)?
   var jobs: FakeJobs!
   var store: AutomationStore!
   var runner: AutomationRunner!
-  /// 走らせ役が記録を知らせた自動化の ID（知らせた順）。
-  var recorded: [Int] = []
-  /// 走らせ役が今の workspace として受ける一覧。
-  var workspaces: [AutomationWorkspace] = []
+  /// 走らせ役が回を記録したと知らせた部品の鍵（知らせた順）。
+  var recorded: [String] = []
 
   override func setUp() {
     jobs = FakeJobs()
-    store = AutomationStore(file: nil)
-    runner = makeRunner()
+    launch()
   }
 
-  private func makeRunner() -> AutomationRunner {
+  /// ストアを開いて走らせ役を起動する。開き直すときは前のストアを手放してから（DB は排他）。
+  func launch() {
+    runner = nil
+    store = nil
+    store = AutomationStore()
     let scheduler = BackgroundScheduler { _, _ in BackgroundRunHandle {} }
     scheduler.now = { [unowned self] in now }
     scheduler.calendar = { Calendar(identifier: .gregorian) }
@@ -34,325 +37,293 @@ final class AutomationRunnerTests: OrbeTestCase {
       armed = (date, fire)
       return { [unowned self] in armed = nil }
     }
-    let runner = AutomationRunner(
+    runner = AutomationRunner(
       store: store, scheduler: scheduler, run: jobs.run,
-      workspaces: { [unowned self] in AutomationWorkspaces(listed: workspaces, home: nil) },
-      recorded: { [unowned self] in recorded.append($0) }, defined: { _ in }, deleted: { _ in })
+      workspaces: { AutomationWorkspaces(listed: [], home: nil) },
+      recorded: { [unowned self] in recorded.append($1) },
+      defined: { _ in }, deleted: { _ in })
     runner.now = { [unowned self] in now }
-    return runner
+    runner.calendar = { Calendar(identifier: .gregorian) }
+    runner.start()
   }
 
-  private func advance(to date: Date) {
-    now = date
-    if let armed, armed.date <= date { armed.fire() }
+  func advance(by seconds: TimeInterval) {
+    now = now.addingTimeInterval(seconds)
+    while let due = armed, due.date <= now {
+      armed = nil
+      due.fire()
+    }
   }
 
-  func create(_ definition: AutomationDefinition = AutomationStoreTests.definition()) throws
-    -> Automation
-  {
-    try runner.set(nil, definition)
+  // MARK: - 部品
+
+  /// コマンドの部品。スクリプトは既定で部品の鍵（呼び出しを部品ごとに見分けるため）。
+  func part(
+    _ key: String, _ trigger: AutomationPart.Trigger, from inputs: [String] = [],
+    script: String? = nil, coverage: AutomationCoverage? = nil,
+    deliver: AutomationPart.Destination = .nextPart
+  ) -> AutomationPart {
+    DesignSceneFixtures.commandPart(
+      key, key, trigger, from: inputs, script: script ?? key, coverage: coverage, deliver: deliver)
   }
 
-  private func line(_ id: String) -> String {
-    #"{"id":"\#(id)","link":"https://example.com/\#(id)","body":"\#(id) の本文","time":"2026-10-10T09:00:00Z"}"#
+  /// 新着の流れを `seconds` ごとに取る取得の部品。
+  func fetch(_ key: String, every seconds: TimeInterval, script: String? = nil) -> AutomationPart {
+    part(key, .scheduled(.every(seconds)), script: script, coverage: .newArrivals)
   }
 
-  func fetched(_ ids: [String], exit: Int32 = 0, stderr: String = "") -> BackgroundRunResult {
+  func define(_ parts: [AutomationPart], name: String = "自動化") throws -> Int {
+    try runner.set(nil, AutomationDefinition(name: name, notify: nil, parts: parts)).id
+  }
+
+  func inbox(_ key: String, of id: Int) -> Int? {
+    store.automation(id)?.parts[key]?.inbox
+  }
+
+  // MARK: - 手段の呼び出し
+
+  /// スクリプトが `script` の呼び出しの番号（呼ばれた順）。
+  func calls(_ script: String) -> [Int] {
+    jobs.calls.indices.filter {
+      if case .command(let command, _) = jobs.calls[$0].job.work { return command.script == script }
+      return false
+    }
+  }
+
+  func input(_ index: Int) -> BackgroundInput? {
+    guard case .command(_, let input) = jobs.calls[index].job.work else { return nil }
+    return input
+  }
+
+  /// 呼び出しに標準入力で渡した行（JSON のオブジェクト）。
+  func rows(_ index: Int) -> [[String: Any]] {
+    let text = String(bytes: input(index)?.stdin ?? Data(), encoding: .utf8) ?? ""
+    return text.split(separator: "\n").compactMap {
+      try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any]
+    }
+  }
+
+  /// 最後に呼んだ `script` に渡した行の id。
+  func ids(_ script: String) -> [String] {
+    guard let last = calls(script).last else { return [] }
+    return rows(last).compactMap { $0["id"] as? String }
+  }
+
+  /// 最後に呼んだ `script` に渡した行の本文。
+  func bodies(_ script: String) -> [String] {
+    guard let last = calls(script).last else { return [] }
+    return rows(last).compactMap { $0["body"] as? String }
+  }
+
+  /// 最後に呼んだ `script` を終える。
+  func finish(_ script: String, _ result: BackgroundRunResult) {
+    guard let last = calls(script).last else { return XCTFail("\(script) は呼ばれていない") }
+    jobs.finish(last, result)
+  }
+
+  func printed(_ stdout: String, exit: Int32 = 0) -> BackgroundRunResult {
     BackgroundRunResult(
-      commandLine: "fetch", startedAt: now, endedAt: now, ending: .exited(exit),
-      output: .command(
-        stdout: .init(data: Data(ids.map(line).joined(separator: "\n").utf8)),
-        stderr: .init(data: Data(stderr.utf8))))
+      commandLine: "run", startedAt: now, endedAt: now, ending: .exited(exit),
+      output: .command(stdout: .init(data: Data(stdout.utf8)), stderr: .init()))
   }
 
-  func replied(_ text: String, isError: Bool = false) -> BackgroundRunResult {
-    BackgroundRunResult(
+  func item(_ id: String, body: String? = nil) -> String {
+    let body = body ?? "\(id) の本文"
+    return #"{"id":"\#(id)","link":"https://example.com/\#(id)","body":"\#(body)","#
+      + #""time":"2026-10-10T09:00:00Z"}"#
+  }
+
+  func fetched(_ ids: [String]) -> BackgroundRunResult {
+    printed(ids.map { item($0) }.joined(separator: "\n"))
+  }
+
+  // MARK: - 溜まりと判定
+
+  /// 取得の部品が回るたびに判定の溜まりが増え、判定の予定の時刻に溜まった分がまとめて渡って、溜まりが空になる。
+  func testFetchesFillTheJudgesInboxAndTheJudgeTakesItAllAtItsTime() throws {
+    let id = try define([
+      fetch("gh", every: 1800), fetch("slack", every: 3600),
+      part("judge", .scheduled(.every(86400)), from: ["gh", "slack"], deliver: .taskCandidates),
+    ])
+
+    advance(by: 1800)
+    finish("gh", fetched(["a"]))
+    XCTAssertEqual(inbox("judge", of: id), 1)
+    advance(by: 1800)
+    finish("gh", fetched(["a", "b"]))
+    finish("slack", fetched(["s"]))
+    XCTAssertEqual(inbox("judge", of: id), 3)
+    XCTAssertEqual(calls("judge"), [], "判定は予定の時刻まで起きない")
+
+    advance(by: 86400 - 3600)
+    XCTAssertEqual(ids("judge"), ["gh:a", "gh:b", "slack:s"])
+    finish("judge", printed(#"{"propose":"gh:a","title":"a に対応する"}"#))
+
+    XCTAssertEqual(inbox("judge", of: id), 0)
+    XCTAssertEqual(store.proposals.map(\.title), ["a に対応する"])
+  }
+
+  /// 判定が失敗しても溜まりは残り、取得は溜め続け、次の判定の回で同じ項目が渡る。
+  func testAFailedJudgeKeepsItsInboxForTheNextJudge() throws {
+    let id = try define([
+      fetch("gh", every: 1800),
+      part("judge", .scheduled(.every(3600)), from: ["gh"], deliver: .taskCandidates),
+    ])
+    advance(by: 1800)
+    finish("gh", fetched(["a"]))
+
+    advance(by: 1800)
+    finish("judge", printed("", exit: 1))
+    finish("gh", fetched(["a", "b"]))
+    XCTAssertEqual(inbox("judge", of: id), 2, "失敗した回の行も残る")
+
+    advance(by: 3600)
+    XCTAssertEqual(ids("judge"), ["gh:a", "gh:b"])
+  }
+
+  /// 「届いたら」の部品が失敗しても、同じ行ですぐには回し直さず、上流の次の回の後に（新しい行が無くても）やり直す。
+  func testAFailedArrivalPartRetriesAfterTheUpstreamsNextRunNotAtOnce() throws {
+    _ = try define([
+      fetch("gh", every: 1800),
+      part("digest", .arrival, from: ["gh"], deliver: .report),
+    ])
+    advance(by: 1800)
+    finish("gh", fetched(["a"]))
+    finish("digest", printed("", exit: 1))
+    XCTAssertEqual(calls("digest").count, 1, "失敗した行ですぐ回し直さない")
+
+    advance(by: 1800)
+    finish("gh", fetched(["a"]))
+
+    XCTAssertEqual(calls("digest").count, 2)
+    XCTAssertEqual(ids("digest"), ["gh:a"])
+  }
+
+  /// 「届いたら」の部品が走っている間に届いた行は、その回が終わったら続けて起こして渡す。
+  func testRowsArrivingWhileAnArrivalPartRunsAreTakenRightAfterIt() throws {
+    let id = try define([
+      fetch("gh", every: 1800),
+      part("digest", .arrival, from: ["gh"], deliver: .report),
+    ])
+    advance(by: 1800)
+    finish("gh", fetched(["a"]))
+    advance(by: 1800)
+    finish("gh", fetched(["a", "b"]))
+    XCTAssertEqual(calls("digest").count, 1, "走っている間は重ねない")
+
+    finish("digest", printed("要約"))
+
+    XCTAssertEqual(calls("digest").count, 2)
+    XCTAssertEqual(ids("digest"), ["gh:b"])
+    finish("digest", printed("要約"))
+    XCTAssertEqual(inbox("digest", of: id), 0)
+  }
+
+  /// 届いたまま残っている行は、起動で載せたときに「届いたら」の部品を起こす。止めた自動化は起動では起こさず、再開で起こす。
+  func testLeftoverRowsWakeArrivalPartsAtLaunchAndOnResumeButNotWhilePaused() throws {
+    func seed(_ digest: String, paused: Bool) throws -> Int {
+      let id = try store.create(
+        AutomationDefinition(
+          name: digest, notify: nil,
+          parts: [
+            fetch("gh", every: 86400),
+            part("digest", .arrival, from: ["gh"], script: digest, deliver: .report),
+          ]), now: now
+      ).id
+      _ = try store.record(
+        AutomationPassEnd(
+          automationId: id, part: "gh", trigger: .schedule, startedAt: now, endedAt: now,
+          take: nil,
+          outcome: DesignSceneFixtures.fetched(
+            "gh", [AutomationItem(id: "a", link: "https://example.com/a", body: "a", time: now)])))
+      if paused { _ = try store.setPaused(id, true) }
+      return id
+    }
+    _ = try seed("active-digest", paused: false)
+    let paused = try seed("paused-digest", paused: true)
+
+    launch()
+
+    XCTAssertEqual(ids("active-digest"), ["gh:a"], "起動で起こす")
+    XCTAssertEqual(calls("paused-digest"), [], "止めた自動化は起動で起こさない")
+    _ = try runner.pause(paused, false)
+    XCTAssertEqual(ids("paused-digest"), ["gh:a"], "再開で起こす")
+  }
+
+  /// 1 回の上限を超えて溜まった行は、1 つの契機の中で続けて回して取り切る。
+  func testOneTriggerTakesTheWholeInboxBeyondTheBatchLimit() throws {
+    let id = try define([
+      fetch("gh", every: 1800),
+      DesignSceneFixtures.agentPart(
+        "judge", "判定", .scheduled(.every(86400)), from: ["gh"], instruction: "判定する",
+        deliver: .taskCandidates),
+    ])
+    let count = AutomationInbox.batchCount + 1
+    advance(by: 1800)
+    finish("gh", fetched((0..<count).map { "i\($0)" }))
+    XCTAssertEqual(inbox("judge", of: id), count)
+
+    advance(by: 86400 - 1800)
+    let judged = BackgroundRunResult(
       commandLine: "claude -p", startedAt: now, endedAt: now, ending: .exited(0),
-      output: .agent(reply: BackgroundAgentReply(text: text, isError: isError), stderr: .init()))
-  }
+      output: .agent(
+        reply: BackgroundAgentReply(text: #"{"nothing":"該当なし"}"#, isError: false),
+        stderr: .init()))
+    jobs.finish(try XCTUnwrap(agentCalls.first), judged)
+    guard agentCalls.count == 2 else { return XCTFail("残りを同じ契機で続けて回す: \(agentCalls)") }
+    jobs.finish(agentCalls[1], judged)
 
-  func prompt(_ index: Int) -> String {
-    guard case .agent(let call) = jobs.calls[index].job.work else { return "" }
-    return call.prompt
-  }
-
-  // MARK: - 1 回
-
-  func testScheduledRunJudgesOnlyNewItemsAndCommits() throws {
-    let automation = try create()
-
-    advance(to: start.addingTimeInterval(1800))
-    XCTAssertEqual(jobs.calls.map(\.job), [.command(BackgroundCommand(script: "fetch"))])
-    XCTAssertTrue(runner.isRunning(automation.id))
-    jobs.finish(0, fetched(["a", "b"]))
-
-    XCTAssertEqual(jobs.calls.count, 2, "新しい項目があるので判定を起こす")
-    guard case .agent(let call) = jobs.calls[1].job.work else { return XCTFail("判定は agent") }
-    XCTAssertEqual(call.tools, [], "判定はツールを持たない")
-    XCTAssertEqual(call.model, "haiku")
-    jobs.finish(1, replied(#"{"propose":"a","title":"a に返信する"}"#))
-
-    XCTAssertFalse(runner.isRunning(automation.id))
-    XCTAssertEqual(store.proposals.map(\.title), ["a に返信する"])
-    let run = try XCTUnwrap(store.automation(automation.id)?.runs.first)
-    XCTAssertEqual(run.trigger, .schedule)
-    XCTAssertEqual(run.source?.count, 2)
-    XCTAssertEqual(run.fresh, 2)
-    XCTAssertEqual(AutomationStoreTests.candidates(run)?.proposed, 1)
-    XCTAssertNil(run.failure)
-    XCTAssertEqual(store.automation(automation.id)?.lastRunAt, now)
-    XCTAssertEqual(armed?.date, now.addingTimeInterval(1800), "取得の開始から数え直す")
-  }
-
-  /// 前の回に無かった項目だけが判定に回り、新しい項目が無い回は判定を起こさない。
-  func testOnlyNewItemsReachTheJudgeAndNoNewItemsMeansNoJudge() throws {
-    let automation = try create()
-    try runner.runNow(automation.id)
-    jobs.finish(0, fetched(["a"]))
-    jobs.finish(1, replied(""))
-
-    try runner.runNow(automation.id)
-    jobs.finish(2, fetched(["a", "b"]))
-    XCTAssertTrue(prompt(3).contains(#""id":"b""#))
-    XCTAssertFalse(prompt(3).contains(#""id":"a""#), "前の回に取れた項目は判定に回さない")
-    jobs.finish(3, replied(""))
-
-    try runner.runNow(automation.id)
-    jobs.finish(4, fetched(["a", "b"]))
-
-    XCTAssertEqual(jobs.calls.count, 5, "新しい項目が無い回は判定を起こさない")
-    let run = try XCTUnwrap(store.automation(automation.id)?.runs.first)
-    XCTAssertEqual(run.trigger, .now)
-    XCTAssertEqual(run.fresh, 0)
-    XCTAssertEqual(run.steps, [])
-    XCTAssertFalse(runner.isRunning(automation.id))
-  }
-
-  /// 判定には付け先にできる workspace の一覧が載り、判定が書いた付け先は永続 ID で候補に残る。照合には回の始めに写した
-  /// 一覧を使うので、判定の間に workspace が消えても判定が見た一覧で読む。一覧に無い付け先の行は理由付きで捨てる。
-  func testJudgeAttachesProposalsToTheWorkspacesItWasShown() throws {
-    let orbe = AutomationWorkspace(id: 7, persistentId: UUID(), name: "orbe", root: "/src/orbe")
-    workspaces = [orbe]
-    let automation = try create()
-    try runner.runNow(automation.id)
-    jobs.finish(0, fetched(["a", "b", "c"]))
-
-    XCTAssertTrue(prompt(1).contains(#"{"name":"orbe","root":"/src/orbe","workspace":7}"#))
-    workspaces = []
-    jobs.finish(
-      1,
-      replied(
-        [
-          #"{"propose":"a","title":"a に返信する","workspace":7}"#,
-          #"{"propose":"b","title":"b に返信する"}"#,
-          #"{"propose":"c","title":"c に返信する","workspace":8}"#,
-        ].joined(separator: "\n")))
-
-    XCTAssertEqual(store.proposals.map(\.title), ["a に返信する", "b に返信する"])
-    XCTAssertEqual(store.proposals.map(\.workspace), [orbe.persistentId, nil])
-    let run = try XCTUnwrap(store.automation(automation.id)?.runs.first)
+    XCTAssertEqual(inbox("judge", of: id), 0)
     XCTAssertEqual(
-      AutomationStoreTests.candidates(run)?.rejected.reasons,
-      ["propose c: workspace 8 is not a listed workspace"])
+      store.automation(id)?.state("judge").runs.map(\.taken), [1, AutomationInbox.batchCount])
   }
 
-  func testRunNowIsRefusedWhileRunning() throws {
-    let automation = try create()
-    try runner.runNow(automation.id)
-
-    XCTAssertThrowsError(try runner.runNow(automation.id)) {
-      XCTAssertEqual($0 as? AutomationError, .running(automation.id))
+  var agentCalls: [Int] {
+    jobs.calls.indices.filter {
+      if case .agent = jobs.calls[$0].job.work { return true }
+      return false
     }
-    XCTAssertThrowsError(try runner.runNow(99)) {
-      XCTAssertEqual($0 as? AutomationError, .automationNotFound(99))
-    }
-    XCTAssertEqual(jobs.calls.count, 1)
   }
 
-  /// 止めた受信は予定では回らないが、「今すぐ」は受ける。
-  func testPausedAutomationRunsOnlyWhenAskedNow() throws {
-    let automation = try create()
-    _ = try runner.pause(automation.id, true)
+  /// 回が走っている間に、取った行と同じ id の新しい行が届いて置き換わっても、その回の確定は新しい行を消さず、次の回に渡す。
+  func testARowReplacedWhileAPartRunsSurvivesThatPartsCommit() throws {
+    let id = try define([
+      part("gh", .scheduled(.every(1800)), coverage: .everything),
+      part("digest", .scheduled(.every(3600)), from: ["gh"], deliver: .report),
+    ])
+    advance(by: 1800)
+    finish("gh", printed(item("a", body: "古い本文")))
 
-    advance(to: start.addingTimeInterval(86400))
-    XCTAssertEqual(jobs.calls.count, 0)
-    XCTAssertNil(runner.nextRunAt(store.automation(automation.id)!))
+    advance(by: 1800)
+    XCTAssertEqual(bodies("digest"), ["古い本文"])
+    finish("gh", printed(item("a", body: "新しい本文")))
+    finish("digest", printed("要約"))
+    XCTAssertEqual(inbox("digest", of: id), 1, "置き換わった新しい行は残る")
 
-    try runner.runNow(automation.id)
-    XCTAssertEqual(jobs.calls.count, 1)
+    advance(by: 3600)
+    XCTAssertEqual(calls("digest").count, 2)
+    XCTAssertEqual(bodies("digest"), ["新しい本文"])
   }
 
-  /// 長く止めていた受信を再開すると、数え始め（最後に回った時刻）は動かないので、過ぎた回として 1 回すぐ回る。
-  func testResumingALongPausedAutomationRunsOnceRightAway() throws {
-    let automation = try create()
-    try runner.runNow(automation.id)
-    jobs.finish(0, fetched([]))
-    _ = try runner.pause(automation.id, true)
-    advance(to: start.addingTimeInterval(86400))
-    XCTAssertEqual(jobs.calls.count, 1, "止めている間は回らない")
+  // MARK: - 目印
 
-    _ = try runner.pause(automation.id, false)
+  /// 新着の流れの取得は、前回成功した回の始まりを目印（`ORBE_SINCE`）に受ける。失敗した回では目印は進まない。
+  func testANewArrivalsFetchGetsTheStartOfItsLastSuccessfulRun() throws {
+    _ = try define([
+      fetch("gh", every: 1800),
+      part("digest", .arrival, from: ["gh"], deliver: .report),
+    ])
+    func since() -> String? { calls("gh").last.flatMap { input($0)?.environment["ORBE_SINCE"] } }
 
-    XCTAssertEqual(jobs.calls.count, 2, "再開したらまず最新を取る")
-    guard jobs.calls.count == 2 else { return }
-    XCTAssertTrue(runner.isRunning(automation.id))
-    jobs.finish(1, fetched([]))
-    XCTAssertEqual(store.automation(automation.id)?.runs.first?.trigger, .schedule)
-    XCTAssertEqual(jobs.calls.count, 2, "過ぎた回は何回分でも 1 回だけ")
-  }
+    advance(by: 1800)
+    XCTAssertNil(since(), "一度も成功していなければ目印は無い")
+    advance(by: 600)
+    finish("gh", fetched(["a"]))
+    advance(by: 1800)
+    XCTAssertEqual(since(), SessionEvent.iso8601(start.addingTimeInterval(1800)))
+    finish("gh", printed("", exit: 1))
+    advance(by: 1800)
 
-  /// 番人の予定に載ったまま受信がストアから消えていても、回はすぐ終わり、「走っている」が残らない。
-  func testMissingAutomationEndsTheRunAtOnce() throws {
-    let automation = try create()
-    try store.delete(automation.id)
-
-    advance(to: start.addingTimeInterval(1800))
-
-    XCTAssertFalse(runner.isRunning(automation.id))
-    XCTAssertEqual(jobs.calls.count, 0)
-    XCTAssertEqual(armed?.date, now.addingTimeInterval(1800), "終わりを受けて数え直している")
-  }
-
-  // MARK: - 書き換えと競合
-
-  /// 取得か判定の書き換えは、走っている段を止め、その結果を新しい定義の回として確定しない。
-  func testReworkStopsTheRunningRunAndDropsItsResult() throws {
-    let automation = try create()
-    try runner.runNow(automation.id)
-
-    _ = try runner.set(automation.id, AutomationStoreTests.definition(script: "fetch --since 1d"))
-    jobs.finish(0, fetched(["a"]))
-
-    XCTAssertEqual(jobs.stopped, [0])
-    XCTAssertEqual(jobs.calls.count, 1, "止めた回の続き（判定）を起こさない")
-    XCTAssertEqual(store.automation(automation.id)?.runs, [])
-    XCTAssertFalse(runner.isRunning(automation.id))
-  }
-
-  /// 判定の最中に書き換えても同じ。判定の結果は捨てる。
-  func testReworkDuringTheJudgeDropsTheJudgement() throws {
-    let automation = try create()
-    try runner.runNow(automation.id)
-    jobs.finish(0, fetched(["a"]))
-
-    _ = try runner.set(automation.id, AutomationStoreTests.definition(instruction: "別の指示"))
-    jobs.finish(1, replied(#"{"propose":"a","title":"古い指示の提案"}"#))
-
-    XCTAssertEqual(jobs.stopped, [1])
-    XCTAssertEqual(store.proposals, [])
-  }
-
-  /// 名前やいつだけの書き換え・止める／再開は、走っている回を止めない。
-  func testRenameAndPauseKeepTheRunningRun() throws {
-    let automation = try create()
-    try runner.runNow(automation.id)
-
-    _ = try runner.set(
-      automation.id, AutomationStoreTests.definition("新しい名前", trigger: .every(600)))
-    _ = try runner.pause(automation.id, true)
-    _ = try runner.pause(automation.id, false)
-    XCTAssertTrue(runner.isRunning(automation.id))
-    jobs.finish(0, fetched([]))
-
-    XCTAssertEqual(jobs.stopped, [])
-    XCTAssertEqual(store.automation(automation.id)?.runs.count, 1)
-    XCTAssertEqual(armed?.date, now.addingTimeInterval(600), "新しいいつで数え直す")
-  }
-
-  func testDeleteStopsTheRunningRun() throws {
-    let automation = try create()
-    try runner.runNow(automation.id)
-
-    try runner.delete(automation.id)
-    jobs.finish(0, fetched(["a"]))
-
-    XCTAssertEqual(jobs.stopped, [0])
-    XCTAssertEqual(jobs.calls.count, 1)
-    XCTAssertNil(armed)
-  }
-
-  // MARK: - 失敗した回
-
-  func testFetchFailureLeavesProposalsAndRecordsTheReason() throws {
-    let automation = try create()
-    try runner.runNow(automation.id)
-    jobs.finish(0, fetched(["a"]))
-    jobs.finish(1, replied(#"{"propose":"a","title":"返信する"}"#))
-
-    try runner.runNow(automation.id)
-    jobs.finish(2, fetched([], exit: 1, stderr: "token expired\n"))
-
-    XCTAssertEqual(store.proposals.count, 1, "失敗を 0 件と読んで提案を下げない")
-    XCTAssertEqual(store.automation(automation.id)?.lastFetched.map(\.id), ["a"])
-    XCTAssertEqual(
-      store.automation(automation.id)?.runs.first?.failure,
-      "the fetch ended: exited 1: token expired")
-  }
-
-  /// 判定が失敗した回は取得済みも進めないので、同じ項目は次の回でまた判定に回る。
-  func testJudgeFailureKeepsTheItemsNewForTheNextRun() throws {
-    let automation = try create()
-    try runner.runNow(automation.id)
-    jobs.finish(0, fetched(["a"]))
-    jobs.finish(1, replied("overloaded", isError: true))
-
-    let run = try XCTUnwrap(store.automation(automation.id)?.runs.first)
-    XCTAssertEqual(run.failure, #"the step "判定" agent reported an error: overloaded"#)
-    XCTAssertEqual(store.automation(automation.id)?.lastFetched, [])
-    try runner.runNow(automation.id)
-    jobs.finish(2, fetched(["a"]))
-    XCTAssertEqual(jobs.calls.count, 4, "同じ項目をまた判定に回す")
-  }
-
-  /// 取得役の agent は固定の枠で依頼され、指定したツールが使えなかった回は失敗として何も進めない。
-  func testAgentFetchUsesTheFixedFrameAndFailsWhenToolsAreUnavailable() throws {
-    var definition = AutomationStoreTests.definition()
-    definition.source?.method = AutomationStoreTests.agentSource()
-    let automation = try create(definition)
-    try runner.runNow(automation.id)
-
-    guard case .agent(let call) = jobs.calls[0].job.work else { return XCTFail("取得役は agent") }
-    XCTAssertEqual(call.tools, ["mcp__slack__search"])
-    XCTAssertEqual(call.prompt, AutomationPrompts.fetch(request: "自分宛の DM"))
-    jobs.finish(
-      0,
-      BackgroundRunResult(
-        commandLine: "claude -p", startedAt: now, endedAt: now,
-        ending: .toolsUnavailable(["mcp__slack__search"]),
-        output: .agent(reply: nil, stderr: .init())))
-
-    XCTAssertEqual(
-      store.automation(automation.id)?.runs.first?.failure,
-      "the fetch ended: tools unavailable: mcp__slack__search")
-    XCTAssertEqual(jobs.calls.count, 1)
-  }
-
-  /// 取得役の agent は、最終応答の行を項目として読み、新しい項目を判定へ回す。
-  func testAgentFetchReadsItemsFromItsReply() throws {
-    var definition = AutomationStoreTests.definition()
-    definition.source?.method = AutomationStoreTests.agentSource()
-    let automation = try create(definition)
-    try runner.runNow(automation.id)
-
-    jobs.finish(0, replied(line("a")))
-
-    guard jobs.calls.count == 2 else { return XCTFail("取れた項目を判定に回す: \(jobs.calls.count)") }
-    XCTAssertTrue(prompt(1).contains(#""id":"a""#))
-  }
-
-  // MARK: - 起動
-
-  /// 起動時に、保存された受信を最後に回った時刻から数えて載せ直す。過ぎていれば 1 回だけすぐ回る。
-  func testStartRegistersStoredAutomationsFromTheirLastRun() throws {
-    let automation = try create()
-    try runner.runNow(automation.id)
-    jobs.finish(0, fetched([]))
-
-    now = start.addingTimeInterval(7200)
-    let restarted = makeRunner()
-    restarted.start()
-
-    XCTAssertEqual(jobs.calls.count, 2, "過ぎていた回を 1 回だけ回す")
-    XCTAssertTrue(restarted.isRunning(automation.id))
+    XCTAssertEqual(since(), SessionEvent.iso8601(start.addingTimeInterval(1800)))
   }
 }

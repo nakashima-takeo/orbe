@@ -214,7 +214,7 @@ extension DesignSceneFixtures {
 
   static func taskPaletteModel(
     _ file: TasksFile? = nil, openLists: ((GitHubViewer) -> GitHubOpenLists)? = nil,
-    sessionTabs: AgentSessionTabs = AgentSessionTabs(), automations: AutomationsFile? = nil,
+    sessionTabs: AgentSessionTabs = AgentSessionTabs(), automations: [AutomationSample]? = nil,
     workspaces: TaskPaletteWorkspaces? = nil
   ) -> TaskPaletteModel {
     let items = taskGitHubItems()
@@ -222,7 +222,7 @@ extension DesignSceneFixtures {
       store: TaskStore(file: file ?? taskDesignFile()), githubItems: items, viewer: items.viewer,
       openLists: (openLists ?? taskOpenLists)(items.viewer), root: taskRoot,
       agents: taskAgents(), sessionTabs: sessionTabs,
-      automations: automationRunner(automations ?? automationDesignFile()),
+      automations: automationRunner(automations ?? automationDesignSamples()),
       workspaces: { workspaces ?? taskWorkspaces }, now: taskToday, timeZone: taskCalendar.timeZone,
       clock: { _ in taskToday })
   }

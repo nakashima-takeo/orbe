@@ -29,7 +29,9 @@ final class SecretaryTextTests: OrbeTestCase {
   }
 
   func testAFixNamesTheAutomation() {
-    let automation = DesignSceneFixtures.boardAutomations()[2]
+    let automation = DesignSceneFixtures.automationStore(
+      DesignSceneFixtures.boardAutomationSamples()
+    ).automations[2]
     XCTAssertEqual(
       SecretaryText.firstInput(.automationFix(automation), l10n: ja),
       "依頼: 自動化 \(automation.id)「\(automation.definition.name)」を直す。")

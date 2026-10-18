@@ -29,7 +29,6 @@ final class WindowControllerBoardPartsTests: OrbeTestCase {
 
   /// Home を前面にしてタブを `count` 枚開き、ボードを選んで、画面外に出した WindowController。焦点は依頼の欄。
   @MainActor private func homeOnBoard(tabs count: Int) throws -> WindowController {
-    AutomationPersistence.save(DesignSceneFixtures.automationEmptyFile())
     let wc = WindowController()
     shown = wc
     NSApplication.shared.setActivationPolicy(.accessory)

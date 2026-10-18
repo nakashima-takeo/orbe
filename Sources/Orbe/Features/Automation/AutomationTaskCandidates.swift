@@ -1,125 +1,79 @@
 import Foundation
 
-/// タスク候補の出力先の 1 回。項目は取得元の `id` でたどり、リンクと本文はいつも取得元の項目から取る——段が作った文や
-/// リンクを候補に入れないため。
-final class AutomationTaskCandidates: AutomationSinkRun {
-  private let store: AutomationStore
-  private let automationId: Int
-  private let workspaces: () -> AutomationWorkspaces
-  private var fetched: [AutomationItem] = []
-  private var fresh: [AutomationItem] = []
-  private var choices = AutomationJudgeChoices(
-    open: [], workspaces: AutomationWorkspaces(listed: [], home: nil))
-  private var rejected = AutomationRejections()
+// タスク候補の保ち方。候補はリンク単位で全自動化を通じて 1 つ。候補が忘れられるのは、どの自動化も候補を持たなくなったとき
+// だけで、それまではタスクにした・捨てた・対応済みの候補も覚えていて、同じリンクを再び候補にしない。
+//
+// 自動化 A がリンク L の候補を持つのは、A のタスク候補へ至る取得の部品のどれかの前回の出力に L があるとき、または A の判定の
+// 部品が出して判断待ちで、出どころの取得の部品が今の A のグラフで新着の流れのとき。止めた自動化も持つ。
 
-  /// `workspaces` は候補の付け先にできる今の workspace。
-  init(
-    store: AutomationStore, automationId: Int, workspaces: @escaping () -> AutomationWorkspaces
-  ) {
-    self.store = store
-    self.automationId = automationId
-    self.workspaces = workspaces
-  }
-
-  /// 判定を直したら、今の集合を見直して候補を出し直す（既に候補のあるリンクは取り込みで除く）。
-  static let reviewsAfterRework = true
-
-  /// 要件。取得元が要り、取得の性質は新着の流れか今の集合（毎回全件で候補をどう保つかは決めていない）。段は 1 つ以上。
-  static func check(_ definition: AutomationDefinition) throws(AutomationError) {
-    guard let source = definition.source else {
-      throw .invalid("sink taskCandidates: a source is required")
-    }
-    guard source.coverage != .everything else {
-      throw .invalid("sink taskCandidates: the coverage must be newArrivals or currentSet")
-    }
-    guard !definition.steps.isEmpty else {
-      throw .invalid("sink taskCandidates: at least one step is required")
-    }
-  }
-
-  /// 同じリンクの候補がどこにも無い項目。同じ回に同じリンクが複数あれば最初の 1 件だけ。
-  func admit(_ items: [AutomationItem], fetched: [AutomationItem]) -> [AutomationItem] {
-    self.fetched = fetched
-    let proposed = Set(store.proposals.map(\.item.link))
-    var links = Set<String>()
-    fresh = items.filter { !proposed.contains($0.link) && links.insert($0.link).inserted }
-    return fresh
-  }
-
-  /// `id` が今回の新しい項目の行だけを渡す。判断待ちの候補と workspace の一覧はこの時点で取る。
-  func prepare(_ rows: [String]) -> [String] {
-    choices = AutomationJudgeChoices(
-      open: store.openProposals(of: automationId, in: fetched), workspaces: workspaces())
-    let ids = Set(fresh.map(\.id))
-    return rows.filter { row in
-      guard let id = AutomationPrompts.id(of: row) else {
-        rejected.add("input without an id")
+extension Automation {
+  /// タスク候補へ至る取得の部品の前回の出力のリンク。持ち主・重なりはこの集合で言う。
+  var candidateLinks: Set<String> {
+    Set(
+      graph.nodes.filter { node in
+        if case .fetch = node.role { return graph.reachesTaskCandidates(node.key) }
         return false
-      }
-      guard ids.contains(id) else {
-        rejected.add("input \(id): not a new item")
-        return false
-      }
-      return true
+      }.flatMap { state($0.key).lastOutput.map(\.link) })
+  }
+
+  /// この自動化が候補を持っているか。
+  func holds(_ proposal: AutomationProposal) -> Bool {
+    candidateLinks.contains(proposal.item.link) || streams(proposal)
+  }
+
+  /// この自動化の判定の部品が出して判断待ちで、出どころの取得の部品が今のグラフで新着の流れか——新着の流れでは、対応済みの
+  /// 知らせが元の項目と別の項目として届くため、取得から消えても持ち続ける。
+  func streams(_ proposal: AutomationProposal) -> Bool {
+    proposal.automationId == id && proposal.state == .open
+      && graph.node(proposal.partKey)?.role == .judge
+      && graph.node(proposal.sourcePartKey)?.role == .fetch(.newArrivals)
+  }
+}
+
+extension AutomationMemory {
+  /// どの自動化も持たない候補を忘れ（DB からも消す）、そのうち判断待ちだったもの（下げた候補）の数を返す。
+  @discardableResult mutating func forgetUnheld(_ db: AutomationDatabase) throws -> Int {
+    let automations = automations
+    let unheld = proposals.filter { proposal in !automations.contains { $0.holds(proposal) } }
+    guard !unheld.isEmpty else { return 0 }
+    try db.delete(proposals: unheld.map(\.id))
+    let ids = Set(unheld.map(\.id))
+    proposals.removeAll { ids.contains($0.id) }
+    return unheld.filter { $0.state == .open }.count
+  }
+}
+
+extension AutomationStore {
+  /// 判定の部品 `judge` に見せる判断待ちの候補（判定が対応済みにできる相手）。その判定へ行が届く取得の部品の前回の出力に
+  /// リンクがあるものと、その判定が出して判断待ちのままの新着の流れのもの。
+  func openProposals(of id: Int, judge: String) -> [AutomationProposal] {
+    guard let automation = automation(id) else { return [] }
+    let links = Set(
+      automation.graph.fetches(reaching: judge).flatMap {
+        automation.state($0.key).lastOutput.map(\.link)
+      })
+    return proposals.filter {
+      $0.state == .open
+        && (links.contains($0.item.link) || ($0.partKey == judge && automation.streams($0)))
     }
   }
 
-  func prompt(instruction: String, rows: [String], now: Date, timeZone: TimeZone) -> String {
-    AutomationPrompts.judge(
-      instruction: instruction, rows: rows, choices: choices, now: now, timeZone: timeZone)
+  /// 候補を棚に出す自動化。候補を出した自動化がまだ候補を持っていればそれ、いなければ持っている自動化のうち ID が最小のもの。
+  func shelf(of proposal: AutomationProposal) -> Automation? {
+    let holding = automations.filter { $0.holds(proposal) }
+    return holding.first { $0.id == proposal.automationId } ?? holding.min { $0.id < $1.id }
   }
 
-  /// JSON の行として読めた数を数える。全行が形違いでも回は失敗にせず、候補なしとする。
-  func read(_ text: String) -> AutomationSinkReading<[AutomationDecision]> {
-    let (rows, malformed) = AutomationPrompts.readRows(text)
-    let (decisions, rejected) = AutomationPrompts.readJudge(
-      rows, itemIds: Set(fresh.map(\.id)), choices: choices)
-    self.rejected.add(rejected)
-    return .output(decisions, count: rows.count, rejected: malformed)
-  }
-
-  /// 候補は確定で覚えるので、届けはすぐ終わる。
-  func deliver(
-    _ output: [AutomationDecision], completion: @escaping (AutomationSinkFailure?) -> Void
-  ) -> BackgroundRunHandle {
-    completion(nil)
-    return BackgroundRunHandle {}
-  }
-
-  /// この時点の状態に当て直す。回の途中に他の自動化の確定や人のさばきがあっても、既に候補のあるリンクへの候補は捨て、
-  /// 出ていない候補は対応済みにしない。候補を出した時刻は回の終わり。
-  func commit(
-    _ output: [AutomationDecision]?, into book: inout AutomationProposalBook,
-    automations: [Automation], endedAt: Date
-  ) -> AutomationSinkReport? {
-    var report = AutomationTaskCandidatesReport(rejected: rejected)
-    for decision in output ?? [] {
-      switch decision {
-      case .propose(let itemId, let title, let due, let workspace):
-        guard let item = fresh.first(where: { $0.id == itemId }) else { continue }
-        guard !book.proposals.contains(where: { $0.item.link == item.link }) else {
-          report.rejected.add("propose \(itemId): \(item.link) is already proposed")
-          continue
-        }
-        book.proposals.append(
-          AutomationProposal(
-            id: book.nextId, automationId: automationId, item: item, title: title, due: due,
-            workspace: workspace, proposedAt: TaskItem.storedInstant(endedAt), state: .open))
-        book.nextId += 1
-        report.proposed += 1
-      case .resolve(let link):
-        guard
-          let open = book.proposals.firstIndex(where: { $0.item.link == link && $0.state == .open })
-        else {
-          report.rejected.add("resolve \(link): no open proposal")
-          continue
-        }
-        book.proposals[open].state = .resolved
-        report.resolved += 1
-      }
+  /// 判定の部品を持つ他の自動化と、タスク候補へ至る取得の部品の前回の出力が重なっているリンクの数（重なりのある相手だけ、
+  /// ID 順）。
+  func overlaps(of id: Int) -> [(automation: Automation, count: Int)] {
+    guard let automation = automation(id), automation.judges else { return [] }
+    let links = automation.candidateLinks
+    return automations.compactMap { other in
+      guard other.id != id, other.judges else { return nil }
+      let count = links.intersection(other.candidateLinks).count
+      return count > 0 ? (other, count) : nil
     }
-    report.withdrawn = book.forgetUnheld(by: automations)
-    return .taskCandidates(report)
   }
 }
 
@@ -129,9 +83,8 @@ enum AutomationDecision: Equatable {
   case resolve(link: String)
 }
 
-/// 判定に見せ、判定の出力をその中で照合する選択肢。1 回の中で `prepare` のときに 1 度だけ取り、依頼文と読み取りの両方に
-/// 同じ値を使う——回の途中に候補がさばかれたり workspace が増減・改名されたりしても、判定が見たものと照合するものが
-/// 食い違わない。
+/// 判定に見せ、判定の出力をその中で照合する選択肢。1 回の中で起こす前に 1 度だけ取り、依頼文と読み取りの両方に同じ値を
+/// 使う——回の途中に候補がさばかれたり workspace が増減・改名されたりしても、判定が見たものと照合するものが食い違わない。
 struct AutomationJudgeChoices: Equatable {
   /// 判断待ちの候補（resolve の相手）。
   let open: [AutomationProposal]
@@ -142,7 +95,7 @@ struct AutomationJudgeChoices: Equatable {
 struct AutomationWorkspaces: Equatable {
   /// 判定に見せる workspace（Home を除く。サイドバーの順）。
   let listed: [AutomationWorkspace]
-  /// Home の起動ごとの ID。付け先にこれを書いた行は付け先なし（Home に付く）として受ける——コマンドの段は
+  /// Home の起動ごとの ID。付け先にこれを書いた行は付け先なし（Home に付く）として受ける——コマンドの判定は
   /// `orb ws list --json` から Home の ID を書きうる。
   let home: Int?
 }
@@ -153,67 +106,4 @@ struct AutomationWorkspace: Equatable {
   let persistentId: UUID
   let name: String
   let root: String
-}
-
-/// 候補の帳面（候補と次に振る ID）。`AutomationStore` が持ち、確定のときだけタスク候補の出力先に貸す。
-///
-/// 候補はリンク単位で全自動化を通じて 1 つ。候補が忘れられるのは、どの自動化も候補を持たなくなったときだけで、それまでは
-/// タスクにした・捨てた・対応済みの候補も覚えていて、同じリンクを再び候補にしない。
-struct AutomationProposalBook: Equatable {
-  var proposals: [AutomationProposal]
-  var nextId: Int
-
-  /// どの自動化も持たない候補を忘れ、そのうち出ていたものの数を返す。止めた自動化も持つ。
-  mutating func forgetUnheld(by automations: [Automation]) -> Int {
-    let held = { (proposal: AutomationProposal) in
-      automations.contains { Self.holds($0, proposal) }
-    }
-    let withdrawn = proposals.filter { $0.state == .open && !held($0) }.count
-    proposals.removeAll { !held($0) }
-    return withdrawn
-  }
-
-  /// 自動化が候補を持っているか。出力先がタスク候補の自動化だけが持つ——前回の取得結果にリンクがあるか、新着の流れの
-  /// 自動化が出してまだ人の判断待ちのものか。
-  static func holds(_ automation: Automation, _ proposal: AutomationProposal) -> Bool {
-    switch automation.definition.sink {
-    case .taskCandidates:
-      automation.lastFetched.contains { $0.link == proposal.item.link }
-        || (automation.definition.source?.coverage == .newArrivals
-          && automation.id == proposal.automationId
-          && proposal.state == .open)
-    case .command, .report, .agent: false
-    }
-  }
-}
-
-extension AutomationStore {
-  /// 判定に見せる出ている候補（判定が対応済みにできる相手）。取れた項目のリンクを持つものと、新着の流れの自動化なら
-  /// 自分が出して判断待ちのままのもの——新着の流れでは、対応済みの知らせが元の項目と別の項目として届くため。
-  func openProposals(of id: Int, in fetched: [AutomationItem]) -> [AutomationProposal] {
-    let links = Set(fetched.map(\.link))
-    let streams = automation(id)?.definition.source?.coverage == .newArrivals
-    return proposals.filter {
-      $0.state == .open && (links.contains($0.item.link) || (streams && $0.automationId == id))
-    }
-  }
-
-  /// 候補を棚に出す自動化。候補を出した自動化がまだ候補を持っていればそれ、いなければ持っている自動化のうち ID が最小のもの。
-  func shelf(of proposal: AutomationProposal) -> Automation? {
-    let holding = automations.filter { AutomationProposalBook.holds($0, proposal) }
-    return holding.first { $0.id == proposal.automationId } ?? holding.min { $0.id < $1.id }
-  }
-
-  /// 出力先がタスク候補の他の自動化と、前回の取得結果が重なっているリンクの数（重なりのある相手だけ、ID 順）。
-  func overlaps(of id: Int) -> [(automation: Automation, count: Int)] {
-    guard let automation = automation(id), automation.definition.sink == .taskCandidates else {
-      return []
-    }
-    let links = Set(automation.lastFetched.map(\.link))
-    return automations.compactMap { other in
-      guard other.id != id, other.definition.sink == .taskCandidates else { return nil }
-      let count = links.intersection(other.lastFetched.map(\.link)).count
-      return count > 0 ? (other, count) : nil
-    }
-  }
 }

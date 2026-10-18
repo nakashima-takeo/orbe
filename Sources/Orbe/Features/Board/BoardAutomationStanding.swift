@@ -1,6 +1,6 @@
 import Foundation
 
-/// 自動化 1 つの立ち位置——走っているか・止めているか・前回の区分——を 1 回だけ導いた値。並びの群・点の色・右端の種類は
+/// 自動化 1 つの立ち位置——どれかの部品が走っているか・止めているか・最新の部品の回の区分——を 1 回だけ導いた値。並びの群・点の色・右端の種類は
 /// すべてここから読む（同じ判定が並び・点・文・色に散ると、優先順位が 1 か所だけずれる）。自動化そのものは持たない。
 struct BoardAutomationStanding: Equatable, Identifiable {
   let id: Int
@@ -42,8 +42,8 @@ struct BoardAutomationStanding: Equatable, Identifiable {
 extension BoardAutomationStanding {
   init(_ automation: Automation, runner: AutomationRunner, now: Date) {
     self.init(
-      id: automation.id, name: automation.definition.name, paused: automation.paused,
+      id: automation.id, name: automation.name, paused: automation.paused,
       running: runner.isRunning(automation.id), next: runner.nextRunAt(automation, now: now),
-      last: automation.runs.first.map(BoardAutomationSummary.tone))
+      last: automation.runs.first.map { BoardAutomationSummary.tone($0.run) })
   }
 }

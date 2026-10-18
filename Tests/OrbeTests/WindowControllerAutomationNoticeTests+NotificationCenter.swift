@@ -22,13 +22,13 @@ extension WindowControllerAutomationNoticeTests {
     let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
     let id = try recorded(wc, notify: .notificationCenter)
 
-    wc.notifyAutomationRecorded(id)
+    wc.notifyAutomationRecorded(id, "digest")
 
     XCTAssertEqual(
       center.posted,
       [
         SystemNotificationContent(
-          identifier: "automation.\(id)", title: "開いている PR の要約", body: "PR は 3 件",
+          identifier: "automation.\(id)", title: "開いている PR の要約", body: "要約: PR は 3 件",
           automationId: id)
       ])
     XCTAssertNil(wc.attentionStore.transient, "通知センターに出た回はピルを出さない")
@@ -42,19 +42,19 @@ extension WindowControllerAutomationNoticeTests {
     let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
 
     let undetermined = try recorded(wc, notify: .notificationCenter)
-    wc.notifyAutomationRecorded(undetermined)
+    wc.notifyAutomationRecorded(undetermined, "digest")
     XCTAssertEqual(standing(wc)?.automationId, undetermined)
     XCTAssertEqual(center.requestCount, 1)
 
     center.authorization = .denied
     let denied = try recorded(wc, name: "拒否", notify: .notificationCenter)
-    wc.notifyAutomationRecorded(denied)
+    wc.notifyAutomationRecorded(denied, "digest")
     XCTAssertEqual(standing(wc)?.automationId, denied)
 
     center.authorization = .authorized
     center.postSucceeds = false
     let failed = try recorded(wc, name: "出せない", notify: .notificationCenter)
-    wc.notifyAutomationRecorded(failed)
+    wc.notifyAutomationRecorded(failed, "digest")
     XCTAssertEqual(standing(wc)?.automationId, failed)
 
     XCTAssertTrue(center.posted.isEmpty)
@@ -67,7 +67,7 @@ extension WindowControllerAutomationNoticeTests {
     let center = try notifier(wc)
     center.authorization = .authorized
 
-    wc.notifyAutomationRecorded(try recorded(wc, notify: .menuBar))
+    wc.notifyAutomationRecorded(try recorded(wc, notify: .menuBar), "digest")
 
     XCTAssertNotNil(standing(wc))
     XCTAssertTrue(center.posted.isEmpty)
@@ -78,8 +78,7 @@ extension WindowControllerAutomationNoticeTests {
   @MainActor func testSettingAsksForPermissionAndDeletingFromTheBoardWithdraws() throws {
     let wc = controller()
     let center = try notifier(wc)
-    var definition = AutomationStoreTests.definition()
-    definition.notify = .menuBar
+    var definition = Self.reportDefinition(notify: .menuBar)
     guard
       case .success(let created) = wc.controlSetAutomation(automationId: nil, definition),
       let id = ((created as? [String: Any])?["automation"] as? [String: Any])?["automationId"]
@@ -101,13 +100,13 @@ extension WindowControllerAutomationNoticeTests {
   @MainActor func testChoosingNotificationCenterOnTheBoardAsksForPermission() throws {
     let wc = controller()
     let center = try notifier(wc)
-    let id = try wc.automationStore.create(AutomationStoreTests.definition(), now: Date()).id
+    let id = try wc.automationStore.create(Self.reportDefinition(notify: nil), now: Date()).id
     wc.showAutomation(id)
 
     wc.board.automation.openNotify()
     wc.board.automation.chooseNotify(.notificationCenter)
 
-    XCTAssertEqual(wc.automationStore.automation(id)?.definition.notify, .notificationCenter)
+    XCTAssertEqual(wc.automationStore.automation(id)?.notify, .notificationCenter)
     XCTAssertEqual(center.requestCount, 1)
   }
 

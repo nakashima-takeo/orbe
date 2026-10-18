@@ -1,302 +1,318 @@
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
 
-/// 受信のストア——定義の検証、判定に回す新しい項目、確定の当て直し（リンク単位で 1 つの提案・人のさばきを上書きしない）、
-/// どの受信の取得結果からも消えたリンクの提案を忘れる、失敗した回は何も進めない、棚に出す受信と重なり、提案をタスクにする。
+/// 自動化のストアの保存——再起動の往復、旧形式の JSON と読めない DB の退避、2 つ目の Orbe の締め出し。DB は caseDir の本物。
 ///
-/// 壊れると何が起きるか。同じ Slack のメッセージが 2 つの受信から二重に提案される。人が捨てた提案が次の回で「対応済み」に
-/// 化ける・また提案される。取得が失敗した回に提案が一斉に消える。判定が同じ項目を回のたびに読み直す。
+/// 壊れると何が起きるか: 再起動で溜まり・候補・回の記録・決まりを外した印が巻き戻るか消える。旧形式の自動化を抱えた環境で
+/// 起動できない、または古い定義を読み違える。Orbe が書いたのではない DB で起動が落ちる。同じ state の 2 つ目の Orbe が予定を
+/// 回して副作用を二重に起こす、先に開いた Orbe の DB を退避して中身を奪う。
 final class AutomationStoreTests: OrbeTestCase {
-  let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+  static let at = Date(timeIntervalSince1970: 1_800_000_000)
 
+  /// 今の集合を取る取得の部品 `fetch` と、届いたらタスク候補を出す判定の部品 `judge`。
   static func definition(
-    _ name: String = "Slack: 自分宛", script: String = "fetch", instruction: String = "判定して",
-    coverage: AutomationCoverage = .currentSet, trigger: BackgroundTiming = .every(1800)
+    _ name: String = "受信", coverage: AutomationCoverage = .currentSet, script: String = "fetch"
   ) -> AutomationDefinition {
-    AutomationDefinition(
-      name: name, trigger: trigger,
-      source: AutomationSource(
-        method: .command(BackgroundCommand(script: script, directory: nil)), coverage: coverage),
-      steps: [judgeStep(instruction)], sink: .taskCandidates)
+    DesignSceneFixtures.candidatesDefinition(
+      name,
+      fetch: DesignSceneFixtures.commandPart(
+        "fetch", "取る", .scheduled(.every(1800)), script: script, coverage: coverage))
   }
 
-  static func judgeStep(_ instruction: String = "判定して", cli: String = "claude") -> AutomationStep {
-    AutomationStep(
-      name: "判定",
-      method: .agent(AutomationStepAgent(cli: cli, model: "haiku", instruction: instruction)))
+  static func item(_ id: String) -> AutomationItem {
+    AutomationItem(id: id, link: "https://example.com/\(id)", body: "\(id) の本文", time: at)
   }
 
-  static func agentSource(
-    tools: [String] = ["mcp__slack__search"], request: String = "自分宛の DM"
-  ) -> AutomationSource.Method {
-    .agent(AutomationSourceAgent(cli: "claude", model: "haiku", tools: tools, request: request))
+  /// 取得の部品の回を確定する。
+  static func fetch(
+    _ store: AutomationStore, _ id: Int, _ items: [AutomationItem],
+    outcome: AutomationPartPass.Outcome? = nil, at: Date = at
+  ) throws {
+    _ = try store.record(
+      AutomationPassEnd(
+        automationId: id, part: "fetch", trigger: .schedule, startedAt: at, endedAt: at,
+        take: nil, outcome: outcome ?? DesignSceneFixtures.fetched("fetch", items)))
   }
 
-  static func item(_ id: String, link: String? = nil, body: String = "本文") -> AutomationItem {
-    AutomationItem(
-      id: id, link: link ?? "https://example.com/\(id)", body: body,
-      time: Date(timeIntervalSince1970: 1_800_000_000))
+  /// 判定の部品の、溜まりをすべて取った回を確定する。
+  static func judge(
+    _ store: AutomationStore, _ id: Int, proposing items: [AutomationItem] = [],
+    resolving links: [String] = [], at: Date = at
+  ) throws {
+    let taken = try store.inbox(of: "judge", in: id).map(\.seq)
+    _ = try store.record(
+      AutomationPassEnd(
+        automationId: id, part: "judge", trigger: .arrival, startedAt: at, endedAt: at,
+        take: AutomationInbox.Take(taken: taken, dropped: []),
+        outcome: .succeeded(
+          .judge(
+            proposals: items.map { DesignSceneFixtures.proposal($0, "対応: \($0.id)") },
+            resolved: links),
+          DesignSceneFixtures.execution(taken.count), breach: nil)))
   }
 
-  private func runRecord(failure: String? = nil) -> AutomationRun {
-    Self.run(at: t0, failure: failure)
-  }
-
-  /// 取得元まで行った回の記録（確定で出力先の記録が付く）。
-  static func run(at date: Date, failure: String? = nil) -> AutomationRun {
-    AutomationRun(
-      startedAt: date, endedAt: date, trigger: .schedule,
-      source: AutomationStepReport(
-        name: nil, commandLine: "fetch", ending: "exited 0", count: 0,
-        rejected: AutomationRejections()),
-      fresh: 0, steps: [], lastStepCountedBySink: false, sink: nil, failure: failure)
-  }
-
-  /// 確定した回の出力先の記録。
-  static func candidates(_ run: AutomationRun?) -> AutomationTaskCandidatesReport? {
-    guard case .taskCandidates(let report) = run?.sink else { return nil }
-    return report
-  }
-
-  /// 出力先タスク候補の確定を、判定の決定 `decisions` で行う（取れた項目をすべて新しい項目として取り込む）。
-  static func commit(
-    _ store: AutomationStore, _ id: Int, _ run: AutomationRun, fetched: [AutomationItem],
-    decisions: [AutomationDecision]
-  ) {
-    let sink = AutomationTaskCandidates(
-      store: store, automationId: id, workspaces: { AutomationWorkspaces(listed: [], home: nil) })
-    _ = sink.admit(fetched, fetched: fetched)
-    store.commit(id, run, fetched: fetched) {
-      sink.commit(decisions, into: &$0, automations: $1, endedAt: run.endedAt)
+  /// 決まりを外した取得の回（出し直しで通った）。
+  static func breached(_ items: [AutomationItem]) -> AutomationPartPass.Outcome {
+    let fetched = DesignSceneFixtures.fetched("fetch", items)
+    guard case .succeeded(let output, let execution, _) = fetched else {
+      preconditionFailure("a fetched outcome succeeds")
     }
+    return .succeeded(
+      output, execution,
+      breach: AutomationPartPass.Breach(
+        lines: [AutomationBrokenLine(line: 3, reason: "missing link")],
+        redo: AutomationPartPass.Redo(firstCall: execution, lines: [])))
   }
 
-  func store(automations count: Int = 1) throws -> AutomationStore {
-    let store = AutomationStore(file: nil)
-    for index in 0..<count { _ = try store.create(Self.definition("受信 \(index + 1)"), now: t0) }
-    return store
+  private func quarantined() throws -> [String] {
+    try FileManager.default.contentsOfDirectory(atPath: TestScratch.caseDir.path)
+      .filter { $0.hasPrefix("automations-broken-") }
   }
 
-  /// 成功した回を確定する。`proposing` の項目に提案を出し、`resolving` のリンクを対応済みにする。
-  func commit(
-    _ store: AutomationStore, _ id: Int, fetched: [AutomationItem],
-    proposing: [AutomationItem] = [],
-    resolving: [String] = []
-  ) {
-    let decisions =
-      proposing.map {
-        AutomationDecision.propose(itemId: $0.id, title: "対応: \($0.id)", due: nil, workspace: nil)
+  // MARK: - 再起動
+
+  /// 自動化・部品の状態（前回の出力・決まりを外した印・回の記録・溜まり）・候補は、どの変異（作る・確定・書き換え・さばく・
+  /// 止める・消す）の後に開き直しても同じで、溜まりの行も同じ本文で読める。
+  func testEverythingSurvivesARestart() throws {
+    var store: AutomationStore? = AutomationStore()
+    let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
+    let (a, b) = (Self.item("a"), Self.item("b"))
+    try Self.fetch(XCTUnwrap(store), id, [a], outcome: Self.breached([a]))
+    try Self.judge(XCTUnwrap(store), id, proposing: [a])
+    try Self.fetch(XCTUnwrap(store), id, [a, b], at: Self.at.addingTimeInterval(1800))
+    var rewritten = Self.definition("受信（要約つき）")
+    rewritten.notify = .menuBar
+    rewritten.parts.append(
+      DesignSceneFixtures.commandPart(
+        "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report))
+    _ = try store?.replace(id, with: rewritten, now: Self.at)
+    try store?.dismiss(XCTUnwrap(store?.proposals.first?.id))
+    _ = try store?.setPaused(id, true)
+    let deleted = try XCTUnwrap(store?.create(Self.definition("消す"), now: Self.at).id)
+    try store?.delete(deleted)
+    let automations = store?.automations
+    let proposals = store?.proposals
+    let rows = try store?.rows(XCTUnwrap(store?.inbox(of: "judge", in: id)).map(\.seq))
+    XCTAssertEqual(rows?.isEmpty, false, "前提: 溜まりに行がある")
+    store = nil
+
+    let reopened = AutomationStore()
+
+    XCTAssertEqual(reopened.automations, automations)
+    XCTAssertEqual(reopened.proposals, proposals)
+    XCTAssertEqual(try reopened.rows(reopened.inbox(of: "judge", in: id).map(\.seq)), rows)
+  }
+
+  // MARK: - 退避
+
+  /// 旧形式の `automations.json` は退避して読まず、自動化 0 件で使える状態で始まる。
+  func testALegacyFileIsSetAsideAndAutomationsStartEmpty() throws {
+    let legacy = try XCTUnwrap(AutomationPersistence.legacyFile)
+    let original = Data(#"{"version":3,"automations":[{"id":1,"name":"旧"}]}"#.utf8)
+    try original.write(to: legacy)
+
+    let store = AutomationStore()
+
+    XCTAssertTrue(store.available)
+    XCTAssertEqual(store.automations, [])
+    XCTAssertFalse(FileManager.default.fileExists(atPath: legacy.path))
+    let aside = try quarantined().filter { $0.hasSuffix(".json") }
+    XCTAssertEqual(aside.count, 1)
+    let moved = legacy.deletingLastPathComponent().appendingPathComponent(
+      try XCTUnwrap(aside.first))
+    XCTAssertEqual(try Data(contentsOf: moved), original)
+  }
+
+  /// 今の形として読めない行を持つ DB（Orbe が書いたのではない）は、フォルダごと退避して空で始まる。読める JSON でも、グラフの
+  /// 検証を通らない定義は読めない行。
+  func testADatabaseWithRowsOrbeCannotReadIsSetAsideAndStartsEmpty() throws {
+    _ = try AutomationStore().create(Self.definition(), now: Self.at)
+    var invalid = Self.definition()
+    invalid.parts[1] = DesignSceneFixtures.agentPart(
+      "judge", "判定", .arrival, from: ["fetch"], tools: ["Read"], instruction: "判定する",
+      deliver: .taskCandidates)
+    XCTAssertThrowsError(try invalid.checked(), "前提: 検証を通らない定義")
+    try SQLiteDatabase(url: automationsFolder().appendingPathComponent("db.sqlite")).run(
+      "UPDATE automations SET definition = ?", [.text(try AutomationDatabase.encode(invalid))])
+
+    let store = AutomationStore()
+
+    XCTAssertTrue(store.available)
+    XCTAssertEqual(store.automations, [])
+    XCTAssertEqual(try quarantined().count, 1)
+  }
+
+  // MARK: - 排他
+
+  /// 先に開いたストアが DB を持つ間、同じ DB を開く 2 つ目のストアは読まず・書かず・退避もしない。先のストアが手放せば開ける。
+  func testASecondStoreOnTheSameDatabaseNeitherReadsNorWritesNorSetsItAside() throws {
+    var first: AutomationStore? = AutomationStore()
+    _ = try first?.create(Self.definition("一つ目"), now: Self.at)
+
+    var second: AutomationStore? = AutomationStore()
+
+    XCTAssertEqual(second?.available, false)
+    XCTAssertEqual(second?.automations, [])
+    XCTAssertThrowsError(try second?.create(Self.definition("二つ目"), now: Self.at)) {
+      guard case .unavailable = $0 as? AutomationError else { return XCTFail("\($0)") }
+    }
+    _ = try first?.create(Self.definition("三つ目"), now: Self.at)
+    XCTAssertEqual(try quarantined(), [], "先のストアの DB を退避しない")
+
+    second = nil
+    first = nil
+    XCTAssertEqual(AutomationStore().automations.map(\.name), ["一つ目", "三つ目"])
+  }
+
+  // MARK: - 決まりを外した印
+
+  /// 出力が決まりを外した印は最初の回に付き、何をするかが変わるまで残る（名前だけの書き換えでは残る）。
+  func testTheBreachMarkStaysFromTheFirstBreachUntilThePartsWorkChanges() throws {
+    let store = AutomationStore()
+    let id = try store.create(Self.definition(), now: Self.at).id
+    let a = Self.item("a")
+    try Self.fetch(store, id, [a], outcome: Self.breached([a]))
+    try Self.fetch(store, id, [a], outcome: Self.breached([a]), at: Self.at.addingTimeInterval(60))
+    func mark() -> AutomationBreachMark? { store.automation(id)?.state("fetch").breach }
+
+    XCTAssertEqual(
+      mark(),
+      AutomationBreachMark(
+        at: Self.at, lines: AutomationRejections(count: 1, reasons: ["line 3: missing link"]),
+        redone: true, passed: true))
+    _ = try store.replace(id, with: Self.definition("改名"), now: Self.at)
+    XCTAssertEqual(mark()?.at, Self.at, "名前だけなら残る")
+    _ = try store.replace(id, with: Self.definition("改名", script: "fetch --all"), now: Self.at)
+    XCTAssertNil(mark(), "何をするかが変われば下ろす")
+  }
+
+  // MARK: - 溜まりの上限
+
+  /// 溜まりの件数の上限を超えて捨てた行は、その部品の次の回の記録に数える。
+  func testRowsDroppedOverTheInboxLimitAreCountedInTheNextRun() throws {
+    let store = AutomationStore()
+    var definition = Self.definition()
+    definition.parts[1].inboxLimit = AutomationPart.InboxLimit(maxAgeHours: nil, maxItems: 2)
+    let id = try store.create(definition, now: Self.at).id
+    try Self.fetch(store, id, ["a", "b", "c"].map(Self.item))
+    XCTAssertEqual(store.automation(id)?.state("judge").inbox, 2)
+
+    try Self.judge(store, id)
+
+    XCTAssertEqual(store.automation(id)?.state("judge").runs.first?.dropped.counts, [.overflow: 1])
+  }
+
+  // MARK: - 書き込みの 1 経路
+
+  /// 変異のトランザクションが通らなければ、メモリも DB も変わらず、呼び手に「保存できない」を返す（ストアは使えるまま）。
+  func testAMutationThatFailsToCommitChangesNeitherMemoryNorTheDatabase() throws {
+    struct Refused: Error {}
+    var store: AutomationStore? = AutomationStore()
+    let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
+
+    func deleteThenFail(_ db: AutomationDatabase, _ memory: inout AutomationMemory) throws {
+      try db.delete(automation: id)
+      memory.automations.removeAll()
+      throw Refused()
+    }
+
+    XCTAssertThrowsError(try store?.commit(deleteThenFail)) {
+      guard case .unavailable = $0 as? AutomationError else { return XCTFail("\($0)") }
+    }
+
+    XCTAssertEqual(store?.automations.map(\.id), [id])
+    XCTAssertEqual(store?.available, true)
+    store = nil
+    XCTAssertEqual(AutomationStore().automations.map(\.id), [id], "DB も巻き戻っている")
+  }
+
+  // MARK: - ID と記録
+
+  /// 消した自動化と忘れた候補の ID は、開き直しても使い回さない。
+  func testIdsOfDeletedAutomationsAndForgottenProposalsAreNeverReused() throws {
+    var store: AutomationStore? = AutomationStore()
+    let kept = try XCTUnwrap(store?.create(Self.definition("残す"), now: Self.at).id)
+    let deleted = try XCTUnwrap(store?.create(Self.definition("消す"), now: Self.at).id)
+    let x = Self.item("x")
+    try Self.fetch(XCTUnwrap(store), deleted, [x])
+    try Self.judge(XCTUnwrap(store), deleted, proposing: [x])
+    let forgotten = try XCTUnwrap(store?.proposals.first?.id)
+    try store?.delete(deleted)
+    XCTAssertEqual(store?.proposals, [], "前提: 消した自動化だけが持っていた候補は忘れる")
+    store = nil
+
+    let reopened = AutomationStore()
+    let created = try reopened.create(Self.definition("新しい"), now: Self.at).id
+    try Self.fetch(reopened, kept, [x])
+    try Self.judge(reopened, kept, proposing: [x])
+
+    XCTAssertGreaterThan(created, deleted)
+    XCTAssertGreaterThan(try XCTUnwrap(reopened.proposals.first?.id), forgotten)
+  }
+
+  /// 回の記録は部品ごとに新しい 20 件だけを残し、開き直しても同じ 20 件。
+  func testOnlyTheNewestRunsOfAPartAreKeptAcrossARestart() throws {
+    var store: AutomationStore? = AutomationStore()
+    let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
+    let count = AutomationPartState.retainedRuns + 3
+    for n in 0..<count {
+      try Self.fetch(XCTUnwrap(store), id, [], at: Self.at.addingTimeInterval(TimeInterval(60 * n)))
+    }
+    let runs = try XCTUnwrap(store?.automation(id)?.state("fetch").runs)
+    XCTAssertEqual(
+      runs.map(\.startedAt),
+      (3..<count).reversed().map { Self.at.addingTimeInterval(TimeInterval(60 * $0)) })
+    store = nil
+
+    XCTAssertEqual(AutomationStore().automation(id)?.state("fetch").runs, runs)
+  }
+
+  // MARK: - 定義
+
+  /// 自動化の名前は前後の空白を除いて 1 行で保存し、空や複数行の名前は断る。
+  func testTheNameIsKeptOnOneTrimmedLine() throws {
+    let store = AutomationStore()
+    XCTAssertEqual(try store.create(Self.definition("  受信  "), now: Self.at).name, "受信")
+    for name in ["受信\n2 行目", "   "] {
+      XCTAssertThrowsError(try store.create(Self.definition(name), now: Self.at), name) {
+        guard case .invalid = $0 as? AutomationError else { return XCTFail("\($0)") }
       }
-      + resolving.map { AutomationDecision.resolve(link: $0) }
-    Self.commit(store, id, runRecord(), fetched: fetched, decisions: decisions)
-  }
-
-  // MARK: - 新しい項目
-
-  /// 枠の差分の後にタスク候補の取り込みを掛けた、段に回す項目。
-  private func newItems(
-    _ store: AutomationStore, _ id: Int, _ fetched: [AutomationItem]
-  ) -> [AutomationItem] {
-    AutomationTaskCandidates(
-      store: store, automationId: id, workspaces: { AutomationWorkspaces(listed: [], home: nil) }
-    )
-    .admit(store.unseen(of: id, in: fetched), fetched: fetched)
-  }
-
-  func testNewItemsSkipThePreviousFetchExistingProposalsAndRepeatedLinks() throws {
-    let store = try store(automations: 2)
-    commit(store, 1, fetched: [Self.item("a"), Self.item("b")])
-    commit(store, 2, fetched: [Self.item("x")], proposing: [Self.item("x")])
-
-    let fresh = newItems(
-      store, 1,
-      [
-        Self.item("a"), Self.item("c"), Self.item("c2", link: "https://example.com/c"),
-        Self.item("y", link: "https://example.com/x"),
-      ])
-
-    XCTAssertEqual(fresh.map(\.id), ["c"], "前回取れた id・提案のあるリンク・同じ回の 2 つ目のリンクは回さない")
-  }
-
-  /// 同じリンクでも id が新しければ（動きがあった）、提案が無い限り判定に回し直す。
-  func testNewIdForAnUnproposedLinkIsJudgedAgain() throws {
-    let store = try store()
-    commit(store, 1, fetched: [Self.item("a")])
-
-    XCTAssertEqual(
-      newItems(store, 1, [Self.item("a2", link: "https://example.com/a")]).map(\.id), ["a2"])
-  }
-
-  func testReviewAllJudgesEverythingExceptProposedLinks() throws {
-    let store = try store()
-    commit(store, 1, fetched: [Self.item("a"), Self.item("b")], proposing: [Self.item("b")])
-    _ = try store.replace(1, with: Self.definition("受信 1", instruction: "別の指示"))
-
-    XCTAssertEqual(newItems(store, 1, [Self.item("a"), Self.item("b")]).map(\.id), ["a"])
-    commit(store, 1, fetched: [Self.item("a"), Self.item("b")])
-    XCTAssertFalse(store.automation(1)!.reviewAll, "見直した回の確定で下ろす")
-  }
-
-  // MARK: - 確定
-
-  /// 2 つの受信が同じリンクを同時に判定しても、提案は先に確定した 1 つだけ。後の側は理由付きで捨てる。
-  func testOneProposalPerLinkAcrossAutomations() throws {
-    let store = try store(automations: 2)
-    let shared = Self.item("m", link: "https://example.com/shared")
-    let second = AutomationTaskCandidates(
-      store: store, automationId: 2, workspaces: { AutomationWorkspaces(listed: [], home: nil) })
-    XCTAssertEqual(second.admit([shared], fetched: [shared]), [shared], "まだ候補が無いので受ける")
-    commit(store, 1, fetched: [shared], proposing: [shared])
-
-    store.commit(2, runRecord(), fetched: [shared]) {
-      second.commit(
-        [.propose(itemId: "m", title: "二重", due: nil, workspace: nil)], into: &$0, automations: $1,
-        endedAt: self.t0)
     }
-    let report = Self.candidates(store.automation(2)!.runs[0])
-
-    XCTAssertEqual(store.proposals.count, 1)
-    XCTAssertEqual(store.proposals[0].automationId, 1)
-    XCTAssertEqual(report?.proposed, 0)
-    XCTAssertEqual(
-      report?.rejected.reasons, ["propose m: https://example.com/shared is already proposed"])
+    XCTAssertEqual(store.automations.count, 1)
   }
 
-  /// 判定中に人がさばいた提案は、後から届いた判定の「対応済み」で上書きしない。
-  func testResolveDoesNotOverwriteAHumanDecision() throws {
-    let store = try store()
+  // MARK: - 累計
+
+  /// さばいた候補は、棚に出していた自動化でなく出した自動化の累計に数え、開き直しても残る。判定の部品が無くなれば 0 に戻る。
+  func testHandlingAProposalCountsOnTheAutomationThatProposedIt() throws {
+    var store: AutomationStore? = AutomationStore()
+    let issuer = try XCTUnwrap(store?.create(Self.definition("出した"), now: Self.at).id)
+    let shelf = try XCTUnwrap(store?.create(Self.definition("棚"), now: Self.at).id)
     let a = Self.item("a")
-    let b = Self.item("b")
-    commit(store, 1, fetched: [a, b], proposing: [a, b])
-    try store.dismiss(store.proposals[0].id)
+    try Self.fetch(XCTUnwrap(store), issuer, [a])
+    try Self.judge(XCTUnwrap(store), issuer, proposing: [a])
+    try Self.fetch(XCTUnwrap(store), shelf, [a])
+    try Self.fetch(XCTUnwrap(store), issuer, [])
+    let proposal = try XCTUnwrap(store?.proposals.first)
+    XCTAssertEqual(store?.shelf(of: proposal)?.id, shelf, "前提: 棚は別の自動化")
 
-    commit(store, 1, fetched: [a, b], resolving: [a.link, b.link])
+    try store?.dismiss(proposal.id)
+    store = nil
+    let reopened = AutomationStore()
 
-    XCTAssertEqual(store.proposals.map(\.state), [.dismissed, .resolved])
-    XCTAssertEqual(Self.candidates(store.automation(1)!.runs[0])?.resolved, 1)
-  }
-
-  /// どの受信の取得結果からも消えたリンクの提案は忘れる（出ていたものは下げた数に入る）。他の受信が取っている間は残る。
-  func testProposalsAreForgottenOnlyWhenNoAutomationFetchesTheLink() throws {
-    let store = try store(automations: 2)
-    let shared = Self.item("s")
-    let only = Self.item("o")
-    commit(store, 1, fetched: [shared, only], proposing: [shared, only])
-    commit(store, 2, fetched: [shared])
-
-    commit(store, 1, fetched: [])
-
-    XCTAssertEqual(store.proposals.map(\.item.link), [shared.link])
-    XCTAssertEqual(Self.candidates(store.automation(1)!.runs[0])?.withdrawn, 1)
-    XCTAssertEqual(store.shelf(of: store.proposals[0])?.id, 2, "提案した受信が取らなくなったら、取っている受信の棚へ")
-  }
-
-  /// 消えたリンクがまた現れたら、もう一度判定に回る。
-  func testForgottenLinkIsJudgedAgainWhenItReturns() throws {
-    let store = try store()
-    let a = Self.item("a")
-    commit(store, 1, fetched: [a], proposing: [a])
-    commit(store, 1, fetched: [])
-
-    XCTAssertEqual(newItems(store, 1, [a]).map(\.id), ["a"])
-  }
-
-  func testPausingKeepsTheFetchedLinksSoProposalsStay() throws {
-    let store = try store(automations: 2)
-    let a = Self.item("a")
-    commit(store, 1, fetched: [a], proposing: [a])
-
-    _ = try store.setPaused(1, true)
-    commit(store, 2, fetched: [])
-
-    XCTAssertEqual(store.proposals.count, 1)
-  }
-
-  func testDeletingAnAutomationForgetsTheLinksOnlyItFetched() throws {
-    let store = try store(automations: 2)
-    let a = Self.item("a")
-    let b = Self.item("b")
-    commit(store, 1, fetched: [a, b], proposing: [a, b])
-    commit(store, 2, fetched: [b])
-
-    try store.delete(1)
-
-    XCTAssertEqual(store.proposals.map(\.item.link), [b.link])
-  }
-
-  /// 失敗した回は記録と最後に回った時刻だけを進め、取得済みも提案も動かさない（失敗を「0 件」と読み違えない）。
-  func testFailedRunMovesOnlyTheRecordAndTheTime() throws {
-    let store = try store()
-    let a = Self.item("a")
-    commit(store, 1, fetched: [a], proposing: [a])
-    let before = store.automation(1)!
-
-    let later = t0.addingTimeInterval(1800)
-    var failed = runRecord(failure: "the fetch ended: exited 1")
-    failed.startedAt = later
-    store.recordFailure(of: 1, failed)
-
-    let after = store.automation(1)!
-    XCTAssertEqual(after.lastFetched, before.lastFetched)
-    XCTAssertEqual(store.proposals.count, 1)
-    XCTAssertEqual(after.lastRunAt, later)
-    XCTAssertEqual(after.runs.first?.failure, "the fetch ended: exited 1")
-  }
-
-  func testRunRecordsKeepTheNewestTwenty() throws {
-    let store = try store()
-    for minute in 0..<(Automation.retainedRuns + 3) {
-      var record = runRecord()
-      record.startedAt = t0.addingTimeInterval(TimeInterval(minute * 60))
-      store.recordFailure(of: 1, record)
-    }
-
-    let runs = store.automation(1)!.runs
-    XCTAssertEqual(runs.count, Automation.retainedRuns)
-    XCTAssertEqual(runs.first?.startedAt, t0.addingTimeInterval(TimeInterval(22 * 60)), "新しい順")
-  }
-
-  func testOverlapsCountSharedLinksWithEachOtherAutomation() throws {
-    let store = try store(automations: 3)
-    commit(store, 1, fetched: [Self.item("a"), Self.item("b"), Self.item("c")])
-    commit(store, 2, fetched: [Self.item("a2", link: "https://example.com/a"), Self.item("b")])
-    commit(store, 3, fetched: [Self.item("z")])
-
-    let overlaps = store.overlaps(of: 1)
-    XCTAssertEqual(overlaps.map(\.automation.id), [2])
-    XCTAssertEqual(overlaps.map(\.count), [2])
-  }
-
-  // MARK: - 提案をさばく
-
-  func testAcceptAddsATodoTaskOnTheGivenWorkspaceAndMarksTheProposal() throws {
-    let store = try store()
-    let tasks = TaskStore(file: nil)
-    let a = Self.item("a", body: "レビューをお願いします")
-    Self.commit(
-      store, 1, runRecord(), fetched: [a],
-      decisions: [
-        .propose(itemId: "a", title: "レビューする", due: TaskItem.DueDate("2026-10-12"), workspace: nil)
-      ])
-
-    let home = UUID()
-    let task = try store.accept(store.proposals[0].id, into: tasks, workspace: home)
-
-    XCTAssertEqual(tasks.tasks, [task])
-    XCTAssertEqual(task.title, "レビューする")
-    XCTAssertEqual(task.status, .todo)
-    XCTAssertEqual(task.due?.text, "2026-10-12")
-    XCTAssertEqual(task.workspace, home)
-    XCTAssertEqual(task.description, "https://example.com/a\n\nレビューをお願いします")
-    XCTAssertEqual(store.proposals[0].state, .accepted(taskId: task.id))
-    let id = store.proposals[0].id
-    XCTAssertThrowsError(try store.dismiss(id), "さばいた提案はもうさばけない") {
-      XCTAssertEqual($0 as? AutomationError, .proposalNotOpen(id), "値の不正とは分けて断る")
-    }
-    XCTAssertThrowsError(try store.accept(id, into: tasks, workspace: home)) {
-      XCTAssertEqual($0 as? AutomationError, .proposalNotOpen(id))
-    }
-    XCTAssertEqual(tasks.tasks.count, 1, "断った「タスクにする」はタスクを足さない")
+    XCTAssertEqual(reopened.automation(issuer)?.tally, AutomationTally(accepted: 0, dismissed: 1))
+    XCTAssertEqual(reopened.automation(shelf)?.tally, AutomationTally())
+    _ = try reopened.replace(
+      issuer,
+      with: AutomationDefinition(
+        name: "出した", notify: nil,
+        parts: [
+          Self.definition().parts[0],
+          DesignSceneFixtures.commandPart(
+            "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report),
+        ]), now: Self.at)
+    XCTAssertEqual(reopened.automation(issuer)?.tally, AutomationTally())
   }
 }

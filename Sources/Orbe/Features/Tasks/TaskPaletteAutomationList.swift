@@ -68,14 +68,14 @@ struct TaskPaletteAutomationList: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
   }
 
-  /// 「13:00 の回 · 9 件取得 → 新しい 4 件を処理 → 候補 2」と「中身 →」。狭い欄では要約を 2 行まで折り返す。
+  /// 最新の判定の部品の回（「9:00 判定 · 12 件 → 候補 2」）と「中身 →」。狭い欄では要約を 2 行まで折り返す。
   private func headline(_ automation: Automation) -> some View {
     let text = AutomationText(l10n: l10n, today: model.today, timeZone: model.timeZone)
+    let latest = automation.runs.first { automation.graph.node($0.part)?.role == .judge }
+    let name = latest.flatMap { automation.graph.node($0.part)?.part.name } ?? ""
     return HStack(alignment: .firstTextBaseline, spacing: Theme.Space.step) {
-      Text(text.runHeadline(automation.runs.first))
-        .foregroundStyle(
-          automation.runs.first?.failure == nil ? Color.theme.textMuted : Color.theme.danger
-        )
+      Text(text.runHeadline(part: name, latest?.run))
+        .foregroundStyle(latest?.run.failed == true ? Color.theme.danger : Color.theme.textMuted)
         .lineLimit(2)
         .truncationMode(.tail)
         .fixedSize(horizontal: false, vertical: true)

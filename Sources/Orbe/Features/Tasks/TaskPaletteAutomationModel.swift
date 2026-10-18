@@ -97,11 +97,11 @@ enum TaskPaletteAutomationError: Equatable {
   /// ヘッダーのタブの件数（入力の絞り込みに左右されない）。
   var openCount: Int { shelved.count }
 
-  /// 「すべて」と、出力先がタスク候補の受信を ID 順に。
+  /// 「すべて」と、判定の部品を持つ自動化を ID 順に。
   var shelfRows: [TaskPaletteAutomationShelfRow] {
     let counts = Dictionary(grouping: shelved, by: \.shelf).mapValues(\.count)
     return [TaskPaletteAutomationShelfRow(id: .all, automation: nil, count: shelved.count)]
-      + store.automations.filter { $0.definition.sink == .taskCandidates }
+      + store.automations.filter(\.judges)
       .sorted { $0.id < $1.id }.map {
         TaskPaletteAutomationShelfRow(
           id: .automation($0.id), automation: $0, count: counts[$0.id] ?? 0)

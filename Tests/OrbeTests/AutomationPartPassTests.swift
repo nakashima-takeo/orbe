@@ -105,6 +105,17 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
     XCTAssertEqual(rows.map(\.id), ["f:a", "f:b"])
   }
 
+  /// 同じ `id` の 2 つ目の項目は外れた行（下流の溜まりで前の行を黙って置き換えない）。
+  func testFetchItemWithARepeatedIdBreaksTheRules() throws {
+    start(
+      AutomationGraphTests.fetch("f"), .fetch(.currentSet), .fetch(since: nil, lastOutput: []))
+
+    jobs.finish(0, fetched(["a", "a"]))
+
+    XCTAssertEqual(breach?.lines.map(\.line), [2], "\(outcomes)")
+    XCTAssertNotNil(failed, "コマンドの取得は外れた行があれば失敗")
+  }
+
   /// ツールが揃わず止まった取得は失敗——0 件と読むと、今の集合の候補が一斉に下がる。
   func testFetchThatCouldNotGetItsToolsFails() throws {
     start(
@@ -268,6 +279,15 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
     jobs.finish(0, replied(#"{"error":"投稿できなかった"}"#))
 
     XCTAssertTrue(try XCTUnwrap(failed, "\(outcomes)").contains("投稿できなかった"))
+  }
+
+  /// agent が終了コード 0 でもエラーを返した回（is_error）は失敗で、その文を報告にしない。
+  func testAnAgentReplyMarkedAsAnErrorFails() throws {
+    start(AutomationGraphTests.agent("w", tools: [Self.tool]), .work, .work)
+
+    jobs.finish(0, replied("rate limited", isError: true))
+
+    XCTAssertTrue(try XCTUnwrap(failed, "\(outcomes)").contains("reported an error"))
   }
 
   /// 副作用は終了コードで成否が決まり、失敗には標準エラーが添えられる。

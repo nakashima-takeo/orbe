@@ -57,10 +57,10 @@ final class WindowController: NSObject, NSWindowDelegate {
   // タスク一覧の唯一の正。制御 API と画面が同じ変異メソッドを呼び、変異ごとに tasks.json へ即時保存される。
   // workspace の参照は表示・応答のときに解くので、workspace の復元との順序の依存は無い。
   let taskStore = TaskStore()
-  // 受信の走らせ役。定義の変異はここを通して番人の登録を合わせ、読みと提案のさばきは `automationStore` が持つ。
+  // 自動化の走らせ役。定義の変異はここを通して番人の登録を合わせ、読みと提案のさばきは `automationStore` が持つ。
   private(set) lazy var automationRunner = AutomationRunner(
     store: AutomationStore(), workspaces: { [store] in AutomationWorkspaces(store) },
-    recorded: { [weak self] in self?.notifyAutomationRecorded($0) },
+    recorded: { [weak self] in self?.notifyAutomationRecorded($0, $1) },
     defined: { [weak self] in self?.automationDefined($0) },
     deleted: { [weak self] in self?.automationDeleted($0) })
   var automationStore: AutomationStore { automationRunner.store }
@@ -192,7 +192,7 @@ final class WindowController: NSObject, NSWindowDelegate {
     showFirstRunFlow()  // 初回言語選択（preferredLanguage 未設定時）→ 既存 Onboarding（各 CLI へ導入）
     cleanupLegacyCompletionIfNeeded()  // 旧方式が zshrc へ書いた managed block を一度だけ除去
     wireUpdateUI()  // アップデート提示導線を配線し、ゲートを通れば update サイクル開始
-    automationRunner.start()  // 全自動化を番人へ載せる（過ぎていた間隔の回はここで 1 回だけ走る）
+    automationRunner.start()  // 全部品を番人へ載せる（過ぎていた間隔の回はここで 1 回だけ走る）
     waitConditions.start()
     window.center()
   }

@@ -25,7 +25,7 @@ struct TaskPaletteAutomationAction: View {
           PaletteActionLine(
             key: AutomationHand.Operation.runNow.key,
             template: l10n.string(.taskPaletteAutomationActionRunNow),
-            slots: [.emphasis(automation.definition.name)])
+            slots: [.emphasis(automation.name)])
         }
       }
     }

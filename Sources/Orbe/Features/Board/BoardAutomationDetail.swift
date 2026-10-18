@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// 選んだ自動化の詳細（右の欄）。見出し（名前・前回・次回）と、左に流れ・右に実行履歴。幅が足りなければ実行履歴を流れの下へ
-/// 回す——一覧と実行履歴の幅は固定なので、狭い窓で流れの原文が読めない幅まで潰れないため。長ければ欄全体が縦にスクロール
-/// する（選択が替わると先頭へ戻る）。
+/// 選んだ自動化の詳細（右の欄）。見出し（名前・前回・次回）と、左に流れ・右に実行履歴。流れに残る幅が `flowMinWidth` に
+/// 満たなければ実行履歴を流れの下へ回す——一覧と実行履歴の幅は固定なので、狭い窓では流れの幅だけが削られるため。長ければ
+/// 欄全体が縦にスクロールする（選択が替わると先頭へ戻る）。
 struct BoardAutomationDetail: View {
   let standing: BoardAutomationStanding
   let summary: BoardAutomationSummary
@@ -72,7 +72,7 @@ struct BoardAutomationDetail: View {
   /// 名前と前回の 1 行の行箱（見本の描画の、日本語の字の行箱）。
   private static let nameLine: CGFloat = 21
   private static let lastLine: CGFloat = 17
-  /// 流れの原文の箱が読める幅。これに満たなければ実行履歴を下へ回す。
+  /// 流れに残す幅の下限。これに満たなければ実行履歴を下へ回す。
   private static let flowMinWidth: CGFloat = 420
 }
 

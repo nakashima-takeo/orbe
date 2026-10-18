@@ -1,38 +1,24 @@
 import Foundation
 
-/// 流れの段の役割。点の形と線の描き分けが役割で決まる。
-enum BoardFlowRole: Equatable {
-  case trigger
-  case source
-  /// Orbe が挟む段（既に見たものを除く）。
-  case orbe
-  case step(Int)
-  case output
-}
-
-/// 段の手段の札。
-enum BoardFlowMeans: Equatable {
-  case command(String)
-  case model(String)
-}
-
-/// 流れの段 1 つ。文言まで解いた描画用の値。
-struct BoardFlowNode: Equatable {
-  let role: BoardFlowRole
-  var title = ""
-  var means: BoardFlowMeans?
-  /// 実行されるとおりの原文（コマンド・依頼文・指示文）。切らずに全文を出す——承認なしで裏で走るものを、いつも確かめられるため。
-  var verbatim: String?
-  var tools: [String] = []
-  /// 注記。出どころごとに 1 行。
-  var notes: [String] = []
-  /// 前回の回でこの段を出た件数。前回が届かなかった段は nil。
-  var count: Int?
+/// 流れの部品 1 行。文言まで解いた描画用の値。
+struct BoardPartLine: Equatable {
+  let key: String
+  /// 役割の名前（「取得」「判定」）。
+  let role: String
+  let name: String
+  /// 予定の札（「30分ごと」「手動」「届いたら」）。
+  let schedule: String
+  /// 入力の部品の名前（「A・B」）。入力の無い部品は nil。
+  let inputs: String?
+  /// 溜まりの件数。入力のある部品だけ。
+  let inbox: Int?
+  /// 前回の回で読めた数。まだ回っていなければ nil。
+  let count: Int?
 }
 
 /// 回の区分。文言に依らず、回の記録だけから決まる。
 enum BoardRunTone: Equatable {
-  /// 出力先へ何かを出した。
+  /// Orbe へ何かを渡した（候補を出した・報告を書いた・副作用が走った・仕事が何かした）。
   case produced
   /// 何も出さなかった。
   case quiet
@@ -43,6 +29,7 @@ enum BoardRunTone: Equatable {
 struct BoardRunLine: Equatable {
   /// 「16:40」「10/3 9:00 今すぐ」。
   let at: String
+  /// 頭に部品の名前を付けた結果。
   let result: String
   let tone: BoardRunTone
   /// 結果を全文で折り返すか（失敗の理由・報告・agent の応答）。ボードでそれを読めるのはこの行だけ。
@@ -52,272 +39,177 @@ struct BoardRunLine: Equatable {
 /// 自動化 1 つをボードの描画用の値へ読み替えたもの。定義と回の記録の形に依るのはこのファイルだけで、ボードのビューはこの値と
 /// 立ち位置だけを読む——定義の形が変わったとき、直すのがここだけで済むため。
 ///
-/// 段の並びは「トリガー → 取得元 → 既に見たものを除く → 処理 1..n → 出力先」。取得元の無い自動化は、既に見たものを除く段も
-/// 持たない。
+/// 流れは部品を入力の深さ順（同じ深さは定義の順）に 1 行ずつ並べる。実行履歴は部品の回を新しい順に混ぜる。
 struct BoardAutomationSummary: Equatable {
-  /// 出力先の種類の名前（一覧の 2 行目）。
+  /// Orbe へ渡す先の種類の名前（一覧の 2 行目。「タスク候補・報告」、Orbe へ渡す部品が無ければ「コマンド」）。
   let output: String
-  /// いつ（一覧の 2 行目・トリガーの段）。
+  /// 予定（一覧の 2 行目。予定のある部品が 1 つならその言葉、複数なら次に来る部品の予定と「ほか N」、無ければ「手動」）。
   let when: String
-  let nodes: [BoardFlowNode]
+  let parts: [BoardPartLine]
+  /// 流れの下の注記（採用・見送りの累計・通知の設定）。
+  let notes: [String]
   /// 新しい順。
   let runs: [BoardRunLine]
-  /// 帯。古い回が左。
+  /// 帯（直近の `stripLength` 回）。古い回が左。
   let strip: [BoardRunTone]
   /// 一覧の右端の、最新の回の文（「16:40 に 2件を追加」「13:00 に失敗」）。まだ回っていなければ nil。
   let mark: String?
-  /// 詳細の見出しの前回（「前回 今日 16:40　2件をタスク候補に追加」「前回 今日 13:00　失敗」）。失敗の理由は実行履歴だけが出す。
+  /// 詳細の見出しの前回（「前回 今日 16:40　判定: 2件をタスク候補に追加」）。失敗の理由は実行履歴だけが出す。
   let last: String
 
-  /// 件数の列を出すか。取得元を持つ並びだけが件数を持つ。
-  var counted: Bool { nodes.contains { $0.role == .source } }
-
-  /// 実行履歴の最新の行の 1 行目（知らせの本文）。まだ回っていなければ nil。
-  var latestLine: String? {
-    runs.first.map { String($0.result.prefix { !$0.isNewline }) }
-  }
+  /// 帯に並べる回の数。
+  static let stripLength = 20
 }
 
 extension BoardAutomationSummary {
-  init(_ automation: Automation, text: AutomationText) {
+  /// `next` は次に予定で回る部品の鍵（予定のある部品が複数のときの「いつ」に使う）。
+  init(_ automation: Automation, text: AutomationText, next: String?) {
     let l10n = text.l10n
-    let definition = automation.definition
-    let when = text.when(definition.trigger)
-    let counts = automation.runs.first.map { Self.counts($0, of: definition) } ?? Counts()
-    let sink = Self.sink(automation, count: counts.output, l10n: l10n)
-    let output = sink.title
-    self.output = output
-    self.when = when
-    nodes = Self.nodes(definition, counts: counts, when: when, l10n: l10n) + [sink]
-
-    func result(_ run: AutomationRun, heading: Bool) -> String {
-      if let failure = run.failure {
-        return heading
-          ? l10n.string(.boardRunFailedShort) : l10n.format(.boardRunFailed, failure)
-      }
-      if let text = Self.written(run) {
-        return heading ? String(text.prefix { !$0.isNewline }) : text
-      }
-      switch run.sink {
-      case .agent(let report): return Self.agentResult(report, heading: heading, l10n: l10n)
-      case .command: return l10n.string(.boardRunDone)
-      case .taskCandidates(let report) where report.proposed > 0:
-        return heading
-          ? l10n.format(.boardRunAddedTo, report.proposed, output)
-          : l10n.format(.boardRunAdded, report.proposed)
-      case .report: return l10n.string(.boardRunNothingToReport)
-      case .taskCandidates, nil: break
-      }
-      if run.fresh == 0 { return l10n.string(.boardRunNothingNew) }
-      if let step = run.steps.firstIndex(where: { $0.count == 0 }) {
-        return l10n.format(.boardRunAllDropped, step + 1)
-      }
-      return l10n.string(.boardRunNoneAdded)
+    let graph = automation.graph
+    output = Self.destinations(graph, l10n: l10n)
+    when = Self.when(graph, next: next, text: text)
+    parts = graph.byDepth.map { node in
+      let state = automation.state(node.key)
+      return BoardPartLine(
+        key: node.key, role: text.role(node.role), name: node.part.name,
+        schedule: text.schedule(node.part.trigger),
+        inputs: node.part.inputs.isEmpty
+          ? nil
+          : node.part.inputs.map { graph.node($0)?.part.name ?? $0 }.joined(
+            separator: l10n.string(.automationListSeparator)),
+        inbox: node.part.inputs.isEmpty ? nil : state.inbox,
+        count: state.runs.first.map(\.execution.count))
     }
-
-    runs = automation.runs.map { run in
-      let now = run.trigger == .now ? " " + l10n.string(.automationNowMark) : ""
+    var notes: [String] = []
+    if automation.judges {
+      notes.append(
+        l10n.format(.boardOutputTally, automation.tally.accepted, automation.tally.dismissed))
+    }
+    if let notify = automation.notify {
+      notes.append(l10n.format(.boardOutputNotify, l10n.string(notify.labelKey)))
+    }
+    self.notes = notes
+    let keyed = automation.runs
+    let names = Dictionary(uniqueKeysWithValues: graph.nodes.map { ($0.key, $0.part.name) })
+    runs = keyed.map { entry in
+      let now = entry.run.trigger == .now ? " " + l10n.string(.automationNowMark) : ""
       return BoardRunLine(
-        at: text.stamp(run.startedAt) + now, result: result(run, heading: false),
-        tone: Self.tone(run),
-        wraps: run.failure != nil || Self.written(run) != nil || Self.declined(run))
+        at: text.stamp(entry.run.startedAt) + now,
+        result: (names[entry.part] ?? entry.part) + ": "
+          + Self.result(entry.run, heading: false, text: text),
+        tone: Self.tone(entry.run), wraps: Self.wraps(entry.run))
     }
-    strip = automation.runs.reversed().map(Self.tone)
-    if let latest = automation.runs.first {
-      let at = text.stamp(latest.startedAt)
-      if latest.failure != nil {
-        mark = l10n.format(.boardRunMark, at, l10n.string(.boardRunFailedShort))
-      } else if case .taskCandidates(let report) = latest.sink, report.proposed > 0 {
-        mark = l10n.format(.boardRunMarkAdded, at, report.proposed)
-      } else if case .report(.some) = latest.sink {
-        mark = l10n.format(.boardRunMarkReported, at)
-      } else if case .agent(let report) = latest.sink {
-        mark = l10n.format(.boardRunMark, at, Self.agentResult(report, heading: true, l10n: l10n))
-      } else {
-        mark = l10n.format(.boardRunMark, at, result(latest, heading: false))
-      }
-      last = l10n.format(
-        .boardAutomationLast, text.moment(latest.startedAt), result(latest, heading: true))
-    } else {
+    strip = keyed.prefix(Self.stripLength).reversed().map { Self.tone($0.run) }
+    guard let latest = keyed.first else {
       mark = nil
       last = l10n.string(.automationNeverRan)
+      return
     }
+    let at = text.stamp(latest.run.startedAt)
+    let heading = Self.result(latest.run, heading: true, text: text)
+    switch latest.run.result {
+    case _ where latest.run.failed:
+      mark = l10n.format(.boardRunMark, at, l10n.string(.boardRunFailedShort))
+    case .judge(let proposed, _, _) where proposed > 0:
+      mark = l10n.format(.boardRunMarkAdded, at, proposed)
+    case .report(.some):
+      mark = l10n.format(.boardRunMarkReported, at)
+    case .work(.some, _):
+      // 応答の文は長くなりうる。右端は名前を潰さない短い語で言い、文は実行履歴で読む。
+      mark = l10n.format(.boardRunMark, at, l10n.string(.boardRunDone))
+    default:
+      mark = l10n.format(.boardRunMark, at, heading)
+    }
+    last = l10n.format(
+      .boardAutomationLast, text.moment(latest.run.startedAt),
+      (names[latest.part] ?? latest.part) + ": " + heading)
   }
 
-  /// 出力先の段。タイトルは出力先の種類の名前。タスク候補は採用・見送りの累計を注記に、コマンドは全文と作業ディレクトリを
-  /// 出し（手段の札は題と同じ語になるので出さない）、報告は定義に何も持たないので題だけ。agent はモデルの札（省略なら解いた
-  /// 既定）・依頼文の全文・ツールの札。通知の設定は、どの出力先でも注記のいちばん下に出す。
-  private static func sink(_ automation: Automation, count: Int?, l10n: LocalizationStore)
-    -> BoardFlowNode
+  /// 部品の回 1 つを知らせの本文にした 1 行（「判定: 2件を追加」）。実行履歴の行の 1 行目と同じ文。
+  static func line(
+    _ run: AutomationPartRun, part key: String, in automation: Automation, text: AutomationText
+  ) -> String {
+    let name = automation.graph.node(key)?.part.name ?? key
+    let result = result(run, heading: false, text: text)
+    return String((name + ": " + result).prefix { !$0.isNewline })
+  }
+
+  /// Orbe へ渡す先の種類（定義の順に重ねず並べる）。どれも無ければ「コマンド」。
+  private static func destinations(_ graph: AutomationGraph, l10n: LocalizationStore) -> String {
+    var kinds: [String] = []
+    for node in graph.nodes {
+      let kind: L10nKey
+      switch node.part.destination {
+      case .taskCandidates: kind = .boardOutputTaskCandidates
+      case .report: kind = .boardOutputReport
+      case .nextPart, .sideEffect: continue
+      }
+      let name = l10n.string(kind)
+      if !kinds.contains(name) { kinds.append(name) }
+    }
+    return kinds.isEmpty
+      ? l10n.string(.boardOutputCommand)
+      : kinds.joined(separator: l10n.string(.automationListSeparator))
+  }
+
+  private static func when(_ graph: AutomationGraph, next: String?, text: AutomationText) -> String
   {
-    var node = BoardFlowNode(role: .output, count: count)
-    switch automation.definition.sink {
-    case .taskCandidates:
-      node.title = l10n.string(.boardOutputTaskCandidates)
-      if case .taskCandidates(let state) = automation.sinkState {
-        node.notes.append(l10n.format(.boardOutputTally, state.accepted, state.dismissed))
-      }
-    case .command(let sink):
-      node.title = l10n.string(.boardOutputCommand)
-      script(&node, sink.command, l10n: l10n)
-    case .report:
-      node.title = l10n.string(.boardOutputReport)
-    case .agent(let agent):
-      node.title = l10n.string(.boardOutputAgent)
-      node.means = .model(agent.resolvedModel)
-      node.verbatim = agent.request
-      node.tools = agent.tools
+    let scheduled = graph.nodes.filter {
+      if case .scheduled = $0.part.trigger { true } else { false }
     }
-    if let notify = automation.definition.notify {
-      node.notes.append(l10n.format(.boardOutputNotify, l10n.string(notify.labelKey)))
-    }
-    return node
+    guard let first = scheduled.first else { return text.l10n.string(.automationManual) }
+    let shown = scheduled.first { $0.key == next } ?? first
+    let words = text.schedule(shown.part.trigger)
+    return scheduled.count == 1
+      ? words : text.l10n.format(.automationOthers, words, scheduled.count - 1)
   }
 
-  /// コマンドの段: 手段の札・コマンドの全文・作業ディレクトリ。
-  private static func command(
-    _ node: inout BoardFlowNode, _ command: BackgroundCommand, l10n: LocalizationStore
-  ) {
-    node.means = .command(l10n.string(.automationCommand))
-    script(&node, command, l10n: l10n)
-  }
-
-  /// コマンドの全文と作業ディレクトリ。
-  private static func script(
-    _ node: inout BoardFlowNode, _ command: BackgroundCommand, l10n: LocalizationStore
-  ) {
-    node.verbatim = command.script
-    if let directory = command.directory {
-      node.notes.append(l10n.string(.automationDirectory) + "  " + directory)
+  /// 回の結果。見出し（一覧の右端・詳細の前回・知らせ）は 1 行に縮め、実行履歴は全文を出す。
+  private static func result(_ run: AutomationPartRun, heading: Bool, text: AutomationText)
+    -> String
+  {
+    let l10n = text.l10n
+    if let failure = run.failure {
+      return heading ? l10n.string(.boardRunFailedShort) : l10n.format(.boardRunFailed, failure)
     }
-  }
-
-  /// 出力先の手前までの段の並び。件数は最新の回のもの。モデルは省略なら解いた既定を出す。
-  private static func nodes(
-    _ definition: AutomationDefinition, counts: Counts, when: String, l10n: LocalizationStore
-  ) -> [BoardFlowNode] {
-    var nodes = [BoardFlowNode(role: .trigger, title: when)]
-    if let source = definition.source {
-      var node = BoardFlowNode(role: .source, count: counts.source)
-      switch source.method {
-      case .agent(let agent):
-        node.means = .model(AutomationDefinition.model(agent.model, finalStep: false))
-        node.verbatim = agent.request
-        node.tools = agent.tools
-      case .command(let script): command(&node, script, l10n: l10n)
-      }
-      nodes.append(node)
-      nodes.append(
-        BoardFlowNode(role: .orbe, title: l10n.string(.boardOrbeSeen), count: counts.orbe))
+    switch run.result {
+    case .fetch(let fresh) where fresh == 0:
+      return l10n.string(.boardRunNothingNew)
+    case .judge(let proposed, _, _) where proposed > 0:
+      return heading
+        ? l10n.format(.boardRunAddedTo, proposed, l10n.string(.boardOutputTaskCandidates))
+        : l10n.format(.boardRunAdded, proposed)
+    case .judge:
+      return l10n.string(.boardRunNoneAdded)
+    case .report(let body?), .work(let body?, _):
+      return heading ? String(body.prefix { !$0.isNewline }) : body
+    case .work(nil, let nothing?):
+      return heading
+        ? l10n.string(.boardRunNothingDone) : l10n.format(.boardRunNothingDoneBecause, nothing)
+    default:
+      return text.outcome(run)
     }
-    for (index, step) in definition.steps.enumerated() {
-      var node = BoardFlowNode(
-        role: .step(index + 1), title: step.name,
-        count: counts.steps.indices.contains(index) ? counts.steps[index] : nil)
-      switch step.method {
-      case .agent(let agent):
-        node.means = .model(definition.model(of: agent, at: index))
-        node.verbatim = agent.instruction
-      case .command(let script): command(&node, script, l10n: l10n)
-      }
-      nodes.append(node)
-    }
-    return nodes
   }
 
   // MARK: - 文言に依らない分類
 
-  /// 回の区分。並べ替え（文言を解かずに走る）も、この分類だけを使う。
-  static func tone(_ run: AutomationRun) -> BoardRunTone {
-    if run.failure != nil { return .failed }
-    return delivered(run).produced ? .produced : .quiet
-  }
-
-  /// 回の結果の文章（報告か agent の応答）。無い回は nil。
-  private static func written(_ run: AutomationRun) -> String? {
-    switch run.sink {
-    case .report(let text): text
-    case .agent(let report): report.text
-    case .taskCandidates, .command, nil: nil
+  /// 回の区分。並べ替え（文言を解かずに走る）と知らせも、この分類だけを使う。出し直しで通った回は、通った出力で決める。
+  static func tone(_ run: AutomationPartRun) -> BoardRunTone {
+    if run.failed { return .failed }
+    switch run.result {
+    case .judge(let proposed, _, _): return proposed > 0 ? .produced : .quiet
+    case .report(let text): return text != nil ? .produced : .quiet
+    case .work(_, let nothing): return nothing == nil ? .produced : .quiet
+    case .sideEffect: return .produced
+    case .fetch, .process, nil: return .quiet
     }
   }
 
-  /// 応答の文が無い agent の回の結果。することが無いと申告した回は「何もしなかった」（見出しでなければ理由付き）、ほかは「完了」。
-  private static func agentResult(
-    _ report: AutomationAgentReport, heading: Bool, l10n: LocalizationStore
-  ) -> String {
-    guard let nothing = report.nothing else { return l10n.string(.boardRunDone) }
-    return heading
-      ? l10n.string(.boardRunNothingDone) : l10n.format(.boardRunNothingDoneBecause, nothing)
-  }
-
-  /// agent がすることが無いと申告した回か。
-  private static func declined(_ run: AutomationRun) -> Bool {
-    if case .agent(let report) = run.sink { report.nothing != nil } else { false }
-  }
-
-  /// 出力先へ出したかと、出力先の件数。タスク候補は候補を 1 つ以上受けた回、コマンドは走った回、報告は文のある回、agent は
-  /// することが無いと申告しなかった回が出した回で、件数は受けた候補の数・渡した行の数・報告か応答の数（1 か 0）。
-  private static func delivered(_ run: AutomationRun) -> (produced: Bool, count: Int) {
-    switch run.sink {
-    case .taskCandidates(let report): (report.proposed > 0, report.proposed)
-    case .command(let report): (true, report.count)
-    case .report(let text): (text != nil, text == nil ? 0 : 1)
-    case .agent(let report): (report.nothing == nil, report.nothing == nil ? 1 : 0)
-    case nil: (false, 0)
+  private static func wraps(_ run: AutomationPartRun) -> Bool {
+    switch run.result {
+    case _ where run.failed: true
+    case .report(.some), .work(.some, _), .work(nil, .some): true
+    default: false
     }
-  }
-
-  /// 出力先の記録が、定義の出力先と同じ種類か。
-  private static func same(_ report: AutomationSinkReport, _ sink: AutomationSink) -> Bool {
-    switch (report, sink) {
-    case (.taskCandidates, .taskCandidates), (.command, .command), (.report, .report),
-      (.agent, .agent):
-      true
-    case (.taskCandidates, _), (.command, _), (.report, _), (.agent, _): false
-    }
-  }
-
-  /// 1 回で各段を出た件数。
-  struct Counts: Equatable {
-    var source: Int?
-    var orbe: Int?
-    /// 処理の段の順。届かなかった段から先は無い。
-    var steps: [Int] = []
-    var output: Int?
-  }
-
-  /// 回の記録の段ごとの件数を、届いた段まで並べる。取得元と既に見たものを除くは、取得元を通った回（新しい項目の数を持つ回）
-  /// だけが持つ。段で落ちた回（出力先の記録を持たない失敗）は、記録の最後の段が落ちた段なので、その手前まで。出力先は、成功して
-  /// 出力先が最後の出力を読んだ回だけが持つ——途中の段が 0 件を出した回・新しい項目が無かった回は、出力先へ届いていない。
-  ///
-  /// 書き換えても回の記録は残るので、記録が今の定義の段で走ったものかを照合し、合わない段には数を出さない——位置だけで当てると、
-  /// 走っていない段や別の出力先に前回の数が付くため。段名は先頭から照合し、最初に食い違った段から先は出さない（前回その先の段が
-  /// 受けた入力は、今の並びで受けるものと違う）。最後の段の数は出力先が数えた数（報告なら報告の有無の 1・0）なので、記録で
-  /// 出力先が数えた段と今の最後の段が同じ段で、出力先の種類も同じときだけ出す。出力先は、段の並びがすべて合い、種類も同じときだけ。
-  private static func counts(_ run: AutomationRun, of definition: AutomationDefinition) -> Counts {
-    var counts = Counts()
-    if let fresh = run.fresh {
-      counts.source = run.source?.count
-      counts.orbe = fresh
-    }
-    let named = zip(run.steps, definition.steps).prefix { $0.name == $1.name }.count
-    let sameSink = run.sink.map { same($0, definition.sink) } ?? true
-    var steps = run.steps.map(\.count)
-    if run.failure != nil, run.sink == nil, !steps.isEmpty { steps.removeLast() }
-    steps = Array(steps.prefix(named))
-    if let index = steps.indices.last {
-      let countedBySink = run.lastStepCountedBySink && index == run.steps.count - 1
-      let lastNow = index == definition.steps.count - 1
-      if countedBySink != lastNow || (countedBySink && !sameSink) { steps.removeLast() }
-    }
-    counts.steps = steps
-    let reached = run.steps.isEmpty ? run.fresh != 0 : run.lastStepCountedBySink
-    if run.failure == nil, reached, named == run.steps.count,
-      run.steps.count == definition.steps.count, sameSink
-    {
-      counts.output = delivered(run).count
-    }
-    return counts
   }
 }

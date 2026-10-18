@@ -72,13 +72,12 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
   /// 提案タブで提案をタスクにすると、開いた workspace ではなく Home に付く。
   @MainActor func testAcceptingAProposalInTheAutomationTabAttachesTheTaskToHome() throws {
     let wc = try launchOnAnEmptyWorkspace()
-    let automation = try wc.automationRunner.set(nil, AutomationStoreTests.definition())
-    let item = AutomationStoreTests.item("a")
-    AutomationStoreTests.commit(
-      wc.automationStore, automation.id,
-      DesignSceneFixtures.automationRun(at: Date(), items: 1, fresh: 1),
-      fetched: [item],
-      decisions: [.propose(itemId: "a", title: "見積もりを送る", due: nil, workspace: nil)])
+    let automation = try wc.automationRunner.set(
+      nil, WindowControllerAutomationControlTests.definition())
+    let item = WindowControllerAutomationControlTests.item("a")
+    try WindowControllerAutomationControlTests.round(
+      wc.automationStore, automation.id, fetched: [item], proposing: [item], titles: ["見積もりを送る"],
+      workspaces: [nil])
 
     let palette = try openTaskPalette(wc)
     palette.setTab(.automation)
@@ -95,12 +94,12 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
     throws
   {
     let wc = try launchOnAnEmptyWorkspace()
-    let automation = try wc.automationRunner.set(nil, AutomationStoreTests.definition())
-    AutomationStoreTests.commit(
-      wc.automationStore, automation.id,
-      DesignSceneFixtures.automationRun(at: Date(), items: 1, fresh: 1),
-      fetched: [AutomationStoreTests.item("a")],
-      decisions: [.propose(itemId: "a", title: "main で直す", due: nil, workspace: mainId)])
+    let automation = try wc.automationRunner.set(
+      nil, WindowControllerAutomationControlTests.definition())
+    let item = WindowControllerAutomationControlTests.item("a")
+    try WindowControllerAutomationControlTests.round(
+      wc.automationStore, automation.id, fetched: [item], proposing: [item], titles: ["main で直す"],
+      workspaces: [mainId])
 
     let palette = try openTaskPalette(wc)
     palette.setTab(.automation)
@@ -115,12 +114,12 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
   /// ⌘⇧X を開いている間に付け先の workspace が消えたら、↵ の時点の値で解いて Home に付ける。
   @MainActor func testAProposalWhoseWorkspaceWasDeletedWhileOpenGoesToHome() throws {
     let wc = try launchOnAnEmptyWorkspace()
-    let automation = try wc.automationRunner.set(nil, AutomationStoreTests.definition())
-    AutomationStoreTests.commit(
-      wc.automationStore, automation.id,
-      DesignSceneFixtures.automationRun(at: Date(), items: 1, fresh: 1),
-      fetched: [AutomationStoreTests.item("a")],
-      decisions: [.propose(itemId: "a", title: "main で直す", due: nil, workspace: mainId)])
+    let automation = try wc.automationRunner.set(
+      nil, WindowControllerAutomationControlTests.definition())
+    let item = WindowControllerAutomationControlTests.item("a")
+    try WindowControllerAutomationControlTests.round(
+      wc.automationStore, automation.id, fetched: [item], proposing: [item], titles: ["main で直す"],
+      workspaces: [mainId])
     let palette = try openTaskPalette(wc)
     palette.setTab(.automation)
 

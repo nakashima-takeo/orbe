@@ -104,17 +104,54 @@ struct AutomationGraph: Equatable {
   }
 
   static func reachesJudge(from start: Int, _ nodes: [Node], _ downstream: [[Int]]) -> Bool {
+    !judges(reachedFrom: start, nodes, downstream).isEmpty
+  }
+
+  /// `start` の部品が出した行が、途中で取得の部品を通らずに届く判定の部品の位置。
+  private static func judges(reachedFrom start: Int, _ nodes: [Node], _ downstream: [[Int]])
+    -> Set<Int>
+  {
     var pending = downstream[start]
     var seen = Set<Int>()
+    var judges = Set<Int>()
     while let index = pending.popLast() {
       guard seen.insert(index).inserted else { continue }
       switch nodes[index].role {
-      case .judge: return true
+      case .judge: judges.insert(index)
       case .fetch: continue
       case .process, .report, .work, .sideEffect: pending += downstream[index]
       }
     }
-    return false
+    return judges
+  }
+
+  /// `judge` の部品へ、途中で別の取得の部品を通らずに行が届く取得の部品（定義の順）。
+  func fetches(reaching judge: String) -> [Node] {
+    guard let target = nodes.firstIndex(where: { $0.key == judge }) else { return [] }
+    return nodes.indices.filter { index in
+      if case .fetch = nodes[index].role {
+        return Self.judges(reachedFrom: index, nodes, downstream).contains(target)
+      }
+      return false
+    }.map { nodes[$0] }
+  }
+
+  /// `key` の部品を入力に名指す部品（定義の順）。
+  func downstream(of key: String) -> [Node] {
+    guard let index = nodes.firstIndex(where: { $0.key == key }) else { return [] }
+    return downstream[index].sorted().map { nodes[$0] }
+  }
+
+  /// `key` の部品から行が届きうる部品すべて（定義の順）。
+  func descendants(of key: String) -> [Node] {
+    guard let start = nodes.firstIndex(where: { $0.key == key }) else { return [] }
+    var pending = downstream[start]
+    var seen = Set<Int>()
+    while let index = pending.popLast() {
+      guard seen.insert(index).inserted else { continue }
+      pending += downstream[index]
+    }
+    return seen.sorted().map { nodes[$0] }
   }
 
   /// 前後の定義に同じ鍵があり、何をするか（`Node.work`）が変わった部品の鍵（後の定義の順）。足した部品・消した部品は入らない。

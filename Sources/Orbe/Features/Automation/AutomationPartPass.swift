@@ -20,8 +20,10 @@ struct AutomationPartPass {
     /// （接頭の無い元の id。空なら全件が新しい）。
     case fetch(since: Date?, lastOutput: Set<String>)
     /// `reachesJudge` は、出した行が途中で取得の部品を通らずに判定の部品へ届くか（`AutomationGraph.reachesTaskCandidates`）。
-    /// 届くなら、入力の行と `id` で照らせない出力の行も決まりを外した行になる——判定の溜まりには出どころのある行しか積めず、
-    /// 届いた先で黙って消えるため。処理が続くなら、照らせない行を初めに出した処理が外したことになる。
+    /// 届くなら、入力の行の `id` でない `id` の出力の行も決まりを外した行になる——判定は出どころの項目から候補を作るので、
+    /// 新しく作った行は判定で使えないため。処理が続くなら、そうした行を初めに出した処理が外したことになる。入力の行の `id` を
+    /// 保った行は、入力の行に出どころが無くても外れた行にしない（部品は決まりどおりに素通ししている。判定へ積む時点で
+    /// 出どころなしとして捨てる）。
     case process([AutomationPartRow], reachesJudge: Bool)
     /// 行はどれも出どころを持つ。`choices` は判断待ちの候補と付け先にできる workspace。
     case judge([AutomationSourcedRow], choices: AutomationJudgeChoices)
@@ -34,7 +36,7 @@ struct AutomationPartPass {
 
   /// 手段の実行の記録。`count` は読めた数——取得は項目、処理・判定は JSON の行、報告・仕事は文があれば 1、副作用は標準入力に
   /// 渡した行。
-  struct Execution: Equatable {
+  struct Execution: Equatable, Codable {
     let commandLine: String
     let ending: String
     let count: Int
@@ -205,20 +207,20 @@ struct AutomationPartPass {
   ) -> String {
     switch input {
     case .fetch(let since, _):
-      return AutomationPrompts.partFetch(request: instruction, since: mark(node, since))
+      return AutomationPrompts.fetch(instruction: instruction, since: mark(node, since))
     case .process(let rows, let reachesJudge):
-      return AutomationPrompts.partStep(
+      return AutomationPrompts.process(
         instruction: instruction, rows: rows.map(\.text), now: now, timeZone: timeZone,
         reachesJudge: reachesJudge)
     case .judge(let rows, let choices):
-      return AutomationPrompts.partJudge(
+      return AutomationPrompts.judge(
         instruction: instruction, rows: rows.map(\.text), choices: choices, now: now,
         timeZone: timeZone)
     case .report(let rows):
       return AutomationPrompts.report(
         instruction: instruction, rows: rows.map(\.text), now: now, timeZone: timeZone)
     case .work:
-      return AutomationPrompts.sinkAgent(request: instruction, now: now, timeZone: timeZone)
+      return AutomationPrompts.work(instruction: instruction, now: now, timeZone: timeZone)
     case .sideEffect:
       preconditionFailure("a side effect part is a command")
     }

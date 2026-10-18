@@ -8,7 +8,7 @@ protocol ControlAutomationTarget: AnyObject {
   func controlSetAutomation(automationId: Int?, _ definition: AutomationDefinition) -> Result<
     Any, ControlError
   >
-  /// 今すぐ回す（run_automation）。走っている回があれば -32000。
+  /// 入力の無い部品を今すぐ回す（run_automation）。どれも走っていれば -32000。
   func controlRunAutomation(automationId: Int) -> Result<Any, ControlError>
   /// 予定を止める・再開する（pause_automation）。
   func controlPauseAutomation(automationId: Int, paused: Bool) -> Result<Any, ControlError>
@@ -132,7 +132,7 @@ private struct AutomationParams {
     }
   }
 
-  /// `steps[0].instruction` の形（`definition` の中の場所）。
+  /// `parts[2].trigger` の形（`definition` の中の場所）。
   private func path(_ keys: [CodingKey]) -> String {
     keys.reduce(into: "") { path, key in
       if let index = key.intValue {

@@ -40,15 +40,14 @@ final class WindowControllerBoardTests: OrbeTestCase {
 
   /// 止めている自動化を 2 件置く——起動でも回らず、取得もコマンドなので本物の agent は起きない。
   @MainActor private func savePausedAutomations() {
-    let automations = DesignSceneFixtures.boardAutomations().prefix(2).map {
-      var automation = $0
-      automation.paused = true
-      automation.redefine {
-        $0.source?.method = .command(BackgroundCommand(script: "true", directory: nil))
-      }
-      return automation
-    }
-    AutomationPersistence.save(DesignSceneFixtures.boardAutomationFile(Array(automations)))
+    DesignSceneFixtures.seedAutomations(
+      DesignSceneFixtures.boardAutomationSamples().prefix(2).map {
+        var sample = $0
+        sample.paused = true
+        sample.definition.parts[0] = DesignSceneFixtures.commandPart(
+          "fetch", "取る", .scheduled(.every(1800)), script: "true", coverage: .currentSet)
+        return sample
+      })
   }
 
   /// 窓を画面外に出す。非アクティブなアプリの窓は key にならないが、`NSApp.sendEvent` は ordered-in の窓の first responder
@@ -207,7 +206,6 @@ final class WindowControllerBoardTests: OrbeTestCase {
   /// 依頼の欄で打っている途中にボードを離れて戻ると（パレットを閉じる・端末タブから戻る・workspace を戻る）、焦点は欄へ戻り、
   /// 打ちかけは全文が選ばれている（⌘⇧X の入力欄と同じ）。端末タブを選んでいる間、隠れた欄はキーを取らない。
   @MainActor func testFocusReturnsToTheRequestFieldWhereItWasLeft() throws {
-    AutomationPersistence.save(DesignSceneFixtures.automationEmptyFile())
     let wc = WindowController()
     show(wc)
     let home = try XCTUnwrap(wc.store.homeIndex)

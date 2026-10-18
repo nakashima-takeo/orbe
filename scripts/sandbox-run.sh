@@ -91,7 +91,7 @@ do_start() {
 
   local state_dir; state_dir="$(mktemp -d)"
   local sock="$state_dir/control.sock" log="$state_dir/orbe.log"
-  # 見本の state（automations.json など）は起こす前に置く。起動時に読まれる。
+  # 見本の state（workspaces.json など）は起こす前に置く。起動時に読まれる。
   [ -z "$seed" ] || cp -R "$seed/." "$state_dir/"
 
   local scrub=(env

@@ -367,31 +367,14 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAutomationRewriteNote
   case taskPaletteAutomationErrAccept
   // MARK: - 自動化の共有の文（L10nTable+Automation）
-  case automationFetch
-  case automationSteps
   case automationNext
   case automationPaused
   case automationRunning
-  case automationRunAt
-  case automationFetched
-  case automationProcessed
-  case automationProposedShortOne
-  case automationProposedShortOther
-  case automationProposedLongOne
-  case automationProposedLongOther
-  case automationNothingNew
   case automationFailed
   case automationNeverRan
   case automationNowMark
   case automationToday
   case automationDue
-  case automationCurrentSet
-  case automationNewArrivals
-  case automationEverything
-  case automationAgentFetch
-  case automationCommand
-  case automationTools
-  case automationDirectory
   case automationEvery
   case automationDaily
   case automationWeekdays
@@ -410,6 +393,24 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationResume
   case automationDelete
   case automationErrRunning
+  case automationRoleFetch
+  case automationRoleProcess
+  case automationRoleJudge
+  case automationRoleReport
+  case automationRoleWork
+  case automationRoleSideEffect
+  case automationManual
+  case automationArrival
+  case automationParts
+  case automationFetchedFresh
+  case automationTakenTo
+  case automationTakenProposedOne
+  case automationTakenProposedOther
+  case automationOthers
+  case automationBreachOne
+  case automationBreachOther
+  case automationBreachPassed
+  case automationBreachFailed
   // MARK: - 秘書・作業を始める（L10nTable+Secretary）
   case taskStartHomeTask
   case secretaryRequestInput
@@ -590,16 +591,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardAutomationFlow
   case boardAutomationCounts
   case boardAutomationRuns
-  case boardRoleTrigger
-  case boardRoleSource
-  case boardRoleOrbe
-  case boardRoleStep
-  case boardRoleOutput
-  case boardOrbeSeen
   case boardOutputTaskCandidates
   case boardOutputCommand
   case boardOutputReport
-  case boardOutputAgent
   case boardOutputTally
   case boardOutputNotify
   case boardNotifyTitle
@@ -611,7 +605,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardRunAdded
   case boardRunAddedTo
   case boardRunNothingNew
-  case boardRunAllDropped
   case boardRunNoneAdded
   case boardRunDone
   case boardRunNothingToReport
@@ -635,6 +628,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardAskClaudeMissing
   case boardAskUnavailable
   case boardAskFixGone
+  case boardPartInbox
 
   // MARK: - Link（OSC 8 リンクの確認・ブロック）
   case linkConfirmTitle

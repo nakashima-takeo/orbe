@@ -42,7 +42,8 @@ extension DesignGallerySnapshotTests {
       BoardRoot(
         model: BoardModel(
           automation: BoardAutomationModel(
-            runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationFile())),
+            runner: DesignSceneFixtures.automationRunner(
+              DesignSceneFixtures.boardAutomationSamples())),
           parts: []),
         translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
         fontResolver: ChromeFontResolver()),
@@ -64,11 +65,11 @@ extension DesignGallerySnapshotTests {
         size: size, name: name, dir: dir)
     }
     /// 一覧の `row` 行目（0 始まり）を選んだ状態。0 件なら欄のまま。
-    func board(_ file: AutomationsFile? = nil, row: Int = 0) -> BoardModel {
+    func board(_ file: [AutomationSample]? = nil, row: Int = 0) -> BoardModel {
       let model = BoardModel(
         automation: BoardAutomationModel(
           runner: DesignSceneFixtures.automationRunner(
-            file ?? DesignSceneFixtures.boardDesignFile())),
+            file ?? DesignSceneFixtures.boardDesignSamples())),
         parts: [.automation])
       for _ in 0...row { model.automation.move(1) }
       return model
@@ -92,9 +93,9 @@ extension DesignGallerySnapshotTests {
     running.automation.perform(.runNow)
     try write("board_automation_running.png", running)
 
-    try write("board_automation_zero.png", board(DesignSceneFixtures.automationEmptyFile()))
+    try write("board_automation_zero.png", board([]))
 
-    let long = board(DesignSceneFixtures.boardAutomationLongFile())
+    let long = board(DesignSceneFixtures.boardLongSamples())
     try write("board_automation_long_agent.png", long)
     long.automation.move(1)
     long.automation.move(1)
@@ -104,10 +105,10 @@ extension DesignGallerySnapshotTests {
     try write("board_automation_narrow_failed.png", board(), .ja, NSSize(width: 800, height: 600))
 
     // 見本『段の多い例』『一番単純な例』。どちらも回の記録から読み替えた本物の値で描く。
-    let examples = DesignSceneFixtures.boardAutomationFile([
+    let examples = [
       DesignSceneFixtures.boardStepsExample(), DesignSceneFixtures.boardSimpleExample(),
       DesignSceneFixtures.boardDailyNoteExample(), DesignSceneFixtures.boardMergedPostExample(),
-    ])
+    ]
     try write("board_automation_steps.png", board(examples))
     try write("board_automation_simple.png", board(examples, row: 1))
     // 見本『日報の下書き』（取得元も段も無い出力先コマンド）と、取得元のある出力先コマンド。
@@ -124,12 +125,12 @@ extension DesignGallerySnapshotTests {
   /// Backlog → Slack → GitHub → 長い言い回し → 式のまま → 止めている Gmail。
   private func renderBoardCronSnapshots(
     write: (String, BoardModel, Language, NSSize) throws -> Void,
-    board: (AutomationsFile?, Int) -> BoardModel
+    board: ([AutomationSample]?, Int) -> BoardModel
   ) throws {
     let wide = NSSize(width: 1440, height: 844)
     let narrow = NSSize(width: 800, height: 600)
-    let file = DesignSceneFixtures.boardAutomationFile(
-      DesignSceneFixtures.boardAutomations() + DesignSceneFixtures.boardCronExamples())
+    let file =
+      DesignSceneFixtures.boardAutomationSamples() + DesignSceneFixtures.boardCronExamples()
     for language in [Language.ja, .en] {
       let suffix = language == .ja ? "" : "_en"
       try write("board_automation_cron_phrase\(suffix).png", board(file, 3), language, wide)
@@ -143,7 +144,7 @@ extension DesignGallerySnapshotTests {
   /// 動かした姿・低い窓の末尾の行で開いて部品の下端の内側へずれた姿。
   private func renderBoardNotifySnapshots(
     write: (String, BoardModel, Language, NSSize) throws -> Void,
-    board: (AutomationsFile?, Int) -> BoardModel
+    board: ([AutomationSample]?, Int) -> BoardModel
   ) throws {
     let size = NSSize(width: 1440, height: 844)
     for language in [Language.ja, .en] {
@@ -153,9 +154,9 @@ extension DesignGallerySnapshotTests {
       try write("board_notify\(suffix).png", off, language, size)
     }
 
-    let reports = DesignSceneFixtures.boardAutomationFile([
+    let reports = [
       DesignSceneFixtures.boardStepsNotifyExample(), DesignSceneFixtures.boardReportExample(),
-    ])
+    ]
     let menuBar = board(reports, 1)
     menuBar.automation.openNotify()
     menuBar.automation.moveNotify(1)
@@ -170,22 +171,22 @@ extension DesignGallerySnapshotTests {
   /// 通知センターの報告。出力先が agent の『レビュー待ちの PR を Slack へ』。
   private func renderBoardReportSnapshots(
     write: (String, BoardModel, Language, NSSize) throws -> Void,
-    board: (AutomationsFile?, Int) -> BoardModel
+    board: ([AutomationSample]?, Int) -> BoardModel
   ) throws {
     let size = NSSize(width: 1440, height: 844)
-    let reports = DesignSceneFixtures.boardAutomationFile([
+    let reports = [
       DesignSceneFixtures.boardStepsNotifyExample(), DesignSceneFixtures.boardReportExample(),
-    ])
+    ]
     try write("board_automation_report.png", board(reports, 1), .ja, size)
     try write("board_automation_report_en.png", board(reports, 1), .en, size)
     try write("board_automation_steps_notify.png", board(reports, 0), .ja, size)
-    let center = DesignSceneFixtures.boardAutomationFile([
+    let center = [
       DesignSceneFixtures.boardReportNotificationCenterExample()
-    ])
+    ]
     try write("board_automation_report_center.png", board(center, 0), .ja, size)
     try write("board_automation_report_center_en.png", board(center, 0), .en, size)
     // 出力先の agent（取得元も段も無い）。出力先の段にモデルの札・依頼文・ツールの札が並ぶ。
-    let agent = DesignSceneFixtures.boardAutomationFile([DesignSceneFixtures.boardAgentExample()])
+    let agent = [DesignSceneFixtures.boardAgentExample()]
     try write("board_automation_agent.png", board(agent, 0), .ja, size)
     try write("board_automation_agent_en.png", board(agent, 0), .en, size)
   }
@@ -193,7 +194,7 @@ extension DesignGallerySnapshotTests {
   /// 依頼の欄: 文字あり（欄に焦点・フッターが欄のキー）・断り 2 種。秘書の口は閉包の差し替えで、本物の秘書・claude は起きない。
   private func renderBoardRequestSnapshots(
     write: (String, BoardModel, Language, NSSize) throws -> Void,
-    board: (AutomationsFile?) -> BoardModel
+    board: ([AutomationSample]?) -> BoardModel
   ) throws {
     let size = NSSize(width: 1440, height: 844)
 

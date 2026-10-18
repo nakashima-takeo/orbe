@@ -62,6 +62,8 @@ enum AutomationInbox {
   }
 
   enum Reason: Equatable {
+    /// 出どころが無い（判定の部品だけ。判定は出どころの項目から候補を作るので、渡しても使えない）。
+    case unsourced
     /// 今の集合の取得の部品から来て、その項目がもう前回の出力に無い。
     case leftCurrentSet
     /// 届いてから古さの上限を過ぎた。
@@ -111,7 +113,7 @@ enum AutomationInbox {
     let now: Date
   }
 
-  /// `node` が溜まり（`rows`）から取る行を選ぶ。集合外 → 古さ → 候補あり → 同じリンクの古い方 の順に、最初に当たった理由で捨て、
+  /// `node` が溜まり（`rows`）から取る行を選ぶ。出どころなし（判定だけ）→ 集合外 → 古さ → 候補あり → 同じリンクの古い方 の順に、最初に当たった理由で捨て、
   /// 残りを古い順に取る。行を依頼文に入れる agent だけ 1 回の上限で止め（先頭の 1 件だけで超えるならその 1 件）、ほかは全部取る。
   static func take(by node: AutomationGraph.Node, from rows: [Row], in context: Context) -> Take {
     var dropped: [Drop] = []
@@ -141,6 +143,7 @@ enum AutomationInbox {
   private static func reason(toDrop row: Row, by node: AutomationGraph.Node, in context: Context)
     -> Reason?
   {
+    if node.role == .judge, row.origin == nil { return .unsourced }
     if let origin = row.origin, context.graph.node(origin.part)?.role == .fetch(.currentSet),
       context.lastOutputs[origin.part]?.contains(origin.item) != true
     {

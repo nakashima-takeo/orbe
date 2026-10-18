@@ -2,12 +2,11 @@ import XCTest
 
 @testable import Orbe
 
-/// 提案タブの文——回の要約（処理した回・新しい項目が無かった回・失敗した回・まだ回っていない）、時刻の今日 / ほかの日、
-/// いつ（cron の言い換え）。
+/// 自動化の文——部品の回の要約（判定の候補の単数・複数・失敗・まだ回っていない）、時刻の今日 / ほかの日、いつ（cron の言い換え）。
 ///
-/// 壊れると何が起きるか。新しい項目が無かった回が「新しい 0 件を処理 → 候補 0」と読め、処理が走ったように見える。失敗した回が
-/// 件数で出て、壊れた受信に気づけない。昨日の回が今日の時刻に見える。cron の言い換えが元の時刻と食い違い、表示と違う時刻に
-/// 走ると読ませる（1・7 月だけの式が「毎日」に見える）。
+/// 壊れると何が起きるか。英語で候補 1 件の回が「1 candidates」と読める。失敗した回が件数で出て、壊れた部品に気づけない。
+/// 昨日の回が今日の時刻に見える。cron の言い換えが元の時刻と食い違い、表示と違う時刻に走ると読ませる
+/// （1・7 月だけの式が「毎日」に見える）。
 @MainActor
 final class AutomationTextTests: OrbeTestCase {
   private let text = automationText(.ja)
@@ -20,40 +19,35 @@ final class AutomationTextTests: OrbeTestCase {
       timeZone: DesignSceneFixtures.taskCalendar.timeZone)
   }
 
-  func testRunSummaries() {
-    let at = DesignSceneFixtures.automationAt
-    XCTAssertEqual(
-      text.runHeadline(
-        DesignSceneFixtures.automationRun(at: at(13, 0, 0), items: 9, fresh: 4, proposed: 2)),
-      "13:00 の回 · 9 件取得 → 新しい 4 件を処理 → 候補 2")
-    XCTAssertEqual(
-      text.runDetail(
-        DesignSceneFixtures.automationRun(at: at(9, 12, 0), items: 14, fresh: 3, proposed: 1)),
-      "今日 9:12 · 14 件取得 → 新しい 3 件を処理 → 候補 1 件")
-    XCTAssertEqual(
-      text.runHeadline(DesignSceneFixtures.automationRun(at: at(13, 0, 1), items: 9, fresh: 0)),
-      "10/3 13:00 の回 · 9 件取得 → 新しい項目なし")
-    XCTAssertEqual(
-      text.runHeadline(
-        DesignSceneFixtures.automationRun(at: at(9, 0, 0), items: 0, fresh: 0, failure: "boom")),
-      "9:00 の回 · 失敗 — boom")
-    XCTAssertEqual(text.runHeadline(nil), "まだ回っていない")
+  private func judged(taken: Int, proposed: Int, failure: String? = nil) -> AutomationPartRun {
+    let at = DesignSceneFixtures.automationAt(13)
+    var run = AutomationPartRun(
+      startedAt: at, endedAt: at, trigger: .schedule, taken: taken,
+      execution: AutomationPartPass.Execution(
+        commandLine: "claude -p", ending: "exited 0", count: 0))
+    if let failure {
+      run.failure = failure
+    } else {
+      run.result = .judge(proposed: proposed, resolved: 0, rejected: AutomationRejections())
+    }
+    return run
   }
 
-  /// 英語は候補が 1 件なら単数で言う。日本語は助数詞で単複不変。
-  func testProposedCountSingularAndPlural() {
-    let at = DesignSceneFixtures.automationAt
-    let one = DesignSceneFixtures.automationRun(
-      at: at(13, 0, 0), items: 9, fresh: 4, proposed: 1)
-    let two = DesignSceneFixtures.automationRun(
-      at: at(13, 0, 0), items: 9, fresh: 4, proposed: 2)
+  func testJudgeRunSummariesSaySingularAndPluralAndFailure() {
     let en = Self.automationText(.en)
-    XCTAssertEqual(en.runHeadline(one), "13:00 run · fetched 9 → processed 4 new → 1 candidate")
-    XCTAssertEqual(en.runHeadline(two), "13:00 run · fetched 9 → processed 4 new → 2 candidates")
-    XCTAssertEqual(en.runDetail(one), "today 13:00 · fetched 9 → processed 4 new → 1 candidate")
-    XCTAssertEqual(en.runDetail(two), "today 13:00 · fetched 9 → processed 4 new → 2 candidates")
-    XCTAssertEqual(text.runHeadline(one), "13:00 の回 · 9 件取得 → 新しい 4 件を処理 → 候補 1")
-    XCTAssertEqual(text.runDetail(two), "今日 13:00 · 9 件取得 → 新しい 4 件を処理 → 候補 2 件")
+
+    XCTAssertEqual(
+      en.runHeadline(part: "judge", judged(taken: 12, proposed: 1)),
+      "13:00 judge · 12 → 1 candidate")
+    XCTAssertEqual(
+      en.runHeadline(part: "judge", judged(taken: 12, proposed: 2)),
+      "13:00 judge · 12 → 2 candidates")
+    XCTAssertEqual(
+      text.runHeadline(part: "判定", judged(taken: 12, proposed: 2)), "13:00 判定 · 12 件 → 候補 2")
+    XCTAssertEqual(
+      text.runDetail(part: "判定", judged(taken: 3, proposed: 0, failure: "boom")),
+      "今日 13:00 判定 · 失敗 — boom")
+    XCTAssertEqual(text.runHeadline(part: "判定", nil), "まだ回っていない")
   }
 
   func testWhen() {
