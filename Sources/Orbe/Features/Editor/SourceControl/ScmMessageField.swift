@@ -1,10 +1,11 @@
 import AppKit
 import SwiftUI
 
-/// コミットメッセージの欄。↵ は改行（VS Code と同じ）、変換中の ↵ は変換の確定だけ（NSTextView のまま）。1 行のときの高さは
-/// 見本の 26 で、10 行まで伸び、その先はスクロールする。中身は worktree の状態（`SourceControl.message`）そのもので、同じ
-/// worktree を見る別の窓の欄とも同じ値になる。取り消しの履歴は欄ごとに持ち、欄と一緒に消える——窓の履歴に積むと、作り
-/// 直された・隠れた欄の打鍵を別の欄の ⌘Z が戻し、見えない worktree のメッセージを書き換える。⌘↵ は pane が取る
+/// コミットメッセージの欄。↵ はコミット（→ `ScmPanel.commitFromMessage`）、改行は ⇧↵・⌥↵・⌃↵、変換中の ↵ は変換の
+/// 確定だけ（IME が使った ↵ は改行の命令として届かない）。1 行のときの高さは見本の 26 で、10 行まで伸び、その先は
+/// スクロールする。中身は worktree の状態（`SourceControl.message`）そのもので、同じ worktree を見る別の窓の欄とも同じ値に
+/// なる。取り消しの履歴は欄ごとに持ち、欄と一緒に消える——窓の履歴に積むと、作り直された・隠れた欄の打鍵を別の欄の ⌘Z が
+/// 戻し、見えない worktree のメッセージを書き換える。⌘↵（コミットしてプッシュ）は pane が取る
 /// （→ `EditorPaneView+SourceControl`）。焦点の出入りはパネルへ写し、焦点の要求（ソース管理を開いた・列の先頭で ⌘↑）は
 /// ここで当てる。
 struct ScmMessageField: NSViewRepresentable {
@@ -23,6 +24,9 @@ struct ScmMessageField: NSViewRepresentable {
     text.delegate = context.coordinator
     text.onFocus = { [weak coordinator = context.coordinator] in coordinator?.focusDidChange($0) }
     text.onWindow = { [weak coordinator = context.coordinator] in coordinator?.applyFocusRequest() }
+    text.onCommit = { [weak coordinator = context.coordinator] in
+      coordinator?.field.panel.commitFromMessage(andPush: false)
+    }
     let scroll = NSScrollView()
     scroll.documentView = text
     scroll.drawsBackground = false
@@ -88,13 +92,18 @@ struct ScmMessageField: NSViewRepresentable {
   }
 }
 
-/// メッセージ欄のテキスト面。空のときプレースホルダを描き、焦点の出入りを知らせる。
+/// メッセージ欄のテキスト面。空のときプレースホルダを描き、焦点の出入りを知らせる。修飾の無い ↵ はコミットを求め、ほかの改行の
+/// 命令は `\n` を入れる。
 final class ScmMessageTextView: NSTextView {
   var placeholder = "" {
     didSet { if placeholder != oldValue, string.isEmpty { needsDisplay = true } }
   }
   var onFocus: ((Bool) -> Void)?
   var onWindow: (() -> Void)?
+  /// 修飾の無い ↵ を押した（何も入れない）。
+  var onCommit: (() -> Void)?
+  /// 解釈中の押下（`interpretKeyEvents` が同期に呼ぶ命令へ添える）。改行の命令は ↵ と ⇧↵ で同じなので、押下から読み分ける。
+  private var interpreting: NSEvent?
   /// 手で組んだ文字の系の根（テキスト面はこれを持たないので、自分で持つ）。
   private var storage: NSTextStorage?
 
@@ -192,6 +201,30 @@ final class ScmMessageTextView: NSTextView {
         x: origin.x, y: origin.y, width: max(0, bounds.width - origin.x - Self.trailing),
         height: Self.lineHeight),
       options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+  }
+
+  override func keyDown(with event: NSEvent) {
+    interpreting = event
+    defer { interpreting = nil }
+    super.keyDown(with: event)
+  }
+
+  /// ↵ と ⇧↵（と pane が取らない修飾の組）の命令。修飾の無い ↵ だけがコミットで、ほか（押下の無い合成の命令を含む）は改行
+  /// ——押し間違いは軽い側に倒す。
+  override func insertNewline(_ sender: Any?) {
+    if let press = interpreting,
+      press.modifierFlags.isDisjoint(with: [.command, .option, .control, .shift]),
+      press.specialKey == .carriageReturn || press.specialKey == .enter
+    {
+      onCommit?()
+      return
+    }
+    super.insertNewline(sender)
+  }
+
+  /// ⌃↵。標準の行区切り（U+2028）はメッセージに見えない字を入れるので、改行にする。
+  override func insertLineBreak(_ sender: Any?) {
+    super.insertNewline(sender)
   }
 
   override func didChangeText() {

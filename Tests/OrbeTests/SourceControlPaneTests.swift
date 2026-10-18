@@ -5,15 +5,15 @@ import XCTest
 @testable import Orbe
 
 /// エディター面に結んだソース管理パネル——行は区分に合った diff を仮のタブで開き、追跡中のファイルの破棄は確かめてから行い、
-/// メッセージ欄の ⌘↵ はコミットだけを起こし、欄の中身が外から変わったら取り消しの履歴を捨て、取り消しはその欄の中で閉じる。
-/// パネルを出していなくても面が見えていれば件数は status に追いつき（行とグラフは作らない）、cd した後の列は新しい根の行を
-/// 出して押せば新しい根の diff を開く。行の ＋ を同じ位置で続けて押すと、次の行が次々にステージされる。未追跡の行を破棄した
-/// 直後のコミットは、その破棄を数える。
+/// メッセージ欄の ↵ はコミット、⌘↵ はコミットしてプッシュ（同期・公開は起こさない）、改行は ⇧↵・⌥↵・⌃↵。欄の中身が外から
+/// 変わったら取り消しの履歴を捨て、取り消しはその欄の中で閉じる。パネルを出していなくても面が見えていれば件数は status に
+/// 追いつき（行とグラフは作らない）、cd した後の列は新しい根の行を出して押せば新しい根の diff を開く。行の ＋ を同じ位置で
+/// 続けて押すと、次の行が次々にステージされる。未追跡の行を破棄した直後のコミットは、その破棄を数える。
 ///
 /// 壊れると何が起きるか。「ステージされている変更」の行で作業ツリーの diff が開き、コミットする中身と違うものを見て確かめた
 /// ことになる。追跡中のファイルの編集が確認なしに消え、戻せない。未追跡の行を破棄してすぐ ⌘↵ を打つと、自分の破棄のせいで
-/// 「表示と食い違う」と断られる。ボタンが「同期」の間に欄で ⌘↵ を打つと、キー 1 つで
-/// push が走る。コミットの後の ⌘Z が例外を投げ、欄の取り消しが壊れたまま残る。エクスプローラーを出している間、レールの
+/// 「表示と食い違う」と断られる。ボタンが「同期」の間に欄で ⌘↵ を打つと、同期が走る。
+/// ⇧↵ の改行がコミットを起こす・↵ が改行を入れて押せないことに気づかない・⌃↵ が見えない字をメッセージに入れる。コミットの後の ⌘Z が例外を投げ、欄の取り消しが壊れたまま残る。エクスプローラーを出している間、レールの
 /// 件数が古い数で止まる・隠れたパネルのために git を読む。cd した後も列が前の根の行を出し、押した行やボタンが前の
 /// worktree の diff を開く・前の worktree でステージや破棄をする。cd した・パネルを閉じた後の ⌘Z が、見えない欄の打鍵を
 /// 戻して前の worktree の打ちかけのメッセージや別の窓の打ち足しを黙って消す。＋ を続けて押すと、ステージ済みの区分が
@@ -119,9 +119,9 @@ final class SourceControlPaneTests: OrbeTestCase {
     XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, "")
   }
 
-  /// ソース管理を開くとメッセージ欄に焦点が入る。欄の ⌘↵ はコミットだけ——ボタンが「同期」でもネット操作を起こさず、
-  /// コミットできるときはコミットする。
-  func testCommandReturnInTheMessageOnlyCommits() throws {
+  /// ソース管理を開くとメッセージ欄に焦点が入る。欄の ⌘↵ はコミットしてプッシュ——ボタンが「同期」でも同期は起こさず
+  /// （押せなければ音で断る）、コミットできるときはコミットしてから push する。
+  func testCommandReturnInTheMessageCommitsAndPushes() throws {
     let repo = try TempGitRepo()
     repo.addOrigin()
     try repo.write("b.txt", "b\n")
@@ -138,16 +138,47 @@ final class SourceControlPaneTests: OrbeTestCase {
 
     scm.control.message = "typed"
     XCTAssertTrue(hosted.pane.performKeyEquivalent(with: commandReturn))
-    XCTAssertTrue(scm.control.operations.isEmpty, "何も始めない")
+    XCTAssertTrue(scm.control.operations.isEmpty, "同期しない")
     XCTAssertEqual(repo.git(["rev-parse", "origin/main"]).stdoutText, origin)
 
     try repo.write("c.txt", "c\n")
     XCTAssertTrue(repo.git(["add", "c.txt"]).isSuccess)
-    pumpMain(until: { scm.commitState.canCommit }, "ステージ済みができる")
+    pumpMain(until: { scm.commitState.canCommitAndPush }, "ステージ済みができる")
     XCTAssertTrue(hosted.pane.performKeyEquivalent(with: commandReturn))
-    pumpMain(until: { scm.control.operations.isEmpty }, timeout: 20, "コミット")
+    pumpMain(until: { scm.control.operations.isEmpty }, timeout: 20, "コミットしてプッシュ")
     XCTAssertEqual(repo.git(["log", "-1", "--format=%s"]).stdoutText, "typed\n")
-    XCTAssertEqual(repo.git(["rev-parse", "origin/main"]).stdoutText, origin, "push しない")
+    XCTAssertEqual(
+      repo.git(["rev-parse", "origin/main"]).stdoutText, repo.head() + "\n", "push する")
+  }
+
+  /// 欄の ↵ はコミット（押せなければ音で断り、改行も入れない）。⇧↵・⌥↵・⌃↵ と押下の無い改行の命令は `\n` を入れる。
+  func testReturnInTheMessageCommitsAndModifiedReturnsInsertANewline() throws {
+    let repo = try TempGitRepo()
+    try repo.write("a.txt", "edited\n")
+    let hosted = host(repo)
+    let scm = hosted.scm
+    pumpMain(until: { scm.changes.changes.count == 1 }, "変更の行")
+    let field = try type("subject", in: hosted)
+
+    for flags in [.shift, .option, .control] as [NSEvent.ModifierFlags] {
+      field.keyDown(with: .key("\r", flags))
+    }
+    field.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+    XCTAssertEqual(field.string, "subject\n\n\n\n")
+    XCTAssertTrue(scm.control.operations.isEmpty, "改行ではコミットしない")
+    field.insertText(
+      "body", replacementRange: NSRange(location: field.string.utf16.count, length: 0))
+    pumpMain(until: { scm.control.message == "subject\n\n\n\nbody" }, "打った文が欄の外へ届く")
+
+    field.keyDown(with: .key("\r", []))
+    XCTAssertEqual(scm.control.message, "subject\n\n\n\nbody", "↵ は改行を入れない")
+    pumpMain(until: { scm.control.operations.isEmpty && field.string.isEmpty }, timeout: 20, "コミット")
+    XCTAssertEqual(repo.git(["log", "-1", "--format=%s"]).stdoutText, "subject\n")
+    XCTAssertTrue(repo.git(["log", "-1", "--format=%b"]).stdoutText.contains("body"))
+
+    field.keyDown(with: .key("\r", []))
+    XCTAssertEqual(field.string, "", "押せなければ改行も入れない")
+    XCTAssertTrue(scm.control.operations.isEmpty)
   }
 
   /// メッセージ欄の中身が外から変わった（コミットで空になった）ら、それまでの取り消しの履歴は捨てる——⌘Z は差し替え前の

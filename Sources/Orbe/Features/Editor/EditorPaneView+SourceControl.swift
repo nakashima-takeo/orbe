@@ -57,8 +57,8 @@ extension EditorPaneView {
 
   /// ソース管理パネルの中のキー（メッセージ欄の ⌘↵・列の ⌘↑）。扱ったら true。
   ///
-  /// ⌘↵ はコミットだけ——ボタンが同期・公開に替わっていてもネット操作は起こさず、コミットできなければ音で断る。変換中なら
-  /// 確定してからコミットする（chrome キーと同じ規則）。
+  /// ⌘↵ はコミットしてプッシュ——ボタンが同期・公開に替わっていても同期・公開は起こさず、押せなければ音で断る。変換中なら
+  /// 確定してから働かせる（chrome キーと同じ規則）。
   func handleSourceControlKey(_ event: NSEvent) -> Bool {
     guard focusIsInSourceControl else { return false }
     let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
@@ -70,7 +70,7 @@ extension EditorPaneView {
         text.unmarkText()
         text.inputContext?.discardMarkedText()
       }
-      scm.commitFromMessage(andPush: false)
+      scm.commitFromMessage(andPush: true)
       return true
     case .upArrow?:
       guard scm.focusedArea == .list else { return false }
