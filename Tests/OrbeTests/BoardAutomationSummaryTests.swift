@@ -65,4 +65,28 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     XCTAssertEqual(develop.bends, [1, 3], "CI と自分の担当だけの線が点へ曲がり込む")
     XCTAssertEqual(develop.through, [2, 4, 5])
   }
+
+  /// カードの「ツール」: MCP は `__` までをサーバー名とし、claude.ai のコネクタ・プラグインの出どころの頭は落とす。Bash 規則は
+  /// 末尾の `:*` の手前までがコマンド。同じ表示は最初の 1 つだけ。
+  func testCardToolsNameTheServerOrCommandOnce() throws {
+    var samples = DesignSceneFixtures.boardMapSamples()
+    let index = try XCTUnwrap(samples[0].definition.parts.firstIndex { $0.key == "backlog" })
+    samples[0].definition.parts[index].method = .agent(
+      AutomationPartAgent(
+        cli: "claude", model: nil,
+        tools: [
+          "mcp__claude_ai_Gmail__search_threads", "mcp__plugin_core_backlog__get_issues",
+          "mcp__claude_ai_Gmail__get_thread", "Bash(npm run test:unit:*)",
+          "Bash(npm run test:unit:*)",
+        ],
+        instruction: "取る。"))
+    let automation = DesignSceneFixtures.automationStore(samples).automations[0]
+    let card = try XCTUnwrap(
+      BoardAutomationPartValue(
+        automation, part: "backlog", text: text, running: false, next: nil, open: 0))
+
+    XCTAssertEqual(
+      card.facts.first { $0.label == .boardPartTools }?.value.map(\.text),
+      ["Gmail（MCP）・Backlog（MCP）・npm run test:unit コマンド"])
+  }
 }

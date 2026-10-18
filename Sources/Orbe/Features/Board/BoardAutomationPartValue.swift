@@ -127,7 +127,7 @@ extension BoardAutomationPartValue {
         .boardPartRun,
         l10n.format(.boardPartAgent, agent.cli, node.model ?? l10n.string(.boardPartDefaultModel)))
       if !agent.tools.isEmpty {
-        fact(.boardPartTools, agent.tools.map { tool(text: $0, l10n) }.joined(separator: separator))
+        fact(.boardPartTools, tools(agent.tools, l10n).joined(separator: separator))
       }
     case .command:
       fact(.boardPartRun, l10n.string(.boardOutputCommand))
@@ -173,19 +173,36 @@ extension BoardAutomationPartValue {
     return facts
   }
 
+  /// 同じ表示になるツール（同じサーバーの MCP、同じコマンドの Bash 規則）は、最初の 1 つだけを残す。
+  private static func tools(_ rules: [String], _ l10n: LocalizationStore) -> [String] {
+    var seen: Set<String> = []
+    return rules.map { tool(text: $0, l10n) }.filter { seen.insert($0).inserted }
+  }
+
   /// MCP のツールは「<サーバー名の頭を大文字に>（MCP）」、`Bash(git:*)` は「git コマンド」。どちらでもなければ規則のまま。
   private static func tool(text rule: String, _ l10n: LocalizationStore) -> String {
     if rule.hasPrefix("mcp__") {
-      let server = rule.dropFirst(5).split(separator: "_", maxSplits: 1).first.map(String.init)
-      let name = server ?? rule
+      let name = server(rule.dropFirst(5).components(separatedBy: "__")[0])
       return l10n.format(.boardPartToolMCP, name.prefix(1).uppercased() + name.dropFirst())
     }
     if rule.hasPrefix("Bash("), rule.hasSuffix(")") {
       let body = rule.dropFirst(5).dropLast()
-      let command = body.split(separator: ":").first.map(String.init) ?? String(body)
+      let command = body.hasSuffix(":*") ? body.dropLast(2) : body
       return l10n.format(.boardPartToolCommand, command.trimmingCharacters(in: .whitespaces))
     }
     return rule
+  }
+
+  /// Claude Code がサーバー名の頭に付ける出どころ（claude.ai のコネクタの `claude_ai_`、プラグインの `plugin_<プラグイン名>_`）を
+  /// 落とす。
+  private static func server(_ name: String) -> String {
+    if name.hasPrefix("claude_ai_") { return String(name.dropFirst("claude_ai_".count)) }
+    if name.hasPrefix("plugin_"),
+      let separator = name.dropFirst("plugin_".count).firstIndex(of: "_")
+    {
+      return String(name[name.index(after: separator)...])
+    }
+    return name
   }
 
   /// 取り方（「新着だけ（前回 16:00 以降）」「今ある分のうち、新しく現れたもの」「毎回すべて」）。
