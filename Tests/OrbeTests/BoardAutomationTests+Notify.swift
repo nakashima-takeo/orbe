@@ -25,6 +25,64 @@ extension BoardAutomationTests {
     right(window)
   }
 
+  /// 先頭の行が 12 部品の地図を持つ（通知しない）。低い窓では詳細が見える高さを超える。
+  private func tallDetailBoard() -> BoardModel {
+    var samples = DesignSceneFixtures.boardMapSamples()
+    samples[0].definition.notify = nil
+    return board(samples)
+  }
+
+  /// 詳細のスクロール（部品の右端にあるもの）。
+  private func detailScroll(in window: NSWindow) throws -> NSScrollView {
+    func scrollViews(_ view: NSView) -> [NSScrollView] {
+      (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap(scrollViews)
+    }
+    let content = try XCTUnwrap(window.contentView)
+    return try XCTUnwrap(
+      scrollViews(content).max {
+        $0.convert($0.bounds, to: nil).minX < $1.convert($1.bounds, to: nil).minX
+      })
+  }
+
+  /// 詳細をホイールで流したのと同じく、末尾まで送る（選択は動かない）。
+  private func scrollToBottom(_ detail: NSScrollView, in window: NSWindow) throws {
+    let document = try XCTUnwrap(detail.documentView)
+    XCTAssertTrue(document.isFlipped, "前提: 上端が原点")
+    detail.contentView.scroll(
+      to: NSPoint(x: 0, y: document.bounds.height - detail.contentView.bounds.height))
+    detail.reflectScrolledClipView(detail.contentView)
+    flush(window)
+    XCTAssertGreaterThan(detail.contentView.bounds.minY, 0, "前提: 詳細が流れた")
+  }
+
+  /// 詳細の中の「通知」の行の上端（見本の寸法: 上の余白 20・名前の行 21・間 4）。
+  private static let notifyRowTop: CGFloat = 45
+
+  /// 「通知」の行が見える範囲へ引き寄せられるのを待つ。引き寄せ（`scrollTo`）はキーを処理した後の RunLoop で効くので、決まった
+  /// 時間だけ回すと遅い環境では引き寄せが後から効き、そのあと流した詳細を引き戻してしまう。
+  private func waitForNotifyRow(_ detail: NSScrollView, in window: NSWindow) -> Bool {
+    let deadline = Date().addingTimeInterval(5)
+    while detail.contentView.bounds.minY > Self.notifyRowTop, Date() < deadline {
+      pump(0.05)
+    }
+    flush(window)
+    return detail.contentView.bounds.minY <= Self.notifyRowTop
+  }
+
+  /// 先頭の自動化の地図の「通知」の段を選び、詳細を末尾まで流して「通知」の行を見える範囲の外にした低い窓。
+  private func mountWithTheNotifyRowScrolledOut(_ model: BoardModel) throws -> (
+    NSWindow, NSScrollView
+  ) {
+    let window = mount(model, height: 400)
+    down(window)
+    right(window)
+    up(window)
+    XCTAssertEqual(model.automation.selectedMapStop, .notify, "前提: 「通知」の段")
+    let detail = try detailScroll(in: window)
+    try scrollToBottom(detail, in: window)
+    return (window, detail)
+  }
+
   private func notifyLine(_ automation: BoardAutomationModel, _ id: Int) -> String? {
     let text = automation.text(LocalizationStore(language: .ja), now: automation.runner.now())
     return automation.detail(id, text: text, now: automation.runner.now())?.notify
@@ -173,5 +231,36 @@ extension BoardAutomationTests {
     XCTAssertNil(automation.notifyCursor)
     XCTAssertEqual(automation.store.automation(Self.failingBacklog)?.definition.notify, .menuBar)
     XCTAssertEqual(automation.place, .map)
+  }
+
+  /// 「通知」の行が詳細の見える範囲の外にあっても、→ は行を見える範囲へ引き寄せてから開き、開いたまま選べる。
+  func testOpeningBringsTheNotifyRowIntoView() throws {
+    let model = tallDetailBoard()
+    let automation = model.automation
+    let (window, detail) = try mountWithTheNotifyRowScrolledOut(model)
+    let id = try XCTUnwrap(automation.selectedAutomation?.id)
+
+    right(window)
+
+    XCTAssertTrue(waitForNotifyRow(detail, in: window), "「通知」の行が見える範囲へ戻る")
+    XCTAssertEqual(automation.notifyCursor, 0, "見える範囲へ戻っても開いたまま")
+    down(window)
+    send(Key.enter, "\r", to: window)
+    XCTAssertEqual(automation.store.automation(id)?.definition.notify, .menuBar)
+  }
+
+  /// 開いている間に「通知」の行が詳細の見える範囲から外れると閉じる。
+  func testNotifyRowLeavingTheViewWhileOpenCloses() throws {
+    let model = tallDetailBoard()
+    let automation = model.automation
+    let (window, detail) = try mountWithTheNotifyRowScrolledOut(model)
+    right(window)
+    XCTAssertTrue(waitForNotifyRow(detail, in: window), "前提: 開くときの引き寄せが効き終わった")
+    XCTAssertEqual(automation.notifyCursor, 0, "前提: 開いている")
+
+    try scrollToBottom(detail, in: window)
+
+    XCTAssertNil(automation.notifyCursor)
+    XCTAssertEqual(automation.selectedMapStop, .notify, "段は動かない")
   }
 }

@@ -3,7 +3,8 @@ import SwiftUI
 /// 選んだ自動化の詳細（右の欄）。見出し（名前・「通知」の段・次回・直近の実行の帯）と、左に地図・右に選んだ部品のカードの欄。
 /// カードの欄は部品が選ばれていない間（一覧に居る間・「通知」の段）も空のまま幅を保つ——段を移るたびに地図の幅が変わらないため。
 /// 地図に残る幅が `mapMinWidth` に満たなければカードを地図の下へ回す。長ければ欄全体が縦にスクロールする（選択が替わると
-/// 先頭へ戻る）。
+/// 先頭へ戻る）。サブメニュー「通知」を開くときは「通知」の行を見える範囲へ引き寄せる——外にあるまま開くと、見えない
+/// メニューがキーを奪うため。
 struct BoardAutomationDetail: View {
   let model: BoardAutomationModel
   let standing: BoardAutomationStanding
@@ -16,36 +17,45 @@ struct BoardAutomationDetail: View {
     GeometryReader { geometry in
       let width = geometry.size.width - Self.inset.leading - Self.inset.trailing
       let wide = width >= Self.mapMinWidth + Self.columnGap + Self.cardWidth
-      ScrollView {
-        VStack(alignment: .leading, spacing: Self.headingGap) {
-          heading
-          if wide {
-            HStack(alignment: .top, spacing: Self.columnGap) {
-              map
-              Group {
-                if let card {
-                  BoardAutomationPartCard(model: model, card: card)
-                } else {
-                  Color.clear
-                }
+      ScrollViewReader { proxy in
+        scroll(wide: wide)
+          .onChange(of: model.notifyCursor != nil) { was, now in
+            if !was, now { proxy.scrollTo(BoardAutomationModel.MapStop.notify) }
+          }
+      }
+    }
+  }
+
+  private func scroll(wide: Bool) -> some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: Self.headingGap) {
+        heading
+        if wide {
+          HStack(alignment: .top, spacing: Self.columnGap) {
+            map
+            Group {
+              if let card {
+                BoardAutomationPartCard(model: model, card: card)
+              } else {
+                Color.clear
               }
-              .frame(width: Self.cardWidth)
             }
-          } else {
-            VStack(alignment: .leading, spacing: Self.headingGap) {
-              map
-              if let card { BoardAutomationPartCard(model: model, card: card) }
-            }
+            .frame(width: Self.cardWidth)
+          }
+        } else {
+          VStack(alignment: .leading, spacing: Self.headingGap) {
+            map
+            if let card { BoardAutomationPartCard(model: model, card: card) }
           }
         }
-        .padding(Self.inset)
-        .frame(maxWidth: .infinity, alignment: .leading)
       }
-      .id(standing.id)
-      .scrollIndicators(.automatic)
-      .transformAnchorPreference(key: BoardAutomationNotifyAnchor.self, value: .bounds) {
-        $0.viewport = $1
-      }
+      .padding(Self.inset)
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .id(standing.id)
+    .scrollIndicators(.automatic)
+    .transformAnchorPreference(key: BoardAutomationNotifyAnchor.self, value: .bounds) {
+      $0.viewport = $1
     }
   }
 
@@ -93,6 +103,7 @@ struct BoardAutomationDetail: View {
       .padding(.horizontal, -Self.notifyInset)
       .contentShape(Rectangle())
       .onTapGesture { model.tapNotify() }
+      .id(BoardAutomationModel.MapStop.notify)
       .anchorPreference(key: BoardAutomationNotifyAnchor.self, value: .bounds) {
         BoardAutomationNotifyAnchor(row: $0)
       }

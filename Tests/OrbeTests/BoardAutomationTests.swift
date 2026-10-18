@@ -55,10 +55,10 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
   }
 
   /// ボードを実窓に載せ、ボードを選んだときと同じ当て直し（`focus()`）で焦点を中へ入れる。部品は欄から始まる。
-  func mount(_ model: BoardModel) -> NSWindow {
+  func mount(_ model: BoardModel, height: CGFloat = 700) -> NSWindow {
     NSApplication.shared.setActivationPolicy(.accessory)
     let window = KeyDeliveryWindow(
-      contentRect: NSRect(x: -20000, y: -20000, width: 1200, height: 700),
+      contentRect: NSRect(x: -20000, y: -20000, width: 1200, height: height),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = BoardView(
       model: model, translucency: ChromeTranslucency(),
