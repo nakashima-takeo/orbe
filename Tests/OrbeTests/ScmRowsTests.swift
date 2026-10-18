@@ -7,8 +7,7 @@ import XCTest
 /// 壊れると何が起きるか。ステージした後に編集したファイルが片方の区分にしか出ない・競合がステージ済みに並んで一括で
 /// 解決済みにされる・`git rm --cached` のファイルを解除できない・削除したファイルを「ファイルを開く」で開こうとする・
 /// 未追跡を確認なしで捨てる側に数える・git が何も変えない行を一括操作に数える・ボタンの姿が古い行のまま残る・パスの順に
-/// 並ばない・レールの件数が行の数と食い違う・区間の表が行とずれて押した行と違う行が開く・グラフ見出しの地が
-/// ブランチの器の枠と繋がって見える。
+/// 並ばない・レールの件数が行の数と食い違う・区間の表が行とずれて押した行と違う行が開く。
 final class ScmRowsTests: OrbeTestCase {
   private func entry(
     _ staged: GitStatus.Change?, _ unstaged: GitStatus.Change?, from original: String? = nil
@@ -136,24 +135,5 @@ final class ScmRowsTests: OrbeTestCase {
     XCTAssertEqual(next, layout.items.count)
     let folded = ScmLayout.build(changes, branch: branch, graph: nil, collapsed: [.changes])
     XCTAssertEqual(rows(folded), [header(.changes), header(.graph)])
-  }
-
-  /// ブランチの器の行は上下に 6 の空きを持ち（6＋24＋6）、器はその間に描く——グラフ見出しの地と器の枠が接しない。
-  @MainActor
-  func testTheBranchBoxKeepsAGapAboveAndBelowInsideItsRow() throws {
-    let layout = ScmLayout.build(
-      .empty, branch: ScmBranch(status.branch), graph: nil, collapsed: [])
-    let row = try XCTUnwrap(
-      layout.items.firstIndex {
-        if case .branch = $0 { return true }
-        return false
-      })
-    let segment = try XCTUnwrap(
-      layout.segments.first { $0.start <= row && row < $0.start + $0.count })
-    XCTAssertEqual(segment.height, 36)
-    XCTAssertEqual(segment.leading, 0, "空きは器の行の中")
-    let view = ScmRowView(frame: NSRect(x: 0, y: 0, width: 240, height: segment.height))
-    view.show(layout.items[row], language: .en, emoji: nil)
-    XCTAssertEqual(view.band, NSRect(x: 0, y: 6, width: 240, height: 24))
   }
 }

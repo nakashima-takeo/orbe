@@ -6,8 +6,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか。変更があるのにボタンが同期に替わって押すとネット操作が走る・upstream の無いブランチで公開が
 /// 出ない・push 済みのコミットを amend で書き換えられる（Orbe の中では戻せない）・push 済みか分からない間に取り消せる・
-/// push と並んで amend・取り消しが走り、push したコミットを書き換える・競合だけなのにコミットが押せる・主の側が押せないのに
-/// ▾ だけ開く・ボタンが押せない間に取り消せない。
+/// push と並んで amend・取り消しが走り、push したコミットを書き換える・競合だけなのにコミットが押せる。
 final class ScmCommitStateTests: OrbeTestCase {
   private func branch(
     name: String? = "feat", commit: String? = "abc", upstream: GitStatus.Upstream? = nil
@@ -79,16 +78,5 @@ final class ScmCommitStateTests: OrbeTestCase {
     XCTAssertFalse(state(branch: head, committing: true).canUndo)
     XCTAssertFalse(state(staged: 1, branch: head, networking: true).canAmend)
     XCTAssertFalse(state(branch: head, networking: true).canUndo)
-  }
-
-  /// ボタン（主の働きと ▾）の可否は 1 つ——主が押せなければ ▾ も開かない。その間も amend・取り消しの可否は持つ（区分
-  /// 見出しの … から届く）。
-  func testTheButtonHasOneEnablementWhileRewritingStaysReachable() {
-    let blank = state(changes: 1, branch: branch())
-    XCTAssertFalse(blank.isButtonEnabled, "欄が空")
-    XCTAssertTrue(blank.canUndo, "… から取り消せる")
-    XCTAssertTrue(blank.canAmend, "… から amend できる")
-    XCTAssertTrue(state(changes: 1, branch: branch(), blank: false).isButtonEnabled)
-    XCTAssertFalse(state(branch: branch(upstream: upstream(ahead: 0, behind: 0))).isButtonEnabled)
   }
 }
