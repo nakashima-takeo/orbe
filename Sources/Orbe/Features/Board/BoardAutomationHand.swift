@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// ボードの自動化への手の操作（流す・止める ⇄ 再開・削除）。キーと操作の対応（場所ごと）・キーの表示・名前・断りをここだけが
-/// 決める——キーを変えたとき、フッターの表示だけが嘘になる写しを残さないため。
+/// ボードの自動化への手の操作（流す・止める ⇄ 再開・削除）。居場所ごとのキーとの対応・キーの表示・名前・断りをここだけが
+/// 決める——キーを変えたとき、フッターの表示やカードのボタンだけが嘘になる写しを残さないため。
 enum BoardAutomationHand {
   /// 流す先。部品までなら、流す先の部品は地図の「選ばれている部品」から解く。
   enum Reach: Equatable {
@@ -18,7 +18,7 @@ enum BoardAutomationHand {
 
     var key: String {
       switch self {
-      case .flow: "↵"
+      case .flow: "⌘↵"
       case .togglePause: "space"
       case .delete: "⌘⌫"
       }
@@ -43,26 +43,23 @@ enum BoardAutomationHand {
 
   /// 断り。行き違い（消えていた等）は黙り、断るのは流している途中の流すだけ。
   enum Refusal: Equatable {
-    case flowing(Reach)
+    case flowing
 
-    var message: L10nKey {
-      switch self {
-      case .flowing(.ends): .automationErrRunning
-      case .flowing(.part): .automationErrFlowing
-      }
-    }
+    var message: L10nKey { .automationErrRunning }
   }
 
-  /// 一覧では修飾なしの ↵＝終わりまで流す（今すぐ実行）、space＝止める ⇄ 再開、⌘⌫＝削除。地図では修飾なしの ↵＝選ばれている
-  /// 部品まで流す、だけ。他のキーと場所は nil。
+  /// 一覧では ⌘↵＝終わりまで流す（今すぐ実行）、space＝止める ⇄ 再開、⌘⌫＝削除。地図の部品の段では ⌘↵＝選ばれている部品まで
+  /// 流す、だけ。他のキーと場所は nil。
   static func stroke(_ press: KeyPress, at place: BoardAutomationModel.Place) -> Stroke? {
-    let plain = press.modifiers.isDisjoint(with: [.command, .option, .control, .shift])
+    let commandOnly =
+      press.modifiers.contains(.command)
+      && press.modifiers.isDisjoint(with: [.option, .control, .shift])
     let operation: Operation
     switch (place, press.key) {
-    case (.list, .return) where plain: operation = .flow(.ends)
+    case (.list, .return) where commandOnly: operation = .flow(.ends)
     case (.list, .space): operation = .togglePause
     case (.list, .backspace) where press.modifiers.contains(.command): operation = .delete
-    case (.map, .return) where plain: operation = .flow(.part)
+    case (.map, .return) where commandOnly: operation = .flow(.part)
     default: return nil
     }
     return press.phase == .down ? .press(operation) : .held
@@ -84,7 +81,7 @@ enum BoardAutomationHand {
       do throws(AutomationError) {
         try runner.flow(automation.id, to: target)
       } catch {
-        if case .flowing = error { return .flowing(reach) }
+        if case .flowing = error { return .flowing }
       }
     case .togglePause:
       _ = try? runner.pause(automation.id, !automation.paused)

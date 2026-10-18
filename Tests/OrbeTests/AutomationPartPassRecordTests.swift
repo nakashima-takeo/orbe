@@ -80,7 +80,7 @@ final class AutomationPartPassRecordTests: AutomationPartPassTestCase {
         ending: .limited(.elapsed), output: .agent(reply: nil, stderr: .init())))
 
     XCTAssertNotNil(failed, "\(outcomes)")
-    XCTAssertEqual(outcomes.first?.execution.ending, BackgroundEnding.limited(.elapsed).text)
+    XCTAssertEqual(outcomes.first?.execution.ending.text, BackgroundEnding.limited(.elapsed).text)
     XCTAssertEqual(breach?.redo?.lines, [])
     XCTAssertEqual(breach?.redo?.firstCall.count, 1)
   }

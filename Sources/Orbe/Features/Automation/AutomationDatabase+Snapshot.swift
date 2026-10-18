@@ -105,7 +105,7 @@ extension AutomationDatabase {
     let rows = try db.select(
       """
       SELECT id, state, task_id, automation_id, part_key, source_part_key, title, due, workspace,
-        proposed_at, item
+        proposed_at, item, reason
       FROM proposals ORDER BY id
       """, []
     ) { s in
@@ -113,7 +113,7 @@ extension AutomationDatabase {
         s.int(at: 0), s.text(at: 1) ?? "", s.optionalInt64(at: 2), s.int(at: 3),
         s.text(at: 4) ?? "",
         s.text(at: 5) ?? "", s.text(at: 6) ?? "", s.text(at: 7), s.text(at: 8), s.int64(at: 9),
-        s.text(at: 10)
+        s.text(at: 10), s.text(at: 11)
       )
     }
     var proposals: [AutomationProposal] = []
@@ -140,7 +140,7 @@ extension AutomationDatabase {
       proposals.append(
         AutomationProposal(
           id: row.0, automationId: row.3, partKey: row.4, sourcePartKey: row.5, item: item,
-          title: row.6, due: due, workspace: workspace,
+          title: row.6, due: due, workspace: workspace, reason: row.11,
           proposedAt: AutomationPersistence.date(row.9), state: state))
     }
     return proposals

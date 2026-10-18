@@ -349,15 +349,23 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAutomationAll
   case taskPaletteAutomationAskBoard
   case taskPaletteAutomationNoProposals
-  case taskPaletteAutomationNextJudge
-  case taskPaletteAutomationJudgeOnArrival
-  case taskPaletteAutomationJudgeManual
   case taskPaletteAutomationRefreshing
+  case taskPaletteAutomationLastJudge
+  case taskPaletteAutomationNeverJudged
+  case taskPaletteAutomationProposedCount
+  case taskPaletteAutomationReason
+  case taskPaletteAutomationProposedBy
+  case taskPaletteAutomationFieldWorkspace
+  case taskPaletteAutomationFieldDue
+  case taskPaletteAutomationFieldLink
+  case taskPaletteAutomationHintCandidates
+  case githubLinkPullRequest
+  case githubLinkIssue
+  case automationFailedWith
   case taskPaletteAutomationEmpty
   case taskPaletteAutomationOpenLink
   case taskPaletteAutomationAsTask
   case taskPaletteAutomationDismiss
-  case taskPaletteAutomationActionAccept
   case taskPaletteAutomationActionProposals
   case taskPaletteAutomationActionRefresh
   case taskPaletteAutomationHintShelf
@@ -369,11 +377,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationNext
   case automationPaused
   case automationRunning
-  case automationFailed
-  case automationNeverRan
-  case automationFailedPart
-  case automationFailedParts
-  case automationNowMark
   case automationToday
   case automationDue
   case automationEvery
@@ -395,7 +398,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationDelete
   case automationErrRunning
   case automationFlowHere
-  case automationErrFlowing
   case automationRoleFetch
   case automationRoleProcess
   case automationRoleJudge
@@ -404,19 +406,50 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationRoleSideEffect
   case automationManual
   case automationArrival
-  case automationFetchedFresh
-  case automationTakenTo
-  case automationTakenProposedOne
-  case automationTakenProposedOther
-  case automationOthers
-  case automationBreachOne
-  case automationBreachOther
+  case automationBreachNotice
   case automationBreachPassed
   case automationBreachFailed
+  case automationYesterday
+  case automationWithOriginal
+  case automationEndExited
+  case automationEndSignaled
+  case automationEndTimeLimit
+  case automationEndIdleLimit
+  case automationEndOutputLimit
+  case automationEndStopped
+  case automationEndAgentMissing
+  case automationEndDirectoryMissing
+  case automationEndNotStarted
+  case automationEndToolsUnavailable
+  case automationFailNoReply
+  case automationFailNotUTF8
+  case automationFailAgentError
+  case automationFailReported
+  case automationFailBrokeRules
+  case automationFailUnsourced
+  case automationLineAt
+  case automationFaultNotJSON
+  case automationFaultNotObject
+  case automationFaultMissing
+  case automationFaultNull
+  case automationFaultType
+  case automationFaultInvalid
+  case automationFaultInvalidValue
+  case automationFaultIdTwice
+  case automationFaultNotInputId
+  case automationFaultNothingWithItems
+  case automationFaultNotNewItem
+  case automationFaultProposedTwice
+  case automationFaultNotWaiting
+  case automationFaultNotOneDecision
+  case automationFaultTitle
+  case automationFaultDue
+  case automationFaultWorkspace
+  case automationDismissedAlready
+  case automationDismissedNoOpen
   // MARK: - 秘書・作業を始める（L10nTable+Secretary）
   case taskStartHomeTask
   case secretaryRequestInput
-  case secretaryAutomationFixInput
   case taskPaletteAddToTasks
   case taskPaletteHandToAgent
   case taskPaletteHintOpenAgent
@@ -589,76 +622,103 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardEmpty
   case boardAutomationTitle
   case boardAutomationEmpty
-  case boardAutomationLast
   case boardAutomationFlow
-  case boardAutomationRuns
   case boardOutputTaskCandidates
   case boardOutputCommand
-  case boardOutputReport
-  case boardOutputTally
-  case boardOutputNotify
   case boardNotifyTitle
   case boardNotifyOff
   case boardNotifyMenuBar
   case boardNotifyNotificationCenter
-  case boardRunFailed
-  case boardRunFailedShort
-  case boardRunAddedTo
-  case boardRunNothingNew
-  case boardRunNoneAdded
-  case boardRunDone
-  case boardRunNothingToReport
-  case boardRunNothingDone
-  case boardRunNothingDoneBecause
-  case boardRunMark
-  case boardRunMarkAdded
-  case boardRunMarkReported
-  case boardRunMarkFailed
+  case boardNotifyLine
+  case boardNotifyNone
+  case boardListLast
+  case boardListNeverRan
+  case boardRecentRuns
+  case boardMapParts
+  case boardMapPending
+  case boardMapLast
+  case boardMapFresh
+  case boardMapCount
+  case boardMapPassed
+  case boardMapProposed
+  case boardMapNoProposals
+  case boardMapFailed
+  case boardMapNever
+  case boardMapDestination
+  case boardMapOpen
+  case boardMapFormatError
+  case boardDestMenuBar
+  case boardDestNotificationCenter
+  case boardDestBoard
+  case boardPartRun
+  case boardPartTools
+  case boardPartSchedule
+  case boardPartTake
+  case boardPartFrom
+  case boardPartTo
+  case boardPartPending
+  case boardPartTimeout
+  case boardPartDirectory
+  case boardPartNext
+  case boardPartAgent
+  case boardPartDefaultModel
+  case boardPartToolMCP
+  case boardPartToolCommand
+  case boardPartNewSince
+  case boardPartNewOnly
+  case boardPartCurrentSet
+  case boardPartEverything
+  case boardPartTaskCandidates
+  case boardPartNothing
+  case boardPartCount
+  case boardPartNoLimit
+  case boardPartLimitAge
+  case boardPartLimitItems
+  case boardPartLimitBoth
+  case boardPartMinutes
+  case boardPartFormatError
+  case boardPartRedonePassed
+  case boardPartRedoneFailed
+  case boardPartNotRedone
+  case boardPartLastReport
+  case boardPartLastReply
+  case boardPartHistory
+  case boardPartAskFix
+  case boardAskFixDraft
   case boardRunFresh
-  case boardRunTaken
-  case boardRunJudgedAdded
+  case boardRunNothingNew
+  case boardRunCount
+  case boardRunPassed
+  case boardRunJudged
   case boardRunJudgedNone
+  case boardRunSummarized
+  case boardRunReported
+  case boardRunNothingToReport
+  case boardRunDone
+  case boardRunNothingDone
+  case boardRunExecuted
   case boardRunFold
-  case boardGuideLead
-  case boardGuideExamples
-  case boardExampleSlack
-  case boardExampleReviewDigest
-  case boardExampleDailyNote
+  case boardRunManual
+  case boardRunRedonePassed
+  case boardRunDroppedOld
+  case boardRunDroppedOverflow
+  case boardRunAsideSeparator
   case boardHintSelect
   case boardHintToList
   case boardHintChoose
   case boardHintBack
   case boardHintParts
-  case boardHintToParts
-  case boardAskPlaceholder
+  case boardHintSeeParts
+  case boardHintChangeNotify
   case boardAskHint
-  case boardAskFixHint
-  case boardAskClaudeMissing
   case boardAskUnavailable
-  case boardAskFixGone
-  case boardPartInbox
-  case boardMapParts
-  case boardMapLast
-  case boardMapFresh
-  case boardMapTaken
-  case boardMapProposed
-  case boardMapReported
-  case boardMapOpen
-  case boardMapBreach
-  case boardPartInputs
-  case boardPartGoesTo
-  case boardPartNowhere
-  case boardPartCoverage
-  case boardPartNextRun
-  case boardPartInboxLimit
-  case boardPartLimitHours
-  case boardPartLimitItems
-  case boardPartBreachOne
-  case boardPartBreachOther
-  case boardPartRuns
-  case boardCoverageCurrentSet
-  case boardCoverageNewArrivals
-  case boardCoverageEverything
+  case boardGuideLead
+  case boardGuideExamples
+  case boardExampleSlack
+  case boardExampleReviewDigest
+  case boardExampleDailyNote
+  case boardAskPlaceholder
+  case boardAskClaudeMissing
 
   // MARK: - Link（OSC 8 リンクの確認・ブロック）
   case linkConfirmTitle

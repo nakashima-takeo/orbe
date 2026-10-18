@@ -1,6 +1,6 @@
 import Foundation
 
-/// 自動化を人に見せる文（時刻・部品の役割と予定・部品の回の要約・いつ）。何をどの順に出すかまでを決め、描き方（字の大きさ・箱）は
+/// 自動化を人に見せる文（時刻・部品の役割と予定・いつ。回の失敗と外れた行は `AutomationText+Run`）。何をどの順に出すかまでを決め、描き方（字の大きさ・箱）は
 /// 使う画面が決める。暦日は渡された今日とタイムゾーンで決める。
 struct AutomationText {
   let l10n: LocalizationStore
@@ -8,7 +8,7 @@ struct AutomationText {
   let timeZone: TimeZone
 
   /// 「9:12」。
-  private func clock(_ date: Date) -> String {
+  func clock(_ date: Date) -> String {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = timeZone
     let c = calendar.dateComponents([.hour, .minute], from: date)
@@ -32,7 +32,17 @@ struct AutomationText {
     return day == today ? clock(date) : TaskDueText.date(day, today: today)
   }
 
-  /// 部品の役割の名前（「取得」「判定」）。
+  /// 一覧・地図の時刻。今日なら「16:41」、昨日なら「昨日 23:00」、ほかは「10/12 10:00」。
+  func recent(_ date: Date) -> String {
+    let day = TaskItem.DueDate(date, timeZone: timeZone)
+    guard day != today,
+      TaskItem.DueDate(date.addingTimeInterval(86_400), timeZone: timeZone) == today
+    else { return stamp(date) }
+    return l10n.format(.automationYesterday, clock(date))
+  }
+
+  /// 部品の役割の名前（「取得」「判定」）。部品を名指す言い方には使わない——部品は名前だけで言い、役割は地図の役割の列と
+  /// カードの頭でだけ見せる。
   func role(_ role: AutomationPartRole) -> String {
     switch role {
     case .fetch: l10n.string(.automationRoleFetch)
@@ -44,56 +54,13 @@ struct AutomationText {
     }
   }
 
-  /// 部品を人に見せる言い方「判定: 連絡」。
-  func part(_ node: AutomationGraph.Node) -> String {
-    role(node.role) + ": " + node.part.name
-  }
-
-  /// 部品の予定の札（「30分ごと」「平日 9:00」「手動」「届いたら」）。
+  /// 部品の予定（「30分ごと」「平日 9:00」「手動」「前の部品に連動」）。
   func schedule(_ trigger: AutomationPart.Trigger) -> String {
     switch trigger {
     case .scheduled(let timing): when(timing)
     case .manual: l10n.string(.automationManual)
     case .arrival: l10n.string(.automationArrival)
     }
-  }
-
-  /// 部品の回の結果の要約（「12 件取得 → 新しい 3 件」「12 件 → 候補 2」「失敗 — <理由>」）。報告・仕事の文は 1 行目。
-  func outcome(_ run: AutomationPartRun) -> String {
-    if let failure = run.failure { return l10n.format(.automationFailed, failure) }
-    let taken = run.taken ?? 0
-    switch run.result {
-    case .fetch(let fresh):
-      return l10n.format(.automationFetchedFresh, run.execution.count, fresh)
-    case .process:
-      return l10n.format(.automationTakenTo, taken, run.execution.count)
-    case .judge(let proposed, _, _):
-      return l10n.format(
-        proposed == 1 ? .automationTakenProposedOne : .automationTakenProposedOther, taken, proposed
-      )
-    case .report(let text?), .work(let text?, _):
-      return String(text.prefix { !$0.isNewline })
-    case .report(nil):
-      return l10n.string(.boardRunNothingToReport)
-    case .work(nil, .some):
-      return l10n.string(.boardRunNothingDone)
-    case .work(nil, nil), .sideEffect, nil:
-      return l10n.string(.boardRunDone)
-    }
-  }
-
-  /// 部品の最新の回の 1 行。「9:00 判定: 開発 · 12 件 → 候補 2」「判定: 開発 · まだ回っていない」。
-  func latest(_ node: AutomationGraph.Node, _ run: AutomationPartRun?) -> String {
-    guard let run else { return part(node) + " · " + l10n.string(.automationNeverRan) }
-    return stamp(run.startedAt) + " " + part(node) + " · " + outcome(run)
-  }
-
-  /// 最後の回が失敗した部品（新しい失敗が先）。「判定: 連絡 · 失敗」「判定: 連絡 ほか 1 件 · 失敗」。無ければ nil。
-  func failed(_ nodes: [AutomationGraph.Node]) -> String? {
-    guard let first = nodes.first else { return nil }
-    return nodes.count == 1
-      ? l10n.format(.automationFailedPart, part(first))
-      : l10n.format(.automationFailedParts, part(first), nodes.count - 1)
   }
 
   /// 「30分ごと」「平日 9:00」「平日 9:00〜18:50 の10分ごと」。言葉にしない cron 式は「cron <式>」で、式の欄の間は

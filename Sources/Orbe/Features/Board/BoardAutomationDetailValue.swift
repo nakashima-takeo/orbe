@@ -1,6 +1,6 @@
 import Foundation
 
-/// 地図の点とカードの頭の点の見え方。
+/// 地図の部品の点とカードの頭の印の見え方。
 enum BoardNodeLook: Equatable {
   case idle
   /// 最新の回が失敗。
@@ -15,20 +15,32 @@ struct BoardMapPart: Equatable {
   /// 役割の名前（「取得」「判定」）。
   let role: String
   let name: String
-  /// 予定の札（「30分ごと」「手動」「届いたら」）。
-  let schedule: String
-  /// 予定が「届いたら」か（札を沈める）。
-  let arrival: Bool
+  /// 予定の札（「30分ごと」「手動」）。前の部品に連動する部品は札を持たない。
+  let schedule: String?
   /// 入力の部品の名前（「A・B」）。入力の無い部品は nil。
   let inputs: String?
-  /// 溜まりの件数。入力のある部品だけ。
+  /// 未処理の件数。入力のある部品だけ。
   let inbox: Int?
-  /// 出力が決まりを外した印があるか。
+  /// 出力の形式エラーの印があるか。
   let breached: Bool
   let look: BoardNodeLook
-  /// 前回の列（「新しい 2 / 18」「失敗」「実行中…」「–」）。
-  let last: String
-  let lastShade: BoardRunShade
+  /// 前回の列。まだ動いていなければ nil。
+  let last: Last?
+  /// 最新の回が失敗なら、その理由（「日本語（原文）」）。行の下に出す。
+  let failure: String?
+
+  struct Last: Equatable {
+    let mark: BoardRunMark
+    /// 「16:40」「昨日 23:00」。
+    let at: String
+    /// 「新着 2 件」「1 件を次へ」「候補 2 件」「失敗」。報告・作業・外部操作は量を言わない。
+    let amount: (text: String, shade: BoardRunShade)?
+
+    static func == (a: Last, b: Last) -> Bool {
+      a.mark == b.mark && a.at == b.at && a.amount?.text == b.amount?.text
+        && a.amount?.shade == b.amount?.shade
+    }
+  }
 }
 
 /// 地図の 1 行の溝の線。番号は左からの線の位置。
@@ -43,65 +55,63 @@ struct BoardMapLanes: Equatable {
   let bends: [Int]
   /// 上から下まで通る線（曲がり込みつつ下の受け手へも続く線を含む）。
   let through: [Int]
+
+  /// この行の下へ続く線（行の下に足す理由の行は、これをそのまま縦に続ける）。
+  var continuing: [Int] { (through + (below ? [node] : [])).sorted() }
 }
 
-/// 地図の 1 行。部品の行に続けて、Orbe への終わりの行（タスク候補・報告。その行き先の部品がある分だけ）が並ぶ。
+/// 地図の 1 行。部品の行に続けて、行き先の行（タスク候補・報告の出し先。その行き先の部品がある分だけ）が並ぶ。
 struct BoardMapRow: Equatable {
   enum Content: Equatable {
     case part(BoardMapPart)
     /// `open` はこの自動化の棚に出ている判断待ちの候補の数。
     case taskCandidates(open: Int)
-    case report
+    /// 報告と作業の文の出し先（「メニューバーに出す」）。
+    case reports(String)
   }
 
   let content: Content
   let lanes: BoardMapLanes
 }
 
-/// 選んだ自動化の詳細の値（見出し・地図・実行履歴・帯）。地図は部品を入力の深さ順（同じ深さは定義の順）に 1 行ずつ並べ、
-/// 溝の線で入力のつながりを `git log --graph` の流儀で描く。実行履歴は全部品の回を新しい順に混ぜる。
+/// 選んだ自動化の詳細の値（見出し・帯・地図）。地図は部品を入力の深さ順（同じ深さは定義の順）に 1 行ずつ並べ、溝の線で
+/// 入力のつながりを `git log --graph` の流儀で描く。
 struct BoardAutomationDetailValue: Equatable {
-  /// 見出しの前回（「前回 今日 16:40　判定: 2件をタスク候補に追加」）。
-  let last: String
-  /// 見出しの注記（採用・見送りの累計・通知の設定）。
-  let notes: [String]
+  /// 「通知：メニューバー」。
+  let notify: String
+  /// 「次回 16:50」「手動」。止めていれば nil（見出しは停止中を出す）。
+  let next: String?
+  /// 直近の回の区分（全部品を混ぜた新しい `stripLength` 回。古い回が左）。
+  let strip: [BoardRunTone]
   let rows: [BoardMapRow]
   /// 溝の線の本数（自動化ごと。溝の幅はこれで決まる）。
   let laneCount: Int
   let partCount: Int
-  /// 新しい順。
-  let runs: [BoardRunLine]
-  /// 帯（畳んだ後の直近 `stripLength` 行）。古い行が左。
-  let strip: [BoardRunTone]
 
   static let stripLength = 20
 }
 
 extension BoardAutomationDetailValue {
-  /// `running` は部品が走っているか、`open` はこの自動化の棚に出ている判断待ちの候補の数。
+  /// `running` は部品が走っているか、`open` はこの自動化の棚に出ている判断待ちの候補の数、`next` は次に予定で回る時刻。
   init(
-    _ automation: Automation, text: AutomationText, running: (String) -> Bool, open: Int
+    _ automation: Automation, text: AutomationText, running: (String) -> Bool, open: Int,
+    next: Date?
   ) {
     let l10n = text.l10n
     let graph = automation.graph
-    let names = Dictionary(uniqueKeysWithValues: graph.nodes.map { ($0.key, $0.part.name) })
     let ordered = graph.byDepth
     let judges = graph.judges.map(\.key)
     let reports = graph.nodes.filter { $0.part.destination == .report }.map(\.key)
 
     var plans = ordered.map { node in
-      let continues: Bool
-      switch node.part.destination {
-      case .nextPart, .taskCandidates, .report: continues = true
-      case .sideEffect: continues = false
-      }
-      return BoardMapLayout.Row(key: node.key, inputs: node.part.inputs, continues: continues)
+      BoardMapLayout.Row(
+        key: node.key, inputs: node.part.inputs, continues: node.part.destination != .sideEffect)
     }
     if !judges.isEmpty {
       plans.append(.init(key: Self.taskCandidatesKey, inputs: judges, continues: false))
     }
     if !reports.isEmpty {
-      plans.append(.init(key: Self.reportKey, inputs: reports, continues: false))
+      plans.append(.init(key: Self.reportsKey, inputs: reports, continues: false))
     }
     let layout = BoardMapLayout(plans)
     laneCount = layout.laneCount
@@ -116,31 +126,26 @@ extension BoardAutomationDetailValue {
       rows.append(BoardMapRow(content: .taskCandidates(open: open), lanes: lanes))
     }
     if !reports.isEmpty, let lanes = ends.next() {
-      rows.append(BoardMapRow(content: .report, lanes: lanes))
+      rows.append(
+        BoardMapRow(content: .reports(Self.reports(automation.notify, l10n)), lanes: lanes))
     }
     self.rows = rows
     partCount = graph.nodes.count
-
-    var notes: [String] = []
-    if automation.judges {
-      notes.append(
-        l10n.format(.boardOutputTally, automation.tally.accepted, automation.tally.dismissed))
+    notify = l10n.format(
+      .boardNotifyLine, l10n.string(automation.notify?.labelKey ?? .boardNotifyNone))
+    let summary = BoardAutomationSummary(automation, text: text, next: next)
+    self.next = summary.next
+    strip = automation.runs.prefix(Self.stripLength).reversed().map {
+      BoardAutomationSummary.tone($0.run)
     }
-    if let notify = automation.notify {
-      notes.append(l10n.format(.boardOutputNotify, l10n.string(notify.labelKey)))
-    }
-    self.notes = notes
+  }
 
-    let keyed = automation.runs
-    runs = BoardAutomationSummary.lines(keyed, name: { names[$0] ?? $0 }, text: text)
-    strip = runs.prefix(Self.stripLength).reversed().map(\.tone)
-    if let latest = keyed.first {
-      last = l10n.format(
-        .boardAutomationLast, text.moment(latest.run.startedAt),
-        (names[latest.part] ?? latest.part) + ": "
-          + BoardAutomationSummary.heading(latest.run, text: text))
-    } else {
-      last = l10n.string(.automationNeverRan)
+  /// 報告と作業の文の出し先（「メニューバーに出す」）。役割の名前（報告・作業）は使わない。
+  static func reports(_ notify: AutomationNotify?, _ l10n: LocalizationStore) -> String {
+    switch notify {
+    case .menuBar: l10n.string(.boardDestMenuBar)
+    case .notificationCenter: l10n.string(.boardDestNotificationCenter)
+    case nil: l10n.string(.boardDestBoard)
     }
   }
 
@@ -151,30 +156,31 @@ extension BoardAutomationDetailValue {
     let l10n = text.l10n
     let state = automation.state(node.key)
     let latest = state.runs.first
-    let look: BoardNodeLook = running ? .running : latest?.failed == true ? .failed : .idle
-    let last: (text: String, shade: BoardRunShade) =
-      if running {
-        (l10n.string(.automationRunning), .running)
-      } else if let latest {
-        BoardAutomationSummary.brief(latest, text: text)
-      } else {
-        ("–", .sunk)
-      }
     let inputs = node.part.inputs
+    let schedule: String? =
+      switch node.part.trigger {
+      case .arrival: nil
+      case .scheduled, .manual: text.schedule(node.part.trigger)
+      }
     return BoardMapPart(
-      key: node.key, role: text.role(node.role), name: node.part.name,
-      schedule: text.schedule(node.part.trigger), arrival: node.part.trigger == .arrival,
+      key: node.key, role: text.role(node.role), name: node.part.name, schedule: schedule,
       inputs: inputs.isEmpty
         ? nil
         : inputs.map { automation.graph.node($0)?.part.name ?? $0 }.joined(
           separator: l10n.string(.automationListSeparator)),
-      inbox: inputs.isEmpty ? nil : state.inbox, breached: state.breach != nil, look: look,
-      last: last.text, lastShade: last.shade)
+      inbox: inputs.isEmpty ? nil : state.inbox, breached: state.breach != nil,
+      look: running ? .running : latest?.failed == true ? .failed : .idle,
+      last: latest.map {
+        BoardMapPart.Last(
+          mark: $0.failed ? .failure : .success, at: text.recent($0.startedAt),
+          amount: BoardAutomationSummary.amount($0, node: node, text: text))
+      },
+      failure: latest.flatMap { text.failure($0, node: node) })
   }
 
-  /// 終わりの行の鍵（部品の鍵は空でないので、空の鍵と区切りの文字は部品と重ならない）。
+  /// 行き先の行の鍵（部品の鍵は空でないので、空の鍵と区切りの文字は部品と重ならない）。
   private static let taskCandidatesKey = "\u{0}taskCandidates"
-  private static let reportKey = "\u{0}report"
+  private static let reportsKey = "\u{0}reports"
 }
 
 /// 地図の溝の線の割り当て。定義だけから決まる純粋な計算。行を上から見て、この行で最後の受け手を迎える入力の線のうち最も

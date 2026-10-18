@@ -25,21 +25,22 @@ struct TaskPaletteAutomationShelfRow: Equatable, Identifiable {
   let count: Int
 }
 
-/// 棚の段の 2 行目。ビューは文言と色だけを決める。
-enum TaskPaletteAutomationShelfStatus: Equatable {
-  /// 候補を更新している一巡の間（2 行目はこれだけ）。
-  case refreshing
-  /// `plan` は次の判定がいつか（言えなければ nil）、`failed` は最後の回が失敗した部品（新しい失敗が先）。
-  case standing(
-    plan: TaskPaletteAutomationJudgePlan?, noCandidates: Bool, failed: [AutomationGraph.Node])
-}
+/// 棚の段の 2 行目。左に前回の判定、右に今の状態。ビューは文言と色だけを決める。
+struct TaskPaletteAutomationShelfStatus: Equatable {
+  /// 最も新しく回った判定の部品の最新の回。まだどの判定も回っていなければ nil。
+  let last: Judged?
+  let state: State?
 
-/// 次の判定がいつか。
-enum TaskPaletteAutomationJudgePlan: Equatable {
-  case paused
-  case at(Date)
-  case onArrival
-  case manual
+  struct Judged: Equatable {
+    let at: Date
+    let failed: Bool
+  }
+
+  enum State: Equatable {
+    /// 候補を更新している一巡の間。
+    case refreshing
+    case paused
+  }
 }
 
 /// 提案タブの失敗（フッターに赤で出す）。
@@ -164,24 +165,15 @@ enum TaskPaletteAutomationError: Equatable {
     store.automation(proposal.automationId)?.graph.node(proposal.sourcePartKey)?.part.name
   }
 
-  /// 棚の段の 2 行目。一巡の間は更新中だけ。そうでなければ止めていれば停止中、ほかは判定の部品の予定を、時刻のある判定
-  /// （最も早い時刻）→「届いたら」の判定 → 手動の判定の順で最初に当たったもので言う。
-  func status(of automation: Automation, count: Int) -> TaskPaletteAutomationShelfStatus {
-    if runner.isFlowing(automation.id) { return .refreshing }
-    let judges = automation.graph.judges
-    let plan: TaskPaletteAutomationJudgePlan? =
-      if automation.paused {
-        .paused
-      } else if let next = judges.compactMap({ runner.nextRunAt(automation, part: $0.key) }).min() {
-        .at(next)
-      } else if judges.contains(where: { $0.part.trigger == .arrival }) {
-        .onArrival
-      } else if judges.contains(where: { $0.part.trigger == .manual }) {
-        .manual
-      } else {
-        nil
-      }
-    return .standing(plan: plan, noCandidates: count == 0, failed: automation.failedParts)
+  /// 棚の段の 2 行目。前回の判定は、判定の部品のうち最も新しく回ったものの最新の回（他の判定の失敗は一覧の頭で見る）。今の
+  /// 状態は、一巡の間なら更新中、止めていれば停止中。
+  func status(of automation: Automation) -> TaskPaletteAutomationShelfStatus {
+    let last = automation.graph.judges.compactMap { automation.state($0.key).runs.first }
+      .max { $0.startedAt < $1.startedAt }
+    let state: TaskPaletteAutomationShelfStatus.State? =
+      runner.isFlowing(automation.id) ? .refreshing : automation.paused ? .paused : nil
+    return TaskPaletteAutomationShelfStatus(
+      last: last.map { .init(at: $0.startedAt, failed: $0.failed) }, state: state)
   }
 
   // MARK: - 入力・選択

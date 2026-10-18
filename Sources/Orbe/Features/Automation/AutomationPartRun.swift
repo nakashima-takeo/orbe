@@ -1,7 +1,8 @@
 import Foundation
 
-/// 部品の 1 回の記録。確定（失敗の記録を含む）が、取る・積む・当て直すときに決まった数と部品の 1 回の結果から組む。外の形
-/// （`list_automations` の `runs`）＝保存の形。手段を起こさなかった契機（取る行が 0 件）は記録しないので、いつも実行の記録を持つ。
+/// 部品の 1 回の記録。確定（失敗の記録を含む）が、取る・積む・当て直すときに決まった数と部品の 1 回の結果から組む。保存の形は
+/// 種類だけを持ち、外の形（`list_automations` の `runs`）は保存の形に英文を足したもの（`AutomationRunWire`）。手段を起こさなかった
+/// 契機（取る行が 0 件）は記録しないので、いつも実行の記録を持つ。
 struct AutomationPartRun: Equatable {
   enum Trigger: String, Codable {
     case schedule
@@ -27,9 +28,9 @@ struct AutomationPartRun: Equatable {
   var stacked: Int?
   /// この回の確定で下げた（判断待ちだった）候補の数。取得の成功した回だけ持つ。
   var withdrawn: Int?
-  var failure: String?
+  var failure: AutomationFailure?
 
-  /// 決まりを外したこと。外れた行は件数と最初の数件の理由だけを残す。
+  /// 決まりを外したこと。外れた行は件数と最初の数件だけを残す。
   struct Breach: Equatable, Codable {
     /// 1 回目の出力の外れた行。
     let lines: AutomationRejections
@@ -48,8 +49,8 @@ struct AutomationPartRun: Equatable {
     /// `fresh` は下流へ渡す行の数（前回の出力に無かった項目）。
     case fetch(fresh: Int)
     case process
-    /// `rejected` は確定の当て直しで捨てた案。
-    case judge(proposed: Int, resolved: Int, rejected: AutomationRejections)
+    /// `dismissed` は確定の当て直しで捨てた案。
+    case judge(proposed: Int, resolved: Int, dismissed: [AutomationDismissal])
     /// 言うことが無かった回は nil。
     case report(text: String?)
     /// 標準入力に渡した行の数。
@@ -125,26 +126,20 @@ struct AutomationBreachMark: Equatable, Codable {
   let passed: Bool
 }
 
-/// 捨てた行。理由は最初の数件だけ残す。
+/// 外れた行。件数と、最初の数件の行だけを残す。
 struct AutomationRejections: Codable, Equatable {
   var count = 0
-  var reasons: [String] = []
+  var lines: [AutomationBrokenLine] = []
 
-  static let retainedReasons = 5
+  static let retainedLines = 5
 
-  init(count: Int = 0, reasons: [String] = []) {
+  init(count: Int = 0, lines: [AutomationBrokenLine] = []) {
     self.count = count
-    self.reasons = reasons
+    self.lines = lines
   }
 
-  /// 外れた行の件数と、最初の数件の「line <n>: <理由>」。
   init(_ lines: [AutomationBrokenLine]) {
-    self.init(count: lines.count, reasons: lines.prefix(Self.retainedReasons).map(\.text))
-  }
-
-  mutating func add(_ reason: String) {
-    count += 1
-    if reasons.count < Self.retainedReasons { reasons.append(reason) }
+    self.init(count: lines.count, lines: Array(lines.prefix(Self.retainedLines)))
   }
 }
 
@@ -153,7 +148,7 @@ struct AutomationRejections: Codable, Equatable {
 extension AutomationPartRun: Codable {
   private enum CodingKeys: String, CodingKey {
     case startedAt, endedAt, trigger, taken, dropped, execution, breach, result, stacked, withdrawn
-    case failure
+    case failed
   }
 
   /// 無い値は書かない。`dropped` は 0 でない理由だけ。
@@ -169,7 +164,7 @@ extension AutomationPartRun: Codable {
     try c.encodeIfPresent(result, forKey: .result)
     try c.encodeIfPresent(stacked, forKey: .stacked)
     try c.encodeIfPresent(withdrawn, forKey: .withdrawn)
-    try c.encodeIfPresent(failure, forKey: .failure)
+    try c.encodeIfPresent(failure, forKey: .failed)
   }
 
   init(from decoder: Decoder) throws {
@@ -184,7 +179,7 @@ extension AutomationPartRun: Codable {
     result = try c.decodeIfPresent(Result.self, forKey: .result)
     stacked = try c.decodeIfPresent(Int.self, forKey: .stacked)
     withdrawn = try c.decodeIfPresent(Int.self, forKey: .withdrawn)
-    failure = try c.decodeIfPresent(String.self, forKey: .failure)
+    failure = try c.decodeIfPresent(AutomationFailure.self, forKey: .failed)
   }
 }
 
@@ -209,11 +204,11 @@ extension AutomationPartRun.Redo: Codable {
   }
 }
 
-/// `{"kind": "fetch", "fresh"}`・`{"kind": "process"}`・`{"kind": "judge", "proposed", "resolved", "rejected"?}`・
+/// `{"kind": "fetch", "fresh"}`・`{"kind": "process"}`・`{"kind": "judge", "proposed", "resolved", "dismissed"?}`・
 /// `{"kind": "report", "text"?}`・`{"kind": "sideEffect", "count"}`・`{"kind": "work", "text"?, "nothing"?}`。
 extension AutomationPartRun.Result: Codable {
   private enum CodingKeys: String, CodingKey {
-    case kind, fresh, proposed, resolved, rejected, text, count, nothing
+    case kind, fresh, proposed, resolved, dismissed, text, count, nothing
   }
 
   init(from decoder: Decoder) throws {
@@ -225,8 +220,7 @@ extension AutomationPartRun.Result: Codable {
       self = .judge(
         proposed: try c.decode(Int.self, forKey: .proposed),
         resolved: try c.decode(Int.self, forKey: .resolved),
-        rejected: try c.decodeIfPresent(AutomationRejections.self, forKey: .rejected)
-          ?? AutomationRejections())
+        dismissed: try c.decodeIfPresent([AutomationDismissal].self, forKey: .dismissed) ?? [])
     case "report": self = .report(text: try c.decodeIfPresent(String.self, forKey: .text))
     case "sideEffect": self = .sideEffect(count: try c.decode(Int.self, forKey: .count))
     case "work":
@@ -247,11 +241,11 @@ extension AutomationPartRun.Result: Codable {
       try c.encode(fresh, forKey: .fresh)
     case .process:
       try c.encode("process", forKey: .kind)
-    case .judge(let proposed, let resolved, let rejected):
+    case .judge(let proposed, let resolved, let dismissed):
       try c.encode("judge", forKey: .kind)
       try c.encode(proposed, forKey: .proposed)
       try c.encode(resolved, forKey: .resolved)
-      if rejected.count > 0 { try c.encode(rejected, forKey: .rejected) }
+      if !dismissed.isEmpty { try c.encode(dismissed, forKey: .dismissed) }
     case .report(let text):
       try c.encode("report", forKey: .kind)
       try c.encodeIfPresent(text, forKey: .text)

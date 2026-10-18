@@ -5,8 +5,6 @@ import Foundation
 enum SecretaryAsk: Equatable {
   /// 打った文（⌘⇧X の入力の行き先・ボードの依頼の欄）。
   case text(String)
-  /// 自動化の直し。
-  case automationFix(Automation)
 }
 
 /// 起こした claude の最初の入力と役目の指示（Orbe が UI の言語で組む）。
@@ -14,16 +12,10 @@ enum SecretaryText {
   /// 最初の入力（「依頼: 」を先頭に付けた頼み）。その語は中身によらず常に付ける——先頭が `/` の文を claude が
   /// スラッシュコマンドとして実行しないため。頼める中身が無ければ nil。
   static func firstInput(_ ask: SecretaryAsk, l10n: LocalizationStore) -> String? {
-    let body: String
-    switch ask {
-    case .text(let text):
-      body = text.trimmingCharacters(
-        in: CharacterSet.whitespacesAndNewlines.union(.controlCharacters))
-      if body.isEmpty { return nil }
-    case .automationFix(let automation):
-      body = l10n.format(
-        .secretaryAutomationFixInput, "\(automation.id)", automation.name)
-    }
+    guard case .text(let text) = ask else { return nil }
+    let body = text.trimmingCharacters(
+      in: CharacterSet.whitespacesAndNewlines.union(.controlCharacters))
+    if body.isEmpty { return nil }
     return l10n.format(.secretaryRequestInput, body)
   }
 
@@ -67,7 +59,7 @@ enum SecretaryText {
 
   private static func boardJa(skill: String) -> String {
     """
-    あなたは Orbe で、自動化の定義を書く・直す役です。最初のメッセージの「依頼: 」に続く文は、自動化を作る・直す頼みです（一覧から頼んだ直しは「自動化 N「…」を直す。」の形で届きます）。
+    あなたは Orbe で、自動化の定義を書く・直す役です。最初のメッセージの「依頼: 」に続く文は、自動化を作る・直す頼みです。
 
     - 自動化を作る・直すときは、Skill ツールで `\(skill)` を呼び、その手順で進めます。
     - タスクを足す・直すこと、作業そのものはしません。
@@ -78,8 +70,7 @@ enum SecretaryText {
   private static func boardEn(skill: String) -> String {
     """
     In Orbe, your role is to write and fix automation definitions. The first message, after \
-    "Request: ", asks you to create or fix an automation (a fix requested from the list arrives as \
-    "Fix automation N “…”.").
+    "Request: ", asks you to create or fix an automation.
 
     - To create or fix an automation, invoke `\(skill)` with the Skill tool and follow its steps.
     - Do not add or change tasks, and do not do the work itself.

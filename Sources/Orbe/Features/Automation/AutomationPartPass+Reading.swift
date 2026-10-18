@@ -1,44 +1,41 @@
 import Foundation
 
-/// 役割ごとの出力の読み。役の語は `part "<鍵>"`。
+/// 役割ごとの出力の読み。
 extension AutomationPartPass {
   /// 1 つの呼び出しの出力を読んだもの。`lines` は受け付けなかった行で、行を出す部品（取得・処理・判定）だけが持つ。1 行でも
   /// あれば決まりを外した出力で、`Output` は使わない。
   enum Reading {
-    case failed(String)
+    case failed(AutomationFailure)
     case read(Output, count: Int, lines: [AutomationBrokenLine])
   }
 
   static func read(_ result: BackgroundRunResult, _ node: AutomationGraph.Node, _ input: Input)
     -> Reading
   {
-    let word = word(node)
     switch input {
     case .fetch(_, let lastOutput):
-      return reading(result, word) {
-        declaringNothing($0) { fetched($0, node, lastOutput: lastOutput, word) }
-      }
+      return reading(result) { declaringNothing($0) { fetched($0, node, lastOutput: lastOutput) } }
     case .process(let rows, let reachesJudge):
-      return reading(result, word) {
+      return reading(result) {
         declaringNothing($0) { processed($0, rows, reachesJudge: reachesJudge) }
       }
     case .judge(let rows, let choices):
-      return reading(result, word) { declaringNothing($0) { judged($0, rows, choices) } }
+      return reading(result) { declaringNothing($0) { judged($0, rows, choices) } }
     case .report:
-      return reading(result, word) { text in
+      return reading(result) { text in
         let report = AutomationPrompts.nothing(text) == nil ? kept(text) : nil
         return .read(.report(report), count: report == nil ? 0 : 1, lines: [])
       }
     case .work:
-      return reading(result, word) { worked($0, word) }
+      return reading(result) { worked($0) }
     case .sideEffect(let rows, _):
-      return sideEffected(result, count: rows.count, word)
+      return sideEffected(result, count: rows.count)
     }
   }
 
   /// 外から与えた項目（1 行 1 JSON）を、取得の部品が前回の出力なしで取った項目として読む。
   static func given(_ text: String, to node: AutomationGraph.Node) -> Reading {
-    fetched(text, node, lastOutput: [], word(node))
+    fetched(text, node, lastOutput: [])
   }
 
   /// 残す報告の上限（字）。回の記録は部品ごとに 20 回残る。
@@ -51,21 +48,11 @@ extension AutomationPartPass {
     return trimmed.count > reportLimit ? String(trimmed.prefix(reportLimit)) + "…" : trimmed
   }
 
-  /// 「the output of part "<鍵>" broke the rules: line <n>: <理由>」。最初の外れた行を言う。
-  static func broke(_ node: AutomationGraph.Node, _ lines: [AutomationBrokenLine]) -> String {
-    "the output of \(word(node)) broke the rules: \(lines[0].text)"
-  }
-
-  private static func word(_ node: AutomationGraph.Node) -> String {
-    "part \"\(node.key)\""
-  }
-
   /// 手段の出力を文として受けてから読む。
-  private static func reading(
-    _ result: BackgroundRunResult, _ word: String, _ body: (String) -> Reading
-  ) -> Reading {
-    switch AutomationRunOutput.text(result, role: word) {
-    case .failure(let failure): .failed(failure.reason)
+  private static func reading(_ result: BackgroundRunResult, _ body: (String) -> Reading) -> Reading
+  {
+    switch AutomationRunOutput.text(result) {
+    case .failure(let failure): .failed(failure)
     case .success(let text): body(text)
     }
   }
@@ -84,27 +71,25 @@ extension AutomationPartPass {
     lines[last] = ""
     let reading = body(lines.joined(separator: "\n"))
     guard case .read(let output, let count, var broken) = reading, count > 0 else { return reading }
-    broken.append(AutomationBrokenLine(line: last + 1, reason: "a nothing line alongside items"))
+    broken.append(AutomationBrokenLine(line: last + 1, fault: .nothingWithItems))
     return .read(output, count: count, lines: broken.sorted { $0.line < $1.line })
   }
 
   /// `{"error": …}` の行は申告の失敗。項目として読めない行と、同じ `id` の 2 つ目の行は外れた行。前回の出力に無い項目
   /// （毎回全件なら全部）を、`id` に部品の鍵の接頭を付けた行にする。出どころは元の項目のまま持つ。
   private static func fetched(
-    _ text: String, _ node: AutomationGraph.Node, lastOutput: Set<String>, _ word: String
+    _ text: String, _ node: AutomationGraph.Node, lastOutput: Set<String>
   ) -> Reading {
-    if let error = AutomationPrompts.reportedError(in: text) {
-      return .failed("the \(word) reported an error: \(error)")
-    }
+    if let error = AutomationPrompts.reportedError(in: text) { return .failed(.reported(error)) }
     let read = JSONLines<AutomationItem>(text)
-    var lines = read.rejected.map { AutomationBrokenLine(line: $0.line, reason: $0.reason.text) }
+    var lines = read.rejected.map {
+      AutomationBrokenLine(line: $0.line, fault: AutomationLineFault($0.reason))
+    }
     var ids = Set<String>()
     var items: [AutomationItem] = []
     for accepted in read.accepted {
       guard ids.insert(accepted.item.id).inserted else {
-        lines.append(
-          AutomationBrokenLine(line: accepted.line, reason: "id \(accepted.item.id) appeared twice")
-        )
+        lines.append(AutomationBrokenLine(line: accepted.line, fault: .idTwice(accepted.item.id)))
         continue
       }
       items.append(accepted.item)
@@ -137,16 +122,15 @@ extension AutomationPartPass {
     var passed: [AutomationPartRow] = []
     for row in rows {
       guard let id = AutomationPrompts.id(of: row.text) else {
-        lines.append(AutomationBrokenLine(line: row.line, reason: "missing id"))
+        lines.append(AutomationBrokenLine(line: row.line, fault: .missingKey("id")))
         continue
       }
       guard ids.insert(id).inserted else {
-        lines.append(AutomationBrokenLine(line: row.line, reason: "id \(id) appeared twice"))
+        lines.append(AutomationBrokenLine(line: row.line, fault: .idTwice(id)))
         continue
       }
       guard !reachesJudge || inputIds.contains(id) else {
-        lines.append(
-          AutomationBrokenLine(line: row.line, reason: "id \(id) is not the id of an input item"))
+        lines.append(AutomationBrokenLine(line: row.line, fault: .notInputId(id)))
         continue
       }
       passed.append(AutomationPartRow(id: id, text: row.text, origin: origins[id]))
@@ -167,11 +151,12 @@ extension AutomationPartPass {
       objects, itemIds: Set(origins.keys), choices: choices)
     {
       switch reading {
-      case .success(.propose(let itemId, let title, let due, let workspace)):
+      case .success(.propose(let itemId, let title, let due, let workspace, let reason)):
         guard let origin = origins[itemId] else {
           preconditionFailure("an accepted proposal points at one of the rows")
         }
-        proposals.append(Proposal(origin: origin, title: title, due: due, workspace: workspace))
+        proposals.append(
+          Proposal(origin: origin, title: title, due: due, workspace: workspace, reason: reason))
       case .success(.resolve(let link)):
         resolved.append(link)
       case .failure(let line):
@@ -184,10 +169,8 @@ extension AutomationPartPass {
   }
 
   /// 全体が `{"error": …}` の 1 行なら失敗、最後の空でない行が `{"nothing": …}` なら何もしなかった回、ほかは報告の文。
-  private static func worked(_ text: String, _ word: String) -> Reading {
-    if let error = AutomationPrompts.workError(text) {
-      return .failed("the \(word) reported an error: \(error)")
-    }
+  private static func worked(_ text: String) -> Reading {
+    if let error = AutomationPrompts.workError(text) { return .failed(.reported(error)) }
     if let nothing = AutomationPrompts.nothing(text) {
       return .read(.work(.nothing(nothing)), count: 0, lines: [])
     }
@@ -196,13 +179,11 @@ extension AutomationPartPass {
   }
 
   /// 終了コードだけを見て、標準出力は読まない。
-  private static func sideEffected(_ result: BackgroundRunResult, count: Int, _ word: String)
-    -> Reading
-  {
+  private static func sideEffected(_ result: BackgroundRunResult, count: Int) -> Reading {
     guard result.ending == .exited(0) else {
       var stderr = Data()
       if case .command(_, let captured) = result.output { stderr = captured.data }
-      return .failed(AutomationRunOutput.failure(word, result.ending, detail: stderr))
+      return .failed(.ended(detail: AutomationRunOutput.snippet(stderr)))
     }
     return .read(.sideEffect, count: count, lines: [])
   }

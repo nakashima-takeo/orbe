@@ -229,7 +229,10 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
     }
     XCTAssertEqual(
       proposals,
-      [AutomationPartPass.Proposal(origin: origin("b"), title: "b に返信する", due: nil, workspace: nil)]
+      [
+        AutomationPartPass.Proposal(
+          origin: origin("b"), title: "b に返信する", due: nil, workspace: nil, reason: nil)
+      ]
     )
     XCTAssertNil(breach)
   }

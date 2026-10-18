@@ -8,7 +8,7 @@ extension DesignSceneFixtures {
   static func boardReportExample() -> AutomationSample {
     let reports: [(daysAgo: Int, report: AutomationPartPass.Outcome)] = [
       (5, reported("開いている PR は 4 件。新しく 2 件が開いた。")),
-      (4, failed("the part \"digest\" ended: exited 1: Claude usage limit reached")),
+      (4, failed("Claude usage limit reached")),
       (3, reported(nil)),
       (2, reported("開いている PR は 2 件。どちらもレビュー済みでマージ待ち。")),
       (

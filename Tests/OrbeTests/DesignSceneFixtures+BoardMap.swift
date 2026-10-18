@@ -2,16 +2,16 @@ import Foundation
 
 @testable import Orbe
 
-/// 見本 O2Board（案2 地図＋選んだ部品）の自動化。12 部品の「受け持ちの全部」（判定「連絡」の最新の回が失敗・取得「Backlog」の
-/// 出力が決まりを外した・取得の新着なしが続く区間・判定と週報の溜まり）、コマンドだけの「日報スクリプト」、止めた「週末の依存
-/// 更新」と、入力が 8 本の判定を持つ自動化（溝が見本より広がる）。並びは 受け持ちの全部 → 日報スクリプト → 取り込みの多い判定
-/// → 週末の依存更新。
+/// 見本 O2Board・O2PartCards（案2 地図＋選んだ部品）の自動化。12 部品の「受け持ちの全部」（判定「返事が要る連絡を選ぶ」の
+/// 最新の回が制限時間で失敗・取得「メール」の出力の形式エラーが出し直しで通った・取得の新着なしが続く区間・処理が古い行を
+/// 捨てた回・判定と週報の未処理）、コマンドだけの「日報スクリプト」、止めた「週末の依存更新」と、入力が 8 本の判定を持つ自動化
+/// （溝が見本より広がる）。並びは 受け持ちの全部 → 日報スクリプト → 取り込みの多い判定 → 週末の依存更新。
 extension DesignSceneFixtures {
   static func boardMapSamples() -> [AutomationSample] {
     [boardMapCharge, boardMapDailyScript, boardMapWide, boardMapWeekend]
   }
 
-  /// 受け持ちの全部。部品の鍵は GitHub・CI・Backlog・Sentry・Slack・メールの取得、処理 2 つ、報告 2 つ、判定 2 つ。
+  /// 受け持ちの全部。どの部品も、走らせ役の今（15:00）にはまだ次の予定が来ていない。
   private static var boardMapCharge: AutomationSample {
     let at = { (hour: Int, minute: Int, daysAgo: Int) in
       automationAt(hour, minute, daysAgo: daysAgo)
@@ -26,18 +26,17 @@ extension DesignSceneFixtures {
           outcome: fetched(key, all, fresh: Array(all.suffix(fresh)))))
     }
     func process(
-      _ key: String, _ hour: Int, _ minute: Int, rows: Int, from source: String, daysAgo: Int = 0
+      _ key: String, _ time: Date, rows: Int, from source: String, expired: Int = 0
     ) {
-      let origins = sampleItems(source, rows, at: at(hour, minute, daysAgo))
-      let out = origins.map {
+      let out = sampleItems(source, rows, at: time).map {
         AutomationPartRow(
           id: "\(key):\($0.id)", text: #"{"id":"\#(key):\#($0.id)","summary":"まとめ"}"#,
           origin: AutomationOrigin(part: source, item: $0))
       }
       passes.append(
         AutomationSamplePass(
-          part: key, at: at(hour, minute, daysAgo), trigger: .arrival,
-          outcome: processed(out, read: rows)))
+          part: key, at: time, trigger: .arrival, outcome: processed(out, read: rows),
+          expired: expired))
     }
     func judge(_ key: String, at time: Date, proposed: Int, rows: Int, from source: String) {
       let items = sampleItems(source, proposed, at: time)
@@ -49,16 +48,16 @@ extension DesignSceneFixtures {
               proposals: items.map {
                 AutomationPartPass.Proposal(
                   origin: AutomationOrigin(part: source, item: $0), title: "\($0.body)に返事をする",
-                  due: nil, workspace: nil)
+                  due: nil, workspace: nil, reason: nil)
               }, resolved: []), execution(rows), breach: nil)))
     }
 
-    // 10/2・10/3 の連絡の判定。
+    // 10/2・10/3 の連絡の判定と、金曜の週の作業のまとめ。
     fetch("slack", 12, 50, items: 12, fresh: 6, daysAgo: 2)
-    process("dedupe", 12, 51, rows: 6, from: "slack", daysAgo: 2)
+    process("dedupe", at(12, 51, 2), rows: 6, from: "slack")
     judge("contact", at: at(13, 0, 2), proposed: 0, rows: 6, from: "slack")
     fetch("slack", 12, 50, items: 12, fresh: 5, daysAgo: 1)
-    process("dedupe", 12, 51, rows: 5, from: "slack", daysAgo: 1)
+    process("dedupe", at(12, 51, 1), rows: 5, from: "slack")
     judge("contact", at: at(13, 0, 1), proposed: 1, rows: 5, from: "slack")
     passes.append(
       AutomationSamplePass(
@@ -67,51 +66,53 @@ extension DesignSceneFixtures {
     // 今日の 9:00 の開発の判定。
     fetch("github", 8, 50, items: 18, fresh: 12)
     judge("dev", at: at(9, 0, 0), proposed: 2, rows: 12, from: "github")
-    // 13:00 の連絡の判定が時間切れで失敗。溜まりは残る。
+    // 13:00 の連絡の判定が制限時間で失敗。未処理は残る。
     fetch("slack", 12, 40, items: 14, fresh: 4)
-    process("dedupe", 12, 41, rows: 4, from: "slack")
+    process("dedupe", at(12, 41, 0), rows: 4, from: "slack")
     passes.append(
       AutomationSamplePass(
-        part: "contact", at: at(13, 0, 0),
-        outcome: failed("the judge ended: stopped at the time limit")))
-    fetch("mail", 13, 30, items: 2, fresh: 2)
-    process("dedupe", 13, 31, rows: 2, from: "mail")
-    // 新着なしが続く（畳まれる）。どの部品も、走らせ役の今（15:00）にはまだ次の予定が来ていない。
+        part: "contact", at: at(13, 0, 0), outcome: failed("", ending: .timeLimit, count: 0)))
+    // 自分の担当だけは、古い行を 2 件捨ててから 2 件を受け、どれも次へ渡さなかった。
+    fetch("backlog", 13, 0, items: 8, fresh: 4)
+    process("mine", at(13, 45, 0), rows: 0, from: "backlog", expired: 2)
+    fetch("mail", 13, 45, items: 1, fresh: 1)
+    process("dedupe", at(13, 46, 0), rows: 1, from: "mail")
+    // 新着なしが続く（畳まれる）。
     for hour in [13, 14] {
       for minute in stride(from: hour == 13 ? 10 : 0, through: hour == 13 ? 50 : 40, by: 10) {
         fetch("ci", hour, minute, items: 7, fresh: 0)
-        fetch("sentry", hour, minute, items: 3, fresh: 0)
         fetch("slack", hour, minute, items: 14, fresh: 0)
       }
     }
-    // 14:45 の Backlog は、出力が決まりを外して出し直しで通った。
-    let backlog = sampleItems("backlog", 9, at: at(14, 45, 0))
-    let backlogRows = Array(backlog.suffix(1)).map { item in
-      AutomationPartRow(
-        id: "backlog:\(item.id)",
-        text: AutomationPrompts.row(
-          AutomationItem(
-            id: "backlog:\(item.id)", link: item.link, body: item.body, time: item.time)),
-        origin: AutomationOrigin(part: "backlog", item: item))
-    }
+    fetch("sentry", 14, 15, items: 3, fresh: 1)
+    fetch("mail", 14, 15, items: 1, fresh: 0)
+    // 14:45 のメールは、出力の形式エラーを出し直して通った。
+    let mailItems = sampleItems("mail", 2, at: at(14, 45, 0))
     passes.append(
       AutomationSamplePass(
-        part: "backlog", at: at(14, 45, 0),
+        part: "mail", at: at(14, 45, 0),
         outcome: .succeeded(
           .fetch(
-            rows: backlogRows,
-            lastOutput: backlog.map { AutomationSeen(id: $0.id, link: $0.link) }),
-          execution(9),
+            rows: mailItems.map { item in
+              AutomationPartRow(
+                id: "mail:\(item.id)",
+                text: AutomationPrompts.row(
+                  AutomationItem(
+                    id: "mail:\(item.id)", link: item.link, body: item.body, time: item.time)),
+                origin: AutomationOrigin(part: "mail", item: item))
+            },
+            lastOutput: mailItems.map { AutomationSeen(id: $0.id, link: $0.link) }),
+          execution(2),
           breach: AutomationPartPass.Breach(
             lines: [
-              AutomationBrokenLine(line: 3, reason: "not a JSON object"),
-              AutomationBrokenLine(line: 7, reason: "missing \"link\""),
-              AutomationBrokenLine(line: 8, reason: "missing \"link\""),
+              AutomationBrokenLine(line: 3, fault: .missingKey("link")),
+              AutomationBrokenLine(line: 5, fault: .notJSON),
             ],
-            redo: AutomationPartPass.Redo(firstCall: execution(9), lines: [])))))
-    process("mine", 14, 45, rows: 1, from: "backlog")
-    fetch("mail", 14, 45, items: 2, fresh: 2)
-    process("dedupe", 14, 45, rows: 2, from: "mail")
+            redo: AutomationPartPass.Redo(firstCall: execution(4), lines: [])))))
+    fetch("backlog", 14, 45, items: 9, fresh: 1)
+    fetch("sentry", 14, 45, items: 3, fresh: 0)
+    process("mine", at(14, 46, 0), rows: 1, from: "backlog")
+    process("dedupe", at(14, 46, 0), rows: 2, from: "mail")
     fetch("ci", 14, 55, items: 7, fresh: 0)
     fetch("slack", 14, 55, items: 14, fresh: 0)
     fetch("github", 14, 55, items: 18, fresh: 2)
@@ -119,13 +120,18 @@ extension DesignSceneFixtures {
       AutomationSamplePass(
         part: "digest", at: at(14, 56, 0), trigger: .arrival,
         outcome: reported(
-          "レビュー依頼が 2 件。#412 認証のリトライを追加（tanaka）、#415 設定画面の文言を直す（sato）。")))
+          "レビュー依頼が 2 件。#412 認証のリトライを追加（tanaka）、#415 決済画面の文言修正（suzuki）。どちらも今日中の確認を求めている。"
+        )))
 
-    var contact = agentPart(
-      "contact", "連絡", .scheduled(cron("0 13 * * 1-5")), from: ["dedupe"], model: "sonnet",
-      instruction: "Slack とメールから、自分への依頼と、自分の返事を待たれているものだけをタスク候補にする。",
-      deliver: .taskCandidates)
-    contact.inboxLimit = AutomationPart.InboxLimit(maxAgeHours: 24, maxItems: 100)
+    var mine = commandPart(
+      "mine", "自分の担当だけ", .arrival, from: ["backlog", "sentry"],
+      script: #"jq -c 'select(.assignee == "nakatake")'"#, directory: "/Users/me/work/scripts")
+    mine.inboxLimit = AutomationPart.InboxLimit(maxAgeHours: 24, maxItems: nil)
+    var mail = agentPart(
+      "mail", "メール", .scheduled(.every(1800)), model: "haiku",
+      tools: ["mcp__gmail__search_threads"],
+      instruction: "受信箱から、自分宛てで返事を求められているメールを取る。", coverage: .newArrivals)
+    mail.timeoutMinutes = 5
     return AutomationSample(
       definition: AutomationDefinition(
         name: "受け持ちの全部", notify: .menuBar,
@@ -145,26 +151,27 @@ extension DesignSceneFixtures {
           agentPart(
             "slack", "Slack", .scheduled(.every(600)), tools: ["mcp__slack__search_messages"],
             instruction: "自分宛の DM とメンションを、新しい順に 50 件取る。", coverage: .newArrivals),
-          agentPart(
-            "mail", "メール", .scheduled(.every(1800)), tools: ["mcp__gmail__search_threads"],
-            instruction: "自分宛のメールを、直近 1 日分取る。", coverage: .newArrivals),
-          agentPart(
-            "mine", "自分の担当だけ", .arrival, from: ["backlog", "sentry"],
-            instruction: "自分が担当のものだけを残す。"),
+          mail,
+          mine,
           agentPart(
             "dedupe", "重複をまとめる", .arrival, from: ["slack", "mail"],
             instruction: "同じ話題のメッセージを 1 行にまとめる。"),
           agentPart(
-            "digest", "要約", .arrival, from: ["github"], instruction: "レビュー依頼を 2〜3 行で要約する。",
+            "digest", "レビュー依頼を知らせる", .arrival, from: ["github"],
+            instruction: "届いたレビュー依頼を 3 行以内で要約する。", deliver: .report),
+          agentPart(
+            "weekly", "週の作業をまとめる", .scheduled(cron("0 17 * * 5")),
+            from: ["github", "ci", "backlog"], instruction: "今週の動きを週報にまとめる。",
             deliver: .report),
           agentPart(
-            "weekly", "週報", .scheduled(cron("0 17 * * 5")), from: ["github", "ci", "backlog"],
-            instruction: "今週の動きを週報にまとめる。", deliver: .report),
-          agentPart(
-            "dev", "開発", .scheduled(cron("0 9 * * *")), from: ["github", "ci", "mine"],
+            "dev", "開発の依頼を選ぶ", .scheduled(cron("0 9 * * *")), from: ["github", "ci", "mine"],
             model: "sonnet", instruction: "自分が手を動かすべきものだけをタスク候補にする。",
             deliver: .taskCandidates),
-          contact,
+          agentPart(
+            "contact", "返事が要る連絡を選ぶ", .scheduled(cron("0 13 * * 1-5")), from: ["dedupe"],
+            model: "sonnet",
+            instruction: "Slack とメールから、自分への依頼と、自分の返事を待たれているものだけをタスク候補にする。",
+            deliver: .taskCandidates),
         ]),
       createdAt: automationAt(9, 0, daysAgo: 7), passes: passes)
   }
@@ -186,7 +193,7 @@ extension DesignSceneFixtures {
       ])
   }
 
-  /// 取得 8 つが 1 つの判定へ入る。
+  /// 取得 8 つが 1 つの判定へ入る。まだ動いていない。
   private static var boardMapWide: AutomationSample {
     let sources = (1...8).map { "src\($0)" }
     return AutomationSample(
@@ -194,25 +201,25 @@ extension DesignSceneFixtures {
         name: "取り込みの多い判定", notify: nil,
         parts: sources.map {
           commandPart(
-            $0, "取得 \($0.dropFirst(3))", .scheduled(.every(3600)), script: "~/bin/\($0).sh",
+            $0, "取り込み \($0.dropFirst(3))", .scheduled(.every(3600)), script: "~/bin/\($0).sh",
             coverage: .newArrivals)
         } + [
           agentPart(
-            "judge", "まとめて判定", .arrival, from: sources, instruction: "依頼だけをタスク候補にする。",
+            "judge", "依頼を選ぶ", .arrival, from: sources, instruction: "依頼だけをタスク候補にする。",
             deliver: .taskCandidates)
         ]),
       createdAt: automationAt(14, 30))
   }
 
-  /// 止めている。
+  /// 止めている。作業の部品が前回の応答を残している。
   private static var boardMapWeekend: AutomationSample {
     AutomationSample(
       definition: AutomationDefinition(
         name: "週末の依存更新", notify: nil,
         parts: [
           agentPart(
-            "update", "依存を更新", .scheduled(cron("0 10 * * 0,6")), tools: ["Bash(npm outdated:*)"],
-            instruction: "古くなった依存を調べて、上げてよいものを報告する。", deliver: .report)
+            "update", "依存を上げる", .scheduled(cron("0 10 * * 0,6")), tools: ["Bash(npm:*)"],
+            instruction: "古くなった依存を調べて、上げてよいものを上げる。", deliver: .report)
         ]),
       createdAt: automationAt(9, 0, daysAgo: 7), paused: true,
       passes: [

@@ -41,7 +41,8 @@ final class AutomationPromptsTests: OrbeTestCase {
     [
       AutomationProposal(
         id: 1, automationId: 1, partKey: "judge", sourcePartKey: "f", item: Self.item("old"),
-        title: "前の提案", due: nil, workspace: nil, proposedAt: Date(timeIntervalSince1970: 0),
+        title: "前の提案", due: nil, workspace: nil, reason: nil,
+        proposedAt: Date(timeIntervalSince1970: 0),
         state: .open)
     ]
   }
@@ -90,7 +91,9 @@ final class AutomationPromptsTests: OrbeTestCase {
     XCTAssertEqual(
       decisions,
       [
-        .propose(itemId: "a", title: "レビューする", due: TaskItem.DueDate("2026-10-12"), workspace: nil),
+        .propose(
+          itemId: "a", title: "レビューする", due: TaskItem.DueDate("2026-10-12"), workspace: nil,
+          reason: nil),
         .resolve(link: "https://example.com/old"),
       ])
     XCTAssertEqual(notJSON, ["line 9: not JSON"], "JSON でない行は行の読み取りで外す")
@@ -155,8 +158,9 @@ final class AutomationPromptsTests: OrbeTestCase {
     XCTAssertEqual(
       decisions,
       [
-        .propose(itemId: "a", title: "orbe の作業", due: nil, workspace: orbe.persistentId),
-        .propose(itemId: "b", title: "どこでもない作業", due: nil, workspace: nil),
+        .propose(
+          itemId: "a", title: "orbe の作業", due: nil, workspace: orbe.persistentId, reason: nil),
+        .propose(itemId: "b", title: "どこでもない作業", due: nil, workspace: nil, reason: nil),
       ])
     XCTAssertEqual(rejected, [])
   }
@@ -171,7 +175,7 @@ final class AutomationPromptsTests: OrbeTestCase {
     ])
 
     XCTAssertEqual(
-      decisions, [.propose(itemId: "b", title: "null", due: nil, workspace: nil)])
+      decisions, [.propose(itemId: "b", title: "null", due: nil, workspace: nil, reason: nil)])
     XCTAssertEqual(
       rejected,
       [
@@ -219,8 +223,9 @@ final class AutomationPromptsTests: OrbeTestCase {
     XCTAssertEqual(
       decisions,
       [
-        .propose(itemId: "a", title: "Home の作業", due: nil, workspace: nil),
-        .propose(itemId: "b", title: "orbe の作業", due: nil, workspace: repo.persistentId),
+        .propose(itemId: "a", title: "Home の作業", due: nil, workspace: nil, reason: nil),
+        .propose(
+          itemId: "b", title: "orbe の作業", due: nil, workspace: repo.persistentId, reason: nil),
       ])
     XCTAssertEqual(rejected, [])
   }

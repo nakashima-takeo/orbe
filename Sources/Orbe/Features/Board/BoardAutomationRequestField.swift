@@ -4,7 +4,8 @@ import SwiftUI
 /// 頼む。
 ///
 /// 枠は欄に焦点があるときだけ強調色で、一覧にあるときは入力欄の控えめな枠（選ばれて見えるのは常に 1 か所）。焦点を受けると
-/// AppKit の入力欄の既定どおり全文が選ばれる（⌘⇧X の入力欄と同じ）。
+/// AppKit の入力欄の既定どおり全文が選ばれる（⌘⇧X の入力欄と同じ）。カードの「修正を依頼」が書き出した直後だけ、キャレットを
+/// 末尾に置いて続きを打てるようにする（選択は焦点が移った変化を受けてから宣言する——同じ更新で書くと AppKit の全選択に負ける）。
 ///
 /// 欄に焦点が無い間は入力欄にクリックを渡さず、枠全体に被せた面で受けて欄へ移る操作としてモデルに伝える——入力欄が直に
 /// 焦点を取ると、地のクリックの当て直し（選んでいる場所）と行き先を取り合うため。焦点はモデルから写る。
@@ -12,6 +13,7 @@ struct BoardAutomationRequestField: View {
   @Bindable var model: BoardAutomationModel
   let focused: FocusState<BoardAutomationModel.Place?>.Binding
   @Environment(\.localization) private var l10n
+  @State private var selection: TextSelection?
 
   var body: some View {
     let here = model.place == .request
@@ -19,7 +21,7 @@ struct BoardAutomationRequestField: View {
       Text(verbatim: "❯")
         .font(Font.theme.title)
         .foregroundStyle(Color.theme.accentPrimary)
-      TextField("", text: $model.requestText)
+      TextField("", text: $model.requestText, selection: $selection)
         .textFieldStyle(.plain)
         .font(Font.theme.code)
         .foregroundStyle(Color.theme.textPrimary)
@@ -63,6 +65,11 @@ struct BoardAutomationRequestField: View {
     .padding(.bottom, Theme.Stroke.hairline)
     .overlay(alignment: .bottom) {
       Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
+    }
+    .onChange(of: focused.wrappedValue) { _, now in
+      if now == .request, model.takeCaretAtEnd() {
+        selection = TextSelection(insertionPoint: model.requestText.endIndex)
+      }
     }
   }
 

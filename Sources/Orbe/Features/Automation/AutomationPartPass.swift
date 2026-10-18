@@ -38,7 +38,7 @@ struct AutomationPartPass {
   /// 渡した行。
   struct Execution: Equatable, Codable {
     let commandLine: String
-    let ending: String
+    let ending: AutomationEnding
     let count: Int
   }
 
@@ -47,7 +47,7 @@ struct AutomationPartPass {
   enum Outcome: Equatable {
     case succeeded(Output, Execution, breach: Breach?)
     /// 手段が終わった後に分かった失敗（終わり方・UTF-8 でない・申告されたエラー・決まりを外したまま）。何も渡さない。
-    case failed(String, Execution, breach: Breach?)
+    case failed(AutomationFailure, Execution, breach: Breach?)
 
     var execution: Execution {
       switch self {
@@ -97,6 +97,8 @@ struct AutomationPartPass {
     let due: TaskItem.DueDate?
     /// 付け先の `Workspace.persistentId`。
     let workspace: UUID?
+    /// 候補にした理由（判定が書いたときだけ）。
+    let reason: String?
   }
 
   enum Work: Equatable {
@@ -123,8 +125,7 @@ struct AutomationPartPass {
       case .read(_, let count, let lines):
         let first = Self.execution(result, count: count)
         guard let redo = Self.redoJob(job, node, result, lines) else {
-          completion(
-            .failed(Self.broke(node, lines), first, breach: Breach(lines: lines, redo: nil)))
+          completion(.failed(.brokeRules, first, breach: Breach(lines: lines, redo: nil)))
           return
         }
         calls.current = run(redo) { result in
@@ -146,7 +147,8 @@ struct AutomationPartPass {
   }
 
   static func execution(_ result: BackgroundRunResult, count: Int = 0) -> Execution {
-    Execution(commandLine: result.commandLine, ending: result.ending.text, count: count)
+    Execution(
+      commandLine: result.commandLine, ending: AutomationEnding(result.ending), count: count)
   }
 
   private static func job(
@@ -269,4 +271,13 @@ struct AutomationOrigin: Equatable {
   /// 取得の部品の鍵。
   let part: String
   let item: AutomationItem
+}
+
+/// 保存の形は終わり方を種類で持つ（`end`）。外の形の英文の `ending` は `AutomationRunWire` が足す。
+extension AutomationPartPass.Execution {
+  private enum CodingKeys: String, CodingKey {
+    case commandLine
+    case ending = "end"
+    case count
+  }
 }

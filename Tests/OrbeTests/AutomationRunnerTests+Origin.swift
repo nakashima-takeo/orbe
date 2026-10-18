@@ -39,7 +39,10 @@ extension AutomationRunnerTests {
     let id = try finishProcessAfterAddingAJudge(#"{"id":"x","note":"作った行"}"#)
 
     let run = try XCTUnwrap(store.automation(id)?.state("p").runs.first)
-    XCTAssertTrue(try XCTUnwrap(run.failure, "処理の回の失敗にする").contains(#"part "judge""#))
+    XCTAssertEqual(
+      try XCTUnwrap(run.failure, "処理の回の失敗にする").text(
+        part: "p", ending: run.execution.ending, breach: run.breach),
+      #"no row passed to part "judge" has an origin (it did not come from a fetch part)"#)
     XCTAssertEqual(inbox("judge", of: id), 0)
     XCTAssertEqual(inbox("digest", of: id), 0, "失敗した回はどの下流にも渡さない")
     XCTAssertEqual(inbox("p", of: id), 1, "取った行は残り、次の回で取り直す")

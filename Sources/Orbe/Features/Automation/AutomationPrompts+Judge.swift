@@ -36,7 +36,8 @@ extension AutomationPrompts {
       Output one JSON object per line and nothing else (no prose, no code fences):
       - To propose a task for a new item: \
       {"propose": "<item id>", "title": "<one-line task title>", "due": "YYYY-MM-DD", \
-      "workspace": <workspace number>}. \
+      "workspace": <workspace number>, "reason": "<why this item should be a task>"}. \
+      Write reason in one or two sentences, in the language of the user's instruction. \
       Omit due when there is no deadline. At most one proposal per item; use only ids of the new items above. \
       Write workspace only when the item clearly belongs to one of the workspaces above (by the user's \
       instruction or by the item itself, such as its repository), using only numbers listed above; omit it \
@@ -55,56 +56,63 @@ extension AutomationPrompts {
     var proposed = Set<String>()
     var resolved = Set<String>()
     return rows.map { row in
-      let refuse = { (reason: String) in
+      let refuse = { (fault: AutomationLineFault) in
         Result<AutomationDecision, AutomationBrokenLine>.failure(
-          AutomationBrokenLine(line: row.line, reason: reason))
+          AutomationBrokenLine(line: row.line, fault: fault))
       }
       let line: JudgeLine
       switch JSONLines<JudgeLine>.decode(row.text) {
       case .success(let read): line = read
-      case .failure(let reason): return refuse(reason.text)
+      case .failure(let reason): return refuse(AutomationLineFault(reason))
       }
       switch (line.propose, line.resolve) {
       case (let id?, nil):
         let reading = proposal(id, line, itemIds: itemIds, choices: choices, refuse)
         if case .success = reading, !proposed.insert(id).inserted {
-          return refuse("propose \(id): proposed twice")
+          return refuse(.proposedTwice(id))
         }
         return reading
       case (nil, let link?):
         guard openLinks.contains(link), resolved.insert(link).inserted else {
-          return refuse("resolve \(link): not a waiting proposal")
+          return refuse(.notWaiting(link))
         }
         return .success(.resolve(link: link))
       default:
-        return refuse("a line must have exactly one of propose / resolve")
+        return refuse(.notOneDecision)
       }
     }
   }
 
   private static func proposal(
     _ id: String, _ line: JudgeLine, itemIds: Set<String>, choices: AutomationJudgeChoices,
-    _ refuse: (String) -> Result<AutomationDecision, AutomationBrokenLine>
+    _ refuse: (AutomationLineFault) -> Result<AutomationDecision, AutomationBrokenLine>
   ) -> Result<AutomationDecision, AutomationBrokenLine> {
-    guard itemIds.contains(id) else { return refuse("propose \(id): not a new item") }
+    guard itemIds.contains(id) else { return refuse(.notNewItem(id)) }
     guard let rawTitle = line.title, let title = try? TaskStore.validTitle(rawTitle) else {
-      return refuse("propose \(id): title must be a single non-empty line")
+      return refuse(.titleNotOneLine(id))
     }
     var due: TaskItem.DueDate?
     if let rawDue = line.due {
-      guard let parsed = TaskItem.DueDate(rawDue) else {
-        return refuse("propose \(id): due is not a YYYY-MM-DD date: \(rawDue)")
-      }
+      guard let parsed = TaskItem.DueDate(rawDue) else { return refuse(.dueNotDate(id, rawDue)) }
       due = parsed
     }
     var workspace: UUID?
     if let number = line.workspace, number != choices.workspaces.home {
       guard let listed = choices.workspaces.listed.first(where: { $0.id == number }) else {
-        return refuse("propose \(id): workspace \(number) is not a listed workspace")
+        return refuse(.workspaceNotListed(id, number))
       }
       workspace = listed.persistentId
     }
-    return .success(.propose(itemId: id, title: title, due: due, workspace: workspace))
+    return .success(
+      .propose(
+        itemId: id, title: title, due: due, workspace: workspace, reason: reason(line.reason)))
+  }
+
+  /// 候補にした理由を 1 段落に整える（行の区切りと連なる空白を 1 つの空白に）。空なら無い。
+  static func reason(_ raw: String?) -> String? {
+    guard let raw else { return nil }
+    let text = raw.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    return text.isEmpty ? nil : text
   }
 }
 
@@ -115,4 +123,5 @@ private struct JudgeLine: Decodable {
   let title: String?
   let due: String?
   let workspace: Int?
+  let reason: String?
 }

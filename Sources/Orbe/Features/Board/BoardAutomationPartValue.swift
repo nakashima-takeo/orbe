@@ -1,138 +1,205 @@
 import Foundation
 
-/// 選んだ部品のカードの値。地図に出さない部品の中身（手段・モデル・ツール・指示文・取得の性質・上限・回の記録）を出すのは
-/// ここだけ。
+/// カードの項目の切れの見え方。
+enum BoardSegmentLook: Equatable {
+  case plain
+  case muted
+  case emphasized
+}
+
+/// 選んだ部品のカードの値。地図に出さない部品の中身（手段・モデル・ツール・指示文・取り方・上限・制限時間・場所・回の記録）を
+/// 出すのはここだけ。
 struct BoardAutomationPartValue: Equatable {
   let key: String
   let role: String
   let name: String
   let look: BoardNodeLook
-  /// 頭の札のモデル（省いていれば役割の既定）。コマンドは nil（札は「コマンド」）。
-  let model: String?
-  let tools: [String]
-  let schedule: String
-  let arrival: Bool
+  /// 頭の印。まだ動いていなければ nil。
+  let mark: BoardRunMark?
+  /// 実行・ツール・予定・取り方・入力元・出力先・未処理・制限時間・場所・次回の順。部品に無い項目は出さない。
   let facts: [Fact]
   /// 指示文かコマンド。
   let body: String
   let breach: Breach?
-  /// この部品の回（新しい順）。
+  /// 前回の報告か応答（報告と作業の部品だけ）。
+  let lastText: LastText?
+  /// この部品の実行履歴（新しい順）。
   let runs: [BoardRunLine]
 
-  /// 項目 1 つ（「入力」← A・B）。
+  /// 項目 1 つ。値は見え方の違う切れの並び（「8 件」＋「上限なし」）。
   struct Fact: Equatable {
     let label: L10nKey
-    let value: String
-    /// 強調色で出す（1 件以上の溜まり）。
-    let emphasized: Bool
+    let value: [Segment]
   }
 
-  /// 出力が決まりを外した印。
+  struct Segment: Equatable {
+    let text: String
+    let look: BoardSegmentLook
+  }
+
+  /// 出力の形式エラーの枠（部品の外した印から）。
   struct Breach: Equatable {
-    /// 「出力が決まりを外した · 10/18 13:00 · 3 行 · 出し直しで通った」。
-    let summary: String
-    /// 外れた行の理由（最初の数件）。
-    let reasons: [String]
+    /// 「出力の形式エラー · 16:30 · 2 行」。
+    let heading: String
+    /// 「3 行目：link が無い」（最初の数件）。
+    let lines: [String]
+    /// 出し直しの結果の一言。
+    let outcome: String
+  }
+
+  struct LastText: Equatable {
+    let title: L10nKey
+    let at: String
+    let text: String
   }
 }
 
 extension BoardAutomationPartValue {
-  /// `next` は部品が次に予定で回る時刻（止めていれば nil）。
+  /// `next` は部品が次に予定で回る時刻（止めていれば nil）、`open` はこの自動化の棚に出ている判断待ちの候補の数。
   init?(
-    _ automation: Automation, part key: String, text: AutomationText, running: Bool, next: Date?
+    _ automation: Automation, part key: String, text: AutomationText, running: Bool, next: Date?,
+    open: Int
   ) {
     guard let node = automation.graph.node(key) else { return nil }
     let l10n = text.l10n
-    let part = node.part
     let state = automation.state(key)
     self.key = key
     role = text.role(node.role)
-    name = part.name
+    name = node.part.name
     look = running ? .running : state.runs.first?.failed == true ? .failed : .idle
-    schedule = text.schedule(part.trigger)
-    arrival = part.trigger == .arrival
-    switch part.method {
-    case .agent(let agent):
-      model = node.model
-      tools = agent.tools
-      body = agent.instruction
-    case .command(let command):
-      model = nil
-      tools = []
-      body = command.script
+    mark = state.runs.first.map { $0.failed ? .failure : .success }
+    switch node.part.method {
+    case .agent(let agent): body = agent.instruction
+    case .command(let command): body = command.script
     }
-
-    facts = Self.facts(automation, node, text: text, next: next)
-
+    facts = Self.facts(automation, node, text: text, next: next, open: open)
     breach = state.breach.map { mark in
       Breach(
-        summary: l10n.format(
-          mark.lines.count == 1 ? .boardPartBreachOne : .boardPartBreachOther,
-          text.stamp(mark.at), mark.lines.count,
-          l10n.string(mark.passed ? .automationBreachPassed : .automationBreachFailed)),
-        reasons: mark.lines.reasons)
+        heading: l10n.format(.boardPartFormatError, text.recent(mark.at), mark.lines.count),
+        lines: mark.lines.lines.map(text.line),
+        outcome: l10n.string(
+          mark.passed
+            ? .boardPartRedonePassed : mark.redone ? .boardPartRedoneFailed : .boardPartNotRedone))
     }
-    runs = BoardAutomationSummary.lines(
-      state.runs.map { AutomationKeyedRun(part: key, run: $0) }, name: nil, text: text)
+    lastText = Self.lastText(state.runs, text: text)
+    runs = BoardAutomationSummary.lines(state.runs, node: node, text: text)
   }
 
-  /// 項目（入力・行の先・取得の性質・溜まりと上限・次回）。持たない項目は出さない。
+  /// 前回の報告（報告の部品）か応答（作業の部品）。文を残した最新の回から。
+  private static func lastText(_ runs: [AutomationPartRun], text: AutomationText) -> LastText? {
+    for run in runs {
+      switch run.result {
+      case .report(let report?):
+        return LastText(title: .boardPartLastReport, at: text.recent(run.startedAt), text: report)
+      case .work(let reply?, nil):
+        return LastText(title: .boardPartLastReply, at: text.recent(run.startedAt), text: reply)
+      default: continue
+      }
+    }
+    return nil
+  }
+
   private static func facts(
-    _ automation: Automation, _ node: AutomationGraph.Node, text: AutomationText, next: Date?
+    _ automation: Automation, _ node: AutomationGraph.Node, text: AutomationText, next: Date?,
+    open: Int
   ) -> [Fact] {
     let l10n = text.l10n
     let graph = automation.graph
     let part = node.part
-    let key = node.key
-    let state = automation.state(key)
+    let state = automation.state(node.key)
     let separator = l10n.string(.automationListSeparator)
     var facts: [Fact] = []
-    func fact(_ label: L10nKey, _ value: String, emphasized: Bool = false) {
-      facts.append(Fact(label: label, value: value, emphasized: emphasized))
+    func fact(_ label: L10nKey, _ value: String) {
+      facts.append(Fact(label: label, value: [Segment(text: value, look: .plain)]))
     }
+    switch part.method {
+    case .agent(let agent):
+      fact(
+        .boardPartRun,
+        l10n.format(.boardPartAgent, agent.cli, node.model ?? l10n.string(.boardPartDefaultModel)))
+      if !agent.tools.isEmpty {
+        fact(.boardPartTools, agent.tools.map { tool(text: $0, l10n) }.joined(separator: separator))
+      }
+    case .command:
+      fact(.boardPartRun, l10n.string(.boardOutputCommand))
+    }
+    fact(.boardPartSchedule, text.schedule(part.trigger))
+    if case .fetch(let coverage) = node.role { fact(.boardPartTake, take(coverage, state, text)) }
     if !part.inputs.isEmpty {
       fact(
-        .boardPartInputs,
+        .boardPartFrom,
         "← " + part.inputs.map { graph.node($0)?.part.name ?? $0 }.joined(separator: separator))
     }
     switch part.destination {
     case .nextPart:
       fact(
-        .boardPartGoesTo,
-        "→ " + graph.downstream(of: key).map(\.part.name).joined(separator: separator))
-    case .taskCandidates: fact(.boardPartGoesTo, l10n.string(.boardOutputTaskCandidates))
-    case .report: fact(.boardPartGoesTo, l10n.string(.boardOutputReport))
-    case .sideEffect: fact(.boardPartGoesTo, l10n.string(.boardPartNowhere))
-    }
-    if let coverage = part.coverage {
-      let words: L10nKey =
-        switch coverage {
-        case .currentSet: .boardCoverageCurrentSet
-        case .newArrivals: .boardCoverageNewArrivals
-        case .everything: .boardCoverageEverything
-        }
-      fact(.boardPartCoverage, l10n.string(words))
+        .boardPartTo,
+        "→ " + graph.downstream(of: node.key).map(\.part.name).joined(separator: separator))
+    case .taskCandidates: fact(.boardPartTo, l10n.format(.boardPartTaskCandidates, open))
+    case .report: fact(.boardPartTo, BoardAutomationDetailValue.reports(automation.notify, l10n))
+    case .sideEffect: fact(.boardPartTo, l10n.string(.boardPartNothing))
     }
     if !part.inputs.isEmpty {
-      var limits: [String] = []
-      if let hours = part.inboxLimit?.maxAgeHours {
-        limits.append(l10n.format(.boardPartLimitHours, hours))
-      }
-      if let items = part.inboxLimit?.maxItems {
-        limits.append(l10n.format(.boardPartLimitItems, items))
-      }
-      fact(
-        .boardPartInbox,
-        limits.isEmpty
-          ? "\(state.inbox)"
-          : l10n.format(.boardPartInboxLimit, state.inbox, limits.joined(separator: separator)),
-        emphasized: state.inbox > 0)
+      facts.append(
+        Fact(
+          label: .boardPartPending,
+          value: [
+            Segment(
+              text: l10n.format(.boardPartCount, state.inbox),
+              look: state.inbox > 0 ? .emphasized : .muted),
+            Segment(text: "\u{3000}" + limit(part.inboxLimit, l10n), look: .muted),
+          ]))
+    }
+    fact(.boardPartTimeout, l10n.format(.boardPartMinutes, node.timeoutMinutes))
+    if case .command(let command) = part.method, let directory = command.directory {
+      fact(.boardPartDirectory, directory)
     }
     if case .scheduled = part.trigger {
       fact(
-        .boardPartNextRun,
+        .boardPartNext,
         automation.paused ? l10n.string(.automationPaused) : next.map(text.stamp) ?? "")
     }
     return facts
+  }
+
+  /// MCP のツールは「<サーバー名の頭を大文字に>（MCP）」、`Bash(git:*)` は「git コマンド」。どちらでもなければ規則のまま。
+  private static func tool(text rule: String, _ l10n: LocalizationStore) -> String {
+    if rule.hasPrefix("mcp__") {
+      let server = rule.dropFirst(5).split(separator: "_", maxSplits: 1).first.map(String.init)
+      let name = server ?? rule
+      return l10n.format(.boardPartToolMCP, name.prefix(1).uppercased() + name.dropFirst())
+    }
+    if rule.hasPrefix("Bash("), rule.hasSuffix(")") {
+      let body = rule.dropFirst(5).dropLast()
+      let command = body.split(separator: ":").first.map(String.init) ?? String(body)
+      return l10n.format(.boardPartToolCommand, command.trimmingCharacters(in: .whitespaces))
+    }
+    return rule
+  }
+
+  /// 取り方（「新着だけ（前回 16:00 以降）」「今ある分のうち、新しく現れたもの」「毎回すべて」）。
+  private static func take(
+    _ coverage: AutomationCoverage, _ state: AutomationPartState, _ text: AutomationText
+  ) -> String {
+    let l10n = text.l10n
+    switch coverage {
+    case .newArrivals:
+      return state.succeededAt.map { l10n.format(.boardPartNewSince, text.recent($0)) }
+        ?? l10n.string(.boardPartNewOnly)
+    case .currentSet: return l10n.string(.boardPartCurrentSet)
+    case .everything: return l10n.string(.boardPartEverything)
+    }
+  }
+
+  /// 未処理の上限（「24 時間より古い分は捨てる」「上限なし」）。
+  private static func limit(_ limit: AutomationPart.InboxLimit?, _ l10n: LocalizationStore)
+    -> String
+  {
+    switch (limit?.maxAgeHours, limit?.maxItems) {
+    case (let hours?, let items?): l10n.format(.boardPartLimitBoth, hours, items)
+    case (let hours?, nil): l10n.format(.boardPartLimitAge, hours)
+    case (nil, let items?): l10n.format(.boardPartLimitItems, items)
+    case (nil, nil): l10n.string(.boardPartNoLimit)
+    }
   }
 }

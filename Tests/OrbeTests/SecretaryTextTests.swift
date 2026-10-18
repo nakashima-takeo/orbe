@@ -27,16 +27,4 @@ final class SecretaryTextTests: OrbeTestCase {
       SecretaryText.instructions(for: .palette, .ja, pluginName: "orbe-agent-dev")
         .contains("automation"), "⌘⇧X の役目は自動化のスキルを使わない")
   }
-
-  func testAFixNamesTheAutomation() {
-    let automation = DesignSceneFixtures.automationStore(
-      DesignSceneFixtures.boardAutomationSamples()
-    ).automations[2]
-    XCTAssertEqual(
-      SecretaryText.firstInput(.automationFix(automation), l10n: ja),
-      "依頼: 自動化 \(automation.id)「\(automation.definition.name)」を直す。")
-    XCTAssertEqual(
-      SecretaryText.firstInput(.automationFix(automation), l10n: en),
-      "Request: Fix automation \(automation.id) “\(automation.definition.name)”.")
-  }
 }

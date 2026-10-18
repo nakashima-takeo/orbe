@@ -4,8 +4,8 @@ import Foundation
 
 /// 提案タブの棚の見本（見本 O2Palette の並び）。判定の予定の種類・判定ごとの最新の回・失敗した部品・出どころの部品の名前を張る。
 ///
-/// 1. 受け持ちの全部: 取得 3 つ（GitHub・Backlog・Slack）→ 判定「開発」（毎日 9:00。GitHub と Backlog から 12 件 → 候補 2）と
-///    判定「連絡」（毎日 13:00。長い理由で失敗）。棚には消えた自動化 6 の候補も出る（出どころの部品の名前を引けない）。
+/// 1. 受け持ちの全部: 取得 3 つ（GitHub・Backlog・Slack）→ 判定「開発の依頼を選ぶ」（毎日 9:00。GitHub と Backlog から
+///    12 件 → 候補 2。#405 には候補にした理由）と判定「返事が要る連絡を選ぶ」（毎日 13:00。制限時間で失敗）。棚には消えた自動化 6 の候補も出る（出どころの部品の名前を引けない）。
 /// 2. Sentry: 新しいエラー（届いたらの判定。候補 1）。
 /// 3. 長い名前の自動化（手動の判定。候補 1）。
 /// 4. CI: main の失敗（届いたらの判定。候補なし）。
@@ -27,10 +27,12 @@ extension DesignSceneFixtures {
   }
 
   private static func shelfProposal(
-    _ part: String, _ item: AutomationItem, _ title: String, due: TaskItem.DueDate? = nil
+    _ part: String, _ item: AutomationItem, _ title: String, due: TaskItem.DueDate? = nil,
+    reason: String? = nil
   ) -> AutomationPartPass.Proposal {
     AutomationPartPass.Proposal(
-      origin: AutomationOrigin(part: part, item: item), title: title, due: due, workspace: nil)
+      origin: AutomationOrigin(part: part, item: item), title: title, due: due, workspace: nil,
+      reason: reason)
   }
 
   /// GitHub の 7 項目。先頭がレビュー依頼の #405、末尾が自動化 6 と重ねて取る #398。
@@ -77,10 +79,10 @@ extension DesignSceneFixtures {
           "slack", "Slack", .scheduled(.every(1800)),
           script: "~/bin/slack-mentions --since 1d", coverage: .newArrivals),
         agentPart(
-          "dev", "開発", .scheduled(cron("0 9 * * *")), from: ["github", "backlog"],
+          "dev", "開発の依頼を選ぶ", .scheduled(cron("0 9 * * *")), from: ["github", "backlog"],
           instruction: "自分がレビューか修正を頼まれているものだけをタスクにする。", deliver: .taskCandidates),
         agentPart(
-          "contact", "連絡", .scheduled(cron("0 13 * * *")), from: ["slack"],
+          "contact", "返事が要る連絡を選ぶ", .scheduled(cron("0 13 * * *")), from: ["slack"],
           instruction: "自分が返事を頼まれているものだけをタスクにする。", deliver: .taskCandidates),
       ])
     return AutomationSample(
@@ -94,7 +96,9 @@ extension DesignSceneFixtures {
           part: "dev", at: automationAt(9),
           outcome: judged(
             [
-              shelfProposal("github", github[0], "#405 storefront の依存更新 をレビュー"),
+              shelfProposal(
+                "github", github[0], "#405 storefront の依存更新 をレビュー",
+                reason: "あなたにレビューが依頼されていて、まだ応えていない。脆弱性の修正を含むので早めの確認が要る。"),
               shelfProposal(
                 "backlog", backlog[0], "BLG-231 決済画面の文言を直す", due: TaskItem.DueDate("2025-10-07")),
             ], rows: 12)),
@@ -102,9 +106,7 @@ extension DesignSceneFixtures {
           part: "slack", at: automationAt(12, 58), outcome: fetched("slack", slack)),
         AutomationSamplePass(
           part: "contact", at: automationAt(13),
-          outcome: failed(
-            "the judge ended: stopped at the time limit (10 min) before it wrote any decision, "
-              + "and the output so far was cut off in the middle of a line", count: 3)),
+          outcome: failed("", ending: .timeLimit, count: 3)),
       ])
   }
 
@@ -175,7 +177,7 @@ extension DesignSceneFixtures {
       createdAt: automationAt(9, daysAgo: 3), paused: true,
       passes: round(
         "github", at: automationAt(9), items: 0, fresh: 0,
-        failure: "the part \"fetch\" ended: exited 1: gh: Not Found (HTTP 404)"))
+        failure: "gh: Not Found (HTTP 404)"))
   }
 
   private static func shelfDeleted(_ shared: AutomationItem) -> AutomationSample {

@@ -3,11 +3,11 @@ import XCTest
 
 @testable import Orbe
 
-/// 自動化の部品の依頼——欄の ↵ で頼む・一覧の ⌘↵ で直しを頼む・ボードの断り。本物の `BoardView` を実窓に載せ、実 `NSEvent`
+/// 自動化の部品の依頼——欄の ↵ で頼む・カードの「修正を依頼」で欄に書き出す・ボードの断り。本物の `BoardView` を実窓に載せ、実 `NSEvent`
 /// のキーを届ける。秘書の口は頼みを記録する閉包で、本物の秘書・claude は起きない。
 ///
-/// 壊れると何が起きるか: 頼んだのに欄が残って二度送る。消えた自動化の直しを秘書へ渡す。claude が無いのに打った文が消える。
-/// ↵・⌘↵ を押し続けて同じ頼みで何本も claude が起きる。
+/// 壊れると何が起きるか: 頼んだのに欄が残って二度送る。claude が無いのに打った文が消える。↵ を押し続けて同じ頼みで何本も
+/// claude が起きる。修正の書き出しが勝手に頼んでしまう・続けて打つと書き出しが消える。
 extension BoardAutomationTests {
   private func recording(
     _ model: BoardModel, _ refusal: Secretary.Refusal? = nil
@@ -34,36 +34,28 @@ extension BoardAutomationTests {
     XCTAssertNil(model.refusal)
   }
 
-  /// ⌘↵ は選んでいる自動化の直しをその場で頼み、選択は一覧の行のまま。押し続けても 1 回。
-  func testCommandEnterAsksToFixTheSelectedAutomationAtOnce() throws {
+  /// カードの「修正を依頼」は、依頼の欄に「自動化「…」の部品「…」の修正：」を書き出して焦点を欄へ移し、まだ頼まない。続けて
+  /// 打った文は末尾に足され、↵ で欄からふつうに頼む。
+  func testAskToFixDraftsTheRequestInTheField() throws {
     let model = board()
     let automation = model.automation
     let asks = recording(model)
     let window = mount(model)
     down(window)
-
-    send(Key.enter, "\r", .command, to: window)
-    send(Key.enter, "\r", .command, repeating: true, to: window)
-
+    right(window)
     let target = try XCTUnwrap(automation.store.automation(Self.failingBacklog))
-    XCTAssertEqual(asks(), [.automationFix(target)])
-    XCTAssertEqual(automation.place, .list)
-    XCTAssertNil(model.refusal)
-  }
+    let part = try XCTUnwrap(automation.selectedPart)
 
-  /// 選んでいる自動化が頼む前に消えていたら、係へ渡さずに赤で断る。
-  func testAFixWhoseAutomationWasDeletedIsRefused() throws {
-    let model = board()
-    let automation = model.automation
-    let asks = recording(model)
-    automation.move(1)
-    XCTAssertEqual(automation.selectedAutomation?.id, Self.failingBacklog, "前提")
+    automation.draftFix(of: part, l10n: LocalizationStore(language: .ja))
+    flush(window)
 
-    try automation.runner.delete(Self.failingBacklog)
-    automation.askFix()
-
-    XCTAssertEqual(asks(), [])
-    XCTAssertEqual(model.refusal, .boardAskFixGone)
+    let draft = "自動化「\(target.name)」の部品「\(try XCTUnwrap(target.graph.node(part)).part.name)」の修正："
+    XCTAssertEqual(automation.requestText, draft)
+    XCTAssertEqual(automation.place, .request)
+    XCTAssertEqual(asks(), [], "書き出すだけで頼まない")
+    type("x", to: window)
+    send(Key.enter, "\r", to: window)
+    XCTAssertEqual(asks(), [.text(draft + "x")], "末尾から続けて打てる")
   }
 
   /// claude が無ければ赤で断り、打った文を残す。断りは次の操作で消える。
@@ -79,12 +71,6 @@ extension BoardAutomationTests {
     XCTAssertEqual(model.automation.requestText, "a")
     type("b", to: window)
     XCTAssertNil(model.refusal, "欄に打つと消える")
-
-    down(window)
-    send(Key.enter, "\r", .command, to: window)
-    XCTAssertEqual(model.refusal, .boardAskClaudeMissing, "⌘↵ の直しも同じく断る")
-    down(window)
-    XCTAssertNil(model.refusal, "↓ で消える")
   }
 
   /// Home に claude を起こせなければ、依頼できなかったと赤で断り、打った文を残す。

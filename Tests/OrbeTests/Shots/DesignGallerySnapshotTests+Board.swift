@@ -122,8 +122,9 @@ extension DesignGallerySnapshotTests {
     try renderBoardMapSnapshots(write: write, board: { board($0, row: $1) })
   }
 
-  /// 見本 O2Board（案2 地図＋選んだ部品）: 一覧に居る（カードの欄は空）・地図で失敗した判定を選ぶ・決まりを外した取得・
-  /// 走っている取得・コマンドだけ・入力の多い判定（溝が広がる）・狭い窓（カードが地図の下）。
+  /// 見本 O2Board・O2PartCards（案2 地図＋選んだ部品）: 一覧に居る（カードの欄は空）・地図で失敗した判定を選ぶ・役割ごとの
+  /// カード（形式エラーを出し直した取得・古い行を捨てた処理コマンド・報告・作業・外部操作）・走っている取得・「通知」の段と
+  /// 3 択・入力の多い判定（溝が広がる）・狭い窓（カードが地図の下）。
   private func renderBoardMapSnapshots(
     write: (String, BoardModel, Language, NSSize) throws -> Void,
     board: ([AutomationSample]?, Int) -> BoardModel
@@ -142,11 +143,15 @@ extension DesignGallerySnapshotTests {
       try write("board_map_card\(suffix).png", map(0, part: "contact"), language, size)
     }
     try write("board_map_first.png", map(0), .ja, size)
-    try write("board_map_breach.png", map(0, part: "backlog"), .ja, size)
+    try write("board_map_mail.png", map(0, part: "mail"), .ja, size)
+    try write("board_map_mine.png", map(0, part: "mine"), .ja, size)
+    try write("board_map_digest.png", map(0, part: "digest"), .ja, size)
     let running = map(0, part: "slack")
     running.automation.perform(.flow(.part))
     try write("board_map_running.png", running, .ja, size)
-    try write("board_map_weekly.png", map(0, part: "weekly"), .ja, size)
+    let notify = map(0)
+    notify.automation.tapNotify()
+    try write("board_map_notify.png", notify, .ja, size)
     try write("board_map_command.png", map(1), .ja, size)
     try write("board_map_wide.png", map(2, part: "judge"), .ja, size)
     try write("board_map_paused.png", map(3), .ja, size)
@@ -183,7 +188,7 @@ extension DesignGallerySnapshotTests {
     for language in [Language.ja, .en] {
       let suffix = language == .ja ? "" : "_en"
       let off = board(nil, 1)
-      off.automation.openNotify()
+      off.automation.tapNotify()
       try write("board_notify\(suffix).png", off, language, size)
     }
 
@@ -191,12 +196,12 @@ extension DesignGallerySnapshotTests {
       DesignSceneFixtures.boardStepsNotifyExample(), DesignSceneFixtures.boardReportExample(),
     ]
     let menuBar = board(reports, 1)
-    menuBar.automation.openNotify()
+    menuBar.automation.tapNotify()
     menuBar.automation.moveNotify(1)
     try write("board_notify_moved.png", menuBar, .ja, size)
 
     let low = board(nil, 4)
-    low.automation.openNotify()
+    low.automation.tapNotify()
     try write("board_notify_low.png", low, .ja, NSSize(width: 1000, height: 400))
   }
 
@@ -248,11 +253,6 @@ extension DesignGallerySnapshotTests {
     missing.automation.requestText = "Slack の自分宛ての DM をタスクの候補にして"
     missing.automation.send()
     try write("board_request_claude_missing.png", missing, .ja, size)
-
-    let gone = board(nil)
-    try gone.automation.runner.delete(try XCTUnwrap(gone.automation.selectedAutomation?.id))
-    gone.automation.askFix()
-    try write("board_request_fix_gone.png", gone, .ja, size)
   }
 
   private func homeRow(_ strip: TabStrip, selection: StatusRowModel.Selection) -> StatusRowModel {

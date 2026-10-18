@@ -106,7 +106,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
 
   // MARK: - キー
 
-  /// ↓ で選び、space で止める ⇄ 再開（沈んでも選択は付いていく）、↵ で今すぐ実行、⌘⌫ で消して同じ位置の行を選ぶ。
+  /// ↓ で選び、space で止める ⇄ 再開（沈んでも選択は付いていく）、⌘↵ で今すぐ実行、⌘⌫ で消して同じ位置の行を選ぶ。
   func testKeysActOnTheSelectedAutomation() {
     let model = board()
     let automation = model.automation
@@ -122,10 +122,10 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     send(Key.space, " ", to: window)
     XCTAssertEqual(automation.store.automation(Self.slack)?.paused, false)
 
-    send(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", .command, to: window)
     XCTAssertTrue(automation.runner.isRunning(Self.slack))
-    send(Key.enter, "\r", to: window)
-    XCTAssertEqual(model.refusal, .automationErrRunning, "走っている間の ↵ は赤で断る")
+    send(Key.enter, "\r", .command, to: window)
+    XCTAssertEqual(model.refusal, .automationErrRunning, "走っている間の ⌘↵ は赤で断る")
 
     down(window)
     XCTAssertNil(model.refusal, "↓ で消える")
@@ -135,7 +135,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     XCTAssertEqual(automation.selectedAutomation?.id, Self.pausedGmail, "同じ位置の行")
   }
 
-  /// space・↵・⌘⌫ は押し続けても 1 回だけ効く。
+  /// space・⌘↵・⌘⌫ は押し続けても 1 回だけ効く。
   func testHeldKeysActOnce() {
     let model = board()
     let automation = model.automation
@@ -147,10 +147,10 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     send(Key.space, " ", repeating: true, to: window)
     XCTAssertEqual(automation.store.automation(Self.slack)?.paused, true, "止める ⇄ 再開は 1 回だけ（往復しない）")
 
-    send(Key.enter, "\r", to: window)
-    send(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", .command, to: window)
+    send(Key.enter, "\r", .command, repeating: true, to: window)
     XCTAssertTrue(automation.runner.isRunning(Self.slack))
-    XCTAssertNil(model.refusal, "リピートで「実行中のため今すぐ実行できません」の赤を出さない")
+    XCTAssertNil(model.refusal, "リピートで「実行中のため、今は実行できません」の赤を出さない")
 
     send(Key.delete, "\u{7F}", .command, to: window)
     send(Key.delete, "\u{7F}", .command, repeating: true, to: window)
@@ -160,7 +160,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
       "消えるのは 1 件だけ")
   }
 
-  /// 今すぐ実行は修飾なしの ↵ だけ。⇧↵・文字キーは何も起こさない（⌘↵ は直しの依頼で、走らせない）。
+  /// 今すぐ実行は ⌘↵ だけ。⇧↵・文字キーは何も起こさない。
   func testModifiedEnterAndLettersDoNothing() {
     let model = board()
     let automation = model.automation

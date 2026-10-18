@@ -1,15 +1,14 @@
 import SwiftUI
 
-/// 選んだ自動化の詳細（右の欄）。見出し（名前・前回・注記・次回）と、左に地図と実行履歴・右に選んだ部品のカードの欄。カードの欄は
-/// 部品が選ばれていない間（一覧に居る間）も空のまま幅を保つ——⇥ のたびに地図の幅が変わらないため。地図に残る幅が
-/// `mapMinWidth` に満たなければカードを地図の下（実行履歴の上）へ回す。長ければ欄全体が縦にスクロールする（選択が替わると先頭へ
-/// 戻る）。
+/// 選んだ自動化の詳細（右の欄）。見出し（名前・「通知」の段・次回・直近の実行の帯）と、左に地図・右に選んだ部品のカードの欄。
+/// カードの欄は部品が選ばれていない間（一覧に居る間・「通知」の段）も空のまま幅を保つ——段を移るたびに地図の幅が変わらないため。
+/// 地図に残る幅が `mapMinWidth` に満たなければカードを地図の下へ回す。長ければ欄全体が縦にスクロールする（選択が替わると
+/// 先頭へ戻る）。
 struct BoardAutomationDetail: View {
   let model: BoardAutomationModel
   let standing: BoardAutomationStanding
   let detail: BoardAutomationDetailValue
   let card: BoardAutomationPartValue?
-  let text: AutomationText
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
@@ -22,10 +21,7 @@ struct BoardAutomationDetail: View {
           heading
           if wide {
             HStack(alignment: .top, spacing: Self.columnGap) {
-              VStack(alignment: .leading, spacing: Self.headingGap) {
-                map
-                BoardAutomationHistory(detail: detail)
-              }
+              map
               Group {
                 if let card {
                   BoardAutomationPartCard(model: model, card: card)
@@ -39,7 +35,6 @@ struct BoardAutomationDetail: View {
             VStack(alignment: .leading, spacing: Self.headingGap) {
               map
               if let card { BoardAutomationPartCard(model: model, card: card) }
-              BoardAutomationHistory(detail: detail)
             }
           }
         }
@@ -48,6 +43,9 @@ struct BoardAutomationDetail: View {
       }
       .id(standing.id)
       .scrollIndicators(.automatic)
+      .transformAnchorPreference(key: BoardAutomationNotifyAnchor.self, value: .bounds) {
+        $0.viewport = $1
+      }
     }
   }
 
@@ -62,27 +60,55 @@ struct BoardAutomationDetail: View {
           .font(Font(Theme.Typography.title.monospacedWeight(.semibold)))
           .foregroundStyle(Color.theme.textPrimary)
           .frame(minHeight: Self.nameLine)
-        ForEach(Array(([detail.last] + detail.notes).enumerated()), id: \.offset) { _, line in
-          fontResolver.text(line, base: Theme.Typography.codeSmall)
-            .font(Font.theme.codeSmall)
-            .foregroundStyle(Color.theme.textMuted)
-            .frame(minHeight: Self.lastLine)
-        }
+        notifyRow
       }
       .fixedSize(horizontal: false, vertical: true)
       .frame(maxWidth: .infinity, alignment: .leading)
-      Text(upcoming)
-        .font(Font.theme.codeSmall)
-        .foregroundStyle(Color.theme.textSecondary)
-        .frame(height: Self.upcomingLine)
-        .fixedSize()
+      VStack(alignment: .trailing, spacing: 6) {
+        upcoming
+          .font(Font.theme.codeSmall)
+          .frame(height: Self.upcomingLine)
+        HStack(spacing: Theme.Space.step) {
+          Text(l10n.string(.boardRecentRuns))
+            .font(Font.theme.codeSmall)
+            .foregroundStyle(Color.theme.textMuted)
+          BoardRunStrip(tones: detail.strip)
+        }
+      }
+      .fixedSize()
     }
   }
 
-  /// 「次回 16:50」。止めていれば「停止中」。
-  private var upcoming: String {
-    if standing.paused { return l10n.string(.automationPaused) }
-    return standing.next.map(text.next) ?? ""
+  /// 見出しの「通知：メニューバー」。地図の先頭の段で、選んでいる間は濃い地。クリックでその段を選んで 3 択を開く。
+  private var notifyRow: some View {
+    Text(detail.notify)
+      .font(Font.theme.codeSmall)
+      .foregroundStyle(Color.theme.textMuted)
+      .frame(minHeight: Self.lastLine)
+      .padding(.horizontal, Self.notifyInset)
+      .background(
+        model.selectedMapStop == .notify ? Color.theme.selectionFill : Color.clear,
+        in: RoundedRectangle(cornerRadius: 4)
+      )
+      .padding(.horizontal, -Self.notifyInset)
+      .contentShape(Rectangle())
+      .onTapGesture { model.tapNotify() }
+      .anchorPreference(key: BoardAutomationNotifyAnchor.self, value: .bounds) {
+        BoardAutomationNotifyAnchor(row: $0)
+      }
+  }
+
+  /// 「次回 16:50」。止めていれば停止の印と「停止中」。
+  @ViewBuilder private var upcoming: some View {
+    if standing.paused {
+      HStack(spacing: 5) {
+        MarkGlyph(kind: .paused, color: Color.theme.textMuted)
+        Text(l10n.string(.automationPaused))
+      }
+      .foregroundStyle(Color.theme.textMuted)
+    } else {
+      Text(detail.next ?? "").foregroundStyle(Color.theme.textSecondary)
+    }
   }
 
   private static let inset = EdgeInsets(top: 20, leading: 32, bottom: 20, trailing: 32)
@@ -90,15 +116,40 @@ struct BoardAutomationDetail: View {
   private static let columnGap: CGFloat = 40
   private static let cardWidth: CGFloat = 380
   private static let upcomingLine: CGFloat = 20
-  /// 名前と前回の 1 行の行箱（見本の描画の、日本語の字の行箱）。
+  /// 名前と通知の 1 行の行箱（見本の描画の、日本語の字の行箱）。
   private static let nameLine: CGFloat = 21
   private static let lastLine: CGFloat = 17
+  /// 「通知」の段の選択の地を字の外へ広げる幅。
+  private static let notifyInset: CGFloat = 4
   /// 地図に残す幅の下限。これに満たなければカードを地図の下へ回す。
-  private static let mapMinWidth: CGFloat = 420
+  private static let mapMinWidth: CGFloat = 480
 }
 
-/// 詳細の欄の見出し（「流れ」「実行履歴」「この部品の回」）。右に欄ごとの添え物を下端に揃えて置き、下に罫線を引き、罫線の下に
-/// `below` の余白を空ける。
+/// 直近の回の帯。出した回は高い棒（強調色）、何もしなかった回は低い棒（沈んだ色）、失敗は赤の斜めの十字——色だけでなく形でも
+/// 見分ける。古い回が左。
+struct BoardRunStrip: View {
+  let tones: [BoardRunTone]
+
+  var body: some View {
+    HStack(spacing: Theme.Space.hair) {
+      ForEach(Array(tones.enumerated()), id: \.offset) { _, tone in
+        switch tone {
+        case .produced:
+          RoundedRectangle(cornerRadius: 1).fill(Color.theme.accentBright).frame(
+            width: 4, height: 12)
+        case .quiet:
+          RoundedRectangle(cornerRadius: 1).fill(Color.theme.editorGhost).frame(width: 4, height: 4)
+        case .failed:
+          MarkGlyph(kind: .bandFailure, color: Color.theme.danger)
+        }
+      }
+    }
+    .frame(height: 12)
+  }
+}
+
+/// 詳細の欄の見出し（「流れ」「この部品の実行履歴」「前回の報告」）。右に欄ごとの添え物を下端に揃えて置き、下に罫線を引き、
+/// 罫線の下に `below` の余白を空ける。
 struct BoardSectionHeader<Trailing: View>: View {
   let title: L10nKey
   var below: CGFloat = 8

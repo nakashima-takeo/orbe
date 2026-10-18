@@ -71,8 +71,8 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
-  /// ボードの自動化: 欄から ↓ で一覧の先頭 → ↓ で選ぶ → space で止める（行が末尾へ沈み、選択は付いていく）→ space で再開 → ↵ で実行中… → ↵ で赤の
-  /// 断り → ⌘⌫ で消え、同じ位置の行が選ばれる。
+  /// ボードの自動化: 欄から ↓ で一覧の先頭 → ↓ で選ぶ → space で止める（行が末尾へ沈み、選択は付いていく）→ space で再開 →
+  /// ⌘↵ で実行中 → ⌘↵ で赤の断り → ⌘⌫ で消え、同じ位置の行が選ばれる。
   func testBoardAutomation() throws {
     let model = BoardModel(
       automation: BoardAutomationModel(
@@ -98,33 +98,36 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
-  /// 地図と選んだ部品: 一覧で選ぶ（カードの欄は空）→ ⇥ で先頭の部品 → ↑ は端で止まる → ↓ で次の部品 → 失敗した判定まで
-  /// 進む → ↵ で流れて「実行中…」→ 流している途中の ↵ は赤の断り → esc で一覧へ（地図の地とカードが消える）→ ⇥ で同じ
-  /// 部品 → 一覧へ戻って別の自動化を選ぶ → ⇥ で先頭の部品 → カードのボタン。
+  /// 地図と選んだ部品: 一覧で選ぶ（カードの欄は空）→ ↵ で先頭の部品 → ↑ で「通知」の段 → → で 3 択 → esc で段へ → ↓ で
+  /// 部品 → 失敗した判定まで進む → 末尾で止まる → ⌘↵ で流れて実行中 → 流している途中の ⌘↵ は赤の断り → ← で一覧へ（地図の地と
+  /// カードが消える）→ ↵ で同じ部品 → 一覧で別の自動化 → → で先頭の部品 → カードの「修正を依頼」（欄に書き出され焦点が欄へ）。
   func testBoardMap() throws {
     let model = BoardModel(
       automation: BoardAutomationModel(
         runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardMapSamples())),
       parts: [.automation])
     let automation = model.automation
+    let ja = LocalizationStore(language: .ja)
     try flow(
       "board_map", size: NSSize(width: 1440, height: 844),
       render: {
         BoardRoot(
-          model: model, translucency: ChromeTranslucency(),
-          localization: LocalizationStore(language: .ja), fontResolver: ChromeFontResolver())
+          model: model, translucency: ChromeTranslucency(), localization: ja,
+          fontResolver: ChromeFontResolver())
       },
       steps: [
         ("list", { automation.move(1) }),
-        ("tab_first", { automation.enterMap() }),
-        ("up_stops", { automation.movePart(-1) }),
-        ("down", { automation.movePart(1) }),
-        ("to_contact", { for _ in 0..<10 { automation.movePart(1) } }),
-        ("down_stops", { automation.movePart(1) }),
+        ("enter_first", { automation.enterMap() }),
+        ("up_notify", { automation.moveInMap(-1) }),
+        ("notify_open", { automation.openNotify() }),
+        ("notify_back", { automation.closeNotify() }),
+        ("down_part", { automation.moveInMap(1) }),
+        ("to_contact", { for _ in 0..<11 { automation.moveInMap(1) } }),
+        ("end_stops", { automation.moveInMap(1) }),
         ("flow", { automation.perform(.flow(.part)) }),
         ("flow_refused", { automation.perform(.flow(.part)) }),
-        ("escape", { automation.leaveMap() }),
-        ("tab_same", { automation.enterMap() }),
+        ("back_to_list", { automation.leaveMap() }),
+        ("enter_same", { automation.enterMap() }),
         (
           "other_automation",
           {
@@ -132,8 +135,28 @@ extension DesignFlowSnapshotTests {
             automation.move(1)
           }
         ),
-        ("tab_other_first", { automation.enterMap() }),
-        ("button", { automation.flow(to: "note") }),
+        ("enter_other_first", { automation.enterMap() }),
+        ("ask_fix", { automation.draftFix(of: "note", l10n: ja) }),
+      ])
+  }
+
+  /// 狭い窓: カードが地図の下へ回る。
+  func testBoardMapNarrow() throws {
+    let model = BoardModel(
+      automation: BoardAutomationModel(
+        runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardMapSamples())),
+      parts: [.automation])
+    let automation = model.automation
+    try flow(
+      "board_map_narrow", size: NSSize(width: 1000, height: 844),
+      render: {
+        BoardRoot(
+          model: model, translucency: ChromeTranslucency(),
+          localization: LocalizationStore(language: .ja), fontResolver: ChromeFontResolver())
+      },
+      steps: [
+        ("list", { automation.move(1) }),
+        ("contact", { automation.tapPart("contact") }),
       ])
   }
 
@@ -165,8 +188,8 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
-  /// サブメニュー「通知」: 一覧の 2 行目で → で開く（通知しないに印と選び）→ ↓ でメニューバーへ → ↵ で決めて閉じ、注記が
-  /// 「通知：メニューバー」に → 開き直すと印の行から → ↓ で通知センターへ → ← で何も変えずに閉じる。
+  /// サブメニュー「通知」: 一覧の 2 行目の見出しの「通知」の行で開く（通知しないに印と選び）→ ↓ でメニューバーへ → ↵ で
+  /// 決めて閉じ、「通知：メニューバー」に → 開き直すと印の行から → ↓ で通知センターへ → ← で何も変えずに閉じる。
   func testBoardNotify() throws {
     let model = BoardModel(
       automation: BoardAutomationModel(
@@ -188,7 +211,7 @@ extension DesignFlowSnapshotTests {
             automation.move(1)
           }
         ),
-        ("opened", { automation.openNotify() }),
+        ("opened", { automation.tapNotify() }),
         ("moved", { automation.moveNotify(1) }),
         ("chosen", { automation.chooseNotify(.menuBar) }),
         ("reopened", { automation.openNotify() }),
@@ -197,7 +220,7 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
-  /// 低く狭い窓: 末尾の行で開くと、部品の下端の内側へずれて収まる。フッターのキーが幅に収まるか。
+  /// 低く狭い窓: 末尾の行の「通知」の行で開く。フッターのキーが幅に収まるか。
   func testBoardNotifyLow() throws {
     let model = BoardModel(
       automation: BoardAutomationModel(
@@ -213,7 +236,7 @@ extension DesignFlowSnapshotTests {
       },
       steps: [
         ("last_row", { automation.move(-1) }),
-        ("opened", { automation.openNotify() }),
+        ("opened", { automation.tapNotify() }),
       ])
   }
 }

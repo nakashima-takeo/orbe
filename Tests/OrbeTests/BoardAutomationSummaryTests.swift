@@ -2,10 +2,10 @@ import XCTest
 
 @testable import Orbe
 
-/// ボードの読み替え——一覧の右端と詳細の見出し。
+/// ボードの読み替え——一覧の行（前回の成否と時刻・次回）と、地図の溝の線の割り当て。
 ///
-/// 壊れると何が起きるか: 仕事の部品の応答の 1 行目が一覧の右端に入り、自動化の名前が潰れて読めなくなる。判定と報告を両方持つ
-/// 自動化で、判定の回の見出しが「タスク候補・報告に追加」と誤った行き先を言う。
+/// 壊れると何が起きるか: 失敗した部品があるのに一覧の印が成功に見え、壊れた部品に気づけない。地図の線が入力と違う行へつながり、
+/// どの部品の出力がどこへ行くかを読み違える。
 @MainActor
 final class BoardAutomationSummaryTests: OrbeTestCase {
   private let text = AutomationText(
@@ -14,57 +14,35 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
       DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone),
     timeZone: DesignSceneFixtures.taskCalendar.timeZone)
 
-  private func automation(_ samples: [AutomationSample]) throws -> Automation {
-    try XCTUnwrap(DesignSceneFixtures.automationStore(samples).automations.first)
+  private func automations() -> [Automation] {
+    DesignSceneFixtures.automationStore(DesignSceneFixtures.boardMapSamples()).automations
   }
 
-  private func summary(_ samples: [AutomationSample]) throws -> BoardAutomationSummary {
-    BoardAutomationSummary(try automation(samples), text: text, next: nil)
+  /// 失敗した部品があれば失敗の印。時刻はどの部品かを問わず最後に動いた時刻で、昨日なら「昨日」。
+  func testListRowSaysTheLastMarkAndTime() throws {
+    let all = automations()
+    let charge = BoardAutomationSummary(all[0], text: text, next: nil)
+    XCTAssertEqual(charge.mark, .failure)
+    XCTAssertEqual(charge.last, "前回 14:56")
+
+    let script = BoardAutomationSummary(all[1], text: text, next: nil)
+    XCTAssertEqual(script.mark, .success)
+    XCTAssertEqual(script.last, "前回 昨日 23:00")
+
+    let wide = BoardAutomationSummary(all[2], text: text, next: nil)
+    XCTAssertNil(wide.mark)
+    XCTAssertEqual(wide.last, "まだ動いていない")
   }
 
-  private func detail(_ samples: [AutomationSample]) throws -> BoardAutomationDetailValue {
-    BoardAutomationDetailValue(
-      try automation(samples), text: text, running: { _ in false }, open: 0)
-  }
+  /// 見本の 12 部品の線: 行を上から見て、最後の受け手を迎える入力の線のうち最も左に点を置き、無ければ空いている最も左。
+  func testMapLanesFollowTheInputs() throws {
+    let detail = BoardAutomationDetailValue(
+      automations()[0], text: text, running: { _ in false }, open: 0, next: nil)
 
-  func testAWorkRunWithAReplyShowsDoneAtTheRightEndNotTheReply() throws {
-    let samples = [DesignSceneFixtures.boardAgentExample()]
-    let summary = try summary(samples)
-    let last = try detail(samples).last
-
-    XCTAssertEqual(summary.mark, "10/3 9:00 に完了")
-    XCTAssertTrue(last.hasSuffix("PR を投稿: レビュー待ちの PR 2 件を #dev-me に投稿した。"), last)
-  }
-
-  func testAJudgeRunSaysItAddedToTaskCandidatesEvenWithAReportPart() throws {
-    let fixtures = DesignSceneFixtures.self
-    let at = fixtures.automationAt(13)
-    let item = fixtures.sampleItems("gh", 1, at: at)
-    let sample = AutomationSample(
-      definition: AutomationDefinition(
-        name: "判定と要約", notify: nil,
-        parts: [
-          fixtures.commandPart(
-            "fetch", "取る", .scheduled(.every(1800)), script: "gh", coverage: .newArrivals),
-          fixtures.agentPart(
-            "judge", "判定", .arrival, from: ["fetch"], instruction: "判定して",
-            deliver: .taskCandidates),
-          fixtures.agentPart(
-            "digest", "要約", .scheduled(.every(86400)), from: ["fetch"], instruction: "要約して",
-            deliver: .report),
-        ]),
-      createdAt: fixtures.automationAt(9),
-      passes: [
-        AutomationSamplePass(part: "fetch", at: at, outcome: fixtures.fetched("fetch", item)),
-        AutomationSamplePass(
-          part: "judge", at: at.addingTimeInterval(60), trigger: .arrival,
-          outcome: fixtures.judged([fixtures.proposal(item[0], "対応する")], rows: 1)),
-      ])
-
-    let summary = try summary([sample])
-    let last = try detail([sample]).last
-
-    XCTAssertEqual(summary.output, "タスク候補・報告")
-    XCTAssertTrue(last.hasSuffix("判定: 1件をタスク候補に追加"), last)
+    XCTAssertEqual(detail.rows.map(\.lanes.node), [0, 1, 2, 3, 4, 5, 3, 4, 5, 2, 0, 4, 0, 2])
+    XCTAssertEqual(detail.laneCount, 6)
+    let develop = detail.rows[10].lanes
+    XCTAssertEqual(develop.bends, [1, 3], "CI と自分の担当だけの線が点へ曲がり込む")
+    XCTAssertEqual(develop.through, [2, 4, 5])
   }
 }

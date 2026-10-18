@@ -9,6 +9,8 @@ class AutomationPartPassTestCase: OrbeTestCase {
   var jobs: FakeJobs!
   var pass: AutomationPartPass!
   var outcomes: [AutomationPartPass.Outcome] = []
+  /// 最後に起こした部品の鍵（失敗の英文を組む）。
+  var startedKey = ""
 
   override func setUp() {
     jobs = FakeJobs()
@@ -21,7 +23,8 @@ class AutomationPartPassTestCase: OrbeTestCase {
   func start(
     _ part: AutomationPart, _ role: AutomationPartRole, _ input: AutomationPartPass.Input
   ) -> BackgroundRunHandle {
-    pass.start(AutomationGraph.Node(part: part, role: role), input) { [unowned self] in
+    startedKey = part.key
+    return pass.start(AutomationGraph.Node(part: part, role: role), input) { [unowned self] in
       outcomes.append($0)
     }
   }
@@ -96,8 +99,10 @@ class AutomationPartPassTestCase: OrbeTestCase {
 
   var succeeded: AutomationPartPass.Output? { outputs.first ?? nil }
 
+  /// 最初の失敗の、AI が読む英文。
   var failed: String? {
-    guard case .failed(let reason, _, _) = outcomes.first else { return nil }
-    return reason
+    guard case .failed(let failure, let execution, let breach) = outcomes.first else { return nil }
+    return failure.text(
+      part: startedKey, ending: execution.ending, breach: breach.map(AutomationPartRun.Breach.init))
   }
 }

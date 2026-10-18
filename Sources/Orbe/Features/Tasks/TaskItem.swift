@@ -247,6 +247,12 @@ struct TaskLink: Codable, Equatable {
     self.kind = kind
   }
 
+  /// Issue か PR のページの URL から。読めなければ nil。
+  init?(url: String) {
+    guard let read = GitHubItemID.read(url: url) else { return nil }
+    self.init(item: read.item, kind: read.kind)
+  }
+
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     let repo = try c.decode(String.self, forKey: .repo)

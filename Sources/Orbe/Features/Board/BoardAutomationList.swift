@@ -6,6 +6,7 @@ struct BoardAutomationList: View {
   @Bindable var model: BoardAutomationModel
   let standings: [BoardAutomationStanding]
   let text: AutomationText
+  let now: Date
   @Environment(\.localization) private var l10n
 
   var body: some View {
@@ -36,34 +37,25 @@ struct BoardAutomationList: View {
     .overlay(alignment: .trailing) {
       Rectangle().fill(Color.theme.surface1).frame(width: Theme.Stroke.hairline)
     }
-    .transformAnchorPreference(key: BoardAutomationNotifyAnchor.self, value: .bounds) {
-      $0.list = $1
-    }
   }
 
   private var rows: some View {
     ScrollViewReader { proxy in
       ScrollView {
-        VStack(spacing: 0) {
+        VStack(spacing: Theme.Space.hair) {
           ForEach(standings) { standing in
             BoardAutomationRow(
-              standing: standing, summary: model.summary(standing.id, text: text),
+              standing: standing, summary: model.summary(standing.id, text: text, now: now),
               selection: model.list.selectedID == .automation(standing.id)
                 ? (model.inMap ? .parent : .focused) : nil
             )
             .id(BoardAutomationModel.Stop.automation(standing.id))
             .onTapGesture { model.tap(standing.id) }
-            .anchorPreference(key: BoardAutomationNotifyAnchor.self, value: .bounds) {
-              model.list.selectedID == .automation(standing.id) ? .init(row: $0) : .init()
-            }
           }
         }
         .padding(.horizontal, Theme.Space.note)
       }
       .scrollIndicators(.automatic)
-      .transformAnchorPreference(key: BoardAutomationNotifyAnchor.self, value: .bounds) {
-        $0.viewport = $1
-      }
       .onChange(of: model.list.scrollTarget) { _, target in
         guard let target else { return }
         proxy.scrollTo(target.id)
@@ -76,8 +68,9 @@ struct BoardAutomationList: View {
   private static let headerHeight: CGFloat = 32
 }
 
-/// 一覧の 1 行。上段に点・名前・右端の文、下段に Orbe へ渡す先の種類といつ。点・名前・右端の色と種類は立ち位置から、文は読み替えから
-/// 読む。選んでいる行は、焦点が一覧にあれば濃い地、地図にあれば（その自動化の部品を選んでいる間）薄い地。
+/// 一覧の 1 行。上段に名前と状態（実行中・停止中）、下段に前回の結果の印と時刻・次回。状態と結果の印は混ぜない——走っている
+/// ことと前回失敗したことは別の事実で、片方がもう片方を隠さないため。状態は立ち位置から、前回と次回は読み替えから読む。選んで
+/// いる行は、焦点が一覧にあれば濃い地、地図にあれば（その自動化の段を選んでいる間）薄い地。
 struct BoardAutomationRow: View {
   enum Selection {
     case focused
@@ -91,37 +84,56 @@ struct BoardAutomationRow: View {
   @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
-    HStack(spacing: Self.gap) {
-      Circle()
-        .fill(dot)
-        .frame(width: Self.dot, height: Self.dot)
-      VStack(alignment: .leading, spacing: Theme.Space.hair) {
-        HStack(alignment: .firstTextBaseline, spacing: Theme.Space.step) {
-          fontResolver.text(standing.name, base: Theme.Typography.code)
-            .font(Font.theme.code)
-            .foregroundStyle(standing.paused ? Color.theme.textMuted : Color.theme.textPrimary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: Self.nameLine)
-          Text(mark.label)
-            .font(Font.theme.codeSmall)
-            .foregroundStyle(mark.color)
-            .fixedSize()
-        }
-        HStack(spacing: Theme.Space.beat) {
-          Text(summary?.output ?? "").foregroundStyle(Color.theme.kbKeyText)
-          Text(summary?.when ?? "")
-        }
-        .font(Font.theme.codeSmall)
-        .foregroundStyle(Color.theme.textMuted)
-        .frame(height: Self.whenLine)
+    VStack(alignment: .leading, spacing: Theme.Space.hair) {
+      HStack(spacing: Self.gap) {
+        fontResolver.text(standing.name, base: Theme.Typography.code)
+          .font(Font.theme.code)
+          .foregroundStyle(standing.paused ? Color.theme.textMuted : Color.theme.textPrimary)
+          .frame(maxWidth: .infinity, alignment: .leading)
+        state
       }
-      .lineLimit(1)
-      .truncationMode(.tail)
+      .frame(height: Self.nameLine)
+      HStack(spacing: Theme.Space.beat) {
+        HStack(spacing: 5) {
+          if let mark = summary?.mark { BoardRunMarkGlyph(mark: mark) }
+          Text(summary?.last ?? "")
+        }
+        Spacer(minLength: 0)
+        if let next = summary?.next { Text(next) }
+      }
+      .font(Font.theme.codeSmall)
+      .foregroundStyle(Color.theme.textMuted)
+      .frame(height: Self.whenLine)
     }
+    .lineLimit(1)
+    .truncationMode(.tail)
     .padding(.horizontal, Self.inset)
     .frame(height: Self.height)
     .background(fill, in: RoundedRectangle(cornerRadius: Self.radius))
     .contentShape(Rectangle())
+  }
+
+  @ViewBuilder private var state: some View {
+    switch standing.state {
+    case .running:
+      HStack(spacing: 5) {
+        StatusGlyphView(kind: .working, size: 10)
+        Text(l10n.string(.automationRunning))
+      }
+      .font(Font.theme.codeSmall)
+      .foregroundStyle(Color.theme.accentBright)
+      .fixedSize()
+    case .paused:
+      HStack(spacing: 5) {
+        MarkGlyph(kind: .paused, color: Color.theme.textMuted)
+        Text(l10n.string(.automationPaused))
+      }
+      .font(Font.theme.codeSmall)
+      .foregroundStyle(Color.theme.textMuted)
+      .fixedSize()
+    case nil:
+      EmptyView()
+    }
   }
 
   private var fill: Color {
@@ -132,30 +144,22 @@ struct BoardAutomationRow: View {
     }
   }
 
-  private var dot: Color {
-    switch standing.group {
-    case .failing: Color.theme.danger
-    case .paused: Color.theme.textMuted
-    case .active: Color.theme.accentBright
-    }
-  }
-
-  private var mark: (label: String, color: Color) {
-    switch standing.mark {
-    case .running: (l10n.string(.automationRunning), Color.theme.accentBright)
-    case .failed: (summary?.mark ?? "", Color.theme.danger)
-    case .paused: (l10n.string(.automationPaused), Color.theme.textMuted)
-    case .neverRan: (l10n.string(.automationNeverRan), Color.theme.textMuted)
-    case .ran(let tone):
-      (summary?.mark ?? "", tone == .failed ? Color.theme.danger : Color.theme.textSecondary)
-    }
-  }
-
   private static let height: CGFloat = 46
   private static let inset: CGFloat = 10
   private static let gap: CGFloat = 10
-  private static let dot: CGFloat = 6
   private static let radius: CGFloat = 6
   private static let nameLine: CGFloat = 18
   private static let whenLine: CGFloat = 16
+}
+
+/// 成否の印（成功は強調色のチェック、失敗は赤の斜めの十字）。色だけでなく形で見分ける。
+struct BoardRunMarkGlyph: View {
+  let mark: BoardRunMark
+
+  var body: some View {
+    switch mark {
+    case .success: MarkGlyph(kind: .success, color: Color.theme.accentBright)
+    case .failure: MarkGlyph(kind: .failure, color: Color.theme.danger)
+    }
+  }
 }

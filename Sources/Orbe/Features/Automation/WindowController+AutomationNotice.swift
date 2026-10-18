@@ -45,13 +45,11 @@ extension WindowController {
         : nil)
   }
 
-  /// 「<部品>の出力が決まりを外した — line 3: missing link（2 行）· 出し直しで通った」。
+  /// 「連絡 の出力の形式エラー（2 行）— 出し直して通った」。
   private func breachLine(_ breach: AutomationBreachMark, part name: String) -> String {
     localization.format(
-      breach.lines.count == 1 ? .automationBreachOne : .automationBreachOther, name,
-      breach.lines.reasons.first ?? "", breach.lines.count)
-      + " · "
-      + localization.string(breach.passed ? .automationBreachPassed : .automationBreachFailed)
+      .automationBreachNotice, name, breach.lines.count,
+      localization.string(breach.passed ? .automationBreachPassed : .automationBreachFailed))
   }
 
   /// 通知センターでの自動化の通知の識別子。自動化ごとに 1 つなので、新しい回が前の通知を差し替える。

@@ -15,7 +15,7 @@ extension TaskPaletteAutomationModelTests {
     automation.refresh()
     let selected = automation.selectedAutomation!
     XCTAssertTrue(automation.runner.isFlowing(selected.id))
-    XCTAssertEqual(automation.status(of: selected, count: 2), .refreshing)
+    XCTAssertEqual(automation.status(of: selected).state, .refreshing)
     XCTAssertNil(automation.error)
 
     automation.refresh()
@@ -77,78 +77,33 @@ extension TaskPaletteAutomationModelTests {
 
   // MARK: - 棚の 2 行目
 
-  /// 次の判定は時刻のある判定（最も早い時刻）→ 届いたら → 手動の順。止めていれば停止中。失敗した部品は全部品から数える。
-  func testShelfStatusSaysTheNextJudgeAndTheFailedParts() throws {
+  /// 前回の判定は判定の部品のうち最も新しく回ったものの最新の回（成否と時刻）。止めていれば停止中。まだ判定していなければ無い。
+  func testShelfStatusSaysTheLastJudgeAndTheState() throws {
     let palette = TaskPaletteSamples.model(
       [],
       automations: DesignSceneFixtures.automationRunner(
         DesignSceneFixtures.automationShelfSamples()))
     let automation = palette.automation
     func status(_ id: Int) throws -> TaskPaletteAutomationShelfStatus {
-      let row = try XCTUnwrap(automation.shelfRows.first { $0.id == .automation(id) })
-      return automation.status(of: try XCTUnwrap(row.automation), count: row.count)
+      automation.status(of: try XCTUnwrap(automation.store.automation(id)))
     }
-    let owned = try XCTUnwrap(automation.store.automation(1))
 
     XCTAssertEqual(
       try status(1),
-      .standing(
-        plan: .at(DesignSceneFixtures.automationAt(9, daysAgo: -1)), noCandidates: false,
-        failed: [try XCTUnwrap(owned.graph.node("contact"))]))
-    XCTAssertEqual(try status(2), .standing(plan: .onArrival, noCandidates: false, failed: []))
-    XCTAssertEqual(try status(3), .standing(plan: .manual, noCandidates: false, failed: []))
-    XCTAssertEqual(try status(4), .standing(plan: .onArrival, noCandidates: true, failed: []))
-    let paused = try XCTUnwrap(automation.store.automation(5))
-    XCTAssertEqual(
-      try status(5),
-      .standing(
-        plan: .paused, noCandidates: true, failed: [try XCTUnwrap(paused.graph.node("fetch"))]))
-  }
-
-  /// 判定の予定の種類が混ざれば、時刻のある判定（定義の順ではなく最も早い時刻）→ 届いたら → 手動の順で最初に当たったもので
-  /// 言う。
-  func testShelfStatusOfMixedJudgesSaysTheMostConcreteOne() throws {
-    let runner = DesignSceneFixtures.automationRunner()
-    func define(_ judges: [(key: String, trigger: AutomationPart.Trigger)]) throws -> Automation {
-      try runner.set(
-        nil,
-        AutomationDefinition(
-          name: "混在", notify: nil,
-          parts: [
-            DesignSceneFixtures.commandPart(
-              "fetch", "取得", .manual, script: "cat", coverage: .newArrivals)
-          ]
-            + judges.map {
-              DesignSceneFixtures.agentPart(
-                $0.key, $0.key, $0.trigger, from: ["fetch"], instruction: "i",
-                deliver: .taskCandidates)
-            }))
-    }
-    let timed = try define([
-      ("arrival", .arrival), ("late", .scheduled(DesignSceneFixtures.cron("0 13 * * *"))),
-      ("early", .scheduled(DesignSceneFixtures.cron("0 9 * * *"))),
-    ])
-    let untimed = try define([("manual", .manual), ("arrival", .arrival)])
-    let automation = TaskPaletteSamples.model([], automations: runner).automation
-
-    XCTAssertEqual(
-      automation.status(of: timed, count: 1),
-      .standing(
-        plan: .at(DesignSceneFixtures.automationAt(9, daysAgo: -1)), noCandidates: false,
-        failed: []))
-    XCTAssertEqual(
-      automation.status(of: untimed, count: 1),
-      .standing(plan: .onArrival, noCandidates: false, failed: []))
+      TaskPaletteAutomationShelfStatus(
+        last: .init(at: DesignSceneFixtures.automationAt(13), failed: true), state: nil),
+      "連絡の判定（13:00 に失敗）が開発の判定（9:00）より新しい")
+    XCTAssertEqual(try status(5).state, .paused)
   }
 
   /// 失敗した部品は最後の回が失敗した部品だけで、新しい失敗が先（定義の順ではない）。失敗の後に成功した部品は数えない。
-  func testShelfStatusCountsOnlyLatestFailuresNewestFirst() throws {
+  func testFailedPartsCountOnlyLatestFailuresNewestFirst() throws {
     let at = { (hour: Int) in DesignSceneFixtures.automationAt(hour) }
     func fetch(_ key: String) -> AutomationPart {
       DesignSceneFixtures.commandPart(
         key, key, .scheduled(.every(3600)), script: key, coverage: .newArrivals)
     }
-    let failed = DesignSceneFixtures.failed("exited 1")
+    let failed = DesignSceneFixtures.failed("boom")
     let sample = AutomationSample(
       definition: AutomationDefinition(
         name: "失敗", notify: nil,
@@ -168,14 +123,8 @@ extension TaskPaletteAutomationModelTests {
           outcome: DesignSceneFixtures.fetched(
             "recovered", DesignSceneFixtures.sampleItems("recovered", 1, at: at(11)))),
       ])
-    let automation = TaskPaletteSamples.model(
-      [], automations: DesignSceneFixtures.automationRunner([sample])
-    ).automation
-    let owner = try XCTUnwrap(automation.store.automations.first)
+    let owner = try XCTUnwrap(DesignSceneFixtures.automationStore([sample]).automations.first)
 
-    guard case .standing(_, _, let parts) = automation.status(of: owner, count: 0) else {
-      return XCTFail("一巡は無い")
-    }
-    XCTAssertEqual(parts.map(\.key), ["newer", "older"])
+    XCTAssertEqual(owner.failedParts.map(\.key), ["newer", "older"])
   }
 }

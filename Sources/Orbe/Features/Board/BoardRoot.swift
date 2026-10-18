@@ -95,7 +95,7 @@ struct BoardAutomationColumns: View {
     let text = model.text(l10n, now: now)
     let standings = model.standings(at: now)
     HStack(spacing: 0) {
-      BoardAutomationList(model: model, standings: standings, text: text)
+      BoardAutomationList(model: model, standings: standings, text: text, now: now)
         .contentShape(Rectangle())
         .onTapGesture { model.go(.list) }
         .focusable()
@@ -104,11 +104,11 @@ struct BoardAutomationColumns: View {
         .onKeyPress { model.handleKey($0) }
       if case .automation(let id) = model.list.selectedID,
         let standing = standings.first(where: { $0.id == id }),
-        let detail = model.detail(id, text: text)
+        let detail = model.detail(id, text: text, now: now)
       {
         BoardAutomationDetail(
           model: model, standing: standing, detail: detail,
-          card: model.card(text: text, now: now), text: text
+          card: model.card(text: text, now: now)
         )
         .contentShape(Rectangle())
         .onTapGesture { model.go(.map) }

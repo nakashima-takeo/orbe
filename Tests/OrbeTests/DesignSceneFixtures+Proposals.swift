@@ -121,7 +121,7 @@ extension DesignSceneFixtures {
       passes: [
         AutomationSamplePass(
           part: "fetch", at: automationAt(9),
-          outcome: failed("the part \"fetch\" ended: exited 1: gh: Not Found (HTTP 404)"))
+          outcome: failed("gh: Not Found (HTTP 404)"))
       ])
   }
 

@@ -98,9 +98,7 @@ extension AutomationStore {
       if let refused = planned.first(where: { entry in
         entry.push.upstreamFailed && entry.push.unsourced.contains { !inputIds.contains($0.id) }
       }) {
-        run.failure =
-          "no row passed to part \"\(refused.target.key)\" has an origin (it did not come from a "
-          + "fetch part)"
+        run.failure = .unsourced(refused.target.key)
       } else if case .succeeded(let output, _, _) = end.outcome {
         var state = memory.automations[index].state(key)
         for drop in end.take?.dropped ?? [] { run.dropped.add(.init(drop.reason)) }
@@ -234,37 +232,39 @@ extension AutomationStore {
     let (node, index, db) = (settling.node, settling.index, settling.db)
     var proposed = 0
     var resolvedCount = 0
-    var rejected = AutomationRejections()
+    var dismissed: [AutomationDismissal] = []
     for proposal in proposals {
       let link = proposal.origin.item.link
       guard !memory.proposals.contains(where: { $0.item.link == link }) else {
-        rejected.add("propose \(link): already proposed")
+        dismissed.append(AutomationDismissal(link: link, why: .alreadyProposed))
         continue
       }
       let draft = AutomationProposal(
         id: 0, automationId: memory.automations[index].id, partKey: node.key,
         sourcePartKey: proposal.origin.part, item: proposal.origin.item, title: proposal.title,
-        due: proposal.due, workspace: proposal.workspace, proposedAt: endedAt, state: .open)
+        due: proposal.due, workspace: proposal.workspace, reason: proposal.reason,
+        proposedAt: endedAt, state: .open)
       let id = try db.insert(proposal: draft)
       memory.proposals.append(
         AutomationProposal(
           id: id, automationId: draft.automationId, partKey: draft.partKey,
           sourcePartKey: draft.sourcePartKey, item: draft.item, title: draft.title, due: draft.due,
-          workspace: draft.workspace, proposedAt: draft.proposedAt, state: .open))
+          workspace: draft.workspace, reason: draft.reason, proposedAt: draft.proposedAt,
+          state: .open))
       proposed += 1
     }
     for link in resolved {
       guard
         let open = memory.proposals.firstIndex(where: { $0.item.link == link && $0.state == .open })
       else {
-        rejected.add("resolve \(link): no open proposal")
+        dismissed.append(AutomationDismissal(link: link, why: .noOpenProposal))
         continue
       }
       memory.proposals[open].state = .resolved
       try db.update(proposal: memory.proposals[open])
       resolvedCount += 1
     }
-    return .judge(proposed: proposed, resolved: resolvedCount, rejected: rejected)
+    return .judge(proposed: proposed, resolved: resolvedCount, dismissed: dismissed)
   }
 }
 

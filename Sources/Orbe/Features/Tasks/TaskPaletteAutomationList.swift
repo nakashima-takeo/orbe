@@ -64,15 +64,15 @@ struct TaskPaletteAutomationList: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
   }
 
-  /// 判定の部品ごとの最新の回を入力の深さ順に 1 行ずつ（「9:00 判定: 開発 · 12 件 → 候補 2」。失敗は赤）。狭い欄では
-  /// 各行を 2 行まで折り返す。
+  /// 判定の部品ごとの最新の回を入力の深さ順に 1 行ずつ（「9:00 開発の依頼を選ぶ　候補 2 件」。失敗は赤で
+  /// 「失敗：<説明>」）。狭い欄では各行を 2 行まで折り返す。
   private func headline(_ automation: Automation) -> some View {
     let text = AutomationText(l10n: l10n, today: model.today, timeZone: model.timeZone)
     let judges = automation.graph.byDepth.filter { $0.role == .judge }
     return VStack(alignment: .leading, spacing: 3) {
       ForEach(judges, id: \.key) { node in
         let run = automation.state(node.key).runs.first
-        Text(text.latest(node, run))
+        Text(Self.latest(node, run, text))
           .foregroundStyle(run?.failed == true ? Color.theme.danger : Color.theme.textMuted)
           .lineLimit(2)
           .truncationMode(.tail)
@@ -80,10 +80,34 @@ struct TaskPaletteAutomationList: View {
       }
     }
     .font(Font.theme.meta)
+    .lineSpacing(2)
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.horizontal, Theme.Space.phrase)
     .padding(.vertical, Theme.Space.step)
     .padding(.top, Theme.Space.tick)
+  }
+
+  /// 判定の部品の最新の回の 1 行。部品は名前だけで言う。
+  static func latest(
+    _ node: AutomationGraph.Node, _ run: AutomationPartRun?, _ text: AutomationText
+  )
+    -> String
+  {
+    let l10n = text.l10n
+    guard let run else {
+      return node.part.name + "\u{3000}" + l10n.string(.taskPaletteAutomationNeverJudged)
+    }
+    let result: String
+    if let failure = run.failure {
+      result = l10n.format(
+        .automationFailedWith,
+        text.failureHead(failure, ending: run.execution.ending, node: node))
+    } else if case .judge(let proposed, _, _) = run.result, proposed > 0 {
+      result = l10n.format(.taskPaletteAutomationProposedCount, proposed)
+    } else {
+      result = l10n.string(.taskPaletteAutomationNoProposals)
+    }
+    return text.stamp(run.startedAt) + " " + node.part.name + "\u{3000}" + result
   }
 
   private func row(_ proposal: AutomationProposal) -> some View {

@@ -93,7 +93,9 @@ enum AutomationPrompts {
     let lines = JSONLines<AnyObjectLine>(text)
     return (
       lines.accepted.map { AutomationRow(line: $0.line, text: $0.text) },
-      lines.rejected.map { AutomationBrokenLine(line: $0.line, reason: $0.reason.text) }
+      lines.rejected.map {
+        AutomationBrokenLine(line: $0.line, fault: AutomationLineFault($0.reason))
+      }
     )
   }
 
@@ -202,15 +204,6 @@ enum AutomationPrompts {
 struct AutomationRow: Equatable {
   let line: Int
   let text: String
-}
-
-/// 出力の中の、受け付けなかった 1 行。`line` は 1 始まりの行番号（空行も数える）。
-struct AutomationBrokenLine: Error, Equatable {
-  let line: Int
-  let reason: String
-
-  /// 「line <n>: <理由>」。
-  var text: String { "line \(line): \(reason)" }
 }
 
 /// どんな JSON オブジェクトも受ける行（オブジェクトかは `JSONLines` が見る）。

@@ -2,9 +2,9 @@ import XCTest
 
 @testable import Orbe
 
-/// 自動化の文——部品の回の要約（判定の候補の単数・複数・失敗・まだ回っていない）、時刻の今日 / ほかの日、いつ（cron の言い換え）。
+/// 自動化の文——失敗と外れた行の言い方、時刻の今日 / 昨日 / ほかの日、いつ（cron の言い換え）。
 ///
-/// 壊れると何が起きるか。英語で候補 1 件の回が「1 candidates」と読める。失敗した回が件数で出て、壊れた部品に気づけない。
+/// 壊れると何が起きるか。失敗が英文だけで出て、何が起きたか読めない。原文が消えて AI に渡す文と照らせない。
 /// 昨日の回が今日の時刻に見える。cron の言い換えが元の時刻と食い違い、表示と違う時刻に走ると読ませる
 /// （1・7 月だけの式が「毎日」に見える）。
 @MainActor
@@ -19,21 +19,16 @@ final class AutomationTextTests: OrbeTestCase {
       timeZone: DesignSceneFixtures.taskCalendar.timeZone)
   }
 
-  private func judged(taken: Int, proposed: Int, failure: String? = nil) -> AutomationPartRun {
+  private func failed(_ failure: AutomationFailure, ending: AutomationEnding) -> AutomationPartRun {
     let at = DesignSceneFixtures.automationAt(13)
     var run = AutomationPartRun(
-      startedAt: at, endedAt: at, trigger: .schedule, taken: taken,
-      execution: AutomationPartPass.Execution(
-        commandLine: "claude -p", ending: "exited 0", count: 0))
-    if let failure {
-      run.failure = failure
-    } else {
-      run.result = .judge(proposed: proposed, resolved: 0, rejected: AutomationRejections())
-    }
+      startedAt: at, endedAt: at, trigger: .schedule, taken: 3,
+      execution: AutomationPartPass.Execution(commandLine: "claude -p", ending: ending, count: 0))
+    run.failure = failure
     return run
   }
 
-  private static let judge = node("dev", "開発")
+  private static let judge = node("dev", "開発の依頼を選ぶ")
 
   private static func node(_ key: String, _ name: String) -> AutomationGraph.Node {
     let graph = try? AutomationGraph([
@@ -46,28 +41,31 @@ final class AutomationTextTests: OrbeTestCase {
     return node
   }
 
-  func testJudgeRunSummariesSaySingularAndPluralAndFailure() {
-    let en = Self.automationText(.en)
-
+  /// 失敗は日本語の説明に原文を括弧で添える。部品の申告は説明の頭に文を添え、原文を重ねない。
+  func testFailureSaysTheKindWithTheOriginal() {
     XCTAssertEqual(
-      en.latest(Self.judge, judged(taken: 12, proposed: 1)), "13:00 Judge: 開発 · 12 → 1 candidate")
+      text.failure(failed(.ended(detail: ""), ending: .timeLimit), node: Self.judge),
+      #"制限時間内に終わらなかった（the part "dev" ended: stopped at the time limit）"#)
     XCTAssertEqual(
-      en.latest(Self.judge, judged(taken: 12, proposed: 2)), "13:00 Judge: 開発 · 12 → 2 candidates")
+      text.failure(failed(.ended(detail: "boom"), ending: .exited(1)), node: Self.judge),
+      #"終了コード 1 で終わった（the part "dev" ended: exited 1: boom）"#)
     XCTAssertEqual(
-      text.latest(Self.judge, judged(taken: 12, proposed: 2)), "13:00 判定: 開発 · 12 件 → 候補 2")
-    XCTAssertEqual(
-      text.latest(Self.judge, judged(taken: 3, proposed: 0, failure: "boom")),
-      "13:00 判定: 開発 · 失敗 — boom")
-    XCTAssertEqual(text.latest(Self.judge, nil), "判定: 開発 · まだ回っていない")
+      text.failure(failed(.reported("Slack に届かない"), ending: .exited(0)), node: Self.judge),
+      "部品が失敗を申告した：Slack に届かない")
   }
 
-  /// 失敗した部品は新しい失敗を先に言い、2 つ目からは数で言う。
-  func testFailedParts() {
-    let contact = Self.node("contact", "連絡")
+  /// 外れた行は「n 行目：<説明>」。
+  func testBrokenLine() {
+    XCTAssertEqual(
+      text.line(AutomationBrokenLine(line: 3, fault: .missingKey("link"))), "3 行目：link が無い")
+    XCTAssertEqual(text.line(AutomationBrokenLine(line: 5, fault: .notJSON)), "5 行目：JSON として読めない")
+  }
 
-    XCTAssertNil(text.failed([]))
-    XCTAssertEqual(text.failed([contact]), "判定: 連絡 で失敗")
-    XCTAssertEqual(text.failed([contact, Self.judge]), "判定: 連絡 ほか 1 件 で失敗")
+  /// 一覧の時刻は、今日なら時刻だけ、昨日なら「昨日」、ほかは日付付き。
+  func testRecent() {
+    XCTAssertEqual(text.recent(DesignSceneFixtures.automationAt(16, 41)), "16:41")
+    XCTAssertEqual(text.recent(DesignSceneFixtures.automationAt(23, 0, daysAgo: 1)), "昨日 23:00")
+    XCTAssertEqual(text.recent(DesignSceneFixtures.automationAt(10, 0, daysAgo: 2)), "10/2 10:00")
   }
 
   func testWhen() {

@@ -93,7 +93,8 @@ extension AutomationStore {
 
 /// 判定の出力から読み取った 1 つの決定。`workspace` は照合を済ませた付け先の `Workspace.persistentId`。
 enum AutomationDecision: Equatable {
-  case propose(itemId: String, title: String, due: TaskItem.DueDate?, workspace: UUID?)
+  case propose(
+    itemId: String, title: String, due: TaskItem.DueDate?, workspace: UUID?, reason: String?)
   case resolve(link: String)
 }
 

@@ -37,52 +37,93 @@ struct TaskPaletteAutomationDetail: View {
   @ViewBuilder private func content(_ proposal: AutomationProposal) -> some View {
     // 名前は縮め、時刻は残す。
     HStack(spacing: Theme.Space.note + 1) {
-      Image(systemName: "tray.and.arrow.down")
-        .font(.system(size: 10, weight: .medium))
-        .foregroundStyle(Color.theme.accentBright)
+      MarkGlyph(kind: .tray, width: 10, color: Color.theme.accentBright)
       let names = [model.store.shelf(of: proposal)?.name, model.sourceName(of: proposal)]
         .compactMap { $0 }
       if !names.isEmpty {
         TruncatingSlot(names.joined(separator: " · ")) {
           fontResolver.text($0, base: Theme.Typography.meta)
         }
-        Text("·")
+        Text(verbatim: "·")
       }
-      Text(text.moment(proposal.item.time)).fixedSize()
+      Text(text.stamp(proposal.item.time)).fixedSize()
     }
     .font(Font.theme.meta)
     .foregroundStyle(Color.theme.textMuted)
     quote(proposal)
       .padding(.top, Theme.Space.beat)
+    if let reason = proposal.reason { why(reason, proposal) }
     Text(l10n.string(.taskPaletteAutomationAsTask))
       .font(Font.theme.meta)
       .foregroundStyle(Color.theme.textMuted)
-      .padding(.top, Theme.Space.span)
+      .padding(.top, Theme.Space.bar)
     fontResolver.text(proposal.title, base: Theme.Typography.title)
       .font(Font.theme.title)
       .foregroundStyle(Color.theme.textPrimary)
       .fixedSize(horizontal: false, vertical: true)
       .padding(.top, Theme.Space.note)
-    if let due = proposal.due {
-      Text(text.due(due))
+    fields(proposal)
+      .padding(.top, Theme.Space.step)
+  }
+
+  /// 「候補にした理由」と、出した判定と時刻。
+  private func why(_ reason: String, _ proposal: AutomationProposal) -> some View {
+    VStack(alignment: .leading, spacing: Theme.Space.tick) {
+      Text(l10n.string(.taskPaletteAutomationReason))
+        .font(Font.theme.meta)
+        .foregroundStyle(Color.theme.textMuted)
+      fontResolver.text(reason, base: Theme.Typography.workspaceName)
         .font(Font.theme.workspaceName)
-        .foregroundStyle(Color.theme.textSecondary)
-        .padding(.top, Theme.Space.note)
+        .foregroundStyle(Color.theme.textPrimary)
+        .lineSpacing(Self.reasonLeading)
+        .fixedSize(horizontal: false, vertical: true)
+      if let judge = model.store.automation(proposal.automationId)?.graph.node(proposal.partKey) {
+        fontResolver.text(
+          l10n.format(
+            .taskPaletteAutomationProposedBy, judge.part.name, text.moment(proposal.proposedAt)),
+          base: Theme.Typography.meta
+        )
+        .font(Font.theme.meta)
+        .foregroundStyle(Color.theme.textMuted)
+        .fixedSize(horizontal: false, vertical: true)
+      }
     }
-    Text(
-      l10n.string(.taskPaletteFieldWorkspace) + " "
-        + (model.destination(of: proposal)?.name ?? l10n.string(.taskPaletteNoWorkspace))
-    )
-    .font(Font.theme.workspaceName)
-    .foregroundStyle(Color.theme.textSecondary)
-    .lineLimit(1)
-    .truncationMode(.tail)
-    .padding(.top, Theme.Space.note)
+    .padding(.top, 14)
+  }
+
+  /// 付け先・期限・リンク。名前は描くときの今の workspace で解く。
+  private func fields(_ proposal: AutomationProposal) -> some View {
+    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 3) {
+      field(
+        .taskPaletteAutomationFieldWorkspace,
+        l10n.string(.taskPaletteFieldWorkspace) + " "
+          + (model.destination(of: proposal)?.name ?? l10n.string(.taskPaletteNoWorkspace)))
+      if let due = proposal.due {
+        field(
+          .taskPaletteAutomationFieldDue,
+          TaskDueText.label(due, today: text.today, weekdays: TaskDueText.weekdays(l10n.language)))
+      }
+      field(.taskPaletteAutomationFieldLink, GitHubItemText.link(proposal.item.link, l10n: l10n))
+    }
+    .font(Font.theme.codeSmall)
+  }
+
+  private func field(_ label: L10nKey, _ value: String) -> some View {
+    GridRow(alignment: .firstTextBaseline) {
+      Text(l10n.string(label))
+        .foregroundStyle(Color.theme.textMuted)
+        .frame(width: 64, alignment: .leading)
+      fontResolver.text(value, base: Theme.Typography.codeSmall)
+        .foregroundStyle(Color.theme.textSecondary)
+        .lineLimit(1)
+        .truncationMode(.tail)
+        .frame(maxWidth: .infinity, minHeight: 17, alignment: .leading)
+    }
   }
 
   /// 本文の全体と「↗ <ホスト名> で開く」（クリックか ⌘O でブラウザで開く）。
   private func quote(_ proposal: AutomationProposal) -> some View {
-    VStack(alignment: .leading, spacing: Theme.Space.note) {
+    VStack(alignment: .leading, spacing: Theme.Space.step) {
       fontResolver.text(proposal.item.body, base: Theme.Typography.workspaceName)
         .font(Font.theme.workspaceName)
         .foregroundStyle(Color.theme.textPrimary)
@@ -91,10 +132,10 @@ struct TaskPaletteAutomationDetail: View {
       Button {
         model.openLink()
       } label: {
-        Text(
-          "↗ "
-            + l10n.format(.taskPaletteAutomationOpenLink, AutomationText.host(proposal.item.link))
-        )
+        HStack(spacing: 5) {
+          MarkGlyph(kind: .openOut, color: Color.theme.textMuted)
+          Text(l10n.format(.taskPaletteAutomationOpenLink, AutomationText.host(proposal.item.link)))
+        }
         .font(Font.theme.meta)
         .foregroundStyle(Color.theme.textMuted)
         .lineLimit(1)
@@ -109,6 +150,10 @@ struct TaskPaletteAutomationDetail: View {
     .background(
       RoundedRectangle(cornerRadius: Theme.Radius.md).fill(Color.theme.surfaceInk.opacity(0.04)))
   }
+
+  /// 理由の行の高さ 17（見本）に当たる行間。
+  private static let reasonLeading = Theme.Typography.workspaceName.extraLeading(
+    lineHeight: 17 / Theme.Typography.workspaceName.pointSize)
 
   /// 横に並びきらない狭い欄では縦に積む（ボタンの文字は縮めない）。
   private var buttons: some View {

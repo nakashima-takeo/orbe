@@ -62,7 +62,7 @@ final class AutomationStoreTests: OrbeTestCase {
     return .succeeded(
       output, execution,
       breach: AutomationPartPass.Breach(
-        lines: [AutomationBrokenLine(line: 3, reason: "missing link")],
+        lines: [AutomationBrokenLine(line: 3, fault: .missingKey("link"))],
         redo: AutomationPartPass.Redo(firstCall: execution, lines: [])))
   }
 
@@ -180,7 +180,9 @@ final class AutomationStoreTests: OrbeTestCase {
     XCTAssertEqual(
       mark(),
       AutomationBreachMark(
-        at: Self.at, lines: AutomationRejections(count: 1, reasons: ["line 3: missing link"]),
+        at: Self.at,
+        lines: AutomationRejections(
+          count: 1, lines: [AutomationBrokenLine(line: 3, fault: .missingKey("link"))]),
         redone: true, passed: true))
     _ = try store.replace(id, with: Self.definition("改名"), now: Self.at)
     XCTAssertEqual(mark()?.at, Self.at, "名前だけなら残る")

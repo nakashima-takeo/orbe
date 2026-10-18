@@ -14,12 +14,14 @@ struct AutomationSample {
   var deleted = false
 }
 
-/// 見本の部品の 1 回。入力のある部品の回は、その時点の溜まりをすべて取った回にする。
+/// 見本の部品の 1 回。入力のある部品の回は、その時点の溜まりを（捨てる分のほかは）すべて取った回にする。
 struct AutomationSamplePass {
   let part: String
   let at: Date
   var trigger: AutomationPartRun.Trigger = .schedule
   let outcome: AutomationPartPass.Outcome
+  /// 溜まりの古い方から、届いてから古さの上限を過ぎたとして捨てる行の数。
+  var expired = 0
 }
 
 /// 提案タブの fixture（見本 R3Inbox.png と同じ並び）。今日はタスク画面と同じ 2025-10-04、走らせ役の今は同じ日の 15:00 に
@@ -58,8 +60,10 @@ extension DesignSceneFixtures {
           }
           var take: AutomationInbox.Take?
           if !node.part.inputs.isEmpty {
+            let seqs = try store.inbox(of: pass.part, in: id).map(\.seq)
             take = AutomationInbox.Take(
-              taken: try store.inbox(of: pass.part, in: id).map(\.seq), dropped: [])
+              taken: Array(seqs.dropFirst(pass.expired)),
+              dropped: seqs.prefix(pass.expired).map { .init(seq: $0, reason: .expired) })
           }
           _ = try store.record(
             AutomationPassEnd(
@@ -143,7 +147,7 @@ extension DesignSceneFixtures {
 
   // MARK: - 回
 
-  nonisolated static func execution(_ count: Int, ending: String = "exited 0")
+  nonisolated static func execution(_ count: Int, ending: AutomationEnding = .exited(0))
     -> AutomationPartPass.Execution
   {
     AutomationPartPass.Execution(commandLine: "claude -p", ending: ending, count: count)
@@ -168,11 +172,12 @@ extension DesignSceneFixtures {
 
   /// 取得の部品 `fetch` の項目への候補の案。
   nonisolated static func proposal(
-    _ item: AutomationItem, _ title: String, due: TaskItem.DueDate? = nil, workspace: UUID? = nil
+    _ item: AutomationItem, _ title: String, due: TaskItem.DueDate? = nil, workspace: UUID? = nil,
+    reason: String? = nil
   ) -> AutomationPartPass.Proposal {
     AutomationPartPass.Proposal(
       origin: AutomationOrigin(part: "fetch", item: item), title: title, due: due,
-      workspace: workspace)
+      workspace: workspace, reason: reason)
   }
 
   /// 判定の回。`rows` は読めた行の数。
@@ -182,8 +187,17 @@ extension DesignSceneFixtures {
     .succeeded(.judge(proposals: proposals, resolved: []), execution(rows), breach: nil)
   }
 
-  nonisolated static func failed(_ reason: String, count: Int = 0) -> AutomationPartPass.Outcome {
-    .failed(reason, execution(count, ending: "exited 1"), breach: nil)
+  /// 手段が 0 以外で終わった回（`detail` は標準エラーの抜粋）。
+  nonisolated static func failed(
+    _ detail: String, ending: AutomationEnding = .exited(1), count: Int = 0
+  ) -> AutomationPartPass.Outcome {
+    failed(.ended(detail: detail), ending: ending, count: count)
+  }
+
+  nonisolated static func failed(
+    _ failure: AutomationFailure, ending: AutomationEnding = .exited(1), count: Int = 0
+  ) -> AutomationPartPass.Outcome {
+    .failed(failure, execution(count, ending: ending), breach: nil)
   }
 
   nonisolated static func reported(_ text: String?) -> AutomationPartPass.Outcome {

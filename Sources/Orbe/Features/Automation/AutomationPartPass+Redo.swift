@@ -36,7 +36,7 @@ extension AutomationPartPass {
     case .read(let output, let count, let still):
       let breach = Breach(lines: lines, redo: Redo(firstCall: first, lines: still))
       let last = execution(result, count: count)
-      guard still.isEmpty else { return .failed(broke(node, still), last, breach: breach) }
+      guard still.isEmpty else { return .failed(.brokeRules, last, breach: breach) }
       return .succeeded(output, last, breach: breach)
     }
   }
