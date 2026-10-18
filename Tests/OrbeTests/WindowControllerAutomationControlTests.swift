@@ -283,5 +283,15 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertEqual(result["proposed"] as? Int, 1)
     XCTAssertEqual(parts["judge"]?["inbox"] as? Int, 0)
     XCTAssertNil(parts["fetch"]?["inbox"], "入力の無い部品は溜まりを持たない")
+
+    let fetched = try XCTUnwrap((parts["fetch"]?["runs"] as? [[String: Any]])?.first)
+    XCTAssertEqual(
+      Set(fetched.keys),
+      ["startedAt", "endedAt", "trigger", "execution", "result", "stacked", "withdrawn"])
+    XCTAssertEqual((fetched["execution"] as? [String: Any])?["count"] as? Int, 1)
+    XCTAssertEqual(fetched["stacked"] as? Int, 1)
+    let fetchResult = try XCTUnwrap(fetched["result"] as? [String: Any])
+    XCTAssertEqual(fetchResult["kind"] as? String, "fetch")
+    XCTAssertEqual(fetchResult["fresh"] as? Int, 1)
   }
 }

@@ -161,6 +161,24 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     XCTAssertTrue(sound.played.isEmpty)
   }
 
+  /// 判定の回は候補を 1 つ以上出したときだけ知らせ、候補の無い回は知らせない。取得の成功した回は知らせない。
+  @MainActor func testAJudgeRunIsToldOnlyWhenItProposedSomething() throws {
+    let wc = controller()
+    let store = wc.automationStore
+    var definition = AutomationStoreTests.definition()
+    definition.notify = .menuBar
+    let id = try store.create(definition, now: AutomationStoreTests.at).id
+    let (a, b) = (AutomationStoreTests.item("a"), AutomationStoreTests.item("b"))
+
+    try AutomationStoreTests.fetch(store, id, [a])
+    XCTAssertNil(wc.automationNotification(id, "fetch"))
+    try AutomationStoreTests.judge(store, id, proposing: [a])
+    XCTAssertNotNil(wc.automationNotification(id, "judge"))
+    try AutomationStoreTests.fetch(store, id, [a, b])
+    try AutomationStoreTests.judge(store, id)
+    XCTAssertNil(wc.automationNotification(id, "judge"))
+  }
+
   /// 部品の出力が決まりを外した最初の回は外したことを知らせ、その回の失敗も同じ 1 つの知らせで言う。印がある間は、外しても
   /// 外したことは知らせない（失敗の続きの最初としては知らせる）。
   @MainActor func testOnlyTheFirstBreachIsToldAndItsFailureRidesOnIt() throws {
