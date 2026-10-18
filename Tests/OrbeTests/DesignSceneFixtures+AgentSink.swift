@@ -11,8 +11,7 @@ extension DesignSceneFixtures {
       (4, worked(.done(nil))),
       (
         3,
-        failed(
-          "the part \"post\" reported an error: mcp__slack__slack_send_message was refused")
+        failed(AutomationFailure.reported("mcp__slack__slack_send_message was refused"))
       ),
       (2, worked(.nothing("レビュー待ちの PR は無かった"))),
       (

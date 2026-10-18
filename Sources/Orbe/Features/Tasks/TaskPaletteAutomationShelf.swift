@@ -33,7 +33,7 @@ struct TaskPaletteAutomationShelf: View {
 
   private func row(_ row: TaskPaletteAutomationShelfRow) -> some View {
     TaskPaletteAutomationShelfRowView(
-      row: row, status: row.automation.map { model.status(of: $0, count: row.count) },
+      row: row, status: row.automation.map { model.status(of: $0) },
       text: AutomationText(l10n: l10n, today: model.today, timeZone: model.timeZone),
       selected: model.shelfList.selectedID == row.id, focused: model.place == .shelf
     )
@@ -44,8 +44,8 @@ struct TaskPaletteAutomationShelf: View {
   }
 }
 
-/// 棚の 1 段。印はどの受信も共通（出どころの種類は知らない）。棚に焦点が無い間は、選択の地を薄くする（選んでいるが、
-/// キーが届く場所ではない）。
+/// 棚の 1 段。上に印・名前・件数、下に前回の判定（成否の印と時刻）と今の状態（更新中・停止中）。印はどの受信も共通（出どころの
+/// 種類は知らない）。棚に焦点が無い間は、選択の地を薄くする（選んでいるが、キーが届く場所ではない）。
 private struct TaskPaletteAutomationShelfRowView: View {
   let row: TaskPaletteAutomationShelfRow
   let status: TaskPaletteAutomationShelfStatus?
@@ -56,12 +56,10 @@ private struct TaskPaletteAutomationShelfRowView: View {
   @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
-    HStack(alignment: .top, spacing: Theme.Space.step + 1) {
+    HStack(alignment: .top, spacing: 9) {
       Group {
         if row.automation != nil {
-          Image(systemName: "tray.and.arrow.down")
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(Color.theme.accentBright)
+          MarkGlyph(kind: .tray, color: Color.theme.accentBright)
         } else {
           Color.clear
         }
@@ -71,22 +69,19 @@ private struct TaskPaletteAutomationShelfRowView: View {
         HStack(alignment: .top, spacing: Theme.Space.step) {
           fontResolver.text(name, base: Theme.Typography.workspaceName)
             .font(Font.theme.workspaceName)
-            .foregroundStyle(dimmed ? Color.theme.textMuted : Color.theme.textPrimary)
+            .foregroundStyle(Color.theme.textPrimary)
             .lineLimit(2)
             .fixedSize(horizontal: false, vertical: true)
           Spacer(minLength: 0)
-          Text("\(row.count)")
+          Text(verbatim: "\(row.count)")
             .font(Font.theme.workspaceName)
             .foregroundStyle(Color.theme.textMuted)
         }
-        if let status {
-          line(status)
-            .font(Font.theme.meta)
-            .lineLimit(2)
-        }
+        .frame(minHeight: 18)
+        if let status { line(status) }
       }
     }
-    .padding(.vertical, Theme.Space.step + 1)
+    .padding(.vertical, 9)
     .padding(.horizontal, Theme.Space.beat)
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
@@ -101,29 +96,57 @@ private struct TaskPaletteAutomationShelfRowView: View {
     row.automation?.name ?? l10n.string(.taskPaletteAutomationAll)
   }
 
-  private var dimmed: Bool { row.automation != nil && row.count == 0 }
+  /// 成否の印と「前回の判定 13:00」、右に「更新中」「停止中」。まだ判定していなければ印なしの一言。並びきらない狭い棚では、
+  /// 今の状態を次の行へ送る（前回の時刻を省かない）。
+  private func line(_ status: TaskPaletteAutomationShelfStatus) -> some View {
+    ViewThatFits(in: .horizontal) {
+      HStack(spacing: 6) {
+        last(status)
+        Spacer(minLength: Theme.Space.tick)
+        state(status)
+      }
+      VStack(alignment: .leading, spacing: 3) {
+        last(status)
+        state(status)
+      }
+    }
+    .font(Font.theme.meta)
+    .foregroundStyle(Color.theme.textMuted)
+    .lineLimit(1)
+    .frame(minHeight: 15)
+  }
 
-  /// 「次の判定 9:00 · 候補なし · 判定: 連絡 · 失敗」。更新中は強調色でそれだけ、失敗した部品は赤（どちらも文字でも言う）。
-  private func line(_ status: TaskPaletteAutomationShelfStatus) -> Text {
-    let muted = { (value: String) in Text(value).foregroundStyle(Color.theme.textMuted) }
-    guard case .standing(let plan, let noCandidates, let failed) = status else {
-      return Text(l10n.string(.taskPaletteAutomationRefreshing))
-        .foregroundStyle(Color.theme.accentBright)
+  private func last(_ status: TaskPaletteAutomationShelfStatus) -> some View {
+    HStack(spacing: 6) {
+      if let last = status.last {
+        MarkGlyph(
+          kind: last.failed ? .failure : .success,
+          color: last.failed ? Color.theme.danger : Color.theme.accentBright)
+        Text(l10n.format(.taskPaletteAutomationLastJudge, text.stamp(last.at)))
+      } else {
+        Text(l10n.string(.taskPaletteAutomationNeverJudged))
+      }
     }
-    var parts: [Text] = []
-    switch plan {
-    case .paused: parts.append(muted(l10n.string(.automationPaused)))
-    case .at(let date):
-      parts.append(muted(l10n.format(.taskPaletteAutomationNextJudge, text.stamp(date))))
-    case .onArrival: parts.append(muted(l10n.string(.taskPaletteAutomationJudgeOnArrival)))
-    case .manual: parts.append(muted(l10n.string(.taskPaletteAutomationJudgeManual)))
-    case nil: break
+    .fixedSize()
+  }
+
+  @ViewBuilder private func state(_ status: TaskPaletteAutomationShelfStatus) -> some View {
+    switch status.state {
+    case .refreshing:
+      HStack(spacing: 5) {
+        StatusGlyphView(kind: .working, size: 10)
+        Text(l10n.string(.taskPaletteAutomationRefreshing))
+      }
+      .foregroundStyle(Color.theme.accentBright)
+      .fixedSize()
+    case .paused:
+      HStack(spacing: 5) {
+        MarkGlyph(kind: .paused, color: Color.theme.textMuted)
+        Text(l10n.string(.automationPaused))
+      }
+      .fixedSize()
+    case nil:
+      EmptyView()
     }
-    if noCandidates { parts.append(muted(l10n.string(.taskPaletteAutomationNoProposals))) }
-    if let failed = text.failed(failed) {
-      parts.append(Text(failed).foregroundStyle(Color.theme.danger))
-    }
-    guard let first = parts.first else { return Text("") }
-    return parts.dropFirst().reduce(first) { $0 + muted(" · ") + $1 }
   }
 }

@@ -6,9 +6,9 @@ import XCTest
 /// ボードの自動化の部品——一覧の並びと、選んだ自動化へのキー。本物の `BoardView`（中身は SwiftUI）を実窓に載せ、実
 /// `NSEvent` のキーを届ける。走らせ役は取得が終わらない偽物で、本物の claude は起きない。
 ///
-/// 壊れると何が起きるか: 前回が失敗した自動化が一覧の上に来ず、壊れた取得に気づけない。走り出すたびに行が跳ね、↵ を押した
+/// 壊れると何が起きるか: 前回が失敗した自動化が一覧の上に来ず、壊れた取得に気づけない。走り出すたびに行が跳ね、⌘↵ を押した
 /// 直後に選択の位置が狂う。⌘⌫ を押し続けたリピートで次の自動化まで消える（戻せない）。space のリピートで止める ⇄ 再開が
-/// 往復し、どちらになったか分からない。⌘↵ で今すぐ実行が走る。AI や ⌘⇧X が選んでいる自動化を消すと選択が宙に浮き、
+/// 往復し、どちらになったか分からない。⇧↵ で今すぐ実行が走る。AI や ⌘⇧X が選んでいる自動化を消すと選択が宙に浮き、
 /// 詳細が消えてキーが効かなくなる。
 @MainActor
 final class BoardAutomationTests: PaletteCardWindowTestCase {
@@ -55,10 +55,10 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
   }
 
   /// ボードを実窓に載せ、ボードを選んだときと同じ当て直し（`focus()`）で焦点を中へ入れる。部品は欄から始まる。
-  func mount(_ model: BoardModel) -> NSWindow {
+  func mount(_ model: BoardModel, height: CGFloat = 700) -> NSWindow {
     NSApplication.shared.setActivationPolicy(.accessory)
     let window = KeyDeliveryWindow(
-      contentRect: NSRect(x: -20000, y: -20000, width: 1200, height: 700),
+      contentRect: NSRect(x: -20000, y: -20000, width: 1200, height: height),
       styleMask: [.borderless], backing: .buffered, defer: false)
     window.contentView = BoardView(
       model: model, translucency: ChromeTranslucency(),
@@ -106,7 +106,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
 
   // MARK: - キー
 
-  /// ↓ で選び、space で止める ⇄ 再開（沈んでも選択は付いていく）、↵ で今すぐ実行、⌘⌫ で消して同じ位置の行を選ぶ。
+  /// ↓ で選び、space で止める ⇄ 再開（沈んでも選択は付いていく）、⌘↵ で今すぐ実行、⌘⌫ で消して同じ位置の行を選ぶ。
   func testKeysActOnTheSelectedAutomation() {
     let model = board()
     let automation = model.automation
@@ -122,10 +122,10 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     send(Key.space, " ", to: window)
     XCTAssertEqual(automation.store.automation(Self.slack)?.paused, false)
 
-    send(Key.enter, "\r", to: window)
+    send(Key.enter, "\r", .command, to: window)
     XCTAssertTrue(automation.runner.isRunning(Self.slack))
-    send(Key.enter, "\r", to: window)
-    XCTAssertEqual(model.refusal, .automationErrRunning, "走っている間の ↵ は赤で断る")
+    send(Key.enter, "\r", .command, to: window)
+    XCTAssertEqual(model.refusal, .automationErrRunning, "走っている間の ⌘↵ は赤で断る")
 
     down(window)
     XCTAssertNil(model.refusal, "↓ で消える")
@@ -135,7 +135,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     XCTAssertEqual(automation.selectedAutomation?.id, Self.pausedGmail, "同じ位置の行")
   }
 
-  /// space・↵・⌘⌫ は押し続けても 1 回だけ効く。
+  /// space・⌘↵・⌘⌫ は押し続けても 1 回だけ効く。
   func testHeldKeysActOnce() {
     let model = board()
     let automation = model.automation
@@ -147,10 +147,10 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     send(Key.space, " ", repeating: true, to: window)
     XCTAssertEqual(automation.store.automation(Self.slack)?.paused, true, "止める ⇄ 再開は 1 回だけ（往復しない）")
 
-    send(Key.enter, "\r", to: window)
-    send(Key.enter, "\r", repeating: true, to: window)
+    send(Key.enter, "\r", .command, to: window)
+    send(Key.enter, "\r", .command, repeating: true, to: window)
     XCTAssertTrue(automation.runner.isRunning(Self.slack))
-    XCTAssertNil(model.refusal, "リピートで「実行中のため今すぐ実行できません」の赤を出さない")
+    XCTAssertNil(model.refusal, "リピートで「実行中のため、今は実行できません」の赤を出さない")
 
     send(Key.delete, "\u{7F}", .command, to: window)
     send(Key.delete, "\u{7F}", .command, repeating: true, to: window)
@@ -160,7 +160,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
       "消えるのは 1 件だけ")
   }
 
-  /// 今すぐ実行は修飾なしの ↵ だけ。⇧↵・文字キーは何も起こさない（⌘↵ は直しの依頼で、走らせない）。
+  /// 今すぐ実行は ⌘↵ だけ。⇧↵・文字キーは何も起こさない。
   func testModifiedEnterAndLettersDoNothing() {
     let model = board()
     let automation = model.automation

@@ -8,9 +8,9 @@ import XCTest
 extension TaskPaletteModelTests {
   /// 頼みを記録し、`refusal` を返す秘書。
   private func recording(_ palette: TaskPaletteModel, _ refusal: Secretary.Refusal? = nil)
-    -> () -> [SecretaryAsk]
+    -> () -> [String]
   {
-    var asks: [SecretaryAsk] = []
+    var asks: [String] = []
     palette.onAskSecretary = {
       asks.append($0)
       return refusal
@@ -26,7 +26,7 @@ extension TaskPaletteModelTests {
 
     palette.askWithQuery()
 
-    XCTAssertEqual(asks(), [.text("見積もりを山田さんに送る")])
+    XCTAssertEqual(asks(), ["見積もりを山田さんに送る"])
     XCTAssertEqual(palette.store.tasks.count, 3, "タスクは増えない")
     XCTAssertEqual(palette.query, "")
   }

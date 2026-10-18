@@ -156,7 +156,7 @@ final class AutomationTrialTests: OrbeTestCase {
     }
     XCTAssertEqual(proposed.map(\.title), ["B"])
     XCTAssertEqual(
-      trial.passes["judge"]?.first?.run.result, .judge(proposed: 1, resolved: 0, rejected: .init()))
+      trial.passes["judge"]?.first?.run.result, .judge(proposed: 1, resolved: 0, dismissed: []))
     XCTAssertEqual(store.automations, automations)
     XCTAssertEqual(store.proposals, proposals)
     XCTAssertEqual(recorded, notices, "試走の回は本番の知らせに届かない")

@@ -5,8 +5,8 @@ import XCTest
 
 /// 自動化の部品の中の焦点——依頼の欄と一覧の行き来。本物の `BoardView` を実窓に載せ、実 `NSEvent` のキーとクリックを届ける。
 ///
-/// 壊れると何が起きるか: 欄と一覧を行き来できず、頼めないか一覧を操れない。欄で打った space・↵ が一覧の止める・今すぐ実行になる。クリックした場所と
-/// キーの届く場所が食い違い、行をクリックしてから押した space が欄に入る。
+/// 壊れると何が起きるか: 欄と一覧を行き来できず、頼めないか一覧を操れない。欄で打った space・↵ が一覧の止める・地図へ入る
+/// 操作になる。クリックした場所とキーの届く場所が食い違い、行をクリックしてから押した space が欄に入る。
 extension BoardAutomationTests {
   /// 一覧の行・欄・地の窓の中の点（1200×700 の窓、見本の寸法から）。
   private enum Point {
@@ -55,7 +55,7 @@ extension BoardAutomationTests {
 
   /// 欄は一覧の上の 1 段で、欄と行は 1 つの選択を分け合う。部品は欄から始まり、欄を選んでいる間は行の選択と詳細が無い。
   /// 欄の ↓ で一覧の先頭、先頭の行の ↑ で欄、欄の ↑ で一覧の末尾（巡回）、末尾の行の ↓ で欄（巡回）、欄の esc は ↓ と同じく
-  /// 一覧の先頭へ。⇥ は欄でも一覧でも何もしない。
+  /// 一覧の先頭へ。⇥・⇧⇥ は欄でも一覧でも何もせず、一覧の → で地図へ入り、地図の ← で一覧へ戻る。
   func testArrowsMoveOneSelectionThroughTheFieldAndTheRows() {
     let model = board()
     let automation = model.automation
@@ -75,7 +75,12 @@ extension BoardAutomationTests {
     XCTAssertEqual(automation.place, .list, "欄の ↓ で一覧へ")
     XCTAssertEqual(automation.selectedAutomation?.id, Self.failingBacklog, "一覧の先頭")
     send(Key.tab, "\t", to: window)
-    XCTAssertEqual(automation.place, .list, "一覧の ⇥ は何もしない")
+    send(Key.tab, "\u{19}", .shift, to: window)
+    XCTAssertEqual(automation.place, .list, "一覧の ⇥ / ⇧⇥ は何もしない")
+    right(window)
+    XCTAssertEqual(automation.place, .map, "一覧の → で地図へ")
+    left(window)
+    XCTAssertEqual(automation.place, .list, "地図の ← で一覧へ")
     down(window)
     XCTAssertEqual(automation.selectedAutomation?.id, Self.slack, "一覧のキーが効く")
 
@@ -139,7 +144,8 @@ extension BoardAutomationTests {
     XCTAssertEqual(automation.requestText, "a")
   }
 
-  /// 欄のクリックで欄、行や一覧の下の空きのクリックで一覧、地のクリックで最後に居た場所へ移り、直後のキーがそこに届く。
+  /// 欄のクリックで欄、行や一覧の下の空きのクリックで一覧へ移る。右の地のクリックは、欄に居れば欄のまま、自動化を選んで
+  /// いれば地図へ入る。直後のキーはそこに届く。
   func testClicksMoveTheFocusAndTheNextKeyArrivesThere() {
     let model = board()
     let automation = model.automation
@@ -164,11 +170,13 @@ extension BoardAutomationTests {
     XCTAssertEqual(automation.requestText, "c", "欄へ戻ると全文が選ばれているので、打てば置き換わる")
 
     send(Key.escape, "\u{1B}", to: window)
+    let chosen = automation.selectedAutomation?.id
     click(Point.ground, in: window)
-    XCTAssertEqual(automation.place, .list)
-    let before = automation.selectedAutomation?.id
+    XCTAssertEqual(automation.place, .map, "自動化を選んでいれば、地図の地は地図")
+    let before = automation.selectedMapStop
     down(window)
-    XCTAssertNotEqual(automation.selectedAutomation?.id, before, "地のクリックの直後の ↓ は一覧に効く")
+    XCTAssertNotEqual(automation.selectedMapStop, before, "地のクリックの直後の ↓ は地図に効く")
+    XCTAssertEqual(automation.selectedAutomation?.id, chosen, "一覧の選択は動かない")
 
     click(Point.field, in: window)
     click(Point.listGround, in: window)

@@ -1,7 +1,7 @@
 import SwiftUI
 
 extension AutomationNotify {
-  /// 通知先の名前。サブメニューの行と詳細の注記が引く。
+  /// 通知先の名前。サブメニューの行と見出しの「通知」の行が引く。
   var labelKey: L10nKey {
     switch self {
     case .menuBar: .boardNotifyMenuBar
@@ -10,10 +10,9 @@ extension AutomationNotify {
   }
 }
 
-/// サブメニュー「通知」を重ねる位置: 一覧の右端と、一覧の見える範囲と、選んでいる行。一覧は ScrollView なので、行の中に
-/// 重ねると一覧の幅で切られる。部品の高さへ運んで重ねる。
+/// サブメニュー「通知」を重ねる位置: 詳細の見える範囲と、見出しの「通知」の行。詳細は ScrollView なので、行の中に重ねると
+/// 詳細の幅で切られる。部品の高さへ運んで重ねる。
 struct BoardAutomationNotifyAnchor: PreferenceKey {
-  var list: Anchor<CGRect>?
   var viewport: Anchor<CGRect>?
   var row: Anchor<CGRect>?
 
@@ -23,24 +22,20 @@ struct BoardAutomationNotifyAnchor: PreferenceKey {
     value: inout BoardAutomationNotifyAnchor, nextValue: () -> BoardAutomationNotifyAnchor
   ) {
     let next = nextValue()
-    value.list = next.list ?? value.list
     value.viewport = next.viewport ?? value.viewport
     value.row = next.row ?? value.row
   }
 }
 
-/// 開いているサブメニュー「通知」を部品に重ねる層。選んでいる行の右、一覧の右の罫線の外に、行の上端に揃えて置き、開いている
-/// 間も行を追う。部品の端を越えるなら内側へずらす。置くのは行が一覧の見える範囲に収まっている間だけで、開いている間に外れたら
-/// 閉じる——見えない行の横へずらして置くと、見えている別の行の通知を替えたと取り違えるため。開いた直後は行が見える範囲へ
-/// 流れてくる途中なので、外れていても閉じない。メニューの外のクリックは閉じるだけで、下へは届かない。
+/// 開いているサブメニュー「通知」を部品に重ねる層。「通知」の行の右に、行の上端に揃えて置く。部品の端を越えるなら内側へずらす。
+/// 置くのは行が詳細の見える範囲に収まっている間だけで、開いている間に外れたら閉じる。メニューの外のクリックは閉じるだけで、
+/// 下へは届かない。
 struct BoardAutomationNotifyLayer: View {
   let model: BoardAutomationModel
   let anchors: BoardAutomationNotifyAnchor
 
   var body: some View {
-    if model.notifyCursor != nil, let list = anchors.list, let viewport = anchors.viewport,
-      let row = anchors.row
-    {
+    if model.notifyCursor != nil, let viewport = anchors.viewport, let row = anchors.row {
       GeometryReader { proxy in
         let visible = Self.contains(proxy[viewport], proxy[row])
         ZStack(alignment: .topLeading) {
@@ -49,7 +44,7 @@ struct BoardAutomationNotifyLayer: View {
             .onTapGesture { model.closeNotify() }
           if visible {
             BoardAutomationNotifyPlacement(
-              origin: CGPoint(x: proxy[list].maxX + Theme.Space.tick, y: proxy[row].minY)
+              origin: CGPoint(x: proxy[row].maxX + Theme.Space.step, y: proxy[row].minY)
             ) {
               BoardAutomationNotifyMenu(model: model)
             }
@@ -122,9 +117,7 @@ struct BoardAutomationNotifyMenu: View {
     let choose = { model.chooseNotify(choice) }
     return SelectableRow(selected: model.notifyCursor == index, action: choose) {
       HStack(spacing: Theme.Space.step) {
-        Image(systemName: "checkmark")
-          .font(.system(size: 9, weight: .semibold))
-          .foregroundStyle(Color.theme.accentBright)
+        MarkGlyph(kind: .success, width: 9, color: Color.theme.accentBright)
           .opacity(on ? 1 : 0)
         Text(l10n.string(choice?.labelKey ?? .boardNotifyOff))
           .font(Font.theme.chrome)

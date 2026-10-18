@@ -3,13 +3,13 @@ import XCTest
 @testable import Orbe
 
 /// 結び付いた Issue・PR の表示規則（`GitHubItemText`）。一覧の行と右の欄の Issue・PR の欄は、どちらも
-/// この規則を読むだけで出し方を決める。
+/// この規則を読むだけで出し方を決める。自動化の候補のリンクの言い方もここが持つ。
 ///
 /// 壊れると何が起きるか: GitHub の値が届くまで（再起動直後・オフライン・gh が無い）行から番号まで消え、
 /// どのタスクがどの Issue かが分からなくなる。状態の強さを取り違えると、マージ済みの PR が「レビュー待ち」と
 /// 出て、人が終わった作業に手を戻す。終わった PR に CI を出すと、もう直せない失敗が人を呼ぶ。保存した種別と
 /// 実体の種別が食い違うまま値を出すと、Issue のタイトルが PR の札に載る。自分の PR に「レビュー」と出ると、
-/// 人は自分を待つ。
+/// 人は自分を待つ。候補のリンクで PR と Issue を取り違えるか、Issue を worktree の PR として結ぶ。
 final class GitHubItemTextTests: OrbeTestCase {
   private func link(_ kind: GitHubItemKind, _ number: Int, repo: String = "o/n") -> TaskLink {
     TaskLink(item: GitHubItemID(repo: repo, number: number)!, kind: kind)
@@ -151,5 +151,26 @@ final class GitHubItemTextTests: OrbeTestCase {
     XCTAssertFalse(needsReview([pr], issue(), "nakatake"), "PR として付けた番号が実は Issue")
     XCTAssertFalse(
       needsReview([link(.issue, 212), pr], pullRequest(author: "sato"), "nakatake"), "主が Issue")
+  }
+
+  // MARK: - 候補のリンク
+
+  /// GitHub の PR・Issue のページは種別と番号とリポジトリ名で言い、それ以外（GitHub の別のページを含む）はスキームを除いた
+  /// URL のまま。PR の口（worktree の PR の解決）は Issue のページを PR と読まない。
+  func testLinkTellsPullRequestsFromIssuesAndLeavesOtherPagesAsAddresses() {
+    let ja = LocalizationStore(language: .ja)
+
+    XCTAssertEqual(
+      GitHubItemText.link("https://github.com/acme/storefront/pull/405", l10n: ja),
+      "PR #405（storefront）")
+    XCTAssertEqual(
+      GitHubItemText.link("https://github.com/acme/orbe/issues/12", l10n: ja), "Issue #12（orbe）")
+    XCTAssertEqual(
+      GitHubItemText.link("https://github.com/acme/storefront/actions/runs/398", l10n: ja),
+      "github.com/acme/storefront/actions/runs/398")
+    XCTAssertEqual(
+      GitHubItemText.link("https://sentry.io/organizations/acme/issues/7", l10n: ja),
+      "sentry.io/organizations/acme/issues/7")
+    XCTAssertNil(GitHubItemID(pullRequestURL: "https://github.com/acme/orbe/issues/12"))
   }
 }

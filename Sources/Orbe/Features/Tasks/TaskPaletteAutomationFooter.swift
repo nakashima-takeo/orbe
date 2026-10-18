@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// 提案タブのフッターの左（居場所と選択で、主なキーが何をするか。失敗は赤で置き換える）。
+/// 提案タブのフッターの左（居場所と選択で、主なキーが何をするか。失敗は赤で置き換える）。候補の一覧に居る間は出さない——
+/// 候補をさばくキーは詳細のボタンに出ている。
 struct TaskPaletteAutomationAction: View {
   @Bindable var model: TaskPaletteAutomationModel
   @Environment(\.localization) private var l10n
@@ -23,11 +24,7 @@ struct TaskPaletteAutomationAction: View {
             key: "→", template: l10n.string(.taskPaletteAutomationActionProposals), slots: [])
         }
       case .proposals:
-        if let proposal = model.selectedProposal {
-          PaletteActionLine(
-            key: "↵", template: l10n.string(.taskPaletteAutomationActionAccept),
-            slots: [.emphasis(proposal.title)])
-        }
+        EmptyView()
       }
     }
   }
@@ -52,11 +49,7 @@ struct TaskPaletteAutomationHints: View {
       }
     case .proposals:
       TaskPaletteHintRow(cyclesTabs: cyclesTabs, escape: .taskPaletteHintClose) {
-        if model.selectedProposal != nil {
-          PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteMakeTaskOpen))
-          PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteAutomationDismiss))
-          PaletteKeyHint(key: "⌘O", label: l10n.string(.taskPaletteHintOpenInBrowser))
-        }
+        PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteAutomationHintCandidates))
         PaletteKeyHint(key: "←", label: l10n.string(.taskPaletteAutomationHintShelf))
       }
     }

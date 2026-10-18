@@ -183,8 +183,9 @@ final class AutomationTrial {
         return .fetched(part: entry.key, output: output, count: count)
       case .read(_, _, let lines):
         throw .invalid("rows: \(lines[0].text)")
-      case .failed(let reason):
-        throw .invalid("rows: \(reason)")
+      case .failed(let failure):
+        throw .invalid(
+          "rows: \(failure.text(part: entry.key, ending: .givenToTrial, breach: nil))")
       }
     case .process, .report, .work, .sideEffect:
       var arrivals: [AutomationPartRow] = []
@@ -269,12 +270,12 @@ final class AutomationTrial {
       let rows = (try? runner?.store.rows(start.take?.taken ?? [])) ?? []
       held[node.key] = rows.map(\.text)
       let output: AutomationPartPass.Output =
-        node.role == .sideEffect ? .sideEffect : .work(.nothing(Self.heldEnding))
+        node.role == .sideEffect ? .sideEffect : .work(.nothing(AutomationEnding.heldByTrial.text))
       return later(
         .succeeded(
           output,
           AutomationPartPass.Execution(
-            commandLine: "", ending: Self.heldEnding, count: rows.count), breach: nil),
+            commandLine: "", ending: .heldByTrial, count: rows.count), breach: nil),
         completion)
     case .fetch:
       if case .fetched(let part, let output, let count) = given, part == node.key {
@@ -283,7 +284,7 @@ final class AutomationTrial {
             .succeeded(
               output,
               AutomationPartPass.Execution(
-                commandLine: "", ending: Self.givenEnding, count: count), breach: nil)),
+                commandLine: "", ending: .givenToTrial, count: count), breach: nil)),
           completion)
       }
       return start.pass.start(node, start.input) { [weak self] outcome in
@@ -293,9 +294,6 @@ final class AutomationTrial {
       return start.pass.start(node, start.input, completion: completion)
     }
   }
-
-  private static let heldEnding = "held by the trial"
-  private static let givenEnding = "rows given to the trial"
 
   /// 手段を起こさない回も、結果は普段の部品の 1 回と同じく後の main で返す（起こした契機の中へ同期に戻さない）。
   private func later(

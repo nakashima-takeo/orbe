@@ -31,13 +31,9 @@ struct Automation: Equatable, Identifiable {
     return state
   }
 
-  /// 最後の回が失敗した部品（その失敗の新しい順）。
-  var failedParts: [AutomationGraph.Node] {
-    graph.nodes.compactMap { node in
-      state(node.key).runs.first.flatMap { $0.failed ? (node: node, at: $0.startedAt) : nil }
-    }
-    .sorted { ($0.at, $0.node.key) > ($1.at, $1.node.key) }
-    .map(\.node)
+  /// 最後の回が失敗した部品があるか。
+  var failing: Bool {
+    graph.nodes.contains { state($0.key).runs.first?.failed == true }
   }
 
   /// 部品の回をすべて、新しい順に混ぜたもの。
@@ -153,6 +149,8 @@ struct AutomationProposal: Equatable, Identifiable {
   let due: TaskItem.DueDate?
   /// 付け先の `Workspace.persistentId`（判定が決める）。解決できない参照は「なし」と同じに扱う。
   let workspace: UUID?
+  /// 候補にした理由（判定が書いたときだけ）。
+  let reason: String?
   let proposedAt: Date
   var state: State
 

@@ -3,20 +3,20 @@ import XCTest
 @testable import Orbe
 
 /// 自動化の 8 動詞のドメイン側を、実 `WindowController` 越しに固定する。起動で保存済みの部品が番人に載ること、
-/// 提案と重なりが棚に出す自動化の側に出ること、拒否が制御 API の語彙になること、一覧の定義を `set_automation` へ戻せること、
-/// 一覧の部品の回の記録が保存と同じ形であること。候補の付け先は今ある workspace に解けるときだけ起動ごとの id と名前で出ること。
+/// 提案と重なりが棚に出す自動化の側に出ること、拒否が制御 API の語彙になること、一覧の定義を `set_automation` へ戻せること。
+/// 候補の付け先は今ある workspace に解けるときだけ起動ごとの id と名前で、候補にした理由は判定が書いたときだけ出ること。
 /// 試走は始めた応答で道の上の部品を返し、待って読むと部品ごとの回の結果（取得の rows・止めた副作用の held.rows）を返し、
 /// 始める前と自動化を消した後は -32004 で読めないこと。
 ///
 /// 壊れると何が起きるか: Orbe を再起動しただけで全自動化が黙って回らなくなる。AI が自動化の棚を読んでも、提案した自動化が
 /// もう取っていない提案が混ざる・取っている自動化に出ない。流している自動化への `run_automation` が別の誤りに化ける。
-/// 一覧の定義を書き換えて戻すと、予定や部品が別物になる。回の記録を読む AI・秘書が、部品ごとの件数や結果を読めなくなる。
-/// AI が候補の付け先を読めない、または消えた workspace を付け先として読む。AI が試走を始めても結果を読めない、止めた副作用に
+/// 一覧の定義を書き換えて戻すと、予定や部品が別物になる。
+/// AI が候補の付け先や候補にした理由を読めない、または消えた workspace を付け先として読む。AI が試走を始めても結果を読めない、止めた副作用に
 /// 何が渡るはずだったかを確かめられず本番で初めて誤りに気づく、試走をまだ始めていないのに自動化が無いと読んで作り直す。
 ///
 /// 重要: 実 NSWindow に SurfaceView を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerAutomationControlTests: OrbeTestCase {
-  private func launch() throws -> WindowController {
+  func launch() throws -> WindowController {
     let file = WorkspacesFile(
       version: WorkspacePersistence.version, activeWorkspace: 0,
       workspaces: [
@@ -28,7 +28,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     return WindowController()
   }
 
-  private func success(
+  func success(
     _ result: Result<Any, ControlError>, file: StaticString = #filePath, line: UInt = #line
   ) throws -> [String: Any] {
     switch result {
@@ -45,7 +45,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     return nil
   }
 
-  private func listed(_ wc: WindowController) throws -> [Int: [String: Any]] {
+  func listed(_ wc: WindowController) throws -> [Int: [String: Any]] {
     let automations = try XCTUnwrap(
       success(wc.controlListAutomations())["automations"] as? [[String: Any]])
     return Dictionary(
@@ -58,7 +58,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
         as? [[String: Any]])
   }
 
-  private func set(_ wc: WindowController, _ definition: AutomationDefinition) throws -> Int {
+  func set(_ wc: WindowController, _ definition: AutomationDefinition) throws -> Int {
     try XCTUnwrap(
       (success(wc.controlSetAutomation(automationId: nil, definition))["automation"]
         as? [String: Any])?["automationId"] as? Int)
@@ -77,10 +77,11 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
   }
 
   /// 取得の回を確定し、`proposing` があれば溜まりをすべて取った判定の回で候補にする（タイトルは `titles`、付け先は
-  /// `workspaces` の順。省けば「対応: <id>」・付け先なし）。
+  /// `workspaces`、候補にした理由は `reasons` の順。省けば「対応: <id>」・付け先なし・理由なし）。
   static func round(
     _ store: AutomationStore, _ id: Int, fetched items: [AutomationItem],
-    proposing: [AutomationItem] = [], titles: [String]? = nil, workspaces: [UUID?]? = nil
+    proposing: [AutomationItem] = [], titles: [String]? = nil, workspaces: [UUID?]? = nil,
+    reasons: [String?]? = nil
   ) throws {
     let now = Date()
     _ = try store.record(
@@ -96,7 +97,8 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
         outcome: DesignSceneFixtures.judged(
           proposing.enumerated().map { index, item in
             DesignSceneFixtures.proposal(
-              item, titles?[index] ?? "対応: \(item.id)", workspace: workspaces?[index] ?? nil)
+              item, titles?[index] ?? "対応: \(item.id)", workspace: workspaces?[index] ?? nil,
+              reason: reasons?[index] ?? nil)
           }, rows: taken.count)))
   }
 
@@ -204,6 +206,23 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     }
   }
 
+  /// 判定が書いた候補にした理由は、その候補にだけ `reason` として出る。
+  func testProposalsCarryTheReasonOnlyWhenTheJudgeWroteOne() throws {
+    let wc = try launch()
+    let id = try set(wc, Self.definition())
+    let items = ["a", "b"].map { Self.item($0) }
+    try Self.round(
+      wc.automationStore, id, fetched: items, proposing: items,
+      reasons: ["レビューを頼まれている。", nil])
+
+    let listed = Dictionary(
+      uniqueKeysWithValues: try proposals(wc, of: id).map { ($0["title"] as? String ?? "", $0) })
+
+    XCTAssertEqual(listed["対応: a"]?["reason"] as? String, "レビューを頼まれている。")
+    XCTAssertNotNil(listed["対応: b"], "前提")
+    XCTAssertNil(listed["対応: b"]?["reason"], "書かなかった候補はキーごと出さない")
+  }
+
   // MARK: - 拒否
 
   /// 流している間は走っている部品が一覧にそう出て、`run_automation` は「流している途中」で断られる。
@@ -266,37 +285,6 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
     XCTAssertEqual(
       try AutomationWire.decoder.decode(AutomationDefinition.self, from: data), definition)
-  }
-
-  /// 一覧の回の記録は部品ごとに、保存と同じ形（取った件数・実行の記録・役割ごとの結果）。
-  func testListedRunsKeepTheStoredShape() throws {
-    let wc = try launch()
-    let id = try set(wc, Self.definition())
-    let a = Self.item("a")
-    try Self.round(wc.automationStore, id, fetched: [a], proposing: [a])
-
-    let parts = try XCTUnwrap(try listed(wc)[id]?["parts"] as? [String: [String: Any]])
-    let judged = try XCTUnwrap((parts["judge"]?["runs"] as? [[String: Any]])?.first)
-
-    XCTAssertEqual(
-      Set(judged.keys), ["startedAt", "endedAt", "trigger", "taken", "execution", "result"])
-    XCTAssertEqual(judged["taken"] as? Int, 1)
-    XCTAssertEqual((judged["execution"] as? [String: Any])?["commandLine"] as? String, "claude -p")
-    let result = try XCTUnwrap(judged["result"] as? [String: Any])
-    XCTAssertEqual(result["kind"] as? String, "judge")
-    XCTAssertEqual(result["proposed"] as? Int, 1)
-    XCTAssertEqual(parts["judge"]?["inbox"] as? Int, 0)
-    XCTAssertNil(parts["fetch"]?["inbox"], "入力の無い部品は溜まりを持たない")
-
-    let fetched = try XCTUnwrap((parts["fetch"]?["runs"] as? [[String: Any]])?.first)
-    XCTAssertEqual(
-      Set(fetched.keys),
-      ["startedAt", "endedAt", "trigger", "execution", "result", "stacked", "withdrawn"])
-    XCTAssertEqual((fetched["execution"] as? [String: Any])?["count"] as? Int, 1)
-    XCTAssertEqual(fetched["stacked"] as? Int, 1)
-    let fetchResult = try XCTUnwrap(fetched["result"] as? [String: Any])
-    XCTAssertEqual(fetchResult["kind"] as? String, "fetch")
-    XCTAssertEqual(fetchResult["fresh"] as? Int, 1)
   }
 
   /// 試走は始めた応答で道の上の部品を並べ、待って読むと部品の回の結果を返す。自動化を消すと読めない。

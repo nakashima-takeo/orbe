@@ -2,10 +2,12 @@ import XCTest
 
 @testable import Orbe
 
-/// ボードの読み替え——一覧の右端と詳細の見出し。
+/// ボードの読み替え——一覧の行（状態と、それと混ぜない前回の成否と時刻）と、地図の溝の線の割り当て、カードの実行履歴の文。
 ///
-/// 壊れると何が起きるか: 仕事の部品の応答の 1 行目が一覧の右端に入り、自動化の名前が潰れて読めなくなる。判定と報告を両方持つ
-/// 自動化で、判定の回の見出しが「タスク候補・報告に追加」と誤った行き先を言う。
+/// 壊れると何が起きるか: 失敗した部品があるのに一覧の印が成功に見え、壊れた部品に気づけない。流している間や止めている間に
+/// 前回の結果が見えなくなる。地図の線が入力と違う行へつながり、
+/// どの部品の出力がどこへ行くかを読み違える。英語の実行履歴と知らせが「judged 1 items」と言う。新着なしの回が他の回を
+/// 押し出す、または畳んではいけない回（新着のある回・出し直した回）が畳まれて見えなくなる。
 @MainActor
 final class BoardAutomationSummaryTests: OrbeTestCase {
   private let text = AutomationText(
@@ -14,46 +16,162 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
       DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone),
     timeZone: DesignSceneFixtures.taskCalendar.timeZone)
 
-  private func summary(_ samples: [AutomationSample]) throws -> BoardAutomationSummary {
-    let automation = try XCTUnwrap(DesignSceneFixtures.automationStore(samples).automations.first)
-    return BoardAutomationSummary(automation, text: text, next: nil)
+  /// カードの実行履歴の各行の文（畳んだ行は期間の文）。
+  private func said(_ lines: [BoardRunLine]) -> [String] {
+    lines.map {
+      switch $0 {
+      case .run(let entry): entry.result
+      case .fold(let span): span
+      }
+    }
   }
 
-  func testAWorkRunWithAReplyShowsDoneAtTheRightEndNotTheReply() throws {
-    let summary = try summary([DesignSceneFixtures.boardAgentExample()])
-
-    XCTAssertEqual(summary.mark, "10/3 9:00 に完了")
-    XCTAssertTrue(summary.last.hasSuffix("PR を投稿: レビュー待ちの PR 2 件を #dev-me に投稿した。"), summary.last)
+  private func automations() -> [Automation] {
+    DesignSceneFixtures.automationStore(DesignSceneFixtures.boardMapSamples()).automations
   }
 
-  func testAJudgeRunSaysItAddedToTaskCandidatesEvenWithAReportPart() throws {
-    let fixtures = DesignSceneFixtures.self
-    let at = fixtures.automationAt(13)
-    let item = fixtures.sampleItems("gh", 1, at: at)
+  /// 失敗した部品があれば失敗の印。時刻はどの部品かを問わず最後に動いた時刻で、昨日なら「昨日」。
+  func testListRowSaysTheLastMarkAndTime() throws {
+    let all = automations()
+    let charge = BoardAutomationSummary(all[0], text: text, next: nil)
+    XCTAssertEqual(charge.mark, .failure)
+    XCTAssertEqual(charge.last, "前回 14:56")
+
+    let script = BoardAutomationSummary(all[1], text: text, next: nil)
+    XCTAssertEqual(script.mark, .success)
+    XCTAssertEqual(script.last, "前回 昨日 23:00")
+
+    let wide = BoardAutomationSummary(all[2], text: text, next: nil)
+    XCTAssertNil(wide.mark)
+    XCTAssertEqual(wide.last, "まだ動いていない")
+  }
+
+  /// 名前の右の状態（実行中・停止中）と前回の印は混ぜない。失敗した部品のある自動化を流している間も印は失敗のまま、止めて
+  /// いる自動化の印は前回の成否のまま。
+  func testListRowKeepsTheStateApartFromTheLastResult() throws {
+    let model = BoardAutomationModel(
+      runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardMapSamples()))
+    let all = model.store.automations
+    let (charge, weekend) = (all[0].id, all[3].id)
+    try model.runner.flow(charge, to: .ends)
+    let now = model.runner.now()
+    let text = model.text(LocalizationStore(language: .ja), now: now)
+    let states = Dictionary(
+      uniqueKeysWithValues: model.standings(at: now).map { ($0.id, $0.state) })
+
+    XCTAssertEqual(states[charge], .running)
+    XCTAssertEqual(model.summary(charge, text: text, now: now)?.mark, .failure, "流している間も前回の印")
+    XCTAssertEqual(states[weekend], .paused)
+    XCTAssertEqual(model.summary(weekend, text: text, now: now)?.mark, .success, "止めていても前回の印")
+  }
+
+  /// 見本の 12 部品の線: 行を上から見て、最後の受け手を迎える入力の線のうち最も左に点を置き、無ければ空いている最も左。
+  func testMapLanesFollowTheInputs() throws {
+    let detail = BoardAutomationDetailValue(
+      automations()[0], text: text, running: { _ in false }, open: 0, next: nil)
+
+    XCTAssertEqual(detail.rows.map(\.lanes.node), [0, 1, 2, 3, 4, 5, 3, 4, 5, 2, 0, 4, 0, 2])
+    XCTAssertEqual(detail.laneCount, 6)
+    let develop = detail.rows[10].lanes
+    XCTAssertEqual(develop.bends, [1, 3], "CI と自分の担当だけの線が点へ曲がり込む")
+    XCTAssertEqual(develop.through, [2, 4, 5])
+  }
+
+  /// カードの「ツール」: MCP は `__` までをサーバー名とし、claude.ai のコネクタ・プラグインの出どころの頭は落とす。Bash 規則は
+  /// 末尾の `:*` の手前までがコマンド。同じ表示は最初の 1 つだけ。
+  func testCardToolsNameTheServerOrCommandOnce() throws {
+    var samples = DesignSceneFixtures.boardMapSamples()
+    let index = try XCTUnwrap(samples[0].definition.parts.firstIndex { $0.key == "backlog" })
+    samples[0].definition.parts[index].method = .agent(
+      AutomationPartAgent(
+        cli: "claude", model: nil,
+        tools: [
+          "mcp__claude_ai_Gmail__search_threads", "mcp__plugin_core_backlog__get_issues",
+          "mcp__claude_ai_Gmail__get_thread", "Bash(npm run test:unit:*)",
+          "Bash(npm run test:unit:*)",
+        ],
+        instruction: "取る。"))
+    let automation = DesignSceneFixtures.automationStore(samples).automations[0]
+    let card = try XCTUnwrap(
+      BoardAutomationPartValue(
+        automation, part: "backlog", text: text, running: false, next: nil, open: 0))
+
+    XCTAssertEqual(
+      card.facts.first { $0.label == .boardPartTools }?.value.map(\.text),
+      ["Gmail（MCP）・Backlog（MCP）・npm run test:unit コマンド"])
+  }
+
+  /// 一覧の失敗の印は、最後の回が失敗した部品だけで決まる。失敗の後に成功した部品は数えない。
+  func testListMarkCountsOnlyPartsWhoseLatestRunFailed() throws {
+    let at = { (hour: Int) in DesignSceneFixtures.automationAt(hour) }
+    func fetch(_ key: String) -> AutomationPart {
+      DesignSceneFixtures.commandPart(
+        key, key, .scheduled(.every(3600)), script: key, coverage: .newArrivals)
+    }
+    func mark(_ failing: [String]) throws -> BoardRunMark? {
+      let failed = DesignSceneFixtures.failed("boom")
+      let sample = AutomationSample(
+        definition: AutomationDefinition(
+          name: "失敗", notify: nil,
+          parts: [
+            fetch("broken"), fetch("recovered"),
+            DesignSceneFixtures.agentPart(
+              "judge", "判定", .manual, from: ["broken", "recovered"], instruction: "i",
+              deliver: .taskCandidates),
+          ]),
+        createdAt: DesignSceneFixtures.automationAt(9, daysAgo: 3),
+        passes: failing.map { AutomationSamplePass(part: $0, at: at(9), outcome: failed) } + [
+          AutomationSamplePass(part: "recovered", at: at(8), outcome: failed),
+          AutomationSamplePass(
+            part: "recovered", at: at(10),
+            outcome: DesignSceneFixtures.fetched(
+              "recovered", DesignSceneFixtures.sampleItems("recovered", 1, at: at(10)))),
+        ])
+      let automation = try XCTUnwrap(
+        DesignSceneFixtures.automationStore([sample]).automations.first)
+      return BoardAutomationSummary(automation, text: text, next: nil).mark
+    }
+
+    XCTAssertEqual(try mark(["broken"]), .failure)
+    XCTAssertEqual(try mark([]), .success, "失敗の後に成功した部品は数えない")
+  }
+
+  /// 英語の判定の回は、判定した件数が 1 なら単数で言う。
+  func testJudgedRunSaysItemsInTheSingularWhenOneInEnglish() throws {
+    let at = { (hour: Int) in DesignSceneFixtures.automationAt(hour) }
     let sample = AutomationSample(
-      definition: AutomationDefinition(
-        name: "判定と要約", notify: nil,
-        parts: [
-          fixtures.commandPart(
-            "fetch", "取る", .scheduled(.every(1800)), script: "gh", coverage: .newArrivals),
-          fixtures.agentPart(
-            "judge", "判定", .arrival, from: ["fetch"], instruction: "判定して",
-            deliver: .taskCandidates),
-          fixtures.agentPart(
-            "digest", "要約", .scheduled(.every(86400)), from: ["fetch"], instruction: "要約して",
-            deliver: .report),
-        ]),
-      createdAt: fixtures.automationAt(9),
-      passes: [
-        AutomationSamplePass(part: "fetch", at: at, outcome: fixtures.fetched("fetch", item)),
-        AutomationSamplePass(
-          part: "judge", at: at.addingTimeInterval(60), trigger: .arrival,
-          outcome: fixtures.judged([fixtures.proposal(item[0], "対応する")], rows: 1)),
-      ])
+      definition: DesignSceneFixtures.candidatesDefinition(
+        "判定",
+        fetch: DesignSceneFixtures.commandPart(
+          "fetch", "取得", .scheduled(.every(3600)), script: "f", coverage: .newArrivals)),
+      createdAt: at(8),
+      passes: DesignSceneFixtures.round("one", at: at(9), items: 1, fresh: 1, proposed: 1)
+        + DesignSceneFixtures.round("three", at: at(10), items: 3, fresh: 3, proposed: 2))
+    let automation = try XCTUnwrap(DesignSceneFixtures.automationStore([sample]).automations.first)
+    let english = AutomationText(
+      l10n: LocalizationStore(language: .en), today: text.today, timeZone: text.timeZone)
 
-    let summary = try summary([sample])
+    let card = try XCTUnwrap(
+      BoardAutomationPartValue(
+        automation, part: "judge", text: english, running: false, next: nil, open: 0))
 
-    XCTAssertEqual(summary.output, "タスク候補・報告")
-    XCTAssertTrue(summary.last.hasSuffix("判定: 1件をタスク候補に追加"), summary.last)
+    XCTAssertEqual(said(card.runs), ["judged 3 items, 2 proposed", "judged 1 item, 1 proposed"])
+  }
+
+  /// カードの実行履歴は、添え書きの無い新着なしが 3 回以上続く区間だけを期間の 1 行に畳む。1 回だけの新着なしと、出し直して
+  /// 通った回（末尾に添え書き）は 1 行ずつ残す。
+  func testCardHistoryFoldsOnlyLongStretchesOfNothingNew() throws {
+    let automation = automations()[0]
+    func card(_ part: String) throws -> [String] {
+      said(
+        try XCTUnwrap(
+          BoardAutomationPartValue(
+            automation, part: part, text: text, running: false, next: nil, open: 0)
+        ).runs)
+    }
+
+    XCTAssertEqual(
+      try card("slack"), ["13:10〜14:55 は新着なし", "新着 4 件", "新着 5 件", "新着 6 件"])
+    XCTAssertEqual(try card("mail"), ["新着 2 件（出し直して通った）", "新着なし", "新着 1 件"])
   }
 }

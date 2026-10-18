@@ -36,10 +36,10 @@ final class AutomationStoreTests: OrbeTestCase {
         take: nil, outcome: outcome ?? DesignSceneFixtures.fetched("fetch", items)))
   }
 
-  /// 判定の部品の、溜まりをすべて取った回を確定する。
+  /// 判定の部品の、溜まりをすべて取った回を確定する。候補にした理由は `reason`（省けば無し）。
   static func judge(
     _ store: AutomationStore, _ id: Int, proposing items: [AutomationItem] = [],
-    resolving links: [String] = [], at: Date = at
+    resolving links: [String] = [], reason: String? = nil, at: Date = at
   ) throws {
     let taken = try store.inbox(of: "judge", in: id).map(\.seq)
     _ = try store.record(
@@ -48,7 +48,9 @@ final class AutomationStoreTests: OrbeTestCase {
         take: AutomationInbox.Take(taken: taken, dropped: []),
         outcome: .succeeded(
           .judge(
-            proposals: items.map { DesignSceneFixtures.proposal($0, "対応: \($0.id)") },
+            proposals: items.map {
+              DesignSceneFixtures.proposal($0, "対応: \($0.id)", reason: reason)
+            },
             resolved: links),
           DesignSceneFixtures.execution(taken.count), breach: nil)))
   }
@@ -62,7 +64,7 @@ final class AutomationStoreTests: OrbeTestCase {
     return .succeeded(
       output, execution,
       breach: AutomationPartPass.Breach(
-        lines: [AutomationBrokenLine(line: 3, reason: "missing link")],
+        lines: [AutomationBrokenLine(line: 3, fault: .missingKey("link"))],
         redo: AutomationPartPass.Redo(firstCall: execution, lines: [])))
   }
 
@@ -74,14 +76,21 @@ final class AutomationStoreTests: OrbeTestCase {
   // MARK: - 再起動
 
   /// 自動化・部品の状態（前回の出力・決まりを外した印・回の記録・溜まり）・候補は、どの変異（作る・確定・書き換え・さばく・
-  /// 止める・消す）の後に開き直しても同じで、溜まりの行も同じ本文で読める。
+  /// 止める・消す）の後に開き直しても同じで、溜まりの行も同じ本文で読める。回の記録は失敗・判定の確定で捨てた案も、候補は
+  /// 候補にした理由も同じ。
   func testEverythingSurvivesARestart() throws {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
     let (a, b) = (Self.item("a"), Self.item("b"))
     try Self.fetch(XCTUnwrap(store), id, [a], outcome: Self.breached([a]))
-    try Self.judge(XCTUnwrap(store), id, proposing: [a])
+    try Self.judge(
+      XCTUnwrap(store), id, proposing: [a], resolving: ["https://example.com/gone"],
+      reason: "レビューを頼まれている。")
     try Self.fetch(XCTUnwrap(store), id, [a, b], at: Self.at.addingTimeInterval(1800))
+    try Self.fetch(
+      XCTUnwrap(store), id, [],
+      outcome: DesignSceneFixtures.failed(.reported("rate limited"), ending: .exited(0)),
+      at: Self.at.addingTimeInterval(3600))
     var rewritten = Self.definition("受信（要約つき）")
     rewritten.notify = .menuBar
     rewritten.parts.append(
@@ -180,7 +189,9 @@ final class AutomationStoreTests: OrbeTestCase {
     XCTAssertEqual(
       mark(),
       AutomationBreachMark(
-        at: Self.at, lines: AutomationRejections(count: 1, reasons: ["line 3: missing link"]),
+        at: Self.at,
+        lines: AutomationRejections(
+          count: 1, lines: [AutomationBrokenLine(line: 3, fault: .missingKey("link"))]),
         redone: true, passed: true))
     _ = try store.replace(id, with: Self.definition("改名"), now: Self.at)
     XCTAssertEqual(mark()?.at, Self.at, "名前だけなら残る")

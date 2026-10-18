@@ -61,6 +61,7 @@ final class AutomationDatabase {
       title TEXT NOT NULL,
       due TEXT,
       workspace TEXT,
+      reason TEXT,
       proposed_at INTEGER NOT NULL,
       item TEXT NOT NULL
     );
@@ -249,8 +250,8 @@ final class AutomationDatabase {
     try db.run(
       """
       INSERT INTO proposals (link, state, task_id, automation_id, part_key, source_part_key, title, due,
-        workspace, proposed_at, item)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        workspace, reason, proposed_at, item)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       """,
       [
         .text(proposal.item.link), .text(proposal.state.name), Self.taskId(proposal.state),
@@ -258,6 +259,7 @@ final class AutomationDatabase {
         .text(proposal.sourcePartKey), .text(proposal.title),
         proposal.due.map { .text($0.text) } ?? .null,
         proposal.workspace.map { .text($0.uuidString) } ?? .null,
+        proposal.reason.map { .text($0) } ?? .null,
         .integer(AutomationPersistence.millis(proposal.proposedAt)),
         .text(try Self.encode(proposal.item)),
       ])

@@ -49,6 +49,7 @@ extension WindowController {
         "time": SessionEvent.iso8601(proposal.item.time),
         "proposedAt": SessionEvent.iso8601(proposal.proposedAt),
       ]
+      if let reason = proposal.reason { json["reason"] = reason }
       // 出した自動化と部品の鍵は組で出す——棚の自動化（`automationId`）と別のことがあり、鍵だけでは取り違える。出した自動化が
       // 消えた後は、指す先が無いので出さない。
       if automationStore.automation(proposal.automationId) != nil {
@@ -115,14 +116,14 @@ extension WindowController {
       let state = automation.state(node.key)
       var part: [String: Any] = [
         "running": automationRunner.isRunning(automation.id, node.key),
-        "runs": AutomationWire.object(state.runs),
+        "runs": AutomationRunWire.objects(state.runs, part: node.key),
       ]
       if let next = automationRunner.nextRunAt(automation, part: node.key) {
         part["nextRunAt"] = SessionEvent.iso8601(next)
       }
       if let last = state.lastRunAt { part["lastRunAt"] = SessionEvent.iso8601(last) }
       if !node.part.inputs.isEmpty { part["inbox"] = state.inbox }
-      if let breach = state.breach { part["breach"] = AutomationWire.object(breach) }
+      if let breach = state.breach { part["breach"] = AutomationRunWire.object(breach) }
       parts[node.key] = part
     }
     var json: [String: Any] = [
@@ -134,9 +135,7 @@ extension WindowController {
     if automation.judges {
       json["taskCandidates"] =
         [
-          "openProposals": automationStore.proposals.filter {
-            $0.state == .open && automationStore.shelf(of: $0)?.id == automation.id
-          }.count,
+          "openProposals": automationStore.shelvedProposals(of: automation.id).count,
           "overlaps": automationStore.overlaps(of: automation.id).map {
             ["automationId": $0.automation.id, "name": $0.automation.name, "count": $0.count]
               as [String: Any]

@@ -119,7 +119,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
   @MainActor func testAFailureStandsWithTheWaitingSound() throws {
     let wc = controller()
     let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
-    let id = try recorded(wc, failure: "the part \"digest\" ended: exited 1: boom")
+    let id = try recorded(wc, failure: "boom")
 
     wc.notifyAutomationRecorded(id, "digest")
 
@@ -127,7 +127,8 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
       return XCTFail("ピルが立たない")
     }
     XCTAssertTrue(notice.failed)
-    XCTAssertEqual(notice.text, "要約: 失敗：the part \"digest\" ended: exited 1: boom")
+    XCTAssertEqual(
+      notice.text, "要約: 失敗：終了コード 1 で終わった（the part \"digest\" ended: exited 1: boom）")
     XCTAssertEqual(sound.played.map(\.event), [.waiting])
   }
 
@@ -135,18 +136,18 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
   @MainActor func testOnlyTheFirstOfConsecutiveFailuresStands() throws {
     let wc = controller()
     let sound = try XCTUnwrap(wc.soundPlayer as? SoundPlayerFake)
-    let id = try recorded(wc, failure: "the part \"digest\" ended: exited 1: boom")
+    let id = try recorded(wc, failure: "boom")
     wc.notifyAutomationRecorded(id, "digest")
     XCTAssertEqual(standing(wc)?.failed, true)
 
-    try record(wc, id, failure: "the part \"digest\" ended: exited 1: boom")
+    try record(wc, id, failure: "boom")
     XCTAssertNil(wc.automationNotification(id, "digest"), "続く失敗は知らせない")
     wc.notifyAutomationRecorded(id, "digest")
     XCTAssertEqual(sound.played.map(\.event), [.waiting])
 
     try record(wc, id, report: nil)
     wc.notifyAutomationRecorded(id, "digest")
-    try record(wc, id, failure: "the part \"digest\" ended: exited 1: boom")
+    try record(wc, id, failure: "boom")
     XCTAssertNotNil(wc.automationNotification(id, "digest"), "何も出さない回を挟んだ失敗は知らせる")
     wc.notifyAutomationRecorded(id, "digest")
     XCTAssertEqual(sound.played.map(\.event), [.waiting, .waiting])
@@ -192,10 +193,9 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
         notify: .menuBar), now: Date()
     ).id
     let breachedFailure = AutomationPartPass.Outcome.failed(
-      "the output of part \"fetch\" broke the rules: line 3: missing link",
-      DesignSceneFixtures.execution(1, ending: "exited 0"),
+      .brokeRules, DesignSceneFixtures.execution(1),
       breach: AutomationPartPass.Breach(
-        lines: [AutomationBrokenLine(line: 3, reason: "missing link")], redo: nil))
+        lines: [AutomationBrokenLine(line: 3, fault: .missingKey("link"))], redo: nil))
     var at = Date()
     func record(_ outcome: AutomationPartPass.Outcome) throws {
       at = at.addingTimeInterval(60)
@@ -208,14 +208,14 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     try record(breachedFailure)
     let first = try XCTUnwrap(wc.automationNotification(id, "fetch"))
     guard case .automation(let told) = first.notice else { return XCTFail("\(first)") }
-    XCTAssertTrue(told.text.contains("決まりを外した — line 3: missing link"), told.text)
+    XCTAssertEqual(told.text, "取る の出力の形式エラー（1 行）— 失敗した")
     XCTAssertTrue(told.failed)
 
     try record(DesignSceneFixtures.fetched("fetch", []))
     try record(breachedFailure)
     let again = try XCTUnwrap(wc.automationNotification(id, "fetch"), "失敗の続きの最初は知らせる")
     guard case .automation(let failure) = again.notice else { return XCTFail("\(again)") }
-    XCTAssertFalse(failure.text.contains("決まりを外した"), failure.text)
+    XCTAssertFalse(failure.text.contains("形式エラー（"), failure.text)
   }
 
   /// 選んでいる行の回は出ず、同じボードで選んでいない自動化の回は出る。

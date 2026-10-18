@@ -64,6 +64,20 @@ extension AutomationStore {
     return holding.first { $0.id == proposal.automationId } ?? holding.min { $0.id < $1.id }
   }
 
+  /// 判断待ちの候補と、それを棚に出す自動化の ID（候補の順）。棚に出す自動化の無い候補は入らない。⌘⇧X の提案タブ・制御 API・
+  /// ボードはどれもここから数える——棚の規則を変えたとき、数え方が読み手ごとにずれないため。
+  var shelvedProposals: [(proposal: AutomationProposal, shelf: Int)] {
+    proposals.compactMap { proposal in
+      guard proposal.state == .open, let shelf = shelf(of: proposal) else { return nil }
+      return (proposal, shelf.id)
+    }
+  }
+
+  /// `id` の自動化の棚に出ている判断待ちの候補。
+  func shelvedProposals(of id: Int) -> [AutomationProposal] {
+    shelvedProposals.filter { $0.shelf == id }.map(\.proposal)
+  }
+
   /// 判定の部品を持つ他の自動化と、タスク候補へ至る取得の部品の前回の出力が重なっているリンクの数（重なりのある相手だけ、
   /// ID 順）。
   func overlaps(of id: Int) -> [(automation: Automation, count: Int)] {
@@ -79,7 +93,8 @@ extension AutomationStore {
 
 /// 判定の出力から読み取った 1 つの決定。`workspace` は照合を済ませた付け先の `Workspace.persistentId`。
 enum AutomationDecision: Equatable {
-  case propose(itemId: String, title: String, due: TaskItem.DueDate?, workspace: UUID?)
+  case propose(
+    itemId: String, title: String, due: TaskItem.DueDate?, workspace: UUID?, reason: String?)
   case resolve(link: String)
 }
 

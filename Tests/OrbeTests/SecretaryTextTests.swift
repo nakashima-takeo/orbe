@@ -10,10 +10,10 @@ final class SecretaryTextTests: OrbeTestCase {
 
   func testTypedTextIsPassedAsTypedWithoutItsSurroundingBlanks() {
     XCTAssertEqual(
-      SecretaryText.firstInput(.text("  見積もりを\n山田さんに送る\n"), l10n: ja),
+      SecretaryText.firstInput("  見積もりを\n山田さんに送る\n", l10n: ja),
       "依頼: 見積もりを\n山田さんに送る")
     XCTAssertNil(
-      SecretaryText.firstInput(.text(" \n\u{0}\t "), l10n: ja), "空白と制御文字だけは頼めない")
+      SecretaryText.firstInput(" \n\u{0}\t ", l10n: ja), "空白と制御文字だけは頼めない")
   }
 
   func testBoardInstructionsNameTheBundledAutomationSkill() {
@@ -26,17 +26,5 @@ final class SecretaryTextTests: OrbeTestCase {
     XCTAssertFalse(
       SecretaryText.instructions(for: .palette, .ja, pluginName: "orbe-agent-dev")
         .contains("automation"), "⌘⇧X の役目は自動化のスキルを使わない")
-  }
-
-  func testAFixNamesTheAutomation() {
-    let automation = DesignSceneFixtures.automationStore(
-      DesignSceneFixtures.boardAutomationSamples()
-    ).automations[2]
-    XCTAssertEqual(
-      SecretaryText.firstInput(.automationFix(automation), l10n: ja),
-      "依頼: 自動化 \(automation.id)「\(automation.definition.name)」を直す。")
-    XCTAssertEqual(
-      SecretaryText.firstInput(.automationFix(automation), l10n: en),
-      "Request: Fix automation \(automation.id) “\(automation.definition.name)”.")
   }
 }

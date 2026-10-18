@@ -34,7 +34,7 @@ extension DesignSceneFixtures {
       passes: round("slack", at: at(12, 30, 0), items: 9, fresh: 2, proposed: 1)
         + round(
           "slack", at: at(13, 0, 0), items: 0, fresh: 0,
-          failure: "the part \"fetch\" ended: exited 1: Slack API rate limited")
+          failure: "Slack API rate limited")
         + round("slack", at: at(13, 30, 0), items: 10, fresh: 2)
         + round("slack", at: at(14, 0, 0), items: 11, fresh: 1)
         + round("slack", at: at(14, 12, 0), items: 11, fresh: 0, trigger: .now)
@@ -70,7 +70,7 @@ extension DesignSceneFixtures {
       passes: round("backlog", at: at(9, 0, 0), items: 12, fresh: 1, proposed: 1)
         + round(
           "backlog", at: at(13, 0, 0), items: 0, fresh: 0,
-          failure: "the part \"fetch\" ended: exited 1: Backlog の認証が切れています（401 Unauthorized）"))
+          failure: "Backlog の認証が切れています（401 Unauthorized）"))
   }
 
   /// 止めている。
@@ -152,7 +152,7 @@ extension DesignSceneFixtures {
         AutomationSamplePass(
           part: "note", at: automationAt(23, 0, daysAgo: daysAgo),
           outcome: daysAgo == 3
-            ? failed("the part \"note\" ended: exited 1: daily-note: ~/notes is not writable")
+            ? failed("daily-note: ~/notes is not writable")
             : sideEffected(0))
       })
   }

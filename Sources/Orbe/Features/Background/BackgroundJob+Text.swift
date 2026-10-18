@@ -1,6 +1,6 @@
 import Foundation
 
-// 裏で回す仕組みの失敗と終わり方を、AI と人に返す英文へ写す（受信と待ちの条件が共有する）。
+// 裏で回す仕組みの失敗と終わり方を、AI と人に返す英文へ写す（自動化と待ちの条件が共有する）。
 
 extension BackgroundJobError {
   var message: String {
@@ -29,18 +29,9 @@ extension BackgroundCronError {
 }
 
 extension BackgroundEnding {
-  /// 回の記録に残す終わり方。
-  var text: String {
-    switch self {
-    case .exited(let code): "exited \(code)"
-    case .signaled(let signal): "killed by signal \(signal)"
-    case .limited(.elapsed): "stopped at the time limit"
-    case .limited(.idle): "stopped after producing no output for too long"
-    case .limited(.output): "stopped at the output limit"
-    case .stopped: "stopped"
-    case .notStarted(let failure): "not started (\(failure.text))"
-    case .toolsUnavailable(let tools): "tools unavailable: \(tools.joined(separator: ", "))"
-    }
+  /// `toolsUnavailable` の英文。
+  static func unavailable(_ tools: [String]) -> String {
+    "tools unavailable: \(tools.joined(separator: ", "))"
   }
 }
 

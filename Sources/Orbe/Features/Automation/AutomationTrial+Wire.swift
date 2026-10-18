@@ -11,7 +11,7 @@ extension AutomationTrial {
       "parts": range.path.map { node -> [String: Any] in
         [
           "key": node.key, "state": state(of: node.key).rawValue,
-          "runs": (passes[node.key] ?? []).map { $0.json(workspace: workspace) },
+          "runs": (passes[node.key] ?? []).map { $0.json(part: node.key, workspace: workspace) },
         ]
       },
     ]
@@ -24,9 +24,11 @@ extension AutomationTrial {
 
 extension AutomationTrial.Pass {
   /// 止めた副作用・仕事は、写しの上の記録（手段を起こしていない）の代わりに渡るはずだった行だけ。
-  fileprivate func json(workspace: (UUID) -> (id: Int, name: String)?) -> [String: Any] {
+  fileprivate func json(part: String, workspace: (UUID) -> (id: Int, name: String)?) -> [String:
+    Any]
+  {
     if case .held(let rows) = content { return ["held": ["rows": Self.objects(rows)]] }
-    var json = AutomationWire.object(run) as? [String: Any] ?? [:]
+    var json = AutomationRunWire.object(run, part: part)
     switch content {
     case .rows(let rows):
       json["rows"] = Self.objects(rows)
@@ -37,6 +39,7 @@ extension AutomationTrial.Pass {
           "link": proposal.origin.item.link, "title": proposal.title,
         ]
         if let due = proposal.due { item["due"] = due.text }
+        if let reason = proposal.reason { item["reason"] = reason }
         if let ws = proposal.workspace.flatMap(workspace) {
           item["workspaceId"] = ws.id
           item["workspaceName"] = ws.name

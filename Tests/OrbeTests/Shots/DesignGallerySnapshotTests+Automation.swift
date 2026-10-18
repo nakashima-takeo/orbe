@@ -45,7 +45,7 @@ extension DesignGallerySnapshotTests {
     try write("automation_small.png", small, 800, 560)
   }
 
-  /// 棚の見本（見本 O2Palette）: 棚の 2 行目の全種（次の判定・届いたら・手動・停止中・更新中…・候補なし・失敗した部品）、
+  /// 棚の見本（見本 O2Palette）: 棚の 2 行目の全種（前回の判定の成功・失敗・まだ判定していない・停止中・更新中）、
   /// 判定ごとの一覧の頭、出どころの部品の名前。
   private func renderTaskPaletteAutomationShelfSnapshots(
     _ write: (String, TaskPaletteModel, CGFloat, CGFloat) throws -> Void

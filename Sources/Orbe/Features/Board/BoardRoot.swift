@@ -46,11 +46,11 @@ struct BoardPartView: View {
 }
 
 /// 自動化の部品: 上に全幅の依頼の欄、その下に左の一覧と右の欄（選んだ自動化の詳細か、欄を選んでいる間の案内）。焦点の宛先は
-/// 欄と一覧の器の 2 つで、場所の正はモデル（`place`）だけ。届いていない合図（`focusToken`）はボードを通して受け取って写し
+/// 欄・一覧の器・詳細の器（地図）の 3 つで、場所の正はモデル（`place`）だけ。届いていない合図（`focusToken`）はボードを通して受け取って写し
 /// （現れただけでは写さず、焦点がボードの外にあれば捨てる）、SwiftUI が自分で焦点を動かした（窓が key になったときの既定の
 /// 焦点など）ら、モデルの場所へ戻す。クリックはジェスチャがモデルへ届ける。ストアの変化で場所が替わった（行がすべて消えて欄に
-/// なった）ときは、焦点が部品の中にあるときだけ追う（外にある焦点を奪わない）。サブメニュー「通知」は一覧の行の右に、部品の上の
-/// 1 枚の層として重ねる。
+/// なった）ときは、焦点が部品の中にあるときだけ追う（外にある焦点を奪わない）。サブメニュー「通知」は詳細の見出しの
+/// 「通知」の行の右に、部品の上の 1 枚の層として重ねる。
 struct BoardAutomationPart: View {
   let board: BoardModel
   @FocusState private var focused: BoardAutomationModel.Place?
@@ -83,8 +83,8 @@ struct BoardAutomationPart: View {
 }
 
 /// 左の一覧と右の欄。右は自動化を選んでいる間はその詳細、欄を選んでいる間は案内と入力例（0 件でも選べるのは欄だけなので
-/// 案内）。一覧の器は 0 件でも常に置く焦点の宛先で、一覧のキーはここで受ける。器のクリック（行・地）は一覧へ。並び・文は
-/// `now` から計算する。
+/// 案内）。一覧の器は 0 件でも常に置く焦点の宛先で、一覧のキーはここで受ける。器のクリック（行・地）は一覧へ。詳細の器は地図の
+/// 焦点の宛先で、地図のキーはここで受け、地（地図・カードの地）のクリックは地図へ。並び・文は `now` から計算する。
 struct BoardAutomationColumns: View {
   let model: BoardAutomationModel
   let now: Date
@@ -95,7 +95,7 @@ struct BoardAutomationColumns: View {
     let text = model.text(l10n, now: now)
     let standings = model.standings(at: now)
     HStack(spacing: 0) {
-      BoardAutomationList(model: model, standings: standings, text: text)
+      BoardAutomationList(model: model, standings: standings, text: text, now: now)
         .contentShape(Rectangle())
         .onTapGesture { model.go(.list) }
         .focusable()
@@ -104,9 +104,18 @@ struct BoardAutomationColumns: View {
         .onKeyPress { model.handleKey($0) }
       if case .automation(let id) = model.list.selectedID,
         let standing = standings.first(where: { $0.id == id }),
-        let summary = model.summary(id, text: text)
+        let detail = model.detail(id, text: text, now: now)
       {
-        BoardAutomationDetail(standing: standing, summary: summary, text: text)
+        BoardAutomationDetail(
+          model: model, standing: standing, detail: detail,
+          card: model.card(text: text, now: now)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { model.go(.map) }
+        .focusable()
+        .focusEffectDisabled()
+        .focused(focused, equals: .map)
+        .onKeyPress { model.handleMapKey($0) }
       } else {
         BoardAutomationGuide()
       }
