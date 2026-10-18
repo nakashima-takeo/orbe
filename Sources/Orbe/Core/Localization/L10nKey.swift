@@ -379,7 +379,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationPaused
   case automationRunning
   case automationToday
-  case automationDue
   case automationEvery
   case automationDaily
   case automationWeekdays

@@ -26,7 +26,7 @@ extension BoardAutomationModel {
   }
 
   /// 頼んで、受けたかを返す。受けられなければ断りを置く。空の頼みは黙って受けない。
-  @discardableResult private func ask(_ ask: String) -> Bool {
+  private func ask(_ ask: String) -> Bool {
     switch onAsk(ask) {
     case nil: return true
     case .claudeMissing: onRefusal(.boardAskClaudeMissing)

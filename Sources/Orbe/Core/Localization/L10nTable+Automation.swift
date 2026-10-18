@@ -44,7 +44,6 @@ extension L10n {
     .automationPaused: ("停止中", "paused"),
     .automationRunning: ("実行中", "running"),
     .automationToday: ("今日", "today"),
-    .automationDue: ("期限 %1$@（%2$@）", "Due %1$@ (%2$@)"),
     .automationEvery: ("%lld分ごと", "every %lld min"),
     .automationDaily: ("毎日", "daily"),
     .automationWeekdays: ("平日", "weekdays"),

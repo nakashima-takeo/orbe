@@ -109,7 +109,7 @@ extension AutomationPrompts {
   }
 
   /// 候補にした理由を 1 段落に整える（行の区切りと連なる空白を 1 つの空白に）。空なら無い。
-  static func reason(_ raw: String?) -> String? {
+  private static func reason(_ raw: String?) -> String? {
     guard let raw else { return nil }
     let text = raw.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     return text.isEmpty ? nil : text

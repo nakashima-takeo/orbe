@@ -75,7 +75,6 @@ final class AutomationTextTests: OrbeTestCase {
 
   func testWhen() {
     XCTAssertEqual(text.when(.every(1800)), "30分ごと")
-    XCTAssertEqual(text.next(DesignSceneFixtures.automationAt(17, 0)), "次回 17:00")
   }
 
   /// よくある形だけを言葉にし、言葉は元の時刻の集合を一意に表す（範囲は最初と最後の該当時刻）。

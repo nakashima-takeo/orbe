@@ -74,18 +74,6 @@ struct AutomationText {
     }
   }
 
-  /// 「次回 17:00」（今日でなければ日付付き）。
-  func next(_ date: Date) -> String {
-    l10n.format(.automationNext, stamp(date))
-  }
-
-  /// 「期限 10/10（金）」。
-  func due(_ due: TaskItem.DueDate) -> String {
-    l10n.format(
-      .automationDue, TaskDueText.date(due, today: today),
-      TaskDueText.weekdays(l10n.language)[due.weekday])
-  }
-
   /// リンクのホスト名（出どころの種類は知らないので、ホスト名で言う）。
   static func host(_ link: String) -> String {
     URL(string: link)?.host ?? link

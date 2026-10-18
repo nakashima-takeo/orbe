@@ -24,7 +24,7 @@ final class AutomationPromptsTests: OrbeTestCase {
     let read = JSONLines<AutomationItem>(text)
     XCTAssertEqual(read.items.count, 1)
     XCTAssertEqual(
-      read.rejected.map { "line \($0.line): \($0.reason.text)" },
+      read.rejected.map { "line \($0.line): \(AutomationLineFault($0.reason).text)" },
       ["line 1: invalid link", "line 2: invalid time"])
   }
 
