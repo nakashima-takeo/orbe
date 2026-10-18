@@ -83,7 +83,6 @@ final class AutomationTrial {
   private let source: AutomationRunner
   private let onEnd: () -> Void
   private var copy: AutomationStore.Copy?
-  private var store: AutomationStore?
   private var runner: AutomationRunner?
   private var given: Given?
   /// 終わったときの一巡（打ち切られたものを含む）。
@@ -213,7 +212,6 @@ final class AutomationTrial {
     copy = nil
     let runner = self.runner
     self.runner = nil
-    store = nil
     runner?.stopAll()
   }
 
@@ -254,7 +252,6 @@ final class AutomationTrial {
       flowEnded: { [weak self] _, flow in self?.flowEnded(flow) })
     runner.now = source.now
     runner.calendar = source.calendar
-    self.store = store
     self.runner = runner
     runner.start()
     try runner.flow(id, through: path, to: range.to)
@@ -268,7 +265,7 @@ final class AutomationTrial {
     switch node.role {
     case .sideEffect, .work:
       // 取った行は確定の前なのでまだ溜まりにある。仕事の行は役割の入力に載らないので、取った通し番号から読む。
-      let rows = (try? store?.rows(start.take?.taken ?? [])) ?? []
+      let rows = (try? runner?.store.rows(start.take?.taken ?? [])) ?? []
       held[node.key] = rows.map(\.text)
       let output: AutomationPartPass.Output =
         node.role == .sideEffect ? .sideEffect : .work(.nothing(Self.heldEnding))
@@ -352,7 +349,6 @@ final class AutomationTrial {
     endedAt = source.now()
     let runner = self.runner
     self.runner = nil
-    store = nil
     // 走らせ役の知らせの中から呼ばれうるので、番人から外すのは知らせを返した後にする。外すのは、終わった後に起き直した部品の
     // 手段を止めるため。
     DispatchQueue.main.async { runner?.stopAll() }
