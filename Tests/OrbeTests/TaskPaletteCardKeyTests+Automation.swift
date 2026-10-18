@@ -257,4 +257,20 @@ extension TaskPaletteCardKeyTests {
     send(Key.enter, "\r", to: window)
     XCTAssertTrue(model.store.tasks.contains { $0.title == "オンボーディングの環境構築手順を見る" })
   }
+
+  /// 候補を持たない自動化が別の口で消えたら、カードが棚の選択を同じ位置の段へ付け直し、⌘↵ はその段の更新になる（消えた
+  /// 自動化を指したまま黙って何もしないにならない）。
+  func testAutomationDeletedElsewhereMovesTheShelfSelectionSoCommandEnterStillRefreshes() throws {
+    let model = automationModel()
+    let window = mount(model)
+    model.automation.tapShelf(.automation(3))
+    flush(window)
+
+    try model.automation.runner.delete(3)
+    flush(window)
+    send(Key.enter, "\r", .command, to: window)
+
+    XCTAssertEqual(model.automation.shelfList.selectedID, .automation(4))
+    XCTAssertTrue(model.automation.runner.isFlowing(4))
+  }
 }
