@@ -30,7 +30,7 @@ struct AutomationPartRun: Equatable {
   var failure: String?
 
   /// 決まりを外したこと。外れた行は件数と最初の数件の理由だけを残す。
-  struct Breach: Equatable {
+  struct Breach: Equatable, Codable {
     /// 1 回目の出力の外れた行。
     let lines: AutomationRejections
     /// 出し直したときだけある。
@@ -86,11 +86,12 @@ struct AutomationDrops: Equatable {
     case sameLink
     /// 積む時点で件数の上限を超えた。
     case overflow
-    /// 判定の部品へ、出どころ（元になった取得の項目）の無いまま届いた。
+    /// 判定の部品へ、出どころ（元になった取得の項目）の無いまま届いた・溜まっていた。
     case unsourced
 
     init(_ reason: AutomationInbox.Reason) {
       switch reason {
+      case .unsourced: self = .unsourced
       case .leftCurrentSet: self = .leftCurrentSet
       case .expired: self = .expired
       case .proposed: self = .proposed
@@ -184,26 +185,6 @@ extension AutomationPartRun: Codable {
     stacked = try c.decodeIfPresent(Int.self, forKey: .stacked)
     withdrawn = try c.decodeIfPresent(Int.self, forKey: .withdrawn)
     failure = try c.decodeIfPresent(String.self, forKey: .failure)
-  }
-}
-
-/// `{"lines": …, "redo"?: …}`。
-extension AutomationPartRun.Breach: Codable {
-  private enum CodingKeys: String, CodingKey {
-    case lines, redo
-  }
-
-  init(from decoder: Decoder) throws {
-    let c = try decoder.container(keyedBy: CodingKeys.self)
-    self.init(
-      lines: try c.decode(AutomationRejections.self, forKey: .lines),
-      redo: try c.decodeIfPresent(AutomationPartRun.Redo.self, forKey: .redo))
-  }
-
-  func encode(to encoder: Encoder) throws {
-    var c = encoder.container(keyedBy: CodingKeys.self)
-    try c.encode(lines, forKey: .lines)
-    try c.encodeIfPresent(redo, forKey: .redo)
   }
 }
 

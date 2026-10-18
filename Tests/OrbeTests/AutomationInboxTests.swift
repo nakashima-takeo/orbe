@@ -166,6 +166,23 @@ final class AutomationInboxTests: OrbeTestCase {
     XCTAssertEqual(reported.taken, [1, 2, 3, 4])
   }
 
+  /// 判定の溜まりに出どころの無い行が残っていれば（判定でなかった部品を同じ鍵のまま判定に書き換えた後）、取らずに理由付きで
+  /// 捨てる。判定でない部品は取る。
+  func testAJudgeDropsRowsWithoutAnOrigin() throws {
+    let graph = try graph(Parts.agent("j", from: ["cs", "na"], deliver: .taskCandidates))
+    let rows = [row(1), row(2, from: origin("na", "a"))]
+
+    let take = AutomationInbox.take(
+      by: try XCTUnwrap(graph.node("j")), from: rows, in: context(graph))
+    XCTAssertEqual(take.taken, [2])
+    XCTAssertEqual(take.dropped, [.init(seq: 1, reason: .unsourced)])
+
+    let reportGraph = try self.graph(Parts.agent("r", from: ["cs", "na"]))
+    let reported = AutomationInbox.take(
+      by: try XCTUnwrap(reportGraph.node("r")), from: rows, in: context(reportGraph))
+    XCTAssertEqual(reported.taken, [1, 2])
+  }
+
   /// 行を依頼文に入れる agent だけ、古い順に件数と大きさの和の上限まで取り、先頭の 1 件だけで超えるならその 1 件を取る。ツールを
   /// 持つ agent とコマンドは全部取る。
   func testOnlyAnAgentPuttingRowsInItsPromptTakesABoundedBatch() throws {

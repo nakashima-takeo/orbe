@@ -99,7 +99,7 @@ final class AutomationRunner {
     let replaced = try store.replace(id, with: definition, now: now())
     let automation = replaced.automation
     for key in replaced.removed { unregister(id, key) }
-    for key in replaced.reworked + replaced.added { unregister(id, key) }
+    for key in replaced.reworked { unregister(id, key) }
     register(automation)
     defined(id)
     return automation
@@ -132,11 +132,7 @@ final class AutomationRunner {
   }
 
   private func checkAvailable() throws(AutomationError) {
-    guard store.available else {
-      throw .unavailable(
-        "automations are unavailable in this session (another Orbe holds them, or their database "
-          + "could not be opened); see the log")
-    }
+    guard store.available else { throw AutomationStore.unavailableError }
   }
 
   // MARK: - 番人への登録
@@ -261,7 +257,8 @@ extension AutomationRunner {
     }
   }
 
-  /// 契機の始まりの時点の行から、u2 の取る計算で取る行を選ぶ。取る行が 0 件なら手段を起こさず、捨てる行だけを捨てて終える。
+  /// 契機の始まりの時点の行から、`AutomationInbox.take` で取る行を選ぶ。取る行が 0 件なら手段を起こさず、捨てる行だけを
+  /// 捨てて終える。
   private func takeNext(_ trigger: Trigger) {
     guard !trigger.cancelled else { return }
     guard let automation = store.automation(trigger.automationId),
@@ -282,12 +279,23 @@ extension AutomationRunner {
     pass(trigger, take: take)
   }
 
-  /// 部品の 1 回。役割の入力を組み、u3a の部品の 1 回に任せ、終わったら確定する。
+  /// 部品の 1 回。役割の入力を組み、`AutomationPartPass` に任せ、終わったら確定する。入力を組めなければ（取った行を DB から
+  /// 読めない・読む前に消えた）ログに残して契機を終える。
   private func pass(_ trigger: Trigger, take: AutomationInbox.Take?) {
     guard let automation = store.automation(trigger.automationId),
-      let node = automation.graph.node(trigger.part),
-      let input = try? input(node, automation, take)
+      let node = automation.graph.node(trigger.part)
     else { return end(trigger) }
+    let input: AutomationPartPass.Input
+    do throws(AutomationError) {
+      guard let built = try self.input(node, automation, take) else {
+        NSLog("[automation] the rows part \(trigger.part) took are gone or unreadable")
+        return end(trigger)
+      }
+      input = built
+    } catch {
+      NSLog("[automation] cannot start part \(trigger.part): \(error)")
+      return end(trigger)
+    }
     let startedAt = now()
     trigger.lastStart = startedAt
     let pass = AutomationPartPass(run: run, now: now, calendar: calendar)
@@ -301,19 +309,19 @@ extension AutomationRunner {
     _ trigger: Trigger, _ take: AutomationInbox.Take?, _ startedAt: Date,
     _ outcome: AutomationPartPass.Outcome
   ) {
-    let end = AutomationPassEnd(
+    let passEnd = AutomationPassEnd(
       automationId: trigger.automationId, part: trigger.part, trigger: trigger.kind,
       startedAt: startedAt, endedAt: now(), take: take, outcome: outcome)
-    let grew: [String]
+    let result: AutomationRecorded
     do throws(AutomationError) {
-      grew = try store.record(end)
+      result = try store.record(passEnd)
     } catch {
       NSLog("[automation] dropped the result of part \(trigger.part): \(error)")
-      return self.end(trigger)
+      return end(trigger)
     }
     recorded(trigger.automationId, trigger.part)
-    for part in grew { wake(trigger.automationId, part) }
-    guard case .succeeded = outcome, take != nil else { return self.end(trigger) }
+    for part in result.grew { wake(trigger.automationId, part) }
+    guard !result.failed, take != nil else { return end(trigger) }
     takeNext(trigger)
   }
 
@@ -334,16 +342,20 @@ extension AutomationRunner {
   }
 
   /// 役割の入力を組む唯一の場所。取得と仕事は行の席を持たない入力なので、ツールを持ちうる agent へ溜まりの行は渡らない
-  /// （溜まりは起こすかの門にだけ使う）。
+  /// （溜まりは起こすかの門にだけ使う）。行を読む役割で、取った行が 1 つも読めなければ nil。
   private func input(
     _ node: AutomationGraph.Node, _ automation: Automation, _ take: AutomationInbox.Take?
-  ) throws(AutomationError) -> AutomationPartPass.Input {
+  ) throws(AutomationError) -> AutomationPartPass.Input? {
     let state = automation.state(node.key)
-    func rows() throws(AutomationError) -> [AutomationPartRow] {
-      guard let take else { return [] }
-      let rows = try store.rows(take.taken)
-      guard !rows.isEmpty else { throw .invalid("the taken rows are gone") }
-      return rows
+    var rows: [AutomationPartRow] = []
+    switch node.role {
+    case .process, .judge, .report, .sideEffect:
+      if let take {
+        rows = try store.rows(take.taken)
+        guard !rows.isEmpty else { return nil }
+      }
+    case .fetch, .work:
+      break
     }
     switch node.role {
     case .fetch:
@@ -351,10 +363,10 @@ extension AutomationRunner {
     case .work:
       return .work
     case .process:
-      return .process(
-        try rows(), reachesJudge: automation.graph.reachesTaskCandidates(node.key))
+      return .process(rows, reachesJudge: automation.graph.reachesTaskCandidates(node.key))
     case .judge:
-      let sourced = try rows().compactMap { row in
+      // 判定の溜まりの出どころの無い行は、取るときに捨ててある。
+      let sourced = rows.compactMap { row in
         row.origin.map { AutomationSourcedRow(id: row.id, text: row.text, origin: $0) }
       }
       return .judge(
@@ -363,9 +375,9 @@ extension AutomationRunner {
           open: store.openProposals(of: automation.id, judge: node.key),
           workspaces: workspaces()))
     case .report:
-      return .report(try rows())
+      return .report(rows)
     case .sideEffect:
-      return .sideEffect(try rows(), runId: Self.runId(automation.id, node.key, state.anchor))
+      return .sideEffect(rows, runId: Self.runId(automation.id, node.key, state.anchor))
     }
   }
 

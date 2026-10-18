@@ -20,8 +20,10 @@ struct AutomationPartPass {
     /// （接頭の無い元の id。空なら全件が新しい）。
     case fetch(since: Date?, lastOutput: Set<String>)
     /// `reachesJudge` は、出した行が途中で取得の部品を通らずに判定の部品へ届くか（`AutomationGraph.reachesTaskCandidates`）。
-    /// 届くなら、入力の行と `id` で照らせない出力の行も決まりを外した行になる——判定の溜まりには出どころのある行しか積めず、
-    /// 届いた先で黙って消えるため。処理が続くなら、照らせない行を初めに出した処理が外したことになる。
+    /// 届くなら、入力の行の `id` でない `id` の出力の行も決まりを外した行になる——判定は出どころの項目から候補を作るので、
+    /// 新しく作った行は判定で使えないため。処理が続くなら、そうした行を初めに出した処理が外したことになる。入力の行の `id` を
+    /// 保った行は、入力の行に出どころが無くても外れた行にしない（部品は決まりどおりに素通ししている。判定へ積む時点で
+    /// 出どころなしとして捨てる）。
     case process([AutomationPartRow], reachesJudge: Bool)
     /// 行はどれも出どころを持つ。`choices` は判断待ちの候補と付け先にできる workspace。
     case judge([AutomationSourcedRow], choices: AutomationJudgeChoices)

@@ -12,7 +12,15 @@ struct AutomationPassEnd {
   let outcome: AutomationPartPass.Outcome
 }
 
-/// 部品の 1 回の読み書き。取る・積むは u2 の溜まりの規則（`AutomationInbox`）を通し、行の本文は DB にだけ置く。
+/// 確定した部品の 1 回。
+struct AutomationRecorded {
+  /// 溜まりが増えた下流の部品の鍵。
+  let grew: [String]
+  /// 失敗した回として書いたか（部品の 1 回が成功していても、確定で失敗にした回を含む）。
+  let failed: Bool
+}
+
+/// 部品の 1 回の読み書き。取る・積むは溜まりの規則（`AutomationInbox`）を通し、行の本文は DB にだけ置く。
 extension AutomationStore {
   /// 溜まりの目録（本文なし、通し番号の順）。
   func inbox(of key: String, in id: Int) throws(AutomationError) -> [AutomationInbox.Row] {
@@ -43,14 +51,16 @@ extension AutomationStore {
 
   /// 部品の 1 回を 1 トランザクションで確定する。成功した回は、取った行と捨てた行を通し番号で消し、下流の溜まりへ積み、前回の
   /// 出力と目印・候補の帳面・回の記録を書く。失敗した回は記録と最後に回った時刻だけを書き、溜まり・前回の出力・捨てた数は
-  /// 動かさない。下流の判定の部品へ渡す行が 1 行以上あって、どれも出どころを持たなければ、成功した回も失敗した回として書く
-  /// （回の途中に判定の部品を下流に足す書き換えがあると、始めた時点では判定へ届かなかった部品の出力がそうなりうる）。
-  /// どちらも、出力が決まりを外した最初の回なら印を書く。溜まりが増えた下流の部品の鍵を返す。自動化か部品がもう無ければ
-  /// 何もしない。
-  func record(_ end: AutomationPassEnd) throws(AutomationError) -> [String] {
+  /// 動かさない。下流の判定の部品へ渡す行が 1 行以上あって、どれも出どころを持たず、そのうちに部品が自分で作った行（取った
+  /// 行の `id` でない行）があれば、成功した回も失敗した回として書く——回の途中に判定の部品を下流に足す書き換えがあると、始めた
+  /// 時点では判定へ届かなかった部品の出力がそうなりうる（次の回は判定へ届くものとして読まれ、作った行は決まりを外した行に
+  /// なる）。取った行を素通ししただけで出どころが無いなら部品の誤りではないので、確定して判定へは積まずに捨てる（失敗に
+  /// すると、出どころを得られない同じ行で失敗を繰り返す）。どちらも、出力が決まりを外した最初の回なら印を書く。自動化か部品が
+  /// もう無ければ何もしない。
+  func record(_ end: AutomationPassEnd) throws(AutomationError) -> AutomationRecorded {
     guard let index = automations.firstIndex(where: { $0.id == end.automationId }),
       let node = automations[index].graph.node(end.part)
-    else { return [] }
+    else { return AutomationRecorded(grew: [], failed: false) }
     let id = end.automationId
     let key = end.part
     let startedAt = TaskItem.storedInstant(end.startedAt)
@@ -63,7 +73,11 @@ extension AutomationStore {
     return try commit { db, memory in
       var grew: [String] = []
       let planned = try pushes(of: end.outcome, from: node, index, memory, db)
-      if let refused = planned.first(where: \.push.upstreamFailed) {
+      let taken = Set(end.take?.taken ?? [])
+      let inputIds = Set(try db.inbox(of: key, in: id).filter { taken.contains($0.seq) }.map(\.id))
+      if let refused = planned.first(where: { entry in
+        entry.push.upstreamFailed && entry.push.unsourced.contains { !inputIds.contains($0.id) }
+      }) {
         run.failure =
           "no row passed to part \"\(refused.target.key)\" has an origin (it did not come from a "
           + "fetch part)"
@@ -96,7 +110,7 @@ extension AutomationStore {
       try db.put(part: key, of: id, state)
       try db.insert(run: run, part: key, of: id)
       memory.automations[index].parts[key] = state
-      return grew
+      return AutomationRecorded(grew: grew, failed: run.failed)
     }
   }
 
@@ -133,8 +147,8 @@ extension AutomationStore {
     return []
   }
 
-  /// 成功した回が下流へ渡す行（取得と処理の出力）を、下流の部品ごとに、その時点の溜まりの目録に u2 の積む計算へ掛けたもの。
-  /// 行を渡さない回は空。
+  /// 成功した回が下流へ渡す行（取得と処理の出力）を、下流の部品ごとに、その時点の溜まりの目録に `AutomationInbox.push` を
+  /// 掛けたもの。行を渡さない回は空。
   private func pushes(
     of outcome: AutomationPartPass.Outcome, from node: AutomationGraph.Node, _ index: Int,
     _ memory: AutomationMemory, _ db: AutomationDatabase

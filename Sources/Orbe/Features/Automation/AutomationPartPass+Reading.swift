@@ -1,6 +1,6 @@
 import Foundation
 
-/// 役割ごとの出力の読み。失敗の文は今の自動化と同じ形で、役の語は `part "<鍵>"`。
+/// 役割ごとの出力の読み。役の語は `part "<鍵>"`。
 extension AutomationPartPass {
   /// 1 つの呼び出しの出力を読んだもの。`lines` は受け付けなかった行で、行を出す部品（取得・処理・判定）だけが持つ。1 行でも
   /// あれば決まりを外した出力で、`Output` は使わない。
@@ -119,12 +119,13 @@ extension AutomationPartPass {
       count: items.count, lines: lines.sorted { $0.line < $1.line })
   }
 
-  /// 出どころは `id` で入力の行と照らして引き継ぐ。`id` の無い行・同じ `id` の 2 つ目の行・判定へ届くときの照らせない行は
-  /// 外れた行。
+  /// 出どころは `id` で入力の行と照らして引き継ぐ。`id` の無い行・同じ `id` の 2 つ目の行・判定へ届くときの入力の行の `id`
+  /// でない行は外れた行。
   private static func processed(
     _ text: String, _ input: [AutomationPartRow], reachesJudge: Bool
   ) -> Reading {
     var (rows, lines) = AutomationPrompts.objectRows(text)
+    let inputIds = Set(input.map(\.id))
     let origins = Dictionary(
       input.compactMap { row in row.origin.map { (row.id, $0) } }, uniquingKeysWith: { $1 })
     var ids = Set<String>()
@@ -138,7 +139,7 @@ extension AutomationPartPass {
         lines.append(AutomationBrokenLine(line: row.line, reason: "id \(id) appeared twice"))
         continue
       }
-      guard !reachesJudge || origins[id] != nil else {
+      guard !reachesJudge || inputIds.contains(id) else {
         lines.append(
           AutomationBrokenLine(line: row.line, reason: "id \(id) is not the id of an input item"))
         continue
@@ -157,7 +158,7 @@ extension AutomationPartPass {
     var lines = malformed
     var proposals: [Proposal] = []
     var resolved: [String] = []
-    for (row, reading) in AutomationPrompts.judgeRows(
+    for reading in AutomationPrompts.judgeRows(
       objects, itemIds: Set(origins.keys), choices: choices)
     {
       switch reading {
@@ -168,8 +169,8 @@ extension AutomationPartPass {
         proposals.append(Proposal(origin: origin, title: title, due: due, workspace: workspace))
       case .success(.resolve(let link)):
         resolved.append(link)
-      case .failure(.malformed(let reason)), .failure(.refused(let reason)):
-        lines.append(AutomationBrokenLine(line: row.line, reason: reason))
+      case .failure(let line):
+        lines.append(line)
       }
     }
     return .read(
