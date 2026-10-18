@@ -103,7 +103,9 @@ struct TaskPaletteAutomationList: View {
         .automationFailedWith,
         text.failureHead(failure, ending: run.execution.ending, node: node))
     } else if case .judge(let proposed, _, _) = run.result, proposed > 0 {
-      result = l10n.format(.taskPaletteAutomationProposedCount, proposed)
+      result = l10n.plural(
+        proposed, one: .taskPaletteAutomationProposedCountOne,
+        other: .taskPaletteAutomationProposedCountOther)
     } else {
       result = l10n.string(.taskPaletteAutomationNoProposals)
     }

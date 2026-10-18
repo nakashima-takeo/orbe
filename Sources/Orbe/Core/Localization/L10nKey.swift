@@ -352,7 +352,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAutomationRefreshing
   case taskPaletteAutomationLastJudge
   case taskPaletteAutomationNeverJudged
-  case taskPaletteAutomationProposedCount
+  case taskPaletteAutomationProposedCountOne
+  case taskPaletteAutomationProposedCountOther
   case taskPaletteAutomationReason
   case taskPaletteAutomationProposedBy
   case taskPaletteAutomationFieldWorkspace
