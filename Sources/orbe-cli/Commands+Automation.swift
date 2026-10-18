@@ -10,7 +10,7 @@ let automationUsageLines = [
   "orb automation proposals [<id>] [--json]",
   "orb automation set [<id>] [--json]   (definition JSON on stdin)",
   "orb automation run <id> [--part <key>] [--json]",
-  "orb automation try <id> [--from <key>]... [--to <key>]... [--rows <file|->] [--limit <n>] [--json]",
+  "orb automation try <id> [--from <key>]... [--to <key>]... [--stdin] [--limit <n>] [--json]",
   "orb automation trial <id> [--wait] [--timeout-ms <ms>] [--json]",
   "orb automation pause <id> [--json]",
   "orb automation resume <id> [--json]",

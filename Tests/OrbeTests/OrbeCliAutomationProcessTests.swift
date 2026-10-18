@@ -180,7 +180,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
       + #""deliver": "none", "command": "cat >/dev/null; touch '\#(marker.path)'"}]}"#
   }
 
-  /// `try` は与える行（`--rows -` は標準入力）・limit・範囲を運び、`trial --wait` は試走の終わりまで待って部品ごとの結果を
+  /// `try` は与える行（`--stdin`。0 バイトは usage エラー）・limit・範囲を運び、`trial --wait` は試走の終わりまで待って部品ごとの結果を
   /// 出す。副作用は走らず、渡るはずだった行の数が人向けの 1 行に出る。
   func testTryCarriesRowsLimitAndRangeAndTrialWaitsForTheResult() throws {
     let control = try startControlProcess()
@@ -192,8 +192,11 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     }.joined(separator: "\n")
 
     XCTAssertEqual(
-      run(control, ["try", id, "--rows", "-", "--limit", "1"], stdin: rows),
+      run(control, ["try", id, "--stdin", "--limit", "1"], stdin: rows),
       "started a trial of automation \(id)")
+    let empty = control.orb(["automation", "try", id, "--stdin"], stdin: "")
+    XCTAssertEqual(empty.status, 2, empty.stderr)
+    XCTAssertTrue(empty.stderr.contains("--stdin got no input"), empty.stderr)
     let trial = try XCTUnwrap(
       control.orbJSON(["automation", "trial", id, "--wait"])["trial"] as? [String: Any])
     let parts = try XCTUnwrap(trial["parts"] as? [[String: Any]])

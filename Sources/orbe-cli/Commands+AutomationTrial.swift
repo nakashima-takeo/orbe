@@ -6,7 +6,7 @@ func automationTry(_ rest: [String]) -> Never {
   var args = rest
   let from = takeOptions(&args, "--from", requires: "a <key> value")
   let to = takeOptions(&args, "--to", requires: "a <key> value")
-  let rows = takeRowsSource(&args)
+  let useStdin = takeFlag(&args, "--stdin")
   let limit = takeIntOption(&args, "--limit", requires: "a positive <n>")
   if hasHelp(args) {
     print(automationUsage)
@@ -17,39 +17,20 @@ func automationTry(_ rest: [String]) -> Never {
   var params: [String: Any] = ["automationId": id]
   if !from.isEmpty { params["from"] = from }
   if !to.isEmpty { params["to"] = to }
-  if let rows { params["rows"] = readRows(rows) }
+  if useStdin { params["rows"] = rows(readStdinText()) }
   if let limit { params["limit"] = limit }
   let result = callOrExit("try_automation", params)
   if wantJSON { printJSON(result) } else { print("started a trial of automation \(id)") }
   exit(0)
 }
 
-/// `--rows <file|->`。`-` は標準入力（`takeOption` は `-` 始まりを値の席に受けないので、`-` だけを先に抜く）。
-private func takeRowsSource(_ args: inout [String]) -> String? {
-  if let index = args.firstIndex(of: "--rows"), index + 1 < args.count, args[index + 1] == "-" {
-    args.removeSubrange(index...(index + 1))
-    return "-"
-  }
-  return takeOption(&args, "--rows", requires: "a <file> or -")
-}
-
-/// 1 行 1 JSON オブジェクト（空行は飛ばす）。
-private func readRows(_ source: String) -> [[String: Any]] {
-  let data: Data
-  if source == "-" {
-    data = FileHandle.standardInput.readDataToEndOfFile()
-  } else {
-    guard let read = FileManager.default.contents(atPath: source) else {
-      usageDie("cannot read --rows file: \(source)")
-    }
-    data = read
-  }
-  guard let text = String(data: data, encoding: .utf8) else { usageDie("--rows is not UTF-8") }
+/// 入口に与える行。1 行 1 JSON オブジェクトで、空行は飛ばす（改行は LF と CRLF）。
+private func rows(_ text: String) -> [[String: Any]] {
   var rows: [[String: Any]] = []
-  for (index, line) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated()
-  where !line.allSatisfy(\.isWhitespace) {
+  let lines = text.split(omittingEmptySubsequences: false) { $0 == "\n" || $0 == "\r\n" }
+  for (index, line) in lines.enumerated() where !line.allSatisfy(\.isWhitespace) {
     guard let object = (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any]
-    else { usageDie("--rows line \(index + 1) is not a JSON object") }
+    else { usageDie("--stdin line \(index + 1) is not a JSON object") }
     rows.append(object)
   }
   return rows
