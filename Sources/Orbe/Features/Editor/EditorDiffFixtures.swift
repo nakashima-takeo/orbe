@@ -6,7 +6,7 @@
   /// diff のタブの flow fixture。凍結したコードの断片を渡された置き場の git リポジトリにコミットし、作業ツリー・index で
   /// 見本（orbe_design の `diffLines`）と同じ形の書き換え（同じ 2 行・削除 2 行と追加 8 行の区間・同じ 1 行・追加 1 行・
   /// 同じ 1 行）と、削除の多い区間・ステージした rename・ステージしたバイナリ・新しいファイル（未追跡の改行で終わらない本文と、
-  /// ステージした改行で終わる本文）・作業ツリーで消したファイルを起こす。開くのは撮る側（`open_diff` と同じ
+  /// ステージした改行で終わる本文）・作業ツリーで消したファイル（短いものと、見えている高さより長いもの）を起こす。開くのは撮る側（`open_diff` と同じ
   /// セッションの口）。版の本文は git の子プロセス後に、色とハンクは裏の仕事の後に届くので、撮る側は diff の中身が揃うのを
   /// 待つ。
   enum EditorDiffFixtures {
@@ -125,6 +125,7 @@
       try write("Sources/Legacy.swift", "enum Legacy {\n\(legacy)\n}\n")
       try write("docs/notes.md", "# メモ\n\n- 知らせは描画の前に畳む\n")
       try write("Sources/RetiredHooks.swift", retired)
+      try write("Sources/RetiredTable.swift", "enum RetiredTable {\n\(legacy)\n}\n")
       let git = FixtureGit(directory: dir)
       try git(["init", "-q", "-b", "main"])
       try git(["config", "user.email", "gallery@orbe.dev"])
@@ -143,8 +144,9 @@
         to: dir.appendingPathComponent("icon.bin"))
       try git(["add", "icon.bin"])
       try write("Sources/HookClock.swift", added)
-      try FileManager.default.removeItem(
-        at: dir.appendingPathComponent("Sources/RetiredHooks.swift"))
+      for retiredPath in ["Sources/RetiredHooks.swift", "Sources/RetiredTable.swift"] {
+        try FileManager.default.removeItem(at: dir.appendingPathComponent(retiredPath))
+      }
       try write("docs/todo.md", "# やること\n\n- 知らせの間隔を設定にする\n")
       try git(["add", "docs/todo.md"])
       let group = TabGroup(
