@@ -121,7 +121,7 @@ struct TaskPaletteAutomationDetail: View {
     }
   }
 
-  /// 本文の全体と「↗ <ホスト名> で開く」（クリックか ⌘O でブラウザで開く）。
+  /// 本文の全体と「⌘O ↗ <ホスト名> で開く」（クリックか ⌘O でブラウザで開く）。
   private func quote(_ proposal: AutomationProposal) -> some View {
     VStack(alignment: .leading, spacing: Theme.Space.step) {
       fontResolver.text(proposal.item.body, base: Theme.Typography.workspaceName)
@@ -132,9 +132,13 @@ struct TaskPaletteAutomationDetail: View {
       Button {
         model.openLink()
       } label: {
-        HStack(spacing: 5) {
-          MarkGlyph(kind: .openOut, color: Color.theme.textMuted)
-          Text(l10n.format(.taskPaletteAutomationOpenLink, AutomationText.host(proposal.item.link)))
+        HStack(spacing: Theme.Space.step) {
+          Text(verbatim: "⌘O")
+          HStack(spacing: 5) {
+            MarkGlyph(kind: .openOut, color: Color.theme.textMuted)
+            Text(
+              l10n.format(.taskPaletteAutomationOpenLink, AutomationText.host(proposal.item.link)))
+          }
         }
         .font(Font.theme.meta)
         .foregroundStyle(Color.theme.textMuted)
