@@ -10,8 +10,9 @@ import AppKit
 /// 渡す——行の中の部品の上なら、行のクリックではなく部品の押下として渡す。ポインタの下の行には行の中の位置を写す（hover と、
 /// 部品の説明のツールチップ）。VoiceOver には AX のリスト（行の総数と、見えている行・選択の行）として見せる。
 ///
-/// 部品の押下に源が錨を返せば、留める行の上端を押した行の窓の中の高さに合わせ続ける（→ `RowListAnchor`）。送れる範囲の外に
-/// 出るなら、文書の上か下に一時の空きを足して収める。外せば空きを取り、原点を範囲に収める。
+/// 部品の押下に源が錨を返せば、留める行の上端を押した行の窓の中の高さに合わせ続け、押し続けの守りを張る
+/// （→ `RowListAnchor`・`RowListPressGuard`）。上へは原点が 0 に着くまでしか送らず、下へ送りきれなければ文書の下に一時の
+/// 空きを足して収める。外せば空きを取り、原点を範囲に収める。
 final class RowListView<Source: RowListSource>: NSView {
   let source: Source
   let rowHeight: CGFloat
@@ -20,16 +21,14 @@ final class RowListView<Source: RowListSource>: NSView {
   private var drawn: Source.Rows
   /// 列の高さを決めた行の数（`reloadRows` で源から写す）。
   private(set) var rowCount = 0
-  /// 区間の表と、各区間の上端（`reloadRows` で源から写す。一時の空きを含まない）。
-  private var segments: [RowListSegment] = []
-  private var segmentTops: [CGFloat] = []
-  /// 区間の表の高さ（最後の行の下の 1 行分の空きと、一時の空きを含まない）。
-  private var contentHeight: CGFloat = 0
+  /// 区間の表（`reloadRows` で源から写す）。
+  private var geometry = RowListSegments([])
   /// 留める行と、その上端を合わせる窓の中の高さ。
   private var anchor: (rows: RowListAnchor<Source.Selection>, windowY: CGFloat)?
-  /// 錨のための一時の空き（文書の上と下）。
-  private var topSpace: CGFloat = 0
+  /// 錨のための一時の空き（文書の下）。
   private var bottomSpace: CGFloat = 0
+  /// 押し続けの守り（錨を受け取った押下で張る）。
+  private var pressGuard: RowListPressGuard?
   /// 行の高さの最小（枠の本数を決める）。
   private var minimumHeight: CGFloat
   private var slots: [Source.RowView] = []
@@ -58,6 +57,7 @@ final class RowListView<Source: RowListSource>: NSView {
 
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
+    endPressGuard()
     guard window != nil else { return }
     applyFocusRequest()
     // 列が出た更新そのものには載せず、次の周回で済ませる。
@@ -76,15 +76,8 @@ final class RowListView<Source: RowListSource>: NSView {
     drawn = source.rows
     DispatchQueue.global(qos: .utility).async { withExtendedLifetime(previous) {} }
     rowCount = source.rowCount(in: drawn)
-    segments = source.segments(in: drawn)
-    var top: CGFloat = 0
-    segmentTops = segments.map { segment in
-      top += segment.leading
-      defer { top += CGFloat(segment.count) * segment.height }
-      return top
-    }
-    contentHeight = top
-    minimumHeight = segments.map(\.height).min() ?? rowHeight
+    geometry = RowListSegments(source.segments(in: drawn))
+    minimumHeight = geometry.segments.map(\.height).min() ?? rowHeight
     holdAnchor()
     resizeDocument()
     layoutRows()
@@ -97,7 +90,7 @@ final class RowListView<Source: RowListSource>: NSView {
 
   /// 文書の高さ（区間の表・最後の行の下の 1 行分の空き・一時の空き）。
   private func resizeDocument() {
-    let height = topSpace + contentHeight + rowHeight + bottomSpace
+    let height = geometry.height + rowHeight + bottomSpace
     guard frame.height != height else { return }
     setFrameSize(NSSize(width: frame.width, height: height))
   }
@@ -118,8 +111,8 @@ final class RowListView<Source: RowListSource>: NSView {
       addSubview(slot)
       slots.append(slot)
     }
-    let count = min(source.rowCount(in: drawn), segments.last.map { $0.start + $0.count } ?? 0)
-    let first = min(firstRow(from: max(0, visible.minY - topSpace)), count)
+    let count = min(source.rowCount(in: drawn), geometry.rowCount)
+    let first = min(geometry.firstRow(from: max(0, visible.minY)), count)
     var shown = Set<Int>()
     var row = first
     while row < count {
@@ -145,7 +138,7 @@ final class RowListView<Source: RowListSource>: NSView {
 
   /// 見えていなければ、見えるところまで最小限だけ送る（送るなら錨を外し、空きを取った後の行の枠で送る）。
   func scrollRowToVisible(_ row: Int) {
-    guard row < segments.last.map({ $0.start + $0.count }) ?? 0 else { return }
+    guard row < geometry.rowCount else { return }
     let shown = rect(ofRow: row)
     let visible = visibleRect
     guard shown.minY < visible.minY || shown.maxY > visible.maxY else { return }
@@ -156,21 +149,19 @@ final class RowListView<Source: RowListSource>: NSView {
 
   // MARK: - 錨
 
-  /// 留める行の上端を、押した行の窓の中の高さへ送る。送れる範囲の外なら一時の空きを足して収める。留める行が組から消えたら
-  /// 外す。合わせた後は、ポインタの下の行を今の位置で付け直す（動かさなくても、新しい行の部品が光る）。
+  /// 留める行の上端を、押した行の窓の中の高さへ送る。上へは原点が 0 に着くまで（列の上に空きを作らない）、下へ送りきれ
+  /// なければ一時の空きを足して収める。留める行が組に無ければ、今の原点を保つ（手の下で列を跳ばさない）。合わせた後は、
+  /// ポインタの下の行を今の位置で付け直す（動かさなくても、新しい行の部品が光る）。
   func holdAnchor() {
     guard let anchor, window != nil else { return }
-    let target =
-      source.row(of: anchor.rows.pressed, in: drawn)
-      ?? source.row(of: anchor.rows.successor, in: drawn)
-    guard let target, target < rowCount, !segments.isEmpty else { return releaseAnchor() }
     let visible = visibleRect
-    // 窓の高さが今の文書のどこに当たるか、から、見えている範囲の上端から錨までの距離を出す（送っても変わらない）。
-    let offset = convert(NSPoint(x: 0, y: anchor.windowY), from: nil).y - visible.minY
-    let origin = rect(ofRow: target).minY - topSpace - offset
-    topSpace = max(0, -origin)
-    let top = max(0, origin)
-    bottomSpace = max(0, top + visible.height - (contentHeight + rowHeight + topSpace))
+    var top = visible.minY
+    if let target = anchoredRow(anchor.rows) {
+      // 窓の高さが今の文書のどこに当たるか、から、見えている範囲の上端から錨までの距離を出す（送っても変わらない）。
+      let offset = convert(NSPoint(x: 0, y: anchor.windowY), from: nil).y - visible.minY
+      top = max(0, rect(ofRow: target).minY - offset)
+    }
+    bottomSpace = max(0, top + visible.height - (geometry.height + rowHeight))
     resizeDocument()
     if visible.minY != top { scroll(NSPoint(x: 0, y: top)) }
     layoutRows()
@@ -181,61 +172,48 @@ final class RowListView<Source: RowListSource>: NSView {
   func releaseAnchor() {
     guard anchor != nil else { return }
     anchor = nil
-    guard topSpace != 0 || bottomSpace != 0 else { return }
-    let top = visibleRect.minY - topSpace
-    topSpace = 0
+    guard bottomSpace != 0 else { return }
+    let top = visibleRect.minY
     bottomSpace = 0
     resizeDocument()
-    scroll(NSPoint(x: 0, y: min(max(0, top), max(0, bounds.height - visibleRect.height))))
+    scroll(NSPoint(x: 0, y: min(top, max(0, bounds.height - visibleRect.height))))
     layoutRows()
+  }
+
+  /// 錨の留める行（押した行が組に在ればその行、無ければ後継の行。どちらも無ければ nil）。
+  private func anchoredRow(_ rows: RowListAnchor<Source.Selection>) -> Int? {
+    let row =
+      source.row(of: rows.pressed, in: drawn)
+      ?? rows.successor.flatMap { source.row(of: $0, in: drawn) }
+    return row.flatMap { $0 < rowCount ? $0 : nil }
+  }
+
+  // MARK: - 押し続けの守り
+
+  /// 守りの問い——窓の押下 `event` が、留めている行の番号 `control` の部品に当たるか。列の外の view・見出し・別の行・行の
+  /// 地に当たる押下と、錨が外れて留める行が無いときの押下は当たらない。
+  private func admits(_ event: NSEvent, control: Int) -> Bool {
+    guard let anchor, let target = anchoredRow(anchor.rows),
+      window?.contentView?.hitTest(event.locationInWindow) === self
+    else { return false }
+    let point = convert(event.locationInWindow, from: nil)
+    guard row(at: point) == target, let slot = slot(showing: target) else { return false }
+    return slot.control(at: convert(point, to: slot))?.id == control
+  }
+
+  private func endPressGuard() {
+    pressGuard?.end()
+    pressGuard = nil
   }
 
   /// 行 `row`（区間の表の中）の枠。
   private func rect(ofRow row: Int) -> NSRect {
-    var low = 0
-    var high = segments.count
-    while high - low > 1 {
-      let mid = (low + high) / 2
-      if segments[mid].start <= row { low = mid } else { high = mid }
-    }
-    let segment = segments[low]
-    return NSRect(
-      x: 0, y: topSpace + segmentTops[low] + CGFloat(row - segment.start) * segment.height,
-      width: bounds.width, height: segment.height)
-  }
-
-  /// 区間の表の高さ `y`（一時の空きを除く）の行（区間の表の外・区間の前の余白なら nil）。
-  private func row(atY y: CGFloat) -> Int? {
-    guard let low = segment(atY: y), y >= segmentTops[low] else { return nil }
-    let segment = segments[low]
-    let offset = Int((y - segmentTops[low]) / segment.height)
-    return offset < segment.count ? segment.start + offset : nil
-  }
-
-  /// 下端が `y` より下にある最初の行（余白の上なら、その下の行）。
-  private func firstRow(from y: CGFloat) -> Int {
-    guard let low = segment(atY: y) else { return 0 }
-    let segment = segments[low]
-    guard y >= segmentTops[low] else { return segment.start }
-    let offset = Int((y - segmentTops[low]) / segment.height)
-    if offset < segment.count { return segment.start + offset }
-    return low + 1 < segments.count ? segments[low + 1].start : segment.start + segment.count
-  }
-
-  /// 高さ `y` を含む区間（前の余白を含めて、上端が `y` 以下の最後の区間）。最初の区間の余白の上も最初の区間。
-  private func segment(atY y: CGFloat) -> Int? {
-    guard y >= 0, !segments.isEmpty else { return nil }
-    var low = 0
-    var high = segmentTops.count
-    while high - low > 1 {
-      let mid = (low + high) / 2
-      if segmentTops[mid] - segments[mid].leading <= y { low = mid } else { high = mid }
-    }
-    return low
+    let span = geometry.span(ofRow: row)
+    return NSRect(x: 0, y: span.top, width: bounds.width, height: span.height)
   }
 
   private func row(at point: NSPoint) -> Int? {
-    guard let row = row(atY: point.y - topSpace), row < source.rowCount(in: drawn) else {
+    guard let row = geometry.row(atY: point.y), row < source.rowCount(in: drawn) else {
       return nil
     }
     return row
@@ -302,8 +280,13 @@ final class RowListView<Source: RowListSource>: NSView {
     guard let row = row(at: point) else { return }
     if let slot = slot(showing: row), let control = slot.control(at: convert(point, to: slot)) {
       let windowY = convert(NSPoint(x: 0, y: slot.frame.minY), to: nil).y
-      if let rows = source.press(row, control: control, in: drawn) {
+      endPressGuard()
+      if let rows = source.press(row, control: control.id, in: drawn) {
         anchor = (rows, windowY)
+        guard let window else { return }
+        pressGuard = RowListPressGuard(
+          window: window, frame: slot.convert(control.frame, to: nil)
+        ) { [weak self] event in self?.admits(event, control: control.id) ?? false }
       } else {
         releaseAnchor()
       }

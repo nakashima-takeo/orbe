@@ -282,12 +282,13 @@ struct ScmLayout {
     return id(at: row)
   }
 
-  /// ファイル行 `row` の部品を押した後に留める行（押した行と、それが抜けた後に同じ位置へ来る行）。区分に他の行が無ければ nil。
+  /// ファイル行 `row` の部品を押した後に留める行（押した行と、それが抜けた後に同じ位置へ来る行。区分に他の行が無ければ
+  /// 後継なし——押し続けの守りのために錨は返す）。
   func anchor(pressing row: Int, in section: ScmSection) -> RowListAnchor<ScmRowID>? {
-    guard let pressed = id(at: row), let range = fileRanges[section],
-      let successor = fileID(in: section, at: row - range.lowerBound, skipping: row)
-    else { return nil }
-    return RowListAnchor(pressed: pressed, successor: successor)
+    guard let pressed = id(at: row), let range = fileRanges[section] else { return nil }
+    return RowListAnchor(
+      pressed: pressed,
+      successor: fileID(in: section, at: row - range.lowerBound, skipping: row))
   }
 
   /// 行 `row` の同一性（区分見出しとファイル行だけ。ほかは nil）。

@@ -78,8 +78,9 @@ extension RowListTests {
 
     override func drawContent(_ colors: RowColors, in context: CGContext) { draws += 1 }
 
-    override func control(at point: NSPoint) -> Int? {
-      bounds.contains(point) && point.x >= bounds.maxX - 30 ? 0 : nil
+    override func control(at point: NSPoint) -> ListRowControl? {
+      let frame = NSRect(x: bounds.maxX - 30, y: 0, width: 30, height: bounds.height)
+      return frame.contains(point) ? ListRowControl(id: 0, frame: frame) : nil
     }
   }
 }

@@ -129,8 +129,10 @@ final class ScmRowView: ListRowView {
     max(Theme.Layout.editorSearchCountWidth, snap(count.width, .up) + 10)
   }
 
-  override func control(at point: NSPoint) -> Int? {
-    buttonRects().first { $0.1.contains(point) }.map { $0.0.control.rawValue }
+  override func control(at point: NSPoint) -> ListRowControl? {
+    buttonRects().first { $0.1.contains(point) }.map {
+      ListRowControl(id: $0.0.control.rawValue, frame: $0.1)
+    }
   }
 
   override func help(at point: NSPoint) -> String? {

@@ -91,8 +91,9 @@ extension ScmPanel {
   }
 
   /// 行の中の部品を押した。押せない姿の部品は何もしない。ステージ・解除・確認を出さない破棄（未追跡だけ）は、押した行と
-  /// 後継の行（同じ区分の次の行。無ければ前の行）を錨として返す——同じ位置で続けて押すと、次の行が次々に処理される。確認の
-  /// シートを経る破棄と見出しの一括操作は返さない。
+  /// 後継の行（同じ区分の次の行。無ければ前の行。区分の最後の 1 件なら後継なし）を錨として返す——同じ位置で続けて押すと、
+  /// 次の行が次々に処理され、区分が尽きた後にポインタの下へ来たものは働かない。確認のシートを経る破棄と見出しの一括操作は
+  /// 返さない。
   @discardableResult
   func press(_ row: Int, _ control: ScmControl, in layout: ScmLayout) -> RowListAnchor<ScmRowID>? {
     guard row < layout.items.count else { return nil }

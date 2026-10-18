@@ -46,8 +46,8 @@ protocol RowListSource: AnyObject {
   func click(_ row: Int, in rows: Rows)
   /// 行 `row` のダブルクリック。
   func doubleClick(_ row: Int, in rows: Rows)
-  /// 行 `row` の中の部品 `control`（行の view が `control(at:)` で答えた番号）を押した。行のクリックにはならない。返した
-  /// 錨の行を、押した行の高さに留める（→ `RowListAnchor`）。
+  /// 行 `row` の中の部品 `control`（行の view が `control(at:)` で答えた番号）を押した。行のクリックにはならない。錨を
+  /// 返せば、その行を押した行の高さに留め、押し続けの守りを張る（→ `RowListAnchor`）。
   func press(_ row: Int, control: Int, in rows: Rows) -> RowListAnchor<Selection>?
   /// VoiceOver がリストの行 `row` を選んだ。
   func select(_ row: Int, in rows: Rows)
@@ -57,12 +57,17 @@ extension RowListSource {
   func press(_ row: Int, control: Int, in rows: Rows) -> RowListAnchor<Selection>? { nil }
 }
 
-/// 行の中の部品を押した後、ポインタの下に留める行——押した行が組に在る間はその行、抜けたら後継の行。列は押した行の上端の
-/// 窓の中の高さを覚え、組を読み直すたび・列の枠が窓の中で動くたびに、留める行の上端をその高さへ送る（同じ位置で続けて
-/// 押すと、次の行が次々に処理される）。ポインタが列を出る・ホイールやキーで動かす・留める行が組から消えると外す。
+/// 行の中の部品を押した後、ポインタの下に留める行——押した行が組に在る間はその行、抜けたら後継の行（無ければ nil）。列は
+/// 押した行の上端の窓の中の高さを覚え、組を読み直すたび・列の枠が窓の中で動くたびに、留める行の上端をその高さへ送る
+/// （同じ位置で続けて押すと、次の行が次々に処理される）。送るのは原点が 0 に着くまでで、列の上に空きは作らない（届かなければ
+/// 留めない）。下は一時の空きを足して留める。留める行が組に無ければ、今の原点を保つ。ポインタが列を出る・ホイールやキーで
+/// 動かす・選択を見せるために送ると外す。
+///
+/// 錨を受け取った列は、押し続けの守り（→ `RowListPressGuard`）も張る——ポインタが押した部品の枠の中に居る間、その枠の中の
+/// 押下は、留めている行の同じ部品に当たるときだけ通す。留めきれずにポインタの下へ来た見出し・別の行・列の外のものは働かない。
 struct RowListAnchor<ID: Hashable> {
   let pressed: ID
-  let successor: ID
+  let successor: ID?
 }
 
 /// 同じ高さの行が続く区間。`leading` は区間の前の余白（行ではないので、押しても乗っても何も起きない）。
