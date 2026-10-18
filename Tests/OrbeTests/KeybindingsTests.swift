@@ -114,15 +114,14 @@ final class KeybindingsTests: OrbeTestCase {
     }
   }
 
-  /// ヘルプの 1 行を押した出来事（⌘↑ / ⌘↓ は同じ物理キー `ud` を共有するので表示キーで分ける。↵ は修飾キーと同じ
-  /// 描き方の集合にあり、combo から主のキーとして拾えないので表示キーで引く）。
+  /// ヘルプの 1 行を押した出来事（⌘↑ / ⌘↓ は同じ物理キー `ud` を共有するので表示キーで分ける。↵ は ⌘ を併せないので
+  /// 表示キーで引く）。
   private func event(for row: HelpCatalog.Row) -> NSEvent {
     switch row.key {
     case "⌘↑": return arrow(.upArrow)
     case "⌘↓": return arrow(.downArrow)
     case "⌘⌘": return .key("", .command)
     case "↵": return .key("\r", [])
-    case "⌘↵": return .key("\r")
     default:
       let main = row.combo.first { !HelpCatalog.modifierKeys.contains($0) } ?? ""
       return event(key: main, shift: row.combo.contains("shift")).first ?? .key("", .command)
