@@ -257,7 +257,7 @@ final class RootFilesWritesTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["commit", "-qm", "second"]).isSuccess)
     let files = repo.files()
 
-    let undone = finish(files) { files.undoLastCommit(completion: $0) }
+    let undone = finish(files) { files.undoLastCommit(head: .movedByOwnWrite, completion: $0) }
     XCTAssertNil(undone.failure)
     XCTAssertEqual(repo.head(), first)
     XCTAssertEqual(entry(undone, "b.txt"), GitStatus.Entry(staged: .added, unstaged: nil))
@@ -265,7 +265,7 @@ final class RootFilesWritesTests: OrbeTestCase {
 
     XCTAssertTrue(repo.git(["commit", "-qm", "second again"]).isSuccess)
     XCTAssertTrue(repo.git(["reset", "-q", "--hard", first]).isSuccess)
-    let root = finish(files) { files.undoLastCommit(completion: $0) }
+    let root = finish(files) { files.undoLastCommit(head: .movedByOwnWrite, completion: $0) }
     XCTAssertNil(root.failure)
     XCTAssertEqual(
       root.statusAtCompletion?.branch, GitStatus.Branch(name: "main", commit: nil, upstream: nil),

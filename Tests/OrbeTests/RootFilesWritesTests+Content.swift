@@ -55,6 +55,21 @@ extension RootFilesWritesTests {
     assertRefused(files, [("外でコミットしてからステージし直した", seen)])
   }
 
+  /// 外でのコミットで HEAD が進むと、index も作業ツリーも見えていたままでも、コミット・amend・取り消しは何も書かずに断る
+  /// ——見えていないコミットの上に重ねない・書き換えない・取り消さない。
+  func testCommitsAndUndoRefuseWhenTheHeadMovedOutside() throws {
+    try repo.write("a.txt", "edited\n")
+    let files = repo.files()
+    let seen = GitCommitContent.seen(try XCTUnwrap(files.status))
+    XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "agent"]).isSuccess)
+    assertRefused(files, [("外でのコミット", seen)])
+
+    let head = repo.head()
+    let undone = finish(files) { files.undoLastCommit(head: seen.head, completion: $0) }
+    XCTAssertEqual(undone.failure, .contentMismatch)
+    XCTAssertEqual(repo.head(), head, "外のコミットを取り消さない")
+  }
+
   /// rename のステージ済みの行は、index と HEAD の差の両側（元パスと新しいパス）に当たるので、断らずにコミットできる。
   func testAStagedRenameIsCommittedAsItsRowShowsIt() throws {
     try repo.write("old.txt", "body\n")

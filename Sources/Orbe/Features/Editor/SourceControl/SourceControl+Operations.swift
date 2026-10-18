@@ -20,18 +20,20 @@ extension SourceControl {
   }
 
   /// `content` をコミットする。通ればメッセージを空にする（コミットの間に打ち足していれば残す）。
-  func commit(_ content: GitCommitContent) {
+  @discardableResult
+  func commit(_ content: GitCommitContent) -> Operation? {
     commit(content, amend: false)
   }
 
   /// `content` で直前のコミットを差し替える（メッセージが空なら前のメッセージのまま）。
-  func amend(_ content: GitCommitContent) {
+  @discardableResult
+  func amend(_ content: GitCommitContent) -> Operation? {
     commit(content, amend: true)
   }
 
-  private func commit(_ content: GitCommitContent, amend: Bool) {
+  private func commit(_ content: GitCommitContent, amend: Bool) -> Operation? {
     let message = self.message
-    run(amend ? .amend : .commit, amend ? .amend : .commit) { [weak self] files, done in
+    return run(amend ? .amend : .commit, amend ? .amend : .commit) { [weak self] files, done in
       files.commit(message: message, content: content, amend: amend) { failure in
         if failure == nil { self?.clearMessage(ifStill: message) }
         done(failure)
@@ -39,11 +41,14 @@ extension SourceControl {
     }
   }
 
-  func undoLastCommit() {
-    run(.undo, .undo) { files, done in files.undoLastCommit(completion: done) }
+  /// HEAD が `head` のときだけ取り消す。
+  @discardableResult
+  func undoLastCommit(_ head: GitSeenHead) -> Operation? {
+    run(.undo, .undo) { files, done in files.undoLastCommit(head: head, completion: done) }
   }
 
-  func pull() {
+  @discardableResult
+  func pull() -> Operation? {
     run(.pull, .pull) { [weak self] files, done, operation in self?.pull(files, operation, done) }
   }
 
@@ -61,7 +66,8 @@ extension SourceControl {
   }
 
   /// プル → プッシュ（先行・遅れの数に依らず両方走らせる）。
-  func sync() {
+  @discardableResult
+  func sync() -> Operation? {
     run(.sync, .pull) { [weak self] files, done, operation in
       self?.pull(files, operation) { failure in
         self?.continueStep(operation, after: failure, done) { self?.push(files, operation, done) }
@@ -76,9 +82,10 @@ extension SourceControl {
   }
 
   /// `content` をコミット → プッシュ。コミットが通ればメッセージを空にしてから送る。
-  func commitAndPush(_ content: GitCommitContent) {
+  @discardableResult
+  func commitAndPush(_ content: GitCommitContent) -> Operation? {
     let message = self.message
-    run(.commitAndPush, .commit) { [weak self] files, done, operation in
+    return run(.commitAndPush, .commit) { [weak self] files, done, operation in
       guard let self else { return done(.cancelled) }
       attach(
         files.commit(message: message, content: content) { [weak self] failure in
@@ -132,6 +139,7 @@ extension SourceControl {
     _ operation: Operation, after failure: GitWriteFailure?,
     _ done: @escaping (GitWriteFailure?) -> Void, next: () -> Void
   ) {
+    finishFirstStep(operation, failure)
     guard failure == nil else { return done(failure) }
     guard !operation.isStopped else { return done(.cancelled) }
     next()

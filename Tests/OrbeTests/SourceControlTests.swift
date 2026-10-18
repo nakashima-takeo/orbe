@@ -165,7 +165,7 @@ final class SourceControlTests: OrbeTestCase {
     control.amend(.staged("a.txt"))
     XCTAssertEqual(
       control.failure, SourceControl.Failure(kind: .amend, cause: .rewriteDuringNetwork))
-    control.undoLastCommit()
+    control.undoLastCommit(.movedByOwnWrite)
     XCTAssertEqual(
       control.failure, SourceControl.Failure(kind: .undo, cause: .rewriteDuringNetwork))
     XCTAssertEqual(control.operations.map(\.kind), [.commitAndPush])

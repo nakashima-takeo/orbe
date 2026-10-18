@@ -14,17 +14,32 @@ extension ScmPanel {
 
   /// コミットする（✓・ボタン・⌘↵）。何を入れるかは押した時点の姿で決める（見たものをコミットする）。
   func commit() {
-    control.commit(commitContent)
+    startCommit(control.commit)
   }
 
   /// 直前のコミットを差し替える（コミットと同じ範囲）。
   func amend() {
-    control.amend(commitContent)
+    startCommit(control.amend)
   }
 
   /// コミットしてプッシュ（コミットと同じ範囲）。
   func commitAndPush() {
-    control.commitAndPush(commitContent)
+    startCommit(control.commitAndPush)
+  }
+
+  /// 最後のコミットを取り消す（押した時点に見えていた HEAD のときだけ）。
+  func undoLastCommit() {
+    ownWrites.record(.undo, control.undoLastCommit(ownWrites.head(changes)))
+  }
+
+  /// プル（HEAD を動かすので、行に出るまで見えていた HEAD に数える）。
+  func pull() {
+    ownWrites.record(.pull, control.pull())
+  }
+
+  /// 同期（プル → プッシュ）。
+  func sync() {
+    ownWrites.record(.pull, control.sync())
   }
 
   /// 行をステージする（行の ＋・すべてステージ）。結果が行に出るまで、コミットの範囲に数える。
@@ -42,9 +57,19 @@ extension ScmPanel {
     ownWrites.record(.discard(rows), control.discard(rows))
   }
 
-  /// 押した時点の範囲の中身——見えている行に、このパネルで押してまだ行に出ていない書き込みを重ねたもの（→ `ScmOwnWrites`）。
-  /// それ以外の食い違い（外の書き込み）は、根のサービスが書き込みの直前に照らして断る。
-  private var commitContent: GitCommitContent {
-    ownWrites.content(changes)
+  /// 自分の書き込みが終わった（根のサービスの status はもう書き込み後の姿）。
+  func sourceControl(
+    _ control: SourceControl, firstStepDidFinish operation: SourceControl.Operation,
+    failure: GitWriteFailure?
+  ) {
+    ownWrites.firstStepDidFinish(operation, failed: failure != nil, status: operation.files.status)
+  }
+
+  /// 押した時点の範囲の中身——見えている行に、このパネルで押してまだ行に出ていない書き込みを重ねたもの（→ `ScmOwnWrites`）
+  /// ——でコミットの操作を始め、その書き込みも覚える。それ以外の食い違い（外の書き込み）は、根のサービスが書き込みの直前に
+  /// 照らして断る。
+  private func startCommit(_ start: (GitCommitContent) -> SourceControl.Operation?) {
+    let content = ownWrites.content(changes)
+    ownWrites.record(.commit(stagingFirst: content.stagingFirst), start(content))
   }
 }

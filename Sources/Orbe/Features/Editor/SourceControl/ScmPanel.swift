@@ -390,11 +390,11 @@ extension ScmPanel: RootFilesObserver {
   }
 }
 
+/// 操作の 1 段目の終わりは `ScmPanel+Commit`（範囲に数える自分の書き込み）。
 extension ScmPanel: SourceControlObserver {
   /// 自分のネット操作の終わりは remote 追跡 ref を動かしうる（push は HEAD を動かさないので、前の値を残すと push の直後に
   /// amend・取り消しが押せる）。HEAD を動かす操作は、HEAD の違いで分からないになる。
   func sourceControl(_ control: SourceControl, operationDidFinish kind: SourceControl.Kind) {
-    ownWrites.operationsDidFinish(remaining: control.operations)
     readGraphAndHead(remoteRefsMayHaveMoved: kind.isNetwork)
   }
 }

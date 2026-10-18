@@ -114,7 +114,7 @@ final class ScmRowsTests: OrbeTestCase {
   func testEmptySectionsAndFoldedFilesAreNotRowsAndSegmentsCoverEveryRow() {
     let changes = ScmChanges(
       staged: [], changes: ScmChanges.build(status).changes.filter { $0.path.hasPrefix("src/") },
-      stagedVersions: [:])
+      head: nil, stagedVersions: [:])
     let branch = ScmBranch(status.branch)
     func rows(_ layout: ScmLayout) -> [ScmRowID] {
       layout.items.indices.compactMap(layout.id(at:))

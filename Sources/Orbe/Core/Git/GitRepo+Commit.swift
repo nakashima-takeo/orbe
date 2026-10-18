@@ -2,17 +2,29 @@ import Foundation
 
 // MARK: - コミット・amend・最後のコミットの取り消し
 
+/// 押した時点に見えていた HEAD（パネルが渡す）。コミット・amend・取り消しは、書き込みの直前の HEAD がこれでなければ書かない。
+enum GitSeenHead: Equatable {
+  /// 基準のコミット（nil = 初回コミット前）から `undone` 代さかのぼったコミット（`undone` はそのパネルで押した取り消しの
+  /// 数）。index は基準と比べる——取り消しは index を変えないので、取り消した後も前と同じ差のまま照らせる。
+  case at(String?, undone: Int)
+  /// そのパネルで押した書き込み（走っているプル・コミット）が動かす先がまだ分からない。HEAD は照らさず、index は今の HEAD
+  /// と比べる。
+  case movedByOwnWrite
+}
+
 /// コミットの中身（新しいコミットにも、amend にも入れる）。押した時点に見えていたもの（パネルが渡す）で、コミットはそれと
-/// 違う index を書かない（→ `commit`）。
+/// 違う HEAD・index に書かない（→ `commit`）。
 struct GitCommitContent: Equatable {
-  /// 見えていたステージ済み——index が HEAD と違うパス（rename は元パスも）と、その index の版。
+  /// 見えていた HEAD。
+  let head: GitSeenHead
+  /// 見えていたステージ済み——index が HEAD（`head` の基準）と違うパス（rename は元パスも）と、その index の版。
   let staged: [String: GitStatus.IndexVersion]
   /// 版を問わないパス（そのパネルで押したステージが決める。HEAD と同じになってもよい）。`staged` とは重ならない。
   let unknown: Set<String>
   /// 先にステージする行。空なら index のままコミットする。
   let stagingFirst: [GitStatus.Row]
 
-  /// index と HEAD が違うパスと、その index の版 `differing` が見えていたステージ済みと合う。
+  /// index と基準が違うパスと、その index の版 `differing` が見えていたステージ済みと合う。
   func matches(_ differing: [String: GitStatus.IndexVersion]) -> Bool {
     staged.allSatisfy { differing[$0.key] == $0.value }
       && differing.keys.allSatisfy { staged[$0] != nil || unknown.contains($0) }
@@ -24,7 +36,7 @@ extension GitRepo {
   /// コミットする（`amend` なら直前のコミットを差し替える）。中身は `content`——index のままか、先に行をステージして
   /// から（同じ書き込みの中で `stage` と同じ規則で選び直す）。どの中身でも、呼んだ時点の index に競合が残っていれば何も
   /// 書かずに `conflictsRemain` で返す（git はコミットを断るので、先にステージしたものが merge のコミットに混ざりうるだけに
-  /// なる）。コミットに入るものが `content` と違えば何も書かずに `contentMismatch` で返す。amend は、呼んだ時点の HEAD
+  /// なる）。HEAD かコミットに入るものが `content` と違えば何も書かずに `contentMismatch` で返す。amend は、呼んだ時点の HEAD
   /// が push 済みなら何も書かずに `headPushed` で返す。ステージの後で止められたらコミットしない。ステージが通ってコミットが
   /// 落ちたら、ステージしたものは残る。
   ///
@@ -63,18 +75,29 @@ extension GitRepo {
     }
   }
 
-  /// コミットに入るものが押した時点に見えていたものと違えば、何も書かずに `contentMismatch` で返し、同じなら `body` を
-  /// 続ける。git のコミットは index 全体を入れるので、今 index が HEAD と違うパスとその版が見えていたステージ済みと
-  /// （版で比べる——同じパスを外で別の中身にステージし直しても、名前は変わらない）、先にステージするパス（選び直した
-  /// `staging`）が見えていた行と、それぞれ一致しなければならない。パネルの範囲は見えている行で決まり、行は status より
-  /// 遅れて当たり、外（端末）の書き込みは監視が届くまで行に出ない——そのずれの間にも押せてしまうので、書き込みの直前に照らす。
+  /// HEAD かコミットに入るものが押した時点に見えていたものと違えば、何も書かずに `contentMismatch` で返し、同じなら `body`
+  /// を続ける。HEAD は見えていたものでなければならない（外でのコミットの上に重ねない・見えていないコミットを送らない）。
+  /// git のコミットは index 全体を入れるので、今 index が基準と違うパスとその版が見えていたステージ済みと（版で比べる——
+  /// 同じパスを外で別の中身にステージし直しても、名前は変わらない）、先にステージするパス（選び直した `staging`）が見えて
+  /// いた行と、それぞれ一致しなければならない。パネルの範囲は見えている行で決まり、行は status より遅れて当たり、外（端末）
+  /// の書き込みは監視が届くまで行に出ない——そのずれの間にも押せてしまうので、書き込みの直前に照らす。
   private func unlessContentDiffers(
     _ content: GitCommitContent, staging: [String], handle: GitRunner.Handle,
     _ completion: @escaping (GitWriteFailure?) -> Void, then body: @escaping () -> Void
   ) {
-    let staged = [
+    unlessHeadMoved(content.head, handle: handle, completion) {
+      self.unlessIndexDiffers(content, staging: staging, handle: handle, completion, then: body)
+    }
+  }
+
+  private func unlessIndexDiffers(
+    _ content: GitCommitContent, staging: [String], handle: GitRunner.Handle,
+    _ completion: @escaping (GitWriteFailure?) -> Void, then body: @escaping () -> Void
+  ) {
+    var staged = [
       "diff", "--cached", "--raw", "--no-abbrev", "-z", "--no-renames", "--ignore-submodules=none",
     ]
+    if case .at(let base?, _) = content.head { staged += [base, "--"] }
     runner.run(
       staged, cwd: root, handle: handle,
       transform: { listed -> Result<Bool, GitWriteFailure> in
@@ -122,11 +145,45 @@ extension GitRepo {
   }
 
   /// 最後のコミットを取り消す。HEAD が 1 つ戻り、中身はステージ済みに残る。初回コミットなら、HEAD のブランチの ref を
-  /// 消して初回コミット前へ戻す（index はそのまま＝全部ステージ済み）。呼んだ時点の HEAD が push 済みのコミットと shallow
-  /// clone の境界のコミットは取り消さない。
-  func undoLastCommit(handle: GitRunner.Handle, completion: @escaping (GitWriteFailure?) -> Void) {
-    unlessHeadIsPushed(handle: handle, completion) {
-      self.undoUnpushedLastCommit(handle: handle, completion: completion)
+  /// 消して初回コミット前へ戻す（index はそのまま＝全部ステージ済み）。呼んだ時点の HEAD が押した時点に見えていた `head`
+  /// でなければ（外でのコミットを取り消さない）何も書かずに `contentMismatch` で返す。push 済みのコミットと shallow clone の
+  /// 境界のコミットは取り消さない。
+  func undoLastCommit(
+    head: GitSeenHead, handle: GitRunner.Handle, completion: @escaping (GitWriteFailure?) -> Void
+  ) {
+    unlessHeadMoved(head, handle: handle, completion) {
+      self.unlessHeadIsPushed(handle: handle, completion) {
+        self.undoUnpushedLastCommit(handle: handle, completion: completion)
+      }
+    }
+  }
+
+  /// 今の HEAD が押した時点に見えていた `head` でなければ書かずに `contentMismatch` で返し、そうなら `body` を続ける。
+  private func unlessHeadMoved(
+    _ head: GitSeenHead, handle: GitRunner.Handle,
+    _ completion: @escaping (GitWriteFailure?) -> Void, then body: @escaping () -> Void
+  ) {
+    guard case .at(let base, let undone) = head else { return body() }
+    resolveCommit("HEAD", handle: handle, completion) { current in
+      guard let base, undone > 0 else {
+        return current == base ? body() : completion(.contentMismatch)
+      }
+      self.resolveCommit("\(base)~\(undone)", handle: handle, completion) { seen in
+        current == seen ? body() : completion(.contentMismatch)
+      }
+    }
+  }
+
+  /// `name` が指すコミット（無ければ nil——初回コミット前の HEAD・根より前の祖先）。
+  private func resolveCommit(
+    _ name: String, handle: GitRunner.Handle,
+    _ completion: @escaping (GitWriteFailure?) -> Void, then body: @escaping (String?) -> Void
+  ) {
+    let verify = ["rev-parse", "-q", "--verify", name + "^{commit}"]
+    runner.run(verify, cwd: root, handle: handle) { parsed in
+      if parsed.exited && parsed.status == 1 { return body(nil) }
+      if let failure = GitWriteFailure.of(parsed) { return completion(failure) }
+      body(parsed.stdoutText.trimmingCharacters(in: .newlines))
     }
   }
 

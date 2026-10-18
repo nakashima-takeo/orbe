@@ -21,7 +21,7 @@ extension RootFilesWritesTests {
       files.commit(message: "reword", content: staging, amend: true, completion: $0)
     }
     XCTAssertEqual(amended.failure, .headPushed)
-    let undone = finish(files) { files.undoLastCommit(completion: $0) }
+    let undone = finish(files) { files.undoLastCommit(head: .movedByOwnWrite, completion: $0) }
     XCTAssertEqual(undone.failure, .headPushed)
     XCTAssertEqual(repo.head(), pushed)
     XCTAssertEqual(repo.git(["ls-files", "-s"]).stdoutText, index, "index は押す前のまま")
@@ -30,7 +30,7 @@ extension RootFilesWritesTests {
       files.commit(message: "local", content: .staged("a.txt"), completion: $0)
     }
     XCTAssertNil(committed.failure, "新しいコミットは書ける")
-    let local = finish(files) { files.undoLastCommit(completion: $0) }
+    let local = finish(files) { files.undoLastCommit(head: .movedByOwnWrite, completion: $0) }
     XCTAssertNil(local.failure, "未 push の HEAD は取り消せる")
     XCTAssertEqual(repo.head(), pushed)
   }
@@ -47,7 +47,7 @@ extension RootFilesWritesTests {
     let boundary = repo.git(["rev-parse", "HEAD"], in: shallow).stdoutText
     let files = repo.files(at: GitWorktreeRoot.normalizedPath(shallow))
 
-    let undone = finish(files) { files.undoLastCommit(completion: $0) }
+    let undone = finish(files) { files.undoLastCommit(head: .movedByOwnWrite, completion: $0) }
     XCTAssertEqual(undone.failure, .shallowBoundary)
     XCTAssertEqual(repo.git(["rev-parse", "HEAD"], in: shallow).stdoutText, boundary)
   }

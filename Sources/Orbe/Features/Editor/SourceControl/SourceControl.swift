@@ -3,6 +3,12 @@ import Foundation
 /// 面の側が知らせを受ける者（同じ worktree を見ているソース管理パネル）。
 @MainActor
 protocol SourceControlObserver: AnyObject {
+  /// 操作の 1 段目（1 段の操作はその段）が終わった（`failure` が nil なら通った）。根のサービスの完了の後なので、根のサービスの
+  /// status はもう書き込み後の姿。2 段の操作の 1 段目は index・HEAD を書く段（コミット・プル）で、2 段目の push はそれを
+  /// 書かない。
+  func sourceControl(
+    _ control: SourceControl, firstStepDidFinish operation: SourceControl.Operation,
+    failure: GitWriteFailure?)
   /// 種類 `kind` の操作が終わった（通った・止めた・失敗したのどれでも）。
   func sourceControl(_ control: SourceControl, operationDidFinish kind: SourceControl.Kind)
 }
@@ -71,6 +77,7 @@ final class SourceControl {
     /// ネットの段の前で裏の fetch に譲って待つ間の止める手（待ちを取り下げて「止めた」で終える）。
     @ObservationIgnored fileprivate var withdraw: (() -> Void)?
     @ObservationIgnored fileprivate(set) var isStopped = false
+    @ObservationIgnored fileprivate var hasFinishedFirstStep = false
     /// 始めたときの根のサービス。2 段の操作は全段が終わるまで握る——2 段目のために引き直すと、誰も握っていない瞬間に
     /// 新しいサービスができ、管理下かの判定の前に「管理外」で断られうる。
     @ObservationIgnored let files: RootFiles
@@ -229,11 +236,21 @@ final class SourceControl {
     operation.progress = line
   }
 
+  /// 操作の 1 段目が終わった（2 段の操作は段の間、1 段の操作は終わりで。1 段目を待つ間に止めた操作も、終わりで知らせる）。
+  func finishFirstStep(_ operation: Operation, _ failure: GitWriteFailure?) {
+    guard !operation.hasFinishedFirstStep else { return }
+    operation.hasFinishedFirstStep = true
+    for observer in observers {
+      observer.value?.sourceControl(self, firstStepDidFinish: operation, failure: failure)
+    }
+  }
+
   /// 操作を終える（全段の終わり）。止めた・管理外は失敗にしない。人のネット操作なら、裏の fetch の係へ終わりを届ける。
   func finish(_ operation: Operation, _ outcome: GitWriteFailure?) {
     operation.isRunning = false
     operation.longDelay.cancel()
     operations.removeAll { $0 === operation }
+    finishFirstStep(operation, outcome)
     operation.autoFetch?.humanDidFinish(operation.kind, outcome)
     operation.autoFetch = nil
     switch outcome {

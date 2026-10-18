@@ -91,10 +91,12 @@ extension RootFiles {
       completion)
   }
 
-  /// 最後のコミットを取り消す（中身はステージ済みに残る）。
+  /// 最後のコミットを取り消す（中身はステージ済みに残る）。HEAD が `head` でなければ何も書かずに `contentMismatch`。
   @discardableResult
-  func undoLastCommit(completion: @escaping (GitWriteFailure?) -> Void) -> Write {
-    enqueue({ $0.undoLastCommit(handle: $1, completion: $2) }, completion)
+  func undoLastCommit(
+    head: GitSeenHead, completion: @escaping (GitWriteFailure?) -> Void
+  ) -> Write {
+    enqueue({ $0.undoLastCommit(head: head, handle: $1, completion: $2) }, completion)
   }
 
   /// 取り込む。ネット待ちごと順番に入る（取り込みは index と作業ツリーを書く）。

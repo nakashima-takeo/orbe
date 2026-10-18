@@ -161,6 +161,135 @@ extension ScmPanelTests {
     }
   }
 
+  /// 外でのコミット（HEAD が進んだ）が行に出る前に押したコミット・amend・コミットしてプッシュ・取り消しは、何も書かずに
+  /// 断る——見えていないコミットの上に重ねない・送らない・書き換えない・取り消さない。
+  func testWritingRightAfterAnOutsideCommitIsRefusedAndWritesNothing() throws {
+    let actions: [(String, (ScmPanel) -> Void)] = [
+      ("commit", { $0.commit() }), ("amend", { $0.amend() }),
+      ("commitAndPush", { $0.commitAndPush() }), ("undo", { $0.undoLastCommit() }),
+    ]
+    for (name, act) in actions {
+      try freshRepo(addingOrigin: name == "commitAndPush")
+      try repo.write("a.txt", "edited\n")
+      try repo.write("z.txt", "agent\n")
+      show(until: { $0.changes.staged.isEmpty && $0.changes.changes.count == 2 }, "\(name): 行")
+      panel.control.message = "m"
+      XCTAssertTrue(repo.git(["add", "z.txt"]).isSuccess)
+      XCTAssertTrue(repo.git(["commit", "-qm", "agent"]).isSuccess)
+      let (head, status) = (repo.head(), repo.git(["status", "--porcelain"]).stdoutText)
+      act(panel)
+      idle("\(name): 書き込み")
+      XCTAssertEqual(panel.control.failure?.cause, .git(.contentMismatch), name)
+      XCTAssertEqual(repo.head(), head, name)
+      XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, status, name)
+    }
+  }
+
+  /// このパネルで押したコミット・amend・取り消し・プルは、終わって行に出る前（プルは走っている間）に次のコミット・amend を
+  /// 押しても、押した結果どおりに数える——自分が動かした HEAD を「表示と食い違う」と断らない。
+  func testCommittingRightAfterOwnHeadWritesTakesWhatWasPressed() throws {
+    try repo.write("a.txt", "edited\n")
+    try repo.write("s.txt", "staged\n")
+    XCTAssertTrue(repo.git(["add", "s.txt"]).isSuccess)
+    show(until: { $0.changes.staged.count == 1 && $0.changes.changes.count == 1 }, "両方の区分")
+    panel.control.message = "s"
+    pressRightAfter(
+      .commit, "コミットの直後のコミット", first: { $0.commit() },
+      then: {
+        $0.control.message = "rest"
+        $0.commit()
+      })
+    XCTAssertNil(panel.control.failure)
+    XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "a.txt\n")
+    XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD~1"]).stdoutText, "s.txt\n")
+
+    let commits = repo.git(["rev-list", "--count", "HEAD"]).stdoutText
+    pumpMain(until: { self.panel.changes.count == 0 }, "変更が無くなる")
+    panel.control.message = "one"
+    pressRightAfter(
+      .amend, "メッセージだけの amend の直後の amend", first: { $0.amend() },
+      then: {
+        $0.control.message = "two"
+        $0.amend()
+      })
+    XCTAssertNil(panel.control.failure)
+    XCTAssertEqual(repo.git(["log", "-1", "--format=%s"]).stdoutText, "two\n")
+    XCTAssertEqual(repo.git(["rev-list", "--count", "HEAD"]).stdoutText, commits)
+
+    let parent = repo.git(["rev-parse", "HEAD~1"]).stdoutText
+    pumpMain(until: { self.panel.changes.head == self.repo.head() }, "行が今の HEAD に追いつく")
+    pressRightAfter(
+      .undo, "取り消しの直後のコミット", first: { $0.undoLastCommit() },
+      then: {
+        $0.control.message = "again"
+        $0.commit()
+      })
+    XCTAssertNil(panel.control.failure)
+    XCTAssertEqual(repo.git(["rev-parse", "HEAD~1"]).stdoutText, parent)
+    XCTAssertEqual(repo.git(["show", "--name-only", "--format=%s", "HEAD"]).stdoutText, "again\n\na.txt\n")
+  }
+
+  /// 自分のコミットが終わって行に出る前に外でコミットされると、その後に押した amend は、自分が動かした先と違う HEAD として
+  /// 何も書かずに断る。
+  func testAnOutsideCommitRightAfterOwnCommitIsRefused() throws {
+    try repo.write("a.txt", "edited\n")
+    try repo.write("z.txt", "agent\n")
+    XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
+    show(until: { $0.changes.staged.count == 1 && $0.changes.changes.count == 1 }, "両方の区分")
+    panel.control.message = "a"
+    var outside = ""
+    let repo = self.repo!
+    pressRightAfter(
+      .commit, "自分のコミットの直後の外のコミット", first: { $0.commit() },
+      then: {
+        XCTAssertTrue(repo.git(["add", "z.txt"]).isSuccess)
+        XCTAssertTrue(repo.git(["commit", "-qm", "agent"]).isSuccess)
+        outside = repo.head()
+        $0.control.message = "reword"
+        $0.amend()
+      })
+    XCTAssertEqual(panel.control.failure?.cause, .git(.contentMismatch))
+    XCTAssertEqual(repo.head(), outside)
+  }
+
+  /// 走っているプルの後ろで押したコミットは、プルが動かした HEAD の上に、見えていたステージ済みをコミットする。
+  func testCommittingWhileOwnPullRunsCommitsOnThePulledHead() throws {
+    repo.addOrigin()
+    try repo.advanceOrigin(writing: "o.txt", "other\n")
+    try repo.write("s.txt", "staged\n")
+    XCTAssertTrue(repo.git(["add", "s.txt"]).isSuccess)
+    show(until: { $0.changes.staged.count == 1 }, "ステージ済み")
+    panel.control.message = "s"
+    panel.pull()
+    panel.commit()
+    idle("プルとコミット")
+    XCTAssertNil(panel.control.failure)
+    XCTAssertEqual(
+      repo.git(["rev-parse", "HEAD~1"]).stdoutText, repo.git(["rev-parse", "origin/main"]).stdoutText)
+    XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "s.txt\n")
+  }
+
+  /// `first` で始めた種類 `kind` の操作が終わった知らせの中で（行が新しい HEAD に追いつく前に）`then` を押し、終わるまで回す。
+  private func pressRightAfter(
+    _ kind: SourceControl.Kind, _ name: String, first: (ScmPanel) -> Void,
+    then: @escaping (ScmPanel) -> Void
+  ) {
+    let head = panel.changes.head
+    var rowsHead: String??
+    let hook = FinishHook(kind) { [panel] in
+      guard let panel else { return }
+      rowsHead = panel.changes.head
+      then(panel)
+    }
+    panel.control.addObserver(hook)
+    withExtendedLifetime(hook) {
+      first(panel)
+      pumpMain(until: { rowsHead != nil }, "\(name): 書き込みが終わる")
+      idle("\(name): 次の書き込み")
+    }
+    XCTAssertEqual(rowsHead, head, "\(name): 前提: 行はまだ前の HEAD のまま")
+  }
+
   /// 前の場面のパネルを閉じ、新しい repo にする（最初の場面は setUp の repo のまま）。
   private func freshRepo(addingOrigin: Bool) throws {
     if panel != nil {
@@ -208,6 +337,11 @@ private final class FinishHook: SourceControlObserver {
     self.kind = kind
     self.body = body
   }
+
+  func sourceControl(
+    _ control: SourceControl, firstStepDidFinish operation: SourceControl.Operation,
+    failure: GitWriteFailure?
+  ) {}
 
   func sourceControl(_ control: SourceControl, operationDidFinish kind: SourceControl.Kind) {
     guard kind == self.kind, let body else { return }

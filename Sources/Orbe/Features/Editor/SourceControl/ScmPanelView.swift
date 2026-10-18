@@ -119,7 +119,7 @@ private struct ScmControlsHead: View {
           glyph: EditorGlyphs.more, help: l10n.string(.editorScmMoreActions), isEnabled: true,
           menu: {
             ScmMenu.make([
-              ScmMenu.Item(l10n.string(.editorScmPull), state.canNetwork, panel.control.pull),
+              ScmMenu.Item(l10n.string(.editorScmPull), state.canNetwork, panel.pull),
               ScmMenu.Item(l10n.string(.editorScmPush), state.canNetwork, panel.control.push),
               ScmMenu.Item(l10n.string(.editorScmFetch), state.canNetwork, panel.control.fetch),
             ])
@@ -266,7 +266,7 @@ private struct ScmCommitButton: View {
   private func primary(_ primary: ScmCommitState.Primary) {
     switch primary {
     case .commit: panel.commit()
-    case .sync: panel.control.sync()
+    case .sync: panel.sync()
     case .publish: panel.control.publish()
     }
   }
@@ -277,7 +277,7 @@ private struct ScmCommitButton: View {
       ScmMenu.Item(
         l10n.string(.editorScmCommitAndPush), state.canCommitAndPush, panel.commitAndPush),
       nil,
-      ScmMenu.Item(l10n.string(.editorScmUndo), state.canUndo, panel.control.undoLastCommit),
+      ScmMenu.Item(l10n.string(.editorScmUndo), state.canUndo, panel.undoLastCommit),
     ])
   }
 }
