@@ -77,7 +77,7 @@ extension TaskPaletteAutomationModelTests {
 
   // MARK: - 棚の 2 行目
 
-  /// 前回の判定は判定の部品のうち最も新しく回ったものの最新の回（成否と時刻）。止めていれば停止中。まだ判定していなければ無い。
+  /// 前回の判定は判定の部品のうち最も新しく回ったものの最新の回（成否と時刻）。止めていれば停止中。
   func testShelfStatusSaysTheLastJudgeAndTheState() throws {
     let palette = TaskPaletteSamples.model(
       [],
