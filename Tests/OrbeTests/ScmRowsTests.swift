@@ -26,7 +26,7 @@ final class ScmRowsTests: OrbeTestCase {
       "moved.txt": GitStatus.Entry(staged: .renamed, unstaged: nil, originalPath: "old.txt"),
       "gone.txt": GitStatus.Entry(staged: .deleted, unstaged: nil),
     ], untrackedDirectories: [],
-    branch: GitStatus.Branch(name: "main", commit: "abc", upstream: nil))
+    branch: GitStatus.Branch(name: "main", commit: "abc", upstream: nil), stagedVersions: [:])
 
   func testSectionsBadgesAndOrder() {
     let changes = ScmChanges.build(status)
@@ -62,7 +62,7 @@ final class ScmRowsTests: OrbeTestCase {
           "a.txt": entry(nil, .modified), "conflict.txt": entry(.unmerged, .unmerged),
           "content": GitStatus.Entry(staged: nil, unstaged: .modified, unstagedSubmodule: .content),
           "moved": GitStatus.Entry(staged: nil, unstaged: .modified, unstagedSubmodule: .commit),
-        ], untrackedDirectories: [], branch: nil))
+        ], untrackedDirectories: [], branch: nil, stagedVersions: [:]))
     XCTAssertEqual(changes.changes.map(\.path), ["a.txt", "conflict.txt", "content", "moved"])
     XCTAssertEqual(changes.committable.map(\.path), ["a.txt", "moved"])
     XCTAssertEqual(changes.discardable.map(\.path), ["a.txt"])
@@ -94,7 +94,7 @@ final class ScmRowsTests: OrbeTestCase {
     let view = ScmRowView(frame: .zero)
     func enabled(_ entries: [String: GitStatus.Entry]) -> [Bool] {
       let changes = ScmChanges.build(
-        GitStatus(entries: entries, untrackedDirectories: [], branch: nil))
+        GitStatus(entries: entries, untrackedDirectories: [], branch: nil, stagedVersions: [:]))
       let layout = ScmLayout.build(changes, branch: nil, graph: nil, collapsed: [])
       guard let row = layout.index[ScmRowID(section: .changes, path: nil)] else { return [] }
       view.show(layout.items[row], language: .en, emoji: nil)
@@ -113,7 +113,8 @@ final class ScmRowsTests: OrbeTestCase {
   /// 行と、源が描く行がずれない）。
   func testEmptySectionsAndFoldedFilesAreNotRowsAndSegmentsCoverEveryRow() {
     let changes = ScmChanges(
-      staged: [], changes: ScmChanges.build(status).changes.filter { $0.path.hasPrefix("src/") })
+      staged: [], changes: ScmChanges.build(status).changes.filter { $0.path.hasPrefix("src/") },
+      stagedVersions: [:])
     let branch = ScmBranch(status.branch)
     func rows(_ layout: ScmLayout) -> [ScmRowID] {
       layout.items.indices.compactMap(layout.id(at:))

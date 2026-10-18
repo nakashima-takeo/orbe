@@ -55,15 +55,18 @@ struct ScmChanges {
   let committable: [File]
   /// 「変更」のうち、すべて破棄に入る行（破棄できる行）。
   let discardable: [File]
+  /// ステージ済みの区分が見せている index の版（rename は元パスも。→ `GitStatus.stagedVersions`）。
+  let stagedVersions: [String: GitStatus.IndexVersion]
 
-  init(staged: [File], changes: [File]) {
+  init(staged: [File], changes: [File], stagedVersions: [String: GitStatus.IndexVersion]) {
     self.staged = staged
     self.changes = changes
+    self.stagedVersions = stagedVersions
     committable = changes.filter { !$0.isConflicted && $0.canStage }
     discardable = changes.filter(\.canDiscard)
   }
 
-  static let empty = ScmChanges(staged: [], changes: [])
+  static let empty = ScmChanges(staged: [], changes: [], stagedVersions: [:])
 
   /// 件数（ステージ済み＋変更の行）。
   var count: Int { staged.count + changes.count }
@@ -108,7 +111,8 @@ struct ScmChanges {
     let ordered = { (files: [(FileNameOrder.PathKey, File)]) in
       files.sorted { FileNameOrder.comparePaths($0.0, $1.0) == .orderedAscending }.map(\.1)
     }
-    return ScmChanges(staged: ordered(staged), changes: ordered(changes))
+    return ScmChanges(
+      staged: ordered(staged), changes: ordered(changes), stagedVersions: status.stagedVersions)
   }
 
   /// 件数だけ（パネルを出していない間。並べ替えない）。

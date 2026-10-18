@@ -2,33 +2,29 @@ import Foundation
 
 // MARK: - コミット・amend・最後のコミットの取り消し
 
-/// コミットの中身（新しいコミットにも、amend にも入れる）。どちらも押した時点に見えていた行を持ち、コミットに入るパスは
-/// その行のパスと一致しなければならない（→ `commit`）。
-enum GitCommitContent: Equatable {
-  /// ステージ済みの分。行は見えていたステージ済みの行。
-  case staged([GitStatus.Row])
-  /// 行を先にステージしてから。見えていたステージ済みは無い。
-  case staging([GitStatus.Row])
+/// コミットの中身（新しいコミットにも、amend にも入れる）。押した時点に見えていたもの（パネルが渡す）で、コミットはそれと
+/// 違う index を書かない（→ `commit`）。
+struct GitCommitContent: Equatable {
+  /// 見えていたステージ済み——index が HEAD と違うパス（rename は元パスも）と、その index の版。
+  let staged: [String: GitStatus.IndexVersion]
+  /// 版を問わないパス（そのパネルで押したステージが決める。HEAD と同じになってもよい）。`staged` とは重ならない。
+  let unknown: Set<String>
+  /// 先にステージする行。空なら index のままコミットする。
+  let stagingFirst: [GitStatus.Row]
 
-  /// 先にステージする行。
-  var stagedFirst: [GitStatus.Row] {
-    if case .staging(let rows) = self { return rows }
-    return []
-  }
-
-  /// 見えていたステージ済みのパス（rename は元パスも）。
-  var stagedPaths: Set<String> {
-    if case .staged(let rows) = self { return Set(rows.flatMap(\.paths)) }
-    return []
+  /// index と HEAD が違うパスと、その index の版 `differing` が見えていたステージ済みと合う。
+  func matches(_ differing: [String: GitStatus.IndexVersion]) -> Bool {
+    staged.allSatisfy { differing[$0.key] == $0.value }
+      && differing.keys.allSatisfy { staged[$0] != nil || unknown.contains($0) }
   }
 }
 
 /// 書き込みの決まり（止め方・順番・パスの渡し方）は `GitRepo+Changes` と同じ。
 extension GitRepo {
-  /// コミットする（`amend` なら直前のコミットを差し替える）。中身は `content`——ステージ済みの分か、先に行をステージして
+  /// コミットする（`amend` なら直前のコミットを差し替える）。中身は `content`——index のままか、先に行をステージして
   /// から（同じ書き込みの中で `stage` と同じ規則で選び直す）。どの中身でも、呼んだ時点の index に競合が残っていれば何も
   /// 書かずに `conflictsRemain` で返す（git はコミットを断るので、先にステージしたものが merge のコミットに混ざりうるだけに
-  /// なる）。コミットに入るパスが `content` の行と違えば何も書かずに `contentMismatch` で返す。amend は、呼んだ時点の HEAD
+  /// なる）。コミットに入るものが `content` と違えば何も書かずに `contentMismatch` で返す。amend は、呼んだ時点の HEAD
   /// が push 済みなら何も書かずに `headPushed` で返す。ステージの後で止められたらコミットしない。ステージが通ってコミットが
   /// 落ちたら、ステージしたものは残る。
   ///
@@ -51,7 +47,7 @@ extension GitRepo {
     message: String, content: GitCommitContent, amend: Bool, handle: GitRunner.Handle,
     completion: @escaping (GitWriteFailure?) -> Void
   ) {
-    select(content.stagedFirst, handle: handle) { selected in
+    select(content.stagingFirst, handle: handle) { selected in
       switch selected {
       case .failure(let failure): completion(failure)
       case .success(let selection):
@@ -67,27 +63,25 @@ extension GitRepo {
     }
   }
 
-  /// コミットに入るパスが押した時点に見えていた行と違えば、何も書かずに `contentMismatch` で返し、同じなら `body` を続ける。
-  /// git のコミットは index 全体を入れるので、今 index が HEAD と違うパスが見えていたステージ済みと、先にステージする
-  /// パス（選び直した `staging`）が見えていた行と、それぞれ一致しなければならない。パネルの範囲は見えている行で決まり、
-  /// 行は status より遅れて当たり、外（端末）の書き込みは監視が届くまで行に出ない——そのずれの間にも押せてしまうので、
-  /// 書き込みの直前に照らす。
+  /// コミットに入るものが押した時点に見えていたものと違えば、何も書かずに `contentMismatch` で返し、同じなら `body` を
+  /// 続ける。git のコミットは index 全体を入れるので、今 index が HEAD と違うパスとその版が見えていたステージ済みと
+  /// （版で比べる——同じパスを外で別の中身にステージし直しても、名前は変わらない）、先にステージするパス（選び直した
+  /// `staging`）が見えていた行と、それぞれ一致しなければならない。パネルの範囲は見えている行で決まり、行は status より
+  /// 遅れて当たり、外（端末）の書き込みは監視が届くまで行に出ない——そのずれの間にも押せてしまうので、書き込みの直前に照らす。
   private func unlessContentDiffers(
     _ content: GitCommitContent, staging: [String], handle: GitRunner.Handle,
     _ completion: @escaping (GitWriteFailure?) -> Void, then body: @escaping () -> Void
   ) {
     let staged = [
-      "diff", "--cached", "--name-only", "-z", "--no-renames", "--ignore-submodules=none",
+      "diff", "--cached", "--raw", "--no-abbrev", "-z", "--no-renames", "--ignore-submodules=none",
     ]
     runner.run(
       staged, cwd: root, handle: handle,
       transform: { listed -> Result<Bool, GitWriteFailure> in
         if let failure = GitWriteFailure.of(listed) { return .failure(failure) }
-        let paths = Set(
-          listed.stdout.split(separator: 0).compactMap { String(bytes: $0, encoding: .utf8) })
         return .success(
-          paths == content.stagedPaths
-            && Set(staging) == Set(content.stagedFirst.flatMap(\.paths)))
+          Self.indexVersions(ofRaw: listed.stdout).map(content.matches) == true
+            && Set(staging) == Set(content.stagingFirst.flatMap(\.paths)))
       },
       completion: { matched in
         switch matched {
@@ -96,6 +90,21 @@ extension GitRepo {
         case .success(true): body()
         }
       })
+  }
+
+  /// rename を数えない `diff --raw -z` の出力（`:<mode> <mode> <object> <object> <status>` とパスの組）から、パスごとの
+  /// 変化の後の側（index）の版。読めない組があれば nil（見えていたものと合うとは言えない）。
+  private static func indexVersions(ofRaw data: Data) -> [String: GitStatus.IndexVersion]? {
+    let tokens = data.split(separator: 0)
+    guard tokens.count.isMultiple(of: 2) else { return nil }
+    var versions: [String: GitStatus.IndexVersion] = [:]
+    for meta in stride(from: 0, to: tokens.count, by: 2) {
+      guard let fields = String(bytes: tokens[meta], encoding: .utf8)?.split(separator: " "),
+        fields.count == 5, let path = String(bytes: tokens[meta + 1], encoding: .utf8)
+      else { return nil }
+      versions[path] = GitStatus.IndexVersion(mode: fields[1], object: fields[3])
+    }
+    return versions
   }
 
   private func commit(

@@ -36,6 +36,25 @@ extension RootFilesWritesTests {
       ])
   }
 
+  /// 見えていたステージ済みは版で照らす——同じパスを外でステージし直すと（作業ツリーの版を add した・外でコミットしてから
+  /// ステージし直した）名前は変わらないが、版の違いで断る。
+  func testCommitsRefuseWhenAStagedPathWasRestagedOutside() throws {
+    try repo.write("a.txt", "staged\n")
+    XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
+    try repo.write("a.txt", "working tree\n")
+    let files = repo.files()
+    let seen = GitCommitContent.seen(try XCTUnwrap(files.status))
+    XCTAssertEqual(Array(seen.staged.keys), ["a.txt"], "前提: ステージ済みと変更の両方に出ている")
+
+    XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
+    assertRefused(files, [("作業ツリーの版を外でステージした", seen)])
+
+    XCTAssertTrue(repo.git(["commit", "-qm", "outside"]).isSuccess)
+    try repo.write("a.txt", "restaged\n")
+    XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
+    assertRefused(files, [("外でコミットしてからステージし直した", seen)])
+  }
+
   /// rename のステージ済みの行は、index と HEAD の差の両側（元パスと新しいパス）に当たるので、断らずにコミットできる。
   func testAStagedRenameIsCommittedAsItsRowShowsIt() throws {
     try repo.write("old.txt", "body\n")
@@ -43,11 +62,11 @@ extension RootFilesWritesTests {
     XCTAssertTrue(repo.git(["commit", "-qm", "old"]).isSuccess)
     XCTAssertTrue(repo.git(["mv", "old.txt", "moved.txt"]).isSuccess)
     let files = repo.files()
-    let row = files.status!.row("moved.txt")
-    XCTAssertEqual(row.originalPath, "old.txt", "前提: rename の行")
+    let status = try XCTUnwrap(files.status)
+    XCTAssertEqual(status.row("moved.txt").originalPath, "old.txt", "前提: rename の行")
 
     let committed = finish(files) {
-      files.commit(message: "mv", content: .staged([row]), completion: $0)
+      files.commit(message: "mv", content: .seen(status), completion: $0)
     }
     XCTAssertNil(committed.failure)
     XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, "")

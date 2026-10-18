@@ -7,12 +7,13 @@ import Foundation
 @MainActor
 struct ScmOwnWrites {
   enum Kind {
-    case stage, unstage, discard
+    case stage([GitStatus.Row])
+    case unstage([GitStatus.Row])
+    case discard([GitStatus.Row])
   }
 
   private struct Entry {
     let kind: Kind
-    let rows: [GitStatus.Row]
     let operation: SourceControl.Operation
     /// 終わった時点に届いていた status の番号（nil = まだ列にある）。書き込みの終わりは取り直した status を届けた後に
     /// 来るので、この番号以降の status から組んだ行には結果が出ている。
@@ -25,10 +26,9 @@ struct ScmOwnWrites {
   /// 今の行を組んだ status の番号。
   private(set) var rowsNumber = 0
 
-  mutating func record(_ kind: Kind, _ rows: [GitStatus.Row], _ operation: SourceControl.Operation?)
-  {
+  mutating func record(_ kind: Kind, _ operation: SourceControl.Operation?) {
     guard let operation else { return }
-    entries.append(Entry(kind: kind, rows: rows, operation: operation))
+    entries.append(Entry(kind: kind, operation: operation))
   }
 
   mutating func statusDidArrive() {
@@ -56,29 +56,36 @@ struct ScmOwnWrites {
   }
 
   /// 見えている行に覚えている書き込みを重ねた範囲——ステージ済みがあればそれだけ、無ければ「変更」の入る行を先にステージ。
-  func content(staged: [GitStatus.Row], committable: [GitStatus.Row]) -> GitCommitContent {
-    guard !entries.isEmpty else {
-      return staged.isEmpty ? .staging(committable) : .staged(staged)
-    }
-    let byPath = { (rows: [GitStatus.Row]) in
-      Dictionary(rows.map { ($0.path, $0) }, uniquingKeysWith: { $1 })
-    }
-    var staged = byPath(staged)
-    var committable = byPath(committable)
+  /// 自分のステージが入れる版は、押した時点には分からないので問わない。
+  func content(_ changes: ScmChanges) -> GitCommitContent {
+    var staged = changes.stagedVersions
+    var unknown = Set<String>()
+    var committable = Dictionary(
+      changes.committable.map { ($0.path, $0.row) }, uniquingKeysWith: { $1 })
     for entry in entries {
-      for row in entry.rows {
-        switch entry.kind {
-        case .stage:
-          staged[row.path] = row
-          committable[row.path] = nil
-        case .unstage:
-          staged[row.path] = nil
-          committable[row.path] = row
-        case .discard:
+      switch entry.kind {
+      case .stage(let rows):
+        for row in rows {
+          for path in row.paths {
+            staged[path] = nil
+            unknown.insert(path)
+          }
           committable[row.path] = nil
         }
+      case .unstage(let rows):
+        for row in rows {
+          for path in row.paths {
+            staged[path] = nil
+            unknown.remove(path)
+          }
+          committable[row.path] = row
+        }
+      case .discard(let rows):
+        for row in rows { committable[row.path] = nil }
       }
     }
-    return staged.isEmpty ? .staging(Array(committable.values)) : .staged(Array(staged.values))
+    let hasStaged = !staged.isEmpty || !unknown.isEmpty
+    return GitCommitContent(
+      staged: staged, unknown: unknown, stagingFirst: hasStaged ? [] : Array(committable.values))
   }
 }

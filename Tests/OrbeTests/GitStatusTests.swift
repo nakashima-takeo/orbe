@@ -52,6 +52,32 @@ final class GitStatusTests: OrbeTestCase {
     XCTAssertEqual(status.entries.count, 6, "ヘッダ・不正なトークン・空は捨てる")
   }
 
+  /// index 側に変化のあるパスは index の版を持ち（ステージした削除・rename の元パスは index に無い）、作業ツリー側だけの
+  /// 変化・未追跡は持たない。XY が同じまま index の中身だけ変わっても、status は別の値になる（行が古い版のまま残らない）。
+  func testStagedPathsCarryTheirIndexVersion() {
+    let blob = String(repeating: "b", count: 40)
+    func line(_ xy: String, _ mode: String, _ object: String, _ path: String) -> String {
+      "1 \(xy) N... 100644 \(mode) 100644 \(zero) \(object) \(path)"
+    }
+    let status = parse([
+      line("MM", "100644", blob, "a.txt"), line("D.", "000000", zero, "gone.txt"),
+      line(".M", "100644", blob, "edited.txt"), renamed("R.", "new.txt"), "old.txt",
+      "? n.txt",
+    ])
+    XCTAssertEqual(
+      status.stagedVersions,
+      [
+        "a.txt": .entry(mode: "100644", object: blob), "gone.txt": .absent,
+        "new.txt": .entry(mode: "100644", object: zero), "old.txt": .absent,
+      ])
+    let restaged = parse([
+      line("MM", "100644", String(repeating: "c", count: 40), "a.txt"),
+      line("D.", "000000", zero, "gone.txt"), line(".M", "100644", blob, "edited.txt"),
+      renamed("R.", "new.txt"), "old.txt", "? n.txt",
+    ])
+    XCTAssertNotEqual(restaged, status)
+  }
+
   /// サブモジュールのままの作業ツリー側の変化は、チェックアウトしたコミットの移動（`git add` でステージできる）か、中身だけ
   /// （ステージできない）かを持つ。作業ツリーで消した・置き換えたサブモジュールと、作業ツリー側に変化の無い行は持たない。
   func testASubmoduleChangedInTheWorkingTreeIsMarkedWithHowItChanged() {

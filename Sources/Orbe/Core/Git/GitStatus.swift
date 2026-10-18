@@ -67,6 +67,17 @@ struct GitStatus: Equatable {
     var paths: [String] { [path] + (originalPath.map { [$0] } ?? []) }
   }
 
+  /// index の 1 パスの版。index に無いパス（ステージした削除・rename の元パス）は `absent`。
+  enum IndexVersion: Hashable {
+    case absent
+    case entry(mode: String, object: String)
+
+    /// git の出力の mode（`000000` は index に無い）と object 名から。
+    init(mode: Substring, object: Substring) {
+      self = mode == "000000" ? .absent : .entry(mode: String(mode), object: String(object))
+    }
+  }
+
   /// ファイル 1 つに付く印。ディレクトリ行の集約は消費者が `entries` から導く。
   enum Badge: Equatable {
     case modified, added, untracked, conflicted
@@ -80,6 +91,8 @@ struct GitStatus: Equatable {
   let untrackedDirectories: [String]
   /// ブランチのヘッダが無い出力なら nil。
   let branch: Branch?
+  /// index と HEAD が違うパス（rename は元パスも）の index の版。XY が同じまま index の中身が変わったことも、値の違いになる。
+  let stagedVersions: [String: IndexVersion]
 
   /// その相対パスの行（rename・copy なら元パスも）。
   func row(_ path: String) -> Row {
@@ -110,6 +123,7 @@ struct GitStatus: Equatable {
     let tokens = data.split(separator: 0, omittingEmptySubsequences: false)
       .map { String(bytes: $0, encoding: .utf8) ?? "" }
     var entries: [String: Entry] = [:]
+    var versions: [String: IndexVersion] = [:]
     var directories: [String] = []
     var headers = BranchHeaders()
     var index = 0
@@ -120,14 +134,19 @@ struct GitStatus: Equatable {
       case "# ":
         headers.read(token)
       case "1 ":
-        if let (path, entry) = ordinary(token) { entries[path] = merge(entries[path], entry) }
+        if let line = ordinary(token) {
+          entries[line.path] = merge(entries[line.path], line.entry)
+          if line.entry.staged != nil { versions[line.path] = line.index }
+        }
       case "2 ":
         // 元パスは次のトークン。無ければ丸ごと捨てる。
         guard index < tokens.count else { break }
         let original = tokens[index]
         index += 1
-        if let (path, entry) = renamed(token, from: original) {
-          entries[path] = merge(entries[path], entry)
+        if let line = renamed(token, from: original) {
+          entries[line.path] = merge(entries[line.path], line.entry)
+          if line.entry.staged != nil { versions[line.path] = line.index }
+          if line.entry.staged == .renamed { versions[original] = .absent }
         }
       case "u ":
         if let path = unmerged(token) {
@@ -144,7 +163,9 @@ struct GitStatus: Equatable {
         break
       }
     }
-    return GitStatus(entries: entries, untrackedDirectories: directories, branch: headers.branch)
+    return GitStatus(
+      entries: entries, untrackedDirectories: directories, branch: headers.branch,
+      stagedVersions: versions)
   }
 
   /// 同じパスが index 側の変化の行と未追跡の行の両方で出たら（`git rm --cached` の後の `1 D.` と `?`）、行の順に依らず
@@ -194,23 +215,31 @@ struct GitStatus: Equatable {
     }
   }
 
+  /// 変化の行 1 つ（`1`・`2`）。`index` はそのパスの index の版。
+  private struct Line {
+    let path: String
+    let entry: Entry
+    let index: IndexVersion
+  }
+
   /// `1 XY sub mH mI mW hH hI path`
-  private static func ordinary(_ token: String) -> (String, Entry)? {
+  private static func ordinary(_ token: String) -> Line? {
     let fields = token.split(separator: " ", maxSplits: 8, omittingEmptySubsequences: false)
     guard fields.count == 9, let entry = pair(fields[1], sub: fields[2]) else { return nil }
-    return (String(fields[8]), entry)
+    return Line(
+      path: String(fields[8]), entry: entry, index: IndexVersion(mode: fields[4], object: fields[7]))
   }
 
   /// `2 XY sub mH mI mW hH hI Xscore path`（元パスは次のトークン）
-  private static func renamed(_ token: String, from original: String) -> (String, Entry)? {
+  private static func renamed(_ token: String, from original: String) -> Line? {
     let fields = token.split(separator: " ", maxSplits: 9, omittingEmptySubsequences: false)
     guard fields.count == 10, let entry = pair(fields[1], sub: fields[2]) else { return nil }
-    return (
-      String(fields[9]),
-      Entry(
+    return Line(
+      path: String(fields[9]),
+      entry: Entry(
         staged: entry.staged, unstaged: entry.unstaged, originalPath: original,
-        unstagedSubmodule: entry.unstagedSubmodule)
-    )
+        unstagedSubmodule: entry.unstagedSubmodule),
+      index: IndexVersion(mode: fields[4], object: fields[7]))
   }
 
   /// `u XY sub m1 m2 m3 mW h1 h2 h3 path`
