@@ -89,7 +89,7 @@ struct ControlEventRecord {
   }
 }
 
-/// 待機動詞（wait_for_event / prompt_agent / spawn_agent / resume_agent）の `timeoutMs` 検証。
+/// 待機動詞（wait_for_event / prompt_agent / spawn_agent / resume_agent / get_automation_trial）の `timeoutMs` 検証。
 /// 既定値は動詞ごとに違うので呼び出し側が渡す。CLI help と MCP description はその値を写しており、
 /// ドリフトは L4 の help / `tools/list` テストが突き合わせて落とす（`KINDS:` / `KEYS:` と同じ守り方）。
 enum WaitTimeout {
