@@ -240,7 +240,7 @@ private struct ScmCommitButton: View {
       .overlay {
         ScmMenuAnchor(
           help: l10n.string(.editorScmCommitActions), isEnabled: state.isMenuEnabled
-        ) { menu(panel.commitState) }
+        ) { menu(panel.commitState, panel.openCommitMenu()) }
       }
     }
     .frame(height: Theme.Layout.editorScmCommitButton)
@@ -271,13 +271,13 @@ private struct ScmCommitButton: View {
     }
   }
 
-  private func menu(_ state: ScmCommitState) -> NSMenu {
+  private func menu(_ state: ScmCommitState, _ items: ScmCommitMenu) -> NSMenu {
     ScmMenu.make([
-      ScmMenu.Item(l10n.string(.editorScmAmend), state.canAmend, panel.amend),
+      ScmMenu.Item(l10n.string(.editorScmAmend), state.canAmend, items.amend),
       ScmMenu.Item(
-        l10n.string(.editorScmCommitAndPush), state.canCommitAndPush, panel.commitAndPush),
+        l10n.string(.editorScmCommitAndPush), state.canCommitAndPush, items.commitAndPush),
       nil,
-      ScmMenu.Item(l10n.string(.editorScmUndo), state.canUndo, panel.undoLastCommit),
+      ScmMenu.Item(l10n.string(.editorScmUndo), state.canUndo, items.undoLastCommit),
     ])
   }
 }

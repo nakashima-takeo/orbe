@@ -37,6 +37,16 @@ final class ScmPanelTests: OrbeTestCase {
     pumpMain(until: { self.panel.control.operations.isEmpty }, timeout: 20, message)
   }
 
+  /// 前の場面のパネルを閉じ、新しい repo にする（最初の場面は setUp の repo のまま）。
+  func freshRepo(addingOrigin: Bool) throws {
+    if panel != nil {
+      panel.isShown = false
+      panel.isLive = false
+      repo = try TempGitRepo()
+    }
+    if addingOrigin { repo.addOrigin() }
+  }
+
   /// 端末で HEAD を upstream を付けずに push すると（status は変わらず ref だけが動く）、amend と取り消しは押せなくなる。
   func testAHeadPushedFromTheTerminalCanNoLongerBeRewritten() throws {
     repo.addOrigin()

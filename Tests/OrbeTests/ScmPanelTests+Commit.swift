@@ -47,7 +47,7 @@ extension ScmPanelTests {
     show(until: { $0.changes.staged.count == 1 && $0.changes.changes.count == 1 }, "両方の区分")
     let commits = repo.git(["rev-list", "--count", "HEAD"]).stdoutText
 
-    panel.amend()
+    panel.openCommitMenu().amend()
     idle("ステージ済みの amend")
     XCTAssertEqual(repo.git(["rev-list", "--count", "HEAD"]).stdoutText, commits, "積まずに差し替える")
     XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, " M a.txt\n", "作業中の変更は残る")
@@ -56,7 +56,7 @@ extension ScmPanelTests {
     pumpMain(
       until: { self.panel.changes.staged.isEmpty && self.panel.changes.changes.count == 2 },
       "ステージ済みが無くなる")
-    panel.amend()
+    panel.openCommitMenu().amend()
     idle("全部の amend")
     XCTAssertEqual(repo.git(["rev-list", "--count", "HEAD"]).stdoutText, commits)
     XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, "")
@@ -157,53 +157,6 @@ extension ScmPanelTests {
     XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "a.txt\n")
   }
 
-  /// 自分が押していない変化——端末での `git add` の直後（監視が届いて行に出る前）に押したコミット・amend・コミットして
-  /// プッシュは、何も書かずに断る。
-  func testCommittingRightAfterAnOutsideChangeIsRefusedAndWritesNothing() throws {
-    let actions: [(String, (ScmPanel) -> Void)] = [
-      ("commit", { $0.commit() }), ("amend", { $0.amend() }),
-      ("commitAndPush", { $0.commitAndPush() }),
-    ]
-    for (name, act) in actions {
-      try freshRepo(addingOrigin: name == "commitAndPush")
-      try repo.write("a.txt", "edited\n")
-      try repo.write("secret.env", "token\n")
-      show(until: { $0.changes.staged.isEmpty && $0.changes.changes.count == 2 }, "\(name): 行")
-      panel.control.message = "m"
-      XCTAssertTrue(repo.git(["add", "secret.env"]).isSuccess)
-      let (head, status) = (repo.head(), repo.git(["status", "--porcelain"]).stdoutText)
-      act(panel)
-      idle("\(name): コミット")
-      XCTAssertEqual(panel.control.failure?.cause, .git(.contentMismatch), name)
-      XCTAssertEqual(repo.head(), head, name)
-      XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, status, name)
-    }
-  }
-
-  /// 外でのコミット（HEAD が進んだ）が行に出る前に押したコミット・amend・コミットしてプッシュ・取り消しは、何も書かずに
-  /// 断る——見えていないコミットの上に重ねない・送らない・書き換えない・取り消さない。
-  func testWritingRightAfterAnOutsideCommitIsRefusedAndWritesNothing() throws {
-    let actions: [(String, (ScmPanel) -> Void)] = [
-      ("commit", { $0.commit() }), ("amend", { $0.amend() }),
-      ("commitAndPush", { $0.commitAndPush() }), ("undo", { $0.undoLastCommit() }),
-    ]
-    for (name, act) in actions {
-      try freshRepo(addingOrigin: name == "commitAndPush")
-      try repo.write("a.txt", "edited\n")
-      try repo.write("z.txt", "agent\n")
-      show(until: { $0.changes.staged.isEmpty && $0.changes.changes.count == 2 }, "\(name): 行")
-      panel.control.message = "m"
-      XCTAssertTrue(repo.git(["add", "z.txt"]).isSuccess)
-      XCTAssertTrue(repo.git(["commit", "-qm", "agent"]).isSuccess)
-      let (head, status) = (repo.head(), repo.git(["status", "--porcelain"]).stdoutText)
-      act(panel)
-      idle("\(name): 書き込み")
-      XCTAssertEqual(panel.control.failure?.cause, .git(.contentMismatch), name)
-      XCTAssertEqual(repo.head(), head, name)
-      XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, status, name)
-    }
-  }
-
   /// このパネルで押したコミット・amend・取り消し・プルは、終わって行に出る前（プルは走っている間）に次のコミット・amend を
   /// 押しても、押した結果どおりに数える——自分が動かした HEAD を「表示と食い違う」と断らない。
   func testCommittingRightAfterOwnHeadWritesTakesWhatWasPressed() throws {
@@ -226,10 +179,10 @@ extension ScmPanelTests {
     pumpMain(until: { self.panel.changes.count == 0 }, "変更が無くなる")
     panel.control.message = "one"
     pressRightAfter(
-      .amend, "メッセージだけの amend の直後の amend", first: { $0.amend() },
+      .amend, "メッセージだけの amend の直後の amend", first: { $0.openCommitMenu().amend() },
       then: {
         $0.control.message = "two"
-        $0.amend()
+        $0.openCommitMenu().amend()
       })
     XCTAssertNil(panel.control.failure)
     XCTAssertEqual(repo.git(["log", "-1", "--format=%s"]).stdoutText, "two\n")
@@ -238,7 +191,7 @@ extension ScmPanelTests {
     let parent = repo.git(["rev-parse", "HEAD~1"]).stdoutText
     pumpMain(until: { self.panel.changes.head == self.repo.head() }, "行が今の HEAD に追いつく")
     pressRightAfter(
-      .undo, "取り消しの直後のコミット", first: { $0.undoLastCommit() },
+      .undo, "取り消しの直後のコミット", first: { $0.openCommitMenu().undoLastCommit() },
       then: {
         $0.control.message = "again"
         $0.commit()
@@ -266,7 +219,7 @@ extension ScmPanelTests {
         XCTAssertTrue(repo.git(["commit", "-qm", "agent"]).isSuccess)
         outside = repo.head()
         $0.control.message = "reword"
-        $0.amend()
+        $0.openCommitMenu().amend()
       })
     XCTAssertEqual(panel.control.failure?.cause, .git(.contentMismatch))
     XCTAssertEqual(repo.head(), outside)
@@ -309,16 +262,6 @@ extension ScmPanelTests {
       idle("\(name): 次の書き込み")
     }
     XCTAssertEqual(rowsHead, head, "\(name): 前提: 行はまだ前の HEAD のまま")
-  }
-
-  /// 前の場面のパネルを閉じ、新しい repo にする（最初の場面は setUp の repo のまま）。
-  private func freshRepo(addingOrigin: Bool) throws {
-    if panel != nil {
-      panel.isShown = false
-      panel.isLive = false
-      repo = try TempGitRepo()
-    }
-    if addingOrigin { repo.addOrigin() }
   }
 }
 

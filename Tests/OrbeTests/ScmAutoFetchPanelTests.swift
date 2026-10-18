@@ -137,7 +137,7 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     XCTAssertTrue(autoFetch.rules.isRunning, "前提: 裏の fetch はまだ終わっていない")
 
     panel.control.message = "a only"
-    panel.commitAndPush()
+    panel.openCommitMenu().commitAndPush()
     panel.control.stage([GitStatus.Row(path: "b.txt", originalPath: nil)])
     pumpMain(until: { panel.control.operations.isEmpty }, timeout: 20, "コミットしてプッシュとステージ")
     XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "a.txt\n")
@@ -155,7 +155,7 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     let origin = repo.git(["ls-remote", "origin", "main"]).stdoutText
 
     panel.control.message = "a"
-    panel.commitAndPush()
+    panel.openCommitMenu().commitAndPush()
     let operation = try XCTUnwrap(panel.control.operations.first)
     pumpMain(
       until: { panel.control.bandOperation === operation && operation.step == .push },

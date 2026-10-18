@@ -70,13 +70,8 @@ struct ScmOwnWrites {
     entries.removeAll { $0.finish.map { $0.statusNumber <= rowsNumber } ?? false }
   }
 
-  /// 取り消しが照らす HEAD——見えている行の HEAD に、覚えている書き込みを重ねたもの。
-  func head(_ changes: ScmChanges) -> GitSeenHead {
-    seen(changes).head
-  }
-
-  /// コミット・amend の中身——ステージ済みがあればそれだけ、無ければ「変更」の入る行を先にステージ。自分のステージが入れる
-  /// 版は押した時点には分からないので問わない。
+  /// コミット・amend の中身（取り消しはその HEAD で照らす）——ステージ済みがあればそれだけ、無ければ「変更」の入る行を先に
+  /// ステージ。自分のステージが入れる版は押した時点には分からないので問わない。
   func content(_ changes: ScmChanges) -> GitCommitContent {
     let seen = seen(changes)
     return GitCommitContent(

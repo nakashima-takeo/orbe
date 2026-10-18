@@ -14,22 +14,13 @@ extension ScmPanel {
 
   /// コミットする（✓・ボタン・⌘↵）。何を入れるかは押した時点の姿で決める（見たものをコミットする）。
   func commit() {
-    startCommit(control.commit)
+    startCommit(ownWrites.content(changes), control.commit)
   }
 
-  /// 直前のコミットを差し替える（コミットと同じ範囲）。
-  func amend() {
-    startCommit(control.amend)
-  }
-
-  /// コミットしてプッシュ（コミットと同じ範囲）。
-  func commitAndPush() {
-    startCommit(control.commitAndPush)
-  }
-
-  /// 最後のコミットを取り消す（押した時点に見えていた HEAD のときだけ）。
-  func undoLastCommit() {
-    ownWrites.record(.undo, control.undoLastCommit(ownWrites.head(changes)))
+  /// ▾ を開く。項目はどれも開いた時点に見えていたもので照らす——開いている間も status は届いて行は外の書き込みに追いつく
+  /// ので、選んだ時点の行で組むと、開いている間の外のコミットを見えていたものに数えてしまう。
+  func openCommitMenu() -> ScmCommitMenu {
+    ScmCommitMenu(panel: self, seen: ownWrites.content(changes))
   }
 
   /// プル（HEAD を動かすので、行に出るまで見えていた HEAD に数える）。
@@ -67,11 +58,34 @@ extension ScmPanel {
       seesStatus: liveFiles != nil)
   }
 
-  /// 押した時点の範囲の中身——見えている行に、このパネルで押してまだ行に出ていない書き込みを重ねたもの（→ `ScmOwnWrites`）
+  /// 見えていた範囲の中身——見えている行に、このパネルで押してまだ行に出ていない書き込みを重ねたもの（→ `ScmOwnWrites`）
   /// ——でコミットの操作を始め、その書き込みも覚える。それ以外の食い違い（外の書き込み）は、根のサービスが書き込みの直前に
   /// 照らして断る。
-  private func startCommit(_ start: (GitCommitContent) -> SourceControl.Operation?) {
-    let content = ownWrites.content(changes)
+  fileprivate func startCommit(
+    _ content: GitCommitContent, _ start: (GitCommitContent) -> SourceControl.Operation?
+  ) {
     ownWrites.record(.commit(stagingFirst: content.stagingFirst), start(content))
+  }
+}
+
+/// ▾ の項目。どれも ▾ を開いた時点に見えていたもの `seen` で照らす。
+@MainActor
+struct ScmCommitMenu {
+  let panel: ScmPanel
+  let seen: GitCommitContent
+
+  /// 直前のコミットを差し替える（コミットと同じ範囲）。
+  func amend() {
+    panel.startCommit(seen, panel.control.amend)
+  }
+
+  /// コミットしてプッシュ（コミットと同じ範囲）。
+  func commitAndPush() {
+    panel.startCommit(seen, panel.control.commitAndPush)
+  }
+
+  /// 最後のコミットを取り消す（見えていた HEAD のときだけ）。
+  func undoLastCommit() {
+    panel.ownWrites.record(.undo, panel.control.undoLastCommit(seen.head))
   }
 }
