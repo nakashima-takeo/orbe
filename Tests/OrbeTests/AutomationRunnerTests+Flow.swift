@@ -281,4 +281,41 @@ extension AutomationRunnerTests {
     try flow(id)
     XCTAssertEqual(calls("f --all").count, 1)
   }
+
+  // MARK: - 観測
+
+  /// 一巡の有無を読んだ側に、変化が届くか（届いたら true）。
+  @MainActor private func flowingChanges(_ id: Int, _ change: () throws -> Void) rethrows -> Bool {
+    var changed = false
+    withObservationTracking {
+      _ = runner.isFlowing(id)
+    } onChange: {
+      changed = true
+    }
+    try change()
+    return changed
+  }
+
+  /// ⌘⇧X の棚の「更新中…」は一巡の有無を観測して描く。一巡を置く・終わる・打ち切るのどれでも変化が届き、流していない
+  /// 部品の回だけでは届かない。
+  ///
+  /// 壊れると何が起きるか。「更新中…」が出ない・終わっても消えない。予定どおりの回のたびに提案タブが描き直される。
+  @MainActor func testFlowingIsObservableAndRunsOutsideAFlowAreNot() throws {
+    let id = try define([
+      fetch("f", every: 3600), part("j", .manual, from: ["f"], deliver: .taskCandidates),
+    ])
+
+    XCTAssertFalse(
+      flowingChanges(id) {
+        advance(by: 3600)
+        finish("f", fetched(["a"]))
+      }, "流していない回")
+    XCTAssertTrue(try flowingChanges(id) { try flow(id, to: .judges) }, "置く")
+    finish("f", fetched(["b"]))
+    XCTAssertTrue(flowingChanges(id) { finish("j", printed("")) }, "終わる")
+    XCTAssertFalse(runner.isFlowing(id))
+    try flow(id, to: .judges)
+    XCTAssertTrue(try flowingChanges(id) { try runner.delete(id) }, "打ち切る")
+    XCTAssertFalse(runner.isFlowing(id))
+  }
 }
