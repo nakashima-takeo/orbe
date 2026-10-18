@@ -9,6 +9,7 @@ struct BoardAutomationMapView: View {
   let detail: BoardAutomationDetailValue
   let selected: String?
   @Environment(\.localization) private var l10n
+  @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -20,8 +21,10 @@ struct BoardAutomationMapView: View {
           .padding(.trailing, BoardMapRowView.lastInset)
           .frame(width: BoardMapRowView.lastWidth, alignment: .trailing)
       }
+      let roleWidth = roleWidth
       ForEach(Array(detail.rows.enumerated()), id: \.offset) { _, row in
-        let view = BoardMapRowView(row: row, laneCount: detail.laneCount, selected: selected)
+        let view = BoardMapRowView(
+          row: row, laneCount: detail.laneCount, roleWidth: roleWidth, selected: selected)
         if case .part(let part) = row.content {
           view.contentShape(Rectangle()).onTapGesture { model.tapPart(part.key) }
         } else {
@@ -31,12 +34,26 @@ struct BoardAutomationMapView: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
+
+  /// 役割の列の幅。見本の幅を下限に、最も長い役割の名前（英語の「Process」など）に空きを足した幅で揃える。
+  private var roleWidth: CGFloat {
+    let roles = detail.rows.map { row in
+      if case .part(let part) = row.content { return part.role }
+      return l10n.string(.boardMapDestination)
+    }
+    let widest =
+      roles.map { fontResolver.width($0, base: Theme.Typography.codeSmall) }.max()?.rounded(.up)
+      ?? 0
+    return max(BoardMapRowView.minRoleWidth, widest + BoardMapRowView.roleGap)
+  }
 }
 
 /// 地図の 1 行と、失敗した部品なら下の理由の行。
 struct BoardMapRowView: View {
   let row: BoardMapRow
   let laneCount: Int
+  /// 役割の列の幅（地図の行で揃える）。
+  let roleWidth: CGFloat
   let selected: String?
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
@@ -90,7 +107,7 @@ struct BoardMapRowView: View {
         .font(Font.theme.code)
         .foregroundStyle(Color.theme.textPrimary)
         .padding(.trailing, Theme.Space.hair)
-        .layoutPriority(1)
+        .fixedSize()
       if let schedule = part.schedule { BoardScheduleChip(text: schedule).fixedSize() }
       if part.look == .running {
         Text(l10n.string(.automationRunning))
@@ -112,7 +129,7 @@ struct BoardMapRowView: View {
           .truncationMode(.tail)
       }
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
+    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
     .clipped()
     Text(part.inbox.map { "\($0)" } ?? "")
       .font(Font.theme.workspaceName)
@@ -153,7 +170,7 @@ struct BoardMapRowView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.trailing, Self.lastInset)
       .padding(.bottom, Theme.Space.tick)
-      .padding(.leading, BoardMapGutter.width(laneCount) + Self.roleWidth)
+      .padding(.leading, BoardMapGutter.width(laneCount) + roleWidth)
       .background(alignment: .leading) {
         BoardMapGutter(
           lanes: BoardMapLanes(
@@ -182,14 +199,15 @@ struct BoardMapRowView: View {
     Text(text)
       .font(Font.theme.codeSmall)
       .foregroundStyle(Color.theme.textMuted)
-      .frame(width: Self.roleWidth, alignment: .leading)
+      .frame(width: roleWidth, alignment: .leading)
   }
 
   static let height: CGFloat = 26
   static let inboxWidth: CGFloat = 48
   static let lastWidth: CGFloat = 150
   static let lastInset: CGFloat = 6
-  private static let roleWidth: CGFloat = 52
+  static let minRoleWidth: CGFloat = 52
+  static let roleGap: CGFloat = 6
   private static let cellGap: CGFloat = 6
   private static let radius: CGFloat = 6
   /// 理由の行の高さ 16（見本）に当たる行間。
