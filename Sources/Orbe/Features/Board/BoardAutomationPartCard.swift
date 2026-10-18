@@ -128,9 +128,14 @@ struct BoardAutomationPartCard: View {
           .foregroundStyle(Color.theme.textMuted)
           .frame(height: Self.historyLine)
       } else {
+        let column = card.runs.reduce(Self.timeWidth) { width, line in
+          guard case .run(let entry) = line else { return width }
+          return max(
+            width, fontResolver.width(entry.at, base: Theme.Typography.codeSmall).rounded(.up))
+        }
         ForEach(Array(card.runs.enumerated()), id: \.offset) { _, line in
           switch line {
-          case .run(let entry): run(entry)
+          case .run(let entry): run(entry, column: column)
           case .fold(let text):
             Text(text)
               .font(Font.theme.codeSmall)
@@ -142,11 +147,11 @@ struct BoardAutomationPartCard: View {
     }
   }
 
-  private func run(_ entry: BoardRunEntry) -> some View {
+  private func run(_ entry: BoardRunEntry, column: CGFloat) -> some View {
     HStack(alignment: .top, spacing: 10) {
       Text(entry.at)
         .foregroundStyle(Color.theme.textSecondary)
-        .frame(width: Self.timeWidth, height: Self.historyLine, alignment: .leading)
+        .frame(width: column, height: Self.historyLine, alignment: .leading)
       let text = fontResolver.text(entry.result, base: Theme.Typography.codeSmall)
         .foregroundStyle(BoardRunColors.result(entry.shade))
       if entry.wraps {
@@ -199,6 +204,7 @@ struct BoardAutomationPartCard: View {
 
   private static let gap: CGFloat = 12
   private static let historyLine: CGFloat = 22
+  /// 時刻の列の幅の下限（見本）。中身がこれより広ければ中身に合わせる。
   private static let timeWidth: CGFloat = 76
   /// 指示文の行の高さ 1.6（見本）に当たる行間。
   private static let bodyLeading = Theme.Typography.codeCompact.extraLeading(lineHeight: 1.6)
