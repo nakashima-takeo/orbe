@@ -8,7 +8,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか。ステージした分だけをコミットしたつもりで、作業中の変更や未追跡（秘密のファイルを含みうる）まで
 /// 入り、コミットしてプッシュなら remote にも届く。ステージせずに押したコミットに変更が入らない。パネルで押した ＋・− の
-/// 直後のコミットが、自分の操作のせいで「表示と食い違う」と断られる。
+/// 直後や、前に ＋ したファイルをコミットした後のコミットが、自分の操作のせいで「表示と食い違う」と断られる。
 extension ScmPanelTests {
   /// コミットの中身は押した時点の姿で決まる——ステージ済みがあればそれだけ、無ければ「変更」の全部（変更・削除・未追跡）。
   func testCommitTakesTheStagedPartOrElseEveryChange() throws {
@@ -112,6 +112,30 @@ extension ScmPanelTests {
       XCTAssertNil(panel.control.failure, name)
       XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, scene.left, name)
     }
+  }
+
+  /// 自分の ＋ が行に出た後は、見えている行だけで範囲を決める——＋ でステージしてコミットした後に、ステージせずに押した
+  /// コミットは残りの変更を入れる（前の ＋ を持ち越して断らない）。
+  func testOwnStagingStopsCountingOnceTheRowsShowIt() throws {
+    try repo.write("a.txt", "edited\n")
+    try repo.write("n.txt", "new\n")
+    show(until: { $0.changes.staged.isEmpty && $0.changes.changes.count == 2 }, "変更の行")
+    let row = try XCTUnwrap(panel.layout.index[ScmRowID(section: .changes, path: "n.txt")])
+    panel.press(row, .stage, in: panel.layout)
+    idle("ステージ")
+    pumpMain(until: { self.panel.changes.staged.map(\.path) == ["n.txt"] }, "n.txt がステージ済みに出る")
+    panel.control.message = "n"
+    panel.commit()
+    idle("ステージ済みのコミット")
+    pumpMain(
+      until: { self.panel.changes.staged.isEmpty && self.panel.changes.changes.count == 1 },
+      "a.txt だけが残る")
+
+    panel.control.message = "rest"
+    panel.commit()
+    idle("残りのコミット")
+    XCTAssertNil(panel.control.failure)
+    XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "a.txt\n")
   }
 
   /// 自分が押していない変化——端末での `git add` の直後（監視が届いて行に出る前）に押したコミット・amend・コミットして
