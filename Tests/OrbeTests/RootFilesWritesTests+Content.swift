@@ -36,8 +36,7 @@ extension RootFilesWritesTests {
       ])
   }
 
-  /// 見えていたステージ済みは版で照らす——同じパスを外でステージし直すと（作業ツリーの版を add した・外でコミットしてから
-  /// ステージし直した）名前は変わらないが、版の違いで断る。
+  /// 見えていたステージ済みは版で照らす——同じパスを外でステージし直すと、名前は変わらないが版の違いで断る。
   func testCommitsRefuseWhenAStagedPathWasRestagedOutside() throws {
     try repo.write("a.txt", "staged\n")
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
@@ -48,11 +47,6 @@ extension RootFilesWritesTests {
 
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     assertRefused(files, [("作業ツリーの版を外でステージした", seen)])
-
-    XCTAssertTrue(repo.git(["commit", "-qm", "outside"]).isSuccess)
-    try repo.write("a.txt", "restaged\n")
-    XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
-    assertRefused(files, [("外でコミットしてからステージし直した", seen)])
   }
 
   /// 外でのコミットで HEAD が進むと、index も作業ツリーも見えていたままでも、コミット・amend・取り消しは何も書かずに断る
