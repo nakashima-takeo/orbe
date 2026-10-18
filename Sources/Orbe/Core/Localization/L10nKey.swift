@@ -404,9 +404,11 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationParts
   case automationFetchedFresh
   case automationTakenTo
-  case automationTakenProposed
+  case automationTakenProposedOne
+  case automationTakenProposedOther
   case automationOthers
-  case automationBreach
+  case automationBreachOne
+  case automationBreachOther
   case automationBreachPassed
   case automationBreachFailed
   // MARK: - 秘書・作業を始める（L10nTable+Secretary）

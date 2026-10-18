@@ -59,11 +59,6 @@ struct BoardAutomationSummary: Equatable {
 
   /// 帯に並べる回の数。
   static let stripLength = 20
-
-  /// 実行履歴の最新の行の 1 行目。まだ回っていなければ nil。
-  var latestLine: String? {
-    runs.first.map { String($0.result.prefix { !$0.isNewline }) }
-  }
 }
 
 extension BoardAutomationSummary {
@@ -71,8 +66,7 @@ extension BoardAutomationSummary {
   init(_ automation: Automation, text: AutomationText, next: String?) {
     let l10n = text.l10n
     let graph = automation.graph
-    let destinations = Self.destinations(graph, l10n: l10n)
-    output = destinations
+    output = Self.destinations(graph, l10n: l10n)
     when = Self.when(graph, next: next, text: text)
     parts = graph.byDepth.map { node in
       let state = automation.state(node.key)
@@ -102,7 +96,7 @@ extension BoardAutomationSummary {
       return BoardRunLine(
         at: text.stamp(entry.run.startedAt) + now,
         result: (names[entry.part] ?? entry.part) + ": "
-          + Self.result(entry.run, heading: false, output: destinations, text: text),
+          + Self.result(entry.run, heading: false, text: text),
         tone: Self.tone(entry.run), wraps: Self.wraps(entry.run))
     }
     strip = keyed.prefix(Self.stripLength).reversed().map { Self.tone($0.run) }
@@ -112,7 +106,7 @@ extension BoardAutomationSummary {
       return
     }
     let at = text.stamp(latest.run.startedAt)
-    let heading = Self.result(latest.run, heading: true, output: destinations, text: text)
+    let heading = Self.result(latest.run, heading: true, text: text)
     switch latest.run.result {
     case _ where latest.run.failed:
       mark = l10n.format(.boardRunMark, at, l10n.string(.boardRunFailedShort))
@@ -120,6 +114,9 @@ extension BoardAutomationSummary {
       mark = l10n.format(.boardRunMarkAdded, at, proposed)
     case .report(.some):
       mark = l10n.format(.boardRunMarkReported, at)
+    case .work(.some, _):
+      // 応答の文は長くなりうる。右端は名前を潰さない短い語で言い、文は実行履歴で読む。
+      mark = l10n.format(.boardRunMark, at, l10n.string(.boardRunDone))
     default:
       mark = l10n.format(.boardRunMark, at, heading)
     }
@@ -133,8 +130,7 @@ extension BoardAutomationSummary {
     _ run: AutomationPartRun, part key: String, in automation: Automation, text: AutomationText
   ) -> String {
     let name = automation.graph.node(key)?.part.name ?? key
-    let output = destinations(automation.graph, l10n: text.l10n)
-    let result = result(run, heading: false, output: output, text: text)
+    let result = result(run, heading: false, text: text)
     return String((name + ": " + result).prefix { !$0.isNewline })
   }
 
@@ -169,9 +165,9 @@ extension BoardAutomationSummary {
   }
 
   /// 回の結果。見出し（一覧の右端・詳細の前回・知らせ）は 1 行に縮め、実行履歴は全文を出す。
-  private static func result(
-    _ run: AutomationPartRun, heading: Bool, output: String, text: AutomationText
-  ) -> String {
+  private static func result(_ run: AutomationPartRun, heading: Bool, text: AutomationText)
+    -> String
+  {
     let l10n = text.l10n
     if let failure = run.failure {
       return heading ? l10n.string(.boardRunFailedShort) : l10n.format(.boardRunFailed, failure)
@@ -181,7 +177,8 @@ extension BoardAutomationSummary {
       return l10n.string(.boardRunNothingNew)
     case .judge(let proposed, _, _) where proposed > 0:
       return heading
-        ? l10n.format(.boardRunAddedTo, proposed, output) : l10n.format(.boardRunAdded, proposed)
+        ? l10n.format(.boardRunAddedTo, proposed, l10n.string(.boardOutputTaskCandidates))
+        : l10n.format(.boardRunAdded, proposed)
     case .judge:
       return l10n.string(.boardRunNoneAdded)
     case .report(let body?), .work(let body?, _):

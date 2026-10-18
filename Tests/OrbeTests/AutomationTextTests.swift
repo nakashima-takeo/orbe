@@ -2,9 +2,10 @@ import XCTest
 
 @testable import Orbe
 
-/// 自動化の文——時刻の今日 / ほかの日、いつ（cron の言い換え）。
+/// 自動化の文——部品の回の要約（判定の候補の単数・複数・失敗・まだ回っていない）、時刻の今日 / ほかの日、いつ（cron の言い換え）。
 ///
-/// 壊れると何が起きるか。昨日の回が今日の時刻に見える。cron の言い換えが元の時刻と食い違い、表示と違う時刻に走ると読ませる
+/// 壊れると何が起きるか。英語で候補 1 件の回が「1 candidates」と読める。失敗した回が件数で出て、壊れた部品に気づけない。
+/// 昨日の回が今日の時刻に見える。cron の言い換えが元の時刻と食い違い、表示と違う時刻に走ると読ませる
 /// （1・7 月だけの式が「毎日」に見える）。
 @MainActor
 final class AutomationTextTests: OrbeTestCase {
@@ -16,6 +17,37 @@ final class AutomationTextTests: OrbeTestCase {
       today: .today(
         DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone),
       timeZone: DesignSceneFixtures.taskCalendar.timeZone)
+  }
+
+  private func judged(taken: Int, proposed: Int, failure: String? = nil) -> AutomationPartRun {
+    let at = DesignSceneFixtures.automationAt(13)
+    var run = AutomationPartRun(
+      startedAt: at, endedAt: at, trigger: .schedule, taken: taken,
+      execution: AutomationPartPass.Execution(
+        commandLine: "claude -p", ending: "exited 0", count: 0))
+    if let failure {
+      run.failure = failure
+    } else {
+      run.result = .judge(proposed: proposed, resolved: 0, rejected: AutomationRejections())
+    }
+    return run
+  }
+
+  func testJudgeRunSummariesSaySingularAndPluralAndFailure() {
+    let en = Self.automationText(.en)
+
+    XCTAssertEqual(
+      en.runHeadline(part: "judge", judged(taken: 12, proposed: 1)),
+      "13:00 judge · 12 → 1 candidate")
+    XCTAssertEqual(
+      en.runHeadline(part: "judge", judged(taken: 12, proposed: 2)),
+      "13:00 judge · 12 → 2 candidates")
+    XCTAssertEqual(
+      text.runHeadline(part: "判定", judged(taken: 12, proposed: 2)), "13:00 判定 · 12 件 → 候補 2")
+    XCTAssertEqual(
+      text.runDetail(part: "判定", judged(taken: 3, proposed: 0, failure: "boom")),
+      "今日 13:00 判定 · 失敗 — boom")
+    XCTAssertEqual(text.runHeadline(part: "判定", nil), "まだ回っていない")
   }
 
   func testWhen() {

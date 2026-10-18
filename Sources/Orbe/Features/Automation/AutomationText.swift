@@ -63,7 +63,9 @@ struct AutomationText {
     case .process:
       return l10n.format(.automationTakenTo, taken, run.execution.count)
     case .judge(let proposed, _, _):
-      return l10n.format(.automationTakenProposed, taken, proposed)
+      return l10n.format(
+        proposed == 1 ? .automationTakenProposedOne : .automationTakenProposedOther, taken, proposed
+      )
     case .report(let text?), .work(let text?, _):
       return String(text.prefix { !$0.isNewline })
     case .report(nil):

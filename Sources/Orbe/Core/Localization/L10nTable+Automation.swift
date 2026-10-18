@@ -70,9 +70,14 @@ extension L10n {
     .automationParts: ("部品", "Parts"),
     .automationFetchedFresh: ("%1$lld 件取得 → 新しい %2$lld 件", "fetched %1$lld → %2$lld new"),
     .automationTakenTo: ("%1$lld 件 → %2$lld 件", "%1$lld → %2$lld"),
-    .automationTakenProposed: ("%1$lld 件 → 候補 %2$lld", "%1$lld → %2$lld candidates"),
+    .automationTakenProposedOne: ("%1$lld 件 → 候補 %2$lld", "%1$lld → %2$lld candidate"),
+    .automationTakenProposedOther: ("%1$lld 件 → 候補 %2$lld", "%1$lld → %2$lld candidates"),
     .automationOthers: ("%1$@ ほか %2$lld", "%1$@ +%2$lld"),
-    .automationBreach: (
+    .automationBreachOne: (
+      "%1$@ の出力が決まりを外した — %2$@（%3$lld 行）",
+      "%1$@ broke the output rules — %2$@ (%3$lld line)"
+    ),
+    .automationBreachOther: (
       "%1$@ の出力が決まりを外した — %2$@（%3$lld 行）",
       "%1$@ broke the output rules — %2$@ (%3$lld lines)"
     ),

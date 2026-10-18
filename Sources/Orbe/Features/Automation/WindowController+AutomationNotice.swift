@@ -14,8 +14,8 @@ extension WindowController {
   /// 失敗は続く間の最初の回だけ、決まりを外したことは部品の印が無かった回（何をするかが変わるまでに 1 度）だけ知らせる——
   /// 毎回鳴らすと、ピルと音を見なくなるため。外して失敗した回は、外したことの文で失敗も言う。
   ///
-  /// 本文は実行履歴のその回の行の 1 行目——ピルと、押した先の行を同じ文で語るため。設定は Home の実効設定（押した先が Home
-  /// なので、発信元の workspace の値という読み方に揃う）。
+  /// 本文は、外した回のほかは実行履歴のその回の行の 1 行目——ピルと、押した先の行を同じ文で語るため。設定は Home の実効設定
+  /// （押した先が Home なので、発信元の workspace の値という読み方に揃う）。
   func automationNotification(_ id: Int, _ part: String) -> ChromeNotification? {
     guard let automation = automationStore.automation(id), let notify = automation.notify,
       let state = automation.parts[part], let latest = state.runs.first, !isViewingAutomation(id)
@@ -48,7 +48,8 @@ extension WindowController {
   /// 「<部品>の出力が決まりを外した — line 3: missing link（2 行）· 出し直しで通った」。
   private func breachLine(_ breach: AutomationBreachMark, part name: String) -> String {
     localization.format(
-      .automationBreach, name, breach.lines.reasons.first ?? "", breach.lines.count)
+      breach.lines.count == 1 ? .automationBreachOne : .automationBreachOther, name,
+      breach.lines.reasons.first ?? "", breach.lines.count)
       + " · "
       + localization.string(breach.passed ? .automationBreachPassed : .automationBreachFailed)
   }
