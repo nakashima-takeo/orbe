@@ -138,7 +138,7 @@ extension DesignGallerySnapshotTests {
       return model
     }
     // 「ツール」の欄（同じサーバーのツールが並び、claude.ai のコネクタの頭が付く）と、今日以外の手動の回（時刻の列が中身に
-    // 合わせて広がる）。
+    // 合わせて広がる）と、標準エラーの抜粋のある失敗（英語の画面でも抜粋を添える）。
     var tools = samples
     if let slack = tools[0].definition.parts.firstIndex(where: { $0.key == "slack" }),
       case .agent(var agent) = tools[0].definition.parts[slack].method
@@ -155,6 +155,11 @@ extension DesignGallerySnapshotTests {
         part: "slack", at: manualAt, trigger: .now,
         outcome: DesignSceneFixtures.fetched(
           "slack", DesignSceneFixtures.sampleItems("slack", 2, at: manualAt))),
+      at: 0)
+    tools[0].passes.insert(
+      AutomationSamplePass(
+        part: "slack", at: DesignSceneFixtures.automationAt(9, 0, daysAgo: 4),
+        outcome: DesignSceneFixtures.failed("slack: token expired (401)")),
       at: 0)
     for language in [Language.ja, .en] {
       let suffix = language == .ja ? "" : "_en"
