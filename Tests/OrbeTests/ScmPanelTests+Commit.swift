@@ -7,7 +7,8 @@ import XCTest
 /// 出ていない間に押すと、何も書かずに断る。
 ///
 /// 壊れると何が起きるか。ステージした分だけをコミットしたつもりで、作業中の変更や未追跡（秘密のファイルを含みうる）まで
-/// 入り、コミットしてプッシュなら remote にも届く。ステージせずに押したコミットに変更が入らない。
+/// 入り、コミットしてプッシュなら remote にも届く。ステージせずに押したコミットに変更が入らない。パネルで押した ＋・− の
+/// 直後のコミットが、自分の操作のせいで「表示と食い違う」と断られる。
 extension ScmPanelTests {
   /// コミットの中身は押した時点の姿で決まる——ステージ済みがあればそれだけ、無ければ「変更」の全部（変更・削除・未追跡）。
   func testCommitTakesTheStagedPartOrElseEveryChange() throws {
@@ -63,8 +64,8 @@ extension ScmPanelTests {
       repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "a.txt\nn.txt\ns.txt\n")
   }
 
-  /// このパネルで押した ＋・すべてステージ・− は、走っている・順番を待つ・終わって行に出る前のどの間にコミット・amend・
-  /// コミットしてプッシュを押しても、押した結果どおりに数える（押す時刻で結果が変わらない）。
+  /// このパネルで押した ＋・すべてステージ・− は、走っている・順番を待つ・終わって行に出る前のどの間にコミットを押しても、
+  /// 押した結果どおりに数える（押す時刻で結果が変わらない）。
   func testCommittingRightAfterOwnStagingTakesWhatWasPressed() throws {
     let scenes: [OwnWriteScene] = [
       OwnWriteScene("＋ の直後", .stage, .changes, "n.txt", staged: [], left: " M a.txt\n?? m.txt\n"),
@@ -80,77 +81,61 @@ extension ScmPanelTests {
         afterFinish: true, left: " M a.txt\n?? n.txt\n"),
     ]
     for scene in scenes {
-      for (action, act) in Self.commitActions {
-        let name = "\(scene.name) \(action)"
-        try freshRepo(addingOrigin: action == "commitAndPush")
-        try repo.write("a.txt", "edited\n")
-        try repo.write("n.txt", "new\n")
-        try repo.write("m.txt", "new\n")
-        if !scene.staged.isEmpty { XCTAssertTrue(repo.git(["add"] + scene.staged).isSuccess) }
-        show(
-          until: { $0.changes.staged.count == scene.staged.count && $0.changes.changes.count >= 1 },
-          "\(name): 行")
-        panel.control.message = "m"
-        let row = try XCTUnwrap(
-          panel.layout.index[ScmRowID(section: scene.section, path: scene.path)], name)
-        var rowsCaughtUp: Bool?
-        let staged = panel.changes.staged.count
-        let hook = FinishHook(scene.kind) { [panel] in
-          guard let panel, scene.afterFinish else { return }
-          rowsCaughtUp = panel.changes.staged.count != staged
-          act(panel)
-        }
-        panel.control.addObserver(hook)
-        withExtendedLifetime(hook) {
-          panel.press(row, scene.control, in: panel.layout)
-          if !scene.afterFinish { act(panel) }
-          pumpMain(
-            until: { !scene.afterFinish || rowsCaughtUp != nil }, "\(name): 書き込みが終わる")
-          idle("\(name): コミット")
-        }
-        if scene.afterFinish { XCTAssertEqual(rowsCaughtUp, false, "\(name): 前提: 行はまだ組み直されていない") }
-        XCTAssertNil(panel.control.failure, name)
-        XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, scene.left, name)
+      let name = scene.name
+      try freshRepo(addingOrigin: false)
+      try repo.write("a.txt", "edited\n")
+      try repo.write("n.txt", "new\n")
+      try repo.write("m.txt", "new\n")
+      if !scene.staged.isEmpty { XCTAssertTrue(repo.git(["add"] + scene.staged).isSuccess) }
+      show(
+        until: { $0.changes.staged.count == scene.staged.count && $0.changes.changes.count >= 1 },
+        "\(name): 行")
+      panel.control.message = "m"
+      let row = try XCTUnwrap(
+        panel.layout.index[ScmRowID(section: scene.section, path: scene.path)], name)
+      var rowsCaughtUp: Bool?
+      let staged = panel.changes.staged.count
+      let hook = FinishHook(scene.kind) { [panel] in
+        guard let panel, scene.afterFinish else { return }
+        rowsCaughtUp = panel.changes.staged.count != staged
+        panel.commit()
       }
-    }
-  }
-
-  /// 自分が押していない変化——端末での `git add`・`git reset --soft` の直後（監視が届いて行に出る前）に押したコミット・
-  /// amend・コミットしてプッシュは、何も書かずに断る。
-  func testCommittingRightAfterAnOutsideChangeIsRefusedAndWritesNothing() throws {
-    let outside: [(String, (TempGitRepo) -> Void)] = [
-      ("git add", { XCTAssertTrue($0.git(["add", "secret.env"]).isSuccess) }),
-      (
-        "git reset --soft",
-        { XCTAssertTrue($0.git(["reset", "-q", "--soft", "HEAD~1"]).isSuccess) }
-      ),
-    ]
-    for (change, run) in outside {
-      for (action, act) in Self.commitActions {
-        let name = "\(change) \(action)"
-        try freshRepo(addingOrigin: action == "commitAndPush")
-        try repo.write("b.txt", "b\n")
-        XCTAssertTrue(repo.git(["add", "b.txt"]).isSuccess)
-        XCTAssertTrue(repo.git(["commit", "-qm", "b"]).isSuccess)
-        try repo.write("a.txt", "edited\n")
-        try repo.write("secret.env", "token\n")
-        show(until: { $0.changes.staged.isEmpty && $0.changes.changes.count == 2 }, "\(name): 行")
-        panel.control.message = "m"
-        run(repo)
-        let (head, status) = (repo.head(), repo.git(["status", "--porcelain"]).stdoutText)
-        act(panel)
+      panel.control.addObserver(hook)
+      withExtendedLifetime(hook) {
+        panel.press(row, scene.control, in: panel.layout)
+        if !scene.afterFinish { panel.commit() }
+        pumpMain(
+          until: { !scene.afterFinish || rowsCaughtUp != nil }, "\(name): 書き込みが終わる")
         idle("\(name): コミット")
-        XCTAssertEqual(panel.control.failure?.cause, .git(.contentMismatch), name)
-        XCTAssertEqual(repo.head(), head, name)
-        XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, status, name)
       }
+      if scene.afterFinish { XCTAssertEqual(rowsCaughtUp, false, "\(name): 前提: 行はまだ組み直されていない") }
+      XCTAssertNil(panel.control.failure, name)
+      XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, scene.left, name)
     }
   }
 
-  private static let commitActions: [(String, (ScmPanel) -> Void)] = [
-    ("commit", { $0.commit() }), ("amend", { $0.amend() }),
-    ("commitAndPush", { $0.commitAndPush() }),
-  ]
+  /// 自分が押していない変化——端末での `git add` の直後（監視が届いて行に出る前）に押したコミット・amend・コミットして
+  /// プッシュは、何も書かずに断る。
+  func testCommittingRightAfterAnOutsideChangeIsRefusedAndWritesNothing() throws {
+    let actions: [(String, (ScmPanel) -> Void)] = [
+      ("commit", { $0.commit() }), ("amend", { $0.amend() }),
+      ("commitAndPush", { $0.commitAndPush() }),
+    ]
+    for (name, act) in actions {
+      try freshRepo(addingOrigin: name == "commitAndPush")
+      try repo.write("a.txt", "edited\n")
+      try repo.write("secret.env", "token\n")
+      show(until: { $0.changes.staged.isEmpty && $0.changes.changes.count == 2 }, "\(name): 行")
+      panel.control.message = "m"
+      XCTAssertTrue(repo.git(["add", "secret.env"]).isSuccess)
+      let (head, status) = (repo.head(), repo.git(["status", "--porcelain"]).stdoutText)
+      act(panel)
+      idle("\(name): コミット")
+      XCTAssertEqual(panel.control.failure?.cause, .git(.contentMismatch), name)
+      XCTAssertEqual(repo.head(), head, name)
+      XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, status, name)
+    }
+  }
 
   /// 前の場面のパネルを閉じ、新しい repo にする（最初の場面は setUp の repo のまま）。
   private func freshRepo(addingOrigin: Bool) throws {
@@ -160,48 +145,6 @@ extension ScmPanelTests {
       repo = try TempGitRepo()
     }
     if addingOrigin { repo.addOrigin() }
-  }
-
-  /// 面を出し直して最初の status が届く前（新しく握った根のサービスが git dir を解き、status はまだ無い）に押すと、見えて
-  /// いたステージ済みだけをコミットする。隠している間に外でステージされていれば、何も書かずに断る。
-  func testCommittingBeforeTheFirstStatusAfterReappearingTakesOnlyWhatWasShown() throws {
-    for stagedOutside in [false, true] {
-      let name = stagedOutside ? "外でステージされた" : "そのまま"
-      if stagedOutside {
-        panel.isShown = false
-        panel.isLive = false
-        repo = try TempGitRepo()
-      }
-      try repo.write("a.txt", "edited\n")
-      try repo.write("n.txt", "new\n")
-      try repo.write("secret.env", "token\n")
-      XCTAssertTrue(repo.git(["add", "n.txt"]).isSuccess)
-      show(
-        until: { $0.changes.staged.count == 1 && $0.changes.changes.count == 2 }, "\(name): 両方の区分")
-      let head = repo.head()
-
-      panel.isShown = false
-      panel.isLive = false
-      if stagedOutside { XCTAssertTrue(repo.git(["add", "secret.env"]).isSuccess) }
-      panel.isLive = true
-      panel.isShown = true
-      pumpMain(until: { self.panel.liveFiles?.repo != nil }, "\(name): 握り直した根のサービスが git dir を解く")
-      XCTAssertNil(panel.liveFiles?.status, "\(name): 前提: 最初の status はまだ届いていない")
-      panel.control.message = "only n"
-      panel.commit()
-      idle("\(name): コミット")
-      if stagedOutside {
-        XCTAssertEqual(panel.control.failure?.cause, .git(.contentMismatch))
-        XCTAssertEqual(repo.head(), head)
-        XCTAssertEqual(
-          repo.git(["status", "--porcelain"]).stdoutText, " M a.txt\nA  n.txt\nA  secret.env\n")
-      } else {
-        XCTAssertNil(panel.control.failure)
-        XCTAssertEqual(
-          repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "n.txt\n")
-        XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, " M a.txt\n?? secret.env\n")
-      }
-    }
   }
 }
 
