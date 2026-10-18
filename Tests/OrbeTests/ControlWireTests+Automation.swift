@@ -86,6 +86,10 @@ extension ControlWireTests {
     for (label, params, message) in [
       ("定義がオブジェクトでない", ["definition": "x"], "invalid definition"),
       ("部品が無い", ["definition": ["name": "x"]], "missing parts"),
+      (
+        "知らない通知先", ["definition": ["name": "x", "notify": "mail", "parts": [fetch, judge]]],
+        "invalid notify: pass menuBar or notificationCenter"
+      ),
       ("予定が無い", with("trigger", nil), "missing parts[0].trigger"),
       (
         "部品が 2 つの形", with("command", "gh api"),
