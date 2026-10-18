@@ -13,14 +13,14 @@ import Observation
 @Observable final class AutomationStore {
   private(set) var automations: [Automation] = []
   private(set) var proposals: [AutomationProposal] = []
-  private(set) var available: Bool
-  @ObservationIgnored private var database: AutomationDatabase?
+  private var database: AutomationDatabase?
+  /// DB を開けていて、壊れを見つけていない。
+  var available: Bool { database != nil }
   /// 運転中に使えなくなった（走らせ役が全部品の予定を外す）。
   @ObservationIgnored var onUnavailable: () -> Void = {}
 
   init(opened: AutomationDatabase.Opened? = AutomationPersistence.open()) {
     database = opened?.database
-    available = opened != nil
     automations = opened?.snapshot.automations ?? []
     proposals = opened?.snapshot.proposals ?? []
   }
@@ -62,8 +62,6 @@ import Observation
     let automation: Automation
     /// 何をするかが変わった部品。決まりを外した印を下ろした。
     let reworked: [String]
-    /// 足した部品。足した時刻から数える。
-    let added: [String]
     /// 消した部品。状態・溜まり・記録を消した。
     let removed: [String]
   }
@@ -96,7 +94,7 @@ import Observation
       for key in added + unmarked { try db.put(part: key, of: id, next.state(key)) }
       try memory.forgetUnheld(db)
     }
-    return Replaced(automation: next, reworked: reworked, added: added, removed: removed)
+    return Replaced(automation: next, reworked: reworked, removed: removed)
   }
 
   func setPaused(_ id: Int, _ paused: Bool) throws(AutomationError) -> Automation {
@@ -182,9 +180,9 @@ import Observation
 
   // MARK: - 書き込み
 
-  private static let unavailableError = AutomationError.unavailable(
-    "automations are unavailable in this session (another Orbe holds them, or their database "
-      + "could not be opened); see the log")
+  static let unavailableError = AutomationError.unavailable(
+    "automations are unavailable in this session (another Orbe holds them, their database could "
+      + "not be opened, or it broke while running); see the log")
 
   /// 変異の 1 経路。`body` はメモリの写しを進めながら、変わる行を DB に書く（1 トランザクション）。通ったら写しをメモリにし、
   /// 通らなければメモリは変わらない。壊れを見つけたら接続を手放してストアを使えなくする。検証は呼ぶ前に済ませる（`body` が
@@ -216,16 +214,15 @@ import Observation
   }
 
   private func fault(_ error: Error) -> AutomationError {
-    NSLog("[automation] cannot save automations: \(error)")
+    NSLog("[automation] cannot read or save automations: \(error)")
     if let error = error as? SQLiteError, error.isBroken {
       database = nil
-      available = false
       automations = []
       proposals = []
       onUnavailable()
       return Self.unavailableError
     }
-    return .unavailable("could not save automations: \(error)")
+    return .unavailable("could not read or save automations: \(error)")
   }
 }
 
@@ -233,8 +230,4 @@ import Observation
 struct AutomationMemory {
   var automations: [Automation]
   var proposals: [AutomationProposal]
-
-  func index(_ id: Int) -> Int? {
-    automations.firstIndex { $0.id == id }
-  }
 }

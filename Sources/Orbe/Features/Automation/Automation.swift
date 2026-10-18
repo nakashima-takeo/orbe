@@ -89,7 +89,8 @@ struct AutomationPartState: Equatable {
   var succeededAt: Date?
   /// 前回の出力（取得だけ）。差分・候補の持ち主・重なりはこの集合で言う。
   var lastOutput: [AutomationSeen] = []
-  /// まだ回の記録に載せていない捨てた数（積む時点の件数の上限と、取る行が 0 件だった契機で捨てた行）。
+  /// まだ回の記録に載せていない捨てた数（積む時点の件数の上限・判定へ出どころの無いまま届いた行と、取る行が 0 件だった契機で
+  /// 捨てた行）。
   var pendingDrops = AutomationDrops()
   /// 出力が決まりを外した最初の回の印。何をするかが変わるまで残る。
   var breach: AutomationBreachMark?

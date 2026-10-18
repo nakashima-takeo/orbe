@@ -39,7 +39,6 @@ final class AutomationDatabase {
       seq INTEGER PRIMARY KEY AUTOINCREMENT,
       automation_id INTEGER NOT NULL,
       part_key TEXT NOT NULL,
-      input_key TEXT NOT NULL,
       item_id TEXT NOT NULL,
       arrived_at INTEGER NOT NULL,
       size INTEGER NOT NULL,
@@ -183,9 +182,8 @@ final class AutomationDatabase {
 
   /// 取った行の本文（`seqs` の順）。出どころの項目は行そのものか、行に添えた本文から組む。消えていた行は飛ばす。
   func rows(_ seqs: [Int]) throws -> [AutomationPartRow] {
-    var rows: [Int: AutomationPartRow] = [:]
-    for seq in seqs {
-      let found = try db.select(
+    try seqs.compactMap { seq in
+      try db.select(
         "SELECT item_id, row, origin_part, origin_item, origin_link, origin_body FROM inbox WHERE seq = ?",
         [.integer(Int64(seq))]
       ) { s -> AutomationPartRow? in
@@ -202,10 +200,8 @@ final class AutomationDatabase {
           origin: AutomationOrigin(
             part: part, item: AutomationItem(id: item, link: link, body: body.body, time: body.time)
           ))
-      }
-      if let row = found.first ?? nil { rows[seq] = row }
+      }.first ?? nil
     }
-    return seqs.compactMap { rows[$0] }
   }
 
   func delete(inbox seqs: [Int]) throws {
@@ -220,12 +216,12 @@ final class AutomationDatabase {
     let originIsRow = origin?.part == input
     try db.run(
       """
-      INSERT INTO inbox (automation_id, part_key, input_key, item_id, arrived_at, size, origin_part,
-        origin_item, origin_link, row, origin_body)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO inbox (automation_id, part_key, item_id, arrived_at, size, origin_part, origin_item,
+        origin_link, row, origin_body)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       """,
       [
-        .integer(Int64(id)), .text(key), .text(input), .text(row.id),
+        .integer(Int64(id)), .text(key), .text(row.id),
         .integer(AutomationPersistence.millis(arrivedAt)), .integer(Int64(row.text.utf8.count)),
         origin.map { .text($0.part) } ?? .null, origin.map { .text($0.item.id) } ?? .null,
         origin.map { .text($0.item.link) } ?? .null, .text(row.text),
