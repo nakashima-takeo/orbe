@@ -127,7 +127,7 @@ class ListRowView: NSView {
 }
 
 /// 行の中の押せる部品——源へ渡す番号と、行の座標の枠。
-struct ListRowControl: Equatable {
+struct ListRowControl {
   let id: Int
   let frame: NSRect
 }

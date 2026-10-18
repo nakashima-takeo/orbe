@@ -38,9 +38,6 @@ final class RowListPressGuard {
     MainActor.assumeIsolated { end() }
   }
 
-  /// 守りの最中か。
-  var isActive: Bool { monitor != nil }
-
   /// 守りを終える。
   func end() {
     if let monitor { NSEvent.removeMonitor(monitor) }
