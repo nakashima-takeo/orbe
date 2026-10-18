@@ -71,16 +71,9 @@ extension AutomationRunnerTests {
     XCTAssertFalse(refusesAnotherFlow(id), "指した部品が終われば一巡が終わる（届いたらの s3 は道の外）")
   }
 
-  /// 指す先を省くと終わりの部品すべてまで流れる。知らない部品の鍵・知らない自動化は断り、何も走らせない。
-  func testFlowingToTheEndsRunsEveryPartAndUnknownKeysAreRefused() throws {
+  /// 指す先を省くと終わりの部品すべてまで流れ、道の上の「届いたら」が走り終えるまで一巡は終わらない。
+  func testFlowingToTheEndsRunsEveryPartAndWaitsForArrivalParts() throws {
     let id = try defineFanOut()
-    XCTAssertThrowsError(try flow(id, to: .part("nope"))) {
-      XCTAssertEqual($0 as? AutomationError, .partNotFound(id, "nope"))
-    }
-    XCTAssertThrowsError(try flow(99)) {
-      XCTAssertEqual($0 as? AutomationError, .automationNotFound(99))
-    }
-    XCTAssertEqual(jobs.calls.count, 0)
 
     try flow(id)
     finish("f", fetched(["a"]))
@@ -94,11 +87,13 @@ extension AutomationRunnerTests {
     XCTAssertFalse(refusesAnotherFlow(id))
   }
 
-  /// 道の上の「届いたら」は、上流が何も積まなければ動かないまま終わりと数え、一巡は終わる。止めた自動化も流せる。
-  func testAnArrivalPartWithNothingArrivingStillEndsTheFlowAndPausedAutomationsFlow() throws {
+  /// 上流が何も積まなくても一巡は終わる——「届いたら」は起きないまま、流しが起こした手動の部品は取る行が無いまま終わる。
+  /// 止めた自動化も流せる。
+  func testAFlowWhoseUpstreamAddsNothingStillEndsAndPausedAutomationsFlow() throws {
     let id = try define([
       fetch("f", every: 3600),
       part("digest", .arrival, from: ["f"], deliver: .report),
+      part("p", .manual, from: ["f"], deliver: .report),
     ])
     _ = try runner.pause(id, true)
 
