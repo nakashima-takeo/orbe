@@ -258,12 +258,6 @@ import SwiftUI
     focusToken &+= 1
   }
 
-  /// カードの「ここまで今すぐ実行」。その部品を選んで地図に居て、その部品まで流す。
-  func flow(to key: String) {
-    tapPart(key)
-    perform(.flow(.part))
-  }
-
   /// カードの「修正を依頼」。依頼の欄に「自動化「<名前>」の部品「<名前>」の修正：」を書き（書きかけは置き換える）、焦点を欄へ
   /// 移す——続けて打って ↵ で、欄からふつうに頼む。`l10n` は画面の言語。
   func draftFix(of key: String, l10n: LocalizationStore) {

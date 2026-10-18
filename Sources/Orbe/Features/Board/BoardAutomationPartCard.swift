@@ -173,7 +173,7 @@ struct BoardAutomationPartCard: View {
     return HStack(spacing: 6) {
       button(key: operation.key, title: l10n.string(operation.title(paused: false)), primary: true)
       {
-        model.flow(to: card.key)
+        model.perform(operation)
       }
       button(key: nil, title: l10n.string(.boardPartAskFix), primary: false) {
         model.draftFix(of: card.key, l10n: l10n)
