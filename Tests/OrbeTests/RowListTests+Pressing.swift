@@ -9,7 +9,8 @@ import XCTest
 ///
 /// 壊れると何が起きるか。行の組が差し替わる瞬間に押すと、見えていた行と別のファイルがステージ・破棄される。帯の出入りで
 /// 列が動くと、同じ位置で続けて押したときに別の行に当たる。列の上に空きができて見出しごと下がってくる。区分の最後の行を
-/// 処理した後に列が跳ぶ。キー・ホイール・つまみ・列の外への移動の後も空きが残る。
+/// 処理した後に列が跳ぶ。キー・ホイール・つまみ・列の外への移動の後も空きが残る。選択を見せるために送っても錨が残り、
+/// 次の読み直しで見せた選択が画面の外へ戻される。
 extension RowListTests {
   /// 源の組が差し替わってから列が読み直すまでの間に部品を押しても、列が描いている組で渡す。
   func testAPressBeforeTheListReloadsIsPassedWithTheRowsItShows() {
@@ -61,8 +62,8 @@ extension RowListTests {
     XCTAssertEqual(hosted.list.frame.height, 40 + 100, "下の空きで収める")
   }
 
-  /// 一時の空きは、キー・ホイール・つまみ・列の外へのポインタの移動で列を動かすと消える。
-  func testTheTemporaryGapGoesAwayWhenTheListIsMovedByTheUser() {
+  /// 一時の空きは、キー・ホイール・つまみ・列の外へのポインタの移動・選択を見せるための送りで列を動かすと消える。
+  func testTheTemporaryGapGoesAwayWhenTheListIsMoved() {
     let triggers: [(String, (Hosted) -> Void)] = [
       ("キー", { $0.list.keyDown(with: self.key(.downArrow)) }),
       (
@@ -92,6 +93,8 @@ extension RowListTests {
             with: .mouse(.mouseMoved, at: NSPoint(x: 100, y: 300), in: hosted.window))
         }
       ),
+      // 行 3 は見えている 120..<220 の外。
+      ("選択を見せる", { $0.rows.update(rowsVersion: 1, selection: 3, emoji: nil, wantsFocus: false) }),
     ]
     for (name, move) in triggers {
       let hosted = hostWithABottomGap()
