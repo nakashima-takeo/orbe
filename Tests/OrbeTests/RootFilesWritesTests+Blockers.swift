@@ -43,4 +43,27 @@ extension RootFilesWritesTests {
     XCTAssertEqual(try trashed("r.txt/inside"), "nested without a commit\n")
     XCTAssertEqual(try trashed("d"), "a file where the directory was\n")
   }
+
+  /// 大文字小文字を区別しないボリューム（macOS の既定）で、消した追跡中のディレクトリ `D` の場所に小文字のファイル `d` を
+  /// 置き、その両方を破棄すると、`d` をゴミ箱へ移して `D/x` を戻す——戻した `D/` を、名前の当たる `d` として移し直さない。
+  func testDiscardRestoresADirectoryNamedLikeAnUntrackedFileUpToCase() throws {
+    try repo.write("D/x", "tracked\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "tracked"]).isSuccess)
+    try FileManager.default.removeItem(atPath: repo.root + "/D")
+    try repo.write("d", "a file where the directory was\n")
+    guard FileManager.default.fileExists(atPath: repo.root + "/D") else {
+      throw XCTSkip("大文字小文字を区別するボリューム")
+    }
+    let files = repo.files()
+
+    let rows = ["D/x", "d"].map { GitStatus.Row(path: $0, originalPath: nil) }
+    let discarded = finish(files) { files.discard(rows, completion: $0) }
+    XCTAssertNil(discarded.failure)
+    XCTAssertEqual(try String(contentsOfFile: repo.root + "/D/x", encoding: .utf8), "tracked\n")
+    let trash = try XCTUnwrap(GitRepo.trashDirectoryOverride)
+    XCTAssertEqual(
+      try String(contentsOf: trash.appendingPathComponent("d"), encoding: .utf8),
+      "a file where the directory was\n")
+  }
 }

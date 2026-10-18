@@ -38,8 +38,9 @@ extension GitRepo {
   /// 行の変更を捨てる。含めるパスは呼んだ時点の index と作業ツリーで選び直す（`selection`）。
   /// - 追跡中のパスは作業ツリーを index の版へ戻す（ステージ済みの分は残る）。サブモジュールの中は、利用者の
   ///   `submodule.recurse` に依らず触れない（従うと中の未コミットの作業を消し、中で作ったコミットから HEAD を戻す）。
-  ///   戻す場所を塞いでいる未追跡のもの（`blockers`）は先にゴミ箱へ移す——git の restore はそれを黙って消す。
-  /// - 未追跡のパスはゴミ箱へ移す（元に戻せる）。
+  /// - 未追跡のパスはゴミ箱へ移す（元に戻せる）。戻す前に、戻す場所を塞いでいる未追跡のもの（`blockers`。git の restore
+  ///   はそれを黙って消す）と同じ段で移す——戻した後では、戻したディレクトリが未追跡のパスに当たりうる（塞いでいた親の行・
+  ///   大文字小文字だけ違う名前）。restore が落ちても、それまでに移した分はゴミ箱に在る。
   /// - intent-to-add（`git add -N`）のパスは、作業ツリーに在れば index から外してからゴミ箱へ——index の版は空なので、
   ///   戻すと中身を失う。作業ツリーから消えたものは index の版（空）へ戻る。
   ///
@@ -68,12 +69,11 @@ extension GitRepo {
         return
       }
       let restore = selection.indexed.subtracting(intended)
-      // 戻すパスの祖先（塞いでいた親の行）は blockers の段で移す。最後の段では restore が作り直したディレクトリになっている。
-      let trash = selection.paths.filter { path in
-        !restore.contains(path) && !restore.contains { $0.hasPrefix(path + "/") }
+      let untracked = {
+        self.blockers(of: restore, submodules: selection.submodules)
+          + selection.paths.filter { !selection.indexed.contains($0) }
       }
-      let blocking = { self.blockers(of: restore, submodules: selection.submodules) }
-      self.moveToTrash(blocking, handle: handle) { cleared in
+      self.moveToTrash(untracked, handle: handle) { cleared in
         if let cleared { return completion(cleared) }
         let checkout = ["restore", "--worktree", "--no-recurse-submodules"]
         self.runOnPaths(checkout, paths: Array(restore), handle: handle) { restored in
@@ -81,7 +81,7 @@ extension GitRepo {
           let unindex = ["rm", "--cached", "-q"]
           self.runOnPaths(unindex, paths: Array(intended), handle: handle) { removed in
             if let removed { return completion(removed) }
-            self.moveToTrash({ trash }, handle: handle, completion: completion)
+            self.moveToTrash({ Array(intended) }, handle: handle, completion: completion)
           }
         }
       }
