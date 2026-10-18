@@ -196,7 +196,7 @@ extension GitRepo {
   ) {
     DispatchQueue.global(qos: .userInitiated).async {
       var failure: GitWriteFailure?
-      // 選んだ後に消えたパスは、捨てるものが無いので飛ばす。
+      // 無いパスは、捨てるものが無いので飛ばす——選んだ後に消えたもの・同じ段で先に移したもの（同じパス・その中・大文字小文字だけ違う名前）。
       for url in paths().map(self.url(of:)) where Self.exists(url) {
         guard !handle.isCancelled else {
           failure = .cancelled
