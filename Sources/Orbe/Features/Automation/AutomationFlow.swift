@@ -23,8 +23,10 @@ struct AutomationFlow {
     /// 道の上の上流がすべて終わった。「届いたら」なら走っていなければ終わり、そうでなければ次に始まる契機を一巡の分として
     /// 受け取る（走っていなければ起こす）。
     case ready
-    /// 一巡の分の契機が走っている。`marked` が偽なのは流し始めに走っていた入力の無い部品の回で、次の終わりがその回のもの。
-    case taken(marked: Bool)
+    /// 流し始めに走っていた入力の無い部品の回を一巡の分にした。次の終わりがその回のもの。
+    case adopted
+    /// 一巡の分として受け取った契機が走っている。一巡の分の契機の終わりだけを数える。
+    case taken
     case done
   }
 
@@ -43,7 +45,7 @@ struct AutomationFlow {
       if !node.part.inputs.isEmpty {
         flow.steps[node.key] = .waiting(Set(node.part.inputs))
       } else if running(node.key) {
-        flow.steps[node.key] = .taken(marked: false)
+        flow.steps[node.key] = .adopted
       } else {
         flow.steps[node.key] = .ready
         wake.append(node.key)
@@ -60,21 +62,24 @@ struct AutomationFlow {
 
   var finished: Bool { targets.allSatisfy { steps[$0] == .done } }
 
-  /// 部品の契機が始まった。一巡の分として受け取ったら真（走らせ役はその契機に印を立てる）。誰が始めた回かは問わない。
+  /// 部品の契機が始まった。一巡の分として受け取ったら真（走らせ役はその契機を `flowed` として覚え、終わりに渡す）。誰が
+  /// 始めた回かは問わない。
   mutating func started(_ part: String, in graph: AutomationGraph) -> Bool {
     guard steps[part] == .ready, !Self.arrives(part, in: graph) else { return false }
-    steps[part] = .taken(marked: true)
+    steps[part] = .taken
     return true
   }
 
-  /// 部品の契機が終わった。返すのは今すぐ起こす部品。入力のある部品は印の立った契機の終わりだけを数える——番人は回の終わりの
-  /// 中で次の予定の回を同期に始めうるので、古い回の終わりが受け取った回の始まりより後に届く。印の無い回の終わりは、起こす
-  /// 部品を邪魔していた回が終わったとして、走っていなければ起こし直す。
+  /// 部品の契機が終わった（`flowed` は一巡の分として受け取った契機か）。返すのは今すぐ起こす部品。受け取った部品は一巡の分の
+  /// 契機の終わりだけを数える——番人は回の終わりの中で次の予定の回を同期に始めうるので、古い回の終わりが受け取った回の始まり
+  /// より後に届く。一巡の分でない回の終わりは、起こす部品を邪魔していた回が終わったとして、走っていなければ起こし直す。
   mutating func ended(
-    _ part: String, marked: Bool, in graph: AutomationGraph, running: (String) -> Bool
+    _ part: String, flowed: Bool, in graph: AutomationGraph, running: (String) -> Bool
   ) -> [String] {
     switch steps[part] {
-    case .taken(let wanted) where marked || !wanted:
+    case .adopted:
+      return finish(part, graph, running)
+    case .taken where flowed:
       return finish(part, graph, running)
     case .ready:
       return settle(part, graph, running)

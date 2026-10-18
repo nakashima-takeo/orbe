@@ -384,7 +384,7 @@ extension AutomationRunner {
   private func flowEnded(_ trigger: Trigger) {
     let id = trigger.automationId
     guard var flow = flows[id], let graph = store.automation(id)?.graph else { return }
-    let wake = flow.ended(trigger.part, marked: trigger.flowed, in: graph) { isRunning(id, $0) }
+    let wake = flow.ended(trigger.part, flowed: trigger.flowed, in: graph) { isRunning(id, $0) }
     flows[id] = flow.finished ? nil : flow
     for part in wake { scheduler.runNow(id: Self.key(id, part)) }
   }
