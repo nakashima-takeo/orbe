@@ -55,7 +55,8 @@ import Observation
     run: @escaping BackgroundScheduler.Run = { BackgroundRuns.shared.run($0, completion: $1) },
     workspaces: @escaping () -> AutomationWorkspaces,
     recorded: @escaping (AutomationPassRecord) -> Void, defined: @escaping (Int) -> Void,
-    deleted: @escaping (Int) -> Void, startPass: @escaping StartPass = AutomationRunner.startPass,
+    deleted: @escaping (Int) -> Void,
+    startPass: @escaping StartPass = { $0.pass.start($0.node, $0.input, completion: $1) },
     admits: @escaping (Int, String) -> Bool = { _, _ in true },
     flowEnded: @escaping (Int, AutomationFlow) -> Void = { _, _ in }
   ) {
@@ -369,10 +370,10 @@ extension AutomationRunner {
     } else {
       retry(below: trigger.part, in: trigger.automationId)
     }
-    flowEnded(trigger)
+    advanceFlow(after: trigger)
   }
 
-  private func flowEnded(_ trigger: Trigger) {
+  private func advanceFlow(after trigger: Trigger) {
     let id = trigger.automationId
     guard var flow = flows[id], let graph = store.automation(id)?.graph else { return }
     let wake = flow.ended(trigger.part, flowed: trigger.flowed, in: graph) { isRunning(id, $0) }

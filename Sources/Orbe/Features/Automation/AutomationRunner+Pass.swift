@@ -6,8 +6,6 @@ extension AutomationRunner {
   typealias StartPass = (
     AutomationPassStart, @escaping (AutomationPartPass.Outcome) -> Void
   ) -> BackgroundRunHandle
-
-  static let startPass: StartPass = { $0.pass.start($0.node, $0.input, completion: $1) }
 }
 
 /// 部品の 1 回の起こし方（`AutomationRunner.StartPass`）に渡すもの。
