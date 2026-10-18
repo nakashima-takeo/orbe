@@ -112,7 +112,7 @@ final class SourceControlPaneTests: OrbeTestCase {
 
     scm.press(try row(hosted, .changes, "n.txt"), .discard, in: scm.layout)
     scm.control.message = "rest"
-    scm.commit()
+    scm.commitSnapshot().commit()
     pumpMain(until: { scm.control.operations.isEmpty }, timeout: 20, "破棄とコミット")
     XCTAssertNil(scm.control.failure)
     XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "a.txt\n")

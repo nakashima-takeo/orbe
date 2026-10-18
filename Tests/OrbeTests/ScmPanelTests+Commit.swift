@@ -23,7 +23,7 @@ extension ScmPanelTests {
     show(until: { $0.changes.staged.count == 1 && $0.changes.changes.count == 3 }, "両方の区分")
 
     panel.control.message = "staged"
-    panel.commit()
+    panel.commitSnapshot().commit()
     idle("ステージ済みのコミット")
     XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "s.txt\n")
 
@@ -31,7 +31,7 @@ extension ScmPanelTests {
       until: { self.panel.changes.staged.isEmpty && self.panel.changes.changes.count == 3 },
       "ステージ済みが無くなる")
     panel.control.message = "all"
-    panel.commit()
+    panel.commitSnapshot().commit()
     idle("全部のコミット")
     XCTAssertEqual(
       repo.git(["show", "--name-status", "--format=", "HEAD"]).stdoutText,
@@ -47,7 +47,7 @@ extension ScmPanelTests {
     show(until: { $0.changes.staged.count == 1 && $0.changes.changes.count == 1 }, "両方の区分")
     let commits = repo.git(["rev-list", "--count", "HEAD"]).stdoutText
 
-    panel.openCommitMenu().amend()
+    panel.commitSnapshot().amend()
     idle("ステージ済みの amend")
     XCTAssertEqual(repo.git(["rev-list", "--count", "HEAD"]).stdoutText, commits, "積まずに差し替える")
     XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, " M a.txt\n", "作業中の変更は残る")
@@ -56,7 +56,7 @@ extension ScmPanelTests {
     pumpMain(
       until: { self.panel.changes.staged.isEmpty && self.panel.changes.changes.count == 2 },
       "ステージ済みが無くなる")
-    panel.openCommitMenu().amend()
+    panel.commitSnapshot().amend()
     idle("全部の amend")
     XCTAssertEqual(repo.git(["rev-list", "--count", "HEAD"]).stdoutText, commits)
     XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, "")
@@ -98,12 +98,12 @@ extension ScmPanelTests {
       let hook = FinishHook(scene.kind) { [panel] in
         guard let panel, scene.afterFinish else { return }
         rowsCaughtUp = panel.changes.staged.count != staged
-        panel.commit()
+        panel.commitSnapshot().commit()
       }
       panel.control.addObserver(hook)
       withExtendedLifetime(hook) {
         panel.press(row, scene.control, in: panel.layout)
-        if !scene.afterFinish { panel.commit() }
+        if !scene.afterFinish { panel.commitSnapshot().commit() }
         pumpMain(
           until: { !scene.afterFinish || rowsCaughtUp != nil }, "\(name): 書き込みが終わる")
         idle("\(name): コミット")
@@ -127,7 +127,7 @@ extension ScmPanelTests {
     panel.isLive = true
     XCTAssertTrue(panel.changes.staged.isEmpty, "前提: 行はまだ組み直されていない")
     panel.control.message = "n"
-    panel.commit()
+    panel.commitSnapshot().commit()
     idle("コミット")
     XCTAssertNil(panel.control.failure)
     XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, " M a.txt\n")
@@ -144,14 +144,14 @@ extension ScmPanelTests {
     idle("ステージ")
     pumpMain(until: { self.panel.changes.staged.map(\.path) == ["n.txt"] }, "n.txt がステージ済みに出る")
     panel.control.message = "n"
-    panel.commit()
+    panel.commitSnapshot().commit()
     idle("ステージ済みのコミット")
     pumpMain(
       until: { self.panel.changes.staged.isEmpty && self.panel.changes.changes.count == 1 },
       "a.txt だけが残る")
 
     panel.control.message = "rest"
-    panel.commit()
+    panel.commitSnapshot().commit()
     idle("残りのコミット")
     XCTAssertNil(panel.control.failure)
     XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "a.txt\n")
@@ -166,10 +166,10 @@ extension ScmPanelTests {
     show(until: { $0.changes.staged.count == 1 && $0.changes.changes.count == 1 }, "両方の区分")
     panel.control.message = "s"
     pressRightAfter(
-      .commit, "コミットの直後のコミット", first: { $0.commit() },
+      .commit, "コミットの直後のコミット", first: { $0.commitSnapshot().commit() },
       then: {
         $0.control.message = "rest"
-        $0.commit()
+        $0.commitSnapshot().commit()
       })
     XCTAssertNil(panel.control.failure)
     XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "a.txt\n")
@@ -179,10 +179,10 @@ extension ScmPanelTests {
     pumpMain(until: { self.panel.changes.count == 0 }, "変更が無くなる")
     panel.control.message = "one"
     pressRightAfter(
-      .amend, "メッセージだけの amend の直後の amend", first: { $0.openCommitMenu().amend() },
+      .amend, "メッセージだけの amend の直後の amend", first: { $0.commitSnapshot().amend() },
       then: {
         $0.control.message = "two"
-        $0.openCommitMenu().amend()
+        $0.commitSnapshot().amend()
       })
     XCTAssertNil(panel.control.failure)
     XCTAssertEqual(repo.git(["log", "-1", "--format=%s"]).stdoutText, "two\n")
@@ -191,10 +191,10 @@ extension ScmPanelTests {
     let parent = repo.git(["rev-parse", "HEAD~1"]).stdoutText
     pumpMain(until: { self.panel.changes.head == self.repo.head() }, "行が今の HEAD に追いつく")
     pressRightAfter(
-      .undo, "取り消しの直後のコミット", first: { $0.openCommitMenu().undoLastCommit() },
+      .undo, "取り消しの直後のコミット", first: { $0.commitSnapshot().undoLastCommit() },
       then: {
         $0.control.message = "again"
-        $0.commit()
+        $0.commitSnapshot().commit()
       })
     XCTAssertNil(panel.control.failure)
     XCTAssertEqual(repo.git(["rev-parse", "HEAD~1"]).stdoutText, parent)
@@ -213,13 +213,13 @@ extension ScmPanelTests {
     var outside = ""
     let repo = self.repo!
     pressRightAfter(
-      .commit, "自分のコミットの直後の外のコミット", first: { $0.commit() },
+      .commit, "自分のコミットの直後の外のコミット", first: { $0.commitSnapshot().commit() },
       then: {
         XCTAssertTrue(repo.git(["add", "z.txt"]).isSuccess)
         XCTAssertTrue(repo.git(["commit", "-qm", "agent"]).isSuccess)
         outside = repo.head()
         $0.control.message = "reword"
-        $0.openCommitMenu().amend()
+        $0.commitSnapshot().amend()
       })
     XCTAssertEqual(panel.control.failure?.cause, .git(.contentMismatch))
     XCTAssertEqual(repo.head(), outside)
@@ -234,7 +234,7 @@ extension ScmPanelTests {
     show(until: { $0.changes.staged.count == 1 }, "ステージ済み")
     panel.control.message = "s"
     panel.pull()
-    panel.commit()
+    panel.commitSnapshot().commit()
     idle("プルとコミット")
     XCTAssertNil(panel.control.failure)
     XCTAssertEqual(

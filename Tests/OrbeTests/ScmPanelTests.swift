@@ -95,7 +95,7 @@ final class ScmPanelTests: OrbeTestCase {
     show(until: { $0.isHeadPushed == true && $0.changes.changes.count == 1 }, "push 済みの HEAD と変更")
 
     panel.control.message = "local"
-    panel.commit()
+    panel.commitSnapshot().commit()
     idle("コミット")
     let head = repo.head()
     pumpMain(until: { self.panel.isHeadPushed == false }, "新しい HEAD は未 push と読む")

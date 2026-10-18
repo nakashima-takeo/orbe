@@ -88,9 +88,10 @@ private struct ScmBand: View {
   }
 }
 
-/// 区分見出し「ソース管理」22（padding 0 8 0 4）: シェブロン（下の欄・ボタン・失敗の文を畳む）・題・右端に ✓（コミット。⌘↵ と
-/// 同じ条件）・再読込（status を取り直し、グラフと HEAD の push 済みを読み直す）・…（プル / プッシュ / フェッチ。
-/// ネット操作中は全部押せない）。
+/// 区分見出し「ソース管理」22（padding 0 8 0 4）: シェブロン（下の欄・ボタン・失敗の文を畳む）・題・右端に ✓（コミット。欄の ↵ と
+/// 同じ条件）・再読込（status を取り直し、グラフと HEAD の push 済みを読み直す）・…（プル / プッシュ / フェッチ / ─ /
+/// コミット (amend) / 最後のコミットを取り消す。ボタンの姿に縛られず常に開き、ボタンが押せない間も amend・取り消しに届く。
+/// 2 つの項目は ▾ と同じく開いた時点の写しで照らす）。
 private struct ScmControlsHead: View {
   let panel: ScmPanel
   @State private var hovering = false
@@ -100,7 +101,6 @@ private struct ScmControlsHead: View {
   private static let hoverAlpha = 0.04
 
   var body: some View {
-    let state = panel.commitState
     HStack(spacing: 0) {
       TreeChevron(open: panel.isControlsOpen)
       Text(l10n.string(.editorScmTitle))
@@ -110,20 +110,14 @@ private struct ScmControlsHead: View {
       Spacer(minLength: 0)
       HStack(spacing: 1) {
         ScmToolButton(
-          glyph: EditorGlyphs.check, help: l10n.string(.editorScmCommit), isEnabled: state.canCommit
-        ) { panel.commit() }
+          glyph: EditorGlyphs.check, help: l10n.string(.editorScmCommit),
+          isEnabled: panel.commitState.canCommit, action: commit)
         ScmToolButton(
           glyph: EditorGlyphs.refresh, help: l10n.string(.editorScmRefresh), isEnabled: true,
           action: panel.refresh)
         ScmToolButton(
           glyph: EditorGlyphs.more, help: l10n.string(.editorScmMoreActions), isEnabled: true,
-          menu: {
-            ScmMenu.make([
-              ScmMenu.Item(l10n.string(.editorScmPull), state.canNetwork, panel.pull),
-              ScmMenu.Item(l10n.string(.editorScmPush), state.canNetwork, panel.control.push),
-              ScmMenu.Item(l10n.string(.editorScmFetch), state.canNetwork, panel.control.fetch),
-            ])
-          })
+          menu: { moreMenu(panel.commitSnapshot()) })
       }
     }
     .padding(.leading, Theme.Space.tick)
@@ -133,6 +127,25 @@ private struct ScmControlsHead: View {
     .contentShape(Rectangle())
     .onHover { hovering = $0 }
     .onTapGesture { panel.isControlsOpen.toggle() }
+  }
+
+  /// ✓（押した時点の写しで押せるときだけ）。
+  private func commit() {
+    let snapshot = panel.commitSnapshot()
+    if snapshot.state.canCommit { snapshot.commit() }
+  }
+
+  /// …（項目は開いた時点の写しで照らす）。
+  private func moreMenu(_ snapshot: ScmCommitSnapshot) -> NSMenu {
+    let state = snapshot.state
+    return ScmMenu.make([
+      ScmMenu.Item(l10n.string(.editorScmPull), state.canNetwork, panel.pull),
+      ScmMenu.Item(l10n.string(.editorScmPush), state.canNetwork, panel.control.push),
+      ScmMenu.Item(l10n.string(.editorScmFetch), state.canNetwork, panel.control.fetch),
+      nil,
+      ScmMenu.Item(l10n.string(.editorScmAmend), state.canAmend, snapshot.amend),
+      ScmMenu.Item(l10n.string(.editorScmUndo), state.canUndo, snapshot.undoLastCommit),
+    ])
   }
 }
 
@@ -203,9 +216,9 @@ private struct ScmMessageBox: View {
 }
 
 /// コミットボタン（見本 primaryButton 26・radius 3・地 accent・字 tabActiveText 12 semibold）: 主の働き（コミット / 同期 ↑N ↓M /
-/// ブランチを公開）＋縦線 ＋ ▾（コミット (amend) / コミットしてプッシュ / ─ / 最後のコミットを取り消す）。地は側ごとに持ち、
-/// 押せない側は地ごと design-system の disabled にする（字だけ薄くすると、紫の地が押せる姿のまま残る）。▾ は中の項目が
-/// 1 つも押せないときだけ押せない姿で、開かない。
+/// ブランチを公開）＋縦線 ＋ ▾（コミット (amend) / コミットしてプッシュ / ─ / 最後のコミットを取り消す）。ボタンは主の働きと
+/// ▾ で 1 つの可否を持ち、押せない間は地・印・字をまとめて design-system の disabled にして、▾ も開かない（1 つのボタンの中で
+/// 明暗を割らない。字だけ薄くすると、紫の地が押せる姿のまま残る）。
 private struct ScmCommitButton: View {
   let panel: ScmPanel
   @Environment(\.localization) private var l10n
@@ -223,28 +236,24 @@ private struct ScmCommitButton: View {
           .lineLimit(1)
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(Color.theme.accentPrimary)
       .contentShape(Rectangle())
-      .onTapGesture { if state.isPrimaryEnabled { primary(state.primary) } }
-      .opacity(state.isPrimaryEnabled ? 1 : Theme.Opacity.disabled)
-      HStack(spacing: 0) {
-        Rectangle()
-          .fill(Color.theme.bgBase.opacity(Self.dividerAlpha))
-          .frame(width: Theme.Stroke.hairline)
-        EditorGlyphView(glyph: EditorGlyphs.chevronDown, size: 12, color: Color.theme.tabActiveText)
-          .frame(width: Theme.Layout.editorScmCommitCaret)
-          .frame(maxHeight: .infinity)
-      }
-      .background(Color.theme.accentPrimary)
-      .opacity(state.isMenuEnabled ? 1 : Theme.Opacity.disabled)
-      .overlay {
-        ScmMenuAnchor(
-          help: l10n.string(.editorScmCommitActions), isEnabled: state.isMenuEnabled
-        ) { menu(panel.commitState, panel.openCommitMenu()) }
-      }
+      .onTapGesture(perform: pressPrimary)
+      Rectangle()
+        .fill(Color.theme.bgBase.opacity(Self.dividerAlpha))
+        .frame(width: Theme.Stroke.hairline)
+      EditorGlyphView(glyph: EditorGlyphs.chevronDown, size: 12, color: Color.theme.tabActiveText)
+        .frame(width: Theme.Layout.editorScmCommitCaret)
+        .frame(maxHeight: .infinity)
+        .overlay {
+          ScmMenuAnchor(
+            help: l10n.string(.editorScmCommitActions), isEnabled: state.isButtonEnabled
+          ) { menu(panel.commitSnapshot()) }
+        }
     }
     .frame(height: Theme.Layout.editorScmCommitButton)
+    .background(Color.theme.accentPrimary)
     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.xs))
+    .opacity(state.isButtonEnabled ? 1 : Theme.Opacity.disabled)
   }
 
   private func glyph(_ primary: ScmCommitState.Primary) -> EditorGlyphs.Glyph {
@@ -263,21 +272,26 @@ private struct ScmCommitButton: View {
     }
   }
 
-  private func primary(_ primary: ScmCommitState.Primary) {
-    switch primary {
-    case .commit: panel.commit()
+  /// 主の働きを押した時点の写しで起こす。
+  private func pressPrimary() {
+    let snapshot = panel.commitSnapshot()
+    guard snapshot.state.isButtonEnabled else { return }
+    switch snapshot.state.primary {
+    case .commit: snapshot.commit()
     case .sync: panel.sync()
     case .publish: panel.control.publish()
     }
   }
 
-  private func menu(_ state: ScmCommitState, _ items: ScmCommitMenu) -> NSMenu {
-    ScmMenu.make([
-      ScmMenu.Item(l10n.string(.editorScmAmend), state.canAmend, items.amend),
+  /// ▾ のメニュー（項目は開いた時点の写しで照らす）。
+  private func menu(_ snapshot: ScmCommitSnapshot) -> NSMenu {
+    let state = snapshot.state
+    return ScmMenu.make([
+      ScmMenu.Item(l10n.string(.editorScmAmend), state.canAmend, snapshot.amend),
       ScmMenu.Item(
-        l10n.string(.editorScmCommitAndPush), state.canCommitAndPush, items.commitAndPush),
+        l10n.string(.editorScmCommitAndPush), state.canCommitAndPush, snapshot.commitAndPush),
       nil,
-      ScmMenu.Item(l10n.string(.editorScmUndo), state.canUndo, items.undoLastCommit),
+      ScmMenu.Item(l10n.string(.editorScmUndo), state.canUndo, snapshot.undoLastCommit),
     ])
   }
 }

@@ -12,8 +12,8 @@ extension ScmPanelTests {
   /// プッシュは、何も書かずに断る。
   func testCommittingRightAfterAnOutsideChangeIsRefusedAndWritesNothing() throws {
     let actions: [(String, (ScmPanel) -> Void)] = [
-      ("commit", { $0.commit() }), ("amend", { $0.openCommitMenu().amend() }),
-      ("commitAndPush", { $0.openCommitMenu().commitAndPush() }),
+      ("commit", { $0.commitSnapshot().commit() }), ("amend", { $0.commitSnapshot().amend() }),
+      ("commitAndPush", { $0.commitSnapshot().commitAndPush() }),
     ]
     for (name, act) in actions {
       try freshRepo(addingOrigin: name == "commitAndPush")
@@ -41,7 +41,7 @@ extension ScmPanelTests {
     XCTAssertTrue(repo.git(["commit", "-qm", "agent"]).isSuccess)
     let (head, status) = (repo.head(), repo.git(["status", "--porcelain"]).stdoutText)
 
-    panel.commit()
+    panel.commitSnapshot().commit()
     idle("コミット")
     XCTAssertEqual(panel.control.failure?.cause, .git(.contentMismatch))
     XCTAssertEqual(repo.head(), head)
@@ -51,7 +51,7 @@ extension ScmPanelTests {
   /// ▾ を開いている間に外でコミットされ、行がそれに追いついてから選んだ amend・コミットしてプッシュ・取り消しも、何も
   /// 書かずに断る——選んだのは開いた時点の姿で、開いている間の外のコミットは見えていない。
   func testMenuItemsChosenAfterAnOutsideCommitWhileTheMenuIsOpenAreRefused() throws {
-    let actions: [(String, (ScmCommitMenu) -> Void)] = [
+    let actions: [(String, (ScmCommitSnapshot) -> Void)] = [
       ("amend", { $0.amend() }), ("commitAndPush", { $0.commitAndPush() }),
       ("undo", { $0.undoLastCommit() }),
     ]
@@ -61,7 +61,7 @@ extension ScmPanelTests {
       try repo.write("z.txt", "agent\n")
       show(until: { $0.changes.staged.isEmpty && $0.changes.changes.count == 2 }, "\(name): 行")
       panel.control.message = "m"
-      let menu = panel.openCommitMenu()
+      let menu = panel.commitSnapshot()
       XCTAssertTrue(repo.git(["add", "z.txt"]).isSuccess)
       XCTAssertTrue(repo.git(["commit", "-qm", "agent"]).isSuccess)
       let (head, status) = (repo.head(), repo.git(["status", "--porcelain"]).stdoutText)

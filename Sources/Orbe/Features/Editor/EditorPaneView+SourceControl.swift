@@ -70,11 +70,7 @@ extension EditorPaneView {
         text.unmarkText()
         text.inputContext?.discardMarkedText()
       }
-      if scm.commitState.canCommit {
-        scm.commit()
-      } else {
-        NSSound.beep()
-      }
+      scm.commitFromMessage(andPush: false)
       return true
     case .upArrow?:
       guard scm.focusedArea == .list else { return false }

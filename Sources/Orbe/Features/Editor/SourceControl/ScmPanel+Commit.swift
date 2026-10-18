@@ -1,8 +1,8 @@
-import Foundation
+import AppKit
 
-/// コミットボタンの姿と、押した時点の姿で中身を決めるコミット、範囲に数える自分の書き込み。
+/// コミットボタンの姿と、押した・開いた時点の写しで中身を決めるコミット、範囲に数える自分の書き込み。
 extension ScmPanel {
-  /// コミットボタンと ▾ の姿。
+  /// コミットボタンと ▾ の姿（今の行と欄で）。
   var commitState: ScmCommitState {
     ScmCommitState(
       staged: changes.staged.count, changes: changes.changes.count,
@@ -12,15 +12,24 @@ extension ScmPanel {
       isHeadPushed: isHeadPushed)
   }
 
-  /// コミットする（✓・ボタン・⌘↵）。何を入れるかは押した時点の姿で決める（見たものをコミットする）。
-  func commit() {
-    startCommit(ownWrites.content(changes), control.commit)
+  /// 今の写し。押した（✓・ボタン・欄の ↵ / ⌘↵）・開いた（▾・…）時点に取り、可否も働きもこの写しで決める（見たものを
+  /// コミットする）。開いている間も status は届いて行は外の書き込みに追いつくので、選んだ時点の行で組むと、開いている間の
+  /// 外のコミットを見えていたものに数えてしまう。
+  func commitSnapshot() -> ScmCommitSnapshot {
+    ScmCommitSnapshot(panel: self, state: commitState, seen: ownWrites.content(changes))
   }
 
-  /// ▾ を開く。項目はどれも開いた時点に見えていたもので照らす——開いている間も status は届いて行は外の書き込みに追いつく
-  /// ので、選んだ時点の行で組むと、開いている間の外のコミットを見えていたものに数えてしまう。
-  func openCommitMenu() -> ScmCommitMenu {
-    ScmCommitMenu(panel: self, seen: ownWrites.content(changes))
+  /// メッセージ欄のキー——↵ はコミット、⌘↵ はコミットしてプッシュ。押した時点の写しで押せなければ音で断る（ボタンが同期・
+  /// 公開でも、同期・公開は起こさない）。
+  func commitFromMessage(andPush: Bool) {
+    let snapshot = commitSnapshot()
+    if andPush, snapshot.state.canCommitAndPush {
+      snapshot.commitAndPush()
+    } else if !andPush, snapshot.state.canCommit {
+      snapshot.commit()
+    } else {
+      NSSound.beep()
+    }
   }
 
   /// プル（HEAD を動かすので、行に出るまで見えていた HEAD に数える）。
@@ -68,11 +77,17 @@ extension ScmPanel {
   }
 }
 
-/// ▾ の項目。どれも ▾ を開いた時点に見えていたもの `seen` で照らす。
+/// 押した・開いた時点の写し——その時点のボタンの姿 `state` と、見えていたもの `seen`。働きはどれも `seen` で照らす。
 @MainActor
-struct ScmCommitMenu {
+struct ScmCommitSnapshot {
   let panel: ScmPanel
+  let state: ScmCommitState
   let seen: GitCommitContent
+
+  /// コミットする。
+  func commit() {
+    panel.startCommit(seen, panel.control.commit)
+  }
 
   /// 直前のコミットを差し替える（コミットと同じ範囲）。
   func amend() {

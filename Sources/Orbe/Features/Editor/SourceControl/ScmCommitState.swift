@@ -1,9 +1,10 @@
 import Foundation
 
-/// コミットボタンと ▾ の項目の姿（純関数）。コミットできる変更が 1 つも無いとき、ボタンは「同期 ↑N ↓M」（pull → push）か、
-/// コミットがあり upstream の無いブランチでは「ブランチを公開」に替わる。HEAD が push 済みなら amend・取り消しは押せない
-/// （force push を持たないので、書き換えたら Orbe の中では戻れない）。push 済みか分からない間と、ネット操作が走っている・
-/// 順番を待っている間も押せない側に倒す（push と並んで走ると、push したコミットを書き換えうる）。
+/// コミットボタンと ▾ の項目の姿（純関数）。ボタンは主の働きと ▾ で 1 つの可否を持つ（主が押せなければ ▾ も開かない）。
+/// コミットできる変更が 1 つも無いとき、ボタンは「同期 ↑N ↓M」（pull → push）か、コミットがあり upstream の無いブランチ
+/// では「ブランチを公開」に替わる。HEAD が push 済みなら amend・取り消しは押せない（force push を持たないので、書き換えたら
+/// Orbe の中では戻れない）。push 済みか分からない間と、ネット操作が走っている・順番を待っている間も押せない側に倒す（push と
+/// 並んで走ると、push したコミットを書き換えうる）。
 struct ScmCommitState: Equatable {
   enum Primary: Equatable {
     case commit
@@ -12,14 +13,13 @@ struct ScmCommitState: Equatable {
   }
 
   let primary: Primary
-  let isPrimaryEnabled: Bool
-  /// コミットだけの入口（✓・⌘↵）が押せる。ボタンが同期・公開でもネット操作は起こさない。
+  /// ボタン（主の働きと ▾）が押せる。
+  let isButtonEnabled: Bool
+  /// コミットだけの入口（✓・欄の ↵）が押せる。ボタンが同期・公開でもネット操作は起こさない。
   let canCommit: Bool
   let canAmend: Bool
   let canCommitAndPush: Bool
   let canUndo: Bool
-  /// ▾ が開く（中の項目が 1 つでも押せる）。
-  let isMenuEnabled: Bool
   /// プル・プッシュ・フェッチ（前提は根のサービスが判定する。同じ worktree のネット操作が走っている間だけ押せない）。
   let canNetwork: Bool
 
@@ -33,27 +33,26 @@ struct ScmCommitState: Equatable {
     canNetwork = !isNetworking
     if staged + changes > 0 {
       primary = .commit
-      isPrimaryEnabled = canCommit
+      isButtonEnabled = canCommit
     } else if let branch, branch.name != nil, let upstream = branch.upstream {
       if let divergence = upstream.divergence, divergence.ahead + divergence.behind > 0 {
         primary = .sync(divergence)
-        isPrimaryEnabled = !isNetworking
+        isButtonEnabled = !isNetworking
       } else {
         primary = .commit
-        isPrimaryEnabled = false
+        isButtonEnabled = false
       }
     } else if let branch, branch.name != nil, branch.commit != nil {
       primary = .publish
-      isPrimaryEnabled = !isNetworking
+      isButtonEnabled = !isNetworking
     } else {
       primary = .commit
-      isPrimaryEnabled = false
+      isButtonEnabled = false
     }
     let rewritable =
       branch?.commit != nil && isHeadPushed == false && !isCommitting && !isNetworking
     canAmend = rewritable && (staged > 0 || committable > 0 || !messageIsBlank)
     canUndo = rewritable
     canCommitAndPush = canCommit && !isNetworking
-    isMenuEnabled = canAmend || canCommitAndPush || canUndo
   }
 }
