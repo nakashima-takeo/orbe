@@ -69,20 +69,17 @@ extension GitRepo {
         return
       }
       let restore = selection.indexed.subtracting(intended)
-      let untracked = {
-        self.blockers(of: restore, submodules: selection.submodules)
-          + selection.paths.filter { !selection.indexed.contains($0) }
-      }
-      self.moveToTrash(untracked, handle: handle) { cleared in
-        if let cleared { return completion(cleared) }
-        let checkout = ["restore", "--worktree", "--no-recurse-submodules"]
-        self.runOnPaths(checkout, paths: Array(restore), handle: handle) { restored in
-          if let restored { return completion(restored) }
-          let unindex = ["rm", "--cached", "-q"]
-          self.runOnPaths(unindex, paths: Array(intended), handle: handle) { removed in
-            if let removed { return completion(removed) }
-            self.moveToTrash({ Array(intended) }, handle: handle, completion: completion)
-          }
+      let unindex = ["rm", "--cached", "-q"]
+      self.runOnPaths(unindex, paths: Array(intended), handle: handle) { removed in
+        if let removed { return completion(removed) }
+        let untracked = {
+          self.blockers(of: restore, submodules: selection.submodules)
+            + selection.paths.filter { !restore.contains($0) }
+        }
+        self.moveToTrash(untracked, handle: handle) { cleared in
+          if let cleared { return completion(cleared) }
+          let checkout = ["restore", "--worktree", "--no-recurse-submodules"]
+          self.runOnPaths(checkout, paths: Array(restore), handle: handle, completion: completion)
         }
       }
     }

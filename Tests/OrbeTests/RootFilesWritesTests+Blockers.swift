@@ -66,4 +66,30 @@ extension RootFilesWritesTests {
       try String(contentsOf: trash.appendingPathComponent("d"), encoding: .utf8),
       "a file where the directory was\n")
   }
+
+  /// 同じ場面で `d` が intent-to-add（`git add -N`）でも、`d` を index から外してゴミ箱へ移し、`D/x` を戻す——戻した `D/` を
+  /// 移し直さない。
+  func testDiscardRestoresADirectoryNamedLikeAnIntentToAddFileUpToCase() throws {
+    try repo.write("D/x", "tracked\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "tracked"]).isSuccess)
+    try FileManager.default.removeItem(atPath: repo.root + "/D")
+    try repo.write("d", "a file where the directory was\n")
+    guard FileManager.default.fileExists(atPath: repo.root + "/D") else {
+      throw XCTSkip("大文字小文字を区別するボリューム")
+    }
+    XCTAssertTrue(repo.git(["add", "-N", "d"]).isSuccess)
+    let files = repo.files()
+
+    let rows = ["D/x", "d"].map { GitStatus.Row(path: $0, originalPath: nil) }
+    let discarded = finish(files) { files.discard(rows, completion: $0) }
+    XCTAssertNil(discarded.failure)
+    XCTAssertEqual(try String(contentsOfFile: repo.root + "/D/x", encoding: .utf8), "tracked\n")
+    XCTAssertFalse(
+      repo.git(["ls-files"]).stdoutText.split(separator: "\n").contains("d"), "d は index から外れる")
+    let trash = try XCTUnwrap(GitRepo.trashDirectoryOverride)
+    XCTAssertEqual(
+      try String(contentsOf: trash.appendingPathComponent("d"), encoding: .utf8),
+      "a file where the directory was\n")
+  }
 }
