@@ -36,6 +36,18 @@ extension RowListTests {
     XCTAssertEqual(hosted.source.clicks, ["press 2 0", "press 2 0"])
   }
 
+  /// 留める行がポインタの下に来ていなければ（上へ送れずに留めきれない）、枠の中の押下は捨てる——来た別の行の同じ部品も
+  /// 働かない。
+  func testWhenTheHeldRowIsNotUnderThePointerPressesInsideTheControlAreDropped() {
+    // 押した行 2 が抜け、後継は 1 つ上の行 1。原点 0 の列は行 1 を押した高さへ下ろせない。
+    let hosted = hostShown(anchor: RowListAnchor(pressed: 99, successor: 1))
+    send(.leftMouseDown, hosted, at: control)
+    hosted.rows.update(rowsVersion: 1, selection: nil, emoji: nil, wantsFocus: false)
+    XCTAssertEqual(hosted.list.visibleRect.minY, 0, "前提: 留めきれずに原点のまま")
+    send(.leftMouseDown, hosted, at: control)
+    XCTAssertEqual(hosted.source.clicks, ["press 2 0"], "ポインタの下の行 2 の部品は働かない")
+  }
+
   /// 留める行が無ければ、枠の中の押下は捨てる。枠の外へ動く・枠の外を押す・キーで守りは終わり、そこからは普通に届く。
   func testWithoutAHeldRowPressesInsideTheControlAreDroppedUntilTheGuardEnds() {
     let hosted = hostShown(anchor: RowListAnchor(pressed: 99, successor: nil))
