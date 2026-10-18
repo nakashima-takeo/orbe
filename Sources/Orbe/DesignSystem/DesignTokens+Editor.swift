@@ -259,7 +259,7 @@ extension Theme.Layout {
   static let editorRailBadge: CGFloat = 15
   static let editorRailBadgeOffset = CGSize(width: 8, height: 4)
   /// ソース管理（見本 ScmPanel の値）。行（区分見出し・ファイル・コミット・さらに表示）の高さ・種別チップ・行の中のボタンと
-  /// その印・見出しのツールの角・グラフ見出しの上の空き・ブランチの器の高さと下の空き・メッセージ欄の 1 行の高さ・コミット
+  /// その印・見出しのツールの角・グラフ見出しの上の空き・ブランチの器の高さと上下の空き・メッセージ欄の 1 行の高さ・コミット
   /// ボタンの高さと ▾ の幅・ref の札の高さ・コミットの点・点の列の幅。
   static let editorScmRow: CGFloat = 22
   static let editorScmChip: CGFloat = 16

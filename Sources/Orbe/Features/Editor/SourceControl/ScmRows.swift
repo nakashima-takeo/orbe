@@ -232,7 +232,7 @@ struct ScmLayout {
       heights.append(row)
       if isOpen {
         items.append(.branch(branch))
-        heights.append(Theme.Layout.editorScmBranch + Theme.Layout.editorScmBranchGap)
+        heights.append(Theme.Layout.editorScmBranch + Theme.Layout.editorScmBranchGap * 2)
         let commits = graph?.commits ?? []
         for (offset, commit) in commits.enumerated() {
           items.append(.commit(commit, isFirst: offset == 0, isLast: offset == commits.count - 1))

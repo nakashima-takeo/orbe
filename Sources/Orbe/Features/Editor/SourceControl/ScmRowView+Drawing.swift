@@ -62,11 +62,12 @@ extension ScmRowView {
       at: x, top: top(file.directory), width: max(0, limit - x), colors.tertiary, context)
   }
 
-  /// ブランチの器（padding 0 12 6 の箱 24・radius 3・地 sunk .35・枠 hairline .10、中は padding 0 8・gap 6）: ブランチの印 9
-  /// （accentBright）・名前と先行/遅れ（mono 11。数は tertiary）。
+  /// ブランチの器（padding 6 12 6 の箱 24・radius 3・地 sunk .35・枠 hairline .10、中は padding 0 8・gap 6）: ブランチの印 9
+  /// （accentBright）・名前と先行/遅れ（mono 11。数は tertiary）。上の 6 で、グラフ見出しの地と器の枠を離す。名前を優先し、
+  /// 先行/遅れは残りの幅で末尾から省く。
   func draw(_ branch: Branch, _ colors: RowColors, _ scm: ScmRowColors, in context: CGContext) {
-    let box = NSRect(
-      x: 12, y: 0, width: max(0, bounds.width - 24), height: Theme.Layout.editorScmBranch)
+    let band = self.band
+    let box = NSRect(x: 12, y: band.minY, width: max(0, bounds.width - 24), height: band.height)
     fill(box, radius: Theme.Radius.xs, scm.branchGround, in: context)
     context.setStrokeColor(scm.branchBorder)
     context.setLineWidth(Theme.Stroke.hairline)

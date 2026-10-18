@@ -81,11 +81,13 @@ final class ScmRowView: ListRowView {
 
   // MARK: - 寸法
 
-  /// 中身の帯（ブランチの器は下の空きの上）。
+  /// 中身の帯（ブランチの器は上下の空きの間）。
   var band: NSRect {
     switch content {
     case .branch:
-      NSRect(x: 0, y: 0, width: bounds.width, height: Theme.Layout.editorScmBranch)
+      NSRect(
+        x: 0, y: Theme.Layout.editorScmBranchGap, width: bounds.width,
+        height: Theme.Layout.editorScmBranch)
     default:
       bounds
     }
