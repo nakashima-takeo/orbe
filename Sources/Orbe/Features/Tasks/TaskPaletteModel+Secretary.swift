@@ -12,7 +12,7 @@ extension TaskPaletteModel {
   func askWithQuery() {
     guard let title = addTitle else { return }
     leaveEditingForAction()
-    switch onAskSecretary(.text(title)) {
+    switch onAskSecretary(title) {
     case nil: query = ""
     case .claudeMissing: error = .secretaryClaude
     case .unavailable: error = .secretaryUnavailable

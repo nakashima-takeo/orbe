@@ -1,19 +1,11 @@
 import Foundation
 
-/// 画面から秘書の係へ渡す頼み（起こした claude の最初の入力になる中身）。どこから頼んだかは頼む側が `SecretaryOrigin` で
-/// 別に渡す。
-enum SecretaryAsk: Equatable {
-  /// 打った文（⌘⇧X の入力の行き先・ボードの依頼の欄）。
-  case text(String)
-}
-
 /// 起こした claude の最初の入力と役目の指示（Orbe が UI の言語で組む）。
 enum SecretaryText {
-  /// 最初の入力（「依頼: 」を先頭に付けた頼み）。その語は中身によらず常に付ける——先頭が `/` の文を claude が
-  /// スラッシュコマンドとして実行しないため。頼める中身が無ければ nil。
-  static func firstInput(_ ask: SecretaryAsk, l10n: LocalizationStore) -> String? {
-    guard case .text(let text) = ask else { return nil }
-    let body = text.trimmingCharacters(
+  /// 最初の入力（「依頼: 」を先頭に付けた頼み）。頼みは画面で打った文（⌘⇧X の入力の行き先・ボードの依頼の欄）。その語は
+  /// 中身によらず常に付ける——先頭が `/` の文を claude がスラッシュコマンドとして実行しないため。頼める中身が無ければ nil。
+  static func firstInput(_ ask: String, l10n: LocalizationStore) -> String? {
+    let body = ask.trimmingCharacters(
       in: CharacterSet.whitespacesAndNewlines.union(.controlCharacters))
     if body.isEmpty { return nil }
     return l10n.format(.secretaryRequestInput, body)

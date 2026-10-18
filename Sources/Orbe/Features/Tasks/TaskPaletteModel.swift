@@ -111,7 +111,7 @@ struct TaskPaletteTaskList {
   /// 解けた待ちを続きから始められない理由（タスクの ID。nil は始められる）。
   var continuationBlock: (Int) -> TaskPaletteError? = { _ in nil }
   /// 秘書の係へ頼む（agent に任せる）。受けなければ断りを返す。
-  var onAskSecretary: (SecretaryAsk) -> Secretary.Refusal? = { _ in .claudeMissing }
+  var onAskSecretary: (String) -> Secretary.Refusal? = { _ in .claudeMissing }
 
   /// 開いた時点で、出ている行の結び付きの値を取り直す（届くまでは前回の答えで描く）。GitHub タブの一覧の
   /// 取り直し（`openLists.open(root:)`）は開く側が呼ぶ。`workspaces` は今の workspace の値を返す口で、タスクのタブは

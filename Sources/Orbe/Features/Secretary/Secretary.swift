@@ -38,7 +38,7 @@ final class Secretary {
     self.localization = localization
   }
 
-  func ask(_ ask: SecretaryAsk, from origin: SecretaryOrigin) throws(Refusal) {
+  func ask(_ ask: String, from origin: SecretaryOrigin) throws(Refusal) {
     guard let input = SecretaryText.firstInput(ask, l10n: localization) else {
       throw .empty
     }

@@ -156,7 +156,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
   /// agent を開く。
   func testCommandEnterInTheFieldHandsTheTextOverAndOnARowOpensTheAgent() {
     let model = model()
-    var asks: [SecretaryAsk] = []
+    var asks: [String] = []
     model.onAskSecretary = {
       asks.append($0)
       return nil
@@ -167,7 +167,7 @@ final class TaskPaletteCardKeyTests: PaletteCardWindowTestCase {
 
     type("見積もり", into: window)
     send(Key.enter, "\r", .command, to: window)
-    XCTAssertEqual(asks, [.text("見積もり")])
+    XCTAssertEqual(asks, ["見積もり"])
     XCTAssertEqual(model.store.tasks.count, 3, "足さない")
 
     send(Key.enter, "\r", .command, to: window)

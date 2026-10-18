@@ -11,8 +11,8 @@ import XCTest
 extension BoardAutomationTests {
   private func recording(
     _ model: BoardModel, _ refusal: Secretary.Refusal? = nil
-  ) -> () -> [SecretaryAsk] {
-    var asks: [SecretaryAsk] = []
+  ) -> () -> [String] {
+    var asks: [String] = []
     model.automation.onAsk = {
       asks.append($0)
       return refusal
@@ -29,7 +29,7 @@ extension BoardAutomationTests {
     send(Key.enter, "\r", to: window)
     send(Key.enter, "\r", repeating: true, to: window)
 
-    XCTAssertEqual(asks(), [.text("abc")], "押し続けても 1 回")
+    XCTAssertEqual(asks(), ["abc"], "押し続けても 1 回")
     XCTAssertEqual(model.automation.requestText, "")
     XCTAssertNil(model.refusal)
   }
@@ -55,7 +55,7 @@ extension BoardAutomationTests {
     XCTAssertEqual(asks(), [], "書き出すだけで頼まない")
     type("x", to: window)
     send(Key.enter, "\r", to: window)
-    XCTAssertEqual(asks(), [.text(draft + "x")], "末尾から続けて打てる")
+    XCTAssertEqual(asks(), [draft + "x"], "末尾から続けて打てる")
   }
 
   /// claude が無ければ赤で断り、打った文を残す。断りは次の操作で消える。

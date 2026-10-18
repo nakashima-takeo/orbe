@@ -64,7 +64,7 @@ final class SecretaryTests: OrbeTestCase {
         && !command.contains("set_automation"), "タスクを足す役目を添える: \(command)")
     XCTAssertTrue(command.hasSuffix(" -- '依頼: 見積もりを山田さんに送る'"), "頼みは最初の入力: \(command)")
 
-    try wc.secretary.ask(.text("二件目"), from: .palette)
+    try wc.secretary.ask("二件目", from: .palette)
     XCTAssertEqual(try homeTabs(wc).count, 2, "頼みのたびに別の claude")
   }
 
@@ -95,7 +95,7 @@ final class SecretaryTests: OrbeTestCase {
   func testWithoutClaudeTheAskIsRefused() throws {
     let wc = try launch(stage: false)
 
-    XCTAssertThrowsError(try wc.secretary.ask(.text("頼み"), from: .palette)) {
+    XCTAssertThrowsError(try wc.secretary.ask("頼み", from: .palette)) {
       XCTAssertEqual($0 as? Secretary.Refusal, .claudeMissing)
     }
     XCTAssertTrue(try homeTabs(wc).isEmpty)

@@ -22,11 +22,11 @@ extension BoardAutomationModel {
   /// 欄の ↵。打った文を頼み、受けたら欄を空にする。断られたら欄を残す。空の欄は黙る。
   func send() {
     onRefusal(nil)
-    if ask(.text(requestText)) { requestText = "" }
+    if ask(requestText) { requestText = "" }
   }
 
   /// 頼んで、受けたかを返す。受けられなければ断りを置く。空の頼みは黙って受けない。
-  @discardableResult private func ask(_ ask: SecretaryAsk) -> Bool {
+  @discardableResult private func ask(_ ask: String) -> Bool {
     switch onAsk(ask) {
     case nil: return true
     case .claudeMissing: onRefusal(.boardAskClaudeMissing)

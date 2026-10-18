@@ -67,7 +67,7 @@ import SwiftUI
   @ObservationIgnored private var deliveredFocusToken = 0
 
   /// 依頼の欄の文を頼む。ボードの配線が出どころを付けて秘書の口へ渡し、受けなければ断りを返す。
-  @ObservationIgnored var onAsk: (SecretaryAsk) -> Secretary.Refusal? = { _ in .claudeMissing }
+  @ObservationIgnored var onAsk: (String) -> Secretary.Refusal? = { _ in .claudeMissing }
   /// ボードの断りの枠へ置く（nil は消す）。
   @ObservationIgnored var onRefusal: (L10nKey?) -> Void = { _ in }
 
