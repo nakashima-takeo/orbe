@@ -64,6 +64,19 @@ extension RootFilesWritesTests {
     XCTAssertEqual(repo.head(), head, "外のコミットを取り消さない")
   }
 
+  /// 初回コミット前のリポジトリでも、見えていたものでコミットできる（HEAD を照らす `rev-parse` は HEAD が無いと落ちる）。
+  func testCommitWorksBeforeTheFirstCommit() throws {
+    let fresh = try TempGitRepo(initialCommit: false)
+    try fresh.write("first.txt", "f\n")
+    let files = fresh.files()
+    let seen = GitCommitContent.seen(try XCTUnwrap(files.status))
+
+    let committed = finish(files) { files.commit(message: "first", content: seen, completion: $0) }
+    XCTAssertNil(committed.failure)
+    XCTAssertEqual(
+      fresh.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "first.txt\n")
+  }
+
   /// rename のステージ済みの行は、index と HEAD の差の両側（元パスと新しいパス）に当たるので、断らずにコミットできる。
   func testAStagedRenameIsCommittedAsItsRowShowsIt() throws {
     try repo.write("old.txt", "body\n")
