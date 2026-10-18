@@ -2,9 +2,10 @@ import XCTest
 
 @testable import Orbe
 
-/// ボードの読み替え——一覧の行（前回の成否と時刻・次回）と、地図の溝の線の割り当て。
+/// ボードの読み替え——一覧の行（状態と、それと混ぜない前回の成否と時刻）と、地図の溝の線の割り当て。
 ///
-/// 壊れると何が起きるか: 失敗した部品があるのに一覧の印が成功に見え、壊れた部品に気づけない。地図の線が入力と違う行へつながり、
+/// 壊れると何が起きるか: 失敗した部品があるのに一覧の印が成功に見え、壊れた部品に気づけない。流している間や止めている間に
+/// 前回の結果が見えなくなる。地図の線が入力と違う行へつながり、
 /// どの部品の出力がどこへ行くかを読み違える。
 @MainActor
 final class BoardAutomationSummaryTests: OrbeTestCase {
@@ -32,6 +33,25 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     let wide = BoardAutomationSummary(all[2], text: text, next: nil)
     XCTAssertNil(wide.mark)
     XCTAssertEqual(wide.last, "まだ動いていない")
+  }
+
+  /// 名前の右の状態（実行中・停止中）と前回の印は混ぜない。失敗した部品のある自動化を流している間も印は失敗のまま、止めて
+  /// いる自動化の印は前回の成否のまま。
+  func testListRowKeepsTheStateApartFromTheLastResult() throws {
+    let model = BoardAutomationModel(
+      runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardMapSamples()))
+    let all = model.store.automations
+    let (charge, weekend) = (all[0].id, all[3].id)
+    try model.runner.flow(charge, to: .ends)
+    let now = model.runner.now()
+    let text = model.text(LocalizationStore(language: .ja), now: now)
+    let states = Dictionary(
+      uniqueKeysWithValues: model.standings(at: now).map { ($0.id, $0.state) })
+
+    XCTAssertEqual(states[charge], .running)
+    XCTAssertEqual(model.summary(charge, text: text, now: now)?.mark, .failure, "流している間も前回の印")
+    XCTAssertEqual(states[weekend], .paused)
+    XCTAssertEqual(model.summary(weekend, text: text, now: now)?.mark, .success, "止めていても前回の印")
   }
 
   /// 見本の 12 部品の線: 行を上から見て、最後の受け手を迎える入力の線のうち最も左に点を置き、無ければ空いている最も左。
