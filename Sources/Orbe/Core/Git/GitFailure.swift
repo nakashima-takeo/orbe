@@ -45,7 +45,8 @@ enum GitWriteFailure: Error, Equatable {
   /// コミットしようとした index に競合（unmerged のパス）が残っている。git はコミットを必ず断るので、何も書かずに返す。
   case conflictsRemain
   /// コミット・amend・取り消しで、HEAD かコミットに入るものが押した時点に見えていたものと違う（行が status に追いついて
-  /// いない・外で index や HEAD が動いた）。git はコミットに index 全体を入れるので、何も書かずに返す。
+  /// いない・外で index や HEAD が動いた）。何も書かずに返す——見えていないコミットの上に重ねない・書き換えない・取り消さ
+  /// ない。git はコミットに index 全体を入れるので、見えていない変更も入れない。
   case contentMismatch
   /// amend・取り消しで書き換えようとした HEAD が push 済み（どれかの remote 追跡ブランチから届く）。force push を持たない
   /// ので、書き換えれば Orbe の中では戻せない。

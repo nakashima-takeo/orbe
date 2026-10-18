@@ -13,7 +13,7 @@ struct ScmOwnWrites {
     /// コミット・amend・コミットしてプッシュ（`stagingFirst` は先にステージする行）。
     case commit(stagingFirst: [GitStatus.Row])
     case undo
-    /// プル・同期。HEAD を動かし、ステージ済みは新しい HEAD との差のまま残る（残らない取り込みは git が止める）。
+    /// プル・同期。HEAD を動かし、ステージ済みは新しい HEAD との差のまま残るとみなす（残らなければコミットの照合が断る）。
     case pull
   }
 
