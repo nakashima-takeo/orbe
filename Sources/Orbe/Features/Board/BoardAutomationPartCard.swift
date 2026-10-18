@@ -43,7 +43,7 @@ struct BoardAutomationPartCard: View {
 
   private var head: some View {
     HStack(spacing: Theme.Space.step) {
-      if card.look == .running {
+      if card.running {
         StatusGlyphView(kind: .working, size: 10)
       } else if let mark = card.mark {
         BoardRunMarkGlyph(mark: mark)

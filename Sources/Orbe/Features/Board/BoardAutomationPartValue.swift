@@ -19,7 +19,7 @@ struct BoardAutomationPartValue: Equatable {
   let key: String
   let role: String
   let name: String
-  let look: BoardNodeLook
+  let running: Bool
   /// 頭の印。まだ動いていなければ nil。
   let mark: BoardRunMark?
   /// 実行・ツール・予定・取り方・入力元・出力先・未処理・制限時間・場所・次回の順。部品に無い項目は出さない。
@@ -73,7 +73,7 @@ extension BoardAutomationPartValue {
     self.key = key
     role = text.role(node.role)
     name = node.part.name
-    look = running ? .running : state.runs.first?.failed == true ? .failed : .idle
+    self.running = running
     mark = state.runs.first.map { $0.failed ? .failure : .success }
     switch node.part.method {
     case .agent(let agent): body = agent.instruction

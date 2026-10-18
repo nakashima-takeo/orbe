@@ -1,6 +1,6 @@
 import Foundation
 
-/// 地図の部品の点とカードの頭の印の見え方。
+/// 地図の部品の点の見え方。
 enum BoardNodeLook: Equatable {
   case idle
   /// 最新の回が失敗。
