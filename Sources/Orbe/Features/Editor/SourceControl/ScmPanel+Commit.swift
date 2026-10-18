@@ -1,6 +1,6 @@
 import Foundation
 
-/// コミットボタンの姿と、押した時点の姿で中身を決めるコミット。
+/// コミットボタンの姿と、押した時点の姿で中身を決めるコミット、範囲に数える自分の書き込み。
 extension ScmPanel {
   /// コミットボタンと ▾ の姿。
   var commitState: ScmCommitState {
@@ -27,10 +27,25 @@ extension ScmPanel {
     control.commitAndPush(commitContent)
   }
 
-  /// 押した時点の範囲の中身——見えているステージ済みの行があればそれだけ、無ければ「すべてステージ」と同じ行を先にステージ
-  /// して入れる。行が status に追いついていない間の食い違いは、根のサービスが書き込みの直前に照らして断る。
+  /// 行をステージする（行の ＋・すべてステージ）。結果が行に出るまで、コミットの範囲に数える。
+  func stage(_ rows: [GitStatus.Row]) {
+    ownWrites.record(.stage, rows, control.stage(rows))
+  }
+
+  /// 行のステージを解く（行の −・すべて解除）。
+  func unstage(_ rows: [GitStatus.Row]) {
+    ownWrites.record(.unstage, rows, control.unstage(rows))
+  }
+
+  /// 行の変更を捨てる（確認は呼ぶ側）。
+  func discard(_ rows: [GitStatus.Row]) {
+    ownWrites.record(.discard, rows, control.discard(rows))
+  }
+
+  /// 押した時点の範囲の中身——見えている行に、このパネルで押してまだ行に出ていない書き込みを重ねたもの（→ `ScmOwnWrites`）。
+  /// それ以外の食い違い（外の書き込み）は、根のサービスが書き込みの直前に照らして断る。
   private var commitContent: GitCommitContent {
-    changes.staged.isEmpty
-      ? .staging(changes.committable.map(\.row)) : .staged(changes.staged.map(\.row))
+    ownWrites.content(
+      staged: changes.staged.map(\.row), committable: changes.committable.map(\.row))
   }
 }

@@ -3,16 +3,19 @@ import Foundation
 /// 操作の始め方と 2 段の連結。どれも始めたときの根のサービスの口を呼ぶ——前提の判定・順番・止め方・失敗の分類は根のサービスが
 /// 持つ。2 段の操作は 1 段目が通ったときだけ 2 段目を起こし、止められていれば起こさない（止める手の状態を段の間で見る）。
 extension SourceControl {
-  func stage(_ rows: [GitStatus.Row]) {
+  @discardableResult
+  func stage(_ rows: [GitStatus.Row]) -> Operation? {
     run(.stage, .stage) { files, done in files.stage(rows, completion: done) }
   }
 
-  func unstage(_ rows: [GitStatus.Row]) {
+  @discardableResult
+  func unstage(_ rows: [GitStatus.Row]) -> Operation? {
     run(.unstage, .unstage) { files, done in files.unstage(rows, completion: done) }
   }
 
   /// 確認は呼ぶ側（→ `ScmDiscardGate`）。確認した行をそのまま渡す（根のサービスが呼んだ時点の index で選び直す）。
-  func discard(_ rows: [GitStatus.Row]) {
+  @discardableResult
+  func discard(_ rows: [GitStatus.Row]) -> Operation? {
     run(.discard, .discard) { files, done in files.discard(rows, completion: done) }
   }
 
@@ -138,11 +141,12 @@ extension SourceControl {
     if message == committed { message = "" }
   }
 
-  /// 1 段の書き込みの操作を始める。
+  /// 1 段の書き込みの操作を始める（列に載せなければ nil）。
+  @discardableResult
   private func run(
     _ kind: Kind, _ step: Step,
     _ write: @escaping (RootFiles, @escaping (GitWriteFailure?) -> Void) -> RootFiles.Write
-  ) {
+  ) -> Operation? {
     run(kind, step) { [weak self] files, done, operation in
       self?.attach(write(files, done), step: step, to: operation)
     }
@@ -152,11 +156,12 @@ extension SourceControl {
   /// `done` を 1 回呼ぶ。ネット操作は、始まりでそのリポジトリの裏の fetch の係に届け出る（届け出ている間は裏の fetch を撃た
   /// ない）。根の git dir がまだ分からなければ届け出ない（書き込みは git を起こさずに「管理外」で返るので、裏の fetch と
   /// 競らない）。
+  @discardableResult
   private func run(
     _ kind: Kind, _ step: Step,
     _ body: @escaping (RootFiles, @escaping (GitWriteFailure?) -> Void, Operation) -> Void
-  ) {
-    guard let operation = enqueue(kind, step) else { return }
+  ) -> Operation? {
+    guard let operation = enqueue(kind, step) else { return nil }
     let done: (GitWriteFailure?) -> Void = { [weak self, operation] failure in
       self?.finish(operation, failure)
     }
@@ -166,5 +171,6 @@ extension SourceControl {
       operation.autoFetch = autoFetch
     }
     body(operation.files, done, operation)
+    return operation
   }
 }

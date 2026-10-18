@@ -43,15 +43,15 @@ extension EditorPaneView {
   /// 破棄。追跡中を含めば確認のシートを出し、確認した行をそのまま渡す（応答までに status が変わっても、根のサービスが呼んだ
   /// 時点の index で選び直す）。未追跡だけならそのままゴミ箱へ。
   func confirmDiscard(_ files: [ScmChanges.File]) {
-    let control = scm.control
+    let scm = self.scm
     let rows = files.map(\.row)
     guard ScmDiscardGate.needsConfirmation(files), let window else {
-      control.discard(rows)
+      scm.discard(rows)
       return
     }
     let alert = ScmDiscardGate.alert(files, language: localization.language)
     alert.beginSheetModal(for: window) { response in
-      if ScmDiscardGate.shouldDiscard(response) { control.discard(rows) }
+      if ScmDiscardGate.shouldDiscard(response) { scm.discard(rows) }
     }
   }
 

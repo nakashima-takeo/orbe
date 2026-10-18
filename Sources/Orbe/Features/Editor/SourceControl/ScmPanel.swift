@@ -75,6 +75,7 @@ final class ScmPanel {
   /// 欲しいと届けている裏の fetch の係。
   @ObservationIgnored private var autoFetch: ScmAutoFetch?
   @ObservationIgnored private var buildJob = Job()
+  @ObservationIgnored var ownWrites = ScmOwnWrites()
   /// 手元の 2 区分が今の status から作ったものでない（status が届いてから、行を作る組み立てがまだ始まっていない）。
   @ObservationIgnored private var changesAreStale = true
   @ObservationIgnored private var graphLimit = ScmPanel.graphPage
@@ -160,6 +161,7 @@ final class ScmPanel {
   /// status が届いた（か、握り直した根のサービスの status を読む）。
   private func statusDidChange() {
     guard liveFiles?.status != nil else { return }
+    ownWrites.statusDidArrive()
     resolveManaged()
     if readsOnResolve {
       readsOnResolve = false
@@ -186,6 +188,7 @@ final class ScmPanel {
     buildJob.isRunning = true
     let rows = isShown
     let built = rows && !changesAreStale ? changes : nil
+    let builtFrom = built == nil ? ownWrites.statusNumber : ownWrites.rowsNumber
     if rows { changesAreStale = false }
     let branch = status.branch
     let graph = self.graph
@@ -194,14 +197,16 @@ final class ScmPanel {
       guard rows else {
         let count = ScmChanges.count(status)
         return Self.deliver {
-          self?.apply(branch: branch, count: count, changes: nil, layout: nil)
+          self?.apply(branch: branch, count: count, changes: nil, layout: nil, builtFrom: builtFrom)
         }
       }
       let changes = built ?? ScmChanges.build(status)
       let layout = ScmLayout.build(
         changes, branch: ScmBranch(branch), graph: graph, collapsed: collapsed)
       Self.deliver {
-        self?.apply(branch: branch, count: changes.count, changes: changes, layout: layout)
+        self?.apply(
+          branch: branch, count: changes.count, changes: changes, layout: layout,
+          builtFrom: builtFrom)
       }
     }
   }
@@ -215,7 +220,8 @@ final class ScmPanel {
   /// 前の行）を選ぶ（開かない）。置き換えた 2 区分と行の組は裏で手放す（数万行の解放を main に載せない。列が握る写しは
   /// 列が裏で手放す）。
   private func apply(
-    branch: GitStatus.Branch?, count: Int, changes: ScmChanges?, layout: ScmLayout?
+    branch: GitStatus.Branch?, count: Int, changes: ScmChanges?, layout: ScmLayout?,
+    builtFrom: Int
   ) {
     buildJob.isRunning = false
     self.branch = branch
@@ -225,6 +231,7 @@ final class ScmPanel {
       self.changes = changes
       self.layout = layout
       reselect(from: replaced.layout)
+      ownWrites.rowsDidApply(builtFrom: builtFrom)
       rowsVersion &+= 1
       DispatchQueue.global(qos: .utility).async { withExtendedLifetime(replaced) {} }
     }
@@ -387,6 +394,7 @@ extension ScmPanel: SourceControlObserver {
   /// 自分のネット操作の終わりは remote 追跡 ref を動かしうる（push は HEAD を動かさないので、前の値を残すと push の直後に
   /// amend・取り消しが押せる）。HEAD を動かす操作は、HEAD の違いで分からないになる。
   func sourceControl(_ control: SourceControl, operationDidFinish kind: SourceControl.Kind) {
+    ownWrites.operationsDidFinish(remaining: control.operations)
     readGraphAndHead(remoteRefsMayHaveMoved: kind.isNetwork)
   }
 }
