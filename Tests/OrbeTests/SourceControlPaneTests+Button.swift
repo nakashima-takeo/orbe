@@ -3,10 +3,12 @@ import XCTest
 
 @testable import Orbe
 
-/// コミットボタンは主の働きと ▾ で 1 つの可否を持ち、区分見出しの … はボタンの姿に縛られず amend・取り消しに届く。
+/// コミットボタンは主の働きと ▾ で 1 つの可否を持ち、区分見出しの … はボタンの姿に縛られず amend・取り消しに届き、開いた
+/// 時点の姿で照らす。
 ///
 /// 壊れると何が起きるか。主の側が暗いのに ▾ だけ開いて、1 つのボタンの中で明暗が割れる。欄が空の間（ステージ済みの一部を
-/// コミットして残りを置いた直後など）に、取り消しと amend に届かない。
+/// コミットして残りを置いた直後など）に、取り消しと amend に届かない。… を開いている間にエージェントがコミットすると、
+/// 選んだ取り消しがそのコミットを消す。
 extension SourceControlPaneTests {
   /// 面に載っているメニューの当たりのうち、説明が `key` のもの。
   func menuAnchor(_ key: L10nKey, in pane: EditorPaneView) -> ScmMenuAnchor.AnchorView? {
@@ -49,5 +51,35 @@ extension SourceControlPaneTests {
         hosted.pane.layoutSubtreeIfNeeded()
         return caret.menuMaker != nil
       }, "欄に打てば ▾ も開く")
+  }
+
+  /// … の取り消しは開いた時点の姿で照らす——開いている間に外でコミットされ、行が追いついてから選んでも、外のコミットを
+  /// 取り消さずに断る。
+  func testUndoChosenFromTheMoreMenuAfterAnOutsideCommitWhileItIsOpenIsRefused() throws {
+    let repo = try TempGitRepo()
+    try repo.write("b.txt", "b\n")
+    XCTAssertTrue(repo.git(["add", "b.txt"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "second"]).isSuccess)
+    try repo.write("z.txt", "agent\n")
+    let hosted = host(repo)
+    let scm = hosted.scm
+    pumpMain(
+      until: { scm.changes.changes.count == 1 && scm.isHeadPushed == false },
+      "変更の行と、push 済みでない HEAD")
+    hosted.pane.layoutSubtreeIfNeeded()
+    let more = try XCTUnwrap(menuAnchor(.editorScmMoreActions, in: hosted.pane)?.menuMaker?())
+
+    XCTAssertTrue(repo.git(["add", "z.txt"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "agent"]).isSuccess)
+    let (head, status) = (repo.head(), repo.git(["status", "--porcelain"]).stdoutText)
+    pumpMain(
+      until: { scm.changes.head == head && scm.changes.changes.isEmpty }, "行が外のコミットに追いつく")
+    let undo = more.indexOfItem(
+      withTitle: L10n.string(.editorScmUndo, hosted.pane.localization.language))
+    more.performActionForItem(at: undo)
+    pumpMain(until: { scm.control.operations.isEmpty }, timeout: 20, "取り消し")
+    XCTAssertEqual(scm.control.failure?.cause, .git(.contentMismatch))
+    XCTAssertEqual(repo.head(), head, "外のコミットは残る")
+    XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, status)
   }
 }
