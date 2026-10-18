@@ -100,6 +100,7 @@ struct BoardMapRowView: View {
     }
   }
 
+  /// 名前と札が幅に収まらなければ、入力の部品名 → 予定の札の順に末尾を省き、名前と出力の形式エラーの札は残す。
   @ViewBuilder private func partCells(_ part: BoardMapPart) -> some View {
     role(part.role)
     HStack(spacing: Self.cellGap) {
@@ -107,8 +108,9 @@ struct BoardMapRowView: View {
         .font(Font.theme.code)
         .foregroundStyle(Color.theme.textPrimary)
         .padding(.trailing, Theme.Space.hair)
-        .fixedSize()
-      if let schedule = part.schedule { BoardScheduleChip(text: schedule).fixedSize() }
+        .truncationMode(.tail)
+        .layoutPriority(1)
+      if let schedule = part.schedule { BoardScheduleChip(text: schedule) }
       if part.look == .running {
         Text(l10n.string(.automationRunning))
           .font(Font.theme.codeSmall)
@@ -127,6 +129,7 @@ struct BoardMapRowView: View {
           .font(Font.theme.codeSmall)
           .foregroundStyle(Color.theme.textMuted)
           .truncationMode(.tail)
+          .layoutPriority(-1)
       }
     }
     .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
@@ -282,6 +285,8 @@ struct BoardScheduleChip: View {
     Text(text)
       .font(Font.theme.meta)
       .foregroundStyle(Color.theme.textSecondary)
+      .lineLimit(1)
+      .truncationMode(.tail)
       .padding(.horizontal, 7)
       .frame(minHeight: 18)
       .overlay(
