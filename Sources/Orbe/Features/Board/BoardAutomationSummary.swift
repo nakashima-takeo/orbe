@@ -79,7 +79,7 @@ struct BoardRunEntry: Equatable {
 }
 
 extension BoardAutomationSummary {
-  /// 回の区分。並べ替え（文言を解かずに走る）・帯・知らせも、この分類だけを使う。出し直しで通った回は、通った出力で決める。
+  /// 回の区分。帯・知らせは、この分類だけを使う。出し直しで通った回は、通った出力で決める。
   static func tone(_ run: AutomationPartRun) -> BoardRunTone {
     if run.failed { return .failed }
     switch run.result {

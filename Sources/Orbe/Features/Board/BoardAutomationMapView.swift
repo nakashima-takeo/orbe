@@ -312,7 +312,7 @@ struct BoardChip: View {
   }
 }
 
-/// 回の結果の文と帯の色。
+/// 回の結果の文と地図の量の色。
 enum BoardRunColors {
   static func result(_ shade: BoardRunShade) -> Color {
     switch shade {

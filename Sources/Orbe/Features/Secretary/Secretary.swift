@@ -14,7 +14,7 @@ protocol SecretaryHost: AnyObject {
 enum SecretaryOrigin {
   /// ⌘⇧X の入力の行き先。
   case palette
-  /// Home のボード（依頼の欄・直しを依頼）。
+  /// Home のボード（依頼の欄）。
   case board
 }
 
