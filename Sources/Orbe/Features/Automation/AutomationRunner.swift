@@ -258,7 +258,7 @@ extension AutomationRunner {
     _ finish: @escaping (Date) -> Void
   ) -> BackgroundRunHandle {
     // 番人の上に「走っている」を残さないよう、部品が無ければ契機はすぐ終わったものとして知らせる。
-    guard let node = store.automation(id)?.graph.node(part) else {
+    guard let automation = store.automation(id), let node = automation.graph.node(part) else {
       finish(now())
       return BackgroundRunHandle {}
     }
@@ -266,7 +266,7 @@ extension AutomationRunner {
       automationId: id, part: part,
       kind: node.part.trigger == .arrival ? .arrival : kind == .now ? .now : .schedule,
       startedAt: now(), finish: finish)
-    trigger.flowed = flows[id]?.started(part) ?? false
+    trigger.flowed = flows[id]?.started(part, in: automation.graph) ?? false
     if node.part.inputs.isEmpty {
       pass(trigger, take: nil)
     } else {
@@ -368,8 +368,8 @@ extension AutomationRunner {
 
   private func flowEnded(_ trigger: Trigger) {
     let id = trigger.automationId
-    guard var flow = flows[id] else { return }
-    let wake = flow.ended(trigger.part, marked: trigger.flowed) { isRunning(id, $0) }
+    guard var flow = flows[id], let graph = store.automation(id)?.graph else { return }
+    let wake = flow.ended(trigger.part, marked: trigger.flowed, in: graph) { isRunning(id, $0) }
     flows[id] = flow.finished ? nil : flow
     for part in wake { scheduler.runNow(id: Self.key(id, part)) }
   }

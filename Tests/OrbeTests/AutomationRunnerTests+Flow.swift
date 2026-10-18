@@ -182,7 +182,70 @@ extension AutomationRunnerTests {
     XCTAssertFalse(refusesAnotherFlow(id))
   }
 
+  // MARK: - 予定の書き換え
+
+  /// 取得 `f` → `a`（予定は `trigger`）→ 報告 `s`（手動）。
+  private func chain(a trigger: AutomationPart.Trigger) -> AutomationDefinition {
+    AutomationDefinition(
+      name: "流す", notify: nil,
+      parts: [
+        fetch("f", every: 3600),
+        part("a", trigger, from: ["f"]),
+        part("s", .manual, from: ["a"], deliver: .report),
+      ])
+  }
+
+  /// 流しの途中で道の上の部品を「届いたら」から間隔に変えると、今の予定で決める——上流の後に流しが 1 回起こしてから下流へ進む。
+  func testAPartTurnedFromArrivalToIntervalMidFlowIsWokenByTheFlow() throws {
+    let id = try runner.set(nil, chain(a: .arrival)).id
+    try flow(id)
+    _ = try runner.set(id, chain(a: .scheduled(.every(86400))))
+    finish("f", fetched(["x"]))
+
+    XCTAssertEqual(ids("a"), ["f:x"], "上流の後に流しが起こす")
+    XCTAssertEqual(calls("s"), [], "a が終わるまで下流へ進まない")
+    finish("a", printed(#"{"id":"f:x","note":"処理した"}"#))
+    XCTAssertEqual(lastTrigger("a", of: id), .now)
+    XCTAssertEqual(ids("s"), ["f:x"])
+    XCTAssertTrue(refusesAnotherFlow(id))
+    finish("s", printed("要約"))
+    XCTAssertFalse(refusesAnotherFlow(id))
+  }
+
+  /// 流しの途中で道の上の部品を間隔から「届いたら」に変えると、流しはそれを起こさず普段の決まりに任せる——上流が積んで
+  /// 起きた回が失敗しても、同じ行ですぐ起こし直さず、終わりと数えて下流へ進む。
+  func testAPartTurnedFromIntervalToArrivalMidFlowIsLeftToItsUsualRule() throws {
+    let id = try runner.set(nil, chain(a: .scheduled(.every(86400)))).id
+    try flow(id)
+    _ = try runner.set(id, chain(a: .arrival))
+    finish("f", fetched(["x"]))
+    XCTAssertEqual(ids("a"), ["f:x"], "前提: 上流が積んだので普段どおり起きる")
+    finish("a", printed("", exit: 1))
+
+    XCTAssertEqual(calls("a").count, 1, "失敗した行で流しが起こし直さない")
+    XCTAssertEqual(lastTrigger("a", of: id), .arrival)
+    XCTAssertFalse(refusesAnotherFlow(id), "a を終わりと数え、取る行の無い s で一巡が終わる")
+  }
+
   // MARK: - 打ち切り
+
+  /// 道の上の部品の入力を書き換えると（道の形が変わる）一巡は打ち切られ、また流せる。
+  func testRewritingTheInputsOfAPartOnThePathAbortsTheFlow() throws {
+    func definition(a inputs: [String]) -> AutomationDefinition {
+      AutomationDefinition(
+        name: "流す", notify: nil,
+        parts: [
+          fetch("f", every: 3600), fetch("g", every: 3600),
+          part("a", .manual, from: inputs, deliver: .report),
+          part("b", .manual, from: ["g"], deliver: .report),
+        ])
+    }
+    let id = try runner.set(nil, definition(a: ["f", "g"])).id
+    try flow(id, to: .part("a"))
+    _ = try runner.set(id, definition(a: ["f"]))
+
+    try flow(id, to: .part("a"))
+  }
 
   /// 道の上の部品の何をするかを書き換えると一巡は打ち切られ、また流せる。道に触れない書き換え（名前）では続く。
   func testRewritingAPartOnThePathAbortsTheFlowButRenamingDoesNot() throws {
