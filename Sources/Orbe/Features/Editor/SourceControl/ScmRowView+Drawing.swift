@@ -197,7 +197,7 @@ extension ScmRowView {
       }
       let color =
         !button.isEnabled
-        ? (tool ? scm.toolDisabled : scm.disabled)
+        ? (tool ? scm.toolDisabled : scm.buttonDisabled)
         : tool ? (hovered ? colors.text : colors.muted) : colors.text
       let size = Theme.Layout.editorScmGlyph
       drawGlyph(

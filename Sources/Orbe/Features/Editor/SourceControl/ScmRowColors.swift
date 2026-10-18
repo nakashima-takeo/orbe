@@ -47,7 +47,7 @@ struct ScmRowColors {
   let icon: CGColor
   let accent: CGColor
   /// 行のボタンの押せない字（editor.text .3）。
-  let disabled: CGColor
+  let buttonDisabled: CGColor
   /// 見出しのツールの押せない字（muted .35。SwiftUI の見出しのツール `ScmToolButton` と同じ）。
   let toolDisabled: CGColor
   /// 見本 chromeBg（点の輪と中抜きの点の地）。
@@ -73,7 +73,7 @@ struct ScmRowColors {
   private init() {
     icon = Theme.Color.editorIcon.cgColor
     accent = Theme.Color.accentBright.cgColor
-    disabled = Theme.Color.editorText.withAlphaComponent(0.3).cgColor
+    buttonDisabled = Theme.Color.editorText.withAlphaComponent(0.3).cgColor
     toolDisabled = Theme.Color.textMuted.withAlphaComponent(0.35).cgColor
     ground = Theme.Color.bgBase.cgColor
     headerHover = EditorStyle.fill(0.04).cgColor
