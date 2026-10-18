@@ -151,7 +151,7 @@ import SwiftUI
         + (ids.isEmpty ? [] : [BoardKeyHint("↓", .boardHintToList)])
     }
     let paused = selectedAutomation.paused
-    func hand(_ operation: AutomationHand.Operation) -> BoardKeyHint {
+    func hand(_ operation: BoardAutomationHand.Operation) -> BoardKeyHint {
       BoardKeyHint(operation.key, operation.title(paused: paused))
     }
     return [
@@ -178,10 +178,10 @@ import SwiftUI
   }
 
   /// 選んでいる自動化への手の操作。止める ⇄ 再開で行が沈んでも浮いても、選択は同じ自動化に付いていく。
-  func perform(_ operation: AutomationHand.Operation) {
+  func perform(_ operation: BoardAutomationHand.Operation) {
     guard let automation = selectedAutomation else { return }
     onRefusal(nil)
-    if let refusal = AutomationHand.perform(operation, on: automation, runner: runner) {
+    if let refusal = BoardAutomationHand.perform(operation, on: automation, runner: runner) {
       onRefusal(refusal.message)
     }
     reconcile()
@@ -196,14 +196,14 @@ import SwiftUI
     ask(.automationFix(automation))
   }
 
-  /// 一覧の器のキー。サブメニューを開いている間はそちらへ回す。↑↓・→・`AutomationHand.stroke` に任せるキー・⌘↵ のほかは
+  /// 一覧の器のキー。サブメニューを開いている間はそちらへ回す。↑↓・→・`BoardAutomationHand.stroke` に任せるキー・⌘↵ のほかは
   /// 何も起こさず、どれも握る（⇥ で焦点をボードの外へ逃がさない）。
   func handleKey(_ press: KeyPress) -> KeyPress.Result {
     if let cursor = notifyCursor {
       handleNotifyKey(press, cursor)
     } else if press.key == .rightArrow, press.modifiers.isDisjoint(with: Self.chords) {
       if press.phase == .down { openNotify() }
-    } else if let stroke = AutomationHand.stroke(press) {
+    } else if let stroke = BoardAutomationHand.stroke(press) {
       if case .press(let operation) = stroke { perform(operation) }
     } else if press.key == .return, press.modifiers.contains(.command) {
       if press.phase == .down { askFix() }
