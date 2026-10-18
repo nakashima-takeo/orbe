@@ -7,10 +7,12 @@ import XCTest
 /// エディター面に結んだソース管理パネル——行は区分に合った diff を仮のタブで開き、追跡中のファイルの破棄は確かめてから行い、
 /// メッセージ欄の ⌘↵ はコミットだけを起こし、欄の中身が外から変わったら取り消しの履歴を捨て、取り消しはその欄の中で閉じる。
 /// パネルを出していなくても面が見えていれば件数は status に追いつき（行とグラフは作らない）、cd した後の列は新しい根の行を
-/// 出して押せば新しい根の diff を開く。行の ＋ を同じ位置で続けて押すと、次の行が次々にステージされる。
+/// 出して押せば新しい根の diff を開く。行の ＋ を同じ位置で続けて押すと、次の行が次々にステージされる。未追跡の行を破棄した
+/// 直後のコミットは、その破棄を数える。
 ///
 /// 壊れると何が起きるか。「ステージされている変更」の行で作業ツリーの diff が開き、コミットする中身と違うものを見て確かめた
-/// ことになる。追跡中のファイルの編集が確認なしに消え、戻せない。ボタンが「同期」の間に欄で ⌘↵ を打つと、キー 1 つで
+/// ことになる。追跡中のファイルの編集が確認なしに消え、戻せない。未追跡の行を破棄してすぐ ⌘↵ を打つと、自分の破棄のせいで
+/// 「表示と食い違う」と断られる。ボタンが「同期」の間に欄で ⌘↵ を打つと、キー 1 つで
 /// push が走る。コミットの後の ⌘Z が例外を投げ、欄の取り消しが壊れたまま残る。エクスプローラーを出している間、レールの
 /// 件数が古い数で止まる・隠れたパネルのために git を読む。cd した後も列が前の根の行を出し、押した行やボタンが前の
 /// worktree の diff を開く・前の worktree でステージや破棄をする。cd した・パネルを閉じた後の ⌘Z が、見えない欄の打鍵を
@@ -96,6 +98,25 @@ final class SourceControlPaneTests: OrbeTestCase {
     pumpMain(
       until: { (try? String(contentsOf: repo.url("a.txt"), encoding: .utf8)) == "one\n" },
       "破棄を押すと index の版へ戻る")
+  }
+
+  /// 未追跡の行を破棄した直後（行に出る前）に押したコミットは、その行を除いた「変更」をコミットする（自分の破棄を「表示と
+  /// 食い違う」と断らない）。
+  func testCommittingRightAfterDiscardingAnUntrackedRowTakesTheRest() throws {
+    let repo = try TempGitRepo()
+    try repo.write("a.txt", "edited\n")
+    try repo.write("n.txt", "new\n")
+    let hosted = host(repo)
+    let scm = hosted.scm
+    pumpMain(until: { scm.changes.staged.isEmpty && scm.changes.changes.count == 2 }, "変更の行")
+
+    scm.press(try row(hosted, .changes, "n.txt"), .discard, in: scm.layout)
+    scm.control.message = "rest"
+    scm.commit()
+    pumpMain(until: { scm.control.operations.isEmpty }, timeout: 20, "破棄とコミット")
+    XCTAssertNil(scm.control.failure)
+    XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "a.txt\n")
+    XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, "")
   }
 
   /// ソース管理を開くとメッセージ欄に焦点が入る。欄の ⌘↵ はコミットだけ——ボタンが「同期」でもネット操作を起こさず、
