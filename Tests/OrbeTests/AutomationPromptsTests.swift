@@ -4,12 +4,12 @@ import XCTest
 
 /// 依頼文の枠と出力の行の関門——取得の項目は link が http(s)、time が ISO 8601 のものだけ。判定の行は、今回渡した項目・出ている
 /// 提案だけを指し、タイトルと期限がタスクの規則に合うものだけを受ける。依頼文には渡した項目だけが載る。付け先は依頼文に載せた
-/// workspace の一覧の id だけを受けて永続 ID に直して運び、Home の id は付け先なしとして受ける。
+/// workspace の一覧の id だけを受けて永続 ID に直して運び、Home の id は付け先なしとして受ける。候補にした理由は 1 段落に整えて運ぶ。
 ///
 /// 壊れると何が起きるか。外の文面の file: の link が候補のリンクになる。判定が別の自動化の項目や
 /// 存在しない提案を指しても通り、タスクにできないタイトルの提案が棚に並ぶ。判定が一覧に無い workspace や true を付け先に
 /// 書いても通り、候補が別の workspace や行き場の無い付け先を持つ。`orb ws list --json` の Home の id を書いたコマンドの判定の
-/// 候補が捨てられ、二度と出ない。
+/// 候補が捨てられ、二度と出ない。候補の詳細に、判定が書いた理由が改行の崩れたまま出る。
 final class AutomationPromptsTests: OrbeTestCase {
   private let line =
     #"{"id":"1","link":"https://example.com/1","body":"本文","time":"2026-10-10T09:00:00Z"}"#
@@ -183,6 +183,24 @@ final class AutomationPromptsTests: OrbeTestCase {
         "line 2: workspace has the wrong type",
         "line 3: invalid value",
       ])
+  }
+
+  /// 候補にした理由は書けば 1 段落に整えて運び、空白だけなら書かなかったのと同じ。文字列でなければ候補にせず理由付きで捨てる。
+  func testJudgeCarriesTheReasonAsOneParagraph() {
+    let (decisions, rejected) = judged([
+      #"{"propose":"a","title":"見る","reason":"  レビューを頼まれている。\n  期限は明日。 "}"#,
+      #"{"propose":"b","title":"数","reason":3}"#,
+      #"{"propose":"b","title":"空","reason":" \n "}"#,
+    ])
+
+    XCTAssertEqual(
+      decisions,
+      [
+        .propose(
+          itemId: "a", title: "見る", due: nil, workspace: nil, reason: "レビューを頼まれている。 期限は明日。"),
+        .propose(itemId: "b", title: "空", due: nil, workspace: nil, reason: nil),
+      ])
+    XCTAssertEqual(rejected, ["line 2: reason has the wrong type"])
   }
 
   /// 真偽値の true を id 1 と取り違えない（id 1 の workspace があっても付けない）。
