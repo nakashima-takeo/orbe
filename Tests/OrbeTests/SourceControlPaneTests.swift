@@ -5,16 +5,18 @@ import XCTest
 @testable import Orbe
 
 /// エディター面に結んだソース管理パネル——行は区分に合った diff を仮のタブで開き、追跡中のファイルの破棄は確かめてから行い、
-/// メッセージ欄の ↵ はコミット、⌘↵ はコミットしてプッシュ（同期・公開は起こさない）、改行は ⇧↵・⌥↵・⌃↵。欄の中身が外から
-/// 変わったら取り消しの履歴を捨て、取り消しはその欄の中で閉じる。パネルを出していなくても面が見えていれば件数は status に
-/// 追いつき（行とグラフは作らない）、cd した後の列は新しい根の行を出して押せば新しい根の diff を開く。行の ＋ を同じ位置で
-/// 続けて押すと、次の行が次々にステージされる。未追跡の行を破棄した直後のコミットは、その破棄を数える。
+/// メッセージ欄の ↵ はコミット、⌘↵ はコミットしてプッシュ（同期・公開は起こさない）、改行は ⇧↵・⌥↵・⌃↵。欄は中身の行に
+/// 合わせて伸び縮みする。欄の中身が外から変わったら取り消しの履歴を捨て、取り消しはその欄の中で閉じる。パネルを出して
+/// いなくても面が見えていれば件数は status に追いつき（行とグラフは作らない）、cd した後の列は新しい根の行を出して押せば
+/// 新しい根の diff を開く。行の ＋ を同じ位置で続けて押すと、次の行が次々にステージされる。未追跡の行を破棄した直後の
+/// コミットは、その破棄を数える。
 ///
 /// 壊れると何が起きるか。「ステージされている変更」の行で作業ツリーの diff が開き、コミットする中身と違うものを見て確かめた
 /// ことになる。追跡中のファイルの編集が確認なしに消え、戻せない。未追跡の行を破棄してすぐ ⌘↵ を打つと、自分の破棄のせいで
-/// 「表示と食い違う」と断られる。ボタンが「同期」の間に欄で ⌘↵ を打つと、同期が走る。
-/// ⇧↵ の改行がコミットを起こす・↵ が改行を入れて押せないことに気づかない・⌃↵ が見えない字をメッセージに入れる。コミットの後の ⌘Z が例外を投げ、欄の取り消しが壊れたまま残る。エクスプローラーを出している間、レールの
-/// 件数が古い数で止まる・隠れたパネルのために git を読む。cd した後も列が前の根の行を出し、押した行やボタンが前の
+/// 「表示と食い違う」と断られる。ボタンが「同期」の間に欄で ⌘↵ を打つと、同期が走る。⇧↵ の改行がコミットを起こす・↵ が
+/// 改行を入れて押せないことに気づかない・⌃↵ が見えない字をメッセージに入れる。改行しても欄が伸びず、打った行が見えない。
+/// コミットの後の ⌘Z が例外を投げ、欄の取り消しが壊れたまま残る。エクスプローラーを出している間、レールの件数が古い数で
+/// 止まる・隠れたパネルのために git を読む。cd した後も列が前の根の行を出し、押した行やボタンが前の
 /// worktree の diff を開く・前の worktree でステージや破棄をする。cd した・パネルを閉じた後の ⌘Z が、見えない欄の打鍵を
 /// 戻して前の worktree の打ちかけのメッセージや別の窓の打ち足しを黙って消す。＋ を続けて押すと、ステージ済みの区分が
 /// 現れて行がずれ、意図しない行をステージする。
@@ -179,6 +181,32 @@ final class SourceControlPaneTests: OrbeTestCase {
     field.keyDown(with: .key("\r", []))
     XCTAssertEqual(field.string, "", "押せなければ改行も入れない")
     XCTAssertTrue(scm.control.operations.isEmpty)
+  }
+
+  /// 欄は中身の行に合わせてその場で伸び縮みする——打鍵の改行で 1 行ずつ伸び、外からの差し替えでも中身に合い、空にすれば
+  /// 1 行の 26 に戻る。
+  func testTheMessageGrowsAndShrinksWithItsLines() throws {
+    let hosted = host(try TempGitRepo())
+    let field = try type("a", in: hosted)
+    let scroll = try XCTUnwrap(field.enclosingScrollView)
+    func height() -> CGFloat {
+      hosted.pane.layoutSubtreeIfNeeded()
+      return scroll.frame.height
+    }
+    XCTAssertEqual(height(), Theme.Layout.editorScmMessage, accuracy: 0.5, "1 行")
+    let line = field.layoutManager!.defaultLineHeight(for: field.font!)
+
+    field.keyDown(with: .key("\r", [.shift]))
+    pumpMain(until: { height() > Theme.Layout.editorScmMessage }, "改行で伸びる")
+    XCTAssertEqual(height(), Theme.Layout.editorScmMessage + line, accuracy: 0.5, "2 行")
+
+    hosted.scm.control.message = "x\ny\nz"
+    pumpMain(until: { field.string == "x\ny\nz" }, "外の差し替えが欄に届く")
+    XCTAssertEqual(height(), Theme.Layout.editorScmMessage + line * 2, accuracy: 0.5, "3 行")
+
+    hosted.scm.control.message = ""
+    pumpMain(until: { field.string.isEmpty }, "空にする")
+    XCTAssertEqual(height(), Theme.Layout.editorScmMessage, accuracy: 0.5, "1 行に戻る")
   }
 
   /// メッセージ欄の中身が外から変わった（コミットで空になった）ら、それまでの取り消しの履歴は捨てる——⌘Z は差し替え前の

@@ -230,6 +230,7 @@ final class ScmMessageTextView: NSTextView {
   override func didChangeText() {
     super.didChangeText()
     needsDisplay = true
+    contentHeightMayHaveChanged()
   }
 
   /// 中身を外から差し替える（コミット後に空にした・別の窓で打った）。差し替えは undo に積まず、欄の取り消しの履歴も捨てる
@@ -238,5 +239,13 @@ final class ScmMessageTextView: NSTextView {
     breakUndoCoalescing()
     string = message
     undoManager?.removeAllActions()
+    contentHeightMayHaveChanged()
+  }
+
+  /// 中身の高さが変わりうる（打鍵・貼り付け・取り消し・IME の確定・外からの差し替え）。SwiftUI は欄の大きさ
+  /// （`sizeThatFits`）を入力が変わったときだけ聞き直し、AppKit の中の打鍵では聞き直さないので、表現の view から知らせる。
+  /// 幅の変化は SwiftUI の提案が変わるので、ここでは知らせない。
+  private func contentHeightMayHaveChanged() {
+    enclosingScrollView?.invalidateIntrinsicContentSize()
   }
 }
