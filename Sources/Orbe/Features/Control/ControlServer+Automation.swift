@@ -8,8 +8,8 @@ protocol ControlAutomationTarget: AnyObject {
   func controlSetAutomation(automationId: Int?, _ definition: AutomationDefinition) -> Result<
     Any, ControlError
   >
-  /// 入力の無い部品を今すぐ回す（run_automation）。どれも走っていれば -32000。
-  func controlRunAutomation(automationId: Int) -> Result<Any, ControlError>
+  /// 部品まで流す（run_automation）。partKey が nil なら終わりの部品すべてまで。知らない部品は -32004、流している途中は -32000。
+  func controlRunAutomation(automationId: Int, partKey: String?) -> Result<Any, ControlError>
   /// 予定を止める・再開する（pause_automation）。
   func controlPauseAutomation(automationId: Int, paused: Bool) -> Result<Any, ControlError>
   /// 消す（delete_automation）。
@@ -45,7 +45,8 @@ extension ControlServer {
       }
     case "run_automation":
       return { target, p throws(ControlError) in
-        target.controlRunAutomation(automationId: try p.int("automationId"))
+        target.controlRunAutomation(
+          automationId: try p.int("automationId"), partKey: try p.optionalString("partKey"))
       }
     case "pause_automation":
       return { target, p throws(ControlError) in
@@ -92,6 +93,14 @@ private struct AutomationParams {
   func optionalInt(_ key: String) throws(ControlError) -> Int? {
     guard let raw = params[key] else { return nil }
     guard !Self.isBool(raw), let value = raw as? Int else {
+      throw ControlError(code: -32602, message: "invalid \(key)")
+    }
+    return value
+  }
+
+  func optionalString(_ key: String) throws(ControlError) -> String? {
+    guard let raw = params[key] else { return nil }
+    guard let value = raw as? String else {
       throw ControlError(code: -32602, message: "invalid \(key)")
     }
     return value

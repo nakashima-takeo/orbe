@@ -9,7 +9,7 @@ let automationUsageLines = [
   "orb automation list [--json]",
   "orb automation proposals [<id>] [--json]",
   "orb automation set [<id>] [--json]   (definition JSON on stdin)",
-  "orb automation run <id> [--json]",
+  "orb automation run <id> [--part <key>] [--json]",
   "orb automation pause <id> [--json]",
   "orb automation resume <id> [--json]",
   "orb automation rm <id> [--json]",
@@ -204,8 +204,7 @@ func runAutomation(_ args: [String]) -> Never {
   case "list": automationList(rest)
   case "proposals": automationProposals(rest)
   case "set": automationSet(rest)
-  case "run":
-    automationSimple(rest, verb: "run", method: "run_automation", done: "started automation")
+  case "run": automationRun(rest)
   case "pause": automationPause(rest, paused: true)
   case "resume": automationPause(rest, paused: false)
   case "rm":
@@ -357,6 +356,19 @@ private func automationPause(_ rest: [String], paused: Bool) -> Never {
   } else {
     print("\(paused ? "paused" : "resumed") automation \(id)")
   }
+  exit(0)
+}
+
+private func automationRun(_ rest: [String]) -> Never {
+  exitIfHelp(rest)
+  var args = rest
+  let part = takeOption(&args, "--part", requires: "a <key> value")
+  rejectLeftovers(args, positionals: 1)
+  let id = automationIdArg(args, verb: "run")
+  var params: [String: Any] = ["automationId": id]
+  if let part { params["partKey"] = part }
+  let result = callOrExit("run_automation", params)
+  if wantJSON { printJSON(result) } else { print("started automation \(id)") }
   exit(0)
 }
 

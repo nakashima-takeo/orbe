@@ -74,7 +74,7 @@ updated: 2026-10-18
 - `orb automation list [--json]` … ID 順に 1 行 1 自動化（`id 状態 名前 予定 次の時刻 前回` のタブ区切り）。状態は `active` / `paused` / `running`（どれかの部品が走っていれば `running`）。予定は次に来る部品の予定（`every 30m` / `cron 0 9 * * 1-5`。cron 式は定義のまま）で、ほかに予定のある部品があれば ` +N`、予定のある部品が無ければ `manual`。次の時刻は部品のうち最も早いもの。前回は最新の部品の回の記録だけから組み、定義は見ない——`<開始> <鍵> failed: <理由>`、または `<開始> <鍵>: ` に、取得は `12 fetched, 3 new`〔読めた項目・新しい項目〕、処理は `12 in, 4 out`、判定は `2 proposed`、報告は `reported` か `nothing to report`、副作用は `command exited 0`、仕事は `agent exited 0` を続ける。無い値は `-`。部品ごとの状態と回の記録は `--json` で読む。制御文字の扱いは `task list` と同じ）。
 - `orb automation proposals [<id>] [--json]` … 覚えている候補を 1 行 1 つ（`id 状態 自動化の id 期限 タイトル リンク`）。`<id>` でその自動化の棚の分だけ。
 - `orb automation set [<id>] [--json]` … 標準入力の JSON（MCP の `set_automation` の `definition` と同じ形の `name`・`notify`・`parts`）を `definition` に入れて送り、`<id>` が無ければ作って新しい ID だけを出し、あれば丸ごと置き換える。`orb automation list --json` の `definition` を取り出して直し、そのまま流す往復がつながる。定義をフラグに割らないのは、部品がコマンドか agent かで項目が入れ子になり、検証が CLI と control の 2 か所に割れるため。標準入力が空・JSON オブジェクトでないは usage エラー（exit 2）、定義の検証は control が持つ（違反は exit 1）。
-- `orb automation run <id> [--json]` … 入力の無い部品を今すぐ回す（止めた自動化も受ける）。回の終わりを待たずに返る。
+- `orb automation run <id> [--part <key>] [--json]` … `--part` の部品まで流す（省けば終わりの部品すべてまで。止めた自動化も受ける）。回の終わりを待たずに返る。`--part` の値の欠けは usage エラー。
 - `orb automation pause <id> [--json]` / `orb automation resume <id> [--json]` … 予定を止める・再開する。
 - `orb automation rm <id> [--json]`
 

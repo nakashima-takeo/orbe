@@ -15,9 +15,9 @@ extension WindowController {
     }
   }
 
-  func controlRunAutomation(automationId: Int) -> Result<Any, ControlError> {
+  func controlRunAutomation(automationId: Int, partKey: String?) -> Result<Any, ControlError> {
     automationResult { () throws(AutomationError) in
-      try automationRunner.runNow(automationId)
+      try automationRunner.flow(automationId, to: partKey.map { .part($0) } ?? .ends)
       return ["ok": true]
     }
   }
@@ -115,7 +115,7 @@ extension WindowController {
     ControlError(code: -32004, message: "automation not found: \(id)")
   }
 
-  /// ドメインエラーを制御エラーの語彙へ写す（未知 → -32004・不正な値 → -32602・走っている・使えない → -32000）。
+  /// ドメインエラーを制御エラーの語彙へ写す（未知 → -32004・不正な値 → -32602・流している途中・使えない → -32000）。
   private func automationResult(_ body: () throws(AutomationError) -> [String: Any]) -> Result<
     Any, ControlError
   > {
@@ -129,10 +129,14 @@ extension WindowController {
       case .proposalNotOpen(let id):
         return .failure(ControlError(code: -32602, message: "proposal \(id) is not open"))
       case .invalid(let message): return .failure(ControlError(code: -32602, message: message))
-      case .running(let id):
+      case .partNotFound(let id, let key):
+        return .failure(
+          ControlError(code: -32004, message: "part not found: \(key) in automation \(id)"))
+      case .flowing(let id):
         return .failure(
           ControlError(
-            code: -32000, message: "every part of automation \(id) without from is running"))
+            code: -32000,
+            message: "automation \(id) is still flowing; wait until its parts finish"))
       case .unavailable(let message):
         return .failure(ControlError(code: -32000, message: message))
       }

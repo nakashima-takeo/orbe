@@ -154,6 +154,24 @@ struct AutomationGraph: Equatable {
     return seen.sorted().map { nodes[$0] }
   }
 
+  /// `key` の部品へ行が届きうる部品すべて（定義の順）。
+  func ancestors(of key: String) -> [Node] {
+    guard let start = nodes.firstIndex(where: { $0.key == key }) else { return [] }
+    var pending = upstream[start]
+    var seen = Set<Int>()
+    while let index = pending.popLast() {
+      guard seen.insert(index).inserted else { continue }
+      pending += upstream[index]
+    }
+    return seen.sorted().map { nodes[$0] }
+  }
+
+  /// 終わりの部品（行き先が次の部品でない部品。定義の順）。次の部品へ渡す部品は必ず誰かに名指されるので、これらの祖先と
+  /// 合わせると全部品になる。
+  var ends: [Node] {
+    nodes.filter { $0.part.destination != .nextPart }
+  }
+
   /// 前後の定義に同じ鍵があり、何をするか（`Node.work`）が変わった部品の鍵（後の定義の順）。足した部品・消した部品は入らない。
   static func reworked(from old: AutomationGraph, to new: AutomationGraph) -> [String] {
     let before = Dictionary(uniqueKeysWithValues: old.nodes.map { ($0.key, $0.work) })

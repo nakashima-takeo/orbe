@@ -175,8 +175,9 @@ enum AutomationError: Error, Equatable {
   case proposalNotOpen(Int)
   /// 値か組み合わせが不変条件に反する。
   case invalid(String)
-  /// 起こせる部品が無い（入力の無い部品がどれも走っている）。
-  case running(Int)
+  case partNotFound(Int, String)
+  /// 流している途中に流そうとした。
+  case flowing(Int)
   /// 自動化の DB を使えない、または書けなかった。
   case unavailable(String)
 }

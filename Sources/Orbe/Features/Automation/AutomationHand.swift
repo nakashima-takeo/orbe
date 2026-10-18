@@ -32,13 +32,13 @@ enum AutomationHand {
     case held
   }
 
-  /// 断り。行き違い（消えていた等）は黙り、断るのは走っている間の今すぐ実行だけ。
+  /// 断り。行き違い（消えていた等）は黙り、断るのは流している途中の今すぐ実行だけ。
   enum Refusal: Equatable {
-    case running
+    case flowing
 
     var message: L10nKey {
       switch self {
-      case .running: .automationErrRunning
+      case .flowing: .automationErrRunning
       }
     }
   }
@@ -59,16 +59,16 @@ enum AutomationHand {
     return press.phase == .down ? .press(operation) : .held
   }
 
-  /// 走らせ役へ通す。
+  /// 走らせ役へ通す。今すぐ実行は終わりの部品すべてまで流す。
   static func perform(
     _ operation: Operation, on automation: Automation, runner: AutomationRunner
   ) -> Refusal? {
     switch operation {
     case .runNow:
       do throws(AutomationError) {
-        try runner.runNow(automation.id)
+        try runner.flow(automation.id, to: .ends)
       } catch {
-        if case .running = error { return .running }
+        if case .flowing = error { return .flowing }
       }
     case .togglePause:
       _ = try? runner.pause(automation.id, !automation.paused)

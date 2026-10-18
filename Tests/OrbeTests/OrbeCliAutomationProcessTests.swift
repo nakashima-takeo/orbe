@@ -8,7 +8,8 @@ import XCTest
 /// どれもコマンドなので、agent は起きない。
 ///
 /// 壊れると何が起きるか: CLI が組み立てる control メソッド名・params の語（`pause` / `resume` の `paused`、`set` と
-/// `proposals` の `automationId`、`set` の `definition`）はここでしか測れない。`resume` が `paused:true` を送ると、exit 0 を返しながら止まったままになる。
+/// `proposals` の `automationId`、`set` の `definition`、`run` の `partKey`）はここでしか測れない。`resume` が
+/// `paused:true` を送ると、exit 0 を返しながら止まったままになる。`run` が `partKey` を落とすと、指した部品の先まで流れる。
 ///
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliAutomationProcessTests: OrbeTestCase {
@@ -70,6 +71,22 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
 
     XCTAssertEqual(run(control, ["rm", id]), "removed automation \(id)")
     XCTAssertEqual(run(control, ["list"]), "")
+  }
+
+  /// `run --part <鍵>` はその部品まで流す（下流の手動の部品は走らない）。
+  func testRunFlowsToTheGivenPart() throws {
+    let control = try startControlProcess()
+    let manual = definition.replacingOccurrences(
+      of: #"{"kind": "arrival"}"#, with: #"{"kind": "manual"}"#)
+    let id = run(control, ["set"], stdin: manual)
+    let automation = { control.target.automationStore.automation(Int(id)!) }
+
+    XCTAssertEqual(run(control, ["run", id, "--part", "fetch"]), "started automation \(id)")
+    XCTAssertTrue(waitUntil(10) { automation()?.parts["fetch"]?.runs.isEmpty == false })
+    XCTAssertEqual(automation()?.parts["judge"]?.inbox, 1, "前提: 取得が判定の溜まりに積んだ")
+    // 鍵が届かず終わりの部品まで流れると、判定は取得の終わりと同じ知らせの中で起こされる（走っているか、もう記録がある）。
+    XCTAssertFalse(control.target.automationRunner.isRunning(Int(id)!, "judge"))
+    XCTAssertEqual(automation()?.parts["judge"]?.runs, [], "道の外の手動の部品は走らない")
   }
 
   /// 入力の無い副作用のコマンドの前回は、回の記録だけから「コマンドの終わり方」で出る（取得の数を出さない）。

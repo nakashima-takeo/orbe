@@ -22,9 +22,9 @@ Unix domain socket `control.sock`（workspaces.json と並置・パーミッシ�
 - `-32600` JSON だがリクエストオブジェクトでない（配列・`method` 欠落）。`id` は取れれば返す。
 - `-32601` 未知の method。method 名だけで決まり、ウィンドウの有無を見ない——「その動詞が無い」と「今は実行できない」をクライアントが状態に依らず区別できるように。
 - `-32602` params の欠落・型不一致・値域外。
-- `-32004` 宛先（tab / workspace / タスク / 自動化）が見つからない。宛先 ID を解決へ直に渡すメソッド（`get_tab_text` / `send_text` / `send_key` / `report_agent` / `completion_accept`）は `tabId` の欠落・型不一致もここに落ちる（解決の前に検証を挟むメソッドは `-32602`）。
+- `-32004` 宛先（tab / workspace / タスク / 自動化・自動化の部品）が見つからない。宛先 ID を解決へ直に渡すメソッド（`get_tab_text` / `send_text` / `send_key` / `report_agent` / `completion_accept`）は `tabId` の欠落・型不一致もここに落ちる（解決の前に検証を挟むメソッドは `-32602`）。
 - `-32006` `wait_for_event` の `after` が履歴の保持範囲より古い（対処は seq を取り直す。呼び出し側のバグである `-32602` と分ける）。
-- `-32000` 実行できない（ウィンドウ未接続・spawn 失敗・消せない workspace の削除・Home の root 変更・`start_task` の作業場の用意の失敗・`prompt_agent` の busy / 未 mount・ready 待ち中のエージェント消滅・入力の無い部品がどれも走っている自動化の `run_automation`・自動化を使えないセッションの自動化の書き込み・ボードを持たない workspace のボードの部品の操作）。
+- `-32000` 実行できない（ウィンドウ未接続・spawn 失敗・消せない workspace の削除・Home の root 変更・`start_task` の作業場の用意の失敗・`prompt_agent` の busy / 未 mount・ready 待ち中のエージェント消滅・流している途中の自動化の `run_automation`・自動化を使えないセッションの自動化の書き込み・ボードを持たない workspace のボードの部品の操作）。
 
 無応答契約を持つのは `completion_update` / `completion_end` の 2 つだけで、他は必ず 1 行応答を返す——読めない行にも返すことで、クライアントが応答待ちでハングしない。
 
@@ -121,7 +121,7 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
   - `definition` は `{name, notify?, parts}`。各部品は `{key, name, trigger, from?, command, directory? | agent?, model?, tools?, instruction, timeoutMinutes?, coverage?, deliver?, inboxLimit?{maxAgeHours?, maxItems?}}`（`command` と `instruction` のちょうど一方。欄の意味と組み合わせの規則は [automation](../platform/automation.md#定義)）。`trigger` は `{"kind": "interval", "minutes"}`（1〜10080＝7 日）・`{"kind": "cron", "expression": "分 時 日 月 曜日"}`（記法と断る式は [background](../platform/background.md#予定と次の時刻)。式は前後の空白を除いて受けたまま保存する）・`{"kind": "manual"}`・`{"kind": "arrival"}`。`deliver` は省略（次の部品へ）・`taskCandidates`・`report`・`none`。`coverage` は `currentSet`・`newArrivals`・`everything`。`notify` は `"menuBar"` か `"notificationCenter"`（省略は知らせない）。保存に成功した定義の `notify` が `notificationCenter` なら、OS の通知の許可がまだ決まっていないとき、その場で許可を求める（[automation](../platform/automation.md#通知センター)）。
   - 形の誤り（欠落・型違い・知らない値・両方の手段を持つ など）と、値と組み合わせの誤り（[組み合わせの検証](../platform/automation.md#組み合わせの検証)）は `-32602` で、自動化は変わらない。断りの文は定義の中の場所で言う（`missing parts[0].trigger`・`invalid parts[0].coverage: pass currentSet, newArrivals or everything`・`invalid parts[0].trigger.expression: invalid hour field: 24`・`parts[2].from: unknown part "gh"` など）。未知の `automationId` は `-32004`。保存できなかった・自動化を使えないセッション（[automation](../platform/automation.md#保存)）は `-32000`（理由付き）。
   - 何をするかが変わった部品は走っている回を止め、名前・予定・取得の性質・溜まりの上限・通知だけなら止めない。新しく作った自動化・足した部品はすぐには回らない（数え始めは作った・足した時刻）。
-- `run_automation {automationId}` → `{ok, seq}` … 入力の無い部品のうち走っていないものを今すぐ起こし、回の終わりを待たずに返る（結果は `list_automations` の `runs`）。止めた自動化も受ける。全部が走っていれば `-32000`。
+- `run_automation {automationId, partKey?}` → `{ok, seq}` … `partKey` の部品まで[流し](../platform/automation.md#止める流す)（省けば終わりの部品すべてまで）、回の終わりを待たずに返る（結果は `list_automations` の `runs`）。止めた自動化も受ける。知らない部品の鍵は `-32004`（`part not found: <鍵> in automation <id>`）、`partKey` の型違いは `-32602`、流している途中は `-32000`（`automation <id> is still flowing; wait until its parts finish`）。
 - `pause_automation {automationId, paused}` → `{automation, seq}` … 予定を止める（`true`）・再開する（`false`）。走っている回は止めない。`paused` は JSON の真偽値だけを受ける。
 - `delete_automation {automationId}` → `{ok, seq}` … 走っている回を止め、結果は捨てる。その自動化だけが持っていた候補は忘れる。その自動化の通知を通知センターから取り下げる。
 - `set_automation`・`run_automation`・`pause_automation`・`delete_automation` は、自動化を使えないセッションでは `-32000`（理由付き）で断る。

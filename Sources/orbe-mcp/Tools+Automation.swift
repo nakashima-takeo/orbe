@@ -166,7 +166,14 @@ let automationTools: [[String: Any]] = [
       "自動化を今すぐ 1 回回す。すぐ返り、結果は list_automations の runs に載る。止めた自動化も回せる（有効にする前の試し打ち）。"
         + "回が走っている間は断られる（running を見る）。"
     ),
-    ("inputSchema", schema(["automationId": intProp("回す自動化")], required: ["automationId"])),
+    (
+      "inputSchema",
+      schema(
+        [
+          "automationId": intProp("回す自動化"),
+          "partKey": strProp("この部品まで流す（省略で終わりの部品すべてまで）"),
+        ], required: ["automationId"])
+    ),
   ]),
   obj([
     ("name", "pause_automation"),

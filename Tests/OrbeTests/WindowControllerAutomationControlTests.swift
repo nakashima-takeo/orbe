@@ -7,7 +7,7 @@ import XCTest
 /// 一覧の部品の回の記録が保存と同じ形であること。候補の付け先は今ある workspace に解けるときだけ起動ごとの id と名前で出ること。
 ///
 /// 壊れると何が起きるか: Orbe を再起動しただけで全自動化が黙って回らなくなる。AI が自動化の棚を読んでも、提案した自動化が
-/// もう取っていない提案が混ざる・取っている自動化に出ない。走っている自動化への `run_automation` が別の誤りに化ける。
+/// もう取っていない提案が混ざる・取っている自動化に出ない。流している自動化への `run_automation` が別の誤りに化ける。
 /// 一覧の定義を書き換えて戻すと、予定や部品が別物になる。回の記録を読む AI・秘書が、部品ごとの件数や結果を読めなくなる。
 /// AI が候補の付け先を読めない、または消えた workspace を付け先として読む。
 ///
@@ -203,18 +203,18 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
   // MARK: - 拒否
 
-  /// 入力の無い部品が走っている間は一覧の部品にそう出て、`run_automation` は「実行できない」で断られる。
-  func testRunningAutomationIsListedAsRunningAndRefusesRunNow() throws {
+  /// 流している間は走っている部品が一覧にそう出て、`run_automation` は「流している途中」で断られる。
+  func testFlowingAutomationIsListedAsRunningAndRefusesAnotherRun() throws {
     let wc = try launch()
     let id = try set(wc, Self.definition(script: "sleep 30"))
     addTeardownBlock { _ = wc.controlDeleteAutomation(automationId: id) }
 
-    _ = try success(wc.controlRunAutomation(automationId: id))
+    _ = try success(wc.controlRunAutomation(automationId: id, partKey: nil))
 
     let parts = try XCTUnwrap(try listed(wc)[id]?["parts"] as? [String: [String: Any]])
     XCTAssertEqual(parts["fetch"]?["running"] as? Bool, true)
     XCTAssertEqual(parts["judge"]?["running"] as? Bool, false)
-    XCTAssertEqual(code(wc.controlRunAutomation(automationId: id)), -32000)
+    XCTAssertEqual(code(wc.controlRunAutomation(automationId: id, partKey: "fetch")), -32000)
   }
 
   /// 未知の ID は -32004、不変条件に反する定義は -32602 で、受信は変わらない。
@@ -227,7 +227,8 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
       codex.parts[1].method = .agent(agent)
     }
 
-    XCTAssertEqual(code(wc.controlRunAutomation(automationId: 99)), -32004)
+    XCTAssertEqual(code(wc.controlRunAutomation(automationId: 99, partKey: nil)), -32004)
+    XCTAssertEqual(code(wc.controlRunAutomation(automationId: id, partKey: "nope")), -32004)
     XCTAssertEqual(code(wc.controlPauseAutomation(automationId: 99, paused: true)), -32004)
     XCTAssertEqual(code(wc.controlDeleteAutomation(automationId: 99)), -32004)
     XCTAssertEqual(code(wc.controlListAutomationProposals(automationId: 99)), -32004)

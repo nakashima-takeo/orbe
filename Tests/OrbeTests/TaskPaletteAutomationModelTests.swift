@@ -253,7 +253,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertNil(automation.error)
 
     automation.perform(.runNow)
-    XCTAssertEqual(automation.error, .refused(.running), "走っている間は赤で断る")
+    XCTAssertEqual(automation.error, .refused(.flowing), "流している途中は赤で断る")
   }
 
   /// 提案タブの赤は、タブを替えた操作の境目で消える（戻ったときに当てはまらない赤が残らない）。
@@ -263,7 +263,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     palette.automation.enterContents()
     palette.automation.perform(.runNow)
     palette.automation.perform(.runNow)
-    XCTAssertEqual(palette.automation.error, .refused(.running))
+    XCTAssertEqual(palette.automation.error, .refused(.flowing))
 
     palette.setTab(.tasks)
     palette.setTab(.automation)
