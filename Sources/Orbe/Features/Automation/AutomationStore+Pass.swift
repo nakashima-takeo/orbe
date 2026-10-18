@@ -16,8 +16,11 @@ struct AutomationPassEnd {
 struct AutomationRecorded {
   /// 溜まりが増えた下流の部品の鍵。
   let grew: [String]
+  /// 書いた回の記録。自動化か部品がもう無く、何も書かなかったなら nil。
+  let run: AutomationPartRun?
+
   /// 失敗した回として書いたか（部品の 1 回が成功していても、確定で失敗にした回を含む）。
-  let failed: Bool
+  var failed: Bool { run?.failed ?? false }
 }
 
 /// 部品の 1 回の読み書き。取る・積むは溜まりの規則（`AutomationInbox`）を通し、行の本文は DB にだけ置く。
@@ -30,6 +33,23 @@ extension AutomationStore {
   /// 取った行の本文（通し番号の順）。読む前に消えていた行は飛ばす。
   func rows(_ seqs: [Int]) throws(AutomationError) -> [AutomationPartRow] {
     try read { try $0.rows(seqs) }
+  }
+
+  /// 外から届いた行を、`key` の部品の溜まりへ上流の確定と同じ規則（`AutomationInbox.push` と積み方）で積む。出どころは
+  /// 持たない。
+  func arrive(_ rows: [AutomationPartRow], into key: String, of id: Int, at arrivedAt: Date)
+    throws(AutomationError)
+  {
+    let index = try index(id)
+    guard let target = automations[index].graph.node(key) else { throw .partNotFound(id, key) }
+    try commit { db, memory in
+      let push = AutomationInbox.push(
+        rows.map { AutomationInbox.Arrival(id: $0.id, origin: nil, size: $0.text.utf8.count) },
+        into: target, holding: try db.inbox(of: key, in: id))
+      let entry = Push(target: target, rows: rows, push: push)
+      _ = try stack(
+        Settling(node: target, index: index, db: db, pushes: [entry]), at: arrivedAt, &memory)
+    }
   }
 
   /// 取る行が 0 件だった契機で、捨てる行を消して部品の捨てた数に足す（次の回の記録に数える）。
@@ -60,7 +80,7 @@ extension AutomationStore {
   func record(_ end: AutomationPassEnd) throws(AutomationError) -> AutomationRecorded {
     guard let index = automations.firstIndex(where: { $0.id == end.automationId }),
       let node = automations[index].graph.node(end.part)
-    else { return AutomationRecorded(grew: [], failed: false) }
+    else { return AutomationRecorded(grew: [], run: nil) }
     let id = end.automationId
     let key = end.part
     let startedAt = TaskItem.storedInstant(end.startedAt)
@@ -110,7 +130,7 @@ extension AutomationStore {
       try db.put(part: key, of: id, state)
       try db.insert(run: run, part: key, of: id)
       memory.automations[index].parts[key] = state
-      return AutomationRecorded(grew: grew, failed: run.failed)
+      return AutomationRecorded(grew: grew, run: run)
     }
   }
 

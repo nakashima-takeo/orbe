@@ -1,7 +1,7 @@
 ---
 title: Orbe CLI（orb）
 description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/自動化/ボードの部品/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/automation/board/session/wait サブコマンド・socket 文脈解決・終了コード契約
-updated: 2026-10-18
+updated: 2026-10-19
 ---
 
 # Orbe CLI（`orb`）
@@ -75,6 +75,8 @@ updated: 2026-10-18
 - `orb automation proposals [<id>] [--json]` … 覚えている候補を 1 行 1 つ（`id 状態 自動化の id 期限 タイトル リンク`）。`<id>` でその自動化の棚の分だけ。
 - `orb automation set [<id>] [--json]` … 標準入力の JSON（MCP の `set_automation` の `definition` と同じ形の `name`・`notify`・`parts`）を `definition` に入れて送り、`<id>` が無ければ作って新しい ID だけを出し、あれば丸ごと置き換える。`orb automation list --json` の `definition` を取り出して直し、そのまま流す往復がつながる。定義をフラグに割らないのは、部品がコマンドか agent かで項目が入れ子になり、検証が CLI と control の 2 か所に割れるため。標準入力が空・JSON オブジェクトでないは usage エラー（exit 2）、定義の検証は control が持つ（違反は exit 1）。
 - `orb automation run <id> [--part <key>] [--json]` … `--part` の部品まで流す（省けば終わりの部品すべてまで。止めた自動化も受ける）。回の終わりを待たずに返る。`--part` の値の欠けは usage エラー。
+- `orb automation try <id> [--from <key>]... [--to <key>]... [--stdin] [--limit <n>] [--json]` … [試走](../platform/automation.md#試走)を始め、写すのを待たずに返る（人向けの出力は始めた旨の 1 行）。`--from`・`--to` は繰り返して並べる。`--stdin` は標準入力の 1 行 1 JSON オブジェクト（空行は飛ばす）を入口に与える行にする。標準入力の 0 バイトと JSON オブジェクトでない行は usage エラー（exit 2）、範囲・行の検証は control が持つ（exit 1）。
+- `orb automation trial <id> [--wait] [--timeout-ms <ms>] [--json]` … 最新の試走を部品ごとに 1 行（`鍵 状態 回`）で出す。回は最新の回を `list` の「前回」と同じ語で、止めた副作用・仕事は `held N rows`。流す前に終わった試走は先頭に `failed: <理由>`。中身（下流へ渡す行・候補の案・渡るはずだった行）は `--json` で読む。`--wait` で終わりまで待ち（既定 3600000 ms）、時間切れは exit 124。
 - `orb automation pause <id> [--json]` / `orb automation resume <id> [--json]` … 予定を止める・再開する。
 - `orb automation rm <id> [--json]`
 
@@ -116,7 +118,7 @@ control.sock の解決順は `ORBE_STATE_DIR`（非空の明示指定・最優�
 
 ## 終了コード・エラー
 
-- 成功=0、usage エラー（未知 key・引数不足・非数値 id・対象欠如等でクライアントが弾く）=2、RPC/接続エラー=1、`session restore` で 1 つでも `unknown` があった=1（打ち間違いを黙らせない）、`agent prompt` がエージェントの入力待ち（`waiting`）で止まった=3、同じくセッション終了（`clear`）で止まった=4、`wait` / `agent prompt` / `agent spawn` / `agent resume` の時間切れ=124。
+- 成功=0、usage エラー（未知 key・引数不足・非数値 id・対象欠如等でクライアントが弾く）=2、RPC/接続エラー=1、`session restore` で 1 つでも `unknown` があった=1（打ち間違いを黙らせない）、`agent prompt` がエージェントの入力待ち（`waiting`）で止まった=3、同じくセッション終了（`clear`）で止まった=4、`wait` / `agent prompt` / `agent spawn` / `agent resume` / `automation trial --wait` の時間切れ=124。
 - 時間切れに専用コードを与えるのは、待っていたイベントが来ていないのに `orb wait … && 次の処理` が進むのを止めるため——この CLI は成功していないのに 0 を返さない。124 は `timeout(1)` の慣習で、Orbe の文書を読まなくても意味が通る。時間切れは `--json` なら結果を stdout に出すが、それ以外では stdout に何も書かない（`text=$(orb wait …)` が偽のイベントを掴まないため）。`agent prompt` の 3 / 4 も同じ理由で非 0——答えは返っていないので `&& 次の処理` を進めない。3 と 4 を分けるのは対処が違うため（3 は答えを送る、4 は起こし直す）。
 - Orbe 未起動や Orbe 外（socket 不達）は、クラッシュせず構造化メッセージ＋非 0 終了（`--json` 時は `{"error":{code,message}}`）。
 - control の error は code/message をそのまま出す（値域外・不正 enum・未知/消せない workspace・未知 tab 等は control 側が弾く）。未知 key・型不一致はクライアントが `config_list` を SSOT に事前に弾く。

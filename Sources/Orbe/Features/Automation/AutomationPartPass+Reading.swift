@@ -36,6 +36,11 @@ extension AutomationPartPass {
     }
   }
 
+  /// 外から与えた項目（1 行 1 JSON）を、取得の部品が前回の出力なしで取った項目として読む。
+  static func given(_ text: String, to node: AutomationGraph.Node) -> Reading {
+    fetched(text, node, lastOutput: [], word(node))
+  }
+
   /// 残す報告の上限（字）。回の記録は部品ごとに 20 回残る。
   static let reportLimit = 2000
 

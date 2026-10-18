@@ -1,4 +1,5 @@
 import Foundation
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -10,6 +11,8 @@ import XCTest
 /// 壊れると何が起きるか: CLI が組み立てる control メソッド名・params の語（`pause` / `resume` の `paused`、`set` と
 /// `proposals` の `automationId`、`set` の `definition`、`run` の `partKey`）はここでしか測れない。`resume` が
 /// `paused:true` を送ると、exit 0 を返しながら止まったままになる。`run` が `partKey` を落とすと、指した部品の先まで流れる。
+/// `try` が範囲・行・limit を落とすと、AI が指したのと違う試走が黙って走る。`trial --wait` が時間切れを 0 で返すと、AI は
+/// 途中の結果を終わった結果と読む。
 ///
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliAutomationProcessTests: OrbeTestCase {
@@ -166,6 +169,68 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertTrue(control.target.automationStore.automations.isEmpty)
   }
 
+  /// 取得（手段は走れば 3 秒かかる）→ 処理（`cat` で素通し）→ 副作用（走れば `marker` を作る）。
+  private func trialDefinition(marker: URL) -> String {
+    #"{"name": "試す", "parts": ["#
+      + #"{"key": "fetch", "name": "取る", "trigger": {"kind": "manual"}, "coverage": "currentSet", "#
+      + #""command": "sleep 3"}, "#
+      + #"{"key": "note", "name": "写す", "trigger": {"kind": "arrival"}, "from": ["fetch"], "#
+      + #""command": "cat"}, "#
+      + #"{"key": "send", "name": "送る", "trigger": {"kind": "arrival"}, "from": ["note"], "#
+      + #""deliver": "none", "command": "cat >/dev/null; touch '\#(marker.path)'"}]}"#
+  }
+
+  /// `try` は与える行（`--stdin`。0 バイトは usage エラー）・limit・範囲を運び、`trial --wait` は試走の終わりまで待って部品ごとの結果を
+  /// 出す。副作用は走らず、渡るはずだった行の数が人向けの 1 行に出る。
+  func testTryCarriesRowsLimitAndRangeAndTrialWaitsForTheResult() throws {
+    let control = try startControlProcess()
+    let marker = TestScratch.caseDir.appendingPathComponent("sent")
+    let id = run(control, ["set"], stdin: trialDefinition(marker: marker))
+    let rows = ["b", "c"].map { (key: String) -> String in
+      #"{"id":"\#(key)","link":"https://x.test/\#(key)","body":"\#(key)","#
+        + #""time":"2026-01-01T00:00:00Z"}"#
+    }.joined(separator: "\n")
+
+    XCTAssertEqual(
+      run(control, ["try", id, "--stdin", "--limit", "1"], stdin: rows),
+      "started a trial of automation \(id)")
+    let empty = control.orb(["automation", "try", id, "--stdin"], stdin: "")
+    XCTAssertEqual(empty.status, 2, empty.stderr)
+    XCTAssertTrue(empty.stderr.contains("--stdin got no input"), empty.stderr)
+    let trial = try XCTUnwrap(
+      control.orbJSON(["automation", "trial", id, "--wait"])["trial"] as? [String: Any])
+    let parts = try XCTUnwrap(trial["parts"] as? [[String: Any]])
+    func firstRun(_ key: String) -> [String: Any]? {
+      (parts.first { $0["key"] as? String == key }?["runs"] as? [[String: Any]])?.first
+    }
+    func ids(_ rows: Any?) -> [String]? {
+      (rows as? [[String: Any]])?.compactMap { $0["id"] as? String }
+    }
+    XCTAssertEqual(ids(firstRun("fetch")?["rows"]), ["fetch:b"])
+    XCTAssertEqual(ids((firstRun("send")?["held"] as? [String: Any])?["rows"]), ["fetch:b"])
+    XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path), "副作用のコマンドは走らない")
+    XCTAssertEqual(
+      run(control, ["trial", id]).split(separator: "\n").last, "send\theld\theld 1 rows")
+
+    let ranged = try XCTUnwrap(
+      control.orbJSON(["automation", "try", id, "--from", "note", "--to", "note"])["trial"]
+        as? [String: Any])
+    XCTAssertEqual(ranged["from"] as? [String], ["note"])
+    XCTAssertEqual(ranged["to"] as? [String], ["note"])
+  }
+
+  /// `trial --wait` は、試走が `--timeout-ms` までに終わらなければ exit 124。
+  func testTrialWaitExits124WhenTheTrialOutlastsTheTimeout() throws {
+    let control = try startControlProcess()
+    let id = run(
+      control, ["set"],
+      stdin: trialDefinition(marker: TestScratch.caseDir.appendingPathComponent("sent")))
+    _ = run(control, ["try", id])
+
+    let outcome = control.orb(["automation", "trial", id, "--wait", "--timeout-ms", "300"])
+    XCTAssertEqual(outcome.status, 124, outcome.stderr)
+  }
+
   /// 各サブコマンドは受ける数より多い位置引数を、socket に触れる前に usage エラー（2）で断る。
   ///
   /// 壊れると何が起きるか: `orb automation rm 3 4` が 3 だけを消して exit 0 を返し、4 も消したつもりの AI が食い違う。
@@ -173,7 +238,8 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
   func testSubcommandsRejectExtraPositionals() {
     for args in [
       ["list", "1"], ["proposals", "1", "2"], ["set", "1", "2"], ["run", "1", "2"],
-      ["pause", "1", "2"], ["resume", "1", "2"], ["rm", "1", "2"],
+      ["pause", "1", "2"], ["resume", "1", "2"], ["rm", "1", "2"], ["try", "1", "2"],
+      ["trial", "1", "2"],
     ] {
       let outcome = ControlProcess.orbWithoutServer(["automation"] + args)
       let label = "orb automation \(args.joined(separator: " "))"

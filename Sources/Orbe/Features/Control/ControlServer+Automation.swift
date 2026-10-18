@@ -1,6 +1,6 @@
 import Foundation
 
-/// 自動化の 6 動詞の domain 操作（`ControlTarget` の一部。main スレッドでのみ呼ぶ）。
+/// 自動化の 8 動詞の domain 操作（`ControlTarget` の一部。main スレッドでのみ呼ぶ）。
 protocol ControlAutomationTarget: AnyObject {
   /// 自動化を ID 順に列挙する（list_automations）。
   func controlListAutomations() -> Result<Any, ControlError>
@@ -16,11 +16,52 @@ protocol ControlAutomationTarget: AnyObject {
   func controlDeleteAutomation(automationId: Int) -> Result<Any, ControlError>
   /// 覚えている提案を列挙する（list_automation_proposals）。automationId 指定はその自動化の棚の分。
   func controlListAutomationProposals(automationId: Int?) -> Result<Any, ControlError>
+  /// 試走を始める（try_automation）。すぐ返る。知らない自動化・部品は -32004、範囲・行・limit の誤りは -32602。
+  func controlTryAutomation(automationId: Int, _ request: AutomationTrial.Request) -> Result<
+    Any, ControlError
+  >
+  /// 試走を読む（get_automation_trial）。`wait` なら終わりか `timeoutMs` まで待つ。試走が無ければ -32004。
+  func controlAutomationTrial(
+    automationId: Int, wait: Bool, timeoutMs: Int,
+    completion: @escaping (Result<Any, ControlError>) -> Void)
 }
 
-/// 自動化の 6 動詞の解決。ハンドラが見るのは params の在否と JSON の型（違反は -32602）だけで、値の検証と不変条件は
-/// `AutomationStore` が持つ。
+/// 自動化の 8 動詞の解決。ハンドラが見るのは params の在否と JSON の型（違反は -32602）だけで、値の検証と不変条件は
+/// `AutomationStore`・`AutomationTrials` が持つ。
 extension ControlServer {
+  /// 接続ごとに自分で応答する自動化の動詞（待つことがある `get_automation_trial`）。引き受けたら true。
+  func respondsToAutomation(method: String, id: Any?, params: [String: Any], conn: Connection)
+    -> Bool
+  {
+    guard method == "get_automation_trial" else { return false }
+    automationTrial(id: id, params: params, conn: conn)
+    return true
+  }
+
+  private func automationTrial(id: Any?, params: [String: Any], conn: Connection) {
+    let p = AutomationParams(params)
+    let automationId: Int
+    let wait: Bool
+    do throws(ControlError) {
+      automationId = try p.int("automationId")
+      wait = try p.optionalBool("wait") ?? false
+    } catch {
+      return conn.respond(id: id, result: .failure(error))
+    }
+    guard let timeoutMs = WaitTimeout.parse(params, default: WaitTimeout.promptDefaultMs) else {
+      return conn.respond(
+        id: id, result: .failure(ControlError(code: -32602, message: "invalid timeoutMs")))
+    }
+    DispatchQueue.main.async {
+      let respond = { result in self.queue.async { conn.respond(id: id, result: result) } }
+      guard let target = self.target else {
+        return respond(.failure(ControlError(code: -32000, message: "no window")))
+      }
+      target.controlAutomationTrial(
+        automationId: automationId, wait: wait, timeoutMs: timeoutMs, completion: respond)
+    }
+  }
+
   func automationHandler(for method: String) -> (
     (ControlAutomationTarget, [String: Any]) -> Result<Any, ControlError>
   )? {
@@ -60,6 +101,14 @@ extension ControlServer {
     case "list_automation_proposals":
       return { target, p throws(ControlError) in
         target.controlListAutomationProposals(automationId: try p.optionalInt("automationId"))
+      }
+    case "try_automation":
+      return { target, p throws(ControlError) in
+        target.controlTryAutomation(
+          automationId: try p.int("automationId"),
+          AutomationTrial.Request(
+            from: try p.optionalStrings("from"), to: try p.optionalStrings("to"),
+            rows: try p.optionalObjectLines("rows"), limit: try p.optionalInt("limit")))
       }
     default:
       return nil
@@ -107,11 +156,42 @@ private struct AutomationParams {
   }
 
   func bool(_ key: String) throws(ControlError) -> Bool {
-    guard let raw = params[key] else { throw ControlError(code: -32602, message: "missing \(key)") }
+    guard let value = try optionalBool(key) else {
+      throw ControlError(code: -32602, message: "missing \(key)")
+    }
+    return value
+  }
+
+  func optionalBool(_ key: String) throws(ControlError) -> Bool? {
+    guard let raw = params[key] else { return nil }
     guard Self.isBool(raw), let value = raw as? Bool else {
       throw ControlError(code: -32602, message: "invalid \(key)")
     }
     return value
+  }
+
+  func optionalStrings(_ key: String) throws(ControlError) -> [String]? {
+    guard let raw = params[key] else { return nil }
+    guard let value = raw as? [String] else {
+      throw ControlError(code: -32602, message: "invalid \(key)")
+    }
+    return value
+  }
+
+  /// JSON オブジェクトの列を、1 要素 1 行の JSON の文にして読む。
+  func optionalObjectLines(_ key: String) throws(ControlError) -> [String]? {
+    guard let raw = params[key] else { return nil }
+    guard let objects = raw as? [[String: Any]] else {
+      throw ControlError(code: -32602, message: "invalid \(key)")
+    }
+    return try objects.map { object throws(ControlError) in
+      guard
+        let data = try? JSONSerialization.data(
+          withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]),
+        let line = String(bytes: data, encoding: .utf8)
+      else { throw ControlError(code: -32602, message: "invalid \(key)") }
+      return line
+    }
   }
 
   func definition() throws(ControlError) -> AutomationDefinition {

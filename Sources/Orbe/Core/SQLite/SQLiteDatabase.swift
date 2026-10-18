@@ -26,12 +26,21 @@ enum SQLiteValue: Equatable {
 
 /// SQLite の接続。解放で閉じる。main からだけ使う。
 final class SQLiteDatabase {
-  private let handle: OpaquePointer
+  fileprivate let handle: OpaquePointer
 
   /// 読み書きで開き、無ければ作る。読み取りしか許されないファイルは黙って読み取り専用で開くので、`isReadOnly` で見る。
-  init(url: URL) throws {
+  convenience init(url: URL) throws {
+    try self.init(path: url.path)
+  }
+
+  /// メモリだけの空の DB を開く。閉じれば消える。
+  static func memory() throws -> SQLiteDatabase {
+    try SQLiteDatabase(path: ":memory:")
+  }
+
+  private init(path: String) throws {
     var db: OpaquePointer?
-    let rc = sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil)
+    let rc = sqlite3_open_v2(path, &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nil)
     guard rc == SQLITE_OK, let db else {
       let message =
         db.map { String(cString: sqlite3_errmsg($0)) } ?? String(cString: sqlite3_errstr(rc))
@@ -86,6 +95,51 @@ final class SQLiteDatabase {
 
   fileprivate func failure(_ rc: Int32) -> SQLiteError {
     SQLiteError(code: rc, message: String(cString: sqlite3_errmsg(handle)))
+  }
+}
+
+/// 接続の DB（main）を別の接続の DB へ写すバックアップ。区切りごとに `step` で進める。写す元を同じ接続で書き換えると、SQLite が
+/// 写しにも同時に反映する（写し直しにならない）。両方の接続を強参照で持つ。写し終えるか誤りで止まったら、`step` がその場で
+/// 終える（`sqlite3_backup_finish`）——SQLite は、終えるまで写し先の接続を他に使うことを禁じているので、写し終えたと返した
+/// 時点で写し先を使えるようにする。途中で解放すれば打ち切る。
+final class SQLiteBackup {
+  private let source: SQLiteDatabase
+  private let destination: SQLiteDatabase
+  /// 終えたら nil。
+  private var handle: OpaquePointer?
+
+  init(from source: SQLiteDatabase, to destination: SQLiteDatabase) throws {
+    guard let backup = sqlite3_backup_init(destination.handle, "main", source.handle, "main") else {
+      throw destination.failure(sqlite3_errcode(destination.handle))
+    }
+    self.source = source
+    self.destination = destination
+    handle = backup
+  }
+
+  deinit {
+    if let handle { sqlite3_backup_finish(handle) }
+  }
+
+  /// `pages` ページだけ写す。写し終えたら true。元が使用中（BUSY・LOCKED）なら写さずに false。終えた後には呼ばない。
+  func step(pages: Int32) throws -> Bool {
+    guard let handle else { preconditionFailure("the backup has already finished") }
+    let rc = sqlite3_backup_step(handle, pages)
+    switch rc & 0xFF {
+    case SQLITE_OK, SQLITE_BUSY, SQLITE_LOCKED:
+      return false
+    case SQLITE_DONE:
+      self.handle = nil
+      let finished = sqlite3_backup_finish(handle)
+      guard finished == SQLITE_OK else {
+        throw SQLiteError(code: finished, message: String(cString: sqlite3_errstr(finished)))
+      }
+      return true
+    default:
+      self.handle = nil
+      sqlite3_backup_finish(handle)
+      throw SQLiteError(code: rc, message: String(cString: sqlite3_errstr(rc)))
+    }
   }
 }
 

@@ -226,6 +226,52 @@ import Observation
   }
 }
 
+/// 写し——DB の全体をメモリの DB へ写したストア。写しの変異は元の DB に届かない。
+extension AutomationStore {
+  /// 区切って進める写し。区切りの間に元のストアが書いた分も写しに入る（同じ接続の書き込みは SQLite が写しへ反映する）。
+  final class Copy {
+    /// 1 区切りのページ数（1 区切りが画面の 1 コマより十分短く済む大きさ）。
+    static let pagesPerStep: Int32 = 256
+
+    private let source: AutomationStore
+    private let database: SQLiteDatabase
+    private let backup: SQLiteBackup
+
+    fileprivate init(source: AutomationStore, database: SQLiteDatabase, backup: SQLiteBackup) {
+      self.source = source
+      self.database = database
+      self.backup = backup
+    }
+
+    /// 1 区切り写す。写し終えたら写しのストアを返す。写しのストアのメモリは元のメモリをそのまま使う——元は「DB に書けてから
+    /// メモリを進める」を同じ main で行うので、写し終えた時点の元のメモリはその時点の DB と一致する（写しの DB を読み直すと、
+    /// 溜まりの件数を数える読みが溜まりの行の数に比例して main を止める）。写し終えた後には呼ばない。
+    func step() throws(AutomationError) -> AutomationStore? {
+      guard source.available else { throw AutomationStore.unavailableError }
+      do {
+        guard try backup.step(pages: Self.pagesPerStep) else { return nil }
+      } catch {
+        throw .unavailable("could not copy automations: \(error)")
+      }
+      return AutomationStore(
+        opened: AutomationDatabase.Opened(
+          database: AutomationDatabase(database),
+          snapshot: AutomationSnapshot(
+            automations: source.automations, proposals: source.proposals)))
+    }
+  }
+
+  func copy() throws(AutomationError) -> Copy {
+    guard let database else { throw Self.unavailableError }
+    do {
+      let copy = try SQLiteDatabase.memory()
+      return Copy(source: self, database: copy, backup: try database.backup(into: copy))
+    } catch {
+      throw .unavailable("could not copy automations: \(error)")
+    }
+  }
+}
+
 /// 変異の間のメモリの写し（`AutomationStore.commit`）。
 struct AutomationMemory {
   var automations: [Automation]

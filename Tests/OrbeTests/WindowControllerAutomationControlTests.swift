@@ -2,14 +2,17 @@ import XCTest
 
 @testable import Orbe
 
-/// 自動化の 6 動詞のドメイン側を、実 `WindowController` 越しに固定する。起動で保存済みの部品が番人に載ること、
+/// 自動化の 8 動詞のドメイン側を、実 `WindowController` 越しに固定する。起動で保存済みの部品が番人に載ること、
 /// 提案と重なりが棚に出す自動化の側に出ること、拒否が制御 API の語彙になること、一覧の定義を `set_automation` へ戻せること、
 /// 一覧の部品の回の記録が保存と同じ形であること。候補の付け先は今ある workspace に解けるときだけ起動ごとの id と名前で出ること。
+/// 試走は始めた応答で道の上の部品を返し、待って読むと部品ごとの回の結果（取得の rows・止めた副作用の held.rows）を返し、
+/// 始める前と自動化を消した後は -32004 で読めないこと。
 ///
 /// 壊れると何が起きるか: Orbe を再起動しただけで全自動化が黙って回らなくなる。AI が自動化の棚を読んでも、提案した自動化が
 /// もう取っていない提案が混ざる・取っている自動化に出ない。流している自動化への `run_automation` が別の誤りに化ける。
 /// 一覧の定義を書き換えて戻すと、予定や部品が別物になる。回の記録を読む AI・秘書が、部品ごとの件数や結果を読めなくなる。
-/// AI が候補の付け先を読めない、または消えた workspace を付け先として読む。
+/// AI が候補の付け先を読めない、または消えた workspace を付け先として読む。AI が試走を始めても結果を読めない、止めた副作用に
+/// 何が渡るはずだったかを確かめられず本番で初めて誤りに気づく、試走をまだ始めていないのに自動化が無いと読んで作り直す。
 ///
 /// 重要: 実 NSWindow に SurfaceView を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerAutomationControlTests: OrbeTestCase {
@@ -294,5 +297,56 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let fetchResult = try XCTUnwrap(fetched["result"] as? [String: Any])
     XCTAssertEqual(fetchResult["kind"] as? String, "fetch")
     XCTAssertEqual(fetchResult["fresh"] as? Int, 1)
+  }
+
+  /// 試走は始めた応答で道の上の部品を並べ、待って読むと部品の回の結果を返す。自動化を消すと読めない。
+  func testATrialStartsAtOnceAndReadsBackItsPartsWhenWaitedFor() throws {
+    let wc = try launch()
+    let id = try set(
+      wc,
+      AutomationDefinition(
+        name: "試す", notify: nil,
+        parts: [
+          DesignSceneFixtures.commandPart(
+            "fetch", "取る", .manual, script: "exit 1", coverage: .currentSet),
+          DesignSceneFixtures.commandPart(
+            "send", "送る", .arrival, from: ["fetch"], script: "exit 1", deliver: .sideEffect),
+        ]))
+    let row = #"{"id":"a","link":"https://example.com/a","body":"a","time":"2026-10-10T09:00:00Z"}"#
+    var none: Result<Any, ControlError>?
+    wc.controlAutomationTrial(automationId: id, wait: false, timeoutMs: 1) { none = $0 }
+    guard case .failure(let noTrial) = try XCTUnwrap(none) else { return XCTFail("試走が無いのに読めた") }
+    XCTAssertEqual(noTrial.code, -32004)
+    XCTAssertEqual(noTrial.message, "no trial of automation \(id)")
+
+    let started = try success(
+      wc.controlTryAutomation(automationId: id, AutomationTrial.Request(rows: [row])))
+    let trial = try XCTUnwrap(started["trial"] as? [String: Any])
+    XCTAssertEqual(trial["preparing"] as? Bool, true)
+    XCTAssertEqual(
+      (trial["parts"] as? [[String: Any]])?.map { $0["key"] as? String }, ["fetch", "send"])
+
+    var reply: Result<Any, ControlError>?
+    wc.controlAutomationTrial(automationId: id, wait: true, timeoutMs: 5000) { reply = $0 }
+    let deadline = Date().addingTimeInterval(5)
+    while reply == nil && Date() < deadline {
+      RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+    }
+    let read = try success(try XCTUnwrap(reply))
+    XCTAssertNil(read["timedOut"])
+    let ended = try XCTUnwrap(read["trial"] as? [String: Any])
+    XCTAssertEqual(ended["running"] as? Bool, false)
+    let parts = try XCTUnwrap(ended["parts"] as? [[String: Any]])
+    XCTAssertEqual(parts.map { $0["state"] as? String }, ["done", "held"])
+    let fetched = try XCTUnwrap((parts[0]["runs"] as? [[String: Any]])?.first)
+    XCTAssertEqual((fetched["rows"] as? [[String: Any]])?.map { $0["id"] as? String }, ["fetch:a"])
+    let held = try XCTUnwrap(
+      (parts[1]["runs"] as? [[String: Any]])?.first?["held"] as? [String: Any])
+    XCTAssertEqual((held["rows"] as? [[String: Any]])?.map { $0["id"] as? String }, ["fetch:a"])
+
+    _ = wc.controlDeleteAutomation(automationId: id)
+    var gone: Result<Any, ControlError>?
+    wc.controlAutomationTrial(automationId: id, wait: false, timeoutMs: 1) { gone = $0 }
+    XCTAssertEqual(code(try XCTUnwrap(gone)), -32004)
   }
 }

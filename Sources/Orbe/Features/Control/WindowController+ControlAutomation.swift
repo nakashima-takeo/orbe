@@ -1,7 +1,8 @@
 import Foundation
 import OrbeSessionLog
 
-/// 自動化の 6 動詞の domain 側。変異は `AutomationRunner`（番人の登録を合わせる）、読みは `AutomationStore` に任せ、ここは応答の形を組む。
+/// 自動化の 8 動詞の domain 側。変異は `AutomationRunner`（番人の登録を合わせる）、読みは `AutomationStore`、試走は
+/// `AutomationTrials` に任せ、ここは応答の形を組む。
 extension WindowController {
   func controlListAutomations() -> Result<Any, ControlError> {
     .success(["automations": automationStore.automations.map(automationJSON)])
@@ -72,6 +73,40 @@ extension WindowController {
     return .success(["proposals": proposals])
   }
 
+  func controlTryAutomation(automationId: Int, _ request: AutomationTrial.Request) -> Result<
+    Any, ControlError
+  > {
+    automationResult { () throws(AutomationError) in
+      ["trial": trialJSON(try automationTrials.start(automationId, request))]
+    }
+  }
+
+  func controlAutomationTrial(
+    automationId: Int, wait: Bool, timeoutMs: Int,
+    completion: @escaping (Result<Any, ControlError>) -> Void
+  ) {
+    guard wait else {
+      return completion(
+        automationResult { () throws(AutomationError) in
+          ["trial": trialJSON(try automationTrials.trial(automationId))]
+        })
+    }
+    automationTrials.wait(automationId, timeout: .milliseconds(timeoutMs)) { result, timedOut in
+      completion(
+        self.automationResult { () throws(AutomationError) in
+          var json: [String: Any] = ["trial": self.trialJSON(try result.get())]
+          if timedOut { json["timedOut"] = true }
+          return json
+        })
+    }
+  }
+
+  private func trialJSON(_ trial: AutomationTrial) -> [String: Any] {
+    trial.json { id in
+      workspaces.first { $0.persistentId == id }.map { ($0.id, $0.name) }
+    }
+  }
+
   /// 定義（保存のまま）に、止めているか・部品の鍵ごとの状態（走っているか・次の時刻・最後に回った時刻・溜まりの件数・決まりを
   /// 外した印・回の記録〔保存と同じ形〕）を足す。判定の部品を持つ自動化にだけタスク候補の欄を付ける。
   private func automationJSON(_ automation: Automation) -> [String: Any] {
@@ -115,7 +150,7 @@ extension WindowController {
     ControlError(code: -32004, message: "automation not found: \(id)")
   }
 
-  /// ドメインエラーを制御エラーの語彙へ写す（未知 → -32004・不正な値 → -32602・流している途中・使えない → -32000）。
+  /// ドメインエラーを制御エラーの語彙へ写す（未知・試走が無い → -32004・不正な値 → -32602・流している途中・使えない → -32000）。
   private func automationResult(_ body: () throws(AutomationError) -> [String: Any]) -> Result<
     Any, ControlError
   > {
@@ -139,6 +174,8 @@ extension WindowController {
             message: "automation \(id) is still flowing; wait until its parts finish"))
       case .unavailable(let message):
         return .failure(ControlError(code: -32000, message: message))
+      case .trialNotFound(let id):
+        return .failure(ControlError(code: -32004, message: "no trial of automation \(id)"))
       }
     }
   }

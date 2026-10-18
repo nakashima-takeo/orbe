@@ -1,7 +1,7 @@
 ---
 title: 制御 API（外部 → Orbe）
 description: Unix socket 上の JSON-RPC でタブ/workspace/エージェント/タスク/自動化/ボードの部品を操作し、タスクから作業を始める out-of-band 制御チャネルと、イベント履歴（seq）・待機・MCP ブリッジ・ツール群・mount 境界
-updated: 2026-10-18
+updated: 2026-10-19
 ---
 
 # 制御 API（外部 → Orbe）
@@ -22,7 +22,7 @@ Unix domain socket `control.sock`（workspaces.json と並置・パーミッシ�
 - `-32600` JSON だがリクエストオブジェクトでない（配列・`method` 欠落）。`id` は取れれば返す。
 - `-32601` 未知の method。method 名だけで決まり、ウィンドウの有無を見ない——「その動詞が無い」と「今は実行できない」をクライアントが状態に依らず区別できるように。
 - `-32602` params の欠落・型不一致・値域外。
-- `-32004` 宛先（tab / workspace / タスク / 自動化・自動化の部品）が見つからない。宛先 ID を解決へ直に渡すメソッド（`get_tab_text` / `send_text` / `send_key` / `report_agent` / `completion_accept`）は `tabId` の欠落・型不一致もここに落ちる（解決の前に検証を挟むメソッドは `-32602`）。
+- `-32004` 宛先（tab / workspace / タスク / 自動化・自動化の部品・自動化の試走）が見つからない。宛先 ID を解決へ直に渡すメソッド（`get_tab_text` / `send_text` / `send_key` / `report_agent` / `completion_accept`）は `tabId` の欠落・型不一致もここに落ちる（解決の前に検証を挟むメソッドは `-32602`）。
 - `-32006` `wait_for_event` の `after` が履歴の保持範囲より古い（対処は seq を取り直す。呼び出し側のバグである `-32602` と分ける）。
 - `-32000` 実行できない（ウィンドウ未接続・spawn 失敗・消せない workspace の削除・Home の root 変更・`start_task` の作業場の用意の失敗・`prompt_agent` の busy / 未 mount・ready 待ち中のエージェント消滅・流している途中の自動化の `run_automation`・自動化を使えないセッションの自動化の書き込み・ボードを持たない workspace のボードの部品の操作）。
 
@@ -125,8 +125,12 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 - `pause_automation {automationId, paused}` → `{automation, seq}` … 予定を止める（`true`）・再開する（`false`）。走っている回は止めない。`paused` は JSON の真偽値だけを受ける。
 - `delete_automation {automationId}` → `{ok, seq}` … 走っている回を止め、結果は捨てる。その自動化だけが持っていた候補は忘れる。その自動化の通知を通知センターから取り下げる。
 - `set_automation`・`run_automation`・`pause_automation`・`delete_automation` は、自動化を使えないセッションでは `-32000`（理由付き）で断る。
+- `try_automation {automationId, from?, to?, rows?, limit?}` → `{trial, seq}` … 部品を本番の DB の写しの上で流す[試走](../platform/automation.md#試走)を始め、写すのを待たずに返る。`from`・`to` は部品の鍵の列（入口・行き先）、`rows` は入口に与える JSON オブジェクトの列、`limit` は各取得が下流へ渡す新しい項目の上限（正の整数）。同じ自動化の試走が走っていれば止めて置き換える。`trial` は始めた直後の試走で、道の上の部品が並ぶ。知らない自動化・部品の鍵は `-32004`。次は `-32602`: 型の誤り、空の `from`・`to`、どの行き先にも届かない入口（`from[0] "gh" reaches no part in to`）・どの入口からも届かない行き先、道の根が 1 つでないのに `rows` がある、判定の根への `rows`、`rows` の形の誤り（`rows: line 2: missing link` のように行番号で言う）、`limit` の値域外。自動化を使えないセッションは `-32000`。
+- `get_automation_trial {automationId, wait?, timeoutMs?}` → `{trial, timedOut?, seq}` … 最新の試走を読む。走っている途中なら終わった部品の回まで、`wait: true` なら終わりまで待って全部を返す。`timeoutMs` は `prompt_agent` と同じ規則（既定 1 時間・上限 24 時間・不正は `-32602`）で、時間切れはその時点の試走に `timedOut: true` を添えた成功の応答。待つ間に試走を置き換えると新しい試走の終わりを待ち、自動化を消すと `-32004`。呼び手が切れても試走は止まらない。試走が無い自動化は `-32004`（`no trial of automation <id>`）。
+  - `trial` は `automationId`・`from`・`to`（解いた後の鍵）・`limit?`・`startedAt`・`endedAt?`・`running`・`preparing`（写している間）・`failure?`（写している間に範囲の部品が消えた など、流す前に終わった理由）・`parts`。
+  - `parts` は道の上の部品を定義の順に並べ、各要素は `key`・`state`（`waiting` / `running` / `done` / `held`〔止めた副作用・仕事〕 / `untouched`〔打ち切りで動かなかった〕）・`runs`（回。`list_automations` の `runs` と同じく新しい順）。各回は `list_automations` の `runs` の要素と同じ欄に、取得・処理は `rows`（下流へ渡す行）、判定は `proposals`（`id`〔行の id〕・`link`・`title`・`due?`・`workspaceId` と `workspaceName`〔付け先が今ある workspace に解けるときだけ〕）と `resolved`（対応済みにするリンク）を足す。止めた副作用・仕事の回は記録の代わりに `held{rows}`（渡るはずだった行）だけ。
 - `list_automation_proposals {automationId?}` → `{proposals:[…], seq}` … 覚えている候補を全状態で返す。各要素は `proposalId`・`state`（`open` / `accepted` / `dismissed` / `resolved`）・`title`・`due?`・`link`・`body`・`time`・`proposedAt`・`proposedBy{automationId, partKey, sourcePartKey}`（候補を出した自動化と、その判定の部品・出どころの取得の部品の鍵。棚の自動化〔`automationId`〕と別のことがあるので組で返す。出した自動化が消えた後は無い）・`taskId`（`accepted` だけ）・`automationId` と `automationName`（棚に出す自動化）・`workspaceId` と `workspaceName`（付け先が今ある workspace に解けるときだけ。起動ごとの ID と名前。無ければ人がタスクにすると Home に付く）。`automationId` を渡すとその自動化の棚の分だけ（未知は `-32004`）。
-  - 自動化の 6 動詞はいずれも MCP に出す。候補をタスクにする・捨てるは人の判断なので制御 API に無い。自動化の変化はイベントにならない。
+  - 自動化の 8 動詞はいずれも MCP に出す。候補をタスクにする・捨てるは人の判断なので制御 API に無い。自動化の変化はイベントにならない。
 - `list_board_parts {workspaceId}` → `{parts:[{kind}], seq}` … その workspace の[ボード](../chrome/board.md)の部品の並びを上から順に返す。何も決めていないボードは既定（`automation` 1 つ）。
 - `add_board_part {workspaceId, kind}` → `{parts, seq}` … 部品を末尾に置き、結果の並びを返す。1 つのボードに同じ種類は 1 つまでで、既にあれば何も変えずに成功する。
 - `remove_board_part {workspaceId, kind}` → `{parts, seq}` … 部品を外し、結果の並びを返す。無ければ何も変えずに成功する。

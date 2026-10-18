@@ -77,6 +77,11 @@ final class AutomationDatabase {
     try db.transaction(body)
   }
 
+  /// この DB を `copy` へ写すバックアップ（`SQLiteBackup`）。
+  func backup(into copy: SQLiteDatabase) throws -> SQLiteBackup {
+    try SQLiteBackup(from: db, to: copy)
+  }
+
   // MARK: - 自動化と部品の状態
 
   /// 足して ID を返す。

@@ -40,7 +40,7 @@ final class AutomationRunnerTests: OrbeTestCase {
     runner = AutomationRunner(
       store: store, scheduler: scheduler, run: jobs.run,
       workspaces: { AutomationWorkspaces(listed: [], home: nil) },
-      recorded: { [unowned self] in recorded.append($1) },
+      recorded: { [unowned self] in recorded.append($0.end.part) },
       defined: { _ in }, deleted: { _ in })
     runner.now = { [unowned self] in now }
     runner.calendar = { Calendar(identifier: .gregorian) }

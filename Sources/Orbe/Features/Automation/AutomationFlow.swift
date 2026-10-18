@@ -1,8 +1,10 @@
 import Foundation
 
-/// 一巡——部品を指して「そこまで流す」1 回の進み。道（指した部品とその祖先。一巡の間は変わらない）の上で、普段なら今すぐは
+/// 一巡——部品を指して「そこまで流す」1 回の進み。道（流す部品の集まり。一巡の間は変わらない）の上で、普段なら今すぐは
 /// 動かない部品（入力の無い部品と、間隔・cron・手動の入力のある部品）を、道の上の上流がすべて終わった後に 1 回ずつ起こし、
-/// 指した部品がすべて終わったら終わる。「届いたら」の部品は起こさず、普段の決まりで動いた後の終わりを見届ける。
+/// 指した部品がすべて終わったら終わる。「届いたら」の部品は起こさず、普段の決まりで動いた後の終わりを見届ける。各部品が待つのは
+/// 道の上の入力だけで、道の上の入力を持たない部品（道の根）は予定の種類によらず最初に起こす。本番の流しは道を「指した部品と
+/// その祖先すべて」にするので、根は入力の無い部品だけになる。
 ///
 /// 走らせ役がメモリに持ち、部品の契機の始まりと終わり（普段の起こす決まりを見た後）を今の定義と共に知らせる。返した部品は
 /// 走らせ役が「今すぐ」で起こす。起こすか見届けるかは知らせのたびに今の定義の予定の種類で決める——一巡の間に予定だけを
@@ -31,41 +33,52 @@ struct AutomationFlow {
   }
 
   private let targets: [String]
+  /// 道の根。
+  private let roots: Set<String>
   private var steps: [String: Step] = [:]
 
-  /// 流し始める。`wake` は今すぐ起こす部品（走っていない入力の無い部品）。入力の無い部品が走っていれば、その回を一巡の分にする
-  /// （入力が無いので、いつ始まった回でも出すものは同じ）。
+  /// `path` の上を `targets`（どれも `path` の上）まで流し始める。`wake` は今すぐ起こす部品（走っていない根）。入力の無い根が
+  /// 走っていれば、その回を一巡の分にする（入力が無いので、いつ始まった回でも出すものは同じ）。入力のある根が走っていれば、
+  /// その回が終わった後に起こす。
   static func start(
-    to targets: [String], in graph: AutomationGraph, running: (String) -> Bool
+    through path: Set<String>, to targets: [String], in graph: AutomationGraph,
+    running: (String) -> Bool
   ) -> (flow: AutomationFlow, wake: [String]) {
-    var flow = AutomationFlow(targets: targets)
+    let nodes = graph.nodes.filter { path.contains($0.key) }
+    var flow = AutomationFlow(
+      targets: targets,
+      roots: Set(nodes.filter { path.isDisjoint(with: $0.part.inputs) }.map(\.key)))
     var wake: [String] = []
-    let path = Set(targets + targets.flatMap { graph.ancestors(of: $0).map(\.key) })
-    for node in graph.nodes where path.contains(node.key) {
-      if !node.part.inputs.isEmpty {
-        flow.steps[node.key] = .waiting(Set(node.part.inputs))
-      } else if running(node.key) {
+    for node in nodes {
+      let upstream = path.intersection(node.part.inputs)
+      if !upstream.isEmpty {
+        flow.steps[node.key] = .waiting(upstream)
+      } else if node.part.inputs.isEmpty && running(node.key) {
         flow.steps[node.key] = .adopted
       } else {
         flow.steps[node.key] = .ready
-        wake.append(node.key)
+        if !running(node.key) { wake.append(node.key) }
       }
     }
     return (flow, wake)
   }
 
-  private init(targets: [String]) {
+  private init(targets: [String], roots: Set<String>) {
     self.targets = targets
+    self.roots = roots
   }
 
   var path: Set<String> { Set(steps.keys) }
 
   var finished: Bool { targets.allSatisfy { steps[$0] == .done } }
 
+  /// 部品が一巡の分を終えたか。
+  func isDone(_ part: String) -> Bool { steps[part] == .done }
+
   /// 部品の契機が始まった。一巡の分として受け取ったら真（走らせ役はその契機を `flowed` として覚え、終わりに渡す）。誰が
   /// 始めた回かは問わない。
   mutating func started(_ part: String, in graph: AutomationGraph) -> Bool {
-    guard steps[part] == .ready, !Self.arrives(part, in: graph) else { return false }
+    guard steps[part] == .ready, !arrives(part, in: graph) else { return false }
     steps[part] = .taken
     return true
   }
@@ -112,10 +125,11 @@ struct AutomationFlow {
     _ part: String, _ graph: AutomationGraph, _ running: (String) -> Bool
   ) -> [String] {
     guard !running(part) else { return [] }
-    return Self.arrives(part, in: graph) ? finish(part, graph, running) : [part]
+    return arrives(part, in: graph) ? finish(part, graph, running) : [part]
   }
 
-  private static func arrives(_ part: String, in graph: AutomationGraph) -> Bool {
-    graph.node(part)?.part.trigger == .arrival
+  /// 普段の決まりで起きるのを見届ける部品か（根でない「届いたら」の部品）。
+  private func arrives(_ part: String, in graph: AutomationGraph) -> Bool {
+    !roots.contains(part) && graph.node(part)?.part.trigger == .arrival
   }
 }

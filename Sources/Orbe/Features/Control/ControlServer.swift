@@ -298,7 +298,7 @@ final class ControlServer {
       reportAgent(id: id, params: params, conn: conn)
       return true
     default:
-      return false
+      return respondsToAutomation(method: method, id: id, params: params, conn: conn)
     }
   }
 
