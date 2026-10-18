@@ -137,10 +137,33 @@ extension DesignGallerySnapshotTests {
       if let part { model.automation.tapPart(part) }
       return model
     }
+    // 「ツール」の欄（同じサーバーのツールが並び、claude.ai のコネクタの頭が付く）と、今日以外の手動の回（時刻の列が中身に
+    // 合わせて広がる）。
+    var tools = samples
+    if let slack = tools[0].definition.parts.firstIndex(where: { $0.key == "slack" }),
+      case .agent(var agent) = tools[0].definition.parts[slack].method
+    {
+      agent.tools = [
+        "mcp__claude_ai_Slack__search_messages", "mcp__claude_ai_Slack__read_channel",
+        "mcp__plugin_core_backlog__get_issues", "Bash(npm run test:unit:*)",
+      ]
+      tools[0].definition.parts[slack].method = .agent(agent)
+    }
+    let manualAt = DesignSceneFixtures.automationAt(9, 0, daysAgo: 3)
+    tools[0].passes.insert(
+      AutomationSamplePass(
+        part: "slack", at: manualAt, trigger: .now,
+        outcome: DesignSceneFixtures.fetched(
+          "slack", DesignSceneFixtures.sampleItems("slack", 2, at: manualAt))),
+      at: 0)
     for language in [Language.ja, .en] {
       let suffix = language == .ja ? "" : "_en"
       try write("board_map_list\(suffix).png", board(samples, 0), language, size)
       try write("board_map_card\(suffix).png", map(0, part: "contact"), language, size)
+      let manual = board(tools, 0)
+      manual.automation.enterMap()
+      manual.automation.tapPart("slack")
+      try write("board_map_tools_manual\(suffix).png", manual, language, size)
     }
     try write("board_map_first.png", map(0), .ja, size)
     try write("board_map_mail.png", map(0, part: "mail"), .ja, size)
