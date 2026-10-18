@@ -77,7 +77,8 @@ extension TaskPaletteAutomationModelTests {
 
   // MARK: - 棚の 2 行目
 
-  /// 前回の判定は判定の部品のうち最も新しく回ったものの最新の回（成否と時刻）。止めていれば停止中。
+  /// 前回の判定は判定の部品のうち最も新しく回ったものの最新の回（成否と時刻）。判定がまだ回っていなければ、取得が回っていても
+  /// 無い。止めていれば停止中。
   func testShelfStatusSaysTheLastJudgeAndTheState() throws {
     let palette = TaskPaletteSamples.model(
       [],
@@ -93,6 +94,6 @@ extension TaskPaletteAutomationModelTests {
       TaskPaletteAutomationShelfStatus(
         last: .init(at: DesignSceneFixtures.automationAt(13), failed: true), state: nil),
       "連絡の判定（13:00 に失敗）が開発の判定（9:00）より新しい")
-    XCTAssertEqual(try status(5).state, .paused)
+    XCTAssertEqual(try status(5), TaskPaletteAutomationShelfStatus(last: nil, state: .paused))
   }
 }
