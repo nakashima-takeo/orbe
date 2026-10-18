@@ -7,7 +7,8 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// diff の並びの純関数——インライン（削除行は古い側の行を指す差し込み・追加は型・文脈は旧番号）と並列（区間の削除と追加を
-/// 同じ行から並べ、短い側に詰め物）。壊れると、削除行が別の行に出る・旧番号がずれる・並列の両側が揃わず見比べられない。
+/// 同じ行から並べ、短い側に詰め物）。壊れると、削除行が別の行に出る・旧番号がずれる・並列の両側が揃わず見比べられない・新しいファイル
+/// や消したファイルに存在しない空の行が出る。
 @MainActor
 final class DiffRowsTests: OrbeTestCase {
   private func hunks(_ old: String, _ new: String) -> [LineHunk] {
@@ -48,30 +49,41 @@ final class DiffRowsTests: OrbeTestCase {
       ])
   }
 
-  /// 片側だけ（未追跡・追加）は、無い側を空の本文として比べる——本文の行が追加で、末尾の空の行は古い側の空の行と揃う。
-  /// 削除なら本文の行が古い側の行を指す差し込みで、新しい側の空の行が古い側の末尾の空の行と揃う。
-  func testOneSidedDiffsCompareAgainstTheEmptyText() {
+  /// 片側だけ（新しいファイル・消したファイル）は、版が無い側を 0 行として、有る側の全部の行（改行で終わる本文の末尾の空の
+  /// 行も）が追加か削除になる。並列の無い側は詰め物だけ。空の本文の新しいファイルは空の行 1 つの追加で、両側に版があれば
+  /// 空の本文どうしは変化が無い。
+  func testOneSidedDiffsAddOrRemoveEveryLineOfTheSideThatExists() {
+    let limit = EditorDiff.hunkLimit
     let text = TextRope(lines(["one", "two"]))
-    let empty = TextRope()
     let added = DiffRows.inline(
-      LineDiff.hunks(old: empty, new: text, limit: EditorDiff.hunkLimit), new: DiffRows.Side(text))
+      DiffRows.hunks(old: nil, new: text, limit: limit), new: DiffRows.Side(text))
     XCTAssertEqual(added.insertions, [])
-    XCTAssertEqual(
-      added.spans, [LineSpan(line: 0, style: DiffStyle.added), LineSpan(line: 2, otherNumber: 1)])
+    XCTAssertEqual(added.spans, [LineSpan(line: 0, style: DiffStyle.added)])
     let removed = DiffRows.inline(
-      LineDiff.hunks(old: text, new: empty, limit: EditorDiff.hunkLimit), new: DiffRows.Side(empty))
+      DiffRows.hunks(old: text, new: nil, limit: limit), new: DiffRows.Side(nil))
     XCTAssertEqual(
       removed.insertions,
       [
         RowInsertion(
           line: 0,
-          content: .lines([
-            InsertedLine(line: 0, style: DiffStyle.removed),
-            InsertedLine(line: 1, style: DiffStyle.removed),
-          ]))
+          content: .lines((0..<3).map { InsertedLine(line: $0, style: DiffStyle.removed) }))
       ])
-    XCTAssertEqual(removed.spans, [LineSpan(line: 0, otherNumber: 3)])
-    XCTAssertEqual(LineDiff.hunks(old: empty, new: empty, limit: EditorDiff.hunkLimit), [])
+    XCTAssertEqual(removed.spans, [])
+    let side = DiffRows.side(
+      DiffRows.hunks(old: nil, new: text, limit: limit), old: DiffRows.Side(nil),
+      new: DiffRows.Side(text))
+    XCTAssertEqual(
+      side.left.insertions,
+      [
+        RowInsertion(
+          line: 0, content: .lines(Array(repeating: InsertedLine(style: DiffStyle.pad), count: 3)))
+      ])
+    XCTAssertEqual(side.left.spans, [])
+    XCTAssertEqual(side.right.spans, [LineSpan(line: 0, style: DiffStyle.added)])
+    XCTAssertEqual(
+      DiffRows.hunks(old: nil, new: TextRope(), limit: limit),
+      [LineHunk(oldStart: 0, oldCount: 0, newStart: 1, newCount: 1)])
+    XCTAssertEqual(DiffRows.hunks(old: TextRope(), new: TextRope(), limit: limit), [])
   }
 
   /// 末尾の改行を足すのは空の行の追加——足した行だけが追加で、元の最後の行は文脈のまま。

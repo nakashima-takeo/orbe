@@ -3,17 +3,34 @@ import OrbeEditorCore
 
 /// 行差分の区間の列から、diff の面に置く並び（インライン・並列）を作る純関数。行の型は `DiffStyle` の番号で、色を知らない。
 ///
-/// 片側の大きさは面の行の数で、行差分が数える行の数と同じ（→ `LineDiff`）。その版に無い側は空の本文（空の行 1 つ）。区間の
+/// 片側の大きさは面の行の数で、行差分が数える行の数と同じ（→ `LineDiff`）。その版に無い側（新しいファイルの古い側・消した
+/// ファイルの新しい側）は 0 行で、有る側の全部の行が追加か削除になる（空の本文は空の行 1 つで、版が無いのとは違う）。区間の
 /// 外の行は両側で 1 対 1 に揃う。
 enum DiffRows {
-  /// 片側の大きさ（面の行の数）。
+  /// 片側の大きさ（面の行の数。版が無ければ 0）。
   struct Side: Equatable {
     let lines: Int
 
-    /// 写し `text` の大きさ。
-    init(_ text: TextRope) {
-      lines = text.lineCount
+    /// 写し `text` の大きさ（nil は版が無い）。
+    init(_ text: TextRope?) {
+      lines = text?.lineCount ?? 0
     }
+
+    /// 版が無い。
+    var isAbsent: Bool { lines == 0 }
+  }
+
+  /// 古い側と新しい側の行差分（nil は版が無い側）。片側が無ければ行差分を取らず、無い側 0 行・有る側の全部の行の区間 1 つ
+  /// にする（本文を割らないので、大きなファイルでも手間は端の数だけ）。
+  static func hunks(old: TextRope?, new: TextRope?, limit: LineDiff.Limit) -> [LineHunk] {
+    if let old, let new { return LineDiff.hunks(old: old, new: new, limit: limit) }
+    let (old, new) = (Side(old), Side(new))
+    guard !old.isAbsent || !new.isAbsent else { return [] }
+    return [
+      LineHunk(
+        oldStart: old.isAbsent ? 0 : 1, oldCount: old.lines, newStart: new.isAbsent ? 0 : 1,
+        newCount: new.lines)
+    ]
   }
 
   /// 区間 1 つの 0 始まりの範囲。

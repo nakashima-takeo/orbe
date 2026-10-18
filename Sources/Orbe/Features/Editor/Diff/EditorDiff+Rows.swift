@@ -13,12 +13,15 @@ extension EditorDiff {
     case .inline:
       var rows = DiffRows.inline(hunks, new: newSide)
       rows.source = old
-      look(DiffStyle.inline, rows).apply(to: surface, document: document)
+      look(DiffStyle.inline, rows, absent: newSide.isAbsent).apply(to: surface, document: document)
     case .side:
       let rows = DiffRows.side(hunks, old: oldSide, new: newSide)
       let left = oldSurface ?? makeOldSurface()
-      if let left { look(DiffStyle.side, rows.left).apply(to: left, document: nil) }
-      look(DiffStyle.side, rows.right).apply(to: surface, document: document)
+      if let left {
+        look(DiffStyle.side, rows.left, absent: oldSide.isAbsent).apply(to: left, document: nil)
+      }
+      look(DiffStyle.side, rows.right, absent: newSide.isAbsent)
+        .apply(to: surface, document: document)
       if let left, oldSurface == nil {
         carryTop(to: surface)
         oldSurface = left
@@ -56,14 +59,19 @@ extension EditorDiff {
     let side = DiffRows.Side(document.text)
     guard let oldSource else { return nil }
     guard let base = oldSource else {
-      return (LineDiff.hunks(old: TextRope(), new: document.text, limit: Self.hunkLimit), side)
+      return (DiffRows.hunks(old: nil, new: document.text, limit: Self.hunkLimit), side)
     }
     guard document.hunksBase == base else { return nil }
     return (document.hunks, side)
   }
 
-  private func look(_ presentation: SurfacePresentation, _ rows: SurfaceRows) -> SurfaceLook {
-    SurfaceLook(
+  /// 見え方。版が無い側（`absent`）の面は、エディターの都合で持つ空の行に番号を描かない（存在しない行を番号付きで出さない）。
+  private func look(
+    _ presentation: SurfacePresentation, _ rows: SurfaceRows, absent: Bool
+  ) -> SurfaceLook {
+    var presentation = presentation
+    presentation.numbersOwnLines = !absent
+    return SurfaceLook(
       presentation: presentation, rows: rows, isEditable: false, hunkLimit: Self.hunkLimit)
   }
 

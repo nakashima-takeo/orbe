@@ -72,7 +72,7 @@ extension EditorDiffTests {
     let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
     waitRows(diff, "変更が出る") { $0.boundaries == [1] }
     try FileManager.default.removeItem(at: repo.url("a.txt"))
-    waitRows(diff, "消せば全部が削除") { self.removedLines($0) == [0, 1, 2, 3] }
+    waitRows(diff, "消せば全部が削除") { self.removedLines($0) == [0, 1, 2, 3, 4] }
     XCTAssertNil(diff.document)
     XCTAssertTrue(repo.git(["checkout", "--", "a.txt"]).isSuccess)
     waitRows(diff, "戻せば変更なし") { $0.isEmpty }

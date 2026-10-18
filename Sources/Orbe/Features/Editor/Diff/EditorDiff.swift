@@ -24,7 +24,8 @@ final class EditorDiff: RootFilesObserver {
   private var workingStale = true
   private var documents: Documents
   let surfaces: EditorSurfaces
-  /// 古い側と、新しい側が版の本文のときの新しい側（その面も diff が持つ）。その版に無い側は空の本文。
+  /// 古い側と、新しい側が版の本文のときの新しい側（その面も diff が持つ）。その版に無い側も空の本文の文書を持つ（面は空の
+  /// 行を 1 つ持つが、大きさ `oldSide`・`newSide` は 0 行で、その行に番号を描かない）。
   private(set) var old: RevisionDocument?
   private(set) var newRevision: RevisionDocument?
   private var newRevisionSurface: (any TextSurface)?
@@ -43,8 +44,8 @@ final class EditorDiff: RootFilesObserver {
   /// 今の古い側・新しい側の本文の元（その版に無ければ nil。まだ決めていなければ外側の nil）と大きさ。
   private(set) var oldSource: String??
   private var newSource: String??
-  private(set) var oldSide = DiffRows.Side(TextRope())
-  private(set) var newSide = DiffRows.Side(TextRope())
+  private(set) var oldSide = DiffRows.Side(nil)
+  private(set) var newSide = DiffRows.Side(nil)
   /// ステージ済みの側と行差分を頼んだ通し番号。
   private var stagedRequest = 0
   /// 見せていない間に変わった。
@@ -321,7 +322,8 @@ final class EditorDiff: RootFilesObserver {
     }
     if document == nil, let old {
       setNewRevision(nil)
-      revisionHunks = LineDiff.hunks(old: old.text, new: TextRope(), limit: Self.hunkLimit)
+      revisionHunks = DiffRows.hunks(
+        old: oldSide.isAbsent ? nil : old.text, new: nil, limit: Self.hunkLimit)
     }
     return .ready
   }
@@ -340,8 +342,8 @@ final class EditorDiff: RootFilesObserver {
     let request = stagedRequest
     let (oldText, newText, limit) = (head.text, index.text, Self.hunkLimit)
     Task.detached(priority: .userInitiated) { [weak self] in
-      let (old, new) = (TextRope(oldText ?? ""), TextRope(newText ?? ""))
-      let hunks = LineDiff.hunks(old: old, new: new, limit: limit)
+      let hunks = DiffRows.hunks(
+        old: oldText.map(TextRope.init), new: newText.map(TextRope.init), limit: limit)
       await MainActor.run { [weak self] in
         guard let self, request == stagedRequest else { return }
         setOld(oldText)
@@ -358,7 +360,7 @@ final class EditorDiff: RootFilesObserver {
     return content == .ready ? .ready : .loading
   }
 
-  /// 古い側を本文 `text`（その版に無ければ nil——空の本文）にする。変われば作り直す。
+  /// 古い側を本文 `text`（その版に無ければ nil——空の本文の文書で、大きさは 0 行）にする。変われば作り直す。
   private func setOld(_ text: String?) {
     guard oldSource != .some(text) else { return }
     oldSource = .some(text)
@@ -370,10 +372,10 @@ final class EditorDiff: RootFilesObserver {
     }
     revision.onFocusChange = { [weak self] focused in self?.onFocusChange?(focused) }
     old = revision
-    oldSide = DiffRows.Side(revision.text)
+    oldSide = DiffRows.Side(text == nil ? nil : revision.text)
   }
 
-  /// 新しい側を版の本文 `text`（その版に無ければ nil——空の本文）にする。文書と面は 1 対 1 なので、面も
+  /// 新しい側を版の本文 `text`（その版に無ければ nil——空の本文の文書で、大きさは 0 行）にする。文書と面は 1 対 1 なので、面も
   /// 作り直す——前の面で先頭に見えていた行を新しい面でも先頭に見せ、並列なら古い側の面も作り直して新しい面と結ぶ。
   private func setNewRevision(_ text: String?) {
     guard newSource != .some(text) else { return }
@@ -388,7 +390,7 @@ final class EditorDiff: RootFilesObserver {
     revision.onViewportChange = { [weak self] in self?.viewportDidChange() }
     revision.onFocusChange = { [weak self] focused in self?.onFocusChange?(focused) }
     newRevision = revision
-    newSide = DiffRows.Side(revision.text)
+    newSide = DiffRows.Side(text == nil ? nil : revision.text)
     newRevisionSurface = surfaces.make()
     if let surface = newRevisionSurface { revision.attach(surface) }
   }
