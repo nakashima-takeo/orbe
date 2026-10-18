@@ -96,40 +96,57 @@ private struct TaskPaletteAutomationShelfRowView: View {
     row.automation?.name ?? l10n.string(.taskPaletteAutomationAll)
   }
 
-  /// 成否の印と「前回の判定 13:00」、右に「更新中」「停止中」。まだ判定していなければ印なしの一言。
+  /// 成否の印と「前回の判定 13:00」、右に「更新中」「停止中」。まだ判定していなければ印なしの一言。並びきらない狭い棚では、
+  /// 今の状態を次の行へ送る（前回の時刻を省かない）。
   private func line(_ status: TaskPaletteAutomationShelfStatus) -> some View {
-    HStack(spacing: 6) {
-      if let last = status.last {
-        MarkGlyph(
-          kind: last.failed ? .failure : .success,
-          color: last.failed ? Color.theme.danger : Color.theme.accentBright)
-        Text(l10n.format(.taskPaletteAutomationLastJudge, text.stamp(last.at)))
-          .layoutPriority(1)
-      } else {
-        Text(l10n.string(.taskPaletteAutomationNeverJudged)).layoutPriority(1)
+    ViewThatFits(in: .horizontal) {
+      HStack(spacing: 6) {
+        last(status)
+        Spacer(minLength: Theme.Space.tick)
+        state(status)
       }
-      Spacer(minLength: Theme.Space.tick)
-      switch status.state {
-      case .refreshing:
-        HStack(spacing: 5) {
-          StatusGlyphView(kind: .working, size: 10)
-          Text(l10n.string(.taskPaletteAutomationRefreshing))
-        }
-        .foregroundStyle(Color.theme.accentBright)
-        .fixedSize()
-      case .paused:
-        HStack(spacing: 5) {
-          MarkGlyph(kind: .paused, color: Color.theme.textMuted)
-          Text(l10n.string(.automationPaused))
-        }
-        .fixedSize()
-      case nil:
-        EmptyView()
+      VStack(alignment: .leading, spacing: 3) {
+        last(status)
+        state(status)
       }
     }
     .font(Font.theme.meta)
     .foregroundStyle(Color.theme.textMuted)
     .lineLimit(1)
     .frame(minHeight: 15)
+  }
+
+  private func last(_ status: TaskPaletteAutomationShelfStatus) -> some View {
+    HStack(spacing: 6) {
+      if let last = status.last {
+        MarkGlyph(
+          kind: last.failed ? .failure : .success,
+          color: last.failed ? Color.theme.danger : Color.theme.accentBright)
+        Text(l10n.format(.taskPaletteAutomationLastJudge, text.stamp(last.at)))
+      } else {
+        Text(l10n.string(.taskPaletteAutomationNeverJudged))
+      }
+    }
+    .fixedSize()
+  }
+
+  @ViewBuilder private func state(_ status: TaskPaletteAutomationShelfStatus) -> some View {
+    switch status.state {
+    case .refreshing:
+      HStack(spacing: 5) {
+        StatusGlyphView(kind: .working, size: 10)
+        Text(l10n.string(.taskPaletteAutomationRefreshing))
+      }
+      .foregroundStyle(Color.theme.accentBright)
+      .fixedSize()
+    case .paused:
+      HStack(spacing: 5) {
+        MarkGlyph(kind: .paused, color: Color.theme.textMuted)
+        Text(l10n.string(.automationPaused))
+      }
+      .fixedSize()
+    case nil:
+      EmptyView()
+    }
   }
 }
