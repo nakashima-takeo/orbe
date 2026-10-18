@@ -8,7 +8,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか。外の文面の file: の link が候補のリンクになる。判定が別の自動化の項目や
 /// 存在しない提案を指しても通り、タスクにできないタイトルの提案が棚に並ぶ。判定が一覧に無い workspace や true を付け先に
-/// 書いても通り、候補が別の workspace や行き場の無い付け先を持つ。`orb ws list --json` の Home の id を書いたコマンドの段の
+/// 書いても通り、候補が別の workspace や行き場の無い付け先を持つ。`orb ws list --json` の Home の id を書いたコマンドの判定の
 /// 候補が捨てられ、二度と出ない。
 final class AutomationPromptsTests: OrbeTestCase {
   private let line =
@@ -46,22 +46,22 @@ final class AutomationPromptsTests: OrbeTestCase {
     ]
   }
 
-  /// 判定の出力を行ごとに読んだもの。JSON でない行は別に持つ。
+  /// 判定の出力を行ごとに読んだもの。受けなかった行は判定の部品の読みと同じく「line <n>: <理由>」で持ち、JSON でない行は
+  /// 別に持つ。
   private struct Read {
     let decisions: [AutomationDecision]
-    let rejected: AutomationRejections
+    let rejected: [String]
     let notJSON: [String]
   }
 
   private func read(_ text: String, itemIds: Set<String>, choices: AutomationJudgeChoices) -> Read {
     let (rows, broken) = AutomationPrompts.objectRows(text)
     var decisions: [AutomationDecision] = []
-    var rejected = AutomationRejections()
-    for (row, reading) in AutomationPrompts.judgeRows(rows, itemIds: itemIds, choices: choices) {
+    var rejected: [String] = []
+    for reading in AutomationPrompts.judgeRows(rows, itemIds: itemIds, choices: choices) {
       switch reading {
       case .success(let decision): decisions.append(decision)
-      case .failure(.malformed(let reason)): rejected.add("line \(row.line): \(reason)")
-      case .failure(.refused(let reason)): rejected.add(reason)
+      case .failure(let line): rejected.append(line.text)
       }
     }
     return Read(decisions: decisions, rejected: rejected, notJSON: broken.map(\.text))
@@ -94,8 +94,15 @@ final class AutomationPromptsTests: OrbeTestCase {
         .resolve(link: "https://example.com/old"),
       ])
     XCTAssertEqual(notJSON, ["line 9: not JSON"], "JSON でない行は行の読み取りで外す")
-    XCTAssertEqual(rejected.count, 6)
-    XCTAssertEqual(rejected.reasons.count, AutomationRejections.retainedReasons, "理由は最初の数件だけ残す")
+    XCTAssertEqual(
+      rejected,
+      [
+        "line 2: propose a: proposed twice", "line 3: propose zzz: not a new item",
+        "line 4: propose b: title must be a single non-empty line",
+        "line 5: propose b: due is not a YYYY-MM-DD date: 2026-02-30",
+        "line 7: resolve https://example.com/unknown: not a waiting proposal",
+        "line 8: a line must have exactly one of propose / resolve",
+      ], "どの行も行番号付きの理由で外す")
   }
 
   /// 判定の依頼文には、新しい項目・出ている提案・期限を決めるための今日と利用者の指示文が載る。
@@ -131,7 +138,7 @@ final class AutomationPromptsTests: OrbeTestCase {
 
   // MARK: - 付け先
 
-  private func judged(_ lines: [String]) -> ([AutomationDecision], AutomationRejections) {
+  private func judged(_ lines: [String]) -> ([AutomationDecision], [String]) {
     let read = read(
       lines.joined(separator: "\n"), itemIds: Set(items.map(\.id)),
       choices: AutomationJudgeChoices(open: [], workspaces: listed([orbe])))
@@ -151,7 +158,7 @@ final class AutomationPromptsTests: OrbeTestCase {
         .propose(itemId: "a", title: "orbe の作業", due: nil, workspace: orbe.persistentId),
         .propose(itemId: "b", title: "どこでもない作業", due: nil, workspace: nil),
       ])
-    XCTAssertEqual(rejected.count, 0)
+    XCTAssertEqual(rejected, [])
   }
 
   /// 一覧に無い id・整数でない値（文字列・小数）の行は、候補にせず理由付きで捨てる。null は書かなかったのと同じ。
@@ -166,9 +173,9 @@ final class AutomationPromptsTests: OrbeTestCase {
     XCTAssertEqual(
       decisions, [.propose(itemId: "b", title: "null", due: nil, workspace: nil)])
     XCTAssertEqual(
-      rejected.reasons,
+      rejected,
       [
-        "propose a: workspace 4 is not a listed workspace",
+        "line 1: propose a: workspace 4 is not a listed workspace",
         "line 2: workspace has the wrong type",
         "line 3: invalid value",
       ])
@@ -183,10 +190,10 @@ final class AutomationPromptsTests: OrbeTestCase {
     let (decisions, rejected) = (read.decisions, read.rejected)
 
     XCTAssertEqual(decisions, [])
-    XCTAssertEqual(rejected.reasons, ["line 1: workspace has the wrong type"])
+    XCTAssertEqual(rejected, ["line 1: workspace has the wrong type"])
   }
 
-  /// Home は依頼文の一覧に載らず、Home の id を書いた行は付け先なし（Home に付く）として受ける——コマンドの段は
+  /// Home は依頼文の一覧に載らず、Home の id を書いた行は付け先なし（Home に付く）として受ける——コマンドの判定は
   /// `orb ws list --json` から Home の id を書きうる。
   func testHomeIsNotListedAndItsIdMeansNoWorkspace() throws {
     let session = SessionStore()
@@ -215,7 +222,7 @@ final class AutomationPromptsTests: OrbeTestCase {
         .propose(itemId: "a", title: "Home の作業", due: nil, workspace: nil),
         .propose(itemId: "b", title: "orbe の作業", due: nil, workspace: repo.persistentId),
       ])
-    XCTAssertEqual(rejected.count, 0)
+    XCTAssertEqual(rejected, [])
   }
 
   private func listed(_ workspaces: [AutomationWorkspace]) -> AutomationWorkspaces {

@@ -205,7 +205,7 @@ struct AutomationRow: Equatable {
 }
 
 /// 出力の中の、受け付けなかった 1 行。`line` は 1 始まりの行番号（空行も数える）。
-struct AutomationBrokenLine: Equatable {
+struct AutomationBrokenLine: Error, Equatable {
   let line: Int
   let reason: String
 

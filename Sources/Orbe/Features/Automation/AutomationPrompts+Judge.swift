@@ -43,70 +43,68 @@ extension AutomationPrompts {
       when unsure, and the task goes to Home.
       - When the new items show that a waiting proposal is already dealt with: {"resolve": "<link of that proposal>"}. \
       Use only links of the waiting proposals above.
-
-      """ + whenEmpty("you output no propose or resolve line")
+      \(whenEmpty("you output no propose or resolve line"))
+      """
   }
 
-  /// 判定の出力の行ごとの読み。受けた決定か、受けられない理由。
+  /// 判定の出力の行ごとの読み。受けた決定か、受けられない行（行番号と理由）。
   static func judgeRows(
     _ rows: [AutomationRow], itemIds: Set<String>, choices: AutomationJudgeChoices
-  ) -> [(row: AutomationRow, reading: Result<AutomationDecision, JudgeRefusal>)] {
+  ) -> [Result<AutomationDecision, AutomationBrokenLine>] {
     let openLinks = Set(choices.open.map(\.item.link))
     var proposed = Set<String>()
     var resolved = Set<String>()
     return rows.map { row in
+      let refuse = { (reason: String) in
+        Result<AutomationDecision, AutomationBrokenLine>.failure(
+          AutomationBrokenLine(line: row.line, reason: reason))
+      }
       let line: JudgeLine
       switch JSONLines<JudgeLine>.decode(row.text) {
       case .success(let read): line = read
-      case .failure(let reason): return (row, .failure(.malformed(reason.text)))
+      case .failure(let reason): return refuse(reason.text)
       }
       switch (line.propose, line.resolve) {
       case (let id?, nil):
-        let reading = proposal(id, line, itemIds: itemIds, choices: choices)
+        let reading = proposal(id, line, itemIds: itemIds, choices: choices, refuse)
         if case .success = reading, !proposed.insert(id).inserted {
-          return (row, .failure(.refused("propose \(id): proposed twice")))
+          return refuse("propose \(id): proposed twice")
         }
-        return (row, reading)
+        return reading
       case (nil, let link?):
         guard openLinks.contains(link), resolved.insert(link).inserted else {
-          return (row, .failure(.refused("resolve \(link): not a waiting proposal")))
+          return refuse("resolve \(link): not a waiting proposal")
         }
-        return (row, .success(.resolve(link: link)))
+        return .success(.resolve(link: link))
       default:
-        return (row, .failure(.refused("a line must have exactly one of propose / resolve")))
+        return refuse("a line must have exactly one of propose / resolve")
       }
     }
   }
 
   private static func proposal(
-    _ id: String, _ line: JudgeLine, itemIds: Set<String>, choices: AutomationJudgeChoices
-  ) -> Result<AutomationDecision, JudgeRefusal> {
-    guard itemIds.contains(id) else { return .failure(.refused("propose \(id): not a new item")) }
+    _ id: String, _ line: JudgeLine, itemIds: Set<String>, choices: AutomationJudgeChoices,
+    _ refuse: (String) -> Result<AutomationDecision, AutomationBrokenLine>
+  ) -> Result<AutomationDecision, AutomationBrokenLine> {
+    guard itemIds.contains(id) else { return refuse("propose \(id): not a new item") }
     guard let rawTitle = line.title, let title = try? TaskStore.validTitle(rawTitle) else {
-      return .failure(.refused("propose \(id): title must be a single non-empty line"))
+      return refuse("propose \(id): title must be a single non-empty line")
     }
     var due: TaskItem.DueDate?
     if let rawDue = line.due {
       guard let parsed = TaskItem.DueDate(rawDue) else {
-        return .failure(.refused("propose \(id): due is not a YYYY-MM-DD date: \(rawDue)"))
+        return refuse("propose \(id): due is not a YYYY-MM-DD date: \(rawDue)")
       }
       due = parsed
     }
     var workspace: UUID?
     if let number = line.workspace, number != choices.workspaces.home {
       guard let listed = choices.workspaces.listed.first(where: { $0.id == number }) else {
-        return .failure(.refused("propose \(id): workspace \(number) is not a listed workspace"))
+        return refuse("propose \(id): workspace \(number) is not a listed workspace")
       }
       workspace = listed.persistentId
     }
     return .success(.propose(itemId: id, title: title, due: due, workspace: workspace))
-  }
-
-  /// 判定の出力の行を受けられない理由。`malformed` は判定の行として読めない（記録には行番号を添える）、`refused` は読めたが
-  /// 受けられない（理由がどの案かを言う）。
-  enum JudgeRefusal: Error, Equatable {
-    case malformed(String)
-    case refused(String)
   }
 }
 
