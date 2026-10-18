@@ -25,7 +25,6 @@ extension L10n {
     .taskPaletteAutomationHintShelf: ("棚へ", "shelf"),
     .taskPaletteAutomationHintPick: ("自動追加", "auto-add"),
     .taskPaletteAutomationHintProposals: ("候補へ", "candidates"),
-    .taskPaletteAutomationHintBack: ("戻る", "back"),
     .taskPaletteAutomationErrAccept: ("タスクにできませんでした", "Couldn’t make it a task"),
     .taskPaletteAutomationErrRefreshing: (
       "更新中のため、今は更新できません", "Already refreshing — can’t refresh now"

@@ -16,8 +16,8 @@ extension TaskPaletteModel {
     // キーにせず、焦点の持ち主（編集欄なら文字入力）へ流す（esc を押し続けて一段より深く抜けない・棚で ↵ を押し続けて
     // 候補をタスクにしない。詳細の ↵ を押し続けると、編集を始めた後のリピートは改行になる）。
     if press.phase == .down {
-      keyDownSpot = keySpot
-    } else if keyDownSpot != keySpot {
+      keyDownTarget = focusTarget
+    } else if keyDownTarget != focusTarget {
       return .ignored
     }
     switch focusTarget {
@@ -34,9 +34,7 @@ extension TaskPaletteModel {
     case .tasks: return handleTaskFieldKey(press)
     case .github: return handleGitHubFieldKey(press)
     case .automation:
-      guard press.key == .escape, automation.place == .field else {
-        return automation.handleFieldKey(press)
-      }
+      guard press.key == .escape else { return automation.handleFieldKey(press) }
       onDismiss()
       return .handled
     }
@@ -131,7 +129,11 @@ extension TaskPaletteModel {
 
   /// 右の欄の項目・提案タブの棚。
   private func handlePlaceKey(_ press: KeyPress) -> KeyPress.Result {
-    if visibleTab == .automation { return automation.handleShelfKey(press) }
+    if visibleTab == .automation {
+      guard press.key == .escape else { return automation.handleShelfKey(press) }
+      onDismiss()
+      return .handled
+    }
     switch area {
     case .list: return .ignored
     case .pane(let stop): return handlePaneKey(press, stop)

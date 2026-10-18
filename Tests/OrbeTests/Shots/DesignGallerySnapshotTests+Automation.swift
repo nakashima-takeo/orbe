@@ -55,13 +55,16 @@ extension DesignGallerySnapshotTests {
       return palette
     }
 
+    // 開いた直後: 絞り込み欄に居て、棚の「すべて」は焦点の無い薄い地。
+    try write("automation_shelf_field.png", model(), 1440, 900)
+
     // 棚に居る（見本の状態）: 受け持ちの全部を選び、Sentry は更新中。
     let shelf = model()
     shelf.automation.enterShelf()
     shelf.automation.moveShelf(1)
     try write("automation_shelf.png", shelf, 1440, 900)
 
-    // 候補の一覧に居る: 先頭が選ばれ、詳細の見出しに取得の部品の名前。
+    // 候補の一覧に居る: 先頭が選ばれ、詳細の見出しに取得の部品の名前。棚の段は焦点の無い薄い地。
     let list = model()
     list.automation.tapShelf(.automation(1))
     try write("automation_shelf_list.png", list, 1440, 900)

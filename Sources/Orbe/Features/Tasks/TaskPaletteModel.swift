@@ -85,8 +85,8 @@ struct TaskPaletteTaskList {
   var draft: TaskEditDraft? {
     didSet { if draft?.target != oldValue?.target { focus() } }
   }
-  /// 押しているキーを押し始めたときの場所。書くのはキーの入口（`handleKey`）だけ。
-  @ObservationIgnored var keyDownSpot: TaskPaletteKeySpot?
+  /// 押しているキーを押し始めたときの焦点の宛先。書くのはキーの入口（`handleKey`）だけ。
+  @ObservationIgnored var keyDownTarget: TaskPaletteFocusTarget?
   /// 書くのはモデル（拡張を含む）だけ。
   var error: TaskPaletteError?
   /// 画面を開いている間に入力欄から最後に足したタスク（右の欄の見出し「タスク · 今 ⌘⇧X から足した」）。書くのは
@@ -269,12 +269,6 @@ struct TaskPaletteTaskList {
     case .paneDue: return .paneDue
     case nil: return area == .list ? .field : .card
     }
-  }
-
-  /// 押し続けたキーを止める単位。焦点の宛先に、提案タブなら居場所まで含める（絞り込み欄と候補の一覧は焦点の宛先が同じ）。
-  var keySpot: TaskPaletteKeySpot {
-    TaskPaletteKeySpot(
-      focus: focusTarget, automation: visibleTab == .automation ? automation.place : nil)
   }
 
   /// 編集中の文字（入力欄の binding）。編集中でなければ書き込みを捨てる。

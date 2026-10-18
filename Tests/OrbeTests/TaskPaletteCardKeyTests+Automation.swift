@@ -8,8 +8,7 @@ import XCTest
 /// 壊れると何が起きるか: 絞り込みに「x」を打つと候補が消える。入力を消そうと押した ⌘⌫（そのリピート）が候補を捨てる。
 /// リンクを開くつもりの ⌘O が候補をタスクにする。⌘↵ でタスクになっても agent を開く画面が出ない、押し続けるとタスクが
 /// いくつもできる。← で文字の間を動けない、または棚へ入れない。⇧⇥ で棚から焦点が逃げる。棚の ⌘↵ が候補の更新にならず
-/// 候補をタスクにする。絞り込み欄の esc で画面が閉じない。一覧で esc を押し続けると画面まで閉じる。棚で ↵ を押し続けると
-/// 候補がタスクになる。
+/// 候補をタスクにする。どこかの居場所の esc で画面が閉じない。棚で ↵ を押し続けると候補がタスクになる。
 extension TaskPaletteCardKeyTests {
   private enum AutomationKey {
     static let o: UInt16 = 31
@@ -117,8 +116,8 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(opened, [task.id])
   }
 
-  /// 絞り込み欄の ↓ で棚、棚の ↓ で自動化を選び → で候補の一覧（先頭）、← で棚、↵ で同じ行、esc で絞り込み欄。文字が
-  /// あるときの ← は文字の間を動く。
+  /// 絞り込み欄の ↓ で棚、棚の ↓ で自動化を選び → で候補の一覧（先頭）、← で棚、↵ で同じ行、← と棚の先頭の ↑ で
+  /// 絞り込み欄。文字があるときの ← は文字の間を動く。
   func testAutomationArrowsMoveBetweenFieldShelfAndProposals() {
     let model = automationModel()
     let window = mount(model)
@@ -139,7 +138,9 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.automation.selectedProposal?.id, 2, "覚えている行へ戻る")
     XCTAssertEqual(model.store.tasks.count, 1, "棚の ↵ は候補をタスクにしない")
 
-    send(Key.escape, "\u{1B}", to: window)
+    arrow(Key.left, to: window)
+    arrow(Key.up, to: window)
+    arrow(Key.up, to: window)
     XCTAssertEqual(model.automation.place, .field)
     type("a", into: window)
     arrow(Key.left, to: window)
@@ -158,21 +159,6 @@ extension TaskPaletteCardKeyTests {
 
     XCTAssertEqual(model.automation.place, .proposals)
     XCTAssertEqual(model.store.tasks.count, 1)
-  }
-
-  /// 一覧で esc を押し続けても、押し始めの esc で絞り込み欄へ戻って止まる——続くリピートで画面を閉じない。
-  func testAutomationEscapeHeldOnTheProposalsStopsAtTheField() {
-    let model = listedAutomationModel()
-    var dismissed = false
-    model.onDismiss = { dismissed = true }
-    let window = mount(model)
-
-    send(Key.escape, "\u{1B}", to: window)
-    send(Key.escape, "\u{1B}", repeating: true, to: window)
-    send(Key.escape, "\u{1B}", repeating: true, to: window)
-
-    XCTAssertEqual(model.automation.place, .field)
-    XCTAssertFalse(dismissed)
   }
 
   /// 棚でも ⇥・⇧⇥ でタブを巡り、戻ると居場所が残る。移った先では入力欄がキーを受ける。
@@ -209,16 +195,25 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.store.tasks.count, 1, "候補をタスクにしない")
   }
 
-  /// 絞り込み欄の esc は画面を閉じる。
-  func testAutomationEscapeOnTheFieldClosesTheScreen() {
-    let model = automationModel()
-    var dismissed = false
-    model.onDismiss = { dismissed = true }
-    let window = mount(model)
+  /// esc はどの居場所でも画面を閉じる。
+  func testAutomationEscapeClosesTheScreenFromEveryPlace() {
+    for place: TaskPaletteAutomationPlace in [.field, .shelf, .proposals] {
+      let model = automationModel()
+      var dismissed = false
+      model.onDismiss = { dismissed = true }
+      let window = mount(model)
+      switch place {
+      case .field: break
+      case .shelf: arrow(Key.down, to: window)
+      case .proposals: model.automation.enterProposals()
+      }
+      flush(window)
+      XCTAssertEqual(model.automation.place, place)
 
-    send(Key.escape, "\u{1B}", to: window)
+      send(Key.escape, "\u{1B}", to: window)
 
-    XCTAssertTrue(dismissed)
+      XCTAssertTrue(dismissed, "\(place)")
+    }
   }
 
   /// 選んでいる候補が別の口でさばかれたら、カードが付け直しへ届け、↵ が次の候補に効く（黙って何もしないにならない）。

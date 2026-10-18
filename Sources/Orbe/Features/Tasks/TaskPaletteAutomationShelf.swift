@@ -35,7 +35,7 @@ struct TaskPaletteAutomationShelf: View {
     TaskPaletteAutomationShelfRowView(
       row: row, status: row.automation.map { model.status(of: $0, count: row.count) },
       text: AutomationText(l10n: l10n, today: model.today, timeZone: model.timeZone),
-      selected: model.shelfList.selectedID == row.id
+      selected: model.shelfList.selectedID == row.id, focused: model.place == .shelf
     )
     .contentShape(Rectangle())
     .onTapGesture { model.tapShelf(row.id) }
@@ -44,12 +44,14 @@ struct TaskPaletteAutomationShelf: View {
   }
 }
 
-/// 棚の 1 段。印はどの受信も共通（出どころの種類は知らない）。
+/// 棚の 1 段。印はどの受信も共通（出どころの種類は知らない）。棚に焦点が無い間は、選択の地を薄くする（選んでいるが、
+/// キーが届く場所ではない）。
 private struct TaskPaletteAutomationShelfRowView: View {
   let row: TaskPaletteAutomationShelfRow
   let status: TaskPaletteAutomationShelfStatus?
   let text: AutomationText
   let selected: Bool
+  let focused: Bool
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
@@ -89,7 +91,10 @@ private struct TaskPaletteAutomationShelfRowView: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .background(
       RoundedRectangle(cornerRadius: Theme.Radius.row)
-        .fill(selected ? Color.theme.selectionFill : .clear))
+        .fill(
+          selected
+            ? (focused ? Color.theme.selectionFill : Color.theme.surfaceInk.opacity(0.06))
+            : .clear))
   }
 
   private var name: String {

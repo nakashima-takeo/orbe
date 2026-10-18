@@ -7,7 +7,7 @@ import XCTest
 extension DesignFlowSnapshotTests {
   /// ⇥ で GitHub タブ・提案タブへ（絞り込み欄に居て候補は選ばれていない）・打って絞り込み・↓ で棚・段を移る・⌘↵ で更新中…・
   /// 更新中の ⌘↵ の断り・→ で候補の一覧（先頭が選ばれる）・↓ で 2 行目・← で棚・→ で同じ行・⌘⌫ で捨てる（同じ位置の行が
-  /// 選ばれる）・↵ でタスクにする・esc で絞り込み欄・タスクのタブでタスクが Home に付いている、までを撮る。
+  /// 選ばれる）・↵ でタスクにする・← と ↑ で絞り込み欄・タスクのタブでタスクが Home に付いている、までを撮る。
   func testTaskPaletteAutomation() throws {
     let palette = DesignSceneFixtures.taskPaletteModel(
       automations: DesignSceneFixtures.automationShelfSamples())
@@ -37,7 +37,12 @@ extension DesignFlowSnapshotTests {
         ("same_row", { automation.enterProposals() }),
         ("dismissed", { automation.dismiss() }),
         ("accepted", { palette.submit() }),
-        ("field", { automation.enterField() }),
+        (
+          "field",
+          {
+            automation.enterShelf(); automation.moveShelf(-1); automation.moveShelf(-1)
+          }
+        ),
         ("tasks_tab", { palette.setTab(.tasks) }),
       ])
   }

@@ -363,7 +363,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAutomationHintShelf
   case taskPaletteAutomationHintPick
   case taskPaletteAutomationHintProposals
-  case taskPaletteAutomationHintBack
   case taskPaletteAutomationErrAccept
   case taskPaletteAutomationErrRefreshing
   // MARK: - 自動化の共有の文（L10nTable+Automation）

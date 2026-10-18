@@ -46,12 +46,12 @@ struct TaskPaletteAutomationHints: View {
         PaletteKeyHint(key: "↓", label: l10n.string(.taskPaletteAutomationHintShelf))
       }
     case .shelf:
-      TaskPaletteHintRow(cyclesTabs: cyclesTabs, escape: .taskPaletteAutomationHintBack) {
+      TaskPaletteHintRow(cyclesTabs: cyclesTabs, escape: .taskPaletteHintClose) {
         PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteAutomationHintPick))
         PaletteKeyHint(key: "→", label: l10n.string(.taskPaletteAutomationHintProposals))
       }
     case .proposals:
-      TaskPaletteHintRow(cyclesTabs: cyclesTabs, escape: .taskPaletteAutomationHintBack) {
+      TaskPaletteHintRow(cyclesTabs: cyclesTabs, escape: .taskPaletteHintClose) {
         if model.selectedProposal != nil {
           PaletteKeyHint(key: "⌘↵", label: l10n.string(.taskPaletteMakeTaskOpen))
           PaletteKeyHint(key: "⌘⌫", label: l10n.string(.taskPaletteAutomationDismiss))

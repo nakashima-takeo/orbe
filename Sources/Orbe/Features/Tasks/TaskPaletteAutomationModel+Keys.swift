@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 提案タブのキー。絞り込み欄と候補の一覧は入力欄に焦点があり、↵ は入力欄の `onSubmit`、絞り込み欄の esc と ⇥・⇧⇥ は
-/// 画面のモデルが受ける。棚はカードの器に焦点がある。取り消せない操作（捨てる）・タスクにして開く・ブラウザで開く・候補の
+/// 提案タブのキー。絞り込み欄と候補の一覧は入力欄に焦点があり、↵ は入力欄の `onSubmit`、esc（どの居場所でも閉じる）と
+/// ⇥・⇧⇥ は画面のモデルが受ける。棚はカードの器に焦点がある。取り消せない操作（捨てる）・タスクにして開く・ブラウザで開く・候補の
 /// 更新は押した瞬間だけを操作にし、押し続けたキーリピートは捨てる。
 extension TaskPaletteAutomationModel {
   /// 入力欄（絞り込み欄と候補の一覧）。捨てるは ⌘⌫ で、入力欄が空のときだけ効く（文字があれば行頭まで消す）——焦点が
@@ -30,8 +30,6 @@ extension TaskPaletteAutomationModel {
     case .leftArrow:
       guard TaskPaletteModel.isUnmodified(press), query.isEmpty else { return .ignored }
       enterShelf()
-    case .escape where place == .proposals:
-      enterField()
     default:
       return .ignored
     }
@@ -47,7 +45,6 @@ extension TaskPaletteAutomationModel {
     case .return where press.modifiers.contains(.command):
       if press.phase == .down { refresh() }
     case .rightArrow, .return: enterProposals()
-    case .escape: enterField()
     default: return .ignored
     }
     return .handled
