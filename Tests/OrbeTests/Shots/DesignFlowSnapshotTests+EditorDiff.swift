@@ -8,7 +8,8 @@ import XCTest
 
 /// diff のタブの flow（fixture は `EditorDiffFixtures`——本物のコード片の git リポジトリ。開くのは `open_diff` と同じセッション
 /// の口）。作業ツリー / ステージ済み × インライン / 並列 × dark / light、長い行を横に送った状態、削除の多い区間、表示できない
-/// 一文、仮の diff タブ、未保存の印のある diff タブを撮る。見本は orbe_design の `DiffView.tsx`・`EditorLayer.tsx`。
+/// 一文、新しいファイル・消したファイル（版が無い側は 0 行）、仮の diff タブ、未保存の印のある diff タブを撮る。見本は
+/// orbe_design の `DiffView.tsx`・`EditorLayer.tsx`。
 extension DesignFlowSnapshotTests {
   func testEditorDiff() throws {
     let stage = try DiffStage(queries: queriesRoot)
@@ -37,7 +38,26 @@ extension DesignFlowSnapshotTests {
           }
         ),
         ("not_text", { try stage.open("icon.bin", .staged) }),
-        ("preview_and_dirty", { try stage.previewAndDirty() }),
+        ("new_file_inline", { try stage.open("Sources/HookClock.swift", .workingTree) }),
+        ("new_file_side", { stage.select(.side) }),
+        ("deleted_file_side", { try stage.open("Sources/RetiredHooks.swift", .workingTree) }),
+        ("deleted_file_inline", { stage.select(.inline) }),
+        (
+          "staged_new_file_side_light",
+          {
+            stage.window.appearance = NSAppearance(named: .aqua)
+            stage.select(.side)
+            try stage.open("docs/todo.md", .staged)
+          }
+        ),
+        (
+          "preview_and_dirty",
+          {
+            stage.window.appearance = NSAppearance(named: .darkAqua)
+            stage.select(.inline)
+            try stage.previewAndDirty()
+          }
+        ),
       ])
   }
 
