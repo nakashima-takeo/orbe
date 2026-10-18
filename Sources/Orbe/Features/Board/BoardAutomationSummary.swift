@@ -100,7 +100,10 @@ extension BoardAutomationSummary {
     switch run.result {
     case .fetch(let fresh):
       if node.role == .fetch(.everything) {
-        return (l10n.format(.boardMapCount, run.execution.count), .plain)
+        return (
+          l10n.plural(run.execution.count, one: .boardMapCountOne, other: .boardMapCountOther),
+          .plain
+        )
       }
       return fresh == 0
         ? (l10n.string(.boardRunNothingNew), .sunk) : (l10n.format(.boardMapFresh, fresh), .plain)
@@ -129,7 +132,10 @@ extension BoardAutomationSummary {
     switch run.result {
     case .fetch(let fresh):
       if node.role == .fetch(.everything) {
-        (body, shade) = (l10n.format(.boardRunCount, run.execution.count), .plain)
+        (body, shade) = (
+          l10n.plural(run.execution.count, one: .boardRunCountOne, other: .boardRunCountOther),
+          .plain
+        )
       } else if fresh == 0 {
         (body, shade) = (l10n.string(.boardRunNothingNew), .sunk)
       } else {
@@ -141,8 +147,11 @@ extension BoardAutomationSummary {
     case .judge(let proposed, _, _):
       (body, shade) =
         proposed > 0
-        ? (l10n.format(.boardRunJudged, taken, proposed), .plain)
-        : (l10n.format(.boardRunJudgedNone, taken), .sunk)
+        ? (
+          l10n.format(taken == 1 ? .boardRunJudgedOne : .boardRunJudgedOther, taken, proposed),
+          .plain
+        )
+        : (l10n.plural(taken, one: .boardRunJudgedNoneOne, other: .boardRunJudgedNoneOther), .sunk)
     case .report(.some):
       (body, shade) =
         run.taken.map { (l10n.format(.boardRunSummarized, $0), .plain) }

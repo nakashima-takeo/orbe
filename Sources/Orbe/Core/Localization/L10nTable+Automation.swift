@@ -72,7 +72,10 @@ extension L10n {
     .automationRoleSideEffect: ("外部操作", "External action"),
     .automationManual: ("手動", "manual"),
     .automationArrival: ("前の部品に連動", "follows the previous part"),
-    .automationBreachNotice: (
+    .automationBreachNoticeOne: (
+      "%1$@ の出力の形式エラー（%2$lld 行）— %3$@", "%1$@ output format error (%2$lld line) — %3$@"
+    ),
+    .automationBreachNoticeOther: (
       "%1$@ の出力の形式エラー（%2$lld 行）— %3$@", "%1$@ output format error (%2$lld lines) — %3$@"
     ),
     .automationBreachPassed: ("出し直して通った", "passed on redo"),

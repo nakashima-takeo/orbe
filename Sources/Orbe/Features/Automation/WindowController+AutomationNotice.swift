@@ -48,7 +48,8 @@ extension WindowController {
   /// 「連絡 の出力の形式エラー（2 行）— 出し直して通った」。
   private func breachLine(_ breach: AutomationBreachMark, part name: String) -> String {
     localization.format(
-      .automationBreachNotice, name, breach.lines.count,
+      breach.lines.count == 1 ? .automationBreachNoticeOne : .automationBreachNoticeOther, name,
+      breach.lines.count,
       localization.string(breach.passed ? .automationBreachPassed : .automationBreachFailed))
   }
 

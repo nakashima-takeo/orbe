@@ -18,11 +18,13 @@ extension L10n {
     .boardListLast: ("前回 %@", "last %@"),
     .boardListNeverRan: ("まだ動いていない", "hasn’t run yet"),
     .boardRecentRuns: ("直近の実行", "Recent runs"),
-    .boardMapParts: ("%lld 部品", "%lld parts"),
+    .boardMapPartsOne: ("%lld 部品", "%lld part"),
+    .boardMapPartsOther: ("%lld 部品", "%lld parts"),
     .boardMapPending: ("未処理", "Pending"),
     .boardMapLast: ("前回", "Last"),
     .boardMapFresh: ("新着 %lld 件", "%lld new"),
-    .boardMapCount: ("%lld 件", "%lld items"),
+    .boardMapCountOne: ("%lld 件", "%lld item"),
+    .boardMapCountOther: ("%lld 件", "%lld items"),
     .boardMapPassed: ("%lld 件を次へ", "%lld passed on"),
     .boardMapProposed: ("候補 %lld 件", "%lld proposed"),
     .boardMapNoProposals: ("候補なし", "no candidates"),
@@ -62,7 +64,10 @@ extension L10n {
       "%1$lld 時間より古い分と、%2$lld 件を超えた分は捨てる", "drops items older than %1$lld h and beyond %2$lld"
     ),
     .boardPartMinutes: ("%lld 分", "%lld min"),
-    .boardPartFormatError: (
+    .boardPartFormatErrorOne: (
+      "出力の形式エラー · %1$@ · %2$lld 行", "Output format error · %1$@ · %2$lld line"
+    ),
+    .boardPartFormatErrorOther: (
       "出力の形式エラー · %1$@ · %2$lld 行", "Output format error · %1$@ · %2$lld lines"
     ),
     .boardPartRedonePassed: (
@@ -81,10 +86,13 @@ extension L10n {
     .boardAskFixDraft: ("自動化「%1$@」の部品「%2$@」の修正：", "Fix the part “%2$@” of the automation “%1$@”: "),
     .boardRunFresh: ("新着 %lld 件", "%lld new"),
     .boardRunNothingNew: ("新着なし", "nothing new"),
-    .boardRunCount: ("%lld 件", "%lld items"),
+    .boardRunCountOne: ("%lld 件", "%lld item"),
+    .boardRunCountOther: ("%lld 件", "%lld items"),
     .boardRunPassed: ("%1$lld 件のうち %2$lld 件を次へ", "%2$lld of %1$lld passed on"),
-    .boardRunJudged: ("%1$lld 件を判定して候補 %2$lld 件", "judged %1$lld → %2$lld proposed"),
-    .boardRunJudgedNone: ("%lld 件を判定、候補なし", "judged %lld → none proposed"),
+    .boardRunJudgedOne: ("%1$lld 件を判定して候補 %2$lld 件", "judged %1$lld item, %2$lld proposed"),
+    .boardRunJudgedOther: ("%1$lld 件を判定して候補 %2$lld 件", "judged %1$lld items, %2$lld proposed"),
+    .boardRunJudgedNoneOne: ("%lld 件を判定、候補なし", "judged %lld item, none proposed"),
+    .boardRunJudgedNoneOther: ("%lld 件を判定、候補なし", "judged %lld items, none proposed"),
     .boardRunSummarized: ("%lld 件を要約", "summarized %lld"),
     .boardRunReported: ("報告した", "reported"),
     .boardRunNothingToReport: ("報告なし", "nothing to report"),

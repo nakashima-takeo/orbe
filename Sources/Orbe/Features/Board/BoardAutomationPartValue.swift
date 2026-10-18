@@ -75,7 +75,9 @@ extension BoardAutomationPartValue {
     facts = Self.facts(automation, node, text: text, next: next, open: open)
     breach = state.breach.map { mark in
       Breach(
-        heading: l10n.format(.boardPartFormatError, text.recent(mark.at), mark.lines.count),
+        heading: l10n.format(
+          mark.lines.count == 1 ? .boardPartFormatErrorOne : .boardPartFormatErrorOther,
+          text.recent(mark.at), mark.lines.count),
         lines: mark.lines.lines.map(text.line),
         outcome: l10n.string(
           mark.passed

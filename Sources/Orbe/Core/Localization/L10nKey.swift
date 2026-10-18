@@ -407,7 +407,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationRoleSideEffect
   case automationManual
   case automationArrival
-  case automationBreachNotice
+  case automationBreachNoticeOne
+  case automationBreachNoticeOther
   case automationBreachPassed
   case automationBreachFailed
   case automationYesterday
@@ -635,11 +636,13 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardListLast
   case boardListNeverRan
   case boardRecentRuns
-  case boardMapParts
+  case boardMapPartsOne
+  case boardMapPartsOther
   case boardMapPending
   case boardMapLast
   case boardMapFresh
-  case boardMapCount
+  case boardMapCountOne
+  case boardMapCountOther
   case boardMapPassed
   case boardMapProposed
   case boardMapNoProposals
@@ -677,7 +680,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardPartLimitItems
   case boardPartLimitBoth
   case boardPartMinutes
-  case boardPartFormatError
+  case boardPartFormatErrorOne
+  case boardPartFormatErrorOther
   case boardPartRedonePassed
   case boardPartRedoneFailed
   case boardPartNotRedone
@@ -688,10 +692,13 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardAskFixDraft
   case boardRunFresh
   case boardRunNothingNew
-  case boardRunCount
+  case boardRunCountOne
+  case boardRunCountOther
   case boardRunPassed
-  case boardRunJudged
-  case boardRunJudgedNone
+  case boardRunJudgedOne
+  case boardRunJudgedOther
+  case boardRunJudgedNoneOne
+  case boardRunJudgedNoneOther
   case boardRunSummarized
   case boardRunReported
   case boardRunNothingToReport
