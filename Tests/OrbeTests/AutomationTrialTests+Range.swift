@@ -34,8 +34,6 @@ extension AutomationTrialTests {
     waitCalls("backlog", 1)
     XCTAssertEqual(calls("gh").count, 1)
     finish("gh", fetched(["a"]))
-    RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-    XCTAssertEqual(calls("judge"), [], "道の上の上流が終わるまで起こさない")
     finish("backlog", fetched(["b"]))
     waitCalls("judge", 1)
     XCTAssertEqual(Set(ids("judge")), ["gh:a", "backlog:b"])

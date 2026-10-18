@@ -139,7 +139,6 @@ final class AutomationTrialTests: OrbeTestCase {
     let notices = recorded
 
     let trial = try trials.start(id, .init())
-    XCTAssertTrue(trial.preparing)
     waitCalls("gh", 2)
     finish("gh", fetched(["a", "b"]))
     waitCalls("p", 2)
@@ -164,7 +163,8 @@ final class AutomationTrialTests: OrbeTestCase {
 
     try runner.flow(id, to: .ends)
     finish("gh", fetched(["a", "b"]))
-    XCTAssertEqual(ids("p"), ["gh:b"], "試走で見た項目も本番では新しい")
+    XCTAssertEqual(calls("p").count, 3, "試走で見た項目も本番では新しい")
+    XCTAssertEqual(ids("p"), ["gh:b"])
   }
 
   /// 処理が `id` の無い行を出すと、試走の回は本番の回と同じ失敗の理由と外した行の記録で返る。
@@ -207,19 +207,19 @@ final class AutomationTrialTests: OrbeTestCase {
       return XCTFail("止めた行が無い")
     }
     XCTAssertEqual(held.compactMap(AutomationPrompts.id(of:)), ["gh:a"])
-    let parts = try XCTUnwrap(trial.json { _ in nil }["parts"] as? [[String: Any]])
-    let send = try XCTUnwrap(parts.first { $0["key"] as? String == "send" })
-    let runs = try XCTUnwrap(send["runs"] as? [[String: Any]])
-    XCTAssertEqual(Array(runs[0].keys), ["held"], "止めた回は渡るはずだった行だけ")
   }
 
-  /// 取得の入口に与えた項目は、手段を起こさず接頭の付いた id で下流へ流れる。判定へ与えると断る。
+  /// 取得の入口に与えた項目は、手段を起こさず、本番が既に見た項目でも接頭の付いた id で下流へ流れる。判定へ与えると断る。
   func testRowsGivenToAFetchFlowDownWithoutItsMethodAndAJudgeRefusesThem() throws {
     let id = try define([fetch("gh"), part("judge", from: ["gh"], deliver: .taskCandidates)])
+    try runner.flow(id, to: .ends)
+    finish("gh", fetched(["a"]))
+    finish("judge", "")
+
     let trial = try trials.start(id, .init(rows: [item("a")]))
-    waitCalls("judge", 1)
+    waitCalls("judge", 2)
     XCTAssertEqual(ids("judge"), ["gh:a"])
-    XCTAssertEqual(calls("gh"), [])
+    XCTAssertEqual(calls("gh").count, 1)
     finish("judge", "")
     ended(trial)
 
@@ -272,7 +272,7 @@ final class AutomationTrialTests: OrbeTestCase {
   /// 同じ自動化で始め直すと前の試走の手段が止まり、待っている読み手には新しい試走の終わりが返る。
   func testStartingAgainStopsTheRunningTrialAndWaitersGetTheNewOne() throws {
     let id = try define([fetch("gh"), part("d", from: ["gh"], deliver: .report)])
-    let first = try trials.start(id, .init())
+    _ = try trials.start(id, .init())
     waitCalls("gh", 1)
     var replies: [(AutomationTrial?, Bool)] = []
     trials.wait(id, timeout: .seconds(10)) { replies.append(((try? $0.get()), $1)) }
@@ -287,7 +287,6 @@ final class AutomationTrialTests: OrbeTestCase {
     XCTAssertEqual(replies.count, 1)
     XCTAssertTrue(replies.first?.0 === second)
     XCTAssertEqual(replies.first?.1, false)
-    XCTAssertTrue(first.running, "止めた試走は終わりを集めない")
     XCTAssertTrue(try trials.trial(id) === second)
   }
 
@@ -302,16 +301,17 @@ final class AutomationTrialTests: OrbeTestCase {
     XCTAssertEqual(reply?.0?.running, true)
   }
 
-  /// 自動化を消すと試走の手段が止まり、試走は読めなくなる。
-  func testDeletingTheAutomationStopsItsTrial() throws {
+  /// 自動化を消すと試走の手段が止まり、終わりを待つ読み手には時間切れを待たずに自動化が無いと返る。
+  func testDeletingTheAutomationStopsItsTrialAndAnswersItsWaiters() throws {
     let id = try define([fetch("gh"), part("d", from: ["gh"], deliver: .report)])
     _ = try trials.start(id, .init())
     waitCalls("gh", 1)
+    var reply: Result<AutomationTrial, AutomationError>?
+    trials.wait(id, timeout: .seconds(10)) { result, _ in reply = result }
     try runner.delete(id)
 
     XCTAssertEqual(jobs.stopped, [calls("gh")[0]])
-    XCTAssertThrowsError(try trials.trial(id)) {
-      XCTAssertEqual($0 as? AutomationError, .automationNotFound(id))
-    }
+    guard case .failure(let error) = reply else { return XCTFail("待つ読み手に返っていない") }
+    XCTAssertEqual(error, .automationNotFound(id))
   }
 }

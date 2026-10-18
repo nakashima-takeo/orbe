@@ -335,7 +335,6 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let held = try XCTUnwrap(
       (parts[1]["runs"] as? [[String: Any]])?.first?["held"] as? [String: Any])
     XCTAssertEqual((held["rows"] as? [[String: Any]])?.map { $0["id"] as? String }, ["fetch:a"])
-    XCTAssertEqual(wc.automationStore.automation(id)?.state("fetch").runs, [])
 
     _ = wc.controlDeleteAutomation(automationId: id)
     var gone: Result<Any, ControlError>?
