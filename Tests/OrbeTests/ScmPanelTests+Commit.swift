@@ -114,6 +114,25 @@ extension ScmPanelTests {
     }
   }
 
+  /// 面を隠している間に終わった自分の ＋ も、出し直して行が組み直される前に押したコミットに数える（隠している間は status
+  /// を受けないので、終わった時点の行には出ていない）。
+  func testOwnStagingFinishedWhileHiddenStillCounts() throws {
+    try repo.write("a.txt", "edited\n")
+    try repo.write("n.txt", "new\n")
+    show(until: { $0.changes.staged.isEmpty && $0.changes.changes.count == 2 }, "変更の行")
+    let row = try XCTUnwrap(panel.layout.index[ScmRowID(section: .changes, path: "n.txt")])
+    panel.press(row, .stage, in: panel.layout)
+    panel.isLive = false
+    idle("隠している間のステージ")
+    panel.isLive = true
+    XCTAssertTrue(panel.changes.staged.isEmpty, "前提: 行はまだ組み直されていない")
+    panel.control.message = "n"
+    panel.commit()
+    idle("コミット")
+    XCTAssertNil(panel.control.failure)
+    XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, " M a.txt\n")
+  }
+
   /// 自分の ＋ が行に出た後は、見えている行だけで範囲を決める——＋ でステージしてコミットした後に、ステージせずに押した
   /// コミットは残りの変更を入れる（前の ＋ を持ち越して断らない）。
   func testOwnStagingStopsCountingOnceTheRowsShowIt() throws {

@@ -54,13 +54,14 @@ struct ScmOwnWrites {
   }
 
   /// 操作の 1 段目が終わった。`status` は根のサービスの書き込み後の status。書き込みの終わりは取り直した status を届けた
-  /// 後に来るので、今の番号の status に結果が出ている。
+  /// 後に来るので、パネルが status を受けていれば今の番号の status に結果が出ている。受けていなければ（`seesStatus` が
+  /// false。面を隠している間）、次に届く status に出る。
   mutating func firstStepDidFinish(
-    _ operation: SourceControl.Operation, failed: Bool, status: GitStatus?
+    _ operation: SourceControl.Operation, failed: Bool, status: GitStatus?, seesStatus: Bool
   ) {
     guard let index = entries.firstIndex(where: { $0.operation === operation }) else { return }
     entries[index].finish = Finish(
-      statusNumber: statusNumber, failed: failed,
+      statusNumber: seesStatus ? statusNumber : statusNumber + 1, failed: failed,
       head: status?.branch.map { .at($0.commit, undone: 0) } ?? .movedByOwnWrite)
     forgetShown()
   }

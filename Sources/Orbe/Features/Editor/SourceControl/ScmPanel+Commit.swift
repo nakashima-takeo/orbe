@@ -62,7 +62,9 @@ extension ScmPanel {
     _ control: SourceControl, firstStepDidFinish operation: SourceControl.Operation,
     failure: GitWriteFailure?
   ) {
-    ownWrites.firstStepDidFinish(operation, failed: failure != nil, status: operation.files.status)
+    ownWrites.firstStepDidFinish(
+      operation, failed: failure != nil, status: operation.files.status,
+      seesStatus: liveFiles != nil)
   }
 
   /// 押した時点の範囲の中身——見えている行に、このパネルで押してまだ行に出ていない書き込みを重ねたもの（→ `ScmOwnWrites`）
