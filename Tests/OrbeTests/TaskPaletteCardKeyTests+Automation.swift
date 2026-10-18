@@ -208,6 +208,21 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.store.tasks.count, 1, "候補をタスクにしない")
   }
 
+  /// 一覧に居る間に棚の段をクリックすると棚に居て、続く ⌘↵ は候補をタスクにせず、その自動化の更新になる。
+  func testAutomationCommandEnterAfterClickingAShelfRowRefreshesTheAutomation() {
+    let model = listedAutomationModel()
+    let window = mount(model)
+
+    model.automation.tapShelf(.automation(1))
+    flush(window)
+    send(Key.enter, "\r", .command, to: window)
+
+    XCTAssertEqual(model.automation.place, .shelf)
+    XCTAssertTrue(model.automation.runner.isFlowing(1))
+    XCTAssertEqual(model.store.tasks.count, 1, "候補をタスクにしない")
+    XCTAssertEqual(model.automation.store.proposals.map(\.state), [.open, .open, .open])
+  }
+
   /// esc はどの居場所でも画面を閉じる。
   func testAutomationEscapeClosesTheScreenFromEveryPlace() {
     for place: TaskPaletteAutomationPlace in [.field, .shelf, .proposals] {

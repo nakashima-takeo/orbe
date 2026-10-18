@@ -245,10 +245,10 @@ enum TaskPaletteAutomationError: Equatable {
     if shelfList.selectedID != previous { proposalList.selectFirst(in: proposalIDs) }
   }
 
-  /// 棚の段のクリック。選んで候補の一覧に入る。
+  /// 棚の段のクリック。選んで棚に居る（焦点のある列だけが選ばれているので、候補は選ばれない）。
   func tapShelf(_ id: TaskPaletteAutomationShelfID) {
     error = nil
-    place = .proposals
+    place = .shelf
     guard shelfList.selectedID != id, shelfList.select(id, in: shelfIDs) else { return }
     proposalList.selectFirst(in: proposalIDs)
   }

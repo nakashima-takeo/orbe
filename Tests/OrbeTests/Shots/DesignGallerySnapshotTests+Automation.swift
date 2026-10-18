@@ -17,6 +17,7 @@ extension DesignGallerySnapshotTests {
     // 見本どおり: 棚で Slack の 1 つ目を選び、候補の一覧の先頭に居る。
     let design = model()
     design.automation.tapShelf(.automation(1))
+    design.automation.enterProposals()
     try write("automation_design.png", design, 1440, 900)
 
     // 開いた直後: 絞り込み欄に居て、候補は選ばれていない（印なし・詳細は空）。
@@ -32,6 +33,7 @@ extension DesignGallerySnapshotTests {
 
     let crowded = model(DesignSceneFixtures.automationCrowdedSamples())
     crowded.automation.tapShelf(.automation(1))
+    crowded.automation.enterProposals()
     crowded.automation.jumpProposal(1)
     try write("automation_crowded.png", crowded, 1440, 900)
 
@@ -39,6 +41,7 @@ extension DesignGallerySnapshotTests {
 
     let small = model()
     small.automation.tapShelf(.automation(1))
+    small.automation.enterProposals()
     try write("automation_small.png", small, 800, 560)
   }
 
@@ -67,11 +70,13 @@ extension DesignGallerySnapshotTests {
     // 候補の一覧に居る: 先頭が選ばれ、詳細の見出しに取得の部品の名前。棚の段は焦点の無い薄い地。
     let list = model()
     list.automation.tapShelf(.automation(1))
+    list.automation.enterProposals()
     try write("automation_shelf_list.png", list, 1440, 900)
 
     // 出どころの部品の名前を引けない候補（消えた自動化が出した）。
     let unnamed = model()
     unnamed.automation.tapShelf(.automation(1))
+    unnamed.automation.enterProposals()
     unnamed.automation.jumpProposal(1)
     try write("automation_shelf_unnamed.png", unnamed, 1440, 900)
 
