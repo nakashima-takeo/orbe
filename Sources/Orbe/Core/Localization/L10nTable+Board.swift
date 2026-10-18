@@ -73,7 +73,7 @@ extension L10n {
     .boardMapLast: ("前回", "Last"),
     .boardMapFresh: ("新しい %1$lld / %2$lld", "%1$lld new / %2$lld"),
     .boardMapTaken: ("%1$lld → %2$lld", "%1$lld → %2$lld"),
-    .boardMapProposed: ("候補 %1$lld / %2$lld", "%1$lld/%2$lld proposed"),
+    .boardMapProposed: ("候補 %1$lld / %2$lld", "%1$lld/%2$lld picked"),
     .boardMapReported: ("報告した", "reported"),
     .boardMapOpen: ("判断待ち %lld", "%lld waiting"),
     .boardMapBreach: ("決まりを外した", "broke the rules"),

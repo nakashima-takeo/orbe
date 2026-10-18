@@ -17,8 +17,8 @@ struct BoardAutomationMapView: View {
     }
     let roleWidth = max(
       BoardMapRowView.minRoleWidth,
-      roles.map { fontResolver.width($0, base: Theme.Typography.codeSmall) }.max()?.rounded(.up)
-        ?? 0)
+      (roles.map { fontResolver.width($0, base: Theme.Typography.codeSmall) }.max()?.rounded(.up)
+        ?? 0) + BoardMapRowView.roleGap)
     VStack(alignment: .leading, spacing: 0) {
       BoardSectionHeader(title: .boardAutomationFlow) {
         Text(l10n.format(.boardMapParts, detail.partCount))
@@ -146,7 +146,9 @@ struct BoardMapRowView: View {
   static let inboxWidth: CGFloat = 44
   static let lastWidth: CGFloat = 96
   static let lastInset: CGFloat = 6
+  /// 役割の列の幅の下限（見本）と、長い役割の名前（英語）の後ろに空ける幅。
   static let minRoleWidth: CGFloat = 44
+  static let roleGap: CGFloat = 6
   /// 終わりの行の役割の欄。
   static let endRole = "Orbe"
   private static let cellGap: CGFloat = 6
