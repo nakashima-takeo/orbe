@@ -4,7 +4,8 @@ import XCTest
 
 extension RootFilesWritesTests {
   /// 追跡中のパスの場所を塞いでいる未追跡のもの——同じ名前のディレクトリ・入れ子のリポジトリ（コミットの有無に依らず）・
-  /// ファイルに置き換えた親の階層——は、破棄で戻す前にゴミ箱へ移す（git の restore は黙って消す）。
+  /// ファイルに置き換えた親の階層——は、破棄で戻す前にゴミ箱へ移す（git の restore は黙って消す）。塞いでいる親の行も
+  /// 一緒に破棄すると（すべて破棄）、戻したディレクトリを未追跡の行としてゴミ箱へ移し直さない。
   func testDiscardMovesWhatBlocksATrackedPathToTheTrashBeforeRestoring() throws {
     for path in ["p.txt", "q.txt", "r.txt", "d/x"] { try repo.write(path, "\(path)\n") }
     XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
@@ -23,7 +24,9 @@ extension RootFilesWritesTests {
     try repo.write("d", "a file where the directory was\n")
     let files = repo.files()
 
-    let rows = ["p.txt", "q.txt", "r.txt", "d/x"].map { GitStatus.Row(path: $0, originalPath: nil) }
+    let rows = ["p.txt", "q.txt", "r.txt", "d/x", "d"].map {
+      GitStatus.Row(path: $0, originalPath: nil)
+    }
     let discarded = finish(files) { files.discard(rows, completion: $0) }
     XCTAssertNil(discarded.failure)
     for path in ["p.txt", "q.txt", "r.txt", "d/x"] {

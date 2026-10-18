@@ -68,7 +68,10 @@ extension GitRepo {
         return
       }
       let restore = selection.indexed.subtracting(intended)
-      let trash = selection.paths.filter { !restore.contains($0) }
+      // 戻すパスの祖先（塞いでいた親の行）は blockers の段で移す。最後の段では restore が作り直したディレクトリになっている。
+      let trash = selection.paths.filter { path in
+        !restore.contains(path) && !restore.contains { $0.hasPrefix(path + "/") }
+      }
       let blocking = { self.blockers(of: restore, submodules: selection.submodules) }
       self.moveToTrash(blocking, handle: handle) { cleared in
         if let cleared { return completion(cleared) }
