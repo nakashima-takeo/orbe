@@ -117,6 +117,7 @@ extension SurfaceConfig {
 struct SurfaceArrangement: Equatable, Sendable {
   var showsMinimap = true
   var numberColumns = 1
+  var numbersOwnLines = true
   var numberWidth: CGFloat?
   var numberTrailing: CGFloat?
   var signWidth: CGFloat = 0
@@ -127,6 +128,7 @@ struct SurfaceArrangement: Equatable, Sendable {
   init(_ presentation: SurfacePresentation) {
     showsMinimap = presentation.showsMinimap
     numberColumns = presentation.numberColumns
+    numbersOwnLines = presentation.numbersOwnLines
     numberWidth = presentation.numberWidth
     numberTrailing = presentation.numberTrailing
     signWidth = presentation.signWidth

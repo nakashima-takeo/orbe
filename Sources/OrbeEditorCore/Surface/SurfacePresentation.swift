@@ -11,6 +11,9 @@ public struct SurfacePresentation: Equatable {
   /// 番号の列の数（1 か 2）。2 なら左の列に「もう一方の番号」（`LineSpan.otherNumber`・差し込んだ行が指す出どころの行の
   /// 番号）、右の列に文書の行の番号を描く。1 なら文書の行の番号だけを描く（差し込んだ行には描かない）。
   public var numberColumns: Int
+  /// 文書の行に番号を描くか。描かない面でも、差し込んだ行が指す出どころの行の番号（2 列の左の列）は描く。文書の行が
+  /// 存在しない行（diff の版が無い側の面の空の行）の面だけが、描かない。
+  public var numbersOwnLines: Bool
   /// 番号の列 1 つの最小の幅と、番号の右端から列の右端までの余白（pt。nil なら面を作ったときの見え方の値）。最大の番号が
   /// 収まらなければ列は広がる。
   public var numberWidth: CGFloat?
@@ -23,13 +26,15 @@ public struct SurfacePresentation: Equatable {
   public var lineStyles: [LineStyle]
 
   public init(
-    showsMinimap: Bool = true, numberColumns: Int = 1, numberWidth: CGFloat? = nil,
+    showsMinimap: Bool = true, numberColumns: Int = 1, numbersOwnLines: Bool = true,
+    numberWidth: CGFloat? = nil,
     numberTrailing: CGFloat? = nil, signWidth: CGFloat = 0, showsMarks: Bool = true,
     lineStyles: [LineStyle] = []
   ) {
     precondition(numberColumns == 1 || numberColumns == 2, "番号の列は 1 か 2")
     self.showsMinimap = showsMinimap
     self.numberColumns = numberColumns
+    self.numbersOwnLines = numbersOwnLines
     self.numberWidth = numberWidth
     self.numberTrailing = numberTrailing
     self.signWidth = signWidth

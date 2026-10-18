@@ -33,7 +33,9 @@ extension FrameBuilder {
       drawHighlights(item, source.material.highlights, rowTop: top, window: visible.offsets, c)
       let width = drawText(item.laid, at: (item.start, top), visible, roles: &roles, c)
       longestLine = max(longestLine, width)
-      drawNumber(item.row + 1, rowTop: top, inset: c.gutter.ownInset, font: numberFont, c)
+      if source.material.arrangement.numbersOwnLines {
+        drawNumber(item.row + 1, rowTop: top, inset: c.gutter.ownInset, font: numberFont, c)
+      }
       if c.gutter.other != nil, let other = rows.otherNumber(ofLine: item.row) {
         drawNumber(other, rowTop: top, inset: c.gutter.otherInset, font: numberFont, c)
       }
