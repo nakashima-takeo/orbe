@@ -95,8 +95,8 @@ extension L10n {
       "There are unresolved conflicts. Resolve them and stage those files before committing."
     ),
     .editorScmFailureContentMismatch: (
-      "コミットに入る変更が画面の表示と食い違うため、コミットしませんでした。表示が追いつくのを待ってから、もう一度押してください。",
-      "The changes to commit didn't match the list, so nothing was committed. Wait for it to update, then retry."
+      "画面の表示とまだ食い違う変更があったため、何も書き込みませんでした。表示が追いつくのを待ってから、もう一度押してください。",
+      "Something changed that the list doesn't show yet, so nothing was written. Wait for it to update, then retry."
     ),
     .editorScmFailureNetworkBusy: (
       "この worktree で別のプル・プッシュ・フェッチが走っていたため、始めませんでした。終わってからもう一度試してください。",
