@@ -86,6 +86,8 @@ struct AutomationDrops: Equatable {
     case sameLink
     /// 積む時点で件数の上限を超えた。
     case overflow
+    /// 判定の部品へ、出どころ（元になった取得の項目）の無いまま届いた。
+    case unsourced
 
     init(_ reason: AutomationInbox.Reason) {
       switch reason {

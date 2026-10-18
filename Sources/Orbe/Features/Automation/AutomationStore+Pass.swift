@@ -43,8 +43,10 @@ extension AutomationStore {
 
   /// 部品の 1 回を 1 トランザクションで確定する。成功した回は、取った行と捨てた行を通し番号で消し、下流の溜まりへ積み、前回の
   /// 出力と目印・候補の帳面・回の記録を書く。失敗した回は記録と最後に回った時刻だけを書き、溜まり・前回の出力・捨てた数は
-  /// 動かさない。どちらも、出力が決まりを外した最初の回なら印を書く。溜まりが増えた下流の部品の鍵を返す。自動化か部品が
-  /// もう無ければ何もしない。
+  /// 動かさない。下流の判定の部品へ渡す行が 1 行以上あって、どれも出どころを持たなければ、成功した回も失敗した回として書く
+  /// （回の途中に判定の部品を下流に足す書き換えがあると、始めた時点では判定へ届かなかった部品の出力がそうなりうる）。
+  /// どちらも、出力が決まりを外した最初の回なら印を書く。溜まりが増えた下流の部品の鍵を返す。自動化か部品がもう無ければ
+  /// 何もしない。
   func record(_ end: AutomationPassEnd) throws(AutomationError) -> [String] {
     guard let index = automations.firstIndex(where: { $0.id == end.automationId }),
       let node = automations[index].graph.node(end.part)
@@ -60,7 +62,12 @@ extension AutomationStore {
     )
     return try commit { db, memory in
       var grew: [String] = []
-      if case .succeeded(let output, _, _) = end.outcome {
+      let planned = try pushes(of: end.outcome, from: node, index, memory, db)
+      if let refused = planned.first(where: \.push.upstreamFailed) {
+        run.failure =
+          "no row passed to part \"\(refused.target.key)\" has an origin (it did not come from a "
+          + "fetch part)"
+      } else if case .succeeded(let output, _, _) = end.outcome {
         var state = memory.automations[index].state(key)
         for drop in end.take?.dropped ?? [] { run.dropped.add(.init(drop.reason)) }
         run.dropped.add(state.pendingDrops)
@@ -72,7 +79,8 @@ extension AutomationStore {
         }
         if case .fetch(_, let lastOutput) = output { state.lastOutput = lastOutput }
         memory.automations[index].parts[key] = state
-        grew = try settle(output, &run, Settling(node: node, index: index, db: db), &memory)
+        grew = try settle(
+          output, &run, Settling(node: node, index: index, db: db, pushes: planned), &memory)
       } else if case .failed(let reason, _, _) = end.outcome {
         run.failure = reason
       }
@@ -100,13 +108,13 @@ extension AutomationStore {
   ) throws -> [String] {
     switch output {
     case .fetch(let rows, _):
-      let (stacked, grew) = try stack(rows, settling, at: run.endedAt, &memory)
+      let (stacked, grew) = try stack(settling, at: run.endedAt, &memory)
       run.result = .fetch(fresh: rows.count)
       run.stacked = stacked
       run.withdrawn = try memory.forgetUnheld(settling.db)
       return grew
-    case .process(let rows):
-      let (stacked, grew) = try stack(rows, settling, at: run.endedAt, &memory)
+    case .process:
+      let (stacked, grew) = try stack(settling, at: run.endedAt, &memory)
       run.result = .process
       run.stacked = stacked
       return grew
@@ -125,15 +133,19 @@ extension AutomationStore {
     return []
   }
 
-  /// 下流の部品ごとに、その時点の溜まりの目録に u2 の積む計算を掛けて積む。置き換え・件数の上限で消える行は通し番号で消し、
-  /// 積む行は新しい通し番号で足す。上限で捨てた数は下流の部品の捨てた数に足す。積んだ行の数と、溜まりが増えた部品を返す。
-  private func stack(
-    _ rows: [AutomationPartRow], _ settling: Settling, at arrivedAt: Date,
-    _ memory: inout AutomationMemory
-  ) throws -> (stacked: Int, grew: [String]) {
-    let (node, index, db) = (settling.node, settling.index, settling.db)
-    let id = memory.automations[index].id
-    let byId = Dictionary(rows.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
+  /// 成功した回が下流へ渡す行（取得と処理の出力）を、下流の部品ごとに、その時点の溜まりの目録に u2 の積む計算へ掛けたもの。
+  /// 行を渡さない回は空。
+  private func pushes(
+    of outcome: AutomationPartPass.Outcome, from node: AutomationGraph.Node, _ index: Int,
+    _ memory: AutomationMemory, _ db: AutomationDatabase
+  ) throws -> [Push] {
+    let rows: [AutomationPartRow]
+    switch outcome {
+    case .succeeded(.fetch(let fetched, _), _, _): rows = fetched
+    case .succeeded(.process(let processed), _, _): rows = processed
+    default: return []
+    }
+    let automation = memory.automations[index]
     let arrivals = rows.map { row in
       AutomationInbox.Arrival(
         id: row.id,
@@ -141,13 +153,27 @@ extension AutomationStore {
           AutomationInbox.Origin(part: $0.part, item: $0.item.id, link: $0.item.link)
         }, size: row.text.utf8.count)
     }
+    return try automation.graph.downstream(of: node.key).map { target in
+      Push(
+        target: target, rows: rows,
+        push: AutomationInbox.push(
+          arrivals, into: target, holding: try db.inbox(of: target.key, in: automation.id)))
+    }
+  }
+
+  /// 積む計算に従って積む。置き換え・件数の上限で消える行は通し番号で消し、積む行は新しい通し番号で足す。件数の上限と、判定の
+  /// 部品へ出どころの無いまま届いた行は捨てて、下流の部品の捨てた数に足す（次の回の記録に載る）。積んだ行の数と、溜まりが
+  /// 増えた部品を返す。
+  private func stack(
+    _ settling: Settling, at arrivedAt: Date, _ memory: inout AutomationMemory
+  ) throws -> (stacked: Int, grew: [String]) {
+    let (node, index, db) = (settling.node, settling.index, settling.db)
+    let id = memory.automations[index].id
     var stacked = 0
     var grew: [String] = []
-    for target in memory.automations[index].graph.downstream(of: node.key) {
-      let push = AutomationInbox.push(
-        arrivals, into: target, holding: try db.inbox(of: target.key, in: id))
-      precondition(
-        push.unsourced.isEmpty, "rows without an origin never reach a judge (the part pass breaks)")
+    for entry in settling.pushes {
+      let (target, push) = (entry.target, entry.push)
+      let byId = Dictionary(entry.rows.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
       try db.delete(inbox: push.replaced + push.overflowed)
       for arrival in push.stacked {
         guard let row = byId[arrival.id] else { continue }
@@ -155,6 +181,7 @@ extension AutomationStore {
       }
       var state = memory.automations[index].state(target.key)
       state.pendingDrops.add(.overflow, push.overflowed.count + push.overflowedArrivals.count)
+      state.pendingDrops.add(.unsourced, push.unsourced.count)
       (state.inbox, state.newestSeq) = try db.inboxCount(of: target.key, in: id)
       try db.put(part: target.key, of: id, state)
       memory.automations[index].parts[target.key] = state
@@ -207,9 +234,17 @@ extension AutomationStore {
   }
 }
 
-/// 確定の中で役割ごとの書き込みに運ぶもの（確定する部品・その自動化の位置・トランザクションの中の DB）。
+/// 確定の中で役割ごとの書き込みに運ぶもの（確定する部品・その自動化の位置・トランザクションの中の DB・下流へ積む計算）。
 private struct Settling {
   let node: AutomationGraph.Node
   let index: Int
   let db: AutomationDatabase
+  let pushes: [Push]
+}
+
+/// 下流の部品 1 つへの積む計算と、その元の行。
+private struct Push {
+  let target: AutomationGraph.Node
+  let rows: [AutomationPartRow]
+  let push: AutomationInbox.Push
 }
