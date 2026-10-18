@@ -104,6 +104,20 @@ extension AutomationRunnerTests {
     XCTAssertFalse(refusesAnotherFlow(id))
   }
 
+  /// 指す先が 1 つも無ければ（判定を持たない自動化の候補の更新）、何も起こさず一巡も置かない。置くと終わりの知らせが来ず、
+  /// 以後ずっと断る。
+  func testFlowingToNoPartsRunsNothingAndLeavesNoFlow() throws {
+    let id = try define([
+      fetch("f", every: 3600), part("s", .arrival, from: ["f"], deliver: .sideEffect),
+    ])
+
+    try flow(id, to: .judges)
+
+    XCTAssertEqual(calls("f"), [])
+    XCTAssertFalse(runner.isFlowing(id))
+    XCTAssertFalse(refusesAnotherFlow(id))
+  }
+
   // MARK: - 手動
 
   /// 手動の部品は上流が積んでも走らず、それ自身かその下流を指して流したときだけ走る。上流を指して流しても走らない。

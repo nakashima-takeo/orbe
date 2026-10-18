@@ -166,6 +166,11 @@ struct AutomationGraph: Equatable {
     return seen.sorted().map { nodes[$0] }
   }
 
+  /// タスク候補を行き先にする部品（判定。定義の順）。
+  var judges: [Node] {
+    nodes.filter { $0.role == .judge }
+  }
+
   /// 終わりの部品（行き先が次の部品でない部品。定義の順）。次の部品へ渡す部品は必ず誰かに名指されるので、これらの祖先と
   /// 合わせると全部品になる。
   var ends: [Node] {

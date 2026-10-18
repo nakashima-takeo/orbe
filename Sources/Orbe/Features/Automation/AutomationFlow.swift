@@ -13,6 +13,8 @@ struct AutomationFlow {
     case part(String)
     /// 終わりの部品すべて（`AutomationGraph.ends`）。
     case ends
+    /// タスク候補を行き先にする部品すべて（`AutomationGraph.judges`）。
+    case judges
   }
 
   private enum Step: Equatable {
