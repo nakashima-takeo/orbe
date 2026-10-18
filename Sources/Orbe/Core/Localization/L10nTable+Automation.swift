@@ -67,7 +67,6 @@ extension L10n {
     .automationRoleSideEffect: ("副作用", "Side effect"),
     .automationManual: ("手動", "manual"),
     .automationArrival: ("届いたら", "on arrival"),
-    .automationParts: ("部品", "Parts"),
     .automationFetchedFresh: ("%1$lld 件取得 → 新しい %2$lld 件", "fetched %1$lld → %2$lld new"),
     .automationTakenTo: ("%1$lld 件 → %2$lld 件", "%1$lld → %2$lld"),
     .automationTakenProposedOne: ("%1$lld 件 → 候補 %2$lld", "%1$lld → %2$lld candidate"),

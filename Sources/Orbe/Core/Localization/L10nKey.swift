@@ -402,7 +402,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationRoleSideEffect
   case automationManual
   case automationArrival
-  case automationParts
   case automationFetchedFresh
   case automationTakenTo
   case automationTakenProposedOne
