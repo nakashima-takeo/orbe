@@ -183,8 +183,8 @@ extension BoardAutomationSummary {
     )
   }
 
-  /// 部品の回を新しい順に 1 行ずつ。取得の新着なし（失敗でない取得の回で新しい項目が 0）が `foldLength` 回以上続く区間は、
-  /// 期間の 1 行に畳む——短い間隔の取得の「新着なし」が、他の回を押し出さないため。
+  /// 部品の回を新しい順に 1 行ずつ。素の「新着なし」の回（失敗でも手動でもない取得の回で新しい項目が 0、添え書きが付かない）が
+  /// `foldLength` 回以上続く区間は、期間の 1 行に畳む——短い間隔の取得の「新着なし」が、他の回を押し出さないため。
   static func lines(_ runs: [AutomationPartRun], node: AutomationGraph.Node, text: AutomationText)
     -> [BoardRunLine]
   {
@@ -204,7 +204,7 @@ extension BoardAutomationSummary {
     }
     for run in runs {
       if case .fetch(0) = run.result, !run.failed, node.role != .fetch(.everything),
-        run.dropped.isEmpty
+        run.trigger != .now, run.breach == nil, run.dropped.isEmpty
       {
         quiet.append(run)
       } else {
