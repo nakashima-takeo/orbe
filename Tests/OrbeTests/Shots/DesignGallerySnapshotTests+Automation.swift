@@ -28,7 +28,7 @@ extension DesignGallerySnapshotTests {
 
     // 棚の 2 行目の全種（次の時刻・止めている・実行中…・前回は失敗・候補なし）。
     let running = model()
-    try? running.automation.runner.runNow(1)
+    try? running.automation.runner.flow(1, to: .ends)
     running.automation.enterShelf()
     try write("automation_shelf_running.png", running, 1440, 900)
 

@@ -137,13 +137,20 @@ extension ControlWireTests {
       -32602, "真偽値でない 1 を true と読まない")
     _ = wire.request(
       id: 4, method: "pause_automation", params: ["automationId": 2, "paused": false])
+    XCTAssertEqual(
+      errorCode(
+        wire.request(id: 9, method: "run_automation", params: ["automationId": 2, "partKey": 1])),
+      -32602)
     _ = wire.request(id: 5, method: "run_automation", params: ["automationId": 2])
+    _ = wire.request(
+      id: 10, method: "run_automation", params: ["automationId": 2, "partKey": "judge"])
     _ = wire.request(id: 6, method: "delete_automation", params: ["automationId": 2])
     _ = wire.request(id: 7, method: "list_automation_proposals", params: [:])
     _ = wire.request(id: 8, method: "list_automation_proposals", params: ["automationId": 2])
 
     XCTAssertEqual(fake.pausedAutomations.map(\.paused), [false])
-    XCTAssertEqual(fake.ranAutomationIds, [2])
+    XCTAssertEqual(fake.ranAutomations.map(\.automationId), [2, 2])
+    XCTAssertEqual(fake.ranAutomations.map(\.partKey), [nil, "judge"])
     XCTAssertEqual(fake.deletedAutomationIds, [2])
     XCTAssertEqual(fake.proposalLists, [nil, 2])
   }

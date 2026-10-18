@@ -96,7 +96,7 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
       automation.ids, [Self.failingBacklog, Self.slack, Self.github, Self.pausedGmail],
       "前回が失敗 → それ以外 → 止めている。群の中は ID 順")
 
-    try automation.runner.runNow(Self.github)
+    try automation.runner.flow(Self.github, to: .ends)
     XCTAssertTrue(automation.runner.isRunning(Self.github), "前提: 走っている")
 
     XCTAssertEqual(

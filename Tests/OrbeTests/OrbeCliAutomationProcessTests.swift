@@ -72,6 +72,24 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertEqual(run(control, ["list"]), "")
   }
 
+  /// `run --part <鍵>` はその部品まで流す（下流の手動の部品は走らない）。知らない鍵は RPC エラー（1）、値の欠けは usage
+  /// エラー（2）。
+  func testRunFlowsToTheGivenPart() throws {
+    let control = try startControlProcess()
+    let manual = definition.replacingOccurrences(
+      of: #"{"kind": "arrival"}"#, with: #"{"kind": "manual"}"#)
+    let id = run(control, ["set"], stdin: manual)
+    let automation = { control.target.automationStore.automation(Int(id)!) }
+
+    XCTAssertEqual(run(control, ["run", id, "--part", "fetch"]), "started automation \(id)")
+    XCTAssertTrue(waitUntil(10) { automation()?.parts["fetch"]?.runs.isEmpty == false })
+    XCTAssertEqual(automation()?.parts["judge"]?.inbox, 1, "前提: 取得が判定の溜まりに積んだ")
+    XCTAssertEqual(automation()?.parts["judge"]?.runs, [], "道の外の手動の部品は走らない")
+
+    XCTAssertEqual(control.orb(["automation", "run", id, "--part", "nope"]).status, 1)
+    XCTAssertEqual(control.orb(["automation", "run", id, "--part"]).status, 2)
+  }
+
   /// 入力の無い副作用のコマンドの前回は、回の記録だけから「コマンドの終わり方」で出る（取得の数を出さない）。
   func testListShowsTheEndingOfASideEffectCommand() throws {
     let control = try startControlProcess()

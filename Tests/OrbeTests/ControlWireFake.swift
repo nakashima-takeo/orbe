@@ -121,7 +121,7 @@ final class FakeControlTarget: ControlTarget {
   private(set) var deletedTaskIds: [Int] = []
   private(set) var startedTasks: [TaskStartRequest] = []
   private(set) var setAutomations: [(automationId: Int?, definition: AutomationDefinition)] = []
-  private(set) var ranAutomationIds: [Int] = []
+  private(set) var ranAutomations: [(automationId: Int, partKey: String?)] = []
   private(set) var pausedAutomations: [(automationId: Int, paused: Bool)] = []
   private(set) var deletedAutomationIds: [Int] = []
   private(set) var proposalLists: [Int?] = []
@@ -310,8 +310,8 @@ final class FakeControlTarget: ControlTarget {
     return outcome(["automation": ["automationId": automationId ?? 1]])
   }
 
-  func controlRunAutomation(automationId: Int) -> Result<Any, ControlError> {
-    ranAutomationIds.append(automationId)
+  func controlRunAutomation(automationId: Int, partKey: String?) -> Result<Any, ControlError> {
+    ranAutomations.append((automationId, partKey))
     return outcome(["ok": true])
   }
 
