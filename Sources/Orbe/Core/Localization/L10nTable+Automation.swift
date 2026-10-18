@@ -20,7 +20,7 @@ extension L10n {
     .taskPaletteAutomationAsTask: ("タスクにすると", "As a task"),
     .taskPaletteAutomationDismiss: ("捨てる", "Dismiss"),
     .taskPaletteAutomationActionAccept: ("%1$@ をタスクにする", "Make %1$@ a task"),
-    .taskPaletteAutomationActionProposals: ("候補の一覧へ", "Back to candidates"),
+    .taskPaletteAutomationActionProposals: ("候補の一覧へ", "Go to candidates"),
     .taskPaletteAutomationActionRefresh: ("%1$@ の候補を今すぐ更新", "Refresh candidates of %1$@ now"),
     .taskPaletteAutomationHintShelf: ("棚へ", "shelf"),
     .taskPaletteAutomationHintPick: ("自動追加", "auto-add"),
