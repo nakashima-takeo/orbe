@@ -73,7 +73,8 @@ final class AutomationStoreTests: OrbeTestCase {
 
   // MARK: - 再起動
 
-  /// 自動化・部品の状態（前回の出力・決まりを外した印・回の記録・溜まり）・候補は、開き直しても同じで、溜まりの行も同じ本文で読める。
+  /// 自動化・部品の状態（前回の出力・決まりを外した印・回の記録・溜まり）・候補は、どの変異（作る・確定・書き換え・さばく・
+  /// 止める・消す）の後に開き直しても同じで、溜まりの行も同じ本文で読める。
   func testEverythingSurvivesARestart() throws {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
@@ -81,7 +82,16 @@ final class AutomationStoreTests: OrbeTestCase {
     try Self.fetch(XCTUnwrap(store), id, [a], outcome: Self.breached([a]))
     try Self.judge(XCTUnwrap(store), id, proposing: [a])
     try Self.fetch(XCTUnwrap(store), id, [a, b], at: Self.at.addingTimeInterval(1800))
+    var rewritten = Self.definition("受信（要約つき）")
+    rewritten.notify = .menuBar
+    rewritten.parts.append(
+      DesignSceneFixtures.commandPart(
+        "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report))
+    _ = try store?.replace(id, with: rewritten, now: Self.at)
+    try store?.dismiss(XCTUnwrap(store?.proposals.first?.id))
     _ = try store?.setPaused(id, true)
+    let deleted = try XCTUnwrap(store?.create(Self.definition("消す"), now: Self.at).id)
+    try store?.delete(deleted)
     let automations = store?.automations
     let proposals = store?.proposals
     let rows = try store?.rows(XCTUnwrap(store?.inbox(of: "judge", in: id)).map(\.seq))
@@ -115,12 +125,17 @@ final class AutomationStoreTests: OrbeTestCase {
     XCTAssertEqual(try Data(contentsOf: moved), original)
   }
 
-  /// 今の形として読めない行を持つ DB（Orbe が書いたのではない）は、フォルダごと退避して空で始まる。
+  /// 今の形として読めない行を持つ DB（Orbe が書いたのではない）は、フォルダごと退避して空で始まる。読める JSON でも、グラフの
+  /// 検証を通らない定義は読めない行。
   func testADatabaseWithRowsOrbeCannotReadIsSetAsideAndStartsEmpty() throws {
     _ = try AutomationStore().create(Self.definition(), now: Self.at)
-    let folder = try XCTUnwrap(AutomationPersistence.folder)
-    try SQLiteDatabase(url: folder.appendingPathComponent("db.sqlite"))
-      .exec("UPDATE automations SET definition = '{}'")
+    var invalid = Self.definition()
+    invalid.parts[1] = DesignSceneFixtures.agentPart(
+      "judge", "判定", .arrival, from: ["fetch"], tools: ["Read"], instruction: "判定する",
+      deliver: .taskCandidates)
+    XCTAssertThrowsError(try invalid.checked(), "前提: 検証を通らない定義")
+    try SQLiteDatabase(url: automationsFolder().appendingPathComponent("db.sqlite")).run(
+      "UPDATE automations SET definition = ?", [.text(try AutomationDatabase.encode(invalid))])
 
     let store = AutomationStore()
 
@@ -187,5 +202,117 @@ final class AutomationStoreTests: OrbeTestCase {
     try Self.judge(store, id)
 
     XCTAssertEqual(store.automation(id)?.state("judge").runs.first?.dropped.counts, [.overflow: 1])
+  }
+
+  // MARK: - 書き込みの 1 経路
+
+  /// 変異のトランザクションが通らなければ、メモリも DB も変わらず、呼び手に「保存できない」を返す（ストアは使えるまま）。
+  func testAMutationThatFailsToCommitChangesNeitherMemoryNorTheDatabase() throws {
+    struct Refused: Error {}
+    var store: AutomationStore? = AutomationStore()
+    let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
+
+    func deleteThenFail(_ db: AutomationDatabase, _ memory: inout AutomationMemory) throws {
+      try db.delete(automation: id)
+      memory.automations.removeAll()
+      throw Refused()
+    }
+
+    XCTAssertThrowsError(try store?.commit(deleteThenFail)) {
+      guard case .unavailable = $0 as? AutomationError else { return XCTFail("\($0)") }
+    }
+
+    XCTAssertEqual(store?.automations.map(\.id), [id])
+    XCTAssertEqual(store?.available, true)
+    store = nil
+    XCTAssertEqual(AutomationStore().automations.map(\.id), [id], "DB も巻き戻っている")
+  }
+
+  // MARK: - ID と記録
+
+  /// 消した自動化と忘れた候補の ID は、開き直しても使い回さない。
+  func testIdsOfDeletedAutomationsAndForgottenProposalsAreNeverReused() throws {
+    var store: AutomationStore? = AutomationStore()
+    let kept = try XCTUnwrap(store?.create(Self.definition("残す"), now: Self.at).id)
+    let deleted = try XCTUnwrap(store?.create(Self.definition("消す"), now: Self.at).id)
+    let x = Self.item("x")
+    try Self.fetch(XCTUnwrap(store), deleted, [x])
+    try Self.judge(XCTUnwrap(store), deleted, proposing: [x])
+    let forgotten = try XCTUnwrap(store?.proposals.first?.id)
+    try store?.delete(deleted)
+    XCTAssertEqual(store?.proposals, [], "前提: 消した自動化だけが持っていた候補は忘れる")
+    store = nil
+
+    let reopened = AutomationStore()
+    let created = try reopened.create(Self.definition("新しい"), now: Self.at).id
+    try Self.fetch(reopened, kept, [x])
+    try Self.judge(reopened, kept, proposing: [x])
+
+    XCTAssertGreaterThan(created, deleted)
+    XCTAssertGreaterThan(try XCTUnwrap(reopened.proposals.first?.id), forgotten)
+  }
+
+  /// 回の記録は部品ごとに新しい 20 件だけを残し、開き直しても同じ 20 件。
+  func testOnlyTheNewestRunsOfAPartAreKeptAcrossARestart() throws {
+    var store: AutomationStore? = AutomationStore()
+    let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
+    let count = AutomationPartState.retainedRuns + 3
+    for n in 0..<count {
+      try Self.fetch(XCTUnwrap(store), id, [], at: Self.at.addingTimeInterval(TimeInterval(60 * n)))
+    }
+    let runs = try XCTUnwrap(store?.automation(id)?.state("fetch").runs)
+    XCTAssertEqual(
+      runs.map(\.startedAt),
+      (3..<count).reversed().map { Self.at.addingTimeInterval(TimeInterval(60 * $0)) })
+    store = nil
+
+    XCTAssertEqual(AutomationStore().automation(id)?.state("fetch").runs, runs)
+  }
+
+  // MARK: - 定義
+
+  /// 自動化の名前は前後の空白を除いて 1 行で保存し、空や複数行の名前は断る。
+  func testTheNameIsKeptOnOneTrimmedLine() throws {
+    let store = AutomationStore()
+    XCTAssertEqual(try store.create(Self.definition("  受信  "), now: Self.at).name, "受信")
+    for name in ["受信\n2 行目", "   "] {
+      XCTAssertThrowsError(try store.create(Self.definition(name), now: Self.at), name) {
+        guard case .invalid = $0 as? AutomationError else { return XCTFail("\($0)") }
+      }
+    }
+    XCTAssertEqual(store.automations.count, 1)
+  }
+
+  // MARK: - 累計
+
+  /// さばいた候補は、棚に出していた自動化でなく出した自動化の累計に数え、開き直しても残る。判定の部品が無くなれば 0 に戻る。
+  func testHandlingAProposalCountsOnTheAutomationThatProposedIt() throws {
+    var store: AutomationStore? = AutomationStore()
+    let issuer = try XCTUnwrap(store?.create(Self.definition("出した"), now: Self.at).id)
+    let shelf = try XCTUnwrap(store?.create(Self.definition("棚"), now: Self.at).id)
+    let a = Self.item("a")
+    try Self.fetch(XCTUnwrap(store), issuer, [a])
+    try Self.judge(XCTUnwrap(store), issuer, proposing: [a])
+    try Self.fetch(XCTUnwrap(store), shelf, [a])
+    try Self.fetch(XCTUnwrap(store), issuer, [])
+    let proposal = try XCTUnwrap(store?.proposals.first)
+    XCTAssertEqual(store?.shelf(of: proposal)?.id, shelf, "前提: 棚は別の自動化")
+
+    try store?.dismiss(proposal.id)
+    store = nil
+    let reopened = AutomationStore()
+
+    XCTAssertEqual(reopened.automation(issuer)?.tally, AutomationTally(accepted: 0, dismissed: 1))
+    XCTAssertEqual(reopened.automation(shelf)?.tally, AutomationTally())
+    _ = try reopened.replace(
+      issuer,
+      with: AutomationDefinition(
+        name: "出した", notify: nil,
+        parts: [
+          Self.definition().parts[0],
+          DesignSceneFixtures.commandPart(
+            "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report),
+        ]), now: Self.at)
+    XCTAssertEqual(reopened.automation(issuer)?.tally, AutomationTally())
   }
 }
