@@ -1,17 +1,25 @@
 import SwiftUI
 
-/// ボードの一覧で選んだ自動化への手の操作（今すぐ実行・止める ⇄ 再開・削除）。キー・キーの表示・名前・断りをここだけが
+/// ボードの自動化への手の操作（流す・止める ⇄ 再開・削除）。キーと操作の対応（場所ごと）・キーの表示・名前・断りをここだけが
 /// 決める——キーを変えたとき、フッターの表示だけが嘘になる写しを残さないため。
 enum BoardAutomationHand {
-  enum Operation {
+  /// 流す先。部品までなら、流す先の部品は地図の「選ばれている部品」から解く。
+  enum Reach: Equatable {
+    /// 終わりの部品すべて。
+    case ends
+    /// 選ばれている部品。
+    case part
+  }
+
+  enum Operation: Equatable {
+    case flow(Reach)
     case togglePause
-    case runNow
     case delete
 
     var key: String {
       switch self {
+      case .flow: "↵"
       case .togglePause: "space"
-      case .runNow: "↵"
       case .delete: "⌘⌫"
       }
     }
@@ -19,8 +27,9 @@ enum BoardAutomationHand {
     /// 止める ⇄ 再開は、止めているかで名前が替わる。
     func title(paused: Bool) -> L10nKey {
       switch self {
+      case .flow(.ends): .automationRunNow
+      case .flow(.part): .automationFlowHere
       case .togglePause: paused ? .automationResume : .automationPause
-      case .runNow: .automationRunNow
       case .delete: .automationDelete
       }
     }
@@ -32,43 +41,50 @@ enum BoardAutomationHand {
     case held
   }
 
-  /// 断り。行き違い（消えていた等）は黙り、断るのは流している途中の今すぐ実行だけ。
+  /// 断り。行き違い（消えていた等）は黙り、断るのは流している途中の流すだけ。
   enum Refusal: Equatable {
-    case flowing
+    case flowing(Reach)
 
     var message: L10nKey {
       switch self {
-      case .flowing: .automationErrRunning
+      case .flowing(.ends): .automationErrRunning
+      case .flowing(.part): .automationErrFlowing
       }
     }
   }
 
-  /// 修飾なしの ↵＝今すぐ実行、space＝止める ⇄ 再開、⌘⌫＝削除。他のキーは nil。
-  static func stroke(_ press: KeyPress) -> Stroke? {
+  /// 一覧では修飾なしの ↵＝終わりまで流す（今すぐ実行）、space＝止める ⇄ 再開、⌘⌫＝削除。地図では修飾なしの ↵＝選ばれている
+  /// 部品まで流す、だけ。他のキーと場所は nil。
+  static func stroke(_ press: KeyPress, at place: BoardAutomationModel.Place) -> Stroke? {
+    let plain = press.modifiers.isDisjoint(with: [.command, .option, .control, .shift])
     let operation: Operation
-    switch press.key {
-    case .return where press.modifiers.isDisjoint(with: [.command, .option, .control, .shift]):
-      operation = .runNow
-    case .space:
-      operation = .togglePause
-    case .backspace where press.modifiers.contains(.command):
-      operation = .delete
-    default:
-      return nil
+    switch (place, press.key) {
+    case (.list, .return) where plain: operation = .flow(.ends)
+    case (.list, .space): operation = .togglePause
+    case (.list, .backspace) where press.modifiers.contains(.command): operation = .delete
+    case (.map, .return) where plain: operation = .flow(.part)
+    default: return nil
     }
     return press.phase == .down ? .press(operation) : .held
   }
 
-  /// 走らせ役へ通す。今すぐ実行は終わりの部品すべてまで流す。
+  /// 走らせ役へ通す。`part` は部品まで流すときの流す先（無ければ何もしない）。
   static func perform(
-    _ operation: Operation, on automation: Automation, runner: AutomationRunner
+    _ operation: Operation, on automation: Automation, part: String?, runner: AutomationRunner
   ) -> Refusal? {
     switch operation {
-    case .runNow:
+    case .flow(let reach):
+      let target: AutomationFlow.Target
+      switch reach {
+      case .ends: target = .ends
+      case .part:
+        guard let part else { return nil }
+        target = .part(part)
+      }
       do throws(AutomationError) {
-        try runner.flow(automation.id, to: .ends)
+        try runner.flow(automation.id, to: target)
       } catch {
-        if case .flowing = error { return .flowing }
+        if case .flowing = error { return .flowing(reach) }
       }
     case .togglePause:
       _ = try? runner.pause(automation.id, !automation.paused)

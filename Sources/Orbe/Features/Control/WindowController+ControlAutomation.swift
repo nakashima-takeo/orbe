@@ -134,9 +134,7 @@ extension WindowController {
     if automation.judges {
       json["taskCandidates"] =
         [
-          "openProposals": automationStore.proposals.filter {
-            $0.state == .open && automationStore.shelf(of: $0)?.id == automation.id
-          }.count,
+          "openProposals": automationStore.shelvedProposals(of: automation.id).count,
           "overlaps": automationStore.overlaps(of: automation.id).map {
             ["automationId": $0.automation.id, "name": $0.automation.name, "count": $0.count]
               as [String: Any]

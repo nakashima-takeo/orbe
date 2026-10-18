@@ -77,7 +77,7 @@ extension BoardAutomationTests {
 
   private func outputNotes(_ automation: BoardAutomationModel, _ id: Int) -> [String] {
     let text = automation.text(LocalizationStore(language: .ja), now: automation.runner.now())
-    return automation.summary(id, text: text)?.notes ?? []
+    return automation.detail(id, text: text)?.notes ?? []
   }
 
   /// → で開くと今の設定（通知しない）の行から。↓ ↵ でその自動化の通知だけがメニューバーに替わり、注記が追従して閉じる。

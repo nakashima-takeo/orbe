@@ -394,6 +394,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationResume
   case automationDelete
   case automationErrRunning
+  case automationFlowHere
+  case automationErrFlowing
   case automationRoleFetch
   case automationRoleProcess
   case automationRoleJudge
@@ -589,7 +591,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardAutomationEmpty
   case boardAutomationLast
   case boardAutomationFlow
-  case boardAutomationCounts
   case boardAutomationRuns
   case boardOutputTaskCandidates
   case boardOutputCommand
@@ -602,7 +603,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardNotifyNotificationCenter
   case boardRunFailed
   case boardRunFailedShort
-  case boardRunAdded
   case boardRunAddedTo
   case boardRunNothingNew
   case boardRunNoneAdded
@@ -613,6 +613,12 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardRunMark
   case boardRunMarkAdded
   case boardRunMarkReported
+  case boardRunMarkFailed
+  case boardRunFresh
+  case boardRunTaken
+  case boardRunJudgedAdded
+  case boardRunJudgedNone
+  case boardRunFold
   case boardGuideLead
   case boardGuideExamples
   case boardExampleSlack
@@ -622,6 +628,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardHintToList
   case boardHintChoose
   case boardHintBack
+  case boardHintParts
+  case boardHintToParts
   case boardAskPlaceholder
   case boardAskHint
   case boardAskFixHint
@@ -629,6 +637,28 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardAskUnavailable
   case boardAskFixGone
   case boardPartInbox
+  case boardMapParts
+  case boardMapLast
+  case boardMapFresh
+  case boardMapTaken
+  case boardMapProposed
+  case boardMapReported
+  case boardMapOpen
+  case boardMapBreach
+  case boardPartInputs
+  case boardPartGoesTo
+  case boardPartNowhere
+  case boardPartCoverage
+  case boardPartNextRun
+  case boardPartInboxLimit
+  case boardPartLimitHours
+  case boardPartLimitItems
+  case boardPartBreachOne
+  case boardPartBreachOther
+  case boardPartRuns
+  case boardCoverageCurrentSet
+  case boardCoverageNewArrivals
+  case boardCoverageEverything
 
   // MARK: - Link（OSC 8 リンクの確認・ブロック）
   case linkConfirmTitle

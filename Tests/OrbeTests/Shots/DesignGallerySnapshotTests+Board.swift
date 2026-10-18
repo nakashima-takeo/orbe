@@ -89,8 +89,8 @@ extension DesignGallerySnapshotTests {
     try write("board_automation_field_en.png", field, .en)
 
     let running = board(row: 1)
-    running.automation.perform(.runNow)
-    running.automation.perform(.runNow)
+    running.automation.perform(.flow(.ends))
+    running.automation.perform(.flow(.ends))
     try write("board_automation_running.png", running)
 
     try write("board_automation_zero.png", board([]))
@@ -119,6 +119,39 @@ extension DesignGallerySnapshotTests {
     try renderBoardRequestSnapshots(write: write, board: { board($0) })
     try renderBoardNotifySnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardCronSnapshots(write: write, board: { board($0, row: $1) })
+    try renderBoardMapSnapshots(write: write, board: { board($0, row: $1) })
+  }
+
+  /// 見本 O2Board（案2 地図＋選んだ部品）: 一覧に居る（カードの欄は空）・地図で失敗した判定を選ぶ・決まりを外した取得・
+  /// 走っている取得・コマンドだけ・入力の多い判定（溝が広がる）・狭い窓（カードが地図の下）。
+  private func renderBoardMapSnapshots(
+    write: (String, BoardModel, Language, NSSize) throws -> Void,
+    board: ([AutomationSample]?, Int) -> BoardModel
+  ) throws {
+    let size = NSSize(width: 1440, height: 844)
+    let samples = DesignSceneFixtures.boardMapSamples()
+    func map(_ row: Int, part: String? = nil) -> BoardModel {
+      let model = board(samples, row)
+      model.automation.enterMap()
+      if let part { model.automation.tapPart(part) }
+      return model
+    }
+    for language in [Language.ja, .en] {
+      let suffix = language == .ja ? "" : "_en"
+      try write("board_map_list\(suffix).png", board(samples, 0), language, size)
+      try write("board_map_card\(suffix).png", map(0, part: "contact"), language, size)
+    }
+    try write("board_map_first.png", map(0), .ja, size)
+    try write("board_map_breach.png", map(0, part: "backlog"), .ja, size)
+    let running = map(0, part: "slack")
+    running.automation.perform(.flow(.part))
+    try write("board_map_running.png", running, .ja, size)
+    try write("board_map_weekly.png", map(0, part: "weekly"), .ja, size)
+    try write("board_map_command.png", map(1), .ja, size)
+    try write("board_map_wide.png", map(2, part: "judge"), .ja, size)
+    try write("board_map_paused.png", map(3), .ja, size)
+    try write(
+      "board_map_narrow.png", map(0, part: "contact"), .ja, NSSize(width: 1000, height: 844))
   }
 
   /// いつの言葉が長い自動化と、式のまま出る自動化。一覧の 2 段目と詳細のいつを、広い面・狭い面・英語で撮る。並びは

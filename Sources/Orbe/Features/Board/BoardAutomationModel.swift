@@ -2,20 +2,26 @@ import Observation
 import SwiftUI
 
 /// ボードの自動化の部品の状態（@Observable）。部品は依頼の欄・一覧・右の欄（詳細か案内）で 1 つ。自動化・回・走っているか・次の
-/// 時刻は唯一の正（走らせ役とストア）から毎回読み、写さない。持つのは選択（同一性）と欄の中身だけ。ストアが変わったら
+/// 時刻は唯一の正（走らせ役とストア）から毎回読み、写さない。持つのは選択（同一性）・地図に居るかと欄の中身だけ。ストアが変わったら
 /// `reconcile()` で選択を付け直す（ビューの `.onChange` が届ける）。だから裏の回・AI の変更・⌘⇧X での操作がそのまま映る。
 ///
 /// 欄は一覧の上の 1 段で、欄と一覧の行は 1 つの選択の同一性を分け合う（⌘⇧X で入力の行き先と一覧の行が 1 つの選択なのと
 /// 同じ）。選ばれて見えるのは常に 1 か所で、焦点の場所は選択から決まる。↑↓ は欄と行の並びを端で巡回する。焦点が外から
 /// 部品へ入ると欄から始まり（⌘⇧X が開くと入力欄に焦点があるのと同じ）、中での当て直しは選んでいる場所へ戻る。
 ///
+/// 詳細の地図は、一覧で選んだ自動化の部品を選ぶ焦点の場所（一覧の ⇥ で入り、⇧⇥ / esc で一覧へ戻る）。一覧と地図は親子で、
+/// 地図に居る間も一覧の行は選んだまま残る。部品の選択は覚えている部品で、それが「選ばれている」のは地図に居る間だけ（地図の
+/// 選択の地・カード・地図の ↵ はすべて `selectedPart` を読む）。一覧の選択が別の段に替わると、地図から出て部品の選択を先頭へ
+/// 戻す。
+///
 /// 一覧の行の → で開くサブメニュー「通知」は、選んでいる行の付属で、焦点の場所を増やさない。対象はいつも選んでいる自動化で、
-/// 選んでいる段が変わると閉じる（行が一覧の見える範囲から外れたときはビューが閉じる）。
+/// 選んでいる段が変わる・地図へ移ると閉じる（行が一覧の見える範囲から外れたときはビューが閉じる）。
 @Observable final class BoardAutomationModel {
   /// 焦点の場所。
   enum Place: Hashable {
     case request
     case list
+    case map
   }
 
   /// 選べる段: 欄か、一覧の自動化の行。
@@ -29,7 +35,18 @@ import SwiftUI
 
   let runner: AutomationRunner
   private(set) var list = ListState<Stop>() {
-    didSet { if list.selectedID != oldValue.selectedID { notifyCursor = nil } }
+    didSet {
+      guard list.selectedID != oldValue.selectedID else { return }
+      notifyCursor = nil
+      inMap = false
+      partList = ListState()
+    }
+  }
+  /// 部品の選択（覚えている部品の鍵）。
+  private(set) var partList = ListState<String>()
+  /// 地図に居るか。一覧で自動化を選んでいる間だけ true になりうる。
+  private(set) var inMap = false {
+    didSet { if inMap { notifyCursor = nil } }
   }
   /// サブメニュー「通知」で選んでいる行（`notifyChoices` の番号）。nil は閉じている。
   private(set) var notifyCursor: Int?
@@ -67,7 +84,9 @@ import SwiftUI
   var stops: [Stop] { [.request] + ids.map(Stop.automation) }
 
   var place: Place {
-    if case .automation = list.selectedID { .list } else { .request }
+    if inMap { return .map }
+    if case .automation = list.selectedID { return .list }
+    return .request
   }
 
   /// 選んでいる自動化。欄を選んでいる間は nil（詳細の代わりに案内を出す）。
@@ -76,13 +95,40 @@ import SwiftUI
     return store.automation(id)
   }
 
-  /// 自動化 1 つのボードの描画用の値。ビューは自動化そのものに触れず、これと立ち位置だけを読む。
+  /// 選んでいる自動化の部品の並び（地図の行の順）。
+  var partIDs: [String] { selectedAutomation?.graph.byDepth.map(\.key) ?? [] }
+
+  /// 選ばれている部品。地図に居る間だけ、覚えている部品を返す。
+  var selectedPart: String? {
+    guard inMap, let key = partList.selectedID, partIDs.contains(key) else { return nil }
+    return key
+  }
+
+  // ビューは自動化そのものに触れず、次の値と立ち位置だけを読む。
+
+  /// 一覧の行の値。
   func summary(_ id: Int, text: AutomationText) -> BoardAutomationSummary? {
     guard let automation = store.automation(id) else { return nil }
     let next = automation.graph.nodes.compactMap { node in
       runner.nextRunAt(automation, part: node.key).map { (key: node.key, at: $0) }
     }.min { $0.at < $1.at }
     return BoardAutomationSummary(automation, text: text, next: next?.key)
+  }
+
+  /// 詳細の値。
+  func detail(_ id: Int, text: AutomationText) -> BoardAutomationDetailValue? {
+    guard let automation = store.automation(id) else { return nil }
+    return BoardAutomationDetailValue(
+      automation, text: text, running: { self.runner.isRunning(id, $0) },
+      open: store.shelvedProposals(of: id).count)
+  }
+
+  /// 選ばれている部品のカードの値。地図に居なければ nil。
+  func card(text: AutomationText, now: Date) -> BoardAutomationPartValue? {
+    guard let automation = selectedAutomation, let key = selectedPart else { return nil }
+    return BoardAutomationPartValue(
+      automation, part: key, text: text, running: runner.isRunning(automation.id, key),
+      next: runner.nextRunAt(automation, part: key, now: now))
   }
 
   /// 描くときの文。暦の今日は描くときの今から導く（開きっぱなしの画面で日をまたいでも「今日」が古くならない）。
@@ -92,19 +138,28 @@ import SwiftUI
   }
 
   /// ストアが変わったあとの付け直し。同一性が今の段にあればそのまま、無ければ同じ位置（末尾で頭打ち）の段へ。行がすべて
-  /// 消えれば欄になる。
+  /// 消えれば欄になる。部品も同一性で付け直し、消えたら同じ位置の部品へ。地図に居る間に選んでいた自動化が消えたら一覧へ戻る
+  /// （移った先の自動化の部品を勝手に選ばない）。
   func reconcile() {
     list.reconcile(stops)
+    partList.reconcile(partIDs)
   }
 
   // MARK: - 焦点の場所
 
-  /// 部品の中で焦点を移す（クリックから）。欄なら欄を選び、欄から一覧へ移ったら一覧の先頭の行を選ぶ。行が無ければ欄のまま。
+  /// 部品の中で焦点を移す（クリックから）。欄なら欄を選び、欄から一覧へ移ったら一覧の先頭の行を選ぶ（行が無ければ欄のまま）。
+  /// 地図から一覧へは選んでいる行のまま。地図へは覚えている部品へ。
   func go(_ place: Place) {
     if place != self.place {
       switch place {
       case .request: list.select(.request, in: stops)
-      case .list: if let first = ids.first { list.select(.automation(first), in: stops) }
+      case .list:
+        if inMap {
+          inMap = false
+        } else if let first = ids.first {
+          list.select(.automation(first), in: stops)
+        }
+      case .map: enterMap()
       }
     }
     focusToken &+= 1
@@ -120,6 +175,7 @@ import SwiftUI
   /// 勝つ。自動化が在ればその行を選んで焦点を一覧へ、無ければ欄を選ぶ。
   func open(_ id: Int) {
     onRefusal(nil)
+    inMap = false
     if !list.select(.automation(id), in: stops) { list.select(.request, in: stops) }
     focusToken &+= 1
   }
@@ -138,7 +194,7 @@ import SwiftUI
   }
 
   /// フッターの左に出すキー。欄では送る・一覧へ移るキー（一覧が空なら移る先が無いので出さない）、一覧では選んだ自動化で効く
-  /// キー、サブメニューを開いている間はその中のキー。
+  /// キー、地図では部品で効くキー、サブメニューを開いている間はその中のキー。
   var hints: [BoardKeyHint] {
     if notifyCursor != nil {
       return [
@@ -154,9 +210,16 @@ import SwiftUI
     func hand(_ operation: BoardAutomationHand.Operation) -> BoardKeyHint {
       BoardKeyHint(operation.key, operation.title(paused: paused))
     }
+    if inMap {
+      return [
+        BoardKeyHint("↑↓", .boardHintParts), hand(.flow(.part)),
+        BoardKeyHint("⇧⇥", .boardHintToList),
+      ]
+    }
     return [
-      BoardKeyHint("↑↓", .boardHintSelect), hand(.togglePause), hand(.runNow),
+      BoardKeyHint("↑↓", .boardHintSelect), hand(.togglePause), hand(.flow(.ends)),
       BoardKeyHint("→", .boardNotifyTitle), BoardKeyHint("⌘↵", .boardAskFixHint), hand(.delete),
+      BoardKeyHint("⇥", .boardHintToParts),
     ]
   }
 
@@ -170,40 +233,100 @@ import SwiftUI
     if place != before { focusToken &+= 1 }
   }
 
-  /// 行のクリック。
+  /// 行のクリック。一覧に居る（部品は選ばれていない）。
   func tap(_ id: Int) {
     onRefusal(nil)
+    inMap = false
     list.select(.automation(id), in: stops)
     focusToken &+= 1
   }
 
-  /// 選んでいる自動化への手の操作。止める ⇄ 再開で行が沈んでも浮いても、選択は同じ自動化に付いていく。
+  /// 選んでいる自動化への手の操作。止める ⇄ 再開で行が沈んでも浮いても、選択は同じ自動化に付いていく。部品まで流すのは
+  /// 選ばれている部品だけで、地図に居なければ何もしない。
   func perform(_ operation: BoardAutomationHand.Operation) {
     guard let automation = selectedAutomation else { return }
     onRefusal(nil)
-    if let refusal = BoardAutomationHand.perform(operation, on: automation, runner: runner) {
+    if let refusal = BoardAutomationHand.perform(
+      operation, on: automation, part: selectedPart, runner: runner)
+    {
       onRefusal(refusal.message)
     }
     reconcile()
     list.follow()
   }
 
-  /// ⌘↵。選んでいる自動化の直しをその場で頼む。頼む相手は今のストアから引き、もう無ければ頼まずに断る。
-  func askFix() {
-    guard case .automation(let id) = list.selectedID else { return }
+  // MARK: - 地図
+
+  /// 地図へ入る。覚えている部品（初めて・一覧で別の自動化を選んだ後は先頭）が選ばれる。自動化を選んでいなければ何もしない。
+  func enterMap() {
+    guard selectedAutomation != nil else { return }
     onRefusal(nil)
-    guard let automation = store.automation(id) else { return onRefusal(.boardAskFixGone) }
-    ask(.automationFix(automation))
+    partList.reconcile(partIDs)
+    inMap = true
+    focusToken &+= 1
   }
 
-  /// 一覧の器のキー。サブメニューを開いている間はそちらへ回す。↑↓・→・`BoardAutomationHand.stroke` に任せるキー・⌘↵ のほかは
-  /// 何も起こさず、どれも握る（⇥ で焦点をボードの外へ逃がさない）。
+  /// 一覧へ戻る。一覧の行はそのまま。
+  func leaveMap() {
+    guard inMap else { return }
+    onRefusal(nil)
+    inMap = false
+    focusToken &+= 1
+  }
+
+  /// 地図の ↑↓。端で止まり巡回しない。
+  func movePart(_ direction: Int) {
+    guard inMap else { return }
+    onRefusal(nil)
+    let ids = partIDs
+    guard let index = partList.selectedID.flatMap({ ids.firstIndex(of: $0) }) else { return }
+    let target = index + direction
+    guard ids.indices.contains(target) else { return }
+    partList.select(ids[target], in: ids)
+  }
+
+  /// 地図の部品の行のクリック。その部品を選んで地図に居る。
+  func tapPart(_ key: String) {
+    guard selectedAutomation != nil else { return }
+    onRefusal(nil)
+    partList.select(key, in: partIDs)
+    inMap = true
+    focusToken &+= 1
+  }
+
+  /// カードのボタン。その部品を選んで地図に居て、その部品まで流す。
+  func flow(to key: String) {
+    tapPart(key)
+    perform(.flow(.part))
+  }
+
+  /// 地図の器のキー。↑↓・↵（`BoardAutomationHand.stroke` に任せる）・⇧⇥ / esc のほかは何も起こさず、どれも握る（焦点を
+  /// ボードの外へ逃がさない）。
+  func handleMapKey(_ press: KeyPress) -> KeyPress.Result {
+    if let stroke = BoardAutomationHand.stroke(press, at: .map) {
+      if case .press(let operation) = stroke { perform(operation) }
+    } else if press.key == .backtab || press.key == .escape
+      || (press.key == .tab && press.modifiers.contains(.shift))
+    {
+      if press.phase == .down { leaveMap() }
+    } else if press.key == .upArrow || press.key == .downArrow,
+      !press.modifiers.contains(.command)
+    {
+      movePart(press.key == .upArrow ? -1 : 1)
+    }
+    return .handled
+  }
+
+  /// 一覧の器のキー。サブメニューを開いている間はそちらへ回す。↑↓・→・⇥・`BoardAutomationHand.stroke` に任せるキー・⌘↵ の
+  /// ほかは何も起こさず、どれも握る（⇧⇥ で焦点をボードの外へ逃がさない）。
   func handleKey(_ press: KeyPress) -> KeyPress.Result {
     if let cursor = notifyCursor {
       handleNotifyKey(press, cursor)
     } else if press.key == .rightArrow, press.modifiers.isDisjoint(with: Self.chords) {
       if press.phase == .down { openNotify() }
-    } else if let stroke = BoardAutomationHand.stroke(press) {
+    } else if press.key == .tab, press.modifiers.isDisjoint(with: Self.chords) {
+      if press.phase == .down { enterMap() }
+    } else if let stroke = BoardAutomationHand.stroke(press, at: .list) {
       if case .press(let operation) = stroke { perform(operation) }
     } else if press.key == .return, press.modifiers.contains(.command) {
       if press.phase == .down { askFix() }
@@ -268,40 +391,4 @@ import SwiftUI
 
   /// 修飾なしのキーとみなさない修飾（矢印キーが伴う numericPad・function は含めない）。
   private static let chords: EventModifiers = [.command, .option, .control, .shift]
-
-  // MARK: - 依頼の欄
-
-  /// 欄のキー。↑↓ は段を移り、esc は ↓ と同じく一覧の先頭の行へ。⇥・⇧⇥ は何もせずに握る（焦点をボードの外へ逃がさない）。
-  /// 変換中のキーは窓が IME へ渡すので、ここへは来ない。ほかは入力欄へ流す。
-  func handleRequestKey(_ press: KeyPress) -> KeyPress.Result {
-    switch press.key {
-    case .upArrow, .downArrow:
-      guard !press.modifiers.contains(.command) else { return .ignored }
-      move(press.key == .upArrow ? -1 : 1)
-    case .escape:
-      if press.phase == .down { move(1) }
-    case .tab, .backtab:
-      break
-    default:
-      return .ignored
-    }
-    return .handled
-  }
-
-  /// 欄の ↵。打った文を頼み、受けたら欄を空にする。断られたら欄を残す。空の欄は黙る。
-  func send() {
-    onRefusal(nil)
-    if ask(.text(requestText)) { requestText = "" }
-  }
-
-  /// 頼んで、受けたかを返す。受けられなければ断りを置く。空の頼みは黙って受けない。
-  @discardableResult private func ask(_ ask: SecretaryAsk) -> Bool {
-    switch onAsk(ask) {
-    case nil: return true
-    case .claudeMissing: onRefusal(.boardAskClaudeMissing)
-    case .unavailable: onRefusal(.boardAskUnavailable)
-    case .empty: break
-    }
-    return false
-  }
 }

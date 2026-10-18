@@ -105,12 +105,7 @@ enum TaskPaletteAutomationError: Equatable {
   // MARK: - 行
 
   /// 人の判断待ちの提案と、それを出す棚の受信。
-  private var shelved: [(proposal: AutomationProposal, shelf: Int)] {
-    store.proposals.compactMap { proposal in
-      guard proposal.state == .open, let shelf = store.shelf(of: proposal) else { return nil }
-      return (proposal, shelf.id)
-    }
-  }
+  private var shelved: [(proposal: AutomationProposal, shelf: Int)] { store.shelvedProposals }
 
   /// ヘッダーのタブの件数（入力の絞り込みに左右されない）。
   var openCount: Int { shelved.count }

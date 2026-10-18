@@ -92,9 +92,48 @@ extension DesignFlowSnapshotTests {
         ("down", { automation.move(1) }),
         ("paused", { automation.perform(.togglePause) }),
         ("resumed", { automation.perform(.togglePause) }),
-        ("run_now", { automation.perform(.runNow) }),
-        ("run_refused", { automation.perform(.runNow) }),
+        ("run_now", { automation.perform(.flow(.ends)) }),
+        ("run_refused", { automation.perform(.flow(.ends)) }),
         ("deleted", { automation.perform(.delete) }),
+      ])
+  }
+
+  /// 地図と選んだ部品: 一覧で選ぶ（カードの欄は空）→ ⇥ で先頭の部品 → ↑ は端で止まる → ↓ で次の部品 → 失敗した判定まで
+  /// 進む → ↵ で流れて「実行中…」→ 流している途中の ↵ は赤の断り → esc で一覧へ（地図の地とカードが消える）→ ⇥ で同じ
+  /// 部品 → 一覧へ戻って別の自動化を選ぶ → ⇥ で先頭の部品 → カードのボタン。
+  func testBoardMap() throws {
+    let model = BoardModel(
+      automation: BoardAutomationModel(
+        runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardMapSamples())),
+      parts: [.automation])
+    let automation = model.automation
+    try flow(
+      "board_map", size: NSSize(width: 1440, height: 844),
+      render: {
+        BoardRoot(
+          model: model, translucency: ChromeTranslucency(),
+          localization: LocalizationStore(language: .ja), fontResolver: ChromeFontResolver())
+      },
+      steps: [
+        ("list", { automation.move(1) }),
+        ("tab_first", { automation.enterMap() }),
+        ("up_stops", { automation.movePart(-1) }),
+        ("down", { automation.movePart(1) }),
+        ("to_contact", { for _ in 0..<10 { automation.movePart(1) } }),
+        ("down_stops", { automation.movePart(1) }),
+        ("flow", { automation.perform(.flow(.part)) }),
+        ("flow_refused", { automation.perform(.flow(.part)) }),
+        ("escape", { automation.leaveMap() }),
+        ("tab_same", { automation.enterMap() }),
+        (
+          "other_automation",
+          {
+            automation.leaveMap()
+            automation.move(1)
+          }
+        ),
+        ("tab_other_first", { automation.enterMap() }),
+        ("button", { automation.flow(to: "note") }),
       ])
   }
 

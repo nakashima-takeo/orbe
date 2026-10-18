@@ -48,7 +48,8 @@ struct BoardAutomationList: View {
           ForEach(standings) { standing in
             BoardAutomationRow(
               standing: standing, summary: model.summary(standing.id, text: text),
-              selected: model.list.selectedID == .automation(standing.id)
+              selection: model.list.selectedID == .automation(standing.id)
+                ? (model.inMap ? .parent : .focused) : nil
             )
             .id(BoardAutomationModel.Stop.automation(standing.id))
             .onTapGesture { model.tap(standing.id) }
@@ -76,11 +77,16 @@ struct BoardAutomationList: View {
 }
 
 /// 一覧の 1 行。上段に点・名前・右端の文、下段に Orbe へ渡す先の種類といつ。点・名前・右端の色と種類は立ち位置から、文は読み替えから
-/// 読む。
+/// 読む。選んでいる行は、焦点が一覧にあれば濃い地、地図にあれば（その自動化の部品を選んでいる間）薄い地。
 struct BoardAutomationRow: View {
+  enum Selection {
+    case focused
+    case parent
+  }
+
   let standing: BoardAutomationStanding
   let summary: BoardAutomationSummary?
-  let selected: Bool
+  let selection: Selection?
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
@@ -114,11 +120,16 @@ struct BoardAutomationRow: View {
     }
     .padding(.horizontal, Self.inset)
     .frame(height: Self.height)
-    .background(
-      selected ? Color.theme.selectionFill : Color.clear,
-      in: RoundedRectangle(cornerRadius: Self.radius)
-    )
+    .background(fill, in: RoundedRectangle(cornerRadius: Self.radius))
     .contentShape(Rectangle())
+  }
+
+  private var fill: Color {
+    switch selection {
+    case .focused: Color.theme.selectionFill
+    case .parent: Color.theme.surfaceInk.opacity(0.06)
+    case nil: Color.clear
+    }
   }
 
   private var dot: Color {
@@ -132,6 +143,7 @@ struct BoardAutomationRow: View {
   private var mark: (label: String, color: Color) {
     switch standing.mark {
     case .running: (l10n.string(.automationRunning), Color.theme.accentBright)
+    case .failed: (summary?.mark ?? "", Color.theme.danger)
     case .paused: (l10n.string(.automationPaused), Color.theme.textMuted)
     case .neverRan: (l10n.string(.automationNeverRan), Color.theme.textMuted)
     case .ran(let tone):

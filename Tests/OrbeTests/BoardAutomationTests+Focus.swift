@@ -55,7 +55,7 @@ extension BoardAutomationTests {
 
   /// 欄は一覧の上の 1 段で、欄と行は 1 つの選択を分け合う。部品は欄から始まり、欄を選んでいる間は行の選択と詳細が無い。
   /// 欄の ↓ で一覧の先頭、先頭の行の ↑ で欄、欄の ↑ で一覧の末尾（巡回）、末尾の行の ↓ で欄（巡回）、欄の esc は ↓ と同じく
-  /// 一覧の先頭へ。⇥ は欄でも一覧でも何もしない。
+  /// 一覧の先頭へ。欄の ⇥ は何もせず、一覧の ⇥ は地図へ入り、地図の ⇧⇥ で一覧へ戻る。
   func testArrowsMoveOneSelectionThroughTheFieldAndTheRows() {
     let model = board()
     let automation = model.automation
@@ -75,7 +75,9 @@ extension BoardAutomationTests {
     XCTAssertEqual(automation.place, .list, "欄の ↓ で一覧へ")
     XCTAssertEqual(automation.selectedAutomation?.id, Self.failingBacklog, "一覧の先頭")
     send(Key.tab, "\t", to: window)
-    XCTAssertEqual(automation.place, .list, "一覧の ⇥ は何もしない")
+    XCTAssertEqual(automation.place, .map, "一覧の ⇥ で地図へ")
+    send(Key.tab, "\u{19}", .shift, to: window)
+    XCTAssertEqual(automation.place, .list, "地図の ⇧⇥ で一覧へ")
     down(window)
     XCTAssertEqual(automation.selectedAutomation?.id, Self.slack, "一覧のキーが効く")
 

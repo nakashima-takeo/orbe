@@ -14,16 +14,26 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
       DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone),
     timeZone: DesignSceneFixtures.taskCalendar.timeZone)
 
+  private func automation(_ samples: [AutomationSample]) throws -> Automation {
+    try XCTUnwrap(DesignSceneFixtures.automationStore(samples).automations.first)
+  }
+
   private func summary(_ samples: [AutomationSample]) throws -> BoardAutomationSummary {
-    let automation = try XCTUnwrap(DesignSceneFixtures.automationStore(samples).automations.first)
-    return BoardAutomationSummary(automation, text: text, next: nil)
+    BoardAutomationSummary(try automation(samples), text: text, next: nil)
+  }
+
+  private func detail(_ samples: [AutomationSample]) throws -> BoardAutomationDetailValue {
+    BoardAutomationDetailValue(
+      try automation(samples), text: text, running: { _ in false }, open: 0)
   }
 
   func testAWorkRunWithAReplyShowsDoneAtTheRightEndNotTheReply() throws {
-    let summary = try summary([DesignSceneFixtures.boardAgentExample()])
+    let samples = [DesignSceneFixtures.boardAgentExample()]
+    let summary = try summary(samples)
+    let last = try detail(samples).last
 
     XCTAssertEqual(summary.mark, "10/3 9:00 に完了")
-    XCTAssertTrue(summary.last.hasSuffix("PR を投稿: レビュー待ちの PR 2 件を #dev-me に投稿した。"), summary.last)
+    XCTAssertTrue(last.hasSuffix("PR を投稿: レビュー待ちの PR 2 件を #dev-me に投稿した。"), last)
   }
 
   func testAJudgeRunSaysItAddedToTaskCandidatesEvenWithAReportPart() throws {
@@ -52,8 +62,9 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
       ])
 
     let summary = try summary([sample])
+    let last = try detail([sample]).last
 
     XCTAssertEqual(summary.output, "タスク候補・報告")
-    XCTAssertTrue(summary.last.hasSuffix("判定: 1件をタスク候補に追加"), summary.last)
+    XCTAssertTrue(last.hasSuffix("判定: 1件をタスク候補に追加"), last)
   }
 }

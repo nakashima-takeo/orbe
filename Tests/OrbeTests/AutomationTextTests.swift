@@ -66,8 +66,8 @@ final class AutomationTextTests: OrbeTestCase {
     let contact = Self.node("contact", "連絡")
 
     XCTAssertNil(text.failed([]))
-    XCTAssertEqual(text.failed([contact]), "判定: 連絡 · 失敗")
-    XCTAssertEqual(text.failed([contact, Self.judge]), "判定: 連絡 ほか 1 件 · 失敗")
+    XCTAssertEqual(text.failed([contact]), "判定: 連絡 で失敗")
+    XCTAssertEqual(text.failed([contact, Self.judge]), "判定: 連絡 ほか 1 件 で失敗")
   }
 
   func testWhen() {
