@@ -28,10 +28,10 @@ final class SecretaryTextTests: OrbeTestCase {
         .contains("automation"), "⌘⇧X の役目は自動化のスキルを使わない")
   }
 
-  func testAFixNamesTheAutomation() throws {
-    let automation = try XCTUnwrap(
-      DesignSceneFixtures.automationStore(DesignSceneFixtures.boardAutomationSamples())
-        .automations[2])
+  func testAFixNamesTheAutomation() {
+    let automation = DesignSceneFixtures.automationStore(
+      DesignSceneFixtures.boardAutomationSamples()
+    ).automations[2]
     XCTAssertEqual(
       SecretaryText.firstInput(.automationFix(automation), l10n: ja),
       "依頼: 自動化 \(automation.id)「\(automation.definition.name)」を直す。")
