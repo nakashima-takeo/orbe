@@ -41,7 +41,8 @@ final class AutomationTextTests: OrbeTestCase {
     return node
   }
 
-  /// 失敗は日本語の説明に原文を括弧で添える。部品の申告は説明の頭に文を添え、原文を重ねない。
+  /// 失敗は日本語の説明に原文を括弧で添える。部品の申告は説明の頭に文を添え、原文を重ねない。英語の画面は原文を添えない
+  /// （説明も原文も英語で、同じことを 2 度言うため）。
   func testFailureSaysTheKindWithTheOriginal() {
     XCTAssertEqual(
       text.failure(failed(.ended(detail: ""), ending: .timeLimit), node: Self.judge),
@@ -52,6 +53,10 @@ final class AutomationTextTests: OrbeTestCase {
     XCTAssertEqual(
       text.failure(failed(.reported("Slack に届かない"), ending: .exited(0)), node: Self.judge),
       "部品が失敗を申告した：Slack に届かない")
+    XCTAssertEqual(
+      Self.automationText(.en).failure(
+        failed(.ended(detail: ""), ending: .timeLimit), node: Self.judge),
+      "didn’t finish within the time limit")
   }
 
   /// 外れた行は「n 行目：<説明>」。

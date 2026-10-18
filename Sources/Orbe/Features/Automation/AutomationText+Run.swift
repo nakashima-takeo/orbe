@@ -1,7 +1,8 @@
 import Foundation
 
-/// 回の失敗と外れた行の、画面の言い方。種類から日本語の説明を引き、AI が読む英文（原文）を括弧で添える。Orbe が種類を決め
-/// られない文（部品の申告・CLI のエラー）は、説明の頭の後に文をそのまま添え、原文を重ねない。
+/// 回の失敗と外れた行の、画面の言い方。種類から説明を引き、日本語の画面では AI が読む英文（原文）を括弧で添える。原文は
+/// 英語なので、英語の画面では説明と同じことを 2 度言わないよう添えない。Orbe が種類を決められない文（部品の申告・CLI の
+/// エラー）は、説明の頭の後に文をそのまま添え、原文を重ねない。
 extension AutomationText {
   /// 「制限時間内に終わらなかった（the part "x" ended: stopped at the time limit）」。
   func failure(_ run: AutomationPartRun, node: AutomationGraph.Node) -> String? {
@@ -9,6 +10,7 @@ extension AutomationText {
     let head = failureHead(failure, ending: run.execution.ending, node: node)
     switch failure {
     case .agentError, .reported: return head
+    case _ where l10n.language == .en: return head
     default:
       let original = failure.text(part: node.key, ending: run.execution.ending, breach: run.breach)
       return l10n.format(.automationWithOriginal, head, original)
