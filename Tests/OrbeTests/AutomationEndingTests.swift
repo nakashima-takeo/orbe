@@ -14,7 +14,8 @@ final class AutomationEndingTests: OrbeTestCase {
       + BackgroundProcess.Limit.allCases.map(BackgroundEnding.limited)
       + [
         .notStarted(.agentNotFound("claude")), .notStarted(.directoryMissing("~/work/scripts")),
-        .notStarted(.launchFailed(2)), .toolsUnavailable(["mcp__slack__search", "mcp__gmail__read"]),
+        .notStarted(.launchFailed(2)),
+        .toolsUnavailable(["mcp__slack__search", "mcp__gmail__read"]),
       ]
 
     for ending in endings {

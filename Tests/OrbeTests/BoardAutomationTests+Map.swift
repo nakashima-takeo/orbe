@@ -12,7 +12,8 @@ import XCTest
 extension BoardAutomationTests {
   private func card(_ automation: BoardAutomationModel) -> BoardAutomationPartValue? {
     let now = automation.runner.now()
-    return automation.card(text: automation.text(LocalizationStore(language: .ja), now: now), now: now)
+    return automation.card(
+      text: automation.text(LocalizationStore(language: .ja), now: now), now: now)
   }
 
   /// 一覧の ↵ は今すぐ実行せずに地図の先頭の部品へ入る。地図の esc は一覧の同じ行へ戻り、部品の選択とカードが消える。
