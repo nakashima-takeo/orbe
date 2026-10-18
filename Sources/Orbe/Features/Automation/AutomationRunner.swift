@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// 自動化の部品を 1 つずつ番人に載せ、部品の契機ごとに「溜まりから取る → 部品の 1 回 → 確定」を回す。main で使う。
 ///
@@ -15,14 +16,15 @@ import Foundation
 ///
 /// 流す（`flow`）は、部品を指してそこに至る道の上の部品を 1 回ずつ回す（`AutomationFlow`）。一巡は自動化ごとに高々 1 つで、
 /// メモリだけに持つ。走らせ役は契機の始まりと終わりを一巡へ知らせ、返った部品を「今すぐ」で起こす。道の上の部品を番人から
-/// 外すと一巡を打ち切る——待っている回の終わりが来なくなるので。
+/// 外すと一巡を打ち切る——待っている回の終わりが来なくなるので。観測に載せるのは一巡だけで（画面が一巡の有無を読む）、他の
+/// 持ち物は部品の回のたびに変わるので観測から外す。
 ///
 /// 部品の回を記録するたびに `recorded` で自動化と部品の鍵を知らせる（知らせるかどうか・何を出すかは受けた側がストアの今の値
 /// から決める）。定義を書いたら `defined`、消したら `deleted` で知らせる。
-final class AutomationRunner {
+@Observable final class AutomationRunner {
   let store: AutomationStore
-  var now: () -> Date = Date.init
-  var calendar: () -> Calendar = { Calendar.current }
+  @ObservationIgnored var now: () -> Date = Date.init
+  @ObservationIgnored var calendar: () -> Calendar = { Calendar.current }
 
   private let scheduler: BackgroundScheduler
   private let run: BackgroundScheduler.Run
@@ -31,11 +33,11 @@ final class AutomationRunner {
   private let defined: (Int) -> Void
   private let deleted: (Int) -> Void
   /// 番人に載せている鍵。
-  private var registered = Set<String>()
+  @ObservationIgnored private var registered = Set<String>()
   /// 部品ごとの、前の契機の始まりの時点の最も新しい通し番号（メモリだけ。無ければ溜まりの行はすべて新しい）。
-  private var marks: [String: Int] = [:]
+  @ObservationIgnored private var marks: [String: Int] = [:]
   /// 部品ごとの、番人に最後に返した数え始め。記録の無い契機（取る行が 0 件）でも進むので、次の時刻はこれから数える。
-  private var anchors: [String: Date] = [:]
+  @ObservationIgnored private var anchors: [String: Date] = [:]
   /// 自動化ごとの、流している途中の一巡。
   private var flows: [Int: AutomationFlow] = [:]
 
@@ -70,6 +72,11 @@ final class AutomationRunner {
 
   func isRunning(_ id: Int, _ key: String) -> Bool {
     scheduler.isRunning(id: Self.key(id, key))
+  }
+
+  /// 流している途中か（一巡があるか）。
+  func isFlowing(_ id: Int) -> Bool {
+    flows[id] != nil
   }
 
   /// `now`（渡さなければ走らせ役の今）から見て、どれかの部品が次に予定で回る時刻（止めていれば nil）。
@@ -128,7 +135,8 @@ final class AutomationRunner {
     deleted(id)
   }
 
-  /// 指した部品まで流す（止めた自動化も受ける）。流している途中なら断る。
+  /// 指した部品まで流す（止めた自動化も受ける）。流している途中なら断る。指す部品が無ければ一巡を置かない（置くと終わりの
+  /// 知らせが来ず、以後ずっと断る）。
   func flow(_ id: Int, to target: AutomationFlow.Target) throws(AutomationError) {
     try checkAvailable()
     guard let automation = store.automation(id) else { throw .automationNotFound(id) }
@@ -139,8 +147,11 @@ final class AutomationRunner {
       targets = [key]
     case .ends:
       targets = automation.graph.ends.map(\.key)
+    case .judges:
+      targets = automation.graph.judges.map(\.key)
     }
     guard flows[id] == nil else { throw .flowing(id) }
+    guard !targets.isEmpty else { return }
     let (flow, wake) = AutomationFlow.start(to: targets, in: automation.graph) {
       isRunning(id, $0)
     }
@@ -266,7 +277,11 @@ extension AutomationRunner {
       automationId: id, part: part,
       kind: node.part.trigger == .arrival ? .arrival : kind == .now ? .now : .schedule,
       startedAt: now(), finish: finish)
-    trigger.flowed = flows[id]?.started(part, in: automation.graph) ?? false
+    // 一巡があるときだけ触れる（触れるだけで観測が切れ、流していない自動化の回のたびに画面が描き直される）。
+    if var flow = flows[id] {
+      trigger.flowed = flow.started(part, in: automation.graph)
+      flows[id] = flow
+    }
     if node.part.inputs.isEmpty {
       pass(trigger, take: nil)
     } else {

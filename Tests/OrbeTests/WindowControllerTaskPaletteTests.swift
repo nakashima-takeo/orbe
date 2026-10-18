@@ -81,6 +81,7 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
 
     let palette = try openTaskPalette(wc)
     palette.setTab(.automation)
+    palette.automation.enterProposals()
     palette.submit()
 
     XCTAssertEqual(
@@ -103,6 +104,7 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
 
     let palette = try openTaskPalette(wc)
     palette.setTab(.automation)
+    palette.automation.enterProposals()
     palette.automation.acceptAndOpen()
 
     let task = try XCTUnwrap(wc.taskStore.tasks.first { $0.title == "main で直す" })
@@ -122,6 +124,7 @@ final class WindowControllerTaskPaletteTests: OrbeTestCase {
       workspaces: [mainId])
     let palette = try openTaskPalette(wc)
     palette.setTab(.automation)
+    palette.automation.enterProposals()
 
     let main = try XCTUnwrap(wc.workspaces.firstIndex { $0.persistentId == mainId })
     wc.closeWorkspace(main, origin: .controlAPI)

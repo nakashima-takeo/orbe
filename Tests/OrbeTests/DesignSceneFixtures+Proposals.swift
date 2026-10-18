@@ -151,33 +151,4 @@ extension DesignSceneFixtures {
       ], at: 0)
     return samples
   }
-
-  /// 部品の中身を行数で切らないことを見る見本: Backlog（3）の取得に長い指示文と多くのツール・長い判定の指示文、Slack（1）に
-  /// 長い取得のコマンドと作業ディレクトリ。
-  static func automationLongSamples() -> [AutomationSample] {
-    var samples = automationDesignSamples()
-    samples[2].definition.parts[0] = agentPart(
-      "fetch", "Backlog から取る", .scheduled(.every(1800)), model: "haiku",
-      tools: [
-        "mcp__backlog__get_issues", "mcp__backlog__get_issue_comments",
-        "mcp__backlog__get_project_list", "mcp__backlog__get_users",
-        "mcp__backlog__get_notifications", "mcp__backlog__get_wiki_pages",
-      ],
-      instruction: (1...9).map { "\($0). 自分が担当の未完了の課題を、更新の新しい順に 30 件取る。期限の近いものを先に。" }
-        .joined(separator: "\n"), coverage: .currentSet)
-    samples[2].definition.parts[1] = agentPart(
-      "judge", "判定", .arrival, from: ["fetch"], model: "sonnet",
-      instruction: (1...8).map { "\($0). 今日中に自分が手を動かす必要があるものだけをタスクにする。" }
-        .joined(separator: "\n"), deliver: .taskCandidates)
-    samples[0].definition.parts[0] = commandPart(
-      "fetch", "Slack から取る", .scheduled(cron("0 9,13,17 * * *")),
-      script: (1...8).map {
-        "gh search prs --review-requested=@me --json url,title,body --limit \($0 * 10) \\"
-      }
-      .joined(separator: "\n") + "\n  | jq -c '.[] | {id: .url, link: .url, body: .title}'",
-      directory:
-        "/Users/someone/work/very/long/path/to/the/repository/that/wraps/onto/the/next/line",
-      coverage: .newArrivals)
-    return samples
-  }
 }

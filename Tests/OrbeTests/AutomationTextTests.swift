@@ -33,21 +33,41 @@ final class AutomationTextTests: OrbeTestCase {
     return run
   }
 
+  private static let judge = node("dev", "開発")
+
+  private static func node(_ key: String, _ name: String) -> AutomationGraph.Node {
+    let graph = try? AutomationGraph([
+      DesignSceneFixtures.commandPart(
+        "fetch", "取得", .manual, script: "cat", coverage: .newArrivals),
+      DesignSceneFixtures.agentPart(
+        key, name, .arrival, from: ["fetch"], instruction: "i", deliver: .taskCandidates),
+    ])
+    guard let node = graph?.node(key) else { preconditionFailure("the graph is valid") }
+    return node
+  }
+
   func testJudgeRunSummariesSaySingularAndPluralAndFailure() {
     let en = Self.automationText(.en)
 
     XCTAssertEqual(
-      en.runHeadline(part: "judge", judged(taken: 12, proposed: 1)),
-      "13:00 judge · 12 → 1 candidate")
+      en.latest(Self.judge, judged(taken: 12, proposed: 1)), "13:00 Judge: 開発 · 12 → 1 candidate")
     XCTAssertEqual(
-      en.runHeadline(part: "judge", judged(taken: 12, proposed: 2)),
-      "13:00 judge · 12 → 2 candidates")
+      en.latest(Self.judge, judged(taken: 12, proposed: 2)), "13:00 Judge: 開発 · 12 → 2 candidates")
     XCTAssertEqual(
-      text.runHeadline(part: "判定", judged(taken: 12, proposed: 2)), "13:00 判定 · 12 件 → 候補 2")
+      text.latest(Self.judge, judged(taken: 12, proposed: 2)), "13:00 判定: 開発 · 12 件 → 候補 2")
     XCTAssertEqual(
-      text.runDetail(part: "判定", judged(taken: 3, proposed: 0, failure: "boom")),
-      "今日 13:00 判定 · 失敗 — boom")
-    XCTAssertEqual(text.runHeadline(part: "判定", nil), "まだ回っていない")
+      text.latest(Self.judge, judged(taken: 3, proposed: 0, failure: "boom")),
+      "13:00 判定: 開発 · 失敗 — boom")
+    XCTAssertEqual(text.latest(Self.judge, nil), "判定: 開発 · まだ回っていない")
+  }
+
+  /// 失敗した部品は新しい失敗を先に言い、2 つ目からは数で言う。
+  func testFailedParts() {
+    let contact = Self.node("contact", "連絡")
+
+    XCTAssertNil(text.failed([]))
+    XCTAssertEqual(text.failed([contact]), "判定: 連絡 · 失敗")
+    XCTAssertEqual(text.failed([contact, Self.judge]), "判定: 連絡 ほか 1 件 · 失敗")
   }
 
   func testWhen() {

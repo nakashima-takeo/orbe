@@ -349,29 +349,30 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAutomationAll
   case taskPaletteAutomationAskBoard
   case taskPaletteAutomationNoProposals
-  case taskPaletteAutomationLastFailed
-  case taskPaletteAutomationContents
+  case taskPaletteAutomationNextJudge
+  case taskPaletteAutomationJudgeOnArrival
+  case taskPaletteAutomationJudgeManual
+  case taskPaletteAutomationRefreshing
   case taskPaletteAutomationEmpty
   case taskPaletteAutomationOpenLink
   case taskPaletteAutomationAsTask
   case taskPaletteAutomationDismiss
   case taskPaletteAutomationActionAccept
   case taskPaletteAutomationActionProposals
-  case taskPaletteAutomationActionRunNow
+  case taskPaletteAutomationActionRefresh
   case taskPaletteAutomationHintShelf
   case taskPaletteAutomationHintPick
-  case taskPaletteAutomationHintBack
-  case taskPaletteAutomationLast
-  case taskPaletteAutomationOverlaps
-  case taskPaletteAutomationOverlapCount
-  case taskPaletteAutomationRewriteNote
+  case taskPaletteAutomationHintProposals
   case taskPaletteAutomationErrAccept
+  case taskPaletteAutomationErrRefreshing
   // MARK: - 自動化の共有の文（L10nTable+Automation）
   case automationNext
   case automationPaused
   case automationRunning
   case automationFailed
   case automationNeverRan
+  case automationFailedPart
+  case automationFailedParts
   case automationNowMark
   case automationToday
   case automationDue

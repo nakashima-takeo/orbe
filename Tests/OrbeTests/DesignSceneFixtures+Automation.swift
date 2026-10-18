@@ -10,6 +10,8 @@ struct AutomationSample {
   var paused = false
   /// 古い順に確定する部品の回。
   var passes: [AutomationSamplePass] = []
+  /// 回を確定した後に消す（出した候補が、重ねて取っている別の自動化の棚に残る）。
+  var deleted = false
 }
 
 /// 見本の部品の 1 回。入力のある部品の回は、その時点の溜まりをすべて取った回にする。
@@ -65,6 +67,7 @@ extension DesignSceneFixtures {
               endedAt: pass.at.addingTimeInterval(60), take: take, outcome: pass.outcome))
         }
         if sample.paused { _ = try store.setPaused(id, true) }
+        if sample.deleted { try store.delete(id) }
       }
     } catch {
       preconditionFailure("the samples are valid: \(error)")
