@@ -51,6 +51,12 @@ enum TaskPaletteFocusTarget: Hashable {
   case paneDue
 }
 
+/// 押し続けたキーを止める単位（焦点の宛先と、提案タブの居場所）。
+struct TaskPaletteKeySpot: Equatable {
+  let focus: TaskPaletteFocusTarget
+  let automation: TaskPaletteAutomationPlace?
+}
+
 /// 文字の項目の下書き。編集を始めたときの書き戻し先に結び付き、確定はそこへ書く。焦点・キー・変換中・確定の
 /// 経路は書き戻し先に依らず 1 つで、確定の処理だけを書き戻し先で分ける。
 struct TaskEditDraft: Equatable {

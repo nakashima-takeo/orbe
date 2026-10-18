@@ -71,9 +71,9 @@ extension TaskPaletteModel {
     }
   }
 
-  /// 入力欄のクリック。右の欄・棚・中身から一覧へ戻る。
+  /// 入力欄のクリック。右の欄から一覧へ、提案タブの棚から絞り込み欄へ戻る。
   func returnToField() {
-    if visibleTab == .automation { automation.showProposals() } else { leaveDetail() }
+    if visibleTab == .automation { automation.enterField() } else { leaveDetail() }
   }
 
   /// 入力が変わったら、先頭の行（タスクのタブで入力があれば入力の行き先）を選ぶ。タスクの表は入力の変化で

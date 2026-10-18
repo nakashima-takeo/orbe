@@ -1,15 +1,20 @@
 import SwiftUI
 
-/// 提案タブのキー。↵（提案の一覧）は入力欄の `onSubmit`、esc（提案の一覧）と ⇥・⇧⇥ は画面のモデルが受ける。中身のキーは
-/// `AutomationHand.stroke` に任せる（ボードと同じ）。取り消せない操作（捨てる・削除）・タスクにして開く・ブラウザで開くは押した瞬間だけを
-/// 操作にし、押し続けたキーリピートは捨てる。
+/// 提案タブのキー。絞り込み欄と候補の一覧は入力欄に焦点があり、↵ は入力欄の `onSubmit`、絞り込み欄の esc と ⇥・⇧⇥ は
+/// 画面のモデルが受ける。棚はカードの器に焦点がある。取り消せない操作（捨てる）・タスクにして開く・ブラウザで開く・候補の
+/// 更新は押した瞬間だけを操作にし、押し続けたキーリピートは捨てる。
 extension TaskPaletteAutomationModel {
-  /// 入力欄（提案の一覧）。捨てるは ⌘⌫ で、入力欄が空のときだけ効く（文字があれば行頭まで消す）——焦点が絞り込み欄に
-  /// あるので、単キーにすると絞り込みのつもりで打った 1 文字で提案が消える。
+  /// 入力欄（絞り込み欄と候補の一覧）。捨てるは ⌘⌫ で、入力欄が空のときだけ効く（文字があれば行頭まで消す）——焦点が
+  /// 絞り込み欄にあるので、単キーにすると絞り込みのつもりで打った 1 文字で候補が消える。候補をさばくキーは選ばれている
+  /// 候補にだけ効くので、絞り込み欄では何もしない。
   func handleFieldKey(_ press: KeyPress) -> KeyPress.Result {
     switch press.key {
     case .upArrow, .downArrow:
       let direction = press.key == .upArrow ? -1 : 1
+      guard place == .proposals else {
+        if direction > 0, TaskPaletteModel.isUnmodified(press) { enterShelf() }
+        return .handled
+      }
       if press.modifiers.contains(.command) {
         jumpProposal(direction)
       } else {
@@ -22,46 +27,27 @@ extension TaskPaletteAutomationModel {
     case _ where TaskPaletteModel.isCommandBackspace(press):
       guard query.isEmpty else { return .ignored }
       if press.phase == .down { dismiss() }
-    case .rightArrow:
-      guard TaskPaletteModel.isUnmodified(press), selectedAutomation != nil else { return .ignored }
-      enterContents()
     case .leftArrow:
       guard TaskPaletteModel.isUnmodified(press), query.isEmpty else { return .ignored }
       enterShelf()
+    case .escape where place == .proposals:
+      enterField()
     default:
       return .ignored
     }
     return .handled
   }
 
-  /// 棚と中身。
-  func handlePlaceKey(_ press: KeyPress) -> KeyPress.Result {
-    switch place {
-    case .proposals: return .ignored
-    case .shelf: return handleShelfKey(press)
-    case .contents: return handleContentsKey(press)
-    }
-  }
-
-  private func handleShelfKey(_ press: KeyPress) -> KeyPress.Result {
+  /// 棚。
+  func handleShelfKey(_ press: KeyPress) -> KeyPress.Result {
     switch press.key {
     case .upArrow, .downArrow:
       let direction = press.key == .upArrow ? -1 : 1
       if press.modifiers.contains(.command) { jumpShelf(direction) } else { moveShelf(direction) }
-    case .rightArrow, .return, .escape: showProposals()
-    default: return .ignored
-    }
-    return .handled
-  }
-
-  private func handleContentsKey(_ press: KeyPress) -> KeyPress.Result {
-    if let stroke = AutomationHand.stroke(press) {
-      if case .press(let operation) = stroke { perform(operation) }
-      return .handled
-    }
-    switch press.key {
-    case .leftArrow, .escape: showProposals()
-    case .return: break
+    case .return where press.modifiers.contains(.command):
+      if press.phase == .down { refresh() }
+    case .rightArrow, .return: enterProposals()
+    case .escape: enterField()
     default: return .ignored
     }
     return .handled

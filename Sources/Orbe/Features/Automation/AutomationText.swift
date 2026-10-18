@@ -44,6 +44,11 @@ struct AutomationText {
     }
   }
 
+  /// 部品を人に見せる言い方「判定: 連絡」。
+  func part(_ node: AutomationGraph.Node) -> String {
+    role(node.role) + ": " + node.part.name
+  }
+
   /// 部品の予定の札（「30分ごと」「平日 9:00」「手動」「届いたら」）。
   func schedule(_ trigger: AutomationPart.Trigger) -> String {
     switch trigger {
@@ -77,16 +82,18 @@ struct AutomationText {
     }
   }
 
-  /// 候補の一覧の頭。「9:00 判定 · 12 件 → 候補 2」。
-  func runHeadline(part name: String, _ run: AutomationPartRun?) -> String {
-    guard let run else { return l10n.string(.automationNeverRan) }
-    return stamp(run.startedAt) + " " + name + " · " + outcome(run)
+  /// 部品の最新の回の 1 行。「9:00 判定: 開発 · 12 件 → 候補 2」「判定: 開発 · まだ回っていない」。
+  func latest(_ node: AutomationGraph.Node, _ run: AutomationPartRun?) -> String {
+    guard let run else { return part(node) + " · " + l10n.string(.automationNeverRan) }
+    return stamp(run.startedAt) + " " + part(node) + " · " + outcome(run)
   }
 
-  /// 自動追加の中身の前回。「今日 9:12 判定 · 12 件 → 候補 2」。
-  func runDetail(part name: String, _ run: AutomationPartRun?) -> String {
-    guard let run else { return l10n.string(.automationNeverRan) }
-    return moment(run.startedAt) + " " + name + " · " + outcome(run)
+  /// 最後の回が失敗した部品（新しい失敗が先）。「判定: 連絡 · 失敗」「判定: 連絡 ほか 1 件 · 失敗」。無ければ nil。
+  func failed(_ nodes: [AutomationGraph.Node]) -> String? {
+    guard let first = nodes.first else { return nil }
+    return nodes.count == 1
+      ? l10n.format(.automationFailedPart, part(first))
+      : l10n.format(.automationFailedParts, part(first), nodes.count - 1)
   }
 
   /// 「30分ごと」「平日 9:00」「平日 9:00〜18:50 の10分ごと」。言葉にしない cron 式は「cron <式>」で、式の欄の間は

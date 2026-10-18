@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// 提案タブの右の詳細。選んでいる提案の出どころ（受信名と時刻）・本文の全体・リンク、タスクにしたときのタイトル・期限・付け先、
-/// 「タスクにする」「タスクにして開く」「捨てる」のボタン。収まらなければ欄ごとスクロールし、収まる間はボタンを下端へ押す。
+/// 提案タブの右の詳細。選ばれている候補の出どころ（自動化の名前・取得の部品の名前・時刻）・本文の全体・リンク、タスクにしたとき
+/// のタイトル・期限・付け先、「タスクにする」「タスクにして開く」「捨てる」のボタン。選ばれている候補が無ければ空。収まらなければ
+/// 欄ごとスクロールし、収まる間はボタンを下端へ押す。
 struct TaskPaletteAutomationDetail: View {
   @Bindable var model: TaskPaletteAutomationModel
   @Environment(\.localization) private var l10n
@@ -34,13 +35,17 @@ struct TaskPaletteAutomationDetail: View {
   }
 
   @ViewBuilder private func content(_ proposal: AutomationProposal) -> some View {
-    // 受信名は縮め、時刻は残す。
+    // 名前は縮め、時刻は残す。
     HStack(spacing: Theme.Space.note + 1) {
       Image(systemName: "tray.and.arrow.down")
         .font(.system(size: 10, weight: .medium))
         .foregroundStyle(Color.theme.accentBright)
-      if let name = model.store.shelf(of: proposal)?.name {
-        TruncatingSlot(name) { fontResolver.text($0, base: Theme.Typography.meta) }
+      let names = [model.store.shelf(of: proposal)?.name, model.sourceName(of: proposal)]
+        .compactMap { $0 }
+      if !names.isEmpty {
+        TruncatingSlot(names.joined(separator: " · ")) {
+          fontResolver.text($0, base: Theme.Typography.meta)
+        }
         Text("·")
       }
       Text(text.moment(proposal.item.time)).fixedSize()
