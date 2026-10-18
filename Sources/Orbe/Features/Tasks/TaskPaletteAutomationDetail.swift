@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// 提案タブの右の詳細。選ばれている候補の出どころ（自動化の名前・取得の部品の名前・時刻）・本文の全体・リンク、タスクにしたとき
-/// のタイトル・期限・付け先、「タスクにする」「タスクにして開く」「捨てる」のボタン。選ばれている候補が無ければ空。収まらなければ
-/// 欄ごとスクロールし、収まる間はボタンを下端へ押す。
+/// のタイトル・期限・付け先、「タスクにする」「タスクにして開く」「捨てる」のボタン。選ばれている候補が無ければ空。ボタンは欄の
+/// 下端に置いてスクロールさせない——さばくキーの案内はここにしか無いので、本文が長くても隠さないため。収まらない中身だけが
+/// スクロールする。
 struct TaskPaletteAutomationDetail: View {
   @Bindable var model: TaskPaletteAutomationModel
   @Environment(\.localization) private var l10n
@@ -10,20 +11,19 @@ struct TaskPaletteAutomationDetail: View {
 
   var body: some View {
     if let proposal = model.selectedProposal {
-      GeometryReader { geometry in
+      VStack(alignment: .leading, spacing: 0) {
         ScrollView {
-          VStack(alignment: .leading, spacing: 0) {
-            content(proposal)
-            Spacer(minLength: Theme.Space.span)
-            buttons
-          }
-          .padding(.horizontal, Theme.Space.phrase)
-          .padding(.top, Theme.Space.span + Theme.Space.hair)
-          .padding(.bottom, Theme.Space.span)
-          .frame(width: geometry.size.width)
-          .frame(minHeight: geometry.size.height, alignment: .top)
+          VStack(alignment: .leading, spacing: 0) { content(proposal) }
+            .padding(.horizontal, Theme.Space.phrase)
+            .padding(.top, Theme.Space.span + Theme.Space.hair)
+            .padding(.bottom, Theme.Space.span)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollIndicators(.automatic)
+        buttons
+          .padding(.horizontal, Theme.Space.phrase)
+          .padding(.top, Theme.Space.step)
+          .padding(.bottom, Theme.Space.span)
       }
     } else {
       Color.clear
