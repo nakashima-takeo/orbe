@@ -2,14 +2,17 @@ import XCTest
 
 @testable import Orbe
 
-/// 自動化の 6 動詞のドメイン側を、実 `WindowController` 越しに固定する。起動で保存済みの部品が番人に載ること、
+/// 自動化の 8 動詞のドメイン側を、実 `WindowController` 越しに固定する。起動で保存済みの部品が番人に載ること、
 /// 提案と重なりが棚に出す自動化の側に出ること、拒否が制御 API の語彙になること、一覧の定義を `set_automation` へ戻せること、
 /// 一覧の部品の回の記録が保存と同じ形であること。候補の付け先は今ある workspace に解けるときだけ起動ごとの id と名前で出ること。
+/// 試走は始めた応答で道の上の部品を返し、待って読むと部品ごとの回の結果（取得の rows・止めた副作用の held.rows）を返し、
+/// 始める前と自動化を消した後は -32004 で読めないこと。
 ///
 /// 壊れると何が起きるか: Orbe を再起動しただけで全自動化が黙って回らなくなる。AI が自動化の棚を読んでも、提案した自動化が
 /// もう取っていない提案が混ざる・取っている自動化に出ない。流している自動化への `run_automation` が別の誤りに化ける。
 /// 一覧の定義を書き換えて戻すと、予定や部品が別物になる。回の記録を読む AI・秘書が、部品ごとの件数や結果を読めなくなる。
-/// AI が候補の付け先を読めない、または消えた workspace を付け先として読む。
+/// AI が候補の付け先を読めない、または消えた workspace を付け先として読む。AI が試走を始めても結果を読めない、止めた副作用に
+/// 何が渡るはずだったかを確かめられず本番で初めて誤りに気づく、試走をまだ始めていないのに自動化が無いと読んで作り直す。
 ///
 /// 重要: 実 NSWindow に SurfaceView を接続するため **libghostty ランタイムを起動する**（GhosttyKit 必須）。
 final class WindowControllerAutomationControlTests: OrbeTestCase {
@@ -310,6 +313,11 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
             "send", "送る", .arrival, from: ["fetch"], script: "exit 1", deliver: .sideEffect),
         ]))
     let row = #"{"id":"a","link":"https://example.com/a","body":"a","time":"2026-10-10T09:00:00Z"}"#
+    var none: Result<Any, ControlError>?
+    wc.controlAutomationTrial(automationId: id, wait: false, timeoutMs: 1) { none = $0 }
+    guard case .failure(let noTrial) = try XCTUnwrap(none) else { return XCTFail("試走が無いのに読めた") }
+    XCTAssertEqual(noTrial.code, -32004)
+    XCTAssertEqual(noTrial.message, "no trial of automation \(id)")
 
     let started = try success(
       wc.controlTryAutomation(automationId: id, AutomationTrial.Request(rows: [row])))

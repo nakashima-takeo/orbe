@@ -229,8 +229,6 @@ final class AutomationTrialTests: OrbeTestCase {
     finish("digest", "2 回目")
     ended(trial)
 
-    XCTAssertEqual(
-      trial.passes["digest"]?.map(\.run.result), [.report(text: "2 回目"), .report(text: "1 回目")])
     let parts = try XCTUnwrap(trial.json { _ in nil }["parts"] as? [[String: Any]])
     let runs = try XCTUnwrap(
       parts.first { $0["key"] as? String == "digest" }?["runs"] as? [[String: Any]])
@@ -240,20 +238,32 @@ final class AutomationTrialTests: OrbeTestCase {
 
   // MARK: - 止める部品・与える行・limit
 
-  /// 副作用は手段を起こさず、渡るはずだった行を止めた行として返す。
-  func testASideEffectIsHeldWithTheRowsItWouldHaveGot() throws {
-    let id = try define([fetch("gh"), part("send", .arrival, from: ["gh"], deliver: .sideEffect)])
+  /// 副作用と仕事（ツールを持つ agent）は手段を起こさず、渡るはずだった行を止めた行として返す。
+  func testSideEffectsAndWorkAreHeldWithTheRowsTheyWouldHaveGot() throws {
+    let id = try define([
+      fetch("gh"), part("send", .arrival, from: ["gh"], deliver: .sideEffect),
+      DesignSceneFixtures.agentPart(
+        "job", "job", .arrival, from: ["gh"], tools: ["Bash(git status:*)"], instruction: "do",
+        deliver: .report),
+    ])
     let trial = try trials.start(id, .init())
     waitCalls("gh", 1)
     finish("gh", fetched(["a"]))
     ended(trial)
 
     XCTAssertEqual(calls("send"), [])
-    XCTAssertEqual(trial.state(of: "send"), .held)
-    guard case .held(let held) = trial.passes["send"]?.first?.content else {
-      return XCTFail("止めた行が無い")
+    XCTAssertEqual(
+      jobs.calls.filter {
+        if case .agent = $0.job.work { return true }
+        return false
+      }.count, 0)
+    for key in ["send", "job"] {
+      XCTAssertEqual(trial.state(of: key), .held, key)
+      guard case .held(let held) = trial.passes[key]?.first?.content else {
+        return XCTFail("\(key) に止めた行が無い")
+      }
+      XCTAssertEqual(held.compactMap(AutomationPrompts.id(of:)), ["gh:a"], key)
     }
-    XCTAssertEqual(held.compactMap(AutomationPrompts.id(of:)), ["gh:a"])
   }
 
   /// 取得の入口に与えた項目は、手段を起こさず、本番が既に見た項目でも接頭の付いた id で下流へ流れる。判定へ与えると断る。
