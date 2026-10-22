@@ -21,7 +21,7 @@ struct ScmSplit: View {
         isRepositoryOpen: panel.isRepositoryOpen, isGraphOpen: panel.isGraphOpen)
       VStack(spacing: 0) {
         VStack(spacing: 0) {
-          ScmControlsHead(panel: panel)
+          ScmRepositoryHead(panel: panel)
           if panel.isRepositoryOpen { ScmControls(panel: panel) }
         }
         .onGeometryChange(for: CGFloat.self, of: \.size.height) { above = $0 }
