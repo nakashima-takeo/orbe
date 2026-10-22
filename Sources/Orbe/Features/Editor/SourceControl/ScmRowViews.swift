@@ -17,7 +17,6 @@ final class ScmRowView: ListRowView {
   }
 
   struct Header {
-    let section: ScmSection
     let isOpen: Bool
     let label: TextLine
     let count: TextLine

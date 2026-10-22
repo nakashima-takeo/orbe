@@ -53,7 +53,7 @@ extension ScmRowView {
         ]
       }
     return Header(
-      section: section, isOpen: isOpen,
+      isOpen: isOpen,
       label: TextLine(title(section, language), Theme.Typography.editorScmSection),
       count: TextLine(count.formatted(), Theme.Typography.editorScmCount),
       buttons: buttons)
