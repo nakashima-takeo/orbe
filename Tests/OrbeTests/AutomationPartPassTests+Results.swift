@@ -75,6 +75,30 @@ extension AutomationPartPassTests {
     XCTAssertEqual(breach?.lines.map(\.text), ["item 1: missing id"])
   }
 
+  /// 呼び出しの形の誤り（空の報告など）で断られたまま終えた回も出力の形式エラーの失敗——道具を呼んだ回を結果なしと言わない。
+  func testACallOfTheWrongShapeLeftUnfixedFailsAsBrokenRules() throws {
+    start(AutomationGraphTests.agent("r", from: ["f"]), .report, .report([]))
+
+    XCTAssertTrue(use(0, .putReport, ["text": "  \n"]).isError)
+    jobs.finish(0, done())
+
+    XCTAssertEqual(failed, #"the output of part "r" broke the rules: the report is empty"#)
+  }
+
+  /// 結果を断られた後の「何も無い」は断る——断られた結果を「何も無い」で覆って成功にしない。
+  func testNothingAfterARefusedResultIsRefusedAndTheRunFails() throws {
+    start(
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      .process([row("a")], reachesJudge: false))
+
+    readAll(0)
+    XCTAssertTrue(use(0, .putRows, ["rows": [["note": "id が無い"]]]).isError)
+    XCTAssertTrue(use(0, .reportNothing, ["why": "残す行が無い"]).isError)
+    jobs.finish(0, done())
+
+    XCTAssertEqual(failed, #"the output of part "p" broke the rules: item 1: missing id"#)
+  }
+
   /// 断った結果の呼び出しは記録に残り、直して受けた回は成功——断りは同じ会話の中の直しで、別の呼び出しは起こさない。
   func testRefusedResultsAreRecordedAndTheFixedResultPasses() throws {
     start(
