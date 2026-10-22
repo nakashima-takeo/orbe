@@ -202,14 +202,14 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     try record(breachedFailure)
     let first = try XCTUnwrap(wc.automationNotification(id, "fetch"))
     guard case .automation(let told) = first.notice else { return XCTFail("\(first)") }
-    XCTAssertEqual(told.text, "取る の出力の形式エラー（1 件）— 失敗した")
+    XCTAssertEqual(told.text, "取る の出力の形式エラー（1 件）— 修正されず失敗")
     XCTAssertTrue(told.failed)
 
     try record(DesignSceneFixtures.fetched([]))
     try record(breachedFailure)
     let again = try XCTUnwrap(wc.automationNotification(id, "fetch"), "失敗の続きの最初は知らせる")
     guard case .automation(let failure) = again.notice else { return XCTFail("\(again)") }
-    XCTAssertFalse(failure.text.contains("形式エラー（"), failure.text)
+    XCTAssertTrue(failure.text.hasPrefix("取る: 失敗："), failure.text)
   }
 
   /// 選んでいる行の回は出ず、同じボードで選んでいない自動化の回は出る。

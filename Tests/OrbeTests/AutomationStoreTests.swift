@@ -70,7 +70,7 @@ final class AutomationStoreTests: OrbeTestCase {
     return try store.replace(id, version: current.version, with: definition, now: at)
   }
 
-  /// 断った結果をその場で直して通った取得の回。
+  /// 形式エラーをその場で直して通った取得の回。
   static func breached(_ items: [AutomationItem]) -> AutomationPartPass.Outcome {
     let fetched = DesignSceneFixtures.fetched(items)
     guard case .succeeded(let output, let execution, _) = fetched else {

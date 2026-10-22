@@ -122,6 +122,7 @@ extension DesignGallerySnapshotTests {
     try renderBoardNotifySnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardCronSnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardMapSnapshots(write: write, board: { board($0, row: $1) })
+    try renderBoardJudgeOutcomeSnapshots(write: write, board: { board($0, row: $1) })
   }
 
   /// 見本 O2Board・O2PartCards（案2 地図＋選んだ部品）: 一覧に居る（カードの欄は空）・地図で失敗した判定を選ぶ・役割ごとの
@@ -210,6 +211,21 @@ extension DesignGallerySnapshotTests {
     try write("board_map_paused.png", map(3), .ja, size)
     try write(
       "board_map_narrow.png", map(0, part: "contact"), .ja, NSSize(width: 1000, height: 844))
+  }
+
+  /// 判定の部品の回の終わり方ごとのカード: 形式エラーをその場で修正済み・修正されず失敗（agent と、コマンドの出力の形式
+  /// エラー）・入力の読み残し・結果なし。
+  private func renderBoardJudgeOutcomeSnapshots(
+    write: (String, BoardModel, Language, NSSize) throws -> Void,
+    board: ([AutomationSample]?, Int) -> BoardModel
+  ) throws {
+    let size = NSSize(width: 1440, height: 844)
+    for (name, sample) in DesignSceneFixtures.boardJudgeOutcomeSamples() {
+      let model = board([sample], 0)
+      model.automation.enterMap()
+      model.automation.tapPart(key: "judge")
+      try write("board_judge_\(name).png", model, .ja, size)
+    }
   }
 
   /// いつの言葉が長い自動化と、式のまま出る自動化。一覧の 2 段目と詳細のいつを、広い面・狭い面・英語で撮る。並びは

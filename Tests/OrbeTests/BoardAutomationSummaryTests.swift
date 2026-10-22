@@ -172,6 +172,6 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
 
     XCTAssertEqual(
       try card("slack"), ["13:10〜14:55 は新着なし", "新着 4 件", "新着 5 件", "新着 6 件"])
-    XCTAssertEqual(try card("mail"), ["新着 2 件（断った結果を直して通った）", "新着なし", "新着 1 件"])
+    XCTAssertEqual(try card("mail"), ["新着 2 件（形式エラーを修正済み）", "新着なし", "新着 1 件"])
   }
 }

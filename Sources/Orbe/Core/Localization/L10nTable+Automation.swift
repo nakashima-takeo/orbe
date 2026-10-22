@@ -77,8 +77,8 @@ extension L10n {
     .automationBreachNoticeOther: (
       "%1$@ の出力の形式エラー（%2$lld 件）— %3$@", "%1$@ output format error (%2$lld items) — %3$@"
     ),
-    .automationBreachPassed: ("その場で直して通った", "fixed and passed"),
-    .automationBreachFailed: ("失敗した", "failed"),
+    .automationBreachPassed: ("その場で修正済み", "fixed on the spot"),
+    .automationBreachFailed: ("修正されず失敗", "not fixed; failed"),
     .automationYesterday: ("昨日 %@", "yesterday %@"),
     .automationWithOriginal: ("%1$@（%2$@）", "%1$@ (%2$@)"),
     .automationFailureExcerpt: ("%1$@：%2$@", "%1$@: %2$@"),
@@ -96,11 +96,9 @@ extension L10n {
     .automationFailNotUTF8: ("出力の文字を読めない（UTF-8 でない）", "couldn’t read the output (not UTF-8)"),
     .automationFailAgentError: ("%1$@ がエラーを返した：%2$@", "%1$@ returned an error: %2$@"),
     .automationFailReported: ("部品が失敗を申告した：%@", "the part reported a failure: %@"),
-    .automationFailBrokeRules: ("出力が決まりを外した", "the output broke the rules"),
-    .automationFailUnreadInput: (
-      "入力の %lld 件を読み切らずに終わった", "ended without reading %lld input items"
-    ),
-    .automationFailNoResult: ("結果を出さずに終わった", "ended without giving a result"),
+    .automationFailBrokeRules: ("出力の形式エラー", "output format error"),
+    .automationFailUnreadInput: ("入力の読み残し %lld 件", "%lld input items unread"),
+    .automationFailNoResult: ("結果なし", "no result"),
     .automationFailUnsourced: (
       "判定へ渡す行が、どの取得から来たか分からない", "rows for the judge don’t say which fetch they came from"
     ),

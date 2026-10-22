@@ -68,13 +68,13 @@ final class AutomationTextTests: OrbeTestCase {
     ])
     XCTAssertEqual(
       Self.automationText(.en).failure(broke, node: Self.judge),
-      "the output broke the rules: item 2: not JSON", "最初の外れた件")
+      "output format error: item 2: not JSON", "最初の外れた件")
     XCTAssertEqual(
       text.failure(failed(.unreadInput(2), ending: .exited(0)), node: Self.judge),
-      "入力の 2 件を読み切らずに終わった（the part \"dev\" ended without reading 2 of its input items）")
+      "入力の読み残し 2 件（the part \"dev\" ended without reading 2 of its input items）")
     XCTAssertEqual(
       text.failure(failed(.noResult, ending: .exited(0)), node: Self.judge),
-      "結果を出さずに終わった（the part \"dev\" ended without giving a result）")
+      "結果なし（the part \"dev\" ended without giving a result）")
   }
 
   /// 外れた件は「n 件目：<説明>」。

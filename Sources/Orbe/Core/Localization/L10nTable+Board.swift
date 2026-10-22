@@ -65,14 +65,8 @@ extension L10n {
     .boardPartFormatErrorOther: (
       "出力の形式エラー · %1$@ · %2$lld 件", "Output format error · %1$@ · %2$lld items"
     ),
-    .boardPartBreachPassed: (
-      "断った結果をその場で直して通った。指示を直すと、次から断られずに済む。",
-      "Fixed on the spot and passed. Fix the instruction to avoid this next time."
-    ),
-    .boardPartBreachFailed: (
-      "この回は失敗した。指示を直すと、次から断られずに済む。",
-      "This run failed. Fix the instruction to avoid this next time."
-    ),
+    .boardPartBreachPassed: ("その場で修正済み", "Fixed on the spot"),
+    .boardPartBreachFailed: ("修正されず失敗", "Not fixed; failed"),
     .boardPartLastReport: ("前回の報告", "Last report"),
     .boardPartLastReply: ("前回の応答", "Last reply"),
     .boardPartHistory: ("この部品の実行履歴", "This part’s runs"),
@@ -94,7 +88,7 @@ extension L10n {
     .boardRunExecuted: ("実行した", "ran"),
     .boardRunFold: ("%1$@〜%2$@ は新着なし", "nothing new %1$@–%2$@"),
     .boardRunManual: ("%@ 手動", "%@ manual"),
-    .boardRunFixedPassed: ("断った結果を直して通った", "fixed on the spot"),
+    .boardRunFixedPassed: ("形式エラーを修正済み", "format error fixed"),
     .boardRunDroppedOld: ("古い %lld 件を捨てた", "dropped %lld old"),
     .boardRunDroppedOverflow: ("多すぎた %lld 件を捨てた", "dropped %lld over the limit"),
     .boardRunDroppedLapsed: ("読む前に期限で消えた %lld 件", "%lld expired before being read"),
