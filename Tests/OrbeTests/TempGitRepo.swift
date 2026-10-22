@@ -5,7 +5,8 @@ import XCTest
 @testable import Orbe
 
 /// テストの作業ディレクトリに作る実 git リポジトリ（初期コミット付き）。根のサービス・監視・観測のテストが共有する。
-/// `root` は根の正規形（`GitWorktreeRoot.normalizedPath`）で、タブの `groupKey` と同じ綴り。
+/// `root` は根の正規形（`GitWorktreeRoot.normalizedPath`）で、タブの `groupKey` と同じ綴り。ref の形式は files に固定する
+/// （監視が remote 追跡 ref の変化を ref 名で見分けるのは files だけ。git の既定や環境変数に左右されない）。
 final class TempGitRepo {
   let dir: URL
   let root: String
@@ -16,7 +17,7 @@ final class TempGitRepo {
       "\(name)-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     root = GitWorktreeRoot.normalizedPath(dir.path)
-    XCTAssertTrue(git(["init", "-q", "-b", "main"]).isSuccess)
+    XCTAssertTrue(git(["init", "-q", "-b", "main", "--ref-format=files"]).isSuccess)
     XCTAssertTrue(git(["config", "user.email", "t@example.com"]).isSuccess)
     XCTAssertTrue(git(["config", "user.name", "t"]).isSuccess)
     guard initialCommit else { return }
@@ -35,8 +36,10 @@ final class TempGitRepo {
     return bare
   }
 
-  /// 別の clone から origin の main を 1 コミット進める（このリポジトリには取り込まない）。
-  func advanceOrigin(writing relativePath: String, _ text: String) throws {
+  /// 別の clone から、origin の `branch` を origin の main の 1 コミット先へ進める（このリポジトリには取り込まない）。
+  func advanceOrigin(writing relativePath: String, _ text: String, onto branch: String = "main")
+    throws
+  {
     let other = dir.path + "-other-\(UUID().uuidString)"
     XCTAssertTrue(git(["clone", "-q", dir.path + "-origin.git", other]).isSuccess)
     for args in [
@@ -47,7 +50,24 @@ final class TempGitRepo {
     try write(relativePath, text, in: other)
     XCTAssertTrue(git(["add", "-A"], in: other).isSuccess)
     XCTAssertTrue(git(["commit", "-qm", "from other"], in: other).isSuccess)
-    XCTAssertTrue(git(["push", "-q", "origin", "main"], in: other).isSuccess)
+    XCTAssertTrue(git(["push", "-q", "origin", "HEAD:" + branch], in: other).isSuccess)
+  }
+
+  /// `t.txt` を 1 コミット持つ別のリポジトリを、サブモジュール `path` として足してコミットする。サブモジュールの中でも
+  /// 作者の設定を持たせる（`git -C <path>` でそのままコミットできる）。
+  func addSubmodule(_ path: String) throws {
+    let source = dir.path + "-\(path)"
+    try write("t.txt", "t\n", in: source)
+    for args in [
+      ["init", "-q", "-b", "main", source], ["-C", source, "add", "t.txt"],
+      ["-C", source, "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", "t"],
+      ["-c", "protocol.file.allow=always", "submodule", "add", "-q", source, path],
+      ["commit", "-qm", "add submodule"],
+      ["-C", path, "config", "user.email", "t@example.com"],
+      ["-C", path, "config", "user.name", "t"],
+    ] {
+      XCTAssertTrue(git(args).isSuccess, "\(args)")
+    }
   }
 
   /// HEAD のコミット。

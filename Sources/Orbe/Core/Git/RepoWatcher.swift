@@ -15,6 +15,9 @@ final class RepoWatcher {
     var gitChanged = false
     /// 取りこぼし（イベントの drop・root の付け替え）。全部見直す。
     var scanAll = false
+    /// git の状態のうち remote 追跡 ref が動いたかもしれない（`gitChanged` の一部。何をそう見るかは
+    /// `isRemoteRefChange`）。
+    var remoteRefsChanged = false
 
     var isEmpty: Bool { paths.isEmpty && !gitChanged && !scanAll }
 
@@ -22,6 +25,7 @@ final class RepoWatcher {
       paths.formUnion(other.paths)
       gitChanged = gitChanged || other.gitChanged
       scanAll = scanAll || other.scanAll
+      remoteRefsChanged = remoteRefsChanged || other.remoteRefsChanged
     }
   }
 
@@ -98,12 +102,15 @@ final class RepoWatcher {
       if flag & Self.scanAllFlags != 0 {
         batch.scanAll = true
         batch.gitChanged = true
+        batch.remoteRefsChanged = true
         continue
       }
       let spelled = respell(path)
       if let gitDir = gitDirs.first(where: { spelled.hasPrefix($0 + "/") }) {
-        if Self.isGitStateChange(String(spelled.dropFirst(gitDir.count))) {
+        let sub = String(spelled.dropFirst(gitDir.count))
+        if Self.isGitStateChange(sub) {
           batch.gitChanged = true
+          if Self.isRemoteRefChange(sub) { batch.remoteRefsChanged = true }
         }
       } else if !spelled.contains("/.git/"), !spelled.hasSuffix("/.git") {
         batch.paths.insert(spelled)
@@ -134,6 +141,14 @@ final class RepoWatcher {
   static func isGitStateChange(_ sub: String) -> Bool {
     guard !sub.hasSuffix(".lock") else { return false }
     return !ignoredGitDirEntries.contains(sub.dropFirst().prefix { $0 != "/" })
+  }
+
+  /// git の状態の変化 `sub`（git dir からの相対パス）で remote 追跡 ref が動いたかもしれないか——`refs/remotes` の下と、
+  /// どの ref が動いたかを名前で分けられない packed-refs・reftable。HEAD・ローカルのブランチ・タグ・index・FETCH_HEAD は
+  /// remote 追跡 ref ではない。
+  static func isRemoteRefChange(_ sub: String) -> Bool {
+    sub.hasPrefix("/refs/remotes/") || sub == "/refs/remotes" || sub == "/packed-refs"
+      || sub == "/reftable" || sub.hasPrefix("/reftable/")
   }
 
   /// タイマーを `due` に張り直す（常に 1 本）。

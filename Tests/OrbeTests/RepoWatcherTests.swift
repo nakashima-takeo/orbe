@@ -66,10 +66,13 @@ final class RepoWatcherTests: OrbeTestCase {
     XCTAssertTrue(
       batches.allSatisfy { $0.paths.allSatisfy { !$0.contains("/.git/") } },
       "git dir の中はパスに出ない: \(batches)")
+    XCTAssertFalse(batches.contains { $0.remoteRefsChanged }, "index は remote 追跡 ref ではない")
     batches.removeAll()
 
     XCTAssertTrue(repo.git(["commit", "-qm", "c"]).isSuccess)
     pumpMain(until: { batches.contains { $0.gitChanged } }, "HEAD / refs の変化")
+    XCTAssertFalse(
+      batches.contains { $0.remoteRefsChanged }, "HEAD とローカルのブランチは remote 追跡 ref ではない")
     batches.removeAll()
 
     XCTAssertTrue(repo.git(["tag", "t"]).isSuccess)
@@ -96,6 +99,17 @@ final class RepoWatcherTests: OrbeTestCase {
       "/MERGE_HEAD", "/rebase-merge/done", "/sequencer/todo", "/AUTO_MERGE", "/some-new-state-file",
     ] {
       XCTAssertTrue(RepoWatcher.isGitStateChange(state), state)
+    }
+    for ref in [
+      "/refs/remotes/origin/main", "/refs/remotes", "/packed-refs", "/reftable/tables.list",
+    ] {
+      XCTAssertTrue(RepoWatcher.isRemoteRefChange(ref), ref)
+    }
+    for state in [
+      "/HEAD", "/refs/heads/main", "/refs/tags/v1", "/index", "/FETCH_HEAD", "/ORIG_HEAD",
+      "/MERGE_HEAD", "/rebase-merge/done",
+    ] {
+      XCTAssertFalse(RepoWatcher.isRemoteRefChange(state), state)
     }
   }
 

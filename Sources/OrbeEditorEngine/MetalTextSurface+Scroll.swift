@@ -71,6 +71,10 @@ extension MetalTextSurface {
     bodySite.transact(reveal: .showing(policy), of: range)
   }
 
+  func scrollToStart() {
+    place(.zero)
+  }
+
   // MARK: - スクロールだけのキー（キャレットは動かない）
 
   /// PageUp・PageDown——見えている高さから 1 行を残した量ずつ。

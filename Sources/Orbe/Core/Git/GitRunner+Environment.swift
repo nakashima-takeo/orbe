@@ -28,4 +28,10 @@ extension GitRunner {
     }
     return env
   }
+
+  /// 人が見ていない実行（裏の fetch）に足す環境。人の前に何も出さない——利用者の GUI の askpass があっても使わず、
+  /// 資格情報の helper にも対話しない合図を渡す（Git Credential Manager）。ssh-agent の側の承認は封じられない。
+  static let unattendedEnvironment = [
+    "SSH_ASKPASS": refusal, "GIT_ASKPASS": refusal, "GCM_INTERACTIVE": "never",
+  ]
 }

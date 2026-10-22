@@ -31,6 +31,8 @@ enum HelpCatalog {
         Row(key: "⌘E", label: .helpShortcutToggleEditorFace, combo: ["cmd", "e"]),
         Row(key: "⌘S", label: .helpShortcutSaveDocument, combo: ["cmd", "s"]),
         Row(key: "⌘⇧F", label: .helpShortcutFindInProject, combo: ["cmd", "shift", "f"]),
+        Row(key: "↵", label: .helpShortcutScmCommit, combo: ["return"]),
+        Row(key: "⌘↵", label: .helpShortcutScmCommitAndPush, combo: ["cmd", "return"]),
         Row(key: "⌘⇧E", label: .helpShortcutOpenEditor, combo: ["cmd", "shift", "e"]),
         Row(key: "⌘Q", label: .helpShortcutQuit, combo: ["cmd", "q"]),
       ]),
@@ -134,11 +136,13 @@ enum HelpCatalog {
     ],
   ]
 
-  /// 下寄せラベルで描く修飾キー id（デザイン見本 MOD_RE の集合表現）。
+  /// 修飾キー id。
   static let modifierKeys: Set<String> = [
-    "shift", "rshift", "caps", "tab", "return", "delete",
-    "cmd", "rcmd", "opt", "ropt", "ctrl", "fn",
+    "shift", "rshift", "caps", "cmd", "rcmd", "opt", "ropt", "ctrl", "fn",
   ]
+
+  /// 下寄せラベルで描くキー id（デザイン見本 MOD_RE の集合表現）。
+  static let bottomLabelKeys = modifierKeys.union(["tab", "return", "delete"])
 
   /// combo id → 表示記号（キー絞り込みチップ用）。無ければ id の大文字。
   static let symbols: [String: String] = [

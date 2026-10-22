@@ -3,39 +3,6 @@ import CoreText
 import OrbeEditorCore
 import os
 
-/// 行の印（git ガター）を行に写したもの。面が印を受け取ったときに、引いた写しで写す。
-struct RowMarks: Equatable, Sendable {
-  struct Bar: Equatable, Sendable {
-    var rows: ClosedRange<Int>
-    var kind: LineMarks.Kind
-  }
-
-  /// 削除の三角。`atBottom` は行の下端（改行で終わらない本文の末尾）、そうでなければ行の上端。
-  struct Deletion: Equatable, Sendable {
-    var row: Int
-    var atBottom: Bool
-  }
-
-  var bars: [Bar] = []
-  var deletions: [Deletion] = []
-
-  static let empty = RowMarks()
-
-  init() {}
-
-  /// 区間は改行込みなので、最後の行は区間の最後の字の行。境は次の行の行頭（本文が改行で終わらない末尾なら最後の行の下端）。
-  init(_ spans: LineMarkSpans, in text: TextRope) {
-    bars = spans.marks.map { mark in
-      let rows = text.rows(of: NSRange(location: mark.range.location, length: mark.range.length))
-      return Bar(rows: rows, kind: mark.kind)
-    }
-    deletions = spans.deletions.map { offset in
-      let row = text.row(containing: offset)
-      return Deletion(row: row, atBottom: text.lineStart(row) != offset)
-    }
-  }
-}
-
 /// 面を作るときに決まり、閉じるまで変わらない見え方。フォントは不変で、Core Text はスレッドをまたいだ利用を保証する。
 struct SurfaceConfig: @unchecked Sendable {
   /// 装備の寸法。
@@ -276,7 +243,7 @@ struct FrameMaterial: Sendable {
   var rowEdits: [RowEdit] = []
   /// 描画スレッドがまだ受け取っていない打鍵の時刻（その打鍵の取引が入ったコマで打鍵→画面の遅れを測る）。
   var keystrokes: [Double] = []
-  var marks = RowMarks.empty
+  var marks = LineMarks.empty
   /// 縦の並び（写しと同じ書き込みで置く——描画スレッドは引き取った写しの行の並びで描く）。
   var rows = RowLayout(lineHeight: 1)
   /// 差し込んだ行の出どころの写し（並びと同じ書き込みで置き、出どころの役割が変われば置き直す）。

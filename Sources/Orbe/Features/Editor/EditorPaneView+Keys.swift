@@ -38,11 +38,11 @@ extension EditorPaneView {
   }
 
   /// chrome キーの解決点。first responder が自分か配下のときだけ効く——隠れた連の pane も窓に残るので、
-  /// 焦点が自分か配下に無いときは素通しする。検索パネルの中のキーは chrome キーより先に見る。chrome キーを走らせる前に焦点の
+  /// 焦点が自分か配下に無いときは素通しする。検索パネル・ソース管理パネルの中のキーは chrome キーより先に見る。chrome キーを走らせる前に焦点の
   /// 文書の変換を確定する（⌘F の種の読み取りや焦点の移動の前に、変換の状態と IME の状態を揃える。未確定の文字は既に本文に
   /// あるので、⌘S は見えている本文を保存する）。
   override func performKeyEquivalent(with event: NSEvent) -> Bool {
-    if focusIsInside, handleProjectSearchKey(event) { return true }
+    if focusIsInside, handleProjectSearchKey(event) || handleSourceControlKey(event) { return true }
     guard focusIsInside, let action = Keybindings.chromeAction(for: event)
     else { return super.performKeyEquivalent(with: event) }
     document?.surface.commitMarkedText()

@@ -16,7 +16,7 @@ let allConfigKeys = [
   "worktree-dir", "notification-sound", "notification-sound-volume",
   "notification-sound-enabled", "notification-sound-custom-done",
   "notification-sound-custom-waiting", "notification-sound-custom-waiting-same-as-done",
-  "menubar-notification-duration",
+  "menubar-notification-duration", "scm-auto-fetch",
 ]
 
 let configUsageLines = [
@@ -45,7 +45,7 @@ let configSetUsage = """
     font-size, background-opacity, notification-sound-volume,
     menubar-notification-duration   integer
     background-blur, cursor-style-blink, notification-sound-enabled,
-    notification-sound-custom-waiting-same-as-done   true/false/on/off/1/0
+    notification-sound-custom-waiting-same-as-done, scm-auto-fetch   true/false/on/off/1/0
     theme (auto/light/dark), font-family, tab-title-font-family, emoji-font,
     default-agent, worktree-dir, notification-sound (a sound name or custom)   string
     agent-state-icons, notification-sound-custom-done,

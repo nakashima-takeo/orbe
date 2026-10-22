@@ -11,14 +11,17 @@ extension EditorDiff {
     else { return }
     switch mode {
     case .inline:
-      var rows = DiffRows.inline(hunks, old: oldSide, new: newSide)
+      var rows = DiffRows.inline(hunks, new: newSide)
       rows.source = old
-      look(DiffStyle.inline, rows).apply(to: surface, document: document)
+      look(DiffStyle.inline, rows, absent: newSide.isAbsent).apply(to: surface, document: document)
     case .side:
       let rows = DiffRows.side(hunks, old: oldSide, new: newSide)
       let left = oldSurface ?? makeOldSurface()
-      if let left { look(DiffStyle.side, rows.left).apply(to: left, document: nil) }
-      look(DiffStyle.side, rows.right).apply(to: surface, document: document)
+      if let left {
+        look(DiffStyle.side, rows.left, absent: oldSide.isAbsent).apply(to: left, document: nil)
+      }
+      look(DiffStyle.side, rows.right, absent: newSide.isAbsent)
+        .apply(to: surface, document: document)
       if let left, oldSurface == nil {
         carryTop(to: surface)
         oldSurface = left
@@ -38,11 +41,13 @@ extension EditorDiff {
     revealFirstChange(on: surface)
   }
 
-  /// 作り直した新しい側の面で、前の面の先頭の行を先頭に見せる。
+  /// 作り直した新しい側の面で、前の面の先頭の行を先頭に見せる。先頭の行なら、その前に差し込んだ削除行を上へ外さない
+  /// よう、文書の先頭へ送る。
   private func carryTop(to surface: any TextSurface) {
     guard let row = carriedTop, let text = newRevision?.text else { return }
     carriedTop = nil
     revealed = true
+    guard row > 0 else { return surface.scrollToStart() }
     surface.reveal(
       NSRange(location: text.lineStart(min(row, text.lineCount - 1)), length: 0), policy: .top)
   }
@@ -55,13 +60,20 @@ extension EditorDiff {
     guard let document else { return (revisionHunks, newSide) }
     let side = DiffRows.Side(document.text)
     guard let oldSource else { return nil }
-    guard let base = oldSource else { return (DiffRows.wholeHunks(old: .absent, new: side), side) }
+    guard let base = oldSource else {
+      return (DiffRows.hunks(old: nil, new: document.text, limit: Self.hunkLimit), side)
+    }
     guard document.hunksBase == base else { return nil }
     return (document.hunks, side)
   }
 
-  private func look(_ presentation: SurfacePresentation, _ rows: SurfaceRows) -> SurfaceLook {
-    SurfaceLook(
+  /// 見え方。版が無い側（`absent`）の面は、エディターの都合で持つ空の行に番号を描かない（存在しない行を番号付きで出さない）。
+  private func look(
+    _ presentation: SurfacePresentation, _ rows: SurfaceRows, absent: Bool
+  ) -> SurfaceLook {
+    var presentation = presentation
+    presentation.numbersOwnLines = !absent
+    return SurfaceLook(
       presentation: presentation, rows: rows, isEditable: false, hunkLimit: Self.hunkLimit)
   }
 
@@ -72,14 +84,16 @@ extension EditorDiff {
   }
 
   /// 初めて並びを置いたときに、最初の変更区間が見える位置へ送る——区間の上の文脈の行から区間の終わりまで（インラインの
-  /// 削除行はその間に差し込まれる）を、中央から、収まらなければ上端から見せる。区間が先頭の行から始まるなら上の文脈の行は
-  /// 無く、削除行は文書の先頭の前に差し込まれる——中央へ送る位置は端の手前に収まり、先頭の差し込みごと見える。
+  /// 削除行はその間に差し込まれる）を、中央から、収まらなければ上端から見せる。区間が先頭の行から始まるなら、削除行は
+  /// 先頭の行の前に差し込まれ、どちらの着地も文書の先頭になる。区間を見せる口は先頭の行の上端から見せ、長い削除行の頭を
+  /// 上へ外すので、文書の先頭へ送る口で送る。
   private func revealFirstChange(on surface: any TextSurface) {
     guard !revealed, let first = currentRows?.hunks.first else { return }
     revealed = true
-    let text = document?.text ?? newRevision?.text ?? TextRope()
     let start = first.newCount > 0 ? first.newStart - 1 : first.newStart
-    let from = min(max(0, start - 1), text.lineCount - 1)
+    guard start > 0 else { return surface.scrollToStart() }
+    let text = document?.text ?? newRevision?.text ?? TextRope()
+    let from = min(start - 1, text.lineCount - 1)
     let to = min(max(from, start + first.newCount - 1), text.lineCount - 1)
     surface.reveal(
       NSRange(location: text.lineStart(from), length: text.lineEnd(to) - text.lineStart(from)),

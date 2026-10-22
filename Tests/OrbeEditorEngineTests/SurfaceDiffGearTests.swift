@@ -7,7 +7,7 @@ import XCTest
 /// diff の装備——番号の列（2 列ならもう一方の番号）・記号の列・印の列の有無と番号の列の寸法で決まる行番号の列の配置、行の型の
 /// 地と記号、差し込んだ行の字（出どころの行・出どころの役割の色・空白の点・番号）、区間の始まりの追従。壊れると、旧番号が
 /// 編集でずれる・行の地が行番号の列やスクロールバーの下に掛からない・削除行が素の字で出る・裏から届いた色が削除行に出ない・
-/// 差し込んだ削除行の番号を押して隣の行が選ばれる。
+/// 差し込んだ削除行の番号を押して隣の行が選ばれる・diff の版が無い側の面に、存在しない行の番号が出る。
 @MainActor
 final class SurfaceDiffGearTests: EngineTestCase {
   private let size = CGSize(width: 600, height: 300)
@@ -128,6 +128,36 @@ final class SurfaceDiffGearTests: EngineTestCase {
     XCTAssertTrue(inked(0...split, middle(0), number), "区間のもう一方の番号")
     XCTAssertFalse(inked(0...split, middle(3), number), "もう一方の番号の無い区間は空")
     XCTAssertEqual(layout.gutter.other, max(config.gutterWidth, ceil(config.numberWidth(21)) + 16))
+  }
+
+  /// 文書の行に番号を描かない面は、文書の行の番号の列を空けたまま、差し込んだ行の出どころの番号は描く（diff の版が無い側の
+  /// 面の空の行に、存在しない行の番号を出さない）。
+  func testAFaceThatDoesNotNumberItsOwnLinesStillNumbersTheInsertedLines() throws {
+    let opened = try open("", size: size)
+    let surface = opened.surface
+    let source = InsertedText()
+    let removed = source.lines(["let gone = 1"], style: 0)
+    var presentation = inline
+    presentation.numbersOwnLines = false
+    surface.setPresentation(presentation)
+    surface.setRows(
+      SurfaceRows(insertions: [RowInsertion(line: 0, content: .lines(removed))], source: source))
+    let config = surface.config
+    let layout = surface.surfaceLayout
+    let split = layout.gutter.other ?? 0
+    let number = { (rgb: [Int]) in rgb[1] > 60 }
+    func inked(_ shot: PixelShot, _ x: ClosedRange<CGFloat>, row: Double) -> Bool {
+      let y = config.topInset + CGFloat(row + 0.5) * config.lineHeight
+      return stride(from: x.lowerBound, to: x.upperBound, by: 0.5).contains {
+        number(shot.rgb($0, y))
+      }
+    }
+    let own = split...(layout.column - 18)
+    let shot = try pixelShot(opened)
+    XCTAssertTrue(inked(shot, 0...split, row: 0), "差し込んだ行の左の列に出どころの番号")
+    XCTAssertFalse(inked(shot, own, row: 1), "文書の行に番号は無い")
+    surface.setPresentation(inline)
+    XCTAssertTrue(inked(try pixelShot(opened), own, row: 1), "前提: 描く面なら文書の行に番号")
   }
 
   /// 差し込んだ行の空白にも、文書の行と同じ規則で点が出る。

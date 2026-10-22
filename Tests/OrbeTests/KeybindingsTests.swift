@@ -12,9 +12,10 @@ final class KeybindingsTests: OrbeTestCase {
     .key(String(UnicodeScalar(k.rawValue)!), flags)
   }
 
-  /// ヘルプの行のうち chrome ではなくメニュー・端末・修飾の素タップが担うもの。
-  /// chrome はこれらを奪ってはいけない（奪えば ⌘C のコピーや ⌘Q の終了が効かなくなる）。
-  private let handledOutsideChrome: Set = ["⌘Q", "⌘C", "⌘V", "⌘⌘"]
+  /// ヘルプの行のうち chrome ではなくメニュー・端末・面・修飾の素タップが担うもの（↵・⌘↵ はソース管理のメッセージ欄に
+  /// 焦点があるときだけ欄とエディターの面が取る）。chrome はこれらを奪ってはいけない（奪えば ⌘C のコピーや ⌘Q の終了、
+  /// 端末やテキストへの ↵・⌘↵ が効かなくなる）。
+  private let handledOutsideChrome: Set = ["⌘Q", "⌘C", "⌘V", "↵", "⌘↵", "⌘⌘"]
 
   /// ヘルプが案内する ⌘ ショートカットと、chrome が実際に先取りする操作は一致する。
   /// ヘルプ（人が読む掲載）と Keybindings（キーの振り分け）は別々に書かれた 2 つの正本で、
@@ -105,6 +106,7 @@ final class KeybindingsTests: OrbeTestCase {
     case "left": return [arrow(.leftArrow, flags)]
     case "right": return [arrow(.rightArrow, flags)]
     case "ud": return [arrow(.upArrow, flags), arrow(.downArrow, flags)]
+    case "return": return [.key("\r", flags)]
     default:
       guard id.count == 1 else { return [] }
       guard shift else { return [.key(id, flags)] }
@@ -112,12 +114,14 @@ final class KeybindingsTests: OrbeTestCase {
     }
   }
 
-  /// ヘルプの 1 行を押した出来事（⌘↑ / ⌘↓ は同じ物理キー `ud` を共有するので表示キーで分ける）。
+  /// ヘルプの 1 行を押した出来事（⌘↑ / ⌘↓ は同じ物理キー `ud` を共有するので表示キーで分ける。↵ は ⌘ を併せないので
+  /// 表示キーで引く）。
   private func event(for row: HelpCatalog.Row) -> NSEvent {
     switch row.key {
     case "⌘↑": return arrow(.upArrow)
     case "⌘↓": return arrow(.downArrow)
     case "⌘⌘": return .key("", .command)
+    case "↵": return .key("\r", [])
     default:
       let main = row.combo.first { !HelpCatalog.modifierKeys.contains($0) } ?? ""
       return event(key: main, shift: row.combo.contains("shift")).first ?? .key("", .command)

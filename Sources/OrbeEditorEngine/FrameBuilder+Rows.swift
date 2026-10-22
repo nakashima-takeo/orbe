@@ -33,12 +33,16 @@ extension FrameBuilder {
       drawHighlights(item, source.material.highlights, rowTop: top, window: visible.offsets, c)
       let width = drawText(item.laid, at: (item.start, top), visible, roles: &roles, c)
       longestLine = max(longestLine, width)
-      drawNumber(item.row + 1, rowTop: top, inset: c.gutter.ownInset, font: numberFont, c)
+      if source.material.arrangement.numbersOwnLines {
+        drawNumber(item.row + 1, rowTop: top, inset: c.gutter.ownInset, font: numberFont, c)
+      }
       if c.gutter.other != nil, let other = rows.otherNumber(ofLine: item.row) {
         drawNumber(other, rowTop: top, inset: c.gutter.otherInset, font: numberFont, c)
       }
     }
-    if c.gutter.marks > 0 { drawMarks(source.material.marks, rows: visibleRows, c) }
+    if c.gutter.marks > 0 {
+      drawMarks(source.material.marks, rows: visibleRows, lineCount: content.text.lineCount, c)
+    }
   }
 
   /// 行の型の地を、行番号の列の左端から面の右端（縦スクロールバーの列の下）まで塗る（切り取りは上端の余白の下）。

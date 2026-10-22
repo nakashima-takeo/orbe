@@ -43,13 +43,54 @@ final class LineDiffTests: XCTestCase {
 
   func testTrailingNewlineAndCarriageReturnCount() {
     XCTAssertEqual(
-      LineDiff.hunks(base: "a\nb\n", current: TextRope("a\nb")), [hunk(2, 1, 2, 1)],
-      "末尾の改行の有無は最後の行の違い")
+      LineDiff.hunks(base: "a\nb\n", current: TextRope("a\nb")), [hunk(3, 1, 2, 0)],
+      "末尾の改行を消すのは最後の空の行の削除")
+    XCTAssertEqual(
+      LineDiff.hunks(base: "a", current: TextRope("a\nb")), [hunk(1, 0, 2, 1)],
+      "改行の無い最終行の後ろに足した行だけが追加")
+    XCTAssertEqual(
+      LineDiff.hunks(base: "a", current: TextRope("a\n")), [hunk(1, 0, 2, 1)],
+      "末尾の改行を足すのは空の行の追加")
+    XCTAssertEqual(
+      LineDiff.hunks(base: "a\n", current: TextRope("a\nb")), [hunk(2, 1, 2, 1)],
+      "末尾の空の行に打てば、その行の変更")
     XCTAssertEqual(
       LineDiff.hunks(base: "a\r\nb\r\n", current: TextRope("a\r\nb\r\n")), [], "CRLF はそのまま比べる")
     XCTAssertEqual(
       LineDiff.hunks(base: "a\r\nb\r\n", current: TextRope("a\nb\n")), [hunk(1, 2, 1, 2)],
       "CRLF と LF は違う行（正規化しない）")
+  }
+
+  /// 空の本文（空の行 1 つ）と比べると、改行で終わる本文なら中身の行だけが追加・削除で、改行で終わらない本文は空の
+  /// 行がその行に替わった変更。空の本文の 1 行は先頭か末尾の空の行とだけ対応し、途中の空の行には結ばない。どの入口
+  /// （ガターの底と本文・2 つの写し）のどちらの側が空でも同じ。
+  func testTheEmptyTextIsOneEmptyLine() {
+    let empty = TextRope()
+    let cases: [(text: String, added: LineHunk)] = [
+      ("a", hunk(1, 1, 1, 1)), ("a\n", hunk(0, 0, 1, 1)), ("\na", hunk(1, 0, 2, 1)),
+      ("a\n\nb", hunk(1, 1, 1, 3)),
+    ]
+    for (text, added) in cases {
+      let removed = hunk(added.newStart, added.newCount, added.oldStart, added.oldCount)
+      XCTAssertEqual(LineDiff.hunks(base: "", current: TextRope(text)), [added], text)
+      XCTAssertEqual(LineDiff.hunks(base: text, current: empty), [removed], text)
+      XCTAssertEqual(
+        LineDiff.hunks(old: empty, new: TextRope(text), limit: .edits(10)), [added], text)
+      XCTAssertEqual(
+        LineDiff.hunks(old: TextRope(text), new: empty, limit: .edits(10)), [removed], text)
+    }
+  }
+
+  /// 改行で終わる本文どうしなら、末尾の空の行は両側で揃う——末尾に空の行で始まる塊を足すと、足した塊が追加になる
+  /// （git と同じ位置）。
+  func testTheTrailingEmptyLinesOfNewlineEndedTextsPair() {
+    XCTAssertEqual(LineDiff.hunks(base: "a\n", current: TextRope("a\n\nb\n")), [hunk(1, 0, 2, 2)])
+    XCTAssertEqual(
+      LineDiff.hunks(base: "func a() {}\n", current: TextRope("func a() {}\n\nfunc b() {}\n")),
+      [hunk(1, 0, 2, 2)])
+    XCTAssertEqual(
+      LineDiff.hunks(base: "a\nb\n", current: TextRope("a\nb\n\n")), [hunk(2, 0, 3, 1)])
+    XCTAssertEqual(LineDiff.hunks(base: "a\n\nb\n", current: TextRope("a\n")), [hunk(2, 2, 1, 0)])
   }
 
   /// 行の同一性はバイト列——正準等価（NFC の é と NFD の e + 結合アクセント）は違う行。git と同じ見方。

@@ -7,8 +7,8 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// diff の並びの純関数——インライン（削除行は古い側の行を指す差し込み・追加は型・文脈は旧番号）と並列（区間の削除と追加を
-/// 同じ行から並べ、短い側に詰め物）。壊れると、削除行が別の行に出る・旧番号がずれる・最後の空の行に番号が付く・並列の
-/// 両側が揃わず見比べられない。
+/// 同じ行から並べ、短い側に詰め物）。壊れると、削除行が別の行に出る・旧番号がずれる・並列の両側が揃わず見比べられない・新しいファイル
+/// や消したファイルに存在しない空の行が出る。
 @MainActor
 final class DiffRowsTests: OrbeTestCase {
   private func hunks(_ old: String, _ new: String) -> [LineHunk] {
@@ -29,8 +29,7 @@ final class DiffRowsTests: OrbeTestCase {
   /// 文脈の区間は旧番号。最後の空の行（改行で終わる本文）は両側で揃う。
   func testInlinePlacesRemovedLinesAsInsertionsPointingAtTheOldSide() {
     let (old, new) = sample
-    let rows = DiffRows.inline(
-      hunks(old, new), old: DiffRows.Side(TextRope(old)), new: DiffRows.Side(TextRope(new)))
+    let rows = DiffRows.inline(hunks(old, new), new: DiffRows.Side(TextRope(new)))
     XCTAssertEqual(
       rows.insertions,
       [
@@ -50,39 +49,49 @@ final class DiffRowsTests: OrbeTestCase {
       ])
   }
 
-  /// 片側だけ（未追跡・追加）なら全部の行が追加で、古い側の番号は無い（最後の空の行にも付かない）。削除なら全部の行が
-  /// 古い側の行を指す差し込みで、新しい側は 0 行。
-  func testOneSidedDiffsAreWhollyAddedOrRemoved() {
+  /// 片側だけ（新しいファイル・消したファイル）は、版が無い側を 0 行として、有る側の全部の行（改行で終わる本文の末尾の空の
+  /// 行も）が追加か削除になる。並列の無い側は詰め物だけ。空の本文の新しいファイルは空の行 1 つの追加で、両側に版があれば
+  /// 空の本文どうしは変化が無い。
+  func testOneSidedDiffsAddOrRemoveEveryLineOfTheSideThatExists() {
+    let limit = EditorDiff.hunkLimit
     let text = TextRope(lines(["one", "two"]))
     let added = DiffRows.inline(
-      DiffRows.wholeHunks(old: .absent, new: DiffRows.Side(text)), old: .absent,
-      new: DiffRows.Side(text))
+      DiffRows.hunks(old: nil, new: text, limit: limit), new: DiffRows.Side(text))
     XCTAssertEqual(added.insertions, [])
-    XCTAssertEqual(
-      added.spans, [LineSpan(line: 0, style: DiffStyle.added), LineSpan(line: 2, otherNumber: nil)])
+    XCTAssertEqual(added.spans, [LineSpan(line: 0, style: DiffStyle.added)])
     let removed = DiffRows.inline(
-      DiffRows.wholeHunks(old: DiffRows.Side(text), new: .absent), old: DiffRows.Side(text),
-      new: .absent)
+      DiffRows.hunks(old: text, new: nil, limit: limit), new: DiffRows.Side(nil))
     XCTAssertEqual(
       removed.insertions,
       [
         RowInsertion(
           line: 0,
-          content: .lines([
-            InsertedLine(line: 0, style: DiffStyle.removed),
-            InsertedLine(line: 1, style: DiffStyle.removed),
-          ]))
+          content: .lines((0..<3).map { InsertedLine(line: $0, style: DiffStyle.removed) }))
       ])
     XCTAssertEqual(removed.spans, [])
-    XCTAssertEqual(DiffRows.wholeHunks(old: .absent, new: .absent), [])
+    let side = DiffRows.side(
+      DiffRows.hunks(old: nil, new: text, limit: limit), old: DiffRows.Side(nil),
+      new: DiffRows.Side(text))
+    XCTAssertEqual(
+      side.left.insertions,
+      [
+        RowInsertion(
+          line: 0, content: .lines(Array(repeating: InsertedLine(style: DiffStyle.pad), count: 3)))
+      ])
+    XCTAssertEqual(side.left.spans, [])
+    XCTAssertEqual(side.right.spans, [LineSpan(line: 0, style: DiffStyle.added)])
+    XCTAssertEqual(
+      DiffRows.hunks(old: nil, new: TextRope(), limit: limit),
+      [LineHunk(oldStart: 0, oldCount: 0, newStart: 1, newCount: 1)])
+    XCTAssertEqual(DiffRows.hunks(old: TextRope(), new: TextRope(), limit: limit), [])
   }
 
-  /// 末尾の改行が片側にだけあれば、新しい側にだけある最後の空の行は旧番号を持たない。
-  func testATrailingRowOnlyOnTheNewSideHasNoOldNumber() {
+  /// 末尾の改行を足すのは空の行の追加——足した行だけが追加で、元の最後の行は文脈のまま。
+  func testAddingATrailingNewlineAddsTheEmptyRow() {
     let (old, new) = ("a\nb", "a\nb\nc\n")
-    let rows = DiffRows.inline(
-      hunks(old, new), old: DiffRows.Side(TextRope(old)), new: DiffRows.Side(TextRope(new)))
-    XCTAssertEqual(rows.spans.last, LineSpan(line: 3, otherNumber: nil), "\(rows.spans)")
+    let rows = DiffRows.inline(hunks(old, new), new: DiffRows.Side(TextRope(new)))
+    XCTAssertEqual(
+      rows.spans, [LineSpan(line: 0, otherNumber: 1), LineSpan(line: 2, style: DiffStyle.added)])
   }
 
   /// 並列は変わった区間の削除と追加を上から同じ行（同じ y）に並べ、行の数の差の分だけ短い側の区間の後に詰め物が入り、

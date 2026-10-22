@@ -31,7 +31,7 @@ extension ProjectSearchTests {
     var opened: [(RowID, ProjectSearch.Opening)] = []
     f.search.onOpen = { id, opening in opened.append((id, opening)) }
     var window: (() -> Void)?
-    f.search.navigationDelay.schedule = { _, fire in window = fire }
+    f.search.navigation.delay.schedule = { _, fire in window = fire }
     return RowsFixture(search: f.search, opened: { opened }, closeWindow: { window?() })
   }
 
@@ -89,7 +89,7 @@ extension ProjectSearchTests {
     f.search.moveSelection(by: 1, isRepeat: true)
     f.closeWindow()
     XCTAssertEqual(f.opened().count, 1, "押している間は窓が閉じても開かない")
-    f.search.navigationKeyDidRelease()
+    f.search.navigation.keyDidRelease()
     XCTAssertEqual(f.opened().count, 1, "離してすぐには開かない")
     f.closeWindow()
     XCTAssertEqual(
@@ -98,9 +98,9 @@ extension ProjectSearchTests {
 
     f.search.select(match("a.txt", 0))
     f.search.moveSelection(by: 1, isRepeat: false)
-    f.search.navigationKeyDidRelease()
+    f.search.navigation.keyDidRelease()
     f.search.moveSelection(by: 2, isRepeat: false)
-    f.search.navigationKeyDidRelease()
+    f.search.navigation.keyDidRelease()
     XCTAssertEqual(f.opened().count, 3, "窓の中の押下は待つ")
     f.closeWindow()
     XCTAssertEqual(f.opened().last?.0, match("b.txt", 0), "窓が閉じたら最後の選択だけ")
@@ -127,7 +127,7 @@ extension ProjectSearchTests {
     let blurred = try rowsFixture()
     holding(blurred)
     blurred.search.focusDidChange(.results, focused: false)
-    blurred.search.navigationKeyDidRelease()
+    blurred.search.navigation.keyDidRelease()
     blurred.closeWindow()
     XCTAssertEqual(blurred.opened().count, 1, "焦点が外れたら待っている開きを捨てる")
 
@@ -145,14 +145,14 @@ extension ProjectSearchTests {
     f.search.moveSelection(by: 1, isRepeat: false)
     f.search.moveSelection(by: 1, isRepeat: false)
     f.search.moveLeft()
-    f.search.navigationKeyDidRelease()
+    f.search.navigation.keyDidRelease()
     f.closeWindow()
     XCTAssertEqual(f.opened().count, 1, "見出しへ動いていれば開かない")
 
     f.search.select(match("a.txt", 0))
     f.search.moveSelection(by: 1, isRepeat: true)
     f.search.escapeInResults()
-    f.search.navigationKeyDidRelease()
+    f.search.navigation.keyDidRelease()
     f.closeWindow()
     XCTAssertEqual(f.opened().count, 1, "選択を外していれば開かない")
   }
@@ -172,7 +172,7 @@ extension ProjectSearchTests {
       f.search.moveSelection(by: -1, isRepeat: true)
       openAtOnce(f.search)
       let count = f.opened().count
-      f.search.navigationKeyDidRelease()
+      f.search.navigation.keyDidRelease()
       f.closeWindow()
       XCTAssertEqual(f.opened().count, count, "\(name): 待っていた開きは走らない")
     }

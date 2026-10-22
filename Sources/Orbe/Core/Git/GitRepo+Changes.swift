@@ -1,6 +1,6 @@
 import Foundation
 
-// MARK: - 変更の書き込み（ステージ・解除・破棄・コミット・取り消し）
+// MARK: - 変更の書き込み（ステージ・解除・破棄。コミット・取り消しは `GitRepo+Commit`）
 
 /// 利用者が起こす index・作業ツリー・HEAD への書き込み。どれも無出力で打ち切らず、`handle` で止める（hook・filter・
 /// 署名の沈黙は「何も起きていない」ことを意味しない）。順番は呼び出し側（根のサービス）が作る——同じ worktree の
@@ -36,10 +36,13 @@ extension GitRepo {
   }
 
   /// 行の変更を捨てる。含めるパスは呼んだ時点の index と作業ツリーで選び直す（`selection`）。
-  /// - 追跡中のパスは作業ツリーを index の版へ戻す（ステージ済みの分は残る）。
-  /// - 未追跡のパスはゴミ箱へ移す（元に戻せる）。
-  /// - intent-to-add（`git add -N`）のパスは、作業ツリーに在れば index から外してからゴミ箱へ——index の版は空なので、
-  ///   戻すと中身を失う。作業ツリーから消えたものは index の版（空）へ戻る。
+  /// - 追跡中のパスは作業ツリーを index の版へ戻す（ステージ済みの分は残る）。サブモジュールの中は、利用者の
+  ///   `submodule.recurse` に依らず触れない（従うと中の未コミットの作業を消し、中で作ったコミットから HEAD を戻す）。
+  /// - 未追跡のパスはゴミ箱へ移す（元に戻せる）。戻す前に、戻す場所を塞いでいる未追跡のもの（`blockers`。git の restore
+  ///   はそれを黙って消す）と同じ段で移す——戻した後では、戻したディレクトリが未追跡のパスに当たりうる（塞いでいた親の行・
+  ///   大文字小文字だけ違う名前）。restore が落ちても、それまでに移した分はゴミ箱に在る。
+  /// - intent-to-add（`git add -N`）のパスは、作業ツリーに在れば最初に index から外し、未追跡のパスと同じ段でゴミ箱へ
+  ///   ——index の版は空なので、戻すと中身を失う。作業ツリーから消えたものは index の版（空）へ戻る。
   ///
   /// 追跡中かは観測の status でなく呼んだ時点の index で決める（status が古いとき、追跡中のファイルをゴミ箱へ送らない）。
   /// ゴミ箱へは裏のスレッドで 1 件ずつ移し、その都度止められたかを見る（件数が多いと main を止めるため）。移せなければ
@@ -66,23 +69,29 @@ extension GitRepo {
         return
       }
       let restore = selection.indexed.subtracting(intended)
-      let trash = selection.paths.filter { !restore.contains($0) }
-      let checkout = ["restore", "--worktree"]
-      self.runOnPaths(checkout, paths: Array(restore), handle: handle) { restored in
-        if let restored { return completion(restored) }
-        let unindex = ["rm", "--cached", "-q"]
-        self.runOnPaths(unindex, paths: Array(intended), handle: handle) { removed in
-          if let removed { return completion(removed) }
-          self.moveToTrash(trash, handle: handle, completion: completion)
+      let unindex = ["rm", "--cached", "-q"]
+      self.runOnPaths(unindex, paths: Array(intended), handle: handle) { removed in
+        if let removed { return completion(removed) }
+        let untracked = {
+          self.blockers(of: restore, submodules: selection.submodules)
+            + selection.paths.filter { !restore.contains($0) }
+        }
+        self.moveToTrash(untracked, handle: handle) { cleared in
+          if let cleared { return completion(cleared) }
+          let checkout = ["restore", "--worktree", "--no-recurse-submodules"]
+          self.runOnPaths(checkout, paths: Array(restore), handle: handle, completion: completion)
         }
       }
     }
   }
 
-  /// ステージ・破棄に含めるパスと、そのうち呼んだ時点の index に載っているもの。
-  private struct Selection {
+  /// ステージ・破棄に含めるパスと、そのうち呼んだ時点の index に載っているもの・サブモジュールとして載っているもの。
+  /// `unmerged` は、その index に競合（stage が 0 でないエントリ）が残っているか。
+  struct Selection {
     let paths: [String]
     let indexed: Set<String>
+    let submodules: Set<String>
+    let unmerged: Bool
   }
 
   /// 行から、ステージ・破棄に含めるパスを呼んだ時点の index と作業ツリーで選び直す。
@@ -92,19 +101,30 @@ extension GitRepo {
   ///   ステージ済みの rename（`R.`・`RM`）では元パスは index に無く、そこへ置き直された別の未追跡ファイルを巻き込まない。
   ///
   /// index は丸ごと読む——`ls-files` はパスを標準入力で受けられず、引数では長さの上限を越えうる。読みと作業ツリーの
-  /// 確かめは裏のスレッドで済ませる。
-  private func select(
+  /// 確かめは裏のスレッドで済ませる。stage の番号つきで読み、競合が残っているかも同じ読みで答える（コミットが使う）。
+  func select(
     _ rows: [GitStatus.Row], handle: GitRunner.Handle,
     completion: @escaping (Result<Selection, GitWriteFailure>) -> Void
   ) {
     let asked = Set(rows.flatMap(\.paths))
     runner.run(
-      ["ls-files", "-z"], cwd: root, handle: handle,
+      ["ls-files", "-s", "-z"], cwd: root, handle: handle,
       transform: { listed -> Result<Selection, GitWriteFailure> in
         if let failure = GitWriteFailure.of(listed) { return .failure(failure) }
-        let indexed = Set(
-          listed.stdout.split(separator: 0).compactMap { String(bytes: $0, encoding: .utf8) }
-            .filter(asked.contains))
+        var indexed = Set<String>()
+        var submodules = Set<String>()
+        var unmerged = false
+        // `<mode> <object> <stage>\t<path>`
+        for entry in listed.stdout.split(separator: 0) {
+          guard let tab = entry.firstIndex(of: 0x09) else { continue }
+          if tab > entry.startIndex, entry[entry.index(before: tab)] != 0x30 { unmerged = true }
+          if let path = String(bytes: entry[entry.index(after: tab)...], encoding: .utf8),
+            asked.contains(path)
+          {
+            indexed.insert(path)
+            if entry.starts(with: Self.gitlinkMode) { submodules.insert(path) }
+          }
+        }
         var paths: [String] = []
         for row in rows {
           if indexed.contains(row.path) || Self.exists(self.url(of: row.path)) {
@@ -112,7 +132,8 @@ extension GitRepo {
           }
           if let original = row.originalPath, indexed.contains(original) { paths.append(original) }
         }
-        return .success(Selection(paths: paths, indexed: indexed))
+        return .success(
+          Selection(paths: paths, indexed: indexed, submodules: submodules, unmerged: unmerged))
       }, completion: completion)
   }
 
@@ -135,71 +156,48 @@ extension GitRepo {
       }, completion: completion)
   }
 
-  /// ステージ済みの分をコミットする。メッセージは書いたまま残る（`#` 始まりの行も。前後の空行・行末の空白・続く空行だけ
-  /// 整える）。`amend` は直前のコミットを差し替え、メッセージが空なら前のメッセージを一字も変えずに中身だけ差し替える
-  /// ——整え方を明示しないと、利用者の `commit.cleanup=strip` が前のメッセージの `#` の行を消す。ユーザーの hook・署名の
-  /// 設定はそのまま効く。
-  func commit(
-    message: String, amend: Bool, handle: GitRunner.Handle,
-    completion: @escaping (GitWriteFailure?) -> Void
-  ) {
-    let keepsMessage = amend && message.allSatisfy(\.isWhitespace)
-    var args = ["commit"] + (amend ? ["--amend"] : [])
-    args +=
-      keepsMessage ? ["--no-edit", "--cleanup=verbatim"] : ["--cleanup=whitespace", "-F", "-"]
-    runner.run(
-      args, cwd: root, stdin: keepsMessage ? nil : Data(message.utf8), timesOut: false,
-      handle: handle
-    ) { completion(.of($0)) }
-  }
-
-  /// 最後のコミットを取り消す。HEAD が 1 つ戻り、中身はステージ済みに残る。初回コミットなら、HEAD のブランチの ref を
-  /// 消して初回コミット前へ戻す（index はそのまま＝全部ステージ済み）。shallow clone の境界のコミットは取り消さない。
-  func undoLastCommit(handle: GitRunner.Handle, completion: @escaping (GitWriteFailure?) -> Void) {
-    let parents = ["rev-list", "--parents", "-n", "1", "HEAD"]
-    runner.run(parents, cwd: root, handle: handle) { listed in
-      if let failure = GitWriteFailure.of(listed) {
-        completion(failure)
-        return
-      }
-      let commits = listed.stdoutText.split(whereSeparator: \.isWhitespace).map(String.init)
-      guard let head = commits.first else {
-        completion(.reason(GitRepo.failureReason(of: listed)))
-        return
-      }
-      guard commits.count == 1 else {
-        self.runner.run(
-          ["reset", "--soft", "HEAD~1"], cwd: self.root, timesOut: false, handle: handle
-        ) { completion(.of($0)) }
-        return
-      }
-      // shallow clone の境界のコミットも親を返さない。初回コミットとして ref を消すと、履歴とつながらなくなる。
-      guard !self.isShallowBoundary(head) else { return completion(.shallowBoundary) }
-      self.runner.run(["symbolic-ref", "-q", "HEAD"], cwd: self.root, handle: handle) { ref in
-        guard ref.isSuccess else {
-          completion(ref.exited && ref.status == 1 ? .detached : .of(ref))
-          return
-        }
-        let branch = ref.stdoutText.trimmingCharacters(in: .newlines)
-        self.runner.run(
-          ["update-ref", "-d", branch, head], cwd: self.root, timesOut: false, handle: handle
-        ) { completion(.of($0)) }
-      }
-    }
-  }
-
   /// ゴミ箱の行き先の差し替え（テスト用。隔離ハーネスが毎テスト caseDir の下へ張る）。nil なら利用者のゴミ箱。
   nonisolated(unsafe) static var trashDirectoryOverride: URL?
 
-  /// 裏のスレッドで 1 件ずつゴミ箱へ移し、その都度止められたかを見る。completion は main で返る。
+  /// index でサブモジュール（gitlink）のエントリの mode。
+  private static let gitlinkMode = Data("160000 ".utf8)
+
+  /// 戻すパス `paths` の場所を塞いでいる未追跡のもの——パスの場所にあるディレクトリ（サブモジュールの場所を除く。同じ名前の
+  /// ディレクトリ・入れ子のリポジトリ）と、ディレクトリでない親の階層（ファイル・symlink に置き換えた親）。裏のスレッドで呼ぶ。
+  private func blockers(of paths: Set<String>, submodules: Set<String>) -> [String] {
+    var found: [String] = []
+    var clear = Set<String>()
+    for path in paths.sorted() {
+      var parent = ""
+      var blocked = false
+      for component in path.split(separator: "/").dropLast() {
+        parent = parent.isEmpty ? String(component) : parent + "/" + component
+        guard !clear.contains(parent) else { continue }
+        let type = Self.fileType(at: url(of: parent))
+        guard type == nil || type == .typeDirectory else {
+          if !found.contains(parent) { found.append(parent) }
+          blocked = true
+          break
+        }
+        clear.insert(parent)
+        if type == nil { break }
+      }
+      if !blocked, !submodules.contains(path), Self.fileType(at: url(of: path)) == .typeDirectory {
+        found.append(path)
+      }
+    }
+    return found
+  }
+
+  /// 裏のスレッドで `paths` を引き、1 件ずつゴミ箱へ移し、その都度止められたかを見る。completion は main で返る。
   private func moveToTrash(
-    _ paths: [String], handle: GitRunner.Handle, completion: @escaping (GitWriteFailure?) -> Void
+    _ paths: @escaping () -> [String], handle: GitRunner.Handle,
+    completion: @escaping (GitWriteFailure?) -> Void
   ) {
-    let urls = paths.map(url(of:))
     DispatchQueue.global(qos: .userInitiated).async {
       var failure: GitWriteFailure?
-      // 選んだ後に消えたパスは、捨てるものが無いので飛ばす。
-      for url in urls where Self.exists(url) {
+      // 無いパスは、捨てるものが無いので飛ばす——選んだ後に消えたもの・同じ段で先に移したもの（同じパス・その中・大文字小文字だけ違う名前）。
+      for url in paths().map(self.url(of:)) where Self.exists(url) {
         guard !handle.isCancelled else {
           failure = .cancelled
           break
@@ -225,15 +223,8 @@ extension GitRepo {
       at: url, to: directory.appendingPathComponent(url.lastPathComponent))
   }
 
-  /// HEAD が shallow clone の境界（親が手元に無い）か。境界は共有 git dir の `shallow` に 1 行ずつ載る。
-  private func isShallowBoundary(_ commit: String) -> Bool {
-    let shallow = (commonDir as NSString).appendingPathComponent("shallow")
-    guard let text = try? String(contentsOfFile: shallow, encoding: .utf8) else { return false }
-    return text.split(separator: "\n").contains { $0 == commit }
-  }
-
   /// パスの操作。空なら git を起こさずに成功で返す——パスの無い `add -A`・`reset`・`restore`・`rm` は全体に効く。
-  private func runOnPaths(
+  func runOnPaths(
     _ args: [String], paths: [String], handle: GitRunner.Handle,
     completion: @escaping (GitWriteFailure?) -> Void
   ) {
@@ -252,5 +243,10 @@ extension GitRepo {
   /// symlink を辿らずに在るか（壊れた symlink も在る）。
   private static func exists(_ url: URL) -> Bool {
     (try? FileManager.default.attributesOfItem(atPath: url.path)) != nil
+  }
+
+  /// symlink を辿らない種類（無ければ nil）。
+  private static func fileType(at url: URL) -> FileAttributeType? {
+    (try? FileManager.default.attributesOfItem(atPath: url.path))?[.type] as? FileAttributeType
   }
 }

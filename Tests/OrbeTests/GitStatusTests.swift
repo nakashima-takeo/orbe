@@ -52,6 +52,57 @@ final class GitStatusTests: OrbeTestCase {
     XCTAssertEqual(status.entries.count, 6, "ヘッダ・不正なトークン・空は捨てる")
   }
 
+  /// index 側に変化のあるパスは index の版を持ち（ステージした削除・rename の元パスは index に無い）、作業ツリー側だけの
+  /// 変化・未追跡は持たない。XY が同じまま index の中身だけ変わっても、status は別の値になる（行が古い版のまま残らない）。
+  func testStagedPathsCarryTheirIndexVersion() {
+    let blob = String(repeating: "b", count: 40)
+    func line(_ xy: String, _ mode: String, _ object: String, _ path: String) -> String {
+      "1 \(xy) N... 100644 \(mode) 100644 \(zero) \(object) \(path)"
+    }
+    let status = parse([
+      line("MM", "100644", blob, "a.txt"), line("D.", "000000", zero, "gone.txt"),
+      line(".M", "100644", blob, "edited.txt"), renamed("R.", "new.txt"), "old.txt",
+      "? n.txt",
+    ])
+    XCTAssertEqual(
+      status.stagedVersions,
+      [
+        "a.txt": .entry(mode: "100644", object: blob), "gone.txt": .absent,
+        "new.txt": .entry(mode: "100644", object: zero), "old.txt": .absent,
+      ])
+    let restaged = parse([
+      line("MM", "100644", String(repeating: "c", count: 40), "a.txt"),
+      line("D.", "000000", zero, "gone.txt"), line(".M", "100644", blob, "edited.txt"),
+      renamed("R.", "new.txt"), "old.txt", "? n.txt",
+    ])
+    XCTAssertNotEqual(restaged, status)
+  }
+
+  /// サブモジュールのままの作業ツリー側の変化は、チェックアウトしたコミットの移動（`git add` でステージできる）か、中身だけ
+  /// （ステージできない）かを持つ。作業ツリーで消した・置き換えたサブモジュールと、作業ツリー側に変化の無い行は持たない。
+  func testASubmoduleChangedInTheWorkingTreeIsMarkedWithHowItChanged() {
+    func submodule(_ xy: String, _ sub: String, _ path: String) -> String {
+      "1 \(xy) \(sub) 160000 160000 160000 \(zero) \(zero) \(path)"
+    }
+    let status = parse([
+      submodule(".M", "S.M.", "dirty"), submodule(".M", "S..U", "untracked"),
+      submodule(".M", "SCM.", "moved"), submodule(".M", "SC..", "committed"),
+      submodule("M.", "S.M.", "staged"), submodule(".D", "S...", "removed"),
+      submodule(".T", "S...", "replaced"), submodule("TM", "S...", "retyped"),
+      ordinary(".M", "file.txt"),
+    ])
+    let marks = status.entries.mapValues(\.unstagedSubmodule)
+    XCTAssertEqual(marks["dirty"], .content)
+    XCTAssertEqual(marks["untracked"], .content)
+    XCTAssertEqual(marks["moved"], .commit)
+    XCTAssertEqual(marks["committed"], .commit)
+    XCTAssertEqual(marks["staged"], .some(nil), "作業ツリー側に変化が無い")
+    XCTAssertEqual(marks["removed"], .some(nil), "消したサブモジュールは restore で戻る")
+    XCTAssertEqual(marks["replaced"], .some(nil), "ファイルに置き換えたサブモジュールは restore で戻る")
+    XCTAssertEqual(marks["retyped"], .some(nil), "ファイルに置き換えてステージした後の編集は普通のファイルの変化")
+    XCTAssertEqual(marks["file.txt"], .some(nil))
+  }
+
   func testBadgeDerivation() {
     let status = parse([
       ordinary(".M", "m.txt"), ordinary("M.", "staged.txt"), ordinary("A.", "a.txt"),

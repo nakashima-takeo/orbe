@@ -33,6 +33,20 @@ final class HelpModelTests: OrbeTestCase {
     XCTAssertEqual(m.revealRowID, "top/\(L10nKey.helpCatWorkspaceTabs.rawValue)/⌘T")
   }
 
+  /// 修飾を含まない押下は検索欄へのタイプなので、行に一致させない——↵ の行（combo は ↵ 単独）も光らず、検索語・
+  /// 絞り込み・カテゴリはそのまま残る。
+  func testUnmodifiedPressKeepsTheSearch() {
+    let m = model()
+    m.category = .group(.helpCatTerminal)
+    m.query = "タブ"
+    m.pressed = ["return"]
+    m.syncPressedMatch(l10n)
+    XCTAssertTrue(m.pressedRowIDs.isEmpty, "↵ 単独は ↵ の行にも一致させない")
+    XCTAssertNil(m.revealRowID)
+    XCTAssertEqual(m.query, "タブ")
+    XCTAssertEqual(m.category, .group(.helpCatTerminal))
+  }
+
   /// 左右修飾キー（rcmd/rshift/ropt）は combo 語彙へ正規化して一致する。
   func testRightModifiersNormalize() {
     let m = model()

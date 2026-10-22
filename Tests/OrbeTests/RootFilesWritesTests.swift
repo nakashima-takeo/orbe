@@ -8,7 +8,8 @@ import XCTest
 ///
 /// 壊れると何が起きるか。ステージした行が「変更」に残る・rename を解除すると元パスの削除だけが index に残る・`*` を含む
 /// 名前で別のファイルがステージされる・破棄でステージ済みの分まで消える・未追跡の破棄で取り返しがつかない・`#` の行が
-/// メッセージから消える・取り消しで中身ごと失う・smudge が止まるとステージの完了が返らない。
+/// メッセージから消える・取り消しで中身ごと失う・smudge が止まるとステージの完了が返らない。競合の残る merge の途中で
+/// 押したコミットが関係の無い変更をステージし、merge のコミットに混ぜる。
 @MainActor
 final class RootFilesWritesTests: OrbeTestCase {
   var repo: TempGitRepo!
@@ -17,7 +18,7 @@ final class RootFilesWritesTests: OrbeTestCase {
     repo = try TempGitRepo()
   }
 
-  private func finish(
+  func finish(
     _ files: RootFiles, _ start: (@escaping (GitWriteFailure?) -> Void) -> RootFiles.Write,
     file: StaticString = #filePath, line: UInt = #line
   ) -> WriteOutcome {
@@ -195,7 +196,9 @@ final class RootFilesWritesTests: OrbeTestCase {
     let files = repo.files()
 
     let committed = finish(files) {
-      files.commit(message: "\n\nTitle  \n\n# not a comment\nbody\n\n", completion: $0)
+      files.commit(
+        message: "\n\nTitle  \n\n# not a comment\nbody\n\n", content: .staged("a.txt"),
+        completion: $0)
     }
     XCTAssertNil(committed.failure)
     XCTAssertEqual(
@@ -209,7 +212,9 @@ final class RootFilesWritesTests: OrbeTestCase {
   /// 何もステージしていないコミットは、git が stdout に言った理由で失敗する。
   func testCommittingNothingFailsWithGitsReason() throws {
     let files = repo.files()
-    let committed = finish(files) { files.commit(message: "empty", completion: $0) }
+    let committed = finish(files) {
+      files.commit(message: "empty", content: .staged(), completion: $0)
+    }
     guard case .reason(let reason) = committed.failure else {
       return XCTFail("理由つきの失敗: \(String(describing: committed.failure))")
     }
@@ -228,14 +233,18 @@ final class RootFilesWritesTests: OrbeTestCase {
     try repo.write("a.txt", "amended\n")
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
 
-    let kept = finish(files) { files.commit(message: "  \n", amend: true, completion: $0) }
+    let kept = finish(files) {
+      files.commit(message: "  \n", content: .staged("a.txt"), amend: true, completion: $0)
+    }
     XCTAssertNil(kept.failure)
     XCTAssertNotEqual(repo.head(), before)
     XCTAssertEqual(repo.git(["log", "-1", "--format=%B"]).stdoutText, message + "\n")
     XCTAssertEqual(repo.git(["rev-list", "--count", "HEAD"]).stdoutText, "1\n", "積まずに差し替える")
     XCTAssertEqual(repo.git(["show", "HEAD:a.txt"]).stdoutText, "amended\n")
 
-    let renamed = finish(files) { files.commit(message: "renamed", amend: true, completion: $0) }
+    let renamed = finish(files) {
+      files.commit(message: "renamed", content: .staged(), amend: true, completion: $0)
+    }
     XCTAssertNil(renamed.failure)
     XCTAssertEqual(repo.git(["log", "-1", "--format=%s"]).stdoutText, "renamed\n")
   }
@@ -248,7 +257,7 @@ final class RootFilesWritesTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["commit", "-qm", "second"]).isSuccess)
     let files = repo.files()
 
-    let undone = finish(files) { files.undoLastCommit(completion: $0) }
+    let undone = finish(files) { files.undoLastCommit(head: .movedByOwnWrite, completion: $0) }
     XCTAssertNil(undone.failure)
     XCTAssertEqual(repo.head(), first)
     XCTAssertEqual(entry(undone, "b.txt"), GitStatus.Entry(staged: .added, unstaged: nil))
@@ -256,26 +265,12 @@ final class RootFilesWritesTests: OrbeTestCase {
 
     XCTAssertTrue(repo.git(["commit", "-qm", "second again"]).isSuccess)
     XCTAssertTrue(repo.git(["reset", "-q", "--hard", first]).isSuccess)
-    let root = finish(files) { files.undoLastCommit(completion: $0) }
+    let root = finish(files) { files.undoLastCommit(head: .movedByOwnWrite, completion: $0) }
     XCTAssertNil(root.failure)
     XCTAssertEqual(
       root.statusAtCompletion?.branch, GitStatus.Branch(name: "main", commit: nil, upstream: nil),
       "初回コミット前に戻る")
     XCTAssertEqual(entry(root, "a.txt"), GitStatus.Entry(staged: .added, unstaged: nil))
-  }
-
-  /// shallow clone の境界のコミットは、初回コミットと取り違えて取り消さない（ブランチを消すと履歴とつながらなくなる）。
-  func testTheShallowBoundaryIsNotUndone() throws {
-    XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "second"]).isSuccess)
-    let shallow = TestScratch.caseDir.appendingPathComponent("shallow").path
-    XCTAssertTrue(
-      repo.git(["clone", "-q", "--depth", "1", "file://" + repo.root, shallow]).isSuccess)
-    let boundary = repo.git(["rev-parse", "HEAD"], in: shallow).stdoutText
-    let files = repo.files(at: GitWorktreeRoot.normalizedPath(shallow))
-
-    let undone = finish(files) { files.undoLastCommit(completion: $0) }
-    XCTAssertEqual(undone.failure, .shallowBoundary)
-    XCTAssertEqual(repo.git(["rev-parse", "HEAD"], in: shallow).stdoutText, boundary)
   }
 
   /// ユーザーの hook（pre-commit）と署名の設定はそのまま効く。
@@ -301,7 +296,9 @@ final class RootFilesWritesTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     let files = repo.files()
 
-    let committed = finish(files) { files.commit(message: "signed", completion: $0) }
+    let committed = finish(files) {
+      files.commit(message: "signed", content: .staged("a.txt"), completion: $0)
+    }
     XCTAssertNil(committed.failure)
     XCTAssertTrue(FileManager.default.fileExists(atPath: marker), "pre-commit が走った")
     XCTAssertTrue(repo.git(["cat-file", "commit", "HEAD"]).stdoutText.contains("gpgsig"), "署名された")
@@ -373,6 +370,7 @@ final class RootFilesWritesTests: OrbeTestCase {
     let files = RootFiles(root: GitWorktreeRoot.normalizedPath(outside.path))
     pumpMain(until: { files.isResolved })
     XCTAssertEqual(
-      finish(files) { files.commit(message: "x", completion: $0) }.failure, .notManaged)
+      finish(files) { files.commit(message: "x", content: .staged(), completion: $0) }.failure,
+      .notManaged)
   }
 }

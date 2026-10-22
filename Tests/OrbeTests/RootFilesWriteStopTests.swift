@@ -3,11 +3,13 @@ import XCTest
 
 @testable import Orbe
 
-/// 書き込みを止める手。利用者が起こした書き込みは無出力で打ち切らず、止めるまで待つ。止めれば「止めた」で返り、
-/// `index.lock` を残さない。順番待ちの書き込みは、前の書き込みの終わりを待たずに git を起こさないまま「止めた」で返る。
+/// 書き込みを止める手。利用者が起こした書き込みは無出力で打ち切らず、止めるまで待つ（人が見ていない裏の fetch は打ち切る）。
+/// 止めれば「止めた」で返り、`index.lock` を残さない。順番待ちの書き込みは、前の書き込みの終わりを待たずに git を起こさない
+/// まま「止めた」で返る。
 ///
 /// 壊れると何が起きるか。署名の pin 入力や重い hook の最中のコミットが 2 分で黙って切られる・止めても返らない・
-/// 止めた後に `index.lock` が残って以後の git が全部落ちる・止めたはずのステージが後で走る。
+/// 止めた後に `index.lock` が残って以後の git が全部落ちる・止めたはずのステージが後で走る。応答しない remote への裏の
+/// fetch が返らず、そのリポジトリの自動 fetch が止まったままになる。
 @MainActor
 final class RootFilesWriteStopTests: OrbeTestCase {
   private var fixture: GitHangFixture!
@@ -60,7 +62,8 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     try stageChange()
     let files = managed()
     let outcome = WriteOutcome()
-    let write = files.commit(message: "blocked", completion: outcome.receive)
+    let write = files.commit(
+      message: "blocked", content: .staged("a.txt"), completion: outcome.receive)
     assertStopped(write, outcome)
   }
 
@@ -101,7 +104,8 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     let runner = GitRunner(idleTimeout: shortIdleTimeout)
     let files = managed(runner: runner)
     let outcome = WriteOutcome()
-    let write = files.commit(message: "slow hook", completion: outcome.receive)
+    let write = files.commit(
+      message: "slow hook", content: .staged("a.txt"), completion: outcome.receive)
     XCTAssertTrue(fixture.pumpUntilHung())
 
     let smudge = try fixture.installScript("smudge.sh", body: "sleep 30")
@@ -119,6 +123,21 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     XCTAssertEqual(outcome.failure, .cancelled)
   }
 
+  /// 裏の fetch（人が見ていない）は、相手が無出力のまま返らなければ、止めなくても打ち切られて返る。
+  func testAnUnattendedFetchIsTimedOut() throws {
+    let helper = try fixture.installScript("hang-remote.sh", body: fixture.waitingBody)
+    XCTAssertTrue(fixture.git(["config", "protocol.ext.allow", "always"]).isSuccess)
+    XCTAssertTrue(fixture.git(["remote", "add", "origin", "ext::\(helper)"]).isSuccess)
+    let files = managed(runner: GitRunner(idleTimeout: shortIdleTimeout))
+    let outcome = WriteOutcome()
+
+    _ = files.fetch(unattended: true, onProgress: { _ in }, completion: outcome.receive)
+    XCTAssertTrue(fixture.pumpUntilHung())
+    pumpMain(until: { outcome.finished }, timeout: 10, "止めずに返る")
+    XCTAssertNotNil(outcome.failure)
+    XCTAssertNotEqual(outcome.failure, .cancelled)
+  }
+
   /// 書き込みが残っている間は、握る者が離れても根のサービスは生きていて（同じ根なら同じもの）完了を返し、走っていたものも
   /// 止めた順番待ちも返り終われば離れる（監視が残らない）。
   func testAServiceLivesUntilItsWritesReturn() throws {
@@ -129,7 +148,7 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     weak let observed = held
     let committed = WriteOutcome()
     let queued = WriteOutcome()
-    held?.commit(message: "blocked", completion: committed.receive)
+    held?.commit(message: "blocked", content: .staged("a.txt"), completion: committed.receive)
     XCTAssertTrue(fixture.pumpUntilHung())
     let write = held?.stage(
       [GitStatus.Row(path: "a.txt", originalPath: nil)], completion: queued.receive)
@@ -150,7 +169,7 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     try stageChange()
     let files = managed()
     let first = WriteOutcome()
-    files.commit(message: "blocked", completion: first.receive)
+    files.commit(message: "blocked", content: .staged("a.txt"), completion: first.receive)
     XCTAssertTrue(fixture.pumpUntilHung())
     try "b\n".write(toFile: root + "/b.txt", atomically: true, encoding: .utf8)
     let queued = WriteOutcome()

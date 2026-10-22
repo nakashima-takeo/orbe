@@ -3,30 +3,34 @@ import OrbeEditorCore
 
 /// 行差分の区間の列から、diff の面に置く並び（インライン・並列）を作る純関数。行の型は `DiffStyle` の番号で、色を知らない。
 ///
-/// 片側の大きさは面の行の数（`rows`）と、行差分が数える行の数（`lines`——本文が改行で終われば最後の空の行を数えない）で
-/// 渡す。その版に無い側は 0 行。区間の外の行は両側で 1 対 1 に揃う。
+/// 片側の大きさは行差分が数える行の数で（→ `LineDiff`）、版が有れば面の行の数と同じ。その版に無い側（新しいファイルの
+/// 古い側・消したファイルの新しい側）は 0 行で（面が持つ空の行 1 つは数えない）、有る側の全部の行が追加か削除になる（空の
+/// 本文は空の行 1 つで、版が無いのとは違う）。区間の外の行は両側で 1 対 1 に揃う。
 enum DiffRows {
-  /// 片側の大きさ。
+  /// 片側の大きさ（面の行の数。版が無ければ 0）。
   struct Side: Equatable {
-    var rows: Int
-    var lines: Int
+    let lines: Int
 
-    /// 写し `text` の大きさ。
-    init(_ text: TextRope) {
-      rows = text.lineCount
-      let length = text.length
-      let endsWithNewline =
-        length == 0 || text.units(in: NSRange(location: length - 1, length: 1)).first == 0x0A
-      lines = endsWithNewline ? rows - 1 : rows
+    /// 写し `text` の大きさ（nil は版が無い）。
+    init(_ text: TextRope?) {
+      lines = text?.lineCount ?? 0
     }
 
-    init(rows: Int, lines: Int) {
-      self.rows = rows
-      self.lines = lines
-    }
+    /// 版が無い。
+    var isAbsent: Bool { lines == 0 }
+  }
 
-    /// その版に無い側。
-    static let absent = Side(rows: 0, lines: 0)
+  /// 古い側と新しい側の行差分（nil は版が無い側）。片側が無ければ行差分を取らず、無い側 0 行・有る側の全部の行の区間 1 つ
+  /// にする（本文を割らないので、大きなファイルでも手間は端の数だけ）。
+  static func hunks(old: TextRope?, new: TextRope?, limit: LineDiff.Limit) -> [LineHunk] {
+    if let old, let new { return LineDiff.hunks(old: old, new: new, limit: limit) }
+    let (old, new) = (Side(old), Side(new))
+    guard !old.isAbsent || !new.isAbsent else { return [] }
+    return [
+      LineHunk(
+        oldStart: old.isAbsent ? 0 : 1, oldCount: old.lines, newStart: new.isAbsent ? 0 : 1,
+        newCount: new.lines)
+    ]
   }
 
   /// 区間 1 つの 0 始まりの範囲。
@@ -42,20 +46,10 @@ enum DiffRows {
     }
   }
 
-  /// 片側が無いとき（未追跡・追加・削除）の区間——無い側 0 行と、ある側の全部の行。
-  static func wholeHunks(old: Side, new: Side) -> [LineHunk] {
-    guard old.lines > 0 || new.lines > 0 else { return [] }
-    return [
-      LineHunk(
-        oldStart: old.lines > 0 ? 1 : 0, oldCount: old.lines, newStart: new.lines > 0 ? 1 : 0,
-        newCount: new.lines)
-    ]
-  }
-
   /// インライン——新しい側の面に、区間の削除行を「古い側の行を指す差し込み」として区間の新しい側の始まりの境に置き、追加の
   /// 区間に型「追加」、文脈の区間に旧番号の始まりを渡す（差し込みの出どころは呼び手が添える）。
-  static func inline(_ hunks: [LineHunk], old: Side, new: Side) -> SurfaceRows {
-    var spans = Spans(limit: new.rows)
+  static func inline(_ hunks: [LineHunk], new: Side) -> SurfaceRows {
+    var spans = Spans(limit: new.lines)
     var insertions: [RowInsertion] = []
     var oldNext = 0
     var newNext = 0
@@ -71,13 +65,7 @@ enum DiffRows {
       oldNext = block.old.upperBound
       newNext = block.new.upperBound
     }
-    let tail = new.rows - newNext
-    if tail > 0 {
-      // 区間の後の行は旧番号で揃う。古い側の行が先に尽きれば（新しい側にだけ最後の空の行がある）、その行は番号なし。
-      spans.add(newNext, otherNumber: oldNext < old.rows ? oldNext + 1 : nil)
-      let paired = old.rows - oldNext
-      if paired < tail, paired > 0 { spans.add(newNext + paired, otherNumber: nil) }
-    }
+    if newNext < new.lines { spans.add(newNext, otherNumber: oldNext + 1) }
     return SurfaceRows(insertions: insertions, spans: spans.items)
   }
 
@@ -86,8 +74,8 @@ enum DiffRows {
   static func side(_ hunks: [LineHunk], old: Side, new: Side) -> (
     left: SurfaceRows, right: SurfaceRows
   ) {
-    var left = (spans: Spans(limit: old.rows), insertions: [RowInsertion]())
-    var right = (spans: Spans(limit: new.rows), insertions: [RowInsertion]())
+    var left = (spans: Spans(limit: old.lines), insertions: [RowInsertion]())
+    var right = (spans: Spans(limit: new.lines), insertions: [RowInsertion]())
     let pads = { (count: Int) in
       Array(repeating: InsertedLine(style: DiffStyle.pad), count: count)
     }

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// レール＋サイドバー（エクスプローラーか検索パネル）の SwiftUI ルート。器の中の別 root なので環境は明示注入する。
+/// レール＋サイドバー（エクスプローラー・検索パネル・ソース管理パネル）の SwiftUI ルート。器の中の別 root なので環境は明示注入する。
 /// 幅は pane が決める（レール 36 ＋ hairline、サイドバーが出るときは ＋幅 ＋ hairline）。レールは固定幅で、
 /// パネルは残りを埋める——サイドバーの幅の持ち主は pane で、ここは与えられた幅を埋めるだけ。
 struct EditorSideRoot: View {
@@ -9,6 +9,10 @@ struct EditorSideRoot: View {
   let search: ProjectSearch
   /// 検索結果の列（pane が持ち、パネルが隠れても捨てない）。
   let searchResults: RowList<SearchResultsSource>
+  let scm: ScmPanel
+  /// ソース管理の変更の列とグラフの列（検索結果の列と同じく pane が持つ）。
+  let scmList: RowList<ScmListSource>
+  let scmGraphList: RowList<ScmGraphSource>
   /// 開閉の真実（pane と同じ 1 つ。写しを挟まない）。
   let sidebar: EditorSidebarState
   let localization: LocalizationStore
@@ -19,11 +23,15 @@ struct EditorSideRoot: View {
     // 狭く切り詰められても root が中央寄せで左へずれず、レールは 0〜36 に居る。溢れは右で、切り落とす。
     GeometryReader { _ in
       HStack(spacing: 0) {
-        RailView(selection: sidebar.isOpen ? sidebar.panel : nil, onSelect: shell.selectPanel)
+        RailView(
+          selection: sidebar.isOpen ? sidebar.panel : nil, sourceControlCount: scm.count,
+          onSelect: shell.selectPanel)
         if sidebar.isOpen {
           switch sidebar.panel {
           case .files: ExplorerView(shell: shell, tree: tree)
           case .search: SearchPanelView(search: search, results: searchResults)
+          case .sourceControl:
+            ScmPanelView(panel: scm, list: scmList, graphList: scmGraphList, sidebar: sidebar)
           }
         }
       }
@@ -35,13 +43,16 @@ struct EditorSideRoot: View {
   }
 }
 
-/// レール: 幅 36 のアイコン列。項目は「ファイル」「検索」（サイドバーのパネルと 1 対 1）。選択は左 2px の accent の
-/// 縦線 ＋ 淡い地（design-system §5 のエディター面の例外）で、サイドバーが閉じている間は無い（`selection == nil`）。
+/// レール: 幅 36 のアイコン列。項目は「ファイル」「検索」「ソース管理」（サイドバーのパネルと 1 対 1）。選択は左 2px の
+/// accent の縦線 ＋ 淡い地（design-system §5 のエディター面の例外）で、サイドバーが閉じている間は無い（`selection == nil`）。
 /// 押すと `onSelect`——選択中の項目ならサイドバーを閉じ、別の項目ならそのパネルへ切り替える（閉じていれば開く）。
+/// ソース管理の項目は、変更があれば右下に件数のバッジを出す（見本 Rail.tsx。1000 以上は「999+」）。
 struct RailView: View {
   typealias Item = EditorSidebarState.Panel
 
   let selection: Item?
+  /// ソース管理の件数（ステージ済み＋変更の行。0 なら出さない）。
+  let sourceControlCount: Int
   let onSelect: (Item) -> Void
   @Environment(\.colorScheme) private var scheme
   @Environment(\.localization) private var l10n
@@ -72,16 +83,55 @@ struct RailView: View {
 
   private func railItem(_ item: Item, selected: Bool, ink: EditorInk) -> some View {
     EditorGlyphView(
-      glyph: item == .files ? EditorGlyphs.railFiles : EditorGlyphs.railSearch,
-      size: Theme.Layout.editorRailGlyph,
+      glyph: glyph(item), size: Theme.Layout.editorRailGlyph,
       color: selected ? Color.theme.textPrimary : Color.theme.editorTertiary
     )
+    .overlay(alignment: .bottomTrailing) {
+      if item == .sourceControl, sourceControlCount > 0 { RailBadge(count: sourceControlCount) }
+    }
     .frame(width: Theme.Layout.editorRail, height: Theme.Layout.editorRail)
     .background(selected ? ink.fill(Self.selectedFillAlpha) : .clear)
     .overlay(alignment: .leading) {
       if selected { Rectangle().fill(Color.theme.accentPrimary).frame(width: accentBar) }
     }
-    .help(l10n.string(item == .files ? .editorExplorerTitle : .editorRailSearch))
+    .help(l10n.string(help(item)))
+  }
+
+  private func glyph(_ item: Item) -> EditorGlyphs.Glyph {
+    switch item {
+    case .files: EditorGlyphs.railFiles
+    case .search: EditorGlyphs.railSearch
+    case .sourceControl: EditorGlyphs.railGit
+    }
+  }
+
+  private func help(_ item: Item) -> L10nKey {
+    switch item {
+    case .files: .editorExplorerTitle
+    case .search: .editorRailSearch
+    case .sourceControl: .editorRailSourceControl
+    }
+  }
+}
+
+/// レールの件数バッジ（見本 Rail.tsx: アイコンの右下から右 8・下 4 はみ出す、最小 15×15・radius 8・地 accent・字 tabActiveText
+/// 9 bold・padding 0 3）。
+private struct RailBadge: View {
+  let count: Int
+
+  private static let limit = 999
+
+  var body: some View {
+    Text(count > Self.limit ? "\(Self.limit)+" : "\(count)")
+      .font(Font.theme.editorRailBadge)
+      .foregroundStyle(Color.theme.tabActiveText)
+      .lineLimit(1)
+      .padding(.horizontal, 3)
+      .frame(minWidth: Theme.Layout.editorRailBadge, minHeight: Theme.Layout.editorRailBadge)
+      .fixedSize()
+      .background(Capsule().fill(Color.theme.accentPrimary))
+      .offset(
+        x: Theme.Layout.editorRailBadgeOffset.width, y: Theme.Layout.editorRailBadgeOffset.height)
   }
 }
 

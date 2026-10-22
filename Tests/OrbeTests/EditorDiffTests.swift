@@ -108,17 +108,77 @@ final class EditorDiffTests: OrbeTestCase {
     pumpMain(until: { window.firstResponder === diff.newSurface?.responder }, "焦点は面へ")
   }
 
-  /// 未追跡のファイルは全部の行が追加、作業ツリーで消したファイルは全部の行が削除になる。
+  /// 未追跡のファイルは全部の行（改行で終わる本文の末尾の空の行も）が追加、作業ツリーで消したファイルは全部の行が削除になる。
+  /// 版が無い側の面は、エディターの都合で持つ空の行に番号を描かない。
   func testOneSidedWorkingTreeDiffs() throws {
     try repo.write("new.txt", "x\ny\n")
     let (tab, _) = tab()
     let added = try tab.group.editor.openDiff(id("new.txt", .workingTree), as: .pinned)
-    waitRows(added, "未追跡は全部が追加") { $0.style(ofLine: 0) == DiffStyle.added }
-    XCTAssertTrue(try engine(added.newSurface).rows.isEmpty)
+    waitRows(added, "未追跡は全部が追加") {
+      $0.style(ofLine: 0) == DiffStyle.added && $0.style(ofLine: 2) == DiffStyle.added
+    }
+    XCTAssertTrue(try engine(added.newSurface).rows.isEmpty, "− 空の行は出ない")
+    XCTAssertTrue(try engine(added.newSurface).presentation.numbersOwnLines)
     try FileManager.default.removeItem(at: repo.url("a.txt"))
     let removed = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
-    waitRows(removed, "消したファイルは全部が削除") { self.removedLines($0) == [0, 1, 2, 3] }
+    waitRows(removed, "消したファイルは全部が削除") { self.removedLines($0) == [0, 1, 2, 3, 4] }
     XCTAssertNil(removed.document, "新しい側の文書は無い")
+    XCTAssertFalse(
+      try engine(removed.newSurface).presentation.numbersOwnLines, "存在しない行に番号を描かない")
+  }
+
+  /// 先頭の行から始まる最初の変更区間は、文書の先頭から見せる——先頭の行の前に差し込んだ削除行が見えている高さより長く
+  /// ても、その頭が上へ外れない（消したファイルは全部の行がこの形）。
+  func testAChangeFromTheFirstLineOpensAtTheTopOfTheDocument() throws {
+    let lines = (0..<200).map { "line \($0)" }
+    try repo.write("gone.txt", lines.joined(separator: "\n") + "\n")
+    try repo.write("head.txt", lines.joined(separator: "\n") + "\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "long"]).isSuccess)
+    try FileManager.default.removeItem(at: repo.url("gone.txt"))
+    try repo.write("head.txt", lines[100...].joined(separator: "\n") + "\n")
+    let (tab, _) = tab()
+    for path in ["gone.txt", "head.txt"] {
+      let diff = try tab.group.editor.openDiff(id(path, .workingTree), as: .pinned)
+      waitRows(diff, "\(path): 削除行が届く") { !self.removedLines($0).isEmpty }
+      pumpMain(until: { diff.revealed }, "\(path): 最初の変更区間へ送る")
+      let surface = try engine(diff.newSurface)
+      surface.flush()
+      XCTAssertLessThan(surface.viewportLines.visible, 100, "前提: 削除行は見えている高さより長い")
+      XCTAssertEqual(surface.viewportLines.first, 0, "\(path): 削除行の頭から見える")
+    }
+  }
+
+  /// ステージ済みの新しいファイル・消したファイルも、版が無い側を 0 行として全部の行が追加・削除になる——存在しない空の行は
+  /// 出ず、並列の無い側は詰め物だけで、番号を描かない。
+  func testOneSidedStagedDiffsShowNoLineThatDoesNotExist() throws {
+    try repo.write("n.txt", "aaa")
+    XCTAssertTrue(repo.git(["add", "n.txt"]).isSuccess)
+    XCTAssertTrue(repo.git(["rm", "-q", "a.txt"]).isSuccess)
+    let modes = EditorDiffModeState()
+    let (tab, _) = tab()
+    tab.group.view.editor.configure(
+      translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
+      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(), diffModes: modes)
+    let added = try tab.group.editor.openDiff(id("n.txt", .staged), as: .pinned)
+    waitRows(added, "+ aaa") { $0.style(ofLine: 0) == DiffStyle.added }
+    XCTAssertEqual(removedLines(try engine(added.newSurface).rows), [], "− 空の行は出ない")
+    let removed = try tab.group.editor.openDiff(id("a.txt", .staged), as: .pinned)
+    waitRows(removed, "全部の行が削除") { self.removedLines($0) == [0, 1, 2, 3, 4] }
+    XCTAssertFalse(try engine(removed.newSurface).presentation.numbersOwnLines)
+
+    _ = try tab.group.editor.openDiff(id("n.txt", .staged), as: .pinned)
+    modes.select(.side)
+    pumpMain(until: { added.oldSurface != nil }, "並列")
+    let left = try engine(added.oldSurface)
+    let pads = left.rows.contents.flatMap { content -> [InsertedLine] in
+      guard case .lines(let lines) = content else { return [] }
+      return lines.filter { $0.line == nil }
+    }
+    XCTAssertEqual(pads.count, 1, "左は + aaa に並ぶ詰め物だけ")
+    XCTAssertEqual(left.rows.style(ofLine: 0), nil, "左の空の行は削除ではない")
+    XCTAssertFalse(left.presentation.numbersOwnLines, "左の空の行に番号を描かない")
+    XCTAssertTrue(try engine(added.newSurface).presentation.numbersOwnLines)
   }
 
   /// バイナリ・シンボリックリンク・競合中は、タブは開き、本体に理由の一文が出る。

@@ -87,7 +87,7 @@ struct RulerSpans {
   struct Key: Equatable {
     var find: Int
     var word: Int
-    var marks: RowMarks
+    var marks: LineMarks
     var lineCount: Int
     /// 縦の並びの版（行を表示の単位へ写す）。
     var rows: Int
@@ -271,8 +271,8 @@ extension FrameBuilder {
         findRows.sort { $0.lowerBound < $1.lowerBound }
       }
     }
-    let removed = marks.deletions.map { deletion -> ClosedRange<Int> in
-      let row = max(0, deletion.row + (deletion.atBottom ? 1 : 0) - 1)
+    let removed = marks.deletions.map { boundary -> ClosedRange<Int> in
+      let row = max(0, boundary - 1)
       return row...row
     }
     let groups: [(RulerSpans.Kind, [ClosedRange<Int>])] = [

@@ -11,7 +11,7 @@ final class FakeTextSurface: TextSurface {
   weak var delegate: TextSurfaceDelegate?
   private(set) var undoBoundaries = 0
   /// 最後に押された行の印と、押された回数。
-  private(set) var lineMarks = LineMarkSpans.empty
+  private(set) var lineMarks = LineMarks.empty
   private(set) var lineMarkPushes = 0
   weak var host: TextSurfaceHost?
   /// 見えている範囲（本文の言葉）。テストが置く。
@@ -59,13 +59,14 @@ final class FakeTextSurface: TextSurface {
 
   func markUndoBoundary() { undoBoundaries += 1 }
 
-  func setLineMarks(_ spans: LineMarkSpans) {
-    lineMarks = spans
+  func setLineMarks(_ marks: LineMarks) {
+    lineMarks = marks
     lineMarkPushes += 1
     pull()
   }
 
   func reveal(_ range: NSRange, policy: TextReveal) {}
+  func scrollToStart() {}
 
   func setRows(_ rows: SurfaceRows) {}
 
