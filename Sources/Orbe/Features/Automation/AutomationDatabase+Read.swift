@@ -276,3 +276,29 @@ extension AutomationInbox.Row {
       origin: origin, unread: true)
   }
 }
+
+/// 受け手の「読めば取る行」。
+struct AutomationPending: Equatable {
+  let count: Int
+  /// 数えた行のどれかが古さの上限を過ぎる最も早い時刻。
+  let expiresAt: Date?
+}
+
+extension AutomationDatabase {
+  /// 受け手 `node` が今読めば取る行の数（1 回の上限は掛けない）と、そのどれかが古さの上限を過ぎる最も早い時刻。`proposed` は
+  /// リンクに候補があるか。
+  func pending(
+    _ node: AutomationGraph.Node, in graph: AutomationGraph, proposed: @escaping (String) -> Bool,
+    now: Date
+  ) throws -> AutomationPending {
+    let taken = try read(
+      node, in: graph, baseline: nil,
+      context: AutomationInbox.Context(proposed: proposed, now: now, batch: false)
+    ).taken
+    let ages = Dictionary(uniqueKeysWithValues: node.inputs.map { ($0.from, $0.maxAgeHours) })
+    let expiries = taken.compactMap { row in
+      ages[row.edge].flatMap { $0 }.map { row.at.addingTimeInterval(TimeInterval($0) * 3600) }
+    }
+    return AutomationPending(count: taken.count, expiresAt: expiries.min())
+  }
+}

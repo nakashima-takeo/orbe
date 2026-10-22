@@ -229,3 +229,14 @@ enum AutomationSourceRef: Hashable {
   case item(Int)
   case event(Int)
 }
+
+extension AutomationDatabase {
+  /// 自動化の外していない部品の鍵（部品の台帳）。定義を読めない自動化でも行から引ける。
+  func partKeys(of automation: Int) throws -> [AutomationPartID: String] {
+    Dictionary(
+      uniqueKeysWithValues: try db.select(
+        "SELECT id, key FROM parts WHERE automation_id = ? AND removed_at IS NULL",
+        [.integer(Int64(automation))]
+      ) { (AutomationPartID($0.int(at: 0)), $0.text(at: 1) ?? "") })
+  }
+}

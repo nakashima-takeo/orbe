@@ -103,6 +103,8 @@ struct AutomationPartState: Equatable {
   var reads: [AutomationPartID: AutomationReadPosition] = [:]
   /// 受け手として、今読めば取る行の数（古さの上限を過ぎた行を除く）。入力の無い部品は 0。
   var inbox = 0
+  /// 受け手として、数えた行のどれかが古さの上限を過ぎる最も早い時刻（過ぎたら数え直す）。上限の無い入力だけなら nil。
+  var inboxExpiresAt: Date?
   /// 出す側の今有効な項目の書かれた id とリンク（取得の最新の結果）。
   var live: [AutomationSeen] = []
 

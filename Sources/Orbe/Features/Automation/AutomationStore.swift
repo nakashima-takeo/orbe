@@ -26,6 +26,8 @@ import Observation
   @ObservationIgnored var onUnavailable: () -> Void = {}
   /// 走っている回が読んだ行（確定まで掃除から守る）。走らせ役が渡す。
   @ObservationIgnored var holding: () -> Set<AutomationRowRef> = { [] }
+  /// 変異が通った（走らせ役が、読めば取る行の数え直しの時刻を合わせ直す）。
+  @ObservationIgnored var committed: () -> Void = {}
 
   init(opening: Result<AutomationDatabase.Opened, AutomationError> = AutomationPersistence.open()) {
     switch opening {
@@ -220,6 +222,7 @@ import Observation
     if memory.unreadableProposals != unreadableProposals {
       unreadableProposals = memory.unreadableProposals
     }
+    committed()
     return result
   }
 

@@ -41,4 +41,47 @@ extension AutomationRunner {
       }
     }
   }
+
+  /// 祖先の予定でのやり直しで起こすか。take が new の入力は読んでいない上流の行（読んだ位置より後の番号）があれば、all の
+  /// 入力は最後に失敗せずに終えた契機の始まりより後に上流が変わっていれば。`settled` はその契機の始まりの、入力ごとの上流の印
+  /// （無ければ変化の番号 0）。失敗した契機の行は読んだ位置が進まないので new では残り、all では基準線が進まないので残る。
+  static func needsRetry(
+    _ node: AutomationGraph.Node, in automation: Automation,
+    settled: [AutomationPartID: Mark]
+  ) -> Bool {
+    let reads = automation.state(node.id).reads
+    return node.inputs.contains { edge in
+      let up = mark(of: edge.from, in: automation)
+      switch edge.take {
+      case .new:
+        let read = reads[edge.from] ?? AutomationReadPosition()
+        return up.item > read.item || up.event > read.event
+      case .all:
+        return up.changes > (settled[edge.from]?.changes ?? 0)
+      }
+    }
+  }
+
+  /// 起こす決まり。「届いたら」の部品に、基準線より新しい上流の行があり、走っていなければ起こす。
+  func wake(_ id: Int, _ part: AutomationPartID) {
+    guard let automation = store.automation(id), let node = automation.graph.node(part),
+      node.part.trigger == .arrival
+    else { return }
+    let key = Self.key(id, part)
+    guard Self.hasNew(node, in: automation, since: marks[key] ?? [:]),
+      !scheduler.isRunning(id: key)
+    else { return }
+    scheduler.runNow(id: key)
+  }
+
+  /// 失敗のやり直し。「届いたら」でない部品の契機が終わったら、下流の「届いたら」の部品を、最後に失敗せずに終えた契機より後の
+  /// 上流の行があればすべて起こす（`AutomationRunner+Wake` の `needsRetry`）。
+  func retry(below part: AutomationPartID, in id: Int) {
+    guard let automation = store.automation(id) else { return }
+    for node in automation.graph.descendants(of: part) where node.part.trigger == .arrival {
+      let key = Self.key(id, node.id)
+      guard Self.needsRetry(node, in: automation, settled: settled[key] ?? [:]) else { continue }
+      scheduler.runNow(id: key)
+    }
+  }
 }

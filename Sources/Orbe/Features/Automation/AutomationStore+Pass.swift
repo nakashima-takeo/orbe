@@ -139,6 +139,27 @@ extension AutomationStore {
   }
 }
 
+extension AutomationStore {
+  /// 数えた行のどれかが古さの上限を過ぎる最も早い時刻（どの受け手でも）。
+  var nextInboxExpiry: Date? {
+    automations.flatMap { $0.parts.values.compactMap(\.inboxExpiresAt) }.min()
+  }
+
+  /// 数えた行が古さの上限を過ぎた（`now` が過ぎる時刻より後の）受け手の「読めば取る行」の数を数え直す。
+  func recountExpired(now: Date) throws(AutomationError) {
+    let expired = automations.map { automation in
+      (
+        automation.id,
+        automation.parts.filter { ($0.value.inboxExpiresAt ?? .distantFuture) < now }.map(\.key)
+      )
+    }.filter { !$0.1.isEmpty }
+    guard !expired.isEmpty else { return }
+    try commit(sweepingAt: nil) { db, memory in
+      for (id, parts) in expired { try memory.recount(id, db, now: now, parts: parts) }
+    }
+  }
+}
+
 extension AutomationMemory {
   /// 受け手の読んだ位置を DB から写す。
   mutating func refreshReads(_ id: Int, _ part: AutomationPartID, _ db: AutomationDatabase) throws {
@@ -159,10 +180,9 @@ extension AutomationMemory {
     let links = heldLinks
     for node in automation.graph.nodes
     where !node.inputs.isEmpty && (parts?.contains(node.id) ?? true) {
-      automations[index].parts[node.id]?.inbox = try db.read(
-        node, in: automation.graph, baseline: nil,
-        context: AutomationInbox.Context(proposed: links.contains, now: now, batch: false)
-      ).taken.count
+      let pending = try db.pending(node, in: automation.graph, proposed: links.contains, now: now)
+      automations[index].parts[node.id]?.inbox = pending.count
+      automations[index].parts[node.id]?.inboxExpiresAt = pending.expiresAt
     }
   }
 

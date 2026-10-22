@@ -29,10 +29,10 @@ extension AutomationDatabase {
     for index in snapshot.automations.indices {
       let automation = snapshot.automations[index]
       for node in automation.graph.nodes where !node.inputs.isEmpty {
-        snapshot.automations[index].parts[node.id]?.inbox = try database.read(
-          node, in: automation.graph, baseline: nil,
-          context: AutomationInbox.Context(proposed: links.contains, now: now, batch: false)
-        ).taken.count
+        let pending = try database.pending(
+          node, in: automation.graph, proposed: links.contains, now: now)
+        snapshot.automations[index].parts[node.id]?.inbox = pending.count
+        snapshot.automations[index].parts[node.id]?.inboxExpiresAt = pending.expiresAt
       }
     }
     return snapshot
@@ -158,24 +158,49 @@ extension AutomationDatabase {
     }
   }
 
-  /// 部品の状態（直近の回・最新の成功・外した印・持ち越し・最後の番号・今有効な項目）。
   private func state(of part: PartRow) throws -> AutomationPartState {
-    var state = AutomationPartState(addedAt: part.addedAt)
-    state.runs = try records(of: part.id, limit: AutomationPartState.retainedRuns)
-    state.succeededAt = try succeededAt(of: part.id)
-    state.breach = try breachRecord(of: part.id).map(AutomationBreachMark.init)
-    if let drops = Self.decode(AutomationDrops.self, part.pendingDrops) {
+    try state(
+      of: part.id, addedAt: part.addedAt, lastItemSeq: part.lastItemSeq,
+      lastEventSeq: part.lastEventSeq, pendingDrops: part.pendingDrops)
+  }
+
+  /// DB にある部品の状態（開き直したストアが持つものと同じ。読めば取る行の数は呼び手が数える）。
+  func storedState(of id: AutomationPartID) throws -> AutomationPartState {
+    let rows = try db.select(
+      "SELECT added_at, last_item_seq, last_event_seq, pending_drops FROM parts WHERE id = ?",
+      [.integer(Int64(id.rawValue))]
+    ) { s in
+      (addedAt: s.int64(at: 0), item: s.int(at: 1), event: s.int(at: 2), drops: s.text(at: 3))
+    }
+    guard let row = rows.first else {
+      throw AutomationError.unavailable("part \(id) is missing from the database")
+    }
+    return try state(
+      of: id, addedAt: AutomationPersistence.date(row.addedAt), lastItemSeq: row.item,
+      lastEventSeq: row.event, pendingDrops: row.drops)
+  }
+
+  /// 部品の状態（直近の回・最新の成功・外した印・持ち越し・最後の番号・今有効な項目・読んだ位置）。
+  private func state(
+    of id: AutomationPartID, addedAt: Date, lastItemSeq: Int, lastEventSeq: Int,
+    pendingDrops: String?
+  ) throws -> AutomationPartState {
+    var state = AutomationPartState(addedAt: addedAt)
+    state.runs = try records(of: id, limit: AutomationPartState.retainedRuns)
+    state.succeededAt = try succeededAt(of: id)
+    state.breach = try breachRecord(of: id).map(AutomationBreachMark.init)
+    if let drops = Self.decode(AutomationDrops.self, pendingDrops) {
       state.pendingDrops = drops
     } else {
-      NSLog("[automation] dropped unreadable carried counts of part \(part.id)")
+      NSLog("[automation] dropped unreadable carried counts of part \(id)")
     }
-    state.lastItemSeq = part.lastItemSeq
-    state.lastEventSeq = part.lastEventSeq
-    state.live = try live(of: part.id)
+    state.lastItemSeq = lastItemSeq
+    state.lastEventSeq = lastEventSeq
+    state.live = try live(of: id)
     state.reads = Dictionary(
       uniqueKeysWithValues: try db.select(
         "SELECT from_part_id, read_item_seq, read_event_seq FROM part_edges WHERE to_part_id = ?",
-        [.integer(Int64(part.id.rawValue))]
+        [.integer(Int64(id.rawValue))]
       ) {
         (
           AutomationPartID($0.int(at: 0)),

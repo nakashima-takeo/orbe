@@ -11,10 +11,11 @@ extension AutomationStore {
     let removed: [AutomationPartID]
   }
 
-  /// 書き換える前の自動化（定義を読めない自動化は持たない）と、その版と外していない部品。
+  /// 書き換える前の自動化（定義を読めない自動化は持たない）と、その版と外していない部品とその鍵。
   private struct Current {
     let version: Int
     let parts: [AutomationPartID]
+    let keys: [AutomationPartID: String]
     let automation: Automation?
   }
 
@@ -29,9 +30,12 @@ extension AutomationStore {
     if let automation = automation(id) {
       current = Current(
         version: automation.version, parts: automation.graph.nodes.map(\.id),
+        keys: Dictionary(uniqueKeysWithValues: automation.graph.nodes.map { ($0.id, $0.key) }),
         automation: automation)
     } else if let broken = unreadable.first(where: { $0.id == id }) {
-      current = Current(version: broken.version, parts: broken.parts, automation: nil)
+      current = Current(
+        version: broken.version, parts: broken.parts, keys: try read { try $0.partKeys(of: id) },
+        automation: nil)
     } else {
       throw .automationNotFound(id)
     }
@@ -42,8 +46,7 @@ extension AutomationStore {
     guard version == current.version else {
       throw .versionMismatch(sent: version, current: current.version)
     }
-    try Self.checkIds(
-      definition.parts, of: id, current: current.parts, graph: current.automation?.graph)
+    try Self.checkIds(definition.parts, of: id, current: current.keys)
     let at = TaskItem.storedInstant(now)
     return try commit(sweepingAt: at) { db, memory in
       var entities = try Self.entities(checked, old: current.automation, db)
@@ -130,7 +133,11 @@ extension AutomationStore {
     for node in graph.nodes {
       try db.setEdges(of: id, to: node.id, node.inputs)
       let before = old?.graph.node(node.id)
-      var state = old?.parts[node.id] ?? AutomationPartState(addedAt: at)
+      // 定義を読めない自動化の残る部品は、開き直したストアと同じく DB の状態から始める。
+      var state =
+        try old?.parts[node.id]
+        ?? (current.parts.contains(node.id)
+          ? db.storedState(of: node.id) : AutomationPartState(addedAt: at))
       if let was = before?.coverage, node.coverage != was {
         let items = try db.invalidateItems(of: node.id, at: at)
         rewired.invalidated += items
@@ -155,25 +162,24 @@ extension AutomationStore {
   }
 
   /// 部品の `id` を確かめる: この自動化の今の部品だけ・重なりなし・`id` の無い部品の鍵が外れる部品の鍵と同じでない。
+  /// `current` は今の部品の台帳（ID と鍵）。
   private static func checkIds(
-    _ parts: [AutomationDefinition.Part], of automation: Int, current: [AutomationPartID],
-    graph: AutomationGraph?
+    _ parts: [AutomationDefinition.Part], of automation: Int, current: [AutomationPartID: String]
   ) throws(AutomationError) {
     var seen = Set<AutomationPartID>()
     for (index, part) in parts.enumerated() {
       guard let id = part.id else { continue }
-      guard current.contains(id) else {
+      guard current[id] != nil else {
         throw .invalid("parts[\(index)].id: \(id) is not a part of automation \(automation)")
       }
       guard seen.insert(id).inserted else {
         throw .invalid("parts[\(index)].id: \(id) is named twice")
       }
     }
-    guard let graph else { return }
     for (index, part) in parts.enumerated() where part.id == nil {
-      if let owner = graph.node(key: part.key), !seen.contains(owner.id) {
+      if let owner = current.first(where: { $0.value == part.key })?.key, !seen.contains(owner) {
         throw .invalid(
-          "parts[\(index)].id: the key \"\(part.key)\" belongs to part \(owner.id); send its id to "
+          "parts[\(index)].id: the key \"\(part.key)\" belongs to part \(owner); send its id to "
             + "keep the part, or use another key for a new part")
       }
     }

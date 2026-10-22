@@ -47,13 +47,9 @@ extension WindowController {
     automationResult { () throws(AutomationError) in
       let page = try automationStore.history(
         of: automationId, part: partKey, before: before, limit: limit)
-      let keys = Dictionary(
-        uniqueKeysWithValues: automationStore.automation(automationId)?.graph.nodes.map {
-          ($0.id, $0.key)
-        } ?? [])
       var json: [String: Any] = [
         "runs": page.runs.map { run -> [String: Any] in
-          let key = keys[run.part] ?? "\(run.part)"
+          let key = page.keys[run.part] ?? "\(run.part)"
           var object = AutomationRunWire.object(run.record, part: key)
           object["partKey"] = key
           return object
