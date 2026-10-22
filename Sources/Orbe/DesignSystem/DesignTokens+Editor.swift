@@ -166,9 +166,9 @@ extension Theme.Typography {
   static let editorSearchNote = NSFont.systemFont(ofSize: 11, weight: .regular)
   /// レールの件数バッジ（sans 9 bold）。
   static let editorRailBadge = NSFont.systemFont(ofSize: 9, weight: .bold)
-  /// ソース管理（見本 ScmPanel の値）。区分見出し（sans 11 bold）・件数バッジ（sans 9.5）・ファイル行の名前（sans 13）と
-  /// ディレクトリ（sans 11）・メッセージ欄（sans 12）・コミットボタン（sans 12 semibold）・グラフのコミットの題（sans 12）・
-  /// ref の札（mono 9）・ブランチの器（mono 11）・「さらに表示」（sans 11.5）・失敗の文（sans 11）。
+  /// ソース管理（見本 ScmPanel の値）。親・子の区分・グラフの枠の見出し（sans 11 bold）・件数バッジ（sans 9.5）・ファイル行の
+  /// 名前（sans 13）とディレクトリ（sans 11）・メッセージ欄（sans 12）・コミットボタン（sans 12 semibold）・グラフのコミットの
+  /// 題（sans 12）・ref の札（mono 9）・グラフのブランチの行（mono 11）・「さらに表示」（sans 11.5）・失敗の文（sans 11）。
   static let editorScmSection = NSFont.systemFont(ofSize: 11, weight: .bold)
   static let editorScmCount = NSFont.systemFont(ofSize: 9.5, weight: .regular)
   static let editorScmFile = NSFont.systemFont(ofSize: 13, weight: .regular)
@@ -258,22 +258,22 @@ extension Theme.Layout {
   /// レールの件数バッジ（最小の幅と高さ）と、アイコンの右下からのはみ出し（右・下）。
   static let editorRailBadge: CGFloat = 15
   static let editorRailBadgeOffset = CGSize(width: 8, height: 4)
-  /// ソース管理（見本 ScmPanel の値）。行（見出し・ファイル・ブランチ・コミット・さらに表示）の高さ・種別チップ・行の中の
-  /// ボタンとその印・見出しのツールの角・子の区分の字下げ・メッセージ欄の 1 行の高さ・コミットボタンの高さと ▾ の幅・ref の札の
-  /// 高さ・コミットの点・点の列の幅。
+  /// ソース管理（見本 ScmPanel の値）。行（見出し・ファイル・コミット・さらに表示）の高さ・種別チップ・行の中のボタンとその印・
+  /// 見出しのツールの角・メッセージ欄の 1 行の高さ・コミットボタンの高さと ▾ の幅・ref の札の高さ・コミットの点・点の列の幅。
   static let editorScmRow: CGFloat = 22
   static let editorScmChip: CGFloat = 16
   static let editorScmRowButton: CGFloat = 18
   static let editorScmGlyph: CGFloat = 13
   static let editorScmTool: CGFloat = 20
-  static let editorScmIndent: CGFloat = 8
   static let editorScmMessage: CGFloat = 26
   static let editorScmCommitButton: CGFloat = 26
   static let editorScmCommitCaret: CGFloat = 24
   static let editorScmRef: CGFloat = 15
   static let editorScmDot: CGFloat = 7
   static let editorScmDotColumn: CGFloat = 16
-  /// グラフの枠の高さ（見出し 22 を含む）の既定（見出し＋8 行）と下限（見出し＋3 行）。見本に無い（人の決定）。
+  /// 子の区分の字下げ。見本に無い（人の決定 H20）。
+  static let editorScmIndent: CGFloat = 8
+  /// グラフの枠の高さ（見出し 22 を含む）の既定（見出し＋8 行）と下限（見出し＋3 行）。見本に無い（人の決定 H20）。
   static let editorScmGraph: CGFloat = 198
   static let editorScmGraphMin: CGFloat = 88
   /// 実行中の帯の高さと「止める」の高さ（見本に無い。決定の図の値）。
