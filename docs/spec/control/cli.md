@@ -1,7 +1,7 @@
 ---
 title: Orbe CLI（orb）
 description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/自動化/ボードの部品/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/automation/board/session/wait サブコマンド・socket 文脈解決・終了コード契約
-updated: 2026-10-22
+updated: 2026-10-23
 ---
 
 # Orbe CLI（`orb`）
@@ -77,7 +77,7 @@ updated: 2026-10-22
 - `orb automation runs <id> [--part <key>] [--before <recordId>] [--limit <n>] [--json]` … `list_automation_runs` に乗り、回の記録を新しい順に 1 行 1 回（`記録の ID 回の要約`。要約は `list` の「前回」と同じ語）で出す。続きがあれば最後に `next <recordId>` の行を出し、その値を `--before` に渡すと続きが出る。
 - `orb automation run <id> [--part <key>] [--json]` … `--part` の部品まで流す（省けば終わりの部品すべてまで。止めた自動化も受ける）。回の終わりを待たずに返る。`--part` の値の欠けは usage エラー。
 - `orb automation try <id> [--from <key>]... [--to <key>]... [--stdin] [--limit <n>] [--json]` … [試走](../platform/automation.md#試走)を始め、写すのを待たずに返る（人向けの出力は始めた旨の 1 行）。`--from`・`--to` は繰り返して並べる。`--stdin` は標準入力の 1 行 1 JSON オブジェクト（空行は飛ばす）を入口に与える行にする。標準入力の 0 バイトと JSON オブジェクトでない行は usage エラー（exit 2）、範囲・行の検証は control が持つ（exit 1）。
-- `orb automation trial <id> [--wait] [--timeout-ms <ms>] [--json]` … 最新の試走を部品ごとに 1 行（`鍵 状態 回`）で出す。回は最新の回を `list` の「前回」と同じ語で、止めた副作用・仕事は `held N rows`。流す前に終わった試走は先頭に `failed: <理由>`。中身（下流へ渡す行・候補の案・渡るはずだった行）は `--json` で読む。`--wait` で終わりまで待ち（既定 3600000 ms）、時間切れは exit 124。
+- `orb automation trial <id> [--wait] [--timeout-ms <ms>] [--json]` … 最新の試走を部品ごとに 1 行（`鍵 状態 回`）で出す。回は最新の回を `list` の「前回」と同じ語で、止めた副作用・仕事は `held N rows`、行を与えた取得は `given N rows`。流し切れずに終わった試走は先頭に `failed: <理由>`。中身（下流へ渡す行・候補の案・渡るはずだった行・与えた行）は `--json` で読む。`--wait` で終わりまで待ち（既定 3600000 ms）、時間切れは exit 124。
 - `orb automation pause <id> [--json]` / `orb automation resume <id> [--json]` … 予定を止める・再開する。
 - `orb automation rm <id> [--json]`
 
