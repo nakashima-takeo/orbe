@@ -101,6 +101,7 @@ extension SourceControlPaneTests {
     }
 
     press(row: 1)
+    RunLoop.main.run(until: Date().addingTimeInterval(0.2))
     XCTAssertEqual(commits(), ScmPanel.graphPage, "コミットは押しても何も起きない")
     press(row: scm.graphLayout.items.count - 1)
     pumpMain(until: { commits() == ScmPanel.graphPage + 1 }, "さらに表示で先のコミットが出る")
