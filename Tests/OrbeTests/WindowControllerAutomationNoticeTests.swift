@@ -212,6 +212,28 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     XCTAssertTrue(failure.text.hasPrefix("取る: 失敗："), failure.text)
   }
 
+  /// 外した印は印の回の記録そのものを指すので、同じミリ秒に始まった次の回で、外した回の知らせが出直さない。
+  @MainActor func testTheBreachNoticeBelongsToTheMarkedRunAlone() throws {
+    let wc = controller()
+    let store = wc.automationStore
+    let id = try store.create(
+      DesignSceneFixtures.candidatesDefinition(
+        "受信",
+        fetch: DesignSceneFixtures.commandPart(
+          "fetch", "取る", .scheduled(.every(1800)), script: "fetch", coverage: .currentSet),
+        notify: .menuBar), now: Date()
+    ).id
+    let at = Date()
+    try store.record(
+      id, part: "fetch", at: at,
+      outcome: AutomationStoreTests.breached([AutomationStoreTests.item("a")]))
+    XCTAssertNotNil(wc.automationNotification(id, "fetch"), "前提: 外した回は知らせる")
+
+    try store.record(id, part: "fetch", at: at, outcome: DesignSceneFixtures.fetched([]))
+
+    XCTAssertNil(wc.automationNotification(id, "fetch"))
+  }
+
   /// 選んでいる行の回は出ず、同じボードで選んでいない自動化の回は出る。
   @MainActor func testViewingTheRowStaysSilent() throws {
     let wc = controller()
