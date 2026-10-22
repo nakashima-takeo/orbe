@@ -10,7 +10,6 @@ struct AutomationSettling {
   /// 回の履歴から数えられない捨てた数（持ち越し・読む前に期限で消えた数）。
   private var carried = AutomationDrops()
   private var written = AutomationDatabase.Written()
-  private var outputs: [AutomationDatabase.Output] = []
 
   init(end: AutomationPassEnd, node: AutomationGraph.Node, index: Int, db: AutomationDatabase) {
     self.end = end
@@ -53,7 +52,7 @@ struct AutomationSettling {
     if decided != nil || run.withdrawn != nil {
       try memory.recountJudges(db, now: run.endedAt)
     }
-    return AutomationRecorded(changed: written.changed, run: run, outputs: recordedOutputs())
+    return AutomationRecorded(changed: written.changed, run: run)
   }
 
   /// 読んだ位置を進め、持ち越しを回の記録へ移す。
@@ -73,11 +72,13 @@ struct AutomationSettling {
   ) throws {
     switch output {
     case .fetch(let rows), .process(let rows):
-      outputs = rows.map { AutomationDatabase.Output(id: $0.id, body: $0.text, source: $0.source) }
+      let outputs = rows.map {
+        AutomationDatabase.Output(id: $0.id, body: $0.text, source: $0.source)
+      }
       written =
         node.coverage == .currentSet
-        ? try db.writeItems(of: end.part, outputs, at: run.endedAt, replacing: !end.given)
-        : try db.writeEvents(of: end.part, outputs, at: run.endedAt, distinct: !end.given)
+        ? try db.writeItems(of: end.part, outputs, at: run.endedAt)
+        : try db.writeEvents(of: end.part, outputs, at: run.endedAt)
       let withdrawn = try memory.withdraw(originatingIn: written.invalidated, db)
       if node.role == .fetch {
         run.result = .fetch(fresh: written.fresh.count, duplicates: written.duplicates)
@@ -162,18 +163,5 @@ struct AutomationSettling {
     try memory.recount(
       end.automationId, db, now: entry.endedAt,
       parts: [end.part] + memory.automations[index].graph.downstream(of: end.part).map(\.id))
-  }
-
-  /// 出した行ごとの、今それを表す行と下流へ渡す 1 行。
-  private func recordedOutputs() -> [AutomationRecorded.Output] {
-    let fresh = Set(written.fresh)
-    return zip(written.rows, outputs).enumerated().compactMap { index, pair in
-      guard let ref = pair.0 else { return nil }
-      let output = pair.1
-      let downstream = output.source == nil ? "\(end.part):\(output.id)" : output.id
-      return AutomationRecorded.Output(
-        ref: ref, text: AutomationPrompts.replacing(id: downstream, in: output.body),
-        fresh: fresh.contains(index))
-    }
   }
 }

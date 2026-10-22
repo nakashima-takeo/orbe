@@ -49,9 +49,9 @@ extension AutomationTrial {
     return ids.filter { seen.insert($0).inserted }
   }
 
-  /// 与えた行を、道の根（ちょうど 1 つ）の役割に合わせて読む。取得は取得の読み方で、入力のある部品は文字列の `id` を持つ行として
-  /// 受け、その上流の出力にする（上流がちょうど 1 つのときだけ）。判定は断る——判定は出どころ（取得の項目）から候補を作るので、
-  /// 出どころの無い行は本番では捨てられる。
+  /// 与えた行を、道の根（ちょうど 1 つ）の役割に合わせて読む。取得は取得の読み方でその取得の出力に、入力のある部品は文字列の
+  /// `id` を持つ行として受けてその上流の出力にする（上流がちょうど 1 つのときだけ）。判定は断る——判定は出どころ（取得の項目）
+  /// から候補を作るので、出どころの無い行は本番では捨てられる。
   static func given(_ rows: [String], in range: Range, of graph: AutomationGraph)
     throws(AutomationError) -> Given
   {
@@ -70,7 +70,7 @@ extension AutomationTrial {
       var outputs = AutomationOutputs(.fetch(since: nil))
       let broken = outputs.put(rows.joined(separator: "\n"))
       guard broken.isEmpty else { throw .invalid("rows: \(broken[0].text)") }
-      return .fetched(part: entry.id, output: outputs.output(nothing: nil), count: outputs.count)
+      return Given(entry: entry.id, writer: entry.id, rows: outputs.rows)
     case .process, .report, .work, .sideEffect:
       guard entry.inputs.count == 1, let upstream = entry.inputs.first?.from else {
         let keys = entry.inputs.compactMap { graph.node($0.from)?.key }
@@ -86,7 +86,7 @@ extension AutomationTrial {
         }
         arrivals.append(AutomationPartRow(id: id, text: row, origin: nil, source: nil))
       }
-      return .arrivals(part: entry.id, upstream: upstream, rows: arrivals)
+      return Given(entry: entry.id, writer: upstream, rows: arrivals)
     }
   }
 }

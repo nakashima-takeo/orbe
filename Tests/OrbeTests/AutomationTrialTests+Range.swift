@@ -61,7 +61,7 @@ extension AutomationTrialTests {
     ended(trial)
 
     XCTAssertEqual(trial.targetKeys, ["judge", "digest"])
-    XCTAssertEqual(trial.passes(key: "digest").first?.run.result, .report(text: "a が来た"))
+    XCTAssertEqual(trial.passes(key: "digest").first?.run?.result, .report(text: "a が来た"))
   }
 
   /// 指した入口から届かない行き先は断る。
@@ -78,7 +78,7 @@ extension AutomationTrialTests {
     }
   }
 
-  /// `limit` は取得が下流へ渡す行を先頭から絞る。
+  /// `limit` は取得が下流へ渡す行を先頭から絞る。絞った行は写しに無いので、受け手は読む前に消えたと数えない。
   func testALimitCutsTheRowsAFetchPassesDown() throws {
     let id = try define([
       fetch("gh"), part("p", from: ["gh"]), part("d", from: ["p"], deliver: .report),
@@ -92,6 +92,7 @@ extension AutomationTrialTests {
     ended(trial)
     XCTAssertEqual(
       rows(trial, "gh"), [downstream("gh", "a", of: id), downstream("gh", "b", of: id)])
-    XCTAssertEqual(trial.passes(key: "gh").first?.run.result, .fetch(fresh: 3, duplicates: 0))
+    XCTAssertEqual(trial.passes(key: "gh").first?.run?.result, .fetch(fresh: 3, duplicates: 0))
+    XCTAssertEqual(trial.passes(key: "p").first?.run?.dropped, AutomationDrops())
   }
 }

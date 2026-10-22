@@ -21,10 +21,6 @@ enum AutomationEnding: Equatable {
   case notStarted(String)
   /// 指定した MCP のツールが始まりの時点で揃わなかった（揃わなかった名前）。
   case toolsUnavailable([String])
-  /// 試走が止めた副作用・作業（手段を起こしていない）。
-  case heldByTrial
-  /// 試走が外から与えた行を取得の出力にした（手段を起こしていない）。
-  case givenToTrial
 
   init(_ ending: BackgroundEnding) {
     switch ending {
@@ -54,8 +50,6 @@ enum AutomationEnding: Equatable {
     case .directoryMissing(let directory): "not started (directory missing: \(directory))"
     case .notStarted(let reason): "not started (\(reason))"
     case .toolsUnavailable(let tools): BackgroundEnding.unavailable(tools)
-    case .heldByTrial: "held by the trial"
-    case .givenToTrial: "rows given to the trial"
     }
   }
 }
@@ -226,8 +220,6 @@ extension AutomationEnding: Codable {
       self = .directoryMissing(try c.decode(String.self, forKey: .directory))
     case "notStarted": self = .notStarted(try c.decode(String.self, forKey: .reason))
     case "toolsUnavailable": self = .toolsUnavailable(try c.decode([String].self, forKey: .tools))
-    case "heldByTrial": self = .heldByTrial
-    case "givenToTrial": self = .givenToTrial
     default:
       throw DecodingError.dataCorruptedError(
         forKey: .kind, in: c, debugDescription: "unknown ending kind")
@@ -259,8 +251,6 @@ extension AutomationEnding: Codable {
     case .toolsUnavailable(let tools):
       try c.encode("toolsUnavailable", forKey: .kind)
       try c.encode(tools, forKey: .tools)
-    case .heldByTrial: try c.encode("heldByTrial", forKey: .kind)
-    case .givenToTrial: try c.encode("givenToTrial", forKey: .kind)
     }
   }
 }

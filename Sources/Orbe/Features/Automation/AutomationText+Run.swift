@@ -66,7 +66,7 @@ extension AutomationText {
     case .timeLimit: l10n.string(.automationEndTimeLimit)
     case .idleLimit: l10n.string(.automationEndIdleLimit)
     case .outputLimit: l10n.string(.automationEndOutputLimit)
-    case .stopped, .heldByTrial, .givenToTrial: l10n.string(.automationEndStopped)
+    case .stopped: l10n.string(.automationEndStopped)
     case .agentMissing(let cli): l10n.format(.automationEndAgentMissing, cli)
     case .directoryMissing(let directory): l10n.format(.automationEndDirectoryMissing, directory)
     case .notStarted: l10n.string(.automationEndNotStarted)

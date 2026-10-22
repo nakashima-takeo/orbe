@@ -60,8 +60,12 @@ func automationTrial(_ rest: [String]) -> Never {
   for part in trial?["parts"] as? [[String: Any]] ?? [] {
     let key = part["key"] as? String ?? "?"
     let cell = (part["runs"] as? [[String: Any]])?.first.map { run in
-      guard let held = run["held"] as? [String: Any] else { return runCell(key, run) }
-      return "held \((held["rows"] as? [Any])?.count ?? 0) rows"
+      for kind in ["held", "given"] {
+        if let rows = (run[kind] as? [String: Any])?["rows"] as? [Any] {
+          return "\(kind) \(rows.count) rows"
+        }
+      }
+      return runCell(key, run)
     }
     print(
       [key, part["state"].map(display) ?? "-", cell ?? "-"].map(tsvCell).joined(separator: "\t"))

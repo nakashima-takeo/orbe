@@ -12,9 +12,6 @@ struct AutomationPassEnd {
   /// 読んだもの。入力の無い部品は nil。
   let read: AutomationInbox.Read?
   let outcome: AutomationPartPass.Outcome
-
-  /// 試走の与えた行を出力にした取得の回（今の集合でも他の項目を無効にせず、出来事の見分けも掛けない）。
-  var given: Bool { outcome.execution.ending == .givenToTrial }
 }
 
 /// 確定した部品の 1 回。
@@ -23,15 +20,6 @@ struct AutomationRecorded {
   let changed: Bool
   /// 書いた回の記録。自動化か部品がもう無く、何も書かなかったなら nil。
   let run: AutomationPartRun?
-  /// 出した行ごとの、今それを表す行と下流へ渡す 1 行（出力の順。足さなかった重なりは除く）。試走が添える。
-  var outputs: [Output] = []
-
-  struct Output: Equatable {
-    let ref: AutomationRowRef
-    let text: String
-    /// この回が新しく有効にした行か。
-    let fresh: Bool
-  }
 
   /// 失敗した回として書いたか（部品の 1 回が成功していても、確定で失敗にした回を含む）。
   var failed: Bool { run?.failed ?? false }
@@ -42,7 +30,7 @@ extension AutomationStore {
   /// 受け手 `part` の読み。`baseline` はつながりごとの読む上限の番号（契機の始まりの時点の上流の最後の番号）。
   func read(
     _ part: AutomationPartID, of id: Int, baseline: [AutomationPartID: AutomationSeqs]?,
-    now: Date, overrides: [AutomationReadOverride] = []
+    now: Date
   ) throws(AutomationError) -> AutomationInbox.Read? {
     guard let automation = automation(id), let node = automation.graph.node(part),
       !node.inputs.isEmpty
@@ -51,8 +39,7 @@ extension AutomationStore {
     return try read {
       try $0.read(
         node, in: automation.graph, baseline: baseline,
-        context: AutomationInbox.Context(proposed: links.contains, now: now),
-        overrides: overrides)
+        context: AutomationInbox.Context(proposed: links.contains, now: now))
     }
   }
 
@@ -111,28 +98,6 @@ extension AutomationStore {
     return try commit(sweepingAt: run.endedAt) { db, memory in
       var settling = AutomationSettling(end: end, node: node, index: index, db: db)
       return try settling.settle(run, &memory)
-    }
-  }
-
-  /// 試走で入力のある入口に与えた行を、上流 `part` の出力として足す（今の集合でも他の項目を無効にせず、出来事の流れでも見分けを
-  /// 掛けない）。足した行の参照を返す。
-  func give(_ rows: [AutomationPartRow], as part: AutomationPartID, of id: Int, at: Date)
-    throws(AutomationError) -> Set<AutomationRowRef>
-  {
-    let index = try index(id)
-    guard let node = automations[index].graph.node(part) else {
-      throw .partNotFound(id, "\(part)")
-    }
-    let at = TaskItem.storedInstant(at)
-    return try commit(sweepingAt: nil) { db, memory in
-      let outputs = rows.map { AutomationDatabase.Output(id: $0.id, body: $0.text, source: nil) }
-      let written =
-        node.coverage == .currentSet
-        ? try db.writeItems(of: part, outputs, at: at, replacing: false)
-        : try db.writeEvents(of: part, outputs, at: at, distinct: false)
-      try memory.reread(part, of: id, db)
-      try memory.recount(id, db, now: at)
-      return Set(written.rows.compactMap { $0 })
     }
   }
 }

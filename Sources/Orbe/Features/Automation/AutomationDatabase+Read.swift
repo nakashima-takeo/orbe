@@ -73,7 +73,7 @@ extension AutomationDatabase {
     }
     var rows: [AutomationInbox.Row] = []
     for item in items {
-      let id = item.source == nil ? "\(up):\(item.written)" : item.written
+      let id = Self.downstreamId(item.written, of: up, inherited: item.source != nil)
       rows.append(
         AutomationInbox.Row(
           edge: up, table: .item, seq: item.seq, ref: .version(item.version),
@@ -83,7 +83,7 @@ extension AutomationDatabase {
           unread: item.seq > reading.read.item))
     }
     for event in events {
-      let id = event.source == nil ? "\(up):\(event.written)" : event.written
+      let id = Self.downstreamId(event.written, of: up, inherited: event.source != nil)
       rows.append(
         AutomationInbox.Row(
           edge: up, table: .event, seq: event.seq, ref: .event(event.event),
@@ -93,6 +93,12 @@ extension AutomationDatabase {
           unread: event.seq > reading.read.event))
     }
     return rows
+  }
+
+  /// 下流へ渡す id。入力を引き継いだ行は書かれた id のまま（下流が入力と照らせる）、それ以外は `<部品 ID>:<書かれた id>`
+  /// （部品をまたいで重ならない）。
+  static func downstreamId(_ written: String, of part: AutomationPartID, inherited: Bool) -> String {
+    inherited ? written : "\(part):\(written)"
   }
 
   /// 引き継ぎをたどった先の行。それを出した部品の今の役割が取得なら出どころ（候補のリンクと本文の元）で、ほかは出どころなし。
@@ -191,22 +197,12 @@ extension AutomationDatabase {
   }
 }
 
-/// 試走が根の受け手の読みに掛ける上書き。与えた行は読んだ位置によらず読み、その回が有効にした行と与えた行は先頭から `limit`
-/// 行に絞る（絞った残りは読んだものとして流さない）。
-struct AutomationReadOverride {
-  let edge: AutomationPartID
-  let given: Set<AutomationRowRef>
-  let fresh: Set<AutomationRowRef>
-  let limit: Int?
-}
-
 extension AutomationDatabase {
   /// 受け手 `node` の読み。`baseline` はつながりごとの読む上限の番号（契機の始まりの時点の上流の最後の番号。無ければ今の最後の
   /// 番号）。読んだ位置を進める先までの、読む前に期限で消えた出来事を数えて添える。
   func read(
     _ node: AutomationGraph.Node, in graph: AutomationGraph,
-    baseline: [AutomationPartID: AutomationSeqs]?, context: AutomationInbox.Context,
-    overrides: [AutomationReadOverride] = []
+    baseline: [AutomationPartID: AutomationSeqs]?, context: AutomationInbox.Context
   ) throws -> AutomationInbox.Read {
     let positions = try self.positions(of: node.id)
     var rows: [AutomationInbox.Row] = []
@@ -219,27 +215,9 @@ extension AutomationDatabase {
         seqs: AutomationSeqs(
           item: min(base.item, position.last.item), event: min(base.event, position.last.event)))
       ceilings.append(ceiling)
-      let override = overrides.first { $0.edge == edge.from }
-      var read = edge
-      if override != nil { read.take = .all }
-      var found = try self.rows(
-        Reading(edge: read, read: position.read, ceiling: ceiling.seqs), graph: graph,
+      rows += try self.rows(
+        Reading(edge: edge, read: position.read, ceiling: ceiling.seqs), graph: graph,
         now: context.now)
-      if let override {
-        found = found.compactMap { row in
-          if override.given.contains(row.ref) { return row.forcedUnread }
-          return edge.take == .all || row.unread ? row : nil
-        }
-        if let limit = override.limit {
-          let flowing = found.filter {
-            override.fresh.contains($0.ref) || override.given.contains($0.ref)
-          }
-          .sorted(by: AutomationInbox.order)
-          let dropped = Set(flowing.dropFirst(limit).map(\.ref))
-          found.removeAll { dropped.contains($0.ref) }
-        }
-      }
-      rows += found
     }
     var read = AutomationInbox.read(by: node, rows, ceilings: ceilings, in: context)
     for reach in read.reach where reach.table == .event {
@@ -247,15 +225,6 @@ extension AutomationDatabase {
       read.lapsed += try lapsed(of: reach.edge, from: from, to: reach.seq, now: context.now)
     }
     return read
-  }
-}
-
-extension AutomationInbox.Row {
-  /// 読んだ位置によらず読む行として。
-  fileprivate var forcedUnread: Self {
-    Self(
-      edge: edge, table: table, seq: seq, ref: ref, source: source, id: id, text: text, at: at,
-      origin: origin, unread: true)
   }
 }
 

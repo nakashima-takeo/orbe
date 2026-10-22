@@ -164,7 +164,8 @@ final class AutomationTrialTests: OrbeTestCase {
     }
     XCTAssertEqual(proposed.map(\.title), ["B"])
     XCTAssertEqual(
-      trial.passes(key: "judge").first?.run.result, .judge(proposed: 1, resolved: 0, dismissed: []))
+      trial.passes(key: "judge").first?.run?.result,
+      .judge(proposed: 1, resolved: 0, dismissed: []))
     XCTAssertEqual(store.automations, automations)
     XCTAssertEqual(store.proposals, proposals)
     XCTAssertEqual(recorded, notices, "試走の回は本番の知らせに届かない")
@@ -244,9 +245,30 @@ final class AutomationTrialTests: OrbeTestCase {
       runs.map { ($0["result"] as? [String: Any])?["text"] as? String }, ["2 回目", "1 回目"])
   }
 
+  /// 入力が 2 つの「届いたら」の処理が試走の中で 2 回確定しても、回ごとの結果はその回が足した行だけ（同じ時刻でも混ざらない）。
+  func testEachRunOfAPartCarriesOnlyTheRowsItAdded() throws {
+    let id = try define([
+      fetch("gh"), fetch("backlog"), part("p", .arrival, from: ["gh", "backlog"]),
+      part("d", from: ["p"], deliver: .report),
+    ])
+    let trial = try trials.start(id, .init(from: ["gh", "backlog"], to: ["p"]))
+    waitCalls("backlog", 1)
+    finish("gh", fetched(["a"]))
+    waitCalls("p", 1)
+    finish("p", #"{"id":"pa"}"#)
+    finish("backlog", fetched(["b"]))
+    waitCalls("p", 2)
+    finish("p", #"{"id":"pb"}"#)
+    ended(trial)
+
+    XCTAssertEqual(trial.passes(key: "p").count, 2)
+    XCTAssertEqual(rows(trial, "p"), [downstream("p", "pb", of: id), downstream("p", "pa", of: id)])
+  }
+
   // MARK: - 止める部品・与える行・limit
 
-  /// 副作用と仕事（ツールを持つ agent）は手段を起こさず、渡るはずだった行を止めた行として返す。
+  /// 副作用と仕事（ツールを持つ agent）は写しの上でも動かさず、流しの終わりに渡るはずだった行を 1 つにまとめて返す。回の記録は
+  /// 持たない。
   func testSideEffectsAndWorkAreHeldWithTheRowsTheyWouldHaveGot() throws {
     let id = try define([
       fetch("gh"), part("send", .arrival, from: ["gh"], deliver: .sideEffect),
@@ -267,7 +289,8 @@ final class AutomationTrialTests: OrbeTestCase {
       }.count, 0)
     for key in ["send", "job"] {
       XCTAssertEqual(trial.state(key: key), .held, key)
-      guard case .held(let held) = trial.passes(key: key).first?.content else {
+      XCTAssertEqual(trial.passes(key: key).count, 1, key)
+      guard case .held(let held) = trial.passes(key: key).first else {
         return XCTFail("\(key) に止めた行が無い")
       }
       XCTAssertEqual(
@@ -313,7 +336,8 @@ final class AutomationTrialTests: OrbeTestCase {
     ended(trial)
   }
 
-  /// 取得の入口に与えた項目は、手段を起こさず、本番が既に見た項目でも接頭の付いた id で下流へ流れる。判定へ与えると断る。
+  /// 取得の入口に与えた項目は、手段を起こさず、本番が既に見た項目でも接頭の付いた id で下流へ流れる。その取得は回の記録を
+  /// 持たず、与えた行を結果にする。判定へ与えると断る。
   func testRowsGivenToAFetchFlowDownWithoutItsMethodAndAJudgeRefusesThem() throws {
     let id = try define([fetch("gh"), part("judge", from: ["gh"], deliver: .taskCandidates)])
     try runner.flow(id, to: .ends)
@@ -326,6 +350,12 @@ final class AutomationTrialTests: OrbeTestCase {
     XCTAssertEqual(calls("gh").count, 1)
     finish("judge", "")
     ended(trial)
+    XCTAssertEqual(trial.state(key: "gh"), .given)
+    XCTAssertEqual(trial.passes(key: "gh").count, 1)
+    guard case .given(let given) = trial.passes(key: "gh").first else {
+      return XCTFail("gh に与えた行が無い")
+    }
+    XCTAssertEqual(given.compactMap(AutomationPrompts.id(of:)), [downstream("gh", "a", of: id)])
 
     XCTAssertThrowsError(
       try trials.start(id, .init(from: ["judge"], to: ["judge"], rows: [#"{"id":"x"}"#]))
@@ -338,7 +368,7 @@ final class AutomationTrialTests: OrbeTestCase {
   }
 
   /// 入力のある入口に与えた行は、ただ 1 つの上流（の写し）の出力として足され、上流の行として（接頭付きの id で）取られる。
-  /// 「届いたら」の入口も今すぐ動く。上流が複数の入口に与えると断る。
+  /// 「届いたら」の入口も今すぐ動き、その回は今すぐの回として記録される。上流が複数の入口に与えると断る。
   func testRowsGivenToAPartWithInputsArriveInItsInboxCopy() throws {
     let id = try define([
       fetch("gh"), part("p", .arrival, from: ["gh"]),
@@ -355,6 +385,7 @@ final class AutomationTrialTests: OrbeTestCase {
     finish("digest", "x")
     ended(trial)
     XCTAssertEqual(store.automation(id)?.state(key: "p").pending.count, 0)
+    XCTAssertEqual(trial.passes(key: "p").first?.run?.trigger, .now)
 
     let merged = try define([
       fetch("gh"), fetch("slack"), part("p", from: ["gh", "slack"]),
@@ -364,5 +395,16 @@ final class AutomationTrialTests: OrbeTestCase {
       guard case .invalid(let message) = $0 as? AutomationError else { return XCTFail("\($0)") }
       XCTAssertTrue(message.hasPrefix(#"rows: "p" has 2 inputs"#), message)
     }
+  }
+}
+
+extension AutomationTrial.Pass {
+  /// 写しの上で確定した回（テスト）。止めた・与えた結果は nil。
+  var run: AutomationPartRun? {
+    if case .ran(let run, _) = self { run } else { nil }
+  }
+
+  var content: AutomationTrial.Content? {
+    if case .ran(_, let content) = self { content } else { nil }
   }
 }

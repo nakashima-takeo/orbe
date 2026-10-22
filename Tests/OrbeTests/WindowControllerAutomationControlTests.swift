@@ -347,10 +347,11 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let ended = try XCTUnwrap(read["trial"] as? [String: Any])
     XCTAssertEqual(ended["running"] as? Bool, false)
     let parts = try XCTUnwrap(ended["parts"] as? [[String: Any]])
-    XCTAssertEqual(parts.map { $0["state"] as? String }, ["done", "held"])
+    XCTAssertEqual(parts.map { $0["state"] as? String }, ["given", "held"])
     let fetchId = "\(wc.automationStore.part(id, "fetch")):a"
-    let fetched = try XCTUnwrap((parts[0]["runs"] as? [[String: Any]])?.first)
-    XCTAssertEqual((fetched["rows"] as? [[String: Any]])?.map { $0["id"] as? String }, [fetchId])
+    let given = try XCTUnwrap(
+      (parts[0]["runs"] as? [[String: Any]])?.first?["given"] as? [String: Any])
+    XCTAssertEqual((given["rows"] as? [[String: Any]])?.map { $0["id"] as? String }, [fetchId])
     let held = try XCTUnwrap(
       (parts[1]["runs"] as? [[String: Any]])?.first?["held"] as? [String: Any])
     XCTAssertEqual((held["rows"] as? [[String: Any]])?.map { $0["id"] as? String }, [fetchId])
