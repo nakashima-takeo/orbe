@@ -104,9 +104,9 @@ final class AutomationStoreTests: OrbeTestCase {
 
   // MARK: - 再起動
 
-  /// 自動化・部品の状態（読んだ位置・今有効な項目・決まりを外した印・回の記録・持ち越し・読めば取る行の数）・版・候補は、
-  /// どの変異（作る・確定・書き換え・さばく・止める・消す）の後に開き直しても同じ。回の記録は失敗・判定の確定で捨てた案も、
-  /// 候補は候補にした理由も同じ。
+  /// 自動化・つながりの取り方（take・古さの上限）・部品の状態（読んだ位置・今有効な項目・決まりを外した印・回の記録・持ち越し・
+  /// 読めば取る行の数）・版・候補は、どの変異（作る・確定・書き換え・さばく・止める・消す）の後に開き直しても同じ。回の記録は
+  /// 失敗・判定の確定で捨てた案も、候補は候補にした理由も同じ。
   func testEverythingSurvivesARestart() throws {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
@@ -122,9 +122,10 @@ final class AutomationStoreTests: OrbeTestCase {
       at: Self.at.addingTimeInterval(3600))
     var rewritten = Self.definition("受信（要約つき）")
     rewritten.notify = .menuBar
-    rewritten.parts.append(
-      DesignSceneFixtures.commandPart(
-        "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report))
+    var digest = DesignSceneFixtures.commandPart(
+      "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report)
+    digest.from = [AutomationDefinition.Input(part: "fetch", take: .all, maxAgeHours: 24)]
+    rewritten.parts.append(digest)
     try Self.rewrite(XCTUnwrap(store), id, rewritten)
     try store?.dismiss(XCTUnwrap(store?.proposals.first?.id), now: Self.at)
     _ = try store?.setPaused(id, true, now: Self.at)
