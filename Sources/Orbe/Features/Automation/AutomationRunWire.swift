@@ -1,9 +1,26 @@
 import Foundation
+import OrbeSessionLog
 
-/// 回の記録の外の形（`list_automations` の `runs`・部品の `breach`・試走の部品の回）。保存の形（種類だけ）に、AI が読む英文を
-/// 足す——終わり方の `ending`・失敗の `failure`・外れた行の `reasons`・判定の確定で捨てた案の `rejected`。英文は部品の鍵が要るので、
-/// 鍵を手元に持つここで組む。
+/// 回の記録の外の形（`list_automations` の `lastRun`・`list_automation_runs` の `runs`・部品の `breach`・試走の部品の回）。保存の
+/// 形（種類だけ）に、AI が読む英文を足す——終わり方の `ending`・失敗の `failure`・外れた行の `reasons`・判定の確定で捨てた案の
+/// `rejected`。英文は部品の鍵が要るので、鍵を手元に持つここで組む。
 enum AutomationRunWire {
+  /// 記録 1 件（`recordId` を添える）。不明な記録は列から分かる分と `unknown: true` だけ。
+  static func object(_ record: AutomationRunRecord, part: String) -> [String: Any] {
+    switch record.content {
+    case .known(let run):
+      var json = object(run, part: part)
+      json["recordId"] = record.id
+      return json
+    case .unknown(let run):
+      return [
+        "recordId": record.id, "startedAt": SessionEvent.iso8601(run.startedAt),
+        "endedAt": SessionEvent.iso8601(run.endedAt), "trigger": run.trigger.rawValue,
+        "failed": run.failed, "unknown": true,
+      ]
+    }
+  }
+
   static func object(_ run: AutomationPartRun, part: String) -> [String: Any] {
     var json = AutomationWire.object(run) as? [String: Any] ?? [:]
     json["execution"] = execution(json["execution"], run.execution)
@@ -32,10 +49,6 @@ enum AutomationRunWire {
       json["result"] = result
     }
     return json
-  }
-
-  static func objects(_ runs: [AutomationPartRun], part: String) -> [[String: Any]] {
-    runs.map { object($0, part: part) }
   }
 
   /// 部品の外した印。

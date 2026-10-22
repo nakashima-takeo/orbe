@@ -80,12 +80,10 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     _ wc: WindowController, _ id: Int, report: String? = "PR は 3 件\n- #1",
     failure: String? = nil
   ) throws {
-    _ = try wc.automationStore.record(
-      AutomationPassEnd(
-        automationId: id, part: "digest", trigger: .now, startedAt: Date(), endedAt: Date(),
-        take: nil,
-        outcome: failure.map { DesignSceneFixtures.failed($0) }
-          ?? DesignSceneFixtures.reported(report)))
+    try wc.automationStore.record(
+      id, part: "digest", trigger: .now, at: Date(),
+      outcome: failure.map { DesignSceneFixtures.failed($0) }
+        ?? DesignSceneFixtures.reported(report))
   }
 
   @MainActor func standing(_ wc: WindowController) -> AutomationNotice? {
@@ -199,10 +197,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     var at = Date()
     func record(_ outcome: AutomationPartPass.Outcome) throws {
       at = at.addingTimeInterval(60)
-      _ = try store.record(
-        AutomationPassEnd(
-          automationId: id, part: "fetch", trigger: .schedule, startedAt: at, endedAt: at,
-          take: nil, outcome: outcome))
+      try store.record(id, part: "fetch", at: at, outcome: outcome)
     }
 
     try record(breachedFailure)
@@ -211,7 +206,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     XCTAssertEqual(told.text, "取る の出力の形式エラー（1 行）— 失敗した")
     XCTAssertTrue(told.failed)
 
-    try record(DesignSceneFixtures.fetched("fetch", []))
+    try record(DesignSceneFixtures.fetched([]))
     try record(breachedFailure)
     let again = try XCTUnwrap(wc.automationNotification(id, "fetch"), "失敗の続きの最初は知らせる")
     guard case .automation(let failure) = again.notice else { return XCTFail("\(again)") }

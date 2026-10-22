@@ -1,6 +1,6 @@
 import Foundation
 
-// 自動化の 8 動詞の MCP ツール定義。秘書の AI が自動化を作り・直し・結果を読むための説明をここに持つ。
+// 自動化の 9 動詞の MCP ツール定義。秘書の AI が自動化を作り・直し・結果を読むための説明をここに持つ。
 // 候補をタスクにする・捨てるは人の判断なので、AI には出さない。
 
 private let definitionShape =
@@ -105,9 +105,12 @@ let automationTools: [[String: Any]] = [
     (
       "description",
       "自動化（外の出どころから項目を予定どおり取り、処理の段で絞り・判断して、出力先へ出す仕組み）を ID 順に返す {automations}。"
-        + "各要素は automationId・definition（set_automation と同じ定義を保存のまま。省略したモデルは省略のまま）・"
+        + "各要素は automationId・version（書き換えに添える定義の版）・definition（set_automation と同じ定義。各部品に id が付く。"
+        + "省略したモデルは省略のまま）・"
         + "paused（予定を止めているか）・running（回が走っているか）・nextRunAt（次に予定で回る時刻。止めていれば無い）・lastRunAt・"
-        + "runs（回の記録）。出力先がタスク候補の自動化だけが taskCandidates {openProposals"
+        + "parts の部品の鍵ごとに lastRun（最新の 1 回の記録。過去は list_automation_runs）。定義を読めない自動化は "
+        + "{automationId, version, definition（行から組めた分）, definitionError（理由）} で、直すか消す。"
+        + "出力先がタスク候補の自動化だけが taskCandidates {openProposals"
         + "（この自動化の棚に出ている候補の数）, overlaps（前回の取得結果が他の自動化と重なっているリンクの数 "
         + "[{automationId, name, count}]。範囲の切り直しの手がかり）} を持つ。"
         + "runs は新しい順に 20 件まで。各回は startedAt・endedAt・trigger（schedule / now）・"
@@ -133,7 +136,8 @@ let automationTools: [[String: Any]] = [
       "description",
       "自動化を作るか、automationId を渡して定義を丸ごと置き換え、その自動化を list_automations の 1 要素の形で返す {automation}。"
         + definitionShape
-        + "書き直すときは、list_automations の definition を取り、直して丸ごと送る。"
+        + "書き直すときは、list_automations の definition と version を取り、直して丸ごと version を添えて送る（間に定義が変わって"
+        + "いれば断られるので、読み直す）。部品の id を保てば同じ部品のまま（鍵を変えても）。id の無い部品は新しい部品になる。"
         + "置き換えで、取得元のやり方・段の手段とモデル（省略は解いた値で比べる）と指示文かコマンド・出力先"
         + "（出力先のコマンドの timeoutMinutes も、省略は 2 として比べる。出力先の agent の model は省略を sonnet として比べる）が"
         + "変わると、走っている回を止める。"
@@ -145,7 +149,8 @@ let automationTools: [[String: Any]] = [
       "inputSchema",
       schema(
         [
-          "automationId": intProp("置き換える自動化（省略で新規）"),
+          "automationId": intProp("書き換える自動化（省略で新規）"),
+          "version": intProp("書き換えの元にした版（list_automations の version。書き換えでは必須）"),
           "definition": [
             "type": "object",
             "description":
@@ -157,6 +162,25 @@ let automationTools: [[String: Any]] = [
               + "notify は \"menuBar\" か \"notificationCenter\"（省略で知らせない）",
           ],
         ], required: ["definition"])
+    ),
+  ]),
+  obj([
+    ("name", "list_automation_runs"),
+    (
+      "description",
+      "自動化の過去の回の記録を新しい順に返す {runs, next?}。各回は list_automations の lastRun と同じ形に recordId と partKey を"
+        + "足したもの。中身を読めない記録は {recordId, partKey, startedAt, endedAt, trigger, failed, unknown: true}。"
+        + "next があれば、before に渡すと続きが返る。"
+    ),
+    (
+      "inputSchema",
+      schema(
+        [
+          "automationId": intProp("読む自動化"),
+          "partKey": strProp("この部品の回だけ（省略で全部品）"),
+          "before": intProp("この recordId より前（前のページの next）"),
+          "limit": intProp("件数（既定 20・上限 100）"),
+        ], required: ["automationId"])
     ),
   ]),
   obj([

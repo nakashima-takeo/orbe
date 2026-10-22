@@ -16,7 +16,8 @@ import XCTest
 ///
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliAutomationProcessTests: OrbeTestCase {
-  /// 回すと取得の部品が項目 a を 1 つ取り、届いたら判定の部品（コマンド）が a を候補に出す。
+  /// 回すと取得の部品が項目 a を 1 つ取り、届いたら判定の部品（コマンド）が a を候補に出す。新しい DB で最初に作る部品の ID は
+  /// 1 なので、a の下流へ渡す id は `1:a`。
   private let definition = #"""
     {"name": "GitHub: 通知", "parts": [
       {"key": "fetch", "name": "取る", "trigger": {"kind": "interval", "minutes": 30},
@@ -24,14 +25,16 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
        "echo '{\"id\":\"a\",\"link\":\"https://x.test/a\",\"body\":\"a\",\"time\":\"2026-01-01T00:00:00Z\"}'"},
       {"key": "judge", "name": "判定", "trigger": {"kind": "arrival"}, "from": ["fetch"],
        "deliver": "taskCandidates",
-       "command": "cat >/dev/null; echo '{\"propose\":\"fetch:a\",\"title\":\"a を見る\"}'"}]}
+       "command": "cat >/dev/null; echo '{\"propose\":\"1:a\",\"title\":\"a を見る\"}'"}]}
     """#
 
+  /// `allowFailure` なら終わり方を問わず、標準出力と標準エラーを返す。
   private func run(
-    _ control: ControlProcess, _ args: [String], stdin: String? = nil,
+    _ control: ControlProcess, _ args: [String], stdin: String? = nil, allowFailure: Bool = false,
     file: StaticString = #filePath, line: UInt = #line
   ) -> String {
     let outcome = control.orb(["automation"] + args, stdin: stdin, file: file, line: line)
+    if allowFailure { return outcome.stdout + outcome.stderr }
     XCTAssertEqual(
       outcome.status, 0,
       "orb automation \(args.joined(separator: " ")) が exit 0 でない: \(outcome.stderr)", file: file,
@@ -61,16 +64,28 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertEqual(run(control, ["run", id]), "started automation \(id)", "止めた自動化も今すぐは受ける")
     XCTAssertTrue(
       waitUntil(10) {
-        control.target.automationStore.automation(Int(id)!)?.parts["judge"]?.runs.isEmpty == false
+        control.target.automationStore.automation(Int(id)!)?.state(key: "judge").runs.isEmpty
+          == false
       }, "今すぐの回の後に、届いたら判定の回が記録に残らない")
     XCTAssertTrue(row(control)[5].hasSuffix(" judge: 1 proposed"), row(control)[5])
 
     XCTAssertEqual(run(control, ["resume", id]), "resumed automation \(id)")
     XCTAssertEqual(row(control)[1], "active")
 
-    let renamedText = definition.replacingOccurrences(of: "GitHub: 通知", with: "GitHub: 自分宛の通知")
-    XCTAssertEqual(run(control, ["set", id], stdin: renamedText), "updated automation \(id)")
+    var listed = try XCTUnwrap(control.target.automationStore.automation(Int(id)!)?.definition)
+    listed.name = "GitHub: 自分宛の通知"
+    let renamedText = try XCTUnwrap(
+      String(bytes: AutomationWire.encoder().encode(listed), encoding: .utf8))
+    XCTAssertTrue(
+      run(control, ["set", id], stdin: renamedText, allowFailure: true).contains("--version"),
+      "書き換えは版を添える")
+    XCTAssertEqual(
+      run(control, ["set", id, "--version", "1"], stdin: renamedText), "updated automation \(id)")
     XCTAssertEqual(row(control)[2], "GitHub: 自分宛の通知")
+    XCTAssertTrue(
+      run(control, ["set", id, "--version", "1"], stdin: renamedText, allowFailure: true)
+        .contains("version mismatch: sent 1, current 2"),
+      "古い版の書き換えは断る")
 
     XCTAssertEqual(run(control, ["rm", id]), "removed automation \(id)")
     XCTAssertEqual(run(control, ["list"]), "")
@@ -85,11 +100,11 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     let automation = { control.target.automationStore.automation(Int(id)!) }
 
     XCTAssertEqual(run(control, ["run", id, "--part", "fetch"]), "started automation \(id)")
-    XCTAssertTrue(waitUntil(10) { automation()?.parts["fetch"]?.runs.isEmpty == false })
-    XCTAssertEqual(automation()?.parts["judge"]?.inbox, 1, "前提: 取得が判定の溜まりに積んだ")
+    XCTAssertTrue(waitUntil(10) { automation()?.state(key: "fetch").runs.isEmpty == false })
+    XCTAssertEqual(automation()?.state(key: "judge").inbox, 1, "前提: 判定が読めば取る行がある")
     // 鍵が届かず終わりの部品まで流れると、判定は取得の終わりと同じ知らせの中で起こされる（走っているか、もう記録がある）。
     XCTAssertFalse(control.target.automationRunner.isRunning(Int(id)!, "judge"))
-    XCTAssertEqual(automation()?.parts["judge"]?.runs, [], "道の外の手動の部品は走らない")
+    XCTAssertEqual(automation()?.state(key: "judge").runs, [], "道の外の手動の部品は走らない")
   }
 
   /// 入力の無い副作用のコマンドの前回は、回の記録だけから「コマンドの終わり方」で出る（取得の数を出さない）。
@@ -122,14 +137,12 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
             + #""trigger": {"kind": "cron", "expression": "0 9 * * 1-5"}, "#
             + #""tools": ["Bash(gh search prs:*)"], "instruction": "投稿して", "deliver": "report"}]}"#
         )))
-    _ = try control.target.automationStore.record(
-      AutomationPassEnd(
-        automationId: id, part: "post", trigger: .schedule, startedAt: Date(), endedAt: Date(),
-        take: nil,
-        outcome: .succeeded(
-          .work(.done("投稿した")),
-          AutomationPartPass.Execution(commandLine: "claude -p", ending: .exited(0), count: 1),
-          breach: nil)))
+    try control.target.automationStore.record(
+      id, part: "post", at: Date(),
+      outcome: .succeeded(
+        .work(.done("投稿した")),
+        AutomationPartPass.Execution(commandLine: "claude -p", ending: .exited(0), count: 1),
+        breach: nil))
     let last = row(control)[5]
     XCTAssertTrue(last.hasSuffix(" post: agent exited 0"), last)
   }
@@ -206,8 +219,8 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     func ids(_ rows: Any?) -> [String]? {
       (rows as? [[String: Any]])?.compactMap { $0["id"] as? String }
     }
-    XCTAssertEqual(ids(firstRun("fetch")?["rows"]), ["fetch:b"])
-    XCTAssertEqual(ids((firstRun("send")?["held"] as? [String: Any])?["rows"]), ["fetch:b"])
+    XCTAssertEqual(ids(firstRun("fetch")?["rows"]), ["1:b"], "取得の部品の ID の接頭（新しい DB の最初の部品）")
+    XCTAssertEqual(ids((firstRun("send")?["held"] as? [String: Any])?["rows"]), ["1:b"])
     XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path), "副作用のコマンドは走らない")
     XCTAssertEqual(
       run(control, ["trial", id]).split(separator: "\n").last, "send\theld\theld 1 rows")

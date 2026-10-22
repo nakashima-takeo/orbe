@@ -17,8 +17,8 @@ final class TaskPaletteAutomationListTests: OrbeTestCase {
       timeZone: DesignSceneFixtures.taskCalendar.timeZone)
     func latest(_ id: Int, _ part: String) throws -> String {
       let automation = try XCTUnwrap(store.automation(id))
-      let node = try XCTUnwrap(automation.graph.node(part))
-      return TaskPaletteAutomationList.latest(node, automation.state(part).runs.first, text)
+      let node = try XCTUnwrap(automation.graph.node(key: part))
+      return TaskPaletteAutomationList.latest(node, automation.state(node.id).runs.first, text)
     }
 
     XCTAssertEqual(try latest(1, "dev"), "9:00 開発の依頼を選ぶ\u{3000}候補 2 件")

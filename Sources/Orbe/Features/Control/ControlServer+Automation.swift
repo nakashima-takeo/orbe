@@ -1,13 +1,17 @@
 import Foundation
 
-/// 自動化の 8 動詞の domain 操作（`ControlTarget` の一部。main スレッドでのみ呼ぶ）。
+/// 自動化の 9 動詞の domain 操作（`ControlTarget` の一部。main スレッドでのみ呼ぶ）。
 protocol ControlAutomationTarget: AnyObject {
-  /// 自動化を ID 順に列挙する（list_automations）。
+  /// 自動化を ID 順に列挙する（list_automations）。使えないセッションでは -32000 と理由。
   func controlListAutomations() -> Result<Any, ControlError>
-  /// 自動化を作るか丸ごと置き換える（set_automation）。automationId が nil なら作る。未知の automationId は -32004。
-  func controlSetAutomation(automationId: Int?, _ definition: AutomationDefinition) -> Result<
-    Any, ControlError
-  >
+  /// 自動化を作るか書き換える（set_automation）。automationId が nil なら作る。書き換えは version が要り、違えば -32000。未知の
+  /// automationId は -32004。
+  func controlSetAutomation(
+    automationId: Int?, version: Int?, _ definition: AutomationDefinition
+  ) -> Result<Any, ControlError>
+  /// 回の記録を新しい順に 1 ページ読む（list_automation_runs）。
+  func controlListAutomationRuns(automationId: Int, partKey: String?, before: Int?, limit: Int?)
+    -> Result<Any, ControlError>
   /// 部品まで流す（run_automation）。partKey が nil なら終わりの部品すべてまで。知らない部品は -32004、流している途中は -32000。
   func controlRunAutomation(automationId: Int, partKey: String?) -> Result<Any, ControlError>
   /// 予定を止める・再開する（pause_automation）。
@@ -26,7 +30,7 @@ protocol ControlAutomationTarget: AnyObject {
     completion: @escaping (Result<Any, ControlError>) -> Void)
 }
 
-/// 自動化の 8 動詞の解決。ハンドラが見るのは params の在否と JSON の型（違反は -32602）だけで、値の検証と不変条件は
+/// 自動化の 9 動詞の解決。ハンドラが見るのは params の在否と JSON の型（違反は -32602）だけで、値の検証と不変条件は
 /// `AutomationStore`・`AutomationTrials` が持つ。
 extension ControlServer {
   /// 接続ごとに自分で応答する自動化の動詞（待つことがある `get_automation_trial`）。引き受けたら true。
@@ -82,7 +86,14 @@ extension ControlServer {
     case "set_automation":
       return { target, p throws(ControlError) in
         target.controlSetAutomation(
-          automationId: try p.optionalInt("automationId"), try p.definition())
+          automationId: try p.optionalInt("automationId"), version: try p.optionalInt("version"),
+          try p.definition())
+      }
+    case "list_automation_runs":
+      return { target, p throws(ControlError) in
+        target.controlListAutomationRuns(
+          automationId: try p.int("automationId"), partKey: try p.optionalString("partKey"),
+          before: try p.optionalInt("before"), limit: try p.optionalInt("limit"))
       }
     case "run_automation":
       return { target, p throws(ControlError) in
@@ -201,34 +212,10 @@ private struct AutomationParams {
     guard raw is [String: Any] else {
       throw ControlError(code: -32602, message: "invalid definition")
     }
-    do {
-      let data = try JSONSerialization.data(withJSONObject: raw)
-      return try AutomationWire.decoder.decode(AutomationDefinition.self, from: data)
-    } catch DecodingError.keyNotFound(let key, let context) {
-      throw ControlError(code: -32602, message: "missing \(path(context.codingPath + [key]))")
-    } catch DecodingError.typeMismatch(_, let context) {
-      throw ControlError(code: -32602, message: "invalid \(path(context.codingPath))")
-    } catch DecodingError.valueNotFound(_, let context) {
-      throw ControlError(code: -32602, message: "invalid \(path(context.codingPath))")
-    } catch DecodingError.dataCorrupted(let context) {
-      let at = path(context.codingPath)
-      throw ControlError(
-        code: -32602,
-        message: at.isEmpty
-          ? context.debugDescription : "invalid \(at): \(context.debugDescription)")
+    do throws(AutomationError) {
+      return try AutomationDefinition.decode(raw)
     } catch {
-      throw ControlError(code: -32602, message: "invalid params")
-    }
-  }
-
-  /// `parts[2].trigger` の形（`definition` の中の場所）。
-  private func path(_ keys: [CodingKey]) -> String {
-    keys.reduce(into: "") { path, key in
-      if let index = key.intValue {
-        path += "[\(index)]"
-      } else {
-        path += path.isEmpty ? key.stringValue : "." + key.stringValue
-      }
+      throw ControlError(code: -32602, message: AutomationDatabase.reason(error))
     }
   }
 }

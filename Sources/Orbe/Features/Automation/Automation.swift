@@ -1,6 +1,6 @@
 import Foundation
 
-/// 自動化 1 つ。定義（名前・通知・部品のグラフ）と、Orbe が溜めるもの（部品ごとの状態・採用/見送りの累計）を持つ。部品ごとの
+/// 自動化 1 つ。自動化は部品ではなく、名前・通知・止めた時刻・版の番号と、部品とつながり（グラフ）で中身を表す。部品ごとの
 /// 状態がグラフの部品とちょうど揃うことは `AutomationStore` が保証する。
 struct Automation: Equatable, Identifiable {
   /// 永続の短い整数。使い回さない。
@@ -9,62 +9,61 @@ struct Automation: Equatable, Identifiable {
   /// 部品の回を知らせる先。nil は知らせない。何をするかには入らない。
   var notify: AutomationNotify?
   var graph: AutomationGraph
-  /// 止めているのは時刻による予定と起動時の起こしだけ。
-  var paused: Bool
+  /// 止めた時刻。止めているのは時刻による予定と起動時の起こしだけ。
+  var pausedAt: Date?
+  /// 定義の版。名前・通知・部品・つながりのどれかが変わるたびに 1 増える（古い定義からの書き換えを断る印）。
+  var version: Int
   let createdAt: Date
-  /// 判定の部品を持つ間だけ数え、持たなくなれば 0 に戻る。
-  var tally: AutomationTally
-  /// 部品の鍵ごとの状態。
-  var parts: [String: AutomationPartState]
+  /// 部品ごとの状態。
+  var parts: [AutomationPartID: AutomationPartState]
 
-  /// 外の形＝保存の形。
+  var paused: Bool { pausedAt != nil }
+
+  /// 外の形（部品に ID を添える）。
   var definition: AutomationDefinition {
     AutomationDefinition(name: name, notify: notify, parts: graph.parts)
   }
 
-  /// 判定の部品を持つか。タスク候補の棚・累計・重なりはこれを持つ自動化の単位。
+  /// 判定の部品を持つか。タスク候補の棚・重なりはこれを持つ自動化の単位。
   var judges: Bool { !graph.judges.isEmpty }
 
   /// 部品の状態。グラフの部品はいつも状態を持つ。
-  func state(_ key: String) -> AutomationPartState {
-    guard let state = parts[key] else { preconditionFailure("every part has a state: \(key)") }
+  func state(_ id: AutomationPartID) -> AutomationPartState {
+    guard let state = parts[id] else { preconditionFailure("every part has a state: \(id)") }
     return state
   }
 
   /// 最後の回が失敗した部品があるか。
   var failing: Bool {
-    graph.nodes.contains { state($0.key).runs.first?.failed == true }
+    graph.nodes.contains { state($0.id).runs.first?.failed == true }
   }
 
   /// 部品の回をすべて、新しい順に混ぜたもの。
   var runs: [AutomationKeyedRun] {
-    parts.flatMap { key, state in state.runs.map { AutomationKeyedRun(part: key, run: $0) } }
-      .sorted { ($0.run.startedAt, $0.part) > ($1.run.startedAt, $1.part) }
+    parts.flatMap { id, state in state.runs.map { AutomationKeyedRun(part: id, record: $0) } }
+      .sorted { ($0.record.startedAt, $0.record.id) > ($1.record.startedAt, $1.record.id) }
   }
 }
 
 /// どの部品の回か。
 struct AutomationKeyedRun: Equatable {
-  let part: String
-  let run: AutomationPartRun
+  let part: AutomationPartID
+  let record: AutomationRunRecord
 }
 
-/// 自動化の定義（外の形＝保存の形）。形だけを読み、値と組み合わせは `checked()` が検証する。
-struct AutomationDefinition: Equatable, Codable {
-  var name: String
-  var notify: AutomationNotify?
-  var parts: [AutomationPart]
-
-  /// 名前は 1 行に整え、部品はグラフとして検証する。名前はタスクのタイトルと同じ 1 行の規則（前後の空白を除いて保存）。
-  func checked() throws(AutomationError) -> (name: String, graph: AutomationGraph) {
-    let name: String
-    do throws(TaskStoreError) {
-      name = try TaskStore.validTitle(self.name)
-    } catch {
-      throw .invalid("name: must be a single non-empty line")
-    }
-    return (name, try AutomationGraph(parts))
-  }
+/// 定義が今の検証を通らない自動化。動かず、定義を直すか消すまで、行から組めた分と理由を持って場所を占める。持っていた候補は
+/// 忘れない。
+struct AutomationUnreadable: Equatable, Identifiable {
+  let id: Int
+  /// 1 行として読めた名前。読めなければ nil。
+  let name: String?
+  let version: Int
+  /// 行から組めた分の定義（外の形の JSON）。
+  let definition: String
+  /// 読めない理由（定義の中の場所で言う英文）。
+  let reason: String
+  /// 外していない部品。
+  let parts: [AutomationPartID]
 }
 
 /// 回を知らせる先。
@@ -75,52 +74,53 @@ enum AutomationNotify: String, CaseIterable {
   case notificationCenter
 }
 
-/// 取得の性質——取得結果が何を表すか。差分を掛けるかと、候補をいつ下げるかがこれで決まる。
+/// 出力の性質——出した行が何を表すか。何が今有効かを、出す側が決める。
 enum AutomationCoverage: String {
-  /// その時点の全体（例: 自分が担当の未完了課題）。取得から消えたリンクの候補を下げる。
+  /// 今の集合（状態）。結果にある間有効で、結果から消えたら無効になる（例: 自分が担当の未完了課題）。
   case currentSet
-  /// 新着だけ（例: 自分宛の新しい DM）。取得から消えても下げず、判定が対応済みとしたときだけ下げる。
+  /// 出来事の流れ（記録）。足すだけで、残す期間を過ぎたら消える（例: 自分宛の新しい DM）。
   case newArrivals
-  /// 毎回全件。前回の出力との差分を掛けない。
-  case everything
 }
 
-/// 部品 1 つの状態。
+/// 部品 1 つの状態。行と記録の正は DB で、メモリは画面と予定に要る分だけを持つ。
 struct AutomationPartState: Equatable {
   /// 部品を足した時刻。一度も回っていない部品の数え始め。
   var addedAt: Date
-  var lastRunAt: Date?
-  /// 前回成功した回の開始時刻。新着の流れの取得に目印として渡す。
+  /// 直近の回の記録（新しい順に `retainedRuns` 件まで）。
+  var runs: [AutomationRunRecord] = []
+  /// 最新の成功した回の開始時刻。新着の流れの取得に目印として渡す。
   var succeededAt: Date?
-  /// 前回の出力（取得だけ）。差分・候補の持ち主・重なりはこの集合で言う。
-  var lastOutput: [AutomationSeen] = []
-  /// まだ回の記録に載せていない捨てた数（積む時点の件数の上限・判定へ出どころの無いまま届いた行と、取る行が 0 件だった契機で
-  /// 捨てた行）。
-  var pendingDrops = AutomationDrops()
   /// 出力が決まりを外した最初の回の印。何をするかが変わるまで残る。
   var breach: AutomationBreachMark?
-  /// 新しい順。
-  var runs: [AutomationPartRun] = []
-  /// 溜まりの件数（メモリだけ。行は DB にだけある）。
+  /// 受け手として、回の無い契機（取る行 0 件）で捨てた・期限で消えたと数えた数。次の成功した回の記録に載せて空に戻す。
+  var pendingDrops = AutomationDrops()
+  /// 出す側として、項目・出来事にそれぞれ最後に振った通し番号。
+  var lastItemSeq = 0
+  var lastEventSeq = 0
+  /// 出す側の変化の番号（メモリだけ）。項目が有効になる・版が足される・項目が無効になる・出来事が足されるたびに進む。
+  var changes = 0
+  /// 受け手として、つながり（上流の部品）ごとの読んだ位置。
+  var reads: [AutomationPartID: AutomationReadPosition] = [:]
+  /// 受け手として、今読めば取る行の数（古さの上限を過ぎた行を除く）。入力の無い部品は 0。
   var inbox = 0
-  /// 溜まりの最も新しい通し番号（メモリだけ。空なら 0）。
-  var newestSeq = 0
+  /// 出す側の今有効な項目の書かれた id とリンク（取得の最新の結果）。
+  var live: [AutomationSeen] = []
 
   static let retainedRuns = 20
+
+  var lastRunAt: Date? { runs.first?.startedAt }
 
   /// 番人の数え始め。回が記録されたときだけ進む。
   var anchor: Date { lastRunAt ?? addedAt }
 }
 
-/// 判定の部品を持つ自動化の候補の累計——この自動化の出す候補が役に立っているかを読む数。人がさばいたときだけ増える。
-struct AutomationTally: Equatable {
-  /// タスクにした数。
-  var accepted = 0
-  /// 捨てた数。
-  var dismissed = 0
+/// 受け手が 1 つのつながりの項目・出来事をそれぞれ何番まで読んだか。
+struct AutomationReadPosition: Equatable {
+  var item = 0
+  var event = 0
 }
 
-/// 取得の出力 1 行。`id` は部品の中での同一性、`link` は自動化をまたぐ同一性。
+/// 取得の出力 1 行の、候補に使う欄。`id` は部品の中での同一性（書かれた id）、`link` は自動化をまたぐ同一性。
 struct AutomationItem: Equatable {
   let id: String
   let link: String
@@ -128,22 +128,26 @@ struct AutomationItem: Equatable {
   let time: Date
 }
 
-/// 前回の出力に覚えておく 1 項目。
-struct AutomationSeen: Codable, Equatable {
+/// 今有効な項目 1 つの書かれた id とリンク。
+struct AutomationSeen: Equatable {
   let id: String
   let link: String
 }
 
-/// 判定が出した候補。リンクは全候補を通じて一意。
+/// 判定が出した候補。Orbe が覚えている間だけメモリに載る。リンクは覚えている候補を通じて一意。
 struct AutomationProposal: Equatable, Identifiable {
   let id: Int
-  /// 候補を出した自動化（履歴。棚に出す自動化は `AutomationStore.shelf(of:)` が導く）。
-  let automationId: Int
-  /// 出した判定の部品。
-  let partKey: String
-  /// 出どころの取得の部品。
-  let sourcePartKey: String
-  /// 出どころの項目（`id` は接頭の無い元の id）。
+  /// 候補を出した判定の回。
+  let runId: Int
+  /// 候補を出した自動化（履歴。棚に出す自動化は `AutomationStore.shelf(of:)` が導く）。消えていれば nil。
+  var automationId: Int?
+  /// 出した判定の部品と、その回が動いた定義。
+  let judge: AutomationPartID
+  let defId: AutomationDefID
+  /// 出どころの部品と行。
+  let source: AutomationPartID
+  let origin: AutomationRowRef
+  /// 出どころの行の欄（`id` は書かれた id）。
   let item: AutomationItem
   let title: String
   let due: TaskItem.DueDate?
@@ -163,8 +167,14 @@ struct AutomationProposal: Equatable, Identifiable {
   }
 }
 
+/// 指す行や値が読めない、覚えている候補。リンクだけを持ち、「既に候補がある」に効く。画面と判定には出さず、自動で忘れない。
+struct AutomationUnreadableProposal: Equatable {
+  let id: Int
+  let link: String
+}
+
 extension AutomationProposal.State {
-  /// 永続とワイヤの語（open / accepted / dismissed / resolved）。
+  /// ワイヤの語（open / accepted / dismissed / resolved）。
   var name: String {
     switch self {
     case .open: "open"
@@ -189,4 +199,8 @@ enum AutomationError: Error, Equatable {
   case unavailable(String)
   /// その自動化の試走が無い。
   case trialNotFound(Int)
+  /// 送った版が今の版と違う（間に定義が変わった）。
+  case versionMismatch(sent: Int, current: Int)
+  /// 定義を読めない自動化を動かそうとした（理由）。
+  case unreadable(Int, String)
 }

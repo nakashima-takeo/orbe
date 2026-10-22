@@ -12,12 +12,12 @@ import XCTest
 final class AutomationPartPassEmptyTests: AutomationPartPassTestCase {
   private static let nothing = #"{"nothing":"新しい項目が無い"}"#
 
-  private func fetchAgent() -> AutomationPart {
+  private func fetchAgent() -> AutomationDefinition.Part {
     AutomationGraphTests.agent("f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet)
   }
 
   func testFetchAndJudgePromptsAskForANothingLine() throws {
-    start(fetchAgent(), .fetch(.currentSet), .fetch(since: nil, lastOutput: []))
+    start(fetchAgent(), .fetch(.currentSet), .fetch(since: nil))
     start(
       AutomationGraphTests.agent("j", from: ["f"], deliver: .taskCandidates), .judge,
       judgeInput(["a"]))
@@ -31,11 +31,11 @@ final class AutomationPartPassEmptyTests: AutomationPartPassTestCase {
   }
 
   func testFetchOutputOfOnlyANothingLinePassesNoItems() throws {
-    start(fetchAgent(), .fetch(.currentSet), .fetch(since: nil, lastOutput: ["a"]))
+    start(fetchAgent(), .fetch(.currentSet), .fetch(since: nil))
 
     jobs.finish(0, replied(Self.nothing))
 
-    XCTAssertEqual(succeeded, .fetch(rows: [], lastOutput: []), "\(outcomes)")
+    XCTAssertEqual(succeeded, .fetch([]), "\(outcomes)")
     XCTAssertNil(breach)
   }
 
@@ -65,7 +65,7 @@ final class AutomationPartPassEmptyTests: AutomationPartPassTestCase {
   /// 項目と一緒に出た nothing の行は外れた行で、行番号は元の出力のまま。
   func testNothingLineAlongsideFetchedItemsBreaksTheRules() throws {
     start(
-      AutomationGraphTests.fetch("f"), .fetch(.currentSet), .fetch(since: nil, lastOutput: []))
+      AutomationGraphTests.fetch("f"), .fetch(.currentSet), .fetch(since: nil))
 
     let item =
       #"{"id":"a","link":"https://example.com/a","body":"a","time":"2026-10-10T09:00:00Z"}"#

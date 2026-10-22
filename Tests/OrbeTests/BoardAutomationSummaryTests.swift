@@ -82,7 +82,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
   func testCardToolsNameTheServerOrCommandOnce() throws {
     var samples = DesignSceneFixtures.boardMapSamples()
     let index = try XCTUnwrap(samples[0].definition.parts.firstIndex { $0.key == "backlog" })
-    samples[0].definition.parts[index].method = .agent(
+    samples[0].definition.parts[index].action.method = .agent(
       AutomationPartAgent(
         cli: "claude", model: nil,
         tools: [
@@ -94,7 +94,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     let automation = DesignSceneFixtures.automationStore(samples).automations[0]
     let card = try XCTUnwrap(
       BoardAutomationPartValue(
-        automation, part: "backlog", text: text, running: false, next: nil, open: 0))
+        automation, key: "backlog", text: text, running: false, next: nil, open: 0))
 
     XCTAssertEqual(
       card.facts.first { $0.label == .boardPartTools }?.value.map(\.text),
@@ -104,7 +104,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
   /// 一覧の失敗の印は、最後の回が失敗した部品だけで決まる。失敗の後に成功した部品は数えない。
   func testListMarkCountsOnlyPartsWhoseLatestRunFailed() throws {
     let at = { (hour: Int) in DesignSceneFixtures.automationAt(hour) }
-    func fetch(_ key: String) -> AutomationPart {
+    func fetch(_ key: String) -> AutomationDefinition.Part {
       DesignSceneFixtures.commandPart(
         key, key, .scheduled(.every(3600)), script: key, coverage: .newArrivals)
     }
@@ -125,7 +125,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
           AutomationSamplePass(
             part: "recovered", at: at(10),
             outcome: DesignSceneFixtures.fetched(
-              "recovered", DesignSceneFixtures.sampleItems("recovered", 1, at: at(10)))),
+              DesignSceneFixtures.sampleItems("recovered", 1, at: at(10)))),
         ])
       let automation = try XCTUnwrap(
         DesignSceneFixtures.automationStore([sample]).automations.first)
@@ -153,7 +153,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
 
     let card = try XCTUnwrap(
       BoardAutomationPartValue(
-        automation, part: "judge", text: english, running: false, next: nil, open: 0))
+        automation, key: "judge", text: english, running: false, next: nil, open: 0))
 
     XCTAssertEqual(said(card.runs), ["judged 3 items, 2 proposed", "judged 1 item, 1 proposed"])
   }
@@ -166,7 +166,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
       said(
         try XCTUnwrap(
           BoardAutomationPartValue(
-            automation, part: part, text: text, running: false, next: nil, open: 0)
+            automation, key: part, text: text, running: false, next: nil, open: 0)
         ).runs)
     }
 

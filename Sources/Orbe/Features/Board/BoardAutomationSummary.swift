@@ -40,7 +40,7 @@ extension BoardAutomationSummary {
   /// `next` は次に予定で回る時刻。
   init(_ automation: Automation, text: AutomationText, next: Date?) {
     let l10n = text.l10n
-    if let latest = automation.runs.first?.run {
+    if let latest = automation.runs.first?.record {
       mark = automation.failing ? .failure : .success
       last = l10n.format(.boardListLast, text.recent(latest.startedAt))
     } else {
@@ -79,6 +79,12 @@ struct BoardRunEntry: Equatable {
 }
 
 extension BoardAutomationSummary {
+  /// 回の記録の区分。不明な記録は成否だけで決める。
+  static func tone(_ record: AutomationRunRecord) -> BoardRunTone {
+    guard let run = record.run else { return record.failed ? .failed : .quiet }
+    return tone(run)
+  }
+
   /// 回の区分。帯・知らせは、この分類だけを使う。出し直しで通った回は、通った出力で決める。
   static func tone(_ run: AutomationPartRun) -> BoardRunTone {
     if run.failed { return .failed }
@@ -98,18 +104,11 @@ extension BoardAutomationSummary {
     let l10n = text.l10n
     if run.failed { return (l10n.string(.boardMapFailed), .failed) }
     switch run.result {
-    case .fetch(let fresh):
-      if node.role == .fetch(.everything) {
-        return (
-          l10n.plural(run.execution.count, one: .boardMapCountOne, other: .boardMapCountOther),
-          .plain
-        )
-      }
+    case .fetch(let fresh, _):
       return fresh == 0
         ? (l10n.string(.boardRunNothingNew), .sunk) : (l10n.format(.boardMapFresh, fresh), .plain)
-    case .process:
-      let passed = run.execution.count
-      return (l10n.format(.boardMapPassed, passed), passed > 0 ? .plain : .sunk)
+    case .process(let fresh, _):
+      return (l10n.format(.boardMapPassed, fresh), fresh > 0 ? .plain : .sunk)
     case .judge(let proposed, _, _):
       return proposed > 0
         ? (l10n.format(.boardMapProposed, proposed), .plain)
@@ -130,20 +129,12 @@ extension BoardAutomationSummary {
     let taken = run.taken ?? 0
     let (body, shade): (String, BoardRunShade)
     switch run.result {
-    case .fetch(let fresh):
-      if node.role == .fetch(.everything) {
-        (body, shade) = (
-          l10n.plural(run.execution.count, one: .boardRunCountOne, other: .boardRunCountOther),
-          .plain
-        )
-      } else if fresh == 0 {
-        (body, shade) = (l10n.string(.boardRunNothingNew), .sunk)
-      } else {
-        (body, shade) = (l10n.format(.boardRunFresh, fresh), .plain)
-      }
-    case .process:
-      let passed = run.execution.count
-      (body, shade) = (l10n.format(.boardRunPassed, taken, passed), passed > 0 ? .plain : .sunk)
+    case .fetch(let fresh, _):
+      (body, shade) =
+        fresh == 0
+        ? (l10n.string(.boardRunNothingNew), .sunk) : (l10n.format(.boardRunFresh, fresh), .plain)
+    case .process(let fresh, _):
+      (body, shade) = (l10n.format(.boardRunPassed, taken, fresh), fresh > 0 ? .plain : .sunk)
     case .judge(let proposed, _, _):
       (body, shade) =
         proposed > 0
@@ -173,6 +164,9 @@ extension BoardAutomationSummary {
     if let many = run.dropped.counts[.overflow] {
       asides.append(l10n.format(.boardRunDroppedOverflow, many))
     }
+    if let lapsed = run.dropped.counts[.lapsed] {
+      asides.append(l10n.format(.boardRunDroppedLapsed, lapsed))
+    }
     if case .judge(_, _, let dismissed) = run.result { asides += text.dismissals(dismissed) }
     guard !asides.isEmpty else { return (body, shade) }
     return (
@@ -185,9 +179,9 @@ extension BoardAutomationSummary {
 
   /// 部品の回を新しい順に 1 行ずつ。素の「新着なし」の回（失敗でも手動でもない取得の回で新しい項目が 0、添え書きが付かない）が
   /// `foldLength` 回以上続く区間は、期間の 1 行に畳む——短い間隔の取得の「新着なし」が、他の回を押し出さないため。
-  static func lines(_ runs: [AutomationPartRun], node: AutomationGraph.Node, text: AutomationText)
-    -> [BoardRunLine]
-  {
+  static func lines(
+    _ records: [AutomationRunRecord], node: AutomationGraph.Node, text: AutomationText
+  ) -> [BoardRunLine] {
     var lines: [BoardRunLine] = []
     var quiet: [AutomationPartRun] = []
     func flush() {
@@ -202,9 +196,14 @@ extension BoardAutomationSummary {
       }
       quiet = []
     }
-    for run in runs {
-      if case .fetch(0) = run.result, !run.failed, node.role != .fetch(.everything),
-        run.trigger != .now, run.breach == nil, run.dropped.isEmpty
+    for record in records {
+      guard let run = record.run else {
+        flush()
+        lines.append(unknown(record, text: text))
+        continue
+      }
+      if case .fetch(0, _) = run.result, !run.failed, run.trigger != .now, run.breach == nil,
+        run.dropped.isEmpty
       {
         quiet.append(run)
       } else {
@@ -237,15 +236,26 @@ extension BoardAutomationSummary {
         result: result.text, shade: result.shade, wraps: wraps))
   }
 
+  /// 不明な記録の行（時刻と成否だけ）。
+  private static func unknown(_ record: AutomationRunRecord, text: AutomationText) -> BoardRunLine {
+    let at = text.stamp(record.startedAt)
+    return .run(
+      BoardRunEntry(
+        at: record.trigger == .now ? text.l10n.format(.boardRunManual, at) : at,
+        result: text.l10n.string(record.failed ? .boardRunUnknownFailed : .boardRunUnknownPassed),
+        shade: record.failed ? .failed : .sunk, wraps: false))
+  }
+
   /// 畳む区間の最短の長さ。
   static let foldLength = 3
 
   /// 部品の回 1 つを知らせの本文にした 1 行（「連絡: 5 件を判定して候補 1 件」）。報告と作業の応答は文の 1 行目。部品は名前
   /// だけで言う。
   static func line(
-    _ run: AutomationPartRun, part key: String, in automation: Automation, text: AutomationText
+    _ run: AutomationPartRun, part: AutomationPartID, in automation: Automation,
+    text: AutomationText
   ) -> String {
-    guard let node = automation.graph.node(key) else { return key }
+    guard let node = automation.graph.node(part) else { return "\(part)" }
     let body: String =
       switch run.result {
       case .report(let report?) where !run.failed: report

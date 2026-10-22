@@ -31,9 +31,7 @@ extension DesignSceneFixtures {
     _ part: String, _ item: AutomationItem, _ title: String, due: TaskItem.DueDate? = nil,
     reason: String? = nil
   ) -> AutomationPartPass.Proposal {
-    AutomationPartPass.Proposal(
-      origin: AutomationOrigin(part: part, item: item), title: title, due: due, workspace: nil,
-      reason: reason)
+    proposal(item, title, due: due, reason: reason)
   }
 
   /// GitHub の 7 項目。先頭がレビュー依頼の #405、末尾が自動化 6 と重ねて取る #398。
@@ -90,9 +88,9 @@ extension DesignSceneFixtures {
       definition: definition, createdAt: automationAt(9, daysAgo: 3),
       passes: [
         AutomationSamplePass(
-          part: "github", at: automationAt(8, 58), outcome: fetched("github", github)),
+          part: "github", at: automationAt(8, 58), outcome: fetched(github)),
         AutomationSamplePass(
-          part: "backlog", at: automationAt(8, 59), outcome: fetched("backlog", backlog)),
+          part: "backlog", at: automationAt(8, 59), outcome: fetched(backlog)),
         AutomationSamplePass(
           part: "dev", at: automationAt(9),
           outcome: judged(
@@ -104,7 +102,7 @@ extension DesignSceneFixtures {
                 "backlog", backlog[0], "BLG-231 決済画面の文言を直す", due: TaskItem.DueDate("2025-10-07")),
             ], rows: 12)),
         AutomationSamplePass(
-          part: "slack", at: automationAt(12, 58), outcome: fetched("slack", slack)),
+          part: "slack", at: automationAt(12, 58), outcome: fetched(slack)),
         AutomationSamplePass(
           part: "contact", at: automationAt(13),
           outcome: failed("", ending: .timeLimit, count: 3)),
@@ -127,7 +125,7 @@ extension DesignSceneFixtures {
       createdAt: automationAt(9, daysAgo: 3),
       passes: [
         AutomationSamplePass(
-          part: "fetch", at: automationAt(14, 30), outcome: fetched("fetch", items)),
+          part: "fetch", at: automationAt(14, 30), outcome: fetched(items)),
         AutomationSamplePass(
           part: "judge", at: automationAt(14, 31), trigger: .arrival,
           outcome: judged([proposal(items[0], "TypeError: cart is undefined を直す")], rows: 1)),
@@ -149,7 +147,7 @@ extension DesignSceneFixtures {
     return AutomationSample(
       definition: definition, createdAt: automationAt(9, daysAgo: 3),
       passes: [
-        AutomationSamplePass(part: "fetch", at: automationAt(14), outcome: fetched("fetch", items)),
+        AutomationSamplePass(part: "fetch", at: automationAt(14), outcome: fetched(items)),
         AutomationSamplePass(
           part: "judge", at: automationAt(14, 5), trigger: .now,
           outcome: judged(
@@ -191,7 +189,7 @@ extension DesignSceneFixtures {
       createdAt: automationAt(9, daysAgo: 3),
       passes: [
         AutomationSamplePass(
-          part: "fetch", at: automationAt(8, 45), outcome: fetched("fetch", [shared])),
+          part: "fetch", at: automationAt(8, 45), outcome: fetched([shared])),
         AutomationSamplePass(
           part: "judge", at: automationAt(8, 46), trigger: .arrival,
           outcome: judged([proposal(shared, "main の e2e の失敗を調べる")], rows: 1)),

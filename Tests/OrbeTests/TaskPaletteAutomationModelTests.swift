@@ -48,9 +48,11 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
   func testTheShelfListsOnlyTaskCandidateAutomations() throws {
     let runner = DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignSamples())
     var command = runner.store.automation(4)!.definition
+    let judge = command.parts[1].id
     command.parts[1] = DesignSceneFixtures.commandPart(
       "judge", "投稿", .arrival, from: ["fetch"], script: "cat", deliver: .sideEffect)
-    _ = try runner.set(4, command)
+    command.parts[1].id = judge
+    _ = try runner.set(4, version: runner.store.automation(4)!.version, command)
     let palette = TaskPaletteSamples.model([], automations: runner)
 
     XCTAssertEqual(
@@ -61,11 +63,8 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     let runner = DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignSamples())
     let item = DesignSceneFixtures.automationItem(
       "C03-9", "後の回", at: DesignSceneFixtures.automationNow)
-    let fetched = runner.store.automation(2)!.state("fetch").lastOutput.map {
-      AutomationItem(id: $0.id, link: $0.link, body: "", time: DesignSceneFixtures.automationNow)
-    }
     try WindowControllerAutomationControlTests.round(
-      runner.store, 2, fetched: fetched + [item], proposing: [item], titles: ["後の提案"])
+      runner.store, 2, fetched: [item], proposing: [item], titles: ["後の提案"])
     let palette = TaskPaletteSamples.model([], automations: runner)
 
     XCTAssertEqual(palette.automation.proposalIDs, [4, 1, 2, 3])
@@ -327,7 +326,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
 
   // MARK: - 出どころ
 
-  /// 候補の出どころの部品の名前は、候補を出した自動化の定義から引く。消えた自動化の候補は引けない。
+  /// 候補の出どころの部品の名前は、候補を出した自動化の定義から引く。消えた自動化の候補は、出どころの項目が無効になって下がる。
   func testSourceNameComesFromTheProposingAutomation() {
     let palette = TaskPaletteSamples.model(
       [],
@@ -337,6 +336,6 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     automation.tapShelf(.automation(1))
 
     XCTAssertEqual(
-      automation.proposals.map(automation.sourceName(of:)), ["GitHub", "Backlog", nil])
+      automation.proposals.map(automation.sourceName(of:)), ["GitHub", "Backlog"])
   }
 }

@@ -40,7 +40,8 @@ final class AutomationPromptsTests: OrbeTestCase {
   private var open: [AutomationProposal] {
     [
       AutomationProposal(
-        id: 1, automationId: 1, partKey: "judge", sourcePartKey: "f", item: Self.item("old"),
+        id: 1, runId: 1, automationId: 1, judge: AutomationPartID(2), defId: AutomationDefID(2),
+        source: AutomationPartID(1), origin: .version(1), item: Self.item("old"),
         title: "前の提案", due: nil, workspace: nil, reason: nil,
         proposedAt: Date(timeIntervalSince1970: 0),
         state: .open)
@@ -111,7 +112,8 @@ final class AutomationPromptsTests: OrbeTestCase {
   /// 判定の依頼文には、新しい項目・出ている提案・期限を決めるための今日と利用者の指示文が載る。
   func testJudgePromptCarriesTheNewItemsTheOpenProposalsAndToday() throws {
     let prompt = AutomationPrompts.judge(
-      instruction: "自分がやるべきことだけ", rows: [AutomationPrompts.row(items[0])],
+      instruction: "自分がやるべきことだけ",
+      rows: [AutomationPrompts.jsonLine(AutomationWire.object(items[0]))],
       choices: AutomationJudgeChoices(open: open, workspaces: listed([orbe])),
       now: Date(timeIntervalSince1970: 1_800_000_000),
       timeZone: try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo")))
@@ -128,7 +130,7 @@ final class AutomationPromptsTests: OrbeTestCase {
   /// 付け先にできる workspace が無ければ、一覧の節は (none) になる。
   func testJudgePromptSaysNoneWithoutWorkspaces() throws {
     let prompt = AutomationPrompts.judge(
-      instruction: "指示", rows: [AutomationPrompts.row(items[0])],
+      instruction: "指示", rows: [AutomationPrompts.jsonLine(AutomationWire.object(items[0]))],
       choices: AutomationJudgeChoices(open: [], workspaces: listed([])),
       now: Date(timeIntervalSince1970: 1_800_000_000),
       timeZone: try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo")))
@@ -226,7 +228,8 @@ final class AutomationPromptsTests: OrbeTestCase {
     let choices = AutomationJudgeChoices(open: [], workspaces: AutomationWorkspaces(session))
 
     let prompt = AutomationPrompts.judge(
-      instruction: "指示", rows: [AutomationPrompts.row(items[0])], choices: choices,
+      instruction: "指示", rows: [AutomationPrompts.jsonLine(AutomationWire.object(items[0]))],
+      choices: choices,
       now: Date(timeIntervalSince1970: 1_800_000_000),
       timeZone: try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo")))
     let read = read(

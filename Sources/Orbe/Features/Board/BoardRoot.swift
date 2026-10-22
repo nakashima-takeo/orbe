@@ -103,6 +103,11 @@ struct BoardAutomationColumns: View {
         .focused(focused, equals: .list)
         .onKeyPress { model.handleKey($0) }
       if case .automation(let id) = model.list.selectedID,
+        let standing = standings.first(where: { $0.id == id }), let reason = standing.unreadable
+      {
+        BoardAutomationUnreadableDetail(
+          model: model, standing: standing, reason: reason, text: text)
+      } else if case .automation(let id) = model.list.selectedID,
         let standing = standings.first(where: { $0.id == id }),
         let detail = model.detail(id, text: text, now: now)
       {

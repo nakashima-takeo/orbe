@@ -70,8 +70,8 @@ struct TaskPaletteAutomationList: View {
     let text = AutomationText(l10n: l10n, today: model.today, timeZone: model.timeZone)
     let judges = automation.graph.byDepth.filter { $0.role == .judge }
     return VStack(alignment: .leading, spacing: 3) {
-      ForEach(judges, id: \.key) { node in
-        let run = automation.state(node.key).runs.first
+      ForEach(judges, id: \.id) { node in
+        let run = automation.state(node.id).runs.first
         Text(Self.latest(node, run, text))
           .foregroundStyle(run?.failed == true ? Color.theme.danger : Color.theme.textMuted)
           .lineLimit(2)
@@ -89,15 +89,19 @@ struct TaskPaletteAutomationList: View {
 
   /// 判定の部品の最新の回の 1 行。部品は名前だけで言う。
   static func latest(
-    _ node: AutomationGraph.Node, _ run: AutomationPartRun?, _ text: AutomationText
+    _ node: AutomationGraph.Node, _ record: AutomationRunRecord?, _ text: AutomationText
   )
     -> String
   {
     let l10n = text.l10n
-    guard let run else {
+    guard let record else {
       return node.part.name + "\u{3000}" + l10n.string(.taskPaletteAutomationNeverJudged)
     }
     let result: String
+    guard let run = record.run else {
+      result = l10n.string(record.failed ? .boardRunUnknownFailed : .boardRunUnknownPassed)
+      return node.part.name + "\u{3000}" + result
+    }
     if let failure = run.failure {
       result = l10n.format(
         .automationFailedWith,

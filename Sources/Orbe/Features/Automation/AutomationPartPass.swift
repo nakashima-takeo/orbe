@@ -1,8 +1,8 @@
 import Foundation
 import OrbeSessionLog
 
-/// 部品の 1 回。部品と、その役割の入力を受けて手段を起こし、役割ごとに出力を読んで結果を返す。溜まり・保存・予定は
-/// 持たない——何を取ったか・何を積むか・回の記録をどう確定するかは呼び手が決める。
+/// 部品の 1 回。部品と、その役割の入力を受けて手段を起こし、役割ごとに出力を読んで結果を返す。読み・保存・予定は
+/// 持たない——何を取ったか・出した行をどう残すか・回の記録をどう確定するかは呼び手が決める。
 ///
 /// 行を出す部品（取得・処理・判定）の出力に受け付けない行が 1 行でもあれば、決まりを外したものとする。agent の部品は同じ回の
 /// 中で 1 回だけ出し直させ、コマンドの部品は直ちに失敗にする。上限は経過時間（`timeoutMinutes`）だけで、出し直しと分け合う。
@@ -16,13 +16,12 @@ struct AutomationPartPass {
   /// 部品の役割の入力。ケースが役割と 1 対 1 に対応し、役割と食い違う入力は呼び手の誤り。取得と仕事のケースは行の席を
   /// 持たない——外から届いた文面を、ツールを持ちうる agent の依頼文へ型の上で運ばないため。
   enum Input {
-    /// `since` は前回成功した回の開始時刻（新着の流れの取得にだけ渡す）。`lastOutput` は前回の出力の項目の id
-    /// （接頭の無い元の id。空なら全件が新しい）。
-    case fetch(since: Date?, lastOutput: Set<String>)
+    /// `since` は前回成功した回の開始時刻（新着の流れの取得にだけ渡す）。
+    case fetch(since: Date?)
     /// `reachesJudge` は、出した行が途中で取得の部品を通らずに判定の部品へ届くか（`AutomationGraph.reachesTaskCandidates`）。
     /// 届くなら、入力の行の `id` でない `id` の出力の行も決まりを外した行になる——判定は出どころの項目から候補を作るので、
     /// 新しく作った行は判定で使えないため。処理が続くなら、そうした行を初めに出した処理が外したことになる。入力の行の `id` を
-    /// 保った行は、入力の行に出どころが無くても外れた行にしない（部品は決まりどおりに素通ししている。判定へ積む時点で
+    /// 保った行は、入力の行に出どころが無くても外れた行にしない（部品は決まりどおりに素通ししている。判定が読む時点で
     /// 出どころなしとして捨てる）。
     case process([AutomationPartRow], reachesJudge: Bool)
     /// 行はどれも出どころを持つ。`choices` は判断待ちの候補と付け先にできる workspace。
@@ -77,10 +76,9 @@ struct AutomationPartPass {
 
   /// 役割ごとの成功の出力。
   enum Output: Equatable {
-    /// `rows` は前回の出力に無かった項目（毎回全件なら全部）で、`id` は `<部品の鍵>:<元の id>`。`lastOutput` は今回取れた
-    /// 全項目で、次の回の前回の出力になる。
-    case fetch(rows: [AutomationPartRow], lastOutput: [AutomationSeen])
-    /// どの行も `id` を持ち、`id` は重ならない。入力の行と `id` で照らせた行だけが出どころを持つ。
+    /// 取れた全項目（書かれた id と書かれたままの 1 行）。何が新しいかは出す側の確定が決める。
+    case fetch([AutomationPartRow])
+    /// どの行も `id` を持ち、`id` は重ならない。入力の行と `id` で照らせた行だけが、その入力を引き継ぎ、出どころを持つ。
     case process([AutomationPartRow])
     /// `resolved` は対応済みにする判断待ちの候補のリンク。
     case judge(proposals: [Proposal], resolved: [String])
@@ -92,7 +90,7 @@ struct AutomationPartPass {
 
   /// 判定が出した候補の案。リンクと本文は出どころの項目から取る。
   struct Proposal: Equatable {
-    let origin: AutomationOrigin
+    let origin: AutomationInbox.Origin
     let title: String
     let due: TaskItem.DueDate?
     /// 付け先の `Workspace.persistentId`。
@@ -157,7 +155,7 @@ struct AutomationPartPass {
     -> BackgroundJob
   {
     let elapsed = TimeInterval(node.timeoutMinutes * 60)
-    switch node.part.method {
+    switch node.action.method {
     case .command(let command):
       return BackgroundJob(
         work: .command(command, commandInput(node, input)),
@@ -181,7 +179,7 @@ struct AutomationPartPass {
     -> BackgroundInput
   {
     switch input {
-    case .fetch(let since, _):
+    case .fetch(let since):
       guard let since = mark(node, since) else { return BackgroundInput() }
       return BackgroundInput(environment: ["ORBE_SINCE": SessionEvent.iso8601(since)])
     case .process(let rows, _), .report(let rows):
@@ -208,7 +206,7 @@ struct AutomationPartPass {
     timeZone: TimeZone
   ) -> String {
     switch input {
-    case .fetch(let since, _):
+    case .fetch(let since):
       return AutomationPrompts.fetch(instruction: instruction, since: mark(node, since))
     case .process(let rows, let reachesJudge):
       return AutomationPrompts.process(
@@ -250,27 +248,21 @@ extension AutomationPartPass.Input {
   }
 }
 
-/// 溜まりの 1 行の本文（取った行）か、下流へ渡す行。
+/// 部品の 1 回が受ける行（読んだ行）か、出した行。受ける行の `id` は下流へ渡す id、出した行の `id` は書かれた id。
 struct AutomationPartRow: Equatable {
   let id: String
-  /// 行の JSON の 1 行。
+  /// 行の JSON の 1 行（受ける行は下流へ渡す 1 行、出した行は書かれたまま）。
   let text: String
-  let origin: AutomationOrigin?
+  let origin: AutomationInbox.Origin?
+  /// 受ける行は出す側の行（下流が引き継ぐ参照）、出した行は引き継いだ入力。
+  let source: AutomationSourceRef?
 }
 
-/// 出どころを必ず持つ行。判定の溜まりには出どころのある行だけが積まれる。
+/// 出どころを必ず持つ行。判定は出どころのある行だけを読む。
 struct AutomationSourcedRow: Equatable {
   let id: String
   let text: String
-  let origin: AutomationOrigin
-}
-
-/// 行の元になった取得の部品と、その部品が出したままの項目。項目の `id` は接頭の無い元の id で、前回の出力と照らす
-/// （行の `id` は `<部品の鍵>:<元の id>`）。候補のリンクと本文はいつもここから取る。
-struct AutomationOrigin: Equatable {
-  /// 取得の部品の鍵。
-  let part: String
-  let item: AutomationItem
+  let origin: AutomationInbox.Origin
 }
 
 /// 保存の形は終わり方を種類で持つ（`end`）。外の形の英文の `ending` は `AutomationRunWire` が足す。

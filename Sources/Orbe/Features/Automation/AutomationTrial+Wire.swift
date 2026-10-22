@@ -6,12 +6,12 @@ extension AutomationTrial {
   /// `workspace` は候補の付け先（`Workspace.persistentId`）を今の workspace の id と名前に解く。
   func json(workspace: (UUID) -> (id: Int, name: String)?) -> [String: Any] {
     var json: [String: Any] = [
-      "automationId": automationId, "from": range.from, "to": range.to,
+      "automationId": automationId, "from": keys(range.from), "to": keys(range.to),
       "startedAt": SessionEvent.iso8601(startedAt), "running": running, "preparing": preparing,
       "parts": range.path.map { node -> [String: Any] in
         [
-          "key": node.key, "state": state(of: node.key).rawValue,
-          "runs": (passes[node.key] ?? []).map { $0.json(part: node.key, workspace: workspace) },
+          "key": node.key, "state": state(of: node.id).rawValue,
+          "runs": (passes[node.id] ?? []).map { $0.json(part: node.key, workspace: workspace) },
         ]
       },
     ]
@@ -19,6 +19,10 @@ extension AutomationTrial {
     if let endedAt { json["endedAt"] = SessionEvent.iso8601(endedAt) }
     if let failure { json["failure"] = failure }
     return json
+  }
+
+  private func keys(_ ids: [AutomationPartID]) -> [String] {
+    ids.compactMap { id in range.path.first { $0.id == id }?.key }
   }
 }
 

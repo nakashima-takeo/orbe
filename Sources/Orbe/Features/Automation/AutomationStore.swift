@@ -4,26 +4,45 @@ import Observation
 /// 自動化と候補の唯一の正（@Observable・main のみ）。`WindowController` が 1 個所有し、制御 API・走らせ役・画面が同じ変異
 /// メソッドを呼ぶ——値の検証と不変条件はここだけが持つ。
 ///
-/// 変異はどれも「変わる行を DB に 1 トランザクションで書き、通ってからメモリを進める」の 1 経路で行う。書けなければメモリは
-/// 変わらず、呼び手に `.unavailable` を返す——逆だと、書けなかった変化が画面にだけ残り、再起動で巻き戻る。溜まりの行の本文は
-/// DB にだけ置き、メモリは件数だけを持つ。
+/// 変異はどれも「変わる行を DB に 1 トランザクションで書き、最後に掃除し、通ってからメモリを進める」の 1 経路で行う。書けなければ
+/// メモリは変わらず、呼び手に `.unavailable` を返す——逆だと、書けなかった変化が画面にだけ残り、再起動で巻き戻る。出す側の行の
+/// 本文は DB にだけ置き、メモリは画面と予定に要る分（直近の回・読めば取る行の数・覚えている候補・今有効な項目の id とリンク）
+/// だけを持つ。
 ///
-/// DB を開けなかった（別の Orbe が持つ・確かめられない）か、運転中に壊れを見つけたストアは使えない: 自動化 0 件として描き、
-/// 変異を断る。壊れの退避は次の起動の検査に任せる。
+/// DB を使えない（開けない・別の Orbe が持つ・新しい版・運転中に壊れを見つけた）ストアは、自動化 0 件として描き、変異と読みを
+/// 理由付きで断る。壊れの退避は次の起動の検査に任せる。
 @Observable final class AutomationStore {
   private(set) var automations: [Automation] = []
+  /// 定義を読めない自動化。
+  private(set) var unreadable: [AutomationUnreadable] = []
   private(set) var proposals: [AutomationProposal] = []
+  private(set) var unreadableProposals: [AutomationUnreadableProposal] = []
   private var database: AutomationDatabase?
-  /// DB を開けていて、壊れを見つけていない。
+  /// 使えないときの断り。
+  private(set) var unavailableError: AutomationError
+  /// DB を使える。
   var available: Bool { database != nil }
   /// 運転中に使えなくなった（走らせ役が全部品の予定を外す）。
   @ObservationIgnored var onUnavailable: () -> Void = {}
+  /// 走っている回が読んだ行（確定まで掃除から守る）。走らせ役が渡す。
+  @ObservationIgnored var holding: () -> Set<AutomationRowRef> = { [] }
 
-  init(opened: AutomationDatabase.Opened? = AutomationPersistence.open()) {
-    database = opened?.database
-    automations = opened?.snapshot.automations ?? []
-    proposals = opened?.snapshot.proposals ?? []
+  init(opening: Result<AutomationDatabase.Opened, AutomationError> = AutomationPersistence.open()) {
+    switch opening {
+    case .success(let opened):
+      database = opened.database
+      automations = opened.snapshot.automations
+      unreadable = opened.snapshot.unreadable
+      proposals = opened.snapshot.proposals
+      unreadableProposals = opened.snapshot.unreadableProposals
+      unavailableError = Self.brokenError
+    case .failure(let error):
+      unavailableError = error
+    }
   }
+
+  static let brokenError = AutomationError.unavailable(
+    "automations are unavailable in this session: the database broke while running; see the log")
 
   func automation(_ id: Int) -> Automation? {
     automations.first { $0.id == id }
@@ -31,102 +50,102 @@ import Observation
 
   func index(_ id: Int) throws(AutomationError) -> Int {
     guard let index = automations.firstIndex(where: { $0.id == id }) else {
+      if let broken = unreadable.first(where: { $0.id == id }) {
+        throw .unreadable(id, broken.reason)
+      }
       throw .automationNotFound(id)
     }
     return index
   }
 
+  /// 覚えている候補のリンク（読めない候補を含む）。
+  var heldLinks: Set<String> {
+    Set(proposals.map(\.item.link) + unreadableProposals.map(\.link))
+  }
+
   // MARK: - 定義
 
   func create(_ definition: AutomationDefinition, now: Date) throws(AutomationError) -> Automation {
-    let (name, graph) = try definition.checked()
+    if let index = definition.parts.firstIndex(where: { $0.id != nil }) {
+      throw .invalid("parts[\(index)].id: a new automation has no part ids yet")
+    }
+    let (name, checked) = try definition.checked()
     let at = TaskItem.storedInstant(now)
-    let parts = Dictionary(
-      uniqueKeysWithValues: graph.nodes.map { ($0.key, AutomationPartState(addedAt: at)) })
-    let draft = Automation(
-      id: 0, name: name, notify: definition.notify, graph: graph, paused: false, createdAt: at,
-      tally: AutomationTally(), parts: parts)
-    return try commit { db, memory in
-      let id = try db.insert(draft)
-      for (key, state) in parts { try db.put(part: key, of: id, state) }
-      let automation = Automation(
-        id: id, name: name, notify: definition.notify, graph: graph, paused: false, createdAt: at,
-        tally: AutomationTally(), parts: parts)
+    return try commit(sweepingAt: at) { db, memory in
+      let id = try db.insertAutomation(name: name, notify: definition.notify, createdAt: at)
+      var entities: [AutomationPart] = []
+      for (position, item) in checked.enumerated() {
+        let defId = try db.insert(action: item.part.action)
+        let partId = try db.insertPart(
+          of: id, at: position, item.part, defId: defId, addedAt: at)
+        entities.append(Self.entity(item.part, id: partId, defId: defId))
+      }
+      let graph = AutomationGraph(checked, parts: entities)
+      for node in graph.nodes { try db.setEdges(of: id, to: node.id, node.inputs) }
+      var automation = Automation(
+        id: id, name: name, notify: definition.notify, graph: graph, pausedAt: nil, version: 1,
+        createdAt: at,
+        parts: Dictionary(
+          uniqueKeysWithValues: graph.nodes.map { ($0.id, AutomationPartState(addedAt: at)) }))
+      try Self.refreshReads(&automation, db)
       memory.automations.append(automation)
-      return automation
+      try memory.recount(automation.id, db, now: at)
+      return memory.automations[memory.automations.count - 1]
     }
   }
 
-  /// 定義を丸ごと置き換えたときの、部品ごとの変化。
-  struct Replaced {
-    let automation: Automation
-    /// 何をするかが変わった部品。決まりを外した印を下ろした。
-    let reworked: [String]
-    /// 消した部品。状態・溜まり・記録を消した。
-    let removed: [String]
-  }
-
-  /// 定義を丸ごと置き換える。残る部品の前回の出力と溜まりには触れない（ほかの部品の溜まりにある、消えた部品から来た行も
-  /// そのまま）。判定の部品が 1 つも無くなれば累計を 0 に戻す。誰も持たなくなった候補は、その場で忘れる。止めているかは変えない。
-  func replace(_ id: Int, with definition: AutomationDefinition, now: Date) throws(AutomationError)
-    -> Replaced
-  {
-    let index = try index(id)
-    let (name, graph) = try definition.checked()
-    let old = automations[index]
-    let reworked = AutomationGraph.reworked(from: old.graph, to: graph)
-    let removed = old.graph.nodes.map(\.key).filter { graph.node($0) == nil }
-    let added = graph.nodes.map(\.key).filter { old.graph.node($0) == nil }
-    var next = old
-    next.name = name
-    next.notify = definition.notify
-    next.graph = graph
-    for key in removed { next.parts[key] = nil }
-    let at = TaskItem.storedInstant(now)
-    for key in added { next.parts[key] = AutomationPartState(addedAt: at) }
-    let unmarked = reworked.filter { next.parts[$0]?.breach != nil }
-    for key in unmarked { next.parts[key]?.breach = nil }
-    if !next.judges { next.tally = AutomationTally() }
-    try commit { db, memory in
-      memory.automations[index] = next
-      try db.update(next)
-      for key in removed { try db.delete(part: key, of: id) }
-      for key in added + unmarked { try db.put(part: key, of: id, next.state(key)) }
-      try memory.forgetUnheld(db)
-    }
-    return Replaced(automation: next, reworked: reworked, removed: removed)
-  }
-
-  func setPaused(_ id: Int, _ paused: Bool) throws(AutomationError) -> Automation {
+  /// 止める・再開する。版は変えない。
+  func setPaused(_ id: Int, _ paused: Bool, now: Date) throws(AutomationError) -> Automation {
     let index = try index(id)
     var next = automations[index]
-    next.paused = paused
-    try commit { db, memory in
-      try db.update(next)
+    guard next.paused != paused else { return next }
+    next.pausedAt = paused ? TaskItem.storedInstant(now) : nil
+    try commit(sweepingAt: nil) { db, memory in
+      try db.setPaused(id, at: next.pausedAt)
       memory.automations[index] = next
     }
     return next
   }
 
-  /// 消す。その部品の状態・溜まり・記録も消え、その自動化だけが持っていた候補は忘れる。
-  func delete(_ id: Int) throws(AutomationError) {
-    let index = try index(id)
-    try commit { db, memory in
-      try db.delete(automation: id)
-      memory.automations.remove(at: index)
+  /// 消す。部品をすべて外し（今有効な項目を無効にし、記録を消す）、自動化の行を消す。出どころが無効になった判断待ちの候補は
+  /// 下がり、誰も持たなくなった候補は忘れる。定義を読めない自動化も消せる。
+  func delete(_ id: Int, now: Date) throws(AutomationError) {
+    let parts: [AutomationPartID]
+    if let automation = automation(id) {
+      parts = automation.graph.nodes.map(\.id)
+    } else if let broken = unreadable.first(where: { $0.id == id }) {
+      parts = broken.parts
+    } else {
+      throw .automationNotFound(id)
+    }
+    let at = TaskItem.storedInstant(now)
+    try commit(sweepingAt: at) { db, memory in
+      var invalidated: [Int] = []
+      for part in parts {
+        invalidated += try db.invalidateItems(of: part, at: at)
+        try db.removePart(part, at: at)
+      }
+      try db.deleteAutomation(id)
+      memory.automations.removeAll { $0.id == id }
+      memory.unreadable.removeAll { $0.id == id }
+      for index in memory.proposals.indices where memory.proposals[index].automationId == id {
+        memory.proposals[index].automationId = nil
+      }
+      try memory.withdraw(originatingIn: invalidated, db)
       try memory.forgetUnheld(db)
+      try memory.recountJudges(db, now: at)
     }
   }
 
   // MARK: - 候補をさばく
 
-  /// 出ている候補を、`workspace` に付けてタスク一覧へ未着手で足す。追加が拒否されたら候補も累計も変わらない。タスクを足した後に
-  /// 候補を書けなければ、候補は判断待ちのまま残る（タスクと自動化は別の原本）。
-  func accept(_ proposalId: Int, into tasks: TaskStore, workspace: UUID?) throws(AutomationError)
-    -> TaskItem
+  /// 出ている候補を、`workspace` に付けてタスク一覧へ未着手で足す。追加が拒否されたら候補は変わらない。タスクを足した後に
+  /// 判断を書けなければ、候補は判断待ちのまま残る（タスクと自動化は別の原本）。
+  func accept(_ proposalId: Int, into tasks: TaskStore, workspace: UUID?, now: Date = Date())
+    throws(AutomationError) -> TaskItem
   {
     let index = try openIndex(proposalId)
-    guard database != nil else { throw Self.unavailableError }
+    guard database != nil else { throw unavailableError }
     let proposal = proposals[index]
     var draft = TaskDraft(title: proposal.title)
     draft.due = proposal.due
@@ -142,31 +161,25 @@ import Observation
       }
     }
     do throws(AutomationError) {
-      try decide(index, as: .accepted(taskId: task.id), \.accepted)
+      try decide(index, as: .accepted(taskId: task.id), now: now)
     } catch {
       NSLog("[automation] the task \(task.id) was added but the proposal stays open: \(error)")
     }
     return task
   }
 
-  func dismiss(_ proposalId: Int) throws(AutomationError) {
-    try decide(try openIndex(proposalId), as: .dismissed, \.dismissed)
+  func dismiss(_ proposalId: Int, now: Date = Date()) throws(AutomationError) {
+    try decide(try openIndex(proposalId), as: .dismissed, now: now)
   }
 
-  /// さばいた候補を、出した自動化の累計に数える（棚に出していた自動化ではなく）。出した自動化が居ない・判定の部品を持たなく
-  /// なっていれば数えない。
-  private func decide(
-    _ index: Int, as state: AutomationProposal.State,
-    _ outcome: WritableKeyPath<AutomationTally, Int>
-  ) throws(AutomationError) {
-    try commit { db, memory in
+  /// 人の判断を 1 件残す。
+  private func decide(_ index: Int, as state: AutomationProposal.State, now: Date)
+    throws(AutomationError)
+  {
+    let at = TaskItem.storedInstant(now)
+    try commit(sweepingAt: at) { db, memory in
+      try db.settle(memory.proposals[index].id, state, at: at)
       memory.proposals[index].state = state
-      try db.update(proposal: memory.proposals[index])
-      let issuer = memory.proposals[index].automationId
-      guard let owner = memory.automations.firstIndex(where: { $0.id == issuer && $0.judges })
-      else { return }
-      memory.automations[owner].tally[keyPath: outcome] += 1
-      try db.update(memory.automations[owner])
     }
   }
 
@@ -180,32 +193,39 @@ import Observation
 
   // MARK: - 書き込み
 
-  static let unavailableError = AutomationError.unavailable(
-    "automations are unavailable in this session (another Orbe holds them, their database could "
-      + "not be opened, or it broke while running); see the log")
-
-  /// 変異の 1 経路。`body` はメモリの写しを進めながら、変わる行を DB に書く（1 トランザクション）。通ったら写しをメモリにし、
-  /// 通らなければメモリは変わらない。壊れを見つけたら接続を手放してストアを使えなくする。検証は呼ぶ前に済ませる（`body` が
-  /// 投げたものはどれも書けなかったことになる）。
-  func commit<T>(_ body: (AutomationDatabase, inout AutomationMemory) throws -> T)
-    throws(AutomationError) -> T
-  {
-    guard let database else { throw Self.unavailableError }
-    var memory = AutomationMemory(automations: automations, proposals: proposals)
+  /// 変異の 1 経路。`body` はメモリの写しを進めながら、変わる行を DB に書く（1 トランザクション）。`sweepingAt` があれば最後に
+  /// 掃除する。通ったら写しをメモリにし、通らなければメモリは変わらない。壊れを見つけたら接続を手放してストアを使えなくする。
+  /// 検証は呼ぶ前に済ませる（`body` が投げたものはどれも書けなかったことになる）。
+  func commit<T>(
+    sweepingAt sweep: Date?, _ body: (AutomationDatabase, inout AutomationMemory) throws -> T
+  ) throws(AutomationError) -> T {
+    guard let database else { throw unavailableError }
+    var memory = AutomationMemory(
+      automations: automations, unreadable: unreadable, proposals: proposals,
+      unreadableProposals: unreadableProposals)
+    let holding = self.holding()
     let result: T
     do {
-      result = try database.transaction { try body(database, &memory) }
+      result = try database.transaction {
+        let result = try body(database, &memory)
+        if let sweep { try database.sweep(now: sweep, holding: holding) }
+        return result
+      }
     } catch {
       throw fault(error)
     }
     if memory.automations != automations { automations = memory.automations }
+    if memory.unreadable != unreadable { unreadable = memory.unreadable }
     if memory.proposals != proposals { proposals = memory.proposals }
+    if memory.unreadableProposals != unreadableProposals {
+      unreadableProposals = memory.unreadableProposals
+    }
     return result
   }
 
   /// トランザクションの外で読む。
   func read<T>(_ body: (AutomationDatabase) throws -> T) throws(AutomationError) -> T {
-    guard let database else { throw Self.unavailableError }
+    guard let database else { throw unavailableError }
     do {
       return try body(database)
     } catch {
@@ -214,13 +234,17 @@ import Observation
   }
 
   private func fault(_ error: Error) -> AutomationError {
+    if let error = error as? AutomationError { return error }
     NSLog("[automation] cannot read or save automations: \(error)")
     if let error = error as? SQLiteError, error.isBroken {
       database = nil
+      unavailableError = Self.brokenError
       automations = []
+      unreadable = []
       proposals = []
+      unreadableProposals = []
       onUnavailable()
-      return Self.unavailableError
+      return unavailableError
     }
     return .unavailable("could not read or save automations: \(error)")
   }
@@ -245,24 +269,27 @@ extension AutomationStore {
 
     /// 1 区切り写す。写し終えたら写しのストアを返す。写しのストアのメモリは元のメモリをそのまま使う——元は「DB に書けてから
     /// メモリを進める」を同じ main で行うので、写し終えた時点の元のメモリはその時点の DB と一致する（写しの DB を読み直すと、
-    /// 溜まりの件数を数える読みが溜まりの行の数に比例して main を止める）。写し終えた後には呼ばない。
+    /// 読めば取る行を数える読みが行の数に比例して main を止める）。写し終えた後には呼ばない。
     func step() throws(AutomationError) -> AutomationStore? {
-      guard source.available else { throw AutomationStore.unavailableError }
+      guard source.available else { throw source.unavailableError }
       do {
         guard try backup.step(pages: Self.pagesPerStep) else { return nil }
+        try database.exec("PRAGMA foreign_keys = ON")
       } catch {
         throw .unavailable("could not copy automations: \(error)")
       }
       return AutomationStore(
-        opened: AutomationDatabase.Opened(
-          database: AutomationDatabase(database),
-          snapshot: AutomationSnapshot(
-            automations: source.automations, proposals: source.proposals)))
+        opening: .success(
+          AutomationDatabase.Opened(
+            database: AutomationDatabase(database),
+            snapshot: AutomationSnapshot(
+              automations: source.automations, unreadable: source.unreadable,
+              proposals: source.proposals, unreadableProposals: source.unreadableProposals))))
     }
   }
 
   func copy() throws(AutomationError) -> Copy {
-    guard let database else { throw Self.unavailableError }
+    guard let database else { throw unavailableError }
     do {
       let copy = try SQLiteDatabase.memory()
       return Copy(source: self, database: copy, backup: try database.backup(into: copy))
@@ -275,5 +302,15 @@ extension AutomationStore {
 /// 変異の間のメモリの写し（`AutomationStore.commit`）。
 struct AutomationMemory {
   var automations: [Automation]
+  var unreadable: [AutomationUnreadable]
   var proposals: [AutomationProposal]
+  var unreadableProposals: [AutomationUnreadableProposal]
+
+  func automation(_ id: Int) -> Automation? {
+    automations.first { $0.id == id }
+  }
+
+  var heldLinks: Set<String> {
+    Set(proposals.map(\.item.link) + unreadableProposals.map(\.link))
+  }
 }

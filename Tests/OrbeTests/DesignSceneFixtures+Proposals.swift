@@ -25,14 +25,14 @@ extension DesignSceneFixtures {
     automationItem("C03-2", "#team-orbe「今週の進捗、金曜までに週報へお願いします」", at: automationAt(11, 5))
   }
 
-  private static var backlogFetch: AutomationPart {
+  private static var backlogFetch: AutomationDefinition.Part {
     agentPart(
       "fetch", "Backlog から取る", .scheduled(.every(1800)), model: "haiku",
       tools: ["mcp__backlog__get_issues"], instruction: "自分が担当の未完了の課題を、更新の新しい順に 30 件取る。",
       coverage: .currentSet)
   }
 
-  private static var slackFetch: AutomationPart {
+  private static var slackFetch: AutomationDefinition.Part {
     commandPart(
       "fetch", "Slack から取る", .scheduled(cron("0 9,13,17 * * *")),
       script: "~/bin/slack-mentions --since 1d", coverage: .newArrivals)
@@ -57,7 +57,7 @@ extension DesignSceneFixtures {
         createdAt: created,
         passes: [
           AutomationSamplePass(
-            part: "fetch", at: fetchedAt, outcome: fetched("fetch", [estimate, onboarding])),
+            part: "fetch", at: fetchedAt, outcome: fetched([estimate, onboarding])),
           AutomationSamplePass(
             part: "judge", at: judgedAt, trigger: .arrival,
             outcome: judged(
@@ -77,7 +77,7 @@ extension DesignSceneFixtures {
         createdAt: created,
         passes: [
           AutomationSamplePass(
-            part: "fetch", at: fetchedAt, outcome: fetched("fetch", [weekly, onboarding])),
+            part: "fetch", at: fetchedAt, outcome: fetched([weekly, onboarding])),
           AutomationSamplePass(
             part: "judge", at: judgedAt, trigger: .arrival,
             outcome: judged(
@@ -91,6 +91,12 @@ extension DesignSceneFixtures {
     ]
   }
 
+  private static var backlogItem: AutomationItem {
+    AutomationItem(
+      id: "ORBE-12", link: "https://example.backlog.com/view/ORBE-12", body: "課題",
+      time: automationAt(8))
+  }
+
   /// 30 分ごとの軽い agent で提案なし。
   private static var inboxBacklog: AutomationSample {
     AutomationSample(
@@ -99,13 +105,7 @@ extension DesignSceneFixtures {
       passes: [
         AutomationSamplePass(
           part: "fetch", at: automationAt(15),
-          outcome: fetched(
-            "fetch",
-            [
-              AutomationItem(
-                id: "ORBE-12", link: "https://example.backlog.com/view/ORBE-12", body: "課題",
-                time: automationAt(8))
-            ], fresh: []))
+          outcome: fetched([backlogItem]), kept: [backlogItem])
       ])
   }
 
@@ -137,7 +137,7 @@ extension DesignSceneFixtures {
     }
     samples[0].passes.insert(
       contentsOf: [
-        AutomationSamplePass(part: "fetch", at: automationAt(9), outcome: fetched("fetch", items)),
+        AutomationSamplePass(part: "fetch", at: automationAt(9), outcome: fetched(items)),
         AutomationSamplePass(
           part: "judge", at: automationAt(9, 1), trigger: .arrival,
           outcome: judged(

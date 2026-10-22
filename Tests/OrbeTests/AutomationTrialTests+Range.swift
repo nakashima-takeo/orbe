@@ -10,18 +10,18 @@ extension AutomationTrialTests {
   /// 1 部品だけ: 溜まり（の写し）から次の本番と同じ規則で取り、上流は動かない。本番の溜まりは残る。
   func testTryingOnePartTakesItsInboxCopyAndLeavesTheUpstreamAlone() throws {
     let id = try define([fetch("gh"), part("judge", from: ["gh"], deliver: .taskCandidates)])
-    try runner.flow(id, to: .part("gh"))
+    try runner.flow(id, to: .part(store.part(id, "gh")))
     finish("gh", fetched(["a"]))
 
     let trial = try trials.start(id, .init(from: ["judge"], to: ["judge"]))
     waitCalls("judge", 1)
-    XCTAssertEqual(ids("judge"), ["gh:a"])
+    XCTAssertEqual(ids("judge"), [downstream("gh", "a", of: id)])
     XCTAssertEqual(calls("gh").count, 1, "上流は動かない")
     finish("judge", "")
     ended(trial)
 
     XCTAssertEqual(trial.range.path.map(\.key), ["judge"])
-    XCTAssertEqual(store.automation(id)?.state("judge").inbox, 1)
+    XCTAssertEqual(store.automation(id)?.state(key: "judge").inbox, 1)
   }
 
   /// 合流の一部: 指した 2 つの取得と判定だけが動き、判定は道の外の取得を待たない。
@@ -36,7 +36,8 @@ extension AutomationTrialTests {
     finish("gh", fetched(["a"]))
     finish("backlog", fetched(["b"]))
     waitCalls("judge", 1)
-    XCTAssertEqual(Set(ids("judge")), ["gh:a", "backlog:b"])
+    XCTAssertEqual(
+      Set(ids("judge")), [downstream("gh", "a", of: id), downstream("backlog", "b", of: id)])
     finish("judge", "")
     ended(trial)
 
@@ -59,8 +60,8 @@ extension AutomationTrialTests {
     finish("digest", "a が来た")
     ended(trial)
 
-    XCTAssertEqual(trial.range.to, ["judge", "digest"])
-    XCTAssertEqual(trial.passes["digest"]?.first?.run.result, .report(text: "a が来た"))
+    XCTAssertEqual(trial.targetKeys, ["judge", "digest"])
+    XCTAssertEqual(trial.passes(key: "digest").first?.run.result, .report(text: "a が来た"))
   }
 
   /// 指した入口から届かない行き先は断る。
@@ -75,5 +76,22 @@ extension AutomationTrialTests {
     XCTAssertThrowsError(try trials.start(id, .init(to: ["nope"]))) {
       XCTAssertEqual($0 as? AutomationError, .partNotFound(id, "nope"))
     }
+  }
+
+  /// `limit` は取得が下流へ渡す行を先頭から絞る。
+  func testALimitCutsTheRowsAFetchPassesDown() throws {
+    let id = try define([
+      fetch("gh"), part("p", from: ["gh"]), part("d", from: ["p"], deliver: .report),
+    ])
+    let trial = try trials.start(id, .init(limit: 2))
+    waitCalls("gh", 1)
+    finish("gh", fetched(["a", "b", "c"]))
+    waitCalls("p", 1)
+    XCTAssertEqual(ids("p"), [downstream("gh", "a", of: id), downstream("gh", "b", of: id)])
+    finish("p", "")
+    ended(trial)
+    XCTAssertEqual(
+      rows(trial, "gh"), [downstream("gh", "a", of: id), downstream("gh", "b", of: id)])
+    XCTAssertEqual(trial.passes(key: "gh").first?.run.result, .fetch(fresh: 3, duplicates: 0))
   }
 }

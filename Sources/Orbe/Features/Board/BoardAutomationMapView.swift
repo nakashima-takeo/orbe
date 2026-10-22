@@ -7,7 +7,7 @@ import SwiftUI
 struct BoardAutomationMapView: View {
   let model: BoardAutomationModel
   let detail: BoardAutomationDetailValue
-  let selected: String?
+  let selected: AutomationPartID?
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
@@ -26,7 +26,7 @@ struct BoardAutomationMapView: View {
         let view = BoardMapRowView(
           row: row, laneCount: detail.laneCount, roleWidth: roleWidth, selected: selected)
         if case .part(let part) = row.content {
-          view.contentShape(Rectangle()).onTapGesture { model.tapPart(part.key) }
+          view.contentShape(Rectangle()).onTapGesture { model.tapPart(part.id) }
         } else {
           view
         }
@@ -54,7 +54,7 @@ struct BoardMapRowView: View {
   let laneCount: Int
   /// 役割の列の幅（地図の行で揃える）。
   let roleWidth: CGFloat
-  let selected: String?
+  let selected: AutomationPartID?
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
@@ -84,7 +84,7 @@ struct BoardMapRowView: View {
   }
 
   private var isSelected: Bool {
-    if case .part(let part) = row.content { return part.key == selected }
+    if case .part(let part) = row.content { return part.id == selected }
     return false
   }
 
