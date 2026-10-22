@@ -57,7 +57,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     let now = model.runner.now()
     let text = model.text(LocalizationStore(language: .ja), now: now)
     let states = Dictionary(
-      uniqueKeysWithValues: model.standings(at: now).map { ($0.id, $0.state) })
+      uniqueKeysWithValues: model.standings.map { ($0.id, $0.state) })
 
     XCTAssertEqual(states[charge], .running)
     XCTAssertEqual(model.summary(charge, text: text, now: now)?.mark, .failure, "流している間も前回の印")

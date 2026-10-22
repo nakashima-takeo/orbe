@@ -93,7 +93,7 @@ struct BoardAutomationColumns: View {
 
   var body: some View {
     let text = model.text(l10n, now: now)
-    let standings = model.standings(at: now)
+    let standings = model.standings
     HStack(spacing: 0) {
       BoardAutomationList(model: model, standings: standings, text: text, now: now)
         .contentShape(Rectangle())

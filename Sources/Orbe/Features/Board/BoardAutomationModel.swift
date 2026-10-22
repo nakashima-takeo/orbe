@@ -78,15 +78,15 @@ import SwiftUI
 
   var store: AutomationStore { runner.store }
 
-  /// `now` での立ち位置で並べた自動化: 失敗した部品がある・定義を読めない（止めていない）→ それ以外（止めていない）→ 止めて
-  /// いる。群の中は ID 順。描く経路は描くときの今を、描かない経路は走らせ役の今を渡す。
-  func standings(at now: Date) -> [BoardAutomationStanding] {
-    (store.automations.map { BoardAutomationStanding($0, runner: runner, now: now) }
+  /// 立ち位置で並べた自動化: 失敗した部品がある・定義を読めない（止めていない）→ それ以外（止めていない）→ 止めている。群の中は
+  /// ID 順。
+  var standings: [BoardAutomationStanding] {
+    (store.automations.map { BoardAutomationStanding($0, runner: runner) }
       + store.unreadable.map(BoardAutomationStanding.init))
       .sorted { ($0.group, $0.id) < ($1.group, $1.id) }
   }
 
-  var ids: [Int] { standings(at: runner.now()).map(\.id) }
+  var ids: [Int] { standings.map(\.id) }
 
   /// 選べる段の並び（欄が先頭、続いて一覧の行）。
   var stops: [Stop] { [.request] + ids.map(Stop.automation) }

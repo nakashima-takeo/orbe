@@ -88,13 +88,6 @@ struct AutomationDrops: Equatable {
   mutating func add(_ other: AutomationDrops) {
     for (reason, count) in other.counts { add(reason, count) }
   }
-
-  /// `other` を差し引いたもの（0 以下の理由は落とす）。
-  func subtracting(_ other: AutomationDrops) -> AutomationDrops {
-    var rest = AutomationDrops()
-    for (reason, count) in counts { rest.add(reason, count - (other.counts[reason] ?? 0)) }
-    return rest
-  }
 }
 
 /// 結果を初めて断った回の印（部品ごと）。印の回の記録から導く。

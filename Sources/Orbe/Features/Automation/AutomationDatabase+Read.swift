@@ -193,20 +193,6 @@ extension AutomationDatabase {
       }
     }
   }
-
-  /// 行の下流へ渡す 1 行（参照から）。試走の与えた行を読み直すのに使う。
-  func body(of ref: AutomationRowRef) throws -> String? {
-    switch ref {
-    case .version(let id):
-      try db.select("SELECT body FROM item_versions WHERE id = ?", [.integer(Int64(id))]) {
-        $0.text(at: 0)
-      }.first ?? nil
-    case .event(let id):
-      try db.select("SELECT body FROM events WHERE id = ?", [.integer(Int64(id))]) {
-        $0.text(at: 0)
-      }.first ?? nil
-    }
-  }
 }
 
 /// 試走が根の受け手の読みに掛ける上書き。与えた行は読んだ位置によらず読み、その回が有効にした行と与えた行は先頭から `limit`

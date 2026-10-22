@@ -174,7 +174,7 @@ extension BoardAutomationDetailValue {
       last: latest.map {
         BoardMapPart.Last(
           mark: $0.failed ? .failure : .success, at: text.recent($0.startedAt),
-          amount: $0.run.flatMap { BoardAutomationSummary.amount($0, node: node, text: text) })
+          amount: $0.run.flatMap { BoardAutomationSummary.amount($0, text: text) })
       },
       failure: latest?.run.flatMap { text.failure($0, node: node) })
   }

@@ -98,7 +98,7 @@ extension BoardAutomationSummary {
   }
 
   /// 地図の前回の列の量（「新着 2 件」「1 件を次へ」「候補 2 件」）。報告・作業・外部操作は量を言わない（nil）。
-  static func amount(_ run: AutomationPartRun, node: AutomationGraph.Node, text: AutomationText)
+  static func amount(_ run: AutomationPartRun, text: AutomationText)
     -> (text: String, shade: BoardRunShade)?
   {
     let l10n = text.l10n
