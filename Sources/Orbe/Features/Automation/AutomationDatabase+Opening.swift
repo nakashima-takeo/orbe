@@ -44,50 +44,68 @@ extension AutomationDatabase {
     case unreadable(AutomationUnreadable)
   }
 
-  /// 自動化 1 つを、部品・つながり・使う動作の定義の行から組んで検証する。通らなければ定義を読めない自動化。
+  /// 自動化 1 つを、部品・つながり・使う動作の定義の行から外の形の型に組み、検証に通す。組めないか通らなければ定義を読めない
+  /// 自動化。
   private func automation(_ row: AutomationRow) throws -> Assembled {
-    let parts = try partRows(of: row.id)
-    var object: [String: Any] = ["name": row.name, "parts": parts.map(\.object)]
-    if let notify = row.notify { object["notify"] = notify }
-    func broken(_ reason: String) -> Assembled {
+    let rows = try partRows(of: row.id)
+    let notify = row.notify.flatMap(AutomationNotify.init)
+    func broken(_ reason: String, _ definition: Any) -> Assembled {
       .unreadable(
         AutomationUnreadable(
           id: row.id, name: try? TaskStore.validTitle(row.name), version: row.version,
-          definition: Self.jsonText(object), reason: reason, parts: parts.map(\.id)))
+          definition: Self.jsonText(definition), reason: reason, parts: rows.map(\.id)))
     }
-    if let problem = parts.lazy.compactMap(\.problem).first { return broken(problem) }
+    let keys = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.key) })
+    var parts: [AutomationDefinition.Part] = []
+    for (index, part) in rows.enumerated() {
+      switch Self.part(part, at: index, keys: keys) {
+      case .success(let typed): parts.append(typed)
+      case .failure(let problem): return broken(problem.reason, Self.rawDefinition(row, rows, keys))
+      }
+    }
+    let definition = AutomationDefinition(name: row.name, notify: notify, parts: parts)
     let checked: (name: String, parts: [AutomationGraph.Checked])
     do throws(AutomationError) {
-      checked = try AutomationDefinition.decode(object).checked()
+      checked = try definition.checked()
     } catch {
-      return broken(Self.reason(error))
+      return broken(Self.reason(error), AutomationWire.object(definition))
     }
     let graph = AutomationGraph(
       checked.parts,
-      parts: zip(checked.parts, parts).map { checked, row in
-        AutomationPart(
-          id: row.id, key: checked.part.key, name: checked.part.name,
-          trigger: checked.part.trigger, maxItems: checked.part.maxItems, defId: row.defId)
+      parts: zip(checked.parts, rows).map { checked, row in
+        AutomationStore.entity(checked.part, id: row.id, defId: row.defId)
       })
     var states: [AutomationPartID: AutomationPartState] = [:]
-    for part in parts { states[part.id] = try state(of: part.id) }
+    for part in rows { states[part.id] = try state(of: part.id) }
     return .readable(
       Automation(
-        id: row.id, name: checked.name, notify: row.notify.flatMap(AutomationNotify.init),
-        graph: graph, pausedAt: row.pausedAt.map(AutomationPersistence.date),
-        version: row.version, createdAt: AutomationPersistence.date(row.createdAt), parts: states))
+        id: row.id, name: checked.name, notify: notify, graph: graph,
+        pausedAt: row.pausedAt.map(AutomationPersistence.date), version: row.version,
+        createdAt: AutomationPersistence.date(row.createdAt), parts: states))
   }
 
-  /// 自動化の外していない部品の行。外の形の JSON に組めた分と、組めなかった理由を持つ。
+  /// 自動化の外していない部品の行（保存したままの値）。
   private struct PartRow {
     let id: AutomationPartID
     let defId: AutomationDefID
-    let object: [String: Any]
-    let problem: String?
+    let key: String
+    let name: String
+    let trigger: String?
+    let maxItems: Int?
+    /// 組み合わせの定義を指すか。
+    let composite: Bool
+    let action: String?
+    /// 入力（上流の部品・取り方・古さの上限。`from` の順）。
+    let inputs: [AutomationPartEdge]
+  }
+
+  /// 部品を型に組めなかった理由（定義の中の場所で言う英文）。
+  private struct Unbuilt: Error {
+    let reason: String
   }
 
   private func partRows(of automation: Int) throws -> [PartRow] {
-    let rows = try db.select(
+    try db.select(
       """
       SELECT p.id, p.key, p.name, p.trigger, p.max_items, p.def_id, d.kind, a.action
       FROM parts p JOIN part_defs d ON d.id = p.def_id LEFT JOIN action_defs a ON a.id = p.def_id
@@ -95,51 +113,102 @@ extension AutomationDatabase {
       """, [.integer(Int64(automation))]
     ) { s in
       (
-        id: s.int(at: 0), key: s.text(at: 1) ?? "", name: s.text(at: 2) ?? "",
-        trigger: s.text(at: 3), maxItems: s.optionalInt64(at: 4), defId: s.int(at: 5),
-        kind: s.text(at: 6), action: s.text(at: 7)
+        id: AutomationPartID(s.int(at: 0)), key: s.text(at: 1) ?? "", name: s.text(at: 2) ?? "",
+        trigger: s.text(at: 3), maxItems: s.optionalInt64(at: 4).map(Int.init),
+        defId: AutomationDefID(s.int(at: 5)), composite: s.text(at: 6) == "composite",
+        action: s.text(at: 7)
       )
+    }.map { row in
+      PartRow(
+        id: row.id, defId: row.defId, key: row.key, name: row.name, trigger: row.trigger,
+        maxItems: row.maxItems, composite: row.composite, action: row.action,
+        inputs: try db.select(
+          """
+          SELECT from_part_id, take, max_age_hours FROM part_edges WHERE to_part_id = ?
+          ORDER BY position
+          """, [.integer(Int64(row.id.rawValue))]
+        ) { s in
+          AutomationPartEdge(
+            from: AutomationPartID(s.int(at: 0)),
+            take: AutomationTake(rawValue: s.text(at: 1) ?? "") ?? .new,
+            maxAgeHours: s.optionalInt64(at: 2).map(Int.init))
+        })
     }
-    let keys = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.key) })
-    return try rows.enumerated().map { index, row in
-      var object: [String: Any] = ["id": row.id, "key": row.key, "name": row.name]
-      var problem: String?
-      if let trigger = row.trigger.flatMap(Self.jsonObject) {
-        object["trigger"] = trigger
-      } else {
-        problem = "parts[\(index)].trigger: the stored trigger cannot be read"
-      }
-      if let maxItems = row.maxItems { object["inboxLimit"] = ["maxItems": maxItems] }
-      let from = try db.select(
-        """
-        SELECT from_part_id, take, max_age_hours FROM part_edges WHERE to_part_id = ?
-        ORDER BY position
-        """, [.integer(Int64(row.id))]
-      ) { s -> Any in
-        let key = keys[s.int(at: 0)] ?? ""
-        let take = s.text(at: 1) ?? "new"
-        guard take != "new" || !s.isNull(at: 2) else { return key }
-        var input: [String: Any] = ["part": key]
-        if take != "new" { input["take"] = take }
-        if let hours = s.optionalInt64(at: 2) { input["maxAgeHours"] = hours }
-        return input
-      }
-      if !from.isEmpty { object["from"] = from }
-      if row.kind == "composite" {
-        // 組み合わせの部品を書く Orbe は DB の版を上げるので、版 2 の DB にあるのは壊れた値。
-        problem =
-          problem
-          ?? "parts[\(index)]: the stored definition is made of parts, which this database version "
-          + "does not hold"
-      } else if let action = row.action.flatMap(Self.jsonObject) {
-        object.merge(action) { current, _ in current }
-      } else {
-        problem = problem ?? "parts[\(index)]: the stored action cannot be read"
-      }
-      return PartRow(
-        id: AutomationPartID(row.id), defId: AutomationDefID(row.defId), object: object,
-        problem: problem)
+  }
+
+  /// 部品の行を外の形の部品に組む。予定と動作の定義は保存した JSON をそれぞれの型で読み、入力の上流はこの自動化の今の鍵に
+  /// 解く。読めなければ定義の中の場所で言う理由。
+  private static func part(
+    _ row: PartRow, at index: Int, keys: [AutomationPartID: String]
+  ) -> Result<AutomationDefinition.Part, Unbuilt> {
+    let at = "parts[\(index)]"
+    guard let storedTrigger = row.trigger.flatMap(jsonObject) else {
+      return .failure(Unbuilt(reason: "\(at).trigger: the stored trigger cannot be read"))
     }
+    guard !row.composite else {
+      return .failure(
+        Unbuilt(
+          reason: "\(at): the stored definition is made of parts, which this database version "
+            + "does not hold"))
+    }
+    guard let storedAction = row.action.flatMap(jsonObject) else {
+      return .failure(Unbuilt(reason: "\(at): the stored action cannot be read"))
+    }
+    let trigger: AutomationPart.Trigger
+    let action: AutomationActionDef
+    do throws(Unbuilt) {
+      trigger = try decode(AutomationPart.Trigger.self, storedTrigger, at: "\(at).trigger")
+      action = try decode(AutomationActionDef.self, storedAction, at: at)
+    } catch {
+      return .failure(error)
+    }
+    return .success(
+      AutomationDefinition.Part(
+        id: row.id, key: row.key, name: row.name, trigger: trigger,
+        from: row.inputs.map {
+          AutomationDefinition.Input(
+            part: keys[$0.from] ?? "", take: $0.take, maxAgeHours: $0.maxAgeHours)
+        }, action: action, maxItems: row.maxItems))
+  }
+
+  private static func decode<T: Decodable>(_ type: T.Type, _ object: [String: Any], at: String)
+    throws(Unbuilt) -> T
+  {
+    do {
+      return try AutomationWire.decoder.decode(
+        type, from: try JSONSerialization.data(withJSONObject: object))
+    } catch {
+      throw Unbuilt(reason: AutomationDefinition.reason(error, at: at))
+    }
+  }
+
+  /// 型に組めない自動化の外の形（AI が直すため）。行の生の値から組み、読めない値は読めた分だけを置く。
+  private static func rawDefinition(
+    _ row: AutomationRow, _ parts: [PartRow], _ keys: [AutomationPartID: String]
+  ) -> [String: Any] {
+    var object: [String: Any] = [
+      "name": row.name,
+      "parts": parts.map { part -> [String: Any] in
+        var object: [String: Any] = ["id": part.id.rawValue, "key": part.key, "name": part.name]
+        if let trigger = part.trigger.flatMap(jsonObject) { object["trigger"] = trigger }
+        if let maxItems = part.maxItems { object["inboxLimit"] = ["maxItems": maxItems] }
+        let from = part.inputs.map { edge -> Any in
+          let key = keys[edge.from] ?? ""
+          guard edge.take != .new || edge.maxAgeHours != nil else { return key }
+          var input: [String: Any] = ["part": key]
+          if edge.take != .new { input["take"] = edge.take.rawValue }
+          if let hours = edge.maxAgeHours { input["maxAgeHours"] = hours }
+          return input
+        }
+        if !from.isEmpty { object["from"] = from }
+        if !part.composite, let action = part.action.flatMap(jsonObject) {
+          object.merge(action) { current, _ in current }
+        }
+        return object
+      },
+    ]
+    if let notify = row.notify { object["notify"] = notify }
+    return object
   }
 
   /// 覚えている候補。指す行や値が読めない候補は、リンクだけを持つ読めない候補にする。
