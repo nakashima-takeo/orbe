@@ -184,7 +184,8 @@ struct HeadlessCLI {
   }
 }
 
-/// 裏の agent に足す MCP サーバー 1 つ（標準入出力で話す）。`tools` は許すツールの完全名。
+/// 裏の agent に足す MCP サーバー 1 つ（標準入出力で話す）。`environment` はサーバーに渡す変数で、値は CLI の環境に置き、
+/// 設定には名前の参照だけを書く——回の札がコマンド行（プロセス一覧と回の記録）に出ないため。`tools` は許すツールの完全名。
 struct HeadlessServer: Equatable {
   let name: String
   let command: String
@@ -232,13 +233,15 @@ enum ClaudeHeadless {
     return args
   }
 
-  /// `{"mcpServers": {"<名前>": {"type": "stdio", "command", "args": [], "env"}}}`。
+  /// `{"mcpServers": {"<名前>": {"type": "stdio", "command", "args": [], "env"}}}`。`env` は値でなく `${名前}` の参照で、
+  /// claude が自分の環境から展開する（値は `HeadlessServer.environment` を CLI の環境に置いたもの）。
   private static func mcpConfig(_ server: HeadlessServer) -> String {
     let config: [String: Any] = [
       "mcpServers": [
         server.name: [
           "type": "stdio", "command": server.command, "args": [String](),
-          "env": server.environment,
+          "env": Dictionary(
+            uniqueKeysWithValues: server.environment.keys.map { ($0, "${\($0)}") }),
         ] as [String: Any]
       ]
     ]

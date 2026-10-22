@@ -28,7 +28,7 @@ final class ClaudeHeadlessTests: OrbeTestCase {
     XCTAssertTrue(args.contains("--strict-mcp-config"))
   }
 
-  /// Orbe の口のサーバーは `--mcp-config` で足し、そのツールだけを許すものに足す。利用者の MCP のツールが無ければ、利用者の
+  /// Orbe の口のサーバーは `--mcp-config` で足し、そのツールだけを許すものに足す。サーバーの環境は `${名前}` の参照で書く。利用者の MCP のツールが無ければ、利用者の
   /// 設定も MCP サーバーも読まない閉じた形のまま。
   func testOrbeServerIsAddedWithOnlyItsTools() throws {
     let server = HeadlessServer(
@@ -41,8 +41,10 @@ final class ClaudeHeadlessTests: OrbeTestCase {
     let config = try XCTUnwrap(args.firstIndex(of: "--mcp-config")).advanced(by: 1)
     XCTAssertEqual(
       args[config],
-      #"{"mcpServers":{"orbe_run":{"args":[],"command":"/A/orbe-mcp","env":{"ORBE_RUN_TOKEN":"t"},"#
-        + #""type":"stdio"}}}"#)
+      #"{"mcpServers":{"orbe_run":{"args":[],"command":"/A/orbe-mcp","#
+        + #""env":{"ORBE_RUN_TOKEN":"${ORBE_RUN_TOKEN}"},"type":"stdio"}}}"#,
+      "環境は参照だけで、値（回の札）はコマンド行に出さない")
+    XCTAssertFalse(args.contains { $0.contains(#""t""#) })
     XCTAssertTrue(args.contains("--strict-mcp-config"))
     XCTAssertEqual(Array(args.suffix(3)), ["--setting-sources", "", "--strict-mcp-config"])
   }

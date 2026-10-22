@@ -49,18 +49,34 @@ extension BackgroundRunsTests {
     XCTAssertEqual(ended.first?["isError"] as? Bool, true, "終わった回の札は断られる")
   }
 
-  /// claude に渡した `--mcp-config` の Orbe の口のサーバー（起こすコマンドと環境）。
+  /// claude に渡した `--mcp-config` の Orbe の口のサーバー（起こすコマンドと環境）。環境は `${名前}` の参照で、claude が自分の
+  /// 環境から展開するのと同じく、偽の claude が受けた環境から値を引く。
   private func orbeServer(in arguments: [String]) throws -> (command: String, env: [String: String])
   {
+    let received = Dictionary(
+      try String(contentsOf: bin.appendingPathComponent("env"), encoding: .utf8)
+        .split(separator: "\n").compactMap { line -> (String, String)? in
+          guard let equal = line.firstIndex(of: "=") else { return nil }
+          return (String(line[..<equal]), String(line[line.index(after: equal)...]))
+        }, uniquingKeysWith: { $1 })
     let index = try XCTUnwrap(arguments.firstIndex(of: "--mcp-config"), "\(arguments)")
     let config = try XCTUnwrap(
       JSONSerialization.jsonObject(with: Data(arguments[index + 1].utf8)) as? [String: Any])
     let servers = try XCTUnwrap(config["mcpServers"] as? [String: [String: Any]])
     let server = try XCTUnwrap(servers[BackgroundOrbeAccess.server], "\(servers.keys)")
+    let env = try XCTUnwrap(server["env"] as? [String: String])
+    XCTAssertFalse(arguments.joined().contains(token(in: received)), "札はコマンド行に出さない")
     return (
       try XCTUnwrap(server["command"] as? String),
-      try XCTUnwrap(server["env"] as? [String: String])
+      try env.mapValues { reference in
+        guard reference.hasPrefix("${"), reference.hasSuffix("}") else { return reference }
+        return try XCTUnwrap(received[String(reference.dropFirst(2).dropLast())], reference)
+      }
     )
+  }
+
+  private func token(in env: [String: String]) -> String {
+    env["ORBE_RUN_TOKEN"] ?? "ORBE_RUN_TOKEN is missing"
   }
 
   /// 定義どおりに `orbe-mcp` を起こし（環境は定義の分と PATH だけ）、要求を順に流して各応答の `result` を返す。

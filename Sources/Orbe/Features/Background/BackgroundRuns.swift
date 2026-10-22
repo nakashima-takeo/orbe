@@ -311,7 +311,9 @@ private struct Prepared {
     let watched = tools.filter { $0.hasPrefix("mcp__") }
     let spec = BackgroundProcess.Spec(
       executable: executable, arguments: arguments,
-      environment: env.merging(cli.environment(tools)) { $1 }, directory: directory.path,
+      environment: env.merging(cli.environment(tools)) { $1 }
+        .merging(server?.environment ?? [:]) { $1 },
+      directory: directory.path,
       stdin: Data(call.prompt.utf8), elapsedLimit: limits.elapsed,
       idleLimit: limits.idle,
       stdout: .lines(maxLength: BackgroundRuns.eventLineLimit) { line in
