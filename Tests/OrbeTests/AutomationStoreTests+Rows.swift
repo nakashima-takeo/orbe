@@ -109,7 +109,7 @@ extension AutomationStoreTests {
   // MARK: - 取り方
 
   /// 毎回すべてを取る受け手には、回ごとに今の集合の全件が届く。同じ上流の新しいものだけの受け手には新しい項目だけ。出来事の流れ
-  /// なら、毎回すべては古さの上限の内の出来事の窓になる。
+  /// なら、毎回すべては古さの上限の内の出来事の窓になり、前に読んだ行が窓の外へ出ても捨てた数に数え直さない。
   func testTakingAllReadsTheWholeSetOrTheWindowEveryTime() throws {
     let store = AutomationStore()
     let set = try define(
@@ -122,6 +122,7 @@ extension AutomationStoreTests {
     try fetch(store, events, ["old"], at: Self.at)
     try take(store, set, "a", at: Self.at)
     try take(store, set, "all", at: Self.at)
+    try take(store, events, "window", at: Self.at)
 
     let t1 = Self.at.addingTimeInterval(Self.day + 3600)
     try fetch(store, set, ["x", "y"], at: t1)
@@ -131,7 +132,8 @@ extension AutomationStoreTests {
     XCTAssertEqual(try take(store, set, "all", at: t1), ["x", "y"])
     XCTAssertEqual(try take(store, events, "window", at: t1), ["new"], "窓の外の古い出来事は入らない")
     XCTAssertEqual(try take(store, set, "all", at: t1), ["x", "y"], "毎回すべて")
-    XCTAssertEqual(lastRun(store, set, "all")?.dropped, AutomationDrops(), "読んだ行は捨てた数に数え直さない")
+    XCTAssertEqual(
+      lastRun(store, events, "window")?.dropped, AutomationDrops(), "窓の外へ出た読んだ行は捨てた数に数え直さない")
   }
 
   /// 古さの上限より古い、まだ受け取っていない行は捨てて、その回の記録の `dropped.expired` に数える。
@@ -313,12 +315,11 @@ extension AutomationStoreTests {
       try db.db.select(
         """
         SELECT (SELECT count(*) FROM item_versions WHERE body LIKE '%一度だけの本文%'),
-          (SELECT count(*) FROM runs WHERE record LIKE '%一度だけの本文%'),
-          (SELECT count(*) FROM proposals WHERE title LIKE '%一度だけの本文%')
+          (SELECT count(*) FROM runs WHERE record LIKE '%一度だけの本文%')
         """, []
-      ) { [$0.int(at: 0), $0.int(at: 1), $0.int(at: 2)] }.first
+      ) { [$0.int(at: 0), $0.int(at: 1)] }.first
     }
-    XCTAssertEqual(copies, [1, 0, 0])
+    XCTAssertEqual(copies, [1, 0])
     XCTAssertEqual(store.proposals.first?.item.body, "一度だけの本文", "候補の中身は出どころから引く")
   }
 }

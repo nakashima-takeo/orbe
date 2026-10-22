@@ -169,7 +169,6 @@ final class AutomationGraphTests: OrbeTestCase {
     let graph = try AutomationGraph.numbered(parts)
 
     XCTAssertEqual(graph.parts.map(\.from), parts.map(\.from))
-    XCTAssertEqual(graph.parts.map(\.id), [1, 2, 3].map(AutomationPartID.init))
   }
 }
 

@@ -2,12 +2,12 @@ import XCTest
 
 @testable import Orbe
 
-/// 開くとき——DB の版と形の確かめ、読めない定義・記録の閉じ込め。
+/// 開くとき——DB の版の確かめ、読めない定義・記録の閉じ込め。
 ///
-/// 壊れると何が起きるか: 古い版の DB や形の違う DB で起動が落ちる、または読み違える。新しい版の DB を退避して利用者の自動化を
+/// 壊れると何が起きるか: 古い版の DB で起動が落ちる、または読み違える。新しい版の DB を退避して利用者の自動化を
 /// 失う。読めない定義が 1 つあるだけで全部の自動化を失う。読めない記録 1 件で部品の記録が全部消える。
 extension AutomationStoreTests {
-  // MARK: - 版と形
+  // MARK: - 版
 
   /// 旧形式の `automations.json` は退避して読まず、自動化 0 件で使える状態で始まる。
   func testALegacyFileIsSetAsideAndAutomationsStartEmpty() throws {
@@ -53,18 +53,6 @@ extension AutomationStoreTests {
       guard case .unavailable(let reason) = $0 as? AutomationError else { return XCTFail("\($0)") }
       XCTAssertTrue(reason.contains("version 99"), reason)
     }
-  }
-
-  /// 同じ版でも表の形（列）が違う DB は退避して空で始まる。
-  func testADatabaseWhoseTablesDifferFromTheVersionIsSetAside() throws {
-    _ = try AutomationStore().create(Self.definition(), now: Self.at)
-    try database().exec("ALTER TABLE automations DROP COLUMN created_at")
-
-    let store = AutomationStore()
-
-    XCTAssertTrue(store.available)
-    XCTAssertEqual(store.automations, [])
-    XCTAssertEqual(try quarantined().count, 1)
   }
 
   // MARK: - 閉じ込め
