@@ -145,8 +145,6 @@ enum AutomationLineFault: Equatable {
   case notNonEmptyArray(String)
   /// 報告の文が空。
   case emptyReport
-  /// 報告を 2 度渡した。
-  case reportTwice
 
   init<Item>(_ reason: JSONLines<Item>.Reason) {
     switch reason {
@@ -180,7 +178,6 @@ enum AutomationLineFault: Equatable {
       "propose \(id): workspace \(number) is not a listed workspace"
     case .notNonEmptyArray(let key): "\(key) must be a non-empty array"
     case .emptyReport: "the report is empty"
-    case .reportTwice: "the report was already given"
     }
   }
 }
@@ -349,7 +346,6 @@ extension AutomationBrokenLine: Codable {
       fault = .workspaceNotListed(try string(.id), try c.decode(Int.self, forKey: .workspace))
     case "notNonEmptyArray": fault = .notNonEmptyArray(try string(.key))
     case "emptyReport": fault = .emptyReport
-    case "reportTwice": fault = .reportTwice
     default:
       throw DecodingError.dataCorruptedError(
         forKey: .kind, in: c, debugDescription: "unknown line fault")
@@ -384,7 +380,6 @@ extension AutomationBrokenLine: Codable {
       try c.encode(number, forKey: .workspace)
     case .notNonEmptyArray(let key): try kind("notNonEmptyArray", [(.key, key)])
     case .emptyReport: try kind("emptyReport")
-    case .reportTwice: try kind("reportTwice")
     }
   }
 }

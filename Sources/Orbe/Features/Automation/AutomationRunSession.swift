@@ -192,7 +192,6 @@ final class AutomationRunSession {
     guard let text = arguments["text"] as? String else {
       return refuse(.typeMismatch("text"), "give the report as a string")
     }
-    guard outputs.report == nil else { return refuse(.reportTwice, "give the report once") }
     guard outputs.putReport(text) else {
       return refuse(
         .emptyReport, "when there is nothing to report, call \(Tool.reportNothing.rawValue)")

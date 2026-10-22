@@ -125,7 +125,6 @@ extension L10n {
     ),
     .automationFaultNotNonEmptyArray: ("%@ が空でない配列でない", "%@ isn’t a non-empty array"),
     .automationFaultEmptyReport: ("報告が空", "the report is empty"),
-    .automationFaultReportTwice: ("報告を 2 度出した", "the report was given twice"),
     .automationDismissedAlready: ("既に候補にあるので %lld 件を捨てた", "dropped %lld already proposed"),
     .automationDismissedNoOpen: (
       "対応済みにする候補が無いので %lld 件を捨てた", "dropped %lld with no waiting proposal"

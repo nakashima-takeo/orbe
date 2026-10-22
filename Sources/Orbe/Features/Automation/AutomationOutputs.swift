@@ -52,9 +52,10 @@ struct AutomationOutputs {
     return broken
   }
 
-  /// 報告・仕事の文。前後の空白を除いて上限で切り（切ったら「…」を付ける）、空なら受けない。2 つ目は受けない。
+  /// 報告・仕事の文。前後の空白を除いて上限で切り（切ったら「…」を付ける）、空なら受けない。出し直した報告は前の報告を
+  /// 置き換える——報告は 1 つの文なので、直した中身を受ける。
   mutating func putReport(_ text: String) -> Bool {
-    guard report == nil, let kept = Self.kept(text) else { return false }
+    guard let kept = Self.kept(text) else { return false }
     report = kept
     return true
   }
