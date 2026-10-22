@@ -12,7 +12,7 @@ import XCTest
 /// `proposals` の `automationId`、`set` の `definition`、`run` の `partKey`）はここでしか測れない。`resume` が
 /// `paused:true` を送ると、exit 0 を返しながら止まったままになる。`run` が `partKey` を落とすと、指した部品の先まで流れる。
 /// `try` が範囲・行・limit を落とすと、AI が指したのと違う試走が黙って走る。`trial --wait` が時間切れを 0 で返すと、AI は
-/// 途中の結果を終わった結果と読む。
+/// 途中の結果を終わった結果と読む。`runs` が `partKey`・`before` を落とすと、AI は別の部品の回や同じページを続きと読む。
 ///
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliAutomationProcessTests: OrbeTestCase {
@@ -168,6 +168,43 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertEqual(run(control, ["proposals"]).split(separator: "\n").count, 2)
   }
 
+  /// `runs <id>` は回の記録を新しい順に 1 行 1 回（記録の ID と回の要約）で出し、続きがあれば最後に `next <記録の ID>` を出す。
+  /// `--part` はその部品だけ、`--limit` は 1 ページの件数、`--before` は前のページの `next` からの続き。
+  func testRunsPagesThePastRunsNewestFirst() throws {
+    let control = try startControlProcess()
+    let id = try XCTUnwrap(
+      Int(
+        run(
+          control, ["set"],
+          stdin: #"{"name": "取得と記録", "parts": ["#
+            + #"{"key": "fetch", "name": "取る", "trigger": {"kind": "interval", "minutes": 30}, "#
+            + #""coverage": "currentSet", "command": "true"}, "#
+            + #"{"key": "note", "name": "記録", "trigger": {"kind": "manual"}, "from": ["fetch"], "#
+            + #""command": "true", "deliver": "none"}]}"#)))
+    let store = control.target.automationStore
+    let start = Date()
+    for (offset, key) in [(0, "fetch"), (60, "note"), (120, "fetch"), (180, "fetch")] {
+      try store.record(
+        id, part: key, at: start.addingTimeInterval(TimeInterval(offset)),
+        outcome: key == "fetch"
+          ? DesignSceneFixtures.fetched([WindowControllerAutomationControlTests.item("a")])
+          : DesignSceneFixtures.sideEffected(0))
+    }
+    let fetches = try XCTUnwrap(store.automation(id)?.state(key: "fetch").runs.map(\.id))
+    func lines(_ args: [String]) -> [[String]] {
+      run(control, ["runs", String(id)] + args).split(separator: "\n").map {
+        $0.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+      }
+    }
+
+    let first = lines(["--part", "fetch", "--limit", "2"])
+    XCTAssertEqual(first.map(\.[0]), ["\(fetches[0])", "\(fetches[1])", "next"])
+    XCTAssertTrue(first[0][1].hasSuffix(" fetch: 1 fetched, 0 new"), first[0][1])
+    XCTAssertEqual(first[2][1], "\(fetches[1])")
+    XCTAssertEqual(lines(["--part", "fetch", "--before", first[2][1]]).map(\.[0]), ["\(fetches[2])"])
+    XCTAssertEqual(lines([]).count, 4, "部品を指さなければ全部品の回")
+  }
+
   /// 定義の検証は control が持つ。標準入力が JSON オブジェクトでないのは usage エラー（2）、形の欠けは RPC エラー（1）。
   func testSetRejectsBrokenInput() throws {
     let control = try startControlProcess()
@@ -252,7 +289,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     for args in [
       ["list", "1"], ["proposals", "1", "2"], ["set", "1", "2"], ["run", "1", "2"],
       ["pause", "1", "2"], ["resume", "1", "2"], ["rm", "1", "2"], ["try", "1", "2"],
-      ["trial", "1", "2"],
+      ["trial", "1", "2"], ["runs", "1", "2"],
     ] {
       let outcome = ControlProcess.orbWithoutServer(["automation"] + args)
       let label = "orb automation \(args.joined(separator: " "))"
