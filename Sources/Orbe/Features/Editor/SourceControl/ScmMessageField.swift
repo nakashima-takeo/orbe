@@ -132,6 +132,8 @@ final class ScmMessageTextView: NSTextView {
     isAutomaticTextReplacementEnabled = false
     isVerticallyResizable = true
     isHorizontallyResizable = false
+    // 上限を開けないと、テキスト面は見えている枠より高くならず、10 行を越えた分へスクロールできない。
+    maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
     textContainerInset = NSSize(width: 0, height: Self.verticalInset)
     typingAttributes = [.font: Self.font, .foregroundColor: Theme.Color.textPrimary]
   }

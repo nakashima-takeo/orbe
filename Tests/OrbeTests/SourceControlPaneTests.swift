@@ -209,6 +209,32 @@ final class SourceControlPaneTests: OrbeTestCase {
     XCTAssertEqual(height(), Theme.Layout.editorScmMessage, accuracy: 0.5, "1 行に戻る")
   }
 
+  /// 欄は 10 行で止まり、その先は中がスクロールして、打った行とキャレットが見えるように送られる。
+  func testTheMessageScrollsPastTenLinesKeepingTheCaretInView() throws {
+    let hosted = host(try TempGitRepo())
+    let field = try type("a", in: hosted)
+    let scroll = try XCTUnwrap(field.enclosingScrollView)
+    let line = field.layoutManager!.defaultLineHeight(for: field.font!)
+    let tallest = Theme.Layout.editorScmMessage + line * CGFloat(ScmMessageField.maxLines - 1)
+    for lines in 2...13 {
+      field.keyDown(with: .key("\r", [.shift]))
+      let height = min(Theme.Layout.editorScmMessage + line * CGFloat(lines - 1), tallest)
+      pumpMain(
+        until: {
+          hosted.pane.layoutSubtreeIfNeeded()
+          return abs(scroll.frame.height - height) < 0.5
+        }, "\(lines) 行の高さ")
+      let caret = field.layoutManager!.extraLineFragmentRect.offsetBy(
+        dx: field.textContainerOrigin.x, dy: field.textContainerOrigin.y)
+      XCTAssertTrue(field.visibleRect.contains(caret), "\(lines) 行: キャレットの行が見える")
+      if lines <= ScmMessageField.maxLines {
+        XCTAssertEqual(scroll.contentView.bounds.minY, 0, "\(lines) 行: 収まる間は先頭の行から見える")
+      }
+    }
+    XCTAssertGreaterThan(field.frame.height, scroll.contentView.bounds.height, "中身は枠より高い")
+    XCTAssertGreaterThan(scroll.contentView.bounds.minY, 0, "中がスクロールしている")
+  }
+
   /// メッセージ欄の中身が外から変わった（コミットで空になった）ら、それまでの取り消しの履歴は捨てる——⌘Z は差し替え前の
   /// 文へ戻らず、今の文の外を戻そうとして例外を投げることもない。
   func testAnOutsideChangeOfTheMessageDiscardsTheFieldsUndo() throws {
