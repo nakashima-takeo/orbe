@@ -92,8 +92,8 @@ struct ScmMessageField: NSViewRepresentable {
   }
 }
 
-/// メッセージ欄の枠。スクロールバーはいつも overlay——AppKit は窓に載せた後に既定の型（マウスをつないだ Mac では legacy）へ
-/// 戻し、legacy のバーは 10 行を越えた途端に字の幅を狭めて折り返しを変える。
+/// メッセージ欄の枠。スクロールバーはいつも overlay——AppKit は推奨の型が変わるたびに setter で各枠をその型（マウスを
+/// つないだ Mac では legacy）へ戻し、legacy のバーは 10 行を越えた途端に字の幅を狭めて折り返しを変える。
 final class ScmMessageScrollView: NSScrollView {
   override var scrollerStyle: NSScroller.Style {
     get { super.scrollerStyle }

@@ -235,7 +235,7 @@ final class SourceControlPaneTests: OrbeTestCase {
     XCTAssertGreaterThan(field.frame.height, scroll.contentView.bounds.height, "中身は枠より高い")
     XCTAssertGreaterThan(scroll.contentView.bounds.minY, 0, "中がスクロールしている")
 
-    scroll.scrollerStyle = .legacy  // AppKit は窓に載せた後に既定（マウスをつないだ Mac では legacy）へ戻す
+    scroll.scrollerStyle = .legacy  // 推奨の型が legacy へ変わると、AppKit はこの setter で当て直す
     hosted.pane.layoutSubtreeIfNeeded()
     XCTAssertEqual(field.frame.width, scroll.frame.width, "スクロールバーが字の幅を狭めない")
   }
