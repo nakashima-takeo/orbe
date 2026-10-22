@@ -209,7 +209,8 @@ final class SourceControlPaneTests: OrbeTestCase {
     XCTAssertEqual(height(), Theme.Layout.editorScmMessage, accuracy: 0.5, "1 行に戻る")
   }
 
-  /// 欄は 10 行で止まり、その先は中がスクロールして、打った行とキャレットが見えるように送られる。
+  /// 欄は 10 行で止まり、その先は中がスクロールして、打った行とキャレットが見えるように送られる。スクロールバーは字の幅を
+  /// 狭めない。
   func testTheMessageScrollsPastTenLinesKeepingTheCaretInView() throws {
     let hosted = host(try TempGitRepo())
     let field = try type("a", in: hosted)
@@ -233,6 +234,11 @@ final class SourceControlPaneTests: OrbeTestCase {
     }
     XCTAssertGreaterThan(field.frame.height, scroll.contentView.bounds.height, "中身は枠より高い")
     XCTAssertGreaterThan(scroll.contentView.bounds.minY, 0, "中がスクロールしている")
+
+    scroll.scrollerStyle = .legacy
+    hosted.pane.layoutSubtreeIfNeeded()
+    XCTAssertEqual(scroll.scrollerStyle, .overlay, "AppKit が既定の legacy へ戻しても overlay")
+    XCTAssertEqual(field.frame.width, scroll.frame.width, "スクロールバーが字の幅を狭めない")
   }
 
   /// メッセージ欄の中身が外から変わった（コミットで空になった）ら、それまでの取り消しの履歴は捨てる——⌘Z は差し替え前の

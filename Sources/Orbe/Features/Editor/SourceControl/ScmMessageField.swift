@@ -27,7 +27,7 @@ struct ScmMessageField: NSViewRepresentable {
     text.onCommit = { [weak coordinator = context.coordinator] in
       coordinator?.field.panel.commitFromMessage(andPush: false)
     }
-    let scroll = NSScrollView()
+    let scroll = ScmMessageScrollView()
     scroll.documentView = text
     scroll.drawsBackground = false
     scroll.borderType = .noBorder
@@ -89,6 +89,16 @@ struct ScmMessageField: NSViewRepresentable {
       window.makeFirstResponder(text)
       field.panel.focusRequestDidApply()
     }
+  }
+}
+
+/// メッセージ欄の枠。スクロールバーはいつも overlay——AppKit は窓に載せた後に既定の型（マウスをつないだ Mac では legacy）へ
+/// 戻し、legacy のバーは 10 行を越えた途端に字の幅を狭めて折り返しを変える。
+final class ScmMessageScrollView: NSScrollView {
+  override var scrollerStyle: NSScroller.Style {
+    get { super.scrollerStyle }
+    // swiftlint:disable:next unused_setter_value
+    set { super.scrollerStyle = .overlay }
   }
 }
 
