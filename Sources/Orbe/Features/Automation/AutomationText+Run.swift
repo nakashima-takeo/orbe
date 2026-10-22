@@ -77,9 +77,10 @@ extension AutomationText {
     }
   }
 
-  /// 「3 件目：link が無い」。
+  /// 「3 件目：link が無い」（位置の無い誤りは理由だけ）。
   func line(_ broken: AutomationBrokenLine) -> String {
-    l10n.format(.automationLineAt, broken.line, fault(broken.fault))
+    guard let line = broken.line else { return fault(broken.fault) }
+    return l10n.format(.automationLineAt, line, fault(broken.fault))
   }
 
   /// 外れた件の理由。
@@ -101,6 +102,9 @@ extension AutomationText {
     case .titleNotOneLine: l10n.string(.automationFaultTitle)
     case .dueNotDate: l10n.string(.automationFaultDue)
     case .workspaceNotListed: l10n.string(.automationFaultWorkspace)
+    case .notNonEmptyArray(let key): l10n.format(.automationFaultNotNonEmptyArray, key)
+    case .emptyReport: l10n.string(.automationFaultEmptyReport)
+    case .reportTwice: l10n.string(.automationFaultReportTwice)
     }
   }
 

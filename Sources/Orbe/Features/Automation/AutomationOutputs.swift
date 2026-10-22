@@ -92,7 +92,7 @@ struct AutomationOutputs {
       rows.append(
         AutomationPartRow(id: accepted.item.id, text: accepted.text, origin: nil, source: nil))
     }
-    return broken.sorted { $0.line < $1.line }
+    return broken.sorted { ($0.line ?? 0) < ($1.line ?? 0) }
   }
 
   /// `id` の無い件・同じ `id` の 2 つ目・判定へ届くときの入力の行の `id` でない件は外れた件。
@@ -118,7 +118,7 @@ struct AutomationOutputs {
         AutomationPartRow(
           id: id, text: object.text, origin: inputs[id]?.origin, source: inputs[id]?.source))
     }
-    return broken.sorted { $0.line < $1.line }
+    return broken.sorted { ($0.line ?? 0) < ($1.line ?? 0) }
   }
 
   /// 案は取った行の `id` を指すものだけを受け、指した行の出どころを付ける。
@@ -146,7 +146,7 @@ struct AutomationOutputs {
         broken.append(line)
       }
     }
-    return broken.sorted { $0.line < $1.line }
+    return broken.sorted { ($0.line ?? 0) < ($1.line ?? 0) }
   }
 
   /// 1 件 1 行の JSON をオブジェクトとして読む。読めない件はすべて位置と理由で返す。

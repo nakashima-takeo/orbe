@@ -107,13 +107,13 @@ enum AutomationFailure: Error, Equatable {
 }
 
 /// 結果の中の、受け付けなかった 1 件。`line` は 1 度に出した分の中の 1 始まりの位置（agent は道具の 1 回の呼び出しの何件目、
-/// コマンドは標準出力の行番号。空行も数える）。
+/// コマンドは標準出力の行番号。空行も数える）。呼び出しの形そのものの誤り（空の配列・空の報告 など）は位置を持たない。
 struct AutomationBrokenLine: Error, Equatable {
-  let line: Int
+  let line: Int?
   let fault: AutomationLineFault
 
-  /// 「item <n>: <理由>」。
-  var text: String { "item \(line): \(fault.text)" }
+  /// 「item <n>: <理由>」（位置の無い誤りは理由だけ）。
+  var text: String { line.map { "item \($0): \(fault.text)" } ?? fault.text }
 }
 
 /// 行を受け付けなかった理由。
@@ -141,6 +141,12 @@ enum AutomationLineFault: Equatable {
   case dueNotDate(String, String)
   /// 判定の案の付け先が一覧に無い（id と番号）。
   case workspaceNotListed(String, Int)
+  /// 結果の道具の引数（欄の名前）が空でない配列でない。
+  case notNonEmptyArray(String)
+  /// 報告の文が空。
+  case emptyReport
+  /// 報告を 2 度渡した。
+  case reportTwice
 
   init<Item>(_ reason: JSONLines<Item>.Reason) {
     switch reason {
@@ -172,6 +178,9 @@ enum AutomationLineFault: Equatable {
     case .dueNotDate(let id, let raw): "propose \(id): due is not a YYYY-MM-DD date: \(raw)"
     case .workspaceNotListed(let id, let number):
       "propose \(id): workspace \(number) is not a listed workspace"
+    case .notNonEmptyArray(let key): "\(key) must be a non-empty array"
+    case .emptyReport: "the report is empty"
+    case .reportTwice: "the report was already given"
     }
   }
 }
@@ -338,16 +347,19 @@ extension AutomationBrokenLine: Codable {
     case "dueNotDate": fault = .dueNotDate(try string(.id), try string(.raw))
     case "workspaceNotListed":
       fault = .workspaceNotListed(try string(.id), try c.decode(Int.self, forKey: .workspace))
+    case "notNonEmptyArray": fault = .notNonEmptyArray(try string(.key))
+    case "emptyReport": fault = .emptyReport
+    case "reportTwice": fault = .reportTwice
     default:
       throw DecodingError.dataCorruptedError(
         forKey: .kind, in: c, debugDescription: "unknown line fault")
     }
-    self.init(line: try c.decode(Int.self, forKey: .line), fault: fault)
+    self.init(line: try c.decodeIfPresent(Int.self, forKey: .line), fault: fault)
   }
 
   func encode(to encoder: Encoder) throws {
     var c = encoder.container(keyedBy: CodingKeys.self)
-    try c.encode(line, forKey: .line)
+    try c.encodeIfPresent(line, forKey: .line)
     func kind(_ name: String, _ values: [(CodingKeys, String)] = []) throws {
       try c.encode(name, forKey: .kind)
       for (key, value) in values { try c.encode(value, forKey: key) }
@@ -370,6 +382,9 @@ extension AutomationBrokenLine: Codable {
     case .workspaceNotListed(let id, let number):
       try kind("workspaceNotListed", [(.id, id)])
       try c.encode(number, forKey: .workspace)
+    case .notNonEmptyArray(let key): try kind("notNonEmptyArray", [(.key, key)])
+    case .emptyReport: try kind("emptyReport")
+    case .reportTwice: try kind("reportTwice")
     }
   }
 }

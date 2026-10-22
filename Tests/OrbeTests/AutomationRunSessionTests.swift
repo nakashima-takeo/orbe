@@ -87,7 +87,7 @@ final class AutomationRunSessionTests: AutomationPartPassTestCase {
     XCTAssertTrue(session.call("put_rows", ["rows": [["id": "a"]]]).isError, "前の呼び出しとの重なりも")
     XCTAssertTrue(session.call("put_rows", ["rows": []]).isError)
     XCTAssertEqual(session.outputs.count, 1)
-    XCTAssertEqual(session.rejected.map(\.line), [2, 3, 4, 1])
+    XCTAssertEqual(session.rejected.map(\.line), [2, 3, 4, 1, nil], "空の配列は位置の無い 1 件")
   }
 
   /// 何も無いの申告は結果の前だけで、申告の後は結果を受けない。失敗の申告の後も受けない。

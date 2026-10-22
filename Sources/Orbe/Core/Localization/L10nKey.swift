@@ -448,6 +448,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationFaultTitle
   case automationFaultDue
   case automationFaultWorkspace
+  case automationFaultNotNonEmptyArray
+  case automationFaultEmptyReport
+  case automationFaultReportTwice
   case automationDismissedAlready
   case automationDismissedNoOpen
   // MARK: - 秘書・作業を始める（L10nTable+Secretary）
