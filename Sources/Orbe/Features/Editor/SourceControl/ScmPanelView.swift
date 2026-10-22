@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+
 /// サイドバー: ソース管理パネル（見本 ScmPanel）。上から、パネルヘッダー → 実行中の帯（0.3 秒を超えて走る操作があるときだけ）→
 /// 親「ソース管理」（見出し・メッセージ欄・コミットボタン・失敗の文・変更の列〔2 つの子の区分。AppKit〕）→ 境目 → グラフの枠
 /// （区切り線・見出し「グラフ」・グラフの列。AppKit）。git 管理外の根では、ヘッダーの下に理由の一文だけ。部分ごとに別の view
@@ -92,7 +93,7 @@ private struct ScmBand: View {
 /// ✓（コミット。欄の ↵ と同じ条件）・再読込（status を取り直し、グラフと HEAD の push 済みを読み直す）・…（プル / プッシュ / フェッチ / ─ /
 /// コミット (amend) / 最後のコミットを取り消す。ボタンの姿に縛られず常に開き、ボタンが押せない間も amend・取り消しに届く。
 /// 2 つの項目は ▾ と同じく開いた時点の写しで照らす）。
-struct ScmControlsHead: View {
+struct ScmRepositoryHead: View {
   let panel: ScmPanel
   @State private var hovering = false
   @Environment(\.colorScheme) private var scheme
