@@ -10,18 +10,14 @@ extension ScmPanelTests {
   /// 開いた diff と開き方。
   typealias Opened = (key: EditorDiff.Key, opening: ScmPanel.Opening)
 
-  /// ステージ済み s.txt、変更 a.txt（編集）・n.txt（未追跡）、グラフ（ブランチと 1 コミット）の出たパネル。キーの開きは
+  /// ステージ済み s.txt、変更 a.txt（編集）・n.txt（未追跡）の出たパネル。キーの開きは
   /// 窓を待たずにそのつど開く。開いた行を記録する。
   private func keysPanel() throws -> () -> [Opened] {
     try repo.write("s.txt", "s\n")
     XCTAssertTrue(repo.git(["add", "s.txt"]).isSuccess)
     try repo.write("a.txt", "edited\n")
     try repo.write("n.txt", "new\n")
-    show(
-      until: { panel in
-        panel.changes.staged.count == 1 && panel.layout.items.count == 5
-          && panel.graphLayout.items.contains { if case .commit = $0 { true } else { false } }
-      }, "2 区分とグラフの行")
+    show(until: { $0.changes.staged.count == 1 && $0.layout.items.count == 5 }, "2 区分の行")
     panel.navigation.delay.schedule = { _, fire in fire() }
     var opened: [Opened] = []
     panel.onOpenDiff = { key, opening in opened.append((key, opening)) }

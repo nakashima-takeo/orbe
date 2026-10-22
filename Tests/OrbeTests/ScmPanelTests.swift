@@ -170,8 +170,7 @@ final class ScmPanelTests: OrbeTestCase {
     XCTAssertEqual(opened, 0)
   }
 
-  /// 大きな変更（数千件）のある worktree でも、行と件数は最新の status に追いつく——行の組み立てより先にグラフの読み
-  /// （コミットのたびに git の状態が変わって起きる）が返っても、手元の古い行で組み直した結果が最新の status を退けない。
+  /// 大きな変更（数千件）のある worktree でも、行と件数は最新の status に追いつく。
   func testRowsCatchUpWithTheLatestStatusOnALargeWorktree() throws {
     let untracked = 5000
     for index in 0..<untracked { try repo.write("u/\(index).txt", "u\n") }
