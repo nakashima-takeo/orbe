@@ -22,11 +22,12 @@ extension DesignFlowSnapshotTests {
     let graphHeight = pane.sidebar.graphHeight
     defer { pane.sidebar.setGraphHeight(graphHeight) }
     var hovers = false
+    var rise: CGFloat?
     let steps: [(label: String, action: () -> Void)] = [
       ("open", { panel.select(ScmRowID(section: .changes, path: "src/agent/StateHooks.swift")) }),
       ("header_selected", { panel.select(ScmRowID(section: .changes, path: nil)) }),
       ("graph_hover", { hovers = true }),
-      ("resized", { hovers = false }),
+      ("resized", { (hovers, rise) = (false, 66) }),
       ("graph_closed", { panel.isGraphOpen.toggle() }),
       (
         "repository_closed",
@@ -55,7 +56,10 @@ extension DesignFlowSnapshotTests {
             scene.view, size: size, dark: dark,
             until: {
               guard panel.isHeadPushed != nil else { return false }
-              if step.label == "resized", dark { Self.dragHandle(in: pane, by: 66) }
+              if let amount = rise {
+                Self.dragHandle(in: pane, by: amount)
+                rise = nil
+              }
               if hovers { Self.hoverGraphHeader(in: pane) }
               return true
             }))
