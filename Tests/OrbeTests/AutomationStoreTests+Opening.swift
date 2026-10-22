@@ -69,6 +69,27 @@ extension AutomationStoreTests {
 
   // MARK: - 閉じ込め
 
+  /// 版 2 の DB で組み合わせの部品の定義を指す部品は壊れた値なので、その自動化は定義エラーとして読めない自動化になる。
+  func testAPartPointingAtACompositeDefinitionIsADefinitionError() throws {
+    var store: AutomationStore? = AutomationStore()
+    let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
+    let judge = try XCTUnwrap(store?.part(id, "judge"))
+    store = nil
+    try database().exec(
+      """
+      INSERT INTO part_defs (kind) VALUES ('composite');
+      INSERT INTO composite_defs (id) VALUES (last_insert_rowid());
+      UPDATE parts SET def_id = (SELECT max(id) FROM composite_defs) WHERE id = \(judge.rawValue);
+      """)
+
+    let reopened = AutomationStore()
+
+    XCTAssertEqual(reopened.automations, [])
+    XCTAssertEqual(
+      reopened.unreadable.first?.reason,
+      "parts[1]: the stored definition is made of parts, which this database version does not hold")
+  }
+
   /// 動作の定義の JSON を壊した自動化は、その自動化だけが「定義を読めない」として残る（組めた定義・版・理由を持ち、動かず、
   /// 持っていた候補はほかの自動化の確定の後も消えない）。版を添えた書き換えで直り、消すこともできる。ほかの自動化は普段どおり。
   func testAnAutomationWhoseDefinitionCannotBeReadStaysAsideAlone() throws {

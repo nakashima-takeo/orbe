@@ -101,7 +101,7 @@ extension L10n {
     .boardRunDroppedLapsed: ("読む前に期限で消えた %lld 件", "%lld expired before being read"),
     .boardRunUnknownPassed: ("成功（記録を読めない）", "succeeded (the record cannot be read)"),
     .boardRunUnknownFailed: ("失敗（記録を読めない）", "failed (the record cannot be read)"),
-    .boardAutomationUnreadable: ("定義を読めない", "The definition cannot be read"),
+    .boardAutomationUnreadable: ("定義エラー", "Definition error"),
     .boardAutomationNumbered: ("自動化 #%lld", "Automation #%lld"),
     .boardRunAsideSeparator: ("、", ", "),
     .boardHintSelect: ("移動", "move"),

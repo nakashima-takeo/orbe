@@ -21,7 +21,7 @@ extension AutomationText {
     }
   }
 
-  /// 定義を読めない理由（「定義を読めない（parts[0].trigger: …）」。英語の画面は「: 」で添える）。
+  /// 定義を読めない理由（「定義エラー（parts[0].trigger: …）」。英語の画面は「: 」で添える）。
   func unreadable(_ reason: String) -> String {
     let head = l10n.string(.boardAutomationUnreadable)
     return l10n.language == .en

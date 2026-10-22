@@ -14,8 +14,8 @@ final class BoardAutomationUnreadableTests: OrbeTestCase {
         store: DesignSceneFixtures.boardUnreadableStore()))
   }
 
-  /// 読めない自動化は一覧の先頭（失敗の群）に理由を持って並び、詳細の地図は無い。「修正を依頼」は自動化の名前で依頼の欄に
-  /// 書き出し、⌘⌫ で消せる。流す・止める ⇄ 再開は効かない。
+  /// 読めない自動化は一覧の先頭（失敗の群）に理由を持って並び、詳細の地図は無い。「修正を依頼」は自動化の名前と理由の原文を
+  /// 依頼の欄に書き出し、⌘⌫ で消せる。流す・止める ⇄ 再開は効かない。
   func testAnUnreadableAutomationIsListedWithItsReasonAndCanOnlyBeFixedOrDeleted() throws {
     let model = model()
     let first = try XCTUnwrap(model.standings(at: model.runner.now()).first)
@@ -32,8 +32,13 @@ final class BoardAutomationUnreadableTests: OrbeTestCase {
     model.perform(.flow(.ends))
     XCTAssertFalse(model.runner.isRunning(2))
 
+    let reason = try XCTUnwrap(first.unreadable)
     model.draftFixOfUnreadable(l10n: LocalizationStore(language: .ja))
-    XCTAssertEqual(model.requestText, "自動化「GitHub: レビュー依頼」の修正：")
+    XCTAssertEqual(model.requestText, "自動化「GitHub: レビュー依頼」の修正：\(reason)")
+    model.move(1)
+    model.draftFixOfUnreadable(l10n: LocalizationStore(language: .en))
+    XCTAssertEqual(
+      model.requestText, "Fix the automation “GitHub: レビュー依頼”: \(reason)")
     model.move(1)
     model.perform(.delete)
     XCTAssertEqual(model.store.unreadable, [])

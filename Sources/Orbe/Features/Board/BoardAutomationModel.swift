@@ -281,10 +281,13 @@ import SwiftUI
     draft(l10n.format(.boardAskFixDraft, automation.name, node.part.name))
   }
 
-  /// 定義を読めない自動化の「修正を依頼」。依頼の欄に「自動化「<名前>」の修正：」を書く。
+  /// 定義を読めない自動化の「修正を依頼」。依頼の欄に「自動化「<名前>」の修正：<理由の原文>」を書く（読むのは AI なので
+  /// 原文だけ）。
   func draftFixOfUnreadable(l10n: LocalizationStore) {
     guard let broken = selectedUnreadable else { return }
-    draft(l10n.format(.boardAskFixAutomationDraft, BoardAutomationStanding.name(of: broken, l10n)))
+    draft(
+      l10n.format(.boardAskFixAutomationDraft, BoardAutomationStanding.name(of: broken, l10n))
+        + broken.reason)
   }
 
   private func draft(_ text: String) {

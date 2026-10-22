@@ -141,8 +141,11 @@ extension AutomationDatabase {
       }
       if !from.isEmpty { object["from"] = from }
       if row.kind == "composite" {
+        // 組み合わせの部品を書く Orbe は DB の版を上げるので、版 2 の DB にあるのは壊れた値。
         problem =
-          problem ?? "parts[\(index)]: it uses a part made of parts, which this Orbe cannot run"
+          problem
+          ?? "parts[\(index)]: the stored definition is made of parts, which this database version "
+          + "does not hold"
       } else if let action = row.action.flatMap(Self.jsonObject) {
         object.merge(action) { current, _ in current }
       } else {
