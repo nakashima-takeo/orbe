@@ -5,7 +5,7 @@ import XCTest
 /// 定義を読めない自動化と、使えない DB の外の口。
 ///
 /// 壊れると何が起きるか: 読めない自動化が一覧から消え、AI が直すことも消すこともできない。新しい版の DB で起動した Orbe の
-/// 一覧が 0 件を返し、AI が自動化を作り直して二重に動かす。
+/// 一覧が 0 件を返し、AI が自動化を作り直して二重に動かす。ほかの動詞が「見つからない」と答え、AI が消えたと読み違える。
 extension WindowControllerAutomationControlTests {
   /// 読めない自動化は一覧の自分の場所に、行から組めた定義（部品の id つき）・版・理由で載り、回の記録は部品の鍵で読める。
   /// 一覧の id と版を添えた `set_automation` で、同じ部品のまま直る。
@@ -48,17 +48,36 @@ extension WindowControllerAutomationControlTests {
       fixed.parts.compactMap(\.id), "一覧の id で直すと同じ部品のまま")
   }
 
-  /// 今より新しい版の DB では、一覧も書き換えも理由を言って断る。
-  func testANewerDatabaseRefusesTheListWithTheReason() throws {
+  /// 今より新しい版の DB では、自動化のどの動詞も中身を見る前に、-32000 と理由で断る。
+  func testANewerDatabaseRefusesEveryVerbWithTheReason() throws {
     _ = try AutomationStore().create(Self.definition(), now: Date())
     try SQLiteDatabase(url: automationsFolder().appendingPathComponent("db.sqlite")).exec(
       "PRAGMA user_version = 99")
     let wc = try launch()
 
-    guard case .failure(let error) = wc.controlListAutomations() else {
-      return XCTFail("一覧が断られない")
+    var answers: [String: Result<Any, ControlError>] = [
+      "list_automations": wc.controlListAutomations(),
+      "set_automation": wc.controlSetAutomation(automationId: nil, version: nil, Self.definition()),
+      "list_automation_runs": wc.controlListAutomationRuns(
+        automationId: 1, partKey: nil, before: nil, limit: nil),
+      "run_automation": wc.controlRunAutomation(automationId: 1, partKey: nil),
+      "pause_automation": wc.controlPauseAutomation(automationId: 1, paused: true),
+      "delete_automation": wc.controlDeleteAutomation(automationId: 1),
+      "list_automation_proposals": wc.controlListAutomationProposals(automationId: nil),
+      "try_automation": wc.controlTryAutomation(automationId: 1, AutomationTrial.Request()),
+    ]
+    wc.controlAutomationTrial(automationId: 1, wait: false, timeoutMs: 0) {
+      answers["get_automation_trial"] = $0
     }
-    XCTAssertEqual(error.code, -32000)
-    XCTAssertTrue(error.message.contains("version 99"), error.message)
+
+    XCTAssertEqual(answers.count, 9)
+    for (verb, answer) in answers {
+      guard case .failure(let error) = answer else {
+        XCTFail("\(verb) が断られない")
+        continue
+      }
+      XCTAssertEqual(error.code, -32000, verb)
+      XCTAssertTrue(error.message.contains("version 99"), "\(verb): \(error.message)")
+    }
   }
 }
