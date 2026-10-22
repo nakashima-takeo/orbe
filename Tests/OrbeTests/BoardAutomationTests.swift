@@ -194,4 +194,25 @@ final class BoardAutomationTests: PaletteCardWindowTestCase {
     send(Key.space, " ", to: window)
     XCTAssertEqual(automation.store.automation(Self.github)?.paused, true)
   }
+
+  /// 定義を読めない自動化をほかの口で消しても、ボードは同じ位置の行を選ぶ（一覧の並びは読める自動化と読めない自動化を合わせた
+  /// もの）。
+  func testDeletingAnUnreadableAutomationElsewhereMovesTheSelectionToTheSamePosition() throws {
+    let model = BoardModel(
+      automation: BoardAutomationModel(
+        runner: DesignSceneFixtures.automationRunner(
+          store: DesignSceneFixtures.boardUnreadableStore())),
+      parts: [.automation])
+    let automation = model.automation
+    let window = mount(model)
+    down(window)
+    XCTAssertEqual(automation.selectedUnreadable?.id, 2, "前提")
+
+    try automation.runner.delete(2)
+    flush(window)
+
+    let first = try XCTUnwrap(automation.ids.first)
+    XCTAssertEqual(automation.list.selectedID, .automation(first), "消えた行と同じ位置の行")
+    XCTAssertNotNil(automation.selectedAutomation)
+  }
 }

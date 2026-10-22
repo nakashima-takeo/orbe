@@ -78,7 +78,8 @@ struct BoardAutomationPart: View {
     .onChange(of: focused) { _, place in
       if let place, place != model.place { focused = model.place }
     }
-    .onChange(of: model.store.automations, initial: true) { model.reconcile() }
+    .onChange(of: model.stops, initial: true) { model.reconcile() }
+    .onChange(of: model.mapStops) { model.reconcile() }
   }
 }
 
