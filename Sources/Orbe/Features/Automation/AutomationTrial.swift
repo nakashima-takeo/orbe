@@ -268,7 +268,8 @@ final class AutomationTrial {
     if completed, let store {
       do throws(AutomationError) {
         for node in range.path where Self.holds(node) {
-          guard let read = try store.read(node.id, of: automationId, baseline: nil, now: source.now()),
+          guard
+            let read = try store.read(node.id, of: automationId, baseline: nil, now: source.now()),
             !read.taken.isEmpty
           else { continue }
           passes[node.id] = [.held(read.taken.map(\.text))]

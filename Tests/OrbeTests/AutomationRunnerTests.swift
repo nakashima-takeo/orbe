@@ -94,7 +94,7 @@ final class AutomationRunnerTests: OrbeTestCase {
   }
 
   func pending(_ key: String, of id: Int) -> Int? {
-    store.automation(id)?.graph.node(key: key).flatMap { store.automation(id)?.parts[$0.id]?.pending.count }
+    store.automation(id)?.state(key: key).pending.count
   }
 
   /// 下流へ渡す id（`<部品 ID>:<書かれた id>`）。

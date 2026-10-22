@@ -154,18 +154,7 @@ extension BoardAutomationPartValue {
     case .report: fact(.boardPartTo, BoardAutomationDetailValue.reports(automation.notify, l10n))
     case .sideEffect: fact(.boardPartTo, l10n.string(.boardPartNothing))
     }
-    if !node.inputs.isEmpty {
-      facts.append(
-        Fact(
-          label: .boardPending,
-          flow: nil,
-          value: [
-            Segment(
-              text: l10n.format(.boardPartCount, state.pending.count),
-              look: state.pending.count > 0 ? .emphasized : .muted),
-            Segment(text: "\u{3000}" + limit(part.maxItems, l10n), look: .muted),
-          ]))
-    }
+    if !node.inputs.isEmpty { facts.append(pending(state.pending, maxItems: part.maxItems, l10n)) }
     fact(.boardPartTimeout, l10n.format(.boardPartMinutes, node.timeoutMinutes))
     if case .command(let command) = action.method, let directory = command.directory {
       fact(.boardPartDirectory, directory)
@@ -239,6 +228,20 @@ extension BoardAutomationPartValue {
       }
       return l10n.format(.boardPartEventStreamSince, text.recent(since))
     }
+  }
+
+  /// 未処理（「8 件」＋1 回に取る件数の上限）。
+  private static func pending(
+    _ pending: AutomationPending, maxItems: Int?, _ l10n: LocalizationStore
+  ) -> Fact {
+    Fact(
+      label: .boardPending, flow: nil,
+      value: [
+        Segment(
+          text: l10n.format(.boardPartCount, pending.count),
+          look: pending.count > 0 ? .emphasized : .muted),
+        Segment(text: "\u{3000}" + limit(maxItems, l10n), look: .muted),
+      ])
   }
 
   /// 1 回に取る件数の上限（「30 件を超えた古い分は捨てる」「上限なし」）。古さの上限は入力ごとに入力元へ添える。

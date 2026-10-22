@@ -73,19 +73,19 @@ extension AutomationDatabase {
         record: AutomationRunRecord(
           id: row.id, defId: row.defId,
           content: Self.content(
-            started: row.started, ended: row.ended, trigger: row.trigger, failure: row.failure,
-            record: row.record, inputs: inputs[row.id] ?? [:])))
+            AutomationUnknownRun(
+              startedAt: row.started, endedAt: row.ended, trigger: row.trigger,
+              failed: row.failure != nil),
+            failure: row.failure, record: row.record, inputs: inputs[row.id] ?? [:])))
     }
   }
 
-  /// 列と保存の JSON と回の履歴の数から組んだ中身。どれかが読めなければ不明な記録。
+  /// 列（`columns`）と保存の JSON と回の履歴の数から組んだ中身。どれかが読めなければ列から分かる分だけの不明な記録。
   private static func content(
-    started: Date, ended: Date, trigger: AutomationPartRun.Trigger, failure rawFailure: String?,
-    record: String?, inputs: [String: Int]
+    _ columns: AutomationUnknownRun, failure rawFailure: String?, record: String?,
+    inputs: [String: Int]
   ) -> AutomationRunRecord.Content {
-    let unknown = AutomationRunRecord.Content.unknown(
-      AutomationUnknownRun(
-        startedAt: started, endedAt: ended, trigger: trigger, failed: rawFailure != nil))
+    let unknown = AutomationRunRecord.Content.unknown(columns)
     var failure: AutomationFailure?
     if let rawFailure {
       guard let decoded = decode(AutomationFailure.self, rawFailure) else { return unknown }
@@ -104,7 +104,7 @@ extension AutomationDatabase {
     }
     return .known(
       AutomationPartRun(
-        startedAt: started, endedAt: ended, trigger: trigger,
+        startedAt: columns.startedAt, endedAt: columns.endedAt, trigger: columns.trigger,
         taken: reads ? inputs["taken"] ?? 0 : nil, dropped: dropped, execution: stored.execution,
         breach: stored.breach, result: stored.result, withdrawn: stored.withdrawn,
         failure: failure))

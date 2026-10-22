@@ -164,8 +164,10 @@ final class AutomationDatabase {
   func state(of id: AutomationPartID) throws -> AutomationPartState {
     let part: [SQLiteValue] = [.integer(Int64(id.rawValue))]
     guard
-      let addedAt = try db.select("SELECT added_at FROM parts WHERE id = ?", part, { $0.int64(at: 0) })
-        .first
+      let addedAt = try db.select(
+        "SELECT added_at FROM parts WHERE id = ?", part, { $0.int64(at: 0) }
+      )
+      .first
     else {
       throw AutomationError.unavailable("part \(id) is missing from the database")
     }

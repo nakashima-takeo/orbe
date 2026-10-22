@@ -37,7 +37,8 @@ extension AutomationDatabase {
 
   /// つながりの上流の行を読む。take が new なら読んだ位置より後の番号だけ、all なら位置によらず、今有効な項目の今の版と残す
   /// 期間の内の出来事を、どちらも上限の番号まで。`graph` は出どころを持つか（たどった先が取得の行か）を見る今のグラフ。
-  func rows(_ reading: Reading, graph: AutomationGraph, now: Date) throws -> [AutomationIntake.Row] {
+  func rows(_ reading: Reading, graph: AutomationGraph, now: Date) throws -> [AutomationIntake.Row]
+  {
     let up = reading.edge.from
     let p: SQLiteValue = .integer(Int64(up.rawValue))
     let all = reading.edge.take == .all
@@ -97,7 +98,8 @@ extension AutomationDatabase {
 
   /// 下流へ渡す id。入力を引き継いだ行は書かれた id のまま（下流が入力と照らせる）、それ以外は `<部品 ID>:<書かれた id>`
   /// （部品をまたいで重ならない）。
-  static func downstreamId(_ written: String, of part: AutomationPartID, inherited: Bool) -> String {
+  static func downstreamId(_ written: String, of part: AutomationPartID, inherited: Bool) -> String
+  {
     inherited ? written : "\(part):\(written)"
   }
 

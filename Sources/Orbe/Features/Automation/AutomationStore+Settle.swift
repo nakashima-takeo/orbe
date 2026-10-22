@@ -45,7 +45,8 @@ struct AutomationSettling {
     if let read = end.read {
       try db.insertInputs(
         of: recordId,
-        read.taken.map { ($0.ref, "taken") } + read.dropped.map { ($0.row.ref, $0.reason.rawValue) })
+        read.taken.map { ($0.ref, "taken") } + read.dropped.map { ($0.row.ref, $0.reason.rawValue) }
+      )
     }
     if let decided { try apply(decided, run: recordId, &memory) }
     try finish(AutomationRunRecord(id: recordId, defId: end.defId, content: .known(run)), &memory)

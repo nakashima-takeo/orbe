@@ -18,10 +18,7 @@ import Observation
 /// 部品の回を記録するたびに `recorded` で、その回の終わり（読んだもの・部品の 1 回の結果）と確定を知らせる（知らせるか
 /// どうか・何を出すかは受けた側が決める）。`recorded` は確定の直後、下流を起こす前に同期で呼ぶ——受けた側はその中で、確定した
 /// 回が出した行を読み、下流が読む前に手を掛けられる（試走の `limit` がこの順に依る）。定義を書いたら `defined`、消したら
-/// `deleted` で知らせる。
-///
-/// 使い手が差し替えられるのは、番人に載せる部品（`admits`。既定は全部品）と知らせだけ。試走は DB の写しの上で載せる部品だけを
-/// 変えて、本番と同じ流しを動かす。
+/// `deleted` で知らせる。使い手が差し替えられるのは、番人に載せる部品（`admits`。既定は全部品）と知らせだけ。
 @Observable final class AutomationRunner {
   let store: AutomationStore
   @ObservationIgnored var now: () -> Date = Date.init
@@ -42,8 +39,7 @@ import Observation
   @ObservationIgnored private var registered = Set<String>()
   /// 部品ごとの、前の契機の始まりの時点の、入力ごとの上流の印（メモリだけ。無ければ読んだ位置と変化の番号 0 が基準線）。
   @ObservationIgnored var marks: [String: [AutomationPartID: Mark]] = [:]
-  /// 出す側の部品ごとの変化の番号（メモリだけ。DB から導けない）。項目が有効になる・版が足される・項目が無効になる・出来事が
-  /// 足されるたびに進む。毎回すべてを取るつながりの起こす決まりが読む。
+  /// 出す側の部品ごとの変化の番号（メモリだけ。DB から導けない。行が変わるたびに進む）。毎回すべてを取るつながりが読む。
   @ObservationIgnored var changes: [AutomationPartID: Int] = [:]
   /// 部品ごとの、番人に最後に返した数え始め。記録の無い契機（取る行が 0 件）でも進むので、次の時刻はこれから数える。
   @ObservationIgnored private var anchors: [String: Date] = [:]
@@ -283,12 +279,10 @@ extension AutomationRunner {
       flowed = flow.started(part, in: automation.graph)
       flows[id] = flow
     }
-    // 「届いたら」の部品の「今すぐ」は、流しが起こした回でなければ起こす決まりが起こした回（届いた行で起きた回）。
+    // 流しが起こした回でない「届いたら」の部品の回は、起こす決まりが起こした（届いた行で起きた）回。
     let trigger = Trigger(
       automationId: id, part: part,
-      kind: kind == .now
-        ? (node.part.trigger == .arrival && !flowed ? .arrival : .now)
-        : node.part.trigger == .arrival ? .arrival : .schedule,
+      kind: node.part.trigger == .arrival && !flowed ? .arrival : kind == .now ? .now : .schedule,
       startedAt: now(), finish: finish, flowed: flowed)
     active[ObjectIdentifier(trigger)] = trigger
     if node.inputs.isEmpty {
