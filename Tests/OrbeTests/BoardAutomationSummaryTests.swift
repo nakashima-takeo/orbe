@@ -7,7 +7,7 @@ import XCTest
 /// 壊れると何が起きるか: 失敗した部品があるのに一覧の印が成功に見え、壊れた部品に気づけない。流している間や止めている間に
 /// 前回の結果が見えなくなる。地図の線が入力と違う行へつながり、
 /// どの部品の出力がどこへ行くかを読み違える。英語の実行履歴と知らせが「judged 1 items」と言う。新着なしの回が他の回を
-/// 押し出す、または畳んではいけない回（新着のある回・出し直した回）が畳まれて見えなくなる。
+/// 押し出す、または畳んではいけない回（新着のある回・形式エラーを修正した回）が畳まれて見えなくなる。
 @MainActor
 final class BoardAutomationSummaryTests: OrbeTestCase {
   private let text = AutomationText(
@@ -158,8 +158,8 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     XCTAssertEqual(said(card.runs), ["judged 3 items, 2 proposed", "judged 1 item, 1 proposed"])
   }
 
-  /// カードの実行履歴は、添え書きの無い新着なしが 3 回以上続く区間だけを期間の 1 行に畳む。1 回だけの新着なしと、出し直して
-  /// 通った回（末尾に添え書き）は 1 行ずつ残す。
+  /// カードの実行履歴は、添え書きの無い新着なしが 3 回以上続く区間だけを期間の 1 行に畳む。1 回だけの新着なしと、形式エラーを
+  /// 修正して通った回（末尾に添え書き）は 1 行ずつ残す。
   func testCardHistoryFoldsOnlyLongStretchesOfNothingNew() throws {
     let automation = automations()[0]
     func card(_ part: String) throws -> [String] {

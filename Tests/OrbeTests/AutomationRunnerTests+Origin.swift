@@ -65,7 +65,7 @@ extension AutomationRunnerTests {
     finish("digest", printed("要約"))
 
     advance(by: 86400)
-    finish("judge", printed(#"{"nothing":"候補なし"}"#))
+    finish("judge", printed(""))
     XCTAssertEqual(
       store.automation(id)?.state(key: "judge").runs.first?.run?.dropped.counts, [.unsourced: 1],
       "捨てた数は判定の次の回の記録に載る")
