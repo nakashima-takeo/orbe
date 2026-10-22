@@ -60,20 +60,19 @@ extension L10n {
     .boardPartLimitItems: ("%lld 件を超えた古い分は捨てる", "drops the oldest beyond %lld"),
     .boardPartMinutes: ("%lld 分", "%lld min"),
     .boardPartFormatErrorOne: (
-      "出力の形式エラー · %1$@ · %2$lld 行", "Output format error · %1$@ · %2$lld line"
+      "出力の形式エラー · %1$@ · %2$lld 件", "Output format error · %1$@ · %2$lld item"
     ),
     .boardPartFormatErrorOther: (
-      "出力の形式エラー · %1$@ · %2$lld 行", "Output format error · %1$@ · %2$lld lines"
+      "出力の形式エラー · %1$@ · %2$lld 件", "Output format error · %1$@ · %2$lld items"
     ),
-    .boardPartRedonePassed: (
-      "出し直して通った。指示を直すと、次から出し直しが要らなくなる。",
-      "Passed on redo. Fix the instruction to skip the redo next time."
+    .boardPartBreachPassed: (
+      "断った結果をその場で直して通った。指示を直すと、次から断られずに済む。",
+      "Fixed on the spot and passed. Fix the instruction to avoid this next time."
     ),
-    .boardPartRedoneFailed: (
-      "出し直しても直らず、この回は失敗した。指示を直すと、次から出し直しが要らなくなる。",
-      "Still broken after the redo, so this run failed. Fix the instruction to skip the redo next time."
+    .boardPartBreachFailed: (
+      "この回は失敗した。指示を直すと、次から断られずに済む。",
+      "This run failed. Fix the instruction to avoid this next time."
     ),
-    .boardPartNotRedone: ("出し直せず、この回は失敗した。", "Couldn’t redo, so this run failed."),
     .boardPartLastReport: ("前回の報告", "Last report"),
     .boardPartLastReply: ("前回の応答", "Last reply"),
     .boardPartHistory: ("この部品の実行履歴", "This part’s runs"),
@@ -95,7 +94,7 @@ extension L10n {
     .boardRunExecuted: ("実行した", "ran"),
     .boardRunFold: ("%1$@〜%2$@ は新着なし", "nothing new %1$@–%2$@"),
     .boardRunManual: ("%@ 手動", "%@ manual"),
-    .boardRunRedonePassed: ("出し直して通った", "passed on redo"),
+    .boardRunFixedPassed: ("断った結果を直して通った", "fixed on the spot"),
     .boardRunDroppedOld: ("古い %lld 件を捨てた", "dropped %lld old"),
     .boardRunDroppedOverflow: ("多すぎた %lld 件を捨てた", "dropped %lld over the limit"),
     .boardRunDroppedLapsed: ("読む前に期限で消えた %lld 件", "%lld expired before being read"),

@@ -67,15 +67,10 @@ extension AutomationTrial {
         "rows cannot be given to the judge part \"\(entry.key)\": a judge proposes only from items "
           + "a fetch part fetched, so give the items to a fetch part above it")
     case .fetch:
-      switch AutomationPartPass.given(rows.joined(separator: "\n")) {
-      case .read(let output, let count, let lines) where lines.isEmpty:
-        return .fetched(part: entry.id, output: output, count: count)
-      case .read(_, _, let lines):
-        throw .invalid("rows: \(lines[0].text)")
-      case .failed(let failure):
-        throw .invalid(
-          "rows: \(failure.text(part: entry.key, ending: .givenToTrial, breach: nil))")
-      }
+      var outputs = AutomationOutputs(.fetch(since: nil))
+      let broken = outputs.put(rows.joined(separator: "\n"))
+      guard broken.isEmpty else { throw .invalid("rows: \(broken[0].text)") }
+      return .fetched(part: entry.id, output: outputs.output(nothing: nil), count: outputs.count)
     case .process, .report, .work, .sideEffect:
       guard entry.inputs.count == 1, let upstream = entry.inputs.first?.from else {
         let keys = entry.inputs.compactMap { graph.node($0.from)?.key }
@@ -87,7 +82,7 @@ extension AutomationTrial {
       var arrivals: [AutomationPartRow] = []
       for (index, row) in rows.enumerated() {
         guard let id = AutomationPrompts.id(of: row) else {
-          throw .invalid("rows: line \(index + 1): missing id")
+          throw .invalid("rows: item \(index + 1): missing id")
         }
         arrivals.append(AutomationPartRow(id: id, text: row, origin: nil, source: nil))
       }

@@ -95,13 +95,14 @@ extension AutomationGraphTests {
   }
 
   /// agent が名指せるのは MCP のツールの完全名と `Bash(<コマンドの接頭>:*)` だけ。組み込み・サーバー単位・ワイルドカードを通すと、
-  /// 外の文面に仕込まれた指示でファイルの書き込みや名指しの外のツールの呼び出しが起きうる。
+  /// 外の文面に仕込まれた指示でファイルの書き込みや名指しの外のツールの呼び出しが起きうる。Read を名指すと許可の規則に入り、
+  /// 作業ディレクトリの外まで読める（行を見る agent に Orbe が渡す Read は、規則に入れない別の道）。
   func testAgentToolsMustBeFullMCPToolNamesOrBashRules() {
     let working = { (tool: String) in
       [Self.agent("w", tools: ["mcp__slack__search", tool], trigger: Self.everyTenMinutes)]
     }
     for tool in [
-      "Bash", "Write", "mcp__slack", "mcp__slack__", "mcp____search", "mcp__slack__*",
+      "Bash", "Read", "Write", "mcp__slack", "mcp__slack__", "mcp____search", "mcp__slack__*",
       "mcp__slack__a b", "mcp__slack__search,mcp__slack", "Bash(*)", "Bash(gh:*", "Bash( :*)",
       "Bash(gh,curl:*)", "Bash(gh*:*)", "Bash(gh (x):*)", "Bash(gh\n:*)", "Bash(gh search prs)",
     ] {

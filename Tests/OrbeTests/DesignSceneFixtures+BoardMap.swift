@@ -75,7 +75,7 @@ extension DesignSceneFixtures {
     }
     fetch("sentry", 14, 15, items: 3, fresh: 1)
     fetch("mail", 14, 15, items: 1, fresh: 0)
-    // 14:45 のメールは、出力の形式エラーを出し直して通った。
+    // 14:45 のメールは、断った結果をその場で直して通った。
     let mailItems = sampleItems("mail", 2, at: at(14, 45, 0))
     passes.append(
       AutomationSamplePass(
@@ -83,12 +83,10 @@ extension DesignSceneFixtures {
         outcome: .succeeded(
           .fetch(mailItems.map(row)),
           execution(2),
-          breach: AutomationPartPass.Breach(
-            lines: [
-              AutomationBrokenLine(line: 3, fault: .missingKey("link")),
-              AutomationBrokenLine(line: 5, fault: .notJSON),
-            ],
-            redo: AutomationPartPass.Redo(firstCall: execution(4), lines: [])))))
+          breach: AutomationRejections([
+            AutomationBrokenLine(line: 3, fault: .missingKey("link")),
+            AutomationBrokenLine(line: 5, fault: .notJSON),
+          ]))))
     fetch("backlog", 14, 45, items: 9, fresh: 1)
     fetch("sentry", 14, 45, items: 3, fresh: 0)
     process("mine", at(14, 46, 0), rows: 1, from: "backlog")

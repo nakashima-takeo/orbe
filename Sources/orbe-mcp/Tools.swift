@@ -361,5 +361,3 @@ let tools: [[String: Any]] =
       ("inputSchema", schema(["taskId": intProp("消すタスク")], required: ["taskId"])),
     ]),
   ] + waitConditionTools + startTaskTools + automationTools + boardTools
-
-let toolNames = Set(tools.compactMap { $0["name"] as? String })

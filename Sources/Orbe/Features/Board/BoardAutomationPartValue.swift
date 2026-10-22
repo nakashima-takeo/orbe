@@ -46,11 +46,11 @@ struct BoardAutomationPartValue: Equatable {
 
   /// 出力の形式エラーの枠（部品の外した印から）。
   struct Breach: Equatable {
-    /// 「出力の形式エラー · 16:30 · 2 行」。
+    /// 「出力の形式エラー · 16:30 · 2 件」。
     let heading: String
-    /// 「3 行目：link が無い」（最初の数件）。
+    /// 「3 件目：link が無い」（最初の数件）。
     let lines: [String]
-    /// 出し直しの結果の一言。
+    /// 結果の一言。
     let outcome: String
   }
 
@@ -80,18 +80,19 @@ extension BoardAutomationPartValue {
     case .command(let command): body = command.script
     }
     facts = Self.facts(automation, node, text: text, next: next, open: open)
-    breach = state.breach.map { mark in
-      Breach(
-        heading: l10n.format(
-          mark.lines.count == 1 ? .boardPartFormatErrorOne : .boardPartFormatErrorOther,
-          text.recent(mark.at), mark.lines.count),
-        lines: mark.lines.lines.map(text.line),
-        outcome: l10n.string(
-          mark.passed
-            ? .boardPartRedonePassed : mark.redone ? .boardPartRedoneFailed : .boardPartNotRedone))
-    }
+    breach = state.breach.map { Self.breach($0, text: text) }
     lastText = Self.lastText(state.runs, text: text)
     runs = BoardAutomationSummary.lines(state.runs, node: node, text: text)
+  }
+
+  private static func breach(_ mark: AutomationBreachMark, text: AutomationText) -> Breach {
+    let l10n = text.l10n
+    return Breach(
+      heading: l10n.format(
+        mark.lines.count == 1 ? .boardPartFormatErrorOne : .boardPartFormatErrorOther,
+        text.recent(mark.at), mark.lines.count),
+      lines: mark.lines.lines.map(text.line),
+      outcome: l10n.string(mark.passed ? .boardPartBreachPassed : .boardPartBreachFailed))
   }
 
   /// 前回の報告（報告の部品）か応答（作業の部品）。文を残した最新の回から。

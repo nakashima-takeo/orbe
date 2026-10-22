@@ -94,7 +94,7 @@ extension AutomationStore {
       startedAt: TaskItem.storedInstant(end.startedAt),
       endedAt: TaskItem.storedInstant(end.endedAt), trigger: end.trigger,
       taken: end.read?.taken.count, execution: end.outcome.execution,
-      breach: end.outcome.breach.map(AutomationPartRun.Breach.init))
+      breach: end.outcome.breach)
     if case .succeeded(.process(let rows), _, _) = end.outcome,
       let judge = automations[index].graph.judges(reachedFrom: node.id).first, !rows.isEmpty,
       rows.allSatisfy({ $0.origin == nil }), rows.contains(where: { $0.source == nil })

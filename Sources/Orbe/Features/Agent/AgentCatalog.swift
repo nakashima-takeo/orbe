@@ -168,11 +168,12 @@ enum HeadlessSupport {
 }
 
 /// 非対話の 1 回の起こし方。依頼文は標準入力で渡す。`arguments`・`environment` の `tools` は許可の規則（組み込みのツール名・
-/// `Bash(<コマンドの接頭>:*)`・`mcp__` で始まる MCP のツールの完全名）。`environment` は子の環境に上書きする変数。`reply` は標準出力の 1 行から
+/// `Bash(<コマンドの接頭>:*)`・`mcp__` で始まる MCP のツールの完全名）。`arguments` の `server` は足す MCP サーバー（Orbe 自身の
+/// 口）。`environment` は子の環境に上書きする変数で、`tools` には足すサーバーのツールも含める。`reply` は標準出力の 1 行から
 /// 最終応答を取り出す（最終応答の行でなければ nil）。`availableTools` は始まりの出来事の行から、その回で使えるツールの名前を
 /// 取り出す（始まりの行でなければ nil）。
 struct HeadlessCLI {
-  let arguments: (_ model: String, _ tools: [String]) -> [String]
+  let arguments: (_ model: String, _ tools: [String], _ server: HeadlessServer?) -> [String]
   let environment: (_ tools: [String]) -> [String: String]
   let reply: (Data) -> BackgroundAgentReply?
   let availableTools: (Data) -> [String]?
@@ -181,6 +182,14 @@ struct HeadlessCLI {
   static func missingTools(_ requested: [String], available: [String]) -> [String] {
     requested.filter { $0.hasPrefix("mcp__") && !available.contains($0) }
   }
+}
+
+/// 裏の agent に足す MCP サーバー 1 つ（標準入出力で話す）。`tools` は許すツールの完全名。
+struct HeadlessServer: Equatable {
+  let name: String
+  let command: String
+  let environment: [String: String]
+  let tools: [String]
 }
 
 /// 裏で回せない理由。
@@ -201,21 +210,44 @@ enum ClaudeHeadless {
   /// 指定した呼び出しは、利用者が登録した MCP サーバーを名前で
   /// 使うため設定を読み、指定したもの以外は拒否する（`dontAsk`。利用者の bypassPermissions もこれで上書きする）——ただし利用者が
   /// 常に許可にしたツールと hook は効き、設定の `additionalDirectories` の下は指定なしで読める。
-  static func arguments(model: String, tools: [String]) -> [String] {
+  ///
+  /// 足すサーバー（`server`）は `--mcp-config` で渡し、そのツールだけを許すものに足す。利用者の MCP のツールを指定しなければ、
+  /// 利用者の設定も MCP サーバーも読まない閉じた形のまま、足したサーバーだけが加わる。
+  static func arguments(model: String, tools: [String], server: HeadlessServer?) -> [String] {
     let builtins = tools.filter { !$0.hasPrefix("mcp__") }
     var names: [String] = []
     for rule in builtins {
       let name = rule.firstIndex(of: "(").map { String(rule[..<$0]) } ?? rule
       if !names.contains(name) { names.append(name) }
     }
+    let allowed = tools + (server?.tools ?? [])
     var args = ["-p", "--model", model, "--tools", names.joined(separator: ",")]
-    if !tools.isEmpty { args += ["--allowedTools", tools.joined(separator: ",")] }
+    if !allowed.isEmpty { args += ["--allowedTools", allowed.joined(separator: ",")] }
+    if let server { args += ["--mcp-config", mcpConfig(server)] }
     args += [
       "--permission-mode", "dontAsk", "--no-session-persistence",
       "--output-format", "stream-json", "--verbose",
     ]
     if builtins.count == tools.count { args += ["--setting-sources", "", "--strict-mcp-config"] }
     return args
+  }
+
+  /// `{"mcpServers": {"<名前>": {"type": "stdio", "command", "args": [], "env"}}}`。
+  private static func mcpConfig(_ server: HeadlessServer) -> String {
+    let config: [String: Any] = [
+      "mcpServers": [
+        server.name: [
+          "type": "stdio", "command": server.command, "args": [String](),
+          "env": server.environment,
+        ] as [String: Any]
+      ]
+    ]
+    guard
+      let data = try? JSONSerialization.data(
+        withJSONObject: config, options: [.sortedKeys, .withoutEscapingSlashes]),
+      let text = String(bytes: data, encoding: .utf8)
+    else { preconditionFailure("an MCP config is plain JSON") }
+    return text
   }
 
   /// どちらの呼び出しでも、利用者の CLAUDE.md と auto memory を読まない。`--setting-sources` は auto memory を止めず、

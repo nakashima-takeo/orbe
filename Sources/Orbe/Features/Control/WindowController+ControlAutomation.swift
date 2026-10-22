@@ -1,7 +1,7 @@
 import Foundation
 import OrbeSessionLog
 
-/// 自動化の 9 動詞の domain 側。変異は `AutomationRunner`（番人の登録を合わせる）、読みは `AutomationStore`、試走は
+/// 自動化の 9 動詞と、裏の agent の回の道具の domain 側。変異は `AutomationRunner`（番人の登録を合わせる）、読みは `AutomationStore`、試走は
 /// `AutomationTrials` に任せ、ここは応答の形を組む。
 extension WindowController {
   /// 自動化を ID 順に（定義を読めない自動化も、その場所に）。使えないセッションでは理由で断る。
@@ -114,6 +114,17 @@ extension WindowController {
       return json
     }
     return proposals
+  }
+
+  /// 裏で動く agent の回の道具を 1 つ呼ぶ。返事は道具の答え（中身の塊と、断ったか）。
+  func controlRunTool(token: String, name: String, arguments: [String: Any]) -> Result<
+    Any, ControlError
+  > {
+    guard let session = automationRunner.runData.session(token) else {
+      return .failure(ControlError(code: -32004, message: "run not found (it has ended)"))
+    }
+    let reply = session.call(name, arguments)
+    return .success(["texts": reply.texts, "isError": reply.isError])
   }
 
   func controlTryAutomation(automationId: Int, _ request: AutomationTrial.Request) -> Result<

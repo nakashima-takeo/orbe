@@ -292,12 +292,23 @@ final class AutomationRunnerTests: OrbeTestCase {
     XCTAssertEqual(inbox("judge", of: id), items.count)
 
     advance(by: 86400 - 1800)
-    let judged = BackgroundRunResult(
-      commandLine: "claude -p", startedAt: now, endedAt: now, ending: .exited(0),
-      output: .agent(
-        reply: BackgroundAgentReply(text: #"{"nothing":"該当なし"}"#, isError: false),
-        stderr: .init()))
-    jobs.finish(try XCTUnwrap(agentCalls.first), judged)
+    let index = try XCTUnwrap(agentCalls.first)
+    guard case .agent(let call) = jobs.calls[index].job.work,
+      let session = call.orbe.flatMap({ runner.runData.session($0.token) })
+    else { return XCTFail("判定の回の口が無い") }
+    var offset: Int? = 0
+    while let next = offset {
+      let head = session.call("read_run_rows", ["offset": next, "limit": 100]).texts.first ?? ""
+      offset =
+        (try? JSONSerialization.jsonObject(with: Data(head.utf8)) as? [String: Any])?["next"]
+        as? Int
+    }
+    XCTAssertFalse(session.call("report_nothing", ["why": "該当なし"]).isError)
+    jobs.finish(
+      index,
+      BackgroundRunResult(
+        commandLine: "claude -p", startedAt: now, endedAt: now, ending: .exited(0),
+        output: .agent(reply: BackgroundAgentReply(text: "done", isError: false), stderr: .init())))
 
     XCTAssertEqual(agentCalls.count, 1)
     XCTAssertEqual(inbox("judge", of: id), 0)

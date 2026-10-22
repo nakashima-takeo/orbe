@@ -1,6 +1,6 @@
 import Foundation
 
-/// 自動化の 9 動詞の domain 操作（`ControlTarget` の一部。main スレッドでのみ呼ぶ）。
+/// 自動化の 9 動詞と、裏の agent の回の道具（run_tool）の domain 操作（`ControlTarget` の一部。main スレッドでのみ呼ぶ）。
 protocol ControlAutomationTarget: AnyObject {
   /// 自動化を ID 順に列挙する（list_automations）。使えないセッションでは -32000 と理由。
   func controlListAutomations() -> Result<Any, ControlError>
@@ -24,13 +24,18 @@ protocol ControlAutomationTarget: AnyObject {
   func controlTryAutomation(automationId: Int, _ request: AutomationTrial.Request) -> Result<
     Any, ControlError
   >
+  /// 裏で動く agent が、自分の回の道具（入力を読む・結果を出す）を 1 つ呼ぶ（run_tool）。終わった回の札は -32004。道具の
+  /// 引数の誤りは道具の答え（断った）で返す。
+  func controlRunTool(token: String, name: String, arguments: [String: Any]) -> Result<
+    Any, ControlError
+  >
   /// 試走を読む（get_automation_trial）。`wait` なら終わりか `timeoutMs` まで待つ。試走が無ければ -32004。
   func controlAutomationTrial(
     automationId: Int, wait: Bool, timeoutMs: Int,
     completion: @escaping (Result<Any, ControlError>) -> Void)
 }
 
-/// 自動化の 9 動詞の解決。ハンドラが見るのは params の在否と JSON の型（違反は -32602）だけで、値の検証と不変条件は
+/// 自動化の 9 動詞と、裏の agent の回の道具の解決。ハンドラが見るのは params の在否と JSON の型（違反は -32602）だけで、値の検証と不変条件は
 /// `AutomationStore`・`AutomationTrials` が持つ。
 extension ControlServer {
   /// 接続ごとに自分で応答する自動化の動詞（待つことがある `get_automation_trial`）。引き受けたら true。
@@ -113,6 +118,12 @@ extension ControlServer {
       return { target, p throws(ControlError) in
         target.controlListAutomationProposals(automationId: try p.optionalInt("automationId"))
       }
+    case "run_tool":
+      return { target, p throws(ControlError) in
+        target.controlRunTool(
+          token: try p.string("token"), name: try p.string("name"),
+          arguments: try p.optionalObject("arguments") ?? [:])
+      }
     case "try_automation":
       return { target, p throws(ControlError) in
         target.controlTryAutomation(
@@ -158,6 +169,13 @@ private struct AutomationParams {
     return value
   }
 
+  func string(_ key: String) throws(ControlError) -> String {
+    guard let value = try optionalString(key) else {
+      throw ControlError(code: -32602, message: "missing \(key)")
+    }
+    return value
+  }
+
   func optionalString(_ key: String) throws(ControlError) -> String? {
     guard let raw = params[key] else { return nil }
     guard let value = raw as? String else {
@@ -176,6 +194,14 @@ private struct AutomationParams {
   func optionalBool(_ key: String) throws(ControlError) -> Bool? {
     guard let raw = params[key] else { return nil }
     guard Self.isBool(raw), let value = raw as? Bool else {
+      throw ControlError(code: -32602, message: "invalid \(key)")
+    }
+    return value
+  }
+
+  func optionalObject(_ key: String) throws(ControlError) -> [String: Any]? {
+    guard let raw = params[key] else { return nil }
+    guard let value = raw as? [String: Any] else {
       throw ControlError(code: -32602, message: "invalid \(key)")
     }
     return value

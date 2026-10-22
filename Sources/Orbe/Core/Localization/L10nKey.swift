@@ -428,6 +428,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationFailAgentError
   case automationFailReported
   case automationFailBrokeRules
+  case automationFailUnreadInput
+  case automationFailNoResult
   case automationFailUnsourced
   case automationLineAt
   case automationFaultNotJSON
@@ -439,7 +441,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationFaultInvalidValue
   case automationFaultIdTwice
   case automationFaultNotInputId
-  case automationFaultNothingWithItems
   case automationFaultNotNewItem
   case automationFaultProposedTwice
   case automationFaultNotWaiting
@@ -679,9 +680,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardPartMinutes
   case boardPartFormatErrorOne
   case boardPartFormatErrorOther
-  case boardPartRedonePassed
-  case boardPartRedoneFailed
-  case boardPartNotRedone
+  case boardPartBreachPassed
+  case boardPartBreachFailed
   case boardPartLastReport
   case boardPartLastReply
   case boardPartHistory
@@ -703,7 +703,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardRunExecuted
   case boardRunFold
   case boardRunManual
-  case boardRunRedonePassed
+  case boardRunFixedPassed
   case boardRunDroppedOld
   case boardRunDroppedOverflow
   case boardRunDroppedLapsed

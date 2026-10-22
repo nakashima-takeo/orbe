@@ -275,6 +275,44 @@ final class AutomationTrialTests: OrbeTestCase {
     }
   }
 
+  /// 行を見る agent は試走でも本番と同じく行を Orbe の MCP で読み、その回の札は写しの DB のまだ受け取っていない行と、入口に
+  /// 与えた行を返す。
+  func testAnAgentReadingRowsReadsTheCopysRowsAndTheGivenRows() throws {
+    let id = try define([
+      fetch("gh"),
+      DesignSceneFixtures.agentPart("p", "処理", .manual, from: ["gh"], instruction: "残す"),
+      part("digest", from: ["p"], deliver: .report),
+    ])
+    try runner.flow(id, to: .part(store.part(id, "gh")))
+    finish("gh", fetched(["a"]))
+    XCTAssertEqual(store.automation(id)?.state(key: "p").inbox, 1)
+
+    let trial = try trials.start(id, .init(from: ["p"], rows: [#"{"id":"x"}"#]))
+    let agents = {
+      self.jobs.calls.indices.filter {
+        if case .agent = self.jobs.calls[$0].job.work { return true }
+        return false
+      }
+    }
+    settle(until: { agents().count == 1 })
+    guard let index = agents().first, case .agent(let call) = jobs.calls[index].job.work else {
+      return XCTFail("p の agent が呼ばれていない")
+    }
+    let session = try XCTUnwrap(call.orbe.flatMap { runner.runData.session($0.token) })
+    let page = session.call("read_run_rows", [:]).texts.last ?? ""
+    XCTAssertEqual(
+      page.split(separator: "\n").compactMap { AutomationPrompts.id(of: String($0)) },
+      [downstream("gh", "a", of: id), downstream("gh", "x", of: id)])
+    _ = session.call("report_nothing", ["why": "残る項目なし"])
+    XCTAssertFalse(call.prompt.contains(downstream("gh", "a", of: id)), "行の中身は依頼文に載せない")
+    jobs.finish(
+      index,
+      BackgroundRunResult(
+        commandLine: "claude -p", startedAt: now, endedAt: now, ending: .exited(0),
+        output: .agent(reply: BackgroundAgentReply(text: "done", isError: false), stderr: .init())))
+    ended(trial)
+  }
+
   /// 取得の入口に与えた項目は、手段を起こさず、本番が既に見た項目でも接頭の付いた id で下流へ流れる。判定へ与えると断る。
   func testRowsGivenToAFetchFlowDownWithoutItsMethodAndAJudgeRefusesThem() throws {
     let id = try define([fetch("gh"), part("judge", from: ["gh"], deliver: .taskCandidates)])
@@ -295,7 +333,7 @@ final class AutomationTrialTests: OrbeTestCase {
       guard case .invalid = $0 as? AutomationError else { return XCTFail("\($0)") }
     }
     XCTAssertThrowsError(try trials.start(id, .init(rows: [#"{"id":"x"}"#]))) {
-      XCTAssertEqual($0 as? AutomationError, .invalid("rows: line 1: missing link"))
+      XCTAssertEqual($0 as? AutomationError, .invalid("rows: item 1: missing link"))
     }
   }
 

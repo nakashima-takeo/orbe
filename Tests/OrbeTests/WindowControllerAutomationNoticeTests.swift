@@ -192,8 +192,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     ).id
     let breachedFailure = AutomationPartPass.Outcome.failed(
       .brokeRules, DesignSceneFixtures.execution(1),
-      breach: AutomationPartPass.Breach(
-        lines: [AutomationBrokenLine(line: 3, fault: .missingKey("link"))], redo: nil))
+      breach: AutomationRejections([AutomationBrokenLine(line: 3, fault: .missingKey("link"))]))
     var at = Date()
     func record(_ outcome: AutomationPartPass.Outcome) throws {
       at = at.addingTimeInterval(60)
@@ -203,7 +202,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     try record(breachedFailure)
     let first = try XCTUnwrap(wc.automationNotification(id, "fetch"))
     guard case .automation(let told) = first.notice else { return XCTFail("\(first)") }
-    XCTAssertEqual(told.text, "取る の出力の形式エラー（1 行）— 失敗した")
+    XCTAssertEqual(told.text, "取る の出力の形式エラー（1 件）— 失敗した")
     XCTAssertTrue(told.failed)
 
     try record(DesignSceneFixtures.fetched([]))

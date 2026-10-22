@@ -85,7 +85,7 @@ extension BoardAutomationSummary {
     return tone(run)
   }
 
-  /// 回の区分。帯・知らせは、この分類だけを使う。出し直しで通った回は、通った出力で決める。
+  /// 回の区分。帯・知らせは、この分類だけを使う。結果を断られて直した回も、受けた結果で決める。
   static func tone(_ run: AutomationPartRun) -> BoardRunTone {
     if run.failed { return .failed }
     switch run.result {
@@ -118,7 +118,7 @@ extension BoardAutomationSummary {
     }
   }
 
-  /// カードの実行履歴の結果の文。捨てた数・判定の確定で捨てた案・出し直して通ったことを末尾に添える。
+  /// カードの実行履歴の結果の文。捨てた数・判定の確定で捨てた案・断った結果を直して通ったことを末尾に添える。
   static func result(_ run: AutomationPartRun, node: AutomationGraph.Node, text: AutomationText)
     -> (text: String, shade: BoardRunShade)
   {
@@ -157,7 +157,7 @@ extension BoardAutomationSummary {
       (body, shade) = (l10n.string(.boardRunExecuted), .plain)
     }
     var asides: [String] = []
-    if run.breach?.redo != nil { asides.append(l10n.string(.boardRunRedonePassed)) }
+    if run.breach != nil { asides.append(l10n.string(.boardRunFixedPassed)) }
     if let old = run.dropped.counts[.expired] {
       asides.append(l10n.format(.boardRunDroppedOld, old))
     }

@@ -6,11 +6,12 @@ import XCTest
 /// 利用者の MCP サーバーを使うが、どちらでも指定以外は問わずに拒否し、会話を残さない。最終応答は最後の `result` から取る。
 ///
 /// 壊れると何が起きるか。外部の文面を読む判定役が、利用者が常に許可したツールや bypassPermissions を引き継いで何でもできる。
+/// 行を読むだけの agent が、Orbe の口のほかに利用者の設定や MCP サーバーまで使える。
 /// 裏の実行が /resume の履歴を埋める。MCP のツールを指定した取得役が、利用者の MCP サーバーを読めずに何も取れない。
 final class ClaudeHeadlessTests: OrbeTestCase {
   func testBuiltinOnlyCallIsSealedFromUserSettingsAndMCP() {
     XCTAssertEqual(
-      ClaudeHeadless.arguments(model: "haiku", tools: ["Read", "Grep"]),
+      ClaudeHeadless.arguments(model: "haiku", tools: ["Read", "Grep"], server: nil),
       [
         "-p", "--model", "haiku", "--tools", "Read,Grep", "--allowedTools", "Read,Grep",
         "--permission-mode", "dontAsk", "--no-session-persistence",
@@ -20,16 +21,36 @@ final class ClaudeHeadlessTests: OrbeTestCase {
   }
 
   func testCallWithoutToolsDisablesAllTools() {
-    let args = ClaudeHeadless.arguments(model: "haiku", tools: [])
+    let args = ClaudeHeadless.arguments(model: "haiku", tools: [], server: nil)
 
     XCTAssertEqual(Array(args[3...4]), ["--tools", ""])
     XCTAssertFalse(args.contains("--allowedTools"))
     XCTAssertTrue(args.contains("--strict-mcp-config"))
   }
 
+  /// Orbe の口のサーバーは `--mcp-config` で足し、そのツールだけを許すものに足す。利用者の MCP のツールが無ければ、利用者の
+  /// 設定も MCP サーバーも読まない閉じた形のまま。
+  func testOrbeServerIsAddedWithOnlyItsTools() throws {
+    let server = HeadlessServer(
+      name: "orbe_run", command: "/A/orbe-mcp", environment: ["ORBE_RUN_TOKEN": "t"],
+      tools: ["mcp__orbe_run__read_run_rows"])
+    let args = ClaudeHeadless.arguments(model: "haiku", tools: [], server: server)
+
+    XCTAssertEqual(
+      Array(args[3...6]), ["--tools", "", "--allowedTools", "mcp__orbe_run__read_run_rows"])
+    let config = try XCTUnwrap(args.firstIndex(of: "--mcp-config")).advanced(by: 1)
+    XCTAssertEqual(
+      args[config],
+      #"{"mcpServers":{"orbe_run":{"args":[],"command":"/A/orbe-mcp","env":{"ORBE_RUN_TOKEN":"t"},"#
+        + #""type":"stdio"}}}"#)
+    XCTAssertTrue(args.contains("--strict-mcp-config"))
+    XCTAssertEqual(Array(args.suffix(3)), ["--setting-sources", "", "--strict-mcp-config"])
+  }
+
   /// MCP のツールは利用者の MCP サーバーを名前で使うので、設定を読む。組み込みは指定したものだけ。
   func testMCPToolCallReadsUserSettingsButStillAllowsOnlyTheNamedTools() {
-    let args = ClaudeHeadless.arguments(model: "haiku", tools: ["Read", "mcp__slack__search"])
+    let args = ClaudeHeadless.arguments(
+      model: "haiku", tools: ["Read", "mcp__slack__search"], server: nil)
 
     XCTAssertEqual(
       Array(args[3...6]), ["--tools", "Read", "--allowedTools", "Read,mcp__slack__search"])
@@ -44,7 +65,7 @@ final class ClaudeHeadlessTests: OrbeTestCase {
   func testBashRulesGiveBashButAllowOnlyTheNamedPrefixes() {
     XCTAssertEqual(
       ClaudeHeadless.arguments(
-        model: "sonnet", tools: ["Bash(gh search prs:*)", "Bash(date -u:*)"]),
+        model: "sonnet", tools: ["Bash(gh search prs:*)", "Bash(date -u:*)"], server: nil),
       [
         "-p", "--model", "sonnet", "--tools", "Bash", "--allowedTools",
         "Bash(gh search prs:*),Bash(date -u:*)", "--permission-mode", "dontAsk",
@@ -53,7 +74,7 @@ final class ClaudeHeadlessTests: OrbeTestCase {
       ])
 
     let mixed = ClaudeHeadless.arguments(
-      model: "sonnet", tools: ["Bash(gh search prs:*)", "mcp__slack__post"])
+      model: "sonnet", tools: ["Bash(gh search prs:*)", "mcp__slack__post"], server: nil)
     XCTAssertEqual(
       Array(mixed[3...6]),
       ["--tools", "Bash", "--allowedTools", "Bash(gh search prs:*),mcp__slack__post"])

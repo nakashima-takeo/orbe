@@ -29,6 +29,8 @@ import Observation
   /// 番人（一巡が部品を起こす）。
   let scheduler: BackgroundScheduler
   let run: BackgroundScheduler.Run
+  /// 行を見る agent に、その回の行を Orbe の MCP で渡す帳面（試走の走らせ役も同じものを使う）。
+  let runData: AutomationRunData
   let workspaces: () -> AutomationWorkspaces
   private let recorded: (AutomationPassRecord) -> Void
   private let defined: (Int) -> Void
@@ -61,6 +63,7 @@ import Observation
   init(
     store: AutomationStore, scheduler: BackgroundScheduler = BackgroundScheduler(),
     run: @escaping BackgroundScheduler.Run = { BackgroundRuns.shared.run($0, completion: $1) },
+    runData: AutomationRunData = AutomationRunData(),
     workspaces: @escaping () -> AutomationWorkspaces,
     recorded: @escaping (AutomationPassRecord) -> Void, defined: @escaping (Int) -> Void,
     deleted: @escaping (Int) -> Void,
@@ -71,6 +74,7 @@ import Observation
     self.store = store
     self.scheduler = scheduler
     self.run = run
+    self.runData = runData
     self.workspaces = workspaces
     self.recorded = recorded
     self.defined = defined
@@ -330,7 +334,7 @@ extension AutomationRunner {
     let defId = node.part.defId
     let start = AutomationPassStart(
       automationId: trigger.automationId, node: node, input: input, read: read,
-      pass: AutomationPartPass(run: run, now: now, calendar: calendar))
+      pass: AutomationPartPass(run: run, now: now, calendar: calendar, runData: runData))
     trigger.current = startPass(start) { [weak self] outcome in
       guard let self, !trigger.cancelled else { return }
       ended(trigger, defId, read, startedAt, outcome)

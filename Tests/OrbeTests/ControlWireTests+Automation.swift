@@ -28,6 +28,7 @@ extension ControlWireTests {
         ]
       ),
       ("get_automation_trial", ["automationId": 2, "wait": true, "timeoutMs": 500]),
+      ("run_tool", ["token": "t", "name": "read_run_rows", "arguments": ["offset": 50]]),
     ]
   }
 
@@ -191,6 +192,28 @@ extension ControlWireTests {
     XCTAssertEqual(fake.runLists.map(\.partKey), ["judge"])
     XCTAssertEqual(fake.runLists.map(\.before), [9])
     XCTAssertEqual(fake.runLists.map(\.limit), [5])
+  }
+
+  /// 裏の agent の回の道具は、札と道具の名前を必ず受け、引数はオブジェクトだけを運ぶ（無ければ空）。
+  func testRunToolCarriesTheTokenTheNameAndTheArguments() {
+    let fake = FakeControlTarget()
+    let wire = startWire(target: fake)
+
+    XCTAssertEqual(
+      errorCode(wire.request(id: 1, method: "run_tool", params: ["name": "read_run_rows"])), -32602)
+    XCTAssertEqual(
+      errorCode(
+        wire.request(
+          id: 2, method: "run_tool", params: ["token": "t", "name": "x", "arguments": [1]])),
+      -32602)
+    _ = wire.request(id: 3, method: "run_tool", params: ["token": "t", "name": "report_nothing"])
+    _ = wire.request(
+      id: 4, method: "run_tool",
+      params: ["token": "t", "name": "read_run_rows", "arguments": ["limit": 10]])
+
+    XCTAssertEqual(fake.runTools.map(\.name), ["report_nothing", "read_run_rows"])
+    XCTAssertEqual(fake.runTools.map(\.token), ["t", "t"])
+    XCTAssertEqual(fake.runTools.map { $0.arguments["limit"] as? Int }, [nil, 10])
   }
 
   /// 試走の範囲は鍵の列、与える行は JSON オブジェクトの列で受け、1 要素 1 行の JSON にして運ぶ。待つ上限の既定は 1 時間。

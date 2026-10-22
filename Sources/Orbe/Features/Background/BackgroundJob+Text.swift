@@ -44,6 +44,7 @@ extension BackgroundStartFailure {
     case .agentNotFound(let cli): "\(cli) is not installed"
     case .directoryMissing(let directory): "directory missing: \(directory)"
     case .workDirectoryFailed(let directory): "could not create the work directory: \(directory)"
+    case .orbeServerMissing: "Orbe's MCP server is not bundled (run Orbe.app)"
     case .launchFailed(let code): "launch failed: \(String(cString: strerror(code)))"
     }
   }
