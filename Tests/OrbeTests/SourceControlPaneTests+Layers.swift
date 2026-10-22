@@ -5,11 +5,12 @@ import XCTest
 
 /// 親「ソース管理」とグラフの枠（エディター面に結んだパネル）——親を畳むと、焦点のあった欄・列から本文へ焦点を移してから
 /// 隠す。親を畳んだままソース管理を出しても、パネルの中へ焦点を求めない。グラフの列で押して働くのは「さらに表示」だけで、
-/// 押しても変更の列の焦点と選択は動かない。
+/// 押しても変更の列の焦点と選択は動かない。境目を引くとグラフの枠の高さが変わり、離すと記憶へ書き戻す。
 ///
 /// 壊れると何が起きるか。列で ↑↓ していて親を畳むと、焦点が窓へ落ちてキーがどこにも届かない（パネルは焦点があると思った
 /// まま）。畳んだ親を開いた瞬間に、残っていた焦点の要求が本文の焦点を奪う。グラフのコミットを押すと、変更の列から焦点が
-/// 抜けて ↑↓ が効かなくなる。「さらに表示」を押しても 50 件の先が出ない。
+/// 抜けて ↑↓ が効かなくなる。「さらに表示」を押しても 50 件の先が出ない。境目を引いても枠が動かない・逆へ動く・
+/// ポインタから離れて動く、離しても高さが残らず再起動で戻る。
 extension SourceControlPaneTests {
   /// 変更 a.txt・b.txt と 1 コミットのグラフが出た面。
   private func layersPane() throws -> Hosted {
@@ -110,4 +111,44 @@ extension SourceControlPaneTests {
     XCTAssertEqual(scm.selection, ScmRowID(section: .changes, path: "b.txt"), "続けて ↓ が効く")
   }
 
+  /// 境目を引くと、グラフの枠は掴んだときの高さから引いた分だけ伸び縮みし（上へ引けば伸びる）、離すと記憶へ書き戻す。
+  func testDraggingTheBoundaryResizesTheGraphFrameAndWritesItBackOnRelease() throws {
+    let hosted = host(try TempGitRepo(), showsPanel: false)
+    hosted.window.setContentSize(NSSize(width: 900, height: 700))
+    hosted.pane.configure(
+      translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
+      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState.loaded(),
+      diffModes: EditorDiffModeState())
+    hosted.pane.shell.selectPanel(.sourceControl)
+    let graph = hosted.pane.scmGraphList
+    func graphFrameHeight() -> CGFloat {
+      hosted.pane.layoutSubtreeIfNeeded()
+      return graph.window == nil ? 0 : graph.frame.height + Theme.Layout.editorScmRow
+    }
+    let standard = Theme.Layout.editorScmGraph
+    pumpMain(until: { graphFrameHeight() == standard }, "既定の高さのグラフの枠")
+    let handle = try XCTUnwrap(splitHandle(in: hosted.pane))
+    let grab = handle.convert(NSPoint(x: handle.bounds.midX, y: handle.bounds.midY), to: nil)
+    func drag(rising rise: CGFloat) {
+      handle.mouseDragged(
+        with: .mouse(
+          .leftMouseDragged, at: NSPoint(x: grab.x, y: grab.y + rise), in: hosted.window))
+    }
+
+    handle.mouseDown(with: .mouse(.leftMouseDown, at: grab, in: hosted.window))
+    drag(rising: 40)
+    pumpMain(until: { graphFrameHeight() == standard + 40 }, "上へ引けば伸びる")
+    drag(rising: -50)
+    pumpMain(until: { graphFrameHeight() == standard - 50 }, "掴んだときの高さから、引いた分だけ")
+    XCTAssertEqual(
+      AppStatePersistence.load()?.editorSidebar?.graphHeight, standard, "引いている間は書かない")
+    handle.mouseUp(with: .mouse(.leftMouseUp, at: grab, in: hosted.window))
+    XCTAssertEqual(
+      AppStatePersistence.load()?.editorSidebar?.graphHeight, standard - 50, "離すと書き戻す")
+  }
+
+  /// 面に載っている境目の当たり（載っていなければ nil）。
+  private func splitHandle(in view: NSView) -> ScmSplitHandleView? {
+    (view as? ScmSplitHandleView) ?? view.subviews.lazy.compactMap(splitHandle(in:)).first
+  }
 }
