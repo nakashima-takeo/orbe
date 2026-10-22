@@ -124,6 +124,53 @@ extension AutomationStoreTests {
     XCTAssertEqual(reopened.automations.map(\.id), [fine])
   }
 
+  /// 判定の動作の定義を壊した、取得に決まりを外した印のある自動化（読めない自動化として開き直したストア）。
+  private func unreadableWithABreach() throws -> (store: AutomationStore, id: Int) {
+    var store: AutomationStore? = AutomationStore()
+    let id = try XCTUnwrap(store?.create(Self.definition("壊す"), now: Self.at).id)
+    try Self.fetch(XCTUnwrap(store), id, [Self.item("a")], outcome: Self.breached([Self.item("a")]))
+    let judge = try XCTUnwrap(store?.part(id, "judge"))
+    store = nil
+    try database().run(
+      """
+      UPDATE action_defs SET action = '{"instruction": 1}'
+      WHERE id = (SELECT def_id FROM parts WHERE id = ?)
+      """, [.integer(Int64(judge.rawValue))])
+    return (AutomationStore(), id)
+  }
+
+  /// 読めない自動化を直すと、残る部品は開き直したストアと同じ状態（回の記録・通し番号・足した時刻）から続き、何をするかが
+  /// 変わったものとして外した印が下りる。
+  func testFixingAnUnreadableAutomationCarriesItsPartsOverAndLowersTheirMarks() throws {
+    let (carried, id) = try { () throws -> (Automation, Int) in
+      let (store, id) = try unreadableWithABreach()
+      var fixed = Self.definition("直した")
+      for index in fixed.parts.indices {
+        fixed.parts[index].id = store.unreadable.first?.parts[index]
+      }
+
+      _ = try store.replace(id, version: 1, with: fixed, now: Self.at)
+
+      return (try XCTUnwrap(store.automation(id)), id)
+    }()
+
+    XCTAssertEqual(carried.state(key: "fetch").runs.count, 1)
+    XCTAssertNil(carried.state(key: "fetch").breach)
+    XCTAssertEqual(Self.persisted([carried]), AutomationStore().automation(id).map { [$0] })
+  }
+
+  /// 読めない自動化の書き換えでも、id を落として今の部品と同じ鍵で書いた部品は断り、部品は変わらない。
+  func testAnUnreadableAutomationRefusesARewriteThatDropsThePartIds() throws {
+    let (store, id) = try unreadableWithABreach()
+    let parts = store.unreadable.first?.parts
+
+    XCTAssertThrowsError(try store.replace(id, version: 1, with: Self.definition(), now: Self.at)) {
+      guard case .invalid(let message) = $0 as? AutomationError else { return XCTFail("\($0)") }
+      XCTAssertTrue(message.hasPrefix(#"parts[0].id: the key "fetch" belongs to part"#), message)
+    }
+    XCTAssertEqual(store.unreadable.first?.parts, parts)
+  }
+
   /// 中身の JSON を壊した回の記録は、その 1 件だけが「不明な記録」として、時刻・契機・成否を持って残る。
   func testARunRecordThatCannotBeReadStaysAsAnUnknownRecord() throws {
     var store: AutomationStore? = AutomationStore()
