@@ -93,8 +93,7 @@ enum AutomationInbox {
   /// つながりごとの、読む上限の番号（読んだ位置を上限まで進めてよいかを決める）。
   struct Ceiling: Equatable {
     let edge: AutomationPartID
-    let item: Int
-    let event: Int
+    let seqs: AutomationSeqs
   }
 
   /// 取るときの事情。
@@ -162,8 +161,8 @@ enum AutomationInbox {
   private static func reach(_ ceilings: [Ceiling]) -> [Reach] {
     ceilings.flatMap { ceiling in
       [
-        Reach(edge: ceiling.edge, table: .item, seq: ceiling.item),
-        Reach(edge: ceiling.edge, table: .event, seq: ceiling.event),
+        Reach(edge: ceiling.edge, table: .item, seq: ceiling.seqs.item),
+        Reach(edge: ceiling.edge, table: .event, seq: ceiling.seqs.event),
       ]
     }.filter { $0.seq > 0 }
   }

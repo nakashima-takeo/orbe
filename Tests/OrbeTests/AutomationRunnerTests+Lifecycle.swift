@@ -41,7 +41,7 @@ extension AutomationRunnerTests {
     XCTAssertEqual(store.automation(id)?.state(key: "gh").runs.count, 2, "止めた回の結果は確定しない")
     XCTAssertEqual(inbox("judge", of: id), 2)
     let gh = try XCTUnwrap(store.automation(id)?.state(key: "gh"))
-    XCTAssertEqual(gh.lastEventSeq, 2, "出した行は残る")
+    XCTAssertEqual(try store.lastSeqs(id, "gh").event, 2, "出した行は残る")
     XCTAssertEqual(gh.succeededAt, start.addingTimeInterval(3600), "前回成功の目印は残る")
   }
 
@@ -130,7 +130,7 @@ extension AutomationRunnerTests {
     XCTAssertEqual(calls("judge").count, 1, "取る行が無ければ手段を起こさない")
     XCTAssertEqual(store.automation(id)?.state(key: "judge").runs.count, 1, "記録も残さない")
     XCTAssertEqual(
-      store.automation(id)?.state(key: "judge").pendingDrops.counts, [.proposed: 1],
+      try store.pendingDrops(id, "judge").counts, [.proposed: 1],
       "捨てた数は持ち越す")
 
     finish("gh", printed([item("a"), sameLink, item("b")].joined(separator: "\n")))

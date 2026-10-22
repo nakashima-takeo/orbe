@@ -101,7 +101,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
 
     XCTAssertEqual(run(control, ["run", id, "--part", "fetch"]), "started automation \(id)")
     XCTAssertTrue(waitUntil(10) { automation()?.state(key: "fetch").runs.isEmpty == false })
-    XCTAssertEqual(automation()?.state(key: "judge").inbox, 1, "前提: 判定が読めば取る行がある")
+    XCTAssertEqual(automation()?.state(key: "judge").pending.count, 1, "前提: 判定が読めば取る行がある")
     // 鍵が届かず終わりの部品まで流れると、判定は取得の終わりと同じ知らせの中で起こされる（走っているか、もう記録がある）。
     XCTAssertFalse(control.target.automationRunner.isRunning(Int(id)!, "judge"))
     XCTAssertEqual(automation()?.state(key: "judge").runs, [], "道の外の手動の部品は走らない")

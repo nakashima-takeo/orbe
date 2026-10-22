@@ -85,14 +85,16 @@ extension BoardAutomationPartValue {
     runs = BoardAutomationSummary.lines(state.runs, node: node, text: text)
   }
 
-  private static func breach(_ mark: AutomationBreachMark, text: AutomationText) -> Breach {
+  /// 印の回の記録から。読めない記録なら外れた件は空。
+  private static func breach(_ record: AutomationRunRecord, text: AutomationText) -> Breach {
     let l10n = text.l10n
+    let lines = record.run?.breach ?? AutomationRejections()
     return Breach(
       heading: l10n.format(
-        mark.lines.count == 1 ? .boardPartFormatErrorOne : .boardPartFormatErrorOther,
-        text.recent(mark.at), mark.lines.count),
-      lines: mark.lines.lines.map(text.line),
-      outcome: l10n.string(mark.passed ? .boardPartBreachPassed : .boardPartBreachFailed))
+        lines.count == 1 ? .boardPartFormatErrorOne : .boardPartFormatErrorOther,
+        text.recent(record.startedAt), lines.count),
+      lines: lines.lines.map(text.line),
+      outcome: l10n.string(record.failed ? .boardPartBreachFailed : .boardPartBreachPassed))
   }
 
   /// 前回の報告（報告の部品）か応答（作業の部品）。文を残した最新の回から。
@@ -159,8 +161,8 @@ extension BoardAutomationPartValue {
           flow: nil,
           value: [
             Segment(
-              text: l10n.format(.boardPartCount, state.inbox),
-              look: state.inbox > 0 ? .emphasized : .muted),
+              text: l10n.format(.boardPartCount, state.pending.count),
+              look: state.pending.count > 0 ? .emphasized : .muted),
             Segment(text: "\u{3000}" + limit(part.maxItems, l10n), look: .muted),
           ]))
     }

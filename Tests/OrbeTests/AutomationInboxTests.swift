@@ -42,8 +42,8 @@ final class AutomationInboxTests: OrbeTestCase {
 
   private func ceilings(cs item: Int = 0, na event: Int = 0) -> [AutomationInbox.Ceiling] {
     [
-      AutomationInbox.Ceiling(edge: cs, item: item, event: 0),
-      AutomationInbox.Ceiling(edge: na, item: 0, event: event),
+      AutomationInbox.Ceiling(edge: cs, seqs: AutomationSeqs(item: item, event: 0)),
+      AutomationInbox.Ceiling(edge: na, seqs: AutomationSeqs(item: 0, event: event)),
     ]
   }
 

@@ -4,7 +4,7 @@ import Foundation
 /// 中身の JSON を読めない回の記録は「不明な記録」、指す行や値が読めない候補は「読めない候補」として残し、ほかは普段どおり読む。
 /// 読みの SQL の失敗は投げる（そのセッションは書かない）。
 extension AutomationDatabase {
-  static func snapshot(_ db: SQLiteDatabase, now: Date) throws -> AutomationSnapshot {
+  static func memory(_ db: SQLiteDatabase, now: Date) throws -> AutomationMemory {
     let database = AutomationDatabase(db)
     var automations: [Automation] = []
     var unreadable: [AutomationUnreadable] = []
@@ -22,20 +22,11 @@ extension AutomationDatabase {
       }
     }
     let (proposals, unreadableProposals) = try database.heldProposals()
-    var snapshot = AutomationSnapshot(
+    var memory = AutomationMemory(
       automations: automations, unreadable: unreadable, proposals: proposals,
       unreadableProposals: unreadableProposals)
-    let links = snapshot.heldLinks
-    for index in snapshot.automations.indices {
-      let automation = snapshot.automations[index]
-      for node in automation.graph.nodes where !node.inputs.isEmpty {
-        let pending = try database.pending(
-          node, in: automation.graph, proposed: links.contains, now: now)
-        snapshot.automations[index].parts[node.id]?.inbox = pending.count
-        snapshot.automations[index].parts[node.id]?.inboxExpiresAt = pending.expiresAt
-      }
-    }
-    return snapshot
+    for automation in automations { try memory.recount(automation.id, database, now: now) }
+    return memory
   }
 
   /// `automations` の 1 行。
@@ -79,7 +70,7 @@ extension AutomationDatabase {
           trigger: checked.part.trigger, maxItems: checked.part.maxItems, defId: row.defId)
       })
     var states: [AutomationPartID: AutomationPartState] = [:]
-    for part in parts { states[part.id] = try state(of: part) }
+    for part in parts { states[part.id] = try state(of: part.id) }
     return .readable(
       Automation(
         id: row.id, name: checked.name, notify: row.notify.flatMap(AutomationNotify.init),
@@ -93,17 +84,12 @@ extension AutomationDatabase {
     let defId: AutomationDefID
     let object: [String: Any]
     let problem: String?
-    let addedAt: Date
-    let lastItemSeq: Int
-    let lastEventSeq: Int
-    let pendingDrops: String?
   }
 
   private func partRows(of automation: Int) throws -> [PartRow] {
     let rows = try db.select(
       """
-      SELECT p.id, p.key, p.name, p.trigger, p.max_items, p.def_id, d.kind, a.action, p.added_at,
-        p.last_item_seq, p.last_event_seq, p.pending_drops
+      SELECT p.id, p.key, p.name, p.trigger, p.max_items, p.def_id, d.kind, a.action
       FROM parts p JOIN part_defs d ON d.id = p.def_id LEFT JOIN action_defs a ON a.id = p.def_id
       WHERE p.automation_id = ? AND p.removed_at IS NULL ORDER BY p.position
       """, [.integer(Int64(automation))]
@@ -111,8 +97,7 @@ extension AutomationDatabase {
       (
         id: s.int(at: 0), key: s.text(at: 1) ?? "", name: s.text(at: 2) ?? "",
         trigger: s.text(at: 3), maxItems: s.optionalInt64(at: 4), defId: s.int(at: 5),
-        kind: s.text(at: 6), action: s.text(at: 7), addedAt: s.int64(at: 8),
-        lastItem: s.int(at: 9), lastEvent: s.int(at: 10), drops: s.text(at: 11)
+        kind: s.text(at: 6), action: s.text(at: 7)
       )
     }
     let keys = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.key) })
@@ -153,61 +138,8 @@ extension AutomationDatabase {
       }
       return PartRow(
         id: AutomationPartID(row.id), defId: AutomationDefID(row.defId), object: object,
-        problem: problem, addedAt: AutomationPersistence.date(row.addedAt),
-        lastItemSeq: row.lastItem, lastEventSeq: row.lastEvent, pendingDrops: row.drops)
+        problem: problem)
     }
-  }
-
-  private func state(of part: PartRow) throws -> AutomationPartState {
-    try state(
-      of: part.id, addedAt: part.addedAt, lastItemSeq: part.lastItemSeq,
-      lastEventSeq: part.lastEventSeq, pendingDrops: part.pendingDrops)
-  }
-
-  /// DB にある部品の状態（開き直したストアが持つものと同じ。読めば取る行の数は呼び手が数える）。
-  func storedState(of id: AutomationPartID) throws -> AutomationPartState {
-    let rows = try db.select(
-      "SELECT added_at, last_item_seq, last_event_seq, pending_drops FROM parts WHERE id = ?",
-      [.integer(Int64(id.rawValue))]
-    ) { s in
-      (addedAt: s.int64(at: 0), item: s.int(at: 1), event: s.int(at: 2), drops: s.text(at: 3))
-    }
-    guard let row = rows.first else {
-      throw AutomationError.unavailable("part \(id) is missing from the database")
-    }
-    return try state(
-      of: id, addedAt: AutomationPersistence.date(row.addedAt), lastItemSeq: row.item,
-      lastEventSeq: row.event, pendingDrops: row.drops)
-  }
-
-  /// 部品の状態（直近の回・最新の成功・外した印・持ち越し・最後の番号・今有効な項目・読んだ位置）。
-  private func state(
-    of id: AutomationPartID, addedAt: Date, lastItemSeq: Int, lastEventSeq: Int,
-    pendingDrops: String?
-  ) throws -> AutomationPartState {
-    var state = AutomationPartState(addedAt: addedAt)
-    state.runs = try records(of: id, limit: AutomationPartState.retainedRuns)
-    state.succeededAt = try succeededAt(of: id)
-    state.breach = try breachRecord(of: id).map(AutomationBreachMark.init)
-    if let drops = Self.decode(AutomationDrops.self, pendingDrops) {
-      state.pendingDrops = drops
-    } else {
-      NSLog("[automation] dropped unreadable carried counts of part \(id)")
-    }
-    state.lastItemSeq = lastItemSeq
-    state.lastEventSeq = lastEventSeq
-    state.live = try live(of: id)
-    state.reads = Dictionary(
-      uniqueKeysWithValues: try db.select(
-        "SELECT from_part_id, read_item_seq, read_event_seq FROM part_edges WHERE to_part_id = ?",
-        [.integer(Int64(id.rawValue))]
-      ) {
-        (
-          AutomationPartID($0.int(at: 0)),
-          AutomationReadPosition(item: $0.int(at: 1), event: $0.int(at: 2))
-        )
-      })
-    return state
   }
 
   /// 覚えている候補。指す行や値が読めない候補は、リンクだけを持つ読めない候補にする。

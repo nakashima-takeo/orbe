@@ -7,12 +7,10 @@ extension AutomationStore {
 
   /// 回の記録の 1 ページ。
   struct History {
-    /// 新しい順。
-    let runs: [AutomationKeyedRun]
+    /// 新しい順。鍵は部品の今の鍵（部品の台帳から。定義を読めない自動化でも引ける）。
+    let runs: [AutomationKeyedRecord]
     /// 続きがあれば、次のページを読むときに `before` に渡す記録の ID。
     let next: Int?
-    /// 部品の今の鍵（部品の台帳から。定義を読めない自動化でも引ける）。
-    let keys: [AutomationPartID: String]
   }
 
   /// 自動化の回の記録を新しい順に `limit` 件（既定 20・上限 100）。`part` を渡せばその部品だけ。`before` は前のページの `next`。
@@ -37,11 +35,8 @@ extension AutomationStore {
     } else {
       throw .automationNotFound(id)
     }
-    let (found, keys) = try read {
-      (try $0.records(among: parts, before: before, limit: limit + 1), try $0.partKeys(of: id))
-    }
-    let page = found.prefix(limit).map { AutomationKeyedRun(part: $0.part, record: $0.record) }
-    return History(
-      runs: page, next: found.count > limit ? page.last?.record.id : nil, keys: keys)
+    let found = try read { try $0.records(of: parts, before: before, limit: limit + 1) }
+    let page = Array(found.prefix(limit))
+    return History(runs: page, next: found.count > limit ? page.last?.record.id : nil)
   }
 }

@@ -46,6 +46,9 @@ import Observation
   @ObservationIgnored private var registered = Set<String>()
   /// 部品ごとの、前の契機の始まりの時点の、入力ごとの上流の印（メモリだけ。無ければ読んだ位置と変化の番号 0 が基準線）。
   @ObservationIgnored var marks: [String: [AutomationPartID: Mark]] = [:]
+  /// 出す側の部品ごとの変化の番号（メモリだけ。DB から導けない）。項目が有効になる・版が足される・項目が無効になる・出来事が
+  /// 足されるたびに進む。毎回すべてを取るつながりの起こす決まりが読む。
+  @ObservationIgnored var changes: [AutomationPartID: Int] = [:]
   /// 部品ごとの、番人に最後に返した数え始め。記録の無い契機（取る行が 0 件）でも進むので、次の時刻はこれから数える。
   @ObservationIgnored private var anchors: [String: Date] = [:]
   /// 走っている契機（掃除から守る行を言う）。
@@ -139,7 +142,11 @@ import Observation
     }
     let replaced = try store.replace(id, version: version, with: definition, now: now())
     let automation = replaced.automation
-    for part in replaced.removed { unregister(id, part) }
+    for part in replaced.changed { changes[part, default: 0] += 1 }
+    for part in replaced.removed {
+      unregister(id, part)
+      changes[part] = nil
+    }
     for part in replaced.reworked { unregister(id, part) }
     register(automation)
     defined(id)
@@ -159,7 +166,10 @@ import Observation
     try checkAvailable()
     let parts = store.automation(id)?.graph.nodes.map(\.id) ?? []
     try store.delete(id, now: now())
-    for part in parts { unregister(id, part) }
+    for part in parts {
+      unregister(id, part)
+      changes[part] = nil
+    }
     deleted(id)
   }
 
@@ -219,6 +229,7 @@ import Observation
     for key in registered { scheduler.remove(id: key) }
     registered = []
     marks = [:]
+    changes = [:]
     settled = [:]
     anchors = [:]
     active = [:]
@@ -238,7 +249,7 @@ extension AutomationRunner {
     let startedAt: Date
     let finish: (Date) -> Void
     /// 契機の始まりの時点の、入力ごとの上流の最後の番号。これ以下の行を読む。
-    var baseline: [AutomationPartID: (item: Int, event: Int)] = [:]
+    var baseline: [AutomationPartID: AutomationSeqs] = [:]
     /// 走っている回が読んだ行。
     var holding: [AutomationRowRef] = []
     /// 回の始まり。
@@ -283,15 +294,14 @@ extension AutomationRunner {
     }
     if node.inputs.isEmpty {
       pass(trigger, read: nil)
-    } else {
-      var marks: [AutomationPartID: Mark] = [:]
-      for edge in node.inputs {
-        let up = Self.mark(of: edge.from, in: automation)
-        marks[edge.from] = up
-        trigger.baseline[edge.from] = (up.item, up.event)
-      }
+    } else if let inlets = inlets(of: part, in: id) {
+      let marks = inlets.mapValues(\.up)
       self.marks[Self.key(id, part)] = marks
+      trigger.baseline = marks.mapValues(\.seqs)
       read(trigger)
+    } else {
+      trigger.failed = true
+      end(trigger)
     }
     return BackgroundRunHandle { [weak self] in
       trigger.cancelled = true
@@ -357,6 +367,7 @@ extension AutomationRunner {
       return end(trigger)
     }
     trigger.holding = []
+    if result.changed { changes[trigger.part, default: 0] += 1 }
     recorded(AutomationPassRecord(end: passEnd, recorded: result))
     if result.changed, let automation = store.automation(trigger.automationId) {
       for node in automation.graph.downstream(of: trigger.part) {

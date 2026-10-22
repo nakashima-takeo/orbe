@@ -6,8 +6,9 @@ import Observation
 ///
 /// 変異はどれも「変わる行を DB に 1 トランザクションで書き、最後に掃除し、通ってからメモリを進める」の 1 経路で行う。書けなければ
 /// メモリは変わらず、呼び手に `.unavailable` を返す——逆だと、書けなかった変化が画面にだけ残り、再起動で巻き戻る。出す側の行の
-/// 本文は DB にだけ置き、メモリは画面と予定に要る分（直近の回・読めば取る行の数・覚えている候補・今有効な項目の id とリンク）
-/// だけを持つ。
+/// 本文は DB にだけ置き、メモリは画面と予定が同期で読む分（部品の状態・覚えている候補）だけを持つ。部品の状態は変わった部品に
+/// ついて DB から読み直す（`AutomationMemory.reread`・`recount`）。確定の中でしか使わない事実（読んだ位置・最後の番号・持ち越し）
+/// は持たず、使う場で DB から読む。
 ///
 /// DB を使えない（開けない・別の Orbe が持つ・新しい版・運転中に壊れを見つけた）ストアは、自動化 0 件として描き、変異と読みを
 /// 理由付きで断る。壊れの退避は次の起動の検査に任せる。
@@ -33,10 +34,10 @@ import Observation
     switch opening {
     case .success(let opened):
       database = opened.database
-      automations = opened.snapshot.automations
-      unreadable = opened.snapshot.unreadable
-      proposals = opened.snapshot.proposals
-      unreadableProposals = opened.snapshot.unreadableProposals
+      automations = opened.memory.automations
+      unreadable = opened.memory.unreadable
+      proposals = opened.memory.proposals
+      unreadableProposals = opened.memory.unreadableProposals
       unavailableError = Self.brokenError
     case .failure(let error):
       unavailableError = error
@@ -60,10 +61,14 @@ import Observation
     return index
   }
 
-  /// 覚えている候補のリンク（読めない候補を含む）。
-  var heldLinks: Set<String> {
-    Set(proposals.map(\.item.link) + unreadableProposals.map(\.link))
+  /// 今のメモリ。
+  var memory: AutomationMemory {
+    AutomationMemory(
+      automations: automations, unreadable: unreadable, proposals: proposals,
+      unreadableProposals: unreadableProposals)
   }
+
+  var heldLinks: Set<String> { memory.heldLinks }
 
   // MARK: - 定義
 
@@ -84,12 +89,11 @@ import Observation
       }
       let graph = AutomationGraph(checked, parts: entities)
       for node in graph.nodes { try db.setEdges(of: id, to: node.id, node.inputs) }
-      var automation = Automation(
+      let automation = Automation(
         id: id, name: name, notify: definition.notify, graph: graph, pausedAt: nil, version: 1,
         createdAt: at,
         parts: Dictionary(
-          uniqueKeysWithValues: graph.nodes.map { ($0.id, AutomationPartState(addedAt: at)) }))
-      try Self.refreshReads(&automation, db)
+          uniqueKeysWithValues: try graph.nodes.map { ($0.id, try db.state(of: $0.id)) }))
       memory.automations.append(automation)
       try memory.recount(automation.id, db, now: at)
       return memory.automations[memory.automations.count - 1]
@@ -202,9 +206,7 @@ import Observation
     sweepingAt sweep: Date?, _ body: (AutomationDatabase, inout AutomationMemory) throws -> T
   ) throws(AutomationError) -> T {
     guard let database else { throw unavailableError }
-    var memory = AutomationMemory(
-      automations: automations, unreadable: unreadable, proposals: proposals,
-      unreadableProposals: unreadableProposals)
+    var memory = self.memory
     let holding = self.holding()
     let result: T
     do {
@@ -284,10 +286,7 @@ extension AutomationStore {
       return AutomationStore(
         opening: .success(
           AutomationDatabase.Opened(
-            database: AutomationDatabase(database),
-            snapshot: AutomationSnapshot(
-              automations: source.automations, unreadable: source.unreadable,
-              proposals: source.proposals, unreadableProposals: source.unreadableProposals))))
+            database: AutomationDatabase(database), memory: source.memory)))
     }
   }
 
@@ -302,18 +301,29 @@ extension AutomationStore {
   }
 }
 
-/// 変異の間のメモリの写し（`AutomationStore.commit`）。
-struct AutomationMemory {
+/// ストアのメモリ——起動時に読んだ全部（`AutomationDatabase.memory`）と、変異の間に進める写し（`AutomationStore.commit`）。
+struct AutomationMemory: Equatable {
   var automations: [Automation]
-  var unreadable: [AutomationUnreadable]
+  var unreadable: [AutomationUnreadable] = []
   var proposals: [AutomationProposal]
-  var unreadableProposals: [AutomationUnreadableProposal]
+  var unreadableProposals: [AutomationUnreadableProposal] = []
 
   func automation(_ id: Int) -> Automation? {
     automations.first { $0.id == id }
   }
 
+  /// 覚えている候補のリンク（読めない候補を含む）。「既に候補がある」はこれで言う。
   var heldLinks: Set<String> {
     Set(proposals.map(\.item.link) + unreadableProposals.map(\.link))
+  }
+
+  /// 部品の自分の状態を DB から読み直す（読めば取る行は保つ）。
+  mutating func reread(_ part: AutomationPartID, of id: Int, _ db: AutomationDatabase) throws {
+    guard let index = automations.firstIndex(where: { $0.id == id }),
+      let pending = automations[index].parts[part]?.pending
+    else { return }
+    var state = try db.state(of: part)
+    state.pending = pending
+    automations[index].parts[part] = state
   }
 }

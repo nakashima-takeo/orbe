@@ -5,36 +5,32 @@ extension AutomationDatabase {
   /// 受け手が 1 つのつながりから読む範囲。
   struct Reading {
     let edge: AutomationPartEdge
-    /// 読んだ位置（項目・出来事）。
-    let readItem: Int
-    let readEvent: Int
+    /// 読んだ位置。
+    let read: AutomationSeqs
     /// 読む上限の番号（契機の始まりの時点の上流の最後の番号。無ければ今の最後の番号）。
-    let ceilingItem: Int
-    let ceilingEvent: Int
+    let ceiling: AutomationSeqs
   }
 
   /// 受け手の 1 つのつながりの読んだ位置と、上流の最後の番号。
-  struct Position {
-    let item: Int
-    let event: Int
-    let lastItem: Int
-    let lastEvent: Int
+  struct Position: Equatable {
+    let read: AutomationSeqs
+    let last: AutomationSeqs
   }
 
   /// 受け手のつながりごとの読んだ位置と、上流の最後の番号。
-  func readings(of receiver: AutomationGraph.Node) throws -> [AutomationPartID: Position] {
+  func positions(of receiver: AutomationPartID) throws -> [AutomationPartID: Position] {
     Dictionary(
       uniqueKeysWithValues: try db.select(
         """
         SELECT e.from_part_id, e.read_item_seq, e.read_event_seq, p.last_item_seq, p.last_event_seq
         FROM part_edges e JOIN parts p ON p.id = e.from_part_id WHERE e.to_part_id = ?
-        """, [.integer(Int64(receiver.id.rawValue))]
+        """, [.integer(Int64(receiver.rawValue))]
       ) { s in
         (
           AutomationPartID(s.int(at: 0)),
           Position(
-            item: s.int(at: 1), event: s.int(at: 2), lastItem: s.int(at: 3),
-            lastEvent: s.int(at: 4))
+            read: AutomationSeqs(item: s.int(at: 1), event: s.int(at: 2)),
+            last: AutomationSeqs(item: s.int(at: 3), event: s.int(at: 4)))
         )
       })
   }
@@ -48,10 +44,10 @@ extension AutomationDatabase {
     let items = try db.select(
       """
       SELECT i.id, i.seq, i.written_id, i.valid_from, i.source_item_id, i.source_event_id, v.id, v.body
-      FROM items i JOIN item_versions v
-        ON v.id = (SELECT max(id) FROM item_versions WHERE item_id = i.id)
+      FROM items i JOIN item_versions v ON v.id = \(Self.currentVersion(of: "i.id"))
       WHERE i.part_id = ? AND i.valid_to IS NULL AND i.seq > ? AND i.seq <= ? ORDER BY i.seq
-      """, [p, .integer(Int64(all ? 0 : reading.readItem)), .integer(Int64(reading.ceilingItem))]
+      """,
+      [p, .integer(Int64(all ? 0 : reading.read.item)), .integer(Int64(reading.ceiling.item))]
     ) { s in
       (
         item: s.int(at: 0), seq: s.int(at: 1), written: s.text(at: 2) ?? "",
@@ -65,8 +61,8 @@ extension AutomationDatabase {
       WHERE part_id = ? AND created_at >= ? AND seq > ? AND seq <= ? ORDER BY seq
       """,
       [
-        p, Self.cutoff(now), .integer(Int64(all ? 0 : reading.readEvent)),
-        .integer(Int64(reading.ceilingEvent)),
+        p, Self.cutoff(now), .integer(Int64(all ? 0 : reading.read.event)),
+        .integer(Int64(reading.ceiling.event)),
       ]
     ) { s in
       (
@@ -84,7 +80,7 @@ extension AutomationDatabase {
           source: .item(item.item), id: id,
           text: AutomationPrompts.replacing(id: id, in: item.body), at: item.at,
           origin: try origin(of: .item(item.item), graph: graph),
-          unread: item.seq > reading.readItem))
+          unread: item.seq > reading.read.item))
     }
     for event in events {
       let id = event.source == nil ? "\(up):\(event.written)" : event.written
@@ -94,7 +90,7 @@ extension AutomationDatabase {
           source: .event(event.event), id: id,
           text: AutomationPrompts.replacing(id: id, in: event.body), at: event.at,
           origin: try origin(of: .event(event.event), graph: graph),
-          unread: event.seq > reading.readEvent))
+          unread: event.seq > reading.read.event))
     }
     return rows
   }
@@ -137,7 +133,7 @@ extension AutomationDatabase {
     switch source {
     case .item(let id):
       found = try db.select(
-        "SELECT id, body FROM item_versions WHERE item_id = ? ORDER BY id DESC LIMIT 1",
+        "SELECT id, body FROM item_versions WHERE id = \(Self.currentVersion(of: "?"))",
         [.integer(Int64(id))]
       ) { (ref: .version($0.int(at: 0)), body: $0.text(at: 1)) }
     case .event(let id):
@@ -209,26 +205,26 @@ extension AutomationDatabase {
   /// 番号）。読んだ位置を進める先までの、読む前に期限で消えた出来事を数えて添える。
   func read(
     _ node: AutomationGraph.Node, in graph: AutomationGraph,
-    baseline: [AutomationPartID: (item: Int, event: Int)]?, context: AutomationInbox.Context,
+    baseline: [AutomationPartID: AutomationSeqs]?, context: AutomationInbox.Context,
     overrides: [AutomationReadOverride] = []
   ) throws -> AutomationInbox.Read {
-    let readings = try self.readings(of: node)
+    let positions = try self.positions(of: node.id)
     var rows: [AutomationInbox.Row] = []
     var ceilings: [AutomationInbox.Ceiling] = []
     for edge in node.inputs {
-      guard let position = readings[edge.from] else { continue }
+      guard let position = positions[edge.from] else { continue }
+      let base = baseline?[edge.from] ?? position.last
       let ceiling = AutomationInbox.Ceiling(
         edge: edge.from,
-        item: min(baseline?[edge.from]?.item ?? position.lastItem, position.lastItem),
-        event: min(baseline?[edge.from]?.event ?? position.lastEvent, position.lastEvent))
+        seqs: AutomationSeqs(
+          item: min(base.item, position.last.item), event: min(base.event, position.last.event)))
       ceilings.append(ceiling)
       let override = overrides.first { $0.edge == edge.from }
       var read = edge
       if override != nil { read.take = .all }
       var found = try self.rows(
-        Reading(
-          edge: read, readItem: position.item, readEvent: position.event,
-          ceilingItem: ceiling.item, ceilingEvent: ceiling.event), graph: graph, now: context.now)
+        Reading(edge: read, read: position.read, ceiling: ceiling.seqs), graph: graph,
+        now: context.now)
       if let override {
         found = found.compactMap { row in
           if override.given.contains(row.ref) { return row.forcedUnread }
@@ -247,7 +243,7 @@ extension AutomationDatabase {
     }
     var read = AutomationInbox.read(by: node, rows, ceilings: ceilings, in: context)
     for reach in read.reach where reach.table == .event {
-      guard let from = readings[reach.edge]?.event else { continue }
+      guard let from = positions[reach.edge]?.read.event else { continue }
       read.lapsed += try lapsed(of: reach.edge, from: from, to: reach.seq, now: context.now)
     }
     return read
@@ -261,13 +257,6 @@ extension AutomationInbox.Row {
       edge: edge, table: table, seq: seq, ref: ref, source: source, id: id, text: text, at: at,
       origin: origin, unread: true)
   }
-}
-
-/// 受け手の「読めば取る行」。
-struct AutomationPending: Equatable {
-  let count: Int
-  /// 数えた行のどれかが古さの上限を過ぎる最も早い時刻。
-  let expiresAt: Date?
 }
 
 extension AutomationDatabase {

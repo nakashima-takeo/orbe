@@ -45,8 +45,7 @@ extension AutomationDatabase {
       uniqueKeysWithValues: try db.select(
         """
         SELECT i.written_id, i.id, i.source_item_id, i.source_event_id, v.id, v.body
-        FROM items i JOIN item_versions v
-          ON v.id = (SELECT max(id) FROM item_versions WHERE item_id = i.id)
+        FROM items i JOIN item_versions v ON v.id = \(Self.currentVersion(of: "i.id"))
         WHERE i.part_id = ? AND i.valid_to IS NULL
         """, [.integer(p)]
       ) { s in
@@ -158,21 +157,22 @@ extension AutomationDatabase {
   }
 
   /// 部品が項目・出来事にそれぞれ最後に振った通し番号。
-  func lastSeqs(of part: AutomationPartID) throws -> (item: Int, event: Int) {
+  func lastSeqs(of part: AutomationPartID) throws -> AutomationSeqs {
     try db.select(
       "SELECT last_item_seq, last_event_seq FROM parts WHERE id = ?",
       [.integer(Int64(part.rawValue))]
-    ) { (item: $0.int(at: 0), event: $0.int(at: 1)) }.first ?? (0, 0)
+    ) { AutomationSeqs(item: $0.int(at: 0), event: $0.int(at: 1)) }.first ?? AutomationSeqs()
   }
 
-  /// 部品の今有効な項目の書かれた id とリンク（取得の最新の結果）。
-  func live(of part: AutomationPartID) throws -> [AutomationSeen] {
-    try db.select(
-      """
-      SELECT i.written_id, (SELECT link FROM item_versions WHERE item_id = i.id ORDER BY id DESC LIMIT 1)
-      FROM items i WHERE i.part_id = ? AND i.valid_to IS NULL ORDER BY i.seq
-      """, [.integer(Int64(part.rawValue))]
-    ) { AutomationSeen(id: $0.text(at: 0) ?? "", link: $0.text(at: 1) ?? "") }
+  /// 部品の今有効な項目のリンク（取得の最新の結果）。リンクの無い項目は入らない。
+  func liveLinks(of part: AutomationPartID) throws -> Set<String> {
+    Set(
+      try db.select(
+        """
+        SELECT v.link FROM items i JOIN item_versions v ON v.id = \(Self.currentVersion(of: "i.id"))
+        WHERE i.part_id = ? AND i.valid_to IS NULL AND v.link IS NOT NULL
+        """, [.integer(Int64(part.rawValue))]
+      ) { $0.text(at: 0) ?? "" })
   }
 
   /// 項目を出どころに持つ候補を下げる候補の ID（覚えていて、判断が無く、対応済みでないもの）。
@@ -191,6 +191,11 @@ extension AutomationDatabase {
   }
 
   // MARK: - 値
+
+  /// 項目の今の版の ID を引く SQL の式（`item` は項目の ID の式）。版は足すだけなので、最も大きい ID が今の版。
+  static func currentVersion(of item: String) -> String {
+    "(SELECT max(id) FROM item_versions WHERE item_id = \(item))"
+  }
 
   static func cutoff(_ now: Date) -> SQLiteValue {
     instant(now.addingTimeInterval(-retention))

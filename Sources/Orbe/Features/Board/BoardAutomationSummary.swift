@@ -40,7 +40,7 @@ extension BoardAutomationSummary {
   /// `next` は次に予定で回る時刻。
   init(_ automation: Automation, text: AutomationText, next: Date?) {
     let l10n = text.l10n
-    if let latest = automation.runs.first?.record {
+    if let latest = automation.runs.first {
       mark = automation.failing ? .failure : .success
       last = l10n.format(.boardListLast, text.recent(latest.startedAt))
     } else {

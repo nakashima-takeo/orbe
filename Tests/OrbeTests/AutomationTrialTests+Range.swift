@@ -21,7 +21,7 @@ extension AutomationTrialTests {
     ended(trial)
 
     XCTAssertEqual(trial.range.path.map(\.key), ["judge"])
-    XCTAssertEqual(store.automation(id)?.state(key: "judge").inbox, 1)
+    XCTAssertEqual(store.automation(id)?.state(key: "judge").pending.count, 1)
   }
 
   /// 合流の一部: 指した 2 つの取得と判定だけが動き、判定は道の外の取得を待たない。

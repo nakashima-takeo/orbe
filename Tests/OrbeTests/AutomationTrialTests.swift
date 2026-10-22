@@ -285,7 +285,7 @@ final class AutomationTrialTests: OrbeTestCase {
     ])
     try runner.flow(id, to: .part(store.part(id, "gh")))
     finish("gh", fetched(["a"]))
-    XCTAssertEqual(store.automation(id)?.state(key: "p").inbox, 1)
+    XCTAssertEqual(store.automation(id)?.state(key: "p").pending.count, 1)
 
     let trial = try trials.start(id, .init(from: ["p"], rows: [#"{"id":"x"}"#]))
     let agents = {
@@ -354,7 +354,7 @@ final class AutomationTrialTests: OrbeTestCase {
     waitCalls("digest", 1)
     finish("digest", "x")
     ended(trial)
-    XCTAssertEqual(store.automation(id)?.state(key: "p").inbox, 0)
+    XCTAssertEqual(store.automation(id)?.state(key: "p").pending.count, 0)
 
     let merged = try define([
       fetch("gh"), fetch("slack"), part("p", from: ["gh", "slack"]),

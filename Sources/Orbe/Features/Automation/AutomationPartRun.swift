@@ -90,24 +90,6 @@ struct AutomationDrops: Equatable {
   }
 }
 
-/// 結果を初めて断った回の印（部品ごと）。印の回の記録から導く。
-struct AutomationBreachMark: Equatable, Codable {
-  /// その回の開始時刻。
-  let at: Date
-  let lines: AutomationRejections
-  /// 回が通ったか（agent が断られた結果を同じ会話の中で直した回だけが当たる）。
-  let passed: Bool
-}
-
-extension AutomationBreachMark {
-  /// 印の回の記録から。読めない記録なら、時刻と通ったかだけを持つ。
-  init(_ record: AutomationRunRecord) {
-    self.init(
-      at: record.startedAt, lines: record.run?.breach ?? AutomationRejections(),
-      passed: !record.failed)
-  }
-}
-
 /// 回の記録 1 件。時刻・契機・成否は列から分かり、中身は読めなければ不明な記録になる。
 struct AutomationRunRecord: Equatable {
   /// 記録の ID（`recordId`）。

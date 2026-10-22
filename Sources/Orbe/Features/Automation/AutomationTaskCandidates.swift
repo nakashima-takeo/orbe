@@ -13,7 +13,7 @@ extension Automation {
   var candidateLinks: Set<String> {
     Set(
       graph.nodes.filter { $0.role == .fetch && graph.reachesTaskCandidates($0.id) }
-        .flatMap { state($0.id).live.map(\.link) })
+        .flatMap { state($0.id).liveLinks })
   }
 
   /// この自動化が候補を持っているか。
@@ -62,7 +62,7 @@ extension AutomationStore {
   func openProposals(of id: Int, judge: AutomationPartID) -> [AutomationProposal] {
     guard let automation = automation(id) else { return [] }
     let fetches = automation.graph.fetches(reaching: judge)
-    let links = Set(fetches.flatMap { automation.state($0.id).live.map(\.link) })
+    let links = Set(fetches.flatMap { automation.state($0.id).liveLinks })
     let sources = Set(fetches.map(\.id))
     return proposals.filter {
       $0.state == .open

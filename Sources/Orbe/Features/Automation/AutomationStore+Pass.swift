@@ -41,7 +41,7 @@ struct AutomationRecorded {
 extension AutomationStore {
   /// 受け手 `part` の読み。`baseline` はつながりごとの読む上限の番号（契機の始まりの時点の上流の最後の番号）。
   func read(
-    _ part: AutomationPartID, of id: Int, baseline: [AutomationPartID: (item: Int, event: Int)]?,
+    _ part: AutomationPartID, of id: Int, baseline: [AutomationPartID: AutomationSeqs]?,
     now: Date, overrides: [AutomationReadOverride] = []
   ) throws(AutomationError) -> AutomationInbox.Read? {
     guard let automation = automation(id), let node = automation.graph.node(part),
@@ -56,22 +56,27 @@ extension AutomationStore {
     }
   }
 
+  /// 受け手 `part` のつながりごとの読んだ位置と上流の最後の番号（起こす決まりが読む）。
+  func positions(of part: AutomationPartID, in id: Int) throws(AutomationError)
+    -> [AutomationPartID: AutomationDatabase.Position]
+  {
+    try read { try $0.positions(of: part) }
+  }
+
   /// 取る行が 0 件だった契機。捨てた行があれば読んだ位置をその最大の番号まで進め、捨てた数と読む前に期限で消えた数を受け手の
   /// 部品の持ち越しに足す（次の成功した回の記録に載る）。
   func discard(_ read: AutomationInbox.Read, of part: AutomationPartID, in id: Int, now: Date)
     throws(AutomationError)
   {
-    guard read.taken.isEmpty, let index = automations.firstIndex(where: { $0.id == id }),
-      automations[index].parts[part] != nil, !read.reach.isEmpty
-    else { return }
+    guard read.taken.isEmpty, automation(id)?.parts[part] != nil, !read.reach.isEmpty else {
+      return
+    }
     try commit(sweepingAt: TaskItem.storedInstant(now)) { db, memory in
       try db.advance(part, read.reach)
-      var state = memory.automations[index].state(part)
-      for drop in read.dropped { state.pendingDrops.add(.init(drop.reason)) }
-      state.pendingDrops.add(.lapsed, read.lapsed)
-      try db.setPendingDrops(part, state.pendingDrops)
-      memory.automations[index].parts[part] = state
-      try memory.refreshReads(id, part, db)
+      var drops = try db.pendingDrops(of: part)
+      for drop in read.dropped { drops.add(.init(drop.reason)) }
+      drops.add(.lapsed, read.lapsed)
+      try db.setPendingDrops(part, drops)
       try memory.recount(id, db, now: now, parts: [part])
     }
   }
@@ -104,9 +109,7 @@ extension AutomationStore {
       run.failure = reason
     }
     return try commit(sweepingAt: run.endedAt) { db, memory in
-      var settling = AutomationSettling(
-        end: end, node: node, index: index, db: db, state: memory.automations[index].state(end.part)
-      )
+      var settling = AutomationSettling(end: end, node: node, index: index, db: db)
       return try settling.settle(run, &memory)
     }
   }
@@ -127,12 +130,7 @@ extension AutomationStore {
         node.coverage == .currentSet
         ? try db.writeItems(of: part, outputs, at: at, replacing: false)
         : try db.writeEvents(of: part, outputs, at: at, distinct: false)
-      var state = memory.automations[index].state(part)
-      let seqs = try db.lastSeqs(of: part)
-      state.lastItemSeq = seqs.item
-      state.lastEventSeq = seqs.event
-      state.changes += 1
-      memory.automations[index].parts[part] = state
+      try memory.reread(part, of: id, db)
       try memory.recount(id, db, now: at)
       return Set(written.rows.compactMap { $0 })
     }
@@ -141,8 +139,8 @@ extension AutomationStore {
 
 extension AutomationStore {
   /// 数えた行のどれかが古さの上限を過ぎる最も早い時刻（どの受け手でも）。
-  var nextInboxExpiry: Date? {
-    automations.flatMap { $0.parts.values.compactMap(\.inboxExpiresAt) }.min()
+  var nextPendingExpiry: Date? {
+    automations.flatMap { $0.parts.values.compactMap(\.pending.expiresAt) }.min()
   }
 
   /// 数えた行が古さの上限を過ぎた（`now` が過ぎる時刻より後の）受け手の「読めば取る行」の数を数え直す。
@@ -150,7 +148,7 @@ extension AutomationStore {
     let expired = automations.map { automation in
       (
         automation.id,
-        automation.parts.filter { ($0.value.inboxExpiresAt ?? .distantFuture) < now }.map(\.key)
+        automation.parts.filter { ($0.value.pending.expiresAt ?? .distantFuture) < now }.map(\.key)
       )
     }.filter { !$0.1.isEmpty }
     guard !expired.isEmpty else { return }
@@ -161,17 +159,7 @@ extension AutomationStore {
 }
 
 extension AutomationMemory {
-  /// 受け手の読んだ位置を DB から写す。
-  mutating func refreshReads(_ id: Int, _ part: AutomationPartID, _ db: AutomationDatabase) throws {
-    guard let index = automations.firstIndex(where: { $0.id == id }),
-      let node = automations[index].graph.node(part)
-    else { return }
-    automations[index].parts[part]?.reads = try db.readings(of: node).mapValues {
-      AutomationReadPosition(item: $0.item, event: $0.event)
-    }
-  }
-
-  /// 受け手の「読めば取る行」の数を数え直す。`parts` を省けば自動化の入力のある部品すべて。
+  /// 受け手の「読めば取る行」を数え直す。`parts` を省けば自動化の入力のある部品すべて。起動時も変化の後も、これだけが数える。
   mutating func recount(
     _ id: Int, _ db: AutomationDatabase, now: Date, parts: [AutomationPartID]? = nil
   ) throws {
@@ -180,9 +168,8 @@ extension AutomationMemory {
     let links = heldLinks
     for node in automation.graph.nodes
     where !node.inputs.isEmpty && (parts?.contains(node.id) ?? true) {
-      let pending = try db.pending(node, in: automation.graph, proposed: links.contains, now: now)
-      automations[index].parts[node.id]?.inbox = pending.count
-      automations[index].parts[node.id]?.inboxExpiresAt = pending.expiresAt
+      automations[index].parts[node.id]?.pending = try db.pending(
+        node, in: automation.graph, proposed: links.contains, now: now)
     }
   }
 

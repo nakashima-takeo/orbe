@@ -94,7 +94,7 @@ final class AutomationRunnerTests: OrbeTestCase {
   }
 
   func inbox(_ key: String, of id: Int) -> Int? {
-    store.automation(id)?.graph.node(key: key).flatMap { store.automation(id)?.parts[$0.id]?.inbox }
+    store.automation(id)?.graph.node(key: key).flatMap { store.automation(id)?.parts[$0.id]?.pending.count }
   }
 
   /// 下流へ渡す id（`<部品 ID>:<書かれた id>`）。
@@ -359,7 +359,7 @@ final class AutomationRunnerTests: OrbeTestCase {
     advance(by: 1800)
     finish("gh", fetched(["a"]))
     finish("copy", printed(item("a")))
-    XCTAssertEqual(store.automation(id)?.state(key: "copy").live.count, 1, "前提: 写した項目が有効")
+    XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks.count, 1, "前提: 写した項目が有効")
 
     advance(by: 1800)
     finish("gh", printed(""))
@@ -367,7 +367,7 @@ final class AutomationRunnerTests: OrbeTestCase {
     XCTAssertEqual(calls("copy").count, 2, "入力が 0 件でも回る")
     XCTAssertEqual(rows(try XCTUnwrap(calls("copy").last)).count, 0)
     finish("copy", printed(""))
-    XCTAssertEqual(store.automation(id)?.state(key: "copy").live, [])
+    XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks, [])
   }
 
   // MARK: - 目印

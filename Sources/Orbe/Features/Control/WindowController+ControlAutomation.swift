@@ -48,9 +48,8 @@ extension WindowController {
         of: automationId, part: partKey, before: before, limit: limit)
       var json: [String: Any] = [
         "runs": page.runs.map { run -> [String: Any] in
-          let key = page.keys[run.part] ?? "\(run.part)"
-          var object = AutomationRunWire.object(run.record, part: key)
-          object["partKey"] = key
+          var object = AutomationRunWire.object(run.record, part: run.key)
+          object["partKey"] = run.key
           return object
         }
       ]
@@ -175,8 +174,8 @@ extension WindowController {
         part["nextRunAt"] = SessionEvent.iso8601(next)
       }
       if let last = state.lastRunAt { part["lastRunAt"] = SessionEvent.iso8601(last) }
-      if !node.inputs.isEmpty { part["inbox"] = state.inbox }
-      if let breach = state.breach { part["breach"] = AutomationRunWire.object(breach) }
+      if !node.inputs.isEmpty { part["inbox"] = state.pending.count }
+      if let breach = state.breach { part["breach"] = AutomationRunWire.breach(breach) }
       parts[node.key] = part
     }
     var json: [String: Any] = [

@@ -32,12 +32,12 @@ enum AutomationPersistence {
     guard let folder else { return .failure(.unavailable("the state folder is unknown")) }
     switch StateDatabase.open(
       folder: folder, version: version, schema: AutomationDatabase.schema, migrations: migrations,
-      read: { try AutomationDatabase.snapshot($0, now: now) })
+      read: { try AutomationDatabase.memory($0, now: now) })
     {
     case .opened(let opened):
       return .success(
         AutomationDatabase.Opened(
-          database: AutomationDatabase(opened.database), snapshot: opened.contents))
+          database: AutomationDatabase(opened.database), memory: opened.contents))
     case .refused(let reason):
       return .failure(
         .unavailable("automations are unavailable in this session: the database \(reason)"))
@@ -51,19 +51,6 @@ enum AutomationPersistence {
 
   static func date(_ millis: Int64) -> Date {
     Date(timeIntervalSince1970: Double(millis) / 1000)
-  }
-}
-
-/// 起動時に読んだ全部。
-struct AutomationSnapshot: Equatable {
-  var automations: [Automation]
-  var unreadable: [AutomationUnreadable] = []
-  var proposals: [AutomationProposal]
-  var unreadableProposals: [AutomationUnreadableProposal] = []
-
-  /// 覚えている候補のリンク（読めない候補を含む）。「既に候補がある」はこれで言う。
-  var heldLinks: Set<String> {
-    Set(proposals.map(\.item.link) + unreadableProposals.map(\.link))
   }
 }
 

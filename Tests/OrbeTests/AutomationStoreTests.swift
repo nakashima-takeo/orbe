@@ -96,19 +96,10 @@ final class AutomationStoreTests: OrbeTestCase {
     try SQLiteDatabase(url: automationsFolder().appendingPathComponent("db.sqlite"))
   }
 
-  /// メモリだけの変化の番号を除いた自動化（開き直すと 0 から数え直す）。
-  static func persisted(_ automations: [Automation]?) -> [Automation]? {
-    automations?.map { automation in
-      var automation = automation
-      for id in automation.parts.keys { automation.parts[id]?.changes = 0 }
-      return automation
-    }
-  }
-
   // MARK: - 再起動
 
-  /// 自動化・つながりの取り方（take・古さの上限）・部品の状態（読んだ位置・今有効な項目・決まりを外した印・回の記録・持ち越し・
-  /// 読めば取る行の数）・版・候補は、どの変異（作る・確定・書き換え・さばく・止める・消す）の後に開き直しても同じ。回の記録は
+  /// 自動化・つながりの取り方（take・古さの上限）・部品の状態（今有効な項目のリンク・決まりを外した印・回の記録・読めば取る行
+  /// の数）・版・候補は、どの変異（作る・確定・書き換え・さばく・止める・消す）の後に開き直しても同じ。回の記録は
   /// 失敗・判定の確定で捨てた案も、候補は候補にした理由も同じ。
   func testEverythingSurvivesARestart() throws {
     var store: AutomationStore? = AutomationStore()
@@ -136,13 +127,13 @@ final class AutomationStoreTests: OrbeTestCase {
     try store?.delete(deleted, now: Self.at)
     let automations = store?.automations
     let proposals = store?.proposals
-    XCTAssertEqual(automations?.first?.state(key: "judge").inbox, 1, "前提: 判定が読めば取る行がある")
+    XCTAssertEqual(automations?.first?.state(key: "judge").pending.count, 1, "前提: 判定が読めば取る行がある")
     XCTAssertEqual(automations?.first?.version, 2)
     store = nil
 
     let reopened = AutomationStore()
 
-    XCTAssertEqual(reopened.automations, Self.persisted(automations))
+    XCTAssertEqual(reopened.automations, automations)
     XCTAssertEqual(reopened.proposals, proposals)
   }
 
@@ -177,15 +168,15 @@ final class AutomationStoreTests: OrbeTestCase {
     let a = Self.item("a")
     try Self.fetch(store, id, [a], outcome: Self.breached([a]))
     try Self.fetch(store, id, [a], outcome: Self.breached([a]), at: Self.at.addingTimeInterval(60))
-    func mark() -> AutomationBreachMark? { store.automation(id)?.state(key: "fetch").breach }
+    func mark() -> AutomationRunRecord? { store.automation(id)?.state(key: "fetch").breach }
 
-    XCTAssertEqual(
-      mark(),
-      AutomationBreachMark(
-        at: Self.at,
-        lines: AutomationRejections(Self.breachLines), passed: true))
+    let first = try XCTUnwrap(mark())
+    XCTAssertEqual(first.id, store.automation(id)?.state(key: "fetch").runs.last?.id, "最初の回の記録")
+    XCTAssertEqual(first.startedAt, Self.at)
+    XCTAssertEqual(first.run?.breach, AutomationRejections(Self.breachLines))
+    XCTAssertFalse(first.failed)
     try Self.rewrite(store, id, Self.definition("改名"))
-    XCTAssertEqual(mark()?.at, Self.at, "名前だけなら残る")
+    XCTAssertEqual(mark(), first, "名前だけなら残る")
     try Self.rewrite(store, id, Self.definition("改名", script: "fetch --all"))
     XCTAssertNil(mark(), "何をするかが変われば下ろす")
   }
@@ -271,7 +262,7 @@ final class AutomationStoreTests: OrbeTestCase {
       [Self.at] + (4...count).map { Self.at.addingTimeInterval(TimeInterval(60 * $0)) },
       "外した印の回で、最新の成功した回でもある最初の回は残る")
     XCTAssertEqual(fetches.succeededAt, Self.at)
-    XCTAssertEqual(fetches.breach?.at, Self.at)
+    XCTAssertEqual(fetches.breach?.startedAt, Self.at)
     XCTAssertEqual(
       judged, AutomationPartState.retainedRuns + 1, "候補を出した回は 20 件の外でも残る")
     XCTAssertEqual(AutomationStore().automation(id)?.state(key: "fetch").runs, fetches.runs)

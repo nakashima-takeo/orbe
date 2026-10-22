@@ -156,7 +156,7 @@ extension AutomationStoreTests {
 
     XCTAssertEqual(carried.state(key: "fetch").runs.count, 1)
     XCTAssertNil(carried.state(key: "fetch").breach)
-    XCTAssertEqual(Self.persisted([carried]), AutomationStore().automation(id).map { [$0] })
+    XCTAssertEqual(carried, AutomationStore().automation(id))
   }
 
   /// 読めない自動化の書き換えでも、id を落として今の部品と同じ鍵で書いた部品は断り、部品は変わらない。

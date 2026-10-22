@@ -122,7 +122,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertTrue(
       waitUntil(10) { wc.automationStore.automation(active.id)?.runs.isEmpty == false },
       "起動で始まった回が確定しない")
-    XCTAssertEqual(wc.automationStore.automation(active.id)?.runs.first?.record.trigger, .schedule)
+    XCTAssertEqual(wc.automationStore.automation(active.id)?.runs.first?.trigger, .schedule)
   }
 
   // MARK: - 棚と重なり

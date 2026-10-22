@@ -136,9 +136,7 @@ extension BoardAutomationDetailValue {
       .boardNotifyLine, l10n.string(automation.notify?.labelKey ?? .boardNotifyNone))
     let summary = BoardAutomationSummary(automation, text: text, next: next)
     self.next = summary.next
-    strip = automation.runs.prefix(Self.stripLength).reversed().map {
-      BoardAutomationSummary.tone($0.record)
-    }
+    strip = automation.runs.prefix(Self.stripLength).reversed().map(BoardAutomationSummary.tone)
   }
 
   /// 報告と作業の文の出し先（「メニューバーに出す」）。役割の名前（報告・作業）は使わない。
@@ -169,7 +167,7 @@ extension BoardAutomationDetailValue {
         ? nil
         : inputs.map { automation.graph.node($0)?.part.name ?? "\($0)" }.joined(
           separator: l10n.string(.automationListSeparator)),
-      inbox: inputs.isEmpty ? nil : state.inbox, breached: state.breach != nil,
+      inbox: inputs.isEmpty ? nil : state.pending.count, breached: state.breach != nil,
       look: running ? .running : latest?.failed == true ? .failed : .idle,
       last: latest.map {
         BoardMapPart.Last(

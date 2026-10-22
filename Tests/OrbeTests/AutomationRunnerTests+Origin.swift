@@ -105,11 +105,11 @@ extension AutomationRunnerTests {
     XCTAssertNil(state.runs.first?.run?.failure)
     XCTAssertNil(state.runs.first?.run?.breach)
     XCTAssertNil(state.breach, "決まりに反していない部品に印を付けない")
-    XCTAssertEqual(state.inbox, 0)
+    XCTAssertEqual(state.pending.count, 0)
     XCTAssertEqual(inbox("judge", of: id), 0)
     XCTAssertEqual(calls("p").count, 1)
     advance(by: 1800)
     XCTAssertEqual(calls("judge"), [], "取る行が無ければ判定は起きない")
-    XCTAssertEqual(store.automation(id)?.state(key: "judge").pendingDrops.counts, [.unsourced: 1])
+    XCTAssertEqual(try store.pendingDrops(id, "judge").counts, [.unsourced: 1])
   }
 }
