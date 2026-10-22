@@ -160,7 +160,7 @@ extension AutomationGraph {
     for (index, part) in parts.enumerated() {
       let passes =
         roles[index] == .judge
-        || (!roles[index].isFetch && !judges(reachedFrom: index, roles, downstream).isEmpty)
+        || (roles[index] != .fetch && !judges(reachedFrom: index, roles, downstream).isEmpty)
       guard passes, let input = part.from.firstIndex(where: { $0.take == .all }) else { continue }
       throw .invalid(
         "parts[\(index)].from[\(input)]: rows taken with take all reach taskCandidates; take new here"
@@ -176,12 +176,12 @@ extension AutomationGraph {
     switch part.action.destination {
     case .nextPart:
       guard part.readsRows else {
-        guard let coverage = part.action.coverage else {
+        guard part.action.coverage != nil else {
           throw .invalid(
             "\(path).coverage: a part that does not read rows fetches items and needs coverage "
               + "(currentSet or newArrivals)")
         }
-        return .fetch(coverage)
+        return .fetch
       }
       return .process
     case .taskCandidates:

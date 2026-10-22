@@ -85,7 +85,7 @@ struct AutomationSettling {
         ? try db.writeItems(of: end.part, outputs, at: run.endedAt, replacing: !end.given)
         : try db.writeEvents(of: end.part, outputs, at: run.endedAt, distinct: !end.given)
       let withdrawn = try memory.withdraw(originatingIn: written.invalidated, db)
-      if node.role.isFetch {
+      if node.role == .fetch {
         run.result = .fetch(fresh: written.fresh.count, duplicates: written.duplicates)
         run.withdrawn = withdrawn
       } else {

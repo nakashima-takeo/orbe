@@ -125,7 +125,7 @@ extension AutomationDatabase {
         continue
       }
       let part = AutomationPartID(row.part)
-      guard graph.node(part)?.role.isFetch == true else { return nil }
+      guard graph.node(part)?.role == .fetch else { return nil }
       return try originRow(current, part: part)
     }
   }

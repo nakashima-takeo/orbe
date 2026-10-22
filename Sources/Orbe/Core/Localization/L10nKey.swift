@@ -658,7 +658,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardPartRun
   case boardPartTools
   case boardPartSchedule
-  case boardPartTake
+  case boardPartCoverage
   case boardPartFrom
   case boardPartTo
   case boardPartPending
@@ -669,9 +669,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardPartDefaultModel
   case boardPartToolMCP
   case boardPartToolCommand
-  case boardPartNewSince
-  case boardPartNewOnly
   case boardPartCurrentSet
+  case boardPartEventStream
+  case boardPartEventStreamSince
   case boardPartTakeAll
   case boardPartMaxAge
   case boardPartTaskCandidates

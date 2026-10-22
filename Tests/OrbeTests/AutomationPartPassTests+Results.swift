@@ -20,7 +20,7 @@ extension AutomationPartPassTests {
 
   /// コマンドの失敗は 0 以外の終了コード——標準出力に項目があっても使わない。
   func testCommandFailsByItsExitCode() throws {
-    start(AutomationGraphTests.fetch("f"), .fetch(.currentSet), .fetch(since: nil))
+    start(AutomationGraphTests.fetch("f"), .fetch, .fetch(since: nil))
 
     jobs.finish(0, printed(fetchedLines(["a"]), exit: 2, stderr: "down"))
 

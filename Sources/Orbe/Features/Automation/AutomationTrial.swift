@@ -236,7 +236,7 @@ final class AutomationTrial {
     let key = record.end.part
     guard !stopped, let run = record.run, let node = range.path.first(where: { $0.id == key })
     else { return }
-    if range.roots.contains(where: { $0.id == key }), !run.failed, node.role.isFetch,
+    if range.roots.contains(where: { $0.id == key }), !run.failed, node.role == .fetch,
       record.end.given || request.limit != nil
     {
       let given = record.end.given ? Set(record.recorded.outputs.map(\.ref)) : []

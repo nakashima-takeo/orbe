@@ -104,7 +104,7 @@ struct AutomationPartAgent: Equatable {
 /// 部品の役割。欄には持たず、部品自身の欄（入力・ツール・行き先）から `AutomationGraph` が導く。
 enum AutomationPartRole: Equatable {
   /// 行を見ずに項目を出す。
-  case fetch(AutomationCoverage)
+  case fetch
   /// 行を見て行を出す。
   case process
   /// 行を見てタスク候補を出す。
@@ -123,9 +123,5 @@ enum AutomationPartRole: Equatable {
     case .fetch, .process: "haiku"
     case .sideEffect: nil
     }
-  }
-
-  var isFetch: Bool {
-    if case .fetch = self { true } else { false }
   }
 }

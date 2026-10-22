@@ -39,8 +39,7 @@ struct AutomationGraph: Equatable {
     /// 出力の性質を解いたもの。行を出す部品（取得・処理）だけが持ち、処理の省略は出来事の流れ。
     var coverage: AutomationCoverage? {
       switch role {
-      case .fetch(let coverage): coverage
-      case .process: action.coverage ?? .newArrivals
+      case .fetch, .process: action.coverage ?? .newArrivals
       case .judge, .report, .work, .sideEffect: nil
       }
     }
@@ -143,7 +142,7 @@ struct AutomationGraph: Equatable {
     guard let target = index(judge) else { return [] }
     let roles = nodes.map(\.role)
     return nodes.indices.filter { index in
-      nodes[index].role.isFetch
+      nodes[index].role == .fetch
         && Self.judges(reachedFrom: index, roles, downstream).contains(target)
     }.map { nodes[$0] }
   }

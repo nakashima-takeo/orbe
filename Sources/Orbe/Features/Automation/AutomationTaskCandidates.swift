@@ -12,7 +12,7 @@ extension Automation {
   /// タスク候補へ至る取得の部品の今有効な項目のリンク。持ち主・重なりはこの集合で言う。
   var candidateLinks: Set<String> {
     Set(
-      graph.nodes.filter { $0.role.isFetch && graph.reachesTaskCandidates($0.id) }
+      graph.nodes.filter { $0.role == .fetch && graph.reachesTaskCandidates($0.id) }
         .flatMap { state($0.id).live.map(\.link) })
   }
 

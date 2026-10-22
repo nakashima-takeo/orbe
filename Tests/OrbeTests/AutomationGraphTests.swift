@@ -130,7 +130,7 @@ final class AutomationGraphTests: OrbeTestCase {
     XCTAssertEqual(
       Dictionary(uniqueKeysWithValues: graph.nodes.map { ($0.key, $0.role) }),
       [
-        "fetch": .fetch(.currentSet), "gate": .fetch(.newArrivals), "process": .process,
+        "fetch": .fetch, "gate": .fetch, "process": .process,
         "processCommand": .process, "judge": .judge, "report": .report, "reportAlone": .report,
         "work": .work, "sideEffect": .sideEffect,
       ])

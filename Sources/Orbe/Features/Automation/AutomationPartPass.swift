@@ -224,7 +224,7 @@ struct AutomationPartPass {
 
   /// 目印は新着の流れの取得にだけ渡す。
   private static func mark(_ node: AutomationGraph.Node, _ since: Date?) -> Date? {
-    node.role == .fetch(.newArrivals) ? since : nil
+    node.coverage == .newArrivals ? since : nil
   }
 
   /// 1 行 1 オブジェクト。行が無ければ標準入力は空。

@@ -13,8 +13,8 @@ enum BoardFlowDirection: Equatable {
   case outgoing
 }
 
-/// 選んだ部品のカードの値。地図に出さない部品の中身（手段・モデル・ツール・指示文・取り方・上限・制限時間・場所・回の記録）を
-/// 出すのはここだけ。
+/// 選んだ部品のカードの値。地図に出さない部品の中身（手段・モデル・ツール・指示文・出力の性質・取り方・上限・制限時間・場所・
+/// 回の記録）を出すのはここだけ。
 struct BoardAutomationPartValue: Equatable {
   let id: AutomationPartID
   let role: String
@@ -22,7 +22,7 @@ struct BoardAutomationPartValue: Equatable {
   let running: Bool
   /// 頭の印。まだ動いていなければ nil。
   let mark: BoardRunMark?
-  /// 実行・ツール・予定・取り方・入力元・出力先・未処理・制限時間・場所・次回の順。部品に無い項目は出さない。
+  /// 実行・ツール・予定・出力の性質・入力元・出力先・未処理・制限時間・場所・次回の順。部品に無い項目は出さない。
   let facts: [Fact]
   /// 指示文かコマンド。
   let body: String
@@ -135,7 +135,9 @@ extension BoardAutomationPartValue {
       fact(.boardPartRun, l10n.string(.boardOutputCommand))
     }
     fact(.boardPartSchedule, text.schedule(part.trigger))
-    if case .fetch(let coverage) = node.role { fact(.boardPartTake, take(coverage, state, text)) }
+    if let coverage = node.coverage {
+      fact(.boardPartCoverage, self.coverage(coverage, of: node, state, text))
+    }
     if !node.inputs.isEmpty {
       fact(
         .boardPartFrom,
@@ -220,16 +222,20 @@ extension BoardAutomationPartValue {
       notes.joined(separator: l10n.string(.automationListSeparator)))
   }
 
-  /// 取り方（「新着だけ（前回 16:00 以降）」「今ある分のうち、新しく現れたもの」）。
-  private static func take(
-    _ coverage: AutomationCoverage, _ state: AutomationPartState, _ text: AutomationText
+  /// 出力の性質（「今の集合」「出来事の流れ」）。出来事の流れの取得は、前回成功の目印から取ることを添える（「出来事の流れ
+  /// （前回 16:00 以降を取る）」）。
+  private static func coverage(
+    _ coverage: AutomationCoverage, of node: AutomationGraph.Node, _ state: AutomationPartState,
+    _ text: AutomationText
   ) -> String {
     let l10n = text.l10n
     switch coverage {
-    case .newArrivals:
-      return state.succeededAt.map { l10n.format(.boardPartNewSince, text.recent($0)) }
-        ?? l10n.string(.boardPartNewOnly)
     case .currentSet: return l10n.string(.boardPartCurrentSet)
+    case .newArrivals:
+      guard node.role == .fetch, let since = state.succeededAt else {
+        return l10n.string(.boardPartEventStream)
+      }
+      return l10n.format(.boardPartEventStreamSince, text.recent(since))
     }
   }
 
