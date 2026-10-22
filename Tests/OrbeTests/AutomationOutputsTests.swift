@@ -60,10 +60,9 @@ final class AutomationOutputsTests: OrbeTestCase {
     let (rows, broken) = AutomationOutputs.objectRows(text)
     var decisions: [AutomationDecision] = []
     var rejected: [String] = []
-    var proposed = Set<String>()
-    var resolved = Set<String>()
+    var seen = AutomationOutputs.JudgeSeen()
     for reading in AutomationOutputs.judgeRows(
-      rows, itemIds: itemIds, choices: choices, proposed: &proposed, resolved: &resolved)
+      rows, .decisions, itemIds: itemIds, choices: choices, seen: &seen)
     {
       switch reading {
       case .success(let decision): decisions.append(decision)

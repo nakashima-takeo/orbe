@@ -18,22 +18,48 @@ extension AutomationPartPassTests {
     XCTAssertNil(breach)
   }
 
-  /// コマンドの失敗は 0 以外の終了コード。`{"error": …}` も `{"nothing": …}` も申告ではなく、ただの行として確かめる。
-  func testCommandFailsByExitCodeAndDeclarationLinesAreJustLines() throws {
+  /// コマンドの失敗は 0 以外の終了コード——標準出力に項目があっても使わない。
+  func testCommandFailsByItsExitCode() throws {
     start(AutomationGraphTests.fetch("f"), .fetch(.currentSet), .fetch(since: nil))
-    start(
-      AutomationGraphTests.command("p", from: ["f"], deliver: .nextPart), .process,
-      .process([row("a")], reachesJudge: false))
 
-    jobs.finish(0, printed(#"{"error":"down"}"#, exit: 2, stderr: "down"))
-    jobs.finish(1, printed(#"{"nothing":"無い"}"#))
+    jobs.finish(0, printed(fetchedLines(["a"]), exit: 2, stderr: "down"))
 
-    XCTAssertEqual(outcomes.count, 2)
-    guard case .failed(.ended, _, _) = outcomes[0] else { return XCTFail("\(outcomes)") }
-    guard case .failed(.brokeRules, _, let broken) = outcomes[1] else {
+    guard case .failed(.ended, _, _) = outcomes.first else { return XCTFail("\(outcomes)") }
+    XCTAssertTrue(try XCTUnwrap(failed).contains("down"))
+  }
+
+  private func fetchedLines(_ ids: [String]) -> String {
+    ids.map {
+      #"{"id":"\#($0)","link":"https://example.com/\#($0)","body":"\#($0)","time":"2026-10-10T09:00:00Z"}"#
+    }.joined(separator: "\n")
+  }
+
+  /// 受けた結果の後に断られた呼び出しがあり、直さずに終えた回は出力の形式エラーの失敗——受けた分だけで成功にすると、断られた
+  /// 呼び出しの中身が黙って消える。直して受ければ成功。
+  func testARefusedCallAfterAcceptedResultsMustBeFixed() throws {
+    for _ in 0..<2 {
+      start(
+        AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+        .process([row("a"), row("b")], reachesJudge: false))
+    }
+    for index in 0..<2 {
+      readAll(index)
+      XCTAssertFalse(use(index, .putRows, ["rows": [["id": "f:a"]]]).isError)
+      XCTAssertTrue(use(index, .putRows, ["rows": [["note": "b"]]]).isError)
+    }
+    XCTAssertFalse(use(1, .putRows, ["rows": [["id": "f:b"]]]).isError)
+    jobs.finish(0, done())
+    jobs.finish(1, done())
+
+    guard case .failed(.brokeRules, _, let unfixed) = outcomes.first else {
       return XCTFail("\(outcomes)")
     }
-    XCTAssertEqual(broken?.lines.map(\.text), ["item 1: missing id"])
+    XCTAssertEqual(unfixed?.lines.map(\.text), ["item 1: missing id"])
+    guard case .succeeded(.process(let rows), _, let fixed) = outcomes.last else {
+      return XCTFail("\(outcomes)")
+    }
+    XCTAssertEqual(rows.map(\.id), ["f:a", "f:b"])
+    XCTAssertEqual(fixed?.lines.map(\.text), ["item 1: missing id"])
   }
 
   // MARK: - 結果の無い回

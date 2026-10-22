@@ -46,7 +46,7 @@ extension WindowController {
         : nil)
   }
 
-  /// 「連絡 の出力の形式エラー（2 件）— その場で直して通った」。
+  /// 「連絡 の出力の形式エラー（2 件）— その場で修正済み」。
   private func breachLine(_ breach: AutomationBreachMark, part name: String) -> String {
     localization.format(
       breach.lines.count == 1 ? .automationBreachNoticeOne : .automationBreachNoticeOther, name,

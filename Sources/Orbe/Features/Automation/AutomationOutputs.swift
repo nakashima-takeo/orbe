@@ -17,8 +17,7 @@ struct AutomationOutputs {
   /// 報告・仕事の文。
   private(set) var report: String?
   private var ids = Set<String>()
-  private var proposedIds = Set<String>()
-  private var resolvedLinks = Set<String>()
+  private var judgeSeen = JudgeSeen()
 
   init(_ input: AutomationPartPass.Input) {
     self.input = input
@@ -35,15 +34,17 @@ struct AutomationOutputs {
   }
 
   /// 行を出す役割（取得・処理・判定）の 1 度の分（1 件 1 行の JSON）。外れた件（`line` は分の中の 1 始まりの位置。空行も
-  /// 数える）をすべて返し、1 件でもあれば何も受けない。
-  mutating func put(_ text: String) -> [AutomationBrokenLine] {
+  /// 数える）をすべて返し、1 件でもあれば何も受けない。`judging` は判定の 1 件の形。
+  mutating func put(_ text: String, judging shape: JudgeShape = .decisions)
+    -> [AutomationBrokenLine]
+  {
     var next = self
     let broken: [AutomationBrokenLine]
     switch input {
     case .fetch: broken = next.fetched(text)
     case .process(let input, let reachesJudge):
       broken = next.processed(text, input, reachesJudge: reachesJudge)
-    case .judge(let input, let choices): broken = next.judged(text, input, choices)
+    case .judge(let input, let choices): broken = next.judged(text, shape, input, choices)
     case .report, .work, .sideEffect:
       preconditionFailure("only a part that passes rows on puts rows")
     }
@@ -123,14 +124,14 @@ struct AutomationOutputs {
 
   /// 案は取った行の `id` を指すものだけを受け、指した行の出どころを付ける。
   private mutating func judged(
-    _ text: String, _ input: [AutomationSourcedRow], _ choices: AutomationJudgeChoices
+    _ text: String, _ shape: JudgeShape, _ input: [AutomationSourcedRow],
+    _ choices: AutomationJudgeChoices
   ) -> [AutomationBrokenLine] {
     let (objects, malformed) = Self.objectRows(text)
     let origins = Dictionary(input.map { ($0.id, $0.origin) }, uniquingKeysWith: { $1 })
     var broken = malformed
     for reading in Self.judgeRows(
-      objects, itemIds: Set(origins.keys), choices: choices, proposed: &proposedIds,
-      resolved: &resolvedLinks)
+      objects, shape, itemIds: Set(origins.keys), choices: choices, seen: &judgeSeen)
     {
       switch reading {
       case .success(.propose(let itemId, let title, let due, let workspace, let reason)):

@@ -141,9 +141,9 @@ final class AutomationRunSessionTests: AutomationPartPassTestCase {
     XCTAssertEqual(
       session.call("read_workspaces", [:]).texts, [#"{"name":"orbe","root":"/src","workspace":3}"#])
     XCTAssertEqual(
-      session.call("propose", ["proposals": [["title": "x"]]]).texts[0].split(separator: "\n").last,
-      "item 1: missing id")
-    XCTAssertTrue(session.call("propose", ["proposals": [["id": "a", "title": "x"]]]).isError)
+      session.call("propose", ["proposals": [["title": "x"], ["id": "zzz", "title": "y"]]]).texts[0]
+        .split(separator: "\n").dropFirst(),
+      ["item 1: missing id", "item 2: propose zzz: not a new item"], "id の無い件もほかの件と一緒に全件言う")
     XCTAssertFalse(
       session.call("propose", ["proposals": [["id": "f:a", "title": "a に返信する", "workspace": 3]]])
         .isError)

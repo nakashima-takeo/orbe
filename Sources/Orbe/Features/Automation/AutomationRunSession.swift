@@ -44,6 +44,9 @@ final class AutomationRunSession {
   private(set) var error: String?
   /// 断った結果の呼び出しの、外れた件すべて（呼び出しの形の誤りは位置を持たない 1 件）。
   private(set) var rejected: [AutomationBrokenLine] = []
+  /// 最後の結果の呼び出しを断ったか（断られた後に受けた結果の呼び出しが無い）。そのまま終えた回は、断られた中身が黙って
+  /// 消えないよう決まりを外した失敗にする。
+  private(set) var refusedLast = false
 
   init(_ input: AutomationPartPass.Input) {
     outputs = AutomationOutputs(input)
@@ -88,8 +91,7 @@ final class AutomationRunSession {
     case .readWorkspaces: return .ok(workspaces)
     case .putItems: return put(arguments, "items")
     case .putRows: return put(arguments, "rows")
-    case .propose:
-      return put(arguments, "proposals", missing: Self.missingId) { Self.proposalLine($0) }
+    case .propose: return put(arguments, "proposals", judging: .proposals)
     case .resolve: return put(arguments, "links") { ["resolve": $0] }
     case .putReport: return putReport(arguments)
     case .reportNothing: return reportNothing(arguments)
@@ -157,11 +159,10 @@ final class AutomationRunSession {
     return nil
   }
 
-  /// `key` の配列の 1 件ずつを 1 行にして確かめる。`missing` は行にする前に分かる外れ（判定の案の id が無い など）、`line` は
-  /// 1 件を行にするときの形（既定はそのまま）。
+  /// `key` の配列の 1 件ずつを 1 行にして確かめる。`line` は 1 件を行にするときの形（既定はそのまま）、`shape` は判定の 1 件の形。
   private func put(
     _ arguments: [String: Any], _ key: String,
-    missing: (Any) -> AutomationLineFault? = { _ in nil }, _ line: (Any) -> Any = { $0 }
+    judging shape: AutomationOutputs.JudgeShape = .decisions, _ line: (Any) -> Any = { $0 }
   ) -> Reply {
     if let closed { return closed }
     guard let entries = arguments[key] as? [Any], !entries.isEmpty else {
@@ -169,23 +170,20 @@ final class AutomationRunSession {
         .notNonEmptyArray(key),
         "when there is nothing, call \(Tool.reportNothing.rawValue)")
     }
-    var broken = entries.enumerated().compactMap { index, entry in
-      missing(entry).map { AutomationBrokenLine(line: index + 1, fault: $0) }
-    }
-    if broken.isEmpty {
-      broken = outputs.put(
-        entries.map { entry in
-          let object = line(entry)
-          return JSONSerialization.isValidJSONObject(object)
-            ? AutomationPrompts.jsonLine(object) : Self.scalarLine(object)
-        }.joined(separator: "\n"))
-    }
+    let broken = outputs.put(
+      entries.map { entry in
+        let object = line(entry)
+        return JSONSerialization.isValidJSONObject(object)
+          ? AutomationPrompts.jsonLine(object) : Self.scalarLine(object)
+      }.joined(separator: "\n"), judging: shape)
     guard broken.isEmpty else {
       rejected += broken
+      refusedLast = true
       return .refused(
         "Nothing from this call was accepted. Fix these and call again with all of them:\n"
           + broken.map(\.text).joined(separator: "\n"))
     }
+    refusedLast = false
     return .ok("Accepted \(entries.count) (\(outputs.count) in all).")
   }
 
@@ -199,6 +197,7 @@ final class AutomationRunSession {
       return refuse(
         .emptyReport, "when there is nothing to report, call \(Tool.reportNothing.rawValue)")
     }
+    refusedLast = false
     return .ok("Accepted the report.")
   }
 
@@ -220,6 +219,7 @@ final class AutomationRunSession {
   private func refuse(_ fault: AutomationLineFault, _ hint: String) -> Reply {
     let broken = AutomationBrokenLine(line: nil, fault: fault)
     rejected.append(broken)
+    refusedLast = true
     return .refused("Nothing from this call was accepted: \(broken.text); \(hint).")
   }
 
@@ -228,26 +228,12 @@ final class AutomationRunSession {
     return .ok("Noted: this run has failed.")
   }
 
-  /// 判定の案 1 件の文字列の `id` が無ければ、その外れ。オブジェクトでない件は行の読みが外す。
-  private static func missingId(_ entry: Any) -> AutomationLineFault? {
-    guard let object = entry as? [String: Any] else { return nil }
-    return object["id"] is String ? nil : .missingKey("id")
-  }
-
-  /// 判定の案 1 件を、判定の 1 行（`{"propose": <id>, …}`）に。
-  private static func proposalLine(_ entry: Any) -> Any {
-    guard var object = entry as? [String: Any] else { return entry }
-    object["propose"] = object.removeValue(forKey: "id")
-    return object
-  }
-
   /// JSON のオブジェクトにならない 1 件（文字列・数など）の 1 行。読みがオブジェクトでないとして外す。
   private static func scalarLine(_ value: Any) -> String {
     guard
-      let data = try? JSONSerialization.data(withJSONObject: [value], options: [.fragmentsAllowed]),
-      let text = String(bytes: data, encoding: .utf8)
+      let data = try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed])
     else { return "null" }
-    return String(text.dropFirst().dropLast())
+    return String(bytes: data, encoding: .utf8) ?? "null"
   }
 
   /// 整数（真偽値は整数として受けない。JSONSerialization は true / false も NSNumber に載せる）。

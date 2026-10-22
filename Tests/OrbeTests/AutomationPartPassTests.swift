@@ -133,7 +133,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
           ]
         ]
       ])
-    jobs.finish(0, replied("取れました。{\"nothing\": \"ない\"}"))
+    jobs.finish(0, replied("取れました。"))
 
     guard case .fetch(let rows) = try XCTUnwrap(succeeded, "\(outcomes)") else {
       return XCTFail("\(outcomes)")
