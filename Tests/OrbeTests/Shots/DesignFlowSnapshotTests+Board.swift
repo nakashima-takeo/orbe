@@ -136,7 +136,7 @@ extension DesignFlowSnapshotTests {
           }
         ),
         ("enter_other_first", { automation.enterMap() }),
-        ("ask_fix", { automation.draftFix(of: "note", l10n: ja) }),
+        ("ask_fix", { automation.draftFix(key: "note", l10n: ja) }),
       ])
   }
 
@@ -156,7 +156,7 @@ extension DesignFlowSnapshotTests {
       },
       steps: [
         ("list", { automation.move(1) }),
-        ("contact", { automation.tapPart("contact") }),
+        ("contact", { automation.tapPart(key: "contact") }),
       ])
   }
 

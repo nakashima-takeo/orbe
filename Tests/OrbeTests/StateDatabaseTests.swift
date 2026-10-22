@@ -29,7 +29,7 @@ final class StateDatabaseTests: OrbeTestCase {
   private func seedVersion1(_ names: [String], in folder: URL? = nil) throws {
     let db = try XCTUnwrap(
       StateDatabase.open(folder: folder ?? self.folder, version: 1, schema: Self.schemaV1) { _ in ()
-      }?.database)
+      }.opened?.database)
     try db.transaction {
       for name in names {
         let insert = try db.prepare("INSERT INTO item VALUES (?)")
@@ -49,7 +49,8 @@ final class StateDatabaseTests: OrbeTestCase {
   private func names(inVersion1At folder: URL) throws -> [String] {
     try names(
       XCTUnwrap(
-        StateDatabase.open(folder: folder, version: 1, schema: Self.schemaV1) { _ in () }?.database)
+        StateDatabase.open(folder: folder, version: 1, schema: Self.schemaV1) { _ in () }.opened?
+          .database)
     )
   }
 
@@ -100,8 +101,8 @@ final class StateDatabaseTests: OrbeTestCase {
     let garbage = Data("これは SQLite の DB ではない".utf8)
     try garbage.write(to: databaseFile(in: folder))
 
-    let db = StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2) { _ in () }?
-      .database
+    let db = StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2) { _ in () }
+      .opened?.database
 
     try assertStartsEmpty(db)
     let quarantined = try quarantinedFolders()
@@ -120,8 +121,8 @@ final class StateDatabaseTests: OrbeTestCase {
     try handle.write(contentsOf: Data(repeating: 0xFF, count: 4096))
     try handle.close()
 
-    let db = StateDatabase.open(folder: folder, version: 1, schema: Self.schemaV1) { _ in () }?
-      .database
+    let db = StateDatabase.open(folder: folder, version: 1, schema: Self.schemaV1) { _ in () }
+      .opened?.database
 
     XCTAssertEqual(try quarantinedFolders().count, 1, "中の壊れも退避する")
     XCTAssertEqual(try names(XCTUnwrap(db)), [], "空で始まる")
@@ -130,8 +131,8 @@ final class StateDatabaseTests: OrbeTestCase {
   func testVersionMismatchIsQuarantinedWithReadableContent() throws {
     try seedVersion1(["版 1 の中身"])
 
-    let db = StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2) { _ in () }?
-      .database
+    let db = StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2) { _ in () }
+      .opened?.database
 
     try assertStartsEmpty(db)
     let quarantined = try XCTUnwrap(quarantinedFolders().first)
@@ -147,7 +148,9 @@ final class StateDatabaseTests: OrbeTestCase {
     try Data("旧 JSON の退避物".utf8).write(to: jsonQuarantine)
     try seedVersion1(["版 1 の中身"])
 
-    _ = StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2) { _ in () }?.database
+    _ =
+      StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2) { _ in () }.opened?
+      .database
 
     let quarantined = try quarantinedFolders()
     XCTAssertEqual(quarantined.count, 1, "退避物のフォルダは最新 1 件だけ")
@@ -166,12 +169,13 @@ final class StateDatabaseTests: OrbeTestCase {
 
     try denyEntryCreation(in: parent)
     XCTAssertNil(
-      StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2) { _ in () }?.database,
+      StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2) { _ in () }.opened?
+        .database,
       "退避できなければ接続を返さない（原本に新しい版を作らない）")
 
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: parent.path)
-    let db = StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2) { _ in () }?
-      .database
+    let db = StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2) { _ in () }
+      .opened?.database
 
     try assertStartsEmpty(db)
     let quarantined = try XCTUnwrap(
@@ -189,7 +193,8 @@ final class StateDatabaseTests: OrbeTestCase {
     try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: file.path)
 
     XCTAssertNil(
-      StateDatabase.open(folder: folder, version: 1, schema: Self.schemaV1) { _ in () }?.database)
+      StateDatabase.open(folder: folder, version: 1, schema: Self.schemaV1) { _ in () }.opened?
+        .database)
 
     XCTAssertEqual(try quarantinedFolders(), [], "健全かもしれない原本を退避しない")
     try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)
@@ -208,10 +213,77 @@ final class StateDatabaseTests: OrbeTestCase {
     }
 
     XCTAssertNil(
-      StateDatabase.open(folder: folder, version: 1, schema: Self.schemaV1) { _ in () }?.database)
+      StateDatabase.open(folder: folder, version: 1, schema: Self.schemaV1) { _ in () }.opened?
+        .database)
 
     XCTAssertEqual(try quarantinedFolders(), [], "確かめられなかっただけの原本を退避しない")
     try fm.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)
     XCTAssertEqual(try names(inVersion1At: folder), ["版 1 の中身"], "原本は元の場所に元のまま残る")
+  }
+
+  /// 版 1 から版 2 への移行を持つ Orbe は、版 1 の DB を移して中身ごと読み、退避しない。
+  func testAnOlderVersionIsMigratedInPlace() throws {
+    try seedVersion1(["版 1 の中身"])
+    let migration = StateDatabase.Migration(from: 1) { db in
+      try db.exec(
+        "\(Self.schemaV2); INSERT INTO entry (title) SELECT name FROM item; DROP TABLE item")
+    }
+
+    let db = try XCTUnwrap(
+      StateDatabase.open(
+        folder: folder, version: 2, schema: Self.schemaV2, migrations: [migration]
+      ) { db in
+        try db.select("SELECT title FROM entry", []) { $0.text(at: 0) ?? "" }
+      }.opened)
+
+    XCTAssertEqual(db.contents, ["版 1 の中身"])
+    XCTAssertEqual(try quarantinedFolders(), [], "移せた DB は退避しない")
+  }
+
+  /// 移行が失敗した DB は動かさず、使わない（版 1 のまま残る）。
+  func testAFailedMigrationLeavesTheDatabaseUntouchedAndUnused() throws {
+    try seedVersion1(["版 1 の中身"])
+    let migration = StateDatabase.Migration(from: 1) { db in
+      try db.exec("ALTER TABLE item RENAME TO entry; ALTER TABLE missing ADD COLUMN x")
+    }
+
+    let opening = StateDatabase.open(
+      folder: folder, version: 2, schema: Self.schemaV2, migrations: [migration]
+    ) { _ in () }
+
+    XCTAssertNil(opening.opened)
+    XCTAssertEqual(try quarantinedFolders(), [])
+    XCTAssertEqual(try names(inVersion1At: folder), ["版 1 の中身"], "巻き戻って版 1 のまま")
+  }
+
+  /// 今より新しい版の DB は退避せず、使わない理由を返す。
+  func testANewerVersionIsLeftUntouchedAndRefused() throws {
+    try seedVersion1(["版 1 の中身"])
+
+    do {
+      let db = try XCTUnwrap(
+        StateDatabase.open(folder: folder, version: 1, schema: Self.schemaV1) { _ in () }.opened?
+          .database)
+      try db.exec("PRAGMA user_version = 3")
+    }
+
+    guard
+      case .refused(let reason) = StateDatabase.open(
+        folder: folder, version: 2, schema: Self.schemaV2, read: { _ in () })
+    else { return XCTFail("新しい版は使わない") }
+    XCTAssertTrue(reason.contains("version 3"), reason)
+    XCTAssertEqual(try quarantinedFolders(), [], "新しい版は退避しない")
+  }
+
+  /// 版が合っても表の形が今の版と違う DB は退避する。
+  func testTablesThatDifferFromTheVersionAreQuarantined() throws {
+    try seedVersion1(["版 1 の中身"])
+
+    let db = StateDatabase.open(
+      folder: folder, version: 1, schema: "CREATE TABLE item (name TEXT NOT NULL, extra TEXT)"
+    ) { _ in () }.opened?.database
+
+    XCTAssertNotNil(db, "退避して空で始める")
+    XCTAssertEqual(try quarantinedFolders().count, 1)
   }
 }

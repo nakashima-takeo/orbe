@@ -176,7 +176,7 @@ struct BoardAutomationPartCard: View {
         model.perform(operation)
       }
       button(key: nil, title: l10n.string(.boardPartAskFix), primary: false) {
-        model.draftFix(of: card.key, l10n: l10n)
+        model.draftFix(of: card.id, l10n: l10n)
       }
     }
   }

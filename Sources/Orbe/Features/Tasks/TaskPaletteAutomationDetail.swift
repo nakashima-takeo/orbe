@@ -77,10 +77,10 @@ struct TaskPaletteAutomationDetail: View {
         .foregroundStyle(Color.theme.textPrimary)
         .lineSpacing(Self.reasonLeading)
         .fixedSize(horizontal: false, vertical: true)
-      if let judge = model.store.automation(proposal.automationId)?.graph.node(proposal.partKey) {
+      if let judge = model.judgeName(of: proposal) {
         fontResolver.text(
           l10n.format(
-            .taskPaletteAutomationProposedBy, judge.part.name, text.moment(proposal.proposedAt)),
+            .taskPaletteAutomationProposedBy, judge, text.moment(proposal.proposedAt)),
           base: Theme.Typography.meta
         )
         .font(Font.theme.meta)

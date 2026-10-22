@@ -13,7 +13,7 @@ final class AutomationPartPassRecordTests: AutomationPartPassTestCase {
   /// 取得は今回取れた全項目を数える（前回の出力にあって下流へ渡さない項目も）。
   func testFetchCountsEveryItemItRead() {
     start(
-      AutomationGraphTests.fetch("f"), .fetch(.currentSet), .fetch(since: nil, lastOutput: ["a"]))
+      AutomationGraphTests.fetch("f"), .fetch(.currentSet), .fetch(since: nil))
 
     jobs.finish(0, fetched(["a", "b"]))
 
@@ -50,7 +50,7 @@ final class AutomationPartPassRecordTests: AutomationPartPassTestCase {
     start(
       AutomationGraphTests.agent(
         "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
-      .fetch(.currentSet), .fetch(since: nil, lastOutput: []))
+      .fetch(.currentSet), .fetch(since: nil))
 
     jobs.finish(0, replied(#"{"id":"x"}"#))
     jobs.finish(
@@ -58,7 +58,7 @@ final class AutomationPartPassRecordTests: AutomationPartPassTestCase {
       replied(
         #"{"id":"a","link":"https://example.com/a","body":"a","time":"2026-10-10T09:00:00Z"}"#))
 
-    guard case .fetch(let rows, _) = try XCTUnwrap(succeeded, "\(outcomes)") else {
+    guard case .fetch(let rows) = try XCTUnwrap(succeeded, "\(outcomes)") else {
       return XCTFail("\(outcomes)")
     }
     XCTAssertEqual(rows.count, 1)

@@ -21,25 +21,41 @@ class AutomationPartPassTestCase: OrbeTestCase {
 
   @discardableResult
   func start(
-    _ part: AutomationPart, _ role: AutomationPartRole, _ input: AutomationPartPass.Input
+    _ part: AutomationDefinition.Part, _ role: AutomationPartRole,
+    _ input: AutomationPartPass.Input
   ) -> BackgroundRunHandle {
     startedKey = part.key
-    return pass.start(AutomationGraph.Node(part: part, role: role), input) { [unowned self] in
-      outcomes.append($0)
-    }
+    let node = AutomationGraph.Node(
+      part: AutomationPart(
+        id: AutomationPartID(1), key: part.key, name: part.name, trigger: part.trigger,
+        maxItems: part.maxItems, defId: AutomationDefID(1)),
+      action: part.action,
+      inputs: part.from.enumerated().map {
+        AutomationPartEdge(
+          from: AutomationPartID(100 + $0.offset), take: $0.element.take,
+          maxAgeHours: $0.element.maxAgeHours)
+      }, role: role)
+    return pass.start(node, input) { [unowned self] in outcomes.append($0) }
   }
 
   func item(_ id: String) -> AutomationItem {
     AutomationItem(id: id, link: "https://example.com/\(id)", body: "\(id) の本文", time: now)
   }
 
-  func origin(_ id: String) -> AutomationOrigin {
-    AutomationOrigin(part: "f", item: item(id))
+  func origin(_ id: String) -> AutomationInbox.Origin {
+    AutomationInbox.Origin(part: AutomationPartID(9), row: .event(Self.number(id)), item: item(id))
   }
 
   /// 取得の部品 `f` を出た行。
   func row(_ id: String) -> AutomationPartRow {
-    AutomationPartRow(id: "f:\(id)", text: #"{"id":"f:\#(id)"}"#, origin: origin(id))
+    AutomationPartRow(
+      id: "f:\(id)", text: #"{"id":"f:\#(id)"}"#, origin: origin(id),
+      source: .event(Self.number(id)))
+  }
+
+  /// id ごとに決まる、出す側の行の番号（見本）。
+  static func number(_ id: String) -> Int {
+    id.utf8.reduce(7) { ($0 &* 31 &+ Int($1)) & 0xFFFF }
   }
 
   func printed(_ stdout: String, exit: Int32 = 0, stderr: String = "")

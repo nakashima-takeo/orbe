@@ -33,7 +33,7 @@ final class AutomationPartPassPromptTests: AutomationPartPassTestCase {
     start(
       AutomationGraphTests.agent(
         "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
-      .fetch(.currentSet), .fetch(since: nil, lastOutput: []))
+      .fetch(.currentSet), .fetch(since: nil))
 
     XCTAssertTrue(
       try prompt().contains(

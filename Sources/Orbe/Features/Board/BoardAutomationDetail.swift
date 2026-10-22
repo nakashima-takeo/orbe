@@ -66,7 +66,7 @@ struct BoardAutomationDetail: View {
   private var heading: some View {
     HStack(alignment: .top, spacing: Theme.Space.phrase) {
       VStack(alignment: .leading, spacing: Theme.Space.tick) {
-        fontResolver.text(standing.name, base: Theme.Typography.title)
+        fontResolver.text(standing.title(l10n), base: Theme.Typography.title)
           .font(Font(Theme.Typography.title.monospacedWeight(.semibold)))
           .foregroundStyle(Color.theme.textPrimary)
           .frame(minHeight: Self.nameLine)
@@ -183,5 +183,48 @@ struct BoardSectionHeader<Trailing: View>: View {
       Rectangle().fill(Color.theme.surface1).frame(height: Theme.Stroke.hairline)
     }
     .padding(.bottom, below)
+  }
+}
+
+/// 定義を読めない自動化の詳細（右の欄）。名前と理由と「修正を依頼」だけを出す——地図とカードは定義から組むので出せない。
+struct BoardAutomationUnreadableDetail: View {
+  let model: BoardAutomationModel
+  let standing: BoardAutomationStanding
+  let reason: String
+  let text: AutomationText
+  @Environment(\.localization) private var l10n
+  @Environment(\.chromeFontResolver) private var fontResolver
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: Theme.Space.phrase) {
+      fontResolver.text(standing.title(l10n), base: Theme.Typography.title)
+        .font(Font(Theme.Typography.title.monospacedWeight(.semibold)))
+        .foregroundStyle(Color.theme.textPrimary)
+      HStack(alignment: .firstTextBaseline, spacing: 6) {
+        BoardRunMarkGlyph(mark: .failure)
+        fontResolver.text(text.unreadable(reason), base: Theme.Typography.codeSmall)
+          .font(Font.theme.codeSmall)
+          .foregroundStyle(Color.theme.danger)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      Button {
+        model.draftFixOfUnreadable(l10n: l10n)
+      } label: {
+        Text(l10n.string(.boardPartAskFix))
+          .font(Font.theme.workspaceName)
+          .foregroundStyle(Color.theme.textPrimary)
+          .padding(.horizontal, 10)
+          .frame(height: 26)
+          .background(
+            Color.theme.surfaceInk.opacity(0.06),
+            in: RoundedRectangle(cornerRadius: Theme.Radius.row)
+          )
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .focusable(false)
+    }
+    .padding(EdgeInsets(top: 20, leading: 32, bottom: 20, trailing: 32))
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
   }
 }

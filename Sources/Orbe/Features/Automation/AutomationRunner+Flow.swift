@@ -16,25 +16,28 @@ extension AutomationRunner {
   /// 知らせが来ず、以後ずっと断る）。
   func flow(_ id: Int, to target: AutomationFlow.Target) throws(AutomationError) {
     try checkAvailable()
+    _ = try store.index(id)
     guard let automation = store.automation(id) else { throw .automationNotFound(id) }
-    let targets: [String]
+    let targets: [AutomationPartID]
     switch target {
-    case .part(let key):
-      guard automation.graph.node(key) != nil else { throw .partNotFound(id, key) }
-      targets = [key]
+    case .part(let part):
+      guard automation.graph.node(part) != nil else { throw .partNotFound(id, "\(part)") }
+      targets = [part]
     case .ends:
-      targets = automation.graph.ends.map(\.key)
+      targets = automation.graph.ends.map(\.id)
     case .judges:
-      targets = automation.graph.judges.map(\.key)
+      targets = automation.graph.judges.map(\.id)
     }
     guard flows[id] == nil else { throw .flowing(id) }
     guard !targets.isEmpty else { return }
-    let path = Set(targets + targets.flatMap { automation.graph.ancestors(of: $0).map(\.key) })
+    let path = Set(targets + targets.flatMap { automation.graph.ancestors(of: $0).map(\.id) })
     try flow(id, through: path, to: targets)
   }
 
   /// 道（`path`）を渡して、その上を `targets`（空でなく、どれも道の上）まで流す。流している途中なら断る。
-  func flow(_ id: Int, through path: Set<String>, to targets: [String]) throws(AutomationError) {
+  func flow(_ id: Int, through path: Set<AutomationPartID>, to targets: [AutomationPartID])
+    throws(AutomationError)
+  {
     try checkAvailable()
     guard let graph = store.automation(id)?.graph else { throw .automationNotFound(id) }
     guard flows[id] == nil else { throw .flowing(id) }

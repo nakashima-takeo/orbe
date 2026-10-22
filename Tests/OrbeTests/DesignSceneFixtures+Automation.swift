@@ -14,14 +14,22 @@ struct AutomationSample {
   var deleted = false
 }
 
-/// 見本の部品の 1 回。入力のある部品の回は、その時点の溜まりを（捨てる分のほかは）すべて取った回にする。
+/// 見本の部品の 1 回。入力のある部品の回は、その時点で読める行を（捨てる分のほかは）すべて取った回にする。判定の候補の案の
+/// 出どころと、素通しの処理の出力は、読んだ行から組み直す（出どころは DB の行を指すため）。
 struct AutomationSamplePass {
   let part: String
   let at: Date
   var trigger: AutomationPartRun.Trigger = .schedule
   let outcome: AutomationPartPass.Outcome
-  /// 溜まりの古い方から、届いてから古さの上限を過ぎたとして捨てる行の数。
+  /// 取得の回の前から出ていた項目。見本を置くときに、見本のすべての回の分をまとめて回の記録を残さず出力へ足し、下流の受け手は
+  /// 読んだものとしておく。回の出力にもまとめた分を載せる——見本が言う「新しい項目」の数を、DB の照らし合わせが同じに数えるため。
+  var kept: [AutomationItem] = []
+  /// 読んだ行の古い方から、古さの上限を過ぎたとして捨てる行の数。
   var expired = 0
+  /// 取る行の数（新しい方から）。省けば読んだ行すべて。残りは読んだものとして流さない。
+  var take: Int?
+  /// 素通しの処理の回: 取った行の先頭から N 行を、id を保ったまま次へ渡す。
+  var passThrough: Int?
 }
 
 /// 提案タブの fixture（見本 R3Inbox.png と同じ並び）。今日はタスク画面と同じ 2025-10-04、走らせ役の今は同じ日の 15:00 に
@@ -45,6 +53,41 @@ extension DesignSceneFixtures {
     return store
   }
 
+  /// 見本を置いた DB に `corrupt` で手を入れてから開き直したストア（読めない定義・不明な記録の見本）。
+  static func automationStore(
+    _ samples: [AutomationSample], corrupt: (SQLiteDatabase) throws -> Void
+  ) -> AutomationStore {
+    let previous = AutomationPersistence.folderOverride
+    AutomationPersistence.folderOverride = TestScratch.caseDir.appendingPathComponent(
+      "automations-\(UUID().uuidString.prefix(8))", isDirectory: true)
+    defer { AutomationPersistence.folderOverride = previous }
+    do {
+      try {
+        let store = AutomationStore()
+        seed(samples, into: store)
+        try store.read { try corrupt($0.db) }
+      }()
+    } catch {
+      preconditionFailure("the corruption runs: \(error)")
+    }
+    return AutomationStore()
+  }
+
+  /// 見本『Home 自動化』のうち、GitHub の判定の動作の定義を壊し（定義を読めない自動化）、Slack の取得の最新の成功した回の中身を
+  /// 壊した（不明な記録）DB。
+  static func boardUnreadableStore() -> AutomationStore {
+    automationStore(boardDesignSamples()) { db in
+      try db.exec(
+        """
+        UPDATE action_defs SET action = '{"instruction": 1}'
+        WHERE id = (SELECT def_id FROM parts WHERE automation_id = 2 AND key = 'judge');
+        UPDATE runs SET record = '{}' WHERE id = (
+          SELECT max(r.id) FROM runs r JOIN parts p ON p.id = r.part_id
+          WHERE p.automation_id = 1 AND p.key = 'fetch' AND r.failure IS NULL)
+        """)
+    }
+  }
+
   /// 窓が開く既定の DB に見本を置き、閉じる（窓を作る前に呼ぶ）。
   static func seedAutomations(_ samples: [AutomationSample]) {
     seed(samples, into: AutomationStore())
@@ -54,38 +97,127 @@ extension DesignSceneFixtures {
     do {
       for sample in samples {
         let id = try store.create(sample.definition, now: sample.createdAt).id
+        var kept: [String: [AutomationItem]] = [:]
         for pass in sample.passes {
-          guard let node = store.automation(id)?.graph.node(pass.part) else {
-            preconditionFailure("no part \(pass.part) in the sample")
+          for item in pass.kept where !(kept[pass.part]?.contains { $0.id == item.id } ?? false) {
+            kept[pass.part, default: []].append(item)
           }
-          var take: AutomationInbox.Take?
-          if !node.part.inputs.isEmpty {
-            let seqs = try store.inbox(of: pass.part, in: id).map(\.seq)
-            take = AutomationInbox.Take(
-              taken: Array(seqs.dropFirst(pass.expired)),
-              dropped: seqs.prefix(pass.expired).map { .init(seq: $0, reason: .expired) })
-          }
-          _ = try store.record(
-            AutomationPassEnd(
-              automationId: id, part: pass.part, trigger: pass.trigger, startedAt: pass.at,
-              endedAt: pass.at.addingTimeInterval(60), take: take, outcome: pass.outcome))
         }
-        if sample.paused { _ = try store.setPaused(id, true) }
-        if sample.deleted { try store.delete(id) }
+        for (key, items) in kept.sorted(by: { $0.key < $1.key }) {
+          try prepare(items, as: key, of: id, in: store, at: sample.createdAt)
+        }
+        for pass in sample.passes {
+          try record(pass, of: id, in: store, kept: kept[pass.part] ?? [])
+        }
+        if sample.paused { _ = try store.setPaused(id, true, now: sample.createdAt) }
+        if sample.deleted { try store.delete(id, now: sample.createdAt) }
       }
     } catch {
       preconditionFailure("the samples are valid: \(error)")
     }
   }
 
+  /// 見本の前から出ていた項目を、回の記録を残さず `key` の部品の出力へ足し、下流の受け手は読んだものとする。
+  private static func prepare(
+    _ items: [AutomationItem], as key: String, of id: Int, in store: AutomationStore, at: Date
+  ) throws {
+    let part = store.part(id, key)
+    _ = try store.give(items.map(row), as: part, of: id, at: at)
+    for receiver in store.automation(id)?.graph.downstream(of: part) ?? [] {
+      guard var read = try store.read(receiver.id, of: id, baseline: nil, now: at) else { continue }
+      read.taken = []
+      read.dropped = []
+      read.lapsed = 0
+      try store.discard(read, of: receiver.id, in: id, now: at)
+    }
+  }
+
+  /// 見本の回 1 つを、走らせ役と同じ読みと確定で記録する。`kept` はその部品の見本の前から出ていた項目で、取得の回の出力に足す。
+  static func record(
+    _ pass: AutomationSamplePass, of id: Int, in store: AutomationStore,
+    kept: [AutomationItem] = []
+  ) throws {
+    guard let automation = store.automation(id), let node = automation.graph.node(key: pass.part)
+    else {
+      preconditionFailure("no part \(pass.part) in the sample")
+    }
+    var read: AutomationInbox.Read?
+    var outcome = pass.outcome
+    if case .succeeded(.fetch(let rows), let execution, let breach) = outcome, !kept.isEmpty {
+      let ids = Set(rows.map(\.id))
+      outcome = .succeeded(
+        .fetch(kept.filter { !ids.contains($0.id) }.map(row) + rows), execution, breach: breach)
+    }
+    if !node.inputs.isEmpty {
+      var found = try readOrFail(
+        store.read(node.id, of: id, baseline: nil, now: pass.at.addingTimeInterval(60)))
+      let expired = found.taken.prefix(pass.expired)
+      found.taken.removeFirst(expired.count)
+      found.dropped += expired.map { AutomationInbox.Drop(row: $0, reason: .expired) }
+      if let take = pass.take { found.taken = Array(found.taken.suffix(take)) }
+      read = found
+      outcome = resolved(outcome, pass, found.taken)
+    }
+    _ = try store.record(
+      AutomationPassEnd(
+        automationId: id, part: node.id, defId: node.part.defId, trigger: pass.trigger,
+        startedAt: pass.at, endedAt: pass.at.addingTimeInterval(60), read: read,
+        outcome: outcome))
+  }
+
+  private static func readOrFail(_ read: AutomationInbox.Read?) -> AutomationInbox.Read {
+    guard let read else { preconditionFailure("a part with inputs reads") }
+    return read
+  }
+
+  /// 判定の案の出どころを、読んだ行の出どころ（同じ書かれた id の項目、無ければ順に）に当て直す。素通しの処理は、取った行を
+  /// 次へ渡す。
+  private static func resolved(
+    _ outcome: AutomationPartPass.Outcome, _ pass: AutomationSamplePass,
+    _ taken: [AutomationInbox.Row]
+  ) -> AutomationPartPass.Outcome {
+    if let count = pass.passThrough, case .succeeded(_, let execution, let breach) = outcome {
+      return .succeeded(
+        .process(
+          taken.prefix(count).map {
+            AutomationPartRow(id: $0.id, text: $0.text, origin: $0.origin, source: $0.source)
+          }), execution, breach: breach)
+    }
+    guard case .succeeded(.judge(let proposals, let resolved), let execution, let breach) = outcome
+    else { return outcome }
+    var origins = taken.compactMap(\.origin)
+    let placed = proposals.compactMap { proposal -> AutomationPartPass.Proposal? in
+      let index =
+        origins.firstIndex { $0.item.id == proposal.origin.item.id } ?? origins.indices.first
+      guard let index else { return nil }
+      let origin = origins.remove(at: index)
+      return AutomationPartPass.Proposal(
+        origin: origin, title: proposal.title, due: proposal.due, workspace: proposal.workspace,
+        reason: proposal.reason)
+    }
+    return .succeeded(.judge(proposals: placed, resolved: resolved), execution, breach: breach)
+  }
+
+  /// 項目を取得が出した 1 行にする。
+  nonisolated static func row(_ item: AutomationItem) -> AutomationPartRow {
+    AutomationPartRow(
+      id: item.id, text: AutomationPrompts.jsonLine(AutomationWire.object(item)), origin: nil,
+      source: nil)
+  }
+
   /// 番人も部品の回も止まった走らせ役。
   static func automationRunner(_ samples: [AutomationSample] = []) -> AutomationRunner {
+    automationRunner(store: automationStore(samples))
+  }
+
+  /// `store` の上の、番人も部品の回も止まった走らせ役。
+  static func automationRunner(store: AutomationStore) -> AutomationRunner {
     let scheduler = BackgroundScheduler { _, _ in BackgroundRunHandle {} }
     scheduler.now = { automationNow }
     scheduler.calendar = { taskCalendar }
     scheduler.arm = { _, _ in {} }
     let runner = AutomationRunner(
-      store: automationStore(samples), scheduler: scheduler,
+      store: store, scheduler: scheduler,
       run: { _, _ in BackgroundRunHandle {} },
       workspaces: { AutomationWorkspaces(listed: [], home: nil) }, recorded: { _ in },
       defined: { _ in }, deleted: { _ in })
@@ -109,29 +241,33 @@ extension DesignSceneFixtures {
   nonisolated static func commandPart(
     _ key: String, _ name: String, _ trigger: AutomationPart.Trigger, from inputs: [String] = [],
     script: String, directory: String? = nil, coverage: AutomationCoverage? = nil,
-    deliver: AutomationPart.Destination = .nextPart
-  ) -> AutomationPart {
-    AutomationPart(
-      key: key, name: name, trigger: trigger, inputs: inputs,
-      method: .command(BackgroundCommand(script: script, directory: directory)),
-      timeoutMinutes: nil, coverage: coverage, destination: deliver, inboxLimit: nil)
+    deliver: AutomationActionDef.Destination = .nextPart
+  ) -> AutomationDefinition.Part {
+    AutomationDefinition.Part(
+      id: nil, key: key, name: name, trigger: trigger,
+      from: inputs.map { AutomationDefinition.Input(part: $0) },
+      action: AutomationActionDef(
+        method: .command(BackgroundCommand(script: script, directory: directory)),
+        timeoutMinutes: nil, coverage: coverage, destination: deliver), maxItems: nil)
   }
 
   nonisolated static func agentPart(
     _ key: String, _ name: String, _ trigger: AutomationPart.Trigger, from inputs: [String] = [],
     model: String? = nil, tools: [String] = [], instruction: String,
-    coverage: AutomationCoverage? = nil, deliver: AutomationPart.Destination = .nextPart
-  ) -> AutomationPart {
-    AutomationPart(
-      key: key, name: name, trigger: trigger, inputs: inputs,
-      method: .agent(
-        AutomationPartAgent(cli: "claude", model: model, tools: tools, instruction: instruction)),
-      timeoutMinutes: nil, coverage: coverage, destination: deliver, inboxLimit: nil)
+    coverage: AutomationCoverage? = nil, deliver: AutomationActionDef.Destination = .nextPart
+  ) -> AutomationDefinition.Part {
+    AutomationDefinition.Part(
+      id: nil, key: key, name: name, trigger: trigger,
+      from: inputs.map { AutomationDefinition.Input(part: $0) },
+      action: AutomationActionDef(
+        method: .agent(
+          AutomationPartAgent(cli: "claude", model: model, tools: tools, instruction: instruction)),
+        timeoutMinutes: nil, coverage: coverage, destination: deliver), maxItems: nil)
   }
 
   /// 取得の部品 `fetch` と、届いたらタスク候補を出す判定の部品 `judge`。
   nonisolated static func candidatesDefinition(
-    _ name: String, fetch: AutomationPart,
+    _ name: String, fetch: AutomationDefinition.Part,
     instruction: String = "自分が何かを頼まれている・期限がある項目だけをタスクにする。",
     notify: AutomationNotify? = nil
   ) -> AutomationDefinition {
@@ -153,31 +289,19 @@ extension DesignSceneFixtures {
     AutomationPartPass.Execution(commandLine: "claude -p", ending: ending, count: count)
   }
 
-  /// 取得の回。`fresh` を省けば全項目が新しい。
-  nonisolated static func fetched(
-    _ part: String, _ items: [AutomationItem], fresh: [AutomationItem]? = nil
-  ) -> AutomationPartPass.Outcome {
-    let rows = (fresh ?? items).map { item in
-      let id = "\(part):\(item.id)"
-      return AutomationPartRow(
-        id: id,
-        text: AutomationPrompts.row(
-          AutomationItem(id: id, link: item.link, body: item.body, time: item.time)),
-        origin: AutomationOrigin(part: part, item: item))
-    }
-    return .succeeded(
-      .fetch(rows: rows, lastOutput: items.map { AutomationSeen(id: $0.id, link: $0.link) }),
-      execution(items.count), breach: nil)
+  /// 取得の回（取れた全項目）。
+  nonisolated static func fetched(_ items: [AutomationItem]) -> AutomationPartPass.Outcome {
+    .succeeded(.fetch(items.map(row)), execution(items.count), breach: nil)
   }
 
-  /// 取得の部品 `fetch` の項目への候補の案。
+  /// 項目への候補の案。出どころは、記録するときに判定が読んだ行の出どころ（同じ書かれた id の項目）に当て直す。
   nonisolated static func proposal(
     _ item: AutomationItem, _ title: String, due: TaskItem.DueDate? = nil, workspace: UUID? = nil,
     reason: String? = nil
   ) -> AutomationPartPass.Proposal {
     AutomationPartPass.Proposal(
-      origin: AutomationOrigin(part: "fetch", item: item), title: title, due: due,
-      workspace: workspace, reason: reason)
+      origin: AutomationInbox.Origin(part: AutomationPartID(0), row: .event(0), item: item),
+      title: title, due: due, workspace: workspace, reason: reason)
   }
 
   /// 判定の回。`rows` は読めた行の数。
@@ -231,6 +355,21 @@ extension DesignSceneFixtures {
     }
   }
 
+  /// 1 回の取得の全項目と、そのうち新しい項目。新しくない項目は回によらず同じ（id は `<出どころ>-<番号>`）、新しい項目は回の
+  /// 時刻の id。
+  nonisolated static func sampleRound(_ source: String, at time: Date, items: Int, fresh: Int)
+    -> (all: [AutomationItem], new: [AutomationItem])
+  {
+    let kept = (0..<(items - fresh)).map { n in
+      AutomationItem(
+        id: "\(source)-\(n)", link: "https://example.com/\(source)/\(n)",
+        body: "\(source) の項目 \(n)",
+        time: Date(timeIntervalSince1970: 1_700_000_000))
+    }
+    let new = Array(sampleItems(source, items, at: time).suffix(fresh))
+    return (kept + new, new)
+  }
+
   /// 取得の回と、その後の届いたらの判定の回。新しい `fresh` 項目のうち先頭の `proposed` 件を候補にする。取得が失敗した回は
   /// 判定を起こさない。
   nonisolated static func round(
@@ -242,11 +381,11 @@ extension DesignSceneFixtures {
         AutomationSamplePass(part: "fetch", at: time, trigger: trigger, outcome: failed(failure))
       ]
     }
-    let all = sampleItems(source, items, at: time)
-    let new = Array(all.suffix(fresh))
+    let (all, new) = sampleRound(source, at: time, items: items, fresh: fresh)
     var passes = [
       AutomationSamplePass(
-        part: "fetch", at: time, trigger: trigger, outcome: fetched("fetch", all, fresh: new))
+        part: "fetch", at: time, trigger: trigger, outcome: fetched(all),
+        kept: Array(all.prefix(items - fresh)))
     ]
     if !new.isEmpty {
       passes.append(
@@ -254,7 +393,7 @@ extension DesignSceneFixtures {
           part: "judge", at: time.addingTimeInterval(60), trigger: .arrival,
           outcome: judged(
             new.prefix(proposed).map { proposal($0, "\($0.body)に対応する") },
-            rows: new.count)))
+            rows: new.count), take: new.count))
     }
     return passes
   }

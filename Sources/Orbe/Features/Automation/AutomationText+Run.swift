@@ -21,6 +21,14 @@ extension AutomationText {
     }
   }
 
+  /// 定義を読めない理由（「定義エラー（parts[0].trigger: …）」。英語の画面は「: 」で添える）。
+  func unreadable(_ reason: String) -> String {
+    let head = l10n.string(.boardAutomationUnreadable)
+    return l10n.language == .en
+      ? l10n.format(.automationFailureExcerpt, head, reason)
+      : l10n.format(.automationWithOriginal, head, reason)
+  }
+
   /// 説明が言わず、原文にだけある抜粋（標準エラーか応答の抜粋・最初の外れた行）。無ければ nil。
   private func excerpt(_ failure: AutomationFailure, breach: AutomationPartRun.Breach?) -> String? {
     switch failure {
@@ -41,7 +49,7 @@ extension AutomationText {
     case .notUTF8: return l10n.string(.automationFailNotUTF8)
     case .agentError(let text):
       var cli = ""
-      if case .agent(let agent) = node.part.method { cli = agent.cli }
+      if case .agent(let agent) = node.action.method { cli = agent.cli }
       return l10n.format(.automationFailAgentError, cli, text)
     case .reported(let text): return l10n.format(.automationFailReported, text)
     case .brokeRules: return l10n.string(.automationFailBrokeRules)

@@ -5,7 +5,8 @@ import Foundation
 /// （成否の印）は混ぜない。自動化そのものは持たない。
 struct BoardAutomationStanding: Equatable, Identifiable {
   let id: Int
-  let name: String
+  /// 1 行として読めた名前。定義を読めない自動化で名前も読めなければ nil（「自動化 #<id>」と呼ぶ）。
+  let name: String?
   let paused: Bool
   /// どれかの部品が走っているか、流している途中か（部品と部品の間も含む）。
   let running: Bool
@@ -13,6 +14,8 @@ struct BoardAutomationStanding: Equatable, Identifiable {
   let next: Date?
   /// 最後の回が失敗した部品があるか。
   let failing: Bool
+  /// 定義を読めない理由（定義を読めない自動化だけ）。
+  var unreadable: String?
 
   /// 並びの群（この順に並ぶ）。走っているかは効かない——走り出すたびに行が跳ねないため。
   enum Group: Comparable {
@@ -23,7 +26,7 @@ struct BoardAutomationStanding: Equatable, Identifiable {
 
   var group: Group {
     if paused { return .paused }
-    return failing ? .failing : .active
+    return failing || unreadable != nil ? .failing : .active
   }
 
   /// 名前の右の状態。走っているのを止めているより先に言う（止めていても流せる）。
@@ -39,6 +42,22 @@ struct BoardAutomationStanding: Equatable, Identifiable {
 }
 
 extension BoardAutomationStanding {
+  /// 一覧と見出しの名前。
+  func title(_ l10n: LocalizationStore) -> String {
+    name ?? l10n.format(.boardAutomationNumbered, id)
+  }
+
+  static func name(of broken: AutomationUnreadable, _ l10n: LocalizationStore) -> String {
+    broken.name ?? l10n.format(.boardAutomationNumbered, broken.id)
+  }
+
+  /// 定義を読めない自動化。動かないので、走らず予定も無い。
+  init(_ broken: AutomationUnreadable) {
+    self.init(
+      id: broken.id, name: broken.name, paused: false, running: false, next: nil, failing: false,
+      unreadable: broken.reason)
+  }
+
   init(_ automation: Automation, runner: AutomationRunner, now: Date) {
     self.init(
       id: automation.id, name: automation.name, paused: automation.paused,

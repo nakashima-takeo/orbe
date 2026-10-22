@@ -14,7 +14,7 @@ final class AutomationPartPassRedoTests: AutomationPartPassTestCase {
     start(
       AutomationGraphTests.agent(
         "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
-      .fetch(.currentSet), .fetch(since: nil, lastOutput: []))
+      .fetch(.currentSet), .fetch(since: nil))
     let first = (1...6).map { #"{"id":"x\#($0)"}"# }.joined(separator: "\n")
 
     jobs.finish(0, replied(first, took: 200))
@@ -36,10 +36,10 @@ final class AutomationPartPassRedoTests: AutomationPartPassTestCase {
       replied(
         #"{"id":"a","link":"https://example.com/a","body":"a","time":"2026-10-10T09:00:00Z"}"#))
 
-    guard case .fetch(let rows, _) = try XCTUnwrap(succeeded, "\(outcomes)") else {
+    guard case .fetch(let rows) = try XCTUnwrap(succeeded, "\(outcomes)") else {
       return XCTFail("\(outcomes)")
     }
-    XCTAssertEqual(rows.map(\.id), ["f:a"])
+    XCTAssertEqual(rows.map(\.id), ["a"])
     XCTAssertEqual(breach?.lines.count, 6)
     XCTAssertEqual(breach?.redo?.lines, [])
   }
@@ -109,7 +109,7 @@ final class AutomationPartPassRedoTests: AutomationPartPassTestCase {
     start(
       AutomationGraphTests.agent(
         "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
-      .fetch(.currentSet), .fetch(since: nil, lastOutput: []))
+      .fetch(.currentSet), .fetch(since: nil))
 
     jobs.finish(0, replied(#"{"error":"Slack に届かない"}"#))
 

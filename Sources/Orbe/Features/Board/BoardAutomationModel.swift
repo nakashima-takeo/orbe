@@ -30,10 +30,10 @@ import SwiftUI
     case automation(Int)
   }
 
-  /// 地図の段: 見出しの「通知」の行か、部品の行（鍵）。
+  /// 地図の段: 見出しの「通知」の行か、部品の行。
   enum MapStop: Hashable {
     case notify
-    case part(String)
+    case part(AutomationPartID)
   }
 
   /// サブメニュー「通知」の行の並び（通知しない・メニューバー・通知センター）。
@@ -78,10 +78,11 @@ import SwiftUI
 
   var store: AutomationStore { runner.store }
 
-  /// `now` での立ち位置で並べた自動化: 失敗した部品がある（止めていない）→ それ以外（止めていない）→ 止めている。群の中は
-  /// ID 順。描く経路は描くときの今を、描かない経路は走らせ役の今を渡す。
+  /// `now` での立ち位置で並べた自動化: 失敗した部品がある・定義を読めない（止めていない）→ それ以外（止めていない）→ 止めて
+  /// いる。群の中は ID 順。描く経路は描くときの今を、描かない経路は走らせ役の今を渡す。
   func standings(at now: Date) -> [BoardAutomationStanding] {
-    store.automations.map { BoardAutomationStanding($0, runner: runner, now: now) }
+    (store.automations.map { BoardAutomationStanding($0, runner: runner, now: now) }
+      + store.unreadable.map(BoardAutomationStanding.init))
       .sorted { ($0.group, $0.id) < ($1.group, $1.id) }
   }
 
@@ -96,16 +97,22 @@ import SwiftUI
     return .request
   }
 
-  /// 選んでいる自動化。欄を選んでいる間は nil（詳細の代わりに案内を出す）。
+  /// 選んでいる自動化。欄・定義を読めない自動化を選んでいる間は nil。
   var selectedAutomation: Automation? {
     guard case .automation(let id) = list.selectedID else { return nil }
     return store.automation(id)
   }
 
+  /// 選んでいる、定義を読めない自動化。
+  var selectedUnreadable: AutomationUnreadable? {
+    guard case .automation(let id) = list.selectedID else { return nil }
+    return store.unreadable.first { $0.id == id }
+  }
+
   /// 選んでいる自動化の地図の段の並び（「通知」、続いて部品の行の順）。
   var mapStops: [MapStop] {
     guard let automation = selectedAutomation else { return [] }
-    return [.notify] + automation.graph.byDepth.map { .part($0.key) }
+    return [.notify] + automation.graph.byDepth.map { .part($0.id) }
   }
 
   /// 選ばれている地図の段。地図に居る間だけ、覚えている段を返す。
@@ -115,9 +122,9 @@ import SwiftUI
   }
 
   /// 選ばれている部品。
-  var selectedPart: String? {
-    guard case .part(let key) = selectedMapStop else { return nil }
-    return key
+  var selectedPart: AutomationPartID? {
+    guard case .part(let part) = selectedMapStop else { return nil }
+    return part
   }
 
   /// ストアが変わったあとの付け直し。同一性が今の段にあればそのまま、無ければ同じ位置（末尾で頭打ち）の段へ。行がすべて
@@ -197,6 +204,13 @@ import SwiftUI
   /// 選んでいる自動化への手の操作。止める ⇄ 再開で行が沈んでも浮いても、選択は同じ自動化に付いていく。部品まで流すのは
   /// 選ばれている部品だけで、部品が選ばれていなければ何もしない。
   func perform(_ operation: BoardAutomationHand.Operation) {
+    if let broken = selectedUnreadable, operation == .delete {
+      onRefusal(nil)
+      try? runner.delete(broken.id)
+      reconcile()
+      list.follow()
+      return
+    }
     guard let automation = selectedAutomation else { return }
     onRefusal(nil)
     if let refusal = BoardAutomationHand.perform(
@@ -240,8 +254,8 @@ import SwiftUI
   }
 
   /// 地図の部品の行のクリック。その部品を選んで地図に居る。
-  func tapPart(_ key: String) {
-    select(.part(key))
+  func tapPart(_ part: AutomationPartID) {
+    select(.part(part))
   }
 
   /// 見出しの「通知」の行のクリック。その段を選んで地図に居て、サブメニューを開く。
@@ -260,9 +274,24 @@ import SwiftUI
 
   /// カードの「修正を依頼」。依頼の欄に「自動化「<名前>」の部品「<名前>」の修正：」を書き（書きかけは置き換える）、焦点を欄へ
   /// 移す——続けて打って ↵ で、欄からふつうに頼む。`l10n` は画面の言語。
-  func draftFix(of key: String, l10n: LocalizationStore) {
-    guard let automation = selectedAutomation, let node = automation.graph.node(key) else { return }
-    requestText = l10n.format(.boardAskFixDraft, automation.name, node.part.name)
+  func draftFix(of part: AutomationPartID, l10n: LocalizationStore) {
+    guard let automation = selectedAutomation, let node = automation.graph.node(part) else {
+      return
+    }
+    draft(l10n.format(.boardAskFixDraft, automation.name, node.part.name))
+  }
+
+  /// 定義を読めない自動化の「修正を依頼」。依頼の欄に「自動化「<名前>」の修正：<理由の原文>」を書く（読むのは AI なので
+  /// 原文だけ）。
+  func draftFixOfUnreadable(l10n: LocalizationStore) {
+    guard let broken = selectedUnreadable else { return }
+    draft(
+      l10n.format(.boardAskFixAutomationDraft, BoardAutomationStanding.name(of: broken, l10n))
+        + broken.reason)
+  }
+
+  private func draft(_ text: String) {
+    requestText = text
     caretAtEnd = true
     list.select(.request, in: stops)
     focusToken &+= 1
@@ -345,7 +374,7 @@ import SwiftUI
     }
     var definition = automation.definition
     definition.notify = notify
-    _ = try? runner.set(automation.id, definition)
+    _ = try? runner.set(automation.id, version: automation.version, definition)
     reconcile()
   }
 

@@ -13,8 +13,8 @@ extension AutomationPartPass {
     -> Reading
   {
     switch input {
-    case .fetch(_, let lastOutput):
-      return reading(result) { declaringNothing($0) { fetched($0, node, lastOutput: lastOutput) } }
+    case .fetch:
+      return reading(result) { declaringNothing($0) { fetched($0) } }
     case .process(let rows, let reachesJudge):
       return reading(result) {
         declaringNothing($0) { processed($0, rows, reachesJudge: reachesJudge) }
@@ -33,9 +33,9 @@ extension AutomationPartPass {
     }
   }
 
-  /// 外から与えた項目（1 行 1 JSON）を、取得の部品が前回の出力なしで取った項目として読む。
-  static func given(_ text: String, to node: AutomationGraph.Node) -> Reading {
-    fetched(text, node, lastOutput: [])
+  /// 外から与えた項目（1 行 1 JSON）を、取得の部品が取った項目として読む。
+  static func given(_ text: String) -> Reading {
+    fetched(text)
   }
 
   /// 残す報告の上限（字）。回の記録は部品ごとに 20 回残る。
@@ -75,49 +75,34 @@ extension AutomationPartPass {
     return .read(output, count: count, lines: broken.sorted { $0.line < $1.line })
   }
 
-  /// `{"error": …}` の行は申告の失敗。項目として読めない行と、同じ `id` の 2 つ目の行は外れた行。前回の出力に無い項目
-  /// （毎回全件なら全部）を、`id` に部品の鍵の接頭を付けた行にする。出どころは元の項目のまま持つ。
-  private static func fetched(
-    _ text: String, _ node: AutomationGraph.Node, lastOutput: Set<String>
-  ) -> Reading {
+  /// `{"error": …}` の行は申告の失敗。項目として読めない行と、同じ `id` の 2 つ目の行は外れた行。取れた全項目を、書かれた id と
+  /// 書かれたままの 1 行（余分な欄も残す）で返す。
+  private static func fetched(_ text: String) -> Reading {
     if let error = AutomationPrompts.reportedError(in: text) { return .failed(.reported(error)) }
     let read = JSONLines<AutomationItem>(text)
     var lines = read.rejected.map {
       AutomationBrokenLine(line: $0.line, fault: AutomationLineFault($0.reason))
     }
     var ids = Set<String>()
-    var items: [AutomationItem] = []
+    var rows: [AutomationPartRow] = []
     for accepted in read.accepted {
       guard ids.insert(accepted.item.id).inserted else {
         lines.append(AutomationBrokenLine(line: accepted.line, fault: .idTwice(accepted.item.id)))
         continue
       }
-      items.append(accepted.item)
+      rows.append(
+        AutomationPartRow(id: accepted.item.id, text: accepted.text, origin: nil, source: nil))
     }
-    let fresh =
-      node.role == .fetch(.everything) ? items : items.filter { !lastOutput.contains($0.id) }
-    let rows = fresh.map { item in
-      let id = "\(node.key):\(item.id)"
-      return AutomationPartRow(
-        id: id,
-        text: AutomationPrompts.row(
-          AutomationItem(id: id, link: item.link, body: item.body, time: item.time)),
-        origin: AutomationOrigin(part: node.key, item: item))
-    }
-    return .read(
-      .fetch(rows: rows, lastOutput: items.map { AutomationSeen(id: $0.id, link: $0.link) }),
-      count: items.count, lines: lines.sorted { $0.line < $1.line })
+    return .read(.fetch(rows), count: rows.count, lines: lines.sorted { $0.line < $1.line })
   }
 
-  /// 出どころは `id` で入力の行と照らして引き継ぐ。`id` の無い行・同じ `id` の 2 つ目の行・判定へ届くときの入力の行の `id`
-  /// でない行は外れた行。
+  /// `id` で入力の行と照らせた行は、その入力を引き継ぎ、出どころも引き継ぐ。`id` の無い行・同じ `id` の 2 つ目の行・判定へ
+  /// 届くときの入力の行の `id` でない行は外れた行。
   private static func processed(
     _ text: String, _ input: [AutomationPartRow], reachesJudge: Bool
   ) -> Reading {
     var (rows, lines) = AutomationPrompts.objectRows(text)
-    let inputIds = Set(input.map(\.id))
-    let origins = Dictionary(
-      input.compactMap { row in row.origin.map { (row.id, $0) } }, uniquingKeysWith: { $1 })
+    let inputs = Dictionary(input.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
     var ids = Set<String>()
     var passed: [AutomationPartRow] = []
     for row in rows {
@@ -129,11 +114,13 @@ extension AutomationPartPass {
         lines.append(AutomationBrokenLine(line: row.line, fault: .idTwice(id)))
         continue
       }
-      guard !reachesJudge || inputIds.contains(id) else {
+      guard !reachesJudge || inputs[id] != nil else {
         lines.append(AutomationBrokenLine(line: row.line, fault: .notInputId(id)))
         continue
       }
-      passed.append(AutomationPartRow(id: id, text: row.text, origin: origins[id]))
+      passed.append(
+        AutomationPartRow(
+          id: id, text: row.text, origin: inputs[id]?.origin, source: inputs[id]?.source))
     }
     return .read(.process(passed), count: rows.count, lines: lines.sorted { $0.line < $1.line })
   }

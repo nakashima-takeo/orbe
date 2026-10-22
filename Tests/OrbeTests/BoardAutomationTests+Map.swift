@@ -26,7 +26,7 @@ extension BoardAutomationTests {
 
     send(Key.enter, "\r", to: window)
     XCTAssertEqual(automation.place, .map)
-    XCTAssertEqual(automation.selectedPart, "github", "初めて入ると先頭の部品")
+    XCTAssertEqual(automation.selectedPartKey, "github", "初めて入ると先頭の部品")
     XCTAssertFalse(automation.runner.isRunning(id), "↵ は流さない")
     XCTAssertNotNil(card(automation))
 
@@ -46,12 +46,12 @@ extension BoardAutomationTests {
     down(window)
     let id = try XCTUnwrap(automation.selectedAutomation?.id)
     right(window)
-    XCTAssertEqual(automation.selectedPart, "github", "前提")
+    XCTAssertEqual(automation.selectedPartKey, "github", "前提")
 
     send(Key.enter, "\r", to: window)
     right(window)
     XCTAssertEqual(automation.place, .map)
-    XCTAssertEqual(automation.selectedPart, "github", "↵・→ で段は動かない")
+    XCTAssertEqual(automation.selectedPartKey, "github", "↵・→ で段は動かない")
     XCTAssertFalse(automation.runner.isRunning(id), "↵・→ は流さない")
 
     send(Key.enter, "\r", .command, to: window)

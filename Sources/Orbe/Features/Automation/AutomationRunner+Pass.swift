@@ -13,8 +13,8 @@ struct AutomationPassStart {
   let automationId: Int
   let node: AutomationGraph.Node
   let input: AutomationPartPass.Input
-  /// 溜まりから取ったもの。入力の無い部品は nil。
-  let take: AutomationInbox.Take?
+  /// 読んだもの。入力の無い部品は nil。
+  let read: AutomationInbox.Read?
   /// 走らせ役の実行の係と時計で組んだ部品の 1 回（既定の起こし方が使う）。
   let pass: AutomationPartPass
 }
@@ -22,6 +22,9 @@ struct AutomationPassStart {
 /// 記録した部品の 1 回（`AutomationRunner` の `recorded`）。
 struct AutomationPassRecord {
   let end: AutomationPassEnd
+  /// 確定したもの。
+  let recorded: AutomationRecorded
+
   /// 書いた回の記録。自動化か部品がもう無く、何も書かなかったなら nil。
-  let run: AutomationPartRun?
+  var run: AutomationPartRun? { recorded.run }
 }

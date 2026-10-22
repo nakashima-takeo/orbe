@@ -11,7 +11,7 @@ enum BoardNodeLook: Equatable {
 
 /// 地図の部品の行。文言まで解いた値。
 struct BoardMapPart: Equatable {
-  let key: String
+  let id: AutomationPartID
   /// 役割の名前（「取得」「判定」）。
   let role: String
   let name: String
@@ -94,18 +94,19 @@ struct BoardAutomationDetailValue: Equatable {
 extension BoardAutomationDetailValue {
   /// `running` は部品が走っているか、`open` はこの自動化の棚に出ている判断待ちの候補の数、`next` は次に予定で回る時刻。
   init(
-    _ automation: Automation, text: AutomationText, running: (String) -> Bool, open: Int,
+    _ automation: Automation, text: AutomationText, running: (AutomationPartID) -> Bool, open: Int,
     next: Date?
   ) {
     let l10n = text.l10n
     let graph = automation.graph
     let ordered = graph.byDepth
-    let judges = graph.judges.map(\.key)
-    let reports = graph.nodes.filter { $0.part.destination == .report }.map(\.key)
+    let judges = graph.judges.map { "\($0.id)" }
+    let reports = graph.nodes.filter { $0.action.destination == .report }.map { "\($0.id)" }
 
     var plans = ordered.map { node in
       BoardMapLayout.Row(
-        key: node.key, inputs: node.part.inputs, continues: node.part.destination != .sideEffect)
+        key: "\(node.id)", inputs: node.inputParts.map { "\($0)" },
+        continues: node.action.destination != .sideEffect)
     }
     if !judges.isEmpty {
       plans.append(.init(key: Self.taskCandidatesKey, inputs: judges, continues: false))
@@ -118,7 +119,7 @@ extension BoardAutomationDetailValue {
 
     var rows = zip(ordered, layout.lanes).map { node, lanes in
       BoardMapRow(
-        content: .part(Self.part(node, in: automation, text: text, running: running(node.key))),
+        content: .part(Self.part(node, in: automation, text: text, running: running(node.id))),
         lanes: lanes)
     }
     var ends = layout.lanes.dropFirst(ordered.count).makeIterator()
@@ -136,7 +137,7 @@ extension BoardAutomationDetailValue {
     let summary = BoardAutomationSummary(automation, text: text, next: next)
     self.next = summary.next
     strip = automation.runs.prefix(Self.stripLength).reversed().map {
-      BoardAutomationSummary.tone($0.run)
+      BoardAutomationSummary.tone($0.record)
     }
   }
 
@@ -154,28 +155,28 @@ extension BoardAutomationDetailValue {
     _ node: AutomationGraph.Node, in automation: Automation, text: AutomationText, running: Bool
   ) -> BoardMapPart {
     let l10n = text.l10n
-    let state = automation.state(node.key)
+    let state = automation.state(node.id)
     let latest = state.runs.first
-    let inputs = node.part.inputs
+    let inputs = node.inputParts
     let schedule: String? =
       switch node.part.trigger {
       case .arrival: nil
       case .scheduled, .manual: text.schedule(node.part.trigger)
       }
     return BoardMapPart(
-      key: node.key, role: text.role(node.role), name: node.part.name, schedule: schedule,
+      id: node.id, role: text.role(node.role), name: node.part.name, schedule: schedule,
       inputs: inputs.isEmpty
         ? nil
-        : inputs.map { automation.graph.node($0)?.part.name ?? $0 }.joined(
+        : inputs.map { automation.graph.node($0)?.part.name ?? "\($0)" }.joined(
           separator: l10n.string(.automationListSeparator)),
       inbox: inputs.isEmpty ? nil : state.inbox, breached: state.breach != nil,
       look: running ? .running : latest?.failed == true ? .failed : .idle,
       last: latest.map {
         BoardMapPart.Last(
           mark: $0.failed ? .failure : .success, at: text.recent($0.startedAt),
-          amount: BoardAutomationSummary.amount($0, node: node, text: text))
+          amount: $0.run.flatMap { BoardAutomationSummary.amount($0, node: node, text: text) })
       },
-      failure: latest.flatMap { text.failure($0, node: node) })
+      failure: latest?.run.flatMap { text.failure($0, node: node) })
   }
 
   /// 行き先の行の鍵（部品の鍵は空でないので、空の鍵と区切りの文字は部品と重ならない）。

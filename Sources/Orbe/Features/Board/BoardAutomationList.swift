@@ -46,6 +46,7 @@ struct BoardAutomationList: View {
           ForEach(standings) { standing in
             BoardAutomationRow(
               standing: standing, summary: model.summary(standing.id, text: text, now: now),
+              text: text,
               selection: model.list.selectedID == .automation(standing.id)
                 ? (model.inMap ? .parent : .focused) : nil
             )
@@ -79,6 +80,7 @@ struct BoardAutomationRow: View {
 
   let standing: BoardAutomationStanding
   let summary: BoardAutomationSummary?
+  let text: AutomationText
   let selection: Selection?
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
@@ -86,7 +88,7 @@ struct BoardAutomationRow: View {
   var body: some View {
     VStack(alignment: .leading, spacing: Theme.Space.hair) {
       HStack(spacing: Self.gap) {
-        fontResolver.text(standing.name, base: Theme.Typography.code)
+        fontResolver.text(standing.title(l10n), base: Theme.Typography.code)
           .font(Font.theme.code)
           .foregroundStyle(standing.paused ? Color.theme.textMuted : Color.theme.textPrimary)
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -94,12 +96,19 @@ struct BoardAutomationRow: View {
       }
       .frame(height: Self.nameLine)
       HStack(spacing: Theme.Space.beat) {
-        HStack(spacing: 5) {
-          if let mark = summary?.mark { BoardRunMarkGlyph(mark: mark) }
-          Text(summary?.last ?? "")
+        if let reason = standing.unreadable {
+          HStack(spacing: 5) {
+            BoardRunMarkGlyph(mark: .failure)
+            Text(text.unreadable(reason)).foregroundStyle(Color.theme.danger)
+          }
+        } else {
+          HStack(spacing: 5) {
+            if let mark = summary?.mark { BoardRunMarkGlyph(mark: mark) }
+            Text(summary?.last ?? "")
+          }
+          Spacer(minLength: 0)
+          if let next = summary?.next { Text(next) }
         }
-        Spacer(minLength: 0)
-        if let next = summary?.next { Text(next) }
       }
       .font(Font.theme.codeSmall)
       .foregroundStyle(Color.theme.textMuted)

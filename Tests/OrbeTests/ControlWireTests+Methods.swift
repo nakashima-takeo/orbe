@@ -38,7 +38,8 @@ extension ControlWireTests {
       "config_list", "config_set", "create_workspace", "rename_workspace",
       "set_workspace_root", "remove_workspace", "restore_sessions",
       "list_tasks", "add_task", "update_task", "delete_task", "start_task",
-      "list_automations", "set_automation", "run_automation", "pause_automation",
+      "list_automations", "set_automation", "list_automation_runs", "run_automation",
+      "pause_automation",
       "delete_automation", "list_automation_proposals", "try_automation", "get_automation_trial",
       "list_board_parts", "add_board_part", "remove_board_part",
     ]

@@ -126,7 +126,8 @@ final class FakeControlTarget: ControlTarget {
   private(set) var setWaitConditions: [SetWaitCondition] = []
   private(set) var deletedTaskIds: [Int] = []
   private(set) var startedTasks: [TaskStartRequest] = []
-  private(set) var setAutomations: [(automationId: Int?, definition: AutomationDefinition)] = []
+  private(set) var setAutomations: [FakeSetAutomation] = []
+  private(set) var runLists: [FakeRunList] = []
   private(set) var ranAutomations: [(automationId: Int, partKey: String?)] = []
   private(set) var pausedAutomations: [(automationId: Int, paused: Bool)] = []
   private(set) var deletedAutomationIds: [Int] = []
@@ -311,11 +312,20 @@ final class FakeControlTarget: ControlTarget {
     outcome(["automations": [Any]()])
   }
 
-  func controlSetAutomation(automationId: Int?, _ definition: AutomationDefinition) -> Result<
+  func controlSetAutomation(
+    automationId: Int?, version: Int?, _ definition: AutomationDefinition
+  ) -> Result<
     Any, ControlError
   > {
-    setAutomations.append((automationId, definition))
+    setAutomations.append(FakeSetAutomation(automationId, version, definition))
     return outcome(["automation": ["automationId": automationId ?? 1]])
+  }
+
+  func controlListAutomationRuns(automationId: Int, partKey: String?, before: Int?, limit: Int?)
+    -> Result<Any, ControlError>
+  {
+    runLists.append(FakeRunList(partKey: partKey, before: before, limit: limit))
+    return outcome(["runs": [Any]()])
   }
 
   func controlRunAutomation(automationId: Int, partKey: String?) -> Result<Any, ControlError> {
@@ -367,4 +377,24 @@ final class FakeControlTarget: ControlTarget {
     removedBoardParts.append((workspaceId, part))
     return outcome(["parts": [Any]()])
   }
+}
+
+/// `set_automation` が届けたもの。
+struct FakeSetAutomation {
+  let automationId: Int?
+  let version: Int?
+  let definition: AutomationDefinition
+
+  init(_ automationId: Int?, _ version: Int?, _ definition: AutomationDefinition) {
+    self.automationId = automationId
+    self.version = version
+    self.definition = definition
+  }
+}
+
+/// `list_automation_runs` が届けたもの。
+struct FakeRunList {
+  let partKey: String?
+  let before: Int?
+  let limit: Int?
 }

@@ -31,13 +31,13 @@ final class AutomationTextTests: OrbeTestCase {
   private static let judge = node("dev", "開発の依頼を選ぶ")
 
   private static func node(_ key: String, _ name: String) -> AutomationGraph.Node {
-    let graph = try? AutomationGraph([
+    let graph = try? AutomationGraph.numbered([
       DesignSceneFixtures.commandPart(
         "fetch", "取得", .manual, script: "cat", coverage: .newArrivals),
       DesignSceneFixtures.agentPart(
         key, name, .arrival, from: ["fetch"], instruction: "i", deliver: .taskCandidates),
     ])
-    guard let node = graph?.node(key) else { preconditionFailure("the graph is valid") }
+    guard let node = graph?.node(key: key) else { preconditionFailure("the graph is valid") }
     return node
   }
 

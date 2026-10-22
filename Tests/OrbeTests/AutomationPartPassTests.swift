@@ -18,7 +18,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
   /// 上限は部品の経過時間だけで、無出力では打ち切らない——部品の上限は利用者が決める `timeoutMinutes` の一本にするため。
   func testPartIsLimitedOnlyByItsTimeoutNotBySilence() {
     var part = AutomationGraphTests.agent("r", from: ["f"])
-    part.timeoutMinutes = 3
+    part.action.timeoutMinutes = 3
 
     start(part, .report, .report([]))
 
@@ -31,18 +31,18 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
   func testOnlyNewArrivalsFetchGetsTheMark() throws {
     let since = now.addingTimeInterval(-3600)
     let mark = SessionEvent.iso8601(since)
-    func agent(_ coverage: AutomationCoverage) -> AutomationPart {
+    func agent(_ coverage: AutomationCoverage) -> AutomationDefinition.Part {
       AutomationGraphTests.agent("f", tools: [Self.tool], deliver: .nextPart, coverage: coverage)
     }
 
     start(
       AutomationGraphTests.fetch("f", .newArrivals), .fetch(.newArrivals),
-      .fetch(since: since, lastOutput: []))
+      .fetch(since: since))
     start(
       AutomationGraphTests.fetch("f", .currentSet), .fetch(.currentSet),
-      .fetch(since: since, lastOutput: []))
-    start(agent(.newArrivals), .fetch(.newArrivals), .fetch(since: since, lastOutput: []))
-    start(agent(.currentSet), .fetch(.currentSet), .fetch(since: since, lastOutput: []))
+      .fetch(since: since))
+    start(agent(.newArrivals), .fetch(.newArrivals), .fetch(since: since))
+    start(agent(.currentSet), .fetch(.currentSet), .fetch(since: since))
 
     XCTAssertEqual(try XCTUnwrap(commandInput(0)).environment, ["ORBE_SINCE": mark])
     XCTAssertEqual(try XCTUnwrap(commandInput(1)).environment, [:])
@@ -70,45 +70,30 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
 
   // MARK: - 取得
 
-  /// 前回の出力に無い項目だけを渡す。渡す行の `id` は `<鍵>:<元の id>`、出どころは元の項目のまま。前回の出力は今回の全項目。
-  func testFetchPassesOnlyItemsMissingFromTheLastOutput() throws {
-    start(
-      AutomationGraphTests.fetch("f"), .fetch(.currentSet), .fetch(since: nil, lastOutput: ["a"]))
+  /// 取れた全項目を、書かれた id と書かれたままの 1 行（余分な欄も残す）で返す。何が新しいかは出す側の確定が決める。
+  func testFetchReturnsEveryItemAsWritten() throws {
+    start(AutomationGraphTests.fetch("f"), .fetch(.currentSet), .fetch(since: nil))
+    let labelled =
+      #"{"id":"b","link":"https://example.com/b","body":"b","time":"2026-10-10T09:00:00Z","labels":["x"]}"#
 
-    jobs.finish(0, fetched(["a", "b"]))
+    jobs.finish(0, printed(fetchedLine("a") + "\n" + labelled))
 
-    guard case .fetch(let rows, let lastOutput) = try XCTUnwrap(succeeded, "\(outcomes)") else {
+    guard case .fetch(let rows) = try XCTUnwrap(succeeded, "\(outcomes)") else {
       return XCTFail("\(outcomes)")
     }
-    XCTAssertEqual(rows.map(\.id), ["f:b"])
-    XCTAssertEqual(rows.map { AutomationPrompts.id(of: $0.text) }, ["f:b"])
-    XCTAssertEqual(rows.first?.origin?.part, "f")
-    XCTAssertEqual(rows.first?.origin?.item.id, "b", "前回の出力と照らせるよう、出どころの id は接頭の無い元の id")
-    XCTAssertEqual(
-      lastOutput,
-      [
-        AutomationSeen(id: "a", link: "https://example.com/a"),
-        AutomationSeen(id: "b", link: "https://example.com/b"),
-      ])
+    XCTAssertEqual(rows.map(\.id), ["a", "b"])
+    XCTAssertEqual(rows.last?.text, labelled, "書かれたまま")
+    XCTAssertEqual(rows.map(\.source), [nil, nil])
   }
 
-  func testEverythingFetchPassesAllItemsRegardlessOfTheLastOutput() throws {
-    start(
-      AutomationGraphTests.fetch("f", .everything), .fetch(.everything),
-      .fetch(since: nil, lastOutput: ["a"]))
-
-    jobs.finish(0, fetched(["a", "b"]))
-
-    guard case .fetch(let rows, _) = try XCTUnwrap(succeeded, "\(outcomes)") else {
-      return XCTFail("\(outcomes)")
-    }
-    XCTAssertEqual(rows.map(\.id), ["f:a", "f:b"])
+  private func fetchedLine(_ id: String) -> String {
+    #"{"id":"\#(id)","link":"https://example.com/\#(id)","body":"\#(id) の本文","time":"2026-10-10T09:00:00Z"}"#
   }
 
   /// 同じ `id` の 2 つ目の項目は外れた行（下流の溜まりで前の行を黙って置き換えない）。
   func testFetchItemWithARepeatedIdBreaksTheRules() throws {
     start(
-      AutomationGraphTests.fetch("f"), .fetch(.currentSet), .fetch(since: nil, lastOutput: []))
+      AutomationGraphTests.fetch("f"), .fetch(.currentSet), .fetch(since: nil))
 
     jobs.finish(0, fetched(["a", "a"]))
 
@@ -121,7 +106,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
     start(
       AutomationGraphTests.agent(
         "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
-      .fetch(.currentSet), .fetch(since: nil, lastOutput: ["a"]))
+      .fetch(.currentSet), .fetch(since: nil))
 
     jobs.finish(
       0,
@@ -170,7 +155,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
     XCTAssertNotNil(failed)
   }
 
-  /// 出力の行は `id` で入力の行と照らして出どころを引き継ぎ、照らせない行は出どころを持たない。
+  /// 出力の行は `id` で入力の行と照らして、その入力（出す側の行）と出どころを引き継ぎ、照らせない行はどちらも持たない。
   func testProcessCarriesTheOriginById() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
@@ -183,19 +168,21 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
     }
     XCTAssertEqual(rows.map(\.id), ["f:b", "new"])
     XCTAssertEqual(rows.map(\.origin), [origin("b"), nil])
+    XCTAssertEqual(rows.map(\.source), [row("b").source, nil])
   }
 
   /// 取得 → 処理 a → 処理 b → 判定 では、a の行も判定へ届く。照らせない行は判定の溜まりに積めず黙って消えるので、それを
   /// 初めに出した a が外したことになる——下流の b には直しようがない。
   func testProcessWhoseRowsReachAJudgeBreaksTheRulesWithARowItCannotTrace() throws {
-    let graph = try AutomationGraph([
+    let parts = [
       AutomationGraphTests.fetch("f"),
       AutomationGraphTests.command("a", from: ["f"], deliver: .nextPart),
       AutomationGraphTests.command("b", from: ["a"], deliver: .nextPart),
       AutomationGraphTests.agent("j", from: ["b"], deliver: .taskCandidates),
-    ])
-    let a = try XCTUnwrap(graph.nodes.first { $0.key == "a" })
-    start(a.part, a.role, .process([row("a")], reachesJudge: graph.reachesTaskCandidates("a")))
+    ]
+    let graph = try AutomationGraph.numbered(parts)
+    let a = try XCTUnwrap(graph.node(key: "a"))
+    start(parts[1], a.role, .process([row("a")], reachesJudge: graph.reachesTaskCandidates(a.id)))
 
     jobs.finish(0, printed(#"{"id":"f:a"}"# + "\n" + #"{"id":"new"}"#))
 
@@ -309,7 +296,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
   /// 止めた回は、手段が後から終わっても結果を返さない。
   func testStoppedPassNeverReturnsAResult() {
     let handle = start(
-      AutomationGraphTests.fetch("f"), .fetch(.currentSet), .fetch(since: nil, lastOutput: []))
+      AutomationGraphTests.fetch("f"), .fetch(.currentSet), .fetch(since: nil))
 
     handle.stop()
     jobs.finish(0, fetched(["a"]))

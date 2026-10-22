@@ -48,9 +48,12 @@ enum AutomationPrompts {
 
   // MARK: - 処理
 
-  /// 項目を下流へ渡す 1 行。
-  static func row(_ item: AutomationItem) -> String {
-    jsonLine(AutomationWire.object(item))
+  /// 出す側が書いたままの 1 行の `id` を、下流へ渡す id に置き換えた 1 行（ほかの欄は書かれたまま）。
+  static func replacing(id: String, in body: String) -> String {
+    guard var object = try? JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any]
+    else { return body }
+    object["id"] = id
+    return jsonLine(object)
   }
 
   /// 処理の依頼文。読みが外れた行にする `id` の決まりを伝える。`reachesJudge` は出した行が取得を通らずに判定へ届くか（届くなら

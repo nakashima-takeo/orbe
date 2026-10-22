@@ -1,0 +1,205 @@
+import Foundation
+
+/// 定義の書き換え。自動化の部品とつながりの行を直接書き換え、何をするかが変わった部品だけ部品の定義を足して指し直す。
+extension AutomationStore {
+  /// 定義を書き換えたときの、部品ごとの変化。
+  struct Replaced {
+    let automation: Automation
+    /// 何をするか（使う定義か入力）が変わった部品。決まりを外した印を下ろした。
+    let reworked: [AutomationPartID]
+    /// 外した部品。
+    let removed: [AutomationPartID]
+  }
+
+  /// 書き換える前の自動化（定義を読めない自動化は持たない）と、その版と外していない部品とその鍵。
+  private struct Current {
+    let version: Int
+    let parts: [AutomationPartID]
+    let keys: [AutomationPartID: String]
+    let automation: Automation?
+  }
+
+  /// 定義を書き換える。`version` は書き換えの元にした版で、今の版と違えば断る。部品は `id` で今の部品を指し（無ければ新しい
+  /// 部品）、自動化の部品とつながりの行を直接書き換える。何をするかが変わった部品だけ、使う部品の定義を足して指し直す。何も
+  /// 変わらなければ何も書かず、版も進めない。定義を読めない自動化も書き換えで直せる（残る部品はすべて何をするかが変わった
+  /// ものとして扱う）。止めているかは変えない。
+  func replace(
+    _ id: Int, version: Int?, with definition: AutomationDefinition, now: Date
+  ) throws(AutomationError) -> Replaced {
+    let current: Current
+    if let automation = automation(id) {
+      current = Current(
+        version: automation.version, parts: automation.graph.nodes.map(\.id),
+        keys: Dictionary(uniqueKeysWithValues: automation.graph.nodes.map { ($0.id, $0.key) }),
+        automation: automation)
+    } else if let broken = unreadable.first(where: { $0.id == id }) {
+      current = Current(
+        version: broken.version, parts: broken.parts, keys: try read { try $0.partKeys(of: id) },
+        automation: nil)
+    } else {
+      throw .automationNotFound(id)
+    }
+    let (name, checked) = try definition.checked()
+    guard let version else {
+      throw .invalid("version: pass the version you read with list_automations to rewrite")
+    }
+    guard version == current.version else {
+      throw .versionMismatch(sent: version, current: current.version)
+    }
+    try Self.checkIds(definition.parts, of: id, current: current.keys)
+    let at = TaskItem.storedInstant(now)
+    return try commit(sweepingAt: at) { db, memory in
+      var entities = try Self.entities(checked, old: current.automation, db)
+      if let old = current.automation, old.name == name, old.notify == definition.notify,
+        old.graph.nodes.map(\.part) == entities,
+        old.graph.parts.map(\.from) == checked.map(\.part.from)
+      {
+        return Replaced(automation: old, reworked: [], removed: [])
+      }
+      let removed = current.parts.filter { !Set(checked.compactMap(\.part.id)).contains($0) }
+      var invalidated: [Int] = []
+      for part in removed {
+        invalidated += try db.invalidateItems(of: part, at: at)
+        try db.removePart(part, at: at)
+      }
+      try Self.writeParts(checked, &entities, of: id, db, at: at)
+      let graph = AutomationGraph(checked, parts: entities)
+      let rewired = try Self.rewire(graph, of: id, current, db, at: at)
+      try db.updateAutomation(id, name: name, notify: definition.notify, version: version + 1)
+      let row = try db.automationRow(id)
+      var automation = Automation(
+        id: id, name: name, notify: definition.notify, graph: graph, pausedAt: row.pausedAt,
+        version: version + 1, createdAt: row.createdAt, parts: rewired.states)
+      try Self.refreshReads(&automation, db)
+      memory.unreadable.removeAll { $0.id == id }
+      memory.automations.removeAll { $0.id == id }
+      memory.automations.append(automation)
+      memory.automations.sort { $0.id < $1.id }
+      try memory.withdraw(originatingIn: invalidated + rewired.invalidated, db)
+      try memory.forgetUnheld(db)
+      try memory.recount(id, db, now: at)
+      try memory.recountJudges(db, now: at)
+      return Replaced(
+        automation: memory.automation(id) ?? automation, reworked: rewired.reworked,
+        removed: removed)
+    }
+  }
+
+  /// 部品の行を書き換える: 残る部品を書き換え、`id` の無い部品を足す（`entities` に振った ID を書く）。
+  private static func writeParts(
+    _ checked: [AutomationGraph.Checked], _ entities: inout [AutomationPart], of id: Int,
+    _ db: AutomationDatabase, at: Date
+  ) throws {
+    try db.setAsidePlaces(of: id)
+    for (position, item) in checked.enumerated() {
+      let defId = entities[position].defId
+      if let partId = item.part.id {
+        try db.updatePart(partId, at: position, item.part, defId: defId)
+      } else {
+        entities[position] = entity(
+          item.part,
+          id: try db.insertPart(of: id, at: position, item.part, defId: defId, addedAt: at),
+          defId: defId)
+      }
+    }
+  }
+
+  /// 部品ごとの使う動作の定義。今使っている定義と中身が同じならそのまま指し、違えば足す。新しい部品の ID は仮の 0。
+  private static func entities(
+    _ checked: [AutomationGraph.Checked], old: Automation?, _ db: AutomationDatabase
+  ) throws -> [AutomationPart] {
+    try checked.map { item in
+      let previous = item.part.id.flatMap { old?.graph.node($0) }
+      let same = previous.flatMap { $0.action == item.part.action ? $0.part.defId : nil }
+      let defId = try same ?? db.insert(action: item.part.action)
+      return entity(item.part, id: item.part.id ?? AutomationPartID(0), defId: defId)
+    }
+  }
+
+  /// つながりの書き換えの結果。
+  private struct Rewired {
+    var states: [AutomationPartID: AutomationPartState] = [:]
+    var reworked: [AutomationPartID] = []
+    var invalidated: [Int] = []
+  }
+
+  /// つながりを書き換え、出力の性質が変わった部品の今有効な項目を無効にし、何をするかが変わった部品の外した印を下ろす。同じ
+  /// 部品どうしのつながりが残れば読んだ位置も残る。
+  private static func rewire(
+    _ graph: AutomationGraph, of id: Int, _ current: Current, _ db: AutomationDatabase, at: Date
+  ) throws -> Rewired {
+    var rewired = Rewired()
+    let old = current.automation
+    for node in graph.nodes {
+      try db.setEdges(of: id, to: node.id, node.inputs)
+      let before = old?.graph.node(node.id)
+      // 定義を読めない自動化の残る部品は、開き直したストアと同じく DB の状態から始める。
+      var state =
+        try old?.parts[node.id]
+        ?? (current.parts.contains(node.id)
+          ? db.storedState(of: node.id) : AutomationPartState(addedAt: at))
+      if let was = before?.coverage, node.coverage != was {
+        let items = try db.invalidateItems(of: node.id, at: at)
+        rewired.invalidated += items
+        if !items.isEmpty { state.changes += 1 }
+      }
+      let changed =
+        old == nil
+        ? current.parts.contains(node.id)
+        : before.map { $0.part.defId != node.part.defId || Set($0.inputs) != Set(node.inputs) }
+          ?? false
+      if changed {
+        rewired.reworked.append(node.id)
+        if state.breach != nil {
+          try db.setBreach(node.id, run: nil)
+          state.breach = nil
+        }
+      }
+      state.live = try db.live(of: node.id)
+      rewired.states[node.id] = state
+    }
+    return rewired
+  }
+
+  /// 部品の `id` を確かめる: この自動化の今の部品だけ・重なりなし・`id` の無い部品の鍵が外れる部品の鍵と同じでない。
+  /// `current` は今の部品の台帳（ID と鍵）。
+  private static func checkIds(
+    _ parts: [AutomationDefinition.Part], of automation: Int, current: [AutomationPartID: String]
+  ) throws(AutomationError) {
+    var seen = Set<AutomationPartID>()
+    for (index, part) in parts.enumerated() {
+      guard let id = part.id else { continue }
+      guard current[id] != nil else {
+        throw .invalid("parts[\(index)].id: \(id) is not a part of automation \(automation)")
+      }
+      guard seen.insert(id).inserted else {
+        throw .invalid("parts[\(index)].id: \(id) is named twice")
+      }
+    }
+    for (index, part) in parts.enumerated() where part.id == nil {
+      if let owner = current.first(where: { $0.value == part.key })?.key, !seen.contains(owner) {
+        throw .invalid(
+          "parts[\(index)].id: the key \"\(part.key)\" belongs to part \(owner); send its id to "
+            + "keep the part, or use another key for a new part")
+      }
+    }
+  }
+
+  static func entity(
+    _ part: AutomationDefinition.Part, id: AutomationPartID, defId: AutomationDefID
+  ) -> AutomationPart {
+    AutomationPart(
+      id: id, key: part.key, name: part.name, trigger: part.trigger, maxItems: part.maxItems,
+      defId: defId)
+  }
+
+  /// 受け手ごとの読んだ位置を DB から写す。
+  static func refreshReads(_ automation: inout Automation, _ db: AutomationDatabase) throws {
+    for node in automation.graph.nodes {
+      let readings = try db.readings(of: node)
+      automation.parts[node.id]?.reads = readings.mapValues {
+        AutomationReadPosition(item: $0.item, event: $0.event)
+      }
+    }
+  }
+}
