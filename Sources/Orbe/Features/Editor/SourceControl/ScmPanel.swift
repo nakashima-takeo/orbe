@@ -349,14 +349,11 @@ final class ScmPanel {
 
   // MARK: - 開閉
 
-  /// 親「ソース管理」を開く・畳む。畳むときは、欄と列が窓から外れる前に焦点を本文へ移させ（外れてからでは AppKit が焦点を
-  /// 窓へ落とし、キーがどこにも届かない）、当てていない焦点の要求を捨てる（開いた瞬間に焦点を奪わない）。選択は残す。
+  /// 親「ソース管理」を開く・畳む。畳むときは、欄と列が窓から外れる前に焦点を本文へ移させる（外れてからでは AppKit が焦点を
+  /// 窓へ落とし、キーがどこにも届かない）。選択は残す。
   func setRepositoryOpen(_ open: Bool) {
     guard open != isRepositoryOpen else { return }
-    if !open {
-      onRepositoryWillClose()
-      focusRequest = nil
-    }
+    if !open { onRepositoryWillClose() }
     isRepositoryOpen = open
   }
 
