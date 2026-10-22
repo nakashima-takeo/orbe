@@ -15,7 +15,7 @@ struct BoardAutomationMapView: View {
     VStack(alignment: .leading, spacing: 0) {
       BoardSectionHeader(title: .boardAutomationFlow) {
         Text(l10n.plural(detail.partCount, one: .boardMapPartsOne, other: .boardMapPartsOther))
-        Text(l10n.string(.boardMapPending))
+        Text(l10n.string(.boardPending))
           .frame(width: BoardMapRowView.pendingWidth, alignment: .trailing)
         Text(l10n.string(.boardMapLast))
           .padding(.trailing, BoardMapRowView.lastInset)
@@ -119,7 +119,7 @@ struct BoardMapRowView: View {
       }
       if part.breached {
         BoardChip(
-          text: l10n.string(.boardMapFormatError), foreground: Color.theme.danger,
+          text: l10n.string(.automationFormatError), foreground: Color.theme.danger,
           fill: Color.theme.tintRed
         )
         .fixedSize()

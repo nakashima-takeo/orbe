@@ -10,7 +10,6 @@ extension L10n {
       "自動追加を足す・変えるのは Home のボードから頼む",
       "To add or change auto-adds, ask from the Home board"
     ),
-    .taskPaletteAutomationNoProposals: ("候補なし", "no candidates"),
     .taskPaletteAutomationRefreshing: ("更新中", "refreshing"),
     .taskPaletteAutomationLastJudge: ("前回の判定 %@", "last judged %@"),
     .taskPaletteAutomationNeverJudged: ("まだ判定していない", "not judged yet"),
@@ -96,7 +95,8 @@ extension L10n {
     .automationFailNotUTF8: ("出力の文字を読めない（UTF-8 でない）", "couldn’t read the output (not UTF-8)"),
     .automationFailAgentError: ("%1$@ がエラーを返した：%2$@", "%1$@ returned an error: %2$@"),
     .automationFailReported: ("部品が失敗を申告した：%@", "the part reported a failure: %@"),
-    .automationFailBrokeRules: ("出力の形式エラー", "output format error"),
+    .automationFormatError: ("出力の形式エラー", "output format error"),
+    .automationNoProposals: ("候補なし", "no candidates"),
     .automationFailUnreadInput: ("入力の読み残し %lld 件", "%lld input items unread"),
     .automationFailNoResult: ("結果なし", "no result"),
     .automationFailUnsourced: (

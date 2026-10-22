@@ -348,7 +348,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAutomationPlaceholder
   case taskPaletteAutomationAll
   case taskPaletteAutomationAskBoard
-  case taskPaletteAutomationNoProposals
   case taskPaletteAutomationRefreshing
   case taskPaletteAutomationLastJudge
   case taskPaletteAutomationNeverJudged
@@ -427,7 +426,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationFailNotUTF8
   case automationFailAgentError
   case automationFailReported
-  case automationFailBrokeRules
+  case automationFormatError
+  case automationNoProposals
   case automationFailUnreadInput
   case automationFailNoResult
   case automationFailUnsourced
@@ -641,17 +641,13 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardRecentRuns
   case boardMapPartsOne
   case boardMapPartsOther
-  case boardMapPending
   case boardMapLast
-  case boardMapFresh
   case boardMapPassed
   case boardMapProposed
-  case boardMapNoProposals
   case boardMapFailed
   case boardMapNever
   case boardMapDestination
   case boardMapOpen
-  case boardMapFormatError
   case boardDestMenuBar
   case boardDestNotificationCenter
   case boardDestBoard
@@ -661,7 +657,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardPartCoverage
   case boardPartFrom
   case boardPartTo
-  case boardPartPending
+  case boardPending
+  case boardFresh
   case boardPartTimeout
   case boardPartDirectory
   case boardPartNext
@@ -690,7 +687,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardPartAskFix
   case boardAskFixDraft
   case boardAskFixAutomationDraft
-  case boardRunFresh
   case boardRunNothingNew
   case boardRunPassed
   case boardRunJudgedOne

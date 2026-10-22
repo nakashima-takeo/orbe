@@ -106,13 +106,13 @@ extension BoardAutomationSummary {
     switch run.result {
     case .fetch(let fresh, _):
       return fresh == 0
-        ? (l10n.string(.boardRunNothingNew), .sunk) : (l10n.format(.boardMapFresh, fresh), .plain)
+        ? (l10n.string(.boardRunNothingNew), .sunk) : (l10n.format(.boardFresh, fresh), .plain)
     case .process(let fresh, _):
       return (l10n.format(.boardMapPassed, fresh), fresh > 0 ? .plain : .sunk)
     case .judge(let proposed, _, _):
       return proposed > 0
         ? (l10n.format(.boardMapProposed, proposed), .plain)
-        : (l10n.string(.boardMapNoProposals), .sunk)
+        : (l10n.string(.automationNoProposals), .sunk)
     case .report, .work, .sideEffect, nil:
       return nil
     }
@@ -132,7 +132,7 @@ extension BoardAutomationSummary {
     case .fetch(let fresh, _):
       (body, shade) =
         fresh == 0
-        ? (l10n.string(.boardRunNothingNew), .sunk) : (l10n.format(.boardRunFresh, fresh), .plain)
+        ? (l10n.string(.boardRunNothingNew), .sunk) : (l10n.format(.boardFresh, fresh), .plain)
     case .process(let fresh, _):
       (body, shade) = (l10n.format(.boardRunPassed, taken, fresh), fresh > 0 ? .plain : .sunk)
     case .judge(let proposed, _, _):

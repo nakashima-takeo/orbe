@@ -51,7 +51,7 @@ extension AutomationText {
       if case .agent(let agent) = node.action.method { cli = agent.cli }
       return l10n.format(.automationFailAgentError, cli, text)
     case .reported(let text): return l10n.format(.automationFailReported, text)
-    case .brokeRules: return l10n.string(.automationFailBrokeRules)
+    case .brokeRules: return l10n.string(.automationFormatError)
     case .unreadInput(let count): return l10n.format(.automationFailUnreadInput, count)
     case .noResult: return l10n.string(.automationFailNoResult)
     case .unsourced: return l10n.string(.automationFailUnsourced)

@@ -157,7 +157,7 @@ extension BoardAutomationPartValue {
     if !node.inputs.isEmpty {
       facts.append(
         Fact(
-          label: .boardPartPending,
+          label: .boardPending,
           flow: nil,
           value: [
             Segment(
