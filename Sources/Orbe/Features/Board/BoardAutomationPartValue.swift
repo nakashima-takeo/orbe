@@ -13,8 +13,8 @@ enum BoardFlowDirection: Equatable {
   case outgoing
 }
 
-/// 選んだ部品のカードの値。地図に出さない部品の中身（手段・モデル・ツール・指示文・出力の性質・取り方・上限・制限時間・場所・
-/// 回の記録）を出すのはここだけ。
+/// 選んだ部品のカードの値。地図に出さない部品の中身（手段・モデル・ツール・指示文・保存・取り方・上限・制限時間・場所・回の記録）を
+/// 出すのはここだけ。
 struct BoardAutomationPartValue: Equatable {
   let id: AutomationPartID
   let role: String
@@ -22,7 +22,7 @@ struct BoardAutomationPartValue: Equatable {
   let running: Bool
   /// 頭の印。まだ動いていなければ nil。
   let mark: BoardRunMark?
-  /// 実行・ツール・予定・出力の性質・入力元・出力先・未処理・制限時間・場所・次回の順。部品に無い項目は出さない。
+  /// 実行・ツール・予定・保存・入力元・出力先・未処理・制限時間・場所・次回の順。部品に無い項目は出さない。
   let facts: [Fact]
   /// 指示文かコマンド。
   let body: String
@@ -138,7 +138,7 @@ extension BoardAutomationPartValue {
     }
     fact(.boardPartSchedule, text.schedule(part.trigger))
     if let coverage = node.coverage {
-      fact(.boardPartCoverage, self.coverage(coverage, of: node, state, text))
+      fact(.boardPartSaving, self.coverage(coverage, of: node, state, text))
     }
     if !node.inputs.isEmpty {
       fact(
@@ -213,20 +213,20 @@ extension BoardAutomationPartValue {
       notes.joined(separator: l10n.string(.automationListSeparator)))
   }
 
-  /// 出力の性質（「今の集合」「出来事の流れ」）。出来事の流れの取得は、前回成功の目印から取ることを添える（「出来事の流れ
-  /// （前回 16:00 以降を取る）」）。
+  /// 部品が出した行の保存の仕方（「上書き」「追記」）。追記の取得は、前回成功の目印から取ることを添える（「追記（前回 16:00 より後を
+  /// 取る）」）。
   private static func coverage(
     _ coverage: AutomationCoverage, of node: AutomationGraph.Node, _ state: AutomationPartState,
     _ text: AutomationText
   ) -> String {
     let l10n = text.l10n
     switch coverage {
-    case .currentSet: return l10n.string(.boardPartCurrentSet)
+    case .currentSet: return l10n.string(.boardPartOverwrite)
     case .newArrivals:
       guard node.role == .fetch, let since = state.succeededAt else {
-        return l10n.string(.boardPartEventStream)
+        return l10n.string(.boardPartAppend)
       }
-      return l10n.format(.boardPartEventStreamSince, text.recent(since))
+      return l10n.format(.boardPartAppendSince, text.recent(since))
     }
   }
 
