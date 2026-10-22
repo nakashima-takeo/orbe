@@ -277,18 +277,19 @@ final class AutomationRunnerTests: OrbeTestCase {
     XCTAssertEqual(ids("paused-digest"), [downstream("gh", "a", of: paused)], "再開で起こす")
   }
 
-  /// 1 回の上限を超えて読める行は、1 つの契機の中で続けて回して取り切る。
-  func testOneTriggerTakesTheWholeInboxBeyondTheBatchLimit() throws {
+  /// 行を見る agent は、まだ受け取っていない行を件数と大きさによらず 1 回で全部取る。
+  func testOneRunTakesTheWholeInbox() throws {
     let id = try define([
       fetch("gh", every: 1800),
       DesignSceneFixtures.agentPart(
         "judge", "判定", .scheduled(.every(86400)), from: ["gh"], instruction: "判定する",
         deliver: .taskCandidates),
     ])
-    let count = AutomationInbox.batchCount + 1
+    let body = String(repeating: "本文", count: 1 << 10)
+    let items = (0..<150).map { item("i\($0)", body: body) }
     advance(by: 1800)
-    finish("gh", fetched((0..<count).map { "i\($0)" }))
-    XCTAssertEqual(inbox("judge", of: id), count)
+    finish("gh", printed(items.joined(separator: "\n")))
+    XCTAssertEqual(inbox("judge", of: id), items.count)
 
     advance(by: 86400 - 1800)
     let judged = BackgroundRunResult(
@@ -297,13 +298,11 @@ final class AutomationRunnerTests: OrbeTestCase {
         reply: BackgroundAgentReply(text: #"{"nothing":"該当なし"}"#, isError: false),
         stderr: .init()))
     jobs.finish(try XCTUnwrap(agentCalls.first), judged)
-    guard agentCalls.count == 2 else { return XCTFail("残りを同じ契機で続けて回す: \(agentCalls)") }
-    jobs.finish(agentCalls[1], judged)
 
+    XCTAssertEqual(agentCalls.count, 1)
     XCTAssertEqual(inbox("judge", of: id), 0)
     XCTAssertEqual(
-      store.automation(id)?.state(store.part(id, "judge")).runs.map(\.run?.taken),
-      [1, AutomationInbox.batchCount])
+      store.automation(id)?.state(store.part(id, "judge")).runs.map(\.run?.taken), [items.count])
   }
 
   var agentCalls: [Int] {

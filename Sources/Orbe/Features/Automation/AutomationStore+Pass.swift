@@ -51,7 +51,7 @@ extension AutomationStore {
     return try read {
       try $0.read(
         node, in: automation.graph, baseline: baseline,
-        context: AutomationInbox.Context(proposed: links.contains, now: now, batch: true),
+        context: AutomationInbox.Context(proposed: links.contains, now: now),
         overrides: overrides)
     }
   }

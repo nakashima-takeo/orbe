@@ -6,8 +6,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか: 同じ下流の id の行が二重に渡る。出どころの無い行が判定へ届き、候補のリンクと本文が引けない。件数の
 /// 上限で新しい行が先に捨てられる。古さで捨てた行・候補のある行が判定に渡り、提案が二重になる。前の回までに読んだ行が古く
-/// なるたびに捨てた数に数え直される。1 回の上限で切った残りを読んだ位置が飛び越えて、行を取りこぼす。毎回すべてを取る入力が
-/// 上限で切られる。
+/// なるたびに捨てた数に数え直される。行を見る agent が読めば取る行を一部しか取らない。
 final class AutomationInboxTests: OrbeTestCase {
   typealias Parts = AutomationGraphTests
 
@@ -48,11 +47,9 @@ final class AutomationInboxTests: OrbeTestCase {
     ]
   }
 
-  private func context(proposed: Set<String> = [], now: Date? = nil, batch: Bool = true)
-    -> AutomationInbox.Context
-  {
+  private func context(proposed: Set<String> = [], now: Date? = nil) -> AutomationInbox.Context {
     AutomationInbox.Context(
-      proposed: { proposed.contains($0) }, now: now ?? t0.addingTimeInterval(3600), batch: batch)
+      proposed: { proposed.contains($0) }, now: now ?? t0.addingTimeInterval(3600))
   }
 
   /// 捨てた行（古い順に「id 理由」）。
@@ -72,7 +69,6 @@ final class AutomationInboxTests: OrbeTestCase {
     XCTAssertEqual(
       read.reach,
       [.init(edge: cs, table: .item, seq: 4), .init(edge: na, table: .event, seq: 9)])
-    XCTAssertFalse(read.cut)
   }
 
   /// 古さの上限を過ぎた行は捨てて数える。前の回までに読んだ行（毎回すべてを取る入力）は、古くなっても数え直さない。
@@ -131,41 +127,16 @@ final class AutomationInboxTests: OrbeTestCase {
     XCTAssertEqual(drops(read), ["a replaced", "b overflow", "a overflow"], "捨てた行も古い順")
   }
 
-  /// 行を依頼文に入れる agent は、新しい行だけを取る入力を 1 回の上限（件数）で古い方から切る。切った残りは読まず（捨てた数にも
-  /// 数えず）、読んだ位置は読んだ最大の番号まで。毎回すべてを取る入力は切らない。件数を数えるだけの読みは切らない。
-  func testAnAgentReadingRowsCutsNewRowsAtTheBatch() throws {
-    var part = Parts.agent("r", from: ["cs", "na"])
-    part.from[0].take = .all
-    let report = try node(part)
-    let all = (1...3).map { row($0, "all\($0)", unread: false) }
-    let new = (1...(AutomationInbox.batchCount + 5)).map { row($0, "new\($0)", from: na) }
+  /// 行を見る agent も、読めば取る行を件数と大きさによらず 1 回で全部取る。
+  func testAnAgentReadingRowsTakesEveryRowAtOnce() throws {
+    let report = try node(Parts.agent("r", from: ["cs", "na"]))
+    let new = (1...150).map { row($0, "new\($0)", from: na, size: 2 << 10) }
 
     let read = AutomationInbox.read(
-      by: report, all + new, ceilings: ceilings(cs: 3, na: new.count), in: context())
-    let counted = AutomationInbox.read(
-      by: report, all + new, ceilings: ceilings(cs: 3, na: new.count), in: context(batch: false))
+      by: report, new, ceilings: ceilings(na: new.count), in: context())
 
-    XCTAssertTrue(read.cut)
-    XCTAssertEqual(read.taken.count, AutomationInbox.batchCount + 3)
-    XCTAssertEqual(
-      read.reach,
-      [
-        .init(edge: cs, table: .item, seq: 3),
-        .init(edge: na, table: .event, seq: AutomationInbox.batchCount),
-      ])
-    XCTAssertEqual(counted.taken.count, new.count + 3)
-    XCTAssertFalse(counted.cut)
-  }
-
-  /// コマンドは 1 回の上限で切らない（何回も走って副作用が二重になるため）。
-  func testACommandTakesEverythingAtOnce() throws {
-    let command = try node(Parts.command("c", from: ["cs", "na"]))
-    let new = (1...(AutomationInbox.batchCount + 5)).map { row($0, "new\($0)", from: na) }
-
-    let read = AutomationInbox.read(
-      by: command, new, ceilings: ceilings(na: new.count), in: context())
-
+    XCTAssertGreaterThan(new.map(\.text.utf8.count).reduce(0, +), 256 << 10)
     XCTAssertEqual(read.taken.count, new.count)
-    XCTAssertFalse(read.cut)
+    XCTAssertEqual(read.reach, [.init(edge: na, table: .event, seq: new.count)])
   }
 }
