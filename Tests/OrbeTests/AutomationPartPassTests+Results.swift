@@ -61,6 +61,20 @@ extension AutomationPartPassTests {
     XCTAssertNil(breach, "読み残しの断りは外れた件に数えない")
   }
 
+  /// 断られた結果を直さず、結果の無いまま終えた回は出力の形式エラーの失敗——結果なし（道具を一度も呼ばなかった回）と分ける。
+  func testRefusedResultsLeftUnfixedFailAsBrokenRules() throws {
+    start(
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      .process([row("a")], reachesJudge: false))
+
+    readAll(0)
+    XCTAssertTrue(use(0, .putRows, ["rows": [["note": "id が無い"]]]).isError)
+    jobs.finish(0, done())
+
+    XCTAssertEqual(failed, #"the output of part "p" broke the rules: item 1: missing id"#)
+    XCTAssertEqual(breach?.lines.map(\.text), ["item 1: missing id"])
+  }
+
   /// 断った結果の呼び出しは記録に残り、直して受けた回は成功——断りは同じ会話の中の直しで、別の呼び出しは起こさない。
   func testRefusedResultsAreRecordedAndTheFixedResultPasses() throws {
     start(

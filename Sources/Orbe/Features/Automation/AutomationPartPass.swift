@@ -151,7 +151,8 @@ struct AutomationPartPass {
       commandLine: result.commandLine, ending: AutomationEnding(result.ending), count: count)
   }
 
-  /// agent の回の結果: CLI の終わり方が先、次に申告された失敗、結果があれば成功、無ければ読み残しか結果なしの失敗。
+  /// agent の回の結果: CLI の終わり方が先、次に申告された失敗、結果があれば成功。無ければ、入力を渡し切っていなければ読み
+  /// 残し、結果の呼び出しを断ったままなら出力の形式エラー、どちらでもなければ結果なしの失敗。
   private static func agentEnded(_ result: BackgroundRunResult, _ session: AutomationRunSession)
     -> Outcome
   {
@@ -163,7 +164,9 @@ struct AutomationPartPass {
     if let error = session.error { return .failed(.reported(error), execution, breach: breach) }
     guard session.answered else {
       let unread = session.unread.count
-      return .failed(unread > 0 ? .unreadInput(unread) : .noResult, execution, breach: breach)
+      let failure: AutomationFailure =
+        unread > 0 ? .unreadInput(unread) : breach != nil ? .brokeRules : .noResult
+      return .failed(failure, execution, breach: breach)
     }
     return .succeeded(session.outputs.output(nothing: session.nothing), execution, breach: breach)
   }

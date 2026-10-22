@@ -3,7 +3,7 @@ import Foundation
 @testable import Orbe
 
 /// 判定の部品の回の終わり方ごとの見本。どれも 13:00 に普段どおり候補を出し、14:30 の回の終わり方だけが違う: 形式エラー 2 件を
-/// その場で修正して成功（`fixed`）・修正されず結果なしで失敗（`unfixed`）・コマンドの判定の出力の形式エラー（`command`）・
+/// その場で修正して成功（`fixed`）・修正されず出力の形式エラーで失敗（`unfixed`）・コマンドの判定の出力の形式エラー（`command`）・
 /// 入力の読み残し（`unread`）・結果なし（`noResult`）。
 extension DesignSceneFixtures {
   static func boardJudgeOutcomeSamples() -> [(String, AutomationSample)] {
@@ -17,7 +17,7 @@ extension DesignSceneFixtures {
       .judge(proposals: [proposal(new[0], "\(new[0].body)に返信する")], resolved: []),
       execution(1), breach: rejected)
     let unfixed = AutomationPartPass.Outcome.failed(
-      .noResult, execution(0, ending: .exited(0)), breach: rejected)
+      .brokeRules, execution(0, ending: .exited(0)), breach: rejected)
     let broken = AutomationPartPass.Outcome.failed(
       .brokeRules, execution(0, ending: .exited(0)),
       breach: AutomationRejections([

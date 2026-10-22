@@ -72,11 +72,11 @@ enum AutomationFailure: Error, Equatable {
   case agentError(String)
   /// agent の部品が Orbe の道具（report_error）で失敗を申告した。
   case reported(String)
-  /// コマンドの出力が決まりを外した。
+  /// 結果が決まりを外したまま終わった（コマンドは外れた件を出した、agent は断られた結果を直さずに終えた）。
   case brokeRules
   /// agent が、入力の行（その数）を読み切らないまま結果を出さずに終わった（結果の道具は読み切るまで断る）。
   case unreadInput(Int)
-  /// agent が結果も申告も出さずに終わった。
+  /// agent が結果の道具も申告も一度も呼ばずに終わった。
   case noResult
   /// 判定（鍵）へ渡す行が、どれも出どころを持たなかった。
   case unsourced(String)
