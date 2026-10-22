@@ -121,8 +121,8 @@ final class AutomationDatabase {
       ])
   }
 
-  /// 部品を外す: 外した時刻を書き、今有効な項目を無効にし、つながりと外した印と持ち越しを消し、回の記録（残っている候補を
-  /// 出した回を除く）と、判定だった部品の判断の記録（覚えている候補のものを除く）を消す。指されなくなった台帳は掃除が消す。
+  /// 部品を外す: 外した時刻を書き、今有効な項目を無効にし、つながりと外した印と持ち越しを消す。外した部品の回の記録・判断の
+  /// 記録・台帳は、同じトランザクションの最後の掃除が、候補を忘れた後に指されなくなったものから消す。
   func removePart(_ id: AutomationPartID, at: Date) throws {
     let part: [SQLiteValue] = [.integer(Int64(id.rawValue))]
     try invalidateItems(of: id, at: at)
@@ -130,20 +130,6 @@ final class AutomationDatabase {
     try db.run(
       "UPDATE parts SET removed_at = ?, breach_run_id = NULL, pending_drops = '{}' WHERE id = ?",
       [Self.instant(at)] + part)
-    try db.run(
-      """
-      DELETE FROM settlements WHERE proposal_id IN (
-        SELECT q.id FROM proposals q JOIN runs r ON r.id = q.run_id
-        WHERE r.part_id = ? AND q.id NOT IN (SELECT proposal_id FROM held_proposals))
-      """, part)
-    try db.run(
-      """
-      DELETE FROM proposals WHERE run_id IN (SELECT id FROM runs WHERE part_id = ?)
-        AND id NOT IN (SELECT proposal_id FROM held_proposals)
-        AND id NOT IN (SELECT proposal_id FROM settlements)
-      """, part)
-    try db.run(
-      "DELETE FROM runs WHERE part_id = ? AND id NOT IN (SELECT run_id FROM proposals)", part)
   }
 
   /// 外した印の回。

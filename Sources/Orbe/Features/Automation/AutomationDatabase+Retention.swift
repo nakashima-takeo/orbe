@@ -22,15 +22,17 @@ extension AutomationDatabase {
   /// 判断の記録・候補・回の記録。
   private func sweepRecords() throws {
     let keep = Int64(AutomationPartState.retainedRuns)
-    // 判断の記録: 判定の部品ごとに新しい方から回数まで（覚えている候補のものは消さない）。
+    // 判断の記録: 判定の部品ごとに新しい方から回数まで。外した部品のものは残さない。どちらも覚えている候補のものは消さない。
     try db.run(
       """
       DELETE FROM settlements WHERE proposal_id IN (
         SELECT proposal_id FROM (
-          SELECT s.proposal_id, ROW_NUMBER() OVER (
+          SELECT s.proposal_id, p.removed_at, ROW_NUMBER() OVER (
             PARTITION BY r.part_id ORDER BY s.decided_at DESC, s.proposal_id DESC) AS n
-          FROM settlements s JOIN proposals q ON q.id = s.proposal_id JOIN runs r ON r.id = q.run_id)
-        WHERE n > ?1 AND proposal_id NOT IN (SELECT proposal_id FROM held_proposals))
+          FROM settlements s JOIN proposals q ON q.id = s.proposal_id JOIN runs r ON r.id = q.run_id
+            JOIN parts p ON p.id = r.part_id)
+        WHERE (n > ?1 OR removed_at IS NOT NULL)
+          AND proposal_id NOT IN (SELECT proposal_id FROM held_proposals))
       """, [.integer(keep)])
     // 判断が無く、覚えてもいない候補。
     try db.run(
@@ -38,14 +40,15 @@ extension AutomationDatabase {
       DELETE FROM proposals WHERE id NOT IN (SELECT proposal_id FROM held_proposals)
         AND id NOT IN (SELECT proposal_id FROM settlements)
       """, [])
-    // 回の記録: 部品ごとに新しい方から回数まで。外していない部品の最新の成功した回・外した印の回・残っている候補を出した回は
-    // 消さない（最新の回は回数の内にいつも入る）。
+    // 回の記録: 部品ごとに新しい方から回数まで。外した部品のものは残さない。外していない部品の最新の成功した回・外した印の回・
+    // 残っている候補を出した回は消さない（最新の回は回数の内にいつも入る）。
     try db.run(
       """
       DELETE FROM runs WHERE id IN (
         SELECT id FROM (
-          SELECT id, part_id, ROW_NUMBER() OVER (PARTITION BY part_id ORDER BY id DESC) AS n FROM runs)
-        WHERE n > ?1
+          SELECT r.id, p.removed_at, ROW_NUMBER() OVER (PARTITION BY r.part_id ORDER BY r.id DESC) AS n
+          FROM runs r JOIN parts p ON p.id = r.part_id)
+        WHERE (n > ?1 OR removed_at IS NOT NULL)
           AND id NOT IN (SELECT breach_run_id FROM parts WHERE breach_run_id IS NOT NULL)
           AND id NOT IN (SELECT run_id FROM proposals)
           AND id NOT IN (
@@ -59,7 +62,7 @@ extension AutomationDatabase {
     try db.run(
       """
       DELETE FROM events WHERE created_at < ?1
-        AND id NOT IN (\(heldEvents.isEmpty ? "NULL" : heldEvents))
+        \(heldEvents.isEmpty ? "" : "AND id NOT IN (\(heldEvents))")
         AND NOT EXISTS (SELECT 1 FROM items WHERE source_event_id = events.id)
         AND NOT EXISTS (SELECT 1 FROM events e WHERE e.source_event_id = events.id)
         AND NOT EXISTS (SELECT 1 FROM run_event_inputs WHERE event_id = events.id)
@@ -99,7 +102,7 @@ extension AutomationDatabase {
     let referenced = """
       (v.id IN (SELECT version_id FROM run_item_inputs)
         OR v.id IN (SELECT origin_version_id FROM proposals WHERE origin_version_id IS NOT NULL)
-        OR v.id IN (\(heldVersions.isEmpty ? "NULL" : heldVersions)))
+        \(heldVersions.isEmpty ? "" : "OR v.id IN (\(heldVersions))"))
       """
     try db.run(
       """

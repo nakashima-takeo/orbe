@@ -7,7 +7,6 @@ extension WindowController {
   /// 自動化を ID 順に（定義を読めない自動化も、その場所に）。使えないセッションでは理由で断る。
   func controlListAutomations() -> Result<Any, ControlError> {
     automationResult { () throws(AutomationError) in
-      guard automationStore.available else { throw automationStore.unavailableError }
       let readable = automationStore.automations.map { ($0.id, automationJSON($0)) }
       let unreadable = automationStore.unreadable.map { ($0.id, unreadableJSON($0)) }
       return ["automations": (readable + unreadable).sorted { $0.0 < $1.0 }.map(\.1)]
@@ -74,9 +73,16 @@ extension WindowController {
   }
 
   func controlListAutomationProposals(automationId: Int?) -> Result<Any, ControlError> {
-    if let automationId, automationStore.automation(automationId) == nil {
-      return .failure(Self.automationNotFound(automationId))
+    automationResult { () throws(AutomationError) in
+      if let automationId, automationStore.automation(automationId) == nil {
+        throw .automationNotFound(automationId)
+      }
+      return ["proposals": proposalsJSON(of: automationId)]
     }
+  }
+
+  /// 覚えている候補（`automationId` があればその自動化の棚の分だけ）。
+  private func proposalsJSON(of automationId: Int?) -> [[String: Any]] {
     let proposals = automationStore.proposals.compactMap { proposal -> [String: Any]? in
       let shelf = automationStore.shelf(of: proposal)
       if let automationId, shelf?.id != automationId { return nil }
@@ -107,7 +113,7 @@ extension WindowController {
       if case .accepted(let taskId) = proposal.state { json["taskId"] = taskId }
       return json
     }
-    return .success(["proposals": proposals])
+    return proposals
   }
 
   func controlTryAutomation(automationId: Int, _ request: AutomationTrial.Request) -> Result<
@@ -197,10 +203,12 @@ extension WindowController {
   }
 
   /// ドメインエラーを制御エラーの語彙へ写す（未知・試走が無い → -32004・不正な値 → -32602・流している途中・使えない → -32000）。
+  /// 自動化を使えないセッションでは、どの動詞も中身を見る前に理由で断る。
   private func automationResult(_ body: () throws(AutomationError) -> [String: Any]) -> Result<
     Any, ControlError
   > {
     do throws(AutomationError) {
+      guard automationStore.available else { throw automationStore.unavailableError }
       return .success(try body())
     } catch {
       switch error {
