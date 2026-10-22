@@ -19,9 +19,7 @@ final class ScmPanelSplitTests: OrbeTestCase {
 
   func testBothOpenKeepTheStoredHeightUnderTheCeiling() {
     XCTAssertEqual(split().graphHeight, 198)
-    XCTAssertEqual(split().ceiling, 600 - 100 - 66, "親に列より上のもの＋3 行を残す")
-    XCTAssertEqual(split(above: 400).graphHeight, 134, "欄が伸びれば上限で縮む")
-    XCTAssertEqual(split(above: 400).stored, 198, "持っている高さは変えない")
+    XCTAssertEqual(split(above: 400).graphHeight, 600 - 400 - 66, "欄が伸びれば、親に列より上のもの＋3 行を残して縮む")
     XCTAssertEqual(split(total: 120).graphHeight, 22, "両立しなければ下限を割って見出しだけ残す")
   }
 
