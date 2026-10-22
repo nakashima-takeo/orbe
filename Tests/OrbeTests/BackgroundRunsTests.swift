@@ -9,20 +9,20 @@ import XCTest
 /// 壊れると何が起きるか。再起動の直後に claude が何本も立ち上がる。軽い確認のコマンドが重い agent の後ろで待たされる。
 /// Orbe を終えた後に子が残る。claude が利用者の設定や MCP サーバーを読んで、指定していないツールを使う。
 final class BackgroundRunsTests: OrbeTestCase {
-  private var bin: URL!
+  var bin: URL!
 
   override func setUpWithError() throws {
     bin = TestScratch.caseDir.appendingPathComponent("bin")
     try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
   }
 
-  private func runs(agents: Int = 2, commands: Int = 4, withBin: Bool = true) -> BackgroundRuns {
+  func runs(agents: Int = 2, commands: Int = 4, withBin: Bool = true) -> BackgroundRuns {
     let path = withBin ? "\(bin.path):/usr/bin:/bin" : "/usr/bin:/bin"
     return BackgroundRuns(slots: [.agent: agents, .command: commands]) { path }
   }
 
   /// 偽の claude を置く。受けた引数（NUL 区切り）・環境・標準入力を隣へ書き、`body` を実行する。
-  private func placeClaude(_ body: String) throws {
+  func placeClaude(_ body: String) throws {
     let script = """
       #!/bin/sh
       dir=$(dirname "$0")
@@ -36,14 +36,14 @@ final class BackgroundRunsTests: OrbeTestCase {
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
   }
 
-  private func receivedArguments() throws -> [String] {
+  func receivedArguments() throws -> [String] {
     let data = try Data(contentsOf: bin.appendingPathComponent("args"))
     return data.split(separator: 0, omittingEmptySubsequences: false).dropLast().map {
       String(bytes: $0, encoding: .utf8) ?? ""
     }
   }
 
-  private func run(
+  func run(
     _ runs: BackgroundRuns, _ job: BackgroundJob, timeout: TimeInterval = 20
   ) throws -> BackgroundRunResult {
     var result: BackgroundRunResult?
@@ -61,7 +61,7 @@ final class BackgroundRunsTests: OrbeTestCase {
     .command(BackgroundCommand(script: script, directory: directory))
   }
 
-  private func agent(_ cli: String = "claude", tools: [String] = []) -> BackgroundJob {
+  func agent(_ cli: String = "claude", tools: [String] = []) -> BackgroundJob {
     .agent(BackgroundAgentCall(cli: cli, model: "haiku", tools: tools, prompt: "判定して"))
   }
 
@@ -236,7 +236,8 @@ final class BackgroundRunsTests: OrbeTestCase {
     XCTAssertEqual(result.ending, .exited(0))
     XCTAssertEqual(reply(result), BackgroundAgentReply(text: #"{"ok":true}"#, isError: false))
     XCTAssertEqual(
-      try receivedArguments(), ClaudeHeadless.arguments(model: "haiku", tools: ["Read"]))
+      try receivedArguments(),
+      ClaudeHeadless.arguments(model: "haiku", tools: ["Read"], server: nil))
     let env = try String(contentsOf: bin.appendingPathComponent("env"), encoding: .utf8)
       .split(separator: "\n").map(String.init)
     for (key, value) in ClaudeHeadless.environment(tools: ["Read"]) {

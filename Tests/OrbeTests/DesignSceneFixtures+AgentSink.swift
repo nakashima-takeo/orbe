@@ -3,12 +3,12 @@ import Foundation
 @testable import Orbe
 
 /// 見本『レビュー待ちの PR を Slack へ』: 入力の無い仕事の部品が、平日 9:00 に gh で調べて Slack に投稿する。通知は
-/// メニューバー。応答の全文（複数行）・することが無いという申告（何もしなかった）・agent が失敗を申告した回・空の応答（完了）を
+/// メニューバー。報告の全文（複数行）・することが無いという申告（何もしなかった）・agent が失敗を申告した回・1 行の報告を
 /// 持つ。見本の今日（2025-10-04）は土曜なので、回は前の平日に置く。
 extension DesignSceneFixtures {
   static func boardAgentExample() -> AutomationSample {
     let outcomes: [(daysAgo: Int, outcome: AutomationPartPass.Outcome)] = [
-      (4, worked(.done(nil))),
+      (4, worked(.done("レビュー待ちの PR 1 件を #dev-me に投稿した。"))),
       (
         3,
         failed(AutomationFailure.reported("mcp__slack__slack_send_message was refused"))

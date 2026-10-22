@@ -8,7 +8,8 @@ import Foundation
 /// 子の環境は「プロセスの環境＋子プロセス PATH」（コマンドは 1 回分の入力の変数を足す）。PATH と agent の絶対パスは実行のたびに裏で解決し、PATH の確定を待つ
 /// ——起動直後の「検出中」を「無い」と取り違えず、後から入れた CLI も拾うため。
 /// agent は回ごとに作る空のディレクトリで起こし、回の後に消す——claude は作業ディレクトリの中の読み取り専用のコマンドを許可の
-/// 規則と関係なく走らせるので、読める範囲を空にする。
+/// 規則と関係なく走らせるので、読める範囲を空にする。Orbe の口を渡す回は、同梱の `orbe-mcp` をその回の札付きで
+/// MCP サーバーとして足す。
 final class BackgroundRuns {
   static let shared = BackgroundRuns()
 
@@ -21,6 +22,7 @@ final class BackgroundRuns {
 
   private let slots: [BackgroundJob.Kind: Int]
   private let resolvePATH: () -> String
+  private let orbeServer: () -> BackgroundOrbeServer?
   private let lock = NSLock()
   private var running: [BackgroundJob.Kind: Int] = [:]
   private var waiting: [Entry] = []
@@ -28,12 +30,22 @@ final class BackgroundRuns {
   private var shuttingDown = false
   private let activity = DispatchGroup()
 
+  /// `orbeServer` は回の口のサーバー（既定は同梱の `orbe-mcp` とこのインスタンスの制御 socket。バンドルの
+  /// 無い起動では無い）。
   init(
     slots: [BackgroundJob.Kind: Int] = BackgroundRuns.defaultSlots,
-    resolvePATH: @escaping () -> String = { ShellPATH.shared.value(wait: .settled) }
+    resolvePATH: @escaping () -> String = { ShellPATH.shared.value(wait: .settled) },
+    orbeServer: @escaping () -> BackgroundOrbeServer? = BackgroundRuns.bundledOrbeServer
   ) {
     self.slots = slots
     self.resolvePATH = resolvePATH
+    self.orbeServer = orbeServer
+  }
+
+  static func bundledOrbeServer() -> BackgroundOrbeServer? {
+    OrbeRuntimeEnv.mcpBinaryPath.map {
+      BackgroundOrbeServer(command: $0, socket: ControlServer.shared.socketPath)
+    }
   }
 
   /// 走らせる。結果は main で 1 度だけ届く（全停止で捨てた順番待ちの分と、全停止の後に渡した分には届かない）。返る手で止めると「止められた」が届く。
@@ -181,9 +193,21 @@ final class BackgroundRuns {
           $0.command == call.cli
         })
       else { return .failure(.agentNotFound(call.cli)) }
+      var server: HeadlessServer?
+      if let access = call.orbe {
+        guard let orbe = orbeServer() else { return .failure(.orbeServerMissing) }
+        server = HeadlessServer(
+          name: BackgroundOrbeAccess.server, command: orbe.command,
+          environment: [
+            "ORBE_RUN_TOKEN": access.token, "ORBE_RUN_TOOLS": access.tools.joined(separator: ","),
+            "ORBE_SOCK": orbe.socket,
+          ],
+          tools: access.toolNames)
+      }
       do {
         return .success(
-          try Prepared.agent(call, cli: cli, executable: found.path, limits: job.limits, env: env))
+          try Prepared.agent(
+            call, (cli, found.path), server: server, limits: job.limits, env: env))
       } catch {
         return .failure(error)
       }
@@ -267,11 +291,12 @@ private struct Prepared {
     }
   }
 
-  /// 作業ディレクトリをこの回のために作る。作れなければ始めない。
+  /// 作業ディレクトリをこの回のために作る。作れなければ始めない。`server` は足す MCP サーバー（Orbe の回の口）。
   static func agent(
-    _ call: BackgroundAgentCall, cli: HeadlessCLI, executable: String, limits: BackgroundLimits,
-    env: [String: String]
+    _ call: BackgroundAgentCall, _ agent: (cli: HeadlessCLI, executable: String),
+    server: HeadlessServer?, limits: BackgroundLimits, env: [String: String]
   ) throws(BackgroundStartFailure) -> Prepared {
+    let (cli, executable) = agent
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("orbe-agent-\(UUID().uuidString)")
     do {
@@ -279,13 +304,16 @@ private struct Prepared {
     } catch {
       throw .workDirectoryFailed(directory.path)
     }
-    let arguments = cli.arguments(call.model, call.tools)
+    let arguments = cli.arguments(call.model, call.tools, server)
     let commandLine = ([executable] + arguments).map(ShellWord.quoted).joined(separator: " ")
     let box = ReplyBox()
-    let watched = call.tools.filter { $0.hasPrefix("mcp__") }
+    let tools = call.tools + (server?.tools ?? [])
+    let watched = tools.filter { $0.hasPrefix("mcp__") }
     let spec = BackgroundProcess.Spec(
       executable: executable, arguments: arguments,
-      environment: env.merging(cli.environment(call.tools)) { $1 }, directory: directory.path,
+      environment: env.merging(cli.environment(tools)) { $1 }
+        .merging(server?.environment ?? [:]) { $1 },
+      directory: directory.path,
       stdin: Data(call.prompt.utf8), elapsedLimit: limits.elapsed,
       idleLimit: limits.idle,
       stdout: .lines(maxLength: BackgroundRuns.eventLineLimit) { line in

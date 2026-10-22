@@ -2,11 +2,9 @@ import XCTest
 
 @testable import Orbe
 
-/// 結果に残す実行の記録——読めた数の数え方は役割ごとに決まり、記録は出力を使った（最後に読んだ）呼び出しのもの。出し直したなら
-/// 1 回目の記録は外したことの側に残る。
+/// 結果に残す実行の記録——受けた数の数え方は役割ごとに決まる。
 ///
-/// 壊れると何が起きるか: 回の記録の件数が渡した行と食い違う（1 回目が全行外れ・出し直しで取れた回が「0 件取った」になる）。
-/// 出し直しが読む前に落ちた回に、出し直したことと落ちた終わり方が残らない。
+/// 壊れると何が起きるか: 回の記録の件数が渡した行と食い違う（断った件まで「取った」に数える）。
 final class AutomationPartPassRecordTests: AutomationPartPassTestCase {
   private var count: Int? { outcomes.first?.execution.count }
 
@@ -20,7 +18,7 @@ final class AutomationPartPassRecordTests: AutomationPartPassTestCase {
     XCTAssertEqual(count, 2, "\(outcomes)")
   }
 
-  func testProcessAndJudgeCountTheJSONLinesTheyRead() {
+  func testProcessAndJudgeCountTheLinesTheyGave() {
     start(
       AutomationGraphTests.command("p", from: ["f"], deliver: .nextPart), .process,
       .process([row("a"), row("b")], reachesJudge: false))
@@ -45,43 +43,18 @@ final class AutomationPartPassRecordTests: AutomationPartPassTestCase {
     XCTAssertEqual(count, 2, "\(outcomes)")
   }
 
-  /// 出し直しで通った回の記録は出し直しの呼び出しのもの——1 回目が全行外れでも、渡した行の数と記録が食い違わない。
-  func testRedoneRunRecordsTheRedoAndKeepsTheFirstCallInTheBreach() throws {
-    start(
-      AutomationGraphTests.agent(
-        "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
-      .fetch(.currentSet), .fetch(since: nil))
-
-    jobs.finish(0, replied(#"{"id":"x"}"#))
-    jobs.finish(
-      1,
-      replied(
-        #"{"id":"a","link":"https://example.com/a","body":"a","time":"2026-10-10T09:00:00Z"}"#))
-
-    guard case .fetch(let rows) = try XCTUnwrap(succeeded, "\(outcomes)") else {
-      return XCTFail("\(outcomes)")
-    }
-    XCTAssertEqual(rows.count, 1)
-    XCTAssertEqual(count, 1)
-    XCTAssertEqual(breach?.redo?.firstCall.count, 0)
-  }
-
-  /// 出し直しが読む前に落ちた回も、記録は出し直しの終わり方で、出し直したことが残る。
-  func testRedoThatEndsBeforeItIsReadRecordsItsEnding() throws {
+  /// agent は受けた件数を数える（断った呼び出しの件は数えない）。
+  func testAgentCountsWhatWasAccepted() {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
-      .process([row("a")], reachesJudge: false))
+      .process([row("a"), row("b")], reachesJudge: false))
 
-    jobs.finish(0, replied(#"{"note":"id を落とした"}"#))
-    jobs.finish(
-      1,
-      BackgroundRunResult(
-        commandLine: "claude -p", startedAt: now, endedAt: now, elapsed: 0,
-        ending: .limited(.elapsed), output: .agent(reply: nil, stderr: .init())))
+    readAll(0)
+    use(0, .putRows, ["rows": [["id": "f:a"], ["note": "x"]]])
+    use(0, .putRows, ["rows": [["id": "f:a"]]])
+    use(0, .putRows, ["rows": [["id": "f:b"]]])
+    jobs.finish(0, done())
 
-    XCTAssertNotNil(failed, "\(outcomes)")
-    XCTAssertEqual(outcomes.first?.execution.ending.text, "stopped at the time limit")
-    XCTAssertEqual(breach?.redo?.lines, [])
-    XCTAssertEqual(breach?.redo?.firstCall.count, 1)
+    XCTAssertEqual(count, 2, "\(outcomes)")
   }
 }

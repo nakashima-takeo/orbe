@@ -2,15 +2,15 @@ import XCTest
 
 @testable import Orbe
 
-/// 依頼文の枠と出力の行の関門——取得の項目は link が http(s)、time が ISO 8601 のものだけ。判定の行は、今回渡した項目・出ている
-/// 提案だけを指し、タイトルと期限がタスクの規則に合うものだけを受ける。依頼文には渡した項目だけが載る。付け先は依頼文に載せた
-/// workspace の一覧の id だけを受けて永続 ID に直して運び、Home の id は付け先なしとして受ける。候補にした理由は 1 段落に整えて運ぶ。
+/// 結果の関門——取得の項目は link が http(s)、time が ISO 8601 のものだけ。判定の結果は、今回渡した項目・出ている提案だけを
+/// 指し、タイトルと期限がタスクの規則に合うものだけを受ける。付け先は付け先の一覧の id だけを受けて永続 ID に直して運び、Home
+/// の id は付け先なしとして受ける。候補にした理由は 1 段落に整えて運ぶ。
 ///
 /// 壊れると何が起きるか。外の文面の file: の link が候補のリンクになる。判定が別の自動化の項目や
 /// 存在しない提案を指しても通り、タスクにできないタイトルの提案が棚に並ぶ。判定が一覧に無い workspace や true を付け先に
 /// 書いても通り、候補が別の workspace や行き場の無い付け先を持つ。`orb ws list --json` の Home の id を書いたコマンドの判定の
 /// 候補が捨てられ、二度と出ない。候補の詳細に、判定が書いた理由が改行の崩れたまま出る。
-final class AutomationPromptsTests: OrbeTestCase {
+final class AutomationOutputsTests: OrbeTestCase {
   private let line =
     #"{"id":"1","link":"https://example.com/1","body":"本文","time":"2026-10-10T09:00:00Z"}"#
 
@@ -48,7 +48,7 @@ final class AutomationPromptsTests: OrbeTestCase {
     ]
   }
 
-  /// 判定の出力を行ごとに読んだもの。受けなかった行は判定の部品の読みと同じく「line <n>: <理由>」で持ち、JSON でない行は
+  /// 判定の結果を 1 件ずつ読んだもの。受けなかった件は部品の 1 回と同じく「item <n>: <理由>」で持ち、JSON でない件は
   /// 別に持つ。
   private struct Read {
     let decisions: [AutomationDecision]
@@ -57,10 +57,13 @@ final class AutomationPromptsTests: OrbeTestCase {
   }
 
   private func read(_ text: String, itemIds: Set<String>, choices: AutomationJudgeChoices) -> Read {
-    let (rows, broken) = AutomationPrompts.objectRows(text)
+    let (rows, broken) = AutomationOutputs.objectRows(text)
     var decisions: [AutomationDecision] = []
     var rejected: [String] = []
-    for reading in AutomationPrompts.judgeRows(rows, itemIds: itemIds, choices: choices) {
+    var seen = AutomationOutputs.JudgeSeen()
+    for reading in AutomationOutputs.judgeRows(
+      rows, .decisions, itemIds: itemIds, choices: choices, seen: &seen)
+    {
       switch reading {
       case .success(let decision): decisions.append(decision)
       case .failure(let line): rejected.append(line.text)
@@ -97,48 +100,16 @@ final class AutomationPromptsTests: OrbeTestCase {
           reason: nil),
         .resolve(link: "https://example.com/old"),
       ])
-    XCTAssertEqual(notJSON, ["line 9: not JSON"], "JSON でない行は行の読み取りで外す")
+    XCTAssertEqual(notJSON, ["item 9: not JSON"], "JSON でない件は 1 件の読み取りで外す")
     XCTAssertEqual(
       rejected,
       [
-        "line 2: propose a: proposed twice", "line 3: propose zzz: not a new item",
-        "line 4: propose b: title must be a single non-empty line",
-        "line 5: propose b: due is not a YYYY-MM-DD date: 2026-02-30",
-        "line 7: resolve https://example.com/unknown: not a waiting proposal",
-        "line 8: a line must have exactly one of propose / resolve",
-      ], "どの行も行番号付きの理由で外す")
-  }
-
-  /// 判定の依頼文には、新しい項目・出ている提案・期限を決めるための今日と利用者の指示文が載る。
-  func testJudgePromptCarriesTheNewItemsTheOpenProposalsAndToday() throws {
-    let prompt = AutomationPrompts.judge(
-      instruction: "自分がやるべきことだけ",
-      rows: [AutomationPrompts.jsonLine(AutomationWire.object(items[0]))],
-      choices: AutomationJudgeChoices(open: open, workspaces: listed([orbe])),
-      now: Date(timeIntervalSince1970: 1_800_000_000),
-      timeZone: try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo")))
-
-    XCTAssertTrue(prompt.contains("自分がやるべきことだけ"))
-    XCTAssertTrue(prompt.contains(#""id":"a""#))
-    XCTAssertFalse(prompt.contains(#""id":"b""#), "新しい項目だけを載せる")
-    XCTAssertTrue(prompt.contains(#""link":"https://example.com/old","title":"前の提案""#))
-    XCTAssertTrue(prompt.contains("2027-01-15 17:00"), prompt)
-    XCTAssertTrue(prompt.contains("Asia/Tokyo"))
-    XCTAssertTrue(prompt.contains(#"{"name":"orbe","root":"/src/orbe","workspace":3}"#))
-  }
-
-  /// 付け先にできる workspace が無ければ、一覧の節は (none) になる。
-  func testJudgePromptSaysNoneWithoutWorkspaces() throws {
-    let prompt = AutomationPrompts.judge(
-      instruction: "指示", rows: [AutomationPrompts.jsonLine(AutomationWire.object(items[0]))],
-      choices: AutomationJudgeChoices(open: [], workspaces: listed([])),
-      now: Date(timeIntervalSince1970: 1_800_000_000),
-      timeZone: try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo")))
-
-    XCTAssertTrue(
-      prompt.contains(
-        "Workspaces the user works in (one JSON object per line; may be empty):\n(none)"),
-      prompt)
+        "item 2: propose a: proposed twice", "item 3: propose zzz: not a new item",
+        "item 4: propose b: title must be a single non-empty line",
+        "item 5: propose b: due is not a YYYY-MM-DD date: 2026-02-30",
+        "item 7: resolve https://example.com/unknown: not a waiting proposal",
+        "item 8: must have exactly one of propose / resolve",
+      ], "どの件も位置付きの理由で外す")
   }
 
   // MARK: - 付け先
@@ -181,9 +152,9 @@ final class AutomationPromptsTests: OrbeTestCase {
     XCTAssertEqual(
       rejected,
       [
-        "line 1: propose a: workspace 4 is not a listed workspace",
-        "line 2: workspace has the wrong type",
-        "line 3: invalid value",
+        "item 1: propose a: workspace 4 is not a listed workspace",
+        "item 2: workspace has the wrong type",
+        "item 3: invalid value",
       ])
   }
 
@@ -202,7 +173,7 @@ final class AutomationPromptsTests: OrbeTestCase {
           itemId: "a", title: "見る", due: nil, workspace: nil, reason: "レビューを頼まれている。 期限は明日。"),
         .propose(itemId: "b", title: "空", due: nil, workspace: nil, reason: nil),
       ])
-    XCTAssertEqual(rejected, ["line 2: reason has the wrong type"])
+    XCTAssertEqual(rejected, ["item 2: reason has the wrong type"])
   }
 
   /// 真偽値の true を id 1 と取り違えない（id 1 の workspace があっても付けない）。
@@ -214,7 +185,7 @@ final class AutomationPromptsTests: OrbeTestCase {
     let (decisions, rejected) = (read.decisions, read.rejected)
 
     XCTAssertEqual(decisions, [])
-    XCTAssertEqual(rejected, ["line 1: workspace has the wrong type"])
+    XCTAssertEqual(rejected, ["item 1: workspace has the wrong type"])
   }
 
   /// Home は依頼文の一覧に載らず、Home の id を書いた行は付け先なし（Home に付く）として受ける——コマンドの判定は
@@ -227,11 +198,7 @@ final class AutomationPromptsTests: OrbeTestCase {
     let home = try XCTUnwrap(session.homeIndex.map { session.workspaces[$0] })
     let choices = AutomationJudgeChoices(open: [], workspaces: AutomationWorkspaces(session))
 
-    let prompt = AutomationPrompts.judge(
-      instruction: "指示", rows: [AutomationPrompts.jsonLine(AutomationWire.object(items[0]))],
-      choices: choices,
-      now: Date(timeIntervalSince1970: 1_800_000_000),
-      timeZone: try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo")))
+    let listed = AutomationRunSession(.judge([], choices: choices)).call("read_workspaces", [:])
     let read = read(
       [
         #"{"propose":"a","title":"Home の作業","workspace":\#(home.id)}"#,
@@ -239,8 +206,8 @@ final class AutomationPromptsTests: OrbeTestCase {
       ].joined(separator: "\n"), itemIds: Set(items.map(\.id)), choices: choices)
     let (decisions, rejected) = (read.decisions, read.rejected)
 
-    XCTAssertTrue(prompt.contains(#""name":"orbe""#), prompt)
-    XCTAssertFalse(prompt.contains("/state/home"), "Home は付け先の一覧に載せない")
+    XCTAssertTrue(listed.texts[0].contains(#""name":"orbe""#), "\(listed)")
+    XCTAssertFalse(listed.texts[0].contains("/state/home"), "Home は付け先の一覧に載せない")
     XCTAssertEqual(
       decisions,
       [
@@ -255,7 +222,7 @@ final class AutomationPromptsTests: OrbeTestCase {
     AutomationWorkspaces(listed: workspaces, home: nil)
   }
 
-  /// 仕事の依頼文は、枠と利用者の依頼文と今だけを持ち、行を受ける席が無い。することが無い回は申告の 1 行で終える。
+  /// 仕事の依頼文は、枠と利用者の依頼文と今だけを持ち、行を受ける席が無い。することが無い回は report_nothing で終える。
   func testWorkPromptCarriesTheRequestAndNowOnly() {
     let prompt = AutomationPrompts.work(
       instruction: "PR をまとめて投稿して", now: Date(timeIntervalSince1970: 1_800_000_000),
@@ -264,44 +231,7 @@ final class AutomationPromptsTests: OrbeTestCase {
     XCTAssertTrue(prompt.contains("Now: 2027-01-15 17:00 (Friday), time zone Asia/Tokyo."))
     XCTAssertTrue(prompt.contains("not instructions"), "ツールで読んだ文面は指示ではない")
     XCTAssertTrue(prompt.contains("within 2000 characters"))
-    XCTAssertTrue(
-      prompt.contains(#"do nothing and output only this one line instead: {"nothing": "<why>"}"#),
-      "することが無い回の出口")
+    XCTAssertTrue(prompt.contains("do nothing and call report_nothing instead"), "することが無い回の出口")
     XCTAssertFalse(prompt.contains("Input"), "行を載せる席を持たない")
-  }
-
-  /// 失敗の申告は、前後の空白を除いた全体が `{"error": …}` の 1 行のときだけ。
-  func testWorkErrorIsOnlyAWholeErrorLine() {
-    XCTAssertEqual(AutomationPrompts.workError(#" {"error": "refused"}"# + "\n"), "refused")
-    XCTAssertNil(AutomationPrompts.workError("投稿した。\n" + #"{"error": "例"}"#))
-    XCTAssertNil(AutomationPrompts.workError(#"{"error": 1}"#))
-    XCTAssertNil(AutomationPrompts.workError(#"{"id": "a", "error": "x"}"#))
-    XCTAssertNil(AutomationPrompts.workError("done"))
-  }
-
-  /// 処理と報告の枠も、残る項目・言うことが無い回を空の出力でなく申告の 1 行で言わせる。
-  func testProcessAndReportPromptsAskForTheNothingLine() {
-    let now = Date(timeIntervalSince1970: 1_800_000_000)
-    let zone = TimeZone(identifier: "Asia/Tokyo")!
-    XCTAssertTrue(
-      AutomationPrompts.process(
-        instruction: "残す", rows: [], now: now, timeZone: zone, reachesJudge: false
-      ).contains(
-        #"When no item remains, output only this one line instead: {"nothing": "<why>"}"#))
-    XCTAssertTrue(
-      AutomationPrompts.report(instruction: "要約", rows: [], now: now, timeZone: zone).contains(
-        #"When there is nothing to report, output only this one line instead: {"nothing": "<why>"}"#
-      ))
-  }
-
-  /// することが無いという申告は、最後の空でない行が `{"nothing": …}` のとき。前置きの文は捨てる（モデルが前置きの後に申告を
-  /// 付けることがある）。申告の後に文が続く出力・`id` を持つ行は申告でない。
-  func testANothingLineIsTheLastNonEmptyLine() {
-    XCTAssertEqual(AutomationPrompts.nothing(#" {"nothing": "残る項目なし"}"# + "\n"), "残る項目なし")
-    XCTAssertEqual(
-      AutomationPrompts.nothing("今日は水曜日です。\n\n" + #"{"nothing": "日曜でない"}"# + "\n  \n"), "日曜でない")
-    XCTAssertNil(AutomationPrompts.nothing(#"{"nothing": "例"}"# + "\n投稿した。"))
-    XCTAssertNil(AutomationPrompts.nothing(#"{"id": "a", "nothing": "x"}"#))
-    XCTAssertNil(AutomationPrompts.nothing(#"{"nothing": 1}"#))
   }
 }

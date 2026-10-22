@@ -45,15 +45,6 @@ struct AutomationGraph: Equatable {
       }
     }
 
-    /// 行を見るか——入力があり、ツールを持つ agent でない。
-    var readsRows: Bool { !inputs.isEmpty && !action.hasTools }
-
-    /// 行を依頼文に入れる agent か（入力があり、ツールを持たない）。1 回で取る量の上限はこれにだけ掛かる。
-    var putsRowsInPrompt: Bool {
-      guard case .agent = action.method else { return false }
-      return readsRows
-    }
-
     /// 入力の部品。
     var inputParts: [AutomationPartID] { inputs.map(\.from) }
   }

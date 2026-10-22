@@ -30,7 +30,7 @@ final class FakeControlTarget: ControlTarget {
   var domainFailure: ControlError?
 
   /// 記録は常に行い、`domainFailure` が立っていればそれを、無ければ success を返す。
-  private func outcome(_ value: Any) -> Result<Any, ControlError> {
+  func outcome(_ value: Any) -> Result<Any, ControlError> {
     if let failure = domainFailure { return .failure(failure) }
     return .success(value)
   }
@@ -128,11 +128,12 @@ final class FakeControlTarget: ControlTarget {
   private(set) var startedTasks: [TaskStartRequest] = []
   private(set) var setAutomations: [FakeSetAutomation] = []
   private(set) var runLists: [FakeRunList] = []
+  var runTools: [FakeRunTool] = []
   private(set) var ranAutomations: [(automationId: Int, partKey: String?)] = []
   private(set) var pausedAutomations: [(automationId: Int, paused: Bool)] = []
   private(set) var deletedAutomationIds: [Int] = []
   private(set) var proposalLists: [Int?] = []
-  private(set) var triedAutomations: [(automationId: Int, request: AutomationTrial.Request)] = []
+  var triedAutomations: [(automationId: Int, request: AutomationTrial.Request)] = []
   private(set) var readTrials: [ReadTrial] = []
   private(set) var boardLists: [Int] = []
   private(set) var addedBoardParts: [(workspaceId: Int, part: BoardPart)] = []
@@ -348,13 +349,6 @@ final class FakeControlTarget: ControlTarget {
     return outcome(["proposals": [Any]()])
   }
 
-  func controlTryAutomation(automationId: Int, _ request: AutomationTrial.Request) -> Result<
-    Any, ControlError
-  > {
-    triedAutomations.append((automationId, request))
-    return outcome(["trial": [String: Any]()])
-  }
-
   func controlAutomationTrial(
     automationId: Int, wait: Bool, timeoutMs: Int,
     completion: @escaping (Result<Any, ControlError>) -> Void
@@ -390,11 +384,4 @@ struct FakeSetAutomation {
     self.version = version
     self.definition = definition
   }
-}
-
-/// `list_automation_runs` が届けたもの。
-struct FakeRunList {
-  let partKey: String?
-  let before: Int?
-  let limit: Int?
 }

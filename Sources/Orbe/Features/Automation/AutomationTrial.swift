@@ -3,7 +3,7 @@ import Foundation
 /// 試走——自動化の部品を、本番を汚さずに本番と同じ流しで動かし、部品の回ごとの結果を集める 1 回。main で使う。
 ///
 /// 本番の DB を区切ってメモリの DB へ写し（`AutomationStore.Copy`）、写しの上に本番と同じ走らせ役を立てて、範囲の道だけを番人に
-/// 載せて流す。読む・確定・出す側の行・起こす決まり・出し直しは本番のコードのまま写しの上で動き、本番の DB には届かない。
+/// 載せて流す。読む・確定・出す側の行・起こす決まり・結果の確かめは本番のコードのまま写しの上で動き、本番の DB には届かない。
 /// 本番と変えるのは部品の 1 回の起こし方と、道の根から出るつながりの受け手の読みだけ: 副作用と仕事は手段を起こさず、取った行を
 /// 止めた行として成功の回で終える（失敗にすると読んだ位置が進まず、上流の契機のたびのやり直しで同じ行が起こされ続ける）。行を
 /// 与えた取得の入口は手段を起こさず、与えた項目をその回の出力として書く（出来事の見分けは掛けない）。入力のある入口に与えた行は、
@@ -174,7 +174,7 @@ final class AutomationTrial {
     }
     let path = Set(range.path.map(\.id))
     let runner = AutomationRunner(
-      store: store, run: source.run, workspaces: source.workspaces,
+      store: store, run: source.run, runData: source.runData, workspaces: source.workspaces,
       recorded: { [weak self] in self?.recorded($0) }, defined: { _ in }, deleted: { _ in },
       startPass: { [weak self] start, completion in
         self?.startPass(start, completion) ?? BackgroundRunHandle {}

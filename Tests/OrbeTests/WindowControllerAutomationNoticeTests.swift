@@ -192,8 +192,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     ).id
     let breachedFailure = AutomationPartPass.Outcome.failed(
       .brokeRules, DesignSceneFixtures.execution(1),
-      breach: AutomationPartPass.Breach(
-        lines: [AutomationBrokenLine(line: 3, fault: .missingKey("link"))], redo: nil))
+      breach: AutomationRejections([AutomationBrokenLine(line: 3, fault: .missingKey("link"))]))
     var at = Date()
     func record(_ outcome: AutomationPartPass.Outcome) throws {
       at = at.addingTimeInterval(60)
@@ -203,14 +202,14 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     try record(breachedFailure)
     let first = try XCTUnwrap(wc.automationNotification(id, "fetch"))
     guard case .automation(let told) = first.notice else { return XCTFail("\(first)") }
-    XCTAssertEqual(told.text, "取る の出力の形式エラー（1 行）— 失敗した")
+    XCTAssertEqual(told.text, "取る の出力の形式エラー（1 件）— 修正されず失敗")
     XCTAssertTrue(told.failed)
 
     try record(DesignSceneFixtures.fetched([]))
     try record(breachedFailure)
     let again = try XCTUnwrap(wc.automationNotification(id, "fetch"), "失敗の続きの最初は知らせる")
     guard case .automation(let failure) = again.notice else { return XCTFail("\(again)") }
-    XCTAssertFalse(failure.text.contains("形式エラー（"), failure.text)
+    XCTAssertTrue(failure.text.hasPrefix("取る: 失敗："), failure.text)
   }
 
   /// 選んでいる行の回は出ず、同じボードで選んでいない自動化の回は出る。

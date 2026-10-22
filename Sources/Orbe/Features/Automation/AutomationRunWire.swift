@@ -2,7 +2,7 @@ import Foundation
 import OrbeSessionLog
 
 /// 回の記録の外の形（`list_automations` の `lastRun`・`list_automation_runs` の `runs`・部品の `breach`・試走の部品の回）。保存の
-/// 形（種類だけ）に、AI が読む英文を足す——終わり方の `ending`・失敗の `failure`・外れた行の `reasons`・判定の確定で捨てた案の
+/// 形（種類だけ）に、AI が読む英文を足す——終わり方の `ending`・失敗の `failure`・外れた件の `reasons`・判定の確定で捨てた案の
 /// `rejected`。英文は部品の鍵が要るので、鍵を手元に持つここで組む。
 enum AutomationRunWire {
   /// 記録 1 件（`recordId` を添える）。不明な記録は列から分かる分と `unknown: true` だけ。
@@ -27,17 +27,7 @@ enum AutomationRunWire {
     if let failure = run.failure {
       json["failure"] = failure.text(part: part, ending: run.execution.ending, breach: run.breach)
     }
-    if let breach = run.breach, var object = json["breach"] as? [String: Any] {
-      object["lines"] = rejections(object["lines"], breach.lines)
-      if let redo = breach.redo, var redoObject = object["redo"] as? [String: Any] {
-        redoObject["firstCall"] = execution(redoObject["firstCall"], redo.firstCall)
-        if redo.lines.count > 0 {
-          redoObject["lines"] = rejections(redoObject["lines"], redo.lines)
-        }
-        object["redo"] = redoObject
-      }
-      json["breach"] = object
-    }
+    if let breach = run.breach { json["breach"] = rejections(json["breach"], breach) }
     if case .judge(_, _, let dismissed) = run.result, !dismissed.isEmpty,
       var result = json["result"] as? [String: Any]
     {

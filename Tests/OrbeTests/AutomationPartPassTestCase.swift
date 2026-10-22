@@ -7,6 +7,7 @@ class AutomationPartPassTestCase: OrbeTestCase {
   static let tool = AutomationGraphTests.tool
   let now = Date(timeIntervalSince1970: 1_800_000_000)
   var jobs: FakeJobs!
+  var runData: AutomationRunData!
   var pass: AutomationPartPass!
   var outcomes: [AutomationPartPass.Outcome] = []
   /// 最後に起こした部品の鍵（失敗の英文を組む）。
@@ -14,9 +15,10 @@ class AutomationPartPassTestCase: OrbeTestCase {
 
   override func setUp() {
     jobs = FakeJobs()
+    runData = AutomationRunData()
     pass = AutomationPartPass(
       run: jobs.run, now: { [unowned self] in now },
-      calendar: { Calendar(identifier: .gregorian) })
+      calendar: { Calendar(identifier: .gregorian) }, runData: runData)
   }
 
   @discardableResult
@@ -84,12 +86,45 @@ class AutomationPartPassTestCase: OrbeTestCase {
       output: .agent(reply: BackgroundAgentReply(text: text, isError: isError), stderr: .init()))
   }
 
+  /// agent の CLI が最終応答を返して終わった（結果は道具で受けているので、応答の文は読まない）。
+  func done(took seconds: TimeInterval = 0) -> BackgroundRunResult {
+    replied("done", took: seconds)
+  }
+
+  /// 呼び出し `index` の agent の回の相手（回が終わっていれば nil）。
+  func session(_ index: Int) -> AutomationRunSession? {
+    agentCall(index)?.orbe.flatMap { runData.session($0.token) }
+  }
+
+  /// 呼び出し `index` の agent が、その回の道具を呼ぶ。
+  @discardableResult
+  func use(_ index: Int, _ tool: AutomationRunSession.Tool, _ arguments: [String: Any] = [:])
+    -> AutomationRunSession.Reply
+  {
+    guard let session = session(index) else {
+      XCTFail("回の相手が無い: \(index)")
+      return .refused("")
+    }
+    return session.call(tool.rawValue, arguments)
+  }
+
+  /// 呼び出し `index` の agent が、入力の行をすべて読む。
+  func readAll(_ index: Int) {
+    var offset: Int? = 0
+    while let next = offset {
+      let reply = use(
+        index, .readRunRows, ["offset": next, "limit": AutomationRunSession.pageLimit])
+      let head = try? JSONSerialization.jsonObject(with: Data((reply.texts.first ?? "").utf8))
+      offset = (head as? [String: Any])?["next"] as? Int
+    }
+  }
+
   func agentCall(_ index: Int) -> BackgroundAgentCall? {
     guard case .agent(let call) = jobs.calls[index].job.work else { return nil }
     return call
   }
 
-  var breach: AutomationPartPass.Breach? { outcomes.first?.breach }
+  var breach: AutomationRejections? { outcomes.first?.breach }
 
   func judgeInput(_ ids: [String]) -> AutomationPartPass.Input {
     .judge(
@@ -118,7 +153,6 @@ class AutomationPartPassTestCase: OrbeTestCase {
   /// 最初の失敗の、AI が読む英文。
   var failed: String? {
     guard case .failed(let failure, let execution, let breach) = outcomes.first else { return nil }
-    return failure.text(
-      part: startedKey, ending: execution.ending, breach: breach.map(AutomationPartRun.Breach.init))
+    return failure.text(part: startedKey, ending: execution.ending, breach: breach)
   }
 }

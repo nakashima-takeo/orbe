@@ -63,7 +63,8 @@ let automationUsage = """
              local and project scopes) are unavailable.
              A command prints one JSON object per item:
              {"id","link","body","time"} (link http(s), time ISO 8601),
-             and fails with a non-zero exit or a single {"error": "…"} line.
+             prints nothing when there are none, and fails with a non-zero
+             exit.
              coverage (required): "currentSet" when the source returns the
              whole current set (a proposal whose link leaves it is
              withdrawn), "newArrivals" when it returns only new items (a
@@ -126,9 +127,10 @@ let automationUsage = """
              The output of the last step is the report, kept as text (up to
              2000 characters) in the run record; a command last step prints
              it on stdout. Its first line shows on the board's heading and in
-             the notification. An agent last step is told to keep it short and
-             to print only {"nothing": "…"} when there is nothing to report;
-             a run with no report succeeds as "nothing to report". Editing
+             the notification. An agent last step gives it through Orbe's
+             tool, kept short, or says there is nothing to report; a command
+             that prints nothing, or an agent that says so, succeeds as
+             "nothing to report". Editing
              the definition does not make the next run process every fetched
              item again.
              {"kind": "agent", "agent": "claude", "model": "…",
@@ -154,13 +156,12 @@ let automationUsage = """
              naming anything. Instructions hidden in outside text the agent
              reads with its tools can make it use a writing tool it was given.
              Without model it runs sonnet; it is cut off after 10 minutes, or
-             3 minutes without output. Its final reply is kept as the result
-             of the run (the first line shows on the board's heading and in
-             the notification). Orbe tells it to reply only {"nothing": "…"}
-             when there is nothing to do; a run whose reply ends with that
-             line delivers nothing (an empty reply counts as done). A run
-             fails when the agent replies only {"error": "…"}, crashes, hits
-             its limit, or a named MCP tool is unavailable. A failed run, or
+             3 minutes without output. It gives its report through Orbe's
+             tool, kept as the result of the run (the first line shows on the
+             board's heading and in the notification); when there is nothing
+             to do it says so and delivers nothing. A run fails when the agent
+             says it cannot do it, ends without a result, crashes, hits its
+             limit, or a named MCP tool is unavailable. A failed run, or
              one Orbe did not finish, starts the agent again on the next run
              (a post can be doubled). Editing the definition does not make the
              next run process every fetched item again. The request stays in

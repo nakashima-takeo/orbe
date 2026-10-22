@@ -72,13 +72,13 @@ extension L10n {
     .automationManual: ("手動", "manual"),
     .automationArrival: ("前の部品に連動", "follows the previous part"),
     .automationBreachNoticeOne: (
-      "%1$@ の出力の形式エラー（%2$lld 行）— %3$@", "%1$@ output format error (%2$lld line) — %3$@"
+      "%1$@ の出力の形式エラー（%2$lld 件）— %3$@", "%1$@ output format error (%2$lld item) — %3$@"
     ),
     .automationBreachNoticeOther: (
-      "%1$@ の出力の形式エラー（%2$lld 行）— %3$@", "%1$@ output format error (%2$lld lines) — %3$@"
+      "%1$@ の出力の形式エラー（%2$lld 件）— %3$@", "%1$@ output format error (%2$lld items) — %3$@"
     ),
-    .automationBreachPassed: ("出し直して通った", "passed on redo"),
-    .automationBreachFailed: ("失敗した", "failed"),
+    .automationBreachPassed: ("その場で修正済み", "fixed on the spot"),
+    .automationBreachFailed: ("修正されず失敗", "not fixed; failed"),
     .automationYesterday: ("昨日 %@", "yesterday %@"),
     .automationWithOriginal: ("%1$@（%2$@）", "%1$@ (%2$@)"),
     .automationFailureExcerpt: ("%1$@：%2$@", "%1$@: %2$@"),
@@ -96,11 +96,13 @@ extension L10n {
     .automationFailNotUTF8: ("出力の文字を読めない（UTF-8 でない）", "couldn’t read the output (not UTF-8)"),
     .automationFailAgentError: ("%1$@ がエラーを返した：%2$@", "%1$@ returned an error: %2$@"),
     .automationFailReported: ("部品が失敗を申告した：%@", "the part reported a failure: %@"),
-    .automationFailBrokeRules: ("出力の形式エラーが直らなかった", "output format errors weren’t fixed"),
+    .automationFailBrokeRules: ("出力の形式エラー", "output format error"),
+    .automationFailUnreadInput: ("入力の読み残し %lld 件", "%lld input items unread"),
+    .automationFailNoResult: ("結果なし", "no result"),
     .automationFailUnsourced: (
       "判定へ渡す行が、どの取得から来たか分からない", "rows for the judge don’t say which fetch they came from"
     ),
-    .automationLineAt: ("%1$lld 行目：%2$@", "line %1$lld: %2$@"),
+    .automationLineAt: ("%1$lld 件目：%2$@", "item %1$lld: %2$@"),
     .automationFaultNotJSON: ("JSON として読めない", "not JSON"),
     .automationFaultNotObject: ("JSON のオブジェクトでない", "not a JSON object"),
     .automationFaultMissing: ("%@ が無い", "missing %@"),
@@ -110,7 +112,6 @@ extension L10n {
     .automationFaultInvalidValue: ("値が正しくない", "invalid value"),
     .automationFaultIdTwice: ("id %@ が 2 回出た", "id %@ appeared twice"),
     .automationFaultNotInputId: ("id %@ は受け取った行に無い", "id %@ is not one of the input rows"),
-    .automationFaultNothingWithItems: ("「何も無い」の行と項目が一緒に出た", "a “nothing” line came with items"),
     .automationFaultNotNewItem: ("id %@ は今回の項目でない", "id %@ is not a new item"),
     .automationFaultProposedTwice: ("id %@ を 2 回候補にした", "id %@ was proposed twice"),
     .automationFaultNotWaiting: ("対応済みにした候補が見つからない", "the resolved proposal wasn’t found"),
@@ -122,6 +123,8 @@ extension L10n {
     .automationFaultWorkspace: (
       "付け先の workspace が一覧に無い", "the workspace isn’t one of the listed ones"
     ),
+    .automationFaultNotNonEmptyArray: ("%@ が空でない配列でない", "%@ isn’t a non-empty array"),
+    .automationFaultEmptyReport: ("報告が空", "the report is empty"),
     .automationDismissedAlready: ("既に候補にあるので %lld 件を捨てた", "dropped %lld already proposed"),
     .automationDismissedNoOpen: (
       "対応済みにする候補が無いので %lld 件を捨てた", "dropped %lld with no waiting proposal"

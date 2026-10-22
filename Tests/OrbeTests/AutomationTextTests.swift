@@ -62,21 +62,26 @@ final class AutomationTextTests: OrbeTestCase {
         failed(.ended(detail: "boom"), ending: .exited(1)), node: Self.judge),
       "exited with code 1: boom")
     var broke = failed(.brokeRules, ending: .exited(0))
-    broke.breach = AutomationPartRun.Breach(
-      lines: AutomationRejections([AutomationBrokenLine(line: 2, fault: .notJSON)]),
-      redo: AutomationPartRun.Redo(
-        firstCall: broke.execution,
-        lines: AutomationRejections([AutomationBrokenLine(line: 3, fault: .missingKey("link"))])))
+    broke.breach = AutomationRejections([
+      AutomationBrokenLine(line: 2, fault: .notJSON),
+      AutomationBrokenLine(line: 3, fault: .missingKey("link")),
+    ])
     XCTAssertEqual(
       Self.automationText(.en).failure(broke, node: Self.judge),
-      "output format errors weren’t fixed: line 3: missing link", "出し直しでも外れていた最初の行")
+      "output format error: item 2: not JSON", "最初の外れた件")
+    XCTAssertEqual(
+      text.failure(failed(.unreadInput(2), ending: .exited(0)), node: Self.judge),
+      "入力の読み残し 2 件（the part \"dev\" ended without reading 2 of its input items）")
+    XCTAssertEqual(
+      text.failure(failed(.noResult, ending: .exited(0)), node: Self.judge),
+      "結果なし（the part \"dev\" ended without giving a result）")
   }
 
-  /// 外れた行は「n 行目：<説明>」。
+  /// 外れた件は「n 件目：<説明>」。
   func testBrokenLine() {
     XCTAssertEqual(
-      text.line(AutomationBrokenLine(line: 3, fault: .missingKey("link"))), "3 行目：link が無い")
-    XCTAssertEqual(text.line(AutomationBrokenLine(line: 5, fault: .notJSON)), "5 行目：JSON として読めない")
+      text.line(AutomationBrokenLine(line: 3, fault: .missingKey("link"))), "3 件目：link が無い")
+    XCTAssertEqual(text.line(AutomationBrokenLine(line: 5, fault: .notJSON)), "5 件目：JSON として読めない")
   }
 
   /// 一覧の時刻は、今日なら時刻だけ、昨日なら「昨日」、ほかは日付付き。

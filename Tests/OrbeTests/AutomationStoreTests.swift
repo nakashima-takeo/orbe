@@ -70,7 +70,12 @@ final class AutomationStoreTests: OrbeTestCase {
     return try store.replace(id, version: current.version, with: definition, now: at)
   }
 
-  /// 決まりを外した取得の回（出し直しで通った）。
+  /// 形式エラーをその場で直して通った取得の回（件の外れと、位置の無い呼び出しの形の誤り）。
+  static let breachLines = [
+    AutomationBrokenLine(line: 3, fault: .missingKey("link")),
+    AutomationBrokenLine(line: nil, fault: .notNonEmptyArray("items")),
+  ]
+
   static func breached(_ items: [AutomationItem]) -> AutomationPartPass.Outcome {
     let fetched = DesignSceneFixtures.fetched(items)
     guard case .succeeded(let output, let execution, _) = fetched else {
@@ -78,9 +83,7 @@ final class AutomationStoreTests: OrbeTestCase {
     }
     return .succeeded(
       output, execution,
-      breach: AutomationPartPass.Breach(
-        lines: [AutomationBrokenLine(line: 3, fault: .missingKey("link"))],
-        redo: AutomationPartPass.Redo(firstCall: execution, lines: [])))
+      breach: AutomationRejections(breachLines))
   }
 
   func quarantined() throws -> [String] {
@@ -180,9 +183,7 @@ final class AutomationStoreTests: OrbeTestCase {
       mark(),
       AutomationBreachMark(
         at: Self.at,
-        lines: AutomationRejections(
-          count: 1, lines: [AutomationBrokenLine(line: 3, fault: .missingKey("link"))]),
-        redone: true, passed: true))
+        lines: AutomationRejections(Self.breachLines), passed: true))
     try Self.rewrite(store, id, Self.definition("改名"))
     XCTAssertEqual(mark()?.at, Self.at, "名前だけなら残る")
     try Self.rewrite(store, id, Self.definition("改名", script: "fetch --all"))

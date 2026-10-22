@@ -5,8 +5,8 @@ import Observation
 ///
 /// 番人の鍵は `automation:<id>/<部品の ID>`（鍵を変えても同じ部品のまま）。間隔・cron の部品は止めていなければ「いつ」付きで、
 /// それ以外（手動・届いたら・止めた自動化の部品）は「いつ」なしで載せる。同じ部品の契機は重ならない（重ねない保証・
-/// 「今すぐ」・走っているかは番人が持つ）。1 つの契機の中では、契機の始まりの時点の上流の行（つながりごと表ごとの上流の最後の
-/// 番号まで）を読む。1 回の上限で切ったときだけ、取り切るまで続けて回し、回が失敗するか書けなければその契機を終える。
+/// 「今すぐ」・走っているかは番人が持つ）。1 つの契機は、契機の始まりの時点の上流の行（つながりごと表ごとの上流の最後の番号
+/// まで）を読み、読めば取る行を全部取って 1 回だけ回す。
 ///
 /// 「届いたら」の部品を起こす決まりは `AutomationRunner+Wake`。
 ///
@@ -29,6 +29,8 @@ import Observation
   /// 番人（一巡が部品を起こす）。
   let scheduler: BackgroundScheduler
   let run: BackgroundScheduler.Run
+  /// 行を見る agent に、その回の行を Orbe の MCP で渡す帳面（試走の走らせ役も同じものを使う）。
+  let runData: AutomationRunData
   let workspaces: () -> AutomationWorkspaces
   private let recorded: (AutomationPassRecord) -> Void
   private let defined: (Int) -> Void
@@ -61,6 +63,7 @@ import Observation
   init(
     store: AutomationStore, scheduler: BackgroundScheduler = BackgroundScheduler(),
     run: @escaping BackgroundScheduler.Run = { BackgroundRuns.shared.run($0, completion: $1) },
+    runData: AutomationRunData = AutomationRunData(),
     workspaces: @escaping () -> AutomationWorkspaces,
     recorded: @escaping (AutomationPassRecord) -> Void, defined: @escaping (Int) -> Void,
     deleted: @escaping (Int) -> Void,
@@ -71,6 +74,7 @@ import Observation
     self.store = store
     self.scheduler = scheduler
     self.run = run
+    self.runData = runData
     self.workspaces = workspaces
     self.recorded = recorded
     self.defined = defined
@@ -237,8 +241,8 @@ extension AutomationRunner {
     var baseline: [AutomationPartID: (item: Int, event: Int)] = [:]
     /// 走っている回が読んだ行。
     var holding: [AutomationRowRef] = []
-    /// 最後の回の始まり。
-    var lastStart: Date?
+    /// 回の始まり。
+    var passStartedAt: Date?
     var current: BackgroundRunHandle?
     var cancelled = false
     /// 一巡の分として受け取った契機か。
@@ -287,7 +291,7 @@ extension AutomationRunner {
         trigger.baseline[edge.from] = (up.item, up.event)
       }
       self.marks[Self.key(id, part)] = marks
-      readNext(trigger)
+      read(trigger)
     }
     return BackgroundRunHandle { [weak self] in
       trigger.cancelled = true
@@ -298,8 +302,7 @@ extension AutomationRunner {
 
   /// 契機の始まりの時点までの上流の行を読む。取る行が 0 件なら手段を起こさず、捨てた行の分だけ読んだ位置を進めて終える。
   /// ただし今の集合の処理は 0 件でも回す（空の集合を写す）。
-  private func readNext(_ trigger: Trigger) {
-    guard !trigger.cancelled else { return }
+  private func read(_ trigger: Trigger) {
     let read: AutomationInbox.Read?
     do throws(AutomationError) {
       read = try store.read(
@@ -326,12 +329,12 @@ extension AutomationRunner {
     else { return end(trigger) }
     let input = self.input(node, automation, read)
     let startedAt = now()
-    trigger.lastStart = startedAt
+    trigger.passStartedAt = startedAt
     trigger.holding = read.map { $0.taken.map(\.ref) + $0.dropped.map(\.row.ref) } ?? []
     let defId = node.part.defId
     let start = AutomationPassStart(
       automationId: trigger.automationId, node: node, input: input, read: read,
-      pass: AutomationPartPass(run: run, now: now, calendar: calendar))
+      pass: AutomationPartPass(run: run, now: now, calendar: calendar, runData: runData))
     trigger.current = startPass(start) { [weak self] outcome in
       guard let self, !trigger.cancelled else { return }
       ended(trigger, defId, read, startedAt, outcome)
@@ -361,18 +364,17 @@ extension AutomationRunner {
       }
     }
     if result.failed { trigger.failed = true }
-    guard !result.failed, read?.cut == true else { return end(trigger) }
-    readNext(trigger)
+    end(trigger)
   }
 
-  /// 契機を終える。番人へ返す数え始めは最後の回の始まり（回が無ければ契機の始まり）。終えた後に、「届いたら」の部品なら
+  /// 契機を終える。番人へ返す数え始めは回の始まり（回が無ければ契機の始まり）。終えた後に、「届いたら」の部品なら
   /// 走っている間に届いた行を起こす決まりを見て、そうでなければ下流をやり直す。一巡へはその後に知らせる——「届いたら」の
   /// 部品が普段の決まりで起き直さなかったことを見てから終わりと数えるため。
   private func end(_ trigger: Trigger) {
     active[ObjectIdentifier(trigger)] = nil
     let key = Self.key(trigger.automationId, trigger.part)
     if !trigger.failed, let marks = marks[key] { settled[key] = marks }
-    let anchor = trigger.lastStart ?? trigger.startedAt
+    let anchor = trigger.passStartedAt ?? trigger.startedAt
     anchors[key] = anchor
     trigger.finish(anchor)
     guard let node = store.automation(trigger.automationId)?.graph.node(trigger.part) else {

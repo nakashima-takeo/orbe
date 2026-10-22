@@ -3,10 +3,6 @@ import Foundation
 /// 受け手の読み。上流から引いた行（`AutomationDatabase.rows`）に受け手の取り方を掛け、取る行・捨てる行・読んだ位置の進め先を
 /// 選ぶだけの計算。DB を読み書きするのは呼び手。
 enum AutomationInbox {
-  /// 行を依頼文に入れる agent が 1 回で取る件数と大きさの和（バイト）の上限。
-  static let batchCount = 100
-  static let batchBytes = 256 << 10
-
   /// 出す側の表。
   enum Table: Equatable {
     case item
@@ -90,8 +86,6 @@ enum AutomationInbox {
     var dropped: [Drop]
     /// 読んだ位置の進め先。
     var reach: [Reach]
-    /// 1 回の上限で切った（切った残りは読んでいないので、同じ契機でもう 1 回読む）。
-    var cut: Bool
     /// 読む前に期限で消えた出来事の数（呼び手が `reach` から数えて足す）。
     var lapsed = 0
   }
@@ -108,13 +102,10 @@ enum AutomationInbox {
     /// リンクに候補があるか。
     let proposed: (String) -> Bool
     let now: Date
-    /// 1 回の上限を掛けるか（件数を数えるだけのときは掛けない）。
-    let batch: Bool
   }
 
   /// `node` が `rows` から取る行を選ぶ。古さ → 判定だけの捨て方（出どころなし → 候補あり → 同じリンクの古い方）→ 同じ id の
-  /// 古い方 → 件数の上限 の順に捨て、残りを古い順に取る。行を依頼文に入れる agent だけ、take が new の行に 1 回の上限を
-  /// 掛け（先頭の 1 件だけで超えるならその 1 件）、切った残りは読まない。take が all の行は切らない（毎回全件の取り方なので）。
+  /// 古い方 → 件数の上限 の順に捨て、残りを古い順に取る。読んだ位置は上限の番号まで進める。
   static func read(
     by node: AutomationGraph.Node, _ rows: [Row], ceilings: [Ceiling], in context: Context
   ) -> Read {
@@ -131,19 +122,10 @@ enum AutomationInbox {
       }
       remaining.removeFirst(remaining.count - maxItems)
     }
-    let cutAt =
-      context.batch && node.putsRowsInPrompt
-      ? cut(remaining.filter { edges[$0.edge]?.take != .all }) : nil
-    func inside(_ row: Row) -> Bool {
-      guard let cutAt, edges[row.edge]?.take != .all else { return true }
-      return order(row, cutAt)
-    }
     return Read(
-      taken: remaining.filter(inside),
-      dropped: dropped.filter { $0.row.unread && inside($0.row) }.sorted { order($0.row, $1.row) },
-      reach: reach(
-        read: rows.filter(inside), left: rows.filter { $0.unread && !inside($0) }, ceilings),
-      cut: cutAt != nil)
+      taken: remaining,
+      dropped: dropped.filter(\.row.unread).sorted { order($0.row, $1.row) },
+      reach: reach(ceilings))
   }
 
   /// 古さで捨て、判定だけは出どころなし → 候補あり → 同じリンクの古い方で捨てる。残りと捨てた行（古い順）を返す。
@@ -175,35 +157,15 @@ enum AutomationInbox {
     return (remaining, dropped + stale.map { Drop(row: $0, reason: .sameLink) })
   }
 
-  /// 1 回の上限で切る行（古い順に件数と大きさの和が上限を超える最初の行）。切らなければ nil。
-  private static func cut(_ rows: [Row]) -> Row? {
-    var count = 0
-    var bytes = 0
-    for row in rows {
-      guard count < batchCount, count == 0 || bytes + row.text.utf8.count <= batchBytes else {
-        return row
-      }
-      count += 1
-      bytes += row.text.utf8.count
-    }
-    return nil
-  }
-
-  /// 読んだ位置の進め先。読み残しの無いつながりと表は上限の番号まで（その間で読まなかった番号は、読む前に無効になった項目か
-  /// 期限で消えた出来事）、読み残しがあれば読んだ最大の番号まで。
-  private static func reach(read: [Row], left: [Row], _ ceilings: [Ceiling]) -> [Reach] {
-    var reach: [Reach] = []
-    for ceiling in ceilings {
-      for table in [Table.item, .event] {
-        let mine = { (row: Row) in row.edge == ceiling.edge && row.table == table }
-        let seq =
-          left.contains(where: mine)
-          ? read.filter(mine).map(\.seq).max() ?? 0
-          : table == .item ? ceiling.item : ceiling.event
-        if seq > 0 { reach.append(Reach(edge: ceiling.edge, table: table, seq: seq)) }
-      }
-    }
-    return reach
+  /// 読んだ位置の進め先——つながりと表ごとに上限の番号まで（その間で取らなかった番号は、読む前に無効になった項目か期限で
+  /// 消えた出来事）。
+  private static func reach(_ ceilings: [Ceiling]) -> [Reach] {
+    ceilings.flatMap { ceiling in
+      [
+        Reach(edge: ceiling.edge, table: .item, seq: ceiling.item),
+        Reach(edge: ceiling.edge, table: .event, seq: ceiling.event),
+      ]
+    }.filter { $0.seq > 0 }
   }
 
   /// 古い順（同じ時刻は上流・表・番号の順）。表ごとの番号は時刻と同じ向きに増える。

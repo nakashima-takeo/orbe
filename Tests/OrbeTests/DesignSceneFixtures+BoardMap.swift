@@ -3,7 +3,7 @@ import Foundation
 @testable import Orbe
 
 /// 見本 O2Board・O2PartCards（案2 地図＋選んだ部品）の自動化。12 部品の「受け持ちの全部」（判定「返事が要る連絡を選ぶ」の
-/// 最新の回が制限時間で失敗・取得「メール」の出力の形式エラーが出し直しで通った・取得の新着なしが続く区間・処理が古い行を
+/// 最新の回が制限時間で失敗・取得「メール」の出力の形式エラーをその場で修正して通った・取得の新着なしが続く区間・処理が古い行を
 /// 捨てた回・判定と週報の未処理）、コマンドだけの「日報スクリプト」、止めた「週末の依存更新」と、入力が 8 本の判定を持つ自動化
 /// （溝が見本より広がる）。並びは 受け持ちの全部 → 日報スクリプト → 取り込みの多い判定 → 週末の依存更新。
 extension DesignSceneFixtures {
@@ -75,7 +75,7 @@ extension DesignSceneFixtures {
     }
     fetch("sentry", 14, 15, items: 3, fresh: 1)
     fetch("mail", 14, 15, items: 1, fresh: 0)
-    // 14:45 のメールは、出力の形式エラーを出し直して通った。
+    // 14:45 のメールは、形式エラーをその場で直して通った。
     let mailItems = sampleItems("mail", 2, at: at(14, 45, 0))
     passes.append(
       AutomationSamplePass(
@@ -83,12 +83,10 @@ extension DesignSceneFixtures {
         outcome: .succeeded(
           .fetch(mailItems.map(row)),
           execution(2),
-          breach: AutomationPartPass.Breach(
-            lines: [
-              AutomationBrokenLine(line: 3, fault: .missingKey("link")),
-              AutomationBrokenLine(line: 5, fault: .notJSON),
-            ],
-            redo: AutomationPartPass.Redo(firstCall: execution(4), lines: [])))))
+          breach: AutomationRejections([
+            AutomationBrokenLine(line: 3, fault: .missingKey("link")),
+            AutomationBrokenLine(line: 5, fault: .notJSON),
+          ]))))
     fetch("backlog", 14, 45, items: 9, fresh: 1)
     fetch("sentry", 14, 45, items: 3, fresh: 0)
     process("mine", at(14, 46, 0), rows: 1, from: "backlog")

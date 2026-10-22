@@ -1,17 +1,20 @@
 import Foundation
 import OrbeSessionLog
 
-/// 部品の 1 回。部品と、その役割の入力を受けて手段を起こし、役割ごとに出力を読んで結果を返す。読み・保存・予定は
-/// 持たない——何を取ったか・出した行をどう残すか・回の記録をどう確定するかは呼び手が決める。
+/// 部品の 1 回。部品と、その役割の入力を受けて手段を起こし、役割ごとに結果を受けて返す。読み・保存・予定は持たない——何を
+/// 取ったか・出した行をどう残すか・回の記録をどう確定するかは呼び手が決める。
 ///
-/// 行を出す部品（取得・処理・判定）の出力に受け付けない行が 1 行でもあれば、決まりを外したものとする。agent の部品は同じ回の
-/// 中で 1 回だけ出し直させ、コマンドの部品は直ちに失敗にする。上限は経過時間（`timeoutMinutes`）だけで、出し直しと分け合う。
-/// 無出力では打ち切らない。
+/// agent の部品は、回の入力を Orbe の MCP の道具で読み、結果も道具で出す（`AutomationRunSession`）。道具が呼ばれるたびに
+/// 確かめ、外れていればその場で理由を返すので、agent は同じ会話の中で直す。コマンドの部品は入力を標準入力で受け、結果を
+/// 標準出力で出す——同じ決まり（`AutomationOutputs`）で確かめ、1 件でも外れていればその回は失敗にする（走らせ直しても同じ
+/// 出力になるため）。上限は経過時間（`timeoutMinutes`）だけで、無出力では打ち切らない。
 struct AutomationPartPass {
   let run: BackgroundScheduler.Run
   /// 依頼文に載せる今の時刻とタイムゾーンの読み口。起こすときに読む。
   let now: () -> Date
   let calendar: () -> Calendar
+  /// agent の回の相手を Orbe の MCP へ渡す帳面。
+  let runData: AutomationRunData
 
   /// 部品の役割の入力。ケースが役割と 1 対 1 に対応し、役割と食い違う入力は呼び手の誤り。取得と仕事のケースは行の席を
   /// 持たない——外から届いた文面を、ツールを持ちうる agent の依頼文へ型の上で運ばないため。
@@ -33,20 +36,19 @@ struct AutomationPartPass {
     case sideEffect([AutomationPartRow], runId: String)
   }
 
-  /// 手段の実行の記録。`count` は読めた数——取得は項目、処理・判定は JSON の行、報告・仕事は文があれば 1、副作用は標準入力に
-  /// 渡した行。
+  /// 手段の実行の記録。`count` は受けた数——取得は項目、処理・判定は行、報告・仕事は文があれば 1、副作用は標準入力に渡した行。
   struct Execution: Equatable, Codable {
     let commandLine: String
     let ending: AutomationEnding
     let count: Int
   }
 
-  /// `Execution` は最後の呼び出し（出し直したなら出し直し）の記録で、成功の出力はその出力から読んだもの。出し直したなら、
-  /// 1 回目の記録は `breach` が持つ。`breach` は決まりを外した回だけにある。
+  /// `breach` は結果を断った回だけにある（agent は断った呼び出しの外れた件、コマンドは外れた行）。
   enum Outcome: Equatable {
-    case succeeded(Output, Execution, breach: Breach?)
-    /// 手段が終わった後に分かった失敗（終わり方・UTF-8 でない・申告されたエラー・決まりを外したまま）。何も渡さない。
-    case failed(AutomationFailure, Execution, breach: Breach?)
+    case succeeded(Output, Execution, breach: AutomationRejections?)
+    /// 手段が終わった後に分かった失敗（終わり方・UTF-8 でない・申告されたエラー・決まりを外した・入力を読み切らない・結果が
+    /// 無い）。何も渡さない。
+    case failed(AutomationFailure, Execution, breach: AutomationRejections?)
 
     var execution: Execution {
       switch self {
@@ -54,24 +56,11 @@ struct AutomationPartPass {
       }
     }
 
-    var breach: Breach? {
+    var breach: AutomationRejections? {
       switch self {
       case .succeeded(_, _, let breach), .failed(_, _, let breach): breach
       }
     }
-  }
-
-  /// 行を出す部品の出力が決まりを外したこと。`lines` は 1 回目の出力の外れた行すべて。`redo` は出し直したときだけある。
-  struct Breach: Equatable {
-    let lines: [AutomationBrokenLine]
-    let redo: Redo?
-  }
-
-  /// 出し直したこと。`firstCall` は 1 回目の呼び出しの記録（結果の `Execution` は出し直しのもの）。`lines` は出し直しの出力で
-  /// まだ外れていた行（通った、または読む前に失敗したなら空）。
-  struct Redo: Equatable {
-    let firstCall: Execution
-    let lines: [AutomationBrokenLine]
   }
 
   /// 役割ごとの成功の出力。
@@ -100,48 +89,61 @@ struct AutomationPartPass {
   }
 
   enum Work: Equatable {
-    /// 報告の文。空の応答なら nil。
-    case done(String?)
+    /// 報告の文。
+    case done(String)
     /// 何もしなかった理由。
     case nothing(String)
   }
 
-  /// 手段を起こす。結果は main で 1 度だけ返る。返る手で止めると、走っている呼び出し（1 回目か出し直し）を止め、結果は返らない。
+  /// 手段を起こす。結果は main で 1 度だけ返る。返る手で止めると、走っている呼び出しを止め、結果は返らない。
   func start(
     _ node: AutomationGraph.Node, _ input: Input, completion: @escaping (Outcome) -> Void
   ) -> BackgroundRunHandle {
     precondition(input.fits(node.role), "the input must match the role of the part")
-    let job = Self.job(node, input, now: now(), timeZone: calendar().timeZone)
-    let calls = Calls()
-    calls.current = run(job) { result in
-      guard !calls.stopped else { return }
-      switch Self.read(result, node, input) {
-      case .failed(let reason):
-        completion(.failed(reason, Self.execution(result), breach: nil))
-      case .read(let output, let count, let lines) where lines.isEmpty:
-        completion(.succeeded(output, Self.execution(result, count: count), breach: nil))
-      case .read(_, let count, let lines):
-        let first = Self.execution(result, count: count)
-        guard let redo = Self.redoJob(job, node, result, lines) else {
-          completion(.failed(.brokeRules, first, breach: Breach(lines: lines, redo: nil)))
-          return
-        }
-        calls.current = run(redo) { result in
-          guard !calls.stopped else { return }
-          completion(Self.redone(result, node, input, first: first, lines: lines))
-        }
+    let elapsed = TimeInterval(node.timeoutMinutes * 60)
+    var stopped = false
+    let handle: BackgroundRunHandle
+    switch node.action.method {
+    case .command(let command):
+      let job = BackgroundJob(
+        work: .command(command, Self.commandInput(node, input)),
+        limits: BackgroundLimits(
+          elapsed: elapsed, idle: nil, output: BackgroundLimits.command.output,
+          stderr: BackgroundLimits.command.stderr))
+      handle = run(job) { result in
+        guard !stopped else { return }
+        completion(Self.commandEnded(result, input))
+      }
+      return BackgroundRunHandle {
+        stopped = true
+        handle.stop()
+      }
+    case .agent(let agent):
+      guard let model = node.model else { preconditionFailure("an agent part has a model") }
+      let session = AutomationRunSession(input)
+      let runData = self.runData
+      let token = runData.open(session)
+      let job = BackgroundJob(
+        work: .agent(
+          BackgroundAgentCall(
+            cli: agent.cli, model: model, tools: Self.tools(agent, input),
+            prompt: Self.prompt(
+              node, agent.instruction, input, now: now(), timeZone: calendar().timeZone),
+            orbe: BackgroundOrbeAccess(token: token, tools: session.tools.map(\.rawValue)))),
+        limits: BackgroundLimits(
+          elapsed: elapsed, idle: nil, output: BackgroundLimits.agent.output,
+          stderr: BackgroundLimits.agent.stderr))
+      handle = run(job) { result in
+        runData.close(token)
+        guard !stopped else { return }
+        completion(Self.agentEnded(result, session))
+      }
+      return BackgroundRunHandle {
+        stopped = true
+        runData.close(token)
+        handle.stop()
       }
     }
-    return BackgroundRunHandle {
-      calls.stopped = true
-      calls.current?.stop()
-    }
-  }
-
-  /// 走っている呼び出しと、止められたか。
-  private final class Calls {
-    var current: BackgroundRunHandle?
-    var stopped = false
   }
 
   static func execution(_ result: BackgroundRunResult, count: Int = 0) -> Execution {
@@ -149,30 +151,24 @@ struct AutomationPartPass {
       commandLine: result.commandLine, ending: AutomationEnding(result.ending), count: count)
   }
 
-  private static func job(
-    _ node: AutomationGraph.Node, _ input: Input, now: Date, timeZone: TimeZone
-  )
-    -> BackgroundJob
+  /// agent の回の結果: CLI の終わり方が先、次に申告された失敗。最後の結果の呼び出しを断ったまま終えていれば出力の形式エラー
+  /// （断られた中身を黙って落とさない）。結果があれば成功、無ければ入力を渡し切っていなければ読み残し、渡し切っていれば
+  /// 結果なしの失敗。
+  private static func agentEnded(_ result: BackgroundRunResult, _ session: AutomationRunSession)
+    -> Outcome
   {
-    let elapsed = TimeInterval(node.timeoutMinutes * 60)
-    switch node.action.method {
-    case .command(let command):
-      return BackgroundJob(
-        work: .command(command, commandInput(node, input)),
-        limits: BackgroundLimits(
-          elapsed: elapsed, idle: nil, output: BackgroundLimits.command.output,
-          stderr: BackgroundLimits.command.stderr))
-    case .agent(let agent):
-      guard let model = node.model else { preconditionFailure("an agent part has a model") }
-      return BackgroundJob(
-        work: .agent(
-          BackgroundAgentCall(
-            cli: agent.cli, model: model, tools: tools(agent, input),
-            prompt: prompt(node, agent.instruction, input, now: now, timeZone: timeZone))),
-        limits: BackgroundLimits(
-          elapsed: elapsed, idle: nil, output: BackgroundLimits.agent.output,
-          stderr: BackgroundLimits.agent.stderr))
+    let execution = execution(result, count: session.outputs.count)
+    let breach = session.rejected.isEmpty ? nil : AutomationRejections(session.rejected)
+    if let failure = AutomationRunOutput.agentFailure(result) {
+      return .failed(failure, execution, breach: breach)
     }
+    if let error = session.error { return .failed(.reported(error), execution, breach: breach) }
+    if session.refusedLast { return .failed(.brokeRules, execution, breach: breach) }
+    guard session.answered else {
+      let unread = session.unread.count
+      return .failed(unread > 0 ? .unreadInput(unread) : .noResult, execution, breach: breach)
+    }
+    return .succeeded(session.outputs.output(nothing: session.nothing), execution, breach: breach)
   }
 
   private static func commandInput(_ node: AutomationGraph.Node, _ input: Input)
@@ -187,7 +183,8 @@ struct AutomationPartPass {
     case .judge(let rows, _):
       return BackgroundInput(stdin: stdin(rows.map(\.text)))
     case .sideEffect(let rows, let runId):
-      return BackgroundInput(stdin: stdin(rows.map(\.text)), environment: ["ORBE_RUN_ID": runId])
+      return BackgroundInput(
+        stdin: stdin(rows.map(\.text)), environment: ["ORBE_RUN_ID": runId])
     case .work:
       preconditionFailure("a work part is an agent")
     }
@@ -210,15 +207,14 @@ struct AutomationPartPass {
       return AutomationPrompts.fetch(instruction: instruction, since: mark(node, since))
     case .process(let rows, let reachesJudge):
       return AutomationPrompts.process(
-        instruction: instruction, rows: rows.map(\.text), now: now, timeZone: timeZone,
+        instruction: instruction, count: rows.count, now: now, timeZone: timeZone,
         reachesJudge: reachesJudge)
-    case .judge(let rows, let choices):
+    case .judge(let rows, _):
       return AutomationPrompts.judge(
-        instruction: instruction, rows: rows.map(\.text), choices: choices, now: now,
-        timeZone: timeZone)
+        instruction: instruction, count: rows.count, now: now, timeZone: timeZone)
     case .report(let rows):
       return AutomationPrompts.report(
-        instruction: instruction, rows: rows.map(\.text), now: now, timeZone: timeZone)
+        instruction: instruction, count: rows.count, now: now, timeZone: timeZone)
     case .work:
       return AutomationPrompts.work(instruction: instruction, now: now, timeZone: timeZone)
     case .sideEffect:
@@ -238,6 +234,15 @@ struct AutomationPartPass {
 }
 
 extension AutomationPartPass.Input {
+  /// 部品の 1 回が受ける行の 1 行ずつ（取得と仕事は持たない）。
+  var rowTexts: [String] {
+    switch self {
+    case .process(let rows, _), .report(let rows), .sideEffect(let rows, _): rows.map(\.text)
+    case .judge(let rows, _): rows.map(\.text)
+    case .fetch, .work: []
+    }
+  }
+
   fileprivate func fits(_ role: AutomationPartRole) -> Bool {
     switch (self, role) {
     case (.fetch, .fetch), (.process, .process), (.judge, .judge), (.report, .report),

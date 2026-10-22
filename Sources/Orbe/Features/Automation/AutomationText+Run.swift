@@ -29,13 +29,12 @@ extension AutomationText {
       : l10n.format(.automationWithOriginal, head, reason)
   }
 
-  /// 説明が言わず、原文にだけある抜粋（標準エラーか応答の抜粋・最初の外れた行）。無ければ nil。
-  private func excerpt(_ failure: AutomationFailure, breach: AutomationPartRun.Breach?) -> String? {
+  /// 説明が言わず、原文にだけある抜粋（標準エラーか応答の抜粋・最初の外れた件）。無ければ nil。
+  private func excerpt(_ failure: AutomationFailure, breach: AutomationRejections?) -> String? {
     switch failure {
     case .ended(let detail), .noReply(let detail): detail.isEmpty ? nil : detail
-    case .brokeRules:
-      breach.flatMap { $0.redo?.lines.lines.first ?? $0.lines.lines.first }.map(line)
-    case .notUTF8, .agentError, .reported, .unsourced: nil
+    case .brokeRules: breach?.lines.first.map(line)
+    case .notUTF8, .agentError, .reported, .unsourced, .unreadInput, .noResult: nil
     }
   }
 
@@ -53,6 +52,8 @@ extension AutomationText {
       return l10n.format(.automationFailAgentError, cli, text)
     case .reported(let text): return l10n.format(.automationFailReported, text)
     case .brokeRules: return l10n.string(.automationFailBrokeRules)
+    case .unreadInput(let count): return l10n.format(.automationFailUnreadInput, count)
+    case .noResult: return l10n.string(.automationFailNoResult)
     case .unsourced: return l10n.string(.automationFailUnsourced)
     }
   }
@@ -76,12 +77,13 @@ extension AutomationText {
     }
   }
 
-  /// 「3 行目：link が無い」。
+  /// 「3 件目：link が無い」（位置の無い誤りは理由だけ）。
   func line(_ broken: AutomationBrokenLine) -> String {
-    l10n.format(.automationLineAt, broken.line, fault(broken.fault))
+    guard let line = broken.line else { return fault(broken.fault) }
+    return l10n.format(.automationLineAt, line, fault(broken.fault))
   }
 
-  /// 外れた行の理由。
+  /// 外れた件の理由。
   func fault(_ fault: AutomationLineFault) -> String {
     switch fault {
     case .notJSON: l10n.string(.automationFaultNotJSON)
@@ -93,7 +95,6 @@ extension AutomationText {
     case .invalidValue(let key): l10n.format(.automationFaultInvalid, key)
     case .idTwice(let id): l10n.format(.automationFaultIdTwice, id)
     case .notInputId(let id): l10n.format(.automationFaultNotInputId, id)
-    case .nothingWithItems: l10n.string(.automationFaultNothingWithItems)
     case .notNewItem(let id): l10n.format(.automationFaultNotNewItem, id)
     case .proposedTwice(let id): l10n.format(.automationFaultProposedTwice, id)
     case .notWaiting: l10n.string(.automationFaultNotWaiting)
@@ -101,6 +102,8 @@ extension AutomationText {
     case .titleNotOneLine: l10n.string(.automationFaultTitle)
     case .dueNotDate: l10n.string(.automationFaultDue)
     case .workspaceNotListed: l10n.string(.automationFaultWorkspace)
+    case .notNonEmptyArray(let key): l10n.format(.automationFaultNotNonEmptyArray, key)
+    case .emptyReport: l10n.string(.automationFaultEmptyReport)
     }
   }
 

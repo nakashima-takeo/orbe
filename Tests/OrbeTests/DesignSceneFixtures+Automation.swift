@@ -329,7 +329,7 @@ extension DesignSceneFixtures {
   }
 
   nonisolated static func worked(_ work: AutomationPartPass.Work) -> AutomationPartPass.Outcome {
-    let count = if case .done(.some) = work { 1 } else { 0 }
+    let count = if case .done = work { 1 } else { 0 }
     return .succeeded(.work(work), execution(count), breach: nil)
   }
 

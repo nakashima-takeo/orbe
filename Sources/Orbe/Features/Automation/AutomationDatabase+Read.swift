@@ -285,7 +285,7 @@ struct AutomationPending: Equatable {
 }
 
 extension AutomationDatabase {
-  /// 受け手 `node` が今読めば取る行の数（1 回の上限は掛けない）と、そのどれかが古さの上限を過ぎる最も早い時刻。`proposed` は
+  /// 受け手 `node` が今読めば取る行の数と、そのどれかが古さの上限を過ぎる最も早い時刻。`proposed` は
   /// リンクに候補があるか。
   func pending(
     _ node: AutomationGraph.Node, in graph: AutomationGraph, proposed: @escaping (String) -> Bool,
@@ -293,7 +293,7 @@ extension AutomationDatabase {
   ) throws -> AutomationPending {
     let taken = try read(
       node, in: graph, baseline: nil,
-      context: AutomationInbox.Context(proposed: proposed, now: now, batch: false)
+      context: AutomationInbox.Context(proposed: proposed, now: now)
     ).taken
     let ages = Dictionary(uniqueKeysWithValues: node.inputs.map { ($0.from, $0.maxAgeHours) })
     let expiries = taken.compactMap { row in

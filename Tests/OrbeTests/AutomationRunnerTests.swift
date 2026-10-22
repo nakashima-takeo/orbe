@@ -3,12 +3,12 @@ import XCTest
 
 @testable import Orbe
 
-/// 走らせ役——部品ごとの予定、上流から読んで部品の 1 回に渡すこと、「届いたら」の部品の起こし方、1 回の上限で切ったときの
-/// 取り切り、書き換え。番人の時計と手段の実行だけを差し替え、ストアと DB と部品の 1 回は本物で回す。
+/// 走らせ役——部品ごとの予定、上流から読んで部品の 1 回に渡すこと、「届いたら」の部品の起こし方、読めば取る行を 1 回で
+/// 取り切ること、書き換え。番人の時計と手段の実行だけを差し替え、ストアと DB と部品の 1 回は本物で回す。
 ///
 /// 壊れると何が起きるか: 取得が出した項目が判定に届かない・判定の失敗で消える・同じ項目が二度判定に渡る。「届いたら」の部品が
 /// 読めば取る行を抱えたまま誰にも起こされず、次の上流の回（毎日の取得なら 1 日）まで止まる。失敗した行で agent が即座に回り
-/// 続ける。1 日に出る量が 1 回の上限を超えると、読み残しが日ごとに伸び続ける。新着の流れの取得が目印を失い、同じ項目を取り直すか
+/// 続ける。読めば取る行を一部しか取らず、読み残しが日ごとに伸び続ける。新着の流れの取得が目印を失い、同じ項目を取り直すか
 /// 取り逃す。書き換えた前の定義の結果が新しい定義の回として確定する、名前を変えただけで走っている回が殺される。
 final class AutomationRunnerTests: OrbeTestCase {
   let start = Date(timeIntervalSince1970: 1_800_000_000)
@@ -277,33 +277,43 @@ final class AutomationRunnerTests: OrbeTestCase {
     XCTAssertEqual(ids("paused-digest"), [downstream("gh", "a", of: paused)], "再開で起こす")
   }
 
-  /// 1 回の上限を超えて読める行は、1 つの契機の中で続けて回して取り切る。
-  func testOneTriggerTakesTheWholeInboxBeyondTheBatchLimit() throws {
+  /// 行を見る agent は、まだ受け取っていない行を件数と大きさによらず 1 回で全部取る。
+  func testOneRunTakesTheWholeInbox() throws {
     let id = try define([
       fetch("gh", every: 1800),
       DesignSceneFixtures.agentPart(
         "judge", "判定", .scheduled(.every(86400)), from: ["gh"], instruction: "判定する",
         deliver: .taskCandidates),
     ])
-    let count = AutomationInbox.batchCount + 1
+    let body = String(repeating: "本文", count: 1 << 10)
+    let items = (0..<150).map { item("i\($0)", body: body) }
     advance(by: 1800)
-    finish("gh", fetched((0..<count).map { "i\($0)" }))
-    XCTAssertEqual(inbox("judge", of: id), count)
+    finish("gh", printed(items.joined(separator: "\n")))
+    XCTAssertEqual(inbox("judge", of: id), items.count)
 
     advance(by: 86400 - 1800)
-    let judged = BackgroundRunResult(
-      commandLine: "claude -p", startedAt: now, endedAt: now, ending: .exited(0),
-      output: .agent(
-        reply: BackgroundAgentReply(text: #"{"nothing":"該当なし"}"#, isError: false),
-        stderr: .init()))
-    jobs.finish(try XCTUnwrap(agentCalls.first), judged)
-    guard agentCalls.count == 2 else { return XCTFail("残りを同じ契機で続けて回す: \(agentCalls)") }
-    jobs.finish(agentCalls[1], judged)
+    let index = try XCTUnwrap(agentCalls.first)
+    guard case .agent(let call) = jobs.calls[index].job.work,
+      let session = call.orbe.flatMap({ runner.runData.session($0.token) })
+    else { return XCTFail("判定の回の口が無い") }
+    var offset: Int? = 0
+    while let next = offset {
+      let head = session.call("read_run_rows", ["offset": next, "limit": 100]).texts.first ?? ""
+      offset =
+        (try? JSONSerialization.jsonObject(with: Data(head.utf8)) as? [String: Any])?["next"]
+        as? Int
+    }
+    XCTAssertFalse(session.call("report_nothing", ["why": "該当なし"]).isError)
+    jobs.finish(
+      index,
+      BackgroundRunResult(
+        commandLine: "claude -p", startedAt: now, endedAt: now, ending: .exited(0),
+        output: .agent(reply: BackgroundAgentReply(text: "done", isError: false), stderr: .init())))
 
+    XCTAssertEqual(agentCalls.count, 1)
     XCTAssertEqual(inbox("judge", of: id), 0)
     XCTAssertEqual(
-      store.automation(id)?.state(store.part(id, "judge")).runs.map(\.run?.taken),
-      [1, AutomationInbox.batchCount])
+      store.automation(id)?.state(store.part(id, "judge")).runs.map(\.run?.taken), [items.count])
   }
 
   var agentCalls: [Int] {

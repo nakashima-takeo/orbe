@@ -62,11 +62,10 @@ extension WindowControllerAutomationControlTests {
       "fetch", at: 1,
       .failed(
         .brokeRules, DesignSceneFixtures.execution(0),
-        breach: AutomationPartPass.Breach(
-          lines: [AutomationBrokenLine(line: 3, fault: .missingKey("link"))],
-          redo: AutomationPartPass.Redo(
-            firstCall: DesignSceneFixtures.execution(0),
-            lines: [AutomationBrokenLine(line: 2, fault: .notJSON)]))))
+        breach: AutomationRejections([
+          AutomationBrokenLine(line: 3, fault: .missingKey("link")),
+          AutomationBrokenLine(line: 4, fault: .notJSON),
+        ])))
     try record(
       "judge", at: 2,
       .succeeded(
@@ -88,14 +87,12 @@ extension WindowControllerAutomationControlTests {
     XCTAssertEqual((ended["failed"] as? [String: Any])?["kind"] as? String, "ended", "種類も出る")
 
     XCTAssertEqual(
-      broke["failure"] as? String, #"the output of part "fetch" broke the rules: line 2: not JSON"#,
-      "出し直しても外れた行で言う")
+      broke["failure"] as? String,
+      #"the output of part "fetch" broke the rules: item 3: missing link"#, "最初の外れた件で言う")
     let breach = try XCTUnwrap(broke["breach"] as? [String: Any])
+    XCTAssertEqual(breach["count"] as? Int, 2)
     XCTAssertEqual(
-      (breach["lines"] as? [String: Any])?["reasons"] as? [String], ["line 3: missing link"])
-    XCTAssertEqual(
-      ((breach["redo"] as? [String: Any])?["lines"] as? [String: Any])?["reasons"] as? [String],
-      ["line 2: not JSON"])
+      breach["reasons"] as? [String], ["item 3: missing link", "item 4: not JSON"])
 
     let parts = try XCTUnwrap(try listed(wc)[id]?["parts"] as? [String: [String: Any]])
     let judged = try XCTUnwrap(parts["judge"]?["lastRun"] as? [String: Any])
