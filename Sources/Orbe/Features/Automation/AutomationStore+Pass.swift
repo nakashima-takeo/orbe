@@ -96,10 +96,10 @@ extension AutomationStore {
       taken: end.read?.taken.count, execution: end.outcome.execution,
       breach: end.outcome.breach)
     if case .succeeded(.process(let rows), _, _) = end.outcome,
-      let judge = automations[index].graph.judges(reachedFrom: node.id).first, !rows.isEmpty,
+      automations[index].graph.reachesTaskCandidates(node.id), !rows.isEmpty,
       rows.allSatisfy({ $0.origin == nil }), rows.contains(where: { $0.source == nil })
     {
-      run.failure = .unsourced(judge.key)
+      run.failure = .unsourced
     } else if case .failed(let reason, _, _) = end.outcome {
       run.failure = reason
     }

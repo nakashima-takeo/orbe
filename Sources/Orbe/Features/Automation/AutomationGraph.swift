@@ -138,12 +138,6 @@ struct AutomationGraph: Equatable {
     return judges
   }
 
-  /// `id` の部品が出した行が、途中で取得の部品を通らずに届く判定の部品（定義の順）。
-  func judges(reachedFrom id: AutomationPartID) -> [Node] {
-    guard let index = index(id) else { return [] }
-    return Self.judges(reachedFrom: index, nodes.map(\.role), downstream).sorted().map { nodes[$0] }
-  }
-
   /// `judge` の部品へ、途中で別の取得の部品を通らずに行が届く取得の部品（定義の順）。
   func fetches(reaching judge: AutomationPartID) -> [Node] {
     guard let target = index(judge) else { return [] }

@@ -78,8 +78,8 @@ enum AutomationFailure: Error, Equatable {
   case unreadInput(Int)
   /// agent が結果の道具も申告も一度も呼ばずに終わった。
   case noResult
-  /// 判定（鍵）へ渡す行が、どれも出どころを持たなかった。
-  case unsourced(String)
+  /// 判定へ渡す行が、どれも出どころを持たなかった。
+  case unsourced
 
   /// AI が読む英文。`part` はこの回の部品の鍵。
   func text(part: String, ending: AutomationEnding, breach: AutomationRejections?) -> String {
@@ -100,8 +100,9 @@ enum AutomationFailure: Error, Equatable {
         "the \(word) ended without reading \(count) of its input \(count == 1 ? "item" : "items")"
     case .noResult:
       return "the \(word) ended without giving a result"
-    case .unsourced(let target):
-      return "no row passed to part \"\(target)\" has an origin (it did not come from a fetch part)"
+    case .unsourced:
+      return
+        "the rows of \(word) reach a judge part, but none has an origin (none came from a fetch part)"
     }
   }
 }
@@ -267,7 +268,7 @@ extension AutomationEnding: Codable {
 /// `{"kind": "ended", "detail"?: "…"}` の形。空の抜粋は書かない。
 extension AutomationFailure: Codable {
   private enum CodingKeys: String, CodingKey {
-    case kind, detail, text, part, count
+    case kind, detail, text, count
   }
 
   init(from decoder: Decoder) throws {
@@ -282,7 +283,7 @@ extension AutomationFailure: Codable {
     case "brokeRules": self = .brokeRules
     case "unreadInput": self = .unreadInput(try c.decode(Int.self, forKey: .count))
     case "noResult": self = .noResult
-    case "unsourced": self = .unsourced(try c.decode(String.self, forKey: .part))
+    case "unsourced": self = .unsourced
     default:
       throw DecodingError.dataCorruptedError(
         forKey: .kind, in: c, debugDescription: "unknown failure kind")
@@ -310,9 +311,7 @@ extension AutomationFailure: Codable {
       try c.encode("unreadInput", forKey: .kind)
       try c.encode(count, forKey: .count)
     case .noResult: try c.encode("noResult", forKey: .kind)
-    case .unsourced(let part):
-      try c.encode("unsourced", forKey: .kind)
-      try c.encode(part, forKey: .part)
+    case .unsourced: try c.encode("unsourced", forKey: .kind)
     }
   }
 }
