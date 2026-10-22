@@ -4,11 +4,12 @@ import XCTest
 @testable import Orbe
 
 /// 親「ソース管理」とグラフの枠（エディター面に結んだパネル）——親を畳むと、焦点のあった欄・列から本文へ焦点を移してから
-/// 隠す。親を畳んだままソース管理を出しても、パネルの中へ焦点を求めない。グラフの列を押しても、変更の列の焦点と選択は動かない。
+/// 隠す。親を畳んだままソース管理を出しても、パネルの中へ焦点を求めない。グラフの列で押して働くのは「さらに表示」だけで、
+/// 押しても変更の列の焦点と選択は動かない。
 ///
 /// 壊れると何が起きるか。列で ↑↓ していて親を畳むと、焦点が窓へ落ちてキーがどこにも届かない（パネルは焦点があると思った
 /// まま）。畳んだ親を開いた瞬間に、残っていた焦点の要求が本文の焦点を奪う。グラフのコミットを押すと、変更の列から焦点が
-/// 抜けて ↑↓ が効かなくなる。
+/// 抜けて ↑↓ が効かなくなる。「さらに表示」を押しても 50 件の先が出ない。
 extension SourceControlPaneTests {
   /// 変更 a.txt・b.txt と 1 コミットのグラフが出た面。
   private func layersPane() throws -> Hosted {
@@ -66,21 +67,47 @@ extension SourceControlPaneTests {
     XCTAssertNil(scm.focusedArea, "開いても焦点を奪わない")
   }
 
-  /// グラフの列のコミットを押しても、変更の列の焦点と選択はそのままで、続けて ↑↓ が効く。
-  func testPressingTheGraphKeepsTheFocusAndSelectionOfTheChangesList() throws {
-    let hosted = try layersPane()
+  /// グラフの列のコミットを押しても何も起きず、「さらに表示」を押すと 50 件の先のコミットが出る。どちらでも変更の列の
+  /// 焦点と選択はそのままで、続けて ↓ が効く。
+  func testPressingTheGraphOnlyShowsMoreAndKeepsTheFocusOfTheChangesList() throws {
+    let repo = try TempGitRepo()
+    for n in 1...ScmPanel.graphPage {
+      XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "c\(n)"]).isSuccess)
+    }
+    try repo.write("a.txt", "edited\n")
+    try repo.write("b.txt", "new\n")
+    let hosted = host(repo)
     let scm = hosted.scm
     let list = hosted.pane.scmList.list
     let graph = hosted.pane.scmGraphList.list
-    scm.select(ScmRowID(section: .changes, path: "a.txt"))
+    func commits() -> Int {
+      scm.graphLayout.items.filter { if case .commit = $0 { true } else { false } }.count
+    }
+    pumpMain(
+      until: {
+        list.rowCount == 3 && commits() == ScmPanel.graphPage
+          && graph.rowCount == scm.graphLayout.items.count && graph.window != nil
+      }, "変更の列と、続きのあるグラフの列")
+    let selected = ScmRowID(section: .changes, path: "a.txt")
+    scm.select(selected)
     hosted.window.makeFirstResponder(list)
-    pumpMain(until: { graph.window != nil && graph.visibleRect.height > 0 }, "グラフの列が見える")
+    func press(row: Int) {
+      let y = (CGFloat(row) + 0.5) * Theme.Layout.editorScmRow
+      graph.scrollToVisible(NSRect(x: 0, y: y - 1, width: 1, height: 2))
+      graph.mouseDown(
+        with: .mouse(
+          .leftMouseDown, at: graph.convert(NSPoint(x: 60, y: y), to: nil), in: hosted.window))
+    }
 
-    let commit = graph.convert(NSPoint(x: 60, y: 1.5 * Theme.Layout.editorScmRow), to: nil)
-    graph.mouseDown(with: .mouse(.leftMouseDown, at: commit, in: hosted.window))
+    press(row: 1)
+    XCTAssertEqual(commits(), ScmPanel.graphPage, "コミットは押しても何も起きない")
+    press(row: scm.graphLayout.items.count - 1)
+    pumpMain(until: { commits() == ScmPanel.graphPage + 1 }, "さらに表示で先のコミットが出る")
+    XCTAssertFalse(scm.graphLayout.items.contains(.more), "続きが無くなれば、さらに表示は消える")
     XCTAssertTrue(hosted.window.firstResponder === list, "焦点は変更の列のまま")
-    XCTAssertEqual(scm.selection, ScmRowID(section: .changes, path: "a.txt"))
+    XCTAssertEqual(scm.selection, selected)
     list.keyDown(with: .key(String(UnicodeScalar(NSEvent.SpecialKey.downArrow.rawValue)!), []))
     XCTAssertEqual(scm.selection, ScmRowID(section: .changes, path: "b.txt"), "続けて ↓ が効く")
   }
+
 }
