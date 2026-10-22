@@ -61,7 +61,7 @@ extension AutomationStore {
     try commit(sweepingAt: TaskItem.storedInstant(now)) { db, memory in
       try db.advance(part, read.reach)
       var drops = try db.pendingDrops(of: part)
-      for drop in read.dropped { drops.add(.init(drop.reason)) }
+      for drop in read.dropped { drops.add(drop.reason) }
       drops.add(.lapsed, read.lapsed)
       try db.setPendingDrops(part, drops)
       try memory.recount(id, db, now: now, parts: [part])

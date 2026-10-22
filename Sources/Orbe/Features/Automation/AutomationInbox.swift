@@ -39,36 +39,10 @@ enum AutomationInbox {
     let unread: Bool
   }
 
-  enum Reason: Equatable {
-    /// 出どころが無い（判定の部品だけ）。
-    case unsourced
-    /// 古さの上限を過ぎた。
-    case expired
-    /// 出どころのリンクに候補がある（判定の部品だけ）。
-    case proposed
-    /// 同じリンクの、より新しい行がある（判定の部品だけ）。
-    case sameLink
-    /// 同じ下流へ渡す id の、より新しい行がある。
-    case replaced
-    /// 件数の上限を超えた。
-    case overflow
-
-    /// 回の履歴の扱いの名。
-    var how: String {
-      switch self {
-      case .unsourced: "unsourced"
-      case .expired: "expired"
-      case .proposed: "proposed"
-      case .sameLink: "sameLink"
-      case .replaced: "replaced"
-      case .overflow: "overflow"
-      }
-    }
-  }
-
+  /// 捨てた行と理由（`lapsed` は読みでは出ない）。
   struct Drop: Equatable {
     let row: Row
-    let reason: Reason
+    let reason: AutomationDrops.Reason
   }
 
   /// 読んだ位置の進め先（つながりと表ごと）。

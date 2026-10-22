@@ -48,6 +48,7 @@ struct AutomationPartRun: Equatable {
 struct AutomationDrops: Equatable {
   private(set) var counts: [Reason: Int] = [:]
 
+  /// 捨てた理由。名前は回の履歴の扱いの名と同じ。
   enum Reason: String, CaseIterable {
     /// 古さの上限を過ぎた。
     case expired
@@ -61,19 +62,8 @@ struct AutomationDrops: Equatable {
     case unsourced
     /// 同じ回の中で、同じ id の新しい行に置き換わった。
     case replaced
-    /// 受け手が読む前に、残す期間を過ぎて消えた出来事。
+    /// 受け手が読む前に、残す期間を過ぎて消えた出来事（読みでは出ない。読んだ位置の進め先から数える）。
     case lapsed
-
-    init(_ reason: AutomationInbox.Reason) {
-      switch reason {
-      case .unsourced: self = .unsourced
-      case .expired: self = .expired
-      case .proposed: self = .proposed
-      case .sameLink: self = .sameLink
-      case .overflow: self = .overflow
-      case .replaced: self = .replaced
-      }
-    }
   }
 
   var isEmpty: Bool { counts.isEmpty }

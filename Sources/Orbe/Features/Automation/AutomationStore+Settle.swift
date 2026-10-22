@@ -32,7 +32,7 @@ struct AutomationSettling {
       }
     }
     var dropped = carried
-    for drop in end.read?.dropped ?? [] { dropped.add(.init(drop.reason)) }
+    for drop in end.read?.dropped ?? [] { dropped.add(drop.reason) }
     run.dropped = dropped
     let decided = judged.map { decide($0.proposals, $0.resolved, memory) }
     if let decided {
@@ -45,7 +45,7 @@ struct AutomationSettling {
     if let read = end.read {
       try db.insertInputs(
         of: recordId,
-        read.taken.map { ($0.ref, "taken") } + read.dropped.map { ($0.row.ref, $0.reason.how) })
+        read.taken.map { ($0.ref, "taken") } + read.dropped.map { ($0.row.ref, $0.reason.rawValue) })
     }
     if let decided { try apply(decided, run: recordId, &memory) }
     try finish(AutomationRunRecord(id: recordId, defId: end.defId, content: .known(run)), &memory)
