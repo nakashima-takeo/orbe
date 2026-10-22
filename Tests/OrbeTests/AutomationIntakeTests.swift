@@ -7,7 +7,7 @@ import XCTest
 /// 壊れると何が起きるか: 同じ下流の id の行が二重に渡る。出どころの無い行が判定へ届き、候補のリンクと本文が引けない。件数の
 /// 上限で新しい行が先に捨てられる。古さで捨てた行・候補のある行が判定に渡り、提案が二重になる。前の回までに読んだ行が古く
 /// なるたびに捨てた数に数え直される。行を見る agent が読めば取る行を一部しか取らない。
-final class AutomationInboxTests: OrbeTestCase {
+final class AutomationIntakeTests: OrbeTestCase {
   typealias Parts = AutomationGraphTests
 
   let t0 = Date(timeIntervalSince1970: 1_800_000_000)
@@ -27,33 +27,33 @@ final class AutomationInboxTests: OrbeTestCase {
   private func row(
     _ seq: Int, _ id: String? = nil, from edge: AutomationPartID? = nil, link: String? = nil,
     sourced: Bool = true, at: Date? = nil, unread: Bool = true, size: Int = 10
-  ) -> AutomationInbox.Row {
+  ) -> AutomationIntake.Row {
     let edge = edge ?? cs
     let id = id ?? "row\(seq)"
     let item = AutomationItem(
       id: id, link: link ?? "https://example.com/\(id)", body: "", time: t0)
-    return AutomationInbox.Row(
+    return AutomationIntake.Row(
       edge: edge, table: edge == cs ? .item : .event, seq: seq,
       ref: edge == cs ? .version(seq) : .event(seq), source: .item(seq), id: id,
       text: String(repeating: "x", count: size), at: at ?? t0.addingTimeInterval(Double(seq)),
-      origin: sourced ? AutomationInbox.Origin(part: edge, row: .version(seq), item: item) : nil,
+      origin: sourced ? AutomationIntake.Origin(part: edge, row: .version(seq), item: item) : nil,
       unread: unread)
   }
 
-  private func ceilings(cs item: Int = 0, na event: Int = 0) -> [AutomationInbox.Ceiling] {
+  private func ceilings(cs item: Int = 0, na event: Int = 0) -> [AutomationIntake.Ceiling] {
     [
-      AutomationInbox.Ceiling(edge: cs, seqs: AutomationSeqs(item: item, event: 0)),
-      AutomationInbox.Ceiling(edge: na, seqs: AutomationSeqs(item: 0, event: event)),
+      AutomationIntake.Ceiling(edge: cs, seqs: AutomationSeqs(item: item, event: 0)),
+      AutomationIntake.Ceiling(edge: na, seqs: AutomationSeqs(item: 0, event: event)),
     ]
   }
 
-  private func context(proposed: Set<String> = [], now: Date? = nil) -> AutomationInbox.Context {
-    AutomationInbox.Context(
+  private func context(proposed: Set<String> = [], now: Date? = nil) -> AutomationIntake.Context {
+    AutomationIntake.Context(
       proposed: { proposed.contains($0) }, now: now ?? t0.addingTimeInterval(3600))
   }
 
   /// 捨てた行（古い順に「id 理由」）。
-  private func drops(_ read: AutomationInbox.Read) -> [String] {
+  private func drops(_ read: AutomationIntake.Read) -> [String] {
     read.dropped.map { "\($0.row.id) \($0.reason)" }
   }
 
@@ -62,7 +62,7 @@ final class AutomationInboxTests: OrbeTestCase {
   func testRowsAreTakenOldestFirstAndPositionsAdvanceToTheCeiling() throws {
     let report = try node(Parts.agent("r", from: ["cs", "na"]))
 
-    let read = AutomationInbox.read(
+    let read = AutomationIntake.read(
       by: report, [row(5, from: na), row(3)], ceilings: ceilings(cs: 4, na: 9), in: context())
 
     XCTAssertEqual(read.taken.map(\.id), ["row3", "row5"])
@@ -80,7 +80,7 @@ final class AutomationInboxTests: OrbeTestCase {
     let report = try node(part)
     let old = t0.addingTimeInterval(-7200)
 
-    let read = AutomationInbox.read(
+    let read = AutomationIntake.read(
       by: report,
       [
         row(1, "readOld", at: old, unread: false), row(2, "kept", unread: false),
@@ -102,9 +102,9 @@ final class AutomationInboxTests: OrbeTestCase {
     ]
     let proposed: Set = ["https://example.com/p"]
 
-    let judged = AutomationInbox.read(
+    let judged = AutomationIntake.read(
       by: judge, rows, ceilings: ceilings(cs: 3, na: 4), in: context(proposed: proposed))
-    let reported = AutomationInbox.read(
+    let reported = AutomationIntake.read(
       by: report, rows, ceilings: ceilings(cs: 3, na: 4), in: context(proposed: proposed))
 
     XCTAssertEqual(judged.taken.map(\.id), ["newer"])
@@ -118,7 +118,7 @@ final class AutomationInboxTests: OrbeTestCase {
     part.maxItems = 2
     let report = try node(part)
 
-    let read = AutomationInbox.read(
+    let read = AutomationIntake.read(
       by: report,
       [row(1, "a"), row(2, "b"), row(3, "a", from: na), row(4, "c", from: na), row(5, "d")],
       ceilings: ceilings(cs: 5, na: 4), in: context())
@@ -132,7 +132,7 @@ final class AutomationInboxTests: OrbeTestCase {
     let report = try node(Parts.agent("r", from: ["cs", "na"]))
     let new = (1...150).map { row($0, "new\($0)", from: na, size: 2 << 10) }
 
-    let read = AutomationInbox.read(
+    let read = AutomationIntake.read(
       by: report, new, ceilings: ceilings(na: new.count), in: context())
 
     XCTAssertGreaterThan(new.map(\.text.utf8.count).reduce(0, +), 256 << 10)

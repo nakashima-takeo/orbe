@@ -202,7 +202,7 @@ extension DesignSceneFixtures {
     let at = { (minutes: Int) in
       automationAt(14, 55).addingTimeInterval(TimeInterval(-60 * minutes))
     }
-    // 取得の回だけを置く（判定は処理の部品の先にあり、取得の行は処理の溜まりに溜まる）。
+    // 取得の回だけを置く（判定は処理の部品の先にあり、取得の行は処理が読めば取る行になる）。
     let passes = (0..<20).reversed().map { n -> AutomationSamplePass in
       let fresh = n.isMultiple(of: 3) ? 2 : 0
       let (all, _) = sampleRound("dm", at: at(n * 10), items: 6, fresh: fresh)

@@ -56,7 +56,7 @@ extension AutomationGraph {
       }
       if part.maxItems != nil {
         throw .invalid(
-          "\(path).inboxLimit: a currentSet part copies its whole input, so it has no maxItems")
+          "\(path).maxItems: a currentSet part copies its whole input, so it has no maxItems")
       }
     }
     return (part, role)
@@ -77,9 +77,9 @@ extension AutomationGraph {
     }
     if let items = part.maxItems {
       guard !part.from.isEmpty else {
-        throw .invalid("\(path).inboxLimit: only a part with from takes rows")
+        throw .invalid("\(path).maxItems: only a part with from takes rows")
       }
-      guard items >= 1 else { throw .invalid("\(path).inboxLimit.maxItems: must be at least 1") }
+      guard items >= 1 else { throw .invalid("\(path).maxItems: must be at least 1") }
     }
     if part.from.isEmpty, part.trigger == .arrival {
       throw .invalid(

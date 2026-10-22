@@ -7,8 +7,8 @@ import XCTest
 /// 壊れると何が起きるか: 1 部品だけを試したつもりが上流の取得まで走る。合流の一部を試すと道の外の取得を待ち続けて終わらない。
 /// 分岐の片方が動かない。届かない指し方が黙って何もしない試走になる。
 extension AutomationTrialTests {
-  /// 1 部品だけ: 溜まり（の写し）から次の本番と同じ規則で取り、上流は動かない。本番の溜まりは残る。
-  func testTryingOnePartTakesItsInboxCopyAndLeavesTheUpstreamAlone() throws {
+  /// 1 部品だけ: 写しの上の読めば取る行を次の本番と同じ規則で取り、上流は動かない。本番の読めば取る行は残る。
+  func testTryingOnePartTakesItsPendingRowsInTheCopyAndLeavesTheUpstreamAlone() throws {
     let id = try define([fetch("gh"), part("judge", from: ["gh"], deliver: .taskCandidates)])
     try runner.flow(id, to: .part(store.part(id, "gh")))
     finish("gh", fetched(["a"]))

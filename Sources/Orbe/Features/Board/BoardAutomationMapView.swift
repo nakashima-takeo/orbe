@@ -16,7 +16,7 @@ struct BoardAutomationMapView: View {
       BoardSectionHeader(title: .boardAutomationFlow) {
         Text(l10n.plural(detail.partCount, one: .boardMapPartsOne, other: .boardMapPartsOther))
         Text(l10n.string(.boardMapPending))
-          .frame(width: BoardMapRowView.inboxWidth, alignment: .trailing)
+          .frame(width: BoardMapRowView.pendingWidth, alignment: .trailing)
         Text(l10n.string(.boardMapLast))
           .padding(.trailing, BoardMapRowView.lastInset)
           .frame(width: BoardMapRowView.lastWidth, alignment: .trailing)
@@ -135,10 +135,10 @@ struct BoardMapRowView: View {
     }
     .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
     .clipped()
-    Text(part.inbox.map { "\($0)" } ?? "")
+    Text(part.pending.map { "\($0)" } ?? "")
       .font(Font.theme.workspaceName)
-      .foregroundStyle((part.inbox ?? 0) > 0 ? Color.theme.accentBright : Color.theme.textMuted)
-      .frame(width: Self.inboxWidth, alignment: .trailing)
+      .foregroundStyle((part.pending ?? 0) > 0 ? Color.theme.accentBright : Color.theme.textMuted)
+      .frame(width: Self.pendingWidth, alignment: .trailing)
     last(part.last)
       .padding(.trailing, Self.lastInset)
       .frame(width: Self.lastWidth, alignment: .trailing)
@@ -207,7 +207,7 @@ struct BoardMapRowView: View {
   }
 
   static let height: CGFloat = 26
-  static let inboxWidth: CGFloat = 48
+  static let pendingWidth: CGFloat = 48
   static let lastWidth: CGFloat = 150
   static let lastInset: CGFloat = 6
   static let minRoleWidth: CGFloat = 52

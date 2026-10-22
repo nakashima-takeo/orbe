@@ -28,8 +28,8 @@ extension WindowControllerAutomationControlTests {
     let result = try XCTUnwrap(judged["result"] as? [String: Any])
     XCTAssertEqual(result["kind"] as? String, "judge")
     XCTAssertEqual(result["proposed"] as? Int, 1)
-    XCTAssertEqual(parts["judge"]?["inbox"] as? Int, 0)
-    XCTAssertNil(parts["fetch"]?["inbox"], "入力の無い部品は溜まりを持たない")
+    XCTAssertEqual(parts["judge"]?["pending"] as? Int, 0)
+    XCTAssertNil(parts["fetch"]?["pending"], "入力の無い部品は読めば取る行を持たない")
 
     let fetched = try XCTUnwrap(parts["fetch"]?["lastRun"] as? [String: Any])
     XCTAssertEqual(

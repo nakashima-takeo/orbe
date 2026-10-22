@@ -160,8 +160,8 @@ extension WindowController {
     }
   }
 
-  /// 定義（部品に `id` を添えた外の形）と版に、止めているか・部品の今の鍵ごとの状態（走っているか・最新の回・次の時刻・最後に
-  /// 回った時刻・読めば取る行の数・決まりを外した印）を足す。判定の部品を持つ自動化にだけタスク候補の欄を付ける。
+  /// 定義（部品に `id` を添えた外の形）と版に、止めているか・部品の今の鍵ごとの状態（走っているか・最新の回・次の時刻・読めば
+  /// 取る行の数・決まりを外した印）を足す。判定の部品を持つ自動化にだけタスク候補の欄を付ける。
   private func automationJSON(_ automation: Automation) -> [String: Any] {
     var parts: [String: Any] = [:]
     for node in automation.graph.nodes {
@@ -173,8 +173,7 @@ extension WindowController {
       if let next = automationRunner.nextRunAt(automation, part: node.id) {
         part["nextRunAt"] = SessionEvent.iso8601(next)
       }
-      if let last = state.lastRunAt { part["lastRunAt"] = SessionEvent.iso8601(last) }
-      if !node.inputs.isEmpty { part["inbox"] = state.pending.count }
+      if !node.inputs.isEmpty { part["pending"] = state.pending.count }
       if let breach = state.breach { part["breach"] = AutomationRunWire.breach(breach) }
       parts[node.key] = part
     }

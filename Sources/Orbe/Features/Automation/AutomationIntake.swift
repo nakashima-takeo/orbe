@@ -2,7 +2,7 @@ import Foundation
 
 /// 受け手の読み。上流から引いた行（`AutomationDatabase.rows`）に受け手の取り方を掛け、取る行・捨てる行・読んだ位置の進め先を
 /// 選ぶだけの計算。DB を読み書きするのは呼び手。
-enum AutomationInbox {
+enum AutomationIntake {
   /// 出す側の表。
   enum Table: Equatable {
     case item

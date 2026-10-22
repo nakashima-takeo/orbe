@@ -93,7 +93,7 @@ final class AutomationRunnerTests: OrbeTestCase {
     return try runner.set(id, version: current.version, definition)
   }
 
-  func inbox(_ key: String, of id: Int) -> Int? {
+  func pending(_ key: String, of id: Int) -> Int? {
     store.automation(id)?.graph.node(key: key).flatMap { store.automation(id)?.parts[$0.id]?.pending.count }
   }
 
@@ -159,10 +159,10 @@ final class AutomationRunnerTests: OrbeTestCase {
     printed(ids.map { item($0) }.joined(separator: "\n"))
   }
 
-  // MARK: - 溜まりと判定
+  // MARK: - 読めば取る行と判定
 
-  /// 取得の部品が回るたびに判定の溜まりが増え、判定の予定の時刻に溜まった分がまとめて渡って、溜まりが空になる。
-  func testFetchesFillTheJudgesInboxAndTheJudgeTakesItAllAtItsTime() throws {
+  /// 取得の部品が回るたびに判定が読めば取る行が増え、判定の予定の時刻にその分がまとめて渡って、0 件になる。
+  func testFetchesAddToTheJudgesPendingRowsAndTheJudgeTakesThemAllAtItsTime() throws {
     let id = try define([
       fetch("gh", every: 1800), fetch("slack", every: 3600),
       part("judge", .scheduled(.every(86400)), from: ["gh", "slack"], deliver: .taskCandidates),
@@ -170,11 +170,11 @@ final class AutomationRunnerTests: OrbeTestCase {
 
     advance(by: 1800)
     finish("gh", fetched(["a"]))
-    XCTAssertEqual(inbox("judge", of: id), 1)
+    XCTAssertEqual(pending("judge", of: id), 1)
     advance(by: 1800)
     finish("gh", fetched(["a", "b"]))
     finish("slack", fetched(["s"]))
-    XCTAssertEqual(inbox("judge", of: id), 3)
+    XCTAssertEqual(pending("judge", of: id), 3)
     XCTAssertEqual(calls("judge"), [], "判定は予定の時刻まで起きない")
 
     advance(by: 86400 - 3600)
@@ -187,12 +187,12 @@ final class AutomationRunnerTests: OrbeTestCase {
     finish(
       "judge", printed(#"{"propose":"\#(downstream("gh", "a", of: id))","title":"a に対応する"}"#))
 
-    XCTAssertEqual(inbox("judge", of: id), 0)
+    XCTAssertEqual(pending("judge", of: id), 0)
     XCTAssertEqual(store.proposals.map(\.title), ["a に対応する"])
   }
 
-  /// 判定が失敗しても溜まりは残り、取得は溜め続け、次の判定の回で同じ項目が渡る。
-  func testAFailedJudgeKeepsItsInboxForTheNextJudge() throws {
+  /// 判定が失敗しても読めば取る行は残り、取得は足し続け、次の判定の回で同じ項目が渡る。
+  func testAFailedJudgeKeepsItsPendingRowsForTheNextJudge() throws {
     let id = try define([
       fetch("gh", every: 1800),
       part("judge", .scheduled(.every(3600)), from: ["gh"], deliver: .taskCandidates),
@@ -203,7 +203,7 @@ final class AutomationRunnerTests: OrbeTestCase {
     advance(by: 1800)
     finish("judge", printed("", exit: 1))
     finish("gh", fetched(["a", "b"]))
-    XCTAssertEqual(inbox("judge", of: id), 2, "失敗した回の行も残る")
+    XCTAssertEqual(pending("judge", of: id), 2, "失敗した回の行も残る")
 
     advance(by: 3600)
     XCTAssertEqual(ids("judge"), [downstream("gh", "a", of: id), downstream("gh", "b", of: id)])
@@ -244,7 +244,7 @@ final class AutomationRunnerTests: OrbeTestCase {
     XCTAssertEqual(calls("digest").count, 2)
     XCTAssertEqual(ids("digest"), [downstream("gh", "b", of: id)])
     finish("digest", printed("要約"))
-    XCTAssertEqual(inbox("digest", of: id), 0)
+    XCTAssertEqual(pending("digest", of: id), 0)
   }
 
   /// 届いたまま残っている行は、起動で載せたときに「届いたら」の部品を起こす。止めた自動化は起動では起こさず、再開で起こす。
@@ -278,7 +278,7 @@ final class AutomationRunnerTests: OrbeTestCase {
   }
 
   /// 行を見る agent は、まだ受け取っていない行を件数と大きさによらず 1 回で全部取る。
-  func testOneRunTakesTheWholeInbox() throws {
+  func testOneRunTakesEveryPendingRow() throws {
     let id = try define([
       fetch("gh", every: 1800),
       DesignSceneFixtures.agentPart(
@@ -289,7 +289,7 @@ final class AutomationRunnerTests: OrbeTestCase {
     let items = (0..<150).map { item("i\($0)", body: body) }
     advance(by: 1800)
     finish("gh", printed(items.joined(separator: "\n")))
-    XCTAssertEqual(inbox("judge", of: id), items.count)
+    XCTAssertEqual(pending("judge", of: id), items.count)
 
     advance(by: 86400 - 1800)
     let index = try XCTUnwrap(agentCalls.first)
@@ -311,7 +311,7 @@ final class AutomationRunnerTests: OrbeTestCase {
         output: .agent(reply: BackgroundAgentReply(text: "done", isError: false), stderr: .init())))
 
     XCTAssertEqual(agentCalls.count, 1)
-    XCTAssertEqual(inbox("judge", of: id), 0)
+    XCTAssertEqual(pending("judge", of: id), 0)
     XCTAssertEqual(
       store.automation(id)?.state(store.part(id, "judge")).runs.map(\.run?.taken), [items.count])
   }

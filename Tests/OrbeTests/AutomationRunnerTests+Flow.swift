@@ -59,7 +59,7 @@ extension AutomationRunnerTests {
     XCTAssertEqual(ids("s1"), [downstream("f", "a", of: id)])
     XCTAssertEqual(ids("s3"), [downstream("f", "a", of: id)], "届いたらは上流が積んだので普段どおり起きる")
     XCTAssertEqual(calls("s2"), [], "道の外は走らない")
-    XCTAssertEqual(inbox("s2", of: id), 1, "道の外の溜まりは普段どおり溜まる")
+    XCTAssertEqual(pending("s2", of: id), 1, "道の外の部品にも普段どおり読めば取る行が増える")
     XCTAssertTrue(refusesAnotherFlow(id))
     finish("s1", printed(""))
 

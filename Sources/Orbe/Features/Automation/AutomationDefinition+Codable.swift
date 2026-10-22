@@ -5,11 +5,7 @@ import Foundation
 /// 部品の欄と動作の定義の欄を 1 つのオブジェクトに並べる。`from` と agent の `tools` の空の配列は書かないのと同じ。
 extension AutomationDefinition.Part: Codable {
   private enum CodingKeys: String, CodingKey {
-    case id, key, name, trigger, from, inboxLimit
-  }
-
-  private enum LimitKeys: String, CodingKey {
-    case maxItems, maxAgeHours
+    case id, key, name, trigger, from, maxItems
   }
 
   init(from decoder: Decoder) throws {
@@ -20,18 +16,7 @@ extension AutomationDefinition.Part: Codable {
     trigger = try c.decode(AutomationPart.Trigger.self, forKey: .trigger)
     from = try c.decodeIfPresent([AutomationDefinition.Input].self, forKey: .from) ?? []
     action = try AutomationActionDef(from: decoder)
-    maxItems = nil
-    if c.contains(.inboxLimit) {
-      let limit = try c.nestedContainer(keyedBy: LimitKeys.self, forKey: .inboxLimit)
-      if limit.contains(.maxAgeHours) {
-        throw DecodingError.dataCorruptedError(
-          forKey: .maxAgeHours, in: limit,
-          debugDescription:
-            "the age limit belongs to each input: write {\"part\": \"<key>\", \"maxAgeHours\": n} in from"
-        )
-      }
-      maxItems = try limit.decode(Int.self, forKey: .maxItems)
-    }
+    maxItems = try c.decodeIfPresent(Int.self, forKey: .maxItems)
   }
 
   func encode(to encoder: Encoder) throws {
@@ -42,10 +27,7 @@ extension AutomationDefinition.Part: Codable {
     try c.encode(trigger, forKey: .trigger)
     if !from.isEmpty { try c.encode(from, forKey: .from) }
     try action.encode(to: encoder)
-    if let maxItems {
-      var limit = c.nestedContainer(keyedBy: LimitKeys.self, forKey: .inboxLimit)
-      try limit.encode(maxItems, forKey: .maxItems)
-    }
+    try c.encodeIfPresent(maxItems, forKey: .maxItems)
   }
 }
 

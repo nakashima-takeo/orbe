@@ -10,7 +10,7 @@ struct AutomationPassEnd {
   let startedAt: Date
   let endedAt: Date
   /// 読んだもの。入力の無い部品は nil。
-  let read: AutomationInbox.Read?
+  let read: AutomationIntake.Read?
   let outcome: AutomationPartPass.Outcome
 }
 
@@ -25,13 +25,13 @@ struct AutomationRecorded {
   var failed: Bool { run?.failed ?? false }
 }
 
-/// 部品の 1 回の読み書き。読みは受け手の取り方（`AutomationInbox`）を通し、行の本文は DB にだけ置く。
+/// 部品の 1 回の読み書き。読みは受け手の取り方（`AutomationIntake`）を通し、行の本文は DB にだけ置く。
 extension AutomationStore {
   /// 受け手 `part` の読み。`baseline` はつながりごとの読む上限の番号（契機の始まりの時点の上流の最後の番号）。
   func read(
     _ part: AutomationPartID, of id: Int, baseline: [AutomationPartID: AutomationSeqs]?,
     now: Date
-  ) throws(AutomationError) -> AutomationInbox.Read? {
+  ) throws(AutomationError) -> AutomationIntake.Read? {
     guard let automation = automation(id), let node = automation.graph.node(part),
       !node.inputs.isEmpty
     else { return nil }
@@ -39,7 +39,7 @@ extension AutomationStore {
     return try read {
       try $0.read(
         node, in: automation.graph, baseline: baseline,
-        context: AutomationInbox.Context(proposed: links.contains, now: now))
+        context: AutomationIntake.Context(proposed: links.contains, now: now))
     }
   }
 
@@ -52,7 +52,7 @@ extension AutomationStore {
 
   /// 取る行が 0 件だった契機。捨てた行があれば読んだ位置をその最大の番号まで進め、捨てた数と読む前に期限で消えた数を受け手の
   /// 部品の持ち越しに足す（次の成功した回の記録に載る）。
-  func discard(_ read: AutomationInbox.Read, of part: AutomationPartID, in id: Int, now: Date)
+  func discard(_ read: AutomationIntake.Read, of part: AutomationPartID, in id: Int, now: Date)
     throws(AutomationError)
   {
     guard read.taken.isEmpty, automation(id)?.parts[part] != nil, !read.reach.isEmpty else {

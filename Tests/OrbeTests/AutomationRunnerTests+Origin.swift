@@ -43,9 +43,9 @@ extension AutomationRunnerTests {
       try XCTUnwrap(run.failure, "処理の回の失敗にする").text(
         part: "p", ending: run.execution.ending, breach: run.breach),
       #"the rows of part "p" reach a judge part, but none has an origin (none came from a fetch part)"#)
-    XCTAssertEqual(inbox("judge", of: id), 0)
-    XCTAssertEqual(inbox("digest", of: id), 0, "失敗した回はどの下流にも渡さない")
-    XCTAssertEqual(inbox("p", of: id), 1, "取った行は残り、次の回で取り直す")
+    XCTAssertEqual(pending("judge", of: id), 0)
+    XCTAssertEqual(pending("digest", of: id), 0, "失敗した回はどの下流にも渡さない")
+    XCTAssertEqual(pending("p", of: id), 1, "取った行は残り、次の回で取り直す")
     XCTAssertEqual(calls("p").count, 1, "失敗にした回で契機を終え、同じ行ですぐ走り直さない")
   }
 
@@ -58,7 +58,7 @@ extension AutomationRunnerTests {
     }
 
     XCTAssertNil(store.automation(id)?.state(key: "p").runs.first?.run?.failure)
-    XCTAssertEqual(inbox("judge", of: id), 1, "出どころのある行だけを判定が取る")
+    XCTAssertEqual(pending("judge", of: id), 1, "出どころのある行だけを判定が取る")
     XCTAssertEqual(
       ids("digest"), [downstream("gh", "a", of: id), downstream("p", "x", of: id)],
       "判定でない下流には出どころの無い行も届く（作った行は処理の ID の接頭）")
@@ -93,7 +93,7 @@ extension AutomationRunnerTests {
     advance(by: 1800)
     finish("gh", fetched(["a"]))
     finish("q", printed(#"{"id":"x","note":"作った行"}"#))
-    XCTAssertEqual(inbox("p", of: id), 1, "前提: 出どころの無い行が p に溜まる")
+    XCTAssertEqual(pending("p", of: id), 1, "前提: 出どころの無い行を p が読める")
     try rewrite(id, passThroughDefinition(judge: true))
 
     advance(by: 86400 - 1800)
@@ -106,7 +106,7 @@ extension AutomationRunnerTests {
     XCTAssertNil(state.runs.first?.run?.breach)
     XCTAssertNil(state.breach, "決まりに反していない部品に印を付けない")
     XCTAssertEqual(state.pending.count, 0)
-    XCTAssertEqual(inbox("judge", of: id), 0)
+    XCTAssertEqual(pending("judge", of: id), 0)
     XCTAssertEqual(calls("p").count, 1)
     advance(by: 1800)
     XCTAssertEqual(calls("judge"), [], "取る行が無ければ判定は起きない")

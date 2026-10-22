@@ -16,7 +16,7 @@ struct AutomationDefinition: Equatable, Codable {
     /// 入力（上流の部品の鍵と取り方）。空は入力の無い部品。
     var from: [Input]
     var action: AutomationActionDef
-    /// 1 回に取る件数の上限（外の形は `inboxLimit.maxItems`）。
+    /// 1 回に取る件数の上限。
     var maxItems: Int?
 
     /// 行を見るか——入力があり、ツールを持つ agent でない。

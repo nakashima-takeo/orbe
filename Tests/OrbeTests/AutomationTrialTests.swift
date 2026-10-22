@@ -176,7 +176,7 @@ final class AutomationTrialTests: OrbeTestCase {
     XCTAssertEqual(ids("p"), [downstream("gh", "b", of: id)])
   }
 
-  /// 写しの中のほかの自動化は、試走の道と同じ鍵の部品でも、溜まりに行のある「届いたら」の部品でも起こさない（写しでも手段は
+  /// 写しの中のほかの自動化は、試走の道と同じ鍵の部品でも、読めば取る行のある「届いたら」の部品でも起こさない（写しでも手段は
   /// 本物）。手段のスクリプトは x・y で、試走する自動化の部品と見分ける。
   func testATrialDoesNotWakeOtherAutomationsInTheCopy() throws {
     let other = try define([
@@ -369,7 +369,7 @@ final class AutomationTrialTests: OrbeTestCase {
 
   /// 入力のある入口に与えた行は、ただ 1 つの上流（の写し）の出力として足され、上流の行として（接頭付きの id で）取られる。
   /// 「届いたら」の入口も今すぐ動き、その回は今すぐの回として記録される。上流が複数の入口に与えると断る。
-  func testRowsGivenToAPartWithInputsArriveInItsInboxCopy() throws {
+  func testRowsGivenToAPartWithInputsArriveAsTheRowsOfItsUpstream() throws {
     let id = try define([
       fetch("gh"), part("p", .arrival, from: ["gh"]),
       part("digest", from: ["p"], deliver: .report),

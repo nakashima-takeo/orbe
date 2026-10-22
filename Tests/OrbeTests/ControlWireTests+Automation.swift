@@ -44,7 +44,7 @@ extension ControlWireTests {
   private var judge: [String: Any] {
     [
       "id": 4, "key": "judge", "name": "判定", "trigger": ["kind": "arrival"],
-      "from": [["part": "slack", "maxAgeHours": 24]], "inboxLimit": ["maxItems": 30],
+      "from": [["part": "slack", "maxAgeHours": 24]], "maxItems": 30,
       "model": "opus", "instruction": "自分がやること", "deliver": "taskCandidates",
     ]
   }
@@ -123,9 +123,7 @@ extension ControlWireTests {
         "invalid parts[0].from[0].take: pass new or all"
       ),
       (
-        "件数の上限の古さ", with("inboxLimit", ["maxAgeHours": 24]),
-        "invalid parts[0].inboxLimit.maxAgeHours: the age limit belongs to each input: "
-          + #"write {"part": "<key>", "maxAgeHours": n} in from"#
+        "数でない件数の上限", with("maxItems", "many"), "invalid parts[0].maxItems"
       ),
       (
         "知らない予定の種類", with("trigger", ["kind": "daily"]),

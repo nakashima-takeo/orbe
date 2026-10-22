@@ -66,8 +66,8 @@ extension AutomationGraphTests {
         "入力に同じ鍵が 2 度",
         changing(1) { $0.from = [.init(part: "f"), .init(part: "f", take: .all)] }, "parts[1].from"
       ),
-      ("入力の無い部品の件数の上限", changing(0) { $0.maxItems = 1 }, "parts[0].inboxLimit"),
-      ("件数の上限が 0", changing(1) { $0.maxItems = 0 }, "parts[1].inboxLimit.maxItems"),
+      ("入力の無い部品の件数の上限", changing(0) { $0.maxItems = 1 }, "parts[0].maxItems"),
+      ("件数の上限が 0", changing(1) { $0.maxItems = 0 }, "parts[1].maxItems"),
       (
         "古さの上限が 0", changing(1) { $0.from = [.init(part: "f", maxAgeHours: 0)] },
         "parts[1].from[0].maxAgeHours"
@@ -171,7 +171,7 @@ extension AutomationGraphTests {
             .all, Self.agent("p", from: ["f"], deliver: .nextPart, coverage: .currentSet))
           process.maxItems = 5
           return [Self.fetch("f"), process, Self.agent("r", from: ["p"])]
-        }(), "parts[1].inboxLimit"
+        }(), "parts[1].maxItems"
       ),
     ] {
       assertRefused(parts, at: place, label)

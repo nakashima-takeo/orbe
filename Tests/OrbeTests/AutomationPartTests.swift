@@ -24,7 +24,7 @@ final class AutomationPartTests: OrbeTestCase {
          "command": "gh search prs", "directory": "/Users/me/repo", "coverage": "currentSet"},
         {"key": "judge", "name": "判定", "trigger": {"kind": "cron", "expression": "0 9 * * *"},
          "from": [{"part": "gh", "maxAgeHours": 72}], "instruction": "判定して",
-         "deliver": "taskCandidates", "inboxLimit": {"maxItems": 30}, "timeoutMinutes": 10},
+         "deliver": "taskCandidates", "maxItems": 30, "timeoutMinutes": 10},
         {"key": "post", "name": "投稿", "trigger": {"kind": "manual"}, "agent": "claude",
          "model": "opus", "tools": ["mcp__slack__post"], "instruction": "投稿して", "deliver": "report"},
         {"key": "say", "name": "知らせ", "trigger": {"kind": "arrival"},
@@ -99,8 +99,7 @@ final class AutomationPartTests: OrbeTestCase {
         "[1].from[0].take"
       ),
       (
-        "件数の上限に古さ", manual, #""command": "x", "inboxLimit": {"maxAgeHours": 1}"#,
-        "[1].inboxLimit.maxAgeHours"
+        "数でない件数の上限", manual, #""command": "x", "maxItems": "many""#, "[1].maxItems"
       ),
       ("知らない行き先", manual, #""command": "x", "deliver": "slack""#, "[1].deliver"),
     ] {

@@ -191,7 +191,7 @@ extension AutomationDatabase {
       "parts": parts.map { part -> [String: Any] in
         var object: [String: Any] = ["id": part.id.rawValue, "key": part.key, "name": part.name]
         if let trigger = part.trigger.flatMap(jsonObject) { object["trigger"] = trigger }
-        if let maxItems = part.maxItems { object["inboxLimit"] = ["maxItems": maxItems] }
+        if let maxItems = part.maxItems { object["maxItems"] = maxItems }
         let from = part.inputs.map { edge -> Any in
           let key = keys[edge.from] ?? ""
           guard edge.take != .new || edge.maxAgeHours != nil else { return key }

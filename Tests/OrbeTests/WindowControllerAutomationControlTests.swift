@@ -76,7 +76,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     AutomationItem(id: id, link: "https://example.com/\(id)", body: "\(id) の本文", time: Date())
   }
 
-  /// 取得の回を確定し、`proposing` があれば溜まりをすべて取った判定の回で候補にする（タイトルは `titles`、付け先は
+  /// 取得の回を確定し、`proposing` があれば読める行をすべて取った判定の回で候補にする（タイトルは `titles`、付け先は
   /// `workspaces`、候補にした理由は `reasons` の順。省けば「対応: <id>」・付け先なし・理由なし）。
   static func round(
     _ store: AutomationStore, _ id: Int, fetched items: [AutomationItem],

@@ -4,7 +4,7 @@ extension AutomationRunner {
   /// 役割の入力を組む唯一の場所。取得と仕事は行の席を持たない入力なので、ツールを持ちうる agent へ上流の行は渡らない
   /// （読みは起こすかの門にだけ使う）。
   func input(
-    _ node: AutomationGraph.Node, _ automation: Automation, _ read: AutomationInbox.Read?
+    _ node: AutomationGraph.Node, _ automation: Automation, _ read: AutomationIntake.Read?
   ) -> AutomationPartPass.Input {
     let state = automation.state(node.id)
     let rows = (read?.taken ?? []).map {

@@ -141,7 +141,7 @@ enum HomeTemplate {
     hook も効き、設定の additionalDirectories の下も名指しなしで読める。\
     agent がツールで読んだ外の文面に仕込まれた指示で、名指しした書き込みのツールが使われうる。
     - agent には届いた行も件数も渡らない。対象が要る仕事なら、依頼文で agent 自身に調べさせる。失敗した回は次の回でもう一度\
-    起きる（投稿が二重になりうる）。依頼文は automations.json に残るので秘密を書かない。
+    起きる（投稿が二重になりうる）。依頼文は自動化の DB（state の automations フォルダ）に残るので秘密を書かない。
     - 通知（`notify: "menuBar"` か `"notificationCenter"`）: どの出力先にも付けられる。何かを出した回と、失敗が続くなら最初の\
     失敗の回に、メニューバーか macOS の通知センターへ名前と結果の 1 行が出る。通知センターの通知は自動化ごとに 1 つで、新しい回が\
     差し替える。`notificationCenter` を書くと、Orbe の通知の許可がまだ決まっていなければ OS が許可を問う。許可が無い回は\
@@ -185,7 +185,8 @@ enum HomeTemplate {
     text the agent reads with its tools can make it use a writing tool it was given.
     - The agent gets neither the lines that arrived nor their count; when the job needs targets, have the \
     agent look them up itself in the request. A failed run starts the agent again on the next run (a post \
-    can be doubled). The request stays in automations.json, so never put secrets in it.
+    can be doubled). The request stays in the automation database (the automations folder of the state), so never put \
+    secrets in it.
     - Notify (`notify: "menuBar"` or `"notificationCenter"`): any sink can have it. When a run delivers \
     something, or on the first of consecutive failed runs, the name and the result line show in the menu bar \
     or in macOS Notification Center. Notification Center keeps one notification per automation; a new run \

@@ -20,7 +20,7 @@ struct BoardMapPart: Equatable {
   /// 入力の部品の名前（「A・B」）。入力の無い部品は nil。
   let inputs: String?
   /// 未処理の件数。入力のある部品だけ。
-  let inbox: Int?
+  let pending: Int?
   /// 出力の形式エラーの印があるか。
   let breached: Bool
   let look: BoardNodeLook
@@ -167,7 +167,7 @@ extension BoardAutomationDetailValue {
         ? nil
         : inputs.map { automation.graph.node($0)?.part.name ?? "\($0)" }.joined(
           separator: l10n.string(.automationListSeparator)),
-      inbox: inputs.isEmpty ? nil : state.pending.count, breached: state.breach != nil,
+      pending: inputs.isEmpty ? nil : state.pending.count, breached: state.breach != nil,
       look: running ? .running : latest?.failed == true ? .failed : .idle,
       last: latest.map {
         BoardMapPart.Last(

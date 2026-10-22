@@ -37,7 +37,7 @@ extension AutomationDatabase {
 
   /// つながりの上流の行を読む。take が new なら読んだ位置より後の番号だけ、all なら位置によらず、今有効な項目の今の版と残す
   /// 期間の内の出来事を、どちらも上限の番号まで。`graph` は出どころを持つか（たどった先が取得の行か）を見る今のグラフ。
-  func rows(_ reading: Reading, graph: AutomationGraph, now: Date) throws -> [AutomationInbox.Row] {
+  func rows(_ reading: Reading, graph: AutomationGraph, now: Date) throws -> [AutomationIntake.Row] {
     let up = reading.edge.from
     let p: SQLiteValue = .integer(Int64(up.rawValue))
     let all = reading.edge.take == .all
@@ -71,11 +71,11 @@ extension AutomationDatabase {
         body: s.text(at: 6) ?? "{}"
       )
     }
-    var rows: [AutomationInbox.Row] = []
+    var rows: [AutomationIntake.Row] = []
     for item in items {
       let id = Self.downstreamId(item.written, of: up, inherited: item.source != nil)
       rows.append(
-        AutomationInbox.Row(
+        AutomationIntake.Row(
           edge: up, table: .item, seq: item.seq, ref: .version(item.version),
           source: .item(item.item), id: id,
           text: AutomationPrompts.replacing(id: id, in: item.body), at: item.at,
@@ -85,7 +85,7 @@ extension AutomationDatabase {
     for event in events {
       let id = Self.downstreamId(event.written, of: up, inherited: event.source != nil)
       rows.append(
-        AutomationInbox.Row(
+        AutomationIntake.Row(
           edge: up, table: .event, seq: event.seq, ref: .event(event.event),
           source: .event(event.event), id: id,
           text: AutomationPrompts.replacing(id: id, in: event.body), at: event.at,
@@ -103,7 +103,7 @@ extension AutomationDatabase {
 
   /// 引き継ぎをたどった先の行。それを出した部品の今の役割が取得なら出どころ（候補のリンクと本文の元）で、ほかは出どころなし。
   /// 項目は今の版を指す。
-  func origin(of start: AutomationSourceRef, graph: AutomationGraph) throws -> AutomationInbox
+  func origin(of start: AutomationSourceRef, graph: AutomationGraph) throws -> AutomationIntake
     .Origin?
   {
     var current = start
@@ -133,7 +133,7 @@ extension AutomationDatabase {
   }
 
   private func originRow(_ source: AutomationSourceRef, part: AutomationPartID) throws
-    -> AutomationInbox.Origin?
+    -> AutomationIntake.Origin?
   {
     let found: [(ref: AutomationRowRef, body: String?)]
     switch source {
@@ -150,7 +150,7 @@ extension AutomationDatabase {
     guard let row = found.first, let item = Self.decode(AutomationItem.self, row.body) else {
       return nil
     }
-    return AutomationInbox.Origin(part: part, row: row.ref, item: item)
+    return AutomationIntake.Origin(part: part, row: row.ref, item: item)
   }
 
   /// 読む前に期限で消えた出来事の数: 上流の出来事の番号の（`from`, `to`] のうち、残す期間の内に残っていないもの。
@@ -168,7 +168,7 @@ extension AutomationDatabase {
   }
 
   /// 読んだ位置を進める（下がらない）。
-  func advance(_ receiver: AutomationPartID, _ reach: [AutomationInbox.Reach]) throws {
+  func advance(_ receiver: AutomationPartID, _ reach: [AutomationIntake.Reach]) throws {
     for reach in reach {
       let column = reach.table == .item ? "read_item_seq" : "read_event_seq"
       try db.run(
@@ -202,15 +202,15 @@ extension AutomationDatabase {
   /// 番号）。読んだ位置を進める先までの、読む前に期限で消えた出来事を数えて添える。
   func read(
     _ node: AutomationGraph.Node, in graph: AutomationGraph,
-    baseline: [AutomationPartID: AutomationSeqs]?, context: AutomationInbox.Context
-  ) throws -> AutomationInbox.Read {
+    baseline: [AutomationPartID: AutomationSeqs]?, context: AutomationIntake.Context
+  ) throws -> AutomationIntake.Read {
     let positions = try self.positions(of: node.id)
-    var rows: [AutomationInbox.Row] = []
-    var ceilings: [AutomationInbox.Ceiling] = []
+    var rows: [AutomationIntake.Row] = []
+    var ceilings: [AutomationIntake.Ceiling] = []
     for edge in node.inputs {
       guard let position = positions[edge.from] else { continue }
       let base = baseline?[edge.from] ?? position.last
-      let ceiling = AutomationInbox.Ceiling(
+      let ceiling = AutomationIntake.Ceiling(
         edge: edge.from,
         seqs: AutomationSeqs(
           item: min(base.item, position.last.item), event: min(base.event, position.last.event)))
@@ -219,7 +219,7 @@ extension AutomationDatabase {
         Reading(edge: edge, read: position.read, ceiling: ceiling.seqs), graph: graph,
         now: context.now)
     }
-    var read = AutomationInbox.read(by: node, rows, ceilings: ceilings, in: context)
+    var read = AutomationIntake.read(by: node, rows, ceilings: ceilings, in: context)
     for reach in read.reach where reach.table == .event {
       guard let from = positions[reach.edge]?.read.event else { continue }
       read.lapsed += try lapsed(of: reach.edge, from: from, to: reach.seq, now: context.now)
@@ -237,7 +237,7 @@ extension AutomationDatabase {
   ) throws -> AutomationPending {
     let taken = try read(
       node, in: graph, baseline: nil,
-      context: AutomationInbox.Context(proposed: proposed, now: now)
+      context: AutomationIntake.Context(proposed: proposed, now: now)
     ).taken
     let ages = Dictionary(uniqueKeysWithValues: node.inputs.map { ($0.from, $0.maxAgeHours) })
     let expiries = taken.compactMap { row in

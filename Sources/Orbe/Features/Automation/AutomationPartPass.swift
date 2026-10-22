@@ -79,7 +79,7 @@ struct AutomationPartPass {
 
   /// 判定が出した候補の案。リンクと本文は出どころの項目から取る。
   struct Proposal: Equatable {
-    let origin: AutomationInbox.Origin
+    let origin: AutomationIntake.Origin
     let title: String
     let due: TaskItem.DueDate?
     /// 付け先の `Workspace.persistentId`。
@@ -258,7 +258,7 @@ struct AutomationPartRow: Equatable {
   let id: String
   /// 行の JSON の 1 行（受ける行は下流へ渡す 1 行、出した行は書かれたまま）。
   let text: String
-  let origin: AutomationInbox.Origin?
+  let origin: AutomationIntake.Origin?
   /// 受ける行は出す側の行（下流が引き継ぐ参照）、出した行は引き継いだ入力。
   let source: AutomationSourceRef?
 }
@@ -267,7 +267,7 @@ struct AutomationPartRow: Equatable {
 struct AutomationSourcedRow: Equatable {
   let id: String
   let text: String
-  let origin: AutomationInbox.Origin
+  let origin: AutomationIntake.Origin
 }
 
 /// 保存の形は終わり方を種類で持つ（`end`）。外の形の英文の `ending` は `AutomationRunWire` が足す。

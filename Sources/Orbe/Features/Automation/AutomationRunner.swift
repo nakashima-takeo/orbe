@@ -312,7 +312,7 @@ extension AutomationRunner {
   /// 契機の始まりの時点までの上流の行を読む。取る行が 0 件なら手段を起こさず、捨てた行の分だけ読んだ位置を進めて終える。
   /// ただし今の集合の処理は 0 件でも回す（空の集合を写す）。
   private func read(_ trigger: Trigger) {
-    let read: AutomationInbox.Read?
+    let read: AutomationIntake.Read?
     do throws(AutomationError) {
       read = try store.read(
         trigger.part, of: trigger.automationId, baseline: trigger.baseline, now: now())
@@ -331,7 +331,7 @@ extension AutomationRunner {
   }
 
   /// 部品の 1 回。役割の入力を組み、`AutomationPartPass` に任せ、終わったら確定する。
-  private func pass(_ trigger: Trigger, read: AutomationInbox.Read?) {
+  private func pass(_ trigger: Trigger, read: AutomationIntake.Read?) {
     guard let automation = store.automation(trigger.automationId),
       let node = automation.graph.node(trigger.part)
     else { return end(trigger) }
@@ -348,7 +348,7 @@ extension AutomationRunner {
   }
 
   private func ended(
-    _ trigger: Trigger, _ defId: AutomationDefID, _ read: AutomationInbox.Read?,
+    _ trigger: Trigger, _ defId: AutomationDefID, _ read: AutomationIntake.Read?,
     _ startedAt: Date, _ outcome: AutomationPartPass.Outcome
   ) {
     let passEnd = AutomationPassEnd(
