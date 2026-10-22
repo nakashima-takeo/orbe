@@ -170,7 +170,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
   }
 
   /// 候補を出した自動化と部品の鍵は組（`proposedBy`）で出し、棚の自動化と取り違えない。部品は今の鍵で言い、外した部品は出さない。
-  /// 出した自動化を消すと、出どころの項目が無効になるので提案は下がる。
+  /// 判定と出どころの両方を外しても出した自動化は言い、出した自動化を消したら言わない。
   func testProposedByNamesTheProposingAutomationApartFromTheShelf() throws {
     let wc = try launch()
     let store = wc.automationStore
@@ -192,8 +192,22 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertNil(proposedBy["partKey"], "外した判定の部品は言わない")
     XCTAssertEqual(proposedBy["sourcePartKey"] as? String, "source", "出どころの部品は今の鍵で言う")
 
+    try store.dismiss(try XCTUnwrap(store.proposals.first?.id))
+    let other = DesignSceneFixtures.commandPart(
+      "other", "ほか", .manual, script: "other", deliver: .report)
+    _ = try success(
+      wc.controlSetAutomation(
+        automationId: first, version: 2,
+        AutomationDefinition(name: "受信 1", notify: nil, parts: [other])))
+    let rest = try XCTUnwrap(
+      try proposals(wc, of: second).first?["proposedBy"] as? [String: Any],
+      "判定と出どころの両方を外しても、出した自動化は残る（判断済みの候補は下がらない）")
+    XCTAssertEqual(rest["automationId"] as? Int, first)
+    XCTAssertNil(rest["sourcePartKey"])
+
     _ = wc.controlDeleteAutomation(automationId: first)
-    XCTAssertTrue(try proposals(wc, of: second).isEmpty)
+    let orphan = try XCTUnwrap(try proposals(wc, of: second).first)
+    XCTAssertNil(orphan["proposedBy"], "出した自動化を消したら言わない")
   }
 
   /// 候補は付け先が今ある workspace に解けるときだけ、起動ごとの id と名前を持つ（永続 ID は出さない）。付け先が無い・

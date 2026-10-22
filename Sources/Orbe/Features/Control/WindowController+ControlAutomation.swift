@@ -94,7 +94,7 @@ extension WindowController {
       if let reason = proposal.reason { json["reason"] = reason }
       // 出した自動化と部品の鍵は組で出す——棚の自動化（`automationId`）と別のことがあり、鍵だけでは取り違える。出した自動化が
       // 消えた後は、指す先が無いので出さない。部品は今の鍵で言い、外れていれば出さない。
-      if let issuer = proposal.automationId.flatMap(automationStore.automation) {
+      if let issuer = automationStore.issuer(of: proposal) {
         var by: [String: Any] = ["automationId": issuer.id]
         if let judge = issuer.graph.node(proposal.judge) { by["partKey"] = judge.key }
         if let source = issuer.graph.node(proposal.source) { by["sourcePartKey"] = source.key }

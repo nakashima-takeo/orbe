@@ -24,7 +24,7 @@ extension AutomationDatabase {
     let (proposals, unreadableProposals) = try database.heldProposals()
     var memory = AutomationMemory(
       automations: automations, unreadable: unreadable, proposals: proposals,
-      unreadableProposals: unreadableProposals)
+      unreadableProposals: unreadableProposals, judgeOwners: try database.judgeOwners())
     for automation in automations { try memory.recount(automation.id, database, now: now) }
     return memory
   }
@@ -215,11 +215,11 @@ extension AutomationDatabase {
   private func heldProposals() throws -> ([AutomationProposal], [AutomationUnreadableProposal]) {
     let rows = try db.select(
       """
-      SELECT q.id, q.run_id, r.part_id, r.def_id, r.ended_at, p.automation_id, q.origin_version_id,
+      SELECT q.id, q.run_id, r.part_id, r.def_id, r.ended_at, q.origin_version_id,
         q.origin_event_id, coalesce(v.body, e.body), coalesce(i.part_id, e.part_id), q.link, q.title,
         q.due, q.workspace, q.reason, h.resolved_at, s.outcome, s.task_id
       FROM held_proposals h JOIN proposals q ON q.id = h.proposal_id
-      JOIN runs r ON r.id = q.run_id JOIN parts p ON p.id = r.part_id
+      JOIN runs r ON r.id = q.run_id
       LEFT JOIN item_versions v ON v.id = q.origin_version_id
       LEFT JOIN items i ON i.id = v.item_id
       LEFT JOIN events e ON e.id = q.origin_event_id
@@ -229,12 +229,11 @@ extension AutomationDatabase {
     ) { s in
       (
         id: s.int(at: 0), run: s.int(at: 1), judge: s.int(at: 2), defId: s.int(at: 3),
-        endedAt: s.int64(at: 4), automation: s.optionalInt64(at: 5),
-        version: s.optionalInt64(at: 6), event: s.optionalInt64(at: 7), body: s.text(at: 8),
-        source: s.optionalInt64(at: 9), link: s.text(at: 10) ?? "", title: s.text(at: 11) ?? "",
-        due: s.text(at: 12), workspace: s.text(at: 13), reason: s.text(at: 14),
-        resolvedAt: s.optionalInt64(at: 15), outcome: s.text(at: 16),
-        taskId: s.optionalInt64(at: 17)
+        endedAt: s.int64(at: 4), version: s.optionalInt64(at: 5), event: s.optionalInt64(at: 6),
+        body: s.text(at: 7), source: s.optionalInt64(at: 8), link: s.text(at: 9) ?? "",
+        title: s.text(at: 10) ?? "", due: s.text(at: 11), workspace: s.text(at: 12),
+        reason: s.text(at: 13), resolvedAt: s.optionalInt64(at: 14), outcome: s.text(at: 15),
+        taskId: s.optionalInt64(at: 16)
       )
     }
     var proposals: [AutomationProposal] = []
@@ -261,7 +260,7 @@ extension AutomationDatabase {
       }
       proposals.append(
         AutomationProposal(
-          id: row.id, runId: row.run, automationId: row.automation.map(Int.init),
+          id: row.id, runId: row.run,
           judge: AutomationPartID(row.judge), defId: AutomationDefID(row.defId),
           source: AutomationPartID(Int(source)), origin: origin, item: item, title: row.title,
           due: due ?? nil, workspace: workspace ?? nil, reason: row.reason,

@@ -70,10 +70,16 @@ extension AutomationStore {
     }
   }
 
+  /// 候補を出した自動化——判定の部品の持ち主（部品を外しても自動化が残れば、その自動化）。持ち主を消していれば nil。
+  func issuer(of proposal: AutomationProposal) -> Automation? {
+    judgeOwners[proposal.judge].flatMap(automation)
+  }
+
   /// 候補を棚に出す自動化。候補を出した自動化がまだ候補を持っていればそれ、いなければ持っている自動化のうち ID が最小のもの。
   func shelf(of proposal: AutomationProposal) -> Automation? {
     let holding = automations.filter { $0.holds(proposal) }
-    return holding.first { $0.id == proposal.automationId } ?? holding.min { $0.id < $1.id }
+    let issuer = issuer(of: proposal)?.id
+    return holding.first { $0.id == issuer } ?? holding.min { $0.id < $1.id }
   }
 
   /// 判断待ちの候補と、それを棚に出す自動化の ID（候補の順）。棚に出す自動化の無い候補は入らない。⌘⇧X の提案タブ・制御 API・

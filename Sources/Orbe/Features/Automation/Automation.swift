@@ -126,9 +126,7 @@ struct AutomationProposal: Equatable, Identifiable {
   let id: Int
   /// 候補を出した判定の回。
   let runId: Int
-  /// 候補を出した自動化（履歴。棚に出す自動化は `AutomationStore.shelf(of:)` が導く）。消えていれば nil。
-  var automationId: Int?
-  /// 出した判定の部品と、その回が動いた定義。
+  /// 出した判定の部品と、その回が動いた定義。候補を出した自動化はこの部品の持ち主（`AutomationStore.issuer(of:)`）。
   let judge: AutomationPartID
   let defId: AutomationDefID
   /// 出どころの部品と行。

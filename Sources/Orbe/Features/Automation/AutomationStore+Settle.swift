@@ -141,7 +141,7 @@ struct AutomationSettling {
       let proposalId = try db.insert(proposal: proposal, run: recordId)
       memory.proposals.append(
         AutomationProposal(
-          id: proposalId, runId: recordId, automationId: end.automationId, judge: end.part,
+          id: proposalId, runId: recordId, judge: end.part,
           defId: end.defId, source: proposal.origin.part, origin: proposal.origin.row,
           item: proposal.origin.item, title: proposal.title, due: proposal.due,
           workspace: proposal.workspace, reason: proposal.reason, proposedAt: endedAt,

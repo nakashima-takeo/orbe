@@ -18,6 +18,8 @@ import Observation
   private(set) var unreadable: [AutomationUnreadable] = []
   private(set) var proposals: [AutomationProposal] = []
   private(set) var unreadableProposals: [AutomationUnreadableProposal] = []
+  /// 覚えている候補を出した判定の部品の持ち主（部品 ID → 自動化 ID。外した部品も、候補に指されている間は持ち主を指す）。
+  private(set) var judgeOwners: [AutomationPartID: Int] = [:]
   private var database: AutomationDatabase?
   /// 使えないときの断り。
   private(set) var unavailableError: AutomationError
@@ -38,6 +40,7 @@ import Observation
       unreadable = opened.memory.unreadable
       proposals = opened.memory.proposals
       unreadableProposals = opened.memory.unreadableProposals
+      judgeOwners = opened.memory.judgeOwners
       unavailableError = Self.brokenError
     case .failure(let error):
       unavailableError = error
@@ -65,7 +68,7 @@ import Observation
   var memory: AutomationMemory {
     AutomationMemory(
       automations: automations, unreadable: unreadable, proposals: proposals,
-      unreadableProposals: unreadableProposals)
+      unreadableProposals: unreadableProposals, judgeOwners: judgeOwners)
   }
 
   var heldLinks: Set<String> { memory.heldLinks }
@@ -134,9 +137,6 @@ import Observation
       try db.deleteAutomation(id)
       memory.automations.removeAll { $0.id == id }
       memory.unreadable.removeAll { $0.id == id }
-      for index in memory.proposals.indices where memory.proposals[index].automationId == id {
-        memory.proposals[index].automationId = nil
-      }
       try memory.withdraw(originatingIn: invalidated, db)
       try memory.forgetUnheld(db)
       try memory.recountJudges(db, now: at)
@@ -200,7 +200,7 @@ import Observation
   // MARK: - 書き込み
 
   /// 変異の 1 経路。`body` はメモリの写しを進めながら、変わる行を DB に書く（1 トランザクション）。`sweepingAt` があれば最後に
-  /// 掃除する。通ったら写しをメモリにし、通らなければメモリは変わらない。壊れを見つけたら接続を手放してストアを使えなくする。
+  /// 掃除し、判定の部品の持ち主を読み直す。通ったら写しをメモリにし、通らなければメモリは変わらない。壊れを見つけたら接続を手放してストアを使えなくする。
   /// 検証は呼ぶ前に済ませる（`body` が投げたものはどれも書けなかったことになる）。
   func commit<T>(
     sweepingAt sweep: Date?, _ body: (AutomationDatabase, inout AutomationMemory) throws -> T
@@ -213,6 +213,7 @@ import Observation
       result = try database.transaction {
         let result = try body(database, &memory)
         if let sweep { try database.sweep(now: sweep, holding: holding) }
+        memory.judgeOwners = try database.judgeOwners()
         return result
       }
     } catch {
@@ -224,6 +225,7 @@ import Observation
     if memory.unreadableProposals != unreadableProposals {
       unreadableProposals = memory.unreadableProposals
     }
+    if memory.judgeOwners != judgeOwners { judgeOwners = memory.judgeOwners }
     committed()
     return result
   }
@@ -248,6 +250,7 @@ import Observation
       unreadable = []
       proposals = []
       unreadableProposals = []
+      judgeOwners = [:]
       onUnavailable()
       return unavailableError
     }
@@ -307,6 +310,8 @@ struct AutomationMemory: Equatable {
   var unreadable: [AutomationUnreadable] = []
   var proposals: [AutomationProposal]
   var unreadableProposals: [AutomationUnreadableProposal] = []
+  /// 覚えている候補を出した判定の部品の持ち主（`AutomationStore.judgeOwners`）。
+  var judgeOwners: [AutomationPartID: Int] = [:]
 
   func automation(_ id: Int) -> Automation? {
     automations.first { $0.id == id }
