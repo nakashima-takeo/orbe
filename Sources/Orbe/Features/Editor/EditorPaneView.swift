@@ -54,8 +54,9 @@ final class EditorPaneView: NSView {
   let searchResults: RowList<SearchResultsSource>
   /// ソース管理パネルの状態（面ごと。根が変われば作り直す）。
   private(set) var scm: ScmPanel
-  /// ソース管理の列（検索結果の列と同じく、パネルが隠れている間も持つ）。
+  /// ソース管理の変更の列とグラフの列（検索結果の列と同じく、パネルが隠れている間も持つ）。
   private(set) var scmList: RowList<ScmListSource>
+  private(set) var scmGraphList: RowList<ScmGraphSource>
   /// F4 / ⇧F4 と結果の列の外の押下を拾うイベントの監視（窓に付いている間だけ）。
   var eventMonitor: Any?
   /// サイドバーの幅と開閉（アプリ全体で 1 つ。`configure` が本物を配る）。変化を観測して置き直す。
@@ -84,10 +85,13 @@ final class EditorPaneView: NSView {
     self.scm = scm
     let scmList = Self.scmList(scm)
     self.scmList = scmList
+    let scmGraphList = Self.scmGraphList(scm)
+    self.scmGraphList = scmGraphList
     sideHost = NSHostingView(
       rootView: EditorSideRoot(
         shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
-        scmList: scmList, sidebar: sidebar, localization: localization, fontResolver: fontResolver))
+        scmList: scmList, scmGraphList: scmGraphList, sidebar: sidebar,
+        localization: localization, fontResolver: fontResolver))
     headerHost = NSHostingView(
       rootView: EditorHeaderRoot(
         shell: shell, localization: localization, fontResolver: fontResolver))
@@ -148,10 +152,15 @@ final class EditorPaneView: NSView {
     RowList(source: ScmListSource(panel: scm), rowHeight: Theme.Layout.editorScmRow)
   }
 
+  private static func scmGraphList(_ scm: ScmPanel) -> RowList<ScmGraphSource> {
+    RowList(source: ScmGraphSource(panel: scm), rowHeight: Theme.Layout.editorScmRow)
+  }
+
   private func installRoots() {
     sideHost.rootView = EditorSideRoot(
       shell: shell, tree: tree, search: projectSearch, searchResults: searchResults, scm: scm,
-      scmList: scmList, sidebar: sidebar, localization: localization, fontResolver: fontResolver)
+      scmList: scmList, scmGraphList: scmGraphList, sidebar: sidebar, localization: localization,
+      fontResolver: fontResolver)
     headerHost.rootView = EditorHeaderRoot(
       shell: shell, localization: localization, fontResolver: fontResolver)
     emptyHost.rootView = EditorFaceRoot(localization: localization, content: faceContent)
@@ -222,6 +231,7 @@ final class EditorPaneView: NSView {
     scm.isLive = false
     scm = ScmPanel(root: root)
     scmList = Self.scmList(scm)
+    scmGraphList = Self.scmGraphList(scm)
     wireSourceControl()
     projectSearch.setRoot(root, searchNow: showsSearchPanel && projectSearch.isLive)
     updateLiveness()

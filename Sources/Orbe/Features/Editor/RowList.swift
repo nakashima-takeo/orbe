@@ -1,7 +1,8 @@
 import AppKit
 
-/// 行の列（`RowList`）の源。行の数・行の高さ・行の中身・操作の意味を答える。列は見えている行の枠（行の view）だけを持ち、
-/// 行を番号で源に問うて描かせる。選択は源（model）が持ち、列は操作を渡すだけで自分では動かさない。
+/// 行の列（`RowList`）の源。行の数・行の中身・操作の意味を答える。列は見えている行の枠（行の view）だけを持ち、
+/// 行を番号で源に問うて描かせる。選択は源（model）が持ち、列は操作を渡すだけで自分では動かさない。選べる行の無い源
+/// （`Selection == Never`）の列は焦点を持たず、押下だけを渡す。
 ///
 /// 行の組（`Rows`）は列が読み直すたびに写し、次に読み直すまでの問いと操作はすべてその写しで渡す——源の組が差し替わってから
 /// 列が読み直すまでの間に押しても、見えている行に当たる。
@@ -10,16 +11,13 @@ protocol RowListSource: AnyObject {
   associatedtype RowView: ListRowView
   /// 選択の同一性（行の番号がずれても同じ選択を指す値）。
   associatedtype Selection: Hashable
-  /// 行の組（行の数・区間の表・行の中身・選択の引き当ての元）。
+  /// 行の組（行の数・行の中身・選択の引き当ての元）。
   associatedtype Rows
 
   /// 今の行の組。
   var rows: Rows { get }
   /// 行の数。組が写しでない（その場で変わる）源のために、列は行を問う上限にも読み直した後のこの値を使う。
   func rowCount(in rows: Rows) -> Int
-  /// 行の高さ——同じ高さの行が続く区間の表（先頭から順に `0..<rowCount` を隙間なく覆う。区間の前の余白は行の外）。列は
-  /// 読み直すたびに写し、位置と行の引き当てを区間の数に比例する手間で済ませる（行の数に依らない）。
-  func segments(in rows: Rows) -> [RowListSegment]
   /// 枠を 1 つ作る。列は見えている行の数＋1 本まで作って使い回す。
   func makeRowView() -> RowView
   /// 枠 `view` に行 `row` の中身を写す。列は並べるたび（送るたびを含む）に見えている全行について呼ぶので、中身が
@@ -31,6 +29,8 @@ protocol RowListSource: AnyObject {
   /// 最初の行を描く前に 1 度だけ要る準備（字体の読み込み・初回の字組み・色の解決）。列が窓に載った次の周回で呼ぶ。
   func prepareRows(for appearance: NSAppearance)
 
+  /// 列が焦点を持つか（押されて焦点を取り、キーを受ける）。
+  var acceptsFocus: Bool { get }
   /// 列へ焦点を入れる要求があるか（列が窓に載ったとき・`update` で求められたときに見る）。
   var wantsFocus: Bool { get }
   /// 列が焦点の要求を当てた。
@@ -54,7 +54,24 @@ protocol RowListSource: AnyObject {
 }
 
 extension RowListSource {
+  var acceptsFocus: Bool { true }
   func press(_ row: Int, control: Int, in rows: Rows) -> RowListAnchor<Selection>? { nil }
+}
+
+/// 選べる行の無い源の列は焦点を持たない——押しても焦点を取らず（ほかの列の焦点と選択はそのまま）、キーを受けない。
+/// 源が答えるのは描画と押下（クリック・行の中の部品）だけ。
+extension RowListSource where Selection == Never {
+  var acceptsFocus: Bool { false }
+  var wantsFocus: Bool { false }
+  func focusRequestDidApply() {}
+  func focusDidChange(_ focused: Bool) {}
+  func row(of selection: Never, in rows: Rows) -> Int? {
+    switch selection {}
+  }
+  func perform(_ key: RowListKey, in rows: Rows) {}
+  func keyDidRelease() {}
+  func doubleClick(_ row: Int, in rows: Rows) {}
+  func select(_ row: Int, in rows: Rows) {}
 }
 
 /// 行の中の部品を押した後、ポインタの下に留める行——押した行が組に在る間はその行、抜けたら後継の行（無ければ nil）。列は
@@ -68,21 +85,6 @@ extension RowListSource {
 struct RowListAnchor<ID: Hashable> {
   let pressed: ID
   let successor: ID?
-}
-
-/// 同じ高さの行が続く区間。`leading` は区間の前の余白（行ではないので、押しても乗っても何も起きない）。
-struct RowListSegment: Equatable {
-  let start: Int
-  let count: Int
-  let height: CGFloat
-  let leading: CGFloat
-
-  init(start: Int, count: Int, height: CGFloat, leading: CGFloat = 0) {
-    self.start = start
-    self.count = count
-    self.height = height
-    self.leading = leading
-  }
 }
 
 /// 列が源へ渡すキーの操作。
@@ -114,7 +116,6 @@ final class RowList<Source: RowListSource>: NSScrollView {
   /// 最初の `tile` で見せる。
   private var pendingReveal: Source.Selection?
 
-  /// `rowHeight` は行 1 つ分の高さ（末尾の空き・ページ送りの重ね）。行そのものの高さは源の区間の表が決める。
   init(source: Source, rowHeight: CGFloat) {
     list = RowListView(source: source, rowHeight: rowHeight)
     super.init(frame: .zero)

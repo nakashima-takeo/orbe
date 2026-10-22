@@ -10,8 +10,9 @@ struct EditorSideRoot: View {
   /// 検索結果の列（pane が持ち、パネルが隠れても捨てない）。
   let searchResults: RowList<SearchResultsSource>
   let scm: ScmPanel
-  /// ソース管理の列（検索結果の列と同じく pane が持つ）。
+  /// ソース管理の変更の列とグラフの列（検索結果の列と同じく pane が持つ）。
   let scmList: RowList<ScmListSource>
+  let scmGraphList: RowList<ScmGraphSource>
   /// 開閉の真実（pane と同じ 1 つ。写しを挟まない）。
   let sidebar: EditorSidebarState
   let localization: LocalizationStore
@@ -29,7 +30,8 @@ struct EditorSideRoot: View {
           switch sidebar.panel {
           case .files: ExplorerView(shell: shell, tree: tree)
           case .search: SearchPanelView(search: search, results: searchResults)
-          case .sourceControl: ScmPanelView(panel: scm, list: scmList)
+          case .sourceControl:
+            ScmPanelView(panel: scm, list: scmList, graphList: scmGraphList, sidebar: sidebar)
           }
         }
       }

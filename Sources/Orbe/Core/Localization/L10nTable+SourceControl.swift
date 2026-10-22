@@ -7,7 +7,7 @@ extension L10n {
     .editorScmTitle: ("ソース管理", "Source Control"),
     .editorScmStaged: ("ステージされている変更", "Staged Changes"),
     .editorScmChanges: ("変更", "Changes"),
-    .editorScmGraph: ("ソース管理グラフ", "Source Control Graph"),
+    .editorScmGraph: ("グラフ", "Graph"),
     .editorScmPlaceholderBranch: ("メッセージ (↵ で \"%@\" にコミット)", "Message (↵ to commit on \"%@\")"),
     .editorScmPlaceholder: ("メッセージ (↵ でコミット)", "Message (↵ to commit)"),
     .editorScmCommit: ("コミット", "Commit"),

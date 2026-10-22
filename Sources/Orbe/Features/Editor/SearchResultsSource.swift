@@ -17,11 +17,6 @@ final class SearchResultsSource: RowListSource {
 
   func rowCount(in search: ProjectSearch) -> Int { search.rowCount }
 
-  /// 見出しも一致も同じ高さ（区間 1 つ）。
-  func segments(in search: ProjectSearch) -> [RowListSegment] {
-    [RowListSegment(start: 0, count: search.rowCount, height: Theme.Layout.editorSearchRow)]
-  }
-
   func makeRowView() -> SearchResultRowView { SearchResultRowView(frame: .zero) }
 
   func show(_ row: Int, of search: ProjectSearch, in view: SearchResultRowView, emoji: NSFont?) {

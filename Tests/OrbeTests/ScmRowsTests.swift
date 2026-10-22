@@ -2,12 +2,12 @@ import XCTest
 
 @testable import Orbe
 
-/// status → 2 区分の行と、列の行の組。
+/// status → 2 区分の行と、変更の列・グラフの列の行の組。
 ///
 /// 壊れると何が起きるか。ステージした後に編集したファイルが片方の区分にしか出ない・競合がステージ済みに並んで一括で
 /// 解決済みにされる・`git rm --cached` のファイルを解除できない・削除したファイルを「ファイルを開く」で開こうとする・
 /// 未追跡を確認なしで捨てる側に数える・git が何も変えない行を一括操作に数える・ボタンの姿が古い行のまま残る・パスの順に
-/// 並ばない・レールの件数が行の数と食い違う・区間の表が行とずれて押した行と違う行が開く。
+/// 並ばない・レールの件数が行の数と食い違う。グラフの列の頭にブランチが出ない・さらに表示が出ない・管理外でも空の枠が出る。
 final class ScmRowsTests: OrbeTestCase {
   private func entry(
     _ staged: GitStatus.Change?, _ unstaged: GitStatus.Change?, from original: String? = nil
@@ -95,7 +95,7 @@ final class ScmRowsTests: OrbeTestCase {
     func enabled(_ entries: [String: GitStatus.Entry]) -> [Bool] {
       let changes = ScmChanges.build(
         GitStatus(entries: entries, untrackedDirectories: [], branch: nil, stagedVersions: [:]))
-      let layout = ScmLayout.build(changes, branch: nil, graph: nil, collapsed: [])
+      let layout = ScmLayout.build(changes, collapsed: [])
       guard let row = layout.index[ScmRowID(section: .changes, path: nil)] else { return [] }
       view.show(layout.items[row], language: .en, emoji: nil)
       guard case .header(let header) = view.content else { return [] }
@@ -109,31 +109,47 @@ final class ScmRowsTests: OrbeTestCase {
     XCTAssertEqual(enabled(["c.txt": conflict, "a.txt": entry(nil, .modified)]), [true, true])
   }
 
-  /// 行が 0 の区分は見出しごと出ず、畳んだ区分のファイル行は出ない。区間の表は行を先頭から隙間なく覆う（列が位置から引く
-  /// 行と、源が描く行がずれない）。
-  func testEmptySectionsAndFoldedFilesAreNotRowsAndSegmentsCoverEveryRow() {
+  /// 変更の列は子の見出しとファイル行だけ。行が 0 の区分は見出しごと出ず、畳んだ区分のファイル行は出ない。
+  func testEmptySectionsAndFoldedFilesAreNotRows() {
     let changes = ScmChanges(
       staged: [], changes: ScmChanges.build(status).changes.filter { $0.path.hasPrefix("src/") },
       head: nil, stagedVersions: [:])
-    let branch = ScmBranch(status.branch)
-    func rows(_ layout: ScmLayout) -> [ScmRowID] {
-      layout.items.indices.compactMap(layout.id(at:))
+    func rows(_ layout: ScmLayout) -> [ScmRowID?] {
+      layout.items.indices.map(layout.id(at:))
     }
-    let header = { (section: ScmSection) in ScmRowID(section: section, path: nil) }
-    let layout = ScmLayout.build(changes, branch: branch, graph: nil, collapsed: [])
+    let header = ScmRowID(section: .changes, path: nil)
+    let layout = ScmLayout.build(changes, collapsed: [])
     XCTAssertEqual(
       rows(layout),
-      [header(.changes)]
+      [header]
         + ["src/a2.swift", "src/a10.swift", "src/b.swift"].map {
           ScmRowID(section: .changes, path: $0)
-        } + [header(.graph)])
-    var next = 0
-    for segment in layout.segments {
-      XCTAssertEqual(segment.start, next)
-      next += segment.count
+        })
+    XCTAssertEqual(rows(ScmLayout.build(changes, collapsed: [.changes])), [header])
+  }
+
+  /// グラフの列は頭にブランチの行、コミット（縦の線の端は最初と最後）、続きがあれば「さらに表示」。ブランチが無ければ空。
+  func testTheGraphRowsStartWithTheBranchAndEndWithMoreOnlyWhenThereIsMore() throws {
+    let branch = ScmBranch(status.branch)
+    func commit(_ oid: String) -> GitGraphCommit {
+      GitGraphCommit(
+        oid: oid, parents: [], subject: oid, localBranches: [], remoteBranches: [], isPushed: false)
     }
-    XCTAssertEqual(next, layout.items.count)
-    let folded = ScmLayout.build(changes, branch: branch, graph: nil, collapsed: [.changes])
-    XCTAssertEqual(rows(folded), [header(.changes), header(.graph)])
+    let commits = [commit("c2"), commit("c1")]
+    let layout = ScmGraphLayout.build(
+      branch: branch, graph: GitCommitGraph(commits: commits, hasMore: true))
+    XCTAssertEqual(
+      layout.items,
+      [
+        .branch(try XCTUnwrap(branch)),
+        .commit(commits[0], isFirst: true, isLast: false),
+        .commit(commits[1], isFirst: false, isLast: true), .more,
+      ])
+    XCTAssertEqual(
+      ScmGraphLayout.build(branch: branch, graph: nil).items, [.branch(try XCTUnwrap(branch))],
+      "読む前もブランチの行は出る")
+    XCTAssertEqual(
+      ScmGraphLayout.build(branch: nil, graph: GitCommitGraph(commits: commits, hasMore: false)),
+      .empty)
   }
 }

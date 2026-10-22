@@ -1,12 +1,13 @@
 import Foundation
 
 /// ソース管理パネルの面ごとの状態——根のサービスの観測（status・git の状態）・件数・2 区分の行・グラフ・HEAD が push 済みか・
-/// 区分の開閉・選択・パネルの中の焦点。worktree の事実（メッセージ・操作・失敗）は `SourceControl` が持ち、ここは見せ方と観測だけ。
+/// 親「ソース管理」・子の区分・グラフの枠の開閉・選択・パネルの中の焦点。worktree の事実（メッセージ・操作・失敗）は
+/// `SourceControl` が持ち、ここは見せ方と観測だけ。
 ///
 /// 面が見えている間（`isLive`）は根のサービスを握って status を受け、件数（レールのバッジ）を出す。行の組み立て・グラフ・
 /// HEAD の push 済みの読みは、パネルを出している間（`isShown`）だけ行う——レールの件数のためにパネルを開かせず、隠れた
-/// パネルのために git を起こさない。行の組み立ては裏で 1 本ずつ済ませ、main は結果を差し替えて列に行の版を渡すだけ
-/// （→ `ScmRows`）。
+/// パネルのために git を起こさない。変更の列の行の組み立ては裏で 1 本ずつ済ませ、main は結果を差し替えて列に行の版を渡す
+/// だけ。グラフの列の行は高々数百行なので main で作る（→ `ScmRows`）。
 @MainActor @Observable
 final class ScmPanel {
   /// パネルの中の焦点の置き場。
@@ -41,11 +42,16 @@ final class ScmPanel {
   private(set) var branch: GitStatus.Branch?
   private(set) var changes = ScmChanges.empty
   private(set) var layout = ScmLayout.empty
-  /// 行の組が変わるたびに進む（列はこれを見て読み直す）。
+  /// 変更の列の行の組が変わるたびに進む（列はこれを見て読み直す）。
   private(set) var rowsVersion = 0
   private(set) var graph: GitCommitGraph?
-  /// 区分「ソース管理」（メッセージ欄・ボタン・失敗の文）が開いている。
-  var isControlsOpen = true
+  private(set) var graphLayout = ScmGraphLayout.empty
+  /// グラフの列の行の組が変わるたびに進む。
+  private(set) var graphRowsVersion = 0
+  /// 親「ソース管理」（メッセージ欄・ボタン・失敗の文と 2 つの子の区分）が開いている。変えるのは `setRepositoryOpen` だけ。
+  private(set) var isRepositoryOpen = true
+  /// グラフの枠が開いている。
+  var isGraphOpen = true
   private(set) var collapsed: Set<ScmSection> = []
   private(set) var selection: ScmRowID?
   private(set) var focusedArea: Area?
@@ -66,6 +72,8 @@ final class ScmPanel {
   @ObservationIgnored var onOpenFile: (URL) -> Void = { _ in }
   /// 破棄の確認を出す（確認が要らなければそのまま破棄する）。
   @ObservationIgnored var onDiscard: ([ScmChanges.File]) -> Void = { _ in }
+  /// 親を畳む直前（欄と列がまだ窓に居るうち）。焦点がパネルの中にあれば、面の本文へ移す。
+  @ObservationIgnored var onRepositoryWillClose: () -> Void = {}
   /// 面の workspace の実効設定で、裏の fetch がオンか（使う時点で読む）。
   @ObservationIgnored var autoFetchEnabled: () -> Bool = { true }
   /// キーで行へ動いたときの開きの間引き。
@@ -139,7 +147,7 @@ final class ScmPanel {
 
   /// 根のサービスが git 管理下かを読む。管理下なら裏の fetch を欲しがるか決め直す——根のサービスから何か届くたびに呼ぶので、
   /// status の取り直しが落ち続けていても、根の git dir が分かった後の知らせで決まる。
-  private func resolveManaged() {
+  func resolveManaged() {
     guard let files = liveFiles else { return }
     if files.repo != nil {
       isManaged = true
@@ -159,7 +167,7 @@ final class ScmPanel {
   }
 
   /// status が届いた（か、握り直した根のサービスの status を読む）。
-  private func statusDidChange() {
+  func statusDidChange() {
     guard liveFiles?.status != nil else { return }
     ownWrites.statusDidArrive()
     resolveManaged()
@@ -171,10 +179,10 @@ final class ScmPanel {
     requestBuild()
   }
 
-  /// 件数と、パネルを出していれば行の組を、今の入力（status・グラフ・開閉）から裏で作り直す。組み立ては 1 本ずつで、
+  /// 件数と、パネルを出していれば変更の列の行の組を、今の入力（status・開閉）から裏で作り直す。組み立ては 1 本ずつで、
   /// 走っている間の要求は「終わったらもう 1 回」に畳む——どの組み立ても始めた時点の最新の入力から作るので、届いた結果は
   /// 捨てずに当てられ、最後に当たるのはいつも最新の入力から作った組になる。2 区分は status が変わったときだけ作り直し、
-  /// グラフ・開閉だけが変わったら手元の 2 区分を使う（直列なので、手元の 2 区分は前の組み立てが当てた最新のもの）。
+  /// 開閉だけが変わったら手元の 2 区分を使う（直列なので、手元の 2 区分は前の組み立てが当てた最新のもの）。
   private func requestBuild() {
     if buildJob.isRunning {
       buildJob.again = true
@@ -191,7 +199,6 @@ final class ScmPanel {
     let builtFrom = built == nil ? ownWrites.statusNumber : ownWrites.rowsNumber
     if rows { changesAreStale = false }
     let branch = status.branch
-    let graph = self.graph
     let collapsed = self.collapsed
     DispatchQueue.global(qos: .userInitiated).async { [weak self] in
       guard rows else {
@@ -201,8 +208,7 @@ final class ScmPanel {
         }
       }
       let changes = built ?? ScmChanges.build(status)
-      let layout = ScmLayout.build(
-        changes, branch: ScmBranch(branch), graph: graph, collapsed: collapsed)
+      let layout = ScmLayout.build(changes, collapsed: collapsed)
       Self.deliver {
         self?.apply(
           branch: branch, count: changes.count, changes: changes, layout: layout,
@@ -218,7 +224,7 @@ final class ScmPanel {
 
   /// 裏の結果を差し替え、待っている組み立てがあれば始める。選んでいた行が消えたら、同じ区分のその位置の行（無ければ
   /// 前の行）を選ぶ（開かない）。置き換えた 2 区分と行の組は裏で手放す（数万行の解放を main に載せない。列が握る写しは
-  /// 列が裏で手放す）。
+  /// 列が裏で手放す）。行を組んだ（パネルを出している）なら、ブランチの変化をグラフの列へ写す。
   private func apply(
     branch: GitStatus.Branch?, count: Int, changes: ScmChanges?, layout: ScmLayout?,
     builtFrom: Int
@@ -234,6 +240,7 @@ final class ScmPanel {
       ownWrites.rowsDidApply(builtFrom: builtFrom)
       rowsVersion &+= 1
       DispatchQueue.global(qos: .utility).async { withExtendedLifetime(replaced) {} }
+      updateGraphRows()
     }
     if buildJob.again {
       buildJob.again = false
@@ -285,7 +292,7 @@ final class ScmPanel {
       graphJob.isRunning = false
       if let graph, graph != self.graph {
         self.graph = graph
-        if isShown { requestBuild() }
+        if isShown { updateGraphRows() }
       }
       if graphJob.again {
         graphJob.again = false
@@ -320,6 +327,14 @@ final class ScmPanel {
     }
   }
 
+  /// グラフの列の行の組を今のブランチとグラフから作り、変わっていれば差し替えて列に読み直させる。
+  private func updateGraphRows() {
+    let next = ScmGraphLayout.build(branch: ScmBranch(branch), graph: graph)
+    guard next != graphLayout else { return }
+    graphLayout = next
+    graphRowsVersion &+= 1
+  }
+
   /// 「さらに表示」: 件数を増やして頭から読み直す。
   func showMoreCommits() {
     graphLimit += Self.graphPage
@@ -333,6 +348,17 @@ final class ScmPanel {
   }
 
   // MARK: - 開閉
+
+  /// 親「ソース管理」を開く・畳む。畳むときは、欄と列が窓から外れる前に焦点を本文へ移させ（外れてからでは AppKit が焦点を
+  /// 窓へ落とし、キーがどこにも届かない）、当てていない焦点の要求を捨てる（開いた瞬間に焦点を奪わない）。選択は残す。
+  func setRepositoryOpen(_ open: Bool) {
+    guard open != isRepositoryOpen else { return }
+    if !open {
+      onRepositoryWillClose()
+      focusRequest = nil
+    }
+    isRepositoryOpen = open
+  }
 
   func isOpen(_ section: ScmSection) -> Bool { !collapsed.contains(section) }
 
@@ -370,31 +396,5 @@ final class ScmPanel {
   func panelDidHide() {
     navigation.drop()
     focusedArea = nil
-  }
-}
-
-extension ScmPanel: RootFilesObserver {
-  func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change) {
-    resolveManaged()
-  }
-
-  func rootFilesStatusDidChange(_ files: RootFiles) {
-    statusDidChange()
-  }
-
-  func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version) {}
-
-  func rootFilesGitStateDidChange(_ files: RootFiles, remoteRefsChanged: Bool) {
-    resolveManaged()
-    readGraphAndHead(remoteRefsMayHaveMoved: remoteRefsChanged)
-  }
-}
-
-/// 操作の 1 段目の終わりは `ScmPanel+Commit`（範囲に数える自分の書き込み）。
-extension ScmPanel: SourceControlObserver {
-  /// 自分のネット操作の終わりは remote 追跡 ref を動かしうる（push は HEAD を動かさないので、前の値を残すと push の直後に
-  /// amend・取り消しが押せる）。HEAD を動かす操作は、HEAD の違いで分からないになる。
-  func sourceControl(_ control: SourceControl, operationDidFinish kind: SourceControl.Kind) {
-    readGraphAndHead(remoteRefsMayHaveMoved: kind.isNetwork)
   }
 }

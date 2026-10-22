@@ -1,6 +1,6 @@
 import Foundation
 
-/// 列の選択・キー・押下（検索結果の列と同じ型。→ `ScmListSource`）。
+/// 変更の列の選択・キー・押下（検索結果の列と同じ型。→ `ScmListSource`）。
 extension ScmPanel {
   /// 選んだファイル行を開く（見出し・選択なしは開かない）。
   func openSelection(_ opening: Opening) {
@@ -10,19 +10,17 @@ extension ScmPanel {
     onOpenDiff(EditorDiff.Key(root: root, path: path, kind: kind), opening)
   }
 
-  /// ↑↓: 渡れる行（区分見出しとファイル行）だけを渡る。未選択なら先頭。ファイル行へ動けば仮で開く（間引く）。
+  /// ↑↓: 子の見出しとファイル行を順に渡る。未選択なら先頭。ファイル行へ動けば仮で開く（間引く）。
   func moveSelection(by delta: Int, isRepeat: Bool, in layout: ScmLayout) {
     let rows = layout.items.indices
     guard !rows.isEmpty else { return }
-    let navigable = { (row: Int) in layout.id(at: row) != nil }
     let before = selection
     var row: Int?
     if let selection, let current = layout.index[selection] {
-      var next = current + delta
-      while rows.contains(next), !navigable(next) { next += delta }
+      let next = current + delta
       row = rows.contains(next) ? next : nil
     } else {
-      row = rows.first(where: navigable)
+      row = rows.first
     }
     if let row { select(layout.id(at: row)) }
     if selection != before, selection?.path != nil { navigation.didNavigate(isRepeat: isRepeat) }
@@ -59,10 +57,10 @@ extension ScmPanel {
     }
   }
 
-  /// ⌘↑: 先頭の行（か未選択）ならメッセージ欄へ戻る。
+  /// ⌘↑: 先頭の行（か未選択）ならメッセージ欄へ戻る（列が見えていれば、同じ親の中の欄も見えている）。
   func returnToMessageIfAtTop() {
-    let top = layout.items.indices.first { layout.id(at: $0) != nil }
-    guard selection.map({ layout.index[$0] == top }) ?? true, isControlsOpen else { return }
+    let top = layout.items.indices.first
+    guard selection.map({ layout.index[$0] == top }) ?? true else { return }
     requestFocus(.message)
   }
 
@@ -77,10 +75,6 @@ extension ScmPanel {
     case .file:
       select(layout.id(at: row))
       openSelection(.browse)
-    case .more:
-      showMoreCommits()
-    case .branch, .commit:
-      break
     }
   }
 
@@ -105,7 +99,6 @@ extension ScmPanel {
       case .stageAll where !changes.committable.isEmpty:
         stage(changes.committable.map(\.row))
       case .discardAll where !changes.discardable.isEmpty: onDiscard(changes.discardable)
-      case .refreshGraph: readGraphAndHead(remoteRefsMayHaveMoved: true)
       default: break
       }
     case .file(let section, let file):
@@ -124,8 +117,6 @@ extension ScmPanel {
           ? nil : layout.anchor(pressing: row, in: section)
       default: break
       }
-    default:
-      break
     }
     return nil
   }
@@ -135,5 +126,4 @@ extension ScmPanel {
 enum ScmControl: Int {
   case openFile, discard, stage, unstage
   case discardAll, stageAll, unstageAll
-  case refreshGraph
 }

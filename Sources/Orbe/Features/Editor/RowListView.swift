@@ -2,12 +2,12 @@ import AppKit
 
 /// 行を並べる列（`RowList` の文書）。行は数万になりうるので、見えている行の数＋1 本の枠だけを持ち、行 r を枠
 /// r mod 本数 に割り当てて使い回す——送って描き直すのは新しく見えた行だけで、行の数が変わっても列の高さを変えるだけ
-/// （行ごとの仕事をしない）。行の高さは源の区間の表で決まり、位置 ↔ 行は区間の表を二分探索で引く。最後の行の下に行 1 つ分の
+/// （行ごとの仕事をしない）。行はどれも同じ高さ（`rowHeight`）。最後の行の下に行 1 つ分の
 /// 空きを持つ——末尾まで送っても最後の行が下端に付かない（VS Code の一覧と同じ）。空きは文書の内側なので、ホイール・つまみ・
 /// End のどれでも届き、押しても行は無い。
 ///
-/// キーは源の操作へ渡す（`RowListKey`）。Home / End・PageUp / PageDown は列が送るだけ。押すと焦点を取り、行の番号を源へ
-/// 渡す——行の中の部品の上なら、行のクリックではなく部品の押下として渡す。ポインタの下の行には行の中の位置を写す（hover と、
+/// キーは源の操作へ渡す（`RowListKey`）。Home / End・PageUp / PageDown は列が送るだけ。押すと焦点を取り（焦点を持たない源の
+/// 列は取らない）、行の番号を源へ渡す——行の中の部品の上なら、行のクリックではなく部品の押下として渡す。ポインタの下の行には行の中の位置を写す（hover と、
 /// 部品の説明のツールチップ）。VoiceOver には AX のリスト（行の総数と、見えている行・選択の行）として見せる。
 ///
 /// 部品の押下に源が錨を返せば、留める行の上端を押した行の窓の中の高さに合わせ続け、押し続けの守りを張る
@@ -21,16 +21,12 @@ final class RowListView<Source: RowListSource>: NSView {
   private var drawn: Source.Rows
   /// 列の高さを決めた行の数（`reloadRows` で源から写す）。
   private(set) var rowCount = 0
-  /// 区間の表（`reloadRows` で源から写す）。
-  private var geometry = RowListSegments([])
   /// 留める行と、その上端を合わせる窓の中の高さ。
   private var anchor: (rows: RowListAnchor<Source.Selection>, windowY: CGFloat)?
   /// 錨のための一時の空き（文書の下）。
   private var bottomSpace: CGFloat = 0
   /// 押し続けの守り（錨を受け取った押下で張る）。
   private var pressGuard: RowListPressGuard?
-  /// 行の高さの最小（枠の本数を決める）。
-  private var minimumHeight: CGFloat
   private var slots: [Source.RowView] = []
 
   /// 選んでいる行の番号（源の選択を写したもの）。
@@ -46,7 +42,6 @@ final class RowListView<Source: RowListSource>: NSView {
     self.source = source
     self.rowHeight = rowHeight
     drawn = source.rows
-    minimumHeight = rowHeight
     super.init(frame: .zero)
     setAccessibilityElement(true)
     setAccessibilityRole(.list)
@@ -76,8 +71,6 @@ final class RowListView<Source: RowListSource>: NSView {
     drawn = source.rows
     DispatchQueue.global(qos: .utility).async { withExtendedLifetime(previous) {} }
     rowCount = source.rowCount(in: drawn)
-    geometry = RowListSegments(source.segments(in: drawn))
-    minimumHeight = geometry.segments.map(\.height).min() ?? rowHeight
     holdAnchor()
     resizeDocument()
     layoutRows()
@@ -88,9 +81,12 @@ final class RowListView<Source: RowListSource>: NSView {
     source.row(of: selection, in: drawn)
   }
 
-  /// 文書の高さ（区間の表・最後の行の下の 1 行分の空き・一時の空き）。
+  /// 行の高さの和（最後の行の下の空きと一時の空きを含まない）。
+  private var rowsHeight: CGFloat { CGFloat(rowCount) * rowHeight }
+
+  /// 文書の高さ（行・最後の行の下の 1 行分の空き・一時の空き）。
   private func resizeDocument() {
-    let height = geometry.height + rowHeight + bottomSpace
+    let height = rowsHeight + rowHeight + bottomSpace
     guard frame.height != height else { return }
     setFrameSize(NSSize(width: frame.width, height: height))
   }
@@ -104,15 +100,15 @@ final class RowListView<Source: RowListSource>: NSView {
   /// 見えている行に枠を割り当てて描かせる（行が見えなくなった枠は隠す）。
   func layoutRows() {
     let visible = visibleRect
-    let capacity = Int((max(visible.height, minimumHeight) / minimumHeight).rounded(.up)) + 1
+    let capacity = Int((max(visible.height, rowHeight) / rowHeight).rounded(.up)) + 1
     while slots.count < capacity {
       let slot = source.makeRowView()
       slot.frame = NSRect(x: 0, y: 0, width: bounds.width, height: rowHeight)
       addSubview(slot)
       slots.append(slot)
     }
-    let count = min(source.rowCount(in: drawn), geometry.rowCount)
-    let first = min(geometry.firstRow(from: max(0, visible.minY)), count)
+    let count = shownCount
+    let first = min(Int(max(0, visible.minY) / rowHeight), count)
     var shown = Set<Int>()
     var row = first
     while row < count {
@@ -138,7 +134,7 @@ final class RowListView<Source: RowListSource>: NSView {
 
   /// 見えていなければ、見えるところまで最小限だけ送る（送るなら錨を外す）。
   func scrollRowToVisible(_ row: Int) {
-    guard row < geometry.rowCount else { return }
+    guard row < rowCount else { return }
     let shown = rect(ofRow: row)
     let visible = visibleRect
     guard shown.minY < visible.minY || shown.maxY > visible.maxY else { return }
@@ -160,7 +156,7 @@ final class RowListView<Source: RowListSource>: NSView {
       let offset = convert(NSPoint(x: 0, y: anchor.windowY), from: nil).y - visible.minY
       top = max(0, rect(ofRow: target).minY - offset)
     }
-    bottomSpace = max(0, top + visible.height - (geometry.height + rowHeight))
+    bottomSpace = max(0, top + visible.height - (rowsHeight + rowHeight))
     resizeDocument()
     if visible.minY != top { scroll(NSPoint(x: 0, y: top)) }
     layoutRows()
@@ -205,17 +201,18 @@ final class RowListView<Source: RowListSource>: NSView {
     pressGuard = nil
   }
 
-  /// 行 `row`（区間の表の中）の枠。
+  /// 描ける行の数——読み直した時点の行の数と、源の今の行の数の小さい方（組がその場で変わる源は、読み直す前に行が
+  /// 減りうる）。
+  private var shownCount: Int { min(rowCount, source.rowCount(in: drawn)) }
+
   private func rect(ofRow row: Int) -> NSRect {
-    let span = geometry.span(ofRow: row)
-    return NSRect(x: 0, y: span.top, width: bounds.width, height: span.height)
+    NSRect(x: 0, y: CGFloat(row) * rowHeight, width: bounds.width, height: rowHeight)
   }
 
   private func row(at point: NSPoint) -> Int? {
-    guard let row = geometry.row(atY: point.y), row < source.rowCount(in: drawn) else {
-      return nil
-    }
-    return row
+    guard point.y >= 0 else { return nil }
+    let row = Int(point.y / rowHeight)
+    return row < shownCount ? row : nil
   }
 
   /// 見えている行 `row` の枠。
@@ -259,7 +256,7 @@ final class RowListView<Source: RowListSource>: NSView {
     source.focusRequestDidApply()
   }
 
-  override var acceptsFirstResponder: Bool { true }
+  override var acceptsFirstResponder: Bool { source.acceptsFocus }
 
   override func becomeFirstResponder() -> Bool {
     source.focusDidChange(true)
@@ -274,7 +271,7 @@ final class RowListView<Source: RowListSource>: NSView {
   // MARK: - マウス
 
   override func mouseDown(with event: NSEvent) {
-    window?.makeFirstResponder(self)
+    if source.acceptsFocus { window?.makeFirstResponder(self) }
     let point = convert(event.locationInWindow, from: nil)
     guard let row = row(at: point) else { return }
     if let slot = slot(showing: row), let control = slot.control(at: convert(point, to: slot)) {

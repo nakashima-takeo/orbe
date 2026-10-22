@@ -48,7 +48,7 @@
       var isReady: Bool {
         panel.changes.staged.count == 1 && panel.changes.changes.count == 3
           && panel.graph?.commits.count == 5 && panel.isHeadPushed == false
-          && panel.layout.items.count == 13
+          && panel.layout.items.count == 6 && panel.graphLayout.items.count == 6
       }
 
       /// 撮る view（pane をそのまま載せる）。

@@ -1,14 +1,16 @@
 import AppKit
 import SwiftUI
-
 /// サイドバー: ソース管理パネル（見本 ScmPanel）。上から、パネルヘッダー → 実行中の帯（0.3 秒を超えて走る操作があるときだけ）→
-/// 区分見出し「ソース管理」（✓ コミット・再読込・…（プル / プッシュ / フェッチ））→ メッセージ欄・コミットボタン・失敗の文 →
-/// 列（2 区分とグラフ。AppKit）。git 管理外の根では、ヘッダーの下に理由の一文だけ。部分ごとに別の view にして、読む値が
-/// 変わった部分だけを組み直す（status が届くたびに欄まで組み直さない）。根が変わると面は panel と列を組で作り直すので、中身は
-/// panel で同一視する（そうしないと載せた列・欄の AppKit と言語の追従が前の根のまま残る）。
+/// 親「ソース管理」（見出し・メッセージ欄・コミットボタン・失敗の文・変更の列〔2 つの子の区分。AppKit〕）→ 境目 → グラフの枠
+/// （区切り線・見出し「グラフ」・グラフの列。AppKit）。git 管理外の根では、ヘッダーの下に理由の一文だけ。部分ごとに別の view
+/// にして、読む値が変わった部分だけを組み直す（status が届くたびに欄まで組み直さない）。根が変わると面は panel と列を組で
+/// 作り直すので、中身は panel で同一視する（そうしないと載せた列・欄の AppKit と言語の追従が前の根のまま残る）。
 struct ScmPanelView: View {
   let panel: ScmPanel
   let list: RowList<ScmListSource>
+  let graphList: RowList<ScmGraphSource>
+  /// グラフの枠の高さの持ち主（アプリ全体で 1 つ）。
+  let sidebar: EditorSidebarState
   @Environment(\.localization) private var l10n
 
   var body: some View {
@@ -24,9 +26,7 @@ struct ScmPanelView: View {
           .padding(.vertical, Theme.Space.step)
       } else {
         ScmBand(control: panel.control)
-        ScmControlsHead(panel: panel)
-        if panel.isControlsOpen { ScmControls(panel: panel) }
-        ScmList(panel: panel, list: list)
+        ScmSplit(panel: panel, list: list, graphList: graphList, sidebar: sidebar)
       }
     }
     .id(ObjectIdentifier(panel))
@@ -88,11 +88,11 @@ private struct ScmBand: View {
   }
 }
 
-/// 区分見出し「ソース管理」22（padding 0 8 0 4）: シェブロン（下の欄・ボタン・失敗の文を畳む）・題・右端に ✓（コミット。欄の ↵ と
-/// 同じ条件）・再読込（status を取り直し、グラフと HEAD の push 済みを読み直す）・…（プル / プッシュ / フェッチ / ─ /
+/// 親「ソース管理」の見出し 22（padding 0 8 0 4）: シェブロン（欄・ボタン・失敗の文と 2 つの子の区分をまとめて畳む）・題・右端に
+/// ✓（コミット。欄の ↵ と同じ条件）・再読込（status を取り直し、グラフと HEAD の push 済みを読み直す）・…（プル / プッシュ / フェッチ / ─ /
 /// コミット (amend) / 最後のコミットを取り消す。ボタンの姿に縛られず常に開き、ボタンが押せない間も amend・取り消しに届く。
 /// 2 つの項目は ▾ と同じく開いた時点の写しで照らす）。
-private struct ScmControlsHead: View {
+struct ScmControlsHead: View {
   let panel: ScmPanel
   @State private var hovering = false
   @Environment(\.colorScheme) private var scheme
@@ -102,7 +102,7 @@ private struct ScmControlsHead: View {
 
   var body: some View {
     HStack(spacing: 0) {
-      TreeChevron(open: panel.isControlsOpen)
+      TreeChevron(open: panel.isRepositoryOpen)
       Text(l10n.string(.editorScmTitle))
         .font(Font.theme.editorScmSection)
         .foregroundStyle(Color.theme.editorText)
@@ -126,7 +126,7 @@ private struct ScmControlsHead: View {
     .background(hovering ? EditorInk(scheme).fill(Self.hoverAlpha) : .clear)
     .contentShape(Rectangle())
     .onHover { hovering = $0 }
-    .onTapGesture { panel.isControlsOpen.toggle() }
+    .onTapGesture { panel.setRepositoryOpen(!panel.isRepositoryOpen) }
   }
 
   /// ✓（押した時点の写しで押せるときだけ）。
@@ -150,7 +150,7 @@ private struct ScmControlsHead: View {
 }
 
 /// メッセージ欄・コミットボタン・失敗の文（padding 2 12 8・gap 6）。
-private struct ScmControls: View {
+struct ScmControls: View {
   let panel: ScmPanel
   @Environment(\.localization) private var l10n
 
@@ -296,30 +296,9 @@ private struct ScmCommitButton: View {
   }
 }
 
-/// 列（pane が持つ `RowList`）を載せる。読む値（行の版・選択・焦点の要求・絵文字の字体）をここで読んで列へ渡し、言語が
-/// 変われば行の文言を読み直させる。
-private struct ScmList: View {
-  let panel: ScmPanel
-  let list: RowList<ScmListSource>
-  @Environment(\.chromeFontResolver) private var fontResolver
-  @Environment(\.localization) private var l10n
-
-  var body: some View {
-    RowListHost(
-      list: list, rowsVersion: panel.rowsVersion, selection: panel.selection,
-      emoji: fontResolver.emojiFont, wantsFocus: panel.focusRequest == .list
-    )
-    .onChange(of: l10n.language, initial: true) { _, language in
-      guard list.list.source.language != language else { return }
-      list.list.source.language = language
-      list.list.reloadRows()
-    }
-  }
-}
-
 /// 見出しのツール 20（radius 4・hover 地 fill .08 で字が上がる。既定の字 muted）。押せない姿は字を薄くし、押しても何もしない。
 /// `menu` を渡すと押下で OS のメニューを出す。
-private struct ScmToolButton: View {
+struct ScmToolButton: View {
   let glyph: EditorGlyphs.Glyph
   let help: String
   let isEnabled: Bool

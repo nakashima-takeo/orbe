@@ -1,12 +1,17 @@
 import AppKit
 import OrbeEditorCore
 
-/// ソース管理パネルの結線——行から diff・ファイルを開く・破棄の確認・パネルの中のキー（メッセージ欄の ⌘↵・列の ⌘↑）。
+/// ソース管理パネルの結線——行から diff・ファイルを開く・破棄の確認・親を畳むときの焦点・パネルの中のキー（メッセージ欄の
+/// ⌘↵・列の ⌘↑）。
 extension EditorPaneView {
   func wireSourceControl() {
     scm.onOpenDiff = { [weak self] key, opening in self?.openScmDiff(key, opening) }
     scm.onOpenFile = { [weak self] url in self?.open(url, as: .pinned) }
     scm.onDiscard = { [weak self] files in self?.confirmDiscard(files) }
+    scm.onRepositoryWillClose = { [weak self] in
+      guard let self, focusIsInSourceControl else { return }
+      reclaimSidebarFocus()
+    }
     scm.autoFetchEnabled = { [weak self] in self?.settings()[SettingKeys.scmAutoFetch] ?? false }
   }
 

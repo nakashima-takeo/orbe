@@ -2,7 +2,7 @@ import AppKit
 
 /// 行の中で描く印（`EditorGlyphs` を CGPath にしたもの。寸法ごとに 1 度だけ作る）。
 enum ScmGlyphShape: Hashable {
-  case chevron, chevronOpen, openFile, discard, plus, minus, refresh, branch
+  case chevron, chevronOpen, openFile, discard, plus, minus, branch
 
   private var glyph: EditorGlyphs.Glyph {
     switch self {
@@ -11,7 +11,6 @@ enum ScmGlyphShape: Hashable {
     case .discard: EditorGlyphs.discard
     case .plus: EditorGlyphs.plus
     case .minus: EditorGlyphs.minus
-    case .refresh: EditorGlyphs.refresh
     case .branch: EditorGlyphs.branch
     }
   }
@@ -40,6 +39,24 @@ enum ScmGlyphShape: Hashable {
     Self.cache[self, default: [:]][size] = made
     return made
   }
+
+  /// `rect`（正方形）に `color` で描く。
+  @MainActor func draw(in rect: NSRect, _ color: CGColor, in context: CGContext) {
+    let path = path(size: rect.width)
+    context.saveGState()
+    context.translateBy(x: rect.minX, y: rect.minY)
+    if path.fills {
+      context.setFillColor(color)
+      context.addPath(path.path)
+      context.fillPath()
+    } else {
+      context.setStrokeColor(color)
+      context.setLineWidth(path.lineWidth)
+      context.addPath(path.path)
+      context.strokePath()
+    }
+    context.restoreGState()
+  }
 }
 
 /// ソース管理の行だけが使う色（行に共通の色は `RowColors`）。外観ごとに 1 度だけ解いて使い回す。
@@ -58,8 +75,6 @@ struct ScmRowColors {
   let buttonHover: CGColor
   let countStrong: CGColor
   let graphLine: CGColor
-  let branchGround: CGColor
-  let branchBorder: CGColor
   let localRefGround: CGColor
   let localRefBorder: CGColor
   let remoteRefGround: CGColor
@@ -82,8 +97,6 @@ struct ScmRowColors {
     buttonHover = EditorStyle.fill(0.10).cgColor
     countStrong = Theme.Color.accentPrimary.withAlphaComponent(0.35).cgColor
     graphLine = EditorStyle.hairline(0.12).cgColor
-    branchGround = EditorStyle.sunk(0.35).cgColor
-    branchBorder = EditorStyle.hairline(0.10).cgColor
     localRefGround = Theme.Color.accentPrimary.withAlphaComponent(0.18).cgColor
     localRefBorder = Theme.Color.accentPrimary.withAlphaComponent(0.4).cgColor
     remoteRefGround = EditorStyle.fill(0.06).cgColor

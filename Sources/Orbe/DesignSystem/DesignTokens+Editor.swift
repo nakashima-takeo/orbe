@@ -258,23 +258,24 @@ extension Theme.Layout {
   /// レールの件数バッジ（最小の幅と高さ）と、アイコンの右下からのはみ出し（右・下）。
   static let editorRailBadge: CGFloat = 15
   static let editorRailBadgeOffset = CGSize(width: 8, height: 4)
-  /// ソース管理（見本 ScmPanel の値）。行（区分見出し・ファイル・コミット・さらに表示）の高さ・種別チップ・行の中のボタンと
-  /// その印・見出しのツールの角・グラフ見出しの上の空き・ブランチの器の高さと上下の空き・メッセージ欄の 1 行の高さ・コミット
-  /// ボタンの高さと ▾ の幅・ref の札の高さ・コミットの点・点の列の幅。
+  /// ソース管理（見本 ScmPanel の値）。行（見出し・ファイル・ブランチ・コミット・さらに表示）の高さ・種別チップ・行の中の
+  /// ボタンとその印・見出しのツールの角・子の区分の字下げ・メッセージ欄の 1 行の高さ・コミットボタンの高さと ▾ の幅・ref の札の
+  /// 高さ・コミットの点・点の列の幅。
   static let editorScmRow: CGFloat = 22
   static let editorScmChip: CGFloat = 16
   static let editorScmRowButton: CGFloat = 18
   static let editorScmGlyph: CGFloat = 13
   static let editorScmTool: CGFloat = 20
-  static let editorScmGraphGap: CGFloat = 8
-  static let editorScmBranch: CGFloat = 24
-  static let editorScmBranchGap: CGFloat = 6
+  static let editorScmIndent: CGFloat = 8
   static let editorScmMessage: CGFloat = 26
   static let editorScmCommitButton: CGFloat = 26
   static let editorScmCommitCaret: CGFloat = 24
   static let editorScmRef: CGFloat = 15
   static let editorScmDot: CGFloat = 7
   static let editorScmDotColumn: CGFloat = 16
+  /// グラフの枠の高さ（見出し 22 を含む）の既定（見出し＋8 行）と下限（見出し＋3 行）。見本に無い（人の決定）。
+  static let editorScmGraph: CGFloat = 198
+  static let editorScmGraphMin: CGFloat = 88
   /// 実行中の帯の高さと「止める」の高さ（見本に無い。決定の図の値）。
   static let editorScmBand: CGFloat = 28
   static let editorScmStop: CGFloat = 20

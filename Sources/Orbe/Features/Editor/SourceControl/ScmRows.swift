@@ -1,11 +1,10 @@
 import Foundation
 import OrbeEditorCore
 
-/// ソース管理の区分。
+/// ソース管理の子の区分（親「ソース管理」の中）。
 enum ScmSection: Hashable {
   case staged
   case changes
-  case graph
 }
 
 /// 列の行の同一性（行の番号がずれても同じ行を指す）。区分見出しは `path` が nil。
@@ -81,7 +80,6 @@ struct ScmChanges {
     switch section {
     case .staged: staged
     case .changes: changes
-    case .graph: []
     }
   }
 
@@ -140,7 +138,7 @@ struct ScmChanges {
   }
 }
 
-/// ブランチの器の中身。
+/// グラフの先頭のブランチの行の中身。
 struct ScmBranch: Equatable {
   /// ブランチ名（detached なら HEAD の短い sha。初回コミット前の detached は無い）。
   let label: String
@@ -160,8 +158,8 @@ struct ScmBranch: Equatable {
   }
 }
 
-/// 列の行の組——行の列・区間の表・行の同一性の索引。status・グラフ・開閉が変わるたびに裏で 1 つの値として作り、main で
-/// 差し替える（行の数が数万でも、main の仕事は差し替えだけ）。
+/// 変更の列の行の組——行の列・行の同一性の索引。status・開閉が変わるたびに裏で 1 つの値として作り、main で差し替える
+/// （行の数が数万でも、main の仕事は差し替えだけ）。
 struct ScmLayout {
   /// 「変更」の見出しのすべてステージ・すべて破棄に入る行があるか。
   struct Bulk {
@@ -174,34 +172,22 @@ struct ScmLayout {
   enum Item {
     case header(ScmSection, count: Int, isOpen: Bool, bulk: Bulk = .none)
     case file(ScmSection, ScmChanges.File)
-    case branch(ScmBranch)
-    /// コミット（`isFirst` / `isLast` は縦の線の端）。
-    case commit(GitGraphCommit, isFirst: Bool, isLast: Bool)
-    case more
   }
 
   let items: [Item]
-  let segments: [RowListSegment]
   /// 区分見出しとファイル行の位置。
   let index: [ScmRowID: Int]
   /// 区分ごとのファイル行の範囲（見出しは含まない）。
   let fileRanges: [ScmSection: Range<Int>]
 
-  static let empty = ScmLayout(items: [], segments: [], index: [:], fileRanges: [:])
+  static let empty = ScmLayout(items: [], index: [:], fileRanges: [:])
 
-  /// 行を作る（裏で呼ぶ）。区分は行が 0 なら見出しごと出さない。グラフはブランチがあれば出す。
-  static func build(
-    _ changes: ScmChanges, branch: ScmBranch?, graph: GitCommitGraph?,
-    collapsed: Set<ScmSection>
-  ) -> ScmLayout {
+  /// 行を作る（裏で呼ぶ）。区分は行が 0 なら見出しごと出さない。
+  static func build(_ changes: ScmChanges, collapsed: Set<ScmSection>) -> ScmLayout {
     var items: [Item] = []
-    var heights: [CGFloat] = []
-    var leadings: [Int: CGFloat] = [:]
     var index: [ScmRowID: Int] = [:]
     var ranges: [ScmSection: Range<Int>] = [:]
-    items.reserveCapacity(changes.count + 4)
-    heights.reserveCapacity(changes.count + 4)
-    let row = Theme.Layout.editorScmRow
+    items.reserveCapacity(changes.count + 2)
     for section in [ScmSection.staged, .changes] {
       let files = changes.files(in: section)
       guard !files.isEmpty else { continue }
@@ -213,60 +199,16 @@ struct ScmLayout {
           canStageAll: !changes.committable.isEmpty, canDiscardAll: !changes.discardable.isEmpty)
         : .none
       items.append(.header(section, count: files.count, isOpen: isOpen, bulk: bulk))
-      heights.append(row)
       let start = items.count
       if isOpen {
         for file in files {
           index[ScmRowID(section: section, path: file.path)] = items.count
           items.append(.file(section, file))
-          heights.append(row)
         }
       }
       ranges[section] = start..<items.count
     }
-    if let branch {
-      let isOpen = !collapsed.contains(.graph)
-      index[ScmRowID(section: .graph, path: nil)] = items.count
-      leadings[items.count] = Theme.Layout.editorScmGraphGap
-      items.append(.header(.graph, count: 0, isOpen: isOpen))
-      heights.append(row)
-      if isOpen {
-        items.append(.branch(branch))
-        heights.append(Theme.Layout.editorScmBranch + Theme.Layout.editorScmBranchGap * 2)
-        let commits = graph?.commits ?? []
-        for (offset, commit) in commits.enumerated() {
-          items.append(.commit(commit, isFirst: offset == 0, isLast: offset == commits.count - 1))
-          heights.append(row)
-        }
-        if graph?.hasMore == true {
-          items.append(.more)
-          heights.append(row)
-        }
-      }
-    }
-    return ScmLayout(
-      items: items, segments: segments(heights, leadings: leadings), index: index,
-      fileRanges: ranges)
-  }
-
-  /// 高さの列を、同じ高さの続く区間に畳む。前の余白を持つ行は区間の頭にする。
-  private static func segments(
-    _ heights: [CGFloat], leadings: [Int: CGFloat]
-  ) -> [RowListSegment] {
-    var segments: [RowListSegment] = []
-    var start = 0
-    func close(_ end: Int) {
-      segments.append(
-        RowListSegment(
-          start: start, count: end - start, height: heights[start], leading: leadings[start] ?? 0))
-    }
-    for (row, height) in heights.enumerated()
-    where row > 0 && (height != heights[row - 1] || leadings[row] != nil) {
-      close(row)
-      start = row
-    }
-    if start < heights.count { close(heights.count) }
-    return segments
+    return ScmLayout(items: items, index: index, fileRanges: ranges)
   }
 
   /// 区分 `section` のファイル行のうち `offset` 番目の位置に来る行（範囲の外なら最後の行）。`skipped` の行は数えない——その行が
@@ -291,13 +233,39 @@ struct ScmLayout {
       successor: fileID(in: section, at: row - range.lowerBound, skipping: row))
   }
 
-  /// 行 `row` の同一性（区分見出しとファイル行だけ。ほかは nil）。
+  /// 行 `row` の同一性（範囲の外なら nil）。
   func id(at row: Int) -> ScmRowID? {
     guard row >= 0, row < items.count else { return nil }
     switch items[row] {
     case .header(let section, _, _, _): return ScmRowID(section: section, path: nil)
     case .file(let section, let file): return ScmRowID(section: section, path: file.path)
-    default: return nil
     }
+  }
+}
+
+/// グラフの列の行の組——先頭のブランチの行・コミット・さらに表示。ブランチが無ければ空（グラフの枠を出さない）。高々数百行
+/// なので、グラフかブランチが変わった時点で main で作る（変更の組の裏の組み立てには相乗りしない——グラフだけの変化で
+/// 数万行の変更の組を作り直さない）。
+struct ScmGraphLayout: Equatable {
+  enum Item: Equatable {
+    case branch(ScmBranch)
+    /// コミット（`isFirst` / `isLast` は縦の線の端）。
+    case commit(GitGraphCommit, isFirst: Bool, isLast: Bool)
+    case more
+  }
+
+  let items: [Item]
+
+  static let empty = ScmGraphLayout(items: [])
+
+  static func build(branch: ScmBranch?, graph: GitCommitGraph?) -> ScmGraphLayout {
+    guard let branch else { return .empty }
+    let commits = graph?.commits ?? []
+    var items: [Item] = [.branch(branch)]
+    for (offset, commit) in commits.enumerated() {
+      items.append(.commit(commit, isFirst: offset == 0, isLast: offset == commits.count - 1))
+    }
+    if graph?.hasMore == true { items.append(.more) }
+    return ScmGraphLayout(items: items)
   }
 }

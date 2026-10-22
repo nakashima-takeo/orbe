@@ -9,18 +9,13 @@ extension RowListTests {
     let version: Int
   }
 
-  /// 源の偽物。行 r の中身は "row r"、選択の同一性は行の番号そのもの。受けた操作を記録する。行の高さは `segments`
-  /// （無ければ全行 20 の区間 1 つ）。
+  /// 源の偽物。行 r の中身は "row r"、選択の同一性は行の番号そのもの。受けた操作を記録する。
   final class Source: RowListSource {
     var rowCount = 200
-    var segments: [RowListSegment]?
-    /// 組の版。組は版だけを写す値で、行の数と高さは読み直さなくてもその場で変わる。
+    /// 組の版。組は版だけを写す値で、行の数は読み直さなくてもその場で変わる。
     var version = 0
     var rows: SourceRows { SourceRows(version: version) }
     func rowCount(in rows: SourceRows) -> Int { rowCount }
-    func segments(in rows: SourceRows) -> [RowListSegment] {
-      segments ?? [RowListSegment(start: 0, count: rowCount, height: 20)]
-    }
     var wantsFocus = false
     private(set) var keys: [RowListKey] = []
     private(set) var releases = 0
@@ -83,4 +78,19 @@ extension RowListTests {
       return frame.contains(point) ? ListRowControl(id: 0, frame: frame) : nil
     }
   }
+}
+
+/// 選べる行の無い源の偽物（行は 10）。受けたクリックを記録する。
+final class RowListUnselectableSource: RowListSource {
+  typealias Selection = Never
+  var rows: RowListTests.SourceRows { RowListTests.SourceRows(version: 0) }
+  private(set) var clicks: [Int] = []
+  func rowCount(in rows: RowListTests.SourceRows) -> Int { 10 }
+  func makeRowView() -> RowListTests.Row { RowListTests.Row(frame: .zero) }
+  func show(_ row: Int, of rows: RowListTests.SourceRows, in view: RowListTests.Row, emoji: NSFont?)
+  {
+    view.show("row \(row)")
+  }
+  func prepareRows(for appearance: NSAppearance) {}
+  func click(_ row: Int, in rows: RowListTests.SourceRows) { clicks.append(row) }
 }

@@ -24,12 +24,12 @@ extension EditorPaneView {
   }
 
   /// レールの項目を押した。検索・ソース管理のパネルを出したら入力欄に焦点を入れる（VS Code のアクティビティバーと同じ）。
+  /// ソース管理の親「ソース管理」を畳んでいれば、欄も列も無いので焦点を求めない（当たらない要求を残すと、親を開いた瞬間に
+  /// 焦点を奪う）。
   func selectPanel(_ panel: EditorSidebarState.Panel) {
     sidebar.select(panel)
     if showsSearchPanel { projectSearch.requestFocus(.field) }
-    if showsSourceControl {
-      scm.requestFocus(scm.isControlsOpen ? .message : .list)
-    }
+    if showsSourceControl, scm.isRepositoryOpen { scm.requestFocus(.message) }
   }
 
   /// ⌘⇧F の種——押した時点の焦点がテキスト面で、選択が 1 行以内の非空ならその文字列、⌘F のバーの入力欄ならその

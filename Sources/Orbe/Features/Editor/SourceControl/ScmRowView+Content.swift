@@ -9,23 +9,14 @@ extension ScmRowView {
     case .file(let section, let file):
       "f\(section)\(file.path)\u{0}\(file.badge)\(file.existsInWorkingTree)\(file.canStage)"
         + "\(file.canDiscard)\(language)"
-    case .branch(let branch):
-      "b\(branch.label)\u{0}\(branch.divergence?.arrows ?? "")"
-    case .commit(let commit, let isFirst, let isLast):
-      "c\(commit.oid)\(commit.isPushed)\(isFirst)\(isLast)\(commit.localBranches)\(commit.remoteBranches)"
-    case .more: "m\(language)"
     }
   }
 
   /// VoiceOver に渡す中身の文字列。
   static func label(_ item: ScmLayout.Item, _ language: Language) -> String {
     switch item {
-    case .header(let section, let count, _, _):
-      section == .graph ? title(section, language) : "\(title(section, language)), \(count)"
+    case .header(let section, let count, _, _): "\(title(section, language)), \(count)"
     case .file(_, let file): file.path
-    case .branch(let branch): branch.label
-    case .commit(let commit, _, _): commit.subject
-    case .more: L10n.string(.editorScmShowMore, language)
     }
   }
 
@@ -34,24 +25,6 @@ extension ScmRowView {
     case .header(let section, let count, let isOpen, let bulk):
       .header(header(section, count: count, isOpen: isOpen, bulk: bulk, language))
     case .file(let section, let file): .file(self.file(section, file, language, emoji))
-    case .branch(let branch):
-      .branch(
-        Branch(
-          name: TextLine(
-            branch.label, Theme.Typography.editorScmBranch, glyphs: .chrome(emoji: emoji)),
-          divergence: branch.divergence.map(\.arrows).flatMap {
-            $0.isEmpty ? nil : TextLine($0, Theme.Typography.editorScmBranch)
-          }))
-    case .commit(let commit, let isFirst, let isLast):
-      .commit(
-        Commit(
-          subject: TextLine(
-            commit.subject, Theme.Typography.editorScmCommit, glyphs: .chrome(emoji: emoji)),
-          isPushed: commit.isPushed, isFirst: isFirst, isLast: isLast,
-          refs: commit.localBranches.map { (TextLine($0, Theme.Typography.editorScmRef), true) }
-            + commit.remoteBranches.map { (TextLine($0, Theme.Typography.editorScmRef), false) }))
-    case .more:
-      .more(TextLine(L10n.string(.editorScmShowMore, language), Theme.Typography.editorScmMore))
     }
   }
 
@@ -59,11 +32,10 @@ extension ScmRowView {
     switch section {
     case .staged: L10n.string(.editorScmStaged, language)
     case .changes: L10n.string(.editorScmChanges, language)
-    case .graph: L10n.string(.editorScmGraph, language)
     }
   }
 
-  /// 区分見出し: 「ステージされている変更」はすべて解除、「変更」はすべて破棄・すべてステージ、グラフは再読込。すべて破棄・
+  /// 子の見出し: 「ステージされている変更」はすべて解除、「変更」はすべて破棄・すべてステージ。すべて破棄・
   /// すべてステージは、入る行が無ければ押せない姿で置く（すべて解除の見出しは、行が 0 なら出ない）。
   private static func header(
     _ section: ScmSection, count: Int, isOpen: Bool, bulk: ScmLayout.Bulk, _ language: Language
@@ -79,12 +51,11 @@ extension ScmRowView {
           button(.discardAll, .discard, bulk.canDiscardAll, .editorScmDiscardAll),
           button(.stageAll, .plus, bulk.canStageAll, .editorScmStageAll),
         ]
-      case .graph: [button(.refreshGraph, .refresh, true, .editorScmRefresh)]
       }
     return Header(
       section: section, isOpen: isOpen,
       label: TextLine(title(section, language), Theme.Typography.editorScmSection),
-      count: section == .graph ? nil : TextLine(count.formatted(), Theme.Typography.editorScmCount),
+      count: TextLine(count.formatted(), Theme.Typography.editorScmCount),
       buttons: buttons)
   }
 

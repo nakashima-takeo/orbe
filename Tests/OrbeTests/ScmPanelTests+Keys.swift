@@ -2,13 +2,13 @@ import XCTest
 
 @testable import Orbe
 
-/// 列のキー——↑↓ は区分見出しとファイル行だけを渡り（グラフの行には止まらない）、ファイル行でだけ仮で開く。← → Enter は
-/// 見出しの開閉と見出し・ファイル行の行き来、Enter はファイル行を普通のタブで開く。⌘↑ は先頭の行から、欄が見えているときだけ
-/// 欄へ戻る。
+/// 変更の列のキー——↑↓ は子の見出しとファイル行を渡り（グラフは別の列で、キーでは入らない）、ファイル行でだけ仮で開く。
+/// ← → Enter は見出しの開閉と見出し・ファイル行の行き来、Enter はファイル行を普通のタブで開く。⌘↑ は先頭の行から欄へ戻る。
+/// 親「ソース管理」を畳むと、当てていない焦点の要求を捨て、焦点を本文へ移させてから畳む。
 ///
-/// 壊れると何が起きるか。↓ がグラフのブランチやコミットの行に止まり、Enter も ← → も効かない行に選択が残る。見出しへ動いた
-/// だけで diff が開く。Enter で開いても焦点が列に残る。畳んだ区分「ソース管理」へ ⌘↑ が焦点を送り、焦点の要求が残って次に
-/// 区分「ソース管理」を開いたとき欄が焦点を奪う。
+/// 壊れると何が起きるか。↓ が列の末尾を越えて選択を失う。見出しへ動いただけで diff が開く。Enter で開いても焦点が列に残る。
+/// 親を畳んだ後に残った焦点の要求が、次に親を開いたとき欄の焦点を奪う。親を畳んだ瞬間に欄・列が窓から外れ、キーがどこにも
+/// 届かなくなる。
 extension ScmPanelTests {
   /// 開いた diff と開き方。
   typealias Opened = (key: EditorDiff.Key, opening: ScmPanel.Opening)
@@ -22,9 +22,8 @@ extension ScmPanelTests {
     try repo.write("n.txt", "new\n")
     show(
       until: { panel in
-        panel.changes.staged.count == 1 && panel.changes.changes.count == 2
-          && panel.graph != nil
-          && panel.layout.items.contains { if case .commit = $0 { true } else { false } }
+        panel.changes.staged.count == 1 && panel.layout.items.count == 5
+          && panel.graphLayout.items.contains { if case .commit = $0 { true } else { false } }
       }, "2 区分とグラフの行")
     panel.navigation.delay.schedule = { _, fire in fire() }
     var opened: [Opened] = []
@@ -40,12 +39,12 @@ extension ScmPanelTests {
     pumpMain(until: { ready(self.panel) }, message)
   }
 
-  /// ↓ は未選択なら先頭から、区分見出しとファイル行だけを順に渡り、グラフの見出しの先（ブランチ・コミット）へは進まない。
-  /// ファイル行へ動いたときだけ、その区分の diff を仮で開く。
-  func testArrowsCrossOnlyHeadersAndFilesAndPreviewTheFilesTheyReach() throws {
+  /// ↓ は未選択なら先頭から、子の見出しとファイル行を順に渡り、末尾で止まる。ファイル行へ動いたときだけ、その区分の diff を
+  /// 仮で開く。
+  func testArrowsCrossHeadersAndFilesAndPreviewTheFilesTheyReach() throws {
     let opened = try keysPanel()
     var visited: [ScmRowID?] = []
-    for _ in 0..<7 {
+    for _ in 0..<6 {
       panel.moveSelection(by: 1, isRepeat: false, in: panel.layout)
       visited.append(panel.selection)
     }
@@ -53,7 +52,7 @@ extension ScmPanelTests {
       visited,
       [
         id(.staged), id(.staged, "s.txt"), id(.changes), id(.changes, "a.txt"),
-        id(.changes, "n.txt"), id(.graph), id(.graph),
+        id(.changes, "n.txt"), id(.changes, "n.txt"),
       ])
     XCTAssertEqual(opened().map(\.key.path), ["s.txt", "a.txt", "n.txt"], "見出しでは開かない")
     XCTAssertEqual(opened().map(\.key.kind), [.staged, .workingTree, .workingTree])
@@ -89,24 +88,43 @@ extension ScmPanelTests {
     XCTAssertEqual(opened().count, count, "見出しの Enter は開かない")
   }
 
-  /// ⌘↑ は先頭の行か未選択のときだけ欄へ焦点を求め、区分「ソース管理」を畳んで欄が隠れていれば求めない。
-  func testCommandUpReturnsToTheMessageOnlyFromTheTopWhileItIsShown() throws {
+  /// ⌘↑ は先頭の行か未選択のときだけ欄へ焦点を求める。
+  func testCommandUpReturnsToTheMessageOnlyFromTheTop() throws {
     _ = try keysPanel()
     panel.select(id(.staged, "s.txt"))
     panel.returnToMessageIfAtTop()
     XCTAssertNil(panel.focusRequest, "先頭でなければ戻らない")
 
-    panel.isControlsOpen = false
     panel.select(id(.staged))
-    panel.returnToMessageIfAtTop()
-    XCTAssertNil(panel.focusRequest, "欄が隠れていれば戻らない")
-
-    panel.isControlsOpen = true
     panel.returnToMessageIfAtTop()
     XCTAssertEqual(panel.focusRequest, .message)
     panel.focusRequestDidApply()
     panel.select(nil)
     panel.returnToMessageIfAtTop()
     XCTAssertEqual(panel.focusRequest, .message, "未選択からも戻る")
+  }
+
+  /// 親を畳む口は、畳む前に焦点を本文へ移させ（欄と列がまだ窓に居るうち）、当てていない焦点の要求を捨てる。選択・子の区分の
+  /// 開閉は残り、開けば元のまま。
+  func testClosingTheRepositoryLetsTheFocusLeaveFirstAndDropsTheFocusRequest() throws {
+    _ = try keysPanel()
+    var order: [String] = []
+    panel.onRepositoryWillClose = { [unowned self] in
+      order.append(panel.isRepositoryOpen ? "leave while open" : "leave after close")
+    }
+    panel.select(id(.changes, "a.txt"))
+    panel.toggle(.staged)
+    panel.requestFocus(.message)
+    panel.setRepositoryOpen(false)
+    XCTAssertEqual(order, ["leave while open"])
+    XCTAssertFalse(panel.isRepositoryOpen)
+    XCTAssertNil(panel.focusRequest, "当てていない要求は捨てる")
+
+    panel.setRepositoryOpen(false)
+    XCTAssertEqual(order.count, 1, "畳んだまま畳んでも呼ばない")
+    panel.setRepositoryOpen(true)
+    XCTAssertEqual(panel.selection, id(.changes, "a.txt"), "選択は残る")
+    XCTAssertFalse(panel.isOpen(.staged), "子の区分の開閉は残る")
+    XCTAssertEqual(order.count, 1, "開くときは呼ばない")
   }
 }
