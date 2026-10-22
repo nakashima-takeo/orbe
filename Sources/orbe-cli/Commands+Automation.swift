@@ -251,8 +251,10 @@ private func automationList(_ rest: [String]) -> Never {
   for automation in automations {
     let parts = automation["parts"] as? [String: [String: Any]] ?? [:]
     let state =
-      parts.values.contains { $0["running"] as? Bool == true }
-      ? "running" : automation["paused"] as? Bool == true ? "paused" : "active"
+      automation["definitionError"] != nil
+      ? "unreadable"
+      : parts.values.contains { $0["running"] as? Bool == true }
+        ? "running" : automation["paused"] as? Bool == true ? "paused" : "active"
     let definition = automation["definition"] as? [String: Any]
     let next = parts.compactMap { key, part in
       (part["nextRunAt"] as? String).map { (key: key, at: $0) }
