@@ -201,7 +201,8 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertEqual(first.map(\.[0]), ["\(fetches[0])", "\(fetches[1])", "next"])
     XCTAssertTrue(first[0][1].hasSuffix(" fetch: 1 fetched, 0 new"), first[0][1])
     XCTAssertEqual(first[2][1], "\(fetches[1])")
-    XCTAssertEqual(lines(["--part", "fetch", "--before", first[2][1]]).map(\.[0]), ["\(fetches[2])"])
+    XCTAssertEqual(
+      lines(["--part", "fetch", "--before", first[2][1]]).map(\.[0]), ["\(fetches[2])"])
     XCTAssertEqual(lines([]).count, 4, "部品を指さなければ全部品の回")
   }
 
