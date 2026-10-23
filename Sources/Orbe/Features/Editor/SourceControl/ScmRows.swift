@@ -108,7 +108,7 @@ struct ScmChanges {
           (
             key,
             File(
-              row: row, badge: badge(change), existsInWorkingTree: exists,
+              row: row, badge: .init(change), existsInWorkingTree: exists,
               discardMovesToTrash: false)
           ))
       }
@@ -117,7 +117,7 @@ struct ScmChanges {
           (
             key,
             File(
-              row: row, badge: badge(change), existsInWorkingTree: exists,
+              row: row, badge: .init(change), existsInWorkingTree: exists,
               discardMovesToTrash: entry.discardMovesToTrash, submodule: entry.unstagedSubmodule)
           ))
       }
@@ -135,15 +135,6 @@ struct ScmChanges {
     status.entries.values.reduce(0) { count, entry in
       if entry.isConflicted { return count + 1 }
       return count + (entry.staged == nil ? 0 : 1) + (entry.unstaged == nil ? 0 : 1)
-    }
-  }
-
-  private static func badge(_ change: GitStatus.Change) -> GitStatus.Badge {
-    switch change {
-    case .added, .copied: .added
-    case .untracked: .untracked
-    case .unmerged: .conflicted
-    default: .modified
     }
   }
 

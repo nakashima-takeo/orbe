@@ -89,9 +89,19 @@ struct GitStatus: Equatable {
     }
   }
 
-  /// ファイル 1 つに付く印。ディレクトリ行の集約は消費者が `entries` から導く。
+  /// ファイル 1 つに付く印。
   enum Badge: Equatable {
     case modified, added, untracked, conflicted
+
+    /// 変化の印（エクスプローラーとソース管理の行が共有する写し）。
+    init(_ change: Change) {
+      switch change {
+      case .added: self = .added
+      case .untracked: self = .untracked
+      case .unmerged: self = .conflicted
+      default: self = .modified
+      }
+    }
   }
 
   /// 相対パス → 変化（rename・copy は新しいパスで引く）。未追跡はファイル 1 件ずつ。index から外して作業ツリーに残した
@@ -105,22 +115,12 @@ struct GitStatus: Equatable {
   /// index と HEAD が違うパス（rename は元パスも）の index の版。XY が同じまま index の中身が変わったことも、値の違いになる。
   let stagedVersions: [String: IndexVersion]
 
-  /// その相対パスの行（rename・copy なら元パスも）。
-  func row(_ path: String) -> Row {
-    Row(path: path, originalPath: entries[path]?.originalPath)
-  }
-
-  /// 完全一致のエントリがあれば、競合 → conflicted、`unstaged ?? staged` が added → added、
-  /// untracked → untracked、それ以外の変化 → modified。無ければ未追跡ディレクトリの中なら untracked。
+  /// 完全一致のエントリがあれば、競合なら conflicted、そうでなければ `unstaged ?? staged` の印（`Badge.init`）。無ければ
+  /// 未追跡ディレクトリの中なら untracked。
   func badge(of relativePath: String) -> Badge? {
     if let entry = entries[relativePath] {
       if entry.isConflicted { return .conflicted }
-      switch entry.unstaged ?? entry.staged {
-      case .added: return .added
-      case .untracked: return .untracked
-      case .none: return nil
-      default: return .modified
-      }
+      return (entry.unstaged ?? entry.staged).map(Badge.init)
     }
     let inside = untrackedDirectories.contains {
       relativePath == $0 || relativePath.hasPrefix($0 + "/")
@@ -131,16 +131,11 @@ struct GitStatus: Equatable {
   /// NUL 区切りの porcelain v2。`1`（通常）・`2`（rename・copy。次のトークンが元パス）・`u`（競合）・
   /// `?`（未追跡）・`# branch.*`（ブランチのヘッダ）を読み、`!`（ignored）・他のヘッダ・不正なトークンは捨てる。
   static func parse(_ data: Data) -> GitStatus {
-    let tokens = data.split(separator: 0, omittingEmptySubsequences: false)
-      .map { String(bytes: $0, encoding: .utf8) ?? "" }
     var entries: [String: Entry] = [:]
     var versions: [String: IndexVersion] = [:]
     var directories: [String] = []
     var headers = BranchHeaders()
-    var index = 0
-    while index < tokens.count {
-      let token = tokens[index]
-      index += 1
+    for (token, original) in lines(data) {
       switch token.prefix(2) {
       case "# ":
         headers.read(token)
@@ -150,11 +145,7 @@ struct GitStatus: Equatable {
           if line.entry.staged != nil { versions[line.path] = line.index }
         }
       case "2 ":
-        // 元パスは次のトークン。無ければ丸ごと捨てる。
-        guard index < tokens.count else { break }
-        let original = tokens[index]
-        index += 1
-        if let line = renamed(token, from: original) {
+        if let original, let line = renamed(token, from: original) {
           entries[line.path] = merge(entries[line.path], line.entry)
           if line.entry.staged != nil { versions[line.path] = line.index }
           if line.entry.staged == .renamed { versions[original] = .absent }
@@ -179,6 +170,27 @@ struct GitStatus: Equatable {
       stagedVersions: versions)
   }
 
+  /// トークンを行（`2` の行は元パスのトークンと組）に分ける。行の種類は UTF-8 として読む前のバイトで決める——UTF-8 で
+  /// 読めない行（非 UTF-8 のパス）は捨てるが、`2` の行はそのときも元パスのトークンを消費する（次の行として読まない）。
+  /// 元パスのトークンが無い `2` の行は捨てる。
+  private static func lines(_ data: Data) -> [(token: String, original: String?)] {
+    var tokens = data.split(separator: 0, omittingEmptySubsequences: false)[...]
+    var lines: [(token: String, original: String?)] = []
+    while let bytes = tokens.popFirst() {
+      guard bytes.prefix(2).elementsEqual("2 ".utf8) else {
+        if let token = String(bytes: bytes, encoding: .utf8) { lines.append((token, nil)) }
+        continue
+      }
+      guard let original = tokens.popFirst() else { break }
+      if let token = String(bytes: bytes, encoding: .utf8),
+        let original = String(bytes: original, encoding: .utf8)
+      {
+        lines.append((token, original))
+      }
+    }
+    return lines
+  }
+
   /// 同じパスが index 側の変化の行と未追跡の行の両方で出たら（`git rm --cached` の後の `1 D.` と `?`）、行の順に依らず
   /// 1 つに併せる——後の行で上書きすると、ステージ済みの削除が見えず解除もできない。
   private static func merge(_ existing: Entry?, _ entry: Entry) -> Entry {
@@ -189,7 +201,7 @@ struct GitStatus: Equatable {
     return Entry(
       staged: tracked.staged, unstaged: tracked.unstaged ?? .untracked,
       originalPath: tracked.originalPath,
-      unstagedSubmodule: tracked.unstaged == nil ? nil : tracked.unstagedSubmodule)
+      unstagedSubmodule: tracked.unstagedSubmodule)
   }
 
   /// `# branch.oid <commit | (initial)>`・`# branch.head <name | (detached)>`・`# branch.upstream <name>`・
