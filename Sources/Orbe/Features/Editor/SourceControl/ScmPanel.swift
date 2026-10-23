@@ -301,7 +301,7 @@ final class ScmPanel {
     }
   }
 
-  /// HEAD 1 件をグラフの口で読み、push 済みか（どれかの remote 追跡ブランチから届くか）を読んだコミットと組で持つ。グラフの
+  /// HEAD のコミットと push 済みか（どれかの remote 追跡ブランチから届くか）を組で読む（グラフの口を通らない）。グラフの
   /// 50 件に HEAD が入る保証は無い（upstream が先に進んでいると上位を upstream が占める）ので、グラフの結果から拾わない。
   ///
   /// 分からないとした後は、その後に始めた読みが終わるまで分からないまま（走っている読みはきっかけより前を読んでいるかも
@@ -314,10 +314,10 @@ final class ScmPanel {
       return
     }
     headJob.isRunning = true
-    repo.commitGraph(refs: ["HEAD"], limit: 1) { [weak self] graph in
+    repo.headPush { [weak self] read in
       guard let self else { return }
       headJob.isRunning = false
-      headPush = graph?.commits.first.map { ($0.oid, $0.isPushed) }
+      headPush = read
       if headJob.again {
         headJob.again = false
         readHead(remoteRefsMayHaveMoved: false)

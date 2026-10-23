@@ -169,7 +169,7 @@ final class ScmRowsTests: OrbeTestCase {
     let branch = ScmBranch(status.branch)
     func commit(_ oid: String) -> GitGraphCommit {
       GitGraphCommit(
-        oid: oid, parents: [], subject: oid, localBranches: [], remoteBranches: [], isPushed: false)
+        oid: oid, subject: oid, localBranches: [], remoteBranches: [], isPushed: false)
     }
     let commits = [commit("c2"), commit("c1")]
     let layout = ScmGraphLayout.build(

@@ -3,11 +3,12 @@ import XCTest
 
 @testable import Orbe
 
-/// コミットグラフ（実 git）: 既定の範囲（HEAD と upstream）で、各コミットの親・題・指している local / remote のブランチ名・
-/// push 済みかが読め、件数を区切って続きを読め、範囲の ref を選べ、ユーザーの設定で出力が変わらない。
+/// コミットグラフ（実 git）: HEAD と upstream から届くコミットの題・指している local / remote のブランチ名・push 済みかが
+/// 読め、件数を区切って読んでその先があるかも分かり、ユーザーの設定で出力が変わらない。HEAD の push 済みはグラフを通らず
+/// 同じ定義で読める。
 ///
-/// 壊れると何が起きるか。upstream にだけあるコミットが出ない・merge の線が繋がらない・push 済みの印が嘘をつく・
-/// `log.showSignature` の利用者で題が署名の行に化ける。
+/// 壊れると何が起きるか。upstream にだけあるコミットが出ない・push 済みの印が嘘をつく・さらに表示が出ない・
+/// `log.showSignature` の利用者で題が署名の行に化ける・push した直後に amend・取り消しが押せる。
 final class GitRepoGraphTests: OrbeTestCase {
   private var repo: TempGitRepo!
 
@@ -15,12 +16,21 @@ final class GitRepoGraphTests: OrbeTestCase {
     repo = try TempGitRepo()
   }
 
-  private func graph(
-    _ git: GitRepo, refs: [String]? = nil, skip: Int = 0, limit: Int = 50
-  ) -> GitCommitGraph? {
+  private func graph(_ git: GitRepo, limit: Int = 50) -> GitCommitGraph? {
     var result: GitCommitGraph?
     let done = expectation(description: "graph")
-    git.commitGraph(refs: refs, skip: skip, limit: limit) {
+    git.commitGraph(limit: limit) {
+      result = $0
+      done.fulfill()
+    }
+    wait(for: [done], timeout: 20)
+    return result
+  }
+
+  private func headPush(_ git: GitRepo) -> (commit: String, isPushed: Bool)? {
+    var result: (commit: String, isPushed: Bool)?
+    let done = expectation(description: "headPush")
+    git.headPush {
       result = $0
       done.fulfill()
     }
@@ -48,36 +58,51 @@ final class GitRepoGraphTests: OrbeTestCase {
     let commits = try XCTUnwrap(graph(git)).commits
     XCTAssertEqual(Set(commits.map(\.oid)), [local, remote, initial])
     let byOid = Dictionary(uniqueKeysWithValues: commits.map { ($0.oid, $0) })
-    XCTAssertEqual(byOid[local]?.parents, [initial])
     XCTAssertEqual(byOid[local]?.subject, "local")
     XCTAssertEqual(byOid[local]?.localBranches.sorted(), ["a,b", "main"])
     XCTAssertEqual(byOid[local]?.isPushed, false)
     XCTAssertEqual(byOid[remote]?.remoteBranches, ["origin/main"], "origin/HEAD は含まない")
     XCTAssertEqual(byOid[remote]?.isPushed, true)
     XCTAssertEqual(byOid[initial]?.isPushed, true)
-    XCTAssertEqual(byOid[initial]?.parents, [])
   }
 
-  /// 件数を区切って続きを読め、呼び出し側が範囲の ref を選べる。remote 追跡ブランチが無ければ全部「未 push」。
-  /// 初回コミット前は（失敗でなく）空。
-  func testPagesAndChosenRefs() throws {
+  /// 件数を区切って読み、その先があるかも分かる（件数を増やして読み直せば残りが出る）。remote 追跡ブランチが無ければ全部
+  /// 「未 push」。初回コミット前は（失敗でなく）空。
+  func testItReadsUpToALimitAndTellsWhetherMoreFollow() throws {
     let git = try repo.open()
     for index in 1...4 { commit("c\(index)") }
-    XCTAssertTrue(repo.git(["branch", "side", "HEAD~2"]).isSuccess)
 
     let first = try XCTUnwrap(graph(git, limit: 2))
     XCTAssertEqual(first.commits.map(\.subject), ["c4", "c3"])
     XCTAssertTrue(first.hasMore)
-    let rest = try XCTUnwrap(graph(git, skip: 2, limit: 10))
-    XCTAssertEqual(rest.commits.map(\.subject), ["c2", "c1", "init"])
-    XCTAssertFalse(rest.hasMore)
-    XCTAssertTrue(rest.commits.allSatisfy { !$0.isPushed })
-
-    XCTAssertEqual(
-      try XCTUnwrap(graph(git, refs: ["side"])).commits.map(\.subject), ["c2", "c1", "init"])
+    let all = try XCTUnwrap(graph(git, limit: 10))
+    XCTAssertEqual(all.commits.map(\.subject), ["c4", "c3", "c2", "c1", "init"])
+    XCTAssertFalse(all.hasMore)
+    XCTAssertTrue(all.commits.allSatisfy { !$0.isPushed })
 
     let fresh = try TempGitRepo(initialCommit: false)
     XCTAssertEqual(graph(try fresh.open()), GitCommitGraph(commits: [], hasMore: false))
+  }
+
+  /// HEAD の push 済みは、グラフと同じ定義（どれかの remote 追跡ブランチから届く）で HEAD 1 件だけを読む。upstream が先に
+  /// 進んでいても（グラフの先頭を upstream が占めても）HEAD のコミットで答える。初回コミット前は nil。
+  func testHeadPushReadsOnlyTheHeadCommit() throws {
+    let git = try repo.open()
+    repo.addOrigin()
+    commit("local")
+    let local = repo.head()
+    XCTAssertEqual(headPush(git)?.commit, local)
+    XCTAssertEqual(headPush(git)?.isPushed, false)
+
+    XCTAssertTrue(repo.git(["push", "-q"]).isSuccess)
+    try repo.advanceOrigin(writing: "o.txt", "o\n")
+    XCTAssertTrue(repo.git(["fetch", "-q"]).isSuccess)
+    XCTAssertNotEqual(graph(git, limit: 1)?.commits.first?.oid, local, "前提: 先頭は upstream")
+    XCTAssertEqual(headPush(git)?.commit, local)
+    XCTAssertEqual(headPush(git)?.isPushed, true)
+
+    let fresh = try TempGitRepo(initialCommit: false)
+    XCTAssertNil(headPush(try fresh.open()))
   }
 
   /// ユーザーの `log.showSignature`・色・出力の文字コードの設定で、出力が変わらない。
