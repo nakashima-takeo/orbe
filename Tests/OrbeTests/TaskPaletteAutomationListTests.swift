@@ -26,5 +26,15 @@ final class TaskPaletteAutomationListTests: OrbeTestCase {
       try latest(1, "contact"), "13:00 返事が要る連絡を選ぶ\u{3000}失敗：制限時間を超過")
     XCTAssertEqual(try latest(4, "judge"), "14:51 判定\u{3000}候補なし")
     XCTAssertEqual(try latest(5, "judge"), "判定\u{3000}未判定")
+    let judge = try XCTUnwrap(store.automation(4)?.graph.node(key: "judge"))
+    let unknown = AutomationRunRecord(
+      id: 1,
+      content: .unknown(
+        AutomationUnknownRun(
+          startedAt: DesignSceneFixtures.automationAt(9),
+          endedAt: DesignSceneFixtures.automationAt(9), trigger: .schedule, failed: true)))
+    XCTAssertEqual(
+      TaskPaletteAutomationList.latest(judge, unknown, text),
+      "9:00 判定\u{3000}失敗（記録を読み込めません）", "不明な記録も時刻と成否で言う")
   }
 }

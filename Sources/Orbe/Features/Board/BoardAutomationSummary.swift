@@ -244,7 +244,8 @@ extension BoardAutomationSummary {
     return .run(
       BoardRunEntry(
         at: record.trigger == .now ? text.l10n.format(.boardRunManual, at) : at,
-        result: text.l10n.string(record.failed ? .boardRunUnknownFailed : .boardRunUnknownPassed),
+        result: text.l10n.string(
+          record.failed ? .automationRunUnknownFailed : .automationRunUnknownPassed),
         shade: record.failed ? .failed : .sunk, wraps: false))
   }
 

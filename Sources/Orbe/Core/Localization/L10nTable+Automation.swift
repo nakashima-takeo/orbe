@@ -95,6 +95,8 @@ extension L10n {
     .automationFailReported: ("部品が失敗を報告：%@", "the part reported a failure: %@"),
     .automationFormatError: ("出力の形式エラー", "output format error"),
     .automationNoProposals: ("候補なし", "no candidates"),
+    .automationRunUnknownPassed: ("成功（記録を読み込めません）", "succeeded (couldn’t load the record)"),
+    .automationRunUnknownFailed: ("失敗（記録を読み込めません）", "failed (couldn’t load the record)"),
     .automationFailUnreadInput: ("入力 %lld 件を読まずに終了", "ended with %lld input items unread"),
     .automationFailNoResult: ("結果を渡さずに終了", "ended without returning a result"),
     .automationFailUnsourced: ("判定へ渡す行の取得元が不明", "unknown source of the rows passed to the judge"),

@@ -97,11 +97,12 @@ struct TaskPaletteAutomationList: View {
     guard let record else {
       return node.part.name + "\u{3000}" + l10n.string(.taskPaletteAutomationNeverJudged)
     }
-    let result: String
+    let head = text.stamp(record.startedAt) + " " + node.part.name + "\u{3000}"
     guard let run = record.run else {
-      result = l10n.string(record.failed ? .boardRunUnknownFailed : .boardRunUnknownPassed)
-      return node.part.name + "\u{3000}" + result
+      return head
+        + l10n.string(record.failed ? .automationRunUnknownFailed : .automationRunUnknownPassed)
     }
+    let result: String
     if let failure = run.failure {
       result = l10n.format(
         .automationFailedWith,
@@ -113,7 +114,7 @@ struct TaskPaletteAutomationList: View {
     } else {
       result = l10n.string(.automationNoProposals)
     }
-    return text.stamp(run.startedAt) + " " + node.part.name + "\u{3000}" + result
+    return head + result
   }
 
   private func row(_ proposal: AutomationProposal) -> some View {

@@ -427,6 +427,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationFailReported
   case automationFormatError
   case automationNoProposals
+  case automationRunUnknownPassed
+  case automationRunUnknownFailed
   case automationFailUnreadInput
   case automationFailNoResult
   case automationFailUnsourced
@@ -706,8 +708,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardRunDroppedOld
   case boardRunDroppedOverflow
   case boardRunDroppedLapsed
-  case boardRunUnknownPassed
-  case boardRunUnknownFailed
   case boardAutomationUnreadable
   case boardAutomationNumbered
   case boardRunAsideSeparator

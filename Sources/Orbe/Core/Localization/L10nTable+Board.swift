@@ -90,8 +90,6 @@ extension L10n {
     .boardRunDroppedLapsed: (
       "未読のまま保持期間を過ぎた %lld 件を削除", "deleted %lld unread past the retention period"
     ),
-    .boardRunUnknownPassed: ("成功（記録を読み込めません）", "succeeded (couldn’t load the record)"),
-    .boardRunUnknownFailed: ("失敗（記録を読み込めません）", "failed (couldn’t load the record)"),
     .boardAutomationUnreadable: ("定義エラー", "Definition error"),
     .boardAutomationNumbered: ("自動化 #%lld", "Automation #%lld"),
     .boardRunAsideSeparator: ("、", ", "),
