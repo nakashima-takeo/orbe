@@ -29,7 +29,10 @@ enum AutomationPersistence {
       var quarantine = StateFileQuarantine()
       quarantine.quarantine(legacy)
     }
-    guard let folder else { return .failure(.unavailable("the state folder is unknown")) }
+    guard let folder else {
+      return .failure(
+        .unavailable("automations are unavailable in this session: the state folder is unknown"))
+    }
     switch StateDatabase.open(
       folder: folder, version: version, schema: AutomationDatabase.schema, migrations: migrations,
       read: { try AutomationDatabase.memory($0, now: now) })
