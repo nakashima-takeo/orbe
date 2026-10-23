@@ -36,6 +36,47 @@ final class SurfaceFlushTests: EngineTestCase {
       Double(first) * Double(surface.config.lineHeight), accuracy: 1e-6, "同じ書き込みで位置も出る")
   }
 
+  /// ⌘ の URL の下線の位置は取引に書くだけで、Orbe から始まる呼び出しの並びの途中では箱へ書かず、周の終わりに出す。面が
+  /// 焦点を失えば消える。
+  func testTheLinkPointerIsWrittenWithTheTurnAndClearedWhenTheFocusLeaves() throws {
+    let surface = try open(rows(20)).surface
+    surface.updateFocus(true)
+    RunLoop.main.run(until: Date())
+    let before = surface.material.revision
+    surface.setLinkPointer(CGPoint(x: 40, y: 10))
+    XCTAssertEqual(surface.material.revision, before, "並びの途中では箱へ書かない")
+    RunLoop.main.run(until: Date())
+    XCTAssertEqual(surface.material.revision, before + 1, "周の終わりに 1 回だけ書く")
+    XCTAssertNotNil(surface.material.read().linkPointer)
+    surface.updateFocus(false)
+    surface.flush()
+    XCTAssertNil(surface.material.read().linkPointer, "焦点を失えば下線は消える")
+  }
+
+  /// 周の終わりに出す中で起きた変化（出した面の見えている範囲の知らせへの反応）は、待ちに残り、main の runloop をすぐ起こして
+  /// 次の周で出す（眠ったまま残さない）。
+  func testAChangeMadeWhileFlushingAtTheEndOfATurnWakesTheNextTurn() throws {
+    let a = try open(rows(200), size: CGSize(width: 400, height: 300))
+    let b = try open(rows(120), size: CGSize(width: 400, height: 300))
+    let c = try open(rows(20))
+    a.surface.shareScroll(with: b.surface)
+    RunLoop.main.run(until: Date())
+    let scheduler = FlushScheduler.shared
+    var woken = 0
+    let wake = scheduler.wakeMain
+    scheduler.wakeMain = { woken += 1 }
+    defer { scheduler.wakeMain = wake }
+    b.document.onViewportChange = { c.surface.setLinkPointer(CGPoint(x: 40, y: 10)) }
+    a.surface.scroll(toFirstLine: 20)
+    XCTAssertTrue(c.surface.pending.isEmpty, "前提: 出す前は c に変化が無い")
+    scheduler.flushAll()
+    XCTAssertFalse(c.surface.pending.isEmpty, "前提: 出す中で c に変化が積まれた")
+    XCTAssertEqual(woken, 1, "すぐ次の周を起こす")
+    scheduler.flushAll()
+    XCTAssertTrue(c.surface.pending.isEmpty, "次の周で出る")
+    XCTAssertEqual(woken, 1, "残りが無ければ起こさない")
+  }
+
   /// 面自身の入力（打鍵）への Orbe の反応は、入力の処理の中に同期に入り、処理の終わりに一緒に 1 回で出る。
   func testOrbesReactionToAnInputIsFlushedWithIt() throws {
     let opened = try open("abc\n")

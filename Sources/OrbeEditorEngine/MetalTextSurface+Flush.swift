@@ -146,6 +146,8 @@ final class FlushScheduler {
 
   private var waiting: [Int: Entry] = [:]
   private var observer: CFRunLoopObserver?
+  /// main の runloop を起こす口（テストが差し替える）。
+  var wakeMain: () -> Void = { CFRunLoopWakeUp(CFRunLoopGetMain()) }
 
   func schedule(_ surface: MetalTextSurface) {
     guard waiting[surface.id] == nil else { return }
@@ -170,10 +172,14 @@ final class FlushScheduler {
     self.observer = observer
   }
 
-  private func flushAll() {
+  /// 待っている面を出す。出す中で起きた変化（出した面の見えている範囲の知らせへの反応・ホバーの引き直し）が待ちに残れば、
+  /// main の runloop をすぐ起こし、次の周の終わりで出す（ここで回しきらない——止まる前提を全経路で持たずに、main を
+  /// 眠ったまま残さない）。
+  func flushAll() {
     guard !waiting.isEmpty else { return }
     let entries = waiting.values
     waiting.removeAll()
     for entry in entries { entry.surface?.flush() }
+    if !waiting.isEmpty { wakeMain() }
   }
 }

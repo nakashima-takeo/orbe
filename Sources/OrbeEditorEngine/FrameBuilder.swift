@@ -209,8 +209,7 @@ final class FrameBuilder {
     let c = Context(
       g: g, palette: palette, focused: focused, atlas: source.atlas, config: config,
       tabColumns: tabColumns, roles: content.roles,
-      linkPointer: focused
-        ? source.material.linkPointer.map { SIMD2(Double($0.x) * s, Double($0.y) * s) } : nil,
+      linkPointer: source.material.linkPointer.map { SIMD2(Double($0.x) * s, Double($0.y) * s) },
       pen: OverlayPen(
         originX: g.column - g.scrollX, lineHeight: g.lineHeight,
         baseline: (Double(config.baseline) * s).rounded(), scale: s, cell: Double(config.cell),

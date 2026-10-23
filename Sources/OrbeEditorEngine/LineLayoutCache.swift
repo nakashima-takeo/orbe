@@ -98,6 +98,14 @@ final class LineLayoutCache {
   private var frameRows: [Int: LaidOutLine] = [:]
   private var rowsVersion: Int?
   private var rowsTabColumns: Int?
+  /// 全行で最も広い行の幅と、それを測った版とタブの桁。
+  private struct Widest {
+    let version: Int
+    let tabColumns: Int
+    let width: CGFloat
+  }
+
+  private var widest: Widest?
   /// 組むフォントとタブの刻み（nil なら面のフォントと、桁から面の設定で出す刻み）。
   private let face: (font: CTFont, tabWidth: CGFloat)?
 
@@ -126,6 +134,19 @@ final class LineLayoutCache {
     rowsTabColumns = tabColumns
     frameRows.removeAll(keepingCapacity: true)
     shapedInFrame = 0
+  }
+
+  /// 版 `version` の `rows` 行のうち最も広い行の幅（pt。行 r の組んだ結果は `line(r)`）。同じ版とタブの桁の間は測った値を
+  /// 返す——全行を引くのは版ごとに 1 回。
+  func widestWidth(
+    version: Int, tabColumns: Int, rows: Int, line: (Int) -> LaidOutLine
+  ) -> CGFloat {
+    if let widest, widest.version == version, widest.tabColumns == tabColumns {
+      return widest.width
+    }
+    let width = (0..<rows).reduce(CGFloat(0)) { max($0, line($1).width) }
+    widest = Widest(version: version, tabColumns: tabColumns, width: width)
+    return width
   }
 
   /// このコマで描く行 `row` の組んだ結果。前のコマで描いた行に無ければ、行の中身 `source` を読んで引く。`carets` なら

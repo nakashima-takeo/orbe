@@ -174,6 +174,7 @@ extension FrameBuilder {
     if let reveal = material.reveal {
       revealField(reveal, material, width: Double(field.frame.width), cache: cache, c)
     }
+    limitFieldScroll(material, width: Double(field.frame.width), cache: cache, c)
     let pen = Self.pen(material, originX: x0 - (material.scroll.x * s).rounded(), c)
     var overlays = CaretOverlays(
       material.caret, drop: nil, caretVisible: source.caretVisible, text: text, from: 0)
@@ -229,6 +230,26 @@ extension FrameBuilder {
     if material.scroll.reveal(serial: reveal.serial, caret: caret, width: width) {
       fieldRevealed = true
     }
+  }
+
+  /// 入力欄の横の送りを、最も広い行（全行。組むのは本文の版ごとに 1 回）とキャレットが幅 `width` に収まる所までに収める
+  /// （動けば、このコマの後で main へ知らせる）。
+  private func limitFieldScroll(
+    _ material: FieldMaterial, width: Double, cache: LineLayoutCache, _ c: Context
+  ) {
+    let text = material.content.text
+    let tabColumns = material.tabColumns
+    let widest = cache.widestWidth(
+      version: material.content.version, tabColumns: tabColumns, rows: text.lineCount
+    ) { row in
+      cache.line(
+        LineShaper.source(
+          start: text.lineStart(row),
+          next: row + 1 < text.lineCount ? text.lineStart(row + 1) : nil, in: text),
+        tabColumns: tabColumns, config: c.config, fonts: c.fonts)
+    }
+    let limit = Double(widest) + Double(c.config.caretSize.width) - width
+    if material.scroll.clamp(to: limit) { fieldRevealed = true }
   }
 
   /// 入力欄の行に重ねるものの筆——行頭の x が `originX`（px）、行の高さと基線は入力欄の見え方、色は入力欄の色（未確定の
