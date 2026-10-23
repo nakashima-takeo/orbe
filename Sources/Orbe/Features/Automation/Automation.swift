@@ -153,10 +153,13 @@ struct AutomationProposal: Equatable, Identifiable {
   }
 }
 
-/// 指す行や値が読めない、覚えている候補。リンクだけを持ち、「既に候補がある」に効く。画面と判定には出さず、自動で忘れない。
+/// 指す行や値が読めない、覚えている候補。分かる分（ID・リンク・出した判定の部品）だけを持ち、「既に候補がある」に効く。
+/// 外の口（`list_automation_proposals`）には分かる分だけで出し、棚・画面・判定には出さない。持ち主が無くなれば忘れる。
 struct AutomationUnreadableProposal: Equatable {
   let id: Int
   let link: String
+  /// 出した判定の部品（回の行から引くので、候補の値が壊れていても分かる）。
+  let judge: AutomationPartID
 }
 
 extension AutomationProposal.State {

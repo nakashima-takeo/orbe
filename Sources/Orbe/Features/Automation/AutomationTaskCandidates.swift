@@ -6,7 +6,7 @@ import Foundation
 //
 // 自動化 A がリンク L の候補を持つのは、A のタスク候補へ至る取得の部品のどれかの今有効な項目に L があるとき、または A の判定の
 // 部品が出して判断待ちのとき。止めた自動化も持つ。定義を読めない自動化は、その部品が出した候補と、その部品が出どころの候補を
-// 持つ。
+// 持つ。読めない候補は状態が分からないので、出した判定の部品がある間は、その部品の自動化が持つ。
 
 extension Automation {
   /// タスク候補へ至る取得の部品の今有効な項目のリンク。持ち主・重なりはこの集合で言う。
@@ -21,26 +21,39 @@ extension Automation {
     candidateLinks.contains(proposal.item.link)
       || (proposal.state == .open && graph.node(proposal.judge)?.role == .judge)
   }
+
+  func holds(_ proposal: AutomationUnreadableProposal) -> Bool {
+    candidateLinks.contains(proposal.link) || graph.node(proposal.judge) != nil
+  }
 }
 
 extension AutomationUnreadable {
   func holds(_ proposal: AutomationProposal) -> Bool {
     parts.contains(proposal.judge) || parts.contains(proposal.source)
   }
+
+  func holds(_ proposal: AutomationUnreadableProposal) -> Bool {
+    parts.contains(proposal.judge)
+  }
 }
 
 extension AutomationMemory {
-  /// どの自動化も持たない候補を忘れる（覚えている印を外す）。
+  /// どの自動化も持たない候補（読めない候補も）を忘れる（覚えている印を外す）。
   mutating func forgetUnheld(_ db: AutomationDatabase) throws {
     let automations = automations
     let unreadable = unreadable
-    let unheld = proposals.filter { proposal in
-      !automations.contains { $0.holds(proposal) } && !unreadable.contains { $0.holds(proposal) }
-    }
+    let unheld =
+      proposals.filter { proposal in
+        !automations.contains { $0.holds(proposal) } && !unreadable.contains { $0.holds(proposal) }
+      }.map(\.id)
+      + unreadableProposals.filter { proposal in
+        !automations.contains { $0.holds(proposal) } && !unreadable.contains { $0.holds(proposal) }
+      }.map(\.id)
     guard !unheld.isEmpty else { return }
-    try db.forget(proposals: unheld.map(\.id))
-    let ids = Set(unheld.map(\.id))
+    try db.forget(proposals: unheld)
+    let ids = Set(unheld)
     proposals.removeAll { ids.contains($0.id) }
+    unreadableProposals.removeAll { ids.contains($0.id) }
   }
 
   /// 出どころの項目が無効になった判断待ちの候補を下げ（忘れ）、下げた数を返す。
@@ -52,6 +65,7 @@ extension AutomationMemory {
     try db.forget(proposals: Array(ids))
     let withdrawn = proposals.filter { ids.contains($0.id) && $0.state == .open }.count
     proposals.removeAll { ids.contains($0.id) }
+    unreadableProposals.removeAll { ids.contains($0.id) }
     return withdrawn
   }
 }
@@ -79,6 +93,14 @@ extension AutomationStore {
   func shelf(of proposal: AutomationProposal) -> Automation? {
     let holding = automations.filter { $0.holds(proposal) }
     let issuer = issuer(of: proposal)?.id
+    return holding.first { $0.id == issuer } ?? holding.min { $0.id < $1.id }
+  }
+
+  /// 読めない候補を持つ自動化（棚の規則と同じく、出した自動化が持っていればそれ、いなければ ID が最小のもの）。棚には出さず、
+  /// 外の口の絞り込みにだけ使う。
+  func holder(of proposal: AutomationUnreadableProposal) -> Automation? {
+    let holding = automations.filter { $0.holds(proposal) }
+    let issuer = judgeOwners[proposal.judge]
     return holding.first { $0.id == issuer } ?? holding.min { $0.id < $1.id }
   }
 

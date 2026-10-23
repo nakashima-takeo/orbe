@@ -110,7 +110,12 @@ extension WindowController {
       if case .accepted(let taskId) = proposal.state { json["taskId"] = taskId }
       return json
     }
-    return proposals
+    // 読めない候補は、読めない記録と同じく分かる分だけで出す。
+    let unreadable = automationStore.unreadableProposals.compactMap { proposal -> [String: Any]? in
+      if let automationId, automationStore.holder(of: proposal)?.id != automationId { return nil }
+      return ["proposalId": proposal.id, "link": proposal.link, "unreadable": true]
+    }
+    return proposals + unreadable
   }
 
   /// 裏で動く agent の回の道具を 1 つ呼ぶ。返事は道具の答え（中身の塊と、断ったか）。

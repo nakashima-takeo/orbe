@@ -184,6 +184,31 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.unreadable.first?.parts, parts)
   }
 
+  /// 値の壊れた候補は、その 1 件だけが読めない候補としてリンクを塞ぎ続け、持ち主（出した判定の部品の自動化）が無くなれば
+  /// メモリからも DB からも忘れる。
+  func testAProposalThatCannotBeReadHoldsItsLinkUntilItsHolderIsGone() throws {
+    var store: AutomationStore? = AutomationStore()
+    let id = try XCTUnwrap(store?.create(Self.definition(coverage: .newArrivals), now: Self.at).id)
+    let (a, b) = (Self.item("a"), Self.item("b"))
+    try Self.fetch(XCTUnwrap(store), id, [a, b])
+    try Self.judge(XCTUnwrap(store), id, proposing: [a, b])
+    store = nil
+    try database().run("UPDATE proposals SET due = 'x' WHERE link = ?", [.text(a.link)])
+
+    let reopened = AutomationStore()
+    XCTAssertEqual(reopened.proposals.map(\.item.link), [b.link], "ほかの候補は普段どおり")
+    XCTAssertEqual(reopened.unreadableProposals.map(\.link), [a.link])
+    XCTAssertTrue(reopened.heldLinks.contains(a.link), "読めない候補も同じリンクを塞ぐ")
+
+    try reopened.delete(id, now: Self.at)
+
+    XCTAssertEqual(reopened.unreadableProposals, [])
+    XCTAssertEqual(
+      try reopened.read {
+        try $0.db.select("SELECT count(*) FROM held_proposals", []) { $0.int(at: 0) }
+      }, [0])
+  }
+
   /// 中身の JSON を壊した回の記録は、その 1 件だけが「不明な記録」として、時刻・契機・成否を持って残る。
   func testARunRecordThatCannotBeReadStaysAsAnUnknownRecord() throws {
     var store: AutomationStore? = AutomationStore()

@@ -52,6 +52,26 @@ extension WindowControllerAutomationControlTests {
       fixed.parts.compactMap(\.id), "一覧の id で直すと同じ部品のまま")
   }
 
+  /// 値の壊れた候補は、候補の一覧に分かる分（ID・リンク・`unreadable`）だけで載り、自動化で絞っても持ち主の自動化に載る。
+  func testAProposalThatCannotBeReadIsListedWithWhatIsKnown() throws {
+    try {
+      let store = AutomationStore()
+      let id = try store.create(Self.definition(), now: AutomationStoreTests.at).id
+      let a = AutomationStoreTests.item("a")
+      try AutomationStoreTests.fetch(store, id, [a])
+      try AutomationStoreTests.judge(store, id, proposing: [a])
+      try store.read { try $0.db.run("UPDATE proposals SET due = 'x'", []) }
+    }()
+    let wc = try launch()
+
+    let proposals = try success(wc.controlListAutomationProposals(automationId: 1))["proposals"]
+    let listed = try XCTUnwrap(proposals as? [[String: Any]])
+    XCTAssertEqual(listed.count, 1)
+    XCTAssertEqual(listed.first?.keys.sorted(), ["link", "proposalId", "unreadable"])
+    XCTAssertEqual(listed.first?["link"] as? String, "https://example.com/a")
+    XCTAssertEqual(listed.first?["unreadable"] as? Bool, true)
+  }
+
   /// 今より新しい版の DB では、自動化のどの動詞も中身を見る前に、-32000 と理由で断る。
   func testANewerDatabaseRefusesEveryVerbWithTheReason() throws {
     _ = try AutomationStore().create(Self.definition(), now: Date())

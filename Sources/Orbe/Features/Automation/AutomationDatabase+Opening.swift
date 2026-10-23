@@ -255,7 +255,9 @@ extension AutomationDatabase {
         let item = Self.decode(AutomationItem.self, row.body), item.link == row.link,
         due.map({ $0 != nil }) ?? true, workspace.map({ $0 != nil }) ?? true
       else {
-        unreadable.append(AutomationUnreadableProposal(id: row.id, link: row.link))
+        unreadable.append(
+          AutomationUnreadableProposal(
+            id: row.id, link: row.link, judge: AutomationPartID(row.judge)))
         continue
       }
       proposals.append(
