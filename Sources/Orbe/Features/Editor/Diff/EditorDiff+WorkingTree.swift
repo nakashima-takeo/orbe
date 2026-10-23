@@ -60,7 +60,7 @@ extension EditorDiff {
       }
     }
     if document == nil, let old {
-      setNewRevision(nil)
+      setNewRevision(nil, keepsOld: true)
       revisionHunks = DiffRows.hunks(
         old: oldSide.isAbsent ? nil : old.text, new: nil, limit: Self.hunkLimit)
     }

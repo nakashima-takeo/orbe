@@ -41,29 +41,6 @@ final class RootFiles {
     case alreadyExists(URL)
   }
 
-  /// 関心の単位——根からの相対パスと版。
-  struct Version: Hashable {
-    let path: String
-    let revision: GitRevision
-  }
-
-  /// 版の本文の状態（OID ごとに決まる）。
-  enum VersionState: Equatable {
-    /// 本文（作業ツリーに出したときの姿）。
-    case text(String)
-    /// その版に無い（index に無い・競合中・初回コミット前の HEAD を含む。ファイルでないものも）。
-    case absent
-    /// UTF-8 として読めない。
-    case notText
-    /// git から取れない（取り直しの上限に達した・まだ状態の無い版で、OID の一覧か本文を取れなかった）。
-    case failed
-
-    var text: String? {
-      if case .text(let text) = self { return text }
-      return nil
-    }
-  }
-
   private final class WeakRef {
     weak var value: RootFiles?
     init(_ value: RootFiles) { self.value = value }
@@ -97,8 +74,10 @@ final class RootFiles {
   private var versions: [Version: Settled] = [:]
   private var statusJob = RefreshJob()
   private var versionJob = RefreshJob()
-  /// 次に始まる status の取り直しが済んだら呼ぶもの（書き込みの完了）。
+  /// 次に始まる status の取り直しが済んだら呼ぶもの（書き込みの完了・diff の初めての位置決め）。
   private var statusWaiters: [() -> Void] = []
+  /// 次に始まる版の本文の取り直しが済んだら呼ぶもの（diff の初めての位置決め）。
+  private var versionWaiters: [() -> Void] = []
   /// 同じ worktree の index への書き込みの順番待ち（先頭から 1 つずつ走らせる）。
   var queuedWrites: [QueuedWrite] = []
   var isWriting = false
@@ -289,8 +268,14 @@ final class RootFiles {
 
   // MARK: - 版の本文の取り直し
 
-  private func requestVersionRefresh() {
-    guard repo != nil else { return }
+  /// 版の本文を取り直す。`then` は、この要求の後に始まる取り直しが済んだら（変わった版を知らせた後。git の失敗でも）
+  /// 呼ぶ——status の `requestStatusRefresh(then:)` と同じ。管理外（または判定の前）なら、すぐ呼ぶ。
+  func requestVersionRefresh(then waiter: (() -> Void)? = nil) {
+    guard repo != nil else {
+      waiter?()
+      return
+    }
+    if let waiter { versionWaiters.append(waiter) }
     if versionJob.isRunning {
       versionJob.again = true
       return
@@ -302,6 +287,8 @@ final class RootFiles {
   private func refreshVersions() {
     guard let repo else { return }
     versionJob.isRunning = true
+    let waiters = versionWaiters
+    versionWaiters = []
     let interests = self.interests
     let index = interests.filter { $0.revision == .index }.map(\.path).sorted()
     let head = interests.filter { $0.revision == .head }.map(\.path).sorted()
@@ -330,17 +317,18 @@ final class RootFiles {
             versions[version] = Settled(oid: nil, state: .absent)
           }
         }
-        fetchBlobs(fetch[...], changed: changed)
+        fetchBlobs(fetch[...], changed: changed, waiters: waiters)
       }
     }
   }
 
   /// 変わった OID の blob を 1 つずつ取る（並列に投げない）。
   private func fetchBlobs(
-    _ pending: ArraySlice<(version: Version, oid: String)>, changed: [Version]
+    _ pending: ArraySlice<(version: Version, oid: String)>, changed: [Version],
+    waiters: [() -> Void]
   ) {
     guard let repo, let next = pending.first else {
-      finish(changed: changed)
+      finish(changed: changed, waiters: waiters)
       return
     }
     repo.blob(oid: next.oid, relativePath: next.version.path) { [weak self] data in
@@ -371,11 +359,11 @@ final class RootFiles {
         if versions[version]?.state != settled.state { changed.append(version) }
         versions[version] = settled
       }
-      fetchBlobs(pending.dropFirst(), changed: changed)
+      fetchBlobs(pending.dropFirst(), changed: changed, waiters: waiters)
     }
   }
 
-  private func finish(changed: [Version]) {
+  private func finish(changed: [Version], waiters: [() -> Void]) {
     // 連鎖の最中に関心が消えた版（取り始めたときの集合で走り切る）を書き戻さない。
     dropUnwantedVersions()
     for observation in live {
@@ -383,6 +371,7 @@ final class RootFiles {
         observation.observer.rootFiles(self, versionDidChange: version)
       }
     }
+    for waiter in waiters { waiter() }
     versionJob.isRunning = false
     if versionJob.again {
       versionJob.again = false

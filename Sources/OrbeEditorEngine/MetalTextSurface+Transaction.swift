@@ -20,6 +20,8 @@ struct Transaction {
   /// 見せる区間（nil なら見せ方を頼んだ場の主のキャレット）と、見せ方を頼んだ場。
   var revealing: NSRange?
   var revealSite: EditingSite?
+  /// 見せる縦の範囲を縦の並びの中の位置で頼んだ（本文の場。`revealing` は横の寄せだけに使う）。
+  var revealingRows: (from: RowPosition, to: RowPosition)?
   /// 見せ方の前に置くスクロールの位置（スクロールだけのキー・ドラッグの自動スクロール）。
   var scrollTo: SIMD2<Double>?
   /// 取引を起こした打鍵の出来事の時刻（打鍵→画面の遅れを、本文と同じ書き込みで材料へ添える）。
@@ -75,7 +77,9 @@ extension MetalTextSurface {
   /// 順で 1 回で書く。
   private func commit(_ finished: Transaction) {
     guard let change = bodySite.change else { return }
-    let span = finished.reveal == .none ? nil : finished.revealSite?.revealSpan(finished.revealing)
+    let span =
+      finished.reveal == .none
+      ? nil : finished.revealSite?.revealSpan(finished.revealing, rows: finished.revealingRows)
     bodySite.change = nil
     editor.noteTransaction(
       from: change.cursors, edited: change.edited, restored: change.restoresCursors)

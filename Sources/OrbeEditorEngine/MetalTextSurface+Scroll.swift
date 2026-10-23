@@ -71,8 +71,18 @@ extension MetalTextSurface {
     bodySite.transact(reveal: .showing(policy), of: range)
   }
 
-  func scrollToStart() {
-    place(.zero)
+  func scroll(to position: RowPosition) {
+    guard let text = currentContent?.text else { return }
+    scroll(toFirstLine: CGFloat(rows.unit(of: position, lineCount: text.lineCount)))
+  }
+
+  /// 2 つの位置の間を見せる。横は `from` の行の行頭を区間として、本文の横の寄せに渡す。
+  func reveal(from: RowPosition, to: RowPosition, policy: TextReveal) {
+    guard let text = currentContent?.text else { return }
+    let head = text.lineStart(min(max(0, from.line), text.lineCount - 1))
+    bodySite.transact(reveal: .showing(policy), of: NSRange(location: head, length: 0)) {
+      transaction?.revealingRows = (from, to)
+    }
   }
 
   // MARK: - スクロールだけのキー（キャレットは動かない）
@@ -183,15 +193,14 @@ extension MetalTextSurface {
     context.textInputClientDidScroll()
   }
 
-  /// 見えている範囲。先頭は縦の並びで先頭に見えている文書の行（塊の上なら次の文書の行）で、端を越えて見せている分は端で
-  /// 数える。見えている高さが無ければ nil。
+  /// 見えている範囲。先頭は縦の並びで先頭に見えている所（段の粒度の位置）で、端を越えて見せている分は端で数える。見えて
+  /// いる高さが無ければ nil。
   private func measureViewport(position: SIMD2<Double>, limits: ScrollPhysics.Limits)
     -> TextViewport?
   {
     guard limits.viewport.y > 0, let text = currentContent?.text else { return nil }
-    let row = rows.firstVisibleLine(atY: limits.clampedY(position), lineCount: text.lineCount)
     return TextViewport(
-      firstVisible: text.lineStart(row),
+      top: rows.position(atY: limits.clampedY(position), lineCount: text.lineCount),
       visibleLines: CGFloat(limits.viewport.y / limits.lineHeight))
   }
 }

@@ -50,6 +50,24 @@ extension EditorDiff {
     let release: (EditorDocument) -> Void
   }
 
+  /// 初めての位置決めの段階。開いた時点に追いついた最初の並びで 1 回だけ、最初の変更区間へ送る（以後の変化では送らない）。
+  enum Placement {
+    /// 開いた後の根のサービスの取り直しと、その後の状態から作った並びを待っている。
+    case catchingUp
+    /// 追いついた。面が大きさを持つのを待っている。
+    case sizing
+    /// 決めた。以後は作り直しで、見えていた所を引き継ぐだけ。
+    case placed
+  }
+
+  /// 作り直した新しい側の面で先頭に置く所。
+  enum Carried {
+    /// 変わらない古い側の行の錨（新しい並びで位置に戻す）。
+    case anchor(DiffRows.Anchor)
+    /// 前の面の位置（両側とも変わったので錨が無い）。
+    case position(RowPosition)
+  }
+
   /// 作業ツリー diff の新しい側。
   enum WorkingSide {
     /// 開いた文書（ファイルタブと共有する）。

@@ -290,9 +290,7 @@ final class EditorDocumentBackgroundTests: XCTestCase {
 
   /// 面の見えている範囲を、行 `row` から 10 行にする。
   private func show(row: Int, of surface: FakeTextSurface) {
-    let document = try? XCTUnwrap(surface.delegate as? EditorDocument)
-    surface.viewport = TextViewport(
-      firstVisible: document?.text.lineStart(row) ?? 0, visibleLines: 10)
+    surface.viewport = TextViewport(top: RowPosition(line: row), visibleLines: 10)
     surface.delegate?.surfaceDidChangeViewport(surface)
   }
 

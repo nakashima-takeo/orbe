@@ -40,7 +40,7 @@ final class SurfaceSharedScrollTests: EngineTestCase {
     XCTAssertEqual(a.surface.scrollPosition.y, 200)
     XCTAssertEqual(b.surface.scrollPosition, a.surface.scrollPosition)
     XCTAssertEqual(
-      b.surface.viewport.firstVisible, b.document.text.lineStart(Int(200 / 18)),
+      b.surface.viewport.top, RowPosition(line: Int(200 / 18)),
       "動かしていない面の見えている範囲も知らせ直す")
   }
 
@@ -110,7 +110,7 @@ final class SurfaceSharedScrollTests: EngineTestCase {
     a.surface.flush()
     XCTAssertEqual(a.surface.scrollPosition.y, before + 3 * 18)
     XCTAssertEqual(b.surface.scrollPosition, a.surface.scrollPosition)
-    XCTAssertEqual(a.surface.viewport.firstVisible, a.document.text.lineStart(50))
+    XCTAssertEqual(a.surface.viewport.top, RowPosition(line: 50))
   }
 
   /// 面が閉じれば外れ、残った面の範囲は自分の本文だけで決まる。

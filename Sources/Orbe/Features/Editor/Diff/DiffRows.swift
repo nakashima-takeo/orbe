@@ -89,18 +89,89 @@ enum DiffRows {
     )
   }
 
-  /// 新しい側の行 `line` に揃う古い側の行（区間の中なら、区間の古い側の同じ段か、区間の古い側の最後）。
-  static func oldLine(forNew line: Int, _ hunks: [LineHunk]) -> Int {
+  /// インラインで、新しい側の面の見えている先頭 `top` から `count` 段の中に出る古い側の行を含む範囲——先頭の段の次に出る
+  /// 古い側の行から `count` 行（インラインに出る古い側の行は単調に増え、1 段に高々 1 行）。
+  static func oldLines(from top: RowPosition, count: Int, _ hunks: [LineHunk]) -> ClosedRange<Int> {
+    var shift = 0
+    var first: Int?
+    for hunk in hunks {
+      let (old, new) = (hunk.oldLines, hunk.newLines)
+      if top.line < new.lowerBound { break }
+      if top.line == new.lowerBound, top.offset < 0, !old.isEmpty {
+        first = old.lowerBound + max(0, old.count + top.offset)
+        break
+      }
+      if top.line < new.upperBound {
+        first = old.upperBound
+        break
+      }
+      shift = old.upperBound - new.upperBound
+    }
+    let start = max(0, first ?? top.line + shift)
+    return start...(start + max(0, count))
+  }
+
+  /// 縦の並びの中の位置の、古い側に付けた錨——古い側の行 `line`（`0...古い側の行数`）の段と、その上に並ぶ追加の行の段の数
+  /// `added`（0 以下。古い側の行に揃わない追加の行を指すとき）。古い側が変わらず新しい側が変わる作り直しで、読んでいた
+  /// 位置を引き継ぐ。
+  struct Anchor: Equatable {
+    let line: Int
+    let added: Int
+  }
+
+  /// 新しい側の面の位置 `top` を、行差分 `hunks` の並び（`side` なら並列の右、そうでなければインライン）で古い側の錨に直す。
+  static func anchor(at top: RowPosition, _ hunks: [LineHunk], side: Bool) -> Anchor {
     var shift = 0
     for hunk in hunks {
-      let block = (old: hunk.oldLines, new: hunk.newLines)
-      if line < block.new.lowerBound { break }
-      if line < block.new.upperBound {
-        return block.old.lowerBound + min(line - block.new.lowerBound, max(0, block.old.count - 1))
+      let (old, new) = (hunk.oldLines, hunk.newLines)
+      if side {
+        // 区間の段 r は、左の古い行 old.lowerBound + r と右の新しい行 new.lowerBound + r に揃う。右の詰め物は区間の後ろ。
+        if top.line == new.upperBound, top.offset < 0, old.count > new.count {
+          let row = new.count + max(0, old.count - new.count + top.offset)
+          return Anchor(line: old.lowerBound + row, added: 0)
+        }
+        if top.line < new.lowerBound { break }
+        if top.line < new.upperBound {
+          let row = top.line - new.lowerBound
+          return row < old.count
+            ? Anchor(line: old.lowerBound + row, added: 0)
+            : Anchor(line: old.upperBound, added: row - new.count)
+        }
+      } else {
+        if top.line < new.lowerBound { break }
+        if top.line == new.lowerBound, top.offset < 0, !old.isEmpty {
+          return Anchor(line: old.lowerBound + max(0, old.count + top.offset), added: 0)
+        }
+        if top.line < new.upperBound {
+          return Anchor(line: old.upperBound, added: top.line - new.upperBound)
+        }
       }
-      shift = block.old.upperBound - block.new.upperBound
+      shift = old.upperBound - new.upperBound
     }
-    return max(0, line + shift)
+    return Anchor(line: max(0, top.line + shift), added: 0)
+  }
+
+  /// 古い側の錨 `anchor` を、行差分 `hunks` の並びの新しい側の面の位置に戻す（`anchor(at:_:side:)` の逆）。錨の追加の行が
+  /// 新しい並びに無ければ、同じ区間の頭に寄せる。
+  static func position(of anchor: Anchor, _ hunks: [LineHunk], side: Bool) -> RowPosition {
+    var shift = 0
+    for hunk in hunks {
+      let (old, new) = (hunk.oldLines, hunk.newLines)
+      if anchor.line < old.lowerBound { break }
+      if anchor.line < old.upperBound {
+        let row = anchor.line - old.lowerBound
+        guard side else { return RowPosition(line: new.lowerBound, offset: row - old.count) }
+        return row < new.count
+          ? RowPosition(line: new.lowerBound + row)
+          : RowPosition(line: new.upperBound, offset: row - old.count)
+      }
+      if anchor.line == old.upperBound, anchor.added < 0, !new.isEmpty {
+        let first = side ? new.lowerBound + min(old.count, new.count) : new.lowerBound
+        return RowPosition(line: max(first, new.upperBound + anchor.added))
+      }
+      shift = new.upperBound - old.upperBound
+    }
+    return RowPosition(line: max(0, anchor.line + shift))
   }
 
   /// 区間の始まりの昇順の列。同じ行に重ねて置けば後の方を残し、面の行の外（`limit` 以上）は置かない。

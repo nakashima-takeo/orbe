@@ -69,6 +69,9 @@ public final class EditorDocument {
   /// 直してから結果が届くまでは、前の baseline とそれに対するハンク（その後の編集でずらしたもの）の組のまま——この組と
   /// 今の本文は、いつでも互いに食い違わない。
   public private(set) var hunksBase: String?
+  /// ハンクが今の版・今の baseline・今の上限に対する裏の結果か（編集でずらしただけ・頼み直した結果を待っている間は
+  /// false。baseline が無ければ true）。
+  public var hunksAreCurrent: Bool { pendingHunks == nil }
   /// ハンクが変わった（結果が届いた・編集でずらした・baseline が無くなった）。行の印と同じ時機に、印の後で届く。
   public var onHunksChange: (() -> Void)?
   /// 字下げの作法（単位とタブか）。開いたとき、および本文を丸ごと置き換えたときに本文から検出し直し、面へ押す。

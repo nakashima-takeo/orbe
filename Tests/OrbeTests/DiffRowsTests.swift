@@ -117,6 +117,69 @@ final class DiffRowsTests: OrbeTestCase {
     XCTAssertEqual(left.rows.y(ofLine: 5), 12 * lineHeight, "追加 1 行の向かいに詰め物 1 行")
   }
 
+  /// インラインの見えている先頭から古い側の行を写す——差し込み（削除行）の中の段はその削除行、追加の区間の中は区間の後の
+  /// 古い側の行、文脈はずれた分。壊れると、見えている削除行の色が後回しになる。
+  func testTheOldLinesInViewFollowTheTopOfTheInlineRows() {
+    let (old, new) = sample
+    let sample = hunks(old, new)
+    let cases: [String: (RowPosition, Int)] = [
+      "区間の前": (RowPosition(line: 0), 0),
+      "削除行の頭": (RowPosition(line: 2, offset: -2), 2),
+      "削除行の 2 段目": (RowPosition(line: 2, offset: -1), 3),
+      "差し込みの上は頭で止まる": (RowPosition(line: 2, offset: -9), 2),
+      "追加の区間の中は区間の後の行": (RowPosition(line: 5), 4),
+      "文脈": (RowPosition(line: 10), 4),
+      "追加だけの区間": (RowPosition(line: 11), 5),
+      "末尾の文脈": (RowPosition(line: 12), 5),
+    ]
+    for (message, (top, first)) in cases {
+      XCTAssertEqual(DiffRows.oldLines(from: top, count: 3, sample), first...(first + 3), message)
+    }
+    let removed = DiffRows.hunks(
+      old: TextRope(lines((0..<199).map(String.init))), new: nil, limit: EditorDiff.hunkLimit)
+    XCTAssertEqual(
+      DiffRows.oldLines(from: RowPosition(line: 0, offset: -100), count: 40, removed), 100...140,
+      "消したファイルの途中は、見えている削除行から")
+    XCTAssertEqual(DiffRows.oldLines(from: .head(of: 0), count: 40, removed), 0...40, "消したファイルの頭")
+  }
+
+  /// 新しい側の面の位置を古い側の錨に直し、新しい並びの位置へ戻す——インラインの削除行・追加の行・文脈、並列の右の
+  /// 詰め物。古い側が変わらず新しい側の上で行が増えても、同じ古い側の行（同じ段）を指す。
+  func testAnchorsCarryThePositionAcrossANewSideThroughTheOldSide() {
+    let (old, new) = sample
+    let before = hunks(old, new)
+    let after = hunks(old, lines(["x", "y", "z"]) + new)
+    let inline: [RowPosition: (anchor: DiffRows.Anchor, moved: RowPosition)] = [
+      RowPosition(line: 2, offset: -1): (
+        .init(line: 3, added: 0), RowPosition(line: 5, offset: -1)
+      ),
+      RowPosition(line: 5): (.init(line: 4, added: -5), RowPosition(line: 8)),
+      RowPosition(line: 10): (.init(line: 4, added: 0), RowPosition(line: 13)),
+      RowPosition(line: 12): (.init(line: 5, added: 0), RowPosition(line: 15)),
+    ]
+    for (top, (anchor, moved)) in inline {
+      XCTAssertEqual(DiffRows.anchor(at: top, before, side: false), anchor, "\(top)")
+      XCTAssertEqual(DiffRows.position(of: anchor, before, side: false), top, "往復: \(top)")
+      XCTAssertEqual(DiffRows.position(of: anchor, after, side: false), moved, "上に 3 行: \(top)")
+    }
+    let shorter = hunks(lines(["a", "b", "c", "d", "e", "f"]), lines(["a", "B", "f"]))
+    let side: [(RowPosition, DiffRows.Anchor)] = [
+      (RowPosition(line: 1), .init(line: 1, added: 0)),
+      (RowPosition(line: 2, offset: -2), .init(line: 3, added: 0)),
+      (RowPosition(line: 2, offset: -1), .init(line: 4, added: 0)),
+    ]
+    for (top, anchor) in side {
+      XCTAssertEqual(DiffRows.anchor(at: top, shorter, side: true), anchor, "並列: \(top)")
+      XCTAssertEqual(DiffRows.position(of: anchor, shorter, side: true), top, "並列の往復: \(top)")
+    }
+    let longer = DiffRows.anchor(at: RowPosition(line: 5), before, side: true)
+    XCTAssertEqual(longer, .init(line: 4, added: -5), "並列で古い側より長い追加の段")
+    XCTAssertEqual(DiffRows.position(of: longer, before, side: true), RowPosition(line: 5))
+    XCTAssertEqual(
+      DiffRows.position(of: .init(line: 4, added: -9), before, side: false), RowPosition(line: 2),
+      "無くなった追加の行は同じ区間の頭")
+  }
+
   private func surface(_ text: String, _ rows: SurfaceRows) throws -> MetalTextSurface {
     let surface = MetalTextSurface(style: EditorStyle.make(), omittedLabel: { "+\($0)" })
     let url = try caseFile("\(UUID().uuidString).txt", text)
