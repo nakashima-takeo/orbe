@@ -46,6 +46,21 @@ extension AutomationStoreTests {
   }
 
   /// 受け手の回（読める行をすべて取る）。取った行の書かれた id（下流へ渡す id の接頭を外したもの）を返す。
+  /// 処理の部品 `copy` の、取った行をすべて引き継いで出す回を確定する。
+  private func copyAll(_ store: AutomationStore, _ id: Int, at: Date) throws {
+    let part = store.part(id, "copy")
+    let read = try XCTUnwrap(store.read(part, of: id, baseline: nil, now: at))
+    try store.record(
+      AutomationPassEnd(
+        automationId: id, part: part,
+        defId: try XCTUnwrap(store.automation(id)?.graph.node(part)).part.defId,
+        trigger: .arrival, startedAt: at, endedAt: at, read: read,
+        outcome: DesignSceneFixtures.processed(
+          read.taken.map {
+            AutomationPartRow(id: $0.id, text: $0.text, origin: $0.origin, source: $0.source)
+          }, read: read.taken.count)))
+  }
+
   @discardableResult private func take(
     _ store: AutomationStore, _ id: Int, _ key: String, at: Date, failing: Bool = false
   ) throws -> [String] {
@@ -236,32 +251,19 @@ extension AutomationStoreTests {
     copy.from = [AutomationDefinition.Input(part: "gh", take: .all)]
     let id = try define(
       store, coverage: .currentSet, receivers: [copy, receiver("a", from: .init(part: "copy"))])
-    let part = store.part(id, "copy")
-    func runCopy(at: Date) throws {
-      let read = try XCTUnwrap(store.read(part, of: id, baseline: nil, now: at))
-      try store.record(
-        AutomationPassEnd(
-          automationId: id, part: part,
-          defId: try XCTUnwrap(store.automation(id)?.graph.node(part)).part.defId,
-          trigger: .arrival, startedAt: at, endedAt: at, read: read,
-          outcome: DesignSceneFixtures.processed(
-            read.taken.map {
-              AutomationPartRow(id: $0.id, text: $0.text, origin: $0.origin, source: $0.source)
-            }, read: read.taken.count)))
-    }
     try fetch(store, id, ["x"], at: Self.at)
-    try runCopy(at: Self.at)
-    try runCopy(at: Self.at.addingTimeInterval(60))
+    try copyAll(store, id, at: Self.at)
+    try copyAll(store, id, at: Self.at.addingTimeInterval(60))
     XCTAssertEqual(
       try take(store, id, "a", at: Self.at.addingTimeInterval(60)), ["x"], "読み直しても 1 度だけ")
     XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks.count, 1)
 
     try fetch(store, id, [], at: Self.at.addingTimeInterval(120))
-    try runCopy(at: Self.at.addingTimeInterval(120))
+    try copyAll(store, id, at: Self.at.addingTimeInterval(120))
     XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks, [], "入力が 0 件なら前の出力を無効にする")
 
     try fetch(store, id, ["y"], at: Self.at.addingTimeInterval(180))
-    try runCopy(at: Self.at.addingTimeInterval(180))
+    try copyAll(store, id, at: Self.at.addingTimeInterval(180))
     var events = try XCTUnwrap(store.automation(id)?.definition)
     events.parts[1].action.coverage = nil
     let version = try XCTUnwrap(store.automation(id)?.version)
@@ -269,6 +271,27 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks, [], "性質を書き換えると項目は無効")
     XCTAssertEqual(
       store.automation(id)?.graph.node(key: "copy")?.coverage, .newArrivals, "書かなければ出来事の流れ")
+  }
+
+  /// 今の集合の処理が引き継いだ項目は、引き継ぎ元が変わったら（上流の項目が処理の 2 回の間に消えて現れた）別の項目になり、
+  /// 下流にもう一度届く。
+  func testACurrentSetProcessRowWhoseSourceChangedArrivesAgain() throws {
+    let store = AutomationStore()
+    var copy = DesignSceneFixtures.agentPart(
+      "copy", "写す", .arrival, from: ["gh"], instruction: "写す", coverage: .currentSet)
+    copy.from = [AutomationDefinition.Input(part: "gh", take: .all)]
+    let id = try define(
+      store, coverage: .currentSet, receivers: [copy, receiver("a", from: .init(part: "copy"))])
+    try fetch(store, id, ["x"], at: Self.at)
+    try copyAll(store, id, at: Self.at)
+    XCTAssertEqual(try take(store, id, "a", at: Self.at), ["x"])
+
+    try fetch(store, id, [], at: Self.at.addingTimeInterval(60))
+    try fetch(store, id, ["x"], at: Self.at.addingTimeInterval(120))
+    try copyAll(store, id, at: Self.at.addingTimeInterval(120))
+
+    XCTAssertEqual(try take(store, id, "a", at: Self.at.addingTimeInterval(120)), ["x"])
+    XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks.count, 1, "今有効なのは新しい項目だけ")
   }
 
   /// 上流の性質を出来事の流れから今の集合に書き換えても、受け手がまだ読んでいない出来事は届く。

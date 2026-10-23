@@ -128,6 +128,34 @@ extension AutomationStoreTests {
     XCTAssertEqual(try rewritten { $0.timeoutMinutes = 9 }, [judge])
   }
 
+  /// 先頭に新しい部品を挿し、残す部品の鍵を変えてその旧鍵を新しい部品に使う書き換えも通り、残す部品は ID を保ち、部品は定義の
+  /// 順に並ぶ（DB の位置も）。
+  func testARewriteCanInsertAPartAndHandItAnOldKey() throws {
+    let store = AutomationStore()
+    let id = try store.create(sendDefinition(), now: Self.at).id
+    let (fetch, send) = (store.part(id, "fetch"), store.part(id, "send"))
+    var definition = try XCTUnwrap(store.automation(id)?.definition)
+    definition.parts[0].key = "gh"
+    definition.parts[1].from = [AutomationDefinition.Input(part: "gh")]
+    definition.parts.insert(
+      DesignSceneFixtures.commandPart(
+        "fetch", "掃除", .scheduled(.every(3600)), script: "clean", deliver: .sideEffect), at: 0)
+
+    _ = try store.replace(id, version: 1, with: definition, now: Self.at)
+
+    let nodes = try XCTUnwrap(store.automation(id)?.graph.nodes)
+    XCTAssertEqual(nodes.map(\.key), ["fetch", "gh", "send"])
+    XCTAssertEqual(Array(nodes.map(\.id).dropFirst()), [fetch, send], "残す部品は同じ ID")
+    XCTAssertGreaterThan(nodes[0].id, send, "新しい部品")
+    XCTAssertEqual(
+      try store.read {
+        try $0.db.select(
+          "SELECT key FROM parts WHERE automation_id = ? AND removed_at IS NULL ORDER BY position",
+          [.integer(Int64(id))]
+        ) { $0.text(at: 0) ?? "" }
+      }, ["fetch", "gh", "send"])
+  }
+
   /// 書き換えは版を添えて送り、通れば版が 1 増える。id の無い部品は新しい部品になる。止める・再開は版を変えない。
   func testARewriteCarriesTheVersionAndBumpsIt() throws {
     let store = AutomationStore()
