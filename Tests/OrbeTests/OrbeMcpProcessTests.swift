@@ -84,6 +84,37 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     }
   }
 
+  /// 裏の agent の回の道具（札があるときだけ出す）の名前と、説明が写すページの既定・上限・大きさ・行の上限は、Orbe 本体の正本
+  /// （`AutomationRunSession.Tool`・ページの定数・`AutomationOutputs.rowKiB`）と同じで、`read_run_rows` は claude が結果を
+  /// ファイルに書き出す閾値を上げる。orbe-mcp は別ターゲットなので、片側だけ直してもコンパイルもほかのテストも通り、その道具を
+  /// 持つ役割の回が毎回「ツールが使えなかった」で失敗する。
+  func testRunToolsMatchTheRunSession() throws {
+    let all = AutomationRunSession.Tool.allCases.map(\.rawValue)
+    let tools = ControlProcess.mcpToolsList(
+      env: ["ORBE_RUN_TOKEN": "t", "ORBE_RUN_TOOLS": all.joined(separator: ",")])
+    func tool(_ name: String) throws -> [String: Any] {
+      try XCTUnwrap(tools.first { $0["name"] as? String == name }, "\(name) が tools/list に無い")
+    }
+
+    XCTAssertEqual(Set(tools.compactMap { $0["name"] as? String }), Set(all))
+    let read = try tool("read_run_rows")
+    let properties = (read["inputSchema"] as? [String: Any])?["properties"] as? [String: Any]
+    let limit = (properties?["limit"] as? [String: Any])?["description"] as? String ?? ""
+    for copied in [
+      "1 to \(AutomationRunSession.pageLimit);", "default \(AutomationRunSession.pageDefault);",
+      "about \(AutomationRunSession.pageBytes >> 10) KiB)",
+    ] {
+      XCTAssertTrue(limit.contains(copied), "\(copied): \(limit)")
+    }
+    XCTAssertEqual(
+      (read["_meta"] as? [String: Any])?["anthropic/maxResultSizeChars"] as? Int, 500_000)
+    for name in ["put_items", "put_rows"] {
+      let description = try tool(name)["description"] as? String ?? ""
+      XCTAssertTrue(
+        description.contains("at most \(AutomationOutputs.rowKiB) KiB"), "\(name): \(description)")
+    }
+  }
+
   /// `tools/list` の description が写す既定・上限は control の正本（`WaitTimeout` / `SessionLogLimits`）と
   /// 同じ値。AI が timeoutMs・limit・一度に戻す件数を決める唯一の情報源なので、写しが古いと省略時の
   /// 待ち時間を誤って見積もり、上限を超えた要求を組む。数字の直後の区切りまで含めて比べる——部分一致だと
