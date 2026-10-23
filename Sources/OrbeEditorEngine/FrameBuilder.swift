@@ -227,7 +227,7 @@ final class FrameBuilder {
     drawVerticalScrollbar(layout, lines: lines, source, content, c)
     drawSliders(
       layout, lines: lines, source,
-      contentLines: CGFloat(rows.contentLines(lineCount: lineCount)), c)
+      contentLines: source.limits.contentLines(rows: rows, lineCount: lineCount), c)
     guard g.height > g.top else { return }
     drawRows(source, content, cache: cache, c)
   }

@@ -49,6 +49,12 @@ extension MetalTextSurface {
     return limits.viewportLines(at: position, rows: rows, lineCount: text.lineCount)
   }
 
+  /// 縦の全体の量（表示の単位。→ `ScrollPhysics.Limits.contentLines`）——取引の中で置いた範囲も当てた今の値。
+  var contentLines: CGFloat {
+    let limits = scrollState().limits
+    return limits.contentLines(rows: rows, lineCount: currentContent?.text.lineCount ?? 1)
+  }
+
   /// 先頭（表示の単位）の位置へ置く（`viewportLines` の逆。最後の項目の上端——スクロールを共にする面では、長い方の面の
   /// 最後の項目の上端——までに収める。横位置は動かさない）。
   func scroll(toFirstLine line: CGFloat) {

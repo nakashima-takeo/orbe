@@ -44,6 +44,23 @@ final class SurfaceSharedScrollTests: EngineTestCase {
       "動かしていない面の見えている範囲も知らせ直す")
   }
 
+  /// 短い面のスクロールバーも共にする範囲で写す——全体の量は長い面と同じで、長い面だけが続く所まで送っても、先頭の位置は
+  /// 範囲の位置から出る（つまみがトラックからはみ出さず、つまみのドラッグ・トラックの押下も長い面の端まで届く）。
+  func testTheShorterSurfacesScrollbarMapsTheSharedRange() throws {
+    let (a, b) = try pair()
+    _ = a.surface.snapshot()
+    _ = b.surface.snapshot()
+    XCTAssertEqual(b.surface.contentLines, a.surface.contentLines, "全体の量は共にする範囲")
+    b.surface.scroll(toFirstLine: 1_000)
+    b.surface.flush()
+    XCTAssertEqual(b.surface.viewportLines.first, a.surface.viewportLines.first, accuracy: 1e-9)
+    let geometry = ScrollbarGeometry(
+      contentLines: b.surface.contentLines, firstLine: b.surface.viewportLines.first,
+      visibleLines: b.surface.viewportLines.visible, height: 300)
+    XCTAssertLessThanOrEqual(geometry.sliderPosition + geometry.sliderLength, 300, "つまみはトラックの中")
+    XCTAssertEqual(geometry.sliderPosition + geometry.sliderLength, 300, accuracy: 0.5, "最下端まで届く")
+  }
+
   /// 縦の範囲は長い方の面の端まで——短い面も長い面の最後の行まで送れ、End も長い面の End と同じ所へ行く。横の範囲は長い
   /// 行の面の端まで。
   func testTheRangeIsTheLargerOfTheTwo() throws {
