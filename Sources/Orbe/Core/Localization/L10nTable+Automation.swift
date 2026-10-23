@@ -121,6 +121,7 @@ extension L10n {
     .automationFaultWorkspace: ("workspace が一覧にありません", "the workspace isn’t in the list"),
     .automationFaultNotArray: ("%@ が配列ではありません", "%@ is not an array"),
     .automationFaultAfterNothing: ("何も無いと申告した後の結果", "a result after reporting nothing"),
+    .automationFaultTooLarge: ("%lld KiB を超える大きさ", "larger than %lld KiB"),
     .automationDismissedAlready: ("候補に登録済みの %lld 件を破棄", "discarded %lld already proposed"),
     .automationDismissedNoOpen: ("判断待ちの候補が無い %lld 件を破棄", "discarded %lld with no waiting proposal"),
     .automationDismissedOriginInvalidated: (

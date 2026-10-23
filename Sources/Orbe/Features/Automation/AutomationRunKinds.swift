@@ -141,6 +141,8 @@ enum AutomationLineFault: Equatable {
   case notArray(String)
   /// 何も無いと申告した後に結果を出した。
   case afterNothing
+  /// 下流へ渡す行が大きさの上限（`AutomationOutputs.rowKiB`）を超えた。
+  case tooLarge
 
   init<Item>(_ reason: JSONLines<Item>.Reason) {
     switch reason {
@@ -174,6 +176,7 @@ enum AutomationLineFault: Equatable {
       "propose \(id): workspace \(number) is not a listed workspace"
     case .notArray(let key): "\(key) must be an array"
     case .afterNothing: "a result after report_nothing"
+    case .tooLarge: "larger than \(AutomationOutputs.rowKiB) KiB"
     }
   }
 }
@@ -339,6 +342,7 @@ extension AutomationBrokenLine: Codable {
       fault = .workspaceNotListed(try string(.id), try c.decode(Int.self, forKey: .workspace))
     case "notArray": fault = .notArray(try string(.key))
     case "afterNothing": fault = .afterNothing
+    case "tooLarge": fault = .tooLarge
     default:
       throw DecodingError.dataCorruptedError(
         forKey: .kind, in: c, debugDescription: "unknown line fault")
@@ -373,6 +377,7 @@ extension AutomationBrokenLine: Codable {
       try c.encode(number, forKey: .workspace)
     case .notArray(let key): try kind("notArray", [(.key, key)])
     case .afterNothing: try kind("afterNothing")
+    case .tooLarge: try kind("tooLarge")
     }
   }
 }

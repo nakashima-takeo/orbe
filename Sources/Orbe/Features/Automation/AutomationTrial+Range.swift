@@ -81,6 +81,10 @@ extension AutomationTrial {
       }
       var arrivals: [AutomationPartRow] = []
       for (index, row) in rows.enumerated() {
+        guard AutomationOutputs.fits(row) else {
+          throw .invalid(
+            "rows: \(AutomationBrokenLine(line: index + 1, fault: .tooLarge).text)")
+        }
         guard let id = AutomationPrompts.id(of: row) else {
           throw .invalid("rows: item \(index + 1): missing id")
         }

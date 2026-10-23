@@ -28,6 +28,22 @@ final class AutomationOutputsTests: OrbeTestCase {
       ["line 1: invalid link", "line 2: invalid time"])
   }
 
+  /// 下流へ渡す行は大きさの上限（64 KiB）までで、超えた行は位置付きの外れた件。取得も処理も、agent もコマンドも同じ確かめを
+  /// 通る（Orbe の口の 1 ページで届かない行を残さない）。
+  func testARowLargerThanTheLimitIsBroken() {
+    let large = String(repeating: "あ", count: (AutomationOutputs.rowKiB << 10) / 3 + 1)
+    var fetch = AutomationOutputs(.fetch(since: nil))
+    let fetched = fetch.put(
+      line + "\n"
+        + #"{"id":"2","link":"https://example.com/2","body":"\#(large)","time":"2026-10-10T09:00:00Z"}"#
+    )
+    var process = AutomationOutputs(.process([], reachesJudge: false))
+    let processed = process.put(#"{"id":"x","note":"\#(large)"}"#)
+
+    XCTAssertEqual(fetched.map(\.text), ["item 2: larger than 64 KiB"])
+    XCTAssertEqual(processed.map(\.text), ["item 1: larger than 64 KiB"])
+  }
+
   // MARK: - 判定
 
   private static func item(_ id: String) -> AutomationItem {

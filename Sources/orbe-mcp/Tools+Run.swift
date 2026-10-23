@@ -11,6 +11,9 @@ private let itemArray = { (desc: String) -> [String: Any] in
 let runTools: [[String: Any]] = [
   obj([
     ("name", "read_run_rows"),
+    // claude は道具の 1 回の結果が閾値を超えるとファイルに書き出し、agent には読めないパスだけを見せる。1 ページは Orbe が
+    // 大きさで切り、行 1 つは書く場で上限に収めてあるので、閾値をページより十分大きくする。
+    ("_meta", ["anthropic/maxResultSizeChars": 500_000]),
     (
       "description",
       "Returns a page of the input items of this run, one JSON object per line, from offset (0 is the first item). "
@@ -48,8 +51,8 @@ let runTools: [[String: Any]] = [
     ("name", "put_items"),
     (
       "description",
-      "Gives Orbe fetched items: {id, link, body, time} each (extra fields are kept). Orbe checks every item; if "
-        + "any is wrong it accepts none of this call and says what to fix."
+      "Gives Orbe fetched items: {id, link, body, time} each (extra fields are kept; an item is at most 64 KiB). "
+        + "Orbe checks every item; if any is wrong it accepts none of this call and says what to fix."
     ),
     ("inputSchema", schema(["items": itemArray("the items")], required: ["items"])),
   ]),
@@ -57,8 +60,8 @@ let runTools: [[String: Any]] = [
     ("name", "put_rows"),
     (
       "description",
-      "Gives Orbe output items, one JSON object each with a string id. Orbe checks every item; if any is wrong it "
-        + "accepts none of this call and says what to fix."
+      "Gives Orbe output items, one JSON object each with a string id (an item is at most 64 KiB). Orbe checks "
+        + "every item; if any is wrong it accepts none of this call and says what to fix."
     ),
     ("inputSchema", schema(["rows": itemArray("the output items")], required: ["rows"])),
   ]),
