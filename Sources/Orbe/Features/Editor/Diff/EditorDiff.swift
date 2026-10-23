@@ -22,6 +22,11 @@ final class EditorDiff: RootFilesObserver {
   /// 作業ツリーの姿（ステージ済みなら nil）と、それを読み直すべきか（ファイルが変わった）。
   var working: WorkingSide?
   var workingStale = true
+  /// 作業ツリーのサブモジュールが取り出しているコミット（外側の nil はまだ読んでいない、内側の nil は取り出していない）と、
+  /// 読みの通し番号（読み直しを頼めば前の読みの結果を捨てる）。
+  var submoduleHead: String??
+  var submoduleHeadRequest = 0
+  var readsSubmoduleHead = false
   private(set) var documents: Documents
   let surfaces: EditorSurfaces
   /// 古い側と、新しい側が版の本文のときの新しい側（その面も diff が持つ）。その版に無い側も空の本文の文書を持つ（面は空の
@@ -41,6 +46,8 @@ final class EditorDiff: RootFilesObserver {
   private(set) var presented: Mode?
   /// 中身・面・並びが変わった（見せている間だけ。pane が本体を置き直す）。
   var onPresentationChange: (() -> Void)?
+  /// 古い側が index のサブモジュール（文書の底ではない「Subproject commit」の行）。
+  var oldIsSubmodule = false
   /// 今の古い側・新しい側の本文の元（その版に無ければ nil。まだ決めていなければ外側の nil）と大きさ。
   private(set) var oldSource: String??
   private var newSource: String??
@@ -239,9 +246,17 @@ final class EditorDiff: RootFilesObserver {
     sourcesDidChange()
   }
 
-  /// status が変わった——競合の出入りと、ステージ済みの rename の元パス。
+  /// status が変わった——競合の出入り・ステージ済みの rename の元パス・作業ツリーのサブモジュールの中の変化。
   func rootFilesStatusDidChange(_ files: RootFiles) {
     files.setVersions(interests, for: self)
+    forgetSubmoduleHead()
+    sourcesDidChange()
+  }
+
+  /// git の状態が変わった（監視の 1 バッチに 1 回）——作業ツリーのサブモジュールが取り出しているコミットを読み直す。
+  func rootFilesGitStateDidChange(_ files: RootFiles, remoteRefsChanged: Bool) {
+    guard case .directory? = working else { return }
+    forgetSubmoduleHead()
     sourcesDidChange()
   }
 
@@ -300,7 +315,7 @@ final class EditorDiff: RootFilesObserver {
       if state == .failed { return .unavailable(.failed) }
     }
     if head == .absent, index == .absent { return .unavailable(.nowhere) }
-    let (oldText, newText, limit) = (head.text, index.text, Self.hunkLimit)
+    let (oldText, newText, limit) = (Self.sideText(head), Self.sideText(index), Self.hunkLimit)
     // 今の側と同じなら、走っている依頼を捨てただけで済む。
     guard oldSource != .some(oldText) || newSource != .some(newText) else { return .ready }
     let request = stagedRequest

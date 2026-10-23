@@ -87,6 +87,9 @@ extension EditorDiff {
     guard let base = oldSource else {
       return (DiffRows.hunks(old: nil, new: document.text, limit: Self.hunkLimit), side)
     }
+    // サブモジュールからファイルへ置き換えた行——古い側は文書の底ではないので、丸ごとの置き換え（git が削除と追加に割るのと
+    // 同じ形）。
+    if oldIsSubmodule { return ([LineHunk(old: 0..<oldSide.lines, new: 0..<side.lines)], side) }
     guard document.hunksBase == base else { return nil }
     return (document.hunks, side)
   }

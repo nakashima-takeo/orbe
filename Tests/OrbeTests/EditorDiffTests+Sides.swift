@@ -7,9 +7,9 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// diff の側の決まり方——新しい側の文書が替わったとき（並びが載るまで出さない・仮のタブとタブ行・未保存が下りたとき）、
-/// 両側とも無いパス、途中のシンボリックリンク。壊れると、diff タブに編集できる面が一瞬出る・未保存の文書を
+/// 両側とも無いパス、途中のシンボリックリンク、サブモジュール。壊れると、diff タブに編集できる面が一瞬出る・未保存の文書を
 /// 使う仮のタブが黙って入れ替わる・消えたファイルの diff が古いまま残る・リンク先の別のファイルが出る・空の diff が理由
-/// なしに出る。
+/// なしに出る・サブモジュールの行が「git から取れない」になる。
 extension EditorDiffTests {
   /// diff だけが持つファイルが消えて戻った直後は、新しい文書の行差分が届くまで本体に何も出さず、届けば読むだけで出す。
   func testADiffOnlyDocumentThatComesBackShowsNothingUntilItsRowsArrive() throws {
@@ -115,5 +115,59 @@ extension EditorDiffTests {
     let diff = try tab.group.editor.openDiff(id("dir/f.txt", .workingTree), as: .pinned)
     waitRows(diff, "全部の行が削除") { self.removedLines($0) == [0, 1] }
     XCTAssertNil(diff.document, "リンク先の文書を開かない")
+  }
+
+  /// サブモジュールの行は「Subproject commit」の 1 行の差——作業ツリーは index のコミット ↔ 取り出しているコミット（中が
+  /// 変わっていれば -dirty）、ステージ済みは HEAD ↔ index。
+  func testASubmoduleRowShowsTheSubprojectCommitLines() throws {
+    try repo.addSubmodule("sub")
+    let commit = {
+      self.repo.git(["-C", "sub", "rev-parse", "HEAD"]).stdoutText.trimmingCharacters(in: .newlines)
+    }
+    let first = commit()
+    try repo.write("sub/t.txt", "changed\n")
+    let (tab, _) = tab()
+    let dirty = try tab.group.editor.openDiff(id("sub", .workingTree), as: .pinned)
+    waitRows(dirty, "中身だけ変わった") { _ in dirty.newRevision != nil }
+    XCTAssertEqual(text(dirty.old), "Subproject commit \(first)")
+    XCTAssertEqual(text(dirty.newRevision), "Subproject commit \(first)-dirty")
+    tab.group.editor.close(.diff(id("sub", .workingTree)))
+
+    XCTAssertTrue(repo.git(["-C", "sub", "commit", "-qam", "inside"]).isSuccess)
+    let second = commit()
+    pumpMain(until: {
+      dirty.files.status?.entries["sub"]?.unstagedSubmodule == .commit(dirty: false)
+    })
+    let moved = try tab.group.editor.openDiff(id("sub", .workingTree), as: .pinned)
+    pumpMain(until: { self.text(moved.newRevision) == "Subproject commit \(second)" }, "中でコミットした")
+    XCTAssertEqual(text(moved.old), "Subproject commit \(first)")
+    XCTAssertEqual(removedLines(try engine(moved.newSurface).rows), [0], "1 行の差")
+
+    XCTAssertTrue(repo.git(["add", "sub"]).isSuccess)
+    let staged = try tab.group.editor.openDiff(id("sub", .staged), as: .pinned)
+    pumpMain(until: { self.text(staged.newRevision) == "Subproject commit \(second)" }, "ステージ済み")
+    XCTAssertEqual(text(staged.old), "Subproject commit \(first)")
+  }
+
+  /// サブモジュールをファイルに置き換えた作業ツリー diff は、「Subproject commit」の行とファイルの本文の丸ごとの置き換えで、
+  /// 新しい側はファイルの文書。
+  func testASubmoduleReplacedByAFileIsAWholeReplacement() throws {
+    try repo.addSubmodule("sub")
+    let first = repo.git(["-C", "sub", "rev-parse", "HEAD"]).stdoutText.trimmingCharacters(
+      in: .newlines)
+    try FileManager.default.removeItem(at: repo.url("sub"))
+    try repo.write("sub", "a file\nnow\n")
+    let (tab, _) = tab()
+    let diff = try tab.group.editor.openDiff(id("sub", .workingTree), as: .pinned)
+    waitRows(diff, "置き換え") { self.removedLines($0) == [0] }
+    XCTAssertNotNil(diff.document, "新しい側はファイルの文書")
+    XCTAssertEqual(text(diff.old), "Subproject commit \(first)")
+    let rows = try engine(diff.newSurface).rows
+    XCTAssertEqual(rows.style(ofLine: 0), DiffStyle.added)
+    XCTAssertEqual(rows.style(ofLine: 2), DiffStyle.added, "全部の行が追加")
+  }
+
+  private func text(_ revision: RevisionDocument?) -> String? {
+    revision.map { String(decoding: $0.text.contiguousUnits(), as: UTF16.self) }
   }
 }

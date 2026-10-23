@@ -283,7 +283,8 @@ final class RootFiles {
     refreshVersions()
   }
 
-  /// 関心のある版の OID を版ごとに 1 回で引き、OID が変わったものだけ本文を取る。
+  /// 関心のある版の OID を版ごとに 1 回で引き、OID が変わったファイルだけ本文を取る。サブモジュールはコミットを状態に
+  /// する（blob を取らない）。
   private func refreshVersions() {
     guard let repo else { return }
     versionJob.isRunning = true
@@ -310,9 +311,13 @@ final class RootFiles {
             }
             continue
           }
-          if let oid = oids[version.path] {
+          switch oids[version.path] {
+          case .file(let oid)?:
             if versions[version]?.oid != oid { fetch.append((version, oid)) }
-          } else {
+          case .submodule(let commit)?:
+            if versions[version]?.state != .submodule(commit) { changed.append(version) }
+            versions[version] = Settled(oid: commit, state: .submodule(commit))
+          case nil:
             if versions[version]?.state != .absent { changed.append(version) }
             versions[version] = Settled(oid: nil, state: .absent)
           }

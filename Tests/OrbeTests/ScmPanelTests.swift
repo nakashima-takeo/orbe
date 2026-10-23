@@ -226,7 +226,9 @@ final class ScmPanelTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["-C", "sub", "commit", "-qm", "inner"]).isSuccess)
     panel.refresh()
     pumpMain(
-      until: { self.panel.changes.changes.first { $0.path == "sub" }?.submodule == .commit },
+      until: {
+        self.panel.changes.changes.first { $0.path == "sub" }?.submodule == .commit(dirty: false)
+      },
       "中でコミットしたサブモジュールの行")
     discarding = []
     let moved = try XCTUnwrap(panel.layout.index[ScmRowID(section: .changes, path: "sub")])

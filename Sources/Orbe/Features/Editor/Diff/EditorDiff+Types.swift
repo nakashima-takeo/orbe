@@ -77,6 +77,9 @@ extension EditorDiff {
     case document(EditorDocument)
     /// 作業ツリーに無い（消した）。
     case missing
+    /// ディレクトリ（`hasRepository` は中が取り出したリポジトリ）。index の版がサブモジュールか、中がリポジトリなら、
+    /// サブモジュールとして「Subproject commit」の行で見せる。どちらでもなければ表示できない。
+    case directory(hasRepository: Bool)
     case unavailable(Unavailable)
   }
 }

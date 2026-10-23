@@ -1,6 +1,6 @@
 import Foundation
 
-/// 版の本文の語彙——関心の単位と版の状態。
+/// 版の本文の語彙——関心の単位と版の状態、作業ツリーのサブモジュールが取り出しているコミット。
 extension RootFiles {
   /// 関心の単位——根からの相対パスと版。
   struct Version: Hashable {
@@ -12,7 +12,9 @@ extension RootFiles {
   enum VersionState: Equatable {
     /// 本文（作業ツリーに出したときの姿）。
     case text(String)
-    /// その版に無い（index に無い・競合中・初回コミット前の HEAD を含む。ファイルでないものも）。
+    /// サブモジュール（gitlink が指すコミット）。本文は取らない。
+    case submodule(String)
+    /// その版に無い（index に無い・競合中・初回コミット前の HEAD を含む。ファイルでもサブモジュールでもないものも）。
     case absent
     /// UTF-8 として読めない。
     case notText
@@ -23,5 +25,12 @@ extension RootFiles {
       if case .text(let text) = self { return text }
       return nil
     }
+  }
+
+  /// 作業ツリーのサブモジュール `path`（根からの相対パス）が取り出しているコミット（→ `GitRepo.submoduleHead`。管理外なら
+  /// nil）。
+  func submoduleHead(of path: String, completion: @escaping (String?) -> Void) {
+    guard let repo else { return completion(nil) }
+    repo.submoduleHead(relativePath: path, completion: completion)
   }
 }

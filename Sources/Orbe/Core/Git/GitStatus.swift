@@ -10,8 +10,9 @@ struct GitStatus: Equatable {
   /// 作業ツリー側もサブモジュールのまま変わったときの変わり方。どちらも `git restore` では戻らない（サブモジュールの
   /// HEAD も中のファイルも動かさない）。作業ツリーで消した・ファイルに置き換えたサブモジュールはこれに当たらない。
   enum SubmoduleChange: Equatable {
-    /// チェックアウトしているコミットが index と違う（中のファイルの変化を伴うこともある）。`git add` でステージできる。
-    case commit
+    /// チェックアウトしているコミットが index と違う。`git add` でステージできる。`dirty` は、中の追跡中のファイルも変わった・
+    /// 未追跡のファイルがある。
+    case commit(dirty: Bool)
     /// 中のファイルだけが変わった・増えた。`git add` でもステージできない。
     case content
   }
@@ -260,9 +261,10 @@ struct GitStatus: Equatable {
     guard chars.count == 2 else { return nil }
     let unstaged = change(chars[1])
     let flags = Array(sub)
+    let dirty = flags.count == 4 && (flags[2] == "M" || flags[3] == "U")
     let submodule: SubmoduleChange? =
       unstaged == .modified && flags.count == 4 && flags[0] == "S"
-      ? (flags[1] == "C" ? .commit : (flags[2] == "M" || flags[3] == "U") ? .content : nil) : nil
+      ? (flags[1] == "C" ? .commit(dirty: dirty) : dirty ? .content : nil) : nil
     return Entry(staged: change(chars[0]), unstaged: unstaged, unstagedSubmodule: submodule)
   }
 
