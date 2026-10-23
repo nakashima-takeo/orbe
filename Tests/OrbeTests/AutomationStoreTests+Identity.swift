@@ -100,6 +100,34 @@ extension AutomationStoreTests {
     XCTAssertFalse(stored.contains { $0.contains(#""key""#) }, "定義に鍵は残らない")
   }
 
+  /// 省略していた値に既定と同じ値を書き足すだけ（判定のモデル・上限）は、何をするかの変化に入らず、走っている回を止めない。
+  /// 既定と違う値は変化。
+  func testSpellingOutADefaultIsNotAChangeOfWork() throws {
+    let store = AutomationStore()
+    let id = try store.create(Self.definition(), now: Self.at).id
+    let judge = store.part(id, "judge")
+    func rewritten(_ change: (inout AutomationActionDef) -> Void) throws -> [AutomationPartID] {
+      var definition = try XCTUnwrap(store.automation(id)?.definition)
+      change(&definition.parts[1].action)
+      let version = try XCTUnwrap(store.automation(id)?.version)
+      return try store.replace(id, version: version, with: definition, now: Self.at).reworked
+    }
+    func model(_ model: String?) -> (inout AutomationActionDef) -> Void {
+      { action in
+        guard case .agent(var agent) = action.method else { return }
+        agent.model = model
+        action.method = .agent(agent)
+      }
+    }
+
+    XCTAssertEqual(try rewritten(model(nil)), [], "省略は既定の sonnet と同じ")
+    XCTAssertEqual(
+      try rewritten { $0.timeoutMinutes = AutomationActionDef.agentTimeoutMinutes }, [],
+      "agent の既定の上限を明示")
+    XCTAssertEqual(try rewritten(model("opus")), [judge])
+    XCTAssertEqual(try rewritten { $0.timeoutMinutes = 9 }, [judge])
+  }
+
   /// 書き換えは版を添えて送り、通れば版が 1 増える。id の無い部品は新しい部品になる。止める・再開は版を変えない。
   func testARewriteCarriesTheVersionAndBumpsIt() throws {
     let store = AutomationStore()

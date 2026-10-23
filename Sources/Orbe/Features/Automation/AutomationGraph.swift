@@ -46,6 +46,28 @@ struct AutomationGraph: Equatable {
 
     /// 入力の部品。
     var inputParts: [AutomationPartID] { inputs.map(\.from) }
+
+    /// 何をするか（省略を解いた動作と入力の集合）。書き換えで何をするかが変わったかはこれで比べる——省略していた値に既定と
+    /// 同じ値を書き足しただけでは変わらない。
+    var work: Work {
+      var method = action.method
+      if case .agent(var agent) = method {
+        agent.model = model
+        method = .agent(agent)
+      }
+      return Work(
+        method: method, timeoutMinutes: timeoutMinutes, coverage: coverage,
+        destination: action.destination, inputs: Set(inputs))
+    }
+  }
+
+  /// 部品が何をするか（`Node.work`）。
+  struct Work: Equatable {
+    let method: AutomationActionDef.Method
+    let timeoutMinutes: Int
+    let coverage: AutomationCoverage?
+    let destination: AutomationActionDef.Destination
+    let inputs: Set<AutomationPartEdge>
   }
 
   /// 検証を通った部品の外の形と、導いた役割と、入力の部品の位置。
