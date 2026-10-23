@@ -16,17 +16,6 @@ final class ScmPanel {
     case list
   }
 
-  /// 行の開き方。
-  struct Opening: Equatable {
-    let mode: EditorSession.OpenMode
-    let focusesText: Bool
-
-    /// シングルクリック・キーで行へ動いた: 仮で開き、焦点は列のまま。
-    static let browse = Opening(mode: .preview, focusesText: false)
-    /// ダブルクリック・Enter: 普通に開いて本文へ。
-    static let commit = Opening(mode: .pinned, focusesText: true)
-  }
-
   /// グラフを読む件数の刻み。
   static let graphPage = 50
 

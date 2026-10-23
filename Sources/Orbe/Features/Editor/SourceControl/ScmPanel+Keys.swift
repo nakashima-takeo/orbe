@@ -2,6 +2,17 @@ import Foundation
 
 /// 変更の列の選択・キー・押下（検索結果の列と同じ型。→ `ScmListSource`）。
 extension ScmPanel {
+  /// 行の開き方。
+  struct Opening: Equatable {
+    let mode: EditorSession.OpenMode
+    let focusesText: Bool
+
+    /// シングルクリック・キーで行へ動いた: 仮で開き、焦点は列のまま。
+    static let browse = Opening(mode: .preview, focusesText: false)
+    /// ダブルクリック・Enter: 普通に開いて本文へ。
+    static let commit = Opening(mode: .pinned, focusesText: true)
+  }
+
   /// 選んだファイル行を開く（見出し・選択なしは開かない）。
   func openSelection(_ opening: Opening) {
     navigation.drop()
