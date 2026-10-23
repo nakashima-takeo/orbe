@@ -49,6 +49,26 @@ extension AutomationStoreTests {
     XCTAssertEqual(try count("item_versions", where: "body LIKE '%変わった本文%'"), 1, "今の版は残る")
   }
 
+  /// 走っている回が読んだ行（出どころの版を含む）は、どこからも指されていなくても確定まで消さない。
+  func testAVersionARunningPassHoldsIsNotSwept() throws {
+    var store: AutomationStore? = AutomationStore()
+    let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
+    try Self.fetch(XCTUnwrap(store), id, [Self.item("a")])
+    let first = try XCTUnwrap(
+      store?.read { try $0.db.select("SELECT min(id) FROM item_versions", []) { $0.int(at: 0) } }
+        .first)
+    store?.holding = { [.version(first)] }
+    let changed = AutomationItem(
+      id: "a", link: "https://example.com/a", body: "変わった本文", time: Self.at)
+    for n in 1...(AutomationPartState.retainedRuns + 1) {
+      try Self.fetch(
+        XCTUnwrap(store), id, [changed], at: Self.at.addingTimeInterval(60 * Double(n)))
+    }
+    store = nil
+
+    XCTAssertEqual(try count("item_versions", where: "id = \(first)"), 1)
+  }
+
   /// 判断した候補を持つ自動化を消すと、その自動化の行（部品・つながり・定義・出した行・回・候補・判断）は 1 つも残らない。
   func testADeletedAutomationLeavesNoRowsBehind() throws {
     var store: AutomationStore? = AutomationStore()

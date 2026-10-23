@@ -3,7 +3,7 @@ import Foundation
 /// 保持と掃除。確定・さばき・書き換えのトランザクションの最後に 1 度だけ、指されていない行を消す。どの参照元も `NOT EXISTS`
 /// で見て、外部キーが参照の漏れをトランザクションの失敗にする。
 extension AutomationDatabase {
-  /// `holding` は走っている回が読んだ行（確定まで消さない）。
+  /// `holding` は走っている回が読んだ行とその出どころ（確定まで消さない）。
   func sweep(now: Date, holding: Set<AutomationRowRef>) throws {
     let heldVersions = holding.compactMap { ref -> String? in
       if case .version(let id) = ref { return String(id) }

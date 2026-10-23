@@ -225,7 +225,7 @@ extension AutomationRunner {
     let finish: (Date) -> Void
     /// 契機の始まりの時点の、入力ごとの上流の最後の番号。これ以下の行を読む。
     var baseline: [AutomationPartID: AutomationSeqs] = [:]
-    /// 走っている回が読んだ行。
+    /// 走っている回が読んだ行とその出どころ。
     var holding: [AutomationRowRef] = []
     /// 回の始まり。
     var passStartedAt: Date?
@@ -313,7 +313,10 @@ extension AutomationRunner {
     let input = self.input(node, automation, read)
     let startedAt = now()
     trigger.passStartedAt = startedAt
-    trigger.holding = read.map { $0.taken.map(\.ref) + $0.dropped.map(\.row.ref) } ?? []
+    trigger.holding =
+      read.map {
+        $0.taken.map(\.ref) + $0.dropped.map(\.row.ref) + $0.taken.compactMap(\.origin?.row)
+      } ?? []
     let defId = node.part.defId
     let pass = AutomationPartPass(run: run, now: now, calendar: calendar, runData: runData)
     trigger.current = pass.start(node, input) { [weak self] outcome in

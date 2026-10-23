@@ -35,6 +35,27 @@ extension AutomationRunnerTests {
     return id
   }
 
+  /// 判定が走っている間、読んだ行の出どころの版（処理を挟むと回の履歴に指されない）も掃除から守る——確定の候補がその版を
+  /// 指すので。
+  func testARunningJudgeHoldsTheOriginsOfTheRowsItRead() throws {
+    let id = try define([
+      part("gh", .scheduled(.every(1800)), coverage: .currentSet),
+      part("p", .arrival, from: ["gh"]),
+      part("judge", .scheduled(.every(86400)), from: ["p"], deliver: .taskCandidates),
+    ])
+    advance(by: 1800)
+    finish("gh", fetched(["a"]))
+    finish("p", printed(#"{"id":"\#(downstream("gh", "a", of: id))"}"#))
+
+    advance(by: 86400)
+    XCTAssertEqual(calls("judge").count, 1, "前提: 判定が走っている")
+    XCTAssertTrue(
+      store.holding().contains {
+        if case .version = $0 { return true }
+        return false
+      })
+  }
+
   func testAProcessRunWhoseRowsAllLackAnOriginFailsWhenAJudgeWasAddedMidRun() throws {
     let id = try finishProcessAfterAddingAJudge { _ in #"{"id":"x","note":"作った行"}"# }
 
