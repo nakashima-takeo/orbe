@@ -285,7 +285,7 @@ extension AutomationRunner {
     }
   }
 
-  /// 契機の始まりの時点までの上流の行を読む。取る行が 0 件なら手段を起こさず、捨てた行の分だけ読んだ位置を進めて終える。
+  /// 契機の始まりの時点までの上流の行を読む。取る行が 0 件なら手段を起こさず、読んだ位置を読む上限の番号まで進めて終える。
   /// ただし今の集合の処理は 0 件でも回す（空の集合を写す）。
   private func read(_ trigger: Trigger) {
     let read: AutomationIntake.Read?

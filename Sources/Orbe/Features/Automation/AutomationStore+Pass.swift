@@ -47,8 +47,8 @@ extension AutomationStore {
     try read { try $0.positions(of: part) }
   }
 
-  /// 取る行が 0 件だった契機。捨てた行があれば読んだ位置をその最大の番号まで進め、捨てた数と読む前に期限で消えた数を受け手の
-  /// 部品の持ち越しに足す（次の成功した回の記録に載る）。
+  /// 取る行が 0 件だった契機。読んだ位置を読む上限の番号まで進め、捨てた数と読む前に期限で消えた数を受け手の部品の
+  /// 持ち越しに足す（次の成功した回の記録に載る）。
   func discard(_ read: AutomationIntake.Read, of part: AutomationPartID, in id: Int, now: Date)
     throws(AutomationError)
   {
