@@ -340,7 +340,7 @@ extension AutomationRunner {
       return end(trigger)
     }
     trigger.holding = []
-    recorded(AutomationPassRecord(end: passEnd, recorded: result))
+    recorded(AutomationPassRecord(end: passEnd, run: result.run))
     if result.changed, let automation = store.automation(trigger.automationId) {
       for node in automation.graph.downstream(of: trigger.part) {
         wake(trigger.automationId, node.id)

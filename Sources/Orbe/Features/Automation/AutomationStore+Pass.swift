@@ -20,9 +20,6 @@ struct AutomationRecorded {
   let changed: Bool
   /// 書いた回の記録。自動化か部品がもう無く、何も書かなかったなら nil。
   let run: AutomationPartRun?
-
-  /// 失敗した回として書いたか（部品の 1 回が成功していても、確定で失敗にした回を含む）。
-  var failed: Bool { run?.failed ?? false }
 }
 
 /// 部品の 1 回の読み書き。読みは受け手の取り方（`AutomationIntake`）を通し、行の本文は DB にだけ置く。

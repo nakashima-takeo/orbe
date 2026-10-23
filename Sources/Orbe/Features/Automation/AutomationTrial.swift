@@ -24,7 +24,7 @@ final class AutomationTrial {
     var to: [String]?
     /// 入口に与える行（1 行 1 JSON オブジェクト）。道の根が 1 つのときだけ受ける。
     var rows: [String]?
-    /// 取得が下流へ渡す行の上限。
+    /// 道の根の取得の回が新しく足す行の上限。毎回すべてを取る受け手は、前から今有効な行もあわせて読む。
     var limit: Int?
   }
 
@@ -125,15 +125,15 @@ final class AutomationTrial {
   /// 写している途中か。
   var preparing: Bool { copy != nil }
 
-  func state(of key: AutomationPartID) -> PartState {
-    if key == givenFetch { return .given }
-    if let node = range.path.first(where: { $0.id == key }), Self.holds(node) {
+  func state(of part: AutomationPartID) -> PartState {
+    if part == givenFetch { return .given }
+    if let node = range.path.first(where: { $0.id == part }), Self.holds(node) {
       if running { return .waiting }
       return completed ? .held : .untouched
     }
-    guard running else { return finalFlow?.isDone(key) == true ? .done : .untouched }
-    if runner?.currentFlow(automationId)?.isDone(key) == true { return .done }
-    return runner?.isRunning(automationId, key) == true ? .running : .waiting
+    guard running else { return finalFlow?.isDone(part) == true ? .done : .untouched }
+    if runner?.currentFlow(automationId)?.isDone(part) == true { return .done }
+    return runner?.isRunning(automationId, part) == true ? .running : .waiting
   }
 
   /// 止める部品（副作用・仕事）か。
@@ -219,9 +219,9 @@ final class AutomationTrial {
   /// 部品の回の知らせ（確定の直後、下流が読む前）。取得・処理はその回が写しに足した新しい行を結果にし、道の根の取得なら先に
   /// `limit` で写しを絞る。判定は案を結果にする。
   private func recorded(_ record: AutomationPassRecord) {
-    let key = record.end.part
+    let part = record.end.part
     guard !stopped, let store, let run = record.run,
-      let node = range.path.first(where: { $0.id == key })
+      let node = range.path.first(where: { $0.id == part })
     else { return }
     let content: Content
     do throws(AutomationError) {
@@ -229,7 +229,7 @@ final class AutomationTrial {
     } catch {
       return end(failure: Self.reason(error))
     }
-    passes[key, default: []].insert(.ran(run, content), at: 0)
+    passes[part, default: []].insert(.ran(run, content), at: 0)
   }
 
   private func content(

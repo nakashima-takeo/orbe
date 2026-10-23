@@ -122,7 +122,7 @@ extension DesignSceneFixtures {
     _ items: [AutomationItem], as key: String, of id: Int, in store: AutomationStore, at: Date
   ) throws {
     let part = store.part(id, key)
-    _ = try store.give(items.map(row), as: part, of: id, at: at)
+    try store.give(items.map(row), as: part, of: id, at: at)
     for receiver in store.automation(id)?.graph.downstream(of: part) ?? [] {
       guard var read = try store.read(receiver.id, of: id, baseline: nil, now: at) else { continue }
       read.taken = []
