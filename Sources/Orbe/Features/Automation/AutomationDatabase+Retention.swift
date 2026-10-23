@@ -93,12 +93,17 @@ extension AutomationDatabase {
       """, [])
   }
 
-  /// 今の集合の項目と版。今有効な項目の今の版は消さない。版は、どこからも指されず、次の版が出す側の残っている最も古い回より前に
-  /// 出ているものを消す。項目は、出す側の残っている最も古い回より前に無効になり、引き継ぎに指されず、版が 1 つも指されて
-  /// いないものを版ごと消す。
+  /// 今の集合の項目と版。今有効な項目の今の版は消さない。基準は出す側の部品の残す数の内で最も古い回の始まり（残す数を
+  /// 過ぎても例外として残る回は数えない——その回が読んだ版は回の履歴が指して残る）。版は、どこからも指されず、次の版が基準より
+  /// 前に出ているものを消す。項目は、基準より前に無効になり、引き継ぎに指されず、版が 1 つも指されていないものを版ごと消す。
   private func sweepItems(_ heldVersions: String) throws {
-    let oldest =
-      "coalesce((SELECT min(started_at) FROM runs WHERE part_id = i.part_id), 9223372036854775807)"
+    let oldest = """
+      coalesce((
+        SELECT min(started_at) FROM (
+          SELECT started_at, ROW_NUMBER() OVER (ORDER BY id DESC) AS n FROM runs
+          WHERE part_id = i.part_id)
+        WHERE n <= \(AutomationPartState.retainedRuns)), 9223372036854775807)
+      """
     let referenced = """
       (v.id IN (SELECT version_id FROM run_item_inputs)
         OR v.id IN (SELECT origin_version_id FROM proposals WHERE origin_version_id IS NOT NULL)

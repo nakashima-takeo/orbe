@@ -49,6 +49,24 @@ extension AutomationStoreTests {
     XCTAssertEqual(try count("item_versions", where: "body LIKE '%変わった本文%'"), 1, "今の版は残る")
   }
 
+  /// 取得の部品が一度決まりを外して印の回が残す数を過ぎても残っていても、その後に置き換わった古い版は、残す数の内の回より
+  /// 前に置き換わっていれば消える。
+  func testAReplacedVersionIsSweptEvenWhileABreachRunOutlivesTheWindow() throws {
+    var store: AutomationStore? = AutomationStore()
+    let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
+    try Self.fetch(XCTUnwrap(store), id, [], outcome: Self.breached([Self.item("a")]))
+    let changed = AutomationItem(
+      id: "a", link: "https://example.com/a", body: "変わった本文", time: Self.at)
+    for n in 1...(AutomationPartState.retainedRuns + 1) {
+      try Self.fetch(
+        XCTUnwrap(store), id, [changed], at: Self.at.addingTimeInterval(60 * Double(n)))
+    }
+    XCTAssertNotNil(store?.automation(id)?.state(key: "fetch").breach, "前提: 印の回が残る")
+    store = nil
+
+    XCTAssertEqual(try count("item_versions"), 1)
+  }
+
   /// 走っている回が読んだ行（出どころの版を含む）は、どこからも指されていなくても確定まで消さない。
   func testAVersionARunningPassHoldsIsNotSwept() throws {
     var store: AutomationStore? = AutomationStore()
