@@ -52,9 +52,9 @@ extension ScmPanel {
     ownWrites.record(.unstage(rows), control.unstage(rows))
   }
 
-  /// 行の変更を捨てる（確認は呼ぶ側）。
-  func discard(_ rows: [GitStatus.Row]) {
-    ownWrites.record(.discard(rows), control.discard(rows))
+  /// 見えていた行の変更を捨てる（確認は呼ぶ側）。
+  func discard(_ content: GitDiscardContent) {
+    ownWrites.record(.discard(content.rows), control.discard(content))
   }
 
   /// 自分の書き込みが終わった（根のサービスの status はもう書き込み後の姿）。

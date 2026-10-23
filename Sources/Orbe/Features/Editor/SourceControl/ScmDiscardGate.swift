@@ -1,15 +1,22 @@
 import AppKit
 
-/// 破棄の確認。追跡中のファイルを含む破棄は作業ツリーを index の版へ戻すので元に戻せず、確認を出す。未追跡だけならゴミ箱へ
-/// 移す（戻せる）ので確認しない。「破棄」はクリックだけで確定し、Return では確定しない（`UnsavedGate.overwriteAlert` と同じ
-/// 型。Esc はキャンセル）。
+/// 破棄の確認。index の版へ戻すパスを含む破棄は元に戻せないので、確認を出す。ゴミ箱へ移すもの（未追跡・作業ツリーに在る
+/// intent-to-add）だけなら戻せるので確認しない。行き先は行に写した規則（`ScmChanges.File.discardMovesToTrash`）で決める。
+/// 「破棄」はクリックだけで確定し、Return では確定しない（`UnsavedGate.overwriteAlert` と同じ型。Esc はキャンセル）。
 @MainActor
 enum ScmDiscardGate {
+  /// 戻すパスを 1 つでも含む——ゴミ箱へ移らない行か、元パス（rename の元パスは戻す側）を持つ行がある。
   static func needsConfirmation(_ files: [ScmChanges.File]) -> Bool {
-    files.contains(where: \.isTracked)
+    files.contains { !$0.discardMovesToTrash || $0.row.originalPath != nil }
   }
 
-  /// 件数（1 件ならその名前）と、未追跡を含めばゴミ箱へ移す件数を添えた確認。
+  /// 根のサービスへ渡す、見えていた破棄。
+  static func content(_ files: [ScmChanges.File]) -> GitDiscardContent {
+    GitDiscardContent(
+      rows: files.map(\.row), trashed: Set(files.filter(\.discardMovesToTrash).map(\.path)))
+  }
+
+  /// 件数（1 件ならその名前）と、ゴミ箱へ移す行があればその件数を添えた確認。
   static func alert(_ files: [ScmChanges.File], language: Language) -> NSAlert {
     let alert = NSAlert()
     alert.messageText =
@@ -17,10 +24,10 @@ enum ScmDiscardGate {
       ? L10n.format(
         .editorScmDiscardTitleOne, language, (files[0].path as NSString).lastPathComponent)
       : L10n.format(.editorScmDiscardTitleOther, language, files.count)
-    let untracked = files.filter { !$0.isTracked }.count
+    let trashed = files.filter(\.discardMovesToTrash).count
     alert.informativeText = [
       L10n.string(.editorScmDiscardMessage, language),
-      untracked > 0 ? L10n.format(.editorScmDiscardUntracked, language, untracked) : nil,
+      trashed > 0 ? L10n.format(.editorScmDiscardToTrash, language, trashed) : nil,
     ].compactMap { $0 }.joined(separator: " ")
     let confirm = alert.addButton(withTitle: L10n.string(.editorScmDiscardConfirm, language))
     confirm.hasDestructiveAction = true

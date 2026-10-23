@@ -15,7 +15,7 @@ extension RootFilesWritesTests {
     let files = repo.files()
     pumpMain(until: { files.status?.entries["sub"]?.unstagedSubmodule == .commit }, "前提: SCM. の行")
 
-    let discarded = finish(files) { files.discard([files.status!.row("sub")], completion: $0) }
+    let discarded = finish(files) { files.discard(files.status!.discarding("sub"), completion: $0) }
     XCTAssertNil(discarded.failure)
     XCTAssertEqual(repo.git(["-C", "sub", "rev-parse", "HEAD"]).stdoutText, inside)
     XCTAssertEqual(

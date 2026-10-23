@@ -43,13 +43,49 @@ final class ScmRowsTests: OrbeTestCase {
     XCTAssertEqual(unstaged["new.txt"]?.badge, .untracked)
     XCTAssertEqual(
       staged["moved.txt"]?.row, GitStatus.Row(path: "moved.txt", originalPath: "old.txt"))
-    XCTAssertEqual(unstaged["new.txt"]?.isTracked, false)
-    XCTAssertEqual(unstaged["cached.txt"]?.isTracked, false)
-    XCTAssertEqual(unstaged["src/a2.swift"]?.isTracked, true)
+    XCTAssertEqual(unstaged["new.txt"]?.discardMovesToTrash, true)
+    XCTAssertEqual(unstaged["cached.txt"]?.discardMovesToTrash, true)
+    XCTAssertEqual(unstaged["src/a2.swift"]?.discardMovesToTrash, false)
     XCTAssertEqual(unstaged["src/a2.swift"]?.existsInWorkingTree, false)
     XCTAssertEqual(staged["gone.txt"]?.existsInWorkingTree, false)
     XCTAssertEqual(staged["cached.txt"]?.existsInWorkingTree, true)
     XCTAssertEqual(ScmChanges.count(status), changes.count)
+  }
+
+  /// 破棄でゴミ箱へ移る行は、作業ツリー側が未追跡か intent-to-add（作業ツリー側の追加・rename）の行。確認が要るのは戻す
+  /// パスを含む破棄——ゴミ箱へ移らない行か、元パスを持つ行（intent-to-add の rename の元パスは戻す）。確認の文はゴミ箱へ移る
+  /// 行を数える。根のサービスへは、見えていた行とそのゴミ箱行きのパスを渡す。
+  @MainActor
+  func testIntentToAddRowsGoToTheTrashAndTheGateCountsThem() {
+    let changes = ScmChanges.build(
+      GitStatus(
+        entries: [
+          "intended.txt": entry(nil, .added), "new.txt": entry(nil, .untracked),
+          "renamed.txt": entry(nil, .renamed, from: "old.txt"), "a.txt": entry(.added, .modified),
+          "gone.txt": entry(.added, .deleted),
+        ], untrackedDirectories: [], branch: nil, stagedVersions: [:]))
+    let files = Dictionary(uniqueKeysWithValues: changes.changes.map { ($0.path, $0) })
+    XCTAssertEqual(
+      changes.changes.filter(\.discardMovesToTrash).map(\.path),
+      ["intended.txt", "new.txt", "renamed.txt"])
+    let pick = { (paths: [String]) in paths.compactMap { files[$0] } }
+    XCTAssertFalse(ScmDiscardGate.needsConfirmation(pick(["intended.txt", "new.txt"])))
+    XCTAssertTrue(ScmDiscardGate.needsConfirmation(pick(["renamed.txt"])), "元パスは戻す")
+    XCTAssertTrue(ScmDiscardGate.needsConfirmation(pick(["intended.txt", "a.txt"])))
+    XCTAssertTrue(ScmDiscardGate.needsConfirmation(pick(["gone.txt"])), "消えた intent-to-add は戻す")
+    XCTAssertEqual(
+      ScmDiscardGate.content(pick(["intended.txt", "renamed.txt", "a.txt"])),
+      GitDiscardContent(
+        rows: [
+          GitStatus.Row(path: "intended.txt", originalPath: nil),
+          GitStatus.Row(path: "renamed.txt", originalPath: "old.txt"),
+          GitStatus.Row(path: "a.txt", originalPath: nil),
+        ], trashed: ["intended.txt", "renamed.txt"]))
+    XCTAssertEqual(
+      ScmDiscardGate.alert(pick(["intended.txt", "renamed.txt", "a.txt"]), language: .en)
+        .informativeText,
+      "The working tree goes back to the staged version. This can't be undone. "
+        + "2 files go to the Trash.")
   }
 
   /// すべてステージ・ステージ済みが無いときのコミットに入る行は「変更」の行から、競合と中身だけ変わったサブモジュールを
@@ -76,7 +112,7 @@ final class ScmRowsTests: OrbeTestCase {
     func enabled(_ submodule: GitStatus.SubmoduleChange?) -> [Bool] {
       let file = ScmChanges.File(
         row: GitStatus.Row(path: "sub", originalPath: nil), badge: .modified,
-        existsInWorkingTree: true, isTracked: true, submodule: submodule)
+        existsInWorkingTree: true, discardMovesToTrash: false, submodule: submodule)
       view.show(.file(.changes, file), language: .en, emoji: nil)
       guard case .file(let content) = view.content else { return [] }
       return content.buttons.map(\.isEnabled)

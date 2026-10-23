@@ -111,4 +111,38 @@ extension RootFilesWritesTests {
       }
     }
   }
+
+  /// 破棄は、各パスの行き先が押した時点に見えていたものと違えば何も書かずに断る——未追跡に見えていたファイルが外で
+  /// `git add` されて編集されていても（監視が届く前）、確認なしに index の版へ戻して編集を消さない。逆向き（戻すと見えて
+  /// いたものが外で `git rm --cached` された）も断る。見え方が追いつけば通る。
+  func testDiscardRefusesWhenWhereAPathGoesDiffersFromWhatWasSeen() throws {
+    try repo.write("new.txt", "first\n")
+    try repo.write("a.txt", "edited\n")
+    let files = repo.files()
+    let seenNew = files.status!.discarding("new.txt")
+    let seenA = files.status!.discarding("a.txt")
+    XCTAssertEqual(seenNew.trashed, ["new.txt"], "前提: 未追跡に見えている")
+    XCTAssertEqual(seenA.trashed, [], "前提: 戻すと見えている")
+    XCTAssertTrue(repo.git(["add", "new.txt"]).isSuccess)
+    try repo.write("new.txt", "first\nadded after git add\n")
+    XCTAssertTrue(repo.git(["rm", "-q", "--cached", "a.txt"]).isSuccess)
+    let index = repo.git(["ls-files", "-s"]).stdoutText
+
+    for seen in [seenNew, seenA] {
+      XCTAssertEqual(
+        finish(files) { files.discard(seen, completion: $0) }.failure, .contentMismatch)
+    }
+    XCTAssertEqual(
+      try String(contentsOfFile: repo.root + "/new.txt", encoding: .utf8),
+      "first\nadded after git add\n")
+    XCTAssertEqual(try String(contentsOfFile: repo.root + "/a.txt", encoding: .utf8), "edited\n")
+    XCTAssertEqual(repo.git(["ls-files", "-s"]).stdoutText, index, "index も変わらない")
+
+    let caughtUp = finish(files) {
+      files.discard(files.status!.discarding("new.txt", "a.txt"), completion: $0)
+    }
+    XCTAssertNil(caughtUp.failure)
+    XCTAssertEqual(try String(contentsOfFile: repo.root + "/new.txt", encoding: .utf8), "first\n")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: repo.root + "/a.txt"), "ゴミ箱へ移る")
+  }
 }

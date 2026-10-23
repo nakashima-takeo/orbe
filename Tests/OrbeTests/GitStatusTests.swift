@@ -149,3 +149,11 @@ final class GitStatusTests: OrbeTestCase {
     XCTAssertNil(parse([ordinary(".M", "m.txt")]).branch, "ヘッダの無い出力")
   }
 }
+
+extension GitStatus {
+  /// 今の status に見えている行き先のまま `paths` の行を破棄する中身（テストの略記）。
+  func discarding(_ paths: String...) -> GitDiscardContent {
+    GitDiscardContent(
+      rows: paths.map(row), trashed: Set(paths.filter { entries[$0]?.discardMovesToTrash == true }))
+  }
+}

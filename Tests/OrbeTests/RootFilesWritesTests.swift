@@ -117,7 +117,7 @@ final class RootFilesWritesTests: OrbeTestCase {
     try repo.write("a.txt", "staged then edited\n")
     let files = repo.files()
 
-    let discarded = finish(files) { files.discard([files.status!.row("a.txt")], completion: $0) }
+    let discarded = finish(files) { files.discard(files.status!.discarding("a.txt"), completion: $0) }
     XCTAssertNil(discarded.failure)
     XCTAssertEqual(entry(discarded, "a.txt"), GitStatus.Entry(staged: .modified, unstaged: nil))
     XCTAssertEqual(try String(contentsOfFile: repo.root + "/a.txt", encoding: .utf8), "staged\n")
@@ -130,7 +130,7 @@ final class RootFilesWritesTests: OrbeTestCase {
     let files = repo.files()
     let trashed = try XCTUnwrap(GitRepo.trashDirectoryOverride).appendingPathComponent(name)
 
-    let discarded = finish(files) { files.discard([files.status!.row(name)], completion: $0) }
+    let discarded = finish(files) { files.discard(files.status!.discarding(name), completion: $0) }
     XCTAssertNil(discarded.failure)
     XCTAssertNil(entry(discarded, name))
     XCTAssertFalse(FileManager.default.fileExists(atPath: repo.root + "/" + name), "元の場所から消える")
@@ -159,7 +159,7 @@ final class RootFilesWritesTests: OrbeTestCase {
 
     try repo.write("moved.txt", body + "edited again\n")
     let discarded = finish(files) {
-      files.discard([files.status!.row("moved.txt")], completion: $0)
+      files.discard(files.status!.discarding("moved.txt"), completion: $0)
     }
     XCTAssertNil(discarded.failure)
     XCTAssertEqual(
@@ -178,7 +178,7 @@ final class RootFilesWritesTests: OrbeTestCase {
       .appendingPathComponent("intended.txt")
 
     let discarded = finish(files) {
-      files.discard([files.status!.row("intended.txt")], completion: $0)
+      files.discard(files.status!.discarding("intended.txt"), completion: $0)
     }
     XCTAssertNil(discarded.failure)
     XCTAssertNil(entry(discarded, "intended.txt"), "index からも外れる")

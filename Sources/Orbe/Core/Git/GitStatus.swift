@@ -35,6 +35,17 @@ struct GitStatus: Equatable {
     }
 
     var isConflicted: Bool { staged == .unmerged || unstaged == .unmerged }
+
+    /// この行の破棄で、行のパスがゴミ箱へ移るか（戻せる）。作業ツリー側の変化が未追跡か、作業ツリーに在る intent-to-add
+    /// （`git add -N`。porcelain v2 では作業ツリー側の追加・rename としてだけ出る——通常の追加は index 側）なら移る。rename の
+    /// 元パスと、作業ツリーから消えた intent-to-add（作業ツリー側の削除）は index の版へ戻す側。`GitRepo.discard` の選び分け
+    /// （呼んだ時点の index に無いもの・`diff-files --diff-filter=A` に出るもの）と同じ規則。
+    var discardMovesToTrash: Bool {
+      switch unstaged {
+      case .untracked?, .added?, .renamed?: true
+      default: false
+      }
+    }
   }
 
   /// 今のブランチ。HEAD・upstream が動けば値が変わる。

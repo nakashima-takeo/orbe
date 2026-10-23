@@ -13,10 +13,11 @@ extension SourceControl {
     run(.unstage, .unstage) { files, done in files.unstage(rows, completion: done) }
   }
 
-  /// 確認は呼ぶ側（→ `ScmDiscardGate`）。確認した行をそのまま渡す（根のサービスが呼んだ時点の index で選び直す）。
+  /// 確認は呼ぶ側（→ `ScmDiscardGate`）。確認した中身をそのまま渡す（根のサービスが呼んだ時点の index で選び直し、見えて
+  /// いた行き先と照らす）。
   @discardableResult
-  func discard(_ rows: [GitStatus.Row]) -> Operation? {
-    run(.discard, .discard) { files, done in files.discard(rows, completion: done) }
+  func discard(_ content: GitDiscardContent) -> Operation? {
+    run(.discard, .discard) { files, done in files.discard(content, completion: done) }
   }
 
   /// `content` をコミットする。通ればメッセージを空にする（コミットの間に打ち足していれば残す）。
