@@ -48,7 +48,7 @@ struct AutomationPartRun: Equatable {
 struct AutomationDrops: Equatable {
   private(set) var counts: [Reason: Int] = [:]
 
-  /// 捨てた理由。名前は回の履歴の扱いの名と同じ。
+  /// 捨てた理由。名前は回の履歴の扱いの名と同じ（`lapsed` は回の履歴に載らない）。
   enum Reason: String, CaseIterable {
     /// 古さの上限を過ぎた。
     case expired
@@ -84,8 +84,6 @@ struct AutomationDrops: Equatable {
 struct AutomationRunRecord: Equatable {
   /// 記録の ID（`recordId`）。
   let id: Int
-  /// 回が動いた定義。
-  let defId: AutomationDefID
   let content: Content
 
   enum Content: Equatable {

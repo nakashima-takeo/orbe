@@ -48,7 +48,7 @@ struct AutomationSettling {
       )
     }
     if let decided { try apply(decided, run: recordId, &memory) }
-    try finish(AutomationRunRecord(id: recordId, defId: end.defId, content: .known(run)), &memory)
+    try finish(AutomationRunRecord(id: recordId, content: .known(run)), &memory)
     return AutomationRecorded(changed: written.changed, run: run)
   }
 

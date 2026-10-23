@@ -54,24 +54,24 @@ extension AutomationDatabase {
   {
     let rows = try db.select(
       """
-      SELECT r.id, p.key, r.def_id, r.started_at, r.ended_at, r.trigger, r.failure, r.record
+      SELECT r.id, p.key, r.started_at, r.ended_at, r.trigger, r.failure, r.record
       FROM runs r JOIN parts p ON p.id = r.part_id \(clause)
       """, values
     ) { s in
       (
-        id: s.int(at: 0), key: s.text(at: 1) ?? "", defId: AutomationDefID(s.int(at: 2)),
-        started: AutomationPersistence.date(s.int64(at: 3)),
-        ended: AutomationPersistence.date(s.int64(at: 4)),
-        trigger: AutomationPartRun.Trigger(rawValue: s.text(at: 5) ?? "") ?? .schedule,
-        failure: s.text(at: 6), record: s.text(at: 7)
+        id: s.int(at: 0), key: s.text(at: 1) ?? "",
+        started: AutomationPersistence.date(s.int64(at: 2)),
+        ended: AutomationPersistence.date(s.int64(at: 3)),
+        trigger: AutomationPartRun.Trigger(rawValue: s.text(at: 4) ?? "") ?? .schedule,
+        failure: s.text(at: 5), record: s.text(at: 6)
       )
     }
     let inputs = try self.inputs(of: rows.map(\.id))
     return rows.map { row in
       AutomationKeyedRecord(
-        key: row.key,
+        partKey: row.key,
         record: AutomationRunRecord(
-          id: row.id, defId: row.defId,
+          id: row.id,
           content: Self.content(
             AutomationUnknownRun(
               startedAt: row.started, endedAt: row.ended, trigger: row.trigger,
@@ -130,6 +130,6 @@ extension AutomationDatabase {
 
 /// 回の記録 1 件と、それを持つ部品の今の鍵。
 struct AutomationKeyedRecord: Equatable {
-  let key: String
+  let partKey: String
   let record: AutomationRunRecord
 }

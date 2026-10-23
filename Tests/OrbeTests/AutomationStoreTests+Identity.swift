@@ -91,7 +91,13 @@ extension AutomationStoreTests {
     let second = try XCTUnwrap(store.automation(id)?.graph.node(judge)?.part.defId)
     XCTAssertEqual(rewritten.reworked, [judge])
     XCTAssertNotEqual(second, first)
-    XCTAssertEqual(store.automation(id)?.state(judge).runs.map(\.defId), [second, first])
+    XCTAssertEqual(
+      try store.read {
+        try $0.db.select(
+          "SELECT def_id FROM runs WHERE part_id = ? ORDER BY id DESC",
+          [.integer(Int64(judge.rawValue))]
+        ) { AutomationDefID($0.int(at: 0)) }
+      }, [second, first])
     let stored = try store.read { db in
       try db.db.select("SELECT action FROM action_defs ORDER BY id", []) { $0.text(at: 0) ?? "" }
     }

@@ -48,8 +48,8 @@ extension WindowController {
         of: automationId, part: partKey, before: before, limit: limit)
       var json: [String: Any] = [
         "runs": page.runs.map { run -> [String: Any] in
-          var object = AutomationRunWire.object(run.record, part: run.key)
-          object["partKey"] = run.key
+          var object = AutomationRunWire.object(run.record, part: run.partKey)
+          object["partKey"] = run.partKey
           return object
         }
       ]
