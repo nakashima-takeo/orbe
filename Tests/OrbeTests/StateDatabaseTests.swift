@@ -69,6 +69,37 @@ final class StateDatabaseTests: OrbeTestCase {
     return statement.int64(at: 0)
   }
 
+  private static let parentTable = "CREATE TABLE parent (id INTEGER PRIMARY KEY, name TEXT NOT NULL"
+  private static let childTable = """
+    CREATE TABLE child (
+      id INTEGER PRIMARY KEY,
+      parent_id INTEGER NOT NULL REFERENCES parent (id) ON DELETE CASCADE)
+    """
+  /// 子の表に指される親の表を持つ版 1 と、親の表に列を足した版 2。
+  private static let parentAndChildV1 = "\(parentTable)); \(childTable)"
+  private static let parentAndChildV2 = "\(parentTable), note TEXT); \(childTable)"
+
+  /// 親と、それを指す子を 1 行ずつ持つ版 1 の DB を作る。
+  private func seedParentAndChild() throws {
+    try XCTUnwrap(
+      StateDatabase.open(folder: folder, version: 1, schema: Self.parentAndChildV1) { _ in () }
+        .opened?.database
+    ).exec("INSERT INTO parent VALUES (1, '親'); INSERT INTO child VALUES (1, 1)")
+  }
+
+  /// 親の表を SQLite の作り直しの手順（作る・写す・消す・名前を変える）で版 2 へ直す移行。写すのは `keeping` に合う親の行。
+  private static func rebuildParent(keeping: String) -> StateDatabase.Migration {
+    StateDatabase.Migration(from: 1) { db in
+      try db.exec(
+        """
+        CREATE TABLE parent_new (id INTEGER PRIMARY KEY, name TEXT NOT NULL, note TEXT);
+        INSERT INTO parent_new (id, name) SELECT id, name FROM parent WHERE \(keeping);
+        DROP TABLE parent;
+        ALTER TABLE parent_new RENAME TO parent
+        """)
+    }
+  }
+
   /// 退避の後に返った接続が、新しい版の空の DB であること。
   private func assertStartsEmpty(
     _ db: SQLiteDatabase?, file: StaticString = #filePath, line: UInt = #line
@@ -277,34 +308,38 @@ final class StateDatabaseTests: OrbeTestCase {
   /// 移行は外部キーを切って流れるので、指されている表を SQLite の作り直しの手順（作る・写す・消す・名前を変える）で直しても、
   /// 子の行は消えずに移る。名前を変えた表の文面の違い（引用符）は形の違いにならない。
   func testAMigrationCanRebuildAReferencedTableAndKeepsTheChildRows() throws {
-    let parent = "CREATE TABLE parent (id INTEGER PRIMARY KEY, name TEXT NOT NULL"
-    let child = """
-      CREATE TABLE child (
-        id INTEGER PRIMARY KEY,
-        parent_id INTEGER NOT NULL REFERENCES parent (id) ON DELETE CASCADE)
-      """
-    let v1 = "\(parent)); \(child)"
-    let v2 = "\(parent), note TEXT); \(child)"
-    try XCTUnwrap(
-      StateDatabase.open(folder: folder, version: 1, schema: v1) { _ in () }.opened?.database
-    ).exec("INSERT INTO parent VALUES (1, '親'); INSERT INTO child VALUES (1, 1)")
-    let migration = StateDatabase.Migration(from: 1) { db in
-      try db.exec(
-        """
-        CREATE TABLE parent_new (id INTEGER PRIMARY KEY, name TEXT NOT NULL, note TEXT);
-        INSERT INTO parent_new (id, name) SELECT id, name FROM parent;
-        DROP TABLE parent;
-        ALTER TABLE parent_new RENAME TO parent
-        """)
-    }
+    try seedParentAndChild()
 
     let opened = try XCTUnwrap(
-      StateDatabase.open(folder: folder, version: 2, schema: v2, migrations: [migration]) { db in
+      StateDatabase.open(
+        folder: folder, version: 2, schema: Self.parentAndChildV2,
+        migrations: [Self.rebuildParent(keeping: "1 = 1")]
+      ) { db in
         try db.select("SELECT count(*) FROM child", []) { $0.int(at: 0) }
       }.opened)
 
     XCTAssertEqual(opened.contents, [1], "子の行は残る")
     XCTAssertEqual(try quarantinedFolders(), [])
+  }
+
+  /// 移した後に、指す先の無い子の行が残れば（外部キーを切って流すので、移行の途中では断られない）、移行は巻き戻り、DB は
+  /// 動かさず使わない（版 1 のまま残る）。
+  func testAMigrationThatLeavesAnOrphanedChildRowIsRolledBackAndUnused() throws {
+    try seedParentAndChild()
+
+    guard
+      case .refused(let reason) = StateDatabase.open(
+        folder: folder, version: 2, schema: Self.parentAndChildV2,
+        migrations: [Self.rebuildParent(keeping: "id <> 1")], read: { _ in () })
+    else { return XCTFail("外部キーの食い違う移行は使わない") }
+
+    XCTAssertTrue(reason.contains("foreign keys are broken"), reason)
+    XCTAssertEqual(try quarantinedFolders(), [])
+    let kept = try XCTUnwrap(
+      StateDatabase.open(folder: folder, version: 1, schema: Self.parentAndChildV1) { db in
+        try db.select("SELECT count(*) FROM parent", []) { $0.int(at: 0) }
+      }.opened)
+    XCTAssertEqual(kept.contents, [1], "巻き戻って版 1 のまま")
   }
 
   /// 今より新しい版の DB は退避せず、使わない理由を返す。
