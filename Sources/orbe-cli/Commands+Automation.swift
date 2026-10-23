@@ -312,11 +312,14 @@ private func automationProposals(_ rest: [String]) -> Never {
 private func automationSet(_ rest: [String]) -> Never {
   exitIfAutomationHelp(rest)
   var args = rest
-  let version = takeOption(&args, "--version", requires: "a <n> value")
+  let version = takeIntOption(&args, "--version", requires: "a positive <n>")
   rejectLeftovers(args, positionals: 1)
   let id = args.isEmpty ? nil : automationIdArg(args, verb: "set")
   if id != nil, version == nil {
     usageDie("automation set <id> requires --version (the version list --json shows)")
+  }
+  if id == nil, version != nil {
+    usageDie("automation set --version requires the <id> of the automation to rewrite")
   }
   let data = FileHandle.standardInput.readDataToEndOfFile()
   guard !data.isEmpty else { usageDie("automation set reads the definition JSON from stdin") }
@@ -325,10 +328,7 @@ private func automationSet(_ rest: [String]) -> Never {
   }
   var params: [String: Any] = ["definition": definition]
   if let id { params["automationId"] = id }
-  if let version {
-    guard let number = Int(version) else { usageDie("invalid --version: \(version)") }
-    params["version"] = number
-  }
+  if let version { params["version"] = version }
   let result = callOrExit("set_automation", params)
   if wantJSON {
     printJSON(result)

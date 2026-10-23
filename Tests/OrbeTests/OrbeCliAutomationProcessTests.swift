@@ -285,6 +285,27 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertEqual(outcome.status, 124, outcome.stderr)
   }
 
+  /// 数のオプションは、標準入力を読む前・socket に触れる前に usage エラー（2）で確かめる。`set` の `--version` は `<id>` と
+  /// 組みでだけ受ける。
+  ///
+  /// 壊れると何が起きるか: `orb automation set 3 --version x` が端末で標準入力の終わりを待って止まる。`--version 0` が版の
+  /// 食い違いとして返り、誤りの場所が伝わらない。`<id>` の無い `--version` が黙って捨てられ、書き換えのつもりで新しい自動化を
+  /// 作る。
+  func testNumericOptionsAreCheckedBeforeAnythingElse() {
+    for (args, message) in [
+      (["set", "1", "--version", "x"], "--version requires a positive <n>"),
+      (["set", "1", "--version", "0"], "--version requires a positive <n>"),
+      (["set", "--version", "1"], "--version requires the <id>"),
+      (["runs", "1", "--before", "x"], "--before requires a positive <recordId>"),
+      (["runs", "1", "--limit", "0"], "--limit requires a positive <n>"),
+    ] {
+      let outcome = ControlProcess.orbWithoutServer(["automation"] + args)
+      let label = "orb automation \(args.joined(separator: " "))"
+      XCTAssertEqual(outcome.status, 2, "\(label): \(outcome.stderr)")
+      XCTAssertTrue(outcome.stderr.contains(message), "\(label): \(outcome.stderr)")
+    }
+  }
+
   /// 各サブコマンドは受ける数より多い位置引数を、socket に触れる前に usage エラー（2）で断る。
   ///
   /// 壊れると何が起きるか: `orb automation rm 3 4` が 3 だけを消して exit 0 を返し、4 も消したつもりの AI が食い違う。

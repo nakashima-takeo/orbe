@@ -44,19 +44,13 @@ func automationRuns(_ rest: [String]) -> Never {
   exitIfAutomationHelp(rest)
   var args = rest
   let part = takeOption(&args, "--part", requires: "a <key> value")
-  let before = takeOption(&args, "--before", requires: "a <recordId> value")
-  let limit = takeOption(&args, "--limit", requires: "a <n> value")
+  let before = takeIntOption(&args, "--before", requires: "a positive <recordId>")
+  let limit = takeIntOption(&args, "--limit", requires: "a positive <n>")
   rejectLeftovers(args, positionals: 1)
   var params: [String: Any] = ["automationId": automationIdArg(args, verb: "runs")]
   if let part { params["partKey"] = part }
-  if let before {
-    guard let number = Int(before) else { usageDie("invalid --before: \(before)") }
-    params["before"] = number
-  }
-  if let limit {
-    guard let number = Int(limit) else { usageDie("invalid --limit: \(limit)") }
-    params["limit"] = number
-  }
+  if let before { params["before"] = before }
+  if let limit { params["limit"] = limit }
   let result = callOrExit("list_automation_runs", params)
   if wantJSON {
     printJSON(result)
