@@ -102,8 +102,8 @@ extension AutomationText {
     case .titleNotOneLine: l10n.string(.automationFaultTitle)
     case .dueNotDate: l10n.string(.automationFaultDue)
     case .workspaceNotListed: l10n.string(.automationFaultWorkspace)
-    case .notNonEmptyArray(let key): l10n.format(.automationFaultNotNonEmptyArray, key)
-    case .emptyReport: l10n.string(.automationFaultEmptyReport)
+    case .notArray(let key): l10n.format(.automationFaultNotArray, key)
+    case .afterNothing: l10n.string(.automationFaultAfterNothing)
     }
   }
 

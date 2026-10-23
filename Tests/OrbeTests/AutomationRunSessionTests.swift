@@ -86,8 +86,28 @@ final class AutomationRunSessionTests: AutomationPartPassTestCase {
     XCTAssertFalse(session.call("put_rows", ["rows": [["id": "a"]]]).isError)
     XCTAssertTrue(session.call("put_rows", ["rows": [["id": "a"]]]).isError, "前の呼び出しとの重なりも")
     XCTAssertTrue(session.call("put_rows", ["rows": []]).isError)
+    XCTAssertTrue(session.call("put_rows", ["rows": "a"]).isError)
     XCTAssertEqual(session.outputs.count, 1)
-    XCTAssertEqual(session.rejected.map(\.line), [2, 3, 4, 1, nil], "空の配列は位置の無い 1 件")
+    XCTAssertEqual(
+      session.rejected.map(\.line), [2, 3, 4, 1, nil], "空の配列は数えず、配列でない引数は位置の無い 1 件")
+  }
+
+  /// 空の配列は断った結果に数えないので、勧めどおり report_nothing を呼べる。report_error を持たない役割には、断られた後の
+  /// report_nothing の断りで report_error を勧めない。
+  func testAnEmptyCallLeavesRoomToReportNothing() {
+    let session = AutomationRunSession(.process(rows(1), reachesJudge: false))
+    _ = session.call("read_run_rows", [:])
+
+    XCTAssertTrue(
+      session.call("put_rows", ["rows": []]).texts[0].contains("call report_nothing"))
+    XCTAssertFalse(session.call("report_nothing", ["why": "無い"]).isError)
+
+    let refused = AutomationRunSession(.process(rows(1), reachesJudge: false))
+    _ = refused.call("read_run_rows", [:])
+    _ = refused.call("put_rows", ["rows": [["note": "x"]]])
+    let reply = refused.call("report_nothing", ["why": "無い"])
+    XCTAssertTrue(reply.isError)
+    XCTAssertFalse(reply.texts[0].contains("report_error"), reply.texts[0])
   }
 
   /// 何も無いの申告は結果の前だけで、申告の後は結果を受けない。失敗の申告の後も受けない。

@@ -44,9 +44,21 @@ final class AutomationRunSession {
   private(set) var error: String?
   /// 断った結果の呼び出しの、外れた件すべて（呼び出しの形の誤りは位置を持たない 1 件）。
   private(set) var rejected: [AutomationBrokenLine] = []
+  /// 最後に受けた結果の呼び出しより後に断った呼び出しの、外れた件（断られたまま直っていない件）。
+  private var unfixed: [AutomationBrokenLine] = []
+
   /// 最後の結果の呼び出しを断ったか（断られた後に受けた結果の呼び出しが無い）。そのまま終えた回は、断られた中身が黙って
   /// 消えないよう決まりを外した失敗にする。
-  private(set) var refusedLast = false
+  var refusedLast: Bool { !unfixed.isEmpty }
+
+  /// 回の記録に残す外れた件（数は全部、件は断られたままの件を先に、ほかは断った順に）。断らなかった回は nil。
+  var rejections: AutomationRejections? {
+    guard !rejected.isEmpty else { return nil }
+    return AutomationRejections(
+      count: rejected.count,
+      lines: Array(
+        (unfixed + rejected.dropLast(unfixed.count)).prefix(AutomationRejections.retainedLines)))
+  }
 
   init(_ input: AutomationPartPass.Input) {
     outputs = AutomationOutputs(input)
@@ -141,13 +153,10 @@ final class AutomationRunSession {
 
   // MARK: - 結果
 
-  /// 結果を出す道具が受けられる時点か。断るなら理由。
+  /// 結果の道具と申告が受けられる時点か。断るなら理由（断った結果には数えない）。
   private var closed: Reply? {
     if error != nil {
       return .refused("You reported an error; this run has ended without a result.")
-    }
-    if nothing != nil {
-      return .refused("You reported that there is nothing; this run has no result.")
     }
     let unread = unread
     guard unread.isEmpty else {
@@ -160,16 +169,20 @@ final class AutomationRunSession {
   }
 
   /// `key` の配列の 1 件ずつを 1 行にして確かめる。`line` は 1 件を行にするときの形（既定はそのまま）、`shape` は判定の 1 件の形。
+  /// 空の配列は中身の無い呼び出しとして、断った結果に数えずに断る。
   private func put(
     _ arguments: [String: Any], _ key: String,
     judging shape: AutomationOutputs.JudgeShape = .decisions, _ line: (Any) -> Any = { $0 }
   ) -> Reply {
     if let closed { return closed }
-    guard let entries = arguments[key] as? [Any], !entries.isEmpty else {
-      return refuse(
-        .notNonEmptyArray(key),
-        "when there is nothing, call \(Tool.reportNothing.rawValue)")
+    guard let entries = arguments[key] as? [Any] else {
+      return refuse(.notArray(key), "give \(key) as an array")
     }
+    guard !entries.isEmpty else {
+      return .refused(
+        "\(key) is empty; when there is nothing, call \(Tool.reportNothing.rawValue).")
+    }
+    if let afterNothing { return afterNothing }
     let broken = outputs.put(
       entries.map { entry in
         let object = line(entry)
@@ -178,26 +191,36 @@ final class AutomationRunSession {
       }.joined(separator: "\n"), judging: shape)
     guard broken.isEmpty else {
       rejected += broken
-      refusedLast = true
+      unfixed += broken
       return .refused(
         "Nothing from this call was accepted. Fix these and call again with all of them:\n"
           + broken.map(\.text).joined(separator: "\n"))
     }
-    refusedLast = false
+    unfixed = []
     return .ok("Accepted \(entries.count) (\(outputs.count) in all).")
   }
 
+  /// 報告の文を受ける。空白だけの文は中身の無い呼び出しとして、断った結果に数えずに断る。
   private func putReport(_ arguments: [String: Any]) -> Reply {
     if let closed { return closed }
     guard let text = arguments["text"] as? String else {
       return refuse(.typeMismatch("text"), "give the report as a string")
     }
-    guard outputs.putReport(text) else {
-      return refuse(
-        .emptyReport, "when there is nothing to report, call \(Tool.reportNothing.rawValue)")
+    guard AutomationOutputs.kept(text) != nil else {
+      return .refused(
+        "The report is empty; when there is nothing to report, call "
+          + "\(Tool.reportNothing.rawValue).")
     }
-    refusedLast = false
+    if let afterNothing { return afterNothing }
+    _ = outputs.putReport(text)
+    unfixed = []
     return .ok("Accepted the report.")
+  }
+
+  /// 何も無いと申告した後の結果の呼び出しは、外れた呼び出しとして断る（結果を黙って捨てて、何も無い回として終えない）。
+  private var afterNothing: Reply? {
+    guard nothing != nil else { return nil }
+    return refuse(.afterNothing, "this run reported that there is nothing")
   }
 
   private func reportNothing(_ arguments: [String: Any]) -> Reply {
@@ -206,9 +229,11 @@ final class AutomationRunSession {
       return .refused("You already gave results; report_nothing is only for a run with no result.")
     }
     guard rejected.isEmpty else {
+      let fallback =
+        tools.contains(.reportError)
+        ? ", or call \(Tool.reportError.rawValue) if you cannot" : ""
       return .refused(
-        "Orbe refused results you gave in this run: fix them and give them again, or call "
-          + "\(Tool.reportError.rawValue) if you cannot.")
+        "Orbe refused results you gave in this run: fix them and give them again\(fallback).")
     }
     nothing = (arguments["why"] as? String) ?? ""
     return .ok("Noted: nothing this time.")
@@ -218,7 +243,7 @@ final class AutomationRunSession {
   private func refuse(_ fault: AutomationLineFault, _ hint: String) -> Reply {
     let broken = AutomationBrokenLine(line: nil, fault: fault)
     rejected.append(broken)
-    refusedLast = true
+    unfixed.append(broken)
     return .refused("Nothing from this call was accepted: \(broken.text); \(hint).")
   }
 

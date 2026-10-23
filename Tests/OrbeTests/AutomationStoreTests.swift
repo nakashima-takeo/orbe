@@ -73,7 +73,7 @@ final class AutomationStoreTests: OrbeTestCase {
   /// 形式エラーをその場で直して通った取得の回（件の外れと、位置の無い呼び出しの形の誤り）。
   static let breachLines = [
     AutomationBrokenLine(line: 3, fault: .missingKey("link")),
-    AutomationBrokenLine(line: nil, fault: .notNonEmptyArray("items")),
+    AutomationBrokenLine(line: nil, fault: .notArray("items")),
   ]
 
   static func breached(_ items: [AutomationItem]) -> AutomationPartPass.Outcome {

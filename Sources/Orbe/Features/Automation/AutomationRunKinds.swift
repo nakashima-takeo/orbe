@@ -102,7 +102,8 @@ enum AutomationFailure: Error, Equatable {
 }
 
 /// 結果の中の、受け付けなかった 1 件。`line` は 1 度に出した分の中の 1 始まりの位置（agent は道具の 1 回の呼び出しの何件目、
-/// コマンドは標準出力の行番号。空行も数える）。呼び出しの形そのものの誤り（空の配列・空の報告 など）は位置を持たない。
+/// コマンドは標準出力の行番号。空行も数える）。呼び出しの形そのものの誤り（配列でない引数・申告の後の結果 など）は位置を
+/// 持たない。
 struct AutomationBrokenLine: Error, Equatable {
   let line: Int?
   let fault: AutomationLineFault
@@ -136,10 +137,10 @@ enum AutomationLineFault: Equatable {
   case dueNotDate(String, String)
   /// 判定の案の付け先が一覧に無い（id と番号）。
   case workspaceNotListed(String, Int)
-  /// 結果の道具の引数（欄の名前）が空でない配列でない。
-  case notNonEmptyArray(String)
-  /// 報告の文が空。
-  case emptyReport
+  /// 結果の道具の引数（欄の名前）が配列でない。
+  case notArray(String)
+  /// 何も無いと申告した後に結果を出した。
+  case afterNothing
 
   init<Item>(_ reason: JSONLines<Item>.Reason) {
     switch reason {
@@ -171,8 +172,8 @@ enum AutomationLineFault: Equatable {
     case .dueNotDate(let id, let raw): "propose \(id): due is not a YYYY-MM-DD date: \(raw)"
     case .workspaceNotListed(let id, let number):
       "propose \(id): workspace \(number) is not a listed workspace"
-    case .notNonEmptyArray(let key): "\(key) must be a non-empty array"
-    case .emptyReport: "the report is empty"
+    case .notArray(let key): "\(key) must be an array"
+    case .afterNothing: "a result after report_nothing"
     }
   }
 }
@@ -336,8 +337,8 @@ extension AutomationBrokenLine: Codable {
     case "dueNotDate": fault = .dueNotDate(try string(.id), try string(.raw))
     case "workspaceNotListed":
       fault = .workspaceNotListed(try string(.id), try c.decode(Int.self, forKey: .workspace))
-    case "notNonEmptyArray": fault = .notNonEmptyArray(try string(.key))
-    case "emptyReport": fault = .emptyReport
+    case "notArray": fault = .notArray(try string(.key))
+    case "afterNothing": fault = .afterNothing
     default:
       throw DecodingError.dataCorruptedError(
         forKey: .kind, in: c, debugDescription: "unknown line fault")
@@ -370,8 +371,8 @@ extension AutomationBrokenLine: Codable {
     case .workspaceNotListed(let id, let number):
       try kind("workspaceNotListed", [(.id, id)])
       try c.encode(number, forKey: .workspace)
-    case .notNonEmptyArray(let key): try kind("notNonEmptyArray", [(.key, key)])
-    case .emptyReport: try kind("emptyReport")
+    case .notArray(let key): try kind("notArray", [(.key, key)])
+    case .afterNothing: try kind("afterNothing")
     }
   }
 }

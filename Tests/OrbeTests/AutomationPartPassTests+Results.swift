@@ -101,14 +101,60 @@ extension AutomationPartPassTests {
     XCTAssertEqual(breach?.lines.map(\.text), ["item 1: missing id"])
   }
 
-  /// 呼び出しの形の誤り（空の報告など）で断られたまま終えた回も出力の形式エラーの失敗——道具を呼んだ回を結果なしと言わない。
+  /// 呼び出しの形の誤り（配列でない引数など）で断られたまま終えた回も出力の形式エラーの失敗——道具を呼んだ回を結果なしと
+  /// 言わない。
   func testACallOfTheWrongShapeLeftUnfixedFailsAsBrokenRules() throws {
-    start(AutomationGraphTests.agent("r", from: ["f"]), .report, .report([]))
+    start(
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      .process([row("a")], reachesJudge: false))
 
-    XCTAssertTrue(use(0, .putReport, ["text": "  \n"]).isError)
+    readAll(0)
+    XCTAssertTrue(use(0, .putRows, ["rows": "f:a"]).isError)
     jobs.finish(0, done())
 
-    XCTAssertEqual(failed, #"the output of part "r" broke the rules: the report is empty"#)
+    XCTAssertEqual(failed, #"the output of part "p" broke the rules: rows must be an array"#)
+  }
+
+  /// 何も無いと申告した後の結果の呼び出しは外れた呼び出しとして断り、そのまま終えた回は出力の形式エラーの失敗——結果を黙って
+  /// 捨てて 0 件の成功（今の集合なら今有効な項目の一斉の無効化）にしない。
+  func testAResultAfterReportingNothingFailsTheRun() throws {
+    start(
+      AutomationGraphTests.agent(
+        "f", tools: ["mcp__slack__search"], deliver: .nextPart, coverage: .currentSet),
+      .fetch, .fetch(since: nil))
+
+    XCTAssertFalse(use(0, .reportNothing, ["why": "無い"]).isError)
+    XCTAssertTrue(
+      use(
+        0, .putItems,
+        [
+          "items": [
+            ["id": "a", "link": "https://e.com/a", "body": "a", "time": "2026-10-10T09:00:00Z"]
+          ]
+        ]
+      ).isError)
+    jobs.finish(0, done())
+
+    XCTAssertEqual(
+      failed, #"the output of part "f" broke the rules: a result after report_nothing"#)
+  }
+
+  /// 断られたまま終えた回の記録は、断られたままの件を先に並べる（先に直した件ではなく）。数は回全体。
+  func testABrokenRunRecordsTheUnfixedItemsFirst() throws {
+    start(
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      .process([row("a")], reachesJudge: false))
+
+    readAll(0)
+    use(0, .putRows, ["rows": [["note": "1"], ["note": "2"]]])
+    use(0, .putRows, ["rows": [["id": "f:a"]]])
+    use(0, .putRows, ["rows": [["id": "f:a"]]])
+    jobs.finish(0, done())
+
+    XCTAssertEqual(breach?.count, 3)
+    XCTAssertEqual(
+      breach?.lines.map(\.text),
+      ["item 1: id f:a appeared twice", "item 1: missing id", "item 2: missing id"])
   }
 
   /// 結果を断られた後の「何も無い」は断る——断られた結果を「何も無い」で覆って成功にしない。

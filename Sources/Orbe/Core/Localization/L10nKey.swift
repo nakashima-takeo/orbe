@@ -447,8 +447,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationFaultTitle
   case automationFaultDue
   case automationFaultWorkspace
-  case automationFaultNotNonEmptyArray
-  case automationFaultEmptyReport
+  case automationFaultNotArray
+  case automationFaultAfterNothing
   case automationDismissedAlready
   case automationDismissedNoOpen
   case automationDismissedOriginInvalidated

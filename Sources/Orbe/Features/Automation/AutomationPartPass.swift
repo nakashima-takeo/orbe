@@ -158,7 +158,7 @@ struct AutomationPartPass {
     -> Outcome
   {
     let execution = execution(result, count: session.outputs.count)
-    let breach = session.rejected.isEmpty ? nil : AutomationRejections(session.rejected)
+    let breach = session.rejections
     if let failure = AutomationRunOutput.agentFailure(result) {
       return .failed(failure, execution, breach: breach)
     }

@@ -119,8 +119,8 @@ extension L10n {
     .automationFaultTitle: ("タイトルが空、または複数行", "the title is empty or has multiple lines"),
     .automationFaultDue: ("期限が YYYY-MM-DD の形式ではありません", "the due date isn’t in YYYY-MM-DD format"),
     .automationFaultWorkspace: ("workspace が一覧にありません", "the workspace isn’t in the list"),
-    .automationFaultNotNonEmptyArray: ("%@ が空、または配列ではありません", "%@ is empty or not an array"),
-    .automationFaultEmptyReport: ("報告が空", "the report is empty"),
+    .automationFaultNotArray: ("%@ が配列ではありません", "%@ is not an array"),
+    .automationFaultAfterNothing: ("何も無いと申告した後の結果", "a result after reporting nothing"),
     .automationDismissedAlready: ("候補に登録済みの %lld 件を破棄", "discarded %lld already proposed"),
     .automationDismissedNoOpen: ("判断待ちの候補が無い %lld 件を破棄", "discarded %lld with no waiting proposal"),
     .automationDismissedOriginInvalidated: (
