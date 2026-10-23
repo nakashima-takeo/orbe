@@ -20,9 +20,9 @@ extension AutomationStore {
         let output = AutomationDatabase.Output(id: row.id, body: row.text, source: nil)
         if node.coverage == .currentSet {
           try db.invalidateLiveItem(of: part, written: row.id, at: at)
-          _ = try db.insertItem(of: part, output, at: at)
+          try db.insertItem(of: part, output, at: at)
         } else {
-          _ = try db.insertEvent(of: part, output, at: at)
+          try db.insertEvent(of: part, output, at: at)
         }
       }
       try memory.reread(part, of: id, db)

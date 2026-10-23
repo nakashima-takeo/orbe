@@ -16,9 +16,9 @@ extension AutomationRunner {
   }
 
   /// 受け手のつながりごとの今（DB から読む）。読めなければ nil（ログに残す。起こす決まりは起こさない）。
-  func inlets(of part: AutomationPartID, in id: Int) -> [AutomationPartID: Inlet]? {
+  func inlets(of part: AutomationPartID) -> [AutomationPartID: Inlet]? {
     do throws(AutomationError) {
-      let positions = try store.positions(of: part, in: id)
+      let positions = try store.positions(of: part)
       return positions.mapValues { Inlet(read: $0.read, up: $0.last) }
     } catch {
       NSLog("[automation] cannot read the inputs of part \(part): \(error)")
@@ -55,7 +55,7 @@ extension AutomationRunner {
       node.part.trigger == .arrival
     else { return }
     let key = Self.key(id, part)
-    guard !scheduler.isRunning(id: key), let inlets = inlets(of: part, in: id),
+    guard !scheduler.isRunning(id: key), let inlets = inlets(of: part),
       Self.hasNew(node, inlets, since: marks[key] ?? [:])
     else { return }
     scheduler.runNow(id: key)
@@ -67,7 +67,7 @@ extension AutomationRunner {
     guard let automation = store.automation(id) else { return }
     for node in automation.graph.descendants(of: part) where node.part.trigger == .arrival {
       let key = Self.key(id, node.id)
-      guard let inlets = inlets(of: node.id, in: id), Self.needsRetry(node, inlets) else {
+      guard let inlets = inlets(of: node.id), Self.needsRetry(node, inlets) else {
         continue
       }
       scheduler.runNow(id: key)

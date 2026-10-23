@@ -44,7 +44,7 @@ extension AutomationStore {
   }
 
   /// 受け手 `part` のつながりごとの読んだ位置と上流の最後の番号（起こす決まりが読む）。
-  func positions(of part: AutomationPartID, in id: Int) throws(AutomationError)
+  func positions(of part: AutomationPartID) throws(AutomationError)
     -> [AutomationPartID: AutomationDatabase.Position]
   {
     try read { try $0.positions(of: part) }

@@ -17,10 +17,8 @@ extension AutomationDatabase {
 
   /// 出す側の確定の結果。
   struct Written: Equatable {
-    /// 出力ごとの、今その出力を表す行（足さなかった重なりは nil）。
-    var rows: [AutomationRowRef?] = []
-    /// 新しく有効にした行（新しい項目と出来事）の、出力の位置。
-    var fresh: [Int] = []
+    /// 新しく有効にした行（新しい項目と出来事）の数。
+    var fresh = 0
     /// 出来事の流れで、残す期間の内に同じ id を出したので足さなかった数。
     var duplicates = 0
     /// 無効にした項目。
@@ -29,7 +27,7 @@ extension AutomationDatabase {
     var versioned = 0
 
     /// 何かが変わったか（項目が有効になる・版が足される・項目が無効になる・出来事が足される）。
-    var changed: Bool { !fresh.isEmpty || !invalidated.isEmpty || versioned > 0 }
+    var changed: Bool { fresh > 0 || !invalidated.isEmpty || versioned > 0 }
 
   }
 
@@ -42,28 +40,22 @@ extension AutomationDatabase {
     var live = Dictionary(
       uniqueKeysWithValues: try db.select(
         """
-        SELECT i.written_id, i.id, i.source_item_id, i.source_event_id, v.id, v.body
+        SELECT i.written_id, i.id, i.source_item_id, i.source_event_id, v.body
         FROM items i JOIN item_versions v ON v.id = \(Self.currentVersion(of: "i.id"))
         WHERE i.part_id = ? AND i.valid_to IS NULL
         """, [.integer(p)]
       ) { s in
         (
           s.text(at: 0) ?? "",
-          (
-            id: s.int(at: 1), source: Self.source(s, item: 2, event: 3), version: s.int(at: 4),
-            body: s.text(at: 5)
-          )
+          (id: s.int(at: 1), source: Self.source(s, item: 2, event: 3), body: s.text(at: 4))
         )
       })
     for output in outputs {
       if let current = live.removeValue(forKey: output.id) {
         if current.source == output.source {
-          if current.body == output.body {
-            written.rows.append(.version(current.version))
-          } else {
+          if current.body != output.body {
             try insertVersion(
               of: current.id, seq: try nextSeq(of: part, "last_item_seq"), output.body, at: at)
-            written.rows.append(.version(Int(db.lastInsertRowID)))
             written.versioned += 1
           }
           continue
@@ -71,8 +63,8 @@ extension AutomationDatabase {
         try invalidate(item: current.id, of: part, at: at)
         written.invalidated.append(current.id)
       }
-      written.fresh.append(written.rows.count)
-      written.rows.append(.version(try insertItem(of: part, output, at: at)))
+      try insertItem(of: part, output, at: at)
+      written.fresh += 1
     }
     for current in live.values {
       try invalidate(item: current.id, of: part, at: at)
@@ -94,17 +86,16 @@ extension AutomationDatabase {
       ) { _ in true }
       if !seen.isEmpty {
         written.duplicates += 1
-        written.rows.append(nil)
         continue
       }
-      written.fresh.append(written.rows.count)
-      written.rows.append(.event(try insertEvent(of: part, output, at: at)))
+      try insertEvent(of: part, output, at: at)
+      written.fresh += 1
     }
     return written
   }
 
-  /// 新しい項目を、次の番号と、同じ番号の最初の版で足す。足した版を返す。
-  func insertItem(of part: AutomationPartID, _ output: Output, at: Date) throws -> Int {
+  /// 新しい項目を、次の番号と、同じ番号の最初の版で足す。
+  func insertItem(of part: AutomationPartID, _ output: Output, at: Date) throws {
     let seq = try nextSeq(of: part, "last_item_seq")
     try db.run(
       """
@@ -114,7 +105,6 @@ extension AutomationDatabase {
       [.integer(Int64(part.rawValue)), .integer(seq), .text(output.id)]
         + Self.values(output.source) + [Self.instant(at)])
     try insertVersion(of: Int(db.lastInsertRowID), seq: seq, output.body, at: at)
-    return Int(db.lastInsertRowID)
   }
 
   private func insertVersion(of item: Int, seq: Int64, _ body: String, at: Date) throws {
@@ -123,8 +113,8 @@ extension AutomationDatabase {
       [.integer(Int64(item)), .integer(seq), .text(body), Self.instant(at)])
   }
 
-  /// 新しい出来事を次の番号で足し、その ID を返す。
-  func insertEvent(of part: AutomationPartID, _ output: Output, at: Date) throws -> Int {
+  /// 新しい出来事を次の番号で足す。
+  func insertEvent(of part: AutomationPartID, _ output: Output, at: Date) throws {
     let seq = try nextSeq(of: part, "last_event_seq")
     try db.run(
       """
@@ -136,11 +126,10 @@ extension AutomationDatabase {
         .integer(Int64(part.rawValue)), .integer(seq), Self.instant(at), .text(output.id),
         .text(output.body),
       ] + Self.values(output.source))
-    return Int(db.lastInsertRowID)
   }
 
   /// 部品の今有効な項目をすべて無効にし、無効にした項目を返す（性質の書き換え・部品を外す）。
-  @discardableResult func invalidateItems(of part: AutomationPartID, at: Date) throws -> [Int] {
+  func invalidateItems(of part: AutomationPartID, at: Date) throws -> [Int] {
     let ids = try db.select(
       "SELECT id FROM items WHERE part_id = ? AND valid_to IS NULL",
       [.integer(Int64(part.rawValue))]

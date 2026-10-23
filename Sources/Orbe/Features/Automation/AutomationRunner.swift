@@ -270,7 +270,7 @@ extension AutomationRunner {
     active[ObjectIdentifier(trigger)] = trigger
     if node.inputs.isEmpty {
       pass(trigger, read: nil)
-    } else if let inlets = inlets(of: part, in: id) {
+    } else if let inlets = inlets(of: part) {
       let marks = inlets.mapValues(\.up)
       self.marks[Self.key(id, part)] = marks
       trigger.baseline = marks

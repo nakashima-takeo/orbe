@@ -59,8 +59,7 @@ extension AutomationStore {
       let removed = current.parts.filter { !Set(checked.compactMap(\.part.id)).contains($0) }
       var invalidated: [Int] = []
       for part in removed {
-        invalidated += try db.invalidateItems(of: part, at: at)
-        try db.removePart(part, at: at)
+        invalidated += try db.removePart(part, at: at)
       }
       try Self.writeParts(checked, &entities, of: id, db, at: at)
       let graph = AutomationGraph(checked, parts: entities)

@@ -16,8 +16,7 @@ extension AutomationRunner {
   /// 知らせが来ず、以後ずっと断る）。
   func flow(_ id: Int, to target: AutomationFlow.Target) throws(AutomationError) {
     try checkAvailable()
-    _ = try store.index(id)
-    guard let automation = store.automation(id) else { throw .automationNotFound(id) }
+    let automation = store.automations[try store.index(id)]
     let targets: [AutomationPartID]
     switch target {
     case .part(let part):

@@ -122,14 +122,15 @@ final class AutomationDatabase {
   }
 
   /// 部品を外す: 外した時刻を書き、今有効な項目を無効にし、つながりと外した印と持ち越しを消す。外した部品の回の記録・判断の
-  /// 記録・台帳は、同じトランザクションの最後の掃除が、候補を忘れた後に指されなくなったものから消す。
-  func removePart(_ id: AutomationPartID, at: Date) throws {
+  /// 記録・台帳は、同じトランザクションの最後の掃除が、候補を忘れた後に指されなくなったものから消す。無効にした項目を返す。
+  func removePart(_ id: AutomationPartID, at: Date) throws -> [Int] {
     let part: [SQLiteValue] = [.integer(Int64(id.rawValue))]
-    try invalidateItems(of: id, at: at)
+    let invalidated = try invalidateItems(of: id, at: at)
     try db.run("DELETE FROM part_edges WHERE from_part_id = ?1 OR to_part_id = ?1", part)
     try db.run(
       "UPDATE parts SET removed_at = ?, breach_run_id = NULL, pending_drops = '{}' WHERE id = ?",
       [Self.instant(at)] + part)
+    return invalidated
   }
 
   /// 外した印の回。

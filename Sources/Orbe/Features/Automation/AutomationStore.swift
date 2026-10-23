@@ -131,8 +131,7 @@ import Observation
     try commit(sweepingAt: at) { db, memory in
       var invalidated: [Int] = []
       for part in parts {
-        invalidated += try db.invalidateItems(of: part, at: at)
-        try db.removePart(part, at: at)
+        invalidated += try db.removePart(part, at: at)
       }
       try db.deleteAutomation(id)
       memory.automations.removeAll { $0.id == id }

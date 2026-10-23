@@ -40,8 +40,7 @@ struct AutomationSettling {
         proposed: decided.pending.count, resolved: decided.resolving.count,
         dismissed: decided.dismissed)
     }
-    let recordId = try db.insert(
-      run: run, of: end.part, defId: end.defId, carried: run.failed ? AutomationDrops() : carried)
+    let recordId = try db.insert(run: run, of: end.part, defId: end.defId, carried: carried)
     if let read = end.read {
       try db.insertInputs(
         of: recordId,
@@ -82,10 +81,10 @@ struct AutomationSettling {
         : try db.writeEvents(of: end.part, outputs, at: run.endedAt)
       let withdrawn = try memory.withdraw(originatingIn: written.invalidated, db)
       if node.role == .fetch {
-        run.result = .fetch(fresh: written.fresh.count, duplicates: written.duplicates)
+        run.result = .fetch(fresh: written.fresh, duplicates: written.duplicates)
         run.withdrawn = withdrawn
       } else {
-        run.result = .process(fresh: written.fresh.count, duplicates: written.duplicates)
+        run.result = .process(fresh: written.fresh, duplicates: written.duplicates)
       }
     case .report(let text): run.result = .report(text: text)
     case .work(.done(let text)): run.result = .work(text: text, nothing: nil)
