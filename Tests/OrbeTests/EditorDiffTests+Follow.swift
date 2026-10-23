@@ -316,7 +316,8 @@ extension EditorDiffTests {
     XCTAssertTrue(try engine(diff.oldSurface).partner === diff.newSurface as? MetalTextSurface)
   }
 
-  /// 並列で左の面に焦点があるまま index が変わって左の面を作り直しても、焦点は diff の面に残る（窓へ落ちない）。
+  /// 並列で左の面に焦点があるまま index が変わって左の面を作り直しても、焦点は作り直した左の面に残る（窓へ落ちず、右へも
+  /// 移らない）。
   func testTheFocusStaysInTheDiffWhenTheLeftSurfaceIsRebuilt() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let modes = EditorDiffModeState(mode: .side)
@@ -332,9 +333,6 @@ extension EditorDiffTests {
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     pumpMain(
       until: { diff.oldSurface.map { $0.responder !== left } ?? false }, "左の面が作り直される")
-    let focused = window.firstResponder
-    XCTAssertTrue(
-      focused === diff.oldSurface?.responder || focused === diff.newSurface?.responder,
-      "焦点は diff の面に残る")
+    XCTAssertTrue(window.firstResponder === diff.oldSurface?.responder, "焦点は最後に焦点のあった左の面に残る")
   }
 }
