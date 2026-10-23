@@ -299,6 +299,18 @@ extension AutomationStoreTests {
     XCTAssertEqual(try take(store, id, "a", at: Self.at.addingTimeInterval(60)), ["x", "y"])
   }
 
+  /// 回の記録の取った数は回ごとに数え、同じ部品のほかの回の分と混ざらない。
+  func testEachRunCountsOnlyTheRowsItTook() throws {
+    let store = AutomationStore()
+    let id = try define(store, coverage: .newArrivals)
+    try fetch(store, id, ["x", "y"], at: Self.at)
+    try take(store, id, "a", at: Self.at)
+    try fetch(store, id, ["z"], at: Self.at.addingTimeInterval(60))
+    try take(store, id, "a", at: Self.at.addingTimeInterval(60))
+
+    XCTAssertEqual(store.automation(id)?.state(key: "a").runs.map(\.run?.taken), [1, 2])
+  }
+
   // MARK: - 写しを持たない
 
   /// 候補・判断・回の記録は行の中身を写して持たない（中身は出す側の行に 1 度だけある）。
