@@ -154,6 +154,32 @@ final class RootFilesRemoteTests: OrbeTestCase {
     XCTAssertEqual(try String(contentsOfFile: repo.root + "/o.txt", encoding: .utf8), "o\n")
   }
 
+  /// 人が見ていない裏の fetch は FETCH_HEAD を書かない（端末で `git fetch <remote> <ref>` の後に FETCH_HEAD を使う手順を
+  /// 別のコミットへ移さない）。remote 追跡 ref は取り込む。人の fetch は `git fetch` と同じく書く。
+  func testAnUnattendedFetchLeavesFetchHeadAlone() throws {
+    repo.addOrigin()
+    try repo.advanceOrigin(writing: "o.txt", "o\n", onto: "pr")
+    XCTAssertTrue(repo.git(["fetch", "-q", "origin", "pr"]).isSuccess)
+    let fetchHead = repo.root + "/.git/FETCH_HEAD"
+    let before = try String(contentsOfFile: fetchHead, encoding: .utf8)
+    let modified = try FileManager.default.attributesOfItem(atPath: fetchHead)[.modificationDate]
+    try repo.advanceOrigin(writing: "m.txt", "m\n")
+    let files = repo.files()
+
+    let unattended = finish(files) {
+      files.fetch(attended: false, onProgress: { _ in }, completion: $0)
+    }
+    XCTAssertNil(unattended.failure)
+    XCTAssertEqual(unattended.statusAtCompletion?.branch?.upstream?.divergence?.behind, 1)
+    XCTAssertEqual(try String(contentsOfFile: fetchHead, encoding: .utf8), before)
+    XCTAssertEqual(
+      try FileManager.default.attributesOfItem(atPath: fetchHead)[.modificationDate] as? Date,
+      modified as? Date)
+
+    XCTAssertNil(finish(files) { files.fetch(onProgress: { _ in }, completion: $0) }.failure)
+    XCTAssertNotEqual(try String(contentsOfFile: fetchHead, encoding: .utf8), before)
+  }
+
   /// 前提を確かめている間に止めた pull の後ろに並んだ pull も、走って返る——前の完了の中で次の前提の確かめが始まっても、
   /// その待ち手は失われない。
   func testAPullQueuedBehindOneStoppedDuringItsPreconditionsStillRuns() throws {

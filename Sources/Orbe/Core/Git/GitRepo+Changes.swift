@@ -2,9 +2,9 @@ import Foundation
 
 // MARK: - 変更の書き込み（ステージ・解除・破棄。コミット・取り消しは `GitRepo+Commit`）
 
-/// 利用者が起こす index・作業ツリー・HEAD への書き込み。どれも無出力で打ち切らず、`handle` で止める（hook・filter・
-/// 署名の沈黙は「何も起きていない」ことを意味しない）。順番は呼び出し側（根のサービス）が作る——同じ worktree の
-/// index へ同時に書けば、git は index.lock で待たずに落ちる。completion は main で返る。
+/// 利用者が起こす index・作業ツリー・HEAD への書き込み。前段の読みも含めてどの段も `handle` の下で走り、打ち切るかは
+/// その手が決める（`GitRunner.Handle.isAttended`）。順番は呼び出し側（根のサービス）が作る——同じ worktree の index へ
+/// 同時に書けば、git は index.lock で待たずに落ちる。completion は main で返る。
 ///
 /// パスはファイル名そのもの（ユーザーのデータ）なので、NUL 区切りの標準入力で渡し、その呼び出しだけ pathspec を
 /// literal にする（`*` `:` を含む名前で別のファイルに当たらない。引数の長さの上限も越えない）。
@@ -232,7 +232,7 @@ extension GitRepo {
     let list = paths.map { $0 + "\0" }.joined()
     runner.run(
       args + ["--pathspec-from-file=-", "--pathspec-file-nul"], cwd: root, stdin: Data(list.utf8),
-      environment: ["GIT_LITERAL_PATHSPECS": "1"], timesOut: false, handle: handle
+      environment: ["GIT_LITERAL_PATHSPECS": "1"], handle: handle
     ) { completion(.of($0)) }
   }
 

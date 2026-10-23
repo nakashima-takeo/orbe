@@ -139,8 +139,7 @@ extension GitRepo {
     args +=
       keepsMessage ? ["--no-edit", "--cleanup=verbatim"] : ["--cleanup=whitespace", "-F", "-"]
     runner.run(
-      args, cwd: root, stdin: keepsMessage ? nil : Data(message.utf8), timesOut: false,
-      handle: handle
+      args, cwd: root, stdin: keepsMessage ? nil : Data(message.utf8), handle: handle
     ) { completion(.of($0)) }
   }
 
@@ -217,9 +216,9 @@ extension GitRepo {
         return
       }
       guard commits.count == 1 else {
-        self.runner.run(
-          ["reset", "--soft", "HEAD~1"], cwd: self.root, timesOut: false, handle: handle
-        ) { completion(.of($0)) }
+        self.runner.run(["reset", "--soft", "HEAD~1"], cwd: self.root, handle: handle) {
+          completion(.of($0))
+        }
         return
       }
       // shallow clone の境界のコミットも親を返さない。初回コミットとして ref を消すと、履歴とつながらなくなる。
@@ -230,9 +229,9 @@ extension GitRepo {
           return
         }
         let branch = ref.stdoutText.trimmingCharacters(in: .newlines)
-        self.runner.run(
-          ["update-ref", "-d", branch, head], cwd: self.root, timesOut: false, handle: handle
-        ) { completion(.of($0)) }
+        self.runner.run(["update-ref", "-d", branch, head], cwd: self.root, handle: handle) {
+          completion(.of($0))
+        }
       }
     }
   }

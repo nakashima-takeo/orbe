@@ -2,23 +2,24 @@ import Foundation
 
 // MARK: - リモートとの書き込み（fetch・pull・push）
 
-/// 利用者が起こすリモートとの書き込み。無出力で打ち切らず（裏の fetch を除く）`handle` で止め、進捗（git の語の行）を `onProgress` へ
-/// 届いた順に渡す。ユーザーの設定（既定の remote・prune・`pull.rebase`・`push.default`・`pushRemote`・
+/// リモートとの書き込み。前段の読みも含めてどの段も `handle` の下で走り（打ち切るかは手が決める）、進捗（git の語の行）を
+/// `onProgress` へ届いた順に渡す。ユーザーの設定（既定の remote・prune・`pull.rebase`・`push.default`・`pushRemote`・
 /// `core.sshCommand`・credential helper）はそのまま効く。completion は main で返る。
 ///
 /// 前提（upstream・detached・push 先・止まった操作）は本体の git を起こす前に判定する。`branch` は呼んだ時点の status の
 /// ブランチで、nil（分からない）ならブランチに依る判定を飛ばして git に任せる。
 extension GitRepo {
-  /// `unattended` は人が見ていない実行（裏の fetch）——止められる人がいないので無出力で打ち切り（進捗の行が延命する）、
-  /// askpass・資格情報の窓を出させない。
+  /// 取ってくる。`handle` が見ていない手なら人が見ていない実行（裏の fetch）——無出力で打ち切り（進捗の行が延命する）、
+  /// askpass・資格情報の窓を出させず、FETCH_HEAD を書かない（端末で FETCH_HEAD を使う手順を動かさない）。
   func fetch(
-    unattended: Bool = false, onProgress: @escaping (String) -> Void, handle: GitRunner.Handle,
+    onProgress: @escaping (String) -> Void, handle: GitRunner.Handle,
     completion: @escaping (GitWriteFailure?) -> Void
   ) {
+    let attended = handle.isAttended
     runner.run(
-      ["fetch", "--progress"], cwd: root,
-      environment: unattended ? GitRunner.unattendedEnvironment : [:], timesOut: unattended,
-      onProgress: onProgress, handle: handle
+      ["fetch", "--progress"] + (attended ? [] : ["--no-write-fetch-head"]), cwd: root,
+      environment: attended ? [:] : GitRunner.unattendedEnvironment, onProgress: onProgress,
+      handle: handle
     ) { completion(.ofRemote($0)) }
   }
 
@@ -36,9 +37,8 @@ extension GitRepo {
     }
     if let branch, branch.name == nil { return Self.fail(.detached, completion) }
     if let branch, branch.upstream == nil { return Self.fail(.noUpstream, completion) }
-    runner.run(
-      ["pull", "--progress"], cwd: root, timesOut: false, onProgress: onProgress, handle: handle
-    ) { output in
+    let pull = ["pull", "--progress"]
+    runner.run(pull, cwd: root, onProgress: onProgress, handle: handle) { output in
       let failure = GitWriteFailure.ofRemote(output)
       if failure != nil, failure != .cancelled, before == .none,
         case .inProgress(let operation) = GitWorktreeOperationProbe.detect(worktreeAt: self.root)
@@ -61,8 +61,8 @@ extension GitRepo {
   ) {
     func run(_ extra: [String]) {
       runner.run(
-        ["push", "--porcelain", "--progress"] + extra, cwd: root, timesOut: false,
-        onProgress: onProgress, handle: handle
+        ["push", "--porcelain", "--progress"] + extra, cwd: root, onProgress: onProgress,
+        handle: handle
       ) { output in completion(Self.pushFailure(output)) }
     }
     guard let branch, branch.upstream == nil else { return run([]) }

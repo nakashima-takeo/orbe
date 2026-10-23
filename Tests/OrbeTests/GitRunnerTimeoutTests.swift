@@ -123,6 +123,22 @@ final class GitRunnerTimeoutTests: OrbeTestCase {
       elapsed, 10, "打ち切りの後に EOF を無期限に待つと、直したいハングを別の場所で作り直すことになる")
   }
 
+  /// 打ち切るかは止める手が決める。見ている手で走る実行は、上限を過ぎても止めるまで待つ（同じ手で走る前段の読みも
+  /// 同じ）。見ていない手（既定）は `testStoppedRunReturnsWhileGrandchildHoldsThePipes` が打ち切られることを見る。
+  func testAnAttendedHandleIsNeverCut() throws {
+    try fixture.installHook("pre-commit", body: fixture.waitingBody)
+    try stageChange()
+    let attended = GitRunner.Handle(attended: true)
+    var output: GitRunner.Output?
+    runner.run(["commit", "-m", "watched"], cwd: fixture.root, handle: attended) { output = $0 }
+    XCTAssertTrue(fixture.waitUntilHung())
+    RunLoop.main.run(until: Date().addingTimeInterval(1.5))
+    XCTAssertNil(output, "無出力が上限を過ぎても打ち切らない")
+    attended.cancel()
+    pumpMain(until: { output != nil }, "止めたら返る")
+    XCTAssertEqual(output?.ending, .cancelled)
+  }
+
   // MARK: - 後始末（git 自身の SIGTERM 処理に依存する事実。変わったら気づけるよう固定する）
 
   /// 打ち切った clone は宛先ディレクトリを残さない（SIGTERM を受けた git 自身が掃除する）。

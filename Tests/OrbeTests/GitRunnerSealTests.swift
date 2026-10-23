@@ -25,16 +25,18 @@ final class GitRunnerSealTests: OrbeTestCase {
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     var output: GitRunner.Output?
     let started = Date()
-    GitRunner.shared.run(["commit"], cwd: repo.root, timesOut: false) { output = $0 }
+    GitRunner.shared.run(["commit"], cwd: repo.root, handle: GitRunner.Handle(attended: true)) {
+      output = $0
+    }
     pumpMain(until: { output != nil }, timeout: 10, "エディタを待たない")
     XCTAssertLessThan(Date().timeIntervalSince(started), 5)
     XCTAssertEqual(output?.isSuccess, false)
   }
 
   /// ssh を起こす経路で fetch し、記録用の `core.sshCommand` が受け取った環境変数 `names` の値を 1 行ずつ返す（既定は
-  /// `SSH_ASKPASS_REQUIRE` と `SSH_ASKPASS`）。`unattended` なら裏の fetch。
+  /// `SSH_ASKPASS_REQUIRE` と `SSH_ASKPASS`）。`attended` が偽なら裏の fetch。
   private func fetchRecordingSsh(
-    unattended: Bool = false, recording names: [String] = ["SSH_ASKPASS_REQUIRE", "SSH_ASKPASS"]
+    attended: Bool = true, recording names: [String] = ["SSH_ASKPASS_REQUIRE", "SSH_ASKPASS"]
   ) throws -> (env: String, failure: GitWriteFailure?) {
     let record = TestScratch.caseDir.appendingPathComponent("ssh-env").path
     let script = TestScratch.caseDir.appendingPathComponent("record-ssh.sh").path
@@ -52,7 +54,7 @@ final class GitRunnerSealTests: OrbeTestCase {
     let files = repo.files()
     let outcome = WriteOutcome()
 
-    files.fetch(unattended: unattended, onProgress: { _ in }, completion: outcome.receive)
+    files.fetch(attended: attended, onProgress: { _ in }, completion: outcome.receive)
     pumpMain(until: { outcome.finished }, timeout: 20)
     return (try String(contentsOfFile: record, encoding: .utf8), outcome.failure)
   }
@@ -84,7 +86,7 @@ final class GitRunnerSealTests: OrbeTestCase {
       unsetenv("GIT_ASKPASS")
     }
     let fetched = try fetchRecordingSsh(
-      unattended: true, recording: ["SSH_ASKPASS", "GIT_ASKPASS", "GCM_INTERACTIVE"])
+      attended: false, recording: ["SSH_ASKPASS", "GIT_ASKPASS", "GCM_INTERACTIVE"])
     XCTAssertEqual(fetched.env, "/usr/bin/false\n/usr/bin/false\nnever\n")
   }
 

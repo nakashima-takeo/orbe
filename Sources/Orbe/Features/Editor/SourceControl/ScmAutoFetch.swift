@@ -137,7 +137,7 @@ final class ScmAutoFetch {
     else { return }
     rules.backgroundDidStart()
     running = files.fetch(
-      unattended: true, onProgress: { _ in },
+      attended: false, onProgress: { _ in },
       completion: { [weak self] failure in self?.backgroundDidFinish(failure) })
   }
 
