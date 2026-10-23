@@ -95,4 +95,24 @@ extension AutomationTrialTests {
     XCTAssertEqual(trial.passes(key: "gh").first?.run?.result, .fetch(fresh: 3, duplicates: 0))
     XCTAssertEqual(trial.passes(key: "p").first?.run?.dropped, AutomationDrops())
   }
+
+  /// 出来事の流れの取得でも `limit` は同じに効く: 絞った出来事を写しから消して通し番号も戻すので、「届いたら」の受け手は
+  /// 絞った後の行だけを読み、絞った出来事を読む前に期限で消えたと数えない。
+  func testALimitOnANewArrivalsFetchReachesAnArrivalPartAlreadyCut() throws {
+    var gh = fetch("gh")
+    gh.action.coverage = .newArrivals
+    let id = try define([
+      gh, part("p", .arrival, from: ["gh"]), part("d", from: ["p"], deliver: .report),
+    ])
+    let trial = try trials.start(id, .init(limit: 2))
+    waitCalls("gh", 1)
+    finish("gh", fetched(["a", "b", "c"]))
+    waitCalls("p", 1)
+    XCTAssertEqual(ids("p"), [downstream("gh", "a", of: id), downstream("gh", "b", of: id)])
+    finish("p", "")
+    ended(trial)
+    XCTAssertEqual(
+      rows(trial, "gh"), [downstream("gh", "a", of: id), downstream("gh", "b", of: id)])
+    XCTAssertEqual(trial.passes(key: "p").first?.run?.dropped, AutomationDrops())
+  }
 }
