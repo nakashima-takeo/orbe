@@ -27,7 +27,7 @@ final class HunkTrackTests: XCTestCase {
     text.split(separator: "\n", omittingEmptySubsequences: false)
   }
 
-  /// `LineDiff` の出力と同じ形か: 昇順・重ならない（間に文脈を挟む）・両側とも本文の中・区間の外の行は両側で 1 対 1 で
+  /// `LineDiff` の出力と同じ形か: 空の区間が無く・昇順・重ならない（間に文脈を挟む）・両側とも本文の中・区間の外の行は両側で 1 対 1 で
   /// 同じ中身（`contents` が false なら中身は見ない——行の数を変えない編集は、届くまで区間を変えない）。
   private func assertShape(
     _ hunks: [LineHunk], base: String, text: String, contents: Bool = true, _ context: String,
@@ -37,9 +37,12 @@ final class HunkTrackTests: XCTestCase {
     var (oldNext, newNext) = (0, 0)
     for (index, hunk) in hunks.enumerated() {
       let (o, n) = (hunk.oldLines, hunk.newLines)
+      XCTAssertFalse(o.isEmpty && n.isEmpty, "空の区間は無い: \(context)", file: file, line: line)
       if index > 0 {
         XCTAssertGreaterThan(
           n.lowerBound, newNext, "区間の間に文脈を挟む: \(context)", file: file, line: line)
+      } else {
+        XCTAssertGreaterThanOrEqual(n.lowerBound, 0, "本文の先頭から: \(context)", file: file, line: line)
       }
       XCTAssertEqual(
         o.lowerBound - oldNext, n.lowerBound - newNext, "区間の外は 1 対 1: \(context)", file: file,
