@@ -72,8 +72,10 @@ struct BoardAutomationPartCard: View {
               + fontResolver.text(segment.text, base: Theme.Typography.codeSmall)
               .foregroundStyle(Self.color(segment.look))
           }
+          .lineSpacing(Self.factLeading)
+          .padding(.vertical, Self.factLeading / 2)
           .fixedSize(horizontal: false, vertical: true)
-          .frame(maxWidth: .infinity, minHeight: 18, alignment: .leading)
+          .frame(maxWidth: .infinity, alignment: .leading)
         }
       }
     }
@@ -210,6 +212,10 @@ struct BoardAutomationPartCard: View {
   private static let historyLine: CGFloat = 22
   /// 時刻の列の幅の下限（見本）。中身がこれより広ければ中身に合わせる。
   private static let timeWidth: CGFloat = 76
+  /// 項目の行の高さ 18（見本）に当たる行間。行間は行と行の間にしか入らないので、半分ずつを値の上下に足し、折り返した値の
+  /// 1 行目も 1 行の値と同じ位置に置く。
+  private static let factLeading = Theme.Typography.codeSmall.extraLeading(
+    lineHeight: 18 / Theme.Typography.codeSmall.pointSize)
   /// 指示文の行の高さ 1.6（見本）に当たる行間。
   private static let bodyLeading = Theme.Typography.codeCompact.extraLeading(lineHeight: 1.6)
   /// 折り返す結果の行の高さ 18（見本）に当たる行間。
