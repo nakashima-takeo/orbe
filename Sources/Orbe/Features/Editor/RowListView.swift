@@ -29,6 +29,8 @@ final class RowListView<Source: RowListSource>: NSView {
   private var bottomSpace: CGFloat = 0
   /// 押し続けの守り（錨を受け取った押下で張る）。
   private var pressGuard: RowListPressGuard?
+  /// ポインタが列の中に居るか（入った・中で動いた・押したで立ち、出た・外で動いた・窓に載り直したで下りる）。
+  private var pointerIsInside = false
   private var slots: [Source.RowView] = []
 
   /// 選んでいる行の番号（源の選択を写したもの）。
@@ -76,6 +78,7 @@ final class RowListView<Source: RowListSource>: NSView {
     holdAnchor()
     resizeDocument()
     layoutRows()
+    updatePointer()
   }
 
   /// 選択 `selection` の描いている組での行。
@@ -224,9 +227,18 @@ final class RowListView<Source: RowListSource>: NSView {
 
   // MARK: - ポインタ
 
-  /// ポインタの下の行へ、行の中の位置を写す（ほかの行は外す）。部品の説明をツールチップにする。
+  /// ポインタが列に入った・中で動いた（`inside`）、出た・外で動いた・列が窓に載り直した（`!inside`）。
+  func pointerMoved(inside: Bool) {
+    pointerIsInside = inside
+    updatePointer()
+  }
+
+  /// ポインタの下の行へ、行の中の位置を写す（ほかの行は外す）。部品の説明をツールチップにする。ポインタが列の中に居なければ
+  /// （アプリが背後にある間を含む）、どの行にも写さない。
   func updatePointer() {
-    guard let window, let scroll = enclosingScrollView else { return pointerDidLeave() }
+    guard pointerIsInside, let window, let scroll = enclosingScrollView else {
+      return pointerDidLeave()
+    }
     let location = window.mouseLocationOutsideOfEventStream
     guard scroll.bounds.contains(scroll.convert(location, from: nil)) else {
       return pointerDidLeave()
@@ -244,7 +256,7 @@ final class RowListView<Source: RowListSource>: NSView {
     if toolTip != help { toolTip = help }
   }
 
-  func pointerDidLeave() {
+  private func pointerDidLeave() {
     for slot in slots { slot.pointer = nil }
     toolTip = nil
   }
@@ -273,6 +285,7 @@ final class RowListView<Source: RowListSource>: NSView {
   // MARK: - マウス
 
   override func mouseDown(with event: NSEvent) {
+    pointerIsInside = true
     if source.acceptsFocus { window?.makeFirstResponder(self) }
     let point = convert(event.locationInWindow, from: nil)
     guard let row = row(at: point) else { return }

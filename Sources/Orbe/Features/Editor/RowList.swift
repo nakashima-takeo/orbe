@@ -203,7 +203,7 @@ final class RowList<Source: RowListSource>: NSScrollView {
     // 隠れる間にポインタが出ても出た通知は来ないので、載せ直すたびに外に居るところから始める。ポインタの真下に
     // 載ったときは入った通知も来ないので、動いたところで内外を決め直す（→ mouseMoved）。
     scrollbar.hover(false)
-    list.pointerDidLeave()
+    list.pointerMoved(inside: false)
   }
 
   override func mouseMoved(with event: NSEvent) {
@@ -211,24 +211,20 @@ final class RowList<Source: RowListSource>: NSScrollView {
     // 焦点のある列へは外で動いても届くので、位置で内外を決める。
     let inside = bounds.contains(convert(event.locationInWindow, from: nil))
     scrollbar.hover(inside)
-    if inside {
-      list.updatePointer()
-    } else {
-      list.releaseAnchor()
-      list.pointerDidLeave()
-    }
+    if !inside { list.releaseAnchor() }
+    list.pointerMoved(inside: inside)
   }
 
   override func mouseEntered(with event: NSEvent) {
     guard event.trackingArea === hoverArea else { return super.mouseEntered(with: event) }
     scrollbar.hover(true)
-    list.updatePointer()
+    list.pointerMoved(inside: true)
   }
 
   override func mouseExited(with event: NSEvent) {
     guard event.trackingArea === hoverArea else { return super.mouseExited(with: event) }
     scrollbar.hover(false)
     list.releaseAnchor()
-    list.pointerDidLeave()
+    list.pointerMoved(inside: false)
   }
 }

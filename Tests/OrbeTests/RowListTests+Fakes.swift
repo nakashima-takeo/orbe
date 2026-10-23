@@ -9,7 +9,7 @@ extension RowListTests {
     let version: Int
   }
 
-  /// 源の偽物。行 r の中身は "row r"、選択の同一性は行の番号そのもの。受けた操作を記録する。
+  /// 源の偽物。行 r の中身は "<label> r"（既定 "row r"）、選択の同一性は行の番号そのもの。受けた操作を記録する。
   final class Source: RowListSource {
     var rowCount = 200
     /// 組の版。組は版だけを写す値で、行の数は読み直さなくてもその場で変わる。
@@ -29,13 +29,15 @@ extension RowListTests {
     var anchor: RowListAnchor<Int>?
     /// 部品を押せない姿で描く行。
     var disabledRows: Set<Int> = []
+    /// 行の中身の頭。
+    var label = "row"
     /// 部品の押下で渡された組の版。
     private(set) var pressedVersions: [Int] = []
 
     func makeRowView() -> Row { Row(frame: .zero) }
     func show(_ row: Int, of rows: SourceRows, in view: Row, emoji: NSFont?) {
       if row >= rowCount { outOfRange += 1 }
-      view.show("row \(row)")
+      view.show("\(label) \(row)")
       view.isControlEnabled = !disabledRows.contains(row)
     }
     func row(of selection: Int, in rows: SourceRows) -> Int? {
@@ -62,7 +64,7 @@ extension RowListTests {
     func select(_ row: Int, in rows: SourceRows) { selected.append(row) }
   }
 
-  /// 行の偽物。中身が変わったときだけ描き直す（描いた回数を数える）。右端 30pt に部品 0 を持つ。
+  /// 行の偽物。中身が変わったときだけ描き直す（描いた回数を数える）。右端 30pt に部品 0 を持ち、その説明は中身の文字列。
   final class Row: ListRowView {
     private(set) var label: String?
     private(set) var draws = 0
@@ -81,6 +83,10 @@ extension RowListTests {
       let frame = NSRect(x: bounds.maxX - 30, y: 0, width: 30, height: bounds.height)
       return frame.contains(point)
         ? ListRowControl(id: 0, frame: frame, isEnabled: isControlEnabled) : nil
+    }
+
+    override func help(at point: NSPoint) -> String? {
+      control(at: point) == nil ? nil : label
     }
   }
 }
