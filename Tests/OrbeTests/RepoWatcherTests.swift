@@ -40,10 +40,18 @@ final class RepoWatcherTests: OrbeTestCase {
   }
 
   /// git の操作は「git が変わった」だけを立て、パス集合には `.git` の中を入れない。objects（loose・
-  /// multi-pack-index）・reflog・他の worktree や submodule の私有状態・`.lock` の出入りだけでは
-  /// 「git が変わった」にならない——それだけではバッチが生まれないので、作業ツリーの変化を 1 つ起こして
-  /// そのバッチ（畳まれる）で見る。
+  /// multi-pack-index）・reflog・他の worktree の私有状態・submodule の objects や reflog・`.lock` の出入りだけでは
+  /// 「git が変わった」にも「入れ子の git dir が変わった」にもならない——それだけではバッチが生まれないので、作業ツリーの
+  /// 変化を 1 つ起こしてそのバッチ（畳まれる）で見る。
   func testGitOperationsRaiseGitChangedWithoutPaths() throws {
+    // サブモジュールの git dir そのものの出入りは入れ子の変化なので、先に作って配達を済ませる。
+    for dir in ["objects/ab", "logs", "fsmonitor--daemon/cookies"] {
+      try FileManager.default.createDirectory(
+        atPath: repo.root + "/.git/modules/sub/" + dir, withIntermediateDirectories: true)
+    }
+    try repo.write(".orbe-watch-marker", "again")
+    pumpMain(until: { batches.contains { $0.paths.contains(repo.root + "/.orbe-watch-marker") } })
+    batches.removeAll()
     XCTAssertTrue(
       GitRunner.shared.runSync(
         ["hash-object", "-w", "--stdin"], cwd: repo.dir.path, stdin: Data("blob\n".utf8)
@@ -51,7 +59,8 @@ final class RepoWatcherTests: OrbeTestCase {
       .isSuccess)
     for noise in [
       "index.lock", "objects/pack/multi-pack-index", "logs/HEAD", "worktrees/other/index",
-      "worktrees/other/HEAD", "modules/sub/index",
+      "worktrees/other/HEAD", "modules/sub/objects/ab/cdef", "modules/sub/logs/HEAD",
+      "modules/sub/index.lock", "modules/sub/fsmonitor--daemon/cookies/1-1",
     ] {
       try repo.write(".git/" + noise, "n\n")
     }
@@ -59,6 +68,7 @@ final class RepoWatcherTests: OrbeTestCase {
     try repo.write("a.txt", "changed\n")
     pumpMain(until: { !batches.isEmpty }, "作業ツリーの変化")
     XCTAssertEqual(batches.map(\.gitChanged), [false], "関係ない出入りは git の変化ではない")
+    XCTAssertEqual(batches.map(\.nestedGitChanged), [false], "入れ子の git dir の変化でもない")
     batches.removeAll()
 
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
@@ -89,16 +99,28 @@ final class RepoWatcherTests: OrbeTestCase {
     for ignored in [
       "/fsmonitor--daemon/cookies/93678-1", "/fsmonitor--daemon.ipc",
       "/objects/pack/multi-pack-index",
-      "/objects/ab/cdef", "/logs/HEAD", "/worktrees/other/index", "/modules/sub/index",
+      "/objects/ab/cdef", "/logs/HEAD", "/worktrees/other/index",
       "/index.lock", "/packed-refs.lock", "/worktrees", "/objects",
+      "/modules/sub/objects/ab/cdef", "/modules/sub/logs/HEAD", "/modules/sub/index.lock",
+      "/modules/tools/sub/fsmonitor--daemon/cookies/1-1", "/modules/a/modules/b/objects/pack/x",
+      "/modules/sub/worktrees/w/index",
     ] {
-      XCTAssertFalse(RepoWatcher.isGitStateChange(ignored), ignored)
+      XCTAssertNil(RepoWatcher.gitDirChange(ignored), ignored)
     }
     for state in [
       "/index", "/HEAD", "/ORIG_HEAD", "/refs/heads/main", "/packed-refs", "/reftable/tables.list",
       "/MERGE_HEAD", "/rebase-merge/done", "/sequencer/todo", "/AUTO_MERGE", "/some-new-state-file",
+      "/refs/heads/logs",
     ] {
-      XCTAssertTrue(RepoWatcher.isGitStateChange(state), state)
+      XCTAssertEqual(
+        RepoWatcher.gitDirChange(state), .state(remoteRefs: RepoWatcher.isRemoteRefChange(state)),
+        state)
+    }
+    for nested in [
+      "/modules/sub/index", "/modules/sub/HEAD", "/modules/tools/sub/refs/heads/main",
+      "/modules/a/modules/b/index", "/modules/sub/ORIG_HEAD",
+    ] {
+      XCTAssertEqual(RepoWatcher.gitDirChange(nested), .nested, nested)
     }
     for ref in [
       "/refs/remotes/origin/main", "/refs/remotes", "/packed-refs", "/reftable/tables.list",
@@ -111,6 +133,43 @@ final class RepoWatcherTests: OrbeTestCase {
     ] {
       XCTAssertFalse(RepoWatcher.isRemoteRefChange(state), state)
     }
+  }
+
+  /// 根より深い `<dir>/.git/` の下（作業ツリーの中に git dir を持つサブモジュール・入れ子のリポジトリ）の状態の変化は、
+  /// パスにも親の git の変化にも出ず、「入れ子の git dir が変わった」として届く。その objects・`.lock` では届かない。根
+  /// 自身の `.git/` は根だけを見る監視では捨てる（git dir の監視が受け持つ）。
+  func testANestedGitDirInTheWorkingTreeArrivesAsItsOwnChange() throws {
+    try repo.write("inner/x.txt", "x\n")
+    for args in [
+      ["init", "-q", "inner"], ["-C", "inner", "add", "x.txt"],
+      ["-C", "inner", "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", "x"],
+    ] {
+      XCTAssertTrue(repo.git(args).isSuccess, "\(args)")
+    }
+    var rootBatches: [RepoWatcher.Batch] = []
+    let rootOnly = RepoWatcher(roots: [repo.root], gitDirs: []) { rootBatches.append($0) }
+    XCTAssertNotNil(rootOnly)
+    try repo.write(".orbe-watch-marker-2", "")
+    pumpMain(
+      until: { rootBatches.contains { $0.paths.contains(repo.root + "/.orbe-watch-marker-2") } })
+    rootBatches.removeAll()
+
+    try repo.write(".git/some-state", "s\n")
+    try repo.write("inner/.git/objects/ab/cdef", "o\n")
+    try repo.write("inner/.git/index.lock", "l\n")
+    try repo.write("b.txt", "b\n")
+    pumpMain(until: { rootBatches.contains { $0.paths.contains(repo.root + "/b.txt") } })
+    XCTAssertFalse(rootBatches.contains { $0.nestedGitChanged || $0.gitChanged }, "\(rootBatches)")
+    rootBatches.removeAll()
+    try FileManager.default.removeItem(atPath: repo.root + "/inner/.git/index.lock")
+
+    try repo.write("inner/x.txt", "y\n")
+    XCTAssertTrue(repo.git(["-C", "inner", "commit", "-qam", "y"]).isSuccess)
+    pumpMain(until: { rootBatches.contains { $0.nestedGitChanged } }, "中のコミット")
+    XCTAssertFalse(rootBatches.contains { $0.gitChanged || $0.remoteRefsChanged })
+    XCTAssertTrue(
+      rootBatches.allSatisfy { $0.paths.allSatisfy { !$0.contains("/.git/") } }, "\(rootBatches)")
+    withExtendedLifetime(rootOnly) {}
   }
 
   /// linked worktree の根は、自分の gitDir（commonDir の中）の変化は拾い、隣の worktree の私有状態では
