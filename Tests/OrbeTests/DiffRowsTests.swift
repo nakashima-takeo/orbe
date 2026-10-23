@@ -143,41 +143,43 @@ final class DiffRowsTests: OrbeTestCase {
     XCTAssertEqual(DiffRows.oldLines(from: .head(of: 0), count: 40, removed), 0...40, "消したファイルの頭")
   }
 
-  /// 新しい側の面の位置を古い側の錨に直し、新しい並びの位置へ戻す——インラインの削除行・追加の行・文脈、並列の右の
-  /// 詰め物。古い側が変わらず新しい側の上で行が増えても、同じ古い側の行（同じ段）を指す。
-  func testAnchorsCarryThePositionAcrossANewSideThroughTheOldSide() {
+  /// 古い側が変わらず新しい側が変わる作り直しで、見えている位置は同じ古い側の行（同じ段）へ引き継ぐ——インラインの
+  /// 削除行・追加の行・文脈、並列の右の詰め物と古い側より長い追加の段。読んでいた追加の行が新しい並びに無ければ、同じ区間の
+  /// 頭。壊れると、index が変わるたびに読んでいた所から跳ぶ。
+  func testAPositionIsCarriedAcrossANewSideThroughTheOldSide() {
     let (old, new) = sample
     let before = hunks(old, new)
     let after = hunks(old, lines(["x", "y", "z"]) + new)
-    let inline: [RowPosition: (anchor: DiffRows.Anchor, moved: RowPosition)] = [
-      RowPosition(line: 2, offset: -1): (
-        .init(line: 3, added: 0), RowPosition(line: 5, offset: -1)
-      ),
-      RowPosition(line: 5): (.init(line: 4, added: -5), RowPosition(line: 8)),
-      RowPosition(line: 10): (.init(line: 4, added: 0), RowPosition(line: 13)),
-      RowPosition(line: 12): (.init(line: 5, added: 0), RowPosition(line: 15)),
-    ]
-    for (top, (anchor, moved)) in inline {
-      XCTAssertEqual(DiffRows.anchor(at: top, before, side: false), anchor, "\(top)")
-      XCTAssertEqual(DiffRows.position(of: anchor, before, side: false), top, "往復: \(top)")
-      XCTAssertEqual(DiffRows.position(of: anchor, after, side: false), moved, "上に 3 行: \(top)")
+    let carry = { (top: RowPosition, from: [LineHunk], to: [LineHunk], side: Bool) in
+      DiffRows.position(of: DiffRows.anchor(at: top, from, side: side), to, side: side)
     }
-    let shorter = hunks(lines(["a", "b", "c", "d", "e", "f"]), lines(["a", "B", "f"]))
-    let side: [(RowPosition, DiffRows.Anchor)] = [
-      (RowPosition(line: 1), .init(line: 1, added: 0)),
-      (RowPosition(line: 2, offset: -2), .init(line: 3, added: 0)),
-      (RowPosition(line: 2, offset: -1), .init(line: 4, added: 0)),
+    let inline: [RowPosition: RowPosition] = [
+      RowPosition(line: 2, offset: -1): RowPosition(line: 5, offset: -1),
+      RowPosition(line: 5): RowPosition(line: 8),
+      RowPosition(line: 10): RowPosition(line: 13),
+      RowPosition(line: 12): RowPosition(line: 15),
     ]
-    for (top, anchor) in side {
-      XCTAssertEqual(DiffRows.anchor(at: top, shorter, side: true), anchor, "並列: \(top)")
-      XCTAssertEqual(DiffRows.position(of: anchor, shorter, side: true), top, "並列の往復: \(top)")
+    for (top, moved) in inline {
+      XCTAssertEqual(carry(top, before, before, false), top, "同じ並びなら同じ位置: \(top)")
+      XCTAssertEqual(carry(top, before, after, false), moved, "上に 3 行: \(top)")
     }
-    let longer = DiffRows.anchor(at: RowPosition(line: 5), before, side: true)
-    XCTAssertEqual(longer, .init(line: 4, added: -5), "並列で古い側より長い追加の段")
-    XCTAssertEqual(DiffRows.position(of: longer, before, side: true), RowPosition(line: 5))
+    let shorterOld = lines(["a", "b", "c", "d", "e", "f"])
+    let shorter = hunks(shorterOld, lines(["a", "B", "f"]))
+    let shorterAfter = hunks(shorterOld, lines(["x", "y", "z", "a", "B", "f"]))
+    let side: [RowPosition: RowPosition] = [
+      RowPosition(line: 1): RowPosition(line: 4),
+      RowPosition(line: 2, offset: -2): RowPosition(line: 5, offset: -2),
+      RowPosition(line: 2, offset: -1): RowPosition(line: 5, offset: -1),
+    ]
+    for (top, moved) in side {
+      XCTAssertEqual(carry(top, shorter, shorter, true), top, "並列で同じ並びなら同じ位置: \(top)")
+      XCTAssertEqual(carry(top, shorter, shorterAfter, true), moved, "並列で上に 3 行: \(top)")
+    }
     XCTAssertEqual(
-      DiffRows.position(of: .init(line: 4, added: -9), before, side: false), RowPosition(line: 2),
-      "無くなった追加の行は同じ区間の頭")
+      carry(RowPosition(line: 5), before, after, true), RowPosition(line: 8), "並列で古い側より長い追加の段")
+    let fewer = hunks(old, lines(["a", "", "add 0", "add 1", "ctx", "}", "end"]))
+    XCTAssertEqual(
+      carry(RowPosition(line: 3), before, fewer, false), RowPosition(line: 2), "無くなった追加の行は同じ区間の頭")
   }
 
   private func surface(_ text: String, _ rows: SurfaceRows) throws -> MetalTextSurface {
