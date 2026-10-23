@@ -294,6 +294,28 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks.count, 1, "今有効なのは新しい項目だけ")
   }
 
+  /// 入力を読む部品の回は、取った行が 0 件で失敗しても、取った数（0）を記録に持つ。確定が返す回と読み直した回は同じ。
+  func testARunThatReadsItsInputsKeepsItsTakenCountWhenItTookNothingAndFailed() throws {
+    let store = AutomationStore()
+    var copy = DesignSceneFixtures.agentPart(
+      "copy", "写す", .arrival, from: ["gh"], instruction: "写す", coverage: .currentSet)
+    copy.from = [AutomationDefinition.Input(part: "gh", take: .all)]
+    let id = try define(
+      store, coverage: .currentSet, receivers: [copy, receiver("a", from: .init(part: "copy"))])
+    let part = store.part(id, "copy")
+    let read = try XCTUnwrap(store.read(part, of: id, baseline: nil, now: Self.at))
+
+    let recorded = try store.record(
+      AutomationPassEnd(
+        automationId: id, part: part,
+        defId: try XCTUnwrap(store.automation(id)?.graph.node(part)).part.defId,
+        trigger: .arrival, startedAt: Self.at, endedAt: Self.at, read: read,
+        outcome: DesignSceneFixtures.failed("boom")))
+
+    XCTAssertEqual(recorded.run?.taken, 0)
+    XCTAssertEqual(store.automation(id)?.state(key: "copy").runs.first?.run, recorded.run)
+  }
+
   /// 上流の性質を出来事の流れから今の集合に書き換えても、受け手がまだ読んでいない出来事は届く。
   func testUnreadEventsStillArriveAfterTheUpstreamTurnsIntoASet() throws {
     let store = AutomationStore()

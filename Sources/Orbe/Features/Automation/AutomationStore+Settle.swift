@@ -49,7 +49,8 @@ struct AutomationSettling {
     }
     if let decided { try apply(decided, run: recordId, &memory) }
     try finish(AutomationRunRecord(id: recordId, content: .known(run)), &memory)
-    return AutomationRecorded(changed: written.changed, run: run)
+    let recorded = memory.automations[index].state(end.part).runs.first { $0.id == recordId }
+    return AutomationRecorded(changed: written.changed, run: recorded?.run)
   }
 
   /// 読んだ位置を進め、持ち越しを回の記録へ移す。

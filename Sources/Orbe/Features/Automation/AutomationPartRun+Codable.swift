@@ -24,8 +24,11 @@ extension AutomationPartRun: Encodable {
 }
 
 /// 回の記録の保存の JSON（`runs.record`）。列（時刻・契機・失敗）と、回の履歴から数えられる数（取った数・読んで捨てた数）は
-/// 持たず、持ち越した捨てた数と読む前に期限で消えた数（`carried`）・実行・外したこと・結果・下げた数だけを持つ。
+/// 持たず、入力を読む回か（`reads`。取った数を出すか）・持ち越した捨てた数と読む前に期限で消えた数（`carried`）・実行・
+/// 外したこと・結果・下げた数だけを持つ。
 struct AutomationRunStore: Codable {
+  /// 入力を読む部品の回か（取った行が 0 件の回も）。
+  var reads: Bool
   var carried: AutomationDrops
   var execution: AutomationPartPass.Execution
   var breach: AutomationRejections?
@@ -33,10 +36,11 @@ struct AutomationRunStore: Codable {
   var withdrawn: Int?
 
   private enum CodingKeys: String, CodingKey {
-    case carried, execution, breach, result, withdrawn
+    case reads, carried, execution, breach, result, withdrawn
   }
 
   init(_ run: AutomationPartRun, carried: AutomationDrops) {
+    reads = run.taken != nil
     self.carried = carried
     execution = run.execution
     breach = run.breach
@@ -46,6 +50,7 @@ struct AutomationRunStore: Codable {
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
+    reads = try c.decodeIfPresent(Bool.self, forKey: .reads) ?? false
     carried = try c.decodeIfPresent(AutomationDrops.self, forKey: .carried) ?? AutomationDrops()
     execution = try c.decode(AutomationPartPass.Execution.self, forKey: .execution)
     breach = try c.decodeIfPresent(AutomationRejections.self, forKey: .breach)
@@ -55,6 +60,7 @@ struct AutomationRunStore: Codable {
 
   func encode(to encoder: Encoder) throws {
     var c = encoder.container(keyedBy: CodingKeys.self)
+    if reads { try c.encode(reads, forKey: .reads) }
     if !carried.isEmpty { try c.encode(carried, forKey: .carried) }
     try c.encode(execution, forKey: .execution)
     try c.encodeIfPresent(breach, forKey: .breach)

@@ -1,7 +1,7 @@
 import Foundation
 
 /// 回の記録の読み書き。時刻・契機・失敗は列に、回の履歴から数えられない残りは JSON に持ち、取った数と読んで捨てた数は読むときに
-/// 回の履歴から組む。
+/// 回の履歴から組む。回の記録の中身を組むのは読みのここだけで、確定も書いた記録を読み直して返す。
 extension AutomationDatabase {
   /// 回の記録を足して ID を返す。`carried` は回の履歴から数えられない捨てた数（持ち越し・読む前に期限で消えた数）。
   func insert(
@@ -97,15 +97,11 @@ extension AutomationDatabase {
       guard let reason = AutomationDrops.Reason(rawValue: how) else { return unknown }
       dropped.add(reason, count)
     }
-    let reads: Bool
-    switch stored.result {
-    case .process, .judge: reads = true
-    default: reads = !inputs.isEmpty
-    }
     return .known(
       AutomationPartRun(
         startedAt: columns.startedAt, endedAt: columns.endedAt, trigger: columns.trigger,
-        taken: reads ? inputs["taken"] ?? 0 : nil, dropped: dropped, execution: stored.execution,
+        taken: stored.reads ? inputs["taken"] ?? 0 : nil, dropped: dropped,
+        execution: stored.execution,
         breach: stored.breach, result: stored.result, withdrawn: stored.withdrawn,
         failure: failure))
   }
