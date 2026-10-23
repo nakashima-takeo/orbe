@@ -224,20 +224,20 @@ extension GitRepo {
     return essentialFailureReason(output.stdoutText)
   }
 
-  /// git の stderr から実質的な失敗理由を取り出す。成功・失敗どちらでも出る進捗風の行
+  /// git の出力（stderr、それが空なら stdout）から実質的な失敗理由を取り出す。成功・失敗どちらでも出る進捗風の行
   /// （`Preparing worktree (new branch 'issue/44')`・`--progress` の `Receiving objects: 42%`）を落とし、
-  /// `fatal:`／`error:` 行（複数あれば全て・改行結合）を返す。無ければ最終非空行、それも無ければ stderr 全文。
+  /// `fatal:`／`error:` 行（複数あれば全て・改行結合）を返す。無ければ最終非空行、それも無ければ全文。
   /// **`\r` でも行を割る**——`--progress` の進捗は `\r` 区切りで流れるので、`\n` だけで割ると進捗と
   /// `fatal:` が 1 行に融合して巨大な失敗理由になる。git stderr の癖はこの git ラッパー層に閉じる
   /// （`BranchParser` 等と同じく、git の出力を読む規則としてここに置く）。
-  static func essentialFailureReason(_ stderr: String) -> String {
+  static func essentialFailureReason(_ text: String) -> String {
     let lines =
-      stderr
+      text
       .split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r" })
       .map { $0.trimmingCharacters(in: .whitespaces) }
       .filter { !$0.isEmpty }
     let reasons = lines.filter { $0.contains("fatal:") || $0.contains("error:") }
     if !reasons.isEmpty { return reasons.joined(separator: "\n") }
-    return lines.last ?? stderr
+    return lines.last ?? text
   }
 }

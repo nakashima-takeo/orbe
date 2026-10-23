@@ -138,7 +138,7 @@ enum SettingsRegistry {
   /// agent-state-icons〔gui.conf 非経由〕→ worktree-dir〔同〕→
   /// notification-sound〔同〕→ notification-sound-volume〔同〕→ notification-sound-enabled〔同〕→
   /// notification-sound-custom-done / -waiting / -waiting-same-as-done〔いずれも同〕→
-  /// menubar-notification-duration〔同〕）。
+  /// menubar-notification-duration〔同〕→ scm-auto-fetch〔同〕）。
   /// `rootOrder`（表示順）とは別物——混同すると gui.conf のバイト順が崩れる。
   static let all: [SettingDescriptor] = [
     SettingDescriptor(
