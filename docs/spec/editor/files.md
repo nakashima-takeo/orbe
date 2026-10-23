@@ -1,7 +1,7 @@
 ---
 title: ファイルと git
 description: エディターの根・根のサービスの寿命・監視と通知・取り直し・status とバッジ・版の本文と baseline・git の書き込みの入口・一覧と新規作成・外部変更
-updated: 2026-10-18
+updated: 2026-10-24
 ---
 
 # ファイルと git
@@ -58,9 +58,9 @@ status はユーザーの設定に左右されない——未追跡の表示・s
 
 ## 版の本文と baseline
 
-版の本文は、その版の blob を**作業ツリーに出したときの中身**で、版ごと（パスと index / HEAD）に OID と状態——本文・その版に無い（index に無い・競合中で stage 0 が無い・初回コミット前の HEAD・ファイルでないもの）・UTF-8 でない・取れない——を 1 か所で持つ。開いている文書の baseline と diff の両側（→ [diff](diff.md)）は同じこの本文を引く——取り直しの規則（OID の守り・失敗の上限・smudge / LFS を通る回数）が割れない。
+版の本文は、その版の blob を**作業ツリーに出したときの中身**で、版ごと（パスと index / HEAD）に OID と状態——本文・サブモジュール（gitlink が指すコミット。本文は取らない）・その版に無い（index に無い・競合中で stage 0 が無い・初回コミット前の HEAD・ファイルでもサブモジュールでもないもの）・UTF-8 でない・取れない——を 1 か所で持つ。開いている文書の baseline と diff の両側（→ [diff](diff.md)）は同じこの本文を引く——取り直しの規則（OID の守り・失敗の上限・smudge / LFS を通る回数）が割れない。
 
-開いている文書の baseline は、index の版の状態が本文のときのその本文（ほかは baseline 無し）で、index の版を**作業ツリーに出したときの中身**——そのパスの属性で smudge filter と eol 変換を掛けた後の本文（textconv・外部 diff は通らない）。ガターは git の見方を映すものなので、底も git が clean と言う姿に揃える。`git add` / `git checkout` 等で index の blob が変われば追従し、変わらなければ取り直さない（OID で判定）。例外は取得が git の失敗で落ちたとき——前の baseline（古い index 版）を保ったまま、次の取り直しで同じ版をもう一度取りに行く（LFS のネットワークのような一時失敗を回復させる）。同じ版で 3 回失敗すれば「取れない」として諦め（baseline 無し）、index が別の版へ動くまで取り直さない（必須 filter の欠落のような恒久失敗で git を回し続けない）。取り直しの鍵が OID なので、`.gitattributes` や filter 設定の変更は index の blob が変わるまで baseline に映らない。作業ツリーの編集では変わらない。未追跡・非 git・index に無い・競合中（stage 0 が無い）・UTF-8 でないファイルは baseline 無し。smudge の実行コマンドは config 側にしか書けず、信頼できないリポジトリのコードが実行される面は checkout と同じ——きっかけがファイルを開くことである点だけが違う。
+開いている文書の baseline は、index の版の状態が本文のときのその本文（ほかは baseline 無し）で、index の版を**作業ツリーに出したときの中身**——そのパスの属性で smudge filter と eol 変換を掛けた後の本文（textconv・外部 diff は通らない）。ガターは git の見方を映すものなので、底も git が clean と言う姿に揃える。`git add` / `git checkout` 等で index の blob が変われば追従し、変わらなければ取り直さない（OID で判定）。例外は取得が git の失敗で落ちたとき——前の baseline（古い index 版）を保ったまま、次の取り直しで同じ版をもう一度取りに行く（LFS のネットワークのような一時失敗を回復させる）。同じ版で 3 回失敗すれば「取れない」として諦め（baseline 無し）、index が別の版へ動くまで取り直さない（必須 filter の欠落のような恒久失敗で git を回し続けない）。取り直しの鍵が OID なので、`.gitattributes` や filter 設定の変更は index の blob が変わるまで baseline に映らない。作業ツリーの編集では変わらない。未追跡・非 git・index に無い・競合中（stage 0 が無い）・UTF-8 でないファイルと、index の版がサブモジュールのパスは baseline 無し。smudge の実行コマンドは config 側にしか書けず、信頼できないリポジトリのコードが実行される面は checkout と同じ——きっかけがファイルを開くことである点だけが違う。
 
 文書は baseline と本文の行差分（ハンク）を持つ（→ [code](code.md)）。
 
