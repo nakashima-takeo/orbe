@@ -101,6 +101,26 @@ final class SourceControl {
     }
   }
 
+  /// 操作の 1 段目の終わり方。
+  enum FirstStepOutcome: Equatable {
+    case passed
+    /// 落ちた（走る前に止めた・断ったを含む）。コミットの段なら、index に何も書いていない。
+    case failed
+    /// コミットの段が、先にステージする行を index に書いた後で落ちた（ステージしたものは残る）。
+    case failedAfterStaging
+
+    init(_ failure: GitWriteFailure?) {
+      self = failure == nil ? .passed : .failed
+    }
+
+    init(_ commit: GitCommitOutcome) {
+      switch commit {
+      case .committed: self = .passed
+      case .failed(_, let stagedFirst): self = stagedFirst ? .failedAfterStaging : .failed
+      }
+    }
+  }
+
   /// 最後の失敗（どの操作の、なぜか）。止めた・管理外は記録しない。
   struct Failure: Equatable {
     let kind: Kind
@@ -136,27 +156,6 @@ final class SourceControl {
   private static var registry: [String: SourceControl] = [:]
 
   /// 根（正準形）の状態。無ければ作る。
-
-  /// 操作の 1 段目の終わり方。
-  enum FirstStepOutcome: Equatable {
-    case passed
-    /// 落ちた（走る前に止めた・断ったを含む）。コミットの段なら、index に何も書いていない。
-    case failed
-    /// コミットの段が、先にステージする行を index に書いた後で落ちた（ステージしたものは残る）。
-    case failedAfterStaging
-
-    init(_ failure: GitWriteFailure?) {
-      self = failure == nil ? .passed : .failed
-    }
-
-    init(_ commit: GitCommitOutcome) {
-      switch commit {
-      case .committed: self = .passed
-      case .failed(_, let stagedFirst): self = stagedFirst ? .failedAfterStaging : .failed
-      }
-    }
-  }
-
   static func shared(for root: String) -> SourceControl {
     if let live = registry[root] { return live }
     let control = SourceControl(root: root)
