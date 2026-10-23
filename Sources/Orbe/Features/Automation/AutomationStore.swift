@@ -138,7 +138,6 @@ import Observation
       memory.unreadable.removeAll { $0.id == id }
       try memory.withdraw(originatingIn: invalidated, db)
       try memory.forgetUnheld(db)
-      try memory.recountJudges(db, now: at)
     }
   }
 
@@ -177,7 +176,7 @@ import Observation
     try decide(try openIndex(proposalId), as: .dismissed, now: now)
   }
 
-  /// 人の判断を 1 件残す。
+  /// 人の判断を 1 件残す。判断待ちでなくなった候補は、どの自動化も持たなければ忘れる。
   private func decide(_ index: Int, as state: AutomationProposal.State, now: Date)
     throws(AutomationError)
   {
@@ -185,6 +184,7 @@ import Observation
     try commit(sweepingAt: at) { db, memory in
       try db.settle(memory.proposals[index].id, state, at: at)
       memory.proposals[index].state = state
+      try memory.forgetUnheld(db)
     }
   }
 
@@ -198,8 +198,9 @@ import Observation
 
   // MARK: - 書き込み
 
-  /// 変異の 1 経路。`body` はメモリの写しを進めながら、変わる行を DB に書く（1 トランザクション）。`sweepingAt` があれば最後に
-  /// 掃除し、判定の部品の持ち主を読み直す。通ったら写しをメモリにし、通らなければメモリは変わらない。壊れを見つけたら接続を手放してストアを使えなくする。
+  /// 変異の 1 経路。`body` はメモリの写しを進めながら、変わる行を DB に書く（1 トランザクション）。`sweepingAt`（変異の時刻）が
+  /// あれば、覚えている候補のリンクが変わったときに判定の部品の読めば取る行を数え直し（「既に候補がある」で捨てる行が変わる）、
+  /// 最後に掃除する。判定の部品の持ち主はいつも読み直す。通ったら写しをメモリにし、通らなければメモリは変わらない。壊れを見つけたら接続を手放してストアを使えなくする。
   /// 検証は呼ぶ前に済ませる（`body` が投げたものはどれも書けなかったことになる）。
   func commit<T>(
     sweepingAt sweep: Date?, _ body: (AutomationDatabase, inout AutomationMemory) throws -> T
@@ -210,8 +211,12 @@ import Observation
     let result: T
     do {
       result = try database.transaction {
+        let held = memory.heldLinks
         let result = try body(database, &memory)
-        if let sweep { try database.sweep(now: sweep, holding: holding) }
+        if let sweep {
+          if memory.heldLinks != held { try memory.recountJudges(database, now: sweep) }
+          try database.sweep(now: sweep, holding: holding)
+        }
         memory.judgeOwners = try database.judgeOwners()
         return result
       }

@@ -109,7 +109,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertEqual(task.due, TaskItem.DueDate("2025-10-10"))
     XCTAssertEqual(task.workspace, DesignSceneFixtures.taskWorkspaces.all[0].id, "付け先に付く")
     XCTAssertTrue(task.description.hasPrefix("https://example.slack.com/archives/D01-1\n\n"))
-    XCTAssertEqual(palette.automation.store.proposals[0].state, .accepted(taskId: task.id))
+    XCTAssertEqual(try palette.automation.store.decision(of: 1), .accepted(taskId: task.id))
     XCTAssertEqual(palette.automation.proposalIDs, [2, 3])
     XCTAssertEqual(palette.automation.proposalList.selectedID, 2)
     XCTAssertNil(palette.automation.error)
@@ -167,14 +167,14 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertEqual(palette.store.tasks.first?.workspace, TaskPaletteSamples.home)
   }
 
-  func testDismissMakesNoTaskAndSelectsTheSamePosition() {
+  func testDismissMakesNoTaskAndSelectsTheSamePosition() throws {
     let palette = listed()
     palette.automation.moveProposal(1)
 
     palette.automation.dismiss()
 
     XCTAssertEqual(palette.store.tasks.count, 1)
-    XCTAssertEqual(palette.automation.store.proposals[1].state, .dismissed)
+    XCTAssertEqual(try palette.automation.store.decision(of: 2), .dismissed)
     XCTAssertEqual(palette.automation.proposalIDs, [1, 3])
     XCTAssertEqual(palette.automation.proposalList.selectedID, 3)
   }

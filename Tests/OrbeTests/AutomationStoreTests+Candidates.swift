@@ -57,6 +57,24 @@ extension AutomationStoreTests {
     XCTAssertEqual(dismissed.map(\.why), [.originInvalidated])
   }
 
+  /// 人がさばいて誰も持たなくなった候補はその場で忘れ、同じリンクの行を待つ別の判定の読めば取る行をすぐ数え直す。
+  func testADecisionForgetsAnUnheldProposalAndRecountsTheOtherJudges() throws {
+    let store = AutomationStore()
+    let first = try store.create(Self.definition("一つ目", coverage: .newArrivals), now: Self.at).id
+    let a = Self.item("a")
+    try Self.fetch(store, first, [a])
+    try Self.judge(store, first, proposing: [a])
+    let second = try store.create(Self.definition("二つ目", coverage: .newArrivals), now: Self.at).id
+    try Self.fetch(store, second, [a])
+    XCTAssertEqual(
+      store.automation(second)?.state(key: "judge").pending.count, 0, "前提: 候補のあるリンクの行は数えない")
+
+    try store.dismiss(XCTUnwrap(store.proposals.first?.id), now: Self.at)
+
+    XCTAssertEqual(proposals(store), [:])
+    XCTAssertEqual(store.automation(second)?.state(key: "judge").pending.count, 1)
+  }
+
   /// 出どころが出来事の候補は、取得から消えても判定が対応済みにするまで残り、対応済みになれば（誰も持たないので）忘れる。
   func testANewArrivalsProposalStaysUntilTheJudgeResolvesIt() throws {
     let store = AutomationStore()

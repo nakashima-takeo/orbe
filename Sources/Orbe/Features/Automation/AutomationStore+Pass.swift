@@ -138,7 +138,7 @@ extension AutomationMemory {
     }
   }
 
-  /// 判定の部品の数を数え直す（覚えている候補が変わると「既に候補がある」で捨てる行が変わる）。
+  /// 判定の部品の数を数え直す（覚えている候補のリンクが変わると「既に候補がある」で捨てる行が変わる）。
   mutating func recountJudges(_ db: AutomationDatabase, now: Date) throws {
     for automation in automations where automation.judges {
       try recount(automation.id, db, now: now, parts: automation.graph.judges.map(\.id))

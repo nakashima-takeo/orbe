@@ -49,9 +49,6 @@ struct AutomationSettling {
     }
     if let decided { try apply(decided, run: recordId, &memory) }
     try finish(AutomationRunRecord(id: recordId, defId: end.defId, content: .known(run)), &memory)
-    if decided != nil || run.withdrawn != nil {
-      try memory.recountJudges(db, now: run.endedAt)
-    }
     return AutomationRecorded(changed: written.changed, run: run)
   }
 

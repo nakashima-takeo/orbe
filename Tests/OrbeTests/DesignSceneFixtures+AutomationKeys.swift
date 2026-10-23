@@ -33,6 +33,19 @@ extension AutomationStore {
     try read { try $0.lastSeqs(of: part(id, key)) }
   }
 
+  /// 候補への人の判断（DB の判断の記録から。判断の無い候補は nil。テスト）。判断した候補は、どの自動化も持たなければその場で
+  /// 忘れてメモリから外れるので、判断は記録から読む。
+  func decision(of proposal: Int) throws -> AutomationProposal.State? {
+    try read {
+      try $0.db.select(
+        "SELECT outcome, task_id FROM settlements WHERE proposal_id = ?",
+        [.integer(Int64(proposal))]
+      ) { s -> AutomationProposal.State in
+        s.text(at: 0) == "accepted" ? .accepted(taskId: s.int(at: 1)) : .dismissed
+      }.first
+    }
+  }
+
   /// 鍵で指した受け手の持ち越し（DB から。テスト）。
   func pendingDrops(_ id: Int, _ key: String) throws -> AutomationDrops {
     try read { try $0.pendingDrops(of: part(id, key)) }

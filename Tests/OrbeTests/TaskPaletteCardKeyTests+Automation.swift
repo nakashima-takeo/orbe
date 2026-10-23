@@ -48,7 +48,7 @@ extension TaskPaletteCardKeyTests {
   }
 
   /// x は文字として入り、⌘⌫ は文字があれば行頭まで消すだけ。空の入力欄の ⌘⌫ で選んだ候補を捨てる。↵ でタスクにする。
-  func testAutomationFieldTypesXAndCommandDeleteDismissesOnlyWhenEmpty() {
+  func testAutomationFieldTypesXAndCommandDeleteDismissesOnlyWhenEmpty() throws {
     let model = listedAutomationModel()
     let window = mount(model)
 
@@ -59,7 +59,7 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.automation.store.proposals.map(\.state), [.open, .open, .open])
 
     send(Key.delete, "\u{7F}", .command, to: window)
-    XCTAssertEqual(model.automation.store.proposals[0].state, .dismissed)
+    XCTAssertEqual(try model.automation.store.decision(of: 1), .dismissed)
     XCTAssertEqual(model.automation.proposalList.selectedID, 2)
 
     send(Key.enter, "\r", to: window)
@@ -111,8 +111,8 @@ extension TaskPaletteCardKeyTests {
     XCTAssertEqual(model.store.tasks.count, 2, "タスクは 1 つだけ")
     XCTAssertEqual(
       task.workspace, DesignSceneFixtures.taskWorkspaces.all[0].id, "↵ と同じく付け先に付く")
-    XCTAssertEqual(model.automation.store.proposals[0].state, .accepted(taskId: task.id))
-    XCTAssertEqual(model.automation.store.proposals[1].state, .open, "リピートで次の候補をさばかない")
+    XCTAssertEqual(try model.automation.store.decision(of: 1), .accepted(taskId: task.id))
+    XCTAssertNil(try model.automation.store.decision(of: 2), "リピートで次の候補をさばかない")
     XCTAssertEqual(opened, [task.id])
   }
 

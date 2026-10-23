@@ -76,7 +76,6 @@ extension AutomationStore {
       try memory.withdraw(originatingIn: invalidated + rewired.invalidated, db)
       try memory.forgetUnheld(db)
       try memory.recount(id, db, now: at)
-      try memory.recountJudges(db, now: at)
       return Replaced(
         automation: memory.automation(id) ?? automation, reworked: rewired.reworked,
         removed: removed)
