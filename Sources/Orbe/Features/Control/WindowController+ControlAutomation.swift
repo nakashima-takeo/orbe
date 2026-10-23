@@ -73,9 +73,7 @@ extension WindowController {
 
   func controlListAutomationProposals(automationId: Int?) -> Result<Any, ControlError> {
     automationResult { () throws(AutomationError) in
-      if let automationId, automationStore.automation(automationId) == nil {
-        throw .automationNotFound(automationId)
-      }
+      if let automationId { _ = try automationStore.index(automationId) }
       return ["proposals": proposalsJSON(of: automationId)]
     }
   }
