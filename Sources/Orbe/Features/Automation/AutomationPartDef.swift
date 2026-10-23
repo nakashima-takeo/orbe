@@ -75,6 +75,15 @@ struct AutomationPart: Equatable {
   }
 }
 
+extension AutomationPart {
+  /// 外の形の部品に、Orbe が振った ID と使う部品の定義を当てた実体。
+  init(_ part: AutomationDefinition.Part, id: AutomationPartID, defId: AutomationDefID) {
+    self.init(
+      id: id, key: part.key, name: part.name, trigger: part.trigger, maxItems: part.maxItems,
+      defId: defId)
+  }
+}
+
 /// 部品どうしのつながり（受け手の 1 つの入力）。受け手が取り方を持つ。
 struct AutomationPartEdge: Hashable {
   let from: AutomationPartID

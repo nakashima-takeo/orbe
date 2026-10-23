@@ -235,11 +235,11 @@ private struct AutomationParams {
     guard let raw = params["definition"] else {
       throw ControlError(code: -32602, message: "missing definition")
     }
-    guard raw is [String: Any] else {
+    guard let object = raw as? [String: Any] else {
       throw ControlError(code: -32602, message: "invalid definition")
     }
     do throws(AutomationError) {
-      return try AutomationDefinition.decode(raw)
+      return try AutomationDefinition.decode(object)
     } catch {
       throw ControlError(code: -32602, message: AutomationDatabase.reason(error))
     }

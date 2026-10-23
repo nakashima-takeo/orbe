@@ -88,7 +88,7 @@ import Observation
         let defId = try db.insert(action: item.part.action)
         let partId = try db.insertPart(
           of: id, at: position, item.part, defId: defId, addedAt: at)
-        entities.append(Self.entity(item.part, id: partId, defId: defId))
+        entities.append(AutomationPart(item.part, id: partId, defId: defId))
       }
       let graph = AutomationGraph(checked, parts: entities)
       for node in graph.nodes { try db.setEdges(of: id, to: node.id, node.inputs) }

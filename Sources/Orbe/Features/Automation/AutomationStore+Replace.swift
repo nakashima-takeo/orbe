@@ -93,7 +93,7 @@ extension AutomationStore {
       if let partId = item.part.id {
         try db.updatePart(partId, at: position, item.part, defId: defId)
       } else {
-        entities[position] = entity(
+        entities[position] = AutomationPart(
           item.part,
           id: try db.insertPart(of: id, at: position, item.part, defId: defId, addedAt: at),
           defId: defId)
@@ -109,7 +109,7 @@ extension AutomationStore {
       let previous = item.part.id.flatMap { old?.graph.node($0) }
       let same = previous.flatMap { $0.action == item.part.action ? $0.part.defId : nil }
       let defId = try same ?? db.insert(action: item.part.action)
-      return entity(item.part, id: item.part.id ?? AutomationPartID(0), defId: defId)
+      return AutomationPart(item.part, id: item.part.id ?? AutomationPartID(0), defId: defId)
     }
   }
 
@@ -172,13 +172,4 @@ extension AutomationStore {
       }
     }
   }
-
-  static func entity(
-    _ part: AutomationDefinition.Part, id: AutomationPartID, defId: AutomationDefID
-  ) -> AutomationPart {
-    AutomationPart(
-      id: id, key: part.key, name: part.name, trigger: part.trigger, maxItems: part.maxItems,
-      defId: defId)
-  }
-
 }

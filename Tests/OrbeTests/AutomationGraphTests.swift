@@ -11,7 +11,6 @@ final class AutomationGraphTests: OrbeTestCase {
   static let everyTenMinutes = AutomationPart.Trigger.scheduled(.every(600))
 
   /// 入力の無いコマンドの、取得の部品。
-  /// 入力の無いコマンドの、取得の部品。
   static func fetch(
     _ key: String, _ coverage: AutomationCoverage = .currentSet,
     trigger: AutomationPart.Trigger = everyTenMinutes

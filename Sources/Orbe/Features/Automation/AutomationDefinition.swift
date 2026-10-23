@@ -42,8 +42,7 @@ struct AutomationDefinition: Equatable, Codable {
   }
 
   /// JSON の値を定義として読む。読めない箇所を定義の中の場所（`parts[2].trigger` など）で言う。
-  static func decode(_ object: Any) throws(AutomationError) -> AutomationDefinition {
-    guard object is [String: Any] else { throw .invalid("definition: must be a JSON object") }
+  static func decode(_ object: [String: Any]) throws(AutomationError) -> AutomationDefinition {
     do {
       let data = try JSONSerialization.data(withJSONObject: object)
       return try AutomationWire.decoder.decode(AutomationDefinition.self, from: data)

@@ -73,7 +73,7 @@ extension AutomationDatabase {
     let graph = AutomationGraph(
       checked.parts,
       parts: zip(checked.parts, rows).map { checked, row in
-        AutomationStore.entity(checked.part, id: row.id, defId: row.defId)
+        AutomationPart(checked.part, id: row.id, defId: row.defId)
       })
     var states: [AutomationPartID: AutomationPartState] = [:]
     for part in rows { states[part.id] = try state(of: part.id) }
