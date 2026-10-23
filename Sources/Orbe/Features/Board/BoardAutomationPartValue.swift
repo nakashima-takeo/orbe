@@ -7,13 +7,8 @@ enum BoardSegmentLook: Equatable {
   case emphasized
 }
 
-/// 部品どうしの流れの向き（入力元は入ってくる、出力先は出ていく）。
-enum BoardFlowDirection: Equatable {
-  case incoming
-  case outgoing
-}
-
-/// 選んだ部品のカードの値。地図に出さない部品の中身（手段・モデル・ツール・指示文・保存・取り方・上限・制限時間・場所・回の記録）を
+/// 選んだ部品のカードの値。地図に出さない部品の中身（手段・モデル・ツール・指示文・保存・取り方・上限・制限時間・作業ディレクトリ・
+/// 回の記録）を
 /// 出すのはここだけ。
 struct BoardAutomationPartValue: Equatable {
   let id: AutomationPartID
@@ -22,7 +17,8 @@ struct BoardAutomationPartValue: Equatable {
   let running: Bool
   /// 頭の印。まだ動いていなければ nil。
   let mark: BoardRunMark?
-  /// 実行・ツール・予定・保存・入力元・出力先・未処理・制限時間・場所・次回の順。部品に無い項目は出さない。
+  /// 実行方法・ツール・トリガー・保存・入力元・出力先・未処理・制限時間・作業ディレクトリ・次回の順。部品に無い項目は出さない。
+  /// 出力先は部品の外の行き場所（タスク候補・報告の出し先など）だけで、後ろの部品へ渡す取得・処理には出さない。
   let facts: [Fact]
   /// 指示文かコマンド。
   let body: String
@@ -32,10 +28,10 @@ struct BoardAutomationPartValue: Equatable {
   /// この部品の実行履歴（新しい順）。
   let runs: [BoardRunLine]
 
-  /// 項目 1 つ。値は見え方の違う切れの並び（「8 件」＋「上限なし」）。部品どうしをつなぐ入力元・出力先は頭に向きの矢印を置く。
+  /// 項目 1 つ。値は見え方の違う切れの並び（「8 件」＋「上限なし」）。入力元は頭に向きの矢印を置く。
   struct Fact: Equatable {
     let label: L10nKey
-    let flow: BoardFlowDirection?
+    let incoming: Bool
     let value: [Segment]
   }
 
@@ -48,7 +44,7 @@ struct BoardAutomationPartValue: Equatable {
   struct Breach: Equatable {
     /// 「出力の形式エラー · 16:30 · 2 件」。
     let heading: String
-    /// 「3 件目：link が無い」（最初の数件）。
+    /// 「3 件目：link がありません」（最初の数件）。
     let lines: [String]
     /// 結果の一言。
     let outcome: String
@@ -122,37 +118,36 @@ extension BoardAutomationPartValue {
     let state = automation.state(node.id)
     let separator = l10n.string(.automationListSeparator)
     var facts: [Fact] = []
-    func fact(_ label: L10nKey, _ value: String, flow: BoardFlowDirection? = nil) {
-      facts.append(Fact(label: label, flow: flow, value: [Segment(text: value, look: .plain)]))
+    func fact(_ label: L10nKey, _ value: String, incoming: Bool = false) {
+      facts.append(
+        Fact(label: label, incoming: incoming, value: [Segment(text: value, look: .plain)]))
     }
     switch action.method {
     case .agent(let agent):
       fact(
-        .boardPartRun,
+        .boardPartMethod,
         l10n.format(.boardPartAgent, agent.cli, node.model ?? l10n.string(.boardPartDefaultModel)))
       if !agent.tools.isEmpty {
         fact(.boardPartTools, tools(agent.tools, l10n).joined(separator: separator))
       }
     case .command:
-      fact(.boardPartRun, l10n.string(.boardOutputCommand))
+      fact(.boardPartMethod, l10n.string(.boardPartMethodCommand))
     }
-    fact(.boardPartSchedule, text.schedule(part.trigger))
+    fact(.boardPartTrigger, text.schedule(part.trigger))
     if let coverage = node.coverage {
       fact(.boardPartSaving, self.coverage(coverage, of: node, state, text))
     }
     if !node.inputs.isEmpty {
       fact(
         .boardPartFrom,
-        node.inputs.map { input(graph, $0, l10n) }.joined(separator: separator), flow: .incoming)
+        node.inputs.map { input(graph, $0, l10n) }.joined(separator: separator), incoming: true)
     }
     switch action.destination {
-    case .nextPart:
-      fact(
-        .boardPartTo, graph.downstream(of: node.id).map(\.part.name).joined(separator: separator),
-        flow: .outgoing)
-    case .taskCandidates: fact(.boardPartTo, l10n.format(.boardPartTaskCandidates, open))
-    case .report: fact(.boardPartTo, BoardAutomationDetailValue.reports(automation.notify, l10n))
-    case .sideEffect: fact(.boardPartTo, l10n.string(.boardPartNothing))
+    case .nextPart: break
+    case .taskCandidates: fact(.boardPartDestination, l10n.format(.boardPartTaskCandidates, open))
+    case .report:
+      fact(.boardPartDestination, BoardAutomationDetailValue.reports(automation.notify, l10n))
+    case .sideEffect: fact(.boardPartDestination, l10n.string(.boardPartNothing))
     }
     if !node.inputs.isEmpty { facts.append(pending(state.pending, maxItems: part.maxItems, l10n)) }
     fact(.boardPartTimeout, l10n.format(.boardPartMinutes, node.timeoutMinutes))
@@ -199,7 +194,7 @@ extension BoardAutomationPartValue {
     return name
   }
 
-  /// 入力 1 つ（「取得」「取得（毎回すべて・24 時間まで）」）。
+  /// 入力 1 つ（「取得」「取得（毎回全件・24 時間以内）」）。
   private static func input(
     _ graph: AutomationGraph, _ edge: AutomationPartEdge, _ l10n: LocalizationStore
   ) -> String {
@@ -235,7 +230,7 @@ extension BoardAutomationPartValue {
     _ pending: AutomationPending, maxItems: Int?, _ l10n: LocalizationStore
   ) -> Fact {
     Fact(
-      label: .boardPending, flow: nil,
+      label: .boardPending, incoming: false,
       value: [
         Segment(
           text: l10n.format(.boardPartCount, pending.count),
@@ -244,7 +239,7 @@ extension BoardAutomationPartValue {
       ])
   }
 
-  /// 1 回に取る件数の上限（「30 件を超えた古い分は捨てる」「上限なし」）。古さの上限は入力ごとに入力元へ添える。
+  /// 1 回に取る件数の上限（「上限 30 件（超過分は古い順に破棄）」「上限なし」）。古さの上限は入力ごとに入力元へ添える。
   private static func limit(_ maxItems: Int?, _ l10n: LocalizationStore) -> String {
     maxItems.map { l10n.format(.boardPartLimitItems, $0) } ?? l10n.string(.boardPartNoLimit)
   }

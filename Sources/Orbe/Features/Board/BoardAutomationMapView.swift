@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 詳細の「地図」。部品を入力の深さ順に 1 行ずつ縦に並べ、左の溝に入力のつながりを線で描き、続けて行き先の行を並べる。行は
+/// 詳細の「地図」。部品を入力の深さ順に 1 行ずつ縦に並べ、左の溝に入力のつながりを線で描き、続けて出力先の行を並べる。行は
 /// 溝・役割・名前と予定の札と入力・未処理・前回（成否の印・時刻・量）。最新の回が失敗した部品は、行の下に理由の行を足す（溝の
 /// 線は途切れずに続く）。地図に居る間は選ばれている部品の行に濃い地を敷く。部品の行のクリックはその部品を選ぶ。線の割り当ても
 /// 行の文言も読み替えが解いた値で、ここは描くだけ。
@@ -125,7 +125,7 @@ struct BoardMapRowView: View {
         .fixedSize()
       }
       if let inputs = part.inputs {
-        (BoardFlowDirection.incoming.lead
+        (Text.boardIncomingLead
           + fontResolver.text(inputs, base: Theme.Typography.codeSmall))
           .font(Font.theme.codeSmall)
           .foregroundStyle(Color.theme.textMuted)
@@ -144,7 +144,7 @@ struct BoardMapRowView: View {
       .frame(width: Self.lastWidth, alignment: .trailing)
   }
 
-  /// 前回の列（成否の印・時刻・量）。まだ動いていなければ「まだ」。
+  /// 前回の列（成否の印・時刻・量）。まだ動いていなければ「未実行」。
   @ViewBuilder private func last(_ last: BoardMapPart.Last?) -> some View {
     HStack(spacing: 7) {
       if let last {
@@ -323,10 +323,9 @@ enum BoardRunColors {
   }
 }
 
-extension BoardFlowDirection {
-  /// 部品の名前の頭に置く向きの矢印と空き（`codeSmall` の文に混ぜる）。
-  var lead: Text {
-    let arrow: MarkGlyphKind = self == .incoming ? .arrowLeft : .arrowRight
-    return arrow.inline(Theme.Typography.codeSmall) + Text(verbatim: " ")
+extension Text {
+  /// 入力元の部品の名前の頭に置く向きの矢印と空き（`codeSmall` の文に混ぜる）。
+  static var boardIncomingLead: Text {
+    MarkGlyphKind.arrowLeft.inline(Theme.Typography.codeSmall) + Text(verbatim: " ")
   }
 }

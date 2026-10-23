@@ -53,7 +53,7 @@ struct AutomationText {
     }
   }
 
-  /// 部品の予定（「30分ごと」「平日 9:00」「手動」「前の部品に連動」）。
+  /// 部品の予定（「30分ごと」「平日 9:00」「手動」「入力元に連動」）。
   func schedule(_ trigger: AutomationPart.Trigger) -> String {
     switch trigger {
     case .scheduled(let timing): when(timing)

@@ -234,7 +234,7 @@ extension WindowController {
         return .failure(
           ControlError(
             code: -32000,
-            message: "automation \(id) is still flowing; wait until its parts finish"))
+            message: "automation \(id) is still running; wait until its parts finish"))
       case .unavailable(let message):
         return .failure(ControlError(code: -32000, message: message))
       case .trialNotFound(let id):

@@ -33,7 +33,7 @@ struct BoardMapPart: Equatable {
     let mark: BoardRunMark
     /// 「16:40」「昨日 23:00」。
     let at: String
-    /// 「新着 2 件」「1 件を次へ」「候補 2 件」「失敗」。報告・作業・外部操作は量を言わない。
+    /// 「新着 2 件」「1 件を出力」「候補 2 件」「失敗」。報告・作業・外部操作は量を言わない。
     let amount: (text: String, shade: BoardRunShade)?
 
     static func == (a: Last, b: Last) -> Bool {
@@ -60,13 +60,13 @@ struct BoardMapLanes: Equatable {
   var continuing: [Int] { (through + (below ? [node] : [])).sorted() }
 }
 
-/// 地図の 1 行。部品の行に続けて、行き先の行（タスク候補・報告の出し先。その行き先の部品がある分だけ）が並ぶ。
+/// 地図の 1 行。部品の行に続けて、出力先の行（タスク候補・報告の出し先。その出力先の部品がある分だけ）が並ぶ。
 struct BoardMapRow: Equatable {
   enum Content: Equatable {
     case part(BoardMapPart)
     /// `open` はこの自動化の棚に出ている判断待ちの候補の数。
     case taskCandidates(open: Int)
-    /// 報告と作業の文の出し先（「メニューバーに出す」）。
+    /// 報告と作業の文の出し先（「メニューバー」）。
     case reports(String)
   }
 
@@ -79,7 +79,7 @@ struct BoardMapRow: Equatable {
 struct BoardAutomationDetailValue: Equatable {
   /// 「通知：メニューバー」。
   let notify: String
-  /// 「次回 16:50」「手動」。止めていれば nil（見出しは停止中を出す）。
+  /// 「次回 16:50」「手動」。止めていれば nil（見出しは一時停止中を出す）。
   let next: String?
   /// 直近の回の区分（全部品を混ぜた新しい `stripLength` 回。古い回が左）。
   let strip: [BoardRunTone]
@@ -139,12 +139,12 @@ extension BoardAutomationDetailValue {
     strip = automation.runs.prefix(Self.stripLength).reversed().map(BoardAutomationSummary.tone)
   }
 
-  /// 報告と作業の文の出し先（「メニューバーに出す」）。役割の名前（報告・作業）は使わない。
+  /// 報告と作業の文の出し先（「メニューバー」）。役割の名前（報告・作業）は使わない。
   static func reports(_ notify: AutomationNotify?, _ l10n: LocalizationStore) -> String {
     switch notify {
-    case .menuBar: l10n.string(.boardDestMenuBar)
-    case .notificationCenter: l10n.string(.boardDestNotificationCenter)
-    case nil: l10n.string(.boardDestBoard)
+    case .menuBar: l10n.string(.boardOutputMenuBar)
+    case .notificationCenter: l10n.string(.boardOutputNotificationCenter)
+    case nil: l10n.string(.boardOutputBoard)
     }
   }
 
@@ -177,7 +177,7 @@ extension BoardAutomationDetailValue {
       failure: latest?.run.flatMap { text.failure($0, node: node) })
   }
 
-  /// 行き先の行の鍵（部品の鍵は空でないので、空の鍵と区切りの文字は部品と重ならない）。
+  /// 出力先の行の鍵（部品の鍵は空でないので、空の鍵と区切りの文字は部品と重ならない）。
   private static let taskCandidatesKey = "\u{0}taskCandidates"
   private static let reportsKey = "\u{0}reports"
 }
