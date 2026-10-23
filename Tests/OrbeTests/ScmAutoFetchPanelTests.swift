@@ -69,8 +69,18 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     let repo = try TempGitRepo()
     repo.addOrigin()
     let script = TestScratch.caseDir.appendingPathComponent("denied-ssh.sh").path
-    try "#!/bin/sh\necho 'git@example.invalid: Permission denied (publickey).' >&2\nexit 255\n"
-      .write(toFile: script, atomically: true, encoding: .utf8)
+    let log = TestScratch.caseDir.appendingPathComponent("ssh-attempts").path
+    // 撃った回数は remote へ繋ぎにいった数。git が ssh の種類を確かめる `-G` は繋がないので数えない。
+    try """
+    #!/bin/sh
+    [ "$1" = -G ] || echo attempt >> '\(log)'
+    echo 'git@example.invalid: Permission denied (publickey).' >&2
+    exit 255
+
+    """.write(toFile: script, atomically: true, encoding: .utf8)
+    let attempts = {
+      ((try? String(contentsOfFile: log, encoding: .utf8)) ?? "").split(separator: "\n").count
+    }
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script)
     XCTAssertTrue(repo.git(["config", "core.sshCommand", script]).isSuccess)
     XCTAssertTrue(
@@ -89,20 +99,21 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     panel.isLive = true
     pumpMain(until: { autoFetch.rules.isWanted }, "面がまた見える")
     RunLoop.main.run(until: Date().addingTimeInterval(1))
-    XCTAssertEqual(autoFetch.rules.blocks, 1, "値が同じなら止まったまま")
+    XCTAssertEqual(attempts(), 1, "値が同じなら止まったまま撃たない")
 
     panel.isLive = false
     XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "pushed"]).isSuccess)
     XCTAssertTrue(repo.git(["update-ref", "refs/remotes/origin/main", "HEAD"]).isSuccess)
     panel.isLive = true
     pumpMain(
-      until: { autoFetch.rules.blocks == 2 && autoFetch.rules.refsAtBlock != nil }, timeout: 20,
+      until: { attempts() == 2 && autoFetch.rules.isBlocked && autoFetch.rules.refsAtBlock != nil },
+      timeout: 20,
       "再開した裏の fetch が撃つ（また認証で止まる）")
 
     XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "pushed again"]).isSuccess)
     XCTAssertTrue(repo.git(["update-ref", "refs/remotes/origin/main", "HEAD"]).isSuccess)
     pumpMain(
-      until: { autoFetch.rules.blocks == 3 }, timeout: 20, "面が見えている間に ref が動いた知らせでも再開する")
+      until: { attempts() == 3 }, timeout: 20, "面が見えている間に ref が動いた知らせでも再開する")
   }
 
   /// 出しているパネルで裏の fetch を走らせる。止めても終わりが遅れるように、ref を書く hook の最初の 1 回を、SIGTERM を

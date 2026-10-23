@@ -150,7 +150,10 @@ final class ScmAutoFetchRulesTests: OrbeTestCase {
     stale.backgroundDidStart()
     stale.backgroundDidFinish(.authentication, at: at(2))
     stale.refsAtBlockWereRead(["refs/remotes/origin/main": "c"], block: earlier)
-    XCTAssertNil(stale.refsAtBlock, "前の止まりのときに読んだ値は基準にしない")
+    XCTAssertFalse(
+      stale.refsWereRead(["refs/remotes/origin/main": "d"], block: stale.blocks),
+      "前の止まりのときに読んだ値は基準にしない")
+    stale.refsAtBlockWereRead(["refs/remotes/origin/main": "c"], block: stale.blocks)
     XCTAssertFalse(stale.refsWereRead(["refs/remotes/origin/main": "d"], block: earlier))
     XCTAssertTrue(stale.isBlocked, "前の止まりの間に読み始めた値では解けない")
   }
