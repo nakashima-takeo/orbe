@@ -184,7 +184,7 @@ final class SourceControlPaneTests: OrbeTestCase {
   }
 
   /// 欄は中身の行に合わせてその場で伸び縮みする——打鍵の改行で 1 行ずつ伸び、外からの差し替えでも中身に合い、空にすれば
-  /// 1 行の 26 に戻る。
+  /// 1 行の 26 に戻る。折り返す文は、サイドバーを狭める・広げる・戻すのどれでも、その幅で組んだ行の高さに合う。
   func testTheMessageGrowsAndShrinksWithItsLines() throws {
     let hosted = host(try TempGitRepo())
     let field = try type("a", in: hosted)
@@ -207,6 +207,23 @@ final class SourceControlPaneTests: OrbeTestCase {
     hosted.scm.control.message = ""
     pumpMain(until: { field.string.isEmpty }, "空にする")
     XCTAssertEqual(height(), Theme.Layout.editorScmMessage, accuracy: 0.5, "1 行に戻る")
+
+    let wrapping = String(repeating: "word ", count: 30)
+    hosted.scm.control.message = wrapping
+    pumpMain(until: { field.string == wrapping }, "折り返す文")
+    func wrappedHeight() -> CGFloat {
+      let layout = field.layoutManager!
+      layout.ensureLayout(for: field.textContainer!)
+      return layout.usedRect(for: field.textContainer!).height + Theme.Layout.editorScmMessage
+        - line
+    }
+    var heights: [CGFloat] = []
+    for width in [200, 400, 240] as [CGFloat] {
+      hosted.pane.sidebar.setWidth(width)
+      pumpMain(until: { abs(height() - wrappedHeight()) < 0.5 }, "幅 \(width) の行に合う")
+      heights.append(height())
+    }
+    XCTAssertEqual(Set(heights).count, 3, "前提: 幅ごとに行の数が違う \(heights)")
   }
 
   /// 欄は 10 行で止まり、その先は中がスクロールして、打った行とキャレットが見えるように送られる。スクロールバーは字の幅を

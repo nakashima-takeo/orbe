@@ -126,6 +126,8 @@ final class ScmMessageTextView: NSTextView {
   private var interpreting: NSEvent?
   /// 手で組んだ文字の系の根（テキスト面はこれを持たないので、自分で持つ）。
   private var storage: NSTextStorage?
+  /// 高さの問いだけに使う組み（同じ文字の系に足した 2 つ目のレイアウト。表示の組みに触れずに、問われた幅で組む）。
+  private var measuring: NSTextContainer?
 
   private static let font = Theme.Typography.editorScmMessage
   private static let leading: CGFloat = 8
@@ -133,14 +135,20 @@ final class ScmMessageTextView: NSTextView {
 
   convenience init() {
     let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
-    container.widthTracksTextView = true
+    container.widthTracksTextView = false
     container.lineFragmentPadding = 0
     let layout = NSLayoutManager()
     layout.addTextContainer(container)
     let storage = NSTextStorage()
     storage.addLayoutManager(layout)
+    let measuring = NSTextContainer(size: .zero)
+    measuring.lineFragmentPadding = 0
+    let measuringLayout = NSLayoutManager()
+    measuringLayout.addTextContainer(measuring)
+    storage.addLayoutManager(measuringLayout)
     self.init(frame: .zero, textContainer: container)
     self.storage = storage
+    self.measuring = measuring
     font = Self.font
     textColor = Theme.Color.textPrimary
     insertionPointColor = Theme.Color.accentPrimary
@@ -159,18 +167,17 @@ final class ScmMessageTextView: NSTextView {
   }
 
   /// 1 行の高さ。
-  private static var lineHeight: CGFloat { NSLayoutManager().defaultLineHeight(for: font) }
+  private static let lineHeight = NSLayoutManager().defaultLineHeight(for: font)
 
   /// 1 行のときに見本の 26 になる上下の余白。
-  private static var verticalInset: CGFloat {
-    (Theme.Layout.editorScmMessage - lineHeight) / 2
-  }
+  private static let verticalInset = (Theme.Layout.editorScmMessage - lineHeight) / 2
 
   /// 行の左右の余白（見本 padding 0 5 0 8。テキストコンテナの左右は同じ余白しか持てないので、左はコンテナの原点で動かす）。
   override var textContainerOrigin: NSPoint {
     NSPoint(x: Self.leading, y: super.textContainerOrigin.y)
   }
 
+  /// 表示の組みの幅の持ち主はテキスト面の枠だけ（高さの問いは別の組みで答える）。
   override func setFrameSize(_ newSize: NSSize) {
     super.setFrameSize(newSize)
     textContainer?.containerSize = NSSize(
@@ -178,19 +185,18 @@ final class ScmMessageTextView: NSTextView {
       height: CGFloat.greatestFiniteMagnitude)
   }
 
-  /// 幅 `width` で中身が収まる高さ（`maxLines` 行まで）。
+  /// 幅 `width` で中身が収まる高さ（`maxLines` 行まで）。表示の組みには触れず、問われた幅だけで決まる。組むのは `maxLines`
+  /// 行の分まで（長い貼り付けでも、問いのたびに全文を組まない）。
   func fittingHeight(width: CGFloat, maxLines: Int) -> CGFloat {
-    let inset = Self.verticalInset * 2
-    guard let container = textContainer, let layout = layoutManager else {
+    let limit = Self.lineHeight * CGFloat(maxLines)
+    guard let measuring, let layout = measuring.layoutManager else {
       return Theme.Layout.editorScmMessage
     }
-    let available = max(0, width - Self.leading - Self.trailing)
-    if container.containerSize.width != available {
-      container.containerSize = NSSize(width: available, height: .greatestFiniteMagnitude)
-    }
-    layout.ensureLayout(for: container)
-    let used = max(layout.usedRect(for: container).height, Self.lineHeight)
-    return min(used, Self.lineHeight * CGFloat(maxLines)) + inset
+    let size = NSSize(width: max(0, width - Self.leading - Self.trailing), height: limit)
+    if measuring.containerSize != size { measuring.containerSize = size }
+    layout.ensureLayout(for: measuring)
+    let used = max(layout.usedRect(for: measuring).height, Self.lineHeight)
+    return min(used, limit) + Self.verticalInset * 2
   }
 
   override func viewDidMoveToWindow() {
