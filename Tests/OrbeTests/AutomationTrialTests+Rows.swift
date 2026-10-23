@@ -61,7 +61,7 @@ extension AutomationTrialTests {
     guard let index = agents().first, case .agent(let call) = jobs.calls[index].job.work else {
       return XCTFail("p の agent が呼ばれていない")
     }
-    let session = try XCTUnwrap(call.orbe.flatMap { runner.runData.session($0.token) })
+    let session = try XCTUnwrap(call.orbe.flatMap { runner.runSessions.session($0.token) })
     let page = session.call("read_run_rows", [:]).texts.last ?? ""
     XCTAssertEqual(
       page.split(separator: "\n").compactMap { AutomationPrompts.id(of: String($0)) },

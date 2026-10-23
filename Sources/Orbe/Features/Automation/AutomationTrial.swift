@@ -205,7 +205,7 @@ final class AutomationTrial {
     }
     guard !targets.isEmpty else { return finish(completed: true) }
     let runner = AutomationRunner(
-      store: store, run: source.run, runData: source.runData, workspaces: source.workspaces,
+      store: store, run: source.run, runSessions: source.runSessions, workspaces: source.workspaces,
       recorded: { [weak self] in self?.recorded($0) }, defined: { _ in }, deleted: { _ in },
       admits: { $0 == id && admitted.contains($1) },
       flowEnded: { [weak self] _, flow in self?.flowEnded(flow) })

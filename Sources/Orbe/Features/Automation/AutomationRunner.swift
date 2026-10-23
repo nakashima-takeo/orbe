@@ -28,7 +28,7 @@ import Observation
   let scheduler: BackgroundScheduler
   let run: BackgroundScheduler.Run
   /// 行を見る agent に、その回の行を Orbe の MCP で渡す帳面（試走の走らせ役も同じものを使う）。
-  let runData: AutomationRunData
+  let runSessions: AutomationRunSessions
   let workspaces: () -> AutomationWorkspaces
   private let recorded: (AutomationPassRecord) -> Void
   private let defined: (Int) -> Void
@@ -54,7 +54,7 @@ import Observation
   init(
     store: AutomationStore, scheduler: BackgroundScheduler = BackgroundScheduler(),
     run: @escaping BackgroundScheduler.Run = { BackgroundRuns.shared.run($0, completion: $1) },
-    runData: AutomationRunData = AutomationRunData(),
+    runSessions: AutomationRunSessions = AutomationRunSessions(),
     workspaces: @escaping () -> AutomationWorkspaces,
     recorded: @escaping (AutomationPassRecord) -> Void, defined: @escaping (Int) -> Void,
     deleted: @escaping (Int) -> Void,
@@ -64,7 +64,7 @@ import Observation
     self.store = store
     self.scheduler = scheduler
     self.run = run
-    self.runData = runData
+    self.runSessions = runSessions
     self.workspaces = workspaces
     self.recorded = recorded
     self.defined = defined
@@ -318,7 +318,7 @@ extension AutomationRunner {
         $0.taken.map(\.ref) + $0.dropped.map(\.row.ref) + $0.taken.compactMap(\.origin?.row)
       } ?? []
     let defId = node.part.defId
-    let pass = AutomationPartPass(run: run, now: now, calendar: calendar, runData: runData)
+    let pass = AutomationPartPass(run: run, now: now, calendar: calendar, runSessions: runSessions)
     trigger.current = pass.start(node, input) { [weak self] outcome in
       guard let self, !trigger.cancelled else { return }
       ended(trigger, defId, read, startedAt, outcome)

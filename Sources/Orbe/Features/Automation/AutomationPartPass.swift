@@ -14,7 +14,7 @@ struct AutomationPartPass {
   let now: () -> Date
   let calendar: () -> Calendar
   /// agent の回の相手を Orbe の MCP へ渡す帳面。
-  let runData: AutomationRunData
+  let runSessions: AutomationRunSessions
 
   /// 部品の役割の入力。ケースが役割と 1 対 1 に対応し、役割と食い違う入力は呼び手の誤り。取得と仕事のケースは行の席を
   /// 持たない——外から届いた文面を、ツールを持ちうる agent の依頼文へ型の上で運ばないため。
@@ -121,8 +121,8 @@ struct AutomationPartPass {
     case .agent(let agent):
       guard let model = node.model else { preconditionFailure("an agent part has a model") }
       let session = AutomationRunSession(input)
-      let runData = self.runData
-      let token = runData.open(session)
+      let runSessions = self.runSessions
+      let token = runSessions.open(session)
       let job = BackgroundJob(
         work: .agent(
           BackgroundAgentCall(
@@ -134,13 +134,13 @@ struct AutomationPartPass {
           elapsed: elapsed, idle: nil, output: BackgroundLimits.agent.output,
           stderr: BackgroundLimits.agent.stderr))
       handle = run(job) { result in
-        runData.close(token)
+        runSessions.close(token)
         guard !stopped else { return }
         completion(Self.agentEnded(result, session))
       }
       return BackgroundRunHandle {
         stopped = true
-        runData.close(token)
+        runSessions.close(token)
         handle.stop()
       }
     }

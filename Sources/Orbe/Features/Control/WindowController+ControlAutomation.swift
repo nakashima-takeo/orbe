@@ -122,7 +122,7 @@ extension WindowController {
   func controlRunTool(token: String, name: String, arguments: [String: Any]) -> Result<
     Any, ControlError
   > {
-    guard let session = automationRunner.runData.session(token) else {
+    guard let session = automationRunner.runSessions.session(token) else {
       return .failure(ControlError(code: -32004, message: "run not found (it has ended)"))
     }
     let reply = session.call(name, arguments)

@@ -7,7 +7,7 @@ class AutomationPartPassTestCase: OrbeTestCase {
   static let tool = AutomationGraphTests.tool
   let now = Date(timeIntervalSince1970: 1_800_000_000)
   var jobs: FakeJobs!
-  var runData: AutomationRunData!
+  var runSessions: AutomationRunSessions!
   var pass: AutomationPartPass!
   var outcomes: [AutomationPartPass.Outcome] = []
   /// 最後に起こした部品の鍵（失敗の英文を組む）。
@@ -15,10 +15,10 @@ class AutomationPartPassTestCase: OrbeTestCase {
 
   override func setUp() {
     jobs = FakeJobs()
-    runData = AutomationRunData()
+    runSessions = AutomationRunSessions()
     pass = AutomationPartPass(
       run: jobs.run, now: { [unowned self] in now },
-      calendar: { Calendar(identifier: .gregorian) }, runData: runData)
+      calendar: { Calendar(identifier: .gregorian) }, runSessions: runSessions)
   }
 
   @discardableResult
@@ -76,24 +76,20 @@ class AutomationPartPassTestCase: OrbeTestCase {
       }.joined(separator: "\n"))
   }
 
-  /// `took` は上限の時計で走った長さ。
-  func replied(_ text: String, took seconds: TimeInterval = 0, isError: Bool = false)
-    -> BackgroundRunResult
-  {
+  func replied(_ text: String, isError: Bool = false) -> BackgroundRunResult {
     BackgroundRunResult(
-      commandLine: "claude -p", startedAt: now, endedAt: now.addingTimeInterval(seconds),
-      elapsed: seconds, ending: .exited(0),
+      commandLine: "claude -p", startedAt: now, endedAt: now, elapsed: 0, ending: .exited(0),
       output: .agent(reply: BackgroundAgentReply(text: text, isError: isError), stderr: .init()))
   }
 
   /// agent の CLI が最終応答を返して終わった（結果は道具で受けているので、応答の文は読まない）。
-  func done(took seconds: TimeInterval = 0) -> BackgroundRunResult {
-    replied("done", took: seconds)
+  func done() -> BackgroundRunResult {
+    replied("done")
   }
 
   /// 呼び出し `index` の agent の回の相手（回が終わっていれば nil）。
   func session(_ index: Int) -> AutomationRunSession? {
-    agentCall(index)?.orbe.flatMap { runData.session($0.token) }
+    agentCall(index)?.orbe.flatMap { runSessions.session($0.token) }
   }
 
   /// 呼び出し `index` の agent が、その回の道具を呼ぶ。

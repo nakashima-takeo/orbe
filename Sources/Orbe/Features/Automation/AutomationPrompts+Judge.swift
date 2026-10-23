@@ -6,8 +6,7 @@ extension AutomationPrompts {
   /// だけの回も、何も無い回ではない。
   static func judge(instruction: String, count: Int, now: Date, timeZone: TimeZone) -> String {
     """
-    You decide which incoming items should become tasks on the user's task list. Use only Orbe's tools named \
-    below; you have no other tools.
+    You decide which incoming items should become tasks on the user's task list. \(orbeToolsOnly)
 
     Now: \(local(now, timeZone)), time zone \(timeZone.identifier).
 

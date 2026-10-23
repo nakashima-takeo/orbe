@@ -10,12 +10,12 @@ import XCTest
 extension BackgroundRunsTests {
   func testTheRunsMCPServerReachesItsRunThroughTheBundledBridge() throws {
     let control = try startControlProcess()
-    let runData = control.target.automationRunner.runData
+    let runSessions = control.target.automationRunner.runSessions
     let rows = ["a", "b"].map {
       AutomationPartRow(id: $0, text: #"{"id":"\#($0)"}"#, origin: nil, source: nil)
     }
     let session = AutomationRunSession(.process(rows, reachesJudge: false))
-    let token = runData.open(session)
+    let token = runSessions.open(session)
     try placeClaude(#"echo '{"type":"result","is_error":false,"result":"done"}'"#)
     let job = BackgroundJob.agent(
       BackgroundAgentCall(
@@ -43,7 +43,7 @@ extension BackgroundRunsTests {
     XCTAssertEqual(replies[4]["isError"] as? Bool, false)
     XCTAssertEqual(session.outputs.count, 1, "受けた結果が回の相手に届く")
 
-    runData.close(token)
+    runSessions.close(token)
     let ended = bridge(
       server, [("tools/call", ["name": "report_nothing", "arguments": ["why": "x"]])])
     XCTAssertEqual(ended.first?["isError"] as? Bool, true, "終わった回の札は断られる")

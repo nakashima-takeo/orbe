@@ -42,7 +42,7 @@ enum AutomationPrompts {
   // MARK: - 行を見る部品
 
   /// 行を見る agent の道具の 1 文。
-  private static let orbeToolsOnly = "Use only Orbe's tools named below; you have no other tools."
+  static let orbeToolsOnly = "Use only Orbe's tools named below; you have no other tools."
 
   /// 入力の言い方——件数と読み方だけで、行の中身は載せない。
   static func input(_ count: Int) -> String {

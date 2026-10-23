@@ -69,7 +69,7 @@ final class AutomationPartPassPromptTests: AutomationPartPassTestCase {
     jobs.finish(0, done())
 
     XCTAssertNotNil(succeeded, "\(outcomes)")
-    XCTAssertNil(runData.session(token))
+    XCTAssertNil(runSessions.session(token))
   }
 
   func testFetchPromptTellsTheAgentNotToFollowWhatItReads() throws {

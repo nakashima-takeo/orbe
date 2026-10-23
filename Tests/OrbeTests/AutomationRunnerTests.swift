@@ -294,7 +294,7 @@ final class AutomationRunnerTests: OrbeTestCase {
     advance(by: 86400 - 1800)
     let index = try XCTUnwrap(agentCalls.first)
     guard case .agent(let call) = jobs.calls[index].job.work,
-      let session = call.orbe.flatMap({ runner.runData.session($0.token) })
+      let session = call.orbe.flatMap({ runner.runSessions.session($0.token) })
     else { return XCTFail("判定の回の口が無い") }
     var offset: Int? = 0
     while let next = offset {
