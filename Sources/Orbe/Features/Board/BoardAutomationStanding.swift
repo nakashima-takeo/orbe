@@ -45,10 +45,6 @@ extension BoardAutomationStanding {
     name ?? l10n.format(.boardAutomationNumbered, id)
   }
 
-  static func name(of broken: AutomationUnreadable, _ l10n: LocalizationStore) -> String {
-    broken.name ?? l10n.format(.boardAutomationNumbered, broken.id)
-  }
-
   /// 定義を読めない自動化。動かないので走らない。
   init(_ broken: AutomationUnreadable) {
     self.init(

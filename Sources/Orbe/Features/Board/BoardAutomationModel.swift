@@ -286,7 +286,7 @@ import SwiftUI
   func draftFixOfUnreadable(l10n: LocalizationStore) {
     guard let broken = selectedUnreadable else { return }
     draft(
-      l10n.format(.boardAskFixAutomationDraft, BoardAutomationStanding.name(of: broken, l10n))
+      l10n.format(.boardAskFixAutomationDraft, BoardAutomationStanding(broken).title(l10n))
         + broken.reason)
   }
 
