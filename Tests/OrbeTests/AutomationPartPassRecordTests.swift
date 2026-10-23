@@ -11,7 +11,7 @@ final class AutomationPartPassRecordTests: AutomationPartPassTestCase {
   /// 取得は今回取れた全項目を数える（前回の出力にあって下流へ渡さない項目も）。
   func testFetchCountsEveryItemItRead() {
     start(
-      AutomationGraphTests.fetch("f"), .fetch(.currentSet), .fetch(since: nil))
+      AutomationGraphTests.fetch("f"), .fetch, .fetch(since: nil))
 
     jobs.finish(0, fetched(["a", "b"]))
 

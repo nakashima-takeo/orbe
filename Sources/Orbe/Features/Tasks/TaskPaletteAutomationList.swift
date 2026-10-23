@@ -111,7 +111,7 @@ struct TaskPaletteAutomationList: View {
         proposed, one: .taskPaletteAutomationProposedCountOne,
         other: .taskPaletteAutomationProposedCountOther)
     } else {
-      result = l10n.string(.taskPaletteAutomationNoProposals)
+      result = l10n.string(.automationNoProposals)
     }
     return text.stamp(run.startedAt) + " " + node.part.name + "\u{3000}" + result
   }

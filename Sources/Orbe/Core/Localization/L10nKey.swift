@@ -348,7 +348,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAutomationPlaceholder
   case taskPaletteAutomationAll
   case taskPaletteAutomationAskBoard
-  case taskPaletteAutomationNoProposals
   case taskPaletteAutomationRefreshing
   case taskPaletteAutomationLastJudge
   case taskPaletteAutomationNeverJudged
@@ -356,7 +355,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAutomationProposedCountOther
   case taskPaletteAutomationReason
   case taskPaletteAutomationProposedBy
-  case taskPaletteAutomationFieldWorkspace
   case taskPaletteAutomationFieldDue
   case taskPaletteAutomationFieldLink
   case taskPaletteAutomationHintCandidates
@@ -365,11 +363,10 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationFailedWith
   case taskPaletteAutomationEmpty
   case taskPaletteAutomationOpenLink
-  case taskPaletteAutomationAsTask
+  case taskPaletteAutomationTaskContent
   case taskPaletteAutomationDismiss
   case taskPaletteAutomationActionProposals
   case taskPaletteAutomationActionRefresh
-  case taskPaletteAutomationHintShelf
   case taskPaletteAutomationHintPick
   case taskPaletteAutomationHintProposals
   case taskPaletteAutomationErrAccept
@@ -397,7 +394,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationResume
   case automationDelete
   case automationErrRunning
-  case automationFlowHere
+  case automationFlowToSelected
+  case automationHintToList
   case automationRoleFetch
   case automationRoleProcess
   case automationRoleJudge
@@ -412,7 +410,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationBreachFailed
   case automationYesterday
   case automationWithOriginal
-  case automationFailureExcerpt
+  case automationLabeled
   case automationEndExited
   case automationEndSignaled
   case automationEndTimeLimit
@@ -427,7 +425,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationFailNotUTF8
   case automationFailAgentError
   case automationFailReported
-  case automationFailBrokeRules
+  case automationFormatError
+  case automationNoProposals
   case automationFailUnreadInput
   case automationFailNoResult
   case automationFailUnsourced
@@ -629,7 +628,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardAutomationEmpty
   case boardAutomationFlow
   case boardOutputTaskCandidates
-  case boardOutputCommand
+  case boardPartMethodCommand
   case boardNotifyTitle
   case boardNotifyOff
   case boardNotifyMenuBar
@@ -641,27 +640,24 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardRecentRuns
   case boardMapPartsOne
   case boardMapPartsOther
-  case boardMapPending
   case boardMapLast
-  case boardMapFresh
-  case boardMapPassed
+  case boardMapOutput
   case boardMapProposed
-  case boardMapNoProposals
   case boardMapFailed
   case boardMapNever
   case boardMapDestination
   case boardMapOpen
-  case boardMapFormatError
-  case boardDestMenuBar
-  case boardDestNotificationCenter
-  case boardDestBoard
-  case boardPartRun
+  case boardOutputMenuBar
+  case boardOutputNotificationCenter
+  case boardOutputBoard
+  case boardPartMethod
   case boardPartTools
-  case boardPartSchedule
-  case boardPartTake
+  case boardPartTrigger
+  case boardPartSaving
   case boardPartFrom
-  case boardPartTo
-  case boardPartPending
+  case boardPartDestination
+  case boardPending
+  case boardFresh
   case boardPartTimeout
   case boardPartDirectory
   case boardPartNext
@@ -669,9 +665,9 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardPartDefaultModel
   case boardPartToolMCP
   case boardPartToolCommand
-  case boardPartNewSince
-  case boardPartNewOnly
-  case boardPartCurrentSet
+  case boardPartOverwrite
+  case boardPartAppend
+  case boardPartAppendSince
   case boardPartTakeAll
   case boardPartMaxAge
   case boardPartTaskCandidates
@@ -690,9 +686,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardPartAskFix
   case boardAskFixDraft
   case boardAskFixAutomationDraft
-  case boardRunFresh
   case boardRunNothingNew
-  case boardRunPassed
+  case boardRunOutput
   case boardRunJudgedOne
   case boardRunJudgedOther
   case boardRunJudgedNoneOne
@@ -715,7 +710,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardAutomationNumbered
   case boardRunAsideSeparator
   case boardHintSelect
-  case boardHintToList
   case boardHintChoose
   case boardHintBack
   case boardHintParts

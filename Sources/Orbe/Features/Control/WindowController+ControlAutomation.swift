@@ -48,9 +48,8 @@ extension WindowController {
         of: automationId, part: partKey, before: before, limit: limit)
       var json: [String: Any] = [
         "runs": page.runs.map { run -> [String: Any] in
-          let key = page.keys[run.part] ?? "\(run.part)"
-          var object = AutomationRunWire.object(run.record, part: key)
-          object["partKey"] = key
+          var object = AutomationRunWire.object(run.record, part: run.key)
+          object["partKey"] = run.key
           return object
         }
       ]
@@ -95,7 +94,7 @@ extension WindowController {
       if let reason = proposal.reason { json["reason"] = reason }
       // 出した自動化と部品の鍵は組で出す——棚の自動化（`automationId`）と別のことがあり、鍵だけでは取り違える。出した自動化が
       // 消えた後は、指す先が無いので出さない。部品は今の鍵で言い、外れていれば出さない。
-      if let issuer = proposal.automationId.flatMap(automationStore.automation) {
+      if let issuer = automationStore.issuer(of: proposal) {
         var by: [String: Any] = ["automationId": issuer.id]
         if let judge = issuer.graph.node(proposal.judge) { by["partKey"] = judge.key }
         if let source = issuer.graph.node(proposal.source) { by["sourcePartKey"] = source.key }
@@ -161,8 +160,8 @@ extension WindowController {
     }
   }
 
-  /// 定義（部品に `id` を添えた外の形）と版に、止めているか・部品の今の鍵ごとの状態（走っているか・最新の回・次の時刻・最後に
-  /// 回った時刻・読めば取る行の数・決まりを外した印）を足す。判定の部品を持つ自動化にだけタスク候補の欄を付ける。
+  /// 定義（部品に `id` を添えた外の形）と版に、止めているか・部品の今の鍵ごとの状態（走っているか・最新の回・次の時刻・読めば
+  /// 取る行の数・決まりを外した印）を足す。判定の部品を持つ自動化にだけタスク候補の欄を付ける。
   private func automationJSON(_ automation: Automation) -> [String: Any] {
     var parts: [String: Any] = [:]
     for node in automation.graph.nodes {
@@ -174,9 +173,8 @@ extension WindowController {
       if let next = automationRunner.nextRunAt(automation, part: node.id) {
         part["nextRunAt"] = SessionEvent.iso8601(next)
       }
-      if let last = state.lastRunAt { part["lastRunAt"] = SessionEvent.iso8601(last) }
-      if !node.inputs.isEmpty { part["inbox"] = state.inbox }
-      if let breach = state.breach { part["breach"] = AutomationRunWire.object(breach) }
+      if !node.inputs.isEmpty { part["pending"] = state.pending.count }
+      if let breach = state.breach { part["breach"] = AutomationRunWire.breach(breach) }
       parts[node.key] = part
     }
     var json: [String: Any] = [
@@ -236,7 +234,7 @@ extension WindowController {
         return .failure(
           ControlError(
             code: -32000,
-            message: "automation \(id) is still flowing; wait until its parts finish"))
+            message: "automation \(id) is still running; wait until its parts finish"))
       case .unavailable(let message):
         return .failure(ControlError(code: -32000, message: message))
       case .trialNotFound(let id):

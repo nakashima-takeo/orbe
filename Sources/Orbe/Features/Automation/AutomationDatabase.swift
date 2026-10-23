@@ -8,7 +8,7 @@ import Foundation
 final class AutomationDatabase {
   struct Opened {
     let database: AutomationDatabase
-    let snapshot: AutomationSnapshot
+    let memory: AutomationMemory
   }
 
   let db: SQLiteDatabase
@@ -139,10 +139,44 @@ final class AutomationDatabase {
       [run.map { .integer(Int64($0)) } ?? .null, .integer(Int64(id.rawValue))])
   }
 
+  /// 受け手として回の無い契機（取る行 0 件）で捨てた・期限で消えたと数え、次の成功した回の記録へ持ち越す数。読めなければ空と
+  /// して扱う（ログに残す）。
+  func pendingDrops(of id: AutomationPartID) throws -> AutomationDrops {
+    let raw =
+      try db.select(
+        "SELECT pending_drops FROM parts WHERE id = ?", [.integer(Int64(id.rawValue))]
+      ) { $0.text(at: 0) }.first ?? nil
+    guard let drops = Self.decode(AutomationDrops.self, raw) else {
+      NSLog("[automation] dropped unreadable carried counts of part \(id)")
+      return AutomationDrops()
+    }
+    return drops
+  }
+
   func setPendingDrops(_ id: AutomationPartID, _ drops: AutomationDrops) throws {
     try db.run(
       "UPDATE parts SET pending_drops = ? WHERE id = ?",
       [.text(try Self.encode(drops)), .integer(Int64(id.rawValue))])
+  }
+
+  /// 部品の自分の状態（直近の回・最新の成功・外した印・今有効な項目のリンク）。起動時も変化の後も、メモリの部品の状態はここから
+  /// 読み直す。読めば取る行は数えない（`AutomationMemory.recount`）。
+  func state(of id: AutomationPartID) throws -> AutomationPartState {
+    let part: [SQLiteValue] = [.integer(Int64(id.rawValue))]
+    guard
+      let addedAt = try db.select(
+        "SELECT added_at FROM parts WHERE id = ?", part, { $0.int64(at: 0) }
+      )
+      .first
+    else {
+      throw AutomationError.unavailable("part \(id) is missing from the database")
+    }
+    var state = AutomationPartState(addedAt: AutomationPersistence.date(addedAt))
+    state.runs = try records(of: [id], limit: AutomationPartState.retainedRuns).map(\.record)
+    state.succeededAt = try succeededAt(of: id)
+    state.breach = try breachRecord(of: id)
+    state.liveLinks = try liveLinks(of: id)
+    return state
   }
 
   // MARK: - つながり

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// 提案タブの右の詳細。選ばれている候補の出どころ（自動化の名前・取得の部品の名前・時刻）・本文の全体・リンク、タスクにしたとき
-/// のタイトル・期限・付け先、「タスクにする」「タスクにして開く」「捨てる」のボタン。選ばれている候補が無ければ空。ボタンは欄の
+/// のタイトル・期限・workspace、「タスクにする」「タスクにして開く」「却下」のボタン。選ばれている候補が無ければ空。ボタンは欄の
 /// 下端に置いてスクロールさせない——さばくキーの案内はここにしか無いので、本文が長くても隠さないため。収まらない中身だけが
 /// スクロールする。
 struct TaskPaletteAutomationDetail: View {
@@ -53,7 +53,7 @@ struct TaskPaletteAutomationDetail: View {
     quote(proposal)
       .padding(.top, Theme.Space.beat)
     if let reason = proposal.reason { why(reason, proposal) }
-    Text(l10n.string(.taskPaletteAutomationAsTask))
+    Text(l10n.string(.taskPaletteAutomationTaskContent))
       .font(Font.theme.meta)
       .foregroundStyle(Color.theme.textMuted)
       .padding(.top, Theme.Space.bar)
@@ -66,7 +66,7 @@ struct TaskPaletteAutomationDetail: View {
       .padding(.top, Theme.Space.step)
   }
 
-  /// 「候補にした理由」と、出した判定と時刻。
+  /// 「提案の理由」と、出した判定と時刻。
   private func why(_ reason: String, _ proposal: AutomationProposal) -> some View {
     VStack(alignment: .leading, spacing: Theme.Space.tick) {
       Text(l10n.string(.taskPaletteAutomationReason))
@@ -91,13 +91,12 @@ struct TaskPaletteAutomationDetail: View {
     .padding(.top, 14)
   }
 
-  /// 付け先・期限・リンク。名前は描くときの今の workspace で解く。
+  /// workspace・期限・リンク。名前は描くときの今の workspace で解く。
   private func fields(_ proposal: AutomationProposal) -> some View {
     Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 3) {
       field(
-        .taskPaletteAutomationFieldWorkspace,
-        l10n.string(.taskPaletteFieldWorkspace) + " "
-          + (model.destination(of: proposal)?.name ?? l10n.string(.taskPaletteNoWorkspace)))
+        .taskPaletteFieldWorkspace,
+        model.destination(of: proposal)?.name ?? l10n.string(.taskPaletteNoWorkspace))
       if let due = proposal.due {
         field(
           .taskPaletteAutomationFieldDue,

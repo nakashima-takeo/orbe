@@ -1,7 +1,7 @@
 import Foundation
 
 /// 自動化 1 つの立ち位置——走っているか・止めているか・最後の回が失敗した部品があるか——を 1 回だけ導いた値。並びの群と名前の
-/// 右の状態はここから読む（同じ判定が並び・状態に散ると、優先順位が 1 か所だけずれる）。状態（実行中・停止中）と前回の結果
+/// 右の状態はここから読む（同じ判定が並び・状態に散ると、優先順位が 1 か所だけずれる）。状態（実行中・一時停止中）と前回の結果
 /// （成否の印）は混ぜない。自動化そのものは持たない。
 struct BoardAutomationStanding: Equatable, Identifiable {
   let id: Int
@@ -10,8 +10,6 @@ struct BoardAutomationStanding: Equatable, Identifiable {
   let paused: Bool
   /// どれかの部品が走っているか、流している途中か（部品と部品の間も含む）。
   let running: Bool
-  /// `now` から見て次に予定で回る時刻。止めていれば nil。
-  let next: Date?
   /// 最後の回が失敗した部品があるか。
   let failing: Bool
   /// 定義を読めない理由（定義を読めない自動化だけ）。
@@ -51,17 +49,17 @@ extension BoardAutomationStanding {
     broken.name ?? l10n.format(.boardAutomationNumbered, broken.id)
   }
 
-  /// 定義を読めない自動化。動かないので、走らず予定も無い。
+  /// 定義を読めない自動化。動かないので走らない。
   init(_ broken: AutomationUnreadable) {
     self.init(
-      id: broken.id, name: broken.name, paused: false, running: false, next: nil, failing: false,
+      id: broken.id, name: broken.name, paused: false, running: false, failing: false,
       unreadable: broken.reason)
   }
 
-  init(_ automation: Automation, runner: AutomationRunner, now: Date) {
+  init(_ automation: Automation, runner: AutomationRunner) {
     self.init(
       id: automation.id, name: automation.name, paused: automation.paused,
       running: runner.isRunning(automation.id) || runner.isFlowing(automation.id),
-      next: runner.nextRunAt(automation, now: now), failing: automation.failing)
+      failing: automation.failing)
   }
 }

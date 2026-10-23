@@ -7,13 +7,13 @@ import XCTest
 ///
 /// 壊れると何が起きるか: 書き換えで取得が前回の出力と目印を失い、全件を新着として流す。失敗の知らせが黙って出なくなる。止めた
 /// 回や再起動の後のやり直しで副作用のコマンドに別の回の ID が渡り、同じ回を二度実行する。候補のあるリンクの行で agent が無駄に
-/// 起き、捨てる行が溜まりに残り続ける。壊れた DB に書き続ける。
+/// 起き、捨てる行が読めば取る行に残り続ける。壊れた DB に書き続ける。
 extension AutomationRunnerTests {
   // MARK: - 書き換え
 
   /// 書き換えは、何をするかが変わった部品の走っている回だけを止めて結果を捨てる。名前だけの書き換えでは走っている回が最後
-  /// まで走って確定する。どちらでも溜まりは残る。
-  func testRewritingStopsOnlyAPartWhoseWorkChangedAndKeepsTheInbox() throws {
+  /// まで走って確定する。どちらでも読めば取る行は残る。
+  func testRewritingStopsOnlyAPartWhoseWorkChangedAndKeepsThePendingRows() throws {
     func definition(_ name: String, gh script: String) -> AutomationDefinition {
       AutomationDefinition(
         name: name, notify: nil,
@@ -39,9 +39,9 @@ extension AutomationRunnerTests {
     jobs.finish(running, fetched(["a", "b", "c"]))
 
     XCTAssertEqual(store.automation(id)?.state(key: "gh").runs.count, 2, "止めた回の結果は確定しない")
-    XCTAssertEqual(inbox("judge", of: id), 2)
+    XCTAssertEqual(pending("judge", of: id), 2)
     let gh = try XCTUnwrap(store.automation(id)?.state(key: "gh"))
-    XCTAssertEqual(gh.lastEventSeq, 2, "出した行は残る")
+    XCTAssertEqual(try store.lastSeqs(id, "gh").event, 2, "出した行は残る")
     XCTAssertEqual(gh.succeededAt, start.addingTimeInterval(3600), "前回成功の目印は残る")
   }
 
@@ -102,7 +102,7 @@ extension AutomationRunnerTests {
     let before = calls("post --v2").count
     advance(by: 60)
     launch()
-    XCTAssertEqual(calls("post --v2").count, before + 1, "前提: 起動で溜まりの行をやり直す")
+    XCTAssertEqual(calls("post --v2").count, before + 1, "前提: 起動で読めば取る行をやり直す")
     XCTAssertEqual(runId("post --v2"), second, "再起動の後のやり直しも同じ ID")
     XCTAssertTrue(second.hasPrefix("\(id)-\(post)-"), "部品は ID で言う（鍵を変えても変わらない）")
   }
@@ -124,13 +124,13 @@ extension AutomationRunnerTests {
       #"{"id":"a2","link":"https://example.com/a","body":"a の続き","#
       + #""time":"2026-10-10T09:00:00Z"}"#
     finish("gh", printed([item("a"), sameLink].joined(separator: "\n")))
-    XCTAssertEqual(inbox("judge", of: id), 0, "候補のあるリンクの行は、読めば捨てるので数えない")
+    XCTAssertEqual(pending("judge", of: id), 0, "候補のあるリンクの行は、読めば捨てるので数えない")
 
     advance(by: 3600)
     XCTAssertEqual(calls("judge").count, 1, "取る行が無ければ手段を起こさない")
     XCTAssertEqual(store.automation(id)?.state(key: "judge").runs.count, 1, "記録も残さない")
     XCTAssertEqual(
-      store.automation(id)?.state(key: "judge").pendingDrops.counts, [.proposed: 1],
+      try store.pendingDrops(id, "judge").counts, [.proposed: 1],
       "捨てた数は持ち越す")
 
     finish("gh", printed([item("a"), sameLink, item("b")].joined(separator: "\n")))

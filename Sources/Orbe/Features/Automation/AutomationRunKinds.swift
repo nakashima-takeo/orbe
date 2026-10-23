@@ -21,10 +21,6 @@ enum AutomationEnding: Equatable {
   case notStarted(String)
   /// 指定した MCP のツールが始まりの時点で揃わなかった（揃わなかった名前）。
   case toolsUnavailable([String])
-  /// 試走が止めた副作用・作業（手段を起こしていない）。
-  case heldByTrial
-  /// 試走が外から与えた行を取得の出力にした（手段を起こしていない）。
-  case givenToTrial
 
   init(_ ending: BackgroundEnding) {
     switch ending {
@@ -54,8 +50,6 @@ enum AutomationEnding: Equatable {
     case .directoryMissing(let directory): "not started (directory missing: \(directory))"
     case .notStarted(let reason): "not started (\(reason))"
     case .toolsUnavailable(let tools): BackgroundEnding.unavailable(tools)
-    case .heldByTrial: "held by the trial"
-    case .givenToTrial: "rows given to the trial"
     }
   }
 }
@@ -78,8 +72,8 @@ enum AutomationFailure: Error, Equatable {
   case unreadInput(Int)
   /// agent が結果の道具も申告も一度も呼ばずに終わった。
   case noResult
-  /// 判定（鍵）へ渡す行が、どれも出どころを持たなかった。
-  case unsourced(String)
+  /// 判定へ渡す行が、どれも出どころを持たなかった。
+  case unsourced
 
   /// AI が読む英文。`part` はこの回の部品の鍵。
   func text(part: String, ending: AutomationEnding, breach: AutomationRejections?) -> String {
@@ -100,8 +94,9 @@ enum AutomationFailure: Error, Equatable {
         "the \(word) ended without reading \(count) of its input \(count == 1 ? "item" : "items")"
     case .noResult:
       return "the \(word) ended without giving a result"
-    case .unsourced(let target):
-      return "no row passed to part \"\(target)\" has an origin (it did not come from a fetch part)"
+    case .unsourced:
+      return
+        "the rows of \(word) reach a judge part, but none has an origin (none came from a fetch part)"
     }
   }
 }
@@ -225,8 +220,6 @@ extension AutomationEnding: Codable {
       self = .directoryMissing(try c.decode(String.self, forKey: .directory))
     case "notStarted": self = .notStarted(try c.decode(String.self, forKey: .reason))
     case "toolsUnavailable": self = .toolsUnavailable(try c.decode([String].self, forKey: .tools))
-    case "heldByTrial": self = .heldByTrial
-    case "givenToTrial": self = .givenToTrial
     default:
       throw DecodingError.dataCorruptedError(
         forKey: .kind, in: c, debugDescription: "unknown ending kind")
@@ -258,8 +251,6 @@ extension AutomationEnding: Codable {
     case .toolsUnavailable(let tools):
       try c.encode("toolsUnavailable", forKey: .kind)
       try c.encode(tools, forKey: .tools)
-    case .heldByTrial: try c.encode("heldByTrial", forKey: .kind)
-    case .givenToTrial: try c.encode("givenToTrial", forKey: .kind)
     }
   }
 }
@@ -267,7 +258,7 @@ extension AutomationEnding: Codable {
 /// `{"kind": "ended", "detail"?: "…"}` の形。空の抜粋は書かない。
 extension AutomationFailure: Codable {
   private enum CodingKeys: String, CodingKey {
-    case kind, detail, text, part, count
+    case kind, detail, text, count
   }
 
   init(from decoder: Decoder) throws {
@@ -282,7 +273,7 @@ extension AutomationFailure: Codable {
     case "brokeRules": self = .brokeRules
     case "unreadInput": self = .unreadInput(try c.decode(Int.self, forKey: .count))
     case "noResult": self = .noResult
-    case "unsourced": self = .unsourced(try c.decode(String.self, forKey: .part))
+    case "unsourced": self = .unsourced
     default:
       throw DecodingError.dataCorruptedError(
         forKey: .kind, in: c, debugDescription: "unknown failure kind")
@@ -310,9 +301,7 @@ extension AutomationFailure: Codable {
       try c.encode("unreadInput", forKey: .kind)
       try c.encode(count, forKey: .count)
     case .noResult: try c.encode("noResult", forKey: .kind)
-    case .unsourced(let part):
-      try c.encode("unsourced", forKey: .kind)
-      try c.encode(part, forKey: .part)
+    case .unsourced: try c.encode("unsourced", forKey: .kind)
     }
   }
 }

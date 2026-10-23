@@ -18,7 +18,7 @@ final class BoardAutomationUnreadableTests: OrbeTestCase {
   /// 依頼の欄に書き出し、⌘⌫ で消せる。流す・止める ⇄ 再開は効かない。
   func testAnUnreadableAutomationIsListedWithItsReasonAndCanOnlyBeFixedOrDeleted() throws {
     let model = model()
-    let first = try XCTUnwrap(model.standings(at: model.runner.now()).first)
+    let first = try XCTUnwrap(model.standings.first)
     XCTAssertEqual(first.id, 2)
     XCTAssertEqual(first.name, "GitHub: レビュー依頼")
     XCTAssertEqual(first.unreadable?.hasPrefix("invalid parts[1].instruction"), true)
@@ -59,6 +59,6 @@ final class BoardAutomationUnreadableTests: OrbeTestCase {
 
     guard case .run(let entry) = card.runs.first else { return XCTFail("\(card.runs)") }
     XCTAssertEqual(entry.at, "14:45")
-    XCTAssertEqual(entry.result, "成功（記録を読めない）")
+    XCTAssertEqual(entry.result, "成功（記録を読み込めません）")
   }
 }

@@ -46,17 +46,17 @@ final class AutomationTextTests: OrbeTestCase {
   func testFailureSaysTheKindWithTheOriginal() {
     XCTAssertEqual(
       text.failure(failed(.ended(detail: ""), ending: .timeLimit), node: Self.judge),
-      #"制限時間内に終わらなかった（the part "dev" ended: stopped at the time limit）"#)
+      #"制限時間を超過（the part "dev" ended: stopped at the time limit）"#)
     XCTAssertEqual(
       text.failure(failed(.ended(detail: "boom"), ending: .exited(1)), node: Self.judge),
-      #"終了コード 1 で終わった（the part "dev" ended: exited 1: boom）"#)
+      #"終了コード 1 で終了（the part "dev" ended: exited 1: boom）"#)
     XCTAssertEqual(
       text.failure(failed(.reported("Slack に届かない"), ending: .exited(0)), node: Self.judge),
-      "部品が失敗を申告した：Slack に届かない")
+      "部品が失敗を報告：Slack に届かない")
     XCTAssertEqual(
       Self.automationText(.en).failure(
         failed(.ended(detail: ""), ending: .timeLimit), node: Self.judge),
-      "didn’t finish within the time limit")
+      "time limit exceeded")
     XCTAssertEqual(
       Self.automationText(.en).failure(
         failed(.ended(detail: "boom"), ending: .exited(1)), node: Self.judge),
@@ -68,20 +68,21 @@ final class AutomationTextTests: OrbeTestCase {
     ])
     XCTAssertEqual(
       Self.automationText(.en).failure(broke, node: Self.judge),
-      "output format error: item 2: not JSON", "最初の外れた件")
+      "output format error: item 2: not valid JSON", "最初の外れた件")
     XCTAssertEqual(
       text.failure(failed(.unreadInput(2), ending: .exited(0)), node: Self.judge),
-      "入力の読み残し 2 件（the part \"dev\" ended without reading 2 of its input items）")
+      "入力 2 件を読まずに終了（the part \"dev\" ended without reading 2 of its input items）")
     XCTAssertEqual(
       text.failure(failed(.noResult, ending: .exited(0)), node: Self.judge),
-      "結果なし（the part \"dev\" ended without giving a result）")
+      "結果を渡さずに終了（the part \"dev\" ended without giving a result）")
   }
 
   /// 外れた件は「n 件目：<説明>」。
   func testBrokenLine() {
     XCTAssertEqual(
-      text.line(AutomationBrokenLine(line: 3, fault: .missingKey("link"))), "3 件目：link が無い")
-    XCTAssertEqual(text.line(AutomationBrokenLine(line: 5, fault: .notJSON)), "5 件目：JSON として読めない")
+      text.line(AutomationBrokenLine(line: 3, fault: .missingKey("link"))), "3 件目：link がありません")
+    XCTAssertEqual(
+      text.line(AutomationBrokenLine(line: 5, fault: .notJSON)), "5 件目：JSON として解析できません")
   }
 
   /// 一覧の時刻は、今日なら時刻だけ、昨日なら「昨日」、ほかは日付付き。

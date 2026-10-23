@@ -7,21 +7,15 @@ struct AutomationSettling {
   /// 自動化のメモリの位置。
   let index: Int
   let db: AutomationDatabase
-  var state: AutomationPartState
   /// 回の履歴から数えられない捨てた数（持ち越し・読む前に期限で消えた数）。
   private var carried = AutomationDrops()
   private var written = AutomationDatabase.Written()
-  private var outputs: [AutomationDatabase.Output] = []
 
-  init(
-    end: AutomationPassEnd, node: AutomationGraph.Node, index: Int, db: AutomationDatabase,
-    state: AutomationPartState
-  ) {
+  init(end: AutomationPassEnd, node: AutomationGraph.Node, index: Int, db: AutomationDatabase) {
     self.end = end
     self.node = node
     self.index = index
     self.db = db
-    self.state = state
   }
 
   /// 確定する。成功した回は読んだ位置を進めて持ち越しを載せ、役割ごとの結果を書く。どちらの回も記録・回の履歴・外した印を書く。
@@ -38,7 +32,7 @@ struct AutomationSettling {
       }
     }
     var dropped = carried
-    for drop in end.read?.dropped ?? [] { dropped.add(.init(drop.reason)) }
+    for drop in end.read?.dropped ?? [] { dropped.add(drop.reason) }
     run.dropped = dropped
     let decided = judged.map { decide($0.proposals, $0.resolved, memory) }
     if let decided {
@@ -51,24 +45,24 @@ struct AutomationSettling {
     if let read = end.read {
       try db.insertInputs(
         of: recordId,
-        read.taken.map { ($0.ref, "taken") } + read.dropped.map { ($0.row.ref, $0.reason.how) })
+        read.taken.map { ($0.ref, "taken") } + read.dropped.map { ($0.row.ref, $0.reason.rawValue) }
+      )
     }
     if let decided { try apply(decided, run: recordId, &memory) }
     try finish(AutomationRunRecord(id: recordId, defId: end.defId, content: .known(run)), &memory)
     if decided != nil || run.withdrawn != nil {
       try memory.recountJudges(db, now: run.endedAt)
     }
-    return AutomationRecorded(changed: written.changed, run: run, outputs: recordedOutputs())
+    return AutomationRecorded(changed: written.changed, run: run)
   }
 
   /// 読んだ位置を進め、持ち越しを回の記録へ移す。
   private mutating func consume() throws {
     guard let read = end.read else { return }
     try db.advance(end.part, read.reach)
-    carried.add(state.pendingDrops)
+    carried.add(try db.pendingDrops(of: end.part))
     carried.add(.lapsed, read.lapsed)
-    state.pendingDrops = AutomationDrops()
-    try db.setPendingDrops(end.part, state.pendingDrops)
+    try db.setPendingDrops(end.part, AutomationDrops())
   }
 
   /// 判定でない役割の結果。取得・処理は出した行を照らし（今の集合は項目と版、出来事の流れは出来事）、出どころの項目が無効に
@@ -79,13 +73,15 @@ struct AutomationSettling {
   ) throws {
     switch output {
     case .fetch(let rows), .process(let rows):
-      outputs = rows.map { AutomationDatabase.Output(id: $0.id, body: $0.text, source: $0.source) }
+      let outputs = rows.map {
+        AutomationDatabase.Output(id: $0.id, body: $0.text, source: $0.source)
+      }
       written =
         node.coverage == .currentSet
-        ? try db.writeItems(of: end.part, outputs, at: run.endedAt, replacing: !end.given)
-        : try db.writeEvents(of: end.part, outputs, at: run.endedAt, distinct: !end.given)
+        ? try db.writeItems(of: end.part, outputs, at: run.endedAt)
+        : try db.writeEvents(of: end.part, outputs, at: run.endedAt)
       let withdrawn = try memory.withdraw(originatingIn: written.invalidated, db)
-      if node.role.isFetch {
+      if node.role == .fetch {
         run.result = .fetch(fresh: written.fresh.count, duplicates: written.duplicates)
         run.withdrawn = withdrawn
       } else {
@@ -146,7 +142,7 @@ struct AutomationSettling {
       let proposalId = try db.insert(proposal: proposal, run: recordId)
       memory.proposals.append(
         AutomationProposal(
-          id: proposalId, runId: recordId, automationId: end.automationId, judge: end.part,
+          id: proposalId, runId: recordId, judge: end.part,
           defId: end.defId, source: proposal.origin.part, origin: proposal.origin.row,
           item: proposal.origin.item, title: proposal.title, due: proposal.due,
           workspace: proposal.workspace, reason: proposal.reason, proposedAt: endedAt,
@@ -158,40 +154,15 @@ struct AutomationSettling {
     }
   }
 
-  /// 部品の状態を進め（外した印・直近の回・目印・番号・今有効な項目・読んだ位置）、忘れる候補を忘れ、数え直す。
-  private mutating func finish(_ entry: AutomationRunRecord, _ memory: inout AutomationMemory)
-    throws
-  {
-    if end.outcome.breach != nil, state.breach == nil {
+  /// 外した最初の回なら印を書き、部品の状態を読み直し、忘れる候補を忘れ、数え直す。
+  private func finish(_ entry: AutomationRunRecord, _ memory: inout AutomationMemory) throws {
+    if end.outcome.breach != nil, memory.automations[index].state(end.part).breach == nil {
       try db.setBreach(end.part, run: entry.id)
-      state.breach = AutomationBreachMark(entry)
     }
-    state.runs.insert(entry, at: 0)
-    state.runs = Array(state.runs.prefix(AutomationPartState.retainedRuns))
-    if !entry.failed { state.succeededAt = entry.startedAt }
-    if written.changed { state.changes += 1 }
-    let seqs = try db.lastSeqs(of: end.part)
-    state.lastItemSeq = seqs.item
-    state.lastEventSeq = seqs.event
-    state.live = try db.live(of: end.part)
-    memory.automations[index].parts[end.part] = state
-    try memory.refreshReads(end.automationId, end.part, db)
+    try memory.reread(end.part, of: end.automationId, db)
     try memory.forgetUnheld(db)
     try memory.recount(
       end.automationId, db, now: entry.endedAt,
       parts: [end.part] + memory.automations[index].graph.downstream(of: end.part).map(\.id))
-  }
-
-  /// 出した行ごとの、今それを表す行と下流へ渡す 1 行。
-  private func recordedOutputs() -> [AutomationRecorded.Output] {
-    let fresh = Set(written.fresh)
-    return zip(written.rows, outputs).enumerated().compactMap { index, pair in
-      guard let ref = pair.0 else { return nil }
-      let output = pair.1
-      let downstream = output.source == nil ? "\(end.part):\(output.id)" : output.id
-      return AutomationRecorded.Output(
-        ref: ref, text: AutomationPrompts.replacing(id: downstream, in: output.body),
-        fresh: fresh.contains(index))
-    }
   }
 }

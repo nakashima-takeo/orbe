@@ -43,7 +43,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
 
     let wide = BoardAutomationSummary(all[2], text: text, next: nil)
     XCTAssertNil(wide.mark)
-    XCTAssertEqual(wide.last, "まだ動いていない")
+    XCTAssertEqual(wide.last, "未実行")
   }
 
   /// 名前の右の状態（実行中・停止中）と前回の印は混ぜない。失敗した部品のある自動化を流している間も印は失敗のまま、止めて
@@ -57,7 +57,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     let now = model.runner.now()
     let text = model.text(LocalizationStore(language: .ja), now: now)
     let states = Dictionary(
-      uniqueKeysWithValues: model.standings(at: now).map { ($0.id, $0.state) })
+      uniqueKeysWithValues: model.standings.map { ($0.id, $0.state) })
 
     XCTAssertEqual(states[charge], .running)
     XCTAssertEqual(model.summary(charge, text: text, now: now)?.mark, .failure, "流している間も前回の印")
@@ -172,6 +172,6 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
 
     XCTAssertEqual(
       try card("slack"), ["13:10〜14:55 は新着なし", "新着 4 件", "新着 5 件", "新着 6 件"])
-    XCTAssertEqual(try card("mail"), ["新着 2 件（形式エラーを修正済み）", "新着なし", "新着 1 件"])
+    XCTAssertEqual(try card("mail"), ["新着 2 件（形式エラーを agent が修正済み）", "新着なし", "新着 1 件"])
   }
 }

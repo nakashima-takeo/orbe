@@ -6,7 +6,7 @@ import Foundation
 extension AutomationRunner {
   /// 次の数え直しの時刻を合わせ直す（ストアの変異が通るたび）。
   func scheduleRecount() {
-    let next = store.nextInboxExpiry.map(Self.minute(after:))
+    let next = store.nextPendingExpiry.map(Self.minute(after:))
     guard next != recountAt else { return }
     recountTimer?.invalidate()
     recountTimer = nil

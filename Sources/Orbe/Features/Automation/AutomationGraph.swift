@@ -39,8 +39,7 @@ struct AutomationGraph: Equatable {
     /// 出力の性質を解いたもの。行を出す部品（取得・処理）だけが持ち、処理の省略は出来事の流れ。
     var coverage: AutomationCoverage? {
       switch role {
-      case .fetch(let coverage): coverage
-      case .process: action.coverage ?? .newArrivals
+      case .fetch, .process: action.coverage ?? .newArrivals
       case .judge, .report, .work, .sideEffect: nil
       }
     }
@@ -138,18 +137,12 @@ struct AutomationGraph: Equatable {
     return judges
   }
 
-  /// `id` の部品が出した行が、途中で取得の部品を通らずに届く判定の部品（定義の順）。
-  func judges(reachedFrom id: AutomationPartID) -> [Node] {
-    guard let index = index(id) else { return [] }
-    return Self.judges(reachedFrom: index, nodes.map(\.role), downstream).sorted().map { nodes[$0] }
-  }
-
   /// `judge` の部品へ、途中で別の取得の部品を通らずに行が届く取得の部品（定義の順）。
   func fetches(reaching judge: AutomationPartID) -> [Node] {
     guard let target = index(judge) else { return [] }
     let roles = nodes.map(\.role)
     return nodes.indices.filter { index in
-      nodes[index].role.isFetch
+      nodes[index].role == .fetch
         && Self.judges(reachedFrom: index, roles, downstream).contains(target)
     }.map { nodes[$0] }
   }

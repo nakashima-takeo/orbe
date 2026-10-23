@@ -2,8 +2,8 @@ import Observation
 import SwiftUI
 
 /// ボードの自動化の部品の状態（@Observable）。部品は依頼の欄・一覧・右の欄（詳細か案内）で 1 つ。自動化・回・走っているか・次の
-/// 時刻は唯一の正（走らせ役とストア）から毎回読み、写さない。持つのは選択（同一性）・地図に居るかと欄の中身だけ。ストアが変わったら
-/// `reconcile()` で選択を付け直す（ビューの `.onChange` が届ける）。だから裏の回・AI の変更・⌘⇧X での操作がそのまま映る。
+/// 時刻は唯一の正（走らせ役とストア）から毎回読み、写さない。持つのは選択（同一性）・地図に居るかと欄の中身だけ。段の並びが
+/// 変われば `reconcile()` で選択を付け直す（ビューの `.onChange` が届ける）。だから裏の回・AI の変更・⌘⇧X の操作がそのまま映る。
 ///
 /// 欄は一覧の上の 1 段で、欄と一覧の行は 1 つの選択の同一性を分け合う（⌘⇧X で入力の行き先と一覧の行が 1 つの選択なのと
 /// 同じ）。選ばれて見えるのは常に 1 か所で、焦点の場所は選択から決まる。↑↓ は欄と行の並びを端で巡回する。焦点が外から
@@ -78,15 +78,15 @@ import SwiftUI
 
   var store: AutomationStore { runner.store }
 
-  /// `now` での立ち位置で並べた自動化: 失敗した部品がある・定義を読めない（止めていない）→ それ以外（止めていない）→ 止めて
-  /// いる。群の中は ID 順。描く経路は描くときの今を、描かない経路は走らせ役の今を渡す。
-  func standings(at now: Date) -> [BoardAutomationStanding] {
-    (store.automations.map { BoardAutomationStanding($0, runner: runner, now: now) }
+  /// 立ち位置で並べた自動化: 失敗した部品がある・定義を読めない（止めていない）→ それ以外（止めていない）→ 止めている。群の中は
+  /// ID 順。
+  var standings: [BoardAutomationStanding] {
+    (store.automations.map { BoardAutomationStanding($0, runner: runner) }
       + store.unreadable.map(BoardAutomationStanding.init))
       .sorted { ($0.group, $0.id) < ($1.group, $1.id) }
   }
 
-  var ids: [Int] { standings(at: runner.now()).map(\.id) }
+  var ids: [Int] { standings.map(\.id) }
 
   /// 選べる段の並び（欄が先頭、続いて一覧の行）。
   var stops: [Stop] { [.request] + ids.map(Stop.automation) }

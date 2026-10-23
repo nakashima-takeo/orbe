@@ -164,7 +164,8 @@ final class AutomationTrialTests: OrbeTestCase {
     }
     XCTAssertEqual(proposed.map(\.title), ["B"])
     XCTAssertEqual(
-      trial.passes(key: "judge").first?.run.result, .judge(proposed: 1, resolved: 0, dismissed: []))
+      trial.passes(key: "judge").first?.run?.result,
+      .judge(proposed: 1, resolved: 0, dismissed: []))
     XCTAssertEqual(store.automations, automations)
     XCTAssertEqual(store.proposals, proposals)
     XCTAssertEqual(recorded, notices, "試走の回は本番の知らせに届かない")
@@ -175,7 +176,7 @@ final class AutomationTrialTests: OrbeTestCase {
     XCTAssertEqual(ids("p"), [downstream("gh", "b", of: id)])
   }
 
-  /// 写しの中のほかの自動化は、試走の道と同じ鍵の部品でも、溜まりに行のある「届いたら」の部品でも起こさない（写しでも手段は
+  /// 写しの中のほかの自動化は、試走の道と同じ鍵の部品でも、読めば取る行のある「届いたら」の部品でも起こさない（写しでも手段は
   /// 本物）。手段のスクリプトは x・y で、試走する自動化の部品と見分ける。
   func testATrialDoesNotWakeOtherAutomationsInTheCopy() throws {
     let other = try define([
@@ -244,125 +245,35 @@ final class AutomationTrialTests: OrbeTestCase {
       runs.map { ($0["result"] as? [String: Any])?["text"] as? String }, ["2 回目", "1 回目"])
   }
 
-  // MARK: - 止める部品・与える行・limit
-
-  /// 副作用と仕事（ツールを持つ agent）は手段を起こさず、渡るはずだった行を止めた行として返す。
-  func testSideEffectsAndWorkAreHeldWithTheRowsTheyWouldHaveGot() throws {
+  /// 入力が 2 つの「届いたら」の処理が試走の中で 2 回確定しても、回ごとの結果はその回が足した行だけ（同じ時刻でも混ざらない）。
+  func testEachRunOfAPartCarriesOnlyTheRowsItAdded() throws {
     let id = try define([
-      fetch("gh"), part("send", .arrival, from: ["gh"], deliver: .sideEffect),
-      DesignSceneFixtures.agentPart(
-        "job", "job", .arrival, from: ["gh"], tools: ["Bash(git status:*)"], instruction: "do",
-        deliver: .report),
+      fetch("gh"), fetch("backlog"), part("p", .arrival, from: ["gh", "backlog"]),
+      part("d", from: ["p"], deliver: .report),
     ])
-    let trial = try trials.start(id, .init())
-    waitCalls("gh", 1)
+    let trial = try trials.start(id, .init(from: ["gh", "backlog"], to: ["p"]))
+    waitCalls("backlog", 1)
     finish("gh", fetched(["a"]))
-    ended(trial)
-
-    XCTAssertEqual(calls("send"), [])
-    XCTAssertEqual(
-      jobs.calls.filter {
-        if case .agent = $0.job.work { return true }
-        return false
-      }.count, 0)
-    for key in ["send", "job"] {
-      XCTAssertEqual(trial.state(key: key), .held, key)
-      guard case .held(let held) = trial.passes(key: key).first?.content else {
-        return XCTFail("\(key) に止めた行が無い")
-      }
-      XCTAssertEqual(
-        held.compactMap(AutomationPrompts.id(of:)), [downstream("gh", "a", of: id)], key)
-    }
-  }
-
-  /// 行を見る agent は試走でも本番と同じく行を Orbe の MCP で読み、その回の札は写しの DB のまだ受け取っていない行と、入口に
-  /// 与えた行を返す。
-  func testAnAgentReadingRowsReadsTheCopysRowsAndTheGivenRows() throws {
-    let id = try define([
-      fetch("gh"),
-      DesignSceneFixtures.agentPart("p", "処理", .manual, from: ["gh"], instruction: "残す"),
-      part("digest", from: ["p"], deliver: .report),
-    ])
-    try runner.flow(id, to: .part(store.part(id, "gh")))
-    finish("gh", fetched(["a"]))
-    XCTAssertEqual(store.automation(id)?.state(key: "p").inbox, 1)
-
-    let trial = try trials.start(id, .init(from: ["p"], rows: [#"{"id":"x"}"#]))
-    let agents = {
-      self.jobs.calls.indices.filter {
-        if case .agent = self.jobs.calls[$0].job.work { return true }
-        return false
-      }
-    }
-    settle(until: { agents().count == 1 })
-    guard let index = agents().first, case .agent(let call) = jobs.calls[index].job.work else {
-      return XCTFail("p の agent が呼ばれていない")
-    }
-    let session = try XCTUnwrap(call.orbe.flatMap { runner.runData.session($0.token) })
-    let page = session.call("read_run_rows", [:]).texts.last ?? ""
-    XCTAssertEqual(
-      page.split(separator: "\n").compactMap { AutomationPrompts.id(of: String($0)) },
-      [downstream("gh", "a", of: id), downstream("gh", "x", of: id)])
-    _ = session.call("report_nothing", ["why": "残る項目なし"])
-    XCTAssertFalse(call.prompt.contains(downstream("gh", "a", of: id)), "行の中身は依頼文に載せない")
-    jobs.finish(
-      index,
-      BackgroundRunResult(
-        commandLine: "claude -p", startedAt: now, endedAt: now, ending: .exited(0),
-        output: .agent(reply: BackgroundAgentReply(text: "done", isError: false), stderr: .init())))
-    ended(trial)
-  }
-
-  /// 取得の入口に与えた項目は、手段を起こさず、本番が既に見た項目でも接頭の付いた id で下流へ流れる。判定へ与えると断る。
-  func testRowsGivenToAFetchFlowDownWithoutItsMethodAndAJudgeRefusesThem() throws {
-    let id = try define([fetch("gh"), part("judge", from: ["gh"], deliver: .taskCandidates)])
-    try runner.flow(id, to: .ends)
-    finish("gh", fetched(["a"]))
-    finish("judge", "")
-
-    let trial = try trials.start(id, .init(rows: [item("a")]))
-    waitCalls("judge", 2)
-    XCTAssertEqual(ids("judge"), [downstream("gh", "a", of: id)])
-    XCTAssertEqual(calls("gh").count, 1)
-    finish("judge", "")
-    ended(trial)
-
-    XCTAssertThrowsError(
-      try trials.start(id, .init(from: ["judge"], to: ["judge"], rows: [#"{"id":"x"}"#]))
-    ) {
-      guard case .invalid = $0 as? AutomationError else { return XCTFail("\($0)") }
-    }
-    XCTAssertThrowsError(try trials.start(id, .init(rows: [#"{"id":"x"}"#]))) {
-      XCTAssertEqual($0 as? AutomationError, .invalid("rows: item 1: missing link"))
-    }
-  }
-
-  /// 入力のある入口に与えた行は、ただ 1 つの上流（の写し）の出力として足され、上流の行として（接頭付きの id で）取られる。
-  /// 「届いたら」の入口も今すぐ動く。上流が複数の入口に与えると断る。
-  func testRowsGivenToAPartWithInputsArriveInItsInboxCopy() throws {
-    let id = try define([
-      fetch("gh"), part("p", .arrival, from: ["gh"]),
-      part("digest", from: ["p"], deliver: .report),
-    ])
-    let trial = try trials.start(
-      id, .init(from: ["p"], rows: [#"{"id":"x","note":"手作り"}"#]))
     waitCalls("p", 1)
-    let x = downstream("gh", "x", of: id)
-    XCTAssertEqual(ids("p"), [x])
-    XCTAssertEqual(calls("gh"), [])
-    finish("p", #"{"id":"\#(x)"}"#)
-    waitCalls("digest", 1)
-    finish("digest", "x")
+    finish("p", #"{"id":"pa"}"#)
+    finish("backlog", fetched(["b"]))
+    waitCalls("p", 2)
+    finish("p", #"{"id":"pb"}"#)
     ended(trial)
-    XCTAssertEqual(store.automation(id)?.state(key: "p").inbox, 0)
 
-    let merged = try define([
-      fetch("gh"), fetch("slack"), part("p", from: ["gh", "slack"]),
-      part("digest", from: ["p"], deliver: .report),
-    ])
-    XCTAssertThrowsError(try trials.start(merged, .init(from: ["p"], rows: [#"{"id":"x"}"#]))) {
-      guard case .invalid(let message) = $0 as? AutomationError else { return XCTFail("\($0)") }
-      XCTAssertTrue(message.hasPrefix(#"rows: "p" has 2 inputs"#), message)
-    }
+    XCTAssertEqual(trial.passes(key: "p").count, 2)
+    XCTAssertEqual(
+      rows(trial, "p"), [downstream("p", "pb", of: id), downstream("p", "pa", of: id)])
+  }
+}
+
+extension AutomationTrial.Pass {
+  /// 写しの上で確定した回（テスト）。止めた・与えた結果は nil。
+  var run: AutomationPartRun? {
+    if case .ran(let run, _) = self { run } else { nil }
+  }
+
+  var content: AutomationTrial.Content? {
+    if case .ran(_, let content) = self { content } else { nil }
   }
 }

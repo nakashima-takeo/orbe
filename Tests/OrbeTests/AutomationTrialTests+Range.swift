@@ -7,8 +7,8 @@ import XCTest
 /// 壊れると何が起きるか: 1 部品だけを試したつもりが上流の取得まで走る。合流の一部を試すと道の外の取得を待ち続けて終わらない。
 /// 分岐の片方が動かない。届かない指し方が黙って何もしない試走になる。
 extension AutomationTrialTests {
-  /// 1 部品だけ: 溜まり（の写し）から次の本番と同じ規則で取り、上流は動かない。本番の溜まりは残る。
-  func testTryingOnePartTakesItsInboxCopyAndLeavesTheUpstreamAlone() throws {
+  /// 1 部品だけ: 写しの上の読めば取る行を次の本番と同じ規則で取り、上流は動かない。本番の読めば取る行は残る。
+  func testTryingOnePartTakesItsPendingRowsInTheCopyAndLeavesTheUpstreamAlone() throws {
     let id = try define([fetch("gh"), part("judge", from: ["gh"], deliver: .taskCandidates)])
     try runner.flow(id, to: .part(store.part(id, "gh")))
     finish("gh", fetched(["a"]))
@@ -21,7 +21,7 @@ extension AutomationTrialTests {
     ended(trial)
 
     XCTAssertEqual(trial.range.path.map(\.key), ["judge"])
-    XCTAssertEqual(store.automation(id)?.state(key: "judge").inbox, 1)
+    XCTAssertEqual(store.automation(id)?.state(key: "judge").pending.count, 1)
   }
 
   /// 合流の一部: 指した 2 つの取得と判定だけが動き、判定は道の外の取得を待たない。
@@ -61,7 +61,7 @@ extension AutomationTrialTests {
     ended(trial)
 
     XCTAssertEqual(trial.targetKeys, ["judge", "digest"])
-    XCTAssertEqual(trial.passes(key: "digest").first?.run.result, .report(text: "a が来た"))
+    XCTAssertEqual(trial.passes(key: "digest").first?.run?.result, .report(text: "a が来た"))
   }
 
   /// 指した入口から届かない行き先は断る。
@@ -78,7 +78,7 @@ extension AutomationTrialTests {
     }
   }
 
-  /// `limit` は取得が下流へ渡す行を先頭から絞る。
+  /// `limit` は取得が下流へ渡す行を先頭から絞る。絞った行は写しに無いので、受け手は読む前に消えたと数えない。
   func testALimitCutsTheRowsAFetchPassesDown() throws {
     let id = try define([
       fetch("gh"), part("p", from: ["gh"]), part("d", from: ["p"], deliver: .report),
@@ -92,6 +92,7 @@ extension AutomationTrialTests {
     ended(trial)
     XCTAssertEqual(
       rows(trial, "gh"), [downstream("gh", "a", of: id), downstream("gh", "b", of: id)])
-    XCTAssertEqual(trial.passes(key: "gh").first?.run.result, .fetch(fresh: 3, duplicates: 0))
+    XCTAssertEqual(trial.passes(key: "gh").first?.run?.result, .fetch(fresh: 3, duplicates: 0))
+    XCTAssertEqual(trial.passes(key: "p").first?.run?.dropped, AutomationDrops())
   }
 }

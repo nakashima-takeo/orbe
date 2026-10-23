@@ -78,7 +78,8 @@ struct BoardAutomationPart: View {
     .onChange(of: focused) { _, place in
       if let place, place != model.place { focused = model.place }
     }
-    .onChange(of: model.store.automations, initial: true) { model.reconcile() }
+    .onChange(of: model.stops, initial: true) { model.reconcile() }
+    .onChange(of: model.mapStops) { model.reconcile() }
   }
 }
 
@@ -93,7 +94,7 @@ struct BoardAutomationColumns: View {
 
   var body: some View {
     let text = model.text(l10n, now: now)
-    let standings = model.standings(at: now)
+    let standings = model.standings
     HStack(spacing: 0) {
       BoardAutomationList(model: model, standings: standings, text: text, now: now)
         .contentShape(Rectangle())

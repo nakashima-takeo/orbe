@@ -36,13 +36,13 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
     }
 
     start(
-      AutomationGraphTests.fetch("f", .newArrivals), .fetch(.newArrivals),
+      AutomationGraphTests.fetch("f", .newArrivals), .fetch,
       .fetch(since: since))
     start(
-      AutomationGraphTests.fetch("f", .currentSet), .fetch(.currentSet),
+      AutomationGraphTests.fetch("f", .currentSet), .fetch,
       .fetch(since: since))
-    start(agent(.newArrivals), .fetch(.newArrivals), .fetch(since: since))
-    start(agent(.currentSet), .fetch(.currentSet), .fetch(since: since))
+    start(agent(.newArrivals), .fetch, .fetch(since: since))
+    start(agent(.currentSet), .fetch, .fetch(since: since))
 
     XCTAssertEqual(try XCTUnwrap(commandInput(0)).environment, ["ORBE_SINCE": mark])
     XCTAssertEqual(try XCTUnwrap(commandInput(1)).environment, [:])
@@ -75,7 +75,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
     start(
       AutomationGraphTests.agent(
         "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
-      .fetch(.currentSet), .fetch(since: nil))
+      .fetch, .fetch(since: nil))
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
       .process([row("a")], reachesJudge: false))
@@ -99,7 +99,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
 
   /// 取れた全項目を、書かれた id と書かれたままの 1 行（余分な欄も残す）で返す。何が新しいかは出す側の確定が決める。
   func testFetchReturnsEveryItemAsWritten() throws {
-    start(AutomationGraphTests.fetch("f"), .fetch(.currentSet), .fetch(since: nil))
+    start(AutomationGraphTests.fetch("f"), .fetch, .fetch(since: nil))
     let labelled =
       #"{"id":"b","link":"https://example.com/b","body":"b","time":"2026-10-10T09:00:00Z","labels":["x"]}"#
 
@@ -122,7 +122,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
     start(
       AutomationGraphTests.agent(
         "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
-      .fetch(.currentSet), .fetch(since: nil))
+      .fetch, .fetch(since: nil))
 
     use(
       0, .putItems,
@@ -144,7 +144,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
 
   /// 同じ `id` の 2 つ目の項目は外れた件で、コマンドの取得はその回を失敗にする。
   func testFetchItemWithARepeatedIdBreaksTheRules() throws {
-    start(AutomationGraphTests.fetch("f"), .fetch(.currentSet), .fetch(since: nil))
+    start(AutomationGraphTests.fetch("f"), .fetch, .fetch(since: nil))
 
     jobs.finish(0, fetched(["a", "a"]))
 
@@ -157,7 +157,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
     start(
       AutomationGraphTests.agent(
         "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
-      .fetch(.currentSet), .fetch(since: nil))
+      .fetch, .fetch(since: nil))
 
     jobs.finish(
       0,
@@ -173,7 +173,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
     start(
       AutomationGraphTests.agent(
         "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
-      .fetch(.currentSet), .fetch(since: nil))
+      .fetch, .fetch(since: nil))
 
     use(0, .reportError, ["what": "Slack に届かない"])
     jobs.finish(0, done())
@@ -318,7 +318,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
   /// 止めた回は、手段が後から終わっても結果を返さず、agent の回の口も閉じる。
   func testStoppedPassNeverReturnsAResult() {
     let handle = start(
-      AutomationGraphTests.fetch("f"), .fetch(.currentSet), .fetch(since: nil))
+      AutomationGraphTests.fetch("f"), .fetch, .fetch(since: nil))
     let agentHandle = start(AutomationGraphTests.agent("w", tools: [Self.tool]), .work, .work)
 
     handle.stop()

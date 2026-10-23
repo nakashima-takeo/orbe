@@ -23,8 +23,8 @@ final class TaskPaletteAutomationListTests: OrbeTestCase {
 
     XCTAssertEqual(try latest(1, "dev"), "9:00 開発の依頼を選ぶ\u{3000}候補 2 件")
     XCTAssertEqual(
-      try latest(1, "contact"), "13:00 返事が要る連絡を選ぶ\u{3000}失敗：制限時間内に終わらなかった")
+      try latest(1, "contact"), "13:00 返事が要る連絡を選ぶ\u{3000}失敗：制限時間を超過")
     XCTAssertEqual(try latest(4, "judge"), "14:51 判定\u{3000}候補なし")
-    XCTAssertEqual(try latest(5, "judge"), "判定\u{3000}まだ判定していない")
+    XCTAssertEqual(try latest(5, "judge"), "判定\u{3000}未判定")
   }
 }

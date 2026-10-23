@@ -28,8 +28,8 @@ extension WindowControllerAutomationControlTests {
     let result = try XCTUnwrap(judged["result"] as? [String: Any])
     XCTAssertEqual(result["kind"] as? String, "judge")
     XCTAssertEqual(result["proposed"] as? Int, 1)
-    XCTAssertEqual(parts["judge"]?["inbox"] as? Int, 0)
-    XCTAssertNil(parts["fetch"]?["inbox"], "入力の無い部品は溜まりを持たない")
+    XCTAssertEqual(parts["judge"]?["pending"] as? Int, 0)
+    XCTAssertNil(parts["fetch"]?["pending"], "入力の無い部品は読めば取る行を持たない")
 
     let fetched = try XCTUnwrap(parts["fetch"]?["lastRun"] as? [String: Any])
     XCTAssertEqual(
@@ -101,6 +101,31 @@ extension WindowControllerAutomationControlTests {
     XCTAssertEqual(rejected["count"] as? Int, 1)
     XCTAssertEqual(
       rejected["reasons"] as? [String], ["resolve https://example.com/gone: no open proposal"])
+  }
+
+  /// 部品の外した印は、印の回の開始時刻・外れた件（英文つき）・その回が通ったかで出る。
+  func testABreachMarkIsListedFromTheMarkedRun() throws {
+    let wc = try launch()
+    let id = try set(wc, Self.definition())
+    try wc.automationStore.record(
+      id, part: "fetch", at: Date(),
+      outcome: .failed(
+        .brokeRules, DesignSceneFixtures.execution(0),
+        breach: AutomationRejections([
+          AutomationBrokenLine(line: 3, fault: .missingKey("link")),
+          AutomationBrokenLine(line: 4, fault: .notJSON),
+        ])))
+
+    let fetch = try XCTUnwrap(
+      try listed(wc)[id]?["parts"] as? [String: [String: Any]])["fetch"]
+    let mark = try XCTUnwrap(fetch?["breach"] as? [String: Any])
+    let run = try XCTUnwrap(fetch?["lastRun"] as? [String: Any])
+    XCTAssertEqual(Set(mark.keys), ["at", "lines", "passed"])
+    XCTAssertEqual(mark["at"] as? String, run["startedAt"] as? String)
+    let lines = try XCTUnwrap(mark["lines"] as? [String: Any])
+    XCTAssertEqual(lines["count"] as? Int, 2)
+    XCTAssertEqual(lines["reasons"] as? [String], ["item 3: missing link", "item 4: not JSON"])
+    XCTAssertEqual(mark["passed"] as? Bool, false)
   }
 
   /// 過去の回は新しい順に `limit` 件ずつ読め、返した最後の記録の ID を `before` に渡すと続きが返る。部品を指せばその部品だけ。

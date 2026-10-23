@@ -187,15 +187,15 @@ extension AutomationStoreTests {
     let read = try XCTUnwrap(store.read(store.part(id, "a"), of: id, baseline: nil, now: Self.at))
     XCTAssertTrue(read.taken.first?.text.contains(#""labels":["bug"]"#) == true, "余分な欄が残る")
     try take(store, id, "a", at: Self.at)
-    let seq = store.automation(id)?.state(key: "gh").lastItemSeq
+    let seq = try store.lastSeqs(id, "gh").item
 
     try fetchText([labelled], at: Self.at.addingTimeInterval(60))
-    XCTAssertEqual(store.automation(id)?.state(key: "gh").lastItemSeq, seq, "同じ結果で行は増えない")
+    XCTAssertEqual(try store.lastSeqs(id, "gh").item, seq, "同じ結果で行は増えない")
     try fetchText(
       [labelled.replacingOccurrences(of: "bug", with: "fixed")], at: Self.at.addingTimeInterval(120)
     )
     XCTAssertEqual(try take(store, id, "a", at: Self.at.addingTimeInterval(120)), [], "中身の変化は届かない")
-    XCTAssertEqual(store.automation(id)?.state(key: "gh").lastItemSeq, seq, "版を足しても番号は同じ")
+    XCTAssertEqual(try store.lastSeqs(id, "gh").item, seq, "版を足しても番号は同じ")
 
     try fetchText([], at: Self.at.addingTimeInterval(180))
     try fetchText([labelled], at: Self.at.addingTimeInterval(240))
@@ -254,11 +254,11 @@ extension AutomationStoreTests {
     try runCopy(at: Self.at.addingTimeInterval(60))
     XCTAssertEqual(
       try take(store, id, "a", at: Self.at.addingTimeInterval(60)), ["x"], "読み直しても 1 度だけ")
-    XCTAssertEqual(store.automation(id)?.state(key: "copy").live.count, 1)
+    XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks.count, 1)
 
     try fetch(store, id, [], at: Self.at.addingTimeInterval(120))
     try runCopy(at: Self.at.addingTimeInterval(120))
-    XCTAssertEqual(store.automation(id)?.state(key: "copy").live, [], "入力が 0 件なら前の出力を無効にする")
+    XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks, [], "入力が 0 件なら前の出力を無効にする")
 
     try fetch(store, id, ["y"], at: Self.at.addingTimeInterval(180))
     try runCopy(at: Self.at.addingTimeInterval(180))
@@ -266,7 +266,7 @@ extension AutomationStoreTests {
     events.parts[1].action.coverage = nil
     let version = try XCTUnwrap(store.automation(id)?.version)
     _ = try store.replace(id, version: version, with: events, now: Self.at.addingTimeInterval(200))
-    XCTAssertEqual(store.automation(id)?.state(key: "copy").live, [], "性質を書き換えると項目は無効")
+    XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks, [], "性質を書き換えると項目は無効")
     XCTAssertEqual(
       store.automation(id)?.graph.node(key: "copy")?.coverage, .newArrivals, "書かなければ出来事の流れ")
   }
@@ -297,6 +297,18 @@ extension AutomationStoreTests {
     try fetch(store, id, ["x", "y"], at: Self.at.addingTimeInterval(60))
 
     XCTAssertEqual(try take(store, id, "a", at: Self.at.addingTimeInterval(60)), ["x", "y"])
+  }
+
+  /// 回の記録の取った数は回ごとに数え、同じ部品のほかの回の分と混ざらない。
+  func testEachRunCountsOnlyTheRowsItTook() throws {
+    let store = AutomationStore()
+    let id = try define(store, coverage: .newArrivals)
+    try fetch(store, id, ["x", "y"], at: Self.at)
+    try take(store, id, "a", at: Self.at)
+    try fetch(store, id, ["z"], at: Self.at.addingTimeInterval(60))
+    try take(store, id, "a", at: Self.at.addingTimeInterval(60))
+
+    XCTAssertEqual(store.automation(id)?.state(key: "a").runs.map(\.run?.taken), [1, 2])
   }
 
   // MARK: - 写しを持たない

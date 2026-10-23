@@ -39,16 +39,9 @@ struct Automation: Equatable, Identifiable {
   }
 
   /// 部品の回をすべて、新しい順に混ぜたもの。
-  var runs: [AutomationKeyedRun] {
-    parts.flatMap { id, state in state.runs.map { AutomationKeyedRun(part: id, record: $0) } }
-      .sorted { ($0.record.startedAt, $0.record.id) > ($1.record.startedAt, $1.record.id) }
+  var runs: [AutomationRunRecord] {
+    parts.values.flatMap(\.runs).sorted { ($0.startedAt, $0.id) > ($1.startedAt, $1.id) }
   }
-}
-
-/// どの部品の回か。
-struct AutomationKeyedRun: Equatable {
-  let part: AutomationPartID
-  let record: AutomationRunRecord
 }
 
 /// 定義が今の検証を通らない自動化。動かず、定義を直すか消すまで、行から組めた分と理由を持って場所を占める。持っていた候補は
@@ -82,7 +75,8 @@ enum AutomationCoverage: String {
   case newArrivals
 }
 
-/// 部品 1 つの状態。行と記録の正は DB で、メモリは画面と予定に要る分だけを持つ。
+/// 部品 1 つの状態。行と記録の正は DB で、メモリは画面と予定が同期で読む分だけを、部品ごとに DB から読み直して持つ——自分の
+/// 状態は `AutomationDatabase.state(of:)`、読めば取る行は `AutomationMemory.recount`。差分を手で当てないので、DB とずれない。
 struct AutomationPartState: Equatable {
   /// 部品を足した時刻。一度も回っていない部品の数え始め。
   var addedAt: Date
@@ -90,23 +84,12 @@ struct AutomationPartState: Equatable {
   var runs: [AutomationRunRecord] = []
   /// 最新の成功した回の開始時刻。新着の流れの取得に目印として渡す。
   var succeededAt: Date?
-  /// 出力が決まりを外した最初の回の印。何をするかが変わるまで残る。
-  var breach: AutomationBreachMark?
-  /// 受け手として、回の無い契機（取る行 0 件）で捨てた・期限で消えたと数えた数。次の成功した回の記録に載せて空に戻す。
-  var pendingDrops = AutomationDrops()
-  /// 出す側として、項目・出来事にそれぞれ最後に振った通し番号。
-  var lastItemSeq = 0
-  var lastEventSeq = 0
-  /// 出す側の変化の番号（メモリだけ）。項目が有効になる・版が足される・項目が無効になる・出来事が足されるたびに進む。
-  var changes = 0
-  /// 受け手として、つながり（上流の部品）ごとの読んだ位置。
-  var reads: [AutomationPartID: AutomationReadPosition] = [:]
-  /// 受け手として、今読めば取る行の数（古さの上限を過ぎた行を除く）。入力の無い部品は 0。
-  var inbox = 0
-  /// 受け手として、数えた行のどれかが古さの上限を過ぎる最も早い時刻（過ぎたら数え直す）。上限の無い入力だけなら nil。
-  var inboxExpiresAt: Date?
-  /// 出す側の今有効な項目の書かれた id とリンク（取得の最新の結果）。
-  var live: [AutomationSeen] = []
+  /// 出力が決まりを外した最初の回の記録。何をするかが変わるまで残る。
+  var breach: AutomationRunRecord?
+  /// 受け手として今読めば取る行。入力の無い部品は 0 件。
+  var pending = AutomationPending()
+  /// 出す側の今有効な項目のリンク（取得の最新の結果）。
+  var liveLinks: Set<String> = []
 
   static let retainedRuns = 20
 
@@ -116,8 +99,16 @@ struct AutomationPartState: Equatable {
   var anchor: Date { lastRunAt ?? addedAt }
 }
 
-/// 受け手が 1 つのつながりの項目・出来事をそれぞれ何番まで読んだか。
-struct AutomationReadPosition: Equatable {
+/// 受け手の「読めば取る行」。
+struct AutomationPending: Equatable {
+  /// 今読めば取る行の数（古さの上限を過ぎた行を除く）。
+  var count = 0
+  /// 数えた行のどれかが古さの上限を過ぎる最も早い時刻（過ぎたら数え直す）。上限の無い入力だけなら nil。
+  var expiresAt: Date?
+}
+
+/// 項目と出来事の番号の組（読んだ位置・上流の最後の番号・読む上限）。
+struct AutomationSeqs: Equatable {
   var item = 0
   var event = 0
 }
@@ -130,20 +121,12 @@ struct AutomationItem: Equatable {
   let time: Date
 }
 
-/// 今有効な項目 1 つの書かれた id とリンク。
-struct AutomationSeen: Equatable {
-  let id: String
-  let link: String
-}
-
 /// 判定が出した候補。Orbe が覚えている間だけメモリに載る。リンクは覚えている候補を通じて一意。
 struct AutomationProposal: Equatable, Identifiable {
   let id: Int
   /// 候補を出した判定の回。
   let runId: Int
-  /// 候補を出した自動化（履歴。棚に出す自動化は `AutomationStore.shelf(of:)` が導く）。消えていれば nil。
-  var automationId: Int?
-  /// 出した判定の部品と、その回が動いた定義。
+  /// 出した判定の部品と、その回が動いた定義。候補を出した自動化はこの部品の持ち主（`AutomationStore.issuer(of:)`）。
   let judge: AutomationPartID
   let defId: AutomationDefID
   /// 出どころの部品と行。

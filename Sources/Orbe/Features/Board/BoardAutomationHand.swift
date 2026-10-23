@@ -28,7 +28,7 @@ enum BoardAutomationHand {
     func title(paused: Bool) -> L10nKey {
       switch self {
       case .flow(.ends): .automationRunNow
-      case .flow(.part): .automationFlowHere
+      case .flow(.part): .automationFlowToSelected
       case .togglePause: paused ? .automationResume : .automationPause
       case .delete: .automationDelete
       }

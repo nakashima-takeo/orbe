@@ -41,11 +41,13 @@ enum AutomationRunWire {
     return json
   }
 
-  /// 部品の外した印。
-  static func object(_ mark: AutomationBreachMark) -> [String: Any] {
-    var json = AutomationWire.object(mark) as? [String: Any] ?? [:]
-    json["lines"] = rejections(json["lines"], mark.lines)
-    return json
+  /// 部品の外した印（印の回の記録から）: その回の開始時刻・外れた件・回が通ったか。読めない記録の外れた件は空。
+  static func breach(_ record: AutomationRunRecord) -> [String: Any] {
+    let lines = record.run?.breach ?? AutomationRejections()
+    return [
+      "at": SessionEvent.iso8601(record.startedAt),
+      "lines": rejections(AutomationWire.object(lines), lines), "passed": !record.failed,
+    ]
   }
 
   private static func execution(

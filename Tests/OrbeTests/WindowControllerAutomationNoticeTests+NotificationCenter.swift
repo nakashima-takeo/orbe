@@ -28,7 +28,7 @@ extension WindowControllerAutomationNoticeTests {
       center.posted,
       [
         SystemNotificationContent(
-          identifier: "automation.\(id)", title: "開いている PR の要約", body: "要約: PR は 3 件",
+          identifier: "automation.\(id)", title: "開いている PR の要約", body: "要約：PR は 3 件",
           automationId: id)
       ])
     XCTAssertNil(wc.attentionStore.transient, "通知センターに出た回はピルを出さない")

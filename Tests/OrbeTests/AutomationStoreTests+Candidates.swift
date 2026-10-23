@@ -68,7 +68,8 @@ extension AutomationStoreTests {
               origin: try XCTUnwrap(read.taken.first?.origin), title: "対応: a", due: nil,
               workspace: nil, reason: nil)
           ], rows: 1)))
-    XCTAssertEqual(store.proposals.map(\.automationId), [first], "リンクの候補は全自動化を通じて 1 つ")
+    XCTAssertEqual(
+      store.proposals.map { store.issuer(of: $0)?.id }, [first], "リンクの候補は全自動化を通じて 1 つ")
     let run = store.automation(second)?.state(key: "judge").runs.first?.run
     guard case .judge(0, 0, let rejected) = run?.result else { return XCTFail("二つ目の判定の回が記録されない") }
     XCTAssertEqual(rejected.count, 1)

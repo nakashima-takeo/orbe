@@ -9,6 +9,8 @@ extension AutomationStore {
     let reworked: [AutomationPartID]
     /// 外した部品。
     let removed: [AutomationPartID]
+    /// 出す側の行が変わった部品（出力の性質が変わり、今有効な項目を無効にした）。
+    let changed: [AutomationPartID]
   }
 
   /// 書き換える前の自動化（定義を読めない自動化は持たない）と、その版と外していない部品とその鍵。
@@ -54,7 +56,7 @@ extension AutomationStore {
         old.graph.nodes.map(\.part) == entities,
         old.graph.parts.map(\.from) == checked.map(\.part.from)
       {
-        return Replaced(automation: old, reworked: [], removed: [])
+        return Replaced(automation: old, reworked: [], removed: [], changed: [])
       }
       let removed = current.parts.filter { !Set(checked.compactMap(\.part.id)).contains($0) }
       var invalidated: [Int] = []
@@ -67,10 +69,9 @@ extension AutomationStore {
       let rewired = try Self.rewire(graph, of: id, current, db, at: at)
       try db.updateAutomation(id, name: name, notify: definition.notify, version: version + 1)
       let row = try db.automationRow(id)
-      var automation = Automation(
+      let automation = Automation(
         id: id, name: name, notify: definition.notify, graph: graph, pausedAt: row.pausedAt,
         version: version + 1, createdAt: row.createdAt, parts: rewired.states)
-      try Self.refreshReads(&automation, db)
       memory.unreadable.removeAll { $0.id == id }
       memory.automations.removeAll { $0.id == id }
       memory.automations.append(automation)
@@ -81,7 +82,7 @@ extension AutomationStore {
       try memory.recountJudges(db, now: at)
       return Replaced(
         automation: memory.automation(id) ?? automation, reworked: rewired.reworked,
-        removed: removed)
+        removed: removed, changed: rewired.changed)
     }
   }
 
@@ -120,11 +121,12 @@ extension AutomationStore {
   private struct Rewired {
     var states: [AutomationPartID: AutomationPartState] = [:]
     var reworked: [AutomationPartID] = []
+    var changed: [AutomationPartID] = []
     var invalidated: [Int] = []
   }
 
-  /// つながりを書き換え、出力の性質が変わった部品の今有効な項目を無効にし、何をするかが変わった部品の外した印を下ろす。同じ
-  /// 部品どうしのつながりが残れば読んだ位置も残る。
+  /// つながりを書き換え、出力の性質が変わった部品の今有効な項目を無効にし、何をするかが変わった部品の外した印を下ろし、部品の
+  /// 状態を読み直す。同じ部品どうしのつながりが残れば読んだ位置も残る。
   private static func rewire(
     _ graph: AutomationGraph, of id: Int, _ current: Current, _ db: AutomationDatabase, at: Date
   ) throws -> Rewired {
@@ -133,30 +135,21 @@ extension AutomationStore {
     for node in graph.nodes {
       try db.setEdges(of: id, to: node.id, node.inputs)
       let before = old?.graph.node(node.id)
-      // 定義を読めない自動化の残る部品は、開き直したストアと同じく DB の状態から始める。
-      var state =
-        try old?.parts[node.id]
-        ?? (current.parts.contains(node.id)
-          ? db.storedState(of: node.id) : AutomationPartState(addedAt: at))
       if let was = before?.coverage, node.coverage != was {
         let items = try db.invalidateItems(of: node.id, at: at)
         rewired.invalidated += items
-        if !items.isEmpty { state.changes += 1 }
+        if !items.isEmpty { rewired.changed.append(node.id) }
       }
-      let changed =
+      let reworked =
         old == nil
         ? current.parts.contains(node.id)
         : before.map { $0.part.defId != node.part.defId || Set($0.inputs) != Set(node.inputs) }
           ?? false
-      if changed {
+      if reworked {
         rewired.reworked.append(node.id)
-        if state.breach != nil {
-          try db.setBreach(node.id, run: nil)
-          state.breach = nil
-        }
+        try db.setBreach(node.id, run: nil)
       }
-      state.live = try db.live(of: node.id)
-      rewired.states[node.id] = state
+      rewired.states[node.id] = try db.state(of: node.id)
     }
     return rewired
   }
@@ -193,13 +186,4 @@ extension AutomationStore {
       defId: defId)
   }
 
-  /// 受け手ごとの読んだ位置を DB から写す。
-  static func refreshReads(_ automation: inout Automation, _ db: AutomationDatabase) throws {
-    for node in automation.graph.nodes {
-      let readings = try db.readings(of: node)
-      automation.parts[node.id]?.reads = readings.mapValues {
-        AutomationReadPosition(item: $0.item, event: $0.event)
-      }
-    }
-  }
 }

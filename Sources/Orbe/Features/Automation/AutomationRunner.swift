@@ -16,11 +16,9 @@ import Observation
 /// 載せるのは一巡だけで（画面が一巡の有無を読む）、他の持ち物は部品の回のたびに変わるので観測から外す。
 ///
 /// 部品の回を記録するたびに `recorded` で、その回の終わり（読んだもの・部品の 1 回の結果）と確定を知らせる（知らせるか
-/// どうか・何を出すかは受けた側が決める）。定義を書いたら `defined`、消したら `deleted` で知らせる。
-///
-/// 使い手は、部品の 1 回の起こし方（`startPass`。既定は部品の 1 回をそのまま起こす）と、番人に載せる部品（`admits`。既定は
-/// 全部品）と、受け手の読みの上書き（`overrides`）を差し替えられる。試走が、DB の写しの上で手段の起こし方と動かす部品と根の
-/// 受け手の読みだけを変えて、同じ流しを動かすため。
+/// どうか・何を出すかは受けた側が決める）。`recorded` は確定の直後、下流を起こす前に同期で呼ぶ——受けた側はその中で、確定した
+/// 回が出した行を読み、下流が読む前に手を掛けられる（試走の `limit` がこの順に依る）。定義を書いたら `defined`、消したら
+/// `deleted` で知らせる。使い手が差し替えられるのは、番人に載せる部品（`admits`。既定は全部品）と知らせだけ。
 @Observable final class AutomationRunner {
   let store: AutomationStore
   @ObservationIgnored var now: () -> Date = Date.init
@@ -35,17 +33,14 @@ import Observation
   private let recorded: (AutomationPassRecord) -> Void
   private let defined: (Int) -> Void
   private let deleted: (Int) -> Void
-  private let startPass: StartPass
   private let admits: (Int, AutomationPartID) -> Bool
   private let flowEnded: (Int, AutomationFlow) -> Void
-  /// 受け手の読みの上書き（試走の根の受け手）。
-  @ObservationIgnored var overrides: (Int, AutomationPartID) -> [AutomationReadOverride] = { _, _ in
-    []
-  }
   /// 番人に載せている鍵。
   @ObservationIgnored private var registered = Set<String>()
   /// 部品ごとの、前の契機の始まりの時点の、入力ごとの上流の印（メモリだけ。無ければ読んだ位置と変化の番号 0 が基準線）。
   @ObservationIgnored var marks: [String: [AutomationPartID: Mark]] = [:]
+  /// 出す側の部品ごとの変化の番号（メモリだけ。DB から導けない。行が変わるたびに進む）。毎回すべてを取るつながりが読む。
+  @ObservationIgnored var changes: [AutomationPartID: Int] = [:]
   /// 部品ごとの、番人に最後に返した数え始め。記録の無い契機（取る行が 0 件）でも進むので、次の時刻はこれから数える。
   @ObservationIgnored private var anchors: [String: Date] = [:]
   /// 走っている契機（掃除から守る行を言う）。
@@ -67,7 +62,6 @@ import Observation
     workspaces: @escaping () -> AutomationWorkspaces,
     recorded: @escaping (AutomationPassRecord) -> Void, defined: @escaping (Int) -> Void,
     deleted: @escaping (Int) -> Void,
-    startPass: @escaping StartPass = { $0.pass.start($0.node, $0.input, completion: $1) },
     admits: @escaping (Int, AutomationPartID) -> Bool = { _, _ in true },
     flowEnded: @escaping (Int, AutomationFlow) -> Void = { _, _ in }
   ) {
@@ -79,7 +73,6 @@ import Observation
     self.recorded = recorded
     self.defined = defined
     self.deleted = deleted
-    self.startPass = startPass
     self.admits = admits
     self.flowEnded = flowEnded
     store.onUnavailable = { [weak self] in self?.stopAll() }
@@ -139,7 +132,11 @@ import Observation
     }
     let replaced = try store.replace(id, version: version, with: definition, now: now())
     let automation = replaced.automation
-    for part in replaced.removed { unregister(id, part) }
+    for part in replaced.changed { changes[part, default: 0] += 1 }
+    for part in replaced.removed {
+      unregister(id, part)
+      changes[part] = nil
+    }
     for part in replaced.reworked { unregister(id, part) }
     register(automation)
     defined(id)
@@ -159,7 +156,10 @@ import Observation
     try checkAvailable()
     let parts = store.automation(id)?.graph.nodes.map(\.id) ?? []
     try store.delete(id, now: now())
-    for part in parts { unregister(id, part) }
+    for part in parts {
+      unregister(id, part)
+      changes[part] = nil
+    }
     deleted(id)
   }
 
@@ -219,6 +219,7 @@ import Observation
     for key in registered { scheduler.remove(id: key) }
     registered = []
     marks = [:]
+    changes = [:]
     settled = [:]
     anchors = [:]
     active = [:]
@@ -238,7 +239,7 @@ extension AutomationRunner {
     let startedAt: Date
     let finish: (Date) -> Void
     /// 契機の始まりの時点の、入力ごとの上流の最後の番号。これ以下の行を読む。
-    var baseline: [AutomationPartID: (item: Int, event: Int)] = [:]
+    var baseline: [AutomationPartID: AutomationSeqs] = [:]
     /// 走っている回が読んだ行。
     var holding: [AutomationRowRef] = []
     /// 回の始まり。
@@ -246,19 +247,20 @@ extension AutomationRunner {
     var current: BackgroundRunHandle?
     var cancelled = false
     /// 一巡の分として受け取った契機か。
-    var flowed = false
+    let flowed: Bool
     /// 回が失敗したか、読めなかった・書けなかった（やり直しの基準線を進めない）。
     var failed = false
 
     init(
       automationId: Int, part: AutomationPartID, kind: AutomationPartRun.Trigger,
-      startedAt: Date, finish: @escaping (Date) -> Void
+      startedAt: Date, finish: @escaping (Date) -> Void, flowed: Bool
     ) {
       self.automationId = automationId
       self.part = part
       self.kind = kind
       self.startedAt = startedAt
       self.finish = finish
+      self.flowed = flowed
     }
   }
 
@@ -271,27 +273,28 @@ extension AutomationRunner {
       finish(now())
       return BackgroundRunHandle {}
     }
-    let trigger = Trigger(
-      automationId: id, part: part,
-      kind: node.part.trigger == .arrival ? .arrival : kind == .now ? .now : .schedule,
-      startedAt: now(), finish: finish)
-    active[ObjectIdentifier(trigger)] = trigger
     // 一巡があるときだけ触れる（触れるだけで観測が切れ、流していない自動化の回のたびに画面が描き直される）。
+    var flowed = false
     if var flow = flows[id] {
-      trigger.flowed = flow.started(part, in: automation.graph)
+      flowed = flow.started(part, in: automation.graph)
       flows[id] = flow
     }
+    // 流しが起こした回でない「届いたら」の部品の回は、起こす決まりが起こした（届いた行で起きた）回。
+    let trigger = Trigger(
+      automationId: id, part: part,
+      kind: node.part.trigger == .arrival && !flowed ? .arrival : kind == .now ? .now : .schedule,
+      startedAt: now(), finish: finish, flowed: flowed)
+    active[ObjectIdentifier(trigger)] = trigger
     if node.inputs.isEmpty {
       pass(trigger, read: nil)
-    } else {
-      var marks: [AutomationPartID: Mark] = [:]
-      for edge in node.inputs {
-        let up = Self.mark(of: edge.from, in: automation)
-        marks[edge.from] = up
-        trigger.baseline[edge.from] = (up.item, up.event)
-      }
+    } else if let inlets = inlets(of: part, in: id) {
+      let marks = inlets.mapValues(\.up)
       self.marks[Self.key(id, part)] = marks
+      trigger.baseline = marks.mapValues(\.seqs)
       read(trigger)
+    } else {
+      trigger.failed = true
+      end(trigger)
     }
     return BackgroundRunHandle { [weak self] in
       trigger.cancelled = true
@@ -303,11 +306,10 @@ extension AutomationRunner {
   /// 契機の始まりの時点までの上流の行を読む。取る行が 0 件なら手段を起こさず、捨てた行の分だけ読んだ位置を進めて終える。
   /// ただし今の集合の処理は 0 件でも回す（空の集合を写す）。
   private func read(_ trigger: Trigger) {
-    let read: AutomationInbox.Read?
+    let read: AutomationIntake.Read?
     do throws(AutomationError) {
       read = try store.read(
-        trigger.part, of: trigger.automationId, baseline: trigger.baseline, now: now(),
-        overrides: overrides(trigger.automationId, trigger.part))
+        trigger.part, of: trigger.automationId, baseline: trigger.baseline, now: now())
     } catch {
       NSLog("[automation] cannot read the rows of part \(trigger.part): \(error)")
       trigger.failed = true
@@ -323,7 +325,7 @@ extension AutomationRunner {
   }
 
   /// 部品の 1 回。役割の入力を組み、`AutomationPartPass` に任せ、終わったら確定する。
-  private func pass(_ trigger: Trigger, read: AutomationInbox.Read?) {
+  private func pass(_ trigger: Trigger, read: AutomationIntake.Read?) {
     guard let automation = store.automation(trigger.automationId),
       let node = automation.graph.node(trigger.part)
     else { return end(trigger) }
@@ -332,17 +334,15 @@ extension AutomationRunner {
     trigger.passStartedAt = startedAt
     trigger.holding = read.map { $0.taken.map(\.ref) + $0.dropped.map(\.row.ref) } ?? []
     let defId = node.part.defId
-    let start = AutomationPassStart(
-      automationId: trigger.automationId, node: node, input: input, read: read,
-      pass: AutomationPartPass(run: run, now: now, calendar: calendar, runData: runData))
-    trigger.current = startPass(start) { [weak self] outcome in
+    let pass = AutomationPartPass(run: run, now: now, calendar: calendar, runData: runData)
+    trigger.current = pass.start(node, input) { [weak self] outcome in
       guard let self, !trigger.cancelled else { return }
       ended(trigger, defId, read, startedAt, outcome)
     }
   }
 
   private func ended(
-    _ trigger: Trigger, _ defId: AutomationDefID, _ read: AutomationInbox.Read?,
+    _ trigger: Trigger, _ defId: AutomationDefID, _ read: AutomationIntake.Read?,
     _ startedAt: Date, _ outcome: AutomationPartPass.Outcome
   ) {
     let passEnd = AutomationPassEnd(
@@ -357,6 +357,7 @@ extension AutomationRunner {
       return end(trigger)
     }
     trigger.holding = []
+    if result.changed { changes[trigger.part, default: 0] += 1 }
     recorded(AutomationPassRecord(end: passEnd, recorded: result))
     if result.changed, let automation = store.automation(trigger.automationId) {
       for node in automation.graph.downstream(of: trigger.part) {

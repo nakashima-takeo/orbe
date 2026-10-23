@@ -20,14 +20,7 @@ struct AutomationDefID: Hashable, Comparable {
   static func < (a: Self, b: Self) -> Bool { a.rawValue < b.rawValue }
 }
 
-/// 部品の定義——部品が何をするか。動作 1 つか、部品を組み合わせた部品（内側にまた組み合わせを置ける）。自動化の部品が
-/// どれを使うかは `AutomationPart.defId` が指す。組み合わせは表せるだけで、動かす口は無い。
-enum AutomationPartDef: Equatable {
-  case action(AutomationActionDef)
-  case composite(AutomationCompositeDef)
-}
-
-/// 動作の定義: 手段・上限・出力の性質・行き先。
+/// 動作の定義——部品が何をするか: 手段・上限・出力の性質・行き先。自動化の部品がどれを使うかは `AutomationPart.defId` が指す。
 struct AutomationActionDef: Equatable {
   var method: Method
   /// 分。省略は `AutomationGraph.Node.timeoutMinutes` が解く。
@@ -58,24 +51,6 @@ struct AutomationActionDef: Equatable {
     guard case .agent(let agent) = method else { return false }
     return !agent.tools.isEmpty
   }
-}
-
-/// 部品を組み合わせた部品。内側で使う部品の定義と、内側のつながりを持つ。
-struct AutomationCompositeDef: Equatable {
-  let slots: [AutomationCompositeSlot]
-  let edges: [AutomationCompositeEdge]
-}
-
-/// 組み合わせの内側で使う部品の定義 1 つ分。
-struct AutomationCompositeSlot: Equatable {
-  let id: Int
-  let childDefId: AutomationDefID
-}
-
-/// 組み合わせの内側のつながり（両端の席）。
-struct AutomationCompositeEdge: Equatable {
-  let from: Int
-  let to: Int
 }
 
 /// 自動化の部品（実体）。自動化の中のどこに置き、どう呼び、いつ動くかと、使う部品の定義を持つ。
@@ -129,7 +104,7 @@ struct AutomationPartAgent: Equatable {
 /// 部品の役割。欄には持たず、部品自身の欄（入力・ツール・行き先）から `AutomationGraph` が導く。
 enum AutomationPartRole: Equatable {
   /// 行を見ずに項目を出す。
-  case fetch(AutomationCoverage)
+  case fetch
   /// 行を見て行を出す。
   case process
   /// 行を見てタスク候補を出す。
@@ -148,9 +123,5 @@ enum AutomationPartRole: Equatable {
     case .fetch, .process: "haiku"
     case .sideEffect: nil
     }
-  }
-
-  var isFetch: Bool {
-    if case .fetch = self { true } else { false }
   }
 }

@@ -22,30 +22,14 @@ extension AutomationDatabase {
     return Int(db.lastInsertRowID)
   }
 
-  /// 部品の回の記録を新しい順に `limit` 件（`before` より前の ID だけ）。
-  func records(of part: AutomationPartID, before: Int? = nil, limit: Int) throws
-    -> [AutomationRunRecord]
-  {
-    try selectRecords(
-      "WHERE part_id = ? AND id < ? ORDER BY id DESC LIMIT ?",
-      [
-        .integer(Int64(part.rawValue)), .integer(Int64(before ?? Int.max)),
-        .integer(Int64(limit)),
-      ])
-  }
-
-  /// `parts` の回の記録を混ぜて新しい順に `limit` 件（`before` より前の ID だけ）。
-  func records(among parts: [AutomationPartID], before: Int?, limit: Int) throws
-    -> [(part: AutomationPartID, record: AutomationRunRecord)]
+  /// `parts` の回の記録を混ぜて新しい順に `limit` 件（`before` より前の ID だけ）。それぞれに部品の今の鍵を添える。
+  func records(of parts: [AutomationPartID], before: Int? = nil, limit: Int) throws
+    -> [AutomationKeyedRecord]
   {
     let list = parts.map { String($0.rawValue) }.joined(separator: ",")
-    let rows = try db.select(
-      "SELECT id, part_id FROM runs WHERE part_id IN (\(list)) AND id < ? ORDER BY id DESC LIMIT ?",
-      [.integer(Int64(before ?? Int.max)), .integer(Int64(limit))]
-    ) { ($0.int(at: 0), AutomationPartID($0.int(at: 1))) }
-    return try rows.compactMap { id, part in
-      try selectRecords("WHERE id = ?", [.integer(Int64(id))]).first.map { (part, $0) }
-    }
+    return try selectRecords(
+      "WHERE r.part_id IN (\(list)) AND r.id < ? ORDER BY r.id DESC LIMIT ?",
+      [.integer(Int64(before ?? Int.max)), .integer(Int64(limit))])
   }
 
   /// 最新の成功した回の開始時刻。
@@ -59,72 +43,93 @@ extension AutomationDatabase {
   /// 外した印の回の記録。
   func breachRecord(of part: AutomationPartID) throws -> AutomationRunRecord? {
     try selectRecords(
-      "WHERE id = (SELECT breach_run_id FROM parts WHERE id = ?)",
+      "WHERE r.id = (SELECT breach_run_id FROM parts WHERE id = ?)",
       [.integer(Int64(part.rawValue))]
-    ).first
+    ).first?.record
   }
 
+  /// 回の記録を 1 つの問い合わせで読み、回の履歴の数をもう 1 つの問い合わせでまとめて引く。
   private func selectRecords(_ clause: String, _ values: [SQLiteValue]) throws
-    -> [AutomationRunRecord]
+    -> [AutomationKeyedRecord]
   {
     let rows = try db.select(
-      "SELECT id, def_id, started_at, ended_at, trigger, failure, record FROM runs \(clause)",
-      values
+      """
+      SELECT r.id, p.key, r.def_id, r.started_at, r.ended_at, r.trigger, r.failure, r.record
+      FROM runs r JOIN parts p ON p.id = r.part_id \(clause)
+      """, values
     ) { s in
       (
-        id: s.int(at: 0), defId: AutomationDefID(s.int(at: 1)),
-        started: AutomationPersistence.date(s.int64(at: 2)),
-        ended: AutomationPersistence.date(s.int64(at: 3)),
-        trigger: AutomationPartRun.Trigger(rawValue: s.text(at: 4) ?? "") ?? .schedule,
-        failure: s.text(at: 5), record: s.text(at: 6)
+        id: s.int(at: 0), key: s.text(at: 1) ?? "", defId: AutomationDefID(s.int(at: 2)),
+        started: AutomationPersistence.date(s.int64(at: 3)),
+        ended: AutomationPersistence.date(s.int64(at: 4)),
+        trigger: AutomationPartRun.Trigger(rawValue: s.text(at: 5) ?? "") ?? .schedule,
+        failure: s.text(at: 6), record: s.text(at: 7)
       )
     }
-    return try rows.map { row in
-      let unknown = AutomationRunRecord(
-        id: row.id, defId: row.defId,
-        content: .unknown(
-          AutomationUnknownRun(
-            startedAt: row.started, endedAt: row.ended, trigger: row.trigger,
-            failed: row.failure != nil)))
-      var failure: AutomationFailure?
-      if let raw = row.failure {
-        guard let decoded = Self.decode(AutomationFailure.self, raw) else { return unknown }
-        failure = decoded
-      }
-      guard let stored = Self.decode(AutomationRunStore.self, row.record) else { return unknown }
-      let inputs = try self.inputs(of: row.id)
-      var dropped = stored.carried
-      for (how, count) in inputs where how != "taken" {
-        guard let reason = AutomationDrops.Reason(rawValue: how) else { return unknown }
-        dropped.add(reason, count)
-      }
-      let reads: Bool
-      switch stored.result {
-      case .process, .judge: reads = true
-      default: reads = !inputs.isEmpty
-      }
-      return AutomationRunRecord(
-        id: row.id, defId: row.defId,
-        content: .known(
-          AutomationPartRun(
-            startedAt: row.started, endedAt: row.ended, trigger: row.trigger,
-            taken: reads ? inputs["taken"] ?? 0 : nil, dropped: dropped,
-            execution: stored.execution, breach: stored.breach, result: stored.result,
-            withdrawn: stored.withdrawn, failure: failure)))
+    let inputs = try self.inputs(of: rows.map(\.id))
+    return rows.map { row in
+      AutomationKeyedRecord(
+        key: row.key,
+        record: AutomationRunRecord(
+          id: row.id, defId: row.defId,
+          content: Self.content(
+            AutomationUnknownRun(
+              startedAt: row.started, endedAt: row.ended, trigger: row.trigger,
+              failed: row.failure != nil),
+            failure: row.failure, record: row.record, inputs: inputs[row.id] ?? [:])))
     }
   }
 
-  /// 回の履歴を扱いごとに数えたもの。
-  private func inputs(of run: Int) throws -> [String: Int] {
-    var counts: [String: Int] = [:]
-    for (how, count) in try db.select(
+  /// 列（`columns`）と保存の JSON と回の履歴の数から組んだ中身。どれかが読めなければ列から分かる分だけの不明な記録。
+  private static func content(
+    _ columns: AutomationUnknownRun, failure rawFailure: String?, record: String?,
+    inputs: [String: Int]
+  ) -> AutomationRunRecord.Content {
+    let unknown = AutomationRunRecord.Content.unknown(columns)
+    var failure: AutomationFailure?
+    if let rawFailure {
+      guard let decoded = decode(AutomationFailure.self, rawFailure) else { return unknown }
+      failure = decoded
+    }
+    guard let stored = decode(AutomationRunStore.self, record) else { return unknown }
+    var dropped = stored.carried
+    for (how, count) in inputs where how != "taken" {
+      guard let reason = AutomationDrops.Reason(rawValue: how) else { return unknown }
+      dropped.add(reason, count)
+    }
+    let reads: Bool
+    switch stored.result {
+    case .process, .judge: reads = true
+    default: reads = !inputs.isEmpty
+    }
+    return .known(
+      AutomationPartRun(
+        startedAt: columns.startedAt, endedAt: columns.endedAt, trigger: columns.trigger,
+        taken: reads ? inputs["taken"] ?? 0 : nil, dropped: dropped, execution: stored.execution,
+        breach: stored.breach, result: stored.result, withdrawn: stored.withdrawn,
+        failure: failure))
+  }
+
+  /// 回ごとの、回の履歴を扱いごとに数えたもの。
+  private func inputs(of runs: [Int]) throws -> [Int: [String: Int]] {
+    guard !runs.isEmpty else { return [:] }
+    let list = runs.map(String.init).joined(separator: ",")
+    var counts: [Int: [String: Int]] = [:]
+    for (run, how, count) in try db.select(
       """
-      SELECT how, count(*) FROM run_item_inputs WHERE run_id = ?1 GROUP BY how
-      UNION ALL SELECT how, count(*) FROM run_event_inputs WHERE run_id = ?1 GROUP BY how
-      """, [.integer(Int64(run))], { ($0.text(at: 0) ?? "", $0.int(at: 1)) })
+      SELECT run_id, how, count(*) FROM run_item_inputs WHERE run_id IN (\(list)) GROUP BY run_id, how
+      UNION ALL
+      SELECT run_id, how, count(*) FROM run_event_inputs WHERE run_id IN (\(list)) GROUP BY run_id, how
+      """, [], { ($0.int(at: 0), $0.text(at: 1) ?? "", $0.int(at: 2)) })
     {
-      counts[how, default: 0] += count
+      counts[run, default: [:]][how, default: 0] += count
     }
     return counts
   }
+}
+
+/// 回の記録 1 件と、それを持つ部品の今の鍵。
+struct AutomationKeyedRecord: Equatable {
+  let key: String
+  let record: AutomationRunRecord
 }

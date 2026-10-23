@@ -48,6 +48,7 @@ struct AutomationPartRun: Equatable {
 struct AutomationDrops: Equatable {
   private(set) var counts: [Reason: Int] = [:]
 
+  /// 捨てた理由。名前は回の履歴の扱いの名と同じ。
   enum Reason: String, CaseIterable {
     /// 古さの上限を過ぎた。
     case expired
@@ -61,19 +62,8 @@ struct AutomationDrops: Equatable {
     case unsourced
     /// 同じ回の中で、同じ id の新しい行に置き換わった。
     case replaced
-    /// 受け手が読む前に、残す期間を過ぎて消えた出来事。
+    /// 受け手が読む前に、残す期間を過ぎて消えた出来事（読みでは出ない。読んだ位置の進め先から数える）。
     case lapsed
-
-    init(_ reason: AutomationInbox.Reason) {
-      switch reason {
-      case .unsourced: self = .unsourced
-      case .expired: self = .expired
-      case .proposed: self = .proposed
-      case .sameLink: self = .sameLink
-      case .overflow: self = .overflow
-      case .replaced: self = .replaced
-      }
-    }
   }
 
   var isEmpty: Bool { counts.isEmpty }
@@ -87,31 +77,6 @@ struct AutomationDrops: Equatable {
 
   mutating func add(_ other: AutomationDrops) {
     for (reason, count) in other.counts { add(reason, count) }
-  }
-
-  /// `other` を差し引いたもの（0 以下の理由は落とす）。
-  func subtracting(_ other: AutomationDrops) -> AutomationDrops {
-    var rest = AutomationDrops()
-    for (reason, count) in counts { rest.add(reason, count - (other.counts[reason] ?? 0)) }
-    return rest
-  }
-}
-
-/// 結果を初めて断った回の印（部品ごと）。印の回の記録から導く。
-struct AutomationBreachMark: Equatable, Codable {
-  /// その回の開始時刻。
-  let at: Date
-  let lines: AutomationRejections
-  /// 回が通ったか（agent が断られた結果を同じ会話の中で直した回だけが当たる）。
-  let passed: Bool
-}
-
-extension AutomationBreachMark {
-  /// 印の回の記録から。読めない記録なら、時刻と通ったかだけを持つ。
-  init(_ record: AutomationRunRecord) {
-    self.init(
-      at: record.startedAt, lines: record.run?.breach ?? AutomationRejections(),
-      passed: !record.failed)
   }
 }
 

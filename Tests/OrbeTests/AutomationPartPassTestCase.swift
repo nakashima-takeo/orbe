@@ -44,8 +44,8 @@ class AutomationPartPassTestCase: OrbeTestCase {
     AutomationItem(id: id, link: "https://example.com/\(id)", body: "\(id) の本文", time: now)
   }
 
-  func origin(_ id: String) -> AutomationInbox.Origin {
-    AutomationInbox.Origin(part: AutomationPartID(9), row: .event(Self.number(id)), item: item(id))
+  func origin(_ id: String) -> AutomationIntake.Origin {
+    AutomationIntake.Origin(part: AutomationPartID(9), row: .event(Self.number(id)), item: item(id))
   }
 
   /// 取得の部品 `f` を出た行。

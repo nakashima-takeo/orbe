@@ -42,4 +42,33 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.automations, before)
     XCTAssertEqual(try unread(store).count, 13)
   }
+
+  /// 試走が写しに掛ける操作（行を与える・絞る）の後も、ストアのメモリは DB から開き直した値と同じ（変わった部品の状態と読めば
+  /// 取る行を読み直す）。今の集合に与えた行は、既に読んだ id でも新しい項目として読める。
+  func testTheTrialsOperationsKeepTheMemoryEqualToTheDatabase() throws {
+    var store: AutomationStore? = AutomationStore()
+    let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
+    try Self.fetch(XCTUnwrap(store), id, [Self.item("a")])
+    try Self.judge(XCTUnwrap(store), id)
+    let fetch = try XCTUnwrap(store?.part(id, "fetch"))
+    let rows = ["a", "b", "c"].map {
+      AutomationPartRow(
+        id: $0,
+        text: #"{"id":"\#($0)","link":"https://example.com/\#($0)","body":"\#($0)","#
+          + #""time":"2026-10-10T09:00:00Z"}"#, origin: nil, source: nil)
+    }
+    func state(_ key: String) -> AutomationPartState? { store?.automation(id)?.state(key: key) }
+
+    try store?.give(rows, as: fetch, of: id, at: Self.at)
+    XCTAssertEqual(
+      state("fetch")?.liveLinks, Set(["a", "b", "c"].map { "https://example.com/\($0)" }))
+    XCTAssertEqual(state("judge")?.pending.count, 3)
+    try store?.trim(fetch, in: id, fresh: 3, keeping: 1, now: Self.at)
+    XCTAssertEqual(state("fetch")?.liveLinks, ["https://example.com/a"])
+    XCTAssertEqual(state("judge")?.pending.count, 1)
+    let automations = store?.automations
+    store = nil
+
+    XCTAssertEqual(AutomationStore().automations, automations)
+  }
 }

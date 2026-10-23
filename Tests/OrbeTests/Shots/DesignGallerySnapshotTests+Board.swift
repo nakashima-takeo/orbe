@@ -199,6 +199,9 @@ extension DesignGallerySnapshotTests {
     try write("board_map_first.png", map(0), .ja, size)
     try write("board_map_mail.png", map(0, part: "mail"), .ja, size)
     try write("board_map_mine.png", map(0, part: "mine"), .ja, size)
+    // 保存: 上書きの取得・追記の処理（追記の取得は slack の実行中で見る）。
+    try write("board_map_github.png", map(0, part: "github"), .ja, size)
+    try write("board_map_dedupe.png", map(0, part: "dedupe"), .ja, size)
     try write("board_map_digest.png", map(0, part: "digest"), .ja, size)
     let running = map(0, part: "slack")
     running.automation.perform(.flow(.part))

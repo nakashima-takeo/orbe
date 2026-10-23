@@ -2,7 +2,7 @@ import Foundation
 
 /// 受け手の読み。上流から引いた行（`AutomationDatabase.rows`）に受け手の取り方を掛け、取る行・捨てる行・読んだ位置の進め先を
 /// 選ぶだけの計算。DB を読み書きするのは呼び手。
-enum AutomationInbox {
+enum AutomationIntake {
   /// 出す側の表。
   enum Table: Equatable {
     case item
@@ -39,36 +39,10 @@ enum AutomationInbox {
     let unread: Bool
   }
 
-  enum Reason: Equatable {
-    /// 出どころが無い（判定の部品だけ）。
-    case unsourced
-    /// 古さの上限を過ぎた。
-    case expired
-    /// 出どころのリンクに候補がある（判定の部品だけ）。
-    case proposed
-    /// 同じリンクの、より新しい行がある（判定の部品だけ）。
-    case sameLink
-    /// 同じ下流へ渡す id の、より新しい行がある。
-    case replaced
-    /// 件数の上限を超えた。
-    case overflow
-
-    /// 回の履歴の扱いの名。
-    var how: String {
-      switch self {
-      case .unsourced: "unsourced"
-      case .expired: "expired"
-      case .proposed: "proposed"
-      case .sameLink: "sameLink"
-      case .replaced: "replaced"
-      case .overflow: "overflow"
-      }
-    }
-  }
-
+  /// 捨てた行と理由（`lapsed` は読みでは出ない）。
   struct Drop: Equatable {
     let row: Row
-    let reason: Reason
+    let reason: AutomationDrops.Reason
   }
 
   /// 読んだ位置の進め先（つながりと表ごと）。
@@ -93,8 +67,7 @@ enum AutomationInbox {
   /// つながりごとの、読む上限の番号（読んだ位置を上限まで進めてよいかを決める）。
   struct Ceiling: Equatable {
     let edge: AutomationPartID
-    let item: Int
-    let event: Int
+    let seqs: AutomationSeqs
   }
 
   /// 取るときの事情。
@@ -162,8 +135,8 @@ enum AutomationInbox {
   private static func reach(_ ceilings: [Ceiling]) -> [Reach] {
     ceilings.flatMap { ceiling in
       [
-        Reach(edge: ceiling.edge, table: .item, seq: ceiling.item),
-        Reach(edge: ceiling.edge, table: .event, seq: ceiling.event),
+        Reach(edge: ceiling.edge, table: .item, seq: ceiling.seqs.item),
+        Reach(edge: ceiling.edge, table: .event, seq: ceiling.seqs.event),
       ]
     }.filter { $0.seq > 0 }
   }

@@ -28,6 +28,16 @@ extension AutomationStore {
     return part
   }
 
+  /// 鍵で指した部品が項目・出来事に最後に振った番号（DB から。テスト）。
+  func lastSeqs(_ id: Int, _ key: String) throws -> AutomationSeqs {
+    try read { try $0.lastSeqs(of: part(id, key)) }
+  }
+
+  /// 鍵で指した受け手の持ち越し（DB から。テスト）。
+  func pendingDrops(_ id: Int, _ key: String) throws -> AutomationDrops {
+    try read { try $0.pendingDrops(of: part(id, key)) }
+  }
+
   /// 鍵で指した部品の 1 回を、走らせ役と同じ読み（読める行をすべて取る）で確定する（テストと見本）。
   @discardableResult func record(
     _ id: Int, part key: String, trigger: AutomationPartRun.Trigger = .schedule, at: Date,

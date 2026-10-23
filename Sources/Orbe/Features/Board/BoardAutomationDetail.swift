@@ -109,7 +109,7 @@ struct BoardAutomationDetail: View {
       }
   }
 
-  /// 「次回 16:50」。止めていれば停止の印と「停止中」。
+  /// 「次回 16:50」。止めていれば停止の印と「一時停止中」。
   @ViewBuilder private var upcoming: some View {
     if standing.paused {
       HStack(spacing: 5) {

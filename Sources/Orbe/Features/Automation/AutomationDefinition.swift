@@ -16,7 +16,7 @@ struct AutomationDefinition: Equatable, Codable {
     /// 入力（上流の部品の鍵と取り方）。空は入力の無い部品。
     var from: [Input]
     var action: AutomationActionDef
-    /// 1 回に取る件数の上限（外の形は `inboxLimit.maxItems`）。
+    /// 1 回に取る件数の上限。
     var maxItems: Int?
 
     /// 行を見るか——入力があり、ツールを持つ agent でない。
@@ -47,24 +47,30 @@ struct AutomationDefinition: Equatable, Codable {
     do {
       let data = try JSONSerialization.data(withJSONObject: object)
       return try AutomationWire.decoder.decode(AutomationDefinition.self, from: data)
-    } catch DecodingError.keyNotFound(let key, let context) {
-      throw .invalid("missing \(path(context.codingPath + [key]))")
-    } catch DecodingError.typeMismatch(_, let context) {
-      throw .invalid("invalid \(path(context.codingPath))")
-    } catch DecodingError.valueNotFound(_, let context) {
-      throw .invalid("invalid \(path(context.codingPath))")
-    } catch DecodingError.dataCorrupted(let context) {
-      let at = path(context.codingPath)
-      throw .invalid(
-        at.isEmpty ? context.debugDescription : "invalid \(at): \(context.debugDescription)")
     } catch {
-      throw .invalid("invalid definition")
+      throw .invalid(reason(error, at: ""))
+    }
+  }
+
+  /// 読みの誤りを、定義の中の場所で言う理由の文にする。`base` は読んだ値の定義の中の場所（`parts[1]`・`parts[1].trigger`。
+  /// 定義そのものなら空）。
+  static func reason(_ error: Error, at base: String) -> String {
+    switch error {
+    case DecodingError.keyNotFound(let key, let context):
+      return "missing \(path(context.codingPath + [key], under: base))"
+    case DecodingError.typeMismatch(_, let context), DecodingError.valueNotFound(_, let context):
+      return "invalid \(path(context.codingPath, under: base))"
+    case DecodingError.dataCorrupted(let context):
+      let at = path(context.codingPath, under: base)
+      return at.isEmpty ? context.debugDescription : "invalid \(at): \(context.debugDescription)"
+    default:
+      return "invalid definition"
     }
   }
 
   /// `parts[2].trigger` の形（定義の中の場所）。
-  private static func path(_ keys: [CodingKey]) -> String {
-    keys.reduce(into: "") { path, key in
+  private static func path(_ keys: [CodingKey], under base: String) -> String {
+    keys.reduce(into: base) { path, key in
       if let index = key.intValue {
         path += "[\(index)]"
       } else {

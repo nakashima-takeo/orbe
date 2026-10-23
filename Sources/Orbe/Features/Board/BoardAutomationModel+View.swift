@@ -49,7 +49,7 @@ extension BoardAutomationModel {
     }
     guard let selectedAutomation else {
       return [BoardKeyHint("↵", .boardAskHint)]
-        + (ids.isEmpty ? [] : [BoardKeyHint("↓", .boardHintToList)])
+        + (ids.isEmpty ? [] : [BoardKeyHint("↓", .automationHintToList)])
     }
     let paused = selectedAutomation.paused
     func hand(_ operation: BoardAutomationHand.Operation) -> BoardKeyHint {
@@ -59,12 +59,12 @@ extension BoardAutomationModel {
     case .notify:
       return [
         BoardKeyHint("↑↓", .boardHintParts), BoardKeyHint("↵", .boardHintChangeNotify),
-        BoardKeyHint("←", .boardHintToList),
+        BoardKeyHint("←", .automationHintToList),
       ]
     case .part:
       return [
         BoardKeyHint("↑↓", .boardHintParts), hand(.flow(.part)),
-        BoardKeyHint("←", .boardHintToList),
+        BoardKeyHint("←", .automationHintToList),
       ]
     case nil:
       return [

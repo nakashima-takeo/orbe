@@ -5,7 +5,7 @@ import Foundation
 /// 行）を「説明: 抜粋」で添える。Orbe が種類を決められない文（部品の申告・CLI のエラー）は、説明の頭の後に文をそのまま
 /// 添え、原文を重ねない。
 extension AutomationText {
-  /// 「制限時間内に終わらなかった（the part "x" ended: stopped at the time limit）」。
+  /// 「制限時間を超過（the part "x" ended: stopped at the time limit）」。
   func failure(_ run: AutomationPartRun, node: AutomationGraph.Node) -> String? {
     guard let failure = run.failure else { return nil }
     let head = failureHead(failure, ending: run.execution.ending, node: node)
@@ -13,7 +13,7 @@ extension AutomationText {
     case .agentError, .reported: return head
     case _ where l10n.language == .en:
       return excerpt(failure, breach: run.breach).map {
-        l10n.format(.automationFailureExcerpt, head, $0)
+        l10n.format(.automationLabeled, head, $0)
       } ?? head
     default:
       let original = failure.text(part: node.key, ending: run.execution.ending, breach: run.breach)
@@ -25,7 +25,7 @@ extension AutomationText {
   func unreadable(_ reason: String) -> String {
     let head = l10n.string(.boardAutomationUnreadable)
     return l10n.language == .en
-      ? l10n.format(.automationFailureExcerpt, head, reason)
+      ? l10n.format(.automationLabeled, head, reason)
       : l10n.format(.automationWithOriginal, head, reason)
   }
 
@@ -51,7 +51,7 @@ extension AutomationText {
       if case .agent(let agent) = node.action.method { cli = agent.cli }
       return l10n.format(.automationFailAgentError, cli, text)
     case .reported(let text): return l10n.format(.automationFailReported, text)
-    case .brokeRules: return l10n.string(.automationFailBrokeRules)
+    case .brokeRules: return l10n.string(.automationFormatError)
     case .unreadInput(let count): return l10n.format(.automationFailUnreadInput, count)
     case .noResult: return l10n.string(.automationFailNoResult)
     case .unsourced: return l10n.string(.automationFailUnsourced)
@@ -66,7 +66,7 @@ extension AutomationText {
     case .timeLimit: l10n.string(.automationEndTimeLimit)
     case .idleLimit: l10n.string(.automationEndIdleLimit)
     case .outputLimit: l10n.string(.automationEndOutputLimit)
-    case .stopped, .heldByTrial, .givenToTrial: l10n.string(.automationEndStopped)
+    case .stopped: l10n.string(.automationEndStopped)
     case .agentMissing(let cli): l10n.format(.automationEndAgentMissing, cli)
     case .directoryMissing(let directory): l10n.format(.automationEndDirectoryMissing, directory)
     case .notStarted: l10n.string(.automationEndNotStarted)
@@ -77,7 +77,7 @@ extension AutomationText {
     }
   }
 
-  /// 「3 件目：link が無い」（位置の無い誤りは理由だけ）。
+  /// 「3 件目：link がありません」（位置の無い誤りは理由だけ）。
   func line(_ broken: AutomationBrokenLine) -> String {
     guard let line = broken.line else { return fault(broken.fault) }
     return l10n.format(.automationLineAt, line, fault(broken.fault))
@@ -107,7 +107,7 @@ extension AutomationText {
     }
   }
 
-  /// 判定の確定で捨てた案を理由ごとに数えた添え書き（「既に候補にあるので 2 件を捨てた」）。無ければ空。
+  /// 判定の確定で捨てた案を理由ごとに数えた添え書き（「候補に登録済みの 2 件を破棄」）。無ければ空。
   func dismissals(_ dismissed: [AutomationDismissal]) -> [String] {
     let already = dismissed.filter { $0.why == .alreadyProposed }.count
     let noOpen = dismissed.count - already

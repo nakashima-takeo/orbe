@@ -101,7 +101,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
 
     XCTAssertEqual(run(control, ["run", id, "--part", "fetch"]), "started automation \(id)")
     XCTAssertTrue(waitUntil(10) { automation()?.state(key: "fetch").runs.isEmpty == false })
-    XCTAssertEqual(automation()?.state(key: "judge").inbox, 1, "前提: 判定が読めば取る行がある")
+    XCTAssertEqual(automation()?.state(key: "judge").pending.count, 1, "前提: 判定が読めば取る行がある")
     // 鍵が届かず終わりの部品まで流れると、判定は取得の終わりと同じ知らせの中で起こされる（走っているか、もう記録がある）。
     XCTAssertFalse(control.target.automationRunner.isRunning(Int(id)!, "judge"))
     XCTAssertEqual(automation()?.state(key: "judge").runs, [], "道の外の手動の部品は走らない")
@@ -257,11 +257,14 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     func ids(_ rows: Any?) -> [String]? {
       (rows as? [[String: Any]])?.compactMap { $0["id"] as? String }
     }
-    XCTAssertEqual(ids(firstRun("fetch")?["rows"]), ["1:b"], "取得の部品の ID の接頭（新しい DB の最初の部品）")
+    XCTAssertEqual(
+      ids((firstRun("fetch")?["given"] as? [String: Any])?["rows"]), ["1:b"],
+      "取得の部品の ID の接頭（新しい DB の最初の部品）")
     XCTAssertEqual(ids((firstRun("send")?["held"] as? [String: Any])?["rows"]), ["1:b"])
     XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path), "副作用のコマンドは走らない")
-    XCTAssertEqual(
-      run(control, ["trial", id]).split(separator: "\n").last, "send\theld\theld 1 rows")
+    let lines = run(control, ["trial", id]).split(separator: "\n")
+    XCTAssertTrue(lines.contains("fetch\tgiven\tgiven 1 rows"), "\(lines)")
+    XCTAssertEqual(lines.last, "send\theld\theld 1 rows")
 
     let ranged = try XCTUnwrap(
       control.orbJSON(["automation", "try", id, "--from", "note", "--to", "note"])["trial"]

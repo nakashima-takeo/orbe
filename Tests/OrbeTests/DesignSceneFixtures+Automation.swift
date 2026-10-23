@@ -141,7 +141,7 @@ extension DesignSceneFixtures {
     else {
       preconditionFailure("no part \(pass.part) in the sample")
     }
-    var read: AutomationInbox.Read?
+    var read: AutomationIntake.Read?
     var outcome = pass.outcome
     if case .succeeded(.fetch(let rows), let execution, let breach) = outcome, !kept.isEmpty {
       let ids = Set(rows.map(\.id))
@@ -153,7 +153,7 @@ extension DesignSceneFixtures {
         store.read(node.id, of: id, baseline: nil, now: pass.at.addingTimeInterval(60)))
       let expired = found.taken.prefix(pass.expired)
       found.taken.removeFirst(expired.count)
-      found.dropped += expired.map { AutomationInbox.Drop(row: $0, reason: .expired) }
+      found.dropped += expired.map { AutomationIntake.Drop(row: $0, reason: .expired) }
       if let take = pass.take { found.taken = Array(found.taken.suffix(take)) }
       read = found
       outcome = resolved(outcome, pass, found.taken)
@@ -165,7 +165,7 @@ extension DesignSceneFixtures {
         outcome: outcome))
   }
 
-  private static func readOrFail(_ read: AutomationInbox.Read?) -> AutomationInbox.Read {
+  private static func readOrFail(_ read: AutomationIntake.Read?) -> AutomationIntake.Read {
     guard let read else { preconditionFailure("a part with inputs reads") }
     return read
   }
@@ -174,7 +174,7 @@ extension DesignSceneFixtures {
   /// 次へ渡す。
   private static func resolved(
     _ outcome: AutomationPartPass.Outcome, _ pass: AutomationSamplePass,
-    _ taken: [AutomationInbox.Row]
+    _ taken: [AutomationIntake.Row]
   ) -> AutomationPartPass.Outcome {
     if let count = pass.passThrough, case .succeeded(_, let execution, let breach) = outcome {
       return .succeeded(
@@ -300,7 +300,7 @@ extension DesignSceneFixtures {
     reason: String? = nil
   ) -> AutomationPartPass.Proposal {
     AutomationPartPass.Proposal(
-      origin: AutomationInbox.Origin(part: AutomationPartID(0), row: .event(0), item: item),
+      origin: AutomationIntake.Origin(part: AutomationPartID(0), row: .event(0), item: item),
       title: title, due: due, workspace: workspace, reason: reason)
   }
 
