@@ -29,6 +29,34 @@ extension AutomationStoreTests {
     XCTAssertEqual(proposals(store), [a.link: .open])
   }
 
+  /// 判定が読んだ後に出どころの項目が無効になったら、その案は確定で理由付きで捨て、判断待ちの候補に残さない。
+  func testAProposalWhoseOriginWasInvalidatedMidRunIsDismissed() throws {
+    let store = AutomationStore()
+    let id = try store.create(Self.definition(coverage: .currentSet), now: Self.at).id
+    let a = Self.item("a")
+    try Self.fetch(store, id, [a])
+    let judge = store.part(id, "judge")
+    let read = try XCTUnwrap(store.read(judge, of: id, baseline: nil, now: Self.at))
+    try Self.fetch(store, id, [])
+
+    try store.record(
+      AutomationPassEnd(
+        automationId: id, part: judge,
+        defId: try XCTUnwrap(store.automation(id)?.graph.node(judge)).part.defId,
+        trigger: .arrival, startedAt: Self.at, endedAt: Self.at, read: read,
+        outcome: DesignSceneFixtures.judged(
+          [
+            AutomationPartPass.Proposal(
+              origin: try XCTUnwrap(read.taken.first?.origin), title: "対応: a", due: nil,
+              workspace: nil, reason: nil)
+          ], rows: 1)))
+
+    XCTAssertEqual(proposals(store), [:])
+    let run = store.automation(id)?.state(key: "judge").runs.first?.run
+    guard case .judge(0, 0, let dismissed) = run?.result else { return XCTFail("判定の回が記録されない") }
+    XCTAssertEqual(dismissed.map(\.why), [.originInvalidated])
+  }
+
   /// 出どころが出来事の候補は、取得から消えても判定が対応済みにするまで残り、対応済みになれば（誰も持たないので）忘れる。
   func testANewArrivalsProposalStaysUntilTheJudgeResolvesIt() throws {
     let store = AutomationStore()

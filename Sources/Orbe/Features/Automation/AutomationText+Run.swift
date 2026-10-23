@@ -109,9 +109,14 @@ extension AutomationText {
 
   /// 判定の確定で捨てた案を理由ごとに数えた添え書き（「候補に登録済みの 2 件を破棄」）。無ければ空。
   func dismissals(_ dismissed: [AutomationDismissal]) -> [String] {
-    let already = dismissed.filter { $0.why == .alreadyProposed }.count
-    let noOpen = dismissed.count - already
-    return (already > 0 ? [l10n.format(.automationDismissedAlready, already)] : [])
-      + (noOpen > 0 ? [l10n.format(.automationDismissedNoOpen, noOpen)] : [])
+    let keys: [(AutomationDismissal.Why, L10nKey)] = [
+      (.alreadyProposed, .automationDismissedAlready),
+      (.noOpenProposal, .automationDismissedNoOpen),
+      (.originInvalidated, .automationDismissedOriginInvalidated),
+    ]
+    return keys.compactMap { why, key in
+      let count = dismissed.filter { $0.why == why }.count
+      return count > 0 ? l10n.format(key, count) : nil
+    }
   }
 }

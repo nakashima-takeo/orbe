@@ -187,6 +187,8 @@ struct AutomationDismissal: Equatable {
     case alreadyProposed
     /// 対応済みにする判断待ちの候補が無い。
     case noOpenProposal
+    /// 案の出どころの項目が、回の途中に無効になった。
+    case originInvalidated
   }
 
   /// AI が読む英文。
@@ -194,6 +196,7 @@ struct AutomationDismissal: Equatable {
     switch why {
     case .alreadyProposed: "propose \(link): already proposed"
     case .noOpenProposal: "resolve \(link): no open proposal"
+    case .originInvalidated: "propose \(link): its source item is no longer current"
     }
   }
 }

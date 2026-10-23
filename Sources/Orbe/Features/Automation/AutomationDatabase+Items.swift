@@ -187,6 +187,19 @@ extension AutomationDatabase {
     ) { $0.int(at: 0) }
   }
 
+  /// 版のうち、その項目が今有効でないもの。
+  func invalidatedVersions(_ versions: [Int]) throws -> Set<Int> {
+    guard !versions.isEmpty else { return [] }
+    let list = versions.map(String.init).joined(separator: ",")
+    return Set(
+      try db.select(
+        """
+        SELECT v.id FROM item_versions v JOIN items i ON i.id = v.item_id
+        WHERE v.id IN (\(list)) AND i.valid_to IS NOT NULL
+        """, []
+      ) { $0.int(at: 0) })
+  }
+
   // MARK: - 値
 
   /// 項目の今の版の ID を引く SQL の式（`item` は項目の ID の式）。版は足すだけなので、最も大きい ID が今の版。

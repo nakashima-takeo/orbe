@@ -123,5 +123,8 @@ extension L10n {
     .automationFaultEmptyReport: ("報告が空", "the report is empty"),
     .automationDismissedAlready: ("候補に登録済みの %lld 件を破棄", "discarded %lld already proposed"),
     .automationDismissedNoOpen: ("判断待ちの候補が無い %lld 件を破棄", "discarded %lld with no waiting proposal"),
+    .automationDismissedOriginInvalidated: (
+      "取得元の項目が無効になった %lld 件を破棄", "discarded %lld whose source item is no longer current"
+    ),
   ]
 }

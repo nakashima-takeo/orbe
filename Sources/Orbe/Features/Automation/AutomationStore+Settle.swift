@@ -34,7 +34,7 @@ struct AutomationSettling {
     var dropped = carried
     for drop in end.read?.dropped ?? [] { dropped.add(drop.reason) }
     run.dropped = dropped
-    let decided = judged.map { decide($0.proposals, $0.resolved, memory) }
+    let decided = try judged.map { try decide($0.proposals, $0.resolved, memory) }
     if let decided {
       run.result = .judge(
         proposed: decided.pending.count, resolved: decided.resolving.count,
@@ -101,16 +101,26 @@ struct AutomationSettling {
     let dismissed: [AutomationDismissal]
   }
 
-  /// 回の途中に他の確定や人のさばきがあっても、既に候補のあるリンクへの案は理由付きで捨て、判断待ちでない候補は対応済みに
-  /// しない。
+  /// 回の途中に他の確定や人のさばきがあっても、出どころの項目が無効になった案と既に候補のあるリンクへの案は理由付きで捨て、
+  /// 判断待ちでない候補は対応済みにしない。
   private func decide(
     _ proposals: [AutomationPartPass.Proposal], _ resolved: [String], _ memory: AutomationMemory
-  ) -> Decided {
+  ) throws -> Decided {
     var proposed = memory.heldLinks
+    let invalidated = try db.invalidatedVersions(
+      proposals.compactMap {
+        if case .version(let id) = $0.origin.row { return id }
+        return nil
+      })
     var pending: [AutomationPartPass.Proposal] = []
     var resolving: [Int] = []
     var dismissed: [AutomationDismissal] = []
     for proposal in proposals {
+      if case .version(let id) = proposal.origin.row, invalidated.contains(id) {
+        dismissed.append(
+          AutomationDismissal(link: proposal.origin.item.link, why: .originInvalidated))
+        continue
+      }
       guard proposed.insert(proposal.origin.item.link).inserted else {
         dismissed.append(
           AutomationDismissal(link: proposal.origin.item.link, why: .alreadyProposed))
