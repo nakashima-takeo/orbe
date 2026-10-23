@@ -4,10 +4,10 @@ import SwiftUI
 /// コミットメッセージの欄。↵ はコミット（→ `ScmPanel.commitFromMessage`）、改行は ⇧↵・⌥↵・⌃↵、変換中の ↵ は変換の
 /// 確定だけ（IME が使った ↵ は改行の命令として届かない）。1 行のときの高さは見本の 26 で、10 行まで伸び、その先は
 /// スクロールする。中身は worktree の状態（`SourceControl.message`）そのもので、同じ worktree を見る別の窓の欄とも同じ値に
-/// なる。取り消しの履歴は欄ごとに持ち、欄と一緒に消える——窓の履歴に積むと、作り直された・隠れた欄の打鍵を別の欄の ⌘Z が
-/// 戻し、見えない worktree のメッセージを書き換える。⌘↵（コミットしてプッシュ）は pane が取る
-/// （→ `EditorPaneView+SourceControl`）。焦点の出入りはパネルへ写し、焦点の要求（ソース管理を開いた・列の先頭で ⌘↑）は
-/// ここで当てる。
+/// なる。変換中の字は確定するまでメッセージに入れず、パネルの見せ方（`ScmPanel.composition`）に写す。取り消しの履歴は
+/// 欄ごとに持ち、欄と一緒に消える——窓の履歴に積むと、作り直された・隠れた欄の打鍵を別の欄の ⌘Z が戻し、見えない
+/// worktree のメッセージを書き換える。⌘↵（コミットしてプッシュ）は pane が取る（→ `EditorPaneView+SourceControl`）。
+/// 焦点の出入りはパネルへ写し、焦点の要求（ソース管理を開いた・列の先頭で ⌘↑）はここで当てる。
 struct ScmMessageField: NSViewRepresentable {
   let panel: ScmPanel
   let placeholder: String
@@ -27,6 +27,9 @@ struct ScmMessageField: NSViewRepresentable {
     text.onCommit = { [weak coordinator = context.coordinator] in
       coordinator?.field.panel.commitFromMessage(andPush: false)
     }
+    text.onComposition = { [weak coordinator = context.coordinator] in
+      coordinator?.compositionDidChange($0)
+    }
     let scroll = ScmMessageScrollView()
     scroll.documentView = text
     scroll.drawsBackground = false
@@ -42,6 +45,7 @@ struct ScmMessageField: NSViewRepresentable {
   func updateNSView(_ scroll: NSScrollView, context: Context) {
     context.coordinator.field = self
     guard let text = scroll.documentView as? ScmMessageTextView else { return }
+    panel.confirmComposition = { [weak text] in text?.confirmComposition() }
     text.placeholder = placeholder
     let message = panel.control.message
     if text.string != message, !text.hasMarkedText() {
@@ -78,6 +82,10 @@ struct ScmMessageField: NSViewRepresentable {
       field.panel.control.message = text.string
     }
 
+    func compositionDidChange(_ composition: String) {
+      if field.panel.composition != composition { field.panel.composition = composition }
+    }
+
     func focusDidChange(_ focused: Bool) {
       field.focused = focused
       field.panel.focusDidChange(.message, focused: focused)
@@ -112,6 +120,8 @@ final class ScmMessageTextView: NSTextView {
   var onWindow: (() -> Void)?
   /// 修飾の無い ↵ を押した（何も入れない）。
   var onCommit: (() -> Void)?
+  /// 変換中の字が変わった（変換が始まった・変わった・終わった。終われば空）。
+  var onComposition: ((String) -> Void)?
   /// 解釈中の押下（`interpretKeyEvents` が同期に呼ぶ命令へ添える）。改行の命令は ↵ と ⇧↵ で同じなので、押下から読み分ける。
   private var interpreting: NSEvent?
   /// 手で組んだ文字の系の根（テキスト面はこれを持たないので、自分で持つ）。
@@ -243,6 +253,29 @@ final class ScmMessageTextView: NSTextView {
     super.didChangeText()
     needsDisplay = true
     contentHeightMayHaveChanged()
+    reportComposition()
+  }
+
+  override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+    super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
+    reportComposition()
+  }
+
+  override func unmarkText() {
+    super.unmarkText()
+    reportComposition()
+  }
+
+  /// 変換中なら確定する（IME の変換も終わらせる）。確定した字は、返る前に `textDidChange` でメッセージへ入る。
+  func confirmComposition() {
+    guard hasMarkedText() else { return }
+    unmarkText()
+    inputContext?.discardMarkedText()
+  }
+
+  /// 変換中の字を知らせる（IME の確定の `insertText` は `didChangeText` で拾う）。
+  private func reportComposition() {
+    onComposition?(hasMarkedText() ? (string as NSString).substring(with: markedRange()) : "")
   }
 
   /// 中身を外から差し替える（コミット後に空にした・別の窓で打った）。差し替えは undo に積まず、欄の取り消しの履歴も捨てる

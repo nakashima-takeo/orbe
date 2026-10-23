@@ -330,13 +330,13 @@ final class SourceControlPaneTests: OrbeTestCase {
   }
 
   /// 面のメッセージ欄（載っていなければ nil）。
-  private func messageField(in view: NSView) -> ScmMessageTextView? {
+  func messageField(in view: NSView) -> ScmMessageTextView? {
     (view as? ScmMessageTextView) ?? view.subviews.lazy.compactMap(messageField(in:)).first
   }
 
   /// メッセージ欄に焦点を入れ、末尾に `text` を打つ（打った文が欄の外へ届くまで待つ）。
   @discardableResult
-  private func type(_ text: String, in hosted: Hosted) throws -> ScmMessageTextView {
+  func type(_ text: String, in hosted: Hosted) throws -> ScmMessageTextView {
     pumpMain(until: { self.messageField(in: hosted.pane) != nil }, "メッセージ欄")
     let field = try XCTUnwrap(messageField(in: hosted.pane))
     hosted.window.makeFirstResponder(field)
