@@ -107,7 +107,8 @@ struct AutomationPending: Equatable {
   var expiresAt: Date?
 }
 
-/// 項目と出来事の番号の組（読んだ位置・上流の最後の番号・読む上限）。
+/// 項目の表と出来事の表の番号の組（読んだ位置・上流の最後の番号・読む上限）。項目の表の番号は変化の番号（項目の追加・版の
+/// 追加・無効化で進む）。
 struct AutomationSeqs: Equatable {
   var item = 0
   var event = 0

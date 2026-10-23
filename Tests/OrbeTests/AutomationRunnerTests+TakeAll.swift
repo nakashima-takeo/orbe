@@ -41,6 +41,36 @@ extension AutomationRunnerTests {
     XCTAssertEqual(calls("copy").count, 2, "上流が変わらなければ起き直さない")
   }
 
+  /// 毎回すべてを取る「届いたら」の部品は、上流の項目の中身が変わっただけでも起き、変わった中身を写す。
+  func testATakeAllArrivalPartWakesWhenAnUpstreamItemsBodyChanges() throws {
+    _ = try defineCopy()
+    advance(by: 1800)
+    finish("gh", fetched(["a"]))
+    finish("copy", printed(item("a")))
+
+    advance(by: 1800)
+    finish("gh", printed(item("a", body: "書き換えた本文")))
+
+    XCTAssertEqual(calls("copy").count, 2, "版の追加で起きる")
+    XCTAssertEqual(bodies("copy"), ["書き換えた本文"])
+  }
+
+  /// 再起動の後も、毎回すべてを取る「届いたら」の部品は、まだ扱い終えていない上流の変化で起きる（失敗した回の後に Orbe を
+  /// 終えても、上流がまた変わるのを待たない）。扱い終えた変化では起き直さない。
+  func testATakeAllArrivalPartWakesAfterARelaunchForAChangeItHasNotHandled() throws {
+    _ = try defineCopy()
+    advance(by: 1800)
+    finish("gh", fetched(["a"]))
+    finish("copy", printed("", exit: 1))
+
+    launch()
+    XCTAssertEqual(calls("copy").count, 2, "起動で起きる")
+    finish("copy", printed(item("a")))
+
+    launch()
+    XCTAssertEqual(calls("copy").count, 2, "扱い終えた変化では起き直さない")
+  }
+
   /// 今の集合の処理は、入力が 0 件になっても回り（空の集合を写す）、前の出力をすべて無効にする。
   func testACurrentSetProcessRunsOnAnEmptyInputAndDropsItsOutput() throws {
     let id = try defineCopy()

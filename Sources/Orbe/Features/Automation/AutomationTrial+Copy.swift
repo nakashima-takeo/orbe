@@ -30,8 +30,8 @@ extension AutomationStore {
     }
   }
 
-  /// 部品の回が新しく足した `fresh` 行のうち、番号の順で `keeping` 行を超えた分を写しから消し、その表の最後の番号を残した行の
-  /// 最後まで戻す。写しは、その回が新しい行を `keeping` 行だけ出した状態と同じになる（読んだ位置・読む前に期限で消えた数・
+  /// 部品の回が新しく足した `fresh` 行のうち、番号の順で `keeping` 行を超えた分を写しから消し、その表の最後の番号を、残った
+  /// 行が記録する最も大きい番号（項目の表は項目・版・無効化の番号）まで戻す。写しは、その回が新しい行を `keeping` 行だけ出した状態と同じになる（読んだ位置・読む前に期限で消えた数・
   /// 起こす決まりが本番の意味のまま揃う）。確定の直後、下流が読む前に呼ぶ。
   func trim(_ part: AutomationPartID, in id: Int, fresh: Int, keeping: Int, now: Date)
     throws(AutomationError)
@@ -107,10 +107,21 @@ extension AutomationDatabase {
         try db.run("DELETE FROM events WHERE id = ?", id)
       }
     }
-    let column = coverage == .currentSet ? "last_item_seq" : "last_event_seq"
+    let (column, recorded) =
+      coverage == .currentSet
+      ? (
+        "last_item_seq",
+        """
+        SELECT seq FROM items WHERE part_id = ?1
+        UNION ALL SELECT valid_to_seq FROM items WHERE part_id = ?1
+        UNION ALL SELECT v.seq FROM item_versions v JOIN items i ON i.id = v.item_id
+          WHERE i.part_id = ?1
+        """
+      )
+      : ("last_event_seq", "SELECT seq FROM events WHERE part_id = ?1")
     try db.run(
-      "UPDATE parts SET \(column) = ? WHERE id = ?",
-      [.integer(Int64(rows[keeping - 1].seq)), .integer(Int64(part.rawValue))])
+      "UPDATE parts SET \(column) = coalesce((SELECT max(seq) FROM (\(recorded))), 0) WHERE id = ?1",
+      [.integer(Int64(part.rawValue))])
   }
 
   /// 同じ書かれた id の今有効な項目を無効にする。
@@ -119,7 +130,7 @@ extension AutomationDatabase {
       "SELECT id FROM items WHERE part_id = ? AND written_id = ? AND valid_to IS NULL",
       [.integer(Int64(part.rawValue)), .text(written)], { $0.int(at: 0) })
     {
-      try invalidate(item: item, at: at)
+      try invalidate(item: item, of: part, at: at)
     }
   }
 }

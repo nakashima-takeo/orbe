@@ -1,74 +1,51 @@
 import Foundation
 
-/// 「届いたら」の部品を起こす決まりは 1 つ: 入力のどれかに、その契機の基準線より新しい上流の行があり、走っていなければ起こす。
-/// 基準線は、take が new の入力なら表ごとに「読んだ位置」と「前の契機の始まりの時点の上流の最後の番号」の大きい方、take が all
-/// の入力なら「前の契機の始まりの時点の上流の変化の番号」（走らせ役のメモリだけ。項目が無効になっても番号は進まないので）。
-/// 読んだ位置と上流の最後の番号は、見るたびに DB から読む。この決まりは、
+/// 「届いたら」の部品を起こす決まりは 1 つ: 入力のどれかに、その契機の基準線より新しい上流の番号があり、走っていなければ起こす。
+/// 基準線は入力ごと・表ごとに「読んだ位置」と「前の契機の始まりの時点の上流の最後の番号」の大きい方で、取り方によらない——項目の
+/// 表の番号は変化の番号（項目の追加・版の追加・無効化で進む）なので、毎回すべてを取る入力も同じ比べ方で上流の変化に起きる。
+/// 読んだ位置と上流の最後の番号は、見るたびに DB から読む（再起動の後も、読んでいない変化で起こす）。この決まりは、
 /// 上流の行が変わったとき（上流の確定）・登録したとき（起動・書き換え・再開。止めた自動化は除く）・その部品の契機が終わったときに
 /// 見る。失敗した契機の行は基準線以下なので、この決まりでは起こさない（同じ行で失敗をすぐ繰り返さない）。代わりに、
-/// 「届いたら」でない部品の契機が終わるたびに、下流の「届いたら」の部品を、読めば取る行があればすべて起こす（祖先の予定の
-/// 間隔でやり直す）。
+/// 「届いたら」でない部品の契機が終わるたびに、下流の「届いたら」の部品を、読んだ位置より後の上流の番号があればすべて起こす
+/// （祖先の予定の間隔でやり直す）。
 extension AutomationRunner {
-  /// 上流の印: 最後に振った番号（項目・出来事）と変化の番号。
-  struct Mark: Equatable {
-    var seqs = AutomationSeqs()
-    var changes = 0
-  }
-
-  /// 受け手の 1 つのつながりの今: 読んだ位置と、上流の今の印。
+  /// 受け手の 1 つのつながりの今: 読んだ位置と、上流の最後の番号。
   struct Inlet: Equatable {
     let read: AutomationSeqs
-    let up: Mark
+    let up: AutomationSeqs
   }
 
-  /// 受け手のつながりごとの今（読んだ位置と上流の最後の番号は DB から、変化の番号はメモリから）。読めなければ nil（ログに
-  /// 残す。起こす決まりは起こさない）。
+  /// 受け手のつながりごとの今（DB から読む）。読めなければ nil（ログに残す。起こす決まりは起こさない）。
   func inlets(of part: AutomationPartID, in id: Int) -> [AutomationPartID: Inlet]? {
     do throws(AutomationError) {
       let positions = try store.positions(of: part, in: id)
-      return Dictionary(
-        uniqueKeysWithValues: positions.map { up, position in
-          (up, Inlet(read: position.read, up: Mark(seqs: position.last, changes: changes[up] ?? 0)))
-        })
+      return positions.mapValues { Inlet(read: $0.read, up: $0.last) }
     } catch {
       NSLog("[automation] cannot read the inputs of part \(part): \(error)")
       return nil
     }
   }
 
-  /// 入力のどれかに、基準線より新しい上流の行があるか。`previous` は前の契機の始まりの時点の、入力ごとの上流の印。
+  /// 入力のどれかに、基準線より新しい上流の番号があるか。`previous` は前の契機の始まりの時点の、入力ごとの上流の最後の番号。
   static func hasNew(
     _ node: AutomationGraph.Node, _ inlets: [AutomationPartID: Inlet],
-    since previous: [AutomationPartID: Mark]
+    since previous: [AutomationPartID: AutomationSeqs]
   ) -> Bool {
     node.inputs.contains { edge in
       guard let now = inlets[edge.from] else { return false }
-      let before = previous[edge.from]
-      switch edge.take {
-      case .new:
-        return now.up.seqs.item > max(now.read.item, before?.seqs.item ?? 0)
-          || now.up.seqs.event > max(now.read.event, before?.seqs.event ?? 0)
-      case .all:
-        return now.up.changes > (before?.changes ?? 0)
-      }
+      let before = previous[edge.from] ?? AutomationSeqs()
+      return now.up.item > max(now.read.item, before.item)
+        || now.up.event > max(now.read.event, before.event)
     }
   }
 
-  /// 祖先の予定でのやり直しで起こすか。take が new の入力は読んでいない上流の行（読んだ位置より後の番号）があれば、all の
-  /// 入力は最後に失敗せずに終えた契機の始まりより後に上流が変わっていれば。`settled` はその契機の始まりの、入力ごとの上流の印
-  /// （無ければ変化の番号 0）。失敗した契機の行は読んだ位置が進まないので new では残り、all では基準線が進まないので残る。
-  static func needsRetry(
-    _ node: AutomationGraph.Node, _ inlets: [AutomationPartID: Inlet],
-    settled: [AutomationPartID: Mark]
-  ) -> Bool {
+  /// 祖先の予定でのやり直しで起こすか: 入力のどれかに、読んだ位置より後の上流の番号があるか（失敗した契機は読んだ位置を
+  /// 進めないので、その行と変化が残る）。
+  static func needsRetry(_ node: AutomationGraph.Node, _ inlets: [AutomationPartID: Inlet]) -> Bool
+  {
     node.inputs.contains { edge in
       guard let now = inlets[edge.from] else { return false }
-      switch edge.take {
-      case .new:
-        return now.up.seqs.item > now.read.item || now.up.seqs.event > now.read.event
-      case .all:
-        return now.up.changes > (settled[edge.from]?.changes ?? 0)
-      }
+      return now.up.item > now.read.item || now.up.event > now.read.event
     }
   }
 
@@ -84,15 +61,15 @@ extension AutomationRunner {
     scheduler.runNow(id: key)
   }
 
-  /// 失敗のやり直し。「届いたら」でない部品の契機が終わったら、下流の「届いたら」の部品を、最後に失敗せずに終えた契機より後の
-  /// 上流の行があればすべて起こす（`AutomationRunner+Wake` の `needsRetry`）。
+  /// 失敗のやり直し。「届いたら」でない部品の契機が終わったら、下流の「届いたら」の部品を、読んだ位置より後の上流の番号が
+  /// あればすべて起こす（`needsRetry`）。
   func retry(below part: AutomationPartID, in id: Int) {
     guard let automation = store.automation(id) else { return }
     for node in automation.graph.descendants(of: part) where node.part.trigger == .arrival {
       let key = Self.key(id, node.id)
-      guard let inlets = inlets(of: node.id, in: id),
-        Self.needsRetry(node, inlets, settled: settled[key] ?? [:])
-      else { continue }
+      guard let inlets = inlets(of: node.id, in: id), Self.needsRetry(node, inlets) else {
+        continue
+      }
       scheduler.runNow(id: key)
     }
   }

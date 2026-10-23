@@ -61,22 +61,21 @@ extension AutomationDatabase {
           if current.body == output.body {
             written.rows.append(.version(current.version))
           } else {
-            try db.run(
-              "INSERT INTO item_versions (item_id, body, valid_from) VALUES (?, ?, ?)",
-              [.integer(Int64(current.id)), .text(output.body), Self.instant(at)])
+            try insertVersion(
+              of: current.id, seq: try nextSeq(of: part, "last_item_seq"), output.body, at: at)
             written.rows.append(.version(Int(db.lastInsertRowID)))
             written.versioned += 1
           }
           continue
         }
-        try invalidate(item: current.id, at: at)
+        try invalidate(item: current.id, of: part, at: at)
         written.invalidated.append(current.id)
       }
       written.fresh.append(written.rows.count)
       written.rows.append(.version(try insertItem(of: part, output, at: at)))
     }
     for current in live.values {
-      try invalidate(item: current.id, at: at)
+      try invalidate(item: current.id, of: part, at: at)
       written.invalidated.append(current.id)
     }
     return written
@@ -104,7 +103,7 @@ extension AutomationDatabase {
     return written
   }
 
-  /// 新しい項目を、次の番号と最初の版で足す。足した版を返す。
+  /// 新しい項目を、次の番号と、同じ番号の最初の版で足す。足した版を返す。
   func insertItem(of part: AutomationPartID, _ output: Output, at: Date) throws -> Int {
     let seq = try nextSeq(of: part, "last_item_seq")
     try db.run(
@@ -114,11 +113,14 @@ extension AutomationDatabase {
       """,
       [.integer(Int64(part.rawValue)), .integer(seq), .text(output.id)]
         + Self.values(output.source) + [Self.instant(at)])
-    let item = db.lastInsertRowID
-    try db.run(
-      "INSERT INTO item_versions (item_id, body, valid_from) VALUES (?, ?, ?)",
-      [.integer(item), .text(output.body), Self.instant(at)])
+    try insertVersion(of: Int(db.lastInsertRowID), seq: seq, output.body, at: at)
     return Int(db.lastInsertRowID)
+  }
+
+  private func insertVersion(of item: Int, seq: Int64, _ body: String, at: Date) throws {
+    try db.run(
+      "INSERT INTO item_versions (item_id, seq, body, valid_from) VALUES (?, ?, ?, ?)",
+      [.integer(Int64(item)), .integer(seq), .text(body), Self.instant(at)])
   }
 
   /// 新しい出来事を次の番号で足し、その ID を返す。
@@ -143,14 +145,16 @@ extension AutomationDatabase {
       "SELECT id FROM items WHERE part_id = ? AND valid_to IS NULL",
       [.integer(Int64(part.rawValue))]
     ) { $0.int(at: 0) }
-    for id in ids { try invalidate(item: id, at: at) }
+    for id in ids { try invalidate(item: id, of: part, at: at) }
     return ids
   }
 
-  func invalidate(item: Int, at: Date) throws {
+  /// 部品 `part` の今有効な項目を、次の番号で無効にする。
+  func invalidate(item: Int, of part: AutomationPartID, at: Date) throws {
+    let seq = try nextSeq(of: part, "last_item_seq")
     try db.run(
-      "UPDATE items SET valid_to = max(valid_from, ?) WHERE id = ?",
-      [Self.instant(at), .integer(Int64(item))])
+      "UPDATE items SET valid_to = max(valid_from, ?), valid_to_seq = ? WHERE id = ?",
+      [Self.instant(at), .integer(seq), .integer(Int64(item))])
   }
 
   private func nextSeq(of part: AutomationPartID, _ column: String) throws -> Int64 {
@@ -160,7 +164,7 @@ extension AutomationDatabase {
       .first ?? 0
   }
 
-  /// 部品が項目・出来事にそれぞれ最後に振った通し番号。
+  /// 部品が項目の表（変化の番号）・出来事の表にそれぞれ最後に振った通し番号。
   func lastSeqs(of part: AutomationPartID) throws -> AutomationSeqs {
     try db.select(
       "SELECT last_item_seq, last_event_seq FROM parts WHERE id = ?",

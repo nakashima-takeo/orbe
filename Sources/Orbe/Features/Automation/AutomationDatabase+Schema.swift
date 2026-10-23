@@ -2,6 +2,9 @@ import Foundation
 
 extension AutomationDatabase {
   /// 版 2 の表。ID はどれも使い回さない（AUTOINCREMENT）。外部キーは接続ごとに `PRAGMA foreign_keys = ON` で守る。
+  ///
+  /// 部品の項目の通し番号（`parts.last_item_seq`）は変化の番号で、項目の追加（`items.seq`。最初の版も同じ番号）・版の追加
+  /// （`item_versions.seq`）・項目の無効化（`items.valid_to_seq`）のたびに 1 進む。出来事の通し番号は出来事の追加で進む。
   static let schema = """
     CREATE TABLE part_defs (
       id   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,8 +96,11 @@ extension AutomationDatabase {
       source_event_id INTEGER REFERENCES events (id),
       valid_from      INTEGER NOT NULL,
       valid_to        INTEGER,
+      valid_to_seq    INTEGER,
       CHECK (source_item_id IS NULL OR source_event_id IS NULL),
       CHECK (valid_to IS NULL OR valid_to >= valid_from),
+      CHECK ((valid_to IS NULL) = (valid_to_seq IS NULL)),
+      CHECK (valid_to_seq IS NULL OR valid_to_seq > seq),
       UNIQUE (part_id, seq)
     );
     CREATE UNIQUE INDEX items_live ON items (part_id, written_id) WHERE valid_to IS NULL;
@@ -104,6 +110,7 @@ extension AutomationDatabase {
     CREATE TABLE item_versions (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       item_id    INTEGER NOT NULL REFERENCES items (id),
+      seq        INTEGER NOT NULL CHECK (seq > 0),
       body       TEXT    NOT NULL CHECK (json_type(body) = 'object'),
       valid_from INTEGER NOT NULL,
       link       TEXT GENERATED ALWAYS AS (json_extract(body, '$.link')) VIRTUAL,

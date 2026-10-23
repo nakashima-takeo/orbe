@@ -37,16 +37,12 @@ import Observation
   private let flowEnded: (Int, AutomationFlow) -> Void
   /// 番人に載せている鍵。
   @ObservationIgnored private var registered = Set<String>()
-  /// 部品ごとの、前の契機の始まりの時点の、入力ごとの上流の印（メモリだけ。無ければ読んだ位置と変化の番号 0 が基準線）。
-  @ObservationIgnored var marks: [String: [AutomationPartID: Mark]] = [:]
-  /// 出す側の部品ごとの変化の番号（メモリだけ。DB から導けない。行が変わるたびに進む）。毎回すべてを取るつながりが読む。
-  @ObservationIgnored var changes: [AutomationPartID: Int] = [:]
+  /// 部品ごとの、前の契機の始まりの時点の、入力ごとの上流の最後の番号（メモリだけ。無ければ読んだ位置だけが基準線）。
+  @ObservationIgnored var marks: [String: [AutomationPartID: AutomationSeqs]] = [:]
   /// 部品ごとの、番人に最後に返した数え始め。記録の無い契機（取る行が 0 件）でも進むので、次の時刻はこれから数える。
   @ObservationIgnored private var anchors: [String: Date] = [:]
   /// 走っている契機（掃除から守る行を言う）。
   @ObservationIgnored private var active: [ObjectIdentifier: Trigger] = [:]
-  /// 部品ごとの、最後に失敗せずに終えた契機の始まりの時点の、入力ごとの上流の印（祖先の予定でのやり直しの基準線）。
-  @ObservationIgnored var settled: [String: [AutomationPartID: Mark]] = [:]
   /// 読めば取る行の数え直し（古さの上限を過ぎた行を除く）の時刻と、その時計。
   @ObservationIgnored var recountAt: Date?
   @ObservationIgnored var recountTimer: Timer?
@@ -132,12 +128,7 @@ import Observation
     }
     let replaced = try store.replace(id, version: version, with: definition, now: now())
     let automation = replaced.automation
-    for part in replaced.changed { changes[part, default: 0] += 1 }
-    for part in replaced.removed {
-      unregister(id, part)
-      changes[part] = nil
-    }
-    for part in replaced.reworked { unregister(id, part) }
+    for part in replaced.removed + replaced.reworked { unregister(id, part) }
     register(automation)
     defined(id)
     return automation
@@ -156,10 +147,7 @@ import Observation
     try checkAvailable()
     let parts = store.automation(id)?.graph.nodes.map(\.id) ?? []
     try store.delete(id, now: now())
-    for part in parts {
-      unregister(id, part)
-      changes[part] = nil
-    }
+    for part in parts { unregister(id, part) }
     deleted(id)
   }
 
@@ -207,7 +195,6 @@ import Observation
     scheduler.remove(id: key)
     registered.remove(key)
     marks[key] = nil
-    settled[key] = nil
     anchors[key] = nil
   }
 
@@ -219,8 +206,6 @@ import Observation
     for key in registered { scheduler.remove(id: key) }
     registered = []
     marks = [:]
-    changes = [:]
-    settled = [:]
     anchors = [:]
     active = [:]
     recountTimer?.invalidate()
@@ -248,8 +233,6 @@ extension AutomationRunner {
     var cancelled = false
     /// 一巡の分として受け取った契機か。
     let flowed: Bool
-    /// 回が失敗したか、読めなかった・書けなかった（やり直しの基準線を進めない）。
-    var failed = false
 
     init(
       automationId: Int, part: AutomationPartID, kind: AutomationPartRun.Trigger,
@@ -290,10 +273,9 @@ extension AutomationRunner {
     } else if let inlets = inlets(of: part, in: id) {
       let marks = inlets.mapValues(\.up)
       self.marks[Self.key(id, part)] = marks
-      trigger.baseline = marks.mapValues(\.seqs)
+      trigger.baseline = marks
       read(trigger)
     } else {
-      trigger.failed = true
       end(trigger)
     }
     return BackgroundRunHandle { [weak self] in
@@ -312,7 +294,6 @@ extension AutomationRunner {
         trigger.part, of: trigger.automationId, baseline: trigger.baseline, now: now())
     } catch {
       NSLog("[automation] cannot read the rows of part \(trigger.part): \(error)")
-      trigger.failed = true
       return end(trigger)
     }
     guard let read, let node = store.automation(trigger.automationId)?.graph.node(trigger.part)
@@ -353,18 +334,15 @@ extension AutomationRunner {
       result = try store.record(passEnd)
     } catch {
       NSLog("[automation] dropped the result of part \(trigger.part): \(error)")
-      trigger.failed = true
       return end(trigger)
     }
     trigger.holding = []
-    if result.changed { changes[trigger.part, default: 0] += 1 }
     recorded(AutomationPassRecord(end: passEnd, recorded: result))
     if result.changed, let automation = store.automation(trigger.automationId) {
       for node in automation.graph.downstream(of: trigger.part) {
         wake(trigger.automationId, node.id)
       }
     }
-    if result.failed { trigger.failed = true }
     end(trigger)
   }
 
@@ -374,7 +352,6 @@ extension AutomationRunner {
   private func end(_ trigger: Trigger) {
     active[ObjectIdentifier(trigger)] = nil
     let key = Self.key(trigger.automationId, trigger.part)
-    if !trigger.failed, let marks = marks[key] { settled[key] = marks }
     let anchor = trigger.passStartedAt ?? trigger.startedAt
     anchors[key] = anchor
     trigger.finish(anchor)

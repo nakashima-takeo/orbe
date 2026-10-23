@@ -168,7 +168,7 @@ extension AutomationStoreTests {
   // MARK: - 出す側の行
 
   /// 今の集合の項目は、中身が変わっても（同じ id）読んだ受け手に再び届かず、結果から消えてまた現れたら新しい項目として届く。
-  /// 同じ結果を出し続けても出す側の行は増えない。取得が書いた余分な欄は、下流へ渡す行にそのまま載る。
+  /// 同じ結果を出し続けても出す側の行も変化の番号も増えない。取得が書いた余分な欄は、下流へ渡す行にそのまま載る。
   func testCurrentSetItemsKeepTheirIdentityWhileTheyStayInTheSet() throws {
     let store = AutomationStore()
     let id = try define(store, coverage: .currentSet)
@@ -195,7 +195,7 @@ extension AutomationStoreTests {
       [labelled.replacingOccurrences(of: "bug", with: "fixed")], at: Self.at.addingTimeInterval(120)
     )
     XCTAssertEqual(try take(store, id, "a", at: Self.at.addingTimeInterval(120)), [], "中身の変化は届かない")
-    XCTAssertEqual(try store.lastSeqs(id, "gh").item, seq, "版を足しても番号は同じ")
+    XCTAssertEqual(try store.lastSeqs(id, "gh").item, seq + 1, "版を足すと変化の番号が進む")
 
     try fetchText([], at: Self.at.addingTimeInterval(180))
     try fetchText([labelled], at: Self.at.addingTimeInterval(240))

@@ -9,8 +9,6 @@ extension AutomationStore {
     let reworked: [AutomationPartID]
     /// 外した部品。
     let removed: [AutomationPartID]
-    /// 出す側の行が変わった部品（出力の性質が変わり、今有効な項目を無効にした）。
-    let changed: [AutomationPartID]
   }
 
   /// 書き換える前の自動化（定義を読めない自動化は持たない）と、その版と外していない部品とその鍵。
@@ -56,7 +54,7 @@ extension AutomationStore {
         old.graph.nodes.map(\.part) == entities,
         old.graph.parts.map(\.from) == checked.map(\.part.from)
       {
-        return Replaced(automation: old, reworked: [], removed: [], changed: [])
+        return Replaced(automation: old, reworked: [], removed: [])
       }
       let removed = current.parts.filter { !Set(checked.compactMap(\.part.id)).contains($0) }
       var invalidated: [Int] = []
@@ -82,7 +80,7 @@ extension AutomationStore {
       try memory.recountJudges(db, now: at)
       return Replaced(
         automation: memory.automation(id) ?? automation, reworked: rewired.reworked,
-        removed: removed, changed: rewired.changed)
+        removed: removed)
     }
   }
 
@@ -121,7 +119,6 @@ extension AutomationStore {
   private struct Rewired {
     var states: [AutomationPartID: AutomationPartState] = [:]
     var reworked: [AutomationPartID] = []
-    var changed: [AutomationPartID] = []
     var invalidated: [Int] = []
   }
 
@@ -136,9 +133,7 @@ extension AutomationStore {
       try db.setEdges(of: id, to: node.id, node.inputs)
       let before = old?.graph.node(node.id)
       if let was = before?.coverage, node.coverage != was {
-        let items = try db.invalidateItems(of: node.id, at: at)
-        rewired.invalidated += items
-        if !items.isEmpty { rewired.changed.append(node.id) }
+        rewired.invalidated += try db.invalidateItems(of: node.id, at: at)
       }
       let reworked =
         old == nil
