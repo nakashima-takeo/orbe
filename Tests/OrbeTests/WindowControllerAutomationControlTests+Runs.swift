@@ -103,6 +103,31 @@ extension WindowControllerAutomationControlTests {
       rejected["reasons"] as? [String], ["resolve https://example.com/gone: no open proposal"])
   }
 
+  /// 部品の外した印は、印の回の開始時刻・外れた件（英文つき）・その回が通ったかで出る。
+  func testABreachMarkIsListedFromTheMarkedRun() throws {
+    let wc = try launch()
+    let id = try set(wc, Self.definition())
+    try wc.automationStore.record(
+      id, part: "fetch", at: Date(),
+      outcome: .failed(
+        .brokeRules, DesignSceneFixtures.execution(0),
+        breach: AutomationRejections([
+          AutomationBrokenLine(line: 3, fault: .missingKey("link")),
+          AutomationBrokenLine(line: 4, fault: .notJSON),
+        ])))
+
+    let fetch = try XCTUnwrap(
+      try listed(wc)[id]?["parts"] as? [String: [String: Any]])["fetch"]
+    let mark = try XCTUnwrap(fetch?["breach"] as? [String: Any])
+    let run = try XCTUnwrap(fetch?["lastRun"] as? [String: Any])
+    XCTAssertEqual(Set(mark.keys), ["at", "lines", "passed"])
+    XCTAssertEqual(mark["at"] as? String, run["startedAt"] as? String)
+    let lines = try XCTUnwrap(mark["lines"] as? [String: Any])
+    XCTAssertEqual(lines["count"] as? Int, 2)
+    XCTAssertEqual(lines["reasons"] as? [String], ["item 3: missing link", "item 4: not JSON"])
+    XCTAssertEqual(mark["passed"] as? Bool, false)
+  }
+
   /// 過去の回は新しい順に `limit` 件ずつ読め、返した最後の記録の ID を `before` に渡すと続きが返る。部品を指せばその部品だけ。
   /// 部品ごとに残る回は 20 件。
   func testPastRunsArePagedNewestFirst() throws {
