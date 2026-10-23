@@ -136,6 +136,21 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     XCTAssertEqual(try mark([]), .success, "失敗の後に成功した部品は数えない")
   }
 
+  /// 処理の回の「N 件中 M 件を出力」の M は出した件数——今の集合の処理が毎回全件を写す回も、新しく届く行の数で「0 件を出力」と
+  /// 言わない。
+  func testAProcessRunSaysHowManyRowsItGave() throws {
+    let run = AutomationPartRun(
+      startedAt: DesignSceneFixtures.automationAt(9), endedAt: DesignSceneFixtures.automationAt(9),
+      trigger: .arrival, taken: 10,
+      execution: DesignSceneFixtures.execution(10), result: .process(fresh: 0, duplicates: 0))
+    let node = try XCTUnwrap(automations().first?.graph.nodes.first)
+
+    XCTAssertEqual(BoardAutomationSummary.amount(run, text: text)?.text, "10 件を出力")
+    XCTAssertEqual(BoardAutomationSummary.amount(run, text: text)?.shade, .plain)
+    XCTAssertEqual(
+      BoardAutomationSummary.result(run, node: node, text: text).text, "10 件中 10 件を出力")
+  }
+
   /// 英語の判定の回は、判定した件数が 1 なら単数で言う。
   func testJudgedRunSaysItemsInTheSingularWhenOneInEnglish() throws {
     let at = { (hour: Int) in DesignSceneFixtures.automationAt(hour) }

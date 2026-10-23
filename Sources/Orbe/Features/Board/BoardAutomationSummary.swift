@@ -107,8 +107,9 @@ extension BoardAutomationSummary {
     case .fetch(let fresh, _):
       return fresh == 0
         ? (l10n.string(.boardRunNothingNew), .sunk) : (l10n.format(.boardFresh, fresh), .plain)
-    case .process(let fresh, _):
-      return (l10n.format(.boardMapOutput, fresh), fresh > 0 ? .plain : .sunk)
+    case .process:
+      let output = run.execution.count
+      return (l10n.format(.boardMapOutput, output), output > 0 ? .plain : .sunk)
     case .judge(let proposed, _, _):
       return proposed > 0
         ? (l10n.format(.boardMapProposed, proposed), .plain)
@@ -133,8 +134,9 @@ extension BoardAutomationSummary {
       (body, shade) =
         fresh == 0
         ? (l10n.string(.boardRunNothingNew), .sunk) : (l10n.format(.boardFresh, fresh), .plain)
-    case .process(let fresh, _):
-      (body, shade) = (l10n.format(.boardRunOutput, taken, fresh), fresh > 0 ? .plain : .sunk)
+    case .process:
+      let output = run.execution.count
+      (body, shade) = (l10n.format(.boardRunOutput, taken, output), output > 0 ? .plain : .sunk)
     case .judge(let proposed, _, _):
       (body, shade) =
         proposed > 0
