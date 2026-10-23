@@ -2,12 +2,13 @@ import Foundation
 
 // `orb automation` の回の記録の読み（`list` の前回の列・`runs`）。
 
-/// 最新の部品の回の要約（時刻が同じなら鍵の大きい方。アプリの部品の回の並びと揃える）。
+/// 最新の部品の回の要約（時刻が同じなら記録の ID の大きい方。アプリの部品の回の並びと揃える）。
 func lastRunCell(_ parts: [String: [String: Any]]) -> String? {
   let latest = parts.compactMap { key, part in
     (part["lastRun"] as? [String: Any]).map { (key: key, run: $0) }
   }.max {
-    ($0.run["startedAt"] as? String ?? "", $0.key) < ($1.run["startedAt"] as? String ?? "", $1.key)
+    ($0.run["startedAt"] as? String ?? "", $0.run["recordId"] as? Int ?? 0)
+      < ($1.run["startedAt"] as? String ?? "", $1.run["recordId"] as? Int ?? 0)
   }
   return latest.map { runCell($0.key, $0.run) }
 }
