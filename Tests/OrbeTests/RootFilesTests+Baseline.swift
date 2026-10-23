@@ -81,6 +81,27 @@ extension RootFilesTests {
     XCTAssertEqual(recorder.versionChanges, [version, version])
   }
 
+  /// 「その版に無い」だった版に OID が現れ、その blob の取得が一時的に落ちたら、「無い」を保たずに「取れない」に決めて
+  /// 知らせる（index に在るのに diff が全部追加に見えたまま残らない）。前の本文を持つ版だけが前を保つ。
+  func testABlobFailureAfterAnAbsentVersionAppearsSettlesAsFailed() throws {
+    try repo.write(".gitattributes", "new.txt filter=flaky\n")
+    XCTAssertTrue(repo.git(["config", "filter.flaky.smudge", "exit 1"]).isSuccess)
+    XCTAssertTrue(repo.git(["config", "filter.flaky.clean", "cat"]).isSuccess)
+    XCTAssertTrue(repo.git(["config", "filter.flaky.required", "true"]).isSuccess)
+    let files = RootFiles(root: repo.root)
+    let recorder = Recorder()
+    let url = repo.url("new.txt")
+    try repo.write("new.txt", "n\n")
+    files.addObserver(recorder, interest: url)
+    pumpMain(until: { files.status != nil })
+    let version = try XCTUnwrap(files.version(of: url, at: .index))
+    pumpMain(until: { files.state(of: version) == .absent }, "前提: index に無い")
+
+    XCTAssertTrue(repo.git(["add", "new.txt"]).isSuccess)
+    pumpMain(until: { files.state(of: version) == .failed }, timeout: 20, "取れないに決まる")
+    XCTAssertEqual(recorder.versionChanges, [version, version])
+  }
+
   /// 版の OID の一覧を git から取れなければ、まだ状態の無い版は「取れない」に決まって知らせが届く（関心を申告した者が、
   /// 決まらない状態のまま待ち続けない）。
   func testAVersionWhoseOIDsCannotBeListedIsSettledAsFailed() throws {

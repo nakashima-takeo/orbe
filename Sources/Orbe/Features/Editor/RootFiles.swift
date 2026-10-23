@@ -352,8 +352,9 @@ final class RootFiles {
       var changed = changed
       let version = next.version
       // git の失敗（smudge の失敗・打ち切り。一時的でありうる）は上限までは OID を焼かず、次の取り直しで同じ OID を
-      // 取り直す——状態を持っている版は前を保ち、まだ状態の無い版は OID の無い「取れない」にする（関心を申告した者が、
-      // 決まらない状態のまま待ち続けない）。上限に達したら OID ごと「取れない」を焼き、OID が変わるまで諦める。
+      // 取り直す——前の本文（OID のある状態）を持つ版は前を保ち、それ以外（まだ状態の無い版・「その版に無い」だった版）は
+      // OID の無い「取れない」にする（関心を申告した者が、決まらない状態や事実と違う「無い」のまま待ち続けない）。上限に
+      // 達したら OID ごと「取れない」を焼き、OID が変わるまで諦める。
       // UTF-8 でない中身は恒久なので即座に OID ごと「読めない」を記録する。
       let settled: Settled?
       if let data {
@@ -368,7 +369,7 @@ final class RootFiles {
         if count >= Self.blobFailureBudget {
           settled = Settled(oid: next.oid, state: .failed)
         } else {
-          settled = versions[version] == nil ? Settled(oid: nil, state: .failed) : nil
+          settled = versions[version]?.oid == nil ? Settled(oid: nil, state: .failed) : nil
         }
       }
       if let settled {
