@@ -159,6 +159,19 @@ extension AutomationStoreTests {
     XCTAssertEqual(carried, AutomationStore().automation(id))
   }
 
+  /// 読めない自動化を、今の集合の部品の出力の性質を変えて直すと、その部品の今有効な項目は無効になる。
+  func testFixingAnUnreadableAutomationWithAnotherCoverageInvalidatesItsItems() throws {
+    let (store, id) = try unreadableWithABreach()
+    var fixed = Self.definition("直した", coverage: .newArrivals)
+    for index in fixed.parts.indices {
+      fixed.parts[index].id = store.unreadable.first?.parts[index]
+    }
+
+    _ = try store.replace(id, version: 1, with: fixed, now: Self.at)
+
+    XCTAssertEqual(store.automation(id)?.state(key: "fetch").liveLinks, [])
+  }
+
   /// 読めない自動化の書き換えでも、id を落として今の部品と同じ鍵で書いた部品は断り、部品は変わらない。
   func testAnUnreadableAutomationRefusesARewriteThatDropsThePartIds() throws {
     let (store, id) = try unreadableWithABreach()

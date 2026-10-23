@@ -121,7 +121,8 @@ extension AutomationStore {
   }
 
   /// つながりを書き換え、出力の性質が変わった部品の今有効な項目を無効にし、何をするかが変わった部品の外した印を下ろし、部品の
-  /// 状態を読み直す。同じ部品どうしのつながりが残れば読んだ位置も残る。
+  /// 状態を読み直す。同じ部品どうしのつながりが残れば読んだ位置も残る。定義を読めない自動化を直すときは前の性質を知らないので、
+  /// 残る部品のうち今の集合でない部品の今有効な項目を無効にし、残る部品をすべて何をするかが変わったものとして扱う。
   private static func rewire(
     _ graph: AutomationGraph, of id: Int, _ current: Current, _ db: AutomationDatabase, at: Date
   ) throws -> Rewired {
@@ -130,12 +131,17 @@ extension AutomationStore {
     for node in graph.nodes {
       try db.setEdges(of: id, to: node.id, node.inputs)
       let before = old?.graph.node(node.id)
-      if let was = before?.coverage, node.coverage != was {
+      let kept = current.parts.contains(node.id)
+      let coverageChanged =
+        old == nil
+        ? kept && node.coverage != .currentSet
+        : before?.coverage.map { $0 != node.coverage } ?? false
+      if coverageChanged {
         rewired.invalidated += try db.invalidateItems(of: node.id, at: at)
       }
       let reworked =
         old == nil
-        ? current.parts.contains(node.id)
+        ? kept
         : before.map { $0.part.defId != node.part.defId || Set($0.inputs) != Set(node.inputs) }
           ?? false
       if reworked {
