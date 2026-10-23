@@ -77,7 +77,7 @@ extension AutomationDatabase {
       let id = Self.downstreamId(item.written, of: up, inherited: item.source != nil)
       rows.append(
         AutomationIntake.Row(
-          edge: up, table: .item, seq: item.seq, ref: .version(item.version),
+          from: up, table: .item, seq: item.seq, ref: .version(item.version),
           source: .item(item.item), id: id,
           text: AutomationPrompts.replacing(id: id, in: item.body), at: item.at,
           origin: try origin(of: .item(item.item), graph: graph),
@@ -87,7 +87,7 @@ extension AutomationDatabase {
       let id = Self.downstreamId(event.written, of: up, inherited: event.source != nil)
       rows.append(
         AutomationIntake.Row(
-          edge: up, table: .event, seq: event.seq, ref: .event(event.event),
+          from: up, table: .event, seq: event.seq, ref: .event(event.event),
           source: .event(event.event), id: id,
           text: AutomationPrompts.replacing(id: id, in: event.body), at: event.at,
           origin: try origin(of: .event(event.event), graph: graph),
@@ -177,7 +177,7 @@ extension AutomationDatabase {
         "UPDATE part_edges SET \(column) = max(\(column), ?) WHERE to_part_id = ? AND from_part_id = ?",
         [
           .integer(Int64(reach.seq)), .integer(Int64(receiver.rawValue)),
-          .integer(Int64(reach.edge.rawValue)),
+          .integer(Int64(reach.from.rawValue)),
         ])
     }
   }
@@ -213,7 +213,7 @@ extension AutomationDatabase {
       guard let position = positions[edge.from] else { continue }
       let base = baseline?[edge.from] ?? position.last
       let ceiling = AutomationIntake.Ceiling(
-        edge: edge.from,
+        from: edge.from,
         seqs: AutomationSeqs(
           item: min(base.item, position.last.item), event: min(base.event, position.last.event)))
       ceilings.append(ceiling)
@@ -223,8 +223,8 @@ extension AutomationDatabase {
     }
     var read = AutomationIntake.read(by: node, rows, ceilings: ceilings, in: context)
     for reach in read.reach where reach.table == .event {
-      guard let from = positions[reach.edge]?.read.event else { continue }
-      read.lapsed += try lapsed(of: reach.edge, from: from, to: reach.seq, now: context.now)
+      guard let from = positions[reach.from]?.read.event else { continue }
+      read.lapsed += try lapsed(of: reach.from, from: from, to: reach.seq, now: context.now)
     }
     return read
   }
@@ -243,7 +243,7 @@ extension AutomationDatabase {
     ).taken
     let ages = Dictionary(uniqueKeysWithValues: node.inputs.map { ($0.from, $0.maxAgeHours) })
     let expiries = taken.compactMap { row in
-      ages[row.edge].flatMap { $0 }.map { row.at.addingTimeInterval(TimeInterval($0) * 3600) }
+      ages[row.from].flatMap { $0 }.map { row.at.addingTimeInterval(TimeInterval($0) * 3600) }
     }
     return AutomationPending(count: taken.count, expiresAt: expiries.min())
   }

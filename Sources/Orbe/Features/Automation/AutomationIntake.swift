@@ -21,7 +21,7 @@ enum AutomationIntake {
   /// 上流の行 1 つ。
   struct Row: Equatable {
     /// 上流の部品（つながり）。
-    let edge: AutomationPartID
+    let from: AutomationPartID
     let table: Table
     let seq: Int
     /// 回の履歴が指す行（項目は版）。
@@ -47,7 +47,7 @@ enum AutomationIntake {
 
   /// 読んだ位置の進め先（つながりと表ごと）。
   struct Reach: Equatable {
-    let edge: AutomationPartID
+    let from: AutomationPartID
     let table: Table
     let seq: Int
   }
@@ -66,7 +66,7 @@ enum AutomationIntake {
 
   /// つながりごとの、読む上限の番号（読んだ位置を上限まで進めてよいかを決める）。
   struct Ceiling: Equatable {
-    let edge: AutomationPartID
+    let from: AutomationPartID
     let seqs: AutomationSeqs
   }
 
@@ -110,7 +110,7 @@ enum AutomationIntake {
     var dropped: [Drop] = []
     let judge = node.role == .judge
     for row in rows {
-      if let hours = edges[row.edge]?.maxAgeHours,
+      if let hours = edges[row.from]?.maxAgeHours,
         context.now.timeIntervalSince(row.at) > TimeInterval(hours) * 3600
       {
         dropped.append(Drop(row: row, reason: .expired))
@@ -135,15 +135,15 @@ enum AutomationIntake {
   private static func reach(_ ceilings: [Ceiling]) -> [Reach] {
     ceilings.flatMap { ceiling in
       [
-        Reach(edge: ceiling.edge, table: .item, seq: ceiling.seqs.item),
-        Reach(edge: ceiling.edge, table: .event, seq: ceiling.seqs.event),
+        Reach(from: ceiling.from, table: .item, seq: ceiling.seqs.item),
+        Reach(from: ceiling.from, table: .event, seq: ceiling.seqs.event),
       ]
     }.filter { $0.seq > 0 }
   }
 
   /// 古い順（同じ時刻は上流・表・番号の順）。表ごとの番号は時刻と同じ向きに増える。
   static func order(_ a: Row, _ b: Row) -> Bool {
-    (a.at, a.edge.rawValue, a.table == .item ? 0 : 1, a.seq)
-      < (b.at, b.edge.rawValue, b.table == .item ? 0 : 1, b.seq)
+    (a.at, a.from.rawValue, a.table == .item ? 0 : 1, a.seq)
+      < (b.at, b.from.rawValue, b.table == .item ? 0 : 1, b.seq)
   }
 }

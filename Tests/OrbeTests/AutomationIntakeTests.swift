@@ -33,7 +33,7 @@ final class AutomationIntakeTests: OrbeTestCase {
     let item = AutomationItem(
       id: id, link: link ?? "https://example.com/\(id)", body: "", time: t0)
     return AutomationIntake.Row(
-      edge: edge, table: edge == cs ? .item : .event, seq: seq,
+      from: edge, table: edge == cs ? .item : .event, seq: seq,
       ref: edge == cs ? .version(seq) : .event(seq), source: .item(seq), id: id,
       text: String(repeating: "x", count: size), at: at ?? t0.addingTimeInterval(Double(seq)),
       origin: sourced ? AutomationIntake.Origin(part: edge, row: .version(seq), item: item) : nil,
@@ -42,8 +42,8 @@ final class AutomationIntakeTests: OrbeTestCase {
 
   private func ceilings(cs item: Int = 0, na event: Int = 0) -> [AutomationIntake.Ceiling] {
     [
-      AutomationIntake.Ceiling(edge: cs, seqs: AutomationSeqs(item: item, event: 0)),
-      AutomationIntake.Ceiling(edge: na, seqs: AutomationSeqs(item: 0, event: event)),
+      AutomationIntake.Ceiling(from: cs, seqs: AutomationSeqs(item: item, event: 0)),
+      AutomationIntake.Ceiling(from: na, seqs: AutomationSeqs(item: 0, event: event)),
     ]
   }
 
@@ -68,7 +68,7 @@ final class AutomationIntakeTests: OrbeTestCase {
     XCTAssertEqual(read.taken.map(\.id), ["row3", "row5"])
     XCTAssertEqual(
       read.reach,
-      [.init(edge: cs, table: .item, seq: 4), .init(edge: na, table: .event, seq: 9)])
+      [.init(from: cs, table: .item, seq: 4), .init(from: na, table: .event, seq: 9)])
   }
 
   /// 古さの上限を過ぎた行は捨てて数える。前の回までに読んだ行（毎回すべてを取る入力）は、古くなっても数え直さない。
@@ -137,6 +137,6 @@ final class AutomationIntakeTests: OrbeTestCase {
 
     XCTAssertGreaterThan(new.map(\.text.utf8.count).reduce(0, +), 256 << 10)
     XCTAssertEqual(read.taken.count, new.count)
-    XCTAssertEqual(read.reach, [.init(edge: na, table: .event, seq: new.count)])
+    XCTAssertEqual(read.reach, [.init(from: na, table: .event, seq: new.count)])
   }
 }
