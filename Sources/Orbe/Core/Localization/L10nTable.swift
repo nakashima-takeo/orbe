@@ -167,6 +167,14 @@ enum L10n {
       "git から版を取得できないため、差分を表示できません",
       "Can't show the diff: git couldn't read the file's versions"
     ),
+    .editorDiffNowhereInWorkingTree: (
+      "このパスは git にも作業ツリーにもないため、差分を表示できません",
+      "Can't show the diff: the path is neither in git nor in the working tree"
+    ),
+    .editorDiffNowhereStaged: (
+      "このパスは HEAD にも index にもないため、差分を表示できません",
+      "Can't show the diff: the path is neither in HEAD nor in the index"
+    ),
 
     // MARK: Editor 面（骨: エクスプローラー）
     .editorExplorerTitle: ("エクスプローラー", "Explorer"),

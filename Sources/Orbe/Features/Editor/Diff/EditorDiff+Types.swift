@@ -33,6 +33,8 @@ extension EditorDiff {
     case conflicted
     /// git から取れない。
     case failed
+    /// 両側とも無い（作業ツリー: 作業ツリーにも index にも無い。ステージ済み: HEAD にも index にも無い）。
+    case nowhere
   }
 
   /// 見せられる中身。
@@ -43,11 +45,12 @@ extension EditorDiff {
     case ready
   }
 
-  /// 作業ツリー diff が新しい側の文書を引く口と手放す口（文書は実体ごとに 1 つで、セッションが持ち主を数える）。
+  /// 作業ツリー diff が新しい側の文書を引く口と、替わったと知らせる口（文書は実体ごとに 1 つで、セッションが持ち主を数える）。
   struct Documents {
     let open: (URL) throws -> EditorDocument
-    /// diff が使わなくなった文書（ほかに使うタブが無ければ閉じる）。
-    let release: (EditorDocument) -> Void
+    /// diff が作業ツリーの姿で新しい側の文書を替えた（引数は前の文書。無かったなら nil）。前の文書はほかに使うタブが無ければ
+    /// 閉じ、仮のタブとタブ行を今の文書に合わせる。
+    let switched: (EditorDocument?) -> Void
   }
 
   /// 初めての位置決めの段階。開いた時点に追いついた最初の並びで 1 回だけ、最初の変更区間へ送る（以後の変化では送らない）。

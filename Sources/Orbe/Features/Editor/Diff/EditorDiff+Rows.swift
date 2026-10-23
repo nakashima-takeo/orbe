@@ -81,7 +81,7 @@ extension EditorDiff {
   /// が今の古い側でなければ（古い側を入れ替える前）並べない——面に残っている並びは面自身の編集に付いて動くので、今の本文と
   /// 食い違わない。
   var currentRows: (hunks: [LineHunk], newSide: DiffRows.Side)? {
-    guard let document else { return (revisionHunks, newSide) }
+    guard let document else { return (revisionHunks, newRevisionSide) }
     let side = DiffRows.Side(document.text)
     guard let oldSource else { return nil }
     guard let base = oldSource else {

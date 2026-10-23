@@ -25,7 +25,7 @@ final class EditorDiff: RootFilesObserver {
   private(set) var documents: Documents
   let surfaces: EditorSurfaces
   /// 古い側と、新しい側が版の本文のときの新しい側（その面も diff が持つ）。その版に無い側も空の本文の文書を持つ（面は空の
-  /// 行を 1 つ持つが、大きさ `oldSide`・`newSide` は 0 行で、その行に番号を描かない）。
+  /// 行を 1 つ持つが、大きさ `oldSide`・`newRevisionSide` は 0 行で、その行に番号を描かない）。
   private(set) var old: RevisionDocument?
   private(set) var newRevision: RevisionDocument?
   private var newRevisionSurface: (any TextSurface)?
@@ -45,7 +45,7 @@ final class EditorDiff: RootFilesObserver {
   private(set) var oldSource: String??
   private var newSource: String??
   private(set) var oldSide = DiffRows.Side(nil)
-  private(set) var newSide = DiffRows.Side(nil)
+  private(set) var newRevisionSide = DiffRows.Side(nil)
   /// ステージ済みの側と行差分を頼んだ通し番号と、頼んで届いていないか。
   private var stagedRequest = 0
   private(set) var stagedPending = false
@@ -70,7 +70,8 @@ final class EditorDiff: RootFilesObserver {
     self.surfaces = surfaces
     files = RootFiles.shared(for: id.root)
     if id.kind == .workingTree {
-      try updateWorkingSide(throwing: true)
+      workingStale = false
+      working = try readWorkingTree(throwing: true)
       // 監視の知らせより先に開いても（エージェントが書いた直後の open_diff）、書いた中身で始める。
       document?.reconcileWithDisk()
     }
@@ -99,10 +100,12 @@ final class EditorDiff: RootFilesObserver {
   }
 
   /// 新しい側の文書が `previous` から替わった——前の文書をファイルタブの見え方に戻し、今の文書のハンクを追う（見せて
-  /// いれば）。面が替わるので古い側の面も閉じ、pane に置き直させる。
+  /// いれば）。面が替わるので古い側の面も閉じ、pane に置き直させる。今の文書で並びを置けるようになるまで、中身は
+  /// 「読み込み中」（本体に何も出さない。開くときと同じ）。
   func documentDidSwitch(from previous: EditorDocument?) {
     dropOldSurface()
     surfacesChanged = true
+    if document != nil { content = .loading }
     if presented != nil, let previous { restoreCode(previous) }
     guard presented != nil, let document else { return }
     document.onHunksChange = { [weak self] in self?.sourcesDidChange() }
@@ -125,6 +128,13 @@ final class EditorDiff: RootFilesObserver {
     working = .document(next)
     documentDidSwitch(from: previous)
     stale = true
+  }
+
+  /// 新しい側の文書の未保存が変わった（セッションが配る）。未保存の間に保留した作業ツリーの読み直しを、未保存でなくなった
+  /// 時点で行う。
+  func documentDirtyDidChange() {
+    guard workingStale, document?.isDirty == false else { return }
+    sourcesDidChange()
   }
 
   /// 積んだ作り直しを、見せていれば今行う。
@@ -289,11 +299,12 @@ final class EditorDiff: RootFilesObserver {
       if state == .notText { return .unavailable(.notText) }
       if state == .failed { return .unavailable(.failed) }
     }
+    if head == .absent, index == .absent { return .unavailable(.nowhere) }
+    let (oldText, newText, limit) = (head.text, index.text, Self.hunkLimit)
     // 今の側と同じなら、走っている依頼を捨てただけで済む。
-    guard oldSource != .some(head.text) || newSource != .some(index.text) else { return .ready }
+    guard oldSource != .some(oldText) || newSource != .some(newText) else { return .ready }
     let request = stagedRequest
     stagedPending = true
-    let (oldText, newText, limit) = (head.text, index.text, Self.hunkLimit)
     Task.detached(priority: .userInitiated) { [weak self] in
       let hunks = DiffRows.hunks(
         old: oldText.map(TextRope.init), new: newText.map(TextRope.init), limit: limit)
@@ -354,7 +365,7 @@ final class EditorDiff: RootFilesObserver {
     revision.onViewportChange = { [weak self] in self?.viewportDidChange() }
     revision.onFocusChange = { [weak self] focused in self?.onFocusChange?(focused) }
     newRevision = revision
-    newSide = DiffRows.Side(text == nil ? nil : revision.text)
+    newRevisionSide = DiffRows.Side(text == nil ? nil : revision.text)
     newRevisionSurface = surfaces.make()
     if let surface = newRevisionSurface { revision.attach(surface) }
   }
