@@ -10,7 +10,7 @@ struct Pending {
   var writes: [@Sendable (inout FrameMaterial) -> Void] = []
   /// 積んだ写しのうち最新。
   var content: SurfaceContent?
-  /// 行の数の上限と見えている大きさ。
+  /// 縦のスクロールの端と見えている大きさ。
   var limits: LimitsUpdate?
   /// 置く位置（取引が置いた位置と見せ方の位置）と、置いた通し番号（スクロールを共にする面が同じ周に両方置けば、後に
   /// 置いた方を当てる）。

@@ -283,7 +283,8 @@ struct RowLayout: Sendable {
       lastRow = before.row(containing: changes.map(\.end).max() ?? 0)
     }
 
-    /// 昇順の境の列 `lines` をずらす（境 r ≤ 最初の編集の行 は、付き先が編集より前にある）。動いたら true。
+    /// 昇順の境の列 `lines` をずらす（境 r ≤ 最初の編集の行 は、付き先が編集より前にある）。最初の編集の行より後ろの境が
+    /// 1 つでもあれば、値がずれなくても true。
     func apply(to lines: inout [Int]) -> Bool {
       var index = RowLayout.count(lines, atOrBelow: firstRow)
       guard index < lines.count else { return false }

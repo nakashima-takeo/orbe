@@ -77,10 +77,8 @@ struct ScrollState: Sendable {
     generation += 1
   }
 
-  /// 面 `m` の版 `material` を置く直前の位置と範囲を、その版より前の材料に組む位置として残す（同じ版で続けて置けば、
-  /// 最初に置く前のものだけ）。
+  /// 面 `m` の版 `material` を置く直前の位置と範囲を、その版より前の材料に組む位置として残す。
   mutating func pair(_ m: Int, before material: Int, at t: Double) {
-    guard members[m].pairs.last?.version != material else { return }
     members[m].pairs.append(
       Pair(position: physics.shown(at: t), limits: view(m), version: material))
   }
