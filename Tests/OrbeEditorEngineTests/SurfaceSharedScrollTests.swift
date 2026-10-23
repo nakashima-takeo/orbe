@@ -12,10 +12,10 @@ import XCTest
 final class SurfaceSharedScrollTests: EngineTestCase {
   private let size = CGSize(width: 400, height: 300)
 
-  /// 行数の違う 2 面（左が長い）を結んだもの。
-  func pair(left: Int = 200, right: Int = 120) throws -> (Opened, Opened) {
+  /// 行数の違う 2 面（左が長い）を結んだもの。右の行の幅は `rightWidth`。
+  func pair(left: Int = 200, right: Int = 120, rightWidth: Int = 60) throws -> (Opened, Opened) {
     let a = try open(rows(left), size: size)
-    let b = try open(rows(right, width: 60), size: size)
+    let b = try open(rows(right, width: rightWidth), size: size)
     for opened in [a, b] {
       opened.surface.setPresentation(SurfacePresentation(showsMinimap: false))
     }
@@ -44,21 +44,27 @@ final class SurfaceSharedScrollTests: EngineTestCase {
       "動かしていない面の見えている範囲も知らせ直す")
   }
 
-  /// 短い面のスクロールバーも共にする範囲で写す——全体の量は長い面と同じで、長い面だけが続く所まで送っても、先頭の位置は
-  /// 範囲の位置から出る（つまみがトラックからはみ出さず、つまみのドラッグ・トラックの押下も長い面の端まで届く）。
+  /// 短い面のスクロールバーも共にする範囲で写す——長い面だけが続く所まで送っても、つまみはトラックの下端に描かれ（はみ出さ
+  /// ない）、短い面のトラックの下端を押せば長い面の端まで届く。
   func testTheShorterSurfacesScrollbarMapsTheSharedRange() throws {
-    let (a, b) = try pair()
+    let (a, b) = try pair(rightWidth: 10)
+    _ = host(b, size: size)
+    b.surface.inputScope { b.surface.textView.overview.setReduceMotion(true) }
     _ = a.surface.snapshot()
     _ = b.surface.snapshot()
-    XCTAssertEqual(b.surface.contentLines, a.surface.contentLines, "全体の量は共にする範囲")
+    let bar = b.surface.surfaceLayout.verticalScrollbar
     b.surface.scroll(toFirstLine: 1_000)
-    b.surface.flush()
-    XCTAssertEqual(b.surface.viewportLines.first, a.surface.viewportLines.first, accuracy: 1e-9)
-    let geometry = ScrollbarGeometry(
-      contentLines: b.surface.contentLines, firstLine: b.surface.viewportLines.first,
-      visibleLines: b.surface.viewportLines.visible, height: 300)
-    XCTAssertLessThanOrEqual(geometry.sliderPosition + geometry.sliderLength, 300, "つまみはトラックの中")
-    XCTAssertEqual(geometry.sliderPosition + geometry.sliderLength, 300, accuracy: 0.5, "最下端まで届く")
+    let shot = try pixelShot(b)
+    XCTAssertFalse(shot.hasInk(10, bar.maxY - 2), "前提: 短い面の本文はもう見えない")
+    XCTAssertTrue(shot.hasInk(bar.midX, bar.maxY - 2), "つまみはトラックの下端に描かれる")
+
+    b.surface.scroll(toFirstLine: 0)
+    let bottom = CGPoint(x: bar.midX, y: bar.maxY - 1)
+    try mouse(b, .leftMouseDown, at: bottom)
+    try mouse(b, .leftMouseUp, at: bottom)
+    XCTAssertEqual(
+      a.surface.scrollPosition.y, a.surface.rows.lastTop(lineCount: a.document.text.lineCount),
+      "トラックの下端を押すと長い面の端まで届く")
   }
 
   /// 縦の範囲は長い方の面の端まで——短い面も長い面の最後の行まで送れ、End も長い面の End と同じ所へ行く。横の範囲は長い
