@@ -109,7 +109,7 @@ struct ScmRepositoryHead: View {
         .foregroundStyle(Color.theme.editorText)
         .lineLimit(1)
       Spacer(minLength: 0)
-      HStack(spacing: 1) {
+      HStack(spacing: Theme.Layout.editorScmToolGap) {
         ScmToolButton(
           glyph: EditorGlyphs.check, help: l10n.string(.editorScmCommit),
           isEnabled: panel.commitState.canCommit, action: commit)
@@ -326,7 +326,7 @@ struct ScmToolButton: View {
     .contentShape(Rectangle())
     .onHover { hovering = $0 }
     .overlay {
-      if let menu { ScmMenuAnchor(help: help, menu: menu) }
+      if let menu { ScmMenuAnchor(help: help, isEnabled: isEnabled, menu: menu) }
     }
     .onTapGesture { if isEnabled, menu == nil { action() } }
     .help(help)

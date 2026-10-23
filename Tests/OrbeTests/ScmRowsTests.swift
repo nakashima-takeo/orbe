@@ -144,6 +144,22 @@ final class ScmRowsTests: OrbeTestCase {
     XCTAssertEqual(enabled(["c.txt": conflict, "a.txt": entry(nil, .modified)]), [true, true])
   }
 
+  /// 「変更」の見出しのすべて破棄・すべてステージの間は、親の見出しのツールの間と同じ（`editorScmToolGap`）。
+  @MainActor
+  func testTheBulkButtonsAreSpacedLikeTheRepositoryTools() throws {
+    let view = ScmRowView(frame: NSRect(x: 0, y: 0, width: 300, height: Theme.Layout.editorScmRow))
+    let changes = ScmChanges.build(
+      GitStatus(
+        entries: ["a.txt": entry(nil, .modified)], untrackedDirectories: [], branch: nil,
+        stagedVersions: [:]))
+    let layout = ScmLayout.build(changes, collapsed: [])
+    let row = try XCTUnwrap(layout.index[ScmRowID(section: .changes, path: nil)])
+    view.show(layout.items[row], language: .en, emoji: nil)
+    let rects = view.buttonRects().map(\.1)
+    XCTAssertEqual(rects.count, 2)
+    XCTAssertEqual(rects[1].minX - rects[0].maxX, Theme.Layout.editorScmToolGap)
+  }
+
   /// 変更の列は子の見出しとファイル行だけ。行が 0 の区分は見出しごと出ず、畳んだ区分のファイル行は出ない。
   func testEmptySectionsAndFoldedFilesAreNotRows() {
     let changes = ScmChanges(

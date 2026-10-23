@@ -69,7 +69,7 @@ final class ScmRowView: ListRowView {
       for button in header.buttons.reversed() {
         rects.append(
           (button, NSRect(x: right - tool, y: bounds.midY - tool / 2, width: tool, height: tool)))
-        right -= tool
+        right -= tool + Theme.Layout.editorScmToolGap
       }
       return rects.reversed()
     case .file(let file):
