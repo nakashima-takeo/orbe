@@ -1,7 +1,7 @@
 ---
 title: Orbe CLI（orb）
 description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/自動化/ボードの部品/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/automation/board/session/wait サブコマンド・socket 文脈解決・終了コード契約
-updated: 2026-10-23
+updated: 2026-10-24
 ---
 
 # Orbe CLI（`orb`）
@@ -71,10 +71,10 @@ updated: 2026-10-23
 
 [自動化](../platform/automation.md)を作り・直し・回し・結果を読む。各サブコマンドは同名の制御 API の動詞へそのまま乗る（`runs` は `list_automation_runs`）。
 
-- `orb automation list [--json]` … ID 順に 1 行 1 自動化（`id 状態 名前 予定 次の時刻 前回` のタブ区切り）。状態は `active` / `paused` / `running`（どれかの部品が走っていれば `running`）/ `unreadable`（[定義を読めない自動化](../platform/automation.md#保存)）。予定は次に来る部品の予定（`every 30m` / `cron 0 9 * * 1-5`。cron 式は定義のまま）で、ほかに予定のある部品があれば ` +N`、予定のある部品が無ければ `manual`。次の時刻は部品のうち最も早いもの。前回は部品ごとの最新の回（`lastRun`）のうち最も新しいものだけから組み、定義は見ない——`<開始> <鍵> failed: <理由>`、[不明な記録](../platform/automation.md#回の記録)なら `<開始> <鍵>: unreadable record (succeeded|failed)`、または `<開始> <鍵>: ` に、取得は `12 fetched, 3 new`〔読めた項目・新しい項目〕、処理は `12 in, 4 out`、判定は `2 proposed`、報告は `reported` か `nothing to report`、副作用は `command exited 0`、仕事は `agent exited 0` を続ける。無い値は `-`。部品ごとの状態は `--json`、過去の回は `runs` で読む。制御文字の扱いは `task list` と同じ）。
+- `orb automation list [--json]` … ID 順に 1 行 1 自動化（`id 状態 名前 予定 次の時刻 前回` のタブ区切り）。状態は `active` / `paused` / `running`（どれかの部品が走っていれば `running`）/ `unreadable`（[定義を読めない自動化](../platform/automation.md#保存)）。予定は次に来る部品の予定（`every 30m` / `cron 0 9 * * 1-5`。cron 式は定義のまま）で、ほかに予定のある部品があれば ` +N`、予定のある部品が無ければ `manual`。次の時刻は部品のうち最も早いもの。前回は部品ごとの最新の回（`lastRun`）のうち最も新しいもの（同時刻は記録の ID の大きい方。ボードの並びと同じ）だけから組み、定義は見ない——`<開始> <鍵> failed: <理由>`、[不明な記録](../platform/automation.md#回の記録)なら `<開始> <鍵>: unreadable record (succeeded|failed)`、または `<開始> <鍵>: ` に、取得は `12 fetched, 3 new`〔読めた項目・新しい項目〕、処理は `12 in, 4 out`、判定は `2 proposed`、報告は `reported` か `nothing to report`、副作用は `command exited 0`、仕事は `agent exited 0` を続ける。無い値は `-`。部品ごとの状態は `--json`、過去の回は `runs` で読む。制御文字の扱いは `task list` と同じ）。
 - `orb automation proposals [<id>] [--json]` … 覚えている候補を 1 行 1 つ（`id 状態 自動化の id 期限 タイトル リンク`）。`<id>` でその自動化の棚の分だけ。
-- `orb automation set [<id> --version <n>] [--json]` … 標準入力の JSON（MCP の `set_automation` の `definition` と同じ形の `name`・`notify`・`parts`）を `definition` に入れて送り、`<id>` が無ければ作って新しい ID だけを出し、あれば `--version`（読んだ版）を添えて丸ごと置き換える。`orb automation list --json` の `definition` と `version` を取り出して直し、そのまま流す往復がつながる。`<id>` があって `--version` が無いのは usage エラー（exit 2）。定義をフラグに割らないのは、部品がコマンドか agent かで項目が入れ子になり、検証が CLI と control の 2 か所に割れるため。標準入力が空・JSON オブジェクトでないは usage エラー（exit 2）、定義の検証は control が持つ（違反は exit 1）。
-- `orb automation runs <id> [--part <key>] [--before <recordId>] [--limit <n>] [--json]` … `list_automation_runs` に乗り、回の記録を新しい順に 1 行 1 回（`記録の ID 回の要約`。要約は `list` の「前回」と同じ語）で出す。続きがあれば最後に `next <recordId>` の行を出し、その値を `--before` に渡すと続きが出る。
+- `orb automation set [<id> --version <n>] [--json]` … 標準入力の JSON（MCP の `set_automation` の `definition` と同じ形の `name`・`notify`・`parts`）を `definition` に入れて送り、`<id>` が無ければ作って新しい ID だけを出し、あれば `--version`（読んだ版）を添えて丸ごと置き換える。`orb automation list --json` の `definition` と `version` を取り出して直し、そのまま流す往復がつながる。`<id>` があって `--version` が無い・`<id>` が無いのに `--version` がある・`--version` が正の整数でないのは、標準入力を読む前に usage エラー（exit 2）。定義をフラグに割らないのは、部品がコマンドか agent かで項目が入れ子になり、検証が CLI と control の 2 か所に割れるため。標準入力が空・JSON オブジェクトでないは usage エラー（exit 2）、定義の検証は control が持つ（違反は exit 1）。
+- `orb automation runs <id> [--part <key>] [--before <recordId>] [--limit <n>] [--json]` … `list_automation_runs` に乗り、回の記録を新しい順に 1 行 1 回（`記録の ID 回の要約`。要約は `list` の「前回」と同じ語）で出す。続きがあれば最後に `next <recordId>` の行を出し、その値を `--before` に渡すと続きが出る。`--before`・`--limit` が正の整数でないのは usage エラー（exit 2）。
 - `orb automation run <id> [--part <key>] [--json]` … `--part` の部品まで流す（省けば終わりの部品すべてまで。止めた自動化も受ける）。回の終わりを待たずに返る。`--part` の値の欠けは usage エラー。
 - `orb automation try <id> [--from <key>]... [--to <key>]... [--stdin] [--limit <n>] [--json]` … [試走](../platform/automation.md#試走)を始め、写すのを待たずに返る（人向けの出力は始めた旨の 1 行）。`--from`・`--to` は繰り返して並べる。`--stdin` は標準入力の 1 行 1 JSON オブジェクト（空行は飛ばす）を入口に与える行にする。標準入力の 0 バイトと JSON オブジェクトでない行は usage エラー（exit 2）、範囲・行の検証は control が持つ（exit 1）。
 - `orb automation trial <id> [--wait] [--timeout-ms <ms>] [--json]` … 最新の試走を部品ごとに 1 行（`鍵 状態 回`）で出す。回は最新の回を `list` の「前回」と同じ語で、止めた副作用・仕事は `held N rows`、行を与えた取得は `given N rows`。流し切れずに終わった試走は先頭に `failed: <理由>`。中身（下流へ渡す行・候補の案・渡るはずだった行・与えた行）は `--json` で読む。`--wait` で終わりまで待ち（既定 3600000 ms）、時間切れは exit 124。
