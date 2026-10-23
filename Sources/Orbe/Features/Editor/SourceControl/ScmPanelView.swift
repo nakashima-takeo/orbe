@@ -177,10 +177,9 @@ struct ScmControls: View {
     .padding(.bottom, Theme.Space.step)
   }
 
-  /// 失敗の文の行間（見本の行高 1.5 から、字の行の高さを引いた分）。
-  private static let failureLineSpacing =
-    Theme.Typography.editorScmNote.pointSize * 1.5
-    - NSLayoutManager().defaultLineHeight(for: Theme.Typography.editorScmNote)
+  /// 失敗の文の行間（見本の行高 1.5）。
+  private static let failureLineSpacing = Theme.Typography.editorScmNote.extraLeading(
+    lineHeight: 1.5)
 
   /// プレースホルダ（ブランチに居ればその名前。detached・初回コミット前は名前なし）。
   private var placeholder: String {

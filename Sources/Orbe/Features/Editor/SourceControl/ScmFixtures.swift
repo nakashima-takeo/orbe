@@ -6,7 +6,9 @@
   /// git の場を作る——bare の origin に 2 件、upstream を origin/main にしたブランチ `feature/agent-hooks` に未 push の 3 件、
   /// ステージ済みの追加 1 件（EmitBuffer.swift）と変更 3 件（StateHooks.swift・HookRegistry.swift・README.md）。面はソース管理の
   /// パネルを出して窓に載せる。status・グラフ・HEAD の push 済みは git の子プロセス後に届くので、撮る側は `warmUp()` の後
-  /// `isReady` を待つ。見本に無い状態（実行中の帯・失敗・同期・公開・変更なし）は、撮る側が本物の git の操作で作る。
+  /// `isReady` を待つ。見本に無い状態（実行中の帯・失敗・同期・公開・変更なし）は、撮る側が本物の git の操作で作る。ローカルの
+  /// main も origin/main と同じコミットを指すので、グラフの 4 行目の札は 2 つ（見本は origin/main だけ。札が 2 つ並ぶ姿を
+  /// 撮る場を兼ねる）。
   enum ScmFixtures {
     static let branch = "feature/agent-hooks"
 

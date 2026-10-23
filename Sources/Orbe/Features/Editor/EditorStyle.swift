@@ -108,14 +108,6 @@ enum EditorStyle {
     }
   }
 
-  /// 見本の sunk(α) を外観で換算した沈み面（`EditorInk.sunk` の NSColor 版）。
-  static func sunk(_ alpha: Double) -> NSColor {
-    NSColor(name: nil) { appearance in
-      Theme.Color.sunkInk.withAlphaComponent(
-        isDark(appearance) ? alpha : alpha * Theme.Opacity.editorSunkLight)
-    }
-  }
-
   /// 見本の hairline(α) を外観で換算した縁（`EditorInk.hairline` の NSColor 版）。
   static func hairline(_ alpha: Double) -> NSColor {
     NSColor(name: nil) { appearance in
