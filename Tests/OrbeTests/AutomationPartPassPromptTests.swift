@@ -97,15 +97,29 @@ final class AutomationPartPassPromptTests: AutomationPartPassTestCase {
     XCTAssertTrue(try prompt().contains("read_workspaces"))
   }
 
-  /// どの枠も、最終応答の文は読まないと言う。
-  func testEveryPromptSaysTheFinalReplyIsIgnored() throws {
+  /// どの枠も、最終応答の文は読まないと言い、何も無い回の出口（report_nothing）を言う。取得でない枠は今の日時と利用者の
+  /// 指示文も載せる（判定の期限はこの日時から決まる）。
+  func testEveryPromptSaysTheFinalReplyIsIgnoredAndHowToReportNothing() throws {
+    start(
+      AutomationGraphTests.agent(
+        "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
+      .fetch, .fetch(since: nil))
     start(AutomationGraphTests.agent("w", tools: [Self.tool]), .work, .work)
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
       .process([row("a")], reachesJudge: false))
+    start(
+      AutomationGraphTests.agent("j", from: ["f"], deliver: .taskCandidates), .judge,
+      judgeInput(["a"]))
+    start(AutomationGraphTests.agent("r", from: ["f"]), .report, .report([row("a")]))
 
-    for index in 0..<2 {
-      XCTAssertTrue(try prompt(index).contains("Orbe ignores your final text reply."), "\(index)")
+    for (index, key) in ["f", "w", "p", "j", "r"].enumerated() {
+      let prompt = try prompt(index)
+      XCTAssertTrue(prompt.contains("Orbe ignores your final text reply."), key)
+      XCTAssertTrue(prompt.contains("call report_nothing"), key)
+      guard key != "f" else { continue }
+      XCTAssertTrue(prompt.contains("Now: "), key)
+      XCTAssertTrue(prompt.contains("\(key) して"), key)
     }
   }
 }

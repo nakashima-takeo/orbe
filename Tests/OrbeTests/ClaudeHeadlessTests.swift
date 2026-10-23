@@ -62,6 +62,23 @@ final class ClaudeHeadlessTests: OrbeTestCase {
     XCTAssertTrue(args.contains("--no-session-persistence"))
   }
 
+  /// 本番の取得・仕事の形（利用者の MCP のツール＋Orbe の口のサーバー）: 利用者の MCP のツールと口のツールを両方許し、口は
+  /// `--mcp-config` で足し、利用者の MCP サーバーを使うので設定を読む（閉じた形にしない）。
+  func testUserMCPToolsAndTheOrbeServerAreAllowedTogether() throws {
+    let server = HeadlessServer(
+      name: "orbe_run", command: "/A/orbe-mcp", environment: ["ORBE_RUN_TOKEN": "t"],
+      tools: ["mcp__orbe_run__put_items"])
+    let args = ClaudeHeadless.arguments(
+      model: "haiku", tools: ["Read", "mcp__slack__search"], server: server)
+
+    XCTAssertEqual(
+      Array(args[3...6]),
+      ["--tools", "Read", "--allowedTools", "Read,mcp__slack__search,mcp__orbe_run__put_items"])
+    XCTAssertTrue(args.contains("--mcp-config"))
+    XCTAssertFalse(args.contains("--setting-sources"))
+    XCTAssertFalse(args.contains("--strict-mcp-config"))
+  }
+
   /// `Bash(<接頭>:*)` の規則は、ツール名だけを `--tools` に（重ねず）、規則そのものを `--allowedTools` に渡す——Bash を持たせて
   /// 名指しの接頭のコマンドだけを許す。MCP を含まなければ閉じたまま。
   func testBashRulesGiveBashButAllowOnlyTheNamedPrefixes() {
