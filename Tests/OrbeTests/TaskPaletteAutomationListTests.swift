@@ -7,7 +7,7 @@ import XCTest
 /// 壊れると何が起きるか: 判定が失敗した・まだ判定していないのに「候補なし」と読め、候補が来ない理由に気づけない。
 @MainActor
 final class TaskPaletteAutomationListTests: OrbeTestCase {
-  /// 「時刻 部品の名前　結果」。結果は候補の数・候補なし・失敗の説明で、まだ回っていなければ時刻なしで「まだ判定していない」。
+  /// 「時刻 部品の名前　結果」。結果は候補の数・候補なし・失敗の説明で、まだ回っていなければ時刻なしで「未判定」。
   func testHeadlineSaysEachJudgesLatestRun() throws {
     let store = DesignSceneFixtures.automationStore(DesignSceneFixtures.automationShelfSamples())
     let text = AutomationText(

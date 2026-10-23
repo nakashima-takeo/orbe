@@ -44,7 +44,7 @@ struct TaskPaletteAutomationShelf: View {
   }
 }
 
-/// 棚の 1 段。上に印・名前・件数、下に前回の判定（成否の印と時刻）と今の状態（更新中・停止中）。印はどの受信も共通（出どころの
+/// 棚の 1 段。上に印・名前・件数、下に前回の判定（成否の印と時刻）と今の状態（更新中・一時停止中）。印はどの受信も共通（出どころの
 /// 種類は知らない）。棚に焦点が無い間は、選択の地を薄くする（選んでいるが、キーが届く場所ではない）。
 private struct TaskPaletteAutomationShelfRowView: View {
   let row: TaskPaletteAutomationShelfRow

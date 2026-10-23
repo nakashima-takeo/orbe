@@ -125,9 +125,6 @@ extension DesignGallerySnapshotTests {
     try renderBoardJudgeOutcomeSnapshots(write: write, board: { board($0, row: $1) })
   }
 
-  /// 見本 O2Board・O2PartCards（案2 地図＋選んだ部品）: 一覧に居る（カードの欄は空）・地図で失敗した判定を選ぶ・役割ごとの
-  /// カード（形式エラーを修正した取得・古い行を捨てた処理コマンド・報告・作業・外部操作）・走っている取得・「通知」の段と
-  /// 3 択・入力の多い判定（溝が広がる）・狭い窓（カードが地図の下）。
   /// 定義を読めない自動化（一覧の先頭の行と、名前・理由・「修正を依頼」だけの詳細）と、不明な記録（Slack の取得のカード）。
   private func renderBoardUnreadableSnapshots(
     write: (String, BoardModel, Language, NSSize) throws -> Void
@@ -151,6 +148,9 @@ extension DesignGallerySnapshotTests {
     try write("board_automation_unknown_record_en.png", unknown, .en, size)
   }
 
+  /// 見本 O2Board・O2PartCards（案2 地図＋選んだ部品）: 一覧に居る（カードの欄は空）・地図で失敗した判定を選ぶ・役割ごとの
+  /// カード（形式エラーを修正した取得・古い行を捨てた処理コマンド・報告・作業・外部操作）・走っている取得・「通知」の段と
+  /// 3 択・入力の多い判定（溝が広がる）・狭い窓（カードが地図の下）。
   private func renderBoardMapSnapshots(
     write: (String, BoardModel, Language, NSSize) throws -> Void,
     board: ([AutomationSample]?, Int) -> BoardModel

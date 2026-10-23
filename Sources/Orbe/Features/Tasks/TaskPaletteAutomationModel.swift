@@ -171,7 +171,7 @@ enum TaskPaletteAutomationError: Equatable {
   }
 
   /// 棚の段の 2 行目。前回の判定は、判定の部品のうち最も新しく回ったものの最新の回（他の判定の失敗は一覧の頭で見る）。今の
-  /// 状態は、一巡の間なら更新中、止めていれば停止中。
+  /// 状態は、一巡の間なら更新中、止めていれば一時停止中。
   func status(of automation: Automation) -> TaskPaletteAutomationShelfStatus {
     let last = automation.graph.judges.compactMap { automation.state($0.id).runs.first }
       .max { $0.startedAt < $1.startedAt }

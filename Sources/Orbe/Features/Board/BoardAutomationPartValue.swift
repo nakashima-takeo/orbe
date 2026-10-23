@@ -8,8 +8,7 @@ enum BoardSegmentLook: Equatable {
 }
 
 /// 選んだ部品のカードの値。地図に出さない部品の中身（手段・モデル・ツール・指示文・保存・取り方・上限・制限時間・作業ディレクトリ・
-/// 回の記録）を
-/// 出すのはここだけ。
+/// 回の記録）を出すのはここだけ。
 struct BoardAutomationPartValue: Equatable {
   let id: AutomationPartID
   let role: String

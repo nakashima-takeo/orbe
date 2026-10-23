@@ -46,12 +46,12 @@ extension WindowController {
         : nil)
   }
 
-  /// 「連絡 の出力の形式エラー（2 件）— その場で修正済み」。
-  private func breachLine(_ breach: AutomationRunRecord, part name: String) -> String {
-    let count = breach.run?.breach?.count ?? 0
+  /// 「連絡 の出力の形式エラー（2 件）— agent が修正済み」。
+  private func breachLine(_ record: AutomationRunRecord, part name: String) -> String {
+    let count = record.run?.breach?.count ?? 0
     return localization.format(
       count == 1 ? .automationBreachNoticeOne : .automationBreachNoticeOther, name, count,
-      localization.string(breach.failed ? .automationBreachFailed : .automationBreachPassed))
+      localization.string(record.failed ? .automationBreachFailed : .automationBreachPassed))
   }
 
   /// 通知センターでの自動化の通知の識別子。自動化ごとに 1 つなので、新しい回が前の通知を差し替える。
