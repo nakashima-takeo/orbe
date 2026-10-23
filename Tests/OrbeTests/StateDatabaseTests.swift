@@ -128,7 +128,7 @@ final class StateDatabaseTests: OrbeTestCase {
     XCTAssertEqual(try names(XCTUnwrap(db)), [], "空で始まる")
   }
 
-  func testVersionMismatchIsQuarantinedWithReadableContent() throws {
+  func testAnOlderVersionWithoutAMigrationIsQuarantinedWithReadableContent() throws {
     try seedVersion1(["版 1 の中身"])
 
     let db = StateDatabase.open(folder: folder, version: 2, schema: Self.schemaV2) { _ in () }
@@ -256,6 +256,57 @@ final class StateDatabaseTests: OrbeTestCase {
     XCTAssertEqual(try names(inVersion1At: folder), ["版 1 の中身"], "巻き戻って版 1 のまま")
   }
 
+  /// 移した後の表の形が今の版と違えば、移行は巻き戻り、DB は動かさず使わない（版 1 のまま残る）。
+  func testAMigrationThatLeavesAnotherShapeIsRolledBackAndUnused() throws {
+    try seedVersion1(["版 1 の中身"])
+    let migration = StateDatabase.Migration(from: 1) { db in
+      try db.exec("ALTER TABLE item RENAME TO entry")
+    }
+
+    guard
+      case .refused(let reason) = StateDatabase.open(
+        folder: folder, version: 2, schema: Self.schemaV2, migrations: [migration],
+        read: { _ in () })
+    else { return XCTFail("形の違う移行は使わない") }
+
+    XCTAssertTrue(reason.contains("differ from version 2"), reason)
+    XCTAssertEqual(try quarantinedFolders(), [])
+    XCTAssertEqual(try names(inVersion1At: folder), ["版 1 の中身"], "巻き戻って版 1 のまま")
+  }
+
+  /// 移行は外部キーを切って流れるので、指されている表を SQLite の作り直しの手順（作る・写す・消す・名前を変える）で直しても、
+  /// 子の行は消えずに移る。名前を変えた表の文面の違い（引用符）は形の違いにならない。
+  func testAMigrationCanRebuildAReferencedTableAndKeepsTheChildRows() throws {
+    let parent = "CREATE TABLE parent (id INTEGER PRIMARY KEY, name TEXT NOT NULL"
+    let child = """
+      CREATE TABLE child (
+        id INTEGER PRIMARY KEY,
+        parent_id INTEGER NOT NULL REFERENCES parent (id) ON DELETE CASCADE)
+      """
+    let v1 = "\(parent)); \(child)"
+    let v2 = "\(parent), note TEXT); \(child)"
+    try XCTUnwrap(
+      StateDatabase.open(folder: folder, version: 1, schema: v1) { _ in () }.opened?.database
+    ).exec("INSERT INTO parent VALUES (1, '親'); INSERT INTO child VALUES (1, 1)")
+    let migration = StateDatabase.Migration(from: 1) { db in
+      try db.exec(
+        """
+        CREATE TABLE parent_new (id INTEGER PRIMARY KEY, name TEXT NOT NULL, note TEXT);
+        INSERT INTO parent_new (id, name) SELECT id, name FROM parent;
+        DROP TABLE parent;
+        ALTER TABLE parent_new RENAME TO parent
+        """)
+    }
+
+    let opened = try XCTUnwrap(
+      StateDatabase.open(folder: folder, version: 2, schema: v2, migrations: [migration]) { db in
+        try db.select("SELECT count(*) FROM child", []) { $0.int(at: 0) }
+      }.opened)
+
+    XCTAssertEqual(opened.contents, [1], "子の行は残る")
+    XCTAssertEqual(try quarantinedFolders(), [])
+  }
+
   /// 今より新しい版の DB は退避せず、使わない理由を返す。
   func testANewerVersionIsLeftUntouchedAndRefused() throws {
     try seedVersion1(["版 1 の中身"])
@@ -285,5 +336,17 @@ final class StateDatabaseTests: OrbeTestCase {
 
     XCTAssertNotNil(db, "退避して空で始める")
     XCTAssertEqual(try quarantinedFolders().count, 1)
+  }
+
+  /// 表作りの文の書き方（空白・改行・引用符）だけが違う同じ版の DB は、形が同じなので退避しない。
+  func testTablesWrittenDifferentlyButShapedTheSameAreKept() throws {
+    try seedVersion1(["版 1 の中身"])
+
+    let db = StateDatabase.open(
+      folder: folder, version: 1, schema: "CREATE  TABLE \"item\" (\n  name   TEXT NOT NULL\n)"
+    ) { _ in () }.opened?.database
+
+    XCTAssertEqual(try names(XCTUnwrap(db)), ["版 1 の中身"])
+    XCTAssertEqual(try quarantinedFolders(), [])
   }
 }
