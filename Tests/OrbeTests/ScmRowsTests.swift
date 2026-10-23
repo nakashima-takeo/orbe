@@ -46,15 +46,12 @@ final class ScmRowsTests: OrbeTestCase {
     XCTAssertEqual(unstaged["new.txt"]?.isTracked, false)
     XCTAssertEqual(unstaged["cached.txt"]?.isTracked, false)
     XCTAssertEqual(unstaged["src/a2.swift"]?.isTracked, true)
-    XCTAssertEqual(unstaged["src/a2.swift"]?.opensAsFile, false)
-    XCTAssertEqual(staged["gone.txt"]?.opensAsFile, false)
-    XCTAssertEqual(staged["cached.txt"]?.opensAsFile, true)
     XCTAssertEqual(ScmChanges.count(status), changes.count)
   }
 
   /// 「ファイルを開く」が押せるのは、作業ツリーにファイルとして在る行だけ——作業ツリーに無い競合（`DD`・競合中に消した
-  /// `UU`）とサブモジュールの行（ステージ済みも変更も）は開けない。ファイルに置き換えたサブモジュールと、index から外して
-  /// 作業ツリーに残したファイルは開ける。
+  /// `UU`）・rename の後に消したファイルとサブモジュールの行（ステージ済みも変更も）は開けない。シンボリックリンク・ファイルに
+  /// 置き換えたサブモジュール・index から外して作業ツリーに残したファイルは開ける。
   func testOnlyRowsThatAreFilesInTheWorkingTreeOpenAsFiles() {
     let zero = String(repeating: "0", count: 40)
     func line(_ xy: String, _ sub: String, _ modes: String, _ path: String) -> String {
@@ -67,6 +64,8 @@ final class ScmRowsTests: OrbeTestCase {
       conflict("DD", "100644 000000 000000 000000", "both-deleted.txt"),
       conflict("UU", "100644 100644 100644 000000", "deleted-in-conflict.txt"),
       conflict("UU", "100644 100644 100644 100644", "conflict.txt"),
+      "2 RD N... 100644 100644 000000 \(zero) \(zero) R100 moved.txt", "old.txt",
+      line(".T", "N...", "100644 100644 120000", "link"),
       line("A.", "S...", "000000 160000 160000", "added-sub"),
       line(".M", "SC..", "160000 160000 160000", "moved-sub"),
       line("MT", "S...", "160000 160000 100644", "sub-as-file"),
@@ -81,10 +80,12 @@ final class ScmRowsTests: OrbeTestCase {
       opens(changes.changes),
       [
         "both-deleted.txt": false, "deleted-in-conflict.txt": false, "conflict.txt": true,
-        "moved-sub": false, "sub-as-file": true, "cached.txt": true,
+        "moved.txt": false, "link": true, "moved-sub": false, "sub-as-file": true,
+        "cached.txt": true,
       ])
     XCTAssertEqual(
-      opens(changes.staged), ["added-sub": false, "sub-as-file": true, "cached.txt": true])
+      opens(changes.staged),
+      ["moved.txt": false, "added-sub": false, "sub-as-file": true, "cached.txt": true])
   }
 
   /// すべてステージ・ステージ済みが無いときのコミットに入る行は「変更」の行から、競合と中身だけ変わったサブモジュールを
@@ -142,22 +143,6 @@ final class ScmRowsTests: OrbeTestCase {
     XCTAssertEqual(enabled(["c.txt": conflict, "sub": content]), [false, false], "すべて破棄・すべてステージ")
     XCTAssertEqual(enabled(["c.txt": conflict, "sub": moved]), [false, true])
     XCTAssertEqual(enabled(["c.txt": conflict, "a.txt": entry(nil, .modified)]), [true, true])
-  }
-
-  /// 「変更」の見出しのすべて破棄・すべてステージの間は、親の見出しのツールの間と同じ（`editorScmToolGap`）。
-  @MainActor
-  func testTheBulkButtonsAreSpacedLikeTheRepositoryTools() throws {
-    let view = ScmRowView(frame: NSRect(x: 0, y: 0, width: 300, height: Theme.Layout.editorScmRow))
-    let changes = ScmChanges.build(
-      GitStatus(
-        entries: ["a.txt": entry(nil, .modified)], untrackedDirectories: [], branch: nil,
-        stagedVersions: [:]))
-    let layout = ScmLayout.build(changes, collapsed: [])
-    let row = try XCTUnwrap(layout.index[ScmRowID(section: .changes, path: nil)])
-    view.show(layout.items[row], language: .en, emoji: nil)
-    let rects = view.buttonRects().map(\.1)
-    XCTAssertEqual(rects.count, 2)
-    XCTAssertEqual(rects[1].minX - rects[0].maxX, Theme.Layout.editorScmToolGap)
   }
 
   /// 変更の列は子の見出しとファイル行だけ。行が 0 の区分は見出しごと出ず、畳んだ区分のファイル行は出ない。

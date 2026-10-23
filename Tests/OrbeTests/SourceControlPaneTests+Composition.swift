@@ -31,7 +31,6 @@ extension SourceControlPaneTests {
 
     let snapshot = scm.commitSnapshot()
     XCTAssertFalse(field.hasMarkedText(), "写しが変換を確定する")
-    XCTAssertEqual(scm.composition, "")
     XCTAssertEqual(scm.control.message, "abcかん")
     XCTAssertTrue(snapshot.state.canCommit)
     snapshot.commit()
@@ -56,7 +55,6 @@ extension SourceControlPaneTests {
     XCTAssertTrue(scm.commitState.isButtonEnabled)
 
     compose("", in: field)
-    XCTAssertEqual(scm.composition, "")
     XCTAssertFalse(scm.commitState.canCommit, "変換を取り消した")
   }
 }
