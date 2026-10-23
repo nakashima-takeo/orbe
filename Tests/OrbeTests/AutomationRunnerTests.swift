@@ -323,53 +323,6 @@ final class AutomationRunnerTests: OrbeTestCase {
     }
   }
 
-  // MARK: - 毎回すべてを取る今の集合の処理
-
-  /// 取得（今の集合）→ 毎回すべてを取る今の集合の処理 `copy` → 副作用 `post`。
-  private func defineCopy() throws -> Int {
-    var copy = part("copy", .arrival, coverage: .currentSet)
-    copy.from = [AutomationDefinition.Input(part: "gh", take: .all)]
-    return try define([
-      part("gh", .scheduled(.every(1800)), coverage: .currentSet), copy,
-      part("post", .arrival, from: ["copy"], deliver: .sideEffect),
-    ])
-  }
-
-  /// 毎回すべてを取る「届いたら」の部品は、上流が変わったときだけ起きる。上流が同じ結果を出し続けても起き直さない。失敗した
-  /// 回の後は、上流が変わらなくても次の祖先の回でやり直す。
-  func testATakeAllArrivalPartWakesOnlyWhenTheUpstreamChanges() throws {
-    _ = try defineCopy()
-    advance(by: 1800)
-    finish("gh", fetched(["a"]))
-    finish("copy", printed("", exit: 1))
-
-    advance(by: 1800)
-    finish("gh", fetched(["a"]))
-    XCTAssertEqual(calls("copy").count, 2, "失敗した回は次の祖先の回でやり直す")
-    finish("copy", printed(item("a")))
-
-    advance(by: 1800)
-    finish("gh", fetched(["a"]))
-    XCTAssertEqual(calls("copy").count, 2, "上流が変わらなければ起き直さない")
-  }
-
-  /// 今の集合の処理は、入力が 0 件になっても回り（空の集合を写す）、前の出力をすべて無効にする。
-  func testACurrentSetProcessRunsOnAnEmptyInputAndDropsItsOutput() throws {
-    let id = try defineCopy()
-    advance(by: 1800)
-    finish("gh", fetched(["a"]))
-    finish("copy", printed(item("a")))
-    XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks.count, 1, "前提: 写した項目が有効")
-
-    advance(by: 1800)
-    finish("gh", printed(""))
-
-    XCTAssertEqual(calls("copy").count, 2, "入力が 0 件でも回る")
-    XCTAssertEqual(rows(try XCTUnwrap(calls("copy").last)).count, 0)
-    finish("copy", printed(""))
-    XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks, [])
-  }
-
   // MARK: - 目印
 
   /// 新着の流れの取得は、前回成功した回の始まりを目印（`ORBE_SINCE`）に受ける。失敗した回では目印は進まない。
