@@ -100,7 +100,7 @@ final class AutomationStoreTests: OrbeTestCase {
 
   /// 自動化・つながりの取り方（take・古さの上限）・部品の状態（今有効な項目のリンク・決まりを外した印・回の記録・読めば取る行
   /// の数）・版・候補は、どの変異（作る・確定・書き換え・さばく・止める・消す）の後に開き直しても同じ。回の記録は
-  /// 失敗・判定の確定で捨てた案も、候補は候補にした理由も同じ。
+  /// 失敗・判定の確定で捨てた案も、候補は候補にした理由と候補を出した自動化も同じ。
   func testEverythingSurvivesARestart() throws {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
@@ -135,6 +135,7 @@ final class AutomationStoreTests: OrbeTestCase {
 
     XCTAssertEqual(reopened.automations, automations)
     XCTAssertEqual(reopened.proposals, proposals)
+    XCTAssertEqual(reopened.proposals.map { reopened.issuer(of: $0)?.id }, [id], "候補を出した自動化")
   }
 
   // MARK: - 排他
