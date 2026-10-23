@@ -130,6 +130,8 @@ func pumpMain(
 final class WriteOutcome {
   private(set) var finished = false
   private(set) var failure: GitWriteFailure?
+  /// コミットの完了なら、落ちる前に先のステージを書いたか（通った・コミットでない完了は nil）。
+  private(set) var stagedFirst: Bool?
   /// 完了が届いた時点の status（完了の時点で書き込み後の姿になっているかを見る）。
   private(set) var statusAtCompletion: GitStatus?
   private let files: RootFiles?
@@ -143,6 +145,11 @@ final class WriteOutcome {
     finished = true
     self.failure = failure
     statusAtCompletion = files?.status
+  }
+
+  func receive(_ outcome: GitCommitOutcome) {
+    if case .failed(_, let stagedFirst) = outcome { self.stagedFirst = stagedFirst }
+    receive(outcome.failure)
   }
 }
 

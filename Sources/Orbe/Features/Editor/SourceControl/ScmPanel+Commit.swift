@@ -62,11 +62,10 @@ extension ScmPanel {
   /// 自分の書き込みが終わった（根のサービスの status はもう書き込み後の姿）。
   func sourceControl(
     _ control: SourceControl, firstStepDidFinish operation: SourceControl.Operation,
-    failure: GitWriteFailure?
+    outcome: SourceControl.FirstStepOutcome
   ) {
     ownWrites.firstStepDidFinish(
-      operation, failed: failure != nil, status: operation.files.status,
-      seesStatus: liveFiles != nil)
+      operation, outcome, status: operation.files.status, seesStatus: liveFiles != nil)
   }
 
   /// 見えていた範囲の中身——見えている行に、このパネルで押してまだ行に出ていない書き込みを重ねたもの（→ `ScmOwnWrites`）

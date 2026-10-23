@@ -375,6 +375,19 @@ final class RootFilesWritesTests: OrbeTestCase {
   }
 }
 
+extension RootFilesWritesTests {
+  /// コミットの完了を待つ。
+  func finish(
+    _ files: RootFiles, _ start: (@escaping (GitCommitOutcome) -> Void) -> RootFiles.Write,
+    file: StaticString = #filePath, line: UInt = #line
+  ) -> WriteOutcome {
+    let outcome = WriteOutcome(files)
+    _ = start(outcome.receive)
+    pumpMain(until: { outcome.finished }, timeout: 20, "コミットの完了", file: file, line: line)
+    return outcome
+  }
+}
+
 /// 作業ツリーから消えたパスのエントリ。
 private func gone(staged: GitStatus.Change?, unstaged: GitStatus.Change?) -> GitStatus.Entry {
   GitStatus.Entry(staged: staged, unstaged: unstaged, workingTree: .absent)

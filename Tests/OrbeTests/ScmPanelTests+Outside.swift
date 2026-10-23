@@ -31,6 +31,55 @@ extension ScmPanelTests {
     }
   }
 
+  /// 外の `git add` で断られたコミットを、行が追いつく前（断った知らせの中）に押し直しても、また何も書かずに断る——何も
+  /// 書かずに断ったコミットは、先にステージする行を書いたことにならない。先のステージの後で hook に拒まれたコミットの
+  /// 押し直しは、自分のステージを数えて通る。
+  func testPressingAgainRightAfterARefusedCommitIsRefusedToo() throws {
+    let actions: [(SourceControl.Kind, (ScmPanel) -> Void)] = [
+      (.commit, { $0.commitSnapshot().commit() }), (.amend, { $0.commitSnapshot().amend() }),
+      (.commitAndPush, { $0.commitSnapshot().commitAndPush() }),
+    ]
+    for (kind, act) in actions {
+      let name = "\(kind)"
+      try freshRepo(addingOrigin: kind == .commitAndPush)
+      try repo.write("a.txt", "edited\n")
+      try repo.write("secret.env", "token\n")
+      show(until: { $0.changes.staged.isEmpty && $0.changes.changes.count == 2 }, "\(name): 行")
+      panel.control.message = "m"
+      XCTAssertTrue(repo.git(["add", "secret.env"]).isSuccess)
+      let (head, status) = (repo.head(), repo.git(["status", "--porcelain"]).stdoutText)
+      var rowsWereBehind = false
+      pressRightAfter(
+        kind, name, first: act,
+        then: {
+          rowsWereBehind = $0.changes.staged.isEmpty
+          act($0)
+        })
+      XCTAssertTrue(rowsWereBehind, "\(name): 前提: 行は外のステージにまだ追いついていない")
+      XCTAssertEqual(panel.control.failure?.cause, .git(.contentMismatch), name)
+      XCTAssertEqual(repo.head(), head, name)
+      XCTAssertEqual(repo.git(["status", "--porcelain"]).stdoutText, status, name)
+    }
+
+    try freshRepo(addingOrigin: false)
+    try repo.write("a.txt", "edited\n")
+    try repo.write(".git/hooks/pre-commit", "#!/bin/sh\n[ -e .git/allow ]\n")
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o755], ofItemAtPath: repo.root + "/.git/hooks/pre-commit")
+    show(until: { $0.changes.staged.isEmpty && $0.changes.changes.count == 1 }, "hook: 行")
+    panel.control.message = "m"
+    let repo = self.repo!
+    pressRightAfter(
+      .commit, "hook", first: { $0.commitSnapshot().commit() },
+      then: {
+        XCTAssertTrue(
+          FileManager.default.createFile(atPath: repo.root + "/.git/allow", contents: nil))
+        $0.commitSnapshot().commit()
+      })
+    XCTAssertNil(panel.control.failure, "自分のステージを数えて通る")
+    XCTAssertEqual(repo.git(["show", "--name-only", "--format=", "HEAD"]).stdoutText, "a.txt\n")
+  }
+
   /// 外でのコミット（HEAD が進んだ）が行に出る前に押したコミットは、何も書かずに断る——見えていないコミットの上に重ねない。
   func testCommittingRightAfterAnOutsideCommitIsRefusedAndWritesNothing() throws {
     try repo.write("a.txt", "edited\n")
