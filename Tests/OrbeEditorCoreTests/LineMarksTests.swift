@@ -54,13 +54,15 @@ final class LineMarksTests: XCTestCase {
 
     surface.replace(NSRange(location: 0, length: 0), with: "z\n")
     XCTAssertEqual(
-      surface.lineMarks.bars, [LineMarks.Bar(rows: 2...2, kind: .added)], "印は打鍵の行の増減にその場で追従する")
+      surface.lineMarks.bars,
+      [LineMarks.Bar(rows: 0...0, kind: .added), LineMarks.Bar(rows: 2...2, kind: .added)],
+      "印は打鍵にその場で追従する（足した行に印・後ろの印は行の増減の分ずれる）")
     XCTAssertEqual(surface.lineMarks.deletions, [4])
     XCTAssertTrue(document.waitUntilCaughtUp())
     XCTAssertEqual(
       surface.lineMarks.bars,
       [LineMarks.Bar(rows: 0...0, kind: .added), LineMarks.Bar(rows: 2...2, kind: .added)],
-      "差分が届けば追いつく")
+      "差分が届いても同じ")
     XCTAssertEqual(surface.lineMarks.deletions, [4])
 
     document.baseline = nil

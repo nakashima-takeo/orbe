@@ -112,7 +112,7 @@ final class RoleRunsTests: XCTestCase {
     }
   }
 
-  /// ハンクのずらし——編集より後ろのハンクは増減した行の数だけ動き、前のハンクは動かない。
+  /// ハンクのずらし——編集が足した行は区間に入り、編集より後ろのハンクは増減した行の数だけ動き、前のハンクは動かない。
   func testHunksShiftByTheLinesTheEditAddsOrRemoves() {
     var log = EditLog()
     let hunks = [
@@ -128,6 +128,7 @@ final class RoleRunsTests: XCTestCase {
       insert.track(hunks),
       [
         LineHunk(oldStart: 1, oldCount: 1, newStart: 1, newCount: 1),
+        LineHunk(oldStart: 3, oldCount: 0, newStart: 4, newCount: 2),
         LineHunk(oldStart: 5, oldCount: 0, newStart: 8, newCount: 2),
         LineHunk(oldStart: 9, oldCount: 2, newStart: 12, newCount: 0),
       ])

@@ -39,7 +39,10 @@ public struct LineMarks: Equatable, Sendable {
         deletions.append(rows.lowerBound)
         continue
       }
-      bars.append(Bar(rows: rows.lowerBound...(rows.upperBound - 1), kind: hunk.oldCount == 0 ? .added : .modified))
+      bars.append(
+        Bar(
+          rows: rows.lowerBound...(rows.upperBound - 1),
+          kind: hunk.oldCount == 0 ? .added : .modified))
     }
     self.init(bars: bars, deletions: deletions)
   }

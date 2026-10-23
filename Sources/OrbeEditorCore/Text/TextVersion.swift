@@ -76,12 +76,10 @@ public struct VersionedEdit: Sendable {
       let lower = first.newLines.lowerBound <= rows.start
       let upper = last.newLines.upperBound >= rows.oldEnd
       let after = last.oldLines.upperBound - last.newLines.upperBound
-      new =
-        (lower ? first.newLines.lowerBound : rows.start)
-        ..< (upper ? last.newLines.upperBound : rows.oldEnd)
-      old =
-        (lower ? first.oldLines.lowerBound : old.lowerBound)
-        ..< (upper ? last.oldLines.upperBound : rows.oldEnd + after)
+      let newStart = lower ? first.newLines.lowerBound : rows.start
+      let oldStart = lower ? first.oldLines.lowerBound : old.lowerBound
+      new = newStart..<(upper ? last.newLines.upperBound : rows.oldEnd)
+      old = oldStart..<(upper ? last.oldLines.upperBound : rows.oldEnd + after)
     }
     let edited = new.lowerBound..<(new.upperBound + delta)
     if !old.isEmpty || !edited.isEmpty { result.append(LineHunk(old: old, new: edited)) }

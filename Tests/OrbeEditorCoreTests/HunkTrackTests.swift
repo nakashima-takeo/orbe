@@ -38,25 +38,31 @@ final class HunkTrackTests: XCTestCase {
     for (index, hunk) in hunks.enumerated() {
       let (o, n) = (hunk.oldLines, hunk.newLines)
       if index > 0 {
-        XCTAssertGreaterThan(n.lowerBound, newNext, "区間の間に文脈を挟む: \(context)", file: file, line: line)
+        XCTAssertGreaterThan(
+          n.lowerBound, newNext, "区間の間に文脈を挟む: \(context)", file: file, line: line)
       }
       XCTAssertEqual(
         o.lowerBound - oldNext, n.lowerBound - newNext, "区間の外は 1 対 1: \(context)", file: file,
         line: line)
-      XCTAssertLessThanOrEqual(o.upperBound, old.count, "古い側は本文の中: \(context)", file: file, line: line)
-      XCTAssertLessThanOrEqual(n.upperBound, new.count, "新しい側は本文の中: \(context)", file: file, line: line)
+      XCTAssertLessThanOrEqual(
+        o.upperBound, old.count, "古い側は本文の中: \(context)", file: file, line: line)
+      XCTAssertLessThanOrEqual(
+        n.upperBound, new.count, "新しい側は本文の中: \(context)", file: file, line: line)
       guard o.lowerBound >= oldNext, n.lowerBound >= newNext else { return }
       if contents {
         for k in 0..<min(o.lowerBound - oldNext, n.lowerBound - newNext) {
-          XCTAssertEqual(old[oldNext + k], new[newNext + k], "文脈の行は同じ中身: \(context)", file: file, line: line)
+          XCTAssertEqual(
+            old[oldNext + k], new[newNext + k], "文脈の行は同じ中身: \(context)", file: file, line: line)
         }
       }
       (oldNext, newNext) = (o.upperBound, n.upperBound)
     }
-    XCTAssertEqual(old.count - oldNext, new.count - newNext, "末尾の文脈は 1 対 1: \(context)", file: file, line: line)
+    XCTAssertEqual(
+      old.count - oldNext, new.count - newNext, "末尾の文脈は 1 対 1: \(context)", file: file, line: line)
     guard contents, old.count - oldNext == new.count - newNext, oldNext <= old.count else { return }
     for k in 0..<(old.count - oldNext) {
-      XCTAssertEqual(old[oldNext + k], new[newNext + k], "文脈の行は同じ中身: \(context)", file: file, line: line)
+      XCTAssertEqual(
+        old[oldNext + k], new[newNext + k], "文脈の行は同じ中身: \(context)", file: file, line: line)
     }
   }
 
@@ -91,17 +97,21 @@ final class HunkTrackTests: XCTestCase {
     let base = "a\nbc\n"
     let (document, surface) = try opened(base, base: base)
     surface.replace(NSRange(location: 1, length: 0), with: "\n")
-    XCTAssertEqual(document.hunks, [LineHunk(oldStart: 1, oldCount: 0, newStart: 2, newCount: 1)], "行末の Enter は追加 1 行")
+    XCTAssertEqual(
+      document.hunks, [LineHunk(oldStart: 1, oldCount: 0, newStart: 2, newCount: 1)],
+      "行末の Enter は追加 1 行")
     XCTAssertTrue(document.waitUntilCaughtUp())
     let arrived = document.hunks
     surface.replace(NSRange(location: 1, length: 1), with: "")
     XCTAssertEqual(document.hunks, [], "足した改行を消せば、区間は無くなる")
     XCTAssertTrue(document.waitUntilCaughtUp())
-    XCTAssertEqual(arrived, [LineHunk(oldStart: 1, oldCount: 0, newStart: 2, newCount: 1)], "届く結果と同じ")
+    XCTAssertEqual(
+      arrived, [LineHunk(oldStart: 1, oldCount: 0, newStart: 2, newCount: 1)], "届く結果と同じ")
 
     surface.replace(NSRange(location: 2, length: 0), with: "x\ny\n")
     XCTAssertEqual(
-      document.hunks, [LineHunk(oldStart: 1, oldCount: 0, newStart: 2, newCount: 2)], "行頭から行頭は行ごとの追加")
+      document.hunks, [LineHunk(oldStart: 1, oldCount: 0, newStart: 2, newCount: 2)],
+      "行頭から行頭は行ごとの追加")
     XCTAssertTrue(document.waitUntilCaughtUp())
     surface.replace(NSRange(location: 2, length: 4), with: "")
     XCTAssertEqual(document.hunks, [], "行ごとの削除")
@@ -109,7 +119,8 @@ final class HunkTrackTests: XCTestCase {
 
     surface.replace(NSRange(location: 3, length: 0), with: "\n")
     XCTAssertEqual(
-      document.hunks, [LineHunk(oldStart: 2, oldCount: 1, newStart: 2, newCount: 2)], "bc の中の Enter は bc の変更")
+      document.hunks, [LineHunk(oldStart: 2, oldCount: 1, newStart: 2, newCount: 2)],
+      "bc の中の Enter は bc の変更")
     assertShape(document.hunks, base: base, text: surface.text, "行の中の Enter")
   }
 
