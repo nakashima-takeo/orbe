@@ -93,7 +93,7 @@ final class ScmRowView: ListRowView {
 
   override func control(at point: NSPoint) -> ListRowControl? {
     buttonRects().first { $0.1.contains(point) }.map {
-      ListRowControl(id: $0.0.control.rawValue, frame: $0.1)
+      ListRowControl(id: $0.0.control.rawValue, frame: $0.1, isEnabled: $0.0.isEnabled)
     }
   }
 

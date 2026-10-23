@@ -53,7 +53,7 @@ class ListRowView: NSView {
   /// ポインタが動いた・入った・出た（hover を描く派生が描き直しを決める）。
   func pointerDidChange(from old: NSPoint?) {}
 
-  /// 行の座標 `point` にある押せる部品（無ければ nil。押せない姿の部品も返す——押して何もしないかは源が決める）。
+  /// 行の座標 `point` にある部品（無ければ nil。押せない姿の部品も、押せないと添えて返す——列はその押下を源へ渡さない）。
   func control(at point: NSPoint) -> ListRowControl? { nil }
 
   /// 行の座標 `point` にある部品の説明（ツールチップ）。
@@ -126,8 +126,9 @@ class ListRowView: NSView {
   }
 }
 
-/// 行の中の押せる部品——源へ渡す番号と、行の座標の枠。
+/// 行の中の部品——源へ渡す番号と、行の座標の枠と、押せるか（押せない姿で描いているか）。
 struct ListRowControl {
   let id: Int
   let frame: NSRect
+  let isEnabled: Bool
 }

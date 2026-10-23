@@ -7,7 +7,8 @@ import AppKit
 /// 押しても行は無い。
 ///
 /// キーは源の操作へ渡す（`RowListKey`）。Home / End・PageUp / PageDown は列が送るだけ。押すと焦点を取り
-/// （焦点を持たない源の列は取らない）、行の番号を源へ渡す——行の中の部品の上なら、行のクリックではなく部品の押下として渡す。
+/// （焦点を持たない源の列は取らない）、行の番号を源へ渡す——行の中の部品の上なら、行のクリックではなく部品の押下として渡す
+/// （押せない姿の部品なら何も渡さず、錨も守りも触らない）。
 /// ポインタの下の行には行の中の位置を写す（hover と、部品の説明のツールチップ）。VoiceOver には AX のリスト（行の総数と、
 /// 見えている行・選択の行）として見せる。
 ///
@@ -276,6 +277,7 @@ final class RowListView<Source: RowListSource>: NSView {
     let point = convert(event.locationInWindow, from: nil)
     guard let row = row(at: point) else { return }
     if let slot = slot(showing: row), let control = slot.control(at: convert(point, to: slot)) {
+      guard control.isEnabled else { return }
       let windowY = convert(NSPoint(x: 0, y: slot.frame.minY), to: nil).y
       endPressGuard()
       if let rows = source.press(row, control: control.id, in: drawn) {

@@ -27,6 +27,8 @@ extension RowListTests {
     private(set) var outOfRange = 0
     /// 部品の押下に返す錨。
     var anchor: RowListAnchor<Int>?
+    /// 部品を押せない姿で描く行。
+    var disabledRows: Set<Int> = []
     /// 部品の押下で渡された組の版。
     private(set) var pressedVersions: [Int] = []
 
@@ -34,6 +36,7 @@ extension RowListTests {
     func show(_ row: Int, of rows: SourceRows, in view: Row, emoji: NSFont?) {
       if row >= rowCount { outOfRange += 1 }
       view.show("row \(row)")
+      view.isControlEnabled = !disabledRows.contains(row)
     }
     func row(of selection: Int, in rows: SourceRows) -> Int? {
       selection < rowCount ? selection : nil
@@ -63,6 +66,7 @@ extension RowListTests {
   final class Row: ListRowView {
     private(set) var label: String?
     private(set) var draws = 0
+    var isControlEnabled = true
 
     func show(_ label: String) {
       guard label != self.label else { return }
@@ -75,7 +79,8 @@ extension RowListTests {
 
     override func control(at point: NSPoint) -> ListRowControl? {
       let frame = NSRect(x: bounds.maxX - 30, y: 0, width: 30, height: bounds.height)
-      return frame.contains(point) ? ListRowControl(id: 0, frame: frame) : nil
+      return frame.contains(point)
+        ? ListRowControl(id: 0, frame: frame, isEnabled: isControlEnabled) : nil
     }
   }
 }

@@ -74,6 +74,33 @@ extension RowListTests {
     XCTAssertEqual(hosted.source.clicks.count, 5)
   }
 
+  /// 守りの中で押せない姿の部品を押しても、源へは渡らず、留め（一時の空き・原点）も守りも変わらない——続けた押下は、
+  /// 留めている行の部品にだけ届く。
+  func testAPressOnADisabledControlKeepsTheHoldAndTheGuard() {
+    let hosted = host(rowCount: 3)
+    hosted.window.setFrameOrigin(NSPoint(x: -20000, y: -20000))
+    hosted.window.orderFront(nil)
+    // 押した行 1 が抜け、後継の行 2 を行 1 の高さ（窓の中の 20）に留める。
+    hosted.source.anchor = RowListAnchor(pressed: 99, successor: 2)
+    let point = NSPoint(x: 185, y: 30)
+    send(.leftMouseDown, hosted, at: point)
+    hosted.rows.update(rowsVersion: 1, selection: nil, emoji: nil, wantsFocus: false)
+    XCTAssertEqual(hosted.list.visibleRect.minY, 20, "前提: 行 2 を留めている")
+    XCTAssertEqual(hosted.list.frame.height, 120, "前提: 下に 40 の空き")
+
+    hosted.source.disabledRows = [2]
+    hosted.rows.update(rowsVersion: 2, selection: nil, emoji: nil, wantsFocus: false)
+    send(.leftMouseDown, hosted, at: NSPoint(x: point.x, y: point.y + 20))
+    XCTAssertEqual(hosted.source.clicks, ["press 1 0"], "押せない部品は源へ渡らない")
+    XCTAssertEqual(hosted.list.visibleRect.minY, 20, "原点を保つ")
+    XCTAssertEqual(hosted.list.frame.height, 120, "空きを保つ")
+
+    hosted.source.disabledRows = []
+    hosted.rows.update(rowsVersion: 3, selection: nil, emoji: nil, wantsFocus: false)
+    send(.leftMouseDown, hosted, at: NSPoint(x: point.x, y: point.y + 20))
+    XCTAssertEqual(hosted.source.clicks, ["press 1 0", "press 2 0"], "守りを通って留めている行へ")
+  }
+
   /// 守りは窓の段で押下を受ける——列が動いて枠の中に列の外の view が来ても、その押下はどこにも届かない。
   func testTheGuardDropsAPressOnAViewThatCameUnderThePointer() {
     let hosted = hostShown(anchor: RowListAnchor(pressed: 2, successor: 3))

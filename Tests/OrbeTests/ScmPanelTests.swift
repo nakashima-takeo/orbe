@@ -201,9 +201,9 @@ final class ScmPanelTests: OrbeTestCase {
       }, timeout: 20, message)
   }
 
-  /// サブモジュールのままの変化の行は、破棄を押しても何も起こさず、すべて破棄にも入らない（git の restore は何も変えない
-  /// ——押せば、戻せない確認を通した後で空振りする）。中身だけ変わった行は ＋ も何も起こさず、中でコミットした（チェック
-  /// アウトしているコミットが動いた）行は ＋ でステージできる。
+  /// サブモジュールのままの変化の行は、破棄が押せない姿で（列は押せない部品の押下を源へ渡さない）、すべて破棄にも入らない
+  /// （git の restore は何も変えない——押せば、戻せない確認を通した後で空振りする）。中身だけ変わった行は ＋ も押せない姿で、
+  /// 中でコミットした（チェックアウトしているコミットが動いた）行は ＋ でステージできる。
   func testASubmoduleChangedInTheWorkingTreeIsNotDiscarded() throws {
     try repo.addSubmodule("sub")
     try repo.write("sub/inner.txt", "inner\n")
@@ -214,10 +214,7 @@ final class ScmPanelTests: OrbeTestCase {
     var discarding: [String] = []
     panel.onDiscard = { files in discarding += files.map(\.path) }
 
-    XCTAssertNil(panel.press(row, .stage, in: panel.layout))
-    XCTAssertNil(panel.press(row, .discard, in: panel.layout))
-    XCTAssertTrue(panel.control.operations.isEmpty, "中身だけの ＋ は何も起こさない")
-    XCTAssertEqual(discarding, [], "破棄は確認も出さない")
+    XCTAssertEqual(enabled(row), [.openFile: false, .discard: false, .stage: false], "中身だけ")
     panel.press(header, .discardAll, in: panel.layout)
     XCTAssertEqual(discarding, ["a.txt"])
 
@@ -230,12 +227,20 @@ final class ScmPanelTests: OrbeTestCase {
       "中でコミットしたサブモジュールの行")
     discarding = []
     let moved = try XCTUnwrap(panel.layout.index[ScmRowID(section: .changes, path: "sub")])
-    XCTAssertNil(panel.press(moved, .discard, in: panel.layout))
+    XCTAssertEqual(enabled(moved), [.openFile: false, .discard: false, .stage: true], "コミットが動いた")
     panel.press(header, .discardAll, in: panel.layout)
     XCTAssertEqual(discarding, ["a.txt"], "コミットが動いた行も破棄しない")
     panel.press(moved, .stage, in: panel.layout)
     idle("ステージ")
     XCTAssertEqual(repo.git(["diff", "--cached", "--name-only"]).stdoutText, "sub\n")
+  }
+
+  /// 行 `row` を描いたときの、部品ごとの押せる・押せない。
+  private func enabled(_ row: Int) -> [ScmControl: Bool] {
+    let view = ScmRowView(frame: NSRect(x: 0, y: 0, width: 300, height: 22))
+    view.show(panel.layout.items[row], language: .en, emoji: nil)
+    guard case .file(let content) = view.content else { return [:] }
+    return Dictionary(uniqueKeysWithValues: content.buttons.map { ($0.control, $0.isEnabled) })
   }
 
   /// 「すべて破棄」「すべてステージ」は競合中のファイルを含めない（競合の行は 1 行ずつステージで解決済みにする）。

@@ -84,7 +84,7 @@ extension ScmPanel {
     openSelection(.commit)
   }
 
-  /// 行の中の部品を押した。押せない姿の部品は何もしない。ステージ・解除・確認を出さない破棄（未追跡だけ）は、押した行と
+  /// 行の中の部品を押した（押せない姿の部品は列が渡さない）。ステージ・解除・確認を出さない破棄（未追跡だけ）は、押した行と
   /// 後継の行（同じ区分の次の行。無ければ前の行。区分の最後の 1 件なら後継なし）を錨として返す——同じ位置で続けて押すと、
   /// 次の行が次々に処理され、区分が尽きた後にポインタの下へ来たものは働かない。確認のシートを経る破棄と見出しの一括操作は
   /// 返さない。
@@ -103,15 +103,15 @@ extension ScmPanel {
       }
     case .file(let section, let file):
       switch control {
-      case .openFile where file.opensAsFile:
+      case .openFile:
         onOpenFile(URL(fileURLWithPath: root).appendingPathComponent(file.path))
-      case .stage where file.canStage:
+      case .stage:
         stage([file.row])
         return layout.anchor(pressing: row, in: section)
       case .unstage:
         unstage([file.row])
         return layout.anchor(pressing: row, in: section)
-      case .discard where file.canDiscard:
+      case .discard:
         onDiscard([file])
         return ScmDiscardGate.needsConfirmation([file])
           ? nil : layout.anchor(pressing: row, in: section)
