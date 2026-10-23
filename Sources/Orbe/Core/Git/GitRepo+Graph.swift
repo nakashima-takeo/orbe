@@ -124,6 +124,22 @@ extension GitRepo {
     }
   }
 
+  /// remote 追跡 ref（`refs/remotes` の下の ref 名 → 指すオブジェクト）。読めなければ nil。値で読むので、pack-refs（値は
+  /// 変わらない）では変わらず、ref の形式（files・reftable）に依らない。
+  func remoteTrackingRefs(completion: @escaping ([String: String]?) -> Void) {
+    runner.run(
+      ["for-each-ref", "--format=%(refname)%00%(objectname)", "refs/remotes"], cwd: root
+    ) { output in
+      guard output.isSuccess else { return completion(nil) }
+      var refs: [String: String] = [:]
+      for line in output.stdoutText.split(separator: "\n") {
+        let fields = line.split(separator: "\0", omittingEmptySubsequences: false)
+        if fields.count == 2 { refs[String(fields[0])] = String(fields[1]) }
+      }
+      completion(refs)
+    }
+  }
+
   /// `oids` のうち、どの remote 追跡ブランチからも届かないもの。remote 追跡ブランチが無ければ git を起こさず全部。
   private func unpushed(
     _ oids: [String], hasRemotes: Bool, completion: @escaping (Set<String>?) -> Void

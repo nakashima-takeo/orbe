@@ -49,18 +49,22 @@ extension SourceControl {
 
   @discardableResult
   func pull() -> Operation? {
-    run(.pull, .pull) { [weak self] files, done, operation in self?.pull(files, operation, done) }
+    run(.pull, .network(.pull)) { [weak self] files, done, operation in
+      self?.pull(files, operation, done)
+    }
   }
 
   func push() {
-    run(.push, .push) { [weak self] files, done, operation in self?.push(files, operation, done) }
+    run(.push, .network(.push)) { [weak self] files, done, operation in
+      self?.push(files, operation, done)
+    }
   }
 
   func fetch() {
-    run(.fetch, .fetch) { [weak self] files, done, operation in
-      self?.network(.fetch, of: operation, done) {
+    run(.fetch, .network(.fetch)) { [weak self] files, done, operation in
+      self?.network(.fetch, of: operation, done) { finished in
         files.fetch(
-          onProgress: { [weak self] in self?.report($0, of: operation) }, completion: done)
+          onProgress: { [weak self] in self?.report($0, of: operation) }, completion: finished)
       }
     }
   }
@@ -68,7 +72,7 @@ extension SourceControl {
   /// プル → プッシュ（先行・遅れの数に依らず両方走らせる）。
   @discardableResult
   func sync() -> Operation? {
-    run(.sync, .pull) { [weak self] files, done, operation in
+    run(.sync, .network(.pull)) { [weak self] files, done, operation in
       self?.pull(files, operation) { failure in
         self?.continueStep(operation, after: failure, done) { self?.push(files, operation, done) }
       }
@@ -77,7 +81,8 @@ extension SourceControl {
 
   /// upstream の無いブランチを upstream を付けて送る（付け方は根のサービスの push）。
   func publish() {
-    run(.publish, .push) { [weak self] files, done, operation in self?.push(files, operation, done)
+    run(.publish, .network(.push)) { [weak self] files, done, operation in
+      self?.push(files, operation, done)
     }
   }
 
@@ -102,33 +107,44 @@ extension SourceControl {
   private func pull(
     _ files: RootFiles, _ operation: Operation, _ done: @escaping (GitWriteFailure?) -> Void
   ) {
-    network(.pull, of: operation, done) {
-      files.pull(onProgress: { [weak self] in self?.report($0, of: operation) }, completion: done)
+    network(.pull, of: operation, done) { finished in
+      files.pull(
+        onProgress: { [weak self] in self?.report($0, of: operation) }, completion: finished)
     }
   }
 
   private func push(
     _ files: RootFiles, _ operation: Operation, _ done: @escaping (GitWriteFailure?) -> Void
   ) {
-    network(.push, of: operation, done) {
-      files.push(onProgress: { [weak self] in self?.report($0, of: operation) }, completion: done)
+    network(.push, of: operation, done) { finished in
+      files.push(
+        onProgress: { [weak self] in self?.report($0, of: operation) }, completion: finished)
     }
   }
 
-  /// ネットの段（`write` が起こす書き込み）を起こして結ぶ。そのリポジトリの裏の fetch が走っていれば、止めてその終わりを
-  /// 待ってから起こす——待つ間も操作は走っている扱いで帯に出し、止められたら待ちを取り下げてその場で「止めた」で終える。
-  /// 譲るのはネットの段の直前だけ（コミットしてプッシュのコミットは押した時点で順番に入り、待つ間に押した操作が先に走らない）。
+  /// ネットの段（`write` が、渡した完了で起こす書き込み）を起こして結ぶ。そのリポジトリの裏の fetch が走っていれば、止めて
+  /// その終わりを待ってから起こす——待つ間も操作は走っている扱いで帯に出し、止められたら待ちを取り下げてその場で「止めた」で
+  /// 終える。譲るのはネットの段の直前だけ（コミットしてプッシュのコミットは押した時点で順番に入り、待つ間に押した操作が先に
+  /// 走らない）。起こした段の終わりは、裏の fetch の係へも届ける（取り下げた段は起こしていないので届けない）。
   private func network(
-    _ step: Step, of operation: Operation, _ done: @escaping (GitWriteFailure?) -> Void,
-    _ write: @escaping () -> RootFiles.Write
+    _ step: NetworkStep, of operation: Operation, _ done: @escaping (GitWriteFailure?) -> Void,
+    _ write: @escaping (@escaping (GitWriteFailure?) -> Void) -> RootFiles.Write
   ) {
-    guard let autoFetch = operation.autoFetch,
+    let autoFetch = operation.autoFetch
+    let start: () -> Void = { [weak self] in
+      self?.attach(
+        write { failure in
+          autoFetch?.networkStepDidFinish(step, failure)
+          done(failure)
+        }, step: .network(step), to: operation)
+    }
+    guard let autoFetch,
       let withdraw = autoFetch.yield(then: { [weak self] in
         self?.endYielding(operation)
-        self?.attach(write(), step: step, to: operation)
+        start()
       })
-    else { return attach(write(), step: step, to: operation) }
-    beginYielding(operation, before: step) {
+    else { return start() }
+    beginYielding(operation, before: .network(step)) {
       withdraw()
       done(.cancelled)
     }

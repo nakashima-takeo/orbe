@@ -92,7 +92,7 @@ final class RootFilesRemoteTests: OrbeTestCase {
       finish(files) { files.push(onProgress: { _ in }, completion: $0) }.failure, .pushRejected)
   }
 
-  /// サーバの hook が断った push は「拒否された（先に取り込みが要る）」ではなく、サーバの理由のままの「その他」。
+  /// サーバの hook が断った push は「拒否された（先に取り込みが要る）」ではなく、サーバの理由のままの「断られた」。
   func testAPushDeclinedByTheServerKeepsItsReason() throws {
     let bare = repo.addOrigin()
     try repo.write(
@@ -103,14 +103,14 @@ final class RootFilesRemoteTests: OrbeTestCase {
     let files = repo.files()
 
     let pushed = finish(files) { files.push(onProgress: { _ in }, completion: $0) }
-    guard case .reason(let reason) = pushed.failure else {
-      return XCTFail("「その他」の失敗: \(String(describing: pushed.failure))")
+    guard case .remoteRefused(let reason) = pushed.failure else {
+      return XCTFail("「断られた」の失敗: \(String(describing: pushed.failure))")
     }
     XCTAssertTrue(reason.contains("pre-receive hook declined"), reason)
   }
 
   /// 取り込んでも直らない拒否（送るタグがリモートに別の中身で在る）は、取り込めば直る拒否（fetch first）が混ざっても
-  /// 「拒否された（先に取り込みが要る）」ではなく、git の要約のままの「その他」。
+  /// 「拒否された（先に取り込みが要る）」ではなく、git の要約のままの「断られた」。
   func testARejectionThatPullingCannotFixKeepsItsReason() throws {
     repo.addOrigin()
     XCTAssertTrue(repo.git(["tag", "v1"]).isSuccess)
@@ -124,8 +124,8 @@ final class RootFilesRemoteTests: OrbeTestCase {
     let files = repo.files()
 
     let pushed = finish(files) { files.push(onProgress: { _ in }, completion: $0) }
-    guard case .reason(let reason) = pushed.failure else {
-      return XCTFail("「その他」の失敗: \(String(describing: pushed.failure))")
+    guard case .remoteRefused(let reason) = pushed.failure else {
+      return XCTFail("「断られた」の失敗: \(String(describing: pushed.failure))")
     }
     XCTAssertTrue(reason.contains("already exists"), reason)
   }

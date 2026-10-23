@@ -51,12 +51,21 @@ final class SourceControl {
 
   /// 2 段の操作の今の段（1 段の操作はその段だけ）。
   enum Step: Equatable {
-    case stage, unstage, discard, commit, amend, undo, pull, push, fetch
+    case stage, unstage, discard, commit, amend, undo
+    /// リモートと話す段（git の進捗の行を写す）。
+    case network(NetworkStep)
 
-    /// git の進捗の行を写す段。
-    var reportsProgress: Bool { self == .pull || self == .push || self == .fetch }
+    var reportsProgress: Bool {
+      if case .network = self { return true }
+      return false
+    }
 
     var isCommit: Bool { self == .commit || self == .amend || self == .undo }
+  }
+
+  /// リモートと話す段。
+  enum NetworkStep: Equatable {
+    case pull, push, fetch
   }
 
   /// 列に載った操作 1 つ。
@@ -251,7 +260,7 @@ final class SourceControl {
     operation.longDelay.cancel()
     operations.removeAll { $0 === operation }
     finishFirstStep(operation, outcome)
-    operation.autoFetch?.humanDidFinish(operation.kind, outcome)
+    operation.autoFetch?.humanDidFinish()
     operation.autoFetch = nil
     switch outcome {
     case nil, .cancelled?, .notManaged?: break

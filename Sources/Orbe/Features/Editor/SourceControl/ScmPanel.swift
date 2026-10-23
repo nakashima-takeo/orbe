@@ -81,7 +81,7 @@ final class ScmPanel {
   /// 握っている根のサービス（面が見えている間だけ）。
   @ObservationIgnored private(set) var liveFiles: RootFiles?
   /// 欲しいと届けている裏の fetch の係。
-  @ObservationIgnored private var autoFetch: ScmAutoFetch?
+  @ObservationIgnored private(set) var autoFetch: ScmAutoFetch?
   @ObservationIgnored private var buildJob = Job()
   @ObservationIgnored var ownWrites = ScmOwnWrites()
   /// 手元の 2 区分が今の status から作ったものでない（status が届いてから、行を作る組み立てがまだ始まっていない）。

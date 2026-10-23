@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -60,6 +61,48 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
 
     panel.isLive = false
     XCTAssertFalse(autoFetch.rules.isWanted, "面が見えなくなれば欲しがらない")
+  }
+
+  /// 認証で止まった裏の fetch は、面を隠している間に端末で remote 追跡 ref が動いていれば、次に面が見えたときに再開する。
+  /// 面が見えている間に動いても、その知らせで再開する。値が止まった時点と同じなら（何も取れなかった外の fetch）止まったまま。
+  func testAStoppedBackgroundFetchResumesWhenTheRemoteRefsMovedWhileThePaneWasHidden() throws {
+    let repo = try TempGitRepo()
+    repo.addOrigin()
+    let script = TestScratch.caseDir.appendingPathComponent("denied-ssh.sh").path
+    try "#!/bin/sh\necho 'git@example.invalid: Permission denied (publickey).' >&2\nexit 255\n"
+      .write(toFile: script, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script)
+    XCTAssertTrue(repo.git(["config", "core.sshCommand", script]).isSuccess)
+    XCTAssertTrue(
+      repo.git(["remote", "set-url", "origin", "ssh://git@example.invalid/r.git"]).isSuccess)
+    let panel = ScmPanel(root: repo.root)
+    self.panel = panel
+    panel.isLive = true
+    pumpMain(until: { panel.liveFiles?.repo != nil }, "根の git dir が分かる")
+    let autoFetch = ScmAutoFetch.shared(for: try XCTUnwrap(panel.liveFiles?.repo))
+    NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
+    pumpMain(
+      until: { autoFetch.rules.isBlocked && autoFetch.rules.refsAtBlock != nil }, timeout: 20,
+      "裏の fetch が認証で止まり、その時点の remote 追跡 ref を読む")
+
+    panel.isLive = false
+    panel.isLive = true
+    pumpMain(until: { autoFetch.rules.isWanted }, "面がまた見える")
+    RunLoop.main.run(until: Date().addingTimeInterval(1))
+    XCTAssertEqual(autoFetch.rules.blocks, 1, "値が同じなら止まったまま")
+
+    panel.isLive = false
+    XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "pushed"]).isSuccess)
+    XCTAssertTrue(repo.git(["update-ref", "refs/remotes/origin/main", "HEAD"]).isSuccess)
+    panel.isLive = true
+    pumpMain(
+      until: { autoFetch.rules.blocks == 2 && autoFetch.rules.refsAtBlock != nil }, timeout: 20,
+      "再開した裏の fetch が撃つ（また認証で止まる）")
+
+    XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "pushed again"]).isSuccess)
+    XCTAssertTrue(repo.git(["update-ref", "refs/remotes/origin/main", "HEAD"]).isSuccess)
+    pumpMain(
+      until: { autoFetch.rules.blocks == 3 }, timeout: 20, "面が見えている間に ref が動いた知らせでも再開する")
   }
 
   /// 出しているパネルで裏の fetch を走らせる。止めても終わりが遅れるように、ref を書く hook の最初の 1 回を、SIGTERM を
@@ -158,7 +201,7 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     panel.commitSnapshot().commitAndPush()
     let operation = try XCTUnwrap(panel.control.operations.first)
     pumpMain(
-      until: { panel.control.bandOperation === operation && operation.step == .push },
+      until: { panel.control.bandOperation === operation && operation.step == .network(.push) },
       timeout: 1.5, "push の段の前で待つ間も帯に出る")
     XCTAssertTrue(autoFetch.rules.isRunning, "前提: 裏の fetch はまだ終わっていない")
     XCTAssertFalse(panel.control.isCommitting, "コミットの段は終わっている")

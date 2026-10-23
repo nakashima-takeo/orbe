@@ -1,14 +1,18 @@
 import AppKit
 
 /// リポジトリの裏の fetch の係。そのリポジトリのエディター面が見えていて設定がオンの面（欲しがる面）があり、Orbe が
-/// 前面にある間、前回の fetch・pull の終わりから `ScmAutoFetchRules.interval` ごとに裏で fetch する（ソース管理パネルを
-/// 出しているかに依らない）。共通の git dir（正準形）ごとに 1 つで、アプリが動いている間持つ——同じリポジトリの worktree は
-/// remote 追跡 ref を共有し、並んだ fetch・pull は後の側が落ちる。
+/// 前面にある間、前回の fetch・pull の段が remote 追跡 ref を取り込んだ終わりから `ScmAutoFetchRules.interval` ごとに裏で
+/// fetch する（ソース管理パネルを出しているかに依らない）。共通の git dir（正準形）ごとに 1 つで、アプリが動いている間持つ
+/// ——同じリポジトリの worktree は remote 追跡 ref を共有し、並んだ fetch・pull は後の側が落ちる。
 ///
 /// 裏の fetch は worktree の操作の列（`SourceControl`）に載らないので、帯・失敗の文・ボタンの可否に出ない。先行・遅れが
 /// 新しく見えるのは、ref が動いた後の監視が、そのリポジトリの見えている根に届くから。人のネット操作は、走っている裏の
 /// fetch を止め、その終わりを待ってから起こす（譲る）——止める手の完了を待たずに起こすと、remote 追跡 ref の更新で後の側が
-/// 落ちる。いつ撃つか・終わりで何を記録するかは `ScmAutoFetchRules` が決め、係は時計と git の呼び出しだけを持つ。
+/// 落ちる。いつ撃つか・何で止まりを解くかは `ScmAutoFetchRules` が決め、係は時計と git の呼び出しだけを持つ。
+///
+/// 認証・ホスト鍵の失敗で止まったら、その時点の remote 追跡 ref を読んでおき、欲しがる面が現れた・Orbe が前面に戻った・
+/// 欲しがる面に remote 追跡 ref が動いたかもしれない知らせが届いたときに今の値と比べる（止まっている間だけ）。端末や
+/// エージェントの push・fetch が通っていれば値が変わっていて、知らせを受ける面がいなかった間の変化も取りこぼさない。
 @MainActor
 final class ScmAutoFetch {
   private struct Wanting {
@@ -23,8 +27,6 @@ final class ScmAutoFetch {
     }
   }
 
-  /// 共通の git dir（正準形）。
-  let key: String
   private(set) var rules: ScmAutoFetchRules
   /// 走っている裏の fetch の止める手。
   private var running: RootFiles.Write?
@@ -41,18 +43,17 @@ final class ScmAutoFetch {
     let key = GitWorktreeRoot.normalizedPath(repo.commonDir)
     if let live = registry[key] { return live }
     observeActivation()
-    let fetcher = ScmAutoFetch(key: key, isAppActive: NSApplication.shared.isActive)
+    let fetcher = ScmAutoFetch(isAppActive: NSApplication.shared.isActive)
     registry[key] = fetcher
     return fetcher
   }
 
-  private init(key: String, isAppActive: Bool) {
-    self.key = key
+  private init(isAppActive: Bool) {
     rules = ScmAutoFetchRules(isAppActive: isAppActive)
   }
 
-  /// Orbe が前面に戻れば予約し直し（時刻を過ぎていればすぐ撃つ）、背後へ回れば予約を捨てる。窓が背後にあるだけ（Orbe の
-  /// 別の窓を使っている）なら止めない。
+  /// Orbe が前面に戻れば止まりを確かめて予約し直し（時刻を過ぎていればすぐ撃つ）、背後へ回れば予約を捨てる。窓が背後に
+  /// あるだけ（Orbe の別の窓を使っている）なら止めない。
   private static func observeActivation() {
     guard activation.isEmpty else { return }
     let center = NotificationCenter.default
@@ -62,8 +63,10 @@ final class ScmAutoFetch {
     .map { name in
       center.addObserver(forName: name, object: nil, queue: .main) { _ in
         MainActor.assumeIsolated {
+          let active = name == NSApplication.didBecomeActiveNotification
           for fetcher in registry.values {
-            fetcher.rules.isAppActive = name == NSApplication.didBecomeActiveNotification
+            fetcher.rules.isAppActive = active
+            if active { fetcher.checkBlock() }
             fetcher.schedule()
           }
         }
@@ -80,10 +83,17 @@ final class ScmAutoFetch {
     guard wanted != isWanting else { return }
     if wanted {
       wanting.append(Wanting(panel: panel))
+      checkBlock()
     } else {
       wanting.removeAll { $0.panel === panel }
     }
     schedule()
+  }
+
+  /// 面 `panel` に、remote 追跡 ref が動いたかもしれない知らせが届いた。欲しがる面なら止まりを確かめる。
+  func remoteRefsMayHaveMoved(by panel: ScmPanel) {
+    guard wanting.contains(where: { $0.panel === panel }) else { return }
+    checkBlock()
   }
 
   // MARK: - 人の操作
@@ -105,9 +115,14 @@ final class ScmAutoFetch {
     return { [weak self] in self?.yielded.removeAll { $0 === waiting } }
   }
 
+  /// 人の操作のネットの段が終わった（起こした段ごと）。
+  func networkStepDidFinish(_ step: SourceControl.NetworkStep, _ failure: GitWriteFailure?) {
+    rules.networkStepDidFinish(step, failure, at: Date())
+  }
+
   /// 人のネット操作が終わった。
-  func humanDidFinish(_ kind: SourceControl.Kind, _ failure: GitWriteFailure?) {
-    rules.humanDidFinish(kind, failure, at: Date())
+  func humanDidFinish() {
+    rules.humanDidFinish()
     schedule()
   }
 
@@ -129,41 +144,69 @@ final class ScmAutoFetch {
     timer = nil
   }
 
+  /// 欲しがっている面の根のサービス。
+  private var wantingFiles: RootFiles? {
+    wanting.lazy.compactMap({ $0.panel?.liveFiles }).first
+  }
+
   /// 欲しがっている面の根のサービスで、裏の fetch を撃つ。
   private func fire() {
     timer = nil
-    guard !rules.isRunning, rules.humans == 0,
-      let files = wanting.lazy.compactMap({ $0.panel?.liveFiles }).first
-    else { return }
+    guard !rules.isRunning, rules.humans == 0, let files = wantingFiles else { return }
     rules.backgroundDidStart()
     running = files.fetch(
       attended: false, onProgress: { _ in },
-      completion: { [weak self] failure in self?.backgroundDidFinish(failure) })
+      completion: { [weak self] failure in self?.backgroundDidFinish(failure, in: files) })
   }
 
-  /// 裏の fetch が終わった。待っていた人の操作を起こし、予約し直す。
-  private func backgroundDidFinish(_ failure: GitWriteFailure?) {
+  /// 裏の fetch が終わった。止まったなら、その時点の remote 追跡 ref を読んでおく。待っていた人の操作を起こし、予約し直す。
+  private func backgroundDidFinish(_ failure: GitWriteFailure?, in files: RootFiles) {
     running = nil
     rules.backgroundDidFinish(failure, at: Date())
+    if rules.isBlocked, let repo = files.repo {
+      let block = rules.blocks
+      repo.remoteTrackingRefs { [weak self] refs in
+        guard let refs else { return }
+        self?.rules.refsAtBlockWereRead(refs, block: block)
+      }
+    }
     let starts = yielded.map(\.start)
     yielded = []
     for start in starts { start() }
     schedule()
   }
+
+  /// 止まっていれば、remote 追跡 ref の今の値を止まった時点の値と比べ、違えば止まりを解いて予約し直す。読めなければ何も
+  /// しない。
+  private func checkBlock() {
+    guard rules.isBlocked, let repo = wantingFiles?.repo else { return }
+    let block = rules.blocks
+    repo.remoteTrackingRefs { [weak self] refs in
+      guard let self, let refs, rules.refsWereRead(refs, block: block) else { return }
+      schedule()
+    }
+  }
 }
 
-/// 裏の fetch の係の判断（時刻を引数で受ける状態機械）——いつ撃つか、終わりで何を記録するか。
+/// 裏の fetch の係の判断（時刻を引数で受ける状態機械）——いつ撃つか、段の終わりと remote 追跡 ref の値で何を記録するか。
+///
+/// 規則は 2 つ。リモートと話せたと分かれば止まりを解き、remote 追跡 ref を取り込めたら前回の時刻を今にする。
 struct ScmAutoFetchRules {
-  /// 前回の fetch・pull の終わりから次の裏の fetch までの間。
+  /// 前回の fetch・pull の段が remote 追跡 ref を取り込んだ終わりから、次の裏の fetch までの間。
   static let interval: TimeInterval = 180
 
-  /// 前回の fetch・pull（裏・手）が通った、または裏の fetch が認証・ホスト鍵以外で落ちた時刻。まだ無ければ、撃てるように
-  /// なったらすぐ撃つ。
+  /// 前回の fetch・pull の段（裏・手）が remote 追跡 ref を取り込んだ、または裏の fetch が認証・ホスト鍵以外で落ちた
+  /// 時刻。まだ無ければ、撃てるようになったらすぐ撃つ。
   private(set) var lastFinished: Date?
   /// 裏の fetch が走っている。
   private(set) var isRunning = false
-  /// 認証・ホスト鍵の失敗で止まっている（手の push・pull・fetch が通るまで）。
+  /// 認証・ホスト鍵の失敗で止まっている（リモートと話せたと分かる手の段が通るか、remote 追跡 ref の値が止まった時点から
+  /// 変わるまで）。
   private(set) var isBlocked = false
+  /// 止まった回の数え。読みの結果がどの止まりのものかを見分ける（読んでいる間に解けた・止まり直した結果を当てない）。
+  private(set) var blocks = 0
+  /// 止まった時点の remote 追跡 ref（ref 名 → 指すオブジェクト。読み終わるまで nil）。
+  private(set) var refsAtBlock: [String: String]?
   /// 走っている（譲られるのを待っているものを含む）人のネット操作の数。
   private(set) var humans = 0
   /// Orbe が前面か。
@@ -192,21 +235,44 @@ struct ScmAutoFetchRules {
     humans += 1
   }
 
-  /// 人のネット操作が終わった。fetch・pull・同期が通れば前回の時刻を今にして止まりを解き、push の類が通れば止まりだけを
-  /// 解く（remote 追跡 ref の全体は新しくならない）。
-  mutating func humanDidFinish(
-    _ kind: SourceControl.Kind, _ failure: GitWriteFailure?, at now: Date
-  ) {
+  /// 人のネット操作が終わった。
+  mutating func humanDidFinish() {
     humans -= 1
-    guard failure == nil else { return }
-    switch kind {
-    case .fetch, .pull, .sync:
-      lastFinished = now
-      isBlocked = false
-    case .push, .publish, .commitAndPush:
-      isBlocked = false
-    default:
-      break
+  }
+
+  /// 人の操作のネットの段 `step` が終わった。リモートと話せたと分かれば（通った・競合で止まったプル・拒否された・サーバーが
+  /// 断った push）止まりを解き、remote 追跡 ref を取り込めたら（fetch・pull が通った・競合で止まったプル）前回の時刻を今に
+  /// する。
+  mutating func networkStepDidFinish(
+    _ step: SourceControl.NetworkStep, _ failure: GitWriteFailure?, at now: Date
+  ) {
+    let talked: Bool
+    let integrated: Bool
+    switch failure {
+    case nil:
+      talked = true
+      integrated = Self.integrates(step)
+    case .conflicted?:
+      talked = true
+      integrated = true
+    case .pushRejected?, .remoteRefused?:
+      talked = true
+      integrated = false
+    case .cancelled?, .notManaged?, .authentication?, .unknownHostKey?, .operationInProgress?,
+      .noUpstream?, .noPushDestination?, .detached?, .conflictsRemain?, .contentMismatch?,
+      .headPushed?, .shallowBoundary?, .reason?:
+      talked = false
+      integrated = false
+    }
+    if talked { unblock() }
+    if integrated { lastFinished = now }
+  }
+
+  /// 通った段が remote 追跡 ref を取り込むか。
+  private static func integrates(_ step: SourceControl.NetworkStep) -> Bool {
+    switch step {
+    case .pull, .fetch: true
+    case .push: false
     }
   }
 
@@ -216,8 +282,30 @@ struct ScmAutoFetchRules {
     isRunning = false
     switch failure {
     case .cancelled?: break
-    case .authentication?, .unknownHostKey?: isBlocked = true
+    case .authentication?, .unknownHostKey?:
+      isBlocked = true
+      blocks += 1
+      refsAtBlock = nil
     default: lastFinished = now
     }
+  }
+
+  /// 止まった直後に読んだ remote 追跡 ref（止まり `block` のもの）。その止まりが続いていれば、比べる基準として持つ。
+  mutating func refsAtBlockWereRead(_ refs: [String: String], block: Int) {
+    guard isBlocked, block == blocks, refsAtBlock == nil else { return }
+    refsAtBlock = refs
+  }
+
+  /// 止まっている間に読んだ remote 追跡 ref の今の値（止まり `block` の間に読み始めたもの）。止まった時点の値と違えば
+  /// 止まりを解いて true（端末・エージェントの push・fetch が通った）。基準がまだ無ければ比べない。
+  mutating func refsWereRead(_ refs: [String: String], block: Int) -> Bool {
+    guard isBlocked, block == blocks, let refsAtBlock, refs != refsAtBlock else { return false }
+    unblock()
+    return true
+  }
+
+  private mutating func unblock() {
+    isBlocked = false
+    refsAtBlock = nil
   }
 }

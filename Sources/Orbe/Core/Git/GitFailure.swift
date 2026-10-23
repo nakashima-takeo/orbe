@@ -33,6 +33,9 @@ enum GitWriteFailure: Error, Equatable {
   case unknownHostKey
   /// push が拒否された（先に取り込みが要る）。
   case pushRejected
+  /// push を断られた（サーバーの hook・保護ブランチ・`already exists` など、取り込んでも直らない）。理由は git の要約の
+  /// まま（送れなかった ref とその要約を頭に置く）。リモートとは話せている。
+  case remoteRefused(String)
   /// pull が競合で止まった（pull の前に無かった操作が、後に在る）。
   case conflicted(GitWorktreeOperation)
   /// merge・rebase 等の途中で pull しようとした。
