@@ -76,10 +76,14 @@ extension AutomationTrialTests {
     ended(trial)
   }
 
-  /// 取得の入口に与えた項目は、手段を起こさず、本番が既に見た項目でも接頭の付いた id で下流へ流れる。その取得は回の記録を
-  /// 持たず、与えた行を結果にする。判定へ与えると断る。
+  /// 取得の入口に与えた行は、手段を起こさず、本番が既に出した出来事と同じ id でも接頭の付いた id で下流へ流れる。その取得は
+  /// 回の記録を持たず、与えた行を結果にする。判定へ与えると断る。
   func testRowsGivenToAFetchFlowDownWithoutItsMethodAndAJudgeRefusesThem() throws {
-    let id = try define([fetch("gh"), part("judge", from: ["gh"], deliver: .taskCandidates)])
+    let id = try define([
+      DesignSceneFixtures.commandPart(
+        "gh", "gh", .manual, script: "gh", coverage: .newArrivals),
+      part("judge", from: ["gh"], deliver: .taskCandidates),
+    ])
     try runner.flow(id, to: .ends)
     finish("gh", fetched(["a"]))
     finish("judge", "")
