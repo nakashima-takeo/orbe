@@ -44,7 +44,7 @@ final class ScmPanel {
   private(set) var collapsed: Set<ScmSection> = []
   private(set) var selection: ScmRowID?
   private(set) var focusedArea: Area?
-  /// 焦点を入れる要求。当てた後に残すと、パネルが次に現れたときに古い要求が焦点を奪う。
+  /// 焦点を入れる要求。当てた後に残すと、パネルが次に現れたときに古い要求が焦点を奪う。当てずに隠れた要求も捨てる。
   private(set) var focusRequest: Area?
   /// 欄に見えている変換中の字（変換中でなければ空）。欄の見せ方なので、worktree のメッセージには確定するまで入れない。
   var composition = ""
@@ -387,6 +387,7 @@ final class ScmPanel {
   func panelDidHide() {
     navigation.drop()
     focusedArea = nil
+    focusRequest = nil
     composition = ""
   }
 }

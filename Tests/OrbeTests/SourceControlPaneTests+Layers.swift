@@ -54,6 +54,21 @@ extension SourceControlPaneTests {
     XCTAssertTrue(hosted.window.firstResponder === list, "押せば列が焦点を取り直す")
   }
 
+  /// 欄か列に焦点がある間に cd で根が変わっても、焦点は面の焦点の行き先へ戻る（作り直されるパネルと一緒に窓へ落ちない）。
+  func testChangingTheRootWithTheFocusInThePanelReturnsItToTheBody() throws {
+    for area in [ScmPanel.Area.message, .list] {
+      let hosted = try layersPane()
+      let old = hosted.scm
+      pumpMain(until: { old.focusedArea == .message }, "\(area): 欄に焦点")
+      if area == .list { hosted.window.makeFirstResponder(hosted.pane.scmList.list) }
+      XCTAssertEqual(old.focusedArea, area, "前提")
+      hosted.pane.setRoot(try TempGitRepo().root)
+      pumpMain(until: { self.messageField(in: hosted.pane) != nil }, "\(area): 新しいパネル")
+      RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+      XCTAssertTrue(hosted.window.firstResponder === hosted.pane.focusTarget, "\(area)")
+    }
+  }
+
   /// 親を畳んだままレールでソース管理を出し直しても、パネルの中へ焦点を求めない。開いても焦点は本文のまま。
   func testShowingThePanelWhileTheRepositoryIsClosedRequestsNoFocus() throws {
     let hosted = try layersPane()

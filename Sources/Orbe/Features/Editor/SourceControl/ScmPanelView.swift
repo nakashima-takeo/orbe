@@ -160,7 +160,7 @@ struct ScmControls: View {
       ScmMessageBox(panel: panel, placeholder: placeholder)
       ScmCommitButton(panel: panel)
       if let failure = panel.control.failure,
-        let text = ScmFailureText.text(failure.cause, l10n.language)
+        let text = ScmFailureText.text(failure, l10n.language)
       {
         Text(text)
           .font(Font.theme.editorScmNote)
