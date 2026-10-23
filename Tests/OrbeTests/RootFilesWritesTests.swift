@@ -62,7 +62,7 @@ final class RootFilesWritesTests: OrbeTestCase {
     let staged = finish(files) { files.stage(rows, completion: $0) }
     XCTAssertNil(staged.failure)
     XCTAssertEqual(entry(staged, "a.txt"), GitStatus.Entry(staged: .modified, unstaged: nil))
-    XCTAssertEqual(entry(staged, "gone.txt"), GitStatus.Entry(staged: .deleted, unstaged: nil))
+    XCTAssertEqual(entry(staged, "gone.txt"), gone(staged: .deleted, unstaged: nil))
     XCTAssertEqual(entry(staged, "new/inner.txt"), GitStatus.Entry(staged: .added, unstaged: nil))
     XCTAssertEqual(entry(staged, ":colon.txt"), GitStatus.Entry(staged: .added, unstaged: nil))
     XCTAssertEqual(
@@ -80,14 +80,14 @@ final class RootFilesWritesTests: OrbeTestCase {
     }
     XCTAssertNil(unstaged.failure)
     XCTAssertEqual(entry(unstaged, "a.txt"), GitStatus.Entry(staged: nil, unstaged: .modified))
-    XCTAssertEqual(entry(unstaged, "gone.txt"), GitStatus.Entry(staged: nil, unstaged: .deleted))
+    XCTAssertEqual(entry(unstaged, "gone.txt"), gone(staged: nil, unstaged: .deleted))
     XCTAssertEqual(
       entry(unstaged, ":colon.txt"), GitStatus.Entry(staged: nil, unstaged: .untracked))
     XCTAssertEqual(
       entry(unstaged, "moved.txt"), GitStatus.Entry(staged: nil, unstaged: .untracked),
       "rename の行の解除は元パスの削除の側も解く")
     XCTAssertEqual(
-      entry(unstaged, "old.txt"), GitStatus.Entry(staged: nil, unstaged: .deleted),
+      entry(unstaged, "old.txt"), gone(staged: nil, unstaged: .deleted),
       "元パスは index に戻り、作業ツリーで消えた形になる")
     XCTAssertEqual(entry(unstaged, "new/inner.txt")?.staged, .added, "選ばなかった行は動かない")
   }
@@ -373,4 +373,9 @@ final class RootFilesWritesTests: OrbeTestCase {
       finish(files) { files.commit(message: "x", content: .staged(), completion: $0) }.failure,
       .notManaged)
   }
+}
+
+/// 作業ツリーから消えたパスのエントリ。
+private func gone(staged: GitStatus.Change?, unstaged: GitStatus.Change?) -> GitStatus.Entry {
+  GitStatus.Entry(staged: staged, unstaged: unstaged, workingTree: .absent)
 }

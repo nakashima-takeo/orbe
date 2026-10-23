@@ -103,6 +103,33 @@ final class GitStatusTests: OrbeTestCase {
     XCTAssertEqual(marks["file.txt"], .some(nil))
   }
 
+  /// 作業ツリー側の種類は作業ツリーの mode（`1`・`2` は 6 番目、`u` は 7 番目）から読む——`000000` は無い、`160000` は
+  /// サブモジュール、ほか（シンボリックリンクを含む）はファイル。index から外して作業ツリーに残したファイル（`1 D.` と `?`）は、
+  /// 行の順に依らずファイル。
+  func testTheWorkingTreeKindComesFromTheWorkingTreeMode() {
+    func line(_ xy: String, _ modes: String, _ path: String) -> String {
+      "1 \(xy) N... \(modes) \(zero) \(zero) \(path)"
+    }
+    let status = parse([
+      line(".D", "100644 100644 000000", "gone.txt"),
+      line("A.", "000000 160000 160000", "sub"),
+      line(".T", "100644 100644 120000", "link"),
+      "2 R. N... 100644 100644 000000 \(zero) \(zero) R100 moved.txt", "old.txt",
+      "u DD N... 100644 000000 000000 000000 \(zero) \(zero) \(zero) both.txt",
+      "u UD N... 100644 100644 000000 100644 \(zero) \(zero) \(zero) kept.txt",
+      "? cached.txt", line("D.", "100644 000000 000000", "cached.txt"),
+      "? new.txt",
+    ])
+    let kinds = status.entries.mapValues(\.workingTree)
+    XCTAssertEqual(
+      kinds,
+      [
+        "gone.txt": .absent, "sub": .submodule, "link": .file, "moved.txt": .absent,
+        "both.txt": .absent, "kept.txt": .file, "cached.txt": .file, "new.txt": .file,
+      ])
+    XCTAssertEqual(status.entries["cached.txt"]?.staged, .deleted)
+  }
+
   func testBadgeDerivation() {
     let status = parse([
       ordinary(".M", "m.txt"), ordinary("M.", "staged.txt"), ordinary("A.", "a.txt"),

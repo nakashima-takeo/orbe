@@ -103,7 +103,7 @@ extension ScmPanel {
       }
     case .file(let section, let file):
       switch control {
-      case .openFile where file.existsInWorkingTree:
+      case .openFile where file.opensAsFile:
         onOpenFile(URL(fileURLWithPath: root).appendingPathComponent(file.path))
       case .stage where file.canStage:
         stage([file.row])

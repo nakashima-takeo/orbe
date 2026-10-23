@@ -22,20 +22,20 @@ struct ScmChanges {
     let row: GitStatus.Row
     /// その区分の変化の印（追加 A・未追跡 U・競合 C、ほか M）。
     let badge: GitStatus.Badge
-    /// 作業ツリーに在る（「ファイルを開く」が押せる）。
-    let existsInWorkingTree: Bool
+    /// 作業ツリーにファイルとして在る（「ファイルを開く」が押せる。無いパスとサブモジュールは開けない）。
+    let opensAsFile: Bool
     /// 追跡中（破棄は作業ツリーを index の版へ戻す——戻せないので確かめる）。未追跡はゴミ箱へ移す。
     let isTracked: Bool
     /// サブモジュールのままの変化なら、その変わり方。
     let submodule: GitStatus.SubmoduleChange?
 
     init(
-      row: GitStatus.Row, badge: GitStatus.Badge, existsInWorkingTree: Bool, isTracked: Bool,
+      row: GitStatus.Row, badge: GitStatus.Badge, opensAsFile: Bool, isTracked: Bool,
       submodule: GitStatus.SubmoduleChange? = nil
     ) {
       self.row = row
       self.badge = badge
-      self.existsInWorkingTree = existsInWorkingTree
+      self.opensAsFile = opensAsFile
       self.isTracked = isTracked
       self.submodule = submodule
     }
@@ -89,24 +89,23 @@ struct ScmChanges {
     var changes: [(FileNameOrder.PathKey, File)] = []
     for (path, entry) in status.entries {
       let row = GitStatus.Row(path: path, originalPath: entry.originalPath)
-      let exists =
-        !(entry.unstaged == .deleted || (entry.staged == .deleted && entry.unstaged == nil))
+      let opens = entry.workingTree == .file
       let key = FileNameOrder.PathKey(path)
       if entry.isConflicted {
         changes.append(
-          (key, File(row: row, badge: .conflicted, existsInWorkingTree: exists, isTracked: true)))
+          (key, File(row: row, badge: .conflicted, opensAsFile: opens, isTracked: true)))
         continue
       }
       if let change = entry.staged {
         staged.append(
-          (key, File(row: row, badge: badge(change), existsInWorkingTree: exists, isTracked: true)))
+          (key, File(row: row, badge: badge(change), opensAsFile: opens, isTracked: true)))
       }
       if let change = entry.unstaged {
         changes.append(
           (
             key,
             File(
-              row: row, badge: badge(change), existsInWorkingTree: exists,
+              row: row, badge: badge(change), opensAsFile: opens,
               isTracked: change != .untracked,
               submodule: entry.unstagedSubmodule)
           ))
@@ -170,7 +169,7 @@ struct ScmLayout {
   }
 
   enum Item {
-    case header(ScmSection, count: Int, isOpen: Bool, bulk: Bulk = .none)
+    case header(ScmSection, count: Int, isOpen: Bool, bulk: Bulk)
     case file(ScmSection, ScmChanges.File)
   }
 
