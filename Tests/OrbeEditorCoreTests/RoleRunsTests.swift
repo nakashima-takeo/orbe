@@ -123,7 +123,7 @@ final class RoleRunsTests: XCTestCase {
     let insert = log.append(
       TextEdit(range: NSRange(location: 10, length: 0), replacement: "a\nb\n"),
       start: TextPoint(row: 3, column: 0), oldEnd: TextPoint(row: 3, column: 0),
-      newEnd: TextPoint(row: 5, column: 0))
+      newEnd: TextPoint(row: 5, column: 0), keepsStartRow: false)
     XCTAssertEqual(
       insert.track(hunks),
       [
@@ -134,7 +134,7 @@ final class RoleRunsTests: XCTestCase {
     let delete = log.append(
       TextEdit(range: NSRange(location: 10, length: 4), replacement: ""),
       start: TextPoint(row: 3, column: 0), oldEnd: TextPoint(row: 5, column: 0),
-      newEnd: TextPoint(row: 3, column: 0))
+      newEnd: TextPoint(row: 3, column: 0), keepsStartRow: false)
     XCTAssertEqual(delete.track(insert.track(hunks)), hunks, "挿して消せば元の行")
   }
 
@@ -145,7 +145,7 @@ final class RoleRunsTests: XCTestCase {
       _ = log.append(
         TextEdit(range: NSRange(location: index, length: 0), replacement: "x"),
         start: TextPoint(row: 0, column: index), oldEnd: TextPoint(row: 0, column: index),
-        newEnd: TextPoint(row: 0, column: index + 1))
+        newEnd: TextPoint(row: 0, column: index + 1), keepsStartRow: false)
     }
     XCTAssertEqual(log.version, 5)
     XCTAssertEqual(log.edits(since: 2)?.map(\.version), [3, 4, 5])

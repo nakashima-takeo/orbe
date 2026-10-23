@@ -62,7 +62,8 @@ public final class EditorDocument {
       requestHunks()
     }
   }
-  /// baseline と本文の行差分。編集の直後はずらした前のハンクで、裏の結果が届くと置き換わる。
+  /// baseline と本文の行差分（形は `LineDiff` の出力と同じ）。編集の直後は前のハンクを編集でずらしたもの（正しい対応だが
+  /// 最小とは限らない——`VersionedEdit.track`）で、裏の結果が届くと置き換わる。
   public private(set) var hunks: [LineHunk] = []
   /// ハンクがどの baseline に対する差分か（ハンクと組で変わる。差分がまだ無い・baseline が無ければ nil）。baseline を置き
   /// 直してから結果が届くまでは、前の baseline とそれに対するハンク（その後の編集でずらしたもの）の組のまま——この組と
@@ -267,7 +268,7 @@ public final class EditorDocument {
 
   /// 行の印を面へ押す。
   private func pushLineMarks() {
-    surface.setLineMarks(LineMarks(hunks: hunks, lineCount: text.lineCount))
+    surface.setLineMarks(LineMarks(hunks: hunks))
     onHunksChange?()
   }
 
@@ -342,12 +343,28 @@ extension EditorDocument: TextSurfaceDelegate {
   private func apply(_ edit: TextEdit) -> VersionedEdit {
     let start = text.point(at: edit.range.location)
     let oldEnd = text.point(at: NSMaxRange(edit.range))
+    let keepsStartRow = keepsStartRow(edit, start: start, oldEnd: oldEnd)
     text.replace(edit.range, with: edit.replacement)
     let newEnd = text.point(at: NSMaxRange(edit.newRange))
-    let record = log.append(edit, start: start, oldEnd: oldEnd, newEnd: newEnd)
+    let record = log.append(
+      edit, start: start, oldEnd: oldEnd, newEnd: newEnd, keepsStartRow: keepsStartRow)
     roles.apply(edit)
     reception.worker?.post(record, text: text)
     return record
+  }
+
+  /// 編集の前の本文で、行の数を変える編集の始まりの行が中身を変えないか——始まりが行末で、差し込む字が改行で始まるか、
+  /// 差し込む字が空で終わりも行末（行を丸ごと消す）。行の数を変えない編集は行を探さない（打鍵の手間を増やさない）。
+  private func keepsStartRow(_ edit: TextEdit, start: TextPoint, oldEnd: TextPoint) -> Bool {
+    let joins = edit.replacement.isEmpty && oldEnd.row > start.row
+    guard edit.replacement.first == 0x0A || joins else { return false }
+    return isLineEnd(edit.range.location, row: start.row)
+      && (!joins || isLineEnd(NSMaxRange(edit.range), row: oldEnd.row))
+  }
+
+  /// 行 `row` の中の位置 `location` が、その行の末尾（改行の前か本文の終わり）か。
+  private func isLineEnd(_ location: Int, row: Int) -> Bool {
+    location == text.length || (row + 1 < text.lineCount && location == text.lineStart(row + 1) - 1)
   }
 
   public func surfaceDidChangeViewport(_ surface: any TextSurface) {

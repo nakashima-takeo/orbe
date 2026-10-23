@@ -218,6 +218,39 @@ extension EditorDiffTests {
     }
   }
 
+  /// 並列のまま、外の書き換えがずらしたハンクの形を崩す 2 通り（行の数を変えながら 2 区間をまたぐ・行の途中から末尾まで
+  /// 消す）を受けても、並びは今の本文の中に収まり、左右の高さが揃う（落ちない）。
+  func testSideBySideSurvivesExternalWritesAcrossHunks() throws {
+    let cases = [
+      ("a\nb\nc\nd\ne\nf\ng\nh\n", "a\nb\nC\nd\nE\nf\ng\nh\n", "a\nX\nC\nd\nE\nf\nY\nY2\nh\n"),
+      ("a\nb\nX\nY", "a\nb\nc", "a\nb"),
+    ]
+    let (tab, _) = tab()
+    tab.group.view.editor.configure(
+      translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
+      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(),
+      diffModes: EditorDiffModeState(mode: .side))
+    for (index, (staged, working, written)) in cases.enumerated() {
+      let path = "s\(index).txt"
+      try repo.write(path, staged)
+      XCTAssertTrue(repo.git(["add", path]).isSuccess)
+      try repo.write(path, working)
+      let diff = try tab.group.editor.openDiff(id(path, .workingTree), as: .pinned)
+      pumpMain(until: { diff.content == .ready && diff.oldSurface != nil }, "並列")
+      let document = try XCTUnwrap(diff.document)
+      XCTAssertTrue(document.waitUntilCaughtUp())
+      try repo.write(path, written)
+      document.reconcileWithDisk()
+      XCTAssertEqual(document.text.contiguousUnits().count, written.utf16.count, "前提: 結果が届く前に差し替わった")
+      let (left, right) = (try engine(diff.oldSurface), try engine(diff.newSurface))
+      let lines = try XCTUnwrap(diff.old).text.lineCount
+      XCTAssertTrue(right.rows.boundaries.allSatisfy { $0 <= document.text.lineCount }, "右の差し込みは本文の中")
+      XCTAssertEqual(
+        left.rows.lastUnit(lineCount: lines), right.rows.lastUnit(lineCount: document.text.lineCount),
+        "左右の高さが揃う: \(path)")
+    }
+  }
+
   /// 並列のまま作業ツリーのファイルが消えて新しい側の面が替わっても、左右の面はスクロールを共にし続ける。
   func testSideBySideKeepsSharingTheScrollWhenTheFileIsRemoved() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")

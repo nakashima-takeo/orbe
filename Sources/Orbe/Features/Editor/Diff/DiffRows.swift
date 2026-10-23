@@ -5,7 +5,8 @@ import OrbeEditorCore
 ///
 /// 片側の大きさは行差分が数える行の数で（→ `LineDiff`）、版が有れば面の行の数と同じ。その版に無い側（新しいファイルの
 /// 古い側・消したファイルの新しい側）は 0 行で（面が持つ空の行 1 つは数えない）、有る側の全部の行が追加か削除になる（空の
-/// 本文は空の行 1 つで、版が無いのとは違う）。区間の外の行は両側で 1 対 1 に揃う。
+/// 本文は空の行 1 つで、版が無いのとは違う）。区間の列は `LineDiff` の出力の形（昇順・重ならない・両側とも本文の中・
+/// 区間の外の行は両側で 1 対 1）を前提にする。
 enum DiffRows {
   /// 片側の大きさ（面の行の数。版が無ければ 0）。
   struct Side: Equatable {
@@ -33,19 +34,6 @@ enum DiffRows {
     ]
   }
 
-  /// 区間 1 つの 0 始まりの範囲。
-  private struct Block {
-    let old: Range<Int>
-    let new: Range<Int>
-
-    init(_ hunk: LineHunk) {
-      let oldFirst = hunk.oldCount > 0 ? hunk.oldStart - 1 : hunk.oldStart
-      let newFirst = hunk.newCount > 0 ? hunk.newStart - 1 : hunk.newStart
-      old = oldFirst..<(oldFirst + hunk.oldCount)
-      new = newFirst..<(newFirst + hunk.newCount)
-    }
-  }
-
   /// インライン——新しい側の面に、区間の削除行を「古い側の行を指す差し込み」として区間の新しい側の始まりの境に置き、追加の
   /// 区間に型「追加」、文脈の区間に旧番号の始まりを渡す（差し込みの出どころは呼び手が添える）。
   static func inline(_ hunks: [LineHunk], new: Side) -> SurfaceRows {
@@ -53,7 +41,8 @@ enum DiffRows {
     var insertions: [RowInsertion] = []
     var oldNext = 0
     var newNext = 0
-    for block in hunks.map(Block.init) {
+    for hunk in hunks {
+      let block = (old: hunk.oldLines, new: hunk.newLines)
       if block.new.lowerBound > newNext { spans.add(newNext, otherNumber: oldNext + 1) }
       if !block.old.isEmpty {
         insertions.append(
@@ -79,7 +68,8 @@ enum DiffRows {
     let pads = { (count: Int) in
       Array(repeating: InsertedLine(style: DiffStyle.pad), count: count)
     }
-    for block in hunks.map(Block.init) {
+    for hunk in hunks {
+      let block = (old: hunk.oldLines, new: hunk.newLines)
       if !block.old.isEmpty { left.spans.add(block.old.lowerBound, style: DiffStyle.removed) }
       if !block.new.isEmpty { right.spans.add(block.new.lowerBound, style: DiffStyle.added) }
       let difference = block.new.count - block.old.count
@@ -102,7 +92,8 @@ enum DiffRows {
   /// 新しい側の行 `line` に揃う古い側の行（区間の中なら、区間の古い側の同じ段か、区間の古い側の最後）。
   static func oldLine(forNew line: Int, _ hunks: [LineHunk]) -> Int {
     var shift = 0
-    for block in hunks.map(Block.init) {
+    for hunk in hunks {
+      let block = (old: hunk.oldLines, new: hunk.newLines)
       if line < block.new.lowerBound { break }
       if line < block.new.upperBound {
         return block.old.lowerBound + min(line - block.new.lowerBound, max(0, block.old.count - 1))

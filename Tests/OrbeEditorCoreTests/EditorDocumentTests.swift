@@ -336,7 +336,8 @@ final class EditorDocumentTests: XCTestCase {
     let edit = log.append(
       TextEdit(range: NSRange(location: at, length: 0), replacement: insertion), start: start,
       oldEnd: start,
-      newEnd: TextPoint(row: start.row, column: start.column + insertion.utf16.count))
+      newEnd: TextPoint(row: start.row, column: start.column + insertion.utf16.count),
+      keepsStartRow: false)
     _ = layer.apply([edit], text: text)
     return (layer, text)
   }
