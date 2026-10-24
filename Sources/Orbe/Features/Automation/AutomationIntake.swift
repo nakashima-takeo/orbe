@@ -130,8 +130,8 @@ enum AutomationIntake {
     return (remaining, dropped + stale.map { Drop(row: $0, reason: .sameLink) })
   }
 
-  /// 読んだ位置の進め先——つながりと表ごとに上限の番号まで（その間で取らなかった番号は、読む前に無効になった項目か期限で
-  /// 消えた出来事）。
+  /// 読んだ位置の進め先——つながりと表ごとに上限の番号まで（その間で取らなかった番号は、読む前に無効になった項目・版の追加や
+  /// 無効化の番号・期限で消えた出来事）。
   private static func reach(_ ceilings: [Ceiling]) -> [Reach] {
     ceilings.flatMap { ceiling in
       [

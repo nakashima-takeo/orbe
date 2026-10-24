@@ -58,7 +58,7 @@ final class AutomationIntakeTests: OrbeTestCase {
   }
 
   /// 読んだ行を古い順に取り、読んだ位置はつながりと表ごとに上限の番号まで進める（その間で読まなかった番号は、読む前に無効に
-  /// なった項目か期限で消えた出来事）。
+  /// なった項目・版の追加や無効化の番号・期限で消えた出来事）。
   func testRowsAreTakenOldestFirstAndPositionsAdvanceToTheCeiling() throws {
     let report = try node(Parts.agent("r", from: ["cs", "na"]))
 
