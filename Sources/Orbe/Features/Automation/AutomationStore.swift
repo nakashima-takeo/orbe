@@ -27,8 +27,8 @@ import Observation
   var available: Bool { database != nil }
   /// 運転中に使えなくなった（走らせ役が全部品の予定を外す）。
   @ObservationIgnored var onUnavailable: () -> Void = {}
-  /// 走っている回が読んだ行とその出どころ（確定まで掃除から守る。判定の確定は読んだ時点の出どころの版を指す）。走らせ役が渡す。
-  @ObservationIgnored var holding: () -> Set<AutomationRowRef> = { [] }
+  /// 走っている回が確定まで使うもの（確定まで掃除から守る）。走らせ役が渡す。
+  @ObservationIgnored var holding: () -> AutomationHolding = { AutomationHolding() }
   /// 変異が通った（走らせ役が、読めば取る行の数え直しの時刻を合わせ直す）。
   @ObservationIgnored var committed: () -> Void = {}
 

@@ -73,7 +73,8 @@ import Observation
     self.flowEnded = flowEnded
     store.onUnavailable = { [weak self] in self?.stopAll() }
     store.holding = { [weak self] in
-      Set(self?.active.values.flatMap { $0.holding } ?? [])
+      self?.active.values.reduce(into: AutomationHolding()) { $0.formUnion($1.holding) }
+        ?? AutomationHolding()
     }
     store.committed = { [weak self] in self?.scheduleRecount() }
   }
@@ -225,8 +226,8 @@ extension AutomationRunner {
     let finish: (Date) -> Void
     /// 契機の始まりの時点の、入力ごとの上流の最後の番号。これ以下の行を読む。
     var baseline: [AutomationPartID: AutomationSeqs] = [:]
-    /// 走っている回が読んだ行とその出どころ。
-    var holding: [AutomationRowRef] = []
+    /// 走っている回が確定まで使うもの。
+    var holding = AutomationHolding()
     /// 回の始まり。
     var passStartedAt: Date?
     var current: BackgroundRunHandle?
@@ -313,11 +314,13 @@ extension AutomationRunner {
     let input = self.input(node, automation, read)
     let startedAt = now()
     trigger.passStartedAt = startedAt
-    trigger.holding =
-      read.map {
-        $0.taken.map(\.ref) + $0.dropped.map(\.row.ref) + $0.taken.compactMap(\.origin?.row)
-      } ?? []
     let defId = node.part.defId
+    trigger.holding = AutomationHolding(
+      rows: Set(
+        read.map {
+          $0.taken.map(\.ref) + $0.dropped.map(\.row.ref) + $0.taken.compactMap(\.origin?.row)
+        } ?? []),
+      defs: [defId])
     let pass = AutomationPartPass(run: run, now: now, calendar: calendar, runSessions: runSessions)
     trigger.current = pass.start(node, input) { [weak self] outcome in
       guard let self, !trigger.cancelled else { return }
@@ -339,7 +342,7 @@ extension AutomationRunner {
       NSLog("[automation] dropped the result of part \(trigger.part): \(error)")
       return end(trigger)
     }
-    trigger.holding = []
+    trigger.holding = AutomationHolding()
     recorded(AutomationPassRecord(end: passEnd, run: result.run))
     if result.changed, let automation = store.automation(trigger.automationId) {
       for node in automation.graph.downstream(of: trigger.part) {

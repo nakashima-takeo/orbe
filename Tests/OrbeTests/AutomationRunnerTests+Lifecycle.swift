@@ -45,6 +45,33 @@ extension AutomationRunnerTests {
     XCTAssertEqual(gh.succeededAt, start.addingTimeInterval(3600), "前回成功の目印は残る")
   }
 
+  /// 既定と同じ上限を書き足しただけの書き換えは、部品の使う定義を付け替えても走っている回を止めない。その回は始めたときの
+  /// 定義で確定する——その定義での最初の回で、ほかに指すものが無くても、回が使う定義は確定まで掃除で消えない。
+  func testARunningRunSettlesOnItsDefinitionAfterAWriteThatOnlySpellsOutADefault() throws {
+    var gh = fetch("gh", every: 1800)
+    let digest = part("digest", .arrival, from: ["gh"], deliver: .report)
+    let id = try define([gh, digest])
+    let first = try XCTUnwrap(store.automation(id)?.graph.node(key: "gh")?.part.defId)
+    advance(by: 1800)
+
+    gh.action.timeoutMinutes = 2
+    try rewrite(id, AutomationDefinition(name: "自動化", notify: nil, parts: [gh, digest]))
+    XCTAssertNotEqual(
+      store.automation(id)?.graph.node(key: "gh")?.part.defId, first, "前提: 書き足した値を保存する定義に付け替える")
+    XCTAssertEqual(jobs.stopped, [])
+    finish("gh", fetched(["a"]))
+
+    let part = store.part(id, "gh")
+    XCTAssertEqual(
+      try store.read {
+        try $0.db.select(
+          "SELECT def_id FROM runs WHERE part_id = ?", [.integer(Int64(part.rawValue))]
+        ) { AutomationDefID($0.int(at: 0)) }
+      }, [first], "回の記録は始めたときの定義を指す")
+    XCTAssertEqual(try store.lastSeqs(id, "gh").event, 1)
+    XCTAssertEqual(calls("digest").count, 1, "確定した行が下流へ届く")
+  }
+
   /// 回を記録するたびに、その部品の鍵で知らせる（成功でも失敗でも）。止めて結果を捨てた回は知らせない。
   func testEveryRecordedRunIsToldAndAStoppedRunIsNot() throws {
     func definition(gh script: String) -> AutomationDefinition {

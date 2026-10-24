@@ -50,7 +50,7 @@ extension AutomationRunnerTests {
     advance(by: 86400)
     XCTAssertEqual(calls("judge").count, 1, "前提: 判定が走っている")
     XCTAssertTrue(
-      store.holding().contains {
+      store.holding().rows.contains {
         if case .version = $0 { return true }
         return false
       })

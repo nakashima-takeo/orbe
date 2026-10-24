@@ -75,7 +75,7 @@ extension AutomationStoreTests {
     let first = try XCTUnwrap(
       store?.read { try $0.db.select("SELECT min(id) FROM item_versions", []) { $0.int(at: 0) } }
         .first)
-    store?.holding = { [.version(first)] }
+    store?.holding = { AutomationHolding(rows: [.version(first)]) }
     let changed = AutomationItem(
       id: "a", link: "https://example.com/a", body: "変わった本文", time: Self.at)
     for n in 1...(AutomationPartState.retainedRuns + 1) {

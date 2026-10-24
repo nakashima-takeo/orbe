@@ -1,22 +1,34 @@
 import Foundation
 
+/// 走っている回が確定まで使うもの: 読んだ行とその出どころ（判定の確定は読んだ時点の出どころの版を指す）と、回を始めたときの
+/// 部品の定義（確定の回の記録が指す）。
+struct AutomationHolding: Equatable {
+  var rows: Set<AutomationRowRef> = []
+  var defs: Set<AutomationDefID> = []
+
+  mutating func formUnion(_ other: Self) {
+    rows.formUnion(other.rows)
+    defs.formUnion(other.defs)
+  }
+}
+
 /// 保持と掃除。確定・さばき・書き換えのトランザクションの最後に 1 度だけ、指されていない行を消す。どの参照元も `NOT EXISTS`
 /// で見て、外部キーが参照の漏れをトランザクションの失敗にする。
 extension AutomationDatabase {
-  /// `holding` は走っている回が読んだ行とその出どころ（確定まで消さない）。
-  func sweep(now: Date, holding: Set<AutomationRowRef>) throws {
-    let heldVersions = holding.compactMap { ref -> String? in
+  /// `holding` は走っている回が確定まで使うもの（消さない）。
+  func sweep(now: Date, holding: AutomationHolding) throws {
+    let heldVersions = holding.rows.compactMap { ref -> String? in
       if case .version(let id) = ref { return String(id) }
       return nil
     }.joined(separator: ",")
-    let heldEvents = holding.compactMap { ref -> String? in
+    let heldEvents = holding.rows.compactMap { ref -> String? in
       if case .event(let id) = ref { return String(id) }
       return nil
     }.joined(separator: ",")
     try sweepRecords()
     try sweepItems(heldVersions)
     try sweepEvents(now: now, held: heldEvents)
-    try sweepLedger()
+    try sweepLedger(held: holding.defs.map { String($0.rawValue) }.joined(separator: ","))
   }
 
   /// 判断の記録・候補・回の記録。
@@ -70,8 +82,8 @@ extension AutomationDatabase {
       """, [Self.cutoff(now)])
   }
 
-  /// 外した部品の台帳と部品の定義: どこからも指されていないもの。
-  private func sweepLedger() throws {
+  /// 外した部品の台帳と部品の定義: どこからも指されず、走っている回も使っていないもの。
+  private func sweepLedger(held heldDefs: String) throws {
     try db.run(
       """
       DELETE FROM parts WHERE removed_at IS NOT NULL
@@ -79,12 +91,13 @@ extension AutomationDatabase {
         AND NOT EXISTS (SELECT 1 FROM items WHERE part_id = parts.id)
         AND NOT EXISTS (SELECT 1 FROM events WHERE part_id = parts.id)
       """, [])
-    // 部品の定義: どこからも指されていないもの。
+    // 部品の定義: どこからも指されず、走っている回も使っていないもの。
     try db.run(
       """
       DELETE FROM action_defs WHERE NOT EXISTS (SELECT 1 FROM parts WHERE def_id = action_defs.id)
         AND NOT EXISTS (SELECT 1 FROM runs WHERE def_id = action_defs.id)
         AND NOT EXISTS (SELECT 1 FROM composite_slots WHERE child_def_id = action_defs.id)
+        \(heldDefs.isEmpty ? "" : "AND id NOT IN (\(heldDefs))")
       """, [])
     try db.run(
       """
