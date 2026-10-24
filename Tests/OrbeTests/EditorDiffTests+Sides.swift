@@ -81,7 +81,7 @@ extension EditorDiffTests {
     pumpMain(until: { diff.content == .unavailable(.nowhere) }, "未保存が下りた時点で追いつく")
   }
 
-  /// git にも作業ツリーにも無いパス・HEAD にも index にも無いパスの diff は、種類ごとの理由の一文を出す。開いた後で両側とも
+  /// index にも作業ツリーにも無いパス・HEAD にも index にも無いパスの diff は、種類ごとの理由の一文を出す。開いた後で両側とも
   /// 無くなったときも同じ。
   func testADiffOfAPathInNeitherSideSaysWhy() throws {
     let (tab, _) = tab()
