@@ -23,7 +23,7 @@ extension EditorDiff {
       look(DiffStyle.side, rows.right, absent: newSide.isAbsent)
         .apply(to: surface, document: document)
       if let left, oldSurface == nil {
-        if placement == .placed { carryTop(to: surface) }
+        carryTop(to: surface)
         oldSurface = left
         surface.shareScroll(with: left)
         surfacesChanged = true
