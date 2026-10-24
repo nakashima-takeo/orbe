@@ -186,7 +186,7 @@ struct AutomationDismissal: Equatable {
   let link: String
   let why: Why
 
-  enum Why: String, Codable {
+  enum Why: String, Codable, CaseIterable {
     /// 同じリンクの候補が既にある。
     case alreadyProposed
     /// 対応済みにする判断待ちの候補が無い。
