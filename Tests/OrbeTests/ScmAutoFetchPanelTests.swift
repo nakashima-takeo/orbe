@@ -13,6 +13,8 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
   private var panel: ScmPanel?
   /// パネルの根のリポジトリ（`panelWithAStubbornBackgroundFetch`・`panelWithABlockedBackgroundFetch` が作る）。
   private var repo: TempGitRepo?
+  /// その origin の bare リポジトリ（`panelWithABlockedBackgroundFetch` が作る）。
+  private var origin: String?
 
   override func tearDown() {
     panel?.isShown = false
@@ -93,19 +95,19 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
   }
 
   /// 同期の pull の段がリモートと話せたら、続く push の段が話せずに落ちても止まりは解ける——段ごとの結果を係へ届けている。
-  /// 操作をまとめた結果（push の失敗）で見ると、認証を直して同期しても止まったまま。origin は進めない（remote 追跡 ref の値は
-  /// 変わらず、値の比べでは解けない）。
+  /// 操作をまとめた結果（push の失敗）で見ると、認証を直して同期しても止まったまま。origin は進めず、pull に `origin/HEAD`
+  /// も作らせない（remote 追跡 ref の値が変わらず、値の比べでは解けない）。
   func testASyncWhosePullTalkedUnblocksTheBackgroundFetchEvenIfItsPushFails() throws {
     let (panel, autoFetch) = try panelWithABlockedBackgroundFetch()
     let repo = try XCTUnwrap(self.repo)
-    XCTAssertTrue(
-      repo.git(["remote", "set-url", "origin", repo.dir.path + "-origin.git"]).isSuccess)
-    let hooks = TestScratch.caseDir.appendingPathComponent("hooks").path
-    try FileManager.default.createDirectory(atPath: hooks, withIntermediateDirectories: true)
-    try "#!/bin/sh\nexit 1\n".write(toFile: hooks + "/pre-push", atomically: true, encoding: .utf8)
-    try FileManager.default.setAttributes(
-      [.posixPermissions: 0o755], ofItemAtPath: hooks + "/pre-push")
-    XCTAssertTrue(repo.git(["config", "core.hooksPath", hooks]).isSuccess)
+    let origin = try XCTUnwrap(self.origin)
+    for args in [
+      ["remote", "set-url", "origin", origin],
+      ["remote", "set-url", "--push", "origin", origin + "-nowhere"],
+      ["config", "remote.origin.followRemoteHEAD", "never"],
+    ] {
+      XCTAssertTrue(repo.git(args).isSuccess, "\(args)")
+    }
 
     panel.control.sync()
     pumpMain(until: { panel.control.operations.isEmpty }, timeout: 20, "同期が終わる")
@@ -119,7 +121,7 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
   /// 断る。
   private func panelWithABlockedBackgroundFetch() throws -> (ScmPanel, ScmAutoFetch) {
     let repo = try TempGitRepo()
-    repo.addOrigin()
+    let origin = repo.addOrigin()
     let script = TestScratch.caseDir.appendingPathComponent("denied-ssh.sh").path
     let log = sshAttemptsLog
     // git が ssh の種類を確かめる `-G` は繋がないので数えない。
@@ -144,6 +146,7 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
       until: { autoFetch.rules.isBlocked && autoFetch.rules.refsAtBlock != nil }, timeout: 20,
       "裏の fetch が認証で止まり、その時点の remote 追跡 ref を読む")
     self.repo = repo
+    self.origin = origin
     return (panel, autoFetch)
   }
 
