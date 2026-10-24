@@ -326,7 +326,8 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
 
   // MARK: - 出どころ
 
-  /// 候補の出どころのノードの名前は、候補を出した自動化の定義から引く。消えた自動化の候補は、出どころの項目が無効になって下がる。
+  /// 候補の出どころのノードの名前は、候補を出した自動化の定義から引く。同じリンクをほかの自動化も候補にしていても、棚には出した
+  /// 自動化の候補だけが出る。
   func testOriginNodeNameComesFromTheProposingAutomation() {
     let palette = TaskPaletteSamples.model(
       [],
@@ -336,6 +337,6 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     automation.tapShelf(.automation(1))
 
     XCTAssertEqual(
-      automation.proposals.map(automation.originNodeName(of:)), ["GitHub", "Backlog"])
+      automation.proposals.map(automation.originNodeName(of:)), ["GitHub", "Backlog", "GitHub"])
   }
 }
