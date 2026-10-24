@@ -7,7 +7,7 @@ import XCTest
 /// 壊れると何が起きるか。何も書かずに断ったコミットを「先にステージした」とパネルが数え、行が追いつく前に押し直したコミットが、
 /// 外でステージされたものだけを入れて通る。hook に拒まれた後の押し直しが、自分のステージを数えずに断られる。
 extension RootFilesWritesTests {
-  /// 照合で断った・`add -A` が落ちたコミットは書いていない。先のステージの後で hook に拒まれたコミットは書いている。
+  /// 照合で断った・`add -A` が落ちたコミットは書いていないとして返す。先のステージの後で hook に拒まれたコミットは書いている。
   func testAFailedCommitTellsWhetherItStagedFirst() throws {
     try repo.write("a.txt", "edited\n")
     try repo.write("b.txt", "outside\n")

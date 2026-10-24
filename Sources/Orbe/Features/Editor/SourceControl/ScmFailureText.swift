@@ -8,7 +8,7 @@ enum ScmFailureText {
     switch failure.cause {
     case .git(.detached) where failure.kind == .undo:
       L10n.string(.editorScmFailureUndoDetached, language)
-    case .git(let failure): text(failure, language)
+    case .git(let gitFailure): text(gitFailure, language)
     case .networkBusy: L10n.string(.editorScmFailureNetworkBusy, language)
     case .rewriteDuringNetwork: L10n.string(.editorScmFailureRewriteDuringNetwork, language)
     case .pushDuringRewrite: L10n.string(.editorScmFailurePushDuringRewrite, language)

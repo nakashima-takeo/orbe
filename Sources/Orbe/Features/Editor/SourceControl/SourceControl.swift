@@ -104,7 +104,7 @@ final class SourceControl {
   /// 操作の 1 段目の終わり方。
   enum FirstStepOutcome: Equatable {
     case passed
-    /// 落ちた（走る前に止めた・断ったを含む）。コミットの段なら、index に何も書いていない。
+    /// 落ちた（走る前に止めた・断ったを含む）。コミットの段なら、先にステージする行が無いか、その `add -A` が通る前に落ちた。
     case failed
     /// コミットの段が、先にステージする行を index に書いた後で落ちた（ステージしたものは残る）。
     case failedAfterStaging

@@ -177,7 +177,7 @@ struct ScmControls: View {
     .padding(.bottom, Theme.Space.step)
   }
 
-  /// 失敗の文の行間（見本の行高 1.5）。
+  /// 失敗の文の行間（design-system の行高 1.5）。
   private static let failureLineSpacing = Theme.Typography.editorScmNote.extraLeading(
     lineHeight: 1.5)
 
