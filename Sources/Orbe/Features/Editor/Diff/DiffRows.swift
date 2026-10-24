@@ -92,22 +92,7 @@ enum DiffRows {
   /// インラインで、新しい側の面の見えている先頭 `top` から `count` 段の中に出る古い側の行を含む範囲——先頭の段の次に出る
   /// 古い側の行から `count` 行（インラインに出る古い側の行は単調に増え、1 段に高々 1 行）。
   static func oldLines(from top: RowPosition, count: Int, _ hunks: [LineHunk]) -> ClosedRange<Int> {
-    var shift = 0
-    var first: Int?
-    for hunk in hunks {
-      let (old, new) = (hunk.oldLines, hunk.newLines)
-      if top.line < new.lowerBound { break }
-      if top.line == new.lowerBound, top.offset < 0, !old.isEmpty {
-        first = old.lowerBound + max(0, old.count + top.offset)
-        break
-      }
-      if top.line < new.upperBound {
-        first = old.upperBound
-        break
-      }
-      shift = old.upperBound - new.upperBound
-    }
-    let start = max(0, first ?? top.line + shift)
+    let start = anchor(at: top, hunks, side: false).line
     return start...(start + max(0, count))
   }
 
