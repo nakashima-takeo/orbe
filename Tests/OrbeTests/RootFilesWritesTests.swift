@@ -160,6 +160,7 @@ final class RootFilesWritesTests: OrbeTestCase {
     XCTAssertEqual(entry(staged, "old.txt"), GitStatus.Entry(staged: nil, unstaged: .untracked))
 
     try repo.write("moved.txt", body + "edited again\n")
+    pumpMain(until: { files.status?.entries["moved.txt"]?.unstaged == .modified }, "編集が「変更」に出る")
     let discarded = finish(files) {
       files.discard(files.status!.discarding("moved.txt"), completion: $0)
     }

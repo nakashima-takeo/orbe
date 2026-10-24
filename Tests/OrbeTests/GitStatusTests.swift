@@ -173,9 +173,12 @@ extension GitStatus {
     Row(path: path, originalPath: entries[path]?.originalPath)
   }
 
-  /// 今の status に見えている行き先のまま `paths` の行を破棄する中身（テストの略記）。
+  /// 今の status から組んだ「変更」の行のうち `paths` の行を、パネルと同じ口で破棄する中身（テストの略記）。「変更」の行に
+  /// 無いパスがあれば落とす（まだ監視が届いていない status から組むと、黙って何も破棄しない）。
+  @MainActor
   func discarding(_ paths: String...) -> GitDiscardContent {
-    GitDiscardContent(
-      rows: paths.map(row), trashed: Set(paths.filter { entries[$0]?.discardMovesToTrash == true }))
+    let files = ScmChanges.build(self).changes.filter { paths.contains($0.path) }
+    XCTAssertEqual(Set(files.map(\.path)), Set(paths), "「変更」の行")
+    return ScmDiscardGate.content(files)
   }
 }
