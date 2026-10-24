@@ -62,7 +62,7 @@ extension EditorDiff {
     let index = files.state(of: RootFiles.Version(path: id.path, revision: .index))
     var newText: String?
     if index != nil, case .directory(let hasRepository) = working {
-      switch submoduleSide(hasRepository: hasRepository, pending: pending) {
+      switch submoduleSide(index, hasRepository: hasRepository, pending: pending) {
       case .text(let text): newText = text
       case .decided(let decided): return decided
       }
@@ -111,13 +111,11 @@ extension EditorDiff {
   /// 作業ツリーのディレクトリをサブモジュールとして見せる本文——取り出しているコミット（取り出していなければ index の
   /// コミット。git と同じく変わっていないとみなす）の行。中が変わっていれば -dirty。index の版がサブモジュールでなく、中も
   /// リポジトリでなければ表示できない。コミットを読み中なら `pending`。
-  private func submoduleSide(hasRepository: Bool, pending: Content) -> SubmoduleSide {
+  private func submoduleSide(
+    _ index: RootFiles.VersionState?, hasRepository: Bool, pending: Content
+  ) -> SubmoduleSide {
     var indexCommit: String?
-    if case .submodule(let commit)? = files.state(
-      of: RootFiles.Version(path: id.path, revision: .index))
-    {
-      indexCommit = commit
-    }
+    if case .submodule(let commit)? = index { indexCommit = commit }
     guard indexCommit != nil || hasRepository else { return .decided(.unavailable(.failed)) }
     guard let head = submoduleHead else {
       readSubmoduleHead()
