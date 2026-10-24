@@ -6,7 +6,7 @@ import XCTest
 /// 自動化の 9 動詞の params の語と型検査。定義は `definition` の欄を保存と同じ形で読み、読めない箇所を定義の中の場所付きで
 /// -32602 の文に入れる。値と組み合わせ（グラフ）の検証は target が持つ。
 ///
-/// 壊れると何が起きるか: 部品の書き忘れが形の上で通り、何もしない自動化ができる。部品がコマンドと agent の両方の形を持っても
+/// 壊れると何が起きるか: ノードの書き忘れが形の上で通り、何もしない自動化ができる。ノードがコマンドと agent の両方の形を持っても
 /// 黙ってどちらかに落ちる。取得の性質や予定の書き損じが黙ってどちらかに落ち、AI の意図と違う予定で回る。断りの文が定義の
 /// どこを直せばよいかを言わず、AI が直せない。`paused` に文字列を渡して止めたつもりが再開になる。
 extension ControlWireTests {
@@ -53,7 +53,7 @@ extension ControlWireTests {
     ["name": "Slack: 自分宛", "nodes": [fetch, judge]]
   }
 
-  /// cron 式は前後の空白を除いて受けたまま運ぶ。部品の id・入力の取り方・件数の上限と、書き換えの版も運ぶ。
+  /// cron 式は前後の空白を除いて受けたまま運ぶ。ノードの id・入力の取り方・件数の上限と、書き換えの版も運ぶ。
   func testSetAutomationCarriesTheDefinitionToTheTarget() throws {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
@@ -104,14 +104,14 @@ extension ControlWireTests {
 
     for (label, params, message) in [
       ("定義がオブジェクトでない", ["definition": "x"], "invalid definition"),
-      ("部品が無い", ["definition": ["name": "x"]], "missing nodes"),
+      ("ノードが無い", ["definition": ["name": "x"]], "missing nodes"),
       (
         "知らない通知先", ["definition": ["name": "x", "notify": "mail", "nodes": [fetch, judge]]],
         "invalid notify: pass menuBar or notificationCenter"
       ),
       ("予定が無い", with("trigger", nil), "missing nodes[0].trigger"),
       (
-        "部品が 2 つの形", with("command", "gh api"),
+        "ノードが 2 つの形", with("command", "gh api"),
         "invalid nodes[0]: pass either command (a shell command) or instruction (an agent)"
       ),
       (

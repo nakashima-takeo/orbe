@@ -2,15 +2,15 @@ import XCTest
 
 @testable import Orbe
 
-/// 自動化の 8 動詞のドメイン側を、実 `WindowController` 越しに固定する。起動で保存済みの部品が番人に載ること、
+/// 自動化の 8 動詞のドメイン側を、実 `WindowController` 越しに固定する。起動で保存済みのノードが番人に載ること、
 /// 提案と重なりが棚に出す自動化の側に出ること、拒否が制御 API の語彙になること、一覧の定義を `set_automation` へ戻せること。
 /// 候補の付け先は今ある workspace に解けるときだけ起動ごとの id と名前で、候補にした理由は判定が書いたときだけ出ること。
-/// 試走は始めた応答で道の上の部品を返し、待って読むと部品ごとの回の結果（取得の rows・止めた副作用の held.rows）を返し、
+/// 試走は始めた応答で道の上のノードを返し、待って読むとノードごとの回の結果（取得の rows・止めた副作用の held.rows）を返し、
 /// 始める前と自動化を消した後は -32004 で読めないこと。
 ///
 /// 壊れると何が起きるか: Orbe を再起動しただけで全自動化が黙って回らなくなる。AI が自動化の棚を読んでも、提案した自動化が
 /// もう取っていない提案が混ざる・取っている自動化に出ない。流している自動化への `run_automation` が別の誤りに化ける。
-/// 一覧の定義を書き換えて戻すと、予定や部品が別物になる。
+/// 一覧の定義を書き換えて戻すと、予定やノードが別物になる。
 /// AI が候補の付け先や候補にした理由を読めない、または消えた workspace を付け先として読む。AI が試走を始めても結果を読めない、止めた副作用に
 /// 何が渡るはずだったかを確かめられず本番で初めて誤りに気づく、試走をまだ始めていないのに自動化が無いと読んで作り直す。
 ///
@@ -64,7 +64,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
         as? [String: Any])?["automationId"] as? Int)
   }
 
-  /// 今の集合を取る取得の部品 `fetch` と、届いたらタスク候補を出す判定の部品 `judge`。
+  /// 今の集合を取る取得のノード `fetch` と、届いたらタスク候補を出す判定のノード `judge`。
   static func definition(_ name: String = "受信", script: String = "true") -> AutomationDefinition {
     DesignSceneFixtures.candidatesDefinition(
       name,
@@ -104,7 +104,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
   // MARK: - 起動
 
-  /// 起動で保存済みの部品を番人へ載せ、過ぎていた回を走らせる。止めた自動化の部品は予定では走らない。
+  /// 起動で保存済みのノードを番人へ載せ、過ぎていた回を走らせる。止めた自動化のノードは予定では走らない。
   func testLaunchSchedulesStoredAutomationsExceptPausedOnes() throws {
     let longAgo = Date().addingTimeInterval(-86400)
     let (active, paused) = try {
@@ -128,7 +128,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
   // MARK: - 棚と重なり
 
   /// 提案は棚に出す自動化の側に出て、重なりは両方の自動化に相手と件数で出る。提案した自動化の取得が出どころの項目を出さなく
-  /// なると提案は下がる（同じリンクをほかの自動化が取っていても）。提案した自動化が判定の部品を外すと、出どころの項目が残る提案は
+  /// なると提案は下がる（同じリンクをほかの自動化が取っていても）。提案した自動化が判定のノードを外すと、出どころの項目が残る提案は
   /// まだ取っている自動化の棚へ移る。
   func testProposalsAndOverlapsAppearOnTheShelfAutomation() throws {
     let wc = try launch()
@@ -169,7 +169,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertEqual(shelved.first?["automationName"] as? String, "受信 2")
   }
 
-  /// 候補を出した自動化と部品の鍵は組（`proposedBy`）で出し、棚の自動化と取り違えない。部品は今の鍵で言い、外した部品は出さない。
+  /// 候補を出した自動化とノードの鍵は組（`proposedBy`）で出し、棚の自動化と取り違えない。ノードは今の鍵で言い、外したノードは出さない。
   /// 判定と出どころの両方を外しても出した自動化は言い、出した自動化を消したら言わない。
   func testProposedByNamesTheProposingAutomationApartFromTheShelf() throws {
     let wc = try launch()
@@ -189,8 +189,8 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertEqual(shelved["automationId"] as? Int, second)
     let proposedBy = try XCTUnwrap(shelved["proposedBy"] as? [String: Any])
     XCTAssertEqual(proposedBy["automationId"] as? Int, first)
-    XCTAssertNil(proposedBy["nodeKey"], "外した判定の部品は言わない")
-    XCTAssertEqual(proposedBy["originNodeKey"] as? String, "source", "出どころの部品は今の鍵で言う")
+    XCTAssertNil(proposedBy["nodeKey"], "外した判定のノードは言わない")
+    XCTAssertEqual(proposedBy["originNodeKey"] as? String, "source", "出どころのノードは今の鍵で言う")
 
     try store.dismiss(try XCTUnwrap(store.proposals.first?.id))
     let other = DesignSceneFixtures.commandNode(
@@ -255,7 +255,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
   // MARK: - 拒否
 
-  /// 流している間は走っている部品が一覧にそう出て、`run_automation` は「流している途中」で断られる。
+  /// 流している間は走っているノードが一覧にそう出て、`run_automation` は「流している途中」で断られる。
   func testFlowingAutomationIsListedAsRunningAndRefusesAnotherRun() throws {
     let wc = try launch()
     let id = try set(wc, Self.definition(script: "sleep 30"))
@@ -323,7 +323,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
       try AutomationWire.decoder.decode(AutomationDefinition.self, from: data), stored)
   }
 
-  /// 試走は始めた応答で道の上の部品を並べ、待って読むと部品の回の結果を返す。自動化を消すと読めない。
+  /// 試走は始めた応答で道の上のノードを並べ、待って読むとノードの回の結果を返す。自動化を消すと読めない。
   func testATrialStartsAtOnceAndReadsBackItsNodesWhenWaitedFor() throws {
     let wc = try launch()
     let id = try set(

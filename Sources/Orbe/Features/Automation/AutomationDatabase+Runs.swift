@@ -22,7 +22,7 @@ extension AutomationDatabase {
     return Int(db.lastInsertRowID)
   }
 
-  /// `nodeIds` の回の記録を混ぜて新しい順に `limit` 件（`before` より前の ID だけ）。それぞれに部品の今の鍵を添える。
+  /// `nodeIds` の回の記録を混ぜて新しい順に `limit` 件（`before` より前の ID だけ）。それぞれにノードの今の鍵を添える。
   func records(of nodeIds: [AutomationNodeID], before: Int? = nil, limit: Int) throws
     -> [AutomationKeyedRecord]
   {
@@ -124,7 +124,7 @@ extension AutomationDatabase {
   }
 }
 
-/// 回の記録 1 件と、それを持つ部品の今の鍵。
+/// 回の記録 1 件と、それを持つノードの今の鍵。
 struct AutomationKeyedRecord: Equatable {
   let nodeKey: String
   let record: AutomationRunRecord

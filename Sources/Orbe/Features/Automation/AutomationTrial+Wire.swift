@@ -1,7 +1,7 @@
 import Foundation
 import OrbeSessionLog
 
-/// 試走の外の形（`try_automation` / `get_automation_trial` の `trial`）。部品の回は本番の `runs` の要素から `recordId`・`nodeKey` を
+/// 試走の外の形（`try_automation` / `get_automation_trial` の `trial`）。ノードの回は本番の `runs` の要素から `recordId`・`nodeKey` を
 /// 除いた形に中身を足す。
 extension AutomationTrial {
   /// `workspace` は候補の付け先（`Workspace.persistentId`）を今の workspace の id と名前に解く。

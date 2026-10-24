@@ -1,6 +1,6 @@
 import Foundation
 
-/// 自動化を人に見せる文（時刻・部品の役割と予定・いつ。回の失敗と外れた行は `AutomationText+Run`）。何をどの順に出すかまでを決め、描き方（字の大きさ・箱）は
+/// 自動化を人に見せる文（時刻・ノードの役割と予定・いつ。回の失敗と外れた行は `AutomationText+Run`）。何をどの順に出すかまでを決め、描き方（字の大きさ・箱）は
 /// 使う画面が決める。暦日は渡された今日とタイムゾーンで決める。
 struct AutomationText {
   let l10n: LocalizationStore
@@ -40,7 +40,7 @@ struct AutomationText {
     return l10n.format(.automationYesterday, clock(date))
   }
 
-  /// 部品の役割の名前（「取得」「判定」）。部品を名指す言い方には使わない——部品は名前だけで言い、役割は地図の役割の列と
+  /// ノードの役割の名前（「取得」「判定」）。ノードを名指す言い方には使わない——ノードは名前だけで言い、役割は地図の役割の列と
   /// カードの頭でだけ見せる。
   func role(_ role: AutomationNodeRole) -> String {
     switch role {
@@ -53,7 +53,7 @@ struct AutomationText {
     }
   }
 
-  /// 部品の予定（「30分ごと」「平日 9:00」「手動」「入力元に連動」）。
+  /// ノードの予定（「30分ごと」「平日 9:00」「手動」「入力元に連動」）。
   func schedule(_ trigger: AutomationNode.Trigger) -> String {
     switch trigger {
     case .scheduled(let timing): when(timing)

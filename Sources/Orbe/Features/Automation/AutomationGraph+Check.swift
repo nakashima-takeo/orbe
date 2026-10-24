@@ -3,8 +3,8 @@ import Foundation
 // グラフの検証。断りの文は定義の中の場所（`nodes[2].from` など。制御 API が読む誤りに付ける場所と同じ書き方）で始まる。
 
 extension AutomationGraph {
-  /// 検証して、部品ごとの役割と入力の部品の位置を返す。最初に見つけた誤り 1 つで断る。順は「自分の欄だけで決まるもの → 鍵の
-  /// 名指し → 名指しの向き → 至るか・取り方」。部品の `id` は見ない（書き換えの口が確かめる）。
+  /// 検証して、ノードごとの役割と入力のノードの位置を返す。最初に見つけた誤り 1 つで断る。順は「自分の欄だけで決まるもの → 鍵の
+  /// 名指し → 名指しの向き → 至るか・取り方」。ノードの `id` は見ない（書き換えの口が確かめる）。
   static func check(_ definitionNodes: [AutomationDefinition.Node]) throws(AutomationError)
     -> [Checked]
   {
@@ -90,7 +90,7 @@ extension AutomationGraph {
     }
   }
 
-  /// 鍵の重複と未知の鍵の名指しを断り、部品ごとの入力を位置で返す。
+  /// 鍵の重複と未知の鍵の名指しを断り、ノードごとの入力を位置で返す。
   private static func upstream(of definitionNodes: [AutomationDefinition.Node])
     throws(AutomationError)
     -> [[Int]]
@@ -117,7 +117,7 @@ extension AutomationGraph {
     return upstream
   }
 
-  /// 定義の順で最初に循環に乗る部品を指し、輪を鍵で示す（`a ← b` は a が b を入力に名指す）。
+  /// 定義の順で最初に循環に乗るノードを指し、輪を鍵で示す（`a ← b` は a が b を入力に名指す）。
   private static func checkAcyclic(
     _ definitionNodes: [AutomationDefinition.Node], _ upstream: [[Int]]
   )
@@ -140,7 +140,7 @@ extension AutomationGraph {
     }
   }
 
-  /// 行き先が次の部品なのに誰も名指さない → 行き先が次の部品でない部品を名指す（名指した側を指す）。
+  /// 行き先が次のノードなのに誰も名指さない → 行き先が次のノードでないノードを名指す（名指した側を指す）。
   private static func checkDestinations(
     _ definitionNodes: [AutomationDefinition.Node], _ upstream: [[Int]], _ downstream: [[Int]]
   ) throws(AutomationError) {
@@ -178,7 +178,7 @@ extension AutomationGraph {
     }
   }
 
-  /// 役割を導く。タスク候補を行き先にする部品が行を見ない・agent の行き先が副作用だけ・出力の性質の有無を断る。
+  /// 役割を導く。タスク候補を行き先にするノードが行を見ない・agent の行き先が副作用だけ・出力の性質の有無を断る。
   private static func role(of definitionNode: AutomationDefinition.Node, _ path: String)
     throws(AutomationError) -> AutomationNodeRole
   {

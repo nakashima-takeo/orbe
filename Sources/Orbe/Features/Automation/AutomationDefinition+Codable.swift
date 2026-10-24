@@ -2,7 +2,7 @@ import Foundation
 
 // 定義の JSON の形。読むときに断るのは形の誤りだけで、値と組み合わせは `AutomationGraph` が検証する。
 
-/// 部品の欄と動作の定義の欄を 1 つのオブジェクトに並べる。`from` と agent の `tools` の空の配列は書かないのと同じ。
+/// ノードの欄と動作の定義の欄を 1 つのオブジェクトに並べる。`from` と agent の `tools` の空の配列は書かないのと同じ。
 extension AutomationDefinition.Node: Codable {
   private enum CodingKeys: String, CodingKey {
     case id, key, name, trigger, from, maxItems
@@ -71,7 +71,7 @@ extension AutomationDefinition.Input: Codable {
 }
 
 /// `command`（＋`directory`）か `instruction`（＋`agent`〔既定 claude〕・`model`・`tools`）のちょうど一方と、`timeoutMinutes`・
-/// `coverage`・`deliver`。`deliver` の省略は次の部品。外の定義の部品の欄と同じオブジェクトに並び、保存（`action_defs.action`）は
+/// `coverage`・`deliver`。`deliver` の省略は次のノード。外の定義のノードの欄と同じオブジェクトに並び、保存（`action_defs.action`）は
 /// この欄だけのオブジェクト。
 extension AutomationActionDef: Codable {
   private enum CodingKeys: String, CodingKey {
@@ -161,7 +161,7 @@ extension AutomationActionDef: Codable {
 }
 
 extension AutomationActionDef.Destination {
-  /// `deliver` の値。次の部品は書かない。
+  /// `deliver` の値。次のノードは書かない。
   var wireName: String? {
     switch self {
     case .nextNode: nil

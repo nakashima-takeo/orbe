@@ -7,7 +7,7 @@ enum BoardSegmentLook: Equatable {
   case emphasized
 }
 
-/// 選んだ部品のカードの値。地図に出さない部品の中身（手段・モデル・ツール・指示文・保存・取り方・上限・制限時間・作業ディレクトリ・
+/// 選んだノードのカードの値。地図に出さないノードの中身（手段・モデル・ツール・指示文・保存・取り方・上限・制限時間・作業ディレクトリ・
 /// 回の記録）を出すのはここだけ。
 struct BoardAutomationNodeValue: Equatable {
   let id: AutomationNodeID
@@ -16,15 +16,15 @@ struct BoardAutomationNodeValue: Equatable {
   let running: Bool
   /// 頭の印。まだ動いていなければ nil。
   let mark: BoardRunMark?
-  /// 実行方法・ツール・トリガー・保存・入力元・出力先・未処理・制限時間・作業ディレクトリ・次回の順。部品に無い項目は出さない。
-  /// 出力先は部品の外の行き場所（タスク候補・報告の出し先など）だけで、後ろの部品へ渡す取得・処理には出さない。
+  /// 実行方法・ツール・トリガー・保存・入力元・出力先・未処理・制限時間・作業ディレクトリ・次回の順。ノードに無い項目は出さない。
+  /// 出力先はノードの外の行き場所（タスク候補・報告の出し先など）だけで、後ろのノードへ渡す取得・処理には出さない。
   let facts: [Fact]
   /// 指示文かコマンド。
   let body: String
   let breach: Breach?
-  /// 前回の報告か応答（報告と作業の部品だけ）。
+  /// 前回の報告か応答（報告と作業のノードだけ）。
   let lastText: LastText?
-  /// この部品の実行履歴（新しい順）。
+  /// このノードの実行履歴（新しい順）。
   let runs: [BoardRunLine]
 
   /// 項目 1 つ。値は見え方の違う切れの並び（「8 件」＋「上限なし」）。入力元は頭に向きの矢印を置く。
@@ -39,7 +39,7 @@ struct BoardAutomationNodeValue: Equatable {
     let look: BoardSegmentLook
   }
 
-  /// 出力の形式エラーの枠（部品の外した印から）。
+  /// 出力の形式エラーの枠（ノードの外した印から）。
   struct Breach: Equatable {
     /// 「出力の形式エラー · 16:30 · 2 件」。
     let heading: String
@@ -57,7 +57,7 @@ struct BoardAutomationNodeValue: Equatable {
 }
 
 extension BoardAutomationNodeValue {
-  /// `next` は部品が次に予定で回る時刻（止めていれば nil）、`open` はこの自動化の棚に出ている判断待ちの候補の数。
+  /// `next` はノードが次に予定で回る時刻（止めていれば nil）、`open` はこの自動化の棚に出ている判断待ちの候補の数。
   init?(
     _ automation: Automation, nodeId: AutomationNodeID, text: AutomationText, running: Bool,
     next: Date?, open: Int
@@ -92,7 +92,7 @@ extension BoardAutomationNodeValue {
       outcome: l10n.string(record.failed ? .boardNodeBreachFailed : .boardNodeBreachPassed))
   }
 
-  /// 前回の報告（報告の部品）か応答（作業の部品）。文を残した最新の回から。
+  /// 前回の報告（報告のノード）か応答（作業のノード）。文を残した最新の回から。
   private static func lastText(_ runs: [AutomationRunRecord], text: AutomationText) -> LastText? {
     for run in runs.compactMap(\.run) {
       switch run.result {
@@ -209,7 +209,7 @@ extension BoardAutomationNodeValue {
       notes.joined(separator: l10n.string(.automationListSeparator)))
   }
 
-  /// 部品が出した行の保存の仕方（「上書き」「追記」）。追記の取得は、前回成功の目印から取ることを添える（「追記（前回 16:00 より後を
+  /// ノードが出した行の保存の仕方（「上書き」「追記」）。追記の取得は、前回成功の目印から取ることを添える（「追記（前回 16:00 より後を
   /// 取る）」）。
   private static func coverage(
     _ coverage: AutomationCoverage, of node: AutomationGraph.Node, _ state: AutomationNodeState,

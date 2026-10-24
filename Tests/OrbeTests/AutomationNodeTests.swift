@@ -2,10 +2,10 @@ import XCTest
 
 @testable import Orbe
 
-/// 部品の JSON の形——外から受けた定義の読み書き。
+/// ノードの JSON の形——外から受けた定義の読み書き。
 ///
-/// 壊れると何が起きるか: AI が書いた部品が別の意味で読まれる（`none` が報告に化ける・入力や取り方が落ちる・部品の id が
-/// 落ちて別の部品になる）。読み直した部品のモデルが解いた値で固まり、役割が変わっても前の既定で走る。コマンドに書いたツールや
+/// 壊れると何が起きるか: AI が書いたノードが別の意味で読まれる（`none` が報告に化ける・入力や取り方が落ちる・ノードの id が
+/// 落ちて別のノードになる）。読み直したノードのモデルが解いた値で固まり、役割が変わっても前の既定で走る。コマンドに書いたツールや
 /// 知らない行き先・取り方が黙って捨てられ、書いた AI が誤りの場所を知らされない。
 final class AutomationNodeTests: OrbeTestCase {
   private func definitionNode(
@@ -80,7 +80,7 @@ final class AutomationNodeTests: OrbeTestCase {
     XCTAssertEqual(from.first as? String, "gh", "取り方も古さの上限も省いた入力は鍵だけで書く")
   }
 
-  /// 形の誤りは読む時点で断り、誤りの場所（部品の位置と欄）を持つ。制御 API はこの場所を `nodes[1].tools` の形で返す。
+  /// 形の誤りは読む時点で断り、誤りの場所（ノードの位置と欄）を持つ。制御 API はこの場所を `nodes[1].tools` の形で返す。
   func testShapeErrorsAreRefusedAtTheirPlace() {
     let manual = #"{"kind": "manual"}"#
     for (label, trigger, fields, place) in [

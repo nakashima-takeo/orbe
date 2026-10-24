@@ -6,7 +6,7 @@ import XCTest
 /// 出し直せば後の報告で置き換え、空の文は断った結果に数えずに断る（何も無い回は report_nothing）。コマンドの報告は標準出力で、空なら報告なし。
 ///
 /// 壊れると何が起きるか: 報告の前後の空行がボードの見出しと知らせの 1 行目を空にする。空の文が空の報告として残る。長い報告・
-/// 長い応答が回の記録（部品ごとに 20 回）を丸ごと膨らませ、ボードの実行履歴が読めない長さになる。仕事が「何もしなかった」を
+/// 長い応答が回の記録（ノードごとに 20 回）を丸ごと膨らませ、ボードの実行履歴が読めない長さになる。仕事が「何もしなかった」を
 /// 言えない。
 final class AutomationNodePassReportTests: AutomationNodePassTestCase {
   private static let long = String(repeating: "あ", count: 2_500)

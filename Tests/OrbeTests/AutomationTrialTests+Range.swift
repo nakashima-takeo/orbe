@@ -2,12 +2,12 @@ import XCTest
 
 @testable import Orbe
 
-/// 試走の範囲——入口（from）と行き先（to）で指した道の上の部品だけが動き、各部品は道の上の入力だけを待つ。
+/// 試走の範囲——入口（from）と行き先（to）で指した道の上のノードだけが動き、各ノードは道の上の入力だけを待つ。
 ///
-/// 壊れると何が起きるか: 1 部品だけを試したつもりが上流の取得まで走る。合流の一部を試すと道の外の取得を待ち続けて終わらない。
+/// 壊れると何が起きるか: 1 ノードだけを試したつもりが上流の取得まで走る。合流の一部を試すと道の外の取得を待ち続けて終わらない。
 /// 分岐の片方が動かない。届かない指し方が黙って何もしない試走になる。
 extension AutomationTrialTests {
-  /// 1 部品だけ: 写しの上の読めば取る行を次の本番と同じ規則で取り、上流は動かない。本番の読めば取る行は残る。
+  /// 1 ノードだけ: 写しの上の読めば取る行を次の本番と同じ規則で取り、上流は動かない。本番の読めば取る行は残る。
   func testTryingOneNodeTakesItsPendingRowsInTheCopyAndLeavesTheUpstreamAlone() throws {
     let id = try define([
       fetch("gh"), definitionNode("judge", from: ["gh"], deliver: .taskCandidates),
@@ -47,7 +47,7 @@ extension AutomationTrialTests {
     XCTAssertEqual(trial.range.path.map(\.key), ["gh", "backlog", "judge"])
   }
 
-  /// 分岐: 入口だけを指すと、入口から届く終わりの部品すべてへ流れる。
+  /// 分岐: 入口だけを指すと、入口から届く終わりのノードすべてへ流れる。
   func testTryingFromABranchingNodeRunsEveryBranch() throws {
     let id = try define([
       fetch("gh"), definitionNode("judge", from: ["gh"], deliver: .taskCandidates),

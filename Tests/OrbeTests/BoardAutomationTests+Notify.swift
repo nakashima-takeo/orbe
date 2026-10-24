@@ -25,7 +25,7 @@ extension BoardAutomationTests {
     right(window)
   }
 
-  /// 先頭の行が 12 部品の地図を持つ（通知しない）。低い窓では詳細が見える高さを超える。
+  /// 先頭の行が 12 ノードの地図を持つ（通知しない）。低い窓では詳細が見える高さを超える。
   private func tallDetailBoard() -> BoardModel {
     var samples = DesignSceneFixtures.boardMapSamples()
     samples[0].definition.notify = nil
@@ -123,7 +123,7 @@ extension BoardAutomationTests {
     XCTAssertEqual(automation.notifyCursor, 2, "端で巡回する")
   }
 
-  /// ← と esc は何も変えずに閉じ、「通知」の段に戻る。部品の段の → は開かない。
+  /// ← と esc は何も変えずに閉じ、「通知」の段に戻る。ノードの段の → は開かない。
   func testLeftAndEscapeCloseWithoutChanging() {
     let model = board()
     let automation = model.automation
@@ -142,7 +142,7 @@ extension BoardAutomationTests {
     XCTAssertEqual(automation.selectedMapStop, .notify, "閉じると「通知」の段")
     down(window)
     right(window)
-    XCTAssertNil(automation.notifyCursor, "部品の段の → は開かない")
+    XCTAssertNil(automation.notifyCursor, "ノードの段の → は開かない")
   }
 
   /// 開いている間は、下のキー（space・↵ のリピート・⌘⌫・⌘↵・↑↓）は地図にも一覧にも効かない。

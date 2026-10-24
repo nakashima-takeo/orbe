@@ -4,9 +4,9 @@ import XCTest
 
 @testable import Orbe
 
-/// 自動化の知らせ。通知をメニューバーにした自動化の部品が出した回・失敗した回を記録すると、名前と「部品：結果」の 1 行のピルが
-/// Home の設定で立ち、出した回は完了の音・失敗は入力待ちの音が鳴る。失敗は部品ごとに続く間の最初の回だけ、出力が決まりを外した
-/// ことは部品ごとに最初の回だけ。off・何も出さなかった回・その行を見ているときは出ない。ピルのクリックは Home のボードでその
+/// 自動化の知らせ。通知をメニューバーにした自動化のノードが出した回・失敗した回を記録すると、名前と「ノード：結果」の 1 行のピルが
+/// Home の設定で立ち、出した回は完了の音・失敗は入力待ちの音が鳴る。失敗はノードごとに続く間の最初の回だけ、出力が決まりを外した
+/// ことはノードごとに最初の回だけ。off・何も出さなかった回・その行を見ているときは出ない。ピルのクリックは Home のボードでその
 /// 自動化の行を選び、焦点を一覧へ置く。
 ///
 /// 壊れると何が起きるか: 通知を付けていない自動化や、新着の無い 10 分ごとの回でピルが出続ける。認証切れで失敗し続ける自動化が
@@ -51,7 +51,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     XCTAssertTrue(wc.window.isKeyWindow, "前提: ウィンドウが key にならない環境ではこの契約を測れない")
   }
 
-  /// 入力の無い報告の部品 `digest`（名前「要約」）だけの自動化。
+  /// 入力の無い報告のノード `digest`（名前「要約」）だけの自動化。
   static func reportDefinition(
     _ name: String = "開いている PR の要約", notify: AutomationNotify? = .menuBar
   ) -> AutomationDefinition {
@@ -178,7 +178,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     XCTAssertNil(wc.automationNotification(id, "judge"))
   }
 
-  /// 部品の出力が決まりを外した最初の回は外したことを知らせ、その回の失敗も同じ 1 つの知らせで言う。印がある間は、外しても
+  /// ノードの出力が決まりを外した最初の回は外したことを知らせ、その回の失敗も同じ 1 つの知らせで言う。印がある間は、外しても
   /// 外したことは知らせない（失敗の続きの最初としては知らせる）。
   @MainActor func testOnlyTheFirstBreachIsToldAndItsFailureRidesOnIt() throws {
     let wc = controller()

@@ -4,9 +4,9 @@ import XCTest
 
 /// ボードの読み替え——一覧の行（状態と、それと混ぜない前回の成否と時刻）と、地図の溝の線の割り当て、カードの実行履歴の文。
 ///
-/// 壊れると何が起きるか: 失敗した部品があるのに一覧の印が成功に見え、壊れた部品に気づけない。流している間や止めている間に
+/// 壊れると何が起きるか: 失敗したノードがあるのに一覧の印が成功に見え、壊れたノードに気づけない。流している間や止めている間に
 /// 前回の結果が見えなくなる。地図の線が入力と違う行へつながり、
-/// どの部品の出力がどこへ行くかを読み違える。英語の実行履歴と知らせが「judged 1 items」と言う。新着なしの回が他の回を
+/// どのノードの出力がどこへ行くかを読み違える。英語の実行履歴と知らせが「judged 1 items」と言う。新着なしの回が他の回を
 /// 押し出す、または畳んではいけない回（新着のある回・形式エラーを修正した回）が畳まれて見えなくなる。
 @MainActor
 final class BoardAutomationSummaryTests: OrbeTestCase {
@@ -30,7 +30,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     DesignSceneFixtures.automationStore(DesignSceneFixtures.boardMapSamples()).automations
   }
 
-  /// 失敗した部品があれば失敗の印。時刻はどの部品かを問わず最後に動いた時刻で、昨日なら「昨日」。
+  /// 失敗したノードがあれば失敗の印。時刻はどのノードかを問わず最後に動いた時刻で、昨日なら「昨日」。
   func testListRowSaysTheLastMarkAndTime() throws {
     let all = automations()
     let charge = BoardAutomationSummary(all[0], text: text, next: nil)
@@ -46,7 +46,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     XCTAssertEqual(wide.last, "未実行")
   }
 
-  /// 名前の右の状態（実行中・停止中）と前回の印は混ぜない。失敗した部品のある自動化を流している間も印は失敗のまま、止めて
+  /// 名前の右の状態（実行中・停止中）と前回の印は混ぜない。失敗したノードのある自動化を流している間も印は失敗のまま、止めて
   /// いる自動化の印は前回の成否のまま。
   func testListRowKeepsTheStateApartFromTheLastResult() throws {
     let model = BoardAutomationModel(
@@ -65,7 +65,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     XCTAssertEqual(model.summary(weekend, text: text, now: now)?.mark, .success, "止めていても前回の印")
   }
 
-  /// 見本の 12 部品の線: 行を上から見て、最後の受け手を迎える入力の線のうち最も左に点を置き、無ければ空いている最も左。
+  /// 見本の 12 ノードの線: 行を上から見て、最後の受け手を迎える入力の線のうち最も左に点を置き、無ければ空いている最も左。
   func testMapLanesFollowTheInputs() throws {
     let detail = BoardAutomationDetailValue(
       automations()[0], text: text, running: { _ in false }, open: 0, next: nil)
@@ -101,7 +101,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
       ["Gmail（MCP）・Backlog（MCP）・npm run test:unit コマンド"])
   }
 
-  /// 一覧の失敗の印は、最後の回が失敗した部品だけで決まる。失敗の後に成功した部品は数えない。
+  /// 一覧の失敗の印は、最後の回が失敗したノードだけで決まる。失敗の後に成功したノードは数えない。
   func testListMarkCountsOnlyNodesWhoseLatestRunFailed() throws {
     let at = { (hour: Int) in DesignSceneFixtures.automationAt(hour) }
     func fetch(_ key: String) -> AutomationDefinition.Node {
@@ -133,7 +133,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     }
 
     XCTAssertEqual(try mark(["broken"]), .failure)
-    XCTAssertEqual(try mark([]), .success, "失敗の後に成功した部品は数えない")
+    XCTAssertEqual(try mark([]), .success, "失敗の後に成功したノードは数えない")
   }
 
   /// 処理の回の「N 件中 M 件を出力」の M は出した件数——今の集合の処理が毎回全件を写す回も、新しく届く行の数で「0 件を出力」と

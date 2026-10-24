@@ -12,7 +12,7 @@ protocol ControlAutomationTarget: AnyObject {
   /// 回の記録を新しい順に 1 ページ読む（list_automation_runs）。
   func controlListAutomationRuns(automationId: Int, nodeKey: String?, before: Int?, limit: Int?)
     -> Result<Any, ControlError>
-  /// 部品まで流す（run_automation）。nodeKey が nil なら終わりの部品すべてまで。知らない部品は -32004、流している途中は -32000。
+  /// ノードまで流す（run_automation）。nodeKey が nil なら終わりのノードすべてまで。知らないノードは -32004、流している途中は -32000。
   func controlRunAutomation(automationId: Int, nodeKey: String?) -> Result<Any, ControlError>
   /// 予定を止める・再開する（pause_automation）。
   func controlPauseAutomation(automationId: Int, paused: Bool) -> Result<Any, ControlError>
@@ -20,7 +20,7 @@ protocol ControlAutomationTarget: AnyObject {
   func controlDeleteAutomation(automationId: Int) -> Result<Any, ControlError>
   /// 覚えている提案を列挙する（list_automation_proposals）。automationId 指定はその自動化の棚の分。
   func controlListAutomationProposals(automationId: Int?) -> Result<Any, ControlError>
-  /// 試走を始める（try_automation）。すぐ返る。知らない自動化・部品は -32004、範囲・行・limit の誤りは -32602。
+  /// 試走を始める（try_automation）。すぐ返る。知らない自動化・ノードは -32004、範囲・行・limit の誤りは -32602。
   func controlTryAutomation(automationId: Int, _ request: AutomationTrial.Request) -> Result<
     Any, ControlError
   >

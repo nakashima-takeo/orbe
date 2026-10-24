@@ -1,30 +1,30 @@
 import Foundation
 import Observation
 
-/// 自動化の部品を 1 つずつ番人に載せ、部品の契機ごとに「上流から読む → 部品の 1 回 → 確定」を回す。main で使う。
+/// 自動化のノードを 1 つずつ番人に載せ、ノードの契機ごとに「上流から読む → ノードの 1 回 → 確定」を回す。main で使う。
 ///
-/// 番人の鍵は `automation:<id>/<部品の ID>`（鍵を変えても同じ部品のまま）。間隔・cron の部品は止めていなければ「いつ」付きで、
-/// それ以外（手動・届いたら・止めた自動化の部品）は「いつ」なしで載せる。同じ部品の契機は重ならない（重ねない保証・
+/// 番人の鍵は `automation:<id>/<ノードの ID>`（鍵を変えても同じノードのまま）。間隔・cron のノードは止めていなければ「いつ」付きで、
+/// それ以外（手動・届いたら・止めた自動化のノード）は「いつ」なしで載せる。同じノードの契機は重ならない（重ねない保証・
 /// 「今すぐ」・走っているかは番人が持つ）。1 つの契機は、契機の始まりの時点の上流の行（つながりごと表ごとの上流の最後の番号
 /// まで）を読み、読めば取る行を全部取って 1 回だけ回す。
 ///
-/// 「届いたら」の部品を起こす決まりは `AutomationRunner+Wake`。
+/// 「届いたら」のノードを起こす決まりは `AutomationRunner+Wake`。
 ///
-/// 流す（`flow`）は、部品を指してそこに至る道の上の部品を 1 回ずつ回す（`AutomationFlow`）。一巡は自動化ごとに高々 1 つで、
-/// メモリだけに持つ。走らせ役は契機の始まりと終わりを一巡へ知らせ、返った部品を「今すぐ」で起こす。道の上の部品を番人から
+/// 流す（`flow`）は、ノードを指してそこに至る道の上のノードを 1 回ずつ回す（`AutomationFlow`）。一巡は自動化ごとに高々 1 つで、
+/// メモリだけに持つ。走らせ役は契機の始まりと終わりを一巡へ知らせ、返ったノードを「今すぐ」で起こす。道の上のノードを番人から
 /// 外すと一巡を打ち切る——待っている回の終わりが来なくなるので。一巡が終わるか打ち切られたら `flowEnded` で知らせる。観測に
-/// 載せるのは一巡だけで（画面が一巡の有無を読む）、他の持ち物は部品の回のたびに変わるので観測から外す。
+/// 載せるのは一巡だけで（画面が一巡の有無を読む）、他の持ち物はノードの回のたびに変わるので観測から外す。
 ///
-/// 部品の回を記録するたびに `recorded` で、その回の終わり（読んだもの・部品の 1 回の結果）と確定を知らせる（知らせるか
+/// ノードの回を記録するたびに `recorded` で、その回の終わり（読んだもの・ノードの 1 回の結果）と確定を知らせる（知らせるか
 /// どうか・何を出すかは受けた側が決める）。`recorded` は確定の直後、下流を起こす前に同期で呼ぶ——受けた側はその中で、確定した
 /// 回が出した行を読み、下流が読む前に手を掛けられる（試走の `limit` がこの順に依る）。定義を書いたら `defined`、消したら
-/// `deleted` で知らせる。使い手が差し替えられるのは、番人に載せる部品（`admits`。既定は全部品）と知らせだけ。
+/// `deleted` で知らせる。使い手が差し替えられるのは、番人に載せるノード（`admits`。既定は全ノード）と知らせだけ。
 @Observable final class AutomationRunner {
   let store: AutomationStore
   @ObservationIgnored var now: () -> Date = Date.init
   @ObservationIgnored var calendar: () -> Calendar = { Calendar.current }
 
-  /// 番人（一巡が部品を起こす）。
+  /// 番人（一巡がノードを起こす）。
   let scheduler: BackgroundScheduler
   let run: BackgroundScheduler.Run
   /// 行を見る agent に、その回の行を Orbe の MCP で渡す帳面（試走の走らせ役も同じものを使う）。
@@ -37,9 +37,9 @@ import Observation
   private let flowEnded: (Int, AutomationFlow) -> Void
   /// 番人に載せている鍵。
   @ObservationIgnored private var registered = Set<String>()
-  /// 部品ごとの、前の契機の始まりの時点の、入力ごとの上流の最後の番号（メモリだけ。無ければ読んだ位置だけが基準線）。
+  /// ノードごとの、前の契機の始まりの時点の、入力ごとの上流の最後の番号（メモリだけ。無ければ読んだ位置だけが基準線）。
   @ObservationIgnored var marks: [String: [AutomationNodeID: AutomationSeqs]] = [:]
-  /// 部品ごとの、番人に最後に返した数え始め。記録の無い契機（取る行が 0 件）でも進むので、次の時刻はこれから数える。
+  /// ノードごとの、番人に最後に返した数え始め。記録の無い契機（取る行が 0 件）でも進むので、次の時刻はこれから数える。
   @ObservationIgnored private var anchors: [String: Date] = [:]
   /// 走っている契機（掃除から守る行を言う）。
   @ObservationIgnored private var active: [ObjectIdentifier: Trigger] = [:]
@@ -49,7 +49,7 @@ import Observation
   /// 自動化ごとの、流している途中の一巡（置くのは `flow`）。
   var flows: [Int: AutomationFlow] = [:]
 
-  /// `workspaces` はタスク候補の付け先にできる今の workspace。判定の部品にだけ渡す。`admits` は自動化の ID と部品の ID から、
+  /// `workspaces` はタスク候補の付け先にできる今の workspace。判定のノードにだけ渡す。`admits` は自動化の ID とノードの ID から、
   /// 番人に載せるかを決める。
   init(
     store: AutomationStore, scheduler: BackgroundScheduler = BackgroundScheduler(),
@@ -79,14 +79,14 @@ import Observation
     store.committed = { [weak self] in self?.scheduleRecount() }
   }
 
-  /// 起動時に一度、全部品を番人へ載せ、止めていない自動化の「届いたら」の部品に起こす決まりを見る（過ぎていた間隔の回は
+  /// 起動時に一度、全ノードを番人へ載せ、止めていない自動化の「届いたら」のノードに起こす決まりを見る（過ぎていた間隔の回は
   /// ここで 1 回だけ走る）。
   func start() {
     for automation in store.automations { register(automation) }
     scheduleRecount()
   }
 
-  /// どれかの部品が走っているか。
+  /// どれかのノードが走っているか。
   func isRunning(_ id: Int) -> Bool {
     store.automation(id)?.graph.nodes.contains { isRunning(id, $0.id) } ?? false
   }
@@ -95,12 +95,12 @@ import Observation
     scheduler.isRunning(id: Self.key(id, nodeId))
   }
 
-  /// `now`（渡さなければ走らせ役の今）から見て、どれかの部品が次に予定で回る時刻（止めていれば nil）。
+  /// `now`（渡さなければ走らせ役の今）から見て、どれかのノードが次に予定で回る時刻（止めていれば nil）。
   func nextRunAt(_ automation: Automation, now: Date? = nil) -> Date? {
     automation.graph.nodes.compactMap { nextRunAt(automation, nodeId: $0.id, now: now) }.min()
   }
 
-  /// 部品が次に予定で回る時刻。止めている・予定の無い部品は nil。過ぎていれば `now` 以前の時刻を返す。
+  /// ノードが次に予定で回る時刻。止めている・予定の無いノードは nil。過ぎていれば `now` 以前の時刻を返す。
   func nextRunAt(_ automation: Automation, nodeId: AutomationNodeID, now: Date? = nil) -> Date? {
     guard !automation.paused, let node = automation.graph.node(nodeId),
       case .scheduled(let timing) = node.entity.trigger
@@ -114,8 +114,8 @@ import Observation
 
   // MARK: - 定義の変異
 
-  /// `id` が nil なら作り、あれば `version` を添えて書き換える。何をするかが変わった部品は走っている回を止めて載せ直し（結果は
-  /// 捨てる）、外した部品は外し、足した部品は足した時刻から数える。鍵・名前・予定・件数の上限・通知だけなら予定だけを
+  /// `id` が nil なら作り、あれば `version` を添えて書き換える。何をするかが変わったノードは走っている回を止めて載せ直し（結果は
+  /// 捨てる）、外したノードは外し、足したノードは足した時刻から数える。鍵・名前・予定・件数の上限・通知だけなら予定だけを
   /// 差し替える（走っている回は最後まで走る）。
   func set(_ id: Int?, version: Int? = nil, _ definition: AutomationDefinition)
     throws(AutomationError) -> Automation
@@ -160,8 +160,8 @@ import Observation
 
   static func key(_ id: Int, _ nodeId: AutomationNodeID) -> String { "automation:\(id)/\(nodeId)" }
 
-  /// 全部品を番人に合わせる。載っていない部品は載せ（数え始めは部品の最後に回った時刻、無ければ足した時刻）、載っている部品は
-  /// 予定だけを差し替える。止めていなければ「届いたら」の部品に起こす決まりを見る。
+  /// 全ノードを番人に合わせる。載っていないノードは載せ（数え始めはノードの最後に回った時刻、無ければ足した時刻）、載っているノードは
+  /// 予定だけを差し替える。止めていなければ「届いたら」のノードに起こす決まりを見る。
   private func register(_ automation: Automation) {
     let id = automation.id
     for node in automation.graph.nodes where admits(id, node.id) {
@@ -186,7 +186,7 @@ import Observation
     for node in automation.graph.nodes { wake(id, node.id) }
   }
 
-  /// 外す。走っている回は止め、その結果は捨てる。起こす決まりの印と数え始めも忘れ、この部品を道に含む一巡を打ち切る。
+  /// 外す。走っている回は止め、その結果は捨てる。起こす決まりの印と数え始めも忘れ、このノードを道に含む一巡を打ち切る。
   private func unregister(_ id: Int, _ nodeId: AutomationNodeID) {
     let key = Self.key(id, nodeId)
     if let flow = flows[id], flow.path.contains(nodeId) {
@@ -199,7 +199,7 @@ import Observation
     anchors[key] = nil
   }
 
-  /// 全部品を番人から外す（走っている回は止め、その結果は捨てる）。一巡は打ち切る。
+  /// 全ノードを番人から外す（走っている回は止め、その結果は捨てる）。一巡は打ち切る。
   func stopAll() {
     let cut = flows
     flows = [:]
@@ -215,7 +215,7 @@ import Observation
   }
 }
 
-/// 部品の契機。
+/// ノードの契機。
 extension AutomationRunner {
   /// 走っている契機。止められたら、以後の結果は捨てる。
   private final class Trigger {
@@ -252,7 +252,7 @@ extension AutomationRunner {
     _ id: Int, _ nodeId: AutomationNodeID, _ kind: BackgroundScheduler.Trigger,
     _ finish: @escaping (Date) -> Void
   ) -> BackgroundRunHandle {
-    // 番人の上に「走っている」を残さないよう、部品が無ければ契機はすぐ終わったものとして知らせる。
+    // 番人の上に「走っている」を残さないよう、ノードが無ければ契機はすぐ終わったものとして知らせる。
     guard let automation = store.automation(id), let node = automation.graph.node(nodeId) else {
       finish(now())
       return BackgroundRunHandle {}
@@ -263,7 +263,7 @@ extension AutomationRunner {
       flowed = flow.started(nodeId, in: automation.graph)
       flows[id] = flow
     }
-    // 流しが起こした回でない「届いたら」の部品の回は、起こす決まりが起こした（届いた行で起きた）回。
+    // 流しが起こした回でない「届いたら」のノードの回は、起こす決まりが起こした（届いた行で起きた）回。
     let trigger = Trigger(
       automationId: id, nodeId: nodeId,
       kind: node.entity.trigger == .arrival && !flowed ? .arrival : kind == .now ? .now : .schedule,
@@ -306,7 +306,7 @@ extension AutomationRunner {
     pass(trigger, read: read)
   }
 
-  /// 部品の 1 回。役割の入力を組み、`AutomationNodePass` に任せ、終わったら確定する。
+  /// ノードの 1 回。役割の入力を組み、`AutomationNodePass` に任せ、終わったら確定する。
   private func pass(_ trigger: Trigger, read: AutomationIntake.Read?) {
     guard let automation = store.automation(trigger.automationId),
       let node = automation.graph.node(trigger.nodeId)
@@ -352,9 +352,9 @@ extension AutomationRunner {
     end(trigger)
   }
 
-  /// 契機を終える。番人へ返す数え始めは回の始まり（回が無ければ契機の始まり）。終えた後に、「届いたら」の部品なら
+  /// 契機を終える。番人へ返す数え始めは回の始まり（回が無ければ契機の始まり）。終えた後に、「届いたら」のノードなら
   /// 走っている間に届いた行を起こす決まりを見て、そうでなければ下流をやり直す。一巡へはその後に知らせる——「届いたら」の
-  /// 部品が普段の決まりで起き直さなかったことを見てから終わりと数えるため。
+  /// ノードが普段の決まりで起き直さなかったことを見てから終わりと数えるため。
   private func end(_ trigger: Trigger) {
     active[ObjectIdentifier(trigger)] = nil
     let key = Self.key(trigger.automationId, trigger.nodeId)

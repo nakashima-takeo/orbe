@@ -2,7 +2,7 @@ import Foundation
 
 @testable import Orbe
 
-/// 見本 B2『開いている PR の要約』: 毎日 18:00 に開いている PR を取り、届いたら要約の部品が報告として残す。通知は
+/// 見本 B2『開いている PR の要約』: 毎日 18:00 に開いている PR を取り、届いたら要約のノードが報告として残す。通知は
 /// メニューバー。報告の全文（複数行）・報告なし・失敗の回を持つ。
 extension DesignSceneFixtures {
   static func boardReportExample() -> AutomationSample {

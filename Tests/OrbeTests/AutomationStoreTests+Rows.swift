@@ -45,7 +45,7 @@ extension AutomationStoreTests {
     { AutomationItem(id: $0, link: "https://example.com/\($0)", body: "\($0) の本文", time: at) }
   }
 
-  /// 処理の部品 `copy` の、取った行をすべて引き継いで出す回を確定する。
+  /// 処理のノード `copy` の、取った行をすべて引き継いで出す回を確定する。
   private func copyAll(_ store: AutomationStore, _ id: Int, at: Date) throws {
     let nodeId = store.nodeId(id, "copy")
     let read = try XCTUnwrap(store.read(nodeId, of: id, baseline: nil, now: at))
@@ -217,7 +217,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(try take(store, id, "a", at: Self.at.addingTimeInterval(240)), ["x"])
   }
 
-  /// 出来事の流れの部品が残す期間の内に同じ id を出したら、中身が違っても足さず、その回の結果の `duplicates` に数える。id が
+  /// 出来事の流れのノードが残す期間の内に同じ id を出したら、中身が違っても足さず、その回の結果の `duplicates` に数える。id が
   /// 違えば毎回届く。残す期間を過ぎた id は、指されて残っていても新しい出来事として足す。
   func testEventsWithTheSameIdWithinTheRetentionAreDuplicates() throws {
     let store = AutomationStore()
@@ -294,7 +294,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks.count, 1, "今有効なのは新しい項目だけ")
   }
 
-  /// 入力を読む部品の回は、取った行が 0 件で失敗しても、取った数（0）を記録に持つ。確定が返す回と読み直した回は同じ。
+  /// 入力を読むノードの回は、取った行が 0 件で失敗しても、取った数（0）を記録に持つ。確定が返す回と読み直した回は同じ。
   func testARunThatReadsItsInputsKeepsItsTakenCountWhenItTookNothingAndFailed() throws {
     let store = AutomationStore()
     var copy = DesignSceneFixtures.agentNode(
@@ -344,7 +344,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(try take(store, id, "a", at: Self.at.addingTimeInterval(60)), ["x", "y"])
   }
 
-  /// 回の記録の取った数は回ごとに数え、同じ部品のほかの回の分と混ざらない。
+  /// 回の記録の取った数は回ごとに数え、同じノードのほかの回の分と混ざらない。
   func testEachRunCountsOnlyTheRowsItTook() throws {
     let store = AutomationStore()
     let id = try define(store, coverage: .newArrivals)

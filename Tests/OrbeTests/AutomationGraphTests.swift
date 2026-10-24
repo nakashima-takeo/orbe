@@ -2,15 +2,15 @@ import XCTest
 
 @testable import Orbe
 
-/// 部品のグラフ——通る組み合わせ・役割・地図の並び。
+/// ノードのグラフ——通る組み合わせ・役割・地図の並び。
 ///
 /// 壊れると何が起きるか: Issue の形の自動化が登録できない。ツールを持つ agent が処理や判定と導かれ、外の文面がツールを持つ
-/// agent の依頼文に入る。地図で入力の部品が下に描かれ線が逆流する。
+/// agent の依頼文に入る。地図で入力のノードが下に描かれ線が逆流する。
 final class AutomationGraphTests: OrbeTestCase {
   static let tool = "mcp__slack__post"
   static let everyTenMinutes = AutomationNode.Trigger.scheduled(.every(600))
 
-  /// 入力の無いコマンドの、取得の部品。
+  /// 入力の無いコマンドの、取得のノード。
   static func fetch(
     _ key: String, _ coverage: AutomationCoverage = .currentSet,
     trigger: AutomationNode.Trigger = everyTenMinutes
@@ -101,7 +101,7 @@ final class AutomationGraphTests: OrbeTestCase {
     }
   }
 
-  /// 部品の入力をすべて `take` で取る形にする。
+  /// ノードの入力をすべて `take` で取る形にする。
   static func taking(_ take: AutomationTake, _ definitionNode: AutomationDefinition.Node)
     -> AutomationDefinition.Node
   {
@@ -112,7 +112,7 @@ final class AutomationGraphTests: OrbeTestCase {
     return definitionNode
   }
 
-  /// 役割は部品自身の欄（入力・ツール・行き先）から Issue の役割の表どおりに導かれる。入力を合図にだけ使うツールを持つ agent は
+  /// 役割はノード自身の欄（入力・ツール・行き先）から Issue の役割の表どおりに導かれる。入力を合図にだけ使うツールを持つ agent は
   /// 行を見ないので取得。
   func testRolesFollowEachNodesOwnFields() throws {
     let graph = try AutomationGraph.numbered([
@@ -137,7 +137,7 @@ final class AutomationGraphTests: OrbeTestCase {
       ])
   }
 
-  /// 地図の並びは入力の深さ順（深さは最も長い道で数える）で、同じ深さは定義の順。入力の部品がいつも先に並ぶ。
+  /// 地図の並びは入力の深さ順（深さは最も長い道で数える）で、同じ深さは定義の順。入力のノードがいつも先に並ぶ。
   func testNodesLineUpByInputDepthThenDefinitionOrder() throws {
     let graph = try AutomationGraph.numbered([
       Self.agent("r", from: ["a", "p"]),
@@ -149,7 +149,7 @@ final class AutomationGraphTests: OrbeTestCase {
     XCTAssertEqual(graph.byDepth.map(\.key), ["b", "a", "p", "r"])
   }
 
-  /// 処理の出力の性質は書かなければ出来事の流れで、書けば書いたとおり。行を出さない部品は持たない。
+  /// 処理の出力の性質は書かなければ出来事の流れで、書けば書いたとおり。行を出さないノードは持たない。
   func testAProcessCoverageDefaultsToNewArrivals() throws {
     let graph = try AutomationGraph.numbered([
       Self.fetch("f"),
@@ -174,7 +174,7 @@ final class AutomationGraphTests: OrbeTestCase {
 }
 
 extension AutomationGraph {
-  /// 検証して、部品と定義に 1 から順の ID を振る（テストの見本）。
+  /// 検証して、ノードと定義に 1 から順の ID を振る（テストの見本）。
   static func numbered(_ definitionNodes: [AutomationDefinition.Node]) throws(AutomationError)
     -> AutomationGraph
   {

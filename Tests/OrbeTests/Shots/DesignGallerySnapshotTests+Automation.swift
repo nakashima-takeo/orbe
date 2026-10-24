@@ -46,7 +46,7 @@ extension DesignGallerySnapshotTests {
   }
 
   /// 棚の見本（見本 O2Palette）: 棚の 2 行目の全種（前回の判定の成功・失敗・まだ判定していない・停止中・更新中）、
-  /// 判定ごとの一覧の頭、出どころの部品の名前。
+  /// 判定ごとの一覧の頭、出どころのノードの名前。
   private func renderTaskPaletteAutomationShelfSnapshots(
     _ write: (String, TaskPaletteModel, CGFloat, CGFloat) throws -> Void
   ) throws {
@@ -67,13 +67,13 @@ extension DesignGallerySnapshotTests {
     shelf.automation.moveShelf(1)
     try write("automation_shelf.png", shelf, 1440, 900)
 
-    // 候補の一覧に居る: 先頭が選ばれ、詳細の見出しに取得の部品の名前。棚の段は焦点の無い薄い地。
+    // 候補の一覧に居る: 先頭が選ばれ、詳細の見出しに取得のノードの名前。棚の段は焦点の無い薄い地。
     let list = model()
     list.automation.tapShelf(.automation(1))
     list.automation.enterProposals()
     try write("automation_shelf_list.png", list, 1440, 900)
 
-    // 出どころの部品の名前を引けない候補（消えた自動化が出した）。
+    // 出どころのノードの名前を引けない候補（消えた自動化が出した）。
     let unnamed = model()
     unnamed.automation.tapShelf(.automation(1))
     unnamed.automation.enterProposals()

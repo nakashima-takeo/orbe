@@ -27,7 +27,7 @@ struct TaskPaletteAutomationBody: View {
   }
 }
 
-/// 真ん中の候補の一覧。自動化を選んでいれば、頭に判定の部品ごとの最新の回を出す。
+/// 真ん中の候補の一覧。自動化を選んでいれば、頭に判定のノードごとの最新の回を出す。
 struct TaskPaletteAutomationList: View {
   @Bindable var model: TaskPaletteAutomationModel
   @Environment(\.localization) private var l10n
@@ -64,7 +64,7 @@ struct TaskPaletteAutomationList: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
   }
 
-  /// 判定の部品ごとの最新の回を入力の深さ順に 1 行ずつ（「9:00 開発の依頼を選ぶ　候補 2 件」。失敗は赤で
+  /// 判定のノードごとの最新の回を入力の深さ順に 1 行ずつ（「9:00 開発の依頼を選ぶ　候補 2 件」。失敗は赤で
   /// 「失敗：<説明>」）。狭い欄では各行を 2 行まで折り返す。
   private func headline(_ automation: Automation) -> some View {
     let text = AutomationText(l10n: l10n, today: model.today, timeZone: model.timeZone)
@@ -87,7 +87,7 @@ struct TaskPaletteAutomationList: View {
     .padding(.top, Theme.Space.tick)
   }
 
-  /// 判定の部品の最新の回の 1 行。部品は名前だけで言う。
+  /// 判定のノードの最新の回の 1 行。ノードは名前だけで言う。
   static func latest(
     _ node: AutomationGraph.Node, _ record: AutomationRunRecord?, _ text: AutomationText
   )
@@ -130,7 +130,7 @@ struct TaskPaletteAutomationList: View {
   }
 }
 
-/// 候補の行。タイトル・期限の札・右に時刻、下に出どころの取得の部品の名前と本文の先頭 1 行。印は選ばれている候補の行だけ。
+/// 候補の行。タイトル・期限の札・右に時刻、下に出どころの取得のノードの名前と本文の先頭 1 行。印は選ばれている候補の行だけ。
 private struct TaskPaletteAutomationProposalRow: View {
   let proposal: AutomationProposal
   let originNodeName: String?

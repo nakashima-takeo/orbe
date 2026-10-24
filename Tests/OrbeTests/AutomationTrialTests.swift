@@ -2,11 +2,11 @@ import XCTest
 
 @testable import Orbe
 
-/// 試走——本番の DB の写しの上で本番と同じ流しを動かし、部品の回ごとの結果を集める。番人の時計と手段の実行だけを差し替え、
+/// 試走——本番の DB の写しの上で本番と同じ流しを動かし、ノードの回ごとの結果を集める。番人の時計と手段の実行だけを差し替え、
 /// ストアと DB と走らせ役（本番と写し）は本物で回す。手段の呼び出しは本番と試走で同じ偽物に積まれる。
 ///
 /// 壊れると何が起きるか: 試走した項目が本番で新しい項目として流れない・候補や回の記録が本番に増える・知らせが出る。試走の
-/// 結果が本番の回と違う読み方になり、AI が直した中身が本番で通らない。範囲の外の部品や副作用が走る。与えた行が流れない。
+/// 結果が本番の回と違う読み方になり、AI が直した中身が本番で通らない。範囲の外のノードや副作用が走る。与えた行が流れない。
 /// 試し直しても前の試走の手段が走り続ける。終わりを待つ AI が時間切れまで返らない。
 final class AutomationTrialTests: OrbeTestCase {
   private static let far: TimeInterval = 86400 * 7
@@ -15,7 +15,7 @@ final class AutomationTrialTests: OrbeTestCase {
   var store: AutomationStore!
   var runner: AutomationRunner!
   var trials: AutomationTrials!
-  /// 本番の走らせ役が回を記録したと知らせた部品の鍵（窓の知らせはここから出る）。
+  /// 本番の走らせ役が回を記録したと知らせたノードの鍵（窓の知らせはここから出る）。
   var recorded: [String] = []
 
   override func setUp() {
@@ -45,7 +45,7 @@ final class AutomationTrialTests: OrbeTestCase {
     store = nil
   }
 
-  // MARK: - 部品と手段
+  // MARK: - ノードと手段
 
   func definitionNode(
     _ key: String, _ trigger: AutomationNode.Trigger = .manual, from inputs: [String] = [],
@@ -59,7 +59,7 @@ final class AutomationTrialTests: OrbeTestCase {
       key, key, .scheduled(.every(Self.far)), script: key, coverage: .currentSet)
   }
 
-  /// 下流へ渡す id（`<部品 ID>:<書かれた id>`）。
+  /// 下流へ渡す id（`<ノード ID>:<書かれた id>`）。
   func downstream(_ key: String, _ written: String, of id: Int) -> String {
     "\(store.nodeId(id, key)):\(written)"
   }
@@ -176,8 +176,8 @@ final class AutomationTrialTests: OrbeTestCase {
     XCTAssertEqual(ids("p"), [downstream("gh", "b", of: id)])
   }
 
-  /// 写しの中のほかの自動化は、試走の道と同じ鍵の部品でも、読めば取る行のある「届いたら」の部品でも起こさない（写しでも手段は
-  /// 本物）。手段のスクリプトは x・y で、試走する自動化の部品と見分ける。
+  /// 写しの中のほかの自動化は、試走の道と同じ鍵のノードでも、読めば取る行のある「届いたら」のノードでも起こさない（写しでも手段は
+  /// 本物）。手段のスクリプトは x・y で、試走する自動化のノードと見分ける。
   func testATrialDoesNotWakeOtherAutomationsInTheCopy() throws {
     let other = try define([
       DesignSceneFixtures.commandNode(
@@ -223,7 +223,7 @@ final class AutomationTrialTests: OrbeTestCase {
     XCTAssertEqual(trial.passes(key: "p").first?.content, AutomationTrial.Content.none)
   }
 
-  /// 1 つの部品が何度も回ると、回は本番の `runs` と同じく新しい順に並ぶ。
+  /// 1 つのノードが何度も回ると、回は本番の `runs` と同じく新しい順に並ぶ。
   func testRunsOfANodeAreNewestFirstAsInProduction() throws {
     let id = try define([
       fetch("gh"), fetch("backlog"),

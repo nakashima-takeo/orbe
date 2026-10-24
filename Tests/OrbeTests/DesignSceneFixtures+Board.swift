@@ -3,7 +3,7 @@ import Foundation
 @testable import Orbe
 
 /// ボードの自動化の fixture（4 件: 前回が失敗・候補あり・新しい項目なし・止めている）。今と今日は提案タブと同じ
-/// （2025-10-04 15:00）。走らせ役は `automationRunner` の部品が終わらない偽物で、本物の claude は起きない。
+/// （2025-10-04 15:00）。走らせ役は `automationRunner` のノードが終わらない偽物で、本物の claude は起きない。
 extension DesignSceneFixtures {
   private static func agentFetch(
     _ tool: String, _ instruction: String, _ coverage: AutomationCoverage,
@@ -102,7 +102,7 @@ extension DesignSceneFixtures {
     boardAutomationSamples() + [boardDraft]
   }
 
-  /// 取得の指示文・使えるツール・コマンドと作業ディレクトリが長く、詳細がスクロールする。回の記録は部品ごとに 20 件。
+  /// 取得の指示文・使えるツール・コマンドと作業ディレクトリが長く、詳細がスクロールする。回の記録はノードごとに 20 件。
   static func boardLongSamples() -> [AutomationSample] {
     var samples = boardAutomationSamples()
     samples[2].definition.nodes[0] = agentNode(
@@ -202,7 +202,7 @@ extension DesignSceneFixtures {
     let at = { (minutes: Int) in
       automationAt(14, 55).addingTimeInterval(TimeInterval(-60 * minutes))
     }
-    // 取得の回だけを置く（判定は処理の部品の先にあり、取得の行は処理が読めば取る行になる）。
+    // 取得の回だけを置く（判定は処理のノードの先にあり、取得の行は処理が読めば取る行になる）。
     let passes = (0..<20).reversed().map { n -> AutomationSamplePass in
       let fresh = n.isMultiple(of: 3) ? 2 : 0
       let (all, _) = sampleRound("dm", at: at(n * 10), items: 6, fresh: fresh)

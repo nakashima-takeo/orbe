@@ -3,18 +3,18 @@ import OrbeTestSupport
 
 @testable import Orbe
 
-/// 見本の自動化 1 つ。ストアの変異の口（作る・部品の回の確定・止める）を通して DB に置く——見本専用の口を本番に足さない。
+/// 見本の自動化 1 つ。ストアの変異の口（作る・ノードの回の確定・止める）を通して DB に置く——見本専用の口を本番に足さない。
 struct AutomationSample {
   var definition: AutomationDefinition
   var createdAt: Date
   var paused = false
-  /// 古い順に確定する部品の回。
+  /// 古い順に確定するノードの回。
   var passes: [AutomationSamplePass] = []
   /// 回を確定した後に消す（出した候補が、重ねて取っている別の自動化の棚に残る）。
   var deleted = false
 }
 
-/// 見本の部品の 1 回。入力のある部品の回は、その時点で読める行を（捨てる分のほかは）すべて取った回にする。判定の候補の案の
+/// 見本のノードの 1 回。入力のあるノードの回は、その時点で読める行を（捨てる分のほかは）すべて取った回にする。判定の候補の案の
 /// 出どころと、素通しの処理の出力は、読んだ行から組み直す（出どころは DB の行を指すため）。
 struct AutomationSamplePass {
   let nodeKey: String
@@ -33,7 +33,7 @@ struct AutomationSamplePass {
 }
 
 /// 提案タブの fixture（見本 R3Inbox.png と同じ並び）。今日はタスク画面と同じ 2025-10-04、走らせ役の今は同じ日の 15:00 に
-/// 固定し、次の時刻と回の時刻を決定論にする。部品は始まっても終わらない（実行中のまま）——実物の claude は起こさない。
+/// 固定し、次の時刻と回の時刻を決定論にする。ノードは始まっても終わらない（実行中のまま）——実物の claude は起こさない。
 extension DesignSceneFixtures {
   static func automationAt(_ hour: Int, _ minute: Int = 0, daysAgo: Int = 0) -> Date {
     let day = taskCalendar.date(byAdding: .day, value: -daysAgo, to: taskToday)!
@@ -117,7 +117,7 @@ extension DesignSceneFixtures {
     }
   }
 
-  /// 見本の前から出ていた項目を、回の記録を残さず `key` の部品の出力へ足し、下流の受け手は読んだものとする。
+  /// 見本の前から出ていた項目を、回の記録を残さず `key` のノードの出力へ足し、下流の受け手は読んだものとする。
   private static func prepare(
     _ items: [AutomationItem], as key: String, of id: Int, in store: AutomationStore, at: Date
   ) throws {
@@ -132,7 +132,7 @@ extension DesignSceneFixtures {
     }
   }
 
-  /// 見本の回 1 つを、走らせ役と同じ読みと確定で記録する。`kept` はその部品の見本の前から出ていた項目で、取得の回の出力に足す。
+  /// 見本の回 1 つを、走らせ役と同じ読みと確定で記録する。`kept` はそのノードの見本の前から出ていた項目で、取得の回の出力に足す。
   static func record(
     _ pass: AutomationSamplePass, of id: Int, in store: AutomationStore,
     kept: [AutomationItem] = []
@@ -205,12 +205,12 @@ extension DesignSceneFixtures {
       source: nil)
   }
 
-  /// 番人も部品の回も止まった走らせ役。
+  /// 番人もノードの回も止まった走らせ役。
   static func automationRunner(_ samples: [AutomationSample] = []) -> AutomationRunner {
     automationRunner(store: automationStore(samples))
   }
 
-  /// `store` の上の、番人も部品の回も止まった走らせ役。
+  /// `store` の上の、番人もノードの回も止まった走らせ役。
   static func automationRunner(store: AutomationStore) -> AutomationRunner {
     let scheduler = BackgroundScheduler { _, _ in BackgroundRunHandle {} }
     scheduler.now = { automationNow }
@@ -227,7 +227,7 @@ extension DesignSceneFixtures {
     return runner
   }
 
-  // MARK: - 部品
+  // MARK: - ノード
 
   /// 見本の cron のいつ。見本には正しい式だけを書く。
   nonisolated static func cron(_ expression: String) -> BackgroundTiming {
@@ -265,7 +265,7 @@ extension DesignSceneFixtures {
         timeoutMinutes: nil, coverage: coverage, destination: deliver), maxItems: nil)
   }
 
-  /// 取得の部品 `fetch` と、届いたらタスク候補を出す判定の部品 `judge`。
+  /// 取得のノード `fetch` と、届いたらタスク候補を出す判定のノード `judge`。
   nonisolated static func candidatesDefinition(
     _ name: String, fetch: AutomationDefinition.Node,
     instruction: String = "自分が何かを頼まれている・期限がある項目だけをタスクにする。",

@@ -2,10 +2,10 @@ import XCTest
 
 @testable import Orbe
 
-/// 流す——部品を指し、そこに至る道の上で、普段なら今すぐ動かない部品（入力の無い部品と、間隔・cron・手動の入力のある部品）を
-/// 上流の後に 1 回ずつ起こす。「届いたら」の部品は普段の決まりだけで動き、指した部品が終わったら一巡が終わる。
+/// 流す——ノードを指し、そこに至る道の上で、普段なら今すぐ動かないノード（入力の無いノードと、間隔・cron・手動の入力のあるノード）を
+/// 上流の後に 1 回ずつ起こす。「届いたら」のノードは普段の決まりだけで動き、指したノードが終わったら一巡が終わる。
 ///
-/// 壊れると何が起きるか: 毎朝 9:00 の判定を押しても取得しか走らない。道の外の部品が押したことで走る。手動の部品が上流の
+/// 壊れると何が起きるか: 毎朝 9:00 の判定を押しても取得しか走らない。道の外のノードが押したことで走る。手動のノードが上流の
 /// 確定で勝手に走る。押した後に積まれた行を取らない回や、確定の前の回を一巡の分に数えて、下流を欠けた入力で走らせる。一巡が
 /// 終わらず、Orbe を再起動するまでその自動化を二度と流せない。
 extension AutomationRunnerTests {
@@ -42,7 +42,7 @@ extension AutomationRunnerTests {
 
   // MARK: - 道
 
-  /// 指した部品の道の上の部品だけが上流の後に順に 1 回ずつ走り、指した部品が終わると一巡が終わる。道の外の部品は走らず、
+  /// 指したノードの道の上のノードだけが上流の後に順に 1 回ずつ走り、指したノードが終わると一巡が終わる。道の外のノードは走らず、
   /// 道の上の「届いたら」は上流が積んだことで普段どおり起きる。
   func testFlowingToANodeRunsItsPathInOrderOnceAndLeavesTheRestAlone() throws {
     let id = try defineFanOut()
@@ -59,7 +59,7 @@ extension AutomationRunnerTests {
     XCTAssertEqual(ids("s1"), [downstream("f", "a", of: id)])
     XCTAssertEqual(ids("s3"), [downstream("f", "a", of: id)], "届いたらは上流が積んだので普段どおり起きる")
     XCTAssertEqual(calls("s2"), [], "道の外は走らない")
-    XCTAssertEqual(pending("s2", of: id), 1, "道の外の部品にも普段どおり読めば取る行が増える")
+    XCTAssertEqual(pending("s2", of: id), 1, "道の外のノードにも普段どおり読めば取る行が増える")
     XCTAssertTrue(refusesAnotherFlow(id))
     finish("s1", printed(""))
 
@@ -68,10 +68,10 @@ extension AutomationRunnerTests {
     XCTAssertEqual(lastTrigger("f", of: id), .now)
     XCTAssertEqual(lastTrigger("p", of: id), .now)
     XCTAssertEqual(lastTrigger("s1", of: id), .now)
-    XCTAssertFalse(refusesAnotherFlow(id), "指した部品が終われば一巡が終わる（届いたらの s3 は道の外）")
+    XCTAssertFalse(refusesAnotherFlow(id), "指したノードが終われば一巡が終わる（届いたらの s3 は道の外）")
   }
 
-  /// 指す先を省くと終わりの部品すべてまで流れ、道の上の「届いたら」が走り終えるまで一巡は終わらない。
+  /// 指す先を省くと終わりのノードすべてまで流れ、道の上の「届いたら」が走り終えるまで一巡は終わらない。
   func testFlowingToTheEndsRunsEveryNodeAndWaitsForArrivalNodes() throws {
     let id = try defineFanOut()
 
@@ -87,7 +87,7 @@ extension AutomationRunnerTests {
     XCTAssertFalse(refusesAnotherFlow(id))
   }
 
-  /// 上流が何も積まなくても一巡は終わる——「届いたら」は起きないまま、流しが起こした手動の部品は取る行が無いまま終わる。
+  /// 上流が何も積まなくても一巡は終わる——「届いたら」は起きないまま、流しが起こした手動のノードは取る行が無いまま終わる。
   /// 止めた自動化も流せる。
   func testAFlowWhoseUpstreamAddsNothingStillEndsAndPausedAutomationsFlow() throws {
     let id = try define([
@@ -120,7 +120,7 @@ extension AutomationRunnerTests {
 
   // MARK: - 手動
 
-  /// 手動の部品は上流が積んでも走らず、それ自身かその下流を指して流したときだけ走る。上流を指して流しても走らない。
+  /// 手動のノードは上流が積んでも走らず、それ自身かその下流を指して流したときだけ走る。上流を指して流しても走らない。
   func testAManualNodeRunsOnlyWhenItOrItsDownstreamIsFlowedTo() throws {
     let id = try define([
       fetch("f", every: 1800),
@@ -143,8 +143,8 @@ extension AutomationRunnerTests {
 
   // MARK: - 走っている回
 
-  /// 流し始めに走っている入力の無い部品は、その回を一巡の分にして重ねて起こさない。上流が終わった時点で走っている入力の
-  /// ある部品は、その回が押した後の行を取れないので、終わった後にもう 1 回起こす。
+  /// 流し始めに走っている入力の無いノードは、その回を一巡の分にして重ねて起こさない。上流が終わった時点で走っている入力の
+  /// あるノードは、その回が押した後の行を取れないので、終わった後にもう 1 回起こす。
   func testARunningSourceCountsButARunningNodeWithInputsRunsOnceMoreAfterIt() throws {
     let id = try define([
       fetch("f", every: 3600),
@@ -209,7 +209,7 @@ extension AutomationRunnerTests {
       ])
   }
 
-  /// 流しの途中で道の上の部品を「届いたら」から間隔に変えると、今の予定で決める——上流の後に流しが 1 回起こしてから下流へ進む。
+  /// 流しの途中で道の上のノードを「届いたら」から間隔に変えると、今の予定で決める——上流の後に流しが 1 回起こしてから下流へ進む。
   func testANodeTurnedFromArrivalToIntervalMidFlowIsWokenByTheFlow() throws {
     let id = try runner.set(nil, chain(a: .arrival)).id
     try flow(id)
@@ -226,7 +226,7 @@ extension AutomationRunnerTests {
     XCTAssertFalse(refusesAnotherFlow(id))
   }
 
-  /// 流しの途中で道の上の部品を間隔から「届いたら」に変えると、流しはそれを起こさず普段の決まりに任せる——上流が積んで
+  /// 流しの途中で道の上のノードを間隔から「届いたら」に変えると、流しはそれを起こさず普段の決まりに任せる——上流が積んで
   /// 起きた回が失敗しても、同じ行ですぐ起こし直さず、終わりと数えて下流へ進む。
   func testANodeTurnedFromIntervalToArrivalMidFlowIsLeftToItsUsualRule() throws {
     let id = try runner.set(nil, chain(a: .scheduled(.every(86400)))).id
@@ -243,7 +243,7 @@ extension AutomationRunnerTests {
 
   // MARK: - 打ち切り
 
-  /// 道の上の部品の入力を書き換えると（道の形が変わる）一巡は打ち切られ、また流せる。
+  /// 道の上のノードの入力を書き換えると（道の形が変わる）一巡は打ち切られ、また流せる。
   func testRewritingTheInputsOfANodeOnThePathAbortsTheFlow() throws {
     func definition(a inputs: [String]) -> AutomationDefinition {
       AutomationDefinition(
@@ -261,7 +261,7 @@ extension AutomationRunnerTests {
     try flow(id, to: .node(store.nodeId(id, "a")))
   }
 
-  /// 道の上の部品の何をするかを書き換えると一巡は打ち切られ、また流せる。道に触れない書き換え（名前）では続く。
+  /// 道の上のノードの何をするかを書き換えると一巡は打ち切られ、また流せる。道に触れない書き換え（名前）では続く。
   func testRewritingANodeOnThePathAbortsTheFlowButRenamingDoesNot() throws {
     func definition(_ name: String, f script: String) -> AutomationDefinition {
       AutomationDefinition(
@@ -297,7 +297,7 @@ extension AutomationRunnerTests {
   }
 
   /// ⌘⇧X の棚の「更新中…」は一巡の有無を観測して描く。一巡を置く・終わる・打ち切るのどれでも変化が届き、流していない
-  /// 部品の回だけでは届かない。
+  /// ノードの回だけでは届かない。
   ///
   /// 壊れると何が起きるか。「更新中…」が出ない・終わっても消えない。予定どおりの回のたびに提案タブが描き直される。
   @MainActor func testFlowingIsObservableAndRunsOutsideAFlowAreNot() throws {

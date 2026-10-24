@@ -3,11 +3,11 @@ import XCTest
 
 @testable import Orbe
 
-/// 部品の 1 回——役割どおりに手段を起こし（上限・目印・標準入力・回の ID・ツール・Orbe の口）、役割ごとに結果を受ける（取得の
+/// ノードの 1 回——役割どおりに手段を起こし（上限・目印・標準入力・回の ID・ツール・Orbe の口）、役割ごとに結果を受ける（取得の
 /// 書かれたままの行、処理の出どころの照らし、判定の候補の出どころ、仕事と副作用の失敗）。agent は Orbe の MCP の道具で、
 /// コマンドは標準出力で、同じ決まりで受ける（道具の答えは `AutomationRunSessionTests`）。止めた回は何も返さない。
 ///
-/// 壊れると何が起きるか: 部品が、利用者の決めた上限時間より前に出力が無いという理由で切られる。今の集合の取得が前回以降の
+/// 壊れると何が起きるか: ノードが、利用者の決めた上限時間より前に出力が無いという理由で切られる。今の集合の取得が前回以降の
 /// 分だけを取り、候補が一斉に下がる。副作用のやり直しに回の ID が渡らず二重に起きる。仕事の agent がツール無しで起き、何も
 /// せずに成功する。前回取れた項目が毎回流れ直す。照らせない・重なった処理の行が黙って消える。結果を出さずに終えた agent の回が
 /// 成功になる。候補に別の項目のリンクが付く。失敗した取得・仕事・副作用が成功として確定する。止めた回の結果が書き換えた後の
@@ -15,7 +15,7 @@ import XCTest
 final class AutomationNodePassTests: AutomationNodePassTestCase {
   // MARK: - 起こし方
 
-  /// 上限は部品の経過時間だけで、無出力では打ち切らない——部品の上限は利用者が決める `timeoutMinutes` の一本にするため。
+  /// 上限はノードの経過時間だけで、無出力では打ち切らない——ノードの上限は利用者が決める `timeoutMinutes` の一本にするため。
   func testNodeIsLimitedOnlyByItsTimeoutNotBySilence() {
     var definitionNode = AutomationGraphTests.agent("r", from: ["f"])
     definitionNode.action.timeoutMinutes = 3
@@ -70,7 +70,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
     XCTAssertEqual(call.orbe?.tools, ["put_report", "report_nothing", "report_error"])
   }
 
-  /// 役割ごとに、Orbe の口で出す道具が決まる（行を見る部品は行がある回だけ読む道具を持つ）。
+  /// 役割ごとに、Orbe の口で出す道具が決まる（行を見るノードは行がある回だけ読む道具を持つ）。
   func testEachRoleGetsItsTools() throws {
     start(
       AutomationGraphTests.agent(

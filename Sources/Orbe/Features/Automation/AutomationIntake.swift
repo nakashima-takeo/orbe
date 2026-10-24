@@ -9,7 +9,7 @@ enum AutomationIntake {
     case event
   }
 
-  /// 出どころ——引き継ぎをたどった先の、取得の部品が出した行。候補のリンクと本文はいつもここから取る。
+  /// 出どころ——引き継ぎをたどった先の、取得のノードが出した行。候補のリンクと本文はいつもここから取る。
   struct Origin: Equatable {
     let nodeId: AutomationNodeID
     /// 項目なら今の版、出来事ならその出来事。
@@ -20,7 +20,7 @@ enum AutomationIntake {
 
   /// 上流の行 1 つ。
   struct Row: Equatable {
-    /// 上流の部品（つながり）。
+    /// 上流のノード（つながり）。
     let from: AutomationNodeID
     let table: Table
     let seq: Int

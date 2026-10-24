@@ -1,44 +1,44 @@
 import Foundation
 
-/// 自動化 1 つ。自動化は部品ではなく、名前・通知・止めた時刻・版の番号と、部品とつながり（グラフ）で中身を表す。部品ごとの
-/// 状態がグラフの部品とちょうど揃うことは `AutomationStore` が保証する。
+/// 自動化 1 つ。自動化はノードではなく、名前・通知・止めた時刻・版の番号と、ノードとつながり（グラフ）で中身を表す。ノードごとの
+/// 状態がグラフのノードとちょうど揃うことは `AutomationStore` が保証する。
 struct Automation: Equatable, Identifiable {
   /// 永続の短い整数。使い回さない。
   let id: Int
   var name: String
-  /// 部品の回を知らせる先。nil は知らせない。何をするかには入らない。
+  /// ノードの回を知らせる先。nil は知らせない。何をするかには入らない。
   var notify: AutomationNotify?
   var graph: AutomationGraph
   /// 止めた時刻。止めているのは時刻による予定と起動時の起こしだけ。
   var pausedAt: Date?
-  /// 定義の版。名前・通知・部品・つながりのどれかが変わるたびに 1 増える（古い定義からの書き換えを断る印）。
+  /// 定義の版。名前・通知・ノード・つながりのどれかが変わるたびに 1 増える（古い定義からの書き換えを断る印）。
   var version: Int
   let createdAt: Date
-  /// 部品ごとの状態。
+  /// ノードごとの状態。
   var states: [AutomationNodeID: AutomationNodeState]
 
   var paused: Bool { pausedAt != nil }
 
-  /// 外の形（部品に ID を添える）。
+  /// 外の形（ノードに ID を添える）。
   var definition: AutomationDefinition {
     AutomationDefinition(name: name, notify: notify, nodes: graph.definitionNodes)
   }
 
-  /// 判定の部品を持つか。タスク候補の棚・重なりはこれを持つ自動化の単位。
+  /// 判定のノードを持つか。タスク候補の棚・重なりはこれを持つ自動化の単位。
   var judges: Bool { !graph.judges.isEmpty }
 
-  /// 部品の状態。グラフの部品はいつも状態を持つ。
+  /// ノードの状態。グラフのノードはいつも状態を持つ。
   func state(_ id: AutomationNodeID) -> AutomationNodeState {
     guard let state = states[id] else { preconditionFailure("every node has a state: \(id)") }
     return state
   }
 
-  /// 最後の回が失敗した部品があるか。
+  /// 最後の回が失敗したノードがあるか。
   var failing: Bool {
     graph.nodes.contains { state($0.id).runs.first?.failed == true }
   }
 
-  /// 部品の回をすべて、新しい順に混ぜたもの。
+  /// ノードの回をすべて、新しい順に混ぜたもの。
   var runs: [AutomationRunRecord] {
     states.values.flatMap(\.runs).sorted { ($0.startedAt, $0.id) > ($1.startedAt, $1.id) }
   }
@@ -55,7 +55,7 @@ struct AutomationUnreadable: Equatable, Identifiable {
   let definition: String
   /// 読めない理由（定義の中の場所で言う英文）。
   let reason: String
-  /// 外していない部品。
+  /// 外していないノード。
   let nodeIds: [AutomationNodeID]
 }
 
@@ -75,10 +75,10 @@ enum AutomationCoverage: String {
   case newArrivals
 }
 
-/// 部品 1 つの状態。行と記録の正は DB で、メモリは画面と予定が同期で読む分だけを、部品ごとに DB から読み直して持つ——自分の
+/// ノード 1 つの状態。行と記録の正は DB で、メモリは画面と予定が同期で読む分だけを、ノードごとに DB から読み直して持つ——自分の
 /// 状態は `AutomationDatabase.state(of:)`、読めば取る行は `AutomationMemory.recount`。差分を手で当てないので、DB とずれない。
 struct AutomationNodeState: Equatable {
-  /// 部品を足した時刻。一度も回っていない部品の数え始め。
+  /// ノードを足した時刻。一度も回っていないノードの数え始め。
   var addedAt: Date
   /// 直近の回の記録（新しい順に `retainedRuns` 件まで）。
   var runs: [AutomationRunRecord] = []
@@ -86,7 +86,7 @@ struct AutomationNodeState: Equatable {
   var succeededAt: Date?
   /// 出力が決まりを外した最初の回の記録。何をするかが変わるまで残る。
   var breach: AutomationRunRecord?
-  /// 受け手として今読めば取る行。入力の無い部品は 0 件。
+  /// 受け手として今読めば取る行。入力の無いノードは 0 件。
   var pending = AutomationPending()
   /// 出す側の今有効な項目のリンク（取得の最新の結果）。
   var liveLinks: Set<String> = []
@@ -114,7 +114,7 @@ struct AutomationSeqs: Equatable {
   var event = 0
 }
 
-/// 取得の出力 1 行の、候補に使う欄。`id` は部品の中での同一性（書かれた id）、`link` は自動化をまたぐ同一性。
+/// 取得の出力 1 行の、候補に使う欄。`id` はノードの中での同一性（書かれた id）、`link` は自動化をまたぐ同一性。
 struct AutomationItem: Equatable {
   let id: String
   let link: String
@@ -127,10 +127,10 @@ struct AutomationProposal: Equatable, Identifiable {
   let id: Int
   /// 候補を出した判定の回。
   let runId: Int
-  /// 出した判定の部品と、その回が動いた定義。候補を出した自動化はこの部品の持ち主（`AutomationStore.issuer(of:)`）。
+  /// 出した判定のノードと、その回が動いた定義。候補を出した自動化はこのノードの持ち主（`AutomationStore.issuer(of:)`）。
   let judge: AutomationNodeID
   let defId: AutomationNodeDefID
-  /// 出どころの部品と行。
+  /// 出どころのノードと行。
   let originNodeId: AutomationNodeID
   let origin: AutomationRowRef
   /// 出どころの行の欄（`id` は書かれた id）。
@@ -153,12 +153,12 @@ struct AutomationProposal: Equatable, Identifiable {
   }
 }
 
-/// 指す行や値が読めない、覚えている候補。分かる分（ID・リンク・出した判定の部品）だけを持ち、「既に候補がある」に効く。
+/// 指す行や値が読めない、覚えている候補。分かる分（ID・リンク・出した判定のノード）だけを持ち、「既に候補がある」に効く。
 /// 外の口（`list_automation_proposals`）には分かる分だけで出し、棚・画面・判定には出さない。持ち主が無くなれば忘れる。
 struct AutomationUnreadableProposal: Equatable {
   let id: Int
   let link: String
-  /// 出した判定の部品（回の行から引くので、候補の値が壊れていても分かる）。
+  /// 出した判定のノード（回の行から引くので、候補の値が壊れていても分かる）。
   let judge: AutomationNodeID
 }
 

@@ -1,6 +1,6 @@
 import Foundation
 
-/// 流す——部品を指して、そこに至る道の上の部品を 1 回ずつ回す（`AutomationFlow`）。
+/// 流す——ノードを指して、そこに至る道の上のノードを 1 回ずつ回す（`AutomationFlow`）。
 extension AutomationRunner {
   /// 流している途中か（一巡があるか）。
   func isFlowing(_ id: Int) -> Bool {
@@ -12,7 +12,7 @@ extension AutomationRunner {
     flows[id]
   }
 
-  /// 指した部品まで流す（止めた自動化も受ける）。流している途中なら断る。指す部品が無ければ一巡を置かない（置くと終わりの
+  /// 指したノードまで流す（止めた自動化も受ける）。流している途中なら断る。指すノードが無ければ一巡を置かない（置くと終わりの
   /// 知らせが来ず、以後ずっと断る）。
   func flow(_ id: Int, to target: AutomationFlow.Target) throws(AutomationError) {
     try checkAvailable()

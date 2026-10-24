@@ -43,7 +43,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(try unread(store).count, 13)
   }
 
-  /// 試走が写しに掛ける操作（行を与える・絞る）の後も、ストアのメモリは DB から開き直した値と同じ（変わった部品の状態と読めば
+  /// 試走が写しに掛ける操作（行を与える・絞る）の後も、ストアのメモリは DB から開き直した値と同じ（変わったノードの状態と読めば
   /// 取る行を読み直す）。今の集合に与えた行は、既に読んだ id でも新しい項目として読める。
   func testTheTrialsOperationsKeepTheMemoryEqualToTheDatabase() throws {
     var store: AutomationStore? = AutomationStore()

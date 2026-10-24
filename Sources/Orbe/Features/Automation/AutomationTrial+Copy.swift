@@ -2,9 +2,9 @@ import Foundation
 
 /// 試走が自分の写しに掛ける操作。写しのストアに対して試走だけが呼ぶ。写しは試走のもので捨てるので、ここでだけ本番の決まり
 /// （出来事は見分けて足す・番号を使い回さない・出どころの項目が無効になれば候補を下げる）を崩す。どの操作も変異の 1 経路
-/// （`commit`）と部品の状態の読み直しを通し、写しのメモリを写しの DB と一致させ続ける。
+/// （`commit`）とノードの状態の読み直しを通し、写しのメモリを写しの DB と一致させ続ける。
 extension AutomationStore {
-  /// 行を、部品 `nodeId` の出力として新しい行で書く。今の集合は、同じ書かれた id の今有効な項目を無効にしてから新しい項目として
+  /// 行を、ノード `nodeId` の出力として新しい行で書く。今の集合は、同じ書かれた id の今有効な項目を無効にしてから新しい項目として
   /// 足す（今有効な項目は id ごとに 1 つのまま。この無効化では判断待ちの候補を下げない——判定は既に候補のあるリンクの行を
   /// 「既に候補がある」で捨てる）。出来事の流れは同じ id でも足す。
   func give(_ rows: [AutomationNodeRow], as nodeId: AutomationNodeID, of id: Int, at: Date)
@@ -30,7 +30,7 @@ extension AutomationStore {
     }
   }
 
-  /// 部品の回が新しく足した `fresh` 行のうち、番号の順で `keeping` 行を超えた分を写しから消し、その表の最後の番号を、残った
+  /// ノードの回が新しく足した `fresh` 行のうち、番号の順で `keeping` 行を超えた分を写しから消し、その表の最後の番号を、残った
   /// 行が記録する最も大きい番号（項目の表は項目・版・無効化の番号）まで戻す。写しは、その回が新しい行を `keeping` 行だけ出
   /// した状態と同じになる（読んだ位置・読む前に期限で消えた数・起こす決まりが本番の意味のまま揃う）。確定の直後、下流が読む
   /// 前に呼ぶ。
@@ -47,7 +47,7 @@ extension AutomationStore {
     }
   }
 
-  /// 部品の表（出力の性質の表）の番号の上から `count` 行を、下流へ渡す 1 行で古い順に。確定の直後に呼べば、その回が新しく
+  /// ノードの表（出力の性質の表）の番号の上から `count` 行を、下流へ渡す 1 行で古い順に。確定の直後に呼べば、その回が新しく
   /// 足した行（時刻の一致では見分けない）。
   func latestRows(of nodeId: AutomationNodeID, in id: Int, count: Int) throws(AutomationError)
     -> [String]
@@ -68,7 +68,7 @@ extension AutomationDatabase {
     let line: String
   }
 
-  /// 部品の表の番号の上から `count` 行（古い順）。
+  /// ノードの表の番号の上から `count` 行（古い順）。
   fileprivate func latest(_ nodeId: AutomationNodeID, _ coverage: AutomationCoverage, count: Int)
     throws -> [Latest]
   {

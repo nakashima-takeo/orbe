@@ -2,7 +2,7 @@ import Foundation
 
 // `orb automation` の回の記録の読み（`list` の前回の列・`runs`）。
 
-/// 最新の部品の回の要約（時刻が同じなら記録の ID の大きい方。アプリの部品の回の並びと揃える）。
+/// 最新のノードの回の要約（時刻が同じなら記録の ID の大きい方。アプリのノードの回の並びと揃える）。
 func lastRunCell(_ nodes: [String: [String: Any]]) -> String? {
   let latest = nodes.compactMap { key, node in
     (node["lastRun"] as? [String: Any]).map { (key: key, run: $0) }
@@ -13,7 +13,7 @@ func lastRunCell(_ nodes: [String: [String: Any]]) -> String? {
   return latest.map { runCell($0.key, $0.run) }
 }
 
-/// 部品の回の要約。回の記録だけから組む: `<開始> <鍵> failed: <理由>`、または `<開始> <鍵>: ` に、取得は
+/// ノードの回の要約。回の記録だけから組む: `<開始> <鍵> failed: <理由>`、または `<開始> <鍵>: ` に、取得は
 /// `12 fetched, 3 new`、処理は `12 in, 4 out`、判定は `2 proposed`、報告は `reported` か `nothing to report`、副作用は
 /// `command exited 0`、仕事は `agent exited 0` を続ける。
 func runCell(_ key: String, _ run: [String: Any]) -> String {

@@ -1,9 +1,9 @@
 import Foundation
 
-/// コマンドの部品の結果の読み。標準出力を、agent の道具と同じ決まり（`AutomationOutputs`）で確かめる。何も無い回は空の
+/// コマンドのノードの結果の読み。標準出力を、agent の道具と同じ決まり（`AutomationOutputs`）で確かめる。何も無い回は空の
 /// 出力、失敗は 0 以外の終了コード。
 extension AutomationNodePass {
-  /// `writer` は回を走らせた部品。
+  /// `writer` は回を走らせたノード。
   static func commandEnded(_ result: BackgroundRunResult, _ input: Input, writer: AutomationNodeID)
     -> Outcome
   {

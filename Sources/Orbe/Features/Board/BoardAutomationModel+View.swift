@@ -17,7 +17,7 @@ extension BoardAutomationModel {
       open: store.shelvedProposals(of: id).count, next: runner.nextRunAt(automation, now: now))
   }
 
-  /// 選ばれている部品のカードの値。部品が選ばれていなければ nil。
+  /// 選ばれているノードのカードの値。ノードが選ばれていなければ nil。
   func card(text: AutomationText, now: Date) -> BoardAutomationNodeValue? {
     guard let automation = selectedAutomation, let nodeId = selectedNodeId else { return nil }
     return BoardAutomationNodeValue(

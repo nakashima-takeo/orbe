@@ -44,7 +44,7 @@ extension AutomationDatabase {
     case unreadable(AutomationUnreadable)
   }
 
-  /// 自動化 1 つを、部品・つながり・使う動作の定義の行から外の形の型に組み、検証に通す。組めないか通らなければ定義を読めない
+  /// 自動化 1 つを、ノード・つながり・使う動作の定義の行から外の形の型に組み、検証に通す。組めないか通らなければ定義を読めない
   /// 自動化。
   private func automation(_ row: AutomationRow) throws -> Assembled {
     let rows = try nodeRows(of: row.id)
@@ -84,7 +84,7 @@ extension AutomationDatabase {
         createdAt: AutomationPersistence.date(row.createdAt), states: states))
   }
 
-  /// 自動化の外していない部品の行（保存したままの値）。
+  /// 自動化の外していないノードの行（保存したままの値）。
   private struct NodeRow {
     let id: AutomationNodeID
     let defId: AutomationNodeDefID
@@ -95,11 +95,11 @@ extension AutomationDatabase {
     /// 組み合わせの定義を指すか。
     let composite: Bool
     let action: String?
-    /// 入力（上流の部品・取り方・古さの上限。`from` の順）。
+    /// 入力（上流のノード・取り方・古さの上限。`from` の順）。
     let inputs: [AutomationNodeEdge]
   }
 
-  /// 部品を型に組めなかった理由（定義の中の場所で言う英文）。
+  /// ノードを型に組めなかった理由（定義の中の場所で言う英文）。
   private struct Unbuilt: Error {
     let reason: String
   }
@@ -136,7 +136,7 @@ extension AutomationDatabase {
     }
   }
 
-  /// 部品の行を外の形の部品に組む。予定と動作の定義は保存した JSON をそれぞれの型で読み、入力の上流はこの自動化の今の鍵に
+  /// ノードの行を外の形のノードに組む。予定と動作の定義は保存した JSON をそれぞれの型で読み、入力の上流はこの自動化の今の鍵に
   /// 解く。読めなければ定義の中の場所で言う理由。
   private static func definitionNode(
     _ row: NodeRow, at index: Int, keys: [AutomationNodeID: String]

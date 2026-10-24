@@ -2,12 +2,12 @@ import XCTest
 
 @testable import Orbe
 
-/// 提案タブの候補の一覧の頭——判定の部品ごとの最新の回の 1 行。
+/// 提案タブの候補の一覧の頭——判定のノードごとの最新の回の 1 行。
 ///
 /// 壊れると何が起きるか: 判定が失敗した・まだ判定していないのに「候補なし」と読め、候補が来ない理由に気づけない。
 @MainActor
 final class TaskPaletteAutomationListTests: OrbeTestCase {
-  /// 「時刻 部品の名前　結果」。結果は候補の数・候補なし・失敗の説明で、まだ回っていなければ時刻なしで「未判定」。
+  /// 「時刻 ノードの名前　結果」。結果は候補の数・候補なし・失敗の説明で、まだ回っていなければ時刻なしで「未判定」。
   func testHeadlineSaysEachJudgesLatestRun() throws {
     let store = DesignSceneFixtures.automationStore(DesignSceneFixtures.automationShelfSamples())
     let text = AutomationText(

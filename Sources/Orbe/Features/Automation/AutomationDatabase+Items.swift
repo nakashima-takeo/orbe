@@ -31,7 +31,7 @@ extension AutomationDatabase {
 
   }
 
-  /// 今の集合の部品の出力を照らす。結果の行ごとに同じ（部品・書かれた id）の今有効な項目を引き、無ければ新しい項目と版を
+  /// 今の集合のノードの出力を照らす。結果の行ごとに同じ（ノード・書かれた id）の今有効な項目を引き、無ければ新しい項目と版を
   /// 足し、あって引き継ぎ元も中身も同じなら何もせず、中身だけ違えば版を足す。引き継ぎ元が違えば今の項目を無効にして新しい
   /// 項目にする。結果に無い今有効な項目は無効にする。
   func writeItems(of nodeId: AutomationNodeID, _ outputs: [Output], at: Date) throws -> Written {
@@ -73,7 +73,7 @@ extension AutomationDatabase {
     return written
   }
 
-  /// 出来事の流れの部品の出力を足す。残す期間の内に同じ部品が同じ書かれた id を出していれば同じ出来事として足さない（中身が
+  /// 出来事の流れのノードの出力を足す。残す期間の内に同じノードが同じ書かれた id を出していれば同じ出来事として足さない（中身が
   /// 違っても）。行が保存の都合で残っていても、見分けは残す期間の内かで決める。
   func writeEvents(of nodeId: AutomationNodeID, _ outputs: [Output], at: Date) throws -> Written {
     let p = Int64(nodeId.rawValue)
@@ -128,7 +128,7 @@ extension AutomationDatabase {
       ] + Self.values(output.source))
   }
 
-  /// 部品の今有効な項目をすべて無効にし、無効にした項目を返す（性質の書き換え・部品を外す）。
+  /// ノードの今有効な項目をすべて無効にし、無効にした項目を返す（性質の書き換え・ノードを外す）。
   func invalidateItems(of nodeId: AutomationNodeID, at: Date) throws -> [Int] {
     let ids = try db.select(
       "SELECT id FROM items WHERE node_id = ? AND valid_to IS NULL",
@@ -138,7 +138,7 @@ extension AutomationDatabase {
     return ids
   }
 
-  /// 部品 `nodeId` の今有効な項目を、次の番号で無効にする。
+  /// ノード `nodeId` の今有効な項目を、次の番号で無効にする。
   func invalidate(item: Int, of nodeId: AutomationNodeID, at: Date) throws {
     let seq = try nextSeq(of: nodeId, "last_item_seq")
     try db.run(
@@ -153,7 +153,7 @@ extension AutomationDatabase {
       .first ?? 0
   }
 
-  /// 部品が項目の表（変化の番号）・出来事の表にそれぞれ最後に振った通し番号。
+  /// ノードが項目の表（変化の番号）・出来事の表にそれぞれ最後に振った通し番号。
   func lastSeqs(of nodeId: AutomationNodeID) throws -> AutomationSeqs {
     try db.select(
       "SELECT last_item_seq, last_event_seq FROM nodes WHERE id = ?",
@@ -161,7 +161,7 @@ extension AutomationDatabase {
     ) { AutomationSeqs(item: $0.int(at: 0), event: $0.int(at: 1)) }.first ?? AutomationSeqs()
   }
 
-  /// 部品の今有効な項目のリンク（取得の最新の結果）。リンクの無い項目は入らない。
+  /// ノードの今有効な項目のリンク（取得の最新の結果）。リンクの無い項目は入らない。
   func liveLinks(of nodeId: AutomationNodeID) throws -> Set<String> {
     Set(
       try db.select(

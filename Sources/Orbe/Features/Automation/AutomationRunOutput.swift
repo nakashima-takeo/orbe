@@ -1,6 +1,6 @@
 import Foundation
 
-/// 部品の手段（コマンドか agent）の終わり方の読み取り。コマンドと agent の読みが同じ形で失敗を言うため、ここに置く。
+/// ノードの手段（コマンドか agent）の終わり方の読み取り。コマンドと agent の読みが同じ形で失敗を言うため、ここに置く。
 enum AutomationRunOutput {
   /// コマンドの標準出力。終了コード 0 で UTF-8 のときだけ。
   static func commandText(_ result: BackgroundRunResult) -> Result<String, AutomationFailure> {

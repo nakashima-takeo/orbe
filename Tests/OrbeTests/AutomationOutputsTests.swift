@@ -45,7 +45,7 @@ final class AutomationOutputsTests: OrbeTestCase {
   }
 
   /// 大きさは書いた形ではなく下流へ渡す形（Orbe が下流へ渡す id を入れて組み直した 1 行）で測る: `\u` で逃がした文字は組み
-  /// 直すと縮み、部品をまたぐ id は `<部品 ID>:` の分だけ伸びる。
+  /// 直すと縮み、ノードをまたぐ id は `<ノード ID>:` の分だけ伸びる。
   func testTheLimitIsMeasuredOnTheRowAsPassedDownstream() {
     let limit = AutomationOutputs.rowKiB << 10
     let escaped = String(repeating: #"\u3042"#, count: limit / 4)
@@ -86,7 +86,7 @@ final class AutomationOutputsTests: OrbeTestCase {
     ]
   }
 
-  /// 判定の結果を 1 件ずつ読んだもの。受けなかった件は部品の 1 回と同じく「item <n>: <理由>」で持ち、JSON でない件は
+  /// 判定の結果を 1 件ずつ読んだもの。受けなかった件はノードの 1 回と同じく「item <n>: <理由>」で持ち、JSON でない件は
   /// 別に持つ。
   private struct Read {
     let decisions: [AutomationDecision]

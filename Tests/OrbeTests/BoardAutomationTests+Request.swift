@@ -34,7 +34,7 @@ extension BoardAutomationTests {
     XCTAssertNil(model.refusal)
   }
 
-  /// カードの「修正を依頼」は、依頼の欄に「自動化「…」の部品「…」の修正：」を書き出して焦点を欄へ移し、まだ頼まない。続けて
+  /// カードの「修正を依頼」は、依頼の欄に「自動化「…」のノード「…」の修正：」を書き出して焦点を欄へ移し、まだ頼まない。続けて
   /// 打った文は末尾に足され、↵ で欄からふつうに頼む。
   func testAskToFixDraftsTheRequestInTheField() throws {
     let model = board()

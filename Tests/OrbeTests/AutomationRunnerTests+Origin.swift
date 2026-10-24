@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 判定は出どころのある行だけを取る。処理の部品が走っている間に、それを入力にする判定の部品を足す書き換えがあると、処理の回は
+/// 判定は出どころのある行だけを取る。処理のノードが走っている間に、それを入力にする判定のノードを足す書き換えがあると、処理の回は
 /// 止まらず（何をするかは変わらない）、始めた時点では判定へ届かなかったので出どころの無い行も出しうる。判定へ届く行がどれも
 /// 出どころを持たず、作った行があれば処理の回の失敗にし、そうでなければ判定が読むときに出どころの無い行を捨てて数える。
 ///
@@ -23,7 +23,7 @@ extension AutomationRunnerTests {
     return AutomationDefinition(name: "処理の後に判定を足す", notify: nil, nodes: definitionNodes)
   }
 
-  /// `p` が走っている間に判定の部品を足し、`p` を `stdout`（自動化の ID から組む）で終える。
+  /// `p` が走っている間に判定のノードを足し、`p` を `stdout`（自動化の ID から組む）で終える。
   private func finishProcessAfterAddingAJudge(_ stdout: (Int) -> String) throws -> Int {
     let id = try runner.set(nil, definition(judge: false)).id
     advance(by: 1800)
@@ -135,7 +135,7 @@ extension AutomationRunnerTests {
     let state = try XCTUnwrap(store.automation(id)?.state(key: "p"))
     XCTAssertNil(state.runs.first?.run?.failure)
     XCTAssertNil(state.runs.first?.run?.breach)
-    XCTAssertNil(state.breach, "決まりに反していない部品に印を付けない")
+    XCTAssertNil(state.breach, "決まりに反していないノードに印を付けない")
     XCTAssertEqual(state.pending.count, 0)
     XCTAssertEqual(pending("judge", of: id), 0)
     XCTAssertEqual(calls("p").count, 1)

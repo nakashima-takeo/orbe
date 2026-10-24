@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 部品の 1 回のテストの土台。偽の実行で手段を起こし、返った結果を順に貯める。
+/// ノードの 1 回のテストの土台。偽の実行で手段を起こし、返った結果を順に貯める。
 class AutomationNodePassTestCase: OrbeTestCase {
   static let tool = AutomationGraphTests.tool
   let now = Date(timeIntervalSince1970: 1_800_000_000)
@@ -10,7 +10,7 @@ class AutomationNodePassTestCase: OrbeTestCase {
   var runSessions: AutomationRunSessions!
   var pass: AutomationNodePass!
   var outcomes: [AutomationNodePass.Outcome] = []
-  /// 最後に起こした部品の鍵（失敗の英文を組む）。
+  /// 最後に起こしたノードの鍵（失敗の英文を組む）。
   var startedKey = ""
 
   override func setUp() {
@@ -50,7 +50,7 @@ class AutomationNodePassTestCase: OrbeTestCase {
       nodeId: AutomationNodeID(9), row: .event(Self.number(id)), item: item(id))
   }
 
-  /// 取得の部品 `f` を出た行。
+  /// 取得のノード `f` を出た行。
   func row(_ id: String) -> AutomationNodeRow {
     AutomationNodeRow(
       id: "f:\(id)", text: #"{"id":"f:\#(id)"}"#, origin: origin(id),

@@ -55,8 +55,8 @@ extension AutomationDatabase {
     }
   }
 
-  /// 覚えている候補を出した判定の部品の持ち主（部品 ID → 自動化 ID）。外した部品も、候補の回に指されている間は台帳が残って
-  /// 持ち主を指す。持ち主の自動化を消した部品は入らない。
+  /// 覚えている候補を出した判定のノードの持ち主（ノード ID → 自動化 ID）。外したノードも、候補の回に指されている間は台帳が残って
+  /// 持ち主を指す。持ち主の自動化を消したノードは入らない。
   func judgeOwners() throws -> [AutomationNodeID: Int] {
     Dictionary(
       uniqueKeysWithValues: try db.select(

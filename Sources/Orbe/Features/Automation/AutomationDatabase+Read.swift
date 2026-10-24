@@ -96,15 +96,15 @@ extension AutomationDatabase {
     return rows
   }
 
-  /// 下流へ渡す id。入力を引き継いだ行は書かれた id のまま（下流が入力と照らせる）、それ以外は `<部品 ID>:<書かれた id>`
-  /// （部品をまたいで重ならない）。
+  /// 下流へ渡す id。入力を引き継いだ行は書かれた id のまま（下流が入力と照らせる）、それ以外は `<ノード ID>:<書かれた id>`
+  /// （ノードをまたいで重ならない）。
   static func downstreamId(_ written: String, of nodeId: AutomationNodeID, inherited: Bool)
     -> String
   {
     inherited ? written : "\(nodeId):\(written)"
   }
 
-  /// 引き継ぎをたどった先の行。それを出した部品の今の役割が取得なら出どころ（候補のリンクと本文の元）で、ほかは出どころなし。
+  /// 引き継ぎをたどった先の行。それを出したノードの今の役割が取得なら出どころ（候補のリンクと本文の元）で、ほかは出どころなし。
   /// 項目は今の版を指す。
   func origin(of start: AutomationSourceRef, graph: AutomationGraph) throws -> AutomationIntake
     .Origin?

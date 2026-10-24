@@ -1,6 +1,6 @@
 import Foundation
 
-// 部品の 1 回の記録の JSON（外の形と保存の形）。
+// ノードの 1 回の記録の JSON（外の形と保存の形）。
 
 extension AutomationNodeRun: Encodable {
   private enum CodingKeys: String, CodingKey {
@@ -27,7 +27,7 @@ extension AutomationNodeRun: Encodable {
 /// 持たず、入力を読む回か（`reads`。取った数を出すか）・持ち越した捨てた数と読む前に期限で消えた数（`carried`）・実行・
 /// 外したこと・結果・下げた数だけを持つ。
 struct AutomationRunStore: Codable {
-  /// 入力を読む部品の回か（取った行が 0 件の回も）。
+  /// 入力を読むノードの回か（取った行が 0 件の回も）。
   var reads: Bool
   var carried: AutomationDrops
   var execution: AutomationNodePass.Execution

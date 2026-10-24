@@ -12,7 +12,7 @@ final class AutomationIntakeTests: OrbeTestCase {
 
   let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 
-  /// 今の集合の取得 cs（ID 1）・新着の取得 na（ID 2）と、両方を入力にする部品 `definitionNode`（ID 3）を載せたグラフの `definitionNode`。
+  /// 今の集合の取得 cs（ID 1）・新着の取得 na（ID 2）と、両方を入力にするノード `definitionNode`（ID 3）を載せたグラフの、`definitionNode` に当たるノード。
   private func node(_ definitionNode: AutomationDefinition.Node) throws -> AutomationGraph.Node {
     var definitionNodes = [Nodes.fetch("cs"), Nodes.fetch("na", .newArrivals), definitionNode]
     if definitionNode.action.destination == .nextNode {

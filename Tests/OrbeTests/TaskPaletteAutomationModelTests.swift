@@ -3,7 +3,7 @@ import XCTest
 @testable import Orbe
 
 /// ⌘⇧X の提案タブ——棚と候補の一覧を同一性で選び、居場所（絞り込み欄・棚・候補の一覧）を移り、候補をタスクにする・捨てる、
-/// 自動化の候補を今すぐ更新する。本物の `AutomationStore`・`AutomationRunner`・`TaskStore` を読み書きする（部品の回は始まっても
+/// 自動化の候補を今すぐ更新する。本物の `AutomationStore`・`AutomationRunner`・`TaskStore` を読み書きする（ノードの回は始まっても
 /// 終わらない）。
 ///
 /// 壊れると何が起きるか。↵ や ⌘⌫ が光っている行とは別の候補に当たる（タスクにした・捨てた直後や、裏の回が確定した直後）。
@@ -44,7 +44,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertNil(automation.selectedProposal, "開いた直後は候補が選ばれていない")
   }
 
-  /// 棚は判定の部品を持つ自動化だけを並べる。副作用のコマンドで終わる自動化は候補を出さないので出さない。
+  /// 棚は判定のノードを持つ自動化だけを並べる。副作用のコマンドで終わる自動化は候補を出さないので出さない。
   func testTheShelfListsOnlyTaskCandidateAutomations() throws {
     let runner = DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignSamples())
     var command = runner.store.automation(4)!.definition
@@ -326,7 +326,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
 
   // MARK: - 出どころ
 
-  /// 候補の出どころの部品の名前は、候補を出した自動化の定義から引く。消えた自動化の候補は、出どころの項目が無効になって下がる。
+  /// 候補の出どころのノードの名前は、候補を出した自動化の定義から引く。消えた自動化の候補は、出どころの項目が無効になって下がる。
   func testSourceNameComesFromTheProposingAutomation() {
     let palette = TaskPaletteSamples.model(
       [],

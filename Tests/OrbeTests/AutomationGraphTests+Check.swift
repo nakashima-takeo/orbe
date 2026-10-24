@@ -4,7 +4,7 @@ import XCTest
 
 /// グラフの検証の断り。断りの文は定義の中の場所（`nodes[1].from` など）で始まり、AI はそこを直して送り直す。
 ///
-/// 壊れると何が起きるか: 一度も走らない部品・行の行き場の無い部品・判定に行の届かない形が登録される。裸の Bash や Write を
+/// 壊れると何が起きるか: 一度も走らないノード・行の行き場の無いノード・判定に行の届かない形が登録される。裸の Bash や Write を
 /// 名指しした agent が何でもできる。毎回すべてを取るつながりの行から候補が作られ、同じ項目が回ごとに判定へ届く。今の集合の
 /// 処理が入力の一部だけを写して、残りの出力を無効にする。
 extension AutomationGraphTests {
@@ -39,13 +39,13 @@ extension AutomationGraphTests {
     }
   }
 
-  /// 部品自身の欄だけで決まる規則は、その部品の欄を指して断る。
+  /// ノード自身の欄だけで決まる規則は、そのノードの欄を指して断る。
   func testANodesOwnFieldsAreRefusedAtTheirPlace() {
     let command = { (script: String, directory: String?) in
       AutomationActionDef.Method.command(BackgroundCommand(script: script, directory: directory))
     }
     for (label, definitionNodes, place) in [
-      ("部品が 0 個", [AutomationDefinition.Node](), "nodes"),
+      ("ノードが 0 個", [AutomationDefinition.Node](), "nodes"),
       ("鍵が空", changing(1) { $0.key = "" }, "nodes[1].key"),
       ("鍵が 33 字", changing(1) { $0.key = String(repeating: "a", count: 33) }, "nodes[1].key"),
       ("鍵に空白", changing(1) { $0.key = "a b" }, "nodes[1].key"),
@@ -68,13 +68,13 @@ extension AutomationGraphTests {
         changing(1) { $0.from = [.init(nodeKey: "f"), .init(nodeKey: "f", take: .all)] },
         "nodes[1].from"
       ),
-      ("入力の無い部品の件数の上限", changing(0) { $0.maxItems = 1 }, "nodes[0].maxItems"),
+      ("入力の無いノードの件数の上限", changing(0) { $0.maxItems = 1 }, "nodes[0].maxItems"),
       ("件数の上限が 0", changing(1) { $0.maxItems = 0 }, "nodes[1].maxItems"),
       (
         "古さの上限が 0", changing(1) { $0.from = [.init(nodeKey: "f", maxAgeHours: 0)] },
         "nodes[1].from[0].maxAgeHours"
       ),
-      ("入力の無い部品が届いたら", changing(0) { $0.trigger = .arrival }, "nodes[0].trigger"),
+      ("入力の無いノードが届いたら", changing(0) { $0.trigger = .arrival }, "nodes[0].trigger"),
       (
         "ツールを持つ agent がタスク候補へ",
         changing(1) {
@@ -82,15 +82,15 @@ extension AutomationGraphTests {
         }, "nodes[1].deliver"
       ),
       (
-        "入力の無い部品がタスク候補へ",
+        "入力の無いノードがタスク候補へ",
         [Self.agent("j", deliver: .taskCandidates)], "nodes[0].deliver"
       ),
       (
         "agent の行き先が副作用だけ", changing(1) { $0.action.destination = .sideEffect },
         "nodes[1].deliver"
       ),
-      ("取得の部品に性質が無い", changing(0) { $0.action.coverage = nil }, "nodes[0].coverage"),
-      ("行を出さない部品に性質", changing(1) { $0.action.coverage = .currentSet }, "nodes[1].coverage"),
+      ("取得のノードに性質が無い", changing(0) { $0.action.coverage = nil }, "nodes[0].coverage"),
+      ("行を出さないノードに性質", changing(1) { $0.action.coverage = .currentSet }, "nodes[1].coverage"),
     ] {
       assertRefused(definitionNodes, at: place, label)
     }
@@ -115,7 +115,7 @@ extension AutomationGraphTests {
     }
   }
 
-  /// 部品どうしの組み合わせの規則は、直すべき部品の欄を指して断る。
+  /// ノードどうしの組み合わせの規則は、直すべきノードの欄を指して断る。
   func testCombinationsAreRefusedAtTheNodeToFix() {
     let unknown = [Self.fetch("f"), Self.agent("r", from: ["gh"])]
     XCTAssertThrowsError(try AutomationGraph.check(unknown)) {
@@ -129,18 +129,18 @@ extension AutomationGraphTests {
         "nodes[2].key"
       ),
       (
-        "循環は定義の順で最初に輪に乗る部品を指す",
+        "循環は定義の順で最初に輪に乗るノードを指す",
         [
           Self.fetch("f"), Self.agent("a", from: ["f", "b"], deliver: .nextNode),
           Self.agent("b", from: ["a"], deliver: .nextNode), Self.agent("r", from: ["b"]),
         ], "nodes[1].from"
       ),
       (
-        "行き先が次の部品なのに誰も名指さない",
+        "行き先が次のノードなのに誰も名指さない",
         [Self.fetch("f"), Self.fetch("g"), Self.agent("r", from: ["f"])], "nodes[1].deliver"
       ),
       (
-        "行き先が次の部品でない部品を名指すのは名指した側を指す",
+        "行き先が次のノードでないノードを名指すのは名指した側を指す",
         [Self.fetch("f"), Self.agent("r", from: ["f"]), Self.agent("x", from: ["r"])],
         "nodes[2].from"
       ),

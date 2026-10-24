@@ -1,6 +1,6 @@
 import Foundation
 
-/// 部品の 1 回の確定の中身（`AutomationStore.record` のトランザクションの中）。
+/// ノードの 1 回の確定の中身（`AutomationStore.record` のトランザクションの中）。
 struct AutomationRecording {
   let end: AutomationPassEnd
   let node: AutomationGraph.Node
@@ -158,7 +158,7 @@ struct AutomationRecording {
     }
   }
 
-  /// 外した最初の回なら印を書き、部品の状態を読み直し、忘れる候補を忘れ、数え直す。
+  /// 外した最初の回なら印を書き、ノードの状態を読み直し、忘れる候補を忘れ、数え直す。
   private func finish(run recordId: Int, endedAt: Date, _ memory: inout AutomationMemory) throws {
     if end.outcome.breach != nil, memory.automations[index].state(end.nodeId).breach == nil {
       try db.setBreach(end.nodeId, run: recordId)

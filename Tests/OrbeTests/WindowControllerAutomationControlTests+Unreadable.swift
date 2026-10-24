@@ -7,8 +7,8 @@ import XCTest
 /// 壊れると何が起きるか: 読めない自動化が一覧から消え、AI が直すことも消すこともできない。新しい版の DB で起動した Orbe の
 /// 一覧が 0 件を返し、AI が自動化を作り直して二重に動かす。ほかの動詞が「見つからない」と答え、AI が消えたと読み違える。
 extension WindowControllerAutomationControlTests {
-  /// 読めない自動化は一覧の自分の場所に、行から組めた定義（部品の id つき）・版・理由で載り、回の記録は部品の鍵で読める。
-  /// 候補の一覧はほかの動詞と同じく読めない理由で断る。一覧の id と版を添えた `set_automation` で、同じ部品のまま直る。
+  /// 読めない自動化は一覧の自分の場所に、行から組めた定義（ノードの id つき）・版・理由で載り、回の記録はノードの鍵で読める。
+  /// 候補の一覧はほかの動詞と同じく読めない理由で断る。一覧の id と版を添えた `set_automation` で、同じノードのまま直る。
   func testAnUnreadableAutomationIsListedWithItsReasonAndCanBeFixed() throws {
     try {
       let store = AutomationStore()
@@ -32,7 +32,7 @@ extension WindowControllerAutomationControlTests {
       wc.controlListAutomationRuns(automationId: 1, nodeKey: nil, before: nil, limit: nil))
     XCTAssertEqual(
       (runs["runs"] as? [[String: Any]])?.map { $0["nodeKey"] as? String },
-      ["fetch"], "回の記録は部品の鍵で返る")
+      ["fetch"], "回の記録はノードの鍵で返る")
     guard case .failure(let refused) = wc.controlListAutomationProposals(automationId: 1) else {
       return XCTFail("読めない自動化の候補は断る")
     }
@@ -49,7 +49,7 @@ extension WindowControllerAutomationControlTests {
     XCTAssertNil(try listed(wc)[1]?["definitionError"])
     XCTAssertEqual(
       wc.automationStore.automation(1)?.graph.nodes.map(\.id),
-      fixed.nodes.compactMap(\.id), "一覧の id で直すと同じ部品のまま")
+      fixed.nodes.compactMap(\.id), "一覧の id で直すと同じノードのまま")
   }
 
   /// 値の壊れた候補は、候補の一覧に分かる分（ID・リンク・`unreadable`）だけで載り、自動化で絞っても持ち主の自動化に載る。

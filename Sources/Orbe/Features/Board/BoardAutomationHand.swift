@@ -3,11 +3,11 @@ import SwiftUI
 /// ボードの自動化への手の操作（流す・止める ⇄ 再開・削除）。居場所ごとのキーとの対応・キーの表示・名前・断りをここだけが
 /// 決める——キーを変えたとき、フッターの表示やカードのボタンだけが嘘になる写しを残さないため。
 enum BoardAutomationHand {
-  /// 流す先。部品までなら、流す先の部品は地図の「選ばれている部品」から解く。
+  /// 流す先。ノードまでなら、流す先のノードは地図の「選ばれているノード」から解く。
   enum Reach: Equatable {
-    /// 終わりの部品すべて。
+    /// 終わりのノードすべて。
     case ends
-    /// 選ばれている部品。
+    /// 選ばれているノード。
     case node
   }
 
@@ -48,7 +48,7 @@ enum BoardAutomationHand {
     var message: L10nKey { .automationErrRunning }
   }
 
-  /// 一覧では ⌘↵＝終わりまで流す（今すぐ実行）、space＝止める ⇄ 再開、⌘⌫＝削除。地図の部品の段では ⌘↵＝選ばれている部品まで
+  /// 一覧では ⌘↵＝終わりまで流す（今すぐ実行）、space＝止める ⇄ 再開、⌘⌫＝削除。地図のノードの段では ⌘↵＝選ばれているノードまで
   /// 流す、だけ。他のキーと場所は nil。
   static func stroke(_ press: KeyPress, at place: BoardAutomationModel.Place) -> Stroke? {
     let commandOnly =
@@ -65,7 +65,7 @@ enum BoardAutomationHand {
     return press.phase == .down ? .press(operation) : .held
   }
 
-  /// 走らせ役へ通す。`nodeId` は部品まで流すときの流す先（無ければ何もしない）。
+  /// 走らせ役へ通す。`nodeId` はノードまで流すときの流す先（無ければ何もしない）。
   static func perform(
     _ operation: Operation, on automation: Automation, nodeId: AutomationNodeID?,
     runner: AutomationRunner

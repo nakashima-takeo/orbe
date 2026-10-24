@@ -1,13 +1,13 @@
 import Foundation
 
-/// 試走——自動化の部品を、本番を汚さずに本番と同じ流しで動かし、部品の回ごとの結果を集める 1 回。main で使う。
+/// 試走——自動化のノードを、本番を汚さずに本番と同じ流しで動かし、ノードの回ごとの結果を集める 1 回。main で使う。
 ///
 /// 本番の DB を区切ってメモリの DB へ写し（`AutomationStore.Copy`）、写しの上に本番と同じ走らせ役を立てて、範囲の道だけを番人に
 /// 載せて流す。読む・確定・出す側の行・起こす決まり・結果の確かめは本番のコードのまま写しの上で動き、本番の DB には届かない。
-/// 本番の層は試走を知らない。試走の都合は、試走が自分の写しに掛ける操作（`AutomationTrial+Copy`）と、載せる部品の選び方だけで
+/// 本番の層は試走を知らない。試走の都合は、試走が自分の写しに掛ける操作（`AutomationTrial+Copy`）と、載せるノードの選び方だけで
 /// 表す:
 ///
-/// - 副作用と仕事は止める部品で、写しの上でも動かさない（載せない）。流しの終わりに、本番の読みで取るはずだった行を 1 回だけ
+/// - 副作用と仕事は止めるノードで、写しの上でも動かさない（載せない）。流しの終わりに、本番の読みで取るはずだった行を 1 回だけ
 ///   読んで返す。
 /// - 与えた行は、取得の入口ならその取得の、入力のある入口ならただ 1 つの上流の出力として、写しに新しい行で書く。取得の入口は
 ///   動かない（載せない）。
@@ -18,9 +18,9 @@ import Foundation
 /// 番人に載せないので動かず、候補の帳面だけが判定の「既に候補がある」に効く。流しが終わるか打ち切られたら写しを捨てる。
 final class AutomationTrial {
   struct Request: Equatable {
-    /// 入口の部品。省けば、行き先とその祖先のうち入力の無い部品すべて。
+    /// 入口のノード。省けば、行き先とその祖先のうち入力の無いノードすべて。
     var from: [String]?
-    /// 行き先の部品。省けば、入口から届く終わりの部品すべて。
+    /// 行き先のノード。省けば、入口から届く終わりのノードすべて。
     var to: [String]?
     /// 入口に与える行（1 行 1 JSON オブジェクト）。道の根が 1 つのときだけ受ける。
     var rows: [String]?
@@ -32,17 +32,17 @@ final class AutomationTrial {
   struct Range {
     let from: [AutomationNodeID]
     let to: [AutomationNodeID]
-    /// 道——入口のどれかの子孫か入口そのもので、行き先のどれかの祖先か行き先そのものの部品（定義の順）。
+    /// 道——入口のどれかの子孫か入口そのもので、行き先のどれかの祖先か行き先そのもののノード（定義の順）。
     let path: [AutomationGraph.Node]
 
-    /// 道の根（道の上の入力を持たない部品）。
+    /// 道の根（道の上の入力を持たないノード）。
     var roots: [AutomationGraph.Node] {
       let ids = Set(path.map(\.id))
       return path.filter { ids.isDisjoint(with: $0.inputNodeIds) }
     }
   }
 
-  /// 与えた行: 書く部品（取得の入口ならその取得、入力のある入口ならただ 1 つの上流）と、その出力にする行。
+  /// 与えた行: 書くノード（取得の入口ならその取得、入力のある入口ならただ 1 つの上流）と、その出力にする行。
   struct Given {
     let entry: AutomationNodeID
     let writer: AutomationNodeID
@@ -56,7 +56,7 @@ final class AutomationTrial {
     case waiting
     case running
     case done
-    /// 副作用・仕事の部品を止めて終えた。
+    /// 副作用・仕事のノードを止めて終えた。
     case held
     /// 与えた行を出力にした取得（手段を起こさない）。
     case given
@@ -64,7 +64,7 @@ final class AutomationTrial {
     case untouched
   }
 
-  /// 部品の結果。
+  /// ノードの結果。
   enum Pass: Equatable {
     /// 写しの上で確定した回（本番の `runs` の要素と同じ形）と、その中身。
     case ran(AutomationNodeRun, Content)
@@ -88,9 +88,9 @@ final class AutomationTrial {
   /// 始めたときの定義で解き、写し終えた時点の定義で解き直す。
   private(set) var range: Range
   private(set) var endedAt: Date?
-  /// 流し切れずに終わった理由（写している間に範囲の部品が消えた・写しに掛ける操作が書けなかった など）。
+  /// 流し切れずに終わった理由（写している間に範囲のノードが消えた・写しに掛ける操作が書けなかった など）。
   private(set) var failure: String?
-  /// 部品ごとの回（本番の `runs` と同じく新しい順）。
+  /// ノードごとの回（本番の `runs` と同じく新しい順）。
   private(set) var passes: [AutomationNodeID: [Pass]] = [:]
 
   private let production: AutomationRunner
@@ -103,7 +103,7 @@ final class AutomationTrial {
   private var givenFetch: AutomationNodeID?
   /// 終わったときの一巡（打ち切られたものを含む）。
   private var finalFlow: AutomationFlow?
-  /// 流し切って終えたか（止める部品を読んだか）。
+  /// 流し切って終えたか（止めるノードを読んだか）。
   private var completed = false
   private var stopped = false
 
@@ -136,7 +136,7 @@ final class AutomationTrial {
     return runner?.isRunning(automationId, nodeId) == true ? .running : .waiting
   }
 
-  /// 止める部品（副作用・仕事）か。
+  /// 止めるノード（副作用・仕事）か。
   private static func holds(_ node: AutomationGraph.Node) -> Bool {
     node.role == .sideEffect || node.role == .work
   }
@@ -176,8 +176,8 @@ final class AutomationTrial {
     }
   }
 
-  /// 写し終えた時点の定義で範囲を解き直し、行を与え、止める部品と行を与えた取得の入口を除いた道を写しの上で流す。行き先は、範囲
-  /// の行き先のうち載せる部品と、止める部品の上流で載せる部品。載せる部品が無ければ流さずに終える。
+  /// 写し終えた時点の定義で範囲を解き直し、行を与え、止めるノードと行を与えた取得の入口を除いた道を写しの上で流す。行き先は、範囲
+  /// の行き先のうち載せるノードと、止めるノードの上流で載せるノード。載せるノードが無ければ流さずに終える。
   private func flow(on store: AutomationStore) throws(AutomationError) {
     let id = automationId
     guard let automation = store.automation(id) else { throw .automationNotFound(id) }
@@ -217,7 +217,7 @@ final class AutomationTrial {
     try runner.flow(id, through: admitted, to: targets)
   }
 
-  /// 部品の回の知らせ（確定の直後、下流が読む前）。取得・処理はその回が写しに足した新しい行を結果にし、道の根の取得なら先に
+  /// ノードの回の知らせ（確定の直後、下流が読む前）。取得・処理はその回が写しに足した新しい行を結果にし、道の根の取得なら先に
   /// `limit` で写しを絞る。判定は案を結果にする。
   private func recorded(_ record: AutomationPassRecord) {
     let nodeId = record.end.nodeId
@@ -265,7 +265,7 @@ final class AutomationTrial {
     finish(completed: flow.finished)
   }
 
-  /// 流しの終わり。流し切ったら、止める部品ごとに本番の読み（位置は進めない）で取るはずだった行を読み、あれば結果にする。
+  /// 流しの終わり。流し切ったら、止めるノードごとに本番の読み（位置は進めない）で取るはずだった行を読み、あれば結果にする。
   private func finish(completed: Bool) {
     if completed, let store {
       do throws(AutomationError) {
@@ -291,7 +291,7 @@ final class AutomationTrial {
     store = nil
     let runner = self.runner
     self.runner = nil
-    // 走らせ役の知らせの中から呼ばれうるので、番人から外すのは知らせを返した後にする。外すのは、終わった後に起き直した部品の
+    // 走らせ役の知らせの中から呼ばれうるので、番人から外すのは知らせを返した後にする。外すのは、終わった後に起き直したノードの
     // 手段を止めるため。
     DispatchQueue.main.async { runner?.stopAll() }
     onEnd()

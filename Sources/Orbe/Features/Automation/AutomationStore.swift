@@ -6,7 +6,7 @@ import Observation
 ///
 /// 変異はどれも「変わる行を DB に 1 トランザクションで書き、最後に掃除し、通ってからメモリを進める」の 1 経路で行う。書けなければ
 /// メモリは変わらず、呼び手に `.unavailable` を返す——逆だと、書けなかった変化が画面にだけ残り、再起動で巻き戻る。出す側の行の
-/// 本文は DB にだけ置き、メモリは画面と予定が同期で読む分（部品の状態・覚えている候補）だけを持つ。部品の状態は変わった部品に
+/// 本文は DB にだけ置き、メモリは画面と予定が同期で読む分（ノードの状態・覚えている候補）だけを持つ。ノードの状態は変わったノードに
 /// ついて DB から読み直す（`AutomationMemory.reread`・`recount`）。確定の中でしか使わない事実（読んだ位置・最後の番号・持ち越し）
 /// は持たず、使う場で DB から読む。
 ///
@@ -18,14 +18,14 @@ import Observation
   private(set) var unreadable: [AutomationUnreadable] = []
   private(set) var proposals: [AutomationProposal] = []
   private(set) var unreadableProposals: [AutomationUnreadableProposal] = []
-  /// 覚えている候補を出した判定の部品の持ち主（部品 ID → 自動化 ID。外した部品も、候補に指されている間は持ち主を指す）。
+  /// 覚えている候補を出した判定のノードの持ち主（ノード ID → 自動化 ID。外したノードも、候補に指されている間は持ち主を指す）。
   private(set) var judgeOwners: [AutomationNodeID: Int] = [:]
   private var database: AutomationDatabase?
   /// 使えないときの断り。
   private(set) var unavailableError: AutomationError
   /// DB を使える。
   var available: Bool { database != nil }
-  /// 運転中に使えなくなった（走らせ役が全部品の予定を外す）。
+  /// 運転中に使えなくなった（走らせ役が全ノードの予定を外す）。
   @ObservationIgnored var onUnavailable: () -> Void = {}
   /// 走っている回が確定まで使うもの（確定まで掃除から守る）。走らせ役が渡す。
   @ObservationIgnored var holding: () -> AutomationHolding = { AutomationHolding() }
@@ -116,7 +116,7 @@ import Observation
     return next
   }
 
-  /// 消す。部品をすべて外し（今有効な項目を無効にし、記録を消す）、自動化の行を消す。出どころが無効になった判断待ちの候補は
+  /// 消す。ノードをすべて外し（今有効な項目を無効にし、記録を消す）、自動化の行を消す。出どころが無効になった判断待ちの候補は
   /// 下がり、誰も持たなくなった候補は忘れる。定義を読めない自動化も消せる。
   func delete(_ id: Int, now: Date) throws(AutomationError) {
     let nodeIds: [AutomationNodeID]
@@ -199,8 +199,8 @@ import Observation
   // MARK: - 書き込み
 
   /// 変異の 1 経路。`body` はメモリの写しを進めながら、変わる行を DB に書く（1 トランザクション）。`sweepingAt`（変異の時刻）が
-  /// あれば、覚えている候補のリンクが変わったときに判定の部品の読めば取る行を数え直し（「既に候補がある」で捨てる行が変わる）、
-  /// 最後に掃除する。判定の部品の持ち主はいつも読み直す。通ったら写しをメモリにし、通らなければメモリは変わらない。壊れを見つけたら接続を手放してストアを使えなくする。
+  /// あれば、覚えている候補のリンクが変わったときに判定のノードの読めば取る行を数え直し（「既に候補がある」で捨てる行が変わる）、
+  /// 最後に掃除する。判定のノードの持ち主はいつも読み直す。通ったら写しをメモリにし、通らなければメモリは変わらない。壊れを見つけたら接続を手放してストアを使えなくする。
   /// 検証は呼ぶ前に済ませる（`body` が投げたものはどれも書けなかったことになる）。
   func commit<T>(
     sweepingAt sweep: Date?, _ body: (AutomationDatabase, inout AutomationMemory) throws -> T
@@ -314,7 +314,7 @@ struct AutomationMemory: Equatable {
   var unreadable: [AutomationUnreadable] = []
   var proposals: [AutomationProposal]
   var unreadableProposals: [AutomationUnreadableProposal] = []
-  /// 覚えている候補を出した判定の部品の持ち主（`AutomationStore.judgeOwners`）。
+  /// 覚えている候補を出した判定のノードの持ち主（`AutomationStore.judgeOwners`）。
   var judgeOwners: [AutomationNodeID: Int] = [:]
 
   func automation(_ id: Int) -> Automation? {
@@ -326,7 +326,7 @@ struct AutomationMemory: Equatable {
     Set(proposals.map(\.item.link) + unreadableProposals.map(\.link))
   }
 
-  /// 部品の自分の状態を DB から読み直す（読めば取る行は保つ）。
+  /// ノードの自分の状態を DB から読み直す（読めば取る行は保つ）。
   mutating func reread(_ nodeId: AutomationNodeID, of id: Int, _ db: AutomationDatabase) throws {
     guard let index = automations.firstIndex(where: { $0.id == id }),
       let pending = automations[index].states[nodeId]?.pending

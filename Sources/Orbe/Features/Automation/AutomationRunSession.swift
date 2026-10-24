@@ -3,7 +3,7 @@ import Foundation
 /// 裏で動く agent の 1 回が、Orbe の MCP の道具で自分の回の入力を読み、結果を出す相手。main で使う。
 ///
 /// 道具は役割ごとに決まる。呼ばれるたびにその場で確かめて返事を返し、外れていれば理由を返す——agent は同じ会話の中で直せる。
-/// 結果を出す道具は、入力の行を渡し切るまで断る（読まずに答えさせない）。回の終わりに、部品の 1 回が受けたものと申告を取る。
+/// 結果を出す道具は、入力の行を渡し切るまで断る（読まずに答えさせない）。回の終わりに、ノードの 1 回が受けたものと申告を取る。
 final class AutomationRunSession {
   enum Tool: String, CaseIterable {
     case readRunRows = "read_run_rows"
@@ -58,7 +58,7 @@ final class AutomationRunSession {
     return AutomationRejections(unfixed + rejected.dropLast(unfixed.count))
   }
 
-  /// `writer` は回を走らせる部品（出す行の下流へ渡す id の接頭）。
+  /// `writer` は回を走らせるノード（出す行の下流へ渡す id の接頭）。
   init(_ input: AutomationNodePass.Input, writer: AutomationNodeID) {
     outputs = AutomationOutputs(input, writer: writer)
     rows = input.rowTexts

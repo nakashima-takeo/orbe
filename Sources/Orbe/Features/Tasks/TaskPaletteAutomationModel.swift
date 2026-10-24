@@ -27,7 +27,7 @@ struct TaskPaletteAutomationShelfRow: Equatable, Identifiable {
 
 /// 棚の段の 2 行目。左に前回の判定、右に今の状態。ビューは文言と色だけを決める。
 struct TaskPaletteAutomationShelfStatus: Equatable {
-  /// 最も新しく回った判定の部品の最新の回。まだどの判定も回っていなければ nil。
+  /// 最も新しく回った判定のノードの最新の回。まだどの判定も回っていなければ nil。
   let last: Judged?
   let state: State?
 
@@ -111,7 +111,7 @@ enum TaskPaletteAutomationError: Equatable {
   /// ヘッダーのタブの件数（入力の絞り込みに左右されない）。
   var openCount: Int { shelved.count }
 
-  /// 「すべて」と、判定の部品を持つ自動化を ID 順に。
+  /// 「すべて」と、判定のノードを持つ自動化を ID 順に。
   var shelfRows: [TaskPaletteAutomationShelfRow] {
     let counts = Dictionary(grouping: shelved, by: \.shelf).mapValues(\.count)
     return [TaskPaletteAutomationShelfRow(id: .all, automation: nil, count: shelved.count)]
@@ -160,17 +160,17 @@ enum TaskPaletteAutomationError: Equatable {
     workspaces().destination(of: proposal.workspace)
   }
 
-  /// 候補の出どころの取得の部品の名前。候補を出した自動化の定義から引き、部品か自動化が消えていれば nil。
+  /// 候補の出どころの取得のノードの名前。候補を出した自動化の定義から引き、ノードか自動化が消えていれば nil。
   func originNodeName(of proposal: AutomationProposal) -> String? {
     store.issuer(of: proposal)?.graph.node(proposal.originNodeId)?.entity.name
   }
 
-  /// 候補を出した判定の部品の名前。部品か自動化が消えていれば nil。
+  /// 候補を出した判定のノードの名前。ノードか自動化が消えていれば nil。
   func judgeName(of proposal: AutomationProposal) -> String? {
     store.issuer(of: proposal)?.graph.node(proposal.judge)?.entity.name
   }
 
-  /// 棚の段の 2 行目。前回の判定は、判定の部品のうち最も新しく回ったものの最新の回（他の判定の失敗は一覧の頭で見る）。今の
+  /// 棚の段の 2 行目。前回の判定は、判定のノードのうち最も新しく回ったものの最新の回（他の判定の失敗は一覧の頭で見る）。今の
   /// 状態は、一巡の間なら更新中、止めていれば一時停止中。
   func status(of automation: Automation) -> TaskPaletteAutomationShelfStatus {
     let last = automation.graph.judges.compactMap { automation.state($0.id).runs.first }
@@ -330,7 +330,7 @@ enum TaskPaletteAutomationError: Equatable {
 
   // MARK: - 候補の更新
 
-  /// 棚の ⌘↵。選んでいる自動化の候補を今すぐ更新する（タスク候補を行き先にする部品すべてまで流す）。断るのは一巡の途中
+  /// 棚の ⌘↵。選んでいる自動化の候補を今すぐ更新する（タスク候補を行き先にするノードすべてまで流す）。断るのは一巡の途中
   /// だけで、行き違い（消えていた・使えない）は黙る。「すべて」では何もしない。
   func refresh() {
     guard let automation = selectedAutomation else { return }

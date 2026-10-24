@@ -41,7 +41,7 @@ final class AutomationTextTests: OrbeTestCase {
     return node
   }
 
-  /// 失敗は日本語の説明に原文を括弧で添える。部品の申告は説明の頭に文を添え、原文を重ねない。英語の画面は原文を重ねず
+  /// 失敗は日本語の説明に原文を括弧で添える。ノードの申告は説明の頭に文を添え、原文を重ねない。英語の画面は原文を重ねず
   /// （説明も原文も英語で、同じことを 2 度言うため）、原文にだけある抜粋（標準エラー・最初の外れた行）だけを添える。
   func testFailureSaysTheKindWithTheOriginal() {
     XCTAssertEqual(

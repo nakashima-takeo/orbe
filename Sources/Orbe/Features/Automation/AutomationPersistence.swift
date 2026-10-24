@@ -1,7 +1,7 @@
 import Foundation
 import OrbeSessionLog
 
-/// 自動化の永続。state の `automations/` フォルダの SQLite の DB（`StateDatabase`）に、部品の定義・自動化と部品とつながり・
+/// 自動化の永続。state の `automations/` フォルダの SQLite の DB（`StateDatabase`）に、ノードの定義・自動化とノードとつながり・
 /// 出す側の行・回の記録と履歴・候補と人の判断を置く（`AutomationDatabase.schema`）。書き手は `AutomationStore` だけ。
 enum AutomationPersistence {
   static let version: Int32 = 2

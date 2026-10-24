@@ -1,9 +1,9 @@
 import Foundation
 import OrbeSessionLog
 
-/// 回の記録の外の形（`list_automations` の `lastRun`・`list_automation_runs` の `runs`・部品の `breach`・試走の部品の回）。保存の
+/// 回の記録の外の形（`list_automations` の `lastRun`・`list_automation_runs` の `runs`・ノードの `breach`・試走のノードの回）。保存の
 /// 形（種類だけ）に、AI が読む英文を足す——終わり方の `ending`・失敗の `failure`・外れた件の `reasons`・判定の確定で捨てた案の
-/// `rejected`。英文は部品の鍵が要るので、鍵を手元に持つここで組む。
+/// `rejected`。英文はノードの鍵が要るので、鍵を手元に持つここで組む。
 enum AutomationRunWire {
   /// 記録 1 件（`recordId` を添える）。不明な記録は列から分かる分と `unknown: true` だけ。
   static func object(_ record: AutomationRunRecord, nodeKey: String) -> [String: Any] {
@@ -42,7 +42,7 @@ enum AutomationRunWire {
     return json
   }
 
-  /// 部品の外した印（印の回の記録から）: その回の開始時刻・外れた件・回が通ったか。読めない記録の外れた件は空。
+  /// ノードの外した印（印の回の記録から）: その回の開始時刻・外れた件・回が通ったか。読めない記録の外れた件は空。
   static func breach(_ record: AutomationRunRecord) -> [String: Any] {
     let lines = record.run?.breach ?? AutomationRejections()
     return [

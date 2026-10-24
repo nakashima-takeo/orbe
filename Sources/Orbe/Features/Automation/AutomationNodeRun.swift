@@ -1,22 +1,22 @@
 import Foundation
 
-/// 部品の 1 回の記録の中身。確定（失敗の記録を含む）が、読む・確定する・当て直すときに決まった数と部品の 1 回の結果から組む。
+/// ノードの 1 回の記録の中身。確定（失敗の記録を含む）が、読む・確定する・当て直すときに決まった数とノードの 1 回の結果から組む。
 /// 保存は時刻・契機・失敗を列に、回の履歴から数えられない残りを JSON に持ち（`AutomationRunStore`）、外の形は保存の形に英文を
 /// 足したもの（`AutomationRunWire`）。手段を起こさなかった契機（取る行が 0 件）は記録しないので、いつも実行の記録を持つ。
 struct AutomationNodeRun: Equatable {
   enum Trigger: String, Codable {
     case schedule
     case now
-    /// 入力の行が届いた（「届いたら」の部品の回）。
+    /// 入力の行が届いた（「届いたら」のノードの回）。
     case arrival
   }
 
   var startedAt: Date
   var endedAt: Date
   var trigger: Trigger
-  /// 取った行の数。入力の無い部品は持たない。
+  /// 取った行の数。入力の無いノードは持たない。
   var taken: Int?
-  /// 読む時点で捨てた数・読む前に期限で消えた数と、部品の持ち越しの和。
+  /// 読む時点で捨てた数・読む前に期限で消えた数と、ノードの持ち越しの和。
   var dropped = AutomationDrops()
   var execution: AutomationNodePass.Execution
   /// 結果を断った回だけ持つ（agent は断った呼び出しの外れた件、コマンドは外れた行）。
@@ -58,7 +58,7 @@ struct AutomationDrops: Equatable {
     case sameLink
     /// 件数の上限を超えた。
     case overflow
-    /// 判定の部品へ、出どころ（元になった取得の行）の無い行が届いた。
+    /// 判定のノードへ、出どころ（元になった取得の行）の無い行が届いた。
     case unsourced
     /// 同じ回の中で、同じ id の新しい行に置き換わった。
     case replaced

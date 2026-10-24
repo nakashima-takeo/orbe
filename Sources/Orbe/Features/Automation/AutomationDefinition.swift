@@ -1,19 +1,19 @@
 import Foundation
 
-/// 自動化の定義（AI から見える外の形）。書くときに動作の定義・自動化の部品・つながりへ分け、読むときに行から組み直す。
-/// 形だけを読み、値と組み合わせは `checked()` が検証する。部品の同一性は `id`（Orbe が振る）で、鍵はただの呼び名。
+/// 自動化の定義（AI から見える外の形）。書くときに動作の定義・自動化のノード・つながりへ分け、読むときに行から組み直す。
+/// 形だけを読み、値と組み合わせは `checked()` が検証する。ノードの同一性は `id`（Orbe が振る）で、鍵はただの呼び名。
 struct AutomationDefinition: Equatable, Codable {
   var name: String
   var notify: AutomationNotify?
   var nodes: [Node]
 
-  /// 外の形の部品 1 つ。`id` は今ある部品を指す（新しく足す部品は持たない）。
+  /// 外の形のノード 1 つ。`id` は今あるノードを指す（新しく足すノードは持たない）。
   struct Node: Equatable {
     var id: AutomationNodeID?
     var key: String
     var name: String
     var trigger: AutomationNode.Trigger
-    /// 入力（上流の部品の鍵と取り方）。空は入力の無い部品。
+    /// 入力（上流のノードの鍵と取り方）。空は入力の無いノード。
     var from: [Input]
     var action: AutomationActionDef
     /// 1 回に取る件数の上限。
@@ -30,7 +30,7 @@ struct AutomationDefinition: Equatable, Codable {
     var maxAgeHours: Int?
   }
 
-  /// 名前は 1 行に整え、部品はグラフとして検証する。名前はタスクのタイトルと同じ 1 行の規則（前後の空白を除いて保存）。
+  /// 名前は 1 行に整え、ノードはグラフとして検証する。名前はタスクのタイトルと同じ 1 行の規則（前後の空白を除いて保存）。
   func checked() throws(AutomationError) -> (name: String, checkedNodes: [AutomationGraph.Checked])
   {
     let name: String

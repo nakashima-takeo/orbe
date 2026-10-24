@@ -2,15 +2,15 @@ import XCTest
 
 @testable import Orbe
 
-/// 部品の同一性と定義の版——鍵はただの呼び名で、部品は Orbe が振る ID で見分ける。部品の定義は書き換えずに足し、自動化の
+/// ノードの同一性と定義の版——鍵はただの呼び名で、ノードは Orbe が振る ID で見分ける。ノードの定義は書き換えずに足し、自動化の
 /// 書き換えは版を添えて送る。
 ///
-/// 壊れると何が起きるか: 鍵を変えただけで部品が別物になり、読んだ行が全部もう一度流れて副作用が二重に走る・記録と候補と外した
+/// 壊れると何が起きるか: 鍵を変えただけでノードが別物になり、読んだ行が全部もう一度流れて副作用が二重に走る・記録と候補と外した
 /// 印を失う。下流へ渡す id や回の ID が鍵の変更で変わり、二重実行を防げない。名前や予定だけの書き換えで走っている回が止まる。
 /// 指示文を直した後の記録が前の中身を指し、どの中身で動いた回か分からなくなる。人がボードで通知を切り替えた直後の AI の古い
-/// 書き換えがそれを黙って戻す。id を書き忘れた書き換えで全部品が作り直される。
+/// 書き換えがそれを黙って戻す。id を書き忘れた書き換えで全ノードが作り直される。
 extension AutomationStoreTests {
-  /// 取得の部品 `fetch` → 副作用のコマンド `send`。
+  /// 取得のノード `fetch` → 副作用のコマンド `send`。
   private func sendDefinition(fetchKey: String = "fetch", script: String = "fetch")
     -> AutomationDefinition
   {
@@ -30,9 +30,9 @@ extension AutomationStoreTests {
       \.id)
   }
 
-  /// 鍵を変えた書き換え（`from` の名指しも合わせて変える）の後も、部品は同じ ID のまま、読んだ位置・まだ受け取っていない行・
+  /// 鍵を変えた書き換え（`from` の名指しも合わせて変える）の後も、ノードは同じ ID のまま、読んだ位置・まだ受け取っていない行・
   /// 回の記録・外した印・候補を保ち、下流へ渡す id と回の ID も変わらない。鍵だけの変化は何をするかの変化に入らない（下流の
-  /// 名指しが変わっただけの部品も）。
+  /// 名指しが変わっただけのノードも）。
   func testRenamingANodeKeepsItsIdentity() throws {
     let store = AutomationStore()
     let id = try store.create(Self.definition(), now: Self.at).id
@@ -52,7 +52,7 @@ extension AutomationStoreTests {
     let replaced = try store.replace(id, version: before.version, with: renamed, now: Self.at)
 
     let after = try XCTUnwrap(store.automation(id))
-    XCTAssertEqual(store.nodeId(id, "gh"), fetch, "同じ部品のまま")
+    XCTAssertEqual(store.nodeId(id, "gh"), fetch, "同じノードのまま")
     XCTAssertEqual(replaced.reworked, [], "鍵だけの変化は何をするかの変化でない")
     XCTAssertEqual(try unread(store, id, "judge"), unreadBefore, "読んだ位置とまだ受け取っていない行")
     XCTAssertEqual(after.state(fetch).runs, before.state(fetch).runs)
@@ -64,8 +64,8 @@ extension AutomationStoreTests {
   }
 
   /// 鍵・名前・予定・件数の上限だけの変化は何をするかの変化に入らず、指示文の変化は新しい定義を足して指し直す。前の回の記録は
-  /// 前の定義を、後の回の記録は新しい定義を指す。部品の定義の行は書いた後に変わらず、保存した値に部品の鍵が残るのは自動化の
-  /// 部品の鍵だけ。
+  /// 前の定義を、後の回の記録は新しい定義を指す。ノードの定義の行は書いた後に変わらず、保存した値にノードの鍵が残るのは自動化の
+  /// ノードの鍵だけ。
   func testOnlyWhatANodeDoesMakesANewDefinition() throws {
     let store = AutomationStore()
     let id = try store.create(Self.definition(), now: Self.at).id
@@ -134,7 +134,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(try rewritten { $0.timeoutMinutes = 9 }, [judge])
   }
 
-  /// 先頭に新しい部品を挿し、残す部品の鍵を変えてその旧鍵を新しい部品に使う書き換えも通り、残す部品は ID を保ち、部品は定義の
+  /// 先頭に新しいノードを挿し、残すノードの鍵を変えてその旧鍵を新しいノードに使う書き換えも通り、残すノードは ID を保ち、ノードは定義の
   /// 順に並ぶ（DB の位置も）。
   func testARewriteCanInsertANodeAndHandItAnOldKey() throws {
     let store = AutomationStore()
@@ -151,8 +151,8 @@ extension AutomationStoreTests {
 
     let nodes = try XCTUnwrap(store.automation(id)?.graph.nodes)
     XCTAssertEqual(nodes.map(\.key), ["fetch", "gh", "send"])
-    XCTAssertEqual(Array(nodes.map(\.id).dropFirst()), [fetch, send], "残す部品は同じ ID")
-    XCTAssertGreaterThan(nodes[0].id, send, "新しい部品")
+    XCTAssertEqual(Array(nodes.map(\.id).dropFirst()), [fetch, send], "残すノードは同じ ID")
+    XCTAssertGreaterThan(nodes[0].id, send, "新しいノード")
     XCTAssertEqual(
       try store.read {
         try $0.db.select(
@@ -162,7 +162,7 @@ extension AutomationStoreTests {
       }, ["fetch", "gh", "send"])
   }
 
-  /// 書き換えは版を添えて送り、通れば版が 1 増える。id の無い部品は新しい部品になる。止める・再開は版を変えない。
+  /// 書き換えは版を添えて送り、通れば版が 1 増える。id の無いノードは新しいノードになる。止める・再開は版を変えない。
   func testARewriteCarriesTheVersionAndBumpsIt() throws {
     let store = AutomationStore()
     let id = try store.create(sendDefinition(), now: Self.at).id
@@ -180,7 +180,7 @@ extension AutomationStoreTests {
 
     XCTAssertEqual(replaced.automation.version, 2)
     XCTAssertEqual(store.automation(id)?.version, 2, "止める・再開は版を変えない")
-    XCTAssertGreaterThan(store.nodeId(id, "log"), store.nodeId(id, "send"), "新しい部品に ID が振られる")
+    XCTAssertGreaterThan(store.nodeId(id, "log"), store.nodeId(id, "send"), "新しいノードに ID が振られる")
     XCTAssertEqual(
       try store.replace(
         id, version: 2, with: XCTUnwrap(store.automation(id)?.definition), now: Self.at
@@ -188,8 +188,8 @@ extension AutomationStoreTests {
       .automation.version, 2, "何も変わらない書き換えは版を進めない")
   }
 
-  /// 次の書き換えは断られ、定義は変わらない: 版が無い・古い（間に通知を切り替えた）、知らない部品の id・ほかの自動化の部品の
-  /// id、新しく作る定義の id、id を落として消える部品と同じ鍵で書いた部品。
+  /// 次の書き換えは断られ、定義は変わらない: 版が無い・古い（間に通知を切り替えた）、知らないノードの id・ほかの自動化のノードの
+  /// id、新しく作る定義の id、id を落として消えるノードと同じ鍵で書いたノード。
   func testRewritesThatWouldLoseOrMixUpNodesAreRefused() throws {
     let store = AutomationStore()
     let id = try store.create(sendDefinition(), now: Self.at).id
@@ -236,7 +236,7 @@ extension AutomationStoreTests {
 }
 
 extension AutomationDefinition {
-  /// 部品に、自動化の今の同じ鍵の部品の id を添えたもの（テスト）。
+  /// ノードに、自動化の今の同じ鍵のノードの id を添えたもの（テスト）。
   fileprivate func withIds(of store: AutomationStore, _ id: Int) -> AutomationDefinition {
     var definition = self
     for index in definition.nodes.indices {

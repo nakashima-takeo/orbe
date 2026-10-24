@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// 詳細の「地図」。部品を入力の深さ順に 1 行ずつ縦に並べ、左の溝に入力のつながりを線で描き、続けて出力先の行を並べる。行は
-/// 溝・役割・名前と予定の札と入力・未処理・前回（成否の印・時刻・量）。最新の回が失敗した部品は、行の下に理由の行を足す（溝の
-/// 線は途切れずに続く）。地図に居る間は選ばれている部品の行に濃い地を敷く。部品の行のクリックはその部品を選ぶ。線の割り当ても
+/// 詳細の「地図」。ノードを入力の深さ順に 1 行ずつ縦に並べ、左の溝に入力のつながりを線で描き、続けて出力先の行を並べる。行は
+/// 溝・役割・名前と予定の札と入力・未処理・前回（成否の印・時刻・量）。最新の回が失敗したノードは、行の下に理由の行を足す（溝の
+/// 線は途切れずに続く）。地図に居る間は選ばれているノードの行に濃い地を敷く。ノードの行のクリックはそのノードを選ぶ。線の割り当ても
 /// 行の文言も読み替えが解いた値で、ここは描くだけ。
 struct BoardAutomationMapView: View {
   let model: BoardAutomationModel
@@ -48,7 +48,7 @@ struct BoardAutomationMapView: View {
   }
 }
 
-/// 地図の 1 行と、失敗した部品なら下の理由の行。
+/// 地図の 1 行と、失敗したノードなら下の理由の行。
 struct BoardMapRowView: View {
   let row: BoardMapRow
   let laneCount: Int
@@ -100,7 +100,7 @@ struct BoardMapRowView: View {
     }
   }
 
-  /// 名前と札が幅に収まらなければ、入力の部品名 → 予定の札の順に末尾を省き、名前と出力の形式エラーの札は残す。
+  /// 名前と札が幅に収まらなければ、入力のノード名 → 予定の札の順に末尾を省き、名前と出力の形式エラーの札は残す。
   @ViewBuilder private func nodeCells(_ mapNode: BoardMapNode) -> some View {
     role(mapNode.role)
     HStack(spacing: Self.cellGap) {
@@ -326,7 +326,7 @@ enum BoardRunColors {
 }
 
 extension Text {
-  /// 入力元の部品の名前の頭に置く向きの矢印と空き（`codeSmall` の文に混ぜる）。
+  /// 入力元のノードの名前の頭に置く向きの矢印と空き（`codeSmall` の文に混ぜる）。
   static var boardIncomingLead: Text {
     MarkGlyphKind.arrowLeft.inline(Theme.Typography.codeSmall) + Text(verbatim: " ")
   }

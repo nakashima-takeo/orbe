@@ -2,7 +2,7 @@ import Foundation
 
 /// 試走の範囲と与えた行の読み。
 extension AutomationTrial {
-  /// 範囲を解く。知らない部品は `nodeNotFound`、どの行き先にも届かない入口・どの入口からも届かない行き先は `invalid`。
+  /// 範囲を解く。知らないノードは `nodeNotFound`、どの行き先にも届かない入口・どの入口からも届かない行き先は `invalid`。
   static func range(of automation: Automation, _ request: Request) throws(AutomationError) -> Range
   {
     let graph = automation.graph
@@ -49,7 +49,7 @@ extension AutomationTrial {
     return ids.filter { seen.insert($0).inserted }
   }
 
-  /// 与えた行を、道の根（ちょうど 1 つ）の役割に合わせて読む。取得は取得の読み方でその取得の出力に、入力のある部品は文字列の
+  /// 与えた行を、道の根（ちょうど 1 つ）の役割に合わせて読む。取得は取得の読み方でその取得の出力に、入力のあるノードは文字列の
   /// `id` を持つ行として受けてその上流の出力にする（上流がちょうど 1 つのときだけ）。判定は断る——判定は出どころ（取得の項目）
   /// から候補を作るので、出どころの無い行は本番では捨てられる。
   static func given(_ rows: [String], in range: Range, of graph: AutomationGraph)

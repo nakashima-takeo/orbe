@@ -1,6 +1,6 @@
 import Foundation
 
-/// 地図の部品の点の見え方。
+/// 地図のノードの点の見え方。
 enum BoardNodeLook: Equatable {
   case idle
   /// 最新の回が失敗。
@@ -9,17 +9,17 @@ enum BoardNodeLook: Equatable {
   case running
 }
 
-/// 地図の部品の行。文言まで解いた値。
+/// 地図のノードの行。文言まで解いた値。
 struct BoardMapNode: Equatable {
   let id: AutomationNodeID
   /// 役割の名前（「取得」「判定」）。
   let role: String
   let name: String
-  /// 予定の札（「30分ごと」「手動」）。前の部品に連動する部品は札を持たない。
+  /// 予定の札（「30分ごと」「手動」）。前のノードに連動するノードは札を持たない。
   let schedule: String?
-  /// 入力の部品の名前（「A・B」）。入力の無い部品は nil。
+  /// 入力のノードの名前（「A・B」）。入力の無いノードは nil。
   let inputs: String?
-  /// 未処理の件数。入力のある部品だけ。
+  /// 未処理の件数。入力のあるノードだけ。
   let pending: Int?
   /// 出力の形式エラーの印があるか。
   let breached: Bool
@@ -60,7 +60,7 @@ struct BoardMapLanes: Equatable {
   var continuing: [Int] { (through + (below ? [node] : [])).sorted() }
 }
 
-/// 地図の 1 行。部品の行に続けて、出力先の行（タスク候補・報告の出し先。その出力先の部品がある分だけ）が並ぶ。
+/// 地図の 1 行。ノードの行に続けて、出力先の行（タスク候補・報告の出し先。その出力先のノードがある分だけ）が並ぶ。
 struct BoardMapRow: Equatable {
   enum Content: Equatable {
     case node(BoardMapNode)
@@ -74,14 +74,14 @@ struct BoardMapRow: Equatable {
   let lanes: BoardMapLanes
 }
 
-/// 選んだ自動化の詳細の値（見出し・帯・地図）。地図は部品を入力の深さ順（同じ深さは定義の順）に 1 行ずつ並べ、溝の線で
+/// 選んだ自動化の詳細の値（見出し・帯・地図）。地図はノードを入力の深さ順（同じ深さは定義の順）に 1 行ずつ並べ、溝の線で
 /// 入力のつながりを `git log --graph` の流儀で描く。
 struct BoardAutomationDetailValue: Equatable {
   /// 「通知：メニューバー」。
   let notify: String
   /// 「次回 16:50」「手動」。止めていれば nil（見出しは一時停止中を出す）。
   let next: String?
-  /// 直近の回の区分（全部品を混ぜた新しい `stripLength` 回。古い回が左）。
+  /// 直近の回の区分（全ノードを混ぜた新しい `stripLength` 回。古い回が左）。
   let strip: [BoardRunTone]
   let rows: [BoardMapRow]
   /// 溝の線の本数（自動化ごと。溝の幅はこれで決まる）。
@@ -92,7 +92,7 @@ struct BoardAutomationDetailValue: Equatable {
 }
 
 extension BoardAutomationDetailValue {
-  /// `running` は部品が走っているか、`open` はこの自動化の棚に出ている判断待ちの候補の数、`next` は次に予定で回る時刻。
+  /// `running` はノードが走っているか、`open` はこの自動化の棚に出ている判断待ちの候補の数、`next` は次に予定で回る時刻。
   init(
     _ automation: Automation, text: AutomationText, running: (AutomationNodeID) -> Bool, open: Int,
     next: Date?
@@ -148,7 +148,7 @@ extension BoardAutomationDetailValue {
     }
   }
 
-  /// 地図の部品の行。
+  /// 地図のノードの行。
   private static func mapNode(
     _ node: AutomationGraph.Node, in automation: Automation, text: AutomationText, running: Bool
   ) -> BoardMapNode {
@@ -177,7 +177,7 @@ extension BoardAutomationDetailValue {
       failure: latest?.run.flatMap { text.failure($0, node: node) })
   }
 
-  /// 出力先の行の鍵（部品の鍵は空でないので、空の鍵と区切りの文字は部品と重ならない）。
+  /// 出力先の行の鍵（ノードの鍵は空でないので、空の鍵と区切りの文字はノードと重ならない）。
   private static let taskCandidatesKey = "\u{0}taskCandidates"
   private static let reportsKey = "\u{0}reports"
 }

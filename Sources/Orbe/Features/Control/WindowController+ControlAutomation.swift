@@ -90,8 +90,8 @@ extension WindowController {
         "proposedAt": SessionEvent.iso8601(proposal.proposedAt),
       ]
       if let reason = proposal.reason { json["reason"] = reason }
-      // 出した自動化と部品の鍵は組で出す——棚の自動化（`automationId`）と別のことがあり、鍵だけでは取り違える。出した自動化が
-      // 消えた後は、指す先が無いので出さない。部品は今の鍵で言い、外れていれば出さない。
+      // 出した自動化とノードの鍵は組で出す——棚の自動化（`automationId`）と別のことがあり、鍵だけでは取り違える。出した自動化が
+      // 消えた後は、指す先が無いので出さない。ノードは今の鍵で言い、外れていれば出さない。
       if let issuer = automationStore.issuer(of: proposal) {
         var by: [String: Any] = ["automationId": issuer.id]
         if let judge = issuer.graph.node(proposal.judge) { by["nodeKey"] = judge.key }
@@ -165,8 +165,8 @@ extension WindowController {
     }
   }
 
-  /// 定義（部品に `id` を添えた外の形）と版に、止めているか・部品の今の鍵ごとの状態（走っているか・最新の回・次の時刻・読めば
-  /// 取る行の数・決まりを外した印）を足す。判定の部品を持つ自動化にだけタスク候補の欄を付ける。
+  /// 定義（ノードに `id` を添えた外の形）と版に、止めているか・ノードの今の鍵ごとの状態（走っているか・最新の回・次の時刻・読めば
+  /// 取る行の数・決まりを外した印）を足す。判定のノードを持つ自動化にだけタスク候補の欄を付ける。
   private func automationJSON(_ automation: Automation) -> [String: Any] {
     var nodeObjects: [String: Any] = [:]
     for node in automation.graph.nodes {

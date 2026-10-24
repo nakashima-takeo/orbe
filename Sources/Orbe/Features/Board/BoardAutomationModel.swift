@@ -9,10 +9,10 @@ import SwiftUI
 /// 同じ）。選ばれて見えるのは常に 1 か所で、焦点の場所は選択から決まる。↑↓ は欄と行の並びを端で巡回する。焦点が外から
 /// 部品へ入ると欄から始まり（⌘⇧X が開くと入力欄に焦点があるのと同じ）、中での当て直しは選んでいる場所へ戻る。
 ///
-/// 詳細の地図は、一覧で選んだ自動化の段（見出しの「通知」と部品）を選ぶ焦点の場所。一覧の ↵ / → で入り、← / esc で一覧へ戻る
+/// 詳細の地図は、一覧で選んだ自動化の段（見出しの「通知」とノード）を選ぶ焦点の場所。一覧の ↵ / → で入り、← / esc で一覧へ戻る
 /// （⌘⇧X の棚と候補の一覧と同じ流儀）。一覧と地図は親子で、地図に居る間も一覧の行は選んだまま残る。地図の段の選択は覚えている
 /// 段で、それが「選ばれている」のは地図に居る間だけ（地図の選択の地・カード・地図の ⌘↵ はすべて `selectedMapStop` を読む）。
-/// 一覧の選択が別の段に替わると、地図から出て段の選択を忘れる（次に入ると先頭の部品）。
+/// 一覧の選択が別の段に替わると、地図から出て段の選択を忘れる（次に入ると先頭のノード）。
 ///
 /// 地図の「通知」の段で ↵ / → を押すと開くサブメニュー「通知」は、その段の付属で、焦点の場所を増やさない。地図の段が変わる・
 /// 地図を出ると閉じる。
@@ -30,7 +30,7 @@ import SwiftUI
     case automation(Int)
   }
 
-  /// 地図の段: 見出しの「通知」の行か、部品の行。
+  /// 地図の段: 見出しの「通知」の行か、ノードの行。
   enum MapStop: Hashable {
     case notify
     case node(AutomationNodeID)
@@ -78,7 +78,7 @@ import SwiftUI
 
   var store: AutomationStore { runner.store }
 
-  /// 立ち位置で並べた自動化: 失敗した部品がある・定義を読めない（止めていない）→ それ以外（止めていない）→ 止めている。群の中は
+  /// 立ち位置で並べた自動化: 失敗したノードがある・定義を読めない（止めていない）→ それ以外（止めていない）→ 止めている。群の中は
   /// ID 順。
   var standings: [BoardAutomationStanding] {
     (store.automations.map { BoardAutomationStanding($0, runner: runner) }
@@ -109,7 +109,7 @@ import SwiftUI
     return store.unreadable.first { $0.id == id }
   }
 
-  /// 選んでいる自動化の地図の段の並び（「通知」、続いて部品の行の順）。
+  /// 選んでいる自動化の地図の段の並び（「通知」、続いてノードの行の順）。
   var mapStops: [MapStop] {
     guard let automation = selectedAutomation else { return [] }
     return [.notify] + automation.graph.byDepth.map { .node($0.id) }
@@ -121,7 +121,7 @@ import SwiftUI
     return stop
   }
 
-  /// 選ばれている部品。
+  /// 選ばれているノード。
   var selectedNodeId: AutomationNodeID? {
     guard case .node(let nodeId) = selectedMapStop else { return nil }
     return nodeId
@@ -193,7 +193,7 @@ import SwiftUI
     if place != before { focusToken &+= 1 }
   }
 
-  /// 行のクリック。一覧に居る（部品は選ばれていない）。
+  /// 行のクリック。一覧に居る（ノードは選ばれていない）。
   func tap(_ id: Int) {
     onRefusal(nil)
     inMap = false
@@ -201,8 +201,8 @@ import SwiftUI
     focusToken &+= 1
   }
 
-  /// 選んでいる自動化への手の操作。止める ⇄ 再開で行が沈んでも浮いても、選択は同じ自動化に付いていく。部品まで流すのは
-  /// 選ばれている部品だけで、部品が選ばれていなければ何もしない。
+  /// 選んでいる自動化への手の操作。止める ⇄ 再開で行が沈んでも浮いても、選択は同じ自動化に付いていく。ノードまで流すのは
+  /// 選ばれているノードだけで、ノードが選ばれていなければ何もしない。
   func perform(_ operation: BoardAutomationHand.Operation) {
     if let broken = selectedUnreadable, operation == .delete {
       onRefusal(nil)
@@ -224,7 +224,7 @@ import SwiftUI
 
   // MARK: - 地図
 
-  /// 地図へ入る。覚えている段（初めて・一覧で別の自動化を選んだ後は先頭の部品）が選ばれる。自動化を選んでいなければ何もしない。
+  /// 地図へ入る。覚えている段（初めて・一覧で別の自動化を選んだ後は先頭のノード）が選ばれる。自動化を選んでいなければ何もしない。
   func enterMap() {
     let stops = mapStops
     guard stops.count > 1 else { return }
@@ -242,7 +242,7 @@ import SwiftUI
     focusToken &+= 1
   }
 
-  /// 地図の ↑↓。端で止まり巡回しない。先頭の部品の ↑ は「通知」の段。
+  /// 地図の ↑↓。端で止まり巡回しない。先頭のノードの ↑ は「通知」の段。
   func moveInMap(_ direction: Int) {
     guard inMap else { return }
     onRefusal(nil)
@@ -253,7 +253,7 @@ import SwiftUI
     mapList.select(stops[target], in: stops)
   }
 
-  /// 地図の部品の行のクリック。その部品を選んで地図に居る。
+  /// 地図のノードの行のクリック。そのノードを選んで地図に居る。
   func tapNode(_ nodeId: AutomationNodeID) {
     select(.node(nodeId))
   }
@@ -272,7 +272,7 @@ import SwiftUI
     focusToken &+= 1
   }
 
-  /// カードの「修正を依頼」。依頼の欄に「自動化「<名前>」の部品「<名前>」の修正：」を書き（書きかけは置き換える）、焦点を欄へ
+  /// カードの「修正を依頼」。依頼の欄に「自動化「<名前>」のノード「<名前>」の修正：」を書き（書きかけは置き換える）、焦点を欄へ
   /// 移す——続けて打って ↵ で、欄からふつうに頼む。`l10n` は画面の言語。
   func draftFix(of nodeId: AutomationNodeID, l10n: LocalizationStore) {
     guard let automation = selectedAutomation, let node = automation.graph.node(nodeId) else {
@@ -305,7 +305,7 @@ import SwiftUI
 
   @ObservationIgnored private var caretAtEnd = false
 
-  /// 地図の器のキー。サブメニューを開いている間はそちらへ回す。↑↓・⌘↵（部品の段。`BoardAutomationHand.stroke` に任せる）・
+  /// 地図の器のキー。サブメニューを開いている間はそちらへ回す。↑↓・⌘↵（ノードの段。`BoardAutomationHand.stroke` に任せる）・
   /// ↵ / →（「通知」の段）・← / esc のほかは何も起こさず、どれも握る（焦点をボードの外へ逃がさない）。
   func handleMapKey(_ press: KeyPress) -> KeyPress.Result {
     if let cursor = notifyCursor {

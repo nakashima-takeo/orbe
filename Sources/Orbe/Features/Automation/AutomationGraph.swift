@@ -1,16 +1,16 @@
 import Foundation
 
-/// 自動化の部品のグラフ。部品（実体）・使う動作の定義・入力のつながり・導いた役割を持ち、作った後は変わらない。組み合わせの
+/// 自動化のノードのグラフ。ノード（実体）・使う動作の定義・入力のつながり・導いた役割を持ち、作った後は変わらない。組み合わせの
 /// 正しさは外の形の定義を `check` に通して確かめてから組む（`AutomationStore` と起動時の読みが通す）。
 struct AutomationGraph: Equatable {
-  /// 定義の順（部品の位置の順）。
+  /// 定義の順（ノードの位置の順）。
   let nodes: [Node]
-  /// 位置ごとの、入力の部品の位置（`from` の中の順）。
+  /// 位置ごとの、入力のノードの位置（`from` の中の順）。
   private let upstream: [[Int]]
-  /// 位置ごとの、この部品を入力に名指す部品の位置。
+  /// 位置ごとの、このノードを入力に名指すノードの位置。
   private let downstream: [[Int]]
 
-  /// 部品と、使う動作の定義・入力・導いた役割。
+  /// ノードと、使う動作の定義・入力・導いた役割。
   struct Node: Equatable {
     let entity: AutomationNode
     let action: AutomationActionDef
@@ -36,7 +36,7 @@ struct AutomationGraph: Equatable {
       }
     }
 
-    /// 出力の性質を解いたもの。行を出す部品（取得・処理）だけが持ち、処理の省略は出来事の流れ。
+    /// 出力の性質を解いたもの。行を出すノード（取得・処理）だけが持ち、処理の省略は出来事の流れ。
     var coverage: AutomationCoverage? {
       switch role {
       case .fetch, .process: action.coverage ?? .newArrivals
@@ -44,7 +44,7 @@ struct AutomationGraph: Equatable {
       }
     }
 
-    /// 入力の部品。
+    /// 入力のノード。
     var inputNodeIds: [AutomationNodeID] { inputs.map(\.from) }
 
     /// 何をするか（省略を解いた動作と入力の集合）。書き換えで何をするかが変わったかはこれで比べる——省略していた値に既定と
@@ -61,7 +61,7 @@ struct AutomationGraph: Equatable {
     }
   }
 
-  /// 部品が何をするか（`Node.behavior`）。
+  /// ノードが何をするか（`Node.behavior`）。
   struct Behavior: Equatable {
     let method: AutomationActionDef.Method
     let timeoutMinutes: Int
@@ -70,14 +70,14 @@ struct AutomationGraph: Equatable {
     let inputs: Set<AutomationNodeEdge>
   }
 
-  /// 検証を通った部品の外の形と、導いた役割と、入力の部品の位置。
+  /// 検証を通ったノードの外の形と、導いた役割と、入力のノードの位置。
   struct Checked: Equatable {
     let definitionNode: AutomationDefinition.Node
     let role: AutomationNodeRole
     let upstream: [Int]
   }
 
-  /// 検証を通った外の形に、部品の実体（ID と使う定義の ID）を当てて組む。`entities` と `checked` は同じ順。
+  /// 検証を通った外の形に、ノードの実体（ID と使う定義の ID）を当てて組む。`entities` と `checked` は同じ順。
   init(_ checked: [Checked], entities: [AutomationNode]) {
     precondition(checked.count == entities.count, "every checked node has an entity")
     nodes = zip(checked, entities).map { checked, entity in
@@ -96,7 +96,7 @@ struct AutomationGraph: Equatable {
     self.downstream = downstream
   }
 
-  /// 外の形に組み直したもの（`from` は鍵で名指し、各部品に ID を添える）。
+  /// 外の形に組み直したもの（`from` は鍵で名指し、各ノードに ID を添える）。
   var definitionNodes: [AutomationDefinition.Node] {
     nodes.map { node in
       AutomationDefinition.Node(
@@ -122,7 +122,7 @@ struct AutomationGraph: Equatable {
     nodes.firstIndex { $0.id == id }
   }
 
-  /// 入力の深さ順（入力の無い部品が 0、ほかは入力の深さの最大＋1）。同じ深さは定義の順。入力の部品がいつも先に並ぶ。
+  /// 入力の深さ順（入力の無いノードが 0、ほかは入力の深さの最大＋1）。同じ深さは定義の順。入力のノードがいつも先に並ぶ。
   var byDepth: [Node] {
     var depths: [Int?] = Array(repeating: nil, count: nodes.count)
     func depth(_ index: Int) -> Int {
@@ -135,14 +135,14 @@ struct AutomationGraph: Equatable {
     return nodes.indices.sorted { (depthOf[$0], $0) < (depthOf[$1], $1) }.map { nodes[$0] }
   }
 
-  /// `id` の部品が出した行が、途中で取得の部品を通らずに判定の部品へ届くか（タスク候補へ至るか）。入力を持つツールの agent は
+  /// `id` のノードが出した行が、途中で取得のノードを通らずに判定のノードへ届くか（タスク候補へ至るか）。入力を持つツールの agent は
   /// 取得の役割で、届いた行を起こす合図にしか使わないので、行はそこを通り抜けない。
   func reachesTaskCandidates(_ id: AutomationNodeID) -> Bool {
     guard let index = index(id) else { return false }
     return !Self.judges(reachedFrom: index, nodes.map(\.role), downstream).isEmpty
   }
 
-  /// `start` の部品が出した行が、途中で取得の部品を通らずに届く判定の部品の位置。
+  /// `start` のノードが出した行が、途中で取得のノードを通らずに届く判定のノードの位置。
   static func judges(reachedFrom start: Int, _ roles: [AutomationNodeRole], _ downstream: [[Int]])
     -> Set<Int>
   {
@@ -160,7 +160,7 @@ struct AutomationGraph: Equatable {
     return judges
   }
 
-  /// `judge` の部品へ、途中で別の取得の部品を通らずに行が届く取得の部品（定義の順）。
+  /// `judge` のノードへ、途中で別の取得のノードを通らずに行が届く取得のノード（定義の順）。
   func fetches(reaching judge: AutomationNodeID) -> [Node] {
     guard let target = index(judge) else { return [] }
     let roles = nodes.map(\.role)
@@ -170,13 +170,13 @@ struct AutomationGraph: Equatable {
     }.map { nodes[$0] }
   }
 
-  /// `id` の部品を入力に名指す部品（定義の順）。
+  /// `id` のノードを入力に名指すノード（定義の順）。
   func downstream(of id: AutomationNodeID) -> [Node] {
     guard let index = index(id) else { return [] }
     return downstream[index].sorted().map { nodes[$0] }
   }
 
-  /// `id` の部品から行が届きうる部品すべて（定義の順）。
+  /// `id` のノードから行が届きうるノードすべて（定義の順）。
   func descendants(of id: AutomationNodeID) -> [Node] {
     guard let start = index(id) else { return [] }
     var pending = downstream[start]
@@ -188,7 +188,7 @@ struct AutomationGraph: Equatable {
     return seen.sorted().map { nodes[$0] }
   }
 
-  /// `id` の部品へ行が届きうる部品すべて（定義の順）。
+  /// `id` のノードへ行が届きうるノードすべて（定義の順）。
   func ancestors(of id: AutomationNodeID) -> [Node] {
     guard let start = index(id) else { return [] }
     var pending = upstream[start]
@@ -200,13 +200,13 @@ struct AutomationGraph: Equatable {
     return seen.sorted().map { nodes[$0] }
   }
 
-  /// タスク候補を行き先にする部品（判定。定義の順）。
+  /// タスク候補を行き先にするノード（判定。定義の順）。
   var judges: [Node] {
     nodes.filter { $0.role == .judge }
   }
 
-  /// 終わりの部品（行き先が次の部品でない部品。定義の順）。次の部品へ渡す部品は必ず誰かに名指されるので、これらの祖先と
-  /// 合わせると全部品になる。
+  /// 終わりのノード（行き先が次のノードでないノード。定義の順）。次のノードへ渡すノードは必ず誰かに名指されるので、これらの祖先と
+  /// 合わせると全ノードになる。
   var ends: [Node] {
     nodes.filter { $0.action.destination != .nextNode }
   }

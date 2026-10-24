@@ -1,21 +1,21 @@
 import Foundation
 
-/// 一巡——部品を指して「そこまで流す」1 回の進み。道（流す部品の集まり。一巡の間は変わらない）の上で、普段なら今すぐは
-/// 動かない部品（入力の無い部品と、間隔・cron・手動の入力のある部品）を、道の上の上流がすべて終わった後に 1 回ずつ起こし、
-/// 指した部品がすべて終わったら終わる。「届いたら」の部品は起こさず、普段の決まりで動いた後の終わりを見届ける。各部品が待つのは
-/// 道の上の入力だけで、道の上の入力を持たない部品（道の根）は予定の種類によらず最初に起こす。本番の流しは道を「指した部品と
-/// その祖先すべて」にするので、根は入力の無い部品だけになる。
+/// 一巡——ノードを指して「そこまで流す」1 回の進み。道（流すノードの集まり。一巡の間は変わらない）の上で、普段なら今すぐは
+/// 動かないノード（入力の無いノードと、間隔・cron・手動の入力のあるノード）を、道の上の上流がすべて終わった後に 1 回ずつ起こし、
+/// 指したノードがすべて終わったら終わる。「届いたら」のノードは起こさず、普段の決まりで動いた後の終わりを見届ける。各ノードが待つのは
+/// 道の上の入力だけで、道の上の入力を持たないノード（道の根）は予定の種類によらず最初に起こす。本番の流しは道を「指したノードと
+/// その祖先すべて」にするので、根は入力の無いノードだけになる。
 ///
-/// 走らせ役がメモリに持ち、部品の契機の始まりと終わり（普段の起こす決まりを見た後）を今の定義と共に知らせる。返した部品は
+/// 走らせ役がメモリに持ち、ノードの契機の始まりと終わり（普段の起こす決まりを見た後）を今の定義と共に知らせる。返したノードは
 /// 走らせ役が「今すぐ」で起こす。起こすか見届けるかは知らせのたびに今の定義の予定の種類で決める——一巡の間に予定だけを
-/// 書き換えても一巡は続くので、流し始めの定義で決めると今の予定とずれる。道の形（入力・行き先）が変わる書き換えは部品を
+/// 書き換えても一巡は続くので、流し始めの定義で決めると今の予定とずれる。道の形（入力・行き先）が変わる書き換えはノードを
 /// 番人から外すので、一巡はそこで打ち切られる。
 struct AutomationFlow {
   enum Target: Equatable {
     case node(AutomationNodeID)
-    /// 終わりの部品すべて（`AutomationGraph.ends`）。
+    /// 終わりのノードすべて（`AutomationGraph.ends`）。
     case ends
-    /// タスク候補を行き先にする部品すべて（`AutomationGraph.judges`）。
+    /// タスク候補を行き先にするノードすべて（`AutomationGraph.judges`）。
     case judges
   }
 
@@ -25,7 +25,7 @@ struct AutomationFlow {
     /// 道の上の上流がすべて終わった。「届いたら」なら走っていなければ終わり、そうでなければ次に始まる契機を一巡の分として
     /// 受け取る（走っていなければ起こす）。
     case ready
-    /// 流し始めに走っていた入力の無い部品の回を一巡の分にした。次の終わりがその回のもの。
+    /// 流し始めに走っていた入力の無いノードの回を一巡の分にした。次の終わりがその回のもの。
     case adopted
     /// 一巡の分として受け取った契機が走っている。一巡の分の契機の終わりだけを数える。
     case taken
@@ -37,7 +37,7 @@ struct AutomationFlow {
   private let roots: Set<AutomationNodeID>
   private var steps: [AutomationNodeID: Step] = [:]
 
-  /// `path` の上を `targets`（どれも `path` の上）まで流し始める。`wake` は今すぐ起こす部品（走っていない根）。入力の無い根が
+  /// `path` の上を `targets`（どれも `path` の上）まで流し始める。`wake` は今すぐ起こすノード（走っていない根）。入力の無い根が
   /// 走っていれば、その回を一巡の分にする（入力が無いので、いつ始まった回でも出すものは同じ）。入力のある根が走っていれば、
   /// その回が終わった後に起こす。
   static func start(
@@ -72,10 +72,10 @@ struct AutomationFlow {
 
   var finished: Bool { targets.allSatisfy { steps[$0] == .done } }
 
-  /// 部品が一巡の分を終えたか。
+  /// ノードが一巡の分を終えたか。
   func isDone(_ nodeId: AutomationNodeID) -> Bool { steps[nodeId] == .done }
 
-  /// 部品の契機が始まった。一巡の分として受け取ったら真（走らせ役はその契機を `flowed` として覚え、終わりに渡す）。誰が
+  /// ノードの契機が始まった。一巡の分として受け取ったら真（走らせ役はその契機を `flowed` として覚え、終わりに渡す）。誰が
   /// 始めた回かは問わない。
   mutating func started(_ nodeId: AutomationNodeID, in graph: AutomationGraph) -> Bool {
     guard steps[nodeId] == .ready, !arrives(nodeId, in: graph) else { return false }
@@ -83,9 +83,9 @@ struct AutomationFlow {
     return true
   }
 
-  /// 部品の契機が終わった（`flowed` は一巡の分として受け取った契機か）。返すのは今すぐ起こす部品。受け取った部品は一巡の分の
+  /// ノードの契機が終わった（`flowed` は一巡の分として受け取った契機か）。返すのは今すぐ起こすノード。受け取ったノードは一巡の分の
   /// 契機の終わりだけを数える——番人は回の終わりの中で次の予定の回を同期に始めうるので、古い回の終わりが受け取った回の始まり
-  /// より後に届く。一巡の分でない回の終わりは、起こす部品を邪魔していた回が終わったとして、走っていなければ起こし直す。
+  /// より後に届く。一巡の分でない回の終わりは、起こすノードを邪魔していた回が終わったとして、走っていなければ起こし直す。
   mutating func ended(
     _ nodeId: AutomationNodeID, flowed: Bool, in graph: AutomationGraph,
     running: (AutomationNodeID) -> Bool
@@ -102,7 +102,7 @@ struct AutomationFlow {
     }
   }
 
-  /// 部品を終わりにし、道の上の上流がすべて終わった下流を次へ進める。
+  /// ノードを終わりにし、道の上の上流がすべて終わった下流を次へ進める。
   private mutating func finish(
     _ nodeId: AutomationNodeID, _ graph: AutomationGraph, _ running: (AutomationNodeID) -> Bool
   ) -> [AutomationNodeID] {
@@ -121,7 +121,7 @@ struct AutomationFlow {
     return wake
   }
 
-  /// 上流がすべて終わった部品を、走っていなければ進める——「届いたら」なら終わりにし、そうでなければ起こす。
+  /// 上流がすべて終わったノードを、走っていなければ進める——「届いたら」なら終わりにし、そうでなければ起こす。
   private mutating func advance(
     _ nodeId: AutomationNodeID, _ graph: AutomationGraph, _ running: (AutomationNodeID) -> Bool
   ) -> [AutomationNodeID] {
@@ -129,7 +129,7 @@ struct AutomationFlow {
     return arrives(nodeId, in: graph) ? finish(nodeId, graph, running) : [nodeId]
   }
 
-  /// 普段の決まりで起きるのを見届ける部品か（根でない「届いたら」の部品）。
+  /// 普段の決まりで起きるのを見届けるノードか（根でない「届いたら」のノード）。
   private func arrives(_ nodeId: AutomationNodeID, in graph: AutomationGraph) -> Bool {
     !roots.contains(nodeId) && graph.node(nodeId)?.entity.trigger == .arrival
   }

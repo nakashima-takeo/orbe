@@ -1,7 +1,7 @@
 import Foundation
 
 // `orb automation <サブコマンド>` の実装と usage。定義は MCP の set_automation の definition と同じ形の JSON を標準入力で
-// 受け、検証は control に任せる（部品はコマンドか agent かで項目が入れ子になるので、フラグに割ると検証が 2 か所に割れる）。
+// 受け、検証は control に任せる（ノードはコマンドか agent かで項目が入れ子になるので、フラグに割ると検証が 2 か所に割れる）。
 
 // MARK: - usage
 
@@ -270,7 +270,7 @@ private func automationList(_ rest: [String]) -> Never {
   exit(0)
 }
 
-/// 次に来る部品の予定（`every 30m` / `cron 0 9 * * 1-5`）。ほかに予定のある部品があれば ` +N`、予定のある部品が無ければ
+/// 次に来るノードの予定（`every 30m` / `cron 0 9 * * 1-5`）。ほかに予定のあるノードがあれば ` +N`、予定のあるノードが無ければ
 /// `manual`。
 private func scheduleCell(_ nodes: [[String: Any]], next: String?) -> String {
   let scheduled = nodes.compactMap { node -> (key: String, words: String)? in

@@ -1,17 +1,17 @@
 import Foundation
 
-/// 定義の書き換え。自動化の部品とつながりの行を直接書き換え、動作の定義の中身が変わった部品だけ部品の定義を足して指し直す。
+/// 定義の書き換え。自動化のノードとつながりの行を直接書き換え、動作の定義の中身が変わったノードだけノードの定義を足して指し直す。
 extension AutomationStore {
-  /// 定義を書き換えたときの、部品ごとの変化。
+  /// 定義を書き換えたときの、ノードごとの変化。
   struct Replaced {
     let automation: Automation
-    /// 何をするか（省略を解いた動作と入力の集合）が変わった部品。決まりを外した印を下ろした。
+    /// 何をするか（省略を解いた動作と入力の集合）が変わったノード。決まりを外した印を下ろした。
     let reworked: [AutomationNodeID]
-    /// 外した部品。
+    /// 外したノード。
     let removed: [AutomationNodeID]
   }
 
-  /// 書き換える前の自動化（定義を読めない自動化は持たない）と、その版と外していない部品とその鍵。
+  /// 書き換える前の自動化（定義を読めない自動化は持たない）と、その版と外していないノードとその鍵。
   private struct Current {
     let version: Int
     let nodeIds: [AutomationNodeID]
@@ -19,9 +19,9 @@ extension AutomationStore {
     let automation: Automation?
   }
 
-  /// 定義を書き換える。`version` は書き換えの元にした版で、今の版と違えば断る。部品は `id` で今の部品を指し（無ければ新しい
-  /// 部品）、自動化の部品とつながりの行を直接書き換える。動作の定義の中身が変わった部品だけ、使う部品の定義を足して指し
-  /// 直す。何も変わらなければ何も書かず、版も進めない。定義を読めない自動化も書き換えで直せる（残る部品はすべて何をするかが
+  /// 定義を書き換える。`version` は書き換えの元にした版で、今の版と違えば断る。ノードは `id` で今のノードを指し（無ければ新しい
+  /// ノード）、自動化のノードとつながりの行を直接書き換える。動作の定義の中身が変わったノードだけ、使うノードの定義を足して指し
+  /// 直す。何も変わらなければ何も書かず、版も進めない。定義を読めない自動化も書き換えで直せる（残るノードはすべて何をするかが
   /// 変わったものとして扱う）。止めているかは変えない。
   func replace(
     _ id: Int, version: Int?, with definition: AutomationDefinition, now: Date
@@ -85,7 +85,7 @@ extension AutomationStore {
     }
   }
 
-  /// 部品の行を書き換える: 残る部品を書き換え、`id` の無い部品を足す（`entities` に振った ID を書く）。
+  /// ノードの行を書き換える: 残るノードを書き換え、`id` の無いノードを足す（`entities` に振った ID を書く）。
   private static func writeNodes(
     _ checked: [AutomationGraph.Checked], _ entities: inout [AutomationNode], of id: Int,
     _ db: AutomationDatabase, at: Date
@@ -105,7 +105,7 @@ extension AutomationStore {
     }
   }
 
-  /// 部品ごとの使う動作の定義。今使っている定義と中身が同じならそのまま指し、違えば足す。新しい部品の ID は仮の 0。
+  /// ノードごとの使う動作の定義。今使っている定義と中身が同じならそのまま指し、違えば足す。新しいノードの ID は仮の 0。
   private static func entities(
     _ checked: [AutomationGraph.Checked], old: Automation?, _ db: AutomationDatabase
   ) throws -> [AutomationNode] {
@@ -127,9 +127,9 @@ extension AutomationStore {
     var invalidated: [Int] = []
   }
 
-  /// つながりを書き換え、出力の性質が変わった部品の今有効な項目を無効にし、何をするかが変わった部品の外した印を下ろし、部品の
-  /// 状態を読み直す。同じ部品どうしのつながりが残れば読んだ位置も残る。定義を読めない自動化を直すときは前の性質を知らないので、
-  /// 残る部品のうち今の集合でない部品の今有効な項目を無効にし、残る部品をすべて何をするかが変わったものとして扱う。
+  /// つながりを書き換え、出力の性質が変わったノードの今有効な項目を無効にし、何をするかが変わったノードの外した印を下ろし、ノードの
+  /// 状態を読み直す。同じノードどうしのつながりが残れば読んだ位置も残る。定義を読めない自動化を直すときは前の性質を知らないので、
+  /// 残るノードのうち今の集合でないノードの今有効な項目を無効にし、残るノードをすべて何をするかが変わったものとして扱う。
   private static func rewire(
     _ graph: AutomationGraph, of id: Int, _ current: Current, _ db: AutomationDatabase, at: Date
   ) throws -> Rewired {
@@ -156,8 +156,8 @@ extension AutomationStore {
     return rewired
   }
 
-  /// 部品の `id` を確かめる: この自動化の今の部品だけ・重なりなし・`id` の無い部品の鍵が外れる部品の鍵と同じでない。
-  /// `current` は今の部品の台帳（ID と鍵）。
+  /// ノードの `id` を確かめる: この自動化の今のノードだけ・重なりなし・`id` の無いノードの鍵が外れるノードの鍵と同じでない。
+  /// `current` は今のノードの台帳（ID と鍵）。
   private static func checkIds(
     _ definitionNodes: [AutomationDefinition.Node], of automation: Int,
     current: [AutomationNodeID: String]

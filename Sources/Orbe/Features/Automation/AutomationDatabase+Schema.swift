@@ -3,7 +3,7 @@ import Foundation
 extension AutomationDatabase {
   /// 版 2 の表。ID はどれも使い回さない（AUTOINCREMENT）。外部キーは接続ごとに `PRAGMA foreign_keys = ON` で守る。
   ///
-  /// 部品の項目の通し番号（`nodes.last_item_seq`）は変化の番号で、項目の追加（`items.seq`。最初の版も同じ番号）・版の追加
+  /// ノードの項目の通し番号（`nodes.last_item_seq`）は変化の番号で、項目の追加（`items.seq`。最初の版も同じ番号）・版の追加
   /// （`item_versions.seq`）・項目の無効化（`items.valid_to_seq`）のたびに 1 進む。出来事の通し番号は出来事の追加で進む。
   static let schema = """
     CREATE TABLE node_defs (

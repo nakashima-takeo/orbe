@@ -1,11 +1,11 @@
 import Foundation
 import OrbeSessionLog
 
-/// 部品の 1 回。部品と、その役割の入力を受けて手段を起こし、役割ごとに結果を受けて返す。読み・保存・予定は持たない——何を
+/// ノードの 1 回。ノードと、その役割の入力を受けて手段を起こし、役割ごとに結果を受けて返す。読み・保存・予定は持たない——何を
 /// 取ったか・出した行をどう残すか・回の記録をどう確定するかは呼び手が決める。
 ///
-/// agent の部品は、回の入力を Orbe の MCP の道具で読み、結果も道具で出す（`AutomationRunSession`）。道具が呼ばれるたびに
-/// 確かめ、外れていればその場で理由を返すので、agent は同じ会話の中で直す。コマンドの部品は入力を標準入力で受け、結果を
+/// agent のノードは、回の入力を Orbe の MCP の道具で読み、結果も道具で出す（`AutomationRunSession`）。道具が呼ばれるたびに
+/// 確かめ、外れていればその場で理由を返すので、agent は同じ会話の中で直す。コマンドのノードは入力を標準入力で受け、結果を
 /// 標準出力で出す——同じ決まり（`AutomationOutputs`）で確かめ、1 件でも外れていればその回は失敗にする（走らせ直しても同じ
 /// 出力になるため）。上限は経過時間（`timeoutMinutes`）だけで、無出力では打ち切らない。
 struct AutomationNodePass {
@@ -16,15 +16,15 @@ struct AutomationNodePass {
   /// agent の回の相手を Orbe の MCP へ渡す帳面。
   let runSessions: AutomationRunSessions
 
-  /// 部品の役割の入力。ケースが役割と 1 対 1 に対応し、役割と食い違う入力は呼び手の誤り。取得と仕事のケースは行の席を
+  /// ノードの役割の入力。ケースが役割と 1 対 1 に対応し、役割と食い違う入力は呼び手の誤り。取得と仕事のケースは行の席を
   /// 持たない——外から届いた文面を、ツールを持ちうる agent の依頼文へ型の上で運ばないため。
   enum Input {
     /// `since` は前回成功した回の開始時刻（新着の流れの取得にだけ渡す）。
     case fetch(since: Date?)
-    /// `reachesJudge` は、出した行が途中で取得の部品を通らずに判定の部品へ届くか（`AutomationGraph.reachesTaskCandidates`）。
+    /// `reachesJudge` は、出した行が途中で取得のノードを通らずに判定のノードへ届くか（`AutomationGraph.reachesTaskCandidates`）。
     /// 届くなら、入力の行の `id` でない `id` の出力の行も決まりを外した行になる——判定は出どころの項目から候補を作るので、
     /// 新しく作った行は判定で使えないため。処理が続くなら、そうした行を初めに出した処理が外したことになる。入力の行の `id` を
-    /// 保った行は、入力の行に出どころが無くても外れた行にしない（部品は決まりどおりに素通ししている。判定が読む時点で
+    /// 保った行は、入力の行に出どころが無くても外れた行にしない（ノードは決まりどおりに素通ししている。判定が読む時点で
     /// 出どころなしとして捨てる）。
     case process([AutomationNodeRow], reachesJudge: Bool)
     /// 行はどれも出どころを持つ。`choices` は判断待ちの候補と付け先にできる workspace。
@@ -234,7 +234,7 @@ struct AutomationNodePass {
 }
 
 extension AutomationNodePass.Input {
-  /// 部品の 1 回が受ける行の 1 行ずつ（取得と仕事は持たない）。
+  /// ノードの 1 回が受ける行の 1 行ずつ（取得と仕事は持たない）。
   var rowTexts: [String] {
     switch self {
     case .process(let rows, _), .report(let rows), .sideEffect(let rows, _): rows.map(\.text)
@@ -253,7 +253,7 @@ extension AutomationNodePass.Input {
   }
 }
 
-/// 部品の 1 回が受ける行（読んだ行）か、出した行。受ける行の `id` は下流へ渡す id、出した行の `id` は書かれた id。
+/// ノードの 1 回が受ける行（読んだ行）か、出した行。受ける行の `id` は下流へ渡す id、出した行の `id` は書かれた id。
 struct AutomationNodeRow: Equatable {
   let id: String
   /// 行の JSON の 1 行（受ける行は下流へ渡す 1 行、出した行は書かれたまま）。

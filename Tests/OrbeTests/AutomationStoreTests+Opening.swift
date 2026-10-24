@@ -5,7 +5,7 @@ import XCTest
 /// 開くとき——DB の版の確かめ、読めない定義・記録の閉じ込め。
 ///
 /// 壊れると何が起きるか: 古い版の DB で起動が落ちる、または読み違える。新しい版の DB を退避して利用者の自動化を
-/// 失う。読めない定義が 1 つあるだけで全部の自動化を失う。読めない記録 1 件で部品の記録が全部消える。
+/// 失う。読めない定義が 1 つあるだけで全部の自動化を失う。読めない記録 1 件でノードの記録が全部消える。
 extension AutomationStoreTests {
   // MARK: - 版
 
@@ -57,7 +57,7 @@ extension AutomationStoreTests {
 
   // MARK: - 閉じ込め
 
-  /// 版 2 の DB で組み合わせの部品の定義を指す部品は壊れた値なので、その自動化は定義エラーとして読めない自動化になる。
+  /// 版 2 の DB で組み合わせのノードの定義を指すノードは壊れた値なので、その自動化は定義エラーとして読めない自動化になる。
   func testANodePointingAtACompositeDefinitionIsADefinitionError() throws {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
@@ -139,8 +139,8 @@ extension AutomationStoreTests {
     return (AutomationStore(), id)
   }
 
-  /// 読めない自動化を直すと、残る部品は開き直したストアと同じ状態（回の記録・通し番号・足した時刻）から続き、何をするかが
-  /// 変わったものとして外した印が下りる。今の集合のまま直した部品の今有効な項目は残る。
+  /// 読めない自動化を直すと、残るノードは開き直したストアと同じ状態（回の記録・通し番号・足した時刻）から続き、何をするかが
+  /// 変わったものとして外した印が下りる。今の集合のまま直したノードの今有効な項目は残る。
   func testFixingAnUnreadableAutomationCarriesItsNodesOverAndLowersTheirMarks() throws {
     let (carried, id) = try { () throws -> (Automation, Int) in
       let (store, id) = try unreadableWithABreach()
@@ -161,7 +161,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(carried, AutomationStore().automation(id))
   }
 
-  /// 読めない自動化を、今の集合の部品の出力の性質を変えて直すと、その部品の今有効な項目は無効になる。
+  /// 読めない自動化を、今の集合のノードの出力の性質を変えて直すと、そのノードの今有効な項目は無効になる。
   func testFixingAnUnreadableAutomationWithAnotherCoverageInvalidatesItsItems() throws {
     let (store, id) = try unreadableWithABreach()
     var fixed = Self.definition("直した", coverage: .newArrivals)
@@ -174,7 +174,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.automation(id)?.state(key: "fetch").liveLinks, [])
   }
 
-  /// 読めない自動化の書き換えでも、id を落として今の部品と同じ鍵で書いた部品は断り、部品は変わらない。
+  /// 読めない自動化の書き換えでも、id を落として今のノードと同じ鍵で書いたノードは断り、ノードは変わらない。
   func testAnUnreadableAutomationRefusesARewriteThatDropsTheNodeIds() throws {
     let (store, id) = try unreadableWithABreach()
     let nodeIds = store.unreadable.first?.nodeIds
@@ -186,7 +186,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.unreadable.first?.nodeIds, nodeIds)
   }
 
-  /// 値の壊れた候補は、その 1 件だけが読めない候補としてリンクを塞ぎ続け、持ち主（出した判定の部品の自動化）が無くなれば
+  /// 値の壊れた候補は、その 1 件だけが読めない候補としてリンクを塞ぎ続け、持ち主（出した判定のノードの自動化）が無くなれば
   /// メモリからも DB からも忘れる。
   func testAProposalThatCannotBeReadHoldsItsLinkUntilItsHolderIsGone() throws {
     var store: AutomationStore? = AutomationStore()

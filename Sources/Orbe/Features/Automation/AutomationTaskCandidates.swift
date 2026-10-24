@@ -4,12 +4,12 @@ import Foundation
 // 項目で、その項目が無効になったときだけ（出来事が出どころの候補は自動では下げない）。候補は、どの自動化も持たなくなったときに
 // 忘れ、それまでは同じリンクを再び候補にしない。
 //
-// 自動化 A がリンク L の候補を持つのは、A のタスク候補へ至る取得の部品のどれかの今有効な項目に L があるとき、または A の判定の
-// 部品が出して判断待ちのとき。止めた自動化も持つ。定義を読めない自動化は、その部品が出した候補と、その部品が出どころの候補を
-// 持つ。読めない候補は状態が分からないので、出した判定の部品がある間は、その部品の自動化が持つ。
+// 自動化 A がリンク L の候補を持つのは、A のタスク候補へ至る取得のノードのどれかの今有効な項目に L があるとき、または A の判定の
+// ノードが出して判断待ちのとき。止めた自動化も持つ。定義を読めない自動化は、そのノードが出した候補と、そのノードが出どころの候補を
+// 持つ。読めない候補は状態が分からないので、出した判定のノードがある間は、そのノードの自動化が持つ。
 
 extension Automation {
-  /// タスク候補へ至る取得の部品の今有効な項目のリンク。持ち主・重なりはこの集合で言う。
+  /// タスク候補へ至る取得のノードの今有効な項目のリンク。持ち主・重なりはこの集合で言う。
   var candidateLinks: Set<String> {
     Set(
       graph.nodes.filter { $0.role == .fetch && graph.reachesTaskCandidates($0.id) }
@@ -71,8 +71,8 @@ extension AutomationMemory {
 }
 
 extension AutomationStore {
-  /// 判定の部品 `judge` に見せる判断待ちの候補（判定が対応済みにできる相手）。その判定へ行が届く取得の部品の今有効な項目に
-  /// リンクがあるものと、その判定が出したもの・その取得の部品が出どころのもの。
+  /// 判定のノード `judge` に見せる判断待ちの候補（判定が対応済みにできる相手）。その判定へ行が届く取得のノードの今有効な項目に
+  /// リンクがあるものと、その判定が出したもの・その取得のノードが出どころのもの。
   func openProposals(of id: Int, judge: AutomationNodeID) -> [AutomationProposal] {
     guard let automation = automation(id) else { return [] }
     let fetches = automation.graph.fetches(reaching: judge)
@@ -85,7 +85,7 @@ extension AutomationStore {
     }
   }
 
-  /// 候補を出した自動化——判定の部品の持ち主（部品を外しても自動化が残れば、その自動化）。持ち主を消していれば nil。
+  /// 候補を出した自動化——判定のノードの持ち主（ノードを外しても自動化が残れば、その自動化）。持ち主を消していれば nil。
   func issuer(of proposal: AutomationProposal) -> Automation? {
     judgeOwners[proposal.judge].flatMap(automation)
   }
@@ -119,7 +119,7 @@ extension AutomationStore {
     shelvedProposals.filter { $0.shelf == id }.map(\.proposal)
   }
 
-  /// 判定の部品を持つ他の自動化と、タスク候補へ至る取得の部品の今有効な項目が重なっているリンクの数（重なりのある相手だけ、
+  /// 判定のノードを持つ他の自動化と、タスク候補へ至る取得のノードの今有効な項目が重なっているリンクの数（重なりのある相手だけ、
   /// ID 順）。
   func overlaps(of id: Int) -> [(automation: Automation, count: Int)] {
     guard let automation = automation(id), automation.judges else { return [] }

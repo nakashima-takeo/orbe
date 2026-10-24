@@ -2,7 +2,7 @@ import Foundation
 
 /// 自動化の DB の読み書き。書く手はどれもトランザクションの中で呼ぶ（`transaction`）。
 ///
-/// 部品の定義（`node_defs` 以下）は書き換えずに足し、自動化・部品・つながりの行は書き換える。出す側のデータは性質ごとに、
+/// ノードの定義（`node_defs` 以下）は書き換えずに足し、自動化・ノード・つながりの行は書き換える。出す側のデータは性質ごとに、
 /// 今の集合（`items`・`item_versions`）と出来事の流れ（`events`）に分け、受け手はつながりに読んだ位置を持つ。参照は外部キーで
 /// 守り、指されなくなった行はトランザクションの最後の掃除が消す（`AutomationDatabase+Retention`）。
 final class AutomationDatabase {
@@ -59,12 +59,12 @@ final class AutomationDatabase {
     }.first ?? (nil, Date(timeIntervalSince1970: 0))
   }
 
-  /// 自動化の行を消す。部品は先に外しておく（外した部品の台帳は自動化を指さなくなる）。
+  /// 自動化の行を消す。ノードは先に外しておく（外したノードの台帳は自動化を指さなくなる）。
   func deleteAutomation(_ id: Int) throws {
     try db.run("DELETE FROM automations WHERE id = ?", [.integer(Int64(id))])
   }
 
-  // MARK: - 部品の定義
+  // MARK: - ノードの定義
 
   /// 動作の定義を足して ID を返す。
   func insert(action: AutomationActionDef) throws -> AutomationNodeDefID {
@@ -76,9 +76,9 @@ final class AutomationDatabase {
     return AutomationNodeDefID(Int(id))
   }
 
-  // MARK: - 部品
+  // MARK: - ノード
 
-  /// 部品を足して ID を返す。
+  /// ノードを足して ID を返す。
   func insertNode(
     of automation: Int, at position: Int, _ definitionNode: AutomationDefinition.Node,
     defId: AutomationNodeDefID, addedAt: Date
@@ -98,7 +98,7 @@ final class AutomationDatabase {
     return AutomationNodeID(Int(db.lastInsertRowID))
   }
 
-  /// 外していない部品の位置と鍵を、一意に当たらない仮の値へ退ける（入れ替えを 1 行ずつ書くため）。
+  /// 外していないノードの位置と鍵を、一意に当たらない仮の値へ退ける（入れ替えを 1 行ずつ書くため）。
   func setAsidePlaces(of automation: Int) throws {
     try db.run(
       """
@@ -124,7 +124,7 @@ final class AutomationDatabase {
       ])
   }
 
-  /// 部品を外す: 外した時刻を書き、今有効な項目を無効にし、つながりと外した印と持ち越しを消す。外した部品の回の記録・判断の
+  /// ノードを外す: 外した時刻を書き、今有効な項目を無効にし、つながりと外した印と持ち越しを消す。外したノードの回の記録・判断の
   /// 記録・台帳は、同じトランザクションの最後の掃除が、候補を忘れた後に指されなくなったものから消す。無効にした項目を返す。
   func removeNode(_ id: AutomationNodeID, at: Date) throws -> [Int] {
     let nodeId: [SQLiteValue] = [.integer(Int64(id.rawValue))]
@@ -163,7 +163,7 @@ final class AutomationDatabase {
       [.text(try Self.encode(drops)), .integer(Int64(id.rawValue))])
   }
 
-  /// 部品の自分の状態（直近の回・最新の成功・外した印・今有効な項目のリンク）。起動時も変化の後も、メモリの部品の状態はここから
+  /// ノードの自分の状態（直近の回・最新の成功・外した印・今有効な項目のリンク）。起動時も変化の後も、メモリのノードの状態はここから
   /// 読み直す。読めば取る行は数えない（`AutomationMemory.recount`）。
   func state(of id: AutomationNodeID) throws -> AutomationNodeState {
     let nodeId: [SQLiteValue] = [.integer(Int64(id.rawValue))]
@@ -185,7 +185,7 @@ final class AutomationDatabase {
 
   // MARK: - つながり
 
-  /// 受け手のつながりを `inputs` に置き換える。同じ部品どうしのつながりが残れば読んだ位置も残り、新しいつながりは項目を 0、
+  /// 受け手のつながりを `inputs` に置き換える。同じノードどうしのつながりが残れば読んだ位置も残り、新しいつながりは項目を 0、
   /// 出来事を上流の最後の出来事の番号から読む。
   func setEdges(of automation: Int, to receiver: AutomationNodeID, _ inputs: [AutomationNodeEdge])
     throws
@@ -255,7 +255,7 @@ enum AutomationSourceRef: Hashable {
 }
 
 extension AutomationDatabase {
-  /// 自動化の外していない部品の鍵（部品の台帳）。定義を読めない自動化でも行から引ける。
+  /// 自動化の外していないノードの鍵（ノードの台帳）。定義を読めない自動化でも行から引ける。
   func nodeKeys(of automation: Int) throws -> [AutomationNodeID: String] {
     Dictionary(
       uniqueKeysWithValues: try db.select(

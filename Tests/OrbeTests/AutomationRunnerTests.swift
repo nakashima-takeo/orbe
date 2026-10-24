@@ -3,10 +3,10 @@ import XCTest
 
 @testable import Orbe
 
-/// 走らせ役——部品ごとの予定、上流から読んで部品の 1 回に渡すこと、「届いたら」の部品の起こし方、読めば取る行を 1 回で
-/// 取り切ること、書き換え。番人の時計と手段の実行だけを差し替え、ストアと DB と部品の 1 回は本物で回す。
+/// 走らせ役——ノードごとの予定、上流から読んでノードの 1 回に渡すこと、「届いたら」のノードの起こし方、読めば取る行を 1 回で
+/// 取り切ること、書き換え。番人の時計と手段の実行だけを差し替え、ストアと DB とノードの 1 回は本物で回す。
 ///
-/// 壊れると何が起きるか: 取得が出した項目が判定に届かない・判定の失敗で消える・同じ項目が二度判定に渡る。「届いたら」の部品が
+/// 壊れると何が起きるか: 取得が出した項目が判定に届かない・判定の失敗で消える・同じ項目が二度判定に渡る。「届いたら」のノードが
 /// 読めば取る行を抱えたまま誰にも起こされず、次の上流の回（毎日の取得なら 1 日）まで止まる。失敗した行で agent が即座に回り
 /// 続ける。読めば取る行を一部しか取らず、読み残しが日ごとに伸び続ける。新着の流れの取得が目印を失い、同じ項目を取り直すか
 /// 取り逃す。書き換えた前の定義の結果が新しい定義の回として確定する、名前を変えただけで走っている回が殺される。
@@ -17,7 +17,7 @@ final class AutomationRunnerTests: OrbeTestCase {
   var jobs: FakeJobs!
   var store: AutomationStore!
   var runner: AutomationRunner!
-  /// 走らせ役が回を記録したと知らせた部品の鍵（知らせた順）。
+  /// 走らせ役が回を記録したと知らせたノードの鍵（知らせた順）。
   var recorded: [String] = []
 
   override func setUp() {
@@ -58,9 +58,9 @@ final class AutomationRunnerTests: OrbeTestCase {
     }
   }
 
-  // MARK: - 部品
+  // MARK: - ノード
 
-  /// コマンドの部品。スクリプトは既定で部品の鍵（呼び出しを部品ごとに見分けるため）。
+  /// コマンドのノード。スクリプトは既定でノードの鍵（呼び出しをノードごとに見分けるため）。
   func definitionNode(
     _ key: String, _ trigger: AutomationNode.Trigger, from inputs: [String] = [],
     script: String? = nil, coverage: AutomationCoverage? = nil,
@@ -70,7 +70,7 @@ final class AutomationRunnerTests: OrbeTestCase {
       key, key, trigger, from: inputs, script: script ?? key, coverage: coverage, deliver: deliver)
   }
 
-  /// 新着の流れを `seconds` ごとに取る取得の部品。
+  /// 新着の流れを `seconds` ごとに取る取得のノード。
   func fetch(_ key: String, every seconds: TimeInterval, script: String? = nil)
     -> AutomationDefinition.Node
   {
@@ -81,7 +81,7 @@ final class AutomationRunnerTests: OrbeTestCase {
     try runner.set(nil, AutomationDefinition(name: name, notify: nil, nodes: definitionNodes)).id
   }
 
-  /// 今の版で書き換える。同じ鍵の部品は今の部品の id を添える（同じ部品のまま）。
+  /// 今の版で書き換える。同じ鍵のノードは今のノードの id を添える（同じノードのまま）。
   @discardableResult func rewrite(_ id: Int, _ definition: AutomationDefinition) throws
     -> Automation
   {
@@ -97,7 +97,7 @@ final class AutomationRunnerTests: OrbeTestCase {
     store.automation(id)?.state(key: key).pending.count
   }
 
-  /// 下流へ渡す id（`<部品 ID>:<書かれた id>`）。
+  /// 下流へ渡す id（`<ノード ID>:<書かれた id>`）。
   func downstream(_ key: String, _ written: String, of id: Int) -> String {
     "\(store.nodeId(id, key)):\(written)"
   }
@@ -161,7 +161,7 @@ final class AutomationRunnerTests: OrbeTestCase {
 
   // MARK: - 読めば取る行と判定
 
-  /// 取得の部品が回るたびに判定が読めば取る行が増え、判定の予定の時刻にその分がまとめて渡って、0 件になる。
+  /// 取得のノードが回るたびに判定が読めば取る行が増え、判定の予定の時刻にその分がまとめて渡って、0 件になる。
   func testFetchesAddToTheJudgesPendingRowsAndTheJudgeTakesThemAllAtItsTime() throws {
     let id = try define([
       fetch("gh", every: 1800), fetch("slack", every: 3600),
@@ -210,7 +210,7 @@ final class AutomationRunnerTests: OrbeTestCase {
     XCTAssertEqual(ids("judge"), [downstream("gh", "a", of: id), downstream("gh", "b", of: id)])
   }
 
-  /// 「届いたら」の部品が失敗しても、同じ行ですぐには回し直さず、上流の次の回の後に（新しい行が無くても）やり直す。
+  /// 「届いたら」のノードが失敗しても、同じ行ですぐには回し直さず、上流の次の回の後に（新しい行が無くても）やり直す。
   func testAFailedArrivalNodeRetriesAfterTheUpstreamsNextRunNotAtOnce() throws {
     let id = try define([
       fetch("gh", every: 1800),
@@ -228,7 +228,7 @@ final class AutomationRunnerTests: OrbeTestCase {
     XCTAssertEqual(ids("digest"), [downstream("gh", "a", of: id)])
   }
 
-  /// 「届いたら」の部品が走っている間に届いた行は、その回が終わったら続けて起こして渡す。
+  /// 「届いたら」のノードが走っている間に届いた行は、その回が終わったら続けて起こして渡す。
   func testRowsArrivingWhileAnArrivalNodeRunsAreTakenRightAfterIt() throws {
     let id = try define([
       fetch("gh", every: 1800),
@@ -248,7 +248,7 @@ final class AutomationRunnerTests: OrbeTestCase {
     XCTAssertEqual(pending("digest", of: id), 0)
   }
 
-  /// 届いたまま残っている行は、起動で載せたときに「届いたら」の部品を起こす。止めた自動化は起動では起こさず、再開で起こす。
+  /// 届いたまま残っている行は、起動で載せたときに「届いたら」のノードを起こす。止めた自動化は起動では起こさず、再開で起こす。
   func testLeftoverRowsWakeArrivalNodesAtLaunchAndOnResumeButNotWhilePaused() throws {
     func seed(_ digest: String, paused: Bool) throws -> Int {
       let id = try store.create(

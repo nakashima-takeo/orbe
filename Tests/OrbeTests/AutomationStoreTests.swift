@@ -13,7 +13,7 @@ import XCTest
 final class AutomationStoreTests: OrbeTestCase {
   static let at = Date(timeIntervalSince1970: 1_800_000_000)
 
-  /// 取得の部品 `fetch` と、届いたらタスク候補を出す判定の部品 `judge`。
+  /// 取得のノード `fetch` と、届いたらタスク候補を出す判定のノード `judge`。
   static func definition(
     _ name: String = "受信", coverage: AutomationCoverage = .currentSet, script: String = "fetch"
   ) -> AutomationDefinition {
@@ -27,7 +27,7 @@ final class AutomationStoreTests: OrbeTestCase {
     AutomationItem(id: id, link: "https://example.com/\(id)", body: "\(id) の本文", time: at)
   }
 
-  /// 取得の部品の回を確定する。
+  /// 取得のノードの回を確定する。
   static func fetch(
     _ store: AutomationStore, _ id: Int, _ items: [AutomationItem],
     outcome: AutomationNodePass.Outcome? = nil, at: Date = at
@@ -36,7 +36,7 @@ final class AutomationStoreTests: OrbeTestCase {
       id, nodeKey: "fetch", at: at, outcome: outcome ?? DesignSceneFixtures.fetched(items))
   }
 
-  /// 判定の部品の、読める行をすべて取った回を確定する。案の出どころは、取った行のうち同じ書かれた id の行のもの。候補にした
+  /// 判定のノードの、読める行をすべて取った回を確定する。案の出どころは、取った行のうち同じ書かれた id の行のもの。候補にした
   /// 理由は `reason`（省けば無し）。
   static func judge(
     _ store: AutomationStore, _ id: Int, proposing items: [AutomationItem] = [],
@@ -58,7 +58,7 @@ final class AutomationStoreTests: OrbeTestCase {
         breach: nil))
   }
 
-  /// 今の版で書き換える。同じ鍵の部品は今の部品の id を添える（同じ部品のまま）。
+  /// 今の版で書き換える。同じ鍵のノードは今のノードの id を添える（同じノードのまま）。
   @discardableResult static func rewrite(
     _ store: AutomationStore, _ id: Int, _ definition: AutomationDefinition, at: Date = at
   ) throws -> AutomationStore.Replaced {
@@ -98,7 +98,7 @@ final class AutomationStoreTests: OrbeTestCase {
 
   // MARK: - 再起動
 
-  /// 自動化・つながりの取り方（take・古さの上限）・部品の状態（今有効な項目のリンク・決まりを外した印・回の記録・読めば取る行
+  /// 自動化・つながりの取り方（take・古さの上限）・ノードの状態（今有効な項目のリンク・決まりを外した印・回の記録・読めば取る行
   /// の数）・版・候補は、どの変異（作る・確定・書き換え・さばく・止める・消す）の後に開き直しても同じ。回の記録は
   /// 失敗・判定の確定で捨てた案も、候補は候補にした理由と候補を出した自動化も同じ。
   func testEverythingSurvivesARestart() throws {
@@ -230,7 +230,7 @@ final class AutomationStoreTests: OrbeTestCase {
     XCTAssertGreaterThan(try XCTUnwrap(reopened.proposals.first?.id), forgotten)
   }
 
-  /// 回の記録は部品ごとに新しい 20 件を残し、それより古い回は消える。ただし最新の成功した回・外した印の回・残っている候補を
+  /// 回の記録はノードごとに新しい 20 件を残し、それより古い回は消える。ただし最新の成功した回・外した印の回・残っている候補を
   /// 出した回は消えない。開き直しても同じ。
   func testOldRunsAreSweptExceptTheOnesSomethingPointsAt() throws {
     var store: AutomationStore? = AutomationStore()
