@@ -67,7 +67,7 @@ extension BoardAutomationPartValue {
     let state = automation.state(part)
     id = part
     role = text.role(node.role)
-    name = node.part.name
+    name = node.entity.name
     self.running = running
     mark = state.runs.first.map { $0.failed ? .failure : .success }
     switch node.action.method {
@@ -112,7 +112,7 @@ extension BoardAutomationPartValue {
   ) -> [Fact] {
     let l10n = text.l10n
     let graph = automation.graph
-    let part = node.part
+    let entity = node.entity
     let action = node.action
     let state = automation.state(node.id)
     let separator = l10n.string(.automationListSeparator)
@@ -132,7 +132,7 @@ extension BoardAutomationPartValue {
     case .command:
       fact(.boardPartMethod, l10n.string(.boardPartMethodCommand))
     }
-    fact(.boardPartTrigger, text.schedule(part.trigger))
+    fact(.boardPartTrigger, text.schedule(entity.trigger))
     if let coverage = node.coverage {
       fact(.boardPartSaving, self.coverage(coverage, of: node, state, text))
     }
@@ -148,12 +148,14 @@ extension BoardAutomationPartValue {
       fact(.boardPartDestination, BoardAutomationDetailValue.reports(automation.notify, l10n))
     case .sideEffect: fact(.boardPartDestination, l10n.string(.boardPartNothing))
     }
-    if !node.inputs.isEmpty { facts.append(pending(state.pending, maxItems: part.maxItems, l10n)) }
+    if !node.inputs.isEmpty {
+      facts.append(pending(state.pending, maxItems: entity.maxItems, l10n))
+    }
     fact(.boardPartTimeout, l10n.format(.boardPartMinutes, node.timeoutMinutes))
     if case .command(let command) = action.method, let directory = command.directory {
       fact(.boardPartDirectory, directory)
     }
-    if case .scheduled = part.trigger {
+    if case .scheduled = entity.trigger {
       fact(
         .boardPartNext,
         automation.paused ? l10n.string(.automationPaused) : next.map(text.stamp) ?? "")
@@ -197,7 +199,7 @@ extension BoardAutomationPartValue {
   private static func input(
     _ graph: AutomationGraph, _ edge: AutomationPartEdge, _ l10n: LocalizationStore
   ) -> String {
-    let name = graph.node(edge.from)?.part.name ?? "\(edge.from)"
+    let name = graph.node(edge.from)?.entity.name ?? "\(edge.from)"
     let notes =
       (edge.take == .all ? [l10n.string(.boardPartTakeAll)] : [])
       + (edge.maxAgeHours.map { [l10n.format(.boardPartMaxAge, $0)] } ?? [])

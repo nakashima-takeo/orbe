@@ -34,7 +34,7 @@ extension AutomationStore {
         automation: automation)
     } else if let broken = unreadable.first(where: { $0.id == id }) {
       current = Current(
-        version: broken.version, parts: broken.parts, keys: try read { try $0.partKeys(of: id) },
+        version: broken.version, parts: broken.nodeIds, keys: try read { try $0.partKeys(of: id) },
         automation: nil)
     } else {
       throw .automationNotFound(id)
@@ -51,24 +51,26 @@ extension AutomationStore {
     return try commit(sweepingAt: at) { db, memory in
       var entities = try Self.entities(checked, old: current.automation, db)
       if let old = current.automation, old.name == name, old.notify == definition.notify,
-        old.graph.nodes.map(\.part) == entities,
-        old.graph.parts.map(\.from) == checked.map(\.part.from)
+        old.graph.nodes.map(\.entity) == entities,
+        old.graph.definitionNodes.map(\.from) == checked.map(\.definitionNode.from)
       {
         return Replaced(automation: old, reworked: [], removed: [])
       }
-      let removed = current.parts.filter { !Set(checked.compactMap(\.part.id)).contains($0) }
+      let removed = current.parts.filter {
+        !Set(checked.compactMap(\.definitionNode.id)).contains($0)
+      }
       var invalidated: [Int] = []
       for part in removed {
         invalidated += try db.removePart(part, at: at)
       }
       try Self.writeParts(checked, &entities, of: id, db, at: at)
-      let graph = AutomationGraph(checked, parts: entities)
+      let graph = AutomationGraph(checked, entities: entities)
       let rewired = try Self.rewire(graph, of: id, current, db, at: at)
       try db.updateAutomation(id, name: name, notify: definition.notify, version: version + 1)
       let row = try db.automationRow(id)
       let automation = Automation(
         id: id, name: name, notify: definition.notify, graph: graph, pausedAt: row.pausedAt,
-        version: version + 1, createdAt: row.createdAt, parts: rewired.states)
+        version: version + 1, createdAt: row.createdAt, states: rewired.states)
       memory.unreadable.removeAll { $0.id == id }
       memory.automations.removeAll { $0.id == id }
       memory.automations.append(automation)
@@ -90,12 +92,13 @@ extension AutomationStore {
     try db.setAsidePlaces(of: id)
     for (position, item) in checked.enumerated() {
       let defId = entities[position].defId
-      if let partId = item.part.id {
-        try db.updatePart(partId, at: position, item.part, defId: defId)
+      if let partId = item.definitionNode.id {
+        try db.updatePart(partId, at: position, item.definitionNode, defId: defId)
       } else {
         entities[position] = AutomationPart(
-          item.part,
-          id: try db.insertPart(of: id, at: position, item.part, defId: defId, addedAt: at),
+          item.definitionNode,
+          id: try db.insertPart(
+            of: id, at: position, item.definitionNode, defId: defId, addedAt: at),
           defId: defId)
       }
     }
@@ -106,10 +109,13 @@ extension AutomationStore {
     _ checked: [AutomationGraph.Checked], old: Automation?, _ db: AutomationDatabase
   ) throws -> [AutomationPart] {
     try checked.map { item in
-      let previous = item.part.id.flatMap { old?.graph.node($0) }
-      let same = previous.flatMap { $0.action == item.part.action ? $0.part.defId : nil }
-      let defId = try same ?? db.insert(action: item.part.action)
-      return AutomationPart(item.part, id: item.part.id ?? AutomationPartID(0), defId: defId)
+      let previous = item.definitionNode.id.flatMap { old?.graph.node($0) }
+      let same = previous.flatMap {
+        $0.action == item.definitionNode.action ? $0.entity.defId : nil
+      }
+      let defId = try same ?? db.insert(action: item.definitionNode.action)
+      return AutomationPart(
+        item.definitionNode, id: item.definitionNode.id ?? AutomationPartID(0), defId: defId)
     }
   }
 

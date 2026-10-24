@@ -131,6 +131,6 @@ struct AutomationFlow {
 
   /// 普段の決まりで起きるのを見届ける部品か（根でない「届いたら」の部品）。
   private func arrives(_ part: AutomationPartID, in graph: AutomationGraph) -> Bool {
-    !roots.contains(part) && graph.node(part)?.part.trigger == .arrival
+    !roots.contains(part) && graph.node(part)?.entity.trigger == .arrival
   }
 }

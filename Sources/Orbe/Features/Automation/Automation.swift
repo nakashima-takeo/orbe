@@ -15,13 +15,13 @@ struct Automation: Equatable, Identifiable {
   var version: Int
   let createdAt: Date
   /// 部品ごとの状態。
-  var parts: [AutomationPartID: AutomationPartState]
+  var states: [AutomationPartID: AutomationPartState]
 
   var paused: Bool { pausedAt != nil }
 
   /// 外の形（部品に ID を添える）。
   var definition: AutomationDefinition {
-    AutomationDefinition(name: name, notify: notify, parts: graph.parts)
+    AutomationDefinition(name: name, notify: notify, parts: graph.definitionNodes)
   }
 
   /// 判定の部品を持つか。タスク候補の棚・重なりはこれを持つ自動化の単位。
@@ -29,7 +29,7 @@ struct Automation: Equatable, Identifiable {
 
   /// 部品の状態。グラフの部品はいつも状態を持つ。
   func state(_ id: AutomationPartID) -> AutomationPartState {
-    guard let state = parts[id] else { preconditionFailure("every part has a state: \(id)") }
+    guard let state = states[id] else { preconditionFailure("every part has a state: \(id)") }
     return state
   }
 
@@ -40,7 +40,7 @@ struct Automation: Equatable, Identifiable {
 
   /// 部品の回をすべて、新しい順に混ぜたもの。
   var runs: [AutomationRunRecord] {
-    parts.values.flatMap(\.runs).sorted { ($0.startedAt, $0.id) > ($1.startedAt, $1.id) }
+    states.values.flatMap(\.runs).sorted { ($0.startedAt, $0.id) > ($1.startedAt, $1.id) }
   }
 }
 
@@ -56,7 +56,7 @@ struct AutomationUnreadable: Equatable, Identifiable {
   /// 読めない理由（定義の中の場所で言う英文）。
   let reason: String
   /// 外していない部品。
-  let parts: [AutomationPartID]
+  let nodeIds: [AutomationPartID]
 }
 
 /// 回を知らせる先。

@@ -95,9 +95,9 @@ struct TaskPaletteAutomationList: View {
   {
     let l10n = text.l10n
     guard let record else {
-      return node.part.name + "\u{3000}" + l10n.string(.taskPaletteAutomationNeverJudged)
+      return node.entity.name + "\u{3000}" + l10n.string(.taskPaletteAutomationNeverJudged)
     }
-    let head = text.stamp(record.startedAt) + " " + node.part.name + "\u{3000}"
+    let head = text.stamp(record.startedAt) + " " + node.entity.name + "\u{3000}"
     guard let run = record.run else {
       return head
         + l10n.string(record.failed ? .automationRunUnknownFailed : .automationRunUnknownPassed)

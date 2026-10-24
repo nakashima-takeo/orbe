@@ -278,7 +278,7 @@ import SwiftUI
     guard let automation = selectedAutomation, let node = automation.graph.node(part) else {
       return
     }
-    draft(l10n.format(.boardAskFixDraft, automation.name, node.part.name))
+    draft(l10n.format(.boardAskFixDraft, automation.name, node.entity.name))
   }
 
   /// 定義を読めない自動化の「修正を依頼」。依頼の欄に「自動化「<名前>」の修正：<理由の原文>」を書く（読むのは AI なので

@@ -85,17 +85,17 @@ import Observation
       let id = try db.insertAutomation(name: name, notify: definition.notify, createdAt: at)
       var entities: [AutomationPart] = []
       for (position, item) in checked.enumerated() {
-        let defId = try db.insert(action: item.part.action)
+        let defId = try db.insert(action: item.definitionNode.action)
         let partId = try db.insertPart(
-          of: id, at: position, item.part, defId: defId, addedAt: at)
-        entities.append(AutomationPart(item.part, id: partId, defId: defId))
+          of: id, at: position, item.definitionNode, defId: defId, addedAt: at)
+        entities.append(AutomationPart(item.definitionNode, id: partId, defId: defId))
       }
-      let graph = AutomationGraph(checked, parts: entities)
+      let graph = AutomationGraph(checked, entities: entities)
       for node in graph.nodes { try db.setEdges(of: id, to: node.id, node.inputs) }
       let automation = Automation(
         id: id, name: name, notify: definition.notify, graph: graph, pausedAt: nil, version: 1,
         createdAt: at,
-        parts: Dictionary(
+        states: Dictionary(
           uniqueKeysWithValues: try graph.nodes.map { ($0.id, try db.state(of: $0.id)) }))
       memory.automations.append(automation)
       try memory.recount(automation.id, db, now: at)
@@ -123,7 +123,7 @@ import Observation
     if let automation = automation(id) {
       parts = automation.graph.nodes.map(\.id)
     } else if let broken = unreadable.first(where: { $0.id == id }) {
-      parts = broken.parts
+      parts = broken.nodeIds
     } else {
       throw .automationNotFound(id)
     }
@@ -329,10 +329,10 @@ struct AutomationMemory: Equatable {
   /// 部品の自分の状態を DB から読み直す（読めば取る行は保つ）。
   mutating func reread(_ part: AutomationPartID, of id: Int, _ db: AutomationDatabase) throws {
     guard let index = automations.firstIndex(where: { $0.id == id }),
-      let pending = automations[index].parts[part]?.pending
+      let pending = automations[index].states[part]?.pending
     else { return }
     var state = try db.state(of: part)
     state.pending = pending
-    automations[index].parts[part] = state
+    automations[index].states[part] = state
   }
 }

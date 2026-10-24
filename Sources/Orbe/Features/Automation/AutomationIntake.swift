@@ -89,7 +89,7 @@ enum AutomationIntake {
     let replaced = remaining.filter { newestId[$0.id] != $0 }
     dropped += replaced.map { Drop(row: $0, reason: .replaced) }
     remaining.removeAll { replaced.contains($0) }
-    if let maxItems = node.part.maxItems, remaining.count > maxItems {
+    if let maxItems = node.entity.maxItems, remaining.count > maxItems {
       dropped += remaining.prefix(remaining.count - maxItems).map {
         Drop(row: $0, reason: .overflow)
       }

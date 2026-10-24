@@ -160,7 +160,7 @@ extension DesignSceneFixtures {
     }
     _ = try store.record(
       AutomationPassEnd(
-        automationId: id, part: node.id, defId: node.part.defId, trigger: pass.trigger,
+        automationId: id, part: node.id, defId: node.entity.defId, trigger: pass.trigger,
         startedAt: pass.at, endedAt: pass.at.addingTimeInterval(60), read: read,
         outcome: outcome))
   }

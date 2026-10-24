@@ -167,7 +167,7 @@ final class AutomationGraphTests: OrbeTestCase {
 
     let graph = try AutomationGraph.numbered(parts)
 
-    XCTAssertEqual(graph.parts.map(\.from), parts.map(\.from))
+    XCTAssertEqual(graph.definitionNodes.map(\.from), parts.map(\.from))
   }
 }
 
@@ -179,10 +179,11 @@ extension AutomationGraph {
     let checked = try check(parts)
     return AutomationGraph(
       checked,
-      parts: checked.enumerated().map { index, item in
+      entities: checked.enumerated().map { index, item in
         AutomationPart(
-          id: AutomationPartID(index + 1), key: item.part.key, name: item.part.name,
-          trigger: item.part.trigger, maxItems: item.part.maxItems,
+          id: AutomationPartID(index + 1), key: item.definitionNode.key,
+          name: item.definitionNode.name,
+          trigger: item.definitionNode.trigger, maxItems: item.definitionNode.maxItems,
           defId: AutomationDefID(index + 1))
       })
   }

@@ -21,7 +21,7 @@ extension AutomationGraph {
     try Self.checkDestinations(checked.map(\.part), upstream, downstream)
     try Self.checkTakes(checked.map(\.part), roles, downstream)
     return checked.indices.map {
-      Checked(part: checked[$0].part, role: checked[$0].role, upstream: upstream[$0])
+      Checked(definitionNode: checked[$0].part, role: checked[$0].role, upstream: upstream[$0])
     }
   }
 

@@ -28,7 +28,7 @@ class AutomationPartPassTestCase: OrbeTestCase {
   ) -> BackgroundRunHandle {
     startedKey = part.key
     let node = AutomationGraph.Node(
-      part: AutomationPart(
+      entity: AutomationPart(
         id: AutomationPartID(1), key: part.key, name: part.name, trigger: part.trigger,
         maxItems: part.maxItems, defId: AutomationDefID(1)),
       action: part.action,

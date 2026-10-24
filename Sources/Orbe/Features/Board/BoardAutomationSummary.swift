@@ -54,7 +54,7 @@ extension BoardAutomationSummary {
     } else {
       self.next =
         automation.graph.nodes.contains {
-          if case .scheduled = $0.part.trigger { true } else { false }
+          if case .scheduled = $0.entity.trigger { true } else { false }
         } ? nil : l10n.string(.automationManual)
     }
   }
@@ -266,6 +266,6 @@ extension BoardAutomationSummary {
       default: result(run, node: node, text: text).text
       }
     return String(
-      text.l10n.format(.automationLabeled, node.part.name, body).prefix { !$0.isNewline })
+      text.l10n.format(.automationLabeled, node.entity.name, body).prefix { !$0.isNewline })
   }
 }

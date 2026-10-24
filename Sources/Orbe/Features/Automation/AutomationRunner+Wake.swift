@@ -52,7 +52,7 @@ extension AutomationRunner {
   /// 起こす決まり。「届いたら」の部品に、基準線より新しい上流の行があり、走っていなければ起こす。
   func wake(_ id: Int, _ part: AutomationPartID) {
     guard let automation = store.automation(id), let node = automation.graph.node(part),
-      node.part.trigger == .arrival
+      node.entity.trigger == .arrival
     else { return }
     let key = Self.key(id, part)
     guard !scheduler.isRunning(id: key), let inlets = inlets(of: part),
@@ -65,7 +65,7 @@ extension AutomationRunner {
   /// あればすべて起こす（`needsRetry`）。
   func retry(below part: AutomationPartID, in id: Int) {
     guard let automation = store.automation(id) else { return }
-    for node in automation.graph.descendants(of: part) where node.part.trigger == .arrival {
+    for node in automation.graph.descendants(of: part) where node.entity.trigger == .arrival {
       let key = Self.key(id, node.id)
       guard let inlets = inlets(of: node.id), Self.needsRetry(node, inlets) else {
         continue

@@ -51,13 +51,13 @@ extension AutomationRunnerTests {
     var gh = fetch("gh", every: 1800)
     let digest = part("digest", .arrival, from: ["gh"], deliver: .report)
     let id = try define([gh, digest])
-    let first = try XCTUnwrap(store.automation(id)?.graph.node(key: "gh")?.part.defId)
+    let first = try XCTUnwrap(store.automation(id)?.graph.node(key: "gh")?.entity.defId)
     advance(by: 1800)
 
     gh.action.timeoutMinutes = 2
     try rewrite(id, AutomationDefinition(name: "自動化", notify: nil, parts: [gh, digest]))
     XCTAssertNotEqual(
-      store.automation(id)?.graph.node(key: "gh")?.part.defId, first, "前提: 書き足した値を保存する定義に付け替える")
+      store.automation(id)?.graph.node(key: "gh")?.entity.defId, first, "前提: 書き足した値を保存する定義に付け替える")
     XCTAssertEqual(jobs.stopped, [])
     finish("gh", fetched(["a"]))
 

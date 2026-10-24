@@ -52,7 +52,7 @@ extension AutomationStore {
   func discard(_ read: AutomationIntake.Read, of part: AutomationPartID, in id: Int, now: Date)
     throws(AutomationError)
   {
-    guard read.taken.isEmpty, automation(id)?.parts[part] != nil, !read.reach.isEmpty else {
+    guard read.taken.isEmpty, automation(id)?.states[part] != nil, !read.reach.isEmpty else {
       return
     }
     try commit(sweepingAt: TaskItem.storedInstant(now)) { db, memory in
@@ -102,7 +102,7 @@ extension AutomationStore {
 extension AutomationStore {
   /// 数えた行のどれかが古さの上限を過ぎる最も早い時刻（どの受け手でも）。
   var nextPendingExpiry: Date? {
-    automations.flatMap { $0.parts.values.compactMap(\.pending.expiresAt) }.min()
+    automations.flatMap { $0.states.values.compactMap(\.pending.expiresAt) }.min()
   }
 
   /// 数えた行が古さの上限を過ぎた（`now` が過ぎる時刻より後の）受け手の「読めば取る行」の数を数え直す。
@@ -110,7 +110,7 @@ extension AutomationStore {
     let expired = automations.map { automation in
       (
         automation.id,
-        automation.parts.filter { ($0.value.pending.expiresAt ?? .distantFuture) < now }.map(\.key)
+        automation.states.filter { ($0.value.pending.expiresAt ?? .distantFuture) < now }.map(\.key)
       )
     }.filter { !$0.1.isEmpty }
     guard !expired.isEmpty else { return }
@@ -130,7 +130,7 @@ extension AutomationMemory {
     let links = heldLinks
     for node in automation.graph.nodes
     where !node.inputs.isEmpty && (parts?.contains(node.id) ?? true) {
-      automations[index].parts[node.id]?.pending = try db.pending(
+      automations[index].states[node.id]?.pending = try db.pending(
         node, in: automation.graph, proposed: links.contains, now: now)
     }
   }

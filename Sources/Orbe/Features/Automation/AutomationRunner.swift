@@ -103,7 +103,7 @@ import Observation
   /// 部品が次に予定で回る時刻。止めている・予定の無い部品は nil。過ぎていれば `now` 以前の時刻を返す。
   func nextRunAt(_ automation: Automation, part: AutomationPartID, now: Date? = nil) -> Date? {
     guard !automation.paused, let node = automation.graph.node(part),
-      case .scheduled(let timing) = node.part.trigger
+      case .scheduled(let timing) = node.entity.trigger
     else { return nil }
     let anchor = anchors[Self.key(automation.id, part)] ?? automation.state(part).anchor
     switch timing.next(after: anchor, deadline: nil, now: now ?? self.now(), calendar: calendar()) {
@@ -167,7 +167,7 @@ import Observation
     for node in automation.graph.nodes where admits(id, node.id) {
       let key = Self.key(id, node.id)
       var timing: BackgroundTiming?
-      if !automation.paused, case .scheduled(let scheduled) = node.part.trigger {
+      if !automation.paused, case .scheduled(let scheduled) = node.entity.trigger {
         timing = scheduled
       }
       if registered.contains(key) {
@@ -266,7 +266,7 @@ extension AutomationRunner {
     // 流しが起こした回でない「届いたら」の部品の回は、起こす決まりが起こした（届いた行で起きた）回。
     let trigger = Trigger(
       automationId: id, part: part,
-      kind: node.part.trigger == .arrival && !flowed ? .arrival : kind == .now ? .now : .schedule,
+      kind: node.entity.trigger == .arrival && !flowed ? .arrival : kind == .now ? .now : .schedule,
       startedAt: now(), finish: finish, flowed: flowed)
     active[ObjectIdentifier(trigger)] = trigger
     if node.inputs.isEmpty {
@@ -314,7 +314,7 @@ extension AutomationRunner {
     let input = self.input(node, automation, read)
     let startedAt = now()
     trigger.passStartedAt = startedAt
-    let defId = node.part.defId
+    let defId = node.entity.defId
     trigger.holding = AutomationHolding(
       rows: Set(
         read.map {
@@ -364,7 +364,7 @@ extension AutomationRunner {
     guard let node = store.automation(trigger.automationId)?.graph.node(trigger.part) else {
       return
     }
-    if node.part.trigger == .arrival {
+    if node.entity.trigger == .arrival {
       wake(trigger.automationId, trigger.part)
     } else {
       retry(below: trigger.part, in: trigger.automationId)

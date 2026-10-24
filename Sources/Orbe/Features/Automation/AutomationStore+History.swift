@@ -31,7 +31,7 @@ extension AutomationStore {
       }
     } else if let broken = unreadable.first(where: { $0.id == id }) {
       guard key == nil else { throw .unreadable(id, broken.reason) }
-      parts = broken.parts
+      parts = broken.nodeIds
     } else {
       throw .automationNotFound(id)
     }

@@ -162,12 +162,12 @@ enum TaskPaletteAutomationError: Equatable {
 
   /// 候補の出どころの取得の部品の名前。候補を出した自動化の定義から引き、部品か自動化が消えていれば nil。
   func sourceName(of proposal: AutomationProposal) -> String? {
-    store.issuer(of: proposal)?.graph.node(proposal.source)?.part.name
+    store.issuer(of: proposal)?.graph.node(proposal.source)?.entity.name
   }
 
   /// 候補を出した判定の部品の名前。部品か自動化が消えていれば nil。
   func judgeName(of proposal: AutomationProposal) -> String? {
-    store.issuer(of: proposal)?.graph.node(proposal.judge)?.part.name
+    store.issuer(of: proposal)?.graph.node(proposal.judge)?.entity.name
   }
 
   /// 棚の段の 2 行目。前回の判定は、判定の部品のうち最も新しく回ったものの最新の回（他の判定の失敗は一覧の頭で見る）。今の

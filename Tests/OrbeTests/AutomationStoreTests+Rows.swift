@@ -52,7 +52,7 @@ extension AutomationStoreTests {
     try store.record(
       AutomationPassEnd(
         automationId: id, part: part,
-        defId: try XCTUnwrap(store.automation(id)?.graph.node(part)).part.defId,
+        defId: try XCTUnwrap(store.automation(id)?.graph.node(part)).entity.defId,
         trigger: .arrival, startedAt: at, endedAt: at, read: read,
         outcome: DesignSceneFixtures.processed(
           read.taken.map {
@@ -69,7 +69,7 @@ extension AutomationStoreTests {
     try store.record(
       AutomationPassEnd(
         automationId: id, part: part,
-        defId: try XCTUnwrap(store.automation(id)?.graph.node(part)).part.defId,
+        defId: try XCTUnwrap(store.automation(id)?.graph.node(part)).entity.defId,
         trigger: .arrival, startedAt: at, endedAt: at, read: read,
         outcome: failing
           ? DesignSceneFixtures.failed("boom") : DesignSceneFixtures.sideEffected(read.taken.count))
@@ -308,7 +308,7 @@ extension AutomationStoreTests {
     let recorded = try store.record(
       AutomationPassEnd(
         automationId: id, part: part,
-        defId: try XCTUnwrap(store.automation(id)?.graph.node(part)).part.defId,
+        defId: try XCTUnwrap(store.automation(id)?.graph.node(part)).entity.defId,
         trigger: .arrival, startedAt: Self.at, endedAt: Self.at, read: read,
         outcome: DesignSceneFixtures.failed("boom")))
 

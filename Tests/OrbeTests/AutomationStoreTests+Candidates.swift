@@ -42,7 +42,7 @@ extension AutomationStoreTests {
     try store.record(
       AutomationPassEnd(
         automationId: id, part: judge,
-        defId: try XCTUnwrap(store.automation(id)?.graph.node(judge)).part.defId,
+        defId: try XCTUnwrap(store.automation(id)?.graph.node(judge)).entity.defId,
         trigger: .arrival, startedAt: Self.at, endedAt: Self.at, read: read,
         outcome: DesignSceneFixtures.judged(
           [
@@ -106,7 +106,7 @@ extension AutomationStoreTests {
     try store.record(
       AutomationPassEnd(
         automationId: second, part: judge,
-        defId: try XCTUnwrap(store.automation(second)?.graph.node(judge)).part.defId,
+        defId: try XCTUnwrap(store.automation(second)?.graph.node(judge)).entity.defId,
         trigger: .arrival, startedAt: Self.at, endedAt: Self.at, read: read,
         outcome: DesignSceneFixtures.judged(
           [

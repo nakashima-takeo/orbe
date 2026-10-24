@@ -72,7 +72,7 @@ extension AutomationStoreTests {
     try Self.fetch(store, id, [Self.item("a")])
     try Self.judge(store, id)
     let judge = store.part(id, "judge")
-    let first = try XCTUnwrap(store.automation(id)?.graph.node(judge)?.part.defId)
+    let first = try XCTUnwrap(store.automation(id)?.graph.node(judge)?.entity.defId)
 
     var plain = try XCTUnwrap(store.automation(id)?.definition)
     plain.parts[1].name = "別名"
@@ -80,7 +80,7 @@ extension AutomationStoreTests {
     plain.parts[1].maxItems = 5
     let renamed = try store.replace(id, version: 1, with: plain, now: Self.at)
     XCTAssertEqual(renamed.reworked, [])
-    XCTAssertEqual(store.automation(id)?.graph.node(judge)?.part.defId, first)
+    XCTAssertEqual(store.automation(id)?.graph.node(judge)?.entity.defId, first)
 
     var instructed = try XCTUnwrap(store.automation(id)?.definition)
     instructed.parts[1].action.method = .agent(
@@ -88,7 +88,7 @@ extension AutomationStoreTests {
     let rewritten = try store.replace(id, version: 2, with: instructed, now: Self.at)
     try Self.judge(store, id, at: Self.at.addingTimeInterval(60))
 
-    let second = try XCTUnwrap(store.automation(id)?.graph.node(judge)?.part.defId)
+    let second = try XCTUnwrap(store.automation(id)?.graph.node(judge)?.entity.defId)
     XCTAssertEqual(rewritten.reworked, [judge])
     XCTAssertNotEqual(second, first)
     XCTAssertEqual(

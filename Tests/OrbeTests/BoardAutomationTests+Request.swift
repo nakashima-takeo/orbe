@@ -49,7 +49,7 @@ extension BoardAutomationTests {
     automation.draftFix(of: part, l10n: LocalizationStore(language: .ja))
     flush(window)
 
-    let draft = "自動化「\(target.name)」の部品「\(try XCTUnwrap(target.graph.node(part)).part.name)」の修正："
+    let draft = "自動化「\(target.name)」の部品「\(try XCTUnwrap(target.graph.node(part)).entity.name)」の修正："
     XCTAssertEqual(automation.requestText, draft)
     XCTAssertEqual(automation.place, .request)
     XCTAssertEqual(asks(), [], "書き出すだけで頼まない")

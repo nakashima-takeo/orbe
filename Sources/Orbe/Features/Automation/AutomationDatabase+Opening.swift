@@ -53,7 +53,7 @@ extension AutomationDatabase {
       .unreadable(
         AutomationUnreadable(
           id: row.id, name: try? TaskStore.validTitle(row.name), version: row.version,
-          definition: Self.jsonText(definition), reason: reason, parts: rows.map(\.id)))
+          definition: Self.jsonText(definition), reason: reason, nodeIds: rows.map(\.id)))
     }
     let keys = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.key) })
     var parts: [AutomationDefinition.Part] = []
@@ -72,8 +72,8 @@ extension AutomationDatabase {
     }
     let graph = AutomationGraph(
       checked.parts,
-      parts: zip(checked.parts, rows).map { checked, row in
-        AutomationPart(checked.part, id: row.id, defId: row.defId)
+      entities: zip(checked.parts, rows).map { checked, row in
+        AutomationPart(checked.definitionNode, id: row.id, defId: row.defId)
       })
     var states: [AutomationPartID: AutomationPartState] = [:]
     for part in rows { states[part.id] = try state(of: part.id) }
@@ -81,7 +81,7 @@ extension AutomationDatabase {
       Automation(
         id: row.id, name: checked.name, notify: notify, graph: graph,
         pausedAt: row.pausedAt.map(AutomationPersistence.date), version: row.version,
-        createdAt: AutomationPersistence.date(row.createdAt), parts: states))
+        createdAt: AutomationPersistence.date(row.createdAt), states: states))
   }
 
   /// 自動化の外していない部品の行（保存したままの値）。

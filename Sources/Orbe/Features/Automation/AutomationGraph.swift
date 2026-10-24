@@ -12,14 +12,14 @@ struct AutomationGraph: Equatable {
 
   /// 部品と、使う動作の定義・入力・導いた役割。
   struct Node: Equatable {
-    let part: AutomationPart
+    let entity: AutomationPart
     let action: AutomationActionDef
     /// `from` の中の順。
     let inputs: [AutomationPartEdge]
     let role: AutomationPartRole
 
-    var id: AutomationPartID { part.id }
-    var key: String { part.key }
+    var id: AutomationPartID { entity.id }
+    var key: String { entity.key }
 
     /// 走るモデル。保存は省略のまま持ち、走らせるとき・画面はここで解く。コマンドは nil。
     var model: String? {
@@ -72,20 +72,20 @@ struct AutomationGraph: Equatable {
 
   /// 検証を通った部品の外の形と、導いた役割と、入力の部品の位置。
   struct Checked: Equatable {
-    let part: AutomationDefinition.Part
+    let definitionNode: AutomationDefinition.Part
     let role: AutomationPartRole
     let upstream: [Int]
   }
 
-  /// 検証を通った外の形に、部品の実体（ID と使う定義の ID）を当てて組む。`parts` と `checked` は同じ順。
-  init(_ checked: [Checked], parts: [AutomationPart]) {
-    precondition(checked.count == parts.count, "every checked part has an entity")
-    nodes = zip(checked, parts).map { checked, part in
+  /// 検証を通った外の形に、部品の実体（ID と使う定義の ID）を当てて組む。`entities` と `checked` は同じ順。
+  init(_ checked: [Checked], entities: [AutomationPart]) {
+    precondition(checked.count == entities.count, "every checked part has an entity")
+    nodes = zip(checked, entities).map { checked, entity in
       Node(
-        part: part, action: checked.part.action,
-        inputs: zip(checked.upstream, checked.part.from).map { index, input in
+        entity: entity, action: checked.definitionNode.action,
+        inputs: zip(checked.upstream, checked.definitionNode.from).map { index, input in
           AutomationPartEdge(
-            from: parts[index].id, take: input.take, maxAgeHours: input.maxAgeHours)
+            from: entities[index].id, take: input.take, maxAgeHours: input.maxAgeHours)
         }, role: checked.role)
     }
     upstream = checked.map(\.upstream)
@@ -97,14 +97,14 @@ struct AutomationGraph: Equatable {
   }
 
   /// 外の形に組み直したもの（`from` は鍵で名指し、各部品に ID を添える）。
-  var parts: [AutomationDefinition.Part] {
+  var definitionNodes: [AutomationDefinition.Part] {
     nodes.map { node in
       AutomationDefinition.Part(
-        id: node.id, key: node.key, name: node.part.name, trigger: node.part.trigger,
+        id: node.id, key: node.key, name: node.entity.name, trigger: node.entity.trigger,
         from: node.inputs.map { edge in
           AutomationDefinition.Input(
             part: self.node(edge.from)?.key ?? "", take: edge.take, maxAgeHours: edge.maxAgeHours)
-        }, action: node.action, maxItems: node.part.maxItems)
+        }, action: node.action, maxItems: node.entity.maxItems)
     }
   }
 

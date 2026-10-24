@@ -157,15 +157,15 @@ extension BoardAutomationDetailValue {
     let latest = state.runs.first
     let inputs = node.inputParts
     let schedule: String? =
-      switch node.part.trigger {
+      switch node.entity.trigger {
       case .arrival: nil
-      case .scheduled, .manual: text.schedule(node.part.trigger)
+      case .scheduled, .manual: text.schedule(node.entity.trigger)
       }
     return BoardMapPart(
-      id: node.id, role: text.role(node.role), name: node.part.name, schedule: schedule,
+      id: node.id, role: text.role(node.role), name: node.entity.name, schedule: schedule,
       inputs: inputs.isEmpty
         ? nil
-        : inputs.map { automation.graph.node($0)?.part.name ?? "\($0)" }.joined(
+        : inputs.map { automation.graph.node($0)?.entity.name ?? "\($0)" }.joined(
           separator: l10n.string(.automationListSeparator)),
       pending: inputs.isEmpty ? nil : state.pending.count, breached: state.breach != nil,
       look: running ? .running : latest?.failed == true ? .failed : .idle,

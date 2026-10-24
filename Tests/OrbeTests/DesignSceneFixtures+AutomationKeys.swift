@@ -61,7 +61,7 @@ extension AutomationStore {
     let ended = endedAt ?? at
     return try record(
       AutomationPassEnd(
-        automationId: id, part: part, defId: node.part.defId, trigger: trigger, startedAt: at,
+        automationId: id, part: part, defId: node.entity.defId, trigger: trigger, startedAt: at,
         endedAt: ended, read: try read(part, of: id, baseline: nil, now: ended), outcome: outcome))
   }
 }

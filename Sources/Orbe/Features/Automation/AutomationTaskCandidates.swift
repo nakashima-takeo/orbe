@@ -29,11 +29,11 @@ extension Automation {
 
 extension AutomationUnreadable {
   func holds(_ proposal: AutomationProposal) -> Bool {
-    parts.contains(proposal.judge) || parts.contains(proposal.source)
+    nodeIds.contains(proposal.judge) || nodeIds.contains(proposal.source)
   }
 
   func holds(_ proposal: AutomationUnreadableProposal) -> Bool {
-    parts.contains(proposal.judge)
+    nodeIds.contains(proposal.judge)
   }
 }
 
