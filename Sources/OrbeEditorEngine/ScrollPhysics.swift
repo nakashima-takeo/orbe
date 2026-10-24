@@ -96,14 +96,21 @@ struct ScrollPhysics: Sendable {
       min(max(0, position.y), maximum.y)
     }
 
-    /// 位置 `position` で先頭に見えている所と見えている高さ（どちらも表示の単位）——俯瞰の式の入力。
+    /// 位置 `position` で先頭に見えている所と見えている高さ（どちらも表示の単位）——俯瞰の式の入力。スクロールを共にする
+    /// 短い側の面で、自分の並びの端より下（長い側だけが続く所）にいれば、範囲の位置から換算する。
     func viewportLines(at position: SIMD2<Double>, rows: RowLayout, lineCount: Int) -> (
       first: CGFloat, visible: CGFloat
     ) {
-      (
-        CGFloat(rows.firstUnit(atY: clampedY(position), lineCount: lineCount)),
-        CGFloat(viewport.y / lineHeight)
-      )
+      let y = clampedY(position)
+      let first =
+        y > max(0, lastTop) ? y / lineHeight : rows.firstUnit(atY: y, lineCount: lineCount)
+      return (CGFloat(first), CGFloat(viewport.y / lineHeight))
+    }
+
+    /// 縦の全体の量（表示の単位）——自分の並びの量（最後の項目の上端 + 1）と、範囲の縦の端を表示の単位にしたもの + 1 の
+    /// 大きい方（スクロールを共にする面は、共にする範囲で写す）。スクロールバーのつまみ・押下・印の写像の入力。
+    func contentLines(rows: RowLayout, lineCount: Int) -> CGFloat {
+      CGFloat(max(rows.contentLines(lineCount: lineCount), maximum.y / lineHeight + 1))
     }
   }
 

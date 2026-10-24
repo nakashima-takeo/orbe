@@ -62,12 +62,16 @@ public final class EditorDocument {
       requestHunks()
     }
   }
-  /// baseline と本文の行差分。編集の直後はずらした前のハンクで、裏の結果が届くと置き換わる。
+  /// baseline と本文の行差分（形は `LineDiff` の出力と同じ）。編集の直後は前のハンクを編集でずらしたもの（同じ形だが最小とは
+  /// 限らず、行の数を変えない編集の後は区間の外の行の中身が底と違いうる——`VersionedEdit.track`）で、裏の結果が届くと置き換わる。
   public private(set) var hunks: [LineHunk] = []
   /// ハンクがどの baseline に対する差分か（ハンクと組で変わる。差分がまだ無い・baseline が無ければ nil）。baseline を置き
   /// 直してから結果が届くまでは、前の baseline とそれに対するハンク（その後の編集でずらしたもの）の組のまま——この組と
   /// 今の本文は、いつでも互いに食い違わない。
   public private(set) var hunksBase: String?
+  /// ハンクが今の版・今の baseline・今の上限に対する裏の結果か（編集でずらしただけ・頼み直した結果を待っている間は
+  /// false。baseline が無ければ true）。
+  public var hunksAreCurrent: Bool { pendingHunks == nil }
   /// ハンクが変わった（結果が届いた・編集でずらした・baseline が無くなった）。行の印と同じ時機に、印の後で届く。
   public var onHunksChange: (() -> Void)?
   /// 字下げの作法（単位とタブか）。開いたとき、および本文を丸ごと置き換えたときに本文から検出し直し、面へ押す。
@@ -267,7 +271,7 @@ public final class EditorDocument {
 
   /// 行の印を面へ押す。
   private func pushLineMarks() {
-    surface.setLineMarks(LineMarks(hunks: hunks, lineCount: text.lineCount))
+    surface.setLineMarks(LineMarks(hunks: hunks))
     onHunksChange?()
   }
 
@@ -281,7 +285,7 @@ public final class EditorDocument {
     if let outcome = contents.hunks, outcome.generation == hunkRequest,
       let edits = log.edits(since: outcome.version)
     {
-      hunks = edits.reduce(outcome.hunks) { $1.track($0) }
+      hunks = VersionedEdit.track(outcome.hunks, through: edits)
       hunksBase = baseline
       if pendingHunks == outcome.version { pendingHunks = nil }
       pushLineMarks()
@@ -320,13 +324,10 @@ extension EditorDocument: TextSurfaceDelegate {
     guard !edits.isEmpty else { return }
     var applied: [VersionedEdit] = []
     applied.reserveCapacity(edits.count)
-    var tracked = hunks
     for whole in edits.reversed() {
-      let record = apply(whole.narrowed(replacing: text.units(in: whole.range)))
-      if baseline != nil { tracked = record.track(tracked) }
-      applied.append(record)
+      applied.append(apply(whole.narrowed(replacing: text.units(in: whole.range))))
     }
-    hunks = tracked
+    if baseline != nil { hunks = VersionedEdit.track(hunks, through: applied) }
     if !isReplacingFromDisk, diskSync.textDidChange(length: text.length) {
       analysis.postComparison(text: text, version: version, synced: diskSync.snapshot.text)
     }
@@ -342,12 +343,37 @@ extension EditorDocument: TextSurfaceDelegate {
   private func apply(_ edit: TextEdit) -> VersionedEdit {
     let start = text.point(at: edit.range.location)
     let oldEnd = text.point(at: NSMaxRange(edit.range))
+    let keepsStartRow = keepsStartRow(edit, start: start, oldEnd: oldEnd)
     text.replace(edit.range, with: edit.replacement)
     let newEnd = text.point(at: NSMaxRange(edit.newRange))
-    let record = log.append(edit, start: start, oldEnd: oldEnd, newEnd: newEnd)
+    let record = log.append(
+      edit, start: start, oldEnd: oldEnd, newEnd: newEnd, keepsStartRow: keepsStartRow)
     roles.apply(edit)
     reception.worker?.post(record, text: text)
     return record
+  }
+
+  /// 編集の前の本文で、行の数を変える編集の始まりの行が中身を変えないか——始まりの行の、位置から改行までの残り（LF なら
+  /// 空、CRLF なら `\r`）について、差し込む字が「残り + 改行」で始まるか、差し込む字が空で終わりの位置の残りも同じ
+  /// （行をつなぐ削除）。改行を差し込まず行もつながない編集は行を読まない（打鍵の手間を増やさない）。
+  private func keepsStartRow(_ edit: TextEdit, start: TextPoint, oldEnd: TextPoint) -> Bool {
+    let replacement = edit.replacement
+    if replacement.isEmpty {
+      guard oldEnd.row > start.row else { return false }
+      let rest = remainder(after: edit.range.location, row: start.row)
+      let end = remainder(after: NSMaxRange(edit.range), row: oldEnd.row)
+      return rest.length == end.length && text.units(in: rest) == text.units(in: end)
+    }
+    guard replacement.contains(0x0A) else { return false }
+    let rest = remainder(after: edit.range.location, row: start.row)
+    guard replacement.count > rest.length, replacement[rest.length] == 0x0A else { return false }
+    return text.units(in: rest).elementsEqual(replacement.prefix(rest.length))
+  }
+
+  /// 行 `row` の中の位置 `location` から、その行の改行の前（最終行なら本文の終わり）までの区間。
+  private func remainder(after location: Int, row: Int) -> NSRange {
+    let end = row + 1 < text.lineCount ? text.lineStart(row + 1) - 1 : text.length
+    return NSRange(location: location, length: end - location)
   }
 
   public func surfaceDidChangeViewport(_ surface: any TextSurface) {

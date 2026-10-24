@@ -157,7 +157,7 @@ final class SurfaceDrawingTests: EngineTestCase {
   }
 
   /// 版を続けて置けば、どの版の材料にもその版に組む位置を返す——版 8 を置いた後でも、版 7 の材料のコマは版 7 で置いた
-  /// 位置を描く（最初の版より前の位置ではない）。範囲と位置を同じ版で続けて置けば、その版より前の材料には両方を置く前の
+  /// 位置を描く（最初の版より前の位置ではない）。範囲と位置を同じ版で一緒に置けば、その版より前の材料には両方を置く前の
   /// ものを組む。main は最新の位置を読む。描画スレッドが読んだ・引き取った版より前の組は手放す。
   func testEachMaterialRevisionTakesThePositionPlacedWithIt() {
     let box = ScrollBox()

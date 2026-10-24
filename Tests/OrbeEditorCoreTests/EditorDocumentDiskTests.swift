@@ -254,8 +254,8 @@ final class EditorDocumentDiskTests: XCTestCase {
 
   // MARK: - ハンク
 
-  /// baseline を置くと裏で行差分を取ってハンクが届き、行の印として面へ押す。編集の直後は、編集で増えた行の数だけずらした
-  /// 前のハンクを出し、裏の結果が届くと置き換わる。baseline を外せば即時に空で、空の印を押す。
+  /// baseline を置くと裏で行差分を取ってハンクが届き、行の印として面へ押す。編集の直後は、前のハンクを編集でずらした
+  /// もの（足した行が区間に入り、後ろの区間は増えた行の数だけずれる）を出し、裏の結果が届くと置き換わる。baseline を外せば即時に空で、空の印を押す。
   func testHunksFollowTheBaselineAndEditsThroughTheBackground() throws {
     let (document, surface) = try open(try temp("e.txt", "a\nb\nc\n"))
     XCTAssertEqual(document.hunks, [])
@@ -268,8 +268,11 @@ final class EditorDocumentDiskTests: XCTestCase {
 
     surface.replace(NSRange(location: 0, length: 0), with: "z\n")
     XCTAssertEqual(
-      document.hunks, [LineHunk(oldStart: 1, oldCount: 0, newStart: 3, newCount: 1)],
-      "編集の直後は、増えた行の数だけずらした前のハンク")
+      document.hunks,
+      [
+        LineHunk(oldStart: 0, oldCount: 0, newStart: 1, newCount: 1),
+        LineHunk(oldStart: 1, oldCount: 0, newStart: 3, newCount: 1),
+      ], "編集の直後は、足した行が区間に入り、後ろの区間がずれる")
     XCTAssertTrue(document.waitUntilCaughtUp())
     XCTAssertEqual(
       document.hunks,

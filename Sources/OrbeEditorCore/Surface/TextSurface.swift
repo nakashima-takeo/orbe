@@ -29,9 +29,12 @@ public protocol TextSurface: AnyObject {
   /// 行う。選択は動かさない。
   func reveal(_ range: NSRange, policy: TextReveal)
 
-  /// 文書の先頭——先頭の行の前の差し込みの上端と左端——へ送る。区間を見せる口は行の上端から見せるので、先頭の行の前の
-  /// 差し込みから見せるのはこの口。
-  func scrollToStart()
+  /// 縦の並びの中の位置 `position` を先頭（上端）に置く（スクロールできる範囲の端で止まる）。横は動かさない。
+  func scroll(to position: RowPosition)
+
+  /// 縦の並びの中の位置 `from` から `to` までを、縦は方針 `policy` で見せる（範囲は `from` の上端から `to` の上端まで）。
+  /// 横は `from` の行の行頭が見えるところまで最小限。判定は面の最新の位置で行い、選択は動かさない。
+  func reveal(from: RowPosition, to: RowPosition, policy: TextReveal)
 
   /// 選択（UTF-16）。置いても見せない——見せるのは `reveal`。置くと本文が主になる（区画の文の選択と入力欄から本文へ
   /// 戻る。同じ値でも）。
@@ -184,16 +187,17 @@ public enum TextHighlightKind: Sendable {
   case currentFindMatch
 }
 
-/// 見えている範囲を本文の言葉で表したもの。`firstVisible` は先頭に見えている行（文書の行）の行頭オフセット、
-/// `visibleLines` は見えている高さに入る行数（小数）。文書の構文が、見えている行を先に解くのに使う。
+/// 見えている範囲を本文の言葉で表したもの。`top` は先頭に見えている所（縦の並びの中の位置。文書の行の中なら段 0、差し込みの
+/// 中なら、その下の文書の行と差し込みの中の段——段の粒度で、塊の中でも 1 段越えれば変わる）、`visibleLines` は見えている
+/// 高さに入る行数（小数）。文書の構文が見えている行を先に解き、diff が位置を引き継ぐのに使う。
 public struct TextViewport: Equatable, Sendable {
-  public var firstVisible: Int
+  public var top: RowPosition
   public var visibleLines: CGFloat
 
-  public init(firstVisible: Int, visibleLines: CGFloat) {
-    self.firstVisible = firstVisible
+  public init(top: RowPosition, visibleLines: CGFloat) {
+    self.top = top
     self.visibleLines = visibleLines
   }
 
-  public static let empty = TextViewport(firstVisible: 0, visibleLines: 0)
+  public static let empty = TextViewport(top: RowPosition(line: 0), visibleLines: 0)
 }

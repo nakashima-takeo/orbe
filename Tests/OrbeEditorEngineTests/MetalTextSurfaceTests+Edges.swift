@@ -11,7 +11,7 @@ extension MetalTextSurfaceTests {
   /// 空の文書にも見えている範囲（先頭・行 1 つ以上）と行番号「1」がある。スクロールした後に全部消しても先頭へ戻る。
   func testAnEmptyDocumentHasAViewportAndLineOne() throws {
     let empty = try open("", name: "a.txt")
-    XCTAssertEqual(empty.surface.viewport.firstVisible, 0)
+    XCTAssertEqual(empty.surface.viewport.top, RowPosition(line: 0))
     XCTAssertGreaterThan(empty.surface.viewport.visibleLines, 0)
     let config = empty.surface.config
     let shot = try pixelShot(empty)
@@ -23,7 +23,7 @@ extension MetalTextSurfaceTests {
     let opened = try open((0..<100).map { "row \($0)" }.joined(separator: "\n"), name: "b.txt")
     opened.surface.scroll(toFirstLine: 50)
     opened.surface.replaceAll(with: "")
-    XCTAssertEqual(opened.surface.viewport.firstVisible, 0, "消せば先頭")
+    XCTAssertEqual(opened.surface.viewport.top, RowPosition(line: 0), "消せば先頭")
     XCTAssertEqual(opened.surface.scrollPosition.y, 0)
   }
 

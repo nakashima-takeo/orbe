@@ -213,6 +213,16 @@ final class FieldScroll: Sendable {
       return s.x != before
     }
   }
+
+  /// 送りを上限 `limit`（最も広い行の右端とキャレットが幅に収まる所）までに収める。入力欄が広がった・文が短くなったとき、
+  /// 行頭を隠したまま右を空けない（本文の横の範囲が縮めば位置を収めるのと同じ）。動いたら true。
+  func clamp(to limit: Double) -> Bool {
+    state.withLock { s in
+      guard s.x > max(0, limit) else { return false }
+      s.x = max(0, limit)
+      return true
+    }
+  }
 }
 
 /// 入力欄の外観で解いた色。

@@ -108,17 +108,18 @@ final class EditorSession {
     return diff
   }
 
-  /// diff が新しい側の文書を引く口と手放す口（このセッション）。
+  /// diff が新しい側の文書を引く口と、替わったと知らせる口（このセッション）。
   private var diffDocuments: EditorDiff.Documents {
     EditorDiff.Documents(
       open: { [unowned self] url in try document(for: url) },
-      release: { [weak self] document in self?.documentLeft(document) })
+      switched: { [weak self] previous in self?.diffDocumentSwitched(from: previous) })
   }
 
-  /// diff が使わなくなった文書——ほかに使うタブが無ければ閉じる。
-  private func documentLeft(_ document: EditorDocument) {
-    if !tabs.contains(where: { $0.document === document }) {
-      links[ObjectIdentifier(document)] = nil
+  /// diff の新しい側の文書が替わった——前の文書は、ほかに使うタブが無ければ閉じる。今の文書が未保存なら仮のタブを普通に
+  /// 戻し、タブ行を作り直す。
+  private func diffDocumentSwitched(from previous: EditorDocument?) {
+    if let previous, !tabs.contains(where: { $0.document === previous }) {
+      links[ObjectIdentifier(previous)] = nil
     }
     settlePreview()
     onChange?()
@@ -133,8 +134,10 @@ final class EditorSession {
     onChange?()
   }
 
-  /// 新しいタブを列へ置いて焦点にする（仮なら今の仮のタブをその位置で入れ替える）。
+  /// 新しいタブを列へ置いて焦点にする（仮なら今の仮のタブをその位置で入れ替える）。未保存の文書を使うタブは、仮で頼まれても
+  /// はじめから普通のタブ（末尾）にする——仮のタブの文書は常に未保存でない。
   private func place(_ tab: EditorTab, as mode: OpenMode) {
+    let mode = tab.document?.isDirty == true ? .pinned : mode
     if mode == .preview, let old = previewID, let index = tabs.firstIndex(where: { $0.id == old }) {
       let replaced = tabs[index]
       tabs[index] = tab
@@ -144,7 +147,6 @@ final class EditorSession {
     }
     if mode == .preview { previewID = tab.id }
     activeID = tab.id
-    settlePreview()
     onChange?()
   }
 
@@ -161,8 +163,11 @@ final class EditorSession {
 
   /// 文書の通知をこのセッションへ結び、結線を持つ。
   private func own(_ document: EditorDocument, link: DocumentLink?) {
-    document.onDirtyChange = { [weak self] _ in
+    document.onDirtyChange = { [weak self, weak document] _ in
       guard let self else { return }
+      for case .diff(let diff) in tabs where diff.document === document {
+        diff.documentDirtyDidChange()
+      }
       settlePreview()
       onChange?()
     }
@@ -293,7 +298,6 @@ final class EditorSession {
 
   /// 列から外したタブの文書を、もう使うタブが無ければ閉じる。
   private func release(_ closed: EditorTab) {
-    if case .diff(let diff) = closed { diff.dismiss() }
     guard let document = closed.document, !tabs.contains(where: { $0.document === document })
     else { return }
     links[ObjectIdentifier(document)] = nil

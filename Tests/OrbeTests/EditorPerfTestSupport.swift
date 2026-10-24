@@ -87,7 +87,7 @@ extension EditorDocument {
   /// 面の見えている行の区間（先頭に見えている行から、見えている行の数を切り上げた行の終わりまで）。
   var visibleRange: NSRange {
     let viewport = surface.viewport
-    let first = text.row(containing: viewport.firstVisible)
+    let first = viewport.top.line
     let start = text.lineStart(first)
     return NSRange(
       location: start, length: text.lineEnd(first + Int(viewport.visibleLines.rounded(.up))) - start

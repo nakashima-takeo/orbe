@@ -36,12 +36,14 @@ extension MetalTextView {
   }
 
   override func cursorUpdate(with event: NSEvent) {
-    trackPointer(at: event.locationInWindow, flags: event.modifierFlags)
+    surface?.inputScope { trackPointer(at: event.locationInWindow, flags: event.modifierFlags) }
   }
 
   override func mouseMoved(with event: NSEvent) {
-    let inside = trackPointer(at: event.locationInWindow, flags: event.modifierFlags)
-    surface?.inputScope { hover(at: event.locationInWindow, inside: inside) }
+    surface?.inputScope {
+      let inside = trackPointer(at: event.locationInWindow, flags: event.modifierFlags)
+      hover(at: event.locationInWindow, inside: inside)
+    }
   }
 
   override func mouseEntered(with event: NSEvent) {
@@ -50,8 +52,10 @@ extension MetalTextView {
   }
 
   override func mouseExited(with event: NSEvent) {
-    surface?.setLinkPointer(nil)
-    surface?.inputScope { hover(at: event.locationInWindow, inside: false) }
+    surface?.inputScope {
+      surface?.setLinkPointer(nil)
+      hover(at: event.locationInWindow, inside: false)
+    }
   }
 
   /// 窓の今のポインタの位置で、ポインタの形とホバーを引き直す（ポインタの下で押せる場所が動いた）。tracking area と同じく
@@ -64,8 +68,8 @@ extension MetalTextView {
     hover(at: windowPoint, inside: inside)
   }
 
-  /// 俯瞰の上のポインタと、区画の押せる場所のホバー。出すきっかけは呼び手が決める——出来事の入口は処理の終わり、
-  /// Orbe から始まる `refreshPointer` は runloop の 1 周の終わり。
+  /// 俯瞰の上のポインタと、区画の押せる場所のホバー。出すきっかけは呼び手が決める——出来事の入口はポインタの形・下線と
+  /// まとめて処理の終わり、Orbe から始まる `refreshPointer` は runloop の 1 周の終わり。
   private func hover(at windowPoint: NSPoint, inside: Bool) {
     let point = convert(windowPoint, from: nil)
     overview.pointerMoved(to: point, inside: inside)
@@ -74,7 +78,9 @@ extension MetalTextView {
 
   override func flagsChanged(with event: NSEvent) {
     guard let window else { return super.flagsChanged(with: event) }
-    trackPointer(at: window.mouseLocationOutsideOfEventStream, flags: event.modifierFlags)
+    surface?.inputScope {
+      trackPointer(at: window.mouseLocationOutsideOfEventStream, flags: event.modifierFlags)
+    }
     super.flagsChanged(with: event)
   }
 }

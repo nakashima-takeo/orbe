@@ -134,7 +134,7 @@ extension ProjectSearchPaneTests {
       XCTAssertEqual(document.surface.selectedRange.length, 6, "一致が選択される")
       XCTAssertEqual(document.text.row(containing: document.surface.selectedRange.location), line)
       let viewport = document.surface.viewport
-      let first = CGFloat(document.text.row(containing: viewport.firstVisible))
+      let first = CGFloat(viewport.top.line)
       XCTAssertEqual(
         first + viewport.visibleLines / 2, CGFloat(line) + 0.5, accuracy: 1,
         "一致の行が中央へ（見えていても）")

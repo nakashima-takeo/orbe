@@ -102,7 +102,8 @@ final class ScmRowsTests: OrbeTestCase {
         entries: [
           "a.txt": entry(nil, .modified), "conflict.txt": entry(.unmerged, .unmerged),
           "content": GitStatus.Entry(staged: nil, unstaged: .modified, unstagedSubmodule: .content),
-          "moved": GitStatus.Entry(staged: nil, unstaged: .modified, unstagedSubmodule: .commit),
+          "moved": GitStatus.Entry(
+            staged: nil, unstaged: .modified, unstagedSubmodule: .commit(dirty: false)),
         ], untrackedDirectories: [], branch: nil, stagedVersions: [:]))
     XCTAssertEqual(changes.changes.map(\.path), ["a.txt", "conflict.txt", "content", "moved"])
     XCTAssertEqual(changes.committable.map(\.path), ["a.txt", "moved"])
@@ -123,7 +124,7 @@ final class ScmRowsTests: OrbeTestCase {
       return content.buttons.map(\.isEnabled)
     }
     XCTAssertEqual(enabled(.content), [true, false, false], "開く・破棄・ステージ")
-    XCTAssertEqual(enabled(.commit), [true, false, true])
+    XCTAssertEqual(enabled(.commit(dirty: false)), [true, false, true])
     XCTAssertEqual(enabled(nil), [true, true, true])
     XCTAssertEqual(enabled(.content), [true, false, false])
   }
@@ -144,7 +145,8 @@ final class ScmRowsTests: OrbeTestCase {
     }
     let conflict = entry(.unmerged, .unmerged)
     let content = GitStatus.Entry(staged: nil, unstaged: .modified, unstagedSubmodule: .content)
-    let moved = GitStatus.Entry(staged: nil, unstaged: .modified, unstagedSubmodule: .commit)
+    let moved = GitStatus.Entry(
+      staged: nil, unstaged: .modified, unstagedSubmodule: .commit(dirty: false))
     XCTAssertEqual(enabled(["c.txt": conflict, "sub": content]), [false, false], "すべて破棄・すべてステージ")
     XCTAssertEqual(enabled(["c.txt": conflict, "sub": moved]), [false, true])
     XCTAssertEqual(enabled(["c.txt": conflict, "a.txt": entry(nil, .modified)]), [true, true])

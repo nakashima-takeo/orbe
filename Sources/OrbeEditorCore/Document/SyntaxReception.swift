@@ -70,7 +70,7 @@ struct SyntaxReception {
 
   /// 面の見えている範囲 `viewport` に掛かる行（`text` の行）。
   static func lines(of viewport: TextViewport, in text: TextRope) -> ClosedRange<Int> {
-    let first = text.row(containing: viewport.firstVisible)
+    let first = min(max(0, viewport.top.line), text.lineCount - 1)
     return first...(first + Int(viewport.visibleLines.rounded(.up)))
   }
 

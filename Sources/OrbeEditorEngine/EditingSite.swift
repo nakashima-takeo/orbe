@@ -85,6 +85,7 @@ final class EditingSite {
       if reveal != .none {
         surface.transaction?.reveal = reveal
         surface.transaction?.revealing = range
+        surface.transaction?.revealingRows = nil
         surface.transaction?.revealSite = self
       }
       if remeasure { change?.remeasure = true }
