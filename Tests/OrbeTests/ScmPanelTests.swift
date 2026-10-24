@@ -235,12 +235,14 @@ final class ScmPanelTests: OrbeTestCase {
     XCTAssertEqual(repo.git(["diff", "--cached", "--name-only"]).stdoutText, "sub\n")
   }
 
-  /// 行 `row` を描いたときの、部品ごとの押せる・押せない。
-  private func enabled(_ row: Int) -> [ScmControl: Bool] {
+  /// 行 `row` を描いたときの、列が部品の位置で読む押せる・押せない。
+  private func enabled(_ row: Int) -> [ScmControl: Bool?] {
     let view = ScmRowView(frame: NSRect(x: 0, y: 0, width: 300, height: 22))
     view.show(panel.layout.items[row], language: .en, emoji: nil)
-    guard case .file(let content) = view.content else { return [:] }
-    return Dictionary(uniqueKeysWithValues: content.buttons.map { ($0.control, $0.isEnabled) })
+    return Dictionary(
+      uniqueKeysWithValues: view.buttonRects().map { button, frame in
+        (button.control, view.control(at: NSPoint(x: frame.midX, y: frame.midY))?.isEnabled)
+      })
   }
 
   /// 「すべて破棄」「すべてステージ」は競合中のファイルを含めない（競合の行は 1 行ずつステージで解決済みにする）。
