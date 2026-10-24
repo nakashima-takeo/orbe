@@ -108,7 +108,7 @@ final class AutomationDatabase {
   }
 
   func updateNode(
-    _ id: AutomationNodeID, at position: Int, _ definitionNode: AutomationDefinition.Node,
+    _ nodeId: AutomationNodeID, at position: Int, _ definitionNode: AutomationDefinition.Node,
     defId: AutomationNodeDefID
   ) throws {
     try db.run(
@@ -120,66 +120,66 @@ final class AutomationDatabase {
         .integer(Int64(position)), .text(definitionNode.key), .text(definitionNode.name),
         .text(try Self.encode(definitionNode.trigger)),
         definitionNode.maxItems.map { .integer(Int64($0)) } ?? .null,
-        .integer(Int64(defId.rawValue)), .integer(Int64(id.rawValue)),
+        .integer(Int64(defId.rawValue)), .integer(Int64(nodeId.rawValue)),
       ])
   }
 
   /// ノードを外す: 外した時刻を書き、今有効な項目を無効にし、つながりと外した印と持ち越しを消す。外したノードの回の記録・判断の
   /// 記録・台帳は、同じトランザクションの最後の掃除が、候補を忘れた後に指されなくなったものから消す。無効にした項目を返す。
-  func removeNode(_ id: AutomationNodeID, at: Date) throws -> [Int] {
-    let nodeId: [SQLiteValue] = [.integer(Int64(id.rawValue))]
-    let invalidated = try invalidateItems(of: id, at: at)
-    try db.run("DELETE FROM node_edges WHERE from_node_id = ?1 OR to_node_id = ?1", nodeId)
+  func removeNode(_ nodeId: AutomationNodeID, at: Date) throws -> [Int] {
+    let values: [SQLiteValue] = [.integer(Int64(nodeId.rawValue))]
+    let invalidated = try invalidateItems(of: nodeId, at: at)
+    try db.run("DELETE FROM node_edges WHERE from_node_id = ?1 OR to_node_id = ?1", values)
     try db.run(
       "UPDATE nodes SET removed_at = ?, breach_run_id = NULL, pending_drops = '{}' WHERE id = ?",
-      [Self.instant(at)] + nodeId)
+      [Self.instant(at)] + values)
     return invalidated
   }
 
   /// 外した印の回。
-  func setBreach(_ id: AutomationNodeID, run: Int?) throws {
+  func setBreach(_ nodeId: AutomationNodeID, run: Int?) throws {
     try db.run(
       "UPDATE nodes SET breach_run_id = ? WHERE id = ?",
-      [run.map { .integer(Int64($0)) } ?? .null, .integer(Int64(id.rawValue))])
+      [run.map { .integer(Int64($0)) } ?? .null, .integer(Int64(nodeId.rawValue))])
   }
 
   /// 受け手として回の無い契機（取る行 0 件）で捨てた・期限で消えたと数え、次の成功した回の記録へ持ち越す数。読めなければ空と
   /// して扱う（ログに残す）。
-  func pendingDrops(of id: AutomationNodeID) throws -> AutomationDrops {
+  func pendingDrops(of nodeId: AutomationNodeID) throws -> AutomationDrops {
     let raw =
       try db.select(
-        "SELECT pending_drops FROM nodes WHERE id = ?", [.integer(Int64(id.rawValue))]
+        "SELECT pending_drops FROM nodes WHERE id = ?", [.integer(Int64(nodeId.rawValue))]
       ) { $0.text(at: 0) }.first ?? nil
     guard let drops = Self.decode(AutomationDrops.self, raw) else {
-      NSLog("[automation] dropped unreadable carried counts of node \(id)")
+      NSLog("[automation] dropped unreadable carried counts of node \(nodeId)")
       return AutomationDrops()
     }
     return drops
   }
 
-  func setPendingDrops(_ id: AutomationNodeID, _ drops: AutomationDrops) throws {
+  func setPendingDrops(_ nodeId: AutomationNodeID, _ drops: AutomationDrops) throws {
     try db.run(
       "UPDATE nodes SET pending_drops = ? WHERE id = ?",
-      [.text(try Self.encode(drops)), .integer(Int64(id.rawValue))])
+      [.text(try Self.encode(drops)), .integer(Int64(nodeId.rawValue))])
   }
 
   /// ノードの自分の状態（直近の回・最新の成功・外した印・今有効な項目のリンク）。起動時も変化の後も、メモリのノードの状態はここから
   /// 読み直す。読めば取る行は数えない（`AutomationMemory.recount`）。
-  func state(of id: AutomationNodeID) throws -> AutomationNodeState {
-    let nodeId: [SQLiteValue] = [.integer(Int64(id.rawValue))]
+  func state(of nodeId: AutomationNodeID) throws -> AutomationNodeState {
+    let values: [SQLiteValue] = [.integer(Int64(nodeId.rawValue))]
     guard
       let addedAt = try db.select(
-        "SELECT added_at FROM nodes WHERE id = ?", nodeId, { $0.int64(at: 0) }
+        "SELECT added_at FROM nodes WHERE id = ?", values, { $0.int64(at: 0) }
       )
       .first
     else {
-      throw AutomationError.unavailable("node \(id) is missing from the database")
+      throw AutomationError.unavailable("node \(nodeId) is missing from the database")
     }
     var state = AutomationNodeState(addedAt: AutomationPersistence.date(addedAt))
-    state.runs = try records(of: [id], limit: AutomationNodeState.retainedRuns).map(\.record)
-    state.succeededAt = try succeededAt(of: id)
-    state.breach = try breachRecord(of: id)
-    state.liveLinks = try liveLinks(of: id)
+    state.runs = try records(of: [nodeId], limit: AutomationNodeState.retainedRuns).map(\.record)
+    state.succeededAt = try succeededAt(of: nodeId)
+    state.breach = try breachRecord(of: nodeId)
+    state.liveLinks = try liveLinks(of: nodeId)
     return state
   }
 

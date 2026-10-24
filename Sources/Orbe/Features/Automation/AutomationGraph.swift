@@ -10,7 +10,7 @@ struct AutomationGraph: Equatable {
   /// 位置ごとの、このノードを入力に名指すノードの位置。
   private let downstream: [[Int]]
 
-  /// ノードと、使う動作の定義・入力・導いた役割。
+  /// ノードの実体と、使う動作の定義・入力・導いた役割。
   struct Node: Equatable {
     let entity: AutomationNode
     let action: AutomationActionDef

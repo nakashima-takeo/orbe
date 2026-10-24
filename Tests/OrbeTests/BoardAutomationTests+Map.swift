@@ -7,7 +7,7 @@ import XCTest
 /// キーを届ける。
 ///
 /// 壊れると何が起きるか: ノードを見るつもりの ↵ で自動化が丸ごと流れ、副作用や報告が走る。地図から一覧へ戻れないか、戻っても
-/// 前のノードが選ばれたままカードに残り、一覧で効くはずのキーがノードに効く。「ここまで今すぐ実行」で選んだノードの先まで流れるか、
+/// 前のノードが選ばれたままカードに残り、一覧で効くはずのキーがノードに効く。「選んだノードまで実行」で選んだノードの先まで流れるか、
 /// 関係の無い取得まで起きる。
 extension BoardAutomationTests {
   private func card(_ automation: BoardAutomationModel) -> BoardAutomationNodeValue? {

@@ -108,7 +108,7 @@ extension AutomationStoreTests {
 
   /// 省略していた値に既定と同じ値を書き足すだけ（判定のモデル・上限）は、何をするかの変化に入らず、走っている回を止めない。
   /// 既定と違う値は変化。
-  func testSpellingOutADefaultIsNotAChangeOfWork() throws {
+  func testSpellingOutADefaultIsNotAChangeOfBehavior() throws {
     let store = AutomationStore()
     let id = try store.create(Self.definition(), now: Self.at).id
     let judge = store.nodeId(id, "judge")

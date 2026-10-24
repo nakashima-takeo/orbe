@@ -343,37 +343,37 @@ extension DesignSceneFixtures {
     .succeeded(.process(rows), execution(read), breach: nil)
   }
 
-  /// `source` の `count` 項目（id は回の時刻と番号）。リンクは出どころと id で一意。
-  nonisolated static func sampleItems(_ source: String, _ count: Int, at time: Date)
+  /// `origin` の `count` 項目（id は回の時刻と番号）。リンクは出どころと id で一意。
+  nonisolated static func sampleItems(_ origin: String, _ count: Int, at time: Date)
     -> [AutomationItem]
   {
     let stamp = Int(time.timeIntervalSince1970)
     return (0..<count).map { n in
       AutomationItem(
-        id: "\(stamp)-\(n)", link: "https://example.com/\(source)/\(stamp)-\(n)",
-        body: "\(source) の項目 \(n)", time: time)
+        id: "\(stamp)-\(n)", link: "https://example.com/\(origin)/\(stamp)-\(n)",
+        body: "\(origin) の項目 \(n)", time: time)
     }
   }
 
   /// 1 回の取得の全項目と、そのうち新しい項目。新しくない項目は回によらず同じ（id は `<出どころ>-<番号>`）、新しい項目は回の
   /// 時刻の id。
-  nonisolated static func sampleRound(_ source: String, at time: Date, items: Int, fresh: Int)
+  nonisolated static func sampleRound(_ origin: String, at time: Date, items: Int, fresh: Int)
     -> (all: [AutomationItem], new: [AutomationItem])
   {
     let kept = (0..<(items - fresh)).map { n in
       AutomationItem(
-        id: "\(source)-\(n)", link: "https://example.com/\(source)/\(n)",
-        body: "\(source) の項目 \(n)",
+        id: "\(origin)-\(n)", link: "https://example.com/\(origin)/\(n)",
+        body: "\(origin) の項目 \(n)",
         time: Date(timeIntervalSince1970: 1_700_000_000))
     }
-    let new = Array(sampleItems(source, items, at: time).suffix(fresh))
+    let new = Array(sampleItems(origin, items, at: time).suffix(fresh))
     return (kept + new, new)
   }
 
   /// 取得の回と、その後の届いたらの判定の回。新しい `fresh` 項目のうち先頭の `proposed` 件を候補にする。取得が失敗した回は
   /// 判定を起こさない。
   nonisolated static func round(
-    _ source: String, at time: Date, items: Int, fresh: Int, proposed: Int = 0,
+    _ origin: String, at time: Date, items: Int, fresh: Int, proposed: Int = 0,
     trigger: AutomationNodeRun.Trigger = .schedule, failure: String? = nil
   ) -> [AutomationSamplePass] {
     if let failure {
@@ -381,7 +381,7 @@ extension DesignSceneFixtures {
         AutomationSamplePass(nodeKey: "fetch", at: time, trigger: trigger, outcome: failed(failure))
       ]
     }
-    let (all, new) = sampleRound(source, at: time, items: items, fresh: fresh)
+    let (all, new) = sampleRound(origin, at: time, items: items, fresh: fresh)
     var passes = [
       AutomationSamplePass(
         nodeKey: "fetch", at: time, trigger: trigger, outcome: fetched(all),

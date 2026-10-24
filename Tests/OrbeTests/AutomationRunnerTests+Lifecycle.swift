@@ -13,7 +13,7 @@ extension AutomationRunnerTests {
 
   /// 書き換えは、何をするかが変わったノードの走っている回だけを止めて結果を捨てる。名前だけの書き換えでは走っている回が最後
   /// まで走って確定する。どちらでも読めば取る行は残る。
-  func testRewritingStopsOnlyANodeWhoseWorkChangedAndKeepsThePendingRows() throws {
+  func testRewritingStopsOnlyANodeWhoseBehaviorChangedAndKeepsThePendingRows() throws {
     func definition(_ name: String, gh script: String) -> AutomationDefinition {
       AutomationDefinition(
         name: name, notify: nil,

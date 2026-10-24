@@ -28,8 +28,10 @@ struct Automation: Equatable, Identifiable {
   var judges: Bool { !graph.judges.isEmpty }
 
   /// ノードの状態。グラフのノードはいつも状態を持つ。
-  func state(_ id: AutomationNodeID) -> AutomationNodeState {
-    guard let state = states[id] else { preconditionFailure("every node has a state: \(id)") }
+  func state(_ nodeId: AutomationNodeID) -> AutomationNodeState {
+    guard let state = states[nodeId] else {
+      preconditionFailure("every node has a state: \(nodeId)")
+    }
     return state
   }
 

@@ -164,12 +164,12 @@ extension AutomationStore {
   ) throws(AutomationError) {
     var seen = Set<AutomationNodeID>()
     for (index, definitionNode) in definitionNodes.enumerated() {
-      guard let id = definitionNode.id else { continue }
-      guard current[id] != nil else {
-        throw .invalid("nodes[\(index)].id: \(id) is not a node of automation \(automation)")
+      guard let nodeId = definitionNode.id else { continue }
+      guard current[nodeId] != nil else {
+        throw .invalid("nodes[\(index)].id: \(nodeId) is not a node of automation \(automation)")
       }
-      guard seen.insert(id).inserted else {
-        throw .invalid("nodes[\(index)].id: \(id) is named twice")
+      guard seen.insert(nodeId).inserted else {
+        throw .invalid("nodes[\(index)].id: \(nodeId) is named twice")
       }
     }
     for (index, definitionNode) in definitionNodes.enumerated() where definitionNode.id == nil {

@@ -163,7 +163,7 @@ final class AutomationStoreTests: OrbeTestCase {
   // MARK: - 決まりを外した印
 
   /// 出力が決まりを外した印は最初の回に付き、何をするかが変わるまで残る（名前だけの書き換えでは残る）。
-  func testTheBreachMarkStaysFromTheFirstBreachUntilTheNodesWorkChanges() throws {
+  func testTheBreachMarkStaysFromTheFirstBreachUntilTheNodesBehaviorChanges() throws {
     let store = AutomationStore()
     let id = try store.create(Self.definition(), now: Self.at).id
     let a = Self.item("a")

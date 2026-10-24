@@ -327,7 +327,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
   // MARK: - 出どころ
 
   /// 候補の出どころのノードの名前は、候補を出した自動化の定義から引く。消えた自動化の候補は、出どころの項目が無効になって下がる。
-  func testSourceNameComesFromTheProposingAutomation() {
+  func testOriginNodeNameComesFromTheProposingAutomation() {
     let palette = TaskPaletteSamples.model(
       [],
       automations: DesignSceneFixtures.automationRunner(
