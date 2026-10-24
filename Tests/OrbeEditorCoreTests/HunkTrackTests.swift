@@ -171,6 +171,18 @@ final class HunkTrackTests: XCTestCase {
     XCTAssertEqual(other.hunks, tracked, "届く結果と同じ")
   }
 
+  /// 行をつなぐ削除は、始まりの行と終わりの行の残りが違えば、始まりの行を変更に入れる（つないだ行は中身が変わる）。
+  func testADeletionJoiningRowsWithDifferentRestsChangesTheStartRow() throws {
+    let base = "ab\ncd\n"
+    let (document, surface) = try opened(base, base: base)
+    surface.replace(NSRange(location: 1, length: 3), with: "")
+    let tracked = document.hunks
+    XCTAssertEqual(
+      tracked, [LineHunk(oldStart: 1, oldCount: 2, newStart: 1, newCount: 1)], "ab と cd が ad になる")
+    XCTAssertTrue(document.waitUntilCaughtUp())
+    XCTAssertEqual(document.hunks, tracked, "届く結果と同じ")
+  }
+
   /// 乱数の編集の束（複数の区間を変える操作を含み、届く前に重ねる）で、ずらしたハンクがいつでも正しい対応の形を保つ。
   /// 届いた結果を今の版へ写す道——届いた版の後の束をまたぐ編集の列をまとめてずらす——も同じ形になる。中身の対応は、届いて
   /// から行の数を変えない編集が無い間だけ見る。
