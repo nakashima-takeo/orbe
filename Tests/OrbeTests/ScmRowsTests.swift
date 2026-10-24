@@ -77,6 +77,8 @@ final class ScmRowsTests: OrbeTestCase {
     let alert = ScmDiscardGate.alert(pick(["intended.txt", "renamed.txt", "a.txt"]), language: .en)
     XCTAssertTrue(
       alert.informativeText.hasSuffix(" 2 files go to the Trash."), alert.informativeText)
+    let one = ScmDiscardGate.alert(pick(["intended.txt", "a.txt"]), language: .en)
+    XCTAssertTrue(one.informativeText.hasSuffix(" 1 file goes to the Trash."), one.informativeText)
   }
 
   /// 戻す破棄の確認で、「破棄」は Return では押されず（戻せない側）、Esc はキャンセル。破棄するのは「破棄」を押したときだけ。

@@ -27,7 +27,10 @@ enum ScmDiscardGate {
     let trashed = files.filter(\.discardMovesToTrash).count
     alert.informativeText = [
       L10n.string(.editorScmDiscardMessage, language),
-      trashed > 0 ? L10n.format(.editorScmDiscardToTrash, language, trashed) : nil,
+      trashed > 0
+        ? L10n.format(
+          trashed == 1 ? .editorScmDiscardToTrashOne : .editorScmDiscardToTrashOther, language,
+          trashed) : nil,
     ].compactMap { $0 }.joined(separator: " ")
     let confirm = alert.addButton(withTitle: L10n.string(.editorScmDiscardConfirm, language))
     confirm.hasDestructiveAction = true
