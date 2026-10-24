@@ -63,7 +63,7 @@ final class ScmRowsTests: OrbeTestCase {
         entries: [
           "intended.txt": entry(nil, .added), "new.txt": entry(nil, .untracked),
           "renamed.txt": entry(nil, .renamed, from: "old.txt"), "a.txt": entry(.added, .modified),
-          "gone.txt": entry(.added, .deleted),
+          "gone.txt": entry(nil, .deleted),
         ], untrackedDirectories: [], branch: nil, stagedVersions: [:]))
     let files = Dictionary(uniqueKeysWithValues: changes.changes.map { ($0.path, $0) })
     XCTAssertEqual(

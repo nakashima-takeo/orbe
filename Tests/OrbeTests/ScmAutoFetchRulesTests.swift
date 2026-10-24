@@ -92,7 +92,7 @@ final class ScmAutoFetchRulesTests: OrbeTestCase {
     }
     let keeping: [(SourceControl.NetworkStep, GitWriteFailure?)] = [
       (.pull, .authentication), (.push, .unknownHostKey), (.fetch, .cancelled),
-      (.pull, .reason("fatal: Need to specify how to reconcile divergent branches.")),
+      (.pull, .reason("Could not resolve host: example.invalid")),
       (.push, .noPushDestination),
     ]
     for (step, failure) in keeping {
