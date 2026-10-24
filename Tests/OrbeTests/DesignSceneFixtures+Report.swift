@@ -2,11 +2,11 @@ import Foundation
 
 @testable import Orbe
 
-/// 見本 B2『開いている PR の要約』: 毎日 18:00 に開いている PR を取り、届いたら要約の部品が報告として残す。通知は
+/// 見本 B2『開いている PR の要約』: 毎日 18:00 に開いている PR を取り、届いたら要約のノードが報告として残す。通知は
 /// メニューバー。報告の全文（複数行）・報告なし・失敗の回を持つ。
 extension DesignSceneFixtures {
   static func boardReportExample() -> AutomationSample {
-    let reports: [(daysAgo: Int, report: AutomationPartPass.Outcome)] = [
+    let reports: [(daysAgo: Int, report: AutomationNodePass.Outcome)] = [
       (5, reported("開いている PR は 4 件。新しく 2 件が開いた。")),
       (4, failed("Claude usage limit reached")),
       (3, reported(nil)),
@@ -25,8 +25,8 @@ extension DesignSceneFixtures {
     return AutomationSample(
       definition: AutomationDefinition(
         name: "開いている PR の要約", notify: .menuBar,
-        parts: [
-          commandPart(
+        nodes: [
+          commandNode(
             "fetch", "開いている PR を取る", .scheduled(cron("0 18 * * *")),
             script:
               "gh pr list --json number,url,title,createdAt | jq -c '.[] | {id: (.number|tostring), "
@@ -34,7 +34,7 @@ extension DesignSceneFixtures {
             coverage: .currentSet),
           AutomationGraphTests.taking(
             .all,
-            agentPart(
+            agentNode(
               "digest", "要約", .arrival, from: ["fetch"], model: "sonnet",
               instruction: "開いている PR を 3 行以内で要約する。", deliver: .report)),
         ]),
@@ -43,10 +43,10 @@ extension DesignSceneFixtures {
         let start = automationAt(18, 0, daysAgo: entry.daysAgo)
         return [
           AutomationSamplePass(
-            part: "fetch", at: start,
+            nodeKey: "fetch", at: start,
             outcome: fetched(sampleItems("prs", 2 + entry.daysAgo % 3, at: start))),
           AutomationSamplePass(
-            part: "digest", at: start.addingTimeInterval(60), trigger: .arrival,
+            nodeKey: "digest", at: start.addingTimeInterval(60), trigger: .arrival,
             outcome: entry.report),
         ]
       })

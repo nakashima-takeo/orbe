@@ -1,7 +1,7 @@
 import Foundation
 import OrbeSessionLog
 
-/// 部品の役割ごとの agent の依頼文の枠。載せるのは役割・今の日時・利用者の指示文・入力の件数・使う道具だけで、入力のデータは
+/// ノードの役割ごとの agent の依頼文の枠。載せるのは役割・今の日時・利用者の指示文・入力の件数・使う道具だけで、入力のデータは
 /// Orbe の MCP の道具で読ませ、結果も道具で出させる（`AutomationRunSession` が呼び出しごとに確かめ、外れていればその場で
 /// 理由を返す）。結果の形を Orbe が固定で持つのは、利用者の指示文が形まで決めると自動化ごとに形が割れて確かめられないため。
 /// 最終応答の文は結果として読まない。
@@ -39,7 +39,7 @@ enum AutomationPrompts {
       """
   }
 
-  // MARK: - 行を見る部品
+  // MARK: - 行を見るノード
 
   /// 行を見る agent の道具の 1 文。
   static let orbeToolsOnly = "Use only Orbe's tools named below; you have no other tools."
@@ -127,7 +127,7 @@ enum AutomationPrompts {
   /// 仕事の依頼文。上流の行も取得の情報も載せない——外から来た文面を、ツールを持つ agent の依頼文に混ぜないため。
   static func work(instruction: String, now: Date, timeZone: TimeZone) -> String {
     """
-    You act for the user as the last part of an automation. Orbe started you in the background on schedule; \
+    You act for the user as the last node of an automation. Orbe started you in the background on schedule; \
     nobody is watching. Use only the tools you were given. \(materialLine)
 
     Now: \(local(now, timeZone)), time zone \(timeZone.identifier).

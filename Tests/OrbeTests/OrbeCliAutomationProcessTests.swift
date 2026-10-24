@@ -5,21 +5,21 @@ import XCTest
 @testable import Orbe
 
 /// 実 `orb automation`（`orbe-cli`）を子プロセスで起こし、実 `WindowController` の自動化を set（標準入力の JSON）→ list →
-/// pause → run → resume → rm のライフサイクルで動かせること、proposals が自動化の棚の提案を出すことを固定する。部品は
+/// pause → run → resume → rm のライフサイクルで動かせること、proposals が自動化の棚の提案を出すことを固定する。ノードは
 /// どれもコマンドなので、agent は起きない。
 ///
 /// 壊れると何が起きるか: CLI が組み立てる control メソッド名・params の語（`pause` / `resume` の `paused`、`set` と
-/// `proposals` の `automationId`、`set` の `definition`、`run` の `partKey`）はここでしか測れない。`resume` が
-/// `paused:true` を送ると、exit 0 を返しながら止まったままになる。`run` が `partKey` を落とすと、指した部品の先まで流れる。
+/// `proposals` の `automationId`、`set` の `definition`、`run` の `nodeKey`）はここでしか測れない。`resume` が
+/// `paused:true` を送ると、exit 0 を返しながら止まったままになる。`run` が `nodeKey` を落とすと、指したノードの先まで流れる。
 /// `try` が範囲・行・limit を落とすと、AI が指したのと違う試走が黙って走る。`trial --wait` が時間切れを 0 で返すと、AI は
-/// 途中の結果を終わった結果と読む。`runs` が `partKey`・`before` を落とすと、AI は別の部品の回や同じページを続きと読む。
+/// 途中の結果を終わった結果と読む。`runs` が `nodeKey`・`before` を落とすと、AI は別のノードの回や同じページを続きと読む。
 ///
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliAutomationProcessTests: OrbeTestCase {
-  /// 回すと取得の部品が項目 a を 1 つ取り、届いたら判定の部品（コマンド）が a を候補に出す。新しい DB で最初に作る部品の ID は
+  /// 回すと取得のノードが項目 a を 1 つ取り、届いたら判定のノード（コマンド）が a を候補に出す。新しい DB で最初に作るノードの ID は
   /// 1 なので、a の下流へ渡す id は `1:a`。
   private let definition = #"""
-    {"name": "GitHub: 通知", "parts": [
+    {"name": "GitHub: 通知", "nodes": [
       {"key": "fetch", "name": "取る", "trigger": {"kind": "interval", "minutes": 30},
        "coverage": "currentSet", "command":
        "echo '{\"id\":\"a\",\"link\":\"https://x.test/a\",\"body\":\"a\",\"time\":\"2026-01-01T00:00:00Z\"}'"},
@@ -91,20 +91,20 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertEqual(run(control, ["list"]), "")
   }
 
-  /// `run --part <鍵>` はその部品まで流す（下流の手動の部品は走らない）。
-  func testRunFlowsToTheGivenPart() throws {
+  /// `run --node <鍵>` はそのノードまで流す（下流の手動のノードは走らない）。
+  func testRunFlowsToTheGivenNode() throws {
     let control = try startControlProcess()
     let manual = definition.replacingOccurrences(
       of: #"{"kind": "arrival"}"#, with: #"{"kind": "manual"}"#)
     let id = run(control, ["set"], stdin: manual)
     let automation = { control.target.automationStore.automation(Int(id)!) }
 
-    XCTAssertEqual(run(control, ["run", id, "--part", "fetch"]), "started automation \(id)")
+    XCTAssertEqual(run(control, ["run", id, "--node", "fetch"]), "started automation \(id)")
     XCTAssertTrue(waitUntil(10) { automation()?.state(key: "fetch").runs.isEmpty == false })
     XCTAssertEqual(automation()?.state(key: "judge").pending.count, 1, "前提: 判定が読めば取る行がある")
-    // 鍵が届かず終わりの部品まで流れると、判定は取得の終わりと同じ知らせの中で起こされる（走っているか、もう記録がある）。
+    // 鍵が届かず終わりのノードまで流れると、判定は取得の終わりと同じ知らせの中で起こされる（走っているか、もう記録がある）。
     XCTAssertFalse(control.target.automationRunner.isRunning(Int(id)!, "judge"))
-    XCTAssertEqual(automation()?.state(key: "judge").runs, [], "道の外の手動の部品は走らない")
+    XCTAssertEqual(automation()?.state(key: "judge").runs, [], "道の外の手動のノードは走らない")
   }
 
   /// 入力の無い副作用のコマンドの前回は、回の記録だけから「コマンドの終わり方」で出る（取得の数を出さない）。
@@ -112,7 +112,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     let control = try startControlProcess()
     let id = run(
       control, ["set"],
-      stdin: #"{"name": "日報", "parts": [{"key": "note", "name": "日報", "#
+      stdin: #"{"name": "日報", "nodes": [{"key": "note", "name": "日報", "#
         + #""trigger": {"kind": "cron", "expression": "0 23 * * *"}, "#
         + #""command": "cat >/dev/null", "deliver": "none"}]}"#)
     XCTAssertEqual(row(control)[3], "cron 0 23 * * *", "cron の予定は式のまま出る")
@@ -126,22 +126,22 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertFalse(last.contains("fetched"), last)
   }
 
-  /// 仕事の部品の前回は「agent の終わり方」で出る。agent は起こさず、回の記録を直に積む。
-  func testListShowsTheEndingOfAWorkPart() throws {
+  /// 仕事のノードの前回は「agent の終わり方」で出る。agent は起こさず、回の記録を直に積む。
+  func testListShowsTheEndingOfAWorkNode() throws {
     let control = try startControlProcess()
     let id = try XCTUnwrap(
       Int(
         run(
           control, ["set"],
-          stdin: #"{"name": "PR を Slack へ", "parts": [{"key": "post", "name": "投稿", "#
+          stdin: #"{"name": "PR を Slack へ", "nodes": [{"key": "post", "name": "投稿", "#
             + #""trigger": {"kind": "cron", "expression": "0 9 * * 1-5"}, "#
             + #""tools": ["Bash(gh search prs:*)"], "instruction": "投稿して", "deliver": "report"}]}"#
         )))
     try control.target.automationStore.record(
-      id, part: "post", at: Date(),
+      id, nodeKey: "post", at: Date(),
       outcome: .succeeded(
         .work(.done("投稿した")),
-        AutomationPartPass.Execution(commandLine: "claude -p", ending: .exited(0), count: 1),
+        AutomationNodePass.Execution(commandLine: "claude -p", ending: .exited(0), count: 1),
         breach: nil))
     let last = row(control)[5]
     XCTAssertTrue(last.hasSuffix(" post: agent exited 0"), last)
@@ -169,14 +169,14 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
   }
 
   /// `runs <id>` は回の記録を新しい順に 1 行 1 回（記録の ID と回の要約）で出し、続きがあれば最後に `next <記録の ID>` を出す。
-  /// `--part` はその部品だけ、`--limit` は 1 ページの件数、`--before` は前のページの `next` からの続き。
+  /// `--node` はそのノードだけ、`--limit` は 1 ページの件数、`--before` は前のページの `next` からの続き。
   func testRunsPagesThePastRunsNewestFirst() throws {
     let control = try startControlProcess()
     let id = try XCTUnwrap(
       Int(
         run(
           control, ["set"],
-          stdin: #"{"name": "取得と記録", "parts": ["#
+          stdin: #"{"name": "取得と記録", "nodes": ["#
             + #"{"key": "fetch", "name": "取る", "trigger": {"kind": "interval", "minutes": 30}, "#
             + #""coverage": "currentSet", "command": "true"}, "#
             + #"{"key": "note", "name": "記録", "trigger": {"kind": "manual"}, "from": ["fetch"], "#
@@ -185,7 +185,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     let start = Date()
     for (offset, key) in [(0, "fetch"), (60, "note"), (120, "fetch"), (180, "fetch")] {
       try store.record(
-        id, part: key, at: start.addingTimeInterval(TimeInterval(offset)),
+        id, nodeKey: key, at: start.addingTimeInterval(TimeInterval(offset)),
         outcome: key == "fetch"
           ? DesignSceneFixtures.fetched([WindowControllerAutomationControlTests.item("a")])
           : DesignSceneFixtures.sideEffected(0))
@@ -197,13 +197,13 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
       }
     }
 
-    let first = lines(["--part", "fetch", "--limit", "2"])
+    let first = lines(["--node", "fetch", "--limit", "2"])
     XCTAssertEqual(first.map(\.[0]), ["\(fetches[0])", "\(fetches[1])", "next"])
     XCTAssertTrue(first[0][1].hasSuffix(" fetch: 1 fetched, 0 new"), first[0][1])
     XCTAssertEqual(first[2][1], "\(fetches[1])")
     XCTAssertEqual(
-      lines(["--part", "fetch", "--before", first[2][1]]).map(\.[0]), ["\(fetches[2])"])
-    XCTAssertEqual(lines([]).count, 4, "部品を指さなければ全部品の回")
+      lines(["--node", "fetch", "--before", first[2][1]]).map(\.[0]), ["\(fetches[2])"])
+    XCTAssertEqual(lines([]).count, 4, "ノードを指さなければ全ノードの回")
   }
 
   /// 定義の検証は control が持つ。標準入力が JSON オブジェクトでないのは usage エラー（2）、形の欠けは RPC エラー（1）。
@@ -216,13 +216,13 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
 
     let missing = control.orb(["automation", "set"], stdin: #"{"name": "x"}"#)
     XCTAssertEqual(missing.status, 1)
-    XCTAssertTrue(missing.stderr.contains("error -32602: missing parts"), missing.stderr)
+    XCTAssertTrue(missing.stderr.contains("error -32602: missing nodes"), missing.stderr)
     XCTAssertTrue(control.target.automationStore.automations.isEmpty)
   }
 
   /// 取得（手段は走れば 3 秒かかる）→ 処理（`cat` で素通し）→ 副作用（走れば `marker` を作る）。
   private func trialDefinition(marker: URL) -> String {
-    #"{"name": "試す", "parts": ["#
+    #"{"name": "試す", "nodes": ["#
       + #"{"key": "fetch", "name": "取る", "trigger": {"kind": "manual"}, "coverage": "currentSet", "#
       + #""command": "sleep 3"}, "#
       + #"{"key": "note", "name": "写す", "trigger": {"kind": "arrival"}, "from": ["fetch"], "#
@@ -231,7 +231,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
       + #""deliver": "none", "command": "cat >/dev/null; touch '\#(marker.path)'"}]}"#
   }
 
-  /// `try` は与える行（`--stdin`。0 バイトは usage エラー）・limit・範囲を運び、`trial --wait` は試走の終わりまで待って部品ごとの結果を
+  /// `try` は与える行（`--stdin`。0 バイトは usage エラー）・limit・範囲を運び、`trial --wait` は試走の終わりまで待ってノードごとの結果を
   /// 出す。副作用は走らず、渡るはずだった行の数が人向けの 1 行に出る。
   func testTryCarriesRowsLimitAndRangeAndTrialWaitsForTheResult() throws {
     let control = try startControlProcess()
@@ -250,16 +250,16 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertTrue(empty.stderr.contains("--stdin got no input"), empty.stderr)
     let trial = try XCTUnwrap(
       control.orbJSON(["automation", "trial", id, "--wait"])["trial"] as? [String: Any])
-    let parts = try XCTUnwrap(trial["parts"] as? [[String: Any]])
+    let nodes = try XCTUnwrap(trial["nodes"] as? [[String: Any]])
     func firstRun(_ key: String) -> [String: Any]? {
-      (parts.first { $0["key"] as? String == key }?["runs"] as? [[String: Any]])?.first
+      (nodes.first { $0["key"] as? String == key }?["runs"] as? [[String: Any]])?.first
     }
     func ids(_ rows: Any?) -> [String]? {
       (rows as? [[String: Any]])?.compactMap { $0["id"] as? String }
     }
     XCTAssertEqual(
       ids((firstRun("fetch")?["given"] as? [String: Any])?["rows"]), ["1:b"],
-      "取得の部品の ID の接頭（新しい DB の最初の部品）")
+      "取得のノードの ID の接頭（新しい DB の最初のノード）")
     XCTAssertEqual(ids((firstRun("send")?["held"] as? [String: Any])?["rows"]), ["1:b"])
     XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path), "副作用のコマンドは走らない")
     let lines = run(control, ["trial", id]).split(separator: "\n")

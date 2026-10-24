@@ -25,14 +25,14 @@ enum BoardRunMark: Equatable {
 }
 
 /// 一覧の行の値（前回の成否と時刻・次回）。定義と回の記録の形に依るのは、これと詳細の値（`BoardAutomationDetailValue`）・
-/// カードの値（`BoardAutomationPartValue`）と、ここに置く共有の読み替え（回の区分・結果の文・畳み）だけで、ボードのビューは
+/// カードの値（`BoardAutomationNodeValue`）と、ここに置く共有の読み替え（回の区分・結果の文・畳み）だけで、ボードのビューは
 /// これらの値と立ち位置だけを読む——定義の形が変わったとき、直す場所を読み替えに限るため。
 struct BoardAutomationSummary: Equatable {
-  /// 前回の結果の印。最後の回が失敗した部品があれば失敗。まだ動いていなければ nil。
+  /// 前回の結果の印。最後の回が失敗したノードがあれば失敗。まだ動いていなければ nil。
   let mark: BoardRunMark?
-  /// 「前回 16:41」「前回 昨日 23:00」。まだ動いていなければ「未実行」。時刻はどの部品かを問わず最後に動いた時刻。
+  /// 「前回 16:41」「前回 昨日 23:00」。まだ動いていなければ「未実行」。時刻はどのノードかを問わず最後に動いた時刻。
   let last: String
-  /// 「次回 16:50」。予定のある部品が無ければ「手動」、止めていれば nil。
+  /// 「次回 16:50」。予定のあるノードが無ければ「手動」、止めていれば nil。
   let next: String?
 }
 
@@ -54,7 +54,7 @@ extension BoardAutomationSummary {
     } else {
       self.next =
         automation.graph.nodes.contains {
-          if case .scheduled = $0.part.trigger { true } else { false }
+          if case .scheduled = $0.entity.trigger { true } else { false }
         } ? nil : l10n.string(.automationManual)
     }
   }
@@ -62,7 +62,7 @@ extension BoardAutomationSummary {
 
 // MARK: - 共有の読み替え（一覧の行・詳細・カード・知らせ）
 
-/// カードの「この部品の実行履歴」の 1 行。
+/// カードの「このノードの実行履歴」の 1 行。
 enum BoardRunLine: Equatable {
   case run(BoardRunEntry)
   /// 取得の新着なしが続いた区間を畳んだ 1 行（「13:05〜16:30 は新着なし」）。
@@ -86,7 +86,7 @@ extension BoardAutomationSummary {
   }
 
   /// 回の区分。帯・知らせは、この分類だけを使う。結果を断られて直した回も、受けた結果で決める。
-  static func tone(_ run: AutomationPartRun) -> BoardRunTone {
+  static func tone(_ run: AutomationNodeRun) -> BoardRunTone {
     if run.failed { return .failed }
     switch run.result {
     case .judge(let proposed, _, _): return proposed > 0 ? .produced : .quiet
@@ -98,7 +98,7 @@ extension BoardAutomationSummary {
   }
 
   /// 地図の前回の列の量（「新着 2 件」「1 件を出力」「候補 2 件」）。報告・作業・外部操作は量を言わない（nil）。
-  static func amount(_ run: AutomationPartRun, text: AutomationText)
+  static func amount(_ run: AutomationNodeRun, text: AutomationText)
     -> (text: String, shade: BoardRunShade)?
   {
     let l10n = text.l10n
@@ -120,7 +120,7 @@ extension BoardAutomationSummary {
   }
 
   /// カードの実行履歴の結果の文。捨てた数・判定の確定で捨てた案・断った結果を直して通ったことを末尾に添える。
-  static func result(_ run: AutomationPartRun, node: AutomationGraph.Node, text: AutomationText)
+  static func result(_ run: AutomationNodeRun, node: AutomationGraph.Node, text: AutomationText)
     -> (text: String, shade: BoardRunShade)
   {
     let l10n = text.l10n
@@ -179,13 +179,13 @@ extension BoardAutomationSummary {
     )
   }
 
-  /// 部品の回を新しい順に 1 行ずつ。素の「新着なし」の回（失敗でも手動でもない取得の回で新しい項目が 0、添え書きが付かない）が
+  /// ノードの回を新しい順に 1 行ずつ。素の「新着なし」の回（失敗でも手動でもない取得の回で新しい項目が 0、添え書きが付かない）が
   /// `foldLength` 回以上続く区間は、期間の 1 行に畳む——短い間隔の取得の「新着なし」が、他の回を押し出さないため。
   static func lines(
     _ records: [AutomationRunRecord], node: AutomationGraph.Node, text: AutomationText
   ) -> [BoardRunLine] {
     var lines: [BoardRunLine] = []
-    var quiet: [AutomationPartRun] = []
+    var quiet: [AutomationNodeRun] = []
     func flush() {
       if quiet.count >= foldLength, let newest = quiet.first, let oldest = quiet.last {
         lines.append(
@@ -224,7 +224,7 @@ extension BoardAutomationSummary {
   }
 
   private static func entry(
-    _ run: AutomationPartRun, node: AutomationGraph.Node, text: AutomationText
+    _ run: AutomationNodeRun, node: AutomationGraph.Node, text: AutomationText
   )
     -> BoardRunLine
   {
@@ -252,13 +252,13 @@ extension BoardAutomationSummary {
   /// 畳む区間の最短の長さ。
   static let foldLength = 3
 
-  /// 部品の回 1 つを知らせの本文にした 1 行（「連絡：5 件を判定、候補 1 件」）。報告と作業の応答は文の 1 行目。部品は名前
+  /// ノードの回 1 つを知らせの本文にした 1 行（「連絡：5 件を判定、候補 1 件」）。報告と作業の応答は文の 1 行目。ノードは名前
   /// だけで言う。
   static func line(
-    _ run: AutomationPartRun, part: AutomationPartID, in automation: Automation,
+    _ run: AutomationNodeRun, nodeId: AutomationNodeID, in automation: Automation,
     text: AutomationText
   ) -> String {
-    guard let node = automation.graph.node(part) else { return "\(part)" }
+    guard let node = automation.graph.node(nodeId) else { return "\(nodeId)" }
     let body: String =
       switch run.result {
       case .report(let report?) where !run.failed: report
@@ -266,6 +266,6 @@ extension BoardAutomationSummary {
       default: result(run, node: node, text: text).text
       }
     return String(
-      text.l10n.format(.automationLabeled, node.part.name, body).prefix { !$0.isNewline })
+      text.l10n.format(.automationLabeled, node.entity.name, body).prefix { !$0.isNewline })
   }
 }

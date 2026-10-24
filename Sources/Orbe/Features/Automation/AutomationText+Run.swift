@@ -2,11 +2,11 @@ import Foundation
 
 /// 回の失敗と外れた行の、画面の言い方。種類から説明を引き、日本語の画面では AI が読む英文（原文）を括弧で添える。原文は
 /// 英語なので、英語の画面では原文を重ねず（説明と同じことを 2 度言うため）、原文にだけある抜粋（標準エラー・最初の外れた
-/// 行）を「説明: 抜粋」で添える。Orbe が種類を決められない文（部品の申告・CLI のエラー）は、説明の頭の後に文をそのまま
+/// 行）を「説明: 抜粋」で添える。Orbe が種類を決められない文（ノードの申告・CLI のエラー）は、説明の頭の後に文をそのまま
 /// 添え、原文を重ねない。
 extension AutomationText {
-  /// 「制限時間を超過（the part "x" ended: stopped at the time limit）」。
-  func failure(_ run: AutomationPartRun, node: AutomationGraph.Node) -> String? {
+  /// 「制限時間を超過（the node "x" ended: stopped at the time limit）」。
+  func failure(_ run: AutomationNodeRun, node: AutomationGraph.Node) -> String? {
     guard let failure = run.failure else { return nil }
     let head = failureHead(failure, ending: run.execution.ending, node: node)
     switch failure {
@@ -16,12 +16,13 @@ extension AutomationText {
         l10n.format(.automationLabeled, head, $0)
       } ?? head
     default:
-      let original = failure.text(part: node.key, ending: run.execution.ending, breach: run.breach)
+      let original = failure.text(
+        nodeKey: node.key, ending: run.execution.ending, breach: run.breach)
       return l10n.format(.automationWithOriginal, head, original)
     }
   }
 
-  /// 定義を読めない理由（「定義エラー（parts[0].trigger: …）」。英語の画面は「: 」で添える）。
+  /// 定義を読めない理由（「定義エラー（nodes[0].trigger: …）」。英語の画面は「: 」で添える）。
   func unreadable(_ reason: String) -> String {
     let head = l10n.string(.boardAutomationUnreadable)
     return l10n.language == .en

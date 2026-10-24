@@ -2,18 +2,18 @@ import Foundation
 
 // 定義の JSON の形。読むときに断るのは形の誤りだけで、値と組み合わせは `AutomationGraph` が検証する。
 
-/// 部品の欄と動作の定義の欄を 1 つのオブジェクトに並べる。`from` と agent の `tools` の空の配列は書かないのと同じ。
-extension AutomationDefinition.Part: Codable {
+/// ノードの欄と動作の定義の欄を 1 つのオブジェクトに並べる。`from` と agent の `tools` の空の配列は書かないのと同じ。
+extension AutomationDefinition.Node: Codable {
   private enum CodingKeys: String, CodingKey {
     case id, key, name, trigger, from, maxItems
   }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
-    id = try c.decodeIfPresent(Int.self, forKey: .id).map(AutomationPartID.init)
+    id = try c.decodeIfPresent(Int.self, forKey: .id).map(AutomationNodeID.init)
     key = try c.decode(String.self, forKey: .key)
     name = try c.decode(String.self, forKey: .name)
-    trigger = try c.decode(AutomationPart.Trigger.self, forKey: .trigger)
+    trigger = try c.decode(AutomationNode.Trigger.self, forKey: .trigger)
     from = try c.decodeIfPresent([AutomationDefinition.Input].self, forKey: .from) ?? []
     action = try AutomationActionDef(from: decoder)
     maxItems = try c.decodeIfPresent(Int.self, forKey: .maxItems)
@@ -31,16 +31,16 @@ extension AutomationDefinition.Part: Codable {
   }
 }
 
-/// `"<鍵>"`（新しい行だけ・古さの上限なし）か `{"part": "<鍵>", "take"?: "new" | "all", "maxAgeHours"?: n}`。書くときは、
+/// `"<鍵>"`（新しい行だけ・古さの上限なし）か `{"node": "<鍵>", "take"?: "new" | "all", "maxAgeHours"?: n}`。書くときは、
 /// 取り方も古さの上限も省けるつながりを鍵の文字列で書く。
 extension AutomationDefinition.Input: Codable {
   private enum CodingKeys: String, CodingKey {
-    case part, take, maxAgeHours
+    case nodeKey = "node", take, maxAgeHours
   }
 
   init(from decoder: Decoder) throws {
     if let key = try? decoder.singleValueContainer().decode(String.self) {
-      self.init(part: key)
+      self.init(nodeKey: key)
       return
     }
     let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -53,25 +53,25 @@ extension AutomationDefinition.Input: Codable {
       take = value
     }
     self.init(
-      part: try c.decode(String.self, forKey: .part), take: take,
+      nodeKey: try c.decode(String.self, forKey: .nodeKey), take: take,
       maxAgeHours: try c.decodeIfPresent(Int.self, forKey: .maxAgeHours))
   }
 
   func encode(to encoder: Encoder) throws {
     guard take != .new || maxAgeHours != nil else {
       var c = encoder.singleValueContainer()
-      try c.encode(part)
+      try c.encode(nodeKey)
       return
     }
     var c = encoder.container(keyedBy: CodingKeys.self)
-    try c.encode(part, forKey: .part)
+    try c.encode(nodeKey, forKey: .nodeKey)
     if take != .new { try c.encode(take.rawValue, forKey: .take) }
     try c.encodeIfPresent(maxAgeHours, forKey: .maxAgeHours)
   }
 }
 
 /// `command`（＋`directory`）か `instruction`（＋`agent`〔既定 claude〕・`model`・`tools`）のちょうど一方と、`timeoutMinutes`・
-/// `coverage`・`deliver`。`deliver` の省略は次の部品。外の定義の部品の欄と同じオブジェクトに並び、保存（`action_defs.action`）は
+/// `coverage`・`deliver`。`deliver` の省略は次のノード。外の定義のノードの欄と同じオブジェクトに並び、保存（`action_defs.action`）は
 /// この欄だけのオブジェクト。
 extension AutomationActionDef: Codable {
   private enum CodingKeys: String, CodingKey {
@@ -108,7 +108,7 @@ extension AutomationActionDef: Codable {
     case (true, false):
       if let key = [CodingKeys.agent, .model, .tools].first(where: c.contains) {
         throw DecodingError.dataCorruptedError(
-          forKey: key, in: c, debugDescription: "a command part has no \(key.stringValue)")
+          forKey: key, in: c, debugDescription: "a command node has no \(key.stringValue)")
       }
       return .command(
         BackgroundCommand(
@@ -117,10 +117,10 @@ extension AutomationActionDef: Codable {
     case (false, true):
       guard !c.contains(.directory) else {
         throw DecodingError.dataCorruptedError(
-          forKey: .directory, in: c, debugDescription: "an agent part has no directory")
+          forKey: .directory, in: c, debugDescription: "an agent node has no directory")
       }
       return .agent(
-        AutomationPartAgent(
+        AutomationNodeAgent(
           cli: try c.decodeIfPresent(String.self, forKey: .agent) ?? "claude",
           model: try c.decodeIfPresent(String.self, forKey: .model),
           tools: try c.decodeIfPresent([String].self, forKey: .tools) ?? [],
@@ -146,7 +146,7 @@ extension AutomationActionDef: Codable {
   }
 
   private static func destination(_ c: KeyedDecodingContainer<CodingKeys>) throws -> Destination {
-    guard let raw = try c.decodeIfPresent(String.self, forKey: .deliver) else { return .nextPart }
+    guard let raw = try c.decodeIfPresent(String.self, forKey: .deliver) else { return .nextNode }
     guard
       let destination = [Destination.taskCandidates, .report, .sideEffect].first(where: {
         $0.wireName == raw
@@ -161,10 +161,10 @@ extension AutomationActionDef: Codable {
 }
 
 extension AutomationActionDef.Destination {
-  /// `deliver` の値。次の部品は書かない。
+  /// `deliver` の値。次のノードは書かない。
   var wireName: String? {
     switch self {
-    case .nextPart: nil
+    case .nextNode: nil
     case .taskCandidates: "taskCandidates"
     case .report: "report"
     case .sideEffect: "none"
@@ -174,7 +174,7 @@ extension AutomationActionDef.Destination {
 
 /// `{"kind": "interval", "minutes": 10}`・`{"kind": "cron", "expression": "0 9 * * *"}`・`{"kind": "manual"}`・
 /// `{"kind": "arrival"}`。cron 式は受けた時点で解析し、正しくなければ断る。
-extension AutomationPart.Trigger: Codable {
+extension AutomationNode.Trigger: Codable {
   private enum CodingKeys: String, CodingKey {
     case kind, minutes, expression
   }

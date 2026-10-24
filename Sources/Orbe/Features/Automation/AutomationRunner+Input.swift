@@ -5,10 +5,10 @@ extension AutomationRunner {
   /// （読みは起こすかの門にだけ使う）。
   func input(
     _ node: AutomationGraph.Node, _ automation: Automation, _ read: AutomationIntake.Read?
-  ) -> AutomationPartPass.Input {
+  ) -> AutomationNodePass.Input {
     let state = automation.state(node.id)
     let rows = (read?.taken ?? []).map {
-      AutomationPartRow(id: $0.id, text: $0.text, origin: $0.origin, source: $0.source)
+      AutomationNodeRow(id: $0.id, text: $0.text, origin: $0.origin, source: $0.source)
     }
     switch node.role {
     case .fetch:
@@ -34,9 +34,9 @@ extension AutomationRunner {
     }
   }
 
-  /// やり直しの鍵（`<自動化 ID>-<部品の ID>-<数え始めのミリ秒>`）。数え始めは記録された回でだけ進むので、止めた回・書けなかった
-  /// 回のやり直しは同じ値になる。部品の鍵を変えても変わらない。
-  static func runId(_ id: Int, _ part: AutomationPartID, _ anchor: Date) -> String {
-    "\(id)-\(part)-\(AutomationPersistence.millis(anchor))"
+  /// やり直しの鍵（`<自動化 ID>-<ノードの ID>-<数え始めのミリ秒>`）。数え始めは記録された回でだけ進むので、止めた回・書けなかった
+  /// 回のやり直しは同じ値になる。ノードの鍵を変えても変わらない。
+  static func runId(_ id: Int, _ nodeId: AutomationNodeID, _ anchor: Date) -> String {
+    "\(id)-\(nodeId)-\(AutomationPersistence.millis(anchor))"
   }
 }

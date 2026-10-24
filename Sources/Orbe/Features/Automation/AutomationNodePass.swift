@@ -1,14 +1,14 @@
 import Foundation
 import OrbeSessionLog
 
-/// 部品の 1 回。部品と、その役割の入力を受けて手段を起こし、役割ごとに結果を受けて返す。読み・保存・予定は持たない——何を
+/// ノードの 1 回。ノードと、その役割の入力を受けて手段を起こし、役割ごとに結果を受けて返す。読み・保存・予定は持たない——何を
 /// 取ったか・出した行をどう残すか・回の記録をどう確定するかは呼び手が決める。
 ///
-/// agent の部品は、回の入力を Orbe の MCP の道具で読み、結果も道具で出す（`AutomationRunSession`）。道具が呼ばれるたびに
-/// 確かめ、外れていればその場で理由を返すので、agent は同じ会話の中で直す。コマンドの部品は入力を標準入力で受け、結果を
+/// agent のノードは、回の入力を Orbe の MCP の道具で読み、結果も道具で出す（`AutomationRunSession`）。道具が呼ばれるたびに
+/// 確かめ、外れていればその場で理由を返すので、agent は同じ会話の中で直す。コマンドのノードは入力を標準入力で受け、結果を
 /// 標準出力で出す——同じ決まり（`AutomationOutputs`）で確かめ、1 件でも外れていればその回は失敗にする（走らせ直しても同じ
 /// 出力になるため）。上限は経過時間（`timeoutMinutes`）だけで、無出力では打ち切らない。
-struct AutomationPartPass {
+struct AutomationNodePass {
   let run: BackgroundScheduler.Run
   /// 依頼文に載せる今の時刻とタイムゾーンの読み口。起こすときに読む。
   let now: () -> Date
@@ -16,24 +16,24 @@ struct AutomationPartPass {
   /// agent の回の相手を Orbe の MCP へ渡す帳面。
   let runSessions: AutomationRunSessions
 
-  /// 部品の役割の入力。ケースが役割と 1 対 1 に対応し、役割と食い違う入力は呼び手の誤り。取得と仕事のケースは行の席を
+  /// ノードの役割の入力。ケースが役割と 1 対 1 に対応し、役割と食い違う入力は呼び手の誤り。取得と仕事のケースは行の席を
   /// 持たない——外から届いた文面を、ツールを持ちうる agent の依頼文へ型の上で運ばないため。
   enum Input {
     /// `since` は前回成功した回の開始時刻（新着の流れの取得にだけ渡す）。
     case fetch(since: Date?)
-    /// `reachesJudge` は、出した行が途中で取得の部品を通らずに判定の部品へ届くか（`AutomationGraph.reachesTaskCandidates`）。
+    /// `reachesJudge` は、出した行が途中で取得のノードを通らずに判定のノードへ届くか（`AutomationGraph.reachesTaskCandidates`）。
     /// 届くなら、入力の行の `id` でない `id` の出力の行も決まりを外した行になる——判定は出どころの項目から候補を作るので、
     /// 新しく作った行は判定で使えないため。処理が続くなら、そうした行を初めに出した処理が外したことになる。入力の行の `id` を
-    /// 保った行は、入力の行に出どころが無くても外れた行にしない（部品は決まりどおりに素通ししている。判定が読む時点で
+    /// 保った行は、入力の行に出どころが無くても外れた行にしない（ノードは決まりどおりに素通ししている。判定が読む時点で
     /// 出どころなしとして捨てる）。
-    case process([AutomationPartRow], reachesJudge: Bool)
+    case process([AutomationNodeRow], reachesJudge: Bool)
     /// 行はどれも出どころを持つ。`choices` は判断待ちの候補と付け先にできる workspace。
     case judge([AutomationSourcedRow], choices: AutomationJudgeChoices)
     /// 入力の無い報告は空。
-    case report([AutomationPartRow])
+    case report([AutomationNodeRow])
     case work
     /// `runId` はコマンドに `ORBE_RUN_ID` で渡す。
-    case sideEffect([AutomationPartRow], runId: String)
+    case sideEffect([AutomationNodeRow], runId: String)
   }
 
   /// 手段の実行の記録。`count` は受けた数——取得は項目、処理・判定は行、報告・仕事は文があれば 1、副作用は標準入力に渡した行。
@@ -66,9 +66,9 @@ struct AutomationPartPass {
   /// 役割ごとの成功の出力。
   enum Output: Equatable {
     /// 取れた全項目（書かれた id と書かれたままの 1 行）。何が新しいかは出す側の確定が決める。
-    case fetch([AutomationPartRow])
+    case fetch([AutomationNodeRow])
     /// どの行も `id` を持ち、`id` は重ならない。入力の行と `id` で照らせた行だけが、その入力を引き継ぎ、出どころを持つ。
-    case process([AutomationPartRow])
+    case process([AutomationNodeRow])
     /// `resolved` は対応済みにする判断待ちの候補のリンク。
     case judge(proposals: [Proposal], resolved: [String])
     /// 報告の文。言うことが無かった回は nil。
@@ -99,7 +99,7 @@ struct AutomationPartPass {
   func start(
     _ node: AutomationGraph.Node, _ input: Input, completion: @escaping (Outcome) -> Void
   ) -> BackgroundRunHandle {
-    precondition(input.fits(node.role), "the input must match the role of the part")
+    precondition(input.fits(node.role), "the input must match the role of the node")
     let elapsed = TimeInterval(node.timeoutMinutes * 60)
     var stopped = false
     let handle: BackgroundRunHandle
@@ -119,7 +119,7 @@ struct AutomationPartPass {
         handle.stop()
       }
     case .agent(let agent):
-      guard let model = node.model else { preconditionFailure("an agent part has a model") }
+      guard let model = node.model else { preconditionFailure("an agent node has a model") }
       let session = AutomationRunSession(input, writer: node.id)
       let runSessions = self.runSessions
       let token = runSessions.open(session)
@@ -186,12 +186,12 @@ struct AutomationPartPass {
       return BackgroundInput(
         stdin: stdin(rows.map(\.text)), environment: ["ORBE_RUN_ID": runId])
     case .work:
-      preconditionFailure("a work part is an agent")
+      preconditionFailure("a work node is an agent")
     }
   }
 
   /// ツールは取得と仕事の agent にだけ渡す。
-  private static func tools(_ agent: AutomationPartAgent, _ input: Input) -> [String] {
+  private static func tools(_ agent: AutomationNodeAgent, _ input: Input) -> [String] {
     switch input {
     case .fetch, .work: agent.tools
     case .process, .judge, .report, .sideEffect: []
@@ -218,7 +218,7 @@ struct AutomationPartPass {
     case .work:
       return AutomationPrompts.work(instruction: instruction, now: now, timeZone: timeZone)
     case .sideEffect:
-      preconditionFailure("a side effect part is a command")
+      preconditionFailure("a side effect node is a command")
     }
   }
 
@@ -233,8 +233,8 @@ struct AutomationPartPass {
   }
 }
 
-extension AutomationPartPass.Input {
-  /// 部品の 1 回が受ける行の 1 行ずつ（取得と仕事は持たない）。
+extension AutomationNodePass.Input {
+  /// ノードの 1 回が受ける行の 1 行ずつ（取得と仕事は持たない）。
   var rowTexts: [String] {
     switch self {
     case .process(let rows, _), .report(let rows), .sideEffect(let rows, _): rows.map(\.text)
@@ -243,7 +243,7 @@ extension AutomationPartPass.Input {
     }
   }
 
-  fileprivate func fits(_ role: AutomationPartRole) -> Bool {
+  fileprivate func fits(_ role: AutomationNodeRole) -> Bool {
     switch (self, role) {
     case (.fetch, .fetch), (.process, .process), (.judge, .judge), (.report, .report),
       (.work, .work), (.sideEffect, .sideEffect):
@@ -253,8 +253,8 @@ extension AutomationPartPass.Input {
   }
 }
 
-/// 部品の 1 回が受ける行（読んだ行）か、出した行。受ける行の `id` は下流へ渡す id、出した行の `id` は書かれた id。
-struct AutomationPartRow: Equatable {
+/// ノードの 1 回が受ける行（読んだ行）か、出した行。受ける行の `id` は下流へ渡す id、出した行の `id` は書かれた id。
+struct AutomationNodeRow: Equatable {
   let id: String
   /// 行の JSON の 1 行（受ける行は下流へ渡す 1 行、出した行は書かれたまま）。
   let text: String
@@ -271,7 +271,7 @@ struct AutomationSourcedRow: Equatable {
 }
 
 /// 保存の形は終わり方を種類で持つ（`end`）。外の形の英文の `ending` は `AutomationRunWire` が足す。
-extension AutomationPartPass.Execution {
+extension AutomationNodePass.Execution {
   private enum CodingKeys: String, CodingKey {
     case commandLine
     case ending = "end"

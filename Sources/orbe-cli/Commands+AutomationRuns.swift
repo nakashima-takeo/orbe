@@ -2,10 +2,10 @@ import Foundation
 
 // `orb automation` の回の記録の読み（`list` の前回の列・`runs`）。
 
-/// 最新の部品の回の要約（時刻が同じなら記録の ID の大きい方。アプリの部品の回の並びと揃える）。
-func lastRunCell(_ parts: [String: [String: Any]]) -> String? {
-  let latest = parts.compactMap { key, part in
-    (part["lastRun"] as? [String: Any]).map { (key: key, run: $0) }
+/// 最新のノードの回の要約（時刻が同じなら記録の ID の大きい方。アプリのノードの回の並びと揃える）。
+func lastRunCell(_ nodes: [String: [String: Any]]) -> String? {
+  let latest = nodes.compactMap { key, node in
+    (node["lastRun"] as? [String: Any]).map { (key: key, run: $0) }
   }.max {
     ($0.run["startedAt"] as? String ?? "", $0.run["recordId"] as? Int ?? 0)
       < ($1.run["startedAt"] as? String ?? "", $1.run["recordId"] as? Int ?? 0)
@@ -13,7 +13,7 @@ func lastRunCell(_ parts: [String: [String: Any]]) -> String? {
   return latest.map { runCell($0.key, $0.run) }
 }
 
-/// 部品の回の要約。回の記録だけから組む: `<開始> <鍵> failed: <理由>`、または `<開始> <鍵>: ` に、取得は
+/// ノードの回の要約。回の記録だけから組む: `<開始> <鍵> failed: <理由>`、または `<開始> <鍵>: ` に、取得は
 /// `12 fetched, 3 new`、処理は `12 in, 4 out`、判定は `2 proposed`、報告は `reported` か `nothing to report`、副作用は
 /// `command exited 0`、仕事は `agent exited 0` を続ける。
 func runCell(_ key: String, _ run: [String: Any]) -> String {
@@ -44,12 +44,12 @@ func runCell(_ key: String, _ run: [String: Any]) -> String {
 func automationRuns(_ rest: [String]) -> Never {
   exitIfAutomationHelp(rest)
   var args = rest
-  let part = takeOption(&args, "--part", requires: "a <key> value")
+  let nodeKey = takeOption(&args, "--node", requires: "a <key> value")
   let before = takeIntOption(&args, "--before", requires: "a positive <recordId>")
   let limit = takeIntOption(&args, "--limit", requires: "a positive <n>")
   rejectLeftovers(args, positionals: 1)
   var params: [String: Any] = ["automationId": automationIdArg(args, verb: "runs")]
-  if let part { params["partKey"] = part }
+  if let nodeKey { params["nodeKey"] = nodeKey }
   if let before { params["before"] = before }
   if let limit { params["limit"] = limit }
   let result = callOrExit("list_automation_runs", params)
@@ -60,7 +60,7 @@ func automationRuns(_ rest: [String]) -> Never {
   let object = result as? [String: Any]
   for run in object?["runs"] as? [[String: Any]] ?? [] {
     print(
-      [run["recordId"].map(display) ?? "-", runCell(run["partKey"].map(display) ?? "?", run)]
+      [run["recordId"].map(display) ?? "-", runCell(run["nodeKey"].map(display) ?? "?", run)]
         .map(tsvCell).joined(separator: "\t"))
   }
   if let next = object?["next"] { print("next\t\(display(next))") }

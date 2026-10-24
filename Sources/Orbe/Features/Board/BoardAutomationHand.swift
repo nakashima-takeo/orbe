@@ -3,12 +3,12 @@ import SwiftUI
 /// ボードの自動化への手の操作（流す・止める ⇄ 再開・削除）。居場所ごとのキーとの対応・キーの表示・名前・断りをここだけが
 /// 決める——キーを変えたとき、フッターの表示やカードのボタンだけが嘘になる写しを残さないため。
 enum BoardAutomationHand {
-  /// 流す先。部品までなら、流す先の部品は地図の「選ばれている部品」から解く。
+  /// 流す先。ノードまでなら、流す先のノードは地図の「選ばれているノード」から解く。
   enum Reach: Equatable {
-    /// 終わりの部品すべて。
+    /// 終わりのノードすべて。
     case ends
-    /// 選ばれている部品。
-    case part
+    /// 選ばれているノード。
+    case node
   }
 
   enum Operation: Equatable {
@@ -28,7 +28,7 @@ enum BoardAutomationHand {
     func title(paused: Bool) -> L10nKey {
       switch self {
       case .flow(.ends): .automationRunNow
-      case .flow(.part): .automationFlowToSelected
+      case .flow(.node): .automationFlowToSelected
       case .togglePause: paused ? .automationResume : .automationPause
       case .delete: .automationDelete
       }
@@ -48,7 +48,7 @@ enum BoardAutomationHand {
     var message: L10nKey { .automationErrRunning }
   }
 
-  /// 一覧では ⌘↵＝終わりまで流す（今すぐ実行）、space＝止める ⇄ 再開、⌘⌫＝削除。地図の部品の段では ⌘↵＝選ばれている部品まで
+  /// 一覧では ⌘↵＝終わりまで流す（今すぐ実行）、space＝止める ⇄ 再開、⌘⌫＝削除。地図のノードの段では ⌘↵＝選ばれているノードまで
   /// 流す、だけ。他のキーと場所は nil。
   static func stroke(_ press: KeyPress, at place: BoardAutomationModel.Place) -> Stroke? {
     let commandOnly =
@@ -59,15 +59,15 @@ enum BoardAutomationHand {
     case (.list, .return) where commandOnly: operation = .flow(.ends)
     case (.list, .space): operation = .togglePause
     case (.list, .backspace) where press.modifiers.contains(.command): operation = .delete
-    case (.map, .return) where commandOnly: operation = .flow(.part)
+    case (.map, .return) where commandOnly: operation = .flow(.node)
     default: return nil
     }
     return press.phase == .down ? .press(operation) : .held
   }
 
-  /// 走らせ役へ通す。`part` は部品まで流すときの流す先（無ければ何もしない）。
+  /// 走らせ役へ通す。`nodeId` はノードまで流すときの流す先（無ければ何もしない）。
   static func perform(
-    _ operation: Operation, on automation: Automation, part: AutomationPartID?,
+    _ operation: Operation, on automation: Automation, nodeId: AutomationNodeID?,
     runner: AutomationRunner
   ) -> Refusal? {
     switch operation {
@@ -75,9 +75,9 @@ enum BoardAutomationHand {
       let target: AutomationFlow.Target
       switch reach {
       case .ends: target = .ends
-      case .part:
-        guard let part else { return nil }
-        target = .part(part)
+      case .node:
+        guard let nodeId else { return nil }
+        target = .node(nodeId)
       }
       do throws(AutomationError) {
         try runner.flow(automation.id, to: target)

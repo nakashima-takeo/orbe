@@ -11,7 +11,7 @@ extension AutomationStoreTests {
   func testACopyTakesInWhatTheStoreWritesBetweenStepsAndKeepsItsOwnChanges() throws {
     let store = AutomationStore()
     var definition = Self.definition()
-    definition.parts[1] = DesignSceneFixtures.commandPart(
+    definition.nodes[1] = DesignSceneFixtures.commandNode(
       "judge", "判定", .arrival, from: ["fetch"], script: "judge", deliver: .taskCandidates)
     let id = try store.create(definition, now: Self.at).id
     let large = (0..<12).map {
@@ -28,12 +28,12 @@ extension AutomationStoreTests {
     while copied == nil { copied = try copy.step() }
     let twin = try XCTUnwrap(copied)
 
-    let judge = store.part(id, "judge")
+    let judge = store.nodeId(id, "judge")
     func unread(_ store: AutomationStore) throws -> [String] {
       try XCTUnwrap(store.read(judge, of: id, baseline: nil, now: Self.at)).taken.map(\.id)
     }
     XCTAssertEqual(try unread(twin), try unread(store))
-    XCTAssertEqual(try unread(twin).last, "\(store.part(id, "fetch")):late")
+    XCTAssertEqual(try unread(twin).last, "\(store.nodeId(id, "fetch")):late")
     XCTAssertEqual(twin.automations, store.automations)
 
     let before = store.automations
@@ -43,21 +43,21 @@ extension AutomationStoreTests {
     XCTAssertEqual(try unread(store).count, 13)
   }
 
-  /// 試走が写しに掛ける操作（行を与える・絞る）の後も、ストアのメモリは DB から開き直した値と同じ（変わった部品の状態と読めば
+  /// 試走が写しに掛ける操作（行を与える・絞る）の後も、ストアのメモリは DB から開き直した値と同じ（変わったノードの状態と読めば
   /// 取る行を読み直す）。今の集合に与えた行は、既に読んだ id でも新しい項目として読める。
   func testTheTrialsOperationsKeepTheMemoryEqualToTheDatabase() throws {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
     try Self.fetch(XCTUnwrap(store), id, [Self.item("a")])
     try Self.judge(XCTUnwrap(store), id)
-    let fetch = try XCTUnwrap(store?.part(id, "fetch"))
+    let fetch = try XCTUnwrap(store?.nodeId(id, "fetch"))
     let rows = ["a", "b", "c"].map {
-      AutomationPartRow(
+      AutomationNodeRow(
         id: $0,
         text: #"{"id":"\#($0)","link":"https://example.com/\#($0)","body":"\#($0)","#
           + #""time":"2026-10-10T09:00:00Z"}"#, origin: nil, source: nil)
     }
-    func state(_ key: String) -> AutomationPartState? { store?.automation(id)?.state(key: key) }
+    func state(_ key: String) -> AutomationNodeState? { store?.automation(id)?.state(key: key) }
 
     try store?.give(rows, as: fetch, of: id, at: Self.at)
     XCTAssertEqual(

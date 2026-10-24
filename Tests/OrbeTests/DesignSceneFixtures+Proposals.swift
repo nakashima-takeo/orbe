@@ -25,15 +25,15 @@ extension DesignSceneFixtures {
     automationItem("C03-2", "#team-orbe「今週の進捗、金曜までに週報へお願いします」", at: automationAt(11, 5))
   }
 
-  private static var backlogFetch: AutomationDefinition.Part {
-    agentPart(
+  private static var backlogFetch: AutomationDefinition.Node {
+    agentNode(
       "fetch", "Backlog から取る", .scheduled(.every(1800)), model: "haiku",
       tools: ["mcp__backlog__get_issues"], instruction: "自分が担当の未完了の課題を、更新の新しい順に 30 件取る。",
       coverage: .currentSet)
   }
 
-  private static var slackFetch: AutomationDefinition.Part {
-    commandPart(
+  private static var slackFetch: AutomationDefinition.Node {
+    commandNode(
       "fetch", "Slack から取る", .scheduled(cron("0 9,13,17 * * *")),
       script: "~/bin/slack-mentions --since 1d", coverage: .newArrivals)
   }
@@ -57,9 +57,9 @@ extension DesignSceneFixtures {
         createdAt: created,
         passes: [
           AutomationSamplePass(
-            part: "fetch", at: fetchedAt, outcome: fetched([estimate, onboarding])),
+            nodeKey: "fetch", at: fetchedAt, outcome: fetched([estimate, onboarding])),
           AutomationSamplePass(
-            part: "judge", at: judgedAt, trigger: .arrival,
+            nodeKey: "judge", at: judgedAt, trigger: .arrival,
             outcome: judged(
               [
                 proposal(
@@ -71,15 +71,15 @@ extension DesignSceneFixtures {
       AutomationSample(
         definition: candidatesDefinition(
           "Slack: 自分の発言",
-          fetch: commandPart(
+          fetch: commandNode(
             "fetch", "Slack から取る", .scheduled(cron("0 18 * * *")),
             script: "~/bin/slack-mine --since 1d", coverage: .newArrivals)),
         createdAt: created,
         passes: [
           AutomationSamplePass(
-            part: "fetch", at: fetchedAt, outcome: fetched([weekly, onboarding])),
+            nodeKey: "fetch", at: fetchedAt, outcome: fetched([weekly, onboarding])),
           AutomationSamplePass(
-            part: "judge", at: judgedAt, trigger: .arrival,
+            nodeKey: "judge", at: judgedAt, trigger: .arrival,
             outcome: judged(
               [
                 proposal(
@@ -104,7 +104,7 @@ extension DesignSceneFixtures {
       createdAt: automationAt(9, daysAgo: 3),
       passes: [
         AutomationSamplePass(
-          part: "fetch", at: automationAt(15),
+          nodeKey: "fetch", at: automationAt(15),
           outcome: fetched([backlogItem]), kept: [backlogItem])
       ])
   }
@@ -114,13 +114,13 @@ extension DesignSceneFixtures {
     AutomationSample(
       definition: candidatesDefinition(
         "GitHub: 自分へのレビュー依頼",
-        fetch: commandPart(
+        fetch: commandNode(
           "fetch", "GitHub から取る", .scheduled(.every(3600)),
           script: "gh search prs --review-requested=@me --json url", coverage: .currentSet)),
       createdAt: automationAt(9, daysAgo: 3), paused: true,
       passes: [
         AutomationSamplePass(
-          part: "fetch", at: automationAt(9),
+          nodeKey: "fetch", at: automationAt(9),
           outcome: failed("gh: Not Found (HTTP 404)"))
       ])
   }
@@ -137,9 +137,9 @@ extension DesignSceneFixtures {
     }
     samples[0].passes.insert(
       contentsOf: [
-        AutomationSamplePass(part: "fetch", at: automationAt(9), outcome: fetched(items)),
+        AutomationSamplePass(nodeKey: "fetch", at: automationAt(9), outcome: fetched(items)),
         AutomationSamplePass(
-          part: "judge", at: automationAt(9, 1), trigger: .arrival,
+          nodeKey: "judge", at: automationAt(9, 1), trigger: .arrival,
           outcome: judged(
             items.enumerated().map { n, item in
               proposal(

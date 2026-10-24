@@ -98,9 +98,9 @@ extension DesignFlowSnapshotTests {
       ])
   }
 
-  /// 地図と選んだ部品: 一覧で選ぶ（カードの欄は空）→ ↵ で先頭の部品 → ↑ で「通知」の段 → → で 3 択 → esc で段へ → ↓ で
-  /// 部品 → 失敗した判定まで進む → 末尾で止まる → ⌘↵ で流れて実行中 → 流している途中の ⌘↵ は赤の断り → ← で一覧へ（地図の地と
-  /// カードが消える）→ ↵ で同じ部品 → 一覧で別の自動化 → → で先頭の部品 → カードの「修正を依頼」（欄に書き出され焦点が欄へ）。
+  /// 地図と選んだノード: 一覧で選ぶ（カードの欄は空）→ ↵ で先頭のノード → ↑ で「通知」の段 → → で 3 択 → esc で段へ → ↓ で
+  /// ノード → 失敗した判定まで進む → 末尾で止まる → ⌘↵ で流れて実行中 → 流している途中の ⌘↵ は赤の断り → ← で一覧へ（地図の地と
+  /// カードが消える）→ ↵ で同じノード → 一覧で別の自動化 → → で先頭のノード → カードの「修正を依頼」（欄に書き出され焦点が欄へ）。
   func testBoardMap() throws {
     let model = BoardModel(
       automation: BoardAutomationModel(
@@ -121,11 +121,11 @@ extension DesignFlowSnapshotTests {
         ("up_notify", { automation.moveInMap(-1) }),
         ("notify_open", { automation.openNotify() }),
         ("notify_back", { automation.closeNotify() }),
-        ("down_part", { automation.moveInMap(1) }),
+        ("down_node", { automation.moveInMap(1) }),
         ("to_contact", { for _ in 0..<11 { automation.moveInMap(1) } }),
         ("end_stops", { automation.moveInMap(1) }),
-        ("flow", { automation.perform(.flow(.part)) }),
-        ("flow_refused", { automation.perform(.flow(.part)) }),
+        ("flow", { automation.perform(.flow(.node)) }),
+        ("flow_refused", { automation.perform(.flow(.node)) }),
         ("back_to_list", { automation.leaveMap() }),
         ("enter_same", { automation.enterMap() }),
         (
@@ -156,7 +156,7 @@ extension DesignFlowSnapshotTests {
       },
       steps: [
         ("list", { automation.move(1) }),
-        ("contact", { automation.tapPart(key: "contact") }),
+        ("contact", { automation.tapNode(key: "contact") }),
       ])
   }
 

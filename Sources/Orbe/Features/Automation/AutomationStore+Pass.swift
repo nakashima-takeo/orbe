@@ -1,35 +1,35 @@
 import Foundation
 
-/// 部品の 1 回の終わり。走らせ役が組み、ストアが確定（または失敗の記録）にする。
+/// ノードの 1 回の終わり。走らせ役が組み、ストアが確定（または失敗の記録）にする。
 struct AutomationPassEnd {
   let automationId: Int
-  let part: AutomationPartID
-  /// 回が動いた定義（回を始めた時点の部品の定義）。
-  let defId: AutomationDefID
-  let trigger: AutomationPartRun.Trigger
+  let nodeId: AutomationNodeID
+  /// 回が動いた定義（回を始めた時点のノードの定義）。
+  let defId: AutomationNodeDefID
+  let trigger: AutomationNodeRun.Trigger
   let startedAt: Date
   let endedAt: Date
-  /// 読んだもの。入力の無い部品は nil。
+  /// 読んだもの。入力の無いノードは nil。
   let read: AutomationIntake.Read?
-  let outcome: AutomationPartPass.Outcome
+  let outcome: AutomationNodePass.Outcome
 }
 
-/// 確定した部品の 1 回。
+/// 確定したノードの 1 回。
 struct AutomationRecorded {
   /// 出す側の行が変わった（下流の受け手に起こす決まりを見る）。
   let changed: Bool
-  /// 書いた回の記録。自動化か部品がもう無く、何も書かなかったなら nil。
-  let run: AutomationPartRun?
+  /// 書いた回の記録。自動化かノードがもう無く、何も書かなかったなら nil。
+  let run: AutomationNodeRun?
 }
 
-/// 部品の 1 回の読み書き。読みは受け手の取り方（`AutomationIntake`）を通し、行の本文は DB にだけ置く。
+/// ノードの 1 回の読み書き。読みは受け手の取り方（`AutomationIntake`）を通し、行の本文は DB にだけ置く。
 extension AutomationStore {
-  /// 受け手 `part` の読み。`baseline` はつながりごとの読む上限の番号（契機の始まりの時点の上流の最後の番号）。
+  /// 受け手 `nodeId` の読み。`baseline` はつながりごとの読む上限の番号（契機の始まりの時点の上流の最後の番号）。
   func read(
-    _ part: AutomationPartID, of id: Int, baseline: [AutomationPartID: AutomationSeqs]?,
+    _ nodeId: AutomationNodeID, of id: Int, baseline: [AutomationNodeID: AutomationSeqs]?,
     now: Date
   ) throws(AutomationError) -> AutomationIntake.Read? {
-    guard let automation = automation(id), let node = automation.graph.node(part),
+    guard let automation = automation(id), let node = automation.graph.node(nodeId),
       !node.inputs.isEmpty
     else { return nil }
     let links = heldLinks
@@ -40,46 +40,46 @@ extension AutomationStore {
     }
   }
 
-  /// 受け手 `part` のつながりごとの読んだ位置と上流の最後の番号（起こす決まりが読む）。
-  func positions(of part: AutomationPartID) throws(AutomationError)
-    -> [AutomationPartID: AutomationDatabase.Position]
+  /// 受け手 `nodeId` のつながりごとの読んだ位置と上流の最後の番号（起こす決まりが読む）。
+  func positions(of nodeId: AutomationNodeID) throws(AutomationError)
+    -> [AutomationNodeID: AutomationDatabase.Position]
   {
-    try read { try $0.positions(of: part) }
+    try read { try $0.positions(of: nodeId) }
   }
 
-  /// 取る行が 0 件だった契機。読んだ位置を読む上限の番号まで進め、捨てた数と読む前に期限で消えた数を受け手の部品の
+  /// 取る行が 0 件だった契機。読んだ位置を読む上限の番号まで進め、捨てた数と読む前に期限で消えた数を受け手のノードの
   /// 持ち越しに足す（次の成功した回の記録に載る）。
-  func discard(_ read: AutomationIntake.Read, of part: AutomationPartID, in id: Int, now: Date)
+  func discard(_ read: AutomationIntake.Read, of nodeId: AutomationNodeID, in id: Int, now: Date)
     throws(AutomationError)
   {
-    guard read.taken.isEmpty, automation(id)?.parts[part] != nil, !read.reach.isEmpty else {
+    guard read.taken.isEmpty, automation(id)?.states[nodeId] != nil, !read.reach.isEmpty else {
       return
     }
     try commit(sweepingAt: TaskItem.storedInstant(now)) { db, memory in
-      try db.advance(part, read.reach)
-      var drops = try db.pendingDrops(of: part)
+      try db.advance(nodeId, read.reach)
+      var drops = try db.pendingDrops(of: nodeId)
       for drop in read.dropped { drops.add(drop.reason) }
       drops.add(.lapsed, read.lapsed)
-      try db.setPendingDrops(part, drops)
-      try memory.recount(id, db, now: now, parts: [part])
+      try db.setPendingDrops(nodeId, drops)
+      try memory.recount(id, db, now: now, nodeIds: [nodeId])
     }
   }
 
-  /// 部品の 1 回を 1 トランザクションで確定する。
+  /// ノードの 1 回を 1 トランザクションで確定する。
   ///
   /// 成功した回は、読んだ位置を進め、持ち越しを記録に載せて空に戻し、出す側なら出した行を照らして（今の集合は項目と版、出来事の
   /// 流れは出来事）、判定なら候補を足し・対応済みにする。出どころの項目が無効になった判断待ちの候補を下げる。失敗した回は記録・
   /// 回の履歴・外した印だけを書き、出す側の行・読んだ位置・持ち越しは動かさない——失敗を「0 件取れた」と読み違えて候補を一斉に
   /// 下げないため。どちらも回の履歴（読んだ行と扱い）を書き、出力が決まりを外した最初の回なら印を書く。
   ///
-  /// 判定へ届く処理が出した行が 1 行以上あって、どれも出どころを持たず、そのうちに部品が自分で作った行（入力を引き継がない行）
-  /// があれば、成功した回も失敗した回として書く——回の途中に判定の部品を下流に足す書き換えがあると、始めた時点では判定へ届か
-  /// なかった部品の出力がそうなりうる。自動化か部品がもう無ければ何もしない。
+  /// 判定へ届く処理が出した行が 1 行以上あって、どれも出どころを持たず、そのうちにノードが自分で作った行（入力を引き継がない行）
+  /// があれば、成功した回も失敗した回として書く——回の途中に判定のノードを下流に足す書き換えがあると、始めた時点では判定へ届か
+  /// なかったノードの出力がそうなりうる。自動化かノードがもう無ければ何もしない。
   func record(_ end: AutomationPassEnd) throws(AutomationError) -> AutomationRecorded {
     guard let index = automations.firstIndex(where: { $0.id == end.automationId }),
-      let node = automations[index].graph.node(end.part)
+      let node = automations[index].graph.node(end.nodeId)
     else { return AutomationRecorded(changed: false, run: nil) }
-    var run = AutomationPartRun(
+    var run = AutomationNodeRun(
       startedAt: TaskItem.storedInstant(end.startedAt),
       endedAt: TaskItem.storedInstant(end.endedAt), trigger: end.trigger,
       taken: end.read?.taken.count, execution: end.outcome.execution,
@@ -93,8 +93,8 @@ extension AutomationStore {
       run.failure = reason
     }
     return try commit(sweepingAt: run.endedAt) { db, memory in
-      var settling = AutomationSettling(end: end, node: node, index: index, db: db)
-      return try settling.settle(run, &memory)
+      var recording = AutomationRecording(end: end, node: node, index: index, db: db)
+      return try recording.record(run, &memory)
     }
   }
 }
@@ -102,7 +102,7 @@ extension AutomationStore {
 extension AutomationStore {
   /// 数えた行のどれかが古さの上限を過ぎる最も早い時刻（どの受け手でも）。
   var nextPendingExpiry: Date? {
-    automations.flatMap { $0.parts.values.compactMap(\.pending.expiresAt) }.min()
+    automations.flatMap { $0.states.values.compactMap(\.pending.expiresAt) }.min()
   }
 
   /// 数えた行が古さの上限を過ぎた（`now` が過ぎる時刻より後の）受け手の「読めば取る行」の数を数え直す。
@@ -110,35 +110,35 @@ extension AutomationStore {
     let expired = automations.map { automation in
       (
         automation.id,
-        automation.parts.filter { ($0.value.pending.expiresAt ?? .distantFuture) < now }.map(\.key)
+        automation.states.filter { ($0.value.pending.expiresAt ?? .distantFuture) < now }.map(\.key)
       )
     }.filter { !$0.1.isEmpty }
     guard !expired.isEmpty else { return }
     try commit(sweepingAt: nil) { db, memory in
-      for (id, parts) in expired { try memory.recount(id, db, now: now, parts: parts) }
+      for (id, nodeIds) in expired { try memory.recount(id, db, now: now, nodeIds: nodeIds) }
     }
   }
 }
 
 extension AutomationMemory {
-  /// 受け手の「読めば取る行」を数え直す。`parts` を省けば自動化の入力のある部品すべて。起動時も変化の後も、これだけが数える。
+  /// 受け手の「読めば取る行」を数え直す。`nodeIds` を省けば自動化の入力のあるノードすべて。起動時も変化の後も、これだけが数える。
   mutating func recount(
-    _ id: Int, _ db: AutomationDatabase, now: Date, parts: [AutomationPartID]? = nil
+    _ id: Int, _ db: AutomationDatabase, now: Date, nodeIds: [AutomationNodeID]? = nil
   ) throws {
     guard let index = automations.firstIndex(where: { $0.id == id }) else { return }
     let automation = automations[index]
     let links = heldLinks
     for node in automation.graph.nodes
-    where !node.inputs.isEmpty && (parts?.contains(node.id) ?? true) {
-      automations[index].parts[node.id]?.pending = try db.pending(
+    where !node.inputs.isEmpty && (nodeIds?.contains(node.id) ?? true) {
+      automations[index].states[node.id]?.pending = try db.pending(
         node, in: automation.graph, proposed: links.contains, now: now)
     }
   }
 
-  /// 判定の部品の数を数え直す（覚えている候補のリンクが変わると「既に候補がある」で捨てる行が変わる）。
+  /// 判定のノードの数を数え直す（覚えている候補のリンクが変わると「既に候補がある」で捨てる行が変わる）。
   mutating func recountJudges(_ db: AutomationDatabase, now: Date) throws {
     for automation in automations where automation.judges {
-      try recount(automation.id, db, now: now, parts: automation.graph.judges.map(\.id))
+      try recount(automation.id, db, now: now, nodeIds: automation.graph.judges.map(\.id))
     }
   }
 }

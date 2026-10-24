@@ -35,18 +35,18 @@ extension AutomationStoreTests {
     let id = try store.create(Self.definition(coverage: .currentSet), now: Self.at).id
     let a = Self.item("a")
     try Self.fetch(store, id, [a])
-    let judge = store.part(id, "judge")
+    let judge = store.nodeId(id, "judge")
     let read = try XCTUnwrap(store.read(judge, of: id, baseline: nil, now: Self.at))
     try Self.fetch(store, id, [])
 
     try store.record(
       AutomationPassEnd(
-        automationId: id, part: judge,
-        defId: try XCTUnwrap(store.automation(id)?.graph.node(judge)).part.defId,
+        automationId: id, nodeId: judge,
+        defId: try XCTUnwrap(store.automation(id)?.graph.node(judge)).entity.defId,
         trigger: .arrival, startedAt: Self.at, endedAt: Self.at, read: read,
         outcome: DesignSceneFixtures.judged(
           [
-            AutomationPartPass.Proposal(
+            AutomationNodePass.Proposal(
               origin: try XCTUnwrap(read.taken.first?.origin), title: "対応: a", due: nil,
               workspace: nil, reason: nil)
           ], rows: 1)))
@@ -99,18 +99,18 @@ extension AutomationStoreTests {
     let a = Self.item("a")
     try Self.fetch(store, first, [a])
     try Self.fetch(store, second, [a])
-    let judge = store.part(second, "judge")
+    let judge = store.nodeId(second, "judge")
     let read = try XCTUnwrap(store.read(judge, of: second, baseline: nil, now: Self.at))
     try Self.judge(store, first, proposing: [a])
 
     try store.record(
       AutomationPassEnd(
-        automationId: second, part: judge,
-        defId: try XCTUnwrap(store.automation(second)?.graph.node(judge)).part.defId,
+        automationId: second, nodeId: judge,
+        defId: try XCTUnwrap(store.automation(second)?.graph.node(judge)).entity.defId,
         trigger: .arrival, startedAt: Self.at, endedAt: Self.at, read: read,
         outcome: DesignSceneFixtures.judged(
           [
-            AutomationPartPass.Proposal(
+            AutomationNodePass.Proposal(
               origin: try XCTUnwrap(read.taken.first?.origin), title: "対応: a", due: nil,
               workspace: nil, reason: nil)
           ], rows: 1)))
@@ -174,7 +174,7 @@ extension AutomationStoreTests {
     try Self.judge(store, stream, proposing: [c])
     try Self.fetch(store, stream, [])
     func seen(_ id: Int) -> [String] {
-      store.openProposals(of: id, judge: store.part(id, "judge")).map(\.item.link)
+      store.openProposals(of: id, judge: store.nodeId(id, "judge")).map(\.item.link)
     }
 
     XCTAssertEqual(seen(first), [a.link])

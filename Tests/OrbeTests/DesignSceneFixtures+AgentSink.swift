@@ -2,12 +2,12 @@ import Foundation
 
 @testable import Orbe
 
-/// 見本『レビュー待ちの PR を Slack へ』: 入力の無い仕事の部品が、平日 9:00 に gh で調べて Slack に投稿する。通知は
+/// 見本『レビュー待ちの PR を Slack へ』: 入力の無い仕事のノードが、平日 9:00 に gh で調べて Slack に投稿する。通知は
 /// メニューバー。報告の全文（複数行）・することが無いという申告（何もしなかった）・agent が失敗を申告した回・1 行の報告を
 /// 持つ。見本の今日（2025-10-04）は土曜なので、回は前の平日に置く。
 extension DesignSceneFixtures {
   static func boardAgentExample() -> AutomationSample {
-    let outcomes: [(daysAgo: Int, outcome: AutomationPartPass.Outcome)] = [
+    let outcomes: [(daysAgo: Int, outcome: AutomationNodePass.Outcome)] = [
       (4, worked(.done("レビュー待ちの PR 1 件を #dev-me に投稿した。"))),
       (
         3,
@@ -28,8 +28,8 @@ extension DesignSceneFixtures {
     return AutomationSample(
       definition: AutomationDefinition(
         name: "レビュー待ちの PR を Slack へ", notify: .menuBar,
-        parts: [
-          agentPart(
+        nodes: [
+          agentNode(
             "post", "PR を投稿", .scheduled(cron("0 9 * * 1-5")),
             tools: ["Bash(gh search prs:*)", "mcp__slack__slack_send_message"],
             instruction: "自分がレビュー待ちの open な PR を gh で調べてまとめ、Slack の #dev-me に投稿して。",
@@ -38,7 +38,7 @@ extension DesignSceneFixtures {
       createdAt: automationAt(9, 0, daysAgo: 7),
       passes: outcomes.map {
         AutomationSamplePass(
-          part: "post", at: automationAt(9, 0, daysAgo: $0.daysAgo), outcome: $0.outcome)
+          nodeKey: "post", at: automationAt(9, 0, daysAgo: $0.daysAgo), outcome: $0.outcome)
       })
   }
 }

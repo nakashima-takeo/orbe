@@ -1,7 +1,7 @@
 import Foundation
 
 // 回の記録の終わり方・失敗・外れた行・判定の確定で捨てた案。どれも自動化が決めた閉じた種類と、Orbe が組まない文（標準エラーの
-// 抜粋・部品の申告の文・CLI のエラー文）だけを値に持つ。保存はこの種類だけで、AI が読む英文（`text`）と画面の日本語
+// 抜粋・ノードの申告の文・CLI のエラー文）だけを値に持つ。保存はこの種類だけで、AI が読む英文（`text`）と画面の日本語
 // （`AutomationText`）は同じ種類の 2 つの言い方——英文を保存すると、英文と種類の 2 つの元ができ、AI と画面が別のものを
 // 読みうるため。下の層の型（`BackgroundEnding`・`JSONLines.Reason`）は包まず、読みの境界で写す。
 
@@ -54,7 +54,7 @@ enum AutomationEnding: Equatable {
   }
 }
 
-/// 部品の回の失敗。手段の終わり方による失敗の終わり方は、同じ回の実行の記録が持つ。決まりを外した失敗の外れた件は、同じ回の
+/// ノードの回の失敗。手段の終わり方による失敗の終わり方は、同じ回の実行の記録が持つ。決まりを外した失敗の外れた件は、同じ回の
 /// 断った結果の記録（`breach`）が持つ。
 enum AutomationFailure: Error, Equatable {
   /// 手段が 0 以外で終わった。`detail` は標準エラーか応答の抜粋（無ければ空）。
@@ -64,7 +64,7 @@ enum AutomationFailure: Error, Equatable {
   case notUTF8
   /// agent の CLI がエラーを返した（その文の抜粋）。
   case agentError(String)
-  /// agent の部品が Orbe の道具（report_error）で失敗を申告した。
+  /// agent のノードが Orbe の道具（report_error）で失敗を申告した。
   case reported(String)
   /// 結果が決まりを外したまま終わった（コマンドは外れた件を出した、agent は断られた結果を直さずに終えた）。
   case brokeRules
@@ -75,9 +75,9 @@ enum AutomationFailure: Error, Equatable {
   /// 判定へ渡す行が、どれも出どころを持たなかった。
   case unsourced
 
-  /// AI が読む英文。`part` はこの回の部品の鍵。
-  func text(part: String, ending: AutomationEnding, breach: AutomationRejections?) -> String {
-    let word = "part \"\(part)\""
+  /// AI が読む英文。`nodeKey` はこの回のノードの鍵。
+  func text(nodeKey: String, ending: AutomationEnding, breach: AutomationRejections?) -> String {
+    let word = "node \"\(nodeKey)\""
     func with(_ head: String, _ detail: String) -> String {
       detail.isEmpty ? head : "\(head): \(detail)"
     }
@@ -96,7 +96,7 @@ enum AutomationFailure: Error, Equatable {
       return "the \(word) ended without giving a result"
     case .unsourced:
       return
-        "the rows of \(word) reach a judge part, but none has an origin (none came from a fetch part)"
+        "the rows of \(word) reach a judge node, but none has an origin (none came from a fetch node)"
     }
   }
 }

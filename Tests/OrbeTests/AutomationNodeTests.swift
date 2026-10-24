@@ -2,84 +2,85 @@ import XCTest
 
 @testable import Orbe
 
-/// 部品の JSON の形——外から受けた定義の読み書き。
+/// ノードの JSON の形——外から受けた定義の読み書き。
 ///
-/// 壊れると何が起きるか: AI が書いた部品が別の意味で読まれる（`none` が報告に化ける・入力や取り方が落ちる・部品の id が
-/// 落ちて別の部品になる）。読み直した部品のモデルが解いた値で固まり、役割が変わっても前の既定で走る。コマンドに書いたツールや
+/// 壊れると何が起きるか: AI が書いたノードが別の意味で読まれる（`none` が報告に化ける・入力や取り方が落ちる・ノードの id が
+/// 落ちて別のノードになる）。読み直したノードのモデルが解いた値で固まり、役割が変わっても前の既定で走る。コマンドに書いたツールや
 /// 知らない行き先・取り方が黙って捨てられ、書いた AI が誤りの場所を知らされない。
-final class AutomationPartTests: OrbeTestCase {
-  private func part(
-    _ id: Int?, _ key: String, _ name: String, _ trigger: AutomationPart.Trigger,
+final class AutomationNodeTests: OrbeTestCase {
+  private func definitionNode(
+    _ id: Int?, _ key: String, _ name: String, _ trigger: AutomationNode.Trigger,
     from: [AutomationDefinition.Input] = [], _ action: AutomationActionDef, maxItems: Int? = nil
-  ) -> AutomationDefinition.Part {
-    AutomationDefinition.Part(
-      id: id.map(AutomationPartID.init), key: key, name: name, trigger: trigger, from: from,
+  ) -> AutomationDefinition.Node {
+    AutomationDefinition.Node(
+      id: id.map(AutomationNodeID.init), key: key, name: name, trigger: trigger, from: from,
       action: action, maxItems: maxItems)
   }
 
-  func testTheJSONFormReadsIntoPartsAndWritesBackTheSame() throws {
+  func testTheJSONFormReadsIntoNodesAndWritesBackTheSame() throws {
     let json = #"""
       [
         {"id": 3, "key": "gh", "name": "GitHub", "trigger": {"kind": "interval", "minutes": 10},
          "command": "gh search prs", "directory": "/Users/me/repo", "coverage": "currentSet"},
         {"key": "judge", "name": "判定", "trigger": {"kind": "cron", "expression": "0 9 * * *"},
-         "from": [{"part": "gh", "maxAgeHours": 72}], "instruction": "判定して",
+         "from": [{"node": "gh", "maxAgeHours": 72}], "instruction": "判定して",
          "deliver": "taskCandidates", "maxItems": 30, "timeoutMinutes": 10},
         {"key": "post", "name": "投稿", "trigger": {"kind": "manual"}, "agent": "claude",
          "model": "opus", "tools": ["mcp__slack__post"], "instruction": "投稿して", "deliver": "report"},
         {"key": "say", "name": "知らせ", "trigger": {"kind": "arrival"},
-         "from": ["gh", {"part": "post", "take": "all"}], "command": "say hi", "deliver": "none"},
+         "from": ["gh", {"node": "post", "take": "all"}], "command": "say hi", "deliver": "none"},
         {"key": "sum", "name": "まとめ", "trigger": {"kind": "arrival"},
-         "from": [{"part": "gh", "take": "all"}], "instruction": "まとめて", "coverage": "currentSet"}
+         "from": [{"node": "gh", "take": "all"}], "instruction": "まとめて", "coverage": "currentSet"}
       ]
       """#
     let expected = [
-      part(
+      definitionNode(
         3, "gh", "GitHub", .scheduled(.every(600)),
         AutomationActionDef(
           method: .command(BackgroundCommand(script: "gh search prs", directory: "/Users/me/repo")),
-          timeoutMinutes: nil, coverage: .currentSet, destination: .nextPart)),
-      part(
+          timeoutMinutes: nil, coverage: .currentSet, destination: .nextNode)),
+      definitionNode(
         nil, "judge", "判定", .scheduled(.cron(try BackgroundCron("0 9 * * *"))),
-        from: [.init(part: "gh", maxAgeHours: 72)],
+        from: [.init(nodeKey: "gh", maxAgeHours: 72)],
         AutomationActionDef(
           method: .agent(
-            AutomationPartAgent(cli: "claude", model: nil, tools: [], instruction: "判定して")),
+            AutomationNodeAgent(cli: "claude", model: nil, tools: [], instruction: "判定して")),
           timeoutMinutes: 10, coverage: nil, destination: .taskCandidates), maxItems: 30),
-      part(
+      definitionNode(
         nil, "post", "投稿", .manual,
         AutomationActionDef(
           method: .agent(
-            AutomationPartAgent(
+            AutomationNodeAgent(
               cli: "claude", model: "opus", tools: ["mcp__slack__post"], instruction: "投稿して")),
           timeoutMinutes: nil, coverage: nil, destination: .report)),
-      part(
-        nil, "say", "知らせ", .arrival, from: [.init(part: "gh"), .init(part: "post", take: .all)],
+      definitionNode(
+        nil, "say", "知らせ", .arrival,
+        from: [.init(nodeKey: "gh"), .init(nodeKey: "post", take: .all)],
         AutomationActionDef(
           method: .command(BackgroundCommand(script: "say hi", directory: nil)),
           timeoutMinutes: nil, coverage: nil, destination: .sideEffect)),
-      part(
-        nil, "sum", "まとめ", .arrival, from: [.init(part: "gh", take: .all)],
+      definitionNode(
+        nil, "sum", "まとめ", .arrival, from: [.init(nodeKey: "gh", take: .all)],
         AutomationActionDef(
           method: .agent(
-            AutomationPartAgent(cli: "claude", model: nil, tools: [], instruction: "まとめて")),
-          timeoutMinutes: nil, coverage: .currentSet, destination: .nextPart)),
+            AutomationNodeAgent(cli: "claude", model: nil, tools: [], instruction: "まとめて")),
+          timeoutMinutes: nil, coverage: .currentSet, destination: .nextNode)),
     ]
 
-    let parts = try AutomationWire.decoder.decode(
-      [AutomationDefinition.Part].self, from: Data(json.utf8))
-    let written = try AutomationWire.encoder().encode(parts)
+    let definitionNodes = try AutomationWire.decoder.decode(
+      [AutomationDefinition.Node].self, from: Data(json.utf8))
+    let written = try AutomationWire.encoder().encode(definitionNodes)
     let from = try XCTUnwrap(
       (JSONSerialization.jsonObject(with: written) as? [[String: Any]])?[3]["from"] as? [Any])
 
-    XCTAssertEqual(parts, expected)
+    XCTAssertEqual(definitionNodes, expected)
     XCTAssertEqual(
-      try AutomationWire.decoder.decode([AutomationDefinition.Part].self, from: written),
-      parts, "書いて読み直しても同じ値（省略したモデルは省略のまま）")
+      try AutomationWire.decoder.decode([AutomationDefinition.Node].self, from: written),
+      definitionNodes, "書いて読み直しても同じ値（省略したモデルは省略のまま）")
     XCTAssertEqual(from.first as? String, "gh", "取り方も古さの上限も省いた入力は鍵だけで書く")
   }
 
-  /// 形の誤りは読む時点で断り、誤りの場所（部品の位置と欄）を持つ。制御 API はこの場所を `parts[1].tools` の形で返す。
+  /// 形の誤りは読む時点で断り、誤りの場所（ノードの位置と欄）を持つ。制御 API はこの場所を `nodes[1].tools` の形で返す。
   func testShapeErrorsAreRefusedAtTheirPlace() {
     let manual = #"{"kind": "manual"}"#
     for (label, trigger, fields, place) in [
@@ -95,7 +96,7 @@ final class AutomationPartTests: OrbeTestCase {
       ),
       ("毎回全件の性質", manual, #""command": "x", "coverage": "everything""#, "[1].coverage"),
       (
-        "知らない取り方", manual, #""command": "x", "from": [{"part": "ok", "take": "x"}]"#,
+        "知らない取り方", manual, #""command": "x", "from": [{"node": "ok", "take": "x"}]"#,
         "[1].from[0].take"
       ),
       (
@@ -107,7 +108,7 @@ final class AutomationPartTests: OrbeTestCase {
         #"[{"key": "ok", "name": "ok", "trigger": {"kind": "manual"}, "command": "x"}, "#
         + #"{"key": "a", "name": "a", "trigger": \#(trigger), \#(fields)}]"#
       XCTAssertThrowsError(
-        try AutomationWire.decoder.decode([AutomationDefinition.Part].self, from: Data(json.utf8)),
+        try AutomationWire.decoder.decode([AutomationDefinition.Node].self, from: Data(json.utf8)),
         label
       ) {
         XCTAssertEqual(location(of: $0), place, label)

@@ -39,7 +39,7 @@ extension AutomationStoreTests {
     try Self.fetch(XCTUnwrap(store), id, [Self.item("a")])
     let changed = AutomationItem(
       id: "a", link: "https://example.com/a", body: "変わった本文", time: Self.at)
-    for n in 1...(AutomationPartState.retainedRuns + 1) {
+    for n in 1...(AutomationNodeState.retainedRuns + 1) {
       try Self.fetch(
         XCTUnwrap(store), id, [changed], at: Self.at.addingTimeInterval(60 * Double(n)))
     }
@@ -49,7 +49,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(try count("item_versions", where: "body LIKE '%変わった本文%'"), 1, "今の版は残る")
   }
 
-  /// 取得の部品が一度決まりを外して印の回が残す数を過ぎても残っていても、その後に置き換わった古い版は、残す数の内の回より
+  /// 取得のノードが一度決まりを外して印の回が残す数を過ぎても残っていても、その後に置き換わった古い版は、残す数の内の回より
   /// 前に置き換わっていれば消える。
   func testAReplacedVersionIsSweptEvenWhileABreachRunOutlivesTheWindow() throws {
     var store: AutomationStore? = AutomationStore()
@@ -57,7 +57,7 @@ extension AutomationStoreTests {
     try Self.fetch(XCTUnwrap(store), id, [], outcome: Self.breached([Self.item("a")]))
     let changed = AutomationItem(
       id: "a", link: "https://example.com/a", body: "変わった本文", time: Self.at)
-    for n in 1...(AutomationPartState.retainedRuns + 1) {
+    for n in 1...(AutomationNodeState.retainedRuns + 1) {
       try Self.fetch(
         XCTUnwrap(store), id, [changed], at: Self.at.addingTimeInterval(60 * Double(n)))
     }
@@ -78,7 +78,7 @@ extension AutomationStoreTests {
     store?.holding = { AutomationHolding(rows: [.version(first)]) }
     let changed = AutomationItem(
       id: "a", link: "https://example.com/a", body: "変わった本文", time: Self.at)
-    for n in 1...(AutomationPartState.retainedRuns + 1) {
+    for n in 1...(AutomationNodeState.retainedRuns + 1) {
       try Self.fetch(
         XCTUnwrap(store), id, [changed], at: Self.at.addingTimeInterval(60 * Double(n)))
     }
@@ -87,7 +87,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(try count("item_versions", where: "id = \(first)"), 1)
   }
 
-  /// 判断した候補を持つ自動化を消すと、その自動化の行（部品・つながり・定義・出した行・回・候補・判断）は 1 つも残らない。
+  /// 判断した候補を持つ自動化を消すと、その自動化の行（ノード・つながり・定義・出した行・回・候補・判断）は 1 つも残らない。
   func testADeletedAutomationLeavesNoRowsBehind() throws {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
@@ -99,7 +99,7 @@ extension AutomationStoreTests {
     store = nil
 
     for table in [
-      "automations", "parts", "part_edges", "part_defs", "action_defs", "items", "item_versions",
+      "automations", "nodes", "node_edges", "node_defs", "action_defs", "items", "item_versions",
       "events", "runs", "proposals", "held_proposals", "settlements",
     ] {
       XCTAssertEqual(try count(table), 0, table)

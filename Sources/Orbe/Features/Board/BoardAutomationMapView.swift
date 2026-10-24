@@ -1,20 +1,20 @@
 import SwiftUI
 
-/// 詳細の「地図」。部品を入力の深さ順に 1 行ずつ縦に並べ、左の溝に入力のつながりを線で描き、続けて出力先の行を並べる。行は
-/// 溝・役割・名前と予定の札と入力・未処理・前回（成否の印・時刻・量）。最新の回が失敗した部品は、行の下に理由の行を足す（溝の
-/// 線は途切れずに続く）。地図に居る間は選ばれている部品の行に濃い地を敷く。部品の行のクリックはその部品を選ぶ。線の割り当ても
+/// 詳細の「地図」。ノードを入力の深さ順に 1 行ずつ縦に並べ、左の溝に入力のつながりを線で描き、続けて出力先の行を並べる。行は
+/// 溝・役割・名前と予定の札と入力・未処理・前回（成否の印・時刻・量）。最新の回が失敗したノードは、行の下に理由の行を足す（溝の
+/// 線は途切れずに続く）。地図に居る間は選ばれているノードの行に濃い地を敷く。ノードの行のクリックはそのノードを選ぶ。線の割り当ても
 /// 行の文言も読み替えが解いた値で、ここは描くだけ。
 struct BoardAutomationMapView: View {
   let model: BoardAutomationModel
   let detail: BoardAutomationDetailValue
-  let selected: AutomationPartID?
+  let selected: AutomationNodeID?
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       BoardSectionHeader(title: .boardAutomationFlow) {
-        Text(l10n.plural(detail.partCount, one: .boardMapPartsOne, other: .boardMapPartsOther))
+        Text(l10n.plural(detail.nodeCount, one: .boardMapNodesOne, other: .boardMapNodesOther))
         Text(l10n.string(.boardPending))
           .frame(width: BoardMapRowView.pendingWidth, alignment: .trailing)
         Text(l10n.string(.boardMapLast))
@@ -25,8 +25,8 @@ struct BoardAutomationMapView: View {
       ForEach(Array(detail.rows.enumerated()), id: \.offset) { _, row in
         let view = BoardMapRowView(
           row: row, laneCount: detail.laneCount, roleWidth: roleWidth, selected: selected)
-        if case .part(let part) = row.content {
-          view.contentShape(Rectangle()).onTapGesture { model.tapPart(part.id) }
+        if case .node(let mapNode) = row.content {
+          view.contentShape(Rectangle()).onTapGesture { model.tapNode(mapNode.id) }
         } else {
           view
         }
@@ -38,7 +38,7 @@ struct BoardAutomationMapView: View {
   /// 役割の列の幅。見本の幅を下限に、最も長い役割の名前（英語の「Process」など）に空きを足した幅で揃える。
   private var roleWidth: CGFloat {
     let roles = detail.rows.map { row in
-      if case .part(let part) = row.content { return part.role }
+      if case .node(let mapNode) = row.content { return mapNode.role }
       return l10n.string(.boardMapDestination)
     }
     let widest =
@@ -48,23 +48,23 @@ struct BoardAutomationMapView: View {
   }
 }
 
-/// 地図の 1 行と、失敗した部品なら下の理由の行。
+/// 地図の 1 行と、失敗したノードなら下の理由の行。
 struct BoardMapRowView: View {
   let row: BoardMapRow
   let laneCount: Int
   /// 役割の列の幅（地図の行で揃える）。
   let roleWidth: CGFloat
-  let selected: AutomationPartID?
+  let selected: AutomationNodeID?
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       HStack(spacing: 0) {
-        BoardMapGutter(lanes: row.lanes, node: node)
+        BoardMapGutter(lanes: row.lanes, look: look)
           .frame(width: BoardMapGutter.width(laneCount), height: Self.height)
         switch row.content {
-        case .part(let part): partCells(part)
+        case .node(let mapNode): nodeCells(mapNode)
         case .taskCandidates(let open):
           destinationCells(
             l10n.string(.boardOutputTaskCandidates), note: l10n.format(.boardMapOpen, open))
@@ -77,21 +77,21 @@ struct BoardMapRowView: View {
       .background(
         isSelected ? Color.theme.selectionFill : Color.clear,
         in: RoundedRectangle(cornerRadius: Self.radius))
-      if case .part(let part) = row.content, let failure = part.failure {
+      if case .node(let mapNode) = row.content, let failure = mapNode.failure {
         reason(failure)
       }
     }
   }
 
   private var isSelected: Bool {
-    if case .part(let part) = row.content { return part.id == selected }
+    if case .node(let mapNode) = row.content { return mapNode.id == selected }
     return false
   }
 
-  private var node: MapNodeGlyph.Look {
+  private var look: MapNodeGlyph.Look {
     switch row.content {
-    case .part(let part):
-      switch part.look {
+    case .node(let mapNode):
+      switch mapNode.look {
       case .idle: .idle
       case .failed: .failed
       case .running: .running
@@ -100,31 +100,31 @@ struct BoardMapRowView: View {
     }
   }
 
-  /// 名前と札が幅に収まらなければ、入力の部品名 → 予定の札の順に末尾を省き、名前と出力の形式エラーの札は残す。
-  @ViewBuilder private func partCells(_ part: BoardMapPart) -> some View {
-    role(part.role)
+  /// 名前と札が幅に収まらなければ、入力のノード名 → 予定の札の順に末尾を省き、名前と出力の形式エラーの札は残す。
+  @ViewBuilder private func nodeCells(_ mapNode: BoardMapNode) -> some View {
+    role(mapNode.role)
     HStack(spacing: Self.cellGap) {
-      fontResolver.text(part.name, base: Theme.Typography.code)
+      fontResolver.text(mapNode.name, base: Theme.Typography.code)
         .font(Font.theme.code)
         .foregroundStyle(Color.theme.textPrimary)
         .padding(.trailing, Theme.Space.hair)
         .truncationMode(.tail)
         .layoutPriority(1)
-      if let schedule = part.schedule { BoardScheduleChip(text: schedule) }
-      if part.look == .running {
+      if let schedule = mapNode.schedule { BoardScheduleChip(text: schedule) }
+      if mapNode.look == .running {
         Text(l10n.string(.automationRunning))
           .font(Font.theme.codeSmall)
           .foregroundStyle(Color.theme.accentBright)
           .fixedSize()
       }
-      if part.breached {
+      if mapNode.breached {
         BoardChip(
           text: l10n.string(.automationFormatError), foreground: Color.theme.danger,
           fill: Color.theme.tintRed
         )
         .fixedSize()
       }
-      if let inputs = part.inputs {
+      if let inputs = mapNode.inputs {
         (Text.boardIncomingLead
           + fontResolver.text(inputs, base: Theme.Typography.codeSmall))
           .font(Font.theme.codeSmall)
@@ -135,17 +135,19 @@ struct BoardMapRowView: View {
     }
     .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
     .clipped()
-    Text(part.pending.map { "\($0)" } ?? "")
+    Text(mapNode.pending.map { "\($0)" } ?? "")
       .font(Font.theme.workspaceName)
-      .foregroundStyle((part.pending ?? 0) > 0 ? Color.theme.accentBright : Color.theme.textMuted)
+      .foregroundStyle(
+        (mapNode.pending ?? 0) > 0 ? Color.theme.accentBright : Color.theme.textMuted
+      )
       .frame(width: Self.pendingWidth, alignment: .trailing)
-    last(part.last)
+    last(mapNode.last)
       .padding(.trailing, Self.lastInset)
       .frame(width: Self.lastWidth, alignment: .trailing)
   }
 
   /// 前回の列（成否の印・時刻・量）。まだ動いていなければ「未実行」。
-  @ViewBuilder private func last(_ last: BoardMapPart.Last?) -> some View {
+  @ViewBuilder private func last(_ last: BoardMapNode.Last?) -> some View {
     HStack(spacing: 7) {
       if let last {
         BoardRunMarkGlyph(mark: last.mark)
@@ -178,8 +180,8 @@ struct BoardMapRowView: View {
       .background(alignment: .leading) {
         BoardMapGutter(
           lanes: BoardMapLanes(
-            node: 0, fromAbove: false, below: false, bends: [], through: row.lanes.continuing),
-          node: nil
+            lane: 0, fromAbove: false, below: false, bends: [], through: row.lanes.continuing),
+          look: nil
         )
         .frame(width: BoardMapGutter.width(laneCount))
       }
@@ -223,14 +225,14 @@ struct BoardMapRowView: View {
 /// 縁で止める（線が点の中に入らない）。点が無ければ（理由の行）線だけ。
 struct BoardMapGutter: View {
   let lanes: BoardMapLanes
-  let node: MapNodeGlyph.Look?
+  let look: MapNodeGlyph.Look?
 
   static func width(_ laneCount: Int) -> CGFloat {
     CGFloat(max(laneCount, 1)) * spacing + first
   }
 
   var body: some View {
-    let x = Self.x(lanes.node)
+    let x = Self.x(lanes.lane)
     let mid = BoardMapRowView.height / 2
     let edge: CGFloat = 4.5
     ZStack(alignment: .topLeading) {
@@ -258,8 +260,8 @@ struct BoardMapGutter: View {
         }
         context.stroke(path, with: .color(Self.rail), lineWidth: Self.line)
       }
-      if let node {
-        MapNodeGlyph(look: node).position(x: x, y: mid)
+      if let look {
+        MapNodeGlyph(look: look).position(x: x, y: mid)
       }
     }
   }
@@ -324,7 +326,7 @@ enum BoardRunColors {
 }
 
 extension Text {
-  /// 入力元の部品の名前の頭に置く向きの矢印と空き（`codeSmall` の文に混ぜる）。
+  /// 入力元のノードの名前の頭に置く向きの矢印と空き（`codeSmall` の文に混ぜる）。
   static var boardIncomingLead: Text {
     MarkGlyphKind.arrowLeft.inline(Theme.Typography.codeSmall) + Text(verbatim: " ")
   }

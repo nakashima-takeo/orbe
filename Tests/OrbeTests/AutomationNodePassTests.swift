@@ -3,24 +3,24 @@ import XCTest
 
 @testable import Orbe
 
-/// 部品の 1 回——役割どおりに手段を起こし（上限・目印・標準入力・回の ID・ツール・Orbe の口）、役割ごとに結果を受ける（取得の
+/// ノードの 1 回——役割どおりに手段を起こし（上限・目印・標準入力・回の ID・ツール・Orbe の口）、役割ごとに結果を受ける（取得の
 /// 書かれたままの行、処理の出どころの照らし、判定の候補の出どころ、仕事と副作用の失敗）。agent は Orbe の MCP の道具で、
 /// コマンドは標準出力で、同じ決まりで受ける（道具の答えは `AutomationRunSessionTests`）。止めた回は何も返さない。
 ///
-/// 壊れると何が起きるか: 部品が、利用者の決めた上限時間より前に出力が無いという理由で切られる。今の集合の取得が前回以降の
+/// 壊れると何が起きるか: ノードが、利用者の決めた上限時間より前に出力が無いという理由で切られる。今の集合の取得が前回以降の
 /// 分だけを取り、候補が一斉に下がる。副作用のやり直しに回の ID が渡らず二重に起きる。仕事の agent がツール無しで起き、何も
 /// せずに成功する。前回取れた項目が毎回流れ直す。照らせない・重なった処理の行が黙って消える。結果を出さずに終えた agent の回が
 /// 成功になる。候補に別の項目のリンクが付く。失敗した取得・仕事・副作用が成功として確定する。止めた回の結果が書き換えた後の
 /// 定義で確定する。
-final class AutomationPartPassTests: AutomationPartPassTestCase {
+final class AutomationNodePassTests: AutomationNodePassTestCase {
   // MARK: - 起こし方
 
-  /// 上限は部品の経過時間だけで、無出力では打ち切らない——部品の上限は利用者が決める `timeoutMinutes` の一本にするため。
-  func testPartIsLimitedOnlyByItsTimeoutNotBySilence() {
-    var part = AutomationGraphTests.agent("r", from: ["f"])
-    part.action.timeoutMinutes = 3
+  /// 上限はノードの経過時間だけで、無出力では打ち切らない——ノードの上限は利用者が決める `timeoutMinutes` の一本にするため。
+  func testNodeIsLimitedOnlyByItsTimeoutNotBySilence() {
+    var definitionNode = AutomationGraphTests.agent("r", from: ["f"])
+    definitionNode.action.timeoutMinutes = 3
 
-    start(part, .report, .report([]))
+    start(definitionNode, .report, .report([]))
 
     XCTAssertEqual(jobs.calls[0].job.limits.elapsed, 180)
     XCTAssertNil(jobs.calls[0].job.limits.idle)
@@ -31,8 +31,8 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
   func testOnlyNewArrivalsFetchGetsTheMark() throws {
     let since = now.addingTimeInterval(-3600)
     let mark = SessionEvent.iso8601(since)
-    func agent(_ coverage: AutomationCoverage) -> AutomationDefinition.Part {
-      AutomationGraphTests.agent("f", tools: [Self.tool], deliver: .nextPart, coverage: coverage)
+    func agent(_ coverage: AutomationCoverage) -> AutomationDefinition.Node {
+      AutomationGraphTests.agent("f", tools: [Self.tool], deliver: .nextNode, coverage: coverage)
     }
 
     start(
@@ -70,14 +70,14 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
     XCTAssertEqual(call.orbe?.tools, ["put_report", "report_nothing", "report_error"])
   }
 
-  /// 役割ごとに、Orbe の口で出す道具が決まる（行を見る部品は行がある回だけ読む道具を持つ）。
+  /// 役割ごとに、Orbe の口で出す道具が決まる（行を見るノードは行がある回だけ読む道具を持つ）。
   func testEachRoleGetsItsTools() throws {
     start(
       AutomationGraphTests.agent(
-        "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
+        "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
       .fetch, .fetch(since: nil))
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: false))
     start(
       AutomationGraphTests.agent("j", from: ["f"], deliver: .taskCandidates), .judge,
@@ -121,7 +121,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
   func testFetchAgentGivesItsItemsThroughTheTool() throws {
     start(
       AutomationGraphTests.agent(
-        "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
+        "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
       .fetch, .fetch(since: nil))
 
     use(
@@ -156,7 +156,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
   func testFetchThatCouldNotGetItsToolsFails() throws {
     start(
       AutomationGraphTests.agent(
-        "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
+        "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
       .fetch, .fetch(since: nil))
 
     jobs.finish(
@@ -172,13 +172,13 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
   func testFetchReportingAnErrorFails() throws {
     start(
       AutomationGraphTests.agent(
-        "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
+        "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
       .fetch, .fetch(since: nil))
 
     use(0, .reportError, ["what": "Slack に届かない"])
     jobs.finish(0, done())
 
-    XCTAssertEqual(failed, #"the part "f" reported an error: Slack に届かない"#)
+    XCTAssertEqual(failed, #"the node "f" reported an error: Slack に届かない"#)
   }
 
   // MARK: - 処理
@@ -186,7 +186,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
   /// 出力の行は `id` で入力の行と照らして、その入力（出す側の行）と出どころを引き継ぎ、照らせない行はどちらも持たない。
   func testProcessCarriesTheOriginById() throws {
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a"), row("b")], reachesJudge: false))
 
     readAll(0)
@@ -204,15 +204,17 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
   /// 取得 → 処理 a → 処理 b → 判定 では、a の行も判定へ届く。照らせない行は判定で使えず黙って消えるので、それを初めに出した
   /// a が外したことになる——下流の b には直しようがない。
   func testProcessWhoseRowsReachAJudgeBreaksTheRulesWithARowItCannotTrace() throws {
-    let parts = [
+    let definitionNodes = [
       AutomationGraphTests.fetch("f"),
-      AutomationGraphTests.command("a", from: ["f"], deliver: .nextPart),
-      AutomationGraphTests.command("b", from: ["a"], deliver: .nextPart),
+      AutomationGraphTests.command("a", from: ["f"], deliver: .nextNode),
+      AutomationGraphTests.command("b", from: ["a"], deliver: .nextNode),
       AutomationGraphTests.agent("j", from: ["b"], deliver: .taskCandidates),
     ]
-    let graph = try AutomationGraph.numbered(parts)
+    let graph = try AutomationGraph.numbered(definitionNodes)
     let a = try XCTUnwrap(graph.node(key: "a"))
-    start(parts[1], a.role, .process([row("a")], reachesJudge: graph.reachesTaskCandidates(a.id)))
+    start(
+      definitionNodes[1], a.role,
+      .process([row("a")], reachesJudge: graph.reachesTaskCandidates(a.id)))
 
     jobs.finish(0, printed(#"{"id":"f:a"}"# + "\n" + #"{"id":"new"}"#))
 
@@ -223,7 +225,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
   /// 同じ `id` の 2 つ目の行は外れた件——前の行を置き換え、前の行が黙って消える。
   func testProcessRowWithARepeatedIdBreaksTheRules() throws {
     start(
-      AutomationGraphTests.command("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.command("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: false))
 
     jobs.finish(0, printed(#"{"id":"f:a"}"# + "\n" + #"{"id":"f:a","note":"2 度目"}"#))
@@ -249,7 +251,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
     XCTAssertEqual(
       proposals,
       [
-        AutomationPartPass.Proposal(
+        AutomationNodePass.Proposal(
           origin: origin("b"), title: "b に返信する", due: nil, workspace: nil, reason: nil)
       ]
     )

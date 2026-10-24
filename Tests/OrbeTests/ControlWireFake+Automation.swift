@@ -4,7 +4,7 @@ import Foundation
 
 /// `list_automation_runs` が届けたもの。
 struct FakeRunList {
-  let partKey: String?
+  let nodeKey: String?
   let before: Int?
   let limit: Int?
 }

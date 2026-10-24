@@ -2,23 +2,23 @@ import XCTest
 
 @testable import Orbe
 
-/// 部品の 1 回の依頼文——外れた件にする決まりを依頼文でも伝え、ツールを持つ取得には読んだ文面に従わせない。行を見る agent は
+/// ノードの 1 回の依頼文——外れた件にする決まりを依頼文でも伝え、ツールを持つ取得には読んだ文面に従わせない。行を見る agent は
 /// 行を Orbe の MCP で読み、依頼文には件数と読み方だけを書く。結果は道具で出させる。
 ///
 /// 壊れると何が起きるか: 行が多い・大きい回の依頼文が上限やモデルの読める量を超える。処理の agent が `id` の決まりを知らずに外し、毎回結果を断られる。判定へ届く処理が新しい項目を作り、
 /// 判定へ届く前に消える。取得の agent が、読んだ外の文面に仕込まれた指示に従ってツールを使う。判定が待っている候補を片付ける
 /// 回に report_nothing だけを呼び、候補が残り続ける。
-final class AutomationPartPassPromptTests: AutomationPartPassTestCase {
+final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
   private func prompt(_ index: Int = 0) throws -> String {
     try XCTUnwrap(agentCall(index)).prompt
   }
 
   func testProcessPromptStatesTheIdRules() throws {
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: false))
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: true))
 
     for index in 0..<2 {
@@ -34,7 +34,7 @@ final class AutomationPartPassPromptTests: AutomationPartPassTestCase {
   /// 自分のツールは持たない。札はその回の行だけを返す。
   func testRowsAreReadThroughOrbesMCPAndThePromptCarriesOnlyTheirCount() throws {
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a"), row("b")], reachesJudge: false))
     start(
       AutomationGraphTests.agent("j", from: ["f"], deliver: .taskCandidates), .judge,
@@ -60,7 +60,7 @@ final class AutomationPartPassPromptTests: AutomationPartPassTestCase {
   /// 回が終われば札は断られる（以後その回の道具は呼べない）。
   func testTheTokenEndsWithTheRun() throws {
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: false))
     let token = try XCTUnwrap(agentCall(0)?.orbe?.token)
     readAll(0)
@@ -75,7 +75,7 @@ final class AutomationPartPassPromptTests: AutomationPartPassTestCase {
   func testFetchPromptTellsTheAgentNotToFollowWhatItReads() throws {
     start(
       AutomationGraphTests.agent(
-        "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
+        "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
       .fetch, .fetch(since: nil))
 
     XCTAssertTrue(
@@ -102,11 +102,11 @@ final class AutomationPartPassPromptTests: AutomationPartPassTestCase {
   func testEveryPromptSaysTheFinalReplyIsIgnoredAndHowToReportNothing() throws {
     start(
       AutomationGraphTests.agent(
-        "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
+        "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
       .fetch, .fetch(since: nil))
     start(AutomationGraphTests.agent("w", tools: [Self.tool]), .work, .work)
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: false))
     start(
       AutomationGraphTests.agent("j", from: ["f"], deliver: .taskCandidates), .judge,

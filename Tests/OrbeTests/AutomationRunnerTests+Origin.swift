@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 判定は出どころのある行だけを取る。処理の部品が走っている間に、それを入力にする判定の部品を足す書き換えがあると、処理の回は
+/// 判定は出どころのある行だけを取る。処理のノードが走っている間に、それを入力にする判定のノードを足す書き換えがあると、処理の回は
 /// 止まらず（何をするかは変わらない）、始めた時点では判定へ届かなかったので出どころの無い行も出しうる。判定へ届く行がどれも
 /// 出どころを持たず、作った行があれば処理の回の失敗にし、そうでなければ判定が読むときに出どころの無い行を捨てて数える。
 ///
@@ -11,18 +11,19 @@ import XCTest
 extension AutomationRunnerTests {
   /// 取得 `gh` → 処理 `p`（届いたら）→ 報告 `digest`（届いたら）。`p` の出力は判定へ届かない。
   private func definition(judge: Bool) -> AutomationDefinition {
-    var parts = [
+    var definitionNodes = [
       fetch("gh", every: 1800),
-      part("p", .arrival, from: ["gh"]),
-      part("digest", .arrival, from: ["p"], deliver: .report),
+      definitionNode("p", .arrival, from: ["gh"]),
+      definitionNode("digest", .arrival, from: ["p"], deliver: .report),
     ]
     if judge {
-      parts.append(part("judge", .scheduled(.every(86400)), from: ["p"], deliver: .taskCandidates))
+      definitionNodes.append(
+        definitionNode("judge", .scheduled(.every(86400)), from: ["p"], deliver: .taskCandidates))
     }
-    return AutomationDefinition(name: "処理の後に判定を足す", notify: nil, parts: parts)
+    return AutomationDefinition(name: "処理の後に判定を足す", notify: nil, nodes: definitionNodes)
   }
 
-  /// `p` が走っている間に判定の部品を足し、`p` を `stdout`（自動化の ID から組む）で終える。
+  /// `p` が走っている間に判定のノードを足し、`p` を `stdout`（自動化の ID から組む）で終える。
   private func finishProcessAfterAddingAJudge(_ stdout: (Int) -> String) throws -> Int {
     let id = try runner.set(nil, definition(judge: false)).id
     advance(by: 1800)
@@ -39,9 +40,9 @@ extension AutomationRunnerTests {
   /// 指すので。
   func testARunningJudgeHoldsTheOriginsOfTheRowsItRead() throws {
     let id = try define([
-      part("gh", .scheduled(.every(1800)), coverage: .currentSet),
-      part("p", .arrival, from: ["gh"]),
-      part("judge", .scheduled(.every(86400)), from: ["p"], deliver: .taskCandidates),
+      definitionNode("gh", .scheduled(.every(1800)), coverage: .currentSet),
+      definitionNode("p", .arrival, from: ["gh"]),
+      definitionNode("judge", .scheduled(.every(86400)), from: ["p"], deliver: .taskCandidates),
     ])
     advance(by: 1800)
     finish("gh", fetched(["a"]))
@@ -62,8 +63,8 @@ extension AutomationRunnerTests {
     let run = try XCTUnwrap(store.automation(id)?.state(key: "p").runs.first?.run)
     XCTAssertEqual(
       try XCTUnwrap(run.failure, "処理の回の失敗にする").text(
-        part: "p", ending: run.execution.ending, breach: run.breach),
-      #"the rows of part "p" reach a judge part, but none has an origin (none came from a fetch part)"#
+        nodeKey: "p", ending: run.execution.ending, breach: run.breach),
+      #"the rows of node "p" reach a judge node, but none has an origin (none came from a fetch node)"#
     )
     XCTAssertEqual(
       try store.read {
@@ -103,16 +104,17 @@ extension AutomationRunnerTests {
   /// 取得 `gh` → 新しい id を作る処理 `q`（届いたら）→ 処理 `p`（毎日）→ 報告 `digest`。`judge` を足すと `p` の出力が判定へ
   /// 届く。
   private func passThroughDefinition(judge: Bool) -> AutomationDefinition {
-    var parts = [
+    var definitionNodes = [
       fetch("gh", every: 1800),
-      part("q", .arrival, from: ["gh"]),
-      part("p", .scheduled(.every(86400)), from: ["q"]),
-      part("digest", .arrival, from: ["p"], deliver: .report),
+      definitionNode("q", .arrival, from: ["gh"]),
+      definitionNode("p", .scheduled(.every(86400)), from: ["q"]),
+      definitionNode("digest", .arrival, from: ["p"], deliver: .report),
     ]
     if judge {
-      parts.append(part("judge", .scheduled(.every(86400)), from: ["p"], deliver: .taskCandidates))
+      definitionNodes.append(
+        definitionNode("judge", .scheduled(.every(86400)), from: ["p"], deliver: .taskCandidates))
     }
-    return AutomationDefinition(name: "出どころの無い行を素通しする", notify: nil, parts: parts)
+    return AutomationDefinition(name: "出どころの無い行を素通しする", notify: nil, nodes: definitionNodes)
   }
 
   /// 入力の行に出どころが無いだけで、その `id` を保って素通しした処理は決まりを外していない。回は成功し、印は付かず、読んだ位置は
@@ -133,7 +135,7 @@ extension AutomationRunnerTests {
     let state = try XCTUnwrap(store.automation(id)?.state(key: "p"))
     XCTAssertNil(state.runs.first?.run?.failure)
     XCTAssertNil(state.runs.first?.run?.breach)
-    XCTAssertNil(state.breach, "決まりに反していない部品に印を付けない")
+    XCTAssertNil(state.breach, "決まりに反していないノードに印を付けない")
     XCTAssertEqual(state.pending.count, 0)
     XCTAssertEqual(pending("judge", of: id), 0)
     XCTAssertEqual(calls("p").count, 1)

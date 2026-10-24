@@ -1,10 +1,10 @@
 import Foundation
 
-/// コマンドの部品の結果の読み。標準出力を、agent の道具と同じ決まり（`AutomationOutputs`）で確かめる。何も無い回は空の
+/// コマンドのノードの結果の読み。標準出力を、agent の道具と同じ決まり（`AutomationOutputs`）で確かめる。何も無い回は空の
 /// 出力、失敗は 0 以外の終了コード。
-extension AutomationPartPass {
-  /// `writer` は回を走らせた部品。
-  static func commandEnded(_ result: BackgroundRunResult, _ input: Input, writer: AutomationPartID)
+extension AutomationNodePass {
+  /// `writer` は回を走らせたノード。
+  static func commandEnded(_ result: BackgroundRunResult, _ input: Input, writer: AutomationNodeID)
     -> Outcome
   {
     if case .sideEffect(let rows, _) = input {
@@ -29,7 +29,7 @@ extension AutomationPartPass {
         return .failed(.brokeRules, execution(result), breach: AutomationRejections(broken))
       }
     case .work, .sideEffect:
-      preconditionFailure("a work part is an agent; a side effect is read above")
+      preconditionFailure("a work node is an agent; a side effect is read above")
     }
     return .succeeded(
       outputs.output(nothing: nil), execution(result, count: outputs.count), breach: nil)

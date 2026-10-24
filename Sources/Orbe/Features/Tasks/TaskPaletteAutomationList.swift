@@ -27,7 +27,7 @@ struct TaskPaletteAutomationBody: View {
   }
 }
 
-/// 真ん中の候補の一覧。自動化を選んでいれば、頭に判定の部品ごとの最新の回を出す。
+/// 真ん中の候補の一覧。自動化を選んでいれば、頭に判定のノードごとの最新の回を出す。
 struct TaskPaletteAutomationList: View {
   @Bindable var model: TaskPaletteAutomationModel
   @Environment(\.localization) private var l10n
@@ -64,7 +64,7 @@ struct TaskPaletteAutomationList: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
   }
 
-  /// 判定の部品ごとの最新の回を入力の深さ順に 1 行ずつ（「9:00 開発の依頼を選ぶ　候補 2 件」。失敗は赤で
+  /// 判定のノードごとの最新の回を入力の深さ順に 1 行ずつ（「9:00 開発の依頼を選ぶ　候補 2 件」。失敗は赤で
   /// 「失敗：<説明>」）。狭い欄では各行を 2 行まで折り返す。
   private func headline(_ automation: Automation) -> some View {
     let text = AutomationText(l10n: l10n, today: model.today, timeZone: model.timeZone)
@@ -87,7 +87,7 @@ struct TaskPaletteAutomationList: View {
     .padding(.top, Theme.Space.tick)
   }
 
-  /// 判定の部品の最新の回の 1 行。部品は名前だけで言う。
+  /// 判定のノードの最新の回の 1 行。ノードは名前だけで言う。
   static func latest(
     _ node: AutomationGraph.Node, _ record: AutomationRunRecord?, _ text: AutomationText
   )
@@ -95,9 +95,9 @@ struct TaskPaletteAutomationList: View {
   {
     let l10n = text.l10n
     guard let record else {
-      return node.part.name + "\u{3000}" + l10n.string(.taskPaletteAutomationNeverJudged)
+      return node.entity.name + "\u{3000}" + l10n.string(.taskPaletteAutomationNeverJudged)
     }
-    let head = text.stamp(record.startedAt) + " " + node.part.name + "\u{3000}"
+    let head = text.stamp(record.startedAt) + " " + node.entity.name + "\u{3000}"
     guard let run = record.run else {
       return head
         + l10n.string(record.failed ? .automationRunUnknownFailed : .automationRunUnknownPassed)
@@ -119,7 +119,7 @@ struct TaskPaletteAutomationList: View {
 
   private func row(_ proposal: AutomationProposal) -> some View {
     TaskPaletteAutomationProposalRow(
-      proposal: proposal, source: model.sourceName(of: proposal),
+      proposal: proposal, originNodeName: model.originNodeName(of: proposal),
       text: AutomationText(l10n: l10n, today: model.today, timeZone: model.timeZone),
       selected: model.selectedProposal?.id == proposal.id
     )
@@ -130,10 +130,10 @@ struct TaskPaletteAutomationList: View {
   }
 }
 
-/// 候補の行。タイトル・期限の札・右に時刻、下に出どころの取得の部品の名前と本文の先頭 1 行。印は選ばれている候補の行だけ。
+/// 候補の行。タイトル・期限の札・右に時刻、下に出どころの取得のノードの名前と本文の先頭 1 行。印は選ばれている候補の行だけ。
 private struct TaskPaletteAutomationProposalRow: View {
   let proposal: AutomationProposal
-  let source: String?
+  let originNodeName: String?
   let text: AutomationText
   let selected: Bool
   @Environment(\.localization) private var l10n
@@ -161,7 +161,8 @@ private struct TaskPaletteAutomationProposalRow: View {
           .fixedSize()
       }
       fontResolver.text(
-        [source, Self.firstLine(proposal.item.body)].compactMap { $0 }.joined(separator: " · "),
+        [originNodeName, Self.firstLine(proposal.item.body)].compactMap { $0 }.joined(
+          separator: " · "),
         base: Theme.Typography.meta
       )
       .font(Font.theme.meta)

@@ -19,11 +19,11 @@ final class AutomationTextTests: OrbeTestCase {
       timeZone: DesignSceneFixtures.taskCalendar.timeZone)
   }
 
-  private func failed(_ failure: AutomationFailure, ending: AutomationEnding) -> AutomationPartRun {
+  private func failed(_ failure: AutomationFailure, ending: AutomationEnding) -> AutomationNodeRun {
     let at = DesignSceneFixtures.automationAt(13)
-    var run = AutomationPartRun(
+    var run = AutomationNodeRun(
       startedAt: at, endedAt: at, trigger: .schedule, taken: 3,
-      execution: AutomationPartPass.Execution(commandLine: "claude -p", ending: ending, count: 0))
+      execution: AutomationNodePass.Execution(commandLine: "claude -p", ending: ending, count: 0))
     run.failure = failure
     return run
   }
@@ -32,27 +32,27 @@ final class AutomationTextTests: OrbeTestCase {
 
   private static func node(_ key: String, _ name: String) -> AutomationGraph.Node {
     let graph = try? AutomationGraph.numbered([
-      DesignSceneFixtures.commandPart(
+      DesignSceneFixtures.commandNode(
         "fetch", "取得", .manual, script: "cat", coverage: .newArrivals),
-      DesignSceneFixtures.agentPart(
+      DesignSceneFixtures.agentNode(
         key, name, .arrival, from: ["fetch"], instruction: "i", deliver: .taskCandidates),
     ])
     guard let node = graph?.node(key: key) else { preconditionFailure("the graph is valid") }
     return node
   }
 
-  /// 失敗は日本語の説明に原文を括弧で添える。部品の申告は説明の頭に文を添え、原文を重ねない。英語の画面は原文を重ねず
+  /// 失敗は日本語の説明に原文を括弧で添える。ノードの申告は説明の頭に文を添え、原文を重ねない。英語の画面は原文を重ねず
   /// （説明も原文も英語で、同じことを 2 度言うため）、原文にだけある抜粋（標準エラー・最初の外れた行）だけを添える。
   func testFailureSaysTheKindWithTheOriginal() {
     XCTAssertEqual(
       text.failure(failed(.ended(detail: ""), ending: .timeLimit), node: Self.judge),
-      #"制限時間を超過（the part "dev" ended: stopped at the time limit）"#)
+      #"制限時間を超過（the node "dev" ended: stopped at the time limit）"#)
     XCTAssertEqual(
       text.failure(failed(.ended(detail: "boom"), ending: .exited(1)), node: Self.judge),
-      #"終了コード 1 で終了（the part "dev" ended: exited 1: boom）"#)
+      #"終了コード 1 で終了（the node "dev" ended: exited 1: boom）"#)
     XCTAssertEqual(
       text.failure(failed(.reported("Slack に届かない"), ending: .exited(0)), node: Self.judge),
-      "部品が失敗を報告：Slack に届かない")
+      "ノードが失敗を報告：Slack に届かない")
     XCTAssertEqual(
       Self.automationText(.en).failure(
         failed(.ended(detail: ""), ending: .timeLimit), node: Self.judge),
@@ -71,10 +71,10 @@ final class AutomationTextTests: OrbeTestCase {
       "output format error: item 2: not valid JSON", "最初の外れた件")
     XCTAssertEqual(
       text.failure(failed(.unreadInput(2), ending: .exited(0)), node: Self.judge),
-      "入力 2 件を読まずに終了（the part \"dev\" ended without reading 2 of its input items）")
+      "入力 2 件を読まずに終了（the node \"dev\" ended without reading 2 of its input items）")
     XCTAssertEqual(
       text.failure(failed(.noResult, ending: .exited(0)), node: Self.judge),
-      "結果を渡さずに終了（the part \"dev\" ended without giving a result）")
+      "結果を渡さずに終了（the node \"dev\" ended without giving a result）")
   }
 
   /// 外れた件は「n 件目：<説明>」。

@@ -4,7 +4,7 @@ import Foundation
 extension AutomationDatabase {
   /// 判定の回が出した候補を足し、覚えている印を付けて ID を返す。
   func insert(
-    proposal: AutomationPartPass.Proposal, run: Int
+    proposal: AutomationNodePass.Proposal, run: Int
   ) throws -> Int {
     var origin: [SQLiteValue] = [.null, .null]
     switch proposal.origin.row {
@@ -55,16 +55,16 @@ extension AutomationDatabase {
     }
   }
 
-  /// 覚えている候補を出した判定の部品の持ち主（部品 ID → 自動化 ID）。外した部品も、候補の回に指されている間は台帳が残って
-  /// 持ち主を指す。持ち主の自動化を消した部品は入らない。
-  func judgeOwners() throws -> [AutomationPartID: Int] {
+  /// 覚えている候補を出した判定のノードの持ち主（ノード ID → 自動化 ID）。外したノードも、候補の回に指されている間は台帳が残って
+  /// 持ち主を指す。持ち主の自動化を消したノードは入らない。
+  func judgeOwners() throws -> [AutomationNodeID: Int] {
     Dictionary(
       uniqueKeysWithValues: try db.select(
         """
-        SELECT DISTINCT r.part_id, p.automation_id FROM held_proposals h
+        SELECT DISTINCT r.node_id, n.automation_id FROM held_proposals h
         JOIN proposals q ON q.id = h.proposal_id JOIN runs r ON r.id = q.run_id
-        JOIN parts p ON p.id = r.part_id WHERE p.automation_id IS NOT NULL
+        JOIN nodes n ON n.id = r.node_id WHERE n.automation_id IS NOT NULL
         """, []
-      ) { (AutomationPartID($0.int(at: 0)), $0.int(at: 1)) })
+      ) { (AutomationNodeID($0.int(at: 0)), $0.int(at: 1)) })
   }
 }

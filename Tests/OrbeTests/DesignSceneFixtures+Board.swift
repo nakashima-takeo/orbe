@@ -3,13 +3,13 @@ import Foundation
 @testable import Orbe
 
 /// ボードの自動化の fixture（4 件: 前回が失敗・候補あり・新しい項目なし・止めている）。今と今日は提案タブと同じ
-/// （2025-10-04 15:00）。走らせ役は `automationRunner` の部品が終わらない偽物で、本物の claude は起きない。
+/// （2025-10-04 15:00）。走らせ役は `automationRunner` のノードが終わらない偽物で、本物の claude は起きない。
 extension DesignSceneFixtures {
   private static func agentFetch(
     _ tool: String, _ instruction: String, _ coverage: AutomationCoverage,
-    _ trigger: AutomationPart.Trigger
-  ) -> AutomationDefinition.Part {
-    agentPart(
+    _ trigger: AutomationNode.Trigger
+  ) -> AutomationDefinition.Node {
+    agentNode(
       "fetch", "取る", trigger, model: "haiku", tools: [tool], instruction: instruction,
       coverage: coverage)
   }
@@ -47,7 +47,7 @@ extension DesignSceneFixtures {
     return AutomationSample(
       definition: candidatesDefinition(
         "GitHub: レビュー依頼",
-        fetch: commandPart(
+        fetch: commandNode(
           "fetch", "取る", .scheduled(.every(3600)),
           script: "gh search prs --review-requested=@me --json url,title", coverage: .currentSet),
         instruction: "すべてタスクにする。期限は付けない。"),
@@ -91,7 +91,7 @@ extension DesignSceneFixtures {
     AutomationSample(
       definition: candidatesDefinition(
         "日報の素材",
-        fetch: commandPart(
+        fetch: commandNode(
           "fetch", "取る", .scheduled(cron("0 23 * * *")), script: "~/bin/daily-notes.sh --today",
           directory: "/Users/me/notes", coverage: .newArrivals)),
       createdAt: automationAt(14, 50))
@@ -102,10 +102,10 @@ extension DesignSceneFixtures {
     boardAutomationSamples() + [boardDraft]
   }
 
-  /// 取得の指示文・使えるツール・コマンドと作業ディレクトリが長く、詳細がスクロールする。回の記録は部品ごとに 20 件。
+  /// 取得の指示文・使えるツール・コマンドと作業ディレクトリが長く、詳細がスクロールする。回の記録はノードごとに 20 件。
   static func boardLongSamples() -> [AutomationSample] {
     var samples = boardAutomationSamples()
-    samples[2].definition.parts[0] = agentPart(
+    samples[2].definition.nodes[0] = agentNode(
       "fetch", "取る", .scheduled(cron("0 9,13 * * *")), model: "haiku",
       tools: [
         "mcp__backlog__get_issues", "mcp__backlog__get_issue_comments",
@@ -120,7 +120,7 @@ extension DesignSceneFixtures {
           "backlog", at: automationAt(13, 0, daysAgo: $0), items: 10 + $0 % 3, fresh: $0 % 2,
           proposed: $0 % 2)
       } + samples[2].passes
-    samples[1].definition.parts[0] = commandPart(
+    samples[1].definition.nodes[0] = commandNode(
       "fetch", "取る", .scheduled(.every(3600)),
       script: (1...6).map {
         "gh search prs --review-requested=@me --json url,title,body --limit \($0 * 10) \\"
@@ -142,15 +142,15 @@ extension DesignSceneFixtures {
     AutomationSample(
       definition: AutomationDefinition(
         name: "日報の下書き", notify: nil,
-        parts: [
-          commandPart(
+        nodes: [
+          commandNode(
             "note", "日報を書く", .scheduled(cron("0 23 * * *")), script: "~/bin/daily-note.sh",
             directory: "/Users/me/notes", deliver: .sideEffect)
         ]),
       createdAt: boardCreated,
       passes: (1..<20).reversed().map { daysAgo in
         AutomationSamplePass(
-          part: "note", at: automationAt(23, 0, daysAgo: daysAgo),
+          nodeKey: "note", at: automationAt(23, 0, daysAgo: daysAgo),
           outcome: daysAgo == 3
             ? failed("daily-note: ~/notes is not writable")
             : sideEffected(0))
@@ -166,28 +166,28 @@ extension DesignSceneFixtures {
       let (all, new) = sampleRound("merged", at: at(hours), items: items, fresh: fresh)
       passes.append(
         AutomationSamplePass(
-          part: "fetch", at: at(hours), outcome: fetched(all),
+          nodeKey: "fetch", at: at(hours), outcome: fetched(all),
           kept: Array(all.prefix(items - fresh))))
       guard !new.isEmpty else { continue }
       passes.append(
         AutomationSamplePass(
-          part: "summary", at: at(hours).addingTimeInterval(60), trigger: .arrival,
+          nodeKey: "summary", at: at(hours).addingTimeInterval(60), trigger: .arrival,
           outcome: processed([], read: new.count), take: new.count, passThrough: new.count))
       passes.append(
         AutomationSamplePass(
-          part: "post", at: at(hours).addingTimeInterval(120), trigger: .arrival,
+          nodeKey: "post", at: at(hours).addingTimeInterval(120), trigger: .arrival,
           outcome: sideEffected(new.count)))
     }
     return AutomationSample(
       definition: AutomationDefinition(
         name: "GitHub: マージした PR を Slack へ", notify: nil,
-        parts: [
-          commandPart(
+        nodes: [
+          commandNode(
             "fetch", "マージした PR を取る", .scheduled(.every(3600)),
             script: "gh search prs --merged --author=@me --json url,title", coverage: .newArrivals),
-          agentPart(
+          agentNode(
             "summary", "要約", .arrival, from: ["fetch"], instruction: "PR ごとに 1 行の要約を付ける。"),
-          commandPart(
+          commandNode(
             "post", "Slack へ投稿", .arrival, from: ["summary"], script: "~/bin/post.sh '#dev-log'",
             deliver: .sideEffect),
         ]),
@@ -202,25 +202,25 @@ extension DesignSceneFixtures {
     let at = { (minutes: Int) in
       automationAt(14, 55).addingTimeInterval(TimeInterval(-60 * minutes))
     }
-    // 取得の回だけを置く（判定は処理の部品の先にあり、取得の行は処理が読めば取る行になる）。
+    // 取得の回だけを置く（判定は処理のノードの先にあり、取得の行は処理が読めば取る行になる）。
     let passes = (0..<20).reversed().map { n -> AutomationSamplePass in
       let fresh = n.isMultiple(of: 3) ? 2 : 0
       let (all, _) = sampleRound("dm", at: at(n * 10), items: 6, fresh: fresh)
       return AutomationSamplePass(
-        part: "fetch", at: at(n * 10), outcome: fetched(all), kept: Array(all.prefix(6 - fresh)))
+        nodeKey: "fetch", at: at(n * 10), outcome: fetched(all), kept: Array(all.prefix(6 - fresh)))
     }
     return AutomationSample(
       definition: AutomationDefinition(
         name: "自分宛ての Slack DM", notify: nil,
-        parts: [
-          commandPart(
+        nodes: [
+          commandNode(
             "fetch", "Slack の DM を取る", .scheduled(.every(600)), script: "~/bin/slack-dm.sh",
             coverage: .newArrivals),
-          commandPart(
+          commandNode(
             "bots", "bot の投稿を除く", .arrival, from: ["fetch"],
             script: "jq 'select(.bot_id == null)'"),
-          agentPart("chat", "雑談を除く", .arrival, from: ["bots"], instruction: "挨拶やお礼だけのメッセージは除く。"),
-          agentPart(
+          agentNode("chat", "雑談を除く", .arrival, from: ["bots"], instruction: "挨拶やお礼だけのメッセージは除く。"),
+          agentNode(
             "judge", "依頼をタスク候補にする", .arrival, from: ["chat"],
             instruction: "自分に何かを頼んでいるものだけを候補にする。\n期限が書かれていれば期限に入れる。",
             deliver: .taskCandidates),
@@ -233,7 +233,7 @@ extension DesignSceneFixtures {
     AutomationSample(
       definition: candidatesDefinition(
         "毎朝の PR 報告",
-        fetch: commandPart(
+        fetch: commandNode(
           "fetch", "PR を取る", .scheduled(cron("0 9 * * *")), script: "gh pr list --json url",
           coverage: .currentSet)),
       createdAt: boardCreated,

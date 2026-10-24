@@ -8,8 +8,8 @@ import XCTest
 /// 壊れると何が起きるか: 観点ごとの問い合わせが黙って空振りし、作り直しの移行で外部キーや一意の制約を書き漏らした DB が
 /// 照合を通ってコミットされる（書くときの整合の守りが外れる）。
 extension StateDatabaseTests {
-  /// 形は観点ごとに照らす: 外部キー・一意の制約・索引の一意・部分索引か・索引の列・WITHOUT ROWID・STRICT のどれか 1 つだけが
-  /// 違う同じ版の DB も退避する。
+  /// 形は観点ごとに照らす: 表・列・索引の名前・外部キー・一意の制約・索引の一意・部分索引か・索引の列・WITHOUT ROWID・STRICT の
+  /// どれか 1 つだけが違う同じ版の DB も退避する。
   func testEachAspectOfTheShapeIsCompared() throws {
     let base = """
       CREATE TABLE owner (id INTEGER PRIMARY KEY);
@@ -17,6 +17,9 @@ extension StateDatabaseTests {
       CREATE INDEX item_name ON item (name);
       """
     let variants = [
+      "table name": base.replacingOccurrences(of: "TABLE owner", with: "TABLE holder"),
+      "column name": base.replacingOccurrences(of: "owner_id INTEGER", with: "holder_id INTEGER"),
+      "index name": base.replacingOccurrences(of: "INDEX item_name", with: "INDEX item_label"),
       "foreign key": base.replacingOccurrences(
         of: "owner_id INTEGER,", with: "owner_id INTEGER REFERENCES owner (id),"),
       "unique": base.replacingOccurrences(

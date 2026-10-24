@@ -160,7 +160,7 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       "sessionIds の上限を写す")
     XCTAssertTrue(
       description(try tool("list_automations")).contains(
-        "新しい順に \(AutomationPartState.retainedRuns) 件まで。"),
+        "新しい順に \(AutomationNodeState.retainedRuns) 件まで。"),
       "回の記録を残す件数を写す")
   }
 
@@ -186,6 +186,46 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     XCTAssertTrue(rejected.isError, "control の拒否は isError:true になる")
     XCTAssertTrue(
       rejected.text.contains("workspace not found"), "error 本文に理由が残る: \(rejected.text)")
+  }
+
+  /// 自動化のツールが `inputSchema` に挙げる引数は、どれも control が同じ名前で読む。control は知らない鍵を黙って読み捨てる
+  /// ので、片側だけ名前が変わると、AI が渡した `run_automation` の行き先のノードが捨てられ、終わりのノードすべて（副作用と
+  /// 仕事を含む）まで流れる。読んだことは、型の違う値を渡してその名前で断られることで見る。
+  func testEveryArgumentTheAutomationToolsListIsReadByControl() throws {
+    let control = try startControlProcess()
+    let tools = ControlProcess.mcpToolsList().filter {
+      ($0["name"] as? String)?.contains("automation") == true
+    }
+    XCTAssertFalse(tools.isEmpty, "tools/list に自動化のツールが無い")
+    func value(ofType type: String?, matching: Bool) -> Any {
+      switch type {
+      case "integer": matching ? 999_999 : "x"
+      case "boolean": matching ? false : "x"
+      case "array": matching ? [Any]() : "x"
+      case "object": matching ? [String: Any]() : "x"
+      default: matching ? "x" : 1
+      }
+    }
+
+    for tool in tools {
+      let name = try XCTUnwrap(tool["name"] as? String)
+      let schema = try XCTUnwrap(tool["inputSchema"] as? [String: Any])
+      let properties = schema["properties"] as? [String: [String: Any]] ?? [:]
+      let required = schema["required"] as? [String] ?? []
+      for (key, property) in properties {
+        var arguments: [String: Any] = [:]
+        for other in required where other != key {
+          arguments[other] = value(ofType: properties[other]?["type"] as? String, matching: true)
+        }
+        arguments[key] = value(ofType: property["type"] as? String, matching: false)
+
+        let call = control.mcpCall(name, arguments)
+
+        XCTAssertTrue(
+          call.isError && call.text.contains("invalid \(key)"),
+          "\(name) の \(key) を control が読まない: \(call.text)")
+      }
+    }
   }
 
   /// AI が MCP だけで、`hasBoard` の workspace（Home の root を知らなくても選べる）のボードの部品を読み・外し・置ける。

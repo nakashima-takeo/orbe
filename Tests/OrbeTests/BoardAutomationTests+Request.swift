@@ -34,7 +34,7 @@ extension BoardAutomationTests {
     XCTAssertNil(model.refusal)
   }
 
-  /// カードの「修正を依頼」は、依頼の欄に「自動化「…」の部品「…」の修正：」を書き出して焦点を欄へ移し、まだ頼まない。続けて
+  /// カードの「修正を依頼」は、依頼の欄に「自動化「…」のノード「…」の修正：」を書き出して焦点を欄へ移し、まだ頼まない。続けて
   /// 打った文は末尾に足され、↵ で欄からふつうに頼む。
   func testAskToFixDraftsTheRequestInTheField() throws {
     let model = board()
@@ -44,12 +44,13 @@ extension BoardAutomationTests {
     down(window)
     right(window)
     let target = try XCTUnwrap(automation.store.automation(Self.failingBacklog))
-    let part = try XCTUnwrap(automation.selectedPart)
+    let nodeId = try XCTUnwrap(automation.selectedNodeId)
 
-    automation.draftFix(of: part, l10n: LocalizationStore(language: .ja))
+    automation.draftFix(of: nodeId, l10n: LocalizationStore(language: .ja))
     flush(window)
 
-    let draft = "自動化「\(target.name)」の部品「\(try XCTUnwrap(target.graph.node(part)).part.name)」の修正："
+    let draft =
+      "自動化「\(target.name)」のノード「\(try XCTUnwrap(target.graph.node(nodeId)).entity.name)」の修正："
     XCTAssertEqual(automation.requestText, draft)
     XCTAssertEqual(automation.place, .request)
     XCTAssertEqual(asks(), [], "書き出すだけで頼まない")

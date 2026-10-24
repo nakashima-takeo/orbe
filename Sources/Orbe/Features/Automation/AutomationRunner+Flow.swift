@@ -1,6 +1,6 @@
 import Foundation
 
-/// 流す——部品を指して、そこに至る道の上の部品を 1 回ずつ回す（`AutomationFlow`）。
+/// 流す——ノードを指して、そこに至る道の上のノードを 1 回ずつ回す（`AutomationFlow`）。
 extension AutomationRunner {
   /// 流している途中か（一巡があるか）。
   func isFlowing(_ id: Int) -> Bool {
@@ -12,16 +12,16 @@ extension AutomationRunner {
     flows[id]
   }
 
-  /// 指した部品まで流す（止めた自動化も受ける）。流している途中なら断る。指す部品が無ければ一巡を置かない（置くと終わりの
+  /// 指したノードまで流す（止めた自動化も受ける）。流している途中なら断る。指すノードが無ければ一巡を置かない（置くと終わりの
   /// 知らせが来ず、以後ずっと断る）。
   func flow(_ id: Int, to target: AutomationFlow.Target) throws(AutomationError) {
     try checkAvailable()
     let automation = store.automations[try store.index(id)]
-    let targets: [AutomationPartID]
+    let targets: [AutomationNodeID]
     switch target {
-    case .part(let part):
-      guard automation.graph.node(part) != nil else { throw .partNotFound(id, "\(part)") }
-      targets = [part]
+    case .node(let nodeId):
+      guard automation.graph.node(nodeId) != nil else { throw .nodeNotFound(id, "\(nodeId)") }
+      targets = [nodeId]
     case .ends:
       targets = automation.graph.ends.map(\.id)
     case .judges:
@@ -34,7 +34,7 @@ extension AutomationRunner {
   }
 
   /// 道（`path`）を渡して、その上を `targets`（空でなく、どれも道の上）まで流す。流している途中なら断る。
-  func flow(_ id: Int, through path: Set<AutomationPartID>, to targets: [AutomationPartID])
+  func flow(_ id: Int, through path: Set<AutomationNodeID>, to targets: [AutomationNodeID])
     throws(AutomationError)
   {
     try checkAvailable()
@@ -45,6 +45,6 @@ extension AutomationRunner {
     }
     // 「今すぐ」の中で契機が同期に始まり終わりうるので、起こす前に一巡を置く。
     flows[id] = flow
-    for part in wake { scheduler.runNow(id: Self.key(id, part)) }
+    for nodeId in wake { scheduler.runNow(id: Self.key(id, nodeId)) }
   }
 }

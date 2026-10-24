@@ -1,24 +1,24 @@
 import Foundation
 
-/// 部品の 1 回の記録の中身。確定（失敗の記録を含む）が、読む・確定する・当て直すときに決まった数と部品の 1 回の結果から組む。
+/// ノードの 1 回の記録の中身。確定（失敗の記録を含む）が、読む・確定する・当て直すときに決まった数とノードの 1 回の結果から組む。
 /// 保存は時刻・契機・失敗を列に、回の履歴から数えられない残りを JSON に持ち（`AutomationRunStore`）、外の形は保存の形に英文を
 /// 足したもの（`AutomationRunWire`）。手段を起こさなかった契機（取る行が 0 件）は記録しないので、いつも実行の記録を持つ。
-struct AutomationPartRun: Equatable {
+struct AutomationNodeRun: Equatable {
   enum Trigger: String, Codable {
     case schedule
     case now
-    /// 入力の行が届いた（「届いたら」の部品の回）。
+    /// 入力の行が届いた（「届いたら」のノードの回）。
     case arrival
   }
 
   var startedAt: Date
   var endedAt: Date
   var trigger: Trigger
-  /// 取った行の数。入力の無い部品は持たない。
+  /// 取った行の数。入力の無いノードは持たない。
   var taken: Int?
-  /// 読む時点で捨てた数・読む前に期限で消えた数と、部品の持ち越しの和。
+  /// 読む時点で捨てた数・読む前に期限で消えた数と、ノードの持ち越しの和。
   var dropped = AutomationDrops()
-  var execution: AutomationPartPass.Execution
+  var execution: AutomationNodePass.Execution
   /// 結果を断った回だけ持つ（agent は断った呼び出しの外れた件、コマンドは外れた行）。
   var breach: AutomationRejections?
   /// 役割ごとの結果。失敗した回は持たない。
@@ -58,7 +58,7 @@ struct AutomationDrops: Equatable {
     case sameLink
     /// 件数の上限を超えた。
     case overflow
-    /// 判定の部品へ、出どころ（元になった取得の行）の無い行が届いた。
+    /// 判定のノードへ、出どころ（元になった取得の行）の無い行が届いた。
     case unsourced
     /// 同じ回の中で、同じ id の新しい行に置き換わった。
     case replaced
@@ -87,12 +87,12 @@ struct AutomationRunRecord: Equatable {
   let content: Content
 
   enum Content: Equatable {
-    case known(AutomationPartRun)
+    case known(AutomationNodeRun)
     case unknown(AutomationUnknownRun)
   }
 
   /// 読めた中身。不明な記録は nil。
-  var run: AutomationPartRun? {
+  var run: AutomationNodeRun? {
     if case .known(let run) = content { run } else { nil }
   }
 
@@ -110,7 +110,7 @@ struct AutomationRunRecord: Equatable {
     }
   }
 
-  var trigger: AutomationPartRun.Trigger {
+  var trigger: AutomationNodeRun.Trigger {
     switch content {
     case .known(let run): run.trigger
     case .unknown(let run): run.trigger
@@ -129,7 +129,7 @@ struct AutomationRunRecord: Equatable {
 struct AutomationUnknownRun: Equatable {
   let startedAt: Date
   let endedAt: Date
-  let trigger: AutomationPartRun.Trigger
+  let trigger: AutomationNodeRun.Trigger
   let failed: Bool
 }
 

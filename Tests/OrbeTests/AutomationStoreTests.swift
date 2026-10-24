@@ -13,13 +13,13 @@ import XCTest
 final class AutomationStoreTests: OrbeTestCase {
   static let at = Date(timeIntervalSince1970: 1_800_000_000)
 
-  /// 取得の部品 `fetch` と、届いたらタスク候補を出す判定の部品 `judge`。
+  /// 取得のノード `fetch` と、届いたらタスク候補を出す判定のノード `judge`。
   static func definition(
     _ name: String = "受信", coverage: AutomationCoverage = .currentSet, script: String = "fetch"
   ) -> AutomationDefinition {
     DesignSceneFixtures.candidatesDefinition(
       name,
-      fetch: DesignSceneFixtures.commandPart(
+      fetch: DesignSceneFixtures.commandNode(
         "fetch", "取る", .scheduled(.every(1800)), script: script, coverage: coverage))
   }
 
@@ -27,45 +27,45 @@ final class AutomationStoreTests: OrbeTestCase {
     AutomationItem(id: id, link: "https://example.com/\(id)", body: "\(id) の本文", time: at)
   }
 
-  /// 取得の部品の回を確定する。
+  /// 取得のノードの回を確定する。
   static func fetch(
     _ store: AutomationStore, _ id: Int, _ items: [AutomationItem],
-    outcome: AutomationPartPass.Outcome? = nil, at: Date = at
+    outcome: AutomationNodePass.Outcome? = nil, at: Date = at
   ) throws {
     try store.record(
-      id, part: "fetch", at: at, outcome: outcome ?? DesignSceneFixtures.fetched(items))
+      id, nodeKey: "fetch", at: at, outcome: outcome ?? DesignSceneFixtures.fetched(items))
   }
 
-  /// 判定の部品の、読める行をすべて取った回を確定する。案の出どころは、取った行のうち同じ書かれた id の行のもの。候補にした
+  /// 判定のノードの、読める行をすべて取った回を確定する。案の出どころは、取った行のうち同じ書かれた id の行のもの。候補にした
   /// 理由は `reason`（省けば無し）。
   static func judge(
     _ store: AutomationStore, _ id: Int, proposing items: [AutomationItem] = [],
     resolving links: [String] = [], reason: String? = nil, at: Date = at
   ) throws {
     let taken = try XCTUnwrap(
-      store.read(store.part(id, "judge"), of: id, baseline: nil, now: at)
+      store.read(store.nodeId(id, "judge"), of: id, baseline: nil, now: at)
     ).taken
-    let proposals = items.compactMap { item -> AutomationPartPass.Proposal? in
+    let proposals = items.compactMap { item -> AutomationNodePass.Proposal? in
       taken.first { $0.origin?.item.id == item.id }?.origin.map {
-        AutomationPartPass.Proposal(
+        AutomationNodePass.Proposal(
           origin: $0, title: "対応: \(item.id)", due: nil, workspace: nil, reason: reason)
       }
     }
     try store.record(
-      id, part: "judge", trigger: .arrival, at: at,
+      id, nodeKey: "judge", trigger: .arrival, at: at,
       outcome: .succeeded(
         .judge(proposals: proposals, resolved: links), DesignSceneFixtures.execution(taken.count),
         breach: nil))
   }
 
-  /// 今の版で書き換える。同じ鍵の部品は今の部品の id を添える（同じ部品のまま）。
+  /// 今の版で書き換える。同じ鍵のノードは今のノードの id を添える（同じノードのまま）。
   @discardableResult static func rewrite(
     _ store: AutomationStore, _ id: Int, _ definition: AutomationDefinition, at: Date = at
   ) throws -> AutomationStore.Replaced {
     let current = try XCTUnwrap(store.automation(id))
     var definition = definition
-    for index in definition.parts.indices {
-      definition.parts[index].id = current.graph.node(key: definition.parts[index].key)?.id
+    for index in definition.nodes.indices {
+      definition.nodes[index].id = current.graph.node(key: definition.nodes[index].key)?.id
     }
     return try store.replace(id, version: current.version, with: definition, now: at)
   }
@@ -76,7 +76,7 @@ final class AutomationStoreTests: OrbeTestCase {
     AutomationBrokenLine(line: nil, fault: .notArray("items")),
   ]
 
-  static func breached(_ items: [AutomationItem]) -> AutomationPartPass.Outcome {
+  static func breached(_ items: [AutomationItem]) -> AutomationNodePass.Outcome {
     let fetched = DesignSceneFixtures.fetched(items)
     guard case .succeeded(let output, let execution, _) = fetched else {
       preconditionFailure("a fetched outcome succeeds")
@@ -98,7 +98,7 @@ final class AutomationStoreTests: OrbeTestCase {
 
   // MARK: - 再起動
 
-  /// 自動化・つながりの取り方（take・古さの上限）・部品の状態（今有効な項目のリンク・決まりを外した印・回の記録・読めば取る行
+  /// 自動化・つながりの取り方（take・古さの上限）・ノードの状態（今有効な項目のリンク・決まりを外した印・回の記録・読めば取る行
   /// の数）・版・候補は、どの変異（作る・確定・書き換え・さばく・止める・消す）の後に開き直しても同じ。回の記録は
   /// 失敗・判定の確定で捨てた案も、候補は候補にした理由と候補を出した自動化も同じ。
   func testEverythingSurvivesARestart() throws {
@@ -116,10 +116,10 @@ final class AutomationStoreTests: OrbeTestCase {
       at: Self.at.addingTimeInterval(3600))
     var rewritten = Self.definition("受信（要約つき）")
     rewritten.notify = .menuBar
-    var digest = DesignSceneFixtures.commandPart(
+    var digest = DesignSceneFixtures.commandNode(
       "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report)
-    digest.from = [AutomationDefinition.Input(part: "fetch", take: .all, maxAgeHours: 24)]
-    rewritten.parts.append(digest)
+    digest.from = [AutomationDefinition.Input(nodeKey: "fetch", take: .all, maxAgeHours: 24)]
+    rewritten.nodes.append(digest)
     try Self.rewrite(XCTUnwrap(store), id, rewritten)
     try store?.dismiss(XCTUnwrap(store?.proposals.first?.id), now: Self.at)
     _ = try store?.setPaused(id, true, now: Self.at)
@@ -163,7 +163,7 @@ final class AutomationStoreTests: OrbeTestCase {
   // MARK: - 決まりを外した印
 
   /// 出力が決まりを外した印は最初の回に付き、何をするかが変わるまで残る（名前だけの書き換えでは残る）。
-  func testTheBreachMarkStaysFromTheFirstBreachUntilThePartsWorkChanges() throws {
+  func testTheBreachMarkStaysFromTheFirstBreachUntilTheNodesBehaviorChanges() throws {
     let store = AutomationStore()
     let id = try store.create(Self.definition(), now: Self.at).id
     let a = Self.item("a")
@@ -230,7 +230,7 @@ final class AutomationStoreTests: OrbeTestCase {
     XCTAssertGreaterThan(try XCTUnwrap(reopened.proposals.first?.id), forgotten)
   }
 
-  /// 回の記録は部品ごとに新しい 20 件を残し、それより古い回は消える。ただし最新の成功した回・外した印の回・残っている候補を
+  /// 回の記録はノードごとに新しい 20 件を残し、それより古い回は消える。ただし最新の成功した回・外した印の回・残っている候補を
   /// 出した回は消えない。開き直しても同じ。
   func testOldRunsAreSweptExceptTheOnesSomethingPointsAt() throws {
     var store: AutomationStore? = AutomationStore()
@@ -238,7 +238,7 @@ final class AutomationStoreTests: OrbeTestCase {
     let a = Self.item("a")
     try Self.fetch(XCTUnwrap(store), id, [a], outcome: Self.breached([a]))
     try Self.judge(XCTUnwrap(store), id, proposing: [a])
-    let count = AutomationPartState.retainedRuns + 3
+    let count = AutomationNodeState.retainedRuns + 3
     for n in 1...count {
       try Self.fetch(
         XCTUnwrap(store), id, [], outcome: DesignSceneFixtures.failed("boom"),
@@ -249,15 +249,15 @@ final class AutomationStoreTests: OrbeTestCase {
     store = nil
     let kept = try database().select(
       """
-      SELECT r.started_at FROM runs r JOIN parts p ON p.id = r.part_id WHERE p.key = 'fetch'
+      SELECT r.started_at FROM runs r JOIN nodes n ON n.id = r.node_id WHERE n.key = 'fetch'
       ORDER BY r.id
       """, []
     ) { AutomationPersistence.date($0.int64(at: 0)) }
     let judged = try database().select(
-      "SELECT count(*) FROM runs r JOIN parts p ON p.id = r.part_id WHERE p.key = 'judge'", []
+      "SELECT count(*) FROM runs r JOIN nodes n ON n.id = r.node_id WHERE n.key = 'judge'", []
     ) { $0.int(at: 0) }.first
 
-    XCTAssertEqual(fetches.runs.count, AutomationPartState.retainedRuns)
+    XCTAssertEqual(fetches.runs.count, AutomationNodeState.retainedRuns)
     XCTAssertEqual(
       kept,
       [Self.at] + (4...count).map { Self.at.addingTimeInterval(TimeInterval(60 * $0)) },
@@ -265,7 +265,7 @@ final class AutomationStoreTests: OrbeTestCase {
     XCTAssertEqual(fetches.succeededAt, Self.at)
     XCTAssertEqual(fetches.breach?.startedAt, Self.at)
     XCTAssertEqual(
-      judged, AutomationPartState.retainedRuns + 1, "候補を出した回は 20 件の外でも残る")
+      judged, AutomationNodeState.retainedRuns + 1, "候補を出した回は 20 件の外でも残る")
     XCTAssertEqual(AutomationStore().automation(id)?.state(key: "fetch").runs, fetches.runs)
   }
 
@@ -294,7 +294,7 @@ final class AutomationStoreTests: OrbeTestCase {
     try Self.fetch(XCTUnwrap(store), id, [a])
     try Self.judge(XCTUnwrap(store), id, proposing: [a])
     var rewritten = Self.definition()
-    rewritten.parts[1] = DesignSceneFixtures.agentPart(
+    rewritten.nodes[1] = DesignSceneFixtures.agentNode(
       "judge", "判定", .arrival, from: ["fetch"], model: "sonnet", instruction: "別の基準で選ぶ。",
       deliver: .taskCandidates)
     try Self.rewrite(XCTUnwrap(store), id, rewritten)

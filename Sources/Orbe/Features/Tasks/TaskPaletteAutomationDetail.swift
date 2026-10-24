@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 提案タブの右の詳細。選ばれている候補の出どころ（自動化の名前・取得の部品の名前・時刻）・本文の全体・リンク、タスクにしたとき
+/// 提案タブの右の詳細。選ばれている候補の出どころ（自動化の名前・取得のノードの名前・時刻）・本文の全体・リンク、タスクにしたとき
 /// のタイトル・期限・workspace、「タスクにする」「タスクにして開く」「却下」のボタン。選ばれている候補が無ければ空。ボタンは欄の
 /// 下端に置いてスクロールさせない——さばくキーの案内はここにしか無いので、本文が長くても隠さないため。収まらない中身だけが
 /// スクロールする。
@@ -38,7 +38,7 @@ struct TaskPaletteAutomationDetail: View {
     // 名前は縮め、時刻は残す。
     HStack(spacing: Theme.Space.note + 1) {
       MarkGlyph(kind: .tray, width: 10, color: Color.theme.accentBright)
-      let names = [model.store.shelf(of: proposal)?.name, model.sourceName(of: proposal)]
+      let names = [model.store.shelf(of: proposal)?.name, model.originNodeName(of: proposal)]
         .compactMap { $0 }
       if !names.isEmpty {
         TruncatingSlot(names.joined(separator: " · ")) {

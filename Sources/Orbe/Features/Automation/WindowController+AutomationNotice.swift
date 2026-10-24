@@ -1,35 +1,35 @@
 import AppKit
 
-/// 自動化の知らせ。走らせ役が部品の回を記録したことを知らせ、窓がその部品の最新の回から 1 つの知らせに組んで、通知音と、
+/// 自動化の知らせ。走らせ役がノードの回を記録したことを知らせ、窓がそのノードの最新の回から 1 つの知らせに組んで、通知音と、
 /// 通知先に応じてメニューバー②か通知センターへ流す。ピルや通知のクリックは Home のボードでその自動化を開く。
 extension WindowController {
-  /// 部品の回を記録した（走らせ役から）。
-  func notifyAutomationRecorded(_ id: Int, _ part: AutomationPartID) {
-    guard let notification = automationNotification(id, part) else { return }
+  /// ノードの回を記録した（走らせ役から）。
+  func notifyAutomationRecorded(_ id: Int, _ nodeId: AutomationNodeID) {
+    guard let notification = automationNotification(id, nodeId) else { return }
     deliver(notification)
   }
 
-  /// 部品の最新の回を知らせとして組む。1 回の記録に知らせは 1 つで、順は「出力が決まりを外した最初の回」→「失敗の続きの最初の
+  /// ノードの最新の回を知らせとして組む。1 回の記録に知らせは 1 つで、順は「出力が決まりを外した最初の回」→「失敗の続きの最初の
   /// 回」→「Orbe へ何かを渡した回」。自動化が消えている・通知が off・どれにも当たらない・その自動化を見ているときは nil。
-  /// 失敗は続く間の最初の回だけ、決まりを外したことは部品の印が無かった回（何をするかが変わるまでに 1 度）だけ知らせる——
+  /// 失敗は続く間の最初の回だけ、決まりを外したことはノードの印が無かった回（何をするかが変わるまでに 1 度）だけ知らせる——
   /// 毎回鳴らすと、ピルと音を見なくなるため。外して失敗した回は、外したことの文で失敗も言う。
   ///
   /// 本文は、外した回のほかは実行履歴のその回の行の 1 行目——ピルと、押した先の行を同じ文で語るため。設定は Home の実効設定
   /// （押した先が Home なので、発信元の workspace の値という読み方に揃う）。
-  func automationNotification(_ id: Int, _ part: AutomationPartID) -> ChromeNotification? {
+  func automationNotification(_ id: Int, _ nodeId: AutomationNodeID) -> ChromeNotification? {
     guard let automation = automationStore.automation(id), let notify = automation.notify,
-      let state = automation.parts[part], let record = state.runs.first, let latest = record.run,
+      let state = automation.states[nodeId], let record = state.runs.first, let latest = record.run,
       !isViewingAutomation(id)
     else { return nil }
     let tone = BoardAutomationSummary.tone(latest)
     let text = board.automation.text(localization, now: automationRunner.now())
     let line: String
     if let breach = state.breach, breach.id == record.id {
-      line = breachLine(breach, part: automation.graph.node(part)?.part.name ?? "\(part)")
+      line = breachLine(breach, nodeName: automation.graph.node(nodeId)?.entity.name ?? "\(nodeId)")
     } else if tone == .failed, state.runs.dropFirst().first?.failed != true {
-      line = BoardAutomationSummary.line(latest, part: part, in: automation, text: text)
+      line = BoardAutomationSummary.line(latest, nodeId: nodeId, in: automation, text: text)
     } else if tone == .produced {
-      line = BoardAutomationSummary.line(latest, part: part, in: automation, text: text)
+      line = BoardAutomationSummary.line(latest, nodeId: nodeId, in: automation, text: text)
     } else {
       return nil
     }
@@ -47,7 +47,7 @@ extension WindowController {
   }
 
   /// 「連絡 の出力の形式エラー（2 件）— agent が修正済み」。
-  private func breachLine(_ record: AutomationRunRecord, part name: String) -> String {
+  private func breachLine(_ record: AutomationRunRecord, nodeName name: String) -> String {
     let count = record.run?.breach?.count ?? 0
     return localization.format(
       count == 1 ? .automationBreachNoticeOne : .automationBreachNoticeOther, name, count,

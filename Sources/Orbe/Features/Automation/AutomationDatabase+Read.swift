@@ -4,7 +4,7 @@ import Foundation
 extension AutomationDatabase {
   /// 受け手が 1 つのつながりから読む範囲。
   struct Reading {
-    let edge: AutomationPartEdge
+    let edge: AutomationNodeEdge
     /// 読んだ位置。
     let read: AutomationSeqs
     /// 読む上限の番号（契機の始まりの時点の上流の最後の番号。無ければ今の最後の番号）。
@@ -18,16 +18,16 @@ extension AutomationDatabase {
   }
 
   /// 受け手のつながりごとの読んだ位置と、上流の最後の番号。
-  func positions(of receiver: AutomationPartID) throws -> [AutomationPartID: Position] {
+  func positions(of receiver: AutomationNodeID) throws -> [AutomationNodeID: Position] {
     Dictionary(
       uniqueKeysWithValues: try db.select(
         """
-        SELECT e.from_part_id, e.read_item_seq, e.read_event_seq, p.last_item_seq, p.last_event_seq
-        FROM part_edges e JOIN parts p ON p.id = e.from_part_id WHERE e.to_part_id = ?
+        SELECT e.from_node_id, e.read_item_seq, e.read_event_seq, n.last_item_seq, n.last_event_seq
+        FROM node_edges e JOIN nodes n ON n.id = e.from_node_id WHERE e.to_node_id = ?
         """, [.integer(Int64(receiver.rawValue))]
       ) { s in
         (
-          AutomationPartID(s.int(at: 0)),
+          AutomationNodeID(s.int(at: 0)),
           Position(
             read: AutomationSeqs(item: s.int(at: 1), event: s.int(at: 2)),
             last: AutomationSeqs(item: s.int(at: 3), event: s.int(at: 4)))
@@ -46,7 +46,7 @@ extension AutomationDatabase {
       """
       SELECT i.id, i.seq, i.written_id, i.valid_from, i.source_item_id, i.source_event_id, v.id, v.body
       FROM items i JOIN item_versions v ON v.id = \(Self.currentVersion(of: "i.id"))
-      WHERE i.part_id = ? AND i.valid_to IS NULL AND i.seq > ? AND i.seq <= ? ORDER BY i.seq
+      WHERE i.node_id = ? AND i.valid_to IS NULL AND i.seq > ? AND i.seq <= ? ORDER BY i.seq
       """,
       [p, .integer(Int64(all ? 0 : reading.read.item)), .integer(Int64(reading.ceiling.item))]
     ) { s in
@@ -59,7 +59,7 @@ extension AutomationDatabase {
     let events = try db.select(
       """
       SELECT id, seq, written_id, created_at, source_item_id, source_event_id, body FROM events
-      WHERE part_id = ? AND created_at >= ? AND seq > ? AND seq <= ? ORDER BY seq
+      WHERE node_id = ? AND created_at >= ? AND seq > ? AND seq <= ? ORDER BY seq
       """,
       [
         p, Self.cutoff(now), .integer(Int64(all ? 0 : reading.read.event)),
@@ -96,45 +96,46 @@ extension AutomationDatabase {
     return rows
   }
 
-  /// 下流へ渡す id。入力を引き継いだ行は書かれた id のまま（下流が入力と照らせる）、それ以外は `<部品 ID>:<書かれた id>`
-  /// （部品をまたいで重ならない）。
-  static func downstreamId(_ written: String, of part: AutomationPartID, inherited: Bool) -> String
+  /// 下流へ渡す id。入力を引き継いだ行は書かれた id のまま（下流が入力と照らせる）、それ以外は `<ノード ID>:<書かれた id>`
+  /// （ノードをまたいで重ならない）。
+  static func downstreamId(_ written: String, of nodeId: AutomationNodeID, inherited: Bool)
+    -> String
   {
-    inherited ? written : "\(part):\(written)"
+    inherited ? written : "\(nodeId):\(written)"
   }
 
-  /// 引き継ぎをたどった先の行。それを出した部品の今の役割が取得なら出どころ（候補のリンクと本文の元）で、ほかは出どころなし。
+  /// 引き継ぎをたどった先の行。それを出したノードの今の役割が取得なら出どころ（候補のリンクと本文の元）で、ほかは出どころなし。
   /// 項目は今の版を指す。
   func origin(of start: AutomationSourceRef, graph: AutomationGraph) throws -> AutomationIntake
     .Origin?
   {
     var current = start
     while true {
-      let next: [(part: Int, source: AutomationSourceRef?)]
+      let next: [(nodeId: Int, source: AutomationSourceRef?)]
       switch current {
       case .item(let id):
         next = try db.select(
-          "SELECT part_id, source_item_id, source_event_id FROM items WHERE id = ?",
+          "SELECT node_id, source_item_id, source_event_id FROM items WHERE id = ?",
           [.integer(Int64(id))]
-        ) { (part: $0.int(at: 0), source: Self.source($0, item: 1, event: 2)) }
+        ) { (nodeId: $0.int(at: 0), source: Self.source($0, item: 1, event: 2)) }
       case .event(let id):
         next = try db.select(
-          "SELECT part_id, source_item_id, source_event_id FROM events WHERE id = ?",
+          "SELECT node_id, source_item_id, source_event_id FROM events WHERE id = ?",
           [.integer(Int64(id))]
-        ) { (part: $0.int(at: 0), source: Self.source($0, item: 1, event: 2)) }
+        ) { (nodeId: $0.int(at: 0), source: Self.source($0, item: 1, event: 2)) }
       }
       guard let row = next.first else { return nil }
       if let source = row.source {
         current = source
         continue
       }
-      let part = AutomationPartID(row.part)
-      guard graph.node(part)?.role == .fetch else { return nil }
-      return try originRow(current, part: part)
+      let nodeId = AutomationNodeID(row.nodeId)
+      guard graph.node(nodeId)?.role == .fetch else { return nil }
+      return try originRow(current, nodeId: nodeId)
     }
   }
 
-  private func originRow(_ source: AutomationSourceRef, part: AutomationPartID) throws
+  private func originRow(_ source: AutomationSourceRef, nodeId: AutomationNodeID) throws
     -> AutomationIntake.Origin?
   {
     let found: [(ref: AutomationRowRef, body: String?)]
@@ -152,15 +153,15 @@ extension AutomationDatabase {
     guard let row = found.first, let item = Self.decode(AutomationItem.self, row.body) else {
       return nil
     }
-    return AutomationIntake.Origin(part: part, row: row.ref, item: item)
+    return AutomationIntake.Origin(nodeId: nodeId, row: row.ref, item: item)
   }
 
   /// 読む前に期限で消えた出来事の数: 上流の出来事の番号の（`from`, `to`] のうち、残す期間の内に残っていないもの。
-  func lapsed(of up: AutomationPartID, from: Int, to: Int, now: Date) throws -> Int {
+  func lapsed(of up: AutomationNodeID, from: Int, to: Int, now: Date) throws -> Int {
     guard to > from else { return 0 }
     let alive =
       try db.select(
-        "SELECT count(*) FROM events WHERE part_id = ? AND seq > ? AND seq <= ? AND created_at >= ?",
+        "SELECT count(*) FROM events WHERE node_id = ? AND seq > ? AND seq <= ? AND created_at >= ?",
         [
           .integer(Int64(up.rawValue)), .integer(Int64(from)), .integer(Int64(to)),
           Self.cutoff(now),
@@ -170,11 +171,11 @@ extension AutomationDatabase {
   }
 
   /// 読んだ位置を進める（下がらない）。
-  func advance(_ receiver: AutomationPartID, _ reach: [AutomationIntake.Reach]) throws {
+  func advance(_ receiver: AutomationNodeID, _ reach: [AutomationIntake.Reach]) throws {
     for reach in reach {
       let column = reach.table == .item ? "read_item_seq" : "read_event_seq"
       try db.run(
-        "UPDATE part_edges SET \(column) = max(\(column), ?) WHERE to_part_id = ? AND from_part_id = ?",
+        "UPDATE node_edges SET \(column) = max(\(column), ?) WHERE to_node_id = ? AND from_node_id = ?",
         [
           .integer(Int64(reach.seq)), .integer(Int64(receiver.rawValue)),
           .integer(Int64(reach.from.rawValue)),
@@ -204,7 +205,7 @@ extension AutomationDatabase {
   /// 番号）。読んだ位置を進める先までの、読む前に期限で消えた出来事を数えて添える。
   func read(
     _ node: AutomationGraph.Node, in graph: AutomationGraph,
-    baseline: [AutomationPartID: AutomationSeqs]?, context: AutomationIntake.Context
+    baseline: [AutomationNodeID: AutomationSeqs]?, context: AutomationIntake.Context
   ) throws -> AutomationIntake.Read {
     let positions = try self.positions(of: node.id)
     var rows: [AutomationIntake.Row] = []

@@ -2,11 +2,11 @@ import Foundation
 
 @testable import Orbe
 
-/// 提案タブの棚の見本（見本 O2Palette の並び）。前回の判定の成否・まだ判定していない・停止中・判定ごとの最新の回・出どころの部品の
+/// 提案タブの棚の見本（見本 O2Palette の並び）。前回の判定の成否・まだ判定していない・停止中・判定ごとの最新の回・出どころのノードの
 /// 名前を張る。
 ///
 /// 1. 受け持ちの全部: 取得 3 つ（GitHub・Backlog・Slack）→ 判定「開発の依頼を選ぶ」（毎日 9:00。GitHub と Backlog から
-///    12 件 → 候補 2。#405 には候補にした理由）と判定「返事が要る連絡を選ぶ」（毎日 13:00。制限時間で失敗）。棚には消えた自動化 6 の候補も出る（出どころの部品の名前を引けない）。
+///    12 件 → 候補 2。#405 には候補にした理由）と判定「返事が要る連絡を選ぶ」（毎日 13:00。制限時間で失敗）。棚には消えた自動化 6 の候補も出る（出どころのノードの名前を引けない）。
 /// 2. Sentry: 新しいエラー（届いたらの判定。候補 1）。
 /// 3. 長い名前の自動化（手動の判定。候補 1）。
 /// 4. CI: main の失敗（届いたらの判定。候補なし）。
@@ -28,9 +28,9 @@ extension DesignSceneFixtures {
   }
 
   private static func shelfProposal(
-    _ part: String, _ item: AutomationItem, _ title: String, due: TaskItem.DueDate? = nil,
+    _ nodeKey: String, _ item: AutomationItem, _ title: String, due: TaskItem.DueDate? = nil,
     reason: String? = nil
-  ) -> AutomationPartPass.Proposal {
+  ) -> AutomationNodePass.Proposal {
     proposal(item, title, due: due, reason: reason)
   }
 
@@ -67,20 +67,20 @@ extension DesignSceneFixtures {
     let slack = sampleItems("slack", 3, at: automationAt(12, 50))
     let definition = AutomationDefinition(
       name: "受け持ちの全部", notify: nil,
-      parts: [
-        commandPart(
+      nodes: [
+        commandNode(
           "github", "GitHub", .scheduled(.every(3600)),
           script: "gh search prs --review-requested=@me --json url,title", coverage: .currentSet),
-        commandPart(
+        commandNode(
           "backlog", "Backlog", .scheduled(.every(3600)),
           script: "~/bin/backlog-mine", coverage: .currentSet),
-        commandPart(
+        commandNode(
           "slack", "Slack", .scheduled(.every(1800)),
           script: "~/bin/slack-mentions --since 1d", coverage: .newArrivals),
-        agentPart(
+        agentNode(
           "dev", "開発の依頼を選ぶ", .scheduled(cron("0 9 * * *")), from: ["github", "backlog"],
           instruction: "自分がレビューか修正を頼まれているものだけをタスクにする。", deliver: .taskCandidates),
-        agentPart(
+        agentNode(
           "contact", "返事が要る連絡を選ぶ", .scheduled(cron("0 13 * * *")), from: ["slack"],
           instruction: "自分が返事を頼まれているものだけをタスクにする。", deliver: .taskCandidates),
       ])
@@ -88,11 +88,11 @@ extension DesignSceneFixtures {
       definition: definition, createdAt: automationAt(9, daysAgo: 3),
       passes: [
         AutomationSamplePass(
-          part: "github", at: automationAt(8, 58), outcome: fetched(github)),
+          nodeKey: "github", at: automationAt(8, 58), outcome: fetched(github)),
         AutomationSamplePass(
-          part: "backlog", at: automationAt(8, 59), outcome: fetched(backlog)),
+          nodeKey: "backlog", at: automationAt(8, 59), outcome: fetched(backlog)),
         AutomationSamplePass(
-          part: "dev", at: automationAt(9),
+          nodeKey: "dev", at: automationAt(9),
           outcome: judged(
             [
               shelfProposal(
@@ -102,9 +102,9 @@ extension DesignSceneFixtures {
                 "backlog", backlog[0], "BLG-231 決済画面の文言を直す", due: TaskItem.DueDate("2025-10-07")),
             ], rows: 12)),
         AutomationSamplePass(
-          part: "slack", at: automationAt(12, 58), outcome: fetched(slack)),
+          nodeKey: "slack", at: automationAt(12, 58), outcome: fetched(slack)),
         AutomationSamplePass(
-          part: "contact", at: automationAt(13),
+          nodeKey: "contact", at: automationAt(13),
           outcome: failed("", ending: .timeLimit, count: 3)),
       ])
   }
@@ -119,15 +119,15 @@ extension DesignSceneFixtures {
     return AutomationSample(
       definition: candidatesDefinition(
         "Sentry: 新しいエラー",
-        fetch: commandPart(
+        fetch: commandNode(
           "fetch", "Sentry", .scheduled(.every(1800)), script: "~/bin/sentry-new",
           coverage: .newArrivals)),
       createdAt: automationAt(9, daysAgo: 3),
       passes: [
         AutomationSamplePass(
-          part: "fetch", at: automationAt(14, 30), outcome: fetched(items)),
+          nodeKey: "fetch", at: automationAt(14, 30), outcome: fetched(items)),
         AutomationSamplePass(
-          part: "judge", at: automationAt(14, 31), trigger: .arrival,
+          nodeKey: "judge", at: automationAt(14, 31), trigger: .arrival,
           outcome: judged([proposal(items[0], "TypeError: cart is undefined を直す")], rows: 1)),
       ])
   }
@@ -140,16 +140,16 @@ extension DesignSceneFixtures {
     ]
     var definition = candidatesDefinition(
       "Slack: 自分宛の DM・メンションのうち、返事か作業を頼まれているもの",
-      fetch: commandPart(
+      fetch: commandNode(
         "fetch", "Slack", .scheduled(.every(1800)), script: "~/bin/slack-mentions",
         coverage: .newArrivals))
-    definition.parts[1].trigger = .manual
+    definition.nodes[1].trigger = .manual
     return AutomationSample(
       definition: definition, createdAt: automationAt(9, daysAgo: 3),
       passes: [
-        AutomationSamplePass(part: "fetch", at: automationAt(14), outcome: fetched(items)),
+        AutomationSamplePass(nodeKey: "fetch", at: automationAt(14), outcome: fetched(items)),
         AutomationSamplePass(
-          part: "judge", at: automationAt(14, 5), trigger: .now,
+          nodeKey: "judge", at: automationAt(14, 5), trigger: .now,
           outcome: judged(
             [proposal(items[0], "見積もりの件に返信", due: TaskItem.DueDate("2025-10-08"))], rows: 1)),
       ])
@@ -159,7 +159,7 @@ extension DesignSceneFixtures {
     AutomationSample(
       definition: candidatesDefinition(
         "CI: main の失敗",
-        fetch: commandPart(
+        fetch: commandNode(
           "fetch", "CI", .scheduled(.every(600)), script: "~/bin/ci-failures",
           coverage: .newArrivals)),
       createdAt: automationAt(9, daysAgo: 3),
@@ -170,7 +170,7 @@ extension DesignSceneFixtures {
     AutomationSample(
       definition: candidatesDefinition(
         "GitHub: 自分へのレビュー依頼",
-        fetch: commandPart(
+        fetch: commandNode(
           "fetch", "GitHub", .scheduled(.every(3600)),
           script: "gh search prs --review-requested=@me --json url", coverage: .currentSet)),
       createdAt: automationAt(9, daysAgo: 3), paused: true,
@@ -183,15 +183,15 @@ extension DesignSceneFixtures {
     AutomationSample(
       definition: candidatesDefinition(
         "GitHub: 失敗した CI",
-        fetch: commandPart(
+        fetch: commandNode(
           "fetch", "GitHub Actions", .scheduled(.every(3600)), script: "~/bin/ci-runs",
           coverage: .currentSet)),
       createdAt: automationAt(9, daysAgo: 3),
       passes: [
         AutomationSamplePass(
-          part: "fetch", at: automationAt(8, 45), outcome: fetched([shared])),
+          nodeKey: "fetch", at: automationAt(8, 45), outcome: fetched([shared])),
         AutomationSamplePass(
-          part: "judge", at: automationAt(8, 46), trigger: .arrival,
+          nodeKey: "judge", at: automationAt(8, 46), trigger: .arrival,
           outcome: judged([proposal(shared, "main の e2e の失敗を調べる")], rows: 1)),
       ],
       deleted: true)

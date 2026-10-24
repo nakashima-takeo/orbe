@@ -5,16 +5,16 @@ import Foundation
 extension AutomationDatabase {
   /// 回の記録を足して ID を返す。`carried` は回の履歴から数えられない捨てた数（持ち越し・読む前に期限で消えた数）。
   func insert(
-    run: AutomationPartRun, of part: AutomationPartID, defId: AutomationDefID,
+    run: AutomationNodeRun, of nodeId: AutomationNodeID, defId: AutomationNodeDefID,
     carried: AutomationDrops
   ) throws -> Int {
     try db.run(
       """
-      INSERT INTO runs (part_id, def_id, started_at, ended_at, trigger, failure, record)
+      INSERT INTO runs (node_id, def_id, started_at, ended_at, trigger, failure, record)
       VALUES (?, ?, ?, ?, ?, ?, ?)
       """,
       [
-        .integer(Int64(part.rawValue)), .integer(Int64(defId.rawValue)),
+        .integer(Int64(nodeId.rawValue)), .integer(Int64(defId.rawValue)),
         Self.instant(run.startedAt), Self.instant(run.endedAt), .text(run.trigger.rawValue),
         try run.failure.map { .text(try Self.encode($0)) } ?? .null,
         .text(try Self.encode(AutomationRunStore(run, carried: carried))),
@@ -22,29 +22,29 @@ extension AutomationDatabase {
     return Int(db.lastInsertRowID)
   }
 
-  /// `parts` の回の記録を混ぜて新しい順に `limit` 件（`before` より前の ID だけ）。それぞれに部品の今の鍵を添える。
-  func records(of parts: [AutomationPartID], before: Int? = nil, limit: Int) throws
+  /// `nodeIds` の回の記録を混ぜて新しい順に `limit` 件（`before` より前の ID だけ）。それぞれにノードの今の鍵を添える。
+  func records(of nodeIds: [AutomationNodeID], before: Int? = nil, limit: Int) throws
     -> [AutomationKeyedRecord]
   {
-    let list = parts.map { String($0.rawValue) }.joined(separator: ",")
+    let list = nodeIds.map { String($0.rawValue) }.joined(separator: ",")
     return try selectRecords(
-      "WHERE r.part_id IN (\(list)) AND r.id < ? ORDER BY r.id DESC LIMIT ?",
+      "WHERE r.node_id IN (\(list)) AND r.id < ? ORDER BY r.id DESC LIMIT ?",
       [.integer(Int64(before ?? Int.max)), .integer(Int64(limit))])
   }
 
   /// 最新の成功した回の開始時刻。
-  func succeededAt(of part: AutomationPartID) throws -> Date? {
+  func succeededAt(of nodeId: AutomationNodeID) throws -> Date? {
     try db.select(
-      "SELECT started_at FROM runs WHERE part_id = ? AND failure IS NULL ORDER BY id DESC LIMIT 1",
-      [.integer(Int64(part.rawValue))]
+      "SELECT started_at FROM runs WHERE node_id = ? AND failure IS NULL ORDER BY id DESC LIMIT 1",
+      [.integer(Int64(nodeId.rawValue))]
     ) { AutomationPersistence.date($0.int64(at: 0)) }.first
   }
 
   /// 外した印の回の記録。
-  func breachRecord(of part: AutomationPartID) throws -> AutomationRunRecord? {
+  func breachRecord(of nodeId: AutomationNodeID) throws -> AutomationRunRecord? {
     try selectRecords(
-      "WHERE r.id = (SELECT breach_run_id FROM parts WHERE id = ?)",
-      [.integer(Int64(part.rawValue))]
+      "WHERE r.id = (SELECT breach_run_id FROM nodes WHERE id = ?)",
+      [.integer(Int64(nodeId.rawValue))]
     ).first?.record
   }
 
@@ -54,22 +54,22 @@ extension AutomationDatabase {
   {
     let rows = try db.select(
       """
-      SELECT r.id, p.key, r.started_at, r.ended_at, r.trigger, r.failure, r.record
-      FROM runs r JOIN parts p ON p.id = r.part_id \(clause)
+      SELECT r.id, n.key, r.started_at, r.ended_at, r.trigger, r.failure, r.record
+      FROM runs r JOIN nodes n ON n.id = r.node_id \(clause)
       """, values
     ) { s in
       (
         id: s.int(at: 0), key: s.text(at: 1) ?? "",
         started: AutomationPersistence.date(s.int64(at: 2)),
         ended: AutomationPersistence.date(s.int64(at: 3)),
-        trigger: AutomationPartRun.Trigger(rawValue: s.text(at: 4) ?? "") ?? .schedule,
+        trigger: AutomationNodeRun.Trigger(rawValue: s.text(at: 4) ?? "") ?? .schedule,
         failure: s.text(at: 5), record: s.text(at: 6)
       )
     }
     let inputs = try self.inputs(of: rows.map(\.id))
     return rows.map { row in
       AutomationKeyedRecord(
-        partKey: row.key,
+        nodeKey: row.key,
         record: AutomationRunRecord(
           id: row.id,
           content: Self.content(
@@ -98,7 +98,7 @@ extension AutomationDatabase {
       dropped.add(reason, count)
     }
     return .known(
-      AutomationPartRun(
+      AutomationNodeRun(
         startedAt: columns.startedAt, endedAt: columns.endedAt, trigger: columns.trigger,
         taken: stored.reads ? inputs["taken"] ?? 0 : nil, dropped: dropped,
         execution: stored.execution,
@@ -124,8 +124,8 @@ extension AutomationDatabase {
   }
 }
 
-/// 回の記録 1 件と、それを持つ部品の今の鍵。
+/// 回の記録 1 件と、それを持つノードの今の鍵。
 struct AutomationKeyedRecord: Equatable {
-  let partKey: String
+  let nodeKey: String
   let record: AutomationRunRecord
 }

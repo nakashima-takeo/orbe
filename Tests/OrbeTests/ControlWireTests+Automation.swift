@@ -6,7 +6,7 @@ import XCTest
 /// 自動化の 9 動詞の params の語と型検査。定義は `definition` の欄を保存と同じ形で読み、読めない箇所を定義の中の場所付きで
 /// -32602 の文に入れる。値と組み合わせ（グラフ）の検証は target が持つ。
 ///
-/// 壊れると何が起きるか: 部品の書き忘れが形の上で通り、何もしない自動化ができる。部品がコマンドと agent の両方の形を持っても
+/// 壊れると何が起きるか: ノードの書き忘れが形の上で通り、何もしない自動化ができる。ノードがコマンドと agent の両方の形を持っても
 /// 黙ってどちらかに落ちる。取得の性質や予定の書き損じが黙ってどちらかに落ち、AI の意図と違う予定で回る。断りの文が定義の
 /// どこを直せばよいかを言わず、AI が直せない。`paused` に文字列を渡して止めたつもりが再開になる。
 extension ControlWireTests {
@@ -15,7 +15,7 @@ extension ControlWireTests {
     [
       ("list_automations", [:]),
       ("set_automation", ["definition": definition]),
-      ("list_automation_runs", ["automationId": 2, "partKey": "judge", "before": 9, "limit": 5]),
+      ("list_automation_runs", ["automationId": 2, "nodeKey": "judge", "before": 9, "limit": 5]),
       ("run_automation", ["automationId": 2]),
       ("pause_automation", ["automationId": 2, "paused": true]),
       ("delete_automation", ["automationId": 2]),
@@ -44,16 +44,16 @@ extension ControlWireTests {
   private var judge: [String: Any] {
     [
       "id": 4, "key": "judge", "name": "判定", "trigger": ["kind": "arrival"],
-      "from": [["part": "slack", "maxAgeHours": 24]], "maxItems": 30,
+      "from": [["node": "slack", "maxAgeHours": 24]], "maxItems": 30,
       "model": "opus", "instruction": "自分がやること", "deliver": "taskCandidates",
     ]
   }
 
   private var definition: [String: Any] {
-    ["name": "Slack: 自分宛", "parts": [fetch, judge]]
+    ["name": "Slack: 自分宛", "nodes": [fetch, judge]]
   }
 
-  /// cron 式は前後の空白を除いて受けたまま運ぶ。部品の id・入力の取り方・件数の上限と、書き換えの版も運ぶ。
+  /// cron 式は前後の空白を除いて受けたまま運ぶ。ノードの id・入力の取り方・件数の上限と、書き換えの版も運ぶ。
   func testSetAutomationCarriesTheDefinitionToTheTarget() throws {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
@@ -70,22 +70,22 @@ extension ControlWireTests {
       fake.setAutomations.last?.definition,
       AutomationDefinition(
         name: "Slack: 自分宛", notify: nil,
-        parts: [
-          AutomationDefinition.Part(
+        nodes: [
+          AutomationDefinition.Node(
             id: nil, key: "slack", name: "Slack: 自分宛",
             trigger: .scheduled(.cron(try BackgroundCron("*/10 9-18 * * 1-5"))), from: [],
             action: AutomationActionDef(
               method: .agent(
-                AutomationPartAgent(
+                AutomationNodeAgent(
                   cli: "claude", model: nil, tools: ["mcp__slack__search"], instruction: "DM")),
-              timeoutMinutes: nil, coverage: .newArrivals, destination: .nextPart),
+              timeoutMinutes: nil, coverage: .newArrivals, destination: .nextNode),
             maxItems: nil),
-          AutomationDefinition.Part(
-            id: AutomationPartID(4), key: "judge", name: "判定", trigger: .arrival,
-            from: [AutomationDefinition.Input(part: "slack", maxAgeHours: 24)],
+          AutomationDefinition.Node(
+            id: AutomationNodeID(4), key: "judge", name: "判定", trigger: .arrival,
+            from: [AutomationDefinition.Input(nodeKey: "slack", maxAgeHours: 24)],
             action: AutomationActionDef(
               method: .agent(
-                AutomationPartAgent(
+                AutomationNodeAgent(
                   cli: "claude", model: "opus", tools: [], instruction: "自分がやること")),
               timeoutMinutes: nil, coverage: nil, destination: .taskCandidates),
             maxItems: 30),
@@ -99,43 +99,43 @@ extension ControlWireTests {
     func with(_ key: String, _ value: Any?) -> [String: Any] {
       var changed = fetch
       changed[key] = value
-      return ["definition": ["name": "x", "parts": [changed, judge]]]
+      return ["definition": ["name": "x", "nodes": [changed, judge]]]
     }
 
     for (label, params, message) in [
       ("定義がオブジェクトでない", ["definition": "x"], "invalid definition"),
-      ("部品が無い", ["definition": ["name": "x"]], "missing parts"),
+      ("ノードが無い", ["definition": ["name": "x"]], "missing nodes"),
       (
-        "知らない通知先", ["definition": ["name": "x", "notify": "mail", "parts": [fetch, judge]]],
+        "知らない通知先", ["definition": ["name": "x", "notify": "mail", "nodes": [fetch, judge]]],
         "invalid notify: pass menuBar or notificationCenter"
       ),
-      ("予定が無い", with("trigger", nil), "missing parts[0].trigger"),
+      ("予定が無い", with("trigger", nil), "missing nodes[0].trigger"),
       (
-        "部品が 2 つの形", with("command", "gh api"),
-        "invalid parts[0]: pass either command (a shell command) or instruction (an agent)"
+        "ノードが 2 つの形", with("command", "gh api"),
+        "invalid nodes[0]: pass either command (a shell command) or instruction (an agent)"
       ),
       (
         "毎回全件の取得の性質", with("coverage", "everything"),
-        "invalid parts[0].coverage: pass currentSet or newArrivals"
+        "invalid nodes[0].coverage: pass currentSet or newArrivals"
       ),
       (
-        "知らない取り方", with("from", [["part": "x", "take": "some"]]),
-        "invalid parts[0].from[0].take: pass new or all"
+        "知らない取り方", with("from", [["node": "x", "take": "some"]]),
+        "invalid nodes[0].from[0].take: pass new or all"
       ),
       (
-        "数でない件数の上限", with("maxItems", "many"), "invalid parts[0].maxItems"
+        "数でない件数の上限", with("maxItems", "many"), "invalid nodes[0].maxItems"
       ),
       (
         "知らない予定の種類", with("trigger", ["kind": "daily"]),
-        "invalid parts[0].trigger.kind: pass interval, cron, manual or arrival"
+        "invalid nodes[0].trigger.kind: pass interval, cron, manual or arrival"
       ),
       (
         "cron の欄が範囲外", with("trigger", ["kind": "cron", "expression": "0 24 * * *"]),
-        "invalid parts[0].trigger.expression: invalid hour field: 24"
+        "invalid nodes[0].trigger.expression: invalid hour field: 24"
       ),
       (
         "間隔が文字列", with("trigger", ["kind": "interval", "minutes": "30"]),
-        "invalid parts[0].trigger.minutes"
+        "invalid nodes[0].trigger.minutes"
       ),
     ] {
       let response = wire.request(id: 1, method: "set_automation", params: params)
@@ -165,11 +165,11 @@ extension ControlWireTests {
       id: 4, method: "pause_automation", params: ["automationId": 2, "paused": false])
     XCTAssertEqual(
       errorCode(
-        wire.request(id: 9, method: "run_automation", params: ["automationId": 2, "partKey": 1])),
+        wire.request(id: 9, method: "run_automation", params: ["automationId": 2, "nodeKey": 1])),
       -32602)
     _ = wire.request(id: 5, method: "run_automation", params: ["automationId": 2])
     _ = wire.request(
-      id: 10, method: "run_automation", params: ["automationId": 2, "partKey": "judge"])
+      id: 10, method: "run_automation", params: ["automationId": 2, "nodeKey": "judge"])
     _ = wire.request(id: 6, method: "delete_automation", params: ["automationId": 2])
     _ = wire.request(id: 7, method: "list_automation_proposals", params: [:])
     _ = wire.request(id: 8, method: "list_automation_proposals", params: ["automationId": 2])
@@ -180,14 +180,14 @@ extension ControlWireTests {
       -32602)
     _ = wire.request(
       id: 12, method: "list_automation_runs",
-      params: ["automationId": 2, "partKey": "judge", "before": 9, "limit": 5])
+      params: ["automationId": 2, "nodeKey": "judge", "before": 9, "limit": 5])
 
     XCTAssertEqual(fake.pausedAutomations.map(\.paused), [false])
     XCTAssertEqual(fake.ranAutomations.map(\.automationId), [2, 2])
-    XCTAssertEqual(fake.ranAutomations.map(\.partKey), [nil, "judge"])
+    XCTAssertEqual(fake.ranAutomations.map(\.nodeKey), [nil, "judge"])
     XCTAssertEqual(fake.deletedAutomationIds, [2])
     XCTAssertEqual(fake.proposalLists, [nil, 2])
-    XCTAssertEqual(fake.runLists.map(\.partKey), ["judge"])
+    XCTAssertEqual(fake.runLists.map(\.nodeKey), ["judge"])
     XCTAssertEqual(fake.runLists.map(\.before), [9])
     XCTAssertEqual(fake.runLists.map(\.limit), [5])
   }

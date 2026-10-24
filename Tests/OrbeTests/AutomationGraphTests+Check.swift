@@ -2,16 +2,17 @@ import XCTest
 
 @testable import Orbe
 
-/// グラフの検証の断り。断りの文は定義の中の場所（`parts[1].from` など）で始まり、AI はそこを直して送り直す。
+/// グラフの検証の断り。断りの文は定義の中の場所（`nodes[1].from` など）で始まり、AI はそこを直して送り直す。
 ///
-/// 壊れると何が起きるか: 一度も走らない部品・行の行き場の無い部品・判定に行の届かない形が登録される。裸の Bash や Write を
+/// 壊れると何が起きるか: 一度も走らないノード・行の行き場の無いノード・判定に行の届かない形が登録される。裸の Bash や Write を
 /// 名指しした agent が何でもできる。毎回すべてを取るつながりの行から候補が作られ、同じ項目が回ごとに判定へ届く。今の集合の
 /// 処理が入力の一部だけを写して、残りの出力を無効にする。
 extension AutomationGraphTests {
   private func assertRefused(
-    _ parts: [AutomationDefinition.Part], at place: String, _ label: String, line: UInt = #line
+    _ definitionNodes: [AutomationDefinition.Node], at place: String, _ label: String,
+    line: UInt = #line
   ) {
-    XCTAssertThrowsError(try AutomationGraph.check(parts), label, line: line) {
+    XCTAssertThrowsError(try AutomationGraph.check(definitionNodes), label, line: line) {
       guard case .invalid(let message) = $0 as? AutomationError else {
         return XCTFail("\(label): \($0)", line: line)
       }
@@ -19,17 +20,17 @@ extension AutomationGraphTests {
     }
   }
 
-  /// 取得 f（parts[0]）と、f を入力にする報告の agent r（parts[1]）の片方を変える。
+  /// 取得 f（nodes[0]）と、f を入力にする報告の agent r（nodes[1]）の片方を変える。
   private func changing(
-    _ index: Int, _ change: (inout AutomationDefinition.Part) -> Void
-  ) -> [AutomationDefinition.Part] {
-    var parts = [Self.fetch("f"), Self.agent("r", from: ["f"])]
-    change(&parts[index])
-    return parts
+    _ index: Int, _ change: (inout AutomationDefinition.Node) -> Void
+  ) -> [AutomationDefinition.Node] {
+    var definitionNodes = [Self.fetch("f"), Self.agent("r", from: ["f"])]
+    change(&definitionNodes[index])
+    return definitionNodes
   }
 
-  private func changingAgent(_ change: (inout AutomationPartAgent) -> Void)
-    -> [AutomationDefinition.Part]
+  private func changingAgent(_ change: (inout AutomationNodeAgent) -> Void)
+    -> [AutomationDefinition.Node]
   {
     changing(1) {
       guard case .agent(var agent) = $0.action.method else { return }
@@ -38,59 +39,60 @@ extension AutomationGraphTests {
     }
   }
 
-  /// 部品自身の欄だけで決まる規則は、その部品の欄を指して断る。
-  func testAPartsOwnFieldsAreRefusedAtTheirPlace() {
+  /// ノード自身の欄だけで決まる規則は、そのノードの欄を指して断る。
+  func testANodesOwnFieldsAreRefusedAtTheirPlace() {
     let command = { (script: String, directory: String?) in
       AutomationActionDef.Method.command(BackgroundCommand(script: script, directory: directory))
     }
-    for (label, parts, place) in [
-      ("部品が 0 個", [AutomationDefinition.Part](), "parts"),
-      ("鍵が空", changing(1) { $0.key = "" }, "parts[1].key"),
-      ("鍵が 33 字", changing(1) { $0.key = String(repeating: "a", count: 33) }, "parts[1].key"),
-      ("鍵に空白", changing(1) { $0.key = "a b" }, "parts[1].key"),
-      ("鍵に英数字以外", changing(1) { $0.key = "取得" }, "parts[1].key"),
-      ("名前が 2 行", changing(1) { $0.name = "a\nb" }, "parts[1].name"),
-      ("1 分未満の間隔", changing(0) { $0.trigger = .scheduled(.every(30)) }, "parts[0].trigger"),
-      ("空のコマンド", changing(0) { $0.action.method = command(" ", nil) }, "parts[0].command"),
+    for (label, definitionNodes, place) in [
+      ("ノードが 0 個", [AutomationDefinition.Node](), "nodes"),
+      ("鍵が空", changing(1) { $0.key = "" }, "nodes[1].key"),
+      ("鍵が 33 字", changing(1) { $0.key = String(repeating: "a", count: 33) }, "nodes[1].key"),
+      ("鍵に空白", changing(1) { $0.key = "a b" }, "nodes[1].key"),
+      ("鍵に英数字以外", changing(1) { $0.key = "取得" }, "nodes[1].key"),
+      ("名前が 2 行", changing(1) { $0.name = "a\nb" }, "nodes[1].name"),
+      ("1 分未満の間隔", changing(0) { $0.trigger = .scheduled(.every(30)) }, "nodes[0].trigger"),
+      ("空のコマンド", changing(0) { $0.action.method = command(" ", nil) }, "nodes[0].command"),
       (
         "相対の作業ディレクトリ", changing(0) { $0.action.method = command("x", "tmp") },
-        "parts[0].directory"
+        "nodes[0].directory"
       ),
-      ("裏で回せない CLI", changingAgent { $0.cli = "codex" }, "parts[1].agent"),
-      ("知らない CLI", changingAgent { $0.cli = "nope" }, "parts[1].agent"),
-      ("空のモデル", changingAgent { $0.model = " " }, "parts[1].model"),
-      ("空の指示文", changingAgent { $0.instruction = " \n" }, "parts[1].instruction"),
-      ("上限が 0 分", changing(1) { $0.action.timeoutMinutes = 0 }, "parts[1].timeoutMinutes"),
-      ("上限が 61 分", changing(1) { $0.action.timeoutMinutes = 61 }, "parts[1].timeoutMinutes"),
+      ("裏で回せない CLI", changingAgent { $0.cli = "codex" }, "nodes[1].agent"),
+      ("知らない CLI", changingAgent { $0.cli = "nope" }, "nodes[1].agent"),
+      ("空のモデル", changingAgent { $0.model = " " }, "nodes[1].model"),
+      ("空の指示文", changingAgent { $0.instruction = " \n" }, "nodes[1].instruction"),
+      ("上限が 0 分", changing(1) { $0.action.timeoutMinutes = 0 }, "nodes[1].timeoutMinutes"),
+      ("上限が 61 分", changing(1) { $0.action.timeoutMinutes = 61 }, "nodes[1].timeoutMinutes"),
       (
         "入力に同じ鍵が 2 度",
-        changing(1) { $0.from = [.init(part: "f"), .init(part: "f", take: .all)] }, "parts[1].from"
+        changing(1) { $0.from = [.init(nodeKey: "f"), .init(nodeKey: "f", take: .all)] },
+        "nodes[1].from"
       ),
-      ("入力の無い部品の件数の上限", changing(0) { $0.maxItems = 1 }, "parts[0].maxItems"),
-      ("件数の上限が 0", changing(1) { $0.maxItems = 0 }, "parts[1].maxItems"),
+      ("入力の無いノードの件数の上限", changing(0) { $0.maxItems = 1 }, "nodes[0].maxItems"),
+      ("件数の上限が 0", changing(1) { $0.maxItems = 0 }, "nodes[1].maxItems"),
       (
-        "古さの上限が 0", changing(1) { $0.from = [.init(part: "f", maxAgeHours: 0)] },
-        "parts[1].from[0].maxAgeHours"
+        "古さの上限が 0", changing(1) { $0.from = [.init(nodeKey: "f", maxAgeHours: 0)] },
+        "nodes[1].from[0].maxAgeHours"
       ),
-      ("入力の無い部品が届いたら", changing(0) { $0.trigger = .arrival }, "parts[0].trigger"),
+      ("入力の無いノードが届いたら", changing(0) { $0.trigger = .arrival }, "nodes[0].trigger"),
       (
         "ツールを持つ agent がタスク候補へ",
         changing(1) {
           $0 = Self.agent("r", from: ["f"], tools: [Self.tool], deliver: .taskCandidates)
-        }, "parts[1].deliver"
+        }, "nodes[1].deliver"
       ),
       (
-        "入力の無い部品がタスク候補へ",
-        [Self.agent("j", deliver: .taskCandidates)], "parts[0].deliver"
+        "入力の無いノードがタスク候補へ",
+        [Self.agent("j", deliver: .taskCandidates)], "nodes[0].deliver"
       ),
       (
         "agent の行き先が副作用だけ", changing(1) { $0.action.destination = .sideEffect },
-        "parts[1].deliver"
+        "nodes[1].deliver"
       ),
-      ("取得の部品に性質が無い", changing(0) { $0.action.coverage = nil }, "parts[0].coverage"),
-      ("行を出さない部品に性質", changing(1) { $0.action.coverage = .currentSet }, "parts[1].coverage"),
+      ("取得のノードに性質が無い", changing(0) { $0.action.coverage = nil }, "nodes[0].coverage"),
+      ("行を出さないノードに性質", changing(1) { $0.action.coverage = .currentSet }, "nodes[1].coverage"),
     ] {
-      assertRefused(parts, at: place, label)
+      assertRefused(definitionNodes, at: place, label)
     }
   }
 
@@ -106,48 +108,48 @@ extension AutomationGraphTests {
       "mcp__slack__a b", "mcp__slack__search,mcp__slack", "Bash(*)", "Bash(gh:*", "Bash( :*)",
       "Bash(gh,curl:*)", "Bash(gh*:*)", "Bash(gh (x):*)", "Bash(gh\n:*)", "Bash(gh search prs)",
     ] {
-      assertRefused(working(tool), at: "parts[0].tools", tool)
+      assertRefused(working(tool), at: "nodes[0].tools", tool)
     }
     for tool in ["mcp__plugin_core_backlog__get_issues", "Bash(gh search prs:*)"] {
       XCTAssertNoThrow(try AutomationGraph.check(working(tool)), tool)
     }
   }
 
-  /// 部品どうしの組み合わせの規則は、直すべき部品の欄を指して断る。
-  func testCombinationsAreRefusedAtThePartToFix() {
+  /// ノードどうしの組み合わせの規則は、直すべきノードの欄を指して断る。
+  func testCombinationsAreRefusedAtTheNodeToFix() {
     let unknown = [Self.fetch("f"), Self.agent("r", from: ["gh"])]
     XCTAssertThrowsError(try AutomationGraph.check(unknown)) {
-      XCTAssertEqual($0 as? AutomationError, .invalid(#"parts[1].from: unknown part "gh""#))
+      XCTAssertEqual($0 as? AutomationError, .invalid(#"nodes[1].from: unknown node "gh""#))
     }
 
-    for (label, parts, place) in [
+    for (label, definitionNodes, place) in [
       (
         "鍵の重複は 2 つ目を指す",
         [Self.fetch("f"), Self.agent("r", from: ["f"]), Self.agent("r", from: ["f"])],
-        "parts[2].key"
+        "nodes[2].key"
       ),
       (
-        "循環は定義の順で最初に輪に乗る部品を指す",
+        "循環は定義の順で最初に輪に乗るノードを指す",
         [
-          Self.fetch("f"), Self.agent("a", from: ["f", "b"], deliver: .nextPart),
-          Self.agent("b", from: ["a"], deliver: .nextPart), Self.agent("r", from: ["b"]),
-        ], "parts[1].from"
+          Self.fetch("f"), Self.agent("a", from: ["f", "b"], deliver: .nextNode),
+          Self.agent("b", from: ["a"], deliver: .nextNode), Self.agent("r", from: ["b"]),
+        ], "nodes[1].from"
       ),
       (
-        "行き先が次の部品なのに誰も名指さない",
-        [Self.fetch("f"), Self.fetch("g"), Self.agent("r", from: ["f"])], "parts[1].deliver"
+        "行き先が次のノードなのに誰も名指さない",
+        [Self.fetch("f"), Self.fetch("g"), Self.agent("r", from: ["f"])], "nodes[1].deliver"
       ),
       (
-        "行き先が次の部品でない部品を名指すのは名指した側を指す",
+        "行き先が次のノードでないノードを名指すのは名指した側を指す",
         [Self.fetch("f"), Self.agent("r", from: ["f"]), Self.agent("x", from: ["r"])],
-        "parts[2].from"
+        "nodes[2].from"
       ),
       (
         "毎回すべてを取るつながりの行が処理を通って判定へ届く",
         [
-          Self.fetch("f"), Self.taking(.all, Self.agent("p", from: ["f"], deliver: .nextPart)),
+          Self.fetch("f"), Self.taking(.all, Self.agent("p", from: ["f"], deliver: .nextNode)),
           Self.agent("j", from: ["p"], deliver: .taskCandidates),
-        ], "parts[1].from[0]"
+        ], "nodes[1].from[0]"
       ),
       (
         "判定が毎回すべてを取る",
@@ -155,26 +157,26 @@ extension AutomationGraphTests {
           Self.fetch("f"),
           Self.taking(.all, Self.agent("j", from: ["f"], deliver: .taskCandidates)),
         ],
-        "parts[1].from[0]"
+        "nodes[1].from[0]"
       ),
       (
         "今の集合の処理が新しい行だけを取る",
         [
-          Self.fetch("f"), Self.agent("p", from: ["f"], deliver: .nextPart, coverage: .currentSet),
+          Self.fetch("f"), Self.agent("p", from: ["f"], deliver: .nextNode, coverage: .currentSet),
           Self.agent("r", from: ["p"]),
-        ], "parts[1].from[0]"
+        ], "nodes[1].from[0]"
       ),
       (
         "今の集合の処理が件数の上限を持つ",
         {
           var process = Self.taking(
-            .all, Self.agent("p", from: ["f"], deliver: .nextPart, coverage: .currentSet))
+            .all, Self.agent("p", from: ["f"], deliver: .nextNode, coverage: .currentSet))
           process.maxItems = 5
           return [Self.fetch("f"), process, Self.agent("r", from: ["p"])]
-        }(), "parts[1].maxItems"
+        }(), "nodes[1].maxItems"
       ),
     ] {
-      assertRefused(parts, at: place, label)
+      assertRefused(definitionNodes, at: place, label)
     }
   }
 }

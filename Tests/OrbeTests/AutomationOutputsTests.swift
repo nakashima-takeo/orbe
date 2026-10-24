@@ -32,12 +32,12 @@ final class AutomationOutputsTests: OrbeTestCase {
   /// 通る（Orbe の口の 1 ページで届かない行を残さない）。
   func testARowLargerThanTheLimitIsBroken() {
     let large = String(repeating: "あ", count: (AutomationOutputs.rowKiB << 10) / 3 + 1)
-    var fetch = AutomationOutputs(.fetch(since: nil), writer: AutomationPartID(1))
+    var fetch = AutomationOutputs(.fetch(since: nil), writer: AutomationNodeID(1))
     let fetched = fetch.put(
       line + "\n"
         + #"{"id":"2","link":"https://example.com/2","body":"\#(large)","time":"2026-10-10T09:00:00Z"}"#
     )
-    var process = AutomationOutputs(.process([], reachesJudge: false), writer: AutomationPartID(1))
+    var process = AutomationOutputs(.process([], reachesJudge: false), writer: AutomationNodeID(1))
     let processed = process.put(#"{"id":"x","note":"\#(large)"}"#)
 
     XCTAssertEqual(fetched.map(\.text), ["item 2: larger than 64 KiB"])
@@ -45,11 +45,11 @@ final class AutomationOutputsTests: OrbeTestCase {
   }
 
   /// 大きさは書いた形ではなく下流へ渡す形（Orbe が下流へ渡す id を入れて組み直した 1 行）で測る: `\u` で逃がした文字は組み
-  /// 直すと縮み、部品をまたぐ id は `<部品 ID>:` の分だけ伸びる。
+  /// 直すと縮み、ノードをまたぐ id は `<ノード ID>:` の分だけ伸びる。
   func testTheLimitIsMeasuredOnTheRowAsPassedDownstream() {
     let limit = AutomationOutputs.rowKiB << 10
     let escaped = String(repeating: #"\u3042"#, count: limit / 4)
-    var fetch = AutomationOutputs(.fetch(since: nil), writer: AutomationPartID(1))
+    var fetch = AutomationOutputs(.fetch(since: nil), writer: AutomationNodeID(1))
     let wide =
       #"{"id":"1","link":"https://example.com/1","body":"\#(escaped)","time":"2026-10-10T09:00:00Z"}"#
     XCTAssertGreaterThan(wide.utf8.count, limit, "前提: 書いた形は上限を超える")
@@ -58,11 +58,11 @@ final class AutomationOutputsTests: OrbeTestCase {
     let pad = String(repeating: "x", count: limit - #"{"id":"a","note":""}"#.utf8.count)
     let edge = #"{"id":"a","note":"\#(pad)"}"#
     XCTAssertEqual(edge.utf8.count, limit, "前提: 書いた形はちょうど上限")
-    var made = AutomationOutputs(.process([], reachesJudge: false), writer: AutomationPartID(1))
+    var made = AutomationOutputs(.process([], reachesJudge: false), writer: AutomationNodeID(1))
     XCTAssertEqual(made.put(edge).map(\.text), ["item 1: larger than 64 KiB"])
-    let input = AutomationPartRow(id: "a", text: #"{"id":"a"}"#, origin: nil, source: .item(1))
+    let input = AutomationNodeRow(id: "a", text: #"{"id":"a"}"#, origin: nil, source: .item(1))
     var kept = AutomationOutputs(
-      .process([input], reachesJudge: false), writer: AutomationPartID(1))
+      .process([input], reachesJudge: false), writer: AutomationNodeID(1))
     XCTAssertEqual(kept.put(edge).map(\.text), [], "入力を引き継いだ行の id はそのまま渡す")
   }
 
@@ -78,15 +78,15 @@ final class AutomationOutputsTests: OrbeTestCase {
   private var open: [AutomationProposal] {
     [
       AutomationProposal(
-        id: 1, runId: 1, judge: AutomationPartID(2), defId: AutomationDefID(2),
-        source: AutomationPartID(1), origin: .version(1), item: Self.item("old"),
+        id: 1, runId: 1, judge: AutomationNodeID(2), defId: AutomationNodeDefID(2),
+        originNodeId: AutomationNodeID(1), origin: .version(1), item: Self.item("old"),
         title: "前の提案", due: nil, workspace: nil, reason: nil,
         proposedAt: Date(timeIntervalSince1970: 0),
         state: .open)
     ]
   }
 
-  /// 判定の結果を 1 件ずつ読んだもの。受けなかった件は部品の 1 回と同じく「item <n>: <理由>」で持ち、JSON でない件は
+  /// 判定の結果を 1 件ずつ読んだもの。受けなかった件はノードの 1 回と同じく「item <n>: <理由>」で持ち、JSON でない件は
   /// 別に持つ。
   private struct Read {
     let decisions: [AutomationDecision]
@@ -236,7 +236,7 @@ final class AutomationOutputsTests: OrbeTestCase {
     let home = try XCTUnwrap(session.homeIndex.map { session.workspaces[$0] })
     let choices = AutomationJudgeChoices(open: [], workspaces: AutomationWorkspaces(session))
 
-    let listed = AutomationRunSession(.judge([], choices: choices), writer: AutomationPartID(1))
+    let listed = AutomationRunSession(.judge([], choices: choices), writer: AutomationNodeID(1))
       .call("read_workspaces", [:])
     let read = read(
       [

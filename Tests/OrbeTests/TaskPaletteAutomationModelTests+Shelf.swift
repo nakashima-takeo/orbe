@@ -6,7 +6,7 @@ import XCTest
 extension TaskPaletteAutomationModelTests {
   // MARK: - 候補の更新
 
-  /// ⌘↵ はタスク候補を行き先にする部品まで流し、一巡の間は棚が更新中になり、もう一度の ⌘↵ は赤で断る。
+  /// ⌘↵ はタスク候補を行き先にするノードまで流し、一巡の間は棚が更新中になり、もう一度の ⌘↵ は赤で断る。
   func testRefreshShowsRefreshingAndRefusesWhileRefreshing() {
     let automation = palette().automation
     automation.enterShelf()
@@ -32,21 +32,21 @@ extension TaskPaletteAutomationModelTests {
     XCTAssertNil(automation.error)
   }
 
-  /// 候補の更新は判定へ至る部品だけを走らせ、判定へ至らない枝（副作用・報告）は走らせない。
-  func testRefreshRunsOnlyThePartsLeadingToTheJudges() throws {
+  /// 候補の更新は判定へ至るノードだけを走らせ、判定へ至らない枝（副作用・報告）は走らせない。
+  func testRefreshRunsOnlyTheNodesLeadingToTheJudges() throws {
     let runner = DesignSceneFixtures.automationRunner()
     let id = try runner.set(
       nil,
       AutomationDefinition(
         name: "候補と投稿", notify: nil,
-        parts: [
-          DesignSceneFixtures.commandPart(
+        nodes: [
+          DesignSceneFixtures.commandNode(
             "fetch", "GitHub", .manual, script: "gh", coverage: .newArrivals),
-          DesignSceneFixtures.agentPart(
+          DesignSceneFixtures.agentNode(
             "judge", "判定", .arrival, from: ["fetch"], instruction: "i", deliver: .taskCandidates),
-          DesignSceneFixtures.commandPart(
+          DesignSceneFixtures.commandNode(
             "log", "ログ", .manual, script: "log", coverage: .newArrivals),
-          DesignSceneFixtures.commandPart(
+          DesignSceneFixtures.commandNode(
             "post", "投稿", .arrival, from: ["log"], script: "post", deliver: .sideEffect),
         ])
     ).id
@@ -77,7 +77,7 @@ extension TaskPaletteAutomationModelTests {
 
   // MARK: - 棚の 2 行目
 
-  /// 前回の判定は判定の部品のうち最も新しく回ったものの最新の回（成否と時刻）。判定がまだ回っていなければ、取得が回っていても
+  /// 前回の判定は判定のノードのうち最も新しく回ったものの最新の回（成否と時刻）。判定がまだ回っていなければ、取得が回っていても
   /// 無い。止めていれば停止中。
   func testShelfStatusSaysTheLastJudgeAndTheState() throws {
     let palette = TaskPaletteSamples.model(
