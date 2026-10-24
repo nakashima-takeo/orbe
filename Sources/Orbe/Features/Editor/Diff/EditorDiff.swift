@@ -254,8 +254,9 @@ final class EditorDiff: RootFilesObserver {
     sourcesDidChange()
   }
 
-  /// git の状態が変わった（監視の 1 バッチに 1 回）——作業ツリーのサブモジュールが取り出しているコミットを読み直す。
-  func rootFilesGitStateDidChange(_ files: RootFiles, remoteRefsChanged: Bool) {
+  /// 入れ子の git dir が変わった（監視の 1 バッチに 1 回）——作業ツリーのサブモジュールが取り出しているコミットを読み直す
+  /// （中で続けてコミットしても、親の status は「コミットが動いた」のまま変わらない）。
+  func rootFilesNestedGitStateDidChange(_ files: RootFiles) {
     guard case .directory? = working else { return }
     forgetSubmoduleHead()
     sourcesDidChange()

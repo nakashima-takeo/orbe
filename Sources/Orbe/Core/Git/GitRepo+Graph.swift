@@ -2,16 +2,15 @@ import Foundation
 
 // MARK: - コミットグラフ
 
-/// コミットの列（トポロジー順）と、続きがあるか。
+/// コミットの列（トポロジー順）と、その先があるか。
 struct GitCommitGraph: Equatable {
   let commits: [GitGraphCommit]
-  /// 続きがある（`skip` を読んだ件数だけ進めて読める）。
+  /// `limit` より先にもコミットがある（件数を増やして頭から読み直せば出る）。
   let hasMore: Bool
 }
 
 struct GitGraphCommit: Equatable {
   let oid: String
-  let parents: [String]
   let subject: String
   /// 指しているローカルブランチ（`refs/heads/` を除いた名前）。
   let localBranches: [String]
@@ -22,37 +21,57 @@ struct GitGraphCommit: Equatable {
 }
 
 extension GitRepo {
-  /// `refs` から届くコミットを、新しい側から `skip` 件飛ばして最大 `limit` 件。`refs` が nil なら HEAD と、在れば
-  /// upstream。読めなければ nil。
+  /// HEAD と、在れば upstream から届くコミットを、新しい側から最大 `limit` 件。読めなければ nil。
   ///
   /// 書式を明示し、署名の表示・色・出力の文字コードを封じる（ユーザーの `log.showSignature` 等で出力が変わらない）。
-  /// 指しているブランチ名は装飾の文字列（`HEAD -> `・`tag: ` が混ざり、名前に `,` が入りうる）を割らずに ref から別に引く。push 済みかは、表示する
-  /// 分から remote 追跡ブランチに届かない分を引くので、手間は表示する分と未 push の分に比例する（履歴全体を歩かない）。
-  func commitGraph(
-    refs: [String]? = nil, skip: Int = 0, limit: Int,
-    completion: @escaping (GitCommitGraph?) -> Void
-  ) {
-    guard let refs else {
-      runner.run(["rev-parse", "--symbolic-full-name", "@{upstream}"], cwd: root) { output in
-        let upstream = output.stdoutText.trimmingCharacters(in: .newlines)
-        let refs = ["HEAD"] + (output.isSuccess && !upstream.isEmpty ? [upstream] : [])
-        self.commitGraph(refs: refs, skip: skip, limit: limit, completion: completion)
-      }
-      return
+  /// 指しているブランチ名は装飾の文字列（`HEAD -> `・`tag: ` が混ざり、名前に `,` が入りうる）を割らずに ref から別に
+  /// 引く。push 済みかは、表示する分から remote 追跡ブランチに届かない分を引くので、その手間は表示する分と未 push の分に
+  /// 比例する（履歴全体を歩かない）。
+  func commitGraph(limit: Int, completion: @escaping (GitCommitGraph?) -> Void) {
+    runner.run(["rev-parse", "--symbolic-full-name", "@{upstream}"], cwd: root) { output in
+      let upstream = output.stdoutText.trimmingCharacters(in: .newlines)
+      let refs = ["HEAD"] + (output.isSuccess && !upstream.isEmpty ? [upstream] : [])
+      self.runner.run(
+        [
+          "log", "--topo-order", "--no-color", "--no-show-signature", "--encoding=UTF-8", "-z",
+          "--format=%H%x00%s", "--max-count=\(limit + 1)", "--ignore-missing",
+          "--end-of-options",
+        ] + refs + ["--"], cwd: self.root,
+        transform: { $0.isSuccess ? Self.parseLog($0.stdout) : nil },
+        completion: { listed in
+          guard let listed else { return completion(nil) }
+          self.decorate(listed, limit: limit, completion: completion)
+        })
     }
-    runner.run(
-      [
-        "log", "--topo-order", "--no-color", "--no-show-signature", "--encoding=UTF-8", "-z",
-        "--format=%H%x00%P%x00%s", "--skip=\(skip)", "--max-count=\(limit + 1)",
-        "--ignore-missing", "--end-of-options",
-      ] + refs + ["--"], cwd: root, transform: { $0.isSuccess ? Self.parseLog($0.stdout) : nil },
-      completion: { listed in
-        guard let listed else { return completion(nil) }
-        self.decorate(listed, limit: limit, completion: completion)
-      })
   }
 
-  /// 読んだコミットに、指しているブランチと push 済みかを添える（続きの判定に 1 件多く読んである）。
+  /// HEAD のコミットと、それが push 済みか（`isPushed`）。グラフの口を通らないので、グラフの並べ替えの手間を払わない。
+  /// 初回コミット前・読めなければ nil。
+  func headPush(completion: @escaping ((commit: String, isPushed: Bool)?) -> Void) {
+    runner.run(["rev-parse", "-q", "--verify", "HEAD^{commit}"], cwd: root) { parsed in
+      let commit = parsed.stdoutText.trimmingCharacters(in: .newlines)
+      guard parsed.isSuccess, !commit.isEmpty else { return completion(nil) }
+      self.isPushed(commit, handle: GitRunner.Handle()) { pushed in
+        completion((try? pushed.get()).map { (commit, $0) })
+      }
+    }
+  }
+
+  /// `revision` が push 済み（どれかの remote 追跡ブランチから届く）か。グラフの push 済み（`unpushed`）と同じ定義。手間は
+  /// `revision` と remote 追跡ブランチの分かれ目より新しい分（未 push の分と、remote 側で先に進んだ分）に比例する。
+  func isPushed(
+    _ revision: String, handle: GitRunner.Handle,
+    completion: @escaping (Result<Bool, GitWriteFailure>) -> Void
+  ) {
+    runner.run(
+      ["rev-list", "-n", "1", revision, "--not", "--remotes", "--"], cwd: root, handle: handle
+    ) { listed in
+      if let failure = GitWriteFailure.of(listed) { return completion(.failure(failure)) }
+      completion(.success(listed.stdoutText.isEmpty))
+    }
+  }
+
+  /// 読んだコミットに、指しているブランチと push 済みかを添える（その先があるかの判定に 1 件多く読んである）。
   private func decorate(
     _ listed: [LoggedCommit], limit: Int, completion: @escaping (GitCommitGraph?) -> Void
   ) {
@@ -63,7 +82,7 @@ extension GitRepo {
         guard let unpushed else { return completion(nil) }
         let commits = shown.map {
           GitGraphCommit(
-            oid: $0.oid, parents: $0.parents, subject: $0.subject,
+            oid: $0.oid, subject: $0.subject,
             localBranches: tips.local[$0.oid] ?? [], remoteBranches: tips.remote[$0.oid] ?? [],
             isPushed: !unpushed.contains($0.oid))
         }
@@ -74,19 +93,15 @@ extension GitRepo {
 
   private struct LoggedCommit {
     let oid: String
-    let parents: [String]
     let subject: String
   }
 
-  /// `-z` と `%H%x00%P%x00%s`: 1 コミット 3 欄が NUL で続く。
+  /// `-z` と `%H%x00%s`: 1 コミット 2 欄が NUL で続く。
   private static func parseLog(_ data: Data) -> [LoggedCommit] {
     let fields = data.split(separator: 0, omittingEmptySubsequences: false)
-    return stride(from: 0, to: fields.count - 2, by: 3).map {
+    return stride(from: 0, to: fields.count - 1, by: 2).map {
       LoggedCommit(
-        oid: String(bytes: fields[$0], encoding: .utf8) ?? "",
-        parents: (String(bytes: fields[$0 + 1], encoding: .utf8) ?? "").split(separator: " ")
-          .map(String.init),
-        subject: subject(fields[$0 + 2]))
+        oid: String(bytes: fields[$0], encoding: .utf8) ?? "", subject: subject(fields[$0 + 1]))
     }
   }
 
@@ -124,7 +139,23 @@ extension GitRepo {
     }
   }
 
-  /// `oids` のうち、どの remote 追跡ブランチからも届かないもの。remote 追跡ブランチが無ければ git を起こさず全部。
+  /// remote 追跡 ref（`refs/remotes` の下の ref 名 → 指すオブジェクト）。読めなければ nil。値で読むので、pack-refs（値は
+  /// 変わらない）では変わらず、ref の形式（files・reftable）に依らない。
+  func remoteTrackingRefs(completion: @escaping ([String: String]?) -> Void) {
+    runner.run(
+      ["for-each-ref", "--format=%(refname)%00%(objectname)", "refs/remotes"], cwd: root
+    ) { output in
+      guard output.isSuccess else { return completion(nil) }
+      var refs: [String: String] = [:]
+      for line in output.stdoutText.split(separator: "\n") {
+        let fields = line.split(separator: "\0", omittingEmptySubsequences: false)
+        if fields.count == 2 { refs[String(fields[0])] = String(fields[1]) }
+      }
+      completion(refs)
+    }
+  }
+
+  /// `oids` から届くコミットのうち、どの remote 追跡ブランチからも届かないもの。remote 追跡ブランチが無ければ git を起こさず全部。
   private func unpushed(
     _ oids: [String], hasRemotes: Bool, completion: @escaping (Set<String>?) -> Void
   ) {

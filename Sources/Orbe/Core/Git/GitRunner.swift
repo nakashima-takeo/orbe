@@ -32,29 +32,28 @@ final class GitRunner {
 
   /// git を背景で実行し、結果をメインキューへ返す。
   ///
-  /// - `timesOut`: 無出力が `idleTimeout` 続いたら打ち切るか。止められる人が見ている実行（利用者が起こした書き込み）は
-  ///   打ち切らず、`handle` で止めさせる——hook・filter・署名・ネットの沈黙は「何も起きていない」ことを意味しない。
   /// - `environment`: 共通の環境に足す変数。
   /// - `onProgress`: stderr の行（`\r` と `\n` で割る）を届いた順に main で渡す。最後の行は `completion` より先に届く。
   /// - `handle`: 止める手。同じ手を続けて渡せば、何段かの実行を 1 つの手で止められる（止めた後の実行は起こさない）。
+  ///   無出力が `idleTimeout` 続いたら打ち切るかは手が決める（`Handle.isAttended`）。
   func run(
     _ args: [String], cwd: String, stdin: Data? = nil, environment: [String: String] = [:],
-    timesOut: Bool = true, onProgress: ((String) -> Void)? = nil, handle: Handle = Handle(),
+    onProgress: ((String) -> Void)? = nil, handle: Handle = Handle(),
     completion: @escaping (Output) -> Void
   ) {
     run(
-      args, cwd: cwd, stdin: stdin, environment: environment, timesOut: timesOut,
-      onProgress: onProgress, handle: handle, transform: { $0 }, completion: completion)
+      args, cwd: cwd, stdin: stdin, environment: environment, onProgress: onProgress,
+      handle: handle, transform: { $0 }, completion: completion)
   }
 
   /// `run` の、結果を裏のスレッドで変換してから main へ返す形（大きな出力の解析を main に載せない）。
   func run<Value>(
     _ args: [String], cwd: String, stdin: Data? = nil, environment: [String: String] = [:],
-    timesOut: Bool = true, onProgress: ((String) -> Void)? = nil, handle: Handle = Handle(),
+    onProgress: ((String) -> Void)? = nil, handle: Handle = Handle(),
     transform: @escaping (Output) -> Value, completion: @escaping (Value) -> Void
   ) {
     let state = RunState(
-      idleTimeout: timesOut ? idleTimeout : nil,
+      idleTimeout: handle.isAttended ? nil : idleTimeout,
       onStderrLine: onProgress.map { deliver in
         { line in DispatchQueue.main.async { deliver(line) } }
       })
@@ -77,8 +76,8 @@ final class GitRunner {
 
   /// 流しながら読む実行。stdout は届いた塊ごとに `onOutput`（裏のスレッド、届いた順）へ渡し、溜めない。
   /// 終わったら `completion`（裏のスレッド。`stdout` は空）。`environment` は共通の環境に足す変数。返る手の `cancel` で
-  /// SIGTERM で止める（止めた後の `completion` も届く）。EOF の猶予は `runSync` と同じだが、無出力では打ち切らない——
-  /// 一致の無い間は何も出さない grep のような実行を黙って切らないため、寿命は止める側が持つ。`onOutput` は終わったら
+  /// SIGTERM で止める（止めた後の `completion` も届く）。EOF の猶予は `runSync` と同じ。返る手は見ている手で、無出力では
+  /// 打ち切らない——一致の無い間は何も出さない grep のような実行を黙って切らないため、寿命は止める側が持つ。`onOutput` は終わったら
   /// 手放す（呼び出し側が手を持ち、閉包が呼び出し側を掴んでも輪にならない）。`qualityOfService` は git のプロセスの QoS。
   func stream(
     _ args: [String], cwd: String, environment: [String: String] = [:],
@@ -86,7 +85,7 @@ final class GitRunner {
     onOutput: @escaping (Data) -> Void, completion: @escaping (Output) -> Void
   ) -> Handle {
     let state = RunState(idleTimeout: nil, onStdout: onOutput)
-    let handle = Handle()
+    let handle = Handle(attended: true)
     queue.async {
       completion(
         self.execute(
@@ -100,9 +99,16 @@ final class GitRunner {
   /// 実行を止める手。どのスレッドから何度呼んでもよい。止めると、走っている実行は SIGTERM で切り、
   /// まだ起こしていない実行（この手を渡した後続の段も含む）は起こさずに「止めた」で返る。
   final class Handle: @unchecked Sendable {
+    /// 止められる人が見ているか。見ている手で走る実行は無出力で打ち切らない——hook・filter・署名・ネットの沈黙は
+    /// 「何も起きていない」ことを意味せず、止めるのは人に任せる。見ていない手（既定）は `idleTimeout` で打ち切る。
+    let isAttended: Bool
     private let lock = NSLock()
     private var cancelled = false
     private var running: [ObjectIdentifier: RunState] = [:]
+
+    init(attended: Bool = false) {
+      isAttended = attended
+    }
 
     var isCancelled: Bool { lock.withLock { cancelled } }
 

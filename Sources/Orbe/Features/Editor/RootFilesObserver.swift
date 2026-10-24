@@ -1,6 +1,7 @@
 import Foundation
 
-/// 根のサービスからの通知。(a)(d) はデバウンス後すぐ、(b) は status が返った時点、(c) は版の本文の取り直しの完了後に届く。
+/// 根のサービスからの通知。(a)(d)(e) はデバウンス後すぐ、(b) は status が返った時点、(c) は版の本文の取り直しの完了後に
+/// 届く。
 @MainActor
 protocol RootFilesObserver: AnyObject {
   /// (a) 根の下でファイルが変わった（git dir の中は含まない）。
@@ -14,8 +15,13 @@ protocol RootFilesObserver: AnyObject {
   /// 追跡 ref が動いたかもしれないか（`refs/remotes` の下か、名前で分けられない packed-refs・reftable が変わった。取り
   /// こぼしなら true。HEAD・ローカルのブランチ・index だけなら false）。
   func rootFilesGitStateDidChange(_ files: RootFiles, remoteRefsChanged: Bool)
+  /// (e) 入れ子の git dir（サブモジュール・入れ子のリポジトリ）の状態が変わった（監視の 1 バッチに 1 回。取りこぼしでも）。
+  /// 中のコミット・checkout・index の書き換えで、それ自体は親の ref・HEAD・index を動かさない（同じバッチで親も
+  /// 動けば (d) も届く）。
+  func rootFilesNestedGitStateDidChange(_ files: RootFiles)
 }
 
 extension RootFilesObserver {
   func rootFilesGitStateDidChange(_ files: RootFiles, remoteRefsChanged: Bool) {}
+  func rootFilesNestedGitStateDidChange(_ files: RootFiles) {}
 }

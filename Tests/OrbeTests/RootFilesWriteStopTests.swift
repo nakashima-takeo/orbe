@@ -131,11 +131,22 @@ final class RootFilesWriteStopTests: OrbeTestCase {
     let files = managed(runner: GitRunner(idleTimeout: shortIdleTimeout))
     let outcome = WriteOutcome()
 
-    _ = files.fetch(unattended: true, onProgress: { _ in }, completion: outcome.receive)
+    _ = files.fetch(attended: false, onProgress: { _ in }, completion: outcome.receive)
     XCTAssertTrue(fixture.pumpUntilHung())
     pumpMain(until: { outcome.finished }, timeout: 10, "止めずに返る")
     XCTAssertNotNil(outcome.failure)
     XCTAssertNotEqual(outcome.failure, .cancelled)
+  }
+
+  /// 人の fetch（見ている手）は、相手が無出力のまま返らなくても打ち切らず、止めるまで待つ。
+  func testAHumanFetchIsNotTimedOut() throws {
+    let helper = try fixture.installScript("hang-remote.sh", body: fixture.waitingBody)
+    XCTAssertTrue(fixture.git(["config", "protocol.ext.allow", "always"]).isSuccess)
+    XCTAssertTrue(fixture.git(["remote", "add", "origin", "ext::\(helper)"]).isSuccess)
+    let files = managed(runner: GitRunner(idleTimeout: shortIdleTimeout))
+    let outcome = WriteOutcome()
+    let write = files.fetch(onProgress: { _ in }, completion: outcome.receive)
+    assertStopped(write, outcome)
   }
 
   /// 書き込みが残っている間は、握る者が離れても根のサービスは生きていて（同じ根なら同じもの）完了を返し、走っていたものも

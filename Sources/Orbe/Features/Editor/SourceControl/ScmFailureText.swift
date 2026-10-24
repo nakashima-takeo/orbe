@@ -29,7 +29,7 @@ enum ScmFailureText {
     case .contentMismatch: L10n.string(.editorScmFailureContentMismatch, language)
     case .headPushed: L10n.string(.editorScmFailureHeadPushed, language)
     case .shallowBoundary: L10n.string(.editorScmFailureShallow, language)
-    case .reason(let reason): reason
+    case .remoteRefused(let reason), .reason(let reason): reason
     }
   }
 }

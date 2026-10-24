@@ -52,6 +52,23 @@ final class GitStatusTests: OrbeTestCase {
     XCTAssertEqual(status.entries.count, 6, "ヘッダ・不正なトークン・空は捨てる")
   }
 
+  /// 新パスか元パスが UTF-8 でない rename の行は捨てる。元パスのトークンは読み飛ばし、次の行として読まない——元パスが
+  /// `? ../sib` の形でも、根の外を指す未追跡の行にならない。
+  func testARenameWithANonUTF8PathIsDroppedWithoutReadingItsOriginalAsALine() {
+    var data = Data()
+    for token in [
+      Data(renamed("R.", "").utf8) + Data([0xFF]), Data("? ../sib".utf8),
+      Data(renamed("R.", "fine.txt").utf8), Data([0xFE]) + Data("old".utf8),
+      Data(ordinary(".M", "after.txt").utf8),
+    ] {
+      data += token + Data([0])
+    }
+    let status = GitStatus.parse(data)
+    XCTAssertNil(status.entries["../sib"])
+    XCTAssertNil(status.entries["fine.txt"], "元パスが読めない rename も捨てる")
+    XCTAssertEqual(Array(status.entries.keys), ["after.txt"], "後の行はそのまま読む")
+  }
+
   /// index 側に変化のあるパスは index の版を持ち（ステージした削除・rename の元パスは index に無い）、作業ツリー側だけの
   /// 変化・未追跡は持たない。XY が同じまま index の中身だけ変わっても、status は別の値になる（行が古い版のまま残らない）。
   func testStagedPathsCarryTheirIndexVersion() {
@@ -147,5 +164,21 @@ final class GitStatusTests: OrbeTestCase {
         .branch?.upstream,
       GitStatus.Upstream(name: "origin/main", divergence: nil))
     XCTAssertNil(parse([ordinary(".M", "m.txt")]).branch, "ヘッダの無い出力")
+  }
+}
+
+extension GitStatus {
+  /// その相対パスの行（rename・copy なら元パスも。テストの略記）。
+  func row(_ path: String) -> Row {
+    Row(path: path, originalPath: entries[path]?.originalPath)
+  }
+
+  /// 今の status から組んだ「変更」の行のうち `paths` の行を、パネルと同じ口で破棄する中身（テストの略記）。「変更」の行に
+  /// 無いパスがあれば落とす（まだ監視が届いていない status から組むと、黙って何も破棄しない）。
+  @MainActor
+  func discarding(_ paths: String...) -> GitDiscardContent {
+    let files = ScmChanges.build(self).changes.filter { paths.contains($0.path) }
+    XCTAssertEqual(Set(files.map(\.path)), Set(paths), "「変更」の行")
+    return ScmDiscardGate.content(files)
   }
 }

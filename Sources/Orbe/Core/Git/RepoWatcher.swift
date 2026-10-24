@@ -4,6 +4,10 @@ import Foundation
 /// 根と git dir の変化を FSEvents で拾い、デバウンスして 1 バッチにまとめる。linked worktree では
 /// index・HEAD が本体側（gitDir / commonDir）に在るので、根だけでなくそれらも監視する。
 ///
+/// 入れ子の git dir（サブモジュールの `.git/modules/<名前>` と作業ツリーの中の `<sub>/.git`、入れ子のリポジトリの
+/// `.git`）の状態の変化も拾い、親の git の状態とは別の事実として出す——中のコミット・checkout・index の書き換えは親の
+/// status（サブモジュールの行）を変えるが、親の ref・HEAD・index は動かさない。
+///
 /// FSEvents が返すパスは実パス（`/private/var/…`）で、根は正規形（`/var/…`）。監視開始時に各 root の
 /// 実パスを 1 回求め、イベントのパスをその root の綴りへ付け替える（通知のパスは呼び手の綴りで揃う）。
 final class RepoWatcher {
@@ -11,19 +15,22 @@ final class RepoWatcher {
   struct Batch: Equatable {
     /// 変わったパス（root の綴りの絶対パス）。git dir の中は含まない。
     var paths: Set<String> = []
-    /// git dir の中で状態が変わった（何を状態と見るかは `isGitStateChange`）。
+    /// 監視している git dir の中で状態が変わった（分け方は `gitDirChange`）。
     var gitChanged = false
+    /// 入れ子の git dir の中で状態が変わった（分け方は `gitDirChange`・`nestedGitDirChange`）。
+    var nestedGitChanged = false
     /// 取りこぼし（イベントの drop・root の付け替え）。全部見直す。
     var scanAll = false
     /// git の状態のうち remote 追跡 ref が動いたかもしれない（`gitChanged` の一部。何をそう見るかは
     /// `isRemoteRefChange`）。
     var remoteRefsChanged = false
 
-    var isEmpty: Bool { paths.isEmpty && !gitChanged && !scanAll }
+    var isEmpty: Bool { paths.isEmpty && !gitChanged && !nestedGitChanged && !scanAll }
 
     mutating func merge(_ other: Batch) {
       paths.formUnion(other.paths)
       gitChanged = gitChanged || other.gitChanged
+      nestedGitChanged = nestedGitChanged || other.nestedGitChanged
       scanAll = scanAll || other.scanAll
       remoteRefsChanged = remoteRefsChanged || other.remoteRefsChanged
     }
@@ -41,7 +48,7 @@ final class RepoWatcher {
 
   /// - Parameters:
   ///   - roots: 監視するディレクトリ（根・gitDir・commonDir）。
-  ///   - gitDirs: このうち git dir であるもの（中の変化を状態ファイルに絞る規則は `isGitStateChange`）。
+  ///   - gitDirs: このうち git dir であるもの（中の変化を状態ファイルに絞る規則は `gitDirChange`）。
   ///     linked worktree では自分の gitDir と commonDir の両方を渡す——最長一致で、commonDir 側の
   ///     `worktrees/` を他人の私有状態として弾ける。
   init?(roots: [String], gitDirs: [String], onChange: @escaping (Batch) -> Void) {
@@ -102,17 +109,28 @@ final class RepoWatcher {
       if flag & Self.scanAllFlags != 0 {
         batch.scanAll = true
         batch.gitChanged = true
+        batch.nestedGitChanged = true
         batch.remoteRefsChanged = true
         continue
       }
       let spelled = respell(path)
       if let gitDir = gitDirs.first(where: { spelled.hasPrefix($0 + "/") }) {
-        let sub = String(spelled.dropFirst(gitDir.count))
-        if Self.isGitStateChange(sub) {
+        switch Self.gitDirChange(String(spelled.dropFirst(gitDir.count))) {
+        case .state(let remoteRefs):
           batch.gitChanged = true
-          if Self.isRemoteRefChange(sub) { batch.remoteRefsChanged = true }
+          if remoteRefs { batch.remoteRefsChanged = true }
+        case .nested: batch.nestedGitChanged = true
+        case nil: break
         }
-      } else if !spelled.contains("/.git/"), !spelled.hasSuffix("/.git") {
+      } else if let dotGit = spelled.range(of: "/.git/") {
+        // 根より深い `<dir>/.git/` の下は入れ子の git dir。根自身の `.git/` は git dir の監視が受け持つので捨てる。
+        let owner = spelled[..<dotGit.lowerBound]
+        if !watched.contains(where: { $0.spelling == owner }),
+          Self.gitDirChange(String(spelled[dotGit.lowerBound...].dropFirst("/.git".count))) != nil
+        {
+          batch.nestedGitChanged = true
+        }
+      } else if !spelled.hasSuffix("/.git") {
         batch.paths.insert(spelled)
       }
     }
@@ -124,23 +142,43 @@ final class RepoWatcher {
     kFSEventStreamEventFlagMustScanSubDirs | kFSEventStreamEventFlagRootChanged
       | kFSEventStreamEventFlagUserDropped | kFSEventStreamEventFlagKernelDropped)
 
-  /// git dir の中で status・baseline に関係しないもの。objects（multi-pack-index を含む）・reflog・
-  /// 他の worktree の私有状態・submodule の内部（`--ignore-submodules=none` で親の status には効くが、
-  /// 先頭 1 段では objects の churn と分離できないため切る）・各種 `.lock` は弾き、それ以外（index・HEAD・
-  /// refs・packed-refs・reftable・merge / rebase / sequencer の進行状態と、git が今後足す状態ファイル）は
-  /// 拾う——拾う側を列挙すると未知のファイルが取りこぼし側に倒れる。
+  /// git dir の中の変化の分け方。
+  enum GitDirChange: Equatable {
+    /// その git dir の状態が変わった。`remoteRefs` は remote 追跡 ref が動いたかもしれないか（`isRemoteRefChange`）。
+    case state(remoteRefs: Bool)
+    /// その git dir の下にある入れ子の git dir（`modules/` の下のサブモジュール）の状態が変わった。
+    case nested
+  }
+
+  /// git dir の中で status・版の本文に関係しないもの。objects（multi-pack-index を含む）・reflog・
+  /// 他の worktree の私有状態・各種 `.lock` は弾き、それ以外（index・HEAD・refs・packed-refs・reftable・
+  /// merge / rebase / sequencer の進行状態と、git が今後足す状態ファイル）は拾う——拾う側を列挙すると
+  /// 未知のファイルが取りこぼし側に倒れる。
   ///
   /// **git 自身の読み取りが生む副産物も弾く**: fsmonitor デーモン（`core.fsmonitor`）は git が読むたびに
   /// `fsmonitor--daemon/cookies/<pid>-<n>` を作って消す（`--no-optional-locks` でも抑止されない）。
   /// 拾うと自分の status が自分を呼び戻し、根を開いている限り git が回り続ける。
   private static let ignoredGitDirEntries: Set<Substring> = [
-    "objects", "logs", "worktrees", "modules", "fsmonitor--daemon", "fsmonitor--daemon.ipc",
+    "objects", "logs", "worktrees", "fsmonitor--daemon", "fsmonitor--daemon.ipc",
   ]
 
-  /// `sub` は git dir からの相対パス（`/` 始まり）。先頭の構成要素で弾く（その要素自身の出入りも含む）。
-  static func isGitStateChange(_ sub: String) -> Bool {
-    guard !sub.hasSuffix(".lock") else { return false }
-    return !ignoredGitDirEntries.contains(sub.dropFirst().prefix { $0 != "/" })
+  /// `sub` は git dir からの相対パス（`/` 始まり）。先頭の構成要素で弾く（その要素自身の出入りも含む）。`modules` の下は
+  /// サブモジュールの git dir で、`nestedGitDirChange` で分ける。
+  static func gitDirChange(_ sub: String) -> GitDirChange? {
+    guard !sub.hasSuffix(".lock") else { return nil }
+    let head = sub.dropFirst().prefix { $0 != "/" }
+    if head == "modules" { return nestedGitDirChange(sub) }
+    guard !ignoredGitDirEntries.contains(head) else { return nil }
+    return .state(remoteRefs: isRemoteRefChange(sub))
+  }
+
+  /// `modules/` の下（`sub` は外側の git dir からの相対パス）。サブモジュールの名前は `/` を含めるので、どこからが
+  /// サブモジュールの git dir かをパスだけでは決められない——名前の最初の段（`modules/` の直後。必ず名前）を除き、どの深さの
+  /// 要素でも同じ表で弾く。名前の 2 段目以降にその語の要素があると取りこぼす。ブランチ名にその語の要素があっても、普通の
+  /// コミット・`reset --soft` は git dir の直下の index・ORIG_HEAD も書くので拾える。
+  private static func nestedGitDirChange(_ sub: String) -> GitDirChange? {
+    let components = sub.split(separator: "/").dropFirst(2)
+    return components.contains(where: ignoredGitDirEntries.contains) ? nil : .nested
   }
 
   /// git の状態の変化 `sub`（git dir からの相対パス）で remote 追跡 ref が動いたかもしれないか——`refs/remotes` の下と、

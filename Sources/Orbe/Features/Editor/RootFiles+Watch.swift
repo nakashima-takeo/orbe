@@ -12,10 +12,14 @@ extension RootFiles {
     } else if !batch.paths.isEmpty {
       notify { $0.rootFiles(self, filesDidChange: .paths(batch.paths)) }
     }
-    if repo != nil, batch.gitChanged || batch.scanAll {
+    if repo != nil, batch.gitChanged {
       notify { $0.rootFilesGitStateDidChange(self, remoteRefsChanged: batch.remoteRefsChanged) }
     }
+    if repo != nil, batch.nestedGitChanged {
+      notify { $0.rootFilesNestedGitStateDidChange(self) }
+    }
     requestStatusRefresh()
-    requestVersionRefresh()
+    // 入れ子の git dir の動きは親の index・HEAD を変えないので、版の本文は取り直さない。
+    if batch.gitChanged || !batch.paths.isEmpty { requestVersionRefresh() }
   }
 }

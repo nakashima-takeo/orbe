@@ -1,4 +1,5 @@
 import AppKit
+import OrbeTestSupport
 import XCTest
 
 @testable import Orbe
@@ -10,7 +11,7 @@ import XCTest
 @MainActor
 final class ScmAutoFetchPanelTests: OrbeTestCase {
   private var panel: ScmPanel?
-  /// 裏の fetch を粘らせたリポジトリ（`panelWithAStubbornBackgroundFetch` が作る）。
+  /// パネルの根のリポジトリ（`panelWithAStubbornBackgroundFetch`・`panelWithABlockedBackgroundFetch` が作る）。
   private var repo: TempGitRepo?
 
   override func tearDown() {
@@ -60,6 +61,100 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
 
     panel.isLive = false
     XCTAssertFalse(autoFetch.rules.isWanted, "面が見えなくなれば欲しがらない")
+  }
+
+  /// 認証で止まった裏の fetch は、面を隠している間に端末で remote 追跡 ref が動いていれば、次に面が見えたときに再開する。
+  /// 面が見えている間に動いても、その知らせで再開する。値が止まった時点と同じなら（何も取れなかった外の fetch）止まったまま。
+  func testAStoppedBackgroundFetchResumesWhenTheRemoteRefsMovedWhileThePaneWasHidden() throws {
+    let (panel, autoFetch) = try panelWithABlockedBackgroundFetch()
+    let repo = try XCTUnwrap(self.repo)
+
+    panel.isLive = false
+    panel.isLive = true
+    pumpMain(until: { autoFetch.rules.isWanted }, "面がまた見える")
+    RunLoop.main.run(until: Date().addingTimeInterval(1))
+    XCTAssertEqual(sshAttempts(), 1, "値が同じなら止まったまま撃たない")
+
+    panel.isLive = false
+    XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "pushed"]).isSuccess)
+    XCTAssertTrue(repo.git(["update-ref", "refs/remotes/origin/main", "HEAD"]).isSuccess)
+    panel.isLive = true
+    pumpMain(
+      until: {
+        sshAttempts() == 2 && autoFetch.rules.isBlocked && autoFetch.rules.refsAtBlock != nil
+      },
+      timeout: 20,
+      "再開した裏の fetch が撃つ（また認証で止まる）")
+
+    XCTAssertTrue(repo.git(["commit", "-q", "--allow-empty", "-m", "pushed again"]).isSuccess)
+    XCTAssertTrue(repo.git(["update-ref", "refs/remotes/origin/main", "HEAD"]).isSuccess)
+    pumpMain(
+      until: { sshAttempts() == 3 }, timeout: 20, "面が見えている間に ref が動いた知らせでも再開する")
+  }
+
+  /// 同期の pull の段がリモートと話せたら、続く push の段が話せずに落ちても止まりは解ける——段ごとの結果を係へ届けている。
+  /// 操作をまとめた結果（push の失敗）で見ると、認証を直して同期しても止まったまま。origin は進めない（remote 追跡 ref の値は
+  /// 変わらず、値の比べでは解けない）。
+  func testASyncWhosePullTalkedUnblocksTheBackgroundFetchEvenIfItsPushFails() throws {
+    let (panel, autoFetch) = try panelWithABlockedBackgroundFetch()
+    let repo = try XCTUnwrap(self.repo)
+    XCTAssertTrue(
+      repo.git(["remote", "set-url", "origin", repo.dir.path + "-origin.git"]).isSuccess)
+    let hooks = TestScratch.caseDir.appendingPathComponent("hooks").path
+    try FileManager.default.createDirectory(atPath: hooks, withIntermediateDirectories: true)
+    try "#!/bin/sh\nexit 1\n".write(toFile: hooks + "/pre-push", atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o755], ofItemAtPath: hooks + "/pre-push")
+    XCTAssertTrue(repo.git(["config", "core.hooksPath", hooks]).isSuccess)
+
+    panel.control.sync()
+    pumpMain(until: { panel.control.operations.isEmpty }, timeout: 20, "同期が終わる")
+    guard case .git(.reason)? = panel.control.failure?.cause else {
+      return XCTFail("前提: push の段がリモートと話せずに落ちる（\(String(describing: panel.control.failure))）")
+    }
+    XCTAssertFalse(autoFetch.rules.isBlocked)
+  }
+
+  /// 面を出し、裏の fetch を認証で止める（その時点の remote 追跡 ref も読み終える）。origin は ssh の URL で、偽の ssh が
+  /// 断る。
+  private func panelWithABlockedBackgroundFetch() throws -> (ScmPanel, ScmAutoFetch) {
+    let repo = try TempGitRepo()
+    repo.addOrigin()
+    let script = TestScratch.caseDir.appendingPathComponent("denied-ssh.sh").path
+    let log = sshAttemptsLog
+    // git が ssh の種類を確かめる `-G` は繋がないので数えない。
+    try """
+    #!/bin/sh
+    [ "$1" = -G ] || echo attempt >> '\(log)'
+    echo 'git@example.invalid: Permission denied (publickey).' >&2
+    exit 255
+
+    """.write(toFile: script, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script)
+    XCTAssertTrue(repo.git(["config", "core.sshCommand", script]).isSuccess)
+    XCTAssertTrue(
+      repo.git(["remote", "set-url", "origin", "ssh://git@example.invalid/r.git"]).isSuccess)
+    let panel = ScmPanel(root: repo.root)
+    self.panel = panel
+    panel.isLive = true
+    pumpMain(until: { panel.liveFiles?.repo != nil }, "根の git dir が分かる")
+    let autoFetch = ScmAutoFetch.shared(for: try XCTUnwrap(panel.liveFiles?.repo))
+    NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: NSApp)
+    pumpMain(
+      until: { autoFetch.rules.isBlocked && autoFetch.rules.refsAtBlock != nil }, timeout: 20,
+      "裏の fetch が認証で止まり、その時点の remote 追跡 ref を読む")
+    self.repo = repo
+    return (panel, autoFetch)
+  }
+
+  private var sshAttemptsLog: String {
+    TestScratch.caseDir.appendingPathComponent("ssh-attempts").path
+  }
+
+  /// 偽の ssh が remote へ繋ぎにいった回数（裏の fetch を撃った回数）。
+  private func sshAttempts() -> Int {
+    ((try? String(contentsOfFile: sshAttemptsLog, encoding: .utf8)) ?? "").split(separator: "\n")
+      .count
   }
 
   /// 出しているパネルで裏の fetch を走らせる。止めても終わりが遅れるように、ref を書く hook の最初の 1 回を、SIGTERM を
@@ -158,7 +253,7 @@ final class ScmAutoFetchPanelTests: OrbeTestCase {
     panel.commitSnapshot().commitAndPush()
     let operation = try XCTUnwrap(panel.control.operations.first)
     pumpMain(
-      until: { panel.control.bandOperation === operation && operation.step == .push },
+      until: { panel.control.bandOperation === operation && operation.step == .network(.push) },
       timeout: 1.5, "push の段の前で待つ間も帯に出る")
     XCTAssertTrue(autoFetch.rules.isRunning, "前提: 裏の fetch はまだ終わっていない")
     XCTAssertFalse(panel.control.isCommitting, "コミットの段は終わっている")
