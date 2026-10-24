@@ -31,7 +31,8 @@ enum StateDatabase {
 
   /// 版 `from` の DB を版 `from + 1` へ移す。外部キーを切った接続の 1 トランザクションの中で呼ぶ——SQLite の表の作り直し
   /// （作る・写す・消す・名前を変える）で、子の行を黙って消さず、指されている表も消せるように。移行の列の後に、外部キーの
-  /// 食い違いが無く表と索引の形が今の版と同じことを確かめ、どれかが合わなければ巻き戻す。
+  /// 食い違いが無く表と索引の形が今の版と同じことを確かめ、どれかが合わなければ巻き戻す。AUTOINCREMENT の表を作り直すときは
+  /// `sqlite_sequence` の値も写す（写さないと、消した最大の ID が再び振られる）。
   struct Migration {
     let from: Int32
     let run: (SQLiteDatabase) throws -> Void
@@ -119,9 +120,11 @@ enum StateDatabase {
     }
   }
 
-  /// 表と索引の形——SQLite が自分で作るものを除く表・索引・ビュー・トリガーの名前と、表の列・外部キー・一意の制約、索引の
-  /// 一意と部分か・列。表作りの文の書き方（空白・引用符・移行の `ADD COLUMN` や `RENAME` が残す文面）は見ない。CHECK 制約・
-  /// 部分索引の条件・ビューとトリガーの中身は SQLite が構造として出さないので照らさない。
+  /// 表と索引の形——SQLite が自分で作るものを除く表・索引・ビュー・トリガーの名前と、表の WITHOUT ROWID・STRICT・列（順・宣言の
+  /// 型の字面・NOT NULL・既定値・主キー・隠れた列か）・外部キー・一意の制約、索引の一意と部分か・列。表作りの文の書き方（空白・
+  /// 引用符・移行の `RENAME` が残す文面）は見ない。列は順も照らすので、`ADD COLUMN` で末尾に足した列は表作りの文でも末尾に置く
+  /// （でなければ表を作り直す）。CHECK 制約・部分索引の条件・ビューとトリガーの中身・AUTOINCREMENT・生成列の式・列の照合順序・
+  /// 外部キーの遅延は SQLite が構造として出さないので照らさない。
   private static func shape(_ db: SQLiteDatabase) throws -> [String] {
     let objects = try db.select(
       """
@@ -134,6 +137,9 @@ enum StateDatabase {
       shape.append([object.type, object.name, object.table].joined(separator: " "))
       switch object.type {
       case "table":
+        shape += try lines(
+          db, "SELECT 'table', wr, strict FROM pragma_table_list(?1) WHERE schema = 'main'",
+          object.name)
         shape += try lines(
           db,
           """
