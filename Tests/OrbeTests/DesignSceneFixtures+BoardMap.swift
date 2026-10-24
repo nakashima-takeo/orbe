@@ -26,15 +26,15 @@ extension DesignSceneFixtures {
           kept: Array(all.prefix(items - fresh))))
     }
     func process(
-      _ key: String, _ time: Date, rows: Int, from source: String, expired: Int = 0
+      _ key: String, _ time: Date, rows: Int, from upstream: String, expired: Int = 0
     ) {
       passes.append(
         AutomationSamplePass(
           nodeKey: key, at: time, trigger: .arrival, outcome: processed([], read: rows),
           expired: expired, passThrough: rows))
     }
-    func judge(_ key: String, at time: Date, proposed: Int, rows: Int, from source: String) {
-      let items = sampleItems(source, proposed, at: time)
+    func judge(_ key: String, at time: Date, proposed: Int, rows: Int, from origin: String) {
+      let items = sampleItems(origin, proposed, at: time)
       passes.append(
         AutomationSamplePass(
           nodeKey: key, at: time,

@@ -161,8 +161,8 @@ enum TaskPaletteAutomationError: Equatable {
   }
 
   /// 候補の出どころの取得の部品の名前。候補を出した自動化の定義から引き、部品か自動化が消えていれば nil。
-  func sourceName(of proposal: AutomationProposal) -> String? {
-    store.issuer(of: proposal)?.graph.node(proposal.source)?.entity.name
+  func originNodeName(of proposal: AutomationProposal) -> String? {
+    store.issuer(of: proposal)?.graph.node(proposal.originNodeId)?.entity.name
   }
 
   /// 候補を出した判定の部品の名前。部品か自動化が消えていれば nil。

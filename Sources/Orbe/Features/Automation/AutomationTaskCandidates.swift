@@ -29,7 +29,7 @@ extension Automation {
 
 extension AutomationUnreadable {
   func holds(_ proposal: AutomationProposal) -> Bool {
-    nodeIds.contains(proposal.judge) || nodeIds.contains(proposal.source)
+    nodeIds.contains(proposal.judge) || nodeIds.contains(proposal.originNodeId)
   }
 
   func holds(_ proposal: AutomationUnreadableProposal) -> Bool {
@@ -77,10 +77,11 @@ extension AutomationStore {
     guard let automation = automation(id) else { return [] }
     let fetches = automation.graph.fetches(reaching: judge)
     let links = Set(fetches.flatMap { automation.state($0.id).liveLinks })
-    let sources = Set(fetches.map(\.id))
+    let originNodeIds = Set(fetches.map(\.id))
     return proposals.filter {
       $0.state == .open
-        && (links.contains($0.item.link) || $0.judge == judge || sources.contains($0.source))
+        && (links.contains($0.item.link) || $0.judge == judge
+          || originNodeIds.contains($0.originNodeId))
     }
   }
 

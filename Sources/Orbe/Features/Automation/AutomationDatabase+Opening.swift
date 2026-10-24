@@ -232,7 +232,7 @@ extension AutomationDatabase {
       (
         id: s.int(at: 0), run: s.int(at: 1), judge: s.int(at: 2), defId: s.int(at: 3),
         endedAt: s.int64(at: 4), version: s.optionalInt64(at: 5), event: s.optionalInt64(at: 6),
-        body: s.text(at: 7), source: s.optionalInt64(at: 8), link: s.text(at: 9) ?? "",
+        body: s.text(at: 7), originNodeId: s.optionalInt64(at: 8), link: s.text(at: 9) ?? "",
         title: s.text(at: 10) ?? "", due: s.text(at: 11), workspace: s.text(at: 12),
         reason: s.text(at: 13), resolvedAt: s.optionalInt64(at: 14), outcome: s.text(at: 15),
         taskId: s.optionalInt64(at: 16)
@@ -253,7 +253,7 @@ extension AutomationDatabase {
       let workspace = row.workspace.map { UUID(uuidString: $0) }
       let origin: AutomationRowRef? =
         row.version.map { .version(Int($0)) } ?? row.event.map { .event(Int($0)) }
-      guard let state, let origin, let source = row.source,
+      guard let state, let origin, let originNodeId = row.originNodeId,
         let item = Self.decode(AutomationItem.self, row.body), item.link == row.link,
         due.map({ $0 != nil }) ?? true, workspace.map({ $0 != nil }) ?? true
       else {
@@ -266,7 +266,8 @@ extension AutomationDatabase {
         AutomationProposal(
           id: row.id, runId: row.run,
           judge: AutomationNodeID(row.judge), defId: AutomationDefID(row.defId),
-          source: AutomationNodeID(Int(source)), origin: origin, item: item, title: row.title,
+          originNodeId: AutomationNodeID(Int(originNodeId)), origin: origin, item: item,
+          title: row.title,
           due: due ?? nil, workspace: workspace ?? nil, reason: row.reason,
           proposedAt: AutomationPersistence.date(row.endedAt), state: state))
     }

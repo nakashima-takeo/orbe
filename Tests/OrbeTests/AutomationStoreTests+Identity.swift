@@ -57,7 +57,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(try unread(store, id, "judge"), unreadBefore, "読んだ位置とまだ受け取っていない行")
     XCTAssertEqual(after.state(fetch).runs, before.state(fetch).runs)
     XCTAssertEqual(after.state(fetch).breach, before.state(fetch).breach)
-    XCTAssertEqual(store.proposals.map(\.source), [fetch])
+    XCTAssertEqual(store.proposals.map(\.originNodeId), [fetch])
     XCTAssertEqual(
       AutomationRunner.runId(id, fetch, after.state(fetch).anchor),
       AutomationRunner.runId(id, fetch, anchor))

@@ -119,7 +119,7 @@ struct TaskPaletteAutomationList: View {
 
   private func row(_ proposal: AutomationProposal) -> some View {
     TaskPaletteAutomationProposalRow(
-      proposal: proposal, source: model.sourceName(of: proposal),
+      proposal: proposal, originNodeName: model.originNodeName(of: proposal),
       text: AutomationText(l10n: l10n, today: model.today, timeZone: model.timeZone),
       selected: model.selectedProposal?.id == proposal.id
     )
@@ -133,7 +133,7 @@ struct TaskPaletteAutomationList: View {
 /// 候補の行。タイトル・期限の札・右に時刻、下に出どころの取得の部品の名前と本文の先頭 1 行。印は選ばれている候補の行だけ。
 private struct TaskPaletteAutomationProposalRow: View {
   let proposal: AutomationProposal
-  let source: String?
+  let originNodeName: String?
   let text: AutomationText
   let selected: Bool
   @Environment(\.localization) private var l10n
@@ -161,7 +161,8 @@ private struct TaskPaletteAutomationProposalRow: View {
           .fixedSize()
       }
       fontResolver.text(
-        [source, Self.firstLine(proposal.item.body)].compactMap { $0 }.joined(separator: " · "),
+        [originNodeName, Self.firstLine(proposal.item.body)].compactMap { $0 }.joined(
+          separator: " · "),
         base: Theme.Typography.meta
       )
       .font(Font.theme.meta)

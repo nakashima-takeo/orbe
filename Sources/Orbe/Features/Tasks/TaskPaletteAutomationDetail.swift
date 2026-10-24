@@ -38,7 +38,7 @@ struct TaskPaletteAutomationDetail: View {
     // 名前は縮め、時刻は残す。
     HStack(spacing: Theme.Space.note + 1) {
       MarkGlyph(kind: .tray, width: 10, color: Color.theme.accentBright)
-      let names = [model.store.shelf(of: proposal)?.name, model.sourceName(of: proposal)]
+      let names = [model.store.shelf(of: proposal)?.name, model.originNodeName(of: proposal)]
         .compactMap { $0 }
       if !names.isEmpty {
         TruncatingSlot(names.joined(separator: " · ")) {

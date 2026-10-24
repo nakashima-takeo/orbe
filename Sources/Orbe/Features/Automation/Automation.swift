@@ -131,7 +131,7 @@ struct AutomationProposal: Equatable, Identifiable {
   let judge: AutomationNodeID
   let defId: AutomationDefID
   /// 出どころの部品と行。
-  let source: AutomationNodeID
+  let originNodeId: AutomationNodeID
   let origin: AutomationRowRef
   /// 出どころの行の欄（`id` は書かれた id）。
   let item: AutomationItem

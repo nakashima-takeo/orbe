@@ -31,7 +31,7 @@ final class AutomationTrials {
     trials.removeValue(forKey: id)?.stop()
     let onEnd: () -> Void = { [weak self] in self?.ended(id) }
     let trial = AutomationTrial(
-      automationId: id, request: request, range: range, source: runner, onEnd: onEnd)
+      automationId: id, request: request, range: range, production: runner, onEnd: onEnd)
     try trial.begin()
     trials[id] = trial
     return trial

@@ -269,12 +269,12 @@ extension AutomationStore {
     /// 1 区切りのページ数（1 区切りが画面の 1 コマより十分短く済む大きさ）。
     static let pagesPerStep: Int32 = 256
 
-    private let source: AutomationStore
+    private let production: AutomationStore
     private let database: SQLiteDatabase
     private let backup: SQLiteBackup
 
-    fileprivate init(source: AutomationStore, database: SQLiteDatabase, backup: SQLiteBackup) {
-      self.source = source
+    fileprivate init(production: AutomationStore, database: SQLiteDatabase, backup: SQLiteBackup) {
+      self.production = production
       self.database = database
       self.backup = backup
     }
@@ -283,7 +283,7 @@ extension AutomationStore {
     /// メモリを進める」を同じ main で行うので、写し終えた時点の元のメモリはその時点の DB と一致する（写しの DB を読み直すと、
     /// 読めば取る行を数える読みが行の数に比例して main を止める）。写し終えた後には呼ばない。
     func step() throws(AutomationError) -> AutomationStore? {
-      guard source.available else { throw source.unavailableError }
+      guard production.available else { throw production.unavailableError }
       do {
         guard try backup.step(pages: Self.pagesPerStep) else { return nil }
         try database.exec("PRAGMA foreign_keys = ON")
@@ -293,7 +293,7 @@ extension AutomationStore {
       return AutomationStore(
         opening: .success(
           AutomationDatabase.Opened(
-            database: AutomationDatabase(database), memory: source.memory)))
+            database: AutomationDatabase(database), memory: production.memory)))
     }
   }
 
@@ -301,7 +301,7 @@ extension AutomationStore {
     guard let database else { throw unavailableError }
     do {
       let copy = try SQLiteDatabase.memory()
-      return Copy(source: self, database: copy, backup: try database.backup(into: copy))
+      return Copy(production: self, database: copy, backup: try database.backup(into: copy))
     } catch {
       throw .unavailable("could not copy automations: \(error)")
     }

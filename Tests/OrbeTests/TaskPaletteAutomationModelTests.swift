@@ -336,6 +336,6 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     automation.tapShelf(.automation(1))
 
     XCTAssertEqual(
-      automation.proposals.map(automation.sourceName(of:)), ["GitHub", "Backlog"])
+      automation.proposals.map(automation.originNodeName(of:)), ["GitHub", "Backlog"])
   }
 }

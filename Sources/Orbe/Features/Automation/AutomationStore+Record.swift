@@ -147,7 +147,7 @@ struct AutomationRecording {
       memory.proposals.append(
         AutomationProposal(
           id: proposalId, runId: recordId, judge: end.nodeId,
-          defId: end.defId, source: proposal.origin.nodeId, origin: proposal.origin.row,
+          defId: end.defId, originNodeId: proposal.origin.nodeId, origin: proposal.origin.row,
           item: proposal.origin.item, title: proposal.title, due: proposal.due,
           workspace: proposal.workspace, reason: proposal.reason, proposedAt: endedAt,
           state: .open))

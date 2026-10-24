@@ -95,7 +95,9 @@ extension WindowController {
       if let issuer = automationStore.issuer(of: proposal) {
         var by: [String: Any] = ["automationId": issuer.id]
         if let judge = issuer.graph.node(proposal.judge) { by["partKey"] = judge.key }
-        if let source = issuer.graph.node(proposal.source) { by["sourcePartKey"] = source.key }
+        if let origin = issuer.graph.node(proposal.originNodeId) {
+          by["sourcePartKey"] = origin.key
+        }
         json["proposedBy"] = by
       }
       if let shelf {

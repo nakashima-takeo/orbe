@@ -93,7 +93,7 @@ final class AutomationTrial {
   /// 部品ごとの回（本番の `runs` と同じく新しい順）。
   private(set) var passes: [AutomationNodeID: [Pass]] = [:]
 
-  private let source: AutomationRunner
+  private let production: AutomationRunner
   private let onEnd: () -> Void
   private var copy: AutomationStore.Copy?
   /// 写しのストア（写し終えてから終わるまで）。
@@ -107,17 +107,17 @@ final class AutomationTrial {
   private var completed = false
   private var stopped = false
 
-  /// `source` は本番の走らせ役（ストア・実行の係・時計・workspace を借りる）。`onEnd` は終わったときに 1 度だけ呼ぶ。
+  /// `production` は本番の走らせ役（ストア・実行の係・時計・workspace を借りる）。`onEnd` は終わったときに 1 度だけ呼ぶ。
   init(
-    automationId: Int, request: Request, range: Range, source: AutomationRunner,
+    automationId: Int, request: Request, range: Range, production: AutomationRunner,
     onEnd: @escaping () -> Void
   ) {
     self.automationId = automationId
     self.request = request
     self.range = range
-    self.source = source
+    self.production = production
     self.onEnd = onEnd
-    startedAt = source.now()
+    startedAt = production.now()
   }
 
   var running: Bool { endedAt == nil }
@@ -145,7 +145,7 @@ final class AutomationTrial {
 
   /// 写し始める。写しは画面の合間に 1 区切りずつ進める。
   func begin() throws(AutomationError) {
-    copy = try source.store.copy()
+    copy = try production.store.copy()
     stepLater()
   }
 
@@ -184,11 +184,11 @@ final class AutomationTrial {
     range = try Self.range(of: automation, request)
     var given: Given?
     if let rows = request.rows { given = try Self.given(rows, in: range, of: automation.graph) }
-    if !automation.paused { _ = try store.setPaused(id, true, now: source.now()) }
+    if !automation.paused { _ = try store.setPaused(id, true, now: production.now()) }
     self.store = store
     if let given {
       let rows = request.limit.map { Array(given.rows.prefix($0)) } ?? given.rows
-      try store.give(rows, as: given.writer, of: id, at: source.now())
+      try store.give(rows, as: given.writer, of: id, at: production.now())
       if given.fetched {
         givenFetch = given.entry
         passes[given.entry] = [
@@ -205,12 +205,13 @@ final class AutomationTrial {
     }
     guard !targets.isEmpty else { return finish(completed: true) }
     let runner = AutomationRunner(
-      store: store, run: source.run, runSessions: source.runSessions, workspaces: source.workspaces,
+      store: store, run: production.run, runSessions: production.runSessions,
+      workspaces: production.workspaces,
       recorded: { [weak self] in self?.recorded($0) }, defined: { _ in }, deleted: { _ in },
       admits: { $0 == id && admitted.contains($1) },
       flowEnded: { [weak self] _, flow in self?.flowEnded(flow) })
-    runner.now = source.now
-    runner.calendar = source.calendar
+    runner.now = production.now
+    runner.calendar = production.calendar
     self.runner = runner
     runner.start()
     try runner.flow(id, through: admitted, to: targets)
@@ -243,7 +244,8 @@ final class AutomationTrial {
       if node.role == .fetch, let limit = request.limit, count > limit,
         range.roots.contains(where: { $0.id == node.id })
       {
-        try store.trim(node.id, in: automationId, fresh: fresh, keeping: limit, now: source.now())
+        try store.trim(
+          node.id, in: automationId, fresh: fresh, keeping: limit, now: production.now())
         count = limit
       }
       return .rows(try store.latestRows(of: node.id, in: automationId, count: count))
@@ -269,7 +271,8 @@ final class AutomationTrial {
       do throws(AutomationError) {
         for node in range.path where Self.holds(node) {
           guard
-            let read = try store.read(node.id, of: automationId, baseline: nil, now: source.now()),
+            let read = try store.read(
+              node.id, of: automationId, baseline: nil, now: production.now()),
             !read.taken.isEmpty
           else { continue }
           passes[node.id] = [.held(read.taken.map(\.text))]
@@ -284,7 +287,7 @@ final class AutomationTrial {
 
   private func end(failure: String?) {
     self.failure = failure
-    endedAt = source.now()
+    endedAt = production.now()
     store = nil
     let runner = self.runner
     self.runner = nil
