@@ -127,6 +127,32 @@ final class HunkTrackTests: XCTestCase {
     assertShape(document.hunks, base: base, text: surface.text, "行の中の Enter")
   }
 
+  /// CRLF の文書でも、行末（`\r` の前）の Enter と行末から行末までの削除は、始まりの行を区間に入れない（届く結果と同じ印）。
+  func testCRLFLineEndEditsKeepTheStartRow() throws {
+    let base = "a\r\nbc\r\n"
+    let (document, surface) = try opened(base, base: base)
+    for replacement in ["\r\n", "\r\n  "] {
+      surface.replace(NSRange(location: 1, length: 0), with: replacement)
+      let tracked = document.hunks
+      XCTAssertEqual(
+        tracked, [LineHunk(oldStart: 1, oldCount: 0, newStart: 2, newCount: 1)],
+        "行末の Enter は追加 1 行: \(replacement.debugDescription)")
+      XCTAssertTrue(document.waitUntilCaughtUp())
+      XCTAssertEqual(document.hunks, tracked, "届く結果と同じ")
+      surface.replace(NSRange(location: 1, length: replacement.utf16.count), with: "")
+      XCTAssertTrue(document.waitUntilCaughtUp())
+    }
+
+    let joined = "a\r\nbc\r\nd\r\n"
+    let (other, otherSurface) = try opened(joined, base: joined)
+    otherSurface.replace(NSRange(location: 1, length: 4), with: "")
+    let tracked = other.hunks
+    XCTAssertEqual(
+      tracked, [LineHunk(oldStart: 2, oldCount: 1, newStart: 1, newCount: 0)], "行ごとの削除")
+    XCTAssertTrue(other.waitUntilCaughtUp())
+    XCTAssertEqual(other.hunks, tracked, "届く結果と同じ")
+  }
+
   /// 乱数の編集の列（届く前に重ねる）で、ずらしたハンクがいつでも正しい対応の形を保つ。中身の対応は、届いてから行の数を
   /// 変えない編集が無い間だけ見る。
   func testRandomEditsKeepTheHunksAValidCorrespondence() throws {
