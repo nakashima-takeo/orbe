@@ -197,14 +197,16 @@ struct RowLayout: Sendable {
   // MARK: - 縦の並びの中の位置
 
   /// 縦の位置 `y` にある所を、縦の並びの中の位置で（段の粒度。`lineCount` 行の文書）。文書の行の中ならその行の段 0（範囲に
-  /// 収める）、塊の中なら塊の下の文書の行（最終行の後の塊なら行数）と、その上端からの負の段。
+  /// 収める）、塊の中なら塊の下の文書の行（最終行の後の塊なら行数）と、その上端からの負の段。段の境のわずかに上は境の段と
+  /// みなす——位置の上端（`unit(of:lineCount:)`）に置いた y が、表示の単位から y への丸めで上の段に化けない。
   func position(atY y: Double, lineCount: Int) -> RowPosition {
+    let y = y + lineHeight * 1e-9
     switch item(atY: y) {
     case .line(let line):
       return RowPosition(line: min(max(0, line), max(0, lineCount - 1)))
     case .block(let index):
       let line = boundaries[index]
-      let offset = (y / lineHeight - unit(ofLine: line) + 1e-9).rounded(.down)
+      let offset = (y / lineHeight - unit(ofLine: line)).rounded(.down)
       return RowPosition(line: line, offset: Int(offset))
     }
   }
