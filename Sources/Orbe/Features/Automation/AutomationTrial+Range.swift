@@ -7,21 +7,21 @@ extension AutomationTrial {
   {
     let graph = automation.graph
     func checked(_ keys: [String]?, _ name: String) throws(AutomationError)
-      -> [AutomationPartID]?
+      -> [AutomationNodeID]?
     {
       guard let keys else { return nil }
       guard !keys.isEmpty else { throw .invalid("\(name) must name at least one part") }
-      var ids: [AutomationPartID] = []
+      var ids: [AutomationNodeID] = []
       for key in keys {
         guard let node = graph.node(key: key) else { throw .partNotFound(automation.id, key) }
         ids.append(node.id)
       }
       return ids
     }
-    func below(_ ids: [AutomationPartID]) -> Set<AutomationPartID> {
+    func below(_ ids: [AutomationNodeID]) -> Set<AutomationNodeID> {
       Set(ids + ids.flatMap { graph.descendants(of: $0).map(\.id) })
     }
-    func above(_ ids: [AutomationPartID]) -> Set<AutomationPartID> {
+    func above(_ ids: [AutomationNodeID]) -> Set<AutomationNodeID> {
       Set(ids + ids.flatMap { graph.ancestors(of: $0).map(\.id) })
     }
     let from = try checked(request.from, "from")
@@ -32,7 +32,7 @@ extension AutomationTrial {
     let entries =
       from ?? graph.nodes.filter { $0.inputs.isEmpty && up.contains($0.id) }.map(\.id)
     let down = below(entries)
-    func key(_ id: AutomationPartID) -> String { graph.node(id)?.key ?? "" }
+    func key(_ id: AutomationNodeID) -> String { graph.node(id)?.key ?? "" }
     for (index, id) in entries.enumerated() where !up.contains(id) {
       throw .invalid("from[\(index)] \"\(key(id))\" reaches no part in to")
     }
@@ -44,8 +44,8 @@ extension AutomationTrial {
       path: graph.nodes.filter { up.contains($0.id) && down.contains($0.id) })
   }
 
-  private static func unique(_ ids: [AutomationPartID]) -> [AutomationPartID] {
-    var seen = Set<AutomationPartID>()
+  private static func unique(_ ids: [AutomationNodeID]) -> [AutomationNodeID] {
+    var seen = Set<AutomationNodeID>()
     return ids.filter { seen.insert($0).inserted }
   }
 

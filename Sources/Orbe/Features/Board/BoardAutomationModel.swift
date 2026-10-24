@@ -33,7 +33,7 @@ import SwiftUI
   /// 地図の段: 見出しの「通知」の行か、部品の行。
   enum MapStop: Hashable {
     case notify
-    case part(AutomationPartID)
+    case part(AutomationNodeID)
   }
 
   /// サブメニュー「通知」の行の並び（通知しない・メニューバー・通知センター）。
@@ -122,7 +122,7 @@ import SwiftUI
   }
 
   /// 選ばれている部品。
-  var selectedPart: AutomationPartID? {
+  var selectedPart: AutomationNodeID? {
     guard case .part(let part) = selectedMapStop else { return nil }
     return part
   }
@@ -254,7 +254,7 @@ import SwiftUI
   }
 
   /// 地図の部品の行のクリック。その部品を選んで地図に居る。
-  func tapPart(_ part: AutomationPartID) {
+  func tapPart(_ part: AutomationNodeID) {
     select(.part(part))
   }
 
@@ -274,7 +274,7 @@ import SwiftUI
 
   /// カードの「修正を依頼」。依頼の欄に「自動化「<名前>」の部品「<名前>」の修正：」を書き（書きかけは置き換える）、焦点を欄へ
   /// 移す——続けて打って ↵ で、欄からふつうに頼む。`l10n` は画面の言語。
-  func draftFix(of part: AutomationPartID, l10n: LocalizationStore) {
+  func draftFix(of part: AutomationNodeID, l10n: LocalizationStore) {
     guard let automation = selectedAutomation, let node = automation.graph.node(part) else {
       return
     }

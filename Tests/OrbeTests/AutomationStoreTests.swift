@@ -30,7 +30,7 @@ final class AutomationStoreTests: OrbeTestCase {
   /// 取得の部品の回を確定する。
   static func fetch(
     _ store: AutomationStore, _ id: Int, _ items: [AutomationItem],
-    outcome: AutomationPartPass.Outcome? = nil, at: Date = at
+    outcome: AutomationNodePass.Outcome? = nil, at: Date = at
   ) throws {
     try store.record(
       id, part: "fetch", at: at, outcome: outcome ?? DesignSceneFixtures.fetched(items))
@@ -45,9 +45,9 @@ final class AutomationStoreTests: OrbeTestCase {
     let taken = try XCTUnwrap(
       store.read(store.part(id, "judge"), of: id, baseline: nil, now: at)
     ).taken
-    let proposals = items.compactMap { item -> AutomationPartPass.Proposal? in
+    let proposals = items.compactMap { item -> AutomationNodePass.Proposal? in
       taken.first { $0.origin?.item.id == item.id }?.origin.map {
-        AutomationPartPass.Proposal(
+        AutomationNodePass.Proposal(
           origin: $0, title: "対応: \(item.id)", due: nil, workspace: nil, reason: reason)
       }
     }
@@ -76,7 +76,7 @@ final class AutomationStoreTests: OrbeTestCase {
     AutomationBrokenLine(line: nil, fault: .notArray("items")),
   ]
 
-  static func breached(_ items: [AutomationItem]) -> AutomationPartPass.Outcome {
+  static func breached(_ items: [AutomationItem]) -> AutomationNodePass.Outcome {
     let fetched = DesignSceneFixtures.fetched(items)
     guard case .succeeded(let output, let execution, _) = fetched else {
       preconditionFailure("a fetched outcome succeeds")
@@ -238,7 +238,7 @@ final class AutomationStoreTests: OrbeTestCase {
     let a = Self.item("a")
     try Self.fetch(XCTUnwrap(store), id, [a], outcome: Self.breached([a]))
     try Self.judge(XCTUnwrap(store), id, proposing: [a])
-    let count = AutomationPartState.retainedRuns + 3
+    let count = AutomationNodeState.retainedRuns + 3
     for n in 1...count {
       try Self.fetch(
         XCTUnwrap(store), id, [], outcome: DesignSceneFixtures.failed("boom"),
@@ -257,7 +257,7 @@ final class AutomationStoreTests: OrbeTestCase {
       "SELECT count(*) FROM runs r JOIN parts p ON p.id = r.part_id WHERE p.key = 'judge'", []
     ) { $0.int(at: 0) }.first
 
-    XCTAssertEqual(fetches.runs.count, AutomationPartState.retainedRuns)
+    XCTAssertEqual(fetches.runs.count, AutomationNodeState.retainedRuns)
     XCTAssertEqual(
       kept,
       [Self.at] + (4...count).map { Self.at.addingTimeInterval(TimeInterval(60 * $0)) },
@@ -265,7 +265,7 @@ final class AutomationStoreTests: OrbeTestCase {
     XCTAssertEqual(fetches.succeededAt, Self.at)
     XCTAssertEqual(fetches.breach?.startedAt, Self.at)
     XCTAssertEqual(
-      judged, AutomationPartState.retainedRuns + 1, "候補を出した回は 20 件の外でも残る")
+      judged, AutomationNodeState.retainedRuns + 1, "候補を出した回は 20 件の外でも残る")
     XCTAssertEqual(AutomationStore().automation(id)?.state(key: "fetch").runs, fetches.runs)
   }
 

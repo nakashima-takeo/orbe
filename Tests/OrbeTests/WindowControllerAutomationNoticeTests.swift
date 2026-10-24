@@ -190,11 +190,11 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
           "fetch", "取る", .scheduled(.every(1800)), script: "fetch", coverage: .currentSet),
         notify: .menuBar), now: Date()
     ).id
-    let breachedFailure = AutomationPartPass.Outcome.failed(
+    let breachedFailure = AutomationNodePass.Outcome.failed(
       .brokeRules, DesignSceneFixtures.execution(1),
       breach: AutomationRejections([AutomationBrokenLine(line: 3, fault: .missingKey("link"))]))
     var at = Date()
-    func record(_ outcome: AutomationPartPass.Outcome) throws {
+    func record(_ outcome: AutomationNodePass.Outcome) throws {
       at = at.addingTimeInterval(60)
       try store.record(id, part: "fetch", at: at, outcome: outcome)
     }

@@ -19,8 +19,8 @@ struct AutomationSample {
 struct AutomationSamplePass {
   let part: String
   let at: Date
-  var trigger: AutomationPartRun.Trigger = .schedule
-  let outcome: AutomationPartPass.Outcome
+  var trigger: AutomationNodeRun.Trigger = .schedule
+  let outcome: AutomationNodePass.Outcome
   /// 取得の回の前から出ていた項目。見本を置くときに、見本のすべての回の分をまとめて回の記録を残さず出力へ足し、下流の受け手は
   /// 読んだものとしておく。回の出力にもまとめた分を載せる——見本が言う「新しい項目」の数を、DB の照らし合わせが同じに数えるため。
   var kept: [AutomationItem] = []
@@ -173,25 +173,25 @@ extension DesignSceneFixtures {
   /// 判定の案の出どころを、読んだ行の出どころ（同じ書かれた id の項目、無ければ順に）に当て直す。素通しの処理は、取った行を
   /// 次へ渡す。
   private static func resolved(
-    _ outcome: AutomationPartPass.Outcome, _ pass: AutomationSamplePass,
+    _ outcome: AutomationNodePass.Outcome, _ pass: AutomationSamplePass,
     _ taken: [AutomationIntake.Row]
-  ) -> AutomationPartPass.Outcome {
+  ) -> AutomationNodePass.Outcome {
     if let count = pass.passThrough, case .succeeded(_, let execution, let breach) = outcome {
       return .succeeded(
         .process(
           taken.prefix(count).map {
-            AutomationPartRow(id: $0.id, text: $0.text, origin: $0.origin, source: $0.source)
+            AutomationNodeRow(id: $0.id, text: $0.text, origin: $0.origin, source: $0.source)
           }), execution, breach: breach)
     }
     guard case .succeeded(.judge(let proposals, let resolved), let execution, let breach) = outcome
     else { return outcome }
     var origins = taken.compactMap(\.origin)
-    let placed = proposals.compactMap { proposal -> AutomationPartPass.Proposal? in
+    let placed = proposals.compactMap { proposal -> AutomationNodePass.Proposal? in
       let index =
         origins.firstIndex { $0.item.id == proposal.origin.item.id } ?? origins.indices.first
       guard let index else { return nil }
       let origin = origins.remove(at: index)
-      return AutomationPartPass.Proposal(
+      return AutomationNodePass.Proposal(
         origin: origin, title: proposal.title, due: proposal.due, workspace: proposal.workspace,
         reason: proposal.reason)
     }
@@ -199,8 +199,8 @@ extension DesignSceneFixtures {
   }
 
   /// 項目を取得が出した 1 行にする。
-  nonisolated static func row(_ item: AutomationItem) -> AutomationPartRow {
-    AutomationPartRow(
+  nonisolated static func row(_ item: AutomationItem) -> AutomationNodeRow {
+    AutomationNodeRow(
       id: item.id, text: AutomationPrompts.jsonLine(AutomationWire.object(item)), origin: nil,
       source: nil)
   }
@@ -239,11 +239,11 @@ extension DesignSceneFixtures {
   }
 
   nonisolated static func commandPart(
-    _ key: String, _ name: String, _ trigger: AutomationPart.Trigger, from inputs: [String] = [],
+    _ key: String, _ name: String, _ trigger: AutomationNode.Trigger, from inputs: [String] = [],
     script: String, directory: String? = nil, coverage: AutomationCoverage? = nil,
     deliver: AutomationActionDef.Destination = .nextPart
-  ) -> AutomationDefinition.Part {
-    AutomationDefinition.Part(
+  ) -> AutomationDefinition.Node {
+    AutomationDefinition.Node(
       id: nil, key: key, name: name, trigger: trigger,
       from: inputs.map { AutomationDefinition.Input(part: $0) },
       action: AutomationActionDef(
@@ -252,22 +252,22 @@ extension DesignSceneFixtures {
   }
 
   nonisolated static func agentPart(
-    _ key: String, _ name: String, _ trigger: AutomationPart.Trigger, from inputs: [String] = [],
+    _ key: String, _ name: String, _ trigger: AutomationNode.Trigger, from inputs: [String] = [],
     model: String? = nil, tools: [String] = [], instruction: String,
     coverage: AutomationCoverage? = nil, deliver: AutomationActionDef.Destination = .nextPart
-  ) -> AutomationDefinition.Part {
-    AutomationDefinition.Part(
+  ) -> AutomationDefinition.Node {
+    AutomationDefinition.Node(
       id: nil, key: key, name: name, trigger: trigger,
       from: inputs.map { AutomationDefinition.Input(part: $0) },
       action: AutomationActionDef(
         method: .agent(
-          AutomationPartAgent(cli: "claude", model: model, tools: tools, instruction: instruction)),
+          AutomationNodeAgent(cli: "claude", model: model, tools: tools, instruction: instruction)),
         timeoutMinutes: nil, coverage: coverage, destination: deliver), maxItems: nil)
   }
 
   /// 取得の部品 `fetch` と、届いたらタスク候補を出す判定の部品 `judge`。
   nonisolated static func candidatesDefinition(
-    _ name: String, fetch: AutomationDefinition.Part,
+    _ name: String, fetch: AutomationDefinition.Node,
     instruction: String = "自分が何かを頼まれている・期限がある項目だけをタスクにする。",
     notify: AutomationNotify? = nil
   ) -> AutomationDefinition {
@@ -284,13 +284,13 @@ extension DesignSceneFixtures {
   // MARK: - 回
 
   nonisolated static func execution(_ count: Int, ending: AutomationEnding = .exited(0))
-    -> AutomationPartPass.Execution
+    -> AutomationNodePass.Execution
   {
-    AutomationPartPass.Execution(commandLine: "claude -p", ending: ending, count: count)
+    AutomationNodePass.Execution(commandLine: "claude -p", ending: ending, count: count)
   }
 
   /// 取得の回（取れた全項目）。
-  nonisolated static func fetched(_ items: [AutomationItem]) -> AutomationPartPass.Outcome {
+  nonisolated static func fetched(_ items: [AutomationItem]) -> AutomationNodePass.Outcome {
     .succeeded(.fetch(items.map(row)), execution(items.count), breach: nil)
   }
 
@@ -298,15 +298,15 @@ extension DesignSceneFixtures {
   nonisolated static func proposal(
     _ item: AutomationItem, _ title: String, due: TaskItem.DueDate? = nil, workspace: UUID? = nil,
     reason: String? = nil
-  ) -> AutomationPartPass.Proposal {
-    AutomationPartPass.Proposal(
-      origin: AutomationIntake.Origin(part: AutomationPartID(0), row: .event(0), item: item),
+  ) -> AutomationNodePass.Proposal {
+    AutomationNodePass.Proposal(
+      origin: AutomationIntake.Origin(part: AutomationNodeID(0), row: .event(0), item: item),
       title: title, due: due, workspace: workspace, reason: reason)
   }
 
   /// 判定の回。`rows` は読めた行の数。
-  nonisolated static func judged(_ proposals: [AutomationPartPass.Proposal], rows: Int)
-    -> AutomationPartPass.Outcome
+  nonisolated static func judged(_ proposals: [AutomationNodePass.Proposal], rows: Int)
+    -> AutomationNodePass.Outcome
   {
     .succeeded(.judge(proposals: proposals, resolved: []), execution(rows), breach: nil)
   }
@@ -314,31 +314,31 @@ extension DesignSceneFixtures {
   /// 手段が 0 以外で終わった回（`detail` は標準エラーの抜粋）。
   nonisolated static func failed(
     _ detail: String, ending: AutomationEnding = .exited(1), count: Int = 0
-  ) -> AutomationPartPass.Outcome {
+  ) -> AutomationNodePass.Outcome {
     failed(.ended(detail: detail), ending: ending, count: count)
   }
 
   nonisolated static func failed(
     _ failure: AutomationFailure, ending: AutomationEnding = .exited(1), count: Int = 0
-  ) -> AutomationPartPass.Outcome {
+  ) -> AutomationNodePass.Outcome {
     .failed(failure, execution(count, ending: ending), breach: nil)
   }
 
-  nonisolated static func reported(_ text: String?) -> AutomationPartPass.Outcome {
+  nonisolated static func reported(_ text: String?) -> AutomationNodePass.Outcome {
     .succeeded(.report(text), execution(text == nil ? 0 : 1), breach: nil)
   }
 
-  nonisolated static func worked(_ work: AutomationPartPass.Work) -> AutomationPartPass.Outcome {
+  nonisolated static func worked(_ work: AutomationNodePass.Work) -> AutomationNodePass.Outcome {
     let count = if case .done = work { 1 } else { 0 }
     return .succeeded(.work(work), execution(count), breach: nil)
   }
 
-  nonisolated static func sideEffected(_ count: Int) -> AutomationPartPass.Outcome {
+  nonisolated static func sideEffected(_ count: Int) -> AutomationNodePass.Outcome {
     .succeeded(.sideEffect, execution(count), breach: nil)
   }
 
-  nonisolated static func processed(_ rows: [AutomationPartRow], read: Int)
-    -> AutomationPartPass.Outcome
+  nonisolated static func processed(_ rows: [AutomationNodeRow], read: Int)
+    -> AutomationNodePass.Outcome
   {
     .succeeded(.process(rows), execution(read), breach: nil)
   }
@@ -374,7 +374,7 @@ extension DesignSceneFixtures {
   /// 判定を起こさない。
   nonisolated static func round(
     _ source: String, at time: Date, items: Int, fresh: Int, proposed: Int = 0,
-    trigger: AutomationPartRun.Trigger = .schedule, failure: String? = nil
+    trigger: AutomationNodeRun.Trigger = .schedule, failure: String? = nil
   ) -> [AutomationSamplePass] {
     if let failure {
       return [

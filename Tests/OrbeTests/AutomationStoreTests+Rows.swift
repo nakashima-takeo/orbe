@@ -15,7 +15,7 @@ extension AutomationStoreTests {
   /// 取得 `gh`（`coverage`）→ 副作用のコマンドの受け手 `a`。
   private func define(
     _ store: AutomationStore, coverage: AutomationCoverage,
-    receivers: [AutomationDefinition.Part]? = nil
+    receivers: [AutomationDefinition.Node]? = nil
   ) throws -> Int {
     try store.create(
       AutomationDefinition(
@@ -29,7 +29,7 @@ extension AutomationStoreTests {
 
   private func receiver(
     _ key: String, from input: AutomationDefinition.Input = .init(part: "gh")
-  ) -> AutomationDefinition.Part {
+  ) -> AutomationDefinition.Node {
     var part = DesignSceneFixtures.commandPart(
       key, key, .arrival, from: [input.part], script: key, deliver: .sideEffect)
     part.from = [input]
@@ -56,7 +56,7 @@ extension AutomationStoreTests {
         trigger: .arrival, startedAt: at, endedAt: at, read: read,
         outcome: DesignSceneFixtures.processed(
           read.taken.map {
-            AutomationPartRow(id: $0.id, text: $0.text, origin: $0.origin, source: $0.source)
+            AutomationNodeRow(id: $0.id, text: $0.text, origin: $0.origin, source: $0.source)
           }, read: read.taken.count)))
   }
 
@@ -77,7 +77,7 @@ extension AutomationStoreTests {
     return read.taken.map { String($0.id.split(separator: ":", maxSplits: 1).last ?? "") }
   }
 
-  private func lastRun(_ store: AutomationStore, _ id: Int, _ key: String) -> AutomationPartRun? {
+  private func lastRun(_ store: AutomationStore, _ id: Int, _ key: String) -> AutomationNodeRun? {
     store.automation(id)?.state(key: key).runs.first?.run
   }
 
@@ -194,7 +194,7 @@ extension AutomationStoreTests {
         id, part: "gh", at: at,
         outcome: DesignSceneFixtures.fetched([]).replacing(
           lines.map {
-            AutomationPartRow(
+            AutomationNodeRow(
               id: AutomationPrompts.id(of: $0) ?? "", text: $0, origin: nil, source: nil)
           }))
     }
@@ -381,9 +381,9 @@ extension AutomationStoreTests {
   }
 }
 
-extension AutomationPartPass.Outcome {
+extension AutomationNodePass.Outcome {
   /// 取得の回の出力を、書かれたままの行に差し替えたもの（テスト）。
-  fileprivate func replacing(_ rows: [AutomationPartRow]) -> Self {
+  fileprivate func replacing(_ rows: [AutomationNodeRow]) -> Self {
     guard case .succeeded(_, let execution, let breach) = self else { return self }
     return .succeeded(.fetch(rows), execution, breach: breach)
   }

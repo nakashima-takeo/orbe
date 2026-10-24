@@ -3,17 +3,17 @@ import Foundation
 // 定義の JSON の形。読むときに断るのは形の誤りだけで、値と組み合わせは `AutomationGraph` が検証する。
 
 /// 部品の欄と動作の定義の欄を 1 つのオブジェクトに並べる。`from` と agent の `tools` の空の配列は書かないのと同じ。
-extension AutomationDefinition.Part: Codable {
+extension AutomationDefinition.Node: Codable {
   private enum CodingKeys: String, CodingKey {
     case id, key, name, trigger, from, maxItems
   }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
-    id = try c.decodeIfPresent(Int.self, forKey: .id).map(AutomationPartID.init)
+    id = try c.decodeIfPresent(Int.self, forKey: .id).map(AutomationNodeID.init)
     key = try c.decode(String.self, forKey: .key)
     name = try c.decode(String.self, forKey: .name)
-    trigger = try c.decode(AutomationPart.Trigger.self, forKey: .trigger)
+    trigger = try c.decode(AutomationNode.Trigger.self, forKey: .trigger)
     from = try c.decodeIfPresent([AutomationDefinition.Input].self, forKey: .from) ?? []
     action = try AutomationActionDef(from: decoder)
     maxItems = try c.decodeIfPresent(Int.self, forKey: .maxItems)
@@ -120,7 +120,7 @@ extension AutomationActionDef: Codable {
           forKey: .directory, in: c, debugDescription: "an agent part has no directory")
       }
       return .agent(
-        AutomationPartAgent(
+        AutomationNodeAgent(
           cli: try c.decodeIfPresent(String.self, forKey: .agent) ?? "claude",
           model: try c.decodeIfPresent(String.self, forKey: .model),
           tools: try c.decodeIfPresent([String].self, forKey: .tools) ?? [],
@@ -174,7 +174,7 @@ extension AutomationActionDef.Destination {
 
 /// `{"kind": "interval", "minutes": 10}`・`{"kind": "cron", "expression": "0 9 * * *"}`・`{"kind": "manual"}`・
 /// `{"kind": "arrival"}`。cron 式は受けた時点で解析し、正しくなければ断る。
-extension AutomationPart.Trigger: Codable {
+extension AutomationNode.Trigger: Codable {
   private enum CodingKeys: String, CodingKey {
     case kind, minutes, expression
   }

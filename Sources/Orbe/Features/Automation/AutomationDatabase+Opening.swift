@@ -56,7 +56,7 @@ extension AutomationDatabase {
           definition: Self.jsonText(definition), reason: reason, nodeIds: rows.map(\.id)))
     }
     let keys = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.key) })
-    var parts: [AutomationDefinition.Part] = []
+    var parts: [AutomationDefinition.Node] = []
     for (index, part) in rows.enumerated() {
       switch Self.part(part, at: index, keys: keys) {
       case .success(let typed): parts.append(typed)
@@ -73,9 +73,9 @@ extension AutomationDatabase {
     let graph = AutomationGraph(
       checked.parts,
       entities: zip(checked.parts, rows).map { checked, row in
-        AutomationPart(checked.definitionNode, id: row.id, defId: row.defId)
+        AutomationNode(checked.definitionNode, id: row.id, defId: row.defId)
       })
-    var states: [AutomationPartID: AutomationPartState] = [:]
+    var states: [AutomationNodeID: AutomationNodeState] = [:]
     for part in rows { states[part.id] = try state(of: part.id) }
     return .readable(
       Automation(
@@ -85,8 +85,8 @@ extension AutomationDatabase {
   }
 
   /// 自動化の外していない部品の行（保存したままの値）。
-  private struct PartRow {
-    let id: AutomationPartID
+  private struct NodeRow {
+    let id: AutomationNodeID
     let defId: AutomationDefID
     let key: String
     let name: String
@@ -96,7 +96,7 @@ extension AutomationDatabase {
     let composite: Bool
     let action: String?
     /// 入力（上流の部品・取り方・古さの上限。`from` の順）。
-    let inputs: [AutomationPartEdge]
+    let inputs: [AutomationNodeEdge]
   }
 
   /// 部品を型に組めなかった理由（定義の中の場所で言う英文）。
@@ -104,7 +104,7 @@ extension AutomationDatabase {
     let reason: String
   }
 
-  private func partRows(of automation: Int) throws -> [PartRow] {
+  private func partRows(of automation: Int) throws -> [NodeRow] {
     try db.select(
       """
       SELECT p.id, p.key, p.name, p.trigger, p.max_items, p.def_id, d.kind, a.action
@@ -113,13 +113,13 @@ extension AutomationDatabase {
       """, [.integer(Int64(automation))]
     ) { s in
       (
-        id: AutomationPartID(s.int(at: 0)), key: s.text(at: 1) ?? "", name: s.text(at: 2) ?? "",
+        id: AutomationNodeID(s.int(at: 0)), key: s.text(at: 1) ?? "", name: s.text(at: 2) ?? "",
         trigger: s.text(at: 3), maxItems: s.optionalInt64(at: 4).map(Int.init),
         defId: AutomationDefID(s.int(at: 5)), composite: s.text(at: 6) == "composite",
         action: s.text(at: 7)
       )
     }.map { row in
-      PartRow(
+      NodeRow(
         id: row.id, defId: row.defId, key: row.key, name: row.name, trigger: row.trigger,
         maxItems: row.maxItems, composite: row.composite, action: row.action,
         inputs: try db.select(
@@ -128,8 +128,8 @@ extension AutomationDatabase {
           ORDER BY position
           """, [.integer(Int64(row.id.rawValue))]
         ) { s in
-          AutomationPartEdge(
-            from: AutomationPartID(s.int(at: 0)),
+          AutomationNodeEdge(
+            from: AutomationNodeID(s.int(at: 0)),
             take: AutomationTake(rawValue: s.text(at: 1) ?? "") ?? .new,
             maxAgeHours: s.optionalInt64(at: 2).map(Int.init))
         })
@@ -139,8 +139,8 @@ extension AutomationDatabase {
   /// 部品の行を外の形の部品に組む。予定と動作の定義は保存した JSON をそれぞれの型で読み、入力の上流はこの自動化の今の鍵に
   /// 解く。読めなければ定義の中の場所で言う理由。
   private static func part(
-    _ row: PartRow, at index: Int, keys: [AutomationPartID: String]
-  ) -> Result<AutomationDefinition.Part, Unbuilt> {
+    _ row: NodeRow, at index: Int, keys: [AutomationNodeID: String]
+  ) -> Result<AutomationDefinition.Node, Unbuilt> {
     let at = "parts[\(index)]"
     guard let storedTrigger = row.trigger.flatMap(jsonObject) else {
       return .failure(Unbuilt(reason: "\(at).trigger: the stored trigger cannot be read"))
@@ -154,16 +154,16 @@ extension AutomationDatabase {
     guard let storedAction = row.action.flatMap(jsonObject) else {
       return .failure(Unbuilt(reason: "\(at): the stored action cannot be read"))
     }
-    let trigger: AutomationPart.Trigger
+    let trigger: AutomationNode.Trigger
     let action: AutomationActionDef
     do throws(Unbuilt) {
-      trigger = try decode(AutomationPart.Trigger.self, storedTrigger, at: "\(at).trigger")
+      trigger = try decode(AutomationNode.Trigger.self, storedTrigger, at: "\(at).trigger")
       action = try decode(AutomationActionDef.self, storedAction, at: at)
     } catch {
       return .failure(error)
     }
     return .success(
-      AutomationDefinition.Part(
+      AutomationDefinition.Node(
         id: row.id, key: row.key, name: row.name, trigger: trigger,
         from: row.inputs.map {
           AutomationDefinition.Input(
@@ -184,7 +184,7 @@ extension AutomationDatabase {
 
   /// 型に組めない自動化の外の形（AI が直すため）。行の生の値から組み、読めない値は読めた分だけを置く。
   private static func rawDefinition(
-    _ row: AutomationRow, _ parts: [PartRow], _ keys: [AutomationPartID: String]
+    _ row: AutomationRow, _ parts: [NodeRow], _ keys: [AutomationNodeID: String]
   ) -> [String: Any] {
     var object: [String: Any] = [
       "name": row.name,
@@ -257,14 +257,14 @@ extension AutomationDatabase {
       else {
         unreadable.append(
           AutomationUnreadableProposal(
-            id: row.id, link: row.link, judge: AutomationPartID(row.judge)))
+            id: row.id, link: row.link, judge: AutomationNodeID(row.judge)))
         continue
       }
       proposals.append(
         AutomationProposal(
           id: row.id, runId: row.run,
-          judge: AutomationPartID(row.judge), defId: AutomationDefID(row.defId),
-          source: AutomationPartID(Int(source)), origin: origin, item: item, title: row.title,
+          judge: AutomationNodeID(row.judge), defId: AutomationDefID(row.defId),
+          source: AutomationNodeID(Int(source)), origin: origin, item: item, title: row.title,
           due: due ?? nil, workspace: workspace ?? nil, reason: row.reason,
           proposedAt: AutomationPersistence.date(row.endedAt), state: state))
     }

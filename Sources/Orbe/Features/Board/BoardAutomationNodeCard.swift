@@ -3,9 +3,9 @@ import SwiftUI
 /// 選んだ部品のカード。頭（成否の印・役割・名前）・項目・指示文かコマンド・出力の形式エラーの枠・前回の報告か応答・この部品の
 /// 実行履歴・ボタン（「⌘↵ 選んだ部品まで実行」「修正を依頼」）。実行のボタンは地図の ⌘↵ と同じ手の操作を通る（キーと名前も
 /// そこから読む）。
-struct BoardAutomationPartCard: View {
+struct BoardAutomationNodeCard: View {
   let model: BoardAutomationModel
-  let card: BoardAutomationPartValue
+  let card: BoardAutomationNodeValue
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
@@ -90,7 +90,7 @@ struct BoardAutomationPartCard: View {
     }
   }
 
-  private func breach(_ breach: BoardAutomationPartValue.Breach) -> some View {
+  private func breach(_ breach: BoardAutomationNodeValue.Breach) -> some View {
     VStack(alignment: .leading, spacing: Theme.Space.tick) {
       HStack(spacing: 6) {
         MarkGlyph(kind: .failure, color: Color.theme.danger)
@@ -112,7 +112,7 @@ struct BoardAutomationPartCard: View {
     .background(Color.theme.tintRed, in: RoundedRectangle(cornerRadius: 6))
   }
 
-  private func lastText(_ last: BoardAutomationPartValue.LastText) -> some View {
+  private func lastText(_ last: BoardAutomationNodeValue.LastText) -> some View {
     VStack(alignment: .leading, spacing: 6) {
       BoardSectionHeader(title: last.title, below: 0) { Text(last.at) }
       fontResolver.text(last.text, base: Theme.Typography.codeCompact)

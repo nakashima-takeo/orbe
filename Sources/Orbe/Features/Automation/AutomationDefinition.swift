@@ -5,14 +5,14 @@ import Foundation
 struct AutomationDefinition: Equatable, Codable {
   var name: String
   var notify: AutomationNotify?
-  var parts: [Part]
+  var parts: [Node]
 
   /// 外の形の部品 1 つ。`id` は今ある部品を指す（新しく足す部品は持たない）。
-  struct Part: Equatable {
-    var id: AutomationPartID?
+  struct Node: Equatable {
+    var id: AutomationNodeID?
     var key: String
     var name: String
-    var trigger: AutomationPart.Trigger
+    var trigger: AutomationNode.Trigger
     /// 入力（上流の部品の鍵と取り方）。空は入力の無い部品。
     var from: [Input]
     var action: AutomationActionDef

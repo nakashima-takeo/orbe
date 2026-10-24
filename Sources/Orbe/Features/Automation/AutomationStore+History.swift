@@ -21,7 +21,7 @@ extension AutomationStore {
     guard (1...Self.historyPageLimit).contains(limit) else {
       throw .invalid("limit: must be 1 to \(Self.historyPageLimit)")
     }
-    let parts: [AutomationPartID]
+    let parts: [AutomationNodeID]
     if let automation = automation(id) {
       if let key {
         guard let node = automation.graph.node(key: key) else { throw .partNotFound(id, key) }

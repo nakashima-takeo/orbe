@@ -8,13 +8,13 @@ import XCTest
 /// agent の依頼文に入る。地図で入力の部品が下に描かれ線が逆流する。
 final class AutomationGraphTests: OrbeTestCase {
   static let tool = "mcp__slack__post"
-  static let everyTenMinutes = AutomationPart.Trigger.scheduled(.every(600))
+  static let everyTenMinutes = AutomationNode.Trigger.scheduled(.every(600))
 
   /// 入力の無いコマンドの、取得の部品。
   static func fetch(
     _ key: String, _ coverage: AutomationCoverage = .currentSet,
-    trigger: AutomationPart.Trigger = everyTenMinutes
-  ) -> AutomationDefinition.Part {
+    trigger: AutomationNode.Trigger = everyTenMinutes
+  ) -> AutomationDefinition.Node {
     DesignSceneFixtures.commandPart(
       key, key, trigger, script: "fetch \(key)", coverage: coverage)
   }
@@ -22,8 +22,8 @@ final class AutomationGraphTests: OrbeTestCase {
   static func agent(
     _ key: String, from inputs: [String] = [], tools: [String] = [],
     deliver: AutomationActionDef.Destination = .report, coverage: AutomationCoverage? = nil,
-    trigger: AutomationPart.Trigger = .manual
-  ) -> AutomationDefinition.Part {
+    trigger: AutomationNode.Trigger = .manual
+  ) -> AutomationDefinition.Node {
     DesignSceneFixtures.agentPart(
       key, key, trigger, from: inputs, tools: tools, instruction: "\(key) して", coverage: coverage,
       deliver: deliver)
@@ -32,17 +32,17 @@ final class AutomationGraphTests: OrbeTestCase {
   static func command(
     _ key: String, from inputs: [String] = [],
     deliver: AutomationActionDef.Destination = .sideEffect,
-    trigger: AutomationPart.Trigger = .manual
-  ) -> AutomationDefinition.Part {
+    trigger: AutomationNode.Trigger = .manual
+  ) -> AutomationDefinition.Node {
     DesignSceneFixtures.commandPart(
       key, key, trigger, from: inputs, script: "run \(key)", deliver: deliver)
   }
 
   /// Issue の動機の例と、今の 4 種の写し方の表の各行は通る。
   func testTheShapesFromTheIssuePass() throws {
-    let nineEveryDay = AutomationPart.Trigger.scheduled(.cron(try BackgroundCron("0 9 * * *")))
+    let nineEveryDay = AutomationNode.Trigger.scheduled(.cron(try BackgroundCron("0 9 * * *")))
     let sources = ["gh-prs", "backlog", "slack_dm"]
-    let shapes: [(String, [AutomationDefinition.Part])] = [
+    let shapes: [(String, [AutomationDefinition.Node])] = [
       (
         "出どころごとの予定 → 1 日 1 回の判定、同じ取得結果 → 届いたら要約",
         [
@@ -102,8 +102,8 @@ final class AutomationGraphTests: OrbeTestCase {
   }
 
   /// 部品の入力をすべて `take` で取る形にする。
-  static func taking(_ take: AutomationTake, _ part: AutomationDefinition.Part)
-    -> AutomationDefinition.Part
+  static func taking(_ take: AutomationTake, _ part: AutomationDefinition.Node)
+    -> AutomationDefinition.Node
   {
     var part = part
     part.from = part.from.map { AutomationDefinition.Input(part: $0.part, take: take) }
@@ -173,15 +173,15 @@ final class AutomationGraphTests: OrbeTestCase {
 
 extension AutomationGraph {
   /// 検証して、部品と定義に 1 から順の ID を振る（テストの見本）。
-  static func numbered(_ parts: [AutomationDefinition.Part]) throws(AutomationError)
+  static func numbered(_ parts: [AutomationDefinition.Node]) throws(AutomationError)
     -> AutomationGraph
   {
     let checked = try check(parts)
     return AutomationGraph(
       checked,
       entities: checked.enumerated().map { index, item in
-        AutomationPart(
-          id: AutomationPartID(index + 1), key: item.definitionNode.key,
+        AutomationNode(
+          id: AutomationNodeID(index + 1), key: item.definitionNode.key,
           name: item.definitionNode.name,
           trigger: item.definitionNode.trigger, maxItems: item.definitionNode.maxItems,
           defId: AutomationDefID(index + 1))

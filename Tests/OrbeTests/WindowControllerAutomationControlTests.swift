@@ -88,12 +88,12 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     guard !proposing.isEmpty else { return }
     let judge = store.part(id, "judge")
     let taken = try XCTUnwrap(store.read(judge, of: id, baseline: nil, now: now)).taken
-    let proposals = proposing.enumerated().compactMap { pair -> AutomationPartPass.Proposal? in
+    let proposals = proposing.enumerated().compactMap { pair -> AutomationNodePass.Proposal? in
       let (index, item) = pair
       guard let origin = taken.first(where: { $0.origin?.item.id == item.id })?.origin else {
         return nil
       }
-      return AutomationPartPass.Proposal(
+      return AutomationNodePass.Proposal(
         origin: origin, title: titles?[index] ?? "対応: \(item.id)",
         due: nil, workspace: workspaces?[index] ?? nil, reason: reasons?[index] ?? nil)
     }

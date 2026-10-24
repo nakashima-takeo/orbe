@@ -18,9 +18,9 @@ extension BoardAutomationModel {
   }
 
   /// 選ばれている部品のカードの値。部品が選ばれていなければ nil。
-  func card(text: AutomationText, now: Date) -> BoardAutomationPartValue? {
+  func card(text: AutomationText, now: Date) -> BoardAutomationNodeValue? {
     guard let automation = selectedAutomation, let part = selectedPart else { return nil }
-    return BoardAutomationPartValue(
+    return BoardAutomationNodeValue(
       automation, part: part, text: text, running: runner.isRunning(automation.id, part),
       next: runner.nextRunAt(automation, part: part, now: now),
       open: store.shelvedProposals(of: automation.id).count)

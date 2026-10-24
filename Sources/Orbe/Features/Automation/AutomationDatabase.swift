@@ -80,9 +80,9 @@ final class AutomationDatabase {
 
   /// 部品を足して ID を返す。
   func insertPart(
-    of automation: Int, at position: Int, _ part: AutomationDefinition.Part,
+    of automation: Int, at position: Int, _ part: AutomationDefinition.Node,
     defId: AutomationDefID, addedAt: Date
-  ) throws -> AutomationPartID {
+  ) throws -> AutomationNodeID {
     try db.run(
       """
       INSERT INTO parts (automation_id, position, key, name, trigger, max_items, def_id, added_at)
@@ -93,7 +93,7 @@ final class AutomationDatabase {
         .text(try Self.encode(part.trigger)), part.maxItems.map { .integer(Int64($0)) } ?? .null,
         .integer(Int64(defId.rawValue)), Self.instant(addedAt),
       ])
-    return AutomationPartID(Int(db.lastInsertRowID))
+    return AutomationNodeID(Int(db.lastInsertRowID))
   }
 
   /// 外していない部品の位置と鍵を、一意に当たらない仮の値へ退ける（入れ替えを 1 行ずつ書くため）。
@@ -106,7 +106,7 @@ final class AutomationDatabase {
   }
 
   func updatePart(
-    _ id: AutomationPartID, at position: Int, _ part: AutomationDefinition.Part,
+    _ id: AutomationNodeID, at position: Int, _ part: AutomationDefinition.Node,
     defId: AutomationDefID
   ) throws {
     try db.run(
@@ -123,7 +123,7 @@ final class AutomationDatabase {
 
   /// 部品を外す: 外した時刻を書き、今有効な項目を無効にし、つながりと外した印と持ち越しを消す。外した部品の回の記録・判断の
   /// 記録・台帳は、同じトランザクションの最後の掃除が、候補を忘れた後に指されなくなったものから消す。無効にした項目を返す。
-  func removePart(_ id: AutomationPartID, at: Date) throws -> [Int] {
+  func removePart(_ id: AutomationNodeID, at: Date) throws -> [Int] {
     let part: [SQLiteValue] = [.integer(Int64(id.rawValue))]
     let invalidated = try invalidateItems(of: id, at: at)
     try db.run("DELETE FROM part_edges WHERE from_part_id = ?1 OR to_part_id = ?1", part)
@@ -134,7 +134,7 @@ final class AutomationDatabase {
   }
 
   /// 外した印の回。
-  func setBreach(_ id: AutomationPartID, run: Int?) throws {
+  func setBreach(_ id: AutomationNodeID, run: Int?) throws {
     try db.run(
       "UPDATE parts SET breach_run_id = ? WHERE id = ?",
       [run.map { .integer(Int64($0)) } ?? .null, .integer(Int64(id.rawValue))])
@@ -142,7 +142,7 @@ final class AutomationDatabase {
 
   /// 受け手として回の無い契機（取る行 0 件）で捨てた・期限で消えたと数え、次の成功した回の記録へ持ち越す数。読めなければ空と
   /// して扱う（ログに残す）。
-  func pendingDrops(of id: AutomationPartID) throws -> AutomationDrops {
+  func pendingDrops(of id: AutomationNodeID) throws -> AutomationDrops {
     let raw =
       try db.select(
         "SELECT pending_drops FROM parts WHERE id = ?", [.integer(Int64(id.rawValue))]
@@ -154,7 +154,7 @@ final class AutomationDatabase {
     return drops
   }
 
-  func setPendingDrops(_ id: AutomationPartID, _ drops: AutomationDrops) throws {
+  func setPendingDrops(_ id: AutomationNodeID, _ drops: AutomationDrops) throws {
     try db.run(
       "UPDATE parts SET pending_drops = ? WHERE id = ?",
       [.text(try Self.encode(drops)), .integer(Int64(id.rawValue))])
@@ -162,7 +162,7 @@ final class AutomationDatabase {
 
   /// 部品の自分の状態（直近の回・最新の成功・外した印・今有効な項目のリンク）。起動時も変化の後も、メモリの部品の状態はここから
   /// 読み直す。読めば取る行は数えない（`AutomationMemory.recount`）。
-  func state(of id: AutomationPartID) throws -> AutomationPartState {
+  func state(of id: AutomationNodeID) throws -> AutomationNodeState {
     let part: [SQLiteValue] = [.integer(Int64(id.rawValue))]
     guard
       let addedAt = try db.select(
@@ -172,8 +172,8 @@ final class AutomationDatabase {
     else {
       throw AutomationError.unavailable("part \(id) is missing from the database")
     }
-    var state = AutomationPartState(addedAt: AutomationPersistence.date(addedAt))
-    state.runs = try records(of: [id], limit: AutomationPartState.retainedRuns).map(\.record)
+    var state = AutomationNodeState(addedAt: AutomationPersistence.date(addedAt))
+    state.runs = try records(of: [id], limit: AutomationNodeState.retainedRuns).map(\.record)
     state.succeededAt = try succeededAt(of: id)
     state.breach = try breachRecord(of: id)
     state.liveLinks = try liveLinks(of: id)
@@ -184,7 +184,7 @@ final class AutomationDatabase {
 
   /// 受け手のつながりを `inputs` に置き換える。同じ部品どうしのつながりが残れば読んだ位置も残り、新しいつながりは項目を 0、
   /// 出来事を上流の最後の出来事の番号から読む。
-  func setEdges(of automation: Int, to receiver: AutomationPartID, _ inputs: [AutomationPartEdge])
+  func setEdges(of automation: Int, to receiver: AutomationNodeID, _ inputs: [AutomationNodeEdge])
     throws
   {
     let to = Int64(receiver.rawValue)
@@ -253,11 +253,11 @@ enum AutomationSourceRef: Hashable {
 
 extension AutomationDatabase {
   /// 自動化の外していない部品の鍵（部品の台帳）。定義を読めない自動化でも行から引ける。
-  func partKeys(of automation: Int) throws -> [AutomationPartID: String] {
+  func partKeys(of automation: Int) throws -> [AutomationNodeID: String] {
     Dictionary(
       uniqueKeysWithValues: try db.select(
         "SELECT id, key FROM parts WHERE automation_id = ? AND removed_at IS NULL",
         [.integer(Int64(automation))]
-      ) { (AutomationPartID($0.int(at: 0)), $0.text(at: 1) ?? "") })
+      ) { (AutomationNodeID($0.int(at: 0)), $0.text(at: 1) ?? "") })
   }
 }

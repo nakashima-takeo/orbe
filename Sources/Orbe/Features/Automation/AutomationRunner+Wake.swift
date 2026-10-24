@@ -16,7 +16,7 @@ extension AutomationRunner {
   }
 
   /// 受け手のつながりごとの今（DB から読む）。読めなければ nil（ログに残す。起こす決まりは起こさない）。
-  func inlets(of part: AutomationPartID) -> [AutomationPartID: Inlet]? {
+  func inlets(of part: AutomationNodeID) -> [AutomationNodeID: Inlet]? {
     do throws(AutomationError) {
       let positions = try store.positions(of: part)
       return positions.mapValues { Inlet(read: $0.read, up: $0.last) }
@@ -28,8 +28,8 @@ extension AutomationRunner {
 
   /// 入力のどれかに、基準線より新しい上流の番号があるか。`previous` は前の契機の始まりの時点の、入力ごとの上流の最後の番号。
   static func hasNew(
-    _ node: AutomationGraph.Node, _ inlets: [AutomationPartID: Inlet],
-    since previous: [AutomationPartID: AutomationSeqs]
+    _ node: AutomationGraph.Node, _ inlets: [AutomationNodeID: Inlet],
+    since previous: [AutomationNodeID: AutomationSeqs]
   ) -> Bool {
     node.inputs.contains { edge in
       guard let now = inlets[edge.from] else { return false }
@@ -41,7 +41,7 @@ extension AutomationRunner {
 
   /// 祖先の予定でのやり直しで起こすか: 入力のどれかに、読んだ位置より後の上流の番号があるか（失敗した契機は読んだ位置を
   /// 進めないので、その行と変化が残る）。
-  static func needsRetry(_ node: AutomationGraph.Node, _ inlets: [AutomationPartID: Inlet]) -> Bool
+  static func needsRetry(_ node: AutomationGraph.Node, _ inlets: [AutomationNodeID: Inlet]) -> Bool
   {
     node.inputs.contains { edge in
       guard let now = inlets[edge.from] else { return false }
@@ -50,7 +50,7 @@ extension AutomationRunner {
   }
 
   /// 起こす決まり。「届いたら」の部品に、基準線より新しい上流の行があり、走っていなければ起こす。
-  func wake(_ id: Int, _ part: AutomationPartID) {
+  func wake(_ id: Int, _ part: AutomationNodeID) {
     guard let automation = store.automation(id), let node = automation.graph.node(part),
       node.entity.trigger == .arrival
     else { return }
@@ -63,7 +63,7 @@ extension AutomationRunner {
 
   /// 失敗のやり直し。「届いたら」でない部品の契機が終わったら、下流の「届いたら」の部品を、読んだ位置より後の上流の番号が
   /// あればすべて起こす（`needsRetry`）。
-  func retry(below part: AutomationPartID, in id: Int) {
+  func retry(below part: AutomationNodeID, in id: Int) {
     guard let automation = store.automation(id) else { return }
     for node in automation.graph.descendants(of: part) where node.entity.trigger == .arrival {
       let key = Self.key(id, node.id)

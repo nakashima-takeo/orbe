@@ -12,7 +12,7 @@ import Foundation
 /// 番人から外すので、一巡はそこで打ち切られる。
 struct AutomationFlow {
   enum Target: Equatable {
-    case part(AutomationPartID)
+    case part(AutomationNodeID)
     /// 終わりの部品すべて（`AutomationGraph.ends`）。
     case ends
     /// タスク候補を行き先にする部品すべて（`AutomationGraph.judges`）。
@@ -21,7 +21,7 @@ struct AutomationFlow {
 
   private enum Step: Equatable {
     /// 道の上の上流で、まだ終わっていないもの。
-    case waiting(Set<AutomationPartID>)
+    case waiting(Set<AutomationNodeID>)
     /// 道の上の上流がすべて終わった。「届いたら」なら走っていなければ終わり、そうでなければ次に始まる契機を一巡の分として
     /// 受け取る（走っていなければ起こす）。
     case ready
@@ -32,23 +32,23 @@ struct AutomationFlow {
     case done
   }
 
-  private let targets: [AutomationPartID]
+  private let targets: [AutomationNodeID]
   /// 道の根。
-  private let roots: Set<AutomationPartID>
-  private var steps: [AutomationPartID: Step] = [:]
+  private let roots: Set<AutomationNodeID>
+  private var steps: [AutomationNodeID: Step] = [:]
 
   /// `path` の上を `targets`（どれも `path` の上）まで流し始める。`wake` は今すぐ起こす部品（走っていない根）。入力の無い根が
   /// 走っていれば、その回を一巡の分にする（入力が無いので、いつ始まった回でも出すものは同じ）。入力のある根が走っていれば、
   /// その回が終わった後に起こす。
   static func start(
-    through path: Set<AutomationPartID>, to targets: [AutomationPartID], in graph: AutomationGraph,
-    running: (AutomationPartID) -> Bool
-  ) -> (flow: AutomationFlow, wake: [AutomationPartID]) {
+    through path: Set<AutomationNodeID>, to targets: [AutomationNodeID], in graph: AutomationGraph,
+    running: (AutomationNodeID) -> Bool
+  ) -> (flow: AutomationFlow, wake: [AutomationNodeID]) {
     let nodes = graph.nodes.filter { path.contains($0.id) }
     var flow = AutomationFlow(
       targets: targets,
       roots: Set(nodes.filter { path.isDisjoint(with: $0.inputParts) }.map(\.id)))
-    var wake: [AutomationPartID] = []
+    var wake: [AutomationNodeID] = []
     for node in nodes {
       let upstream = path.intersection(node.inputParts)
       if !upstream.isEmpty {
@@ -63,21 +63,21 @@ struct AutomationFlow {
     return (flow, wake)
   }
 
-  private init(targets: [AutomationPartID], roots: Set<AutomationPartID>) {
+  private init(targets: [AutomationNodeID], roots: Set<AutomationNodeID>) {
     self.targets = targets
     self.roots = roots
   }
 
-  var path: Set<AutomationPartID> { Set(steps.keys) }
+  var path: Set<AutomationNodeID> { Set(steps.keys) }
 
   var finished: Bool { targets.allSatisfy { steps[$0] == .done } }
 
   /// 部品が一巡の分を終えたか。
-  func isDone(_ part: AutomationPartID) -> Bool { steps[part] == .done }
+  func isDone(_ part: AutomationNodeID) -> Bool { steps[part] == .done }
 
   /// 部品の契機が始まった。一巡の分として受け取ったら真（走らせ役はその契機を `flowed` として覚え、終わりに渡す）。誰が
   /// 始めた回かは問わない。
-  mutating func started(_ part: AutomationPartID, in graph: AutomationGraph) -> Bool {
+  mutating func started(_ part: AutomationNodeID, in graph: AutomationGraph) -> Bool {
     guard steps[part] == .ready, !arrives(part, in: graph) else { return false }
     steps[part] = .taken
     return true
@@ -87,9 +87,9 @@ struct AutomationFlow {
   /// 契機の終わりだけを数える——番人は回の終わりの中で次の予定の回を同期に始めうるので、古い回の終わりが受け取った回の始まり
   /// より後に届く。一巡の分でない回の終わりは、起こす部品を邪魔していた回が終わったとして、走っていなければ起こし直す。
   mutating func ended(
-    _ part: AutomationPartID, flowed: Bool, in graph: AutomationGraph,
-    running: (AutomationPartID) -> Bool
-  ) -> [AutomationPartID] {
+    _ part: AutomationNodeID, flowed: Bool, in graph: AutomationGraph,
+    running: (AutomationNodeID) -> Bool
+  ) -> [AutomationNodeID] {
     switch steps[part] {
     case .adopted:
       return finish(part, graph, running)
@@ -104,10 +104,10 @@ struct AutomationFlow {
 
   /// 部品を終わりにし、道の上の上流がすべて終わった下流を次へ進める。
   private mutating func finish(
-    _ part: AutomationPartID, _ graph: AutomationGraph, _ running: (AutomationPartID) -> Bool
-  ) -> [AutomationPartID] {
+    _ part: AutomationNodeID, _ graph: AutomationGraph, _ running: (AutomationNodeID) -> Bool
+  ) -> [AutomationNodeID] {
     steps[part] = .done
-    var wake: [AutomationPartID] = []
+    var wake: [AutomationNodeID] = []
     for node in graph.downstream(of: part) {
       guard case .waiting(var upstream) = steps[node.id] else { continue }
       upstream.remove(part)
@@ -123,14 +123,14 @@ struct AutomationFlow {
 
   /// 上流がすべて終わった部品を、走っていなければ進める——「届いたら」なら終わりにし、そうでなければ起こす。
   private mutating func settle(
-    _ part: AutomationPartID, _ graph: AutomationGraph, _ running: (AutomationPartID) -> Bool
-  ) -> [AutomationPartID] {
+    _ part: AutomationNodeID, _ graph: AutomationGraph, _ running: (AutomationNodeID) -> Bool
+  ) -> [AutomationNodeID] {
     guard !running(part) else { return [] }
     return arrives(part, in: graph) ? finish(part, graph, running) : [part]
   }
 
   /// 普段の決まりで起きるのを見届ける部品か（根でない「届いたら」の部品）。
-  private func arrives(_ part: AutomationPartID, in graph: AutomationGraph) -> Bool {
+  private func arrives(_ part: AutomationNodeID, in graph: AutomationGraph) -> Bool {
     !roots.contains(part) && graph.node(part)?.entity.trigger == .arrival
   }
 }

@@ -54,7 +54,7 @@ final class BoardAutomationUnreadableTests: OrbeTestCase {
       timeZone: DesignSceneFixtures.taskCalendar.timeZone)
 
     let card = try XCTUnwrap(
-      BoardAutomationPartValue(
+      BoardAutomationNodeValue(
         automation, key: "fetch", text: text, running: false, next: nil, open: 0))
 
     guard case .run(let entry) = card.runs.first else { return XCTFail("\(card.runs)") }

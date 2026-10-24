@@ -62,22 +62,22 @@ final class AutomationRunnerTests: OrbeTestCase {
 
   /// コマンドの部品。スクリプトは既定で部品の鍵（呼び出しを部品ごとに見分けるため）。
   func part(
-    _ key: String, _ trigger: AutomationPart.Trigger, from inputs: [String] = [],
+    _ key: String, _ trigger: AutomationNode.Trigger, from inputs: [String] = [],
     script: String? = nil, coverage: AutomationCoverage? = nil,
     deliver: AutomationActionDef.Destination = .nextPart
-  ) -> AutomationDefinition.Part {
+  ) -> AutomationDefinition.Node {
     DesignSceneFixtures.commandPart(
       key, key, trigger, from: inputs, script: script ?? key, coverage: coverage, deliver: deliver)
   }
 
   /// 新着の流れを `seconds` ごとに取る取得の部品。
   func fetch(_ key: String, every seconds: TimeInterval, script: String? = nil)
-    -> AutomationDefinition.Part
+    -> AutomationDefinition.Node
   {
     part(key, .scheduled(.every(seconds)), script: script, coverage: .newArrivals)
   }
 
-  func define(_ parts: [AutomationDefinition.Part], name: String = "自動化") throws -> Int {
+  func define(_ parts: [AutomationDefinition.Node], name: String = "自動化") throws -> Int {
     try runner.set(nil, AutomationDefinition(name: name, notify: nil, parts: parts)).id
   }
 

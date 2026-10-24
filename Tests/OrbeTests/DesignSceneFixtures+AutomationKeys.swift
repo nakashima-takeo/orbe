@@ -21,7 +21,7 @@ extension BoardAutomationModel {
 
 extension AutomationStore {
   /// 今の鍵の部品の ID（テストと見本）。
-  func part(_ id: Int, _ key: String) -> AutomationPartID {
+  func part(_ id: Int, _ key: String) -> AutomationNodeID {
     guard let part = automation(id)?.graph.node(key: key)?.id else {
       preconditionFailure("no part \(key) in automation \(id)")
     }
@@ -53,8 +53,8 @@ extension AutomationStore {
 
   /// 鍵で指した部品の 1 回を、走らせ役と同じ読み（読める行をすべて取る）で確定する（テストと見本）。
   @discardableResult func record(
-    _ id: Int, part key: String, trigger: AutomationPartRun.Trigger = .schedule, at: Date,
-    endedAt: Date? = nil, outcome: AutomationPartPass.Outcome
+    _ id: Int, part key: String, trigger: AutomationNodeRun.Trigger = .schedule, at: Date,
+    endedAt: Date? = nil, outcome: AutomationNodePass.Outcome
   ) throws -> AutomationRecorded {
     let part = part(id, key)
     guard let node = automation(id)?.graph.node(part) else { preconditionFailure("no part") }
@@ -77,7 +77,7 @@ extension WindowController {
   }
 }
 
-extension BoardAutomationPartValue {
+extension BoardAutomationNodeValue {
   /// 部品を今の鍵で指す（テスト）。
   init?(
     _ automation: Automation, key: String, text: AutomationText, running: Bool, next: Date?,
@@ -105,7 +105,7 @@ extension AutomationRunner {
 
 extension Automation {
   /// 部品の状態を今の鍵で引く（テスト）。
-  func state(key: String) -> AutomationPartState {
+  func state(key: String) -> AutomationNodeState {
     guard let node = graph.node(key: key) else { preconditionFailure("no part \(key)") }
     return state(node.id)
   }
@@ -113,7 +113,7 @@ extension Automation {
 
 extension AutomationTrial {
   /// 部品を鍵で指す（テスト）。
-  func state(key: String) -> PartState {
+  func state(key: String) -> NodeState {
     guard let part = range.path.first(where: { $0.key == key })?.id else { return .untouched }
     return state(of: part)
   }

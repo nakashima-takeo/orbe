@@ -19,11 +19,11 @@ struct AutomationSettling {
   }
 
   /// 確定する。成功した回は読んだ位置を進めて持ち越しを載せ、役割ごとの結果を書く。どちらの回も記録・回の履歴・外した印を書く。
-  mutating func settle(_ run: AutomationPartRun, _ memory: inout AutomationMemory) throws
+  mutating func settle(_ run: AutomationNodeRun, _ memory: inout AutomationMemory) throws
     -> AutomationRecorded
   {
     var run = run
-    var judged: (proposals: [AutomationPartPass.Proposal], resolved: [String])?
+    var judged: (proposals: [AutomationNodePass.Proposal], resolved: [String])?
     if !run.failed, case .succeeded(let output, _, _) = end.outcome {
       try consume()
       switch output {
@@ -62,7 +62,7 @@ struct AutomationSettling {
   /// 判定でない役割の結果。取得・処理は出した行を照らし（今の集合は項目と版、出来事の流れは出来事）、出どころの項目が無効に
   /// なった判断待ちの候補を下げる（下げた数は取得の回にだけ数える）。
   private mutating func produce(
-    _ output: AutomationPartPass.Output, _ run: inout AutomationPartRun,
+    _ output: AutomationNodePass.Output, _ run: inout AutomationNodeRun,
     _ memory: inout AutomationMemory
   ) throws {
     switch output {
@@ -91,7 +91,7 @@ struct AutomationSettling {
 
   /// 判定の出力をこの時点の候補に当て直したもの。
   private struct Decided {
-    let pending: [AutomationPartPass.Proposal]
+    let pending: [AutomationNodePass.Proposal]
     let resolving: [Int]
     let dismissed: [AutomationDismissal]
   }
@@ -99,7 +99,7 @@ struct AutomationSettling {
   /// 回の途中に他の確定や人のさばきがあっても、出どころの項目が無効になった案と既に候補のあるリンクへの案は理由付きで捨て、
   /// 判断待ちでない候補は対応済みにしない。
   private func decide(
-    _ proposals: [AutomationPartPass.Proposal], _ resolved: [String], _ memory: AutomationMemory
+    _ proposals: [AutomationNodePass.Proposal], _ resolved: [String], _ memory: AutomationMemory
   ) throws -> Decided {
     var proposed = memory.heldLinks
     let invalidated = try db.invalidatedVersions(
@@ -107,7 +107,7 @@ struct AutomationSettling {
         if case .version(let id) = $0.origin.row { return id }
         return nil
       })
-    var pending: [AutomationPartPass.Proposal] = []
+    var pending: [AutomationNodePass.Proposal] = []
     var resolving: [Int] = []
     var dismissed: [AutomationDismissal] = []
     for proposal in proposals {

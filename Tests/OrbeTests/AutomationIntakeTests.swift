@@ -13,7 +13,7 @@ final class AutomationIntakeTests: OrbeTestCase {
   let t0 = Date(timeIntervalSince1970: 1_800_000_000)
 
   /// 今の集合の取得 cs（ID 1）・新着の取得 na（ID 2）と、両方を入力にする部品 `part`（ID 3）を載せたグラフの `part`。
-  private func node(_ part: AutomationDefinition.Part) throws -> AutomationGraph.Node {
+  private func node(_ part: AutomationDefinition.Node) throws -> AutomationGraph.Node {
     var parts = [Parts.fetch("cs"), Parts.fetch("na", .newArrivals), part]
     if part.action.destination == .nextPart {
       parts.append(Parts.agent("end", from: [part.key]))
@@ -21,11 +21,11 @@ final class AutomationIntakeTests: OrbeTestCase {
     return try XCTUnwrap(AutomationGraph.numbered(parts).node(key: part.key))
   }
 
-  private let cs = AutomationPartID(1)
-  private let na = AutomationPartID(2)
+  private let cs = AutomationNodeID(1)
+  private let na = AutomationNodeID(2)
 
   private func row(
-    _ seq: Int, _ id: String? = nil, from edge: AutomationPartID? = nil, link: String? = nil,
+    _ seq: Int, _ id: String? = nil, from edge: AutomationNodeID? = nil, link: String? = nil,
     sourced: Bool = true, at: Date? = nil, unread: Bool = true, size: Int = 10
   ) -> AutomationIntake.Row {
     let edge = edge ?? cs

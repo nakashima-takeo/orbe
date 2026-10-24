@@ -160,7 +160,7 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       "sessionIds の上限を写す")
     XCTAssertTrue(
       description(try tool("list_automations")).contains(
-        "新しい順に \(AutomationPartState.retainedRuns) 件まで。"),
+        "新しい順に \(AutomationNodeState.retainedRuns) 件まで。"),
       "回の記録を残す件数を写す")
   }
 

@@ -25,7 +25,7 @@ extension AutomationRunnerTests {
     return false
   }
 
-  private func lastTrigger(_ key: String, of id: Int) -> AutomationPartRun.Trigger? {
+  private func lastTrigger(_ key: String, of id: Int) -> AutomationNodeRun.Trigger? {
     store.automation(id)?.state(key: key).runs.first?.trigger
   }
 
@@ -199,7 +199,7 @@ extension AutomationRunnerTests {
   // MARK: - 予定の書き換え
 
   /// 取得 `f` → `a`（予定は `trigger`）→ 報告 `s`（手動）。
-  private func chain(a trigger: AutomationPart.Trigger) -> AutomationDefinition {
+  private func chain(a trigger: AutomationNode.Trigger) -> AutomationDefinition {
     AutomationDefinition(
       name: "流す", notify: nil,
       parts: [

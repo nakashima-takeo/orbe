@@ -33,7 +33,7 @@ extension AutomationDatabase {
 
   /// 判断の記録・候補・回の記録。
   private func sweepRecords() throws {
-    let keep = Int64(AutomationPartState.retainedRuns)
+    let keep = Int64(AutomationNodeState.retainedRuns)
     // 判断の記録: 判定の部品ごとに新しい方から回数まで。外した部品のものは残さない。どちらも覚えている候補のものは消さない。
     try db.run(
       """
@@ -115,7 +115,7 @@ extension AutomationDatabase {
         SELECT min(started_at) FROM (
           SELECT started_at, ROW_NUMBER() OVER (ORDER BY id DESC) AS n FROM runs
           WHERE part_id = i.part_id)
-        WHERE n <= \(AutomationPartState.retainedRuns)), 9223372036854775807)
+        WHERE n <= \(AutomationNodeState.retainedRuns)), 9223372036854775807)
       """
     let referenced = """
       (v.id IN (SELECT version_id FROM run_item_inputs)

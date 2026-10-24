@@ -2,8 +2,8 @@ import XCTest
 
 @testable import Orbe
 
-/// コマンドの何も無い回と失敗の言い方、agent の結果の無い回と断った結果（`AutomationPartPassTests` の続き）。
-extension AutomationPartPassTests {
+/// コマンドの何も無い回と失敗の言い方、agent の結果の無い回と断った結果（`AutomationNodePassTests` の続き）。
+extension AutomationNodePassTests {
   // MARK: - コマンドの空の出力と終了コード
 
   /// コマンドの何も無い回は空の出力——正しい 0 件。
@@ -186,7 +186,7 @@ extension AutomationPartPassTests {
     XCTAssertEqual(
       succeeded,
       .process([
-        AutomationPartRow(
+        AutomationNodeRow(
           id: "f:a", text: #"{"id":"f:a"}"#, origin: origin("a"), source: row("a").source)
       ]), "\(outcomes)")
     XCTAssertEqual(breach?.lines.map(\.text), ["item 1: missing id"])

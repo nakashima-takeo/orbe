@@ -10,7 +10,7 @@ import XCTest
 /// 前の部品が選ばれたままカードに残り、一覧で効くはずのキーが部品に効く。「ここまで今すぐ実行」で選んだ部品の先まで流れるか、
 /// 関係の無い取得まで起きる。
 extension BoardAutomationTests {
-  private func card(_ automation: BoardAutomationModel) -> BoardAutomationPartValue? {
+  private func card(_ automation: BoardAutomationModel) -> BoardAutomationNodeValue? {
     let now = automation.runner.now()
     return automation.card(
       text: automation.text(LocalizationStore(language: .ja), now: now), now: now)

@@ -42,7 +42,7 @@ struct AutomationText {
 
   /// 部品の役割の名前（「取得」「判定」）。部品を名指す言い方には使わない——部品は名前だけで言い、役割は地図の役割の列と
   /// カードの頭でだけ見せる。
-  func role(_ role: AutomationPartRole) -> String {
+  func role(_ role: AutomationNodeRole) -> String {
     switch role {
     case .fetch: l10n.string(.automationRoleFetch)
     case .process: l10n.string(.automationRoleProcess)
@@ -54,7 +54,7 @@ struct AutomationText {
   }
 
   /// 部品の予定（「30分ごと」「平日 9:00」「手動」「入力元に連動」）。
-  func schedule(_ trigger: AutomationPart.Trigger) -> String {
+  func schedule(_ trigger: AutomationNode.Trigger) -> String {
     switch trigger {
     case .scheduled(let timing): when(timing)
     case .manual: l10n.string(.automationManual)

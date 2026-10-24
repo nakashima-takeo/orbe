@@ -7,7 +7,7 @@ import Foundation
 /// 持つ。見本の今日（2025-10-04）は土曜なので、回は前の平日に置く。
 extension DesignSceneFixtures {
   static func boardAgentExample() -> AutomationSample {
-    let outcomes: [(daysAgo: Int, outcome: AutomationPartPass.Outcome)] = [
+    let outcomes: [(daysAgo: Int, outcome: AutomationNodePass.Outcome)] = [
       (4, worked(.done("レビュー待ちの PR 1 件を #dev-me に投稿した。"))),
       (
         3,

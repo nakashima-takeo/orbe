@@ -71,21 +71,21 @@ extension ControlWireTests {
       AutomationDefinition(
         name: "Slack: 自分宛", notify: nil,
         parts: [
-          AutomationDefinition.Part(
+          AutomationDefinition.Node(
             id: nil, key: "slack", name: "Slack: 自分宛",
             trigger: .scheduled(.cron(try BackgroundCron("*/10 9-18 * * 1-5"))), from: [],
             action: AutomationActionDef(
               method: .agent(
-                AutomationPartAgent(
+                AutomationNodeAgent(
                   cli: "claude", model: nil, tools: ["mcp__slack__search"], instruction: "DM")),
               timeoutMinutes: nil, coverage: .newArrivals, destination: .nextPart),
             maxItems: nil),
-          AutomationDefinition.Part(
-            id: AutomationPartID(4), key: "judge", name: "判定", trigger: .arrival,
+          AutomationDefinition.Node(
+            id: AutomationNodeID(4), key: "judge", name: "判定", trigger: .arrival,
             from: [AutomationDefinition.Input(part: "slack", maxAgeHours: 24)],
             action: AutomationActionDef(
               method: .agent(
-                AutomationPartAgent(
+                AutomationNodeAgent(
                   cli: "claude", model: "opus", tools: [], instruction: "自分がやること")),
               timeoutMinutes: nil, coverage: nil, destination: .taskCandidates),
             maxItems: 30),

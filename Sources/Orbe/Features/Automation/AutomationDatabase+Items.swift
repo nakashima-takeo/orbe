@@ -34,7 +34,7 @@ extension AutomationDatabase {
   /// 今の集合の部品の出力を照らす。結果の行ごとに同じ（部品・書かれた id）の今有効な項目を引き、無ければ新しい項目と版を
   /// 足し、あって引き継ぎ元も中身も同じなら何もせず、中身だけ違えば版を足す。引き継ぎ元が違えば今の項目を無効にして新しい
   /// 項目にする。結果に無い今有効な項目は無効にする。
-  func writeItems(of part: AutomationPartID, _ outputs: [Output], at: Date) throws -> Written {
+  func writeItems(of part: AutomationNodeID, _ outputs: [Output], at: Date) throws -> Written {
     let p = Int64(part.rawValue)
     var written = Written()
     var live = Dictionary(
@@ -75,7 +75,7 @@ extension AutomationDatabase {
 
   /// 出来事の流れの部品の出力を足す。残す期間の内に同じ部品が同じ書かれた id を出していれば同じ出来事として足さない（中身が
   /// 違っても）。行が保存の都合で残っていても、見分けは残す期間の内かで決める。
-  func writeEvents(of part: AutomationPartID, _ outputs: [Output], at: Date) throws -> Written {
+  func writeEvents(of part: AutomationNodeID, _ outputs: [Output], at: Date) throws -> Written {
     let p = Int64(part.rawValue)
     var written = Written()
     for output in outputs {
@@ -95,7 +95,7 @@ extension AutomationDatabase {
   }
 
   /// 新しい項目を、次の番号と、同じ番号の最初の版で足す。
-  func insertItem(of part: AutomationPartID, _ output: Output, at: Date) throws {
+  func insertItem(of part: AutomationNodeID, _ output: Output, at: Date) throws {
     let seq = try nextSeq(of: part, "last_item_seq")
     try db.run(
       """
@@ -114,7 +114,7 @@ extension AutomationDatabase {
   }
 
   /// 新しい出来事を次の番号で足す。
-  func insertEvent(of part: AutomationPartID, _ output: Output, at: Date) throws {
+  func insertEvent(of part: AutomationNodeID, _ output: Output, at: Date) throws {
     let seq = try nextSeq(of: part, "last_event_seq")
     try db.run(
       """
@@ -129,7 +129,7 @@ extension AutomationDatabase {
   }
 
   /// 部品の今有効な項目をすべて無効にし、無効にした項目を返す（性質の書き換え・部品を外す）。
-  func invalidateItems(of part: AutomationPartID, at: Date) throws -> [Int] {
+  func invalidateItems(of part: AutomationNodeID, at: Date) throws -> [Int] {
     let ids = try db.select(
       "SELECT id FROM items WHERE part_id = ? AND valid_to IS NULL",
       [.integer(Int64(part.rawValue))]
@@ -139,14 +139,14 @@ extension AutomationDatabase {
   }
 
   /// 部品 `part` の今有効な項目を、次の番号で無効にする。
-  func invalidate(item: Int, of part: AutomationPartID, at: Date) throws {
+  func invalidate(item: Int, of part: AutomationNodeID, at: Date) throws {
     let seq = try nextSeq(of: part, "last_item_seq")
     try db.run(
       "UPDATE items SET valid_to = max(valid_from, ?), valid_to_seq = ? WHERE id = ?",
       [Self.instant(at), .integer(seq), .integer(Int64(item))])
   }
 
-  private func nextSeq(of part: AutomationPartID, _ column: String) throws -> Int64 {
+  private func nextSeq(of part: AutomationNodeID, _ column: String) throws -> Int64 {
     let p: SQLiteValue = .integer(Int64(part.rawValue))
     try db.run("UPDATE parts SET \(column) = \(column) + 1 WHERE id = ?", [p])
     return try db.select("SELECT \(column) FROM parts WHERE id = ?", [p]) { $0.int64(at: 0) }
@@ -154,7 +154,7 @@ extension AutomationDatabase {
   }
 
   /// 部品が項目の表（変化の番号）・出来事の表にそれぞれ最後に振った通し番号。
-  func lastSeqs(of part: AutomationPartID) throws -> AutomationSeqs {
+  func lastSeqs(of part: AutomationNodeID) throws -> AutomationSeqs {
     try db.select(
       "SELECT last_item_seq, last_event_seq FROM parts WHERE id = ?",
       [.integer(Int64(part.rawValue))]
@@ -162,7 +162,7 @@ extension AutomationDatabase {
   }
 
   /// 部品の今有効な項目のリンク（取得の最新の結果）。リンクの無い項目は入らない。
-  func liveLinks(of part: AutomationPartID) throws -> Set<String> {
+  func liveLinks(of part: AutomationNodeID) throws -> Set<String> {
     Set(
       try db.select(
         """

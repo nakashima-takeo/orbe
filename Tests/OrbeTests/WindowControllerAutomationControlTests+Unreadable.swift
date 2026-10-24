@@ -42,7 +42,7 @@ extension WindowControllerAutomationControlTests {
     XCTAssertEqual(parts.map { $0["key"] as? String }, ["fetch", "judge"])
     var fixed = Self.definition()
     for index in fixed.parts.indices {
-      fixed.parts[index].id = (parts[index]["id"] as? Int).map(AutomationPartID.init)
+      fixed.parts[index].id = (parts[index]["id"] as? Int).map(AutomationNodeID.init)
     }
     let set = try success(wc.controlSetAutomation(automationId: 1, version: 1, fixed))
     XCTAssertEqual((set["automation"] as? [String: Any])?["version"] as? Int, 2)

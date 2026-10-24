@@ -48,7 +48,7 @@ extension WindowControllerAutomationControlTests {
     let id = try set(wc, Self.definition())
     let store = wc.automationStore
     let start = Date()
-    func record(_ part: String, at offset: TimeInterval, _ outcome: AutomationPartPass.Outcome)
+    func record(_ part: String, at offset: TimeInterval, _ outcome: AutomationNodePass.Outcome)
       throws
     {
       try store.record(id, part: part, at: start.addingTimeInterval(offset), outcome: outcome)

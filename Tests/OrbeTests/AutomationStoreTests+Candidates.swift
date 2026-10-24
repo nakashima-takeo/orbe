@@ -46,7 +46,7 @@ extension AutomationStoreTests {
         trigger: .arrival, startedAt: Self.at, endedAt: Self.at, read: read,
         outcome: DesignSceneFixtures.judged(
           [
-            AutomationPartPass.Proposal(
+            AutomationNodePass.Proposal(
               origin: try XCTUnwrap(read.taken.first?.origin), title: "対応: a", due: nil,
               workspace: nil, reason: nil)
           ], rows: 1)))
@@ -110,7 +110,7 @@ extension AutomationStoreTests {
         trigger: .arrival, startedAt: Self.at, endedAt: Self.at, read: read,
         outcome: DesignSceneFixtures.judged(
           [
-            AutomationPartPass.Proposal(
+            AutomationNodePass.Proposal(
               origin: try XCTUnwrap(read.taken.first?.origin), title: "対応: a", due: nil,
               workspace: nil, reason: nil)
           ], rows: 1)))

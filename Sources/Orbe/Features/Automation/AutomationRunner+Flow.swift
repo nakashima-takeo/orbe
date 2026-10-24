@@ -17,7 +17,7 @@ extension AutomationRunner {
   func flow(_ id: Int, to target: AutomationFlow.Target) throws(AutomationError) {
     try checkAvailable()
     let automation = store.automations[try store.index(id)]
-    let targets: [AutomationPartID]
+    let targets: [AutomationNodeID]
     switch target {
     case .part(let part):
       guard automation.graph.node(part) != nil else { throw .partNotFound(id, "\(part)") }
@@ -34,7 +34,7 @@ extension AutomationRunner {
   }
 
   /// 道（`path`）を渡して、その上を `targets`（空でなく、どれも道の上）まで流す。流している途中なら断る。
-  func flow(_ id: Int, through path: Set<AutomationPartID>, to targets: [AutomationPartID])
+  func flow(_ id: Int, through path: Set<AutomationNodeID>, to targets: [AutomationNodeID])
     throws(AutomationError)
   {
     try checkAvailable()

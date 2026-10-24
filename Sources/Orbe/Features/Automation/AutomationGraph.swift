@@ -12,13 +12,13 @@ struct AutomationGraph: Equatable {
 
   /// 部品と、使う動作の定義・入力・導いた役割。
   struct Node: Equatable {
-    let entity: AutomationPart
+    let entity: AutomationNode
     let action: AutomationActionDef
     /// `from` の中の順。
-    let inputs: [AutomationPartEdge]
-    let role: AutomationPartRole
+    let inputs: [AutomationNodeEdge]
+    let role: AutomationNodeRole
 
-    var id: AutomationPartID { entity.id }
+    var id: AutomationNodeID { entity.id }
     var key: String { entity.key }
 
     /// 走るモデル。保存は省略のまま持ち、走らせるとき・画面はここで解く。コマンドは nil。
@@ -45,7 +45,7 @@ struct AutomationGraph: Equatable {
     }
 
     /// 入力の部品。
-    var inputParts: [AutomationPartID] { inputs.map(\.from) }
+    var inputParts: [AutomationNodeID] { inputs.map(\.from) }
 
     /// 何をするか（省略を解いた動作と入力の集合）。書き換えで何をするかが変わったかはこれで比べる——省略していた値に既定と
     /// 同じ値を書き足しただけでは変わらない。
@@ -67,24 +67,24 @@ struct AutomationGraph: Equatable {
     let timeoutMinutes: Int
     let coverage: AutomationCoverage?
     let destination: AutomationActionDef.Destination
-    let inputs: Set<AutomationPartEdge>
+    let inputs: Set<AutomationNodeEdge>
   }
 
   /// 検証を通った部品の外の形と、導いた役割と、入力の部品の位置。
   struct Checked: Equatable {
-    let definitionNode: AutomationDefinition.Part
-    let role: AutomationPartRole
+    let definitionNode: AutomationDefinition.Node
+    let role: AutomationNodeRole
     let upstream: [Int]
   }
 
   /// 検証を通った外の形に、部品の実体（ID と使う定義の ID）を当てて組む。`entities` と `checked` は同じ順。
-  init(_ checked: [Checked], entities: [AutomationPart]) {
+  init(_ checked: [Checked], entities: [AutomationNode]) {
     precondition(checked.count == entities.count, "every checked part has an entity")
     nodes = zip(checked, entities).map { checked, entity in
       Node(
         entity: entity, action: checked.definitionNode.action,
         inputs: zip(checked.upstream, checked.definitionNode.from).map { index, input in
-          AutomationPartEdge(
+          AutomationNodeEdge(
             from: entities[index].id, take: input.take, maxAgeHours: input.maxAgeHours)
         }, role: checked.role)
     }
@@ -97,9 +97,9 @@ struct AutomationGraph: Equatable {
   }
 
   /// 外の形に組み直したもの（`from` は鍵で名指し、各部品に ID を添える）。
-  var definitionNodes: [AutomationDefinition.Part] {
+  var definitionNodes: [AutomationDefinition.Node] {
     nodes.map { node in
-      AutomationDefinition.Part(
+      AutomationDefinition.Node(
         id: node.id, key: node.key, name: node.entity.name, trigger: node.entity.trigger,
         from: node.inputs.map { edge in
           AutomationDefinition.Input(
@@ -108,7 +108,7 @@ struct AutomationGraph: Equatable {
     }
   }
 
-  func node(_ id: AutomationPartID) -> Node? {
+  func node(_ id: AutomationNodeID) -> Node? {
     nodes.first { $0.id == id }
   }
 
@@ -117,7 +117,7 @@ struct AutomationGraph: Equatable {
     nodes.first { $0.key == key }
   }
 
-  private func index(_ id: AutomationPartID) -> Int? {
+  private func index(_ id: AutomationNodeID) -> Int? {
     nodes.firstIndex { $0.id == id }
   }
 
@@ -136,13 +136,13 @@ struct AutomationGraph: Equatable {
 
   /// `id` の部品が出した行が、途中で取得の部品を通らずに判定の部品へ届くか（タスク候補へ至るか）。入力を持つツールの agent は
   /// 取得の役割で、届いた行を起こす合図にしか使わないので、行はそこを通り抜けない。
-  func reachesTaskCandidates(_ id: AutomationPartID) -> Bool {
+  func reachesTaskCandidates(_ id: AutomationNodeID) -> Bool {
     guard let index = index(id) else { return false }
     return !Self.judges(reachedFrom: index, nodes.map(\.role), downstream).isEmpty
   }
 
   /// `start` の部品が出した行が、途中で取得の部品を通らずに届く判定の部品の位置。
-  static func judges(reachedFrom start: Int, _ roles: [AutomationPartRole], _ downstream: [[Int]])
+  static func judges(reachedFrom start: Int, _ roles: [AutomationNodeRole], _ downstream: [[Int]])
     -> Set<Int>
   {
     var pending = downstream[start]
@@ -160,7 +160,7 @@ struct AutomationGraph: Equatable {
   }
 
   /// `judge` の部品へ、途中で別の取得の部品を通らずに行が届く取得の部品（定義の順）。
-  func fetches(reaching judge: AutomationPartID) -> [Node] {
+  func fetches(reaching judge: AutomationNodeID) -> [Node] {
     guard let target = index(judge) else { return [] }
     let roles = nodes.map(\.role)
     return nodes.indices.filter { index in
@@ -170,13 +170,13 @@ struct AutomationGraph: Equatable {
   }
 
   /// `id` の部品を入力に名指す部品（定義の順）。
-  func downstream(of id: AutomationPartID) -> [Node] {
+  func downstream(of id: AutomationNodeID) -> [Node] {
     guard let index = index(id) else { return [] }
     return downstream[index].sorted().map { nodes[$0] }
   }
 
   /// `id` の部品から行が届きうる部品すべて（定義の順）。
-  func descendants(of id: AutomationPartID) -> [Node] {
+  func descendants(of id: AutomationNodeID) -> [Node] {
     guard let start = index(id) else { return [] }
     var pending = downstream[start]
     var seen = Set<Int>()
@@ -188,7 +188,7 @@ struct AutomationGraph: Equatable {
   }
 
   /// `id` の部品へ行が届きうる部品すべて（定義の順）。
-  func ancestors(of id: AutomationPartID) -> [Node] {
+  func ancestors(of id: AutomationNodeID) -> [Node] {
     guard let start = index(id) else { return [] }
     var pending = upstream[start]
     var seen = Set<Int>()

@@ -67,7 +67,7 @@ enum BoardAutomationHand {
 
   /// 走らせ役へ通す。`part` は部品まで流すときの流す先（無ければ何もしない）。
   static func perform(
-    _ operation: Operation, on automation: Automation, part: AutomationPartID?,
+    _ operation: Operation, on automation: Automation, part: AutomationNodeID?,
     runner: AutomationRunner
   ) -> Refusal? {
     switch operation {

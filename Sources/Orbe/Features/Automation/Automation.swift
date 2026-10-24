@@ -15,7 +15,7 @@ struct Automation: Equatable, Identifiable {
   var version: Int
   let createdAt: Date
   /// 部品ごとの状態。
-  var states: [AutomationPartID: AutomationPartState]
+  var states: [AutomationNodeID: AutomationNodeState]
 
   var paused: Bool { pausedAt != nil }
 
@@ -28,7 +28,7 @@ struct Automation: Equatable, Identifiable {
   var judges: Bool { !graph.judges.isEmpty }
 
   /// 部品の状態。グラフの部品はいつも状態を持つ。
-  func state(_ id: AutomationPartID) -> AutomationPartState {
+  func state(_ id: AutomationNodeID) -> AutomationNodeState {
     guard let state = states[id] else { preconditionFailure("every part has a state: \(id)") }
     return state
   }
@@ -56,7 +56,7 @@ struct AutomationUnreadable: Equatable, Identifiable {
   /// 読めない理由（定義の中の場所で言う英文）。
   let reason: String
   /// 外していない部品。
-  let nodeIds: [AutomationPartID]
+  let nodeIds: [AutomationNodeID]
 }
 
 /// 回を知らせる先。
@@ -77,7 +77,7 @@ enum AutomationCoverage: String {
 
 /// 部品 1 つの状態。行と記録の正は DB で、メモリは画面と予定が同期で読む分だけを、部品ごとに DB から読み直して持つ——自分の
 /// 状態は `AutomationDatabase.state(of:)`、読めば取る行は `AutomationMemory.recount`。差分を手で当てないので、DB とずれない。
-struct AutomationPartState: Equatable {
+struct AutomationNodeState: Equatable {
   /// 部品を足した時刻。一度も回っていない部品の数え始め。
   var addedAt: Date
   /// 直近の回の記録（新しい順に `retainedRuns` 件まで）。
@@ -128,10 +128,10 @@ struct AutomationProposal: Equatable, Identifiable {
   /// 候補を出した判定の回。
   let runId: Int
   /// 出した判定の部品と、その回が動いた定義。候補を出した自動化はこの部品の持ち主（`AutomationStore.issuer(of:)`）。
-  let judge: AutomationPartID
+  let judge: AutomationNodeID
   let defId: AutomationDefID
   /// 出どころの部品と行。
-  let source: AutomationPartID
+  let source: AutomationNodeID
   let origin: AutomationRowRef
   /// 出どころの行の欄（`id` は書かれた id）。
   let item: AutomationItem
@@ -159,7 +159,7 @@ struct AutomationUnreadableProposal: Equatable {
   let id: Int
   let link: String
   /// 出した判定の部品（回の行から引くので、候補の値が壊れていても分かる）。
-  let judge: AutomationPartID
+  let judge: AutomationNodeID
 }
 
 extension AutomationProposal.State {

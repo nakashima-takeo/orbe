@@ -9,7 +9,7 @@ import XCTest
 extension AutomationRunnerTests {
   /// 取得（出力の性質は `coverage`）→ 毎回すべてを取る今の集合の処理 `copy` → 副作用 `post`。
   private func copyParts(_ coverage: AutomationCoverage = .currentSet)
-    -> [AutomationDefinition.Part]
+    -> [AutomationDefinition.Node]
   {
     var copy = part("copy", .arrival, coverage: .currentSet)
     copy.from = [AutomationDefinition.Input(part: "gh", take: .all)]

@@ -11,7 +11,7 @@ enum AutomationIntake {
 
   /// 出どころ——引き継ぎをたどった先の、取得の部品が出した行。候補のリンクと本文はいつもここから取る。
   struct Origin: Equatable {
-    let part: AutomationPartID
+    let part: AutomationNodeID
     /// 項目なら今の版、出来事ならその出来事。
     let row: AutomationRowRef
     /// 出どころの行の欄（`id` は書かれた id）。
@@ -21,7 +21,7 @@ enum AutomationIntake {
   /// 上流の行 1 つ。
   struct Row: Equatable {
     /// 上流の部品（つながり）。
-    let from: AutomationPartID
+    let from: AutomationNodeID
     let table: Table
     let seq: Int
     /// 回の履歴が指す行（項目は版）。
@@ -47,7 +47,7 @@ enum AutomationIntake {
 
   /// 読んだ位置の進め先（つながりと表ごと）。
   struct Reach: Equatable {
-    let from: AutomationPartID
+    let from: AutomationNodeID
     let table: Table
     let seq: Int
   }
@@ -66,7 +66,7 @@ enum AutomationIntake {
 
   /// つながりごとの、読む上限の番号（読んだ位置を上限まで進めてよいかを決める）。
   struct Ceiling: Equatable {
-    let from: AutomationPartID
+    let from: AutomationNodeID
     let seqs: AutomationSeqs
   }
 
@@ -103,7 +103,7 @@ enum AutomationIntake {
 
   /// 古さで捨て、判定だけは出どころなし → 候補あり → 同じリンクの古い方で捨てる。残りと捨てた行（古い順）を返す。
   private static func filtered(
-    _ rows: [Row], by node: AutomationGraph.Node, _ edges: [AutomationPartID: AutomationPartEdge],
+    _ rows: [Row], by node: AutomationGraph.Node, _ edges: [AutomationNodeID: AutomationNodeEdge],
     _ context: Context
   ) -> (remaining: [Row], dropped: [Drop]) {
     var remaining: [Row] = []

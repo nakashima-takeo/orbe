@@ -4,7 +4,7 @@ import AppKit
 /// 通知先に応じてメニューバー②か通知センターへ流す。ピルや通知のクリックは Home のボードでその自動化を開く。
 extension WindowController {
   /// 部品の回を記録した（走らせ役から）。
-  func notifyAutomationRecorded(_ id: Int, _ part: AutomationPartID) {
+  func notifyAutomationRecorded(_ id: Int, _ part: AutomationNodeID) {
     guard let notification = automationNotification(id, part) else { return }
     deliver(notification)
   }
@@ -16,7 +16,7 @@ extension WindowController {
   ///
   /// 本文は、外した回のほかは実行履歴のその回の行の 1 行目——ピルと、押した先の行を同じ文で語るため。設定は Home の実効設定
   /// （押した先が Home なので、発信元の workspace の値という読み方に揃う）。
-  func automationNotification(_ id: Int, _ part: AutomationPartID) -> ChromeNotification? {
+  func automationNotification(_ id: Int, _ part: AutomationNodeID) -> ChromeNotification? {
     guard let automation = automationStore.automation(id), let notify = automation.notify,
       let state = automation.states[part], let record = state.runs.first, let latest = record.run,
       !isViewingAutomation(id)

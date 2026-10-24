@@ -19,11 +19,11 @@ final class AutomationTextTests: OrbeTestCase {
       timeZone: DesignSceneFixtures.taskCalendar.timeZone)
   }
 
-  private func failed(_ failure: AutomationFailure, ending: AutomationEnding) -> AutomationPartRun {
+  private func failed(_ failure: AutomationFailure, ending: AutomationEnding) -> AutomationNodeRun {
     let at = DesignSceneFixtures.automationAt(13)
-    var run = AutomationPartRun(
+    var run = AutomationNodeRun(
       startedAt: at, endedAt: at, trigger: .schedule, taken: 3,
-      execution: AutomationPartPass.Execution(commandLine: "claude -p", ending: ending, count: 0))
+      execution: AutomationNodePass.Execution(commandLine: "claude -p", ending: ending, count: 0))
     run.failure = failure
     return run
   }

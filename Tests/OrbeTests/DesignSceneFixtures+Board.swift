@@ -7,8 +7,8 @@ import Foundation
 extension DesignSceneFixtures {
   private static func agentFetch(
     _ tool: String, _ instruction: String, _ coverage: AutomationCoverage,
-    _ trigger: AutomationPart.Trigger
-  ) -> AutomationDefinition.Part {
+    _ trigger: AutomationNode.Trigger
+  ) -> AutomationDefinition.Node {
     agentPart(
       "fetch", "取る", trigger, model: "haiku", tools: [tool], instruction: instruction,
       coverage: coverage)

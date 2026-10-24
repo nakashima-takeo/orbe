@@ -52,12 +52,12 @@ extension AutomationStoreTests {
     try Self.judge(XCTUnwrap(store), id)
     let fetch = try XCTUnwrap(store?.part(id, "fetch"))
     let rows = ["a", "b", "c"].map {
-      AutomationPartRow(
+      AutomationNodeRow(
         id: $0,
         text: #"{"id":"\#($0)","link":"https://example.com/\#($0)","body":"\#($0)","#
           + #""time":"2026-10-10T09:00:00Z"}"#, origin: nil, source: nil)
     }
-    func state(_ key: String) -> AutomationPartState? { store?.automation(id)?.state(key: key) }
+    func state(_ key: String) -> AutomationNodeState? { store?.automation(id)?.state(key: key) }
 
     try store?.give(rows, as: fetch, of: id, at: Self.at)
     XCTAssertEqual(

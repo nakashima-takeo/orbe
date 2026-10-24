@@ -13,12 +13,12 @@ extension DesignSceneFixtures {
       AutomationBrokenLine(line: 2, fault: .titleNotOneLine("1:\(new[1].id)")),
       AutomationBrokenLine(line: 3, fault: .dueNotDate("1:\(new[2].id)", "来週")),
     ])
-    let fixed = AutomationPartPass.Outcome.succeeded(
+    let fixed = AutomationNodePass.Outcome.succeeded(
       .judge(proposals: [proposal(new[0], "\(new[0].body)に返信する")], resolved: []),
       execution(1), breach: rejected)
-    let unfixed = AutomationPartPass.Outcome.failed(
+    let unfixed = AutomationNodePass.Outcome.failed(
       .brokeRules, execution(0, ending: .exited(0)), breach: rejected)
-    let broken = AutomationPartPass.Outcome.failed(
+    let broken = AutomationNodePass.Outcome.failed(
       .brokeRules, execution(0, ending: .exited(0)),
       breach: AutomationRejections([
         AutomationBrokenLine(line: 1, fault: .notNewItem(new[0].id)),
@@ -26,7 +26,7 @@ extension DesignSceneFixtures {
       ]))
     let unread = failed(.unreadInput(2), ending: .exited(0))
     let noResult = failed(.noResult, ending: .exited(0))
-    func sample(_ outcome: AutomationPartPass.Outcome, command: Bool = false) -> AutomationSample {
+    func sample(_ outcome: AutomationNodePass.Outcome, command: Bool = false) -> AutomationSample {
       var definition = candidatesDefinition(
         "GitHub: 自分の担当",
         fetch: commandPart(

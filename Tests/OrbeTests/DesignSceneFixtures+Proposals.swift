@@ -25,14 +25,14 @@ extension DesignSceneFixtures {
     automationItem("C03-2", "#team-orbe「今週の進捗、金曜までに週報へお願いします」", at: automationAt(11, 5))
   }
 
-  private static var backlogFetch: AutomationDefinition.Part {
+  private static var backlogFetch: AutomationDefinition.Node {
     agentPart(
       "fetch", "Backlog から取る", .scheduled(.every(1800)), model: "haiku",
       tools: ["mcp__backlog__get_issues"], instruction: "自分が担当の未完了の課題を、更新の新しい順に 30 件取る。",
       coverage: .currentSet)
   }
 
-  private static var slackFetch: AutomationDefinition.Part {
+  private static var slackFetch: AutomationDefinition.Node {
     commandPart(
       "fetch", "Slack から取る", .scheduled(cron("0 9,13,17 * * *")),
       script: "~/bin/slack-mentions --since 1d", coverage: .newArrivals)

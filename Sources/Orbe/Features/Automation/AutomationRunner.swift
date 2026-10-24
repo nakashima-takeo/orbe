@@ -33,12 +33,12 @@ import Observation
   private let recorded: (AutomationPassRecord) -> Void
   private let defined: (Int) -> Void
   private let deleted: (Int) -> Void
-  private let admits: (Int, AutomationPartID) -> Bool
+  private let admits: (Int, AutomationNodeID) -> Bool
   private let flowEnded: (Int, AutomationFlow) -> Void
   /// 番人に載せている鍵。
   @ObservationIgnored private var registered = Set<String>()
   /// 部品ごとの、前の契機の始まりの時点の、入力ごとの上流の最後の番号（メモリだけ。無ければ読んだ位置だけが基準線）。
-  @ObservationIgnored var marks: [String: [AutomationPartID: AutomationSeqs]] = [:]
+  @ObservationIgnored var marks: [String: [AutomationNodeID: AutomationSeqs]] = [:]
   /// 部品ごとの、番人に最後に返した数え始め。記録の無い契機（取る行が 0 件）でも進むので、次の時刻はこれから数える。
   @ObservationIgnored private var anchors: [String: Date] = [:]
   /// 走っている契機（掃除から守る行を言う）。
@@ -58,7 +58,7 @@ import Observation
     workspaces: @escaping () -> AutomationWorkspaces,
     recorded: @escaping (AutomationPassRecord) -> Void, defined: @escaping (Int) -> Void,
     deleted: @escaping (Int) -> Void,
-    admits: @escaping (Int, AutomationPartID) -> Bool = { _, _ in true },
+    admits: @escaping (Int, AutomationNodeID) -> Bool = { _, _ in true },
     flowEnded: @escaping (Int, AutomationFlow) -> Void = { _, _ in }
   ) {
     self.store = store
@@ -91,7 +91,7 @@ import Observation
     store.automation(id)?.graph.nodes.contains { isRunning(id, $0.id) } ?? false
   }
 
-  func isRunning(_ id: Int, _ part: AutomationPartID) -> Bool {
+  func isRunning(_ id: Int, _ part: AutomationNodeID) -> Bool {
     scheduler.isRunning(id: Self.key(id, part))
   }
 
@@ -101,7 +101,7 @@ import Observation
   }
 
   /// 部品が次に予定で回る時刻。止めている・予定の無い部品は nil。過ぎていれば `now` 以前の時刻を返す。
-  func nextRunAt(_ automation: Automation, part: AutomationPartID, now: Date? = nil) -> Date? {
+  func nextRunAt(_ automation: Automation, part: AutomationNodeID, now: Date? = nil) -> Date? {
     guard !automation.paused, let node = automation.graph.node(part),
       case .scheduled(let timing) = node.entity.trigger
     else { return nil }
@@ -158,7 +158,7 @@ import Observation
 
   // MARK: - 番人への登録
 
-  static func key(_ id: Int, _ part: AutomationPartID) -> String { "automation:\(id)/\(part)" }
+  static func key(_ id: Int, _ part: AutomationNodeID) -> String { "automation:\(id)/\(part)" }
 
   /// 全部品を番人に合わせる。載っていない部品は載せ（数え始めは部品の最後に回った時刻、無ければ足した時刻）、載っている部品は
   /// 予定だけを差し替える。止めていなければ「届いたら」の部品に起こす決まりを見る。
@@ -187,7 +187,7 @@ import Observation
   }
 
   /// 外す。走っている回は止め、その結果は捨てる。起こす決まりの印と数え始めも忘れ、この部品を道に含む一巡を打ち切る。
-  private func unregister(_ id: Int, _ part: AutomationPartID) {
+  private func unregister(_ id: Int, _ part: AutomationNodeID) {
     let key = Self.key(id, part)
     if let flow = flows[id], flow.path.contains(part) {
       flows[id] = nil
@@ -220,12 +220,12 @@ extension AutomationRunner {
   /// 走っている契機。止められたら、以後の結果は捨てる。
   private final class Trigger {
     let automationId: Int
-    let part: AutomationPartID
-    let kind: AutomationPartRun.Trigger
+    let part: AutomationNodeID
+    let kind: AutomationNodeRun.Trigger
     let startedAt: Date
     let finish: (Date) -> Void
     /// 契機の始まりの時点の、入力ごとの上流の最後の番号。これ以下の行を読む。
-    var baseline: [AutomationPartID: AutomationSeqs] = [:]
+    var baseline: [AutomationNodeID: AutomationSeqs] = [:]
     /// 走っている回が確定まで使うもの。
     var holding = AutomationHolding()
     /// 回の始まり。
@@ -236,7 +236,7 @@ extension AutomationRunner {
     let flowed: Bool
 
     init(
-      automationId: Int, part: AutomationPartID, kind: AutomationPartRun.Trigger,
+      automationId: Int, part: AutomationNodeID, kind: AutomationNodeRun.Trigger,
       startedAt: Date, finish: @escaping (Date) -> Void, flowed: Bool
     ) {
       self.automationId = automationId
@@ -249,7 +249,7 @@ extension AutomationRunner {
   }
 
   private func begin(
-    _ id: Int, _ part: AutomationPartID, _ kind: BackgroundScheduler.Trigger,
+    _ id: Int, _ part: AutomationNodeID, _ kind: BackgroundScheduler.Trigger,
     _ finish: @escaping (Date) -> Void
   ) -> BackgroundRunHandle {
     // 番人の上に「走っている」を残さないよう、部品が無ければ契機はすぐ終わったものとして知らせる。
@@ -306,7 +306,7 @@ extension AutomationRunner {
     pass(trigger, read: read)
   }
 
-  /// 部品の 1 回。役割の入力を組み、`AutomationPartPass` に任せ、終わったら確定する。
+  /// 部品の 1 回。役割の入力を組み、`AutomationNodePass` に任せ、終わったら確定する。
   private func pass(_ trigger: Trigger, read: AutomationIntake.Read?) {
     guard let automation = store.automation(trigger.automationId),
       let node = automation.graph.node(trigger.part)
@@ -321,7 +321,7 @@ extension AutomationRunner {
           $0.taken.map(\.ref) + $0.dropped.map(\.row.ref) + $0.taken.compactMap(\.origin?.row)
         } ?? []),
       defs: [defId])
-    let pass = AutomationPartPass(run: run, now: now, calendar: calendar, runSessions: runSessions)
+    let pass = AutomationNodePass(run: run, now: now, calendar: calendar, runSessions: runSessions)
     trigger.current = pass.start(node, input) { [weak self] outcome in
       guard let self, !trigger.cancelled else { return }
       ended(trigger, defId, read, startedAt, outcome)
@@ -330,7 +330,7 @@ extension AutomationRunner {
 
   private func ended(
     _ trigger: Trigger, _ defId: AutomationDefID, _ read: AutomationIntake.Read?,
-    _ startedAt: Date, _ outcome: AutomationPartPass.Outcome
+    _ startedAt: Date, _ outcome: AutomationNodePass.Outcome
   ) {
     let passEnd = AutomationPassEnd(
       automationId: trigger.automationId, part: trigger.part, defId: defId,

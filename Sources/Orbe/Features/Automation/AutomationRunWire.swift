@@ -21,7 +21,7 @@ enum AutomationRunWire {
     }
   }
 
-  static func object(_ run: AutomationPartRun, part: String) -> [String: Any] {
+  static func object(_ run: AutomationNodeRun, part: String) -> [String: Any] {
     var json = AutomationWire.object(run) as? [String: Any] ?? [:]
     json["execution"] = execution(json["execution"], run.execution)
     if let failure = run.failure {
@@ -51,7 +51,7 @@ enum AutomationRunWire {
   }
 
   private static func execution(
-    _ object: Any?, _ execution: AutomationPartPass.Execution
+    _ object: Any?, _ execution: AutomationNodePass.Execution
   ) -> [String: Any] {
     var json = object as? [String: Any] ?? [:]
     json["ending"] = execution.ending.text

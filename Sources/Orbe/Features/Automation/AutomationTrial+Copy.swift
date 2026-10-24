@@ -7,7 +7,7 @@ extension AutomationStore {
   /// 行を、部品 `part` の出力として新しい行で書く。今の集合は、同じ書かれた id の今有効な項目を無効にしてから新しい項目として
   /// 足す（今有効な項目は id ごとに 1 つのまま。この無効化では判断待ちの候補を下げない——判定は既に候補のあるリンクの行を
   /// 「既に候補がある」で捨てる）。出来事の流れは同じ id でも足す。
-  func give(_ rows: [AutomationPartRow], as part: AutomationPartID, of id: Int, at: Date)
+  func give(_ rows: [AutomationNodeRow], as part: AutomationNodeID, of id: Int, at: Date)
     throws(AutomationError)
   {
     let index = try index(id)
@@ -34,7 +34,7 @@ extension AutomationStore {
   /// 行が記録する最も大きい番号（項目の表は項目・版・無効化の番号）まで戻す。写しは、その回が新しい行を `keeping` 行だけ出
   /// した状態と同じになる（読んだ位置・読む前に期限で消えた数・起こす決まりが本番の意味のまま揃う）。確定の直後、下流が読む
   /// 前に呼ぶ。
-  func trim(_ part: AutomationPartID, in id: Int, fresh: Int, keeping: Int, now: Date)
+  func trim(_ part: AutomationNodeID, in id: Int, fresh: Int, keeping: Int, now: Date)
     throws(AutomationError)
   {
     guard let coverage = automation(id)?.graph.node(part)?.coverage else {
@@ -49,7 +49,7 @@ extension AutomationStore {
 
   /// 部品の表（出力の性質の表）の番号の上から `count` 行を、下流へ渡す 1 行で古い順に。確定の直後に呼べば、その回が新しく
   /// 足した行（時刻の一致では見分けない）。
-  func latestRows(of part: AutomationPartID, in id: Int, count: Int) throws(AutomationError)
+  func latestRows(of part: AutomationNodeID, in id: Int, count: Int) throws(AutomationError)
     -> [String]
   {
     guard let coverage = automation(id)?.graph.node(part)?.coverage else {
@@ -69,7 +69,7 @@ extension AutomationDatabase {
   }
 
   /// 部品の表の番号の上から `count` 行（古い順）。
-  fileprivate func latest(_ part: AutomationPartID, _ coverage: AutomationCoverage, count: Int)
+  fileprivate func latest(_ part: AutomationNodeID, _ coverage: AutomationCoverage, count: Int)
     throws -> [Latest]
   {
     let values: [SQLiteValue] = [.integer(Int64(part.rawValue)), .integer(Int64(count))]
@@ -95,7 +95,7 @@ extension AutomationDatabase {
   }
 
   fileprivate func trim(
-    _ part: AutomationPartID, _ coverage: AutomationCoverage, fresh: Int, keeping: Int
+    _ part: AutomationNodeID, _ coverage: AutomationCoverage, fresh: Int, keeping: Int
   ) throws {
     let rows = try latest(part, coverage, count: fresh)
     guard rows.count > keeping, keeping > 0 else { return }
@@ -126,7 +126,7 @@ extension AutomationDatabase {
   }
 
   /// 同じ書かれた id の今有効な項目を無効にする。
-  fileprivate func invalidateLiveItem(of part: AutomationPartID, written: String, at: Date) throws {
+  fileprivate func invalidateLiveItem(of part: AutomationNodeID, written: String, at: Date) throws {
     for item in try db.select(
       "SELECT id FROM items WHERE part_id = ? AND written_id = ? AND valid_to IS NULL",
       [.integer(Int64(part.rawValue)), .text(written)], { $0.int(at: 0) })

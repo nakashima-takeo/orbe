@@ -39,7 +39,7 @@ extension AutomationStoreTests {
     try Self.fetch(XCTUnwrap(store), id, [Self.item("a")])
     let changed = AutomationItem(
       id: "a", link: "https://example.com/a", body: "変わった本文", time: Self.at)
-    for n in 1...(AutomationPartState.retainedRuns + 1) {
+    for n in 1...(AutomationNodeState.retainedRuns + 1) {
       try Self.fetch(
         XCTUnwrap(store), id, [changed], at: Self.at.addingTimeInterval(60 * Double(n)))
     }
@@ -57,7 +57,7 @@ extension AutomationStoreTests {
     try Self.fetch(XCTUnwrap(store), id, [], outcome: Self.breached([Self.item("a")]))
     let changed = AutomationItem(
       id: "a", link: "https://example.com/a", body: "変わった本文", time: Self.at)
-    for n in 1...(AutomationPartState.retainedRuns + 1) {
+    for n in 1...(AutomationNodeState.retainedRuns + 1) {
       try Self.fetch(
         XCTUnwrap(store), id, [changed], at: Self.at.addingTimeInterval(60 * Double(n)))
     }
@@ -78,7 +78,7 @@ extension AutomationStoreTests {
     store?.holding = { AutomationHolding(rows: [.version(first)]) }
     let changed = AutomationItem(
       id: "a", link: "https://example.com/a", body: "変わった本文", time: Self.at)
-    for n in 1...(AutomationPartState.retainedRuns + 1) {
+    for n in 1...(AutomationNodeState.retainedRuns + 1) {
       try Self.fetch(
         XCTUnwrap(store), id, [changed], at: Self.at.addingTimeInterval(60 * Double(n)))
     }

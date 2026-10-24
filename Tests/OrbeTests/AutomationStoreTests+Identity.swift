@@ -84,7 +84,7 @@ extension AutomationStoreTests {
 
     var instructed = try XCTUnwrap(store.automation(id)?.definition)
     instructed.parts[1].action.method = .agent(
-      AutomationPartAgent(cli: "claude", model: "sonnet", tools: [], instruction: "別の基準"))
+      AutomationNodeAgent(cli: "claude", model: "sonnet", tools: [], instruction: "別の基準"))
     let rewritten = try store.replace(id, version: 2, with: instructed, now: Self.at)
     try Self.judge(store, id, at: Self.at.addingTimeInterval(60))
 
@@ -112,7 +112,7 @@ extension AutomationStoreTests {
     let store = AutomationStore()
     let id = try store.create(Self.definition(), now: Self.at).id
     let judge = store.part(id, "judge")
-    func rewritten(_ change: (inout AutomationActionDef) -> Void) throws -> [AutomationPartID] {
+    func rewritten(_ change: (inout AutomationActionDef) -> Void) throws -> [AutomationNodeID] {
       var definition = try XCTUnwrap(store.automation(id)?.definition)
       change(&definition.parts[1].action)
       let version = try XCTUnwrap(store.automation(id)?.version)
@@ -216,7 +216,7 @@ extension AutomationStoreTests {
       .invalid("version: pass the version you read with list_automations to rewrite"))
     XCTAssertEqual(refused(1) { _ in }, .versionMismatch(sent: 1, current: 2))
     XCTAssertEqual(
-      refused(2) { $0.parts[0].id = AutomationPartID(999) },
+      refused(2) { $0.parts[0].id = AutomationNodeID(999) },
       .invalid("parts[0].id: 999 is not a part of automation \(id)"))
     XCTAssertEqual(
       refused(2) { $0.parts[0].id = store.part(other, "fetch") },

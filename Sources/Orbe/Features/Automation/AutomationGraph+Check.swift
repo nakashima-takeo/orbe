@@ -5,9 +5,9 @@ import Foundation
 extension AutomationGraph {
   /// 検証して、部品ごとの役割と入力の部品の位置を返す。最初に見つけた誤り 1 つで断る。順は「自分の欄だけで決まるもの → 鍵の
   /// 名指し → 名指しの向き → 至るか・取り方」。部品の `id` は見ない（書き換えの口が確かめる）。
-  static func check(_ parts: [AutomationDefinition.Part]) throws(AutomationError) -> [Checked] {
+  static func check(_ parts: [AutomationDefinition.Node]) throws(AutomationError) -> [Checked] {
     guard !parts.isEmpty else { throw .invalid("parts: at least one part is required") }
-    var checked: [(part: AutomationDefinition.Part, role: AutomationPartRole)] = []
+    var checked: [(part: AutomationDefinition.Node, role: AutomationNodeRole)] = []
     for (index, part) in parts.enumerated() {
       checked.append(try Self.checked(part, at: "parts[\(index)]"))
     }
@@ -26,8 +26,8 @@ extension AutomationGraph {
   }
 
   /// 自分の欄だけで決まる規則を見て、役割を導く。名前は 1 行に整えて持つ。
-  private static func checked(_ part: AutomationDefinition.Part, at path: String)
-    throws(AutomationError) -> (part: AutomationDefinition.Part, role: AutomationPartRole)
+  private static func checked(_ part: AutomationDefinition.Node, at path: String)
+    throws(AutomationError) -> (part: AutomationDefinition.Node, role: AutomationNodeRole)
   {
     var part = part
     try checkKey(part.key, path)
@@ -63,7 +63,7 @@ extension AutomationGraph {
   }
 
   /// 入力と、受け手の器（件数の上限・届いたら）。
-  private static func checkInputs(_ part: AutomationDefinition.Part, _ path: String)
+  private static func checkInputs(_ part: AutomationDefinition.Node, _ path: String)
     throws(AutomationError)
   {
     var named = Set<String>()
@@ -88,7 +88,7 @@ extension AutomationGraph {
   }
 
   /// 鍵の重複と未知の鍵の名指しを断り、部品ごとの入力を位置で返す。
-  private static func upstream(of parts: [AutomationDefinition.Part]) throws(AutomationError)
+  private static func upstream(of parts: [AutomationDefinition.Node]) throws(AutomationError)
     -> [[Int]]
   {
     var positions: [String: Int] = [:]
@@ -113,7 +113,7 @@ extension AutomationGraph {
   }
 
   /// 定義の順で最初に循環に乗る部品を指し、輪を鍵で示す（`a ← b` は a が b を入力に名指す）。
-  private static func checkAcyclic(_ parts: [AutomationDefinition.Part], _ upstream: [[Int]])
+  private static func checkAcyclic(_ parts: [AutomationDefinition.Node], _ upstream: [[Int]])
     throws(AutomationError)
   {
     for start in parts.indices {
@@ -135,7 +135,7 @@ extension AutomationGraph {
 
   /// 行き先が次の部品なのに誰も名指さない → 行き先が次の部品でない部品を名指す（名指した側を指す）。
   private static func checkDestinations(
-    _ parts: [AutomationDefinition.Part], _ upstream: [[Int]], _ downstream: [[Int]]
+    _ parts: [AutomationDefinition.Node], _ upstream: [[Int]], _ downstream: [[Int]]
   ) throws(AutomationError) {
     for (index, part) in parts.enumerated()
     where part.action.destination == .nextPart && downstream[index].isEmpty {
@@ -155,7 +155,7 @@ extension AutomationGraph {
 
   /// 毎回すべてを取るつながりを通る行は判定へ至れない（判定は新しい行から候補を作る）。
   private static func checkTakes(
-    _ parts: [AutomationDefinition.Part], _ roles: [AutomationPartRole], _ downstream: [[Int]]
+    _ parts: [AutomationDefinition.Node], _ roles: [AutomationNodeRole], _ downstream: [[Int]]
   ) throws(AutomationError) {
     for (index, part) in parts.enumerated() {
       let passes =
@@ -169,10 +169,10 @@ extension AutomationGraph {
   }
 
   /// 役割を導く。タスク候補を行き先にする部品が行を見ない・agent の行き先が副作用だけ・出力の性質の有無を断る。
-  private static func role(of part: AutomationDefinition.Part, _ path: String)
-    throws(AutomationError) -> AutomationPartRole
+  private static func role(of part: AutomationDefinition.Node, _ path: String)
+    throws(AutomationError) -> AutomationNodeRole
   {
-    let role: AutomationPartRole
+    let role: AutomationNodeRole
     switch part.action.destination {
     case .nextPart:
       guard part.readsRows else {
@@ -205,12 +205,12 @@ extension AutomationGraph {
   }
 
   private static func checkKey(_ key: String, _ path: String) throws(AutomationError) {
-    guard AutomationPart.keyLength.contains(key.unicodeScalars.count),
+    guard AutomationNode.keyLength.contains(key.unicodeScalars.count),
       key.unicodeScalars.allSatisfy(isNameCharacter)
     else {
       throw .invalid(
-        "\(path).key: use \(AutomationPart.keyLength.lowerBound) to "
-          + "\(AutomationPart.keyLength.upperBound) letters, digits, _ or -")
+        "\(path).key: use \(AutomationNode.keyLength.lowerBound) to "
+          + "\(AutomationNode.keyLength.upperBound) letters, digits, _ or -")
     }
   }
 

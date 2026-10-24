@@ -9,7 +9,7 @@ import XCTest
 /// 処理が入力の一部だけを写して、残りの出力を無効にする。
 extension AutomationGraphTests {
   private func assertRefused(
-    _ parts: [AutomationDefinition.Part], at place: String, _ label: String, line: UInt = #line
+    _ parts: [AutomationDefinition.Node], at place: String, _ label: String, line: UInt = #line
   ) {
     XCTAssertThrowsError(try AutomationGraph.check(parts), label, line: line) {
       guard case .invalid(let message) = $0 as? AutomationError else {
@@ -21,15 +21,15 @@ extension AutomationGraphTests {
 
   /// 取得 f（parts[0]）と、f を入力にする報告の agent r（parts[1]）の片方を変える。
   private func changing(
-    _ index: Int, _ change: (inout AutomationDefinition.Part) -> Void
-  ) -> [AutomationDefinition.Part] {
+    _ index: Int, _ change: (inout AutomationDefinition.Node) -> Void
+  ) -> [AutomationDefinition.Node] {
     var parts = [Self.fetch("f"), Self.agent("r", from: ["f"])]
     change(&parts[index])
     return parts
   }
 
-  private func changingAgent(_ change: (inout AutomationPartAgent) -> Void)
-    -> [AutomationDefinition.Part]
+  private func changingAgent(_ change: (inout AutomationNodeAgent) -> Void)
+    -> [AutomationDefinition.Node]
   {
     changing(1) {
       guard case .agent(var agent) = $0.action.method else { return }
@@ -44,7 +44,7 @@ extension AutomationGraphTests {
       AutomationActionDef.Method.command(BackgroundCommand(script: script, directory: directory))
     }
     for (label, parts, place) in [
-      ("部品が 0 個", [AutomationDefinition.Part](), "parts"),
+      ("部品が 0 個", [AutomationDefinition.Node](), "parts"),
       ("鍵が空", changing(1) { $0.key = "" }, "parts[1].key"),
       ("鍵が 33 字", changing(1) { $0.key = String(repeating: "a", count: 33) }, "parts[1].key"),
       ("鍵に空白", changing(1) { $0.key = "a b" }, "parts[1].key"),

@@ -19,7 +19,7 @@ import Observation
   private(set) var proposals: [AutomationProposal] = []
   private(set) var unreadableProposals: [AutomationUnreadableProposal] = []
   /// 覚えている候補を出した判定の部品の持ち主（部品 ID → 自動化 ID。外した部品も、候補に指されている間は持ち主を指す）。
-  private(set) var judgeOwners: [AutomationPartID: Int] = [:]
+  private(set) var judgeOwners: [AutomationNodeID: Int] = [:]
   private var database: AutomationDatabase?
   /// 使えないときの断り。
   private(set) var unavailableError: AutomationError
@@ -83,12 +83,12 @@ import Observation
     let at = TaskItem.storedInstant(now)
     return try commit(sweepingAt: at) { db, memory in
       let id = try db.insertAutomation(name: name, notify: definition.notify, createdAt: at)
-      var entities: [AutomationPart] = []
+      var entities: [AutomationNode] = []
       for (position, item) in checked.enumerated() {
         let defId = try db.insert(action: item.definitionNode.action)
         let partId = try db.insertPart(
           of: id, at: position, item.definitionNode, defId: defId, addedAt: at)
-        entities.append(AutomationPart(item.definitionNode, id: partId, defId: defId))
+        entities.append(AutomationNode(item.definitionNode, id: partId, defId: defId))
       }
       let graph = AutomationGraph(checked, entities: entities)
       for node in graph.nodes { try db.setEdges(of: id, to: node.id, node.inputs) }
@@ -119,7 +119,7 @@ import Observation
   /// 消す。部品をすべて外し（今有効な項目を無効にし、記録を消す）、自動化の行を消す。出どころが無効になった判断待ちの候補は
   /// 下がり、誰も持たなくなった候補は忘れる。定義を読めない自動化も消せる。
   func delete(_ id: Int, now: Date) throws(AutomationError) {
-    let parts: [AutomationPartID]
+    let parts: [AutomationNodeID]
     if let automation = automation(id) {
       parts = automation.graph.nodes.map(\.id)
     } else if let broken = unreadable.first(where: { $0.id == id }) {
@@ -315,7 +315,7 @@ struct AutomationMemory: Equatable {
   var proposals: [AutomationProposal]
   var unreadableProposals: [AutomationUnreadableProposal] = []
   /// 覚えている候補を出した判定の部品の持ち主（`AutomationStore.judgeOwners`）。
-  var judgeOwners: [AutomationPartID: Int] = [:]
+  var judgeOwners: [AutomationNodeID: Int] = [:]
 
   func automation(_ id: Int) -> Automation? {
     automations.first { $0.id == id }
@@ -327,7 +327,7 @@ struct AutomationMemory: Equatable {
   }
 
   /// 部品の自分の状態を DB から読み直す（読めば取る行は保つ）。
-  mutating func reread(_ part: AutomationPartID, of id: Int, _ db: AutomationDatabase) throws {
+  mutating func reread(_ part: AutomationNodeID, of id: Int, _ db: AutomationDatabase) throws {
     guard let index = automations.firstIndex(where: { $0.id == id }),
       let pending = automations[index].states[part]?.pending
     else { return }

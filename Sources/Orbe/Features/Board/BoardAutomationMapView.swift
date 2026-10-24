@@ -7,7 +7,7 @@ import SwiftUI
 struct BoardAutomationMapView: View {
   let model: BoardAutomationModel
   let detail: BoardAutomationDetailValue
-  let selected: AutomationPartID?
+  let selected: AutomationNodeID?
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
@@ -54,7 +54,7 @@ struct BoardMapRowView: View {
   let laneCount: Int
   /// 役割の列の幅（地図の行で揃える）。
   let roleWidth: CGFloat
-  let selected: AutomationPartID?
+  let selected: AutomationNodeID?
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
@@ -101,7 +101,7 @@ struct BoardMapRowView: View {
   }
 
   /// 名前と札が幅に収まらなければ、入力の部品名 → 予定の札の順に末尾を省き、名前と出力の形式エラーの札は残す。
-  @ViewBuilder private func partCells(_ part: BoardMapPart) -> some View {
+  @ViewBuilder private func partCells(_ part: BoardMapNode) -> some View {
     role(part.role)
     HStack(spacing: Self.cellGap) {
       fontResolver.text(part.name, base: Theme.Typography.code)
@@ -145,7 +145,7 @@ struct BoardMapRowView: View {
   }
 
   /// 前回の列（成否の印・時刻・量）。まだ動いていなければ「未実行」。
-  @ViewBuilder private func last(_ last: BoardMapPart.Last?) -> some View {
+  @ViewBuilder private func last(_ last: BoardMapNode.Last?) -> some View {
     HStack(spacing: 7) {
       if let last {
         BoardRunMarkGlyph(mark: last.mark)

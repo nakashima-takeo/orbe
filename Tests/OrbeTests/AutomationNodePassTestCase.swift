@@ -3,38 +3,38 @@ import XCTest
 @testable import Orbe
 
 /// 部品の 1 回のテストの土台。偽の実行で手段を起こし、返った結果を順に貯める。
-class AutomationPartPassTestCase: OrbeTestCase {
+class AutomationNodePassTestCase: OrbeTestCase {
   static let tool = AutomationGraphTests.tool
   let now = Date(timeIntervalSince1970: 1_800_000_000)
   var jobs: FakeJobs!
   var runSessions: AutomationRunSessions!
-  var pass: AutomationPartPass!
-  var outcomes: [AutomationPartPass.Outcome] = []
+  var pass: AutomationNodePass!
+  var outcomes: [AutomationNodePass.Outcome] = []
   /// 最後に起こした部品の鍵（失敗の英文を組む）。
   var startedKey = ""
 
   override func setUp() {
     jobs = FakeJobs()
     runSessions = AutomationRunSessions()
-    pass = AutomationPartPass(
+    pass = AutomationNodePass(
       run: jobs.run, now: { [unowned self] in now },
       calendar: { Calendar(identifier: .gregorian) }, runSessions: runSessions)
   }
 
   @discardableResult
   func start(
-    _ part: AutomationDefinition.Part, _ role: AutomationPartRole,
-    _ input: AutomationPartPass.Input
+    _ part: AutomationDefinition.Node, _ role: AutomationNodeRole,
+    _ input: AutomationNodePass.Input
   ) -> BackgroundRunHandle {
     startedKey = part.key
     let node = AutomationGraph.Node(
-      entity: AutomationPart(
-        id: AutomationPartID(1), key: part.key, name: part.name, trigger: part.trigger,
+      entity: AutomationNode(
+        id: AutomationNodeID(1), key: part.key, name: part.name, trigger: part.trigger,
         maxItems: part.maxItems, defId: AutomationDefID(1)),
       action: part.action,
       inputs: part.from.enumerated().map {
-        AutomationPartEdge(
-          from: AutomationPartID(100 + $0.offset), take: $0.element.take,
+        AutomationNodeEdge(
+          from: AutomationNodeID(100 + $0.offset), take: $0.element.take,
           maxAgeHours: $0.element.maxAgeHours)
       }, role: role)
     return pass.start(node, input) { [unowned self] in outcomes.append($0) }
@@ -45,12 +45,12 @@ class AutomationPartPassTestCase: OrbeTestCase {
   }
 
   func origin(_ id: String) -> AutomationIntake.Origin {
-    AutomationIntake.Origin(part: AutomationPartID(9), row: .event(Self.number(id)), item: item(id))
+    AutomationIntake.Origin(part: AutomationNodeID(9), row: .event(Self.number(id)), item: item(id))
   }
 
   /// 取得の部品 `f` を出た行。
-  func row(_ id: String) -> AutomationPartRow {
-    AutomationPartRow(
+  func row(_ id: String) -> AutomationNodeRow {
+    AutomationNodeRow(
       id: "f:\(id)", text: #"{"id":"f:\#(id)"}"#, origin: origin(id),
       source: .event(Self.number(id)))
   }
@@ -122,7 +122,7 @@ class AutomationPartPassTestCase: OrbeTestCase {
 
   var breach: AutomationRejections? { outcomes.first?.breach }
 
-  func judgeInput(_ ids: [String]) -> AutomationPartPass.Input {
+  func judgeInput(_ ids: [String]) -> AutomationNodePass.Input {
     .judge(
       ids.map {
         AutomationSourcedRow(id: "f:\($0)", text: #"{"id":"f:\#($0)"}"#, origin: origin($0))
@@ -137,14 +137,14 @@ class AutomationPartPassTestCase: OrbeTestCase {
   }
 
   /// 返った順の成功の出力。失敗した回は nil。
-  var outputs: [AutomationPartPass.Output?] {
+  var outputs: [AutomationNodePass.Output?] {
     outcomes.map { outcome in
       guard case .succeeded(let output, _, _) = outcome else { return nil }
       return output
     }
   }
 
-  var succeeded: AutomationPartPass.Output? { outputs.first ?? nil }
+  var succeeded: AutomationNodePass.Output? { outputs.first ?? nil }
 
   /// 最初の失敗の、AI が読む英文。
   var failed: String? {

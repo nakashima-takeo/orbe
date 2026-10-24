@@ -6,16 +6,16 @@ extension AutomationStore {
   struct Replaced {
     let automation: Automation
     /// 何をするか（省略を解いた動作と入力の集合）が変わった部品。決まりを外した印を下ろした。
-    let reworked: [AutomationPartID]
+    let reworked: [AutomationNodeID]
     /// 外した部品。
-    let removed: [AutomationPartID]
+    let removed: [AutomationNodeID]
   }
 
   /// 書き換える前の自動化（定義を読めない自動化は持たない）と、その版と外していない部品とその鍵。
   private struct Current {
     let version: Int
-    let parts: [AutomationPartID]
-    let keys: [AutomationPartID: String]
+    let parts: [AutomationNodeID]
+    let keys: [AutomationNodeID: String]
     let automation: Automation?
   }
 
@@ -86,7 +86,7 @@ extension AutomationStore {
 
   /// 部品の行を書き換える: 残る部品を書き換え、`id` の無い部品を足す（`entities` に振った ID を書く）。
   private static func writeParts(
-    _ checked: [AutomationGraph.Checked], _ entities: inout [AutomationPart], of id: Int,
+    _ checked: [AutomationGraph.Checked], _ entities: inout [AutomationNode], of id: Int,
     _ db: AutomationDatabase, at: Date
   ) throws {
     try db.setAsidePlaces(of: id)
@@ -95,7 +95,7 @@ extension AutomationStore {
       if let partId = item.definitionNode.id {
         try db.updatePart(partId, at: position, item.definitionNode, defId: defId)
       } else {
-        entities[position] = AutomationPart(
+        entities[position] = AutomationNode(
           item.definitionNode,
           id: try db.insertPart(
             of: id, at: position, item.definitionNode, defId: defId, addedAt: at),
@@ -107,22 +107,22 @@ extension AutomationStore {
   /// 部品ごとの使う動作の定義。今使っている定義と中身が同じならそのまま指し、違えば足す。新しい部品の ID は仮の 0。
   private static func entities(
     _ checked: [AutomationGraph.Checked], old: Automation?, _ db: AutomationDatabase
-  ) throws -> [AutomationPart] {
+  ) throws -> [AutomationNode] {
     try checked.map { item in
       let previous = item.definitionNode.id.flatMap { old?.graph.node($0) }
       let same = previous.flatMap {
         $0.action == item.definitionNode.action ? $0.entity.defId : nil
       }
       let defId = try same ?? db.insert(action: item.definitionNode.action)
-      return AutomationPart(
-        item.definitionNode, id: item.definitionNode.id ?? AutomationPartID(0), defId: defId)
+      return AutomationNode(
+        item.definitionNode, id: item.definitionNode.id ?? AutomationNodeID(0), defId: defId)
     }
   }
 
   /// つながりの書き換えの結果。
   private struct Rewired {
-    var states: [AutomationPartID: AutomationPartState] = [:]
-    var reworked: [AutomationPartID] = []
+    var states: [AutomationNodeID: AutomationNodeState] = [:]
+    var reworked: [AutomationNodeID] = []
     var invalidated: [Int] = []
   }
 
@@ -158,9 +158,9 @@ extension AutomationStore {
   /// 部品の `id` を確かめる: この自動化の今の部品だけ・重なりなし・`id` の無い部品の鍵が外れる部品の鍵と同じでない。
   /// `current` は今の部品の台帳（ID と鍵）。
   private static func checkIds(
-    _ parts: [AutomationDefinition.Part], of automation: Int, current: [AutomationPartID: String]
+    _ parts: [AutomationDefinition.Node], of automation: Int, current: [AutomationNodeID: String]
   ) throws(AutomationError) {
-    var seen = Set<AutomationPartID>()
+    var seen = Set<AutomationNodeID>()
     for (index, part) in parts.enumerated() {
       guard let id = part.id else { continue }
       guard current[id] != nil else {

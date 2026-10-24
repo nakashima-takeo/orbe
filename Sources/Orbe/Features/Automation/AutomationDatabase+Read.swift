@@ -4,7 +4,7 @@ import Foundation
 extension AutomationDatabase {
   /// 受け手が 1 つのつながりから読む範囲。
   struct Reading {
-    let edge: AutomationPartEdge
+    let edge: AutomationNodeEdge
     /// 読んだ位置。
     let read: AutomationSeqs
     /// 読む上限の番号（契機の始まりの時点の上流の最後の番号。無ければ今の最後の番号）。
@@ -18,7 +18,7 @@ extension AutomationDatabase {
   }
 
   /// 受け手のつながりごとの読んだ位置と、上流の最後の番号。
-  func positions(of receiver: AutomationPartID) throws -> [AutomationPartID: Position] {
+  func positions(of receiver: AutomationNodeID) throws -> [AutomationNodeID: Position] {
     Dictionary(
       uniqueKeysWithValues: try db.select(
         """
@@ -27,7 +27,7 @@ extension AutomationDatabase {
         """, [.integer(Int64(receiver.rawValue))]
       ) { s in
         (
-          AutomationPartID(s.int(at: 0)),
+          AutomationNodeID(s.int(at: 0)),
           Position(
             read: AutomationSeqs(item: s.int(at: 1), event: s.int(at: 2)),
             last: AutomationSeqs(item: s.int(at: 3), event: s.int(at: 4)))
@@ -98,7 +98,7 @@ extension AutomationDatabase {
 
   /// 下流へ渡す id。入力を引き継いだ行は書かれた id のまま（下流が入力と照らせる）、それ以外は `<部品 ID>:<書かれた id>`
   /// （部品をまたいで重ならない）。
-  static func downstreamId(_ written: String, of part: AutomationPartID, inherited: Bool) -> String
+  static func downstreamId(_ written: String, of part: AutomationNodeID, inherited: Bool) -> String
   {
     inherited ? written : "\(part):\(written)"
   }
@@ -128,13 +128,13 @@ extension AutomationDatabase {
         current = source
         continue
       }
-      let part = AutomationPartID(row.part)
+      let part = AutomationNodeID(row.part)
       guard graph.node(part)?.role == .fetch else { return nil }
       return try originRow(current, part: part)
     }
   }
 
-  private func originRow(_ source: AutomationSourceRef, part: AutomationPartID) throws
+  private func originRow(_ source: AutomationSourceRef, part: AutomationNodeID) throws
     -> AutomationIntake.Origin?
   {
     let found: [(ref: AutomationRowRef, body: String?)]
@@ -156,7 +156,7 @@ extension AutomationDatabase {
   }
 
   /// 読む前に期限で消えた出来事の数: 上流の出来事の番号の（`from`, `to`] のうち、残す期間の内に残っていないもの。
-  func lapsed(of up: AutomationPartID, from: Int, to: Int, now: Date) throws -> Int {
+  func lapsed(of up: AutomationNodeID, from: Int, to: Int, now: Date) throws -> Int {
     guard to > from else { return 0 }
     let alive =
       try db.select(
@@ -170,7 +170,7 @@ extension AutomationDatabase {
   }
 
   /// 読んだ位置を進める（下がらない）。
-  func advance(_ receiver: AutomationPartID, _ reach: [AutomationIntake.Reach]) throws {
+  func advance(_ receiver: AutomationNodeID, _ reach: [AutomationIntake.Reach]) throws {
     for reach in reach {
       let column = reach.table == .item ? "read_item_seq" : "read_event_seq"
       try db.run(
@@ -204,7 +204,7 @@ extension AutomationDatabase {
   /// 番号）。読んだ位置を進める先までの、読む前に期限で消えた出来事を数えて添える。
   func read(
     _ node: AutomationGraph.Node, in graph: AutomationGraph,
-    baseline: [AutomationPartID: AutomationSeqs]?, context: AutomationIntake.Context
+    baseline: [AutomationNodeID: AutomationSeqs]?, context: AutomationIntake.Context
   ) throws -> AutomationIntake.Read {
     let positions = try self.positions(of: node.id)
     var rows: [AutomationIntake.Row] = []

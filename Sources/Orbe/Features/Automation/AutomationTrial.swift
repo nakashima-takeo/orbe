@@ -30,8 +30,8 @@ final class AutomationTrial {
 
   /// 解いた範囲。
   struct Range {
-    let from: [AutomationPartID]
-    let to: [AutomationPartID]
+    let from: [AutomationNodeID]
+    let to: [AutomationNodeID]
     /// 道——入口のどれかの子孫か入口そのもので、行き先のどれかの祖先か行き先そのものの部品（定義の順）。
     let path: [AutomationGraph.Node]
 
@@ -44,15 +44,15 @@ final class AutomationTrial {
 
   /// 与えた行: 書く部品（取得の入口ならその取得、入力のある入口ならただ 1 つの上流）と、その出力にする行。
   struct Given {
-    let entry: AutomationPartID
-    let writer: AutomationPartID
-    let rows: [AutomationPartRow]
+    let entry: AutomationNodeID
+    let writer: AutomationNodeID
+    let rows: [AutomationNodeRow]
 
     /// 取得の入口に与えたか（その取得は動かない）。
     var fetched: Bool { writer == entry }
   }
 
-  enum PartState: String {
+  enum NodeState: String {
     case waiting
     case running
     case done
@@ -67,7 +67,7 @@ final class AutomationTrial {
   /// 部品の結果。
   enum Pass: Equatable {
     /// 写しの上で確定した回（本番の `runs` の要素と同じ形）と、その中身。
-    case ran(AutomationPartRun, Content)
+    case ran(AutomationNodeRun, Content)
     /// 止めた副作用・仕事に渡るはずだった行。
     case held([String])
     /// 与えた行を出力にした取得が下流へ渡す行。
@@ -79,7 +79,7 @@ final class AutomationTrial {
     /// 下流へ渡す行（取得・処理）。
     case rows([String])
     /// 候補の案と、対応済みにするリンク（判定）。
-    case judged(proposals: [AutomationPartPass.Proposal], resolved: [String])
+    case judged(proposals: [AutomationNodePass.Proposal], resolved: [String])
   }
 
   let automationId: Int
@@ -91,7 +91,7 @@ final class AutomationTrial {
   /// 流し切れずに終わった理由（写している間に範囲の部品が消えた・写しに掛ける操作が書けなかった など）。
   private(set) var failure: String?
   /// 部品ごとの回（本番の `runs` と同じく新しい順）。
-  private(set) var passes: [AutomationPartID: [Pass]] = [:]
+  private(set) var passes: [AutomationNodeID: [Pass]] = [:]
 
   private let source: AutomationRunner
   private let onEnd: () -> Void
@@ -100,7 +100,7 @@ final class AutomationTrial {
   private var store: AutomationStore?
   private var runner: AutomationRunner?
   /// 行を与えた取得の入口。
-  private var givenFetch: AutomationPartID?
+  private var givenFetch: AutomationNodeID?
   /// 終わったときの一巡（打ち切られたものを含む）。
   private var finalFlow: AutomationFlow?
   /// 流し切って終えたか（止める部品を読んだか）。
@@ -125,7 +125,7 @@ final class AutomationTrial {
   /// 写している途中か。
   var preparing: Bool { copy != nil }
 
-  func state(of part: AutomationPartID) -> PartState {
+  func state(of part: AutomationNodeID) -> NodeState {
     if part == givenFetch { return .given }
     if let node = range.path.first(where: { $0.id == part }), Self.holds(node) {
       if running { return .waiting }
@@ -233,8 +233,8 @@ final class AutomationTrial {
   }
 
   private func content(
-    of node: AutomationGraph.Node, _ run: AutomationPartRun,
-    _ outcome: AutomationPartPass.Outcome, in store: AutomationStore
+    of node: AutomationGraph.Node, _ run: AutomationNodeRun,
+    _ outcome: AutomationNodePass.Outcome, in store: AutomationStore
   ) throws(AutomationError) -> Content {
     guard !run.failed else { return .none }
     switch run.result {

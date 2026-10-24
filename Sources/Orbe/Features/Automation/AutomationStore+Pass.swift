@@ -3,15 +3,15 @@ import Foundation
 /// 部品の 1 回の終わり。走らせ役が組み、ストアが確定（または失敗の記録）にする。
 struct AutomationPassEnd {
   let automationId: Int
-  let part: AutomationPartID
+  let part: AutomationNodeID
   /// 回が動いた定義（回を始めた時点の部品の定義）。
   let defId: AutomationDefID
-  let trigger: AutomationPartRun.Trigger
+  let trigger: AutomationNodeRun.Trigger
   let startedAt: Date
   let endedAt: Date
   /// 読んだもの。入力の無い部品は nil。
   let read: AutomationIntake.Read?
-  let outcome: AutomationPartPass.Outcome
+  let outcome: AutomationNodePass.Outcome
 }
 
 /// 確定した部品の 1 回。
@@ -19,14 +19,14 @@ struct AutomationRecorded {
   /// 出す側の行が変わった（下流の受け手に起こす決まりを見る）。
   let changed: Bool
   /// 書いた回の記録。自動化か部品がもう無く、何も書かなかったなら nil。
-  let run: AutomationPartRun?
+  let run: AutomationNodeRun?
 }
 
 /// 部品の 1 回の読み書き。読みは受け手の取り方（`AutomationIntake`）を通し、行の本文は DB にだけ置く。
 extension AutomationStore {
   /// 受け手 `part` の読み。`baseline` はつながりごとの読む上限の番号（契機の始まりの時点の上流の最後の番号）。
   func read(
-    _ part: AutomationPartID, of id: Int, baseline: [AutomationPartID: AutomationSeqs]?,
+    _ part: AutomationNodeID, of id: Int, baseline: [AutomationNodeID: AutomationSeqs]?,
     now: Date
   ) throws(AutomationError) -> AutomationIntake.Read? {
     guard let automation = automation(id), let node = automation.graph.node(part),
@@ -41,15 +41,15 @@ extension AutomationStore {
   }
 
   /// 受け手 `part` のつながりごとの読んだ位置と上流の最後の番号（起こす決まりが読む）。
-  func positions(of part: AutomationPartID) throws(AutomationError)
-    -> [AutomationPartID: AutomationDatabase.Position]
+  func positions(of part: AutomationNodeID) throws(AutomationError)
+    -> [AutomationNodeID: AutomationDatabase.Position]
   {
     try read { try $0.positions(of: part) }
   }
 
   /// 取る行が 0 件だった契機。読んだ位置を読む上限の番号まで進め、捨てた数と読む前に期限で消えた数を受け手の部品の
   /// 持ち越しに足す（次の成功した回の記録に載る）。
-  func discard(_ read: AutomationIntake.Read, of part: AutomationPartID, in id: Int, now: Date)
+  func discard(_ read: AutomationIntake.Read, of part: AutomationNodeID, in id: Int, now: Date)
     throws(AutomationError)
   {
     guard read.taken.isEmpty, automation(id)?.states[part] != nil, !read.reach.isEmpty else {
@@ -79,7 +79,7 @@ extension AutomationStore {
     guard let index = automations.firstIndex(where: { $0.id == end.automationId }),
       let node = automations[index].graph.node(end.part)
     else { return AutomationRecorded(changed: false, run: nil) }
-    var run = AutomationPartRun(
+    var run = AutomationNodeRun(
       startedAt: TaskItem.storedInstant(end.startedAt),
       endedAt: TaskItem.storedInstant(end.endedAt), trigger: end.trigger,
       taken: end.read?.taken.count, execution: end.outcome.execution,
@@ -123,7 +123,7 @@ extension AutomationStore {
 extension AutomationMemory {
   /// 受け手の「読めば取る行」を数え直す。`parts` を省けば自動化の入力のある部品すべて。起動時も変化の後も、これだけが数える。
   mutating func recount(
-    _ id: Int, _ db: AutomationDatabase, now: Date, parts: [AutomationPartID]? = nil
+    _ id: Int, _ db: AutomationDatabase, now: Date, parts: [AutomationNodeID]? = nil
   ) throws {
     guard let index = automations.firstIndex(where: { $0.id == id }) else { return }
     let automation = automations[index]

@@ -30,7 +30,7 @@ extension DesignSceneFixtures {
   private static func shelfProposal(
     _ part: String, _ item: AutomationItem, _ title: String, due: TaskItem.DueDate? = nil,
     reason: String? = nil
-  ) -> AutomationPartPass.Proposal {
+  ) -> AutomationNodePass.Proposal {
     proposal(item, title, due: due, reason: reason)
   }
 

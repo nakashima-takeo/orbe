@@ -6,7 +6,7 @@ import Foundation
 /// メニューバー。報告の全文（複数行）・報告なし・失敗の回を持つ。
 extension DesignSceneFixtures {
   static func boardReportExample() -> AutomationSample {
-    let reports: [(daysAgo: Int, report: AutomationPartPass.Outcome)] = [
+    let reports: [(daysAgo: Int, report: AutomationNodePass.Outcome)] = [
       (5, reported("開いている PR は 4 件。新しく 2 件が開いた。")),
       (4, failed("Claude usage limit reached")),
       (3, reported(nil)),

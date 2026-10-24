@@ -9,8 +9,8 @@ enum BoardSegmentLook: Equatable {
 
 /// 選んだ部品のカードの値。地図に出さない部品の中身（手段・モデル・ツール・指示文・保存・取り方・上限・制限時間・作業ディレクトリ・
 /// 回の記録）を出すのはここだけ。
-struct BoardAutomationPartValue: Equatable {
-  let id: AutomationPartID
+struct BoardAutomationNodeValue: Equatable {
+  let id: AutomationNodeID
   let role: String
   let name: String
   let running: Bool
@@ -56,10 +56,10 @@ struct BoardAutomationPartValue: Equatable {
   }
 }
 
-extension BoardAutomationPartValue {
+extension BoardAutomationNodeValue {
   /// `next` は部品が次に予定で回る時刻（止めていれば nil）、`open` はこの自動化の棚に出ている判断待ちの候補の数。
   init?(
-    _ automation: Automation, part: AutomationPartID, text: AutomationText, running: Bool,
+    _ automation: Automation, part: AutomationNodeID, text: AutomationText, running: Bool,
     next: Date?, open: Int
   ) {
     guard let node = automation.graph.node(part) else { return nil }
@@ -197,7 +197,7 @@ extension BoardAutomationPartValue {
 
   /// 入力 1 つ（「取得」「取得（毎回全件・24 時間以内）」）。
   private static func input(
-    _ graph: AutomationGraph, _ edge: AutomationPartEdge, _ l10n: LocalizationStore
+    _ graph: AutomationGraph, _ edge: AutomationNodeEdge, _ l10n: LocalizationStore
   ) -> String {
     let name = graph.node(edge.from)?.entity.name ?? "\(edge.from)"
     let notes =
@@ -212,7 +212,7 @@ extension BoardAutomationPartValue {
   /// 部品が出した行の保存の仕方（「上書き」「追記」）。追記の取得は、前回成功の目印から取ることを添える（「追記（前回 16:00 より後を
   /// 取る）」）。
   private static func coverage(
-    _ coverage: AutomationCoverage, of node: AutomationGraph.Node, _ state: AutomationPartState,
+    _ coverage: AutomationCoverage, of node: AutomationGraph.Node, _ state: AutomationNodeState,
     _ text: AutomationText
   ) -> String {
     let l10n = text.l10n

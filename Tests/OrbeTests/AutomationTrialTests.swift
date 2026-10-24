@@ -48,13 +48,13 @@ final class AutomationTrialTests: OrbeTestCase {
   // MARK: - 部品と手段
 
   func part(
-    _ key: String, _ trigger: AutomationPart.Trigger = .manual, from inputs: [String] = [],
+    _ key: String, _ trigger: AutomationNode.Trigger = .manual, from inputs: [String] = [],
     deliver: AutomationActionDef.Destination = .nextPart
-  ) -> AutomationDefinition.Part {
+  ) -> AutomationDefinition.Node {
     DesignSceneFixtures.commandPart(key, key, trigger, from: inputs, script: key, deliver: deliver)
   }
 
-  func fetch(_ key: String) -> AutomationDefinition.Part {
+  func fetch(_ key: String) -> AutomationDefinition.Node {
     DesignSceneFixtures.commandPart(
       key, key, .scheduled(.every(Self.far)), script: key, coverage: .currentSet)
   }
@@ -64,7 +64,7 @@ final class AutomationTrialTests: OrbeTestCase {
     "\(store.part(id, key)):\(written)"
   }
 
-  func define(_ parts: [AutomationDefinition.Part]) throws -> Int {
+  func define(_ parts: [AutomationDefinition.Node]) throws -> Int {
     try runner.set(nil, AutomationDefinition(name: "自動化", notify: nil, parts: parts)).id
   }
 
@@ -269,7 +269,7 @@ final class AutomationTrialTests: OrbeTestCase {
 
 extension AutomationTrial.Pass {
   /// 写しの上で確定した回（テスト）。止めた・与えた結果は nil。
-  var run: AutomationPartRun? {
+  var run: AutomationNodeRun? {
     if case .ran(let run, _) = self { run } else { nil }
   }
 

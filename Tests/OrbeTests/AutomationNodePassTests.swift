@@ -12,7 +12,7 @@ import XCTest
 /// せずに成功する。前回取れた項目が毎回流れ直す。照らせない・重なった処理の行が黙って消える。結果を出さずに終えた agent の回が
 /// 成功になる。候補に別の項目のリンクが付く。失敗した取得・仕事・副作用が成功として確定する。止めた回の結果が書き換えた後の
 /// 定義で確定する。
-final class AutomationPartPassTests: AutomationPartPassTestCase {
+final class AutomationNodePassTests: AutomationNodePassTestCase {
   // MARK: - 起こし方
 
   /// 上限は部品の経過時間だけで、無出力では打ち切らない——部品の上限は利用者が決める `timeoutMinutes` の一本にするため。
@@ -31,7 +31,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
   func testOnlyNewArrivalsFetchGetsTheMark() throws {
     let since = now.addingTimeInterval(-3600)
     let mark = SessionEvent.iso8601(since)
-    func agent(_ coverage: AutomationCoverage) -> AutomationDefinition.Part {
+    func agent(_ coverage: AutomationCoverage) -> AutomationDefinition.Node {
       AutomationGraphTests.agent("f", tools: [Self.tool], deliver: .nextPart, coverage: coverage)
     }
 
@@ -249,7 +249,7 @@ final class AutomationPartPassTests: AutomationPartPassTestCase {
     XCTAssertEqual(
       proposals,
       [
-        AutomationPartPass.Proposal(
+        AutomationNodePass.Proposal(
           origin: origin("b"), title: "b に返信する", due: nil, workspace: nil, reason: nil)
       ]
     )

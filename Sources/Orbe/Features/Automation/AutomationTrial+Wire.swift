@@ -22,7 +22,7 @@ extension AutomationTrial {
     return json
   }
 
-  private func keys(_ ids: [AutomationPartID]) -> [String] {
+  private func keys(_ ids: [AutomationNodeID]) -> [String] {
     ids.compactMap { id in range.path.first { $0.id == id }?.key }
   }
 }

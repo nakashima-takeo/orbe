@@ -6,7 +6,7 @@ import Foundation
 /// 添え、原文を重ねない。
 extension AutomationText {
   /// 「制限時間を超過（the part "x" ended: stopped at the time limit）」。
-  func failure(_ run: AutomationPartRun, node: AutomationGraph.Node) -> String? {
+  func failure(_ run: AutomationNodeRun, node: AutomationGraph.Node) -> String? {
     guard let failure = run.failure else { return nil }
     let head = failureHead(failure, ending: run.execution.ending, node: node)
     switch failure {

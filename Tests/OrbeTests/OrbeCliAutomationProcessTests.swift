@@ -141,7 +141,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
       id, part: "post", at: Date(),
       outcome: .succeeded(
         .work(.done("投稿した")),
-        AutomationPartPass.Execution(commandLine: "claude -p", ending: .exited(0), count: 1),
+        AutomationNodePass.Execution(commandLine: "claude -p", ending: .exited(0), count: 1),
         breach: nil))
     let last = row(control)[5]
     XCTAssertTrue(last.hasSuffix(" post: agent exited 0"), last)

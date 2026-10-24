@@ -9,7 +9,7 @@ struct BoardAutomationDetail: View {
   let model: BoardAutomationModel
   let standing: BoardAutomationStanding
   let detail: BoardAutomationDetailValue
-  let card: BoardAutomationPartValue?
+  let card: BoardAutomationNodeValue?
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
@@ -35,7 +35,7 @@ struct BoardAutomationDetail: View {
             map
             Group {
               if let card {
-                BoardAutomationPartCard(model: model, card: card)
+                BoardAutomationNodeCard(model: model, card: card)
               } else {
                 Color.clear
               }
@@ -45,7 +45,7 @@ struct BoardAutomationDetail: View {
         } else {
           VStack(alignment: .leading, spacing: Self.headingGap) {
             map
-            if let card { BoardAutomationPartCard(model: model, card: card) }
+            if let card { BoardAutomationNodeCard(model: model, card: card) }
           }
         }
       }

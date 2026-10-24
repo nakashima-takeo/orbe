@@ -5,7 +5,7 @@ import XCTest
 /// 結果に残す実行の記録——受けた数の数え方は役割ごとに決まる。
 ///
 /// 壊れると何が起きるか: 回の記録の件数が渡した行と食い違う（断った件まで「取った」に数える）。
-final class AutomationPartPassRecordTests: AutomationPartPassTestCase {
+final class AutomationNodePassRecordTests: AutomationNodePassTestCase {
   private var count: Int? { outcomes.first?.execution.count }
 
   /// 取得は今回取れた全項目を数える（前回の出力にあって下流へ渡さない項目も）。

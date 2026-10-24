@@ -1,7 +1,7 @@
 import Foundation
 
 /// 自動化の部品（実体）の ID。Orbe が振り、使い回さない。状態と履歴はこれだけを指す（鍵はただの呼び名）。
-struct AutomationPartID: Hashable, Comparable, CustomStringConvertible {
+struct AutomationNodeID: Hashable, Comparable, CustomStringConvertible {
   let rawValue: Int
 
   init(_ rawValue: Int) { self.rawValue = rawValue }
@@ -20,7 +20,7 @@ struct AutomationDefID: Hashable, Comparable {
   static func < (a: Self, b: Self) -> Bool { a.rawValue < b.rawValue }
 }
 
-/// 動作の定義——部品が何をするか: 手段・上限・出力の性質・行き先。自動化の部品がどれを使うかは `AutomationPart.defId` が指す。
+/// 動作の定義——部品が何をするか: 手段・上限・出力の性質・行き先。自動化の部品がどれを使うかは `AutomationNode.defId` が指す。
 struct AutomationActionDef: Equatable {
   var method: Method
   /// 分。省略は `AutomationGraph.Node.timeoutMinutes` が解く。
@@ -35,7 +35,7 @@ struct AutomationActionDef: Equatable {
 
   enum Method: Equatable {
     case command(BackgroundCommand)
-    case agent(AutomationPartAgent)
+    case agent(AutomationNodeAgent)
   }
 
   enum Destination: Equatable {
@@ -54,8 +54,8 @@ struct AutomationActionDef: Equatable {
 }
 
 /// 自動化の部品（実体）。自動化の中のどこに置き、どう呼び、いつ動くかと、使う部品の定義を持つ。
-struct AutomationPart: Equatable {
-  let id: AutomationPartID
+struct AutomationNode: Equatable {
+  let id: AutomationNodeID
   var key: String
   var name: String
   var trigger: Trigger
@@ -75,9 +75,9 @@ struct AutomationPart: Equatable {
   }
 }
 
-extension AutomationPart {
+extension AutomationNode {
   /// 外の形の部品に、Orbe が振った ID と使う部品の定義を当てた実体。
-  init(_ part: AutomationDefinition.Part, id: AutomationPartID, defId: AutomationDefID) {
+  init(_ part: AutomationDefinition.Node, id: AutomationNodeID, defId: AutomationDefID) {
     self.init(
       id: id, key: part.key, name: part.name, trigger: part.trigger, maxItems: part.maxItems,
       defId: defId)
@@ -85,8 +85,8 @@ extension AutomationPart {
 }
 
 /// 部品どうしのつながり（受け手の 1 つの入力）。受け手が取り方を持つ。
-struct AutomationPartEdge: Hashable {
-  let from: AutomationPartID
+struct AutomationNodeEdge: Hashable {
+  let from: AutomationNodeID
   var take: AutomationTake
   /// 古さの上限（時間）。項目は有効になってから、出来事は作られてからの時間で数える。
   var maxAgeHours: Int?
@@ -101,9 +101,9 @@ enum AutomationTake: String, Hashable {
 }
 
 /// 部品の agent。
-struct AutomationPartAgent: Equatable {
+struct AutomationNodeAgent: Equatable {
   var cli: String
-  /// 省略は役割の既定（`AutomationPartRole.defaultModel`）。
+  /// 省略は役割の既定（`AutomationNodeRole.defaultModel`）。
   var model: String?
   /// 許可の規則。MCP のツールの完全名か `Bash(<コマンドの接頭>:*)`。空はツールを持たない。
   var tools: [String]
@@ -111,7 +111,7 @@ struct AutomationPartAgent: Equatable {
 }
 
 /// 部品の役割。欄には持たず、部品自身の欄（入力・ツール・行き先）から `AutomationGraph` が導く。
-enum AutomationPartRole: Equatable {
+enum AutomationNodeRole: Equatable {
   /// 行を見ずに項目を出す。
   case fetch
   /// 行を見て行を出す。

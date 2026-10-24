@@ -12,21 +12,21 @@ struct AutomationOutputs {
   /// その数は UTF-8 のバイト数を超えないので、上限は閾値より十分小さく取ってある。
   static let rowKiB = 64
 
-  let input: AutomationPartPass.Input
+  let input: AutomationNodePass.Input
   /// 行を出す部品（下流へ渡す id の接頭）。
-  let writer: AutomationPartID
+  let writer: AutomationNodeID
   /// 受けた行（取得・処理）。取得は書かれた id と書かれたままの 1 行（余分な欄も残す）、処理は入力と `id` で照らせた行だけが
   /// その入力を引き継ぎ、出どころも引き継ぐ。
-  private(set) var rows: [AutomationPartRow] = []
+  private(set) var rows: [AutomationNodeRow] = []
   /// 判定の案と、対応済みにする判断待ちの候補のリンク。
-  private(set) var proposals: [AutomationPartPass.Proposal] = []
+  private(set) var proposals: [AutomationNodePass.Proposal] = []
   private(set) var resolved: [String] = []
   /// 報告・仕事の文。
   private(set) var report: String?
   private var ids = Set<String>()
   private var judgeSeen = JudgeSeen()
 
-  init(_ input: AutomationPartPass.Input, writer: AutomationPartID) {
+  init(_ input: AutomationNodePass.Input, writer: AutomationNodeID) {
     self.input = input
     self.writer = writer
   }
@@ -68,7 +68,7 @@ struct AutomationOutputs {
   }
 
   /// 受けたものからの結果。`nothing` は何も無い回の理由（仕事の「何もしなかった」に使う）。
-  func output(nothing: String?) -> AutomationPartPass.Output {
+  func output(nothing: String?) -> AutomationNodePass.Output {
     switch input {
     case .fetch: .fetch(rows)
     case .process: .process(rows)
@@ -103,14 +103,14 @@ struct AutomationOutputs {
         continue
       }
       rows.append(
-        AutomationPartRow(id: accepted.item.id, text: accepted.text, origin: nil, source: nil))
+        AutomationNodeRow(id: accepted.item.id, text: accepted.text, origin: nil, source: nil))
     }
     return broken.sorted { ($0.line ?? 0) < ($1.line ?? 0) }
   }
 
   /// `id` の無い件・同じ `id` の 2 つ目・判定へ届くときの入力の行の `id` でない件は外れた件。
   private mutating func processed(
-    _ text: String, _ input: [AutomationPartRow], reachesJudge: Bool
+    _ text: String, _ input: [AutomationNodeRow], reachesJudge: Bool
   ) -> [AutomationBrokenLine] {
     var (objects, broken) = Self.objectRows(text)
     let inputs = Dictionary(input.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
@@ -132,7 +132,7 @@ struct AutomationOutputs {
         continue
       }
       rows.append(
-        AutomationPartRow(
+        AutomationNodeRow(
           id: id, text: object.text, origin: inputs[id]?.origin, source: inputs[id]?.source))
     }
     return broken.sorted { ($0.line ?? 0) < ($1.line ?? 0) }
@@ -155,7 +155,7 @@ struct AutomationOutputs {
           preconditionFailure("an accepted proposal points at one of the rows")
         }
         proposals.append(
-          AutomationPartPass.Proposal(
+          AutomationNodePass.Proposal(
             origin: origin, title: title, due: due, workspace: workspace, reason: reason))
       case .success(.resolve(let link)):
         resolved.append(link)

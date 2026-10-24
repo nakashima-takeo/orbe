@@ -59,7 +59,7 @@ final class AutomationRunSession {
   }
 
   /// `writer` は回を走らせる部品（出す行の下流へ渡す id の接頭）。
-  init(_ input: AutomationPartPass.Input, writer: AutomationPartID) {
+  init(_ input: AutomationNodePass.Input, writer: AutomationNodeID) {
     outputs = AutomationOutputs(input, writer: writer)
     rows = input.rowTexts
     let read: [Tool] = rows.isEmpty ? [] : [.readRunRows]

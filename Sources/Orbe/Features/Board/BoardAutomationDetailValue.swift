@@ -10,8 +10,8 @@ enum BoardNodeLook: Equatable {
 }
 
 /// 地図の部品の行。文言まで解いた値。
-struct BoardMapPart: Equatable {
-  let id: AutomationPartID
+struct BoardMapNode: Equatable {
+  let id: AutomationNodeID
   /// 役割の名前（「取得」「判定」）。
   let role: String
   let name: String
@@ -63,7 +63,7 @@ struct BoardMapLanes: Equatable {
 /// 地図の 1 行。部品の行に続けて、出力先の行（タスク候補・報告の出し先。その出力先の部品がある分だけ）が並ぶ。
 struct BoardMapRow: Equatable {
   enum Content: Equatable {
-    case part(BoardMapPart)
+    case part(BoardMapNode)
     /// `open` はこの自動化の棚に出ている判断待ちの候補の数。
     case taskCandidates(open: Int)
     /// 報告と作業の文の出し先（「メニューバー」）。
@@ -94,7 +94,7 @@ struct BoardAutomationDetailValue: Equatable {
 extension BoardAutomationDetailValue {
   /// `running` は部品が走っているか、`open` はこの自動化の棚に出ている判断待ちの候補の数、`next` は次に予定で回る時刻。
   init(
-    _ automation: Automation, text: AutomationText, running: (AutomationPartID) -> Bool, open: Int,
+    _ automation: Automation, text: AutomationText, running: (AutomationNodeID) -> Bool, open: Int,
     next: Date?
   ) {
     let l10n = text.l10n
@@ -151,7 +151,7 @@ extension BoardAutomationDetailValue {
   /// 地図の部品の行。
   private static func part(
     _ node: AutomationGraph.Node, in automation: Automation, text: AutomationText, running: Bool
-  ) -> BoardMapPart {
+  ) -> BoardMapNode {
     let l10n = text.l10n
     let state = automation.state(node.id)
     let latest = state.runs.first
@@ -161,7 +161,7 @@ extension BoardAutomationDetailValue {
       case .arrival: nil
       case .scheduled, .manual: text.schedule(node.entity.trigger)
       }
-    return BoardMapPart(
+    return BoardMapNode(
       id: node.id, role: text.role(node.role), name: node.entity.name, schedule: schedule,
       inputs: inputs.isEmpty
         ? nil
@@ -170,7 +170,7 @@ extension BoardAutomationDetailValue {
       pending: inputs.isEmpty ? nil : state.pending.count, breached: state.breach != nil,
       look: running ? .running : latest?.failed == true ? .failed : .idle,
       last: latest.map {
-        BoardMapPart.Last(
+        BoardMapNode.Last(
           mark: $0.failed ? .failure : .success, at: text.recent($0.startedAt),
           amount: $0.run.flatMap { BoardAutomationSummary.amount($0, text: text) })
       },

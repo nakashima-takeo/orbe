@@ -7,13 +7,13 @@ import XCTest
 /// 壊れると何が起きるか: AI が書いた部品が別の意味で読まれる（`none` が報告に化ける・入力や取り方が落ちる・部品の id が
 /// 落ちて別の部品になる）。読み直した部品のモデルが解いた値で固まり、役割が変わっても前の既定で走る。コマンドに書いたツールや
 /// 知らない行き先・取り方が黙って捨てられ、書いた AI が誤りの場所を知らされない。
-final class AutomationPartTests: OrbeTestCase {
+final class AutomationNodeTests: OrbeTestCase {
   private func part(
-    _ id: Int?, _ key: String, _ name: String, _ trigger: AutomationPart.Trigger,
+    _ id: Int?, _ key: String, _ name: String, _ trigger: AutomationNode.Trigger,
     from: [AutomationDefinition.Input] = [], _ action: AutomationActionDef, maxItems: Int? = nil
-  ) -> AutomationDefinition.Part {
-    AutomationDefinition.Part(
-      id: id.map(AutomationPartID.init), key: key, name: name, trigger: trigger, from: from,
+  ) -> AutomationDefinition.Node {
+    AutomationDefinition.Node(
+      id: id.map(AutomationNodeID.init), key: key, name: name, trigger: trigger, from: from,
       action: action, maxItems: maxItems)
   }
 
@@ -44,13 +44,13 @@ final class AutomationPartTests: OrbeTestCase {
         from: [.init(part: "gh", maxAgeHours: 72)],
         AutomationActionDef(
           method: .agent(
-            AutomationPartAgent(cli: "claude", model: nil, tools: [], instruction: "判定して")),
+            AutomationNodeAgent(cli: "claude", model: nil, tools: [], instruction: "判定して")),
           timeoutMinutes: 10, coverage: nil, destination: .taskCandidates), maxItems: 30),
       part(
         nil, "post", "投稿", .manual,
         AutomationActionDef(
           method: .agent(
-            AutomationPartAgent(
+            AutomationNodeAgent(
               cli: "claude", model: "opus", tools: ["mcp__slack__post"], instruction: "投稿して")),
           timeoutMinutes: nil, coverage: nil, destination: .report)),
       part(
@@ -62,19 +62,19 @@ final class AutomationPartTests: OrbeTestCase {
         nil, "sum", "まとめ", .arrival, from: [.init(part: "gh", take: .all)],
         AutomationActionDef(
           method: .agent(
-            AutomationPartAgent(cli: "claude", model: nil, tools: [], instruction: "まとめて")),
+            AutomationNodeAgent(cli: "claude", model: nil, tools: [], instruction: "まとめて")),
           timeoutMinutes: nil, coverage: .currentSet, destination: .nextPart)),
     ]
 
     let parts = try AutomationWire.decoder.decode(
-      [AutomationDefinition.Part].self, from: Data(json.utf8))
+      [AutomationDefinition.Node].self, from: Data(json.utf8))
     let written = try AutomationWire.encoder().encode(parts)
     let from = try XCTUnwrap(
       (JSONSerialization.jsonObject(with: written) as? [[String: Any]])?[3]["from"] as? [Any])
 
     XCTAssertEqual(parts, expected)
     XCTAssertEqual(
-      try AutomationWire.decoder.decode([AutomationDefinition.Part].self, from: written),
+      try AutomationWire.decoder.decode([AutomationDefinition.Node].self, from: written),
       parts, "書いて読み直しても同じ値（省略したモデルは省略のまま）")
     XCTAssertEqual(from.first as? String, "gh", "取り方も古さの上限も省いた入力は鍵だけで書く")
   }
@@ -107,7 +107,7 @@ final class AutomationPartTests: OrbeTestCase {
         #"[{"key": "ok", "name": "ok", "trigger": {"kind": "manual"}, "command": "x"}, "#
         + #"{"key": "a", "name": "a", "trigger": \#(trigger), \#(fields)}]"#
       XCTAssertThrowsError(
-        try AutomationWire.decoder.decode([AutomationDefinition.Part].self, from: Data(json.utf8)),
+        try AutomationWire.decoder.decode([AutomationDefinition.Node].self, from: Data(json.utf8)),
         label
       ) {
         XCTAssertEqual(location(of: $0), place, label)

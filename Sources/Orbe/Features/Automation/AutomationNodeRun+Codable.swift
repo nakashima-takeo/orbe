@@ -2,7 +2,7 @@ import Foundation
 
 // 部品の 1 回の記録の JSON（外の形と保存の形）。
 
-extension AutomationPartRun: Encodable {
+extension AutomationNodeRun: Encodable {
   private enum CodingKeys: String, CodingKey {
     case startedAt, endedAt, trigger, taken, dropped, execution, breach, result, withdrawn, failed
   }
@@ -30,16 +30,16 @@ struct AutomationRunStore: Codable {
   /// 入力を読む部品の回か（取った行が 0 件の回も）。
   var reads: Bool
   var carried: AutomationDrops
-  var execution: AutomationPartPass.Execution
+  var execution: AutomationNodePass.Execution
   var breach: AutomationRejections?
-  var result: AutomationPartRun.Result?
+  var result: AutomationNodeRun.Result?
   var withdrawn: Int?
 
   private enum CodingKeys: String, CodingKey {
     case reads, carried, execution, breach, result, withdrawn
   }
 
-  init(_ run: AutomationPartRun, carried: AutomationDrops) {
+  init(_ run: AutomationNodeRun, carried: AutomationDrops) {
     reads = run.taken != nil
     self.carried = carried
     execution = run.execution
@@ -52,9 +52,9 @@ struct AutomationRunStore: Codable {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     reads = try c.decodeIfPresent(Bool.self, forKey: .reads) ?? false
     carried = try c.decodeIfPresent(AutomationDrops.self, forKey: .carried) ?? AutomationDrops()
-    execution = try c.decode(AutomationPartPass.Execution.self, forKey: .execution)
+    execution = try c.decode(AutomationNodePass.Execution.self, forKey: .execution)
     breach = try c.decodeIfPresent(AutomationRejections.self, forKey: .breach)
-    result = try c.decodeIfPresent(AutomationPartRun.Result.self, forKey: .result)
+    result = try c.decodeIfPresent(AutomationNodeRun.Result.self, forKey: .result)
     withdrawn = try c.decodeIfPresent(Int.self, forKey: .withdrawn)
   }
 
@@ -72,7 +72,7 @@ struct AutomationRunStore: Codable {
 /// `{"kind": "fetch", "fresh", "duplicates"?}`・`{"kind": "process", "fresh", "duplicates"?}`・
 /// `{"kind": "judge", "proposed", "resolved", "dismissed"?}`・`{"kind": "report", "text"?}`・
 /// `{"kind": "sideEffect", "count"}`・`{"kind": "work", "text"?, "nothing"?}`。
-extension AutomationPartRun.Result: Codable {
+extension AutomationNodeRun.Result: Codable {
   private enum CodingKeys: String, CodingKey {
     case kind, fresh, duplicates, proposed, resolved, dismissed, text, count, nothing
   }

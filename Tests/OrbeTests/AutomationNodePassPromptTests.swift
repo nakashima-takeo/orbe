@@ -8,7 +8,7 @@ import XCTest
 /// 壊れると何が起きるか: 行が多い・大きい回の依頼文が上限やモデルの読める量を超える。処理の agent が `id` の決まりを知らずに外し、毎回結果を断られる。判定へ届く処理が新しい項目を作り、
 /// 判定へ届く前に消える。取得の agent が、読んだ外の文面に仕込まれた指示に従ってツールを使う。判定が待っている候補を片付ける
 /// 回に report_nothing だけを呼び、候補が残り続ける。
-final class AutomationPartPassPromptTests: AutomationPartPassTestCase {
+final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
   private func prompt(_ index: Int = 0) throws -> String {
     try XCTUnwrap(agentCall(index)).prompt
   }

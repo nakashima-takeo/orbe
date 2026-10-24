@@ -73,7 +73,7 @@ extension AutomationMemory {
 extension AutomationStore {
   /// 判定の部品 `judge` に見せる判断待ちの候補（判定が対応済みにできる相手）。その判定へ行が届く取得の部品の今有効な項目に
   /// リンクがあるものと、その判定が出したもの・その取得の部品が出どころのもの。
-  func openProposals(of id: Int, judge: AutomationPartID) -> [AutomationProposal] {
+  func openProposals(of id: Int, judge: AutomationNodeID) -> [AutomationProposal] {
     guard let automation = automation(id) else { return [] }
     let fetches = automation.graph.fetches(reaching: judge)
     let links = Set(fetches.flatMap { automation.state($0.id).liveLinks })
