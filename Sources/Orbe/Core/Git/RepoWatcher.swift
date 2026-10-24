@@ -19,7 +19,8 @@ final class RepoWatcher {
     var gitChanged = false
     /// 入れ子の git dir の中で状態が変わった（分け方は `gitDirChange`・`nestedGitDirChange`）。
     var nestedGitChanged = false
-    /// 取りこぼし（イベントの drop・root の付け替え）。全部見直す。
+    /// 取りこぼし（イベントの drop・root の付け替え）。全部見直す。立つときは `gitChanged`・`nestedGitChanged`・
+    /// `remoteRefsChanged` も立てる（受け手は git の旗だけを見ればよい）。
     var scanAll = false
     /// git の状態のうち remote 追跡 ref が動いたかもしれない（`gitChanged` の一部。何をそう見るかは
     /// `isRemoteRefChange`）。
