@@ -21,12 +21,14 @@ final class RootFilesTests: OrbeTestCase {
     var changes: [RootFiles.Change] = []
     var statusChanges = 0
     var versionChanges: [RootFiles.Version] = []
+    var onVersionChange: (() -> Void)?
     func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change) {
       changes.append(change)
     }
     func rootFilesStatusDidChange(_ files: RootFiles) { statusChanges += 1 }
     func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version) {
       versionChanges.append(version)
+      onVersionChange?()
     }
   }
 
@@ -117,6 +119,27 @@ final class RootFilesTests: OrbeTestCase {
     XCTAssertEqual(calls, 0, "判定の前には呼ばない")
     pumpMain(until: { unmanaged.isResolved }, "管理下かの判定")
     XCTAssertEqual(calls, 2, "管理外と分かったときに呼ぶ")
+  }
+
+  /// 同じ周に来た関心の申告と待ち手付きの要求は、版の本文の取り直し 1 本にまとまり、待ち手はその 1 本で呼ばれる——diff を
+  /// 開くと、文書の結線と diff が同じ周に関心を申告し、diff が待ち手付きで頼む。まとまらないと、申告で始まった 1 本の後に
+  /// もう 1 本が走り、待ち手はその 2 本目を待つ。
+  func testRequestsInTheSameTurnShareOneVersionRefresh() throws {
+    let files = RootFiles(root: repo.root)
+    pumpMain(until: { files.status != nil }, "前提: 管理下と判定した")
+    let version = RootFiles.Version(path: "a.txt", revision: .index)
+    let link = Recorder()
+    let diff = Recorder()
+    var settled = false
+    var settledByTheDelivery: Bool?
+    link.onVersionChange = {
+      DispatchQueue.main.async { settledByTheDelivery = settledByTheDelivery ?? settled }
+    }
+    files.addObserver(link, versions: [version])
+    files.addObserver(diff, versions: [version])
+    files.requestVersionRefresh { settled = true }
+    pumpMain(until: { settledByTheDelivery != nil }, "版が届く")
+    XCTAssertEqual(settledByTheDelivery, true, "版を届けた取り直しで待ち手を呼ぶ（2 本目を待たない）")
   }
 
   // MARK: - status と監視

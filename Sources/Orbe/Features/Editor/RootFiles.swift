@@ -11,9 +11,10 @@ import OrbeEditorCore
 ///
 /// 観測は 2 本の取り直しで成る——status と、版の本文（関心のある（パス, 版）ごとの OID → 変わった OID の blob）。版は
 /// index と HEAD で、文書の底（baseline）と diff の両側が同じ 1 か所の本文を引く。両者にデータの依存は無く、根ごとに
-/// 別々に直列化し、どちらも実行中に来た要求は「終わったらもう 1 回」に畳む。古い結果が後から乗らない（index や HEAD が
-/// 動けば監視が取り直す。status と版の本文は別々の git 起動で読むので同一時点の保証は無い）。別々にするのは、版の本文の
-/// 取得が smudge filter（git-lfs のネットワーク等）で遅くなりうるから——その後ろにバッジと書き込みの完了を並べない。
+/// 別々に直列化し、どちらも実行中に来た要求は「終わったらもう 1 回」に畳む（版の本文は同じ周に来た要求も 1 本に
+/// まとめる——`requestVersionRefresh`）。古い結果が後から乗らない（index や HEAD が動けば監視が取り直す。status と
+/// 版の本文は別々の git 起動で読むので同一時点の保証は無い）。別々にするのは、版の本文の取得が smudge filter
+/// （git-lfs のネットワーク等）で遅くなりうるから——その後ろにバッジと書き込みの完了を並べない。
 @MainActor
 final class RootFiles {
   struct Entry: Equatable {
@@ -74,6 +75,8 @@ final class RootFiles {
   private var versions: [Version: Settled] = [:]
   private var statusJob = RefreshJob()
   private var versionJob = RefreshJob()
+  /// 版の本文の取り直しを、次の周に始めると決めてある。
+  private var versionRefreshIsScheduled = false
   /// 次に始まる status の取り直しが済んだら呼ぶもの（書き込みの完了・diff の初めての位置決め）。
   private var statusWaiters: [() -> Void] = []
   /// 次に始まる版の本文の取り直しが済んだら呼ぶもの（diff の初めての位置決め）。
@@ -266,6 +269,10 @@ final class RootFiles {
 
   /// 版の本文を取り直す。`then` は、この要求の後に始まる取り直しが済んだら（変わった版を知らせた後。git の失敗でも）
   /// 呼ぶ——管理外・判定の前の扱いも、status の `requestStatusRefresh(then:)` と同じ。
+  ///
+  /// 取り直しは次の周に始め、それまでに来た要求を 1 本にまとめる。観測者は関心を申告するたびに要求するので、diff を
+  /// 開くと文書の結線と diff が同じ周に申告し、diff はさらに待ち手付きで要求する——すぐ始めると、待ち手は最初の 1 本の
+  /// 後の 2 本目に付く。
   func requestVersionRefresh(then waiter: (() -> Void)? = nil) {
     guard repo != nil || !isResolved else {
       waiter?()
@@ -277,7 +284,13 @@ final class RootFiles {
       versionJob.again = true
       return
     }
-    refreshVersions()
+    guard !versionRefreshIsScheduled else { return }
+    versionRefreshIsScheduled = true
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      versionRefreshIsScheduled = false
+      refreshVersions()
+    }
   }
 
   /// 関心のある版の OID を版ごとに 1 回で引き、OID が変わったファイルだけ本文を取る。サブモジュールはコミットを状態に
