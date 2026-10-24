@@ -46,7 +46,7 @@ struct BoardMapNode: Equatable {
 /// 地図の 1 行の溝の線。番号は左からの線の位置。
 struct BoardMapLanes: Equatable {
   /// 点を置く線。
-  let node: Int
+  let lane: Int
   /// 点の線が上から点へ届く（この行で最後の受け手を迎える入力）。
   let fromAbove: Bool
   /// 点から下へ続く（出力を受ける行が下にある）。
@@ -57,7 +57,7 @@ struct BoardMapLanes: Equatable {
   let through: [Int]
 
   /// この行の下へ続く線（行の下に足す理由の行は、これをそのまま縦に続ける）。
-  var continuing: [Int] { (through + (below ? [node] : [])).sorted() }
+  var continuing: [Int] { (through + (below ? [lane] : [])).sorted() }
 }
 
 /// 地図の 1 行。ノードの行に続けて、出力先の行（タスク候補・報告の出し先。その出力先のノードがある分だけ）が並ぶ。
@@ -209,18 +209,18 @@ struct BoardMapLayout: Equatable {
       let inputs = Set(row.inputs)
       let inputLanes = owners.filter { inputs.contains($0.value) }
       let ending = Set(inputLanes.filter { lastReceiver[$0.value] == index }.keys)
-      var node = ending.min() ?? 0
+      var lane = ending.min() ?? 0
       if ending.isEmpty {
-        while owners[node] != nil { node += 1 }
+        while owners[lane] != nil { lane += 1 }
       }
       let through = owners.keys.filter { !ending.contains($0) }.sorted()
-      for lane in ending { owners[lane] = nil }
-      if row.continues { owners[node] = row.key }
-      widest = max(widest, node + 1, (through.last ?? -1) + 1)
+      for ended in ending { owners[ended] = nil }
+      if row.continues { owners[lane] = row.key }
+      widest = max(widest, lane + 1, (through.last ?? -1) + 1)
       lanes.append(
         BoardMapLanes(
-          node: node, fromAbove: ending.contains(node), below: row.continues,
-          bends: inputLanes.keys.filter { $0 != node }.sorted(), through: through))
+          lane: lane, fromAbove: ending.contains(lane), below: row.continues,
+          bends: inputLanes.keys.filter { $0 != lane }.sorted(), through: through))
     }
     self.lanes = lanes
     laneCount = widest

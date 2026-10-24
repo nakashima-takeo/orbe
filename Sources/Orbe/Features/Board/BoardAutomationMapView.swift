@@ -61,7 +61,7 @@ struct BoardMapRowView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       HStack(spacing: 0) {
-        BoardMapGutter(lanes: row.lanes, node: node)
+        BoardMapGutter(lanes: row.lanes, look: look)
           .frame(width: BoardMapGutter.width(laneCount), height: Self.height)
         switch row.content {
         case .node(let mapNode): nodeCells(mapNode)
@@ -88,7 +88,7 @@ struct BoardMapRowView: View {
     return false
   }
 
-  private var node: MapNodeGlyph.Look {
+  private var look: MapNodeGlyph.Look {
     switch row.content {
     case .node(let mapNode):
       switch mapNode.look {
@@ -180,8 +180,8 @@ struct BoardMapRowView: View {
       .background(alignment: .leading) {
         BoardMapGutter(
           lanes: BoardMapLanes(
-            node: 0, fromAbove: false, below: false, bends: [], through: row.lanes.continuing),
-          node: nil
+            lane: 0, fromAbove: false, below: false, bends: [], through: row.lanes.continuing),
+          look: nil
         )
         .frame(width: BoardMapGutter.width(laneCount))
       }
@@ -225,14 +225,14 @@ struct BoardMapRowView: View {
 /// 縁で止める（線が点の中に入らない）。点が無ければ（理由の行）線だけ。
 struct BoardMapGutter: View {
   let lanes: BoardMapLanes
-  let node: MapNodeGlyph.Look?
+  let look: MapNodeGlyph.Look?
 
   static func width(_ laneCount: Int) -> CGFloat {
     CGFloat(max(laneCount, 1)) * spacing + first
   }
 
   var body: some View {
-    let x = Self.x(lanes.node)
+    let x = Self.x(lanes.lane)
     let mid = BoardMapRowView.height / 2
     let edge: CGFloat = 4.5
     ZStack(alignment: .topLeading) {
@@ -260,8 +260,8 @@ struct BoardMapGutter: View {
         }
         context.stroke(path, with: .color(Self.rail), lineWidth: Self.line)
       }
-      if let node {
-        MapNodeGlyph(look: node).position(x: x, y: mid)
+      if let look {
+        MapNodeGlyph(look: look).position(x: x, y: mid)
       }
     }
   }

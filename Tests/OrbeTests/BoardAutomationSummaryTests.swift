@@ -70,7 +70,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     let detail = BoardAutomationDetailValue(
       automations()[0], text: text, running: { _ in false }, open: 0, next: nil)
 
-    XCTAssertEqual(detail.rows.map(\.lanes.node), [0, 1, 2, 3, 4, 5, 3, 4, 5, 2, 0, 4, 0, 2])
+    XCTAssertEqual(detail.rows.map(\.lanes.lane), [0, 1, 2, 3, 4, 5, 3, 4, 5, 2, 0, 4, 0, 2])
     XCTAssertEqual(detail.laneCount, 6)
     let develop = detail.rows[10].lanes
     XCTAssertEqual(develop.bends, [1, 3], "CI と自分の担当だけの線が点へ曲がり込む")
