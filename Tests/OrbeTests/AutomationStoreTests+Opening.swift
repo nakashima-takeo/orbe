@@ -140,7 +140,7 @@ extension AutomationStoreTests {
   }
 
   /// 読めない自動化を直すと、残る部品は開き直したストアと同じ状態（回の記録・通し番号・足した時刻）から続き、何をするかが
-  /// 変わったものとして外した印が下りる。
+  /// 変わったものとして外した印が下りる。今の集合のまま直した部品の今有効な項目は残る。
   func testFixingAnUnreadableAutomationCarriesItsPartsOverAndLowersTheirMarks() throws {
     let (carried, id) = try { () throws -> (Automation, Int) in
       let (store, id) = try unreadableWithABreach()
@@ -156,6 +156,8 @@ extension AutomationStoreTests {
 
     XCTAssertEqual(carried.state(key: "fetch").runs.count, 1)
     XCTAssertNil(carried.state(key: "fetch").breach)
+    XCTAssertEqual(
+      carried.state(key: "fetch").liveLinks, [Self.item("a").link], "今の集合のままなら項目は残る")
     XCTAssertEqual(carried, AutomationStore().automation(id))
   }
 
@@ -207,6 +209,24 @@ extension AutomationStoreTests {
       try reopened.read {
         try $0.db.select("SELECT count(*) FROM held_proposals", []) { $0.int(at: 0) }
       }, [0])
+  }
+
+  /// 読めない候補も、出どころの今の集合の項目が無効になれば読める候補と同じく下がり、メモリからも外れて同じリンクを塞がない。
+  func testAProposalThatCannotBeReadIsWithdrawnWhenItsOriginLeaves() throws {
+    var store: AutomationStore? = AutomationStore()
+    let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
+    let a = Self.item("a")
+    try Self.fetch(XCTUnwrap(store), id, [a])
+    try Self.judge(XCTUnwrap(store), id, proposing: [a])
+    store = nil
+    try database().run("UPDATE proposals SET due = 'x' WHERE link = ?", [.text(a.link)])
+    let reopened = AutomationStore()
+    XCTAssertEqual(reopened.unreadableProposals.map(\.link), [a.link], "前提: 読めない候補")
+
+    try Self.fetch(reopened, id, [])
+
+    XCTAssertEqual(reopened.unreadableProposals, [])
+    XCTAssertFalse(reopened.heldLinks.contains(a.link))
   }
 
   /// 中身の JSON を壊した回の記録は、その 1 件だけが「不明な記録」として、時刻・契機・成否を持って残る。

@@ -55,6 +55,27 @@ extension AutomationRunnerTests {
     XCTAssertEqual(bodies("copy"), ["書き換えた本文"])
   }
 
+  /// 毎回すべてを取る部品の版の追加だけで起きた新着の受け手は、取る行が無いので手段を起こさず、読んだ位置を上流の最後の番号
+  /// まで進める（祖先の契機のたびに 0 件の契機を繰り返さない）。
+  func testANewArrivalsReceiverWokenOnlyByAVersionAdvancesItsPosition() throws {
+    let id = try defineCopy()
+    advance(by: 1800)
+    finish("gh", fetched(["a"]))
+    finish("copy", printed(item("a")))
+    finish("post", printed(""))
+    let before = try store.lastSeqs(id, "copy").item
+
+    advance(by: 1800)
+    finish("gh", printed(item("a", body: "書き換えた本文")))
+    finish("copy", printed(item("a", body: "書き換えた本文")))
+
+    XCTAssertEqual(calls("post").count, 1, "版の追加は新着の受け手に届かない")
+    let position = try XCTUnwrap(
+      store.positions(of: store.part(id, "post"))[store.part(id, "copy")])
+    XCTAssertGreaterThan(position.last.item, before, "前提: 版の追加で番号が進んだ")
+    XCTAssertEqual(position.read.item, position.last.item)
+  }
+
   /// 再起動の後も、毎回すべてを取る「届いたら」の部品は、まだ扱い終えていない上流の変化で起きる（失敗した回の後に Orbe を
   /// 終えても、上流がまた変わるのを待たない）。扱い終えた変化では起き直さない。
   func testATakeAllArrivalPartWakesAfterARelaunchForAChangeItHasNotHandled() throws {
