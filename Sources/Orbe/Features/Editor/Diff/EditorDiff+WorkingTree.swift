@@ -60,15 +60,15 @@ extension EditorDiff {
     if case .unavailable(let reason) = working { return .unavailable(reason) }
     let pending: Content = content == .ready ? .ready : .loading
     let index = files.state(of: RootFiles.Version(path: id.path, revision: .index))
-    if let decided = resolveOldSide(index, working: working, pending: pending) { return decided }
-    guard document == nil, let old else { return .ready }
     var newText: String?
-    if case .directory(let hasRepository) = working {
+    if index != nil, case .directory(let hasRepository) = working {
       switch submoduleSide(hasRepository: hasRepository, pending: pending) {
       case .text(let text): newText = text
       case .decided(let decided): return decided
       }
     }
+    if let decided = resolveOldSide(index, working: working, pending: pending) { return decided }
+    guard document == nil, let old else { return .ready }
     setNewRevision(newText, keepsOld: true)
     revisionHunks = DiffRows.hunks(
       old: oldSide.isAbsent ? nil : old.text,

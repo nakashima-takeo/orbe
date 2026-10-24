@@ -167,6 +167,38 @@ extension EditorDiffTests {
     XCTAssertEqual(rows.style(ofLine: 2), DiffStyle.added, "全部の行が追加")
   }
 
+  /// index ではファイルのパスを作業ツリーで取り出したリポジトリに置き換え、見せていない間に `git add` してから見せると、
+  /// 古い側だけを先に替えず、前の組のまま中の HEAD を待って 1 行どうしに収まる（古い側だけ替わると、並びが古い側の行の
+  /// 数と合わず落ちる）。
+  func testStagingAFileReplacedByASubmoduleKeepsBothSidesTogether() throws {
+    try repo.write("sub", "x\ny\nz\n")
+    XCTAssertTrue(repo.git(["add", "sub"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "sub file"]).isSuccess)
+    try FileManager.default.removeItem(at: repo.url("sub"))
+    try repo.write("sub/t.txt", "t\n")
+    for args in [
+      ["-C", "sub", "init", "-q", "-b", "main"], ["-C", "sub", "add", "t.txt"],
+      ["-C", "sub", "-c", "user.email=t@e", "-c", "user.name=t", "commit", "-qm", "t"],
+    ] {
+      XCTAssertTrue(repo.git(args).isSuccess, "\(args)")
+    }
+    let (tab, _) = tab()
+    let diff = try tab.group.editor.openDiff(id("sub", .workingTree), as: .pinned)
+    waitRows(diff, "前提: ファイル → サブモジュールの置き換え") { _ in diff.newRevision != nil }
+    diff.dismiss()
+
+    XCTAssertTrue(repo.git(["add", "sub"]).isSuccess)
+    let index = RootFiles.Version(path: "sub", revision: .index)
+    pumpMain(
+      until: {
+        if case .submodule? = diff.files.state(of: index) { return true }
+        return false
+      }, "index がサブモジュールになる")
+    diff.present(.inline)
+    pumpMain(
+      until: { diff.revisionHunks.isEmpty && diff.oldSide.lines == 1 }, "中の HEAD が届くと 1 行どうし")
+  }
+
   private func text(_ revision: RevisionDocument?) -> String? {
     revision.map { String(decoding: $0.text.contiguousUnits(), as: UTF16.self) }
   }
