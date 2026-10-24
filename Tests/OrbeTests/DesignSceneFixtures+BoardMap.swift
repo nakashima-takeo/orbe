@@ -3,7 +3,7 @@ import Foundation
 @testable import Orbe
 
 /// 見本 O2Board・O2PartCards（案2 地図＋選んだ部品）の自動化。12 部品の「受け持ちの全部」（判定「返事が要る連絡を選ぶ」の
-/// 最新の回が制限時間で失敗・取得「メール」の出力の形式エラーが出し直しで通った・取得の新着なしが続く区間・処理が古い行を
+/// 最新の回が制限時間で失敗・取得「メール」の出力の形式エラーをその場で修正して通った・取得の新着なしが続く区間・処理が古い行を
 /// 捨てた回・判定と週報の未処理）、コマンドだけの「日報スクリプト」、止めた「週末の依存更新」と、入力が 8 本の判定を持つ自動化
 /// （溝が見本より広がる）。並びは 受け持ちの全部 → 日報スクリプト → 取り込みの多い判定 → 週末の依存更新。
 extension DesignSceneFixtures {
@@ -19,37 +19,26 @@ extension DesignSceneFixtures {
     var passes: [AutomationSamplePass] = []
     func fetch(_ key: String, _ hour: Int, _ minute: Int, items: Int, fresh: Int, daysAgo: Int = 0)
     {
-      let all = sampleItems(key, items, at: at(hour, minute, daysAgo))
+      let (all, _) = sampleRound(key, at: at(hour, minute, daysAgo), items: items, fresh: fresh)
       passes.append(
         AutomationSamplePass(
-          part: key, at: at(hour, minute, daysAgo),
-          outcome: fetched(key, all, fresh: Array(all.suffix(fresh)))))
+          part: key, at: at(hour, minute, daysAgo), outcome: fetched(all),
+          kept: Array(all.prefix(items - fresh))))
     }
     func process(
       _ key: String, _ time: Date, rows: Int, from source: String, expired: Int = 0
     ) {
-      let out = sampleItems(source, rows, at: time).map {
-        AutomationPartRow(
-          id: "\(key):\($0.id)", text: #"{"id":"\#(key):\#($0.id)","summary":"まとめ"}"#,
-          origin: AutomationOrigin(part: source, item: $0))
-      }
       passes.append(
         AutomationSamplePass(
-          part: key, at: time, trigger: .arrival, outcome: processed(out, read: rows),
-          expired: expired))
+          part: key, at: time, trigger: .arrival, outcome: processed([], read: rows),
+          expired: expired, passThrough: rows))
     }
     func judge(_ key: String, at time: Date, proposed: Int, rows: Int, from source: String) {
       let items = sampleItems(source, proposed, at: time)
       passes.append(
         AutomationSamplePass(
           part: key, at: time,
-          outcome: .succeeded(
-            .judge(
-              proposals: items.map {
-                AutomationPartPass.Proposal(
-                  origin: AutomationOrigin(part: source, item: $0), title: "\($0.body)に返事をする",
-                  due: nil, workspace: nil, reason: nil)
-              }, resolved: []), execution(rows), breach: nil)))
+          outcome: judged(items.map { proposal($0, "\($0.body)に返事をする") }, rows: rows)))
     }
 
     // 10/2・10/3 の連絡の判定と、金曜の週の作業のまとめ。
@@ -86,29 +75,18 @@ extension DesignSceneFixtures {
     }
     fetch("sentry", 14, 15, items: 3, fresh: 1)
     fetch("mail", 14, 15, items: 1, fresh: 0)
-    // 14:45 のメールは、出力の形式エラーを出し直して通った。
+    // 14:45 のメールは、形式エラーをその場で直して通った。
     let mailItems = sampleItems("mail", 2, at: at(14, 45, 0))
     passes.append(
       AutomationSamplePass(
         part: "mail", at: at(14, 45, 0),
         outcome: .succeeded(
-          .fetch(
-            rows: mailItems.map { item in
-              AutomationPartRow(
-                id: "mail:\(item.id)",
-                text: AutomationPrompts.row(
-                  AutomationItem(
-                    id: "mail:\(item.id)", link: item.link, body: item.body, time: item.time)),
-                origin: AutomationOrigin(part: "mail", item: item))
-            },
-            lastOutput: mailItems.map { AutomationSeen(id: $0.id, link: $0.link) }),
+          .fetch(mailItems.map(row)),
           execution(2),
-          breach: AutomationPartPass.Breach(
-            lines: [
-              AutomationBrokenLine(line: 3, fault: .missingKey("link")),
-              AutomationBrokenLine(line: 5, fault: .notJSON),
-            ],
-            redo: AutomationPartPass.Redo(firstCall: execution(4), lines: [])))))
+          breach: AutomationRejections([
+            AutomationBrokenLine(line: 3, fault: .missingKey("link")),
+            AutomationBrokenLine(line: 5, fault: .notJSON),
+          ]))))
     fetch("backlog", 14, 45, items: 9, fresh: 1)
     fetch("sentry", 14, 45, items: 3, fresh: 0)
     process("mine", at(14, 46, 0), rows: 1, from: "backlog")
@@ -126,12 +104,12 @@ extension DesignSceneFixtures {
     var mine = commandPart(
       "mine", "自分の担当だけ", .arrival, from: ["backlog", "sentry"],
       script: #"jq -c 'select(.assignee == "nakatake")'"#, directory: "/Users/me/work/scripts")
-    mine.inboxLimit = AutomationPart.InboxLimit(maxAgeHours: 24, maxItems: nil)
+    mine.from = mine.from.map { AutomationDefinition.Input(part: $0.part, maxAgeHours: 24) }
     var mail = agentPart(
       "mail", "メール", .scheduled(.every(1800)), model: "haiku",
       tools: ["mcp__gmail__search_threads"],
       instruction: "受信箱から、自分宛てで返事を求められているメールを取る。", coverage: .newArrivals)
-    mail.timeoutMinutes = 5
+    mail.action.timeoutMinutes = 5
     return AutomationSample(
       definition: AutomationDefinition(
         name: "受け持ちの全部", notify: .menuBar,

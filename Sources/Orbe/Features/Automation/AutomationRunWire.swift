@@ -1,26 +1,33 @@
 import Foundation
+import OrbeSessionLog
 
-/// 回の記録の外の形（`list_automations` の `runs`・部品の `breach`・試走の部品の回）。保存の形（種類だけ）に、AI が読む英文を
-/// 足す——終わり方の `ending`・失敗の `failure`・外れた行の `reasons`・判定の確定で捨てた案の `rejected`。英文は部品の鍵が要るので、
-/// 鍵を手元に持つここで組む。
+/// 回の記録の外の形（`list_automations` の `lastRun`・`list_automation_runs` の `runs`・部品の `breach`・試走の部品の回）。保存の
+/// 形（種類だけ）に、AI が読む英文を足す——終わり方の `ending`・失敗の `failure`・外れた件の `reasons`・判定の確定で捨てた案の
+/// `rejected`。英文は部品の鍵が要るので、鍵を手元に持つここで組む。
 enum AutomationRunWire {
+  /// 記録 1 件（`recordId` を添える）。不明な記録は列から分かる分と `unknown: true` だけ。
+  static func object(_ record: AutomationRunRecord, part: String) -> [String: Any] {
+    switch record.content {
+    case .known(let run):
+      var json = object(run, part: part)
+      json["recordId"] = record.id
+      return json
+    case .unknown(let run):
+      return [
+        "recordId": record.id, "startedAt": SessionEvent.iso8601(run.startedAt),
+        "endedAt": SessionEvent.iso8601(run.endedAt), "trigger": run.trigger.rawValue,
+        "failed": run.failed, "unknown": true,
+      ]
+    }
+  }
+
   static func object(_ run: AutomationPartRun, part: String) -> [String: Any] {
     var json = AutomationWire.object(run) as? [String: Any] ?? [:]
     json["execution"] = execution(json["execution"], run.execution)
     if let failure = run.failure {
       json["failure"] = failure.text(part: part, ending: run.execution.ending, breach: run.breach)
     }
-    if let breach = run.breach, var object = json["breach"] as? [String: Any] {
-      object["lines"] = rejections(object["lines"], breach.lines)
-      if let redo = breach.redo, var redoObject = object["redo"] as? [String: Any] {
-        redoObject["firstCall"] = execution(redoObject["firstCall"], redo.firstCall)
-        if redo.lines.count > 0 {
-          redoObject["lines"] = rejections(redoObject["lines"], redo.lines)
-        }
-        object["redo"] = redoObject
-      }
-      json["breach"] = object
-    }
+    if let breach = run.breach { json["breach"] = rejections(json["breach"], breach) }
     if case .judge(_, _, let dismissed) = run.result, !dismissed.isEmpty,
       var result = json["result"] as? [String: Any]
     {
@@ -34,15 +41,13 @@ enum AutomationRunWire {
     return json
   }
 
-  static func objects(_ runs: [AutomationPartRun], part: String) -> [[String: Any]] {
-    runs.map { object($0, part: part) }
-  }
-
-  /// 部品の外した印。
-  static func object(_ mark: AutomationBreachMark) -> [String: Any] {
-    var json = AutomationWire.object(mark) as? [String: Any] ?? [:]
-    json["lines"] = rejections(json["lines"], mark.lines)
-    return json
+  /// 部品の外した印（印の回の記録から）: その回の開始時刻・外れた件・回が通ったか。読めない記録の外れた件は空。
+  static func breach(_ record: AutomationRunRecord) -> [String: Any] {
+    let lines = record.run?.breach ?? AutomationRejections()
+    return [
+      "at": SessionEvent.iso8601(record.startedAt),
+      "lines": rejections(AutomationWire.object(lines), lines), "passed": !record.failed,
+    ]
   }
 
   private static func execution(

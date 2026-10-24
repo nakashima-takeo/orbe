@@ -7,7 +7,7 @@ import XCTest
 /// 壊れると何が起きるか: 失敗した部品があるのに一覧の印が成功に見え、壊れた部品に気づけない。流している間や止めている間に
 /// 前回の結果が見えなくなる。地図の線が入力と違う行へつながり、
 /// どの部品の出力がどこへ行くかを読み違える。英語の実行履歴と知らせが「judged 1 items」と言う。新着なしの回が他の回を
-/// 押し出す、または畳んではいけない回（新着のある回・出し直した回）が畳まれて見えなくなる。
+/// 押し出す、または畳んではいけない回（新着のある回・形式エラーを修正した回）が畳まれて見えなくなる。
 @MainActor
 final class BoardAutomationSummaryTests: OrbeTestCase {
   private let text = AutomationText(
@@ -43,7 +43,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
 
     let wide = BoardAutomationSummary(all[2], text: text, next: nil)
     XCTAssertNil(wide.mark)
-    XCTAssertEqual(wide.last, "まだ動いていない")
+    XCTAssertEqual(wide.last, "未実行")
   }
 
   /// 名前の右の状態（実行中・停止中）と前回の印は混ぜない。失敗した部品のある自動化を流している間も印は失敗のまま、止めて
@@ -57,7 +57,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     let now = model.runner.now()
     let text = model.text(LocalizationStore(language: .ja), now: now)
     let states = Dictionary(
-      uniqueKeysWithValues: model.standings(at: now).map { ($0.id, $0.state) })
+      uniqueKeysWithValues: model.standings.map { ($0.id, $0.state) })
 
     XCTAssertEqual(states[charge], .running)
     XCTAssertEqual(model.summary(charge, text: text, now: now)?.mark, .failure, "流している間も前回の印")
@@ -82,7 +82,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
   func testCardToolsNameTheServerOrCommandOnce() throws {
     var samples = DesignSceneFixtures.boardMapSamples()
     let index = try XCTUnwrap(samples[0].definition.parts.firstIndex { $0.key == "backlog" })
-    samples[0].definition.parts[index].method = .agent(
+    samples[0].definition.parts[index].action.method = .agent(
       AutomationPartAgent(
         cli: "claude", model: nil,
         tools: [
@@ -94,7 +94,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     let automation = DesignSceneFixtures.automationStore(samples).automations[0]
     let card = try XCTUnwrap(
       BoardAutomationPartValue(
-        automation, part: "backlog", text: text, running: false, next: nil, open: 0))
+        automation, key: "backlog", text: text, running: false, next: nil, open: 0))
 
     XCTAssertEqual(
       card.facts.first { $0.label == .boardPartTools }?.value.map(\.text),
@@ -104,7 +104,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
   /// 一覧の失敗の印は、最後の回が失敗した部品だけで決まる。失敗の後に成功した部品は数えない。
   func testListMarkCountsOnlyPartsWhoseLatestRunFailed() throws {
     let at = { (hour: Int) in DesignSceneFixtures.automationAt(hour) }
-    func fetch(_ key: String) -> AutomationPart {
+    func fetch(_ key: String) -> AutomationDefinition.Part {
       DesignSceneFixtures.commandPart(
         key, key, .scheduled(.every(3600)), script: key, coverage: .newArrivals)
     }
@@ -125,7 +125,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
           AutomationSamplePass(
             part: "recovered", at: at(10),
             outcome: DesignSceneFixtures.fetched(
-              "recovered", DesignSceneFixtures.sampleItems("recovered", 1, at: at(10)))),
+              DesignSceneFixtures.sampleItems("recovered", 1, at: at(10)))),
         ])
       let automation = try XCTUnwrap(
         DesignSceneFixtures.automationStore([sample]).automations.first)
@@ -134,6 +134,21 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
 
     XCTAssertEqual(try mark(["broken"]), .failure)
     XCTAssertEqual(try mark([]), .success, "失敗の後に成功した部品は数えない")
+  }
+
+  /// 処理の回の「N 件中 M 件を出力」の M は出した件数——今の集合の処理が毎回全件を写す回も、新しく届く行の数で「0 件を出力」と
+  /// 言わない。
+  func testAProcessRunSaysHowManyRowsItGave() throws {
+    let run = AutomationPartRun(
+      startedAt: DesignSceneFixtures.automationAt(9), endedAt: DesignSceneFixtures.automationAt(9),
+      trigger: .arrival, taken: 10,
+      execution: DesignSceneFixtures.execution(10), result: .process(fresh: 0, duplicates: 0))
+    let node = try XCTUnwrap(automations().first?.graph.nodes.first)
+
+    XCTAssertEqual(BoardAutomationSummary.amount(run, text: text)?.text, "10 件を出力")
+    XCTAssertEqual(BoardAutomationSummary.amount(run, text: text)?.shade, .plain)
+    XCTAssertEqual(
+      BoardAutomationSummary.result(run, node: node, text: text).text, "10 件中 10 件を出力")
   }
 
   /// 英語の判定の回は、判定した件数が 1 なら単数で言う。
@@ -153,25 +168,25 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
 
     let card = try XCTUnwrap(
       BoardAutomationPartValue(
-        automation, part: "judge", text: english, running: false, next: nil, open: 0))
+        automation, key: "judge", text: english, running: false, next: nil, open: 0))
 
     XCTAssertEqual(said(card.runs), ["judged 3 items, 2 proposed", "judged 1 item, 1 proposed"])
   }
 
-  /// カードの実行履歴は、添え書きの無い新着なしが 3 回以上続く区間だけを期間の 1 行に畳む。1 回だけの新着なしと、出し直して
-  /// 通った回（末尾に添え書き）は 1 行ずつ残す。
+  /// カードの実行履歴は、添え書きの無い新着なしが 3 回以上続く区間だけを期間の 1 行に畳む。1 回だけの新着なしと、形式エラーを
+  /// 修正して通った回（末尾に添え書き）は 1 行ずつ残す。
   func testCardHistoryFoldsOnlyLongStretchesOfNothingNew() throws {
     let automation = automations()[0]
     func card(_ part: String) throws -> [String] {
       said(
         try XCTUnwrap(
           BoardAutomationPartValue(
-            automation, part: part, text: text, running: false, next: nil, open: 0)
+            automation, key: part, text: text, running: false, next: nil, open: 0)
         ).runs)
     }
 
     XCTAssertEqual(
       try card("slack"), ["13:10〜14:55 は新着なし", "新着 4 件", "新着 5 件", "新着 6 件"])
-    XCTAssertEqual(try card("mail"), ["新着 2 件（出し直して通った）", "新着なし", "新着 1 件"])
+    XCTAssertEqual(try card("mail"), ["新着 2 件（形式エラーを agent が修正済み）", "新着なし", "新着 1 件"])
   }
 }

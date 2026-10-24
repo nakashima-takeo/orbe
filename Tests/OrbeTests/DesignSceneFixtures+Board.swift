@@ -8,7 +8,7 @@ extension DesignSceneFixtures {
   private static func agentFetch(
     _ tool: String, _ instruction: String, _ coverage: AutomationCoverage,
     _ trigger: AutomationPart.Trigger
-  ) -> AutomationPart {
+  ) -> AutomationDefinition.Part {
     agentPart(
       "fetch", "取る", trigger, model: "haiku", tools: [tool], instruction: instruction,
       coverage: coverage)
@@ -163,25 +163,20 @@ extension DesignSceneFixtures {
     }
     var passes: [AutomationSamplePass] = []
     for (hours, items, fresh) in [(3, 3, 3), (2, 3, 1), (1, 3, 0), (0, 5, 2)] {
-      let all = sampleItems("merged", items, at: at(hours))
-      let new = Array(all.suffix(fresh))
+      let (all, new) = sampleRound("merged", at: at(hours), items: items, fresh: fresh)
       passes.append(
         AutomationSamplePass(
-          part: "fetch", at: at(hours), outcome: fetched("fetch", all, fresh: new)))
+          part: "fetch", at: at(hours), outcome: fetched(all),
+          kept: Array(all.prefix(items - fresh))))
       guard !new.isEmpty else { continue }
-      let rows = new.map {
-        AutomationPartRow(
-          id: "fetch:\($0.id)", text: #"{"id":"fetch:\#($0.id)","summary":"要約"}"#,
-          origin: AutomationOrigin(part: "fetch", item: $0))
-      }
       passes.append(
         AutomationSamplePass(
           part: "summary", at: at(hours).addingTimeInterval(60), trigger: .arrival,
-          outcome: processed(rows, read: rows.count)))
+          outcome: processed([], read: new.count), take: new.count, passThrough: new.count))
       passes.append(
         AutomationSamplePass(
           part: "post", at: at(hours).addingTimeInterval(120), trigger: .arrival,
-          outcome: sideEffected(rows.count)))
+          outcome: sideEffected(new.count)))
     }
     return AutomationSample(
       definition: AutomationDefinition(
@@ -207,12 +202,12 @@ extension DesignSceneFixtures {
     let at = { (minutes: Int) in
       automationAt(14, 55).addingTimeInterval(TimeInterval(-60 * minutes))
     }
-    // 取得の回だけを置く（判定は処理の部品の先にあり、取得の行は処理の溜まりに溜まる）。
+    // 取得の回だけを置く（判定は処理の部品の先にあり、取得の行は処理が読めば取る行になる）。
     let passes = (0..<20).reversed().map { n -> AutomationSamplePass in
-      let all = sampleItems("dm", 6, at: at(n * 10))
+      let fresh = n.isMultiple(of: 3) ? 2 : 0
+      let (all, _) = sampleRound("dm", at: at(n * 10), items: 6, fresh: fresh)
       return AutomationSamplePass(
-        part: "fetch", at: at(n * 10),
-        outcome: fetched("fetch", all, fresh: Array(all.suffix(n.isMultiple(of: 3) ? 2 : 0))))
+        part: "fetch", at: at(n * 10), outcome: fetched(all), kept: Array(all.prefix(6 - fresh)))
     }
     return AutomationSample(
       definition: AutomationDefinition(

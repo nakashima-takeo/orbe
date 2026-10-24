@@ -8,8 +8,9 @@ import Foundation
 let automationUsageLines = [
   "orb automation list [--json]",
   "orb automation proposals [<id>] [--json]",
-  "orb automation set [<id>] [--json]   (definition JSON on stdin)",
+  "orb automation set [<id> --version <n>] [--json]   (definition JSON on stdin)",
   "orb automation run <id> [--part <key>] [--json]",
+  "orb automation runs <id> [--part <key>] [--before <recordId>] [--limit <n>] [--json]",
   "orb automation try <id> [--from <key>]... [--to <key>]... [--stdin] [--limit <n>] [--json]",
   "orb automation trial <id> [--wait] [--timeout-ms <ms>] [--json]",
   "orb automation pause <id> [--json]",
@@ -62,7 +63,8 @@ let automationUsage = """
              local and project scopes) are unavailable.
              A command prints one JSON object per item:
              {"id","link","body","time"} (link http(s), time ISO 8601),
-             and fails with a non-zero exit or a single {"error": "…"} line.
+             prints nothing when there are none, and fails with a non-zero
+             exit.
              coverage (required): "currentSet" when the source returns the
              whole current set (a proposal whose link leaves it is
              withdrawn), "newArrivals" when it returns only new items (a
@@ -125,9 +127,10 @@ let automationUsage = """
              The output of the last step is the report, kept as text (up to
              2000 characters) in the run record; a command last step prints
              it on stdout. Its first line shows on the board's heading and in
-             the notification. An agent last step is told to keep it short and
-             to print only {"nothing": "…"} when there is nothing to report;
-             a run with no report succeeds as "nothing to report". Editing
+             the notification. An agent last step gives it through Orbe's
+             tool, kept short, or says there is nothing to report; a command
+             that prints nothing, or an agent that says so, succeeds as
+             "nothing to report". Editing
              the definition does not make the next run process every fetched
              item again.
              {"kind": "agent", "agent": "claude", "model": "…",
@@ -153,13 +156,12 @@ let automationUsage = """
              naming anything. Instructions hidden in outside text the agent
              reads with its tools can make it use a writing tool it was given.
              Without model it runs sonnet; it is cut off after 10 minutes, or
-             3 minutes without output. Its final reply is kept as the result
-             of the run (the first line shows on the board's heading and in
-             the notification). Orbe tells it to reply only {"nothing": "…"}
-             when there is nothing to do; a run whose reply ends with that
-             line delivers nothing (an empty reply counts as done). A run
-             fails when the agent replies only {"error": "…"}, crashes, hits
-             its limit, or a named MCP tool is unavailable. A failed run, or
+             3 minutes without output. It gives its report through Orbe's
+             tool, kept as the result of the run (the first line shows on the
+             board's heading and in the notification); when there is nothing
+             to do it says so and delivers nothing. A run fails when the agent
+             says it cannot do it, ends without a result, crashes, hits its
+             limit, or a named MCP tool is unavailable. A failed run, or
              one Orbe did not finish, starts the agent again on the next run
              (a post can be doubled). Editing the definition does not make the
              next run process every fetched item again. The request stays in
@@ -177,11 +179,13 @@ let automationUsage = """
              Clicking either opens the automation on Home's board. Runs that
              deliver nothing are not notified. Changing only notify does not
              stop a running run.
-  To edit, take .definition from list --json, change it and pipe it whole:
+  To edit, take .definition and .version from list --json, change the
+  definition and pipe it whole with that version:
     orb automation list --json | jq '.automations[] |
-      select(.automationId==3) | .definition' | … | orb automation set 3
+      select(.automationId==3) | .definition' | … | orb automation set 3 --version 4
   set without <id> creates an automation and prints its id; with <id> it
-  replaces the whole definition. Changing the source method, a step's
+  replaces the whole definition, and is refused when the automation changed
+  since that version. Keep each part's id to keep the part. Changing the source method, a step's
   method, model, instruction or command, or the sink stops a running run;
   with task candidates the next run also processes every fetched item
   again.
@@ -195,7 +199,9 @@ let automationUsage = """
   fetched and new when it has a source, then proposed, the command's
   ending, reported or nothing to report, or the agent's ending when the
   sink recorded one).
-  Per-step counts are in list --json.
+  Per-step counts are in list --json. runs prints past runs newest first,
+  one per line (record id, then the run), and "next <recordId>" when more
+  remain; pass it as --before for the next page.
   proposals prints one proposal per line: id, state, automation id, due,
   title, link.
   """
@@ -209,6 +215,7 @@ func runAutomation(_ args: [String]) -> Never {
   case "proposals": automationProposals(rest)
   case "set": automationSet(rest)
   case "run": automationRun(rest)
+  case "runs": automationRuns(rest)
   case "try": automationTry(rest)
   case "trial": automationTrial(rest)
   case "pause": automationPause(rest, paused: true)
@@ -227,14 +234,14 @@ func runAutomation(_ args: [String]) -> Never {
   }
 }
 
-private func exitIfHelp(_ args: [String]) {
+func exitIfAutomationHelp(_ args: [String]) {
   guard hasHelp(args) else { return }
   print(automationUsage)
   exit(0)
 }
 
 private func automationList(_ rest: [String]) -> Never {
-  exitIfHelp(rest)
+  exitIfAutomationHelp(rest)
   rejectLeftovers(rest, positionals: 0)
   let result = callOrExit("list_automations", [:])
   if wantJSON {
@@ -245,8 +252,10 @@ private func automationList(_ rest: [String]) -> Never {
   for automation in automations {
     let parts = automation["parts"] as? [String: [String: Any]] ?? [:]
     let state =
-      parts.values.contains { $0["running"] as? Bool == true }
-      ? "running" : automation["paused"] as? Bool == true ? "paused" : "active"
+      automation["definitionError"] != nil
+      ? "unreadable"
+      : parts.values.contains { $0["running"] as? Bool == true }
+        ? "running" : automation["paused"] as? Bool == true ? "paused" : "active"
     let definition = automation["definition"] as? [String: Any]
     let next = parts.compactMap { key, part in
       (part["nextRunAt"] as? String).map { (key: key, at: $0) }
@@ -279,41 +288,8 @@ private func scheduleCell(_ parts: [[String: Any]], next: String?) -> String {
   return scheduled.count == 1 ? shown.words : "\(shown.words) +\(scheduled.count - 1)"
 }
 
-/// 最新の部品の回の要約（時刻が同じなら鍵の大きい方。アプリの部品の回の並びと揃える）。
-private func lastRunCell(_ parts: [String: [String: Any]]) -> String? {
-  let latest = parts.compactMap { key, part in
-    ((part["runs"] as? [[String: Any]])?.first).map { (key: key, run: $0) }
-  }.max {
-    ($0.run["startedAt"] as? String ?? "", $0.key) < ($1.run["startedAt"] as? String ?? "", $1.key)
-  }
-  return latest.map { runCell($0.key, $0.run) }
-}
-
-/// 部品の回の要約。回の記録だけから組む: `<開始> <鍵> failed: <理由>`、または `<開始> <鍵>: ` に、取得は
-/// `12 fetched, 3 new`、処理は `12 in, 4 out`、判定は `2 proposed`、報告は `reported` か `nothing to report`、副作用は
-/// `command exited 0`、仕事は `agent exited 0` を続ける。
-func runCell(_ key: String, _ run: [String: Any]) -> String {
-  let started = run["startedAt"].map(display) ?? "?"
-  if let failure = run["failure"] as? String { return "\(started) \(key) failed: \(failure)" }
-  let execution = run["execution"] as? [String: Any]
-  let count = execution?["count"].map(display) ?? "0"
-  let ending = execution?["ending"].map(display) ?? "?"
-  let result = run["result"] as? [String: Any]
-  let summary: String
-  switch result?["kind"] as? String {
-  case "fetch": summary = "\(count) fetched, \(result?["fresh"].map(display) ?? "0") new"
-  case "process": summary = "\(run["taken"].map(display) ?? "0") in, \(count) out"
-  case "judge": summary = "\(result?["proposed"].map(display) ?? "0") proposed"
-  case "report": summary = result?["text"] == nil ? "nothing to report" : "reported"
-  case "sideEffect": summary = "command \(ending)"
-  case "work": summary = "agent \(ending)"
-  default: summary = ending
-  }
-  return "\(started) \(key): \(summary)"
-}
-
 private func automationProposals(_ rest: [String]) -> Never {
-  exitIfHelp(rest)
+  exitIfAutomationHelp(rest)
   rejectLeftovers(rest, positionals: 1)
   var params: [String: Any] = [:]
   if !rest.isEmpty { params["automationId"] = automationIdArg(rest, verb: "proposals") }
@@ -334,9 +310,17 @@ private func automationProposals(_ rest: [String]) -> Never {
 }
 
 private func automationSet(_ rest: [String]) -> Never {
-  exitIfHelp(rest)
-  rejectLeftovers(rest, positionals: 1)
-  let id = rest.isEmpty ? nil : automationIdArg(rest, verb: "set")
+  exitIfAutomationHelp(rest)
+  var args = rest
+  let version = takeIntOption(&args, "--version", requires: "a positive <n>")
+  rejectLeftovers(args, positionals: 1)
+  let id = args.isEmpty ? nil : automationIdArg(args, verb: "set")
+  if id != nil, version == nil {
+    usageDie("automation set <id> requires --version (the version list --json shows)")
+  }
+  if id == nil, version != nil {
+    usageDie("automation set --version requires the <id> of the automation to rewrite")
+  }
   let data = FileHandle.standardInput.readDataToEndOfFile()
   guard !data.isEmpty else { usageDie("automation set reads the definition JSON from stdin") }
   guard let definition = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
@@ -344,6 +328,7 @@ private func automationSet(_ rest: [String]) -> Never {
   }
   var params: [String: Any] = ["definition": definition]
   if let id { params["automationId"] = id }
+  if let version { params["version"] = version }
   let result = callOrExit("set_automation", params)
   if wantJSON {
     printJSON(result)
@@ -357,7 +342,7 @@ private func automationSet(_ rest: [String]) -> Never {
 }
 
 private func automationPause(_ rest: [String], paused: Bool) -> Never {
-  exitIfHelp(rest)
+  exitIfAutomationHelp(rest)
   rejectLeftovers(rest, positionals: 1)
   let id = automationIdArg(rest, verb: paused ? "pause" : "resume")
   let result = callOrExit("pause_automation", ["automationId": id, "paused": paused])
@@ -370,7 +355,7 @@ private func automationPause(_ rest: [String], paused: Bool) -> Never {
 }
 
 private func automationRun(_ rest: [String]) -> Never {
-  exitIfHelp(rest)
+  exitIfAutomationHelp(rest)
   var args = rest
   let part = takeOption(&args, "--part", requires: "a <key> value")
   rejectLeftovers(args, positionals: 1)
@@ -384,7 +369,7 @@ private func automationRun(_ rest: [String]) -> Never {
 
 private func automationSimple(_ rest: [String], verb: String, method: String, done: String) -> Never
 {
-  exitIfHelp(rest)
+  exitIfAutomationHelp(rest)
   rejectLeftovers(rest, positionals: 1)
   let id = automationIdArg(rest, verb: verb)
   let result = callOrExit(method, ["automationId": id])

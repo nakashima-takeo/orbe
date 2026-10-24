@@ -31,10 +31,12 @@ extension DesignSceneFixtures {
             script:
               "gh pr list --json number,url,title,createdAt | jq -c '.[] | {id: (.number|tostring), "
               + "link: .url, body: .title, time: .createdAt}'",
-            coverage: .everything),
-          agentPart(
-            "digest", "要約", .arrival, from: ["fetch"], model: "sonnet",
-            instruction: "開いている PR を 3 行以内で要約する。", deliver: .report),
+            coverage: .currentSet),
+          AutomationGraphTests.taking(
+            .all,
+            agentPart(
+              "digest", "要約", .arrival, from: ["fetch"], model: "sonnet",
+              instruction: "開いている PR を 3 行以内で要約する。", deliver: .report)),
         ]),
       createdAt: automationAt(9, 0, daysAgo: 7),
       passes: reports.flatMap { entry in
@@ -42,7 +44,7 @@ extension DesignSceneFixtures {
         return [
           AutomationSamplePass(
             part: "fetch", at: start,
-            outcome: fetched("fetch", sampleItems("prs", 2 + entry.daysAgo % 3, at: start))),
+            outcome: fetched(sampleItems("prs", 2 + entry.daysAgo % 3, at: start))),
           AutomationSamplePass(
             part: "digest", at: start.addingTimeInterval(60), trigger: .arrival,
             outcome: entry.report),

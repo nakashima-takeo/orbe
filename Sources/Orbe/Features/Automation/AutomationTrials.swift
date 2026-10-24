@@ -21,11 +21,13 @@ final class AutomationTrials {
   func start(_ id: Int, _ request: AutomationTrial.Request) throws(AutomationError)
     -> AutomationTrial
   {
-    guard runner.store.available else { throw AutomationStore.unavailableError }
-    guard let automation = runner.store.automation(id) else { throw .automationNotFound(id) }
+    guard runner.store.available else { throw runner.store.unavailableError }
+    let automation = runner.store.automations[try runner.store.index(id)]
     if let limit = request.limit, limit < 1 { throw .invalid("limit must be a positive integer") }
     let range = try AutomationTrial.range(of: automation, request)
-    if let rows = request.rows { _ = try AutomationTrial.given(rows, in: range) }
+    if let rows = request.rows {
+      _ = try AutomationTrial.given(rows, in: range, of: automation.graph)
+    }
     trials.removeValue(forKey: id)?.stop()
     let onEnd: () -> Void = { [weak self] in self?.ended(id) }
     let trial = AutomationTrial(

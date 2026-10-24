@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// 詳細の「地図」。部品を入力の深さ順に 1 行ずつ縦に並べ、左の溝に入力のつながりを線で描き、続けて行き先の行を並べる。行は
+/// 詳細の「地図」。部品を入力の深さ順に 1 行ずつ縦に並べ、左の溝に入力のつながりを線で描き、続けて出力先の行を並べる。行は
 /// 溝・役割・名前と予定の札と入力・未処理・前回（成否の印・時刻・量）。最新の回が失敗した部品は、行の下に理由の行を足す（溝の
 /// 線は途切れずに続く）。地図に居る間は選ばれている部品の行に濃い地を敷く。部品の行のクリックはその部品を選ぶ。線の割り当ても
 /// 行の文言も読み替えが解いた値で、ここは描くだけ。
 struct BoardAutomationMapView: View {
   let model: BoardAutomationModel
   let detail: BoardAutomationDetailValue
-  let selected: String?
+  let selected: AutomationPartID?
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
@@ -15,8 +15,8 @@ struct BoardAutomationMapView: View {
     VStack(alignment: .leading, spacing: 0) {
       BoardSectionHeader(title: .boardAutomationFlow) {
         Text(l10n.plural(detail.partCount, one: .boardMapPartsOne, other: .boardMapPartsOther))
-        Text(l10n.string(.boardMapPending))
-          .frame(width: BoardMapRowView.inboxWidth, alignment: .trailing)
+        Text(l10n.string(.boardPending))
+          .frame(width: BoardMapRowView.pendingWidth, alignment: .trailing)
         Text(l10n.string(.boardMapLast))
           .padding(.trailing, BoardMapRowView.lastInset)
           .frame(width: BoardMapRowView.lastWidth, alignment: .trailing)
@@ -26,7 +26,7 @@ struct BoardAutomationMapView: View {
         let view = BoardMapRowView(
           row: row, laneCount: detail.laneCount, roleWidth: roleWidth, selected: selected)
         if case .part(let part) = row.content {
-          view.contentShape(Rectangle()).onTapGesture { model.tapPart(part.key) }
+          view.contentShape(Rectangle()).onTapGesture { model.tapPart(part.id) }
         } else {
           view
         }
@@ -54,7 +54,7 @@ struct BoardMapRowView: View {
   let laneCount: Int
   /// 役割の列の幅（地図の行で揃える）。
   let roleWidth: CGFloat
-  let selected: String?
+  let selected: AutomationPartID?
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
 
@@ -84,7 +84,7 @@ struct BoardMapRowView: View {
   }
 
   private var isSelected: Bool {
-    if case .part(let part) = row.content { return part.key == selected }
+    if case .part(let part) = row.content { return part.id == selected }
     return false
   }
 
@@ -119,13 +119,13 @@ struct BoardMapRowView: View {
       }
       if part.breached {
         BoardChip(
-          text: l10n.string(.boardMapFormatError), foreground: Color.theme.danger,
+          text: l10n.string(.automationFormatError), foreground: Color.theme.danger,
           fill: Color.theme.tintRed
         )
         .fixedSize()
       }
       if let inputs = part.inputs {
-        (BoardFlowDirection.incoming.lead
+        (Text.boardIncomingLead
           + fontResolver.text(inputs, base: Theme.Typography.codeSmall))
           .font(Font.theme.codeSmall)
           .foregroundStyle(Color.theme.textMuted)
@@ -135,16 +135,16 @@ struct BoardMapRowView: View {
     }
     .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
     .clipped()
-    Text(part.inbox.map { "\($0)" } ?? "")
+    Text(part.pending.map { "\($0)" } ?? "")
       .font(Font.theme.workspaceName)
-      .foregroundStyle((part.inbox ?? 0) > 0 ? Color.theme.accentBright : Color.theme.textMuted)
-      .frame(width: Self.inboxWidth, alignment: .trailing)
+      .foregroundStyle((part.pending ?? 0) > 0 ? Color.theme.accentBright : Color.theme.textMuted)
+      .frame(width: Self.pendingWidth, alignment: .trailing)
     last(part.last)
       .padding(.trailing, Self.lastInset)
       .frame(width: Self.lastWidth, alignment: .trailing)
   }
 
-  /// 前回の列（成否の印・時刻・量）。まだ動いていなければ「まだ」。
+  /// 前回の列（成否の印・時刻・量）。まだ動いていなければ「未実行」。
   @ViewBuilder private func last(_ last: BoardMapPart.Last?) -> some View {
     HStack(spacing: 7) {
       if let last {
@@ -207,7 +207,7 @@ struct BoardMapRowView: View {
   }
 
   static let height: CGFloat = 26
-  static let inboxWidth: CGFloat = 48
+  static let pendingWidth: CGFloat = 48
   static let lastWidth: CGFloat = 150
   static let lastInset: CGFloat = 6
   static let minRoleWidth: CGFloat = 52
@@ -323,10 +323,9 @@ enum BoardRunColors {
   }
 }
 
-extension BoardFlowDirection {
-  /// 部品の名前の頭に置く向きの矢印と空き（`codeSmall` の文に混ぜる）。
-  var lead: Text {
-    let arrow: MarkGlyphKind = self == .incoming ? .arrowLeft : .arrowRight
-    return arrow.inline(Theme.Typography.codeSmall) + Text(verbatim: " ")
+extension Text {
+  /// 入力元の部品の名前の頭に置く向きの矢印と空き（`codeSmall` の文に混ぜる）。
+  static var boardIncomingLead: Text {
+    MarkGlyphKind.arrowLeft.inline(Theme.Typography.codeSmall) + Text(verbatim: " ")
   }
 }

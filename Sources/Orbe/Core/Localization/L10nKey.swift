@@ -348,7 +348,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAutomationPlaceholder
   case taskPaletteAutomationAll
   case taskPaletteAutomationAskBoard
-  case taskPaletteAutomationNoProposals
   case taskPaletteAutomationRefreshing
   case taskPaletteAutomationLastJudge
   case taskPaletteAutomationNeverJudged
@@ -356,7 +355,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case taskPaletteAutomationProposedCountOther
   case taskPaletteAutomationReason
   case taskPaletteAutomationProposedBy
-  case taskPaletteAutomationFieldWorkspace
   case taskPaletteAutomationFieldDue
   case taskPaletteAutomationFieldLink
   case taskPaletteAutomationHintCandidates
@@ -365,11 +363,10 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationFailedWith
   case taskPaletteAutomationEmpty
   case taskPaletteAutomationOpenLink
-  case taskPaletteAutomationAsTask
+  case taskPaletteAutomationTaskContent
   case taskPaletteAutomationDismiss
   case taskPaletteAutomationActionProposals
   case taskPaletteAutomationActionRefresh
-  case taskPaletteAutomationHintShelf
   case taskPaletteAutomationHintPick
   case taskPaletteAutomationHintProposals
   case taskPaletteAutomationErrAccept
@@ -397,7 +394,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationResume
   case automationDelete
   case automationErrRunning
-  case automationFlowHere
+  case automationFlowToSelected
+  case automationHintToList
   case automationRoleFetch
   case automationRoleProcess
   case automationRoleJudge
@@ -412,7 +410,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationBreachFailed
   case automationYesterday
   case automationWithOriginal
-  case automationFailureExcerpt
+  case automationLabeled
   case automationEndExited
   case automationEndSignaled
   case automationEndTimeLimit
@@ -427,7 +425,12 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationFailNotUTF8
   case automationFailAgentError
   case automationFailReported
-  case automationFailBrokeRules
+  case automationFormatError
+  case automationNoProposals
+  case automationRunUnknownPassed
+  case automationRunUnknownFailed
+  case automationFailUnreadInput
+  case automationFailNoResult
   case automationFailUnsourced
   case automationLineAt
   case automationFaultNotJSON
@@ -439,7 +442,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationFaultInvalidValue
   case automationFaultIdTwice
   case automationFaultNotInputId
-  case automationFaultNothingWithItems
   case automationFaultNotNewItem
   case automationFaultProposedTwice
   case automationFaultNotWaiting
@@ -447,8 +449,12 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationFaultTitle
   case automationFaultDue
   case automationFaultWorkspace
+  case automationFaultNotArray
+  case automationFaultAfterNothing
+  case automationFaultTooLarge
   case automationDismissedAlready
   case automationDismissedNoOpen
+  case automationDismissedOriginInvalidated
   // MARK: - 秘書・作業を始める（L10nTable+Secretary）
   case taskStartHomeTask
   case secretaryRequestInput
@@ -626,7 +632,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardAutomationEmpty
   case boardAutomationFlow
   case boardOutputTaskCandidates
-  case boardOutputCommand
+  case boardPartMethodCommand
   case boardNotifyTitle
   case boardNotifyOff
   case boardNotifyMenuBar
@@ -638,29 +644,24 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardRecentRuns
   case boardMapPartsOne
   case boardMapPartsOther
-  case boardMapPending
   case boardMapLast
-  case boardMapFresh
-  case boardMapCountOne
-  case boardMapCountOther
-  case boardMapPassed
+  case boardMapOutput
   case boardMapProposed
-  case boardMapNoProposals
   case boardMapFailed
   case boardMapNever
   case boardMapDestination
   case boardMapOpen
-  case boardMapFormatError
-  case boardDestMenuBar
-  case boardDestNotificationCenter
-  case boardDestBoard
-  case boardPartRun
+  case boardOutputMenuBar
+  case boardOutputNotificationCenter
+  case boardOutputBoard
+  case boardPartMethod
   case boardPartTools
-  case boardPartSchedule
-  case boardPartTake
+  case boardPartTrigger
+  case boardPartSaving
   case boardPartFrom
-  case boardPartTo
-  case boardPartPending
+  case boardPartDestination
+  case boardPending
+  case boardFresh
   case boardPartTimeout
   case boardPartDirectory
   case boardPartNext
@@ -668,33 +669,29 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardPartDefaultModel
   case boardPartToolMCP
   case boardPartToolCommand
-  case boardPartNewSince
-  case boardPartNewOnly
-  case boardPartCurrentSet
-  case boardPartEverything
+  case boardPartOverwrite
+  case boardPartAppend
+  case boardPartAppendSince
+  case boardPartTakeAll
+  case boardPartMaxAge
   case boardPartTaskCandidates
   case boardPartNothing
   case boardPartCount
   case boardPartNoLimit
-  case boardPartLimitAge
   case boardPartLimitItems
-  case boardPartLimitBoth
   case boardPartMinutes
   case boardPartFormatErrorOne
   case boardPartFormatErrorOther
-  case boardPartRedonePassed
-  case boardPartRedoneFailed
-  case boardPartNotRedone
+  case boardPartBreachPassed
+  case boardPartBreachFailed
   case boardPartLastReport
   case boardPartLastReply
   case boardPartHistory
   case boardPartAskFix
   case boardAskFixDraft
-  case boardRunFresh
+  case boardAskFixAutomationDraft
   case boardRunNothingNew
-  case boardRunCountOne
-  case boardRunCountOther
-  case boardRunPassed
+  case boardRunOutput
   case boardRunJudgedOne
   case boardRunJudgedOther
   case boardRunJudgedNoneOne
@@ -707,12 +704,14 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardRunExecuted
   case boardRunFold
   case boardRunManual
-  case boardRunRedonePassed
+  case boardRunFixedPassed
   case boardRunDroppedOld
   case boardRunDroppedOverflow
+  case boardRunDroppedLapsed
+  case boardAutomationUnreadable
+  case boardAutomationNumbered
   case boardRunAsideSeparator
   case boardHintSelect
-  case boardHintToList
   case boardHintChoose
   case boardHintBack
   case boardHintParts

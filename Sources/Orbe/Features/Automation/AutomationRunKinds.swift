@@ -21,10 +21,6 @@ enum AutomationEnding: Equatable {
   case notStarted(String)
   /// 指定した MCP のツールが始まりの時点で揃わなかった（揃わなかった名前）。
   case toolsUnavailable([String])
-  /// 試走が止めた副作用・作業（手段を起こしていない）。
-  case heldByTrial
-  /// 試走が外から与えた行を取得の出力にした（手段を起こしていない）。
-  case givenToTrial
 
   init(_ ending: BackgroundEnding) {
     switch ending {
@@ -54,14 +50,12 @@ enum AutomationEnding: Equatable {
     case .directoryMissing(let directory): "not started (directory missing: \(directory))"
     case .notStarted(let reason): "not started (\(reason))"
     case .toolsUnavailable(let tools): BackgroundEnding.unavailable(tools)
-    case .heldByTrial: "held by the trial"
-    case .givenToTrial: "rows given to the trial"
     }
   }
 }
 
-/// 部品の回の失敗。手段の終わり方による失敗の終わり方は、同じ回の実行の記録が持つ。出力の形式エラーが直らない失敗の外れた行は、
-/// 同じ回の出力の形式エラーの記録が持つ。
+/// 部品の回の失敗。手段の終わり方による失敗の終わり方は、同じ回の実行の記録が持つ。決まりを外した失敗の外れた件は、同じ回の
+/// 断った結果の記録（`breach`）が持つ。
 enum AutomationFailure: Error, Equatable {
   /// 手段が 0 以外で終わった。`detail` は標準エラーか応答の抜粋（無ければ空）。
   case ended(detail: String)
@@ -70,15 +64,19 @@ enum AutomationFailure: Error, Equatable {
   case notUTF8
   /// agent の CLI がエラーを返した（その文の抜粋）。
   case agentError(String)
-  /// 部品が `{"error": …}` で失敗を申告した。
+  /// agent の部品が Orbe の道具（report_error）で失敗を申告した。
   case reported(String)
-  /// 出力の形式エラーが出し直しでも直らなかった（コマンドは出し直さない）。
+  /// 結果が決まりを外したまま終わった（コマンドは外れた件を出した、agent は断られた結果を直さずに終えた）。
   case brokeRules
-  /// 判定（鍵）へ渡す行が、どれも出どころを持たなかった。
-  case unsourced(String)
+  /// agent が、入力の行（その数）を読み切らないまま結果を出さずに終わった（結果の道具は読み切るまで断る）。
+  case unreadInput(Int)
+  /// agent が結果の道具も申告も一度も呼ばずに終わった。
+  case noResult
+  /// 判定へ渡す行が、どれも出どころを持たなかった。
+  case unsourced
 
   /// AI が読む英文。`part` はこの回の部品の鍵。
-  func text(part: String, ending: AutomationEnding, breach: AutomationPartRun.Breach?) -> String {
+  func text(part: String, ending: AutomationEnding, breach: AutomationRejections?) -> String {
     let word = "part \"\(part)\""
     func with(_ head: String, _ detail: String) -> String {
       detail.isEmpty ? head : "\(head): \(detail)"
@@ -90,21 +88,28 @@ enum AutomationFailure: Error, Equatable {
     case .agentError(let text): return "the \(word) agent reported an error: \(text)"
     case .reported(let text): return "the \(word) reported an error: \(text)"
     case .brokeRules:
-      let line = breach.flatMap { $0.redo?.lines.lines.first ?? $0.lines.lines.first }
-      return "the output of \(word) broke the rules: \(line?.text ?? "")"
-    case .unsourced(let target):
-      return "no row passed to part \"\(target)\" has an origin (it did not come from a fetch part)"
+      return "the output of \(word) broke the rules: \(breach?.lines.first?.text ?? "")"
+    case .unreadInput(let count):
+      return
+        "the \(word) ended without reading \(count) of its input \(count == 1 ? "item" : "items")"
+    case .noResult:
+      return "the \(word) ended without giving a result"
+    case .unsourced:
+      return
+        "the rows of \(word) reach a judge part, but none has an origin (none came from a fetch part)"
     }
   }
 }
 
-/// 出力の中の、受け付けなかった 1 行。`line` は 1 始まりの行番号（空行も数える）。
+/// 結果の中の、受け付けなかった 1 件。`line` は 1 度に出した分の中の 1 始まりの位置（agent は道具の 1 回の呼び出しの何件目、
+/// コマンドは標準出力の行番号。空行も数える）。呼び出しの形そのものの誤り（配列でない引数・申告の後の結果 など）は位置を
+/// 持たない。
 struct AutomationBrokenLine: Error, Equatable {
-  let line: Int
+  let line: Int?
   let fault: AutomationLineFault
 
-  /// 「line <n>: <理由>」。
-  var text: String { "line \(line): \(fault.text)" }
+  /// 「item <n>: <理由>」（位置の無い誤りは理由だけ）。
+  var text: String { line.map { "item \($0): \(fault.text)" } ?? fault.text }
 }
 
 /// 行を受け付けなかった理由。
@@ -120,8 +125,6 @@ enum AutomationLineFault: Equatable {
   case idTwice(String)
   /// 判定へ届く処理が、入力の行の id でない id の行を出した。
   case notInputId(String)
-  /// 何も無い回の申告が項目と一緒に出た。
-  case nothingWithItems
   /// 判定の案が新しい項目でない id を指した。
   case notNewItem(String)
   case proposedTwice(String)
@@ -134,6 +137,12 @@ enum AutomationLineFault: Equatable {
   case dueNotDate(String, String)
   /// 判定の案の付け先が一覧に無い（id と番号）。
   case workspaceNotListed(String, Int)
+  /// 結果の道具の引数（欄の名前）が配列でない。
+  case notArray(String)
+  /// 何も無いと申告した後に結果を出した。
+  case afterNothing
+  /// 下流へ渡す行が大きさの上限（`AutomationOutputs.rowKiB`）を超えた。
+  case tooLarge
 
   init<Item>(_ reason: JSONLines<Item>.Reason) {
     switch reason {
@@ -157,15 +166,17 @@ enum AutomationLineFault: Equatable {
     case .invalidValue(let key): key.isEmpty ? "invalid value" : "invalid \(key)"
     case .idTwice(let id): "id \(id) appeared twice"
     case .notInputId(let id): "id \(id) is not the id of an input item"
-    case .nothingWithItems: "a nothing line alongside items"
     case .notNewItem(let id): "propose \(id): not a new item"
     case .proposedTwice(let id): "propose \(id): proposed twice"
     case .notWaiting(let link): "resolve \(link): not a waiting proposal"
-    case .notOneDecision: "a line must have exactly one of propose / resolve"
+    case .notOneDecision: "must have exactly one of propose / resolve"
     case .titleNotOneLine(let id): "propose \(id): title must be a single non-empty line"
     case .dueNotDate(let id, let raw): "propose \(id): due is not a YYYY-MM-DD date: \(raw)"
     case .workspaceNotListed(let id, let number):
       "propose \(id): workspace \(number) is not a listed workspace"
+    case .notArray(let key): "\(key) must be an array"
+    case .afterNothing: "a result after report_nothing"
+    case .tooLarge: "larger than \(AutomationOutputs.rowKiB) KiB"
     }
   }
 }
@@ -175,11 +186,13 @@ struct AutomationDismissal: Equatable {
   let link: String
   let why: Why
 
-  enum Why: String, Codable {
+  enum Why: String, Codable, CaseIterable {
     /// 同じリンクの候補が既にある。
     case alreadyProposed
     /// 対応済みにする判断待ちの候補が無い。
     case noOpenProposal
+    /// 案の出どころの項目が、回の途中に無効になった。
+    case originInvalidated
   }
 
   /// AI が読む英文。
@@ -187,6 +200,7 @@ struct AutomationDismissal: Equatable {
     switch why {
     case .alreadyProposed: "propose \(link): already proposed"
     case .noOpenProposal: "resolve \(link): no open proposal"
+    case .originInvalidated: "propose \(link): its source item is no longer current"
     }
   }
 }
@@ -213,8 +227,6 @@ extension AutomationEnding: Codable {
       self = .directoryMissing(try c.decode(String.self, forKey: .directory))
     case "notStarted": self = .notStarted(try c.decode(String.self, forKey: .reason))
     case "toolsUnavailable": self = .toolsUnavailable(try c.decode([String].self, forKey: .tools))
-    case "heldByTrial": self = .heldByTrial
-    case "givenToTrial": self = .givenToTrial
     default:
       throw DecodingError.dataCorruptedError(
         forKey: .kind, in: c, debugDescription: "unknown ending kind")
@@ -246,8 +258,6 @@ extension AutomationEnding: Codable {
     case .toolsUnavailable(let tools):
       try c.encode("toolsUnavailable", forKey: .kind)
       try c.encode(tools, forKey: .tools)
-    case .heldByTrial: try c.encode("heldByTrial", forKey: .kind)
-    case .givenToTrial: try c.encode("givenToTrial", forKey: .kind)
     }
   }
 }
@@ -255,7 +265,7 @@ extension AutomationEnding: Codable {
 /// `{"kind": "ended", "detail"?: "…"}` の形。空の抜粋は書かない。
 extension AutomationFailure: Codable {
   private enum CodingKeys: String, CodingKey {
-    case kind, detail, text, part
+    case kind, detail, text, count
   }
 
   init(from decoder: Decoder) throws {
@@ -268,7 +278,9 @@ extension AutomationFailure: Codable {
     case "agentError": self = .agentError(try c.decode(String.self, forKey: .text))
     case "reported": self = .reported(try c.decode(String.self, forKey: .text))
     case "brokeRules": self = .brokeRules
-    case "unsourced": self = .unsourced(try c.decode(String.self, forKey: .part))
+    case "unreadInput": self = .unreadInput(try c.decode(Int.self, forKey: .count))
+    case "noResult": self = .noResult
+    case "unsourced": self = .unsourced
     default:
       throw DecodingError.dataCorruptedError(
         forKey: .kind, in: c, debugDescription: "unknown failure kind")
@@ -292,9 +304,11 @@ extension AutomationFailure: Codable {
       try c.encode("reported", forKey: .kind)
       try c.encode(text, forKey: .text)
     case .brokeRules: try c.encode("brokeRules", forKey: .kind)
-    case .unsourced(let part):
-      try c.encode("unsourced", forKey: .kind)
-      try c.encode(part, forKey: .part)
+    case .unreadInput(let count):
+      try c.encode("unreadInput", forKey: .kind)
+      try c.encode(count, forKey: .count)
+    case .noResult: try c.encode("noResult", forKey: .kind)
+    case .unsourced: try c.encode("unsourced", forKey: .kind)
     }
   }
 }
@@ -318,7 +332,6 @@ extension AutomationBrokenLine: Codable {
     case "invalidValue": fault = .invalidValue(try string(.key))
     case "idTwice": fault = .idTwice(try string(.id))
     case "notInputId": fault = .notInputId(try string(.id))
-    case "nothingWithItems": fault = .nothingWithItems
     case "notNewItem": fault = .notNewItem(try string(.id))
     case "proposedTwice": fault = .proposedTwice(try string(.id))
     case "notWaiting": fault = .notWaiting(try string(.link))
@@ -327,16 +340,19 @@ extension AutomationBrokenLine: Codable {
     case "dueNotDate": fault = .dueNotDate(try string(.id), try string(.raw))
     case "workspaceNotListed":
       fault = .workspaceNotListed(try string(.id), try c.decode(Int.self, forKey: .workspace))
+    case "notArray": fault = .notArray(try string(.key))
+    case "afterNothing": fault = .afterNothing
+    case "tooLarge": fault = .tooLarge
     default:
       throw DecodingError.dataCorruptedError(
         forKey: .kind, in: c, debugDescription: "unknown line fault")
     }
-    self.init(line: try c.decode(Int.self, forKey: .line), fault: fault)
+    self.init(line: try c.decodeIfPresent(Int.self, forKey: .line), fault: fault)
   }
 
   func encode(to encoder: Encoder) throws {
     var c = encoder.container(keyedBy: CodingKeys.self)
-    try c.encode(line, forKey: .line)
+    try c.encodeIfPresent(line, forKey: .line)
     func kind(_ name: String, _ values: [(CodingKeys, String)] = []) throws {
       try c.encode(name, forKey: .kind)
       for (key, value) in values { try c.encode(value, forKey: key) }
@@ -350,7 +366,6 @@ extension AutomationBrokenLine: Codable {
     case .invalidValue(let key): try kind("invalidValue", [(.key, key)])
     case .idTwice(let id): try kind("idTwice", [(.id, id)])
     case .notInputId(let id): try kind("notInputId", [(.id, id)])
-    case .nothingWithItems: try kind("nothingWithItems")
     case .notNewItem(let id): try kind("notNewItem", [(.id, id)])
     case .proposedTwice(let id): try kind("proposedTwice", [(.id, id)])
     case .notWaiting(let link): try kind("notWaiting", [(.link, link)])
@@ -360,6 +375,9 @@ extension AutomationBrokenLine: Codable {
     case .workspaceNotListed(let id, let number):
       try kind("workspaceNotListed", [(.id, id)])
       try c.encode(number, forKey: .workspace)
+    case .notArray(let key): try kind("notArray", [(.key, key)])
+    case .afterNothing: try kind("afterNothing")
+    case .tooLarge: try kind("tooLarge")
     }
   }
 }

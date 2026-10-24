@@ -28,7 +28,7 @@ enum BoardAutomationHand {
     func title(paused: Bool) -> L10nKey {
       switch self {
       case .flow(.ends): .automationRunNow
-      case .flow(.part): .automationFlowHere
+      case .flow(.part): .automationFlowToSelected
       case .togglePause: paused ? .automationResume : .automationPause
       case .delete: .automationDelete
       }
@@ -67,7 +67,8 @@ enum BoardAutomationHand {
 
   /// 走らせ役へ通す。`part` は部品まで流すときの流す先（無ければ何もしない）。
   static func perform(
-    _ operation: Operation, on automation: Automation, part: String?, runner: AutomationRunner
+    _ operation: Operation, on automation: Automation, part: AutomationPartID?,
+    runner: AutomationRunner
   ) -> Refusal? {
     switch operation {
     case .flow(let reach):

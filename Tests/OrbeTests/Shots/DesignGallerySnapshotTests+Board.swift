@@ -95,6 +95,8 @@ extension DesignGallerySnapshotTests {
 
     try write("board_automation_zero.png", board([]))
 
+    try renderBoardUnreadableSnapshots(write: write)
+
     let long = board(DesignSceneFixtures.boardLongSamples())
     try write("board_automation_long_agent.png", long)
     long.automation.move(1)
@@ -120,10 +122,34 @@ extension DesignGallerySnapshotTests {
     try renderBoardNotifySnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardCronSnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardMapSnapshots(write: write, board: { board($0, row: $1) })
+    try renderBoardJudgeOutcomeSnapshots(write: write, board: { board($0, row: $1) })
+  }
+
+  /// 定義を読めない自動化（一覧の先頭の行と、名前・理由・「修正を依頼」だけの詳細）と、不明な記録（Slack の取得のカード）。
+  private func renderBoardUnreadableSnapshots(
+    write: (String, BoardModel, Language, NSSize) throws -> Void
+  ) throws {
+    let size = NSSize(width: 1440, height: 844)
+    func unreadable(row: Int) -> BoardModel {
+      let model = BoardModel(
+        automation: BoardAutomationModel(
+          runner: DesignSceneFixtures.automationRunner(
+            store: DesignSceneFixtures.boardUnreadableStore())),
+        parts: [.automation])
+      for _ in 0...row { model.automation.move(1) }
+      return model
+    }
+    try write("board_automation_unreadable.png", unreadable(row: 0), .ja, size)
+    try write("board_automation_unreadable_en.png", unreadable(row: 0), .en, size)
+    let unknown = unreadable(row: 2)
+    unknown.automation.enterMap()
+    unknown.automation.tapPart(key: "fetch")
+    try write("board_automation_unknown_record.png", unknown, .ja, size)
+    try write("board_automation_unknown_record_en.png", unknown, .en, size)
   }
 
   /// 見本 O2Board・O2PartCards（案2 地図＋選んだ部品）: 一覧に居る（カードの欄は空）・地図で失敗した判定を選ぶ・役割ごとの
-  /// カード（形式エラーを出し直した取得・古い行を捨てた処理コマンド・報告・作業・外部操作）・走っている取得・「通知」の段と
+  /// カード（形式エラーを修正した取得・古い行を捨てた処理コマンド・報告・作業・外部操作）・走っている取得・「通知」の段と
   /// 3 択・入力の多い判定（溝が広がる）・狭い窓（カードが地図の下）。
   private func renderBoardMapSnapshots(
     write: (String, BoardModel, Language, NSSize) throws -> Void,
@@ -134,27 +160,27 @@ extension DesignGallerySnapshotTests {
     func map(_ row: Int, part: String? = nil) -> BoardModel {
       let model = board(samples, row)
       model.automation.enterMap()
-      if let part { model.automation.tapPart(part) }
+      if let part { model.automation.tapPart(key: part) }
       return model
     }
     // 「ツール」の欄（同じサーバーのツールが並び、claude.ai のコネクタの頭が付く）と、今日以外の手動の回（時刻の列が中身に
     // 合わせて広がる）と、標準エラーの抜粋のある失敗（英語の画面でも抜粋を添える）。
     var tools = samples
     if let slack = tools[0].definition.parts.firstIndex(where: { $0.key == "slack" }),
-      case .agent(var agent) = tools[0].definition.parts[slack].method
+      case .agent(var agent) = tools[0].definition.parts[slack].action.method
     {
       agent.tools = [
         "mcp__claude_ai_Slack__search_messages", "mcp__claude_ai_Slack__read_channel",
         "mcp__plugin_core_backlog__get_issues", "Bash(npm run test:unit:*)",
       ]
-      tools[0].definition.parts[slack].method = .agent(agent)
+      tools[0].definition.parts[slack].action.method = .agent(agent)
     }
     let manualAt = DesignSceneFixtures.automationAt(9, 0, daysAgo: 3)
     tools[0].passes.insert(
       AutomationSamplePass(
         part: "slack", at: manualAt, trigger: .now,
         outcome: DesignSceneFixtures.fetched(
-          "slack", DesignSceneFixtures.sampleItems("slack", 2, at: manualAt))),
+          DesignSceneFixtures.sampleItems("slack", 2, at: manualAt))),
       at: 0)
     tools[0].passes.insert(
       AutomationSamplePass(
@@ -167,12 +193,15 @@ extension DesignGallerySnapshotTests {
       try write("board_map_card\(suffix).png", map(0, part: "contact"), language, size)
       let manual = board(tools, 0)
       manual.automation.enterMap()
-      manual.automation.tapPart("slack")
+      manual.automation.tapPart(key: "slack")
       try write("board_map_tools_manual\(suffix).png", manual, language, size)
     }
     try write("board_map_first.png", map(0), .ja, size)
     try write("board_map_mail.png", map(0, part: "mail"), .ja, size)
     try write("board_map_mine.png", map(0, part: "mine"), .ja, size)
+    // 保存: 上書きの取得・追記の処理（追記の取得は slack の実行中で見る）。
+    try write("board_map_github.png", map(0, part: "github"), .ja, size)
+    try write("board_map_dedupe.png", map(0, part: "dedupe"), .ja, size)
     try write("board_map_digest.png", map(0, part: "digest"), .ja, size)
     let running = map(0, part: "slack")
     running.automation.perform(.flow(.part))
@@ -185,6 +214,21 @@ extension DesignGallerySnapshotTests {
     try write("board_map_paused.png", map(3), .ja, size)
     try write(
       "board_map_narrow.png", map(0, part: "contact"), .ja, NSSize(width: 1000, height: 844))
+  }
+
+  /// 判定の部品の回の終わり方ごとのカード: 形式エラーをその場で修正済み・修正されず失敗（agent と、コマンドの出力の形式
+  /// エラー）・入力の読み残し・結果なし。
+  private func renderBoardJudgeOutcomeSnapshots(
+    write: (String, BoardModel, Language, NSSize) throws -> Void,
+    board: ([AutomationSample]?, Int) -> BoardModel
+  ) throws {
+    let size = NSSize(width: 1440, height: 844)
+    for (name, sample) in DesignSceneFixtures.boardJudgeOutcomeSamples() {
+      let model = board([sample], 0)
+      model.automation.enterMap()
+      model.automation.tapPart(key: "judge")
+      try write("board_judge_\(name).png", model, .ja, size)
+    }
   }
 
   /// いつの言葉が長い自動化と、式のまま出る自動化。一覧の 2 段目と詳細のいつを、広い面・狭い面・英語で撮る。並びは

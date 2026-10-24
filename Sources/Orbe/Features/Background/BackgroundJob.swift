@@ -71,12 +71,31 @@ struct BackgroundInput: Equatable {
 }
 
 /// 非対話の agent の呼び出し。`tools` は許可の規則（組み込みのツール名・`Bash(<コマンドの接頭>:*)`・`mcp__` で始まる MCP の
-/// ツールの完全名）。
+/// ツールの完全名）。`orbe` は Orbe の MCP でその回の入力を読み結果を出させる口。
 struct BackgroundAgentCall: Equatable {
   var cli: String
   var model: String
   var tools: [String]
   var prompt: String
+  var orbe: BackgroundOrbeAccess?
+}
+
+/// 裏の agent が自分の回の入力を読み結果を出す口（Orbe の MCP）。`token` はその回の札で、MCP はその回の相手にだけ届く。
+/// `tools` は出して許す道具の名前（サーバーの中の名前）。
+struct BackgroundOrbeAccess: Equatable {
+  /// 足すサーバーの名前（ツールの完全名は `mcp__<名前>__<ツール>`）。利用者が登録した Orbe のプラグインのサーバーと分ける。
+  static let server = "orbe_run"
+
+  let token: String
+  let tools: [String]
+
+  var toolNames: [String] { tools.map { "mcp__\(Self.server)__\($0)" } }
+}
+
+/// 回の口のサーバーの起こし方（同梱の `orbe-mcp` と、このインスタンスの制御 socket）。
+struct BackgroundOrbeServer: Equatable {
+  let command: String
+  let socket: String
 }
 
 /// 1 回の実行の上限。`idle` が nil なら無出力では打ち切らない。`output` はコマンドでは標準出力、agent では最終応答の大きさ
@@ -194,6 +213,8 @@ enum BackgroundStartFailure: Error, Equatable {
   case directoryMissing(String)
   /// agent の回の作業ディレクトリを作れなかった（そのパス）。
   case workDirectoryFailed(String)
+  /// Orbe の MCP を渡す回なのに、同梱の `orbe-mcp` が無い（`swift run` などバンドルの無い起動）。
+  case orbeServerMissing
   /// `posix_spawn` の失敗（errno）。
   case launchFailed(Int32)
 }

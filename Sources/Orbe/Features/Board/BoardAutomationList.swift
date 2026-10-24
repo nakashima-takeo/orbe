@@ -46,6 +46,7 @@ struct BoardAutomationList: View {
           ForEach(standings) { standing in
             BoardAutomationRow(
               standing: standing, summary: model.summary(standing.id, text: text, now: now),
+              text: text,
               selection: model.list.selectedID == .automation(standing.id)
                 ? (model.inMap ? .parent : .focused) : nil
             )
@@ -68,7 +69,7 @@ struct BoardAutomationList: View {
   private static let headerHeight: CGFloat = 32
 }
 
-/// 一覧の 1 行。上段に名前と状態（実行中・停止中）、下段に前回の結果の印と時刻・次回。状態と結果の印は混ぜない——走っている
+/// 一覧の 1 行。上段に名前と状態（実行中・一時停止中）、下段に前回の結果の印と時刻・次回。状態と結果の印は混ぜない——走っている
 /// ことと前回失敗したことは別の事実で、片方がもう片方を隠さないため。状態は立ち位置から、前回と次回は読み替えから読む。選んで
 /// いる行は、焦点が一覧にあれば濃い地、地図にあれば（その自動化の段を選んでいる間）薄い地。
 struct BoardAutomationRow: View {
@@ -79,6 +80,7 @@ struct BoardAutomationRow: View {
 
   let standing: BoardAutomationStanding
   let summary: BoardAutomationSummary?
+  let text: AutomationText
   let selection: Selection?
   @Environment(\.localization) private var l10n
   @Environment(\.chromeFontResolver) private var fontResolver
@@ -86,7 +88,7 @@ struct BoardAutomationRow: View {
   var body: some View {
     VStack(alignment: .leading, spacing: Theme.Space.hair) {
       HStack(spacing: Self.gap) {
-        fontResolver.text(standing.name, base: Theme.Typography.code)
+        fontResolver.text(standing.title(l10n), base: Theme.Typography.code)
           .font(Font.theme.code)
           .foregroundStyle(standing.paused ? Color.theme.textMuted : Color.theme.textPrimary)
           .frame(maxWidth: .infinity, alignment: .leading)
@@ -94,12 +96,19 @@ struct BoardAutomationRow: View {
       }
       .frame(height: Self.nameLine)
       HStack(spacing: Theme.Space.beat) {
-        HStack(spacing: 5) {
-          if let mark = summary?.mark { BoardRunMarkGlyph(mark: mark) }
-          Text(summary?.last ?? "")
+        if let reason = standing.unreadable {
+          HStack(spacing: 5) {
+            BoardRunMarkGlyph(mark: .failure)
+            Text(text.unreadable(reason)).foregroundStyle(Color.theme.danger)
+          }
+        } else {
+          HStack(spacing: 5) {
+            if let mark = summary?.mark { BoardRunMarkGlyph(mark: mark) }
+            Text(summary?.last ?? "")
+          }
+          Spacer(minLength: 0)
+          if let next = summary?.next { Text(next) }
         }
-        Spacer(minLength: 0)
-        if let next = summary?.next { Text(next) }
       }
       .font(Font.theme.codeSmall)
       .foregroundStyle(Color.theme.textMuted)

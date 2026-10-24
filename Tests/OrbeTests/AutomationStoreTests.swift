@@ -3,15 +3,17 @@ import XCTest
 
 @testable import Orbe
 
-/// 自動化のストアの保存——再起動の往復、旧形式の JSON と読めない DB の退避、2 つ目の Orbe の締め出し。DB は caseDir の本物。
+/// 自動化のストアの保存——再起動の往復、DB の版と形の確かめ、読めない定義・記録の閉じ込め、2 つ目の Orbe の締め出し、
+/// 回の記録と判断の記録の保持。DB は caseDir の本物。
 ///
-/// 壊れると何が起きるか: 再起動で溜まり・候補・回の記録・決まりを外した印が巻き戻るか消える。旧形式の自動化を抱えた環境で
-/// 起動できない、または古い定義を読み違える。Orbe が書いたのではない DB で起動が落ちる。同じ state の 2 つ目の Orbe が予定を
-/// 回して副作用を二重に起こす、先に開いた Orbe の DB を退避して中身を奪う。
+/// 壊れると何が起きるか: 再起動で読んだ位置・候補・回の記録・決まりを外した印が巻き戻るか消える。古い版の DB や形の違う DB で
+/// 起動が落ちる、または読み違える。新しい版の DB を退避して利用者の自動化を失う。読めない定義が 1 つあるだけで全部の自動化を
+/// 失う。同じ state の 2 つ目の Orbe が予定を回して副作用を二重に起こす。回の記録が際限なく溜まる、または候補・目印・外した印が
+/// 指す回を消して読めなくなる。
 final class AutomationStoreTests: OrbeTestCase {
   static let at = Date(timeIntervalSince1970: 1_800_000_000)
 
-  /// 今の集合を取る取得の部品 `fetch` と、届いたらタスク候補を出す判定の部品 `judge`。
+  /// 取得の部品 `fetch` と、届いたらタスク候補を出す判定の部品 `judge`。
   static func definition(
     _ name: String = "受信", coverage: AutomationCoverage = .currentSet, script: String = "fetch"
   ) -> AutomationDefinition {
@@ -30,54 +32,75 @@ final class AutomationStoreTests: OrbeTestCase {
     _ store: AutomationStore, _ id: Int, _ items: [AutomationItem],
     outcome: AutomationPartPass.Outcome? = nil, at: Date = at
   ) throws {
-    _ = try store.record(
-      AutomationPassEnd(
-        automationId: id, part: "fetch", trigger: .schedule, startedAt: at, endedAt: at,
-        take: nil, outcome: outcome ?? DesignSceneFixtures.fetched("fetch", items)))
+    try store.record(
+      id, part: "fetch", at: at, outcome: outcome ?? DesignSceneFixtures.fetched(items))
   }
 
-  /// 判定の部品の、溜まりをすべて取った回を確定する。候補にした理由は `reason`（省けば無し）。
+  /// 判定の部品の、読める行をすべて取った回を確定する。案の出どころは、取った行のうち同じ書かれた id の行のもの。候補にした
+  /// 理由は `reason`（省けば無し）。
   static func judge(
     _ store: AutomationStore, _ id: Int, proposing items: [AutomationItem] = [],
     resolving links: [String] = [], reason: String? = nil, at: Date = at
   ) throws {
-    let taken = try store.inbox(of: "judge", in: id).map(\.seq)
-    _ = try store.record(
-      AutomationPassEnd(
-        automationId: id, part: "judge", trigger: .arrival, startedAt: at, endedAt: at,
-        take: AutomationInbox.Take(taken: taken, dropped: []),
-        outcome: .succeeded(
-          .judge(
-            proposals: items.map {
-              DesignSceneFixtures.proposal($0, "対応: \($0.id)", reason: reason)
-            },
-            resolved: links),
-          DesignSceneFixtures.execution(taken.count), breach: nil)))
+    let taken = try XCTUnwrap(
+      store.read(store.part(id, "judge"), of: id, baseline: nil, now: at)
+    ).taken
+    let proposals = items.compactMap { item -> AutomationPartPass.Proposal? in
+      taken.first { $0.origin?.item.id == item.id }?.origin.map {
+        AutomationPartPass.Proposal(
+          origin: $0, title: "対応: \(item.id)", due: nil, workspace: nil, reason: reason)
+      }
+    }
+    try store.record(
+      id, part: "judge", trigger: .arrival, at: at,
+      outcome: .succeeded(
+        .judge(proposals: proposals, resolved: links), DesignSceneFixtures.execution(taken.count),
+        breach: nil))
   }
 
-  /// 決まりを外した取得の回（出し直しで通った）。
+  /// 今の版で書き換える。同じ鍵の部品は今の部品の id を添える（同じ部品のまま）。
+  @discardableResult static func rewrite(
+    _ store: AutomationStore, _ id: Int, _ definition: AutomationDefinition, at: Date = at
+  ) throws -> AutomationStore.Replaced {
+    let current = try XCTUnwrap(store.automation(id))
+    var definition = definition
+    for index in definition.parts.indices {
+      definition.parts[index].id = current.graph.node(key: definition.parts[index].key)?.id
+    }
+    return try store.replace(id, version: current.version, with: definition, now: at)
+  }
+
+  /// 形式エラーをその場で直して通った取得の回（件の外れと、位置の無い呼び出しの形の誤り）。
+  static let breachLines = [
+    AutomationBrokenLine(line: 3, fault: .missingKey("link")),
+    AutomationBrokenLine(line: nil, fault: .notArray("items")),
+  ]
+
   static func breached(_ items: [AutomationItem]) -> AutomationPartPass.Outcome {
-    let fetched = DesignSceneFixtures.fetched("fetch", items)
+    let fetched = DesignSceneFixtures.fetched(items)
     guard case .succeeded(let output, let execution, _) = fetched else {
       preconditionFailure("a fetched outcome succeeds")
     }
     return .succeeded(
       output, execution,
-      breach: AutomationPartPass.Breach(
-        lines: [AutomationBrokenLine(line: 3, fault: .missingKey("link"))],
-        redo: AutomationPartPass.Redo(firstCall: execution, lines: [])))
+      breach: AutomationRejections(breachLines))
   }
 
-  private func quarantined() throws -> [String] {
+  func quarantined() throws -> [String] {
     try FileManager.default.contentsOfDirectory(atPath: TestScratch.caseDir.path)
       .filter { $0.hasPrefix("automations-broken-") }
   }
 
+  /// DB のファイル（ストアを閉じてから触る）。
+  func database() throws -> SQLiteDatabase {
+    try SQLiteDatabase(url: automationsFolder().appendingPathComponent("db.sqlite"))
+  }
+
   // MARK: - 再起動
 
-  /// 自動化・部品の状態（前回の出力・決まりを外した印・回の記録・溜まり）・候補は、どの変異（作る・確定・書き換え・さばく・
-  /// 止める・消す）の後に開き直しても同じで、溜まりの行も同じ本文で読める。回の記録は失敗・判定の確定で捨てた案も、候補は
-  /// 候補にした理由も同じ。
+  /// 自動化・つながりの取り方（take・古さの上限）・部品の状態（今有効な項目のリンク・決まりを外した印・回の記録・読めば取る行
+  /// の数）・版・候補は、どの変異（作る・確定・書き換え・さばく・止める・消す）の後に開き直しても同じ。回の記録は
+  /// 失敗・判定の確定で捨てた案も、候補は候補にした理由と候補を出した自動化も同じ。
   func testEverythingSurvivesARestart() throws {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
@@ -93,64 +116,26 @@ final class AutomationStoreTests: OrbeTestCase {
       at: Self.at.addingTimeInterval(3600))
     var rewritten = Self.definition("受信（要約つき）")
     rewritten.notify = .menuBar
-    rewritten.parts.append(
-      DesignSceneFixtures.commandPart(
-        "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report))
-    _ = try store?.replace(id, with: rewritten, now: Self.at)
-    try store?.dismiss(XCTUnwrap(store?.proposals.first?.id))
-    _ = try store?.setPaused(id, true)
+    var digest = DesignSceneFixtures.commandPart(
+      "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report)
+    digest.from = [AutomationDefinition.Input(part: "fetch", take: .all, maxAgeHours: 24)]
+    rewritten.parts.append(digest)
+    try Self.rewrite(XCTUnwrap(store), id, rewritten)
+    try store?.dismiss(XCTUnwrap(store?.proposals.first?.id), now: Self.at)
+    _ = try store?.setPaused(id, true, now: Self.at)
     let deleted = try XCTUnwrap(store?.create(Self.definition("消す"), now: Self.at).id)
-    try store?.delete(deleted)
+    try store?.delete(deleted, now: Self.at)
     let automations = store?.automations
     let proposals = store?.proposals
-    let rows = try store?.rows(XCTUnwrap(store?.inbox(of: "judge", in: id)).map(\.seq))
-    XCTAssertEqual(rows?.isEmpty, false, "前提: 溜まりに行がある")
+    XCTAssertEqual(automations?.first?.state(key: "judge").pending.count, 1, "前提: 判定が読めば取る行がある")
+    XCTAssertEqual(automations?.first?.version, 2)
     store = nil
 
     let reopened = AutomationStore()
 
     XCTAssertEqual(reopened.automations, automations)
     XCTAssertEqual(reopened.proposals, proposals)
-    XCTAssertEqual(try reopened.rows(reopened.inbox(of: "judge", in: id).map(\.seq)), rows)
-  }
-
-  // MARK: - 退避
-
-  /// 旧形式の `automations.json` は退避して読まず、自動化 0 件で使える状態で始まる。
-  func testALegacyFileIsSetAsideAndAutomationsStartEmpty() throws {
-    let legacy = try XCTUnwrap(AutomationPersistence.legacyFile)
-    let original = Data(#"{"version":3,"automations":[{"id":1,"name":"旧"}]}"#.utf8)
-    try original.write(to: legacy)
-
-    let store = AutomationStore()
-
-    XCTAssertTrue(store.available)
-    XCTAssertEqual(store.automations, [])
-    XCTAssertFalse(FileManager.default.fileExists(atPath: legacy.path))
-    let aside = try quarantined().filter { $0.hasSuffix(".json") }
-    XCTAssertEqual(aside.count, 1)
-    let moved = legacy.deletingLastPathComponent().appendingPathComponent(
-      try XCTUnwrap(aside.first))
-    XCTAssertEqual(try Data(contentsOf: moved), original)
-  }
-
-  /// 今の形として読めない行を持つ DB（Orbe が書いたのではない）は、フォルダごと退避して空で始まる。読める JSON でも、グラフの
-  /// 検証を通らない定義は読めない行。
-  func testADatabaseWithRowsOrbeCannotReadIsSetAsideAndStartsEmpty() throws {
-    _ = try AutomationStore().create(Self.definition(), now: Self.at)
-    var invalid = Self.definition()
-    invalid.parts[1] = DesignSceneFixtures.agentPart(
-      "judge", "判定", .arrival, from: ["fetch"], tools: ["Read"], instruction: "判定する",
-      deliver: .taskCandidates)
-    XCTAssertThrowsError(try invalid.checked(), "前提: 検証を通らない定義")
-    try SQLiteDatabase(url: automationsFolder().appendingPathComponent("db.sqlite")).run(
-      "UPDATE automations SET definition = ?", [.text(try AutomationDatabase.encode(invalid))])
-
-    let store = AutomationStore()
-
-    XCTAssertTrue(store.available)
-    XCTAssertEqual(store.automations, [])
-    XCTAssertEqual(try quarantined().count, 1)
+    XCTAssertEqual(reopened.proposals.map { reopened.issuer(of: $0)?.id }, [id], "候補を出した自動化")
   }
 
   // MARK: - 排他
@@ -184,35 +169,17 @@ final class AutomationStoreTests: OrbeTestCase {
     let a = Self.item("a")
     try Self.fetch(store, id, [a], outcome: Self.breached([a]))
     try Self.fetch(store, id, [a], outcome: Self.breached([a]), at: Self.at.addingTimeInterval(60))
-    func mark() -> AutomationBreachMark? { store.automation(id)?.state("fetch").breach }
+    func mark() -> AutomationRunRecord? { store.automation(id)?.state(key: "fetch").breach }
 
-    XCTAssertEqual(
-      mark(),
-      AutomationBreachMark(
-        at: Self.at,
-        lines: AutomationRejections(
-          count: 1, lines: [AutomationBrokenLine(line: 3, fault: .missingKey("link"))]),
-        redone: true, passed: true))
-    _ = try store.replace(id, with: Self.definition("改名"), now: Self.at)
-    XCTAssertEqual(mark()?.at, Self.at, "名前だけなら残る")
-    _ = try store.replace(id, with: Self.definition("改名", script: "fetch --all"), now: Self.at)
+    let first = try XCTUnwrap(mark())
+    XCTAssertEqual(first.id, store.automation(id)?.state(key: "fetch").runs.last?.id, "最初の回の記録")
+    XCTAssertEqual(first.startedAt, Self.at)
+    XCTAssertEqual(first.run?.breach, AutomationRejections(Self.breachLines))
+    XCTAssertFalse(first.failed)
+    try Self.rewrite(store, id, Self.definition("改名"))
+    XCTAssertEqual(mark(), first, "名前だけなら残る")
+    try Self.rewrite(store, id, Self.definition("改名", script: "fetch --all"))
     XCTAssertNil(mark(), "何をするかが変われば下ろす")
-  }
-
-  // MARK: - 溜まりの上限
-
-  /// 溜まりの件数の上限を超えて捨てた行は、その部品の次の回の記録に数える。
-  func testRowsDroppedOverTheInboxLimitAreCountedInTheNextRun() throws {
-    let store = AutomationStore()
-    var definition = Self.definition()
-    definition.parts[1].inboxLimit = AutomationPart.InboxLimit(maxAgeHours: nil, maxItems: 2)
-    let id = try store.create(definition, now: Self.at).id
-    try Self.fetch(store, id, ["a", "b", "c"].map(Self.item))
-    XCTAssertEqual(store.automation(id)?.state("judge").inbox, 2)
-
-    try Self.judge(store, id)
-
-    XCTAssertEqual(store.automation(id)?.state("judge").runs.first?.dropped.counts, [.overflow: 1])
   }
 
   // MARK: - 書き込みの 1 経路
@@ -224,19 +191,19 @@ final class AutomationStoreTests: OrbeTestCase {
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
 
     func deleteThenFail(_ db: AutomationDatabase, _ memory: inout AutomationMemory) throws {
-      try db.delete(automation: id)
+      try db.setPaused(id, at: Self.at)
       memory.automations.removeAll()
       throw Refused()
     }
 
-    XCTAssertThrowsError(try store?.commit(deleteThenFail)) {
+    XCTAssertThrowsError(try store?.commit(sweepingAt: nil, deleteThenFail)) {
       guard case .unavailable = $0 as? AutomationError else { return XCTFail("\($0)") }
     }
 
     XCTAssertEqual(store?.automations.map(\.id), [id])
     XCTAssertEqual(store?.available, true)
     store = nil
-    XCTAssertEqual(AutomationStore().automations.map(\.id), [id], "DB も巻き戻っている")
+    XCTAssertEqual(AutomationStore().automation(id)?.paused, false, "DB も巻き戻っている")
   }
 
   // MARK: - ID と記録
@@ -250,8 +217,8 @@ final class AutomationStoreTests: OrbeTestCase {
     try Self.fetch(XCTUnwrap(store), deleted, [x])
     try Self.judge(XCTUnwrap(store), deleted, proposing: [x])
     let forgotten = try XCTUnwrap(store?.proposals.first?.id)
-    try store?.delete(deleted)
-    XCTAssertEqual(store?.proposals, [], "前提: 消した自動化だけが持っていた候補は忘れる")
+    try store?.delete(deleted, now: Self.at)
+    XCTAssertEqual(store?.proposals, [], "前提: 消した自動化だけが持っていた候補は下がる")
     store = nil
 
     let reopened = AutomationStore()
@@ -263,21 +230,43 @@ final class AutomationStoreTests: OrbeTestCase {
     XCTAssertGreaterThan(try XCTUnwrap(reopened.proposals.first?.id), forgotten)
   }
 
-  /// 回の記録は部品ごとに新しい 20 件だけを残し、開き直しても同じ 20 件。
-  func testOnlyTheNewestRunsOfAPartAreKeptAcrossARestart() throws {
+  /// 回の記録は部品ごとに新しい 20 件を残し、それより古い回は消える。ただし最新の成功した回・外した印の回・残っている候補を
+  /// 出した回は消えない。開き直しても同じ。
+  func testOldRunsAreSweptExceptTheOnesSomethingPointsAt() throws {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
+    let a = Self.item("a")
+    try Self.fetch(XCTUnwrap(store), id, [a], outcome: Self.breached([a]))
+    try Self.judge(XCTUnwrap(store), id, proposing: [a])
     let count = AutomationPartState.retainedRuns + 3
-    for n in 0..<count {
-      try Self.fetch(XCTUnwrap(store), id, [], at: Self.at.addingTimeInterval(TimeInterval(60 * n)))
+    for n in 1...count {
+      try Self.fetch(
+        XCTUnwrap(store), id, [], outcome: DesignSceneFixtures.failed("boom"),
+        at: Self.at.addingTimeInterval(TimeInterval(60 * n)))
+      try Self.judge(XCTUnwrap(store), id, at: Self.at.addingTimeInterval(TimeInterval(60 * n)))
     }
-    let runs = try XCTUnwrap(store?.automation(id)?.state("fetch").runs)
-    XCTAssertEqual(
-      runs.map(\.startedAt),
-      (3..<count).reversed().map { Self.at.addingTimeInterval(TimeInterval(60 * $0)) })
+    let fetches = try XCTUnwrap(store?.automation(id)?.state(key: "fetch"))
     store = nil
+    let kept = try database().select(
+      """
+      SELECT r.started_at FROM runs r JOIN parts p ON p.id = r.part_id WHERE p.key = 'fetch'
+      ORDER BY r.id
+      """, []
+    ) { AutomationPersistence.date($0.int64(at: 0)) }
+    let judged = try database().select(
+      "SELECT count(*) FROM runs r JOIN parts p ON p.id = r.part_id WHERE p.key = 'judge'", []
+    ) { $0.int(at: 0) }.first
 
-    XCTAssertEqual(AutomationStore().automation(id)?.state("fetch").runs, runs)
+    XCTAssertEqual(fetches.runs.count, AutomationPartState.retainedRuns)
+    XCTAssertEqual(
+      kept,
+      [Self.at] + (4...count).map { Self.at.addingTimeInterval(TimeInterval(60 * $0)) },
+      "外した印の回で、最新の成功した回でもある最初の回は残る")
+    XCTAssertEqual(fetches.succeededAt, Self.at)
+    XCTAssertEqual(fetches.breach?.startedAt, Self.at)
+    XCTAssertEqual(
+      judged, AutomationPartState.retainedRuns + 1, "候補を出した回は 20 件の外でも残る")
+    XCTAssertEqual(AutomationStore().automation(id)?.state(key: "fetch").runs, fetches.runs)
   }
 
   // MARK: - 定義
@@ -294,36 +283,42 @@ final class AutomationStoreTests: OrbeTestCase {
     XCTAssertEqual(store.automations.count, 1)
   }
 
-  // MARK: - 累計
+  // MARK: - 判断の記録
 
-  /// さばいた候補は、棚に出していた自動化でなく出した自動化の累計に数え、開き直しても残る。判定の部品が無くなれば 0 に戻る。
-  func testHandlingAProposalCountsOnTheAutomationThatProposedIt() throws {
+  /// 人が候補をタスクにする・捨てるたびに判断が 1 件残り、候補が Orbe に忘れられた後も残る。判断は、候補を出した判定の回が
+  /// 動いた定義ごとに分かれる（指示文を書き換えた後の候補への判断は、前の候補への判断と別の定義に数える）。
+  func testEachDecisionIsKeptAndCountedByTheDefinitionThatProposed() throws {
     var store: AutomationStore? = AutomationStore()
-    let issuer = try XCTUnwrap(store?.create(Self.definition("出した"), now: Self.at).id)
-    let shelf = try XCTUnwrap(store?.create(Self.definition("棚"), now: Self.at).id)
-    let a = Self.item("a")
-    try Self.fetch(XCTUnwrap(store), issuer, [a])
-    try Self.judge(XCTUnwrap(store), issuer, proposing: [a])
-    try Self.fetch(XCTUnwrap(store), shelf, [a])
-    try Self.fetch(XCTUnwrap(store), issuer, [])
-    let proposal = try XCTUnwrap(store?.proposals.first)
-    XCTAssertEqual(store?.shelf(of: proposal)?.id, shelf, "前提: 棚は別の自動化")
-
-    try store?.dismiss(proposal.id)
+    let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
+    let (a, b) = (Self.item("a"), Self.item("b"))
+    try Self.fetch(XCTUnwrap(store), id, [a])
+    try Self.judge(XCTUnwrap(store), id, proposing: [a])
+    var rewritten = Self.definition()
+    rewritten.parts[1] = DesignSceneFixtures.agentPart(
+      "judge", "判定", .arrival, from: ["fetch"], model: "sonnet", instruction: "別の基準で選ぶ。",
+      deliver: .taskCandidates)
+    try Self.rewrite(XCTUnwrap(store), id, rewritten)
+    try Self.fetch(XCTUnwrap(store), id, [a, b])
+    try Self.judge(XCTUnwrap(store), id, proposing: [b])
+    let proposals = try XCTUnwrap(store?.proposals)
+    XCTAssertNotEqual(proposals[0].defId, proposals[1].defId, "前提: 別の定義が出した")
+    try store?.dismiss(proposals[0].id, now: Self.at)
+    try store?.dismiss(proposals[1].id, now: Self.at)
+    try Self.fetch(XCTUnwrap(store), id, [])
+    XCTAssertEqual(store?.proposals, [], "前提: 取得から消えて忘れた")
     store = nil
-    let reopened = AutomationStore()
 
-    XCTAssertEqual(reopened.automation(issuer)?.tally, AutomationTally(accepted: 0, dismissed: 1))
-    XCTAssertEqual(reopened.automation(shelf)?.tally, AutomationTally())
-    _ = try reopened.replace(
-      issuer,
-      with: AutomationDefinition(
-        name: "出した", notify: nil,
-        parts: [
-          Self.definition().parts[0],
-          DesignSceneFixtures.commandPart(
-            "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report),
-        ]), now: Self.at)
-    XCTAssertEqual(reopened.automation(issuer)?.tally, AutomationTally())
+    let decided = try database().select(
+      """
+      SELECT r.def_id, s.outcome FROM settlements s JOIN proposals q ON q.id = s.proposal_id
+      JOIN runs r ON r.id = q.run_id ORDER BY s.proposal_id
+      """, []
+    ) { "\($0.int(at: 0)) \($0.text(at: 1) ?? "")" }
+
+    XCTAssertEqual(
+      decided,
+      [
+        "\(proposals[0].defId.rawValue) dismissed", "\(proposals[1].defId.rawValue) dismissed",
+      ])
   }
 }

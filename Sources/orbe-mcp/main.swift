@@ -10,6 +10,17 @@ import OrbePaths
 // ORBE_STATE_DIR 直下・最優先 → ORBE_SOCK → Apple 規定の既定パス。
 let socketPath: String = OrbePaths.controlSocketPath() ?? ""
 
+/// 裏で動く agent に Orbe が渡したときの、その回の札（環境の ORBE_RUN_TOKEN）。あれば、その回の道具（ORBE_RUN_TOOLS）だけを出す。
+let runToken = ProcessInfo.processInfo.environment["ORBE_RUN_TOKEN"].flatMap {
+  $0.isEmpty ? nil : $0
+}
+let runToolNames = Set(
+  (ProcessInfo.processInfo.environment["ORBE_RUN_TOOLS"] ?? "").split(separator: ",").map(
+    String.init))
+let servedTools =
+  runToken == nil ? tools : runTools.filter { runToolNames.contains($0["name"] as? String ?? "") }
+let servedToolNames = Set(servedTools.compactMap { $0["name"] as? String })
+
 // MARK: - control.sock クライアント（1 リクエスト 1 接続・同期）
 
 enum ControlResult {
@@ -129,23 +140,26 @@ func handle(_ message: [String: Any]) {
 
   case "tools/list":
     guard let id else { return }
-    reply(id: id, result: ["tools": tools])
+    reply(id: id, result: ["tools": servedTools])
 
   case "tools/call":
     guard let id else { return }
     let params = message["params"] as? [String: Any] ?? [:]
-    guard let name = params["name"] as? String, toolNames.contains(name) else {
+    guard let name = params["name"] as? String, servedToolNames.contains(name) else {
       replyError(id: id, code: -32602, message: "unknown tool")
       return
     }
     var args = params["arguments"] as? [String: Any] ?? [:]
+    if let runToken {
+      runTool(id: id, token: runToken, name: name, arguments: args)
+      return
+    }
     // 呼び出し元タブは、ブリッジを起こした agent のタブ（環境の ORBE_TAB）。どの動詞が読むかを知らずに
     // 全呼び出しへ添え、agent が引数に書いた値は使わない（名乗り間違いを起こさない）。
     args["callerTabId"] = ProcessInfo.processInfo.environment["ORBE_TAB"].flatMap(Int.init)
     switch controlRequest(method: name, params: args) {
     case .ok(let value):
-      let text = jsonText(value)
-      reply(id: id, result: ["content": [["type": "text", "text": text]]])
+      reply(id: id, result: ["content": [["type": "text", "text": jsonText(value)]]])
     case .err(let err):
       reply(
         id: id,
@@ -158,6 +172,25 @@ func handle(_ message: [String: Any]) {
   default:
     // notifications/initialized 等は通知なので無視。未知の request にはエラーを返す。
     if let id { replyError(id: id, code: -32601, message: "method not found: \(method)") }
+  }
+}
+
+/// その回の道具を Orbe の `run_tool` へ渡し、答えの塊をそのまま返す（断った答えは isError）。
+func runTool(id: Any, token: String, name: String, arguments: [String: Any]) {
+  switch controlRequest(
+    method: "run_tool", params: ["token": token, "name": name, "arguments": arguments])
+  {
+  case .ok(let value):
+    let answer = value as? [String: Any] ?? [:]
+    let texts = answer["texts"] as? [String] ?? []
+    reply(
+      id: id,
+      result: [
+        "content": texts.map { ["type": "text", "text": $0] },
+        "isError": answer["isError"] as? Bool ?? false,
+      ])
+  case .err(let err):
+    reply(id: id, result: ["content": [["type": "text", "text": err]], "isError": true])
   }
 }
 

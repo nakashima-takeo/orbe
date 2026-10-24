@@ -1,25 +1,60 @@
 import Foundation
 import OrbeSessionLog
 
-/// 自動化の 8 動詞の domain 側。変異は `AutomationRunner`（番人の登録を合わせる）、読みは `AutomationStore`、試走は
+/// 自動化の 9 動詞と、裏の agent の回の道具の domain 側。変異は `AutomationRunner`（番人の登録を合わせる）、読みは `AutomationStore`、試走は
 /// `AutomationTrials` に任せ、ここは応答の形を組む。
 extension WindowController {
+  /// 自動化を ID 順に（定義を読めない自動化も、その場所に）。使えないセッションでは理由で断る。
   func controlListAutomations() -> Result<Any, ControlError> {
-    .success(["automations": automationStore.automations.map(automationJSON)])
+    automationResult { () throws(AutomationError) in
+      let readable = automationStore.automations.map { ($0.id, automationJSON($0)) }
+      let unreadable = automationStore.unreadable.map { ($0.id, unreadableJSON($0)) }
+      return ["automations": (readable + unreadable).sorted { $0.0 < $1.0 }.map(\.1)]
+    }
   }
 
-  func controlSetAutomation(automationId: Int?, _ definition: AutomationDefinition) -> Result<
-    Any, ControlError
-  > {
+  func controlSetAutomation(
+    automationId: Int?, version: Int?, _ definition: AutomationDefinition
+  ) -> Result<Any, ControlError> {
     automationResult { () throws(AutomationError) in
-      ["automation": automationJSON(try automationRunner.set(automationId, definition))]
+      [
+        "automation": automationJSON(
+          try automationRunner.set(automationId, version: version, definition))
+      ]
     }
   }
 
   func controlRunAutomation(automationId: Int, partKey: String?) -> Result<Any, ControlError> {
     automationResult { () throws(AutomationError) in
-      try automationRunner.flow(automationId, to: partKey.map { .part($0) } ?? .ends)
+      let automation = automationStore.automations[try automationStore.index(automationId)]
+      var target = AutomationFlow.Target.ends
+      if let partKey {
+        guard let node = automation.graph.node(key: partKey) else {
+          throw .partNotFound(automationId, partKey)
+        }
+        target = .part(node.id)
+      }
+      try automationRunner.flow(automationId, to: target)
       return ["ok": true]
+    }
+  }
+
+  /// 回の記録を新しい順に 1 ページ。
+  func controlListAutomationRuns(automationId: Int, partKey: String?, before: Int?, limit: Int?)
+    -> Result<Any, ControlError>
+  {
+    automationResult { () throws(AutomationError) in
+      let page = try automationStore.history(
+        of: automationId, part: partKey, before: before, limit: limit)
+      var json: [String: Any] = [
+        "runs": page.runs.map { run -> [String: Any] in
+          var object = AutomationRunWire.object(run.record, part: run.partKey)
+          object["partKey"] = run.partKey
+          return object
+        }
+      ]
+      if let next = page.next { json["next"] = next }
+      return json
     }
   }
 
@@ -37,9 +72,14 @@ extension WindowController {
   }
 
   func controlListAutomationProposals(automationId: Int?) -> Result<Any, ControlError> {
-    if let automationId, automationStore.automation(automationId) == nil {
-      return .failure(Self.automationNotFound(automationId))
+    automationResult { () throws(AutomationError) in
+      if let automationId { _ = try automationStore.index(automationId) }
+      return ["proposals": proposalsJSON(of: automationId)]
     }
+  }
+
+  /// 覚えている候補（`automationId` があればその自動化の棚の分だけ）。
+  private func proposalsJSON(of automationId: Int?) -> [[String: Any]] {
     let proposals = automationStore.proposals.compactMap { proposal -> [String: Any]? in
       let shelf = automationStore.shelf(of: proposal)
       if let automationId, shelf?.id != automationId { return nil }
@@ -51,13 +91,12 @@ extension WindowController {
       ]
       if let reason = proposal.reason { json["reason"] = reason }
       // 出した自動化と部品の鍵は組で出す——棚の自動化（`automationId`）と別のことがあり、鍵だけでは取り違える。出した自動化が
-      // 消えた後は、指す先が無いので出さない。
-      if automationStore.automation(proposal.automationId) != nil {
-        json["proposedBy"] =
-          [
-            "automationId": proposal.automationId, "partKey": proposal.partKey,
-            "sourcePartKey": proposal.sourcePartKey,
-          ] as [String: Any]
+      // 消えた後は、指す先が無いので出さない。部品は今の鍵で言い、外れていれば出さない。
+      if let issuer = automationStore.issuer(of: proposal) {
+        var by: [String: Any] = ["automationId": issuer.id]
+        if let judge = issuer.graph.node(proposal.judge) { by["partKey"] = judge.key }
+        if let source = issuer.graph.node(proposal.source) { by["sourcePartKey"] = source.key }
+        json["proposedBy"] = by
       }
       if let shelf {
         json["automationId"] = shelf.id
@@ -71,7 +110,23 @@ extension WindowController {
       if case .accepted(let taskId) = proposal.state { json["taskId"] = taskId }
       return json
     }
-    return .success(["proposals": proposals])
+    // 読めない候補は、読めない記録と同じく分かる分だけで出す。
+    let unreadable = automationStore.unreadableProposals.compactMap { proposal -> [String: Any]? in
+      if let automationId, automationStore.holder(of: proposal)?.id != automationId { return nil }
+      return ["proposalId": proposal.id, "link": proposal.link, "unreadable": true]
+    }
+    return proposals + unreadable
+  }
+
+  /// 裏で動く agent の回の道具を 1 つ呼ぶ。返事は道具の答え（中身の塊と、断ったか）。
+  func controlRunTool(token: String, name: String, arguments: [String: Any]) -> Result<
+    Any, ControlError
+  > {
+    guard let session = automationRunner.runSessions.session(token) else {
+      return .failure(ControlError(code: -32004, message: "run not found (it has ended)"))
+    }
+    let reply = session.call(name, arguments)
+    return .success(["texts": reply.texts, "isError": reply.isError])
   }
 
   func controlTryAutomation(automationId: Int, _ request: AutomationTrial.Request) -> Result<
@@ -108,26 +163,26 @@ extension WindowController {
     }
   }
 
-  /// 定義（保存のまま）に、止めているか・部品の鍵ごとの状態（走っているか・次の時刻・最後に回った時刻・溜まりの件数・決まりを
-  /// 外した印・回の記録〔保存と同じ形〕）を足す。判定の部品を持つ自動化にだけタスク候補の欄を付ける。
+  /// 定義（部品に `id` を添えた外の形）と版に、止めているか・部品の今の鍵ごとの状態（走っているか・最新の回・次の時刻・読めば
+  /// 取る行の数・決まりを外した印）を足す。判定の部品を持つ自動化にだけタスク候補の欄を付ける。
   private func automationJSON(_ automation: Automation) -> [String: Any] {
     var parts: [String: Any] = [:]
     for node in automation.graph.nodes {
-      let state = automation.state(node.key)
-      var part: [String: Any] = [
-        "running": automationRunner.isRunning(automation.id, node.key),
-        "runs": AutomationRunWire.objects(state.runs, part: node.key),
-      ]
-      if let next = automationRunner.nextRunAt(automation, part: node.key) {
+      let state = automation.state(node.id)
+      var part: [String: Any] = ["running": automationRunner.isRunning(automation.id, node.id)]
+      if let last = state.runs.first {
+        part["lastRun"] = AutomationRunWire.object(last, part: node.key)
+      }
+      if let next = automationRunner.nextRunAt(automation, part: node.id) {
         part["nextRunAt"] = SessionEvent.iso8601(next)
       }
-      if let last = state.lastRunAt { part["lastRunAt"] = SessionEvent.iso8601(last) }
-      if !node.part.inputs.isEmpty { part["inbox"] = state.inbox }
-      if let breach = state.breach { part["breach"] = AutomationRunWire.object(breach) }
+      if !node.inputs.isEmpty { part["pending"] = state.pending.count }
+      if let breach = state.breach { part["breach"] = AutomationRunWire.breach(breach) }
       parts[node.key] = part
     }
     var json: [String: Any] = [
       "automationId": automation.id,
+      "version": automation.version,
       "definition": AutomationWire.object(automation.definition),
       "paused": automation.paused,
       "parts": parts,
@@ -145,15 +200,27 @@ extension WindowController {
     return json
   }
 
+  /// 定義を読めない自動化: 行から組めた分の定義・版・理由。
+  private func unreadableJSON(_ broken: AutomationUnreadable) -> [String: Any] {
+    [
+      "automationId": broken.id, "version": broken.version,
+      "definition": (try? JSONSerialization.jsonObject(with: Data(broken.definition.utf8)))
+        ?? [String: Any](),
+      "definitionError": broken.reason,
+    ]
+  }
+
   private static func automationNotFound(_ id: Int) -> ControlError {
     ControlError(code: -32004, message: "automation not found: \(id)")
   }
 
   /// ドメインエラーを制御エラーの語彙へ写す（未知・試走が無い → -32004・不正な値 → -32602・流している途中・使えない → -32000）。
+  /// 自動化を使えないセッションでは、どの動詞も中身を見る前に理由で断る。
   private func automationResult(_ body: () throws(AutomationError) -> [String: Any]) -> Result<
     Any, ControlError
   > {
     do throws(AutomationError) {
+      guard automationStore.available else { throw automationStore.unavailableError }
       return .success(try body())
     } catch {
       switch error {
@@ -170,11 +237,25 @@ extension WindowController {
         return .failure(
           ControlError(
             code: -32000,
-            message: "automation \(id) is still flowing; wait until its parts finish"))
+            message: "automation \(id) is still running; wait until its parts finish"))
       case .unavailable(let message):
         return .failure(ControlError(code: -32000, message: message))
       case .trialNotFound(let id):
         return .failure(ControlError(code: -32004, message: "no trial of automation \(id)"))
+      case .versionMismatch(let sent, let current):
+        return .failure(
+          ControlError(
+            code: -32000,
+            message:
+              "version mismatch: sent \(sent), current \(current); read it again with list_automations"
+          ))
+      case .unreadable(let id, let reason):
+        return .failure(
+          ControlError(
+            code: -32000,
+            message:
+              "automation \(id) cannot be read: \(reason); fix it with set_automation or delete it")
+        )
       }
     }
   }

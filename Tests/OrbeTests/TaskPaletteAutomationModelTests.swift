@@ -48,9 +48,11 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
   func testTheShelfListsOnlyTaskCandidateAutomations() throws {
     let runner = DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignSamples())
     var command = runner.store.automation(4)!.definition
+    let judge = command.parts[1].id
     command.parts[1] = DesignSceneFixtures.commandPart(
       "judge", "投稿", .arrival, from: ["fetch"], script: "cat", deliver: .sideEffect)
-    _ = try runner.set(4, command)
+    command.parts[1].id = judge
+    _ = try runner.set(4, version: runner.store.automation(4)!.version, command)
     let palette = TaskPaletteSamples.model([], automations: runner)
 
     XCTAssertEqual(
@@ -61,11 +63,8 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     let runner = DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignSamples())
     let item = DesignSceneFixtures.automationItem(
       "C03-9", "後の回", at: DesignSceneFixtures.automationNow)
-    let fetched = runner.store.automation(2)!.state("fetch").lastOutput.map {
-      AutomationItem(id: $0.id, link: $0.link, body: "", time: DesignSceneFixtures.automationNow)
-    }
     try WindowControllerAutomationControlTests.round(
-      runner.store, 2, fetched: fetched + [item], proposing: [item], titles: ["後の提案"])
+      runner.store, 2, fetched: [item], proposing: [item], titles: ["後の提案"])
     let palette = TaskPaletteSamples.model([], automations: runner)
 
     XCTAssertEqual(palette.automation.proposalIDs, [4, 1, 2, 3])
@@ -110,7 +109,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertEqual(task.due, TaskItem.DueDate("2025-10-10"))
     XCTAssertEqual(task.workspace, DesignSceneFixtures.taskWorkspaces.all[0].id, "付け先に付く")
     XCTAssertTrue(task.description.hasPrefix("https://example.slack.com/archives/D01-1\n\n"))
-    XCTAssertEqual(palette.automation.store.proposals[0].state, .accepted(taskId: task.id))
+    XCTAssertEqual(try palette.automation.store.decision(of: 1), .accepted(taskId: task.id))
     XCTAssertEqual(palette.automation.proposalIDs, [2, 3])
     XCTAssertEqual(palette.automation.proposalList.selectedID, 2)
     XCTAssertNil(palette.automation.error)
@@ -168,14 +167,14 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     XCTAssertEqual(palette.store.tasks.first?.workspace, TaskPaletteSamples.home)
   }
 
-  func testDismissMakesNoTaskAndSelectsTheSamePosition() {
+  func testDismissMakesNoTaskAndSelectsTheSamePosition() throws {
     let palette = listed()
     palette.automation.moveProposal(1)
 
     palette.automation.dismiss()
 
     XCTAssertEqual(palette.store.tasks.count, 1)
-    XCTAssertEqual(palette.automation.store.proposals[1].state, .dismissed)
+    XCTAssertEqual(try palette.automation.store.decision(of: 2), .dismissed)
     XCTAssertEqual(palette.automation.proposalIDs, [1, 3])
     XCTAssertEqual(palette.automation.proposalList.selectedID, 3)
   }
@@ -327,7 +326,7 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
 
   // MARK: - 出どころ
 
-  /// 候補の出どころの部品の名前は、候補を出した自動化の定義から引く。消えた自動化の候補は引けない。
+  /// 候補の出どころの部品の名前は、候補を出した自動化の定義から引く。消えた自動化の候補は、出どころの項目が無効になって下がる。
   func testSourceNameComesFromTheProposingAutomation() {
     let palette = TaskPaletteSamples.model(
       [],
@@ -337,6 +336,6 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
     automation.tapShelf(.automation(1))
 
     XCTAssertEqual(
-      automation.proposals.map(automation.sourceName(of:)), ["GitHub", "Backlog", nil])
+      automation.proposals.map(automation.sourceName(of:)), ["GitHub", "Backlog"])
   }
 }

@@ -19,10 +19,10 @@ extension BoardAutomationModel {
 
   /// 選ばれている部品のカードの値。部品が選ばれていなければ nil。
   func card(text: AutomationText, now: Date) -> BoardAutomationPartValue? {
-    guard let automation = selectedAutomation, let key = selectedPart else { return nil }
+    guard let automation = selectedAutomation, let part = selectedPart else { return nil }
     return BoardAutomationPartValue(
-      automation, part: key, text: text, running: runner.isRunning(automation.id, key),
-      next: runner.nextRunAt(automation, part: key, now: now),
+      automation, part: part, text: text, running: runner.isRunning(automation.id, part),
+      next: runner.nextRunAt(automation, part: part, now: now),
       open: store.shelvedProposals(of: automation.id).count)
   }
 
@@ -41,9 +41,15 @@ extension BoardAutomationModel {
         BoardKeyHint("←", .boardHintBack),
       ]
     }
+    if selectedUnreadable != nil {
+      let delete = BoardAutomationHand.Operation.delete
+      return [
+        BoardKeyHint("↑↓", .boardHintSelect), BoardKeyHint(delete.key, delete.title(paused: false)),
+      ]
+    }
     guard let selectedAutomation else {
       return [BoardKeyHint("↵", .boardAskHint)]
-        + (ids.isEmpty ? [] : [BoardKeyHint("↓", .boardHintToList)])
+        + (ids.isEmpty ? [] : [BoardKeyHint("↓", .automationHintToList)])
     }
     let paused = selectedAutomation.paused
     func hand(_ operation: BoardAutomationHand.Operation) -> BoardKeyHint {
@@ -53,12 +59,12 @@ extension BoardAutomationModel {
     case .notify:
       return [
         BoardKeyHint("↑↓", .boardHintParts), BoardKeyHint("↵", .boardHintChangeNotify),
-        BoardKeyHint("←", .boardHintToList),
+        BoardKeyHint("←", .automationHintToList),
       ]
     case .part:
       return [
         BoardKeyHint("↑↓", .boardHintParts), hand(.flow(.part)),
-        BoardKeyHint("←", .boardHintToList),
+        BoardKeyHint("←", .automationHintToList),
       ]
     case nil:
       return [

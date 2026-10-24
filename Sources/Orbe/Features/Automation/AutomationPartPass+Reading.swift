@@ -1,190 +1,37 @@
 import Foundation
 
-/// 役割ごとの出力の読み。
+/// コマンドの部品の結果の読み。標準出力を、agent の道具と同じ決まり（`AutomationOutputs`）で確かめる。何も無い回は空の
+/// 出力、失敗は 0 以外の終了コード。
 extension AutomationPartPass {
-  /// 1 つの呼び出しの出力を読んだもの。`lines` は受け付けなかった行で、行を出す部品（取得・処理・判定）だけが持つ。1 行でも
-  /// あれば決まりを外した出力で、`Output` は使わない。
-  enum Reading {
-    case failed(AutomationFailure)
-    case read(Output, count: Int, lines: [AutomationBrokenLine])
-  }
-
-  static func read(_ result: BackgroundRunResult, _ node: AutomationGraph.Node, _ input: Input)
-    -> Reading
+  /// `writer` は回を走らせた部品。
+  static func commandEnded(_ result: BackgroundRunResult, _ input: Input, writer: AutomationPartID)
+    -> Outcome
   {
+    if case .sideEffect(let rows, _) = input {
+      guard result.ending == .exited(0) else {
+        return .failed(
+          .ended(detail: AutomationRunOutput.stderr(result)), execution(result), breach: nil)
+      }
+      return .succeeded(.sideEffect, execution(result, count: rows.count), breach: nil)
+    }
+    let text: String
+    switch AutomationRunOutput.commandText(result) {
+    case .failure(let failure): return .failed(failure, execution(result), breach: nil)
+    case .success(let stdout): text = stdout
+    }
+    var outputs = AutomationOutputs(input, writer: writer)
     switch input {
-    case .fetch(_, let lastOutput):
-      return reading(result) { declaringNothing($0) { fetched($0, node, lastOutput: lastOutput) } }
-    case .process(let rows, let reachesJudge):
-      return reading(result) {
-        declaringNothing($0) { processed($0, rows, reachesJudge: reachesJudge) }
-      }
-    case .judge(let rows, let choices):
-      return reading(result) { declaringNothing($0) { judged($0, rows, choices) } }
     case .report:
-      return reading(result) { text in
-        let report = AutomationPrompts.nothing(text) == nil ? kept(text) : nil
-        return .read(.report(report), count: report == nil ? 0 : 1, lines: [])
+      outputs.putReport(text)
+    case .fetch, .process, .judge:
+      let broken = outputs.put(text)
+      guard broken.isEmpty else {
+        return .failed(.brokeRules, execution(result), breach: AutomationRejections(broken))
       }
-    case .work:
-      return reading(result) { worked($0) }
-    case .sideEffect(let rows, _):
-      return sideEffected(result, count: rows.count)
+    case .work, .sideEffect:
+      preconditionFailure("a work part is an agent; a side effect is read above")
     }
-  }
-
-  /// 外から与えた項目（1 行 1 JSON）を、取得の部品が前回の出力なしで取った項目として読む。
-  static func given(_ text: String, to node: AutomationGraph.Node) -> Reading {
-    fetched(text, node, lastOutput: [])
-  }
-
-  /// 残す報告の上限（字）。回の記録は部品ごとに 20 回残る。
-  static let reportLimit = 2000
-
-  /// 残す報告・仕事の文。前後の空白を除いて上限で切り（切ったら「…」を付ける）、空なら nil。
-  static func kept(_ text: String) -> String? {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return nil }
-    return trimmed.count > reportLimit ? String(trimmed.prefix(reportLimit)) + "…" : trimmed
-  }
-
-  /// 手段の出力を文として受けてから読む。
-  private static func reading(_ result: BackgroundRunResult, _ body: (String) -> Reading) -> Reading
-  {
-    switch AutomationRunOutput.text(result) {
-    case .failure(let failure): .failed(failure)
-    case .success(let text): body(text)
-    }
-  }
-
-  /// 行を出す部品の出力を、何も無い回の申告と分けて読む。最後の空でない行が `{"nothing": …}` なら、その行を空行にして
-  /// （行番号は変わらない）残りを読む。残りに読めた行が無ければ正しい 0 件、あれば申告の行も外れた行。前置きの文は残りの
-  /// 読みが外れた行にする。
-  private static func declaringNothing(_ text: String, _ body: (String) -> Reading) -> Reading {
-    var lines = text.split(omittingEmptySubsequences: false) { $0 == "\n" || $0 == "\r\n" }
-    guard
-      let last = lines.lastIndex(where: {
-        !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      }),
-      AutomationPrompts.nothing(String(lines[last])) != nil
-    else { return body(text) }
-    lines[last] = ""
-    let reading = body(lines.joined(separator: "\n"))
-    guard case .read(let output, let count, var broken) = reading, count > 0 else { return reading }
-    broken.append(AutomationBrokenLine(line: last + 1, fault: .nothingWithItems))
-    return .read(output, count: count, lines: broken.sorted { $0.line < $1.line })
-  }
-
-  /// `{"error": …}` の行は申告の失敗。項目として読めない行と、同じ `id` の 2 つ目の行は外れた行。前回の出力に無い項目
-  /// （毎回全件なら全部）を、`id` に部品の鍵の接頭を付けた行にする。出どころは元の項目のまま持つ。
-  private static func fetched(
-    _ text: String, _ node: AutomationGraph.Node, lastOutput: Set<String>
-  ) -> Reading {
-    if let error = AutomationPrompts.reportedError(in: text) { return .failed(.reported(error)) }
-    let read = JSONLines<AutomationItem>(text)
-    var lines = read.rejected.map {
-      AutomationBrokenLine(line: $0.line, fault: AutomationLineFault($0.reason))
-    }
-    var ids = Set<String>()
-    var items: [AutomationItem] = []
-    for accepted in read.accepted {
-      guard ids.insert(accepted.item.id).inserted else {
-        lines.append(AutomationBrokenLine(line: accepted.line, fault: .idTwice(accepted.item.id)))
-        continue
-      }
-      items.append(accepted.item)
-    }
-    let fresh =
-      node.role == .fetch(.everything) ? items : items.filter { !lastOutput.contains($0.id) }
-    let rows = fresh.map { item in
-      let id = "\(node.key):\(item.id)"
-      return AutomationPartRow(
-        id: id,
-        text: AutomationPrompts.row(
-          AutomationItem(id: id, link: item.link, body: item.body, time: item.time)),
-        origin: AutomationOrigin(part: node.key, item: item))
-    }
-    return .read(
-      .fetch(rows: rows, lastOutput: items.map { AutomationSeen(id: $0.id, link: $0.link) }),
-      count: items.count, lines: lines.sorted { $0.line < $1.line })
-  }
-
-  /// 出どころは `id` で入力の行と照らして引き継ぐ。`id` の無い行・同じ `id` の 2 つ目の行・判定へ届くときの入力の行の `id`
-  /// でない行は外れた行。
-  private static func processed(
-    _ text: String, _ input: [AutomationPartRow], reachesJudge: Bool
-  ) -> Reading {
-    var (rows, lines) = AutomationPrompts.objectRows(text)
-    let inputIds = Set(input.map(\.id))
-    let origins = Dictionary(
-      input.compactMap { row in row.origin.map { (row.id, $0) } }, uniquingKeysWith: { $1 })
-    var ids = Set<String>()
-    var passed: [AutomationPartRow] = []
-    for row in rows {
-      guard let id = AutomationPrompts.id(of: row.text) else {
-        lines.append(AutomationBrokenLine(line: row.line, fault: .missingKey("id")))
-        continue
-      }
-      guard ids.insert(id).inserted else {
-        lines.append(AutomationBrokenLine(line: row.line, fault: .idTwice(id)))
-        continue
-      }
-      guard !reachesJudge || inputIds.contains(id) else {
-        lines.append(AutomationBrokenLine(line: row.line, fault: .notInputId(id)))
-        continue
-      }
-      passed.append(AutomationPartRow(id: id, text: row.text, origin: origins[id]))
-    }
-    return .read(.process(passed), count: rows.count, lines: lines.sorted { $0.line < $1.line })
-  }
-
-  /// 候補の案は取った行の `id` を指すものだけを受け、指した行の出どころを付ける。受けられない行はどれも外れた行。
-  private static func judged(
-    _ text: String, _ rows: [AutomationSourcedRow], _ choices: AutomationJudgeChoices
-  ) -> Reading {
-    let (objects, malformed) = AutomationPrompts.objectRows(text)
-    let origins = Dictionary(rows.map { ($0.id, $0.origin) }, uniquingKeysWith: { $1 })
-    var lines = malformed
-    var proposals: [Proposal] = []
-    var resolved: [String] = []
-    for reading in AutomationPrompts.judgeRows(
-      objects, itemIds: Set(origins.keys), choices: choices)
-    {
-      switch reading {
-      case .success(.propose(let itemId, let title, let due, let workspace, let reason)):
-        guard let origin = origins[itemId] else {
-          preconditionFailure("an accepted proposal points at one of the rows")
-        }
-        proposals.append(
-          Proposal(origin: origin, title: title, due: due, workspace: workspace, reason: reason))
-      case .success(.resolve(let link)):
-        resolved.append(link)
-      case .failure(let line):
-        lines.append(line)
-      }
-    }
-    return .read(
-      .judge(proposals: proposals, resolved: resolved), count: objects.count,
-      lines: lines.sorted { $0.line < $1.line })
-  }
-
-  /// 全体が `{"error": …}` の 1 行なら失敗、最後の空でない行が `{"nothing": …}` なら何もしなかった回、ほかは報告の文。
-  private static func worked(_ text: String) -> Reading {
-    if let error = AutomationPrompts.workError(text) { return .failed(.reported(error)) }
-    if let nothing = AutomationPrompts.nothing(text) {
-      return .read(.work(.nothing(nothing)), count: 0, lines: [])
-    }
-    let report = kept(text)
-    return .read(.work(.done(report)), count: report == nil ? 0 : 1, lines: [])
-  }
-
-  /// 終了コードだけを見て、標準出力は読まない。
-  private static func sideEffected(_ result: BackgroundRunResult, count: Int) -> Reading {
-    guard result.ending == .exited(0) else {
-      var stderr = Data()
-      if case .command(_, let captured) = result.output { stderr = captured.data }
-      return .failed(.ended(detail: AutomationRunOutput.snippet(stderr)))
-    }
-    return .read(.sideEffect, count: count, lines: [])
+    return .succeeded(
+      outputs.output(nothing: nil), execution(result, count: outputs.count), breach: nil)
   }
 }

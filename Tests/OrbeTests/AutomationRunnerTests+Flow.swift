@@ -26,7 +26,7 @@ extension AutomationRunnerTests {
   }
 
   private func lastTrigger(_ key: String, of id: Int) -> AutomationPartRun.Trigger? {
-    store.automation(id)?.state(key).runs.first?.trigger
+    store.automation(id)?.state(key: key).runs.first?.trigger
   }
 
   /// 取得 `f` → 処理 `p`（手動）→ 副作用 `s1`（遠い予定）、`f` → 副作用 `s2`（遠い予定）、`p` → 副作用 `s3`（届いたら）。
@@ -47,19 +47,19 @@ extension AutomationRunnerTests {
   func testFlowingToAPartRunsItsPathInOrderOnceAndLeavesTheRestAlone() throws {
     let id = try defineFanOut()
 
-    try flow(id, to: .part("s1"))
+    try flow(id, to: .part(store.part(id, "s1")))
     XCTAssertEqual(calls("f").count, 1)
     XCTAssertEqual(calls("p"), [], "上流が終わるまで起こさない")
     finish("f", fetched(["a"]))
     XCTAssertEqual(calls("p").count, 1)
     XCTAssertEqual(calls("s1"), [])
     XCTAssertTrue(refusesAnotherFlow(id))
-    finish("p", printed(#"{"id":"f:a","note":"処理した"}"#))
+    finish("p", printed(#"{"id":"\#(downstream("f", "a", of: id))","note":"処理した"}"#))
 
-    XCTAssertEqual(ids("s1"), ["f:a"])
-    XCTAssertEqual(ids("s3"), ["f:a"], "届いたらは上流が積んだので普段どおり起きる")
+    XCTAssertEqual(ids("s1"), [downstream("f", "a", of: id)])
+    XCTAssertEqual(ids("s3"), [downstream("f", "a", of: id)], "届いたらは上流が積んだので普段どおり起きる")
     XCTAssertEqual(calls("s2"), [], "道の外は走らない")
-    XCTAssertEqual(inbox("s2", of: id), 1, "道の外の溜まりは普段どおり溜まる")
+    XCTAssertEqual(pending("s2", of: id), 1, "道の外の部品にも普段どおり読めば取る行が増える")
     XCTAssertTrue(refusesAnotherFlow(id))
     finish("s1", printed(""))
 
@@ -78,7 +78,7 @@ extension AutomationRunnerTests {
     try flow(id)
     finish("f", fetched(["a"]))
     XCTAssertEqual(calls("s2").count, 1, "f だけを上流に持つ s2 は f の後に走る")
-    finish("p", printed(#"{"id":"f:a","note":"処理した"}"#))
+    finish("p", printed(#"{"id":"\#(downstream("f", "a", of: id))","note":"処理した"}"#))
     finish("s1", printed(""))
     finish("s2", printed(""))
     XCTAssertTrue(refusesAnotherFlow(id), "届いたらの s3 が走っている間は終わらない")
@@ -132,13 +132,13 @@ extension AutomationRunnerTests {
     XCTAssertEqual(calls("p"), [], "予定でも上流の確定でも走らない")
     finish("f", fetched(["a"]))
 
-    try flow(id, to: .part("f"))
+    try flow(id, to: .part(store.part(id, "f")))
     finish("f", fetched(["a", "b"]))
     XCTAssertEqual(calls("p"), [], "上流を指して流しても走らない")
 
-    try flow(id, to: .part("p"))
+    try flow(id, to: .part(store.part(id, "p")))
     finish("f", fetched(["a", "b"]))
-    XCTAssertEqual(ids("p"), ["f:a", "f:b"])
+    XCTAssertEqual(ids("p"), [downstream("f", "a", of: id), downstream("f", "b", of: id)])
   }
 
   // MARK: - 走っている回
@@ -153,7 +153,7 @@ extension AutomationRunnerTests {
     advance(by: 3600)
     finish("f", fetched(["a"]))
     advance(by: 3600)
-    XCTAssertEqual(ids("j"), ["f:a"], "前提: j が予定で走っている")
+    XCTAssertEqual(ids("j"), [downstream("f", "a", of: id)], "前提: j が予定で走っている")
     XCTAssertEqual(calls("f").count, 2, "前提: f が予定で走っている")
 
     try flow(id)
@@ -163,7 +163,7 @@ extension AutomationRunnerTests {
     finish("j", printed("要約"))
 
     XCTAssertEqual(calls("j").count, 2)
-    XCTAssertEqual(ids("j"), ["f:b"], "押した後に積まれた行を取る")
+    XCTAssertEqual(ids("j"), [downstream("f", "b", of: id)], "押した後に積まれた行を取る")
     XCTAssertTrue(refusesAnotherFlow(id))
     finish("j", printed("要約"))
     XCTAssertFalse(refusesAnotherFlow(id))
@@ -179,7 +179,7 @@ extension AutomationRunnerTests {
     advance(by: 3600)
     finish("f", fetched(["a"]))
     advance(by: 600)
-    XCTAssertEqual(ids("j"), ["f:a"], "前提: j が予定で走っている")
+    XCTAssertEqual(ids("j"), [downstream("f", "a", of: id)], "前提: j が予定で走っている")
 
     try flow(id)
     finish("f", fetched(["a", "b"]))
@@ -188,7 +188,7 @@ extension AutomationRunnerTests {
     finish("j", printed("要約"))
 
     XCTAssertEqual(calls("j").count, 2, "予定の回が続けて始まり、流しは重ねて起こさない")
-    XCTAssertEqual(ids("j"), ["f:b"])
+    XCTAssertEqual(ids("j"), [downstream("f", "b", of: id)])
     XCTAssertTrue(refusesAnotherFlow(id), "古い回の終わりで一巡を進めない")
     finish("j", printed("要約"))
     XCTAssertEqual(calls("j").count, 2)
@@ -213,14 +213,14 @@ extension AutomationRunnerTests {
   func testAPartTurnedFromArrivalToIntervalMidFlowIsWokenByTheFlow() throws {
     let id = try runner.set(nil, chain(a: .arrival)).id
     try flow(id)
-    _ = try runner.set(id, chain(a: .scheduled(.every(86400))))
+    try rewrite(id, chain(a: .scheduled(.every(86400))))
     finish("f", fetched(["x"]))
 
-    XCTAssertEqual(ids("a"), ["f:x"], "上流の後に流しが起こす")
+    XCTAssertEqual(ids("a"), [downstream("f", "x", of: id)], "上流の後に流しが起こす")
     XCTAssertEqual(calls("s"), [], "a が終わるまで下流へ進まない")
-    finish("a", printed(#"{"id":"f:x","note":"処理した"}"#))
+    finish("a", printed(#"{"id":"\#(downstream("f", "x", of: id))","note":"処理した"}"#))
     XCTAssertEqual(lastTrigger("a", of: id), .now)
-    XCTAssertEqual(ids("s"), ["f:x"])
+    XCTAssertEqual(ids("s"), [downstream("f", "x", of: id)])
     XCTAssertTrue(refusesAnotherFlow(id))
     finish("s", printed("要約"))
     XCTAssertFalse(refusesAnotherFlow(id))
@@ -231,9 +231,9 @@ extension AutomationRunnerTests {
   func testAPartTurnedFromIntervalToArrivalMidFlowIsLeftToItsUsualRule() throws {
     let id = try runner.set(nil, chain(a: .scheduled(.every(86400)))).id
     try flow(id)
-    _ = try runner.set(id, chain(a: .arrival))
+    try rewrite(id, chain(a: .arrival))
     finish("f", fetched(["x"]))
-    XCTAssertEqual(ids("a"), ["f:x"], "前提: 上流が積んだので普段どおり起きる")
+    XCTAssertEqual(ids("a"), [downstream("f", "x", of: id)], "前提: 上流が積んだので普段どおり起きる")
     finish("a", printed("", exit: 1))
 
     XCTAssertEqual(calls("a").count, 1, "失敗した行で流しが起こし直さない")
@@ -255,10 +255,10 @@ extension AutomationRunnerTests {
         ])
     }
     let id = try runner.set(nil, definition(a: ["f", "g"])).id
-    try flow(id, to: .part("a"))
-    _ = try runner.set(id, definition(a: ["f"]))
+    try flow(id, to: .part(store.part(id, "a")))
+    try rewrite(id, definition(a: ["f"]))
 
-    try flow(id, to: .part("a"))
+    try flow(id, to: .part(store.part(id, "a")))
   }
 
   /// 道の上の部品の何をするかを書き換えると一巡は打ち切られ、また流せる。道に触れない書き換え（名前）では続く。
@@ -274,9 +274,9 @@ extension AutomationRunnerTests {
     let id = try runner.set(nil, definition("流す", f: "f")).id
     try flow(id)
 
-    _ = try runner.set(id, definition("流す（改名）", f: "f"))
+    try rewrite(id, definition("流す（改名）", f: "f"))
     XCTAssertTrue(refusesAnotherFlow(id))
-    _ = try runner.set(id, definition("流す（改名）", f: "f --all"))
+    try rewrite(id, definition("流す（改名）", f: "f --all"))
 
     try flow(id)
     XCTAssertEqual(calls("f --all").count, 1)

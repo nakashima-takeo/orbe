@@ -1,78 +1,21 @@
 import Foundation
 
 /// 自動化の DB の読み書き。書く手はどれもトランザクションの中で呼ぶ（`transaction`）。
+///
+/// 部品の定義（`part_defs` 以下）は書き換えずに足し、自動化・部品・つながりの行は書き換える。出す側のデータは性質ごとに、
+/// 今の集合（`items`・`item_versions`）と出来事の流れ（`events`）に分け、受け手はつながりに読んだ位置を持つ。参照は外部キーで
+/// 守り、指されなくなった行はトランザクションの最後の掃除が消す（`AutomationDatabase+Retention`）。
 final class AutomationDatabase {
   struct Opened {
     let database: AutomationDatabase
-    let snapshot: AutomationSnapshot
+    let memory: AutomationMemory
   }
 
-  private let db: SQLiteDatabase
+  let db: SQLiteDatabase
 
   init(_ db: SQLiteDatabase) {
     self.db = db
   }
-
-  /// ID（自動化・候補）と溜まりの通し番号は使い回さない（AUTOINCREMENT）——消した最大の番号が新しい行に再び付くと、その行を
-  /// 取って走っている回の確定が、置き換わった新しい行を消す。
-  static let schema = """
-    CREATE TABLE automations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      definition TEXT NOT NULL,
-      paused INTEGER NOT NULL,
-      created_at INTEGER NOT NULL,
-      accepted INTEGER NOT NULL,
-      dismissed INTEGER NOT NULL
-    );
-    CREATE TABLE parts (
-      automation_id INTEGER NOT NULL,
-      key TEXT NOT NULL,
-      added_at INTEGER NOT NULL,
-      last_run_at INTEGER,
-      succeeded_at INTEGER,
-      pending_drops TEXT NOT NULL,
-      last_output TEXT NOT NULL,
-      breach TEXT,
-      PRIMARY KEY (automation_id, key)
-    );
-    CREATE TABLE inbox (
-      seq INTEGER PRIMARY KEY AUTOINCREMENT,
-      automation_id INTEGER NOT NULL,
-      part_key TEXT NOT NULL,
-      item_id TEXT NOT NULL,
-      arrived_at INTEGER NOT NULL,
-      size INTEGER NOT NULL,
-      origin_part TEXT,
-      origin_item TEXT,
-      origin_link TEXT,
-      row TEXT NOT NULL,
-      origin_body TEXT,
-      UNIQUE (automation_id, part_key, item_id)
-    );
-    CREATE INDEX inbox_order ON inbox (automation_id, part_key, seq);
-    CREATE TABLE proposals (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      link TEXT NOT NULL UNIQUE,
-      state TEXT NOT NULL,
-      task_id INTEGER,
-      automation_id INTEGER NOT NULL,
-      part_key TEXT NOT NULL,
-      source_part_key TEXT NOT NULL,
-      title TEXT NOT NULL,
-      due TEXT,
-      workspace TEXT,
-      reason TEXT,
-      proposed_at INTEGER NOT NULL,
-      item TEXT NOT NULL
-    );
-    CREATE TABLE runs (
-      automation_id INTEGER NOT NULL,
-      part_key TEXT NOT NULL,
-      started_at INTEGER NOT NULL,
-      record TEXT NOT NULL
-    );
-    CREATE INDEX runs_order ON runs (automation_id, part_key, started_at);
-    """
 
   func transaction<T>(_ body: () throws -> T) throws -> T {
     try db.transaction(body)
@@ -83,207 +26,203 @@ final class AutomationDatabase {
     try SQLiteBackup(from: db, to: copy)
   }
 
-  // MARK: - 自動化と部品の状態
+  // MARK: - 自動化
 
-  /// 足して ID を返す。
-  func insert(_ automation: Automation) throws -> Int {
+  func insertAutomation(name: String, notify: AutomationNotify?, createdAt: Date) throws -> Int {
     try db.run(
-      """
-      INSERT INTO automations (definition, paused, created_at, accepted, dismissed)
-      VALUES (?, ?, ?, ?, ?)
-      """,
-      [
-        .text(try Self.encode(automation.definition)), .integer(automation.paused ? 1 : 0),
-        .integer(AutomationPersistence.millis(automation.createdAt)),
-        .integer(Int64(automation.tally.accepted)), .integer(Int64(automation.tally.dismissed)),
-      ])
+      "INSERT INTO automations (name, notify, version, created_at) VALUES (?, ?, 1, ?)",
+      [.text(name), Self.text(notify?.rawValue), Self.instant(createdAt)])
     return Int(db.lastInsertRowID)
   }
 
-  func update(_ automation: Automation) throws {
+  func updateAutomation(_ id: Int, name: String, notify: AutomationNotify?, version: Int) throws {
     try db.run(
-      "UPDATE automations SET definition = ?, paused = ?, accepted = ?, dismissed = ? WHERE id = ?",
-      [
-        .text(try Self.encode(automation.definition)), .integer(automation.paused ? 1 : 0),
-        .integer(Int64(automation.tally.accepted)), .integer(Int64(automation.tally.dismissed)),
-        .integer(Int64(automation.id)),
-      ])
+      "UPDATE automations SET name = ?, notify = ?, version = ? WHERE id = ?",
+      [.text(name), Self.text(notify?.rawValue), .integer(Int64(version)), .integer(Int64(id))])
   }
 
-  /// 自動化と、その部品の状態・溜まり・記録を消す。
-  func delete(automation id: Int) throws {
-    let owner: [SQLiteValue] = [.integer(Int64(id))]
-    try db.run("DELETE FROM automations WHERE id = ?", owner)
-    try db.run("DELETE FROM parts WHERE automation_id = ?", owner)
-    try db.run("DELETE FROM inbox WHERE automation_id = ?", owner)
-    try db.run("DELETE FROM runs WHERE automation_id = ?", owner)
+  func setPaused(_ id: Int, at: Date?) throws {
+    try db.run(
+      "UPDATE automations SET paused_at = ? WHERE id = ?",
+      [at.map(Self.instant) ?? .null, .integer(Int64(id))])
   }
 
-  /// 部品の状態の列を書く（記録と溜まりは別に書く）。
-  func put(part key: String, of id: Int, _ state: AutomationPartState) throws {
+  /// 自動化の止めた時刻と作った時刻。
+  func automationRow(_ id: Int) throws -> (pausedAt: Date?, createdAt: Date) {
+    try db.select(
+      "SELECT paused_at, created_at FROM automations WHERE id = ?", [.integer(Int64(id))]
+    ) {
+      (
+        pausedAt: $0.optionalInt64(at: 0).map(AutomationPersistence.date),
+        createdAt: AutomationPersistence.date($0.int64(at: 1))
+      )
+    }.first ?? (nil, Date(timeIntervalSince1970: 0))
+  }
+
+  /// 自動化の行を消す。部品は先に外しておく（外した部品の台帳は自動化を指さなくなる）。
+  func deleteAutomation(_ id: Int) throws {
+    try db.run("DELETE FROM automations WHERE id = ?", [.integer(Int64(id))])
+  }
+
+  // MARK: - 部品の定義
+
+  /// 動作の定義を足して ID を返す。
+  func insert(action: AutomationActionDef) throws -> AutomationDefID {
+    try db.run("INSERT INTO part_defs (kind) VALUES ('action')", [])
+    let id = db.lastInsertRowID
+    try db.run(
+      "INSERT INTO action_defs (id, action) VALUES (?, ?)",
+      [.integer(id), .text(try Self.encode(action))])
+    return AutomationDefID(Int(id))
+  }
+
+  // MARK: - 部品
+
+  /// 部品を足して ID を返す。
+  func insertPart(
+    of automation: Int, at position: Int, _ part: AutomationDefinition.Part,
+    defId: AutomationDefID, addedAt: Date
+  ) throws -> AutomationPartID {
     try db.run(
       """
-      INSERT OR REPLACE INTO parts
-        (automation_id, key, added_at, last_run_at, succeeded_at, pending_drops, last_output, breach)
+      INSERT INTO parts (automation_id, position, key, name, trigger, max_items, def_id, added_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       """,
       [
-        .integer(Int64(id)), .text(key), .integer(AutomationPersistence.millis(state.addedAt)),
-        Self.instant(state.lastRunAt), Self.instant(state.succeededAt),
-        .text(try Self.encode(state.pendingDrops)), .text(try Self.encode(state.lastOutput)),
-        try state.breach.map { .text(try Self.encode($0)) } ?? .null,
+        .integer(Int64(automation)), .integer(Int64(position)), .text(part.key), .text(part.name),
+        .text(try Self.encode(part.trigger)), part.maxItems.map { .integer(Int64($0)) } ?? .null,
+        .integer(Int64(defId.rawValue)), Self.instant(addedAt),
       ])
+    return AutomationPartID(Int(db.lastInsertRowID))
   }
 
-  /// 部品の状態・溜まり・記録を消す。
-  func delete(part key: String, of id: Int) throws {
-    let owner: [SQLiteValue] = [.integer(Int64(id)), .text(key)]
-    try db.run("DELETE FROM parts WHERE automation_id = ? AND key = ?", owner)
-    try db.run("DELETE FROM inbox WHERE automation_id = ? AND part_key = ?", owner)
-    try db.run("DELETE FROM runs WHERE automation_id = ? AND part_key = ?", owner)
-  }
-
-  /// 回の記録を足し、その部品の新しい `retainedRuns` 件だけを残す。
-  func insert(run: AutomationPartRun, part key: String, of id: Int) throws {
-    let owner: [SQLiteValue] = [.integer(Int64(id)), .text(key)]
-    try db.run(
-      "INSERT INTO runs (automation_id, part_key, started_at, record) VALUES (?, ?, ?, ?)",
-      owner + [.integer(AutomationPersistence.millis(run.startedAt)), .text(try Self.encode(run))])
+  /// 外していない部品の位置と鍵を、一意に当たらない仮の値へ退ける（入れ替えを 1 行ずつ書くため）。
+  func setAsidePlaces(of automation: Int) throws {
     try db.run(
       """
-      DELETE FROM runs WHERE automation_id = ? AND part_key = ? AND rowid NOT IN (
-        SELECT rowid FROM runs WHERE automation_id = ? AND part_key = ?
-        ORDER BY started_at DESC, rowid DESC LIMIT ?)
-      """, owner + owner + [.integer(Int64(AutomationPartState.retainedRuns))])
+      UPDATE parts SET position = -id, key = char(0) || id
+      WHERE automation_id = ? AND removed_at IS NULL
+      """, [.integer(Int64(automation))])
   }
 
-  // MARK: - 溜まり
-
-  /// 溜まりの目録（本文なし、通し番号の順）。
-  func inbox(of key: String, in id: Int) throws -> [AutomationInbox.Row] {
-    try db.select(
-      """
-      SELECT seq, item_id, origin_part, origin_item, origin_link, size, arrived_at FROM inbox
-      WHERE automation_id = ? AND part_key = ? ORDER BY seq
-      """, [.integer(Int64(id)), .text(key)]
-    ) { s in
-      var origin: AutomationInbox.Origin?
-      if let part = s.text(at: 2), let item = s.text(at: 3), let link = s.text(at: 4) {
-        origin = AutomationInbox.Origin(part: part, item: item, link: link)
-      }
-      return AutomationInbox.Row(
-        seq: s.int(at: 0), id: s.text(at: 1) ?? "", origin: origin, size: s.int(at: 5),
-        arrivedAt: AutomationPersistence.date(s.int64(at: 6)))
-    }
-  }
-
-  /// 溜まりの件数と最も新しい通し番号。
-  func inboxCount(of key: String, in id: Int) throws -> (count: Int, newest: Int) {
-    let rows = try db.select(
-      "SELECT count(*), coalesce(max(seq), 0) FROM inbox WHERE automation_id = ? AND part_key = ?",
-      [.integer(Int64(id)), .text(key)]
-    ) { ($0.int(at: 0), $0.int(at: 1)) }
-    return rows.first ?? (0, 0)
-  }
-
-  /// 取った行の本文（`seqs` の順）。出どころの項目は行そのものか、行に添えた本文から組む。消えていた行は飛ばす。
-  func rows(_ seqs: [Int]) throws -> [AutomationPartRow] {
-    try seqs.compactMap { seq in
-      try db.select(
-        "SELECT item_id, row, origin_part, origin_item, origin_link, origin_body FROM inbox WHERE seq = ?",
-        [.integer(Int64(seq))]
-      ) { s -> AutomationPartRow? in
-        guard let id = s.text(at: 0), let text = s.text(at: 1) else { return nil }
-        guard let part = s.text(at: 2), let item = s.text(at: 3), let link = s.text(at: 4) else {
-          return AutomationPartRow(id: id, text: text, origin: nil)
-        }
-        let body =
-          s.text(at: 5).flatMap { Self.decode(OriginBody.self, $0) }
-          ?? Self.decode(AutomationItem.self, text).map { OriginBody(body: $0.body, time: $0.time) }
-        guard let body else { return nil }
-        return AutomationPartRow(
-          id: id, text: text,
-          origin: AutomationOrigin(
-            part: part, item: AutomationItem(id: item, link: link, body: body.body, time: body.time)
-          ))
-      }.first ?? nil
-    }
-  }
-
-  func delete(inbox seqs: [Int]) throws {
-    for seq in seqs { try db.run("DELETE FROM inbox WHERE seq = ?", [.integer(Int64(seq))]) }
-  }
-
-  /// 行を積む。行そのものが出どころの項目（取得が出した行。出どころの部品が入力の部品と同じ）なら、本文を二重に持たない。
-  func stack(
-    _ row: AutomationPartRow, into key: String, of id: Int, from input: String, at arrivedAt: Date
+  func updatePart(
+    _ id: AutomationPartID, at position: Int, _ part: AutomationDefinition.Part,
+    defId: AutomationDefID
   ) throws {
-    let origin = row.origin
-    let originIsRow = origin?.part == input
     try db.run(
       """
-      INSERT INTO inbox (automation_id, part_key, item_id, arrived_at, size, origin_part, origin_item,
-        origin_link, row, origin_body)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      UPDATE parts SET position = ?, key = ?, name = ?, trigger = ?, max_items = ?, def_id = ?
+      WHERE id = ?
       """,
       [
-        .integer(Int64(id)), .text(key), .text(row.id),
-        .integer(AutomationPersistence.millis(arrivedAt)), .integer(Int64(row.text.utf8.count)),
-        origin.map { .text($0.part) } ?? .null, origin.map { .text($0.item.id) } ?? .null,
-        origin.map { .text($0.item.link) } ?? .null, .text(row.text),
-        try origin.flatMap { originIsRow ? nil : $0 }.map {
-          .text(try Self.encode(OriginBody(body: $0.item.body, time: $0.item.time)))
-        } ?? .null,
+        .integer(Int64(position)), .text(part.key), .text(part.name),
+        .text(try Self.encode(part.trigger)), part.maxItems.map { .integer(Int64($0)) } ?? .null,
+        .integer(Int64(defId.rawValue)), .integer(Int64(id.rawValue)),
       ])
   }
 
-  /// 行に添える出どころの項目の本文と時刻。
-  private struct OriginBody: Codable {
-    let body: String
-    let time: Date
-  }
-
-  // MARK: - 候補
-
-  /// 足して ID を返す。
-  func insert(proposal: AutomationProposal) throws -> Int {
+  /// 部品を外す: 外した時刻を書き、今有効な項目を無効にし、つながりと外した印と持ち越しを消す。外した部品の回の記録・判断の
+  /// 記録・台帳は、同じトランザクションの最後の掃除が、候補を忘れた後に指されなくなったものから消す。無効にした項目を返す。
+  func removePart(_ id: AutomationPartID, at: Date) throws -> [Int] {
+    let part: [SQLiteValue] = [.integer(Int64(id.rawValue))]
+    let invalidated = try invalidateItems(of: id, at: at)
+    try db.run("DELETE FROM part_edges WHERE from_part_id = ?1 OR to_part_id = ?1", part)
     try db.run(
-      """
-      INSERT INTO proposals (link, state, task_id, automation_id, part_key, source_part_key, title, due,
-        workspace, reason, proposed_at, item)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      """,
-      [
-        .text(proposal.item.link), .text(proposal.state.name), Self.taskId(proposal.state),
-        .integer(Int64(proposal.automationId)), .text(proposal.partKey),
-        .text(proposal.sourcePartKey), .text(proposal.title),
-        proposal.due.map { .text($0.text) } ?? .null,
-        proposal.workspace.map { .text($0.uuidString) } ?? .null,
-        proposal.reason.map { .text($0) } ?? .null,
-        .integer(AutomationPersistence.millis(proposal.proposedAt)),
-        .text(try Self.encode(proposal.item)),
-      ])
-    return Int(db.lastInsertRowID)
+      "UPDATE parts SET removed_at = ?, breach_run_id = NULL, pending_drops = '{}' WHERE id = ?",
+      [Self.instant(at)] + part)
+    return invalidated
   }
 
-  func update(proposal: AutomationProposal) throws {
+  /// 外した印の回。
+  func setBreach(_ id: AutomationPartID, run: Int?) throws {
     try db.run(
-      "UPDATE proposals SET state = ?, task_id = ? WHERE id = ?",
-      [.text(proposal.state.name), Self.taskId(proposal.state), .integer(Int64(proposal.id))])
+      "UPDATE parts SET breach_run_id = ? WHERE id = ?",
+      [run.map { .integer(Int64($0)) } ?? .null, .integer(Int64(id.rawValue))])
   }
 
-  func delete(proposals ids: [Int]) throws {
-    for id in ids { try db.run("DELETE FROM proposals WHERE id = ?", [.integer(Int64(id))]) }
+  /// 受け手として回の無い契機（取る行 0 件）で捨てた・期限で消えたと数え、次の成功した回の記録へ持ち越す数。読めなければ空と
+  /// して扱う（ログに残す）。
+  func pendingDrops(of id: AutomationPartID) throws -> AutomationDrops {
+    let raw =
+      try db.select(
+        "SELECT pending_drops FROM parts WHERE id = ?", [.integer(Int64(id.rawValue))]
+      ) { $0.text(at: 0) }.first ?? nil
+    guard let drops = Self.decode(AutomationDrops.self, raw) else {
+      NSLog("[automation] dropped unreadable carried counts of part \(id)")
+      return AutomationDrops()
+    }
+    return drops
+  }
+
+  func setPendingDrops(_ id: AutomationPartID, _ drops: AutomationDrops) throws {
+    try db.run(
+      "UPDATE parts SET pending_drops = ? WHERE id = ?",
+      [.text(try Self.encode(drops)), .integer(Int64(id.rawValue))])
+  }
+
+  /// 部品の自分の状態（直近の回・最新の成功・外した印・今有効な項目のリンク）。起動時も変化の後も、メモリの部品の状態はここから
+  /// 読み直す。読めば取る行は数えない（`AutomationMemory.recount`）。
+  func state(of id: AutomationPartID) throws -> AutomationPartState {
+    let part: [SQLiteValue] = [.integer(Int64(id.rawValue))]
+    guard
+      let addedAt = try db.select(
+        "SELECT added_at FROM parts WHERE id = ?", part, { $0.int64(at: 0) }
+      )
+      .first
+    else {
+      throw AutomationError.unavailable("part \(id) is missing from the database")
+    }
+    var state = AutomationPartState(addedAt: AutomationPersistence.date(addedAt))
+    state.runs = try records(of: [id], limit: AutomationPartState.retainedRuns).map(\.record)
+    state.succeededAt = try succeededAt(of: id)
+    state.breach = try breachRecord(of: id)
+    state.liveLinks = try liveLinks(of: id)
+    return state
+  }
+
+  // MARK: - つながり
+
+  /// 受け手のつながりを `inputs` に置き換える。同じ部品どうしのつながりが残れば読んだ位置も残り、新しいつながりは項目を 0、
+  /// 出来事を上流の最後の出来事の番号から読む。
+  func setEdges(of automation: Int, to receiver: AutomationPartID, _ inputs: [AutomationPartEdge])
+    throws
+  {
+    let to = Int64(receiver.rawValue)
+    let kept = Dictionary(
+      uniqueKeysWithValues: try db.select(
+        "SELECT from_part_id, read_item_seq, read_event_seq FROM part_edges WHERE to_part_id = ?",
+        [.integer(to)]
+      ) { ($0.int(at: 0), ($0.int64(at: 1), $0.int64(at: 2))) })
+    try db.run("DELETE FROM part_edges WHERE to_part_id = ?", [.integer(to)])
+    for (position, edge) in inputs.enumerated() {
+      let from = Int64(edge.from.rawValue)
+      let start =
+        try db.select(
+          "SELECT last_event_seq FROM parts WHERE id = ?", [.integer(from)]
+        ) { $0.int64(at: 0) }.first ?? 0
+      let read = kept[edge.from.rawValue] ?? (0, start)
+      try db.run(
+        """
+        INSERT INTO part_edges (automation_id, from_part_id, to_part_id, position, take,
+          max_age_hours, read_item_seq, read_event_seq)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+          .integer(Int64(automation)), .integer(from), .integer(to), .integer(Int64(position)),
+          .text(edge.take.rawValue), edge.maxAgeHours.map { .integer(Int64($0)) } ?? .null,
+          .integer(read.0), .integer(read.1),
+        ])
+    }
   }
 
   // MARK: - 値
 
-  private static func taskId(_ state: AutomationProposal.State) -> SQLiteValue {
-    if case .accepted(let taskId) = state { .integer(Int64(taskId)) } else { .null }
+  static func instant(_ date: Date) -> SQLiteValue {
+    .integer(AutomationPersistence.millis(date))
   }
 
-  private static func instant(_ date: Date?) -> SQLiteValue {
-    date.map { .integer(AutomationPersistence.millis($0)) } ?? .null
+  static func text(_ text: String?) -> SQLiteValue {
+    text.map { .text($0) } ?? .null
   }
 
   static func encode(_ value: some Encodable) throws -> String {
@@ -297,5 +236,28 @@ final class AutomationDatabase {
 
   static func decode<T: Decodable>(_ type: T.Type, _ text: String?) -> T? {
     text.flatMap { try? AutomationWire.decoder.decode(type, from: Data($0.utf8)) }
+  }
+}
+
+/// 出す側の行への参照（回の履歴・候補の出どころ）。項目は版を指す。
+enum AutomationRowRef: Hashable {
+  case version(Int)
+  case event(Int)
+}
+
+/// 引き継いだ入力（項目か出来事）。版ではなく項目を指す——入力の中身が変わっただけで別の入力にならないように。
+enum AutomationSourceRef: Hashable {
+  case item(Int)
+  case event(Int)
+}
+
+extension AutomationDatabase {
+  /// 自動化の外していない部品の鍵（部品の台帳）。定義を読めない自動化でも行から引ける。
+  func partKeys(of automation: Int) throws -> [AutomationPartID: String] {
+    Dictionary(
+      uniqueKeysWithValues: try db.select(
+        "SELECT id, key FROM parts WHERE automation_id = ? AND removed_at IS NULL",
+        [.integer(Int64(automation))]
+      ) { (AutomationPartID($0.int(at: 0)), $0.text(at: 1) ?? "") })
   }
 }

@@ -3,8 +3,32 @@ import Foundation
 // グラフの検証。断りの文は定義の中の場所（`parts[2].from` など。制御 API が読む誤りに付ける場所と同じ書き方）で始まる。
 
 extension AutomationGraph {
+  /// 検証して、部品ごとの役割と入力の部品の位置を返す。最初に見つけた誤り 1 つで断る。順は「自分の欄だけで決まるもの → 鍵の
+  /// 名指し → 名指しの向き → 至るか・取り方」。部品の `id` は見ない（書き換えの口が確かめる）。
+  static func check(_ parts: [AutomationDefinition.Part]) throws(AutomationError) -> [Checked] {
+    guard !parts.isEmpty else { throw .invalid("parts: at least one part is required") }
+    var checked: [(part: AutomationDefinition.Part, role: AutomationPartRole)] = []
+    for (index, part) in parts.enumerated() {
+      checked.append(try Self.checked(part, at: "parts[\(index)]"))
+    }
+    let upstream = try Self.upstream(of: checked.map(\.part))
+    try Self.checkAcyclic(checked.map(\.part), upstream)
+    var downstream = Array(repeating: [Int](), count: checked.count)
+    for (index, inputs) in upstream.enumerated() {
+      for input in inputs { downstream[input].append(index) }
+    }
+    let roles = checked.map(\.role)
+    try Self.checkDestinations(checked.map(\.part), upstream, downstream)
+    try Self.checkTakes(checked.map(\.part), roles, downstream)
+    return checked.indices.map {
+      Checked(part: checked[$0].part, role: checked[$0].role, upstream: upstream[$0])
+    }
+  }
+
   /// 自分の欄だけで決まる規則を見て、役割を導く。名前は 1 行に整えて持つ。
-  static func checked(_ part: AutomationPart, at path: String) throws(AutomationError) -> Node {
+  private static func checked(_ part: AutomationDefinition.Part, at path: String)
+    throws(AutomationError) -> (part: AutomationDefinition.Part, role: AutomationPartRole)
+  {
     var part = part
     try checkKey(part.key, path)
     part.name = try line(part.name, "\(path).name")
@@ -15,41 +39,73 @@ extension AutomationGraph {
         throw .invalid("\(path).trigger: \(error.message)")
       }
     }
-    try checkMethod(part.method, path)
-    if let minutes = part.timeoutMinutes, !AutomationPart.timeoutRange.contains(minutes) {
+    try checkMethod(part.action.method, path)
+    if let minutes = part.action.timeoutMinutes,
+      !AutomationActionDef.timeoutRange.contains(minutes)
+    {
       throw .invalid(
-        "\(path).timeoutMinutes: must be \(AutomationPart.timeoutRange.lowerBound) to "
-          + "\(AutomationPart.timeoutRange.upperBound)")
+        "\(path).timeoutMinutes: must be \(AutomationActionDef.timeoutRange.lowerBound) to "
+          + "\(AutomationActionDef.timeoutRange.upperBound)")
     }
+    try checkInputs(part, path)
+    let role = try role(of: part, path)
+    if role == .process, part.action.coverage == .currentSet {
+      if let index = part.from.firstIndex(where: { $0.take != .all }) {
+        throw .invalid(
+          "\(path).from[\(index)]: a currentSet part copies its whole input, so take must be all")
+      }
+      if part.maxItems != nil {
+        throw .invalid(
+          "\(path).maxItems: a currentSet part copies its whole input, so it has no maxItems")
+      }
+    }
+    return (part, role)
+  }
+
+  /// 入力と、受け手の器（件数の上限・届いたら）。
+  private static func checkInputs(_ part: AutomationDefinition.Part, _ path: String)
+    throws(AutomationError)
+  {
     var named = Set<String>()
-    if let twice = part.inputs.first(where: { !named.insert($0).inserted }) {
-      throw .invalid("\(path).from: \"\(twice)\" is named twice")
+    for (index, input) in part.from.enumerated() {
+      guard named.insert(input.part).inserted else {
+        throw .invalid("\(path).from: \"\(input.part)\" is named twice")
+      }
+      if let hours = input.maxAgeHours, hours < 1 {
+        throw .invalid("\(path).from[\(index)].maxAgeHours: must be at least 1")
+      }
     }
-    try checkInboxLimit(part, path)
-    if part.inputs.isEmpty, part.trigger == .arrival {
+    if let items = part.maxItems {
+      guard !part.from.isEmpty else {
+        throw .invalid("\(path).maxItems: only a part with from takes rows")
+      }
+      guard items >= 1 else { throw .invalid("\(path).maxItems: must be at least 1") }
+    }
+    if part.from.isEmpty, part.trigger == .arrival {
       throw .invalid(
         "\(path).trigger: a part without from receives no rows, so arrival never runs it")
     }
-    return Node(part: part, role: try role(of: part, path))
   }
 
   /// 鍵の重複と未知の鍵の名指しを断り、部品ごとの入力を位置で返す。
-  static func upstream(of nodes: [Node]) throws(AutomationError) -> [[Int]] {
+  private static func upstream(of parts: [AutomationDefinition.Part]) throws(AutomationError)
+    -> [[Int]]
+  {
     var positions: [String: Int] = [:]
-    for (index, node) in nodes.enumerated() {
-      if let first = positions[node.key] {
-        throw .invalid("parts[\(index)].key: \"\(node.key)\" is already used by parts[\(first)]")
+    for (index, part) in parts.enumerated() {
+      if let first = positions[part.key] {
+        throw .invalid("parts[\(index)].key: \"\(part.key)\" is already used by parts[\(first)]")
       }
-      positions[node.key] = index
+      positions[part.key] = index
     }
     var upstream: [[Int]] = []
-    for (index, node) in nodes.enumerated() {
+    for (index, part) in parts.enumerated() {
       var inputs: [Int] = []
-      for key in node.part.inputs {
-        guard let input = positions[key] else {
-          throw .invalid("parts[\(index)].from: unknown part \"\(key)\"")
+      for input in part.from {
+        guard let position = positions[input.part] else {
+          throw .invalid("parts[\(index)].from: unknown part \"\(input.part)\"")
         }
-        inputs.append(input)
+        inputs.append(position)
       }
       upstream.append(inputs)
     }
@@ -57,8 +113,10 @@ extension AutomationGraph {
   }
 
   /// 定義の順で最初に循環に乗る部品を指し、輪を鍵で示す（`a ← b` は a が b を入力に名指す）。
-  static func checkAcyclic(_ nodes: [Node], _ upstream: [[Int]]) throws(AutomationError) {
-    for start in nodes.indices {
+  private static func checkAcyclic(_ parts: [AutomationDefinition.Part], _ upstream: [[Int]])
+    throws(AutomationError)
+  {
+    for start in parts.indices {
       var seen = Set<Int>()
       func walk(_ index: Int, _ path: [Int]) -> [Int]? {
         for input in upstream[index] {
@@ -69,58 +127,63 @@ extension AutomationGraph {
       }
       if let ring = walk(start, [start]) {
         throw .invalid(
-          "parts[\(start)].from: cycle \(ring.map { "\"\(nodes[$0].key)\"" }.joined(separator: " ← "))"
+          "parts[\(start)].from: cycle \(ring.map { "\"\(parts[$0].key)\"" }.joined(separator: " ← "))"
         )
       }
     }
   }
 
   /// 行き先が次の部品なのに誰も名指さない → 行き先が次の部品でない部品を名指す（名指した側を指す）。
-  static func checkDestinations(_ nodes: [Node], _ upstream: [[Int]], _ downstream: [[Int]])
-    throws(AutomationError)
-  {
-    for (index, node) in nodes.enumerated()
-    where node.part.destination == .nextPart && downstream[index].isEmpty {
+  private static func checkDestinations(
+    _ parts: [AutomationDefinition.Part], _ upstream: [[Int]], _ downstream: [[Int]]
+  ) throws(AutomationError) {
+    for (index, part) in parts.enumerated()
+    where part.action.destination == .nextPart && downstream[index].isEmpty {
       throw .invalid(
-        "parts[\(index)].deliver: no part names \"\(node.key)\" in from; name it in a from, or "
+        "parts[\(index)].deliver: no part names \"\(part.key)\" in from; name it in a from, or "
           + "deliver to taskCandidates, report or none")
     }
     for (index, inputs) in upstream.enumerated() {
       for input in inputs {
-        guard let delivered = nodes[input].part.destination.wireName else { continue }
+        guard let delivered = parts[input].action.destination.wireName else { continue }
         throw .invalid(
-          "parts[\(index)].from: \"\(nodes[input].key)\" delivers to \(delivered), so it passes no "
+          "parts[\(index)].from: \"\(parts[input].key)\" delivers to \(delivered), so it passes no "
             + "rows to a part")
       }
     }
   }
 
-  /// タスク候補へ至る取得の部品は毎回全件にできない（取得から消えたリンクの候補を下げる規則が成り立たない）。
-  static func checkCoverage(_ nodes: [Node], _ downstream: [[Int]]) throws(AutomationError) {
-    for (index, node) in nodes.enumerated()
-    where node.role == .fetch(.everything) && reachesJudge(from: index, nodes, downstream) {
+  /// 毎回すべてを取るつながりを通る行は判定へ至れない（判定は新しい行から候補を作る）。
+  private static func checkTakes(
+    _ parts: [AutomationDefinition.Part], _ roles: [AutomationPartRole], _ downstream: [[Int]]
+  ) throws(AutomationError) {
+    for (index, part) in parts.enumerated() {
+      let passes =
+        roles[index] == .judge
+        || (roles[index] != .fetch && !judges(reachedFrom: index, roles, downstream).isEmpty)
+      guard passes, let input = part.from.firstIndex(where: { $0.take == .all }) else { continue }
       throw .invalid(
-        "parts[\(index)].coverage: rows of this part reach taskCandidates, so the coverage must be "
-          + "currentSet or newArrivals")
+        "parts[\(index)].from[\(input)]: rows taken with take all reach taskCandidates; take new here"
+      )
     }
   }
 
-  /// 役割を導く。タスク候補を行き先にする部品が行を見ない・agent の行き先が副作用だけ・取得の性質の有無を断る。
-  private static func role(of part: AutomationPart, _ path: String) throws(AutomationError)
-    -> AutomationPartRole
+  /// 役割を導く。タスク候補を行き先にする部品が行を見ない・agent の行き先が副作用だけ・出力の性質の有無を断る。
+  private static func role(of part: AutomationDefinition.Part, _ path: String)
+    throws(AutomationError) -> AutomationPartRole
   {
     let role: AutomationPartRole
-    switch part.destination {
+    switch part.action.destination {
     case .nextPart:
       guard part.readsRows else {
-        guard let coverage = part.coverage else {
+        guard part.action.coverage != nil else {
           throw .invalid(
             "\(path).coverage: a part that does not read rows fetches items and needs coverage "
-              + "(currentSet, newArrivals or everything)")
+              + "(currentSet or newArrivals)")
         }
-        return .fetch(coverage)
+        return .fetch
       }
-      role = .process
+      return .process
     case .taskCandidates:
       guard part.readsRows else {
         throw .invalid(
@@ -128,15 +191,15 @@ extension AutomationGraph {
       }
       role = .judge
     case .report:
-      role = part.hasTools ? .work : .report
+      role = part.action.hasTools ? .work : .report
     case .sideEffect:
-      guard case .command = part.method else {
+      guard case .command = part.action.method else {
         throw .invalid("\(path).deliver: only a command can deliver none; an agent delivers report")
       }
       role = .sideEffect
     }
-    guard part.coverage == nil else {
-      throw .invalid("\(path).coverage: only a part that fetches items has coverage")
+    guard part.action.coverage == nil else {
+      throw .invalid("\(path).coverage: only a part that passes rows on has coverage")
     }
     return role
   }
@@ -151,7 +214,7 @@ extension AutomationGraph {
     }
   }
 
-  private static func checkMethod(_ method: AutomationPart.Method, _ path: String)
+  private static func checkMethod(_ method: AutomationActionDef.Method, _ path: String)
     throws(AutomationError)
   {
     switch method {
@@ -180,24 +243,6 @@ extension AutomationGraph {
       guard !isBlank(agent.instruction) else {
         throw .invalid("\(path).instruction: instruction is empty")
       }
-    }
-  }
-
-  private static func checkInboxLimit(_ part: AutomationPart, _ path: String)
-    throws(AutomationError)
-  {
-    guard let limit = part.inboxLimit else { return }
-    guard !part.inputs.isEmpty else {
-      throw .invalid("\(path).inboxLimit: only a part with from has an inbox")
-    }
-    guard limit.maxAgeHours != nil || limit.maxItems != nil else {
-      throw .invalid("\(path).inboxLimit: pass maxAgeHours, maxItems or both")
-    }
-    if let hours = limit.maxAgeHours, hours < 1 {
-      throw .invalid("\(path).inboxLimit: maxAgeHours must be at least 1")
-    }
-    if let items = limit.maxItems, items < 1 {
-      throw .invalid("\(path).inboxLimit: maxItems must be at least 1")
     }
   }
 

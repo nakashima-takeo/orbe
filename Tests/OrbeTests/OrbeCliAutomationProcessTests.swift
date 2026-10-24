@@ -12,11 +12,12 @@ import XCTest
 /// `proposals` の `automationId`、`set` の `definition`、`run` の `partKey`）はここでしか測れない。`resume` が
 /// `paused:true` を送ると、exit 0 を返しながら止まったままになる。`run` が `partKey` を落とすと、指した部品の先まで流れる。
 /// `try` が範囲・行・limit を落とすと、AI が指したのと違う試走が黙って走る。`trial --wait` が時間切れを 0 で返すと、AI は
-/// 途中の結果を終わった結果と読む。
+/// 途中の結果を終わった結果と読む。`runs` が `partKey`・`before` を落とすと、AI は別の部品の回や同じページを続きと読む。
 ///
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliAutomationProcessTests: OrbeTestCase {
-  /// 回すと取得の部品が項目 a を 1 つ取り、届いたら判定の部品（コマンド）が a を候補に出す。
+  /// 回すと取得の部品が項目 a を 1 つ取り、届いたら判定の部品（コマンド）が a を候補に出す。新しい DB で最初に作る部品の ID は
+  /// 1 なので、a の下流へ渡す id は `1:a`。
   private let definition = #"""
     {"name": "GitHub: 通知", "parts": [
       {"key": "fetch", "name": "取る", "trigger": {"kind": "interval", "minutes": 30},
@@ -24,14 +25,16 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
        "echo '{\"id\":\"a\",\"link\":\"https://x.test/a\",\"body\":\"a\",\"time\":\"2026-01-01T00:00:00Z\"}'"},
       {"key": "judge", "name": "判定", "trigger": {"kind": "arrival"}, "from": ["fetch"],
        "deliver": "taskCandidates",
-       "command": "cat >/dev/null; echo '{\"propose\":\"fetch:a\",\"title\":\"a を見る\"}'"}]}
+       "command": "cat >/dev/null; echo '{\"propose\":\"1:a\",\"title\":\"a を見る\"}'"}]}
     """#
 
+  /// `allowFailure` なら終わり方を問わず、標準出力と標準エラーを返す。
   private func run(
-    _ control: ControlProcess, _ args: [String], stdin: String? = nil,
+    _ control: ControlProcess, _ args: [String], stdin: String? = nil, allowFailure: Bool = false,
     file: StaticString = #filePath, line: UInt = #line
   ) -> String {
     let outcome = control.orb(["automation"] + args, stdin: stdin, file: file, line: line)
+    if allowFailure { return outcome.stdout + outcome.stderr }
     XCTAssertEqual(
       outcome.status, 0,
       "orb automation \(args.joined(separator: " ")) が exit 0 でない: \(outcome.stderr)", file: file,
@@ -61,16 +64,28 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertEqual(run(control, ["run", id]), "started automation \(id)", "止めた自動化も今すぐは受ける")
     XCTAssertTrue(
       waitUntil(10) {
-        control.target.automationStore.automation(Int(id)!)?.parts["judge"]?.runs.isEmpty == false
+        control.target.automationStore.automation(Int(id)!)?.state(key: "judge").runs.isEmpty
+          == false
       }, "今すぐの回の後に、届いたら判定の回が記録に残らない")
     XCTAssertTrue(row(control)[5].hasSuffix(" judge: 1 proposed"), row(control)[5])
 
     XCTAssertEqual(run(control, ["resume", id]), "resumed automation \(id)")
     XCTAssertEqual(row(control)[1], "active")
 
-    let renamedText = definition.replacingOccurrences(of: "GitHub: 通知", with: "GitHub: 自分宛の通知")
-    XCTAssertEqual(run(control, ["set", id], stdin: renamedText), "updated automation \(id)")
+    var listed = try XCTUnwrap(control.target.automationStore.automation(Int(id)!)?.definition)
+    listed.name = "GitHub: 自分宛の通知"
+    let renamedText = try XCTUnwrap(
+      String(bytes: AutomationWire.encoder().encode(listed), encoding: .utf8))
+    XCTAssertTrue(
+      run(control, ["set", id], stdin: renamedText, allowFailure: true).contains("--version"),
+      "書き換えは版を添える")
+    XCTAssertEqual(
+      run(control, ["set", id, "--version", "1"], stdin: renamedText), "updated automation \(id)")
     XCTAssertEqual(row(control)[2], "GitHub: 自分宛の通知")
+    XCTAssertTrue(
+      run(control, ["set", id, "--version", "1"], stdin: renamedText, allowFailure: true)
+        .contains("version mismatch: sent 1, current 2"),
+      "古い版の書き換えは断る")
 
     XCTAssertEqual(run(control, ["rm", id]), "removed automation \(id)")
     XCTAssertEqual(run(control, ["list"]), "")
@@ -85,11 +100,11 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     let automation = { control.target.automationStore.automation(Int(id)!) }
 
     XCTAssertEqual(run(control, ["run", id, "--part", "fetch"]), "started automation \(id)")
-    XCTAssertTrue(waitUntil(10) { automation()?.parts["fetch"]?.runs.isEmpty == false })
-    XCTAssertEqual(automation()?.parts["judge"]?.inbox, 1, "前提: 取得が判定の溜まりに積んだ")
+    XCTAssertTrue(waitUntil(10) { automation()?.state(key: "fetch").runs.isEmpty == false })
+    XCTAssertEqual(automation()?.state(key: "judge").pending.count, 1, "前提: 判定が読めば取る行がある")
     // 鍵が届かず終わりの部品まで流れると、判定は取得の終わりと同じ知らせの中で起こされる（走っているか、もう記録がある）。
     XCTAssertFalse(control.target.automationRunner.isRunning(Int(id)!, "judge"))
-    XCTAssertEqual(automation()?.parts["judge"]?.runs, [], "道の外の手動の部品は走らない")
+    XCTAssertEqual(automation()?.state(key: "judge").runs, [], "道の外の手動の部品は走らない")
   }
 
   /// 入力の無い副作用のコマンドの前回は、回の記録だけから「コマンドの終わり方」で出る（取得の数を出さない）。
@@ -122,14 +137,12 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
             + #""trigger": {"kind": "cron", "expression": "0 9 * * 1-5"}, "#
             + #""tools": ["Bash(gh search prs:*)"], "instruction": "投稿して", "deliver": "report"}]}"#
         )))
-    _ = try control.target.automationStore.record(
-      AutomationPassEnd(
-        automationId: id, part: "post", trigger: .schedule, startedAt: Date(), endedAt: Date(),
-        take: nil,
-        outcome: .succeeded(
-          .work(.done("投稿した")),
-          AutomationPartPass.Execution(commandLine: "claude -p", ending: .exited(0), count: 1),
-          breach: nil)))
+    try control.target.automationStore.record(
+      id, part: "post", at: Date(),
+      outcome: .succeeded(
+        .work(.done("投稿した")),
+        AutomationPartPass.Execution(commandLine: "claude -p", ending: .exited(0), count: 1),
+        breach: nil))
     let last = row(control)[5]
     XCTAssertTrue(last.hasSuffix(" post: agent exited 0"), last)
   }
@@ -153,6 +166,44 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
       run(control, ["proposals", String(second)]),
       ["\(b.id)", "open", "\(second)", "-", "対応: b", b.item.link].joined(separator: "\t"))
     XCTAssertEqual(run(control, ["proposals"]).split(separator: "\n").count, 2)
+  }
+
+  /// `runs <id>` は回の記録を新しい順に 1 行 1 回（記録の ID と回の要約）で出し、続きがあれば最後に `next <記録の ID>` を出す。
+  /// `--part` はその部品だけ、`--limit` は 1 ページの件数、`--before` は前のページの `next` からの続き。
+  func testRunsPagesThePastRunsNewestFirst() throws {
+    let control = try startControlProcess()
+    let id = try XCTUnwrap(
+      Int(
+        run(
+          control, ["set"],
+          stdin: #"{"name": "取得と記録", "parts": ["#
+            + #"{"key": "fetch", "name": "取る", "trigger": {"kind": "interval", "minutes": 30}, "#
+            + #""coverage": "currentSet", "command": "true"}, "#
+            + #"{"key": "note", "name": "記録", "trigger": {"kind": "manual"}, "from": ["fetch"], "#
+            + #""command": "true", "deliver": "none"}]}"#)))
+    let store = control.target.automationStore
+    let start = Date()
+    for (offset, key) in [(0, "fetch"), (60, "note"), (120, "fetch"), (180, "fetch")] {
+      try store.record(
+        id, part: key, at: start.addingTimeInterval(TimeInterval(offset)),
+        outcome: key == "fetch"
+          ? DesignSceneFixtures.fetched([WindowControllerAutomationControlTests.item("a")])
+          : DesignSceneFixtures.sideEffected(0))
+    }
+    let fetches = try XCTUnwrap(store.automation(id)?.state(key: "fetch").runs.map(\.id))
+    func lines(_ args: [String]) -> [[String]] {
+      run(control, ["runs", String(id)] + args).split(separator: "\n").map {
+        $0.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+      }
+    }
+
+    let first = lines(["--part", "fetch", "--limit", "2"])
+    XCTAssertEqual(first.map(\.[0]), ["\(fetches[0])", "\(fetches[1])", "next"])
+    XCTAssertTrue(first[0][1].hasSuffix(" fetch: 1 fetched, 0 new"), first[0][1])
+    XCTAssertEqual(first[2][1], "\(fetches[1])")
+    XCTAssertEqual(
+      lines(["--part", "fetch", "--before", first[2][1]]).map(\.[0]), ["\(fetches[2])"])
+    XCTAssertEqual(lines([]).count, 4, "部品を指さなければ全部品の回")
   }
 
   /// 定義の検証は control が持つ。標準入力が JSON オブジェクトでないのは usage エラー（2）、形の欠けは RPC エラー（1）。
@@ -206,11 +257,14 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     func ids(_ rows: Any?) -> [String]? {
       (rows as? [[String: Any]])?.compactMap { $0["id"] as? String }
     }
-    XCTAssertEqual(ids(firstRun("fetch")?["rows"]), ["fetch:b"])
-    XCTAssertEqual(ids((firstRun("send")?["held"] as? [String: Any])?["rows"]), ["fetch:b"])
-    XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path), "副作用のコマンドは走らない")
     XCTAssertEqual(
-      run(control, ["trial", id]).split(separator: "\n").last, "send\theld\theld 1 rows")
+      ids((firstRun("fetch")?["given"] as? [String: Any])?["rows"]), ["1:b"],
+      "取得の部品の ID の接頭（新しい DB の最初の部品）")
+    XCTAssertEqual(ids((firstRun("send")?["held"] as? [String: Any])?["rows"]), ["1:b"])
+    XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path), "副作用のコマンドは走らない")
+    let lines = run(control, ["trial", id]).split(separator: "\n")
+    XCTAssertTrue(lines.contains("fetch\tgiven\tgiven 1 rows"), "\(lines)")
+    XCTAssertEqual(lines.last, "send\theld\theld 1 rows")
 
     let ranged = try XCTUnwrap(
       control.orbJSON(["automation", "try", id, "--from", "note", "--to", "note"])["trial"]
@@ -231,6 +285,27 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertEqual(outcome.status, 124, outcome.stderr)
   }
 
+  /// 数のオプションは、標準入力を読む前・socket に触れる前に usage エラー（2）で確かめる。`set` の `--version` は `<id>` と
+  /// 組みでだけ受ける。
+  ///
+  /// 壊れると何が起きるか: `orb automation set 3 --version x` が端末で標準入力の終わりを待って止まる。`--version 0` が版の
+  /// 食い違いとして返り、誤りの場所が伝わらない。`<id>` の無い `--version` が黙って捨てられ、書き換えのつもりで新しい自動化を
+  /// 作る。
+  func testNumericOptionsAreCheckedBeforeAnythingElse() {
+    for (args, message) in [
+      (["set", "1", "--version", "x"], "--version requires a positive <n>"),
+      (["set", "1", "--version", "0"], "--version requires a positive <n>"),
+      (["set", "--version", "1"], "--version requires the <id>"),
+      (["runs", "1", "--before", "x"], "--before requires a positive <recordId>"),
+      (["runs", "1", "--limit", "0"], "--limit requires a positive <n>"),
+    ] {
+      let outcome = ControlProcess.orbWithoutServer(["automation"] + args)
+      let label = "orb automation \(args.joined(separator: " "))"
+      XCTAssertEqual(outcome.status, 2, "\(label): \(outcome.stderr)")
+      XCTAssertTrue(outcome.stderr.contains(message), "\(label): \(outcome.stderr)")
+    }
+  }
+
   /// 各サブコマンドは受ける数より多い位置引数を、socket に触れる前に usage エラー（2）で断る。
   ///
   /// 壊れると何が起きるか: `orb automation rm 3 4` が 3 だけを消して exit 0 を返し、4 も消したつもりの AI が食い違う。
@@ -239,7 +314,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     for args in [
       ["list", "1"], ["proposals", "1", "2"], ["set", "1", "2"], ["run", "1", "2"],
       ["pause", "1", "2"], ["resume", "1", "2"], ["rm", "1", "2"], ["try", "1", "2"],
-      ["trial", "1", "2"],
+      ["trial", "1", "2"], ["runs", "1", "2"],
     ] {
       let outcome = ControlProcess.orbWithoutServer(["automation"] + args)
       let label = "orb automation \(args.joined(separator: " "))"

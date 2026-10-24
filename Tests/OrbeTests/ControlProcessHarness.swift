@@ -318,10 +318,12 @@ final class ControlProcess {
   }
 
   /// `tools/list` を 1 往復させ `tools` 配列を返す。socket に触れないのでサーバは要らない。
-  static func mcpToolsList(file: StaticString = #filePath, line: UInt = #line) -> [[String: Any]] {
+  static func mcpToolsList(
+    env: [String: String] = [:], file: StaticString = #filePath, line: UInt = #line
+  ) -> [[String: Any]] {
     guard
       let result = mcpRoundTrip(
-        method: "tools/list", params: [:], label: "tools/list", file: file, line: line)
+        method: "tools/list", params: [:], label: "tools/list", env: env, file: file, line: line)
     else { return [] }
     guard let tools = result["tools"] as? [[String: Any]] else {
       XCTFail("tools/list の result に tools が無い: \(result)", file: file, line: line)

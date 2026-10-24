@@ -183,6 +183,9 @@ final class SQLiteStatement {
     }
   }
 
+  /// 結果の列の数。
+  var columnCount: Int { Int(sqlite3_column_count(handle)) }
+
   func int64(at column: Int) -> Int64 {
     sqlite3_column_int64(handle, Int32(column))
   }
@@ -199,12 +202,6 @@ final class SQLiteStatement {
 
   func isNull(at column: Int) -> Bool {
     sqlite3_column_type(handle, Int32(column)) == SQLITE_NULL
-  }
-
-  /// 最初から流し直せるように戻し、束縛も消す。
-  func reset() {
-    sqlite3_reset(handle)
-    sqlite3_clear_bindings(handle)
   }
 }
 

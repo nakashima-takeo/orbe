@@ -1,34 +1,93 @@
 import Foundation
 
-// 部品の JSON の形。読むときに断るのは形の誤りだけで、値と組み合わせは `AutomationGraph` が検証する。
+// 定義の JSON の形。読むときに断るのは形の誤りだけで、値と組み合わせは `AutomationGraph` が検証する。
 
-/// `command`（＋`directory`）か `instruction`（＋`agent`〔既定 claude〕・`model`・`tools`）のちょうど一方。`from` と agent の
-/// `tools` の空の配列は書かないのと同じで、`deliver` の省略は次の部品。
-extension AutomationPart: Codable {
+/// 部品の欄と動作の定義の欄を 1 つのオブジェクトに並べる。`from` と agent の `tools` の空の配列は書かないのと同じ。
+extension AutomationDefinition.Part: Codable {
   private enum CodingKeys: String, CodingKey {
-    case key, name, trigger, from, command, directory, agent, model, tools, instruction
-    case timeoutMinutes, coverage, deliver, inboxLimit
+    case id, key, name, trigger, from, maxItems
   }
 
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = try c.decodeIfPresent(Int.self, forKey: .id).map(AutomationPartID.init)
     key = try c.decode(String.self, forKey: .key)
     name = try c.decode(String.self, forKey: .name)
-    trigger = try c.decode(Trigger.self, forKey: .trigger)
-    inputs = try c.decodeIfPresent([String].self, forKey: .from) ?? []
-    method = try Self.method(c)
-    timeoutMinutes = try c.decodeIfPresent(Int.self, forKey: .timeoutMinutes)
-    coverage = try Self.coverage(c)
-    destination = try Self.destination(c)
-    inboxLimit = try c.decodeIfPresent(InboxLimit.self, forKey: .inboxLimit)
+    trigger = try c.decode(AutomationPart.Trigger.self, forKey: .trigger)
+    from = try c.decodeIfPresent([AutomationDefinition.Input].self, forKey: .from) ?? []
+    action = try AutomationActionDef(from: decoder)
+    maxItems = try c.decodeIfPresent(Int.self, forKey: .maxItems)
   }
 
   func encode(to encoder: Encoder) throws {
     var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encodeIfPresent(id?.rawValue, forKey: .id)
     try c.encode(key, forKey: .key)
     try c.encode(name, forKey: .name)
     try c.encode(trigger, forKey: .trigger)
-    if !inputs.isEmpty { try c.encode(inputs, forKey: .from) }
+    if !from.isEmpty { try c.encode(from, forKey: .from) }
+    try action.encode(to: encoder)
+    try c.encodeIfPresent(maxItems, forKey: .maxItems)
+  }
+}
+
+/// `"<鍵>"`（新しい行だけ・古さの上限なし）か `{"part": "<鍵>", "take"?: "new" | "all", "maxAgeHours"?: n}`。書くときは、
+/// 取り方も古さの上限も省けるつながりを鍵の文字列で書く。
+extension AutomationDefinition.Input: Codable {
+  private enum CodingKeys: String, CodingKey {
+    case part, take, maxAgeHours
+  }
+
+  init(from decoder: Decoder) throws {
+    if let key = try? decoder.singleValueContainer().decode(String.self) {
+      self.init(part: key)
+      return
+    }
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    var take = AutomationTake.new
+    if let raw = try c.decodeIfPresent(String.self, forKey: .take) {
+      guard let value = AutomationTake(rawValue: raw) else {
+        throw DecodingError.dataCorruptedError(
+          forKey: .take, in: c, debugDescription: "pass new or all")
+      }
+      take = value
+    }
+    self.init(
+      part: try c.decode(String.self, forKey: .part), take: take,
+      maxAgeHours: try c.decodeIfPresent(Int.self, forKey: .maxAgeHours))
+  }
+
+  func encode(to encoder: Encoder) throws {
+    guard take != .new || maxAgeHours != nil else {
+      var c = encoder.singleValueContainer()
+      try c.encode(part)
+      return
+    }
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(part, forKey: .part)
+    if take != .new { try c.encode(take.rawValue, forKey: .take) }
+    try c.encodeIfPresent(maxAgeHours, forKey: .maxAgeHours)
+  }
+}
+
+/// `command`（＋`directory`）か `instruction`（＋`agent`〔既定 claude〕・`model`・`tools`）のちょうど一方と、`timeoutMinutes`・
+/// `coverage`・`deliver`。`deliver` の省略は次の部品。外の定義の部品の欄と同じオブジェクトに並び、保存（`action_defs.action`）は
+/// この欄だけのオブジェクト。
+extension AutomationActionDef: Codable {
+  private enum CodingKeys: String, CodingKey {
+    case command, directory, agent, model, tools, instruction, timeoutMinutes, coverage, deliver
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    method = try Self.method(c)
+    timeoutMinutes = try c.decodeIfPresent(Int.self, forKey: .timeoutMinutes)
+    coverage = try Self.coverage(c)
+    destination = try Self.destination(c)
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
     switch method {
     case .command(let command):
       try c.encode(command.script, forKey: .command)
@@ -42,7 +101,6 @@ extension AutomationPart: Codable {
     try c.encodeIfPresent(timeoutMinutes, forKey: .timeoutMinutes)
     try c.encodeIfPresent(coverage?.rawValue, forKey: .coverage)
     try c.encodeIfPresent(destination.wireName, forKey: .deliver)
-    try c.encodeIfPresent(inboxLimit, forKey: .inboxLimit)
   }
 
   private static func method(_ c: KeyedDecodingContainer<CodingKeys>) throws -> Method {
@@ -82,7 +140,7 @@ extension AutomationPart: Codable {
     guard let raw = try c.decodeIfPresent(String.self, forKey: .coverage) else { return nil }
     guard let coverage = AutomationCoverage(rawValue: raw) else {
       throw DecodingError.dataCorruptedError(
-        forKey: .coverage, in: c, debugDescription: "pass currentSet, newArrivals or everything")
+        forKey: .coverage, in: c, debugDescription: "pass currentSet or newArrivals")
     }
     return coverage
   }
@@ -102,7 +160,7 @@ extension AutomationPart: Codable {
   }
 }
 
-extension AutomationPart.Destination {
+extension AutomationActionDef.Destination {
   /// `deliver` の値。次の部品は書かない。
   var wireName: String? {
     switch self {
@@ -153,24 +211,5 @@ extension AutomationPart.Trigger: Codable {
     case .manual: try c.encode("manual", forKey: .kind)
     case .arrival: try c.encode("arrival", forKey: .kind)
     }
-  }
-}
-
-/// `{"maxAgeHours"?: Int, "maxItems"?: Int}`。
-extension AutomationPart.InboxLimit: Codable {
-  private enum CodingKeys: String, CodingKey {
-    case maxAgeHours, maxItems
-  }
-
-  init(from decoder: Decoder) throws {
-    let c = try decoder.container(keyedBy: CodingKeys.self)
-    maxAgeHours = try c.decodeIfPresent(Int.self, forKey: .maxAgeHours)
-    maxItems = try c.decodeIfPresent(Int.self, forKey: .maxItems)
-  }
-
-  func encode(to encoder: Encoder) throws {
-    var c = encoder.container(keyedBy: CodingKeys.self)
-    try c.encodeIfPresent(maxAgeHours, forKey: .maxAgeHours)
-    try c.encodeIfPresent(maxItems, forKey: .maxItems)
   }
 }

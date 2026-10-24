@@ -1,67 +1,107 @@
 import Foundation
 
-// タスク候補の保ち方。候補はリンク単位で全自動化を通じて 1 つ。候補が忘れられるのは、どの自動化も候補を持たなくなったとき
-// だけで、それまではタスクにした・捨てた・対応済みの候補も覚えていて、同じリンクを再び候補にしない。
+// タスク候補の保ち方。候補はリンク単位で、覚えている候補を通じて 1 つ。判断待ちの候補を Orbe が下げるのは、出どころが今の集合の
+// 項目で、その項目が無効になったときだけ（出来事が出どころの候補は自動では下げない）。候補は、どの自動化も持たなくなったときに
+// 忘れ、それまでは同じリンクを再び候補にしない。
 //
-// 自動化 A がリンク L の候補を持つのは、A のタスク候補へ至る取得の部品のどれかの前回の出力に L があるとき、または A の判定の
-// 部品が出して判断待ちで、出どころの取得の部品が今の A のグラフで新着の流れのとき。止めた自動化も持つ。
+// 自動化 A がリンク L の候補を持つのは、A のタスク候補へ至る取得の部品のどれかの今有効な項目に L があるとき、または A の判定の
+// 部品が出して判断待ちのとき。止めた自動化も持つ。定義を読めない自動化は、その部品が出した候補と、その部品が出どころの候補を
+// 持つ。読めない候補は状態が分からないので、出した判定の部品がある間は、その部品の自動化が持つ。
 
 extension Automation {
-  /// タスク候補へ至る取得の部品の前回の出力のリンク。持ち主・重なりはこの集合で言う。
+  /// タスク候補へ至る取得の部品の今有効な項目のリンク。持ち主・重なりはこの集合で言う。
   var candidateLinks: Set<String> {
     Set(
-      graph.nodes.filter { node in
-        if case .fetch = node.role { return graph.reachesTaskCandidates(node.key) }
-        return false
-      }.flatMap { state($0.key).lastOutput.map(\.link) })
+      graph.nodes.filter { $0.role == .fetch && graph.reachesTaskCandidates($0.id) }
+        .flatMap { state($0.id).liveLinks })
   }
 
   /// この自動化が候補を持っているか。
   func holds(_ proposal: AutomationProposal) -> Bool {
-    candidateLinks.contains(proposal.item.link) || streams(proposal)
+    candidateLinks.contains(proposal.item.link)
+      || (proposal.state == .open && graph.node(proposal.judge)?.role == .judge)
   }
 
-  /// この自動化の判定の部品が出して判断待ちで、出どころの取得の部品が今のグラフで新着の流れか——新着の流れでは、対応済みの
-  /// 知らせが元の項目と別の項目として届くため、取得から消えても持ち続ける。
-  func streams(_ proposal: AutomationProposal) -> Bool {
-    proposal.automationId == id && proposal.state == .open
-      && graph.node(proposal.partKey)?.role == .judge
-      && graph.node(proposal.sourcePartKey)?.role == .fetch(.newArrivals)
+  func holds(_ proposal: AutomationUnreadableProposal) -> Bool {
+    candidateLinks.contains(proposal.link) || graph.node(proposal.judge) != nil
+  }
+}
+
+extension AutomationUnreadable {
+  func holds(_ proposal: AutomationProposal) -> Bool {
+    parts.contains(proposal.judge) || parts.contains(proposal.source)
+  }
+
+  func holds(_ proposal: AutomationUnreadableProposal) -> Bool {
+    parts.contains(proposal.judge)
   }
 }
 
 extension AutomationMemory {
-  /// どの自動化も持たない候補を忘れ（DB からも消す）、そのうち判断待ちだったもの（下げた候補）の数を返す。
-  @discardableResult mutating func forgetUnheld(_ db: AutomationDatabase) throws -> Int {
+  /// どの自動化も持たない候補（読めない候補も）を忘れる（覚えている印を外す）。
+  mutating func forgetUnheld(_ db: AutomationDatabase) throws {
     let automations = automations
-    let unheld = proposals.filter { proposal in !automations.contains { $0.holds(proposal) } }
-    guard !unheld.isEmpty else { return 0 }
-    try db.delete(proposals: unheld.map(\.id))
-    let ids = Set(unheld.map(\.id))
+    let unreadable = unreadable
+    let unheld =
+      proposals.filter { proposal in
+        !automations.contains { $0.holds(proposal) } && !unreadable.contains { $0.holds(proposal) }
+      }.map(\.id)
+      + unreadableProposals.filter { proposal in
+        !automations.contains { $0.holds(proposal) } && !unreadable.contains { $0.holds(proposal) }
+      }.map(\.id)
+    guard !unheld.isEmpty else { return }
+    try db.forget(proposals: unheld)
+    let ids = Set(unheld)
     proposals.removeAll { ids.contains($0.id) }
-    return unheld.filter { $0.state == .open }.count
+    unreadableProposals.removeAll { ids.contains($0.id) }
+  }
+
+  /// 出どころの項目が無効になった判断待ちの候補を下げ（忘れ）、下げた数を返す。
+  @discardableResult mutating func withdraw(originatingIn items: [Int], _ db: AutomationDatabase)
+    throws -> Int
+  {
+    let ids = Set(try db.openProposals(originatingIn: items))
+    guard !ids.isEmpty else { return 0 }
+    try db.forget(proposals: Array(ids))
+    let withdrawn = proposals.filter { ids.contains($0.id) && $0.state == .open }.count
+    proposals.removeAll { ids.contains($0.id) }
+    unreadableProposals.removeAll { ids.contains($0.id) }
+    return withdrawn
   }
 }
 
 extension AutomationStore {
-  /// 判定の部品 `judge` に見せる判断待ちの候補（判定が対応済みにできる相手）。その判定へ行が届く取得の部品の前回の出力に
-  /// リンクがあるものと、その判定が出して判断待ちのままの新着の流れのもの。
-  func openProposals(of id: Int, judge: String) -> [AutomationProposal] {
+  /// 判定の部品 `judge` に見せる判断待ちの候補（判定が対応済みにできる相手）。その判定へ行が届く取得の部品の今有効な項目に
+  /// リンクがあるものと、その判定が出したもの・その取得の部品が出どころのもの。
+  func openProposals(of id: Int, judge: AutomationPartID) -> [AutomationProposal] {
     guard let automation = automation(id) else { return [] }
-    let links = Set(
-      automation.graph.fetches(reaching: judge).flatMap {
-        automation.state($0.key).lastOutput.map(\.link)
-      })
+    let fetches = automation.graph.fetches(reaching: judge)
+    let links = Set(fetches.flatMap { automation.state($0.id).liveLinks })
+    let sources = Set(fetches.map(\.id))
     return proposals.filter {
       $0.state == .open
-        && (links.contains($0.item.link) || ($0.partKey == judge && automation.streams($0)))
+        && (links.contains($0.item.link) || $0.judge == judge || sources.contains($0.source))
     }
+  }
+
+  /// 候補を出した自動化——判定の部品の持ち主（部品を外しても自動化が残れば、その自動化）。持ち主を消していれば nil。
+  func issuer(of proposal: AutomationProposal) -> Automation? {
+    judgeOwners[proposal.judge].flatMap(automation)
   }
 
   /// 候補を棚に出す自動化。候補を出した自動化がまだ候補を持っていればそれ、いなければ持っている自動化のうち ID が最小のもの。
   func shelf(of proposal: AutomationProposal) -> Automation? {
     let holding = automations.filter { $0.holds(proposal) }
-    return holding.first { $0.id == proposal.automationId } ?? holding.min { $0.id < $1.id }
+    let issuer = issuer(of: proposal)?.id
+    return holding.first { $0.id == issuer } ?? holding.min { $0.id < $1.id }
+  }
+
+  /// 読めない候補を持つ自動化（棚の規則と同じく、出した自動化が持っていればそれ、いなければ ID が最小のもの）。棚には出さず、
+  /// 外の口の絞り込みにだけ使う。
+  func holder(of proposal: AutomationUnreadableProposal) -> Automation? {
+    let holding = automations.filter { $0.holds(proposal) }
+    let issuer = judgeOwners[proposal.judge]
+    return holding.first { $0.id == issuer } ?? holding.min { $0.id < $1.id }
   }
 
   /// 判断待ちの候補と、それを棚に出す自動化の ID（候補の順）。棚に出す自動化の無い候補は入らない。⌘⇧X の提案タブ・制御 API・
@@ -78,7 +118,7 @@ extension AutomationStore {
     shelvedProposals.filter { $0.shelf == id }.map(\.proposal)
   }
 
-  /// 判定の部品を持つ他の自動化と、タスク候補へ至る取得の部品の前回の出力が重なっているリンクの数（重なりのある相手だけ、
+  /// 判定の部品を持つ他の自動化と、タスク候補へ至る取得の部品の今有効な項目が重なっているリンクの数（重なりのある相手だけ、
   /// ID 順）。
   func overlaps(of id: Int) -> [(automation: Automation, count: Int)] {
     guard let automation = automation(id), automation.judges else { return [] }

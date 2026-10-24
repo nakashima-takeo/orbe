@@ -40,7 +40,7 @@ struct TaskPaletteAutomationHints: View {
     switch model.place {
     case .field:
       TaskPaletteHintRow(cyclesTabs: cyclesTabs, escape: .taskPaletteHintClose) {
-        PaletteKeyHint(key: "↓", label: l10n.string(.taskPaletteAutomationHintShelf))
+        PaletteKeyHint(key: "↓", label: l10n.string(.automationHintToList))
       }
     case .shelf:
       TaskPaletteHintRow(cyclesTabs: cyclesTabs, escape: .taskPaletteHintClose) {
@@ -50,7 +50,7 @@ struct TaskPaletteAutomationHints: View {
     case .proposals:
       TaskPaletteHintRow(cyclesTabs: cyclesTabs, escape: .taskPaletteHintClose) {
         PaletteKeyHint(key: "↑↓", label: l10n.string(.taskPaletteAutomationHintCandidates))
-        PaletteKeyHint(key: "←", label: l10n.string(.taskPaletteAutomationHintShelf))
+        PaletteKeyHint(key: "←", label: l10n.string(.automationHintToList))
       }
     }
   }

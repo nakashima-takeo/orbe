@@ -1,11 +1,13 @@
 import Foundation
 import OrbeSessionLog
 
-/// 自動化の永続。state の `automations/` フォルダの SQLite の DB（`StateDatabase`）に、自動化・部品の状態・溜まりの行・候補・
-/// 回の記録を置く。形の変わりやすいもの（定義・前回の出力・出どころ・候補の項目・回の記録）は外の JSON のまま 1 列に、骨組みは
-/// 列と索引と制約で持つ。書き手は `AutomationStore` だけ。
+/// 自動化の永続。state の `automations/` フォルダの SQLite の DB（`StateDatabase`）に、部品の定義・自動化と部品とつながり・
+/// 出す側の行・回の記録と履歴・候補と人の判断を置く（`AutomationDatabase.schema`）。書き手は `AutomationStore` だけ。
 enum AutomationPersistence {
-  static let version: Int32 = 1
+  static let version: Int32 = 2
+
+  /// 版ごとの移行（版 N → N+1）。版 1 からの移行は無い（版 1 の DB は退避する）。
+  static let migrations: [StateDatabase.Migration] = []
 
   /// テスト用に DB のフォルダを差し替える（設定時はこちらを使う）。本番は nil。旧形式の JSON の場所もここから導く。
   static var folderOverride: URL?
@@ -20,20 +22,29 @@ enum AutomationPersistence {
     folder?.deletingLastPathComponent().appendingPathComponent("automations.json")
   }
 
-  /// 起動時に開いて全部を読む。旧形式の JSON があれば退避する（失敗しても続け、次の起動でやり直す）。開けない・確かめられない・
-  /// 別の Orbe が持っているときは nil（そのセッションは自動化を読まず・走らせず・書かない）。
-  static func open() -> AutomationDatabase.Opened? {
+  /// 起動時に開いて全部を読む。旧形式の JSON があれば退避する（失敗しても続け、次の起動でやり直す）。使わない（開けない・
+  /// 確かめられない・別の Orbe が持っている・新しい版）ときは理由を返し、そのセッションは自動化を読まず・走らせず・書かない。
+  static func open(now: Date = Date()) -> Result<AutomationDatabase.Opened, AutomationError> {
     if let legacy = legacyFile, FileManager.default.fileExists(atPath: legacy.path) {
       var quarantine = StateFileQuarantine()
       quarantine.quarantine(legacy)
     }
-    guard let folder,
-      let opened = StateDatabase.open(
-        folder: folder, version: version, schema: AutomationDatabase.schema,
-        read: AutomationDatabase.snapshot)
-    else { return nil }
-    return AutomationDatabase.Opened(
-      database: AutomationDatabase(opened.database), snapshot: opened.contents)
+    guard let folder else {
+      return .failure(
+        .unavailable("automations are unavailable in this session: the state folder is unknown"))
+    }
+    switch StateDatabase.open(
+      folder: folder, version: version, schema: AutomationDatabase.schema, migrations: migrations,
+      read: { try AutomationDatabase.memory($0, now: now) })
+    {
+    case .opened(let opened):
+      return .success(
+        AutomationDatabase.Opened(
+          database: AutomationDatabase(opened.database), memory: opened.contents))
+    case .refused(let reason):
+      return .failure(
+        .unavailable("automations are unavailable in this session: the database \(reason)"))
+    }
   }
 
   /// 保存の精度（ミリ秒）。メモリの時刻はいつもこの精度に通してから持つ——読み直した値と同じにするため。
@@ -44,12 +55,6 @@ enum AutomationPersistence {
   static func date(_ millis: Int64) -> Date {
     Date(timeIntervalSince1970: Double(millis) / 1000)
   }
-}
-
-/// 起動時に読んだ全部。
-struct AutomationSnapshot: Equatable {
-  var automations: [Automation]
-  var proposals: [AutomationProposal]
 }
 
 /// 自動化の保存と制御 API が共有する JSON の書き方（時刻は ISO 8601・ミリ秒・Z）。

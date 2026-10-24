@@ -4,7 +4,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 自動化の知らせ。通知をメニューバーにした自動化の部品が出した回・失敗した回を記録すると、名前と「部品: 結果」の 1 行のピルが
+/// 自動化の知らせ。通知をメニューバーにした自動化の部品が出した回・失敗した回を記録すると、名前と「部品：結果」の 1 行のピルが
 /// Home の設定で立ち、出した回は完了の音・失敗は入力待ちの音が鳴る。失敗は部品ごとに続く間の最初の回だけ、出力が決まりを外した
 /// ことは部品ごとに最初の回だけ。off・何も出さなかった回・その行を見ているときは出ない。ピルのクリックは Home のボードでその
 /// 自動化の行を選び、焦点を一覧へ置く。
@@ -80,12 +80,10 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     _ wc: WindowController, _ id: Int, report: String? = "PR は 3 件\n- #1",
     failure: String? = nil
   ) throws {
-    _ = try wc.automationStore.record(
-      AutomationPassEnd(
-        automationId: id, part: "digest", trigger: .now, startedAt: Date(), endedAt: Date(),
-        take: nil,
-        outcome: failure.map { DesignSceneFixtures.failed($0) }
-          ?? DesignSceneFixtures.reported(report)))
+    try wc.automationStore.record(
+      id, part: "digest", trigger: .now, at: Date(),
+      outcome: failure.map { DesignSceneFixtures.failed($0) }
+        ?? DesignSceneFixtures.reported(report))
   }
 
   @MainActor func standing(_ wc: WindowController) -> AutomationNotice? {
@@ -111,7 +109,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     XCTAssertEqual(
       notice,
       AutomationNotice(
-        automationId: id, name: "開いている PR の要約", text: "要約: PR は 3 件", failed: false))
+        automationId: id, name: "開いている PR の要約", text: "要約：PR は 3 件", failed: false))
     XCTAssertEqual(transient.expiresAt.timeIntervalSince(transient.arrivedAt), 40, accuracy: 0.001)
     XCTAssertEqual(sound.played, [.synth(.steel, event: .done, volume: 30)])
   }
@@ -128,7 +126,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     }
     XCTAssertTrue(notice.failed)
     XCTAssertEqual(
-      notice.text, "要約: 失敗：終了コード 1 で終わった（the part \"digest\" ended: exited 1: boom）")
+      notice.text, "要約：失敗：終了コード 1 で終了（the part \"digest\" ended: exited 1: boom）")
     XCTAssertEqual(sound.played.map(\.event), [.waiting])
   }
 
@@ -194,28 +192,46 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     ).id
     let breachedFailure = AutomationPartPass.Outcome.failed(
       .brokeRules, DesignSceneFixtures.execution(1),
-      breach: AutomationPartPass.Breach(
-        lines: [AutomationBrokenLine(line: 3, fault: .missingKey("link"))], redo: nil))
+      breach: AutomationRejections([AutomationBrokenLine(line: 3, fault: .missingKey("link"))]))
     var at = Date()
     func record(_ outcome: AutomationPartPass.Outcome) throws {
       at = at.addingTimeInterval(60)
-      _ = try store.record(
-        AutomationPassEnd(
-          automationId: id, part: "fetch", trigger: .schedule, startedAt: at, endedAt: at,
-          take: nil, outcome: outcome))
+      try store.record(id, part: "fetch", at: at, outcome: outcome)
     }
 
     try record(breachedFailure)
     let first = try XCTUnwrap(wc.automationNotification(id, "fetch"))
     guard case .automation(let told) = first.notice else { return XCTFail("\(first)") }
-    XCTAssertEqual(told.text, "取る の出力の形式エラー（1 行）— 失敗した")
+    XCTAssertEqual(told.text, "取る の出力の形式エラー（1 件）— 失敗")
     XCTAssertTrue(told.failed)
 
-    try record(DesignSceneFixtures.fetched("fetch", []))
+    try record(DesignSceneFixtures.fetched([]))
     try record(breachedFailure)
     let again = try XCTUnwrap(wc.automationNotification(id, "fetch"), "失敗の続きの最初は知らせる")
     guard case .automation(let failure) = again.notice else { return XCTFail("\(again)") }
-    XCTAssertFalse(failure.text.contains("形式エラー（"), failure.text)
+    XCTAssertTrue(failure.text.hasPrefix("取る：失敗："), failure.text)
+  }
+
+  /// 外した印は印の回の記録そのものを指すので、同じミリ秒に始まった次の回で、外した回の知らせが出直さない。
+  @MainActor func testTheBreachNoticeBelongsToTheMarkedRunAlone() throws {
+    let wc = controller()
+    let store = wc.automationStore
+    let id = try store.create(
+      DesignSceneFixtures.candidatesDefinition(
+        "受信",
+        fetch: DesignSceneFixtures.commandPart(
+          "fetch", "取る", .scheduled(.every(1800)), script: "fetch", coverage: .currentSet),
+        notify: .menuBar), now: Date()
+    ).id
+    let at = Date()
+    try store.record(
+      id, part: "fetch", at: at,
+      outcome: AutomationStoreTests.breached([AutomationStoreTests.item("a")]))
+    XCTAssertNotNil(wc.automationNotification(id, "fetch"), "前提: 外した回は知らせる")
+
+    try store.record(id, part: "fetch", at: at, outcome: DesignSceneFixtures.fetched([]))
+
+    XCTAssertNil(wc.automationNotification(id, "fetch"))
   }
 
   /// 選んでいる行の回は出ず、同じボードで選んでいない自動化の回は出る。

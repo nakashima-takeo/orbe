@@ -4,7 +4,7 @@ import AppKit
 /// 通知先に応じてメニューバー②か通知センターへ流す。ピルや通知のクリックは Home のボードでその自動化を開く。
 extension WindowController {
   /// 部品の回を記録した（走らせ役から）。
-  func notifyAutomationRecorded(_ id: Int, _ part: String) {
+  func notifyAutomationRecorded(_ id: Int, _ part: AutomationPartID) {
     guard let notification = automationNotification(id, part) else { return }
     deliver(notification)
   }
@@ -16,15 +16,16 @@ extension WindowController {
   ///
   /// 本文は、外した回のほかは実行履歴のその回の行の 1 行目——ピルと、押した先の行を同じ文で語るため。設定は Home の実効設定
   /// （押した先が Home なので、発信元の workspace の値という読み方に揃う）。
-  func automationNotification(_ id: Int, _ part: String) -> ChromeNotification? {
+  func automationNotification(_ id: Int, _ part: AutomationPartID) -> ChromeNotification? {
     guard let automation = automationStore.automation(id), let notify = automation.notify,
-      let state = automation.parts[part], let latest = state.runs.first, !isViewingAutomation(id)
+      let state = automation.parts[part], let record = state.runs.first, let latest = record.run,
+      !isViewingAutomation(id)
     else { return nil }
     let tone = BoardAutomationSummary.tone(latest)
     let text = board.automation.text(localization, now: automationRunner.now())
     let line: String
-    if let breach = state.breach, breach.at == latest.startedAt {
-      line = breachLine(breach, part: automation.graph.node(part)?.part.name ?? part)
+    if let breach = state.breach, breach.id == record.id {
+      line = breachLine(breach, part: automation.graph.node(part)?.part.name ?? "\(part)")
     } else if tone == .failed, state.runs.dropFirst().first?.failed != true {
       line = BoardAutomationSummary.line(latest, part: part, in: automation, text: text)
     } else if tone == .produced {
@@ -45,12 +46,12 @@ extension WindowController {
         : nil)
   }
 
-  /// 「連絡 の出力の形式エラー（2 行）— 出し直して通った」。
-  private func breachLine(_ breach: AutomationBreachMark, part name: String) -> String {
-    localization.format(
-      breach.lines.count == 1 ? .automationBreachNoticeOne : .automationBreachNoticeOther, name,
-      breach.lines.count,
-      localization.string(breach.passed ? .automationBreachPassed : .automationBreachFailed))
+  /// 「連絡 の出力の形式エラー（2 件）— agent が修正済み」。
+  private func breachLine(_ record: AutomationRunRecord, part name: String) -> String {
+    let count = record.run?.breach?.count ?? 0
+    return localization.format(
+      count == 1 ? .automationBreachNoticeOne : .automationBreachNoticeOther, name, count,
+      localization.string(record.failed ? .automationBreachFailed : .automationBreachPassed))
   }
 
   /// 通知センターでの自動化の通知の識別子。自動化ごとに 1 つなので、新しい回が前の通知を差し替える。

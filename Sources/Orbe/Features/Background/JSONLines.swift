@@ -1,7 +1,7 @@
 import Foundation
 
 /// 1 行 1 件の JSON の読み取り結果。形は使い手が `Decodable` 型で決め、読めた行だけを受ける。読めない行は行番号と理由を残す。
-/// コマンドの出力にも agent の最終応答にも同じ読み方を当てる。
+/// コマンドの標準出力にも、agent が道具で渡した結果（1 件を 1 行にしたもの）にも同じ読み方を当てる。
 struct JSONLines<Item: Decodable> {
   struct Rejection: Equatable {
     /// 1 始まりの行番号（空行も数える）。

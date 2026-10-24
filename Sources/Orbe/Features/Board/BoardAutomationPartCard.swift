@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// 選んだ部品のカード。頭（成否の印・役割・名前）・項目・指示文かコマンド・出力の形式エラーの枠・前回の報告か応答・この部品の
-/// 実行履歴・ボタン（「⌘↵ ここまで今すぐ実行」「修正を依頼」）。実行のボタンは地図の ⌘↵ と同じ手の操作を通る（キーと名前も
+/// 実行履歴・ボタン（「⌘↵ 選んだ部品まで実行」「修正を依頼」）。実行のボタンは地図の ⌘↵ と同じ手の操作を通る（キーと名前も
 /// そこから読む）。
 struct BoardAutomationPartCard: View {
   let model: BoardAutomationModel
@@ -64,14 +64,18 @@ struct BoardAutomationPartCard: View {
         GridRow(alignment: .firstTextBaseline) {
           Text(l10n.string(fact.label))
             .foregroundStyle(Color.theme.textMuted)
-            .frame(width: 64, alignment: .leading)
-          fact.value.reduce(fact.flow?.lead ?? Text(verbatim: "")) { line, segment in
+            .fixedSize()
+            .frame(minWidth: Self.labelWidth, alignment: .leading)
+          let lead = fact.incoming ? Text.boardIncomingLead : Text(verbatim: "")
+          fact.value.reduce(lead) { line, segment in
             line
               + fontResolver.text(segment.text, base: Theme.Typography.codeSmall)
               .foregroundStyle(Self.color(segment.look))
           }
+          .lineSpacing(Self.factLeading)
+          .padding(.vertical, Self.factLeading / 2)
           .fixedSize(horizontal: false, vertical: true)
-          .frame(maxWidth: .infinity, minHeight: 18, alignment: .leading)
+          .frame(maxWidth: .infinity, alignment: .leading)
         }
       }
     }
@@ -176,7 +180,7 @@ struct BoardAutomationPartCard: View {
         model.perform(operation)
       }
       button(key: nil, title: l10n.string(.boardPartAskFix), primary: false) {
-        model.draftFix(of: card.key, l10n: l10n)
+        model.draftFix(of: card.id, l10n: l10n)
       }
     }
   }
@@ -203,9 +207,15 @@ struct BoardAutomationPartCard: View {
   }
 
   private static let gap: CGFloat = 12
+  /// 項目名の列の幅の下限（見本）。最も長い項目名（「作業ディレクトリ」）がこれより広ければ、列をそれに合わせる。
+  private static let labelWidth: CGFloat = 64
   private static let historyLine: CGFloat = 22
   /// 時刻の列の幅の下限（見本）。中身がこれより広ければ中身に合わせる。
   private static let timeWidth: CGFloat = 76
+  /// 項目の行の高さ 18（見本）に当たる行間。行間は行と行の間にしか入らないので、半分ずつを値の上下に足し、折り返した値の
+  /// 1 行目も 1 行の値と同じ位置に置く。
+  private static let factLeading = Theme.Typography.codeSmall.extraLeading(
+    lineHeight: 18 / Theme.Typography.codeSmall.pointSize)
   /// 指示文の行の高さ 1.6（見本）に当たる行間。
   private static let bodyLeading = Theme.Typography.codeCompact.extraLeading(lineHeight: 1.6)
   /// 折り返す結果の行の高さ 18（見本）に当たる行間。

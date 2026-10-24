@@ -28,7 +28,7 @@ extension WindowControllerAutomationNoticeTests {
       center.posted,
       [
         SystemNotificationContent(
-          identifier: "automation.\(id)", title: "開いている PR の要約", body: "要約: PR は 3 件",
+          identifier: "automation.\(id)", title: "開いている PR の要約", body: "要約：PR は 3 件",
           automationId: id)
       ])
     XCTAssertNil(wc.attentionStore.transient, "通知センターに出た回はピルを出さない")
@@ -80,14 +80,16 @@ extension WindowControllerAutomationNoticeTests {
     let center = try notifier(wc)
     var definition = Self.reportDefinition(notify: .menuBar)
     guard
-      case .success(let created) = wc.controlSetAutomation(automationId: nil, definition),
+      case .success(let created) = wc.controlSetAutomation(
+        automationId: nil, version: nil, definition),
       let id = ((created as? [String: Any])?["automation"] as? [String: Any])?["automationId"]
         as? Int
     else { return XCTFail("作れない") }
     XCTAssertEqual(center.requestCount, 0)
 
+    definition = try XCTUnwrap(wc.automationStore.automation(id)?.definition)
     definition.notify = .notificationCenter
-    _ = wc.controlSetAutomation(automationId: id, definition)
+    _ = wc.controlSetAutomation(automationId: id, version: 1, definition)
     XCTAssertEqual(center.requestCount, 1)
 
     wc.showAutomation(id)
