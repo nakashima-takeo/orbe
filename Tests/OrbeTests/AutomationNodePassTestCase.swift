@@ -23,16 +23,17 @@ class AutomationNodePassTestCase: OrbeTestCase {
 
   @discardableResult
   func start(
-    _ part: AutomationDefinition.Node, _ role: AutomationNodeRole,
+    _ definitionNode: AutomationDefinition.Node, _ role: AutomationNodeRole,
     _ input: AutomationNodePass.Input
   ) -> BackgroundRunHandle {
-    startedKey = part.key
+    startedKey = definitionNode.key
     let node = AutomationGraph.Node(
       entity: AutomationNode(
-        id: AutomationNodeID(1), key: part.key, name: part.name, trigger: part.trigger,
-        maxItems: part.maxItems, defId: AutomationDefID(1)),
-      action: part.action,
-      inputs: part.from.enumerated().map {
+        id: AutomationNodeID(1), key: definitionNode.key, name: definitionNode.name,
+        trigger: definitionNode.trigger,
+        maxItems: definitionNode.maxItems, defId: AutomationDefID(1)),
+      action: definitionNode.action,
+      inputs: definitionNode.from.enumerated().map {
         AutomationNodeEdge(
           from: AutomationNodeID(100 + $0.offset), take: $0.element.take,
           maxAgeHours: $0.element.maxAgeHours)
@@ -45,7 +46,8 @@ class AutomationNodePassTestCase: OrbeTestCase {
   }
 
   func origin(_ id: String) -> AutomationIntake.Origin {
-    AutomationIntake.Origin(part: AutomationNodeID(9), row: .event(Self.number(id)), item: item(id))
+    AutomationIntake.Origin(
+      nodeId: AutomationNodeID(9), row: .event(Self.number(id)), item: item(id))
   }
 
   /// 取得の部品 `f` を出た行。
@@ -149,6 +151,6 @@ class AutomationNodePassTestCase: OrbeTestCase {
   /// 最初の失敗の、AI が読む英文。
   var failed: String? {
     guard case .failed(let failure, let execution, let breach) = outcomes.first else { return nil }
-    return failure.text(part: startedKey, ending: execution.ending, breach: breach)
+    return failure.text(nodeKey: startedKey, ending: execution.ending, breach: breach)
   }
 }

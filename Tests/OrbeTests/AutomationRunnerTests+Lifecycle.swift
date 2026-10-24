@@ -13,13 +13,14 @@ extension AutomationRunnerTests {
 
   /// 書き換えは、何をするかが変わった部品の走っている回だけを止めて結果を捨てる。名前だけの書き換えでは走っている回が最後
   /// まで走って確定する。どちらでも読めば取る行は残る。
-  func testRewritingStopsOnlyAPartWhoseWorkChangedAndKeepsThePendingRows() throws {
+  func testRewritingStopsOnlyANodeWhoseWorkChangedAndKeepsThePendingRows() throws {
     func definition(_ name: String, gh script: String) -> AutomationDefinition {
       AutomationDefinition(
         name: name, notify: nil,
         parts: [
           fetch("gh", every: 1800, script: script),
-          part("judge", .scheduled(.every(86400)), from: ["gh"], deliver: .taskCandidates),
+          definitionNode(
+            "judge", .scheduled(.every(86400)), from: ["gh"], deliver: .taskCandidates),
         ])
     }
     let id = try runner.set(nil, definition("受信", gh: "gh")).id
@@ -49,7 +50,7 @@ extension AutomationRunnerTests {
   /// 定義で確定する——その定義での最初の回で、ほかに指すものが無くても、回が使う定義は確定まで掃除で消えない。
   func testARunningRunSettlesOnItsDefinitionAfterAWriteThatOnlySpellsOutADefault() throws {
     var gh = fetch("gh", every: 1800)
-    let digest = part("digest", .arrival, from: ["gh"], deliver: .report)
+    let digest = definitionNode("digest", .arrival, from: ["gh"], deliver: .report)
     let id = try define([gh, digest])
     let first = try XCTUnwrap(store.automation(id)?.graph.node(key: "gh")?.entity.defId)
     advance(by: 1800)
@@ -61,11 +62,11 @@ extension AutomationRunnerTests {
     XCTAssertEqual(jobs.stopped, [])
     finish("gh", fetched(["a"]))
 
-    let part = store.part(id, "gh")
+    let nodeId = store.nodeId(id, "gh")
     XCTAssertEqual(
       try store.read {
         try $0.db.select(
-          "SELECT def_id FROM runs WHERE part_id = ?", [.integer(Int64(part.rawValue))]
+          "SELECT def_id FROM runs WHERE part_id = ?", [.integer(Int64(nodeId.rawValue))]
         ) { AutomationDefID($0.int(at: 0)) }
       }, [first], "回の記録は始めたときの定義を指す")
     XCTAssertEqual(try store.lastSeqs(id, "gh").event, 1)
@@ -79,7 +80,7 @@ extension AutomationRunnerTests {
         name: "要約", notify: nil,
         parts: [
           fetch("gh", every: 1800, script: script),
-          part("digest", .arrival, from: ["gh"], deliver: .report),
+          definitionNode("digest", .arrival, from: ["gh"], deliver: .report),
         ])
     }
     let id = try runner.set(nil, definition(gh: "gh")).id
@@ -105,14 +106,14 @@ extension AutomationRunnerTests {
         name: "投稿", notify: nil,
         parts: [
           fetch("gh", every: 1800),
-          part("post", .arrival, from: ["gh"], script: script, deliver: .sideEffect),
+          definitionNode("post", .arrival, from: ["gh"], script: script, deliver: .sideEffect),
         ])
     }
     func runId(_ script: String) -> String? {
       calls(script).last.flatMap { input($0)?.environment["ORBE_RUN_ID"] }
     }
     let id = try runner.set(nil, definition(post: "post")).id
-    let post = store.part(id, "post")
+    let post = store.nodeId(id, "post")
     advance(by: 1800)
     finish("gh", fetched(["a"]))
     let first = try XCTUnwrap(runId("post"))
@@ -141,7 +142,7 @@ extension AutomationRunnerTests {
   func testATriggerWithNothingToTakeRunsNothingAndCountsTheDropsInTheNextRun() throws {
     let id = try define([
       fetch("gh", every: 1800),
-      part("judge", .scheduled(.every(3600)), from: ["gh"], deliver: .taskCandidates),
+      definitionNode("judge", .scheduled(.every(3600)), from: ["gh"], deliver: .taskCandidates),
     ])
     advance(by: 1800)
     finish("gh", fetched(["a"]))
@@ -171,10 +172,10 @@ extension AutomationRunnerTests {
   // MARK: - 使えなくなったストア
 
   /// 運転中に DB の壊れを見つけたら、ストアは使えなくなり（0 件）、どの部品も予定で回らず、定義の変異を断る。
-  func testABrokenDatabaseFoundWhileRunningStopsEveryPartAndRefusesChanges() throws {
+  func testABrokenDatabaseFoundWhileRunningStopsEveryNodeAndRefusesChanges() throws {
     _ = try define([
       fetch("gh", every: 1800),
-      part("digest", .arrival, from: ["gh"], deliver: .report),
+      definitionNode("digest", .arrival, from: ["gh"], deliver: .report),
     ])
 
     func breaks(_: AutomationDatabase, _: inout AutomationMemory) throws {

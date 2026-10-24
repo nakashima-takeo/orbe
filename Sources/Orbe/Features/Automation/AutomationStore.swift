@@ -86,9 +86,9 @@ import Observation
       var entities: [AutomationNode] = []
       for (position, item) in checked.enumerated() {
         let defId = try db.insert(action: item.definitionNode.action)
-        let partId = try db.insertPart(
+        let nodeId = try db.insertNode(
           of: id, at: position, item.definitionNode, defId: defId, addedAt: at)
-        entities.append(AutomationNode(item.definitionNode, id: partId, defId: defId))
+        entities.append(AutomationNode(item.definitionNode, id: nodeId, defId: defId))
       }
       let graph = AutomationGraph(checked, entities: entities)
       for node in graph.nodes { try db.setEdges(of: id, to: node.id, node.inputs) }
@@ -119,19 +119,19 @@ import Observation
   /// 消す。部品をすべて外し（今有効な項目を無効にし、記録を消す）、自動化の行を消す。出どころが無効になった判断待ちの候補は
   /// 下がり、誰も持たなくなった候補は忘れる。定義を読めない自動化も消せる。
   func delete(_ id: Int, now: Date) throws(AutomationError) {
-    let parts: [AutomationNodeID]
+    let nodeIds: [AutomationNodeID]
     if let automation = automation(id) {
-      parts = automation.graph.nodes.map(\.id)
+      nodeIds = automation.graph.nodes.map(\.id)
     } else if let broken = unreadable.first(where: { $0.id == id }) {
-      parts = broken.nodeIds
+      nodeIds = broken.nodeIds
     } else {
       throw .automationNotFound(id)
     }
     let at = TaskItem.storedInstant(now)
     try commit(sweepingAt: at) { db, memory in
       var invalidated: [Int] = []
-      for part in parts {
-        invalidated += try db.removePart(part, at: at)
+      for nodeId in nodeIds {
+        invalidated += try db.removeNode(nodeId, at: at)
       }
       try db.deleteAutomation(id)
       memory.automations.removeAll { $0.id == id }
@@ -327,12 +327,12 @@ struct AutomationMemory: Equatable {
   }
 
   /// 部品の自分の状態を DB から読み直す（読めば取る行は保つ）。
-  mutating func reread(_ part: AutomationNodeID, of id: Int, _ db: AutomationDatabase) throws {
+  mutating func reread(_ nodeId: AutomationNodeID, of id: Int, _ db: AutomationDatabase) throws {
     guard let index = automations.firstIndex(where: { $0.id == id }),
-      let pending = automations[index].states[part]?.pending
+      let pending = automations[index].states[nodeId]?.pending
     else { return }
-    var state = try db.state(of: part)
+    var state = try db.state(of: nodeId)
     state.pending = pending
-    automations[index].states[part] = state
+    automations[index].states[nodeId] = state
   }
 }

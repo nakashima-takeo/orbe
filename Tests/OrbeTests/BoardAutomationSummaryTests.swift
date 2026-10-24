@@ -102,10 +102,10 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
   }
 
   /// 一覧の失敗の印は、最後の回が失敗した部品だけで決まる。失敗の後に成功した部品は数えない。
-  func testListMarkCountsOnlyPartsWhoseLatestRunFailed() throws {
+  func testListMarkCountsOnlyNodesWhoseLatestRunFailed() throws {
     let at = { (hour: Int) in DesignSceneFixtures.automationAt(hour) }
     func fetch(_ key: String) -> AutomationDefinition.Node {
-      DesignSceneFixtures.commandPart(
+      DesignSceneFixtures.commandNode(
         key, key, .scheduled(.every(3600)), script: key, coverage: .newArrivals)
     }
     func mark(_ failing: [String]) throws -> BoardRunMark? {
@@ -115,15 +115,15 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
           name: "失敗", notify: nil,
           parts: [
             fetch("broken"), fetch("recovered"),
-            DesignSceneFixtures.agentPart(
+            DesignSceneFixtures.agentNode(
               "judge", "判定", .manual, from: ["broken", "recovered"], instruction: "i",
               deliver: .taskCandidates),
           ]),
         createdAt: DesignSceneFixtures.automationAt(9, daysAgo: 3),
-        passes: failing.map { AutomationSamplePass(part: $0, at: at(9), outcome: failed) } + [
-          AutomationSamplePass(part: "recovered", at: at(8), outcome: failed),
+        passes: failing.map { AutomationSamplePass(nodeKey: $0, at: at(9), outcome: failed) } + [
+          AutomationSamplePass(nodeKey: "recovered", at: at(8), outcome: failed),
           AutomationSamplePass(
-            part: "recovered", at: at(10),
+            nodeKey: "recovered", at: at(10),
             outcome: DesignSceneFixtures.fetched(
               DesignSceneFixtures.sampleItems("recovered", 1, at: at(10)))),
         ])
@@ -157,7 +157,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     let sample = AutomationSample(
       definition: DesignSceneFixtures.candidatesDefinition(
         "判定",
-        fetch: DesignSceneFixtures.commandPart(
+        fetch: DesignSceneFixtures.commandNode(
           "fetch", "取得", .scheduled(.every(3600)), script: "f", coverage: .newArrivals)),
       createdAt: at(8),
       passes: DesignSceneFixtures.round("one", at: at(9), items: 1, fresh: 1, proposed: 1)
@@ -177,11 +177,11 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
   /// 修正して通った回（末尾に添え書き）は 1 行ずつ残す。
   func testCardHistoryFoldsOnlyLongStretchesOfNothingNew() throws {
     let automation = automations()[0]
-    func card(_ part: String) throws -> [String] {
+    func card(_ nodeKey: String) throws -> [String] {
       said(
         try XCTUnwrap(
           BoardAutomationNodeValue(
-            automation, key: part, text: text, running: false, next: nil, open: 0)
+            automation, key: nodeKey, text: text, running: false, next: nil, open: 0)
         ).runs)
     }
 

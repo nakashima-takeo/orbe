@@ -31,7 +31,8 @@ struct AutomationDefinition: Equatable, Codable {
   }
 
   /// 名前は 1 行に整え、部品はグラフとして検証する。名前はタスクのタイトルと同じ 1 行の規則（前後の空白を除いて保存）。
-  func checked() throws(AutomationError) -> (name: String, parts: [AutomationGraph.Checked]) {
+  func checked() throws(AutomationError) -> (name: String, checkedNodes: [AutomationGraph.Checked])
+  {
     let name: String
     do throws(TaskStoreError) {
       name = try TaskStore.validTitle(self.name)

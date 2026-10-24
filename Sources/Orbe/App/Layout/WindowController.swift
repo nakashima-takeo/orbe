@@ -60,7 +60,7 @@ final class WindowController: NSObject, NSWindowDelegate {
   // 自動化の走らせ役。定義の変異はここを通して番人の登録を合わせ、読みと提案のさばきは `automationStore` が持つ。
   private(set) lazy var automationRunner = AutomationRunner(
     store: AutomationStore(), workspaces: { [store] in AutomationWorkspaces(store) },
-    recorded: { [weak self] in self?.notifyAutomationRecorded($0.end.automationId, $0.end.part) },
+    recorded: { [weak self] in self?.notifyAutomationRecorded($0.end.automationId, $0.end.nodeId) },
     defined: { [weak self] in self?.automationDefined($0) },
     deleted: { [weak self] in self?.automationDeleted($0) })
   var automationStore: AutomationStore { automationRunner.store }

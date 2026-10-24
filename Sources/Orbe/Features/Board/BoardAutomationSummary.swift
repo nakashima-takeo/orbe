@@ -255,10 +255,10 @@ extension BoardAutomationSummary {
   /// 部品の回 1 つを知らせの本文にした 1 行（「連絡：5 件を判定、候補 1 件」）。報告と作業の応答は文の 1 行目。部品は名前
   /// だけで言う。
   static func line(
-    _ run: AutomationNodeRun, part: AutomationNodeID, in automation: Automation,
+    _ run: AutomationNodeRun, nodeId: AutomationNodeID, in automation: Automation,
     text: AutomationText
   ) -> String {
-    guard let node = automation.graph.node(part) else { return "\(part)" }
+    guard let node = automation.graph.node(nodeId) else { return "\(nodeId)" }
     let body: String =
       switch run.result {
       case .report(let report?) where !run.failed: report

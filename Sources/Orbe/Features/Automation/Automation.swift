@@ -181,7 +181,7 @@ enum AutomationError: Error, Equatable {
   case proposalNotOpen(Int)
   /// 値か組み合わせが不変条件に反する。
   case invalid(String)
-  case partNotFound(Int, String)
+  case nodeNotFound(Int, String)
   /// 流している途中に流そうとした。
   case flowing(Int)
   /// 自動化の DB を使えない、または書けなかった。

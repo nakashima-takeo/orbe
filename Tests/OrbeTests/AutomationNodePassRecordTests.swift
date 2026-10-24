@@ -20,7 +20,7 @@ final class AutomationNodePassRecordTests: AutomationNodePassTestCase {
 
   func testProcessAndJudgeCountTheLinesTheyGave() {
     start(
-      AutomationGraphTests.command("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.command("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a"), row("b")], reachesJudge: false))
     start(
       AutomationGraphTests.command("j", from: ["f"], deliver: .taskCandidates), .judge,
@@ -46,7 +46,7 @@ final class AutomationNodePassRecordTests: AutomationNodePassTestCase {
   /// agent は受けた件数を数える（断った呼び出しの件は数えない）。
   func testAgentCountsWhatWasAccepted() {
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a"), row("b")], reachesJudge: false))
 
     readAll(0)

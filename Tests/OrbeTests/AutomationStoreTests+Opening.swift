@@ -58,10 +58,10 @@ extension AutomationStoreTests {
   // MARK: - 閉じ込め
 
   /// 版 2 の DB で組み合わせの部品の定義を指す部品は壊れた値なので、その自動化は定義エラーとして読めない自動化になる。
-  func testAPartPointingAtACompositeDefinitionIsADefinitionError() throws {
+  func testANodePointingAtACompositeDefinitionIsADefinitionError() throws {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
-    let judge = try XCTUnwrap(store?.part(id, "judge"))
+    let judge = try XCTUnwrap(store?.nodeId(id, "judge"))
     store = nil
     try database().exec(
       """
@@ -87,7 +87,7 @@ extension AutomationStoreTests {
     let a = Self.item("a")
     try Self.fetch(XCTUnwrap(store), broken, [a])
     try Self.judge(XCTUnwrap(store), broken, proposing: [a])
-    let judge = try XCTUnwrap(store?.part(broken, "judge"))
+    let judge = try XCTUnwrap(store?.nodeId(broken, "judge"))
     store = nil
     try database().run(
       """
@@ -129,7 +129,7 @@ extension AutomationStoreTests {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition("壊す"), now: Self.at).id)
     try Self.fetch(XCTUnwrap(store), id, [Self.item("a")], outcome: Self.breached([Self.item("a")]))
-    let judge = try XCTUnwrap(store?.part(id, "judge"))
+    let judge = try XCTUnwrap(store?.nodeId(id, "judge"))
     store = nil
     try database().run(
       """
@@ -141,7 +141,7 @@ extension AutomationStoreTests {
 
   /// 読めない自動化を直すと、残る部品は開き直したストアと同じ状態（回の記録・通し番号・足した時刻）から続き、何をするかが
   /// 変わったものとして外した印が下りる。今の集合のまま直した部品の今有効な項目は残る。
-  func testFixingAnUnreadableAutomationCarriesItsPartsOverAndLowersTheirMarks() throws {
+  func testFixingAnUnreadableAutomationCarriesItsNodesOverAndLowersTheirMarks() throws {
     let (carried, id) = try { () throws -> (Automation, Int) in
       let (store, id) = try unreadableWithABreach()
       var fixed = Self.definition("直した")
@@ -175,15 +175,15 @@ extension AutomationStoreTests {
   }
 
   /// 読めない自動化の書き換えでも、id を落として今の部品と同じ鍵で書いた部品は断り、部品は変わらない。
-  func testAnUnreadableAutomationRefusesARewriteThatDropsThePartIds() throws {
+  func testAnUnreadableAutomationRefusesARewriteThatDropsTheNodeIds() throws {
     let (store, id) = try unreadableWithABreach()
-    let parts = store.unreadable.first?.nodeIds
+    let nodeIds = store.unreadable.first?.nodeIds
 
     XCTAssertThrowsError(try store.replace(id, version: 1, with: Self.definition(), now: Self.at)) {
       guard case .invalid(let message) = $0 as? AutomationError else { return XCTFail("\($0)") }
       XCTAssertTrue(message.hasPrefix(#"parts[0].id: the key "fetch" belongs to part"#), message)
     }
-    XCTAssertEqual(store.unreadable.first?.nodeIds, parts)
+    XCTAssertEqual(store.unreadable.first?.nodeIds, nodeIds)
   }
 
   /// 値の壊れた候補は、その 1 件だけが読めない候補としてリンクを塞ぎ続け、持ち主（出した判定の部品の自動化）が無くなれば

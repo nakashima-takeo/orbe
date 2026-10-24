@@ -68,7 +68,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
   static func definition(_ name: String = "受信", script: String = "true") -> AutomationDefinition {
     DesignSceneFixtures.candidatesDefinition(
       name,
-      fetch: DesignSceneFixtures.commandPart(
+      fetch: DesignSceneFixtures.commandNode(
         "fetch", "取る", .scheduled(.every(1800)), script: script, coverage: .currentSet))
   }
 
@@ -84,9 +84,9 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     reasons: [String?]? = nil
   ) throws {
     let now = Date()
-    try store.record(id, part: "fetch", at: now, outcome: DesignSceneFixtures.fetched(items))
+    try store.record(id, nodeKey: "fetch", at: now, outcome: DesignSceneFixtures.fetched(items))
     guard !proposing.isEmpty else { return }
-    let judge = store.part(id, "judge")
+    let judge = store.nodeId(id, "judge")
     let taken = try XCTUnwrap(store.read(judge, of: id, baseline: nil, now: now)).taken
     let proposals = proposing.enumerated().compactMap { pair -> AutomationNodePass.Proposal? in
       let (index, item) = pair
@@ -98,7 +98,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
         due: nil, workspace: workspaces?[index] ?? nil, reason: reasons?[index] ?? nil)
     }
     try store.record(
-      id, part: "judge", trigger: .arrival, at: now,
+      id, nodeKey: "judge", trigger: .arrival, at: now,
       outcome: DesignSceneFixtures.judged(proposals, rows: taken.count))
   }
 
@@ -158,7 +158,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertTrue(try proposals(wc, of: second).isEmpty)
 
     var reporting = try XCTUnwrap(store.automation(first)?.definition)
-    reporting.parts[1] = DesignSceneFixtures.commandPart(
+    reporting.parts[1] = DesignSceneFixtures.commandNode(
       "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report)
     _ = try success(
       wc.controlSetAutomation(
@@ -181,7 +181,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     try Self.round(store, second, fetched: [moved])
     var reporting = try XCTUnwrap(store.automation(first)?.definition)
     reporting.parts[0].key = "source"
-    reporting.parts[1] = DesignSceneFixtures.commandPart(
+    reporting.parts[1] = DesignSceneFixtures.commandNode(
       "digest", "要約", .arrival, from: ["source"], script: "digest", deliver: .report)
     _ = try success(wc.controlSetAutomation(automationId: first, version: 1, reporting))
 
@@ -193,7 +193,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertEqual(proposedBy["sourcePartKey"] as? String, "source", "出どころの部品は今の鍵で言う")
 
     try store.dismiss(try XCTUnwrap(store.proposals.first?.id))
-    let other = DesignSceneFixtures.commandPart(
+    let other = DesignSceneFixtures.commandNode(
       "other", "ほか", .manual, script: "other", deliver: .report)
     _ = try success(
       wc.controlSetAutomation(
@@ -261,12 +261,12 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let id = try set(wc, Self.definition(script: "sleep 30"))
     addTeardownBlock { _ = wc.controlDeleteAutomation(automationId: id) }
 
-    _ = try success(wc.controlRunAutomation(automationId: id, partKey: nil))
+    _ = try success(wc.controlRunAutomation(automationId: id, nodeKey: nil))
 
-    let parts = try XCTUnwrap(try listed(wc)[id]?["parts"] as? [String: [String: Any]])
-    XCTAssertEqual(parts["fetch"]?["running"] as? Bool, true)
-    XCTAssertEqual(parts["judge"]?["running"] as? Bool, false)
-    XCTAssertEqual(code(wc.controlRunAutomation(automationId: id, partKey: "fetch")), -32000)
+    let nodes = try XCTUnwrap(try listed(wc)[id]?["parts"] as? [String: [String: Any]])
+    XCTAssertEqual(nodes["fetch"]?["running"] as? Bool, true)
+    XCTAssertEqual(nodes["judge"]?["running"] as? Bool, false)
+    XCTAssertEqual(code(wc.controlRunAutomation(automationId: id, nodeKey: "fetch")), -32000)
   }
 
   /// 未知の ID は -32004、不変条件に反する定義は -32602 で、受信は変わらない。
@@ -279,8 +279,8 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
       codex.parts[1].action.method = .agent(agent)
     }
 
-    XCTAssertEqual(code(wc.controlRunAutomation(automationId: 99, partKey: nil)), -32004)
-    XCTAssertEqual(code(wc.controlRunAutomation(automationId: id, partKey: "nope")), -32004)
+    XCTAssertEqual(code(wc.controlRunAutomation(automationId: 99, nodeKey: nil)), -32004)
+    XCTAssertEqual(code(wc.controlRunAutomation(automationId: id, nodeKey: "nope")), -32004)
     XCTAssertEqual(code(wc.controlPauseAutomation(automationId: 99, paused: true)), -32004)
     XCTAssertEqual(code(wc.controlDeleteAutomation(automationId: 99)), -32004)
     XCTAssertEqual(code(wc.controlListAutomationProposals(automationId: 99)), -32004)
@@ -302,12 +302,12 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let definition = AutomationDefinition(
       name: "Slack", notify: .menuBar,
       parts: [
-        DesignSceneFixtures.agentPart(
+        DesignSceneFixtures.agentNode(
           "slack", "取る", .scheduled(.cron(try BackgroundCron("30 9 * * mon-fri"))),
           tools: ["mcp__slack__search"], instruction: "自分宛の DM", coverage: .newArrivals),
-        DesignSceneFixtures.commandPart(
+        DesignSceneFixtures.commandNode(
           "narrow", "絞り込み", .arrival, from: ["slack"], script: "jq -c ."),
-        DesignSceneFixtures.agentPart(
+        DesignSceneFixtures.agentNode(
           "judge", "判定", .manual, from: ["narrow"], instruction: "判定して", deliver: .taskCandidates),
       ])
     let id = try set(wc, definition)
@@ -316,7 +316,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let data = try JSONSerialization.data(withJSONObject: listedDefinition)
     var stored = definition
     for index in stored.parts.indices {
-      stored.parts[index].id = wc.automationStore.part(id, stored.parts[index].key)
+      stored.parts[index].id = wc.automationStore.nodeId(id, stored.parts[index].key)
     }
 
     XCTAssertEqual(
@@ -324,16 +324,16 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
   }
 
   /// 試走は始めた応答で道の上の部品を並べ、待って読むと部品の回の結果を返す。自動化を消すと読めない。
-  func testATrialStartsAtOnceAndReadsBackItsPartsWhenWaitedFor() throws {
+  func testATrialStartsAtOnceAndReadsBackItsNodesWhenWaitedFor() throws {
     let wc = try launch()
     let id = try set(
       wc,
       AutomationDefinition(
         name: "試す", notify: nil,
         parts: [
-          DesignSceneFixtures.commandPart(
+          DesignSceneFixtures.commandNode(
             "fetch", "取る", .manual, script: "exit 1", coverage: .currentSet),
-          DesignSceneFixtures.commandPart(
+          DesignSceneFixtures.commandNode(
             "send", "送る", .arrival, from: ["fetch"], script: "exit 1", deliver: .sideEffect),
         ]))
     let row = #"{"id":"a","link":"https://example.com/a","body":"a","time":"2026-10-10T09:00:00Z"}"#
@@ -360,14 +360,14 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertNil(read["timedOut"])
     let ended = try XCTUnwrap(read["trial"] as? [String: Any])
     XCTAssertEqual(ended["running"] as? Bool, false)
-    let parts = try XCTUnwrap(ended["parts"] as? [[String: Any]])
-    XCTAssertEqual(parts.map { $0["state"] as? String }, ["given", "held"])
-    let fetchId = "\(wc.automationStore.part(id, "fetch")):a"
+    let nodes = try XCTUnwrap(ended["parts"] as? [[String: Any]])
+    XCTAssertEqual(nodes.map { $0["state"] as? String }, ["given", "held"])
+    let fetchId = "\(wc.automationStore.nodeId(id, "fetch")):a"
     let given = try XCTUnwrap(
-      (parts[0]["runs"] as? [[String: Any]])?.first?["given"] as? [String: Any])
+      (nodes[0]["runs"] as? [[String: Any]])?.first?["given"] as? [String: Any])
     XCTAssertEqual((given["rows"] as? [[String: Any]])?.map { $0["id"] as? String }, [fetchId])
     let held = try XCTUnwrap(
-      (parts[1]["runs"] as? [[String: Any]])?.first?["held"] as? [String: Any])
+      (nodes[1]["runs"] as? [[String: Any]])?.first?["held"] as? [String: Any])
     XCTAssertEqual((held["rows"] as? [[String: Any]])?.map { $0["id"] as? String }, [fetchId])
 
     _ = wc.controlDeleteAutomation(automationId: id)

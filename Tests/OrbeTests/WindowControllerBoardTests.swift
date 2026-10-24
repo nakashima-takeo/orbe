@@ -44,7 +44,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
       DesignSceneFixtures.boardAutomationSamples().prefix(2).map {
         var sample = $0
         sample.paused = true
-        sample.definition.parts[0] = DesignSceneFixtures.commandPart(
+        sample.definition.parts[0] = DesignSceneFixtures.commandNode(
           "fetch", "取る", .scheduled(.every(1800)), script: "true", coverage: .currentSet)
         return sample
       })

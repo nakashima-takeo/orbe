@@ -58,7 +58,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     AutomationDefinition(
       name: name, notify: notify,
       parts: [
-        DesignSceneFixtures.agentPart(
+        DesignSceneFixtures.agentNode(
           "digest", "要約", .scheduled(.every(1440)), instruction: "PR を要約する", deliver: .report)
       ])
   }
@@ -81,7 +81,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     failure: String? = nil
   ) throws {
     try wc.automationStore.record(
-      id, part: "digest", trigger: .now, at: Date(),
+      id, nodeKey: "digest", trigger: .now, at: Date(),
       outcome: failure.map { DesignSceneFixtures.failed($0) }
         ?? DesignSceneFixtures.reported(report))
   }
@@ -186,7 +186,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     let id = try store.create(
       DesignSceneFixtures.candidatesDefinition(
         "受信",
-        fetch: DesignSceneFixtures.commandPart(
+        fetch: DesignSceneFixtures.commandNode(
           "fetch", "取る", .scheduled(.every(1800)), script: "fetch", coverage: .currentSet),
         notify: .menuBar), now: Date()
     ).id
@@ -196,7 +196,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     var at = Date()
     func record(_ outcome: AutomationNodePass.Outcome) throws {
       at = at.addingTimeInterval(60)
-      try store.record(id, part: "fetch", at: at, outcome: outcome)
+      try store.record(id, nodeKey: "fetch", at: at, outcome: outcome)
     }
 
     try record(breachedFailure)
@@ -219,17 +219,17 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     let id = try store.create(
       DesignSceneFixtures.candidatesDefinition(
         "受信",
-        fetch: DesignSceneFixtures.commandPart(
+        fetch: DesignSceneFixtures.commandNode(
           "fetch", "取る", .scheduled(.every(1800)), script: "fetch", coverage: .currentSet),
         notify: .menuBar), now: Date()
     ).id
     let at = Date()
     try store.record(
-      id, part: "fetch", at: at,
+      id, nodeKey: "fetch", at: at,
       outcome: AutomationStoreTests.breached([AutomationStoreTests.item("a")]))
     XCTAssertNotNil(wc.automationNotification(id, "fetch"), "前提: 外した回は知らせる")
 
-    try store.record(id, part: "fetch", at: at, outcome: DesignSceneFixtures.fetched([]))
+    try store.record(id, nodeKey: "fetch", at: at, outcome: DesignSceneFixtures.fetched([]))
 
     XCTAssertNil(wc.automationNotification(id, "fetch"))
   }

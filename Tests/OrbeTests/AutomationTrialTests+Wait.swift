@@ -9,7 +9,7 @@ import XCTest
 extension AutomationTrialTests {
   /// 同じ自動化で始め直すと前の試走の手段が止まり、待っている読み手には新しい試走の終わりが返る。
   func testStartingAgainStopsTheRunningTrialAndWaitersGetTheNewOne() throws {
-    let id = try define([fetch("gh"), part("d", from: ["gh"], deliver: .report)])
+    let id = try define([fetch("gh"), definitionNode("d", from: ["gh"], deliver: .report)])
     _ = try trials.start(id, .init())
     waitCalls("gh", 1)
     var replies: [(AutomationTrial?, Bool)] = []
@@ -30,7 +30,7 @@ extension AutomationTrialTests {
 
   /// 時間切れは、その時点の試走を時間切れとして返す。
   func testWaitingPastTheTimeoutReturnsTheTrialSoFar() throws {
-    let id = try define([fetch("gh"), part("d", from: ["gh"], deliver: .report)])
+    let id = try define([fetch("gh"), definitionNode("d", from: ["gh"], deliver: .report)])
     _ = try trials.start(id, .init())
     var reply: (AutomationTrial?, Bool)?
     trials.wait(id, timeout: .milliseconds(30)) { reply = ((try? $0.get()), $1) }
@@ -41,7 +41,7 @@ extension AutomationTrialTests {
 
   /// 自動化を消すと試走の手段が止まり、終わりを待つ読み手には時間切れを待たずに自動化が無いと返る。
   func testDeletingTheAutomationStopsItsTrialAndAnswersItsWaiters() throws {
-    let id = try define([fetch("gh"), part("d", from: ["gh"], deliver: .report)])
+    let id = try define([fetch("gh"), definitionNode("d", from: ["gh"], deliver: .report)])
     _ = try trials.start(id, .init())
     waitCalls("gh", 1)
     var reply: Result<AutomationTrial, AutomationError>?

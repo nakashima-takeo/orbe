@@ -78,7 +78,7 @@ extension ControlWireTests {
               method: .agent(
                 AutomationNodeAgent(
                   cli: "claude", model: nil, tools: ["mcp__slack__search"], instruction: "DM")),
-              timeoutMinutes: nil, coverage: .newArrivals, destination: .nextPart),
+              timeoutMinutes: nil, coverage: .newArrivals, destination: .nextNode),
             maxItems: nil),
           AutomationDefinition.Node(
             id: AutomationNodeID(4), key: "judge", name: "判定", trigger: .arrival,
@@ -184,10 +184,10 @@ extension ControlWireTests {
 
     XCTAssertEqual(fake.pausedAutomations.map(\.paused), [false])
     XCTAssertEqual(fake.ranAutomations.map(\.automationId), [2, 2])
-    XCTAssertEqual(fake.ranAutomations.map(\.partKey), [nil, "judge"])
+    XCTAssertEqual(fake.ranAutomations.map(\.nodeKey), [nil, "judge"])
     XCTAssertEqual(fake.deletedAutomationIds, [2])
     XCTAssertEqual(fake.proposalLists, [nil, 2])
-    XCTAssertEqual(fake.runLists.map(\.partKey), ["judge"])
+    XCTAssertEqual(fake.runLists.map(\.nodeKey), ["judge"])
     XCTAssertEqual(fake.runLists.map(\.before), [9])
     XCTAssertEqual(fake.runLists.map(\.limit), [5])
   }

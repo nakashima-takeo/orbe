@@ -75,9 +75,9 @@ enum AutomationFailure: Error, Equatable {
   /// 判定へ渡す行が、どれも出どころを持たなかった。
   case unsourced
 
-  /// AI が読む英文。`part` はこの回の部品の鍵。
-  func text(part: String, ending: AutomationEnding, breach: AutomationRejections?) -> String {
-    let word = "part \"\(part)\""
+  /// AI が読む英文。`nodeKey` はこの回の部品の鍵。
+  func text(nodeKey: String, ending: AutomationEnding, breach: AutomationRejections?) -> String {
+    let word = "part \"\(nodeKey)\""
     func with(_ head: String, _ detail: String) -> String {
       detail.isEmpty ? head : "\(head): \(detail)"
     }

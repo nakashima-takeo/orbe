@@ -15,9 +15,9 @@ final class TaskPaletteAutomationListTests: OrbeTestCase {
       today: .today(
         DesignSceneFixtures.taskToday, timeZone: DesignSceneFixtures.taskCalendar.timeZone),
       timeZone: DesignSceneFixtures.taskCalendar.timeZone)
-    func latest(_ id: Int, _ part: String) throws -> String {
+    func latest(_ id: Int, _ nodeKey: String) throws -> String {
       let automation = try XCTUnwrap(store.automation(id))
-      let node = try XCTUnwrap(automation.graph.node(key: part))
+      let node = try XCTUnwrap(automation.graph.node(key: nodeKey))
       return TaskPaletteAutomationList.latest(node, automation.state(node.id).runs.first, text)
     }
 

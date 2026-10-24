@@ -42,7 +42,7 @@ final class AutomationRunnerTests: OrbeTestCase {
       workspaces: { AutomationWorkspaces(listed: [], home: nil) },
       recorded: { [unowned self] record in
         recorded.append(
-          store.automation(record.end.automationId)?.graph.node(record.end.part)?.key ?? "?")
+          store.automation(record.end.automationId)?.graph.node(record.end.nodeId)?.key ?? "?")
       },
       defined: { _ in }, deleted: { _ in })
     runner.now = { [unowned self] in now }
@@ -61,12 +61,12 @@ final class AutomationRunnerTests: OrbeTestCase {
   // MARK: - 部品
 
   /// コマンドの部品。スクリプトは既定で部品の鍵（呼び出しを部品ごとに見分けるため）。
-  func part(
+  func definitionNode(
     _ key: String, _ trigger: AutomationNode.Trigger, from inputs: [String] = [],
     script: String? = nil, coverage: AutomationCoverage? = nil,
-    deliver: AutomationActionDef.Destination = .nextPart
+    deliver: AutomationActionDef.Destination = .nextNode
   ) -> AutomationDefinition.Node {
-    DesignSceneFixtures.commandPart(
+    DesignSceneFixtures.commandNode(
       key, key, trigger, from: inputs, script: script ?? key, coverage: coverage, deliver: deliver)
   }
 
@@ -74,11 +74,11 @@ final class AutomationRunnerTests: OrbeTestCase {
   func fetch(_ key: String, every seconds: TimeInterval, script: String? = nil)
     -> AutomationDefinition.Node
   {
-    part(key, .scheduled(.every(seconds)), script: script, coverage: .newArrivals)
+    definitionNode(key, .scheduled(.every(seconds)), script: script, coverage: .newArrivals)
   }
 
-  func define(_ parts: [AutomationDefinition.Node], name: String = "自動化") throws -> Int {
-    try runner.set(nil, AutomationDefinition(name: name, notify: nil, parts: parts)).id
+  func define(_ definitionNodes: [AutomationDefinition.Node], name: String = "自動化") throws -> Int {
+    try runner.set(nil, AutomationDefinition(name: name, notify: nil, parts: definitionNodes)).id
   }
 
   /// 今の版で書き換える。同じ鍵の部品は今の部品の id を添える（同じ部品のまま）。
@@ -99,7 +99,7 @@ final class AutomationRunnerTests: OrbeTestCase {
 
   /// 下流へ渡す id（`<部品 ID>:<書かれた id>`）。
   func downstream(_ key: String, _ written: String, of id: Int) -> String {
-    "\(store.part(id, key)):\(written)"
+    "\(store.nodeId(id, key)):\(written)"
   }
 
   // MARK: - 手段の呼び出し
@@ -165,7 +165,8 @@ final class AutomationRunnerTests: OrbeTestCase {
   func testFetchesAddToTheJudgesPendingRowsAndTheJudgeTakesThemAllAtItsTime() throws {
     let id = try define([
       fetch("gh", every: 1800), fetch("slack", every: 3600),
-      part("judge", .scheduled(.every(86400)), from: ["gh", "slack"], deliver: .taskCandidates),
+      definitionNode(
+        "judge", .scheduled(.every(86400)), from: ["gh", "slack"], deliver: .taskCandidates),
     ])
 
     advance(by: 1800)
@@ -195,7 +196,7 @@ final class AutomationRunnerTests: OrbeTestCase {
   func testAFailedJudgeKeepsItsPendingRowsForTheNextJudge() throws {
     let id = try define([
       fetch("gh", every: 1800),
-      part("judge", .scheduled(.every(3600)), from: ["gh"], deliver: .taskCandidates),
+      definitionNode("judge", .scheduled(.every(3600)), from: ["gh"], deliver: .taskCandidates),
     ])
     advance(by: 1800)
     finish("gh", fetched(["a"]))
@@ -210,10 +211,10 @@ final class AutomationRunnerTests: OrbeTestCase {
   }
 
   /// 「届いたら」の部品が失敗しても、同じ行ですぐには回し直さず、上流の次の回の後に（新しい行が無くても）やり直す。
-  func testAFailedArrivalPartRetriesAfterTheUpstreamsNextRunNotAtOnce() throws {
+  func testAFailedArrivalNodeRetriesAfterTheUpstreamsNextRunNotAtOnce() throws {
     let id = try define([
       fetch("gh", every: 1800),
-      part("digest", .arrival, from: ["gh"], deliver: .report),
+      definitionNode("digest", .arrival, from: ["gh"], deliver: .report),
     ])
     advance(by: 1800)
     finish("gh", fetched(["a"]))
@@ -228,10 +229,10 @@ final class AutomationRunnerTests: OrbeTestCase {
   }
 
   /// 「届いたら」の部品が走っている間に届いた行は、その回が終わったら続けて起こして渡す。
-  func testRowsArrivingWhileAnArrivalPartRunsAreTakenRightAfterIt() throws {
+  func testRowsArrivingWhileAnArrivalNodeRunsAreTakenRightAfterIt() throws {
     let id = try define([
       fetch("gh", every: 1800),
-      part("digest", .arrival, from: ["gh"], deliver: .report),
+      definitionNode("digest", .arrival, from: ["gh"], deliver: .report),
     ])
     advance(by: 1800)
     finish("gh", fetched(["a"]))
@@ -248,18 +249,18 @@ final class AutomationRunnerTests: OrbeTestCase {
   }
 
   /// 届いたまま残っている行は、起動で載せたときに「届いたら」の部品を起こす。止めた自動化は起動では起こさず、再開で起こす。
-  func testLeftoverRowsWakeArrivalPartsAtLaunchAndOnResumeButNotWhilePaused() throws {
+  func testLeftoverRowsWakeArrivalNodesAtLaunchAndOnResumeButNotWhilePaused() throws {
     func seed(_ digest: String, paused: Bool) throws -> Int {
       let id = try store.create(
         AutomationDefinition(
           name: digest, notify: nil,
           parts: [
             fetch("gh", every: 86400),
-            part("digest", .arrival, from: ["gh"], script: digest, deliver: .report),
+            definitionNode("digest", .arrival, from: ["gh"], script: digest, deliver: .report),
           ]), now: now
       ).id
       try store.record(
-        id, part: "gh", at: now,
+        id, nodeKey: "gh", at: now,
         outcome: DesignSceneFixtures.fetched([
           AutomationItem(id: "a", link: "https://example.com/a", body: "a", time: now)
         ]))
@@ -281,7 +282,7 @@ final class AutomationRunnerTests: OrbeTestCase {
   func testOneRunTakesEveryPendingRow() throws {
     let id = try define([
       fetch("gh", every: 1800),
-      DesignSceneFixtures.agentPart(
+      DesignSceneFixtures.agentNode(
         "judge", "判定", .scheduled(.every(86400)), from: ["gh"], instruction: "判定する",
         deliver: .taskCandidates),
     ])
@@ -313,7 +314,7 @@ final class AutomationRunnerTests: OrbeTestCase {
     XCTAssertEqual(agentCalls.count, 1)
     XCTAssertEqual(pending("judge", of: id), 0)
     XCTAssertEqual(
-      store.automation(id)?.state(store.part(id, "judge")).runs.map(\.run?.taken), [items.count])
+      store.automation(id)?.state(store.nodeId(id, "judge")).runs.map(\.run?.taken), [items.count])
   }
 
   var agentCalls: [Int] {
@@ -329,7 +330,7 @@ final class AutomationRunnerTests: OrbeTestCase {
   func testANewArrivalsFetchGetsTheStartOfItsLastSuccessfulRun() throws {
     _ = try define([
       fetch("gh", every: 1800),
-      part("digest", .arrival, from: ["gh"], deliver: .report),
+      definitionNode("digest", .arrival, from: ["gh"], deliver: .report),
     ])
     func since() -> String? { calls("gh").last.flatMap { input($0)?.environment["ORBE_SINCE"] } }
 

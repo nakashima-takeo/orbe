@@ -30,7 +30,7 @@ final class AutomationTrialTests: OrbeTestCase {
       workspaces: { AutomationWorkspaces(listed: [], home: nil) },
       recorded: { [unowned self] record in
         recorded.append(
-          store.automation(record.end.automationId)?.graph.node(record.end.part)?.key ?? "?")
+          store.automation(record.end.automationId)?.graph.node(record.end.nodeId)?.key ?? "?")
       }, defined: { _ in },
       deleted: { [unowned self] in trials.discard($0) })
     runner.now = { [unowned self] in now }
@@ -47,25 +47,25 @@ final class AutomationTrialTests: OrbeTestCase {
 
   // MARK: - 部品と手段
 
-  func part(
+  func definitionNode(
     _ key: String, _ trigger: AutomationNode.Trigger = .manual, from inputs: [String] = [],
-    deliver: AutomationActionDef.Destination = .nextPart
+    deliver: AutomationActionDef.Destination = .nextNode
   ) -> AutomationDefinition.Node {
-    DesignSceneFixtures.commandPart(key, key, trigger, from: inputs, script: key, deliver: deliver)
+    DesignSceneFixtures.commandNode(key, key, trigger, from: inputs, script: key, deliver: deliver)
   }
 
   func fetch(_ key: String) -> AutomationDefinition.Node {
-    DesignSceneFixtures.commandPart(
+    DesignSceneFixtures.commandNode(
       key, key, .scheduled(.every(Self.far)), script: key, coverage: .currentSet)
   }
 
   /// 下流へ渡す id（`<部品 ID>:<書かれた id>`）。
   func downstream(_ key: String, _ written: String, of id: Int) -> String {
-    "\(store.part(id, key)):\(written)"
+    "\(store.nodeId(id, key)):\(written)"
   }
 
-  func define(_ parts: [AutomationDefinition.Node]) throws -> Int {
-    try runner.set(nil, AutomationDefinition(name: "自動化", notify: nil, parts: parts)).id
+  func define(_ definitionNodes: [AutomationDefinition.Node]) throws -> Int {
+    try runner.set(nil, AutomationDefinition(name: "自動化", notify: nil, parts: definitionNodes)).id
   }
 
   func calls(_ script: String) -> [Int] {
@@ -135,8 +135,8 @@ final class AutomationTrialTests: OrbeTestCase {
   /// 試走の前後で本番の状態も候補も変わらず、知らせも出ない。試走で新しかった項目は、その後の本番でも新しい項目として流れる。
   func testATrialLeavesProductionAsItWasAndItsNewItemsStayNewForProduction() throws {
     let id = try define([
-      fetch("gh"), part("p", from: ["gh"]),
-      part("judge", from: ["p"], deliver: .taskCandidates),
+      fetch("gh"), definitionNode("p", from: ["gh"]),
+      definitionNode("judge", from: ["p"], deliver: .taskCandidates),
     ])
     try runner.flow(id, to: .ends)
     finish("gh", fetched(["a"]))
@@ -180,15 +180,15 @@ final class AutomationTrialTests: OrbeTestCase {
   /// 本物）。手段のスクリプトは x・y で、試走する自動化の部品と見分ける。
   func testATrialDoesNotWakeOtherAutomationsInTheCopy() throws {
     let other = try define([
-      DesignSceneFixtures.commandPart(
+      DesignSceneFixtures.commandNode(
         "gh", "gh", .scheduled(.every(Self.far)), script: "x", coverage: .currentSet),
-      DesignSceneFixtures.commandPart(
+      DesignSceneFixtures.commandNode(
         "d", "d", .arrival, from: ["gh"], script: "y", deliver: .report),
     ])
-    try runner.flow(other, to: .part(store.part(other, "gh")))
+    try runner.flow(other, to: .node(store.nodeId(other, "gh")))
     finish("x", fetched(["a"]))
     XCTAssertEqual(calls("y").count, 1, "前提: 本番の y が走っていて、読んだ位置はまだ進んでいない")
-    let id = try define([fetch("gh"), part("d", from: ["gh"], deliver: .report)])
+    let id = try define([fetch("gh"), definitionNode("d", from: ["gh"], deliver: .report)])
 
     let trial = try trials.start(id, .init())
     waitCalls("gh", 1)
@@ -201,7 +201,8 @@ final class AutomationTrialTests: OrbeTestCase {
   /// 処理が `id` の無い行を出すと、試走の回は本番の回と同じ失敗の理由と外した行の記録で返る。
   func testABreachInATrialReadsTheSameAsInProduction() throws {
     let id = try define([
-      fetch("gh"), part("p", from: ["gh"]), part("digest", from: ["p"], deliver: .report),
+      fetch("gh"), definitionNode("p", from: ["gh"]),
+      definitionNode("digest", from: ["p"], deliver: .report),
     ])
     let trial = try trials.start(id, .init())
     waitCalls("gh", 1)
@@ -223,10 +224,10 @@ final class AutomationTrialTests: OrbeTestCase {
   }
 
   /// 1 つの部品が何度も回ると、回は本番の `runs` と同じく新しい順に並ぶ。
-  func testRunsOfAPartAreNewestFirstAsInProduction() throws {
+  func testRunsOfANodeAreNewestFirstAsInProduction() throws {
     let id = try define([
       fetch("gh"), fetch("backlog"),
-      part("digest", .arrival, from: ["gh", "backlog"], deliver: .report),
+      definitionNode("digest", .arrival, from: ["gh", "backlog"], deliver: .report),
     ])
     let trial = try trials.start(id, .init())
     waitCalls("backlog", 1)
@@ -238,18 +239,18 @@ final class AutomationTrialTests: OrbeTestCase {
     finish("digest", "2 回目")
     ended(trial)
 
-    let parts = try XCTUnwrap(trial.json { _ in nil }["parts"] as? [[String: Any]])
+    let nodes = try XCTUnwrap(trial.json { _ in nil }["parts"] as? [[String: Any]])
     let runs = try XCTUnwrap(
-      parts.first { $0["key"] as? String == "digest" }?["runs"] as? [[String: Any]])
+      nodes.first { $0["key"] as? String == "digest" }?["runs"] as? [[String: Any]])
     XCTAssertEqual(
       runs.map { ($0["result"] as? [String: Any])?["text"] as? String }, ["2 回目", "1 回目"])
   }
 
   /// 入力が 2 つの「届いたら」の処理が試走の中で 2 回確定しても、回ごとの結果はその回が足した行だけ（同じ時刻でも混ざらない）。
-  func testEachRunOfAPartCarriesOnlyTheRowsItAdded() throws {
+  func testEachRunOfANodeCarriesOnlyTheRowsItAdded() throws {
     let id = try define([
-      fetch("gh"), fetch("backlog"), part("p", .arrival, from: ["gh", "backlog"]),
-      part("d", from: ["p"], deliver: .report),
+      fetch("gh"), fetch("backlog"), definitionNode("p", .arrival, from: ["gh", "backlog"]),
+      definitionNode("d", from: ["p"], deliver: .report),
     ])
     let trial = try trials.start(id, .init(from: ["gh", "backlog"], to: ["p"]))
     waitCalls("backlog", 1)

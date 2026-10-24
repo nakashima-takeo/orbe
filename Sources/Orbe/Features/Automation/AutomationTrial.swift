@@ -38,7 +38,7 @@ final class AutomationTrial {
     /// 道の根（道の上の入力を持たない部品）。
     var roots: [AutomationGraph.Node] {
       let ids = Set(path.map(\.id))
-      return path.filter { ids.isDisjoint(with: $0.inputParts) }
+      return path.filter { ids.isDisjoint(with: $0.inputNodeIds) }
     }
   }
 
@@ -125,15 +125,15 @@ final class AutomationTrial {
   /// 写している途中か。
   var preparing: Bool { copy != nil }
 
-  func state(of part: AutomationNodeID) -> NodeState {
-    if part == givenFetch { return .given }
-    if let node = range.path.first(where: { $0.id == part }), Self.holds(node) {
+  func state(of nodeId: AutomationNodeID) -> NodeState {
+    if nodeId == givenFetch { return .given }
+    if let node = range.path.first(where: { $0.id == nodeId }), Self.holds(node) {
       if running { return .waiting }
       return completed ? .held : .untouched
     }
-    guard running else { return finalFlow?.isDone(part) == true ? .done : .untouched }
-    if runner?.currentFlow(automationId)?.isDone(part) == true { return .done }
-    return runner?.isRunning(automationId, part) == true ? .running : .waiting
+    guard running else { return finalFlow?.isDone(nodeId) == true ? .done : .untouched }
+    if runner?.currentFlow(automationId)?.isDone(nodeId) == true { return .done }
+    return runner?.isRunning(automationId, nodeId) == true ? .running : .waiting
   }
 
   /// 止める部品（副作用・仕事）か。
@@ -199,9 +199,9 @@ final class AutomationTrial {
     let held = range.path.filter(Self.holds)
     let admitted = Set(range.path.map(\.id)).subtracting(held.map(\.id))
       .subtracting([givenFetch].compactMap { $0 })
-    let targets = range.path.map(\.id).filter { part in
-      admitted.contains(part)
-        && (range.to.contains(part) || held.contains { $0.inputParts.contains(part) })
+    let targets = range.path.map(\.id).filter { nodeId in
+      admitted.contains(nodeId)
+        && (range.to.contains(nodeId) || held.contains { $0.inputNodeIds.contains(nodeId) })
     }
     guard !targets.isEmpty else { return finish(completed: true) }
     let runner = AutomationRunner(
@@ -219,9 +219,9 @@ final class AutomationTrial {
   /// 部品の回の知らせ（確定の直後、下流が読む前）。取得・処理はその回が写しに足した新しい行を結果にし、道の根の取得なら先に
   /// `limit` で写しを絞る。判定は案を結果にする。
   private func recorded(_ record: AutomationPassRecord) {
-    let part = record.end.part
+    let nodeId = record.end.nodeId
     guard !stopped, let store, let run = record.run,
-      let node = range.path.first(where: { $0.id == part })
+      let node = range.path.first(where: { $0.id == nodeId })
     else { return }
     let content: Content
     do throws(AutomationError) {
@@ -229,7 +229,7 @@ final class AutomationTrial {
     } catch {
       return end(failure: Self.reason(error))
     }
-    passes[part, default: []].insert(.ran(run, content), at: 0)
+    passes[nodeId, default: []].insert(.ran(run, content), at: 0)
   }
 
   private func content(
@@ -298,7 +298,7 @@ final class AutomationTrial {
     switch error {
     case .invalid(let message), .unavailable(let message): message
     case .automationNotFound(let id): "automation not found: \(id)"
-    case .partNotFound(let id, let key): "part not found: \(key) in automation \(id)"
+    case .nodeNotFound(let id, let key): "part not found: \(key) in automation \(id)"
     case .unreadable(let id, let reason): "automation \(id) cannot be read: \(reason)"
     case .proposalNotFound, .proposalNotOpen, .flowing, .trialNotFound, .versionMismatch:
       "\(error)"

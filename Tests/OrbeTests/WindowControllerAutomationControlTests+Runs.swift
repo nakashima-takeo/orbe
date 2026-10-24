@@ -16,10 +16,10 @@ extension WindowControllerAutomationControlTests {
     let a = Self.item("a")
     try Self.round(wc.automationStore, id, fetched: [a], proposing: [a])
 
-    let parts = try XCTUnwrap(try listed(wc)[id]?["parts"] as? [String: [String: Any]])
-    let judged = try XCTUnwrap(parts["judge"]?["lastRun"] as? [String: Any])
+    let nodes = try XCTUnwrap(try listed(wc)[id]?["parts"] as? [String: [String: Any]])
+    let judged = try XCTUnwrap(nodes["judge"]?["lastRun"] as? [String: Any])
 
-    XCTAssertNil(parts["judge"]?["runs"], "一覧は最新の 1 回だけ")
+    XCTAssertNil(nodes["judge"]?["runs"], "一覧は最新の 1 回だけ")
     XCTAssertEqual(
       Set(judged.keys),
       ["recordId", "startedAt", "endedAt", "trigger", "taken", "execution", "result"])
@@ -28,10 +28,10 @@ extension WindowControllerAutomationControlTests {
     let result = try XCTUnwrap(judged["result"] as? [String: Any])
     XCTAssertEqual(result["kind"] as? String, "judge")
     XCTAssertEqual(result["proposed"] as? Int, 1)
-    XCTAssertEqual(parts["judge"]?["pending"] as? Int, 0)
-    XCTAssertNil(parts["fetch"]?["pending"], "入力の無い部品は読めば取る行を持たない")
+    XCTAssertEqual(nodes["judge"]?["pending"] as? Int, 0)
+    XCTAssertNil(nodes["fetch"]?["pending"], "入力の無い部品は読めば取る行を持たない")
 
-    let fetched = try XCTUnwrap(parts["fetch"]?["lastRun"] as? [String: Any])
+    let fetched = try XCTUnwrap(nodes["fetch"]?["lastRun"] as? [String: Any])
     XCTAssertEqual(
       Set(fetched.keys),
       ["recordId", "startedAt", "endedAt", "trigger", "execution", "result", "withdrawn"])
@@ -48,10 +48,10 @@ extension WindowControllerAutomationControlTests {
     let id = try set(wc, Self.definition())
     let store = wc.automationStore
     let start = Date()
-    func record(_ part: String, at offset: TimeInterval, _ outcome: AutomationNodePass.Outcome)
+    func record(_ nodeKey: String, at offset: TimeInterval, _ outcome: AutomationNodePass.Outcome)
       throws
     {
-      try store.record(id, part: part, at: start.addingTimeInterval(offset), outcome: outcome)
+      try store.record(id, nodeKey: nodeKey, at: start.addingTimeInterval(offset), outcome: outcome)
     }
     try record(
       "fetch", at: 0,
@@ -74,7 +74,7 @@ extension WindowControllerAutomationControlTests {
 
     let fetches = try XCTUnwrap(
       success(
-        wc.controlListAutomationRuns(automationId: id, partKey: "fetch", before: nil, limit: nil))[
+        wc.controlListAutomationRuns(automationId: id, nodeKey: "fetch", before: nil, limit: nil))[
           "runs"] as? [[String: Any]])
     XCTAssertEqual(fetches.count, 2, "前提")
     XCTAssertEqual(fetches.map { $0["partKey"] as? String }, ["fetch", "fetch"])
@@ -94,8 +94,8 @@ extension WindowControllerAutomationControlTests {
     XCTAssertEqual(
       breach["reasons"] as? [String], ["item 3: missing link", "item 4: not JSON"])
 
-    let parts = try XCTUnwrap(try listed(wc)[id]?["parts"] as? [String: [String: Any]])
-    let judged = try XCTUnwrap(parts["judge"]?["lastRun"] as? [String: Any])
+    let nodes = try XCTUnwrap(try listed(wc)[id]?["parts"] as? [String: [String: Any]])
+    let judged = try XCTUnwrap(nodes["judge"]?["lastRun"] as? [String: Any])
     let rejected = try XCTUnwrap(
       (judged["result"] as? [String: Any])?["rejected"] as? [String: Any])
     XCTAssertEqual(rejected["count"] as? Int, 1)
@@ -108,7 +108,7 @@ extension WindowControllerAutomationControlTests {
     let wc = try launch()
     let id = try set(wc, Self.definition())
     try wc.automationStore.record(
-      id, part: "fetch", at: Date(),
+      id, nodeKey: "fetch", at: Date(),
       outcome: .failed(
         .brokeRules, DesignSceneFixtures.execution(0),
         breach: AutomationRejections([
@@ -137,13 +137,14 @@ extension WindowControllerAutomationControlTests {
     for n in 0..<25 {
       let at = start.addingTimeInterval(TimeInterval(n))
       try wc.automationStore.record(
-        id, part: "fetch", at: at, outcome: DesignSceneFixtures.fetched([]))
+        id, nodeKey: "fetch", at: at, outcome: DesignSceneFixtures.fetched([]))
       try wc.automationStore.record(
-        id, part: "judge", at: at, outcome: DesignSceneFixtures.judged([], rows: 0))
+        id, nodeKey: "judge", at: at, outcome: DesignSceneFixtures.judged([], rows: 0))
     }
-    func page(_ before: Int?, limit: Int? = nil, part: String? = nil) throws -> [String: Any] {
+    func page(_ before: Int?, limit: Int? = nil, nodeKey: String? = nil) throws -> [String: Any] {
       try success(
-        wc.controlListAutomationRuns(automationId: id, partKey: part, before: before, limit: limit))
+        wc.controlListAutomationRuns(
+          automationId: id, nodeKey: nodeKey, before: before, limit: limit))
     }
 
     let first = try page(nil)
@@ -160,11 +161,11 @@ extension WindowControllerAutomationControlTests {
     XCTAssertEqual(ids, ids.sorted(by: >), "新しい順")
     XCTAssertEqual(Set(ids).count, 40, "部品ごとに 20 件")
     XCTAssertEqual(try XCTUnwrap(page(nil, limit: 3)["runs"] as? [[String: Any]]).count, 3)
-    let judged = try XCTUnwrap(page(nil, part: "judge")["runs"] as? [[String: Any]])
+    let judged = try XCTUnwrap(page(nil, nodeKey: "judge")["runs"] as? [[String: Any]])
     XCTAssertEqual(Set(judged.compactMap { $0["partKey"] as? String }), ["judge"])
-    let parts = try XCTUnwrap(try listed(wc)[id]?["parts"] as? [String: [String: Any]])
+    let nodes = try XCTUnwrap(try listed(wc)[id]?["parts"] as? [String: [String: Any]])
     XCTAssertEqual(
-      (parts["judge"]?["lastRun"] as? [String: Any])?["recordId"] as? Int, ids.first,
+      (nodes["judge"]?["lastRun"] as? [String: Any])?["recordId"] as? Int, ids.first,
       "一覧の lastRun は最新の回")
   }
 }

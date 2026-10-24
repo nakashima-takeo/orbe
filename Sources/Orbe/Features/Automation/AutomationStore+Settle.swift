@@ -37,7 +37,7 @@ struct AutomationSettling {
         proposed: decided.pending.count, resolved: decided.resolving.count,
         dismissed: decided.dismissed)
     }
-    let recordId = try db.insert(run: run, of: end.part, defId: end.defId, carried: carried)
+    let recordId = try db.insert(run: run, of: end.nodeId, defId: end.defId, carried: carried)
     if let read = end.read {
       try db.insertInputs(
         of: recordId,
@@ -46,17 +46,17 @@ struct AutomationSettling {
     }
     if let decided { try apply(decided, run: recordId, &memory) }
     try finish(run: recordId, endedAt: run.endedAt, &memory)
-    let recorded = memory.automations[index].state(end.part).runs.first { $0.id == recordId }
+    let recorded = memory.automations[index].state(end.nodeId).runs.first { $0.id == recordId }
     return AutomationRecorded(changed: written.changed, run: recorded?.run)
   }
 
   /// 読んだ位置を進め、持ち越しを回の記録へ移す。
   private mutating func consume() throws {
     guard let read = end.read else { return }
-    try db.advance(end.part, read.reach)
-    carried.add(try db.pendingDrops(of: end.part))
+    try db.advance(end.nodeId, read.reach)
+    carried.add(try db.pendingDrops(of: end.nodeId))
     carried.add(.lapsed, read.lapsed)
-    try db.setPendingDrops(end.part, AutomationDrops())
+    try db.setPendingDrops(end.nodeId, AutomationDrops())
   }
 
   /// 判定でない役割の結果。取得・処理は出した行を照らし（今の集合は項目と版、出来事の流れは出来事）、出どころの項目が無効に
@@ -72,8 +72,8 @@ struct AutomationSettling {
       }
       written =
         node.coverage == .currentSet
-        ? try db.writeItems(of: end.part, outputs, at: run.endedAt)
-        : try db.writeEvents(of: end.part, outputs, at: run.endedAt)
+        ? try db.writeItems(of: end.nodeId, outputs, at: run.endedAt)
+        : try db.writeEvents(of: end.nodeId, outputs, at: run.endedAt)
       let withdrawn = try memory.withdraw(originatingIn: written.invalidated, db)
       if node.role == .fetch {
         run.result = .fetch(fresh: written.fresh, duplicates: written.duplicates)
@@ -146,8 +146,8 @@ struct AutomationSettling {
       let proposalId = try db.insert(proposal: proposal, run: recordId)
       memory.proposals.append(
         AutomationProposal(
-          id: proposalId, runId: recordId, judge: end.part,
-          defId: end.defId, source: proposal.origin.part, origin: proposal.origin.row,
+          id: proposalId, runId: recordId, judge: end.nodeId,
+          defId: end.defId, source: proposal.origin.nodeId, origin: proposal.origin.row,
           item: proposal.origin.item, title: proposal.title, due: proposal.due,
           workspace: proposal.workspace, reason: proposal.reason, proposedAt: endedAt,
           state: .open))
@@ -160,13 +160,13 @@ struct AutomationSettling {
 
   /// 外した最初の回なら印を書き、部品の状態を読み直し、忘れる候補を忘れ、数え直す。
   private func finish(run recordId: Int, endedAt: Date, _ memory: inout AutomationMemory) throws {
-    if end.outcome.breach != nil, memory.automations[index].state(end.part).breach == nil {
-      try db.setBreach(end.part, run: recordId)
+    if end.outcome.breach != nil, memory.automations[index].state(end.nodeId).breach == nil {
+      try db.setBreach(end.nodeId, run: recordId)
     }
-    try memory.reread(end.part, of: end.automationId, db)
+    try memory.reread(end.nodeId, of: end.automationId, db)
     try memory.forgetUnheld(db)
     try memory.recount(
       end.automationId, db, now: endedAt,
-      parts: [end.part] + memory.automations[index].graph.downstream(of: end.part).map(\.id))
+      nodeIds: [end.nodeId] + memory.automations[index].graph.downstream(of: end.nodeId).map(\.id))
   }
 }

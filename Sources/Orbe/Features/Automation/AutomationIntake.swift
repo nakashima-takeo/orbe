@@ -11,7 +11,7 @@ enum AutomationIntake {
 
   /// 出どころ——引き継ぎをたどった先の、取得の部品が出した行。候補のリンクと本文はいつもここから取る。
   struct Origin: Equatable {
-    let part: AutomationNodeID
+    let nodeId: AutomationNodeID
     /// 項目なら今の版、出来事ならその出来事。
     let row: AutomationRowRef
     /// 出どころの行の欄（`id` は書かれた id）。

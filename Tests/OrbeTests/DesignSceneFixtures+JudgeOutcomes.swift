@@ -29,12 +29,12 @@ extension DesignSceneFixtures {
     func sample(_ outcome: AutomationNodePass.Outcome, command: Bool = false) -> AutomationSample {
       var definition = candidatesDefinition(
         "GitHub: 自分の担当",
-        fetch: commandPart(
+        fetch: commandNode(
           "fetch", "担当の課題", .scheduled(.every(3600)),
           script: "gh search issues --assignee @me --state open --json url,title,body,updatedAt",
           coverage: .newArrivals))
       if command {
-        definition.parts[1] = commandPart(
+        definition.parts[1] = commandNode(
           "judge", "判定", .arrival, from: ["fetch"], script: "~/bin/judge.sh",
           deliver: .taskCandidates)
       }
@@ -43,11 +43,11 @@ extension DesignSceneFixtures {
       var passes = round("github", at: automationAt(13, 0), items: 2, fresh: 2, proposed: 1)
       passes.append(
         AutomationSamplePass(
-          part: "fetch", at: at, outcome: fetched(all),
+          nodeKey: "fetch", at: at, outcome: fetched(all),
           kept: Array(all.prefix(all.count - new.count))))
       passes.append(
         AutomationSamplePass(
-          part: "judge", at: at.addingTimeInterval(60), outcome: outcome,
+          nodeKey: "judge", at: at.addingTimeInterval(60), outcome: outcome,
           take: new.count))
       return AutomationSample(definition: definition, createdAt: automationAt(9, 0), passes: passes)
     }

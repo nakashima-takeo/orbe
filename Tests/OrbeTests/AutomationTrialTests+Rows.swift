@@ -11,8 +11,8 @@ extension AutomationTrialTests {
   /// 持たない。
   func testSideEffectsAndWorkAreHeldWithTheRowsTheyWouldHaveGot() throws {
     let id = try define([
-      fetch("gh"), part("send", .arrival, from: ["gh"], deliver: .sideEffect),
-      DesignSceneFixtures.agentPart(
+      fetch("gh"), definitionNode("send", .arrival, from: ["gh"], deliver: .sideEffect),
+      DesignSceneFixtures.agentNode(
         "job", "job", .arrival, from: ["gh"], tools: ["Bash(git status:*)"], instruction: "do",
         deliver: .report),
     ])
@@ -43,10 +43,10 @@ extension AutomationTrialTests {
   func testAnAgentReadingRowsReadsTheCopysRowsAndTheGivenRows() throws {
     let id = try define([
       fetch("gh"),
-      DesignSceneFixtures.agentPart("p", "処理", .manual, from: ["gh"], instruction: "残す"),
-      part("digest", from: ["p"], deliver: .report),
+      DesignSceneFixtures.agentNode("p", "処理", .manual, from: ["gh"], instruction: "残す"),
+      definitionNode("digest", from: ["p"], deliver: .report),
     ])
-    try runner.flow(id, to: .part(store.part(id, "gh")))
+    try runner.flow(id, to: .node(store.nodeId(id, "gh")))
     finish("gh", fetched(["a"]))
     XCTAssertEqual(store.automation(id)?.state(key: "p").pending.count, 1)
 
@@ -80,9 +80,9 @@ extension AutomationTrialTests {
   /// 回の記録を持たず、与えた行を結果にする。判定へ与えると断る。
   func testRowsGivenToAFetchFlowDownWithoutItsMethodAndAJudgeRefusesThem() throws {
     let id = try define([
-      DesignSceneFixtures.commandPart(
+      DesignSceneFixtures.commandNode(
         "gh", "gh", .manual, script: "gh", coverage: .newArrivals),
-      part("judge", from: ["gh"], deliver: .taskCandidates),
+      definitionNode("judge", from: ["gh"], deliver: .taskCandidates),
     ])
     try runner.flow(id, to: .ends)
     finish("gh", fetched(["a"]))
@@ -113,10 +113,10 @@ extension AutomationTrialTests {
 
   /// 入力のある入口に与えた行は、ただ 1 つの上流（の写し）の出力として足され、上流の行として（接頭付きの id で）取られる。
   /// 「届いたら」の入口も今すぐ動き、その回は今すぐの回として記録される。上流が複数の入口に与えると断り、上限を超える行も断る。
-  func testRowsGivenToAPartWithInputsArriveAsTheRowsOfItsUpstream() throws {
+  func testRowsGivenToANodeWithInputsArriveAsTheRowsOfItsUpstream() throws {
     let id = try define([
-      fetch("gh"), part("p", .arrival, from: ["gh"]),
-      part("digest", from: ["p"], deliver: .report),
+      fetch("gh"), definitionNode("p", .arrival, from: ["gh"]),
+      definitionNode("digest", from: ["p"], deliver: .report),
     ])
     let trial = try trials.start(
       id, .init(from: ["p"], rows: [#"{"id":"x","note":"手作り"}"#]))
@@ -132,8 +132,8 @@ extension AutomationTrialTests {
     XCTAssertEqual(trial.passes(key: "p").first?.run?.trigger, .now)
 
     let merged = try define([
-      fetch("gh"), fetch("slack"), part("p", from: ["gh", "slack"]),
-      part("digest", from: ["p"], deliver: .report),
+      fetch("gh"), fetch("slack"), definitionNode("p", from: ["gh", "slack"]),
+      definitionNode("digest", from: ["p"], deliver: .report),
     ])
     XCTAssertThrowsError(try trials.start(merged, .init(from: ["p"], rows: [#"{"id":"x"}"#]))) {
       guard case .invalid(let message) = $0 as? AutomationError else { return XCTFail("\($0)") }

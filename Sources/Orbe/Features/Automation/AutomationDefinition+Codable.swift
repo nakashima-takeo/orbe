@@ -146,7 +146,7 @@ extension AutomationActionDef: Codable {
   }
 
   private static func destination(_ c: KeyedDecodingContainer<CodingKeys>) throws -> Destination {
-    guard let raw = try c.decodeIfPresent(String.self, forKey: .deliver) else { return .nextPart }
+    guard let raw = try c.decodeIfPresent(String.self, forKey: .deliver) else { return .nextNode }
     guard
       let destination = [Destination.taskCandidates, .report, .sideEffect].first(where: {
         $0.wireName == raw
@@ -164,7 +164,7 @@ extension AutomationActionDef.Destination {
   /// `deliver` の値。次の部品は書かない。
   var wireName: String? {
     switch self {
-    case .nextPart: nil
+    case .nextNode: nil
     case .taskCandidates: "taskCandidates"
     case .report: "report"
     case .sideEffect: "none"

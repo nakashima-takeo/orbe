@@ -91,21 +91,21 @@ import Observation
     store.automation(id)?.graph.nodes.contains { isRunning(id, $0.id) } ?? false
   }
 
-  func isRunning(_ id: Int, _ part: AutomationNodeID) -> Bool {
-    scheduler.isRunning(id: Self.key(id, part))
+  func isRunning(_ id: Int, _ nodeId: AutomationNodeID) -> Bool {
+    scheduler.isRunning(id: Self.key(id, nodeId))
   }
 
   /// `now`（渡さなければ走らせ役の今）から見て、どれかの部品が次に予定で回る時刻（止めていれば nil）。
   func nextRunAt(_ automation: Automation, now: Date? = nil) -> Date? {
-    automation.graph.nodes.compactMap { nextRunAt(automation, part: $0.id, now: now) }.min()
+    automation.graph.nodes.compactMap { nextRunAt(automation, nodeId: $0.id, now: now) }.min()
   }
 
   /// 部品が次に予定で回る時刻。止めている・予定の無い部品は nil。過ぎていれば `now` 以前の時刻を返す。
-  func nextRunAt(_ automation: Automation, part: AutomationNodeID, now: Date? = nil) -> Date? {
-    guard !automation.paused, let node = automation.graph.node(part),
+  func nextRunAt(_ automation: Automation, nodeId: AutomationNodeID, now: Date? = nil) -> Date? {
+    guard !automation.paused, let node = automation.graph.node(nodeId),
       case .scheduled(let timing) = node.entity.trigger
     else { return nil }
-    let anchor = anchors[Self.key(automation.id, part)] ?? automation.state(part).anchor
+    let anchor = anchors[Self.key(automation.id, nodeId)] ?? automation.state(nodeId).anchor
     switch timing.next(after: anchor, deadline: nil, now: now ?? self.now(), calendar: calendar()) {
     case .run(let date): return date
     case .expire: return nil
@@ -129,7 +129,7 @@ import Observation
     }
     let replaced = try store.replace(id, version: version, with: definition, now: now())
     let automation = replaced.automation
-    for part in replaced.removed + replaced.reworked { unregister(id, part) }
+    for nodeId in replaced.removed + replaced.reworked { unregister(id, nodeId) }
     register(automation)
     defined(id)
     return automation
@@ -146,9 +146,9 @@ import Observation
   /// 消す。走っている回は止め、その結果は捨てる。
   func delete(_ id: Int) throws(AutomationError) {
     try checkAvailable()
-    let parts = store.automation(id)?.graph.nodes.map(\.id) ?? []
+    let nodeIds = store.automation(id)?.graph.nodes.map(\.id) ?? []
     try store.delete(id, now: now())
-    for part in parts { unregister(id, part) }
+    for nodeId in nodeIds { unregister(id, nodeId) }
     deleted(id)
   }
 
@@ -158,7 +158,7 @@ import Observation
 
   // MARK: - 番人への登録
 
-  static func key(_ id: Int, _ part: AutomationNodeID) -> String { "automation:\(id)/\(part)" }
+  static func key(_ id: Int, _ nodeId: AutomationNodeID) -> String { "automation:\(id)/\(nodeId)" }
 
   /// 全部品を番人に合わせる。載っていない部品は載せ（数え始めは部品の最後に回った時刻、無ければ足した時刻）、載っている部品は
   /// 予定だけを差し替える。止めていなければ「届いたら」の部品に起こす決まりを見る。
@@ -174,12 +174,12 @@ import Observation
         try? scheduler.retime(id: key, timing: timing)
         continue
       }
-      let part = node.id
+      let nodeId = node.id
       let start: BackgroundScheduler.Start = { [weak self] trigger, finish in
-        self?.begin(id, part, trigger, finish) ?? BackgroundRunHandle {}
+        self?.begin(id, nodeId, trigger, finish) ?? BackgroundRunHandle {}
       }
       try? scheduler.register(
-        id: key, timing: timing, anchor: automation.state(part).anchor, start: start)
+        id: key, timing: timing, anchor: automation.state(nodeId).anchor, start: start)
       registered.insert(key)
     }
     guard !automation.paused else { return }
@@ -187,9 +187,9 @@ import Observation
   }
 
   /// 外す。走っている回は止め、その結果は捨てる。起こす決まりの印と数え始めも忘れ、この部品を道に含む一巡を打ち切る。
-  private func unregister(_ id: Int, _ part: AutomationNodeID) {
-    let key = Self.key(id, part)
-    if let flow = flows[id], flow.path.contains(part) {
+  private func unregister(_ id: Int, _ nodeId: AutomationNodeID) {
+    let key = Self.key(id, nodeId)
+    if let flow = flows[id], flow.path.contains(nodeId) {
       flows[id] = nil
       flowEnded(id, flow)
     }
@@ -220,7 +220,7 @@ extension AutomationRunner {
   /// 走っている契機。止められたら、以後の結果は捨てる。
   private final class Trigger {
     let automationId: Int
-    let part: AutomationNodeID
+    let nodeId: AutomationNodeID
     let kind: AutomationNodeRun.Trigger
     let startedAt: Date
     let finish: (Date) -> Void
@@ -236,11 +236,11 @@ extension AutomationRunner {
     let flowed: Bool
 
     init(
-      automationId: Int, part: AutomationNodeID, kind: AutomationNodeRun.Trigger,
+      automationId: Int, nodeId: AutomationNodeID, kind: AutomationNodeRun.Trigger,
       startedAt: Date, finish: @escaping (Date) -> Void, flowed: Bool
     ) {
       self.automationId = automationId
-      self.part = part
+      self.nodeId = nodeId
       self.kind = kind
       self.startedAt = startedAt
       self.finish = finish
@@ -249,31 +249,31 @@ extension AutomationRunner {
   }
 
   private func begin(
-    _ id: Int, _ part: AutomationNodeID, _ kind: BackgroundScheduler.Trigger,
+    _ id: Int, _ nodeId: AutomationNodeID, _ kind: BackgroundScheduler.Trigger,
     _ finish: @escaping (Date) -> Void
   ) -> BackgroundRunHandle {
     // 番人の上に「走っている」を残さないよう、部品が無ければ契機はすぐ終わったものとして知らせる。
-    guard let automation = store.automation(id), let node = automation.graph.node(part) else {
+    guard let automation = store.automation(id), let node = automation.graph.node(nodeId) else {
       finish(now())
       return BackgroundRunHandle {}
     }
     // 一巡があるときだけ触れる（触れるだけで観測が切れ、流していない自動化の回のたびに画面が描き直される）。
     var flowed = false
     if var flow = flows[id] {
-      flowed = flow.started(part, in: automation.graph)
+      flowed = flow.started(nodeId, in: automation.graph)
       flows[id] = flow
     }
     // 流しが起こした回でない「届いたら」の部品の回は、起こす決まりが起こした（届いた行で起きた）回。
     let trigger = Trigger(
-      automationId: id, part: part,
+      automationId: id, nodeId: nodeId,
       kind: node.entity.trigger == .arrival && !flowed ? .arrival : kind == .now ? .now : .schedule,
       startedAt: now(), finish: finish, flowed: flowed)
     active[ObjectIdentifier(trigger)] = trigger
     if node.inputs.isEmpty {
       pass(trigger, read: nil)
-    } else if let inlets = inlets(of: part) {
+    } else if let inlets = inlets(of: nodeId) {
       let marks = inlets.mapValues(\.up)
-      self.marks[Self.key(id, part)] = marks
+      self.marks[Self.key(id, nodeId)] = marks
       trigger.baseline = marks
       read(trigger)
     } else {
@@ -292,15 +292,15 @@ extension AutomationRunner {
     let read: AutomationIntake.Read?
     do throws(AutomationError) {
       read = try store.read(
-        trigger.part, of: trigger.automationId, baseline: trigger.baseline, now: now())
+        trigger.nodeId, of: trigger.automationId, baseline: trigger.baseline, now: now())
     } catch {
-      NSLog("[automation] cannot read the rows of part \(trigger.part): \(error)")
+      NSLog("[automation] cannot read the rows of part \(trigger.nodeId): \(error)")
       return end(trigger)
     }
-    guard let read, let node = store.automation(trigger.automationId)?.graph.node(trigger.part)
+    guard let read, let node = store.automation(trigger.automationId)?.graph.node(trigger.nodeId)
     else { return end(trigger) }
     guard !read.taken.isEmpty || (node.role == .process && node.coverage == .currentSet) else {
-      try? store.discard(read, of: trigger.part, in: trigger.automationId, now: now())
+      try? store.discard(read, of: trigger.nodeId, in: trigger.automationId, now: now())
       return end(trigger)
     }
     pass(trigger, read: read)
@@ -309,7 +309,7 @@ extension AutomationRunner {
   /// 部品の 1 回。役割の入力を組み、`AutomationNodePass` に任せ、終わったら確定する。
   private func pass(_ trigger: Trigger, read: AutomationIntake.Read?) {
     guard let automation = store.automation(trigger.automationId),
-      let node = automation.graph.node(trigger.part)
+      let node = automation.graph.node(trigger.nodeId)
     else { return end(trigger) }
     let input = self.input(node, automation, read)
     let startedAt = now()
@@ -333,19 +333,19 @@ extension AutomationRunner {
     _ startedAt: Date, _ outcome: AutomationNodePass.Outcome
   ) {
     let passEnd = AutomationPassEnd(
-      automationId: trigger.automationId, part: trigger.part, defId: defId,
+      automationId: trigger.automationId, nodeId: trigger.nodeId, defId: defId,
       trigger: trigger.kind, startedAt: startedAt, endedAt: now(), read: read, outcome: outcome)
     let result: AutomationRecorded
     do throws(AutomationError) {
       result = try store.record(passEnd)
     } catch {
-      NSLog("[automation] dropped the result of part \(trigger.part): \(error)")
+      NSLog("[automation] dropped the result of part \(trigger.nodeId): \(error)")
       return end(trigger)
     }
     trigger.holding = AutomationHolding()
     recorded(AutomationPassRecord(end: passEnd, run: result.run))
     if result.changed, let automation = store.automation(trigger.automationId) {
-      for node in automation.graph.downstream(of: trigger.part) {
+      for node in automation.graph.downstream(of: trigger.nodeId) {
         wake(trigger.automationId, node.id)
       }
     }
@@ -357,17 +357,17 @@ extension AutomationRunner {
   /// 部品が普段の決まりで起き直さなかったことを見てから終わりと数えるため。
   private func end(_ trigger: Trigger) {
     active[ObjectIdentifier(trigger)] = nil
-    let key = Self.key(trigger.automationId, trigger.part)
+    let key = Self.key(trigger.automationId, trigger.nodeId)
     let anchor = trigger.passStartedAt ?? trigger.startedAt
     anchors[key] = anchor
     trigger.finish(anchor)
-    guard let node = store.automation(trigger.automationId)?.graph.node(trigger.part) else {
+    guard let node = store.automation(trigger.automationId)?.graph.node(trigger.nodeId) else {
       return
     }
     if node.entity.trigger == .arrival {
-      wake(trigger.automationId, trigger.part)
+      wake(trigger.automationId, trigger.nodeId)
     } else {
-      retry(below: trigger.part, in: trigger.automationId)
+      retry(below: trigger.nodeId, in: trigger.automationId)
     }
     advanceFlow(after: trigger)
   }
@@ -375,9 +375,9 @@ extension AutomationRunner {
   private func advanceFlow(after trigger: Trigger) {
     let id = trigger.automationId
     guard var flow = flows[id], let graph = store.automation(id)?.graph else { return }
-    let wake = flow.ended(trigger.part, flowed: trigger.flowed, in: graph) { isRunning(id, $0) }
+    let wake = flow.ended(trigger.nodeId, flowed: trigger.flowed, in: graph) { isRunning(id, $0) }
     flows[id] = flow.finished ? nil : flow
     if flow.finished { flowEnded(id, flow) }
-    for part in wake { scheduler.runNow(id: Self.key(id, part)) }
+    for nodeId in wake { scheduler.runNow(id: Self.key(id, nodeId)) }
   }
 }

@@ -79,8 +79,8 @@ final class AutomationDatabase {
   // MARK: - 部品
 
   /// 部品を足して ID を返す。
-  func insertPart(
-    of automation: Int, at position: Int, _ part: AutomationDefinition.Node,
+  func insertNode(
+    of automation: Int, at position: Int, _ definitionNode: AutomationDefinition.Node,
     defId: AutomationDefID, addedAt: Date
   ) throws -> AutomationNodeID {
     try db.run(
@@ -89,8 +89,10 @@ final class AutomationDatabase {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       """,
       [
-        .integer(Int64(automation)), .integer(Int64(position)), .text(part.key), .text(part.name),
-        .text(try Self.encode(part.trigger)), part.maxItems.map { .integer(Int64($0)) } ?? .null,
+        .integer(Int64(automation)), .integer(Int64(position)), .text(definitionNode.key),
+        .text(definitionNode.name),
+        .text(try Self.encode(definitionNode.trigger)),
+        definitionNode.maxItems.map { .integer(Int64($0)) } ?? .null,
         .integer(Int64(defId.rawValue)), Self.instant(addedAt),
       ])
     return AutomationNodeID(Int(db.lastInsertRowID))
@@ -105,8 +107,8 @@ final class AutomationDatabase {
       """, [.integer(Int64(automation))])
   }
 
-  func updatePart(
-    _ id: AutomationNodeID, at position: Int, _ part: AutomationDefinition.Node,
+  func updateNode(
+    _ id: AutomationNodeID, at position: Int, _ definitionNode: AutomationDefinition.Node,
     defId: AutomationDefID
   ) throws {
     try db.run(
@@ -115,21 +117,22 @@ final class AutomationDatabase {
       WHERE id = ?
       """,
       [
-        .integer(Int64(position)), .text(part.key), .text(part.name),
-        .text(try Self.encode(part.trigger)), part.maxItems.map { .integer(Int64($0)) } ?? .null,
+        .integer(Int64(position)), .text(definitionNode.key), .text(definitionNode.name),
+        .text(try Self.encode(definitionNode.trigger)),
+        definitionNode.maxItems.map { .integer(Int64($0)) } ?? .null,
         .integer(Int64(defId.rawValue)), .integer(Int64(id.rawValue)),
       ])
   }
 
   /// 部品を外す: 外した時刻を書き、今有効な項目を無効にし、つながりと外した印と持ち越しを消す。外した部品の回の記録・判断の
   /// 記録・台帳は、同じトランザクションの最後の掃除が、候補を忘れた後に指されなくなったものから消す。無効にした項目を返す。
-  func removePart(_ id: AutomationNodeID, at: Date) throws -> [Int] {
-    let part: [SQLiteValue] = [.integer(Int64(id.rawValue))]
+  func removeNode(_ id: AutomationNodeID, at: Date) throws -> [Int] {
+    let nodeId: [SQLiteValue] = [.integer(Int64(id.rawValue))]
     let invalidated = try invalidateItems(of: id, at: at)
-    try db.run("DELETE FROM part_edges WHERE from_part_id = ?1 OR to_part_id = ?1", part)
+    try db.run("DELETE FROM part_edges WHERE from_part_id = ?1 OR to_part_id = ?1", nodeId)
     try db.run(
       "UPDATE parts SET removed_at = ?, breach_run_id = NULL, pending_drops = '{}' WHERE id = ?",
-      [Self.instant(at)] + part)
+      [Self.instant(at)] + nodeId)
     return invalidated
   }
 
@@ -163,10 +166,10 @@ final class AutomationDatabase {
   /// 部品の自分の状態（直近の回・最新の成功・外した印・今有効な項目のリンク）。起動時も変化の後も、メモリの部品の状態はここから
   /// 読み直す。読めば取る行は数えない（`AutomationMemory.recount`）。
   func state(of id: AutomationNodeID) throws -> AutomationNodeState {
-    let part: [SQLiteValue] = [.integer(Int64(id.rawValue))]
+    let nodeId: [SQLiteValue] = [.integer(Int64(id.rawValue))]
     guard
       let addedAt = try db.select(
-        "SELECT added_at FROM parts WHERE id = ?", part, { $0.int64(at: 0) }
+        "SELECT added_at FROM parts WHERE id = ?", nodeId, { $0.int64(at: 0) }
       )
       .first
     else {
@@ -253,7 +256,7 @@ enum AutomationSourceRef: Hashable {
 
 extension AutomationDatabase {
   /// 自動化の外していない部品の鍵（部品の台帳）。定義を読めない自動化でも行から引ける。
-  func partKeys(of automation: Int) throws -> [AutomationNodeID: String] {
+  func nodeKeys(of automation: Int) throws -> [AutomationNodeID: String] {
     Dictionary(
       uniqueKeysWithValues: try db.select(
         "SELECT id, key FROM parts WHERE automation_id = ? AND removed_at IS NULL",

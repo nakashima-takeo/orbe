@@ -32,9 +32,9 @@ final class AutomationTextTests: OrbeTestCase {
 
   private static func node(_ key: String, _ name: String) -> AutomationGraph.Node {
     let graph = try? AutomationGraph.numbered([
-      DesignSceneFixtures.commandPart(
+      DesignSceneFixtures.commandNode(
         "fetch", "取得", .manual, script: "cat", coverage: .newArrivals),
-      DesignSceneFixtures.agentPart(
+      DesignSceneFixtures.agentNode(
         key, name, .arrival, from: ["fetch"], instruction: "i", deliver: .taskCandidates),
     ])
     guard let node = graph?.node(key: key) else { preconditionFailure("the graph is valid") }

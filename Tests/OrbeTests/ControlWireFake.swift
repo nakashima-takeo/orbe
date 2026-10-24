@@ -129,7 +129,7 @@ final class FakeControlTarget: ControlTarget {
   private(set) var setAutomations: [FakeSetAutomation] = []
   private(set) var runLists: [FakeRunList] = []
   var runTools: [FakeRunTool] = []
-  private(set) var ranAutomations: [(automationId: Int, partKey: String?)] = []
+  private(set) var ranAutomations: [(automationId: Int, nodeKey: String?)] = []
   private(set) var pausedAutomations: [(automationId: Int, paused: Bool)] = []
   private(set) var deletedAutomationIds: [Int] = []
   private(set) var proposalLists: [Int?] = []
@@ -322,15 +322,15 @@ final class FakeControlTarget: ControlTarget {
     return outcome(["automation": ["automationId": automationId ?? 1]])
   }
 
-  func controlListAutomationRuns(automationId: Int, partKey: String?, before: Int?, limit: Int?)
+  func controlListAutomationRuns(automationId: Int, nodeKey: String?, before: Int?, limit: Int?)
     -> Result<Any, ControlError>
   {
-    runLists.append(FakeRunList(partKey: partKey, before: before, limit: limit))
+    runLists.append(FakeRunList(nodeKey: nodeKey, before: before, limit: limit))
     return outcome(["runs": [Any]()])
   }
 
-  func controlRunAutomation(automationId: Int, partKey: String?) -> Result<Any, ControlError> {
-    ranAutomations.append((automationId, partKey))
+  func controlRunAutomation(automationId: Int, nodeKey: String?) -> Result<Any, ControlError> {
+    ranAutomations.append((automationId, nodeKey))
     return outcome(["ok": true])
   }
 

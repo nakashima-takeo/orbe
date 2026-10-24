@@ -33,20 +33,20 @@ extension TaskPaletteAutomationModelTests {
   }
 
   /// 候補の更新は判定へ至る部品だけを走らせ、判定へ至らない枝（副作用・報告）は走らせない。
-  func testRefreshRunsOnlyThePartsLeadingToTheJudges() throws {
+  func testRefreshRunsOnlyTheNodesLeadingToTheJudges() throws {
     let runner = DesignSceneFixtures.automationRunner()
     let id = try runner.set(
       nil,
       AutomationDefinition(
         name: "候補と投稿", notify: nil,
         parts: [
-          DesignSceneFixtures.commandPart(
+          DesignSceneFixtures.commandNode(
             "fetch", "GitHub", .manual, script: "gh", coverage: .newArrivals),
-          DesignSceneFixtures.agentPart(
+          DesignSceneFixtures.agentNode(
             "judge", "判定", .arrival, from: ["fetch"], instruction: "i", deliver: .taskCandidates),
-          DesignSceneFixtures.commandPart(
+          DesignSceneFixtures.commandNode(
             "log", "ログ", .manual, script: "log", coverage: .newArrivals),
-          DesignSceneFixtures.commandPart(
+          DesignSceneFixtures.commandNode(
             "post", "投稿", .arrival, from: ["log"], script: "post", deliver: .sideEffect),
         ])
     ).id

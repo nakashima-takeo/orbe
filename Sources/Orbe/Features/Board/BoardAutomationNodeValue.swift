@@ -59,13 +59,13 @@ struct BoardAutomationNodeValue: Equatable {
 extension BoardAutomationNodeValue {
   /// `next` は部品が次に予定で回る時刻（止めていれば nil）、`open` はこの自動化の棚に出ている判断待ちの候補の数。
   init?(
-    _ automation: Automation, part: AutomationNodeID, text: AutomationText, running: Bool,
+    _ automation: Automation, nodeId: AutomationNodeID, text: AutomationText, running: Bool,
     next: Date?, open: Int
   ) {
-    guard let node = automation.graph.node(part) else { return nil }
+    guard let node = automation.graph.node(nodeId) else { return nil }
     let l10n = text.l10n
-    let state = automation.state(part)
-    id = part
+    let state = automation.state(nodeId)
+    id = nodeId
     role = text.role(node.role)
     name = node.entity.name
     self.running = running
@@ -142,7 +142,7 @@ extension BoardAutomationNodeValue {
         node.inputs.map { input(graph, $0, l10n) }.joined(separator: separator), incoming: true)
     }
     switch action.destination {
-    case .nextPart: break
+    case .nextNode: break
     case .taskCandidates: fact(.boardPartDestination, l10n.format(.boardPartTaskCandidates, open))
     case .report:
       fact(.boardPartDestination, BoardAutomationDetailValue.reports(automation.notify, l10n))

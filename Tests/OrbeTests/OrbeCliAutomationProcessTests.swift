@@ -9,10 +9,10 @@ import XCTest
 /// どれもコマンドなので、agent は起きない。
 ///
 /// 壊れると何が起きるか: CLI が組み立てる control メソッド名・params の語（`pause` / `resume` の `paused`、`set` と
-/// `proposals` の `automationId`、`set` の `definition`、`run` の `partKey`）はここでしか測れない。`resume` が
-/// `paused:true` を送ると、exit 0 を返しながら止まったままになる。`run` が `partKey` を落とすと、指した部品の先まで流れる。
+/// `proposals` の `automationId`、`set` の `definition`、`run` の `nodeKey`）はここでしか測れない。`resume` が
+/// `paused:true` を送ると、exit 0 を返しながら止まったままになる。`run` が `nodeKey` を落とすと、指した部品の先まで流れる。
 /// `try` が範囲・行・limit を落とすと、AI が指したのと違う試走が黙って走る。`trial --wait` が時間切れを 0 で返すと、AI は
-/// 途中の結果を終わった結果と読む。`runs` が `partKey`・`before` を落とすと、AI は別の部品の回や同じページを続きと読む。
+/// 途中の結果を終わった結果と読む。`runs` が `nodeKey`・`before` を落とすと、AI は別の部品の回や同じページを続きと読む。
 ///
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliAutomationProcessTests: OrbeTestCase {
@@ -92,7 +92,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
   }
 
   /// `run --part <鍵>` はその部品まで流す（下流の手動の部品は走らない）。
-  func testRunFlowsToTheGivenPart() throws {
+  func testRunFlowsToTheGivenNode() throws {
     let control = try startControlProcess()
     let manual = definition.replacingOccurrences(
       of: #"{"kind": "arrival"}"#, with: #"{"kind": "manual"}"#)
@@ -127,7 +127,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
   }
 
   /// 仕事の部品の前回は「agent の終わり方」で出る。agent は起こさず、回の記録を直に積む。
-  func testListShowsTheEndingOfAWorkPart() throws {
+  func testListShowsTheEndingOfAWorkNode() throws {
     let control = try startControlProcess()
     let id = try XCTUnwrap(
       Int(
@@ -138,7 +138,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
             + #""tools": ["Bash(gh search prs:*)"], "instruction": "投稿して", "deliver": "report"}]}"#
         )))
     try control.target.automationStore.record(
-      id, part: "post", at: Date(),
+      id, nodeKey: "post", at: Date(),
       outcome: .succeeded(
         .work(.done("投稿した")),
         AutomationNodePass.Execution(commandLine: "claude -p", ending: .exited(0), count: 1),
@@ -185,7 +185,7 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     let start = Date()
     for (offset, key) in [(0, "fetch"), (60, "note"), (120, "fetch"), (180, "fetch")] {
       try store.record(
-        id, part: key, at: start.addingTimeInterval(TimeInterval(offset)),
+        id, nodeKey: key, at: start.addingTimeInterval(TimeInterval(offset)),
         outcome: key == "fetch"
           ? DesignSceneFixtures.fetched([WindowControllerAutomationControlTests.item("a")])
           : DesignSceneFixtures.sideEffected(0))
@@ -250,9 +250,9 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
     XCTAssertTrue(empty.stderr.contains("--stdin got no input"), empty.stderr)
     let trial = try XCTUnwrap(
       control.orbJSON(["automation", "trial", id, "--wait"])["trial"] as? [String: Any])
-    let parts = try XCTUnwrap(trial["parts"] as? [[String: Any]])
+    let nodes = try XCTUnwrap(trial["parts"] as? [[String: Any]])
     func firstRun(_ key: String) -> [String: Any]? {
-      (parts.first { $0["key"] as? String == key }?["runs"] as? [[String: Any]])?.first
+      (nodes.first { $0["key"] as? String == key }?["runs"] as? [[String: Any]])?.first
     }
     func ids(_ rows: Any?) -> [String]? {
       (rows as? [[String: Any]])?.compactMap { $0["id"] as? String }

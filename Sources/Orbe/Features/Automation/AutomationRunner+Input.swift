@@ -36,7 +36,7 @@ extension AutomationRunner {
 
   /// やり直しの鍵（`<自動化 ID>-<部品の ID>-<数え始めのミリ秒>`）。数え始めは記録された回でだけ進むので、止めた回・書けなかった
   /// 回のやり直しは同じ値になる。部品の鍵を変えても変わらない。
-  static func runId(_ id: Int, _ part: AutomationNodeID, _ anchor: Date) -> String {
-    "\(id)-\(part)-\(AutomationPersistence.millis(anchor))"
+  static func runId(_ id: Int, _ nodeId: AutomationNodeID, _ anchor: Date) -> String {
+    "\(id)-\(nodeId)-\(AutomationPersistence.millis(anchor))"
   }
 }

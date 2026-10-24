@@ -8,7 +8,7 @@ import XCTest
 /// 落ちて別の部品になる）。読み直した部品のモデルが解いた値で固まり、役割が変わっても前の既定で走る。コマンドに書いたツールや
 /// 知らない行き先・取り方が黙って捨てられ、書いた AI が誤りの場所を知らされない。
 final class AutomationNodeTests: OrbeTestCase {
-  private func part(
+  private func definitionNode(
     _ id: Int?, _ key: String, _ name: String, _ trigger: AutomationNode.Trigger,
     from: [AutomationDefinition.Input] = [], _ action: AutomationActionDef, maxItems: Int? = nil
   ) -> AutomationDefinition.Node {
@@ -17,7 +17,7 @@ final class AutomationNodeTests: OrbeTestCase {
       action: action, maxItems: maxItems)
   }
 
-  func testTheJSONFormReadsIntoPartsAndWritesBackTheSame() throws {
+  func testTheJSONFormReadsIntoNodesAndWritesBackTheSame() throws {
     let json = #"""
       [
         {"id": 3, "key": "gh", "name": "GitHub", "trigger": {"kind": "interval", "minutes": 10},
@@ -34,48 +34,48 @@ final class AutomationNodeTests: OrbeTestCase {
       ]
       """#
     let expected = [
-      part(
+      definitionNode(
         3, "gh", "GitHub", .scheduled(.every(600)),
         AutomationActionDef(
           method: .command(BackgroundCommand(script: "gh search prs", directory: "/Users/me/repo")),
-          timeoutMinutes: nil, coverage: .currentSet, destination: .nextPart)),
-      part(
+          timeoutMinutes: nil, coverage: .currentSet, destination: .nextNode)),
+      definitionNode(
         nil, "judge", "判定", .scheduled(.cron(try BackgroundCron("0 9 * * *"))),
         from: [.init(part: "gh", maxAgeHours: 72)],
         AutomationActionDef(
           method: .agent(
             AutomationNodeAgent(cli: "claude", model: nil, tools: [], instruction: "判定して")),
           timeoutMinutes: 10, coverage: nil, destination: .taskCandidates), maxItems: 30),
-      part(
+      definitionNode(
         nil, "post", "投稿", .manual,
         AutomationActionDef(
           method: .agent(
             AutomationNodeAgent(
               cli: "claude", model: "opus", tools: ["mcp__slack__post"], instruction: "投稿して")),
           timeoutMinutes: nil, coverage: nil, destination: .report)),
-      part(
+      definitionNode(
         nil, "say", "知らせ", .arrival, from: [.init(part: "gh"), .init(part: "post", take: .all)],
         AutomationActionDef(
           method: .command(BackgroundCommand(script: "say hi", directory: nil)),
           timeoutMinutes: nil, coverage: nil, destination: .sideEffect)),
-      part(
+      definitionNode(
         nil, "sum", "まとめ", .arrival, from: [.init(part: "gh", take: .all)],
         AutomationActionDef(
           method: .agent(
             AutomationNodeAgent(cli: "claude", model: nil, tools: [], instruction: "まとめて")),
-          timeoutMinutes: nil, coverage: .currentSet, destination: .nextPart)),
+          timeoutMinutes: nil, coverage: .currentSet, destination: .nextNode)),
     ]
 
-    let parts = try AutomationWire.decoder.decode(
+    let definitionNodes = try AutomationWire.decoder.decode(
       [AutomationDefinition.Node].self, from: Data(json.utf8))
-    let written = try AutomationWire.encoder().encode(parts)
+    let written = try AutomationWire.encoder().encode(definitionNodes)
     let from = try XCTUnwrap(
       (JSONSerialization.jsonObject(with: written) as? [[String: Any]])?[3]["from"] as? [Any])
 
-    XCTAssertEqual(parts, expected)
+    XCTAssertEqual(definitionNodes, expected)
     XCTAssertEqual(
       try AutomationWire.decoder.decode([AutomationDefinition.Node].self, from: written),
-      parts, "書いて読み直しても同じ値（省略したモデルは省略のまま）")
+      definitionNodes, "書いて読み直しても同じ値（省略したモデルは省略のまま）")
     XCTAssertEqual(from.first as? String, "gh", "取り方も古さの上限も省いた入力は鍵だけで書く")
   }
 

@@ -13,7 +13,7 @@ extension WindowControllerAutomationControlTests {
     try {
       let store = AutomationStore()
       let id = try store.create(Self.definition(), now: Date()).id
-      try store.record(id, part: "fetch", at: Date(), outcome: DesignSceneFixtures.fetched([]))
+      try store.record(id, nodeKey: "fetch", at: Date(), outcome: DesignSceneFixtures.fetched([]))
       try store.read {
         try $0.db.run(
           """
@@ -29,7 +29,7 @@ extension WindowControllerAutomationControlTests {
     XCTAssertEqual(
       (entry["definitionError"] as? String)?.hasPrefix("invalid parts[1].instruction"), true)
     let runs = try success(
-      wc.controlListAutomationRuns(automationId: 1, partKey: nil, before: nil, limit: nil))
+      wc.controlListAutomationRuns(automationId: 1, nodeKey: nil, before: nil, limit: nil))
     XCTAssertEqual(
       (runs["runs"] as? [[String: Any]])?.map { $0["partKey"] as? String },
       ["fetch"], "回の記録は部品の鍵で返る")
@@ -38,11 +38,11 @@ extension WindowControllerAutomationControlTests {
     }
     XCTAssertEqual(refused.code, -32000, "見つからないではなく、読めない理由で断る")
     let definition = try XCTUnwrap(entry["definition"] as? [String: Any])
-    let parts = try XCTUnwrap(definition["parts"] as? [[String: Any]])
-    XCTAssertEqual(parts.map { $0["key"] as? String }, ["fetch", "judge"])
+    let nodes = try XCTUnwrap(definition["parts"] as? [[String: Any]])
+    XCTAssertEqual(nodes.map { $0["key"] as? String }, ["fetch", "judge"])
     var fixed = Self.definition()
     for index in fixed.parts.indices {
-      fixed.parts[index].id = (parts[index]["id"] as? Int).map(AutomationNodeID.init)
+      fixed.parts[index].id = (nodes[index]["id"] as? Int).map(AutomationNodeID.init)
     }
     let set = try success(wc.controlSetAutomation(automationId: 1, version: 1, fixed))
     XCTAssertEqual((set["automation"] as? [String: Any])?["version"] as? Int, 2)
@@ -83,8 +83,8 @@ extension WindowControllerAutomationControlTests {
       "list_automations": wc.controlListAutomations(),
       "set_automation": wc.controlSetAutomation(automationId: nil, version: nil, Self.definition()),
       "list_automation_runs": wc.controlListAutomationRuns(
-        automationId: 1, partKey: nil, before: nil, limit: nil),
-      "run_automation": wc.controlRunAutomation(automationId: 1, partKey: nil),
+        automationId: 1, nodeKey: nil, before: nil, limit: nil),
+      "run_automation": wc.controlRunAutomation(automationId: 1, nodeKey: nil),
       "pause_automation": wc.controlPauseAutomation(automationId: 1, paused: true),
       "delete_automation": wc.controlDeleteAutomation(automationId: 1),
       "list_automation_proposals": wc.controlListAutomationProposals(automationId: nil),

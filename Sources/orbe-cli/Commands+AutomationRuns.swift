@@ -3,9 +3,9 @@ import Foundation
 // `orb automation` の回の記録の読み（`list` の前回の列・`runs`）。
 
 /// 最新の部品の回の要約（時刻が同じなら記録の ID の大きい方。アプリの部品の回の並びと揃える）。
-func lastRunCell(_ parts: [String: [String: Any]]) -> String? {
-  let latest = parts.compactMap { key, part in
-    (part["lastRun"] as? [String: Any]).map { (key: key, run: $0) }
+func lastRunCell(_ nodes: [String: [String: Any]]) -> String? {
+  let latest = nodes.compactMap { key, node in
+    (node["lastRun"] as? [String: Any]).map { (key: key, run: $0) }
   }.max {
     ($0.run["startedAt"] as? String ?? "", $0.run["recordId"] as? Int ?? 0)
       < ($1.run["startedAt"] as? String ?? "", $1.run["recordId"] as? Int ?? 0)
@@ -44,12 +44,12 @@ func runCell(_ key: String, _ run: [String: Any]) -> String {
 func automationRuns(_ rest: [String]) -> Never {
   exitIfAutomationHelp(rest)
   var args = rest
-  let part = takeOption(&args, "--part", requires: "a <key> value")
+  let nodeKey = takeOption(&args, "--part", requires: "a <key> value")
   let before = takeIntOption(&args, "--before", requires: "a positive <recordId>")
   let limit = takeIntOption(&args, "--limit", requires: "a positive <n>")
   rejectLeftovers(args, positionals: 1)
   var params: [String: Any] = ["automationId": automationIdArg(args, verb: "runs")]
-  if let part { params["partKey"] = part }
+  if let nodeKey { params["partKey"] = nodeKey }
   if let before { params["before"] = before }
   if let limit { params["limit"] = limit }
   let result = callOrExit("list_automation_runs", params)

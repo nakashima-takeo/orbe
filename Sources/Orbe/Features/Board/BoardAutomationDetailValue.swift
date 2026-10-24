@@ -63,7 +63,7 @@ struct BoardMapLanes: Equatable {
 /// 地図の 1 行。部品の行に続けて、出力先の行（タスク候補・報告の出し先。その出力先の部品がある分だけ）が並ぶ。
 struct BoardMapRow: Equatable {
   enum Content: Equatable {
-    case part(BoardMapNode)
+    case node(BoardMapNode)
     /// `open` はこの自動化の棚に出ている判断待ちの候補の数。
     case taskCandidates(open: Int)
     /// 報告と作業の文の出し先（「メニューバー」）。
@@ -86,7 +86,7 @@ struct BoardAutomationDetailValue: Equatable {
   let rows: [BoardMapRow]
   /// 溝の線の本数（自動化ごと。溝の幅はこれで決まる）。
   let laneCount: Int
-  let partCount: Int
+  let nodeCount: Int
 
   static let stripLength = 20
 }
@@ -105,7 +105,7 @@ extension BoardAutomationDetailValue {
 
     var plans = ordered.map { node in
       BoardMapLayout.Row(
-        key: "\(node.id)", inputs: node.inputParts.map { "\($0)" },
+        key: "\(node.id)", inputs: node.inputNodeIds.map { "\($0)" },
         continues: node.action.destination != .sideEffect)
     }
     if !judges.isEmpty {
@@ -119,7 +119,7 @@ extension BoardAutomationDetailValue {
 
     var rows = zip(ordered, layout.lanes).map { node, lanes in
       BoardMapRow(
-        content: .part(Self.part(node, in: automation, text: text, running: running(node.id))),
+        content: .node(Self.mapNode(node, in: automation, text: text, running: running(node.id))),
         lanes: lanes)
     }
     var ends = layout.lanes.dropFirst(ordered.count).makeIterator()
@@ -131,7 +131,7 @@ extension BoardAutomationDetailValue {
         BoardMapRow(content: .reports(Self.reports(automation.notify, l10n)), lanes: lanes))
     }
     self.rows = rows
-    partCount = graph.nodes.count
+    nodeCount = graph.nodes.count
     notify = l10n.format(
       .boardNotifyLine, l10n.string(automation.notify?.labelKey ?? .boardNotifyNone))
     let summary = BoardAutomationSummary(automation, text: text, next: next)
@@ -149,13 +149,13 @@ extension BoardAutomationDetailValue {
   }
 
   /// 地図の部品の行。
-  private static func part(
+  private static func mapNode(
     _ node: AutomationGraph.Node, in automation: Automation, text: AutomationText, running: Bool
   ) -> BoardMapNode {
     let l10n = text.l10n
     let state = automation.state(node.id)
     let latest = state.runs.first
-    let inputs = node.inputParts
+    let inputs = node.inputNodeIds
     let schedule: String? =
       switch node.entity.trigger {
       case .arrival: nil

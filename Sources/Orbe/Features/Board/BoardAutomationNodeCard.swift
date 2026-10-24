@@ -173,7 +173,7 @@ struct BoardAutomationNodeCard: View {
   }
 
   private var buttons: some View {
-    let operation = BoardAutomationHand.Operation.flow(.part)
+    let operation = BoardAutomationHand.Operation.flow(.node)
     return HStack(spacing: 6) {
       button(key: operation.key, title: l10n.string(operation.title(paused: false)), primary: true)
       {

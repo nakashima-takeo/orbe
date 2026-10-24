@@ -11,7 +11,7 @@ extension AutomationStoreTests {
   func testACopyTakesInWhatTheStoreWritesBetweenStepsAndKeepsItsOwnChanges() throws {
     let store = AutomationStore()
     var definition = Self.definition()
-    definition.parts[1] = DesignSceneFixtures.commandPart(
+    definition.parts[1] = DesignSceneFixtures.commandNode(
       "judge", "判定", .arrival, from: ["fetch"], script: "judge", deliver: .taskCandidates)
     let id = try store.create(definition, now: Self.at).id
     let large = (0..<12).map {
@@ -28,12 +28,12 @@ extension AutomationStoreTests {
     while copied == nil { copied = try copy.step() }
     let twin = try XCTUnwrap(copied)
 
-    let judge = store.part(id, "judge")
+    let judge = store.nodeId(id, "judge")
     func unread(_ store: AutomationStore) throws -> [String] {
       try XCTUnwrap(store.read(judge, of: id, baseline: nil, now: Self.at)).taken.map(\.id)
     }
     XCTAssertEqual(try unread(twin), try unread(store))
-    XCTAssertEqual(try unread(twin).last, "\(store.part(id, "fetch")):late")
+    XCTAssertEqual(try unread(twin).last, "\(store.nodeId(id, "fetch")):late")
     XCTAssertEqual(twin.automations, store.automations)
 
     let before = store.automations
@@ -50,7 +50,7 @@ extension AutomationStoreTests {
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
     try Self.fetch(XCTUnwrap(store), id, [Self.item("a")])
     try Self.judge(XCTUnwrap(store), id)
-    let fetch = try XCTUnwrap(store?.part(id, "fetch"))
+    let fetch = try XCTUnwrap(store?.nodeId(id, "fetch"))
     let rows = ["a", "b", "c"].map {
       AutomationNodeRow(
         id: $0,

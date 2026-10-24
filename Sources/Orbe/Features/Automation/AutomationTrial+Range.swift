@@ -2,7 +2,7 @@ import Foundation
 
 /// 試走の範囲と与えた行の読み。
 extension AutomationTrial {
-  /// 範囲を解く。知らない部品は `partNotFound`、どの行き先にも届かない入口・どの入口からも届かない行き先は `invalid`。
+  /// 範囲を解く。知らない部品は `nodeNotFound`、どの行き先にも届かない入口・どの入口からも届かない行き先は `invalid`。
   static func range(of automation: Automation, _ request: Request) throws(AutomationError) -> Range
   {
     let graph = automation.graph
@@ -13,7 +13,7 @@ extension AutomationTrial {
       guard !keys.isEmpty else { throw .invalid("\(name) must name at least one part") }
       var ids: [AutomationNodeID] = []
       for key in keys {
-        guard let node = graph.node(key: key) else { throw .partNotFound(automation.id, key) }
+        guard let node = graph.node(key: key) else { throw .nodeNotFound(automation.id, key) }
         ids.append(node.id)
       }
       return ids

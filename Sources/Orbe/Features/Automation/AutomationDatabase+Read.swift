@@ -98,9 +98,10 @@ extension AutomationDatabase {
 
   /// 下流へ渡す id。入力を引き継いだ行は書かれた id のまま（下流が入力と照らせる）、それ以外は `<部品 ID>:<書かれた id>`
   /// （部品をまたいで重ならない）。
-  static func downstreamId(_ written: String, of part: AutomationNodeID, inherited: Bool) -> String
+  static func downstreamId(_ written: String, of nodeId: AutomationNodeID, inherited: Bool)
+    -> String
   {
-    inherited ? written : "\(part):\(written)"
+    inherited ? written : "\(nodeId):\(written)"
   }
 
   /// 引き継ぎをたどった先の行。それを出した部品の今の役割が取得なら出どころ（候補のリンクと本文の元）で、ほかは出どころなし。
@@ -110,31 +111,31 @@ extension AutomationDatabase {
   {
     var current = start
     while true {
-      let next: [(part: Int, source: AutomationSourceRef?)]
+      let next: [(nodeId: Int, source: AutomationSourceRef?)]
       switch current {
       case .item(let id):
         next = try db.select(
           "SELECT part_id, source_item_id, source_event_id FROM items WHERE id = ?",
           [.integer(Int64(id))]
-        ) { (part: $0.int(at: 0), source: Self.source($0, item: 1, event: 2)) }
+        ) { (nodeId: $0.int(at: 0), source: Self.source($0, item: 1, event: 2)) }
       case .event(let id):
         next = try db.select(
           "SELECT part_id, source_item_id, source_event_id FROM events WHERE id = ?",
           [.integer(Int64(id))]
-        ) { (part: $0.int(at: 0), source: Self.source($0, item: 1, event: 2)) }
+        ) { (nodeId: $0.int(at: 0), source: Self.source($0, item: 1, event: 2)) }
       }
       guard let row = next.first else { return nil }
       if let source = row.source {
         current = source
         continue
       }
-      let part = AutomationNodeID(row.part)
-      guard graph.node(part)?.role == .fetch else { return nil }
-      return try originRow(current, part: part)
+      let nodeId = AutomationNodeID(row.nodeId)
+      guard graph.node(nodeId)?.role == .fetch else { return nil }
+      return try originRow(current, nodeId: nodeId)
     }
   }
 
-  private func originRow(_ source: AutomationSourceRef, part: AutomationNodeID) throws
+  private func originRow(_ source: AutomationSourceRef, nodeId: AutomationNodeID) throws
     -> AutomationIntake.Origin?
   {
     let found: [(ref: AutomationRowRef, body: String?)]
@@ -152,7 +153,7 @@ extension AutomationDatabase {
     guard let row = found.first, let item = Self.decode(AutomationItem.self, row.body) else {
       return nil
     }
-    return AutomationIntake.Origin(part: part, row: row.ref, item: item)
+    return AutomationIntake.Origin(nodeId: nodeId, row: row.ref, item: item)
   }
 
   /// 読む前に期限で消えた出来事の数: 上流の出来事の番号の（`from`, `to`] のうち、残す期間の内に残っていないもの。

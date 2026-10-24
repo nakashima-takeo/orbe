@@ -14,7 +14,7 @@ struct BoardAutomationMapView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       BoardSectionHeader(title: .boardAutomationFlow) {
-        Text(l10n.plural(detail.partCount, one: .boardMapPartsOne, other: .boardMapPartsOther))
+        Text(l10n.plural(detail.nodeCount, one: .boardMapPartsOne, other: .boardMapPartsOther))
         Text(l10n.string(.boardPending))
           .frame(width: BoardMapRowView.pendingWidth, alignment: .trailing)
         Text(l10n.string(.boardMapLast))
@@ -25,8 +25,8 @@ struct BoardAutomationMapView: View {
       ForEach(Array(detail.rows.enumerated()), id: \.offset) { _, row in
         let view = BoardMapRowView(
           row: row, laneCount: detail.laneCount, roleWidth: roleWidth, selected: selected)
-        if case .part(let part) = row.content {
-          view.contentShape(Rectangle()).onTapGesture { model.tapPart(part.id) }
+        if case .node(let mapNode) = row.content {
+          view.contentShape(Rectangle()).onTapGesture { model.tapNode(mapNode.id) }
         } else {
           view
         }
@@ -38,7 +38,7 @@ struct BoardAutomationMapView: View {
   /// 役割の列の幅。見本の幅を下限に、最も長い役割の名前（英語の「Process」など）に空きを足した幅で揃える。
   private var roleWidth: CGFloat {
     let roles = detail.rows.map { row in
-      if case .part(let part) = row.content { return part.role }
+      if case .node(let mapNode) = row.content { return mapNode.role }
       return l10n.string(.boardMapDestination)
     }
     let widest =
@@ -64,7 +64,7 @@ struct BoardMapRowView: View {
         BoardMapGutter(lanes: row.lanes, node: node)
           .frame(width: BoardMapGutter.width(laneCount), height: Self.height)
         switch row.content {
-        case .part(let part): partCells(part)
+        case .node(let mapNode): nodeCells(mapNode)
         case .taskCandidates(let open):
           destinationCells(
             l10n.string(.boardOutputTaskCandidates), note: l10n.format(.boardMapOpen, open))
@@ -77,21 +77,21 @@ struct BoardMapRowView: View {
       .background(
         isSelected ? Color.theme.selectionFill : Color.clear,
         in: RoundedRectangle(cornerRadius: Self.radius))
-      if case .part(let part) = row.content, let failure = part.failure {
+      if case .node(let mapNode) = row.content, let failure = mapNode.failure {
         reason(failure)
       }
     }
   }
 
   private var isSelected: Bool {
-    if case .part(let part) = row.content { return part.id == selected }
+    if case .node(let mapNode) = row.content { return mapNode.id == selected }
     return false
   }
 
   private var node: MapNodeGlyph.Look {
     switch row.content {
-    case .part(let part):
-      switch part.look {
+    case .node(let mapNode):
+      switch mapNode.look {
       case .idle: .idle
       case .failed: .failed
       case .running: .running
@@ -101,30 +101,30 @@ struct BoardMapRowView: View {
   }
 
   /// 名前と札が幅に収まらなければ、入力の部品名 → 予定の札の順に末尾を省き、名前と出力の形式エラーの札は残す。
-  @ViewBuilder private func partCells(_ part: BoardMapNode) -> some View {
-    role(part.role)
+  @ViewBuilder private func nodeCells(_ mapNode: BoardMapNode) -> some View {
+    role(mapNode.role)
     HStack(spacing: Self.cellGap) {
-      fontResolver.text(part.name, base: Theme.Typography.code)
+      fontResolver.text(mapNode.name, base: Theme.Typography.code)
         .font(Font.theme.code)
         .foregroundStyle(Color.theme.textPrimary)
         .padding(.trailing, Theme.Space.hair)
         .truncationMode(.tail)
         .layoutPriority(1)
-      if let schedule = part.schedule { BoardScheduleChip(text: schedule) }
-      if part.look == .running {
+      if let schedule = mapNode.schedule { BoardScheduleChip(text: schedule) }
+      if mapNode.look == .running {
         Text(l10n.string(.automationRunning))
           .font(Font.theme.codeSmall)
           .foregroundStyle(Color.theme.accentBright)
           .fixedSize()
       }
-      if part.breached {
+      if mapNode.breached {
         BoardChip(
           text: l10n.string(.automationFormatError), foreground: Color.theme.danger,
           fill: Color.theme.tintRed
         )
         .fixedSize()
       }
-      if let inputs = part.inputs {
+      if let inputs = mapNode.inputs {
         (Text.boardIncomingLead
           + fontResolver.text(inputs, base: Theme.Typography.codeSmall))
           .font(Font.theme.codeSmall)
@@ -135,11 +135,13 @@ struct BoardMapRowView: View {
     }
     .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
     .clipped()
-    Text(part.pending.map { "\($0)" } ?? "")
+    Text(mapNode.pending.map { "\($0)" } ?? "")
       .font(Font.theme.workspaceName)
-      .foregroundStyle((part.pending ?? 0) > 0 ? Color.theme.accentBright : Color.theme.textMuted)
+      .foregroundStyle(
+        (mapNode.pending ?? 0) > 0 ? Color.theme.accentBright : Color.theme.textMuted
+      )
       .frame(width: Self.pendingWidth, alignment: .trailing)
-    last(part.last)
+    last(mapNode.last)
       .padding(.trailing, Self.lastInset)
       .frame(width: Self.lastWidth, alignment: .trailing)
   }

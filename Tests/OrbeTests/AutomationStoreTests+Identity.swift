@@ -17,30 +17,30 @@ extension AutomationStoreTests {
     AutomationDefinition(
       name: "送る", notify: nil,
       parts: [
-        DesignSceneFixtures.commandPart(
+        DesignSceneFixtures.commandNode(
           fetchKey, "取る", .scheduled(.every(1800)), script: script, coverage: .currentSet),
-        DesignSceneFixtures.commandPart(
+        DesignSceneFixtures.commandNode(
           "send", "送る", .arrival, from: [fetchKey], script: "send", deliver: .sideEffect),
       ])
   }
 
   /// 受け手が今読めば取る行の下流へ渡す id。
   private func unread(_ store: AutomationStore, _ id: Int, _ key: String) throws -> [String] {
-    try XCTUnwrap(store.read(store.part(id, key), of: id, baseline: nil, now: Self.at)).taken.map(
+    try XCTUnwrap(store.read(store.nodeId(id, key), of: id, baseline: nil, now: Self.at)).taken.map(
       \.id)
   }
 
   /// 鍵を変えた書き換え（`from` の名指しも合わせて変える）の後も、部品は同じ ID のまま、読んだ位置・まだ受け取っていない行・
   /// 回の記録・外した印・候補を保ち、下流へ渡す id と回の ID も変わらない。鍵だけの変化は何をするかの変化に入らない（下流の
   /// 名指しが変わっただけの部品も）。
-  func testRenamingAPartKeepsItsIdentity() throws {
+  func testRenamingANodeKeepsItsIdentity() throws {
     let store = AutomationStore()
     let id = try store.create(Self.definition(), now: Self.at).id
     let (a, b) = (Self.item("a"), Self.item("b"))
     try Self.fetch(store, id, [a], outcome: Self.breached([a]))
     try Self.judge(store, id, proposing: [a])
     try Self.fetch(store, id, [a, b])
-    let fetch = store.part(id, "fetch")
+    let fetch = store.nodeId(id, "fetch")
     let before = try XCTUnwrap(store.automation(id))
     let unreadBefore = try unread(store, id, "judge")
     let anchor = before.state(fetch).anchor
@@ -52,7 +52,7 @@ extension AutomationStoreTests {
     let replaced = try store.replace(id, version: before.version, with: renamed, now: Self.at)
 
     let after = try XCTUnwrap(store.automation(id))
-    XCTAssertEqual(store.part(id, "gh"), fetch, "同じ部品のまま")
+    XCTAssertEqual(store.nodeId(id, "gh"), fetch, "同じ部品のまま")
     XCTAssertEqual(replaced.reworked, [], "鍵だけの変化は何をするかの変化でない")
     XCTAssertEqual(try unread(store, id, "judge"), unreadBefore, "読んだ位置とまだ受け取っていない行")
     XCTAssertEqual(after.state(fetch).runs, before.state(fetch).runs)
@@ -66,12 +66,12 @@ extension AutomationStoreTests {
   /// 鍵・名前・予定・件数の上限だけの変化は何をするかの変化に入らず、指示文の変化は新しい定義を足して指し直す。前の回の記録は
   /// 前の定義を、後の回の記録は新しい定義を指す。部品の定義の行は書いた後に変わらず、保存した値に部品の鍵が残るのは自動化の
   /// 部品の鍵だけ。
-  func testOnlyWhatAPartDoesMakesANewDefinition() throws {
+  func testOnlyWhatANodeDoesMakesANewDefinition() throws {
     let store = AutomationStore()
     let id = try store.create(Self.definition(), now: Self.at).id
     try Self.fetch(store, id, [Self.item("a")])
     try Self.judge(store, id)
-    let judge = store.part(id, "judge")
+    let judge = store.nodeId(id, "judge")
     let first = try XCTUnwrap(store.automation(id)?.graph.node(judge)?.entity.defId)
 
     var plain = try XCTUnwrap(store.automation(id)?.definition)
@@ -111,7 +111,7 @@ extension AutomationStoreTests {
   func testSpellingOutADefaultIsNotAChangeOfWork() throws {
     let store = AutomationStore()
     let id = try store.create(Self.definition(), now: Self.at).id
-    let judge = store.part(id, "judge")
+    let judge = store.nodeId(id, "judge")
     func rewritten(_ change: (inout AutomationActionDef) -> Void) throws -> [AutomationNodeID] {
       var definition = try XCTUnwrap(store.automation(id)?.definition)
       change(&definition.parts[1].action)
@@ -136,15 +136,15 @@ extension AutomationStoreTests {
 
   /// 先頭に新しい部品を挿し、残す部品の鍵を変えてその旧鍵を新しい部品に使う書き換えも通り、残す部品は ID を保ち、部品は定義の
   /// 順に並ぶ（DB の位置も）。
-  func testARewriteCanInsertAPartAndHandItAnOldKey() throws {
+  func testARewriteCanInsertANodeAndHandItAnOldKey() throws {
     let store = AutomationStore()
     let id = try store.create(sendDefinition(), now: Self.at).id
-    let (fetch, send) = (store.part(id, "fetch"), store.part(id, "send"))
+    let (fetch, send) = (store.nodeId(id, "fetch"), store.nodeId(id, "send"))
     var definition = try XCTUnwrap(store.automation(id)?.definition)
     definition.parts[0].key = "gh"
     definition.parts[1].from = [AutomationDefinition.Input(part: "gh")]
     definition.parts.insert(
-      DesignSceneFixtures.commandPart(
+      DesignSceneFixtures.commandNode(
         "fetch", "掃除", .scheduled(.every(3600)), script: "clean", deliver: .sideEffect), at: 0)
 
     _ = try store.replace(id, version: 1, with: definition, now: Self.at)
@@ -168,9 +168,10 @@ extension AutomationStoreTests {
     let id = try store.create(sendDefinition(), now: Self.at).id
     XCTAssertEqual(store.automation(id)?.version, 1)
     var definition = try XCTUnwrap(store.automation(id)?.definition)
-    XCTAssertEqual(definition.parts.map(\.id), [store.part(id, "fetch"), store.part(id, "send")])
+    XCTAssertEqual(
+      definition.parts.map(\.id), [store.nodeId(id, "fetch"), store.nodeId(id, "send")])
     definition.parts.append(
-      DesignSceneFixtures.commandPart(
+      DesignSceneFixtures.commandNode(
         "log", "記録", .arrival, from: ["fetch"], script: "log", deliver: .sideEffect))
 
     let replaced = try store.replace(id, version: 1, with: definition, now: Self.at)
@@ -179,7 +180,7 @@ extension AutomationStoreTests {
 
     XCTAssertEqual(replaced.automation.version, 2)
     XCTAssertEqual(store.automation(id)?.version, 2, "止める・再開は版を変えない")
-    XCTAssertGreaterThan(store.part(id, "log"), store.part(id, "send"), "新しい部品に ID が振られる")
+    XCTAssertGreaterThan(store.nodeId(id, "log"), store.nodeId(id, "send"), "新しい部品に ID が振られる")
     XCTAssertEqual(
       try store.replace(
         id, version: 2, with: XCTUnwrap(store.automation(id)?.definition), now: Self.at
@@ -189,7 +190,7 @@ extension AutomationStoreTests {
 
   /// 次の書き換えは断られ、定義は変わらない: 版が無い・古い（間に通知を切り替えた）、知らない部品の id・ほかの自動化の部品の
   /// id、新しく作る定義の id、id を落として消える部品と同じ鍵で書いた部品。
-  func testRewritesThatWouldLoseOrMixUpPartsAreRefused() throws {
+  func testRewritesThatWouldLoseOrMixUpNodesAreRefused() throws {
     let store = AutomationStore()
     let id = try store.create(sendDefinition(), now: Self.at).id
     let other = try store.create(sendDefinition(), now: Self.at).id
@@ -197,7 +198,7 @@ extension AutomationStoreTests {
     var notified = current
     notified.notify = .menuBar
     _ = try store.replace(id, version: 1, with: notified, now: Self.at)
-    let fetch = store.part(id, "fetch")
+    let fetch = store.nodeId(id, "fetch")
     func refused(_ version: Int?, _ change: (inout AutomationDefinition) -> Void)
       -> AutomationError?
     {
@@ -219,8 +220,8 @@ extension AutomationStoreTests {
       refused(2) { $0.parts[0].id = AutomationNodeID(999) },
       .invalid("parts[0].id: 999 is not a part of automation \(id)"))
     XCTAssertEqual(
-      refused(2) { $0.parts[0].id = store.part(other, "fetch") },
-      .invalid("parts[0].id: \(store.part(other, "fetch")) is not a part of automation \(id)"))
+      refused(2) { $0.parts[0].id = store.nodeId(other, "fetch") },
+      .invalid("parts[0].id: \(store.nodeId(other, "fetch")) is not a part of automation \(id)"))
     XCTAssertEqual(
       refused(2) { $0.parts[0].id = nil },
       .invalid(

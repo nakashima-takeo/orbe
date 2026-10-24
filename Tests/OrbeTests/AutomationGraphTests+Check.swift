@@ -9,9 +9,10 @@ import XCTest
 /// 処理が入力の一部だけを写して、残りの出力を無効にする。
 extension AutomationGraphTests {
   private func assertRefused(
-    _ parts: [AutomationDefinition.Node], at place: String, _ label: String, line: UInt = #line
+    _ definitionNodes: [AutomationDefinition.Node], at place: String, _ label: String,
+    line: UInt = #line
   ) {
-    XCTAssertThrowsError(try AutomationGraph.check(parts), label, line: line) {
+    XCTAssertThrowsError(try AutomationGraph.check(definitionNodes), label, line: line) {
       guard case .invalid(let message) = $0 as? AutomationError else {
         return XCTFail("\(label): \($0)", line: line)
       }
@@ -23,9 +24,9 @@ extension AutomationGraphTests {
   private func changing(
     _ index: Int, _ change: (inout AutomationDefinition.Node) -> Void
   ) -> [AutomationDefinition.Node] {
-    var parts = [Self.fetch("f"), Self.agent("r", from: ["f"])]
-    change(&parts[index])
-    return parts
+    var definitionNodes = [Self.fetch("f"), Self.agent("r", from: ["f"])]
+    change(&definitionNodes[index])
+    return definitionNodes
   }
 
   private func changingAgent(_ change: (inout AutomationNodeAgent) -> Void)
@@ -39,11 +40,11 @@ extension AutomationGraphTests {
   }
 
   /// 部品自身の欄だけで決まる規則は、その部品の欄を指して断る。
-  func testAPartsOwnFieldsAreRefusedAtTheirPlace() {
+  func testANodesOwnFieldsAreRefusedAtTheirPlace() {
     let command = { (script: String, directory: String?) in
       AutomationActionDef.Method.command(BackgroundCommand(script: script, directory: directory))
     }
-    for (label, parts, place) in [
+    for (label, definitionNodes, place) in [
       ("部品が 0 個", [AutomationDefinition.Node](), "parts"),
       ("鍵が空", changing(1) { $0.key = "" }, "parts[1].key"),
       ("鍵が 33 字", changing(1) { $0.key = String(repeating: "a", count: 33) }, "parts[1].key"),
@@ -90,7 +91,7 @@ extension AutomationGraphTests {
       ("取得の部品に性質が無い", changing(0) { $0.action.coverage = nil }, "parts[0].coverage"),
       ("行を出さない部品に性質", changing(1) { $0.action.coverage = .currentSet }, "parts[1].coverage"),
     ] {
-      assertRefused(parts, at: place, label)
+      assertRefused(definitionNodes, at: place, label)
     }
   }
 
@@ -114,13 +115,13 @@ extension AutomationGraphTests {
   }
 
   /// 部品どうしの組み合わせの規則は、直すべき部品の欄を指して断る。
-  func testCombinationsAreRefusedAtThePartToFix() {
+  func testCombinationsAreRefusedAtTheNodeToFix() {
     let unknown = [Self.fetch("f"), Self.agent("r", from: ["gh"])]
     XCTAssertThrowsError(try AutomationGraph.check(unknown)) {
       XCTAssertEqual($0 as? AutomationError, .invalid(#"parts[1].from: unknown part "gh""#))
     }
 
-    for (label, parts, place) in [
+    for (label, definitionNodes, place) in [
       (
         "鍵の重複は 2 つ目を指す",
         [Self.fetch("f"), Self.agent("r", from: ["f"]), Self.agent("r", from: ["f"])],
@@ -129,8 +130,8 @@ extension AutomationGraphTests {
       (
         "循環は定義の順で最初に輪に乗る部品を指す",
         [
-          Self.fetch("f"), Self.agent("a", from: ["f", "b"], deliver: .nextPart),
-          Self.agent("b", from: ["a"], deliver: .nextPart), Self.agent("r", from: ["b"]),
+          Self.fetch("f"), Self.agent("a", from: ["f", "b"], deliver: .nextNode),
+          Self.agent("b", from: ["a"], deliver: .nextNode), Self.agent("r", from: ["b"]),
         ], "parts[1].from"
       ),
       (
@@ -145,7 +146,7 @@ extension AutomationGraphTests {
       (
         "毎回すべてを取るつながりの行が処理を通って判定へ届く",
         [
-          Self.fetch("f"), Self.taking(.all, Self.agent("p", from: ["f"], deliver: .nextPart)),
+          Self.fetch("f"), Self.taking(.all, Self.agent("p", from: ["f"], deliver: .nextNode)),
           Self.agent("j", from: ["p"], deliver: .taskCandidates),
         ], "parts[1].from[0]"
       ),
@@ -160,7 +161,7 @@ extension AutomationGraphTests {
       (
         "今の集合の処理が新しい行だけを取る",
         [
-          Self.fetch("f"), Self.agent("p", from: ["f"], deliver: .nextPart, coverage: .currentSet),
+          Self.fetch("f"), Self.agent("p", from: ["f"], deliver: .nextNode, coverage: .currentSet),
           Self.agent("r", from: ["p"]),
         ], "parts[1].from[0]"
       ),
@@ -168,13 +169,13 @@ extension AutomationGraphTests {
         "今の集合の処理が件数の上限を持つ",
         {
           var process = Self.taking(
-            .all, Self.agent("p", from: ["f"], deliver: .nextPart, coverage: .currentSet))
+            .all, Self.agent("p", from: ["f"], deliver: .nextNode, coverage: .currentSet))
           process.maxItems = 5
           return [Self.fetch("f"), process, Self.agent("r", from: ["p"])]
         }(), "parts[1].maxItems"
       ),
     ] {
-      assertRefused(parts, at: place, label)
+      assertRefused(definitionNodes, at: place, label)
     }
   }
 }

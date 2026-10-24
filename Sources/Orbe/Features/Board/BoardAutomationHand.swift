@@ -8,7 +8,7 @@ enum BoardAutomationHand {
     /// 終わりの部品すべて。
     case ends
     /// 選ばれている部品。
-    case part
+    case node
   }
 
   enum Operation: Equatable {
@@ -28,7 +28,7 @@ enum BoardAutomationHand {
     func title(paused: Bool) -> L10nKey {
       switch self {
       case .flow(.ends): .automationRunNow
-      case .flow(.part): .automationFlowToSelected
+      case .flow(.node): .automationFlowToSelected
       case .togglePause: paused ? .automationResume : .automationPause
       case .delete: .automationDelete
       }
@@ -59,15 +59,15 @@ enum BoardAutomationHand {
     case (.list, .return) where commandOnly: operation = .flow(.ends)
     case (.list, .space): operation = .togglePause
     case (.list, .backspace) where press.modifiers.contains(.command): operation = .delete
-    case (.map, .return) where commandOnly: operation = .flow(.part)
+    case (.map, .return) where commandOnly: operation = .flow(.node)
     default: return nil
     }
     return press.phase == .down ? .press(operation) : .held
   }
 
-  /// 走らせ役へ通す。`part` は部品まで流すときの流す先（無ければ何もしない）。
+  /// 走らせ役へ通す。`nodeId` は部品まで流すときの流す先（無ければ何もしない）。
   static func perform(
-    _ operation: Operation, on automation: Automation, part: AutomationNodeID?,
+    _ operation: Operation, on automation: Automation, nodeId: AutomationNodeID?,
     runner: AutomationRunner
   ) -> Refusal? {
     switch operation {
@@ -75,9 +75,9 @@ enum BoardAutomationHand {
       let target: AutomationFlow.Target
       switch reach {
       case .ends: target = .ends
-      case .part:
-        guard let part else { return nil }
-        target = .part(part)
+      case .node:
+        guard let nodeId else { return nil }
+        target = .node(nodeId)
       }
       do throws(AutomationError) {
         try runner.flow(automation.id, to: target)

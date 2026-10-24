@@ -16,12 +16,12 @@ extension AutomationRunner {
   }
 
   /// 受け手のつながりごとの今（DB から読む）。読めなければ nil（ログに残す。起こす決まりは起こさない）。
-  func inlets(of part: AutomationNodeID) -> [AutomationNodeID: Inlet]? {
+  func inlets(of nodeId: AutomationNodeID) -> [AutomationNodeID: Inlet]? {
     do throws(AutomationError) {
-      let positions = try store.positions(of: part)
+      let positions = try store.positions(of: nodeId)
       return positions.mapValues { Inlet(read: $0.read, up: $0.last) }
     } catch {
-      NSLog("[automation] cannot read the inputs of part \(part): \(error)")
+      NSLog("[automation] cannot read the inputs of part \(nodeId): \(error)")
       return nil
     }
   }
@@ -50,12 +50,12 @@ extension AutomationRunner {
   }
 
   /// 起こす決まり。「届いたら」の部品に、基準線より新しい上流の行があり、走っていなければ起こす。
-  func wake(_ id: Int, _ part: AutomationNodeID) {
-    guard let automation = store.automation(id), let node = automation.graph.node(part),
+  func wake(_ id: Int, _ nodeId: AutomationNodeID) {
+    guard let automation = store.automation(id), let node = automation.graph.node(nodeId),
       node.entity.trigger == .arrival
     else { return }
-    let key = Self.key(id, part)
-    guard !scheduler.isRunning(id: key), let inlets = inlets(of: part),
+    let key = Self.key(id, nodeId)
+    guard !scheduler.isRunning(id: key), let inlets = inlets(of: nodeId),
       Self.hasNew(node, inlets, since: marks[key] ?? [:])
     else { return }
     scheduler.runNow(id: key)
@@ -63,9 +63,9 @@ extension AutomationRunner {
 
   /// 失敗のやり直し。「届いたら」でない部品の契機が終わったら、下流の「届いたら」の部品を、読んだ位置より後の上流の番号が
   /// あればすべて起こす（`needsRetry`）。
-  func retry(below part: AutomationNodeID, in id: Int) {
+  func retry(below nodeId: AutomationNodeID, in id: Int) {
     guard let automation = store.automation(id) else { return }
-    for node in automation.graph.descendants(of: part) where node.entity.trigger == .arrival {
+    for node in automation.graph.descendants(of: nodeId) where node.entity.trigger == .arrival {
       let key = Self.key(id, node.id)
       guard let inlets = inlets(of: node.id), Self.needsRetry(node, inlets) else {
         continue

@@ -15,7 +15,7 @@ final class AutomationGraphTests: OrbeTestCase {
     _ key: String, _ coverage: AutomationCoverage = .currentSet,
     trigger: AutomationNode.Trigger = everyTenMinutes
   ) -> AutomationDefinition.Node {
-    DesignSceneFixtures.commandPart(
+    DesignSceneFixtures.commandNode(
       key, key, trigger, script: "fetch \(key)", coverage: coverage)
   }
 
@@ -24,7 +24,7 @@ final class AutomationGraphTests: OrbeTestCase {
     deliver: AutomationActionDef.Destination = .report, coverage: AutomationCoverage? = nil,
     trigger: AutomationNode.Trigger = .manual
   ) -> AutomationDefinition.Node {
-    DesignSceneFixtures.agentPart(
+    DesignSceneFixtures.agentNode(
       key, key, trigger, from: inputs, tools: tools, instruction: "\(key) して", coverage: coverage,
       deliver: deliver)
   }
@@ -34,7 +34,7 @@ final class AutomationGraphTests: OrbeTestCase {
     deliver: AutomationActionDef.Destination = .sideEffect,
     trigger: AutomationNode.Trigger = .manual
   ) -> AutomationDefinition.Node {
-    DesignSceneFixtures.commandPart(
+    DesignSceneFixtures.commandNode(
       key, key, trigger, from: inputs, script: "run \(key)", deliver: deliver)
   }
 
@@ -56,7 +56,7 @@ final class AutomationGraphTests: OrbeTestCase {
       (
         "取得 → 処理 → 判定",
         [
-          Self.fetch("f"), Self.agent("p", from: ["f"], deliver: .nextPart, trigger: .arrival),
+          Self.fetch("f"), Self.agent("p", from: ["f"], deliver: .nextNode, trigger: .arrival),
           Self.agent("j", from: ["p"], deliver: .taskCandidates, trigger: .arrival),
         ]
       ),
@@ -64,7 +64,7 @@ final class AutomationGraphTests: OrbeTestCase {
       (
         "取得 → 処理 → コマンド",
         [
-          Self.fetch("f"), Self.agent("p", from: ["f"], deliver: .nextPart, trigger: .arrival),
+          Self.fetch("f"), Self.agent("p", from: ["f"], deliver: .nextNode, trigger: .arrival),
           Self.command("c", from: ["p"], trigger: .arrival),
         ]
       ),
@@ -79,7 +79,7 @@ final class AutomationGraphTests: OrbeTestCase {
           Self.taking(
             .all,
             Self.agent(
-              "p", from: ["f"], deliver: .nextPart, coverage: .currentSet, trigger: .arrival)),
+              "p", from: ["f"], deliver: .nextNode, coverage: .currentSet, trigger: .arrival)),
           Self.agent("r", from: ["p"], trigger: .arrival),
         ]
       ),
@@ -91,34 +91,36 @@ final class AutomationGraphTests: OrbeTestCase {
           Self.taking(
             .all,
             Self.agent(
-              "gate", from: ["f"], tools: [Self.tool], deliver: .nextPart, coverage: .newArrivals)),
+              "gate", from: ["f"], tools: [Self.tool], deliver: .nextNode, coverage: .newArrivals)),
           Self.agent("j", from: ["gate"], deliver: .taskCandidates),
         ]
       ),
     ]
-    for (label, parts) in shapes {
-      XCTAssertNoThrow(try AutomationGraph.numbered(parts), label)
+    for (label, definitionNodes) in shapes {
+      XCTAssertNoThrow(try AutomationGraph.numbered(definitionNodes), label)
     }
   }
 
   /// 部品の入力をすべて `take` で取る形にする。
-  static func taking(_ take: AutomationTake, _ part: AutomationDefinition.Node)
+  static func taking(_ take: AutomationTake, _ definitionNode: AutomationDefinition.Node)
     -> AutomationDefinition.Node
   {
-    var part = part
-    part.from = part.from.map { AutomationDefinition.Input(part: $0.part, take: take) }
-    return part
+    var definitionNode = definitionNode
+    definitionNode.from = definitionNode.from.map {
+      AutomationDefinition.Input(part: $0.part, take: take)
+    }
+    return definitionNode
   }
 
   /// 役割は部品自身の欄（入力・ツール・行き先）から Issue の役割の表どおりに導かれる。入力を合図にだけ使うツールを持つ agent は
   /// 行を見ないので取得。
-  func testRolesFollowEachPartsOwnFields() throws {
+  func testRolesFollowEachNodesOwnFields() throws {
     let graph = try AutomationGraph.numbered([
       Self.fetch("fetch"),
       Self.agent(
-        "gate", from: ["fetch"], tools: [Self.tool], deliver: .nextPart, coverage: .newArrivals),
-      Self.agent("process", from: ["fetch"], deliver: .nextPart),
-      Self.command("processCommand", from: ["fetch"], deliver: .nextPart),
+        "gate", from: ["fetch"], tools: [Self.tool], deliver: .nextNode, coverage: .newArrivals),
+      Self.agent("process", from: ["fetch"], deliver: .nextNode),
+      Self.command("processCommand", from: ["fetch"], deliver: .nextNode),
       Self.agent("judge", from: ["gate", "process", "processCommand"], deliver: .taskCandidates),
       Self.agent("report", from: ["fetch"]),
       Self.agent("reportAlone"),
@@ -136,10 +138,10 @@ final class AutomationGraphTests: OrbeTestCase {
   }
 
   /// 地図の並びは入力の深さ順（深さは最も長い道で数える）で、同じ深さは定義の順。入力の部品がいつも先に並ぶ。
-  func testPartsLineUpByInputDepthThenDefinitionOrder() throws {
+  func testNodesLineUpByInputDepthThenDefinitionOrder() throws {
     let graph = try AutomationGraph.numbered([
       Self.agent("r", from: ["a", "p"]),
-      Self.agent("p", from: ["b"], deliver: .nextPart),
+      Self.agent("p", from: ["b"], deliver: .nextNode),
       Self.fetch("b"),
       Self.fetch("a"),
     ])
@@ -151,8 +153,8 @@ final class AutomationGraphTests: OrbeTestCase {
   func testAProcessCoverageDefaultsToNewArrivals() throws {
     let graph = try AutomationGraph.numbered([
       Self.fetch("f"),
-      Self.agent("p", from: ["f"], deliver: .nextPart),
-      Self.taking(.all, Self.agent("q", from: ["f"], deliver: .nextPart, coverage: .currentSet)),
+      Self.agent("p", from: ["f"], deliver: .nextNode),
+      Self.taking(.all, Self.agent("q", from: ["f"], deliver: .nextNode, coverage: .currentSet)),
       Self.agent("r", from: ["p", "q"]),
     ])
 
@@ -160,23 +162,23 @@ final class AutomationGraphTests: OrbeTestCase {
   }
 
   /// 外の形へ組み直すと、取り方も古さの上限も省いた入力は鍵だけに、ほかは書いたとおりに戻る。
-  func testThePartsRoundTripTheirInputs() throws {
+  func testTheNodesRoundTripTheirInputs() throws {
     var receiver = Self.agent("r", from: ["f", "g"])
     receiver.from[1] = AutomationDefinition.Input(part: "g", take: .all, maxAgeHours: 24)
-    let parts = [Self.fetch("f"), Self.fetch("g"), receiver]
+    let definitionNodes = [Self.fetch("f"), Self.fetch("g"), receiver]
 
-    let graph = try AutomationGraph.numbered(parts)
+    let graph = try AutomationGraph.numbered(definitionNodes)
 
-    XCTAssertEqual(graph.definitionNodes.map(\.from), parts.map(\.from))
+    XCTAssertEqual(graph.definitionNodes.map(\.from), definitionNodes.map(\.from))
   }
 }
 
 extension AutomationGraph {
   /// 検証して、部品と定義に 1 から順の ID を振る（テストの見本）。
-  static func numbered(_ parts: [AutomationDefinition.Node]) throws(AutomationError)
+  static func numbered(_ definitionNodes: [AutomationDefinition.Node]) throws(AutomationError)
     -> AutomationGraph
   {
-    let checked = try check(parts)
+    let checked = try check(definitionNodes)
     return AutomationGraph(
       checked,
       entities: checked.enumerated().map { index, item in

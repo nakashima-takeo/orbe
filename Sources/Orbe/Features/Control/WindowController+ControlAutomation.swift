@@ -24,15 +24,15 @@ extension WindowController {
     }
   }
 
-  func controlRunAutomation(automationId: Int, partKey: String?) -> Result<Any, ControlError> {
+  func controlRunAutomation(automationId: Int, nodeKey: String?) -> Result<Any, ControlError> {
     automationResult { () throws(AutomationError) in
       let automation = automationStore.automations[try automationStore.index(automationId)]
       var target = AutomationFlow.Target.ends
-      if let partKey {
-        guard let node = automation.graph.node(key: partKey) else {
-          throw .partNotFound(automationId, partKey)
+      if let nodeKey {
+        guard let node = automation.graph.node(key: nodeKey) else {
+          throw .nodeNotFound(automationId, nodeKey)
         }
-        target = .part(node.id)
+        target = .node(node.id)
       }
       try automationRunner.flow(automationId, to: target)
       return ["ok": true]
@@ -40,16 +40,16 @@ extension WindowController {
   }
 
   /// 回の記録を新しい順に 1 ページ。
-  func controlListAutomationRuns(automationId: Int, partKey: String?, before: Int?, limit: Int?)
+  func controlListAutomationRuns(automationId: Int, nodeKey: String?, before: Int?, limit: Int?)
     -> Result<Any, ControlError>
   {
     automationResult { () throws(AutomationError) in
       let page = try automationStore.history(
-        of: automationId, part: partKey, before: before, limit: limit)
+        of: automationId, nodeKey: nodeKey, before: before, limit: limit)
       var json: [String: Any] = [
         "runs": page.runs.map { run -> [String: Any] in
-          var object = AutomationRunWire.object(run.record, part: run.partKey)
-          object["partKey"] = run.partKey
+          var object = AutomationRunWire.object(run.record, nodeKey: run.nodeKey)
+          object["partKey"] = run.nodeKey
           return object
         }
       ]
@@ -166,26 +166,26 @@ extension WindowController {
   /// 定義（部品に `id` を添えた外の形）と版に、止めているか・部品の今の鍵ごとの状態（走っているか・最新の回・次の時刻・読めば
   /// 取る行の数・決まりを外した印）を足す。判定の部品を持つ自動化にだけタスク候補の欄を付ける。
   private func automationJSON(_ automation: Automation) -> [String: Any] {
-    var parts: [String: Any] = [:]
+    var nodeObjects: [String: Any] = [:]
     for node in automation.graph.nodes {
       let state = automation.state(node.id)
-      var part: [String: Any] = ["running": automationRunner.isRunning(automation.id, node.id)]
+      var object: [String: Any] = ["running": automationRunner.isRunning(automation.id, node.id)]
       if let last = state.runs.first {
-        part["lastRun"] = AutomationRunWire.object(last, part: node.key)
+        object["lastRun"] = AutomationRunWire.object(last, nodeKey: node.key)
       }
-      if let next = automationRunner.nextRunAt(automation, part: node.id) {
-        part["nextRunAt"] = SessionEvent.iso8601(next)
+      if let next = automationRunner.nextRunAt(automation, nodeId: node.id) {
+        object["nextRunAt"] = SessionEvent.iso8601(next)
       }
-      if !node.inputs.isEmpty { part["pending"] = state.pending.count }
-      if let breach = state.breach { part["breach"] = AutomationRunWire.breach(breach) }
-      parts[node.key] = part
+      if !node.inputs.isEmpty { object["pending"] = state.pending.count }
+      if let breach = state.breach { object["breach"] = AutomationRunWire.breach(breach) }
+      nodeObjects[node.key] = object
     }
     var json: [String: Any] = [
       "automationId": automation.id,
       "version": automation.version,
       "definition": AutomationWire.object(automation.definition),
       "paused": automation.paused,
-      "parts": parts,
+      "parts": nodeObjects,
     ]
     if automation.judges {
       json["taskCandidates"] =
@@ -230,7 +230,7 @@ extension WindowController {
       case .proposalNotOpen(let id):
         return .failure(ControlError(code: -32602, message: "proposal \(id) is not open"))
       case .invalid(let message): return .failure(ControlError(code: -32602, message: message))
-      case .partNotFound(let id, let key):
+      case .nodeNotFound(let id, let key):
         return .failure(
           ControlError(code: -32004, message: "part not found: \(key) in automation \(id)"))
       case .flowing(let id):

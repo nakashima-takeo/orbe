@@ -44,12 +44,13 @@ extension BoardAutomationTests {
     down(window)
     right(window)
     let target = try XCTUnwrap(automation.store.automation(Self.failingBacklog))
-    let part = try XCTUnwrap(automation.selectedPart)
+    let nodeId = try XCTUnwrap(automation.selectedNodeId)
 
-    automation.draftFix(of: part, l10n: LocalizationStore(language: .ja))
+    automation.draftFix(of: nodeId, l10n: LocalizationStore(language: .ja))
     flush(window)
 
-    let draft = "自動化「\(target.name)」の部品「\(try XCTUnwrap(target.graph.node(part)).entity.name)」の修正："
+    let draft =
+      "自動化「\(target.name)」の部品「\(try XCTUnwrap(target.graph.node(nodeId)).entity.name)」の修正："
     XCTAssertEqual(automation.requestText, draft)
     XCTAssertEqual(automation.place, .request)
     XCTAssertEqual(asks(), [], "書き出すだけで頼まない")

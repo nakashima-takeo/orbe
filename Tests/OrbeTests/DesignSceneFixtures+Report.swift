@@ -26,7 +26,7 @@ extension DesignSceneFixtures {
       definition: AutomationDefinition(
         name: "開いている PR の要約", notify: .menuBar,
         parts: [
-          commandPart(
+          commandNode(
             "fetch", "開いている PR を取る", .scheduled(cron("0 18 * * *")),
             script:
               "gh pr list --json number,url,title,createdAt | jq -c '.[] | {id: (.number|tostring), "
@@ -34,7 +34,7 @@ extension DesignSceneFixtures {
             coverage: .currentSet),
           AutomationGraphTests.taking(
             .all,
-            agentPart(
+            agentNode(
               "digest", "要約", .arrival, from: ["fetch"], model: "sonnet",
               instruction: "開いている PR を 3 行以内で要約する。", deliver: .report)),
         ]),
@@ -43,10 +43,10 @@ extension DesignSceneFixtures {
         let start = automationAt(18, 0, daysAgo: entry.daysAgo)
         return [
           AutomationSamplePass(
-            part: "fetch", at: start,
+            nodeKey: "fetch", at: start,
             outcome: fetched(sampleItems("prs", 2 + entry.daysAgo % 3, at: start))),
           AutomationSamplePass(
-            part: "digest", at: start.addingTimeInterval(60), trigger: .arrival,
+            nodeKey: "digest", at: start.addingTimeInterval(60), trigger: .arrival,
             outcome: entry.report),
         ]
       })

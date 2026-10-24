@@ -12,7 +12,7 @@ import Foundation
 /// 番人から外すので、一巡はそこで打ち切られる。
 struct AutomationFlow {
   enum Target: Equatable {
-    case part(AutomationNodeID)
+    case node(AutomationNodeID)
     /// 終わりの部品すべて（`AutomationGraph.ends`）。
     case ends
     /// タスク候補を行き先にする部品すべて（`AutomationGraph.judges`）。
@@ -47,10 +47,10 @@ struct AutomationFlow {
     let nodes = graph.nodes.filter { path.contains($0.id) }
     var flow = AutomationFlow(
       targets: targets,
-      roots: Set(nodes.filter { path.isDisjoint(with: $0.inputParts) }.map(\.id)))
+      roots: Set(nodes.filter { path.isDisjoint(with: $0.inputNodeIds) }.map(\.id)))
     var wake: [AutomationNodeID] = []
     for node in nodes {
-      let upstream = path.intersection(node.inputParts)
+      let upstream = path.intersection(node.inputNodeIds)
       if !upstream.isEmpty {
         flow.steps[node.id] = .waiting(upstream)
       } else if node.inputs.isEmpty && running(node.id) {
@@ -73,13 +73,13 @@ struct AutomationFlow {
   var finished: Bool { targets.allSatisfy { steps[$0] == .done } }
 
   /// 部品が一巡の分を終えたか。
-  func isDone(_ part: AutomationNodeID) -> Bool { steps[part] == .done }
+  func isDone(_ nodeId: AutomationNodeID) -> Bool { steps[nodeId] == .done }
 
   /// 部品の契機が始まった。一巡の分として受け取ったら真（走らせ役はその契機を `flowed` として覚え、終わりに渡す）。誰が
   /// 始めた回かは問わない。
-  mutating func started(_ part: AutomationNodeID, in graph: AutomationGraph) -> Bool {
-    guard steps[part] == .ready, !arrives(part, in: graph) else { return false }
-    steps[part] = .taken
+  mutating func started(_ nodeId: AutomationNodeID, in graph: AutomationGraph) -> Bool {
+    guard steps[nodeId] == .ready, !arrives(nodeId, in: graph) else { return false }
+    steps[nodeId] = .taken
     return true
   }
 
@@ -87,16 +87,16 @@ struct AutomationFlow {
   /// 契機の終わりだけを数える——番人は回の終わりの中で次の予定の回を同期に始めうるので、古い回の終わりが受け取った回の始まり
   /// より後に届く。一巡の分でない回の終わりは、起こす部品を邪魔していた回が終わったとして、走っていなければ起こし直す。
   mutating func ended(
-    _ part: AutomationNodeID, flowed: Bool, in graph: AutomationGraph,
+    _ nodeId: AutomationNodeID, flowed: Bool, in graph: AutomationGraph,
     running: (AutomationNodeID) -> Bool
   ) -> [AutomationNodeID] {
-    switch steps[part] {
+    switch steps[nodeId] {
     case .adopted:
-      return finish(part, graph, running)
+      return finish(nodeId, graph, running)
     case .taken where flowed:
-      return finish(part, graph, running)
+      return finish(nodeId, graph, running)
     case .ready:
-      return settle(part, graph, running)
+      return settle(nodeId, graph, running)
     default:
       return []
     }
@@ -104,13 +104,13 @@ struct AutomationFlow {
 
   /// 部品を終わりにし、道の上の上流がすべて終わった下流を次へ進める。
   private mutating func finish(
-    _ part: AutomationNodeID, _ graph: AutomationGraph, _ running: (AutomationNodeID) -> Bool
+    _ nodeId: AutomationNodeID, _ graph: AutomationGraph, _ running: (AutomationNodeID) -> Bool
   ) -> [AutomationNodeID] {
-    steps[part] = .done
+    steps[nodeId] = .done
     var wake: [AutomationNodeID] = []
-    for node in graph.downstream(of: part) {
+    for node in graph.downstream(of: nodeId) {
       guard case .waiting(var upstream) = steps[node.id] else { continue }
-      upstream.remove(part)
+      upstream.remove(nodeId)
       guard upstream.isEmpty else {
         steps[node.id] = .waiting(upstream)
         continue
@@ -123,14 +123,14 @@ struct AutomationFlow {
 
   /// 上流がすべて終わった部品を、走っていなければ進める——「届いたら」なら終わりにし、そうでなければ起こす。
   private mutating func settle(
-    _ part: AutomationNodeID, _ graph: AutomationGraph, _ running: (AutomationNodeID) -> Bool
+    _ nodeId: AutomationNodeID, _ graph: AutomationGraph, _ running: (AutomationNodeID) -> Bool
   ) -> [AutomationNodeID] {
-    guard !running(part) else { return [] }
-    return arrives(part, in: graph) ? finish(part, graph, running) : [part]
+    guard !running(nodeId) else { return [] }
+    return arrives(nodeId, in: graph) ? finish(nodeId, graph, running) : [nodeId]
   }
 
   /// 普段の決まりで起きるのを見届ける部品か（根でない「届いたら」の部品）。
-  private func arrives(_ part: AutomationNodeID, in graph: AutomationGraph) -> Bool {
-    !roots.contains(part) && graph.node(part)?.entity.trigger == .arrival
+  private func arrives(_ nodeId: AutomationNodeID, in graph: AutomationGraph) -> Bool {
+    !roots.contains(nodeId) && graph.node(nodeId)?.entity.trigger == .arrival
   }
 }

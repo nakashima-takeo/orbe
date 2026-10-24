@@ -22,7 +22,7 @@ extension DesignSceneFixtures {
       let (all, _) = sampleRound(key, at: at(hour, minute, daysAgo), items: items, fresh: fresh)
       passes.append(
         AutomationSamplePass(
-          part: key, at: at(hour, minute, daysAgo), outcome: fetched(all),
+          nodeKey: key, at: at(hour, minute, daysAgo), outcome: fetched(all),
           kept: Array(all.prefix(items - fresh))))
     }
     func process(
@@ -30,14 +30,14 @@ extension DesignSceneFixtures {
     ) {
       passes.append(
         AutomationSamplePass(
-          part: key, at: time, trigger: .arrival, outcome: processed([], read: rows),
+          nodeKey: key, at: time, trigger: .arrival, outcome: processed([], read: rows),
           expired: expired, passThrough: rows))
     }
     func judge(_ key: String, at time: Date, proposed: Int, rows: Int, from source: String) {
       let items = sampleItems(source, proposed, at: time)
       passes.append(
         AutomationSamplePass(
-          part: key, at: time,
+          nodeKey: key, at: time,
           outcome: judged(items.map { proposal($0, "\($0.body)に返事をする") }, rows: rows)))
     }
 
@@ -50,7 +50,7 @@ extension DesignSceneFixtures {
     judge("contact", at: at(13, 0, 1), proposed: 1, rows: 5, from: "slack")
     passes.append(
       AutomationSamplePass(
-        part: "weekly", at: at(17, 0, 1),
+        nodeKey: "weekly", at: at(17, 0, 1),
         outcome: reported("今週は PR 12 件をマージ、Backlog の課題 4 件を完了。")))
     // 今日の 9:00 の開発の判定。
     fetch("github", 8, 50, items: 18, fresh: 12)
@@ -60,7 +60,7 @@ extension DesignSceneFixtures {
     process("dedupe", at(12, 41, 0), rows: 4, from: "slack")
     passes.append(
       AutomationSamplePass(
-        part: "contact", at: at(13, 0, 0), outcome: failed("", ending: .timeLimit, count: 0)))
+        nodeKey: "contact", at: at(13, 0, 0), outcome: failed("", ending: .timeLimit, count: 0)))
     // 自分の担当だけは、古い行を 2 件捨ててから 2 件を受け、どれも次へ渡さなかった。
     fetch("backlog", 13, 0, items: 8, fresh: 4)
     process("mine", at(13, 45, 0), rows: 0, from: "backlog", expired: 2)
@@ -79,7 +79,7 @@ extension DesignSceneFixtures {
     let mailItems = sampleItems("mail", 2, at: at(14, 45, 0))
     passes.append(
       AutomationSamplePass(
-        part: "mail", at: at(14, 45, 0),
+        nodeKey: "mail", at: at(14, 45, 0),
         outcome: .succeeded(
           .fetch(mailItems.map(row)),
           execution(2),
@@ -96,16 +96,16 @@ extension DesignSceneFixtures {
     fetch("github", 14, 55, items: 18, fresh: 2)
     passes.append(
       AutomationSamplePass(
-        part: "digest", at: at(14, 56, 0), trigger: .arrival,
+        nodeKey: "digest", at: at(14, 56, 0), trigger: .arrival,
         outcome: reported(
           "レビュー依頼が 2 件。#412 認証のリトライを追加（tanaka）、#415 決済画面の文言修正（suzuki）。どちらも今日中の確認を求めている。"
         )))
 
-    var mine = commandPart(
+    var mine = commandNode(
       "mine", "自分の担当だけ", .arrival, from: ["backlog", "sentry"],
       script: #"jq -c 'select(.assignee == "nakatake")'"#, directory: "/Users/me/work/scripts")
     mine.from = mine.from.map { AutomationDefinition.Input(part: $0.part, maxAgeHours: 24) }
-    var mail = agentPart(
+    var mail = agentNode(
       "mail", "メール", .scheduled(.every(1800)), model: "haiku",
       tools: ["mcp__gmail__search_threads"],
       instruction: "受信箱から、自分宛てで返事を求められているメールを取る。", coverage: .newArrivals)
@@ -114,38 +114,38 @@ extension DesignSceneFixtures {
       definition: AutomationDefinition(
         name: "受け持ちの全部", notify: .menuBar,
         parts: [
-          commandPart(
+          commandNode(
             "github", "GitHub", .scheduled(.every(600)),
             script: "gh search prs --review-requested=@me --json url,title", coverage: .currentSet),
-          commandPart(
+          commandNode(
             "ci", "CI", .scheduled(.every(600)), script: "gh run list --status failure --json url",
             coverage: .currentSet),
-          agentPart(
+          agentNode(
             "backlog", "Backlog", .scheduled(.every(1800)), tools: ["mcp__backlog__get_issues"],
             instruction: "自分が担当の未完了の課題を、更新の新しい順に 30 件取る。", coverage: .currentSet),
-          agentPart(
+          agentNode(
             "sentry", "Sentry", .scheduled(.every(1800)), tools: ["mcp__sentry__list_issues"],
             instruction: "自分のプロジェクトの未解決のエラーを取る。", coverage: .currentSet),
-          agentPart(
+          agentNode(
             "slack", "Slack", .scheduled(.every(600)), tools: ["mcp__slack__search_messages"],
             instruction: "自分宛の DM とメンションを、新しい順に 50 件取る。", coverage: .newArrivals),
           mail,
           mine,
-          agentPart(
+          agentNode(
             "dedupe", "重複をまとめる", .arrival, from: ["slack", "mail"],
             instruction: "同じ話題のメッセージを 1 行にまとめる。"),
-          agentPart(
+          agentNode(
             "digest", "レビュー依頼を知らせる", .arrival, from: ["github"],
             instruction: "届いたレビュー依頼を 3 行以内で要約する。", deliver: .report),
-          agentPart(
+          agentNode(
             "weekly", "週の作業をまとめる", .scheduled(cron("0 17 * * 5")),
             from: ["github", "ci", "backlog"], instruction: "今週の動きを週報にまとめる。",
             deliver: .report),
-          agentPart(
+          agentNode(
             "dev", "開発の依頼を選ぶ", .scheduled(cron("0 9 * * *")), from: ["github", "ci", "mine"],
             model: "sonnet", instruction: "自分が手を動かすべきものだけをタスク候補にする。",
             deliver: .taskCandidates),
-          agentPart(
+          agentNode(
             "contact", "返事が要る連絡を選ぶ", .scheduled(cron("0 13 * * 1-5")), from: ["dedupe"],
             model: "sonnet",
             instruction: "Slack とメールから、自分への依頼と、自分の返事を待たれているものだけをタスク候補にする。",
@@ -160,14 +160,14 @@ extension DesignSceneFixtures {
       definition: AutomationDefinition(
         name: "日報スクリプト", notify: nil,
         parts: [
-          commandPart(
+          commandNode(
             "note", "日報を書く", .scheduled(cron("0 23 * * *")), script: "~/bin/daily-note.sh",
             deliver: .sideEffect)
         ]),
       createdAt: automationAt(9, 0, daysAgo: 7),
       passes: [
         AutomationSamplePass(
-          part: "note", at: automationAt(23, 0, daysAgo: 1), outcome: sideEffected(0))
+          nodeKey: "note", at: automationAt(23, 0, daysAgo: 1), outcome: sideEffected(0))
       ])
   }
 
@@ -178,11 +178,11 @@ extension DesignSceneFixtures {
       definition: AutomationDefinition(
         name: "取り込みの多い判定", notify: nil,
         parts: sources.map {
-          commandPart(
+          commandNode(
             $0, "取り込み \($0.dropFirst(3))", .scheduled(.every(3600)), script: "~/bin/\($0).sh",
             coverage: .newArrivals)
         } + [
-          agentPart(
+          agentNode(
             "judge", "依頼を選ぶ", .arrival, from: sources, instruction: "依頼だけをタスク候補にする。",
             deliver: .taskCandidates)
         ]),
@@ -195,14 +195,14 @@ extension DesignSceneFixtures {
       definition: AutomationDefinition(
         name: "週末の依存更新", notify: nil,
         parts: [
-          agentPart(
+          agentNode(
             "update", "依存を上げる", .scheduled(cron("0 10 * * 0,6")), tools: ["Bash(npm:*)"],
             instruction: "古くなった依存を調べて、上げてよいものを上げる。", deliver: .report)
         ]),
       createdAt: automationAt(9, 0, daysAgo: 7), paused: true,
       passes: [
         AutomationSamplePass(
-          part: "update", at: automationAt(10, 0, daysAgo: 7),
+          nodeKey: "update", at: automationAt(10, 0, daysAgo: 7),
           outcome: worked(.done("react を 18.3.1 へ上げた。")))
       ])
   }

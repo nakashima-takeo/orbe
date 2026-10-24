@@ -45,7 +45,7 @@ struct AutomationGraph: Equatable {
     }
 
     /// 入力の部品。
-    var inputParts: [AutomationNodeID] { inputs.map(\.from) }
+    var inputNodeIds: [AutomationNodeID] { inputs.map(\.from) }
 
     /// 何をするか（省略を解いた動作と入力の集合）。書き換えで何をするかが変わったかはこれで比べる——省略していた値に既定と
     /// 同じ値を書き足しただけでは変わらない。
@@ -207,6 +207,6 @@ struct AutomationGraph: Equatable {
   /// 終わりの部品（行き先が次の部品でない部品。定義の順）。次の部品へ渡す部品は必ず誰かに名指されるので、これらの祖先と
   /// 合わせると全部品になる。
   var ends: [Node] {
-    nodes.filter { $0.action.destination != .nextPart }
+    nodes.filter { $0.action.destination != .nextNode }
   }
 }

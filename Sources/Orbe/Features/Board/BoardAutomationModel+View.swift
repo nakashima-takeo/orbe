@@ -19,10 +19,10 @@ extension BoardAutomationModel {
 
   /// 選ばれている部品のカードの値。部品が選ばれていなければ nil。
   func card(text: AutomationText, now: Date) -> BoardAutomationNodeValue? {
-    guard let automation = selectedAutomation, let part = selectedPart else { return nil }
+    guard let automation = selectedAutomation, let nodeId = selectedNodeId else { return nil }
     return BoardAutomationNodeValue(
-      automation, part: part, text: text, running: runner.isRunning(automation.id, part),
-      next: runner.nextRunAt(automation, part: part, now: now),
+      automation, nodeId: nodeId, text: text, running: runner.isRunning(automation.id, nodeId),
+      next: runner.nextRunAt(automation, nodeId: nodeId, now: now),
       open: store.shelvedProposals(of: automation.id).count)
   }
 
@@ -61,9 +61,9 @@ extension BoardAutomationModel {
         BoardKeyHint("↑↓", .boardHintParts), BoardKeyHint("↵", .boardHintChangeNotify),
         BoardKeyHint("←", .automationHintToList),
       ]
-    case .part:
+    case .node:
       return [
-        BoardKeyHint("↑↓", .boardHintParts), hand(.flow(.part)),
+        BoardKeyHint("↑↓", .boardHintParts), hand(.flow(.node)),
         BoardKeyHint("←", .automationHintToList),
       ]
     case nil:

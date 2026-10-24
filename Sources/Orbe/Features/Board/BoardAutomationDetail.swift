@@ -60,7 +60,7 @@ struct BoardAutomationDetail: View {
   }
 
   private var map: some View {
-    BoardAutomationMapView(model: model, detail: detail, selected: model.selectedPart)
+    BoardAutomationMapView(model: model, detail: detail, selected: model.selectedNodeId)
   }
 
   private var heading: some View {

@@ -6,10 +6,10 @@ import OrbeSessionLog
 /// `rejected`。英文は部品の鍵が要るので、鍵を手元に持つここで組む。
 enum AutomationRunWire {
   /// 記録 1 件（`recordId` を添える）。不明な記録は列から分かる分と `unknown: true` だけ。
-  static func object(_ record: AutomationRunRecord, part: String) -> [String: Any] {
+  static func object(_ record: AutomationRunRecord, nodeKey: String) -> [String: Any] {
     switch record.content {
     case .known(let run):
-      var json = object(run, part: part)
+      var json = object(run, nodeKey: nodeKey)
       json["recordId"] = record.id
       return json
     case .unknown(let run):
@@ -21,11 +21,12 @@ enum AutomationRunWire {
     }
   }
 
-  static func object(_ run: AutomationNodeRun, part: String) -> [String: Any] {
+  static func object(_ run: AutomationNodeRun, nodeKey: String) -> [String: Any] {
     var json = AutomationWire.object(run) as? [String: Any] ?? [:]
     json["execution"] = execution(json["execution"], run.execution)
     if let failure = run.failure {
-      json["failure"] = failure.text(part: part, ending: run.execution.ending, breach: run.breach)
+      json["failure"] = failure.text(
+        nodeKey: nodeKey, ending: run.execution.ending, breach: run.breach)
     }
     if let breach = run.breach { json["breach"] = rejections(json["breach"], breach) }
     if case .judge(_, _, let dismissed) = run.result, !dismissed.isEmpty,

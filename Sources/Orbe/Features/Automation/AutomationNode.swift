@@ -40,7 +40,7 @@ struct AutomationActionDef: Equatable {
 
   enum Destination: Equatable {
     /// この部品を入力に名指す部品へ、出力の行を渡す。
-    case nextPart
+    case nextNode
     case taskCandidates
     case report
     /// 何も渡さない（JSON では `none`）。
@@ -77,9 +77,10 @@ struct AutomationNode: Equatable {
 
 extension AutomationNode {
   /// 外の形の部品に、Orbe が振った ID と使う部品の定義を当てた実体。
-  init(_ part: AutomationDefinition.Node, id: AutomationNodeID, defId: AutomationDefID) {
+  init(_ definitionNode: AutomationDefinition.Node, id: AutomationNodeID, defId: AutomationDefID) {
     self.init(
-      id: id, key: part.key, name: part.name, trigger: part.trigger, maxItems: part.maxItems,
+      id: id, key: definitionNode.key, name: definitionNode.name, trigger: definitionNode.trigger,
+      maxItems: definitionNode.maxItems,
       defId: defId)
   }
 }

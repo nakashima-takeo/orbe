@@ -9,7 +9,7 @@ extension AutomationNodePassTests {
   /// コマンドの何も無い回は空の出力——正しい 0 件。
   func testEmptyCommandOutputIsNothing() throws {
     start(
-      AutomationGraphTests.command("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.command("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: false))
 
     jobs.finish(0, printed(""))
@@ -39,7 +39,7 @@ extension AutomationNodePassTests {
   func testARefusedCallAfterAcceptedResultsMustBeFixed() throws {
     for _ in 0..<2 {
       start(
-        AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+        AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
         .process([row("a"), row("b")], reachesJudge: false))
     }
     for index in 0..<2 {
@@ -76,7 +76,7 @@ extension AutomationNodePassTests {
   /// 入力を読み切らないまま終えた回は、読み残しの失敗（読んだ位置は進まず、行は次の回に届く）。
   func testAgentEndingWithoutReadingItsInputFails() throws {
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a"), row("b")], reachesJudge: false))
 
     use(0, .readRunRows, ["limit": 1])
@@ -90,7 +90,7 @@ extension AutomationNodePassTests {
   /// 断られた結果を直さず、結果の無いまま終えた回は出力の形式エラーの失敗——結果なし（道具を一度も呼ばなかった回）と分ける。
   func testRefusedResultsLeftUnfixedFailAsBrokenRules() throws {
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: false))
 
     readAll(0)
@@ -105,7 +105,7 @@ extension AutomationNodePassTests {
   /// 言わない。
   func testACallOfTheWrongShapeLeftUnfixedFailsAsBrokenRules() throws {
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: false))
 
     readAll(0)
@@ -120,7 +120,7 @@ extension AutomationNodePassTests {
   func testAResultAfterReportingNothingFailsTheRun() throws {
     start(
       AutomationGraphTests.agent(
-        "f", tools: ["mcp__slack__search"], deliver: .nextPart, coverage: .currentSet),
+        "f", tools: ["mcp__slack__search"], deliver: .nextNode, coverage: .currentSet),
       .fetch, .fetch(since: nil))
 
     XCTAssertFalse(use(0, .reportNothing, ["why": "無い"]).isError)
@@ -142,7 +142,7 @@ extension AutomationNodePassTests {
   /// 断られたまま終えた回の記録は、断られたままの件を先に並べる（先に直した件ではなく）。数は回全体。
   func testABrokenRunRecordsTheUnfixedItemsFirst() throws {
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: false))
 
     readAll(0)
@@ -160,7 +160,7 @@ extension AutomationNodePassTests {
   /// 結果を断られた後の「何も無い」は断る——断られた結果を「何も無い」で覆って成功にしない。
   func testNothingAfterARefusedResultIsRefusedAndTheRunFails() throws {
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: false))
 
     readAll(0)
@@ -174,7 +174,7 @@ extension AutomationNodePassTests {
   /// 断った結果の呼び出しは記録に残り、直して受けた回は成功——断りは同じ会話の中の直しで、別の呼び出しは起こさない。
   func testRefusedResultsAreRecordedAndTheFixedResultPasses() throws {
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: false))
 
     readAll(0)

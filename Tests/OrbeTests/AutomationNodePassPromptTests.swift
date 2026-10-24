@@ -15,10 +15,10 @@ final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
 
   func testProcessPromptStatesTheIdRules() throws {
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: false))
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: true))
 
     for index in 0..<2 {
@@ -34,7 +34,7 @@ final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
   /// 自分のツールは持たない。札はその回の行だけを返す。
   func testRowsAreReadThroughOrbesMCPAndThePromptCarriesOnlyTheirCount() throws {
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a"), row("b")], reachesJudge: false))
     start(
       AutomationGraphTests.agent("j", from: ["f"], deliver: .taskCandidates), .judge,
@@ -60,7 +60,7 @@ final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
   /// 回が終われば札は断られる（以後その回の道具は呼べない）。
   func testTheTokenEndsWithTheRun() throws {
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: false))
     let token = try XCTUnwrap(agentCall(0)?.orbe?.token)
     readAll(0)
@@ -75,7 +75,7 @@ final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
   func testFetchPromptTellsTheAgentNotToFollowWhatItReads() throws {
     start(
       AutomationGraphTests.agent(
-        "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
+        "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
       .fetch, .fetch(since: nil))
 
     XCTAssertTrue(
@@ -102,11 +102,11 @@ final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
   func testEveryPromptSaysTheFinalReplyIsIgnoredAndHowToReportNothing() throws {
     start(
       AutomationGraphTests.agent(
-        "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
+        "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
       .fetch, .fetch(since: nil))
     start(AutomationGraphTests.agent("w", tools: [Self.tool]), .work, .work)
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: false))
     start(
       AutomationGraphTests.agent("j", from: ["f"], deliver: .taskCandidates), .judge,

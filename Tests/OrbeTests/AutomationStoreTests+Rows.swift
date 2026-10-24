@@ -21,7 +21,7 @@ extension AutomationStoreTests {
       AutomationDefinition(
         name: "受け手", notify: nil,
         parts: [
-          DesignSceneFixtures.commandPart(
+          DesignSceneFixtures.commandNode(
             "gh", "取る", .scheduled(.every(1800)), script: "gh", coverage: coverage)
         ] + (receivers ?? [receiver("a")])), now: Self.at
     ).id
@@ -30,15 +30,15 @@ extension AutomationStoreTests {
   private func receiver(
     _ key: String, from input: AutomationDefinition.Input = .init(part: "gh")
   ) -> AutomationDefinition.Node {
-    var part = DesignSceneFixtures.commandPart(
+    var definitionNode = DesignSceneFixtures.commandNode(
       key, key, .arrival, from: [input.part], script: key, deliver: .sideEffect)
-    part.from = [input]
-    return part
+    definitionNode.from = [input]
+    return definitionNode
   }
 
   private func fetch(_ store: AutomationStore, _ id: Int, _ ids: [String], at: Date) throws {
     try store.record(
-      id, part: "gh", at: at, outcome: DesignSceneFixtures.fetched(ids.map(item(at))))
+      id, nodeKey: "gh", at: at, outcome: DesignSceneFixtures.fetched(ids.map(item(at))))
   }
 
   private func item(_ at: Date) -> (String) -> AutomationItem {
@@ -47,12 +47,12 @@ extension AutomationStoreTests {
 
   /// 処理の部品 `copy` の、取った行をすべて引き継いで出す回を確定する。
   private func copyAll(_ store: AutomationStore, _ id: Int, at: Date) throws {
-    let part = store.part(id, "copy")
-    let read = try XCTUnwrap(store.read(part, of: id, baseline: nil, now: at))
+    let nodeId = store.nodeId(id, "copy")
+    let read = try XCTUnwrap(store.read(nodeId, of: id, baseline: nil, now: at))
     try store.record(
       AutomationPassEnd(
-        automationId: id, part: part,
-        defId: try XCTUnwrap(store.automation(id)?.graph.node(part)).entity.defId,
+        automationId: id, nodeId: nodeId,
+        defId: try XCTUnwrap(store.automation(id)?.graph.node(nodeId)).entity.defId,
         trigger: .arrival, startedAt: at, endedAt: at, read: read,
         outcome: DesignSceneFixtures.processed(
           read.taken.map {
@@ -64,12 +64,12 @@ extension AutomationStoreTests {
   @discardableResult private func take(
     _ store: AutomationStore, _ id: Int, _ key: String, at: Date, failing: Bool = false
   ) throws -> [String] {
-    let part = store.part(id, key)
-    let read = try XCTUnwrap(store.read(part, of: id, baseline: nil, now: at))
+    let nodeId = store.nodeId(id, key)
+    let read = try XCTUnwrap(store.read(nodeId, of: id, baseline: nil, now: at))
     try store.record(
       AutomationPassEnd(
-        automationId: id, part: part,
-        defId: try XCTUnwrap(store.automation(id)?.graph.node(part)).entity.defId,
+        automationId: id, nodeId: nodeId,
+        defId: try XCTUnwrap(store.automation(id)?.graph.node(nodeId)).entity.defId,
         trigger: .arrival, startedAt: at, endedAt: at, read: read,
         outcome: failing
           ? DesignSceneFixtures.failed("boom") : DesignSceneFixtures.sideEffected(read.taken.count))
@@ -191,7 +191,7 @@ extension AutomationStoreTests {
       #"{"id":"x","link":"https://example.com/x","body":"x","time":"2026-10-10T09:00:00Z","labels":["bug"]}"#
     func fetchText(_ lines: [String], at: Date) throws {
       try store.record(
-        id, part: "gh", at: at,
+        id, nodeKey: "gh", at: at,
         outcome: DesignSceneFixtures.fetched([]).replacing(
           lines.map {
             AutomationNodeRow(
@@ -199,7 +199,7 @@ extension AutomationStoreTests {
           }))
     }
     try fetchText([labelled], at: Self.at)
-    let read = try XCTUnwrap(store.read(store.part(id, "a"), of: id, baseline: nil, now: Self.at))
+    let read = try XCTUnwrap(store.read(store.nodeId(id, "a"), of: id, baseline: nil, now: Self.at))
     XCTAssertTrue(read.taken.first?.text.contains(#""labels":["bug"]"#) == true, "余分な欄が残る")
     try take(store, id, "a", at: Self.at)
     let seq = try store.lastSeqs(id, "gh").item
@@ -227,7 +227,7 @@ extension AutomationStoreTests {
 
     let t1 = Self.at.addingTimeInterval(60)
     try store.record(
-      id, part: "gh", at: t1,
+      id, nodeKey: "gh", at: t1,
       outcome: DesignSceneFixtures.fetched([
         AutomationItem(id: "x", link: "https://example.com/x", body: "直した本文", time: t1),
         AutomationItem(id: "y", link: "https://example.com/y", body: "y", time: t1),
@@ -246,7 +246,7 @@ extension AutomationStoreTests {
   /// 性質を書き換えると今有効な項目はすべて無効になり、出来事は残る。
   func testAProcessCoverageDecidesHowItsRowsLive() throws {
     let store = AutomationStore()
-    var copy = DesignSceneFixtures.agentPart(
+    var copy = DesignSceneFixtures.agentNode(
       "copy", "写す", .arrival, from: ["gh"], instruction: "写す", coverage: .currentSet)
     copy.from = [AutomationDefinition.Input(part: "gh", take: .all)]
     let id = try define(
@@ -277,7 +277,7 @@ extension AutomationStoreTests {
   /// 下流にもう一度届く。
   func testACurrentSetProcessRowWhoseSourceChangedArrivesAgain() throws {
     let store = AutomationStore()
-    var copy = DesignSceneFixtures.agentPart(
+    var copy = DesignSceneFixtures.agentNode(
       "copy", "写す", .arrival, from: ["gh"], instruction: "写す", coverage: .currentSet)
     copy.from = [AutomationDefinition.Input(part: "gh", take: .all)]
     let id = try define(
@@ -297,18 +297,18 @@ extension AutomationStoreTests {
   /// 入力を読む部品の回は、取った行が 0 件で失敗しても、取った数（0）を記録に持つ。確定が返す回と読み直した回は同じ。
   func testARunThatReadsItsInputsKeepsItsTakenCountWhenItTookNothingAndFailed() throws {
     let store = AutomationStore()
-    var copy = DesignSceneFixtures.agentPart(
+    var copy = DesignSceneFixtures.agentNode(
       "copy", "写す", .arrival, from: ["gh"], instruction: "写す", coverage: .currentSet)
     copy.from = [AutomationDefinition.Input(part: "gh", take: .all)]
     let id = try define(
       store, coverage: .currentSet, receivers: [copy, receiver("a", from: .init(part: "copy"))])
-    let part = store.part(id, "copy")
-    let read = try XCTUnwrap(store.read(part, of: id, baseline: nil, now: Self.at))
+    let nodeId = store.nodeId(id, "copy")
+    let read = try XCTUnwrap(store.read(nodeId, of: id, baseline: nil, now: Self.at))
 
     let recorded = try store.record(
       AutomationPassEnd(
-        automationId: id, part: part,
-        defId: try XCTUnwrap(store.automation(id)?.graph.node(part)).entity.defId,
+        automationId: id, nodeId: nodeId,
+        defId: try XCTUnwrap(store.automation(id)?.graph.node(nodeId)).entity.defId,
         trigger: .arrival, startedAt: Self.at, endedAt: Self.at, read: read,
         outcome: DesignSceneFixtures.failed("boom")))
 

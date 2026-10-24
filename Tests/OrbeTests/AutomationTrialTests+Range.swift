@@ -8,9 +8,11 @@ import XCTest
 /// 分岐の片方が動かない。届かない指し方が黙って何もしない試走になる。
 extension AutomationTrialTests {
   /// 1 部品だけ: 写しの上の読めば取る行を次の本番と同じ規則で取り、上流は動かない。本番の読めば取る行は残る。
-  func testTryingOnePartTakesItsPendingRowsInTheCopyAndLeavesTheUpstreamAlone() throws {
-    let id = try define([fetch("gh"), part("judge", from: ["gh"], deliver: .taskCandidates)])
-    try runner.flow(id, to: .part(store.part(id, "gh")))
+  func testTryingOneNodeTakesItsPendingRowsInTheCopyAndLeavesTheUpstreamAlone() throws {
+    let id = try define([
+      fetch("gh"), definitionNode("judge", from: ["gh"], deliver: .taskCandidates),
+    ])
+    try runner.flow(id, to: .node(store.nodeId(id, "gh")))
     finish("gh", fetched(["a"]))
 
     let trial = try trials.start(id, .init(from: ["judge"], to: ["judge"]))
@@ -28,7 +30,7 @@ extension AutomationTrialTests {
   func testTryingPartOfAMergeRunsOnlyThePathAndDoesNotWaitOutsideIt() throws {
     let id = try define([
       fetch("gh"), fetch("backlog"), fetch("slack"),
-      part("judge", from: ["gh", "backlog", "slack"], deliver: .taskCandidates),
+      definitionNode("judge", from: ["gh", "backlog", "slack"], deliver: .taskCandidates),
     ])
     let trial = try trials.start(id, .init(from: ["gh", "backlog"], to: ["judge"]))
     waitCalls("backlog", 1)
@@ -46,10 +48,10 @@ extension AutomationTrialTests {
   }
 
   /// 分岐: 入口だけを指すと、入口から届く終わりの部品すべてへ流れる。
-  func testTryingFromABranchingPartRunsEveryBranch() throws {
+  func testTryingFromABranchingNodeRunsEveryBranch() throws {
     let id = try define([
-      fetch("gh"), part("judge", from: ["gh"], deliver: .taskCandidates),
-      part("digest", from: ["gh"], deliver: .report),
+      fetch("gh"), definitionNode("judge", from: ["gh"], deliver: .taskCandidates),
+      definitionNode("digest", from: ["gh"], deliver: .report),
     ])
     let trial = try trials.start(id, .init(from: ["gh"]))
     waitCalls("gh", 1)
@@ -67,21 +69,22 @@ extension AutomationTrialTests {
   /// 指した入口から届かない行き先は断る。
   func testATargetTheEntriesDoNotReachIsRefused() throws {
     let id = try define([
-      fetch("gh"), fetch("slack"), part("judge", from: ["gh"], deliver: .taskCandidates),
-      part("digest", from: ["slack"], deliver: .report),
+      fetch("gh"), fetch("slack"), definitionNode("judge", from: ["gh"], deliver: .taskCandidates),
+      definitionNode("digest", from: ["slack"], deliver: .report),
     ])
     XCTAssertThrowsError(try trials.start(id, .init(from: ["gh"], to: ["digest"]))) {
       XCTAssertEqual($0 as? AutomationError, .invalid(#"from[0] "gh" reaches no part in to"#))
     }
     XCTAssertThrowsError(try trials.start(id, .init(to: ["nope"]))) {
-      XCTAssertEqual($0 as? AutomationError, .partNotFound(id, "nope"))
+      XCTAssertEqual($0 as? AutomationError, .nodeNotFound(id, "nope"))
     }
   }
 
   /// `limit` は取得が下流へ渡す行を先頭から絞る。絞った行は写しに無いので、受け手は読む前に消えたと数えない。
   func testALimitCutsTheRowsAFetchPassesDown() throws {
     let id = try define([
-      fetch("gh"), part("p", from: ["gh"]), part("d", from: ["p"], deliver: .report),
+      fetch("gh"), definitionNode("p", from: ["gh"]),
+      definitionNode("d", from: ["p"], deliver: .report),
     ])
     let trial = try trials.start(id, .init(limit: 2))
     waitCalls("gh", 1)
@@ -98,11 +101,12 @@ extension AutomationTrialTests {
 
   /// 出来事の流れの取得でも `limit` は同じに効く: 絞った出来事を写しから消して通し番号も戻すので、「届いたら」の受け手は
   /// 絞った後の行だけを読み、絞った出来事を読む前に期限で消えたと数えない。
-  func testALimitOnANewArrivalsFetchReachesAnArrivalPartAlreadyCut() throws {
+  func testALimitOnANewArrivalsFetchReachesAnArrivalNodeAlreadyCut() throws {
     var gh = fetch("gh")
     gh.action.coverage = .newArrivals
     let id = try define([
-      gh, part("p", .arrival, from: ["gh"]), part("d", from: ["p"], deliver: .report),
+      gh, definitionNode("p", .arrival, from: ["gh"]),
+      definitionNode("d", from: ["p"], deliver: .report),
     ])
     let trial = try trials.start(id, .init(limit: 2))
     waitCalls("gh", 1)

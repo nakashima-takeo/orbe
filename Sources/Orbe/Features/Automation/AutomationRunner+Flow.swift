@@ -19,9 +19,9 @@ extension AutomationRunner {
     let automation = store.automations[try store.index(id)]
     let targets: [AutomationNodeID]
     switch target {
-    case .part(let part):
-      guard automation.graph.node(part) != nil else { throw .partNotFound(id, "\(part)") }
-      targets = [part]
+    case .node(let nodeId):
+      guard automation.graph.node(nodeId) != nil else { throw .nodeNotFound(id, "\(nodeId)") }
+      targets = [nodeId]
     case .ends:
       targets = automation.graph.ends.map(\.id)
     case .judges:
@@ -45,6 +45,6 @@ extension AutomationRunner {
     }
     // 「今すぐ」の中で契機が同期に始まり終わりうるので、起こす前に一巡を置く。
     flows[id] = flow
-    for part in wake { scheduler.runNow(id: Self.key(id, part)) }
+    for nodeId in wake { scheduler.runNow(id: Self.key(id, nodeId)) }
   }
 }

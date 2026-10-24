@@ -124,8 +124,8 @@ extension DesignFlowSnapshotTests {
         ("down_part", { automation.moveInMap(1) }),
         ("to_contact", { for _ in 0..<11 { automation.moveInMap(1) } }),
         ("end_stops", { automation.moveInMap(1) }),
-        ("flow", { automation.perform(.flow(.part)) }),
-        ("flow_refused", { automation.perform(.flow(.part)) }),
+        ("flow", { automation.perform(.flow(.node)) }),
+        ("flow_refused", { automation.perform(.flow(.node)) }),
         ("back_to_list", { automation.leaveMap() }),
         ("enter_same", { automation.enterMap() }),
         (
@@ -156,7 +156,7 @@ extension DesignFlowSnapshotTests {
       },
       steps: [
         ("list", { automation.move(1) }),
-        ("contact", { automation.tapPart(key: "contact") }),
+        ("contact", { automation.tapNode(key: "contact") }),
       ])
   }
 

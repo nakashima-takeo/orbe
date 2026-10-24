@@ -16,11 +16,11 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
   // MARK: - 起こし方
 
   /// 上限は部品の経過時間だけで、無出力では打ち切らない——部品の上限は利用者が決める `timeoutMinutes` の一本にするため。
-  func testPartIsLimitedOnlyByItsTimeoutNotBySilence() {
-    var part = AutomationGraphTests.agent("r", from: ["f"])
-    part.action.timeoutMinutes = 3
+  func testNodeIsLimitedOnlyByItsTimeoutNotBySilence() {
+    var definitionNode = AutomationGraphTests.agent("r", from: ["f"])
+    definitionNode.action.timeoutMinutes = 3
 
-    start(part, .report, .report([]))
+    start(definitionNode, .report, .report([]))
 
     XCTAssertEqual(jobs.calls[0].job.limits.elapsed, 180)
     XCTAssertNil(jobs.calls[0].job.limits.idle)
@@ -32,7 +32,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
     let since = now.addingTimeInterval(-3600)
     let mark = SessionEvent.iso8601(since)
     func agent(_ coverage: AutomationCoverage) -> AutomationDefinition.Node {
-      AutomationGraphTests.agent("f", tools: [Self.tool], deliver: .nextPart, coverage: coverage)
+      AutomationGraphTests.agent("f", tools: [Self.tool], deliver: .nextNode, coverage: coverage)
     }
 
     start(
@@ -74,10 +74,10 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
   func testEachRoleGetsItsTools() throws {
     start(
       AutomationGraphTests.agent(
-        "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
+        "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
       .fetch, .fetch(since: nil))
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: false))
     start(
       AutomationGraphTests.agent("j", from: ["f"], deliver: .taskCandidates), .judge,
@@ -121,7 +121,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
   func testFetchAgentGivesItsItemsThroughTheTool() throws {
     start(
       AutomationGraphTests.agent(
-        "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
+        "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
       .fetch, .fetch(since: nil))
 
     use(
@@ -156,7 +156,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
   func testFetchThatCouldNotGetItsToolsFails() throws {
     start(
       AutomationGraphTests.agent(
-        "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
+        "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
       .fetch, .fetch(since: nil))
 
     jobs.finish(
@@ -172,7 +172,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
   func testFetchReportingAnErrorFails() throws {
     start(
       AutomationGraphTests.agent(
-        "f", tools: [Self.tool], deliver: .nextPart, coverage: .currentSet),
+        "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
       .fetch, .fetch(since: nil))
 
     use(0, .reportError, ["what": "Slack に届かない"])
@@ -186,7 +186,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
   /// 出力の行は `id` で入力の行と照らして、その入力（出す側の行）と出どころを引き継ぎ、照らせない行はどちらも持たない。
   func testProcessCarriesTheOriginById() throws {
     start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a"), row("b")], reachesJudge: false))
 
     readAll(0)
@@ -204,15 +204,17 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
   /// 取得 → 処理 a → 処理 b → 判定 では、a の行も判定へ届く。照らせない行は判定で使えず黙って消えるので、それを初めに出した
   /// a が外したことになる——下流の b には直しようがない。
   func testProcessWhoseRowsReachAJudgeBreaksTheRulesWithARowItCannotTrace() throws {
-    let parts = [
+    let definitionNodes = [
       AutomationGraphTests.fetch("f"),
-      AutomationGraphTests.command("a", from: ["f"], deliver: .nextPart),
-      AutomationGraphTests.command("b", from: ["a"], deliver: .nextPart),
+      AutomationGraphTests.command("a", from: ["f"], deliver: .nextNode),
+      AutomationGraphTests.command("b", from: ["a"], deliver: .nextNode),
       AutomationGraphTests.agent("j", from: ["b"], deliver: .taskCandidates),
     ]
-    let graph = try AutomationGraph.numbered(parts)
+    let graph = try AutomationGraph.numbered(definitionNodes)
     let a = try XCTUnwrap(graph.node(key: "a"))
-    start(parts[1], a.role, .process([row("a")], reachesJudge: graph.reachesTaskCandidates(a.id)))
+    start(
+      definitionNodes[1], a.role,
+      .process([row("a")], reachesJudge: graph.reachesTaskCandidates(a.id)))
 
     jobs.finish(0, printed(#"{"id":"f:a"}"# + "\n" + #"{"id":"new"}"#))
 
@@ -223,7 +225,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
   /// 同じ `id` の 2 つ目の行は外れた件——前の行を置き換え、前の行が黙って消える。
   func testProcessRowWithARepeatedIdBreaksTheRules() throws {
     start(
-      AutomationGraphTests.command("p", from: ["f"], deliver: .nextPart), .process,
+      AutomationGraphTests.command("p", from: ["f"], deliver: .nextNode), .process,
       .process([row("a")], reachesJudge: false))
 
     jobs.finish(0, printed(#"{"id":"f:a"}"# + "\n" + #"{"id":"f:a","note":"2 度目"}"#))

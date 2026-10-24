@@ -29,7 +29,7 @@ extension DesignSceneFixtures {
       definition: AutomationDefinition(
         name: "レビュー待ちの PR を Slack へ", notify: .menuBar,
         parts: [
-          agentPart(
+          agentNode(
             "post", "PR を投稿", .scheduled(cron("0 9 * * 1-5")),
             tools: ["Bash(gh search prs:*)", "mcp__slack__slack_send_message"],
             instruction: "自分がレビュー待ちの open な PR を gh で調べてまとめ、Slack の #dev-me に投稿して。",
@@ -38,7 +38,7 @@ extension DesignSceneFixtures {
       createdAt: automationAt(9, 0, daysAgo: 7),
       passes: outcomes.map {
         AutomationSamplePass(
-          part: "post", at: automationAt(9, 0, daysAgo: $0.daysAgo), outcome: $0.outcome)
+          nodeKey: "post", at: automationAt(9, 0, daysAgo: $0.daysAgo), outcome: $0.outcome)
       })
   }
 }

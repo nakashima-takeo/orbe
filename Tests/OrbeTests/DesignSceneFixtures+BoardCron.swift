@@ -13,7 +13,7 @@ extension DesignSceneFixtures {
     AutomationSample(
       definition: candidatesDefinition(
         "Sentry: 本番の新しいエラー",
-        fetch: commandPart(
+        fetch: commandNode(
           "fetch", "Sentry から取る", .scheduled(cron("*/10 9-18 * * 1-5")),
           script: "~/bin/sentry-issues.sh --env production", coverage: .newArrivals),
         instruction: "利用者に影響が出ているエラーだけをタスクにする。"),
@@ -29,7 +29,7 @@ extension DesignSceneFixtures {
     AutomationSample(
       definition: candidatesDefinition(
         "経費: 半期の立替の締め",
-        fetch: commandPart(
+        fetch: commandNode(
           "fetch", "立替を取る", .scheduled(cron("15,45 8 * 1,7 *")),
           script: "~/bin/expenses.sh --open", coverage: .currentSet),
         instruction: "締めまでに申請していない立替をタスクにする。"),

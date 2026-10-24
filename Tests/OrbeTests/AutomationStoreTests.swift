@@ -19,7 +19,7 @@ final class AutomationStoreTests: OrbeTestCase {
   ) -> AutomationDefinition {
     DesignSceneFixtures.candidatesDefinition(
       name,
-      fetch: DesignSceneFixtures.commandPart(
+      fetch: DesignSceneFixtures.commandNode(
         "fetch", "取る", .scheduled(.every(1800)), script: script, coverage: coverage))
   }
 
@@ -33,7 +33,7 @@ final class AutomationStoreTests: OrbeTestCase {
     outcome: AutomationNodePass.Outcome? = nil, at: Date = at
   ) throws {
     try store.record(
-      id, part: "fetch", at: at, outcome: outcome ?? DesignSceneFixtures.fetched(items))
+      id, nodeKey: "fetch", at: at, outcome: outcome ?? DesignSceneFixtures.fetched(items))
   }
 
   /// 判定の部品の、読める行をすべて取った回を確定する。案の出どころは、取った行のうち同じ書かれた id の行のもの。候補にした
@@ -43,7 +43,7 @@ final class AutomationStoreTests: OrbeTestCase {
     resolving links: [String] = [], reason: String? = nil, at: Date = at
   ) throws {
     let taken = try XCTUnwrap(
-      store.read(store.part(id, "judge"), of: id, baseline: nil, now: at)
+      store.read(store.nodeId(id, "judge"), of: id, baseline: nil, now: at)
     ).taken
     let proposals = items.compactMap { item -> AutomationNodePass.Proposal? in
       taken.first { $0.origin?.item.id == item.id }?.origin.map {
@@ -52,7 +52,7 @@ final class AutomationStoreTests: OrbeTestCase {
       }
     }
     try store.record(
-      id, part: "judge", trigger: .arrival, at: at,
+      id, nodeKey: "judge", trigger: .arrival, at: at,
       outcome: .succeeded(
         .judge(proposals: proposals, resolved: links), DesignSceneFixtures.execution(taken.count),
         breach: nil))
@@ -116,7 +116,7 @@ final class AutomationStoreTests: OrbeTestCase {
       at: Self.at.addingTimeInterval(3600))
     var rewritten = Self.definition("受信（要約つき）")
     rewritten.notify = .menuBar
-    var digest = DesignSceneFixtures.commandPart(
+    var digest = DesignSceneFixtures.commandNode(
       "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report)
     digest.from = [AutomationDefinition.Input(part: "fetch", take: .all, maxAgeHours: 24)]
     rewritten.parts.append(digest)
@@ -163,7 +163,7 @@ final class AutomationStoreTests: OrbeTestCase {
   // MARK: - 決まりを外した印
 
   /// 出力が決まりを外した印は最初の回に付き、何をするかが変わるまで残る（名前だけの書き換えでは残る）。
-  func testTheBreachMarkStaysFromTheFirstBreachUntilThePartsWorkChanges() throws {
+  func testTheBreachMarkStaysFromTheFirstBreachUntilTheNodesWorkChanges() throws {
     let store = AutomationStore()
     let id = try store.create(Self.definition(), now: Self.at).id
     let a = Self.item("a")
@@ -294,7 +294,7 @@ final class AutomationStoreTests: OrbeTestCase {
     try Self.fetch(XCTUnwrap(store), id, [a])
     try Self.judge(XCTUnwrap(store), id, proposing: [a])
     var rewritten = Self.definition()
-    rewritten.parts[1] = DesignSceneFixtures.agentPart(
+    rewritten.parts[1] = DesignSceneFixtures.agentNode(
       "judge", "判定", .arrival, from: ["fetch"], model: "sonnet", instruction: "別の基準で選ぶ。",
       deliver: .taskCandidates)
     try Self.rewrite(XCTUnwrap(store), id, rewritten)

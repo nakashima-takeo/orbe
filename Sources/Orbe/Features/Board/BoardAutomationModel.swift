@@ -33,7 +33,7 @@ import SwiftUI
   /// 地図の段: 見出しの「通知」の行か、部品の行。
   enum MapStop: Hashable {
     case notify
-    case part(AutomationNodeID)
+    case node(AutomationNodeID)
   }
 
   /// サブメニュー「通知」の行の並び（通知しない・メニューバー・通知センター）。
@@ -112,7 +112,7 @@ import SwiftUI
   /// 選んでいる自動化の地図の段の並び（「通知」、続いて部品の行の順）。
   var mapStops: [MapStop] {
     guard let automation = selectedAutomation else { return [] }
-    return [.notify] + automation.graph.byDepth.map { .part($0.id) }
+    return [.notify] + automation.graph.byDepth.map { .node($0.id) }
   }
 
   /// 選ばれている地図の段。地図に居る間だけ、覚えている段を返す。
@@ -122,9 +122,9 @@ import SwiftUI
   }
 
   /// 選ばれている部品。
-  var selectedPart: AutomationNodeID? {
-    guard case .part(let part) = selectedMapStop else { return nil }
-    return part
+  var selectedNodeId: AutomationNodeID? {
+    guard case .node(let nodeId) = selectedMapStop else { return nil }
+    return nodeId
   }
 
   /// ストアが変わったあとの付け直し。同一性が今の段にあればそのまま、無ければ同じ位置（末尾で頭打ち）の段へ。行がすべて
@@ -214,7 +214,7 @@ import SwiftUI
     guard let automation = selectedAutomation else { return }
     onRefusal(nil)
     if let refusal = BoardAutomationHand.perform(
-      operation, on: automation, part: selectedPart, runner: runner)
+      operation, on: automation, nodeId: selectedNodeId, runner: runner)
     {
       onRefusal(refusal.message)
     }
@@ -254,8 +254,8 @@ import SwiftUI
   }
 
   /// 地図の部品の行のクリック。その部品を選んで地図に居る。
-  func tapPart(_ part: AutomationNodeID) {
-    select(.part(part))
+  func tapNode(_ nodeId: AutomationNodeID) {
+    select(.node(nodeId))
   }
 
   /// 見出しの「通知」の行のクリック。その段を選んで地図に居て、サブメニューを開く。
@@ -274,8 +274,8 @@ import SwiftUI
 
   /// カードの「修正を依頼」。依頼の欄に「自動化「<名前>」の部品「<名前>」の修正：」を書き（書きかけは置き換える）、焦点を欄へ
   /// 移す——続けて打って ↵ で、欄からふつうに頼む。`l10n` は画面の言語。
-  func draftFix(of part: AutomationNodeID, l10n: LocalizationStore) {
-    guard let automation = selectedAutomation, let node = automation.graph.node(part) else {
+  func draftFix(of nodeId: AutomationNodeID, l10n: LocalizationStore) {
+    guard let automation = selectedAutomation, let node = automation.graph.node(nodeId) else {
       return
     }
     draft(l10n.format(.boardAskFixDraft, automation.name, node.entity.name))

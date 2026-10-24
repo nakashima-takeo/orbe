@@ -16,7 +16,8 @@ extension AutomationText {
         l10n.format(.automationLabeled, head, $0)
       } ?? head
     default:
-      let original = failure.text(part: node.key, ending: run.execution.ending, breach: run.breach)
+      let original = failure.text(
+        nodeKey: node.key, ending: run.execution.ending, breach: run.breach)
       return l10n.format(.automationWithOriginal, head, original)
     }
   }

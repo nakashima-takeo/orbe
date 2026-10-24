@@ -13,29 +13,29 @@ extension AutomationStore {
     let next: Int?
   }
 
-  /// 自動化の回の記録を新しい順に `limit` 件（既定 20・上限 100）。`part` を渡せばその部品だけ。`before` は前のページの `next`。
-  func history(of id: Int, part key: String?, before: Int?, limit: Int?) throws(AutomationError)
+  /// 自動化の回の記録を新しい順に `limit` 件（既定 20・上限 100）。`nodeKey` を渡せばその部品だけ。`before` は前のページの `next`。
+  func history(of id: Int, nodeKey key: String?, before: Int?, limit: Int?) throws(AutomationError)
     -> History
   {
     let limit = limit ?? Self.historyPage
     guard (1...Self.historyPageLimit).contains(limit) else {
       throw .invalid("limit: must be 1 to \(Self.historyPageLimit)")
     }
-    let parts: [AutomationNodeID]
+    let nodeIds: [AutomationNodeID]
     if let automation = automation(id) {
       if let key {
-        guard let node = automation.graph.node(key: key) else { throw .partNotFound(id, key) }
-        parts = [node.id]
+        guard let node = automation.graph.node(key: key) else { throw .nodeNotFound(id, key) }
+        nodeIds = [node.id]
       } else {
-        parts = automation.graph.nodes.map(\.id)
+        nodeIds = automation.graph.nodes.map(\.id)
       }
     } else if let broken = unreadable.first(where: { $0.id == id }) {
       guard key == nil else { throw .unreadable(id, broken.reason) }
-      parts = broken.nodeIds
+      nodeIds = broken.nodeIds
     } else {
       throw .automationNotFound(id)
     }
-    let found = try read { try $0.records(of: parts, before: before, limit: limit + 1) }
+    let found = try read { try $0.records(of: nodeIds, before: before, limit: limit + 1) }
     let page = Array(found.prefix(limit))
     return History(runs: page, next: found.count > limit ? page.last?.record.id : nil)
   }

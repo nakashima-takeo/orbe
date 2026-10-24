@@ -33,10 +33,10 @@ extension AutomationRunnerTests {
   private func defineFanOut() throws -> Int {
     try define([
       fetch("f", every: 3600),
-      part("p", .manual, from: ["f"]),
-      part("s1", .scheduled(.every(Self.far)), from: ["p"], deliver: .sideEffect),
-      part("s2", .scheduled(.every(Self.far)), from: ["f"], deliver: .sideEffect),
-      part("s3", .arrival, from: ["p"], deliver: .sideEffect),
+      definitionNode("p", .manual, from: ["f"]),
+      definitionNode("s1", .scheduled(.every(Self.far)), from: ["p"], deliver: .sideEffect),
+      definitionNode("s2", .scheduled(.every(Self.far)), from: ["f"], deliver: .sideEffect),
+      definitionNode("s3", .arrival, from: ["p"], deliver: .sideEffect),
     ])
   }
 
@@ -44,10 +44,10 @@ extension AutomationRunnerTests {
 
   /// 指した部品の道の上の部品だけが上流の後に順に 1 回ずつ走り、指した部品が終わると一巡が終わる。道の外の部品は走らず、
   /// 道の上の「届いたら」は上流が積んだことで普段どおり起きる。
-  func testFlowingToAPartRunsItsPathInOrderOnceAndLeavesTheRestAlone() throws {
+  func testFlowingToANodeRunsItsPathInOrderOnceAndLeavesTheRestAlone() throws {
     let id = try defineFanOut()
 
-    try flow(id, to: .part(store.part(id, "s1")))
+    try flow(id, to: .node(store.nodeId(id, "s1")))
     XCTAssertEqual(calls("f").count, 1)
     XCTAssertEqual(calls("p"), [], "上流が終わるまで起こさない")
     finish("f", fetched(["a"]))
@@ -72,7 +72,7 @@ extension AutomationRunnerTests {
   }
 
   /// 指す先を省くと終わりの部品すべてまで流れ、道の上の「届いたら」が走り終えるまで一巡は終わらない。
-  func testFlowingToTheEndsRunsEveryPartAndWaitsForArrivalParts() throws {
+  func testFlowingToTheEndsRunsEveryNodeAndWaitsForArrivalNodes() throws {
     let id = try defineFanOut()
 
     try flow(id)
@@ -92,8 +92,8 @@ extension AutomationRunnerTests {
   func testAFlowWhoseUpstreamAddsNothingStillEndsAndPausedAutomationsFlow() throws {
     let id = try define([
       fetch("f", every: 3600),
-      part("digest", .arrival, from: ["f"], deliver: .report),
-      part("p", .manual, from: ["f"], deliver: .report),
+      definitionNode("digest", .arrival, from: ["f"], deliver: .report),
+      definitionNode("p", .manual, from: ["f"], deliver: .report),
     ])
     _ = try runner.pause(id, true)
 
@@ -106,9 +106,9 @@ extension AutomationRunnerTests {
 
   /// 指す先が 1 つも無ければ（判定を持たない自動化の候補の更新）、何も起こさず一巡も置かない。置くと終わりの知らせが来ず、
   /// 以後ずっと断る。
-  func testFlowingToNoPartsRunsNothingAndLeavesNoFlow() throws {
+  func testFlowingToNoNodesRunsNothingAndLeavesNoFlow() throws {
     let id = try define([
-      fetch("f", every: 3600), part("s", .arrival, from: ["f"], deliver: .sideEffect),
+      fetch("f", every: 3600), definitionNode("s", .arrival, from: ["f"], deliver: .sideEffect),
     ])
 
     try flow(id, to: .judges)
@@ -121,10 +121,10 @@ extension AutomationRunnerTests {
   // MARK: - 手動
 
   /// 手動の部品は上流が積んでも走らず、それ自身かその下流を指して流したときだけ走る。上流を指して流しても走らない。
-  func testAManualPartRunsOnlyWhenItOrItsDownstreamIsFlowedTo() throws {
+  func testAManualNodeRunsOnlyWhenItOrItsDownstreamIsFlowedTo() throws {
     let id = try define([
       fetch("f", every: 1800),
-      part("p", .manual, from: ["f"], deliver: .report),
+      definitionNode("p", .manual, from: ["f"], deliver: .report),
     ])
     advance(by: 1800)
     finish("f", fetched(["a"]))
@@ -132,11 +132,11 @@ extension AutomationRunnerTests {
     XCTAssertEqual(calls("p"), [], "予定でも上流の確定でも走らない")
     finish("f", fetched(["a"]))
 
-    try flow(id, to: .part(store.part(id, "f")))
+    try flow(id, to: .node(store.nodeId(id, "f")))
     finish("f", fetched(["a", "b"]))
     XCTAssertEqual(calls("p"), [], "上流を指して流しても走らない")
 
-    try flow(id, to: .part(store.part(id, "p")))
+    try flow(id, to: .node(store.nodeId(id, "p")))
     finish("f", fetched(["a", "b"]))
     XCTAssertEqual(ids("p"), [downstream("f", "a", of: id), downstream("f", "b", of: id)])
   }
@@ -145,10 +145,10 @@ extension AutomationRunnerTests {
 
   /// 流し始めに走っている入力の無い部品は、その回を一巡の分にして重ねて起こさない。上流が終わった時点で走っている入力の
   /// ある部品は、その回が押した後の行を取れないので、終わった後にもう 1 回起こす。
-  func testARunningSourceCountsButARunningPartWithInputsRunsOnceMoreAfterIt() throws {
+  func testARunningSourceCountsButARunningNodeWithInputsRunsOnceMoreAfterIt() throws {
     let id = try define([
       fetch("f", every: 3600),
-      part("j", .scheduled(.every(3600)), from: ["f"], deliver: .report),
+      definitionNode("j", .scheduled(.every(3600)), from: ["f"], deliver: .report),
     ])
     advance(by: 3600)
     finish("f", fetched(["a"]))
@@ -174,7 +174,7 @@ extension AutomationRunnerTests {
   func testAScheduledRunStartedInsideTheBlockingRunsEndIsTheFlowsRun() throws {
     let id = try define([
       fetch("f", every: 3600),
-      part("j", .scheduled(.every(600)), from: ["f"], deliver: .report),
+      definitionNode("j", .scheduled(.every(600)), from: ["f"], deliver: .report),
     ])
     advance(by: 3600)
     finish("f", fetched(["a"]))
@@ -204,13 +204,13 @@ extension AutomationRunnerTests {
       name: "流す", notify: nil,
       parts: [
         fetch("f", every: 3600),
-        part("a", trigger, from: ["f"]),
-        part("s", .manual, from: ["a"], deliver: .report),
+        definitionNode("a", trigger, from: ["f"]),
+        definitionNode("s", .manual, from: ["a"], deliver: .report),
       ])
   }
 
   /// 流しの途中で道の上の部品を「届いたら」から間隔に変えると、今の予定で決める——上流の後に流しが 1 回起こしてから下流へ進む。
-  func testAPartTurnedFromArrivalToIntervalMidFlowIsWokenByTheFlow() throws {
+  func testANodeTurnedFromArrivalToIntervalMidFlowIsWokenByTheFlow() throws {
     let id = try runner.set(nil, chain(a: .arrival)).id
     try flow(id)
     try rewrite(id, chain(a: .scheduled(.every(86400))))
@@ -228,7 +228,7 @@ extension AutomationRunnerTests {
 
   /// 流しの途中で道の上の部品を間隔から「届いたら」に変えると、流しはそれを起こさず普段の決まりに任せる——上流が積んで
   /// 起きた回が失敗しても、同じ行ですぐ起こし直さず、終わりと数えて下流へ進む。
-  func testAPartTurnedFromIntervalToArrivalMidFlowIsLeftToItsUsualRule() throws {
+  func testANodeTurnedFromIntervalToArrivalMidFlowIsLeftToItsUsualRule() throws {
     let id = try runner.set(nil, chain(a: .scheduled(.every(86400)))).id
     try flow(id)
     try rewrite(id, chain(a: .arrival))
@@ -244,31 +244,31 @@ extension AutomationRunnerTests {
   // MARK: - 打ち切り
 
   /// 道の上の部品の入力を書き換えると（道の形が変わる）一巡は打ち切られ、また流せる。
-  func testRewritingTheInputsOfAPartOnThePathAbortsTheFlow() throws {
+  func testRewritingTheInputsOfANodeOnThePathAbortsTheFlow() throws {
     func definition(a inputs: [String]) -> AutomationDefinition {
       AutomationDefinition(
         name: "流す", notify: nil,
         parts: [
           fetch("f", every: 3600), fetch("g", every: 3600),
-          part("a", .manual, from: inputs, deliver: .report),
-          part("b", .manual, from: ["g"], deliver: .report),
+          definitionNode("a", .manual, from: inputs, deliver: .report),
+          definitionNode("b", .manual, from: ["g"], deliver: .report),
         ])
     }
     let id = try runner.set(nil, definition(a: ["f", "g"])).id
-    try flow(id, to: .part(store.part(id, "a")))
+    try flow(id, to: .node(store.nodeId(id, "a")))
     try rewrite(id, definition(a: ["f"]))
 
-    try flow(id, to: .part(store.part(id, "a")))
+    try flow(id, to: .node(store.nodeId(id, "a")))
   }
 
   /// 道の上の部品の何をするかを書き換えると一巡は打ち切られ、また流せる。道に触れない書き換え（名前）では続く。
-  func testRewritingAPartOnThePathAbortsTheFlowButRenamingDoesNot() throws {
+  func testRewritingANodeOnThePathAbortsTheFlowButRenamingDoesNot() throws {
     func definition(_ name: String, f script: String) -> AutomationDefinition {
       AutomationDefinition(
         name: name, notify: nil,
         parts: [
           fetch("f", every: 3600, script: script),
-          part("j", .manual, from: ["f"], deliver: .report),
+          definitionNode("j", .manual, from: ["f"], deliver: .report),
         ])
     }
     let id = try runner.set(nil, definition("流す", f: "f")).id
@@ -302,7 +302,7 @@ extension AutomationRunnerTests {
   /// 壊れると何が起きるか。「更新中…」が出ない・終わっても消えない。予定どおりの回のたびに提案タブが描き直される。
   @MainActor func testFlowingIsObservableAndRunsOutsideAFlowAreNot() throws {
     let id = try define([
-      fetch("f", every: 3600), part("j", .manual, from: ["f"], deliver: .taskCandidates),
+      fetch("f", every: 3600), definitionNode("j", .manual, from: ["f"], deliver: .taskCandidates),
     ])
 
     XCTAssertFalse(

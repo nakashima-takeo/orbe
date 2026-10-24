@@ -17,7 +17,7 @@ struct AutomationSample {
 /// 見本の部品の 1 回。入力のある部品の回は、その時点で読める行を（捨てる分のほかは）すべて取った回にする。判定の候補の案の
 /// 出どころと、素通しの処理の出力は、読んだ行から組み直す（出どころは DB の行を指すため）。
 struct AutomationSamplePass {
-  let part: String
+  let nodeKey: String
   let at: Date
   var trigger: AutomationNodeRun.Trigger = .schedule
   let outcome: AutomationNodePass.Outcome
@@ -99,15 +99,15 @@ extension DesignSceneFixtures {
         let id = try store.create(sample.definition, now: sample.createdAt).id
         var kept: [String: [AutomationItem]] = [:]
         for pass in sample.passes {
-          for item in pass.kept where !(kept[pass.part]?.contains { $0.id == item.id } ?? false) {
-            kept[pass.part, default: []].append(item)
+          for item in pass.kept where !(kept[pass.nodeKey] ?? []).map(\.id).contains(item.id) {
+            kept[pass.nodeKey, default: []].append(item)
           }
         }
         for (key, items) in kept.sorted(by: { $0.key < $1.key }) {
           try prepare(items, as: key, of: id, in: store, at: sample.createdAt)
         }
         for pass in sample.passes {
-          try record(pass, of: id, in: store, kept: kept[pass.part] ?? [])
+          try record(pass, of: id, in: store, kept: kept[pass.nodeKey] ?? [])
         }
         if sample.paused { _ = try store.setPaused(id, true, now: sample.createdAt) }
         if sample.deleted { try store.delete(id, now: sample.createdAt) }
@@ -121,9 +121,9 @@ extension DesignSceneFixtures {
   private static func prepare(
     _ items: [AutomationItem], as key: String, of id: Int, in store: AutomationStore, at: Date
   ) throws {
-    let part = store.part(id, key)
-    try store.give(items.map(row), as: part, of: id, at: at)
-    for receiver in store.automation(id)?.graph.downstream(of: part) ?? [] {
+    let nodeId = store.nodeId(id, key)
+    try store.give(items.map(row), as: nodeId, of: id, at: at)
+    for receiver in store.automation(id)?.graph.downstream(of: nodeId) ?? [] {
       guard var read = try store.read(receiver.id, of: id, baseline: nil, now: at) else { continue }
       read.taken = []
       read.dropped = []
@@ -137,9 +137,9 @@ extension DesignSceneFixtures {
     _ pass: AutomationSamplePass, of id: Int, in store: AutomationStore,
     kept: [AutomationItem] = []
   ) throws {
-    guard let automation = store.automation(id), let node = automation.graph.node(key: pass.part)
+    guard let automation = store.automation(id), let node = automation.graph.node(key: pass.nodeKey)
     else {
-      preconditionFailure("no part \(pass.part) in the sample")
+      preconditionFailure("no part \(pass.nodeKey) in the sample")
     }
     var read: AutomationIntake.Read?
     var outcome = pass.outcome
@@ -160,7 +160,7 @@ extension DesignSceneFixtures {
     }
     _ = try store.record(
       AutomationPassEnd(
-        automationId: id, part: node.id, defId: node.entity.defId, trigger: pass.trigger,
+        automationId: id, nodeId: node.id, defId: node.entity.defId, trigger: pass.trigger,
         startedAt: pass.at, endedAt: pass.at.addingTimeInterval(60), read: read,
         outcome: outcome))
   }
@@ -238,10 +238,10 @@ extension DesignSceneFixtures {
     }
   }
 
-  nonisolated static func commandPart(
+  nonisolated static func commandNode(
     _ key: String, _ name: String, _ trigger: AutomationNode.Trigger, from inputs: [String] = [],
     script: String, directory: String? = nil, coverage: AutomationCoverage? = nil,
-    deliver: AutomationActionDef.Destination = .nextPart
+    deliver: AutomationActionDef.Destination = .nextNode
   ) -> AutomationDefinition.Node {
     AutomationDefinition.Node(
       id: nil, key: key, name: name, trigger: trigger,
@@ -251,10 +251,10 @@ extension DesignSceneFixtures {
         timeoutMinutes: nil, coverage: coverage, destination: deliver), maxItems: nil)
   }
 
-  nonisolated static func agentPart(
+  nonisolated static func agentNode(
     _ key: String, _ name: String, _ trigger: AutomationNode.Trigger, from inputs: [String] = [],
     model: String? = nil, tools: [String] = [], instruction: String,
-    coverage: AutomationCoverage? = nil, deliver: AutomationActionDef.Destination = .nextPart
+    coverage: AutomationCoverage? = nil, deliver: AutomationActionDef.Destination = .nextNode
   ) -> AutomationDefinition.Node {
     AutomationDefinition.Node(
       id: nil, key: key, name: name, trigger: trigger,
@@ -275,7 +275,7 @@ extension DesignSceneFixtures {
       name: name, notify: notify,
       parts: [
         fetch,
-        agentPart(
+        agentNode(
           "judge", "判定", .arrival, from: [fetch.key], model: "sonnet", instruction: instruction,
           deliver: .taskCandidates),
       ])
@@ -300,7 +300,7 @@ extension DesignSceneFixtures {
     reason: String? = nil
   ) -> AutomationNodePass.Proposal {
     AutomationNodePass.Proposal(
-      origin: AutomationIntake.Origin(part: AutomationNodeID(0), row: .event(0), item: item),
+      origin: AutomationIntake.Origin(nodeId: AutomationNodeID(0), row: .event(0), item: item),
       title: title, due: due, workspace: workspace, reason: reason)
   }
 
@@ -378,19 +378,19 @@ extension DesignSceneFixtures {
   ) -> [AutomationSamplePass] {
     if let failure {
       return [
-        AutomationSamplePass(part: "fetch", at: time, trigger: trigger, outcome: failed(failure))
+        AutomationSamplePass(nodeKey: "fetch", at: time, trigger: trigger, outcome: failed(failure))
       ]
     }
     let (all, new) = sampleRound(source, at: time, items: items, fresh: fresh)
     var passes = [
       AutomationSamplePass(
-        part: "fetch", at: time, trigger: trigger, outcome: fetched(all),
+        nodeKey: "fetch", at: time, trigger: trigger, outcome: fetched(all),
         kept: Array(all.prefix(items - fresh)))
     ]
     if !new.isEmpty {
       passes.append(
         AutomationSamplePass(
-          part: "judge", at: time.addingTimeInterval(60), trigger: .arrival,
+          nodeKey: "judge", at: time.addingTimeInterval(60), trigger: .arrival,
           outcome: judged(
             new.prefix(proposed).map { proposal($0, "\($0.body)に対応する") },
             rows: new.count), take: new.count))

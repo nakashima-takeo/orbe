@@ -250,21 +250,21 @@ private func automationList(_ rest: [String]) -> Never {
   }
   let automations = (result as? [String: Any])?["automations"] as? [[String: Any]] ?? []
   for automation in automations {
-    let parts = automation["parts"] as? [String: [String: Any]] ?? [:]
+    let nodes = automation["parts"] as? [String: [String: Any]] ?? [:]
     let state =
       automation["definitionError"] != nil
       ? "unreadable"
-      : parts.values.contains { $0["running"] as? Bool == true }
+      : nodes.values.contains { $0["running"] as? Bool == true }
         ? "running" : automation["paused"] as? Bool == true ? "paused" : "active"
     let definition = automation["definition"] as? [String: Any]
-    let next = parts.compactMap { key, part in
-      (part["nextRunAt"] as? String).map { (key: key, at: $0) }
+    let next = nodes.compactMap { key, node in
+      (node["nextRunAt"] as? String).map { (key: key, at: $0) }
     }.min { $0.at < $1.at }
     print(
       [
         automation["automationId"], state, definition?["name"],
         scheduleCell(definition?["parts"] as? [[String: Any]] ?? [], next: next?.key),
-        next?.at, lastRunCell(parts),
+        next?.at, lastRunCell(nodes),
       ].map { $0.map(display) ?? "-" }.map(tsvCell).joined(separator: "\t"))
   }
   exit(0)
@@ -272,9 +272,9 @@ private func automationList(_ rest: [String]) -> Never {
 
 /// 次に来る部品の予定（`every 30m` / `cron 0 9 * * 1-5`）。ほかに予定のある部品があれば ` +N`、予定のある部品が無ければ
 /// `manual`。
-private func scheduleCell(_ parts: [[String: Any]], next: String?) -> String {
-  let scheduled = parts.compactMap { part -> (key: String, words: String)? in
-    guard let trigger = part["trigger"] as? [String: Any], let key = part["key"] as? String else {
+private func scheduleCell(_ nodes: [[String: Any]], next: String?) -> String {
+  let scheduled = nodes.compactMap { node -> (key: String, words: String)? in
+    guard let trigger = node["trigger"] as? [String: Any], let key = node["key"] as? String else {
       return nil
     }
     switch trigger["kind"] as? String {
@@ -357,11 +357,11 @@ private func automationPause(_ rest: [String], paused: Bool) -> Never {
 private func automationRun(_ rest: [String]) -> Never {
   exitIfAutomationHelp(rest)
   var args = rest
-  let part = takeOption(&args, "--part", requires: "a <key> value")
+  let nodeKey = takeOption(&args, "--part", requires: "a <key> value")
   rejectLeftovers(args, positionals: 1)
   let id = automationIdArg(args, verb: "run")
   var params: [String: Any] = ["automationId": id]
-  if let part { params["partKey"] = part }
+  if let nodeKey { params["partKey"] = nodeKey }
   let result = callOrExit("run_automation", params)
   if wantJSON { printJSON(result) } else { print("started automation \(id)") }
   exit(0)

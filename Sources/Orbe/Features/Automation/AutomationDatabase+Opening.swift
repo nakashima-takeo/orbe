@@ -47,7 +47,7 @@ extension AutomationDatabase {
   /// 自動化 1 つを、部品・つながり・使う動作の定義の行から外の形の型に組み、検証に通す。組めないか通らなければ定義を読めない
   /// 自動化。
   private func automation(_ row: AutomationRow) throws -> Assembled {
-    let rows = try partRows(of: row.id)
+    let rows = try nodeRows(of: row.id)
     let notify = row.notify.flatMap(AutomationNotify.init)
     func broken(_ reason: String, _ definition: Any) -> Assembled {
       .unreadable(
@@ -56,27 +56,27 @@ extension AutomationDatabase {
           definition: Self.jsonText(definition), reason: reason, nodeIds: rows.map(\.id)))
     }
     let keys = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.key) })
-    var parts: [AutomationDefinition.Node] = []
-    for (index, part) in rows.enumerated() {
-      switch Self.part(part, at: index, keys: keys) {
-      case .success(let typed): parts.append(typed)
+    var definitionNodes: [AutomationDefinition.Node] = []
+    for (index, nodeRow) in rows.enumerated() {
+      switch Self.definitionNode(nodeRow, at: index, keys: keys) {
+      case .success(let typed): definitionNodes.append(typed)
       case .failure(let problem): return broken(problem.reason, Self.rawDefinition(row, rows, keys))
       }
     }
-    let definition = AutomationDefinition(name: row.name, notify: notify, parts: parts)
-    let checked: (name: String, parts: [AutomationGraph.Checked])
+    let definition = AutomationDefinition(name: row.name, notify: notify, parts: definitionNodes)
+    let checked: (name: String, checkedNodes: [AutomationGraph.Checked])
     do throws(AutomationError) {
       checked = try definition.checked()
     } catch {
       return broken(Self.reason(error), AutomationWire.object(definition))
     }
     let graph = AutomationGraph(
-      checked.parts,
-      entities: zip(checked.parts, rows).map { checked, row in
+      checked.checkedNodes,
+      entities: zip(checked.checkedNodes, rows).map { checked, row in
         AutomationNode(checked.definitionNode, id: row.id, defId: row.defId)
       })
     var states: [AutomationNodeID: AutomationNodeState] = [:]
-    for part in rows { states[part.id] = try state(of: part.id) }
+    for nodeRow in rows { states[nodeRow.id] = try state(of: nodeRow.id) }
     return .readable(
       Automation(
         id: row.id, name: checked.name, notify: notify, graph: graph,
@@ -104,7 +104,7 @@ extension AutomationDatabase {
     let reason: String
   }
 
-  private func partRows(of automation: Int) throws -> [NodeRow] {
+  private func nodeRows(of automation: Int) throws -> [NodeRow] {
     try db.select(
       """
       SELECT p.id, p.key, p.name, p.trigger, p.max_items, p.def_id, d.kind, a.action
@@ -138,7 +138,7 @@ extension AutomationDatabase {
 
   /// 部品の行を外の形の部品に組む。予定と動作の定義は保存した JSON をそれぞれの型で読み、入力の上流はこの自動化の今の鍵に
   /// 解く。読めなければ定義の中の場所で言う理由。
-  private static func part(
+  private static func definitionNode(
     _ row: NodeRow, at index: Int, keys: [AutomationNodeID: String]
   ) -> Result<AutomationDefinition.Node, Unbuilt> {
     let at = "parts[\(index)]"
@@ -184,15 +184,17 @@ extension AutomationDatabase {
 
   /// 型に組めない自動化の外の形（AI が直すため）。行の生の値から組み、読めない値は読めた分だけを置く。
   private static func rawDefinition(
-    _ row: AutomationRow, _ parts: [NodeRow], _ keys: [AutomationNodeID: String]
+    _ row: AutomationRow, _ nodeRows: [NodeRow], _ keys: [AutomationNodeID: String]
   ) -> [String: Any] {
     var object: [String: Any] = [
       "name": row.name,
-      "parts": parts.map { part -> [String: Any] in
-        var object: [String: Any] = ["id": part.id.rawValue, "key": part.key, "name": part.name]
-        if let trigger = part.trigger.flatMap(jsonObject) { object["trigger"] = trigger }
-        if let maxItems = part.maxItems { object["maxItems"] = maxItems }
-        let from = part.inputs.map { edge -> Any in
+      "parts": nodeRows.map { nodeRow -> [String: Any] in
+        var object: [String: Any] = [
+          "id": nodeRow.id.rawValue, "key": nodeRow.key, "name": nodeRow.name,
+        ]
+        if let trigger = nodeRow.trigger.flatMap(jsonObject) { object["trigger"] = trigger }
+        if let maxItems = nodeRow.maxItems { object["maxItems"] = maxItems }
+        let from = nodeRow.inputs.map { edge -> Any in
           let key = keys[edge.from] ?? ""
           guard edge.take != .new || edge.maxAgeHours != nil else { return key }
           var input: [String: Any] = ["part": key]
@@ -201,7 +203,7 @@ extension AutomationDatabase {
           return input
         }
         if !from.isEmpty { object["from"] = from }
-        if !part.composite, let action = part.action.flatMap(jsonObject) {
+        if !nodeRow.composite, let action = nodeRow.action.flatMap(jsonObject) {
           object.merge(action) { current, _ in current }
         }
         return object
