@@ -96,6 +96,7 @@ public struct VersionedEdit: Sendable {
         back.append(LineHunk(old: old, new: edited).shifted(by: -shift))
       }
     }
+    guard !back.isEmpty else { return front }
     return front + back.reversed().map { $0.shifted(by: shift) }
   }
 }
