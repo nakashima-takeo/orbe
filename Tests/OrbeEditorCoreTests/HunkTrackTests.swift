@@ -127,6 +127,24 @@ final class HunkTrackTests: XCTestCase {
     assertShape(document.hunks, base: base, text: surface.text, "行の中の Enter")
   }
 
+  /// 編集より前にあって接しない区間は、そのまま残る——届いた結果を今の版へ写すときの、前の編集より後ろへ続く編集でも
+  /// （飲み込むと、離れた所に変更がある状態の Enter で、間の文脈がまとめて 1 つの変更に出る）。
+  func testHunksBeforeAnEditStayAsTheyAre() throws {
+    let (document, surface) = try opened("A\nb\nc\nd\ne\n", base: "a\nb\nc\nd\ne\n")
+    let arrived = document.hunks
+    var since: [VersionedEdit] = []
+    document.onTextChange = { since += $0 }
+    let modified = LineHunk(oldStart: 1, oldCount: 1, newStart: 1, newCount: 1)
+    let afterB = LineHunk(oldStart: 2, oldCount: 0, newStart: 3, newCount: 1)
+    surface.replace(NSRange(location: 3, length: 0), with: "\n")
+    XCTAssertEqual(document.hunks, [modified, afterB], "b の行末の Enter")
+    surface.replace(NSRange(location: 8, length: 0), with: "\n")
+    let expected = [modified, afterB, LineHunk(oldStart: 4, oldCount: 0, newStart: 6, newCount: 1)]
+    XCTAssertEqual(document.hunks, expected, "続けて d の行末の Enter")
+    XCTAssertEqual(
+      VersionedEdit.track(arrived, through: since), expected, "届いた版から 2 つの Enter をまとめて写す")
+  }
+
   /// CRLF の文書でも、行末（`\r` の前）の Enter と行末から行末までの削除は、始まりの行を区間に入れない（届く結果と同じ印）。
   func testCRLFLineEndEditsKeepTheStartRow() throws {
     let base = "a\r\nbc\r\n"
@@ -153,45 +171,46 @@ final class HunkTrackTests: XCTestCase {
     XCTAssertEqual(other.hunks, tracked, "届く結果と同じ")
   }
 
-  /// 乱数の編集の列（届く前に重ねる）で、ずらしたハンクがいつでも正しい対応の形を保つ。中身の対応は、届いてから行の数を
-  /// 変えない編集が無い間だけ見る。
+  /// 乱数の編集の束（複数の区間を変える操作を含み、届く前に重ねる）で、ずらしたハンクがいつでも正しい対応の形を保つ。
+  /// 届いた結果を今の版へ写す道——届いた版の後の束をまたぐ編集の列をまとめてずらす——も同じ形になる。中身の対応は、届いて
+  /// から行の数を変えない編集が無い間だけ見る。
   func testRandomEditsKeepTheHunksAValidCorrespondence() throws {
-    var random = SeededRandom(seed: 0x5eed)
+    var random = SeededGenerator(seed: 0x5eed)
     let pieces = ["a", "b", "\n", "\n", "ab\n", "\nb", ""]
     func text(_ count: Int) -> String {
-      (0..<count).map { _ in pieces[random.next(below: pieces.count)] }.joined()
+      (0..<count).map { _ in pieces[Int.random(in: pieces.indices, using: &random)] }.joined()
     }
+    let breaks = { (string: String) in string.filter { $0 == "\n" }.count }
     for round in 0..<200 {
-      let base = text(random.next(below: 12))
-      let (document, surface) = try opened(text(random.next(below: 12)), base: base)
+      let base = text(Int.random(in: 0..<12, using: &random))
+      let (document, surface) = try opened(
+        text(Int.random(in: 0..<12, using: &random)), base: base)
+      let arrived = document.hunks
+      var since: [VersionedEdit] = []
+      document.onTextChange = { since += $0 }
       var exact = true
       for step in 0..<8 {
-        let length = surface.length
-        let location = random.next(below: length + 1)
-        let range = NSRange(location: location, length: random.next(below: length - location + 1))
-        let replacement = text(random.next(below: 3))
-        let breaks = { (string: String) in string.filter { $0 == "\n" }.count }
-        if breaks(surface.substring(in: range)) == breaks(replacement) { exact = false }
-        surface.replace(range, with: replacement)
+        var edits: [TextEdit] = []
+        var next = 0
+        for _ in 0..<Int.random(in: 1...3, using: &random) where next <= surface.length {
+          let location = Int.random(in: next...surface.length, using: &random)
+          let range = NSRange(
+            location: location,
+            length: Int.random(in: 0...(surface.length - location), using: &random))
+          let replacement = text(Int.random(in: 0..<3, using: &random))
+          if breaks(surface.substring(in: range)) == breaks(replacement) { exact = false }
+          edits.append(TextEdit(range: range, replacement: replacement))
+          next = NSMaxRange(range) + 1
+        }
+        surface.apply(edits)
         assertShape(
           document.hunks, base: base, text: surface.text, contents: exact, "回 \(round) の \(step)")
       }
+      assertShape(
+        VersionedEdit.track(arrived, through: since), base: base, text: surface.text,
+        contents: exact, "回 \(round) の届いた版から写す")
       XCTAssertTrue(document.waitUntilCaughtUp())
       assertShape(document.hunks, base: base, text: surface.text, "回 \(round) の届いた結果")
     }
-  }
-}
-
-/// 決まった列を返す乱数（xorshift）。
-private struct SeededRandom {
-  private var state: UInt64
-
-  init(seed: UInt64) { state = seed }
-
-  mutating func next(below bound: Int) -> Int {
-    state ^= state << 13
-    state ^= state >> 7
-    state ^= state << 17
-    return Int(state % UInt64(max(bound, 1)))
   }
 }
