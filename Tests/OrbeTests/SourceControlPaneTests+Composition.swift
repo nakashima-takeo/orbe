@@ -8,7 +8,8 @@ import XCTest
 ///
 /// 壊れると何が起きるか。日本語入力で変換を確定しないまま ✓・ボタン・▾・… を押すと、未確定の字が抜けたコミットができる。
 /// 変換を終えると、コミット済みの文が欄に戻り、続けた ↵ が残りの変更をその文でコミットする。変換中の字だけが見えている
-/// のにボタンが押せない姿になる（押せば ⌘↵ と同じく確定してから働くのに）。
+/// のにボタンが押せない姿になる（押せば ⌘↵ と同じく確定してから働くのに）。IME で確定した後、コミットで空になった欄でも
+/// ボタンが押せる姿に残る。
 extension SourceControlPaneTests {
   /// 欄に変換中の字を置く（IME の打鍵と同じ口）。
   private func compose(_ text: String, in field: ScmMessageTextView) {
@@ -39,7 +40,8 @@ extension SourceControlPaneTests {
     XCTAssertEqual(scm.control.message, "")
   }
 
-  /// 変換中の字だけが欄にあるとき、✓・ボタン・▾ は押せる姿。変換が終われば（取り消せば）押せない姿に戻る。
+  /// 変換中の字だけが欄にあるとき、✓・ボタン・▾ は押せる姿。変換を取り消せば押せない姿に戻る。IME が確定すれば字は
+  /// メッセージへ移り、その後の姿はメッセージだけで決まる。
   func testOnlyAComposingTextMakesTheCommitPressable() throws {
     let repo = try TempGitRepo()
     try repo.write("a.txt", "edited\n")
@@ -56,5 +58,11 @@ extension SourceControlPaneTests {
 
     compose("", in: field)
     XCTAssertFalse(scm.commitState.canCommit, "変換を取り消した")
+
+    compose("ろぐいん", in: field)
+    field.insertText("ログイン", replacementRange: NSRange(location: NSNotFound, length: 0))
+    XCTAssertEqual(scm.control.message, "ログイン", "IME の確定")
+    scm.control.message = ""
+    XCTAssertFalse(scm.commitState.canCommit, "確定した後は、終わった変換の字で押せる姿に残らない")
   }
 }
