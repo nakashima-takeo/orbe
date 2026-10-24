@@ -189,8 +189,6 @@ final class ScmAutoFetch {
 }
 
 /// 裏の fetch の係の判断（時刻を引数で受ける状態機械）——いつ撃つか、段の終わりと remote 追跡 ref の値で何を記録するか。
-///
-/// 規則は 2 つ。リモートと話せたと分かれば止まりを解き、remote 追跡 ref を取り込めたら前回の時刻を今にする。
 struct ScmAutoFetchRules {
   /// 前回の fetch・pull の段が remote 追跡 ref を取り込んだ終わりから、次の裏の fetch までの間。
   static let interval: TimeInterval = 180

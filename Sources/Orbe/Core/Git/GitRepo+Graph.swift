@@ -45,8 +45,8 @@ extension GitRepo {
     }
   }
 
-  /// HEAD のコミットと、それが push 済みか（`isPushed`）。グラフの口を通らないので、手間は未 push の分だけ（履歴の長さに
-  /// 依らない）。初回コミット前・読めなければ nil。
+  /// HEAD のコミットと、それが push 済みか（`isPushed`）。グラフの口を通らないので、グラフの並べ替えの手間を払わない。
+  /// 初回コミット前・読めなければ nil。
   func headPush(completion: @escaping ((commit: String, isPushed: Bool)?) -> Void) {
     runner.run(["rev-parse", "-q", "--verify", "HEAD^{commit}"], cwd: root) { parsed in
       let commit = parsed.stdoutText.trimmingCharacters(in: .newlines)
@@ -57,8 +57,8 @@ extension GitRepo {
     }
   }
 
-  /// `revision` が push 済み（どれかの remote 追跡ブランチから届く）か。グラフの push 済み（`unpushed`）と同じ定義で、届かない
-  /// 側を 1 件見つけたら止まる。
+  /// `revision` が push 済み（どれかの remote 追跡ブランチから届く）か。グラフの push 済み（`unpushed`）と同じ定義。手間は
+  /// `revision` と remote 追跡ブランチの分かれ目より新しい分（未 push の分と、remote 側で先に進んだ分）に比例する。
   func isPushed(
     _ revision: String, handle: GitRunner.Handle,
     completion: @escaping (Result<Bool, GitWriteFailure>) -> Void

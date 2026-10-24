@@ -18,7 +18,7 @@ extension RootFiles {
     case absent
     /// UTF-8 として読めない。
     case notText
-    /// git から取れない（取り直しの上限に達した・まだ状態の無い版で、OID の一覧か本文を取れなかった）。
+    /// git から取れない（取り直しの上限に達した・まだ状態の無い版で OID の一覧か本文を取れなかった・「その版に無い」だった版で本文を取れなかった）。
     case failed
 
     var text: String? {

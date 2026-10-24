@@ -137,7 +137,6 @@ struct ScmChanges {
       return count + (entry.staged == nil ? 0 : 1) + (entry.unstaged == nil ? 0 : 1)
     }
   }
-
 }
 
 /// グラフの先頭のブランチの行の中身。

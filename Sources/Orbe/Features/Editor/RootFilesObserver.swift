@@ -16,7 +16,8 @@ protocol RootFilesObserver: AnyObject {
   /// こぼしなら true。HEAD・ローカルのブランチ・index だけなら false）。
   func rootFilesGitStateDidChange(_ files: RootFiles, remoteRefsChanged: Bool)
   /// (e) 入れ子の git dir（サブモジュール・入れ子のリポジトリ）の状態が変わった（監視の 1 バッチに 1 回。取りこぼしでも）。
-  /// 中のコミット・checkout・index の書き換えで、親の ref・HEAD・index は動いていない。
+  /// 中のコミット・checkout・index の書き換えで、それ自体は親の ref・HEAD・index を動かさない（同じバッチで親も
+  /// 動けば (d) も届く）。
   func rootFilesNestedGitStateDidChange(_ files: RootFiles)
 }
 
