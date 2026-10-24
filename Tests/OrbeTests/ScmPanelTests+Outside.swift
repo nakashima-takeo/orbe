@@ -34,7 +34,7 @@ extension ScmPanelTests {
   /// 外の `git add` で断られたコミットを、行が追いつく前（断った知らせの中）に押し直しても、また何も書かずに断る——何も
   /// 書かずに断ったコミットは、先にステージする行を書いたことにならない。先のステージの後で hook に拒まれたコミットの
   /// 押し直しは、自分のステージを数えて通る。コミットとコミットしてプッシュは 1 段目の終わりを別の道で知らせる。
-  func testPressingAgainRightAfterARefusedCommitIsRefusedToo() throws {
+  func testPressingAgainRightAfterAFailedCommitCountsOnlyTheStageItWrote() throws {
     let actions: [(SourceControl.Kind, (ScmPanel) -> Void)] = [
       (.commit, { $0.commitSnapshot().commit() }),
       (.commitAndPush, { $0.commitSnapshot().commitAndPush() }),
