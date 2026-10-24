@@ -127,8 +127,8 @@ final class HunkTrackTests: XCTestCase {
     assertShape(document.hunks, base: base, text: surface.text, "行の中の Enter")
   }
 
-  /// 編集より前にあって接しない区間は、そのまま残る——届いた結果を今の版へ写すときの、前の編集より後ろへ続く編集でも
-  /// （飲み込むと、離れた所に変更がある状態の Enter で、間の文脈がまとめて 1 つの変更に出る）。
+  /// 編集より前にあって接しない区間は、間の文脈が 1 行でもそのまま残る——届いた結果を今の版へ写すときの、前の編集より
+  /// 後ろへ続く編集でも（飲み込むと、離れた所に変更がある状態の Enter で、間の文脈がまとめて 1 つの変更に出る）。
   func testHunksBeforeAnEditStayAsTheyAre() throws {
     let (document, surface) = try opened("A\nb\nc\nd\ne\n", base: "a\nb\nc\nd\ne\n")
     let arrived = document.hunks
@@ -138,9 +138,9 @@ final class HunkTrackTests: XCTestCase {
     let afterB = LineHunk(oldStart: 2, oldCount: 0, newStart: 3, newCount: 1)
     surface.replace(NSRange(location: 3, length: 0), with: "\n")
     XCTAssertEqual(document.hunks, [modified, afterB], "b の行末の Enter")
-    surface.replace(NSRange(location: 8, length: 0), with: "\n")
-    let expected = [modified, afterB, LineHunk(oldStart: 4, oldCount: 0, newStart: 6, newCount: 1)]
-    XCTAssertEqual(document.hunks, expected, "続けて d の行末の Enter")
+    surface.replace(NSRange(location: 6, length: 0), with: "\n")
+    let expected = [modified, afterB, LineHunk(oldStart: 3, oldCount: 0, newStart: 5, newCount: 1)]
+    XCTAssertEqual(document.hunks, expected, "続けて c の行末の Enter")
     XCTAssertEqual(
       VersionedEdit.track(arrived, through: since), expected, "届いた版から 2 つの Enter をまとめて写す")
   }
