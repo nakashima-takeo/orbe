@@ -249,23 +249,7 @@ final class RootFilesTests: OrbeTestCase {
   /// が変わった」として届き、親の「git の状態が変わった」にはならない。止まった後、親の status の読みが自分を呼び戻さない。
   func testASubmoduleCommitIsFollowedInBothGitDirLayouts() throws {
     try repo.addSubmodule("sub")
-    let inTree = repo.dir.path + "-in-tree-source"
-    try repo.write("t.txt", "t\n", in: inTree)
-    for args in [
-      ["init", "-q", "-b", "main", inTree], ["-C", inTree, "add", "t.txt"],
-      ["-C", inTree, "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", "t"],
-      ["clone", "-q", inTree, "near"],
-      ["-c", "protocol.file.allow=always", "submodule", "add", "-q", inTree, "near"],
-      ["commit", "-qm", "add near"],
-      ["-C", "near", "config", "user.email", "t@example.com"],
-      ["-C", "near", "config", "user.name", "t"],
-    ] {
-      XCTAssertTrue(repo.git(args).isSuccess, "\(args)")
-    }
-    XCTAssertTrue(FileManager.default.fileExists(atPath: repo.root + "/sub/.git"))
-    var isDirectory: ObjCBool = false
-    FileManager.default.fileExists(atPath: repo.root + "/near/.git", isDirectory: &isDirectory)
-    XCTAssertTrue(isDirectory.boolValue, "前提: near の git dir は作業ツリーの中")
+    try repo.addSubmodule("near", gitDirInWorkingTree: true)
     let files = RootFiles(root: repo.root)
     let recorder = Recorder()
     files.addObserver(recorder)
@@ -278,7 +262,8 @@ final class RootFilesTests: OrbeTestCase {
       let gitStateChanges = recorder.gitStateChanges
       XCTAssertTrue(repo.git(["-C", path, "commit", "-qam", "inside"]).isSuccess)
       pumpMain(
-        until: { files.status?.entries[path]?.unstagedSubmodule == .commit(dirty: false) }, "\(path): コミットが動いた")
+        until: { files.status?.entries[path]?.unstagedSubmodule == .commit(dirty: false) },
+        "\(path): コミットが動いた")
       XCTAssertGreaterThan(recorder.nestedGitStateChanges, 0)
       XCTAssertEqual(recorder.gitStateChanges, gitStateChanges, "親の git の状態は変わっていない")
       XCTAssertTrue(repo.git(["-C", path, "reset", "-q", "--soft", "HEAD~1"]).isSuccess)
