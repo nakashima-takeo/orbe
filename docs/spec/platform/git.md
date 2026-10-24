@@ -18,7 +18,7 @@ hooks・署名がユーザーのシェル環境と同等に動くよう、全呼
 - エディタ（メッセージ無しの commit・rebase の todo）は、すぐ失敗するコマンドへ向ける。merge の自動編集は無効。
 - ssh には askpass を必ず使わせ（使うかを `DISPLAY` の有無で揺らさない）、その askpass をすぐ失敗するコマンドにする。パスフレーズと未知のホスト鍵の確かめは、待たずに失敗する。ただし利用者が GUI の askpass を配っていれば（launchd に `SSH_ASKPASS` を置く形）、それを使う——ダイアログで答えられるので待ちにならない。
 
-ユーザーの設定はそのまま効く——`core.sshCommand`・ssh-agent・credential helper・GUI の askpass・hook・署名・`pull.rebase` など。封じが変えるのは「失敗が速く、分類できる」ことだけ。FIDO 鍵の「触れて」の知らせも askpass を通るので、封じの askpass では出ない（認証は進む）。利用者の GUI の askpass を使うときは、知らせもそれに渡る。人が見ていない実行（自動 fetch）だけは、GUI の askpass・`GIT_ASKPASS`・資格情報の helper の対話も使わない（→ リモートの書き込みの fetch）。
+ユーザーの設定はそのまま効く——`core.sshCommand`・ssh-agent・credential helper・GUI の askpass・hook・署名・`pull.rebase` など。封じが変えるのは「失敗が速く、分類できる」ことだけ。FIDO 鍵の「触れて」の知らせも askpass を通るので、封じの askpass では出ない（認証は進む）。利用者の GUI の askpass を使うときは、知らせもそれに渡る。人が見ていない実行（自動 fetch）だけは、GUI の askpass・`GIT_ASKPASS`・Git Credential Manager の対話も使わない（→ リモートの書き込みの fetch）。
 
 ## 並ばない実行
 
@@ -96,7 +96,7 @@ diff の差分は git diff の出力でなくプロセス内で計算するの�
 
 範囲は HEAD と、在れば upstream。件数を区切って読み、その先があるかも返す（続きの読み方は面の側が持つ → [editor/source-control](../editor/source-control.md)）。各コミットについて題（UTF-8 として読めないバイトは置き換えて読む——encoding ヘッダの無い古い非 UTF-8 の題を無題にしない）・指している local / remote 追跡のブランチ名（`<remote>/HEAD` は含まない）・push 済みか（どれかの remote 追跡ブランチから届くか）が読める。書式は明示し、署名の表示・色・出力の文字コードを封じる（`log.showSignature` 等で出力が変わらない）。ブランチ名は装飾の文字列を割らずに ref から別に引く。push 済みかは、表示する分から remote 追跡ブランチに届かない分を引いて決める——手間は表示する分と未 push の分に比例し、履歴全体を歩かない。remote 追跡ブランチが 1 本も無ければ git を起こさず全部「未 push」。
 
-HEAD の push 済みは、同じ定義で HEAD 1 件だけを読む（グラフを通さない）——HEAD のコミットを解決し、そこから remote 追跡ブランチに届かないコミットを 1 件見つけるまで歩く。手間は未 push の分だけで、グラフの並べ替えの手間を払わない。amend・取り消しの直前の照らしも同じ読みを使う。
+HEAD の push 済みは、同じ定義で HEAD 1 件だけを読む（グラフを通さない）——HEAD のコミットを解決し、そこから remote 追跡ブランチに届かないコミットがあるかを問う。手間は HEAD と remote 追跡ブランチの分かれ目より新しい分（未 push の分と、remote 側で先に進んだ分）に比例し、グラフの並べ替えの手間を払わない。amend・取り消しの直前の照らしも同じ読みを使う。
 
 ## プロジェクト検索の grep
 
