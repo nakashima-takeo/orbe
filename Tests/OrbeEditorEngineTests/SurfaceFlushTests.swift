@@ -69,10 +69,10 @@ final class SurfaceFlushTests: EngineTestCase {
     b.document.onViewportChange = { c.surface.setLinkPointer(CGPoint(x: 40, y: 10)) }
     a.surface.scroll(toFirstLine: 20)
     XCTAssertTrue(c.surface.pending.isEmpty, "前提: 出す前は c に変化が無い")
-    scheduler.flushAll()
+    RunLoop.main.run(until: Date())
     XCTAssertFalse(c.surface.pending.isEmpty, "前提: 出す中で c に変化が積まれた")
     XCTAssertEqual(woken, 1, "すぐ次の周を起こす")
-    scheduler.flushAll()
+    RunLoop.main.run(until: Date())
     XCTAssertTrue(c.surface.pending.isEmpty, "次の周で出る")
     XCTAssertEqual(woken, 1, "残りが無ければ起こさない")
   }
