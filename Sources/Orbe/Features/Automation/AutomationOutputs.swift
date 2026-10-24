@@ -58,10 +58,9 @@ struct AutomationOutputs {
 
   /// 報告・仕事の文。前後の空白を除いて上限で切り（切ったら「…」を付ける）、空なら受けない。出し直した報告は前の報告を
   /// 置き換える——報告は 1 つの文なので、直した中身を受ける。
-  mutating func putReport(_ text: String) -> Bool {
-    guard let kept = Self.kept(text) else { return false }
+  mutating func putReport(_ text: String) {
+    guard let kept = Self.kept(text) else { return }
     report = kept
-    return true
   }
 
   /// 受けたものからの結果。`nothing` は何も無い回の理由（仕事の「何もしなかった」に使う）。

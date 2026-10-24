@@ -19,7 +19,7 @@ extension AutomationPartPass {
     var outputs = AutomationOutputs(input)
     switch input {
     case .report:
-      _ = outputs.putReport(text)
+      outputs.putReport(text)
     case .fetch, .process, .judge:
       let broken = outputs.put(text)
       guard broken.isEmpty else {

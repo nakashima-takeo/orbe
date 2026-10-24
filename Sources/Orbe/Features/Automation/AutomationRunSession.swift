@@ -55,10 +55,7 @@ final class AutomationRunSession {
   /// 回の記録に残す外れた件（数は全部、件は断られたままの件を先に、ほかは断った順に）。断らなかった回は nil。
   var rejections: AutomationRejections? {
     guard !rejected.isEmpty else { return nil }
-    return AutomationRejections(
-      count: rejected.count,
-      lines: Array(
-        (unfixed + rejected.dropLast(unfixed.count)).prefix(AutomationRejections.retainedLines)))
+    return AutomationRejections(unfixed + rejected.dropLast(unfixed.count))
   }
 
   init(_ input: AutomationPartPass.Input) {
@@ -213,7 +210,7 @@ final class AutomationRunSession {
           + "\(Tool.reportNothing.rawValue).")
     }
     if let afterNothing { return afterNothing }
-    _ = outputs.putReport(text)
+    outputs.putReport(text)
     unfixed = []
     return .ok("Accepted the report.")
   }

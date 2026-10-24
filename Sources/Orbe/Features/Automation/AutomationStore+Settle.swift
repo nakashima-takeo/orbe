@@ -31,9 +31,6 @@ struct AutomationSettling {
       default: try produce(output, &run, &memory)
       }
     }
-    var dropped = carried
-    for drop in end.read?.dropped ?? [] { dropped.add(drop.reason) }
-    run.dropped = dropped
     let decided = try judged.map { try decide($0.proposals, $0.resolved, memory) }
     if let decided {
       run.result = .judge(
@@ -48,7 +45,7 @@ struct AutomationSettling {
       )
     }
     if let decided { try apply(decided, run: recordId, &memory) }
-    try finish(AutomationRunRecord(id: recordId, content: .known(run)), &memory)
+    try finish(run: recordId, endedAt: run.endedAt, &memory)
     let recorded = memory.automations[index].state(end.part).runs.first { $0.id == recordId }
     return AutomationRecorded(changed: written.changed, run: recorded?.run)
   }
@@ -162,14 +159,14 @@ struct AutomationSettling {
   }
 
   /// 外した最初の回なら印を書き、部品の状態を読み直し、忘れる候補を忘れ、数え直す。
-  private func finish(_ entry: AutomationRunRecord, _ memory: inout AutomationMemory) throws {
+  private func finish(run recordId: Int, endedAt: Date, _ memory: inout AutomationMemory) throws {
     if end.outcome.breach != nil, memory.automations[index].state(end.part).breach == nil {
-      try db.setBreach(end.part, run: entry.id)
+      try db.setBreach(end.part, run: recordId)
     }
     try memory.reread(end.part, of: end.automationId, db)
     try memory.forgetUnheld(db)
     try memory.recount(
-      end.automationId, db, now: entry.endedAt,
+      end.automationId, db, now: endedAt,
       parts: [end.part] + memory.automations[index].graph.downstream(of: end.part).map(\.id))
   }
 }
