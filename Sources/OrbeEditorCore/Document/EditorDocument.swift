@@ -62,8 +62,8 @@ public final class EditorDocument {
       requestHunks()
     }
   }
-  /// baseline と本文の行差分（形は `LineDiff` の出力と同じ）。編集の直後は前のハンクを編集でずらしたもの（正しい対応だが
-  /// 最小とは限らない——`VersionedEdit.track`）で、裏の結果が届くと置き換わる。
+  /// baseline と本文の行差分（形は `LineDiff` の出力と同じ）。編集の直後は前のハンクを編集でずらしたもの（同じ形だが最小とは
+  /// 限らず、行の数を変えない編集の後は区間の外の行の中身が底と違いうる——`VersionedEdit.track`）で、裏の結果が届くと置き換わる。
   public private(set) var hunks: [LineHunk] = []
   /// ハンクがどの baseline に対する差分か（ハンクと組で変わる。差分がまだ無い・baseline が無ければ nil）。baseline を置き
   /// 直してから結果が届くまでは、前の baseline とそれに対するハンク（その後の編集でずらしたもの）の組のまま——この組と

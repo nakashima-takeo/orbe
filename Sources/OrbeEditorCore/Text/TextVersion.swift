@@ -33,8 +33,8 @@ public struct EditedRows: Equatable, Sendable {
   }
 }
 
-/// 版を 1 つ進めた編集。行と桁も持つ——tree-sitter の編集と、ハンクのずらしに使う（どちらも編集の時点の本文でしか
-/// 出せない）。
+/// 版を 1 つ進めた編集。行と桁は tree-sitter の編集に、中身を変えた行（`rows`）はハンクのずらしに使う（どちらも編集の
+/// 時点の本文でしか出せない）。
 public struct VersionedEdit: Sendable {
   /// この編集の後の版。
   public let version: Int
