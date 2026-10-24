@@ -197,26 +197,9 @@ final class RootFiles {
     versions[version]?.state
   }
 
-  // MARK: - 監視
+  // MARK: - 知らせと待ち手
 
-  private func watch(roots: [String], gitDirs: [String]) -> RepoWatcher? {
-    RepoWatcher(roots: roots, gitDirs: gitDirs) { [weak self] batch in self?.handle(batch) }
-  }
-
-  private func handle(_ batch: RepoWatcher.Batch) {
-    if batch.scanAll {
-      notify { $0.rootFiles(self, filesDidChange: .scanAll) }
-    } else if !batch.paths.isEmpty {
-      notify { $0.rootFiles(self, filesDidChange: .paths(batch.paths)) }
-    }
-    if repo != nil, batch.gitChanged || batch.scanAll {
-      notify { $0.rootFilesGitStateDidChange(self, remoteRefsChanged: batch.remoteRefsChanged) }
-    }
-    requestStatusRefresh()
-    requestVersionRefresh()
-  }
-
-  private func notify(_ body: (RootFilesObserver) -> Void) {
+  func notify(_ body: (RootFilesObserver) -> Void) {
     for observation in live { body(observation.observer) }
   }
 
