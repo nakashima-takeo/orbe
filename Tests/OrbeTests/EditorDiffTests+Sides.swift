@@ -129,9 +129,10 @@ extension EditorDiffTests {
     try repo.write("sub/t.txt", "changed\n")
     let (tab, _) = tab()
     let dirty = try tab.group.editor.openDiff(id("sub", .workingTree), as: .pinned)
-    waitRows(dirty, "中身だけ変わった") { _ in dirty.newRevision != nil }
+    waitRows(dirty, "中身だけ変わった") { _ in
+      self.text(dirty.newRevision) == "Subproject commit \(first)-dirty"
+    }
     XCTAssertEqual(text(dirty.old), "Subproject commit \(first)")
-    XCTAssertEqual(text(dirty.newRevision), "Subproject commit \(first)-dirty")
     tab.group.editor.close(.diff(id("sub", .workingTree)))
 
     XCTAssertTrue(repo.git(["-C", "sub", "commit", "-qam", "inside"]).isSuccess)
@@ -143,6 +144,10 @@ extension EditorDiffTests {
     pumpMain(until: { self.text(moved.newRevision) == "Subproject commit \(second)" }, "中でコミットした")
     XCTAssertEqual(text(moved.old), "Subproject commit \(first)")
     XCTAssertEqual(removedLines(try engine(moved.newSurface).rows), [0], "1 行の差")
+    try repo.write("sub/t.txt", "changed again\n")
+    pumpMain(
+      until: { self.text(moved.newRevision) == "Subproject commit \(second)-dirty" },
+      "コミットが動き、中も変わった")
 
     XCTAssertTrue(repo.git(["add", "sub"]).isSuccess)
     let staged = try tab.group.editor.openDiff(id("sub", .staged), as: .pinned)
