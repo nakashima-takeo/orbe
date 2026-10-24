@@ -124,6 +124,39 @@ extension AutomationStoreTests {
     XCTAssertEqual(reopened.automations.map(\.id), [fine])
   }
 
+  /// 読めない自動化の組めた定義は外の形で、壊れた値を元に戻せば元の定義として読める（AI が一覧の定義を直して
+  /// `set_automation` へ戻すため。この形は保存の読みとは別に組む）。
+  func testTheDefinitionOfAnUnreadableAutomationReadsBackOnceTheBrokenValueIsRestored() throws {
+    var definition = Self.definition("壊す")
+    definition.nodes[1].from = [
+      AutomationDefinition.Input(nodeKey: "fetch", maxAgeHours: 24)
+    ]
+    var store: AutomationStore? = AutomationStore()
+    let id = try XCTUnwrap(store?.create(definition, now: Self.at).id)
+    let fetch = try XCTUnwrap(store?.nodeId(id, "fetch"))
+    store = nil
+    let trigger = try XCTUnwrap(
+      try database().select(
+        "SELECT trigger FROM nodes WHERE id = ?", [.integer(Int64(fetch.rawValue))]
+      ) { $0.text(at: 0) }.first?.flatMap { $0 })
+    try database().run(
+      #"UPDATE nodes SET trigger = '{"kind": "daily"}' WHERE id = ?"#,
+      [.integer(Int64(fetch.rawValue))])
+
+    let aside = try XCTUnwrap(AutomationStore().unreadable.first)
+    var object = try XCTUnwrap(
+      try JSONSerialization.jsonObject(with: Data(aside.definition.utf8)) as? [String: Any])
+    var nodes = try XCTUnwrap(object["nodes"] as? [[String: Any]])
+    nodes[0]["trigger"] = try JSONSerialization.jsonObject(with: Data(trigger.utf8))
+    object["nodes"] = nodes
+
+    var expected = definition
+    for index in expected.nodes.indices {
+      expected.nodes[index].id = aside.nodeIds[index]
+    }
+    XCTAssertEqual(try AutomationDefinition.decode(object), expected)
+  }
+
   /// 判定の動作の定義を壊した、取得に決まりを外した印のある自動化（読めない自動化として開き直したストア）。
   private func unreadableWithABreach() throws -> (store: AutomationStore, id: Int) {
     var store: AutomationStore? = AutomationStore()
