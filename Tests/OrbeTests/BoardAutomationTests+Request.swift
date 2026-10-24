@@ -50,7 +50,7 @@ extension BoardAutomationTests {
     flush(window)
 
     let draft =
-      "自動化「\(target.name)」の部品「\(try XCTUnwrap(target.graph.node(nodeId)).entity.name)」の修正："
+      "自動化「\(target.name)」のノード「\(try XCTUnwrap(target.graph.node(nodeId)).entity.name)」の修正："
     XCTAssertEqual(automation.requestText, draft)
     XCTAssertEqual(automation.place, .request)
     XCTAssertEqual(asks(), [], "書き出すだけで頼まない")

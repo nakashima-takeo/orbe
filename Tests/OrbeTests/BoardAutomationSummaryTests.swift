@@ -97,7 +97,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
         automation, key: "backlog", text: text, running: false, next: nil, open: 0))
 
     XCTAssertEqual(
-      card.facts.first { $0.label == .boardPartTools }?.value.map(\.text),
+      card.facts.first { $0.label == .boardNodeTools }?.value.map(\.text),
       ["Gmail（MCP）・Backlog（MCP）・npm run test:unit コマンド"])
   }
 

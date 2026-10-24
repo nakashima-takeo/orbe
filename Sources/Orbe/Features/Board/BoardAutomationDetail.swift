@@ -210,7 +210,7 @@ struct BoardAutomationUnreadableDetail: View {
       Button {
         model.draftFixOfUnreadable(l10n: l10n)
       } label: {
-        Text(l10n.string(.boardPartAskFix))
+        Text(l10n.string(.boardNodeAskFix))
           .font(Font.theme.workspaceName)
           .foregroundStyle(Color.theme.textPrimary)
           .padding(.horizontal, 10)

@@ -52,7 +52,7 @@ final class AutomationTextTests: OrbeTestCase {
       #"終了コード 1 で終了（the node "dev" ended: exited 1: boom）"#)
     XCTAssertEqual(
       text.failure(failed(.reported("Slack に届かない"), ending: .exited(0)), node: Self.judge),
-      "部品が失敗を報告：Slack に届かない")
+      "ノードが失敗を報告：Slack に届かない")
     XCTAssertEqual(
       Self.automationText(.en).failure(
         failed(.ended(detail: ""), ending: .timeLimit), node: Self.judge),

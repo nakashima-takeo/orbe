@@ -58,17 +58,17 @@ extension BoardAutomationModel {
     switch selectedMapStop {
     case .notify:
       return [
-        BoardKeyHint("↑↓", .boardHintParts), BoardKeyHint("↵", .boardHintChangeNotify),
+        BoardKeyHint("↑↓", .boardHintNodes), BoardKeyHint("↵", .boardHintChangeNotify),
         BoardKeyHint("←", .automationHintToList),
       ]
     case .node:
       return [
-        BoardKeyHint("↑↓", .boardHintParts), hand(.flow(.node)),
+        BoardKeyHint("↑↓", .boardHintNodes), hand(.flow(.node)),
         BoardKeyHint("←", .automationHintToList),
       ]
     case nil:
       return [
-        BoardKeyHint("↑↓", .boardHintSelect), BoardKeyHint("↵", .boardHintSeeParts),
+        BoardKeyHint("↑↓", .boardHintSelect), BoardKeyHint("↵", .boardHintSeeNodes),
         hand(.flow(.ends)), hand(.togglePause), hand(.delete),
       ]
     }

@@ -121,7 +121,7 @@ extension DesignFlowSnapshotTests {
         ("up_notify", { automation.moveInMap(-1) }),
         ("notify_open", { automation.openNotify() }),
         ("notify_back", { automation.closeNotify() }),
-        ("down_part", { automation.moveInMap(1) }),
+        ("down_node", { automation.moveInMap(1) }),
         ("to_contact", { for _ in 0..<11 { automation.moveInMap(1) } }),
         ("end_stops", { automation.moveInMap(1) }),
         ("flow", { automation.perform(.flow(.node)) }),

@@ -14,7 +14,7 @@ struct BoardAutomationMapView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       BoardSectionHeader(title: .boardAutomationFlow) {
-        Text(l10n.plural(detail.nodeCount, one: .boardMapPartsOne, other: .boardMapPartsOther))
+        Text(l10n.plural(detail.nodeCount, one: .boardMapNodesOne, other: .boardMapNodesOther))
         Text(l10n.string(.boardPending))
           .frame(width: BoardMapRowView.pendingWidth, alignment: .trailing)
         Text(l10n.string(.boardMapLast))

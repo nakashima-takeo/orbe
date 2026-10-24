@@ -632,7 +632,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardAutomationEmpty
   case boardAutomationFlow
   case boardOutputTaskCandidates
-  case boardPartMethodCommand
+  case boardNodeMethodCommand
   case boardNotifyTitle
   case boardNotifyOff
   case boardNotifyMenuBar
@@ -642,8 +642,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardListLast
   case boardListNeverRan
   case boardRecentRuns
-  case boardMapPartsOne
-  case boardMapPartsOther
+  case boardMapNodesOne
+  case boardMapNodesOther
   case boardMapLast
   case boardMapOutput
   case boardMapProposed
@@ -654,40 +654,40 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardOutputMenuBar
   case boardOutputNotificationCenter
   case boardOutputBoard
-  case boardPartMethod
-  case boardPartTools
-  case boardPartTrigger
-  case boardPartSaving
-  case boardPartFrom
-  case boardPartDestination
+  case boardNodeMethod
+  case boardNodeTools
+  case boardNodeTrigger
+  case boardNodeSaving
+  case boardNodeFrom
+  case boardNodeDestination
   case boardPending
   case boardFresh
-  case boardPartTimeout
-  case boardPartDirectory
-  case boardPartNext
-  case boardPartAgent
-  case boardPartDefaultModel
-  case boardPartToolMCP
-  case boardPartToolCommand
-  case boardPartOverwrite
-  case boardPartAppend
-  case boardPartAppendSince
-  case boardPartTakeAll
-  case boardPartMaxAge
-  case boardPartTaskCandidates
-  case boardPartNothing
-  case boardPartCount
-  case boardPartNoLimit
-  case boardPartLimitItems
-  case boardPartMinutes
-  case boardPartFormatErrorOne
-  case boardPartFormatErrorOther
-  case boardPartBreachPassed
-  case boardPartBreachFailed
-  case boardPartLastReport
-  case boardPartLastReply
-  case boardPartHistory
-  case boardPartAskFix
+  case boardNodeTimeout
+  case boardNodeDirectory
+  case boardNodeNext
+  case boardNodeAgent
+  case boardNodeDefaultModel
+  case boardNodeToolMCP
+  case boardNodeToolCommand
+  case boardNodeOverwrite
+  case boardNodeAppend
+  case boardNodeAppendSince
+  case boardNodeTakeAll
+  case boardNodeMaxAge
+  case boardNodeTaskCandidates
+  case boardNodeNothing
+  case boardNodeCount
+  case boardNodeNoLimit
+  case boardNodeLimitItems
+  case boardNodeMinutes
+  case boardNodeFormatErrorOne
+  case boardNodeFormatErrorOther
+  case boardNodeBreachPassed
+  case boardNodeBreachFailed
+  case boardNodeLastReport
+  case boardNodeLastReply
+  case boardNodeHistory
+  case boardNodeAskFix
   case boardAskFixDraft
   case boardAskFixAutomationDraft
   case boardRunNothingNew
@@ -714,8 +714,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardHintSelect
   case boardHintChoose
   case boardHintBack
-  case boardHintParts
-  case boardHintSeeParts
+  case boardHintNodes
+  case boardHintSeeNodes
   case boardHintChangeNotify
   case boardAskHint
   case boardAskUnavailable

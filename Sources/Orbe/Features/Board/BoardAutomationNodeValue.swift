@@ -86,10 +86,10 @@ extension BoardAutomationNodeValue {
     let lines = record.run?.breach ?? AutomationRejections()
     return Breach(
       heading: l10n.format(
-        lines.count == 1 ? .boardPartFormatErrorOne : .boardPartFormatErrorOther,
+        lines.count == 1 ? .boardNodeFormatErrorOne : .boardNodeFormatErrorOther,
         text.recent(record.startedAt), lines.count),
       lines: lines.lines.map(text.line),
-      outcome: l10n.string(record.failed ? .boardPartBreachFailed : .boardPartBreachPassed))
+      outcome: l10n.string(record.failed ? .boardNodeBreachFailed : .boardNodeBreachPassed))
   }
 
   /// 前回の報告（報告の部品）か応答（作業の部品）。文を残した最新の回から。
@@ -97,9 +97,9 @@ extension BoardAutomationNodeValue {
     for run in runs.compactMap(\.run) {
       switch run.result {
       case .report(let report?):
-        return LastText(title: .boardPartLastReport, at: text.recent(run.startedAt), text: report)
+        return LastText(title: .boardNodeLastReport, at: text.recent(run.startedAt), text: report)
       case .work(let reply?, nil):
-        return LastText(title: .boardPartLastReply, at: text.recent(run.startedAt), text: reply)
+        return LastText(title: .boardNodeLastReply, at: text.recent(run.startedAt), text: reply)
       default: continue
       }
     }
@@ -124,40 +124,40 @@ extension BoardAutomationNodeValue {
     switch action.method {
     case .agent(let agent):
       fact(
-        .boardPartMethod,
-        l10n.format(.boardPartAgent, agent.cli, node.model ?? l10n.string(.boardPartDefaultModel)))
+        .boardNodeMethod,
+        l10n.format(.boardNodeAgent, agent.cli, node.model ?? l10n.string(.boardNodeDefaultModel)))
       if !agent.tools.isEmpty {
-        fact(.boardPartTools, tools(agent.tools, l10n).joined(separator: separator))
+        fact(.boardNodeTools, tools(agent.tools, l10n).joined(separator: separator))
       }
     case .command:
-      fact(.boardPartMethod, l10n.string(.boardPartMethodCommand))
+      fact(.boardNodeMethod, l10n.string(.boardNodeMethodCommand))
     }
-    fact(.boardPartTrigger, text.schedule(entity.trigger))
+    fact(.boardNodeTrigger, text.schedule(entity.trigger))
     if let coverage = node.coverage {
-      fact(.boardPartSaving, self.coverage(coverage, of: node, state, text))
+      fact(.boardNodeSaving, self.coverage(coverage, of: node, state, text))
     }
     if !node.inputs.isEmpty {
       fact(
-        .boardPartFrom,
+        .boardNodeFrom,
         node.inputs.map { input(graph, $0, l10n) }.joined(separator: separator), incoming: true)
     }
     switch action.destination {
     case .nextNode: break
-    case .taskCandidates: fact(.boardPartDestination, l10n.format(.boardPartTaskCandidates, open))
+    case .taskCandidates: fact(.boardNodeDestination, l10n.format(.boardNodeTaskCandidates, open))
     case .report:
-      fact(.boardPartDestination, BoardAutomationDetailValue.reports(automation.notify, l10n))
-    case .sideEffect: fact(.boardPartDestination, l10n.string(.boardPartNothing))
+      fact(.boardNodeDestination, BoardAutomationDetailValue.reports(automation.notify, l10n))
+    case .sideEffect: fact(.boardNodeDestination, l10n.string(.boardNodeNothing))
     }
     if !node.inputs.isEmpty {
       facts.append(pending(state.pending, maxItems: entity.maxItems, l10n))
     }
-    fact(.boardPartTimeout, l10n.format(.boardPartMinutes, node.timeoutMinutes))
+    fact(.boardNodeTimeout, l10n.format(.boardNodeMinutes, node.timeoutMinutes))
     if case .command(let command) = action.method, let directory = command.directory {
-      fact(.boardPartDirectory, directory)
+      fact(.boardNodeDirectory, directory)
     }
     if case .scheduled = entity.trigger {
       fact(
-        .boardPartNext,
+        .boardNodeNext,
         automation.paused ? l10n.string(.automationPaused) : next.map(text.stamp) ?? "")
     }
     return facts
@@ -173,12 +173,12 @@ extension BoardAutomationNodeValue {
   private static func tool(text rule: String, _ l10n: LocalizationStore) -> String {
     if rule.hasPrefix("mcp__") {
       let name = server(rule.dropFirst(5).components(separatedBy: "__")[0])
-      return l10n.format(.boardPartToolMCP, name.prefix(1).uppercased() + name.dropFirst())
+      return l10n.format(.boardNodeToolMCP, name.prefix(1).uppercased() + name.dropFirst())
     }
     if rule.hasPrefix("Bash("), rule.hasSuffix(")") {
       let body = rule.dropFirst(5).dropLast()
       let command = body.hasSuffix(":*") ? body.dropLast(2) : body
-      return l10n.format(.boardPartToolCommand, command.trimmingCharacters(in: .whitespaces))
+      return l10n.format(.boardNodeToolCommand, command.trimmingCharacters(in: .whitespaces))
     }
     return rule
   }
@@ -201,8 +201,8 @@ extension BoardAutomationNodeValue {
   ) -> String {
     let name = graph.node(edge.from)?.entity.name ?? "\(edge.from)"
     let notes =
-      (edge.take == .all ? [l10n.string(.boardPartTakeAll)] : [])
-      + (edge.maxAgeHours.map { [l10n.format(.boardPartMaxAge, $0)] } ?? [])
+      (edge.take == .all ? [l10n.string(.boardNodeTakeAll)] : [])
+      + (edge.maxAgeHours.map { [l10n.format(.boardNodeMaxAge, $0)] } ?? [])
     guard !notes.isEmpty else { return name }
     return l10n.format(
       .automationWithOriginal, name,
@@ -217,12 +217,12 @@ extension BoardAutomationNodeValue {
   ) -> String {
     let l10n = text.l10n
     switch coverage {
-    case .currentSet: return l10n.string(.boardPartOverwrite)
+    case .currentSet: return l10n.string(.boardNodeOverwrite)
     case .newArrivals:
       guard node.role == .fetch, let since = state.succeededAt else {
-        return l10n.string(.boardPartAppend)
+        return l10n.string(.boardNodeAppend)
       }
-      return l10n.format(.boardPartAppendSince, text.recent(since))
+      return l10n.format(.boardNodeAppendSince, text.recent(since))
     }
   }
 
@@ -234,7 +234,7 @@ extension BoardAutomationNodeValue {
       label: .boardPending, incoming: false,
       value: [
         Segment(
-          text: l10n.format(.boardPartCount, pending.count),
+          text: l10n.format(.boardNodeCount, pending.count),
           look: pending.count > 0 ? .emphasized : .muted),
         Segment(text: "\u{3000}" + limit(maxItems, l10n), look: .muted),
       ])
@@ -242,6 +242,6 @@ extension BoardAutomationNodeValue {
 
   /// 1 回に取る件数の上限（「上限 30 件（超過分は古い順に破棄）」「上限なし」）。古さの上限は入力ごとに入力元へ添える。
   private static func limit(_ maxItems: Int?, _ l10n: LocalizationStore) -> String {
-    maxItems.map { l10n.format(.boardPartLimitItems, $0) } ?? l10n.string(.boardPartNoLimit)
+    maxItems.map { l10n.format(.boardNodeLimitItems, $0) } ?? l10n.string(.boardNodeNoLimit)
   }
 }

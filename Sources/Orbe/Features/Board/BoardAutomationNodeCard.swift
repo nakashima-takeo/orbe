@@ -125,7 +125,7 @@ struct BoardAutomationNodeCard: View {
 
   private var history: some View {
     VStack(alignment: .leading, spacing: 0) {
-      BoardSectionHeader(title: .boardPartHistory, below: Theme.Space.tick) { EmptyView() }
+      BoardSectionHeader(title: .boardNodeHistory, below: Theme.Space.tick) { EmptyView() }
       if card.runs.isEmpty {
         Text(l10n.string(.boardListNeverRan))
           .font(Font.theme.codeSmall)
@@ -179,7 +179,7 @@ struct BoardAutomationNodeCard: View {
       {
         model.perform(operation)
       }
-      button(key: nil, title: l10n.string(.boardPartAskFix), primary: false) {
+      button(key: nil, title: l10n.string(.boardNodeAskFix), primary: false) {
         model.draftFix(of: card.id, l10n: l10n)
       }
     }
