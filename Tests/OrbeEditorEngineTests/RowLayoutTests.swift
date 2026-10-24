@@ -54,14 +54,14 @@ final class RowLayoutTests: XCTestCase {
     XCTAssertEqual(rows.blocks(from: 2 * 18 + 36, to: rows.y(ofLine: 5)), 1..<2)
   }
 
-  /// 位置の上端に面を置いて読み直すと同じ位置に戻る——行高の整数倍でない区画の頭とその下の行でも、表示の単位から y への
-  /// 丸めで上の行に化けない（化けると、面を作り直すたびに見えている位置が 1 行ずつ上へずれる）。
+  /// 位置の上端に面を置いて読み直すと同じ位置に戻る——最終行の後の塊の中でも、行高の整数倍でない区画の頭とその下の行で
+  /// 表示の単位から y へ丸めても（化けると、面を作り直すたびに見えている位置が上へずれる）。
   func testAPositionSurvivesTheRoundTripThroughY() {
     let rows = layout()
     let positions =
       [
         RowPosition(line: 2, offset: -2), RowPosition(line: 5, offset: -2),
-        .init(line: 5, offset: -1),
+        .init(line: 5, offset: -1), .init(line: 10, offset: -1),
       ]
       + (0..<10).map { RowPosition(line: $0) }
     for position in positions {
