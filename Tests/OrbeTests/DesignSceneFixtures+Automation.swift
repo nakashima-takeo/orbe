@@ -80,9 +80,9 @@ extension DesignSceneFixtures {
       try db.exec(
         """
         UPDATE action_defs SET action = '{"instruction": 1}'
-        WHERE id = (SELECT def_id FROM parts WHERE automation_id = 2 AND key = 'judge');
+        WHERE id = (SELECT def_id FROM nodes WHERE automation_id = 2 AND key = 'judge');
         UPDATE runs SET record = '{}' WHERE id = (
-          SELECT max(r.id) FROM runs r JOIN parts p ON p.id = r.part_id
+          SELECT max(r.id) FROM runs r JOIN nodes p ON p.id = r.node_id
           WHERE p.automation_id = 1 AND p.key = 'fetch' AND r.failure IS NULL)
         """)
     }

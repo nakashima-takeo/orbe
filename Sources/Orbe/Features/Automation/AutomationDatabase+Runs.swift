@@ -10,7 +10,7 @@ extension AutomationDatabase {
   ) throws -> Int {
     try db.run(
       """
-      INSERT INTO runs (part_id, def_id, started_at, ended_at, trigger, failure, record)
+      INSERT INTO runs (node_id, def_id, started_at, ended_at, trigger, failure, record)
       VALUES (?, ?, ?, ?, ?, ?, ?)
       """,
       [
@@ -28,14 +28,14 @@ extension AutomationDatabase {
   {
     let list = nodeIds.map { String($0.rawValue) }.joined(separator: ",")
     return try selectRecords(
-      "WHERE r.part_id IN (\(list)) AND r.id < ? ORDER BY r.id DESC LIMIT ?",
+      "WHERE r.node_id IN (\(list)) AND r.id < ? ORDER BY r.id DESC LIMIT ?",
       [.integer(Int64(before ?? Int.max)), .integer(Int64(limit))])
   }
 
   /// 最新の成功した回の開始時刻。
   func succeededAt(of nodeId: AutomationNodeID) throws -> Date? {
     try db.select(
-      "SELECT started_at FROM runs WHERE part_id = ? AND failure IS NULL ORDER BY id DESC LIMIT 1",
+      "SELECT started_at FROM runs WHERE node_id = ? AND failure IS NULL ORDER BY id DESC LIMIT 1",
       [.integer(Int64(nodeId.rawValue))]
     ) { AutomationPersistence.date($0.int64(at: 0)) }.first
   }
@@ -43,7 +43,7 @@ extension AutomationDatabase {
   /// 外した印の回の記録。
   func breachRecord(of nodeId: AutomationNodeID) throws -> AutomationRunRecord? {
     try selectRecords(
-      "WHERE r.id = (SELECT breach_run_id FROM parts WHERE id = ?)",
+      "WHERE r.id = (SELECT breach_run_id FROM nodes WHERE id = ?)",
       [.integer(Int64(nodeId.rawValue))]
     ).first?.record
   }
@@ -55,7 +55,7 @@ extension AutomationDatabase {
     let rows = try db.select(
       """
       SELECT r.id, p.key, r.started_at, r.ended_at, r.trigger, r.failure, r.record
-      FROM runs r JOIN parts p ON p.id = r.part_id \(clause)
+      FROM runs r JOIN nodes p ON p.id = r.node_id \(clause)
       """, values
     ) { s in
       (

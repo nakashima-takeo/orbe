@@ -78,11 +78,11 @@ extension AutomationDatabase {
       ? """
       SELECT i.id, i.seq, i.written_id, i.source_item_id, i.source_event_id, v.body
       FROM items i JOIN item_versions v ON v.id = \(Self.currentVersion(of: "i.id"))
-      WHERE i.part_id = ? ORDER BY i.seq DESC LIMIT ?
+      WHERE i.node_id = ? ORDER BY i.seq DESC LIMIT ?
       """
       : """
       SELECT id, seq, written_id, source_item_id, source_event_id, body FROM events
-      WHERE part_id = ? ORDER BY seq DESC LIMIT ?
+      WHERE node_id = ? ORDER BY seq DESC LIMIT ?
       """
     let rows = try db.select(sql, values) { s in
       let id = Self.downstreamId(
@@ -113,15 +113,15 @@ extension AutomationDatabase {
       ? (
         "last_item_seq",
         """
-        SELECT seq FROM items WHERE part_id = ?1
-        UNION ALL SELECT valid_to_seq FROM items WHERE part_id = ?1
+        SELECT seq FROM items WHERE node_id = ?1
+        UNION ALL SELECT valid_to_seq FROM items WHERE node_id = ?1
         UNION ALL SELECT v.seq FROM item_versions v JOIN items i ON i.id = v.item_id
-          WHERE i.part_id = ?1
+          WHERE i.node_id = ?1
         """
       )
-      : ("last_event_seq", "SELECT seq FROM events WHERE part_id = ?1")
+      : ("last_event_seq", "SELECT seq FROM events WHERE node_id = ?1")
     try db.run(
-      "UPDATE parts SET \(column) = coalesce((SELECT max(seq) FROM (\(recorded))), 0) WHERE id = ?1",
+      "UPDATE nodes SET \(column) = coalesce((SELECT max(seq) FROM (\(recorded))), 0) WHERE id = ?1",
       [.integer(Int64(nodeId.rawValue))])
   }
 
@@ -129,7 +129,7 @@ extension AutomationDatabase {
   fileprivate func invalidateLiveItem(of nodeId: AutomationNodeID, written: String, at: Date) throws
   {
     for item in try db.select(
-      "SELECT id FROM items WHERE part_id = ? AND written_id = ? AND valid_to IS NULL",
+      "SELECT id FROM items WHERE node_id = ? AND written_id = ? AND valid_to IS NULL",
       [.integer(Int64(nodeId.rawValue)), .text(written)], { $0.int(at: 0) })
     {
       try invalidate(item: item, of: nodeId, at: at)

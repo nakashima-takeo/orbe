@@ -22,8 +22,8 @@ extension AutomationDatabase {
     Dictionary(
       uniqueKeysWithValues: try db.select(
         """
-        SELECT e.from_part_id, e.read_item_seq, e.read_event_seq, p.last_item_seq, p.last_event_seq
-        FROM part_edges e JOIN parts p ON p.id = e.from_part_id WHERE e.to_part_id = ?
+        SELECT e.from_node_id, e.read_item_seq, e.read_event_seq, p.last_item_seq, p.last_event_seq
+        FROM node_edges e JOIN nodes p ON p.id = e.from_node_id WHERE e.to_node_id = ?
         """, [.integer(Int64(receiver.rawValue))]
       ) { s in
         (
@@ -46,7 +46,7 @@ extension AutomationDatabase {
       """
       SELECT i.id, i.seq, i.written_id, i.valid_from, i.source_item_id, i.source_event_id, v.id, v.body
       FROM items i JOIN item_versions v ON v.id = \(Self.currentVersion(of: "i.id"))
-      WHERE i.part_id = ? AND i.valid_to IS NULL AND i.seq > ? AND i.seq <= ? ORDER BY i.seq
+      WHERE i.node_id = ? AND i.valid_to IS NULL AND i.seq > ? AND i.seq <= ? ORDER BY i.seq
       """,
       [p, .integer(Int64(all ? 0 : reading.read.item)), .integer(Int64(reading.ceiling.item))]
     ) { s in
@@ -59,7 +59,7 @@ extension AutomationDatabase {
     let events = try db.select(
       """
       SELECT id, seq, written_id, created_at, source_item_id, source_event_id, body FROM events
-      WHERE part_id = ? AND created_at >= ? AND seq > ? AND seq <= ? ORDER BY seq
+      WHERE node_id = ? AND created_at >= ? AND seq > ? AND seq <= ? ORDER BY seq
       """,
       [
         p, Self.cutoff(now), .integer(Int64(all ? 0 : reading.read.event)),
@@ -115,12 +115,12 @@ extension AutomationDatabase {
       switch current {
       case .item(let id):
         next = try db.select(
-          "SELECT part_id, source_item_id, source_event_id FROM items WHERE id = ?",
+          "SELECT node_id, source_item_id, source_event_id FROM items WHERE id = ?",
           [.integer(Int64(id))]
         ) { (nodeId: $0.int(at: 0), source: Self.source($0, item: 1, event: 2)) }
       case .event(let id):
         next = try db.select(
-          "SELECT part_id, source_item_id, source_event_id FROM events WHERE id = ?",
+          "SELECT node_id, source_item_id, source_event_id FROM events WHERE id = ?",
           [.integer(Int64(id))]
         ) { (nodeId: $0.int(at: 0), source: Self.source($0, item: 1, event: 2)) }
       }
@@ -161,7 +161,7 @@ extension AutomationDatabase {
     guard to > from else { return 0 }
     let alive =
       try db.select(
-        "SELECT count(*) FROM events WHERE part_id = ? AND seq > ? AND seq <= ? AND created_at >= ?",
+        "SELECT count(*) FROM events WHERE node_id = ? AND seq > ? AND seq <= ? AND created_at >= ?",
         [
           .integer(Int64(up.rawValue)), .integer(Int64(from)), .integer(Int64(to)),
           Self.cutoff(now),
@@ -175,7 +175,7 @@ extension AutomationDatabase {
     for reach in reach {
       let column = reach.table == .item ? "read_item_seq" : "read_event_seq"
       try db.run(
-        "UPDATE part_edges SET \(column) = max(\(column), ?) WHERE to_part_id = ? AND from_part_id = ?",
+        "UPDATE node_edges SET \(column) = max(\(column), ?) WHERE to_node_id = ? AND from_node_id = ?",
         [
           .integer(Int64(reach.seq)), .integer(Int64(receiver.rawValue)),
           .integer(Int64(reach.from.rawValue)),

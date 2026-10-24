@@ -99,7 +99,7 @@ extension AutomationStoreTests {
     store = nil
 
     for table in [
-      "automations", "parts", "part_edges", "part_defs", "action_defs", "items", "item_versions",
+      "automations", "nodes", "node_edges", "node_defs", "action_defs", "items", "item_versions",
       "events", "runs", "proposals", "held_proposals", "settlements",
     ] {
       XCTAssertEqual(try count(table), 0, table)

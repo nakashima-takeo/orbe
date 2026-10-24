@@ -65,9 +65,9 @@ extension AutomationStoreTests {
     store = nil
     try database().exec(
       """
-      INSERT INTO part_defs (kind) VALUES ('composite');
+      INSERT INTO node_defs (kind) VALUES ('composite');
       INSERT INTO composite_defs (id) VALUES (last_insert_rowid());
-      UPDATE parts SET def_id = (SELECT max(id) FROM composite_defs) WHERE id = \(judge.rawValue);
+      UPDATE nodes SET def_id = (SELECT max(id) FROM composite_defs) WHERE id = \(judge.rawValue);
       """)
 
     let reopened = AutomationStore()
@@ -92,7 +92,7 @@ extension AutomationStoreTests {
     try database().run(
       """
       UPDATE action_defs SET action = '{"instruction": 1}'
-      WHERE id = (SELECT def_id FROM parts WHERE id = ?)
+      WHERE id = (SELECT def_id FROM nodes WHERE id = ?)
       """, [.integer(Int64(judge.rawValue))])
 
     let reopened = AutomationStore()
@@ -134,7 +134,7 @@ extension AutomationStoreTests {
     try database().run(
       """
       UPDATE action_defs SET action = '{"instruction": 1}'
-      WHERE id = (SELECT def_id FROM parts WHERE id = ?)
+      WHERE id = (SELECT def_id FROM nodes WHERE id = ?)
       """, [.integer(Int64(judge.rawValue))])
     return (AutomationStore(), id)
   }

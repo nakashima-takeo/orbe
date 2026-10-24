@@ -66,7 +66,7 @@ extension AutomationRunnerTests {
     XCTAssertEqual(
       try store.read {
         try $0.db.select(
-          "SELECT def_id FROM runs WHERE part_id = ?", [.integer(Int64(nodeId.rawValue))]
+          "SELECT def_id FROM runs WHERE node_id = ?", [.integer(Int64(nodeId.rawValue))]
         ) { AutomationNodeDefID($0.int(at: 0)) }
       }, [first], "回の記録は始めたときの定義を指す")
     XCTAssertEqual(try store.lastSeqs(id, "gh").event, 1)

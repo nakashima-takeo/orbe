@@ -42,7 +42,7 @@ extension AutomationDatabase {
         """
         SELECT i.written_id, i.id, i.source_item_id, i.source_event_id, v.body
         FROM items i JOIN item_versions v ON v.id = \(Self.currentVersion(of: "i.id"))
-        WHERE i.part_id = ? AND i.valid_to IS NULL
+        WHERE i.node_id = ? AND i.valid_to IS NULL
         """, [.integer(p)]
       ) { s in
         (
@@ -81,7 +81,7 @@ extension AutomationDatabase {
     for output in outputs {
       let seen = try db.select(
         """
-        SELECT 1 FROM events WHERE part_id = ? AND written_id = ? AND created_at >= ? LIMIT 1
+        SELECT 1 FROM events WHERE node_id = ? AND written_id = ? AND created_at >= ? LIMIT 1
         """, [.integer(p), .text(output.id), Self.cutoff(at)]
       ) { _ in true }
       if !seen.isEmpty {
@@ -99,7 +99,7 @@ extension AutomationDatabase {
     let seq = try nextSeq(of: nodeId, "last_item_seq")
     try db.run(
       """
-      INSERT INTO items (part_id, seq, written_id, source_item_id, source_event_id, valid_from)
+      INSERT INTO items (node_id, seq, written_id, source_item_id, source_event_id, valid_from)
       VALUES (?, ?, ?, ?, ?, ?)
       """,
       [.integer(Int64(nodeId.rawValue)), .integer(seq), .text(output.id)]
@@ -118,7 +118,7 @@ extension AutomationDatabase {
     let seq = try nextSeq(of: nodeId, "last_event_seq")
     try db.run(
       """
-      INSERT INTO events (part_id, seq, created_at, written_id, body, source_item_id,
+      INSERT INTO events (node_id, seq, created_at, written_id, body, source_item_id,
         source_event_id)
       VALUES (?, ?, ?, ?, ?, ?, ?)
       """,
@@ -131,7 +131,7 @@ extension AutomationDatabase {
   /// 部品の今有効な項目をすべて無効にし、無効にした項目を返す（性質の書き換え・部品を外す）。
   func invalidateItems(of nodeId: AutomationNodeID, at: Date) throws -> [Int] {
     let ids = try db.select(
-      "SELECT id FROM items WHERE part_id = ? AND valid_to IS NULL",
+      "SELECT id FROM items WHERE node_id = ? AND valid_to IS NULL",
       [.integer(Int64(nodeId.rawValue))]
     ) { $0.int(at: 0) }
     for id in ids { try invalidate(item: id, of: nodeId, at: at) }
@@ -148,15 +148,15 @@ extension AutomationDatabase {
 
   private func nextSeq(of nodeId: AutomationNodeID, _ column: String) throws -> Int64 {
     let p: SQLiteValue = .integer(Int64(nodeId.rawValue))
-    try db.run("UPDATE parts SET \(column) = \(column) + 1 WHERE id = ?", [p])
-    return try db.select("SELECT \(column) FROM parts WHERE id = ?", [p]) { $0.int64(at: 0) }
+    try db.run("UPDATE nodes SET \(column) = \(column) + 1 WHERE id = ?", [p])
+    return try db.select("SELECT \(column) FROM nodes WHERE id = ?", [p]) { $0.int64(at: 0) }
       .first ?? 0
   }
 
   /// 部品が項目の表（変化の番号）・出来事の表にそれぞれ最後に振った通し番号。
   func lastSeqs(of nodeId: AutomationNodeID) throws -> AutomationSeqs {
     try db.select(
-      "SELECT last_item_seq, last_event_seq FROM parts WHERE id = ?",
+      "SELECT last_item_seq, last_event_seq FROM nodes WHERE id = ?",
       [.integer(Int64(nodeId.rawValue))]
     ) { AutomationSeqs(item: $0.int(at: 0), event: $0.int(at: 1)) }.first ?? AutomationSeqs()
   }
@@ -167,7 +167,7 @@ extension AutomationDatabase {
       try db.select(
         """
         SELECT v.link FROM items i JOIN item_versions v ON v.id = \(Self.currentVersion(of: "i.id"))
-        WHERE i.part_id = ? AND i.valid_to IS NULL AND v.link IS NOT NULL
+        WHERE i.node_id = ? AND i.valid_to IS NULL AND v.link IS NOT NULL
         """, [.integer(Int64(nodeId.rawValue))]
       ) { $0.text(at: 0) ?? "" })
   }

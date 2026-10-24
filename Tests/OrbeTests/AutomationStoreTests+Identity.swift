@@ -94,7 +94,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(
       try store.read {
         try $0.db.select(
-          "SELECT def_id FROM runs WHERE part_id = ? ORDER BY id DESC",
+          "SELECT def_id FROM runs WHERE node_id = ? ORDER BY id DESC",
           [.integer(Int64(judge.rawValue))]
         ) { AutomationNodeDefID($0.int(at: 0)) }
       }, [second, first])
@@ -156,7 +156,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(
       try store.read {
         try $0.db.select(
-          "SELECT key FROM parts WHERE automation_id = ? AND removed_at IS NULL ORDER BY position",
+          "SELECT key FROM nodes WHERE automation_id = ? AND removed_at IS NULL ORDER BY position",
           [.integer(Int64(id))]
         ) { $0.text(at: 0) ?? "" }
       }, ["fetch", "gh", "send"])

@@ -2,7 +2,7 @@ import Foundation
 
 /// 自動化の DB の読み書き。書く手はどれもトランザクションの中で呼ぶ（`transaction`）。
 ///
-/// 部品の定義（`part_defs` 以下）は書き換えずに足し、自動化・部品・つながりの行は書き換える。出す側のデータは性質ごとに、
+/// 部品の定義（`node_defs` 以下）は書き換えずに足し、自動化・部品・つながりの行は書き換える。出す側のデータは性質ごとに、
 /// 今の集合（`items`・`item_versions`）と出来事の流れ（`events`）に分け、受け手はつながりに読んだ位置を持つ。参照は外部キーで
 /// 守り、指されなくなった行はトランザクションの最後の掃除が消す（`AutomationDatabase+Retention`）。
 final class AutomationDatabase {
@@ -68,7 +68,7 @@ final class AutomationDatabase {
 
   /// 動作の定義を足して ID を返す。
   func insert(action: AutomationActionDef) throws -> AutomationNodeDefID {
-    try db.run("INSERT INTO part_defs (kind) VALUES ('action')", [])
+    try db.run("INSERT INTO node_defs (kind) VALUES ('action')", [])
     let id = db.lastInsertRowID
     try db.run(
       "INSERT INTO action_defs (id, action) VALUES (?, ?)",
@@ -85,7 +85,7 @@ final class AutomationDatabase {
   ) throws -> AutomationNodeID {
     try db.run(
       """
-      INSERT INTO parts (automation_id, position, key, name, trigger, max_items, def_id, added_at)
+      INSERT INTO nodes (automation_id, position, key, name, trigger, max_items, def_id, added_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       """,
       [
@@ -102,7 +102,7 @@ final class AutomationDatabase {
   func setAsidePlaces(of automation: Int) throws {
     try db.run(
       """
-      UPDATE parts SET position = -id, key = char(0) || id
+      UPDATE nodes SET position = -id, key = char(0) || id
       WHERE automation_id = ? AND removed_at IS NULL
       """, [.integer(Int64(automation))])
   }
@@ -113,7 +113,7 @@ final class AutomationDatabase {
   ) throws {
     try db.run(
       """
-      UPDATE parts SET position = ?, key = ?, name = ?, trigger = ?, max_items = ?, def_id = ?
+      UPDATE nodes SET position = ?, key = ?, name = ?, trigger = ?, max_items = ?, def_id = ?
       WHERE id = ?
       """,
       [
@@ -129,9 +129,9 @@ final class AutomationDatabase {
   func removeNode(_ id: AutomationNodeID, at: Date) throws -> [Int] {
     let nodeId: [SQLiteValue] = [.integer(Int64(id.rawValue))]
     let invalidated = try invalidateItems(of: id, at: at)
-    try db.run("DELETE FROM part_edges WHERE from_part_id = ?1 OR to_part_id = ?1", nodeId)
+    try db.run("DELETE FROM node_edges WHERE from_node_id = ?1 OR to_node_id = ?1", nodeId)
     try db.run(
-      "UPDATE parts SET removed_at = ?, breach_run_id = NULL, pending_drops = '{}' WHERE id = ?",
+      "UPDATE nodes SET removed_at = ?, breach_run_id = NULL, pending_drops = '{}' WHERE id = ?",
       [Self.instant(at)] + nodeId)
     return invalidated
   }
@@ -139,7 +139,7 @@ final class AutomationDatabase {
   /// 外した印の回。
   func setBreach(_ id: AutomationNodeID, run: Int?) throws {
     try db.run(
-      "UPDATE parts SET breach_run_id = ? WHERE id = ?",
+      "UPDATE nodes SET breach_run_id = ? WHERE id = ?",
       [run.map { .integer(Int64($0)) } ?? .null, .integer(Int64(id.rawValue))])
   }
 
@@ -148,7 +148,7 @@ final class AutomationDatabase {
   func pendingDrops(of id: AutomationNodeID) throws -> AutomationDrops {
     let raw =
       try db.select(
-        "SELECT pending_drops FROM parts WHERE id = ?", [.integer(Int64(id.rawValue))]
+        "SELECT pending_drops FROM nodes WHERE id = ?", [.integer(Int64(id.rawValue))]
       ) { $0.text(at: 0) }.first ?? nil
     guard let drops = Self.decode(AutomationDrops.self, raw) else {
       NSLog("[automation] dropped unreadable carried counts of part \(id)")
@@ -159,7 +159,7 @@ final class AutomationDatabase {
 
   func setPendingDrops(_ id: AutomationNodeID, _ drops: AutomationDrops) throws {
     try db.run(
-      "UPDATE parts SET pending_drops = ? WHERE id = ?",
+      "UPDATE nodes SET pending_drops = ? WHERE id = ?",
       [.text(try Self.encode(drops)), .integer(Int64(id.rawValue))])
   }
 
@@ -169,7 +169,7 @@ final class AutomationDatabase {
     let nodeId: [SQLiteValue] = [.integer(Int64(id.rawValue))]
     guard
       let addedAt = try db.select(
-        "SELECT added_at FROM parts WHERE id = ?", nodeId, { $0.int64(at: 0) }
+        "SELECT added_at FROM nodes WHERE id = ?", nodeId, { $0.int64(at: 0) }
       )
       .first
     else {
@@ -193,20 +193,20 @@ final class AutomationDatabase {
     let to = Int64(receiver.rawValue)
     let kept = Dictionary(
       uniqueKeysWithValues: try db.select(
-        "SELECT from_part_id, read_item_seq, read_event_seq FROM part_edges WHERE to_part_id = ?",
+        "SELECT from_node_id, read_item_seq, read_event_seq FROM node_edges WHERE to_node_id = ?",
         [.integer(to)]
       ) { ($0.int(at: 0), ($0.int64(at: 1), $0.int64(at: 2))) })
-    try db.run("DELETE FROM part_edges WHERE to_part_id = ?", [.integer(to)])
+    try db.run("DELETE FROM node_edges WHERE to_node_id = ?", [.integer(to)])
     for (position, edge) in inputs.enumerated() {
       let from = Int64(edge.from.rawValue)
       let start =
         try db.select(
-          "SELECT last_event_seq FROM parts WHERE id = ?", [.integer(from)]
+          "SELECT last_event_seq FROM nodes WHERE id = ?", [.integer(from)]
         ) { $0.int64(at: 0) }.first ?? 0
       let read = kept[edge.from.rawValue] ?? (0, start)
       try db.run(
         """
-        INSERT INTO part_edges (automation_id, from_part_id, to_part_id, position, take,
+        INSERT INTO node_edges (automation_id, from_node_id, to_node_id, position, take,
           max_age_hours, read_item_seq, read_event_seq)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
@@ -259,7 +259,7 @@ extension AutomationDatabase {
   func nodeKeys(of automation: Int) throws -> [AutomationNodeID: String] {
     Dictionary(
       uniqueKeysWithValues: try db.select(
-        "SELECT id, key FROM parts WHERE automation_id = ? AND removed_at IS NULL",
+        "SELECT id, key FROM nodes WHERE automation_id = ? AND removed_at IS NULL",
         [.integer(Int64(automation))]
       ) { (AutomationNodeID($0.int(at: 0)), $0.text(at: 1) ?? "") })
   }

@@ -40,9 +40,9 @@ extension AutomationDatabase {
       DELETE FROM settlements WHERE proposal_id IN (
         SELECT proposal_id FROM (
           SELECT s.proposal_id, p.removed_at, ROW_NUMBER() OVER (
-            PARTITION BY r.part_id ORDER BY s.decided_at DESC, s.proposal_id DESC) AS n
+            PARTITION BY r.node_id ORDER BY s.decided_at DESC, s.proposal_id DESC) AS n
           FROM settlements s JOIN proposals q ON q.id = s.proposal_id JOIN runs r ON r.id = q.run_id
-            JOIN parts p ON p.id = r.part_id)
+            JOIN nodes p ON p.id = r.node_id)
         WHERE (n > ?1 OR removed_at IS NOT NULL)
           AND proposal_id NOT IN (SELECT proposal_id FROM held_proposals))
       """, [.integer(keep)])
@@ -58,14 +58,14 @@ extension AutomationDatabase {
       """
       DELETE FROM runs WHERE id IN (
         SELECT id FROM (
-          SELECT r.id, p.removed_at, ROW_NUMBER() OVER (PARTITION BY r.part_id ORDER BY r.id DESC) AS n
-          FROM runs r JOIN parts p ON p.id = r.part_id)
+          SELECT r.id, p.removed_at, ROW_NUMBER() OVER (PARTITION BY r.node_id ORDER BY r.id DESC) AS n
+          FROM runs r JOIN nodes p ON p.id = r.node_id)
         WHERE (n > ?1 OR removed_at IS NOT NULL)
-          AND id NOT IN (SELECT breach_run_id FROM parts WHERE breach_run_id IS NOT NULL)
+          AND id NOT IN (SELECT breach_run_id FROM nodes WHERE breach_run_id IS NOT NULL)
           AND id NOT IN (SELECT run_id FROM proposals)
           AND id NOT IN (
-            SELECT max(r.id) FROM runs r JOIN parts p ON p.id = r.part_id
-            WHERE r.failure IS NULL AND p.removed_at IS NULL GROUP BY r.part_id))
+            SELECT max(r.id) FROM runs r JOIN nodes p ON p.id = r.node_id
+            WHERE r.failure IS NULL AND p.removed_at IS NULL GROUP BY r.node_id))
       """, [.integer(keep)])
   }
 
@@ -86,23 +86,23 @@ extension AutomationDatabase {
   private func sweepLedger(held heldDefs: String) throws {
     try db.run(
       """
-      DELETE FROM parts WHERE removed_at IS NOT NULL
-        AND NOT EXISTS (SELECT 1 FROM runs WHERE part_id = parts.id)
-        AND NOT EXISTS (SELECT 1 FROM items WHERE part_id = parts.id)
-        AND NOT EXISTS (SELECT 1 FROM events WHERE part_id = parts.id)
+      DELETE FROM nodes WHERE removed_at IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM runs WHERE node_id = nodes.id)
+        AND NOT EXISTS (SELECT 1 FROM items WHERE node_id = nodes.id)
+        AND NOT EXISTS (SELECT 1 FROM events WHERE node_id = nodes.id)
       """, [])
     // 部品の定義: どこからも指されず、走っている回も使っていないもの。
     try db.run(
       """
-      DELETE FROM action_defs WHERE NOT EXISTS (SELECT 1 FROM parts WHERE def_id = action_defs.id)
+      DELETE FROM action_defs WHERE NOT EXISTS (SELECT 1 FROM nodes WHERE def_id = action_defs.id)
         AND NOT EXISTS (SELECT 1 FROM runs WHERE def_id = action_defs.id)
         AND NOT EXISTS (SELECT 1 FROM composite_slots WHERE child_def_id = action_defs.id)
         \(heldDefs.isEmpty ? "" : "AND id NOT IN (\(heldDefs))")
       """, [])
     try db.run(
       """
-      DELETE FROM part_defs WHERE kind = 'action'
-        AND NOT EXISTS (SELECT 1 FROM action_defs WHERE id = part_defs.id)
+      DELETE FROM node_defs WHERE kind = 'action'
+        AND NOT EXISTS (SELECT 1 FROM action_defs WHERE id = node_defs.id)
       """, [])
   }
 
@@ -114,7 +114,7 @@ extension AutomationDatabase {
       coalesce((
         SELECT min(started_at) FROM (
           SELECT started_at, ROW_NUMBER() OVER (ORDER BY id DESC) AS n FROM runs
-          WHERE part_id = i.part_id)
+          WHERE node_id = i.node_id)
         WHERE n <= \(AutomationNodeState.retainedRuns)), 9223372036854775807)
       """
     let referenced = """

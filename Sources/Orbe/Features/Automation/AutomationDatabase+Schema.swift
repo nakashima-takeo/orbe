@@ -3,10 +3,10 @@ import Foundation
 extension AutomationDatabase {
   /// 版 2 の表。ID はどれも使い回さない（AUTOINCREMENT）。外部キーは接続ごとに `PRAGMA foreign_keys = ON` で守る。
   ///
-  /// 部品の項目の通し番号（`parts.last_item_seq`）は変化の番号で、項目の追加（`items.seq`。最初の版も同じ番号）・版の追加
+  /// 部品の項目の通し番号（`nodes.last_item_seq`）は変化の番号で、項目の追加（`items.seq`。最初の版も同じ番号）・版の追加
   /// （`item_versions.seq`）・項目の無効化（`items.valid_to_seq`）のたびに 1 進む。出来事の通し番号は出来事の追加で進む。
   static let schema = """
-    CREATE TABLE part_defs (
+    CREATE TABLE node_defs (
       id   INTEGER PRIMARY KEY AUTOINCREMENT,
       kind TEXT NOT NULL CHECK (kind IN ('action', 'composite')),
       UNIQUE (id, kind)
@@ -15,17 +15,17 @@ extension AutomationDatabase {
       id     INTEGER PRIMARY KEY,
       kind   TEXT NOT NULL DEFAULT 'action' CHECK (kind = 'action'),
       action TEXT NOT NULL CHECK (json_type(action) = 'object'),
-      FOREIGN KEY (id, kind) REFERENCES part_defs (id, kind)
+      FOREIGN KEY (id, kind) REFERENCES node_defs (id, kind)
     );
     CREATE TABLE composite_defs (
       id   INTEGER PRIMARY KEY,
       kind TEXT NOT NULL DEFAULT 'composite' CHECK (kind = 'composite'),
-      FOREIGN KEY (id, kind) REFERENCES part_defs (id, kind)
+      FOREIGN KEY (id, kind) REFERENCES node_defs (id, kind)
     );
     CREATE TABLE composite_slots (
       id               INTEGER PRIMARY KEY AUTOINCREMENT,
       composite_def_id INTEGER NOT NULL REFERENCES composite_defs (id),
-      child_def_id     INTEGER NOT NULL REFERENCES part_defs (id),
+      child_def_id     INTEGER NOT NULL REFERENCES node_defs (id),
       CHECK (child_def_id < composite_def_id),
       UNIQUE (composite_def_id, id)
     );
@@ -48,7 +48,7 @@ extension AutomationDatabase {
       version    INTEGER NOT NULL CHECK (version >= 1),
       created_at INTEGER NOT NULL
     );
-    CREATE TABLE parts (
+    CREATE TABLE nodes (
       id              INTEGER PRIMARY KEY AUTOINCREMENT,
       automation_id   INTEGER REFERENCES automations (id) ON DELETE SET NULL,
       position        INTEGER NOT NULL,
@@ -56,7 +56,7 @@ extension AutomationDatabase {
       name            TEXT    NOT NULL,
       trigger         TEXT    NOT NULL,
       max_items       INTEGER CHECK (max_items > 0),
-      def_id          INTEGER NOT NULL REFERENCES part_defs (id),
+      def_id          INTEGER NOT NULL REFERENCES node_defs (id),
       added_at        INTEGER NOT NULL,
       removed_at      INTEGER,
       breach_run_id   INTEGER REFERENCES runs (id),
@@ -67,29 +67,29 @@ extension AutomationDatabase {
       CHECK (removed_at IS NULL OR (breach_run_id IS NULL AND pending_drops = '{}')),
       UNIQUE (automation_id, id)
     );
-    CREATE UNIQUE INDEX parts_key      ON parts (automation_id, key)      WHERE removed_at IS NULL;
-    CREATE UNIQUE INDEX parts_position ON parts (automation_id, position) WHERE removed_at IS NULL;
-    CREATE INDEX parts_def ON parts (def_id);
-    CREATE TABLE part_edges (
+    CREATE UNIQUE INDEX nodes_key      ON nodes (automation_id, key)      WHERE removed_at IS NULL;
+    CREATE UNIQUE INDEX nodes_position ON nodes (automation_id, position) WHERE removed_at IS NULL;
+    CREATE INDEX nodes_def ON nodes (def_id);
+    CREATE TABLE node_edges (
       automation_id INTEGER NOT NULL REFERENCES automations (id) ON DELETE CASCADE,
-      from_part_id  INTEGER NOT NULL,
-      to_part_id    INTEGER NOT NULL,
+      from_node_id  INTEGER NOT NULL,
+      to_node_id    INTEGER NOT NULL,
       position      INTEGER NOT NULL,
       take          TEXT    NOT NULL CHECK (take IN ('new', 'all')),
       max_age_hours INTEGER CHECK (max_age_hours > 0),
       read_item_seq  INTEGER NOT NULL DEFAULT 0 CHECK (read_item_seq >= 0),
       read_event_seq INTEGER NOT NULL DEFAULT 0 CHECK (read_event_seq >= 0),
-      PRIMARY KEY (to_part_id, from_part_id),
-      UNIQUE (to_part_id, position),
-      CHECK (from_part_id <> to_part_id),
-      FOREIGN KEY (automation_id, from_part_id) REFERENCES parts (automation_id, id),
-      FOREIGN KEY (automation_id, to_part_id)   REFERENCES parts (automation_id, id)
+      PRIMARY KEY (to_node_id, from_node_id),
+      UNIQUE (to_node_id, position),
+      CHECK (from_node_id <> to_node_id),
+      FOREIGN KEY (automation_id, from_node_id) REFERENCES nodes (automation_id, id),
+      FOREIGN KEY (automation_id, to_node_id)   REFERENCES nodes (automation_id, id)
     ) WITHOUT ROWID;
-    CREATE INDEX part_edges_from ON part_edges (from_part_id);
-    CREATE INDEX part_edges_automation ON part_edges (automation_id);
+    CREATE INDEX node_edges_from ON node_edges (from_node_id);
+    CREATE INDEX node_edges_automation ON node_edges (automation_id);
     CREATE TABLE items (
       id              INTEGER PRIMARY KEY AUTOINCREMENT,
-      part_id         INTEGER NOT NULL REFERENCES parts (id),
+      node_id         INTEGER NOT NULL REFERENCES nodes (id),
       seq             INTEGER NOT NULL CHECK (seq > 0),
       written_id      TEXT    NOT NULL,
       source_item_id  INTEGER REFERENCES items (id),
@@ -101,10 +101,10 @@ extension AutomationDatabase {
       CHECK (valid_to IS NULL OR valid_to >= valid_from),
       CHECK ((valid_to IS NULL) = (valid_to_seq IS NULL)),
       CHECK (valid_to_seq IS NULL OR valid_to_seq > seq),
-      UNIQUE (part_id, seq)
+      UNIQUE (node_id, seq)
     );
-    CREATE UNIQUE INDEX items_live ON items (part_id, written_id) WHERE valid_to IS NULL;
-    CREATE INDEX items_part ON items (part_id, valid_to);
+    CREATE UNIQUE INDEX items_live ON items (node_id, written_id) WHERE valid_to IS NULL;
+    CREATE INDEX items_node ON items (node_id, valid_to);
     CREATE INDEX items_source_item ON items (source_item_id);
     CREATE INDEX items_source_event ON items (source_event_id);
     CREATE TABLE item_versions (
@@ -119,7 +119,7 @@ extension AutomationDatabase {
     );
     CREATE TABLE events (
       id              INTEGER PRIMARY KEY AUTOINCREMENT,
-      part_id         INTEGER NOT NULL REFERENCES parts (id),
+      node_id         INTEGER NOT NULL REFERENCES nodes (id),
       seq             INTEGER NOT NULL CHECK (seq > 0),
       created_at      INTEGER NOT NULL,
       written_id      TEXT    NOT NULL,
@@ -128,16 +128,16 @@ extension AutomationDatabase {
       source_item_id  INTEGER REFERENCES items (id),
       source_event_id INTEGER REFERENCES events (id),
       CHECK (source_item_id IS NULL OR source_event_id IS NULL),
-      UNIQUE (part_id, seq),
+      UNIQUE (node_id, seq),
       UNIQUE (id, link)
     );
-    CREATE INDEX events_seen ON events (part_id, written_id, created_at);
-    CREATE INDEX events_part ON events (part_id, created_at);
+    CREATE INDEX events_seen ON events (node_id, written_id, created_at);
+    CREATE INDEX events_node ON events (node_id, created_at);
     CREATE INDEX events_source_item ON events (source_item_id);
     CREATE INDEX events_source_event ON events (source_event_id);
     CREATE TABLE runs (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      part_id    INTEGER NOT NULL REFERENCES parts (id),
+      node_id    INTEGER NOT NULL REFERENCES nodes (id),
       def_id     INTEGER NOT NULL REFERENCES action_defs (id),
       started_at INTEGER NOT NULL,
       ended_at   INTEGER NOT NULL,
@@ -145,7 +145,7 @@ extension AutomationDatabase {
       failure    TEXT,
       record     TEXT    NOT NULL
     );
-    CREATE INDEX runs_part ON runs (part_id, id);
+    CREATE INDEX runs_node ON runs (node_id, id);
     CREATE INDEX runs_def ON runs (def_id);
     CREATE TABLE run_item_inputs (
       run_id     INTEGER NOT NULL REFERENCES runs (id) ON DELETE CASCADE,

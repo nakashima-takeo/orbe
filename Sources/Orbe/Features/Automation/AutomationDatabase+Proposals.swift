@@ -61,9 +61,9 @@ extension AutomationDatabase {
     Dictionary(
       uniqueKeysWithValues: try db.select(
         """
-        SELECT DISTINCT r.part_id, p.automation_id FROM held_proposals h
+        SELECT DISTINCT r.node_id, p.automation_id FROM held_proposals h
         JOIN proposals q ON q.id = h.proposal_id JOIN runs r ON r.id = q.run_id
-        JOIN parts p ON p.id = r.part_id WHERE p.automation_id IS NOT NULL
+        JOIN nodes p ON p.id = r.node_id WHERE p.automation_id IS NOT NULL
         """, []
       ) { (AutomationNodeID($0.int(at: 0)), $0.int(at: 1)) })
   }

@@ -108,7 +108,7 @@ extension AutomationDatabase {
     try db.select(
       """
       SELECT p.id, p.key, p.name, p.trigger, p.max_items, p.def_id, d.kind, a.action
-      FROM parts p JOIN part_defs d ON d.id = p.def_id LEFT JOIN action_defs a ON a.id = p.def_id
+      FROM nodes p JOIN node_defs d ON d.id = p.def_id LEFT JOIN action_defs a ON a.id = p.def_id
       WHERE p.automation_id = ? AND p.removed_at IS NULL ORDER BY p.position
       """, [.integer(Int64(automation))]
     ) { s in
@@ -124,7 +124,7 @@ extension AutomationDatabase {
         maxItems: row.maxItems, composite: row.composite, action: row.action,
         inputs: try db.select(
           """
-          SELECT from_part_id, take, max_age_hours FROM part_edges WHERE to_part_id = ?
+          SELECT from_node_id, take, max_age_hours FROM node_edges WHERE to_node_id = ?
           ORDER BY position
           """, [.integer(Int64(row.id.rawValue))]
         ) { s in
@@ -217,8 +217,8 @@ extension AutomationDatabase {
   private func heldProposals() throws -> ([AutomationProposal], [AutomationUnreadableProposal]) {
     let rows = try db.select(
       """
-      SELECT q.id, q.run_id, r.part_id, r.def_id, r.ended_at, q.origin_version_id,
-        q.origin_event_id, coalesce(v.body, e.body), coalesce(i.part_id, e.part_id), q.link, q.title,
+      SELECT q.id, q.run_id, r.node_id, r.def_id, r.ended_at, q.origin_version_id,
+        q.origin_event_id, coalesce(v.body, e.body), coalesce(i.node_id, e.node_id), q.link, q.title,
         q.due, q.workspace, q.reason, h.resolved_at, s.outcome, s.task_id
       FROM held_proposals h JOIN proposals q ON q.id = h.proposal_id
       JOIN runs r ON r.id = q.run_id
