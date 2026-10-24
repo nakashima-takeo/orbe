@@ -188,9 +188,14 @@ extension EditorDiffTests {
     ] {
       XCTAssertTrue(repo.git(args).isSuccess, "\(args)")
     }
+    let inner = repo.git(["-C", "sub", "rev-parse", "HEAD"]).stdoutText.trimmingCharacters(
+      in: .newlines)
     let (tab, _) = tab()
     let diff = try tab.group.editor.openDiff(id("sub", .workingTree), as: .pinned)
-    waitRows(diff, "前提: ファイル → サブモジュールの置き換え") { _ in diff.newRevision != nil }
+    waitRows(diff, "ファイル → サブモジュールの置き換え") { _ in
+      self.text(diff.newRevision) == "Subproject commit \(inner)"
+    }
+    XCTAssertEqual(text(diff.old), "x\ny\nz\n", "古い側は index のファイル")
     diff.dismiss()
 
     XCTAssertTrue(repo.git(["add", "sub"]).isSuccess)
