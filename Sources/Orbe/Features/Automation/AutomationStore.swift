@@ -165,7 +165,7 @@ import Observation
       }
     }
     do throws(AutomationError) {
-      try decide(index, as: .accepted(taskId: task.id), now: now)
+      try settle(index, as: .accepted(taskId: task.id), now: now)
     } catch {
       NSLog("[automation] the task \(task.id) was added but the proposal stays open: \(error)")
     }
@@ -173,11 +173,11 @@ import Observation
   }
 
   func dismiss(_ proposalId: Int, now: Date = Date()) throws(AutomationError) {
-    try decide(try openIndex(proposalId), as: .dismissed, now: now)
+    try settle(try openIndex(proposalId), as: .dismissed, now: now)
   }
 
   /// 人の判断を 1 件残す。判断待ちでなくなった候補は、どの自動化も持たなければ忘れる。
-  private func decide(_ index: Int, as state: AutomationProposal.State, now: Date)
+  private func settle(_ index: Int, as state: AutomationProposal.State, now: Date)
     throws(AutomationError)
   {
     let at = TaskItem.storedInstant(now)

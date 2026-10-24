@@ -96,7 +96,7 @@ struct AutomationFlow {
     case .taken where flowed:
       return finish(nodeId, graph, running)
     case .ready:
-      return settle(nodeId, graph, running)
+      return advance(nodeId, graph, running)
     default:
       return []
     }
@@ -116,13 +116,13 @@ struct AutomationFlow {
         continue
       }
       steps[node.id] = .ready
-      wake += settle(node.id, graph, running)
+      wake += advance(node.id, graph, running)
     }
     return wake
   }
 
   /// 上流がすべて終わった部品を、走っていなければ進める——「届いたら」なら終わりにし、そうでなければ起こす。
-  private mutating func settle(
+  private mutating func advance(
     _ nodeId: AutomationNodeID, _ graph: AutomationGraph, _ running: (AutomationNodeID) -> Bool
   ) -> [AutomationNodeID] {
     guard !running(nodeId) else { return [] }

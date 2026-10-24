@@ -1,7 +1,7 @@
 import Foundation
 
 /// 部品の 1 回の確定の中身（`AutomationStore.record` のトランザクションの中）。
-struct AutomationSettling {
+struct AutomationRecording {
   let end: AutomationPassEnd
   let node: AutomationGraph.Node
   /// 自動化のメモリの位置。
@@ -19,7 +19,7 @@ struct AutomationSettling {
   }
 
   /// 確定する。成功した回は読んだ位置を進めて持ち越しを載せ、役割ごとの結果を書く。どちらの回も記録・回の履歴・外した印を書く。
-  mutating func settle(_ run: AutomationNodeRun, _ memory: inout AutomationMemory) throws
+  mutating func record(_ run: AutomationNodeRun, _ memory: inout AutomationMemory) throws
     -> AutomationRecorded
   {
     var run = run
@@ -31,11 +31,11 @@ struct AutomationSettling {
       default: try produce(output, &run, &memory)
       }
     }
-    let decided = try judged.map { try decide($0.proposals, $0.resolved, memory) }
-    if let decided {
+    let reconciled = try judged.map { try reconcile($0.proposals, $0.resolved, memory) }
+    if let reconciled {
       run.result = .judge(
-        proposed: decided.pending.count, resolved: decided.resolving.count,
-        dismissed: decided.dismissed)
+        proposed: reconciled.pending.count, resolved: reconciled.resolving.count,
+        dismissed: reconciled.dismissed)
     }
     let recordId = try db.insert(run: run, of: end.nodeId, defId: end.defId, carried: carried)
     if let read = end.read {
@@ -44,7 +44,7 @@ struct AutomationSettling {
         read.taken.map { ($0.ref, "taken") } + read.dropped.map { ($0.row.ref, $0.reason.rawValue) }
       )
     }
-    if let decided { try apply(decided, run: recordId, &memory) }
+    if let reconciled { try apply(reconciled, run: recordId, &memory) }
     try finish(run: recordId, endedAt: run.endedAt, &memory)
     let recorded = memory.automations[index].state(end.nodeId).runs.first { $0.id == recordId }
     return AutomationRecorded(changed: written.changed, run: recorded?.run)
@@ -90,7 +90,7 @@ struct AutomationSettling {
   }
 
   /// 判定の出力をこの時点の候補に当て直したもの。
-  private struct Decided {
+  private struct Reconciled {
     let pending: [AutomationNodePass.Proposal]
     let resolving: [Int]
     let dismissed: [AutomationDismissal]
@@ -98,9 +98,9 @@ struct AutomationSettling {
 
   /// 回の途中に他の確定や人のさばきがあっても、出どころの項目が無効になった案と既に候補のあるリンクへの案は理由付きで捨て、
   /// 判断待ちでない候補は対応済みにしない。
-  private func decide(
+  private func reconcile(
     _ proposals: [AutomationNodePass.Proposal], _ resolved: [String], _ memory: AutomationMemory
-  ) throws -> Decided {
+  ) throws -> Reconciled {
     var proposed = memory.heldLinks
     let invalidated = try db.invalidatedVersions(
       proposals.compactMap {
@@ -134,15 +134,15 @@ struct AutomationSettling {
       }
       resolving.append(open)
     }
-    return Decided(pending: pending, resolving: resolving, dismissed: dismissed)
+    return Reconciled(pending: pending, resolving: resolving, dismissed: dismissed)
   }
 
   /// 候補を足し（判定の回を指し、覚えている印を付ける）、対応済みにする。
-  private func apply(_ decided: Decided, run recordId: Int, _ memory: inout AutomationMemory)
+  private func apply(_ reconciled: Reconciled, run recordId: Int, _ memory: inout AutomationMemory)
     throws
   {
     let endedAt = TaskItem.storedInstant(end.endedAt)
-    for proposal in decided.pending {
+    for proposal in reconciled.pending {
       let proposalId = try db.insert(proposal: proposal, run: recordId)
       memory.proposals.append(
         AutomationProposal(
@@ -152,7 +152,7 @@ struct AutomationSettling {
           workspace: proposal.workspace, reason: proposal.reason, proposedAt: endedAt,
           state: .open))
     }
-    for open in decided.resolving {
+    for open in reconciled.resolving {
       try db.resolve(memory.proposals[open].id, at: endedAt)
       memory.proposals[open].state = .resolved
     }

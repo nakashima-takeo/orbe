@@ -93,8 +93,8 @@ extension AutomationStore {
       run.failure = reason
     }
     return try commit(sweepingAt: run.endedAt) { db, memory in
-      var settling = AutomationSettling(end: end, node: node, index: index, db: db)
-      return try settling.settle(run, &memory)
+      var recording = AutomationRecording(end: end, node: node, index: index, db: db)
+      return try recording.record(run, &memory)
     }
   }
 }
