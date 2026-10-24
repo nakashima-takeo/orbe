@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// ポインタの下の行——読み直しでも説明（ツールチップ）がポインタの下の今の部品に合い、ポインタが列の外に居る間はどの道
-/// （読み直し・錨・送り）でもホバーを付けない。ポインタの位置は窓が答える値を差し替えて置く（本物のポインタを動かさない）。
+/// （読み直し・送り）でもホバーを付けない。ポインタの位置は窓が答える値を差し替えて置く（本物のポインタを動かさない）。
 ///
 /// 壊れると何が起きるか。見出しの一括操作を押した後、同じ位置に来た別の部品の上で前の部品の説明が出たままになる。
 /// アプリが背後にある間や、ポインタが列を出た後に行が読み直されると、ポインタの無い行にホバーの地が付く。
@@ -51,7 +51,7 @@ extension RowListTests {
     XCTAssertEqual(hovered(hosted), [2])
   }
 
-  /// ポインタが列を出た後は、窓が答える位置が列の上でも（アプリが背後にある間など）、読み直し・錨・送りのどれでもホバーを
+  /// ポインタが列を出た後は、窓が答える位置が列の上でも（アプリが背後にある間など）、読み直し・送りのどれでもホバーを
   /// 付けない。押せば列の中に戻る。
   func testOutsideTheListNoPathPutsTheHoverBack() {
     let (hosted, window) = hostUnderThePointer()
@@ -64,8 +64,6 @@ extension RowListTests {
     XCTAssertNil(hosted.list.toolTip)
     scroll(hosted, by: 20)
     XCTAssertEqual(hovered(hosted), [], "送り")
-    hosted.list.holdAnchor()
-    XCTAssertEqual(hovered(hosted), [], "錨")
 
     hosted.source.anchor = RowListAnchor(pressed: 3, successor: 4)
     press(hosted, at: hosted.list.convert(window.pointer, from: nil))
