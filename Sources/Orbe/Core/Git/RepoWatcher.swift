@@ -173,10 +173,11 @@ final class RepoWatcher {
   }
 
   /// `modules/` の下（`sub` は外側の git dir からの相対パス）。サブモジュールの名前は `/` を含めるので、どこからが
-  /// サブモジュールの git dir かをパスだけでは決められない——どの深さの要素でも同じ表で弾く。名前やブランチ名にその語の
-  /// 要素があると取りこぼす（普通のコミット・`reset --soft` は git dir の直下の index・ORIG_HEAD も書くので拾える）。
+  /// サブモジュールの git dir かをパスだけでは決められない——名前の最初の段（`modules/` の直後。必ず名前）を除き、どの深さの
+  /// 要素でも同じ表で弾く。名前の 2 段目以降にその語の要素があると取りこぼす。ブランチ名にその語の要素があっても、普通の
+  /// コミット・`reset --soft` は git dir の直下の index・ORIG_HEAD も書くので拾える。
   private static func nestedGitDirChange(_ sub: String) -> GitDirChange? {
-    let components = sub.split(separator: "/").dropFirst()
+    let components = sub.split(separator: "/").dropFirst(2)
     return components.contains(where: ignoredGitDirEntries.contains) ? nil : .nested
   }
 

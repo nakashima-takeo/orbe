@@ -118,7 +118,7 @@ final class RepoWatcherTests: OrbeTestCase {
     }
     for nested in [
       "/modules/sub/index", "/modules/sub/HEAD", "/modules/tools/sub/refs/heads/main",
-      "/modules/a/modules/b/index", "/modules/sub/ORIG_HEAD",
+      "/modules/a/modules/b/index", "/modules/sub/ORIG_HEAD", "/modules/logs/index",
     ] {
       XCTAssertEqual(RepoWatcher.gitDirChange(nested), .nested, nested)
     }
