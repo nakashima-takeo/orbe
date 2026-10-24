@@ -31,7 +31,7 @@ class AutomationNodePassTestCase: OrbeTestCase {
       entity: AutomationNode(
         id: AutomationNodeID(1), key: definitionNode.key, name: definitionNode.name,
         trigger: definitionNode.trigger,
-        maxItems: definitionNode.maxItems, defId: AutomationDefID(1)),
+        maxItems: definitionNode.maxItems, defId: AutomationNodeDefID(1)),
       action: definitionNode.action,
       inputs: definitionNode.from.enumerated().map {
         AutomationNodeEdge(

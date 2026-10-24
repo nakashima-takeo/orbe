@@ -329,7 +329,7 @@ extension AutomationRunner {
   }
 
   private func ended(
-    _ trigger: Trigger, _ defId: AutomationDefID, _ read: AutomationIntake.Read?,
+    _ trigger: Trigger, _ defId: AutomationNodeDefID, _ read: AutomationIntake.Read?,
     _ startedAt: Date, _ outcome: AutomationNodePass.Outcome
   ) {
     let passEnd = AutomationPassEnd(

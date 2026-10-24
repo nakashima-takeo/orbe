@@ -186,7 +186,7 @@ extension AutomationGraph {
           id: AutomationNodeID(index + 1), key: item.definitionNode.key,
           name: item.definitionNode.name,
           trigger: item.definitionNode.trigger, maxItems: item.definitionNode.maxItems,
-          defId: AutomationDefID(index + 1))
+          defId: AutomationNodeDefID(index + 1))
       })
   }
 }

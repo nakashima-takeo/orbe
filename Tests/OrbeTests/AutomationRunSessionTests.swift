@@ -150,7 +150,7 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
   /// 「id が無い」と言う。
   func testJudgeReadsItsChoicesAndChecksItsDecisions() throws {
     let waiting = AutomationProposal(
-      id: 1, runId: 1, judge: AutomationNodeID(2), defId: AutomationDefID(2),
+      id: 1, runId: 1, judge: AutomationNodeID(2), defId: AutomationNodeDefID(2),
       originNodeId: AutomationNodeID(1), origin: .version(1), item: item("old"), title: "前の提案",
       due: nil, workspace: nil, reason: nil, proposedAt: now, state: .open)
     let session = AutomationRunSession(

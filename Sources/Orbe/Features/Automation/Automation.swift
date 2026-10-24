@@ -129,7 +129,7 @@ struct AutomationProposal: Equatable, Identifiable {
   let runId: Int
   /// 出した判定の部品と、その回が動いた定義。候補を出した自動化はこの部品の持ち主（`AutomationStore.issuer(of:)`）。
   let judge: AutomationNodeID
-  let defId: AutomationDefID
+  let defId: AutomationNodeDefID
   /// 出どころの部品と行。
   let originNodeId: AutomationNodeID
   let origin: AutomationRowRef

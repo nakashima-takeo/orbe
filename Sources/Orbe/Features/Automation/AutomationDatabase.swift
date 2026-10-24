@@ -67,13 +67,13 @@ final class AutomationDatabase {
   // MARK: - 部品の定義
 
   /// 動作の定義を足して ID を返す。
-  func insert(action: AutomationActionDef) throws -> AutomationDefID {
+  func insert(action: AutomationActionDef) throws -> AutomationNodeDefID {
     try db.run("INSERT INTO part_defs (kind) VALUES ('action')", [])
     let id = db.lastInsertRowID
     try db.run(
       "INSERT INTO action_defs (id, action) VALUES (?, ?)",
       [.integer(id), .text(try Self.encode(action))])
-    return AutomationDefID(Int(id))
+    return AutomationNodeDefID(Int(id))
   }
 
   // MARK: - 部品
@@ -81,7 +81,7 @@ final class AutomationDatabase {
   /// 部品を足して ID を返す。
   func insertNode(
     of automation: Int, at position: Int, _ definitionNode: AutomationDefinition.Node,
-    defId: AutomationDefID, addedAt: Date
+    defId: AutomationNodeDefID, addedAt: Date
   ) throws -> AutomationNodeID {
     try db.run(
       """
@@ -109,7 +109,7 @@ final class AutomationDatabase {
 
   func updateNode(
     _ id: AutomationNodeID, at position: Int, _ definitionNode: AutomationDefinition.Node,
-    defId: AutomationDefID
+    defId: AutomationNodeDefID
   ) throws {
     try db.run(
       """

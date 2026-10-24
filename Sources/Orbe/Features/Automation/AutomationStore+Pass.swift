@@ -5,7 +5,7 @@ struct AutomationPassEnd {
   let automationId: Int
   let nodeId: AutomationNodeID
   /// 回が動いた定義（回を始めた時点の部品の定義）。
-  let defId: AutomationDefID
+  let defId: AutomationNodeDefID
   let trigger: AutomationNodeRun.Trigger
   let startedAt: Date
   let endedAt: Date

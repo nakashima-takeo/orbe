@@ -5,7 +5,7 @@ import Foundation
 extension AutomationDatabase {
   /// 回の記録を足して ID を返す。`carried` は回の履歴から数えられない捨てた数（持ち越し・読む前に期限で消えた数）。
   func insert(
-    run: AutomationNodeRun, of nodeId: AutomationNodeID, defId: AutomationDefID,
+    run: AutomationNodeRun, of nodeId: AutomationNodeID, defId: AutomationNodeDefID,
     carried: AutomationDrops
   ) throws -> Int {
     try db.run(

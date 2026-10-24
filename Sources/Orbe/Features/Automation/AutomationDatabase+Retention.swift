@@ -4,7 +4,7 @@ import Foundation
 /// 部品の定義（確定の回の記録が指す）。
 struct AutomationHolding: Equatable {
   var rows: Set<AutomationRowRef> = []
-  var defs: Set<AutomationDefID> = []
+  var defs: Set<AutomationNodeDefID> = []
 
   mutating func formUnion(_ other: Self) {
     rows.formUnion(other.rows)

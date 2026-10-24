@@ -78,7 +78,7 @@ final class AutomationOutputsTests: OrbeTestCase {
   private var open: [AutomationProposal] {
     [
       AutomationProposal(
-        id: 1, runId: 1, judge: AutomationNodeID(2), defId: AutomationDefID(2),
+        id: 1, runId: 1, judge: AutomationNodeID(2), defId: AutomationNodeDefID(2),
         originNodeId: AutomationNodeID(1), origin: .version(1), item: Self.item("old"),
         title: "前の提案", due: nil, workspace: nil, reason: nil,
         proposedAt: Date(timeIntervalSince1970: 0),

@@ -87,7 +87,7 @@ extension AutomationDatabase {
   /// 自動化の外していない部品の行（保存したままの値）。
   private struct NodeRow {
     let id: AutomationNodeID
-    let defId: AutomationDefID
+    let defId: AutomationNodeDefID
     let key: String
     let name: String
     let trigger: String?
@@ -115,7 +115,7 @@ extension AutomationDatabase {
       (
         id: AutomationNodeID(s.int(at: 0)), key: s.text(at: 1) ?? "", name: s.text(at: 2) ?? "",
         trigger: s.text(at: 3), maxItems: s.optionalInt64(at: 4).map(Int.init),
-        defId: AutomationDefID(s.int(at: 5)), composite: s.text(at: 6) == "composite",
+        defId: AutomationNodeDefID(s.int(at: 5)), composite: s.text(at: 6) == "composite",
         action: s.text(at: 7)
       )
     }.map { row in
@@ -265,7 +265,7 @@ extension AutomationDatabase {
       proposals.append(
         AutomationProposal(
           id: row.id, runId: row.run,
-          judge: AutomationNodeID(row.judge), defId: AutomationDefID(row.defId),
+          judge: AutomationNodeID(row.judge), defId: AutomationNodeDefID(row.defId),
           originNodeId: AutomationNodeID(Int(originNodeId)), origin: origin, item: item,
           title: row.title,
           due: due ?? nil, workspace: workspace ?? nil, reason: row.reason,

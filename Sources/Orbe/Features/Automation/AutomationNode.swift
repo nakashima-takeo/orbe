@@ -12,7 +12,7 @@ struct AutomationNodeID: Hashable, Comparable, CustomStringConvertible {
 }
 
 /// 部品の定義の ID。定義は書き換えずに足すので、ID がそのまま中身の版になる。
-struct AutomationDefID: Hashable, Comparable {
+struct AutomationNodeDefID: Hashable, Comparable {
   let rawValue: Int
 
   init(_ rawValue: Int) { self.rawValue = rawValue }
@@ -61,7 +61,7 @@ struct AutomationNode: Equatable {
   var trigger: Trigger
   /// 受け手として 1 回に取る件数の上限。入力のある部品だけが持てる。
   var maxItems: Int?
-  var defId: AutomationDefID
+  var defId: AutomationNodeDefID
 
   static let keyLength = 1...32
 
@@ -77,7 +77,9 @@ struct AutomationNode: Equatable {
 
 extension AutomationNode {
   /// 外の形の部品に、Orbe が振った ID と使う部品の定義を当てた実体。
-  init(_ definitionNode: AutomationDefinition.Node, id: AutomationNodeID, defId: AutomationDefID) {
+  init(
+    _ definitionNode: AutomationDefinition.Node, id: AutomationNodeID, defId: AutomationNodeDefID
+  ) {
     self.init(
       id: id, key: definitionNode.key, name: definitionNode.name, trigger: definitionNode.trigger,
       maxItems: definitionNode.maxItems,
