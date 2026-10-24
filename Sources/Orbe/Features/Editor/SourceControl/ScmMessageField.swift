@@ -144,6 +144,7 @@ final class ScmMessageTextView: NSTextView {
     let measuring = NSTextContainer(size: .zero)
     measuring.lineFragmentPadding = 0
     let measuringLayout = NSLayoutManager()
+    measuringLayout.backgroundLayoutEnabled = false
     measuringLayout.addTextContainer(measuring)
     storage.addLayoutManager(measuringLayout)
     self.init(frame: .zero, textContainer: container)
@@ -192,9 +193,11 @@ final class ScmMessageTextView: NSTextView {
     guard let measuring, let layout = measuring.layoutManager else {
       return Theme.Layout.editorScmMessage
     }
-    let size = NSSize(width: max(0, width - Self.leading - Self.trailing), height: limit)
+    let size = NSSize(
+      width: max(0, width - Self.leading - Self.trailing), height: .greatestFiniteMagnitude)
     if measuring.containerSize != size { measuring.containerSize = size }
-    layout.ensureLayout(for: measuring)
+    layout.ensureLayout(
+      forBoundingRect: NSRect(x: 0, y: 0, width: size.width, height: limit), in: measuring)
     let used = max(layout.usedRect(for: measuring).height, Self.lineHeight)
     return min(used, limit) + Self.verticalInset * 2
   }

@@ -6,7 +6,7 @@ import XCTest
 
 /// エディター面に結んだソース管理パネル——行は区分に合った diff を仮のタブで開き、追跡中のファイルの破棄は確かめてから行い、
 /// メッセージ欄の ↵ はコミット、⌘↵ はコミットしてプッシュ（同期・公開は起こさない）、改行は ⇧↵・⌥↵・⌃↵。欄は中身の行に
-/// 合わせて伸び縮みする。欄の中身が外から変わったら取り消しの履歴を捨て、取り消しはその欄の中で閉じる。パネルを出して
+/// 合わせて伸び縮みし、1 行が高い文字でも 10 行分の高さまで伸びる。欄の中身が外から変わったら取り消しの履歴を捨て、取り消しはその欄の中で閉じる。パネルを出して
 /// いなくても面が見えていれば件数は status に追いつき（行とグラフは作らない）、cd した後の列は新しい根の行を出して押せば
 /// 新しい根の diff を開く。行の ＋ を同じ位置で続けて押すと、次の行が次々にステージされる。未追跡の行を破棄した直後の
 /// コミットは、その破棄を数える。
@@ -14,7 +14,7 @@ import XCTest
 /// 壊れると何が起きるか。「ステージされている変更」の行で作業ツリーの diff が開き、コミットする中身と違うものを見て確かめた
 /// ことになる。追跡中のファイルの編集が確認なしに消え、戻せない。未追跡の行を破棄してすぐ ↵ を打つと、自分の破棄のせいで
 /// 「表示と食い違う」と断られる。ボタンが「同期」の間に欄で ⌘↵ を打つと、同期が走る。⇧↵ の改行がコミットを起こす・↵ が
-/// 改行を入れて押せないことに気づかない・⌃↵ が見えない字をメッセージに入れる。改行しても欄が伸びず、打った行が見えない。
+/// 改行を入れて押せないことに気づかない・⌃↵ が見えない字をメッセージに入れる。改行しても欄が伸びず、打った行が見えない。タイ文字の欄が 10 行分の手前で止まる。
 /// コミットの後の ⌘Z が例外を投げ、欄の取り消しが壊れたまま残る。エクスプローラーを出している間、レールの件数が古い数で
 /// 止まる・隠れたパネルのために git を読む。cd した後も列が前の根の行を出し、押した行やボタンが前の
 /// worktree の diff を開く・前の worktree でステージや破棄をする。cd した・パネルを閉じた後の ⌘Z が、見えない欄の打鍵を
@@ -255,6 +255,16 @@ final class SourceControlPaneTests: OrbeTestCase {
     scroll.scrollerStyle = .legacy  // 推奨の型が legacy へ変わると、AppKit はこの setter で当て直す
     hosted.pane.layoutSubtreeIfNeeded()
     XCTAssertEqual(field.frame.width, scroll.frame.width, "スクロールバーが字の幅を狭めない")
+  }
+
+  /// 欄の上限は既定の行の 10 行分の高さで、1 行が既定より高い文字（タイ文字）でも低くならない。
+  func testTheMessageOfTallLinesStopsAtTheSameHeight() throws {
+    let field = ScmMessageTextView()
+    let line = try XCTUnwrap(field.layoutManager).defaultLineHeight(for: try XCTUnwrap(field.font))
+    field.string = Array(repeating: "ปั้ญู", count: 12).joined(separator: "\n")
+    XCTAssertEqual(
+      field.fittingHeight(width: 300, maxLines: ScmMessageField.maxLines),
+      Theme.Layout.editorScmMessage + line * CGFloat(ScmMessageField.maxLines - 1), accuracy: 0.5)
   }
 
   /// メッセージ欄の中身が外から変わった（コミットで空になった）ら、それまでの取り消しの履歴は捨てる——⌘Z は差し替え前の
