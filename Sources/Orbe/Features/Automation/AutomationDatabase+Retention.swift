@@ -1,7 +1,7 @@
 import Foundation
 
-/// 走っている回が確定まで使うもの: 読んだ行とその出どころ（判定の確定は読んだ時点の出どころの版を指す）と、回を始めたときの
-/// ノードの定義（確定の回の記録が指す）。
+/// 走っている回が確定まで使うもの: 読んだ行（回の履歴と、判定の確定の候補が指す）と、回を始めたときのノードの定義（確定の回の
+/// 記録が指す）。
 struct AutomationHolding: Equatable {
   var rows: Set<AutomationRowRef> = []
   var defs: Set<AutomationNodeDefID> = []
@@ -40,9 +40,8 @@ extension AutomationDatabase {
       DELETE FROM settlements WHERE proposal_id IN (
         SELECT proposal_id FROM (
           SELECT s.proposal_id, o.removed_at, ROW_NUMBER() OVER (
-            PARTITION BY r.node_id ORDER BY s.decided_at DESC, s.proposal_id DESC) AS n
-          FROM settlements s JOIN proposals q ON q.id = s.proposal_id JOIN runs r ON r.id = q.run_id
-            JOIN nodes o ON o.id = r.node_id)
+            PARTITION BY q.node_id ORDER BY s.decided_at DESC, s.proposal_id DESC) AS n
+          FROM settlements s JOIN proposals q ON q.id = s.proposal_id JOIN nodes o ON o.id = q.node_id)
         WHERE (n > ?1 OR removed_at IS NOT NULL)
           AND proposal_id NOT IN (SELECT proposal_id FROM held_proposals))
       """, [.integer(keep)])
@@ -78,7 +77,7 @@ extension AutomationDatabase {
         AND NOT EXISTS (SELECT 1 FROM items WHERE source_event_id = events.id)
         AND NOT EXISTS (SELECT 1 FROM events e WHERE e.source_event_id = events.id)
         AND NOT EXISTS (SELECT 1 FROM run_event_inputs WHERE event_id = events.id)
-        AND NOT EXISTS (SELECT 1 FROM proposals WHERE origin_event_id = events.id)
+        AND NOT EXISTS (SELECT 1 FROM proposals WHERE event_id = events.id)
       """, [Self.cutoff(now)])
   }
 
@@ -119,7 +118,7 @@ extension AutomationDatabase {
       """
     let referenced = """
       (v.id IN (SELECT version_id FROM run_item_inputs)
-        OR v.id IN (SELECT origin_version_id FROM proposals WHERE origin_version_id IS NOT NULL)
+        OR v.id IN (SELECT version_id FROM proposals WHERE version_id IS NOT NULL)
         \(heldVersions.isEmpty ? "" : "OR v.id IN (\(heldVersions))"))
       """
     try db.run(

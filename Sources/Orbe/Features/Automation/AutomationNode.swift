@@ -20,13 +20,15 @@ struct AutomationNodeDefID: Hashable, Comparable {
   static func < (a: Self, b: Self) -> Bool { a.rawValue < b.rawValue }
 }
 
-/// 動作の定義——ノードが何をするか: 手段・上限・出力の性質・行き先。自動化のノードがどれを使うかは `AutomationNode.defId` が指す。
+/// 動作の定義——ノードが何をするか: 手段・上限・出力の性質・候補の保ち方・行き先。自動化のノードがどれを使うかは `AutomationNode.defId` が指す。
 struct AutomationActionDef: Equatable {
   var method: Method
   /// 分。省略は `AutomationGraph.Node.timeoutMinutes` が解く。
   var timeoutMinutes: Int?
   /// 出力の性質。行を出すノードだけが持つ（取得は必ず書き、処理は省けば出来事の流れ）。
   var coverage: AutomationCoverage?
+  /// 判断待ちの候補の保ち方。判定だけが持てる（省けば `whileCurrent`）。
+  var keep: AutomationKeep?
   var destination: Destination
 
   static let timeoutRange = 1...60
@@ -51,6 +53,14 @@ struct AutomationActionDef: Equatable {
     guard case .agent(let agent) = method else { return false }
     return !agent.tools.isEmpty
   }
+}
+
+/// 判定が出した判断待ちの候補を、いつまで保つか。
+enum AutomationKeep: String {
+  /// 元にした行が今のものである間（元の項目が無効になり、判定の入力にもそのリンクが無くなったら下げる）。
+  case whileCurrent
+  /// 判定が対応済みにするか、人がさばくまで。
+  case untilDecided
 }
 
 /// 自動化のノード（実体）。自動化の中のどこに置き、どう呼び、いつ動くかと、使うノードの定義を持つ。

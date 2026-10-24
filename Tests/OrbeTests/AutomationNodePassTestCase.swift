@@ -45,16 +45,18 @@ class AutomationNodePassTestCase: OrbeTestCase {
     AutomationItem(id: id, link: "https://example.com/\(id)", body: "\(id) の本文", time: now)
   }
 
-  func origin(_ id: String) -> AutomationIntake.Origin {
-    AutomationIntake.Origin(
-      nodeId: AutomationNodeID(9), row: .event(Self.number(id)), item: item(id))
-  }
-
   /// 取得のノード `f` を出た行。
   func row(_ id: String) -> AutomationNodeRow {
     AutomationNodeRow(
-      id: "f:\(id)", text: #"{"id":"f:\#(id)"}"#, origin: origin(id),
+      id: "f:\(id)", text: #"{"id":"f:\#(id)"}"#, ref: .event(Self.number(id)),
       source: .event(Self.number(id)))
+  }
+
+  /// 判定が読む、リンクを持つ行。
+  func linkedRow(_ id: String) -> AutomationNodeRow {
+    AutomationNodeRow(
+      id: "f:\(id)", text: #"{"id":"f:\#(id)","link":"https://example.com/\#(id)"}"#,
+      ref: .event(Self.number(id)), source: .event(Self.number(id)))
   }
 
   /// id ごとに決まる、出す側の行の番号（見本）。
@@ -124,13 +126,12 @@ class AutomationNodePassTestCase: OrbeTestCase {
 
   var breach: AutomationRejections? { outcomes.first?.breach }
 
+  /// 判断待ちの候補も付け先も無い判定の選択肢。
+  static let noChoices = AutomationJudgeChoices(
+    open: [], workspaces: AutomationWorkspaces(listed: [], home: nil))
+
   func judgeInput(_ ids: [String]) -> AutomationNodePass.Input {
-    .judge(
-      ids.map {
-        AutomationSourcedRow(id: "f:\($0)", text: #"{"id":"f:\#($0)"}"#, origin: origin($0))
-      },
-      choices: AutomationJudgeChoices(
-        open: [], workspaces: AutomationWorkspaces(listed: [], home: nil)))
+    .judge(ids.map(linkedRow), choices: Self.noChoices)
   }
 
   func commandInput(_ index: Int) -> BackgroundInput? {

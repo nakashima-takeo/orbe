@@ -56,7 +56,7 @@ extension AutomationStoreTests {
         trigger: .arrival, startedAt: at, endedAt: at, read: read,
         outcome: DesignSceneFixtures.processed(
           read.taken.map {
-            AutomationNodeRow(id: $0.id, text: $0.text, origin: $0.origin, source: $0.source)
+            AutomationNodeRow(id: $0.id, text: $0.text, ref: nil, source: $0.source)
           }, read: read.taken.count)))
   }
 
@@ -195,7 +195,7 @@ extension AutomationStoreTests {
         outcome: DesignSceneFixtures.fetched([]).replacing(
           lines.map {
             AutomationNodeRow(
-              id: AutomationPrompts.id(of: $0) ?? "", text: $0, origin: nil, source: nil)
+              id: AutomationPrompts.id(of: $0) ?? "", text: $0, ref: nil, source: nil)
           }))
     }
     try fetchText([labelled], at: Self.at)
@@ -377,7 +377,7 @@ extension AutomationStoreTests {
       ) { [$0.int(at: 0), $0.int(at: 1)] }.first
     }
     XCTAssertEqual(copies, [1, 0])
-    XCTAssertEqual(store.proposals.first?.item.body, "一度だけの本文", "候補の中身は出どころから引く")
+    XCTAssertEqual(store.proposals.first?.fields.body, "一度だけの本文", "候補の中身は読んだ行から引く")
   }
 }
 

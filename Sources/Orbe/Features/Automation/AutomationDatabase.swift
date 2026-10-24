@@ -242,7 +242,7 @@ final class AutomationDatabase {
   }
 }
 
-/// 出す側の行への参照（回の履歴・候補の出どころ）。項目は版を指す。
+/// 出す側の行への参照（回の履歴・候補が指す読んだ行）。項目は版を指す。
 enum AutomationRowRef: Hashable {
   case version(Int)
   case event(Int)

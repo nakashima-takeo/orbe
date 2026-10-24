@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Orbe
 
-/// 結果の関門——取得の項目は link が http(s)、time が ISO 8601 のものだけ。判定の結果は、今回渡した項目・出ている提案だけを
+/// 結果の関門——取得の項目は、書けば link が http(s)、time が ISO 8601 のものだけ。判定の結果は、今回渡した項目・出ている提案だけを
 /// 指し、タイトルと期限がタスクの規則に合うものだけを受ける。付け先は付け先の一覧の id だけを受けて永続 ID に直して運び、Home
 /// の id は付け先なしとして受ける。候補にした理由は 1 段落に整えて運ぶ。
 ///
@@ -14,15 +14,16 @@ final class AutomationOutputsTests: OrbeTestCase {
   private let line =
     #"{"id":"1","link":"https://example.com/1","body":"本文","time":"2026-10-10T09:00:00Z"}"#
 
-  /// link は http(s)、time は ISO 8601 でなければ形違い。
+  /// link は http(s)、time は ISO 8601 でなければ形違い。どちらも書かなくてよい。
   func testFetchRejectsNonWebLinksAndBadTimes() {
     let text = [
       #"{"id":"1","link":"file:///etc/passwd","body":"","time":"2026-10-10T09:00:00Z"}"#,
       #"{"id":"2","link":"https://example.com/2","body":"","time":"昨日"}"#, line,
+      #"{"id":"3","body":"link も time も無い"}"#,
     ].joined(separator: "\n")
 
     let read = JSONLines<AutomationItem>(text)
-    XCTAssertEqual(read.items.count, 1)
+    XCTAssertEqual(read.items.map(\.id), ["1", "3"])
     XCTAssertEqual(
       read.rejected.map { "line \($0.line): \(AutomationLineFault($0.reason).text)" },
       ["line 1: invalid link", "line 2: invalid time"])
@@ -32,12 +33,13 @@ final class AutomationOutputsTests: OrbeTestCase {
   /// 通る（Orbe の口の 1 ページで届かない行を残さない）。
   func testARowLargerThanTheLimitIsBroken() {
     let large = String(repeating: "あ", count: (AutomationOutputs.rowKiB << 10) / 3 + 1)
-    var fetch = AutomationOutputs(.fetch(since: nil), writer: AutomationNodeID(1))
+    var fetch = AutomationOutputs(
+      .fetch(since: nil, reachesJudge: false), writer: AutomationNodeID(1))
     let fetched = fetch.put(
       line + "\n"
         + #"{"id":"2","link":"https://example.com/2","body":"\#(large)","time":"2026-10-10T09:00:00Z"}"#
     )
-    var process = AutomationOutputs(.process([], reachesJudge: false), writer: AutomationNodeID(1))
+    var process = AutomationOutputs(.process([]), writer: AutomationNodeID(1))
     let processed = process.put(#"{"id":"x","note":"\#(large)"}"#)
 
     XCTAssertEqual(fetched.map(\.text), ["item 2: larger than 64 KiB"])
@@ -49,7 +51,8 @@ final class AutomationOutputsTests: OrbeTestCase {
   func testTheLimitIsMeasuredOnTheRowAsPassedDownstream() {
     let limit = AutomationOutputs.rowKiB << 10
     let escaped = String(repeating: #"\u3042"#, count: limit / 4)
-    var fetch = AutomationOutputs(.fetch(since: nil), writer: AutomationNodeID(1))
+    var fetch = AutomationOutputs(
+      .fetch(since: nil, reachesJudge: false), writer: AutomationNodeID(1))
     let wide =
       #"{"id":"1","link":"https://example.com/1","body":"\#(escaped)","time":"2026-10-10T09:00:00Z"}"#
     XCTAssertGreaterThan(wide.utf8.count, limit, "前提: 書いた形は上限を超える")
@@ -58,11 +61,11 @@ final class AutomationOutputsTests: OrbeTestCase {
     let pad = String(repeating: "x", count: limit - #"{"id":"a","note":""}"#.utf8.count)
     let edge = #"{"id":"a","note":"\#(pad)"}"#
     XCTAssertEqual(edge.utf8.count, limit, "前提: 書いた形はちょうど上限")
-    var made = AutomationOutputs(.process([], reachesJudge: false), writer: AutomationNodeID(1))
+    var made = AutomationOutputs(.process([]), writer: AutomationNodeID(1))
     XCTAssertEqual(made.put(edge).map(\.text), ["item 1: larger than 64 KiB"])
-    let input = AutomationNodeRow(id: "a", text: #"{"id":"a"}"#, origin: nil, source: .item(1))
+    let input = AutomationNodeRow(id: "a", text: #"{"id":"a"}"#, ref: nil, source: .item(1))
     var kept = AutomationOutputs(
-      .process([input], reachesJudge: false), writer: AutomationNodeID(1))
+      .process([input]), writer: AutomationNodeID(1))
     XCTAssertEqual(kept.put(edge).map(\.text), [], "入力を引き継いだ行の id はそのまま渡す")
   }
 
@@ -79,7 +82,8 @@ final class AutomationOutputsTests: OrbeTestCase {
     [
       AutomationProposal(
         id: 1, runId: 1, judge: AutomationNodeID(2), defId: AutomationNodeDefID(2),
-        originNodeId: AutomationNodeID(1), origin: .version(1), item: Self.item("old"),
+        row: .version(1), originNodeId: AutomationNodeID(1),
+        fields: AutomationRowFields(link: "https://example.com/old", body: nil, time: nil),
         title: "前の提案", due: nil, workspace: nil, reason: nil,
         proposedAt: Date(timeIntervalSince1970: 0),
         state: .open)

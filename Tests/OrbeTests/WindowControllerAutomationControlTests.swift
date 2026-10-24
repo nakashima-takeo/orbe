@@ -88,14 +88,10 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     guard !proposing.isEmpty else { return }
     let judge = store.nodeId(id, "judge")
     let taken = try XCTUnwrap(store.read(judge, of: id, baseline: nil, now: now)).taken
-    let proposals = proposing.enumerated().compactMap { pair -> AutomationNodePass.Proposal? in
-      let (index, item) = pair
-      guard let origin = taken.first(where: { $0.origin?.item.id == item.id })?.origin else {
-        return nil
-      }
-      return AutomationNodePass.Proposal(
-        origin: origin, title: titles?[index] ?? "対応: \(item.id)",
-        due: nil, workspace: workspaces?[index] ?? nil, reason: reasons?[index] ?? nil)
+    let proposals = proposing.enumerated().compactMap { index, item in
+      taken.first { $0.link == item.link }?.proposal(
+        titles?[index] ?? "対応: \(item.id)", workspace: workspaces?[index] ?? nil,
+        reason: reasons?[index] ?? nil)
     }
     try store.record(
       id, nodeKey: "judge", trigger: .arrival, at: now,
@@ -125,12 +121,11 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertEqual(wc.automationStore.automation(active.id)?.runs.first?.trigger, .schedule)
   }
 
-  // MARK: - 棚と重なり
+  // MARK: - 棚
 
-  /// 提案は棚に出す自動化の側に出て、重なりは両方の自動化に相手と件数で出る。提案した自動化の取得が出どころの項目を出さなく
-  /// なると提案は下がる（同じリンクをほかの自動化が取っていても）。提案した自動化が判定のノードを外すと、出どころの項目が残る提案は
-  /// まだ取っている自動化の棚へ移る。
-  func testProposalsAndOverlapsAppearOnTheShelfAutomation() throws {
+  /// 候補は出した自動化の棚に出て、同じリンクを両方の自動化の判定が候補にすれば両方に出る。取得が元の項目を出さなくなると、その
+  /// 自動化の候補だけが下がる。判定のノードを外すと、その判定の候補は判断待ちも忘れ、ほかの自動化の候補は残る。
+  func testEachAutomationShelvesItsOwnProposals() throws {
     let wc = try launch()
     let store = wc.automationStore
     let first = try set(wc, Self.definition("受信 1"))
@@ -138,24 +133,18 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let gone = Self.item("gone")
     let moved = Self.item("moved")
     try Self.round(store, first, fetched: [gone, moved], proposing: [gone, moved])
-    try Self.round(store, second, fetched: [moved, gone])
+    try Self.round(store, second, fetched: [moved, gone], proposing: [moved])
 
     let candidates = try listed(wc).compactMapValues { $0["taskCandidates"] as? [String: Any] }
     XCTAssertEqual(candidates[first]?["openProposals"] as? Int, 2)
-    XCTAssertEqual(candidates[second]?["openProposals"] as? Int, 0)
-    for (id, other, name) in [(first, second, "受信 2"), (second, first, "受信 1")] {
-      let overlaps = candidates[id]?["overlaps"] as? [[String: Any]]
-      XCTAssertEqual(
-        overlaps?.map { $0["automationId"] as? Int }, [other], "自動化 \(id) に相手が出る")
-      XCTAssertEqual(overlaps?.first?["name"] as? String, name)
-      XCTAssertEqual(overlaps?.first?["count"] as? Int, 2)
-    }
+    XCTAssertEqual(candidates[second]?["openProposals"] as? Int, 1)
+    XCTAssertEqual(candidates[first]?.keys.sorted(), ["openProposals"])
 
     try Self.round(store, first, fetched: [moved])
     XCTAssertEqual(
       try proposals(wc, of: first).map { $0["link"] as? String }, [moved.link],
-      "出どころの項目が消えた提案は下がる")
-    XCTAssertTrue(try proposals(wc, of: second).isEmpty)
+      "元の項目が消えた提案は下がる")
+    XCTAssertEqual(try proposals(wc, of: second).map { $0["link"] as? String }, [moved.link])
 
     var reporting = try XCTUnwrap(store.automation(first)?.definition)
     reporting.nodes[1] = DesignSceneFixtures.commandNode(
@@ -163,51 +152,33 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     _ = try success(
       wc.controlSetAutomation(
         automationId: first, version: store.automation(first)?.version, reporting))
+    XCTAssertTrue(try proposals(wc, of: first).isEmpty, "判定を外せば候補を忘れる")
     let shelved = try proposals(wc, of: second)
-    XCTAssertEqual(shelved.map { $0["link"] as? String }, [moved.link], "取っている受信の棚へ")
+    XCTAssertEqual(shelved.map { $0["link"] as? String }, [moved.link])
     XCTAssertEqual(shelved.first?["automationId"] as? Int, second)
     XCTAssertEqual(shelved.first?["automationName"] as? String, "受信 2")
   }
 
-  /// 候補を出した自動化とノードの鍵は組（`proposedBy`）で出し、棚の自動化と取り違えない。ノードは今の鍵で言い、外したノードは出さない。
-  /// 判定と出どころの両方を外しても出した自動化は言い、出した自動化を消したら言わない。
-  func testProposedByNamesTheProposingAutomationApartFromTheShelf() throws {
+  /// 候補を出した判定のノードと出どころのノードは、要素の直下に今の鍵で出す。出した自動化を消したら候補ごと消える。
+  func testProposalsNameTheirJudgeAndOriginNodesByTheCurrentKeys() throws {
     let wc = try launch()
     let store = wc.automationStore
-    let first = try set(wc, Self.definition("受信 1"))
-    let second = try set(wc, Self.definition("受信 2"))
-    let moved = Self.item("moved")
-    try Self.round(store, first, fetched: [moved], proposing: [moved])
-    try Self.round(store, second, fetched: [moved])
-    var reporting = try XCTUnwrap(store.automation(first)?.definition)
-    reporting.nodes[0].key = "source"
-    reporting.nodes[1] = DesignSceneFixtures.commandNode(
-      "digest", "要約", .arrival, from: ["source"], script: "digest", deliver: .report)
-    _ = try success(wc.controlSetAutomation(automationId: first, version: 1, reporting))
+    let id = try set(wc, Self.definition("受信"))
+    let item = Self.item("a")
+    try Self.round(store, id, fetched: [item], proposing: [item])
+    var renamed = try XCTUnwrap(store.automation(id)?.definition)
+    renamed.nodes[0].key = "source"
+    renamed.nodes[1].from = [AutomationDefinition.Input(nodeKey: "source")]
+    _ = try success(wc.controlSetAutomation(automationId: id, version: 1, renamed))
 
-    let shelved = try XCTUnwrap(try proposals(wc, of: second).first)
-    XCTAssertEqual(shelved["automationId"] as? Int, second)
-    let proposedBy = try XCTUnwrap(shelved["proposedBy"] as? [String: Any])
-    XCTAssertEqual(proposedBy["automationId"] as? Int, first)
-    XCTAssertNil(proposedBy["nodeKey"], "外した判定のノードは言わない")
-    XCTAssertEqual(proposedBy["originNodeKey"] as? String, "source", "出どころのノードは今の鍵で言う")
+    let proposal = try XCTUnwrap(try proposals(wc, of: id).first)
+    XCTAssertEqual(proposal["automationId"] as? Int, id)
+    XCTAssertEqual(proposal["nodeKey"] as? String, "judge")
+    XCTAssertEqual(proposal["originNodeKey"] as? String, "source")
+    XCTAssertNil(proposal["proposedBy"])
 
-    try store.dismiss(try XCTUnwrap(store.proposals.first?.id))
-    let other = DesignSceneFixtures.commandNode(
-      "other", "ほか", .manual, script: "other", deliver: .report)
-    _ = try success(
-      wc.controlSetAutomation(
-        automationId: first, version: 2,
-        AutomationDefinition(name: "受信 1", notify: nil, nodes: [other])))
-    let rest = try XCTUnwrap(
-      try proposals(wc, of: second).first?["proposedBy"] as? [String: Any],
-      "判定と出どころの両方を外しても、出した自動化は残る（判断済みの候補は下がらない）")
-    XCTAssertEqual(rest["automationId"] as? Int, first)
-    XCTAssertNil(rest["originNodeKey"])
-
-    _ = wc.controlDeleteAutomation(automationId: first)
-    let orphan = try XCTUnwrap(try proposals(wc, of: second).first)
-    XCTAssertNil(orphan["proposedBy"], "出した自動化を消したら言わない")
+    _ = wc.controlDeleteAutomation(automationId: id)
+    XCTAssertTrue(store.proposals.isEmpty)
   }
 
   /// 候補は付け先が今ある workspace に解けるときだけ、起動ごとの id と名前を持つ（永続 ID は出さない）。付け先が無い・
@@ -226,10 +197,9 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
     XCTAssertEqual(listed["対応: a"]?["workspaceId"] as? Int, main.id)
     XCTAssertEqual(listed["対応: a"]?["workspaceName"] as? String, "main")
-    let proposedBy = listed["対応: a"]?["proposedBy"] as? [String: Any]
-    XCTAssertEqual(proposedBy?["automationId"] as? Int, id)
-    XCTAssertEqual(proposedBy?["nodeKey"] as? String, "judge")
-    XCTAssertEqual(proposedBy?["originNodeKey"] as? String, "fetch")
+    XCTAssertEqual(listed["対応: a"]?["automationId"] as? Int, id)
+    XCTAssertEqual(listed["対応: a"]?["nodeKey"] as? String, "judge")
+    XCTAssertEqual(listed["対応: a"]?["originNodeKey"] as? String, "fetch")
     for title in ["対応: b", "対応: c"] {
       XCTAssertNil(listed[title]?["workspaceId"], title)
       XCTAssertNil(listed[title]?["workspaceName"], title)

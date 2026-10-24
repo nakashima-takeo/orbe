@@ -76,8 +76,9 @@ extension AutomationStore {
       memory.automations.removeAll { $0.id == id }
       memory.automations.append(automation)
       memory.automations.sort { $0.id < $1.id }
-      try memory.withdraw(originatingIn: invalidated + rewired.invalidated, db)
-      try memory.forgetUnheld(db)
+      try memory.withdraw(after: invalidated + rewired.invalidated, db)
+      try memory.withdraw(reviewing: rewired.reviewed, db)
+      try memory.forgetUnheld(db, now: at)
       try memory.recount(id, db, now: at)
       return Replaced(
         automation: memory.automation(id) ?? automation, reworked: rewired.reworked,
@@ -125,11 +126,14 @@ extension AutomationStore {
     var states: [AutomationNodeID: AutomationNodeState] = [:]
     var reworked: [AutomationNodeID] = []
     var invalidated: [Int] = []
+    /// 判断待ちの候補を下げる決まりを当て直す判定（`keep` が `whileCurrent` になった判定と、直した読めない自動化の判定）。
+    var reviewed: [AutomationNodeID] = []
   }
 
   /// つながりを書き換え、出力の性質が変わったノードの今有効な項目を無効にし、何をするかが変わったノードの外した印を下ろし、ノードの
   /// 状態を読み直す。同じノードどうしのつながりが残れば読んだ位置も残る。定義を読めない自動化を直すときは前の性質を知らないので、
-  /// 残るノードのうち今の集合でないノードの今有効な項目を無効にし、残るノードをすべて何をするかが変わったものとして扱う。
+  /// 残るノードのうち今の集合でないノードの今有効な項目を無効にし、残るノードをすべて何をするかが変わったものとして扱う。候補の
+  /// 保ち方が `whileCurrent` になった判定（直した読めない自動化では `whileCurrent` の判定すべて）は、下げる決まりを当て直す。
   private static func rewire(
     _ graph: AutomationGraph, of id: Int, _ current: Current, _ db: AutomationDatabase, at: Date
   ) throws -> Rewired {
@@ -145,6 +149,9 @@ extension AutomationStore {
         : before?.coverage.map { $0 != node.coverage } ?? false
       if coverageChanged {
         rewired.invalidated += try db.invalidateItems(of: node.id, at: at)
+      }
+      if node.keep == .whileCurrent, old == nil ? kept : before?.keep == .untilDecided {
+        rewired.reviewed.append(node.id)
       }
       let reworked = old == nil ? kept : before.map { $0.behavior != node.behavior } ?? false
       if reworked {

@@ -72,8 +72,6 @@ enum AutomationFailure: Error, Equatable {
   case unreadInput(Int)
   /// agent が結果の道具も申告も一度も呼ばずに終わった。
   case noResult
-  /// 判定へ渡す行が、どれも出どころを持たなかった。
-  case unsourced
 
   /// AI が読む英文。`nodeKey` はこの回のノードの鍵。
   func text(nodeKey: String, ending: AutomationEnding, breach: AutomationRejections?) -> String {
@@ -94,9 +92,6 @@ enum AutomationFailure: Error, Equatable {
         "the \(word) ended without reading \(count) of its input \(count == 1 ? "item" : "items")"
     case .noResult:
       return "the \(word) ended without giving a result"
-    case .unsourced:
-      return
-        "the rows of \(word) reach a judge node, but none has an origin (none came from a fetch node)"
     }
   }
 }
@@ -123,10 +118,10 @@ enum AutomationLineFault: Equatable {
   case invalidValue(String)
   /// 同じ id の 2 つ目の行。
   case idTwice(String)
-  /// 判定へ届く処理が、入力の行の id でない id の行を出した。
-  case notInputId(String)
-  /// 判定の案が新しい項目でない id を指した。
+  /// 判定の案が、取った行でない id を指した。
   case notNewItem(String)
+  /// 判定の案が指した行に、http か https の URL の link が無い（行の id）。
+  case noLink(String)
   case proposedTwice(String)
   /// 判定の resolve が判断待ちの候補のリンクでない。
   case notWaiting(String)
@@ -165,8 +160,8 @@ enum AutomationLineFault: Equatable {
     case .typeMismatch(let key): "\(key) has the wrong type"
     case .invalidValue(let key): key.isEmpty ? "invalid value" : "invalid \(key)"
     case .idTwice(let id): "id \(id) appeared twice"
-    case .notInputId(let id): "id \(id) is not the id of an input item"
     case .notNewItem(let id): "propose \(id): not a new item"
+    case .noLink(let id): "the row \"\(id)\" has no link"
     case .proposedTwice(let id): "propose \(id): proposed twice"
     case .notWaiting(let link): "resolve \(link): not a waiting proposal"
     case .notOneDecision: "must have exactly one of propose / resolve"
@@ -191,8 +186,8 @@ struct AutomationDismissal: Equatable {
     case alreadyProposed
     /// 対応済みにする判断待ちの候補が無い。
     case noOpenProposal
-    /// 案の出どころの項目が、回の途中に無効になった。
-    case originInvalidated
+    /// 案が元にした行が、回の途中に今のものでなくなった（`keep` が `whileCurrent` の判定だけ）。
+    case noLongerCurrent
   }
 
   /// AI が読む英文。
@@ -200,7 +195,7 @@ struct AutomationDismissal: Equatable {
     switch why {
     case .alreadyProposed: "propose \(link): already proposed"
     case .noOpenProposal: "resolve \(link): no open proposal"
-    case .originInvalidated: "propose \(link): its source item is no longer current"
+    case .noLongerCurrent: "propose \(link): the row it was based on is no longer current"
     }
   }
 }
@@ -280,7 +275,6 @@ extension AutomationFailure: Codable {
     case "brokeRules": self = .brokeRules
     case "unreadInput": self = .unreadInput(try c.decode(Int.self, forKey: .count))
     case "noResult": self = .noResult
-    case "unsourced": self = .unsourced
     default:
       throw DecodingError.dataCorruptedError(
         forKey: .kind, in: c, debugDescription: "unknown failure kind")
@@ -308,7 +302,6 @@ extension AutomationFailure: Codable {
       try c.encode("unreadInput", forKey: .kind)
       try c.encode(count, forKey: .count)
     case .noResult: try c.encode("noResult", forKey: .kind)
-    case .unsourced: try c.encode("unsourced", forKey: .kind)
     }
   }
 }
@@ -331,8 +324,8 @@ extension AutomationBrokenLine: Codable {
     case "typeMismatch": fault = .typeMismatch(try string(.key))
     case "invalidValue": fault = .invalidValue(try string(.key))
     case "idTwice": fault = .idTwice(try string(.id))
-    case "notInputId": fault = .notInputId(try string(.id))
     case "notNewItem": fault = .notNewItem(try string(.id))
+    case "noLink": fault = .noLink(try string(.id))
     case "proposedTwice": fault = .proposedTwice(try string(.id))
     case "notWaiting": fault = .notWaiting(try string(.link))
     case "notOneDecision": fault = .notOneDecision
@@ -365,8 +358,8 @@ extension AutomationBrokenLine: Codable {
     case .typeMismatch(let key): try kind("typeMismatch", [(.key, key)])
     case .invalidValue(let key): try kind("invalidValue", [(.key, key)])
     case .idTwice(let id): try kind("idTwice", [(.id, id)])
-    case .notInputId(let id): try kind("notInputId", [(.id, id)])
     case .notNewItem(let id): try kind("notNewItem", [(.id, id)])
+    case .noLink(let id): try kind("noLink", [(.id, id)])
     case .proposedTwice(let id): try kind("proposedTwice", [(.id, id)])
     case .notWaiting(let link): try kind("notWaiting", [(.link, link)])
     case .notOneDecision: try kind("notOneDecision")

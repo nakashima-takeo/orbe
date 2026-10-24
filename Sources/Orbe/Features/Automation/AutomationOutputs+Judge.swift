@@ -19,7 +19,7 @@ extension AutomationOutputs {
     _ rows: [AutomationRow], _ shape: JudgeShape, itemIds: Set<String>,
     choices: AutomationJudgeChoices, seen: inout JudgeSeen
   ) -> [Result<AutomationDecision, AutomationBrokenLine>] {
-    let openLinks = Set(choices.open.map(\.item.link))
+    let openLinks = Set(choices.open.map(\.link))
     return rows.map { row in
       let refuse = { (fault: AutomationLineFault) in
         Result<AutomationDecision, AutomationBrokenLine>.failure(

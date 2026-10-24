@@ -14,7 +14,7 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
       AutomationNodeRow(
         id: "f:\($0)",
         text: #"{"id":"f:\#($0)","body":""# + String(repeating: "x", count: size) + #""}"#,
-        origin: nil, source: nil)
+        ref: nil, source: nil)
     }
   }
 
@@ -29,7 +29,7 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
   /// 覚える。
   func testRowsArePagedAndRemembered() {
     let session = AutomationRunSession(
-      .process(rows(120), reachesJudge: false), writer: AutomationNodeID(1))
+      .process(rows(120)), writer: AutomationNodeID(1))
 
     let first = session.call("read_run_rows", [:])
     XCTAssertEqual(head(first)["count"] as? Int, 50)
@@ -43,14 +43,14 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
     XCTAssertEqual(session.unread, [])
 
     let big = AutomationRunSession(
-      .process(rows(3, size: 30 << 10), reachesJudge: false), writer: AutomationNodeID(1))
+      .process(rows(3, size: 30 << 10)), writer: AutomationNodeID(1))
     XCTAssertEqual(head(big.call("read_run_rows", ["limit": 3]))["count"] as? Int, 1)
     XCTAssertEqual(head(big.call("read_run_rows", ["offset": 1, "limit": 3]))["count"] as? Int, 1)
   }
 
   func testPageArgumentsAreChecked() {
     let session = AutomationRunSession(
-      .process(rows(3), reachesJudge: false), writer: AutomationNodeID(1))
+      .process(rows(3)), writer: AutomationNodeID(1))
 
     XCTAssertTrue(session.call("read_run_rows", ["offset": -1]).isError)
     XCTAssertTrue(session.call("read_run_rows", ["limit": 0]).isError)
@@ -64,7 +64,7 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
   /// 入力を読み切るまで結果を受けず、読んでいない位置を言う。
   func testResultsWaitUntilEveryRowIsRead() {
     let session = AutomationRunSession(
-      .process(rows(150), reachesJudge: false), writer: AutomationNodeID(1))
+      .process(rows(150)), writer: AutomationNodeID(1))
     _ = session.call("read_run_rows", ["limit": 10])
 
     let refused = session.call("put_rows", ["rows": [["id": "f:0"]]])
@@ -77,7 +77,7 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
   /// 1 回の呼び出しに外れた件が 1 つでもあれば何も受けず、外れた件をすべて言う。直した呼び出しは受ける。
   func testACallIsAcceptedWhollyOrNotAtAll() {
     let session = AutomationRunSession(
-      .process(rows(1), reachesJudge: false), writer: AutomationNodeID(1))
+      .process(rows(1)), writer: AutomationNodeID(1))
     _ = session.call("read_run_rows", [:])
 
     let refused = session.call(
@@ -101,7 +101,7 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
   /// report_nothing の断りで report_error を勧めない。
   func testAnEmptyCallLeavesRoomToReportNothing() {
     let session = AutomationRunSession(
-      .process(rows(1), reachesJudge: false), writer: AutomationNodeID(1))
+      .process(rows(1)), writer: AutomationNodeID(1))
     _ = session.call("read_run_rows", [:])
 
     XCTAssertTrue(
@@ -109,7 +109,7 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
     XCTAssertFalse(session.call("report_nothing", ["why": "無い"]).isError)
 
     let refused = AutomationRunSession(
-      .process(rows(1), reachesJudge: false), writer: AutomationNodeID(1))
+      .process(rows(1)), writer: AutomationNodeID(1))
     _ = refused.call("read_run_rows", [:])
     _ = refused.call("put_rows", ["rows": [["note": "x"]]])
     let reply = refused.call("report_nothing", ["why": "無い"])
@@ -119,7 +119,8 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
 
   /// 何も無いの申告は結果の前だけで、申告の後は結果を受けない。失敗の申告の後も受けない。
   func testNothingAndErrorDoNotMixWithResults() {
-    let fetch = AutomationRunSession(.fetch(since: nil), writer: AutomationNodeID(1))
+    let fetch = AutomationRunSession(
+      .fetch(since: nil, reachesJudge: false), writer: AutomationNodeID(1))
     XCTAssertFalse(fetch.call("report_nothing", ["why": "無い"]).isError)
     XCTAssertTrue(
       fetch.call(
@@ -132,13 +133,14 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
       ).isError)
     XCTAssertTrue(fetch.answered)
 
-    let failing = AutomationRunSession(.fetch(since: nil), writer: AutomationNodeID(1))
+    let failing = AutomationRunSession(
+      .fetch(since: nil, reachesJudge: false), writer: AutomationNodeID(1))
     XCTAssertFalse(failing.call("report_error", ["what": "落ちた"]).isError)
     XCTAssertEqual(failing.error, "落ちた")
     XCTAssertTrue(failing.call("report_nothing", ["why": "x"]).isError)
 
     let given = AutomationRunSession(
-      .process(rows(1), reachesJudge: false), writer: AutomationNodeID(1))
+      .process(rows(1)), writer: AutomationNodeID(1))
     _ = given.call("read_run_rows", [:])
     _ = given.call("put_rows", ["rows": [["id": "a"]]])
     XCTAssertTrue(given.call("report_nothing", ["why": "x"]).isError, "結果を出した後は申告しない")
@@ -150,12 +152,13 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
   /// 「id が無い」と言う。
   func testJudgeReadsItsChoicesAndChecksItsDecisions() throws {
     let waiting = AutomationProposal(
-      id: 1, runId: 1, judge: AutomationNodeID(2), defId: AutomationNodeDefID(2),
-      originNodeId: AutomationNodeID(1), origin: .version(1), item: item("old"), title: "前の提案",
-      due: nil, workspace: nil, reason: nil, proposedAt: now, state: .open)
+      id: 1, runId: 1, judge: AutomationNodeID(2), defId: AutomationNodeDefID(2), row: .version(1),
+      originNodeId: AutomationNodeID(1),
+      fields: AutomationRowFields(link: "https://example.com/old", body: nil, time: nil),
+      title: "前の提案", due: nil, workspace: nil, reason: nil, proposedAt: now, state: .open)
     let session = AutomationRunSession(
       .judge(
-        [AutomationSourcedRow(id: "f:a", text: #"{"id":"f:a"}"#, origin: origin("a"))],
+        [linkedRow("a")],
         choices: AutomationJudgeChoices(
           open: [waiting],
           workspaces: AutomationWorkspaces(

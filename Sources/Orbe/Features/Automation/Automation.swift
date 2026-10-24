@@ -24,7 +24,7 @@ struct Automation: Equatable, Identifiable {
     AutomationDefinition(name: name, notify: notify, nodes: graph.definitionNodes)
   }
 
-  /// 判定のノードを持つか。タスク候補の棚・重なりはこれを持つ自動化の単位。
+  /// 判定のノードを持つか。タスク候補の棚はこれを持つ自動化の単位。
   var judges: Bool { !graph.judges.isEmpty }
 
   /// ノードの状態。グラフのノードはいつも状態を持つ。
@@ -46,8 +46,8 @@ struct Automation: Equatable, Identifiable {
   }
 }
 
-/// 定義が今の検証を通らない自動化。動かず、定義を直すか消すまで、行から組めた分と理由を持って場所を占める。持っていた候補は
-/// 忘れない。
+/// 定義が今の検証を通らない自動化。動かず、定義を直すか消すまで、行から組めた分と理由を持って場所を占める。そのノードが出した
+/// 候補は忘れない。
 struct AutomationUnreadable: Equatable, Identifiable {
   let id: Int
   /// 1 行として読めた名前。読めなければ nil。
@@ -90,7 +90,7 @@ struct AutomationNodeState: Equatable {
   var breach: AutomationRunRecord?
   /// 受け手として今読めば取る行。入力の無いノードは 0 件。
   var pending = AutomationPending()
-  /// 出す側の今有効な項目のリンク（取得の最新の結果）。
+  /// 出す側の今有効な項目のリンク。
   var liveLinks: Set<String> = []
 
   static let retainedRuns = 20
@@ -116,15 +116,22 @@ struct AutomationSeqs: Equatable {
   var event = 0
 }
 
-/// 取得の出力 1 行の、候補に使う欄。`id` はノードの中での同一性（書かれた id）、`link` は自動化をまたぐ同一性。
+/// 取得の出力 1 行。`id` はノードの中での同一性（書かれた id）。`link`・`time` は書いたときだけ持つ。
 struct AutomationItem: Equatable {
   let id: String
-  let link: String
+  let link: String?
   let body: String
-  let time: Date
+  let time: Date?
 }
 
-/// 判定が出した候補。Orbe が覚えている間だけメモリに載る。リンクは覚えている候補を通じて一意。
+/// 判定が案にした行の、候補に使う欄。`link` は http か https の URL で、`body`・`time` は読めたときだけ持つ。
+struct AutomationRowFields: Equatable {
+  let link: String
+  let body: String?
+  let time: Date?
+}
+
+/// 判定が出した候補。Orbe が覚えている間だけメモリに載る。同一性は（判定のノード, リンク）で、覚えている候補を通じて一意。
 struct AutomationProposal: Equatable, Identifiable {
   let id: Int
   /// 候補を出した判定の回。
@@ -132,11 +139,12 @@ struct AutomationProposal: Equatable, Identifiable {
   /// 出した判定のノードと、その回が動いた定義。候補を出した自動化はこのノードの持ち主（`AutomationStore.issuer(of:)`）。
   let judge: AutomationNodeID
   let defId: AutomationNodeDefID
-  /// 出どころのノードと行。
+  /// 判定が読んだ行（項目は版）。
+  let row: AutomationRowRef
+  /// 読んだ行から引き継ぎをたどった先の行を出したノード（表示のためだけ）。
   let originNodeId: AutomationNodeID
-  let origin: AutomationRowRef
-  /// 出どころの行の欄（`id` は書かれた id）。
-  let item: AutomationItem
+  /// 読んだ行の欄。
+  let fields: AutomationRowFields
   let title: String
   let due: TaskItem.DueDate?
   /// 付け先の `Workspace.persistentId`（判定が決める）。解決できない参照は「なし」と同じに扱う。
@@ -145,6 +153,8 @@ struct AutomationProposal: Equatable, Identifiable {
   let reason: String?
   let proposedAt: Date
   var state: State
+
+  var link: String { fields.link }
 
   enum State: Equatable {
     case open
@@ -155,8 +165,9 @@ struct AutomationProposal: Equatable, Identifiable {
   }
 }
 
-/// 指す行や値が読めない、覚えている候補。分かる分（ID・リンク・出した判定のノード）だけを持ち、「既に候補がある」に効く。
-/// 外の口（`list_automation_proposals`）には分かる分だけで出し、棚・画面・判定には出さない。持ち主が無くなれば忘れる。
+/// 指す行や値が読めない、覚えている候補。分かる分（ID・リンク・出した判定のノード）だけを持ち、その判定の「既に候補がある」と
+/// 判定の前に捨てる行に効く。外の口（`list_automation_proposals`）には分かる分だけで出し、棚・画面・判定には出さない。出した
+/// 判定のノードが無くなれば忘れる。
 struct AutomationUnreadableProposal: Equatable {
   let id: Int
   let link: String

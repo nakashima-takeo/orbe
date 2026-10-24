@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 提案タブの右の詳細。選ばれている候補の出どころ（自動化の名前・取得のノードの名前・時刻）・本文の全体・リンク、タスクにしたとき
+/// 提案タブの右の詳細。選ばれている候補の出どころ（自動化の名前・出どころのノードの名前・時刻）・本文の全体・リンク、タスクにしたとき
 /// のタイトル・期限・workspace、「タスクにする」「タスクにして開く」「却下」のボタン。選ばれている候補が無ければ空。ボタンは欄の
 /// 下端に置いてスクロールさせない——さばくキーの案内はここにしか無いので、本文が長くても隠さないため。収まらない中身だけが
 /// スクロールする。
@@ -38,15 +38,15 @@ struct TaskPaletteAutomationDetail: View {
     // 名前は縮め、時刻は残す。
     HStack(spacing: Theme.Space.note + 1) {
       MarkGlyph(kind: .tray, width: 10, color: Color.theme.accentBright)
-      let names = [model.store.shelf(of: proposal)?.name, model.originNodeName(of: proposal)]
+      let names = [model.store.issuer(of: proposal)?.name, model.originNodeName(of: proposal)]
         .compactMap { $0 }
       if !names.isEmpty {
         TruncatingSlot(names.joined(separator: " · ")) {
           fontResolver.text($0, base: Theme.Typography.meta)
         }
-        Text(verbatim: "·")
+        if proposal.fields.time != nil { Text(verbatim: "·") }
       }
-      Text(text.stamp(proposal.item.time)).fixedSize()
+      if let time = proposal.fields.time { Text(text.stamp(time)).fixedSize() }
     }
     .font(Font.theme.meta)
     .foregroundStyle(Color.theme.textMuted)
@@ -102,7 +102,7 @@ struct TaskPaletteAutomationDetail: View {
           .taskPaletteAutomationFieldDue,
           TaskDueText.label(due, today: text.today, weekdays: TaskDueText.weekdays(l10n.language)))
       }
-      field(.taskPaletteAutomationFieldLink, GitHubItemText.link(proposal.item.link, l10n: l10n))
+      field(.taskPaletteAutomationFieldLink, GitHubItemText.link(proposal.link, l10n: l10n))
     }
     .font(Font.theme.codeSmall)
   }
@@ -120,14 +120,16 @@ struct TaskPaletteAutomationDetail: View {
     }
   }
 
-  /// 本文の全体と「⌘O ↗ <ホスト名> で開く」（クリックか ⌘O でブラウザで開く）。
+  /// 本文の全体（あれば）と「⌘O ↗ <ホスト名> で開く」（クリックか ⌘O でブラウザで開く）。
   private func quote(_ proposal: AutomationProposal) -> some View {
     VStack(alignment: .leading, spacing: Theme.Space.step) {
-      fontResolver.text(proposal.item.body, base: Theme.Typography.workspaceName)
-        .font(Font.theme.workspaceName)
-        .foregroundStyle(Color.theme.textPrimary)
-        .lineSpacing(Theme.Space.tick)
-        .fixedSize(horizontal: false, vertical: true)
+      if let body = proposal.fields.body {
+        fontResolver.text(body, base: Theme.Typography.workspaceName)
+          .font(Font.theme.workspaceName)
+          .foregroundStyle(Color.theme.textPrimary)
+          .lineSpacing(Theme.Space.tick)
+          .fixedSize(horizontal: false, vertical: true)
+      }
       Button {
         model.openLink()
       } label: {
@@ -136,7 +138,7 @@ struct TaskPaletteAutomationDetail: View {
           HStack(spacing: 5) {
             MarkGlyph(kind: .openOut, color: Color.theme.textMuted)
             Text(
-              l10n.format(.taskPaletteAutomationOpenLink, AutomationText.host(proposal.item.link)))
+              l10n.format(.taskPaletteAutomationOpenLink, AutomationText.host(proposal.link)))
           }
         }
         .font(Font.theme.meta)

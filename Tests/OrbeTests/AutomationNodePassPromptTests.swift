@@ -5,9 +5,9 @@ import XCTest
 /// ノードの 1 回の依頼文——外れた件にする決まりを依頼文でも伝え、ツールを持つ取得には読んだ文面に従わせない。行を見る agent は
 /// 行を Orbe の MCP で読み、依頼文には件数と読み方だけを書く。結果は道具で出させる。
 ///
-/// 壊れると何が起きるか: 行が多い・大きい回の依頼文が上限やモデルの読める量を超える。処理の agent が `id` の決まりを知らずに外し、毎回結果を断られる。判定へ届く処理が新しい項目を作り、
-/// 判定へ届く前に消える。取得の agent が、読んだ外の文面に仕込まれた指示に従ってツールを使う。判定が待っている候補を片付ける
-/// 回に report_nothing だけを呼び、候補が残り続ける。
+/// 壊れると何が起きるか: 行が多い・大きい回の依頼文が上限やモデルの読める量を超える。処理の agent が `id` の決まりを知らずに
+/// 外し、毎回結果を断られる。処理が新しく作る行の `id` が回ごとに変わり、同じ行が別の行として届き直す。取得の agent が、読んだ
+/// 外の文面に仕込まれた指示に従ってツールを使う。判定が待っている候補を片付ける回に report_nothing だけを呼び、候補が残り続ける。
 final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
   private func prompt(_ index: Int = 0) throws -> String {
     try XCTUnwrap(agentCall(index)).prompt
@@ -16,18 +16,11 @@ final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
   func testProcessPromptStatesTheIdRules() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")], reachesJudge: false))
-    start(
-      AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")], reachesJudge: true))
+      .process([row("a")]))
 
-    for index in 0..<2 {
-      XCTAssertTrue(try prompt(index).contains(#"Give every item a string "id""#), "\(index)")
-      XCTAssertTrue(try prompt(index).contains(#"never give the same "id" twice"#), "\(index)")
-    }
-    let onlyInputIds = #"Give only items whose "id" is one of the input items"#
-    XCTAssertFalse(try prompt(0).contains(onlyInputIds), "判定へ届かない処理は新しい項目を作れる")
-    XCTAssertTrue(try prompt(1).contains(onlyInputIds))
+    XCTAssertTrue(try prompt().contains(#"Give every item a string "id""#))
+    XCTAssertTrue(try prompt().contains(#"never give the same "id" twice"#))
+    XCTAssertTrue(try prompt().contains(#"stays the same for the same item in every run"#))
   }
 
   /// 行を見る agent（処理・判定・報告）は、行をその回の札付きの Orbe の MCP で読み、依頼文には件数と読み方だけがある。
@@ -35,10 +28,10 @@ final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
   func testRowsAreReadThroughOrbesMCPAndThePromptCarriesOnlyTheirCount() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a"), row("b")], reachesJudge: false))
+      .process([row("a"), row("b")]))
     start(
       AutomationGraphTests.agent("j", from: ["f"], deliver: .taskCandidates), .judge,
-      judgeInput(["a", "b"]))
+      .judge([row("a"), row("b")], choices: Self.noChoices))
     start(AutomationGraphTests.agent("r", from: ["f"]), .report, .report([row("a"), row("b")]))
     start(AutomationGraphTests.agent("r", from: ["f"]), .report, .report([]))
 
@@ -61,7 +54,7 @@ final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
   func testTheTokenEndsWithTheRun() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")], reachesJudge: false))
+      .process([row("a")]))
     let token = try XCTUnwrap(agentCall(0)?.orbe?.token)
     readAll(0)
     use(0, .putRows, ["rows": [["id": "f:a"]]])
@@ -76,7 +69,7 @@ final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
     start(
       AutomationGraphTests.agent(
         "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
-      .fetch, .fetch(since: nil))
+      .fetch, .fetch(since: nil, reachesJudge: false))
 
     XCTAssertTrue(
       try prompt().contains(
@@ -103,11 +96,11 @@ final class AutomationNodePassPromptTests: AutomationNodePassTestCase {
     start(
       AutomationGraphTests.agent(
         "f", tools: [Self.tool], deliver: .nextNode, coverage: .currentSet),
-      .fetch, .fetch(since: nil))
+      .fetch, .fetch(since: nil, reachesJudge: false))
     start(AutomationGraphTests.agent("w", tools: [Self.tool]), .work, .work)
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")], reachesJudge: false))
+      .process([row("a")]))
     start(
       AutomationGraphTests.agent("j", from: ["f"], deliver: .taskCandidates), .judge,
       judgeInput(["a"]))

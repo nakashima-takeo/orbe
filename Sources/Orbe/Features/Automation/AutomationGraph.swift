@@ -44,6 +44,11 @@ struct AutomationGraph: Equatable {
       }
     }
 
+    /// 判断待ちの候補の保ち方を解いたもの。判定だけが持ち、省略は `whileCurrent`。
+    var keep: AutomationKeep? {
+      role == .judge ? action.keep ?? .whileCurrent : nil
+    }
+
     /// 入力のノード。
     var inputNodeIds: [AutomationNodeID] { inputs.map(\.from) }
 
@@ -56,7 +61,7 @@ struct AutomationGraph: Equatable {
         method = .agent(agent)
       }
       return Behavior(
-        method: method, timeoutMinutes: timeoutMinutes, coverage: coverage,
+        method: method, timeoutMinutes: timeoutMinutes, coverage: coverage, keep: keep,
         destination: action.destination, inputs: Set(inputs))
     }
   }
@@ -66,6 +71,7 @@ struct AutomationGraph: Equatable {
     let method: AutomationActionDef.Method
     let timeoutMinutes: Int
     let coverage: AutomationCoverage?
+    let keep: AutomationKeep?
     let destination: AutomationActionDef.Destination
     let inputs: Set<AutomationNodeEdge>
   }
@@ -160,14 +166,16 @@ struct AutomationGraph: Equatable {
     return judges
   }
 
-  /// `judge` のノードへ、途中で別の取得のノードを通らずに行が届く取得のノード（定義の順）。
-  func fetches(reaching judge: AutomationNodeID) -> [Node] {
-    guard let target = index(judge) else { return [] }
-    let roles = nodes.map(\.role)
-    return nodes.indices.filter { index in
-      nodes[index].role == .fetch
-        && Self.judges(reachedFrom: index, roles, downstream).contains(target)
-    }.map { nodes[$0] }
+  /// `judge` のノードへ行が届くノード——入力を上流へたどり、取得で止めたもの（取得と処理。定義の順）。
+  func feeders(of judge: AutomationNodeID) -> [Node] {
+    guard let start = index(judge) else { return [] }
+    var pending = upstream[start]
+    var seen = Set<Int>()
+    while let index = pending.popLast() {
+      guard seen.insert(index).inserted, nodes[index].role != .fetch else { continue }
+      pending += upstream[index]
+    }
+    return seen.sorted().map { nodes[$0] }
   }
 
   /// `id` のノードを入力に名指すノード（定義の順）。

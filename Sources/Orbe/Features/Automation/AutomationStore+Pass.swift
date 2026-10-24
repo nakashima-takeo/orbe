@@ -29,14 +29,12 @@ extension AutomationStore {
     _ nodeId: AutomationNodeID, of id: Int, baseline: [AutomationNodeID: AutomationSeqs]?,
     now: Date
   ) throws(AutomationError) -> AutomationIntake.Read? {
-    guard let automation = automation(id), let node = automation.graph.node(nodeId),
-      !node.inputs.isEmpty
-    else { return nil }
-    let links = heldLinks
+    guard let node = automation(id)?.graph.node(nodeId), !node.inputs.isEmpty else { return nil }
+    let closed = memory.closedLinks(of: nodeId)
     return try read {
       try $0.read(
-        node, in: automation.graph, baseline: baseline,
-        context: AutomationIntake.Context(proposed: links.contains, now: now))
+        node, baseline: baseline,
+        context: AutomationIntake.Context(closed: closed.contains, now: now))
     }
   }
 
@@ -68,13 +66,10 @@ extension AutomationStore {
   /// ノードの 1 回を 1 トランザクションで確定する。
   ///
   /// 成功した回は、読んだ位置を進め、持ち越しを記録に載せて空に戻し、出す側なら出した行を照らして（今の集合は項目と版、出来事の
-  /// 流れは出来事）、判定なら候補を足し・対応済みにする。出どころの項目が無効になった判断待ちの候補を下げる。失敗した回は記録・
+  /// 流れは出来事）、無効にした項目を元にした判断待ちの候補を下げる。判定なら候補を足し・対応済みにする。失敗した回は記録・
   /// 回の履歴・外した印だけを書き、出す側の行・読んだ位置・持ち越しは動かさない——失敗を「0 件取れた」と読み違えて候補を一斉に
-  /// 下げないため。どちらも回の履歴（読んだ行と扱い）を書き、出力が決まりを外した最初の回なら印を書く。
-  ///
-  /// 判定へ届く処理が出した行が 1 行以上あって、どれも出どころを持たず、そのうちにノードが自分で作った行（入力を引き継がない行）
-  /// があれば、成功した回も失敗した回として書く——回の途中に判定のノードを下流に足す書き換えがあると、始めた時点では判定へ届か
-  /// なかったノードの出力がそうなりうる。自動化かノードがもう無ければ何もしない。
+  /// 下げないため。どちらも回の履歴（読んだ行と扱い）を書き、出力が決まりを外した最初の回なら印を書く。自動化かノードがもう
+  /// 無ければ何もしない。
   func record(_ end: AutomationPassEnd) throws(AutomationError) -> AutomationRecorded {
     guard let index = automations.firstIndex(where: { $0.id == end.automationId }),
       let node = automations[index].graph.node(end.nodeId)
@@ -84,14 +79,7 @@ extension AutomationStore {
       endedAt: TaskItem.storedInstant(end.endedAt), trigger: end.trigger,
       taken: end.read?.taken.count, execution: end.outcome.execution,
       breach: end.outcome.breach)
-    if case .succeeded(.process(let rows), _, _) = end.outcome,
-      automations[index].graph.reachesTaskCandidates(node.id), !rows.isEmpty,
-      rows.allSatisfy({ $0.origin == nil }), rows.contains(where: { $0.source == nil })
-    {
-      run.failure = .unsourced
-    } else if case .failed(let reason, _, _) = end.outcome {
-      run.failure = reason
-    }
+    if case .failed(let reason, _, _) = end.outcome { run.failure = reason }
     return try commit(sweepingAt: run.endedAt) { db, memory in
       var recording = AutomationRecording(end: end, node: node, index: index, db: db)
       return try recording.record(run, &memory)
@@ -127,18 +115,23 @@ extension AutomationMemory {
   ) throws {
     guard let index = automations.firstIndex(where: { $0.id == id }) else { return }
     let automation = automations[index]
-    let links = heldLinks
     for node in automation.graph.nodes
     where !node.inputs.isEmpty && (nodeIds?.contains(node.id) ?? true) {
+      let closed = closedLinks(of: node.id)
       automations[index].states[node.id]?.pending = try db.pending(
-        node, in: automation.graph, proposed: links.contains, now: now)
+        node, closed: closed.contains, now: now)
     }
   }
 
-  /// 判定のノードの数を数え直す（覚えている候補のリンクが変わると「既に候補がある」で捨てる行が変わる）。
-  mutating func recountJudges(_ db: AutomationDatabase, now: Date) throws {
-    for automation in automations where automation.judges {
-      try recount(automation.id, db, now: now, nodeIds: automation.graph.judges.map(\.id))
+  /// 判定のノード `judges` の数を数え直す（判断待ちでない覚えている候補のリンクが変わると、判定の前に捨てる行が変わる）。
+  mutating func recountJudges(_ judges: Set<AutomationNodeID>, _ db: AutomationDatabase, now: Date)
+    throws
+  {
+    guard !judges.isEmpty else { return }
+    for automation in automations {
+      let nodeIds = automation.graph.judges.map(\.id).filter(judges.contains)
+      guard !nodeIds.isEmpty else { continue }
+      try recount(automation.id, db, now: now, nodeIds: nodeIds)
     }
   }
 }

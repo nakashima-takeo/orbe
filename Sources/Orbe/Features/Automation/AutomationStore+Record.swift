@@ -59,8 +59,8 @@ struct AutomationRecording {
     try db.setPendingDrops(end.nodeId, AutomationDrops())
   }
 
-  /// 判定でない役割の結果。取得・処理は出した行を照らし（今の集合は項目と版、出来事の流れは出来事）、出どころの項目が無効に
-  /// なった判断待ちの候補を下げる（下げた数は取得の回にだけ数える）。
+  /// 判定でない役割の結果。取得・処理は出した行を照らし（今の集合は項目と版、出来事の流れは出来事）、無効にした項目を元にした
+  /// 判断待ちの候補を下げ、下げた数をこの回に数える。
   private mutating func produce(
     _ output: AutomationNodePass.Output, _ run: inout AutomationNodeRun,
     _ memory: inout AutomationMemory
@@ -74,13 +74,11 @@ struct AutomationRecording {
         node.coverage == .currentSet
         ? try db.writeItems(of: end.nodeId, outputs, at: run.endedAt)
         : try db.writeEvents(of: end.nodeId, outputs, at: run.endedAt)
-      let withdrawn = try memory.withdraw(originatingIn: written.invalidated, db)
-      if node.role == .fetch {
-        run.result = .fetch(fresh: written.fresh, duplicates: written.duplicates)
-        run.withdrawn = withdrawn
-      } else {
-        run.result = .process(fresh: written.fresh, duplicates: written.duplicates)
-      }
+      run.withdrawn = try memory.withdraw(after: written.invalidated, db)
+      run.result =
+        node.role == .fetch
+        ? .fetch(fresh: written.fresh, duplicates: written.duplicates)
+        : .process(fresh: written.fresh, duplicates: written.duplicates)
     case .report(let text): run.result = .report(text: text)
     case .work(.done(let text)): run.result = .work(text: text, nothing: nil)
     case .work(.nothing(let reason)): run.result = .work(text: nil, nothing: reason)
@@ -96,37 +94,34 @@ struct AutomationRecording {
     let dismissed: [AutomationDismissal]
   }
 
-  /// 回の途中に他の確定や人のさばきがあっても、出どころの項目が無効になった案と既に候補のあるリンクへの案は理由付きで捨て、
-  /// 判断待ちでない候補は対応済みにしない。
+  /// 回の途中に他の確定や人のさばきがあっても、この判定が同じリンクの候補を既に持つ案と、（`keep` が `whileCurrent` なら）元に
+  /// した行が今のものでなくなった案は理由付きで捨て、この判定の判断待ちでない候補は対応済みにしない。
   private func reconcile(
     _ proposals: [AutomationNodePass.Proposal], _ resolved: [String], _ memory: AutomationMemory
   ) throws -> Reconciled {
-    var proposed = memory.heldLinks
-    let invalidated = try db.invalidatedVersions(
-      proposals.compactMap {
-        if case .version(let id) = $0.origin.row { return id }
-        return nil
-      })
+    var proposed = memory.links(of: end.nodeId)
     var pending: [AutomationNodePass.Proposal] = []
     var resolving: [Int] = []
     var dismissed: [AutomationDismissal] = []
     for proposal in proposals {
-      if case .version(let id) = proposal.origin.row, invalidated.contains(id) {
-        dismissed.append(
-          AutomationDismissal(link: proposal.origin.item.link, why: .originInvalidated))
+      let link = proposal.fields.link
+      if node.keep == .whileCurrent,
+        try db.noLongerCurrent(proposal.row, link: link, inputs: node.inputNodeIds)
+      {
+        dismissed.append(AutomationDismissal(link: link, why: .noLongerCurrent))
         continue
       }
-      guard proposed.insert(proposal.origin.item.link).inserted else {
-        dismissed.append(
-          AutomationDismissal(link: proposal.origin.item.link, why: .alreadyProposed))
+      guard proposed.insert(link).inserted else {
+        dismissed.append(AutomationDismissal(link: link, why: .alreadyProposed))
         continue
       }
       pending.append(proposal)
     }
     for link in resolved {
       guard
-        let open = memory.proposals.firstIndex(where: { $0.item.link == link && $0.state == .open }
-        ),
+        let open = memory.proposals.firstIndex(where: {
+          $0.judge == end.nodeId && $0.link == link && $0.state == .open
+        }),
         !resolving.contains(open)
       else {
         dismissed.append(AutomationDismissal(link: link, why: .noOpenProposal))
@@ -143,14 +138,16 @@ struct AutomationRecording {
   {
     let endedAt = TaskItem.storedInstant(end.endedAt)
     for proposal in reconciled.pending {
-      let proposalId = try db.insert(proposal: proposal, run: recordId)
+      let proposalId = try db.insert(proposal: proposal, run: recordId, nodeId: end.nodeId)
+      guard let originNodeId = try db.lineage(of: proposal.row).last?.nodeId else {
+        throw AutomationError.unavailable("the row of proposal \(proposalId) is missing")
+      }
       memory.proposals.append(
         AutomationProposal(
-          id: proposalId, runId: recordId, judge: end.nodeId,
-          defId: end.defId, originNodeId: proposal.origin.nodeId, origin: proposal.origin.row,
-          item: proposal.origin.item, title: proposal.title, due: proposal.due,
-          workspace: proposal.workspace, reason: proposal.reason, proposedAt: endedAt,
-          state: .open))
+          id: proposalId, runId: recordId, judge: end.nodeId, defId: end.defId, row: proposal.row,
+          originNodeId: originNodeId, fields: proposal.fields, title: proposal.title,
+          due: proposal.due, workspace: proposal.workspace, reason: proposal.reason,
+          proposedAt: endedAt, state: .open))
     }
     for open in reconciled.resolving {
       try db.resolve(memory.proposals[open].id, at: endedAt)
@@ -164,7 +161,7 @@ struct AutomationRecording {
       try db.setBreach(end.nodeId, run: recordId)
     }
     try memory.reread(end.nodeId, of: end.automationId, db)
-    try memory.forgetUnheld(db)
+    try memory.forgetUnheld(db, now: endedAt)
     try memory.recount(
       end.automationId, db, now: endedAt,
       nodeIds: [end.nodeId] + memory.automations[index].graph.downstream(of: end.nodeId).map(\.id))

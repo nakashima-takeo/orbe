@@ -18,8 +18,6 @@ import Observation
   private(set) var unreadable: [AutomationUnreadable] = []
   private(set) var proposals: [AutomationProposal] = []
   private(set) var unreadableProposals: [AutomationUnreadableProposal] = []
-  /// 覚えている候補を出した判定のノードの持ち主（ノード ID → 自動化 ID。外したノードも、候補に指されている間は持ち主を指す）。
-  private(set) var judgeOwners: [AutomationNodeID: Int] = [:]
   private var database: AutomationDatabase?
   /// 使えないときの断り。
   private(set) var unavailableError: AutomationError
@@ -40,7 +38,6 @@ import Observation
       unreadable = opened.memory.unreadable
       proposals = opened.memory.proposals
       unreadableProposals = opened.memory.unreadableProposals
-      judgeOwners = opened.memory.judgeOwners
       unavailableError = Self.brokenError
     case .failure(let error):
       unavailableError = error
@@ -68,10 +65,8 @@ import Observation
   var memory: AutomationMemory {
     AutomationMemory(
       automations: automations, unreadable: unreadable, proposals: proposals,
-      unreadableProposals: unreadableProposals, judgeOwners: judgeOwners)
+      unreadableProposals: unreadableProposals)
   }
-
-  var heldLinks: Set<String> { memory.heldLinks }
 
   // MARK: - 定義
 
@@ -116,8 +111,8 @@ import Observation
     return next
   }
 
-  /// 消す。ノードをすべて外し（今有効な項目を無効にし、記録を消す）、自動化の行を消す。出どころが無効になった判断待ちの候補は
-  /// 下がり、誰も持たなくなった候補は忘れる。定義を読めない自動化も消せる。
+  /// 消す。ノードをすべて外し（今有効な項目を無効にし、記録を消す）、自動化の行を消す。その自動化の判定の候補はすべて忘れ、
+  /// ほかの自動化の判断待ちの候補は下げる決まりで下がる。定義を読めない自動化も消せる。
   func delete(_ id: Int, now: Date) throws(AutomationError) {
     let nodeIds: [AutomationNodeID]
     if let automation = automation(id) {
@@ -136,8 +131,8 @@ import Observation
       try db.deleteAutomation(id)
       memory.automations.removeAll { $0.id == id }
       memory.unreadable.removeAll { $0.id == id }
-      try memory.withdraw(originatingIn: invalidated, db)
-      try memory.forgetUnheld(db)
+      try memory.withdraw(after: invalidated, db)
+      try memory.forgetUnheld(db, now: at)
     }
   }
 
@@ -154,7 +149,8 @@ import Observation
     var draft = TaskDraft(title: proposal.title)
     draft.due = proposal.due
     draft.workspace = workspace
-    draft.description = proposal.item.link + "\n\n" + proposal.item.body
+    draft.description = [proposal.link, proposal.fields.body].compactMap { $0 }.joined(
+      separator: "\n\n")
     let task: TaskItem
     do {
       task = try tasks.add(draft)
@@ -176,7 +172,7 @@ import Observation
     try settle(try openIndex(proposalId), as: .dismissed, now: now)
   }
 
-  /// 人の判断を 1 件残す。判断待ちでなくなった候補は、どの自動化も持たなければ忘れる。
+  /// 人の判断を 1 件残す。判断待ちでなくなった候補は、リンクの行がまた判定へ届きうるのでなければ忘れる。
   private func settle(_ index: Int, as state: AutomationProposal.State, now: Date)
     throws(AutomationError)
   {
@@ -184,7 +180,7 @@ import Observation
     try commit(sweepingAt: at) { db, memory in
       try db.settle(memory.proposals[index].id, state, at: at)
       memory.proposals[index].state = state
-      try memory.forgetUnheld(db)
+      try memory.forgetUnheld(db, now: at)
     }
   }
 
@@ -199,8 +195,8 @@ import Observation
   // MARK: - 書き込み
 
   /// 変異の 1 経路。`body` はメモリの写しを進めながら、変わる行を DB に書く（1 トランザクション）。`sweepingAt`（変異の時刻）が
-  /// あれば、覚えている候補のリンクが変わったときに判定のノードの読めば取る行を数え直し（「既に候補がある」で捨てる行が変わる）、
-  /// 最後に掃除する。判定のノードの持ち主はいつも読み直す。通ったら写しをメモリにし、通らなければメモリは変わらない。壊れを見つけたら接続を手放してストアを使えなくする。
+  /// あれば、判断待ちでない覚えている候補のリンクが変わった判定のノードの読めば取る行を数え直し（判定の前に捨てる行が変わる）、
+  /// 最後に掃除する。通ったら写しをメモリにし、通らなければメモリは変わらない。壊れを見つけたら接続を手放してストアを使えなくする。
   /// 検証は呼ぶ前に済ませる（`body` が投げたものはどれも書けなかったことになる）。
   func commit<T>(
     sweepingAt sweep: Date?, _ body: (AutomationDatabase, inout AutomationMemory) throws -> T
@@ -211,13 +207,14 @@ import Observation
     let result: T
     do {
       result = try database.transaction {
-        let held = memory.heldLinks
+        let closed = memory.closedLinksByJudge
         let result = try body(database, &memory)
         if let sweep {
-          if memory.heldLinks != held { try memory.recountJudges(database, now: sweep) }
+          let after = memory.closedLinksByJudge
+          let changed = Set(closed.keys).union(after.keys).filter { closed[$0] != after[$0] }
+          try memory.recountJudges(changed, database, now: sweep)
           try database.sweep(now: sweep, holding: holding)
         }
-        memory.judgeOwners = try database.judgeOwners()
         return result
       }
     } catch {
@@ -229,7 +226,6 @@ import Observation
     if memory.unreadableProposals != unreadableProposals {
       unreadableProposals = memory.unreadableProposals
     }
-    if memory.judgeOwners != judgeOwners { judgeOwners = memory.judgeOwners }
     committed()
     return result
   }
@@ -254,7 +250,6 @@ import Observation
       unreadable = []
       proposals = []
       unreadableProposals = []
-      judgeOwners = [:]
       onUnavailable()
       return unavailableError
     }
@@ -314,16 +309,9 @@ struct AutomationMemory: Equatable {
   var unreadable: [AutomationUnreadable] = []
   var proposals: [AutomationProposal]
   var unreadableProposals: [AutomationUnreadableProposal] = []
-  /// 覚えている候補を出した判定のノードの持ち主（`AutomationStore.judgeOwners`）。
-  var judgeOwners: [AutomationNodeID: Int] = [:]
 
   func automation(_ id: Int) -> Automation? {
     automations.first { $0.id == id }
-  }
-
-  /// 覚えている候補のリンク（読めない候補を含む）。「既に候補がある」はこれで言う。
-  var heldLinks: Set<String> {
-    Set(proposals.map(\.item.link) + unreadableProposals.map(\.link))
   }
 
   /// ノードの自分の状態を DB から読み直す（読めば取る行は保つ）。

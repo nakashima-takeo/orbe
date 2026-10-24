@@ -170,8 +170,7 @@ extension DesignSceneFixtures {
     return read
   }
 
-  /// 判定の案の出どころを、読んだ行の出どころ（同じ書かれた id の項目、無ければ順に）に当て直す。素通しの処理は、取った行を
-  /// 次へ渡す。
+  /// 判定の案を、読んだ行（同じリンクの行、無ければ順に）に当て直す。素通しの処理は、取った行を次へ渡す。
   private static func resolved(
     _ outcome: AutomationNodePass.Outcome, _ pass: AutomationSamplePass,
     _ taken: [AutomationIntake.Row]
@@ -180,20 +179,17 @@ extension DesignSceneFixtures {
       return .succeeded(
         .process(
           taken.prefix(count).map {
-            AutomationNodeRow(id: $0.id, text: $0.text, origin: $0.origin, source: $0.source)
+            AutomationNodeRow(id: $0.id, text: $0.text, ref: nil, source: $0.source)
           }), execution, breach: breach)
     }
     guard case .succeeded(.judge(let proposals, let resolved), let execution, let breach) = outcome
     else { return outcome }
-    var origins = taken.compactMap(\.origin)
+    var rows = taken
     let placed = proposals.compactMap { proposal -> AutomationNodePass.Proposal? in
-      let index =
-        origins.firstIndex { $0.item.id == proposal.origin.item.id } ?? origins.indices.first
+      let index = rows.firstIndex { $0.link == proposal.fields.link } ?? rows.indices.first
       guard let index else { return nil }
-      let origin = origins.remove(at: index)
-      return AutomationNodePass.Proposal(
-        origin: origin, title: proposal.title, due: proposal.due, workspace: proposal.workspace,
-        reason: proposal.reason)
+      return rows.remove(at: index).proposal(
+        proposal.title, due: proposal.due, workspace: proposal.workspace, reason: proposal.reason)
     }
     return .succeeded(.judge(proposals: placed, resolved: resolved), execution, breach: breach)
   }
@@ -201,7 +197,7 @@ extension DesignSceneFixtures {
   /// 項目を取得が出した 1 行にする。
   nonisolated static func row(_ item: AutomationItem) -> AutomationNodeRow {
     AutomationNodeRow(
-      id: item.id, text: AutomationPrompts.jsonLine(AutomationWire.object(item)), origin: nil,
+      id: item.id, text: AutomationPrompts.jsonLine(AutomationWire.object(item)), ref: nil,
       source: nil)
   }
 
@@ -294,13 +290,14 @@ extension DesignSceneFixtures {
     .succeeded(.fetch(items.map(row)), execution(items.count), breach: nil)
   }
 
-  /// 項目への候補の案。出どころは、記録するときに判定が読んだ行の出どころ（同じ書かれた id の項目）に当て直す。
+  /// 項目への候補の案。指す行は、記録するときに判定が読んだ行（同じリンクの行）に当て直す。
   nonisolated static func proposal(
     _ item: AutomationItem, _ title: String, due: TaskItem.DueDate? = nil, workspace: UUID? = nil,
     reason: String? = nil
   ) -> AutomationNodePass.Proposal {
     AutomationNodePass.Proposal(
-      origin: AutomationIntake.Origin(nodeId: AutomationNodeID(0), row: .event(0), item: item),
+      id: item.id, row: .event(0),
+      fields: AutomationRowFields(link: item.link ?? "", body: item.body, time: item.time),
       title: title, due: due, workspace: workspace, reason: reason)
   }
 

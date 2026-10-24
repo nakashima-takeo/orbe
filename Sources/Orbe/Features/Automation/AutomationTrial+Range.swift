@@ -50,8 +50,7 @@ extension AutomationTrial {
   }
 
   /// 与えた行を、道の根（ちょうど 1 つ）の役割に合わせて読む。取得は取得の読み方でその取得の出力に、入力のあるノードは文字列の
-  /// `id` を持つ行として受けてその上流の出力にする（上流がちょうど 1 つのときだけ）。判定は断る——判定は出どころ（取得の項目）
-  /// から候補を作るので、出どころの無い行は本番では捨てられる。
+  /// `id` を持つ行として受けてその上流の出力にする（上流がちょうど 1 つのときだけ）。
   static func given(_ rows: [String], in range: Range, of graph: AutomationGraph)
     throws(AutomationError) -> Given
   {
@@ -62,16 +61,12 @@ extension AutomationTrial {
           + roots.map { "\"\($0.key)\"" }.joined(separator: ", "))
     }
     switch entry.role {
-    case .judge:
-      throw .invalid(
-        "rows cannot be given to the judge node \"\(entry.key)\": a judge proposes only from items "
-          + "a fetch node fetched, so give the items to a fetch node above it")
     case .fetch:
-      var outputs = AutomationOutputs(.fetch(since: nil), writer: entry.id)
+      var outputs = AutomationOutputs(.fetch(since: nil, reachesJudge: false), writer: entry.id)
       let broken = outputs.put(rows.joined(separator: "\n"))
       guard broken.isEmpty else { throw .invalid("rows: \(broken[0].text)") }
       return Given(entry: entry.id, writer: entry.id, rows: outputs.rows)
-    case .process, .report, .work, .sideEffect:
+    case .process, .judge, .report, .work, .sideEffect:
       guard entry.inputs.count == 1, let upstream = entry.inputs.first?.from else {
         let keys = entry.inputs.compactMap { graph.node($0.from)?.key }
         throw .invalid(
@@ -79,7 +74,7 @@ extension AutomationTrial {
             + "rows are given as the output of a single input, so give them to one of those nodes "
             + "(with from) instead")
       }
-      var outputs = AutomationOutputs(.process([], reachesJudge: false), writer: upstream)
+      var outputs = AutomationOutputs(.process([]), writer: upstream)
       let broken = outputs.put(rows.joined(separator: "\n"))
       guard broken.isEmpty else { throw .invalid("rows: \(broken[0].text)") }
       return Given(entry: entry.id, writer: upstream, rows: outputs.rows)

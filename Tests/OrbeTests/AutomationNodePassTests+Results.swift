@@ -10,7 +10,7 @@ extension AutomationNodePassTests {
   func testEmptyCommandOutputIsNothing() throws {
     start(
       AutomationGraphTests.command("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")], reachesJudge: false))
+      .process([row("a")]))
 
     jobs.finish(0, printed(""))
 
@@ -20,7 +20,7 @@ extension AutomationNodePassTests {
 
   /// コマンドの失敗は 0 以外の終了コード——標準出力に項目があっても使わない。
   func testCommandFailsByItsExitCode() throws {
-    start(AutomationGraphTests.fetch("f"), .fetch, .fetch(since: nil))
+    start(AutomationGraphTests.fetch("f"), .fetch, .fetch(since: nil, reachesJudge: false))
 
     jobs.finish(0, printed(fetchedLines(["a"]), exit: 2, stderr: "down"))
 
@@ -40,7 +40,7 @@ extension AutomationNodePassTests {
     for _ in 0..<2 {
       start(
         AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-        .process([row("a"), row("b")], reachesJudge: false))
+        .process([row("a"), row("b")]))
     }
     for index in 0..<2 {
       readAll(index)
@@ -77,7 +77,7 @@ extension AutomationNodePassTests {
   func testAgentEndingWithoutReadingItsInputFails() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a"), row("b")], reachesJudge: false))
+      .process([row("a"), row("b")]))
 
     use(0, .readRunRows, ["limit": 1])
     XCTAssertTrue(use(0, .putRows, ["rows": [["id": "f:a"]]]).isError, "読み切るまで断る")
@@ -91,7 +91,7 @@ extension AutomationNodePassTests {
   func testRefusedResultsLeftUnfixedFailAsBrokenRules() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")], reachesJudge: false))
+      .process([row("a")]))
 
     readAll(0)
     XCTAssertTrue(use(0, .putRows, ["rows": [["note": "id が無い"]]]).isError)
@@ -106,7 +106,7 @@ extension AutomationNodePassTests {
   func testACallOfTheWrongShapeLeftUnfixedFailsAsBrokenRules() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")], reachesJudge: false))
+      .process([row("a")]))
 
     readAll(0)
     XCTAssertTrue(use(0, .putRows, ["rows": "f:a"]).isError)
@@ -121,7 +121,7 @@ extension AutomationNodePassTests {
     start(
       AutomationGraphTests.agent(
         "f", tools: ["mcp__slack__search"], deliver: .nextNode, coverage: .currentSet),
-      .fetch, .fetch(since: nil))
+      .fetch, .fetch(since: nil, reachesJudge: false))
 
     XCTAssertFalse(use(0, .reportNothing, ["why": "無い"]).isError)
     XCTAssertTrue(
@@ -143,7 +143,7 @@ extension AutomationNodePassTests {
   func testABrokenRunRecordsTheUnfixedItemsFirst() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")], reachesJudge: false))
+      .process([row("a")]))
 
     readAll(0)
     use(0, .putRows, ["rows": [["note": "1"], ["note": "2"]]])
@@ -161,7 +161,7 @@ extension AutomationNodePassTests {
   func testNothingAfterARefusedResultIsRefusedAndTheRunFails() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")], reachesJudge: false))
+      .process([row("a")]))
 
     readAll(0)
     XCTAssertTrue(use(0, .putRows, ["rows": [["note": "id が無い"]]]).isError)
@@ -175,7 +175,7 @@ extension AutomationNodePassTests {
   func testRefusedResultsAreRecordedAndTheFixedResultPasses() throws {
     start(
       AutomationGraphTests.agent("p", from: ["f"], deliver: .nextNode), .process,
-      .process([row("a")], reachesJudge: false))
+      .process([row("a")]))
 
     readAll(0)
     XCTAssertTrue(use(0, .putRows, ["rows": [["note": "id が無い"]]]).isError)
@@ -187,7 +187,7 @@ extension AutomationNodePassTests {
       succeeded,
       .process([
         AutomationNodeRow(
-          id: "f:a", text: #"{"id":"f:a"}"#, origin: origin("a"), source: row("a").source)
+          id: "f:a", text: #"{"id":"f:a"}"#, ref: nil, source: row("a").source)
       ]), "\(outcomes)")
     XCTAssertEqual(breach?.lines.map(\.text), ["item 1: missing id"])
   }

@@ -8,25 +8,21 @@ extension AutomationRunner {
   ) -> AutomationNodePass.Input {
     let state = automation.state(node.id)
     let rows = (read?.taken ?? []).map {
-      AutomationNodeRow(id: $0.id, text: $0.text, origin: $0.origin, source: $0.source)
+      AutomationNodeRow(id: $0.id, text: $0.text, ref: $0.ref, source: $0.source)
     }
     switch node.role {
     case .fetch:
-      return .fetch(since: state.succeededAt)
+      return .fetch(
+        since: state.succeededAt, reachesJudge: automation.graph.reachesTaskCandidates(node.id))
     case .work:
       return .work
     case .process:
-      return .process(rows, reachesJudge: automation.graph.reachesTaskCandidates(node.id))
+      return .process(rows)
     case .judge:
-      // 判定の出どころの無い行は、読むときに捨ててある。
-      let sourced = rows.compactMap { row in
-        row.origin.map { AutomationSourcedRow(id: row.id, text: row.text, origin: $0) }
-      }
       return .judge(
-        sourced,
+        rows,
         choices: AutomationJudgeChoices(
-          open: store.openProposals(of: automation.id, judge: node.id),
-          workspaces: workspaces()))
+          open: store.openProposals(of: node.id), workspaces: workspaces()))
     case .report:
       return .report(rows)
     case .sideEffect:

@@ -23,7 +23,7 @@ struct AutomationNodeRun: Equatable {
   var breach: AutomationRejections?
   /// 役割ごとの結果。失敗した回は持たない。
   var result: Result?
-  /// この回の確定で下げた（判断待ちだった）候補の数。取得の成功した回だけ持つ。
+  /// この回の確定で下げた（判断待ちだった）候補の数。取得・処理の成功した回だけ持つ。
   var withdrawn: Int?
   var failure: AutomationFailure?
 
@@ -52,14 +52,10 @@ struct AutomationDrops: Equatable {
   enum Reason: String, CaseIterable {
     /// 古さの上限を過ぎた。
     case expired
-    /// 出どころのリンクに候補がある。
-    case proposed
-    /// 同じリンクの、より新しい行がある。
-    case sameLink
+    /// 判定のノードへ、その判定の判断待ちでない覚えている候補のリンクの行が届いた。
+    case closed
     /// 件数の上限を超えた。
     case overflow
-    /// 判定のノードへ、出どころ（元になった取得の行）の無い行が届いた。
-    case unsourced
     /// 同じ回の中で、同じ id の新しい行に置き換わった。
     case replaced
     /// 受け手が読む前に、残す期間を過ぎて消えた出来事（読みでは出ない。読んだ位置の進め先から数える）。

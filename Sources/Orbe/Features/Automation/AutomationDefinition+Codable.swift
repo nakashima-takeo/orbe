@@ -71,11 +71,12 @@ extension AutomationDefinition.Input: Codable {
 }
 
 /// `command`（＋`directory`）か `instruction`（＋`agent`〔既定 claude〕・`model`・`tools`）のちょうど一方と、`timeoutMinutes`・
-/// `coverage`・`deliver`。`deliver` の省略は次のノード。外の定義のノードの欄と同じオブジェクトに並び、保存（`action_defs.action`）は
+/// `coverage`・`keep`・`deliver`。`deliver` の省略は次のノード。外の定義のノードの欄と同じオブジェクトに並び、保存（`action_defs.action`）は
 /// この欄だけのオブジェクト。
 extension AutomationActionDef: Codable {
   private enum CodingKeys: String, CodingKey {
-    case command, directory, agent, model, tools, instruction, timeoutMinutes, coverage, deliver
+    case command, directory, agent, model, tools, instruction, timeoutMinutes, coverage, keep,
+      deliver
   }
 
   init(from decoder: Decoder) throws {
@@ -83,6 +84,7 @@ extension AutomationActionDef: Codable {
     method = try Self.method(c)
     timeoutMinutes = try c.decodeIfPresent(Int.self, forKey: .timeoutMinutes)
     coverage = try Self.coverage(c)
+    keep = try Self.keep(c)
     destination = try Self.destination(c)
   }
 
@@ -100,6 +102,7 @@ extension AutomationActionDef: Codable {
     }
     try c.encodeIfPresent(timeoutMinutes, forKey: .timeoutMinutes)
     try c.encodeIfPresent(coverage?.rawValue, forKey: .coverage)
+    try c.encodeIfPresent(keep?.rawValue, forKey: .keep)
     try c.encodeIfPresent(destination.wireName, forKey: .deliver)
   }
 
@@ -143,6 +146,15 @@ extension AutomationActionDef: Codable {
         forKey: .coverage, in: c, debugDescription: "pass currentSet or newArrivals")
     }
     return coverage
+  }
+
+  private static func keep(_ c: KeyedDecodingContainer<CodingKeys>) throws -> AutomationKeep? {
+    guard let raw = try c.decodeIfPresent(String.self, forKey: .keep) else { return nil }
+    guard let keep = AutomationKeep(rawValue: raw) else {
+      throw DecodingError.dataCorruptedError(
+        forKey: .keep, in: c, debugDescription: "pass whileCurrent or untilDecided")
+    }
+    return keep
   }
 
   private static func destination(_ c: KeyedDecodingContainer<CodingKeys>) throws -> Destination {

@@ -141,24 +141,25 @@ extension AutomationRunnerTests {
   /// 記録に数える。
   func testATriggerWithNothingToTakeRunsNothingAndCountsTheDropsInTheNextRun() throws {
     let id = try define([
-      fetch("gh", every: 1800),
+      definitionNode("gh", .scheduled(.every(1800)), coverage: .currentSet),
       definitionNode("judge", .scheduled(.every(3600)), from: ["gh"], deliver: .taskCandidates),
     ])
     advance(by: 1800)
     finish("gh", fetched(["a"]))
     advance(by: 1800)
     finish("judge", printed(#"{"propose":"\#(downstream("gh", "a", of: id))","title":"a に対応する"}"#))
+    try store.dismiss(try XCTUnwrap(store.proposals.first).id, now: now)
     let sameLink =
       #"{"id":"a2","link":"https://example.com/a","body":"a の続き","#
       + #""time":"2026-10-10T09:00:00Z"}"#
     finish("gh", printed([item("a"), sameLink].joined(separator: "\n")))
-    XCTAssertEqual(pending("judge", of: id), 0, "候補のあるリンクの行は、読めば捨てるので数えない")
+    XCTAssertEqual(pending("judge", of: id), 0, "さばいた候補のリンクの行は、読めば捨てるので数えない")
 
     advance(by: 3600)
     XCTAssertEqual(calls("judge").count, 1, "取る行が無ければ手段を起こさない")
     XCTAssertEqual(store.automation(id)?.state(key: "judge").runs.count, 1, "記録も残さない")
     XCTAssertEqual(
-      try store.pendingDrops(id, "judge").counts, [.proposed: 1],
+      try store.pendingDrops(id, "judge").counts, [.closed: 1],
       "捨てた数は持ち越す")
 
     finish("gh", printed([item("a"), sameLink, item("b")].joined(separator: "\n")))
@@ -166,7 +167,7 @@ extension AutomationRunnerTests {
     XCTAssertEqual(ids("judge"), [downstream("gh", "b", of: id)])
     finish("judge", printed(""))
     XCTAssertEqual(
-      store.automation(id)?.state(key: "judge").runs.first?.run?.dropped.counts, [.proposed: 1])
+      store.automation(id)?.state(key: "judge").runs.first?.run?.dropped.counts, [.closed: 1])
   }
 
   // MARK: - 使えなくなったストア
