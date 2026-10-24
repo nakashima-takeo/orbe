@@ -73,12 +73,13 @@ extension EditorDiffTests {
     let diff = try tab.group.editor.openDiff(id("u.txt", .workingTree), as: .pinned)
     waitRows(diff, "追加が出る") { $0.style(ofLine: 0) == DiffStyle.added }
     try FileManager.default.removeItem(at: repo.url("u.txt"))
-    pumpMain(until: { diff.files.status?.entries["u.txt"] == nil }, "消えた")
+    pumpMain(until: { diff.workingStale }, "前提: 消えたと知り、読み直しを保留した")
     XCTAssertTrue(diff.document === document, "前提: 未保存の間は手放さない")
 
     document.surface.replaceAll(with: "u\n")
     XCTAssertTrue(document.isDirty, "前提: 同じ長さなので、未保存は裏の比べで後から下りる")
-    pumpMain(until: { diff.content == .unavailable(.nowhere) }, "未保存が下りた時点で追いつく")
+    pumpMain(until: { !document.isDirty }, "前提: 未保存が下りる")
+    XCTAssertEqual(diff.content, .unavailable(.nowhere), "未保存が下りた時点で追いつく")
   }
 
   /// index にも作業ツリーにも無いパス・HEAD にも index にも無いパスの diff は、種類ごとの理由の一文を出す。開いた後で両側とも
