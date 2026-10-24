@@ -51,7 +51,7 @@ final class ScmRowsTests: OrbeTestCase {
 
   /// 「ファイルを開く」が押せるのは、作業ツリーにファイルとして在る行だけ——作業ツリーに無い競合（`DD`・競合中に消した
   /// `UU`）・rename の後に消したファイルとサブモジュールの行（ステージ済みも変更も）は開けない。シンボリックリンク・ファイルに
-  /// 置き換えたサブモジュール・index から外して作業ツリーに残したファイルは開ける。
+  /// 置き換えたサブモジュール・index から外して作業ツリーに残したファイル（`?` 行が出る場合）は開ける。
   func testOnlyRowsThatAreFilesInTheWorkingTreeOpenAsFiles() {
     let zero = String(repeating: "0", count: 40)
     func line(_ xy: String, _ sub: String, _ modes: String, _ path: String) -> String {
