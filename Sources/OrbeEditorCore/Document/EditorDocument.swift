@@ -285,7 +285,7 @@ public final class EditorDocument {
     if let outcome = contents.hunks, outcome.generation == hunkRequest,
       let edits = log.edits(since: outcome.version)
     {
-      hunks = edits.reduce(outcome.hunks) { $1.track($0) }
+      hunks = VersionedEdit.track(outcome.hunks, through: edits)
       hunksBase = baseline
       if pendingHunks == outcome.version { pendingHunks = nil }
       pushLineMarks()
@@ -324,13 +324,10 @@ extension EditorDocument: TextSurfaceDelegate {
     guard !edits.isEmpty else { return }
     var applied: [VersionedEdit] = []
     applied.reserveCapacity(edits.count)
-    var tracked = hunks
     for whole in edits.reversed() {
-      let record = apply(whole.narrowed(replacing: text.units(in: whole.range)))
-      if baseline != nil { tracked = record.track(tracked) }
-      applied.append(record)
+      applied.append(apply(whole.narrowed(replacing: text.units(in: whole.range))))
     }
-    hunks = tracked
+    if baseline != nil { hunks = VersionedEdit.track(hunks, through: applied) }
     if !isReplacingFromDisk, diskSync.textDidChange(length: text.length) {
       analysis.postComparison(text: text, version: version, synced: diskSync.snapshot.text)
     }

@@ -47,51 +47,62 @@ public struct VersionedEdit: Sendable {
   /// 中身を変えた行。
   public let rows: EditedRows
 
-  /// 編集の前の本文に対するハンク（`LineDiff` の出力と同じ形）を、編集の後の本文に対する同じ形のハンクへ写す。形は、
-  /// 昇順・重ならない・両側とも本文の中・区間の外の行は両側で 1 対 1 で同じ中身。変えた行は区間に入り、それと重なる・
-  /// 接する区間と 1 つにつなぐ（最小とは限らない）。後ろの区間は行の増減ぶんずれる。行の数が変わらなければそのまま
-  /// （行の中だけの編集は、裏の結果が届くまで区間を変えない）。
-  public func track(_ hunks: [LineHunk]) -> [LineHunk] {
-    let delta = rows.newEnd - rows.oldEnd
-    guard delta != 0 else { return hunks }
-    var result: [LineHunk] = []
-    result.reserveCapacity(hunks.count + 1)
-    var index = 0
-    // 区間の外の行の、古い側の行 − 新しい側の行。
-    var offset = 0
-    while index < hunks.count, hunks[index].newLines.upperBound < rows.start {
-      result.append(hunks[index])
-      offset = hunks[index].oldLines.upperBound - hunks[index].newLines.upperBound
-      index += 1
-    }
-    var new = rows.start..<rows.oldEnd
-    var old = (rows.start + offset)..<(rows.oldEnd + offset)
-    if index < hunks.count, hunks[index].newLines.lowerBound <= rows.oldEnd {
-      let first = hunks[index]
-      var last = first
-      while index < hunks.count, hunks[index].newLines.lowerBound <= rows.oldEnd {
-        last = hunks[index]
-        index += 1
+  /// 当てた順の編集の列（どれもその直前の本文の座標）で、最初の編集の前の本文に対するハンク（`LineDiff` の出力と同じ形）を、
+  /// 最後の編集の後の本文に対する同じ形のハンクへ写す。行の数を変える編集ごとに、変えた行を区間に入れ、それと重なる・接する
+  /// 区間と 1 つにつなぎ（最小とは限らない）、後ろの区間を行の増減ぶんずらす。行の数を変えない編集は区間を変えない（区間の
+  /// 外の行の中身は、裏の結果が届くまで底と違いうる）。
+  ///
+  /// 区間の列を「今の編集より前」と「掛かる・後ろ」に分けて持ち、後ろのずれはまとめて足すので、手間は編集の数と、続く編集の
+  /// 間にある区間の数の和に比例する（束は後ろから当てた並びなので、カーソルが多い打鍵でも区間を 1 回なめるだけ）。
+  static func track(_ hunks: [LineHunk], through edits: some Sequence<Self>) -> [LineHunk] {
+    var front = hunks
+    // 逆順（末尾が最も前）。新しい側は `shift` を足した位置。
+    var back: [LineHunk] = []
+    var shift = 0
+    for edit in edits {
+      let rows = edit.rows
+      let delta = rows.newEnd - rows.oldEnd
+      guard delta != 0 else { continue }
+      while let top = back.last, top.newLines.upperBound + shift < rows.start {
+        front.append(top.shifted(by: shift))
+        back.removeLast()
       }
-      let lower = first.newLines.lowerBound <= rows.start
-      let upper = last.newLines.upperBound >= rows.oldEnd
-      let after = last.oldLines.upperBound - last.newLines.upperBound
-      let newStart = lower ? first.newLines.lowerBound : rows.start
-      let oldStart = lower ? first.oldLines.lowerBound : old.lowerBound
-      new = newStart..<(upper ? last.newLines.upperBound : rows.oldEnd)
-      old = oldStart..<(upper ? last.oldLines.upperBound : rows.oldEnd + after)
+      while let last = front.last, last.newLines.upperBound >= rows.start {
+        back.append(last.shifted(by: -shift))
+        front.removeLast()
+      }
+      // 区間の外の行の、古い側の行 − 新しい側の行。
+      let offset = front.last.map { $0.oldLines.upperBound - $0.newLines.upperBound } ?? 0
+      var new = rows.start..<rows.oldEnd
+      var old = (rows.start + offset)..<(rows.oldEnd + offset)
+      if let top = back.last, top.newLines.lowerBound + shift <= rows.oldEnd {
+        let first = top.shifted(by: shift)
+        var last = first
+        while let top = back.last, top.newLines.lowerBound + shift <= rows.oldEnd {
+          last = top.shifted(by: shift)
+          back.removeLast()
+        }
+        let lower = first.newLines.lowerBound <= rows.start
+        let upper = last.newLines.upperBound >= rows.oldEnd
+        let after = last.oldLines.upperBound - last.newLines.upperBound
+        let newStart = lower ? first.newLines.lowerBound : rows.start
+        let oldStart = lower ? first.oldLines.lowerBound : old.lowerBound
+        new = newStart..<(upper ? last.newLines.upperBound : rows.oldEnd)
+        old = oldStart..<(upper ? last.oldLines.upperBound : rows.oldEnd + after)
+      }
+      shift += delta
+      let edited = new.lowerBound..<(new.upperBound + delta)
+      if !old.isEmpty || !edited.isEmpty {
+        back.append(LineHunk(old: old, new: edited).shifted(by: -shift))
+      }
     }
-    let edited = new.lowerBound..<(new.upperBound + delta)
-    if !old.isEmpty || !edited.isEmpty { result.append(LineHunk(old: old, new: edited)) }
-    while index < hunks.count {
-      let hunk = hunks[index]
-      result.append(
-        LineHunk(
-          old: hunk.oldLines,
-          new: (hunk.newLines.lowerBound + delta)..<(hunk.newLines.upperBound + delta)))
-      index += 1
-    }
-    return result
+    return front + back.reversed().map { $0.shifted(by: shift) }
+  }
+}
+
+extension LineHunk {
+  fileprivate func shifted(by delta: Int) -> LineHunk {
+    LineHunk(oldStart: oldStart, oldCount: oldCount, newStart: newStart + delta, newCount: newCount)
   }
 }
 
