@@ -49,20 +49,20 @@ struct AutomationGraph: Equatable {
 
     /// 何をするか（省略を解いた動作と入力の集合）。書き換えで何をするかが変わったかはこれで比べる——省略していた値に既定と
     /// 同じ値を書き足しただけでは変わらない。
-    var work: Work {
+    var behavior: Behavior {
       var method = action.method
       if case .agent(var agent) = method {
         agent.model = model
         method = .agent(agent)
       }
-      return Work(
+      return Behavior(
         method: method, timeoutMinutes: timeoutMinutes, coverage: coverage,
         destination: action.destination, inputs: Set(inputs))
     }
   }
 
-  /// 部品が何をするか（`Node.work`）。
-  struct Work: Equatable {
+  /// 部品が何をするか（`Node.behavior`）。
+  struct Behavior: Equatable {
     let method: AutomationActionDef.Method
     let timeoutMinutes: Int
     let coverage: AutomationCoverage?

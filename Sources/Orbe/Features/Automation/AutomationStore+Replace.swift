@@ -146,7 +146,7 @@ extension AutomationStore {
       if coverageChanged {
         rewired.invalidated += try db.invalidateItems(of: node.id, at: at)
       }
-      let reworked = old == nil ? kept : before.map { $0.work != node.work } ?? false
+      let reworked = old == nil ? kept : before.map { $0.behavior != node.behavior } ?? false
       if reworked {
         rewired.reworked.append(node.id)
         try db.setBreach(node.id, run: nil)
