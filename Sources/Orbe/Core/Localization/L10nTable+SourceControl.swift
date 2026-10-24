@@ -75,6 +75,10 @@ extension L10n {
       "ブランチに居ないため（detached HEAD）、プル・プッシュできません。",
       "Not on a branch (detached HEAD), so you can't pull or push."
     ),
+    .editorScmFailureUndoDetached: (
+      "ブランチに居ないため（detached HEAD）、初回コミットは取り消せません。",
+      "Not on a branch (detached HEAD), so the first commit can't be undone."
+    ),
     .editorScmFailureNoUpstream: (
       "このブランチには upstream がありません。先にブランチを公開してください。",
       "This branch has no upstream. Publish the branch first."

@@ -3,7 +3,8 @@ import Foundation
 /// パネルで利用者が押した書き込み（ステージ・解除・破棄・コミット・amend・取り消し・プル）を、その結果が行に出るまで覚えて
 /// おく。コミット・amend・取り消しが照らす「見えていたもの」は、見えている行にこれを押した順に重ねたもの——自分の操作は、
 /// 走っている・順番を待つ・終わって行に出るまでのどの間でも、押した時点に見えていたものに数える（押す時刻で結果が変わらない）。
-/// 数えないのは自分が押していない変化だけで、それは根のサービスが書き込みの直前に照らして断る。
+/// 数えないのは自分が押していない変化だけで、それは根のサービスが書き込みの直前に照らして断る。押した順と走る順が違いうる
+/// のは、裏の fetch に譲って待つプル・同期だけ（待つ間に押したコミットが先に走る）。
 @MainActor
 struct ScmOwnWrites {
   enum Kind {
@@ -27,7 +28,7 @@ struct ScmOwnWrites {
   private struct Finish {
     /// 終わった時点に届いていた status の番号。この番号以降の status から組んだ行には結果が出ている。
     let statusNumber: Int
-    let failed: Bool
+    let outcome: SourceControl.FirstStepOutcome
     /// 書き込み後の HEAD。
     let head: GitSeenHead
   }
@@ -57,11 +58,12 @@ struct ScmOwnWrites {
   /// 後に来るので、パネルが status を受けていれば今の番号の status に結果が出ている。受けていなければ（`seesStatus` が
   /// false。面を隠している間）、次に届く status に出る。
   mutating func firstStepDidFinish(
-    _ operation: SourceControl.Operation, failed: Bool, status: GitStatus?, seesStatus: Bool
+    _ operation: SourceControl.Operation, _ outcome: SourceControl.FirstStepOutcome,
+    status: GitStatus?, seesStatus: Bool
   ) {
     guard let index = entries.firstIndex(where: { $0.operation === operation }) else { return }
     entries[index].finish = Finish(
-      statusNumber: seesStatus ? statusNumber : statusNumber + 1, failed: failed,
+      statusNumber: seesStatus ? statusNumber : statusNumber + 1, outcome: outcome,
       head: status?.branch.map { .at($0.commit, undone: 0) } ?? .movedByOwnWrite)
     forgetShown()
   }
@@ -109,9 +111,11 @@ struct ScmOwnWrites {
     var hasStaged: Bool { !staged.isEmpty || !unknown.isEmpty || hasUndone }
 
     /// 書き込み 1 つを重ねる。まだ終わっていなければ（`finish` が nil）通ったとし、動かした HEAD は分からないとする。
-    /// 落ちた書き込みは HEAD を動かしていない。触れたパスの index は分からないとする。
+    /// 落ちた書き込みは HEAD を動かしていない。触れたパスの index は分からないとする。落ちたコミットは、先のステージを
+    /// 書いたときだけ、そのステージを重ねる。
     mutating func apply(_ kind: Kind, _ finish: Finish?) {
-      let failed = finish?.failed ?? false
+      let outcome = finish?.outcome ?? .passed
+      let failed = outcome != .passed
       switch kind {
       case .stage(let rows):
         stage(rows)
@@ -128,7 +132,8 @@ struct ScmOwnWrites {
         guard !failed else { return }
         for row in rows { committable[row.path] = nil }
       case .commit(let first):
-        guard !failed else { return stage(first) }
+        if outcome == .failedAfterStaging { return stage(first) }
+        guard !failed else { return }
         staged = [:]
         unknown = []
         for row in first { committable[row.path] = nil }

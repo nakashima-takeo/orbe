@@ -244,7 +244,7 @@ extension ScmPanelTests {
   }
 
   /// `first` で始めた種類 `kind` の操作が終わった知らせの中で（行が新しい HEAD に追いつく前に）`then` を押し、終わるまで回す。
-  private func pressRightAfter(
+  func pressRightAfter(
     _ kind: SourceControl.Kind, _ name: String, first: (ScmPanel) -> Void,
     then: @escaping (ScmPanel) -> Void
   ) {
@@ -304,7 +304,7 @@ private final class FinishHook: SourceControlObserver {
 
   func sourceControl(
     _ control: SourceControl, firstStepDidFinish operation: SourceControl.Operation,
-    failure: GitWriteFailure?
+    outcome: SourceControl.FirstStepOutcome
   ) {}
 
   func sourceControl(_ control: SourceControl, operationDidFinish kind: SourceControl.Kind) {

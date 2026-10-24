@@ -109,7 +109,7 @@ struct ScmRepositoryHead: View {
         .foregroundStyle(Color.theme.editorText)
         .lineLimit(1)
       Spacer(minLength: 0)
-      HStack(spacing: 1) {
+      HStack(spacing: Theme.Layout.editorScmToolGap) {
         ScmToolButton(
           glyph: EditorGlyphs.check, help: l10n.string(.editorScmCommit),
           isEnabled: panel.commitState.canCommit, action: commit)
@@ -160,7 +160,7 @@ struct ScmControls: View {
       ScmMessageBox(panel: panel, placeholder: placeholder)
       ScmCommitButton(panel: panel)
       if let failure = panel.control.failure,
-        let text = ScmFailureText.text(failure.cause, l10n.language)
+        let text = ScmFailureText.text(failure, l10n.language)
       {
         Text(text)
           .font(Font.theme.editorScmNote)
@@ -177,10 +177,9 @@ struct ScmControls: View {
     .padding(.bottom, Theme.Space.step)
   }
 
-  /// 失敗の文の行間（見本の行高 1.5 から、字の行の高さを引いた分）。
-  private static let failureLineSpacing =
-    Theme.Typography.editorScmNote.pointSize * 1.5
-    - NSLayoutManager().defaultLineHeight(for: Theme.Typography.editorScmNote)
+  /// 失敗の文の行間（design-system の行高 1.5）。
+  private static let failureLineSpacing = Theme.Typography.editorScmNote.extraLeading(
+    lineHeight: 1.5)
 
   /// プレースホルダ（ブランチに居ればその名前。detached・初回コミット前は名前なし）。
   private var placeholder: String {
@@ -326,7 +325,7 @@ struct ScmToolButton: View {
     .contentShape(Rectangle())
     .onHover { hovering = $0 }
     .overlay {
-      if let menu { ScmMenuAnchor(help: help, menu: menu) }
+      if let menu { ScmMenuAnchor(help: help, isEnabled: isEnabled, menu: menu) }
     }
     .onTapGesture { if isEnabled, menu == nil { action() } }
     .help(help)

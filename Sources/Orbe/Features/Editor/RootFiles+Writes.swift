@@ -46,14 +46,12 @@ extension RootFiles {
     }
   }
 
-  typealias WriteBody = (
-    GitRepo, GitRunner.Handle, @escaping (GitWriteFailure?) -> Void
-  ) -> Void
+  typealias WriteBody<Outcome> = (GitRepo, GitRunner.Handle, @escaping (Outcome) -> Void) -> Void
 
   struct QueuedWrite {
     let write: Write
-    let body: WriteBody
-    let completion: (GitWriteFailure?) -> Void
+    /// 書き込みを起こす。git の書き込みが終われば、完了を返しに行く前に `finished` を呼ぶ（順番を次へ渡す）。
+    let run: (GitRepo, GitRunner.Handle, _ finished: @escaping () -> Void) -> Void
   }
 
   /// 行をステージする（rename の元パスは、呼んだ時点の index に在るときだけ含める）。
@@ -80,15 +78,15 @@ extension RootFiles {
   /// `content` をコミットする（`amend` なら直前のコミットを差し替える）。先にステージする行は、ステージとコミットを 1 つの
   /// 書き込みとして続けて走らせる（間に別の書き込みが割り込まない）。index に競合が残っていれば何も書かずに
   /// `conflictsRemain`、コミットに入るものが `content` と違えば何も書かずに `contentMismatch`。amend でメッセージが空
-  /// なら、前のメッセージのまま中身だけ差し替える。
+  /// なら、前のメッセージのまま中身だけ差し替える。落ちたら、落ちる前に先のステージを書いたかも返す。
   @discardableResult
   func commit(
     message: String, content: GitCommitContent, amend: Bool = false,
-    completion: @escaping (GitWriteFailure?) -> Void
+    completion: @escaping (GitCommitOutcome) -> Void
   ) -> Write {
     enqueue(
       { $0.commit(message: message, content: content, amend: amend, handle: $1, completion: $2) },
-      completion)
+      completion, refused: { .failed($0, stagedFirst: false) })
   }
 
   /// 最後のコミットを取り消す（中身はステージ済みに残る）。HEAD が `head` でなければ何も書かずに `contentMismatch`。
@@ -139,15 +137,30 @@ extension RootFiles {
   // MARK: - 順番と完了
 
   private func enqueue(
-    _ body: @escaping WriteBody, _ completion: @escaping (GitWriteFailure?) -> Void
+    _ body: @escaping WriteBody<GitWriteFailure?>,
+    _ completion: @escaping (GitWriteFailure?) -> Void
+  ) -> Write {
+    enqueue(body, completion, refused: { $0 })
+  }
+
+  /// 順番に入れる。走る前に止めた・管理外で断った書き込みは、その失敗を `refused` で結果にして返す。
+  private func enqueue<Outcome>(
+    _ body: @escaping WriteBody<Outcome>, _ completion: @escaping (Outcome) -> Void,
+    refused: @escaping (GitWriteFailure) -> Outcome
   ) -> Write {
     let write = Write()
-    guard repo != nil else { return reject(write, completion) }
+    guard repo != nil else { return reject(write) { completion(refused($0)) } }
     write.dequeue = { [self] in
       queuedWrites.removeAll { $0.write === write }
-      DispatchQueue.main.async { completion(.cancelled) }
+      DispatchQueue.main.async { completion(refused(.cancelled)) }
     }
-    queuedWrites.append(QueuedWrite(write: write, body: body, completion: completion))
+    queuedWrites.append(
+      QueuedWrite(write: write) { [self] repo, handle, finished in
+        body(repo, handle) { outcome in
+          finished()
+          self.complete { completion(outcome) }
+        }
+      })
     startNextWrite()
     return write
   }
@@ -158,32 +171,31 @@ extension RootFiles {
     next.write.dequeue = nil
     isWriting = true
     next.write.markStarted()
-    next.body(repo, next.write.handle) { [self] failure in
+    next.run(repo, next.write.handle) { [self] in
       isWriting = false
       startNextWrite()
-      complete(failure, next.completion)
     }
   }
 
   private func start(
-    _ body: @escaping WriteBody, _ completion: @escaping (GitWriteFailure?) -> Void
+    _ body: @escaping WriteBody<GitWriteFailure?>,
+    _ completion: @escaping (GitWriteFailure?) -> Void
   ) -> Write {
     let write = Write()
     guard let repo else { return reject(write, completion) }
     write.markStarted()
-    body(repo, write.handle) { [self] failure in complete(failure, completion) }
+    body(repo, write.handle) { [self] failure in complete { completion(failure) } }
     return write
   }
 
-  private func reject(_ write: Write, _ completion: @escaping (GitWriteFailure?) -> Void) -> Write {
-    DispatchQueue.main.async { completion(.notManaged) }
+  private func reject(_ write: Write, _ refuse: @escaping (GitWriteFailure) -> Void) -> Write {
+    DispatchQueue.main.async { refuse(.notManaged) }
     return write
   }
 
-  private func complete(
-    _ failure: GitWriteFailure?, _ completion: @escaping (GitWriteFailure?) -> Void
-  ) {
-    requestStatusRefresh { [self] in withExtendedLifetime(self) { completion(failure) } }
+  /// 書き込みの後の status の取り直しが済んでから、`completion` を main で返す。
+  private func complete(_ completion: @escaping () -> Void) {
+    requestStatusRefresh { [self] in withExtendedLifetime(self) { completion() } }
   }
 
   /// 前提（upstream・detached）の判定は、取り直した status のブランチで行う（打ってすぐの外の変化を読み落とさない）。

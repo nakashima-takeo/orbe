@@ -155,7 +155,6 @@ struct ThemeFonts {
   // エディター面のソース管理
   let editorRailBadge = Font(Theme.Typography.editorRailBadge as CTFont)
   let editorScmSection = Font(Theme.Typography.editorScmSection as CTFont)
-  let editorScmMessage = Font(Theme.Typography.editorScmMessage as CTFont)
   let editorScmButton = Font(Theme.Typography.editorScmButton as CTFont)
   let editorScmNote = Font(Theme.Typography.editorScmNote as CTFont)
   let editorScmBandName = Font(Theme.Typography.editorScmBandName as CTFont)

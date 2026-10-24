@@ -4,10 +4,10 @@ import SwiftUI
 /// コミットメッセージの欄。↵ はコミット（→ `ScmPanel.commitFromMessage`）、改行は ⇧↵・⌥↵・⌃↵、変換中の ↵ は変換の
 /// 確定だけ（IME が使った ↵ は改行の命令として届かない）。1 行のときの高さは見本の 26 で、10 行まで伸び、その先は
 /// スクロールする。中身は worktree の状態（`SourceControl.message`）そのもので、同じ worktree を見る別の窓の欄とも同じ値に
-/// なる。取り消しの履歴は欄ごとに持ち、欄と一緒に消える——窓の履歴に積むと、作り直された・隠れた欄の打鍵を別の欄の ⌘Z が
-/// 戻し、見えない worktree のメッセージを書き換える。⌘↵（コミットしてプッシュ）は pane が取る
-/// （→ `EditorPaneView+SourceControl`）。焦点の出入りはパネルへ写し、焦点の要求（ソース管理を開いた・列の先頭で ⌘↑）は
-/// ここで当てる。
+/// なる。変換中の字は確定するまでメッセージに入れず、パネルの見せ方（`ScmPanel.composition`）に写す。取り消しの履歴は
+/// 欄ごとに持ち、欄と一緒に消える——窓の履歴に積むと、作り直された・隠れた欄の打鍵を別の欄の ⌘Z が戻し、見えない
+/// worktree のメッセージを書き換える。⌘↵（コミットしてプッシュ）は pane が取る（→ `EditorPaneView+SourceControl`）。
+/// 焦点の出入りはパネルへ写し、焦点の要求（ソース管理を開いた・列の先頭で ⌘↑）はここで当てる。
 struct ScmMessageField: NSViewRepresentable {
   let panel: ScmPanel
   let placeholder: String
@@ -27,6 +27,9 @@ struct ScmMessageField: NSViewRepresentable {
     text.onCommit = { [weak coordinator = context.coordinator] in
       coordinator?.field.panel.commitFromMessage(andPush: false)
     }
+    text.onComposition = { [weak coordinator = context.coordinator] in
+      coordinator?.compositionDidChange($0)
+    }
     let scroll = ScmMessageScrollView()
     scroll.documentView = text
     scroll.drawsBackground = false
@@ -42,6 +45,7 @@ struct ScmMessageField: NSViewRepresentable {
   func updateNSView(_ scroll: NSScrollView, context: Context) {
     context.coordinator.field = self
     guard let text = scroll.documentView as? ScmMessageTextView else { return }
+    panel.confirmComposition = { [weak text] in text?.confirmComposition() }
     text.placeholder = placeholder
     let message = panel.control.message
     if text.string != message, !text.hasMarkedText() {
@@ -78,6 +82,10 @@ struct ScmMessageField: NSViewRepresentable {
       field.panel.control.message = text.string
     }
 
+    func compositionDidChange(_ composition: String) {
+      if field.panel.composition != composition { field.panel.composition = composition }
+    }
+
     func focusDidChange(_ focused: Bool) {
       field.focused = focused
       field.panel.focusDidChange(.message, focused: focused)
@@ -112,10 +120,14 @@ final class ScmMessageTextView: NSTextView {
   var onWindow: (() -> Void)?
   /// 修飾の無い ↵ を押した（何も入れない）。
   var onCommit: (() -> Void)?
+  /// 変換中の字が変わった（変換が始まった・変わった・終わった。終われば空）。
+  var onComposition: ((String) -> Void)?
   /// 解釈中の押下（`interpretKeyEvents` が同期に呼ぶ命令へ添える）。改行の命令は ↵ と ⇧↵ で同じなので、押下から読み分ける。
   private var interpreting: NSEvent?
   /// 手で組んだ文字の系の根（テキスト面はこれを持たないので、自分で持つ）。
   private var storage: NSTextStorage?
+  /// 高さの問いだけに使う組み（同じ文字の系に足した 2 つ目のレイアウト。表示の組みに触れずに、問われた幅で組む）。
+  private var measuring: NSTextContainer?
 
   private static let font = Theme.Typography.editorScmMessage
   private static let leading: CGFloat = 8
@@ -123,14 +135,21 @@ final class ScmMessageTextView: NSTextView {
 
   convenience init() {
     let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
-    container.widthTracksTextView = true
+    container.widthTracksTextView = false
     container.lineFragmentPadding = 0
     let layout = NSLayoutManager()
     layout.addTextContainer(container)
     let storage = NSTextStorage()
     storage.addLayoutManager(layout)
+    let measuring = NSTextContainer(size: .zero)
+    measuring.lineFragmentPadding = 0
+    let measuringLayout = NSLayoutManager()
+    measuringLayout.backgroundLayoutEnabled = false
+    measuringLayout.addTextContainer(measuring)
+    storage.addLayoutManager(measuringLayout)
     self.init(frame: .zero, textContainer: container)
     self.storage = storage
+    self.measuring = measuring
     font = Self.font
     textColor = Theme.Color.textPrimary
     insertionPointColor = Theme.Color.accentPrimary
@@ -149,18 +168,17 @@ final class ScmMessageTextView: NSTextView {
   }
 
   /// 1 行の高さ。
-  private static var lineHeight: CGFloat { NSLayoutManager().defaultLineHeight(for: font) }
+  private static let lineHeight = NSLayoutManager().defaultLineHeight(for: font)
 
   /// 1 行のときに見本の 26 になる上下の余白。
-  private static var verticalInset: CGFloat {
-    (Theme.Layout.editorScmMessage - lineHeight) / 2
-  }
+  private static let verticalInset = (Theme.Layout.editorScmMessage - lineHeight) / 2
 
   /// 行の左右の余白（見本 padding 0 5 0 8。テキストコンテナの左右は同じ余白しか持てないので、左はコンテナの原点で動かす）。
   override var textContainerOrigin: NSPoint {
     NSPoint(x: Self.leading, y: super.textContainerOrigin.y)
   }
 
+  /// 表示の組みの幅の持ち主はテキスト面の枠だけ（高さの問いは別の組みで答える）。
   override func setFrameSize(_ newSize: NSSize) {
     super.setFrameSize(newSize)
     textContainer?.containerSize = NSSize(
@@ -168,19 +186,20 @@ final class ScmMessageTextView: NSTextView {
       height: CGFloat.greatestFiniteMagnitude)
   }
 
-  /// 幅 `width` で中身が収まる高さ（`maxLines` 行まで）。
+  /// 幅 `width` で中身が収まる高さ（`maxLines` 行まで）。表示の組みには触れず、問われた幅だけで決まる。組むのは `maxLines`
+  /// 行の分まで（長い貼り付けでも、問いのたびに全文を組まない）。
   func fittingHeight(width: CGFloat, maxLines: Int) -> CGFloat {
-    let inset = Self.verticalInset * 2
-    guard let container = textContainer, let layout = layoutManager else {
+    let limit = Self.lineHeight * CGFloat(maxLines)
+    guard let measuring, let layout = measuring.layoutManager else {
       return Theme.Layout.editorScmMessage
     }
-    let available = max(0, width - Self.leading - Self.trailing)
-    if container.containerSize.width != available {
-      container.containerSize = NSSize(width: available, height: .greatestFiniteMagnitude)
-    }
-    layout.ensureLayout(for: container)
-    let used = max(layout.usedRect(for: container).height, Self.lineHeight)
-    return min(used, Self.lineHeight * CGFloat(maxLines)) + inset
+    let size = NSSize(
+      width: max(0, width - Self.leading - Self.trailing), height: .greatestFiniteMagnitude)
+    if measuring.containerSize != size { measuring.containerSize = size }
+    layout.ensureLayout(
+      forBoundingRect: NSRect(x: 0, y: 0, width: size.width, height: limit), in: measuring)
+    let used = max(layout.usedRect(for: measuring).height, Self.lineHeight)
+    return min(used, limit) + Self.verticalInset * 2
   }
 
   override func viewDidMoveToWindow() {
@@ -243,6 +262,29 @@ final class ScmMessageTextView: NSTextView {
     super.didChangeText()
     needsDisplay = true
     contentHeightMayHaveChanged()
+    reportComposition()
+  }
+
+  override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+    super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
+    reportComposition()
+  }
+
+  override func unmarkText() {
+    super.unmarkText()
+    reportComposition()
+  }
+
+  /// 変換中なら確定する（IME の変換も終わらせる）。確定した字は、返る前に `textDidChange` でメッセージへ入る。
+  func confirmComposition() {
+    guard hasMarkedText() else { return }
+    unmarkText()
+    inputContext?.discardMarkedText()
+  }
+
+  /// 変換中の字を知らせる（IME の確定の `insertText` は `didChangeText` で拾う）。
+  private func reportComposition() {
+    onComposition?(hasMarkedText() ? (string as NSString).substring(with: markedRange()) : "")
   }
 
   /// 中身を外から差し替える（コミット後に空にした・別の窓で打った）。差し替えは undo に積まず、欄の取り消しの履歴も捨てる

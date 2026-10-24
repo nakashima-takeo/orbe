@@ -58,9 +58,8 @@ struct HelpKeyboardView: View {
     let isSel = key.id == model.fkey
     let isLit = litKeys.contains(key.id)
     let usable = HelpCatalog.usedKeys.contains(key.id)
-    let modifier = HelpCatalog.bottomLabelKeys.contains(key.id)
+    let bottomAligned = !fnRow && HelpCatalog.bottomLabelKeys.contains(key.id)
     let shape = RoundedRectangle(cornerRadius: 5)
-    let bottomAligned = !fnRow && modifier
     return Text(key.label)
       .font(font(for: key, fnRow: fnRow))
       .lineSpacing(1)

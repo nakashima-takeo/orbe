@@ -96,4 +96,12 @@ extension ScmPanelTests {
     panel.returnToMessageIfAtTop()
     XCTAssertEqual(panel.focusRequest, .message, "未選択からも戻る")
   }
+
+  /// 当てられないまま隠れた焦点の要求は捨てる（後で欄が現れても、面の外の焦点を奪わない）。
+  func testAFocusRequestLeftUnappliedIsDroppedWhenThePanelHides() throws {
+    show(until: { $0.isManaged == true }, "パネル")
+    panel.requestFocus(.message)
+    panel.isShown = false
+    XCTAssertNil(panel.focusRequest)
+  }
 }

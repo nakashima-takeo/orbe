@@ -227,6 +227,8 @@ final class EditorPaneView: NSView {
     tree.isLive = false
     tree = FileTree(root: root)
     wireTree()
+    // パネルは作り直されて欄と列が窓から外れるので、外れる前に焦点を面の行き先へ移す。
+    if focusIsInSourceControl { reclaimSidebarFocus() }
     scm.isShown = false
     scm.isLive = false
     scm = ScmPanel(root: root)

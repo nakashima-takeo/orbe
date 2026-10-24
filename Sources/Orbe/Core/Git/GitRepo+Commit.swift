@@ -31,6 +31,23 @@ struct GitCommitContent: Equatable {
   }
 }
 
+/// コミットの書き込みの結果。落ちたら、落ちる前に先にステージする行を index に書いたか（`add -A` が通った後に落ちたか）も
+/// 持つ——何も書かずに落ちたコミットのステージを、書いたものとして数えないため。
+enum GitCommitOutcome: Equatable {
+  case committed
+  case failed(GitWriteFailure, stagedFirst: Bool)
+
+  /// `failure` が nil なら通った。
+  init(_ failure: GitWriteFailure?, stagedFirst: Bool) {
+    self = failure.map { .failed($0, stagedFirst: stagedFirst) } ?? .committed
+  }
+
+  var failure: GitWriteFailure? {
+    if case .failed(let failure, _) = self { return failure }
+    return nil
+  }
+}
+
 /// 書き込みの決まり（止め方・順番・パスの渡し方）は `GitRepo+Changes` と同じ。
 extension GitRepo {
   /// コミットする（`amend` なら直前のコミットを差し替える）。中身は `content`——index のままか、先に行をステージして
@@ -38,37 +55,46 @@ extension GitRepo {
   /// 書かずに `conflictsRemain` で返す（git はコミットを断るので、先にステージしたものが merge のコミットに混ざりうるだけに
   /// なる）。HEAD かコミットに入るものが `content` と違えば何も書かずに `contentMismatch` で返す。amend は、呼んだ時点の HEAD
   /// が push 済みなら何も書かずに `headPushed` で返す。ステージの後で止められたらコミットしない。ステージが通ってコミットが
-  /// 落ちたら、ステージしたものは残る。
+  /// 落ちたら、ステージしたものは残る（結果の `stagedFirst`）。
   ///
   /// メッセージは書いたまま残る（`#` 始まりの行も。前後の空行・行末の空白・続く空行だけ整える）。amend でメッセージが空
   /// なら、前のメッセージを一字も変えずに中身だけ差し替える——整え方を明示しないと、利用者の `commit.cleanup=strip` が
   /// 前のメッセージの `#` の行を消す。ユーザーの hook・署名の設定はそのまま効く。
   func commit(
     message: String, content: GitCommitContent, amend: Bool, handle: GitRunner.Handle,
-    completion: @escaping (GitWriteFailure?) -> Void
+    completion: @escaping (GitCommitOutcome) -> Void
   ) {
     let write = {
       self.stageAndCommit(
         message: message, content: content, amend: amend, handle: handle, completion: completion)
     }
     guard amend else { return write() }
-    unlessHeadIsPushed(handle: handle, completion, then: write)
+    unlessHeadIsPushed(
+      handle: handle, { completion(GitCommitOutcome($0, stagedFirst: false)) }, then: write)
   }
 
   private func stageAndCommit(
     message: String, content: GitCommitContent, amend: Bool, handle: GitRunner.Handle,
-    completion: @escaping (GitWriteFailure?) -> Void
+    completion: @escaping (GitCommitOutcome) -> Void
   ) {
+    let unwritten = { (failure: GitWriteFailure?) in
+      completion(GitCommitOutcome(failure, stagedFirst: false))
+    }
     select(content.stagingFirst, handle: handle) { selected in
       switch selected {
-      case .failure(let failure): completion(failure)
+      case .failure(let failure): unwritten(failure)
       case .success(let selection):
-        guard !selection.unmerged else { return completion(.conflictsRemain) }
-        self.unlessContentDiffers(content, staging: selection.paths, handle: handle, completion) {
+        guard !selection.unmerged else { return unwritten(.conflictsRemain) }
+        self.unlessContentDiffers(content, staging: selection.paths, handle: handle, unwritten) {
           self.runOnPaths(["add", "-A"], paths: selection.paths, handle: handle) { staged in
-            if let staged { return completion(staged) }
-            guard !handle.isCancelled else { return completion(.cancelled) }
-            self.commit(message: message, amend: amend, handle: handle, completion: completion)
+            if let staged { return unwritten(staged) }
+            let stagedFirst = !selection.paths.isEmpty
+            guard !handle.isCancelled else {
+              return completion(.failed(.cancelled, stagedFirst: stagedFirst))
+            }
+            self.commit(message: message, amend: amend, handle: handle) {
+              completion(GitCommitOutcome($0, stagedFirst: stagedFirst))
+            }
           }
         }
       }

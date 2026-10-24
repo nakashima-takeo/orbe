@@ -7,7 +7,8 @@ import AppKit
 /// 押しても行は無い。
 ///
 /// キーは源の操作へ渡す（`RowListKey`）。Home / End・PageUp / PageDown は列が送るだけ。押すと焦点を取り
-/// （焦点を持たない源の列は取らない）、行の番号を源へ渡す——行の中の部品の上なら、行のクリックではなく部品の押下として渡す。
+/// （焦点を持たない源の列は取らない）、行の番号を源へ渡す——行の中の部品の上なら、行のクリックではなく部品の押下として渡す
+/// （押せない姿の部品なら何も渡さず、錨も守りも触らない）。
 /// ポインタの下の行には行の中の位置を写す（hover と、部品の説明のツールチップ）。VoiceOver には AX のリスト（行の総数と、
 /// 見えている行・選択の行）として見せる。
 ///
@@ -28,6 +29,8 @@ final class RowListView<Source: RowListSource>: NSView {
   private var bottomSpace: CGFloat = 0
   /// 押し続けの守り（錨を受け取った押下で張る）。
   private var pressGuard: RowListPressGuard?
+  /// ポインタが列の中に居るか（入った・中で動いた・押したで立ち、出た・外で動いた・窓に載り直したで下りる）。
+  private var pointerIsInside = false
   private var slots: [Source.RowView] = []
 
   /// 選んでいる行の番号（源の選択を写したもの）。
@@ -75,6 +78,7 @@ final class RowListView<Source: RowListSource>: NSView {
     holdAnchor()
     resizeDocument()
     layoutRows()
+    updatePointer()
   }
 
   /// 選択 `selection` の描いている組での行。
@@ -223,9 +227,18 @@ final class RowListView<Source: RowListSource>: NSView {
 
   // MARK: - ポインタ
 
-  /// ポインタの下の行へ、行の中の位置を写す（ほかの行は外す）。部品の説明をツールチップにする。
+  /// ポインタが列に入った・中で動いた（`inside`）、出た・外で動いた・列が窓に載り直した（`!inside`）。
+  func pointerMoved(inside: Bool) {
+    pointerIsInside = inside
+    updatePointer()
+  }
+
+  /// ポインタの下の行へ、行の中の位置を写す（ほかの行は外す）。部品の説明をツールチップにする。ポインタが列の中に居なければ
+  /// （アプリが背後にある間を含む）、どの行にも写さない。
   func updatePointer() {
-    guard let window, let scroll = enclosingScrollView else { return pointerDidLeave() }
+    guard pointerIsInside, let window, let scroll = enclosingScrollView else {
+      return pointerDidLeave()
+    }
     let location = window.mouseLocationOutsideOfEventStream
     guard scroll.bounds.contains(scroll.convert(location, from: nil)) else {
       return pointerDidLeave()
@@ -243,7 +256,7 @@ final class RowListView<Source: RowListSource>: NSView {
     if toolTip != help { toolTip = help }
   }
 
-  func pointerDidLeave() {
+  private func pointerDidLeave() {
     for slot in slots { slot.pointer = nil }
     toolTip = nil
   }
@@ -272,10 +285,12 @@ final class RowListView<Source: RowListSource>: NSView {
   // MARK: - マウス
 
   override func mouseDown(with event: NSEvent) {
+    pointerIsInside = true
     if source.acceptsFocus { window?.makeFirstResponder(self) }
     let point = convert(event.locationInWindow, from: nil)
     guard let row = row(at: point) else { return }
     if let slot = slot(showing: row), let control = slot.control(at: convert(point, to: slot)) {
+      guard control.isEnabled else { return }
       let windowY = convert(NSPoint(x: 0, y: slot.frame.minY), to: nil).y
       endPressGuard()
       if let rows = source.press(row, control: control.id, in: drawn) {
