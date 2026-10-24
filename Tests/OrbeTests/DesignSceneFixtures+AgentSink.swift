@@ -28,7 +28,7 @@ extension DesignSceneFixtures {
     return AutomationSample(
       definition: AutomationDefinition(
         name: "レビュー待ちの PR を Slack へ", notify: .menuBar,
-        parts: [
+        nodes: [
           agentNode(
             "post", "PR を投稿", .scheduled(cron("0 9 * * 1-5")),
             tools: ["Bash(gh search prs:*)", "mcp__slack__slack_send_message"],

@@ -105,7 +105,7 @@ extension DesignSceneFixtures {
   /// 取得の指示文・使えるツール・コマンドと作業ディレクトリが長く、詳細がスクロールする。回の記録は部品ごとに 20 件。
   static func boardLongSamples() -> [AutomationSample] {
     var samples = boardAutomationSamples()
-    samples[2].definition.parts[0] = agentNode(
+    samples[2].definition.nodes[0] = agentNode(
       "fetch", "取る", .scheduled(cron("0 9,13 * * *")), model: "haiku",
       tools: [
         "mcp__backlog__get_issues", "mcp__backlog__get_issue_comments",
@@ -120,7 +120,7 @@ extension DesignSceneFixtures {
           "backlog", at: automationAt(13, 0, daysAgo: $0), items: 10 + $0 % 3, fresh: $0 % 2,
           proposed: $0 % 2)
       } + samples[2].passes
-    samples[1].definition.parts[0] = commandNode(
+    samples[1].definition.nodes[0] = commandNode(
       "fetch", "取る", .scheduled(.every(3600)),
       script: (1...6).map {
         "gh search prs --review-requested=@me --json url,title,body --limit \($0 * 10) \\"
@@ -142,7 +142,7 @@ extension DesignSceneFixtures {
     AutomationSample(
       definition: AutomationDefinition(
         name: "日報の下書き", notify: nil,
-        parts: [
+        nodes: [
           commandNode(
             "note", "日報を書く", .scheduled(cron("0 23 * * *")), script: "~/bin/daily-note.sh",
             directory: "/Users/me/notes", deliver: .sideEffect)
@@ -181,7 +181,7 @@ extension DesignSceneFixtures {
     return AutomationSample(
       definition: AutomationDefinition(
         name: "GitHub: マージした PR を Slack へ", notify: nil,
-        parts: [
+        nodes: [
           commandNode(
             "fetch", "マージした PR を取る", .scheduled(.every(3600)),
             script: "gh search prs --merged --author=@me --json url,title", coverage: .newArrivals),
@@ -212,7 +212,7 @@ extension DesignSceneFixtures {
     return AutomationSample(
       definition: AutomationDefinition(
         name: "自分宛ての Slack DM", notify: nil,
-        parts: [
+        nodes: [
           commandNode(
             "fetch", "Slack の DM を取る", .scheduled(.every(600)), script: "~/bin/slack-dm.sh",
             coverage: .newArrivals),

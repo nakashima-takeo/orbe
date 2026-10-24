@@ -127,7 +127,7 @@ enum AutomationPrompts {
   /// 仕事の依頼文。上流の行も取得の情報も載せない——外から来た文面を、ツールを持つ agent の依頼文に混ぜないため。
   static func work(instruction: String, now: Date, timeZone: TimeZone) -> String {
     """
-    You act for the user as the last part of an automation. Orbe started you in the background on schedule; \
+    You act for the user as the last node of an automation. Orbe started you in the background on schedule; \
     nobody is watching. Use only the tools you were given. \(materialLine)
 
     Now: \(local(now, timeZone)), time zone \(timeZone.identifier).

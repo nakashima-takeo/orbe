@@ -44,12 +44,12 @@ func runCell(_ key: String, _ run: [String: Any]) -> String {
 func automationRuns(_ rest: [String]) -> Never {
   exitIfAutomationHelp(rest)
   var args = rest
-  let nodeKey = takeOption(&args, "--part", requires: "a <key> value")
+  let nodeKey = takeOption(&args, "--node", requires: "a <key> value")
   let before = takeIntOption(&args, "--before", requires: "a positive <recordId>")
   let limit = takeIntOption(&args, "--limit", requires: "a positive <n>")
   rejectLeftovers(args, positionals: 1)
   var params: [String: Any] = ["automationId": automationIdArg(args, verb: "runs")]
-  if let nodeKey { params["partKey"] = nodeKey }
+  if let nodeKey { params["nodeKey"] = nodeKey }
   if let before { params["before"] = before }
   if let limit { params["limit"] = limit }
   let result = callOrExit("list_automation_runs", params)
@@ -60,7 +60,7 @@ func automationRuns(_ rest: [String]) -> Never {
   let object = result as? [String: Any]
   for run in object?["runs"] as? [[String: Any]] ?? [] {
     print(
-      [run["recordId"].map(display) ?? "-", runCell(run["partKey"].map(display) ?? "?", run)]
+      [run["recordId"].map(display) ?? "-", runCell(run["nodeKey"].map(display) ?? "?", run)]
         .map(tsvCell).joined(separator: "\t"))
   }
   if let next = object?["next"] { print("next\t\(display(next))") }

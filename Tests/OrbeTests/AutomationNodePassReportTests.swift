@@ -44,7 +44,7 @@ final class AutomationNodePassReportTests: AutomationNodePassTestCase {
     XCTAssertTrue(use(0, .putReport, ["text": 1]).isError)
     jobs.finish(0, done())
 
-    XCTAssertEqual(failed, #"the output of part "r" broke the rules: text has the wrong type"#)
+    XCTAssertEqual(failed, #"the output of node "r" broke the rules: text has the wrong type"#)
   }
 
   /// 空の報告を断られた後も、何も無い回として申告できる（中身の無い呼び出しは断った結果に数えない）。

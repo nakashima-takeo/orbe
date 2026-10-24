@@ -77,7 +77,7 @@ enum AutomationFailure: Error, Equatable {
 
   /// AI が読む英文。`nodeKey` はこの回の部品の鍵。
   func text(nodeKey: String, ending: AutomationEnding, breach: AutomationRejections?) -> String {
-    let word = "part \"\(nodeKey)\""
+    let word = "node \"\(nodeKey)\""
     func with(_ head: String, _ detail: String) -> String {
       detail.isEmpty ? head : "\(head): \(detail)"
     }
@@ -96,7 +96,7 @@ enum AutomationFailure: Error, Equatable {
       return "the \(word) ended without giving a result"
     case .unsourced:
       return
-        "the rows of \(word) reach a judge part, but none has an origin (none came from a fetch part)"
+        "the rows of \(word) reach a judge node, but none has an origin (none came from a fetch node)"
     }
   }
 }

@@ -158,7 +158,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertTrue(try proposals(wc, of: second).isEmpty)
 
     var reporting = try XCTUnwrap(store.automation(first)?.definition)
-    reporting.parts[1] = DesignSceneFixtures.commandNode(
+    reporting.nodes[1] = DesignSceneFixtures.commandNode(
       "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report)
     _ = try success(
       wc.controlSetAutomation(
@@ -180,8 +180,8 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     try Self.round(store, first, fetched: [moved], proposing: [moved])
     try Self.round(store, second, fetched: [moved])
     var reporting = try XCTUnwrap(store.automation(first)?.definition)
-    reporting.parts[0].key = "source"
-    reporting.parts[1] = DesignSceneFixtures.commandNode(
+    reporting.nodes[0].key = "source"
+    reporting.nodes[1] = DesignSceneFixtures.commandNode(
       "digest", "要約", .arrival, from: ["source"], script: "digest", deliver: .report)
     _ = try success(wc.controlSetAutomation(automationId: first, version: 1, reporting))
 
@@ -189,8 +189,8 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertEqual(shelved["automationId"] as? Int, second)
     let proposedBy = try XCTUnwrap(shelved["proposedBy"] as? [String: Any])
     XCTAssertEqual(proposedBy["automationId"] as? Int, first)
-    XCTAssertNil(proposedBy["partKey"], "外した判定の部品は言わない")
-    XCTAssertEqual(proposedBy["sourcePartKey"] as? String, "source", "出どころの部品は今の鍵で言う")
+    XCTAssertNil(proposedBy["nodeKey"], "外した判定の部品は言わない")
+    XCTAssertEqual(proposedBy["originNodeKey"] as? String, "source", "出どころの部品は今の鍵で言う")
 
     try store.dismiss(try XCTUnwrap(store.proposals.first?.id))
     let other = DesignSceneFixtures.commandNode(
@@ -198,12 +198,12 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     _ = try success(
       wc.controlSetAutomation(
         automationId: first, version: 2,
-        AutomationDefinition(name: "受信 1", notify: nil, parts: [other])))
+        AutomationDefinition(name: "受信 1", notify: nil, nodes: [other])))
     let rest = try XCTUnwrap(
       try proposals(wc, of: second).first?["proposedBy"] as? [String: Any],
       "判定と出どころの両方を外しても、出した自動化は残る（判断済みの候補は下がらない）")
     XCTAssertEqual(rest["automationId"] as? Int, first)
-    XCTAssertNil(rest["sourcePartKey"])
+    XCTAssertNil(rest["originNodeKey"])
 
     _ = wc.controlDeleteAutomation(automationId: first)
     let orphan = try XCTUnwrap(try proposals(wc, of: second).first)
@@ -228,8 +228,8 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertEqual(listed["対応: a"]?["workspaceName"] as? String, "main")
     let proposedBy = listed["対応: a"]?["proposedBy"] as? [String: Any]
     XCTAssertEqual(proposedBy?["automationId"] as? Int, id)
-    XCTAssertEqual(proposedBy?["partKey"] as? String, "judge")
-    XCTAssertEqual(proposedBy?["sourcePartKey"] as? String, "fetch")
+    XCTAssertEqual(proposedBy?["nodeKey"] as? String, "judge")
+    XCTAssertEqual(proposedBy?["originNodeKey"] as? String, "fetch")
     for title in ["対応: b", "対応: c"] {
       XCTAssertNil(listed[title]?["workspaceId"], title)
       XCTAssertNil(listed[title]?["workspaceName"], title)
@@ -263,7 +263,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
     _ = try success(wc.controlRunAutomation(automationId: id, nodeKey: nil))
 
-    let nodes = try XCTUnwrap(try listed(wc)[id]?["parts"] as? [String: [String: Any]])
+    let nodes = try XCTUnwrap(try listed(wc)[id]?["nodes"] as? [String: [String: Any]])
     XCTAssertEqual(nodes["fetch"]?["running"] as? Bool, true)
     XCTAssertEqual(nodes["judge"]?["running"] as? Bool, false)
     XCTAssertEqual(code(wc.controlRunAutomation(automationId: id, nodeKey: "fetch")), -32000)
@@ -274,9 +274,9 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let wc = try launch()
     let id = try set(wc, Self.definition())
     var codex = Self.definition("codex に判定させる")
-    if case .agent(var agent) = codex.parts[1].action.method {
+    if case .agent(var agent) = codex.nodes[1].action.method {
       agent.cli = "codex"
-      codex.parts[1].action.method = .agent(agent)
+      codex.nodes[1].action.method = .agent(agent)
     }
 
     XCTAssertEqual(code(wc.controlRunAutomation(automationId: 99, nodeKey: nil)), -32004)
@@ -289,7 +289,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertEqual(code(wc.controlSetAutomation(automationId: id, version: 1, codex)), -32602)
     XCTAssertEqual(code(wc.controlSetAutomation(automationId: nil, version: nil, codex)), -32602)
     XCTAssertEqual(
-      wc.automationStore.automations.map { $0.definition.parts.map(\.key) }, [["fetch", "judge"]])
+      wc.automationStore.automations.map { $0.definition.nodes.map(\.key) }, [["fetch", "judge"]])
     XCTAssertEqual(wc.automationStore.automations.map(\.version), [1])
   }
 
@@ -301,7 +301,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let wc = try launch()
     let definition = AutomationDefinition(
       name: "Slack", notify: .menuBar,
-      parts: [
+      nodes: [
         DesignSceneFixtures.agentNode(
           "slack", "取る", .scheduled(.cron(try BackgroundCron("30 9 * * mon-fri"))),
           tools: ["mcp__slack__search"], instruction: "自分宛の DM", coverage: .newArrivals),
@@ -315,8 +315,8 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let listedDefinition = try XCTUnwrap(try listed(wc)[id]?["definition"])
     let data = try JSONSerialization.data(withJSONObject: listedDefinition)
     var stored = definition
-    for index in stored.parts.indices {
-      stored.parts[index].id = wc.automationStore.nodeId(id, stored.parts[index].key)
+    for index in stored.nodes.indices {
+      stored.nodes[index].id = wc.automationStore.nodeId(id, stored.nodes[index].key)
     }
 
     XCTAssertEqual(
@@ -330,7 +330,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
       wc,
       AutomationDefinition(
         name: "試す", notify: nil,
-        parts: [
+        nodes: [
           DesignSceneFixtures.commandNode(
             "fetch", "取る", .manual, script: "exit 1", coverage: .currentSet),
           DesignSceneFixtures.commandNode(
@@ -348,7 +348,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let trial = try XCTUnwrap(started["trial"] as? [String: Any])
     XCTAssertEqual(trial["preparing"] as? Bool, true)
     XCTAssertEqual(
-      (trial["parts"] as? [[String: Any]])?.map { $0["key"] as? String }, ["fetch", "send"])
+      (trial["nodes"] as? [[String: Any]])?.map { $0["key"] as? String }, ["fetch", "send"])
 
     var reply: Result<Any, ControlError>?
     wc.controlAutomationTrial(automationId: id, wait: true, timeoutMs: 5000) { reply = $0 }
@@ -360,7 +360,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     XCTAssertNil(read["timedOut"])
     let ended = try XCTUnwrap(read["trial"] as? [String: Any])
     XCTAssertEqual(ended["running"] as? Bool, false)
-    let nodes = try XCTUnwrap(ended["parts"] as? [[String: Any]])
+    let nodes = try XCTUnwrap(ended["nodes"] as? [[String: Any]])
     XCTAssertEqual(nodes.map { $0["state"] as? String }, ["given", "held"])
     let fetchId = "\(wc.automationStore.nodeId(id, "fetch")):a"
     let given = try XCTUnwrap(

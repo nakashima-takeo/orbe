@@ -17,7 +17,7 @@ extension AutomationRunnerTests {
     func definition(_ name: String, gh script: String) -> AutomationDefinition {
       AutomationDefinition(
         name: name, notify: nil,
-        parts: [
+        nodes: [
           fetch("gh", every: 1800, script: script),
           definitionNode(
             "judge", .scheduled(.every(86400)), from: ["gh"], deliver: .taskCandidates),
@@ -56,7 +56,7 @@ extension AutomationRunnerTests {
     advance(by: 1800)
 
     gh.action.timeoutMinutes = 2
-    try rewrite(id, AutomationDefinition(name: "自動化", notify: nil, parts: [gh, digest]))
+    try rewrite(id, AutomationDefinition(name: "自動化", notify: nil, nodes: [gh, digest]))
     XCTAssertNotEqual(
       store.automation(id)?.graph.node(key: "gh")?.entity.defId, first, "前提: 書き足した値を保存する定義に付け替える")
     XCTAssertEqual(jobs.stopped, [])
@@ -78,7 +78,7 @@ extension AutomationRunnerTests {
     func definition(gh script: String) -> AutomationDefinition {
       AutomationDefinition(
         name: "要約", notify: nil,
-        parts: [
+        nodes: [
           fetch("gh", every: 1800, script: script),
           definitionNode("digest", .arrival, from: ["gh"], deliver: .report),
         ])
@@ -104,7 +104,7 @@ extension AutomationRunnerTests {
     func definition(post script: String) -> AutomationDefinition {
       AutomationDefinition(
         name: "投稿", notify: nil,
-        parts: [
+        nodes: [
           fetch("gh", every: 1800),
           definitionNode("post", .arrival, from: ["gh"], script: script, deliver: .sideEffect),
         ])

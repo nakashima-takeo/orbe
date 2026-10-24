@@ -139,7 +139,7 @@ extension DesignSceneFixtures {
   ) throws {
     guard let automation = store.automation(id), let node = automation.graph.node(key: pass.nodeKey)
     else {
-      preconditionFailure("no part \(pass.nodeKey) in the sample")
+      preconditionFailure("no node \(pass.nodeKey) in the sample")
     }
     var read: AutomationIntake.Read?
     var outcome = pass.outcome
@@ -166,7 +166,7 @@ extension DesignSceneFixtures {
   }
 
   private static func readOrFail(_ read: AutomationIntake.Read?) -> AutomationIntake.Read {
-    guard let read else { preconditionFailure("a part with inputs reads") }
+    guard let read else { preconditionFailure("a node with inputs reads") }
     return read
   }
 
@@ -245,7 +245,7 @@ extension DesignSceneFixtures {
   ) -> AutomationDefinition.Node {
     AutomationDefinition.Node(
       id: nil, key: key, name: name, trigger: trigger,
-      from: inputs.map { AutomationDefinition.Input(part: $0) },
+      from: inputs.map { AutomationDefinition.Input(nodeKey: $0) },
       action: AutomationActionDef(
         method: .command(BackgroundCommand(script: script, directory: directory)),
         timeoutMinutes: nil, coverage: coverage, destination: deliver), maxItems: nil)
@@ -258,7 +258,7 @@ extension DesignSceneFixtures {
   ) -> AutomationDefinition.Node {
     AutomationDefinition.Node(
       id: nil, key: key, name: name, trigger: trigger,
-      from: inputs.map { AutomationDefinition.Input(part: $0) },
+      from: inputs.map { AutomationDefinition.Input(nodeKey: $0) },
       action: AutomationActionDef(
         method: .agent(
           AutomationNodeAgent(cli: "claude", model: model, tools: tools, instruction: instruction)),
@@ -273,7 +273,7 @@ extension DesignSceneFixtures {
   ) -> AutomationDefinition {
     AutomationDefinition(
       name: name, notify: notify,
-      parts: [
+      nodes: [
         fetch,
         agentNode(
           "judge", "判定", .arrival, from: [fetch.key], model: "sonnet", instruction: instruction,

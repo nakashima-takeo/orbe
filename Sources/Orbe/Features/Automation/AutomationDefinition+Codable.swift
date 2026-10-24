@@ -31,16 +31,16 @@ extension AutomationDefinition.Node: Codable {
   }
 }
 
-/// `"<鍵>"`（新しい行だけ・古さの上限なし）か `{"part": "<鍵>", "take"?: "new" | "all", "maxAgeHours"?: n}`。書くときは、
+/// `"<鍵>"`（新しい行だけ・古さの上限なし）か `{"node": "<鍵>", "take"?: "new" | "all", "maxAgeHours"?: n}`。書くときは、
 /// 取り方も古さの上限も省けるつながりを鍵の文字列で書く。
 extension AutomationDefinition.Input: Codable {
   private enum CodingKeys: String, CodingKey {
-    case part, take, maxAgeHours
+    case nodeKey = "node", take, maxAgeHours
   }
 
   init(from decoder: Decoder) throws {
     if let key = try? decoder.singleValueContainer().decode(String.self) {
-      self.init(part: key)
+      self.init(nodeKey: key)
       return
     }
     let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -53,18 +53,18 @@ extension AutomationDefinition.Input: Codable {
       take = value
     }
     self.init(
-      part: try c.decode(String.self, forKey: .part), take: take,
+      nodeKey: try c.decode(String.self, forKey: .nodeKey), take: take,
       maxAgeHours: try c.decodeIfPresent(Int.self, forKey: .maxAgeHours))
   }
 
   func encode(to encoder: Encoder) throws {
     guard take != .new || maxAgeHours != nil else {
       var c = encoder.singleValueContainer()
-      try c.encode(part)
+      try c.encode(nodeKey)
       return
     }
     var c = encoder.container(keyedBy: CodingKeys.self)
-    try c.encode(part, forKey: .part)
+    try c.encode(nodeKey, forKey: .nodeKey)
     if take != .new { try c.encode(take.rawValue, forKey: .take) }
     try c.encodeIfPresent(maxAgeHours, forKey: .maxAgeHours)
   }
@@ -108,7 +108,7 @@ extension AutomationActionDef: Codable {
     case (true, false):
       if let key = [CodingKeys.agent, .model, .tools].first(where: c.contains) {
         throw DecodingError.dataCorruptedError(
-          forKey: key, in: c, debugDescription: "a command part has no \(key.stringValue)")
+          forKey: key, in: c, debugDescription: "a command node has no \(key.stringValue)")
       }
       return .command(
         BackgroundCommand(
@@ -117,7 +117,7 @@ extension AutomationActionDef: Codable {
     case (false, true):
       guard !c.contains(.directory) else {
         throw DecodingError.dataCorruptedError(
-          forKey: .directory, in: c, debugDescription: "an agent part has no directory")
+          forKey: .directory, in: c, debugDescription: "an agent node has no directory")
       }
       return .agent(
         AutomationNodeAgent(

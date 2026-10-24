@@ -12,7 +12,7 @@ extension AutomationRunnerTests {
     -> [AutomationDefinition.Node]
   {
     var copy = definitionNode("copy", .arrival, coverage: .currentSet)
-    copy.from = [AutomationDefinition.Input(part: "gh", take: .all)]
+    copy.from = [AutomationDefinition.Input(nodeKey: "gh", take: .all)]
     return [
       definitionNode("gh", .scheduled(.every(1800)), coverage: coverage), copy,
       definitionNode("post", .arrival, from: ["copy"], deliver: .sideEffect),
@@ -116,7 +116,7 @@ extension AutomationRunnerTests {
     finish("gh", fetched(["a"]))
     finish("copy", printed(item("a")))
 
-    try rewrite(id, AutomationDefinition(name: "自動化", notify: nil, parts: copyNodes(.newArrivals)))
+    try rewrite(id, AutomationDefinition(name: "自動化", notify: nil, nodes: copyNodes(.newArrivals)))
 
     XCTAssertEqual(calls("copy").count, 2)
     XCTAssertEqual(rows(try XCTUnwrap(calls("copy").last)).count, 0)

@@ -80,7 +80,7 @@ final class AutomationRunSession {
       tools = [.putReport, .reportNothing, .reportError]
       choices = nil
     case .sideEffect:
-      preconditionFailure("a side effect part is a command")
+      preconditionFailure("a side effect node is a command")
     }
   }
 

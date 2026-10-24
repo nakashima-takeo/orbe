@@ -63,7 +63,7 @@ extension AutomationDatabase {
       case .failure(let problem): return broken(problem.reason, Self.rawDefinition(row, rows, keys))
       }
     }
-    let definition = AutomationDefinition(name: row.name, notify: notify, parts: definitionNodes)
+    let definition = AutomationDefinition(name: row.name, notify: notify, nodes: definitionNodes)
     let checked: (name: String, checkedNodes: [AutomationGraph.Checked])
     do throws(AutomationError) {
       checked = try definition.checked()
@@ -141,14 +141,14 @@ extension AutomationDatabase {
   private static func definitionNode(
     _ row: NodeRow, at index: Int, keys: [AutomationNodeID: String]
   ) -> Result<AutomationDefinition.Node, Unbuilt> {
-    let at = "parts[\(index)]"
+    let at = "nodes[\(index)]"
     guard let storedTrigger = row.trigger.flatMap(jsonObject) else {
       return .failure(Unbuilt(reason: "\(at).trigger: the stored trigger cannot be read"))
     }
     guard !row.composite else {
       return .failure(
         Unbuilt(
-          reason: "\(at): the stored definition is made of parts, which this database version "
+          reason: "\(at): the stored definition is made of nodes, which this database version "
             + "does not hold"))
     }
     guard let storedAction = row.action.flatMap(jsonObject) else {
@@ -167,7 +167,7 @@ extension AutomationDatabase {
         id: row.id, key: row.key, name: row.name, trigger: trigger,
         from: row.inputs.map {
           AutomationDefinition.Input(
-            part: keys[$0.from] ?? "", take: $0.take, maxAgeHours: $0.maxAgeHours)
+            nodeKey: keys[$0.from] ?? "", take: $0.take, maxAgeHours: $0.maxAgeHours)
         }, action: action, maxItems: row.maxItems))
   }
 
@@ -188,7 +188,7 @@ extension AutomationDatabase {
   ) -> [String: Any] {
     var object: [String: Any] = [
       "name": row.name,
-      "parts": nodeRows.map { nodeRow -> [String: Any] in
+      "nodes": nodeRows.map { nodeRow -> [String: Any] in
         var object: [String: Any] = [
           "id": nodeRow.id.rawValue, "key": nodeRow.key, "name": nodeRow.name,
         ]
@@ -197,7 +197,7 @@ extension AutomationDatabase {
         let from = nodeRow.inputs.map { edge -> Any in
           let key = keys[edge.from] ?? ""
           guard edge.take != .new || edge.maxAgeHours != nil else { return key }
-          var input: [String: Any] = ["part": key]
+          var input: [String: Any] = ["node": key]
           if edge.take != .new { input["take"] = edge.take.rawValue }
           if let hours = edge.maxAgeHours { input["maxAgeHours"] = hours }
           return input

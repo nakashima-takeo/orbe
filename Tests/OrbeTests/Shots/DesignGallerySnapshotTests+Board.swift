@@ -166,14 +166,14 @@ extension DesignGallerySnapshotTests {
     // 「ツール」の欄（同じサーバーのツールが並び、claude.ai のコネクタの頭が付く）と、今日以外の手動の回（時刻の列が中身に
     // 合わせて広がる）と、標準エラーの抜粋のある失敗（英語の画面でも抜粋を添える）。
     var tools = samples
-    if let slack = tools[0].definition.parts.firstIndex(where: { $0.key == "slack" }),
-      case .agent(var agent) = tools[0].definition.parts[slack].action.method
+    if let slack = tools[0].definition.nodes.firstIndex(where: { $0.key == "slack" }),
+      case .agent(var agent) = tools[0].definition.nodes[slack].action.method
     {
       agent.tools = [
         "mcp__claude_ai_Slack__search_messages", "mcp__claude_ai_Slack__read_channel",
         "mcp__plugin_core_backlog__get_issues", "Bash(npm run test:unit:*)",
       ]
-      tools[0].definition.parts[slack].action.method = .agent(agent)
+      tools[0].definition.nodes[slack].action.method = .agent(agent)
     }
     let manualAt = DesignSceneFixtures.automationAt(9, 0, daysAgo: 3)
     tools[0].passes.insert(

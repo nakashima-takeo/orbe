@@ -34,12 +34,12 @@ extension DesignSceneFixtures {
           script: "gh search issues --assignee @me --state open --json url,title,body,updatedAt",
           coverage: .newArrivals))
       if command {
-        definition.parts[1] = commandNode(
+        definition.nodes[1] = commandNode(
           "judge", "判定", .arrival, from: ["fetch"], script: "~/bin/judge.sh",
           deliver: .taskCandidates)
       }
       // 判定は 1 時間ごと——失敗した回の行が残っても、撮る時点では起き直さない（「届いたら」なら残った行で走り出す）。
-      definition.parts[1].trigger = .scheduled(.every(3600))
+      definition.nodes[1].trigger = .scheduled(.every(3600))
       var passes = round("github", at: automationAt(13, 0), items: 2, fresh: 2, proposed: 1)
       passes.append(
         AutomationSamplePass(

@@ -9,8 +9,8 @@ let automationUsageLines = [
   "orb automation list [--json]",
   "orb automation proposals [<id>] [--json]",
   "orb automation set [<id> --version <n>] [--json]   (definition JSON on stdin)",
-  "orb automation run <id> [--part <key>] [--json]",
-  "orb automation runs <id> [--part <key>] [--before <recordId>] [--limit <n>] [--json]",
+  "orb automation run <id> [--node <key>] [--json]",
+  "orb automation runs <id> [--node <key>] [--before <recordId>] [--limit <n>] [--json]",
   "orb automation try <id> [--from <key>]... [--to <key>]... [--stdin] [--limit <n>] [--json]",
   "orb automation trial <id> [--wait] [--timeout-ms <ms>] [--json]",
   "orb automation pause <id> [--json]",
@@ -185,15 +185,15 @@ let automationUsage = """
       select(.automationId==3) | .definition' | … | orb automation set 3 --version 4
   set without <id> creates an automation and prints its id; with <id> it
   replaces the whole definition, and is refused when the automation changed
-  since that version. Keep each part's id to keep the part. Changing the source method, a step's
+  since that version. Keep each node's id to keep the node. Changing the source method, a step's
   method, model, instruction or command, or the sink stops a running run;
   with task candidates the next run also processes every fetched item
   again.
   run starts a run now (paused automations too) and returns at once; the
   result shows up in list. pause stops only the schedule; resume restarts
   it.
-  try runs the parts on a copy and returns at once (nothing saved or notified;
-  side effects are held). trial reads it per part; --wait exits 124 on timeout.
+  try runs the nodes on a copy and returns at once (nothing saved or notified;
+  side effects are held). trial reads it per node; --wait exits 124 on timeout.
   list prints one automation per line: id, state (active / paused /
   running), name, trigger, next run, last run (from the run record:
   fetched and new when it has a source, then proposed, the command's
@@ -250,7 +250,7 @@ private func automationList(_ rest: [String]) -> Never {
   }
   let automations = (result as? [String: Any])?["automations"] as? [[String: Any]] ?? []
   for automation in automations {
-    let nodes = automation["parts"] as? [String: [String: Any]] ?? [:]
+    let nodes = automation["nodes"] as? [String: [String: Any]] ?? [:]
     let state =
       automation["definitionError"] != nil
       ? "unreadable"
@@ -263,7 +263,7 @@ private func automationList(_ rest: [String]) -> Never {
     print(
       [
         automation["automationId"], state, definition?["name"],
-        scheduleCell(definition?["parts"] as? [[String: Any]] ?? [], next: next?.key),
+        scheduleCell(definition?["nodes"] as? [[String: Any]] ?? [], next: next?.key),
         next?.at, lastRunCell(nodes),
       ].map { $0.map(display) ?? "-" }.map(tsvCell).joined(separator: "\t"))
   }
@@ -357,11 +357,11 @@ private func automationPause(_ rest: [String], paused: Bool) -> Never {
 private func automationRun(_ rest: [String]) -> Never {
   exitIfAutomationHelp(rest)
   var args = rest
-  let nodeKey = takeOption(&args, "--part", requires: "a <key> value")
+  let nodeKey = takeOption(&args, "--node", requires: "a <key> value")
   rejectLeftovers(args, positionals: 1)
   let id = automationIdArg(args, verb: "run")
   var params: [String: Any] = ["automationId": id]
-  if let nodeKey { params["partKey"] = nodeKey }
+  if let nodeKey { params["nodeKey"] = nodeKey }
   let result = callOrExit("run_automation", params)
   if wantJSON { printJSON(result) } else { print("started automation \(id)") }
   exit(0)

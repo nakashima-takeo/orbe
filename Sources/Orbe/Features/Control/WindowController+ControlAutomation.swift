@@ -49,7 +49,7 @@ extension WindowController {
       var json: [String: Any] = [
         "runs": page.runs.map { run -> [String: Any] in
           var object = AutomationRunWire.object(run.record, nodeKey: run.nodeKey)
-          object["partKey"] = run.nodeKey
+          object["nodeKey"] = run.nodeKey
           return object
         }
       ]
@@ -94,9 +94,9 @@ extension WindowController {
       // 消えた後は、指す先が無いので出さない。部品は今の鍵で言い、外れていれば出さない。
       if let issuer = automationStore.issuer(of: proposal) {
         var by: [String: Any] = ["automationId": issuer.id]
-        if let judge = issuer.graph.node(proposal.judge) { by["partKey"] = judge.key }
+        if let judge = issuer.graph.node(proposal.judge) { by["nodeKey"] = judge.key }
         if let origin = issuer.graph.node(proposal.originNodeId) {
-          by["sourcePartKey"] = origin.key
+          by["originNodeKey"] = origin.key
         }
         json["proposedBy"] = by
       }
@@ -187,7 +187,7 @@ extension WindowController {
       "version": automation.version,
       "definition": AutomationWire.object(automation.definition),
       "paused": automation.paused,
-      "parts": nodeObjects,
+      "nodes": nodeObjects,
     ]
     if automation.judges {
       json["taskCandidates"] =
@@ -234,12 +234,12 @@ extension WindowController {
       case .invalid(let message): return .failure(ControlError(code: -32602, message: message))
       case .nodeNotFound(let id, let key):
         return .failure(
-          ControlError(code: -32004, message: "part not found: \(key) in automation \(id)"))
+          ControlError(code: -32004, message: "node not found: \(key) in automation \(id)"))
       case .flowing(let id):
         return .failure(
           ControlError(
             code: -32000,
-            message: "automation \(id) is still running; wait until its parts finish"))
+            message: "automation \(id) is still running; wait until its nodes finish"))
       case .unavailable(let message):
         return .failure(ControlError(code: -32000, message: message))
       case .trialNotFound(let id):

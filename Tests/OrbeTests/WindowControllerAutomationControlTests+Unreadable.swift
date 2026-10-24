@@ -27,29 +27,29 @@ extension WindowControllerAutomationControlTests {
     let entry = try XCTUnwrap(try listed(wc)[1])
     XCTAssertEqual(entry["version"] as? Int, 1)
     XCTAssertEqual(
-      (entry["definitionError"] as? String)?.hasPrefix("invalid parts[1].instruction"), true)
+      (entry["definitionError"] as? String)?.hasPrefix("invalid nodes[1].instruction"), true)
     let runs = try success(
       wc.controlListAutomationRuns(automationId: 1, nodeKey: nil, before: nil, limit: nil))
     XCTAssertEqual(
-      (runs["runs"] as? [[String: Any]])?.map { $0["partKey"] as? String },
+      (runs["runs"] as? [[String: Any]])?.map { $0["nodeKey"] as? String },
       ["fetch"], "回の記録は部品の鍵で返る")
     guard case .failure(let refused) = wc.controlListAutomationProposals(automationId: 1) else {
       return XCTFail("読めない自動化の候補は断る")
     }
     XCTAssertEqual(refused.code, -32000, "見つからないではなく、読めない理由で断る")
     let definition = try XCTUnwrap(entry["definition"] as? [String: Any])
-    let nodes = try XCTUnwrap(definition["parts"] as? [[String: Any]])
+    let nodes = try XCTUnwrap(definition["nodes"] as? [[String: Any]])
     XCTAssertEqual(nodes.map { $0["key"] as? String }, ["fetch", "judge"])
     var fixed = Self.definition()
-    for index in fixed.parts.indices {
-      fixed.parts[index].id = (nodes[index]["id"] as? Int).map(AutomationNodeID.init)
+    for index in fixed.nodes.indices {
+      fixed.nodes[index].id = (nodes[index]["id"] as? Int).map(AutomationNodeID.init)
     }
     let set = try success(wc.controlSetAutomation(automationId: 1, version: 1, fixed))
     XCTAssertEqual((set["automation"] as? [String: Any])?["version"] as? Int, 2)
     XCTAssertNil(try listed(wc)[1]?["definitionError"])
     XCTAssertEqual(
       wc.automationStore.automation(1)?.graph.nodes.map(\.id),
-      fixed.parts.compactMap(\.id), "一覧の id で直すと同じ部品のまま")
+      fixed.nodes.compactMap(\.id), "一覧の id で直すと同じ部品のまま")
   }
 
   /// 値の壊れた候補は、候補の一覧に分かる分（ID・リンク・`unreadable`）だけで載り、自動化で絞っても持ち主の自動化に載る。

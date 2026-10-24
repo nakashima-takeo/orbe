@@ -9,7 +9,7 @@ extension AutomationTrial {
     var json: [String: Any] = [
       "automationId": automationId, "from": keys(range.from), "to": keys(range.to),
       "startedAt": SessionEvent.iso8601(startedAt), "running": running, "preparing": preparing,
-      "parts": range.path.map { node -> [String: Any] in
+      "nodes": range.path.map { node -> [String: Any] in
         [
           "key": node.key, "state": state(of: node.id).rawValue,
           "runs": (passes[node.id] ?? []).map { $0.json(nodeKey: node.key, workspace: workspace) },

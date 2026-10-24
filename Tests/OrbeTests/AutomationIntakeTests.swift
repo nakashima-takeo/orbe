@@ -75,7 +75,7 @@ final class AutomationIntakeTests: OrbeTestCase {
   func testExpiredRowsAreCountedOnlyWhenNotReadBefore() throws {
     var definitionNode = Nodes.agent("r", from: ["cs", "na"])
     definitionNode.from = [
-      .init(part: "cs", take: .all, maxAgeHours: 1), .init(part: "na", maxAgeHours: 1),
+      .init(nodeKey: "cs", take: .all, maxAgeHours: 1), .init(nodeKey: "na", maxAgeHours: 1),
     ]
     let report = try node(definitionNode)
     let old = t0.addingTimeInterval(-7200)

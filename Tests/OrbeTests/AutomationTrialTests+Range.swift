@@ -73,7 +73,7 @@ extension AutomationTrialTests {
       definitionNode("digest", from: ["slack"], deliver: .report),
     ])
     XCTAssertThrowsError(try trials.start(id, .init(from: ["gh"], to: ["digest"]))) {
-      XCTAssertEqual($0 as? AutomationError, .invalid(#"from[0] "gh" reaches no part in to"#))
+      XCTAssertEqual($0 as? AutomationError, .invalid(#"from[0] "gh" reaches no node in to"#))
     }
     XCTAssertThrowsError(try trials.start(id, .init(to: ["nope"]))) {
       XCTAssertEqual($0 as? AutomationError, .nodeNotFound(id, "nope"))

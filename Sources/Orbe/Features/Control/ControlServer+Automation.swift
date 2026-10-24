@@ -97,13 +97,13 @@ extension ControlServer {
     case "list_automation_runs":
       return { target, p throws(ControlError) in
         target.controlListAutomationRuns(
-          automationId: try p.int("automationId"), nodeKey: try p.optionalString("partKey"),
+          automationId: try p.int("automationId"), nodeKey: try p.optionalString("nodeKey"),
           before: try p.optionalInt("before"), limit: try p.optionalInt("limit"))
       }
     case "run_automation":
       return { target, p throws(ControlError) in
         target.controlRunAutomation(
-          automationId: try p.int("automationId"), nodeKey: try p.optionalString("partKey"))
+          automationId: try p.int("automationId"), nodeKey: try p.optionalString("nodeKey"))
       }
     case "pause_automation":
       return { target, p throws(ControlError) in

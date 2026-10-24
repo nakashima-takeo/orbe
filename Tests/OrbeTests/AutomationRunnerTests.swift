@@ -78,7 +78,7 @@ final class AutomationRunnerTests: OrbeTestCase {
   }
 
   func define(_ definitionNodes: [AutomationDefinition.Node], name: String = "自動化") throws -> Int {
-    try runner.set(nil, AutomationDefinition(name: name, notify: nil, parts: definitionNodes)).id
+    try runner.set(nil, AutomationDefinition(name: name, notify: nil, nodes: definitionNodes)).id
   }
 
   /// 今の版で書き換える。同じ鍵の部品は今の部品の id を添える（同じ部品のまま）。
@@ -87,8 +87,8 @@ final class AutomationRunnerTests: OrbeTestCase {
   {
     let current = try XCTUnwrap(store.automation(id))
     var definition = definition
-    for index in definition.parts.indices {
-      definition.parts[index].id = current.graph.node(key: definition.parts[index].key)?.id
+    for index in definition.nodes.indices {
+      definition.nodes[index].id = current.graph.node(key: definition.nodes[index].key)?.id
     }
     return try runner.set(id, version: current.version, definition)
   }
@@ -254,7 +254,7 @@ final class AutomationRunnerTests: OrbeTestCase {
       let id = try store.create(
         AutomationDefinition(
           name: digest, notify: nil,
-          parts: [
+          nodes: [
             fetch("gh", every: 86400),
             definitionNode("digest", .arrival, from: ["gh"], script: digest, deliver: .report),
           ]), now: now

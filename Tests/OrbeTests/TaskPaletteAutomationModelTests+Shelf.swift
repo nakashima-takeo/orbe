@@ -39,7 +39,7 @@ extension TaskPaletteAutomationModelTests {
       nil,
       AutomationDefinition(
         name: "候補と投稿", notify: nil,
-        parts: [
+        nodes: [
           DesignSceneFixtures.commandNode(
             "fetch", "GitHub", .manual, script: "gh", coverage: .newArrivals),
           DesignSceneFixtures.agentNode(

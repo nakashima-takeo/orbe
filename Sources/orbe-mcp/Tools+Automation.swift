@@ -105,10 +105,10 @@ let automationTools: [[String: Any]] = [
     (
       "description",
       "自動化（外の出どころから項目を予定どおり取り、処理の段で絞り・判断して、出力先へ出す仕組み）を ID 順に返す {automations}。"
-        + "各要素は automationId・version（書き換えに添える定義の版）・definition（set_automation と同じ定義。各部品に id が付く。"
+        + "各要素は automationId・version（書き換えに添える定義の版）・definition（set_automation と同じ定義。各ノードに id が付く。"
         + "省略したモデルは省略のまま）・"
         + "paused（予定を止めているか）・running（回が走っているか）・nextRunAt（次に予定で回る時刻。止めていれば無い）・lastRunAt・"
-        + "parts の部品の鍵ごとに lastRun（最新の 1 回の記録。過去は list_automation_runs）。定義を読めない自動化は "
+        + "nodes のノードの鍵ごとに lastRun（最新の 1 回の記録。過去は list_automation_runs）。定義を読めない自動化は "
         + "{automationId, version, definition（行から組めた分）, definitionError（理由）} で、直すか消す。"
         + "出力先がタスク候補の自動化だけが taskCandidates {openProposals"
         + "（この自動化の棚に出ている候補の数）, overlaps（前回の取得結果が他の自動化と重なっているリンクの数 "
@@ -137,7 +137,7 @@ let automationTools: [[String: Any]] = [
       "自動化を作るか、automationId を渡して定義を丸ごと置き換え、その自動化を list_automations の 1 要素の形で返す {automation}。"
         + definitionShape
         + "書き直すときは、list_automations の definition と version を取り、直して丸ごと version を添えて送る（間に定義が変わって"
-        + "いれば断られるので、読み直す）。部品の id を保てば同じ部品のまま（鍵を変えても）。id の無い部品は新しい部品になる。"
+        + "いれば断られるので、読み直す）。ノードの id を保てば同じノードのまま（鍵を変えても）。id の無いノードは新しいノードになる。"
         + "置き換えで、取得元のやり方・段の手段とモデル（省略は解いた値で比べる）と指示文かコマンド・出力先"
         + "（出力先のコマンドの timeoutMinutes も、省略は 2 として比べる。出力先の agent の model は省略を sonnet として比べる）が"
         + "変わると、走っている回を止める。"
@@ -168,8 +168,8 @@ let automationTools: [[String: Any]] = [
     ("name", "list_automation_runs"),
     (
       "description",
-      "自動化の過去の回の記録を新しい順に返す {runs, next?}。各回は list_automations の lastRun と同じ形に recordId と partKey を"
-        + "足したもの。中身を読めない記録は {recordId, partKey, startedAt, endedAt, trigger, failed, unknown: true}。"
+      "自動化の過去の回の記録を新しい順に返す {runs, next?}。各回は list_automations の lastRun と同じ形に recordId と nodeKey を"
+        + "足したもの。中身を読めない記録は {recordId, nodeKey, startedAt, endedAt, trigger, failed, unknown: true}。"
         + "next があれば、before に渡すと続きが返る。"
     ),
     (
@@ -177,7 +177,7 @@ let automationTools: [[String: Any]] = [
       schema(
         [
           "automationId": intProp("読む自動化"),
-          "partKey": strProp("この部品の回だけ（省略で全部品）"),
+          "nodeKey": strProp("このノードの回だけ（省略で全ノード）"),
           "before": intProp("この recordId より前（前のページの next）"),
           "limit": intProp("件数（既定 20・上限 100）"),
         ], required: ["automationId"])
@@ -195,7 +195,7 @@ let automationTools: [[String: Any]] = [
       schema(
         [
           "automationId": intProp("回す自動化"),
-          "partKey": strProp("この部品まで流す（省略で終わりの部品すべてまで）"),
+          "nodeKey": strProp("このノードまで流す（省略で終わりのノードすべてまで）"),
         ], required: ["automationId"])
     ),
   ]),
@@ -203,10 +203,10 @@ let automationTools: [[String: Any]] = [
     ("name", "try_automation"),
     (
       "description",
-      "自動化の部品を、本番を汚さずに試す（試走）。本番の DB の写しの上で本番と同じ流しを動かし、すぐ返る。結果は"
-        + " get_automation_trial で読む。DB には何も書かず、通知もしない。from（入口の部品の鍵）から to（行き先の部品の鍵）"
-        + "への道の上の部品だけが動く。from を省けば入力の無い部品すべて、to を省けば入口から届く終わりの部品すべて。"
-        + "副作用・仕事の部品は動かさず、渡るはずだった行を返す。取得は本当に走る。rows は入口が 1 つのときだけ与えられ、"
+      "自動化のノードを、本番を汚さずに試す（試走）。本番の DB の写しの上で本番と同じ流しを動かし、すぐ返る。結果は"
+        + " get_automation_trial で読む。DB には何も書かず、通知もしない。from（入口のノードの鍵）から to（行き先のノードの鍵）"
+        + "への道の上のノードだけが動く。from を省けば入力の無いノードすべて、to を省けば入口から届く終わりのノードすべて。"
+        + "副作用・仕事のノードは動かさず、渡るはずだった行を返す。取得は本当に走る。rows は入口が 1 つのときだけ与えられ、"
         + "取得の入口なら取った項目、入力のある入口なら溜まりに届いた行になる（判定の入口は断られる）。limit は各取得が"
         + "下流へ渡す新しい項目を先頭から N 行に絞る。同じ自動化の試走は 1 つで、始め直すと前の試走を止めて置き換える。"
     ),
@@ -215,8 +215,8 @@ let automationTools: [[String: Any]] = [
       schema(
         [
           "automationId": intProp("試す自動化"),
-          "from": strArrayProp("入口の部品の鍵"),
-          "to": strArrayProp("行き先の部品の鍵"),
+          "from": strArrayProp("入口のノードの鍵"),
+          "to": strArrayProp("行き先のノードの鍵"),
           "rows": [
             "type": "array", "items": ["type": "object"],
             "description": "入口に与える行（JSON オブジェクト）",
@@ -229,7 +229,7 @@ let automationTools: [[String: Any]] = [
     ("name", "get_automation_trial"),
     (
       "description",
-      "自動化の最新の試走を読む。部品ごとに state（waiting / running / done / held / untouched）と回の列を返す。"
+      "自動化の最新の試走を読む。ノードごとに state（waiting / running / done / held / untouched）と回の列を返す。"
         + "回は list_automations の runs と同じ形・同じ新しい順に、取得・処理は rows（下流へ渡す行）、判定は proposals と resolved を足す。"
         + "止めた副作用・仕事の回は held.rows（渡るはずだった行）だけ。wait: true なら試走の終わりまで待ち、"
         + "timeoutMs（既定 3600000・上限 86400000）を過ぎたらその時点の結果に timedOut:true を付けて返す。"

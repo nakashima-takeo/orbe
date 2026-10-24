@@ -70,7 +70,7 @@ extension AutomationNodePassTests {
 
     jobs.finish(0, replied("報告することはありません。"))
 
-    XCTAssertEqual(failed, #"the part "r" ended without giving a result"#)
+    XCTAssertEqual(failed, #"the node "r" ended without giving a result"#)
   }
 
   /// 入力を読み切らないまま終えた回は、読み残しの失敗（読んだ位置は進まず、行は次の回に届く）。
@@ -83,7 +83,7 @@ extension AutomationNodePassTests {
     XCTAssertTrue(use(0, .putRows, ["rows": [["id": "f:a"]]]).isError, "読み切るまで断る")
     jobs.finish(0, done())
 
-    XCTAssertEqual(failed, #"the part "p" ended without reading 1 of its input item"#)
+    XCTAssertEqual(failed, #"the node "p" ended without reading 1 of its input item"#)
     XCTAssertNil(breach, "読み残しの断りは外れた件に数えない")
   }
 
@@ -97,7 +97,7 @@ extension AutomationNodePassTests {
     XCTAssertTrue(use(0, .putRows, ["rows": [["note": "id が無い"]]]).isError)
     jobs.finish(0, done())
 
-    XCTAssertEqual(failed, #"the output of part "p" broke the rules: item 1: missing id"#)
+    XCTAssertEqual(failed, #"the output of node "p" broke the rules: item 1: missing id"#)
     XCTAssertEqual(breach?.lines.map(\.text), ["item 1: missing id"])
   }
 
@@ -112,7 +112,7 @@ extension AutomationNodePassTests {
     XCTAssertTrue(use(0, .putRows, ["rows": "f:a"]).isError)
     jobs.finish(0, done())
 
-    XCTAssertEqual(failed, #"the output of part "p" broke the rules: rows must be an array"#)
+    XCTAssertEqual(failed, #"the output of node "p" broke the rules: rows must be an array"#)
   }
 
   /// 何も無いと申告した後の結果の呼び出しは外れた呼び出しとして断り、そのまま終えた回は出力の形式エラーの失敗——結果を黙って
@@ -136,7 +136,7 @@ extension AutomationNodePassTests {
     jobs.finish(0, done())
 
     XCTAssertEqual(
-      failed, #"the output of part "f" broke the rules: a result after report_nothing"#)
+      failed, #"the output of node "f" broke the rules: a result after report_nothing"#)
   }
 
   /// 断られたまま終えた回の記録は、断られたままの件を先に並べる（先に直した件ではなく）。数は回全体。
@@ -168,7 +168,7 @@ extension AutomationNodePassTests {
     XCTAssertTrue(use(0, .reportNothing, ["why": "残す行が無い"]).isError)
     jobs.finish(0, done())
 
-    XCTAssertEqual(failed, #"the output of part "p" broke the rules: item 1: missing id"#)
+    XCTAssertEqual(failed, #"the output of node "p" broke the rules: item 1: missing id"#)
   }
 
   /// 断った結果の呼び出しは記録に残り、直して受けた回は成功——断りは同じ会話の中の直しで、別の呼び出しは起こさない。

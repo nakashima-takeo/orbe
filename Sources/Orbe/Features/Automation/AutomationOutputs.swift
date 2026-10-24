@@ -54,7 +54,7 @@ struct AutomationOutputs {
       broken = next.processed(text, input, reachesJudge: reachesJudge)
     case .judge(let input, let choices): broken = next.judged(text, shape, input, choices)
     case .report, .work, .sideEffect:
-      preconditionFailure("only a part that passes rows on puts rows")
+      preconditionFailure("only a node that passes rows on puts rows")
     }
     if broken.isEmpty { self = next }
     return broken

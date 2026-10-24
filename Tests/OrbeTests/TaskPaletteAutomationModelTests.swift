@@ -48,10 +48,10 @@ final class TaskPaletteAutomationModelTests: OrbeTestCase {
   func testTheShelfListsOnlyTaskCandidateAutomations() throws {
     let runner = DesignSceneFixtures.automationRunner(DesignSceneFixtures.automationDesignSamples())
     var command = runner.store.automation(4)!.definition
-    let judge = command.parts[1].id
-    command.parts[1] = DesignSceneFixtures.commandNode(
+    let judge = command.nodes[1].id
+    command.nodes[1] = DesignSceneFixtures.commandNode(
       "judge", "投稿", .arrival, from: ["fetch"], script: "cat", deliver: .sideEffect)
-    command.parts[1].id = judge
+    command.nodes[1].id = judge
     _ = try runner.set(4, version: runner.store.automation(4)!.version, command)
     let palette = TaskPaletteSamples.model([], automations: runner)
 

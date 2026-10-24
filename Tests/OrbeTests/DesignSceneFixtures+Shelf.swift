@@ -67,7 +67,7 @@ extension DesignSceneFixtures {
     let slack = sampleItems("slack", 3, at: automationAt(12, 50))
     let definition = AutomationDefinition(
       name: "受け持ちの全部", notify: nil,
-      parts: [
+      nodes: [
         commandNode(
           "github", "GitHub", .scheduled(.every(3600)),
           script: "gh search prs --review-requested=@me --json url,title", coverage: .currentSet),
@@ -143,7 +143,7 @@ extension DesignSceneFixtures {
       fetch: commandNode(
         "fetch", "Slack", .scheduled(.every(1800)), script: "~/bin/slack-mentions",
         coverage: .newArrivals))
-    definition.parts[1].trigger = .manual
+    definition.nodes[1].trigger = .manual
     return AutomationSample(
       definition: definition, createdAt: automationAt(9, daysAgo: 3),
       passes: [

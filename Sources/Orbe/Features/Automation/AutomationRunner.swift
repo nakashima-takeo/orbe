@@ -294,7 +294,7 @@ extension AutomationRunner {
       read = try store.read(
         trigger.nodeId, of: trigger.automationId, baseline: trigger.baseline, now: now())
     } catch {
-      NSLog("[automation] cannot read the rows of part \(trigger.nodeId): \(error)")
+      NSLog("[automation] cannot read the rows of node \(trigger.nodeId): \(error)")
       return end(trigger)
     }
     guard let read, let node = store.automation(trigger.automationId)?.graph.node(trigger.nodeId)
@@ -339,7 +339,7 @@ extension AutomationRunner {
     do throws(AutomationError) {
       result = try store.record(passEnd)
     } catch {
-      NSLog("[automation] dropped the result of part \(trigger.nodeId): \(error)")
+      NSLog("[automation] dropped the result of node \(trigger.nodeId): \(error)")
       return end(trigger)
     }
     trigger.holding = AutomationHolding()

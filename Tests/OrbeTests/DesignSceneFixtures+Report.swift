@@ -25,7 +25,7 @@ extension DesignSceneFixtures {
     return AutomationSample(
       definition: AutomationDefinition(
         name: "開いている PR の要約", notify: .menuBar,
-        parts: [
+        nodes: [
           commandNode(
             "fetch", "開いている PR を取る", .scheduled(cron("0 18 * * *")),
             script:

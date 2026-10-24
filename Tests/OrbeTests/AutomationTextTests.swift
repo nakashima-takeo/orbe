@@ -46,10 +46,10 @@ final class AutomationTextTests: OrbeTestCase {
   func testFailureSaysTheKindWithTheOriginal() {
     XCTAssertEqual(
       text.failure(failed(.ended(detail: ""), ending: .timeLimit), node: Self.judge),
-      #"制限時間を超過（the part "dev" ended: stopped at the time limit）"#)
+      #"制限時間を超過（the node "dev" ended: stopped at the time limit）"#)
     XCTAssertEqual(
       text.failure(failed(.ended(detail: "boom"), ending: .exited(1)), node: Self.judge),
-      #"終了コード 1 で終了（the part "dev" ended: exited 1: boom）"#)
+      #"終了コード 1 で終了（the node "dev" ended: exited 1: boom）"#)
     XCTAssertEqual(
       text.failure(failed(.reported("Slack に届かない"), ending: .exited(0)), node: Self.judge),
       "部品が失敗を報告：Slack に届かない")
@@ -71,10 +71,10 @@ final class AutomationTextTests: OrbeTestCase {
       "output format error: item 2: not valid JSON", "最初の外れた件")
     XCTAssertEqual(
       text.failure(failed(.unreadInput(2), ending: .exited(0)), node: Self.judge),
-      "入力 2 件を読まずに終了（the part \"dev\" ended without reading 2 of its input items）")
+      "入力 2 件を読まずに終了（the node \"dev\" ended without reading 2 of its input items）")
     XCTAssertEqual(
       text.failure(failed(.noResult, ending: .exited(0)), node: Self.judge),
-      "結果を渡さずに終了（the part \"dev\" ended without giving a result）")
+      "結果を渡さずに終了（the node \"dev\" ended without giving a result）")
   }
 
   /// 外れた件は「n 件目：<説明>」。

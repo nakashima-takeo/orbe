@@ -5,7 +5,7 @@ import Foundation
 struct AutomationDefinition: Equatable, Codable {
   var name: String
   var notify: AutomationNotify?
-  var parts: [Node]
+  var nodes: [Node]
 
   /// 外の形の部品 1 つ。`id` は今ある部品を指す（新しく足す部品は持たない）。
   struct Node: Equatable {
@@ -25,7 +25,7 @@ struct AutomationDefinition: Equatable, Codable {
 
   /// `from` の要素。鍵だけの文字列は、新しい行だけを取り古さの上限を持たない。
   struct Input: Equatable {
-    var part: String
+    var nodeKey: String
     var take: AutomationTake = .new
     var maxAgeHours: Int?
   }
@@ -39,10 +39,10 @@ struct AutomationDefinition: Equatable, Codable {
     } catch {
       throw .invalid("name: must be a single non-empty line")
     }
-    return (name, try AutomationGraph.check(parts))
+    return (name, try AutomationGraph.check(nodes))
   }
 
-  /// JSON の値を定義として読む。読めない箇所を定義の中の場所（`parts[2].trigger` など）で言う。
+  /// JSON の値を定義として読む。読めない箇所を定義の中の場所（`nodes[2].trigger` など）で言う。
   static func decode(_ object: [String: Any]) throws(AutomationError) -> AutomationDefinition {
     do {
       let data = try JSONSerialization.data(withJSONObject: object)
@@ -52,7 +52,7 @@ struct AutomationDefinition: Equatable, Codable {
     }
   }
 
-  /// 読みの誤りを、定義の中の場所で言う理由の文にする。`base` は読んだ値の定義の中の場所（`parts[1]`・`parts[1].trigger`。
+  /// 読みの誤りを、定義の中の場所で言う理由の文にする。`base` は読んだ値の定義の中の場所（`nodes[1]`・`nodes[1].trigger`。
   /// 定義そのものなら空）。
   static func reason(_ error: Error, at base: String) -> String {
     switch error {
@@ -68,7 +68,7 @@ struct AutomationDefinition: Equatable, Codable {
     }
   }
 
-  /// `parts[2].trigger` の形（定義の中の場所）。
+  /// `nodes[2].trigger` の形（定義の中の場所）。
   private static func path(_ keys: [CodingKey], under base: String) -> String {
     keys.reduce(into: base) { path, key in
       if let index = key.intValue {

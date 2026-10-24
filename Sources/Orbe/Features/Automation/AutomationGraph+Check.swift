@@ -1,6 +1,6 @@
 import Foundation
 
-// グラフの検証。断りの文は定義の中の場所（`parts[2].from` など。制御 API が読む誤りに付ける場所と同じ書き方）で始まる。
+// グラフの検証。断りの文は定義の中の場所（`nodes[2].from` など。制御 API が読む誤りに付ける場所と同じ書き方）で始まる。
 
 extension AutomationGraph {
   /// 検証して、部品ごとの役割と入力の部品の位置を返す。最初に見つけた誤り 1 つで断る。順は「自分の欄だけで決まるもの → 鍵の
@@ -8,10 +8,10 @@ extension AutomationGraph {
   static func check(_ definitionNodes: [AutomationDefinition.Node]) throws(AutomationError)
     -> [Checked]
   {
-    guard !definitionNodes.isEmpty else { throw .invalid("parts: at least one part is required") }
+    guard !definitionNodes.isEmpty else { throw .invalid("nodes: at least one node is required") }
     var checked: [(definitionNode: AutomationDefinition.Node, role: AutomationNodeRole)] = []
     for (index, definitionNode) in definitionNodes.enumerated() {
-      checked.append(try Self.checked(definitionNode, at: "parts[\(index)]"))
+      checked.append(try Self.checked(definitionNode, at: "nodes[\(index)]"))
     }
     let upstream = try Self.upstream(of: checked.map(\.definitionNode))
     try Self.checkAcyclic(checked.map(\.definitionNode), upstream)
@@ -55,11 +55,11 @@ extension AutomationGraph {
     if role == .process, definitionNode.action.coverage == .currentSet {
       if let index = definitionNode.from.firstIndex(where: { $0.take != .all }) {
         throw .invalid(
-          "\(path).from[\(index)]: a currentSet part copies its whole input, so take must be all")
+          "\(path).from[\(index)]: a currentSet node copies its whole input, so take must be all")
       }
       if definitionNode.maxItems != nil {
         throw .invalid(
-          "\(path).maxItems: a currentSet part copies its whole input, so it has no maxItems")
+          "\(path).maxItems: a currentSet node copies its whole input, so it has no maxItems")
       }
     }
     return (definitionNode, role)
@@ -71,8 +71,8 @@ extension AutomationGraph {
   {
     var named = Set<String>()
     for (index, input) in definitionNode.from.enumerated() {
-      guard named.insert(input.part).inserted else {
-        throw .invalid("\(path).from: \"\(input.part)\" is named twice")
+      guard named.insert(input.nodeKey).inserted else {
+        throw .invalid("\(path).from: \"\(input.nodeKey)\" is named twice")
       }
       if let hours = input.maxAgeHours, hours < 1 {
         throw .invalid("\(path).from[\(index)].maxAgeHours: must be at least 1")
@@ -80,13 +80,13 @@ extension AutomationGraph {
     }
     if let items = definitionNode.maxItems {
       guard !definitionNode.from.isEmpty else {
-        throw .invalid("\(path).maxItems: only a part with from takes rows")
+        throw .invalid("\(path).maxItems: only a node with from takes rows")
       }
       guard items >= 1 else { throw .invalid("\(path).maxItems: must be at least 1") }
     }
     if definitionNode.from.isEmpty, definitionNode.trigger == .arrival {
       throw .invalid(
-        "\(path).trigger: a part without from receives no rows, so arrival never runs it")
+        "\(path).trigger: a node without from receives no rows, so arrival never runs it")
     }
   }
 
@@ -99,7 +99,7 @@ extension AutomationGraph {
     for (index, definitionNode) in definitionNodes.enumerated() {
       if let first = positions[definitionNode.key] {
         throw .invalid(
-          "parts[\(index)].key: \"\(definitionNode.key)\" is already used by parts[\(first)]")
+          "nodes[\(index)].key: \"\(definitionNode.key)\" is already used by nodes[\(first)]")
       }
       positions[definitionNode.key] = index
     }
@@ -107,8 +107,8 @@ extension AutomationGraph {
     for (index, definitionNode) in definitionNodes.enumerated() {
       var inputs: [Int] = []
       for input in definitionNode.from {
-        guard let position = positions[input.part] else {
-          throw .invalid("parts[\(index)].from: unknown part \"\(input.part)\"")
+        guard let position = positions[input.nodeKey] else {
+          throw .invalid("nodes[\(index)].from: unknown node \"\(input.nodeKey)\"")
         }
         inputs.append(position)
       }
@@ -134,7 +134,7 @@ extension AutomationGraph {
       }
       if let ring = walk(start, [start]) {
         throw .invalid(
-          "parts[\(start)].from: cycle \(ring.map { "\"\(definitionNodes[$0].key)\"" }.joined(separator: " ← "))"
+          "nodes[\(start)].from: cycle \(ring.map { "\"\(definitionNodes[$0].key)\"" }.joined(separator: " ← "))"
         )
       }
     }
@@ -147,15 +147,15 @@ extension AutomationGraph {
     for (index, definitionNode) in definitionNodes.enumerated()
     where definitionNode.action.destination == .nextNode && downstream[index].isEmpty {
       throw .invalid(
-        "parts[\(index)].deliver: no part names \"\(definitionNode.key)\" in from; name it in a from, or "
+        "nodes[\(index)].deliver: no node names \"\(definitionNode.key)\" in from; name it in a from, or "
           + "deliver to taskCandidates, report or none")
     }
     for (index, inputs) in upstream.enumerated() {
       for input in inputs {
         guard let delivered = definitionNodes[input].action.destination.wireName else { continue }
         throw .invalid(
-          "parts[\(index)].from: \"\(definitionNodes[input].key)\" delivers to \(delivered), so it passes no "
-            + "rows to a part")
+          "nodes[\(index)].from: \"\(definitionNodes[input].key)\" delivers to \(delivered), so it passes no "
+            + "rows to a node")
       }
     }
   }
@@ -173,7 +173,7 @@ extension AutomationGraph {
         continue
       }
       throw .invalid(
-        "parts[\(index)].from[\(input)]: rows taken with take all reach taskCandidates; take new here"
+        "nodes[\(index)].from[\(input)]: rows taken with take all reach taskCandidates; take new here"
       )
     }
   }
@@ -188,7 +188,7 @@ extension AutomationGraph {
       guard definitionNode.readsRows else {
         guard definitionNode.action.coverage != nil else {
           throw .invalid(
-            "\(path).coverage: a part that does not read rows fetches items and needs coverage "
+            "\(path).coverage: a node that does not read rows fetches items and needs coverage "
               + "(currentSet or newArrivals)")
         }
         return .fetch
@@ -197,7 +197,7 @@ extension AutomationGraph {
     case .taskCandidates:
       guard definitionNode.readsRows else {
         throw .invalid(
-          "\(path).deliver: taskCandidates needs a part that reads rows (with from, and no tools)")
+          "\(path).deliver: taskCandidates needs a node that reads rows (with from, and no tools)")
       }
       role = .judge
     case .report:
@@ -209,7 +209,7 @@ extension AutomationGraph {
       role = .sideEffect
     }
     guard definitionNode.action.coverage == nil else {
-      throw .invalid("\(path).coverage: only a part that passes rows on has coverage")
+      throw .invalid("\(path).coverage: only a node that passes rows on has coverage")
     }
     return role
   }

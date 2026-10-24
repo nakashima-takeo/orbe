@@ -29,7 +29,7 @@ extension AutomationNodePass {
         return .failed(.brokeRules, execution(result), breach: AutomationRejections(broken))
       }
     case .work, .sideEffect:
-      preconditionFailure("a work part is an agent; a side effect is read above")
+      preconditionFailure("a work node is an agent; a side effect is read above")
     }
     return .succeeded(
       outputs.output(nothing: nil), execution(result, count: outputs.count), breach: nil)

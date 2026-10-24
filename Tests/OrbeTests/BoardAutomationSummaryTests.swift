@@ -81,8 +81,8 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
   /// 末尾の `:*` の手前までがコマンド。同じ表示は最初の 1 つだけ。
   func testCardToolsNameTheServerOrCommandOnce() throws {
     var samples = DesignSceneFixtures.boardMapSamples()
-    let index = try XCTUnwrap(samples[0].definition.parts.firstIndex { $0.key == "backlog" })
-    samples[0].definition.parts[index].action.method = .agent(
+    let index = try XCTUnwrap(samples[0].definition.nodes.firstIndex { $0.key == "backlog" })
+    samples[0].definition.nodes[index].action.method = .agent(
       AutomationNodeAgent(
         cli: "claude", model: nil,
         tools: [
@@ -113,7 +113,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
       let sample = AutomationSample(
         definition: AutomationDefinition(
           name: "失敗", notify: nil,
-          parts: [
+          nodes: [
             fetch("broken"), fetch("recovered"),
             DesignSceneFixtures.agentNode(
               "judge", "判定", .manual, from: ["broken", "recovered"], instruction: "i",

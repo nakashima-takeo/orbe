@@ -20,7 +20,7 @@ extension AutomationStoreTests {
     try store.create(
       AutomationDefinition(
         name: "受け手", notify: nil,
-        parts: [
+        nodes: [
           DesignSceneFixtures.commandNode(
             "gh", "取る", .scheduled(.every(1800)), script: "gh", coverage: coverage)
         ] + (receivers ?? [receiver("a")])), now: Self.at
@@ -28,10 +28,10 @@ extension AutomationStoreTests {
   }
 
   private func receiver(
-    _ key: String, from input: AutomationDefinition.Input = .init(part: "gh")
+    _ key: String, from input: AutomationDefinition.Input = .init(nodeKey: "gh")
   ) -> AutomationDefinition.Node {
     var definitionNode = DesignSceneFixtures.commandNode(
-      key, key, .arrival, from: [input.part], script: key, deliver: .sideEffect)
+      key, key, .arrival, from: [input.nodeKey], script: key, deliver: .sideEffect)
     definitionNode.from = [input]
     return definitionNode
   }
@@ -91,7 +91,7 @@ extension AutomationStoreTests {
     try fetch(store, id, ["x", "y"], at: Self.at)
     try take(store, id, "a", at: Self.at)
     var definition = try XCTUnwrap(store.automation(id)?.definition)
-    definition.parts.append(receiver("b"))
+    definition.nodes.append(receiver("b"))
     _ = try store.replace(id, version: 1, with: definition, now: Self.at)
 
     let t1 = Self.at.addingTimeInterval(1800)
@@ -111,7 +111,7 @@ extension AutomationStoreTests {
     let id = try define(store, coverage: .newArrivals)
     try fetch(store, id, ["x"], at: Self.at)
     var definition = try XCTUnwrap(store.automation(id)?.definition)
-    definition.parts.append(receiver("b"))
+    definition.nodes.append(receiver("b"))
     _ = try store.replace(id, version: 1, with: definition, now: Self.at)
 
     let t1 = Self.at.addingTimeInterval(1800)
@@ -129,10 +129,10 @@ extension AutomationStoreTests {
     let store = AutomationStore()
     let set = try define(
       store, coverage: .currentSet,
-      receivers: [receiver("a"), receiver("all", from: .init(part: "gh", take: .all))])
+      receivers: [receiver("a"), receiver("all", from: .init(nodeKey: "gh", take: .all))])
     let events = try define(
       store, coverage: .newArrivals,
-      receivers: [receiver("window", from: .init(part: "gh", take: .all, maxAgeHours: 24))])
+      receivers: [receiver("window", from: .init(nodeKey: "gh", take: .all, maxAgeHours: 24))])
     try fetch(store, set, ["x"], at: Self.at)
     try fetch(store, events, ["old"], at: Self.at)
     try take(store, set, "a", at: Self.at)
@@ -156,7 +156,7 @@ extension AutomationStoreTests {
     let store = AutomationStore()
     let id = try define(
       store, coverage: .newArrivals,
-      receivers: [receiver("a", from: .init(part: "gh", maxAgeHours: 1))])
+      receivers: [receiver("a", from: .init(nodeKey: "gh", maxAgeHours: 1))])
     try fetch(store, id, ["old"], at: Self.at)
     let later = Self.at.addingTimeInterval(7200)
     try fetch(store, id, ["old", "new"], at: later)
@@ -248,9 +248,9 @@ extension AutomationStoreTests {
     let store = AutomationStore()
     var copy = DesignSceneFixtures.agentNode(
       "copy", "写す", .arrival, from: ["gh"], instruction: "写す", coverage: .currentSet)
-    copy.from = [AutomationDefinition.Input(part: "gh", take: .all)]
+    copy.from = [AutomationDefinition.Input(nodeKey: "gh", take: .all)]
     let id = try define(
-      store, coverage: .currentSet, receivers: [copy, receiver("a", from: .init(part: "copy"))])
+      store, coverage: .currentSet, receivers: [copy, receiver("a", from: .init(nodeKey: "copy"))])
     try fetch(store, id, ["x"], at: Self.at)
     try copyAll(store, id, at: Self.at)
     try copyAll(store, id, at: Self.at.addingTimeInterval(60))
@@ -265,7 +265,7 @@ extension AutomationStoreTests {
     try fetch(store, id, ["y"], at: Self.at.addingTimeInterval(180))
     try copyAll(store, id, at: Self.at.addingTimeInterval(180))
     var events = try XCTUnwrap(store.automation(id)?.definition)
-    events.parts[1].action.coverage = nil
+    events.nodes[1].action.coverage = nil
     let version = try XCTUnwrap(store.automation(id)?.version)
     _ = try store.replace(id, version: version, with: events, now: Self.at.addingTimeInterval(200))
     XCTAssertEqual(store.automation(id)?.state(key: "copy").liveLinks, [], "性質を書き換えると項目は無効")
@@ -279,9 +279,9 @@ extension AutomationStoreTests {
     let store = AutomationStore()
     var copy = DesignSceneFixtures.agentNode(
       "copy", "写す", .arrival, from: ["gh"], instruction: "写す", coverage: .currentSet)
-    copy.from = [AutomationDefinition.Input(part: "gh", take: .all)]
+    copy.from = [AutomationDefinition.Input(nodeKey: "gh", take: .all)]
     let id = try define(
-      store, coverage: .currentSet, receivers: [copy, receiver("a", from: .init(part: "copy"))])
+      store, coverage: .currentSet, receivers: [copy, receiver("a", from: .init(nodeKey: "copy"))])
     try fetch(store, id, ["x"], at: Self.at)
     try copyAll(store, id, at: Self.at)
     XCTAssertEqual(try take(store, id, "a", at: Self.at), ["x"])
@@ -299,9 +299,9 @@ extension AutomationStoreTests {
     let store = AutomationStore()
     var copy = DesignSceneFixtures.agentNode(
       "copy", "写す", .arrival, from: ["gh"], instruction: "写す", coverage: .currentSet)
-    copy.from = [AutomationDefinition.Input(part: "gh", take: .all)]
+    copy.from = [AutomationDefinition.Input(nodeKey: "gh", take: .all)]
     let id = try define(
-      store, coverage: .currentSet, receivers: [copy, receiver("a", from: .init(part: "copy"))])
+      store, coverage: .currentSet, receivers: [copy, receiver("a", from: .init(nodeKey: "copy"))])
     let nodeId = store.nodeId(id, "copy")
     let read = try XCTUnwrap(store.read(nodeId, of: id, baseline: nil, now: Self.at))
 
@@ -322,7 +322,7 @@ extension AutomationStoreTests {
     let id = try define(store, coverage: .newArrivals)
     try fetch(store, id, ["x"], at: Self.at)
     var definition = try XCTUnwrap(store.automation(id)?.definition)
-    definition.parts[0].action.coverage = .currentSet
+    definition.nodes[0].action.coverage = .currentSet
     _ = try store.replace(id, version: 1, with: definition, now: Self.at)
     try fetch(store, id, ["y"], at: Self.at.addingTimeInterval(60))
 

@@ -16,7 +16,7 @@ extension WindowControllerAutomationControlTests {
     let a = Self.item("a")
     try Self.round(wc.automationStore, id, fetched: [a], proposing: [a])
 
-    let nodes = try XCTUnwrap(try listed(wc)[id]?["parts"] as? [String: [String: Any]])
+    let nodes = try XCTUnwrap(try listed(wc)[id]?["nodes"] as? [String: [String: Any]])
     let judged = try XCTUnwrap(nodes["judge"]?["lastRun"] as? [String: Any])
 
     XCTAssertNil(nodes["judge"]?["runs"], "一覧は最新の 1 回だけ")
@@ -77,24 +77,24 @@ extension WindowControllerAutomationControlTests {
         wc.controlListAutomationRuns(automationId: id, nodeKey: "fetch", before: nil, limit: nil))[
           "runs"] as? [[String: Any]])
     XCTAssertEqual(fetches.count, 2, "前提")
-    XCTAssertEqual(fetches.map { $0["partKey"] as? String }, ["fetch", "fetch"])
+    XCTAssertEqual(fetches.map { $0["nodeKey"] as? String }, ["fetch", "fetch"])
     let (broke, ended) = (fetches[0], fetches[1])
 
     XCTAssertEqual(
-      ended["failure"] as? String, #"the part "fetch" ended: stopped at the time limit: boom"#)
+      ended["failure"] as? String, #"the node "fetch" ended: stopped at the time limit: boom"#)
     XCTAssertEqual(
       (ended["execution"] as? [String: Any])?["ending"] as? String, "stopped at the time limit")
     XCTAssertEqual((ended["failed"] as? [String: Any])?["kind"] as? String, "ended", "種類も出る")
 
     XCTAssertEqual(
       broke["failure"] as? String,
-      #"the output of part "fetch" broke the rules: item 3: missing link"#, "最初の外れた件で言う")
+      #"the output of node "fetch" broke the rules: item 3: missing link"#, "最初の外れた件で言う")
     let breach = try XCTUnwrap(broke["breach"] as? [String: Any])
     XCTAssertEqual(breach["count"] as? Int, 2)
     XCTAssertEqual(
       breach["reasons"] as? [String], ["item 3: missing link", "item 4: not JSON"])
 
-    let nodes = try XCTUnwrap(try listed(wc)[id]?["parts"] as? [String: [String: Any]])
+    let nodes = try XCTUnwrap(try listed(wc)[id]?["nodes"] as? [String: [String: Any]])
     let judged = try XCTUnwrap(nodes["judge"]?["lastRun"] as? [String: Any])
     let rejected = try XCTUnwrap(
       (judged["result"] as? [String: Any])?["rejected"] as? [String: Any])
@@ -117,7 +117,7 @@ extension WindowControllerAutomationControlTests {
         ])))
 
     let fetch = try XCTUnwrap(
-      try listed(wc)[id]?["parts"] as? [String: [String: Any]])["fetch"]
+      try listed(wc)[id]?["nodes"] as? [String: [String: Any]])["fetch"]
     let mark = try XCTUnwrap(fetch?["breach"] as? [String: Any])
     let run = try XCTUnwrap(fetch?["lastRun"] as? [String: Any])
     XCTAssertEqual(Set(mark.keys), ["at", "lines", "passed"])
@@ -162,8 +162,8 @@ extension WindowControllerAutomationControlTests {
     XCTAssertEqual(Set(ids).count, 40, "部品ごとに 20 件")
     XCTAssertEqual(try XCTUnwrap(page(nil, limit: 3)["runs"] as? [[String: Any]]).count, 3)
     let judged = try XCTUnwrap(page(nil, nodeKey: "judge")["runs"] as? [[String: Any]])
-    XCTAssertEqual(Set(judged.compactMap { $0["partKey"] as? String }), ["judge"])
-    let nodes = try XCTUnwrap(try listed(wc)[id]?["parts"] as? [String: [String: Any]])
+    XCTAssertEqual(Set(judged.compactMap { $0["nodeKey"] as? String }), ["judge"])
+    let nodes = try XCTUnwrap(try listed(wc)[id]?["nodes"] as? [String: [String: Any]])
     XCTAssertEqual(
       (nodes["judge"]?["lastRun"] as? [String: Any])?["recordId"] as? Int, ids.first,
       "一覧の lastRun は最新の回")

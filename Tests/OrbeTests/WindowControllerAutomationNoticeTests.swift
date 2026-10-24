@@ -57,7 +57,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
   ) -> AutomationDefinition {
     AutomationDefinition(
       name: name, notify: notify,
-      parts: [
+      nodes: [
         DesignSceneFixtures.agentNode(
           "digest", "要約", .scheduled(.every(1440)), instruction: "PR を要約する", deliver: .report)
       ])
@@ -126,7 +126,7 @@ final class WindowControllerAutomationNoticeTests: OrbeTestCase {
     }
     XCTAssertTrue(notice.failed)
     XCTAssertEqual(
-      notice.text, "要約：失敗：終了コード 1 で終了（the part \"digest\" ended: exited 1: boom）")
+      notice.text, "要約：失敗：終了コード 1 で終了（the node \"digest\" ended: exited 1: boom）")
     XCTAssertEqual(sound.played.map(\.event), [.waiting])
   }
 

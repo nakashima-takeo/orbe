@@ -5,7 +5,7 @@ import Foundation
 /// 行）を「説明: 抜粋」で添える。Orbe が種類を決められない文（部品の申告・CLI のエラー）は、説明の頭の後に文をそのまま
 /// 添え、原文を重ねない。
 extension AutomationText {
-  /// 「制限時間を超過（the part "x" ended: stopped at the time limit）」。
+  /// 「制限時間を超過（the node "x" ended: stopped at the time limit）」。
   func failure(_ run: AutomationNodeRun, node: AutomationGraph.Node) -> String? {
     guard let failure = run.failure else { return nil }
     let head = failureHead(failure, ending: run.execution.ending, node: node)
@@ -22,7 +22,7 @@ extension AutomationText {
     }
   }
 
-  /// 定義を読めない理由（「定義エラー（parts[0].trigger: …）」。英語の画面は「: 」で添える）。
+  /// 定義を読めない理由（「定義エラー（nodes[0].trigger: …）」。英語の画面は「: 」で添える）。
   func unreadable(_ reason: String) -> String {
     let head = l10n.string(.boardAutomationUnreadable)
     return l10n.language == .en

@@ -79,7 +79,7 @@ struct AutomationGraph: Equatable {
 
   /// 検証を通った外の形に、部品の実体（ID と使う定義の ID）を当てて組む。`entities` と `checked` は同じ順。
   init(_ checked: [Checked], entities: [AutomationNode]) {
-    precondition(checked.count == entities.count, "every checked part has an entity")
+    precondition(checked.count == entities.count, "every checked node has an entity")
     nodes = zip(checked, entities).map { checked, entity in
       Node(
         entity: entity, action: checked.definitionNode.action,
@@ -103,7 +103,8 @@ struct AutomationGraph: Equatable {
         id: node.id, key: node.key, name: node.entity.name, trigger: node.entity.trigger,
         from: node.inputs.map { edge in
           AutomationDefinition.Input(
-            part: self.node(edge.from)?.key ?? "", take: edge.take, maxAgeHours: edge.maxAgeHours)
+            nodeKey: self.node(edge.from)?.key ?? "", take: edge.take, maxAgeHours: edge.maxAgeHours
+          )
         }, action: node.action, maxItems: node.entity.maxItems)
     }
   }

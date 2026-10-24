@@ -75,7 +75,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(reopened.automations, [])
     XCTAssertEqual(
       reopened.unreadable.first?.reason,
-      "parts[1]: the stored definition is made of parts, which this database version does not hold")
+      "nodes[1]: the stored definition is made of nodes, which this database version does not hold")
   }
 
   /// 動作の定義の JSON を壊した自動化は、その自動化だけが「定義を読めない」として残る（組めた定義・版・理由を持ち、動かず、
@@ -102,7 +102,7 @@ extension AutomationStoreTests {
     XCTAssertEqual(aside.id, broken)
     XCTAssertEqual(aside.name, "壊す")
     XCTAssertEqual(aside.version, 1)
-    XCTAssertTrue(aside.reason.hasPrefix("invalid parts[1].instruction"), aside.reason)
+    XCTAssertTrue(aside.reason.hasPrefix("invalid nodes[1].instruction"), aside.reason)
     XCTAssertTrue(aside.definition.contains(#""key":"judge""#), aside.definition)
     XCTAssertEqual(reopened.proposals.map(\.item.link), [a.link], "持っていた候補は残る")
     try Self.fetch(reopened, fine, [])
@@ -112,14 +112,14 @@ extension AutomationStoreTests {
     }
 
     var fixed = Self.definition("直した")
-    fixed.parts[0].id = reopened.unreadable.first?.nodeIds.first
-    fixed.parts[1].id = judge
+    fixed.nodes[0].id = reopened.unreadable.first?.nodeIds.first
+    fixed.nodes[1].id = judge
     let replaced = try reopened.replace(broken, version: 1, with: fixed, now: Self.at)
 
     XCTAssertEqual(reopened.unreadable, [])
     XCTAssertEqual(reopened.automations.map(\.id), [broken, fine])
     XCTAssertEqual(replaced.automation.version, 2)
-    XCTAssertEqual(Set(replaced.reworked), Set(fixed.parts.compactMap(\.id)))
+    XCTAssertEqual(Set(replaced.reworked), Set(fixed.nodes.compactMap(\.id)))
     try reopened.delete(broken, now: Self.at)
     XCTAssertEqual(reopened.automations.map(\.id), [fine])
   }
@@ -145,8 +145,8 @@ extension AutomationStoreTests {
     let (carried, id) = try { () throws -> (Automation, Int) in
       let (store, id) = try unreadableWithABreach()
       var fixed = Self.definition("直した")
-      for index in fixed.parts.indices {
-        fixed.parts[index].id = store.unreadable.first?.nodeIds[index]
+      for index in fixed.nodes.indices {
+        fixed.nodes[index].id = store.unreadable.first?.nodeIds[index]
       }
 
       _ = try store.replace(id, version: 1, with: fixed, now: Self.at)
@@ -165,8 +165,8 @@ extension AutomationStoreTests {
   func testFixingAnUnreadableAutomationWithAnotherCoverageInvalidatesItsItems() throws {
     let (store, id) = try unreadableWithABreach()
     var fixed = Self.definition("直した", coverage: .newArrivals)
-    for index in fixed.parts.indices {
-      fixed.parts[index].id = store.unreadable.first?.nodeIds[index]
+    for index in fixed.nodes.indices {
+      fixed.nodes[index].id = store.unreadable.first?.nodeIds[index]
     }
 
     _ = try store.replace(id, version: 1, with: fixed, now: Self.at)
@@ -181,7 +181,7 @@ extension AutomationStoreTests {
 
     XCTAssertThrowsError(try store.replace(id, version: 1, with: Self.definition(), now: Self.at)) {
       guard case .invalid(let message) = $0 as? AutomationError else { return XCTFail("\($0)") }
-      XCTAssertTrue(message.hasPrefix(#"parts[0].id: the key "fetch" belongs to part"#), message)
+      XCTAssertTrue(message.hasPrefix(#"nodes[0].id: the key "fetch" belongs to node"#), message)
     }
     XCTAssertEqual(store.unreadable.first?.nodeIds, nodeIds)
   }

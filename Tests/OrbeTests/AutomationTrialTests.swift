@@ -65,7 +65,7 @@ final class AutomationTrialTests: OrbeTestCase {
   }
 
   func define(_ definitionNodes: [AutomationDefinition.Node]) throws -> Int {
-    try runner.set(nil, AutomationDefinition(name: "自動化", notify: nil, parts: definitionNodes)).id
+    try runner.set(nil, AutomationDefinition(name: "自動化", notify: nil, nodes: definitionNodes)).id
   }
 
   func calls(_ script: String) -> [Int] {
@@ -239,7 +239,7 @@ final class AutomationTrialTests: OrbeTestCase {
     finish("digest", "2 回目")
     ended(trial)
 
-    let nodes = try XCTUnwrap(trial.json { _ in nil }["parts"] as? [[String: Any]])
+    let nodes = try XCTUnwrap(trial.json { _ in nil }["nodes"] as? [[String: Any]])
     let runs = try XCTUnwrap(
       nodes.first { $0["key"] as? String == "digest" }?["runs"] as? [[String: Any]])
     XCTAssertEqual(

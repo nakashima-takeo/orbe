@@ -178,7 +178,7 @@ final class AutomationNodePassTests: AutomationNodePassTestCase {
     use(0, .reportError, ["what": "Slack に届かない"])
     jobs.finish(0, done())
 
-    XCTAssertEqual(failed, #"the part "f" reported an error: Slack に届かない"#)
+    XCTAssertEqual(failed, #"the node "f" reported an error: Slack に届かない"#)
   }
 
   // MARK: - 処理

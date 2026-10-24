@@ -11,7 +11,7 @@ extension AutomationStoreTests {
   func testACopyTakesInWhatTheStoreWritesBetweenStepsAndKeepsItsOwnChanges() throws {
     let store = AutomationStore()
     var definition = Self.definition()
-    definition.parts[1] = DesignSceneFixtures.commandNode(
+    definition.nodes[1] = DesignSceneFixtures.commandNode(
       "judge", "判定", .arrival, from: ["fetch"], script: "judge", deliver: .taskCandidates)
     let id = try store.create(definition, now: Self.at).id
     let large = (0..<12).map {

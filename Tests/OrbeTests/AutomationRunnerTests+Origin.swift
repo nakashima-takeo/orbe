@@ -20,7 +20,7 @@ extension AutomationRunnerTests {
       definitionNodes.append(
         definitionNode("judge", .scheduled(.every(86400)), from: ["p"], deliver: .taskCandidates))
     }
-    return AutomationDefinition(name: "処理の後に判定を足す", notify: nil, parts: definitionNodes)
+    return AutomationDefinition(name: "処理の後に判定を足す", notify: nil, nodes: definitionNodes)
   }
 
   /// `p` が走っている間に判定の部品を足し、`p` を `stdout`（自動化の ID から組む）で終える。
@@ -64,7 +64,7 @@ extension AutomationRunnerTests {
     XCTAssertEqual(
       try XCTUnwrap(run.failure, "処理の回の失敗にする").text(
         nodeKey: "p", ending: run.execution.ending, breach: run.breach),
-      #"the rows of part "p" reach a judge part, but none has an origin (none came from a fetch part)"#
+      #"the rows of node "p" reach a judge node, but none has an origin (none came from a fetch node)"#
     )
     XCTAssertEqual(
       try store.read {
@@ -114,7 +114,7 @@ extension AutomationRunnerTests {
       definitionNodes.append(
         definitionNode("judge", .scheduled(.every(86400)), from: ["p"], deliver: .taskCandidates))
     }
-    return AutomationDefinition(name: "出どころの無い行を素通しする", notify: nil, parts: definitionNodes)
+    return AutomationDefinition(name: "出どころの無い行を素通しする", notify: nil, nodes: definitionNodes)
   }
 
   /// 入力の行に出どころが無いだけで、その `id` を保って素通しした処理は決まりを外していない。回は成功し、印は付かず、読んだ位置は

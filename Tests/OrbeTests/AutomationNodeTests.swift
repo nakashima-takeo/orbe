@@ -23,14 +23,14 @@ final class AutomationNodeTests: OrbeTestCase {
         {"id": 3, "key": "gh", "name": "GitHub", "trigger": {"kind": "interval", "minutes": 10},
          "command": "gh search prs", "directory": "/Users/me/repo", "coverage": "currentSet"},
         {"key": "judge", "name": "判定", "trigger": {"kind": "cron", "expression": "0 9 * * *"},
-         "from": [{"part": "gh", "maxAgeHours": 72}], "instruction": "判定して",
+         "from": [{"node": "gh", "maxAgeHours": 72}], "instruction": "判定して",
          "deliver": "taskCandidates", "maxItems": 30, "timeoutMinutes": 10},
         {"key": "post", "name": "投稿", "trigger": {"kind": "manual"}, "agent": "claude",
          "model": "opus", "tools": ["mcp__slack__post"], "instruction": "投稿して", "deliver": "report"},
         {"key": "say", "name": "知らせ", "trigger": {"kind": "arrival"},
-         "from": ["gh", {"part": "post", "take": "all"}], "command": "say hi", "deliver": "none"},
+         "from": ["gh", {"node": "post", "take": "all"}], "command": "say hi", "deliver": "none"},
         {"key": "sum", "name": "まとめ", "trigger": {"kind": "arrival"},
-         "from": [{"part": "gh", "take": "all"}], "instruction": "まとめて", "coverage": "currentSet"}
+         "from": [{"node": "gh", "take": "all"}], "instruction": "まとめて", "coverage": "currentSet"}
       ]
       """#
     let expected = [
@@ -41,7 +41,7 @@ final class AutomationNodeTests: OrbeTestCase {
           timeoutMinutes: nil, coverage: .currentSet, destination: .nextNode)),
       definitionNode(
         nil, "judge", "判定", .scheduled(.cron(try BackgroundCron("0 9 * * *"))),
-        from: [.init(part: "gh", maxAgeHours: 72)],
+        from: [.init(nodeKey: "gh", maxAgeHours: 72)],
         AutomationActionDef(
           method: .agent(
             AutomationNodeAgent(cli: "claude", model: nil, tools: [], instruction: "判定して")),
@@ -54,12 +54,13 @@ final class AutomationNodeTests: OrbeTestCase {
               cli: "claude", model: "opus", tools: ["mcp__slack__post"], instruction: "投稿して")),
           timeoutMinutes: nil, coverage: nil, destination: .report)),
       definitionNode(
-        nil, "say", "知らせ", .arrival, from: [.init(part: "gh"), .init(part: "post", take: .all)],
+        nil, "say", "知らせ", .arrival,
+        from: [.init(nodeKey: "gh"), .init(nodeKey: "post", take: .all)],
         AutomationActionDef(
           method: .command(BackgroundCommand(script: "say hi", directory: nil)),
           timeoutMinutes: nil, coverage: nil, destination: .sideEffect)),
       definitionNode(
-        nil, "sum", "まとめ", .arrival, from: [.init(part: "gh", take: .all)],
+        nil, "sum", "まとめ", .arrival, from: [.init(nodeKey: "gh", take: .all)],
         AutomationActionDef(
           method: .agent(
             AutomationNodeAgent(cli: "claude", model: nil, tools: [], instruction: "まとめて")),
@@ -79,7 +80,7 @@ final class AutomationNodeTests: OrbeTestCase {
     XCTAssertEqual(from.first as? String, "gh", "取り方も古さの上限も省いた入力は鍵だけで書く")
   }
 
-  /// 形の誤りは読む時点で断り、誤りの場所（部品の位置と欄）を持つ。制御 API はこの場所を `parts[1].tools` の形で返す。
+  /// 形の誤りは読む時点で断り、誤りの場所（部品の位置と欄）を持つ。制御 API はこの場所を `nodes[1].tools` の形で返す。
   func testShapeErrorsAreRefusedAtTheirPlace() {
     let manual = #"{"kind": "manual"}"#
     for (label, trigger, fields, place) in [
@@ -95,7 +96,7 @@ final class AutomationNodeTests: OrbeTestCase {
       ),
       ("毎回全件の性質", manual, #""command": "x", "coverage": "everything""#, "[1].coverage"),
       (
-        "知らない取り方", manual, #""command": "x", "from": [{"part": "ok", "take": "x"}]"#,
+        "知らない取り方", manual, #""command": "x", "from": [{"node": "ok", "take": "x"}]"#,
         "[1].from[0].take"
       ),
       (

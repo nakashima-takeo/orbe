@@ -64,8 +64,8 @@ final class AutomationStoreTests: OrbeTestCase {
   ) throws -> AutomationStore.Replaced {
     let current = try XCTUnwrap(store.automation(id))
     var definition = definition
-    for index in definition.parts.indices {
-      definition.parts[index].id = current.graph.node(key: definition.parts[index].key)?.id
+    for index in definition.nodes.indices {
+      definition.nodes[index].id = current.graph.node(key: definition.nodes[index].key)?.id
     }
     return try store.replace(id, version: current.version, with: definition, now: at)
   }
@@ -118,8 +118,8 @@ final class AutomationStoreTests: OrbeTestCase {
     rewritten.notify = .menuBar
     var digest = DesignSceneFixtures.commandNode(
       "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report)
-    digest.from = [AutomationDefinition.Input(part: "fetch", take: .all, maxAgeHours: 24)]
-    rewritten.parts.append(digest)
+    digest.from = [AutomationDefinition.Input(nodeKey: "fetch", take: .all, maxAgeHours: 24)]
+    rewritten.nodes.append(digest)
     try Self.rewrite(XCTUnwrap(store), id, rewritten)
     try store?.dismiss(XCTUnwrap(store?.proposals.first?.id), now: Self.at)
     _ = try store?.setPaused(id, true, now: Self.at)
@@ -294,7 +294,7 @@ final class AutomationStoreTests: OrbeTestCase {
     try Self.fetch(XCTUnwrap(store), id, [a])
     try Self.judge(XCTUnwrap(store), id, proposing: [a])
     var rewritten = Self.definition()
-    rewritten.parts[1] = DesignSceneFixtures.agentNode(
+    rewritten.nodes[1] = DesignSceneFixtures.agentNode(
       "judge", "判定", .arrival, from: ["fetch"], model: "sonnet", instruction: "別の基準で選ぶ。",
       deliver: .taskCandidates)
     try Self.rewrite(XCTUnwrap(store), id, rewritten)

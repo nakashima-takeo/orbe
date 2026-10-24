@@ -57,7 +57,7 @@ func automationTrial(_ rest: [String]) -> Never {
   }
   let trial = d?["trial"] as? [String: Any]
   if let failure = trial?["failure"] as? String { print("failed: \(failure)") }
-  for node in trial?["parts"] as? [[String: Any]] ?? [] {
+  for node in trial?["nodes"] as? [[String: Any]] ?? [] {
     let key = node["key"] as? String ?? "?"
     let cell = (node["runs"] as? [[String: Any]])?.first.map { run in
       for kind in ["held", "given"] {

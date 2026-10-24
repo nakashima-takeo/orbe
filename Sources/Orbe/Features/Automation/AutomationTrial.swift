@@ -301,7 +301,7 @@ final class AutomationTrial {
     switch error {
     case .invalid(let message), .unavailable(let message): message
     case .automationNotFound(let id): "automation not found: \(id)"
-    case .nodeNotFound(let id, let key): "part not found: \(key) in automation \(id)"
+    case .nodeNotFound(let id, let key): "node not found: \(key) in automation \(id)"
     case .unreadable(let id, let reason): "automation \(id) cannot be read: \(reason)"
     case .proposalNotFound, .proposalNotOpen, .flowing, .trialNotFound, .versionMismatch:
       "\(error)"

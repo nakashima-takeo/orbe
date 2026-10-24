@@ -23,7 +23,7 @@ extension AutomationStore {
   /// 今の鍵の部品の ID（テストと見本）。
   func nodeId(_ id: Int, _ key: String) -> AutomationNodeID {
     guard let nodeId = automation(id)?.graph.node(key: key)?.id else {
-      preconditionFailure("no part \(key) in automation \(id)")
+      preconditionFailure("no node \(key) in automation \(id)")
     }
     return nodeId
   }
@@ -57,7 +57,7 @@ extension AutomationStore {
     endedAt: Date? = nil, outcome: AutomationNodePass.Outcome
   ) throws -> AutomationRecorded {
     let nodeId = nodeId(id, key)
-    guard let node = automation(id)?.graph.node(nodeId) else { preconditionFailure("no part") }
+    guard let node = automation(id)?.graph.node(nodeId) else { preconditionFailure("no node") }
     let ended = endedAt ?? at
     return try record(
       AutomationPassEnd(
@@ -107,7 +107,7 @@ extension AutomationRunner {
 extension Automation {
   /// 部品の状態を今の鍵で引く（テスト）。
   func state(key: String) -> AutomationNodeState {
-    guard let node = graph.node(key: key) else { preconditionFailure("no part \(key)") }
+    guard let node = graph.node(key: key) else { preconditionFailure("no node \(key)") }
     return state(node.id)
   }
 }

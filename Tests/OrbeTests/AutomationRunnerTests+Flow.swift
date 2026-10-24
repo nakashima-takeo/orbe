@@ -202,7 +202,7 @@ extension AutomationRunnerTests {
   private func chain(a trigger: AutomationNode.Trigger) -> AutomationDefinition {
     AutomationDefinition(
       name: "流す", notify: nil,
-      parts: [
+      nodes: [
         fetch("f", every: 3600),
         definitionNode("a", trigger, from: ["f"]),
         definitionNode("s", .manual, from: ["a"], deliver: .report),
@@ -248,7 +248,7 @@ extension AutomationRunnerTests {
     func definition(a inputs: [String]) -> AutomationDefinition {
       AutomationDefinition(
         name: "流す", notify: nil,
-        parts: [
+        nodes: [
           fetch("f", every: 3600), fetch("g", every: 3600),
           definitionNode("a", .manual, from: inputs, deliver: .report),
           definitionNode("b", .manual, from: ["g"], deliver: .report),
@@ -266,7 +266,7 @@ extension AutomationRunnerTests {
     func definition(_ name: String, f script: String) -> AutomationDefinition {
       AutomationDefinition(
         name: name, notify: nil,
-        parts: [
+        nodes: [
           fetch("f", every: 3600, script: script),
           definitionNode("j", .manual, from: ["f"], deliver: .report),
         ])

@@ -21,7 +21,7 @@ extension AutomationRunner {
       let positions = try store.positions(of: nodeId)
       return positions.mapValues { Inlet(read: $0.read, up: $0.last) }
     } catch {
-      NSLog("[automation] cannot read the inputs of part \(nodeId): \(error)")
+      NSLog("[automation] cannot read the inputs of node \(nodeId): \(error)")
       return nil
     }
   }

@@ -16,7 +16,7 @@ extension AutomationStoreTests {
   {
     AutomationDefinition(
       name: "送る", notify: nil,
-      parts: [
+      nodes: [
         DesignSceneFixtures.commandNode(
           fetchKey, "取る", .scheduled(.every(1800)), script: script, coverage: .currentSet),
         DesignSceneFixtures.commandNode(
@@ -47,8 +47,8 @@ extension AutomationStoreTests {
     XCTAssertEqual(unreadBefore, ["\(fetch):b"], "前提: b がまだ受け取られていない")
 
     var renamed = before.definition
-    renamed.parts[0].key = "gh"
-    renamed.parts[1].from = [AutomationDefinition.Input(part: "gh")]
+    renamed.nodes[0].key = "gh"
+    renamed.nodes[1].from = [AutomationDefinition.Input(nodeKey: "gh")]
     let replaced = try store.replace(id, version: before.version, with: renamed, now: Self.at)
 
     let after = try XCTUnwrap(store.automation(id))
@@ -75,15 +75,15 @@ extension AutomationStoreTests {
     let first = try XCTUnwrap(store.automation(id)?.graph.node(judge)?.entity.defId)
 
     var plain = try XCTUnwrap(store.automation(id)?.definition)
-    plain.parts[1].name = "別名"
-    plain.parts[1].trigger = .manual
-    plain.parts[1].maxItems = 5
+    plain.nodes[1].name = "別名"
+    plain.nodes[1].trigger = .manual
+    plain.nodes[1].maxItems = 5
     let renamed = try store.replace(id, version: 1, with: plain, now: Self.at)
     XCTAssertEqual(renamed.reworked, [])
     XCTAssertEqual(store.automation(id)?.graph.node(judge)?.entity.defId, first)
 
     var instructed = try XCTUnwrap(store.automation(id)?.definition)
-    instructed.parts[1].action.method = .agent(
+    instructed.nodes[1].action.method = .agent(
       AutomationNodeAgent(cli: "claude", model: "sonnet", tools: [], instruction: "別の基準"))
     let rewritten = try store.replace(id, version: 2, with: instructed, now: Self.at)
     try Self.judge(store, id, at: Self.at.addingTimeInterval(60))
@@ -114,7 +114,7 @@ extension AutomationStoreTests {
     let judge = store.nodeId(id, "judge")
     func rewritten(_ change: (inout AutomationActionDef) -> Void) throws -> [AutomationNodeID] {
       var definition = try XCTUnwrap(store.automation(id)?.definition)
-      change(&definition.parts[1].action)
+      change(&definition.nodes[1].action)
       let version = try XCTUnwrap(store.automation(id)?.version)
       return try store.replace(id, version: version, with: definition, now: Self.at).reworked
     }
@@ -141,9 +141,9 @@ extension AutomationStoreTests {
     let id = try store.create(sendDefinition(), now: Self.at).id
     let (fetch, send) = (store.nodeId(id, "fetch"), store.nodeId(id, "send"))
     var definition = try XCTUnwrap(store.automation(id)?.definition)
-    definition.parts[0].key = "gh"
-    definition.parts[1].from = [AutomationDefinition.Input(part: "gh")]
-    definition.parts.insert(
+    definition.nodes[0].key = "gh"
+    definition.nodes[1].from = [AutomationDefinition.Input(nodeKey: "gh")]
+    definition.nodes.insert(
       DesignSceneFixtures.commandNode(
         "fetch", "掃除", .scheduled(.every(3600)), script: "clean", deliver: .sideEffect), at: 0)
 
@@ -169,8 +169,8 @@ extension AutomationStoreTests {
     XCTAssertEqual(store.automation(id)?.version, 1)
     var definition = try XCTUnwrap(store.automation(id)?.definition)
     XCTAssertEqual(
-      definition.parts.map(\.id), [store.nodeId(id, "fetch"), store.nodeId(id, "send")])
-    definition.parts.append(
+      definition.nodes.map(\.id), [store.nodeId(id, "fetch"), store.nodeId(id, "send")])
+    definition.nodes.append(
       DesignSceneFixtures.commandNode(
         "log", "記録", .arrival, from: ["fetch"], script: "log", deliver: .sideEffect))
 
@@ -217,19 +217,19 @@ extension AutomationStoreTests {
       .invalid("version: pass the version you read with list_automations to rewrite"))
     XCTAssertEqual(refused(1) { _ in }, .versionMismatch(sent: 1, current: 2))
     XCTAssertEqual(
-      refused(2) { $0.parts[0].id = AutomationNodeID(999) },
-      .invalid("parts[0].id: 999 is not a part of automation \(id)"))
+      refused(2) { $0.nodes[0].id = AutomationNodeID(999) },
+      .invalid("nodes[0].id: 999 is not a node of automation \(id)"))
     XCTAssertEqual(
-      refused(2) { $0.parts[0].id = store.nodeId(other, "fetch") },
-      .invalid("parts[0].id: \(store.nodeId(other, "fetch")) is not a part of automation \(id)"))
+      refused(2) { $0.nodes[0].id = store.nodeId(other, "fetch") },
+      .invalid("nodes[0].id: \(store.nodeId(other, "fetch")) is not a node of automation \(id)"))
     XCTAssertEqual(
-      refused(2) { $0.parts[0].id = nil },
+      refused(2) { $0.nodes[0].id = nil },
       .invalid(
-        "parts[0].id: the key \"fetch\" belongs to part \(fetch); send its id to keep the part, or "
-          + "use another key for a new part"))
+        "nodes[0].id: the key \"fetch\" belongs to node \(fetch); send its id to keep the node, or "
+          + "use another key for a new node"))
     XCTAssertThrowsError(try store.create(current, now: Self.at)) {
       XCTAssertEqual(
-        $0 as? AutomationError, .invalid("parts[0].id: a new automation has no part ids yet"))
+        $0 as? AutomationError, .invalid("nodes[0].id: a new automation has no node ids yet"))
     }
     XCTAssertEqual(store.automation(id)?.definition, notified.withIds(of: store, id))
   }
@@ -239,10 +239,10 @@ extension AutomationDefinition {
   /// 部品に、自動化の今の同じ鍵の部品の id を添えたもの（テスト）。
   fileprivate func withIds(of store: AutomationStore, _ id: Int) -> AutomationDefinition {
     var definition = self
-    for index in definition.parts.indices {
-      definition.parts[index].id =
+    for index in definition.nodes.indices {
+      definition.nodes[index].id =
         store.automation(id)?.graph.node(
-          key: definition.parts[index].key)?.id
+          key: definition.nodes[index].key)?.id
     }
     return definition
   }

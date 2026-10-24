@@ -104,7 +104,7 @@ extension DesignSceneFixtures {
     var mine = commandNode(
       "mine", "自分の担当だけ", .arrival, from: ["backlog", "sentry"],
       script: #"jq -c 'select(.assignee == "nakatake")'"#, directory: "/Users/me/work/scripts")
-    mine.from = mine.from.map { AutomationDefinition.Input(part: $0.part, maxAgeHours: 24) }
+    mine.from = mine.from.map { AutomationDefinition.Input(nodeKey: $0.nodeKey, maxAgeHours: 24) }
     var mail = agentNode(
       "mail", "メール", .scheduled(.every(1800)), model: "haiku",
       tools: ["mcp__gmail__search_threads"],
@@ -113,7 +113,7 @@ extension DesignSceneFixtures {
     return AutomationSample(
       definition: AutomationDefinition(
         name: "受け持ちの全部", notify: .menuBar,
-        parts: [
+        nodes: [
           commandNode(
             "github", "GitHub", .scheduled(.every(600)),
             script: "gh search prs --review-requested=@me --json url,title", coverage: .currentSet),
@@ -159,7 +159,7 @@ extension DesignSceneFixtures {
     AutomationSample(
       definition: AutomationDefinition(
         name: "日報スクリプト", notify: nil,
-        parts: [
+        nodes: [
           commandNode(
             "note", "日報を書く", .scheduled(cron("0 23 * * *")), script: "~/bin/daily-note.sh",
             deliver: .sideEffect)
@@ -177,7 +177,7 @@ extension DesignSceneFixtures {
     return AutomationSample(
       definition: AutomationDefinition(
         name: "取り込みの多い判定", notify: nil,
-        parts: sources.map {
+        nodes: sources.map {
           commandNode(
             $0, "取り込み \($0.dropFirst(3))", .scheduled(.every(3600)), script: "~/bin/\($0).sh",
             coverage: .newArrivals)
@@ -194,7 +194,7 @@ extension DesignSceneFixtures {
     AutomationSample(
       definition: AutomationDefinition(
         name: "週末の依存更新", notify: nil,
-        parts: [
+        nodes: [
           agentNode(
             "update", "依存を上げる", .scheduled(cron("0 10 * * 0,6")), tools: ["Bash(npm:*)"],
             instruction: "古くなった依存を調べて、上げてよいものを上げる。", deliver: .report)

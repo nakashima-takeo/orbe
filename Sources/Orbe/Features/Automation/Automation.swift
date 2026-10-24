@@ -21,7 +21,7 @@ struct Automation: Equatable, Identifiable {
 
   /// 外の形（部品に ID を添える）。
   var definition: AutomationDefinition {
-    AutomationDefinition(name: name, notify: notify, parts: graph.definitionNodes)
+    AutomationDefinition(name: name, notify: notify, nodes: graph.definitionNodes)
   }
 
   /// 判定の部品を持つか。タスク候補の棚・重なりはこれを持つ自動化の単位。
@@ -29,7 +29,7 @@ struct Automation: Equatable, Identifiable {
 
   /// 部品の状態。グラフの部品はいつも状態を持つ。
   func state(_ id: AutomationNodeID) -> AutomationNodeState {
-    guard let state = states[id] else { preconditionFailure("every part has a state: \(id)") }
+    guard let state = states[id] else { preconditionFailure("every node has a state: \(id)") }
     return state
   }
 

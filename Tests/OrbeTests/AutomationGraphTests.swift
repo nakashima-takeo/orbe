@@ -107,7 +107,7 @@ final class AutomationGraphTests: OrbeTestCase {
   {
     var definitionNode = definitionNode
     definitionNode.from = definitionNode.from.map {
-      AutomationDefinition.Input(part: $0.part, take: take)
+      AutomationDefinition.Input(nodeKey: $0.nodeKey, take: take)
     }
     return definitionNode
   }
@@ -164,7 +164,7 @@ final class AutomationGraphTests: OrbeTestCase {
   /// 外の形へ組み直すと、取り方も古さの上限も省いた入力は鍵だけに、ほかは書いたとおりに戻る。
   func testTheNodesRoundTripTheirInputs() throws {
     var receiver = Self.agent("r", from: ["f", "g"])
-    receiver.from[1] = AutomationDefinition.Input(part: "g", take: .all, maxAgeHours: 24)
+    receiver.from[1] = AutomationDefinition.Input(nodeKey: "g", take: .all, maxAgeHours: 24)
     let definitionNodes = [Self.fetch("f"), Self.fetch("g"), receiver]
 
     let graph = try AutomationGraph.numbered(definitionNodes)

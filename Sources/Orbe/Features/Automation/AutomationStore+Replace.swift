@@ -47,7 +47,7 @@ extension AutomationStore {
     guard version == current.version else {
       throw .versionMismatch(sent: version, current: current.version)
     }
-    try Self.checkIds(definition.parts, of: id, current: current.keys)
+    try Self.checkIds(definition.nodes, of: id, current: current.keys)
     let at = TaskItem.storedInstant(now)
     return try commit(sweepingAt: at) { db, memory in
       var entities = try Self.entities(checked, old: current.automation, db)
@@ -166,10 +166,10 @@ extension AutomationStore {
     for (index, definitionNode) in definitionNodes.enumerated() {
       guard let id = definitionNode.id else { continue }
       guard current[id] != nil else {
-        throw .invalid("parts[\(index)].id: \(id) is not a part of automation \(automation)")
+        throw .invalid("nodes[\(index)].id: \(id) is not a node of automation \(automation)")
       }
       guard seen.insert(id).inserted else {
-        throw .invalid("parts[\(index)].id: \(id) is named twice")
+        throw .invalid("nodes[\(index)].id: \(id) is named twice")
       }
     }
     for (index, definitionNode) in definitionNodes.enumerated() where definitionNode.id == nil {
@@ -177,8 +177,8 @@ extension AutomationStore {
         !seen.contains(owner)
       {
         throw .invalid(
-          "parts[\(index)].id: the key \"\(definitionNode.key)\" belongs to part \(owner); send its id to "
-            + "keep the part, or use another key for a new part")
+          "nodes[\(index)].id: the key \"\(definitionNode.key)\" belongs to node \(owner); send its id to "
+            + "keep the node, or use another key for a new node")
       }
     }
   }

@@ -21,7 +21,7 @@ final class BoardAutomationUnreadableTests: OrbeTestCase {
     let first = try XCTUnwrap(model.standings.first)
     XCTAssertEqual(first.id, 2)
     XCTAssertEqual(first.name, "GitHub: レビュー依頼")
-    XCTAssertEqual(first.unreadable?.hasPrefix("invalid parts[1].instruction"), true)
+    XCTAssertEqual(first.unreadable?.hasPrefix("invalid nodes[1].instruction"), true)
 
     model.move(1)
     XCTAssertEqual(model.selectedUnreadable?.id, 2)

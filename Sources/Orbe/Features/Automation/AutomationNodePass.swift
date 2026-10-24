@@ -99,7 +99,7 @@ struct AutomationNodePass {
   func start(
     _ node: AutomationGraph.Node, _ input: Input, completion: @escaping (Outcome) -> Void
   ) -> BackgroundRunHandle {
-    precondition(input.fits(node.role), "the input must match the role of the part")
+    precondition(input.fits(node.role), "the input must match the role of the node")
     let elapsed = TimeInterval(node.timeoutMinutes * 60)
     var stopped = false
     let handle: BackgroundRunHandle
@@ -119,7 +119,7 @@ struct AutomationNodePass {
         handle.stop()
       }
     case .agent(let agent):
-      guard let model = node.model else { preconditionFailure("an agent part has a model") }
+      guard let model = node.model else { preconditionFailure("an agent node has a model") }
       let session = AutomationRunSession(input, writer: node.id)
       let runSessions = self.runSessions
       let token = runSessions.open(session)
@@ -186,7 +186,7 @@ struct AutomationNodePass {
       return BackgroundInput(
         stdin: stdin(rows.map(\.text)), environment: ["ORBE_RUN_ID": runId])
     case .work:
-      preconditionFailure("a work part is an agent")
+      preconditionFailure("a work node is an agent")
     }
   }
 
@@ -218,7 +218,7 @@ struct AutomationNodePass {
     case .work:
       return AutomationPrompts.work(instruction: instruction, now: now, timeZone: timeZone)
     case .sideEffect:
-      preconditionFailure("a side effect part is a command")
+      preconditionFailure("a side effect node is a command")
     }
   }
 

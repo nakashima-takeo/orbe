@@ -10,7 +10,7 @@ extension AutomationTrial {
       -> [AutomationNodeID]?
     {
       guard let keys else { return nil }
-      guard !keys.isEmpty else { throw .invalid("\(name) must name at least one part") }
+      guard !keys.isEmpty else { throw .invalid("\(name) must name at least one node") }
       var ids: [AutomationNodeID] = []
       for key in keys {
         guard let node = graph.node(key: key) else { throw .nodeNotFound(automation.id, key) }
@@ -34,10 +34,10 @@ extension AutomationTrial {
     let down = below(entries)
     func key(_ id: AutomationNodeID) -> String { graph.node(id)?.key ?? "" }
     for (index, id) in entries.enumerated() where !up.contains(id) {
-      throw .invalid("from[\(index)] \"\(key(id))\" reaches no part in to")
+      throw .invalid("from[\(index)] \"\(key(id))\" reaches no node in to")
     }
     for (index, id) in targets.enumerated() where !down.contains(id) {
-      throw .invalid("to[\(index)] \"\(key(id))\" is not reached from any part in from")
+      throw .invalid("to[\(index)] \"\(key(id))\" is not reached from any node in from")
     }
     return Range(
       from: unique(entries), to: unique(targets),
@@ -58,14 +58,14 @@ extension AutomationTrial {
     let roots = range.roots
     guard roots.count == 1, let entry = roots.first else {
       throw .invalid(
-        "rows need exactly one entry part (a part with no input in the range); this range has "
+        "rows need exactly one entry node (a node with no input in the range); this range has "
           + roots.map { "\"\($0.key)\"" }.joined(separator: ", "))
     }
     switch entry.role {
     case .judge:
       throw .invalid(
-        "rows cannot be given to the judge part \"\(entry.key)\": a judge proposes only from items "
-          + "a fetch part fetched, so give the items to a fetch part above it")
+        "rows cannot be given to the judge node \"\(entry.key)\": a judge proposes only from items "
+          + "a fetch node fetched, so give the items to a fetch node above it")
     case .fetch:
       var outputs = AutomationOutputs(.fetch(since: nil), writer: entry.id)
       let broken = outputs.put(rows.joined(separator: "\n"))
@@ -76,7 +76,7 @@ extension AutomationTrial {
         let keys = entry.inputs.compactMap { graph.node($0.from)?.key }
         throw .invalid(
           "rows: \"\(entry.key)\" has \(keys.count) inputs (\(keys.map { "\"\($0)\"" }.joined(separator: ", "))); "
-            + "rows are given as the output of a single input, so give them to one of those parts "
+            + "rows are given as the output of a single input, so give them to one of those nodes "
             + "(with from) instead")
       }
       var outputs = AutomationOutputs(.process([], reachesJudge: false), writer: upstream)

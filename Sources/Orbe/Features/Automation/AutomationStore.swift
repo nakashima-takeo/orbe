@@ -76,8 +76,8 @@ import Observation
   // MARK: - 定義
 
   func create(_ definition: AutomationDefinition, now: Date) throws(AutomationError) -> Automation {
-    if let index = definition.parts.firstIndex(where: { $0.id != nil }) {
-      throw .invalid("parts[\(index)].id: a new automation has no part ids yet")
+    if let index = definition.nodes.firstIndex(where: { $0.id != nil }) {
+      throw .invalid("nodes[\(index)].id: a new automation has no node ids yet")
     }
     let (name, checked) = try definition.checked()
     let at = TaskItem.storedInstant(now)

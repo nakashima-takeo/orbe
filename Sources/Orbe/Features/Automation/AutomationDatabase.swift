@@ -151,7 +151,7 @@ final class AutomationDatabase {
         "SELECT pending_drops FROM nodes WHERE id = ?", [.integer(Int64(id.rawValue))]
       ) { $0.text(at: 0) }.first ?? nil
     guard let drops = Self.decode(AutomationDrops.self, raw) else {
-      NSLog("[automation] dropped unreadable carried counts of part \(id)")
+      NSLog("[automation] dropped unreadable carried counts of node \(id)")
       return AutomationDrops()
     }
     return drops
@@ -173,7 +173,7 @@ final class AutomationDatabase {
       )
       .first
     else {
-      throw AutomationError.unavailable("part \(id) is missing from the database")
+      throw AutomationError.unavailable("node \(id) is missing from the database")
     }
     var state = AutomationNodeState(addedAt: AutomationPersistence.date(addedAt))
     state.runs = try records(of: [id], limit: AutomationNodeState.retainedRuns).map(\.record)
