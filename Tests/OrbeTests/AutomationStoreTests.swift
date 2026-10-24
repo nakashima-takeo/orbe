@@ -249,12 +249,12 @@ final class AutomationStoreTests: OrbeTestCase {
     store = nil
     let kept = try database().select(
       """
-      SELECT r.started_at FROM runs r JOIN nodes p ON p.id = r.node_id WHERE p.key = 'fetch'
+      SELECT r.started_at FROM runs r JOIN nodes n ON n.id = r.node_id WHERE n.key = 'fetch'
       ORDER BY r.id
       """, []
     ) { AutomationPersistence.date($0.int64(at: 0)) }
     let judged = try database().select(
-      "SELECT count(*) FROM runs r JOIN nodes p ON p.id = r.node_id WHERE p.key = 'judge'", []
+      "SELECT count(*) FROM runs r JOIN nodes n ON n.id = r.node_id WHERE n.key = 'judge'", []
     ) { $0.int(at: 0) }.first
 
     XCTAssertEqual(fetches.runs.count, AutomationNodeState.retainedRuns)

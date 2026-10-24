@@ -107,9 +107,9 @@ extension AutomationDatabase {
   private func nodeRows(of automation: Int) throws -> [NodeRow] {
     try db.select(
       """
-      SELECT p.id, p.key, p.name, p.trigger, p.max_items, p.def_id, d.kind, a.action
-      FROM nodes p JOIN node_defs d ON d.id = p.def_id LEFT JOIN action_defs a ON a.id = p.def_id
-      WHERE p.automation_id = ? AND p.removed_at IS NULL ORDER BY p.position
+      SELECT n.id, n.key, n.name, n.trigger, n.max_items, n.def_id, d.kind, a.action
+      FROM nodes n JOIN node_defs d ON d.id = n.def_id LEFT JOIN action_defs a ON a.id = n.def_id
+      WHERE n.automation_id = ? AND n.removed_at IS NULL ORDER BY n.position
       """, [.integer(Int64(automation))]
     ) { s in
       (

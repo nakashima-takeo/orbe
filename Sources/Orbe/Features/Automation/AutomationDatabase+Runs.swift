@@ -54,8 +54,8 @@ extension AutomationDatabase {
   {
     let rows = try db.select(
       """
-      SELECT r.id, p.key, r.started_at, r.ended_at, r.trigger, r.failure, r.record
-      FROM runs r JOIN nodes p ON p.id = r.node_id \(clause)
+      SELECT r.id, n.key, r.started_at, r.ended_at, r.trigger, r.failure, r.record
+      FROM runs r JOIN nodes n ON n.id = r.node_id \(clause)
       """, values
     ) { s in
       (

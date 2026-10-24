@@ -39,10 +39,10 @@ extension AutomationDatabase {
       """
       DELETE FROM settlements WHERE proposal_id IN (
         SELECT proposal_id FROM (
-          SELECT s.proposal_id, p.removed_at, ROW_NUMBER() OVER (
+          SELECT s.proposal_id, o.removed_at, ROW_NUMBER() OVER (
             PARTITION BY r.node_id ORDER BY s.decided_at DESC, s.proposal_id DESC) AS n
           FROM settlements s JOIN proposals q ON q.id = s.proposal_id JOIN runs r ON r.id = q.run_id
-            JOIN nodes p ON p.id = r.node_id)
+            JOIN nodes o ON o.id = r.node_id)
         WHERE (n > ?1 OR removed_at IS NOT NULL)
           AND proposal_id NOT IN (SELECT proposal_id FROM held_proposals))
       """, [.integer(keep)])
@@ -58,14 +58,14 @@ extension AutomationDatabase {
       """
       DELETE FROM runs WHERE id IN (
         SELECT id FROM (
-          SELECT r.id, p.removed_at, ROW_NUMBER() OVER (PARTITION BY r.node_id ORDER BY r.id DESC) AS n
-          FROM runs r JOIN nodes p ON p.id = r.node_id)
+          SELECT r.id, o.removed_at, ROW_NUMBER() OVER (PARTITION BY r.node_id ORDER BY r.id DESC) AS n
+          FROM runs r JOIN nodes o ON o.id = r.node_id)
         WHERE (n > ?1 OR removed_at IS NOT NULL)
           AND id NOT IN (SELECT breach_run_id FROM nodes WHERE breach_run_id IS NOT NULL)
           AND id NOT IN (SELECT run_id FROM proposals)
           AND id NOT IN (
-            SELECT max(r.id) FROM runs r JOIN nodes p ON p.id = r.node_id
-            WHERE r.failure IS NULL AND p.removed_at IS NULL GROUP BY r.node_id))
+            SELECT max(r.id) FROM runs r JOIN nodes o ON o.id = r.node_id
+            WHERE r.failure IS NULL AND o.removed_at IS NULL GROUP BY r.node_id))
       """, [.integer(keep)])
   }
 

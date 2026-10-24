@@ -22,8 +22,8 @@ extension AutomationDatabase {
     Dictionary(
       uniqueKeysWithValues: try db.select(
         """
-        SELECT e.from_node_id, e.read_item_seq, e.read_event_seq, p.last_item_seq, p.last_event_seq
-        FROM node_edges e JOIN nodes p ON p.id = e.from_node_id WHERE e.to_node_id = ?
+        SELECT e.from_node_id, e.read_item_seq, e.read_event_seq, n.last_item_seq, n.last_event_seq
+        FROM node_edges e JOIN nodes n ON n.id = e.from_node_id WHERE e.to_node_id = ?
         """, [.integer(Int64(receiver.rawValue))]
       ) { s in
         (
