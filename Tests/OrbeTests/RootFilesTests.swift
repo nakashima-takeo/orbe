@@ -89,6 +89,36 @@ final class RootFilesTests: OrbeTestCase {
     XCTAssertNil(files.status)
   }
 
+  /// 管理下かの判定の前に頼んだ取り直しの待ち手は、判定の後に始まる最初の取り直しが済んでから呼ばれ、管理外と分かれば
+  /// そのとき呼ばれる。すぐ呼ぶと、開いたばかりの diff が status も版もまだ無い状態を「追いついた」と取り違える。
+  func testWaitersRequestedBeforeTheRootIsResolvedWaitForItsFirstRefresh() throws {
+    let files = RootFiles(root: repo.root)
+    let recorder = Recorder()
+    let version = RootFiles.Version(path: "a.txt", revision: .index)
+    files.addObserver(recorder, versions: [version])
+    XCTAssertFalse(files.isResolved, "前提: 判定の前")
+    var status: GitStatus??
+    var state: RootFiles.VersionState??
+    files.requestStatusRefresh { status = .some(files.status) }
+    files.requestVersionRefresh { state = .some(files.state(of: version)) }
+    pumpMain(until: { status != nil && state != nil }, "待ち手が呼ばれる")
+    XCTAssertNotNil(status ?? nil, "status を読んだ後")
+    XCTAssertNotNil(state ?? nil, "版を読んだ後")
+
+    let broken = TestScratch.caseDir.appendingPathComponent(
+      "orbe-broken-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: broken, withIntermediateDirectories: true)
+    try "gitdir: /nonexistent/orbe/.git\n".write(
+      to: broken.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+    let unmanaged = RootFiles(root: GitWorktreeRoot.normalizedPath(broken.path))
+    var calls = 0
+    unmanaged.requestStatusRefresh { calls += 1 }
+    unmanaged.requestVersionRefresh { calls += 1 }
+    XCTAssertEqual(calls, 0, "判定の前には呼ばない")
+    pumpMain(until: { unmanaged.isResolved }, "管理下かの判定")
+    XCTAssertEqual(calls, 2, "管理外と分かったときに呼ぶ")
+  }
+
   // MARK: - status と監視
 
   func testStatusFollowsExternalWritesAndGitOperations() throws {

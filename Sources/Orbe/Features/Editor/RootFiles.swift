@@ -125,7 +125,10 @@ final class RootFiles {
     GitRepo.open(cwd: root, runner: runner) { [weak self] repo in
       guard let self else { return }
       isResolved = true
-      guard let repo, GitWorktreeRoot.normalizedPath(repo.root) == self.root else { return }
+      guard let repo, GitWorktreeRoot.normalizedPath(repo.root) == self.root else {
+        releaseWaiters()
+        return
+      }
       self.repo = repo
       let gitDirs = [repo.gitDir, repo.commonDir]
       gitWatcher = watch(roots: gitDirs, gitDirs: gitDirs)
@@ -217,16 +220,26 @@ final class RootFiles {
     for observation in live { body(observation.observer) }
   }
 
+  /// 管理外と分かった——判定の前に付けた待ち手を呼ぶ（取り直しは起きない）。
+  private func releaseWaiters() {
+    let waiters = statusWaiters + versionWaiters
+    statusWaiters = []
+    versionWaiters = []
+    for waiter in waiters { waiter() }
+  }
+
   // MARK: - status の取り直し
 
   /// status を取り直す。`then` は、この要求の後に始まる取り直しが済んだら（通知した・値が同じ・git の失敗のどれでも）
-  /// 呼ぶ——実行中の取り直しは要求より前の状態を読んでいるかもしれないので、それには付けない。
+  /// 呼ぶ——実行中の取り直しは要求より前の状態を読んでいるかもしれないので、それには付けない。管理外ならすぐ呼び、
+  /// 管理下かの判定の前なら、判定の後に始まる最初の取り直しに付ける（管理外と分かれば、そのとき呼ぶ）。
   func requestStatusRefresh(then waiter: (() -> Void)? = nil) {
-    guard repo != nil else {
+    guard repo != nil || !isResolved else {
       waiter?()
       return
     }
     if let waiter { statusWaiters.append(waiter) }
+    guard repo != nil else { return }
     if statusJob.isRunning {
       statusJob.again = true
       return
@@ -269,13 +282,14 @@ final class RootFiles {
   // MARK: - 版の本文の取り直し
 
   /// 版の本文を取り直す。`then` は、この要求の後に始まる取り直しが済んだら（変わった版を知らせた後。git の失敗でも）
-  /// 呼ぶ——status の `requestStatusRefresh(then:)` と同じ。管理外（または判定の前）なら、すぐ呼ぶ。
+  /// 呼ぶ——管理外・判定の前の扱いも、status の `requestStatusRefresh(then:)` と同じ。
   func requestVersionRefresh(then waiter: (() -> Void)? = nil) {
-    guard repo != nil else {
+    guard repo != nil || !isResolved else {
       waiter?()
       return
     }
     if let waiter { versionWaiters.append(waiter) }
+    guard repo != nil else { return }
     if versionJob.isRunning {
       versionJob.again = true
       return

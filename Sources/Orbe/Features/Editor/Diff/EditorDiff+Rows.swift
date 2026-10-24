@@ -51,7 +51,8 @@ extension EditorDiff {
   }
 
   /// 並びが開いた時点に追いついている——開いた後の取り直しが済んだ後の状態から作られている。作業ツリー: 文書のハンクが
-  /// 今の index の本文に対する今の版の結果。ステージ済み: 済んだ後に頼んだ行差分が届いた。
+  /// 今の index の本文に対する今の版の結果。ステージ済み: 済んだ後の status で決まる関心の版の状態が揃い、そこから頼んだ
+  /// 行差分が届いた。
   var isCaughtUp: Bool {
     guard resolvedAfterCatchUp, content == .ready, currentRows != nil else { return false }
     switch id.kind {

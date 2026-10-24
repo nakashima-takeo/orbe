@@ -53,7 +53,8 @@ final class EditorDiff: RootFilesObserver {
   private var newSource: String??
   private(set) var oldSide = DiffRows.Side(nil)
   private(set) var newRevisionSide = DiffRows.Side(nil)
-  /// ステージ済みの側と行差分を頼んだ通し番号と、頼んで届いていないか。
+  /// ステージ済みの側と行差分を頼んだ通し番号と、側と並びが今の版の状態に揃っていないか（今の関心の版の状態がまだ無い・
+  /// 頼んだ行差分が届いていない）。
   private var stagedRequest = 0
   private(set) var stagedPending = false
   /// 見せていない間に変わった。
@@ -305,11 +306,15 @@ final class EditorDiff: RootFilesObserver {
     }
   }
 
-  /// ステージ済みは、両側の本文と行差分を裏で揃えてから一緒に入れ替える（届くまでは前の側と並びのまま）。
+  /// ステージ済みは、両側の本文と行差分を裏で揃えてから一緒に入れ替える（届くまでは前の側と並びのまま）。status で関心の
+  /// 版が替わった（rename の元パス）直後など、今の関心の版の状態がまだ無い間も前の側と並びのまま待つ。
   private func resolveStaged() -> Content {
     let head = files.state(of: RootFiles.Version(path: headPath, revision: .head))
     let index = files.state(of: RootFiles.Version(path: id.path, revision: .index))
-    guard let head, let index else { return content == .ready ? .ready : .loading }
+    guard let head, let index else {
+      stagedPending = true
+      return content == .ready ? .ready : .loading
+    }
     for state in [head, index] {
       if state == .notText { return .unavailable(.notText) }
       if state == .failed { return .unavailable(.failed) }

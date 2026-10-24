@@ -93,4 +93,36 @@ extension EditorDiffTests {
     stagedSurface.flush()
     XCTAssertGreaterThan(stagedSurface.viewport.top.line, 200, "ステージ済み: add した変更へ送る")
   }
+
+  /// ステージ済みの rename を、根のサービスの status が rename を知る前に開いても、status で決まる元パスの HEAD が届いてから
+  /// 初めての位置を決め、実際の変更へ送る（元パスの HEAD 抜きの「全部追加」の仮の並びで決めない）。
+  func testAStagedRenameOpenedBeforeTheStatusKnowsItRevealsTheRealChange() throws {
+    // status だけを遅くする——stat の変わった filter 付きのファイルを、status は clean を通して比べ直す（版の取り直しは
+    // 作業ツリーを読まない）。
+    try repo.write(".gitattributes", "slow.txt filter=slow\n")
+    XCTAssertTrue(repo.git(["config", "filter.slow.clean", "sleep 0.5; cat"]).isSuccess)
+    try repo.write("slow.txt", "s\n")
+    var lines = (0..<300).map { "line \($0)" }
+    try repo.write("a.txt", lines.joined(separator: "\n") + "\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "long"]).isSuccess)
+    let (tab, _) = tab()
+    let files = RootFiles.shared(for: repo.root)
+    pumpMain(until: { files.status != nil }, "前提: rename の前の status を持つ")
+
+    XCTAssertTrue(repo.git(["mv", "a.txt", "b.txt"]).isSuccess)
+    lines[250] = "changed 250"
+    try repo.write("b.txt", lines.joined(separator: "\n") + "\n")
+    XCTAssertTrue(repo.git(["add", "b.txt"]).isSuccess)
+    try FileManager.default.setAttributes(
+      [.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: repo.url("slow.txt").path)
+    let diff = try tab.group.editor.openDiff(id("b.txt", .staged), as: .pinned)
+    pumpMain(until: { diff.placement == .placed && diff.newSurface != nil }, "位置を決める")
+    XCTAssertEqual(
+      diff.revisionHunks, [LineHunk(oldStart: 251, oldCount: 1, newStart: 251, newCount: 1)],
+      "元パスの HEAD との差で決める")
+    let surface = try engine(diff.newSurface)
+    surface.flush()
+    XCTAssertGreaterThan(surface.viewport.top.line, 200, "実際の変更へ送る")
+  }
 }
