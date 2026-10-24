@@ -78,8 +78,8 @@ final class GitStatusTests: OrbeTestCase {
     XCTAssertNotEqual(restaged, status)
   }
 
-  /// サブモジュールのままの作業ツリー側の変化は、チェックアウトしたコミットの移動（`git add` でステージできる）か、中身だけ
-  /// （ステージできない）かを持つ。作業ツリーで消した・置き換えたサブモジュールと、作業ツリー側に変化の無い行は持たない。
+  /// サブモジュールのままの作業ツリー側の変化は、チェックアウトしたコミットの移動（`git add` でステージできる。中も変わったか
+  /// も持つ）か、中身だけ（ステージできない）かを持つ。作業ツリーで消した・置き換えたサブモジュールと、作業ツリー側に変化の無い行は持たない。
   func testASubmoduleChangedInTheWorkingTreeIsMarkedWithHowItChanged() {
     func submodule(_ xy: String, _ sub: String, _ path: String) -> String {
       "1 \(xy) \(sub) 160000 160000 160000 \(zero) \(zero) \(path)"
@@ -94,8 +94,8 @@ final class GitStatusTests: OrbeTestCase {
     let marks = status.entries.mapValues(\.unstagedSubmodule)
     XCTAssertEqual(marks["dirty"], .content)
     XCTAssertEqual(marks["untracked"], .content)
-    XCTAssertEqual(marks["moved"], .commit)
-    XCTAssertEqual(marks["committed"], .commit)
+    XCTAssertEqual(marks["moved"], .commit(dirty: true), "コミットが動き、中も変わった")
+    XCTAssertEqual(marks["committed"], .commit(dirty: false))
     XCTAssertEqual(marks["staged"], .some(nil), "作業ツリー側に変化が無い")
     XCTAssertEqual(marks["removed"], .some(nil), "消したサブモジュールは restore で戻る")
     XCTAssertEqual(marks["replaced"], .some(nil), "ファイルに置き換えたサブモジュールは restore で戻る")

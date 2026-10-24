@@ -136,9 +136,17 @@ extension EditingSite {
 
   // MARK: - 見せ方
 
-  /// 区間 `range`（nil なら主のキャレット）の行の縦の範囲（表示の単位——面の行高を 1 とする縦の並びの位置）。
-  func revealSpan(_ range: NSRange?) -> Range<Double>? {
+  /// 区間 `range`（nil なら主のキャレット）の行の縦の範囲（表示の単位——面の行高を 1 とする縦の並びの位置）。本文の場で
+  /// `rows`（縦の並びの中の 2 つの位置）があれば、その上端から上端まで。
+  func revealSpan(
+    _ range: NSRange?, rows positions: (from: RowPosition, to: RowPosition)?
+  ) -> Range<Double>? {
     guard let text = currentContent?.text else { return nil }
+    if isBody, let positions {
+      let rows = surface.rows
+      let from = rows.unit(of: positions.from, lineCount: text.lineCount)
+      return from..<max(from, rows.unit(of: positions.to, lineCount: text.lineCount))
+    }
     let caret = NSRange(location: editor.state.cursors.primary.position, length: 0)
     let shown = range ?? caret
     let location = min(max(0, shown.location), text.length)

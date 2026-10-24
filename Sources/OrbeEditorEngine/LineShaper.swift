@@ -57,7 +57,7 @@ enum LineShaper {
     return (source(start: start, next: next, in: text), start)
   }
 
-  /// 文書に無い行（改行を含まない字列）の中身。
+  /// 改行を含まない字列 `line` の中身。
   static func source(_ line: String) -> Source {
     let units = line.utf16
     return Source(head: ContiguousArray(units.prefix(headLimit)), length: units.count)

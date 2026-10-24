@@ -15,12 +15,35 @@ public struct LineHunk: Equatable, Sendable {
     self.newStart = newStart
     self.newCount = newCount
   }
+
+  /// 0 始まりの半開の範囲から（空の範囲は、その境の上）。
+  public init(old: Range<Int>, new: Range<Int>) {
+    self.init(
+      oldStart: old.isEmpty ? old.lowerBound : old.lowerBound + 1, oldCount: old.count,
+      newStart: new.isEmpty ? new.lowerBound : new.lowerBound + 1, newCount: new.count)
+  }
+
+  /// 古い側の行（0 始まりの半開。件数 0 なら、その境の空の範囲）。
+  public var oldLines: Range<Int> {
+    let first = oldCount > 0 ? oldStart - 1 : oldStart
+    return first..<(first + oldCount)
+  }
+
+  /// 新しい側の行（0 始まりの半開。件数 0 なら、その境の空の範囲）。
+  public var newLines: Range<Int> {
+    let first = newCount > 0 ? newStart - 1 : newStart
+    return first..<(first + newCount)
+  }
 }
 
 /// 行差分の純関数。行はエディターの行——`\n` で割り（`\r` は行の中身に残す）、改行で終わる本文は末尾に空の行を持ち、
 /// 空の本文は空の行 1 つ（行の数は `TextRope.lineCount` と常に等しい）。末尾の改行を足す・消すのは、空の行の追加・削除に
 /// なる。改行で終わる本文どうしなら、末尾の空の行は両側で揃う。片側が空の本文なら、共通の端の外を 1 つの区間にする（空の
 /// 本文の 1 行を、本文の途中の空の行に対応させない）。
+///
+/// 区間の列の形: 昇順・重ならない（区間の間に文脈の行を挟む）・両側とも本文の中（件数 0 の側の境は `0...行数`）・区間の
+/// 外の行は両側で 1 対 1。編集でずらしたハンク（`VersionedEdit.track`）も同じ形を保つ。差分の出力では、さらに区間の外で
+/// 対応する行が同じ中身で、最小とは限らない（上限を越えた残りは 1 区間）。
 public enum LineDiff {
   /// 差分を取る手間の上限。超えれば、共通の先頭・末尾を落とした残り全体を 1 つの変更区間にする（時間を有界にする）。
   public enum Limit: Equatable, Sendable {
@@ -195,11 +218,9 @@ public enum LineDiff {
     return hunks
   }
 
-  /// 0 始まりの位置と件数から 1 始まりの区間へ。件数 0 の側は「直前の行」を指す。
+  /// 0 始まりの位置と件数から。
   private static func hunk(oldStart: Int, oldCount: Int, newStart: Int, newCount: Int) -> LineHunk {
-    LineHunk(
-      oldStart: oldCount == 0 ? oldStart : oldStart + 1, oldCount: oldCount,
-      newStart: newCount == 0 ? newStart : newStart + 1, newCount: newCount)
+    LineHunk(old: oldStart..<(oldStart + oldCount), new: newStart..<(newStart + newCount))
   }
 
   /// 行の中身（改行を含まない）。行の同一性は UTF-16 の単位の列——`String ==` の正準等価（NFC と NFD を同じとみなす）では

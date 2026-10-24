@@ -20,6 +20,8 @@ struct Transaction {
   /// 見せる区間（nil なら見せ方を頼んだ場の主のキャレット）と、見せ方を頼んだ場。
   var revealing: NSRange?
   var revealSite: EditingSite?
+  /// 見せる縦の範囲を縦の並びの中の位置で頼んだ（本文の場。`revealing` は横の寄せだけに使う）。
+  var revealingRows: (from: RowPosition, to: RowPosition)?
   /// 見せ方の前に置くスクロールの位置（スクロールだけのキー・ドラッグの自動スクロール）。
   var scrollTo: SIMD2<Double>?
   /// 取引を起こした打鍵の出来事の時刻（打鍵→画面の遅れを、本文と同じ書き込みで材料へ添える）。
@@ -69,13 +71,15 @@ extension MetalTextSurface {
   /// 本文の場は主で、面に焦点がある。
   var bodyFocused: Bool { focused && primary == .body }
 
-  /// 取引を確定する——縦の並びの差し込みと区画の高さ（見えている先頭の文書の行を保つずらし）・行の数の上限・見せ方の
+  /// 取引を確定する——縦の並びの差し込みと区画の高さ（見えている先頭の文書の行を保つずらし）・範囲・見せ方の
   /// 縦の位置・材料の書き込み（写し・行の印・変わった行・縦の並び・カーソル・入力欄・打鍵の時刻・横の「見えるところ
   /// まで」）を出す前の状態に積み、選択と見えている範囲を知らせる。箱へは出す 1 か所（`flush`）が位置を先・材料を後の
   /// 順で 1 回で書く。
   private func commit(_ finished: Transaction) {
     guard let change = bodySite.change else { return }
-    let span = finished.reveal == .none ? nil : finished.revealSite?.revealSpan(finished.revealing)
+    let span =
+      finished.reveal == .none
+      ? nil : finished.revealSite?.revealSpan(finished.revealing, rows: finished.revealingRows)
     bodySite.change = nil
     editor.noteTransaction(
       from: change.cursors, edited: change.edited, restored: change.restoresCursors)

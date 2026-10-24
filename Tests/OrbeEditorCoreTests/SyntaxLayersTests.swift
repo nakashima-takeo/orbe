@@ -288,7 +288,8 @@ final class Tracker {
     let oldEnd = text.point(at: NSMaxRange(edit.range))
     text.replace(edit.range, with: edit.replacement)
     let newEnd = text.point(at: NSMaxRange(edit.newRange))
-    let record = log.append(edit, start: start, oldEnd: oldEnd, newEnd: newEnd)
+    let record = log.append(
+      edit, start: start, oldEnd: oldEnd, newEnd: newEnd, keepsStartRow: false)
     roles.apply(edit)
     stale = edit.track(stale)
     for range in layers.apply([record], text: text).rangeView {

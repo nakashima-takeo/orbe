@@ -55,8 +55,7 @@ extension EditorPaneView {
       diffDivider.removeFromSuperview()
     }
     paintDiffDivider()
-    let responder = window?.firstResponder
-    if hadFocus || responder === self, responder !== focusTarget {
+    if hadFocus, window?.firstResponder !== focusTarget {
       window?.makeFirstResponder(focusTarget)
     }
   }
@@ -123,6 +122,9 @@ extension EditorPaneView {
     case .unavailable(.symlink): return .notice(.editorDiffSymlink)
     case .unavailable(.conflicted): return .notice(.editorDiffConflicted)
     case .unavailable(.failed): return .notice(.editorDiffFailed)
+    case .unavailable(.nowhere):
+      return .notice(
+        diff.id.kind == .staged ? .editorDiffNowhereStaged : .editorDiffNowhereInWorkingTree)
     }
   }
 

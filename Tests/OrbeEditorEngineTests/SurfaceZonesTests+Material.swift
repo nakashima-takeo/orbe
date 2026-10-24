@@ -200,4 +200,43 @@ extension SurfaceZonesTests {
     surface.textView.cancelOperation(nil)
     XCTAssertNotEqual(try pixelShot(opened).rgb(point.x, point.y), [255, 255, 255], "主でなければ描かない")
   }
+
+  /// 入力欄の横の送りは、最も広い行とキャレットが幅に収まる所までに収まる——長い 1 行を打って送った後に短い文へ置き換えれば
+  /// 行頭が見える。
+  func testTheFieldScrollIsLimitedToItsWidestLine() throws {
+    let opened = try hostedRows()
+    let surface = opened.surface
+    let field = ZoneTextField(id: "reply", style: ThreadZone.fieldStyle())
+    let thread = ThreadZone(comment: "本文", field: field)
+    thread.surface = surface
+    surface.setRows(zone(thread, at: 4))
+    surface.updateFocus(true)
+    surface.focus(field)
+    surface.textView.insertText(String(repeating: "long reply ", count: 40))
+    _ = surface.snapshot()
+    let site = try XCTUnwrap(surface.fields["reply"])
+    XCTAssertGreaterThan(site.horizontal.x, 0, "前提: 長い 1 行で送られた")
+    surface.replaceText(of: field, with: "short")
+    _ = surface.snapshot()
+    XCTAssertEqual(site.horizontal.x, 0, "短い文なら行頭が見える")
+  }
+
+  /// 「点滅しない挿入ポイント」の切り替えは、主になっている入力欄のキャレットにもすぐ効く。
+  func testTurningOffTheCaretBlinkReachesThePrimaryField() throws {
+    let opened = try hostedRows()
+    let surface = opened.surface
+    let field = ZoneTextField(id: "reply", style: ThreadZone.fieldStyle())
+    let thread = ThreadZone(comment: "本文", field: field)
+    thread.surface = surface
+    surface.setRows(zone(thread, at: 4))
+    surface.updateFocus(true)
+    surface.focus(field)
+    surface.textView.insertText("返信")
+    let site = try XCTUnwrap(surface.fields["reply"])
+    surface.flush()
+    XCTAssertEqual(surface.material.read().fields[site.serial]?.caret.blinks, true, "前提: 点滅する")
+    surface.setCaretBlinks(false)
+    surface.flush()
+    XCTAssertEqual(surface.material.read().fields[site.serial]?.caret.blinks, false)
+  }
 }

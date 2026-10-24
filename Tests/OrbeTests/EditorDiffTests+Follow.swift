@@ -131,7 +131,7 @@ extension EditorDiffTests {
     waitRows(diff, "変更が出る") { !$0.isEmpty }
     let before = try engine(diff.newSurface)
     before.flush()
-    let top = try XCTUnwrap(diff.newRevision).text.row(containing: before.viewport.firstVisible)
+    let top = before.viewport.top.line
     XCTAssertGreaterThan(top, 0, "前提: 最初の変更区間へ送られている")
     let stale = try textPixels(before)  // 前の本文を一度描かせる（描いた行は面が持ち続ける）
 
@@ -144,13 +144,13 @@ extension EditorDiffTests {
       "新しい index の本文が届く")
     let after = try engine(diff.newSurface)
     after.flush()
-    XCTAssertEqual(diff.newRevision?.text.row(containing: after.viewport.firstVisible), top)
+    XCTAssertEqual(after.viewport.top.line, top)
 
     let (other, _) = self.tab()
     let fresh = try other.group.editor.openDiff(id("long.txt", .staged), as: .pinned)
     waitRows(fresh, "開き直した diff") { !$0.isEmpty }
     let freshSurface = try engine(fresh.newSurface)
-    pumpMain(until: { freshSurface.viewport.firstVisible > 0 }, "面が大きさを持ち、最初の変更区間へ送られる")
+    pumpMain(until: { freshSurface.viewport.top.line > 0 }, "面が大きさを持ち、最初の変更区間へ送られる")
     // 絵は同じ位置で比べる（送られる位置の端数は、開き方——最初の変更区間へ送るか、前の面の先頭の行を引き継ぐか——で違う）。
     for surface in [after, freshSurface] { surface.scroll(toFirstLine: CGFloat(top)) }
     let expected = try textPixels(freshSurface)
@@ -176,7 +176,7 @@ extension EditorDiffTests {
     for mode in [EditorDiff.Mode.inline, .side] {
       modes.select(mode)
       let diff = try tab.group.editor.openDiff(id("head.txt", .staged), as: .pinned)
-      pumpMain(until: { diff.revealed }, "\(mode): 最初の変更区間へ送る")
+      pumpMain(until: { diff.placement == .placed }, "\(mode): 最初の変更区間へ送る")
       let before = try engine(diff.newSurface)
       before.flush()
       XCTAssertEqual(before.viewportLines.first, 0, "前提: \(mode): 削除行の頭から見える")
@@ -188,7 +188,7 @@ extension EditorDiffTests {
       pumpMain(
         until: {
           diff.newRevision?.text.contiguousUnits().count == staged.utf16.count
-            && diff.carriedTop == nil
+            && diff.carried == nil
         }, "\(mode): 新しい index の本文が届き、先頭を引き継ぐ")
       let after = try engine(diff.newSurface)
       XCTAssertFalse(after === before, "前提: \(mode): 面が作り直される")
@@ -196,6 +196,53 @@ extension EditorDiffTests {
       XCTAssertLessThan(after.viewportLines.visible, 100, "前提: 削除行は見えている高さより長い")
       XCTAssertEqual(after.viewportLines.first, 0, "\(mode): 削除行の頭から見え続ける")
       tab.group.editor.close(.diff(id("head.txt", .staged)))
+    }
+  }
+
+  /// インラインのステージ済み diff で削除行の塊の途中を読んでいる間に index が変わって面が作り直されても、同じ HEAD の行
+  /// （読んでいた削除行の同じ段）が上端に残る——行 0 の前の塊でも、`git add` した箇所が読んでいる所より上で index の行の
+  /// 数が変わっても。
+  func testAStagedDiffKeepsTheRowBeingReadInsideTheRemovedLines() throws {
+    let lines = (0..<300).map { "line \($0)" }
+    try repo.write("long.txt", lines.joined(separator: "\n") + "\n")
+    XCTAssertTrue(repo.git(["add", "-A"]).isSuccess)
+    XCTAssertTrue(repo.git(["commit", "-qm", "long"]).isSuccess)
+    var index = Array(lines[100..<150] + lines[250...])
+    let (tab, _) = tab()
+    let stage = { (text: [String]) in
+      try self.repo.write("long.txt", text.joined(separator: "\n") + "\n")
+      XCTAssertTrue(self.repo.git(["add", "long.txt"]).isSuccess)
+    }
+    try stage(index)
+    let diff = try tab.group.editor.openDiff(id("long.txt", .staged), as: .pinned)
+    pumpMain(until: { diff.placement == .placed && diff.newSurface != nil }, "最初の変更区間へ送る")
+    struct Read {
+      let top: RowPosition
+      let change: (inout [String]) -> Void
+      let expected: RowPosition
+      let message: String
+    }
+    let reads = [
+      Read(
+        top: RowPosition(line: 0, offset: -50), change: { $0[20] = "below" },
+        expected: RowPosition(line: 0, offset: -50), message: "行 0 の前の塊"),
+      Read(
+        top: RowPosition(line: 50, offset: -40),
+        change: { $0.insert(contentsOf: ["x", "y", "z"], at: 10) },
+        expected: RowPosition(line: 53, offset: -40), message: "上で 3 行増えた"),
+    ]
+    for read in reads {
+      let (top, expected, message) = (read.top, read.expected, read.message)
+      let before = try engine(diff.newSurface)
+      before.scroll(to: top)
+      before.flush()
+      XCTAssertEqual(before.viewport.top, top, "前提: \(message) の途中を読む")
+      read.change(&index)
+      try stage(index)
+      pumpMain(until: { diff.newSurface !== before && diff.carried == nil }, "\(message): 面が作り直される")
+      let after = try engine(diff.newSurface)
+      after.flush()
+      XCTAssertEqual(after.viewport.top, expected, "\(message): 同じ HEAD の行が上端に残る")
     }
   }
 
@@ -218,6 +265,42 @@ extension EditorDiffTests {
     }
   }
 
+  /// 並列のまま、外の書き換えがずらしたハンクの形を崩す 2 通り（行の数を変えながら 2 区間をまたぐ・行の途中から末尾まで
+  /// 消す）を受けても、並びは今の本文の中に収まり、左右の高さが揃う（落ちない）。
+  func testSideBySideSurvivesExternalWritesAcrossHunks() throws {
+    let cases = [
+      ("a\nb\nc\nd\ne\nf\ng\nh\n", "a\nb\nC\nd\nE\nf\ng\nh\n", "a\nX\nC\nd\nE\nf\nY\nY2\nh\n"),
+      ("a\nb\nX\nY", "a\nb\nc", "a\nb"),
+    ]
+    let (tab, _) = tab()
+    tab.group.view.editor.configure(
+      translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
+      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(),
+      diffModes: EditorDiffModeState(mode: .side))
+    for (index, (staged, working, written)) in cases.enumerated() {
+      let path = "s\(index).txt"
+      try repo.write(path, staged)
+      XCTAssertTrue(repo.git(["add", path]).isSuccess)
+      try repo.write(path, working)
+      let diff = try tab.group.editor.openDiff(id(path, .workingTree), as: .pinned)
+      pumpMain(until: { diff.content == .ready && diff.oldSurface != nil }, "並列")
+      let document = try XCTUnwrap(diff.document)
+      XCTAssertTrue(document.waitUntilCaughtUp())
+      try repo.write(path, written)
+      document.reconcileWithDisk()
+      XCTAssertEqual(
+        document.text.contiguousUnits().count, written.utf16.count, "前提: 結果が届く前に差し替わった")
+      let (left, right) = (try engine(diff.oldSurface), try engine(diff.newSurface))
+      let lines = try XCTUnwrap(diff.old).text.lineCount
+      XCTAssertTrue(
+        right.rows.boundaries.allSatisfy { $0 <= document.text.lineCount }, "右の差し込みは本文の中")
+      XCTAssertEqual(
+        left.rows.lastUnit(lineCount: lines),
+        right.rows.lastUnit(lineCount: document.text.lineCount),
+        "左右の高さが揃う: \(path)")
+    }
+  }
+
   /// 並列のまま作業ツリーのファイルが消えて新しい側の面が替わっても、左右の面はスクロールを共にし続ける。
   func testSideBySideKeepsSharingTheScrollWhenTheFileIsRemoved() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
@@ -233,7 +316,8 @@ extension EditorDiffTests {
     XCTAssertTrue(try engine(diff.oldSurface).partner === diff.newSurface as? MetalTextSurface)
   }
 
-  /// 並列で左の面に焦点があるまま index が変わって左の面を作り直しても、焦点は diff の面に残る（窓へ落ちない）。
+  /// 並列で左の面に焦点があるまま index が変わって左の面を作り直しても、焦点は作り直した左の面に残る（窓へ落ちず、右へも
+  /// 移らない）。
   func testTheFocusStaysInTheDiffWhenTheLeftSurfaceIsRebuilt() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let modes = EditorDiffModeState(mode: .side)
@@ -249,9 +333,6 @@ extension EditorDiffTests {
     XCTAssertTrue(repo.git(["add", "a.txt"]).isSuccess)
     pumpMain(
       until: { diff.oldSurface.map { $0.responder !== left } ?? false }, "左の面が作り直される")
-    let focused = window.firstResponder
-    XCTAssertTrue(
-      focused === diff.oldSurface?.responder || focused === diff.newSurface?.responder,
-      "焦点は diff の面に残る")
+    XCTAssertTrue(window.firstResponder === diff.oldSurface?.responder, "焦点は最後に焦点のあった左の面に残る")
   }
 }
