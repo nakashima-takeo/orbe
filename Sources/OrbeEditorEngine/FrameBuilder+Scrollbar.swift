@@ -91,7 +91,7 @@ struct RulerSpans {
     var lineCount: Int
     /// 縦の並びの版（行を表示の単位へ写す）。
     var rows: Int
-    var contentLines: CGFloat
+    var scrollLines: CGFloat
     var visibleLines: CGFloat
     var height: CGFloat
     var scale: CGFloat
@@ -108,7 +108,7 @@ struct RulerSpans {
     /// 本文の版（同じオフセットのキャレットでも、本文が変われば行が変わりうる）と縦の並びの版。
     var version: Int
     var rows: Int
-    var contentLines: CGFloat
+    var scrollLines: CGFloat
     var visibleLines: CGFloat
     var height: CGFloat
     var scale: CGFloat
@@ -239,7 +239,7 @@ extension FrameBuilder {
     let rows = source.material.rows
     let key = RulerSpans.CaretKey(
       carets: carets, version: content.version, rows: rows.version,
-      contentLines: ruler.scrollLines, visibleLines: lines.visible, height: area.height,
+      scrollLines: ruler.scrollLines, visibleLines: lines.visible, height: area.height,
       scale: ruler.scale)
     guard key != rulerSpans.caretKey else { return }
     rulerSpans.caretKey = key
@@ -262,7 +262,7 @@ extension FrameBuilder {
     let rows = source.material.rows
     let key = RulerSpans.Key(
       find: find.generation, word: word.generation, marks: marks, lineCount: text.lineCount,
-      rows: rows.version, contentLines: ruler.scrollLines, visibleLines: lines.visible,
+      rows: rows.version, scrollLines: ruler.scrollLines, visibleLines: lines.visible,
       height: area.height, scale: ruler.scale,
       current: highlights.crowded ? highlights.current.first : nil)
     guard key != rulerSpans.key else { return }
