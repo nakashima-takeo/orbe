@@ -1,7 +1,7 @@
 ---
 title: ファイルと git
 description: エディターの根・根のサービスの寿命・監視と通知・取り直し・status とバッジ・版の本文と baseline・git の書き込みの入口・一覧と新規作成・外部変更
-updated: 2026-10-18
+updated: 2026-10-24
 ---
 
 # ファイルと git
