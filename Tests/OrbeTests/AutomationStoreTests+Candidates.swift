@@ -125,18 +125,18 @@ extension AutomationStoreTests {
     XCTAssertEqual(proposals(store), [a.link: .dismissed])
   }
 
-  /// 出どころが出来事で人がさばいた候補は、次の確定で忘れ、その取得の回の「下げた」には数えない。
-  func testANewArrivalsProposalTheUserHandledIsForgottenOnceItsLinkLeaves() throws {
+  /// 出どころが出来事で人がさばいた候補はその場で忘れ、後の取得の回の「下げた」には数えない。
+  func testANewArrivalsProposalTheUserHandledIsForgottenAtOnceAndNotCountedAsWithdrawn() throws {
     let store = AutomationStore()
     let id = try store.create(Self.definition(coverage: .newArrivals), now: Self.at).id
     let a = Self.item("a")
     try Self.fetch(store, id, [a])
     try Self.judge(store, id, proposing: [a])
     try store.dismiss(XCTUnwrap(store.proposals.first?.id))
+    XCTAssertEqual(proposals(store), [:])
 
     try Self.fetch(store, id, [])
 
-    XCTAssertEqual(proposals(store), [:])
     XCTAssertEqual(store.automation(id)?.state(key: "fetch").runs.first?.run?.withdrawn, 0)
   }
 

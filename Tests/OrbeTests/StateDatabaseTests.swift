@@ -69,15 +69,20 @@ final class StateDatabaseTests: OrbeTestCase {
     return statement.int64(at: 0)
   }
 
-  private static let parentTable = "CREATE TABLE parent (id INTEGER PRIMARY KEY, name TEXT NOT NULL"
   private static let childTable = """
     CREATE TABLE child (
       id INTEGER PRIMARY KEY,
       parent_id INTEGER NOT NULL REFERENCES parent (id) ON DELETE CASCADE)
     """
   /// 子の表に指される親の表を持つ版 1 と、親の表に列を足した版 2。
-  private static let parentAndChildV1 = "\(parentTable)); \(childTable)"
-  private static let parentAndChildV2 = "\(parentTable), note TEXT); \(childTable)"
+  private static let parentAndChildV1 = """
+    CREATE TABLE parent (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+    \(childTable)
+    """
+  private static let parentAndChildV2 = """
+    CREATE TABLE parent (id INTEGER PRIMARY KEY, name TEXT NOT NULL, note TEXT);
+    \(childTable)
+    """
 
   /// 親と、それを指す子を 1 行ずつ持つ版 1 の DB を作る。
   private func seedParentAndChild() throws {

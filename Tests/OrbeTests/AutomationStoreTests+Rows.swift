@@ -45,7 +45,6 @@ extension AutomationStoreTests {
     { AutomationItem(id: $0, link: "https://example.com/\($0)", body: "\($0) の本文", time: at) }
   }
 
-  /// 受け手の回（読める行をすべて取る）。取った行の書かれた id（下流へ渡す id の接頭を外したもの）を返す。
   /// 処理の部品 `copy` の、取った行をすべて引き継いで出す回を確定する。
   private func copyAll(_ store: AutomationStore, _ id: Int, at: Date) throws {
     let part = store.part(id, "copy")
@@ -61,6 +60,7 @@ extension AutomationStoreTests {
           }, read: read.taken.count)))
   }
 
+  /// 受け手の回（読める行をすべて取る）。取った行の書かれた id（下流へ渡す id の接頭を外したもの）を返す。
   @discardableResult private func take(
     _ store: AutomationStore, _ id: Int, _ key: String, at: Date, failing: Bool = false
   ) throws -> [String] {
