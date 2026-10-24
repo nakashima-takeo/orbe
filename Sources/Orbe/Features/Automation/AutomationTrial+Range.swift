@@ -67,7 +67,7 @@ extension AutomationTrial {
         "rows cannot be given to the judge part \"\(entry.key)\": a judge proposes only from items "
           + "a fetch part fetched, so give the items to a fetch part above it")
     case .fetch:
-      var outputs = AutomationOutputs(.fetch(since: nil))
+      var outputs = AutomationOutputs(.fetch(since: nil), writer: entry.id)
       let broken = outputs.put(rows.joined(separator: "\n"))
       guard broken.isEmpty else { throw .invalid("rows: \(broken[0].text)") }
       return Given(entry: entry.id, writer: entry.id, rows: outputs.rows)
@@ -79,18 +79,10 @@ extension AutomationTrial {
             + "rows are given as the output of a single input, so give them to one of those parts "
             + "(with from) instead")
       }
-      var arrivals: [AutomationPartRow] = []
-      for (index, row) in rows.enumerated() {
-        guard AutomationOutputs.fits(row) else {
-          throw .invalid(
-            "rows: \(AutomationBrokenLine(line: index + 1, fault: .tooLarge).text)")
-        }
-        guard let id = AutomationPrompts.id(of: row) else {
-          throw .invalid("rows: item \(index + 1): missing id")
-        }
-        arrivals.append(AutomationPartRow(id: id, text: row, origin: nil, source: nil))
-      }
-      return Given(entry: entry.id, writer: upstream, rows: arrivals)
+      var outputs = AutomationOutputs(.process([], reachesJudge: false), writer: upstream)
+      let broken = outputs.put(rows.joined(separator: "\n"))
+      guard broken.isEmpty else { throw .invalid("rows: \(broken[0].text)") }
+      return Given(entry: entry.id, writer: upstream, rows: outputs.rows)
     }
   }
 }

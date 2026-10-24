@@ -112,7 +112,7 @@ struct AutomationPartPass {
           stderr: BackgroundLimits.command.stderr))
       handle = run(job) { result in
         guard !stopped else { return }
-        completion(Self.commandEnded(result, input))
+        completion(Self.commandEnded(result, input, writer: node.id))
       }
       return BackgroundRunHandle {
         stopped = true
@@ -120,7 +120,7 @@ struct AutomationPartPass {
       }
     case .agent(let agent):
       guard let model = node.model else { preconditionFailure("an agent part has a model") }
-      let session = AutomationRunSession(input)
+      let session = AutomationRunSession(input, writer: node.id)
       let runSessions = self.runSessions
       let token = runSessions.open(session)
       let job = BackgroundJob(

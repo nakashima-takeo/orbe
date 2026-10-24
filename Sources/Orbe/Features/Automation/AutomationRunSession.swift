@@ -28,7 +28,7 @@ final class AutomationRunSession {
   }
 
   /// 1 回の読みで返す行の数の既定と上限、大きさの和の目安（バイト）。agent の `limit` は上限で、Orbe は大きさの和が目安を
-  /// 超えたらそこでページを切る（先頭の 1 行は必ず返す。行 1 つは `AutomationOutputs.rowKiB` に収まる）。どのページも claude が
+  /// 超えたらそこでページを切る（先頭の 1 行は必ず返す。下流へ渡す形の行 1 つは `AutomationOutputs.rowKiB` に収まる）。どのページも claude が
   /// 道具の結果をファイルに書き出す閾値（Orbe の口の `read_run_rows` は 500,000 字に上げてある）より十分小さい。
   static let pageDefault = 50
   static let pageLimit = 100
@@ -58,8 +58,9 @@ final class AutomationRunSession {
     return AutomationRejections(unfixed + rejected.dropLast(unfixed.count))
   }
 
-  init(_ input: AutomationPartPass.Input) {
-    outputs = AutomationOutputs(input)
+  /// `writer` は回を走らせる部品（出す行の下流へ渡す id の接頭）。
+  init(_ input: AutomationPartPass.Input, writer: AutomationPartID) {
+    outputs = AutomationOutputs(input, writer: writer)
     rows = input.rowTexts
     let read: [Tool] = rows.isEmpty ? [] : [.readRunRows]
     switch input {

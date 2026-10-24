@@ -6,12 +6,15 @@ import Foundation
 struct AutomationOutputs {
   /// 残す報告・仕事の文の上限（字）。回の記録は部品ごとに 20 回残る。
   static let reportLimit = 2000
-  /// 下流へ渡す行 1 つの大きさの上限（UTF-8 のバイト、KiB）。行を見る agent は行を Orbe の口（`read_run_rows`）で読み、claude
-  /// は道具の 1 回の結果が閾値（Orbe の口は 500,000 字に上げてある）を超えるとファイルに書き出して agent に見せないので、
-  /// どの行も 1 ページで届く大きさにする。上限は閾値から返事の頭と JSON の逃がしの膨らみ（最大 6 倍）を引いて余裕を持たせた値。
+  /// 下流へ渡す行 1 つの大きさの上限（下流へ渡す形の UTF-8 のバイト、KiB）。行を見る agent は行を Orbe の口
+  /// （`read_run_rows`）で読み、claude は道具の 1 回の結果が閾値（Orbe の口は 500,000 字に上げてある）を超えるとファイルに
+  /// 書き出して agent に見せないので、どの行も 1 ページで届く大きさにする。claude は結果を復号後の文字（UTF-16 の単位）で数え、
+  /// その数は UTF-8 のバイト数を超えないので、上限は閾値より十分小さく取ってある。
   static let rowKiB = 64
 
   let input: AutomationPartPass.Input
+  /// 行を出す部品（下流へ渡す id の接頭）。
+  let writer: AutomationPartID
   /// 受けた行（取得・処理）。取得は書かれた id と書かれたままの 1 行（余分な欄も残す）、処理は入力と `id` で照らせた行だけが
   /// その入力を引き継ぎ、出どころも引き継ぐ。
   private(set) var rows: [AutomationPartRow] = []
@@ -23,8 +26,9 @@ struct AutomationOutputs {
   private var ids = Set<String>()
   private var judgeSeen = JudgeSeen()
 
-  init(_ input: AutomationPartPass.Input) {
+  init(_ input: AutomationPartPass.Input, writer: AutomationPartID) {
     self.input = input
+    self.writer = writer
   }
 
   /// 受けた件数——取得は項目、処理・判定は行、報告・仕事は文があれば 1。
@@ -90,7 +94,7 @@ struct AutomationOutputs {
       AutomationBrokenLine(line: $0.line, fault: AutomationLineFault($0.reason))
     }
     for accepted in read.accepted {
-      guard Self.fits(accepted.text) else {
+      guard fits(accepted.text, id: accepted.item.id, inherited: false) else {
         broken.append(AutomationBrokenLine(line: accepted.line, fault: .tooLarge))
         continue
       }
@@ -111,12 +115,12 @@ struct AutomationOutputs {
     var (objects, broken) = Self.objectRows(text)
     let inputs = Dictionary(input.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
     for object in objects {
-      guard Self.fits(object.text) else {
-        broken.append(AutomationBrokenLine(line: object.line, fault: .tooLarge))
-        continue
-      }
       guard let id = AutomationPrompts.id(of: object.text) else {
         broken.append(AutomationBrokenLine(line: object.line, fault: .missingKey("id")))
+        continue
+      }
+      guard fits(object.text, id: id, inherited: inputs[id]?.source != nil) else {
+        broken.append(AutomationBrokenLine(line: object.line, fault: .tooLarge))
         continue
       }
       guard !reachesJudge || inputs[id] != nil else {
@@ -162,9 +166,11 @@ struct AutomationOutputs {
     return broken.sorted { ($0.line ?? 0) < ($1.line ?? 0) }
   }
 
-  /// 下流へ渡す行が大きさの上限に収まるか。
-  static func fits(_ row: String) -> Bool {
-    row.utf8.count <= rowKiB << 10
+  /// 書かれた 1 行が、下流へ渡す形（Orbe が下流へ渡す id を入れて組み直した 1 行）で大きさの上限に収まるか。`inherited` は
+  /// 入力を引き継いだ行（id をそのまま渡す）。
+  private func fits(_ text: String, id: String, inherited: Bool) -> Bool {
+    let downstream = AutomationDatabase.downstreamId(id, of: writer, inherited: inherited)
+    return AutomationPrompts.replacing(id: downstream, in: text).utf8.count <= Self.rowKiB << 10
   }
 
   /// 1 件 1 行の JSON をオブジェクトとして読む。読めない件はすべて位置と理由で返す。

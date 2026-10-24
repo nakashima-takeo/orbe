@@ -112,7 +112,7 @@ extension AutomationTrialTests {
   }
 
   /// 入力のある入口に与えた行は、ただ 1 つの上流（の写し）の出力として足され、上流の行として（接頭付きの id で）取られる。
-  /// 「届いたら」の入口も今すぐ動き、その回は今すぐの回として記録される。上流が複数の入口に与えると断る。
+  /// 「届いたら」の入口も今すぐ動き、その回は今すぐの回として記録される。上流が複数の入口に与えると断り、上限を超える行も断る。
   func testRowsGivenToAPartWithInputsArriveAsTheRowsOfItsUpstream() throws {
     let id = try define([
       fetch("gh"), part("p", .arrival, from: ["gh"]),
@@ -138,6 +138,13 @@ extension AutomationTrialTests {
     XCTAssertThrowsError(try trials.start(merged, .init(from: ["p"], rows: [#"{"id":"x"}"#]))) {
       guard case .invalid(let message) = $0 as? AutomationError else { return XCTFail("\($0)") }
       XCTAssertTrue(message.hasPrefix(#"rows: "p" has 2 inputs"#), message)
+    }
+
+    let large = String(repeating: "x", count: AutomationOutputs.rowKiB << 10)
+    XCTAssertThrowsError(
+      try trials.start(id, .init(from: ["p"], rows: [#"{"id":"y","note":"\#(large)"}"#]))
+    ) {
+      XCTAssertEqual($0 as? AutomationError, .invalid("rows: item 1: larger than 64 KiB"))
     }
   }
 }
