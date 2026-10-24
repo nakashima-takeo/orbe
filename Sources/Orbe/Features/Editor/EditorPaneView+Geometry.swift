@@ -60,9 +60,11 @@ extension EditorPaneView {
 
   /// 焦点を持っているサイドバーのパネル（検索パネル・ソース管理パネルの入力欄か列）。
   var panelHoldingFocus: EditorSidebarState.Panel? {
-    if focusIsInSearchPanel { return .search }
-    if focusIsInSourceControl { return .sourceControl }
-    return nil
+    switch sidebar.panel {
+    case .files: return nil
+    case .search: return focusIsInSearchPanel ? .search : nil
+    case .sourceControl: return focusIsInSourceControl ? .sourceControl : nil
+    }
   }
 
   /// 列の頭の高さ（タブ行 ＋ 下の hairline、本体がパンくずを持てばパンくずも——空状態だけ持たない）。SwiftUI 側の
