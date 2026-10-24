@@ -657,6 +657,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardNodeTools
   case boardNodeTrigger
   case boardNodeSaving
+  case boardNodeKeep
   case boardNodeFrom
   case boardNodeDestination
   case boardPending
@@ -670,6 +671,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardNodeToolCommand
   case boardNodeOverwrite
   case boardNodeAppend
+  case boardNodeKeepWhileCurrent
+  case boardNodeKeepUntilDecided
   case boardNodeAppendSince
   case boardNodeTakeAll
   case boardNodeMaxAge

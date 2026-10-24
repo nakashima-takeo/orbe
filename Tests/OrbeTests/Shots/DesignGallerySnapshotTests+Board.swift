@@ -123,6 +123,7 @@ extension DesignGallerySnapshotTests {
     try renderBoardCronSnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardMapSnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardJudgeOutcomeSnapshots(write: write, board: { board($0, row: $1) })
+    try renderBoardKeepSnapshots(write: write, board: { board($0, row: $1) })
   }
 
   /// 定義を読めない自動化（一覧の先頭の行と、名前・理由・「修正を依頼」だけの詳細）と、不明な記録（Slack の取得のカード）。
@@ -214,6 +215,25 @@ extension DesignGallerySnapshotTests {
     try write("board_map_paused.png", map(3), .ja, size)
     try write(
       "board_map_narrow.png", map(0, nodeKey: "contact"), .ja, NSSize(width: 1000, height: 844))
+  }
+
+  /// 候補の保持: 判断待ちを、対応済みか人がさばくまで保つ判定のカード（既定の判定は board_map_card）。
+  private func renderBoardKeepSnapshots(
+    write: (String, BoardModel, Language, NSSize) throws -> Void,
+    board: ([AutomationSample]?, Int) -> BoardModel
+  ) throws {
+    var keeping = DesignSceneFixtures.boardMapSamples()
+    if let contact = keeping[0].definition.nodes.firstIndex(where: { $0.key == "contact" }) {
+      keeping[0].definition.nodes[contact].action.keep = .untilDecided
+    }
+    for language in [Language.ja, .en] {
+      let model = board(keeping, 0)
+      model.automation.enterMap()
+      model.automation.tapNode(key: "contact")
+      try write(
+        "board_map_card_keep\(language == .ja ? "" : "_en").png", model, language,
+        NSSize(width: 1440, height: 844))
+    }
   }
 
   /// 判定のノードの回の終わり方ごとのカード: 形式エラーをその場で修正済み・修正されず失敗（agent と、コマンドの出力の形式
