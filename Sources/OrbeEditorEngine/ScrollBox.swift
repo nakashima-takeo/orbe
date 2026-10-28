@@ -121,11 +121,6 @@ final class ScrollBox: Sendable {
     }
   }
 
-  /// 本文を丸ごと置き換えた。最も長い行を、版 `version` 以降の写しを描いたコマで測り直す（それまで横の位置は保つ）。
-  func remeasure(from version: Int) {
-    with { s, m in s.members[m].remeasureFrom = version }
-  }
-
   /// まだ当てていないずらし `shift`・範囲 `update`・位置 `place` を当てたときに見せる位置と範囲（箱は書き換えない。main の
   /// 読み取り）。
   func peek(at t: Double, shift: Double, limits update: LimitsUpdate?, place: SIMD2<Double>?) -> (

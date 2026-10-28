@@ -317,11 +317,12 @@ final class MetalTextSurface: TextSurface {
 
   // MARK: - 焦点と撮影
 
-  /// ⌘ を押している間の、本文の上のポインタの位置（押していない・本文の外なら nil）。
+  /// ⌘ を押している間の、本文の上のポインタの位置（押していない・本文の外・面に焦点が無いなら nil）。取引に書くだけで、
+  /// 出すきっかけは呼び手が決める（出来事の入口は処理の終わり、Orbe から始まる呼び出しは runloop の 1 周の終わり）。
   func setLinkPointer(_ point: CGPoint?) {
     guard point != linkPointer else { return }
     linkPointer = point
-    inputScope { write { $0.linkPointer = point } }
+    write { $0.linkPointer = point }
   }
 
   /// 焦点（first responder で、窓が key）が変わりうる。変われば点滅を表示からやり直し、選択の地の色を替える。
@@ -329,6 +330,7 @@ final class MetalTextSurface: TextSurface {
     guard focused != self.focused else { return }
     transact {
       self.focused = focused
+      if !focused { setLinkPointer(nil) }
       zoneSelectionFocusDidChange()
     }
   }
@@ -337,7 +339,10 @@ final class MetalTextSurface: TextSurface {
   /// いる間の描画スレッドの起床は 0。
   func setCaretBlinks(_ blinks: Bool) {
     guard blinks != caretBlinks else { return }
-    transact { caretBlinks = blinks }
+    transact {
+      caretBlinks = blinks
+      for site in fields.values { site.touch() }
+    }
   }
 
   func focusDidChange(_ focused: Bool) {

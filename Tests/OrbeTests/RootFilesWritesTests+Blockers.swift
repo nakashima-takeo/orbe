@@ -24,10 +24,8 @@ extension RootFilesWritesTests {
     try repo.write("d", "a file where the directory was\n")
     let files = repo.files()
 
-    let rows = ["p.txt", "q.txt", "r.txt", "d/x", "d"].map {
-      GitStatus.Row(path: $0, originalPath: nil)
-    }
-    let discarded = finish(files) { files.discard(rows, completion: $0) }
+    let content = files.status!.discarding("p.txt", "q.txt", "r.txt", "d/x", "d")
+    let discarded = finish(files) { files.discard(content, completion: $0) }
     XCTAssertNil(discarded.failure)
     for path in ["p.txt", "q.txt", "r.txt", "d/x"] {
       XCTAssertEqual(
@@ -57,8 +55,9 @@ extension RootFilesWritesTests {
     }
     let files = repo.files()
 
-    let rows = ["D/x", "d"].map { GitStatus.Row(path: $0, originalPath: nil) }
-    let discarded = finish(files) { files.discard(rows, completion: $0) }
+    let discarded = finish(files) {
+      files.discard(files.status!.discarding("D/x", "d"), completion: $0)
+    }
     XCTAssertNil(discarded.failure)
     XCTAssertEqual(try String(contentsOfFile: repo.root + "/D/x", encoding: .utf8), "tracked\n")
     let trash = try XCTUnwrap(GitRepo.trashDirectoryOverride)
@@ -81,8 +80,9 @@ extension RootFilesWritesTests {
     XCTAssertTrue(repo.git(["add", "-N", "d"]).isSuccess)
     let files = repo.files()
 
-    let rows = ["D/x", "d"].map { GitStatus.Row(path: $0, originalPath: nil) }
-    let discarded = finish(files) { files.discard(rows, completion: $0) }
+    let discarded = finish(files) {
+      files.discard(files.status!.discarding("D/x", "d"), completion: $0)
+    }
     XCTAssertNil(discarded.failure)
     XCTAssertEqual(try String(contentsOfFile: repo.root + "/D/x", encoding: .utf8), "tracked\n")
     XCTAssertFalse(

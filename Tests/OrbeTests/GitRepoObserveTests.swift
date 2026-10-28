@@ -207,6 +207,24 @@ final class GitRepoObserveTests: OrbeTestCase {
       "大小無視の照合は `:(literal)` を貫通する——別の綴りのキーで返さない")
   }
 
+  /// サブモジュールの項目は、index・HEAD ともファイルと分けて、gitlink が指すコミットで返す。作業ツリーで取り出している
+  /// コミットは、中のリポジトリの最上位がそのパスのときだけ引ける。
+  func testVersionEntriesTellASubmoduleFromAFile() throws {
+    try repo.addSubmodule("sub")
+    let git = try repo.open()
+    let commit = repo.git(["-C", "sub", "rev-parse", "HEAD"]).stdoutText.trimmingCharacters(
+      in: .newlines)
+    let index = try XCTUnwrap(indexVersions(git, ["sub", "a.txt"]))
+    XCTAssertEqual(index["sub"], .submodule(commit))
+    XCTAssertNotNil(files(index)?["a.txt"], "ファイルは blob")
+    XCTAssertEqual(try XCTUnwrap(headVersions(git, ["sub"]))["sub"], .submodule(commit))
+    XCTAssertEqual(submoduleHead(git, "sub"), commit)
+    try FileManager.default.createDirectory(
+      at: URL(fileURLWithPath: repo.root).appendingPathComponent("plain"),
+      withIntermediateDirectories: true)
+    XCTAssertNil(submoduleHead(git, "plain"), "親のリポジトリの HEAD を答えない")
+  }
+
   /// HEAD の版は、ディスク上の NFD の綴りで問うても引ける（index と同じ照合）。
   func testHeadEntriesFindANameAskedInNFD() throws {
     let git = try repo.open()
@@ -233,8 +251,24 @@ final class GitRepoObserveTests: OrbeTestCase {
     return result
   }
 
+  /// ファイルの項目の OID（サブモジュールは除く）。
   private func headEntries(_ git: GitRepo, _ paths: [String]) -> [String: String]? {
-    var result: [String: String]?
+    files(headVersions(git, paths))
+  }
+
+  private func indexEntries(_ git: GitRepo, _ paths: [String]) -> [String: String]? {
+    files(indexVersions(git, paths))
+  }
+
+  private func files(_ entries: [String: GitVersionEntry]?) -> [String: String]? {
+    entries?.compactMapValues {
+      if case .file(let oid) = $0 { return oid }
+      return nil
+    }
+  }
+
+  private func headVersions(_ git: GitRepo, _ paths: [String]) -> [String: GitVersionEntry]? {
+    var result: [String: GitVersionEntry]?
     let done = expectation(description: "ls-tree")
     git.headEntries(relativePaths: paths) {
       result = $0
@@ -244,10 +278,21 @@ final class GitRepoObserveTests: OrbeTestCase {
     return result
   }
 
-  private func indexEntries(_ git: GitRepo, _ paths: [String]) -> [String: String]? {
-    var result: [String: String]?
+  private func indexVersions(_ git: GitRepo, _ paths: [String]) -> [String: GitVersionEntry]? {
+    var result: [String: GitVersionEntry]?
     let done = expectation(description: "ls-files")
     git.indexEntries(relativePaths: paths) {
+      result = $0
+      done.fulfill()
+    }
+    wait(for: [done], timeout: 20)
+    return result
+  }
+
+  private func submoduleHead(_ git: GitRepo, _ path: String) -> String? {
+    var result: String?
+    let done = expectation(description: "rev-parse")
+    git.submoduleHead(relativePath: path) {
       result = $0
       done.fulfill()
     }

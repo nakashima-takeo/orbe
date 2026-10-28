@@ -551,6 +551,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorDiffSymlink
   case editorDiffConflicted
   case editorDiffFailed
+  case editorDiffNowhereInWorkingTree
+  case editorDiffNowhereStaged
 
   // MARK: - Editor 面（骨: エクスプローラー）
   case editorExplorerTitle
@@ -624,7 +626,8 @@ enum L10nKey: String, CaseIterable, Sendable {
   case editorScmDiscardTitleOne
   case editorScmDiscardTitleOther
   case editorScmDiscardMessage
-  case editorScmDiscardUntracked
+  case editorScmDiscardToTrashOne
+  case editorScmDiscardToTrashOther
   case editorScmDiscardConfirm
   case editorScmFailureAuthentication
   case editorScmFailureHostKey

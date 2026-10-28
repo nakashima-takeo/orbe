@@ -2,6 +2,12 @@ import Foundation
 
 // MARK: - 観測（status・index の読み）
 
+/// 版（index・HEAD）の木の項目——ファイル（blob の OID）か、サブモジュール（gitlink が指すコミット）。
+enum GitVersionEntry: Equatable {
+  case file(String)
+  case submodule(String)
+}
+
 /// 前の値と比べた status の読み。
 enum GitStatusRead: Equatable {
   case changed(GitStatus)
@@ -36,13 +42,15 @@ extension GitRepo {
       }, completion: completion)
   }
 
-  /// index にある blob の OID（相対パス → OID。stage 0 だけ＝競合中のパスは含まない）。
+  /// index にある項目（相対パス → ファイルの blob の OID かサブモジュールのコミット。stage 0 だけ＝競合中のパスは含まない）。
   /// 空の問い合わせは git を起こさない。git が失敗したら nil。
   ///
   /// パスはファイル名そのもの（ユーザーのデータ）なので pathspec として解釈させない——`:` 始まりは magic、
   /// `*` `[` は glob で、`:(` 始まりは fatal になって根の全 baseline が凍る。`:(literal)` を前置し、
   /// これを無効化する環境変数は `GitRunner` が落とす。
-  func indexEntries(relativePaths: [String], completion: @escaping ([String: String]?) -> Void) {
+  func indexEntries(
+    relativePaths: [String], completion: @escaping ([String: GitVersionEntry]?) -> Void
+  ) {
     guard !relativePaths.isEmpty else {
       completion([:])
       return
@@ -54,7 +62,7 @@ extension GitRepo {
         completion(nil)
         return
       }
-      var entries: [String: String] = [:]
+      var entries: [String: GitVersionEntry] = [:]
       for record in output.stdout.split(separator: 0) {
         // `<mode> <oid> <stage>\t<path>`
         guard let line = String(bytes: record, encoding: .utf8),
@@ -62,19 +70,23 @@ extension GitRepo {
         else { continue }
         let fields = line[..<tab].split(separator: " ")
         guard fields.count == 3, fields[2] == "0" else { continue }
-        entries[String(line[line.index(after: tab)...])] = String(fields[1])
+        let oid = String(fields[1])
+        entries[String(line[line.index(after: tab)...])] =
+          fields[0] == "160000" ? .submodule(oid) : .file(oid)
       }
       completion(entries)
     }
   }
 
-  /// HEAD のツリーにある blob の OID（相対パス → OID。無いもの・ファイルでないもの（submodule・ディレクトリ）は含まない。
+  /// HEAD のツリーにある項目（相対パス → ファイルの blob の OID かサブモジュールのコミット。無いもの・ディレクトリは含まない。
   /// 初回コミット前は空）。空の問い合わせは git を起こさない。git が失敗したら nil。
   ///
   /// パスは `indexEntries` と同じく `:(literal)` を前置した pathspec で argv に渡す——macOS の git は argv のパスを
   /// `core.precomposeunicode` で NFC に揃えて照合するので、ディスク上の NFD の綴りでも index と同じく引ける。
   /// 初回コミット前は HEAD が無くて失敗するので、そのときは HEAD が無いことを確かめて空にする。
-  func headEntries(relativePaths: [String], completion: @escaping ([String: String]?) -> Void) {
+  func headEntries(
+    relativePaths: [String], completion: @escaping ([String: GitVersionEntry]?) -> Void
+  ) {
     guard !relativePaths.isEmpty else {
       completion([:])
       return
@@ -90,17 +102,35 @@ extension GitRepo {
         }
         return
       }
-      var entries: [String: String] = [:]
+      var entries: [String: GitVersionEntry] = [:]
       for record in output.stdout.split(separator: 0) {
         // `<mode> <type> <oid>\t<path>`
         guard let line = String(bytes: record, encoding: .utf8),
           let tab = line.firstIndex(of: "\t")
         else { continue }
         let fields = line[..<tab].split(separator: " ")
-        guard fields.count == 3, fields[1] == "blob" else { continue }
-        entries[String(line[line.index(after: tab)...])] = String(fields[2])
+        guard fields.count == 3 else { continue }
+        let path = String(line[line.index(after: tab)...])
+        switch fields[1] {
+        case "blob": entries[path] = .file(String(fields[2]))
+        case "commit": entries[path] = .submodule(String(fields[2]))
+        default: continue
+        }
       }
       completion(entries)
+    }
+  }
+
+  /// 作業ツリーのサブモジュール `relativePath` が取り出しているコミット。中のリポジトリの最上位がそのパスのときだけで（初期化
+  /// していないサブモジュールの中では親の HEAD を答えない）、取り出していない・git が失敗したら nil。
+  func submoduleHead(relativePath: String, completion: @escaping (String?) -> Void) {
+    let path = (root as NSString).appendingPathComponent(relativePath)
+    runner.run(["rev-parse", "--show-toplevel", "HEAD"], cwd: path) { output in
+      let lines = output.stdoutText.split(separator: "\n")
+      guard output.isSuccess, lines.count == 2,
+        GitWorktreeRoot.normalizedPath(String(lines[0])) == GitWorktreeRoot.normalizedPath(path)
+      else { return completion(nil) }
+      completion(String(lines[1]))
     }
   }
 

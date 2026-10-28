@@ -91,6 +91,7 @@ struct RulerSpans {
     var lineCount: Int
     /// 縦の並びの版（行を表示の単位へ写す）。
     var rows: Int
+    var scrollLines: CGFloat
     var visibleLines: CGFloat
     var height: CGFloat
     var scale: CGFloat
@@ -107,6 +108,7 @@ struct RulerSpans {
     /// 本文の版（同じオフセットのキャレットでも、本文が変われば行が変わりうる）と縦の並びの版。
     var version: Int
     var rows: Int
+    var scrollLines: CGFloat
     var visibleLines: CGFloat
     var height: CGFloat
     var scale: CGFloat
@@ -187,7 +189,7 @@ extension FrameBuilder {
     let text = content.text
     let rows = source.material.rows
     let ruler = OverviewRuler(
-      contentLines: CGFloat(rows.contentLines(lineCount: text.lineCount)),
+      contentLines: source.limits.contentLines(rows: rows, lineCount: text.lineCount),
       visibleLines: lines.visible, height: area.height, scale: CGFloat(s))
     let palette = c.palette.overview
     updateRulerSpans(ruler, area: area, lines: lines, source, text: text)
@@ -236,8 +238,9 @@ extension FrameBuilder {
     let carets = source.material.caret.carets
     let rows = source.material.rows
     let key = RulerSpans.CaretKey(
-      carets: carets, version: content.version, rows: rows.version, visibleLines: lines.visible,
-      height: area.height, scale: ruler.scale)
+      carets: carets, version: content.version, rows: rows.version,
+      scrollLines: ruler.scrollLines, visibleLines: lines.visible, height: area.height,
+      scale: ruler.scale)
     guard key != rulerSpans.caretKey else { return }
     rulerSpans.caretKey = key
     let text = content.text
@@ -259,7 +262,8 @@ extension FrameBuilder {
     let rows = source.material.rows
     let key = RulerSpans.Key(
       find: find.generation, word: word.generation, marks: marks, lineCount: text.lineCount,
-      rows: rows.version, visibleLines: lines.visible, height: area.height, scale: ruler.scale,
+      rows: rows.version, scrollLines: ruler.scrollLines, visibleLines: lines.visible,
+      height: area.height, scale: ruler.scale,
       current: highlights.crowded ? highlights.current.first : nil)
     guard key != rulerSpans.key else { return }
     rulerSpans.key = key

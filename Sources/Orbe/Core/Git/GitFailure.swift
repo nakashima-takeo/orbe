@@ -5,7 +5,7 @@ import Foundation
 enum GitFailure: Equatable {
   /// 無出力が続いて打ち切った。git は何も言い残していないので、chrome が文言を用意する。
   case timedOut
-  /// git の stderr から取り出した実質的な理由。そのまま見せる。
+  /// git の出力（stderr、それが空なら stdout）から取り出した実質的な理由。そのまま見せる。
   case reason(String)
 }
 
@@ -19,7 +19,8 @@ enum GitRefreshFailure: Error, Equatable {
 }
 
 /// 書き込み（ステージ・解除・破棄・コミット・取り消し・pull・push・fetch）の失敗。**文言は持たない**。
-/// 無出力で打ち切るのは人が見ていない裏の fetch だけで、その失敗は人に見せないので、打ち切りは分けずに「その他」に入る。
+/// 書き込みの手のうち見ていない手（無出力で打ち切る）は人が見ていない裏の fetch だけで、その失敗は人に見せないので、
+/// 打ち切りは分けずに「その他」に入る。
 /// 分類できない失敗は「その他」（`reason`）に倒す——誤分類より安全。
 enum GitWriteFailure: Error, Equatable {
   /// 止めた。
@@ -32,6 +33,9 @@ enum GitWriteFailure: Error, Equatable {
   case unknownHostKey
   /// push が拒否された（先に取り込みが要る）。
   case pushRejected
+  /// push を断られた（サーバーの hook・保護ブランチ・`already exists` など、取り込んでも直らない）。理由は git の要約の
+  /// まま（送れなかった ref とその要約を頭に置く）。リモートとは話せている。
+  case remoteRefused(String)
   /// pull が競合で止まった（pull の前に無かった操作が、後に在る）。
   case conflicted(GitWorktreeOperation)
   /// merge・rebase 等の途中で pull しようとした。
@@ -46,7 +50,8 @@ enum GitWriteFailure: Error, Equatable {
   case conflictsRemain
   /// コミット・amend・取り消しで、HEAD かコミットに入るものが押した時点に見えていたものと違う（行が status に追いついて
   /// いない・外で index や HEAD が動いた）。何も書かずに返す——見えていないコミットの上に重ねない・書き換えない・取り消さ
-  /// ない。git はコミットに index 全体を入れるので、見えていない変更も入れない。
+  /// ない。git はコミットに index 全体を入れるので、見えていない変更も入れない。破棄で、パスの行き先（ゴミ箱か、index の版へ
+  /// 戻すか）が押した時点に見えていたものと違うときも同じ。
   case contentMismatch
   /// amend・取り消しで書き換えようとした HEAD が push 済み（どれかの remote 追跡ブランチから届く）。force push を持たない
   /// ので、書き換えれば Orbe の中では戻せない。

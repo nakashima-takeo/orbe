@@ -21,13 +21,21 @@ final class RootFilesTests: OrbeTestCase {
     var changes: [RootFiles.Change] = []
     var statusChanges = 0
     var versionChanges: [RootFiles.Version] = []
+    var gitStateChanges = 0
+    var nestedGitStateChanges = 0
+    var onVersionChange: (() -> Void)?
     func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change) {
       changes.append(change)
     }
     func rootFilesStatusDidChange(_ files: RootFiles) { statusChanges += 1 }
     func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version) {
       versionChanges.append(version)
+      onVersionChange?()
     }
+    func rootFilesGitStateDidChange(_ files: RootFiles, remoteRefsChanged: Bool) {
+      gitStateChanges += 1
+    }
+    func rootFilesNestedGitStateDidChange(_ files: RootFiles) { nestedGitStateChanges += 1 }
   }
 
   // MARK: - 根の判定
@@ -87,6 +95,57 @@ final class RootFilesTests: OrbeTestCase {
     pumpMain(until: { files.isResolved }, "管理下かの判定")
     XCTAssertNil(files.repo)
     XCTAssertNil(files.status)
+  }
+
+  /// 管理下かの判定の前に頼んだ取り直しの待ち手は、判定の後に始まる最初の取り直しが済んでから呼ばれ、管理外と分かれば
+  /// そのとき呼ばれる。すぐ呼ぶと、開いたばかりの diff が status も版もまだ無い状態を「追いついた」と取り違える。
+  func testWaitersRequestedBeforeTheRootIsResolvedWaitForItsFirstRefresh() throws {
+    let files = RootFiles(root: repo.root)
+    let recorder = Recorder()
+    let version = RootFiles.Version(path: "a.txt", revision: .index)
+    files.addObserver(recorder, versions: [version])
+    XCTAssertFalse(files.isResolved, "前提: 判定の前")
+    var status: GitStatus??
+    var state: RootFiles.VersionState??
+    files.requestStatusRefresh { status = .some(files.status) }
+    files.requestVersionRefresh { state = .some(files.state(of: version)) }
+    pumpMain(until: { status != nil && state != nil }, "待ち手が呼ばれる")
+    XCTAssertNotNil(status ?? nil, "status を読んだ後")
+    XCTAssertNotNil(state ?? nil, "版を読んだ後")
+
+    let broken = TestScratch.caseDir.appendingPathComponent(
+      "orbe-broken-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: broken, withIntermediateDirectories: true)
+    try "gitdir: /nonexistent/orbe/.git\n".write(
+      to: broken.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
+    let unmanaged = RootFiles(root: GitWorktreeRoot.normalizedPath(broken.path))
+    var calls = 0
+    unmanaged.requestStatusRefresh { calls += 1 }
+    unmanaged.requestVersionRefresh { calls += 1 }
+    XCTAssertEqual(calls, 0, "判定の前には呼ばない")
+    pumpMain(until: { unmanaged.isResolved }, "管理下かの判定")
+    XCTAssertEqual(calls, 2, "管理外と分かったときに呼ぶ")
+  }
+
+  /// 同じ周に来た関心の申告と待ち手付きの要求は、版の本文の取り直し 1 本にまとまり、待ち手はその 1 本で呼ばれる——diff を
+  /// 開くと、文書の結線と diff が同じ周に関心を申告し、diff が待ち手付きで頼む。まとまらないと、申告で始まった 1 本の後に
+  /// もう 1 本が走り、待ち手はその 2 本目を待つ。
+  func testRequestsInTheSameTurnShareOneVersionRefresh() throws {
+    let files = RootFiles(root: repo.root)
+    pumpMain(until: { files.status != nil }, "前提: 管理下と判定した")
+    let version = RootFiles.Version(path: "a.txt", revision: .index)
+    let link = Recorder()
+    let diff = Recorder()
+    var settled = false
+    var settledByTheDelivery: Bool?
+    link.onVersionChange = {
+      DispatchQueue.main.async { settledByTheDelivery = settledByTheDelivery ?? settled }
+    }
+    files.addObserver(link, versions: [version])
+    files.addObserver(diff, versions: [version])
+    files.requestVersionRefresh { settled = true }
+    pumpMain(until: { settledByTheDelivery != nil }, "版が届く")
+    XCTAssertEqual(settledByTheDelivery, true, "版を届けた取り直しで待ち手を呼ぶ（2 本目を待たない）")
   }
 
   // MARK: - status と監視
@@ -183,6 +242,39 @@ final class RootFilesTests: OrbeTestCase {
       until: { files.baseline(for: URL(fileURLWithPath: linkedRoot + "/a.txt")) == "two\n" },
       "本体側の index の変化")
     XCTAssertEqual(recorder.versionChanges.count, 2)
+  }
+
+  /// サブモジュールの中のコミットと `reset --soft` を、監視だけで追う（行が「中身だけ」と「コミットが動いた」を行き来する）。
+  /// git dir が `.git/modules` にある形でも、作業ツリーの中の `<sub>/.git` にある形でも同じ。中の動きは「入れ子の git dir
+  /// が変わった」として届き、親の「git の状態が変わった」にはならない。止まった後、親の status の読みが自分を呼び戻さない。
+  func testASubmoduleCommitIsFollowedInBothGitDirLayouts() throws {
+    try repo.addSubmodule("sub")
+    try repo.addSubmodule("near", gitDirInWorkingTree: true)
+    let files = RootFiles(root: repo.root)
+    let recorder = Recorder()
+    files.addObserver(recorder)
+    pumpMain(until: { files.status != nil })
+
+    for path in ["sub", "near"] {
+      try repo.write(path + "/t.txt", "edited\n")
+      pumpMain(
+        until: { files.status?.entries[path]?.unstagedSubmodule == .content }, "\(path): 中身だけ")
+      let gitStateChanges = recorder.gitStateChanges
+      XCTAssertTrue(repo.git(["-C", path, "commit", "-qam", "inside"]).isSuccess)
+      pumpMain(
+        until: { files.status?.entries[path]?.unstagedSubmodule == .commit(dirty: false) },
+        "\(path): コミットが動いた")
+      XCTAssertGreaterThan(recorder.nestedGitStateChanges, 0)
+      XCTAssertEqual(recorder.gitStateChanges, gitStateChanges, "親の git の状態は変わっていない")
+      XCTAssertTrue(repo.git(["-C", path, "reset", "-q", "--soft", "HEAD~1"]).isSuccess)
+      pumpMain(
+        until: { files.status?.entries[path]?.unstagedSubmodule == .content }, "\(path): 戻る")
+    }
+
+    RunLoop.main.run(until: Date().addingTimeInterval(BatchDebounce.maximumDelay * 2))
+    let settled = recorder.nestedGitStateChanges
+    RunLoop.main.run(until: Date().addingTimeInterval(BatchDebounce.maximumDelay * 2))
+    XCTAssertEqual(recorder.nestedGitStateChanges, settled, "親の status の読みは入れ子の git dir を書かない")
   }
 
   // MARK: - 一覧と新規作成

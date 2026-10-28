@@ -2,7 +2,7 @@ import Foundation
 
 /// 面の縦の並びに、文書の行と行の間へ差し込むもの（→ `TextSurface.setRows`）と、文書の行の見え方。差し込みは行に数えない
 /// 描画で、本文にも undo にも載らない——行番号・見えている範囲・選択・編集は、文書の行だけを見る。
-public struct SurfaceRows: Equatable {
+public struct SurfaceRows {
   /// 境の昇順の差し込みの列。同じ境の差し込みは、列の順に上から並ぶ。
   public var insertions: [RowInsertion]
   /// 文書の行の区間の見え方（始まりの行の昇順）。最初の区間より上の行は、型も「もう一方の番号」も持たない。
@@ -16,10 +16,6 @@ public struct SurfaceRows: Equatable {
     self.insertions = insertions
     self.spans = spans
     self.source = source
-  }
-
-  public static func == (lhs: SurfaceRows, rhs: SurfaceRows) -> Bool {
-    lhs.insertions == rhs.insertions && lhs.spans == rhs.spans && lhs.source === rhs.source
   }
 }
 

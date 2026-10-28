@@ -4,8 +4,8 @@ import OrbeEditorCore
 extension MouseSelection {
   /// ポインタの形と URL の下線——行番号と印の列は矢印、本文は I ビーム、⌘ を押して URL の上なら指（面に焦点があるとき）。
   /// 区画の押せる場所は載せる側が決めた形、区画の入力欄・選べる文・空きは I ビーム。
-  /// ⌘ を押している間は本文の上のポインタの位置を面へ渡し、下線はその位置の下の URL に描画スレッドがそのコマの配置で
-  /// 引く。スクロールで URL の矩形が動くので、矩形は登録せずその場の当たりで決める。
+  /// ⌘ を押している間は、面に焦点があれば本文の上のポインタの位置を面へ渡し、下線はその位置の下の URL に描画スレッドが
+  /// そのコマの配置で引く（指カーソル・⌘クリックと同じ、面の焦点の判定）。スクロールで URL の矩形が動くので、矩形は登録せずその場の当たりで決める。
   func updatePointer(at windowPoint: NSPoint, flags: NSEvent.ModifierFlags, in view: NSView) {
     guard let surface else { return }
     let point = view.convert(windowPoint, from: nil)
@@ -22,7 +22,7 @@ extension MouseSelection {
     }
     let hit = view.bounds.contains(point) ? surface.hit(point) : nil
     let armed = flags.contains(.command) && hit?.area == .text
-    surface.setLinkPointer(armed ? point : nil)
+    surface.setLinkPointer(armed && surface.focused ? point : nil)
     guard let hit else { return }
     if hit.area != .text {
       NSCursor.arrow.set()

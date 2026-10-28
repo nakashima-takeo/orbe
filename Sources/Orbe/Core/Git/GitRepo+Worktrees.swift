@@ -25,7 +25,8 @@ extension GitRepo {
   /// ローカルブランチを upstream の tip まで fast-forward する（fetch → 祖先判定 → ローカル ref の前進）。
   /// 成功なら nil、失敗なら落ちた段と理由。
   ///
-  /// 祖先判定を挟むのは、「分岐している」を stderr の字面ではなく終了コードで知るため。
+  /// 祖先判定を挟むのは、「分岐している」を stderr の字面ではなく終了コードで知るため。どちらの fetch も FETCH_HEAD を
+  /// 書かない（端末で FETCH_HEAD を使う手順を動かさない）。
   ///
   /// ローカル ref の書き込みを `update-ref` や `branch -f` でなく `fetch .` にするのは、**git 自身が書き込みの
   /// 瞬間に「非 fast-forward」と「どこかの worktree で checkout 中」を検査して拒む**から——祖先判定と
@@ -37,7 +38,8 @@ extension GitRepo {
   ) {
     let local = "refs/heads/\(name)"
     runner.run(
-      ["fetch", "--progress", upstream.remote, upstream.remoteRef], cwd: root
+      ["fetch", "--progress", "--no-write-fetch-head", upstream.remote, upstream.remoteRef],
+      cwd: root
     ) { fetched in
       guard fetched.isSuccess else {
         completion(.fetch(GitRepo.failure(from: fetched)))
@@ -74,14 +76,15 @@ extension GitRepo {
     }
   }
 
-  /// origin から fetch し、削除された remote 追跡ブランチを prune する（`refs/remotes/origin/*` のみ更新）。
-  /// 認証の対話は `GitRunner` の環境が封じるので、ハングせず失敗に落ちる。
+  /// origin から fetch し、削除された remote 追跡ブランチを prune する（`refs/remotes/origin/*` のみ更新。FETCH_HEAD は
+  /// 書かない——端末で FETCH_HEAD を使う手順を動かさない）。認証の対話は `GitRunner` の環境が封じるので、ハングせず失敗に
+  /// 落ちる。
   ///
   /// `--progress`: clone と同じ理由。非 tty の `git fetch` は転送中 1 バイトも書かないため、
   /// 明示しないと転送に時間のかかる健全な fetch が「無出力＝ハング」と読まれて打ち切られる。
   /// 戻り値は `Bool` なので進捗 stderr はそのまま捨てられる。
   func fetchPrune(completion: @escaping (Bool) -> Void) {
-    let args = ["fetch", "--progress", "--prune", "origin"]
+    let args = ["fetch", "--progress", "--prune", "--no-write-fetch-head", "origin"]
     runner.run(args, cwd: root) { output in
       completion(output.isSuccess)
     }
@@ -224,20 +227,20 @@ extension GitRepo {
     return essentialFailureReason(output.stdoutText)
   }
 
-  /// git の stderr から実質的な失敗理由を取り出す。成功・失敗どちらでも出る進捗風の行
+  /// git の出力（stderr、それが空なら stdout）から実質的な失敗理由を取り出す。成功・失敗どちらでも出る進捗風の行
   /// （`Preparing worktree (new branch 'issue/44')`・`--progress` の `Receiving objects: 42%`）を落とし、
-  /// `fatal:`／`error:` 行（複数あれば全て・改行結合）を返す。無ければ最終非空行、それも無ければ stderr 全文。
+  /// `fatal:`／`error:` 行（複数あれば全て・改行結合）を返す。無ければ最終非空行、それも無ければ全文。
   /// **`\r` でも行を割る**——`--progress` の進捗は `\r` 区切りで流れるので、`\n` だけで割ると進捗と
   /// `fatal:` が 1 行に融合して巨大な失敗理由になる。git stderr の癖はこの git ラッパー層に閉じる
   /// （`BranchParser` 等と同じく、git の出力を読む規則としてここに置く）。
-  static func essentialFailureReason(_ stderr: String) -> String {
+  static func essentialFailureReason(_ text: String) -> String {
     let lines =
-      stderr
+      text
       .split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r" })
       .map { $0.trimmingCharacters(in: .whitespaces) }
       .filter { !$0.isEmpty }
     let reasons = lines.filter { $0.contains("fatal:") || $0.contains("error:") }
     if !reasons.isEmpty { return reasons.joined(separator: "\n") }
-    return lines.last ?? stderr
+    return lines.last ?? text
   }
 }

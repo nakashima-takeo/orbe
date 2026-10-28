@@ -78,8 +78,9 @@ extension EditorDiffTests {
 
     XCTAssertTrue(destDiff.document === a, "行き先の diff は元の未保存の文書を使う")
     XCTAssertTrue(movedDiff.document === b, "移った diff は行き先の未保存の文書を使う")
-    XCTAssertTrue(
-      a.surface.view.isDescendant(of: dest.group.view.editor), "見せている diff は勝った文書の面を出す")
+    pumpMain(
+      until: { a.surface.view.isDescendant(of: dest.group.view.editor) },
+      "見せている diff は、勝った文書で並びを置けたらその面を出す")
     XCTAssertEqual(
       dest.group.view.editor.shell.tabs.map(\.isDirty), [true, true, true, true], "未保存の印が割れない")
     XCTAssertEqual(dest.group.unsavedDocuments().count, 2, "確認は実体ごとに 1 件")

@@ -7,10 +7,10 @@ import Foundation
 /// 待たずに落ちる）。index を書く操作（ステージ・解除・破棄・コミット・amend・取り消し・pull）は投げた順に 1 つずつ
 /// 走り、fetch・push は並ばない。
 ///
-/// どの書き込みも（人が見ていない裏の fetch を除き）無出力で打ち切らず、止める手（`Write`）を返す。完了は「書き込みの
-/// 後に始まった status の取り直し」が済んでから main で返る——完了が届いた時点で `status` はもう書き込み後の姿になって
-/// いる（監視の到着を待たない）。
-/// baseline の取り直しは待たない（smudge が詰まっても完了は遅れない）。git 管理外の根では呼べない（`notManaged`）。
+/// どの書き込みも止める手（`Write`）を返す。その手は人が見ている手で（人が見ていない裏の fetch を除く）、手の下で走る段は
+/// 前段の読みも含めて無出力で打ち切らない。完了は「書き込みの後に始まった status の取り直し」が済んでから main で返る——
+/// 完了が届いた時点で `status` はもう書き込み後の姿になっている（監視の到着を待たない）。
+/// 版の本文の取り直しは待たない（smudge が詰まっても完了は遅れない）。git 管理外の根では呼べない（`notManaged`）。
 ///
 /// 完了を返すまでは、返りを待つ処理がサービスを強く握る——順番待ちは止める手（行列との輪）、走っている間は git の完了の
 /// 閉包、完了の前の status の取り直しは待ち手。握る者が離れても書き込みの完了は返り、レジストリの「根ごとに 1 つ」も
@@ -21,10 +21,14 @@ extension RootFiles {
   /// 知らせる——順番待ちか走っているかは根のサービスの順番の中にしか無い。
   @MainActor
   final class Write {
-    fileprivate let handle = GitRunner.Handle()
+    fileprivate let handle: GitRunner.Handle
     fileprivate var dequeue: (() -> Void)?
     private var hasStarted = false
     private var onStart: (() -> Void)?
+
+    fileprivate init(attended: Bool = true) {
+      handle = GitRunner.Handle(attended: attended)
+    }
 
     func cancel() {
       handle.cancel()
@@ -66,13 +70,15 @@ extension RootFiles {
     enqueue({ $0.unstage(rows: rows, handle: $1, completion: $2) }, completion)
   }
 
-  /// 行の変更を捨てる。追跡中は作業ツリーを index の版へ（ステージ済みは残る）、未追跡と作業ツリーに在る intent-to-add は
-  /// ゴミ箱へ。
+  /// `content` の行の変更を捨てる。追跡中は作業ツリーを index の版へ（ステージ済みは残る）、未追跡と作業ツリーに在る
+  /// intent-to-add はゴミ箱へ。行き先が `content` に見えていたものと違えば何も書かずに `contentMismatch`。
   /// rename の元パスは、呼んだ時点の index に在るときだけ含める。git とゴミ箱は 1 枠で走り、後から投げた書き込みと
   /// 入れ替わらない。
   @discardableResult
-  func discard(_ rows: [GitStatus.Row], completion: @escaping (GitWriteFailure?) -> Void) -> Write {
-    enqueue({ $0.discard(rows: rows, handle: $1, completion: $2) }, completion)
+  func discard(
+    _ content: GitDiscardContent, completion: @escaping (GitWriteFailure?) -> Void
+  ) -> Write {
+    enqueue({ $0.discard(content, handle: $1, completion: $2) }, completion)
   }
 
   /// `content` をコミットする（`amend` なら直前のコミットを差し替える）。先にステージする行は、ステージとコミットを 1 つの
@@ -116,6 +122,7 @@ extension RootFiles {
     onProgress: @escaping (String) -> Void, completion: @escaping (GitWriteFailure?) -> Void
   ) -> Write {
     start(
+      Write(),
       { repo, handle, done in
         self.withFreshBranch(handle, done) {
           repo.push(branch: $0, onProgress: onProgress, handle: handle, completion: done)
@@ -123,15 +130,15 @@ extension RootFiles {
       }, completion)
   }
 
-  /// 取ってくる。並ばない。`unattended` は人が見ていない裏の fetch（無出力で打ち切り、askpass・資格情報の窓を出させない）。
+  /// 取ってくる。並ばない。`attended` が偽なら人が見ていない裏の fetch で、その手は見ていない手になる（→ `GitRepo.fetch`）。
   @discardableResult
   func fetch(
-    unattended: Bool = false, onProgress: @escaping (String) -> Void,
+    attended: Bool = true, onProgress: @escaping (String) -> Void,
     completion: @escaping (GitWriteFailure?) -> Void
   ) -> Write {
     start(
-      { $0.fetch(unattended: unattended, onProgress: onProgress, handle: $1, completion: $2) },
-      completion)
+      Write(attended: attended),
+      { $0.fetch(onProgress: onProgress, handle: $1, completion: $2) }, completion)
   }
 
   // MARK: - 順番と完了
@@ -178,10 +185,9 @@ extension RootFiles {
   }
 
   private func start(
-    _ body: @escaping WriteBody<GitWriteFailure?>,
+    _ write: Write, _ body: @escaping WriteBody<GitWriteFailure?>,
     _ completion: @escaping (GitWriteFailure?) -> Void
   ) -> Write {
-    let write = Write()
     guard let repo else { return reject(write, completion) }
     write.markStarted()
     body(repo, write.handle) { [self] failure in complete { completion(failure) } }
@@ -199,6 +205,7 @@ extension RootFiles {
   }
 
   /// 前提（upstream・detached）の判定は、取り直した status のブランチで行う（打ってすぐの外の変化を読み落とさない）。
+  /// 取り直しは観測と共有するので、書き込みの手の下では走らず、観測と同じく打ち切られうる。
   private func withFreshBranch(
     _ handle: GitRunner.Handle, _ done: @escaping (GitWriteFailure?) -> Void,
     _ body: @escaping (GitStatus.Branch?) -> Void

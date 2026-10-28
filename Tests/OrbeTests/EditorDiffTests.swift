@@ -141,7 +141,7 @@ final class EditorDiffTests: OrbeTestCase {
     for path in ["gone.txt", "head.txt"] {
       let diff = try tab.group.editor.openDiff(id(path, .workingTree), as: .pinned)
       waitRows(diff, "\(path): 削除行が届く") { !self.removedLines($0).isEmpty }
-      pumpMain(until: { diff.revealed }, "\(path): 最初の変更区間へ送る")
+      pumpMain(until: { diff.placement == .placed }, "\(path): 最初の変更区間へ送る")
       let surface = try engine(diff.newSurface)
       surface.flush()
       XCTAssertLessThan(surface.viewportLines.visible, 100, "前提: 削除行は見えている高さより長い")
@@ -250,8 +250,8 @@ final class EditorDiffTests: OrbeTestCase {
     waitRows(diff, "インライン") { !$0.isEmpty }
     let right = try engine(diff.newSurface)
     right.flush()
-    let first = right.viewport.firstVisible
-    XCTAssertGreaterThan(first, 0, "最初の変更区間へ送られている")
+    let first = right.viewport.top
+    XCTAssertGreaterThan(first.line, 0, "最初の変更区間へ送られている")
 
     modes.select(.side)
     pumpMain(until: { diff.oldSurface != nil && diffSurfaceCount(pane) == 2 }, "並列の 2 面")
@@ -264,7 +264,7 @@ final class EditorDiffTests: OrbeTestCase {
       XCTAssertEqual(left.rows.style(ofLine: 120), DiffStyle.removed)
       XCTAssertEqual(right.rows.style(ofLine: 150), DiffStyle.added)
       right.flush()
-      XCTAssertEqual(right.viewport.firstVisible, first, "見えている先頭の行は保たれる")
+      XCTAssertEqual(right.viewport.top, first, "見えている先頭の行は保たれる")
       XCTAssertEqual(left.view.frame.maxX + 1, right.view.frame.minX, "境の線 1px を挟む")
     }()
 
@@ -273,7 +273,7 @@ final class EditorDiffTests: OrbeTestCase {
     XCTAssertNil(right.partner, "共有が外れる")
     XCTAssertEqual(right.presentation, DiffStyle.inline)
     right.flush()
-    XCTAssertEqual(right.viewport.firstVisible, first)
+    XCTAssertEqual(right.viewport.top, first)
   }
 
   private func diffSurfaceCount(_ pane: EditorPaneView) -> Int {

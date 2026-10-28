@@ -11,9 +11,10 @@ import OrbeEditorCore
 ///
 /// 観測は 2 本の取り直しで成る——status と、版の本文（関心のある（パス, 版）ごとの OID → 変わった OID の blob）。版は
 /// index と HEAD で、文書の底（baseline）と diff の両側が同じ 1 か所の本文を引く。両者にデータの依存は無く、根ごとに
-/// 別々に直列化し、どちらも実行中に来た要求は「終わったらもう 1 回」に畳む。古い結果が後から乗らない（index や HEAD が
-/// 動けば監視が取り直す。status と版の本文は別々の git 起動で読むので同一時点の保証は無い）。別々にするのは、版の本文の
-/// 取得が smudge filter（git-lfs のネットワーク等）で遅くなりうるから——その後ろにバッジと書き込みの完了を並べない。
+/// 別々に直列化し、どちらも実行中に来た要求は「終わったらもう 1 回」に畳む（版の本文は同じ周に来た要求も 1 本に
+/// まとめる——`requestVersionRefresh`）。古い結果が後から乗らない（index や HEAD が動けば監視が取り直す。status と
+/// 版の本文は別々の git 起動で読むので同一時点の保証は無い）。別々にするのは、版の本文の取得が smudge filter
+/// （git-lfs のネットワーク等）で遅くなりうるから——その後ろにバッジと書き込みの完了を並べない。
 @MainActor
 final class RootFiles {
   struct Entry: Equatable {
@@ -39,29 +40,6 @@ final class RootFiles {
 
   enum Error: Swift.Error, Equatable {
     case alreadyExists(URL)
-  }
-
-  /// 関心の単位——根からの相対パスと版。
-  struct Version: Hashable {
-    let path: String
-    let revision: GitRevision
-  }
-
-  /// 版の本文の状態（OID ごとに決まる）。
-  enum VersionState: Equatable {
-    /// 本文（作業ツリーに出したときの姿）。
-    case text(String)
-    /// その版に無い（index に無い・競合中・初回コミット前の HEAD を含む。ファイルでないものも）。
-    case absent
-    /// UTF-8 として読めない。
-    case notText
-    /// git から取れない（取り直しの上限に達した・まだ状態の無い版で、OID の一覧か本文を取れなかった）。
-    case failed
-
-    var text: String? {
-      if case .text(let text) = self { return text }
-      return nil
-    }
   }
 
   private final class WeakRef {
@@ -97,8 +75,12 @@ final class RootFiles {
   private var versions: [Version: Settled] = [:]
   private var statusJob = RefreshJob()
   private var versionJob = RefreshJob()
-  /// 次に始まる status の取り直しが済んだら呼ぶもの（書き込みの完了）。
+  /// 版の本文の取り直しを、次の周に始めると決めてある。
+  private var versionRefreshIsScheduled = false
+  /// 次に始まる status の取り直しが済んだら呼ぶもの（書き込みの完了・diff の初めての位置決め）。
   private var statusWaiters: [() -> Void] = []
+  /// 次に始まる版の本文の取り直しが済んだら呼ぶもの（diff の初めての位置決め）。
+  private var versionWaiters: [() -> Void] = []
   /// 同じ worktree の index への書き込みの順番待ち（先頭から 1 つずつ走らせる）。
   var queuedWrites: [QueuedWrite] = []
   var isWriting = false
@@ -146,7 +128,10 @@ final class RootFiles {
     GitRepo.open(cwd: root, runner: runner) { [weak self] repo in
       guard let self else { return }
       isResolved = true
-      guard let repo, GitWorktreeRoot.normalizedPath(repo.root) == self.root else { return }
+      guard let repo, GitWorktreeRoot.normalizedPath(repo.root) == self.root else {
+        releaseWaiters()
+        return
+      }
       self.repo = repo
       let gitDirs = [repo.gitDir, repo.commonDir]
       gitWatcher = watch(roots: gitDirs, gitDirs: gitDirs)
@@ -215,39 +200,32 @@ final class RootFiles {
     versions[version]?.state
   }
 
-  // MARK: - 監視
+  // MARK: - 知らせと待ち手
 
-  private func watch(roots: [String], gitDirs: [String]) -> RepoWatcher? {
-    RepoWatcher(roots: roots, gitDirs: gitDirs) { [weak self] batch in self?.handle(batch) }
-  }
-
-  private func handle(_ batch: RepoWatcher.Batch) {
-    if batch.scanAll {
-      notify { $0.rootFiles(self, filesDidChange: .scanAll) }
-    } else if !batch.paths.isEmpty {
-      notify { $0.rootFiles(self, filesDidChange: .paths(batch.paths)) }
-    }
-    if repo != nil, batch.gitChanged || batch.scanAll {
-      notify { $0.rootFilesGitStateDidChange(self, remoteRefsChanged: batch.remoteRefsChanged) }
-    }
-    requestStatusRefresh()
-    requestVersionRefresh()
-  }
-
-  private func notify(_ body: (RootFilesObserver) -> Void) {
+  func notify(_ body: (RootFilesObserver) -> Void) {
     for observation in live { body(observation.observer) }
+  }
+
+  /// 管理外と分かった——判定の前に付けた待ち手を呼ぶ（取り直しは起きない）。
+  private func releaseWaiters() {
+    let waiters = statusWaiters + versionWaiters
+    statusWaiters = []
+    versionWaiters = []
+    for waiter in waiters { waiter() }
   }
 
   // MARK: - status の取り直し
 
   /// status を取り直す。`then` は、この要求の後に始まる取り直しが済んだら（通知した・値が同じ・git の失敗のどれでも）
-  /// 呼ぶ——実行中の取り直しは要求より前の状態を読んでいるかもしれないので、それには付けない。
+  /// 呼ぶ——実行中の取り直しは要求より前の状態を読んでいるかもしれないので、それには付けない。管理外ならすぐ呼び、
+  /// 管理下かの判定の前なら、判定の後に始まる最初の取り直しに付ける（管理外と分かれば、そのとき呼ぶ）。
   func requestStatusRefresh(then waiter: (() -> Void)? = nil) {
-    guard repo != nil else {
+    guard repo != nil || !isResolved else {
       waiter?()
       return
     }
     if let waiter { statusWaiters.append(waiter) }
+    guard repo != nil else { return }
     if statusJob.isRunning {
       statusJob.again = true
       return
@@ -289,19 +267,39 @@ final class RootFiles {
 
   // MARK: - 版の本文の取り直し
 
-  private func requestVersionRefresh() {
+  /// 版の本文を取り直す。`then` は、この要求の後に始まる取り直しが済んだら（変わった版を知らせた後。git の失敗でも）
+  /// 呼ぶ——管理外・判定の前の扱いも、status の `requestStatusRefresh(then:)` と同じ。
+  ///
+  /// 取り直しは次の周に始め、それまでに来た要求を 1 本にまとめる。観測者は関心を申告するたびに要求するので、diff を
+  /// 開くと文書の結線と diff が同じ周に申告し、diff はさらに待ち手付きで要求する——すぐ始めると、待ち手は最初の 1 本の
+  /// 後の 2 本目に付く。
+  func requestVersionRefresh(then waiter: (() -> Void)? = nil) {
+    guard repo != nil || !isResolved else {
+      waiter?()
+      return
+    }
+    if let waiter { versionWaiters.append(waiter) }
     guard repo != nil else { return }
     if versionJob.isRunning {
       versionJob.again = true
       return
     }
-    refreshVersions()
+    guard !versionRefreshIsScheduled else { return }
+    versionRefreshIsScheduled = true
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      versionRefreshIsScheduled = false
+      refreshVersions()
+    }
   }
 
-  /// 関心のある版の OID を版ごとに 1 回で引き、OID が変わったものだけ本文を取る。
+  /// 関心のある版の OID を版ごとに 1 回で引き、OID が変わったファイルだけ本文を取る。サブモジュールはコミットを状態に
+  /// する（blob を取らない）。
   private func refreshVersions() {
     guard let repo else { return }
     versionJob.isRunning = true
+    let waiters = versionWaiters
+    versionWaiters = []
     let interests = self.interests
     let index = interests.filter { $0.revision == .index }.map(\.path).sorted()
     let head = interests.filter { $0.revision == .head }.map(\.path).sorted()
@@ -323,24 +321,29 @@ final class RootFiles {
             }
             continue
           }
-          if let oid = oids[version.path] {
+          switch oids[version.path] {
+          case .file(let oid)?:
             if versions[version]?.oid != oid { fetch.append((version, oid)) }
-          } else {
+          case .submodule(let commit)?:
+            if versions[version]?.state != .submodule(commit) { changed.append(version) }
+            versions[version] = Settled(oid: commit, state: .submodule(commit))
+          case nil:
             if versions[version]?.state != .absent { changed.append(version) }
             versions[version] = Settled(oid: nil, state: .absent)
           }
         }
-        fetchBlobs(fetch[...], changed: changed)
+        fetchBlobs(fetch[...], changed: changed, waiters: waiters)
       }
     }
   }
 
   /// 変わった OID の blob を 1 つずつ取る（並列に投げない）。
   private func fetchBlobs(
-    _ pending: ArraySlice<(version: Version, oid: String)>, changed: [Version]
+    _ pending: ArraySlice<(version: Version, oid: String)>, changed: [Version],
+    waiters: [() -> Void]
   ) {
     guard let repo, let next = pending.first else {
-      finish(changed: changed)
+      finish(changed: changed, waiters: waiters)
       return
     }
     repo.blob(oid: next.oid, relativePath: next.version.path) { [weak self] data in
@@ -348,8 +351,9 @@ final class RootFiles {
       var changed = changed
       let version = next.version
       // git の失敗（smudge の失敗・打ち切り。一時的でありうる）は上限までは OID を焼かず、次の取り直しで同じ OID を
-      // 取り直す——状態を持っている版は前を保ち、まだ状態の無い版は OID の無い「取れない」にする（関心を申告した者が、
-      // 決まらない状態のまま待ち続けない）。上限に達したら OID ごと「取れない」を焼き、OID が変わるまで諦める。
+      // 取り直す——前の本文（OID のある状態）を持つ版は前を保ち、それ以外（まだ状態の無い版・「その版に無い」だった版）は
+      // OID の無い「取れない」にする（関心を申告した者が、決まらない状態や事実と違う「無い」のまま待ち続けない）。上限に
+      // 達したら OID ごと「取れない」を焼き、OID が変わるまで諦める。
       // UTF-8 でない中身は恒久なので即座に OID ごと「読めない」を記録する。
       let settled: Settled?
       if let data {
@@ -364,18 +368,18 @@ final class RootFiles {
         if count >= Self.blobFailureBudget {
           settled = Settled(oid: next.oid, state: .failed)
         } else {
-          settled = versions[version] == nil ? Settled(oid: nil, state: .failed) : nil
+          settled = versions[version]?.oid == nil ? Settled(oid: nil, state: .failed) : nil
         }
       }
       if let settled {
         if versions[version]?.state != settled.state { changed.append(version) }
         versions[version] = settled
       }
-      fetchBlobs(pending.dropFirst(), changed: changed)
+      fetchBlobs(pending.dropFirst(), changed: changed, waiters: waiters)
     }
   }
 
-  private func finish(changed: [Version]) {
+  private func finish(changed: [Version], waiters: [() -> Void]) {
     // 連鎖の最中に関心が消えた版（取り始めたときの集合で走り切る）を書き戻さない。
     dropUnwantedVersions()
     for observation in live {
@@ -383,6 +387,7 @@ final class RootFiles {
         observation.observer.rootFiles(self, versionDidChange: version)
       }
     }
+    for waiter in waiters { waiter() }
     versionJob.isRunning = false
     if versionJob.again {
       versionJob.again = false

@@ -27,19 +27,20 @@ struct ScmChanges {
     /// `.gitignore` に当たるファイルを `git rm --cached` した行は、status に作業ツリー側の行（`?`）が出ないので、在っても
     /// 開けない。
     let opensAsFile: Bool
-    /// 追跡中（破棄は作業ツリーを index の版へ戻す——戻せないので確かめる）。未追跡はゴミ箱へ移す。
-    let isTracked: Bool
+    /// 「変更」の行の破棄で、行のパスがゴミ箱へ移る（戻せる）。偽なら index の版へ戻す（戻せないので確かめる）。規則は
+    /// `GitStatus.Entry.discardMovesToTrash`（`GitRepo.discard` と同じ）から写す。rename の元パスは戻す側。
+    let discardMovesToTrash: Bool
     /// サブモジュールのままの変化なら、その変わり方。
     let submodule: GitStatus.SubmoduleChange?
 
     init(
-      row: GitStatus.Row, badge: GitStatus.Badge, opensAsFile: Bool, isTracked: Bool,
-      submodule: GitStatus.SubmoduleChange? = nil
+      row: GitStatus.Row, badge: GitStatus.Badge, opensAsFile: Bool,
+      discardMovesToTrash: Bool, submodule: GitStatus.SubmoduleChange? = nil
     ) {
       self.row = row
       self.badge = badge
       self.opensAsFile = opensAsFile
-      self.isTracked = isTracked
+      self.discardMovesToTrash = discardMovesToTrash
       self.submodule = submodule
     }
 
@@ -96,21 +97,26 @@ struct ScmChanges {
       let key = FileNameOrder.PathKey(path)
       if entry.isConflicted {
         changes.append(
-          (key, File(row: row, badge: .conflicted, opensAsFile: opens, isTracked: true)))
+          (
+            key,
+            File(row: row, badge: .conflicted, opensAsFile: opens, discardMovesToTrash: false)
+          ))
         continue
       }
       if let change = entry.staged {
         staged.append(
-          (key, File(row: row, badge: badge(change), opensAsFile: opens, isTracked: true)))
+          (
+            key,
+            File(row: row, badge: .init(change), opensAsFile: opens, discardMovesToTrash: false)
+          ))
       }
       if let change = entry.unstaged {
         changes.append(
           (
             key,
             File(
-              row: row, badge: badge(change), opensAsFile: opens,
-              isTracked: change != .untracked,
-              submodule: entry.unstagedSubmodule)
+              row: row, badge: .init(change), opensAsFile: opens,
+              discardMovesToTrash: entry.discardMovesToTrash, submodule: entry.unstagedSubmodule)
           ))
       }
     }
@@ -127,15 +133,6 @@ struct ScmChanges {
     status.entries.values.reduce(0) { count, entry in
       if entry.isConflicted { return count + 1 }
       return count + (entry.staged == nil ? 0 : 1) + (entry.unstaged == nil ? 0 : 1)
-    }
-  }
-
-  private static func badge(_ change: GitStatus.Change) -> GitStatus.Badge {
-    switch change {
-    case .added, .copied: .added
-    case .untracked: .untracked
-    case .unmerged: .conflicted
-    default: .modified
     }
   }
 }

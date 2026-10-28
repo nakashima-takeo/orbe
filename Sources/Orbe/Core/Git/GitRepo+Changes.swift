@@ -2,9 +2,18 @@ import Foundation
 
 // MARK: - 変更の書き込み（ステージ・解除・破棄。コミット・取り消しは `GitRepo+Commit`）
 
-/// 利用者が起こす index・作業ツリー・HEAD への書き込み。どれも無出力で打ち切らず、`handle` で止める（hook・filter・
-/// 署名の沈黙は「何も起きていない」ことを意味しない）。順番は呼び出し側（根のサービス）が作る——同じ worktree の
-/// index へ同時に書けば、git は index.lock で待たずに落ちる。completion は main で返る。
+/// 押した時点に見えていた破棄（パネルが渡す）。破棄は、各パスの行き先（ゴミ箱か、index の版へ戻すか）がこれと違えば書かない
+/// （→ `discard`）。
+struct GitDiscardContent: Equatable {
+  /// 破棄する行。
+  let rows: [GitStatus.Row]
+  /// 行のパスのうち、見えていた status でゴミ箱へ移るもの（`GitStatus.Entry.discardMovesToTrash`。rename の元パスは戻す側）。
+  let trashed: Set<String>
+}
+
+/// 利用者が起こす index・作業ツリー・HEAD への書き込み。前段の読みも含めてどの段も `handle` の下で走り、打ち切るかは
+/// その手が決める（`GitRunner.Handle.isAttended`）。順番は呼び出し側（根のサービス）が作る——同じ worktree の index へ
+/// 同時に書けば、git は index.lock で待たずに落ちる。completion は main で返る。
 ///
 /// パスはファイル名そのもの（ユーザーのデータ）なので、NUL 区切りの標準入力で渡し、その呼び出しだけ pathspec を
 /// literal にする（`*` `:` を含む名前で別のファイルに当たらない。引数の長さの上限も越えない）。
@@ -44,31 +53,39 @@ extension GitRepo {
   /// - intent-to-add（`git add -N`）のパスは、作業ツリーに在れば最初に index から外し、未追跡のパスと同じ段でゴミ箱へ
   ///   ——index の版は空なので、戻すと中身を失う。作業ツリーから消えたものは index の版（空）へ戻る。
   ///
-  /// 追跡中かは観測の status でなく呼んだ時点の index で決める（status が古いとき、追跡中のファイルをゴミ箱へ送らない）。
+  /// 行き先は観測の status でなく呼んだ時点の index で決め、押した時点に見えていた行き先（`content.trashed`）と照らす——選んだ
+  /// パスのどれかで違えば（監視が届く前に外で `git add`・`git rm --cached` された）、何も書かずに `contentMismatch` で返す。
+  /// 確認を出すか・確認の文の件数は見えていた行き先で決めているので、どちらの向きの食い違いも利用者の判断の外になる。
   /// ゴミ箱へは裏のスレッドで 1 件ずつ移し、その都度止められたかを見る（件数が多いと main を止めるため）。移せなければ
   /// 失敗で返し、消さない。
   func discard(
-    rows: [GitStatus.Row], handle: GitRunner.Handle,
+    _ content: GitDiscardContent, handle: GitRunner.Handle,
     completion: @escaping (GitWriteFailure?) -> Void
   ) {
-    select(rows, handle: handle) { selected in
+    select(content.rows, handle: handle) { selected in
       switch selected {
       case .failure(let failure): completion(failure)
-      case .success(let selection): self.discard(selection, handle: handle, completion: completion)
+      case .success(let selection):
+        self.discard(selection, seen: content.trashed, handle: handle, completion: completion)
       }
     }
   }
 
   private func discard(
-    _ selection: Selection, handle: GitRunner.Handle,
+    _ selection: Selection, seen trashed: Set<String>, handle: GitRunner.Handle,
     completion: @escaping (GitWriteFailure?) -> Void
   ) {
     intentToAdd(among: selection.indexed, handle: handle) { found in
-      guard case .success(let intended) = found else {
-        if case .failure(let failure) = found { completion(failure) }
-        return
+      let intended: Set<String>
+      switch found {
+      case .failure(let failure): return completion(failure)
+      case .success(let found): intended = found
       }
       let restore = selection.indexed.subtracting(intended)
+      // 塞いでいるもの（`blockers`）はもともとゴミ箱へしか行かないので照らさない。
+      guard selection.paths.allSatisfy({ restore.contains($0) != trashed.contains($0) }) else {
+        return completion(.contentMismatch)
+      }
       let unindex = ["rm", "--cached", "-q"]
       self.runOnPaths(unindex, paths: Array(intended), handle: handle) { removed in
         if let removed { return completion(removed) }
@@ -232,7 +249,7 @@ extension GitRepo {
     let list = paths.map { $0 + "\0" }.joined()
     runner.run(
       args + ["--pathspec-from-file=-", "--pathspec-file-nul"], cwd: root, stdin: Data(list.utf8),
-      environment: ["GIT_LITERAL_PATHSPECS": "1"], timesOut: false, handle: handle
+      environment: ["GIT_LITERAL_PATHSPECS": "1"], handle: handle
     ) { completion(.of($0)) }
   }
 

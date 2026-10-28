@@ -194,6 +194,33 @@ struct RowLayout: Sendable {
     return boundaries.count - 1
   }
 
+  // MARK: - 縦の並びの中の位置
+
+  /// 縦の位置 `y` にある所を、縦の並びの中の位置で（段の粒度。`lineCount` 行の文書）。文書の行の中ならその行の段 0（範囲に
+  /// 収める）、塊の中なら塊の下の文書の行（最終行の後の塊なら行数）と、その上端からの負の段。段の境のわずかに上は境の段と
+  /// みなす——位置の上端（`unit(of:lineCount:)`）に置いた y が、表示の単位から y への丸めで上の段に化けない。
+  func position(atY y: Double, lineCount: Int) -> RowPosition {
+    let y = y + lineHeight * 1e-9
+    switch item(atY: y) {
+    case .line(let line):
+      return RowPosition(line: min(max(0, line), max(0, lineCount - 1)))
+    case .block(let index):
+      let line = boundaries[index]
+      let offset = (y / lineHeight - unit(ofLine: line)).rounded(.down)
+      return RowPosition(line: line, offset: Int(offset))
+    }
+  }
+
+  /// 位置の上端（表示の単位。`lineCount` 行の文書）。行は `0...lineCount` に収め、差し込みの中を指す負の段は、その差し込みの
+  /// 頭で止める。
+  func unit(of position: RowPosition, lineCount: Int) -> Double {
+    let line = min(max(0, position.line), lineCount)
+    let top = unit(ofLine: line)
+    guard position.offset < 0 else { return top + Double(position.offset) }
+    let inserted = (prefix[blocks(above: line)] - prefix[blocks(above: line - 1)]) / lineHeight
+    return top + max(Double(position.offset), -inserted)
+  }
+
   // MARK: - 見えている範囲
 
   /// 縦の位置 `y`（端を越えていれば端に収めたもの）で先頭に見えている所（表示の単位）——文書の行の中なら隠れている割合を
@@ -258,7 +285,8 @@ struct RowLayout: Sendable {
       lastRow = before.row(containing: changes.map(\.end).max() ?? 0)
     }
 
-    /// 昇順の境の列 `lines` をずらす（境 r ≤ 最初の編集の行 は、付き先が編集より前にある）。動いたら true。
+    /// 昇順の境の列 `lines` をずらす（境 r ≤ 最初の編集の行 は、付き先が編集より前にある）。最初の編集の行より後ろの境が
+    /// 1 つでもあれば、値がずれなくても true。
     func apply(to lines: inout [Int]) -> Bool {
       var index = RowLayout.count(lines, atOrBelow: firstRow)
       guard index < lines.count else { return false }
