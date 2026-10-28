@@ -139,8 +139,7 @@ extension GitRepo {
     args +=
       keepsMessage ? ["--no-edit", "--cleanup=verbatim"] : ["--cleanup=whitespace", "-F", "-"]
     runner.run(
-      args, cwd: root, stdin: keepsMessage ? nil : Data(message.utf8), timesOut: false,
-      handle: handle
+      args, cwd: root, stdin: keepsMessage ? nil : Data(message.utf8), handle: handle
     ) { completion(.of($0)) }
   }
 
@@ -187,18 +186,19 @@ extension GitRepo {
     }
   }
 
-  /// HEAD が push 済み（どれかの remote 追跡ブランチから届く——グラフの push 済みと同じ定義）なら書き換えずに `headPushed`
-  /// で返し、そうでなければ `body` を続ける。パネルの押せる・押せないは見せ方で、▾ を開いている間や外の push が監視に届く
-  /// までの間にも押せてしまうので、書き換えの直前に読む。
+  /// HEAD が push 済み（`isPushed`。パネルの HEAD の読みと同じ規則）なら書き換えずに `headPushed` で返し、そうでなければ
+  /// `body` を続ける。パネルの押せる・押せないは見せ方で、▾ を開いている間や外の push が監視に届くまでの間にも押せて
+  /// しまうので、書き換えの直前に読む。
   private func unlessHeadIsPushed(
     handle: GitRunner.Handle, _ completion: @escaping (GitWriteFailure?) -> Void,
     then body: @escaping () -> Void
   ) {
-    let unpushed = ["rev-list", "-n", "1", "HEAD", "--not", "--remotes", "--"]
-    runner.run(unpushed, cwd: root, handle: handle) { listed in
-      if let failure = GitWriteFailure.of(listed) { return completion(failure) }
-      guard !listed.stdoutText.isEmpty else { return completion(.headPushed) }
-      body()
+    isPushed("HEAD", handle: handle) { pushed in
+      switch pushed {
+      case .failure(let failure): completion(failure)
+      case .success(true): completion(.headPushed)
+      case .success(false): body()
+      }
     }
   }
 
@@ -217,9 +217,9 @@ extension GitRepo {
         return
       }
       guard commits.count == 1 else {
-        self.runner.run(
-          ["reset", "--soft", "HEAD~1"], cwd: self.root, timesOut: false, handle: handle
-        ) { completion(.of($0)) }
+        self.runner.run(["reset", "--soft", "HEAD~1"], cwd: self.root, handle: handle) {
+          completion(.of($0))
+        }
         return
       }
       // shallow clone の境界のコミットも親を返さない。初回コミットとして ref を消すと、履歴とつながらなくなる。
@@ -230,9 +230,9 @@ extension GitRepo {
           return
         }
         let branch = ref.stdoutText.trimmingCharacters(in: .newlines)
-        self.runner.run(
-          ["update-ref", "-d", branch, head], cwd: self.root, timesOut: false, handle: handle
-        ) { completion(.of($0)) }
+        self.runner.run(["update-ref", "-d", branch, head], cwd: self.root, handle: handle) {
+          completion(.of($0))
+        }
       }
     }
   }

@@ -50,7 +50,8 @@ extension L10n {
       "作業ツリーを index の版に戻します。この操作は元に戻せません。",
       "The working tree goes back to the staged version. This can't be undone."
     ),
-    .editorScmDiscardUntracked: ("未追跡の %lld 件はゴミ箱へ移します。", "%lld untracked files go to the Trash."),
+    .editorScmDiscardToTrashOne: ("%lld 件はゴミ箱へ移します。", "%lld file goes to the Trash."),
+    .editorScmDiscardToTrashOther: ("%lld 件はゴミ箱へ移します。", "%lld files go to the Trash."),
     .editorScmDiscardConfirm: ("破棄", "Discard"),
     .editorScmFailureAuthentication: (
       "認証できませんでした。端末で git の認証（ssh の鍵・資格情報）を設定してください。",

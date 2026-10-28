@@ -21,6 +21,8 @@ final class RootFilesTests: OrbeTestCase {
     var changes: [RootFiles.Change] = []
     var statusChanges = 0
     var versionChanges: [RootFiles.Version] = []
+    var gitStateChanges = 0
+    var nestedGitStateChanges = 0
     var onVersionChange: (() -> Void)?
     func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change) {
       changes.append(change)
@@ -30,6 +32,10 @@ final class RootFilesTests: OrbeTestCase {
       versionChanges.append(version)
       onVersionChange?()
     }
+    func rootFilesGitStateDidChange(_ files: RootFiles, remoteRefsChanged: Bool) {
+      gitStateChanges += 1
+    }
+    func rootFilesNestedGitStateDidChange(_ files: RootFiles) { nestedGitStateChanges += 1 }
   }
 
   // MARK: - 根の判定
@@ -236,6 +242,39 @@ final class RootFilesTests: OrbeTestCase {
       until: { files.baseline(for: URL(fileURLWithPath: linkedRoot + "/a.txt")) == "two\n" },
       "本体側の index の変化")
     XCTAssertEqual(recorder.versionChanges.count, 2)
+  }
+
+  /// サブモジュールの中のコミットと `reset --soft` を、監視だけで追う（行が「中身だけ」と「コミットが動いた」を行き来する）。
+  /// git dir が `.git/modules` にある形でも、作業ツリーの中の `<sub>/.git` にある形でも同じ。中の動きは「入れ子の git dir
+  /// が変わった」として届き、親の「git の状態が変わった」にはならない。止まった後、親の status の読みが自分を呼び戻さない。
+  func testASubmoduleCommitIsFollowedInBothGitDirLayouts() throws {
+    try repo.addSubmodule("sub")
+    try repo.addSubmodule("near", gitDirInWorkingTree: true)
+    let files = RootFiles(root: repo.root)
+    let recorder = Recorder()
+    files.addObserver(recorder)
+    pumpMain(until: { files.status != nil })
+
+    for path in ["sub", "near"] {
+      try repo.write(path + "/t.txt", "edited\n")
+      pumpMain(
+        until: { files.status?.entries[path]?.unstagedSubmodule == .content }, "\(path): 中身だけ")
+      let gitStateChanges = recorder.gitStateChanges
+      XCTAssertTrue(repo.git(["-C", path, "commit", "-qam", "inside"]).isSuccess)
+      pumpMain(
+        until: { files.status?.entries[path]?.unstagedSubmodule == .commit(dirty: false) },
+        "\(path): コミットが動いた")
+      XCTAssertGreaterThan(recorder.nestedGitStateChanges, 0)
+      XCTAssertEqual(recorder.gitStateChanges, gitStateChanges, "親の git の状態は変わっていない")
+      XCTAssertTrue(repo.git(["-C", path, "reset", "-q", "--soft", "HEAD~1"]).isSuccess)
+      pumpMain(
+        until: { files.status?.entries[path]?.unstagedSubmodule == .content }, "\(path): 戻る")
+    }
+
+    RunLoop.main.run(until: Date().addingTimeInterval(BatchDebounce.maximumDelay * 2))
+    let settled = recorder.nestedGitStateChanges
+    RunLoop.main.run(until: Date().addingTimeInterval(BatchDebounce.maximumDelay * 2))
+    XCTAssertEqual(recorder.nestedGitStateChanges, settled, "親の status の読みは入れ子の git dir を書かない")
   }
 
   // MARK: - 一覧と新規作成

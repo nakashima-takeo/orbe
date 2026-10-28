@@ -12,8 +12,10 @@ extension ScmPanel: RootFilesObserver {
 
   func rootFiles(_ files: RootFiles, versionDidChange version: RootFiles.Version) {}
 
+  /// remote 追跡 ref が動いたかもしれなければ、欲しがると届けている係にも渡す（止まった裏の fetch が確かめる）。
   func rootFilesGitStateDidChange(_ files: RootFiles, remoteRefsChanged: Bool) {
     resolveManaged()
+    if remoteRefsChanged { autoFetch?.remoteRefsMayHaveMoved(by: self) }
     readGraphAndHead(remoteRefsMayHaveMoved: remoteRefsChanged)
   }
 }

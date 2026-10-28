@@ -54,13 +54,16 @@ final class TempGitRepo {
   }
 
   /// `t.txt` を 1 コミット持つ別のリポジトリを、サブモジュール `path` として足してコミットする。サブモジュールの中でも
-  /// 作者の設定を持たせる（`git -C <path>` でそのままコミットできる）。
-  func addSubmodule(_ path: String) throws {
+  /// 作者の設定を持たせる（`git -C <path>` でそのままコミットできる）。git dir は `.git/modules` の下に置き、
+  /// `gitDirInWorkingTree` なら作業ツリーの中の `<path>/.git` に置く（clone 済みのリポジトリを足すと git はそのまま使う）。
+  func addSubmodule(_ path: String, gitDirInWorkingTree: Bool = false) throws {
     let source = dir.path + "-\(path)"
     try write("t.txt", "t\n", in: source)
+    let clone = gitDirInWorkingTree ? [["clone", "-q", source, path]] : []
     for args in [
       ["init", "-q", "-b", "main", source], ["-C", source, "add", "t.txt"],
       ["-C", source, "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-qm", "t"],
+    ] + clone + [
       ["-c", "protocol.file.allow=always", "submodule", "add", "-q", source, path],
       ["commit", "-qm", "add submodule"],
       ["-C", path, "config", "user.email", "t@example.com"],
@@ -68,6 +71,9 @@ final class TempGitRepo {
     ] {
       XCTAssertTrue(git(args).isSuccess, "\(args)")
     }
+    var isDirectory: ObjCBool = false
+    FileManager.default.fileExists(atPath: root + "/\(path)/.git", isDirectory: &isDirectory)
+    XCTAssertEqual(isDirectory.boolValue, gitDirInWorkingTree, "前提: \(path) の git dir の置き場")
   }
 
   /// HEAD のコミット。

@@ -155,6 +155,34 @@ extension EditorDiffTests {
     XCTAssertEqual(text(staged.old), "Subproject commit \(first)")
   }
 
+  /// 作業ツリーのサブモジュールの diff を開いたまま中で続けてコミットすると、新しい側は毎回そのコミットに追う——git dir が
+  /// `.git/modules` にある形でも、作業ツリーの中にある形でも。2 回目からは親の status が変わらず、入れ子の git dir の
+  /// 知らせだけが届く（中のファイルを書かない空のコミットで、作業ツリーの変化を混ぜない。足したときの変化が収まってから
+  /// コミットする）。
+  func testASubmoduleDiffFollowsRepeatedCommitsInsideInBothGitDirLayouts() throws {
+    let (tab, _) = tab()
+    for (path, inTree) in [("sub", false), ("near", true)] {
+      try repo.addSubmodule(path, gitDirInWorkingTree: inTree)
+      let head = {
+        self.repo.git(["-C", path, "rev-parse", "HEAD"]).stdoutText.trimmingCharacters(
+          in: .newlines)
+      }
+      let diff = try tab.group.editor.openDiff(id(path, .workingTree), as: .pinned)
+      let first = head()
+      pumpMain(until: { self.text(diff.newRevision) == "Subproject commit \(first)" }, path)
+      RunLoop.main.run(until: Date().addingTimeInterval(BatchDebounce.maximumDelay * 2))
+
+      for round in 1...2 {
+        XCTAssertTrue(
+          repo.git(["-C", path, "commit", "-q", "--allow-empty", "-m", "\(round)"]).isSuccess)
+        let commit = head()
+        pumpMain(
+          until: { self.text(diff.newRevision) == "Subproject commit \(commit)" },
+          "\(path): \(round) 回目")
+      }
+    }
+  }
+
   /// サブモジュールをファイルに置き換えた作業ツリー diff は、「Subproject commit」の行とファイルの本文の丸ごとの置き換えで、
   /// 新しい側はファイルの文書。
   func testASubmoduleReplacedByAFileIsAWholeReplacement() throws {
