@@ -174,7 +174,8 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
     XCTAssertEqual(
       session.call("propose", ["proposals": [["title": "x"], ["id": "zzz", "title": "y"]]]).texts[0]
         .split(separator: "\n").dropFirst(),
-      ["item 1: missing id", "item 2: propose zzz: not a new item"], "id の無い件もほかの件と一緒に全件言う")
+      ["item 1: missing id", "item 2: propose zzz: not an item of this run"], "id の無い件もほかの件と一緒に全件言う"
+    )
     XCTAssertFalse(
       session.call("propose", ["proposals": [["id": "f:a", "title": "a に返信する", "workspace": 3]]])
         .isError)

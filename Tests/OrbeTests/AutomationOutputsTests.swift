@@ -146,7 +146,7 @@ final class AutomationOutputsTests: OrbeTestCase {
     XCTAssertEqual(
       rejected,
       [
-        "item 2: propose a: proposed twice", "item 3: propose zzz: not a new item",
+        "item 2: propose a: proposed twice", "item 3: propose zzz: not an item of this run",
         "item 4: propose b: title must be a single non-empty line",
         "item 5: propose b: due is not a YYYY-MM-DD date: 2026-02-30",
         "item 7: resolve https://example.com/unknown: not a waiting proposal",

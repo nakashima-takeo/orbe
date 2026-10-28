@@ -160,7 +160,7 @@ enum AutomationLineFault: Equatable {
     case .typeMismatch(let key): "\(key) has the wrong type"
     case .invalidValue(let key): key.isEmpty ? "invalid value" : "invalid \(key)"
     case .idTwice(let id): "id \(id) appeared twice"
-    case .notNewItem(let id): "propose \(id): not a new item"
+    case .notNewItem(let id): "propose \(id): not an item of this run"
     case .noLink(let id): "the row \"\(id)\" has no link"
     case .proposedTwice(let id): "propose \(id): proposed twice"
     case .notWaiting(let link): "resolve \(link): not a waiting proposal"
