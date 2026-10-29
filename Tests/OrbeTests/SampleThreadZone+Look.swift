@@ -21,12 +21,12 @@ extension SampleThreadZone {
     font: .systemFont(ofSize: 12), lineHeight: 16, textColor: chromeText, caretColor: accentBright,
     selectionColor: tint(accent, 0.35), inactiveSelectionColor: tint(accent, 0.18))
 
-  static func dyn(_ dark: Int, _ light: Int, _ alpha: CGFloat = 1) -> NSColor {
+  static func dyn(_ dark: Int, _ light: Int) -> NSColor {
     NSColor(name: nil) { appearance in
       let hex = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
       return NSColor(
         srgbRed: CGFloat((hex >> 16) & 0xff) / 255, green: CGFloat((hex >> 8) & 0xff) / 255,
-        blue: CGFloat(hex & 0xff) / 255, alpha: alpha)
+        blue: CGFloat(hex & 0xff) / 255, alpha: 1)
     }
   }
 
