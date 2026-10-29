@@ -154,7 +154,7 @@ extension EditorRowsTrialTests {
       pane.surface.setRows(rows)
       pane.surface.isEditable = false
     }
-    panes[0].surface.shareScroll(with: panes[1].surface)
+    panes[1].surface.shareScroll(with: panes[0].surface)
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
     window.makeFirstResponder(panes[1].surface.responder)
