@@ -71,7 +71,7 @@ extension AutomationStoreTests {
   }
 
   /// 元にした行が出来事の候補は、取得から消えても判定が対応済みにするまで残り、対応済みになれば（リンクの行がまた届きえないので）
-  /// 忘れる。
+  /// 忘れる。判断待ちの候補のリンクの新しい行は判定へ渡る（判定が対応済みにする手がかり）。
   func testANewArrivalsProposalStaysUntilTheJudgeResolvesIt() throws {
     let store = AutomationStore()
     let id = try store.create(Self.definition(coverage: .newArrivals), now: Self.at).id
@@ -82,8 +82,36 @@ extension AutomationStoreTests {
     try Self.fetch(store, id, [])
     XCTAssertEqual(proposals(store), [Self.link("a"): .open])
 
+    let merged = AutomationItem(id: "a-merged", link: Self.link("a"), body: "マージされた", time: Self.at)
+    try Self.fetch(store, id, [merged])
+    XCTAssertEqual(store.automation(id)?.state(key: "judge").pending.count, 1)
+
     try Self.judge(store, id, resolving: [Self.link("a")])
     XCTAssertEqual(proposals(store), [:])
+  }
+
+  /// 同じリンクの行は判定へすべて届き、1 回でそのうち 2 つを案にしても候補は 1 つで、残りは理由付きで捨てる。
+  func testOneRunProposingTwoRowsOfTheSameLinkMakesOneProposal() throws {
+    let store = AutomationStore()
+    let id = try store.create(Self.definition(), now: Self.at).id
+    let again = AutomationItem(id: "a2", link: Self.link("a"), body: "a の続き", time: Self.at)
+    try Self.fetch(store, id, [Self.item("a"), again])
+    let judge = store.nodeId(id, "judge")
+    let read = try XCTUnwrap(store.read(judge, of: id, baseline: nil, now: Self.at))
+    XCTAssertEqual(read.taken.count, 2, "前提: 同じリンクの行を絞らない")
+
+    try store.record(
+      AutomationPassEnd(
+        automationId: id, nodeId: judge,
+        defId: try XCTUnwrap(store.automation(id)?.graph.node(judge)).entity.defId,
+        trigger: .arrival, startedAt: Self.at, endedAt: Self.at, read: read,
+        outcome: DesignSceneFixtures.judged(
+          read.taken.compactMap { $0.proposal("対応: \($0.id)") }, rows: 2)))
+
+    XCTAssertEqual(store.proposals.map(\.link), [Self.link("a")])
+    let run = store.automation(id)?.state(key: "judge").runs.first?.run
+    guard case .judge(1, 0, let dismissed) = run?.result else { return XCTFail("判定の回が記録されない") }
+    XCTAssertEqual(dismissed.map(\.why), [.alreadyProposed])
   }
 
   /// 判定の確定はその時点のその判定の候補に当て直す: 別の自動化が先に候補にしたリンクの案も候補になり、同じ判定が既に候補に
