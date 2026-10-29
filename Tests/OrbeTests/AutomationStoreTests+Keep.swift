@@ -2,11 +2,11 @@ import XCTest
 
 @testable import Orbe
 
-/// 判定ごとの候補の保ち方——判定の `keep`、判定の入力に残るリンクの歯止め、処理が作った行の下げ方、毎回すべてを読む判定の覚え方。
+/// 判定ごとの候補の保ち方——判定の `keep`、判定の入力に残るリンクの歯止め、処理を通った行の下げ方、毎回すべてを読む判定の覚え方。
 ///
 /// 壊れると何が起きるか: 判定に片付けさせたい候補が、元の項目が消えたときに黙って消える。1 つの判定に入力を集めた形で、片方の
-/// 取得が外しただけで、まだある項目の候補が消えて戻らない。処理がまとめた行の候補が、処理が外しても棚に残り続ける。直近の窓を
-/// 毎回読む判定で、さばいた候補が次の回に戻る。
+/// 取得が外しただけで、まだある項目の候補が消えて戻らない。取得 → 処理 → 判定 の形で、取得が外した項目の候補が棚に残り続ける。
+/// 処理がまとめた行の候補が、処理が外しても棚に残り続ける。直近の窓を毎回読む判定で、さばいた候補が次の回に戻る。
 extension AutomationStoreTests {
   private func keeping(_ keep: AutomationKeep?) -> AutomationDefinition {
     var definition = Self.definition()
@@ -62,6 +62,35 @@ extension AutomationStoreTests {
     try store.record(id, nodeKey: "f2", at: Self.at, outcome: DesignSceneFixtures.fetched([]))
     XCTAssertEqual(store.proposals, [])
     XCTAssertEqual(store.automation(id)?.state(key: "f2").runs.first?.run?.withdrawn, 1)
+  }
+
+  /// 取得（今の集合）→ 処理（出来事の流れ、入力の id を保って本文を書き換える）→ 判定 の候補は、本文が処理の書いた本文で、出どころの
+  /// ノードは取得。取得がその項目を外すと下がり、取得の回に数える。
+  func testAProposalOfARowAProcessPassedOnIsWithdrawnWhenTheFetchDropsItsItem() throws {
+    let store = AutomationStore()
+    var definition = Self.definition()
+    definition.nodes[1].from = [AutomationDefinition.Input(nodeKey: "p")]
+    definition.nodes.insert(
+      DesignSceneFixtures.commandNode("p", "要約", .arrival, from: ["fetch"], script: "p"), at: 1)
+    let id = try store.create(definition, now: Self.at).id
+    try Self.fetch(store, id, [Self.item("a")])
+    let input = try XCTUnwrap(
+      store.read(store.nodeId(id, "p"), of: id, baseline: nil, now: Self.at)?.taken.first)
+    let summary = AutomationNodeRow(
+      id: input.id,
+      text: #"{"id":"\#(input.id)","link":"\#(Self.link("a"))","body":"要約した本文"}"#, ref: nil,
+      source: input.source)
+    try store.record(
+      id, nodeKey: "p", at: Self.at, outcome: DesignSceneFixtures.processed([summary], read: 1))
+    try Self.judge(store, id, proposing: [Self.item("a")])
+
+    let proposal = try XCTUnwrap(store.proposals.first)
+    XCTAssertEqual(proposal.fields.body, "要約した本文")
+    XCTAssertEqual(proposal.originNodeId, store.nodeId(id, "fetch"))
+
+    try Self.fetch(store, id, [])
+    XCTAssertEqual(store.proposals, [])
+    XCTAssertEqual(store.automation(id)?.state(key: "fetch").runs.first?.run?.withdrawn, 1)
   }
 
   /// 今の集合の処理が新しい id で作った行も候補になり、本文はその行のもの、出どころのノードはその処理。処理がその行を出さなく
