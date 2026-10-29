@@ -227,7 +227,7 @@ final class EditorDocumentDiskTests: XCTestCase {
     let (document, surface) = try open(url)
     XCTAssertEqual(surface.text, "hello\n", "本文に BOM は含めない")
 
-    // 未保存の状態で照合する——未編集だと同じ本文の差し替えで黙って自己修復し、ダイジェストの出どころが
+    // 未保存の状態で照合する——未編集だと本文が同じなので受け入れで黙って自己修復し、ダイジェストの出どころが
     // 本文に戻る退行を捕まえられない。
     surface.replace(NSRange(location: 0, length: 0), with: "x")
     document.reconcileWithDisk()
