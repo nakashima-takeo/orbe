@@ -239,7 +239,7 @@ private final class SideBySideView: NSView {
   }
 }
 
-/// 両面の先頭（行 1 の前）に詰め物の行を 6 行、同じ周で足す・外す。
+/// 両面の 1 行目の後（境 1）に詰め物の行を 6 行、同じ周で足す・外す。
 @MainActor
 private final class SideRowsToggle: NSObject {
   private let surfaces: [MetalTextSurface]
