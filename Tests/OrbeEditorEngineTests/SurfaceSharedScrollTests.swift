@@ -298,8 +298,10 @@ extension SurfaceSharedScrollTests {
       return 0
     }
     // GPU に出した命令の列が終わるのを待つ（上限 3 に当たって飛ばさない）。
-    RenderThread.shared.performAndWait { _ in 0 }
-    Thread.sleep(forTimeInterval: 0.01)
+    let deadline = Date().addingTimeInterval(5)
+    while RenderThread.shared.performAndWait({ $0.gpuInflight }) > 0, Date() < deadline {
+      Thread.sleep(forTimeInterval: 0.001)
+    }
   }
 
   private func drawn(_ surface: MetalTextSurface) -> SIMD2<Double>? {
