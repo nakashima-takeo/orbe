@@ -74,7 +74,7 @@ public final class RevisionDocument {
   }
 
   /// 初めて画面に出す直前に呼ぶ（2 回目以降は何もしない）。見えている範囲の色が揃っていなければ、最大
-  /// `EditorDocument.firstColorsWait` 待つ。
+  /// `SyntaxReception.firstColorsWait` 待つ。
   public func prepareToShow() {
     guard reception.beginShowing(ready: isFirstColorReady) else { return }
     _ = wait(until: .now() + SyntaxReception.firstColorsWait) { $0.isFirstColorReady }

@@ -25,7 +25,8 @@ extension Theme.Color {
   static let editorText = editorDyn(light: 0x4d4368, dark: 0xcdc7e2)
   /// 三次の文字——レールの非選択・パンくずの区切り。`textTertiary` は `textMuted` の別名なので別値を持つ。
   static let editorTertiary = editorDyn(light: 0xaca4bd, dark: 0x6d667a)
-  /// 注意の黄——外部変更で衝突中のタブのドット・検索の一致の地。dark は conflict と偶然同値だが light が違い、git 競合でもない。
+  /// 注意の黄——外部変更で衝突中のタブのドット・検索の一致の地・diff タブの種類の注記と選択の上縁。
+  /// dark は conflict と偶然同値だが light が違い、git 競合でもない。
   static let editorCaution = editorDyn(light: 0xa07f0c, dark: 0xe2cd6d)
   /// git の変化の種類の色（追加＝青・削除＝オレンジ・変更＝黄）。赤と緑を見分けにくい人でも区別できるよう、成否の
   /// success / danger（端末の緑・赤）とは別に持つ。diffModified は editorCaution と値だけ同じ独立トークン。
@@ -168,7 +169,8 @@ extension Theme.Typography {
   static let editorRailBadge = NSFont.systemFont(ofSize: 9, weight: .bold)
   /// ソース管理（見本 ScmPanel の値）。親・子の区分・グラフの枠の見出し（sans 11 bold）・件数バッジ（sans 9.5）・ファイル行の
   /// 名前（sans 13）とディレクトリ（sans 11）・メッセージ欄（sans 12）・コミットボタン（sans 12 semibold）・グラフのコミットの
-  /// 題（sans 12）・ref の札（mono 9）・グラフのブランチの行（mono 11）・「さらに表示」（sans 11.5）・失敗の文（sans 11）。
+  /// 題（sans 12）・ref の札（mono 9）。グラフのブランチの行（mono 11）・「さらに表示」（sans 11.5）・失敗の文（sans 11）は
+  /// 見本に無い。
   static let editorScmSection = NSFont.systemFont(ofSize: 11, weight: .bold)
   static let editorScmCount = NSFont.systemFont(ofSize: 9.5, weight: .regular)
   static let editorScmFile = NSFont.systemFont(ofSize: 13, weight: .regular)
@@ -180,7 +182,7 @@ extension Theme.Typography {
   static let editorScmBranch = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
   static let editorScmMore = NSFont.systemFont(ofSize: 11.5, weight: .regular)
   static let editorScmNote = NSFont.systemFont(ofSize: 11, weight: .regular)
-  /// 実行中の帯の操作名（sans 12）・git の進捗の行（mono 10.5）・止める（sans 11）。見本に無い（決定の図の値）。
+  /// 実行中の帯の操作名（sans 12）・git の進捗の行（mono 10.5）・止める（sans 11）。見本に無い。
   static let editorScmBandName = NSFont.systemFont(ofSize: 12, weight: .regular)
   static let editorScmBandProgress = NSFont.monospacedSystemFont(ofSize: 10.5, weight: .regular)
   static let editorScmStop = NSFont.systemFont(ofSize: 11, weight: .regular)
@@ -237,7 +239,7 @@ extension Theme.Layout {
   static let editorScrollbar: CGFloat = 14
   /// 本文の区画の下端の横スクロールバーの高さ（VS Code の horizontalScrollbarSize）。
   static let editorHorizontalScrollbar: CGFloat = 12
-  /// サイドバーの一覧（エクスプローラーのツリー・検索結果）の縦のつまみの幅（VS Code の一覧の verticalScrollbarSize）。
+  /// サイドバーの一覧（エクスプローラーのツリー・検索結果・ソース管理の列）の縦のつまみの幅（VS Code の一覧の verticalScrollbarSize）。
   static let editorSidebarScrollbar: CGFloat = 10
   /// ミニマップの幅の上限（字の左のガター込み。VS Code の maxColumn 120 × 1 字 1pt）。幅は本文の幅から計算し、
   /// 列が狭ければ細くなる。
@@ -272,12 +274,12 @@ extension Theme.Layout {
   static let editorScmRef: CGFloat = 15
   static let editorScmDot: CGFloat = 7
   static let editorScmDotColumn: CGFloat = 16
-  /// 子の区分の字下げ。見本に無い（人の決定 H20）。
+  /// 子の区分の字下げ。見本に無い。
   static let editorScmIndent: CGFloat = 8
-  /// グラフの枠の高さ（見出し 22 を含む）の既定（見出し＋8 行）と下限（見出し＋3 行）。見本に無い（人の決定 H20）。
+  /// グラフの枠の高さ（見出し 22 を含む）の既定（見出し＋8 行）と下限（見出し＋3 行）。見本に無い。
   static let editorScmGraph: CGFloat = 198
   static let editorScmGraphMin: CGFloat = 88
-  /// 実行中の帯の高さと「止める」の高さ（見本に無い。決定の図の値）。
+  /// 実行中の帯の高さと「止める」の高さ（見本に無い）。
   static let editorScmBand: CGFloat = 28
   static let editorScmStop: CGFloat = 20
   /// 引き手と継ぎ目の幅。

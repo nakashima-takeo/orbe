@@ -35,7 +35,7 @@ struct ScmPanelView: View {
   }
 }
 
-/// 実行中の帯 28（見本に無い。決定の図）: 上端に流れる細い線、操作名・git の進捗の最新の行（末尾省略）・右端に「止める」。
+/// 実行中の帯 28（見本に無い）: 上端に流れる細い線、操作名・git の進捗の最新の行（末尾省略）・右端に「止める」。
 private struct ScmBand: View {
   let control: SourceControl
   @Environment(\.colorScheme) private var scheme

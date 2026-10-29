@@ -154,7 +154,7 @@ extension EditorRowsTrialTests {
       pane.surface.setRows(rows)
       pane.surface.isEditable = false
     }
-    panes[0].surface.shareScroll(with: panes[1].surface)
+    panes[1].surface.shareScroll(with: panes[0].surface)
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
     window.makeFirstResponder(panes[1].surface.responder)
@@ -239,7 +239,7 @@ private final class SideBySideView: NSView {
   }
 }
 
-/// 両面の先頭（行 1 の前）に詰め物の行を 6 行、同じ周で足す・外す。
+/// 両面の 1 行目の後（境 1）に詰め物の行を 6 行、同じ周で足す・外す。
 @MainActor
 private final class SideRowsToggle: NSObject {
   private let surfaces: [MetalTextSurface]

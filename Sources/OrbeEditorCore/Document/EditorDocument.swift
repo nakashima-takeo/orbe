@@ -20,9 +20,6 @@ import os
 /// 行差分を行の印（git ガター）として面へ押す。
 @MainActor
 public final class EditorDocument {
-  /// 文書を初めて画面に出すとき、最初の色を待つ上限。
-  public static let firstColorsWait = SyntaxReception.firstColorsWait
-
   public let url: URL
   public let language: SyntaxLanguage?
   public let surface: any TextSurface
@@ -165,10 +162,11 @@ public final class EditorDocument {
   }
 
   /// 文書を初めて画面に出す直前に呼ぶ。構文の裏の仕事が見えている範囲の役割を作り終えていなければ、最初の描画に色が
-  /// 間に合うよう最大 `firstColorsWait` 待つ（越えたら無色で出し、後から色が付く）。2 回目以降は何もしない。
+  /// 間に合うよう最大 `SyntaxReception.firstColorsWait` 待つ（越えたら無色で出し、後から色が付く）。
+  /// 2 回目以降は何もしない。
   public func prepareToShow() {
     guard reception.beginShowing(ready: isFirstColorReady) else { return }
-    _ = wait(until: .now() + Self.firstColorsWait) { $0.isFirstColorReady }
+    _ = wait(until: .now() + SyntaxReception.firstColorsWait) { $0.isFirstColorReady }
   }
 
   /// 裏の仕事（構文・比較・行差分・問い）がすべて今の版に追いつき、その結果を受け取るまで待つ（最大 `timeout`）。

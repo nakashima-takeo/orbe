@@ -2,7 +2,8 @@ import AppKit
 import OrbeEditorCore
 
 /// 試しのスレッドの区画——見本（orbe_design の `DiffView.tsx` の `Thread`。デザイン台帳 D 節）の構成を、区画の絵で組んだ
-/// もの。差し込みの flow（`editor_rows`）と、画面に出す試しの場（`EditorRowsTrialTests`）が載せる。
+/// もの。差し込みの flow（`editor_rows`）と、画面に出す試しの場（`EditorRowsTrialTests`）と、編集メニューの経路のテスト
+/// （`EditorZoneEditingMenuTests`）が載せる。
 ///
 /// 枠（半透明の地・枠線・影）・頭（行と話題・状態の点・押せる「解決」「折りたたむ」）・コメント（アバターの円と頭文字か
 /// OrbeGlyph・名前と時刻と保留中の札・幅で折り返す本文とインラインコードの地・関連コミット）・返信の入力欄と 2 つの
@@ -290,8 +291,9 @@ final class SampleThreadZone: SurfaceZone {
           .box(
             ZoneBox(
               frame: CGRect(
-                x: left + span.lowerBound - Self.codePadding, y: baseline - mono.ascender - 1,
-                width: span.upperBound - span.lowerBound + 2 * Self.codePadding,
+                x: left + span.lowerBound - style.leadingPadding, y: baseline - mono.ascender - 1,
+                width: span.upperBound - span.lowerBound + style.leadingPadding
+                  + style.trailingPadding,
                 height: mono.ascender - mono.descender + 2), radius: 3,
               fill: Self.tint(Self.accent, 0.12))))
       }

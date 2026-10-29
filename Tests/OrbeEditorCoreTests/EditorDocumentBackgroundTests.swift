@@ -222,7 +222,7 @@ final class EditorDocumentBackgroundTests: XCTestCase {
     document.prepareToShow()
     let waited = Date().timeIntervalSince(started)
     XCTAssertTrue(
-      !document.roles.roles(in: all).isEmpty || waited >= EditorDocument.firstColorsWait,
+      !document.roles.roles(in: all).isEmpty || waited >= SyntaxReception.firstColorsWait,
       "初めて見せるときは色を待つ（\(waited) 秒で色が無いまま戻った）")
 
     XCTAssertTrue(document.waitUntilCaughtUp())
