@@ -169,7 +169,8 @@ extension Theme.Typography {
   static let editorRailBadge = NSFont.systemFont(ofSize: 9, weight: .bold)
   /// ソース管理（見本 ScmPanel の値）。親・子の区分・グラフの枠の見出し（sans 11 bold）・件数バッジ（sans 9.5）・ファイル行の
   /// 名前（sans 13）とディレクトリ（sans 11）・メッセージ欄（sans 12）・コミットボタン（sans 12 semibold）・グラフのコミットの
-  /// 題（sans 12）・ref の札（mono 9）・グラフのブランチの行（mono 11）。「さらに表示」（sans 11.5）と失敗の文（sans 11）は見本に無い。
+  /// 題（sans 12）・ref の札（mono 9）。グラフのブランチの行（mono 11）・「さらに表示」（sans 11.5）・失敗の文（sans 11）は
+  /// 見本に無い。
   static let editorScmSection = NSFont.systemFont(ofSize: 11, weight: .bold)
   static let editorScmCount = NSFont.systemFont(ofSize: 9.5, weight: .regular)
   static let editorScmFile = NSFont.systemFont(ofSize: 13, weight: .regular)
