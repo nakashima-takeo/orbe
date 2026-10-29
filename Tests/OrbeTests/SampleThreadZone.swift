@@ -290,8 +290,9 @@ final class SampleThreadZone: SurfaceZone {
           .box(
             ZoneBox(
               frame: CGRect(
-                x: left + span.lowerBound - Self.codePadding, y: baseline - mono.ascender - 1,
-                width: span.upperBound - span.lowerBound + 2 * Self.codePadding,
+                x: left + span.lowerBound - style.leadingPadding, y: baseline - mono.ascender - 1,
+                width: span.upperBound - span.lowerBound + style.leadingPadding
+                  + style.trailingPadding,
                 height: mono.ascender - mono.descender + 2), radius: 3,
               fill: Self.tint(Self.accent, 0.12))))
       }
