@@ -60,11 +60,10 @@ extension EditorPaneView {
 
   /// 焦点を持っているサイドバーのパネル（検索パネル・ソース管理パネルの入力欄か列）。
   var panelHoldingFocus: EditorSidebarState.Panel? {
-    guard sidebar.isOpen, focusIsInSidebar else { return nil }
     switch sidebar.panel {
     case .files: return nil
-    case .search: return projectSearch.focusedArea != nil ? .search : nil
-    case .sourceControl: return scm.focusedArea != nil ? .sourceControl : nil
+    case .search: return focusIsInSearchPanel ? .search : nil
+    case .sourceControl: return focusIsInSourceControl ? .sourceControl : nil
     }
   }
 

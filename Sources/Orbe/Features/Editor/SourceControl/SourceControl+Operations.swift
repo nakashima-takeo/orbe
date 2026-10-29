@@ -34,11 +34,13 @@ extension SourceControl {
 
   private func commit(_ content: GitCommitContent, amend: Bool) -> Operation? {
     let message = self.message
-    return run(amend ? .amend : .commit, amend ? .amend : .commit) { [weak self] files, done in
-      files.commit(message: message, content: content, amend: amend) { failure in
-        if failure == nil { self?.clearMessage(ifStill: message) }
-        done(failure)
-      }
+    let step: Step = amend ? .amend : .commit
+    return run(amend ? .amend : .commit, step) { [weak self] files, done, operation in
+      self?.attach(
+        files.commit(message: message, content: content, amend: amend) { outcome in
+          self?.commitDidFinish(operation, outcome, message: message)
+          done(outcome.failure)
+        }, step: step, to: operation)
     }
   }
 
@@ -94,9 +96,9 @@ extension SourceControl {
     return run(.commitAndPush, .commit) { [weak self] files, done, operation in
       guard let self else { return done(.cancelled) }
       attach(
-        files.commit(message: message, content: content) { [weak self] failure in
-          if failure == nil { self?.clearMessage(ifStill: message) }
-          self?.continueStep(operation, after: failure, done) {
+        files.commit(message: message, content: content) { [weak self] outcome in
+          self?.commitDidFinish(operation, outcome, message: message)
+          self?.continueStep(operation, after: outcome.failure, done) {
             self?.push(files, operation, done)
           }
         }, step: .commit, to: operation)
@@ -151,12 +153,21 @@ extension SourceControl {
     }
   }
 
+  /// コミットの段が終わった。通ればメッセージを空にし（コミットの間に打ち足していれば残す）、先のステージを書いたかを
+  /// 含めて 1 段目の終わりを知らせる。
+  private func commitDidFinish(
+    _ operation: Operation, _ outcome: GitCommitOutcome, message committed: String
+  ) {
+    if outcome == .committed { clearMessage(ifStill: committed) }
+    finishFirstStep(operation, FirstStepOutcome(outcome))
+  }
+
   /// 1 段目が通り、止められていなければ 2 段目を起こす。そうでなければ 1 段目の結果で終える。
   private func continueStep(
     _ operation: Operation, after failure: GitWriteFailure?,
     _ done: @escaping (GitWriteFailure?) -> Void, next: () -> Void
   ) {
-    finishFirstStep(operation, failure)
+    finishFirstStep(operation, FirstStepOutcome(failure))
     guard failure == nil else { return done(failure) }
     guard !operation.isStopped else { return done(.cancelled) }
     next()

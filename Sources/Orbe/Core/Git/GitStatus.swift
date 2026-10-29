@@ -17,6 +17,20 @@ struct GitStatus: Equatable {
     case content
   }
 
+  /// 作業ツリーに在るそのパスの種類（porcelain v2 の作業ツリーの mode）。
+  enum WorkingTreeKind: Equatable {
+    case absent, file, submodule
+
+    /// `000000` は無い、`160000` はサブモジュール、ほか（シンボリックリンクを含む）はファイル。
+    init(mode: Substring) {
+      switch mode {
+      case "000000": self = .absent
+      case "160000": self = .submodule
+      default: self = .file
+      }
+    }
+  }
+
   struct Entry: Equatable {
     let staged: Change?
     let unstaged: Change?
@@ -24,15 +38,18 @@ struct GitStatus: Equatable {
     let originalPath: String?
     /// 作業ツリー側の変化がサブモジュールのままの変化なら、その変わり方。
     let unstagedSubmodule: SubmoduleChange?
+    /// 作業ツリーに在るそのパスの種類。未追跡の行はファイル。
+    let workingTree: WorkingTreeKind
 
     init(
       staged: Change?, unstaged: Change?, originalPath: String? = nil,
-      unstagedSubmodule: SubmoduleChange? = nil
+      unstagedSubmodule: SubmoduleChange? = nil, workingTree: WorkingTreeKind = .file
     ) {
       self.staged = staged
       self.unstaged = unstaged
       self.originalPath = originalPath
       self.unstagedSubmodule = unstagedSubmodule
+      self.workingTree = workingTree
     }
 
     var isConflicted: Bool { staged == .unmerged || unstaged == .unmerged }
@@ -106,7 +123,8 @@ struct GitStatus: Equatable {
   }
 
   /// 相対パス → 変化（rename・copy は新しいパスで引く）。未追跡はファイル 1 件ずつ。index から外して作業ツリーに残した
-  /// ファイル（`git rm --cached`）は、index 側の削除と作業ツリー側の未追跡を 1 つのエントリに併せ持つ。
+  /// ファイル（`git rm --cached`）は、index 側の削除と作業ツリー側の未追跡を 1 つのエントリに併せ持つ。`.gitignore` に
+  /// 当たるファイルは `?` 行が出ないので、index 側の削除だけを持ち、作業ツリーの種類は無い（`absent`）。
   let entries: [String: Entry]
   /// 未追跡のディレクトリ（末尾 `/` 無し）。未追跡の入れ子のリポジトリだけが git にこの形で出る（中は個別に出ない
   /// ので前方一致で引く）。
@@ -152,8 +170,9 @@ struct GitStatus: Equatable {
           if line.entry.staged == .renamed { versions[original] = .absent }
         }
       case "u ":
-        if let path = unmerged(token) {
-          entries[path] = Entry(staged: .unmerged, unstaged: .unmerged)
+        if let line = unmerged(token) {
+          entries[line.path] = Entry(
+            staged: .unmerged, unstaged: .unmerged, workingTree: line.workingTree)
         }
       case "? ":
         let path = String(token.dropFirst(2))
@@ -193,7 +212,8 @@ struct GitStatus: Equatable {
   }
 
   /// 同じパスが index 側の変化の行と未追跡の行の両方で出たら（`git rm --cached` の後の `1 D.` と `?`）、行の順に依らず
-  /// 1 つに併せる——後の行で上書きすると、ステージ済みの削除が見えず解除もできない。
+  /// 1 つに併せる——後の行で上書きすると、ステージ済みの削除が見えず解除もできない。作業ツリーの種類は未追跡の行の側
+  /// （index 側の行の作業ツリーの mode は `000000`）。
   private static func merge(_ existing: Entry?, _ entry: Entry) -> Entry {
     guard let existing else { return entry }
     let isUntracked = { (entry: Entry) in entry.staged == nil && entry.unstaged == .untracked }
@@ -202,7 +222,8 @@ struct GitStatus: Equatable {
     return Entry(
       staged: tracked.staged, unstaged: tracked.unstaged ?? .untracked,
       originalPath: tracked.originalPath,
-      unstagedSubmodule: tracked.unstagedSubmodule)
+      unstagedSubmodule: tracked.unstagedSubmodule,
+      workingTree: untracked.workingTree)
   }
 
   /// `# branch.oid <commit | (initial)>`・`# branch.head <name | (detached)>`・`# branch.upstream <name>`・
@@ -249,7 +270,9 @@ struct GitStatus: Equatable {
   /// `1 XY sub mH mI mW hH hI path`
   private static func ordinary(_ token: String) -> Line? {
     let fields = token.split(separator: " ", maxSplits: 8, omittingEmptySubsequences: false)
-    guard fields.count == 9, let entry = pair(fields[1], sub: fields[2]) else { return nil }
+    guard fields.count == 9, let entry = pair(fields[1], sub: fields[2], worktree: fields[5]) else {
+      return nil
+    }
     return Line(
       path: String(fields[8]), entry: entry,
       index: IndexVersion(mode: fields[4], object: fields[7]))
@@ -258,20 +281,21 @@ struct GitStatus: Equatable {
   /// `2 XY sub mH mI mW hH hI Xscore path`（元パスは次のトークン）
   private static func renamed(_ token: String, from original: String) -> Line? {
     let fields = token.split(separator: " ", maxSplits: 9, omittingEmptySubsequences: false)
-    guard fields.count == 10, let entry = pair(fields[1], sub: fields[2]) else { return nil }
+    guard fields.count == 10, let entry = pair(fields[1], sub: fields[2], worktree: fields[5])
+    else { return nil }
     return Line(
       path: String(fields[9]),
       entry: Entry(
         staged: entry.staged, unstaged: entry.unstaged, originalPath: original,
-        unstagedSubmodule: entry.unstagedSubmodule),
+        unstagedSubmodule: entry.unstagedSubmodule, workingTree: entry.workingTree),
       index: IndexVersion(mode: fields[4], object: fields[7]))
   }
 
   /// `u XY sub m1 m2 m3 mW h1 h2 h3 path`
-  private static func unmerged(_ token: String) -> String? {
+  private static func unmerged(_ token: String) -> (path: String, workingTree: WorkingTreeKind)? {
     let fields = token.split(separator: " ", maxSplits: 10, omittingEmptySubsequences: false)
     guard fields.count == 11 else { return nil }
-    return String(fields[10])
+    return (String(fields[10]), WorkingTreeKind(mode: fields[6]))
   }
 
   /// `sub` は `N...`（サブモジュールでない）か `S<c><m><u>`（`c` はチェックアウトしているコミットが変わったら `C`、`m` は
@@ -279,7 +303,7 @@ struct GitStatus: Equatable {
   /// 1 つでもサブモジュールなら付く。サブモジュールのままの変化は、作業ツリー側が `M` で `C`・`M`・`U` のどれかが立つもの
   /// ——作業ツリーで消した・種類が変わったサブモジュール（`D`・`T`）と、ファイルに置き換えてから編集したもの（`S...`）は
   /// 含めない。
-  private static func pair(_ xy: Substring, sub: Substring) -> Entry? {
+  private static func pair(_ xy: Substring, sub: Substring, worktree mode: Substring) -> Entry? {
     let chars = Array(xy)
     guard chars.count == 2 else { return nil }
     let unstaged = change(chars[1])
@@ -288,7 +312,9 @@ struct GitStatus: Equatable {
     let submodule: SubmoduleChange? =
       unstaged == .modified && flags.count == 4 && flags[0] == "S"
       ? (flags[1] == "C" ? .commit(dirty: dirty) : dirty ? .content : nil) : nil
-    return Entry(staged: change(chars[0]), unstaged: unstaged, unstagedSubmodule: submodule)
+    return Entry(
+      staged: change(chars[0]), unstaged: unstaged, unstagedSubmodule: submodule,
+      workingTree: WorkingTreeKind(mode: mode))
   }
 
   private static func change(_ c: Character) -> Change? {

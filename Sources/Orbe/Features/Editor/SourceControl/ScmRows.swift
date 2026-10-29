@@ -14,16 +14,19 @@ struct ScmRowID: Hashable {
 }
 
 /// status の 2 区分——「ステージされている変更」（index 側の変化。競合は含めない）と「変更」（作業ツリー側の変化と競合）。
-/// 同じファイルが両方に出ることがある（ステージした後に編集した・`git rm --cached`）。並びはパス順（`FileNameOrder` の
-/// パスの比べ方。区切りごとに名前を比べ、同じ階層ではファイルが先）。status は数万エントリになりうるので、裏で作る。
+/// 同じファイルが両方に出ることがある（ステージした後に編集した・`.gitignore` に当たらないファイルを `git rm --cached`
+/// した）。並びはパス順（`FileNameOrder` のパスの比べ方。区切りごとに名前を比べ、同じ階層ではファイルが先）。status は
+/// 数万エントリになりうるので、裏で作る。
 struct ScmChanges {
   struct File: Equatable {
     /// 操作に渡す行（rename なら元パスも）。
     let row: GitStatus.Row
     /// その区分の変化の印（追加 A・未追跡 U・競合 C、ほか M）。
     let badge: GitStatus.Badge
-    /// 作業ツリーに在る（「ファイルを開く」が押せる）。
-    let existsInWorkingTree: Bool
+    /// status が作業ツリーにファイルとして在ると言う（「ファイルを開く」が押せる。無いパスとサブモジュールは開けない）。
+    /// `.gitignore` に当たるファイルを `git rm --cached` した行は、status に作業ツリー側の行（`?`）が出ないので、在っても
+    /// 開けない。
+    let opensAsFile: Bool
     /// 「変更」の行の破棄で、行のパスがゴミ箱へ移る（戻せる）。偽なら index の版へ戻す（戻せないので確かめる）。規則は
     /// `GitStatus.Entry.discardMovesToTrash`（`GitRepo.discard` と同じ）から写す。rename の元パスは戻す側。
     let discardMovesToTrash: Bool
@@ -31,12 +34,12 @@ struct ScmChanges {
     let submodule: GitStatus.SubmoduleChange?
 
     init(
-      row: GitStatus.Row, badge: GitStatus.Badge, existsInWorkingTree: Bool,
+      row: GitStatus.Row, badge: GitStatus.Badge, opensAsFile: Bool,
       discardMovesToTrash: Bool, submodule: GitStatus.SubmoduleChange? = nil
     ) {
       self.row = row
       self.badge = badge
-      self.existsInWorkingTree = existsInWorkingTree
+      self.opensAsFile = opensAsFile
       self.discardMovesToTrash = discardMovesToTrash
       self.submodule = submodule
     }
@@ -90,16 +93,13 @@ struct ScmChanges {
     var changes: [(FileNameOrder.PathKey, File)] = []
     for (path, entry) in status.entries {
       let row = GitStatus.Row(path: path, originalPath: entry.originalPath)
-      let exists =
-        !(entry.unstaged == .deleted || (entry.staged == .deleted && entry.unstaged == nil))
+      let opens = entry.workingTree == .file
       let key = FileNameOrder.PathKey(path)
       if entry.isConflicted {
         changes.append(
           (
             key,
-            File(
-              row: row, badge: .conflicted, existsInWorkingTree: exists,
-              discardMovesToTrash: false)
+            File(row: row, badge: .conflicted, opensAsFile: opens, discardMovesToTrash: false)
           ))
         continue
       }
@@ -107,9 +107,7 @@ struct ScmChanges {
         staged.append(
           (
             key,
-            File(
-              row: row, badge: .init(change), existsInWorkingTree: exists,
-              discardMovesToTrash: false)
+            File(row: row, badge: .init(change), opensAsFile: opens, discardMovesToTrash: false)
           ))
       }
       if let change = entry.unstaged {
@@ -117,7 +115,7 @@ struct ScmChanges {
           (
             key,
             File(
-              row: row, badge: .init(change), existsInWorkingTree: exists,
+              row: row, badge: .init(change), opensAsFile: opens,
               discardMovesToTrash: entry.discardMovesToTrash, submodule: entry.unstagedSubmodule)
           ))
       }
@@ -171,7 +169,7 @@ struct ScmLayout {
   }
 
   enum Item {
-    case header(ScmSection, count: Int, isOpen: Bool, bulk: Bulk = .none)
+    case header(ScmSection, count: Int, isOpen: Bool, bulk: Bulk)
     case file(ScmSection, ScmChanges.File)
   }
 

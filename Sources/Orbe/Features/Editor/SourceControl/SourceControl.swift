@@ -3,12 +3,11 @@ import Foundation
 /// 面の側が知らせを受ける者（同じ worktree を見ているソース管理パネル）。
 @MainActor
 protocol SourceControlObserver: AnyObject {
-  /// 操作の 1 段目（1 段の操作はその段）が終わった（`failure` が nil なら通った）。根のサービスの完了の後なので、根のサービスの
-  /// status はもう書き込み後の姿。2 段の操作の 1 段目は index・HEAD を書く段（コミット・プル）で、2 段目の push はそれを
-  /// 書かない。
+  /// 操作の 1 段目（1 段の操作はその段）が終わった。根のサービスの完了の後なので、根のサービスの status はもう書き込み後の
+  /// 姿。2 段の操作の 1 段目は index・HEAD を書く段（コミット・プル）で、2 段目の push はそれを書かない。
   func sourceControl(
     _ control: SourceControl, firstStepDidFinish operation: SourceControl.Operation,
-    failure: GitWriteFailure?)
+    outcome: SourceControl.FirstStepOutcome)
   /// 種類 `kind` の操作が終わった（通った・止めた・失敗したのどれでも）。
   func sourceControl(_ control: SourceControl, operationDidFinish kind: SourceControl.Kind)
 }
@@ -108,6 +107,26 @@ final class SourceControl {
         return withdraw()
       }
       write?.cancel()
+    }
+  }
+
+  /// 操作の 1 段目の終わり方。
+  enum FirstStepOutcome: Equatable {
+    case passed
+    /// 落ちた（走る前に止めた・断ったを含む）。コミットの段なら、先にステージする行が無いか、その `add -A` が通る前に落ちた。
+    case failed
+    /// コミットの段が、先にステージする行を index に書いた後で落ちた（ステージしたものは残る）。
+    case failedAfterStaging
+
+    init(_ failure: GitWriteFailure?) {
+      self = failure == nil ? .passed : .failed
+    }
+
+    init(_ commit: GitCommitOutcome) {
+      switch commit {
+      case .committed: self = .passed
+      case .failed(_, let stagedFirst): self = stagedFirst ? .failedAfterStaging : .failed
+      }
     }
   }
 
@@ -246,11 +265,12 @@ final class SourceControl {
   }
 
   /// 操作の 1 段目が終わった（2 段の操作は段の間、1 段の操作は終わりで。1 段目を待つ間に止めた操作も、終わりで知らせる）。
-  func finishFirstStep(_ operation: Operation, _ failure: GitWriteFailure?) {
+  /// 知らせるのは最初の 1 回だけ。
+  func finishFirstStep(_ operation: Operation, _ outcome: FirstStepOutcome) {
     guard !operation.hasFinishedFirstStep else { return }
     operation.hasFinishedFirstStep = true
     for observer in observers {
-      observer.value?.sourceControl(self, firstStepDidFinish: operation, failure: failure)
+      observer.value?.sourceControl(self, firstStepDidFinish: operation, outcome: outcome)
     }
   }
 
@@ -259,7 +279,7 @@ final class SourceControl {
     operation.isRunning = false
     operation.longDelay.cancel()
     operations.removeAll { $0 === operation }
-    finishFirstStep(operation, outcome)
+    finishFirstStep(operation, FirstStepOutcome(outcome))
     operation.autoFetch?.humanDidFinish()
     operation.autoFetch = nil
     switch outcome {

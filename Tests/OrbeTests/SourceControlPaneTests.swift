@@ -6,7 +6,7 @@ import XCTest
 
 /// エディター面に結んだソース管理パネル——行は区分に合った diff を仮のタブで開き、追跡中のファイルの破棄は確かめてから行い、
 /// メッセージ欄の ↵ はコミット、⌘↵ はコミットしてプッシュ（同期・公開は起こさない）、改行は ⇧↵・⌥↵・⌃↵。欄は中身の行に
-/// 合わせて伸び縮みする。欄の中身が外から変わったら取り消しの履歴を捨て、取り消しはその欄の中で閉じる。パネルを出して
+/// 合わせて伸び縮みし、1 行が高い文字でも 10 行分の高さまで伸びる。欄の中身が外から変わったら取り消しの履歴を捨て、取り消しはその欄の中で閉じる。パネルを出して
 /// いなくても面が見えていれば件数は status に追いつき（行とグラフは作らない）、cd した後の列は新しい根の行を出して押せば
 /// 新しい根の diff を開く。行の ＋ を同じ位置で続けて押すと、次の行が次々にステージされる。未追跡の行を破棄した直後の
 /// コミットは、その破棄を数える。
@@ -14,7 +14,7 @@ import XCTest
 /// 壊れると何が起きるか。「ステージされている変更」の行で作業ツリーの diff が開き、コミットする中身と違うものを見て確かめた
 /// ことになる。追跡中のファイルの編集が確認なしに消え、戻せない。未追跡の行を破棄してすぐ ↵ を打つと、自分の破棄のせいで
 /// 「表示と食い違う」と断られる。ボタンが「同期」の間に欄で ⌘↵ を打つと、同期が走る。⇧↵ の改行がコミットを起こす・↵ が
-/// 改行を入れて押せないことに気づかない・⌃↵ が見えない字をメッセージに入れる。改行しても欄が伸びず、打った行が見えない。
+/// 改行を入れて押せないことに気づかない・⌃↵ が見えない字をメッセージに入れる。改行しても欄が伸びず、打った行が見えない。タイ文字の欄が 10 行分の手前で止まる。
 /// コミットの後の ⌘Z が例外を投げ、欄の取り消しが壊れたまま残る。エクスプローラーを出している間、レールの件数が古い数で
 /// 止まる・隠れたパネルのために git を読む。cd した後も列が前の根の行を出し、押した行やボタンが前の
 /// worktree の diff を開く・前の worktree でステージや破棄をする。cd した・パネルを閉じた後の ⌘Z が、見えない欄の打鍵を
@@ -184,7 +184,7 @@ final class SourceControlPaneTests: OrbeTestCase {
   }
 
   /// 欄は中身の行に合わせてその場で伸び縮みする——打鍵の改行で 1 行ずつ伸び、外からの差し替えでも中身に合い、空にすれば
-  /// 1 行の 26 に戻る。
+  /// 1 行の 26 に戻る。折り返す文は、サイドバーを狭める・広げる・戻すのどれでも、その幅で組んだ行の高さに合う。
   func testTheMessageGrowsAndShrinksWithItsLines() throws {
     let hosted = host(try TempGitRepo())
     let field = try type("a", in: hosted)
@@ -207,6 +207,23 @@ final class SourceControlPaneTests: OrbeTestCase {
     hosted.scm.control.message = ""
     pumpMain(until: { field.string.isEmpty }, "空にする")
     XCTAssertEqual(height(), Theme.Layout.editorScmMessage, accuracy: 0.5, "1 行に戻る")
+
+    let wrapping = String(repeating: "word ", count: 30)
+    hosted.scm.control.message = wrapping
+    pumpMain(until: { field.string == wrapping }, "折り返す文")
+    func wrappedHeight() -> CGFloat {
+      let layout = field.layoutManager!
+      layout.ensureLayout(for: field.textContainer!)
+      return layout.usedRect(for: field.textContainer!).height + Theme.Layout.editorScmMessage
+        - line
+    }
+    var heights: [CGFloat] = []
+    for width in [200, 400, 240] as [CGFloat] {
+      hosted.pane.sidebar.setWidth(width)
+      pumpMain(until: { abs(height() - wrappedHeight()) < 0.5 }, "幅 \(width) の行に合う")
+      heights.append(height())
+    }
+    XCTAssertEqual(Set(heights).count, 3, "前提: 幅ごとに行の数が違う \(heights)")
   }
 
   /// 欄は 10 行で止まり、その先は中がスクロールして、打った行とキャレットが見えるように送られる。スクロールバーは字の幅を
@@ -238,6 +255,16 @@ final class SourceControlPaneTests: OrbeTestCase {
     scroll.scrollerStyle = .legacy  // 推奨の型が legacy へ変わると、AppKit はこの setter で当て直す
     hosted.pane.layoutSubtreeIfNeeded()
     XCTAssertEqual(field.frame.width, scroll.frame.width, "スクロールバーが字の幅を狭めない")
+  }
+
+  /// 欄の上限は既定の行の 10 行分の高さで、1 行が既定より高い文字（タイ文字）でも低くならない。
+  func testTheMessageOfTallLinesStopsAtTheSameHeight() throws {
+    let field = ScmMessageTextView()
+    let line = try XCTUnwrap(field.layoutManager).defaultLineHeight(for: try XCTUnwrap(field.font))
+    field.string = Array(repeating: "ปั้ญู", count: 12).joined(separator: "\n")
+    XCTAssertEqual(
+      field.fittingHeight(width: 300, maxLines: ScmMessageField.maxLines),
+      Theme.Layout.editorScmMessage + line * CGFloat(ScmMessageField.maxLines - 1), accuracy: 0.5)
   }
 
   /// メッセージ欄の中身が外から変わった（コミットで空になった）ら、それまでの取り消しの履歴は捨てる——⌘Z は差し替え前の
@@ -330,13 +357,13 @@ final class SourceControlPaneTests: OrbeTestCase {
   }
 
   /// 面のメッセージ欄（載っていなければ nil）。
-  private func messageField(in view: NSView) -> ScmMessageTextView? {
+  func messageField(in view: NSView) -> ScmMessageTextView? {
     (view as? ScmMessageTextView) ?? view.subviews.lazy.compactMap(messageField(in:)).first
   }
 
   /// メッセージ欄に焦点を入れ、末尾に `text` を打つ（打った文が欄の外へ届くまで待つ）。
   @discardableResult
-  private func type(_ text: String, in hosted: Hosted) throws -> ScmMessageTextView {
+  func type(_ text: String, in hosted: Hosted) throws -> ScmMessageTextView {
     pumpMain(until: { self.messageField(in: hosted.pane) != nil }, "メッセージ欄")
     let field = try XCTUnwrap(messageField(in: hosted.pane))
     hosted.window.makeFirstResponder(field)

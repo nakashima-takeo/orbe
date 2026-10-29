@@ -5,7 +5,7 @@ import SwiftUI
 /// メニューは AppKit）。押せない間はメニューを開かない。
 struct ScmMenuAnchor: NSViewRepresentable {
   let help: String
-  var isEnabled = true
+  let isEnabled: Bool
   let menu: () -> NSMenu
 
   func makeNSView(context: Context) -> AnchorView { AnchorView() }

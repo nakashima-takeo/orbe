@@ -7,7 +7,7 @@ extension ScmRowView {
     case .header(let section, let count, let isOpen, let bulk):
       "h\(section)\(count)\(isOpen)\(bulk.canStageAll)\(bulk.canDiscardAll)\(language)"
     case .file(let section, let file):
-      "f\(section)\(file.path)\u{0}\(file.badge)\(file.existsInWorkingTree)\(file.canStage)"
+      "f\(section)\(file.path)\u{0}\(file.badge)\(file.opensAsFile)\(file.canStage)"
         + "\(file.canDiscard)\(language)"
     }
   }
@@ -59,16 +59,16 @@ extension ScmRowView {
       buttons: buttons)
   }
 
-  /// ファイル行: ステージ済みは ファイルを開く・ステージを解除、変更は ファイルを開く・変更を破棄・ステージ。作業ツリーに無い
-  /// ファイルの「ファイルを開く」と、git が何も変えない「変更を破棄」「ステージ」は押せない姿で置く（ボタンの位置は行どうし
-  /// で揃う）。
+  /// ファイル行: ステージ済みは ファイルを開く・ステージを解除、変更は ファイルを開く・変更を破棄・ステージ。作業ツリーに
+  /// ファイルとして無い（消えた・サブモジュール）行の「ファイルを開く」と、git が何も変えない「変更を破棄」「ステージ」は
+  /// 押せない姿で置く（ボタンの位置は行どうしで揃う）。
   private static func file(
     _ section: ScmSection, _ file: ScmChanges.File, _ language: Language, _ emoji: NSFont?
   ) -> File {
     let button = { (control: ScmControl, glyph: ScmGlyphShape, enabled: Bool, help: L10nKey) in
       Button(control: control, glyph: glyph, isEnabled: enabled, help: L10n.string(help, language))
     }
-    let open = button(.openFile, .openFile, file.existsInWorkingTree, .editorScmOpenFile)
+    let open = button(.openFile, .openFile, file.opensAsFile, .editorScmOpenFile)
     let buttons =
       section == .staged
       ? [open, button(.unstage, .minus, true, .editorScmUnstage)]

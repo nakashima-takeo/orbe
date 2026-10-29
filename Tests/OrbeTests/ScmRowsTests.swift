@@ -20,12 +20,12 @@ final class ScmRowsTests: OrbeTestCase {
     entries: [
       "src/b.swift": GitStatus.Entry(staged: .added, unstaged: .modified),
       "src/a10.swift": GitStatus.Entry(staged: nil, unstaged: .modified),
-      "src/a2.swift": GitStatus.Entry(staged: nil, unstaged: .deleted),
+      "src/a2.swift": GitStatus.Entry(staged: nil, unstaged: .deleted, workingTree: .absent),
       "conflict.txt": GitStatus.Entry(staged: .unmerged, unstaged: .unmerged),
       "cached.txt": GitStatus.Entry(staged: .deleted, unstaged: .untracked),
       "new.txt": GitStatus.Entry(staged: nil, unstaged: .untracked),
       "moved.txt": GitStatus.Entry(staged: .renamed, unstaged: nil, originalPath: "old.txt"),
-      "gone.txt": GitStatus.Entry(staged: .deleted, unstaged: nil),
+      "gone.txt": GitStatus.Entry(staged: .deleted, unstaged: nil, workingTree: .absent),
     ], untrackedDirectories: [],
     branch: GitStatus.Branch(name: "main", commit: "abc", upstream: nil), stagedVersions: [:])
 
@@ -47,10 +47,46 @@ final class ScmRowsTests: OrbeTestCase {
     XCTAssertEqual(unstaged["new.txt"]?.discardMovesToTrash, true)
     XCTAssertEqual(unstaged["cached.txt"]?.discardMovesToTrash, true)
     XCTAssertEqual(unstaged["src/a2.swift"]?.discardMovesToTrash, false)
-    XCTAssertEqual(unstaged["src/a2.swift"]?.existsInWorkingTree, false)
-    XCTAssertEqual(staged["gone.txt"]?.existsInWorkingTree, false)
-    XCTAssertEqual(staged["cached.txt"]?.existsInWorkingTree, true)
     XCTAssertEqual(ScmChanges.count(status), changes.count)
+  }
+
+  /// 「ファイルを開く」が押せるのは、作業ツリーにファイルとして在る行だけ——作業ツリーに無い競合（`DD`・競合中に消した
+  /// `UU`）・rename の後に消したファイルとサブモジュールの行（ステージ済みも変更も）は開けない。シンボリックリンク・ファイルに
+  /// 置き換えたサブモジュール・index から外して作業ツリーに残したファイル（`?` 行が出る場合）は開ける。
+  func testOnlyRowsThatAreFilesInTheWorkingTreeOpenAsFiles() {
+    let zero = String(repeating: "0", count: 40)
+    func line(_ xy: String, _ sub: String, _ modes: String, _ path: String) -> String {
+      "1 \(xy) \(sub) \(modes) \(zero) \(zero) \(path)"
+    }
+    func conflict(_ xy: String, _ modes: String, _ path: String) -> String {
+      "u \(xy) N... \(modes) \(zero) \(zero) \(zero) \(path)"
+    }
+    let tokens = [
+      conflict("DD", "100644 000000 000000 000000", "both-deleted.txt"),
+      conflict("UU", "100644 100644 100644 000000", "deleted-in-conflict.txt"),
+      conflict("UU", "100644 100644 100644 100644", "conflict.txt"),
+      "2 RD N... 100644 100644 000000 \(zero) \(zero) R100 moved.txt", "old.txt",
+      line(".T", "N...", "100644 100644 120000", "link"),
+      line("A.", "S...", "000000 160000 160000", "added-sub"),
+      line(".M", "SC..", "160000 160000 160000", "moved-sub"),
+      line("MT", "S...", "160000 160000 100644", "sub-as-file"),
+      line("D.", "N...", "100644 000000 000000", "cached.txt"), "? cached.txt",
+    ]
+    let status = GitStatus.parse(Data((tokens.joined(separator: "\u{0}") + "\u{0}").utf8))
+    let changes = ScmChanges.build(status)
+    let opens = { (files: [ScmChanges.File]) in
+      Dictionary(uniqueKeysWithValues: files.map { ($0.path, $0.opensAsFile) })
+    }
+    XCTAssertEqual(
+      opens(changes.changes),
+      [
+        "both-deleted.txt": false, "deleted-in-conflict.txt": false, "conflict.txt": true,
+        "moved.txt": false, "link": true, "moved-sub": false, "sub-as-file": true,
+        "cached.txt": true,
+      ])
+    XCTAssertEqual(
+      opens(changes.staged),
+      ["moved.txt": false, "added-sub": false, "sub-as-file": true, "cached.txt": true])
   }
 
   /// 破棄でゴミ箱へ移る行は、作業ツリー側が未追跡か intent-to-add（作業ツリー側の追加・rename）の行。確認が要るのは戻す
@@ -86,7 +122,7 @@ final class ScmRowsTests: OrbeTestCase {
   func testTheDiscardAlertDoesNotConfirmOnReturn() {
     let tracked = ScmChanges.File(
       row: GitStatus.Row(path: "a.txt", originalPath: nil), badge: .modified,
-      existsInWorkingTree: true, discardMovesToTrash: false)
+      opensAsFile: true, discardMovesToTrash: false)
     let alert = ScmDiscardGate.alert([tracked], language: .en)
     XCTAssertEqual(alert.buttons.map(\.title), ["Discard", "Cancel"])
     XCTAssertEqual(alert.buttons[0].keyEquivalent, "", "破棄は Return で確定しない")
@@ -120,7 +156,7 @@ final class ScmRowsTests: OrbeTestCase {
     func enabled(_ submodule: GitStatus.SubmoduleChange?) -> [Bool] {
       let file = ScmChanges.File(
         row: GitStatus.Row(path: "sub", originalPath: nil), badge: .modified,
-        existsInWorkingTree: true, discardMovesToTrash: false, submodule: submodule)
+        opensAsFile: true, discardMovesToTrash: false, submodule: submodule)
       view.show(.file(.changes, file), language: .en, emoji: nil)
       guard case .file(let content) = view.content else { return [] }
       return content.buttons.map(\.isEnabled)

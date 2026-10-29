@@ -16,17 +16,6 @@ final class ScmPanel {
     case list
   }
 
-  /// 行の開き方。
-  struct Opening: Equatable {
-    let mode: EditorSession.OpenMode
-    let focusesText: Bool
-
-    /// シングルクリック・キーで行へ動いた: 仮で開き、焦点は列のまま。
-    static let browse = Opening(mode: .preview, focusesText: false)
-    /// ダブルクリック・Enter: 普通に開いて本文へ。
-    static let commit = Opening(mode: .pinned, focusesText: true)
-  }
-
   /// グラフを読む件数の刻み。
   static let graphPage = 50
 
@@ -55,8 +44,10 @@ final class ScmPanel {
   private(set) var collapsed: Set<ScmSection> = []
   private(set) var selection: ScmRowID?
   private(set) var focusedArea: Area?
-  /// 焦点を入れる要求。当てた後に残すと、パネルが次に現れたときに古い要求が焦点を奪う。
+  /// 焦点を入れる要求。当てた後に残すと、パネルが次に現れたときに古い要求が焦点を奪う。当てずに隠れた要求も捨てる。
   private(set) var focusRequest: Area?
+  /// 欄に見えている変換中の字（変換中でなければ空）。欄の見せ方なので、worktree のメッセージには確定するまで入れない。
+  var composition = ""
   /// HEAD が push 済みか（nil = 分からない——remote 追跡 ref が動きうるきっかけの後で読み直している・読めない・今の HEAD と
   /// 違うコミットを読んだ）。push 済みは HEAD のコミットと remote 追跡 ref だけで決まるので、それ以外（HEAD・ローカルの
   /// ブランチ・index の変化、ステージ等の終わり）の読み直しの間は、同じ HEAD なら前の値を使う。HEAD が動けば、コミットの
@@ -72,6 +63,9 @@ final class ScmPanel {
   @ObservationIgnored var onOpenFile: (URL) -> Void = { _ in }
   /// 破棄の確認を出す（確認が要らなければそのまま破棄する）。
   @ObservationIgnored var onDiscard: ([ScmChanges.File]) -> Void = { _ in }
+  /// 欄の変換を確定する（載っている欄が登録する。欄が無い・変換中でなければ何もしない）。確定した字は、返る前に worktree
+  /// のメッセージに入る。
+  @ObservationIgnored var confirmComposition: () -> Void = {}
   /// 親を畳む直前（欄と列がまだ窓に居るうち）。焦点がパネルの中にあれば、面の本文へ移す。
   @ObservationIgnored var onRepositoryWillClose: () -> Void = {}
   /// 面の workspace の実効設定で、裏の fetch がオンか（使う時点で読む）。
@@ -393,5 +387,7 @@ final class ScmPanel {
   func panelDidHide() {
     navigation.drop()
     focusedArea = nil
+    focusRequest = nil
+    composition = ""
   }
 }
