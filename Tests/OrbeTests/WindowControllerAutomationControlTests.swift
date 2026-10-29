@@ -3,13 +3,15 @@ import XCTest
 @testable import Orbe
 
 /// 自動化の 8 動詞のドメイン側を、実 `WindowController` 越しに固定する。起動で保存済みのノードが番人に載ること、
-/// 提案と重なりが棚に出す自動化の側に出ること、拒否が制御 API の語彙になること、一覧の定義を `set_automation` へ戻せること。
+/// 候補が出した自動化の棚に出ること、判定のノードに人の判断の数が出ること、拒否が制御 API の語彙になること、一覧の定義を
+/// `set_automation` へ戻せること。
 /// 候補の付け先は今ある workspace に解けるときだけ起動ごとの id と名前で、候補にした理由は判定が書いたときだけ出ること。
 /// 試走は始めた応答で道の上のノードを返し、待って読むとノードごとの回の結果（取得の rows・止めた副作用の held.rows）を返し、
 /// 始める前と自動化を消した後は -32004 で読めないこと。
 ///
-/// 壊れると何が起きるか: Orbe を再起動しただけで全自動化が黙って回らなくなる。AI が自動化の棚を読んでも、提案した自動化が
-/// もう取っていない提案が混ざる・取っている自動化に出ない。流している自動化への `run_automation` が別の誤りに化ける。
+/// 壊れると何が起きるか: Orbe を再起動しただけで全自動化が黙って回らなくなる。AI が自動化の棚を読んでも、元の項目がもう無い
+/// 候補が混ざる・ほかの自動化の候補につられて消える。AI が判定の採用・見送りの数を読めない、または指示文を直す前の数で読む。
+/// 流している自動化への `run_automation` が別の誤りに化ける。
 /// 一覧の定義を書き換えて戻すと、予定やノードが別物になる。
 /// AI が候補の付け先や候補にした理由を読めない、または消えた workspace を付け先として読む。AI が試走を始めても結果を読めない、止めた副作用に
 /// 何が渡るはずだったかを確かめられず本番で初めて誤りに気づく、試走をまだ始めていないのに自動化が無いと読んで作り直す。
@@ -133,18 +135,20 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
     let gone = Self.item("gone")
     let moved = Self.item("moved")
     try Self.round(store, first, fetched: [gone, moved], proposing: [gone, moved])
-    try Self.round(store, second, fetched: [moved, gone], proposing: [moved])
+    try Self.round(store, second, fetched: [moved, gone], proposing: [moved, gone])
 
     let candidates = try listed(wc).compactMapValues { $0["taskCandidates"] as? [String: Any] }
     XCTAssertEqual(candidates[first]?["openProposals"] as? Int, 2)
-    XCTAssertEqual(candidates[second]?["openProposals"] as? Int, 1)
+    XCTAssertEqual(candidates[second]?["openProposals"] as? Int, 2)
     XCTAssertEqual(candidates[first]?.keys.sorted(), ["openProposals"])
 
     try Self.round(store, first, fetched: [moved])
     XCTAssertEqual(
       try proposals(wc, of: first).map { $0["link"] as? String }, [moved.link],
       "元の項目が消えた提案は下がる")
-    XCTAssertEqual(try proposals(wc, of: second).map { $0["link"] as? String }, [moved.link])
+    XCTAssertEqual(
+      try proposals(wc, of: second).map { $0["link"] as? String }, [moved.link, gone.link],
+      "ほかの自動化の同じリンクの候補は残る")
 
     var reporting = try XCTUnwrap(store.automation(first)?.definition)
     reporting.nodes[1] = DesignSceneFixtures.commandNode(
@@ -154,9 +158,35 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
         automationId: first, version: store.automation(first)?.version, reporting))
     XCTAssertTrue(try proposals(wc, of: first).isEmpty, "判定を外せば候補を忘れる")
     let shelved = try proposals(wc, of: second)
-    XCTAssertEqual(shelved.map { $0["link"] as? String }, [moved.link])
+    XCTAssertEqual(shelved.map { $0["link"] as? String }, [moved.link, gone.link])
     XCTAssertEqual(shelved.first?["automationId"] as? Int, second)
     XCTAssertEqual(shelved.first?["automationName"] as? String, "受信 2")
+  }
+
+  /// 判定のノードの状態に、今の定義が出した候補への人の判断の数（採用・見送り）が出る。指示文を書き換えると 0 から数える。
+  func testAJudgeNodeListsTheSettlementsOfItsCurrentDefinition() throws {
+    let wc = try launch()
+    let store = wc.automationStore
+    let id = try set(wc, Self.definition())
+    let (a, b) = (Self.item("a"), Self.item("b"))
+    try Self.round(store, id, fetched: [a, b], proposing: [a, b])
+    let ids = store.proposals.map(\.id)
+    _ = try store.accept(ids[0], into: TaskStore(), workspace: nil)
+    try store.dismiss(ids[1])
+    func settled() throws -> [Int?] {
+      let nodes = try XCTUnwrap(try listed(wc)[id]?["nodes"] as? [String: [String: Any]])
+      return [nodes["judge"]?["accepted"] as? Int, nodes["judge"]?["dismissed"] as? Int]
+    }
+    XCTAssertEqual(try settled(), [1, 1])
+
+    var rewritten = try XCTUnwrap(store.automation(id)?.definition)
+    if case .agent(var agent) = rewritten.nodes[1].action.method {
+      agent.instruction = "期限のある項目だけ"
+      rewritten.nodes[1].action.method = .agent(agent)
+    }
+    _ = try success(
+      wc.controlSetAutomation(automationId: id, version: store.automation(id)?.version, rewritten))
+    XCTAssertEqual(try settled(), [0, 0])
   }
 
   /// 候補を出した判定のノードと出どころのノードは、要素の直下に今の鍵で出す。出した自動化を消したら候補ごと消える。

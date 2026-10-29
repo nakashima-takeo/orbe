@@ -2,12 +2,11 @@ import XCTest
 
 @testable import Orbe
 
-/// 判定ごとの候補の保ち方——判定の `keep`、判定の入力に残るリンクの歯止め、処理が作った行の下げ方、毎回すべてを読む判定の覚え方、
-/// 判定ごとの人の判断の数。
+/// 判定ごとの候補の保ち方——判定の `keep`、判定の入力に残るリンクの歯止め、処理が作った行の下げ方、毎回すべてを読む判定の覚え方。
 ///
 /// 壊れると何が起きるか: 判定に片付けさせたい候補が、元の項目が消えたときに黙って消える。1 つの判定に入力を集めた形で、片方の
 /// 取得が外しただけで、まだある項目の候補が消えて戻らない。処理がまとめた行の候補が、処理が外しても棚に残り続ける。直近の窓を
-/// 毎回読む判定で、さばいた候補が次の回に戻る。判断の数が指示文を直した後も前の定義の分を数える。
+/// 毎回読む判定で、さばいた候補が次の回に戻る。
 extension AutomationStoreTests {
   private func keeping(_ keep: AutomationKeep?) -> AutomationDefinition {
     var definition = Self.definition()
@@ -117,31 +116,5 @@ extension AutomationStoreTests {
 
     try Self.fetch(store, id, [], at: Self.at.addingTimeInterval(25 * 3600))
     XCTAssertEqual(store.proposals, [])
-  }
-
-  /// 人の判断の数は判定の今の定義が出した候補の分で、指示文を書き換えると 0 から数える。
-  func testSettlementCountsBelongToTheJudgesCurrentDefinition() throws {
-    let store = AutomationStore()
-    let id = try store.create(Self.definition(), now: Self.at).id
-    let (a, b) = (Self.item("a"), Self.item("b"))
-    try Self.fetch(store, id, [a, b])
-    try Self.judge(store, id, proposing: [a, b])
-    let ids = store.proposals.map(\.id)
-    _ = try store.accept(ids[0], into: TaskStore(), workspace: nil, now: Self.at)
-    try store.dismiss(ids[1], now: Self.at)
-    func counts() throws -> [Int] {
-      let node = try XCTUnwrap(store.automation(id)?.graph.node(key: "judge"))
-      let counts = try store.settlementCounts(of: node)
-      return [counts.accepted, counts.dismissed]
-    }
-    XCTAssertEqual(try counts(), [1, 1])
-
-    var rewritten = Self.definition()
-    if case .agent(var agent) = rewritten.nodes[1].action.method {
-      agent.instruction = "期限のある項目だけ"
-      rewritten.nodes[1].action.method = .agent(agent)
-    }
-    try Self.rewrite(store, id, rewritten)
-    XCTAssertEqual(try counts(), [0, 0])
   }
 }
