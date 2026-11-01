@@ -85,9 +85,7 @@ public enum ZoneTextLayout {
       ]
     }
     let typesetter = CTTypesetterCreateWithAttributedString(
-      composed(
-        Array(units[span]), styles: Self.styles(styles, in: NSRange(span))
-      ).string)
+      padded(Array(units[span]), styles: Self.styles(styles, in: NSRange(span))).string)
     var lines: [Line] = []
     var start = span.lowerBound
     while start < span.upperBound {
@@ -126,11 +124,12 @@ public enum ZoneTextLayout {
   /// 1 行に組む。字の x 範囲はグリフの位置と送り幅から引き、余白の送りを置いた字の塊では、その送りが乗るグリフ（右端が
   /// 最も右のもの）から送りを引く（位置の境は余白の真ん中に来るので使わない）。
   private static func laid(_ units: [UInt16], styles: [ZoneTextStyle]) -> Laid {
-    let set = composed(units, styles: styles)
+    let set = padded(units, styles: styles)
+    let line = CTLineCreateWithAttributedString(set.string)
     let width =
-      CGFloat(CTLineGetTypographicBounds(set.line, nil, nil, nil))
-      - CGFloat(CTLineGetTrailingWhitespaceWidth(set.line))
-    let glyphs = Self.glyphs(of: set.line)
+      CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+      - CGFloat(CTLineGetTrailingWhitespaceWidth(line))
+    let glyphs = Self.glyphs(of: line)
     var kerned: [Int: CGFloat] = [:]
     for (cluster, kern) in set.kerns {
       let carrier = glyphs.indices.filter { cluster.contains(glyphs[$0].offset) }
@@ -150,28 +149,26 @@ public enum ZoneTextLayout {
       let end = spans.last?.upperBound ?? set.inset
       spans.append(span ?? end..<end)
     }
-    return Laid(line: set.line, inset: set.inset, width: set.inset + max(0, width), spans: spans)
+    return Laid(line: line, inset: set.inset, width: set.inset + max(0, width), spans: spans)
   }
 
-  /// 余白を置いて 1 行に組んだもの——属性文字列と行と、行頭の余白と、送りを置いた字の塊（文の範囲）ごとの送り。
-  private struct Composed {
+  /// 余白を置いた属性文字列と、行頭の余白と、送りを置いた字の塊（文の範囲）ごとの送り。
+  private struct Padded {
     let string: CFAttributedString
-    let line: CTLine
     let inset: CGFloat
     let kerns: [Range<Int>: CGFloat]
   }
 
-  /// 余白を、Core Text が 1 つにまとめて組む字の塊の送りとして置いて組む。まず余白なしで組み、グリフの文字の位置から塊の
+  /// 余白を、Core Text が 1 つにまとめて組む字の塊の送りとして置く。余白なしで組んだ行のグリフの文字の位置から塊の
   /// 区切りを取る。右の余白は見え方の右端のグリフの塊に、左の余白は見え方の左端のグリフのすぐ左に並ぶグリフの塊に送りを
   /// 置く（すぐ左に字が無ければ行頭の余白）。送りは塊の最後のグリフの右に空きを作るので、左右は見た目で決まり、右から左の
-  /// 字でも余白は見え方の字の外に出る。余白が無ければ 1 回だけ組む。
-  private static func composed(_ units: [UInt16], styles: [ZoneTextStyle]) -> Composed {
+  /// 字でも余白は見え方の字の外に出る。余白が無ければ組まない。
+  private static func padded(_ units: [UInt16], styles: [ZoneTextStyle]) -> Padded {
     let plain = attributed(units, styles: styles, kerns: [:])
-    let line = CTLineCreateWithAttributedString(plain)
     guard styles.contains(where: { $0.leadingPadding > 0 || $0.trailingPadding > 0 }) else {
-      return Composed(string: plain, line: line, inset: 0, kerns: [:])
+      return Padded(string: plain, inset: 0, kerns: [:])
     }
-    let glyphs = Self.glyphs(of: line)
+    let glyphs = Self.glyphs(of: CTLineCreateWithAttributedString(plain))
     let starts = Set(glyphs.map(\.offset)).sorted()
     func cluster(of offset: Int) -> Range<Int> {
       let index = starts.lastIndex { $0 <= offset } ?? 0
@@ -197,12 +194,9 @@ public enum ZoneTextLayout {
         }
       }
     }
-    guard !kerns.isEmpty else {
-      return Composed(string: plain, line: line, inset: inset, kerns: [:])
-    }
-    let string = attributed(units, styles: styles, kerns: kerns)
-    return Composed(
-      string: string, line: CTLineCreateWithAttributedString(string), inset: inset, kerns: kerns)
+    return Padded(
+      string: kerns.isEmpty ? plain : attributed(units, styles: styles, kerns: kerns), inset: inset,
+      kerns: kerns)
   }
 
   /// 組んだ行のグリフ 1 つ——見え方（`styles` の添字）・文の位置・x 範囲（行の左端から。送りを含む）。
