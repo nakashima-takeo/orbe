@@ -65,7 +65,7 @@ extension MetalTextSurface {
       entry.picture,
       ZonePainter.Look(appearance: textView.effectiveAppearance, space: space, scale: scale),
       serial: { fieldSite(for: $0).serial })
-    let previous = entry.hits
+    orphanFields(of: entry, keeping: Set(hits.fields.map(\.field.id)))
     entry.material = material
     entry.hits = hits
     zonesRepainted = true
@@ -76,7 +76,6 @@ extension MetalTextSurface {
       site.frame = field.frame
       site.touch()
     }
-    orphanFields(of: entry, keeping: Set(hits.fields.map(\.field.id)), previous: previous)
     transaction?.writes.append { $0.zones[id] = material }
     if let block = rows.block(ofZone: id),
       rows.heights[block] != Double(max(0, entry.picture.height))
@@ -87,11 +86,9 @@ extension MetalTextSurface {
   }
 
   /// 区画 `entry` が描いていた入力欄のうち、`keeping` に無いものを、どの区画も描いていない場にする（取引の終わりに閉じる）。
-  private func orphanFields(
-    of entry: ZoneEntry, keeping: Set<AnyHashable>, previous: ZoneHits? = nil
-  ) {
+  private func orphanFields(of entry: ZoneEntry, keeping: Set<AnyHashable>) {
     let id = ObjectIdentifier(entry.zone)
-    for field in (previous ?? entry.hits).fields where !keeping.contains(field.field.id) {
+    for field in entry.hits.fields where !keeping.contains(field.field.id) {
       if let site = fields[field.field.id], site.zone == id { site.zone = nil }
     }
   }
