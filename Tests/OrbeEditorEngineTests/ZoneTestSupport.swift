@@ -1,7 +1,7 @@
 import AppKit
 import OrbeEditorCore
 
-/// 高さの決まった区画——区画いっぱいの箱 1 つ（色 `color`）。
+/// 高さの決まった絵の差し込み——いっぱいに広がる箱 1 つ（色 `color`）。
 @MainActor
 final class BoxZone: SurfaceZone {
   var height: CGFloat
@@ -25,7 +25,7 @@ final class BoxZone: SurfaceZone {
   func zone(_ event: ZoneEvent) {}
 }
 
-/// 絵を渡された関数で組む区画（要素を直に並べて確かめる）。
+/// 中身を渡された関数で組む絵の差し込み（要素を直に並べて確かめる）。
 @MainActor
 final class PictureZone: SurfaceZone {
   var draw: (CGFloat) -> ZonePicture
@@ -39,9 +39,9 @@ final class PictureZone: SurfaceZone {
   func zone(_ event: ZoneEvent) {}
 }
 
-/// スレッドの形の区画（テストと性能の場面の区画）——影と枠線の付いた角丸の枠・頭の帯と字・アバターの円と頭文字と画像・
-/// 幅で折り返す選べる本文・押せる場所 2 つ・入力欄（`field` があれば。行の数だけ高くなる）。
-/// 押せる場所はホバーで地の色を変え、押下を `events` に残す。
+/// スレッドの形の絵の差し込み（テストと性能の場面で使う）——影と枠線の付いた角丸の枠・頭の帯と字・アバターの円と
+/// 頭文字と画像・幅で折り返す選べる本文・押せる場所 2 つ・入力欄（`field` があれば。行の数だけ高くなる）。押せる場所は
+/// ホバーで地の色を変え、押下を `events` に残す。
 @MainActor
 final class ThreadZone: SurfaceZone {
   static let bodyFont = NSFont.systemFont(ofSize: 12)
@@ -68,7 +68,7 @@ final class ThreadZone: SurfaceZone {
   weak var surface: (any TextSurface)?
   private(set) var hovered: AnyHashable?
   private(set) var events: [ZoneEvent] = []
-  /// 絵を問われた幅（問われた順）。
+  /// 中身を問われた幅（問われた順）。
   private(set) var widths: [CGFloat] = []
   private var fieldLines = 0
 

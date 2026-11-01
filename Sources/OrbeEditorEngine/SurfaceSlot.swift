@@ -28,7 +28,7 @@ final class SurfaceSlot {
   var minimapLayer: MTLTexture?
   let builder = FrameBuilder()
   let recorder = FrameRecorder()
-  /// 区画を描く持ち物。
+  /// 絵の差し込みを描く持ち物。
   let zones: ZoneResources
   /// 出したコマのうち、まだ画面に出ていない（present も破棄もされていない）数。
   var unpresented = 0
@@ -41,7 +41,7 @@ final class SurfaceSlot {
   var drawnPosition: SIMD2<Double>?
   var returning = false
   var drawnCaretVisible = false
-  /// 字のアトラスか区画の画像の地図が埋まって、字か画像を落としたコマを描いた（作り直してもう一度描く）。
+  /// 字のアトラスか絵の差し込みの画像の地図が埋まって、字か画像を落としたコマを描いた（作り直してもう一度描く）。
   var atlasDirty = false
   /// 読んだ材料に入っていて、まだ描いていない打鍵の時刻。
   var keystrokes: [Double] = []

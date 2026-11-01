@@ -85,8 +85,8 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
       convert(site.textRect(clipped, row: row, env, marked: site.markedLine), to: nil))
   }
 
-  /// 点を含む字の位置（主の場の文の座標。主の場の字の上でなければ NSNotFound——行末より右・字の無い行・文の外・主でない場
-  /// や区画の上。macOS 26 の NSTextView と同じ）。
+  /// 点を含む字の位置（主の場の文の座標。主の場の字の上でなければ NSNotFound——行末より右・字の無い行・文の
+  /// 外・主でない場や絵の差し込みの上。macOS 26 の NSTextView と同じ）。
   func characterIndex(for point: NSPoint) -> Int {
     guard let window else { return NSNotFound }
     let local = convert(window.convertPoint(fromScreen: point), from: nil)
@@ -95,9 +95,9 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
     return site.character(at: local)?.location ?? NSNotFound
   }
 
-  /// 点（view の座標）の下の編集の場が主の場ならそれ（主でない場・区画の入力欄でない区画の上なら nil）。IME は答えの位置を
-  /// 他の口と同じ主の場の座標として読むので、主でない場の位置は答えない——変換中に別の場の字を押したとき、その位置が変換中
-  /// の範囲と数の上で重なって IME に押下を取られない。
+  /// 点（view の座標）の下の編集の場が主の場ならそれ（主でない場や、絵の差し込みの入力欄でない所の上なら nil）。IME は
+  /// 答えの位置を他の口と同じ主の場の座標として読むので、主でない場の位置は答えない——変換中に別の場の字を押したとき、
+  /// その位置が変換中の範囲と数の上で重なって IME に押下を取られない。
   private func primarySite(at point: CGPoint) -> EditingSite? {
     guard let surface, let primary = surface.primarySite else { return nil }
     let site: EditingSite? =

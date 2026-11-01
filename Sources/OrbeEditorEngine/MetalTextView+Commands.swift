@@ -1,10 +1,10 @@
 import AppKit
 
 /// 標準のセレクタ（NSStandardKeyBindingResponding）→ 編集のコマンドの表。割り当ては macOS のキー割り当てに任せ、意味は
-/// VS Code の同じ役のコマンドに合わせる（→ `EditCommands`）。`perform(#selector(...))` で呼ばれても効く。コマンドは主の
-/// 場の編集係が行う。スクロールだけのセレクタは編集の状態に触れず、面がスクロールの位置を置く。主が区画の文の間は
-/// `copy:`・`selectAll:`・`cancelOperation:` だけが効き、ほかは何もしない（メニューでも無効）。表に無いセレクタは AppKit の
-/// 既定（responder chain で探し、無ければ警告音）。
+/// VS Code の同じ役のコマンドに合わせる（→ `EditCommands`）。`perform(#selector(...))` で呼ばれても効く。コマンドは
+/// 主の場の編集係が行う。スクロールだけのセレクタは編集の状態に触れず、面がスクロールの位置を置く。主が絵の差し込みの
+/// 文の間は `copy:`・`selectAll:`・`cancelOperation:` だけが効き、ほかは何もしない（メニューでも無効）。表に無い
+/// セレクタは AppKit の既定（responder chain で探し、無ければ警告音）。
 extension MetalTextView {
   /// コマンドは面自身の入力（打鍵の中で届けば打鍵の処理の終わり、メニューから届けばその場で出す）。
   private func run(_ command: EditCommand) {
@@ -73,7 +73,7 @@ extension MetalTextView {
 
   // MARK: - スクロールだけ
 
-  /// スクロールだけのキー（主が区画の文の間は効かない）。
+  /// スクロールだけのキー（主が絵の差し込みの文の間は効かない）。
   private func scroll(_ body: (MetalTextSurface) -> Void) {
     guard let surface, surface.primary != .zoneText else { return }
     surface.inputScope { body(surface) }
@@ -93,7 +93,7 @@ extension MetalTextView {
 
   // MARK: - 選択
 
-  /// 全部を選ぶ（主が区画の文なら、そのまとまり全体）。
+  /// 全部を選ぶ（主が絵の差し込みの文なら、そのまとまり全体）。
   override func selectAll(_ sender: Any?) {
     guard let surface, surface.primary == .zoneText else { return run(.selectAll) }
     surface.inputScope { surface.selectAllZoneText() }
@@ -158,8 +158,8 @@ extension MetalTextView {
     surface?.inputScope { surface?.primarySite?.editor.undoCursors() }
   }
 
-  /// Esc——主が区画の文か入力欄なら本文を主にする。本文が主なら、先に載せる側へ問い（検索バーを閉じる）、使われなければ
-  /// カーソルを 1 本に戻すか選択を解く。変換中（IME が使わなかった）は何もしない。
+  /// Esc——主が絵の差し込みの文か入力欄なら本文を主にする。本文が主なら、先に載せる側へ問い（検索バーを閉じる）、
+  /// 使われなければカーソルを 1 本に戻すか選択を解く。変換中（IME が使わなかった）は何もしない。
   override func cancelOperation(_ sender: Any?) {
     guard !composing, let surface else { return }
     surface.inputScope {
@@ -204,7 +204,7 @@ extension MetalTextView {
     }
   }
 
-  /// 主の場が文を編集できる（主が区画の文なら false）。
+  /// 主の場が文を編集できる（主が絵の差し込みの文なら false）。
   var editable: Bool { surface?.primarySite?.isEditable ?? false }
 
   /// メニューに出る、文を変えるセレクタ（読むだけの主の場では無効。コマンドそのものは編集係が止める）。
@@ -221,8 +221,8 @@ extension MetalTextView {
 
 extension MetalTextView: NSMenuItemValidation {
   /// 変換中の取り消す・やり直すは、変換の取り消しとしていつも有効。コピー・カットはいつも有効（選択が空なら行を写す）。
-  /// ペーストは平文かファイルがあるときだけ。主が区画の文の間は、コピー（選択があるとき）と全部を選ぶだけが有効。主の場が
-  /// 読むだけなら、文を変える項目は無効。
+  /// ペーストは平文かファイルがあるときだけ。主が絵の差し込みの文の間は、コピー（選択があるとき）と全部を選ぶだけが
+  /// 有効。主の場が読むだけなら、文を変える項目は無効。
   func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
     if surface?.primary == .zoneText {
       switch menuItem.action {

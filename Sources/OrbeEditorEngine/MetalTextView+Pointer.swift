@@ -1,7 +1,7 @@
 import AppKit
 
-/// ポインタの形・⌘ の URL の下線・俯瞰と区画のホバー。どれも窓のポインタの位置から、最前面の view がポインタを持つかを
-/// 1 つの判定で決めて引く。
+/// ポインタの形・⌘ の URL の下線・俯瞰と絵の差し込みのホバー。どれも窓のポインタの位置から、最前面の view がポインタを
+/// 持つかを 1 つの判定で決めて引く。
 extension MetalTextView {
   /// ポインタの形と、本体の上のポインタ（つまみの見え隠れと帯・つまみの濃さ）。ドラッグ中も出入りを受ける——つまみを
   /// 押したまま本体の外で離せば、つまみが消える。
@@ -68,8 +68,8 @@ extension MetalTextView {
     hover(at: windowPoint, inside: inside)
   }
 
-  /// 俯瞰の上のポインタと、区画の押せる場所のホバー。出すきっかけは呼び手が決める——出来事の入口はポインタの形・下線と
-  /// まとめて処理の終わり、Orbe から始まる `refreshPointer` は runloop の 1 周の終わり。
+  /// 俯瞰の上のポインタと、絵の差し込みの押せる場所のホバー。出すきっかけは呼び手が決める——出来事の入口はポインタの
+  /// 形・下線とまとめて処理の終わり、Orbe から始まる `refreshPointer` は runloop の 1 周の終わり。
   private func hover(at windowPoint: NSPoint, inside: Bool) {
     let point = convert(windowPoint, from: nil)
     overview.pointerMoved(to: point, inside: inside)

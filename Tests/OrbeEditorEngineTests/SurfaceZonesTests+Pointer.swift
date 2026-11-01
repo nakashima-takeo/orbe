@@ -4,12 +4,12 @@ import XCTest
 
 @testable import OrbeEditorEngine
 
-/// 区画の上のポインタ——区画の文の選択の自動スクロール・押せる場所から選択への切り替え・ポインタの形・主が区画の文の間の
-/// サービス。壊れると、コメントを下へ選び続けられない・選べる文に重なるボタンから選べない・押しても効く・ボタンの上で
-/// 指の形にならない・コメントを選んでいる間のサービスがソースを書き換える・Orbe の操作で押せる場所を出入りする回に途中の
-/// コマが出る。
+/// 絵の差し込みの上のポインタ——その文の選択の自動スクロール・押せる場所から選択への切り替え・ポインタの形・主が
+/// 絵の差し込みの文の間のサービス。壊れると、コメントを下へ選び続けられない・選べる文に重なるボタンから
+/// 選べない・押しても効く・ボタンの上で指の形にならない・コメントを選んでいる間のサービスがソースを書き換える・Orbe の
+/// 操作で押せる場所を出入りする回に途中のコマが出る。
 extension SurfaceZonesTests {
-  /// 区画の文を押して本文の下の外へドラッグすると上下にだけ自動スクロールし、選択はまとまりの端で止まる。
+  /// 絵の差し込みの文を押して本文の下の外へドラッグすると上下にだけ自動スクロールし、選択はまとまりの端で止まる。
   func testDraggingZoneTextBelowAutoscrollsAndStopsAtTheEndOfTheText() throws {
     let setup = try threaded()
     let (opened, thread) = (setup.opened, setup.thread)
@@ -71,7 +71,8 @@ extension SurfaceZonesTests {
     XCTAssertGreaterThan(surface.zoneSelection?.range.length ?? 0, 0)
   }
 
-  /// 区画の上のポインタの形——押せる場所は載せる側が決めた形、入力欄・選べる文・空きは I ビーム。
+  /// 絵の差し込みの上のポインタの形——押せる場所は載せる側が決めた形、入力欄・選べる文・何も描いていない所は I
+  /// ビーム。
   func testThePointerShapeOverAZone() throws {
     let setup = try threaded()
     let (opened, thread) = (setup.opened, setup.thread)
@@ -112,7 +113,7 @@ extension SurfaceZonesTests {
     XCTAssertEqual(surface.material.revision, before + 1, "周の終わりに 1 回だけ書く")
   }
 
-  /// 主が区画の文の間、サービスは選んだ区画の文を送るだけで、受ける（書き換える）ことはしない。
+  /// 主が絵の差し込みの文の間、サービスは選んだその文を送るだけで、受ける（書き換える）ことはしない。
   func testServicesOnlyReadTheZoneSelection() throws {
     let setup = try threaded()
     let (opened, thread, field) = (setup.opened, setup.thread, setup.field)

@@ -8,8 +8,8 @@ import XCTest
 
 /// 標準の編集操作（⌘A ⌘C ⌘X ⌘V ⌘Z ⌘⇧Z と右クリックのメニュー）が、アプリの経路——窓の view の階層が key equivalent を
 /// 取らずにメインメニューへ渡し、編集メニュー（`MainMenu`）の項目が first responder の連鎖へセレクタを配る——で、主
-/// （本文・区画の文・返信の入力欄）に従って効く。壊れると、返信の入力欄で貼れない・全部を選べない、コメントを選んで
-/// いる間の ⌘V や ⌘Z で本文が変わる。
+/// （本文・絵の差し込みの文・返信の入力欄）に従って効く。壊れると、返信の入力欄で貼れない・全部を選べない、コメントを
+/// 選んでいる間の ⌘V や ⌘Z で本文が変わる。
 @MainActor
 final class EditorZoneEditingMenuTests: OrbeTestCase {
   private struct Scene {
@@ -57,8 +57,8 @@ final class EditorZoneEditingMenuTests: OrbeTestCase {
     return try send(item, scene, file: file, line: line)
   }
 
-  /// 右クリックのメニュー（点 `point` は区画の中の座標、nil なら本文の行 0）を出し、セレクタが `action` の項目を選ぶ。
-  /// 項目が有効だったかを返す（項目が無ければ nil）。
+  /// 右クリックのメニュー（点 `point` は絵の差し込みの中の座標、nil なら本文の行 0）を出し、セレクタが `action` の
+  /// 項目を選ぶ。項目が有効だったかを返す（項目が無ければ nil）。
   private func contextMenu(
     at point: CGPoint?, choose action: Selector, _ scene: Scene,
     file: StaticString = #filePath, line: UInt = #line
@@ -146,14 +146,15 @@ final class EditorZoneEditingMenuTests: OrbeTestCase {
     XCTAssertEqual(documentText(scene), Self.source, "本文は変わらない")
   }
 
-  /// 区画の文が主の間は、⌘A（まとまり全体）と ⌘C・右クリックのコピーだけが効き、⌘X ⌘V ⌘Z は無効で本文も入力欄も
+  /// 絵の差し込みの文が主の間は、⌘A（まとまり全体）と ⌘C・右クリックのコピーだけが効き、⌘X ⌘V ⌘Z は無効で本文も入力欄も
   /// 変わらない。
   func testOnlySelectAllAndCopyWorkOnZoneText() throws {
     let scene = try scene()
     let body = try XCTUnwrap(try hits(scene).lines.first { $0.text == AnyHashable("body-0") })
     let at = CGPoint(x: body.origin.x + 20, y: body.origin.y - 4)
     XCTAssertEqual(
-      try contextMenu(at: at, choose: #selector(NSText.paste(_:)), scene), nil, "区画の文のメニューにペーストは無い")
+      try contextMenu(at: at, choose: #selector(NSText.paste(_:)), scene), nil,
+      "絵の差し込みの文のメニューにペーストは無い")
     XCTAssertEqual(scene.surface.primary, .zoneText)
     XCTAssertTrue(try press("a", .command, scene))
     XCTAssertTrue(try press("c", .command, scene))

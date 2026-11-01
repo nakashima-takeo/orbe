@@ -2,8 +2,8 @@ import AppKit
 import OrbeEditorCore
 import simd
 
-/// 編集の場の幾何（view の座標、pt）と見せ方——点 ↔ 位置、範囲の矩形、キャレットの矩形、見せる縦の範囲。本文の場は面の
-/// 縦の並びと横の送りで、入力欄の場は区画の中の矩形と並びの y と場の横の送りで答える。
+/// 編集の場の幾何（view の座標、pt）と見せ方——点 ↔ 位置、範囲の矩形、キャレットの矩形、見せる縦の範囲。本文の場は
+/// 面の縦の並びと横の送りで、入力欄の場は絵の差し込みの中の矩形と並びの y と場の横の送りで答える。
 extension EditingSite {
   /// 文の字体と行の高さ、行の上端から基線まで。
   var font: NSFont { field?.style.font ?? surface.config.font as NSFont }
@@ -14,7 +14,8 @@ extension EditingSite {
     return (field.style.lineHeight - (font.ascender - font.descender)) / 2 + font.ascender
   }
 
-  /// 入力欄の 1 行目の左上（行頭の x。横の送りを引いた位置。縦の位置 `position` で）。区画が並びに無ければ nil。
+  /// 入力欄の 1 行目の左上（行頭の x。横の送りを引いた位置。縦の位置 `position` で）。絵の差し込みが並びに無ければ
+  /// nil。
   func fieldOrigin(position: SIMD2<Double>? = nil) -> CGPoint? {
     guard let zone, let block = surface.rows.block(ofZone: zone) else { return nil }
     let p = position ?? surface.scrollPosition

@@ -19,10 +19,10 @@ import simd
 /// 中（両端を含む）なら、足さずにそのカーソルを外す（その後のドラッグは無い）。⌥ の押下は選択の上でも本文のドラッグの候補に
 /// しない。
 ///
-/// 押下は、押した点の行き先（→ `SurfaceTarget`）で振り分ける。本文・行番号の列・区画の空きは本文の場、入力欄はその場で
-/// 選び（どちらも主をその場にする）、区画の選べる文は区画の文の選択（主を区画の文にする。ドラッグは同じ自動スクロールで
-/// 伸びる）、押せる場所は押下を数えて同じ押せる場所で離せば載せる側へ知らせる（主は変えない。選べる文に重なる押せる場所は、
-/// 4pt を越えてドラッグすれば選択になる）。
+/// 押下は、押した点の行き先（→ `SurfaceTarget`）で振り分ける。本文・行番号の列・絵の差し込みの何も描いていない所は
+/// 本文の場、入力欄はその場で選ぶ（どちらも主をその場にする）。絵の差し込みの選べる文は、その文の選択になる（主を
+/// 絵の差し込みの文にする。ドラッグは同じ自動スクロールで伸びる）。押せる場所は押下を数え、同じ押せる場所で離せば載せる
+/// 側へ知らせる（主は変えない。選べる文に重なる押せる場所は、4pt を越えてドラッグすれば選択になる）。
 @MainActor
 final class MouseSelection: NSObject {
   weak var surface: MetalTextSurface?
@@ -35,13 +35,13 @@ final class MouseSelection: NSObject {
     case link(URL, NSPoint)
     /// 選択の字の上を押した（本文のドラッグの候補）。離したらキャレットを置く位置と、押した位置（窓の座標）。
     case candidate(Int, NSPoint)
-    /// 区画の選べる文を選んでいる。
+    /// 絵の差し込みの選べる文を選んでいる。
     case zoneText
     /// 押せる場所を押している。
     case button(ZonePress)
   }
 
-  /// 押している押せる場所——区画・id・押した位置（窓の座標）と、重なる選べる文（まとまりと位置）。
+  /// 押している押せる場所——絵の差し込み・id・押した位置（窓の座標）と、重なる選べる文（まとまりと位置）。
   struct ZonePress {
     var zone: ObjectIdentifier
     var id: AnyHashable
@@ -282,7 +282,7 @@ final class MouseSelection: NSObject {
   /// 自動スクロールが回っているか。
   var isAutoscrolling: Bool { link != nil }
 
-  /// 区画の文の選択を点まで伸ばす。上下の外では自動スクロールする（区画は横に送らない）。
+  /// 絵の差し込みの文の選択を点まで伸ばす。上下の外では自動スクロールする（絵の差し込みは横に送らない）。
   private func dragZoneText(_ event: NSEvent, in view: NSView) {
     guard let surface else { return }
     point = view.convert(event.locationInWindow, from: nil)

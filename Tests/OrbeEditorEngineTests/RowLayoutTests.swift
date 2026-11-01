@@ -8,7 +8,7 @@ import XCTest
 final class RowLayoutTests: XCTestCase {
   private let lineHeight = 18.0
 
-  /// 境 2 に 2 行、境 5 に区画（30pt）、最終行（10 行）の後に 1 行。
+  /// 境 2 に 2 行、境 5 に絵の差し込み（30pt）、最終行（10 行）の後に 1 行。
   private func layout() -> RowLayout {
     var rows = RowLayout(lineHeight: lineHeight)
     rows.replace(
@@ -54,8 +54,8 @@ final class RowLayoutTests: XCTestCase {
     XCTAssertEqual(rows.blocks(from: 2 * 18 + 36, to: rows.y(ofLine: 5)), 1..<2)
   }
 
-  /// 位置の上端に面を置いて読み直すと同じ位置に戻る——最終行の後の塊の中でも、行高の整数倍でない区画の頭とその下の行で
-  /// 表示の単位から y へ丸めても（化けると、面を作り直すたびに見えている位置が上へずれる）。
+  /// 位置の上端に面を置いて読み直すと同じ位置に戻る——最終行の後の塊の中でも、行高の整数倍でない絵の差し込みの頭とその
+  /// 下の行で表示の単位から y へ丸めても（化けると、面を作り直すたびに見えている位置が上へずれる）。
   func testAPositionSurvivesTheRoundTripThroughY() {
     let rows = layout()
     let positions =
@@ -80,7 +80,7 @@ final class RowLayoutTests: XCTestCase {
     XCTAssertEqual(rows.item(atY: rows.totalHeight(lineCount: 10)), .line(10), "最後の項目より下")
   }
 
-  /// 最終行の後の区画が行より高ければ、端はその下端の 1 行が最上段に来る所——区画の下側まで送れる。
+  /// 最終行の後の絵の差し込みが行より高ければ、端はその下端の 1 行が最上段に来る所——絵の差し込みの下側まで送れる。
   func testTheEndReachesTheBottomOfATallTrailingZone() {
     var rows = RowLayout(lineHeight: lineHeight)
     rows.replace(

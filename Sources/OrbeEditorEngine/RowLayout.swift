@@ -1,8 +1,9 @@
 import Foundation
 import OrbeEditorCore
 
-/// 面の縦の並び——文書の行と、行の境ごとの差し込みの塊（文書に無い行の列か、区画）。行 ↔ y の式はここに
-/// だけあり、描画・スクロールの範囲・面のスクロール操作・当たり・IME の矩形・ドラッグ・俯瞰がどれもこれを呼ぶ。
+/// 面の縦の並び——文書の行と、行の境ごとの差し込みの塊（差し込んだ行の列か、絵の差し込み）。行 ↔ y の
+/// 式はここにだけあり、描画・スクロールの範囲・面のスクロール操作・当たり・IME の矩形・ドラッグ・俯瞰がどれもこれを
+/// 呼ぶ。
 ///
 /// 文書の行 `r` の上端は `r × 行高 + （r より上の塊の高さの合計）`。塊は境の昇順に並び、高さの累積を持つので、行 ↔ y は
 /// 塊の数の対数で引ける。差し込みが無ければどの式も `行 × 行高` と同じ浮動小数の計算になる（差し込みの無い面の位置と
@@ -11,12 +12,13 @@ import OrbeEditorCore
 /// 文書の行の区間の見え方（行の型と、2 列の面の左の列の「もう一方の番号」）も並びと一緒に持ち、差し込みの境と同じ規則で
 /// 面自身の編集に追従させる。
 ///
-/// 値は main だけが作り変え（置く・面自身の編集でずらす・区画を測り直す）、描く材料と一緒に描画スレッドへ渡す。描画スレッド
-/// は引き取った材料の版の並びで描く。
+/// 値は main だけが作り変え（置く・面自身の編集でずらす・絵の差し込みを測り直す）、描く材料と一緒に描画スレッドへ渡す。
+/// 描画スレッドは引き取った材料の版の並びで描く。
 ///
 /// y を返す式は `scale` を取り、装置の画素（pt × 倍率）でも同じ式で引ける（描画スレッドは px で、main は pt で引く）。
 struct RowLayout: Sendable {
-  /// 塊の中身。区画は載せる側の区画の同一性で、区画そのものと絵は main だけが持つ（描く材料は材料の箱の `zones`）。
+  /// 塊の中身。絵の差し込みは載せる側の値の同一性で持ち、絵の差し込みそのものと中身は main だけが持つ（描く材料は材料の
+  /// 箱の `zones`）。
   enum Content: Sendable {
     case lines([InsertedLine])
     case zone(ObjectIdentifier)
@@ -35,9 +37,9 @@ struct RowLayout: Sendable {
   private(set) var contents: [Content] = []
   /// 塊 `i` より前の塊の高さの合計（`prefix[i]`。要素は塊の数 + 1）。
   private var prefix: [Double] = [0]
-  /// 区画を持つか。
+  /// 絵の差し込みを持つか。
   private(set) var hasZones = false
-  /// 区画の同一性 → 塊の番号。
+  /// 絵の差し込みの同一性 → 塊の番号。
   private var zoneBlocks: [ObjectIdentifier: Int] = [:]
   /// 文書の行の区間（始まりの行の昇順）。
   private(set) var spans: [LineSpan] = []
@@ -163,8 +165,8 @@ struct RowLayout: Sendable {
 
   // MARK: - 縦の端
 
-  /// 最後の項目の上端——縦のスクロールの端。最終行の後に塊があれば、その下端から 1 行の高さ上（文書に無い行なら最後の行の
-  /// 上端。区画なら、区画の下端の 1 行が画面の最上段に来る所で、行より高い区画の下側まで送れる）。
+  /// 最後の項目の上端——縦のスクロールの端。最終行の後に塊があれば、その下端から 1 行の高さ上（差し込んだ行なら最後の
+  /// 行の上端。絵の差し込みなら、その下端の 1 行が画面の最上段に来る所で、行より高い絵の差し込みの下側まで送れる）。
   func lastTop(lineCount: Int) -> Double {
     guard let index = trailingBlock(lineCount: lineCount) else {
       return y(ofLine: lineCount - 1)
@@ -334,9 +336,9 @@ struct RowLayout: Sendable {
     return newline - 1
   }
 
-  // MARK: - 区画
+  // MARK: - 絵の差し込み
 
-  /// 区画 `id` の塊の番号（無ければ nil）。
+  /// 絵の差し込み `id` の塊の番号（無ければ nil）。
   func block(ofZone id: ObjectIdentifier) -> Int? { zoneBlocks[id] }
 
   // MARK: - 文書の行の見え方

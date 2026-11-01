@@ -4,7 +4,7 @@ import QuartzCore
 import simd
 
 /// ドラッグの自動スクロール——ドラッグが本文の上下左右の外へ出ている間、ポインタが止まっていても VS Code の速さの式で
-/// 刻みごとに送り、選択を伸ばし続ける（刻みは view の display link）。区画の文の選択は上下にだけ送る。
+/// 刻みごとに送り、選択を伸ばし続ける（刻みは view の display link）。絵の差し込みの文の選択は上下にだけ送る。
 extension MouseSelection {
   func autoscroll(_ edge: Edge) {
     self.edge = edge

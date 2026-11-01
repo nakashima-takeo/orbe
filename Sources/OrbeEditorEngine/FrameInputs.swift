@@ -260,11 +260,11 @@ struct FrameMaterial: Sendable {
   var rowSourceContent: SurfaceContent?
   /// 表示の構成のうち、配置と描き方に効くもの。
   var arrangement = SurfaceArrangement()
-  /// 区画の描く材料（区画の同一性で引く。並びの塊の中身と同じ書き込みで置く）。
+  /// 絵の差し込みを描く材料（絵の差し込みの同一性で引く。並びの塊の中身と同じ書き込みで置く）。
   var zones: [ObjectIdentifier: ZoneMaterial] = [:]
   /// 入力欄の場の描く材料（場の通し番号で引く）。
   var fields: [Int: FieldMaterial] = [:]
-  /// 区画の文の選択の地（区画の文が主の間だけ）。
+  /// 絵の差し込みの文の選択の地（絵の差し込みの文が主の間だけ）。
   var zoneSelection: ZoneSelectionMaterial?
   /// 本文の選択の地とキャレット。`focused` は「本文が主で、面に焦点がある」。
   var caret = CaretMaterial()

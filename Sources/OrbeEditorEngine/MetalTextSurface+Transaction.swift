@@ -9,12 +9,12 @@ import simd
 /// その場ではなく、出す 1 か所（→ `flush`）。
 ///
 /// 取引は面のもの（材料への書き込み・置く位置・打鍵の時刻・焦点と主）で、場の差分（取引の前の状態・写し・変わった行）は
-/// 場ごとに持つ（→ `SiteChange`）。入力欄の打鍵も面の 1 つの取引で、入力欄の知らせの中で載せる側が区画を描き直せば、
-/// 伸びた入力欄と打った字が同じコマに出る。
+/// 場ごとに持つ（→ `SiteChange`）。入力欄の打鍵も面の 1 つの取引で、入力欄の知らせの中で載せる側が絵の差し込みを
+/// 描き直せば、伸びた入力欄と打った字が同じコマに出る。
 struct Transaction {
   /// 取引の中で届いた行の印。
   var marks: LineMarks?
-  /// 取引の中で頼まれた、材料のほかの欄（見え方・焦点・大きさ・区画）の書き込み。
+  /// 取引の中で頼まれた、材料のほかの欄（見え方・焦点・大きさ・絵の差し込み）の書き込み。
   var writes: [@Sendable (inout FrameMaterial) -> Void] = []
   var reveal = Reveal.none
   /// 見せる区間（nil なら見せ方を頼んだ場の主のキャレット）と、見せ方を頼んだ場。
@@ -26,7 +26,7 @@ struct Transaction {
   var scrollTo: SIMD2<Double>?
   /// 取引を起こした打鍵の出来事の時刻（打鍵→画面の遅れを、本文と同じ書き込みで材料へ添える）。
   var keystroke: Double?
-  /// 取引の中で差し込みや区画の高さを変える前の縦の並び（変えなければ nil。面自身の編集でずらすのは含めない）。
+  /// 取引の中で差し込みの高さを変える前の縦の並び（変えなければ nil。面自身の編集でずらすのは含めない）。
   var anchor: RowLayout?
   /// 取引の中で触れた入力欄の場（本文の場はいつも確定する）。
   var touched: [EditingSite] = []
@@ -42,9 +42,10 @@ extension MetalTextSurface {
   var currentContent: SurfaceContent? { bodySite.currentContent }
 
   /// 取引の中で `body` を行う。取引の中から呼ばれれば同じ取引に入り（位置・打鍵の時刻は後から頼んだものが勝つ）、そうで
-  /// なければ取引を開き、終わりに区画を今の幅に合わせ（→ `settleZones`）、1 回だけ確定して出す前の状態に積む。`body` の
-  /// 間に文書から届く知らせ（行の印・役割の変化）と材料への書き込みは控えるだけにする。打鍵の中の IME の呼び出しは打鍵の
-  /// 取引に入り、描くのは打鍵の後の 1 状態だけ。場の見せ方・測り直しは場の取引（`EditingSite.transact`）で頼む。
+  /// なければ取引を開き、終わりに絵の差し込みを今の幅に合わせ（→ `settleZones`）、1 回だけ確定して出す前の状態に積む。
+  /// `body` の間に文書から届く知らせ（行の印・役割の変化）と材料への書き込みは控えるだけにする。打鍵の中の IME の呼び
+  /// 出しは打鍵の取引に入り、描くのは打鍵の後の 1 状態だけ。場の見せ方・測り直しは場の取引（`EditingSite.transact`）で
+  /// 頼む。
   func transact(
     scrollTo: SIMD2<Double>? = nil, keystroke: Double? = nil, _ body: () -> Void = {}
   ) {
@@ -71,10 +72,9 @@ extension MetalTextSurface {
   /// 本文の場は主で、面に焦点がある。
   var bodyFocused: Bool { focused && primary == .body }
 
-  /// 取引を確定する——縦の並びの差し込みと区画の高さ（見えている先頭の文書の行を保つずらし）・範囲・見せ方の
-  /// 縦の位置・材料の書き込み（写し・行の印・変わった行・縦の並び・カーソル・入力欄・打鍵の時刻・横の「見えるところ
-  /// まで」）を出す前の状態に積み、選択と見えている範囲を知らせる。箱へは出す 1 か所（`flush`）が位置を先・材料を後の
-  /// 順で 1 回で書く。
+  /// 取引を確定する——縦の並びの差し込みの高さ（見えている先頭の文書の行を保つずらし）・範囲・見せ方の縦の位置・材料の
+  /// 書き込み（写し・行の印・変わった行・縦の並び・カーソル・入力欄・打鍵の時刻・横の「見えるところまで」）を出す前の
+  /// 状態に積み、選択と見えている範囲を知らせる。箱へは出す 1 か所（`flush`）が位置を先・材料を後の順で 1 回で書く。
   private func commit(_ finished: Transaction) {
     guard let change = bodySite.change else { return }
     let span =
@@ -199,8 +199,8 @@ extension MetalTextSurface {
     return palette
   }
 
-  /// 取引の中で変わった縦の並びを確定する——差し込みや区画の高さが変わっていれば（位置を頼んだ取引でなければ）見えて
-  /// いる先頭の文書の行を同じ位置に保ち、変わった並びを材料への書き込みに積む。
+  /// 取引の中で変わった縦の並びを確定する——差し込みの高さが変わっていれば（位置を頼んだ取引でなければ）見えている
+  /// 先頭の文書の行を同じ位置に保ち、変わった並びを材料への書き込みに積む。
   private func settleRows(_ finished: Transaction, lineCount: Int) {
     if let before = finished.anchor, finished.scrollTo == nil {
       pending.anchored = true

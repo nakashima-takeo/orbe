@@ -3,8 +3,9 @@ import XCTest
 
 @testable import OrbeEditorCore
 
-/// 区画の字の折り返し——行は元の文を隙間なく割り（改行は行に含めない）、どの行も幅に収まり、見え方は行の範囲に切って
-/// 渡る。壊れると、スレッドの本文が区画の幅をはみ出す・選んだ範囲と写る文がずれる・インラインコードの色が別の字に付く。
+/// 絵の差し込みの字の折り返し——行は元の文を隙間なく割り（改行は行に含めない）、どの行も幅に収まり、見え方は行の範囲に
+/// 切って渡る。壊れると、スレッドの本文が絵の差し込みの幅をはみ出す・選んだ範囲と写る文がずれる・インラインコードの色が
+/// 別の字に付く。
 final class ZoneTextLayoutTests: XCTestCase {
   private let font = NSFont.systemFont(ofSize: 12)
   private let mono = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)

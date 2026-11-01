@@ -2,9 +2,9 @@ import AppKit
 import CoreText
 import OrbeEditorCore
 
-/// 区画の描く材料——区画の絵を、描画スレッドがそのまま置ける形にしたもの（座標は区画の左上を原点にした pt）。main が絵を
-/// 問うたとき・外観や倍率が変わったときに作り、並びと同じ書き込みで材料の箱に載せる。字は Core Text で組んだグリフと
-/// 送り、色は面の外観と色空間で解いた値、画像は倍率で描いた画素。
+/// 絵の差し込みを描く材料——中身を、描画スレッドがそのまま置ける形にしたもの（座標は絵の差し込みの左上を原点にした
+/// pt）。main が中身を問うたとき・外観や倍率が変わったときに作り、並びと同じ書き込みで材料の箱に載せる。字は Core Text
+/// で組んだグリフと送り、色は面の外観と色空間で解いた値、画像は倍率で描いた画素。
 ///
 /// フォントは不変で、Core Text はスレッドをまたいだ利用を保証する（`SurfaceConfig` と同じ）。
 struct ZoneMaterial: @unchecked Sendable {
@@ -20,8 +20,8 @@ struct ZoneMaterial: @unchecked Sendable {
     var shadowBlur: Float
   }
 
-  /// 組んだ字の連なり 1 つ（1 つのフォントと色）。`xs` は区画の中の x、`baseline` は区画の中の基線の y、`ys` は基線からの
-  /// 上向きのずれ（全部 0 なら空）。
+  /// 組んだ字の連なり 1 つ（1 つのフォントと色）。`xs` は絵の差し込みの中の x、`baseline` は絵の差し込みの中の基線の
+  /// y、`ys` は基線からの上向きのずれ（全部 0 なら空）。
   struct Run {
     var font: CTFont
     var glyphs: [CGGlyph]
@@ -63,7 +63,7 @@ final class ZonePixels: Sendable {
   }
 }
 
-/// 区画の文の選択の地（区画の中の矩形）。選択は区画の文が主の間だけある。
+/// 絵の差し込みの文の選択の地（絵の差し込みの中の矩形）。選択は絵の差し込みの文が主の間だけある。
 struct ZoneSelectionMaterial: Equatable, Sendable {
   var zone: ObjectIdentifier
   var rects: [CGRect]
@@ -71,7 +71,7 @@ struct ZoneSelectionMaterial: Equatable, Sendable {
   var focused: Bool
 }
 
-/// 区画の当たりの表（main）——押せる場所・入力欄・選べる字の行と、まとまりの文。
+/// 絵の差し込みの当たりの表（main）——押せる場所・入力欄・選べる字の行と、まとまりの文。
 struct ZoneHits {
   struct Button {
     var id: AnyHashable
@@ -95,10 +95,10 @@ struct ZoneHits {
     var line: CTLine
     var carets: CaretMap
 
-    /// 行の当たる帯（区画の中の y）。
+    /// 行の当たる帯（絵の差し込みの中の y）。
     var band: ClosedRange<CGFloat> { (origin.y - ascent)...(origin.y + descent) }
 
-    /// 区画の中の x にいちばん近い、まとまりの文の位置。
+    /// 絵の差し込みの中の x にいちばん近い、まとまりの文の位置。
     func offset(atX x: CGFloat) -> Int {
       guard x > origin.x else { return range.location }
       guard x < origin.x + width else { return NSMaxRange(range) }
@@ -106,7 +106,7 @@ struct ZoneHits {
       return range.location + min(max(0, index), range.length)
     }
 
-    /// まとまりの文の位置の、区画の中の x。
+    /// まとまりの文の位置の、絵の差し込みの中の x。
     func x(of offset: Int) -> CGFloat {
       origin.x + carets.x(min(max(0, offset - range.location), range.length))
     }
@@ -118,7 +118,7 @@ struct ZoneHits {
   /// 選べる文のまとまりの文。
   var texts: [AnyHashable: TextRope] = [:]
 
-  /// 区画の中の点の下の選べる文（まとまりと、いちばん近い位置）。字の行の帯と、その左右に少しの余白の上だけ。
+  /// 絵の差し込みの中の点の下の選べる文（まとまりと、いちばん近い位置）。字の行の帯と、その左右に少しの余白の上だけ。
   func text(at point: CGPoint) -> (AnyHashable, Int)? {
     let slop: CGFloat = 4
     guard
@@ -130,8 +130,8 @@ struct ZoneHits {
     return (line.text, line.offset(atX: point.x))
   }
 
-  /// まとまり `text` の字の行のうち、区画の中の y にいちばん近い行の、x にいちばん近い位置（上の行より上は文の始まり、
-  /// 下の行より下は文の終わり）。まとまりの行が無ければ nil。
+  /// まとまり `text` の字の行のうち、絵の差し込みの中の y にいちばん近い行の、x にいちばん近い位置（上の行より上は文の
+  /// 始まり、下の行より下は文の終わり）。まとまりの行が無ければ nil。
   func offset(in text: AnyHashable, at point: CGPoint) -> Int? {
     let candidates = lines.filter { $0.text == text }
     guard let first = candidates.first, let last = candidates.last else { return nil }
@@ -144,7 +144,8 @@ struct ZoneHits {
   }
 }
 
-/// 区画の絵を材料と当たりの表に写す（main）。画像は倍率と色空間で描いて覚える（同じ画像・大きさなら描き直さない）。
+/// 絵の差し込みの中身を材料と当たりの表に写す（main）。画像は倍率と色空間で描いて覚える（同じ画像・大きさなら
+/// 描き直さない）。
 @MainActor
 final class ZonePainter {
   private struct ImageKey: Hashable {
@@ -169,7 +170,7 @@ final class ZonePainter {
     var scale: CGFloat
   }
 
-  /// 絵 `picture` を外観 `look` で材料に、入力欄を `serial` で場の通し番号に写す。
+  /// 中身 `picture` を外観 `look` で材料に、入力欄を `serial` で場の通し番号に写す。
   func paint(_ picture: ZonePicture, _ look: Look, serial: (ZoneTextField) -> Int)
     -> (ZoneMaterial, ZoneHits)
   {
@@ -211,11 +212,11 @@ final class ZonePainter {
       }
     }
     for text in picture.texts { paint(text, look, into: &material, hits: &hits) }
-    precondition(hits.texts.count == picture.texts.count, "選べる文のまとまりの id は区画の中で一意")
+    precondition(hits.texts.count == picture.texts.count, "選べる文のまとまりの id は絵の差し込みの中で一意")
     precondition(
-      Set(hits.buttons.map(\.id)).count == hits.buttons.count, "押せる場所の id は区画の中で一意")
+      Set(hits.buttons.map(\.id)).count == hits.buttons.count, "押せる場所の id は絵の差し込みの中で一意")
     precondition(
-      Set(hits.fields.map(\.field.id)).count == hits.fields.count, "入力欄の id は区画の中で一意")
+      Set(hits.fields.map(\.field.id)).count == hits.fields.count, "入力欄の id は絵の差し込みの中で一意")
     return (material, hits)
   }
 
@@ -280,7 +281,7 @@ final class ZonePainter {
     return font
   }
 
-  /// 鍵 `keys` の画素の覚えだけを残す（どの区画の材料も指さなくなった画像と画素を手放す）。
+  /// 鍵 `keys` の画素の覚えだけを残す（どの絵の差し込みの材料も指さなくなった画像と画素を手放す）。
   func keep(images keys: Set<Int>) {
     images = images.filter { keys.contains($0.value.pixels.key) }
   }

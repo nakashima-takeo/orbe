@@ -6,18 +6,19 @@ import XCTest
 @testable import Orbe
 @testable import OrbeEditorEngine
 
-/// 区画を人が判定する試しの場（`scripts/preview-editor-rows.sh`）。`ORBE_EDITOR_ROWS_TRIAL=1` のときだけ走り、通常の
-/// `swift test` と CI では skip。製品の機能・設定・制御 API には何も足さない。
+/// 差し込みを人が判定する試しの場（`scripts/preview-editor-rows.sh`）。`ORBE_EDITOR_ROWS_TRIAL=1` のときだけ走り、
+/// 通常の `swift test` と CI では skip。製品の機能・設定・制御 API には何も足さない。
 ///
-/// 人が触る型（既定）: ミニマップを出さない構成の 200KB の文書に、30 行ごとに試しのスレッドの区画（見本 D 節の構成。
-/// ボタンのホバーと押下で見た目が変わり、返信の入力欄に打てる）と、13 行ごとに文書に無い行を差し込み、窓を画面に出して
-/// `ORBE_EDITOR_ROWS_SECONDS` 秒（既定 180）前面に置く。見るのは、区画が本文の空きから離れて見えないか・窓の幅を変えた
-/// とき区画の高さが中身に合うか・入力欄の日本語と候補窓・スクロール中の焦点・区画の文の選択とコピー・ボタンのホバー。
+/// 人が触る型（既定）: ミニマップを出さない構成の 200KB の文書に、30 行ごとに試しのスレッド（見本 D 節の構成。ボタンの
+/// ホバーと押下で見た目が変わり、返信の入力欄に打てる）と、13 行ごとに文書に無い行を差し込み、窓を画面に出して
+/// `ORBE_EDITOR_ROWS_SECONDS` 秒（既定 180）前面に置く。見るのは、スレッドが本文の空きから離れて見えないか・窓の幅を
+/// 変えたときスレッドの高さが中身に合うか・入力欄の日本語と候補窓・スクロール中の焦点・スレッドの文の選択と
+/// コピー・ボタンのホバー。
 ///
-/// 合成の型（`ORBE_EDITOR_ROWS_MODE=synthetic`）: 区画の上下に印の行（全角の塗りの字）を置いた文書で、合成のはじき
-/// （6000pt/s）と端の弾みを流しながら、窓が画面に出したコマを ScreenCaptureKit で受け、コマごとに区画の枠線の行と、上下の
-/// 印の行の字の画素の距離を引く。区画が本文と同じコマに描かれていれば、距離はどのコマでも同じ（±1 画素）。受けたコマを
-/// 連番の PNG と、並べた 1 枚に書き出す（`.preview/flows/rows-trial/`）。
+/// 合成の型（`ORBE_EDITOR_ROWS_MODE=synthetic`）: スレッドの上下に印の行（全角の塗りの字）を置いた文書で、合成のはじき
+/// （6000pt/s）と端の弾みを流しながら、窓が画面に出したコマを ScreenCaptureKit で受け、コマごとにスレッドの枠線の行と、
+/// 上下の印の行の字の画素の距離を引く。スレッドが本文と同じコマに描かれていれば、距離はどのコマでも同じ（±1 画素）。
+/// 受けたコマを連番の PNG と、並べた 1 枚に書き出す（`.preview/flows/rows-trial/`）。
 ///
 /// 並列の型（`ORBE_EDITOR_ROWS_MODE=side`）: 200KB の文書の 2 版（行を書き換え・消し・足したもの）を、並列の
 /// diff の 2 面（番号 1 列・追加 / 削除の地・詰め物）に開き、スクロールを共にさせて窓に並べる。窓の下の「並びを置き直す」
@@ -108,15 +109,15 @@ final class EditorRowsTrialTests: OrbeTestCase {
     XCTAssertGreaterThan(down, 0, "前提: はじきの momentum が面に届いた")
     XCTAssertGreaterThan(bounce, 0, "前提: 端の弾みの momentum が面に届いた")
     XCTAssertGreaterThan(report.frames, 30, "前提: スクロールの間のコマを受けた")
-    XCTAssertGreaterThan(report.above.count, 30, "前提: 区画の枠線と上下の印の行を引けた")
+    XCTAssertGreaterThan(report.above.count, 30, "前提: スレッドの枠線と上下の印の行を引けた")
     XCTAssertLessThanOrEqual(
       (report.above.max() ?? 0) - (report.above.min() ?? 0), 2,
-      "区画の上端と上の行の距離は、どのコマでも同じ（区画が本文と同じコマに描かれる）")
+      "スレッドの上端と上の行の距離は、どのコマでも同じ（スレッドが本文と同じコマに描かれる）")
     XCTAssertLessThanOrEqual(
       (report.below.max() ?? 0) - (report.below.min() ?? 0), 2,
-      "区画の下端と下の行の距離は、どのコマでも同じ")
-    XCTAssertGreaterThan(report.above.min() ?? 0, 0, "区画が上の行の字に重ならない")
-    XCTAssertGreaterThan(report.below.min() ?? 0, 0, "区画が下の行の字に重ならない")
+      "スレッドの下端と下の行の距離は、どのコマでも同じ")
+    XCTAssertGreaterThan(report.above.min() ?? 0, 0, "スレッドが上の行の字に重ならない")
+    XCTAssertGreaterThan(report.below.min() ?? 0, 0, "スレッドが下の行の字に重ならない")
   }
 
   private func outputDirectory() throws -> URL {
@@ -145,7 +146,7 @@ final class EditorRowsTrialTests: OrbeTestCase {
     let window = OrbeWindow(
       contentRect: NSRect(x: 120, y: 120, width: 1200, height: 800),
       styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-    window.title = "区画の試しの場"
+    window.title = "差し込みの試しの場"
     window.isReleasedWhenClosed = false
     window.appearance = NSAppearance(named: .darkAqua)
     window.contentView = tab.group.view
@@ -169,7 +170,7 @@ final class EditorRowsTrialTests: OrbeTestCase {
   /// 文書に無い行の字。
   private static let removedLines = TextRowSource("-   removed line\n-   // gone")
 
-  /// 30 行ごとの試しのスレッドと、13 行ごとの文書に無い行 2 行（区画と同じ境には置かない）。
+  /// 30 行ごとの試しのスレッドと、13 行ごとの文書に無い行 2 行（スレッドと同じ境には置かない）。
   private func insertions(lineCount: Int) -> ([RowInsertion], [SampleThreadZone]) {
     var result: [RowInsertion] = []
     var threads: [SampleThreadZone] = []
@@ -194,7 +195,7 @@ final class EditorRowsTrialTests: OrbeTestCase {
     EditorTypingPerfTests.swiftSource(bytes: 200_000)
   }
 
-  /// 区画の上下の行を印の行（全角の塗りの字）にした文書（合成の型）。字の画素の上端と下端が行ごとに変わらない。
+  /// スレッドの上下の行を印の行（全角の塗りの字）にした文書（合成の型）。字の画素の上端と下端が行ごとに変わらない。
   private static func markedSource() -> String {
     (0..<3000).map { line in
       line % zoneEvery == zoneEvery - 1 || (line % zoneEvery == 0 && line > 0)

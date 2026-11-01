@@ -5,12 +5,13 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// 差し込みの多い面の計測（`FramePerfTests` と同じ場で、`ORBE_EDITOR_PERF=1` のときだけ走る）。ミニマップを出さない
-/// 1MB・200KB に、10 行ごとに差し込み（文書に無い行 2 行と、スレッドの形の区画——影と枠線の付いた枠・頭・アバター・画像・
-/// 折り返す本文・押せる場所——を交互に。1MB で約 4,300）を置き、指のドラッグ・はじき・端への引っ張りを流す。区画の高さは
-/// 本文の行の 5 倍ほどで、区画が画面の多くを占めるコマを含む。関門は本文だけのときと同じ（1 コマの CPU の p99 2ms 未満・描画スレッド自身が
-/// 落とすコマ 0・main に負荷を入れても・1MB の中央値が 200KB の 2 倍以内）。行の増える打鍵 1 回の main の仕事（面の編集係と
-/// 文書と、差し込みの境のずらし。main のスレッドの CPU 時間）は p99 1ms 以下。壊れると、diff や PR のスレッドの多い文書で
-/// スクロールのコマが落ち、打鍵が重くなる。
+/// 1MB・200KB に、10 行ごとに差し込み（文書に無い行 2 行と、スレッドの形の絵の差し込み——影と枠線の付いた
+/// 枠・頭・アバター・画像・折り返す本文・押せる場所——を交互に。1MB で約 4,300）を置き、指のドラッグ・はじき・端への
+/// 引っ張りを流す。絵の差し込みの高さは本文の行の 5 倍ほどで、絵の差し込みが画面の多くを占めるコマを含む。関門は
+/// 本文だけのときと同じ（1 コマの CPU の p99 2ms 未満・描画スレッド自身が落とすコマ 0・main に負荷を入れても・1MB の
+/// 中央値が 200KB の 2 倍以内）。行の増える打鍵 1 回の main の仕事（面の編集係と文書と、差し込みの境のずらし。main の
+/// スレッドの CPU 時間）は p99 1ms 以下。壊れると、diff や PR のスレッドの多い文書でスクロールのコマが落ち、打鍵が
+/// 重くなる。
 extension FramePerfTests {
   func testManyRows() throws {
     let small = try measure(
@@ -38,14 +39,14 @@ extension FramePerfTests {
     XCTAssertLessThanOrEqual(Self.quantile(main.cpu, 0.99), 1, "行の増える打鍵 1 回の main の仕事")
   }
 
-  /// 区画の入力欄に打つ——差し込みの多い 1MB の中ほどのスレッドの返信の入力欄で、打鍵の間隔 100ms と 33ms。関門は本文の
-  /// 打鍵と同じ（打鍵→present の中央値 12.5ms・p95 17ms、打鍵 1 回の main の仕事 p99 1ms）。区画の絵を問い直して材料に写す
-  /// main の仕事（区画 1 つと、幅を変えたときの全部の区画）は記録して示す。
+  /// 絵の差し込みの入力欄に打つ——差し込みの多い 1MB の中ほどのスレッドの返信の入力欄で、打鍵の間隔 100ms と 33ms。
+  /// 関門は本文の打鍵と同じ（打鍵→present の中央値 12.5ms・p95 17ms、打鍵 1 回の main の仕事 p99 1ms）。中身を
+  /// 問い直して材料に写す main の仕事（絵の差し込み 1 つと、幅を変えたときの全部の絵の差し込み）は記録して示す。
   func testTypingIntoAZoneField() throws {
     let opened = try attach(Self.swiftSource(bytes: 1_000_000))
     let surface = opened.surface
     let field = ZoneTextField(id: "perf-reply", style: ThreadZone.fieldStyle())
-    let thread = ThreadZone(comment: "打つ区画。", field: field)
+    let thread = ThreadZone(comment: "打つ返信。", field: field)
     thread.surface = surface
     let lineCount = opened.document.text.lineCount
     let middle = lineCount / 2 / 10 * 10 + 5
@@ -103,7 +104,8 @@ extension FramePerfTests {
     surface.flush()
   }
 
-  /// `lineCount` 行の文書に、10 行ごとに文書に無い行 2 行（字は `source` に足す）とスレッドの形の区画を交互に差し込む列。
+  /// `lineCount` 行の文書に、10 行ごとに文書に無い行 2 行（字は `source` に足す）とスレッドの形の絵の差し込みを交互に
+  /// 差し込む列。
   static func rowInsertions(lineCount: Int, source: InsertedText) -> [RowInsertion] {
     stride(from: 10, to: lineCount, by: 10).enumerated().map { k, line in
       k % 2 == 0
@@ -113,7 +115,7 @@ extension FramePerfTests {
           line: line,
           content: .zone(
             ThreadZone(
-              comment: "スクロールしても、この枠は本文の行の境から離れない。区画 \(k) の本文は幅で折り返す。")))
+              comment: "スクロールしても、この枠は本文の行の境から離れない。試し \(k) の本文は幅で折り返す。")))
     }
   }
 }
