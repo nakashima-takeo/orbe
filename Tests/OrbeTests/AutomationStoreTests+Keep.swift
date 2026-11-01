@@ -6,7 +6,8 @@ import XCTest
 ///
 /// 壊れると何が起きるか: 判定に片付けさせたい候補が、元の項目が消えたときに黙って消える。1 つの判定に入力を集めた形で、片方の
 /// 取得が外しただけで、まだある項目の候補が消えて戻らない。取得 → 処理 → 判定 の形で、取得が外した項目の候補が棚に残り続ける。
-/// 処理がまとめた行の候補が、処理が外しても棚に残り続ける。直近の窓を毎回読む判定で、さばいた候補が次の回に戻る。
+/// 処理がまとめた行の候補が、処理が外しても棚に残り続ける。処理がまとめた行を書き換えるたびに、さばいた候補が戻る。直近の窓を
+/// 毎回読む判定で、さばいた候補が次の回に戻る。
 extension AutomationStoreTests {
   private func keeping(_ keep: AutomationKeep?) -> AutomationDefinition {
     var definition = Self.definition()
@@ -122,6 +123,38 @@ extension AutomationStoreTests {
       id, nodeKey: "p", at: Self.at, outcome: DesignSceneFixtures.processed([], read: 1))
     XCTAssertEqual(store.proposals, [])
     XCTAssertEqual(store.automation(id)?.state(key: "p").runs.first?.run?.withdrawn, 1)
+  }
+
+  /// さばいた候補のリンクは、判定へ行が届く処理の今有効な項目にある間は覚え、処理がその行を書き換えて出し直しても判定の前で
+  /// 捨てる（さばいた候補が戻らない）。
+  func testAClosedProposalStaysClosedWhileAProcessStillHasItsRow() throws {
+    let store = AutomationStore()
+    var process = DesignSceneFixtures.commandNode(
+      "p", "まとめ", .arrival, from: ["fetch"], script: "p", coverage: .currentSet)
+    process.from = [AutomationDefinition.Input(nodeKey: "fetch", take: .all)]
+    var definition = Self.definition()
+    definition.nodes[1].from = [AutomationDefinition.Input(nodeKey: "p")]
+    definition.nodes.insert(process, at: 1)
+    let id = try store.create(definition, now: Self.at).id
+    try Self.fetch(store, id, [Self.item("a")])
+    func thread(_ body: String) -> AutomationNodeRow {
+      AutomationNodeRow(
+        id: "t1", text: #"{"id":"t1","link":"https://example.com/t1","body":"\#(body)"}"#,
+        ref: nil, source: nil)
+    }
+    try store.record(
+      id, nodeKey: "p", at: Self.at,
+      outcome: DesignSceneFixtures.processed([thread("1 件")], read: 1))
+    try Self.judge(
+      store, id, proposing: [AutomationItem(id: "t1", link: Self.link("t1"), body: "", time: nil)])
+    try store.dismiss(try XCTUnwrap(store.proposals.first).id, now: Self.at)
+
+    try store.record(
+      id, nodeKey: "p", at: Self.at.addingTimeInterval(60),
+      outcome: DesignSceneFixtures.processed([thread("2 件")], read: 1))
+
+    XCTAssertEqual(store.proposals.map(\.state), [.dismissed])
+    XCTAssertEqual(store.automation(id)?.state(key: "judge").pending.count, 0)
   }
 
   /// 出来事を毎回すべて読む判定は、さばいた候補のリンクを窓の内にある間は覚え、その出来事を判定の前で捨てる。窓を外れたら忘れる。
