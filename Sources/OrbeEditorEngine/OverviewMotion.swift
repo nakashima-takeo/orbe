@@ -57,7 +57,7 @@ final class OverviewMotion {
   struct ScrollState: Equatable {
     var first: CGFloat
     var visible: CGFloat
-    /// 縦の量（表示の単位。→ `RowLayout.contentLines`）。
+    /// 縦の量（表示の単位。→ `ScrollPhysics.Limits.contentLines`）。
     var contentLines: CGFloat
     var x: Double
     var width: Double

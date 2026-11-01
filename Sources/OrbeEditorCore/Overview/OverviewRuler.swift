@@ -35,8 +35,8 @@ public struct OverviewRuler: Equatable, Sendable {
   public let scrollLines: CGFloat
   public let scale: CGFloat
 
-  /// `contentLines` は最後の項目の上端 + 1（表示の単位。差し込みの無い面では行数）、`height` は ruler の高さ（pt）、
-  /// `scale` はデバイス倍率。
+  /// `contentLines` は最後の項目の上端 + 1（表示の単位。差し込みの無い面では行数。スクロールを共にする面では、共にする
+  /// 範囲の縦の端（表示の単位）+ 1 との大きい方）、`height` は ruler の高さ（pt）、`scale` はデバイス倍率。
   public init(contentLines: CGFloat, visibleLines: CGFloat, height: CGFloat, scale: CGFloat) {
     canvasHeight = Int(max(0, height * scale))
     scrollLines = max(1, contentLines) + max(0, visibleLines - 1)

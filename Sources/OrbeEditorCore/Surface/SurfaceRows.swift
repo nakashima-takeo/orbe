@@ -1,7 +1,8 @@
 import Foundation
 
 /// 面の縦の並びに、文書の行と行の間へ差し込むもの（→ `TextSurface.setRows`）と、文書の行の見え方。差し込みは行に数えない
-/// 描画で、本文にも undo にも載らない——行番号・見えている範囲・選択・編集は、文書の行だけを見る。
+/// 描画で、本文にも undo にも載らない——行番号・選択・編集は、文書の行だけを見る（見えている範囲は縦の並びの中の位置で
+/// 表す。→ `TextViewport`）。
 public struct SurfaceRows {
   /// 境の昇順の差し込みの列。同じ境の差し込みは、列の順に上から並ぶ。
   public var insertions: [RowInsertion]
