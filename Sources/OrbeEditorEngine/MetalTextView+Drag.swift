@@ -185,7 +185,7 @@ extension MetalTextView: NSDraggingSource {
         offset: site.hit(point, position: surface.scrollPosition)?.offset,
         files: fileURLs(on: board), string: board.string(forType: .string),
         dragged: own ? draggedRange : nil,
-        copying: !info.draggingSourceOperationMask.contains(.move) || !site.isBody,
+        copying: !info.draggingSourceOperationMask.contains(.move),
         shift: NSEvent.modifierFlags.contains(.shift),
         opensFiles: site.isBody && surface.host != nil, inserts: site.isEditable))
   }
