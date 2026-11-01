@@ -87,8 +87,6 @@ final class ScmPanel {
   /// remote 追跡 ref が動きうるきっかけの後、その後に始めた読みが終わるまで（前の値を有効なまま残すと、自分の push の
   /// 直後に amend・取り消しが押せる）。
   private var headPushIsStale = false
-  /// パネルを出したときに根のサービスがまだ git 管理下と分かっていなかった（最初の status で読む）。
-  @ObservationIgnored private var readsOnResolve = false
 
   /// 読み・組み立て 1 本の直列化。実行中に来た要求は「終わったらもう 1 回」に畳む。
   private struct Job {
@@ -121,7 +119,6 @@ final class ScmPanel {
     didSet {
       guard isShown != oldValue else { return }
       if isShown {
-        resolveManaged()
         requestBuild()
         readGraphAndHead(remoteRefsMayHaveMoved: true)
       } else {
@@ -139,8 +136,8 @@ final class ScmPanel {
 
   // MARK: - 観測
 
-  /// 根のサービスが git 管理下かを読む。管理下なら裏の fetch を欲しがるか決め直す——根のサービスから何か届くたびに呼ぶので、
-  /// status の取り直しが落ち続けていても、根の git dir が分かった後の知らせで決まる。
+  /// 根のサービスが git 管理下かを読む。握った時点で判定が済んでいればそこで、まだなら判定が済んだ知らせで決まる（判定は
+  /// 根のサービスごとに 1 度しか変わらない）。管理下なら裏の fetch を欲しがるか決め直す。
   func resolveManaged() {
     guard let files = liveFiles else { return }
     if files.repo != nil {
@@ -164,11 +161,6 @@ final class ScmPanel {
   func statusDidChange() {
     guard liveFiles?.status != nil else { return }
     ownWrites.statusDidArrive()
-    resolveManaged()
-    if readsOnResolve {
-      readsOnResolve = false
-      readGraphAndHead(remoteRefsMayHaveMoved: true)
-    }
     changesAreStale = true
     requestBuild()
   }
@@ -260,12 +252,12 @@ final class ScmPanel {
   // MARK: - グラフと HEAD
 
   /// グラフと HEAD の push 済みを読み直す（パネルを出している間だけ）。`remoteRefsMayHaveMoved` なら、HEAD の push 済みは読み
-  /// 終わるまで分からないとする（パネルを出した・再読込・remote 追跡 ref の変化・自分のネット操作の終わり）。
+  /// 終わるまで分からないとする（パネルを出した・再読込・remote 追跡 ref の変化・自分のネット操作の終わり）。git 管理下と
+  /// 分かる前に呼ばれたら、HEAD の push 済みを分からないにして返る（読みは判定が済んだ知らせで始まる）。
   func readGraphAndHead(remoteRefsMayHaveMoved: Bool) {
     guard isShown else { return }
     guard liveFiles?.repo != nil else {
       headPush = nil
-      readsOnResolve = true
       return
     }
     readGraph()

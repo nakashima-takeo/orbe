@@ -130,6 +130,7 @@ final class RootFiles {
       isResolved = true
       guard let repo, GitWorktreeRoot.normalizedPath(repo.root) == self.root else {
         releaseWaiters()
+        notify { $0.rootFilesDidResolve(self) }
         return
       }
       self.repo = repo
@@ -137,6 +138,7 @@ final class RootFiles {
       gitWatcher = watch(roots: gitDirs, gitDirs: gitDirs)
       requestStatusRefresh()
       requestVersionRefresh()
+      notify { $0.rootFilesDidResolve(self) }
     }
   }
 

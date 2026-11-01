@@ -1,7 +1,7 @@
 import Foundation
 
-/// 根のサービスからの通知。(a)(d)(e) はデバウンス後すぐ、(b) は status が返った時点、(c) は版の本文の取り直しの完了後に
-/// 届く。
+/// 根のサービスからの通知。(a)(d)(e) はデバウンス後すぐ、(b) は status が返った時点、(c) は版の本文の取り直しの完了後、
+/// (f) は git 管理下かの判定が済んだ時点に届く。
 @MainActor
 protocol RootFilesObserver: AnyObject {
   /// (a) 根の下でファイルが変わった（git dir の中は含まない）。
@@ -19,9 +19,13 @@ protocol RootFilesObserver: AnyObject {
   /// 中のコミット・checkout・index の書き換えで、それ自体は親の ref・HEAD・index を動かさない（同じバッチで親も
   /// 動けば (d) も届く）。
   func rootFilesNestedGitStateDidChange(_ files: RootFiles)
+  /// (f) git 管理下かの判定が済んだ（登録した後に済んだときだけ。サービスごとに 1 度）。管理下かは `files.repo` で読む。
+  /// 登録した時点で `isResolved` なら届かないので、登録した直後に読む。
+  func rootFilesDidResolve(_ files: RootFiles)
 }
 
 extension RootFilesObserver {
   func rootFilesGitStateDidChange(_ files: RootFiles, remoteRefsChanged: Bool) {}
   func rootFilesNestedGitStateDidChange(_ files: RootFiles) {}
+  func rootFilesDidResolve(_ files: RootFiles) {}
 }
