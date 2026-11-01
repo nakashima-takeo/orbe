@@ -90,6 +90,45 @@ final class ZoneTextLayoutTests: XCTestCase {
     XCTAssertEqual(leading.width, 4 + code + 4, accuracy: 0.01)
   }
 
+  /// 余白は、組版で 1 つにまとまる字（ZWJ でつないだ絵文字・タミルの合字）を割らず、その外に付く。右から左の字の
+  /// インラインコードでも、余白はコードの字の中ではなく見た目の左右に出る。どちらの場合も、余白なしで組んだ行と字の数が
+  /// 同じで、コードの字の幅は変わらず、コードは左の余白の分、後ろの字は左右の余白の分だけ右へずれる。
+  func testPaddingStaysOutsideClustersAndOnTheVisualSides() {
+    let cases = [
+      ("ZWJ でつないだ絵文字", "👨‍👩‍👧", "👨‍👩‍👧"), ("タミルの合字", "க்ஷ", "க்ஷ"), ("右から左の字", "see ", "שלום"),
+    ]
+    let padding: CGFloat = 4
+    for (name, before, code) in cases {
+      let string = before + code + " z"
+      let styles = { (padding: CGFloat) in
+        [
+          ZoneTextStyle(length: before.utf16.count, font: self.font, color: .white),
+          ZoneTextStyle(length: code.utf16.count, font: self.mono, color: .red, padding: padding),
+          ZoneTextStyle(length: 2, font: self.font, color: .white),
+        ]
+      }
+      let bare = ZoneTextLayout.lines(string, styles: styles(0), width: 500)[0]
+      let padded = ZoneTextLayout.lines(string, styles: styles(padding), width: 500)[0]
+      XCTAssertEqual(
+        glyphCount(string, styles(padding)), glyphCount(string, styles(0)), "\(name): 字を割らない")
+      XCTAssertEqual(padded.width, bare.width + 2 * padding, accuracy: 0.01, "\(name): 幅は余白の分だけ増える")
+      XCTAssertEqual(
+        padded.spans[1].upperBound - padded.spans[1].lowerBound,
+        bare.spans[1].upperBound - bare.spans[1].lowerBound, accuracy: 0.01,
+        "\(name): コードの字の幅は変わらない")
+      XCTAssertEqual(
+        padded.spans[1].lowerBound, bare.spans[1].lowerBound + padding, accuracy: 0.01,
+        "\(name): コードは左の余白の分右")
+      XCTAssertEqual(
+        padded.spans[2].lowerBound, bare.spans[2].lowerBound + 2 * padding, accuracy: 0.01,
+        "\(name): 後ろの字は左右の余白の分右")
+    }
+  }
+
+  private func glyphCount(_ string: String, _ styles: [ZoneTextStyle]) -> Int {
+    CTLineGetGlyphCount(ZoneTextLayout.typeset(string, styles: styles).line)
+  }
+
   /// 折り返しで割れた見え方は、割れた側の余白を持たない。
   func testPaddingIsDroppedOnTheSideCutByAWrap() {
     let style = ZoneTextStyle(length: 10, font: mono, color: .red, padding: 4)
