@@ -126,9 +126,10 @@ public struct ZoneText {
   }
 }
 
-/// 字の見え方を、文の範囲の先頭から順に `length` 単位（UTF-16）ずつ当てたもの。余白（pt）は連なりの前後の字をその幅ずつ
-/// 押し出す（CSS のインラインの左右の padding。地は連なりの字の x 範囲をこの幅ずつ広げて置く）。折り返しで割れた側には
-/// 付かない（→ `ZoneTextLayout.styles(_:in:)`）。
+/// 字の見え方を、文の範囲の先頭から順に `length` 単位（UTF-16）ずつ当てたもの。余白（pt）は連なりの左右の字をその幅ずつ
+/// 押し出す（CSS のインラインの左右の padding。地は連なりの字の x 範囲をこの幅ずつ広げて置く）。左右は見た目の左右で、
+/// 余白は組版で 1 つにまとまる字の塊の外に付く（絵文字や結合文字を割らない）。折り返しで割れた側には付かない
+/// （→ `ZoneTextLayout.styles(_:in:)`）。
 public struct ZoneTextStyle: Equatable {
   public var length: Int
   public var font: NSFont

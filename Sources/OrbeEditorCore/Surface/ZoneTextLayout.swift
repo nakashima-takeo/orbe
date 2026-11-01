@@ -13,7 +13,7 @@ public enum ZoneTextLayout {
     public var spans: [Range<CGFloat>]
   }
 
-  /// 1 行に組んだもの——組んだ行と、行頭の余白（行の先頭の見え方の前の余白。字はこの幅だけ右から始まる）。
+  /// 1 行に組んだもの——組んだ行と、行頭の余白（見た目で左端の見え方の左の余白。字はこの幅だけ右から始まる）。
   public struct Typeset {
     public let line: CTLine
     public let inset: CGFloat
@@ -23,13 +23,11 @@ public enum ZoneTextLayout {
   /// 割る位置は Core Text の行の割り方（語の境。日本語は字の境）。空の文は空の 1 行。
   public static func lines(_ string: String, styles: [ZoneTextStyle], width: CGFloat) -> [Line] {
     let units = Array(string.utf16)
-    let typesetter = CTTypesetterCreateWithAttributedString(
-      attributed(units, styles: styles).string)
     var lines: [Line] = []
     var start = 0
     repeat {
       let end = units[start...].firstIndex(of: 0x0A) ?? units.count
-      lines += paragraph(start..<end, units, typesetter, styles: styles, width: width)
+      lines += paragraph(start..<end, units, styles: styles, width: width)
       start = end + 1
     } while start <= units.count
     return lines
@@ -78,8 +76,7 @@ public enum ZoneTextLayout {
   private static let styleAttribute = "OrbeZoneTextStyle"
 
   private static func paragraph(
-    _ span: Range<Int>, _ units: [UInt16], _ typesetter: CTTypesetter, styles: [ZoneTextStyle],
-    width: CGFloat
+    _ span: Range<Int>, _ units: [UInt16], styles: [ZoneTextStyle], width: CGFloat
   ) -> [Line] {
     guard !span.isEmpty else {
       return [
@@ -87,11 +84,16 @@ public enum ZoneTextLayout {
           range: NSRange(location: span.lowerBound, length: 0), styles: [], width: 0, spans: [])
       ]
     }
+    let typesetter = CTTypesetterCreateWithAttributedString(
+      composed(
+        Array(units[span]), styles: Self.styles(styles, in: NSRange(span))
+      ).string)
     var lines: [Line] = []
     var start = span.lowerBound
     while start < span.upperBound {
       let inset = leadingPadding(at: start, styles)
-      let suggested = CTTypesetterSuggestLineBreak(typesetter, start, Double(max(1, width - inset)))
+      let suggested = CTTypesetterSuggestLineBreak(
+        typesetter, start - span.lowerBound, Double(max(1, width - inset)))
       let count = min(max(1, suggested), span.upperBound - start)
       let range = NSRange(location: start, length: count)
       let pieces = Self.styles(styles, in: range)
@@ -121,18 +123,102 @@ public enum ZoneTextLayout {
     let spans: [Range<CGFloat>]
   }
 
-  /// 1 行に組む。字の x 範囲は字の位置と送りから引く（位置の境は余白の真ん中に来るので使わない）。
+  /// 1 行に組む。字の x 範囲はグリフの位置と送り幅から引き、余白の送りを置いた字の塊では、その送りが乗るグリフ（右端が
+  /// 最も右のもの）から送りを引く（位置の境は余白の真ん中に来るので使わない）。
   private static func laid(_ units: [UInt16], styles: [ZoneTextStyle]) -> Laid {
-    let (string, kerns) = attributed(units, styles: styles)
-    let line = CTLineCreateWithAttributedString(string)
-    let inset = styles.first { $0.length > 0 }?.leadingPadding ?? 0
+    let set = composed(units, styles: styles)
     let width =
-      CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
-      - CGFloat(CTLineGetTrailingWhitespaceWidth(line))
+      CGFloat(CTLineGetTypographicBounds(set.line, nil, nil, nil))
+      - CGFloat(CTLineGetTrailingWhitespaceWidth(set.line))
+    let glyphs = Self.glyphs(of: set.line)
+    var kerned: [Int: CGFloat] = [:]
+    for (cluster, kern) in set.kerns {
+      let carrier = glyphs.indices.filter { cluster.contains(glyphs[$0].offset) }
+        .max { glyphs[$0].x.upperBound < glyphs[$1].x.upperBound }
+      if let carrier { kerned[carrier] = kern }
+    }
     var found = [Range<CGFloat>?](repeating: nil, count: styles.count)
+    for (i, glyph) in glyphs.enumerated() {
+      guard let index = glyph.style, found.indices.contains(index) else { continue }
+      let lower = set.inset + glyph.x.lowerBound
+      let upper = max(lower, set.inset + glyph.x.upperBound - kerned[i, default: 0])
+      let span = found[index]
+      found[index] = min(span?.lowerBound ?? lower, lower)..<max(span?.upperBound ?? upper, upper)
+    }
+    var spans: [Range<CGFloat>] = []
+    for span in found {
+      let end = spans.last?.upperBound ?? set.inset
+      spans.append(span ?? end..<end)
+    }
+    return Laid(line: set.line, inset: set.inset, width: set.inset + max(0, width), spans: spans)
+  }
+
+  /// 余白を置いて 1 行に組んだもの——属性文字列と行と、行頭の余白と、送りを置いた字の塊（文の範囲）ごとの送り。
+  private struct Composed {
+    let string: CFAttributedString
+    let line: CTLine
+    let inset: CGFloat
+    let kerns: [Range<Int>: CGFloat]
+  }
+
+  /// 余白を、Core Text が 1 つにまとめて組む字の塊の送りとして置いて組む。まず余白なしで組み、グリフの文字の位置から塊の
+  /// 区切りを取る。右の余白は見え方の右端のグリフの塊に、左の余白は見え方の左端のグリフのすぐ左に並ぶグリフの塊に送りを
+  /// 置く（すぐ左に字が無ければ行頭の余白）。送りは塊の最後のグリフの右に空きを作るので、左右は見た目で決まり、右から左の
+  /// 字でも余白は見え方の字の外に出る。余白が無ければ 1 回だけ組む。
+  private static func composed(_ units: [UInt16], styles: [ZoneTextStyle]) -> Composed {
+    let plain = attributed(units, styles: styles, kerns: [:])
+    let line = CTLineCreateWithAttributedString(plain)
+    guard styles.contains(where: { $0.leadingPadding > 0 || $0.trailingPadding > 0 }) else {
+      return Composed(string: plain, line: line, inset: 0, kerns: [:])
+    }
+    let glyphs = Self.glyphs(of: line)
+    let starts = Set(glyphs.map(\.offset)).sorted()
+    func cluster(of offset: Int) -> Range<Int> {
+      let index = starts.lastIndex { $0 <= offset } ?? 0
+      return starts[index]..<(index + 1 < starts.count ? starts[index + 1] : units.count)
+    }
+    var kerns: [Range<Int>: CGFloat] = [:]
+    var inset: CGFloat = 0
+    for (index, style) in styles.enumerated() {
+      let own = glyphs.indices.filter { glyphs[$0].style == index }
+      if style.trailingPadding > 0,
+        let right = own.max(by: { glyphs[$0].x.upperBound < glyphs[$1].x.upperBound })
+      {
+        kerns[cluster(of: glyphs[right].offset), default: 0] += style.trailingPadding
+      }
+      if style.leadingPadding > 0,
+        let left = own.min(by: { glyphs[$0].x.lowerBound < glyphs[$1].x.lowerBound })
+      {
+        let own = cluster(of: glyphs[left].offset)
+        if let neighbour = glyphs[..<left].lastIndex(where: { !own.contains($0.offset) }) {
+          kerns[cluster(of: glyphs[neighbour].offset), default: 0] += style.leadingPadding
+        } else {
+          inset += style.leadingPadding
+        }
+      }
+    }
+    guard !kerns.isEmpty else {
+      return Composed(string: plain, line: line, inset: inset, kerns: [:])
+    }
+    let string = attributed(units, styles: styles, kerns: kerns)
+    return Composed(
+      string: string, line: CTLineCreateWithAttributedString(string), inset: inset, kerns: kerns)
+  }
+
+  /// 組んだ行のグリフ 1 つ——見え方（`styles` の添字）・文の位置・x 範囲（行の左端から。送りを含む）。
+  private struct Glyph {
+    let style: Int?
+    let offset: Int
+    let x: Range<CGFloat>
+  }
+
+  /// 組んだ行のグリフ（見た目の左から順に）。
+  private static func glyphs(of line: CTLine) -> [Glyph] {
+    var result: [Glyph] = []
     for run in CTLineGetGlyphRuns(line) as? [CTRun] ?? [] {
       let count = CTRunGetGlyphCount(run)
-      guard count > 0, let index = style(of: run) else { continue }
+      guard count > 0 else { continue }
+      let index = style(of: run)
       var positions = [CGPoint](repeating: .zero, count: count)
       var advances = [CGSize](repeating: .zero, count: count)
       var offsets = [CFIndex](repeating: 0, count: count)
@@ -141,31 +227,25 @@ public enum ZoneTextLayout {
       CTRunGetAdvances(run, all, &advances)
       CTRunGetStringIndices(run, all, &offsets)
       for i in 0..<count {
-        let lower = inset + positions[i].x
-        let upper = lower + max(0, advances[i].width - kerns[offsets[i], default: 0])
-        let span = found[index]
-        found[index] = min(span?.lowerBound ?? lower, lower)..<max(span?.upperBound ?? upper, upper)
+        let lower = positions[i].x
+        result.append(
+          Glyph(
+            style: index, offset: offsets[i],
+            x: lower..<max(lower, lower + advances[i].width)))
       }
     }
-    var spans: [Range<CGFloat>] = []
-    for span in found {
-      let end = spans.last?.upperBound ?? inset
-      spans.append(span ?? end..<end)
-    }
-    return Laid(line: line, inset: inset, width: inset + max(0, width), spans: spans)
+    return result
   }
 
-  /// 見え方を当てた属性文字列と、字ごとに足した送り（余白。字の後ろに足す）。前の余白は手前の字の後ろに足す（行頭の見え方
-  /// の前の余白は行頭の余白として組む側が持つ）。
-  private static func attributed(_ units: [UInt16], styles: [ZoneTextStyle]) -> (
-    string: CFAttributedString, kerns: [Int: CGFloat]
-  ) {
+  /// 見え方と送り `kerns`（字の塊ごと）を当てた属性文字列。
+  private static func attributed(
+    _ units: [UInt16], styles: [ZoneTextStyle], kerns: [Range<Int>: CGFloat]
+  ) -> CFAttributedString {
     let string = units.withUnsafeBufferPointer {
       CFStringCreateWithCharacters(nil, $0.baseAddress, $0.count)!
     }
     let attributed = CFAttributedStringCreateMutable(nil, 0)!
     CFAttributedStringReplaceString(attributed, CFRange(location: 0, length: 0), string)
-    var kerns: [Int: CGFloat] = [:]
     var offset = 0
     for (index, style) in styles.enumerated() where offset < units.count {
       let length = min(style.length, units.count - offset)
@@ -173,20 +253,13 @@ public enum ZoneTextLayout {
       CFAttributedStringSetAttribute(attributed, range, kCTFontAttributeName, style.font as CTFont)
       CFAttributedStringSetAttribute(
         attributed, range, styleAttribute as CFString, index as NSNumber)
-      if length > 0 {
-        if offset > 0, style.leadingPadding > 0 {
-          kerns[offset - 1, default: 0] += style.leadingPadding
-        }
-        if style.trailingPadding > 0 {
-          kerns[offset + length - 1, default: 0] += style.trailingPadding
-        }
-      }
       offset += length
     }
-    for (index, kern) in kerns {
+    for (cluster, kern) in kerns {
       CFAttributedStringSetAttribute(
-        attributed, CFRange(location: index, length: 1), kCTKernAttributeName, kern as NSNumber)
+        attributed, CFRange(location: cluster.lowerBound, length: cluster.count),
+        kCTKernAttributeName, kern as NSNumber)
     }
-    return (attributed, kerns)
+    return attributed
   }
 }
