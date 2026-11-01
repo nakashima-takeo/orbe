@@ -183,7 +183,6 @@ final class ZonePainter {
     }
     var material = ZoneMaterial()
     var hits = ZoneHits()
-    for text in picture.texts { hits.texts[text.id] = TextRope(text.string) }
     for element in picture.elements {
       switch element {
       case .box(let box):
@@ -199,21 +198,6 @@ final class ZonePainter {
         }
         let set = ZoneTextLayout.typeset(line.runs.map(\.string).joined(), styles: styles)
         material.runs += runs(set.line, styles: styles, origin: line.origin, look)
-      case .selectable(let line):
-        let whole = hits.texts[line.text] ?? TextRope()
-        let lower = min(max(0, line.range.location), whole.length)
-        let upper = min(max(lower, NSMaxRange(line.range)), whole.length)
-        let string = whole.substring(NSRange(location: lower, length: upper - lower))
-        let set = ZoneTextLayout.typeset(string, styles: line.styles)
-        let origin = CGPoint(x: line.origin.x + set.inset, y: line.origin.y)
-        material.runs += runs(set.line, styles: line.styles, origin: origin, look)
-        let font = line.styles.first?.font ?? .systemFont(ofSize: 12)
-        let width = CGFloat(CTLineGetTypographicBounds(set.line, nil, nil, nil))
-        hits.lines.append(
-          ZoneHits.Line(
-            text: line.text, range: NSRange(location: lower, length: upper - lower),
-            origin: origin, ascent: font.ascender, descent: -font.descender,
-            width: width, line: set.line, carets: CaretMap(set.line, width: width)))
       case .image(let image):
         if let pixels = pixels(image, look) {
           material.images.append(ZoneMaterial.Image(frame: image.frame, pixels: pixels))
@@ -226,12 +210,36 @@ final class ZonePainter {
         material.fields.append(ZoneMaterial.Field(serial: serial(field.field), frame: field.frame))
       }
     }
+    for text in picture.texts { paint(text, look, into: &material, hits: &hits) }
     precondition(hits.texts.count == picture.texts.count, "選べる文のまとまりの id は区画の中で一意")
     precondition(
       Set(hits.buttons.map(\.id)).count == hits.buttons.count, "押せる場所の id は区画の中で一意")
     precondition(
       Set(hits.fields.map(\.field.id)).count == hits.fields.count, "入力欄の id は区画の中で一意")
     return (material, hits)
+  }
+
+  /// 選べる文のまとまり `text` の文を当たりの表に、その行を材料と当たりの表の行に写す。行の範囲は文の中へ切り詰める。
+  private func paint(
+    _ text: ZoneText, _ look: Look, into material: inout ZoneMaterial, hits: inout ZoneHits
+  ) {
+    let whole = TextRope(text.string)
+    hits.texts[text.id] = whole
+    for line in text.lines {
+      let lower = min(max(0, line.range.location), whole.length)
+      let upper = min(max(lower, NSMaxRange(line.range)), whole.length)
+      let string = whole.substring(NSRange(location: lower, length: upper - lower))
+      let set = ZoneTextLayout.typeset(string, styles: line.styles)
+      let origin = CGPoint(x: line.origin.x + set.inset, y: line.origin.y)
+      material.runs += runs(set.line, styles: line.styles, origin: origin, look)
+      let font = line.styles.first?.font ?? .systemFont(ofSize: 12)
+      let width = CGFloat(CTLineGetTypographicBounds(set.line, nil, nil, nil))
+      hits.lines.append(
+        ZoneHits.Line(
+          text: text.id, range: NSRange(location: lower, length: upper - lower),
+          origin: origin, ascent: font.ascender, descent: -font.descender,
+          width: width, line: set.line, carets: CaretMap(set.line, width: width)))
+    }
   }
 
   /// `ZoneTextLayout.typeset` で組んだ行を、字の連なり（フォントと色ごと）に写す。色は連なりの見え方から引く。

@@ -240,14 +240,11 @@ final class SampleThreadZone: SurfaceZone {
           ZoneBox(
             frame: CGRect(x: left, y: y + (headLine - 7) / 2, width: 7, height: 7), radius: 3.5,
             fill: Self.accentBright)))
-      let id = "commit-\(index)"
-      canvas.texts.append(ZoneText(id: id, string: commit))
-      canvas.elements.append(
-        .selectable(
-          ZoneSelectableLine(
-            origin: CGPoint(x: left + 12, y: Self.baseline(top: y, height: headLine, font: mono)),
-            text: id, range: NSRange(location: 0, length: commit.utf16.count),
-            styles: [ZoneTextStyle(length: commit.utf16.count, font: mono, color: Self.muted)])))
+      let line = ZoneSelectableLine(
+        origin: CGPoint(x: left + 12, y: Self.baseline(top: y, height: headLine, font: mono)),
+        range: NSRange(location: 0, length: commit.utf16.count),
+        styles: [ZoneTextStyle(length: commit.utf16.count, font: mono, color: Self.muted)])
+      canvas.texts.append(ZoneText(id: "commit-\(index)", string: commit, lines: [line]))
       y += headLine
     }
     return max(20, y - top)
@@ -280,9 +277,9 @@ final class SampleThreadZone: SurfaceZone {
             padding: Self.codePadding))
       }
     }
-    canvas.texts.append(ZoneText(id: id, string: string))
     let lineHeight: CGFloat = 12 * 1.6
     let lines = ZoneTextLayout.lines(string, styles: styles, width: width)
+    var selectable: [ZoneSelectableLine] = []
     for (index, line) in lines.enumerated() {
       let lineTop = top + CGFloat(index) * lineHeight
       let baseline = Self.baseline(top: lineTop, height: lineHeight, font: sans)
@@ -297,12 +294,11 @@ final class SampleThreadZone: SurfaceZone {
                 height: mono.ascender - mono.descender + 2), radius: 3,
               fill: Self.tint(Self.accent, 0.12))))
       }
-      canvas.elements.append(
-        .selectable(
-          ZoneSelectableLine(
-            origin: CGPoint(x: left, y: baseline), text: id, range: line.range,
-            styles: line.styles)))
+      selectable.append(
+        ZoneSelectableLine(
+          origin: CGPoint(x: left, y: baseline), range: line.range, styles: line.styles))
     }
+    canvas.texts.append(ZoneText(id: id, string: string, lines: selectable))
     return CGFloat(lines.count) * lineHeight
   }
 }

@@ -94,13 +94,14 @@ final class ThreadZone: SurfaceZone {
       x: Self.margin.width, y: Self.margin.height,
       width: max(80, width - Self.margin.width - 16), height: 0)
     var body: [ZoneElement] = []
-    let bottom = layOutComment(in: frame, into: &body)
+    var lines: [ZoneSelectableLine] = []
+    let bottom = layOutComment(in: frame, into: &body, lines: &lines)
     let height = bottom - frame.minY
     return ZonePicture(
       height: frame.minY + height + 8,
       elements: chrome(CGRect(x: frame.minX, y: frame.minY, width: frame.width, height: height))
         + body,
-      texts: [ZoneText(id: Self.commentText, string: comment)])
+      texts: [ZoneText(id: Self.commentText, string: comment, lines: lines)])
   }
 
   /// 頭の帯の高さ。
@@ -143,8 +144,10 @@ final class ThreadZone: SurfaceZone {
     return elements
   }
 
-  /// アバター（円・頭文字・画像）・折り返す本文・入力欄を積み、下端の y を返す。
-  private func layOutComment(in frame: CGRect, into body: inout [ZoneElement]) -> CGFloat {
+  /// アバター（円・頭文字・画像）・折り返す本文・入力欄を積み（本文の行は `lines` へ）、下端の y を返す。
+  private func layOutComment(
+    in frame: CGRect, into body: inout [ZoneElement], lines selectable: inout [ZoneSelectableLine]
+  ) -> CGFloat {
     let inner = frame.width - 2 * Self.inset
     var y = frame.minY + Self.head + 10
     body += [
@@ -164,11 +167,10 @@ final class ThreadZone: SurfaceZone {
     let lines = ZoneTextLayout.lines(
       comment, styles: Self.styles(comment), width: max(10, inner - 30))
     for line in lines {
-      body.append(
-        .selectable(
-          ZoneSelectableLine(
-            origin: CGPoint(x: frame.minX + Self.inset + 30, y: y + 14), text: Self.commentText,
-            range: line.range, styles: line.styles)))
+      selectable.append(
+        ZoneSelectableLine(
+          origin: CGPoint(x: frame.minX + Self.inset + 30, y: y + 14), range: line.range,
+          styles: line.styles))
       y += Self.lineHeight
     }
     y += 8

@@ -23,11 +23,12 @@ public enum ZoneEvent: Equatable {
   case pressed(AnyHashable)
 }
 
-/// 区画の絵——高さと、描く順の要素の列と、選べる文のまとまり。座標は区画の左上を原点にした pt（y は下向き）。
+/// 区画の絵——高さと、要素の列（重ね順は種類で決まる → `ZoneElement`）と、選べる文のまとまり。座標は区画の左上を原点に
+/// した pt（y は下向き）。
 public struct ZonePicture {
   public var height: CGFloat
   public var elements: [ZoneElement]
-  /// 選べる文のまとまり（コピーで渡す文の正）。描かないので要素の列には入れない——選べる字の行が範囲で指す。
+  /// 選べる文のまとまり——文と、それを描く行。コピーで渡す文の正。
   public var texts: [ZoneText]
 
   public init(height: CGFloat, elements: [ZoneElement] = [], texts: [ZoneText] = []) {
@@ -41,7 +42,6 @@ public struct ZonePicture {
 public enum ZoneElement {
   case box(ZoneBox)
   case text(ZoneTextLine)
-  case selectable(ZoneSelectableLine)
   case image(ZoneImage)
   case button(ZoneButton)
   case field(ZoneField)
@@ -115,14 +115,16 @@ public struct ZoneTextLine {
   }
 }
 
-/// 選べる文のまとまり——id（描き直しをまたいで載せる側が安定に保つ値。区画の中で一意）と文。
+/// 選べる文のまとまり——id（描き直しをまたいで載せる側が安定に保つ値。区画の中で一意）と文と、文を描く行の列。
 public struct ZoneText {
   public var id: AnyHashable
   public var string: String
+  public var lines: [ZoneSelectableLine]
 
-  public init(id: AnyHashable, string: String) {
+  public init(id: AnyHashable, string: String, lines: [ZoneSelectableLine]) {
     self.id = id
     self.string = string
+    self.lines = lines
   }
 }
 
@@ -146,17 +148,15 @@ public struct ZoneTextStyle: Equatable {
   }
 }
 
-/// 選べる字の行——まとまり `text` の文の範囲 `range` を、基線の左端 `origin` から描く。字はまとまりの文から引く（文の正は
-/// 1 か所）。
+/// 選べる字の行——まとまりの文の範囲 `range` を、基線の左端 `origin` から描く（折り返さない）。字はまとまりの文から引く
+/// （文の正は 1 か所）。
 public struct ZoneSelectableLine {
   public var origin: CGPoint
-  public var text: AnyHashable
   public var range: NSRange
   public var styles: [ZoneTextStyle]
 
-  public init(origin: CGPoint, text: AnyHashable, range: NSRange, styles: [ZoneTextStyle]) {
+  public init(origin: CGPoint, range: NSRange, styles: [ZoneTextStyle]) {
     self.origin = origin
-    self.text = text
     self.range = range
     self.styles = styles
   }

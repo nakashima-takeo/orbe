@@ -87,16 +87,18 @@ private final class CommentsZone: SurfaceZone {
   init(_ comments: [(AnyHashable, String)]) { self.comments = comments }
 
   func picture(width: CGFloat) -> ZonePicture {
-    let elements = comments.enumerated().map { index, comment in
-      ZoneElement.selectable(
-        ZoneSelectableLine(
-          origin: CGPoint(x: 10, y: 20 * CGFloat(index) + 16), text: comment.0,
-          range: NSRange(location: 0, length: comment.1.utf16.count),
-          styles: ThreadZone.styles(comment.1)))
-    }
-    return ZonePicture(
-      height: 20 * CGFloat(comments.count) + 8, elements: elements,
-      texts: comments.map { ZoneText(id: $0.0, string: $0.1) })
+    ZonePicture(
+      height: 20 * CGFloat(comments.count) + 8,
+      texts: comments.enumerated().map { index, comment in
+        ZoneText(
+          id: comment.0, string: comment.1,
+          lines: [
+            ZoneSelectableLine(
+              origin: CGPoint(x: 10, y: 20 * CGFloat(index) + 16),
+              range: NSRange(location: 0, length: comment.1.utf16.count),
+              styles: ThreadZone.styles(comment.1))
+          ])
+      })
   }
 
   func zone(_ event: ZoneEvent) {}

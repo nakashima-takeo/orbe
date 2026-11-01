@@ -30,15 +30,20 @@ extension SurfaceZonesTests {
               runs: [
                 ZoneTextRun("red", font: font, color: Self.red),
                 ZoneTextRun("green", font: font, color: Self.green),
-              ])),
-          .selectable(
-            ZoneSelectableLine(
-              origin: CGPoint(x: 0, y: 32), text: "t", range: NSRange(location: 0, length: 8),
-              styles: [
-                ZoneTextStyle(length: 3, font: font, color: Self.red),
-                ZoneTextStyle(length: 5, font: font, color: Self.green),
-              ])),
-        ], texts: [ZoneText(id: "t", string: "redgreen")])
+              ]))
+        ],
+        texts: [
+          ZoneText(
+            id: "t", string: "redgreen",
+            lines: [
+              ZoneSelectableLine(
+                origin: CGPoint(x: 0, y: 32), range: NSRange(location: 0, length: 8),
+                styles: [
+                  ZoneTextStyle(length: 3, font: font, color: Self.red),
+                  ZoneTextStyle(length: 5, font: font, color: Self.green),
+                ])
+            ])
+        ])
     }
     surface.setRows(self.zone(zone, at: 2))
     let look = { (color: NSColor) in
@@ -62,15 +67,18 @@ extension SurfaceZonesTests {
       PictureZone { _ in
         ZonePicture(
           height: 30,
-          elements: [
-            .selectable(
-              ZoneSelectableLine(
-                origin: CGPoint(x: 10, y: 14), text: "t", range: NSRange(location: 0, length: 10),
-                styles: [
-                  ZoneTextStyle(length: 4, font: mono, color: Self.red, padding: padding),
-                  ZoneTextStyle(length: 6, font: font, color: Self.green),
-                ]))
-          ], texts: [ZoneText(id: "t", string: "code after")])
+          texts: [
+            ZoneText(
+              id: "t", string: "code after",
+              lines: [
+                ZoneSelectableLine(
+                  origin: CGPoint(x: 10, y: 14), range: NSRange(location: 0, length: 10),
+                  styles: [
+                    ZoneTextStyle(length: 4, font: mono, color: Self.red, padding: padding),
+                    ZoneTextStyle(length: 6, font: font, color: Self.green),
+                  ])
+              ])
+          ])
       }
     }
     let plain = picture(0)
