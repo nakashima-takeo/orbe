@@ -143,7 +143,6 @@ final class ScmGraphRowView: ListRowView {
   private func draw(
     _ commit: Commit, _ colors: RowColors, _ scm: ScmRowColors, in context: CGContext
   ) {
-    let column = Theme.Layout.editorScmDotColumn
     let lineX: CGFloat = 27
     let top = commit.isFirst ? Theme.Space.step : 0
     let bottom = commit.isLast ? bounds.height - Theme.Space.step : bounds.height
@@ -152,7 +151,7 @@ final class ScmGraphRowView: ListRowView {
       context.fill(NSRect(x: lineX, y: top, width: Theme.Stroke.hairline, height: bottom - top))
     }
     let dot = Theme.Layout.editorScmDot
-    let center = NSPoint(x: Self.column + column / 2, y: bounds.height / 2)
+    let center = NSPoint(x: Self.column + Theme.Layout.editorScmDotColumn / 2, y: bounds.height / 2)
     let dotRect = NSRect(x: center.x - dot / 2, y: center.y - dot / 2, width: dot, height: dot)
     if commit.isPushed {
       context.setFillColor(scm.ground)

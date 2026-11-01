@@ -94,9 +94,8 @@ extension SourceControl {
   func commitAndPush(_ content: GitCommitContent) -> Operation? {
     let message = self.message
     return run(.commitAndPush, .commit) { [weak self] files, done, operation in
-      guard let self else { return done(.cancelled) }
-      attach(
-        files.commit(message: message, content: content) { [weak self] outcome in
+      self?.attach(
+        files.commit(message: message, content: content) { outcome in
           self?.commitDidFinish(operation, outcome, message: message)
           self?.continueStep(operation, after: outcome.failure, done) {
             self?.push(files, operation, done)
