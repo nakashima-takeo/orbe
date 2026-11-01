@@ -20,7 +20,8 @@ actor SyntaxWorker {
     var text: TextRope
     var version: Int
     var edits: [VersionedEdit] = []
-    var visible: NSRange
+    /// 見えている行（最新の版の行）。
+    var visible: ClosedRange<Int>
     var running = false
     /// 見えていない範囲の作り直しを始めてよくなる時刻（最後の編集 ＋ 待ち）。編集がまだ無ければ nil（待たない）。
     var quietAt: DispatchTime?
@@ -62,9 +63,9 @@ actor SyntaxWorker {
     self.version = version
     self.inbox = inbox
     roles = RoleRuns(length: text.length)
-    let visible = NSRange(location: 0, length: text.lineEnd(Self.initialVisibleLines - 1))
     mailbox = OSAllocatedUnfairLock(
-      initialState: Mail(text: text, version: version, visible: visible, running: true))
+      initialState: Mail(
+        text: text, version: version, visible: 0...(Self.initialVisibleLines - 1), running: true))
     Task.detached(priority: .userInitiated) { [self] in await run() }
   }
 
@@ -81,9 +82,9 @@ actor SyntaxWorker {
     if wake { start() }
   }
 
-  /// 見えている範囲（最新の版のオフセット）。次の区切りから、そこを先に作る——待ちの間に止まっていても、そこは待たずに作る。
-  nonisolated func setVisible(_ range: NSRange) {
-    wakeIfStale { $0.visible = range }
+  /// 見えている行（最新の版の行）。次の区切りから、そこを先に作る——待ちの間に止まっていても、そこは待たずに作る。
+  nonisolated func setVisible(_ lines: ClosedRange<Int>) {
+    wakeIfStale { $0.visible = lines }
   }
 
   /// main が結果を同期で待つ間、キューの優先度を上げる（待っている main は優先度を譲らない）。
@@ -136,7 +137,7 @@ actor SyntaxWorker {
       }
       absorb(batch)
       guard !layers.isCancelled else { return }
-      let shown = lines(covering: batch.visible)
+      let shown = range(of: batch.visible)
       let quiet = batch.hurry || batch.quietAt.map { DispatchTime.now() >= $0 } ?? true
       if let target = nextTarget(shown: shown, quiet: quiet) {
         rebuild(target, shown: shown)
@@ -218,6 +219,14 @@ actor SyntaxWorker {
     changed = IndexSet()
     deposited = version
     inbox.deposit { $0.syntax.append(outcome) }
+  }
+
+  /// 行 `lines` を丸ごと（改行を含む）。本文の外の行は切り詰める。
+  private func range(of lines: ClosedRange<Int>) -> NSRange {
+    let first = min(max(0, lines.lowerBound), text.lineCount - 1)
+    let last = min(max(first, lines.upperBound), text.lineCount - 1)
+    let start = text.lineStart(first)
+    return NSRange(location: start, length: text.lineEnd(last) - start)
   }
 
   /// 区間に掛かる行を丸ごと（改行を含む）。本文の外は切り詰める。
