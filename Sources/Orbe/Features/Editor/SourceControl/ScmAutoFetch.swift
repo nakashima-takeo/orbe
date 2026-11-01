@@ -144,7 +144,8 @@ final class ScmAutoFetch {
     timer = nil
   }
 
-  /// 欲しがっている面の根のサービス。
+  /// 欲しがっている面のうち先に欲しがった面の根のサービス。fetch は引数を付けないので、その worktree の今のブランチが追う
+  /// remote だけを取る。
   private var wantingFiles: RootFiles? {
     wanting.lazy.compactMap({ $0.panel?.liveFiles }).first
   }

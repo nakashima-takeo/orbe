@@ -19,7 +19,7 @@ struct GitDiscardContent: Equatable {
 /// literal にする（`*` `:` を含む名前で別のファイルに当たらない。引数の長さの上限も越えない）。
 extension GitRepo {
   /// 行をステージする（変更・削除・未追跡のどれでも、作業ツリーの姿を index へ）。含めるパスは呼んだ時点の index と
-  /// 作業ツリーで選び直す（`selection`）。
+  /// 作業ツリーで選び直す（`select`）。
   func stage(
     rows: [GitStatus.Row], handle: GitRunner.Handle,
     completion: @escaping (GitWriteFailure?) -> Void
@@ -44,7 +44,7 @@ extension GitRepo {
       ["reset", "-q"], paths: rows.flatMap(\.paths), handle: handle, completion: completion)
   }
 
-  /// 行の変更を捨てる。含めるパスは呼んだ時点の index と作業ツリーで選び直す（`selection`）。
+  /// 行の変更を捨てる。含めるパスは呼んだ時点の index と作業ツリーで選び直す（`select`）。
   /// - 追跡中のパスは作業ツリーを index の版へ戻す（ステージ済みの分は残る）。サブモジュールの中は、利用者の
   ///   `submodule.recurse` に依らず触れない（従うと中の未コミットの作業を消し、中で作ったコミットから HEAD を戻す）。
   /// - 未追跡のパスはゴミ箱へ移す（元に戻せる）。戻す前に、戻す場所を塞いでいる未追跡のもの（`blockers`。git の restore
