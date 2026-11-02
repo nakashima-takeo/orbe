@@ -10,7 +10,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか: CLI が組み立てる control メソッド名・params の語（`pause` / `resume` の `paused`、`set` と
 /// `proposals` の `automationId`、`set` の `definition`、`run` の `nodeKey`）はここでしか測れない。`resume` が
-/// `paused:true` を送ると、exit 0 を返しながら止まったままになる。`run` が `nodeKey` を落とすと、指したノードの先まで流れる。
+/// `paused:true` を送ると、exit 0 を返しながら止まったままになる。`--node` が `nodeKey` を落とすと、自動化ごと止まる。`run` が `nodeKey` を落とすと、指したノードの先まで流れる。
 /// `try` が範囲・行・limit を落とすと、AI が指したのと違う試走が黙って走る。`trial --wait` が時間切れを 0 で返すと、AI は
 /// 途中の結果を終わった結果と読む。`runs` が `nodeKey`・`before` を落とすと、AI は別のノードの回や同じページを続きと読む。
 ///
@@ -71,6 +71,15 @@ final class OrbeCliAutomationProcessTests: OrbeTestCase {
 
     XCTAssertEqual(run(control, ["resume", id]), "resumed automation \(id)")
     XCTAssertEqual(row(control)[1], "active")
+
+    let automation = { control.target.automationStore.automation(Int(id)!) }
+    XCTAssertEqual(
+      run(control, ["pause", id, "--node", "judge"]), "paused node judge of automation \(id)")
+    XCTAssertEqual(automation()?.state(key: "judge").paused, true)
+    XCTAssertEqual(row(control)[1], "active", "ノードを止めても自動化は止めない")
+    XCTAssertEqual(
+      run(control, ["resume", id, "--node", "judge"]), "resumed node judge of automation \(id)")
+    XCTAssertEqual(automation()?.state(key: "judge").paused, false)
 
     var listed = try XCTUnwrap(control.target.automationStore.automation(Int(id)!)?.definition)
     listed.name = "GitHub: 自分宛の通知"

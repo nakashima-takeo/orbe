@@ -98,8 +98,8 @@ final class AutomationStoreTests: OrbeTestCase {
 
   // MARK: - 再起動
 
-  /// 自動化・つながりの取り方（take・古さの上限）・ノードの状態（今有効な項目のリンク・決まりを外した印・回の記録・読めば取る行
-  /// の数）・版・候補は、どの変異（作る・確定・書き換え・さばく・止める・消す）の後に開き直しても同じ。回の記録は
+  /// 自動化・つながりの取り方（take・古さの上限）・ノードの状態（今有効な項目のリンク・決まりを外した印・止めた印・回の記録・読めば
+  /// 取る行の数）・版・候補は、どの変異（作る・確定・書き換え・さばく・自動化とノードを止める・消す）の後に開き直しても同じ。回の記録は
   /// 失敗・判定の確定で捨てた案も、候補は候補にした理由と候補を出した自動化も同じ。
   func testEverythingSurvivesARestart() throws {
     var store: AutomationStore? = AutomationStore()
@@ -120,7 +120,9 @@ final class AutomationStoreTests: OrbeTestCase {
       "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report)
     digest.from = [AutomationDefinition.Input(nodeKey: "fetch", take: .all, maxAgeHours: 24)]
     rewritten.nodes.append(digest)
+    _ = try store?.setPaused(id, nodeId: XCTUnwrap(store).nodeId(id, "fetch"), true, now: Self.at)
     try Self.rewrite(XCTUnwrap(store), id, rewritten)
+    XCTAssertEqual(store?.automation(id)?.state(key: "fetch").paused, true, "書き換えでノードの止めた印を引き継ぐ")
     try store?.dismiss(XCTUnwrap(store?.proposals.first?.id), now: Self.at)
     _ = try store?.setPaused(id, true, now: Self.at)
     let deleted = try XCTUnwrap(store?.create(Self.definition("消す"), now: Self.at).id)
