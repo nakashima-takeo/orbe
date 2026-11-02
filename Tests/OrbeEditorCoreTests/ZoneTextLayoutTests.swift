@@ -151,6 +151,62 @@ final class ZoneTextLayoutTests: XCTestCase {
     }
   }
 
+  /// 段落の向きに依らず、折り返したどの行でも、インラインコードの余白は、同じ行にある前後の字とコードの間に入り、地は行の
+  /// 中に収まって前後の字にかぶらない（→ `misplacedPadding(_:)`）。右から左の字で始まる段落と、右から左の字のコードが
+  /// 折り返す段落で、コードの後ろが段落と同じ向きの字のときに確かめる。
+  func testCodePaddingSitsBetweenTheCodeAndItsNeighboursOnEveryLine() {
+    for parts in [
+      ["שלום עולם ", "aaaa bbbb cccc dddd", " עולם"], ["see ", "שלום עולם ארוך מאוד", " z"],
+    ] {
+      XCTAssertEqual(misplacedPadding(parts), [], "\(parts.joined()) を折り返したとき、余白か地の置き場が違う行")
+    }
+  }
+
+  /// コードの後ろがコードと同じ向き（段落と逆の向き）の字で、コードの終わりとその字が同じ行に並ぶと、末尾の余白は段落の
+  /// 向きで決めた側（コードの続きが前の行から来る、割れた側）に付き、後ろの字はコードの地に接する。あるべき振る舞いは、
+  /// 余白がコードと後ろの字の間に入ること。
+  func testCodePaddingSitsBetweenTheCodeAndAFollowingRunOfTheSameDirection() {
+    XCTExpectFailure("末尾の余白の左右を、コードの字の並びの向きでなく段落の向きで決めている") {
+      for parts in [
+        ["שלום עולם ", "aaaa bbbb cccc dddd", " z"], ["see ", "שלום עולם ארוך מאוד", " עולם"],
+      ] {
+        XCTAssertEqual(misplacedPadding(parts), [], "\(parts.joined()) を折り返したとき、余白か地の置き場が違う行")
+      }
+    }
+  }
+
+  /// 前と後ろを本文の字体、真ん中を余白 4 のインラインコードにした文 `parts` を幅 60〜200 で折り返し、コードの余白か地の
+  /// 置き場が違う行を返す。正しい行では、地（字の x 範囲を余白の分広げたもの）は行の中に収まり、同じ行にある前後の字と
+  /// コードの間にその側の余白が入り、地は前後の字にかぶらない——余白はコードの見た目の外側に付き、折り返しで割れた側には
+  /// 付かない。
+  private func misplacedPadding(_ parts: [String]) -> [String] {
+    var wrong: [String] = []
+    for width in stride(from: CGFloat(60), through: 200, by: 0.5) {
+      for line in ZoneTextLayout.lines(parts.joined(), styles: codeStyles(parts), width: width) {
+        guard let code = line.styles.firstIndex(where: { $0.font == mono }),
+          !line.spans[code].isEmpty
+        else { continue }
+        let (glyphs, ground) = (line.spans[code], line.ground(code))
+        let inside = ground.lowerBound >= -0.01 && ground.upperBound <= line.width + 0.01
+        let neighbours = [
+          (code - 1, line.styles[code].leadingPadding),
+          (code + 1, line.styles[code].trailingPadding),
+        ]
+        let spaced = neighbours.allSatisfy { other, padding in
+          guard line.spans.indices.contains(other), !line.spans[other].isEmpty else { return true }
+          let span = line.spans[other]
+          let gap = max(span.lowerBound - glyphs.upperBound, glyphs.lowerBound - span.upperBound)
+          let apart =
+            ground.upperBound <= span.lowerBound + 0.01
+            || span.upperBound <= ground.lowerBound + 0.01
+          return gap >= padding - 0.01 && apart
+        }
+        if !inside || !spaced { wrong.append("幅 \(width) の行 \(line.range) の地 \(ground)") }
+      }
+    }
+    return wrong
+  }
+
   /// 前と後ろを本文の字体、真ん中を余白 4 のインラインコードにした見え方。
   private func codeStyles(_ parts: [String]) -> [ZoneTextStyle] {
     parts.enumerated().map { index, part in
