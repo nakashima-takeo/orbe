@@ -110,7 +110,7 @@ final class WindowController: NSObject, NSWindowDelegate {
         return error
       }
     }
-    return BoardModel(automation: automation, parts: [])
+    return BoardModel(automation: automation, widgets: [])
   }()
   private(set) lazy var boardView: BoardView = {
     let view = BoardView(

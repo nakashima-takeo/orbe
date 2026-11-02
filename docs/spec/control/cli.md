@@ -1,6 +1,6 @@
 ---
 title: Orbe CLI（orb）
-description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/自動化/ボードの部品/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/automation/board/session/wait サブコマンド・socket 文脈解決・終了コード契約
+description: タブ内・外から Orbe 自身の設定/ワークスペース/タブ/エージェント/タスク/自動化/ボードのウィジェット/セッションを操作する `orb` CLI。config/ws/tab/agent（spawn・resume・prompt）/task/automation/board/session/wait サブコマンド・socket 文脈解決・終了コード契約
 updated: 2026-11-02
 ---
 
@@ -81,11 +81,11 @@ updated: 2026-11-02
 - `orb automation pause <id> [--node <鍵>] [--json]` / `orb automation resume <id> [--node <鍵>] [--json]` … 自動化を止める・再開する。`--node` でそのノードだけ（規則は `pause_automation`）。`--node` の値の欠けは usage エラー、知らない鍵は `-32004`。`list` の状態の列は自動化の停止だけを言う。
 - `orb automation rm <id> [--json]`
 
-### board（ボードの部品）
+### board（ボードのウィジェット）
 
-workspace の[ボード](../chrome/board.md)に何を出すかを読み・変える。各サブコマンドは制御 API の `list_board_parts`・`add_board_part`・`remove_board_part` へそのまま乗る。宛先はボードを持つ workspace だけで（`orb ws list --json` の `hasBoard` で分かる）、ほかは exit 1 で断られる。
+workspace の[ボード](../chrome/board.md)に何を出すかを読み・変える。各サブコマンドは制御 API の `list_board_widgets`・`add_board_widget`・`remove_board_widget` へそのまま乗る。宛先はボードを持つ workspace だけで（`orb ws list --json` の `hasBoard` で分かる）、ほかは exit 1 で断られる。
 
-- `orb board list <id|current> [--json]` / `orb board add <id|current> <kind> [--json]` / `orb board rm <id|current> <kind> [--json]` … どれも結果の並びを 1 行 1 種類で出す（空なら何も出さない）。`<kind>` は今は `automation`（自動化の部品）だけで、知らない種類の検証は control が持つ（exit 1）。workspace は `ws rename` と同じく位置引数——ボードはその workspace の持ち物なので。既にあるものの `add`・無いものの `rm` は何も変えずに exit 0。
+- `orb board list <id|current> [--json]` / `orb board add <id|current> <kind> [--json]` / `orb board rm <id|current> <kind> [--json]` … どれも結果の並びを 1 行 1 種類で出す（空なら何も出さない）。`<kind>` は今は `automation`（自動化のウィジェット）だけで、知らない種類の検証は control が持つ（exit 1）。workspace は `ws rename` と同じく位置引数——ボードはその workspace の持ち物なので。既にあるものの `add`・無いものの `rm` は何も変えずに exit 0。
 
 ### session（閉じたエージェントセッションの記録と復元）
 

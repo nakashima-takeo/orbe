@@ -68,22 +68,22 @@ struct WorkspaceState: Codable, Equatable {
   /// `Workspace.persistentId`。無いか読めない workspace にはその workspace だけ新しく振る（旧形式から
   /// 読んだ場合も同じ）——後から足したフィールドの異常でファイル全体を落とさない。
   var persistentId: UUID
-  /// ボードの部品の決めた並び（`Workspace.boardParts`）。決めていれば空でも書き、nil（決めていない）は書かない。読めない要素
+  /// ボードのウィジェットの決めた並び（`Workspace.boardWidgets`）。決めていれば空でも書き、nil（決めていない）は書かない。読めない要素
   /// （知らない種類を含む）はその要素だけ落とし、配列でない・中身があるのに 1 つも読めなければ nil（既定）——後から足した
   /// フィールドの異常でファイル全体を落とさない。重なりは `SessionStore.load` が落とす。
-  var boardParts: [BoardPart]?
+  var boardWidgets: [BoardWidget]?
 
   /// `CaseIterable` は TabState と同じ seam（encode を手書きにしたので、足したキーの書き忘れを全キーの往復テストが見る）。
   enum CodingKeys: String, CodingKey, CaseIterable {
     case name, rootPath, activeTab, boardSelected, tabs, groups, lastUsedAt, settingsOverride
-    case lastWorktreeBase, persistentId, boardParts
+    case lastWorktreeBase, persistentId, boardWidgets
   }
 
   init(
     name: String, rootPath: String, activeTab: Int, boardSelected: Bool = false, tabs: [TabState],
     groups: [GroupState] = [],
     lastUsedAt: Date? = nil, settingsOverride: SettingsLayer? = nil,
-    lastWorktreeBase: String? = nil, persistentId: UUID = UUID(), boardParts: [BoardPart]? = nil
+    lastWorktreeBase: String? = nil, persistentId: UUID = UUID(), boardWidgets: [BoardWidget]? = nil
   ) {
     self.name = name
     self.rootPath = rootPath
@@ -95,7 +95,7 @@ struct WorkspaceState: Codable, Equatable {
     self.settingsOverride = settingsOverride
     self.lastWorktreeBase = lastWorktreeBase
     self.persistentId = persistentId
-    self.boardParts = boardParts
+    self.boardWidgets = boardWidgets
   }
 
   /// settingsOverride は 1 キー単位で寛容に読む（`SettingsLayer` 自身の decode）——未知 key・型不一致の
@@ -117,10 +117,10 @@ struct WorkspaceState: Codable, Equatable {
     settingsOverride = layer.flatMap { $0.isEmpty ? nil : $0 }
     lastWorktreeBase = try? c.decodeIfPresent(String.self, forKey: .lastWorktreeBase)
     persistentId = (try? c.decode(UUID.self, forKey: .persistentId)) ?? UUID()
-    boardParts = (try? c.decodeIfPresent([Lenient<BoardPart>].self, forKey: .boardParts))
+    boardWidgets = (try? c.decodeIfPresent([Lenient<BoardWidget>].self, forKey: .boardWidgets))
       .flatMap { elements in
-        let parts = elements.compactMap(\.value)
-        return elements.isEmpty || !parts.isEmpty ? parts : nil
+        let widgets = elements.compactMap(\.value)
+        return elements.isEmpty || !widgets.isEmpty ? widgets : nil
       }
   }
 
@@ -136,7 +136,7 @@ struct WorkspaceState: Codable, Equatable {
     try c.encodeIfPresent(settingsOverride, forKey: .settingsOverride)
     try c.encodeIfPresent(lastWorktreeBase, forKey: .lastWorktreeBase)
     try c.encode(persistentId, forKey: .persistentId)
-    try c.encodeIfPresent(boardParts, forKey: .boardParts)
+    try c.encodeIfPresent(boardWidgets, forKey: .boardWidgets)
   }
 }
 

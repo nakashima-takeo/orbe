@@ -160,7 +160,7 @@ final class WindowControllerBoardTests: OrbeTestCase {
 
   // MARK: - 焦点
 
-  /// 焦点が外から入る（ボードを選ぶ・パレットを閉じる・workspace を戻る）と、部品は欄から始まり、↓ で一覧の先頭へ下りる。
+  /// 焦点が外から入る（ボードを選ぶ・パレットを閉じる・workspace を戻る）と、ウィジェットは欄から始まり、↓ で一覧の先頭へ下りる。
   /// 一覧で選んでいた行は入り直すと保たないが、裏のタブが閉じただけ（焦点は中のまま）なら保つ。
   @MainActor func testEnteringTheBoardStartsAtTheRequestField() throws {
     savePausedAutomations()

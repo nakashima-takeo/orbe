@@ -3,8 +3,8 @@ import XCTest
 
 @testable import Orbe
 
-/// ボードの flow。タブ行の横スクロール（`testBoardScroll`）と、自動化の部品のキー操作（`testBoardAutomation`）と、依頼の欄
-/// （`testBoardRequest`）と、部品の並びの変化（`testBoardParts`）と、サブメニュー「通知」（`testBoardNotify`・
+/// ボードの flow。タブ行の横スクロール（`testBoardScroll`）と、自動化のウィジェットのキー操作（`testBoardAutomation`）と、依頼の欄
+/// （`testBoardRequest`）と、ウィジェットの並びの変化（`testBoardWidgets`）と、サブメニュー「通知」（`testBoardNotify`・
 /// `testBoardNotifyLow`）。
 /// タブ行の横スクロール: 選択が右端のタブへ移るとタブ列だけがスクロールし、ボードのセルは左端に残る。
 /// スクロール位置は描画を跨いで持つ状態なので、1 枚の host を使い回して選択を変えるたびに撮る（`flow` は毎回 host を
@@ -51,14 +51,14 @@ extension DesignFlowSnapshotTests {
     }
   }
 
-  /// 部品の並び: 自動化の部品 → 外すと中央の一文だけ（フッターも出ない） → 置くと部品とフッターが戻る。
-  func testBoardParts() throws {
+  /// ウィジェットの並び: 自動化のウィジェット → 外すと中央の一文だけ（フッターも出ない） → 置くとウィジェットとフッターが戻る。
+  func testBoardWidgets() throws {
     let model = BoardModel(
       automation: BoardAutomationModel(
         runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationSamples())),
-      parts: [.automation])
+      widgets: [.automation])
     try flow(
-      "board_parts", size: NSSize(width: 1440, height: 844),
+      "board_widgets", size: NSSize(width: 1440, height: 844),
       render: {
         BoardRoot(
           model: model, translucency: ChromeTranslucency(),
@@ -77,7 +77,7 @@ extension DesignFlowSnapshotTests {
     let model = BoardModel(
       automation: BoardAutomationModel(
         runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationSamples())),
-      parts: [.automation])
+      widgets: [.automation])
     let automation = model.automation
     try flow(
       "board_automation", size: NSSize(width: 1440, height: 844),
@@ -105,7 +105,7 @@ extension DesignFlowSnapshotTests {
     let model = BoardModel(
       automation: BoardAutomationModel(
         runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardMapSamples())),
-      parts: [.automation])
+      widgets: [.automation])
     let automation = model.automation
     let ja = LocalizationStore(language: .ja)
     try flow(
@@ -145,7 +145,7 @@ extension DesignFlowSnapshotTests {
     let model = BoardModel(
       automation: BoardAutomationModel(
         runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardMapSamples())),
-      parts: [.automation])
+      widgets: [.automation])
     let automation = model.automation
     try flow(
       "board_map_narrow", size: NSSize(width: 1000, height: 844),
@@ -167,7 +167,7 @@ extension DesignFlowSnapshotTests {
     let model = BoardModel(
       automation: BoardAutomationModel(
         runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationSamples())),
-      parts: [.automation])
+      widgets: [.automation])
     let automation = model.automation
     automation.onAsk = { _ in nil }
     try flow(
@@ -194,7 +194,7 @@ extension DesignFlowSnapshotTests {
     let model = BoardModel(
       automation: BoardAutomationModel(
         runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationSamples())),
-      parts: [.automation])
+      widgets: [.automation])
     let automation = model.automation
     try flow(
       "board_notify", size: NSSize(width: 1440, height: 844),
@@ -225,7 +225,7 @@ extension DesignFlowSnapshotTests {
     let model = BoardModel(
       automation: BoardAutomationModel(
         runner: DesignSceneFixtures.automationRunner(DesignSceneFixtures.boardAutomationSamples())),
-      parts: [.automation])
+      widgets: [.automation])
     let automation = model.automation
     try flow(
       "board_notify_low", size: NSSize(width: 900, height: 340),

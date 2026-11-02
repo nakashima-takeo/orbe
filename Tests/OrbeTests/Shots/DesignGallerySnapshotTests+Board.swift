@@ -4,7 +4,7 @@ import XCTest
 @testable import Orbe
 
 /// ボードの gallery。Home のタブ行（左端に固定のボードのセル）を、ボード選択中・タブ選択中・タブが溢れて横スクロールへ
-/// 回る段で撮り、部品を持たないボードの一文と、自動化の部品（見本『Home 自動化』。依頼の欄を含む）を撮る。タブ行の見本は
+/// 回る段で撮り、ウィジェットを持たないボードの一文と、自動化のウィジェット（見本『Home 自動化』。依頼の欄を含む）を撮る。タブ行の見本は
 /// §5 Tab 契約・§5.1 TabBar（ボードのセルは単独タブの器）。
 extension DesignGallerySnapshotTests {
   func renderBoardSnapshots(dir: URL) throws {
@@ -44,7 +44,7 @@ extension DesignGallerySnapshotTests {
           automation: BoardAutomationModel(
             runner: DesignSceneFixtures.automationRunner(
               DesignSceneFixtures.boardAutomationSamples())),
-          parts: []),
+          widgets: []),
         translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
         fontResolver: ChromeFontResolver()),
       size: NSSize(width: 640, height: 480), name: "board_empty.png", dir: dir)
@@ -70,7 +70,7 @@ extension DesignGallerySnapshotTests {
         automation: BoardAutomationModel(
           runner: DesignSceneFixtures.automationRunner(
             file ?? DesignSceneFixtures.boardDesignSamples())),
-        parts: [.automation])
+        widgets: [.automation])
       for _ in 0...row { model.automation.move(1) }
       return model
     }
@@ -137,7 +137,8 @@ extension DesignGallerySnapshotTests {
       let runner = DesignSceneFixtures.automationRunner(
         DesignSceneFixtures.boardWorkspaceSamples(),
         workspaces: DesignSceneFixtures.boardWorkspaces)
-      let model = BoardModel(automation: BoardAutomationModel(runner: runner), parts: [.automation])
+      let model = BoardModel(
+        automation: BoardAutomationModel(runner: runner), widgets: [.automation])
       if let id = runner.store.automations.first(where: { $0.name == name })?.id {
         model.automation.tap(id)
       }
@@ -162,7 +163,7 @@ extension DesignGallerySnapshotTests {
         automation: BoardAutomationModel(
           runner: DesignSceneFixtures.automationRunner(
             store: DesignSceneFixtures.boardUnreadableStore())),
-        parts: [.automation])
+        widgets: [.automation])
       for _ in 0...row { model.automation.move(1) }
       return model
     }
@@ -278,7 +279,7 @@ extension DesignGallerySnapshotTests {
   }
 
   /// サブメニュー「通知」: 通知しない自動化で開いた直後（印と選びが同じ行）・メニューバーの自動化で通知センターへ選びを
-  /// 動かした姿・低い窓の末尾の行で開いて部品の下端の内側へずれた姿。
+  /// 動かした姿・低い窓の末尾の行で開いてウィジェットの下端の内側へずれた姿。
   private func renderBoardNotifySnapshots(
     write: (String, BoardModel, Language, NSSize) throws -> Void,
     board: ([AutomationSample]?, Int) -> BoardModel

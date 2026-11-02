@@ -136,8 +136,8 @@ final class FakeControlTarget: ControlTarget {
   var triedAutomations: [(automationId: Int, request: AutomationTrial.Request)] = []
   private(set) var readTrials: [ReadTrial] = []
   private(set) var boardLists: [Int] = []
-  private(set) var addedBoardParts: [(workspaceId: Int, part: BoardPart)] = []
-  private(set) var removedBoardParts: [(workspaceId: Int, part: BoardPart)] = []
+  private(set) var addedBoardWidgets: [(workspaceId: Int, widget: BoardWidget)] = []
+  private(set) var removedBoardWidgets: [(workspaceId: Int, widget: BoardWidget)] = []
 
   // MARK: - 宛先
 
@@ -360,19 +360,20 @@ final class FakeControlTarget: ControlTarget {
     completion(outcome(["trial": [String: Any]()]))
   }
 
-  func controlListBoardParts(workspaceId: Int) -> Result<Any, ControlError> {
+  func controlListBoardWidgets(workspaceId: Int) -> Result<Any, ControlError> {
     boardLists.append(workspaceId)
-    return outcome(["parts": [["kind": "automation"]]])
+    return outcome(["widgets": [["kind": "automation"]]])
   }
 
-  func controlAddBoardPart(workspaceId: Int, part: BoardPart) -> Result<Any, ControlError> {
-    addedBoardParts.append((workspaceId, part))
-    return outcome(["parts": [["kind": "automation"]]])
+  func controlAddBoardWidget(workspaceId: Int, widget: BoardWidget) -> Result<Any, ControlError> {
+    addedBoardWidgets.append((workspaceId, widget))
+    return outcome(["widgets": [["kind": "automation"]]])
   }
 
-  func controlRemoveBoardPart(workspaceId: Int, part: BoardPart) -> Result<Any, ControlError> {
-    removedBoardParts.append((workspaceId, part))
-    return outcome(["parts": [Any]()])
+  func controlRemoveBoardWidget(workspaceId: Int, widget: BoardWidget) -> Result<Any, ControlError>
+  {
+    removedBoardWidgets.append((workspaceId, widget))
+    return outcome(["widgets": [Any]()])
   }
 }
 

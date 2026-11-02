@@ -3,15 +3,15 @@ import XCTest
 
 @testable import Orbe
 
-/// 実 `orb board`（`orbe-cli`）を子プロセスで起こし、実 `WindowController` の Home のボードの部品を list → rm → add で
+/// 実 `orb board`（`orbe-cli`）を子プロセスで起こし、実 `WindowController` の Home のボードのウィジェットを list → rm → add で
 /// 動かせることを固定する。
 ///
 /// 壊れると何が起きるか: CLI が組み立てる control メソッド名・params の語（`workspaceId`・`kind`）はここでしか測れない。
-/// `rm` が `add_board_part` を送ると、exit 0 を返しながら部品が残る。
+/// `rm` が `add_board_widget` を送ると、exit 0 を返しながらウィジェットが残る。
 ///
 /// 重要: 実 `NSWindow` に `SurfaceView` を接続する（GhosttyKit 必須）。純ロジック検証ではない。
 final class OrbeCliBoardProcessTests: OrbeTestCase {
-  func testBoardSubcommandsListRemoveAndAddParts() throws {
+  func testBoardSubcommandsListRemoveAndAddWidgets() throws {
     let control = try startControlProcess()
     let workspaces = try XCTUnwrap(
       control.orbJSON(["ws", "list"])["workspaces"] as? [[String: Any]])
@@ -28,7 +28,7 @@ final class OrbeCliBoardProcessTests: OrbeTestCase {
     XCTAssertEqual(run(["rm", "\(home)", "automation"]), "", "結果の並び（空）")
     XCTAssertEqual(run(["add", "\(home)", "automation"]), "automation")
     XCTAssertEqual(
-      (control.orbJSON(["board", "list", "\(home)"])["parts"] as? [[String: Any]])?.count, 1)
+      (control.orbJSON(["board", "list", "\(home)"])["widgets"] as? [[String: Any]])?.count, 1)
     XCTAssertEqual(control.orb(["board", "add", "\(home)"]).status, 2, "種類の欠落は usage")
   }
 

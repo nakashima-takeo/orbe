@@ -40,7 +40,8 @@ extension DesignGallerySnapshotTests {
       let runner = DesignSceneFixtures.automationRunner(
         DesignSceneFixtures.boardWorkspaceSamples(),
         workspaces: DesignSceneFixtures.boardWorkspaces)
-      let model = BoardModel(automation: BoardAutomationModel(runner: runner), parts: [.automation])
+      let model = BoardModel(
+        automation: BoardAutomationModel(runner: runner), widgets: [.automation])
       if let automation = runner.store.automations.first(where: { $0.name == "PR の確認" }) {
         model.automation.tap(automation.id)
         for node in automation.graph.nodes {

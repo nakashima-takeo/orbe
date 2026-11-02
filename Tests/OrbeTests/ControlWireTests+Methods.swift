@@ -41,7 +41,7 @@ extension ControlWireTests {
       "list_automations", "set_automation", "list_automation_runs", "run_automation",
       "pause_automation",
       "delete_automation", "list_automation_proposals", "try_automation", "get_automation_trial",
-      "list_board_parts", "add_board_part", "remove_board_part",
+      "list_board_widgets", "add_board_widget", "remove_board_widget",
     ]
     let fixtures = fixtures(fake)
 

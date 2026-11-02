@@ -48,9 +48,9 @@ enum HomeTemplate {
 
     ## Home のボード（画面）に出すものを変える
 
-    - `list_board_parts`・`add_board_part`・`remove_board_part`。workspaceId は Home の id（`list_workspaces` で hasBoard が \
-    true のもの）。
-    - 部品は `automation`（自動化の一覧と依頼の欄）。外しても自動化そのものは消えず、置けば戻る。
+    - `list_board_widgets`・`add_board_widget`・`remove_board_widget`。\
+    workspaceId は Home の id（`list_workspaces` で hasBoard が true のもの）。
+    - ウィジェットは `automation`（自動化の一覧と依頼の欄）。外しても自動化そのものは消えず、置けば戻る。
 
     ## タブと agent を操作する
 
@@ -97,10 +97,10 @@ enum HomeTemplate {
 
     ## Change what Home's board (screen) shows
 
-    - `list_board_parts`, `add_board_part`, `remove_board_part`. workspaceId is Home's id (the one with \
+    - `list_board_widgets`, `add_board_widget`, `remove_board_widget`. workspaceId is Home's id (the one with \
     hasBoard true in `list_workspaces`).
-    - The part is `automation` (the automation list and its request field). Removing it keeps the \
-    automations themselves; adding it brings the part back.
+    - The widget is `automation` (the automation list and its request field). Removing it keeps the \
+    automations themselves; adding it brings the widget back.
 
     ## Operate tabs and agents
 

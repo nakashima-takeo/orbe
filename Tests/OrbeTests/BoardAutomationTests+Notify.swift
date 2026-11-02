@@ -32,7 +32,7 @@ extension BoardAutomationTests {
     return board(samples)
   }
 
-  /// 詳細のスクロール（部品の右端にあるもの）。
+  /// 詳細のスクロール（ウィジェットの右端にあるもの）。
   private func detailScroll(in window: NSWindow) throws -> NSScrollView {
     func scrollViews(_ view: NSView) -> [NSScrollView] {
       (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap(scrollViews)

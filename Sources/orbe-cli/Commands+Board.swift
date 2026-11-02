@@ -1,6 +1,6 @@
 import Foundation
 
-// `orb board <サブコマンド>` の実装と usage。部品の種類の検証は control に任せる（知っている種類は control の断りが返す）。
+// `orb board <サブコマンド>` の実装と usage。ウィジェットの種類の検証は control に任せる（知っている種類は control の断りが返す）。
 
 // MARK: - usage
 
@@ -18,12 +18,13 @@ let boardUsage = """
 
   The board is a screen of the workspace beside its tabs. Only a workspace
   with a board takes these commands (`orb ws list --json` shows hasBoard).
+  The board shows widgets, at most one of each kind.
   KINDS: automation (automations: the request field, the list and the
-  right pane). A board holds each kind at most once.
-  add appends the part; adding a part already there changes nothing.
-  rm removes it; removing a part not there changes nothing. Removing
+  right pane).
+  add appends the widget; adding a widget already there changes nothing.
+  rm removes it; removing a widget not there changes nothing. Removing
   automation keeps the automations themselves (`orb automation list`).
-  Each command prints the resulting parts, one kind per line.
+  Each command prints the resulting widgets, one kind per line.
   """
 
 // MARK: - サブコマンド
@@ -36,8 +37,8 @@ func runBoard(_ args: [String]) -> Never {
   let rest = Array(args.dropFirst())
   switch args[0] {
   case "list": boardList(rest)
-  case "add": boardChange(rest, verb: "add", method: "add_board_part")
-  case "rm": boardChange(rest, verb: "rm", method: "remove_board_part")
+  case "add": boardChange(rest, verb: "add", method: "add_board_widget")
+  case "rm": boardChange(rest, verb: "rm", method: "remove_board_widget")
   default: usageDie("unknown board command: \(args[0])")
   }
 }
@@ -45,23 +46,23 @@ func runBoard(_ args: [String]) -> Never {
 private func boardList(_ rest: [String]) -> Never {
   rejectLeftovers(rest, positionals: 1)
   guard let arg = rest.first else { usageDie("board list requires <id|current>") }
-  printParts(callOrExit("list_board_parts", ["workspaceId": resolveWorkspaceId(arg)]))
+  printWidgets(callOrExit("list_board_widgets", ["workspaceId": resolveWorkspaceId(arg)]))
 }
 
 private func boardChange(_ rest: [String], verb: String, method: String) -> Never {
   rejectLeftovers(rest, positionals: 2)
   guard rest.count == 2 else { usageDie("board \(verb) requires <id|current> <kind>") }
-  printParts(callOrExit(method, ["workspaceId": resolveWorkspaceId(rest[0]), "kind": rest[1]]))
+  printWidgets(callOrExit(method, ["workspaceId": resolveWorkspaceId(rest[0]), "kind": rest[1]]))
 }
 
-private func printParts(_ result: Any) -> Never {
+private func printWidgets(_ result: Any) -> Never {
   if wantJSON {
     printJSON(result)
     exit(0)
   }
-  let parts = (result as? [String: Any])?["parts"] as? [[String: Any]] ?? []
-  for part in parts {
-    print(tsvCell(part["kind"].map(display) ?? "-"))
+  let widgets = (result as? [String: Any])?["widgets"] as? [[String: Any]] ?? []
+  for widget in widgets {
+    print(tsvCell(widget["kind"].map(display) ?? "-"))
   }
   exit(0)
 }
