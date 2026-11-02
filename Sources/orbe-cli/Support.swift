@@ -86,9 +86,10 @@ func timedOutDie(_ result: Any) -> Never {
   exit(124)
 }
 
-/// control を叩き、成功なら result を返す。RPC/接続エラーは出力して終了コード 1 で抜ける。
-func callOrExit(_ method: String, _ params: [String: Any]) -> Any {
-  switch controlRequest(method: method, params: params) {
+/// control を叩き、成功なら result を返す。RPC/接続エラーは出力して終了コード 1 で抜ける。`callerTabId` は要求の封筒に載せる
+/// 呼び出し元タブ。
+func callOrExit(_ method: String, _ params: [String: Any], callerTabId: Int? = nil) -> Any {
+  switch controlRequest(method: method, params: params, callerTabId: callerTabId) {
   case .ok(let result):
     return result
   case .rpcError(let code, let message):

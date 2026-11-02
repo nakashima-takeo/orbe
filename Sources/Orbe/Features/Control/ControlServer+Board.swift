@@ -11,59 +11,33 @@ protocol ControlBoardTarget: AnyObject {
   func controlRemoveBoardWidget(workspaceId: UUID, widget: BoardWidget) -> Result<Any, ControlError>
 }
 
-/// ボードの 3 動詞の解決。ハンドラが見るのは params の在否と JSON の型と種類の名前（違反は -32602）だけで、workspace の
-/// 解決とボードを持つかは domain 側が決める。
+/// ボードの 3 動詞。ハンドラが見るのは引数の在否と JSON の型と種類の名前（違反は -32602）だけで、workspace の解決とボードを
+/// 持つかは domain 側が決める。
 extension ControlServer {
-  func boardHandler(for method: String) -> (
-    (ControlBoardTarget, [String: Any]) -> Result<Any, ControlError>
-  )? {
-    guard let body = boardBody(for: method) else { return nil }
-    return { target, params in
-      do throws(ControlError) {
-        return try body(target, BoardParams(params: params))
-      } catch {
-        return .failure(error)
-      }
-    }
+  static func listBoardWidgets(_ target: ControlBoardTarget, _ p: ControlParams)
+    throws(ControlError) -> Result<Any, ControlError>
+  {
+    target.controlListBoardWidgets(workspaceId: try p.workspaceId())
   }
 
-  private func boardBody(for method: String) -> BoardBody? {
-    switch method {
-    case "list_board_widgets":
-      return { target, p throws(ControlError) in
-        target.controlListBoardWidgets(workspaceId: try ControlWorkspaceId.required(p.params))
-      }
-    case "add_board_widget":
-      return { target, p throws(ControlError) in
-        target.controlAddBoardWidget(
-          workspaceId: try ControlWorkspaceId.required(p.params), widget: try p.widget())
-      }
-    case "remove_board_widget":
-      return { target, p throws(ControlError) in
-        target.controlRemoveBoardWidget(
-          workspaceId: try ControlWorkspaceId.required(p.params), widget: try p.widget())
-      }
-    default:
-      return nil
-    }
+  static func addBoardWidget(_ target: ControlBoardTarget, _ p: ControlParams)
+    throws(ControlError) -> Result<Any, ControlError>
+  {
+    let workspaceId = try p.workspaceId()
+    return target.controlAddBoardWidget(workspaceId: workspaceId, widget: try p.widget())
+  }
+
+  static func removeBoardWidget(_ target: ControlBoardTarget, _ p: ControlParams)
+    throws(ControlError) -> Result<Any, ControlError>
+  {
+    let workspaceId = try p.workspaceId()
+    return target.controlRemoveBoardWidget(workspaceId: workspaceId, widget: try p.widget())
   }
 }
 
-private typealias BoardBody = (ControlBoardTarget, BoardParams) throws(ControlError) -> Result<
-  Any, ControlError
->
-
-/// params の型検査（workspace の ID は `ControlWorkspaceId`）。
-private struct BoardParams {
-  let params: [String: Any]
-
-  func widget() throws(ControlError) -> BoardWidget {
-    guard let raw = params["kind"] else {
-      throw ControlError(code: -32602, message: "missing kind")
-    }
-    guard let kind = raw as? String else {
-      throw ControlError(code: -32602, message: "invalid kind")
-    }
+extension ControlParams {
+  fileprivate func widget() throws(ControlError) -> BoardWidget {
+    let kind = try string("kind")
     guard let widget = BoardWidget(rawValue: kind) else {
       let known = BoardWidget.allCases.map(\.rawValue).joined(separator: ", ")
       throw ControlError(code: -32602, message: "unknown kind: \(kind) (known: \(known))")

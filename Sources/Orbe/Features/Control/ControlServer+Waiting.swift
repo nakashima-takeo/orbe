@@ -20,24 +20,42 @@ struct AgentLaunch {
   }
 }
 
-/// 待機を伴う動詞（prompt_agent / spawn_agent / resume_agent）。queue で param を検証し、main で
-/// domain 操作を行い、queue で待機を張るか応答する二段 hop。`wait_for_event` だけは履歴の replay を
-/// 伴うので `Connection.waitForEvent` が持つ。
+/// 待機を伴う動詞（wait_for_event / prompt_agent / spawn_agent / resume_agent）。queue で引数を読み、main で
+/// domain 操作を行い、queue で待機を張るか応答する二段 hop。履歴の replay と待機は `Connection` が持つ。
 extension ControlServer {
+  /// `wait_for_event`: 宛先・フィルタ・期限は待機を張る**前**に確かめる。素通しすると待機はどちらかへ倒れ、
+  /// どちらも呼び出し側から時間切れと区別できない——絞り込みが黙って消えれば「別タブ・別種の
+  /// イベントで起きる」、一致しない語で張られれば「永遠に起きない」。
+  func waitForEvent(id: Any?, params p: ControlParams, conn: Connection) {
+    let purpose: WaitPurpose
+    let after: Int?
+    let timeoutMs: Int
+    do throws(ControlError) {
+      let tabId = try p.optionalInt("tabId")
+      let kinds = try p.optionalStrings("kinds")
+      let value = try p.optionalString("value")
+      after = try p.optionalInt("after")
+      timeoutMs = try WaitTimeout.parse(p, default: WaitTimeout.eventDefaultMs)
+      purpose = try WaitPurpose.eventFilter(tabId: tabId, kinds: kinds, value: value)
+      if let after, after < 0 { throw p.invalid("after") }
+    } catch {
+      return conn.respond(id: id, result: .failure(error))
+    }
+    conn.waitForEvent(id: id, purpose: purpose, after: after, timeoutMs: timeoutMs)
+  }
+
   /// `prompt_agent`: 送信より後で最初に止まる agent_state で返す。待機は送信の後に queue で張る
   /// だけでよい——送信が引き起こす遷移は FIFO により arm より後に積まれる（`emit` の順序保証）。
-  func promptAgent(id: Any?, params: [String: Any], conn: Connection) {
-    guard let tabId = params["tabId"] as? Int else {
-      return conn.respond(
-        id: id, result: .failure(ControlError(code: -32602, message: "missing tabId")))
-    }
-    guard let text = params["text"] as? String else {
-      return conn.respond(
-        id: id, result: .failure(ControlError(code: -32602, message: "missing text")))
-    }
-    guard let timeoutMs = WaitTimeout.parse(params, default: WaitTimeout.promptDefaultMs) else {
-      return conn.respond(
-        id: id, result: .failure(ControlError(code: -32602, message: "invalid timeoutMs")))
+  func promptAgent(id: Any?, params p: ControlParams, conn: Connection) {
+    let tabId: Int
+    let text: String
+    let timeoutMs: Int
+    do throws(ControlError) {
+      tabId = try p.int("tabId")
+      text = try p.string("text")
+      timeoutMs = try WaitTimeout.parse(p, default: WaitTimeout.promptDefaultMs)
+    } catch {
+      return conn.respond(id: id, result: .failure(error))
     }
     DispatchQueue.main.async {
       let sent = self.onWindow { target -> Result<Void, ControlError> in
@@ -63,13 +81,9 @@ extension ControlServer {
   /// `spawn_agent` / `resume_agent`: 起動後、idle を報告できる agent なら最初の idle まで待つ。
   /// 報告できない agent は即 `ready:false`。既に開いていた会話のタブを返したときは待たない。
   func launchAgent(
-    id: Any?, params: [String: Any], conn: Connection,
+    id: Any?, conn: Connection, timeoutMs: Int,
     launch: @escaping (ControlTarget) -> Result<AgentLaunch, ControlError>
   ) {
-    guard let timeoutMs = WaitTimeout.parse(params, default: WaitTimeout.launchDefaultMs) else {
-      return conn.respond(
-        id: id, result: .failure(ControlError(code: -32602, message: "invalid timeoutMs")))
-    }
     DispatchQueue.main.async {
       let outcome = self.onWindow(launch)
       self.queue.async {

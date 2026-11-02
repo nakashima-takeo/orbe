@@ -178,8 +178,8 @@ final class OrbeReportWireTests: OrbeTestCase {
 
   // MARK: - 語の固定
 
-  /// `report_agent` の params キー全集合。受け側（`ControlServer.resolvedTabHandler(for:)`）が読むキーと 1 対 1 で、
-  /// `sessionId` が stdin の `session_id` からの抽出であることも同時に踏む。
+  /// `report_agent` の params キー全集合。どれも受け側（動詞の表の `report_agent` の行）が受ける鍵で、`sessionId` が stdin の
+  /// `session_id` からの抽出であることも同時に踏む。
   func testReportAgentWireCarriesFullParameterSet() throws {
     let raw = report(
       state: "waiting",
@@ -190,6 +190,10 @@ final class OrbeReportWireTests: OrbeTestCase {
     XCTAssertEqual(
       Set(params.keys), ["tabId", "agent", "state", "sessionId", "message", "messageSource"],
       "params のキー集合（増減はどちらも受け側との断絶になる）")
+    XCTAssertTrue(
+      Set(params.keys).union(["reason"]).isSubset(
+        of: ControlServer.verbs["report_agent"]?.params.keys.map { $0 } ?? []),
+      "条件付きで載る reason も含め、受け側が知らない鍵として断らない")
     XCTAssertEqual(params["tabId"] as? Int, Self.tabId, "報告元は ORBE_TAB の値をそのまま載せる")
     XCTAssertEqual(params["agent"] as? String, "claude", "argv[1] が agent")
     XCTAssertEqual(params["state"] as? String, "waiting", "argv[2] が state")

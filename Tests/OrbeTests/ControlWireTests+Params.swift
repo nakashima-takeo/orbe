@@ -80,11 +80,12 @@ extension ControlWireTests {
         "add_task",
         [
           "title": "経費精算", "status": "in_progress", "priority": "high", "due": "2026-10-06",
-          "waitingReason": "返事", "description": "詳細", "workspaceId": ws, "callerTabId": tab,
+          "waitingReason": "返事", "description": "詳細", "workspaceId": ws,
           "links": [["kind": "pr", "repo": "o/n", "number": 214]],
         ]
       ),
       ("update_task", ["taskId": 7, "title": "改題"]),
+      ("set_wait_condition", ["taskId": 7, "condition": NSNull()]),
       ("delete_task", ["taskId": 7]),
       ("start_task", ["taskId": 7, "branch": "feat/x", "prompt": "直して"]),
     ] + automationRequests + boardRequests
@@ -136,6 +137,8 @@ extension ControlWireTests {
       RequiredParam(method: "restore_sessions", key: "sessionIds", code: -32602),
       RequiredParam(method: "add_task", key: "title", code: -32602),
       RequiredParam(method: "update_task", key: "taskId", code: -32602),
+      RequiredParam(method: "set_wait_condition", key: "taskId", code: -32602),
+      RequiredParam(method: "set_wait_condition", key: "condition", code: -32602),
       RequiredParam(method: "delete_task", key: "taskId", code: -32602),
       RequiredParam(method: "start_task", key: "taskId", code: -32602),
       RequiredParam(method: "set_automation", key: "definition", code: -32602),
@@ -184,15 +187,15 @@ extension ControlWireTests {
     }
   }
 
-  /// 型の違う値は「キーを落とした」のと同じ帰結になる。`as? Int` / `as? String` の
-  /// キャストが唯一の型ガードなので、落とす側と同じ表で押さえられる。
+  /// 型の違う値は、宛先を解く前に `-32602 invalid <鍵>` で断る——欠落が `-32004` に落ちる宛先の `tabId` も、型違いは
+  /// 省略と同じに読まない。
   ///
   /// 型違いには**正しい値を隣の型へ移した値**を渡す（Int 期待なら数字文字列、String 期待なら
   /// 数値）。配列のような「どの型にもならない値」だけだと、キャストを片側へ緩める改変——例えば
   /// CLI が全部文字列で送ってくるのに合わせて `tabId` に `Int(文字列)` を許す——が 1 本も
   /// 落とさずに通る。spec の `-32602` は「欠落・型不一致・値域外」の 3 つを名指しており、
   /// ここが型不一致を受け持つ。
-  func testWronglyTypedParamsAreRejectedLikeMissingOnes() {
+  func testWronglyTypedParamsAreRejectedAsInvalid() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
     let fixtures = fixtures(fake)
@@ -208,9 +211,12 @@ extension ControlWireTests {
       var mistyped = full
       let moved: Any = correct is Int ? String(describing: correct) : 42
       mistyped[spec.key] = moved
+      let response = wire.request(id: id, method: spec.method, params: mistyped)
       XCTAssertEqual(
-        errorCode(wire.request(id: id, method: spec.method, params: mistyped)), spec.code,
-        "\(spec.method) の \(spec.key) に型違い \(moved) を渡すと \(spec.code)（欠落と同じ帰結）")
+        errorCode(response), -32602, "\(spec.method) の \(spec.key) に型違い \(moved) を渡すと -32602")
+      XCTAssertEqual(
+        (response?["error"] as? [String: Any])?["message"] as? String, "invalid \(spec.key)",
+        "\(spec.method) の \(spec.key)")
     }
   }
 

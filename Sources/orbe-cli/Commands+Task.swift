@@ -124,8 +124,7 @@ private func taskAdd(_ rest: [String]) -> Never {
   guard let title = args.first else { usageDie("task add requires <title>") }
   params["title"] = title
   // 呼び出し元タブは、追加者の agent 名と、workspace を省いたときの付き先を control が引くのに使う。
-  if let tab = resolveCurrentTab() { params["callerTabId"] = tab }
-  let result = callOrExit("add_task", params)
+  let result = callOrExit("add_task", params, callerTabId: resolveCurrentTab())
   if wantJSON {
     printJSON(result)
   } else {
@@ -164,8 +163,7 @@ private func taskCondition(_ rest: [String]) -> Never {
   case (.some, true): usageDie("pass only one of --condition / --no-condition")
   }
   // 呼び出し元タブは、条件に作業ディレクトリと agent の会話を入れるのに control が使う。
-  if let tab = resolveCurrentTab() { params["callerTabId"] = tab }
-  let result = callOrExit("set_wait_condition", params)
+  let result = callOrExit("set_wait_condition", params, callerTabId: resolveCurrentTab())
   if wantJSON { printJSON(result) } else { print("updated task \(id)") }
   exit(0)
 }

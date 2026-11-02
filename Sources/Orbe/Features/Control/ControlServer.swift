@@ -215,6 +215,8 @@ final class ControlServer {
 
   // MARK: - ルーティング（queue 上で 1 行受信ごとに）
 
+  /// 1 行の要求を動詞の表で振り分ける。method を表で引き（無ければ -32601）、params の形・封筒の caller・知らない鍵を照らして
+  /// から、行から作った読み手を動詞の応え方どおりにハンドラへ渡す。無応答の動詞は、断るべき要求を何もせずに捨てる。
   func handle(line: Data, from conn: Connection) {
     // 読めない行を黙って捨てない。クライアント（`orb` / MCP ブリッジ）は 1 行応答を待って
     // 読むので、無応答で return するとそのままハングになる。JSON-RPC 2.0 どおり 2 コードへ割る
@@ -233,69 +235,32 @@ final class ControlServer {
       return
     }
     let id = obj["id"]
-    let params = obj["params"] as? [String: Any] ?? [:]
-
-    if respondsByConnection(method: method, id: id, params: params, conn: conn) { return }
-
-    // 補完系は無応答契約（update/end は応答を書かない）を含むため、windowed の解決より先に分ける
-    // （target==nil 時や未知扱いで update/end が応答を書くと、打鍵ぶんの行が accept 応答の前に積む）。
-    if method.hasPrefix("completion_") {
-      DispatchQueue.main.async {
-        let surface = (params["tabId"] as? Int).flatMap {
-          self.target?.controlResolveTab($0)?.surface
-        }
-        guard let result = self.runCompletion(method: method, surface: surface, params: params)
-        else { return }
-        self.queue.async { conn.respond(id: id, result: result) }
-      }
-      return
-    }
-
-    guard let handler = windowedHandler(for: method) else {
+    guard let verb = Self.verbs[method] else {
       conn.respond(
         id: id,
         result: .failure(ControlError(code: -32601, message: "method not found: \(method)")))
       return
     }
-    DispatchQueue.main.async {
-      let result = self.onWindow { handler($0, params) }
-      self.queue.async { conn.respond(id: id, result: result) }
+    let params: ControlParams
+    do throws(ControlError) {
+      params = try ControlParams(request: obj, accepting: verb.params)
+    } catch {
+      if case .silent = verb.reply { return }
+      conn.respond(id: id, result: .failure(error))
+      return
     }
-  }
-
-  /// 応答を接続ごとに自分で返す動詞（待機・ファイル読み・接続の向こうの報告者を使う報告・起動や作業開始の待ち合わせ）。
-  /// 引き受けたら true。
-  private func respondsByConnection(
-    method: String, id: Any?, params: [String: Any], conn: Connection
-  ) -> Bool {
-    switch method {
-    case "wait_for_event":
-      conn.waitForEvent(id: id, params: params)
-      return true
-    case "session_log":
-      sessionLog(id: id, params: params, conn: conn)
-      return true
-    case "prompt_agent":
-      promptAgent(id: id, params: params, conn: conn)
-      return true
-    case "spawn_agent":
-      launchAgent(id: id, params: params, conn: conn) {
-        self.spawnAgent(params: params, target: $0)
+    switch verb.reply {
+    case .window(let handler):
+      DispatchQueue.main.async {
+        let result = self.onWindow { target in
+          Result { () throws(ControlError) in try handler(target, params) }.flatMap { $0 }
+        }
+        self.queue.async { conn.respond(id: id, result: result) }
       }
-      return true
-    case "resume_agent":
-      launchAgent(id: id, params: params, conn: conn) {
-        self.resumeAgent(params: params, target: $0)
-      }
-      return true
-    case "start_task":
-      startTask(id: id, params: params, conn: conn)
-      return true
-    case "report_agent":
-      reportAgent(id: id, params: params, conn: conn)
-      return true
-    default:
-      return respondsToAutomation(method: method, id: id, params: params, conn: conn)
+    case .connection(let handler):
+      handler(self)(id, params, conn)
+    case .silent(let handler):
+      handler(self)(params)
     }
   }
 
@@ -306,95 +271,85 @@ final class ControlServer {
     return body(target)
   }
 
-  typealias WindowedHandler = (ControlTarget, [String: Any]) -> Result<Any, ControlError>
+  // MARK: - workspace とタブの一覧・新しいタブ
 
-  /// ウィンドウ（target）を要するタブ/workspace 操作を method 名だけから解決する。nil は未知メソッド。
-  private func windowedHandler(for method: String) -> WindowedHandler? {
-    switch method {
-    case "list_workspaces":
-      return { target, _ in .success(["workspaces": target.controlListWorkspaces()]) }
-    case "list_tabs":
-      return { target, params in
-        Result { () throws(ControlError) in try ControlWorkspaceId.optional(params) }
-          .flatMap { target.controlListTabs(workspaceId: $0) }
-          .map { ["tabs": $0] as Any }
-      }
-    case "list_agents":
-      return { target, _ in .success(["agents": target.controlListAgents()]) }
-    case "spawn":
-      return { target, params in
-        let select = params["select"]
-        if let select,
-          (select as? NSNumber).map({ CFGetTypeID($0) == CFBooleanGetTypeID() }) != true
-        {
-          return .failure(ControlError(code: -32602, message: "invalid select"))
-        }
-        return Result { () throws(ControlError) in try ControlWorkspaceId.optional(params) }
-          .flatMap { workspaceId in
-            target.controlSpawn(
-              workspaceId: workspaceId, cwd: params["cwd"] as? String,
-              command: params["command"] as? String, selects: select as? Bool ?? true)
-          }
-          .map { ["tabId": $0] as Any }
-      }
-    case "activate_workspace":
-      return { target, params in
-        Result { () throws(ControlError) in try ControlWorkspaceId.required(params) }
-          .flatMap { wid in
-            guard let r = target.controlActivateWorkspace(workspaceId: wid) else {
-              return .failure(ControlError(code: -32004, message: "workspace not found"))
-            }
-            return .success(
-              ["activeWorkspaceId": r.activeWorkspaceId.uuidString, "tabIds": r.tabIds] as Any)
-          }
-      }
-    default:
-      // タブ宛て・config / workspace CRUD・セッション復元・タスク・受信・ボードは拡張の解決
-      // （ControlServer+Dispatch / +Task / +Automation / +Board）へ順に問う。いずれも非該当なら未知メソッド。
-      // `??` で連ねると口の数とともに型推論が重くなるので、配列で順に問う。
-      let resolvers: [(String) -> WindowedHandler?] = [
-        { self.resolvedTabHandler(for: $0) },
-        { self.tabHandler(for: $0) },
-        { self.configWorkspaceHandler(for: $0) },
-        { self.sessionHandler(for: $0) },
-        { self.taskHandler(for: $0) },
-        { self.automationHandler(for: $0) },
-        { self.boardHandler(for: $0) },
-      ]
-      for resolve in resolvers {
-        if let handler = resolve(method) { return handler }
-      }
-      return nil
+  static func listWorkspaces(_ target: ControlTarget, _: ControlParams) -> Result<
+    Any, ControlError
+  > {
+    .success(["workspaces": target.controlListWorkspaces()])
+  }
+
+  static func listTabs(_ target: ControlTarget, _ p: ControlParams) throws(ControlError)
+    -> Result<Any, ControlError>
+  {
+    target.controlListTabs(workspaceId: try p.optionalWorkspaceId()).map { ["tabs": $0] }
+  }
+
+  static func listAgents(_ target: ControlTarget, _: ControlParams) -> Result<Any, ControlError> {
+    .success(["agents": target.controlListAgents()])
+  }
+
+  /// `select` は省略で選ぶ。
+  static func spawn(_ target: ControlTarget, _ p: ControlParams) throws(ControlError) -> Result<
+    Any, ControlError
+  > {
+    let selects = try p.optionalBool("select") ?? true
+    let workspaceId = try p.optionalWorkspaceId()
+    let cwd = try p.optionalString("cwd")
+    let command = try p.optionalString("command")
+    return target.controlSpawn(
+      workspaceId: workspaceId, cwd: cwd, command: command, selects: selects
+    ).map { ["tabId": $0] }
+  }
+
+  static func activateWorkspace(_ target: ControlTarget, _ p: ControlParams) throws(ControlError)
+    -> Result<Any, ControlError>
+  {
+    guard let r = target.controlActivateWorkspace(workspaceId: try p.workspaceId()) else {
+      return .failure(ControlError(code: -32004, message: "workspace not found"))
+    }
+    return .success(["activeWorkspaceId": r.activeWorkspaceId.uuidString, "tabIds": r.tabIds])
+  }
+
+  // MARK: - シェルの補完
+
+  /// `completion_update`（無応答）。タブ・文・カーソルが揃って読めたときだけ写す。
+  func completionUpdate(params p: ControlParams) {
+    guard let tabId = try? p.optionalInt("tabId"), let buffer = try? p.optionalString("buffer"),
+      let cursor = try? p.optionalInt("cursor")
+    else { return }
+    DispatchQueue.main.async {
+      self.target?.controlResolveTab(tabId)?.surface.completionUpdate(
+        buffer: buffer, cursor: cursor)
     }
   }
 
-  /// 補完系メソッドを main で実行する。`completion_update` /
-  /// `completion_end` は無応答契約で nil を返し、Connection が書込みを抑止する。
-  private func runCompletion(method: String, surface: SurfaceView?, params: [String: Any])
-    -> Result<Any, ControlError>?
-  {
-    switch method {
-    case "completion_update":
-      if let surface, let buffer = params["buffer"] as? String,
-        let cursor = params["cursor"] as? Int
-      {
-        surface.completionUpdate(buffer: buffer, cursor: cursor)
+  /// `completion_end`（無応答）。
+  func completionEnd(params p: ControlParams) {
+    guard let tabId = try? p.optionalInt("tabId") else { return }
+    DispatchQueue.main.async { self.target?.controlResolveTab(tabId)?.surface.completionEnd() }
+  }
+
+  /// `completion_accept`。ウィンドウを問わず、タブが解けなければ -32004。`advance` は省略で次のトークンへ進む。
+  func completionAccept(id: Any?, params p: ControlParams, conn: Connection) {
+    let tabId: Int?
+    let advance: Bool
+    do throws(ControlError) {
+      tabId = try p.optionalInt("tabId")
+      advance = try p.optionalBool("advance") ?? true
+    } catch {
+      return conn.respond(id: id, result: .failure(error))
+    }
+    DispatchQueue.main.async {
+      let result: Result<Any, ControlError>
+      if let surface = tabId.flatMap({ self.target?.controlResolveTab($0)?.surface }) {
+        let applied = surface.completionAccept(advance: advance)
+        result = .success(
+          applied.map { ["buffer": $0.buffer, "cursor": $0.cursor] } ?? ["buffer": NSNull()])
+      } else {
+        result = .failure(ControlError(code: -32004, message: "tab not found"))
       }
-      return nil
-    case "completion_end":
-      surface?.completionEnd()
-      return nil
-    case "completion_accept":
-      guard let surface else {
-        return .failure(ControlError(code: -32004, message: "tab not found"))
-      }
-      let advance = params["advance"] as? Bool ?? true
-      if let applied = surface.completionAccept(advance: advance) {
-        return .success(["buffer": applied.buffer, "cursor": applied.cursor])
-      }
-      return .success(["buffer": NSNull()])
-    default:
-      return .failure(ControlError(code: -32601, message: "method not found: \(method)"))
+      self.queue.async { conn.respond(id: id, result: result) }
     }
   }
 }

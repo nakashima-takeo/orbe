@@ -56,7 +56,7 @@ extension ControlWireTests {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
     let params: [String: Any] = [
-      "automationId": 3, "version": 5, "callerTabId": 7, "definition": definition,
+      "automationId": 3, "version": 5, "definition": definition,
     ]
 
     let response = wire.request(id: 1, method: "set_automation", params: params)

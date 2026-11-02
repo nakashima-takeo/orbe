@@ -23,8 +23,8 @@ extension ControlWireTests {
     let wire = startWire(target: fake)
 
     _ = wire.request(
-      id: 1, method: "set_wait_condition",
-      params: ["taskId": 7, "condition": condition, "callerTabId": 42])
+      id: 1, method: "set_wait_condition", params: ["taskId": 7, "condition": condition],
+      callerTabId: 42)
 
     let set = try XCTUnwrap(fake.setWaitConditions.last)
     XCTAssertEqual(set.taskId, 7)
@@ -105,16 +105,22 @@ extension ControlWireTests {
     XCTAssertTrue(fake.setWaitConditions.isEmpty)
   }
 
-  /// 帳簿の動詞は条件を受けない（届いても無視され、target に条件は渡らない）。
-  func testTaskVerbsDoNotCarryAWaitingCondition() throws {
+  /// 帳簿の動詞は条件を受けない（知らない鍵として断り、target に何も届かない）。
+  func testTaskVerbsDoNotCarryAWaitingCondition() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
 
-    _ = wire.request(
-      id: 1, method: "update_task",
-      params: ["taskId": 7, "title": "t", "waitingCondition": condition])
-
-    XCTAssertNil(try XCTUnwrap(fake.updatedTasks.last).update.waitingCondition)
+    for (method, params) in [
+      ("update_task", ["taskId": 7, "title": "t", "waitingCondition": condition] as [String: Any]),
+      ("add_task", ["title": "t", "waitingCondition": condition]),
+    ] {
+      let response = wire.request(id: 1, method: method, params: params)
+      XCTAssertEqual(
+        (response?["error"] as? [String: Any])?["message"] as? String,
+        "unknown waitingCondition", method)
+    }
+    XCTAssertTrue(fake.updatedTasks.isEmpty)
+    XCTAssertTrue(fake.addedTasks.isEmpty)
     XCTAssertTrue(fake.setWaitConditions.isEmpty)
   }
 }
