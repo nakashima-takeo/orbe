@@ -224,6 +224,31 @@ extension AutomationStoreTests {
     store = nil
   }
 
+  /// 版の掃除の基準は出す側のノードの回だけで数える——ほかのノードの回が増えても、出す側の回数の内の回が読みうる版は残る。
+  func testTheVersionCutoffCountsOnlyTheRunsOfTheWritingNode() throws {
+    let store = AutomationStore(
+      opening: AutomationPersistence.open(retention: {
+        AutomationRetention(runCount: 2, runDays: 1, eventDays: 30)
+      }))
+    let id = try store.create(Self.definition(), now: Self.at).id
+    for day in 0...2 {
+      try Self.fetch(
+        store, id,
+        [AutomationItem(id: "a", link: "https://example.com/a", body: "v\(day)", time: Self.at)],
+        at: Self.at.addingTimeInterval(Self.day * Double(day)))
+    }
+    for minute in 1...2 {
+      try store.record(
+        id, nodeKey: "judge", at: Self.at.addingTimeInterval(Self.day * 2 + 60 * Double(minute)),
+        outcome: DesignSceneFixtures.failed("boom"))
+    }
+
+    XCTAssertEqual(
+      try store.read {
+        try $0.db.select("SELECT count(*) FROM item_versions", []) { $0.int(at: 0) }
+      }.first, 3, "取得の回数の内の回が読みうる版は残る")
+  }
+
   /// 全体の設定の出来事の日数が、出す側のノードが日数を書かないときの見分けの窓になる。
   func testTheEventDaysSettingIsTheWindowOfANodeWithoutItsOwnDays() throws {
     let store = AutomationStore(
