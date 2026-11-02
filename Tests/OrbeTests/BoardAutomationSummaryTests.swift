@@ -7,7 +7,8 @@ import XCTest
 /// 壊れると何が起きるか: 失敗したノードがあるのに一覧の印が成功に見え、壊れたノードに気づけない。流している間や止めている間に
 /// 前回の結果が見えなくなる。地図の線が入力と違う行へつながり、
 /// どのノードの出力がどこへ行くかを読み違える。英語の実行履歴と知らせが「judged 1 items」と言う。新着なしの回が他の回を
-/// 押し出す、または畳んではいけない回（新着のある回・形式エラーを修正した回）が畳まれて見えなくなる。
+/// 押し出す、または畳んではいけない回（新着のある回・形式エラーを修正した回）が畳まれて見えなくなる。止めた自動化のノードの
+/// カードの「次回」が空になり、止まっていることが分からない。
 @MainActor
 final class BoardAutomationSummaryTests: OrbeTestCase {
   private let text = AutomationText(
@@ -105,6 +106,19 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
         workspaces: AutomationWorkspaces(all: [], home: nil)))
     XCTAssertEqual(card.state, .paused)
     XCTAssertEqual(card.mark, .failure, "頭の印は前回の成否のまま")
+  }
+
+  /// カードの「次回」は、ノード自身を止めていなくても自動化を止めていれば「一時停止中」。
+  func testTheCardNextSaysPausedWhileTheAutomationIsPaused() throws {
+    var automation = try XCTUnwrap(automations().first)
+    XCTAssertFalse(automation.state(key: "github").paused, "前提: ノード自身は止めていない")
+    automation.pausedAt = DesignSceneFixtures.taskToday
+    let card = try XCTUnwrap(
+      BoardAutomationNodeValue(
+        automation, key: "github", text: text, running: false, next: nil, open: 0))
+
+    XCTAssertEqual(
+      card.facts.first { $0.label == .boardNodeNext }?.value.map(\.text), ["一時停止中"])
   }
 
   /// 見本の 12 ノードの線: 行を上から見て、最後の受け手を迎える入力の線のうち最も左に点を置き、無ければ空いている最も左。
