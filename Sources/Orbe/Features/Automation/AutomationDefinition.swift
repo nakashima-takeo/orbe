@@ -66,6 +66,8 @@ struct AutomationDefinition: Equatable {
   /// 定義そのものなら空）。
   static func reason(_ error: Error, at base: String) -> String {
     switch error {
+    case let unknown as AutomationUnknownKey:
+      return "unknown \(path(unknown.codingPath, under: base))"
     case DecodingError.keyNotFound(let key, let context):
       return "missing \(path(context.codingPath + [key], under: base))"
     case DecodingError.typeMismatch(_, let context), DecodingError.valueNotFound(_, let context):

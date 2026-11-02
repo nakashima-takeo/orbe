@@ -451,6 +451,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   case automationFaultDue
   case automationFaultWorkspace
   case automationFaultNotArray
+  case automationFaultUnknownArgument
   case automationFaultAfterNothing
   case automationFaultTooLarge
   case automationDismissedAlready

@@ -124,6 +124,33 @@ extension AutomationStoreTests {
     XCTAssertEqual(reopened.automations.map(\.id), [fine])
   }
 
+  /// 保存した動作の定義か予定に知らない鍵がある自動化は、その自動化だけが定義を読めない自動化になり、理由がその鍵を場所付きで
+  /// 言う（保存の形は外の形と同じ決まりで読む）。ほかの自動化は普段どおり読める。
+  func testAStoredDefinitionWithAKeyItDoesNotTakeStaysAsideAlone() throws {
+    var store: AutomationStore? = AutomationStore()
+    let action = try XCTUnwrap(store?.create(Self.definition("動作"), now: Self.at).id)
+    let trigger = try XCTUnwrap(store?.create(Self.definition("予定"), now: Self.at).id)
+    let fine = try XCTUnwrap(store?.create(Self.definition("普段"), now: Self.at).id)
+    let actionNode = try XCTUnwrap(store?.nodeId(action, "fetch"))
+    let triggerNode = try XCTUnwrap(store?.nodeId(trigger, "fetch"))
+    store = nil
+    try database().run(
+      """
+      UPDATE action_defs SET action = json_set(action, '$.inboxLimit', 5)
+      WHERE id = (SELECT def_id FROM nodes WHERE id = ?)
+      """, [.integer(Int64(actionNode.rawValue))])
+    try database().run(
+      "UPDATE nodes SET trigger = json_set(trigger, '$.expression', '0 9 * * *') WHERE id = ?",
+      [.integer(Int64(triggerNode.rawValue))])
+
+    let reopened = AutomationStore()
+
+    XCTAssertEqual(reopened.automations.map(\.id), [fine])
+    XCTAssertEqual(
+      Dictionary(uniqueKeysWithValues: reopened.unreadable.map { ($0.id, $0.reason) }),
+      [action: "unknown nodes[0].inboxLimit", trigger: "unknown nodes[0].trigger.expression"])
+  }
+
   /// 読めない自動化の組めた定義は外の形で、壊れた値を元に戻せば元の定義として読める（AI が一覧の定義を直して
   /// `set_automation` へ戻すため。この形は保存の読みとは別に組む）。
   func testTheDefinitionOfAnUnreadableAutomationReadsBackOnceTheBrokenValueIsRestored() throws {

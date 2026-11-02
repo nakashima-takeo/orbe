@@ -97,6 +97,65 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
       session.rejected.map(\.line), [2, 3, 4, 1, nil], "空の配列は数えず、配列でない引数は位置の無い 1 件")
   }
 
+  /// 道具が受けない引数のある呼び出しは丸ごと受けない。結果の道具では位置の無い外れた件 1 つとして数え（直さずに終えれば出力の
+  /// 形式エラー）、読む道具と申告の道具では数えずに断る。どれも受ける引数を言う。
+  func testAnArgumentAToolDoesNotTakeIsRefused() {
+    let session = AutomationRunSession(
+      .process(rows(1), reachesJudge: false), writer: AutomationNodeID(1))
+
+    let read = session.call("read_run_rows", ["offset": 0, "page": 2])
+    XCTAssertTrue(read.isError)
+    XCTAssertEqual(read.texts, ["unknown argument page; read_run_rows takes only limit, offset."])
+    XCTAssertEqual(session.unread, [0], "断った読みは行を渡さない")
+    _ = session.call("read_run_rows", [:])
+
+    let nothing = session.call("report_nothing", ["why": "無い", "reason": "x"])
+    XCTAssertTrue(nothing.isError)
+    XCTAssertEqual(nothing.texts, ["unknown argument reason; report_nothing takes only why."])
+    XCTAssertFalse(session.answered, "断った申告は受けない")
+    XCTAssertTrue(session.rejected.isEmpty, "申告の道具の断りは数えない")
+
+    let put = session.call("put_rows", ["rows": [["id": "a"]], "items": [["id": "b"]]])
+    XCTAssertTrue(put.isError)
+    XCTAssertEqual(
+      put.texts,
+      ["Nothing from this call was accepted: unknown argument items; put_rows takes only rows."])
+    XCTAssertEqual(session.outputs.count, 0)
+    XCTAssertEqual(
+      session.rejected, [AutomationBrokenLine(line: nil, fault: .unknownArgument("items"))])
+    XCTAssertTrue(session.refusedLast)
+
+    XCTAssertFalse(session.call("put_rows", ["rows": [["id": "a"]]]).isError)
+    XCTAssertFalse(session.refusedLast)
+
+    let failing = AutomationRunSession(
+      .fetch(since: nil, reachesJudge: false), writer: AutomationNodeID(1))
+    XCTAssertTrue(failing.call("report_error", ["what": "落ちた", "reason": "x"]).isError)
+    XCTAssertNil(failing.error, "断った失敗の申告は受けない")
+    XCTAssertTrue(failing.rejected.isEmpty)
+  }
+
+  /// 申告の道具の理由（`why`・`what`）は文字列でなければ、欠けても型が違っても数えずに断る——空の理由で受けると、回の記録と
+  /// 画面に何も無い理由・失敗の理由が残らない。
+  func testAReportWithoutAStringReasonIsRefused() {
+    let session = AutomationRunSession(
+      .fetch(since: nil, reachesJudge: false), writer: AutomationNodeID(1))
+    for arguments in [[:], ["why": 1]] as [[String: Any]] {
+      XCTAssertEqual(
+        session.call("report_nothing", arguments).texts, ["Give why as a string."], "\(arguments)")
+    }
+    for arguments in [[:], ["what": NSNull()]] as [[String: Any]] {
+      XCTAssertEqual(
+        session.call("report_error", arguments).texts, ["Give what as a string."], "\(arguments)")
+    }
+    XCTAssertFalse(session.answered)
+    XCTAssertNil(session.error)
+    XCTAssertTrue(session.rejected.isEmpty, "申告の断りは数えない")
+
+    XCTAssertFalse(session.call("report_error", ["what": "落ちた"]).isError)
+    XCTAssertEqual(session.error, "落ちた")
+  }
+
   /// 空の配列は断った結果に数えないので、勧めどおり report_nothing を呼べる。report_error を持たない役割には、断られた後の
   /// report_nothing の断りで report_error を勧めない。
   func testAnEmptyCallLeavesRoomToReportNothing() {
@@ -115,6 +174,21 @@ final class AutomationRunSessionTests: AutomationNodePassTestCase {
     let reply = refused.call("report_nothing", ["why": "無い"])
     XCTAssertTrue(reply.isError)
     XCTAssertFalse(reply.texts[0].contains("report_error"), reply.texts[0])
+  }
+
+  /// 中身の無い結果の呼び出しは、受けない引数が付いていても断った結果に数えず、report_nothing で回を終えられる。
+  func testAnEmptyCallWithAnUnknownArgumentLeavesRoomToReportNothing() {
+    let process = AutomationRunSession(
+      .process(rows(1), reachesJudge: false), writer: AutomationNodeID(1))
+    _ = process.call("read_run_rows", [:])
+    XCTAssertTrue(process.call("put_rows", ["rows": [], "reason": "無い"]).isError)
+
+    let report = AutomationRunSession(.report(rows(1)), writer: AutomationNodeID(1))
+    _ = report.call("read_run_rows", [:])
+    XCTAssertTrue(report.call("put_report", ["text": " ", "note": "無い"]).isError)
+
+    XCTAssertFalse(process.call("report_nothing", ["why": "無い"]).isError)
+    XCTAssertFalse(report.call("report_nothing", ["why": "無い"]).isError)
   }
 
   /// 何も無いの申告は結果の前だけで、申告の後は結果を受けない。失敗の申告の後も受けない。

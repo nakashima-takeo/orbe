@@ -5,14 +5,13 @@ import XCTest
 
 /// 制御プロトコルの **params の語**——各 method が受理するキーとその型——を固定する。
 ///
-/// 壊れると何が起きるか: `ControlServer` の側だけ `params["state"]` を `params["agentState"]` へ
-/// 改名しても、クライアント（`orb` / MCP ブリッジ / `orbe-report`）は古い名前を送り続け、値は
-/// 黙って nil になる。エージェントの状態報告が全て無言で落ちるのに、テストは 1 本も落ちない
-/// ——これが #50 に記録された対照実験そのもの。ここが params の語を押さえる唯一の場所になる。
+/// 壊れると何が起きるか: `ControlServer` の側だけ `state` を `agentState` へ改名すると、古い名前を送り続ける
+/// クライアント（`orb` / MCP ブリッジ / `orbe-report`）の要求は `unknown state` で断られる。`orbe-report` は応答を読まない
+/// ので、エージェントの状態報告が全て無言で落ちる（#50 に記録された対照実験）。
 ///
 /// 2 つの方式で押さえる。
 /// 1. `-32602` / `-32004` ガードのある必須 param は、正しい名前一式で成功し 1 つ落とすと
-///    そのコードになる（改名は「落とす」と等価なので成功側が落ちる）。型不一致と値域外も同じ表で見る
+///    そのコードになる（改名は「落とす」と等価なので成功側が落ちる）。型不一致は `ControlWireTests+Keys.swift` が全引数で見る
 /// 2. ガードの無い optional param は、Fake が受領値を記録して送った値と突き合わせる。
 ///    `messageSource` はここでしか固定できない（欠落しても目に見えず `-32602` にもならない）
 ///
@@ -80,11 +79,12 @@ extension ControlWireTests {
         "add_task",
         [
           "title": "経費精算", "status": "in_progress", "priority": "high", "due": "2026-10-06",
-          "waitingReason": "返事", "description": "詳細", "workspaceId": ws, "callerTabId": tab,
+          "waitingReason": "返事", "description": "詳細", "workspaceId": ws,
           "links": [["kind": "pr", "repo": "o/n", "number": 214]],
         ]
       ),
       ("update_task", ["taskId": 7, "title": "改題"]),
+      ("set_wait_condition", ["taskId": 7, "condition": NSNull()]),
       ("delete_task", ["taskId": 7]),
       ("start_task", ["taskId": 7, "branch": "feat/x", "prompt": "直して"]),
     ] + automationRequests + boardRequests
@@ -136,6 +136,8 @@ extension ControlWireTests {
       RequiredParam(method: "restore_sessions", key: "sessionIds", code: -32602),
       RequiredParam(method: "add_task", key: "title", code: -32602),
       RequiredParam(method: "update_task", key: "taskId", code: -32602),
+      RequiredParam(method: "set_wait_condition", key: "taskId", code: -32602),
+      RequiredParam(method: "set_wait_condition", key: "condition", code: -32602),
       RequiredParam(method: "delete_task", key: "taskId", code: -32602),
       RequiredParam(method: "start_task", key: "taskId", code: -32602),
       RequiredParam(method: "set_automation", key: "definition", code: -32602),
@@ -181,36 +183,6 @@ extension ControlWireTests {
       XCTAssertEqual(
         errorCode(wire.request(id: id, method: spec.method, params: dropped)), spec.code,
         "\(spec.method) から \(spec.key) を落とすと \(spec.code)")
-    }
-  }
-
-  /// 型の違う値は「キーを落とした」のと同じ帰結になる。`as? Int` / `as? String` の
-  /// キャストが唯一の型ガードなので、落とす側と同じ表で押さえられる。
-  ///
-  /// 型違いには**正しい値を隣の型へ移した値**を渡す（Int 期待なら数字文字列、String 期待なら
-  /// 数値）。配列のような「どの型にもならない値」だけだと、キャストを片側へ緩める改変——例えば
-  /// CLI が全部文字列で送ってくるのに合わせて `tabId` に `Int(文字列)` を許す——が 1 本も
-  /// 落とさずに通る。spec の `-32602` は「欠落・型不一致・値域外」の 3 つを名指しており、
-  /// ここが型不一致を受け持つ。
-  func testWronglyTypedParamsAreRejectedLikeMissingOnes() {
-    let fake = FakeControlTarget()
-    let wire = startWire(target: fake)
-    let fixtures = fixtures(fake)
-    var id = 0
-
-    for spec in requiredParams {
-      // `config_set` の `value` だけは型を問わない（存在チェックのみ）。値の検証は設定
-      // レジストリの domain が唯一の検証点という契約なので、ここで型を縛ると spec と食い違う。
-      if spec.method == "config_set" && spec.key == "value" { continue }
-      guard let full = fixtures[spec.method], let correct = full[spec.key] else { continue }
-
-      id += 1
-      var mistyped = full
-      let moved: Any = correct is Int ? String(describing: correct) : 42
-      mistyped[spec.key] = moved
-      XCTAssertEqual(
-        errorCode(wire.request(id: id, method: spec.method, params: mistyped)), spec.code,
-        "\(spec.method) の \(spec.key) に型違い \(moved) を渡すと \(spec.code)（欠落と同じ帰結）")
     }
   }
 

@@ -37,31 +37,20 @@ protocol ControlAutomationTarget: AnyObject {
     completion: @escaping (Result<Any, ControlError>) -> Void)
 }
 
-/// 自動化の 9 動詞と、裏の agent の回の道具の解決。ハンドラが見るのは params の在否と JSON の型（違反は -32602）だけで、値の検証と不変条件は
-/// `AutomationStore`・`AutomationTrials` が持つ。
+/// 自動化の 9 動詞と、裏の agent の回の道具。ハンドラが見るのは引数の在否と JSON の型（違反は -32602）だけで、定義の中身・値の
+/// 検証・不変条件は `AutomationDefinition`・`AutomationStore`・`AutomationTrials` が持つ。
 extension ControlServer {
-  /// 接続ごとに自分で応答する自動化の動詞（待つことがある `get_automation_trial`）。引き受けたら true。
-  func respondsToAutomation(method: String, id: Any?, params: [String: Any], conn: Connection)
-    -> Bool
-  {
-    guard method == "get_automation_trial" else { return false }
-    automationTrial(id: id, params: params, conn: conn)
-    return true
-  }
-
-  private func automationTrial(id: Any?, params: [String: Any], conn: Connection) {
-    let p = AutomationParams(params)
+  /// `get_automation_trial`（`wait` なら待つので、接続ごとに自分で応える）。
+  func automationTrial(id: Any?, params p: ControlParams, conn: Connection) {
     let automationId: Int
     let wait: Bool
+    let timeoutMs: Int
     do throws(ControlError) {
       automationId = try p.int("automationId")
       wait = try p.optionalBool("wait") ?? false
+      timeoutMs = try WaitTimeout.parse(p, default: WaitTimeout.promptDefaultMs)
     } catch {
       return conn.respond(id: id, result: .failure(error))
-    }
-    guard let timeoutMs = WaitTimeout.parse(params, default: WaitTimeout.promptDefaultMs) else {
-      return conn.respond(
-        id: id, result: .failure(ControlError(code: -32602, message: "invalid timeoutMs")))
     }
     DispatchQueue.main.async {
       let respond = { result in self.queue.async { conn.respond(id: id, result: result) } }
@@ -73,174 +62,85 @@ extension ControlServer {
     }
   }
 
-  func automationHandler(for method: String) -> (
-    (ControlAutomationTarget, [String: Any]) -> Result<Any, ControlError>
-  )? {
-    guard let body = automationBody(for: method) else { return nil }
-    return { target, params in
-      do throws(ControlError) {
-        return try body(target, AutomationParams(params))
-      } catch {
-        return .failure(error)
-      }
-    }
-  }
-
-  private func automationBody(for method: String) -> AutomationBody? {
-    switch method {
-    case "list_automations":
-      return { target, _ throws(ControlError) in target.controlListAutomations() }
-    case "set_automation":
-      return { target, p throws(ControlError) in
-        target.controlSetAutomation(
-          automationId: try p.optionalInt("automationId"), version: try p.optionalInt("version"),
-          try p.definition())
-      }
-    case "list_automation_runs":
-      return { target, p throws(ControlError) in
-        target.controlListAutomationRuns(
-          automationId: try p.int("automationId"), nodeKey: try p.optionalString("nodeKey"),
-          before: try p.optionalInt("before"), limit: try p.optionalInt("limit"))
-      }
-    case "run_automation":
-      return { target, p throws(ControlError) in
-        target.controlRunAutomation(
-          automationId: try p.int("automationId"), nodeKey: try p.optionalString("nodeKey"))
-      }
-    case "pause_automation":
-      return { target, p throws(ControlError) in
-        target.controlPauseAutomation(
-          automationId: try p.int("automationId"), nodeKey: try p.optionalString("nodeKey"),
-          paused: try p.bool("paused"))
-      }
-    case "delete_automation":
-      return { target, p throws(ControlError) in
-        target.controlDeleteAutomation(automationId: try p.int("automationId"))
-      }
-    case "list_automation_proposals":
-      return { target, p throws(ControlError) in
-        target.controlListAutomationProposals(automationId: try p.optionalInt("automationId"))
-      }
-    case "run_tool":
-      return { target, p throws(ControlError) in
-        target.controlRunTool(
-          token: try p.string("token"), name: try p.string("name"),
-          arguments: try p.optionalObject("arguments") ?? [:])
-      }
-    case "try_automation":
-      return { target, p throws(ControlError) in
-        target.controlTryAutomation(
-          automationId: try p.int("automationId"),
-          AutomationTrial.Request(
-            from: try p.optionalStrings("from"), to: try p.optionalStrings("to"),
-            rows: try p.optionalObjectLines("rows"), limit: try p.optionalInt("limit")))
-      }
-    default:
-      return nil
-    }
-  }
-}
-
-private typealias AutomationBody = (ControlAutomationTarget, AutomationParams) throws(ControlError)
-  -> Result<
+  static func listAutomations(_ target: ControlAutomationTarget, _: ControlParams) -> Result<
     Any, ControlError
-  >
-
-/// params の型検査。定義は `definition` の欄がオブジェクトであることだけを見る（中身は domain 側が読む）。
-private struct AutomationParams {
-  let params: [String: Any]
-
-  init(_ params: [String: Any]) { self.params = params }
-
-  private static func isBool(_ raw: Any) -> Bool {
-    (raw as? NSNumber).map { CFGetTypeID($0) == CFBooleanGetTypeID() } ?? false
+  > {
+    target.controlListAutomations()
   }
 
-  func int(_ key: String) throws(ControlError) -> Int {
-    guard let value = try optionalInt(key) else {
-      throw ControlError(code: -32602, message: "missing \(key)")
-    }
-    return value
+  /// 定義は外の形の JSON のまま渡す（知らない欄・形・値の誤りは定義の読みが場所付きで断る）。
+  static func setAutomation(_ target: ControlAutomationTarget, _ p: ControlParams)
+    throws(ControlError) -> Result<Any, ControlError>
+  {
+    target.controlSetAutomation(
+      automationId: try p.optionalInt("automationId"), version: try p.optionalInt("version"),
+      try p.object("definition"))
   }
 
-  /// JSONSerialization は true / false も NSNumber に載せ `as? Int` を通すので、真偽値を整数として受けない。
-  func optionalInt(_ key: String) throws(ControlError) -> Int? {
-    guard let raw = params[key] else { return nil }
-    guard !Self.isBool(raw), let value = raw as? Int else {
-      throw ControlError(code: -32602, message: "invalid \(key)")
-    }
-    return value
+  static func listAutomationRuns(_ target: ControlAutomationTarget, _ p: ControlParams)
+    throws(ControlError) -> Result<Any, ControlError>
+  {
+    target.controlListAutomationRuns(
+      automationId: try p.int("automationId"), nodeKey: try p.optionalString("nodeKey"),
+      before: try p.optionalInt("before"), limit: try p.optionalInt("limit"))
   }
 
-  func string(_ key: String) throws(ControlError) -> String {
-    guard let value = try optionalString(key) else {
-      throw ControlError(code: -32602, message: "missing \(key)")
-    }
-    return value
+  static func runAutomation(_ target: ControlAutomationTarget, _ p: ControlParams)
+    throws(ControlError) -> Result<Any, ControlError>
+  {
+    target.controlRunAutomation(
+      automationId: try p.int("automationId"), nodeKey: try p.optionalString("nodeKey"))
   }
 
-  func optionalString(_ key: String) throws(ControlError) -> String? {
-    guard let raw = params[key] else { return nil }
-    guard let value = raw as? String else {
-      throw ControlError(code: -32602, message: "invalid \(key)")
-    }
-    return value
+  static func pauseAutomation(_ target: ControlAutomationTarget, _ p: ControlParams)
+    throws(ControlError) -> Result<Any, ControlError>
+  {
+    target.controlPauseAutomation(
+      automationId: try p.int("automationId"), nodeKey: try p.optionalString("nodeKey"),
+      paused: try p.bool("paused"))
   }
 
-  func bool(_ key: String) throws(ControlError) -> Bool {
-    guard let value = try optionalBool(key) else {
-      throw ControlError(code: -32602, message: "missing \(key)")
-    }
-    return value
+  static func deleteAutomation(_ target: ControlAutomationTarget, _ p: ControlParams)
+    throws(ControlError) -> Result<Any, ControlError>
+  {
+    target.controlDeleteAutomation(automationId: try p.int("automationId"))
   }
 
-  func optionalBool(_ key: String) throws(ControlError) -> Bool? {
-    guard let raw = params[key] else { return nil }
-    guard Self.isBool(raw), let value = raw as? Bool else {
-      throw ControlError(code: -32602, message: "invalid \(key)")
-    }
-    return value
+  static func listAutomationProposals(_ target: ControlAutomationTarget, _ p: ControlParams)
+    throws(ControlError) -> Result<Any, ControlError>
+  {
+    target.controlListAutomationProposals(automationId: try p.optionalInt("automationId"))
   }
 
-  func optionalObject(_ key: String) throws(ControlError) -> [String: Any]? {
-    guard let raw = params[key] else { return nil }
-    guard let value = raw as? [String: Any] else {
-      throw ControlError(code: -32602, message: "invalid \(key)")
-    }
-    return value
+  /// 道具の引数はオブジェクトだけを運ぶ（無ければ空）。受ける欄はその回の道具が照らす。
+  static func runTool(_ target: ControlAutomationTarget, _ p: ControlParams) throws(ControlError)
+    -> Result<Any, ControlError>
+  {
+    target.controlRunTool(
+      token: try p.string("token"), name: try p.string("name"),
+      arguments: try p.optionalObject("arguments") ?? [:])
   }
 
-  func optionalStrings(_ key: String) throws(ControlError) -> [String]? {
-    guard let raw = params[key] else { return nil }
-    guard let value = raw as? [String] else {
-      throw ControlError(code: -32602, message: "invalid \(key)")
-    }
-    return value
-  }
-
-  /// JSON オブジェクトの列を、1 要素 1 行の JSON の文にして読む。
-  func optionalObjectLines(_ key: String) throws(ControlError) -> [String]? {
-    guard let raw = params[key] else { return nil }
-    guard let objects = raw as? [[String: Any]] else {
-      throw ControlError(code: -32602, message: "invalid \(key)")
-    }
-    return try objects.map { object throws(ControlError) in
-      guard
-        let data = try? JSONSerialization.data(
-          withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]),
-        let line = String(bytes: data, encoding: .utf8)
-      else { throw ControlError(code: -32602, message: "invalid \(key)") }
-      return line
-    }
-  }
-
-  func definition() throws(ControlError) -> [String: Any] {
-    guard let raw = params["definition"] else {
-      throw ControlError(code: -32602, message: "missing definition")
-    }
-    guard let object = raw as? [String: Any] else {
-      throw ControlError(code: -32602, message: "invalid definition")
-    }
-    return object
+  /// 与える行は JSON オブジェクトの列で受け、1 要素 1 行の JSON の文にして運ぶ（行は余分な欄を残すデータ）。
+  static func tryAutomation(_ target: ControlAutomationTarget, _ p: ControlParams)
+    throws(ControlError) -> Result<Any, ControlError>
+  {
+    let automationId = try p.int("automationId")
+    let from = try p.optionalStrings("from")
+    let to = try p.optionalStrings("to")
+    let rows = try p.optionalObjects("rows")
+    let limit = try p.optionalInt("limit")
+    return target.controlTryAutomation(
+      automationId: automationId,
+      AutomationTrial.Request(
+        from: from, to: to,
+        rows: try rows?.map { object throws(ControlError) in
+          guard
+            let data = try? JSONSerialization.data(
+              withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]),
+            let line = String(bytes: data, encoding: .utf8)
+          else { throw p.invalid("rows") }
+          return line
+        }, limit: limit))
   }
 }

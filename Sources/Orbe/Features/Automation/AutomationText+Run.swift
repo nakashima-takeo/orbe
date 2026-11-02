@@ -104,6 +104,7 @@ extension AutomationText {
     case .dueNotDate: l10n.string(.automationFaultDue)
     case .workspaceNotListed: l10n.string(.automationFaultWorkspace)
     case .notArray(let key): l10n.format(.automationFaultNotArray, key)
+    case .unknownArgument(let key): l10n.format(.automationFaultUnknownArgument, key)
     case .afterNothing: l10n.string(.automationFaultAfterNothing)
     case .tooLarge: l10n.format(.automationFaultTooLarge, AutomationOutputs.rowKiB)
     }

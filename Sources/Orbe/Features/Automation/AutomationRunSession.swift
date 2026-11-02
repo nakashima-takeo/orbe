@@ -16,6 +16,30 @@ final class AutomationRunSession {
     case putReport = "put_report"
     case reportNothing = "report_nothing"
     case reportError = "report_error"
+
+    /// 受ける引数の名前（orbe-mcp の道具の `inputSchema` の欄と同じ）。
+    var arguments: Set<String> {
+      switch self {
+      case .readRunRows: ["offset", "limit"]
+      case .readWaitingProposals, .readWorkspaces: []
+      case .putItems: ["items"]
+      case .putRows: ["rows"]
+      case .propose: ["proposals"]
+      case .resolve: ["links"]
+      case .putReport: ["text"]
+      case .reportNothing: ["why"]
+      case .reportError: ["what"]
+      }
+    }
+
+    /// 結果を出す道具か（断った呼び出しを外れた件に数える）。
+    var givesResults: Bool {
+      switch self {
+      case .putItems, .putRows, .propose, .resolve, .putReport: true
+      case .readRunRows, .readWaitingProposals, .readWorkspaces, .reportNothing, .reportError:
+        false
+      }
+    }
   }
 
   /// 道具の返事。`texts` は返事の中身の塊。
@@ -95,6 +119,9 @@ final class AutomationRunSession {
   func call(_ name: String, _ arguments: [String: Any]) -> Reply {
     guard let tool = Tool(rawValue: name), tools.contains(tool) else {
       return .refused("\(name) is not a tool of this run")
+    }
+    if let unknown = arguments.keys.sorted().first(where: { !tool.arguments.contains($0) }) {
+      return unknownArgument(unknown, of: tool, arguments)
     }
     switch tool {
     case .readRunRows: return page(arguments)
@@ -236,8 +263,37 @@ final class AutomationRunSession {
       return .refused(
         "Orbe refused results you gave in this run: fix them and give them again\(fallback).")
     }
-    nothing = (arguments["why"] as? String) ?? ""
+    guard let why = arguments["why"] as? String else { return .refused("Give why as a string.") }
+    nothing = why
     return .ok("Noted: nothing this time.")
+  }
+
+  /// 道具の受けない引数。どれも書き損じた鍵と受ける引数を言って断る。外れた件に数えるのは中身のある結果の呼び出しだけで、
+  /// 中身の無い結果の呼び出し（空の配列・空白だけの報告）は、受けない引数の無いときと同じく数えずに report_nothing を
+  /// 勧める——数えると、勧めどおりの申告が断られて、report_error を持たない役割の回は直す手段が無くなる。
+  private func unknownArgument(_ key: String, of tool: Tool, _ arguments: [String: Any]) -> Reply {
+    let takes =
+      tool.arguments.isEmpty
+      ? "\(tool.rawValue) takes no arguments"
+      : "\(tool.rawValue) takes only \(tool.arguments.sorted().joined(separator: ", "))"
+    let refusal = "\(AutomationLineFault.unknownArgument(key).text); \(takes)."
+    guard tool.givesResults else { return .refused(refusal) }
+    if let closed { return closed }
+    guard Self.givesSomething(arguments, to: tool) else {
+      return .refused(
+        "\(refusal) This call gives nothing; when there is nothing, call "
+          + "\(Tool.reportNothing.rawValue).")
+    }
+    return refuse(.unknownArgument(key), takes)
+  }
+
+  /// 結果の呼び出しが中身を持つか（空の配列・空白だけの報告でない）。
+  private static func givesSomething(_ arguments: [String: Any], to tool: Tool) -> Bool {
+    if tool == .putReport {
+      return (arguments["text"] as? String).map { AutomationOutputs.trimmedReport($0) != nil }
+        ?? true
+    }
+    return !tool.arguments.contains { (arguments[$0] as? [Any])?.isEmpty == true }
   }
 
   /// 呼び出しの形そのものの誤りで断り、断った結果に数える（位置は持たない）。
@@ -249,7 +305,8 @@ final class AutomationRunSession {
   }
 
   private func reportError(_ arguments: [String: Any]) -> Reply {
-    error = (arguments["what"] as? String) ?? ""
+    guard let what = arguments["what"] as? String else { return .refused("Give what as a string.") }
+    error = what
     return .ok("Noted: this run has failed.")
   }
 
