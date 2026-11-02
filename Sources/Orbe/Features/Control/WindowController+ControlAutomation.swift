@@ -2,7 +2,8 @@ import Foundation
 import OrbeSessionLog
 
 /// 自動化の 9 動詞と、裏の agent の回の道具の domain 側。変異は `AutomationRunner`（番人の登録を合わせる）、読みは `AutomationStore`、試走は
-/// `AutomationTrials` に任せ、ここは定義を読み、書く定義の workspace の席が今の workspace を指すかを確かめ、応答の形を組む。
+/// `AutomationTrials` に任せ、ここは書き込みの入口（定義を読み、書く定義の workspace の席が今の workspace を指すかを確かめ、ストアで
+/// 確かめる）を通し、応答の形を組む。
 extension WindowController {
   /// 自動化を ID 順に（定義を読めない自動化も、その場所に）。使えないセッションでは理由で断る。
   func controlListAutomations() -> Result<Any, ControlError> {
@@ -19,13 +20,21 @@ extension WindowController {
     automationId: Int?, version: Int?, _ definition: [String: Any]
   ) -> Result<Any, ControlError> {
     automationResult { () throws(AutomationError) in
-      let definition = try AutomationDefinition.decode(definition)
-      try automationRunner.workspaces().checkSeats(of: definition)
-      return [
+      [
         "automation": try automationJSON(
-          try automationRunner.set(automationId, version: version, definition))
+          try automationRunner.set(try checkedWrite(automationId, version, definition)))
       ]
     }
+  }
+
+  /// 書き込みの入口。定義を読み、workspace の席を確かめ、ストアで確かめる。
+  private func checkedWrite(_ automationId: Int?, _ version: Int?, _ definition: [String: Any])
+    throws(AutomationError) -> AutomationStore.CheckedWrite
+  {
+    let definition = try AutomationDefinition.decode(definition)
+    try automationRunner.workspaces().checkSeats(of: definition)
+    return try automationStore.check(
+      AutomationStore.Write(automationId, version: version, definition))
   }
 
   func controlRunAutomation(automationId: Int, nodeKey: String?) -> Result<Any, ControlError> {
@@ -232,12 +241,8 @@ extension WindowController {
     ]
   }
 
-  private static func automationNotFound(_ id: Int) -> ControlError {
-    ControlError(code: -32004, message: "automation not found: \(id)")
-  }
-
-  /// ドメインエラーを制御エラーの語彙へ写す（未知・試走が無い → -32004・不正な値 → -32602・道の重なる流し・使えない → -32000）。
-  /// 自動化を使えないセッションでは、どの動詞も中身を見る前に理由で断る。
+  /// ドメインエラーを制御エラーのコードへ写す（未知 → -32004・不正な値 → -32602・道の重なる流し・使えない・版の食い違い・読めない
+  /// → -32000）。文は `AutomationError.message`。自動化を使えないセッションでは、どの動詞も中身を見る前に理由で断る。
   private func automationResult(_ body: () throws(AutomationError) -> [String: Any]) -> Result<
     Any, ControlError
   > {
@@ -245,43 +250,13 @@ extension WindowController {
       guard automationStore.available else { throw automationStore.unavailableError }
       return .success(try body())
     } catch {
-      switch error {
-      case .automationNotFound(let id): return .failure(Self.automationNotFound(id))
-      case .proposalNotFound(let id):
-        return .failure(ControlError(code: -32004, message: "proposal not found: \(id)"))
-      case .proposalNotOpen(let id):
-        return .failure(ControlError(code: -32602, message: "proposal \(id) is not open"))
-      case .invalid(let message): return .failure(ControlError(code: -32602, message: message))
-      case .nodeNotFound(let id, let key):
-        return .failure(
-          ControlError(code: -32004, message: "node not found: \(key) in automation \(id)"))
-      case .flowing(let id, let nodeId):
-        let key = automationStore.automation(id)?.graph.node(nodeId)?.key ?? "\(nodeId)"
-        return .failure(
-          ControlError(
-            code: -32000,
-            message:
-              "automation \(id): node \"\(key)\" is already in a running flow; wait until it finishes"
-          ))
-      case .unavailable(let message):
-        return .failure(ControlError(code: -32000, message: message))
-      case .trialNotFound(let id):
-        return .failure(ControlError(code: -32004, message: "no trial of automation \(id)"))
-      case .versionMismatch(let sent, let current):
-        return .failure(
-          ControlError(
-            code: -32000,
-            message:
-              "version mismatch: sent \(sent), current \(current); read it again with list_automations"
-          ))
-      case .unreadable(let id, let reason):
-        return .failure(
-          ControlError(
-            code: -32000,
-            message:
-              "automation \(id) cannot be read: \(reason); fix it with set_automation or delete it")
-        )
-      }
+      let code =
+        switch error {
+        case .automationNotFound, .proposalNotFound, .nodeNotFound, .trialNotFound: -32004
+        case .proposalNotOpen, .invalid: -32602
+        case .flowing, .unavailable, .versionMismatch, .unreadable: -32000
+        }
+      return .failure(ControlError(code: code, message: error.message))
     }
   }
 }

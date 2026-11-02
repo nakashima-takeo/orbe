@@ -118,25 +118,24 @@ import Observation
 
   // MARK: - 定義の変異
 
-  /// `id` が nil なら作り、あれば `version` を添えて書き換える。何をするかが変わったノードは走っている回を止めて載せ直し（結果は
-  /// 捨てる）、外したノードは外し、足したノードは足した時刻から数える。鍵・名前・予定・件数の上限・出来事の日数・通知だけなら予定だけを
-  /// 差し替える（走っている回は最後まで走る）。
+  /// `id` が nil なら作り、あれば `version` を添えて書き換える（確かめてから掛ける）。
   func set(_ id: Int?, version: Int? = nil, _ definition: AutomationDefinition)
     throws(AutomationError) -> Automation
   {
+    try set(try store.check(AutomationStore.Write(id, version: version, definition)))
+  }
+
+  /// 確かめた書き込みを掛ける。何をするかが変わったノードは走っている回を止めて載せ直し（結果は捨てる）、外したノードは外し、
+  /// 足したノードは足した時刻から数える。鍵・名前・予定・件数の上限・出来事の日数・通知だけなら予定だけを差し替える（走っている回は
+  /// 最後まで走る）。
+  func set(_ checked: AutomationStore.CheckedWrite) throws(AutomationError) -> Automation {
     try checkAvailable()
-    guard let id else {
-      let automation = try store.create(definition, now: now())
-      register(automation)
-      defined(automation.id, [])
-      return automation
-    }
-    let replaced = try store.replace(id, version: version, with: definition, now: now())
-    let automation = replaced.automation
-    for nodeId in replaced.removed + replaced.reworked { unregister(id, nodeId) }
-    register(automation)
-    defined(id, replaced.removed)
-    return automation
+    let written = try store.apply(checked, now: now())
+    let id = written.automation.id
+    for nodeId in written.removed + written.reworked { unregister(id, nodeId) }
+    register(written.automation)
+    defined(id, written.removed)
+    return written.automation
   }
 
   /// 止める・再開する（`nodeId` があればそのノード自身、無ければ自動化）。止めるのは Orbe が自分から動かすことだけで、走っている回は

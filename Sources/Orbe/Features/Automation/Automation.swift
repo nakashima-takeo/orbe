@@ -207,8 +207,8 @@ enum AutomationError: Error, Equatable {
   /// 値か組み合わせが不変条件に反する。
   case invalid(String)
   case nodeNotFound(Int, String)
-  /// 流そうとした道が、終わっていない流しの道と重なった（重なったノードのうち定義の順で最初のもの）。
-  case flowing(Int, AutomationNodeID)
+  /// 流そうとした道が、終わっていない流しの道と重なった（重なったノードのうち定義の順で最初のものの鍵）。
+  case flowing(Int, String)
   /// 自動化の DB を使えない、または書けなかった。
   case unavailable(String)
   /// その自動化の試走が無い。
@@ -217,4 +217,24 @@ enum AutomationError: Error, Equatable {
   case versionMismatch(sent: Int, current: Int)
   /// 定義を読めない自動化を動かそうとした（理由）。
   case unreadable(Int, String)
+}
+
+extension AutomationError {
+  /// AI が読む英文。制御の口の断りも、試走が流し切れずに終わった理由も、この文を使う。
+  var message: String {
+    switch self {
+    case .automationNotFound(let id): "automation not found: \(id)"
+    case .proposalNotFound(let id): "proposal not found: \(id)"
+    case .proposalNotOpen(let id): "proposal \(id) is not open"
+    case .invalid(let message), .unavailable(let message): message
+    case .nodeNotFound(let id, let key): "node not found: \(key) in automation \(id)"
+    case .flowing(let id, let key):
+      "automation \(id): node \"\(key)\" is already in a running flow; wait until it finishes"
+    case .trialNotFound(let id): "no trial of automation \(id)"
+    case .versionMismatch(let sent, let current):
+      "version mismatch: sent \(sent), current \(current); read it again with list_automations"
+    case .unreadable(let id, let reason):
+      "automation \(id) cannot be read: \(reason); fix it with set_automation or delete it"
+    }
+  }
 }

@@ -177,7 +177,7 @@ final class AutomationTrial {
       try flow(on: store)
     } catch {
       self.copy = nil
-      end(failure: Self.reason(error))
+      end(failure: error.message)
     }
   }
 
@@ -242,7 +242,7 @@ final class AutomationTrial {
     do throws(AutomationError) {
       content = try self.content(of: node, run, record.end.outcome, in: store)
     } catch {
-      return end(failure: Self.reason(error))
+      return end(failure: error.message)
     }
     passes[nodeId, default: []].insert(.ran(run, content), at: 0)
   }
@@ -292,7 +292,7 @@ final class AutomationTrial {
           passes[node.id] = [.held(read.taken.map(\.text))]
         }
       } catch {
-        return end(failure: Self.reason(error))
+        return end(failure: error.message)
       }
     }
     self.completed = completed
@@ -309,16 +309,5 @@ final class AutomationTrial {
     // 手段を止めるため。
     DispatchQueue.main.async { runner?.stopAll() }
     onEnd()
-  }
-
-  private static func reason(_ error: AutomationError) -> String {
-    switch error {
-    case .invalid(let message), .unavailable(let message): message
-    case .automationNotFound(let id): "automation not found: \(id)"
-    case .nodeNotFound(let id, let key): "node not found: \(key) in automation \(id)"
-    case .unreadable(let id, let reason): "automation \(id) cannot be read: \(reason)"
-    case .proposalNotFound, .proposalNotOpen, .flowing, .trialNotFound, .versionMismatch:
-      "\(error)"
-    }
   }
 }
