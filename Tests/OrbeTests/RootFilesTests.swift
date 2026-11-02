@@ -7,7 +7,8 @@ import XCTest
 /// 観測者の関心の和集合、一覧と新規作成、寿命。
 ///
 /// 壊れると何が起きるか。symlink 経由の綴りで管理外と判定されると git バッジが一切出ない。status が古いままだと
-/// 外で `git add` しても印が変わらない。baseline が追従しないとガターの差分が commit 後も残る。
+/// 外で `git add` しても印が変わらない。baseline が追従しないとガターの差分が commit 後も残る。判定が済んだ知らせが
+/// 届かないと、壊れた `.git` の根のソース管理パネルが「git 管理外」に替わらない。
 @MainActor
 final class RootFilesTests: OrbeTestCase {
   var repo: TempGitRepo!
@@ -23,6 +24,7 @@ final class RootFilesTests: OrbeTestCase {
     var versionChanges: [RootFiles.Version] = []
     var gitStateChanges = 0
     var nestedGitStateChanges = 0
+    var resolutions = 0
     var onVersionChange: (() -> Void)?
     func rootFiles(_ files: RootFiles, filesDidChange change: RootFiles.Change) {
       changes.append(change)
@@ -36,6 +38,7 @@ final class RootFilesTests: OrbeTestCase {
       gitStateChanges += 1
     }
     func rootFilesNestedGitStateDidChange(_ files: RootFiles) { nestedGitStateChanges += 1 }
+    func rootFilesDidResolve(_ files: RootFiles) { resolutions += 1 }
   }
 
   // MARK: - 根の判定
@@ -48,6 +51,7 @@ final class RootFilesTests: OrbeTestCase {
     XCTAssertTrue(files.isResolved)
     XCTAssertNotNil(files.repo)
     XCTAssertEqual(recorder.statusChanges, 1)
+    XCTAssertEqual(recorder.resolutions, 1)
     XCTAssertNil(files.status?.badge(of: "a.txt"), "clean")
   }
 
@@ -92,9 +96,12 @@ final class RootFilesTests: OrbeTestCase {
     let root = GitWorktreeRoot.normalizedPath(broken.path)
     XCTAssertEqual(GitWorktreeRoot.root(of: root), root, "前提: 根の規則はこの `.git` を根と見る")
     let files = RootFiles(root: root)
+    let recorder = Recorder()
+    files.addObserver(recorder)
     pumpMain(until: { files.isResolved }, "管理下かの判定")
     XCTAssertNil(files.repo)
     XCTAssertNil(files.status)
+    XCTAssertEqual(recorder.resolutions, 1)
   }
 
   /// 管理下かの判定の前に頼んだ取り直しの待ち手は、判定の後に始まる最初の取り直しが済んでから呼ばれ、管理外と分かれば
@@ -260,11 +267,13 @@ final class RootFilesTests: OrbeTestCase {
       pumpMain(
         until: { files.status?.entries[path]?.unstagedSubmodule == .content }, "\(path): 中身だけ")
       let gitStateChanges = recorder.gitStateChanges
+      let nestedGitStateChanges = recorder.nestedGitStateChanges
       XCTAssertTrue(repo.git(["-C", path, "commit", "-qam", "inside"]).isSuccess)
       pumpMain(
         until: { files.status?.entries[path]?.unstagedSubmodule == .commit(dirty: false) },
         "\(path): コミットが動いた")
-      XCTAssertGreaterThan(recorder.nestedGitStateChanges, 0)
+      XCTAssertGreaterThan(
+        recorder.nestedGitStateChanges, nestedGitStateChanges, "\(path): 入れ子の git dir が変わった")
       XCTAssertEqual(recorder.gitStateChanges, gitStateChanges, "親の git の状態は変わっていない")
       XCTAssertTrue(repo.git(["-C", path, "reset", "-q", "--soft", "HEAD~1"]).isSuccess)
       pumpMain(

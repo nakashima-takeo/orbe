@@ -20,7 +20,7 @@ struct ScmMenuAnchor: NSViewRepresentable {
 
     override func mouseDown(with event: NSEvent) {
       guard let menu = menuMaker?() else { return }
-      menu.popUp(positioning: nil, at: NSPoint(x: 0, y: isFlipped ? bounds.maxY + 2 : -2), in: self)
+      menu.popUp(positioning: nil, at: NSPoint(x: 0, y: -2), in: self)
     }
   }
 }

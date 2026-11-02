@@ -169,10 +169,7 @@ extension EditorDiffTests {
     try repo.write("head.txt", kept.joined(separator: "\n") + "\n")
     XCTAssertTrue(repo.git(["add", "head.txt"]).isSuccess)
     let modes = EditorDiffModeState()
-    let (tab, _) = tab()
-    tab.group.view.editor.configure(
-      translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
-      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(), diffModes: modes)
+    let (tab, _) = tab(modes: modes)
     for mode in [EditorDiff.Mode.inline, .side] {
       modes.select(mode)
       let diff = try tab.group.editor.openDiff(id("head.txt", .staged), as: .pinned)
@@ -272,11 +269,7 @@ extension EditorDiffTests {
       ("a\nb\nc\nd\ne\nf\ng\nh\n", "a\nb\nC\nd\nE\nf\ng\nh\n", "a\nX\nC\nd\nE\nf\nY\nY2\nh\n"),
       ("a\nb\nX\nY", "a\nb\nc", "a\nb"),
     ]
-    let (tab, _) = tab()
-    tab.group.view.editor.configure(
-      translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
-      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(),
-      diffModes: EditorDiffModeState(mode: .side))
+    let (tab, _) = tab(modes: EditorDiffModeState(mode: .side))
     for (index, (staged, working, written)) in cases.enumerated() {
       let path = "s\(index).txt"
       try repo.write(path, staged)
@@ -304,11 +297,7 @@ extension EditorDiffTests {
   /// 並列のまま作業ツリーのファイルが消えて新しい側の面が替わっても、左右の面はスクロールを共にし続ける。
   func testSideBySideKeepsSharingTheScrollWhenTheFileIsRemoved() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
-    let (tab, _) = tab()
-    tab.group.view.editor.configure(
-      translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
-      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(),
-      diffModes: EditorDiffModeState(mode: .side))
+    let (tab, _) = tab(modes: EditorDiffModeState(mode: .side))
     let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
     pumpMain(until: { diff.content == .ready && diff.oldSurface != nil }, "並列")
     try FileManager.default.removeItem(at: repo.url("a.txt"))
@@ -321,10 +310,7 @@ extension EditorDiffTests {
   func testTheFocusStaysInTheDiffWhenTheLeftSurfaceIsRebuilt() throws {
     try repo.write("a.txt", "one\nTWO\nthree\nfour\n")
     let modes = EditorDiffModeState(mode: .side)
-    let (tab, window) = tab()
-    tab.group.view.editor.configure(
-      translucency: ChromeTranslucency(), localization: LocalizationStore(language: .ja),
-      fontResolver: ChromeFontResolver(), sidebar: EditorSidebarState(), diffModes: modes)
+    let (tab, window) = tab(modes: modes)
     let diff = try tab.group.editor.openDiff(id("a.txt", .workingTree), as: .pinned)
     pumpMain(until: { diff.content == .ready && diff.oldSurface != nil }, "並列")
     let left = try XCTUnwrap(diff.oldSurface).responder
