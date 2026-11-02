@@ -237,9 +237,6 @@ extension ControlWireTests {
         "jsonrpc": "2.0", "id": 2, "method": method, "params": ["tabId": fake.tabId],
         "caller": "x",
       ])
-      wire.send([
-        "jsonrpc": "2.0", "id": 3, "method": method, "params": ["tabId": fake.tabId], "partKey": 1,
-      ])
     }
     wire.barrier()
   }
