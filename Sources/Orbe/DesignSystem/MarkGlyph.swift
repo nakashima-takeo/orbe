@@ -116,6 +116,8 @@ struct MapNodeGlyph: View {
     case failed
     case running
     case destination
+    /// ノード自身を止めている（沈んだ色の輪に停止の 2 本線。一覧の行の停止と同じ色と印）。
+    case paused
   }
 
   let look: Look
@@ -143,6 +145,20 @@ struct MapNodeGlyph: View {
       .frame(width: 11, height: 11)
     case .running:
       StatusGlyphView(kind: .working, size: 11)
+    case .paused:
+      Canvas { context, _ in
+        let ring = Path(ellipseIn: CGRect(x: 1, y: 1, width: 9, height: 9))
+        context.stroke(ring, with: .color(Color.theme.textMuted), lineWidth: 1.5)
+        var bars = Path()
+        for x in [4.4, 6.6] {
+          bars.move(to: CGPoint(x: x, y: 3.9))
+          bars.addLine(to: CGPoint(x: x, y: 7.1))
+        }
+        context.stroke(
+          bars, with: .color(Color.theme.textMuted),
+          style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
+      }
+      .frame(width: 11, height: 11)
     }
   }
 }
