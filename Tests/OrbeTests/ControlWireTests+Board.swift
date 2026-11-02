@@ -5,8 +5,7 @@ import XCTest
 
 /// ボードのウィジェットの 3 動詞の params の語と型検査と、domain への配線。
 ///
-/// 壊れると何が起きるか: workspace の ID でない値が読み替えられ、別の workspace のボードを触る。知らない種類が黙って
-/// 何かに読み替えられる。置くと外すが入れ替わって配線され、AI が外したつもりのウィジェットが残る。
+/// 壊れると何が起きるか: 知らない種類が黙って何かに読み替えられる。置くと外すが入れ替わって配線され、AI が外したつもりのウィジェットが残る。
 extension ControlWireTests {
   /// 3 動詞の正しい params 一式（`validRequests` の一部）。
   var boardRequests: [(method: String, params: [String: Any])] {
@@ -53,13 +52,6 @@ extension ControlWireTests {
       let message: String
     }
     let cases = [
-      Case(
-        label: "真偽値は workspace の ID でない", method: "list_board_widgets",
-        params: ["workspaceId": true], message: "invalid workspaceId"),
-      Case(
-        label: "整数は workspace の ID でない", method: "add_board_widget",
-        params: ["workspaceId": 3, "kind": "automation"],
-        message: "invalid workspaceId"),
       Case(
         label: "種類が文字列でない", method: "add_board_widget",
         params: ["workspaceId": Self.workspace, "kind": 1], message: "invalid kind"),

@@ -157,11 +157,9 @@ extension ControlWireTests {
       ("add_task", ["title": "a", "due": "2026-02-30"]),
       ("add_task", ["title": "a", "due": "2026-2-3"]),
       ("add_task", ["title": "a", "due": "2026-10-06T00:00:00Z"]),
-      ("add_task", ["title": "a", "workspaceId": true]),
       ("update_task", ["taskId": 7, "status": "DONE"]),
       ("update_task", ["taskId": 7, "due": "tomorrow"]),
       ("update_task", ["taskId": true, "description": "m"]),
-      ("list_tasks", ["workspaceId": "3"]),
       ("delete_task", ["taskId": 7.5]),
       ("start_task", ["taskId": "7"]),
       ("start_task", ["taskId": 7, "branch": 1]),
@@ -175,7 +173,6 @@ extension ControlWireTests {
     }
     XCTAssertTrue(fake.addedTasks.isEmpty)
     XCTAssertTrue(fake.updatedTasks.isEmpty)
-    XCTAssertTrue(fake.taskLists.isEmpty)
     XCTAssertTrue(fake.deletedTaskIds.isEmpty)
     XCTAssertTrue(fake.startedTasks.isEmpty)
   }

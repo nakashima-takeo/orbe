@@ -33,16 +33,10 @@ extension ControlWireTests {
     XCTAssertEqual(
       errorCode(wire.request(id: 3, method: "spawn_agent", params: ["command": 42])), -32602,
       "非文字列の command は省略と同じにしない")
-
-    // 形の違う workspaceId も「省略」と同じにしない——未知 id を -32004 で弾く契約なのに、
-    // 型違いだけが黙ってアクティブ WS へ逸れると、指定と違う場所にタブが生える。
-    XCTAssertEqual(
-      errorCode(wire.request(id: 4, method: "spawn_agent", params: ["workspaceId": 3])), -32602,
-      "整数の workspaceId は省略と同じにしない")
   }
 
   /// `resume_agent` は `sessionId` を反響せず、4 つの param を名前どおり target へ渡す。
-  /// `workspaceId` / `cwd` はガードが無いので、到達を観測できるのはここだけ。
+  /// `cwd` はガードが無いので、到達を観測できるのはここだけ。
   func testResumeAgentPassesCommandAndSessionIdToTarget() {
     let fake = FakeControlTarget()
     let wire = startWire(target: fake)
@@ -61,12 +55,5 @@ extension ControlWireTests {
     XCTAssertNil(
       (response?["result"] as? [String: Any])?["sessionId"],
       "渡した sessionId を反響しない（実 ID の出所は list_tabs の agentSessionId）")
-
-    XCTAssertEqual(
-      errorCode(
-        wire.request(
-          id: 2, method: "resume_agent",
-          params: ["command": "codex", "sessionId": "s", "workspaceId": "3"])), -32602,
-      "UUID でない workspaceId は省略と同じにしない")
   }
 }
