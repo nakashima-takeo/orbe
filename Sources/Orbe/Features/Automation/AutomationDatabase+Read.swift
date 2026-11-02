@@ -62,7 +62,7 @@ extension AutomationDatabase {
       WHERE node_id = ? AND created_at >= ? AND seq > ? AND seq <= ? ORDER BY seq
       """,
       [
-        p, Self.cutoff(now), .integer(Int64(all ? 0 : reading.read.event)),
+        p, try eventCutoff(of: up, now: now), .integer(Int64(all ? 0 : reading.read.event)),
         .integer(Int64(reading.ceiling.event)),
       ]
     ) { s in
@@ -110,7 +110,7 @@ extension AutomationDatabase {
         "SELECT count(*) FROM events WHERE node_id = ? AND seq > ? AND seq <= ? AND created_at >= ?",
         [
           .integer(Int64(up.rawValue)), .integer(Int64(from)), .integer(Int64(to)),
-          Self.cutoff(now),
+          try eventCutoff(of: up, now: now),
         ]
       ) { $0.int(at: 0) }.first ?? 0
     return to - from - alive
@@ -199,6 +199,7 @@ extension AutomationDatabase {
     var links = Set<String>()
     for edge in judge.inputs where edge.take == .all {
       let since = edge.maxAgeHours.map { now.addingTimeInterval(-TimeInterval($0) * 3600) }
+      let cutoff = try eventCutoff(of: edge.from, now: now)
       links.formUnion(
         try db.select(
           """
@@ -206,8 +207,7 @@ extension AutomationDatabase {
           WHERE node_id = ? AND created_at >= max(?, ?) AND link IS NOT NULL
           """,
           [
-            .integer(Int64(edge.from.rawValue)), Self.cutoff(now),
-            since.map(Self.instant) ?? Self.cutoff(now),
+            .integer(Int64(edge.from.rawValue)), cutoff, since.map(Self.instant) ?? cutoff,
           ]
         ) { $0.text(at: 0) ?? "" })
     }

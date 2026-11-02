@@ -62,9 +62,22 @@ extension WindowController {
     }
   }
 
-  func controlPauseAutomation(automationId: Int, paused: Bool) -> Result<Any, ControlError> {
+  func controlPauseAutomation(automationId: Int, nodeKey: String?, paused: Bool) -> Result<
+    Any, ControlError
+  > {
     automationResult { () throws(AutomationError) in
-      ["automation": try automationJSON(try automationRunner.pause(automationId, paused))]
+      let automation = automationStore.automations[try automationStore.index(automationId)]
+      var nodeId: AutomationNodeID?
+      if let nodeKey {
+        guard let node = automation.graph.node(key: nodeKey) else {
+          throw .nodeNotFound(automationId, nodeKey)
+        }
+        nodeId = node.id
+      }
+      return [
+        "automation": try automationJSON(
+          try automationRunner.pause(automationId, nodeId: nodeId, paused))
+      ]
     }
   }
 
@@ -171,14 +184,16 @@ extension WindowController {
     }
   }
 
-  /// 定義（ノードに `id` を添えた外の形）と版に、止めているか・ノードの今の鍵ごとの状態（走っているか・最新の回・次の時刻・読めば
-  /// 取る行の数・決まりを外した印。判定は今の定義が出した候補への人の判断の数も）を足す。判定のノードを持つ自動化にだけタスク
-  /// 候補の欄を付ける。
+  /// 定義（ノードに `id` を添えた外の形）と版に、止めているか・ノードの今の鍵ごとの状態（走っているか・ノード自身を止めているか・
+  /// 最新の回・次の時刻・読めば取る行の数・決まりを外した印。判定は今の定義が出した候補への人の判断の数も）を足す。判定のノードを
+  /// 持つ自動化にだけタスク候補の欄を付ける。
   private func automationJSON(_ automation: Automation) throws(AutomationError) -> [String: Any] {
     var nodeObjects: [String: Any] = [:]
     for node in automation.graph.nodes {
       let state = automation.state(node.id)
-      var object: [String: Any] = ["running": automationRunner.isRunning(automation.id, node.id)]
+      var object: [String: Any] = [
+        "running": automationRunner.isRunning(automation.id, node.id), "paused": state.paused,
+      ]
       if let last = state.runs.first {
         object["lastRun"] = AutomationRunWire.object(last, nodeKey: node.key)
       }
@@ -228,7 +243,7 @@ extension WindowController {
     ControlError(code: -32004, message: "automation not found: \(id)")
   }
 
-  /// ドメインエラーを制御エラーの語彙へ写す（未知・試走が無い → -32004・不正な値 → -32602・流している途中・使えない → -32000）。
+  /// ドメインエラーを制御エラーの語彙へ写す（未知・試走が無い → -32004・不正な値 → -32602・道の重なる流し・使えない → -32000）。
   /// 自動化を使えないセッションでは、どの動詞も中身を見る前に理由で断る。
   private func automationResult(_ body: () throws(AutomationError) -> [String: Any]) -> Result<
     Any, ControlError
@@ -247,11 +262,14 @@ extension WindowController {
       case .nodeNotFound(let id, let key):
         return .failure(
           ControlError(code: -32004, message: "node not found: \(key) in automation \(id)"))
-      case .flowing(let id):
+      case .flowing(let id, let nodeId):
+        let key = automationStore.automation(id)?.graph.node(nodeId)?.key ?? "\(nodeId)"
         return .failure(
           ControlError(
             code: -32000,
-            message: "automation \(id) is still running; wait until its nodes finish"))
+            message:
+              "automation \(id): node \"\(key)\" is already in a running flow; wait until it finishes"
+          ))
       case .unavailable(let message):
         return .failure(ControlError(code: -32000, message: message))
       case .trialNotFound(let id):

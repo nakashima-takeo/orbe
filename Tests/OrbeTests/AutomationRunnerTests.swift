@@ -44,7 +44,7 @@ final class AutomationRunnerTests: OrbeTestCase {
         recorded.append(
           store.automation(record.end.automationId)?.graph.node(record.end.nodeId)?.key ?? "?")
       },
-      defined: { _ in }, deleted: { _ in })
+      defined: { _, _ in }, deleted: { _, _ in })
     runner.now = { [unowned self] in now }
     runner.calendar = { Calendar(identifier: .gregorian) }
     runner.start()

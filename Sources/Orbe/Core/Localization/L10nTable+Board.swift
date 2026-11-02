@@ -45,7 +45,6 @@ extension L10n {
     .boardWorkspaceRemoved: ("削除済み", "Deleted"),
     .boardNodeNext: ("次回", "Next"),
     .boardNodeAgent: ("%1$@（%2$@）", "%1$@ (%2$@)"),
-    .boardNodeDefaultModel: ("既定のモデル", "default model"),
     .boardNodeToolMCP: ("%@（MCP）", "%@ (MCP)"),
     .boardNodeToolCommand: ("%@ コマンド", "%@ command"),
     .boardNodeOverwrite: ("上書き", "overwrite"),

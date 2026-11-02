@@ -78,7 +78,7 @@ updated: 2026-11-02
 - `orb automation run <id> [--node <key>] [--json]` … `--node` のノードまで流す（省けば終わりのノードすべてまで。止めた自動化も受ける）。回の終わりを待たずに返る。`--node` の値の欠けは usage エラー。
 - `orb automation try <id> [--from <key>]... [--to <key>]... [--stdin] [--limit <n>] [--json]` … [試走](../platform/automation.md#試走)を始め、写すのを待たずに返る（人向けの出力は始めた旨の 1 行）。`--from`・`--to` は繰り返して並べる。`--stdin` は標準入力の 1 行 1 JSON オブジェクト（空行は飛ばす）を入口に与える行にする。標準入力の 0 バイトと JSON オブジェクトでない行は usage エラー（exit 2）、範囲・行の検証は control が持つ（exit 1）。
 - `orb automation trial <id> [--wait] [--timeout-ms <ms>] [--json]` … 最新の試走をノードごとに 1 行（`鍵 状態 回`）で出す。回は最新の回を `list` の「前回」と同じ語で、止めた副作用・仕事は `held N rows`、行を与えた取得は `given N rows`。流し切れずに終わった試走は先頭に `failed: <理由>`。中身（下流へ渡す行・候補の案・渡るはずだった行・与えた行）は `--json` で読む。`--wait` で終わりまで待ち（既定 3600000 ms）、時間切れは exit 124。
-- `orb automation pause <id> [--json]` / `orb automation resume <id> [--json]` … 予定を止める・再開する。
+- `orb automation pause <id> [--node <鍵>] [--json]` / `orb automation resume <id> [--node <鍵>] [--json]` … 自動化を止める・再開する。`--node` でそのノードだけ（規則は `pause_automation`）。`--node` の値の欠けは usage エラー、知らない鍵は `-32004`。`list` の状態の列は自動化の停止だけを言う。
 - `orb automation rm <id> [--json]`
 
 ### board（ボードのウィジェット）

@@ -4,8 +4,8 @@ import Foundation
 ///
 /// 本番の DB を区切ってメモリの DB へ写し（`AutomationStore.Copy`）、写しの上に本番と同じ走らせ役を立てて、範囲の道だけを番人に
 /// 載せて流す。読む・確定・出す側の行・起こす決まり・結果の確かめは本番のコードのまま写しの上で動き、本番の DB には届かない。
-/// 本番の層は試走を知らない。試走の都合は、試走が自分の写しに掛ける操作（`AutomationTrial+Copy`）と、載せるノードの選び方だけで
-/// 表す:
+/// 本番の層は試走を知らない。試走の都合は、試走が自分の写しに掛ける操作（`AutomationTrial+Copy` と、走らせ役を立てる間だけ
+/// 写しの自動化を止めること）と、載せるノードの選び方だけで表す:
 ///
 /// - 副作用と仕事は止めるノードで、写しの上でも動かさない（載せない）。流しの終わりに、本番の読みで取るはずだった行を 1 回だけ
 ///   読んで返す。
@@ -14,8 +14,13 @@ import Foundation
 /// - `limit` は、道の根の取得の回が写しに確定した直後、受け手が読む前に、その回が足した新しい行のうち N 行を超えた分を写しから
 ///   取り除いて掛ける（与えた行は書く前に N 行に切る）。
 ///
-/// 写しの上では試走する自動化を止めた状態にする——予定の時刻と、登録時の起こしを持たせないため。ほかの自動化は写しに残るが
-/// 番人に載せないので動かない。候補の帳面は、試走する判定自身の候補だけが効く。流しが終わるか打ち切られたら写しを捨てる。
+/// 写しの上では、範囲の道のノードの間隔・cron の予定を手動にしてから走らせ役を立てる——予定の時刻で回さないため。流しの間は
+/// 自動化を止めない（止めると「届いたら」のノードも起きなくなり、本番の流しと違う動きになる）。一巡は間隔・cron・手動を同じ
+/// 「普段なら今すぐ動かないノード」として扱うので、流しの動きは本番と変わらない。走らせ役を立てる間（`start()`）だけ写しの自動化を
+/// 止めておく——立てるときの起こす決まりは前の契機の基準線を持たないので、本番では起こさない前からの未処理（失敗した回が残した
+/// 行など）で道の上の「届いたら」が流しより先に走り、本番で流したときより回が増えるため。止めた印は本番のまま写るので、止めた
+/// 自動化・止めたノードの試走は、本番でそれを流したときと同じに動く。ほかの自動化は写しに残るが番人に載せないので動かない。候補の
+/// 帳面は、試走する判定自身の候補だけが効く。流しが終わるか打ち切られたら写しを捨てる。
 final class AutomationTrial {
   struct Request: Equatable {
     /// 入口のノード。省けば、行き先とその祖先のうち入力の無いノードすべて。
@@ -132,7 +137,7 @@ final class AutomationTrial {
       return completed ? .held : .untouched
     }
     guard running else { return finalFlow?.isDone(nodeId) == true ? .done : .untouched }
-    if runner?.currentFlow(automationId)?.isDone(nodeId) == true { return .done }
+    if runner?.currentFlow(automationId, through: nodeId)?.isDone(nodeId) == true { return .done }
     return runner?.isRunning(automationId, nodeId) == true ? .running : .waiting
   }
 
@@ -184,18 +189,9 @@ final class AutomationTrial {
     range = try Self.range(of: automation, request)
     var given: Given?
     if let rows = request.rows { given = try Self.given(rows, in: range, of: automation.graph) }
-    if !automation.paused { _ = try store.setPaused(id, true, now: production.now()) }
+    try store.unschedule(Set(range.path.map(\.id)), of: id, now: production.now())
     self.store = store
-    if let given {
-      let rows = request.limit.map { Array(given.rows.prefix($0)) } ?? given.rows
-      try store.give(rows, as: given.writer, of: id, at: production.now())
-      if given.fetched {
-        givenFetch = given.entry
-        passes[given.entry] = [
-          .given(try store.latestRows(of: given.entry, in: id, count: rows.count))
-        ]
-      }
-    }
+    if let given, given.fetched { givenFetch = given.entry }
     let held = range.path.filter(Self.holds)
     let admitted = Set(range.path.map(\.id)).subtracting(held.map(\.id))
       .subtracting([givenFetch].compactMap { $0 })
@@ -203,17 +199,35 @@ final class AutomationTrial {
       admitted.contains(nodeId)
         && (range.to.contains(nodeId) || held.contains { $0.inputNodeIds.contains(nodeId) })
     }
-    guard !targets.isEmpty else { return finish(completed: true) }
-    let runner = AutomationRunner(
-      store: store, run: production.run, runSessions: production.runSessions,
-      workspaces: production.workspaces,
-      recorded: { [weak self] in self?.recorded($0) }, defined: { _ in }, deleted: { _ in },
-      admits: { $0 == id && admitted.contains($1) },
-      flowEnded: { [weak self] _, flow in self?.flowEnded(flow) })
-    runner.now = production.now
-    runner.calendar = production.calendar
-    self.runner = runner
-    runner.start()
+    // 走らせ役は行を与える前に立てる——与えた行で起動の起こす決まりが入口を起こすと、入口の回が流しの分にならない。
+    var runner: AutomationRunner?
+    if !targets.isEmpty {
+      let started = AutomationRunner(
+        store: store, run: production.run, runSessions: production.runSessions,
+        workspaces: production.workspaces,
+        recorded: { [weak self] in self?.recorded($0) }, defined: { _, _ in },
+        deleted: { _, _ in },
+        admits: { $0 == id && admitted.contains($1) },
+        flowEnded: { [weak self] _, flow in self?.flowEnded(flow) })
+      started.now = production.now
+      started.calendar = production.calendar
+      self.runner = started
+      let unpaused = store.automation(id)?.paused == false
+      if unpaused { _ = try store.setPaused(id, true, now: production.now()) }
+      started.start()
+      if unpaused { _ = try store.setPaused(id, false, now: production.now()) }
+      runner = started
+    }
+    if let given {
+      let rows = request.limit.map { Array(given.rows.prefix($0)) } ?? given.rows
+      try store.give(rows, as: given.writer, of: id, at: production.now())
+      if given.fetched {
+        passes[given.entry] = [
+          .given(try store.latestRows(of: given.entry, in: id, count: rows.count))
+        ]
+      }
+    }
+    guard let runner else { return finish(completed: true) }
     try runner.flow(id, through: admitted, to: targets)
   }
 

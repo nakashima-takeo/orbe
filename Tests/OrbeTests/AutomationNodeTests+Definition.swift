@@ -12,7 +12,7 @@ extension AutomationNodeTests {
     [
       "key": "slack", "name": "Slack: 自分宛",
       "trigger": ["kind": "cron", "expression": " */10 9-18 * * 1-5 "],
-      "agent": "claude", "tools": ["mcp__slack__search"], "instruction": "DM",
+      "agent": "claude", "model": "haiku", "tools": ["mcp__slack__search"], "instruction": "DM",
       "coverage": "newArrivals",
     ]
   }
@@ -38,7 +38,7 @@ extension AutomationNodeTests {
             action: AutomationActionDef(
               method: .agent(
                 AutomationNodeAgent(
-                  cli: "claude", model: nil, tools: ["mcp__slack__search"], instruction: "DM")),
+                  cli: "claude", model: "haiku", tools: ["mcp__slack__search"], instruction: "DM")),
               timeoutMinutes: nil, coverage: .newArrivals, destination: .nextNode),
             maxItems: nil),
           AutomationDefinition.Node(
@@ -51,7 +51,7 @@ extension AutomationNodeTests {
               timeoutMinutes: nil, coverage: nil, destination: .taskCandidates),
             maxItems: 30),
         ]),
-      "agent は省略で claude・モデルは省略のまま")
+      "agent は省略で claude")
   }
 
   func testAnIncompleteOrAmbiguousDefinitionIsRefusedWithItsPlace() {
@@ -68,6 +68,8 @@ extension AutomationNodeTests {
         "invalid notify: pass menuBar or notificationCenter"
       ),
       ("予定が無い", with("trigger", nil), "missing nodes[0].trigger"),
+      ("agent のモデルが無い", with("model", nil), "missing nodes[0].model"),
+      ("数でない出来事の日数", with("retentionDays", "long"), "invalid nodes[0].retentionDays"),
       (
         "ノードが 2 つの形", with("command", "gh api"),
         "invalid nodes[0]: pass either command (a shell command) or instruction (an agent)"

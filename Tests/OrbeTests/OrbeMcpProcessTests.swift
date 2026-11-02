@@ -84,7 +84,7 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     }
   }
 
-  /// 裏の agent の回の道具（札があるときだけ出す）の名前と、説明が写すページの既定・上限・大きさ・行の上限は、Orbe 本体の正本
+  /// 裏の agent の回の道具（札があるときだけ出す）の名前と、説明が写すページの既定・上限・大きさ・行と報告の上限は、Orbe 本体の正本
   /// （`AutomationRunSession.Tool`・ページの定数・`AutomationOutputs.rowKiB`）と同じで、`read_run_rows` は claude が結果を
   /// ファイルに書き出す閾値を上げる。orbe-mcp は別ターゲットなので、片側だけ直してもコンパイルもほかのテストも通り、その道具を
   /// 持つ役割の回が毎回「ツールが使えなかった」で失敗する。
@@ -108,7 +108,7 @@ final class OrbeMcpProcessTests: OrbeTestCase {
     }
     XCTAssertEqual(
       (read["_meta"] as? [String: Any])?["anthropic/maxResultSizeChars"] as? Int, 500_000)
-    for name in ["put_items", "put_rows"] {
+    for name in ["put_items", "put_rows", "put_report"] {
       let description = try tool(name)["description"] as? String ?? ""
       XCTAssertTrue(
         description.contains("at most \(AutomationOutputs.rowKiB) KiB"), "\(name): \(description)")
@@ -160,8 +160,8 @@ final class OrbeMcpProcessTests: OrbeTestCase {
       "sessionIds の上限を写す")
     XCTAssertTrue(
       description(try tool("list_automations")).contains(
-        "新しい順に \(AutomationNodeState.retainedRuns) 件まで。"),
-      "回の記録を残す件数を写す")
+        "新しい順に \(AutomationNodeState.recentRuns) 件まで。"),
+      "メモリに持つ直近の回の数を写す")
   }
 
   /// `tools/list` に出る全ツールが control の method として通る。ブリッジはツール名をそのまま method 名へ

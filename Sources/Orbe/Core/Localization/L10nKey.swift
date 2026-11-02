@@ -374,6 +374,7 @@ enum L10nKey: String, CaseIterable, Sendable {
   // MARK: - 自動化の共有の文（L10nTable+Automation）
   case automationNext
   case automationPaused
+  case automationNodesPaused
   case automationRunning
   case automationToday
   case automationEvery
@@ -669,7 +670,6 @@ enum L10nKey: String, CaseIterable, Sendable {
   case boardWorkspaceRemoved
   case boardNodeNext
   case boardNodeAgent
-  case boardNodeDefaultModel
   case boardNodeToolMCP
   case boardNodeToolCommand
   case boardNodeOverwrite
@@ -771,6 +771,13 @@ enum L10nKey: String, CaseIterable, Sendable {
   case settingsSoundCustomSameAsDone
   case settingsMenuBarNotificationDuration
   case settingsSecondsValue
+  case settingsRunsValueOne
+  case settingsRunsValueOther
+  case settingsDaysValueOne
+  case settingsDaysValueOther
+  case settingsAutomationRunRetentionCount
+  case settingsAutomationRunRetentionDays
+  case settingsAutomationEventRetentionDays
   case settingsUnset
   case settingsToggleOn
   case settingsToggleOff

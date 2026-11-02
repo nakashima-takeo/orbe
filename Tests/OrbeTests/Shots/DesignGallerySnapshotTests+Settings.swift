@@ -19,10 +19,9 @@ extension DesignGallerySnapshotTests {
       paletteSnapshot(settingsRoot.render, canvas: rootStage), size: rootStage,
       name: "palette_settings_root.png", dir: dir)
 
-    // 設定行の下端。一覧は上限 320 で内部スクロールに入るため、音量・オン/オフ・メニューバー通知の
-    // 表示時間（この後に言語行が続く）は選択をそこへ置かないと画に出ない。3 行のうち stepper 2 行
-    // （音量・表示時間）が同じ「ラベル␣␣値＋単位」で並ぶか、最長になる WS 上書き注記つきの行が
-    // 500 幅に収まるかを見る。
+    // 設定行の下端（この後に言語行が続く）。一覧は上限 320 で内部スクロールに入るため、音量からの
+    // 末尾の行は選択をそこへ置かないと画に出ない。stepper の行（音量・表示時間・自動化の保持）が
+    // 同じ「ラベル␣␣値＋単位」で並ぶか、最長になる WS 上書き注記つきの行が 500 幅に収まるかを見る。
     let settingsTail = settingsPaletteModel(overrideNotificationDuration: 180)
     settingsTail.render.selected = SettingsRegistry.rootOrder.count  // 設定行の末尾（scope 行が 0）
     try writePNG(
@@ -68,6 +67,17 @@ extension DesignGallerySnapshotTests {
       paletteSnapshot(settingsSoundCustom.render, canvas: cardSize), size: cardSize,
       name: "palette_settings_sound_custom.png", dir: dir)
 
+    // 自動化の保持の 3 行（回数・日数・追記の日数）。一覧は上限 320 で内部スクロールに入るので、選択を 3 行目（追記の日数）に
+    // 置いて 3 行を画に出し、単位の付いた値を両言語で見る。
+    for language in [Language.ja, .en] {
+      let automation = settingsPaletteModel(language: language)
+      automation.render.selected =
+        (SettingsRegistry.rootOrder.firstIndex { $0.id == .automationEventRetentionDays } ?? 0) + 1
+      try writePNG(
+        paletteSnapshot(automation.render, canvas: rootStage), size: rootStage,
+        name: "palette_settings_root_automation\(language == .ja ? "" : "_en").png", dir: dir)
+    }
+
     try renderPaletteFitSnapshots(dir: dir)
   }
 
@@ -105,7 +115,7 @@ extension DesignGallerySnapshotTests {
   private func settingsPaletteModel(
     overrideFontSize: Int? = nil, overrideTheme: ThemeMode? = nil,
     notificationSound: AgentSoundChoice? = nil, customDone: CustomSoundSource? = nil,
-    overrideNotificationDuration: Int? = nil
+    overrideNotificationDuration: Int? = nil, language: Language = .ja
   ) -> SettingsPaletteModel {
     var global = SettingsLayer()
     global[SettingKeys.fontSize] = 14
@@ -123,6 +133,6 @@ extension DesignGallerySnapshotTests {
       values: ScopedSettingsValues(global: global, override: override),
       fontNames: ["Menlo", "Monaco", "SF Mono"],
       agents: ["claude", "codex", "agy"],
-      localization: LocalizationStore(language: .ja))
+      localization: LocalizationStore(language: language))
   }
 }

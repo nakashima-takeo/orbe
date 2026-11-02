@@ -13,7 +13,8 @@ struct BoardAutomationNodeValue: Equatable {
   let id: AutomationNodeID
   let role: String
   let name: String
-  let running: Bool
+  /// 頭の状態（走っていれば回る輪、走っていなくてノード自身を止めていれば「一時停止中」）。
+  let state: BoardAutomationStanding.State?
   /// 頭の印。まだ動いていなければ nil。
   let mark: BoardRunMark?
   /// 実行方法・ツール・トリガー・保存・入力元・出力先・未処理・制限時間・workspace・作業ディレクトリ・次回の順。ノードに無い項目は
@@ -58,29 +59,29 @@ struct BoardAutomationNodeValue: Equatable {
 }
 
 extension BoardAutomationNodeValue {
-  /// `next` はノードが次に予定で回る時刻（止めていれば nil）、`open` はこの自動化の棚に出ている判断待ちの候補の数、`workspaces` は
-  /// 描くときの今の workspace（走る workspace の名前を引く）。
+  /// `next` はノードが次に予定で回る時刻（実効で止めていれば nil）、`open` はこの自動化の棚に出ている判断待ちの候補の数、
+  /// `workspaces` は描くときの今の workspace（走る workspace の名前を引く）。
   init?(
     _ automation: Automation, nodeId: AutomationNodeID, text: AutomationText, running: Bool,
     next: Date?, open: Int, workspaces: AutomationWorkspaces
   ) {
     guard let node = automation.graph.node(nodeId) else { return nil }
     let l10n = text.l10n
-    let state = automation.state(nodeId)
+    let nodeState = automation.state(nodeId)
     id = nodeId
     role = text.role(node.role)
     name = node.entity.name
-    self.running = running
-    mark = state.runs.first.map { $0.failed ? .failure : .success }
+    state = BoardAutomationStanding.State(running: running, paused: nodeState.paused)
+    mark = nodeState.runs.first.map { $0.failed ? .failure : .success }
     switch node.action.method {
     case .agent(let agent): body = agent.instruction
     case .command(let command): body = command.script
     }
     facts = Self.facts(
       automation, node, text: text, Outside(next: next, open: open, workspaces: workspaces))
-    breach = state.breach.map { Self.breach($0, text: text) }
-    lastText = Self.lastText(state.runs, text: text)
-    runs = BoardAutomationSummary.lines(state.runs, node: node, text: text)
+    breach = nodeState.breach.map { Self.breach($0, text: text) }
+    lastText = Self.lastText(nodeState.runs, text: text)
+    runs = BoardAutomationSummary.lines(nodeState.runs, node: node, text: text)
   }
 
   /// 印の回の記録から。読めない記録なら外れた件は空。
@@ -133,9 +134,7 @@ extension BoardAutomationNodeValue {
     }
     switch action.method {
     case .agent(let agent):
-      fact(
-        .boardNodeMethod,
-        l10n.format(.boardNodeAgent, agent.cli, node.model ?? l10n.string(.boardNodeDefaultModel)))
+      fact(.boardNodeMethod, l10n.format(.boardNodeAgent, agent.cli, agent.model))
       if !agent.tools.isEmpty {
         fact(.boardNodeTools, tools(agent.tools, l10n).joined(separator: separator))
       }
@@ -174,7 +173,8 @@ extension BoardAutomationNodeValue {
     if case .scheduled = entity.trigger {
       fact(
         .boardNodeNext,
-        automation.paused ? l10n.string(.automationPaused) : outside.next.map(text.stamp) ?? "")
+        automation.halted(node.id)
+          ? l10n.string(.automationPaused) : outside.next.map(text.stamp) ?? "")
     }
     return facts
   }

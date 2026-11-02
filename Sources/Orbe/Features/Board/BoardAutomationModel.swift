@@ -305,7 +305,7 @@ import SwiftUI
 
   @ObservationIgnored private var caretAtEnd = false
 
-  /// 地図の器のキー。サブメニューを開いている間はそちらへ回す。↑↓・⌘↵（ノードの段。`BoardAutomationHand.stroke` に任せる）・
+  /// 地図の器のキー。サブメニューを開いている間はそちらへ回す。↑↓・⌘↵ と space（ノードの段。`BoardAutomationHand.stroke` に任せる）・
   /// ↵ / →（「通知」の段）・← / esc のほかは何も起こさず、どれも握る（焦点をボードの外へ逃がさない）。
   func handleMapKey(_ press: KeyPress) -> KeyPress.Result {
     if let cursor = notifyCursor {

@@ -34,7 +34,7 @@ extension ControlWireTests {
     [
       "key": "slack", "name": "Slack: 自分宛",
       "trigger": ["kind": "cron", "expression": " */10 9-18 * * 1-5 "],
-      "agent": "claude", "tools": ["mcp__slack__search"], "instruction": "DM",
+      "agent": "claude", "model": "haiku", "tools": ["mcp__slack__search"], "instruction": "DM",
       "coverage": "newArrivals",
     ]
   }
@@ -102,6 +102,9 @@ extension ControlWireTests {
       -32602, "真偽値でない 1 を true と読まない")
     _ = wire.request(
       id: 4, method: "pause_automation", params: ["automationId": 2, "paused": false])
+    _ = wire.request(
+      id: 13, method: "pause_automation",
+      params: ["automationId": 2, "nodeKey": "judge", "paused": true])
     XCTAssertEqual(
       errorCode(
         wire.request(id: 9, method: "run_automation", params: ["automationId": 2, "nodeKey": 1])),
@@ -121,7 +124,8 @@ extension ControlWireTests {
       id: 12, method: "list_automation_runs",
       params: ["automationId": 2, "nodeKey": "judge", "before": 9, "limit": 5])
 
-    XCTAssertEqual(fake.pausedAutomations.map(\.paused), [false])
+    XCTAssertEqual(fake.pausedAutomations.map(\.paused), [false, true])
+    XCTAssertEqual(fake.pausedAutomations.map(\.nodeKey), [nil, "judge"])
     XCTAssertEqual(fake.ranAutomations.map(\.automationId), [2, 2])
     XCTAssertEqual(fake.ranAutomations.map(\.nodeKey), [nil, "judge"])
     XCTAssertEqual(fake.deletedAutomationIds, [2])

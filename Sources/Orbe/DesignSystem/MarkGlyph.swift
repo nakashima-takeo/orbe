@@ -109,13 +109,14 @@ struct MarkGlyph: View {
 }
 
 /// 地図のノードの点。普段は強調色の輪、最新の回が失敗なら赤の輪に斜めの十字、行き先は塗った点、走っている間は
-/// 点の代わりに回る輪。
+/// 点の代わりに回る輪、ノード自身を止めていれば沈んだ色の輪に停止の 2 本線（一覧の行の停止と同じ色と印）。
 struct MapNodeGlyph: View {
   enum Look: Equatable {
     case idle
     case failed
     case running
     case destination
+    case paused
   }
 
   let look: Look
@@ -143,6 +144,20 @@ struct MapNodeGlyph: View {
       .frame(width: 11, height: 11)
     case .running:
       StatusGlyphView(kind: .working, size: 11)
+    case .paused:
+      Canvas { context, _ in
+        let ring = Path(ellipseIn: CGRect(x: 1, y: 1, width: 9, height: 9))
+        context.stroke(ring, with: .color(Color.theme.textMuted), lineWidth: 1.5)
+        var bars = Path()
+        for x in [4.4, 6.6] {
+          bars.move(to: CGPoint(x: x, y: 3.9))
+          bars.addLine(to: CGPoint(x: x, y: 7.1))
+        }
+        context.stroke(
+          bars, with: .color(Color.theme.textMuted),
+          style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
+      }
+      .frame(width: 11, height: 11)
     }
   }
 }

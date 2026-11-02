@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 選んだノードのカード。頭（成否の印・役割・名前）・項目・指示文かコマンド・出力の形式エラーの枠・前回の報告か応答・このノードの
+/// 選んだノードのカード。頭（成否の印・役割・名前・走っていない間は止めていれば「一時停止中」）・項目・指示文かコマンド・出力の形式エラーの枠・前回の報告か応答・このノードの
 /// 実行履歴・ボタン（「⌘↵ 選んだノードまで実行」「修正を依頼」）。実行のボタンは地図の ⌘↵ と同じ手の操作を通る（キーと名前も
 /// そこから読む）。
 struct BoardAutomationNodeCard: View {
@@ -43,7 +43,7 @@ struct BoardAutomationNodeCard: View {
 
   private var head: some View {
     HStack(spacing: Theme.Space.step) {
-      if card.running {
+      if card.state == .running {
         StatusGlyphView(kind: .working, size: 10)
       } else if let mark = card.mark {
         BoardRunMarkGlyph(mark: mark)
@@ -55,6 +55,15 @@ struct BoardAutomationNodeCard: View {
         .font(Font(Theme.Typography.title.monospacedWeight(.semibold)))
         .foregroundStyle(Color.theme.textPrimary)
         .lineLimit(1)
+      if card.state == .paused {
+        HStack(spacing: 5) {
+          MarkGlyph(kind: .paused, color: Color.theme.textMuted)
+          Text(l10n.string(.automationPaused))
+        }
+        .font(Font.theme.codeSmall)
+        .foregroundStyle(Color.theme.textMuted)
+        .fixedSize()
+      }
     }
   }
 

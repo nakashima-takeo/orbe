@@ -122,6 +122,7 @@ extension DesignGallerySnapshotTests {
     try renderBoardNotifySnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardCronSnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardMapSnapshots(write: write, board: { board($0, row: $1) })
+    try renderBoardPausedNodeSnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardJudgeOutcomeSnapshots(write: write, board: { board($0, row: $1) })
     try renderBoardWorkspaceSnapshots(write: write)
   }

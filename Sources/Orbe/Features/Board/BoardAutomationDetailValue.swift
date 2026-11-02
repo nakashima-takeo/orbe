@@ -1,12 +1,22 @@
 import Foundation
 
-/// 地図のノードの点の見え方。
+/// 地図のノードの行の見え方（点・名前の色・状態の欄）。ノードの状態（走っている・止めている）を最新の回の成否より先に言う。
 enum BoardNodeLook: Equatable {
   case idle
   /// 最新の回が失敗。
   case failed
-  /// 走っている（点の代わりに回る輪）。
+  /// 走っている（点の代わりに回る輪と「実行中」）。
   case running
+  /// 走っていなくてノード自身を止めている（停止の 2 本線と「一時停止中」、沈んだ色の名前）。
+  case paused
+
+  init(_ state: BoardAutomationStanding.State?, failed: Bool) {
+    switch state {
+    case .running: self = .running
+    case .paused: self = .paused
+    case nil: self = failed ? .failed : .idle
+    }
+  }
 }
 
 /// 地図のノードの行。文言まで解いた値。
@@ -23,6 +33,7 @@ struct BoardMapNode: Equatable {
   let pending: Int?
   /// 出力の形式エラーの印があるか。
   let breached: Bool
+  /// 自動化を止めていても、ノード自身の印で決める。
   let look: BoardNodeLook
   /// 前回の列。まだ動いていなければ nil。
   let last: Last?
@@ -81,7 +92,7 @@ struct BoardAutomationDetailValue: Equatable {
   let notify: String
   /// 「workspace：orbe」。自動化に workspace の設定が無ければ nil。
   let workspace: String?
-  /// 「次回 16:50」「手動」。止めていれば nil（見出しは一時停止中を出す）。
+  /// 「次回 16:50」「手動」「ノードを一時停止中」（予定のあるノードがすべて止まっている）。自動化を止めていれば nil（見出しは一時停止中を出す）。
   let next: String?
   /// 直近の回の区分（全ノードを混ぜた新しい `stripLength` 回。古い回が左）。
   let strip: [BoardRunTone]
@@ -181,7 +192,9 @@ extension BoardAutomationDetailValue {
         : inputs.map { automation.graph.node($0)?.entity.name ?? "\($0)" }.joined(
           separator: l10n.string(.automationListSeparator)),
       pending: inputs.isEmpty ? nil : state.pending.count, breached: state.breach != nil,
-      look: running ? .running : latest?.failed == true ? .failed : .idle,
+      look: BoardNodeLook(
+        BoardAutomationStanding.State(running: running, paused: state.paused),
+        failed: latest?.failed == true),
       last: latest.map {
         BoardMapNode.Last(
           mark: $0.failed ? .failure : .success, at: text.recent($0.startedAt),

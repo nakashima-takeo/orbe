@@ -11,7 +11,7 @@ import XCTest
 ///
 /// 壊れると何が起きるか: Orbe を再起動しただけで全自動化が黙って回らなくなる。AI が自動化の棚を読んでも、元の項目がもう無い
 /// 候補が混ざる・ほかの自動化の候補につられて消える・外したノードを出どころとして読む。
-/// AI が判定の採用・見送りの数を読めない、または指示文を直す前の数で読む。流している自動化への `run_automation` が別の誤りに化ける。
+/// AI が判定の採用・見送りの数を読めない、または指示文を直す前の数で読む。
 /// 一覧の定義を書き換えて戻すと、予定やノードが別物になる。
 /// AI が候補の付け先や候補にした理由を読めない、または消えた workspace を付け先として読む。AI が試走を始めても結果を読めない、止めた副作用に
 /// 何が渡るはずだったかを確かめられず本番で初めて誤りに気づく、試走をまだ始めていないのに自動化が無いと読んで作り直す。
@@ -263,20 +263,6 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
   // MARK: - 拒否
 
-  /// 流している間は走っているノードが一覧にそう出て、`run_automation` は「流している途中」で断られる。
-  func testFlowingAutomationIsListedAsRunningAndRefusesAnotherRun() throws {
-    let wc = try launch()
-    let id = try set(wc, Self.definition(script: "sleep 30"))
-    addTeardownBlock { _ = wc.controlDeleteAutomation(automationId: id) }
-
-    _ = try success(wc.controlRunAutomation(automationId: id, nodeKey: nil))
-
-    let nodes = try XCTUnwrap(try listed(wc)[id]?["nodes"] as? [String: [String: Any]])
-    XCTAssertEqual(nodes["fetch"]?["running"] as? Bool, true)
-    XCTAssertEqual(nodes["judge"]?["running"] as? Bool, false)
-    XCTAssertEqual(code(wc.controlRunAutomation(automationId: id, nodeKey: "fetch")), -32000)
-  }
-
   /// 未知の ID は -32004、不変条件に反する定義は -32602 で、受信は変わらない。
   func testRejectionsMapToTheControlVocabulary() throws {
     let wc = try launch()
@@ -289,7 +275,8 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
     XCTAssertEqual(code(wc.controlRunAutomation(automationId: 99, nodeKey: nil)), -32004)
     XCTAssertEqual(code(wc.controlRunAutomation(automationId: id, nodeKey: "nope")), -32004)
-    XCTAssertEqual(code(wc.controlPauseAutomation(automationId: 99, paused: true)), -32004)
+    XCTAssertEqual(
+      code(wc.controlPauseAutomation(automationId: 99, nodeKey: nil, paused: true)), -32004)
     XCTAssertEqual(code(wc.controlDeleteAutomation(automationId: 99)), -32004)
     XCTAssertEqual(code(wc.controlListAutomationProposals(automationId: 99)), -32004)
     XCTAssertEqual(
@@ -303,8 +290,7 @@ final class WindowControllerAutomationControlTests: OrbeTestCase {
 
   // MARK: - 定義の往復
 
-  /// 一覧の定義は `set_automation` と同じ形で、そのまま読み戻すと同じ定義になる（AI が読んで直して戻せる）。省略した
-  /// モデルは省略のまま返る——解いた値で返すと、書き戻した定義のモデルが固定され、役割が変わっても既定が追従しない。
+  /// 一覧の定義は `set_automation` と同じ形で、そのまま読み戻すと同じ定義になる（AI が読んで直して戻せる）。
   func testListedDefinitionReadsBackAsTheSameDefinition() throws {
     let wc = try launch()
     let definition = AutomationDefinition(

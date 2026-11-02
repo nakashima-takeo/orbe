@@ -129,13 +129,13 @@ extension WindowControllerAutomationControlTests {
   }
 
   /// 過去の回は新しい順に `limit` 件ずつ読め、返した最後の記録の ID を `before` に渡すと続きが返る。ノードを指せばそのノードだけ。
-  /// ノードごとに残る回は 20 件。
+  /// 1 日ごとの回は、ノードごとに 20 件（既定の保持の回数。7 日以内の回はその内に入る）が残る。
   func testPastRunsArePagedNewestFirst() throws {
     let wc = try launch()
     let id = try set(wc, Self.definition())
     let start = Date()
     for n in 0..<25 {
-      let at = start.addingTimeInterval(TimeInterval(n))
+      let at = start.addingTimeInterval(TimeInterval(n * 86400))
       try wc.automationStore.record(
         id, nodeKey: "fetch", at: at, outcome: DesignSceneFixtures.fetched([]))
       try wc.automationStore.record(
@@ -167,5 +167,43 @@ extension WindowControllerAutomationControlTests {
     XCTAssertEqual(
       (nodes["judge"]?["lastRun"] as? [String: Any])?["recordId"] as? Int, ids.first,
       "一覧の lastRun は最新の回")
+  }
+
+  /// 回の記録を残す回数と日数は設定の値で、確定のたびに読む（AI が `list_automation_runs` で読める過去の回が変わる）。
+  func testTheRetentionSettingsDecideWhichPastRunsRemain() throws {
+    let wc = try launch()
+    let id = try set(wc, Self.definition())
+    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.automationRunRetentionCount, 2))
+    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.automationRunRetentionDays, 3))
+    let start = Date()
+    for day in 0..<6 {
+      try wc.automationStore.record(
+        id, nodeKey: "fetch", at: start.addingTimeInterval(TimeInterval(day * 86400)),
+        outcome: DesignSceneFixtures.fetched([]))
+    }
+
+    let runs = try XCTUnwrap(
+      success(
+        wc.controlListAutomationRuns(automationId: id, nodeKey: "fetch", before: nil, limit: nil)
+      )["runs"] as? [[String: Any]])
+    XCTAssertEqual(runs.count, 4, "最後の回から 3 日以内の 4 回が残る")
+  }
+
+  /// 出来事の日数の設定も保持の値に届き、効くのは Home の実効値だけ（ほかの workspace の上書きは効かない）。
+  func testTheRetentionReadsTheEventDaysOfHome() throws {
+    let wc = try launch()
+    wc.settingsStore.applyGlobal(SettingChange(SettingKeys.automationEventRetentionDays, 10))
+    XCTAssertEqual(wc.automationRetention.eventDays, 10)
+
+    let home = try XCTUnwrap(wc.store.homeIndex)
+    XCTAssertGreaterThan(wc.workspaces.count, 1, "前提: Home のほかに workspace がある")
+    var override = SettingsLayer()
+    override[SettingKeys.automationEventRetentionDays] = 60
+    for (index, workspace) in wc.workspaces.enumerated() where index != home {
+      workspace.settingsOverride = override
+    }
+    XCTAssertEqual(wc.automationRetention.eventDays, 10, "ほかの workspace の上書きは効かない")
+    wc.workspaces[home].settingsOverride = override
+    XCTAssertEqual(wc.automationRetention.eventDays, 60, "Home の上書きが効く")
   }
 }

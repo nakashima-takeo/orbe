@@ -8,8 +8,13 @@ import XCTest
 /// 候補が消えて戻らない。取得 → 処理 → 判定 の形で、取得が外した項目の候補が棚に残り続ける。処理がまとめた行の候補が、処理が
 /// 外しても棚に残り続ける。処理がまとめた行を書き換えるたびに、さばいた候補が戻る。直近の窓を毎回読む判定で、さばいた候補が次の回に戻る。
 /// 取得（今の集合）→ 処理（出来事）→ 判定 で、取得にまだある課題の候補が出来事の残す期間で消える。同じリンクの出来事が続けて届く
-/// 取得で、最初の出来事の残す期間で候補が消える。残す期間を過ぎた候補を人がタスクにできてしまう。
+/// 取得で、最初の出来事の残す期間で候補が消える。残す期間を過ぎた候補を人がタスクにできてしまう。出来事の残す日数を書いた
+/// ノードの候補が、その日数でなく設定の日数で下がる・残る。長い日数の窓を毎回読む判定で、さばいた候補が設定の日数の後に戻る。
 extension AutomationStoreTests {
+  /// 既定の設定で出来事を残す期間。
+  private static let eventRetention =
+    TimeInterval(AutomationRetention.standard.eventDays) * AutomationDatabase.day
+
   /// 取得 f1（`f1` の出力の性質）・f2（今の集合）→ 判定 の自動化の定義。`judgeFrom` は判定の入力。
   private func gathering(
     judgeFrom inputs: [String] = ["f1", "f2"], f1: AutomationCoverage = .currentSet
@@ -134,7 +139,7 @@ extension AutomationStoreTests {
   func testAProposalOfAnEventFromACurrentSetItemOutlivesTheEventWhileTheItemStays() throws {
     let store = AutomationStore()
     let id = try passedOnByAProcess(store)
-    let later = Self.at.addingTimeInterval(AutomationDatabase.retention + 60)
+    let later = Self.at.addingTimeInterval(Self.eventRetention + 60)
 
     try Self.fetch(store, id, [Self.item("a")], at: later)
     XCTAssertEqual(store.proposals.map(\.state), [.open])
@@ -239,7 +244,7 @@ extension AutomationStoreTests {
     let a = Self.item("a")
     try Self.fetch(store, id, [a])
     try Self.judge(store, id, proposing: [a])
-    let later = Self.at.addingTimeInterval(AutomationDatabase.retention + 60)
+    let later = Self.at.addingTimeInterval(Self.eventRetention + 60)
 
     try Self.fetch(store, id, [Self.item("b")], at: later)
     XCTAssertEqual(store.proposals, [])
@@ -259,6 +264,57 @@ extension AutomationStoreTests {
     XCTAssertEqual(try store.carried(id, "judge"), AutomationCarried())
   }
 
+  /// 判定が読んだ出来事の残す期間は、出したノードの出来事の残す日数で、書かなければ設定の日数——ノードの日数を過ぎた候補は
+  /// 設定の日数の内でも下がり、日数を書かないノードの候補は設定の日数まで残る。
+  func testAProposalOfAnEventIsWithdrawnByTheDaysOfTheNodeThatWroteIt() throws {
+    let store = AutomationStore(
+      opening: AutomationPersistence.open(retention: {
+        AutomationRetention(runCount: 20, runDays: 7, eventDays: 20)
+      }))
+    var short = Self.definition("10 日", coverage: .newArrivals)
+    short.nodes[0].retentionDays = 10
+    let shortId = try store.create(short, now: Self.at).id
+    let plainId = try store.create(Self.definition("設定", coverage: .newArrivals), now: Self.at).id
+    let a = Self.item("a")
+    for id in [shortId, plainId] {
+      try Self.fetch(store, id, [a])
+      try Self.judge(store, id, proposing: [a])
+    }
+    func states(_ id: Int) -> [AutomationProposal.State] {
+      store.proposals.filter { $0.judge == store.nodeId(id, "judge") }.map(\.state)
+    }
+
+    try Self.fetch(store, shortId, [], at: Self.at.addingTimeInterval(11 * AutomationDatabase.day))
+    XCTAssertEqual(states(shortId), [])
+    XCTAssertEqual(try store.carried(shortId, "judge").withdrawn, 1)
+    XCTAssertEqual(states(plainId), [.open], "設定の 20 日の内")
+
+    try Self.fetch(store, plainId, [], at: Self.at.addingTimeInterval(21 * AutomationDatabase.day))
+    XCTAssertEqual(states(plainId), [])
+  }
+
+  /// 出来事を毎回すべて読む判定は、さばいた候補を、出したノードの出来事の残す日数の内は設定の日数を過ぎても覚え、その出来事を
+  /// 判定の前で捨てる。
+  func testAJudgeReadingEveryRunRemembersAClosedProposalWithinTheDaysOfTheNodeThatWroteIt() throws {
+    let store = AutomationStore()
+    var definition = Self.definition(coverage: .newArrivals)
+    definition.nodes[0].retentionDays = 60
+    definition.nodes[1].from = [AutomationDefinition.Input(nodeKey: "fetch", take: .all)]
+    let id = try store.create(definition, now: Self.at).id
+    let a = Self.item("a")
+    try Self.fetch(store, id, [a])
+    try Self.judge(store, id, proposing: [a])
+    try store.dismiss(try XCTUnwrap(store.proposals.first).id, now: Self.at)
+    let later = Self.at.addingTimeInterval(Self.eventRetention + AutomationDatabase.day)
+
+    try Self.fetch(store, id, [], at: later)
+
+    XCTAssertEqual(store.proposals.map(\.state), [.dismissed])
+    let read = try XCTUnwrap(
+      store.read(store.nodeId(id, "judge"), of: id, baseline: nil, now: later))
+    XCTAssertEqual(read.taken, [])
+  }
+
   /// 判定が読んだ出来事が残す期間を過ぎても、判定のもう 1 つの入力の今有効な項目にリンクがあれば下げない。その入力も外すと下がる。
   func testAnExpiredEventKeepsItsProposalWhileAnotherInputOfTheJudgeStillHasItsLink() throws {
     let store = AutomationStore()
@@ -269,7 +325,7 @@ extension AutomationStoreTests {
     }
     try Self.judge(store, id, proposing: [a])
     XCTAssertEqual(store.proposals.map(\.originNodeId), [store.nodeId(id, "f1")], "前提: 出来事の行の候補")
-    let later = Self.at.addingTimeInterval(AutomationDatabase.retention + 60)
+    let later = Self.at.addingTimeInterval(Self.eventRetention + 60)
 
     try store.record(id, nodeKey: "f1", at: later, outcome: DesignSceneFixtures.fetched([]))
     XCTAssertEqual(store.proposals.map(\.state), [.open], "f2 にまだあるので残る")
@@ -298,10 +354,10 @@ extension AutomationStoreTests {
     try Self.judge(store, id, proposing: [followUp], at: again)
     XCTAssertEqual(store.proposals.map(\.state), [.open], "前提: 同じリンクの候補は 1 つ")
 
-    try Self.judge(store, id, at: Self.at.addingTimeInterval(AutomationDatabase.retention + 60))
+    try Self.judge(store, id, at: Self.at.addingTimeInterval(Self.eventRetention + 60))
     XCTAssertEqual(store.proposals.map(\.state), [.open])
 
-    try Self.fetch(store, id, [], at: again.addingTimeInterval(AutomationDatabase.retention + 60))
+    try Self.fetch(store, id, [], at: again.addingTimeInterval(Self.eventRetention + 60))
     XCTAssertEqual(store.proposals, [])
     XCTAssertEqual(try store.carried(id, "judge").withdrawn, 1)
   }
@@ -320,7 +376,7 @@ extension AutomationStoreTests {
     XCTAssertThrowsError(
       try store.accept(
         proposal.id, into: tasks, workspace: nil,
-        now: Self.at.addingTimeInterval(AutomationDatabase.retention + 60))
+        now: Self.at.addingTimeInterval(Self.eventRetention + 60))
     ) { XCTAssertEqual($0 as? AutomationError, .proposalNotFound(proposal.id)) }
     XCTAssertEqual(tasks.tasks.count, count)
     XCTAssertEqual(store.proposals, [])

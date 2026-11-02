@@ -33,17 +33,27 @@ extension WindowController {
     } else {
       return nil
     }
-    let home = store.homeIndex.map { workspaces[$0] }
     return ChromeNotification(
       notice: .automation(
         AutomationNotice(
           automationId: id, name: automation.name, text: line, failed: tone == .failed)),
-      settings: settingsStore.effective(override: home?.settingsOverride),
+      settings: homeSettings,
       systemNotification: notify == .notificationCenter
         ? SystemNotificationContent(
-          identifier: Self.systemNotificationIdentifier(id), title: automation.name, body: line,
+          identifier: Self.systemNotificationIdentifier(id, nodeId), title: automation.name,
+          body: line,
           automationId: id)
         : nil)
+  }
+
+  /// Home の実効設定。自動化は workspace に属さないので、自動化の設定（知らせ・保持）はどれもこれを読む。
+  private var homeSettings: EffectiveSettings {
+    settingsStore.effective(override: store.homeIndex.flatMap { workspaces[$0].settingsOverride })
+  }
+
+  /// 今の保持の値（Home の実効設定から）。
+  var automationRetention: AutomationRetention {
+    AutomationRetention(homeSettings)
   }
 
   /// 「連絡 の出力の形式エラー（2 件）— agent が修正済み」。
@@ -54,20 +64,31 @@ extension WindowController {
       localization.string(record.failed ? .automationBreachFailed : .automationBreachPassed))
   }
 
-  /// 通知センターでの自動化の通知の識別子。自動化ごとに 1 つなので、新しい回が前の通知を差し替える。
-  private static func systemNotificationIdentifier(_ id: Int) -> String { "automation.\(id)" }
+  /// 通知センターでの自動化の通知の識別子。ノードごとに 1 つで、同じノードの新しい回が前の通知を差し替える（ノードの回は互いの
+  /// 後継ではないので、別のノードの通知は残す）。ノードの ID で作る——鍵は変えても同じノードなので。
+  private static func systemNotificationIdentifier(_ id: Int, _ nodeId: AutomationNodeID) -> String
+  {
+    "automation.\(id).\(nodeId)"
+  }
 
-  /// 定義を書いた（走らせ役から。AI の口でもボードでも通る）。通知先が通知センターなら、書いたその場で OS に許可を問う
-  /// （未確認のときだけ）。
-  func automationDefined(_ id: Int) {
+  /// 定義を書いた（走らせ役から。AI の口でもボードでも通る）。外したノードの通知を通知センターから取り下げる。通知先が通知センター
+  /// なら、書いたその場で OS に許可を問う（未確認のときだけ）。
+  func automationDefined(_ id: Int, removed nodeIds: [AutomationNodeID]) {
+    withdrawSystemNotifications(id, nodeIds)
     guard automationStore.automation(id)?.notify == .notificationCenter else { return }
     systemNotifier.requestAuthorizationIfUndetermined()
   }
 
-  /// 自動化を消した（走らせ役から。どの経路で消しても通る）。その自動化の通知を通知センターから取り下げ、試走を止める。
-  func automationDeleted(_ id: Int) {
-    systemNotifier.remove(identifier: Self.systemNotificationIdentifier(id))
+  /// 自動化を消した（走らせ役から。どの経路で消しても通る）。その全ノードの通知を通知センターから取り下げ、試走を止める。
+  func automationDeleted(_ id: Int, nodeIds: [AutomationNodeID]) {
+    withdrawSystemNotifications(id, nodeIds)
     automationTrials.discard(id)
+  }
+
+  private func withdrawSystemNotifications(_ id: Int, _ nodeIds: [AutomationNodeID]) {
+    for nodeId in nodeIds {
+      systemNotifier.remove(identifier: Self.systemNotificationIdentifier(id, nodeId))
+    }
   }
 
   /// 通知センターの通知のクリック。ピルのクリックと同じく、前面化してから Home のボードでその自動化を開く。

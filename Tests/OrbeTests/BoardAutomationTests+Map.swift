@@ -61,4 +61,44 @@ extension BoardAutomationTests {
     send(Key.enter, "\r", .command, to: window)
     XCTAssertEqual(model.refusal, .automationErrRunning)
   }
+
+  /// 地図のノードの段の space はそのノードだけを止める ⇄ 再開し（押し続けても 1 回）、地図の行とカードの頭に「一時停止中」、
+  /// 予定のノードのカードの「次回」に「一時停止中」が出る。フッターは選んだノードの印で名前が替わる。自動化は止めない。
+  func testSpaceInTheMapPausesOnlyTheSelectedNode() throws {
+    let model = board(DesignSceneFixtures.boardMapSamples())
+    let automation = model.automation
+    let window = mount(model)
+    down(window)
+    let id = try XCTUnwrap(automation.selectedAutomation?.id)
+    right(window)
+    XCTAssertEqual(automation.selectedNodeKey, "github", "前提")
+    let l10n = LocalizationStore(language: .ja)
+    let now = automation.runner.now()
+    func mapNode() throws -> BoardMapNode? {
+      let detail = try XCTUnwrap(
+        automation.detail(id, text: automation.text(l10n, now: now), now: now))
+      return detail.rows.compactMap { row -> BoardMapNode? in
+        guard case .node(let node) = row.content else { return nil }
+        return node
+      }.first { $0.id == automation.store.nodeId(id, "github") }
+    }
+    let pause = BoardAutomationHand.Operation.toggleNodePause
+    XCTAssertTrue(automation.hints.contains(BoardKeyHint(pause.key, .automationPause)))
+
+    send(Key.space, " ", to: window)
+    send(Key.space, " ", repeating: true, to: window)
+    let github = try XCTUnwrap(automation.store.automation(id)).state(key: "github")
+    XCTAssertTrue(github.paused, "押し続けても 1 回だけ")
+    XCTAssertEqual(automation.store.automation(id)?.paused, false, "自動化は止めない")
+    XCTAssertEqual(try mapNode()?.look, .paused)
+    let paused = try XCTUnwrap(card(automation))
+    XCTAssertEqual(paused.state, .paused)
+    XCTAssertEqual(
+      paused.facts.first { $0.label == .boardNodeNext }?.value.map(\.text), ["一時停止中"])
+    XCTAssertTrue(automation.hints.contains(BoardKeyHint(pause.key, .automationResume)))
+
+    send(Key.space, " ", to: window)
+    XCTAssertEqual(automation.store.automation(id)?.state(key: "github").paused, false)
+    XCTAssertEqual(try mapNode()?.look, .idle)
+  }
 }

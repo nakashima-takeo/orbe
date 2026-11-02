@@ -1,19 +1,25 @@
 import Foundation
 
-/// 流す——ノードを指して、そこに至る道の上のノードを 1 回ずつ回す（`AutomationFlow`）。
+/// 流す——ノードを指して、そこに至る道の上のノードを 1 回ずつ回す（`AutomationFlow`）。同じ自動化の一巡は、道が交わらない限り
+/// いくつでも同時に走る。道は指したノードとその祖先すべてなので、交わらない一巡は互いの入力に触れず、見届ける契機もぶつからない。
 extension AutomationRunner {
-  /// 流している途中か（一巡があるか）。
+  /// 流している途中の一巡があるか。
   func isFlowing(_ id: Int) -> Bool {
     flows[id] != nil
   }
 
-  /// 流している途中の一巡。
-  func currentFlow(_ id: Int) -> AutomationFlow? {
-    flows[id]
+  /// 道が `nodes` のどれかを通る一巡があるか。
+  func isFlowing(_ id: Int, through nodes: Set<AutomationNodeID>) -> Bool {
+    flows[id]?.contains { !$0.path.isDisjoint(with: nodes) } ?? false
   }
 
-  /// 指したノードまで流す（止めた自動化も受ける）。流している途中なら断る。指すノードが無ければ一巡を置かない（置くと終わりの
-  /// 知らせが来ず、以後ずっと断る）。
+  /// ノードを通る一巡（高々 1 つ）。
+  func currentFlow(_ id: Int, through nodeId: AutomationNodeID) -> AutomationFlow? {
+    flows[id]?.first { $0.path.contains(nodeId) }
+  }
+
+  /// 指したノードまで流す（止めた自動化・止めたノードも受ける）。指すノードが無ければ一巡を置かない（置くと終わりの知らせが来ず、
+  /// 以後ずっと断る）。
   func flow(_ id: Int, to target: AutomationFlow.Target) throws(AutomationError) {
     try checkAvailable()
     let automation = store.automations[try store.index(id)]
@@ -27,24 +33,29 @@ extension AutomationRunner {
     case .judges:
       targets = automation.graph.judges.map(\.id)
     }
-    guard flows[id] == nil else { throw .flowing(id) }
     guard !targets.isEmpty else { return }
     let path = Set(targets + targets.flatMap { automation.graph.ancestors(of: $0).map(\.id) })
     try flow(id, through: path, to: targets)
   }
 
-  /// 道（`path`）を渡して、その上を `targets`（空でなく、どれも道の上）まで流す。流している途中なら断る。
+  /// 道（`path`）を渡して、その上を `targets`（空でなく、どれも道の上）まで流す。同じ自動化の終わっていない一巡の道と交われば、
+  /// 重なったノードのうち定義の順で最初のものを言って断る。
   func flow(_ id: Int, through path: Set<AutomationNodeID>, to targets: [AutomationNodeID])
     throws(AutomationError)
   {
     try checkAvailable()
-    guard let graph = store.automation(id)?.graph else { throw .automationNotFound(id) }
-    guard flows[id] == nil else { throw .flowing(id) }
-    let (flow, wake) = AutomationFlow.start(through: path, to: targets, in: graph) {
+    guard let automation = store.automation(id) else { throw .automationNotFound(id) }
+    let busy = flows[id]?.reduce(into: Set<AutomationNodeID>()) { $0.formUnion($1.path) } ?? []
+    if let overlap = automation.graph.nodes.first(where: {
+      path.contains($0.id) && busy.contains($0.id)
+    }) {
+      throw .flowing(id, overlap.id)
+    }
+    let (flow, wake) = AutomationFlow.start(through: path, to: targets, in: automation) {
       isRunning(id, $0)
     }
     // 「今すぐ」の中で契機が同期に始まり終わりうるので、起こす前に一巡を置く。
-    flows[id] = flow
+    flows[id, default: []].append(flow)
     for nodeId in wake { scheduler.runNow(id: Self.key(id, nodeId)) }
   }
 }

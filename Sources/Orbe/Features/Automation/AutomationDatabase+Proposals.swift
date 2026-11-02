@@ -122,8 +122,8 @@ extension AutomationDatabase {
 
   /// 判断待ちの候補のうち、判定が読んだ行が残す期間を過ぎた（`now` の時点で）出来事のもの。
   func openProposals(readingEventsExpiredAt now: Date) throws -> [OpenProposal] {
-    try selectOpen(
-      "q.event_id IN (SELECT id FROM events WHERE created_at < ?)", [Self.cutoff(now)])
+    let expired = expiredEvents(at: now)
+    return try selectOpen("q.event_id IN (\(expired.sql))", expired.values)
   }
 
   /// 項目 `items` のうち、今の版がリンクを持つものの、ノードとリンク。
@@ -157,7 +157,8 @@ extension AutomationDatabase {
     if try liveLinks(of: nodeId).contains(link) { return true }
     let events = try db.select(
       "SELECT id FROM events WHERE node_id = ? AND link = ? AND created_at >= ? ORDER BY id DESC",
-      [.integer(Int64(nodeId.rawValue)), .text(link), Self.cutoff(now)], { $0.int(at: 0) })
+      [.integer(Int64(nodeId.rawValue)), .text(link), try eventCutoff(of: nodeId, now: now)],
+      { $0.int(at: 0) })
     for event in events where try !lineage(of: .event(event)).contains(where: \.invalid) {
       return true
     }
@@ -167,10 +168,11 @@ extension AutomationDatabase {
   /// 行が、時刻 `now` に残す期間を過ぎた出来事か。
   private func expired(_ row: AutomationRowRef, now: Date) throws -> Bool {
     guard case .event(let id) = row else { return false }
+    let expired = expiredEvents(at: now)
     return
       !(try db.select(
-        "SELECT 1 FROM events WHERE id = ? AND created_at < ?",
-        [.integer(Int64(id)), Self.cutoff(now)],
+        "SELECT 1 FROM events WHERE id = ? AND id IN (\(expired.sql))",
+        [.integer(Int64(id))] + expired.values,
         { _ in true }
       ).isEmpty)
   }
