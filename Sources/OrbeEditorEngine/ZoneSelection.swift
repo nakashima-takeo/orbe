@@ -121,7 +121,7 @@ extension MetalTextSurface {
     transaction?.writes.append { $0.zoneSelection = material }
   }
 
-  /// 絵の差し込みの文の選択の焦点の色を、面の焦点に合わせる。
+  /// 面に焦点があるかに合わせて、絵の差し込みの文の選択の地の色を替える。
   func zoneSelectionFocusDidChange() {
     guard zoneSelection != nil else { return }
     publishZoneSelection()

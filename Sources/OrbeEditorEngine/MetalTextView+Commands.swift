@@ -2,8 +2,8 @@ import AppKit
 
 /// 標準のセレクタ（NSStandardKeyBindingResponding）→ 編集のコマンドの表。割り当ては macOS のキー割り当てに任せ、意味は
 /// VS Code の同じ役のコマンドに合わせる（→ `EditCommands`）。`perform(#selector(...))` で呼ばれても効く。コマンドは
-/// 主の場の編集係が行う。スクロールだけのセレクタは編集の状態に触れず、面がスクロールの位置を置く。主が絵の差し込みの
-/// 文の間は `copy:`・`selectAll:`・`cancelOperation:` だけが効き、ほかは何もしない（メニューでも無効）。表に無い
+/// 主の場の編集係が行う。スクロールだけのセレクタは編集の状態に触れず、面がスクロールの位置を置く。絵の差し込みの文が
+/// 主の間は `copy:`・`selectAll:`・`cancelOperation:` だけが効き、ほかは何もしない（メニューでも無効）。表に無い
 /// セレクタは AppKit の既定（responder chain で探し、無ければ警告音）。
 extension MetalTextView {
   /// コマンドは面自身の入力（打鍵の中で届けば打鍵の処理の終わり、メニューから届けばその場で出す）。
@@ -73,7 +73,7 @@ extension MetalTextView {
 
   // MARK: - スクロールだけ
 
-  /// スクロールだけのキー（主が絵の差し込みの文の間は効かない）。
+  /// スクロールだけのキー（絵の差し込みの文が主の間は効かない）。
   private func scroll(_ body: (MetalTextSurface) -> Void) {
     guard let surface, surface.primary != .zoneText else { return }
     surface.inputScope { body(surface) }
@@ -221,7 +221,7 @@ extension MetalTextView {
 
 extension MetalTextView: NSMenuItemValidation {
   /// 変換中の取り消す・やり直すは、変換の取り消しとしていつも有効。コピー・カットはいつも有効（選択が空なら行を写す）。
-  /// ペーストは平文かファイルがあるときだけ。主が絵の差し込みの文の間は、コピー（選択があるとき）と全部を選ぶだけが
+  /// ペーストは平文かファイルがあるときだけ。絵の差し込みの文が主の間は、コピー（選択があるとき）と全部を選ぶだけが
   /// 有効。主の場が読むだけなら、文を変える項目は無効。
   func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
     if surface?.primary == .zoneText {

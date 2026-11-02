@@ -11,13 +11,15 @@ enum Primary: Equatable {
   case field(AnyHashable)
 }
 
-/// 点の下の行き先。絵の差し込みの上では、入力欄 → 押せる場所 → 選べる文 → 何も描いていない所 の順に当たる。
+/// 点の下の行き先。絵の差し込みの上では、入力欄 → 押せる場所 → 選べる文 の順に当たる。どれにも当たらない所（箱・画像・
+/// 選べない字の行の上を含む）は、絵の差し込みの、ほかに当たらない所。
 enum SurfaceTarget {
   case body
   case field(EditingSite)
   case button(ZoneEntry, ZoneHits.Button)
   /// 絵の差し込みの選べる文のまとまり `text` の位置 `offset`。
   case zoneText(ZoneEntry, text: AnyHashable, offset: Int)
+  /// 絵の差し込みの、ほかに当たらない所。
   case zoneSpace(ZoneEntry)
 }
 

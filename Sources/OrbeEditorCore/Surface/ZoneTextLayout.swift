@@ -23,7 +23,7 @@ public enum ZoneTextLayout {
     }
   }
 
-  /// 1 行に組んだもの——組んだ行と、行頭の余白（見た目で左端の見え方の左の余白。字はこの幅だけ右から始まる）。
+  /// 1 行に組んだもの——組んだ行と、行頭の余白（見た目で行の左端に来る見え方の、左の余白。字はこの幅だけ右へずらして置く）。
   public struct Typeset {
     public let line: CTLine
     public let inset: CGFloat
@@ -145,8 +145,8 @@ public enum ZoneTextLayout {
     let spans: [Range<CGFloat>]
   }
 
-  /// 1 行に組む。字の x 範囲はグリフの位置と送り幅から引き、余白の送りを置いた字の塊では、その送りが乗るグリフ（右端が
-  /// 最も右のもの）から送りを引く（位置の境は余白の真ん中に来るので使わない）。
+  /// 1 行に組む。字の x 範囲はグリフの位置と送り幅から引き、余白を置いた字の塊では、その余白が乗るグリフ（右端が
+  /// 最も右のもの）から余白を引く（位置の境は余白の真ん中に来るので使わない）。
   private static func laid(_ units: [UInt16], styles: [ZoneTextStyle], rightToLeft: Bool) -> Laid {
     let set = padded(units, styles: styles, rightToLeft: rightToLeft)
     let line = CTLineCreateWithAttributedString(set.string)
@@ -177,7 +177,7 @@ public enum ZoneTextLayout {
     return Laid(line: line, inset: set.inset, width: set.inset + max(0, width), spans: spans)
   }
 
-  /// 余白を置いた属性文字列と、行頭の余白と、送りを置いた字の塊（文の範囲）ごとの送り。
+  /// 余白を置いた属性文字列と、行頭の余白と、字の塊（文の範囲）ごとに置いた余白。
   private struct Padded {
     let string: CFAttributedString
     let inset: CGFloat
@@ -256,7 +256,7 @@ public enum ZoneTextLayout {
     return attributed(units, styles: styles, kerns: kerns, rightToLeft: rightToLeft)
   }
 
-  /// 見え方と送り `kerns`（字の塊ごと）を当て、段落の向きを `rightToLeft` に決めた属性文字列。
+  /// 見え方と、字の塊ごとの余白 `kerns` を当て、段落の向きを `rightToLeft` に決めた属性文字列。
   private static func attributed(
     _ units: [UInt16], styles: [ZoneTextStyle], kerns: [Range<Int>: CGFloat], rightToLeft: Bool
   ) -> CFAttributedString {
@@ -348,7 +348,7 @@ extension ZoneTextLayout {
     }
   }
 
-  /// 組んだ行のグリフ 1 つ——見え方（`styles` の添字）・文の位置・x 範囲（行の左端から。送りを含む）。
+  /// 組んだ行のグリフ 1 つ——見え方（`styles` の添字）・文の位置・x 範囲（行の左端から。置いた余白を含む）。
   private struct Glyph {
     let style: Int?
     let offset: Int

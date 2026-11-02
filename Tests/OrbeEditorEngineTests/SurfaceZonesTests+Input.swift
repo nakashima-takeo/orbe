@@ -5,7 +5,7 @@ import XCTest
 @testable import OrbeEditorEngine
 
 /// 絵の差し込みの入力欄と文の選択——主（キーと IME の行き先）の遷移と、入力欄の場の打鍵・IME・undo、絵の差し込みの文の
-/// 選択とコピー、主が絵の差し込みの文の間に効くコマンド。壊れると、返信の打鍵がソースへ入る・返信の undo が本文を
+/// 選択とコピー、絵の差し込みの文が主の間に効くコマンド。壊れると、返信の打鍵がソースへ入る・返信の undo が本文を
 /// 戻す・コメントを選んでいる間のキーで本文が変わる・入力欄が伸びるコマに字が遅れる。
 extension SurfaceZonesTests {
   /// 返信の入力欄つきのスレッドを行 4 の前に置いた面。
@@ -178,9 +178,9 @@ extension SurfaceZonesTests {
     XCTAssertEqual(shown.minY, origin.y - 36, accuracy: 0.5, "スクロールに付いて動く")
   }
 
-  /// 絵の差し込みの文をドラッグで選ぶと主が絵の差し込みの文になり、⌘C で選んだまとまりの文の部分が写る。主が
-  /// 絵の差し込みの文の間は ⌘C・⌘A・Esc だけが効き、打鍵や貼るは本文にも入力欄にも効かない（メニューも無効）。Esc で
-  /// 本文へ戻り、選択は解ける。
+  /// 絵の差し込みの文をドラッグで選ぶと主が絵の差し込みの文になり、⌘C で選んだまとまりの文の部分が写る。
+  /// 絵の差し込みの文が主の間は ⌘C・⌘A・Esc だけが効き、打鍵や貼るは本文にも入力欄にも効かない（メニューも無効）。
+  /// Esc で本文へ戻り、選択は解ける。
   func testSelectingZoneTextAndCopying() throws {
     let setup = try threaded()
     let (opened, thread, field) = (setup.opened, setup.thread, setup.field)
@@ -278,7 +278,7 @@ extension SurfaceZonesTests {
   }
 
   /// 絵の差し込みの中で字を落とせるのは入力欄だけで、落とせば入力欄に入って主が入力欄になる。絵の差し込みの文・押せる
-  /// 場所・何も描いていない所へは落とせず、本文も入力欄も変わらない。
+  /// 場所・ほかに当たらない所へは落とせず、本文も入力欄も変わらない。
   func testDroppingTextGoesIntoAFieldButNotElsewhereInAZone() throws {
     let setup = try threaded()
     let (opened, thread, field) = (setup.opened, setup.thread, setup.field)

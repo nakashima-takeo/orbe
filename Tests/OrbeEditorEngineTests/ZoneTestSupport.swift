@@ -1,7 +1,7 @@
 import AppKit
 import OrbeEditorCore
 
-/// 高さの決まった絵の差し込み——いっぱいに広がる箱 1 つ（色 `color`）。
+/// 高さの決まった絵の差し込み——絵の差し込みいっぱいの箱 1 つ（色 `color`）。
 @MainActor
 final class BoxZone: SurfaceZone {
   var height: CGFloat

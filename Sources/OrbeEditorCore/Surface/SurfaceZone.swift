@@ -1,15 +1,15 @@
 import AppKit
 
-/// 絵の差し込み——面の縦の並びの、文書の行と行の間に置く、載せる側が描く中身（→ `RowInsertion.Content.zone`。PR の
-/// スレッドなど）。面は絵の差し込みを view でなく絵として受け、本文と同じ 1 コマに描く。絵の差し込みと本文がずれて動く
-/// 余地は無い。
+/// 絵の差し込み——面の縦の並びの、文書の行と行の間に置き、載せる側が絵を描くもの（→ `RowInsertion.Content.zone`。PR の
+/// スレッドなど）。面は載せる側から view でなく絵（`ZonePicture`）を受け、本文と同じ 1 コマに描く。絵の差し込みと本文が
+/// ずれて動く余地は無い。
 ///
 /// 面は本文の区画の幅を渡して中身を問い（置いたとき・幅が変わったとき・`TextSurface.redrawZone` のとき）、返った高さを
 /// 絵の差し込みの高さにする。面は配置の仕組みを持たない。要素の座標は、載せる側が絵の差し込みの中の pt で決める（字の
 /// 折り返しは `ZoneTextLayout`）。押せる場所のホバーと押下は `zone(_:)` で載せる側へ知らせる。
 @MainActor
 public protocol SurfaceZone: AnyObject {
-  /// 幅 `width`（本文の区画の幅、pt）で組んだ中身。
+  /// 幅 `width`（本文の区画の幅、pt）で組んだ絵。
   func picture(width: CGFloat) -> ZonePicture
   /// 押せる場所の知らせ。載せる側は見た目を変えるなら `redrawZone` で描き直させる。
   func zone(_ event: ZoneEvent)
@@ -24,7 +24,7 @@ public enum ZoneEvent: Equatable {
   case pressed(AnyHashable)
 }
 
-/// 絵の差し込みの中身——高さと、要素の列（重ね順は種類で決まる → `ZoneElement`）と、選べる文のまとまり。座標は、
+/// 載せる側が描く絵——高さと、要素の列（重ね順は種類で決まる → `ZoneElement`）と、選べる文のまとまり。座標は、
 /// 絵の差し込みの左上を原点にした pt（y は下向き）。
 public struct ZonePicture {
   public var height: CGFloat

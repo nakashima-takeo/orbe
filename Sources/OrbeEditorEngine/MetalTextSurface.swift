@@ -70,7 +70,7 @@ final class MetalTextSurface: TextSurface {
   /// 入力欄の場（入力欄の id で引く）と、場に振る通し番号。
   var fields: [AnyHashable: EditingSite] = [:]
   var nextFieldSerial = 0
-  /// 主（→ `Primary`）と、主が絵の差し込みの文の間の、その文の選択。
+  /// 主（→ `Primary`）と、絵の差し込みの文が主の間の、その文の選択。
   var primary = Primary.body
   var zoneSelection: ZoneTextSelection?
   /// ポインタの下の押せる場所と、ホバーを知らせている最中か。

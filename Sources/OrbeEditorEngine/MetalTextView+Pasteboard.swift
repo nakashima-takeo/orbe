@@ -96,7 +96,7 @@ extension MetalTextView {
 
   // MARK: - サービス
 
-  /// 平文を送る（選択があるとき）と受ける（主が編集の場のとき）。主が絵の差し込みの文の間は送るだけ。
+  /// 平文を送る（選択があるとき）と受ける（主が編集の場のとき）。絵の差し込みの文が主の間は送るだけ。
   override func validRequestor(
     forSendType sendType: NSPasteboard.PasteboardType?,
     returnType: NSPasteboard.PasteboardType?
@@ -119,7 +119,7 @@ extension MetalTextView {
   /// 右クリック・⌃クリックのメニュー（中身と文言は載せる側が組む）。先に変換を確定し、焦点を取り、点の下の行き先を
   /// 主にする。本文と入力欄は、選択の外で押せばキャレットをそこへ動かし、選択の中（両端を含む）なら選択を保つ。
   /// 絵の差し込みの選べる文は、選択の外で押せば押した点を選び、メニューはコピーだけにする。絵の差し込みの
-  /// 何も描いていない所は本文を主にするだけで、押せる場所にはメニューを出さない。
+  /// ほかに当たらない所は本文を主にするだけで、押せる場所にはメニューを出さない。
   override func menu(for event: NSEvent) -> NSMenu? {
     let point = convert(event.locationInWindow, from: nil)
     guard let surface, let host = surface.host, overview.area(at: point) == nil else { return nil }

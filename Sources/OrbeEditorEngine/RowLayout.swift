@@ -17,8 +17,8 @@ import OrbeEditorCore
 ///
 /// y を返す式は `scale` を取り、装置の画素（pt × 倍率）でも同じ式で引ける（描画スレッドは px で、main は pt で引く）。
 struct RowLayout: Sendable {
-  /// 塊の中身。絵の差し込みは載せる側の値の同一性で持ち、絵の差し込みそのものと中身は main だけが持つ（描く材料は材料の
-  /// 箱の `zones`）。
+  /// 塊の中身（差し込んだ行の列か、絵の差し込み）。絵の差し込みは載せる側の値の同一性で持ち、絵の差し込みそのものと、
+  /// それが返した絵（`ZonePicture`）は main だけが持つ（描く材料は材料の箱の `zones`）。
   enum Content: Sendable {
     case lines([InsertedLine])
     case zone(ObjectIdentifier)

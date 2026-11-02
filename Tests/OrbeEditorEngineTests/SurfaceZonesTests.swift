@@ -6,7 +6,7 @@ import XCTest
 
 /// 絵の差し込み（載せる側が描く中身を、本文と同じコマに描く差し込み）——中身を問う幅と高さ・本文と同じ位置への描き
 /// 方・幅や中身の変化での問い直し・上端の影と横スクロールバーとの重ね順・点の下の行き先（入力欄・押せる場所・選べる
-/// 文・何も描いていない所）・押せる場所のホバーと押下。壊れると、PR のスレッドが本文の行に重なる・ずれて動く・幅を
+/// 文・ほかに当たらない所）・押せる場所のホバーと押下。壊れると、PR のスレッドが本文の行に重なる・ずれて動く・幅を
 /// 変えても高さが中身に合わない・ボタンが効かない。
 @MainActor
 final class SurfaceZonesTests: EngineTestCase {
@@ -100,8 +100,8 @@ final class SurfaceZonesTests: EngineTestCase {
     XCTAssertNotEqual(shot.rgb(x, bar.maxY - 1), [255, 255, 255], "横スクロールバーの縁が絵の差し込みの上に出る")
   }
 
-  /// 点の下の行き先——絵の差し込みの上では、入力欄 → 押せる場所 → 選べる文 → 何も描いていない所。絵の差し込みの外は
-  /// 本文。何も描いていない所の当たりは次の文書の行の行頭で、絵の差し込みの字には当たらない。
+  /// 点の下の行き先——絵の差し込みの上では、入力欄 → 押せる場所 → 選べる文 → ほかに当たらない所。絵の差し込みの外は
+  /// 本文。ほかに当たらない所の当たりは次の文書の行の行頭で、絵の差し込みの字には当たらない。
   func testPointsOverAZoneTargetFieldsButtonsTextAndSpace() throws {
     let opened = try hostedRows()
     let surface = opened.surface
@@ -125,7 +125,7 @@ final class SurfaceZonesTests: EngineTestCase {
     XCTAssertEqual(text, ThreadZone.commentText)
     XCTAssertEqual(offset, 0)
     let space = point(CGPoint(x: 10, y: 10))
-    guard case .zoneSpace = surface.target(at: space) else { return XCTFail("絵の差し込みの何も描いていない所") }
+    guard case .zoneSpace = surface.target(at: space) else { return XCTFail("絵の差し込みのほかに当たらない所") }
     XCTAssertEqual(surface.hit(space)?.offset, opened.document.text.lineStart(4))
     XCTAssertNil(surface.character(at: space))
     guard case .body = surface.target(at: point(CGPoint(x: 10, y: -5))) else {

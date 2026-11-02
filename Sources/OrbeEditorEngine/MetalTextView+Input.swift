@@ -95,9 +95,9 @@ extension MetalTextView: @preconcurrency NSTextInputClient {
     return site.character(at: local)?.location ?? NSNotFound
   }
 
-  /// 点（view の座標）の下の編集の場が主の場ならそれ（主でない場や、絵の差し込みの入力欄でない所の上なら nil）。IME は
-  /// 答えの位置を他の口と同じ主の場の座標として読むので、主でない場の位置は答えない——変換中に別の場の字を押したとき、
-  /// その位置が変換中の範囲と数の上で重なって IME に押下を取られない。
+  /// 点（view の座標）の下の編集の場が主の場ならそれ（主でない場の上や、絵の差し込みの上で入力欄でない所なら nil）。
+  /// IME は答えの位置を他の口と同じ主の場の座標として読むので、主でない場の位置は答えない——変換中に別の場の字を押した
+  /// とき、その位置が変換中の範囲と数の上で重なって IME に押下を取られない。
   private func primarySite(at point: CGPoint) -> EditingSite? {
     guard let surface, let primary = surface.primarySite else { return nil }
     let site: EditingSite? =
