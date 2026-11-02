@@ -4,8 +4,8 @@ import Foundation
 ///
 /// 本番の DB を区切ってメモリの DB へ写し（`AutomationStore.Copy`）、写しの上に本番と同じ走らせ役を立てて、範囲の道だけを番人に
 /// 載せて流す。読む・確定・出す側の行・起こす決まり・結果の確かめは本番のコードのまま写しの上で動き、本番の DB には届かない。
-/// 本番の層は試走を知らない。試走の都合は、試走が自分の写しに掛ける操作（`AutomationTrial+Copy`）と、載せるノードの選び方だけで
-/// 表す:
+/// 本番の層は試走を知らない。試走の都合は、試走が自分の写しに掛ける操作（`AutomationTrial+Copy` と、走らせ役を立てる間だけ
+/// 写しの自動化を止めること）と、載せるノードの選び方だけで表す:
 ///
 /// - 副作用と仕事は止めるノードで、写しの上でも動かさない（載せない）。流しの終わりに、本番の読みで取るはずだった行を 1 回だけ
 ///   読んで返す。
@@ -212,10 +212,10 @@ final class AutomationTrial {
       started.now = production.now
       started.calendar = production.calendar
       self.runner = started
-      let quiet = store.automation(id)?.paused == false
-      if quiet { _ = try store.setPaused(id, true, now: production.now()) }
+      let unpaused = store.automation(id)?.paused == false
+      if unpaused { _ = try store.setPaused(id, true, now: production.now()) }
       started.start()
-      if quiet { _ = try store.setPaused(id, false, now: production.now()) }
+      if unpaused { _ = try store.setPaused(id, false, now: production.now()) }
       runner = started
     }
     if let given {

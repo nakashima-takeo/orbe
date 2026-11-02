@@ -23,7 +23,8 @@ struct AutomationFlow {
     /// 道の上の上流で、まだ終わっていないもの。
     case waiting(Set<AutomationNodeID>)
     /// 道の上の上流がすべて終わった。見届けるノードなら走っていなければ終わり、そうでなければ次に始まる契機を一巡の分として
-    /// 受け取る（走っていなければ起こす）。
+    /// 受け取る（走っていなければ起こす）。実効で止めた根でない「届いたら」のノードは、回の終わりに基準線より新しい上流の行が
+    /// 無ければ、その回を一巡の分に数えて終わる。
     case ready
     /// 流し始めに走っていた入力の無いノードの回を一巡の分にした。次の終わりがその回のもの。
     case adopted
@@ -78,17 +79,16 @@ struct AutomationFlow {
   /// ノードの契機が始まった。一巡の分として受け取ったら真（走らせ役はその契機を `flowed` として覚え、終わりに渡す）。誰が
   /// 始めた回かは問わない。
   mutating func started(_ nodeId: AutomationNodeID, in automation: Automation) -> Bool {
-    guard steps[nodeId] == .ready, !arrives(nodeId, in: automation) else { return false }
+    guard steps[nodeId] == .ready, !watched(nodeId, in: automation) else { return false }
     steps[nodeId] = .taken
     return true
   }
 
-  /// ノードの契機が終わった（`flowed` は一巡の分として受け取った契機か、`covered` はその契機が始まりの時点で上流の最後の行まで
-  /// 読んでいたか——その契機の基準線より新しい上流の行が無い）。返すのは今すぐ起こすノード。受け取ったノードは一巡の分の契機の
-  /// 終わりだけを数える——番人は回の終わりの中で次の予定の回を同期に始めうるので、古い回の終わりが受け取った回の始まりより後に
-  /// 届く。一巡の分でない回の終わりは、起こすノードを邪魔していた回が終わったとして、走っていなければ起こし直す。ただし根でない
-  /// 「届いたら」のノード（見届けている間に止めたノード）は、その回が上流の最後の行まで読んでいれば見届けた回を一巡の分に数える
-  /// ——普段の起こす決まりと同じく、読んだ行で起こし直さない（失敗した回の行も読み直さない）。
+  /// ノードの契機が終わった（`flowed` は一巡の分として受け取った契機か、`covered` は終わりの時点で、その契機の基準線より新しい
+  /// 上流の行が無いか）。返すのは今すぐ起こすノード。受け取ったノードは一巡の分の契機の終わりだけを数える——番人は回の終わりの
+  /// 中で次の予定の回を同期に始めうるので、古い回の終わりが受け取った回の始まりより後に届く。一巡の分でない回の終わりは、起こす
+  /// ノードを邪魔していた回が終わったとして、走っていなければ起こし直す。ただし実効で止めた根でない「届いたら」のノードは、
+  /// `covered` ならその回を一巡の分に数える——普段の起こす決まりと同じく、読んだ行で起こし直さない（失敗した回の行も読み直さない）。
   mutating func ended(
     _ nodeId: AutomationNodeID, flowed: Bool, covered: Bool, in automation: Automation,
     running: (AutomationNodeID) -> Bool
@@ -98,7 +98,7 @@ struct AutomationFlow {
       return finish(nodeId, automation, running)
     case .taken where flowed:
       return finish(nodeId, automation, running)
-    case .ready where covered && watchesArrival(nodeId, in: automation):
+    case .ready where covered && nonRootArrival(nodeId, in: automation):
       return finish(nodeId, automation, running)
     case .ready:
       return advance(nodeId, automation, running)
@@ -131,16 +131,16 @@ struct AutomationFlow {
     _ nodeId: AutomationNodeID, _ automation: Automation, _ running: (AutomationNodeID) -> Bool
   ) -> [AutomationNodeID] {
     guard !running(nodeId) else { return [] }
-    return arrives(nodeId, in: automation) ? finish(nodeId, automation, running) : [nodeId]
+    return watched(nodeId, in: automation) ? finish(nodeId, automation, running) : [nodeId]
   }
 
   /// 普段の決まりで起きるのを見届けるノードか（根でない、実効で止めていない「届いたら」のノード）。
-  private func arrives(_ nodeId: AutomationNodeID, in automation: Automation) -> Bool {
-    watchesArrival(nodeId, in: automation) && !automation.halted(nodeId)
+  private func watched(_ nodeId: AutomationNodeID, in automation: Automation) -> Bool {
+    nonRootArrival(nodeId, in: automation) && !automation.halted(nodeId)
   }
 
-  /// 根でない「届いたら」のノードか。
-  private func watchesArrival(_ nodeId: AutomationNodeID, in automation: Automation) -> Bool {
+  /// 根でない「届いたら」のノードか（止めているかは問わない）。
+  private func nonRootArrival(_ nodeId: AutomationNodeID, in automation: Automation) -> Bool {
     !roots.contains(nodeId) && automation.graph.node(nodeId)?.entity.trigger == .arrival
   }
 }
