@@ -155,8 +155,8 @@ let automationUsage = """
              reads with its tools can make it use a writing tool it was given.
              It needs a model; it is cut off after 10 minutes, or
              3 minutes without output. It gives its report through Orbe's
-             tool, kept as the result of the run (the first line shows on the
-             board's heading and in the notification); when there is nothing
+             tool, kept as the result of the run (the first line shows in the
+             notification); when there is nothing
              to do it says so and delivers nothing. A run fails when the agent
              says it cannot do it, ends without a result, crashes, hits its
              limit, or a named MCP tool is unavailable. A failed run, or
@@ -170,8 +170,9 @@ let automationUsage = """
              report, an agent run that had something to do), or on the first
              of consecutive failed runs, the automation's name and the result
              line show with a sound: in the menu bar, or in macOS Notification
-             Center. Notification Center keeps one notification per
-             automation; a new run replaces it. Setting notificationCenter
+             Center. Notification Center keeps one notification per node;
+             the node's next run replaces it (other nodes' notifications
+             stay). Setting notificationCenter
              makes macOS ask for Orbe's notification permission if it is not
              decided yet; without permission, the run shows in the menu bar.
              Clicking either opens the automation on Home's board. Runs that
@@ -188,8 +189,9 @@ let automationUsage = """
   with task candidates the next run also processes every fetched item
   again.
   run starts a run now (paused automations too) and returns at once; the
-  result shows up in list. pause stops only the schedule; resume restarts
-  it.
+  result shows up in list. pause stops only what Orbe starts on its own
+  (schedules and arriving rows), not a running run nor run; --node pauses
+  one node. resume restarts it.
   try runs the nodes on a copy and returns at once (nothing saved or notified;
   side effects are held). trial reads it per node; --wait exits 124 on timeout.
   list prints one automation per line: id, state (active / paused /

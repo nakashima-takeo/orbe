@@ -18,7 +18,7 @@
 ```
 
 - `coverage`: 取得結果がその時点の全体（担当の未完了・レビュー待ち）なら `currentSet`。新着だけ（DM・メンション）なら `newArrivals` にし、コマンドは環境変数 `ORBE_SINCE` 以降を取る。
-- 判定の agent は `model` を省く（sonnet で走る）。
+- 判定の agent には `model` を書く（書かない定義は断られる）。
 
 ### 判定の指示文
 
@@ -46,7 +46,7 @@
  "sink": {"kind": "taskCandidates"}}
 ```
 
-取得元の agent は `model` を省く（haiku で走る）。`request` に、取る範囲と 1 項目の作り方（id・link・body・time に何を入れるか）を書く。
+取得元の agent にも `model` を書く。`request` に、取る範囲と 1 項目の作り方（id・link・body・time に何を入れるか）を書く。
 
 ## 型 3: 定時にまとめて報告する
 

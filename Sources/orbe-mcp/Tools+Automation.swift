@@ -84,13 +84,13 @@ private let definitionShape =
   + "model は必ず書く（書かない定義は断られる）。上限は経過 10 分・出力の無い時間 3 分。"
   + "Orbe は「したことを報告にして道具で渡す（64 KiB まで）・1 行目は要約、することが無い・できないときはその旨を道具で申告する」を指示するので、"
   + "request には何をしてほしいかだけを書く。"
-  + "渡した報告がその回の結果として残り（1 行目がボードの見出しと通知に出る）、することが無いと申告した回は何も出さなかった回になる（知らせない）。"
+  + "渡した報告がその回の結果として残り（1 行目が通知に出る）、することが無いと申告した回は何も出さなかった回になる（知らせない）。"
   + "できないと申告した回・結果を渡さずに終えた回・agent が落ちた回・上限で止まった回・名指しの MCP ツールが揃わなかった回は失敗になる。"
   + "失敗した回と、Orbe が終わる前に止まった回は、次の回でもう一度 agent が起きる（投稿が二重になりうる）。"
   + "定義を書き換えても全件を見直さない。request は automations.json に残るので秘密を書かない。"
   + "notify は任意で、値は \"menuBar\" か \"notificationCenter\"（省略すると知らせない）。どの出力先にも付けられ、出力先へ何かを出した回"
   + "（候補を受けた・コマンドが走った・報告があった・agent がすることが無いと申告せずに終えた）と、失敗が続くなら最初の失敗の回に、自動化の名前と結果の 1 行が出て音が鳴る。"
-  + "menuBar はメニューバーに、notificationCenter は macOS の通知センターに出す。通知センターの通知は自動化ごとに 1 つで、新しい回が前の通知を差し替える。"
+  + "menuBar はメニューバーに、notificationCenter は macOS の通知センターに出す。通知センターの通知はノードごとに 1 つで、同じノードの次の回が前の通知を差し替える（別のノードの通知は残る）。"
   + "notificationCenter を書くと、Orbe の通知の許可がまだ決まっていなければ、その場で OS が許可を問う。"
   + "許可が無い回はメニューバーに出る。"
   + "どちらも押すと Home のボードでその自動化が開く。何も出さなかった回は知らせない。"
@@ -105,9 +105,8 @@ let automationTools: [[String: Any]] = [
     (
       "description",
       "自動化（外の出どころから項目を予定どおり取り、処理の段で絞り・判断して、出力先へ出す仕組み）を ID 順に返す {automations}。"
-        + "各要素は automationId・version（書き換えに添える定義の版）・definition（set_automation と同じ定義。各ノードに id が付く。"
-        + "省略したモデルは省略のまま）・"
-        + "paused（予定を止めているか）・running（回が走っているか）・nextRunAt（次に予定で回る時刻。止めていれば無い）・lastRunAt・"
+        + "各要素は automationId・version（書き換えに添える定義の版）・definition（set_automation と同じ定義。各ノードに id が付く）・"
+        + "paused（自動化を止めているか）・running（回が走っているか）・nextRunAt（次に予定で回る時刻。止めていれば無い）・lastRunAt・"
         + "nodes のノードの鍵ごとに lastRun（最新の 1 回の記録。過去は list_automation_runs）。定義を読めない自動化は "
         + "{automationId, version, definition（行から組めた分）, definitionError（理由）} で、直すか消す。"
         + "出力先がタスク候補の自動化だけが taskCandidates {openProposals"
@@ -188,7 +187,7 @@ let automationTools: [[String: Any]] = [
     (
       "description",
       "自動化を今すぐ 1 回回す。すぐ返り、結果は list_automations の runs に載る。止めた自動化も回せる（有効にする前の試し打ち）。"
-        + "回が走っている間は断られる（running を見る）。"
+        + "通るノードが終わっていない流しと重なれば断られる。"
     ),
     (
       "inputSchema",
@@ -249,8 +248,8 @@ let automationTools: [[String: Any]] = [
     ("name", "pause_automation"),
     (
       "description",
-      "自動化の予定を止める（paused: true）・再開する（false）。止めるのは予定だけで、走っている回は最後まで走り、"
-        + "run_automation は受ける。止めた自動化の取得結果も覚えているので、候補は下がらない。"
+      "自動化を止める（paused: true）・再開する（false）。nodeKey でそのノードだけ。止めるのは Orbe が自分から動かすこと"
+        + "（予定・届いた行での起動）だけで、走っている回と run_automation は止めない。止めた自動化の取得結果も覚えているので、候補は下がらない。"
     ),
     (
       "inputSchema",

@@ -127,12 +127,12 @@ enum HomeTemplate {
     - タスク候補: 人が ⌘⇧X の提案タブで受けた候補だけがタスクになる。Slack・メール・課題管理・GitHub などから拾うのが主な使い方。
     - コマンド: 届いた行を標準入力で受けて走る。取得元も段も無ければ、トリガーのたびに走る（例: 毎晩 23 時に \
     `~/bin/daily-note.sh` を実行する）。
-    - 報告: 最後の段が書いた短い文章を、その回の結果として残す（例: 毎日 18 時に開いている PR を要約する）。1 行目がボードの\
-    見出しと通知に出る。言うことが無い回は「報告なし」になり、知らせない。
+    - 報告: 最後の段が書いた文章を、その回の結果として残す（例: 毎日 18 時に開いている PR を要約する）。1 行目が通知に\
+    出る。言うことが無い回は「報告なし」になり、知らせない。
     - agent: 回ごとに裏で使い捨ての claude を起こし、定義の依頼文と名指ししたツールだけで仕事をさせる（例: 平日 9:00 に、\
     レビュー待ちの PR をまとめて Slack の自分宛てに投稿する）。取得元か段があれば届いた行が 1 行以上ある回だけ、無ければトリガーの\
     たびに起きる。ツールを使って何かをしてほしいときはこれを使い、コマンドの出力先の中で `claude -p` を起こさない（Orbe の\
-    絞り込みが掛からない）。応答の 1 行目がボードの見出しと通知に出る。することが無い回は agent がそう申告して終わり、知らせない。
+    絞り込みが掛からない）。応答の 1 行目が通知に出る。することが無い回は agent がそう申告して終わり、知らせない。
     - agent の名指しは MCP のツールの完全名か `Bash(<コマンドの接頭>:*)`（例 `Bash(gh search prs:*)`）だけで、最小にする。\
     agent は回ごとに作る空のディレクトリを作業ディレクトリにして起きる（ディレクトリに結び付く登録〔claude の local・project\
     スコープ〕の MCP サーバーは使えない）。Bash の規則だけなら、利用者の設定を読まずに走り、作業ディレクトリの外のファイルを引数に\
@@ -143,8 +143,8 @@ enum HomeTemplate {
     - agent には届いた行も件数も渡らない。対象が要る仕事なら、依頼文で agent 自身に調べさせる。失敗した回は次の回でもう一度\
     起きる（投稿が二重になりうる）。依頼文は自動化の DB（state の automations フォルダ）に残るので秘密を書かない。
     - 通知（`notify: "menuBar"` か `"notificationCenter"`）: どの出力先にも付けられる。何かを出した回と、失敗が続くなら最初の\
-    失敗の回に、メニューバーか macOS の通知センターへ名前と結果の 1 行が出る。通知センターの通知は自動化ごとに 1 つで、新しい回が\
-    差し替える。`notificationCenter` を書くと、Orbe の通知の許可がまだ決まっていなければ OS が許可を問う。許可が無い回は\
+    失敗の回に、メニューバーか macOS の通知センターへ名前と結果の 1 行が出る。通知センターの通知はノードごとに 1 つで、同じノードの\
+    次の回が差し替える（別のノードの通知は残る）。`notificationCenter` を書くと、Orbe の通知の許可がまだ決まっていなければ OS が許可を問う。許可が無い回は\
     メニューバーに出る。押すと Home のボードでその自動化が開く。省略すると知らせない。
 
     Orbe の中で予定どおり繰り返し動くのは、待ちの条件の確認と自動化の 2 つ。
@@ -164,15 +164,15 @@ enum HomeTemplate {
     is picking things up from Slack, mail, issue trackers, GitHub, and the like.
     - Command: it runs with the lines that reach it on stdin. With neither a source nor steps, it runs on every \
     trigger (e.g. run `~/bin/daily-note.sh` every night at 23:00).
-    - Report: the short text the last step writes is kept as the result of the run (e.g. summarize the \
-    open PRs every day at 18:00). Its first line shows on the board's heading and in the notification. A run \
+    - Report: the text the last step writes is kept as the result of the run (e.g. summarize the \
+    open PRs every day at 18:00). Its first line shows in the notification. A run \
     with nothing to report shows "nothing to report", and nobody is notified.
     - Agent: each run starts a throwaway claude in the background that does the job with only the \
     definition's request and the tools it names (e.g. at 9:00 on weekdays, post a digest of the PRs waiting for \
     my review to myself on Slack). With a source or steps it starts only when at least one line arrives; \
     without them, on every trigger. Use it when you want something done with tools; never start `claude -p` \
-    inside a command sink (Orbe's limits do not apply there). The first line of its reply shows on the \
-    board's heading and in the notification. When there is nothing to do, the agent says so and ends, and \
+    inside a command sink (Orbe's limits do not apply there). The first line of its reply shows in the \
+    notification. When there is nothing to do, the agent says so and ends, and \
     nobody is notified.
     - An agent may name only full MCP tool names and `Bash(<command prefix>:*)` rules (e.g. \
     `Bash(gh search prs:*)`); name as few as possible. Each run starts in a fresh empty directory (MCP servers \
@@ -189,10 +189,10 @@ enum HomeTemplate {
     secrets in it.
     - Notify (`notify: "menuBar"` or `"notificationCenter"`): any sink can have it. When a run delivers \
     something, or on the first of consecutive failed runs, the name and the result line show in the menu bar \
-    or in macOS Notification Center. Notification Center keeps one notification per automation; a new run \
-    replaces it. Setting `notificationCenter` makes macOS ask for Orbe's notification permission if it is not \
-    decided yet; without permission, the run shows in the menu bar. Clicking either opens the automation on \
-    Home's board. Omit it to stay silent.
+    or in macOS Notification Center. Notification Center keeps one notification per node; the node's next \
+    run replaces it (other nodes' notifications stay). Setting `notificationCenter` makes macOS ask for \
+    Orbe's notification permission if it is not decided yet; without permission, the run shows in the menu \
+    bar. Clicking either opens the automation on Home's board. Omit it to stay silent.
 
     Inside Orbe, the only things that run repeatedly on schedule are waiting-condition checks and automations.
     """
