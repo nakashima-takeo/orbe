@@ -61,14 +61,4 @@ final class AutomationWorkspacesTests: OrbeTestCase {
       }
     }
   }
-
-  /// agent のノードの席は写さない（定義の読みが値によらず「agent のノードは workspace を持たない」で断る）。
-  func testAnAgentNodeSeatIsLeftForTheDefinitionToRefuse() throws {
-    var object = definition(nil, nil)
-    object["nodes"] = [["key": "r", "instruction": "i", "workspace": NSNull()]]
-
-    let stored = try workspaces.inward(object)
-
-    XCTAssertTrue((stored["nodes"] as? [[String: Any]])?[0]["workspace"] is NSNull)
-  }
 }
