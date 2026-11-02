@@ -1,6 +1,6 @@
 ---
 title: 制御 API（外部 → Orbe）
-description: Unix socket 上の JSON-RPC でタブ/workspace/エージェント/タスク/自動化/ボードの部品を操作し、タスクから作業を始める out-of-band 制御チャネルと、イベント履歴（seq）・待機・MCP ブリッジ・ツール群・mount 境界
+description: Unix socket 上の JSON-RPC でタブ/workspace/エージェント/タスク/自動化/ボードのウィジェットを操作し、タスクから作業を始める out-of-band 制御チャネルと、イベント履歴（seq）・待機・MCP ブリッジ・ツール群・mount 境界
 updated: 2026-11-02
 ---
 
@@ -24,7 +24,7 @@ Unix domain socket `control.sock`（workspaces.json と並置・パーミッシ�
 - `-32602` params の欠落・型不一致・値域外。定義の中の参照（`set_automation` の定義のノードの鍵・workspace）が解けないのもここ。
 - `-32004` 宛先（tab / workspace / タスク / 自動化・自動化のノード・自動化の試走）が見つからない。宛先 ID を解決へ直に渡すメソッド（`get_tab_text` / `send_text` / `send_key` / `report_agent` / `completion_accept`）は `tabId` の欠落・型不一致もここに落ちる（解決の前に検証を挟むメソッドは `-32602`）。
 - `-32006` `wait_for_event` の `after` が履歴の保持範囲より古い（対処は seq を取り直す。呼び出し側のバグである `-32602` と分ける）。
-- `-32000` 実行できない（ウィンドウ未接続・spawn 失敗・消せない workspace の削除・Home の root 変更・`start_task` の作業場の用意の失敗・`prompt_agent` の busy / 未 mount・ready 待ち中のエージェント消滅・流している途中の自動化の `run_automation`・自動化を使えないセッションの自動化の読み書き・定義を読めない自動化への操作・`set_automation` の版の食い違い・ボードを持たない workspace のボードの部品の操作）。
+- `-32000` 実行できない（ウィンドウ未接続・spawn 失敗・消せない workspace の削除・Home の root 変更・`start_task` の作業場の用意の失敗・`prompt_agent` の busy / 未 mount・ready 待ち中のエージェント消滅・流している途中の自動化の `run_automation`・自動化を使えないセッションの自動化の読み書き・定義を読めない自動化への操作・`set_automation` の版の食い違い・ボードを持たない workspace のボードのウィジェットの操作）。
 
 無応答契約を持つのは `completion_update` / `completion_end` の 2 つだけで、他は必ず 1 行応答を返す——読めない行にも返すことで、クライアントが応答待ちでハングしない。
 
@@ -54,7 +54,7 @@ workspace / tab にプロセス内単調増加 ID。型をまたいで一意。�
 
 JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`config_*`・workspace CRUD・`focus_tab`/`close_tab`/`open_file`・`completion_*` は socket 専用で、MCP ブリッジには出さない（[cli](cli.md) が直に叩く）。
 
-- `list_workspaces` → `{workspaces:[…]}` … id・name・rootPath・active・tabCount・activated・dormantAgentCount・hasBoard。`hasBoard` はその workspace が[ボード](../chrome/board.md)を持つか（今は Home だけが true）で、ボードの部品の 3 動詞の宛先を外から選ぶ唯一の手がかり——Home の root を知らない agent でも宛先を選べ、ボードを持つ workspace が増えても呼び手は変わらない。`activated` は配下にmaterialize開始済みタブが1枚以上あるかを表す現在値で、0タブまたは全タブ未activatedならfalse。`dormantAgentCount` は現在残る未消費の復元チケット（休眠agent）タブ数で、混在workspaceでは `activated: true` と正の値が同時に成立する。0タブworkspaceを前面化した場合は `active: true, activated: false, dormantAgentCount: 0` となる。
+- `list_workspaces` → `{workspaces:[…]}` … id・name・rootPath・active・tabCount・activated・dormantAgentCount・hasBoard。`hasBoard` はその workspace が[ボード](../chrome/board.md)を持つか（今は Home だけが true）で、ボードのウィジェットの 3 動詞の宛先を外から選ぶ唯一の手がかり——Home の root を知らない agent でも宛先を選べ、ボードを持つ workspace が増えても呼び手は変わらない。`activated` は配下にmaterialize開始済みタブが1枚以上あるかを表す現在値で、0タブまたは全タブ未activatedならfalse。`dormantAgentCount` は現在残る未消費の復元チケット（休眠agent）タブ数で、混在workspaceでは `activated: true` と正の値が同時に成立する。0タブworkspaceを前面化した場合は `active: true, activated: false, dormantAgentCount: 0` となる。
 - `list_tabs` → `{tabs:[…], seq}` … tabId・workspaceId・workspaceName・title・cwd・agentState・agentSessionId（resume 用・未設定なら null）・active（その workspace で選択中のタブ。背景 workspace でも 1 枚 true で、前面かは `list_workspaces` の `active` と合わせて分かる。[ボード](../chrome/board.md)を選んでいる workspace ではどのタブも false）。全 workspace 横断・タブ順。ボードはタブではないので出ない。`seq` は snapshot 時点の履歴位置で、tab の状態と同じ瞬間の値。
 - `list_agents` → `{agents:[…]}` … 検出済みエージェント CLI の command と解決済み絶対 path を列挙する（読み取り専用）。アプリ保持の検出結果をそのまま返し、新規検出（login shell 起動）は起こさない。検出未完了でもエラーにせず**空配列を返す**。`spawn_agent` / `resume_agent` に渡す command の候補源。
 - `get_tab_text {tabId, scrollback?}` → `{text}` … 画面テキスト平文。scrollback 真で履歴全体、偽で可視範囲。
@@ -137,12 +137,12 @@ JSON-RPC メソッド = MCP ツール名の 1:1。ただし `report_agent`・`co
 - `list_automation_proposals {automationId?}` → `{proposals:[…], seq}` … 覚えている候補を全状態で返す。各要素は `proposalId`・`state`（`open` / `accepted` / `dismissed` / `resolved`）・`title`・`due?`・`reason?`（判定が書いた候補にした理由）・`link`・`body?`・`time?`（判定が読んだ行の `body`・`time`。読めなければ無い）・`proposedAt`・`nodeKey`（候補を出した判定のノードの今の鍵）・`originNodeKey?`（出どころのノード〔読んだ行から引き継ぎをたどった先の行を出したノード。処理のこともある〕の今の鍵。外したノードなら無い）・`taskId`（`accepted` だけ）・`automationId` と `automationName`（候補を出した自動化＝棚に出す自動化）・`workspaceId` と `workspaceName`（付け先が今ある workspace に解けるときだけ。起動ごとの ID と名前。無ければ人がタスクにすると Home に付く）。値の壊れた候補（[読めない候補](../platform/automation.md#保存)）は `proposalId`・`link`・`unreadable: true` だけで載る。出した自動化の定義を読めない候補は、`automationId`・`automationName`・`nodeKey`・`originNodeKey` を持たない。`automationId` を渡すとその自動化が出した分だけ（読めない候補は出した判定のノードの持ち主の分。未知は `-32004`、定義を読めない自動化は `-32000`）。
   - 自動化の 9 動詞はいずれも MCP に出す。候補をタスクにする・捨てるは人の判断なので制御 API に無い。自動化の変化はイベントにならない。
 - `run_tool {token, name, arguments?}` → `{texts, isError, seq}` … 裏で動く agent の回の道具（[Orbe の口](../platform/automation.md#ノードの-1-回)）を 1 つ呼ぶ。`token` はその回の札、`name` は道具の名前、`arguments` は道具の引数のオブジェクト（省けば空）。`texts` は道具の答えの塊、`isError` は断ったか（引数の誤り・外れた結果・読み残し・その回の道具でない、はどれも断った答えで返す）。終わった回・知らない札は `-32004`（`run not found (it has ended)`）。札を持つ `orbe-mcp` だけが使う口で、MCP の普段のツールには出さない。
-- `list_board_parts {workspaceId}` → `{parts:[{kind}], seq}` … その workspace の[ボード](../chrome/board.md)の部品の並びを上から順に返す。何も決めていないボードは既定（`automation` 1 つ）。
-- `add_board_part {workspaceId, kind}` → `{parts, seq}` … 部品を末尾に置き、結果の並びを返す。1 つのボードに同じ種類は 1 つまでで、既にあれば何も変えずに成功する。
-- `remove_board_part {workspaceId, kind}` → `{parts, seq}` … 部品を外し、結果の並びを返す。無ければ何も変えずに成功する。
-  - `kind` は部品の種類（今は `automation`＝自動化の部品だけ）。部品は種類で指し、位置や ID は持たない——今は種類が 1 つで、どちらも意味を持たないため。`workspaceId` は省けない。省けば Home や呼び出し元の workspace に寄せる、という隠れた既定は「指定と違う対象を黙って触る」入口になる。
+- `list_board_widgets {workspaceId}` → `{widgets:[{kind}], seq}` … その workspace の[ボード](../chrome/board.md)のウィジェットの並びを上から順に返す。何も決めていないボードは既定（`automation` 1 つ）。
+- `add_board_widget {workspaceId, kind}` → `{widgets, seq}` … ウィジェットを末尾に置き、結果の並びを返す。1 つのボードに同じ種類は 1 つまでで、既にあれば何も変えずに成功する。
+- `remove_board_widget {workspaceId, kind}` → `{widgets, seq}` … ウィジェットを外し、結果の並びを返す。無ければ何も変えずに成功する。
+  - `kind` はウィジェットの種類（今は `automation`＝自動化のウィジェットだけ）。ウィジェットは種類で指し、位置や ID は持たない——今は種類が 1 つで、どちらも意味を持たないため。`workspaceId` は省けない。省けば Home や呼び出し元の workspace に寄せる、という隠れた既定は「指定と違う対象を黙って触る」入口になる。
   - `workspaceId`・`kind` の欠落・型違い（真偽値を番号として渡すことを含む）と知らない種類（理由に知っている種類を添える）は `-32602`、未知の workspace は `-32004`、ボードを持たない workspace は `-32000`。断ったとき並びは変わらない。
-  - 置く・外すは人の選択・焦点・前面の workspace を動かさず（前面ならボードがすぐ描き直る）、`automation` を外しても自動化そのもの（`list_automations`）は消えず、`add_board_part` 1 回で戻せる。画面の構成を変える口だが、人の作業を奪わず失うものが無いので、3 動詞とも MCP に出す。部品の変化はイベントにならない。
+  - 置く・外すは人の選択・焦点・前面の workspace を動かさず（前面ならボードがすぐ描き直る）、`automation` を外しても自動化そのもの（`list_automations`）は消えず、`add_board_widget` 1 回で戻せる。画面の構成を変える口だが、人の作業を奪わず失うものが無いので、3 動詞とも MCP に出す。ウィジェットの変化はイベントにならない。
 - `completion_update` / `completion_end` / `completion_accept` … コマンド補完用（[completion](../palette/completion.md)）。前 2 つは**無応答**。`completion_` 系は宛先解決ガードより前で分岐し、無応答メソッドは宛先不在でも応答を出さない（打鍵ごとの update が accept fd に行を積まない）。読めない行にはこの分岐より前でエラー行を返すため、accept fd から読める行が accept 応答だけとは限らない——クライアントは `id` で自分の応答を選ぶ（[completion](../palette/completion.md)）。socket 専用。
 
 ## 境界
