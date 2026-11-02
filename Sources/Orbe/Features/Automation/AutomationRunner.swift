@@ -17,8 +17,8 @@ import Observation
 ///
 /// ノードの回を記録するたびに `recorded` で、その回の終わり（読んだもの・ノードの 1 回の結果）と確定を知らせる（知らせるか
 /// どうか・何を出すかは受けた側が決める）。`recorded` は確定の直後、下流を起こす前に同期で呼ぶ——受けた側はその中で、確定した
-/// 回が出した行を読み、下流が読む前に手を掛けられる（試走の `limit` がこの順に依る）。定義を書いたら `defined`、消したら
-/// `deleted` で知らせる。使い手が差し替えられるのは、番人に載せるノード（`admits`。既定は全ノード）と知らせだけ。
+/// 回が出した行を読み、下流が読む前に手を掛けられる（試走の `limit` がこの順に依る）。定義を書いたら `defined` で外したノードと、
+/// 消したら `deleted` で消えたノードと共に知らせる。使い手が差し替えられるのは、番人に載せるノード（`admits`。既定は全ノード）と知らせだけ。
 @Observable final class AutomationRunner {
   let store: AutomationStore
   @ObservationIgnored var now: () -> Date = Date.init
@@ -31,8 +31,8 @@ import Observation
   let runSessions: AutomationRunSessions
   let workspaces: () -> AutomationWorkspaces
   private let recorded: (AutomationPassRecord) -> Void
-  private let defined: (Int) -> Void
-  private let deleted: (Int) -> Void
+  private let defined: (Int, [AutomationNodeID]) -> Void
+  private let deleted: (Int, [AutomationNodeID]) -> Void
   private let admits: (Int, AutomationNodeID) -> Bool
   private let flowEnded: (Int, AutomationFlow) -> Void
   /// 番人に載せている鍵。
@@ -56,8 +56,9 @@ import Observation
     run: @escaping BackgroundScheduler.Run = { BackgroundRuns.shared.run($0, completion: $1) },
     runSessions: AutomationRunSessions = AutomationRunSessions(),
     workspaces: @escaping () -> AutomationWorkspaces,
-    recorded: @escaping (AutomationPassRecord) -> Void, defined: @escaping (Int) -> Void,
-    deleted: @escaping (Int) -> Void,
+    recorded: @escaping (AutomationPassRecord) -> Void,
+    defined: @escaping (Int, [AutomationNodeID]) -> Void,
+    deleted: @escaping (Int, [AutomationNodeID]) -> Void,
     admits: @escaping (Int, AutomationNodeID) -> Bool = { _, _ in true },
     flowEnded: @escaping (Int, AutomationFlow) -> Void = { _, _ in }
   ) {
@@ -124,14 +125,14 @@ import Observation
     guard let id else {
       let automation = try store.create(definition, now: now())
       register(automation)
-      defined(automation.id)
+      defined(automation.id, [])
       return automation
     }
     let replaced = try store.replace(id, version: version, with: definition, now: now())
     let automation = replaced.automation
     for nodeId in replaced.removed + replaced.reworked { unregister(id, nodeId) }
     register(automation)
-    defined(id)
+    defined(id, replaced.removed)
     return automation
   }
 
@@ -143,13 +144,12 @@ import Observation
     return automation
   }
 
-  /// 消す。走っている回は止め、その結果は捨てる。
+  /// 消す。走っている回は止め、その結果は捨てる。消えたノード（定義を読めない自動化はノードの台帳のノード）を知らせる。
   func delete(_ id: Int) throws(AutomationError) {
     try checkAvailable()
-    let nodeIds = store.automation(id)?.graph.nodes.map(\.id) ?? []
-    try store.delete(id, now: now())
+    let nodeIds = try store.delete(id, now: now())
     for nodeId in nodeIds { unregister(id, nodeId) }
-    deleted(id)
+    deleted(id, nodeIds)
   }
 
   func checkAvailable() throws(AutomationError) {

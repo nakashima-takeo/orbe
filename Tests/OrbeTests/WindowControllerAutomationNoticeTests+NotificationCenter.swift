@@ -3,13 +3,14 @@ import XCTest
 
 @testable import Orbe
 
-/// 通知先が通知センターの自動化。許可があれば名前と結果の 1 行を自動化ごとの識別子で通知センターへ出し、ピルは出さない。
+/// 通知先が通知センターの自動化。許可があれば名前と結果の 1 行をノードごとの識別子で通知センターへ出し、ピルは出さない。
 /// 許可が無い・未確認・出せなかった回はピルに出し、未確認なら許可を求める。音はどの面でも鳴る。定義を通知センターへ書き換えた
-/// 直後に（AI の口でもボードでも）許可を求め、消したら取り下げる。通知のクリックはピルと同じ行き先。
+/// 直後に（AI の口でもボードでも）許可を求め、ノードを外したらそのノードの、自動化を消したら全ノードの通知を取り下げる。通知の
+/// クリックはピルと同じ行き先。
 ///
-/// 壊れると何が起きるか: 許可を切った人や答えていない人に知らせがどこにも届かない。通知センターに同じ自動化の通知が溜まる。
-/// 消した自動化の通知が残り、押すと欄に落ちる。AI に頼んだ・ボードで選んだその場で許可の問いが出ず、初めての
-/// 回まで気づけない。
+/// 壊れると何が起きるか: 許可を切った人や答えていない人に知らせがどこにも届かない。通知センターに同じノードの通知が溜まる。
+/// 別のノードの通知が直後の通知で消える。外したノード・消した自動化の通知が残り、押すと欄に落ちる。AI に頼んだ・ボードで選んだ
+/// その場で許可の問いが出ず、初めての回まで気づけない。
 extension WindowControllerAutomationNoticeTests {
   @MainActor private func notifier(_ wc: WindowController) throws -> SystemNotifierFake {
     try XCTUnwrap(wc.systemNotifier as? SystemNotifierFake, "隔離ハーネスが通知センターをフェイクへ差していない")
@@ -28,7 +29,8 @@ extension WindowControllerAutomationNoticeTests {
       center.posted,
       [
         SystemNotificationContent(
-          identifier: "automation.\(id)", title: "開いている PR の要約", body: "要約：PR は 3 件",
+          identifier: "automation.\(id).\(wc.automationStore.nodeId(id, "digest"))",
+          title: "開いている PR の要約", body: "要約：PR は 3 件",
           automationId: id)
       ])
     XCTAssertNil(wc.attentionStore.transient, "通知センターに出た回はピルを出さない")
@@ -92,10 +94,41 @@ extension WindowControllerAutomationNoticeTests {
     _ = wc.controlSetAutomation(automationId: id, version: 1, definition)
     XCTAssertEqual(center.requestCount, 1)
 
+    let digest = wc.automationStore.nodeId(id, "digest")
     wc.showAutomation(id)
     wc.board.automation.perform(.delete)
     XCTAssertNil(wc.automationStore.automation(id), "前提: ボードの ⌘⌫ で消えていない")
-    XCTAssertEqual(center.removed, ["automation.\(id)"])
+    XCTAssertEqual(center.removed, ["automation.\(id).\(digest)"])
+  }
+
+  /// 2 つのノードが続けて知らせると通知は 2 つ残り、同じノードの次の回はそのノードの通知を差し替える（識別子が同じ）。ノードを
+  /// 定義から外すと、そのノードの通知だけを取り下げる。
+  @MainActor func testEachNodeKeepsItsOwnNotificationUntilTheNodeIsRemoved() throws {
+    let wc = controller()
+    let center = try notifier(wc)
+    center.authorization = .authorized
+    var definition = Self.reportDefinition(notify: .notificationCenter)
+    definition.nodes.append(
+      DesignSceneFixtures.agentNode(
+        "weekly", "週報", .manual, instruction: "週報を書く", deliver: .report))
+    let id = try wc.automationStore.create(definition, now: Date()).id
+    let (digest, weekly) = (
+      wc.automationStore.nodeId(id, "digest"), wc.automationStore.nodeId(id, "weekly")
+    )
+    for key in ["digest", "weekly", "digest"] {
+      try wc.automationStore.record(
+        id, nodeKey: key, trigger: .now, at: Date(), outcome: DesignSceneFixtures.reported(key))
+      wc.notifyAutomationRecorded(id, key)
+    }
+
+    XCTAssertEqual(
+      center.posted.map(\.identifier),
+      ["automation.\(id).\(digest)", "automation.\(id).\(weekly)", "automation.\(id).\(digest)"])
+
+    var rewritten = try XCTUnwrap(wc.automationStore.automation(id)?.definition)
+    rewritten.nodes.removeAll { $0.key == "weekly" }
+    _ = wc.controlSetAutomation(automationId: id, version: 1, rewritten)
+    XCTAssertEqual(center.removed, ["automation.\(id).\(weekly)"])
   }
 
   /// ボードのサブメニューで通知センターを選んでも、AI の口と同じくその場で許可を求める。

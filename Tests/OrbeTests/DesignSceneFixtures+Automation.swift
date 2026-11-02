@@ -220,7 +220,7 @@ extension DesignSceneFixtures {
       store: store, scheduler: scheduler,
       run: { _, _ in BackgroundRunHandle {} },
       workspaces: { AutomationWorkspaces(listed: [], home: nil) }, recorded: { _ in },
-      defined: { _ in }, deleted: { _ in })
+      defined: { _, _ in }, deleted: { _, _ in })
     runner.now = { automationNow }
     runner.calendar = { taskCalendar }
     runner.start()

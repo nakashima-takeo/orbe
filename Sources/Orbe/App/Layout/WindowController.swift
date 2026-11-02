@@ -61,8 +61,8 @@ final class WindowController: NSObject, NSWindowDelegate {
   private(set) lazy var automationRunner = AutomationRunner(
     store: AutomationStore(), workspaces: { [store] in AutomationWorkspaces(store) },
     recorded: { [weak self] in self?.notifyAutomationRecorded($0.end.automationId, $0.end.nodeId) },
-    defined: { [weak self] in self?.automationDefined($0) },
-    deleted: { [weak self] in self?.automationDeleted($0) })
+    defined: { [weak self] in self?.automationDefined($0, removed: $1) },
+    deleted: { [weak self] in self?.automationDeleted($0, nodeIds: $1) })
   var automationStore: AutomationStore { automationRunner.store }
   // 自動化の試走の係（自動化ごとに 1 つ、メモリだけ）。
   private(set) lazy var automationTrials = AutomationTrials(runner: automationRunner)

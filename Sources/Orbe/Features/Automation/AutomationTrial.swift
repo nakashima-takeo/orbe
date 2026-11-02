@@ -207,7 +207,7 @@ final class AutomationTrial {
     let runner = AutomationRunner(
       store: store, run: production.run, runSessions: production.runSessions,
       workspaces: production.workspaces,
-      recorded: { [weak self] in self?.recorded($0) }, defined: { _ in }, deleted: { _ in },
+      recorded: { [weak self] in self?.recorded($0) }, defined: { _, _ in }, deleted: { _, _ in },
       admits: { $0 == id && admitted.contains($1) },
       flowEnded: { [weak self] _, flow in self?.flowEnded(flow) })
     runner.now = production.now

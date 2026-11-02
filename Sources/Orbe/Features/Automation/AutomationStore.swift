@@ -117,8 +117,10 @@ import Observation
   }
 
   /// 消す。ノードをすべて外し（今有効な項目を無効にし、記録を消す）、自動化の行を消す。出どころが無効になった判断待ちの候補は
-  /// 下がり、誰も持たなくなった候補は忘れる。定義を読めない自動化も消せる。
-  func delete(_ id: Int, now: Date) throws(AutomationError) {
+  /// 下がり、誰も持たなくなった候補は忘れる。定義を読めない自動化も消せる（ノードはノードの台帳から引く）。外したノードを返す。
+  @discardableResult func delete(_ id: Int, now: Date) throws(AutomationError)
+    -> [AutomationNodeID]
+  {
     let nodeIds: [AutomationNodeID]
     if let automation = automation(id) {
       nodeIds = automation.graph.nodes.map(\.id)
@@ -139,6 +141,7 @@ import Observation
       try memory.withdraw(originatingIn: invalidated, db)
       try memory.forgetUnheld(db)
     }
+    return nodeIds
   }
 
   // MARK: - 候補をさばく
