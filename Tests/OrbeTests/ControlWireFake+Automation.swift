@@ -29,6 +29,14 @@ struct FakeRunList {
   let limit: Int?
 }
 
+/// `try_automation` が届けたもの。
+struct FakeTry {
+  let automationId: Int?
+  let version: Int?
+  let definition: [String: Any]?
+  let request: AutomationTrial.Request
+}
+
 /// `run_tool` が届けたもの。
 struct FakeRunTool {
   let token: String
@@ -44,10 +52,13 @@ extension FakeControlTarget {
     return outcome(["texts": [String](), "isError": false])
   }
 
-  func controlTryAutomation(automationId: Int, _ request: AutomationTrial.Request) -> Result<
-    Any, ControlError
-  > {
-    triedAutomations.append((automationId, request))
+  func controlTryAutomation(
+    automationId: Int?, version: Int?, definition: [String: Any]?,
+    _ request: AutomationTrial.Request
+  ) -> Result<Any, ControlError> {
+    triedAutomations.append(
+      FakeTry(
+        automationId: automationId, version: version, definition: definition, request: request))
     return outcome(["trial": [String: Any]()])
   }
 }

@@ -61,14 +61,26 @@ extension AutomationRunner {
 
   /// 起こす決まり。実効で止めていない「届いたら」のノードに、基準線より新しい上流の行があり、走っていなければ起こす。
   func wake(_ id: Int, _ nodeId: AutomationNodeID) {
-    guard let automation = store.automation(id), let node = automation.graph.node(nodeId),
-      node.entity.trigger == .arrival, !automation.halted(nodeId)
-    else { return }
+    guard let automation = store.automation(id), let node = automation.graph.node(nodeId) else {
+      return
+    }
     let key = Self.key(id, nodeId)
-    guard !scheduler.isRunning(id: key), let inlets = inlets(of: nodeId),
-      Self.hasNew(node, inlets, since: marks[key] ?? [:])
+    guard !scheduler.isRunning(id: key),
+      Self.wakes(node, of: automation, since: marks[key] ?? [:], { inlets(of: nodeId) })
     else { return }
     scheduler.runNow(id: key)
+  }
+
+  /// 起こす決まりで起きるか: 実効で止めていない「届いたら」のノードで、入力のどれかに `previous` を基準線とした新しい上流の行が
+  /// あるか。`inlets` は「届いたら」で止めていないノードにだけ読む。
+  static func wakes(
+    _ node: AutomationGraph.Node, of automation: Automation,
+    since previous: [AutomationNodeID: AutomationSeqs],
+    _ inlets: () -> [AutomationNodeID: Inlet]?
+  ) -> Bool {
+    guard node.entity.trigger == .arrival, !automation.halted(node.id), let inlets = inlets()
+    else { return false }
+    return hasNew(node, inlets, since: previous)
   }
 
   /// 失敗のやり直し。「届いたら」でないノードの契機が終わったら、実効で止めていない下流の「届いたら」のノードを、読んだ位置より

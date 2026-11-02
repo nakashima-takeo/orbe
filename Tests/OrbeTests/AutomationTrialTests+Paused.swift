@@ -21,7 +21,7 @@ extension AutomationTrialTests {
       id, nodeKey: "gh", at: now, outcome: DesignSceneFixtures.fetched([item("x", at: now)]))
     now = now.addingTimeInterval(60)
 
-    let trial = try trials.start(id, .init())
+    let trial = try trials.start(.saved(id), .init())
     waitCalls("gh", 1)
     XCTAssertEqual(calls("p"), [], "上流が終わるまで走らない")
     finish("gh", fetched(["x", "y"]))
@@ -43,7 +43,7 @@ extension AutomationTrialTests {
     _ = try runner.pause(id, true)
     let before = store.automations
 
-    let trial = try trials.start(id, .init())
+    let trial = try trials.start(.saved(id), .init())
     waitCalls("gh", 1)
     waitCalls("backlog", 1)
     finish("gh", fetched(["a"]))

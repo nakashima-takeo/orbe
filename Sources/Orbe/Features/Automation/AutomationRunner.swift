@@ -19,9 +19,9 @@ import Observation
 ///
 /// ノードの回を記録するたびに `recorded` で、その回の終わり（読んだもの・ノードの 1 回の結果）と確定を知らせる（知らせるか
 /// どうか・何を出すかは受けた側が決める）。`recorded` は確定の直後、下流を起こす前に同期で呼ぶ——受けた側はその中で、確定した
-/// 回が出した行を読み、下流が読む前に手を掛けられる（試走の `limit` がこの順に依る）。定義を書いたら `defined` で外したノードと、
-/// 消したら `deleted` で消えたノードと共に知らせる。使い手が差し替えられるのは、番人に載せるノード（`admits`。既定は全ノード）と
-/// 知らせだけ。
+/// 回が出した行を読み、下流が読む前に手を掛けられる（試走の `limit` がこの順に依る）。契機が終わるたびに、起こす決まりと一巡の
+/// 進みを見た後で `triggerEnded` で知らせる。定義を書いたら `defined` で外したノードと、消したら `deleted` で消えたノードと共に
+/// 知らせる。使い手が差し替えられるのは、番人に載せるノード（`admits`。既定は全ノード）と知らせだけ。
 @Observable final class AutomationRunner {
   let store: AutomationStore
   @ObservationIgnored var now: () -> Date = Date.init
@@ -38,6 +38,7 @@ import Observation
   private let deleted: (Int, [AutomationNodeID]) -> Void
   private let admits: (Int, AutomationNodeID) -> Bool
   private let flowEnded: (Int, AutomationFlow) -> Void
+  private let triggerEnded: (Int, AutomationNodeID) -> Void
   /// 番人に載せている鍵。
   @ObservationIgnored private var registered = Set<String>()
   /// ノードごとの、前の契機の始まりの時点の、入力ごとの上流の最後の番号（メモリだけ。無ければ読んだ位置だけが基準線）。
@@ -63,7 +64,8 @@ import Observation
     defined: @escaping (Int, [AutomationNodeID]) -> Void,
     deleted: @escaping (Int, [AutomationNodeID]) -> Void,
     admits: @escaping (Int, AutomationNodeID) -> Bool = { _, _ in true },
-    flowEnded: @escaping (Int, AutomationFlow) -> Void = { _, _ in }
+    flowEnded: @escaping (Int, AutomationFlow) -> Void = { _, _ in },
+    triggerEnded: @escaping (Int, AutomationNodeID) -> Void = { _, _ in }
   ) {
     self.store = store
     self.scheduler = scheduler
@@ -75,6 +77,7 @@ import Observation
     self.deleted = deleted
     self.admits = admits
     self.flowEnded = flowEnded
+    self.triggerEnded = triggerEnded
     store.onUnavailable = { [weak self] in self?.stopAll() }
     store.holding = { [weak self] in
       self?.active.values.reduce(into: AutomationHolding()) { $0.formUnion($1.holding) }
@@ -83,8 +86,7 @@ import Observation
     store.committed = { [weak self] in self?.scheduleRecount() }
   }
 
-  /// 起動時に一度、全ノードを番人へ載せ、実効で止めていない「届いたら」のノードに起こす決まりを見る（過ぎていた間隔の回は
-  /// ここで 1 回だけ走る）。
+  /// 起動時に一度、全ノードを番人へ載せ、実効で止めていない「届いたら」のノードに起こす決まりを見る（過ぎていた間隔の回はここで 1 回だけ走る）。
   func start() {
     for automation in store.automations { register(automation) }
     scheduleRecount()
@@ -118,25 +120,24 @@ import Observation
 
   // MARK: - 定義の変異
 
-  /// `id` が nil なら作り、あれば `version` を添えて書き換える。何をするかが変わったノードは走っている回を止めて載せ直し（結果は
-  /// 捨てる）、外したノードは外し、足したノードは足した時刻から数える。鍵・名前・予定・件数の上限・出来事の日数・通知だけなら予定だけを
-  /// 差し替える（走っている回は最後まで走る）。
+  /// `id` が nil なら作り、あれば `version` を添えて書き換える（確かめてから掛ける）。
   func set(_ id: Int?, version: Int? = nil, _ definition: AutomationDefinition)
     throws(AutomationError) -> Automation
   {
+    try set(try store.check(AutomationStore.Write(id, version: version, definition)))
+  }
+
+  /// 確かめた書き込みを掛ける。何をするかが変わったノードは走っている回を止めて載せ直し（結果は捨てる）、外したノードは外し、
+  /// 足したノードは足した時刻から数える。鍵・名前・予定・件数の上限・出来事の日数・通知だけなら予定だけを差し替える（走っている回は
+  /// 最後まで走る）。
+  func set(_ checked: AutomationStore.CheckedWrite) throws(AutomationError) -> Automation {
     try checkAvailable()
-    guard let id else {
-      let automation = try store.create(definition, now: now())
-      register(automation)
-      defined(automation.id, [])
-      return automation
-    }
-    let replaced = try store.replace(id, version: version, with: definition, now: now())
-    let automation = replaced.automation
-    for nodeId in replaced.removed + replaced.reworked { unregister(id, nodeId) }
-    register(automation)
-    defined(id, replaced.removed)
-    return automation
+    let written = try store.apply(checked, now: now())
+    let id = written.automation.id
+    for nodeId in written.removed + written.reworked { unregister(id, nodeId) }
+    register(written.automation)
+    defined(id, written.removed)
+    return written.automation
   }
 
   /// 止める・再開する（`nodeId` があればそのノード自身、無ければ自動化）。止めるのは Orbe が自分から動かすことだけで、走っている回は
@@ -358,6 +359,7 @@ extension AutomationRunner {
   /// 走っている間に届いた行を起こす決まりを見て、そうでなければ下流をやり直す。一巡へはその後に知らせる——「届いたら」の
   /// ノードが普段の決まりで起き直さなかったことを見てから終わりと数えるため。
   private func end(_ trigger: Trigger) {
+    defer { triggerEnded(trigger.automationId, trigger.nodeId) }
     active[ObjectIdentifier(trigger)] = nil
     let key = Self.key(trigger.automationId, trigger.nodeId)
     let anchor = trigger.passStartedAt ?? trigger.startedAt

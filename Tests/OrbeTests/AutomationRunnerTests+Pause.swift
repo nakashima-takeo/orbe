@@ -13,11 +13,12 @@ extension AutomationRunnerTests {
     store.automation(id)?.state(key: key).runs.first?.trigger
   }
 
-  private func flowRefusal(_ id: Int, to target: AutomationFlow.Target) -> AutomationNodeID? {
+  /// 断られたら、重なったノードの鍵。
+  private func flowRefusal(_ id: Int, to target: AutomationFlow.Target) -> String? {
     do throws(AutomationError) {
       try runner.flow(id, to: target)
     } catch {
-      if case .flowing(id, let nodeId) = error { return nodeId }
+      if case .flowing(id, let key) = error { return key }
       XCTFail("\(error)")
     }
     return nil
@@ -110,16 +111,14 @@ extension AutomationRunnerTests {
       fetch("c", every: 86400),
       definitionNode("d", .manual, from: ["c"], deliver: .sideEffect),
     ])
-    let (a, b, c, d) = (
-      store.nodeId(id, "a"), store.nodeId(id, "b"), store.nodeId(id, "c"), store.nodeId(id, "d")
-    )
+    let (b, c, d) = (store.nodeId(id, "b"), store.nodeId(id, "c"), store.nodeId(id, "d"))
 
     try runner.flow(id, to: .node(d))
     try runner.flow(id, to: .node(b))
     XCTAssertEqual(calls("a").count, 1)
     XCTAssertEqual(calls("c").count, 1)
-    XCTAssertEqual(flowRefusal(id, to: .node(d)), c)
-    XCTAssertEqual(flowRefusal(id, to: .ends), a)
+    XCTAssertEqual(flowRefusal(id, to: .node(d)), "c")
+    XCTAssertEqual(flowRefusal(id, to: .ends), "a")
     XCTAssertTrue(runner.isFlowing(id, through: [d]))
 
     let current = try XCTUnwrap(store.automation(id)?.definition)

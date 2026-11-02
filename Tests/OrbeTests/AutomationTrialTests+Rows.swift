@@ -16,7 +16,7 @@ extension AutomationTrialTests {
         "job", "job", .arrival, from: ["gh"], tools: ["Bash(git status:*)"], instruction: "do",
         deliver: .report),
     ])
-    let trial = try trials.start(id, .init())
+    let trial = try trials.start(.saved(id), .init())
     waitCalls("gh", 1)
     finish("gh", fetched(["a"]))
     ended(trial)
@@ -50,7 +50,7 @@ extension AutomationTrialTests {
     finish("gh", fetched(["a"]))
     XCTAssertEqual(store.automation(id)?.state(key: "p").pending.count, 1)
 
-    let trial = try trials.start(id, .init(from: ["p"], rows: [#"{"id":"x"}"#]))
+    let trial = try trials.start(.saved(id), .init(from: ["p"], rows: [#"{"id":"x"}"#]))
     let agents = {
       self.jobs.calls.indices.filter {
         if case .agent = self.jobs.calls[$0].job.work { return true }
@@ -88,7 +88,7 @@ extension AutomationTrialTests {
     finish("gh", fetched(["a"]))
     finish("judge", "")
 
-    let trial = try trials.start(id, .init(rows: [item("a")]))
+    let trial = try trials.start(.saved(id), .init(rows: [item("a")]))
     waitCalls("judge", 2)
     XCTAssertEqual(ids("judge"), [downstream("gh", "a", of: id)])
     XCTAssertEqual(calls("gh").count, 1)
@@ -102,14 +102,14 @@ extension AutomationTrialTests {
     XCTAssertEqual(given.compactMap(AutomationPrompts.id(of:)), [downstream("gh", "a", of: id)])
 
     let judged = try trials.start(
-      id,
+      .saved(id),
       .init(from: ["judge"], to: ["judge"], rows: [#"{"id":"x","link":"https://example.com/x"}"#]))
     waitCalls("judge", 3)
     XCTAssertEqual(ids("judge"), [downstream("gh", "x", of: id)])
     XCTAssertEqual(calls("gh").count, 1)
     finish("judge", "")
     ended(judged)
-    XCTAssertThrowsError(try trials.start(id, .init(rows: [#"{"id":"x"}"#]))) {
+    XCTAssertThrowsError(try trials.start(.saved(id), .init(rows: [#"{"id":"x"}"#]))) {
       XCTAssertEqual($0 as? AutomationError, .invalid("rows: item 1: missing body"))
     }
   }
@@ -122,7 +122,7 @@ extension AutomationTrialTests {
       definitionNode("digest", from: ["p"], deliver: .report),
     ])
     let trial = try trials.start(
-      id, .init(from: ["p"], rows: [#"{"id":"x","note":"手作り"}"#]))
+      .saved(id), .init(from: ["p"], rows: [#"{"id":"x","note":"手作り"}"#]))
     waitCalls("p", 1)
     let x = downstream("gh", "x", of: id)
     XCTAssertEqual(ids("p"), [x])
@@ -138,14 +138,16 @@ extension AutomationTrialTests {
       fetch("gh"), fetch("slack"), definitionNode("p", from: ["gh", "slack"]),
       definitionNode("digest", from: ["p"], deliver: .report),
     ])
-    XCTAssertThrowsError(try trials.start(merged, .init(from: ["p"], rows: [#"{"id":"x"}"#]))) {
+    XCTAssertThrowsError(
+      try trials.start(.saved(merged), .init(from: ["p"], rows: [#"{"id":"x"}"#]))
+    ) {
       guard case .invalid(let message) = $0 as? AutomationError else { return XCTFail("\($0)") }
       XCTAssertTrue(message.hasPrefix(#"rows: "p" has 2 inputs"#), message)
     }
 
     let large = String(repeating: "x", count: AutomationOutputs.rowKiB << 10)
     XCTAssertThrowsError(
-      try trials.start(id, .init(from: ["p"], rows: [#"{"id":"y","note":"\#(large)"}"#]))
+      try trials.start(.saved(id), .init(from: ["p"], rows: [#"{"id":"y","note":"\#(large)"}"#]))
     ) {
       XCTAssertEqual($0 as? AutomationError, .invalid("rows: item 1: larger than 64 KiB"))
     }

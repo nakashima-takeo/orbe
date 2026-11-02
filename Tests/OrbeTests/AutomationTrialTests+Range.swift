@@ -15,14 +15,14 @@ extension AutomationTrialTests {
     try runner.flow(id, to: .node(store.nodeId(id, "gh")))
     finish("gh", fetched(["a"]))
 
-    let trial = try trials.start(id, .init(from: ["judge"], to: ["judge"]))
+    let trial = try trials.start(.saved(id), .init(from: ["judge"], to: ["judge"]))
     waitCalls("judge", 1)
     XCTAssertEqual(ids("judge"), [downstream("gh", "a", of: id)])
     XCTAssertEqual(calls("gh").count, 1, "上流は動かない")
     finish("judge", "")
     ended(trial)
 
-    XCTAssertEqual(trial.range.path.map(\.key), ["judge"])
+    XCTAssertEqual(trial.range?.path.map(\.key), ["judge"])
     XCTAssertEqual(store.automation(id)?.state(key: "judge").pending.count, 1)
   }
 
@@ -32,7 +32,7 @@ extension AutomationTrialTests {
       fetch("gh"), fetch("backlog"), fetch("slack"),
       definitionNode("judge", from: ["gh", "backlog", "slack"], deliver: .taskCandidates),
     ])
-    let trial = try trials.start(id, .init(from: ["gh", "backlog"], to: ["judge"]))
+    let trial = try trials.start(.saved(id), .init(from: ["gh", "backlog"], to: ["judge"]))
     waitCalls("backlog", 1)
     XCTAssertEqual(calls("gh").count, 1)
     finish("gh", fetched(["a"]))
@@ -44,7 +44,7 @@ extension AutomationTrialTests {
     ended(trial)
 
     XCTAssertEqual(calls("slack"), [])
-    XCTAssertEqual(trial.range.path.map(\.key), ["gh", "backlog", "judge"])
+    XCTAssertEqual(trial.range?.path.map(\.key), ["gh", "backlog", "judge"])
   }
 
   /// 分岐: 入口だけを指すと、入口から届く終わりのノードすべてへ流れる。
@@ -53,7 +53,7 @@ extension AutomationTrialTests {
       fetch("gh"), definitionNode("judge", from: ["gh"], deliver: .taskCandidates),
       definitionNode("digest", from: ["gh"], deliver: .report),
     ])
-    let trial = try trials.start(id, .init(from: ["gh"]))
+    let trial = try trials.start(.saved(id), .init(from: ["gh"]))
     waitCalls("gh", 1)
     finish("gh", fetched(["a"]))
     waitCalls("judge", 1)
@@ -62,7 +62,7 @@ extension AutomationTrialTests {
     finish("digest", "a が来た")
     ended(trial)
 
-    XCTAssertEqual(trial.targetKeys, ["judge", "digest"])
+    XCTAssertEqual(trial.keys.to, ["judge", "digest"])
     XCTAssertEqual(trial.passes(key: "digest").first?.run?.result, .report(text: "a が来た"))
   }
 
@@ -72,10 +72,10 @@ extension AutomationTrialTests {
       fetch("gh"), fetch("slack"), definitionNode("judge", from: ["gh"], deliver: .taskCandidates),
       definitionNode("digest", from: ["slack"], deliver: .report),
     ])
-    XCTAssertThrowsError(try trials.start(id, .init(from: ["gh"], to: ["digest"]))) {
+    XCTAssertThrowsError(try trials.start(.saved(id), .init(from: ["gh"], to: ["digest"]))) {
       XCTAssertEqual($0 as? AutomationError, .invalid(#"from[0] "gh" reaches no node in to"#))
     }
-    XCTAssertThrowsError(try trials.start(id, .init(to: ["nope"]))) {
+    XCTAssertThrowsError(try trials.start(.saved(id), .init(to: ["nope"]))) {
       XCTAssertEqual($0 as? AutomationError, .nodeNotFound(id, "nope"))
     }
   }
@@ -86,7 +86,7 @@ extension AutomationTrialTests {
       fetch("gh"), definitionNode("p", from: ["gh"]),
       definitionNode("d", from: ["p"], deliver: .report),
     ])
-    let trial = try trials.start(id, .init(limit: 2))
+    let trial = try trials.start(.saved(id), .init(limit: 2))
     waitCalls("gh", 1)
     finish("gh", fetched(["a", "b", "c"]))
     waitCalls("p", 1)
@@ -108,7 +108,7 @@ extension AutomationTrialTests {
       gh, definitionNode("p", .arrival, from: ["gh"]),
       definitionNode("d", from: ["p"], deliver: .report),
     ])
-    let trial = try trials.start(id, .init(limit: 2))
+    let trial = try trials.start(.saved(id), .init(limit: 2))
     waitCalls("gh", 1)
     finish("gh", fetched(["a", "b", "c"]))
     waitCalls("p", 1)

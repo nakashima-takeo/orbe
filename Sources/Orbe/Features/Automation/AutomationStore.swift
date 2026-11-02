@@ -72,35 +72,6 @@ import Observation
 
   // MARK: - 定義
 
-  func create(_ definition: AutomationDefinition, now: Date) throws(AutomationError) -> Automation {
-    if let index = definition.nodes.firstIndex(where: { $0.id != nil }) {
-      throw .invalid("nodes[\(index)].id: a new automation has no node ids yet")
-    }
-    let (name, checked) = try definition.checked()
-    let at = TaskItem.storedInstant(now)
-    return try commit(sweepingAt: at) { db, memory in
-      let id = try db.insertAutomation(
-        name: name, notify: definition.notify, workspace: definition.workspace, createdAt: at)
-      var entities: [AutomationNode] = []
-      for (position, item) in checked.enumerated() {
-        let defId = try db.insert(action: item.definitionNode.action)
-        let nodeId = try db.insertNode(
-          of: id, at: position, item.definitionNode, defId: defId, addedAt: at)
-        entities.append(AutomationNode(item.definitionNode, id: nodeId, defId: defId))
-      }
-      let graph = AutomationGraph(checked, entities: entities, workspace: definition.workspace)
-      for node in graph.nodes { try db.setEdges(of: id, to: node.id, node.inputs) }
-      let automation = Automation(
-        id: id, name: name, notify: definition.notify, graph: graph, pausedAt: nil, version: 1,
-        createdAt: at,
-        states: Dictionary(
-          uniqueKeysWithValues: try graph.nodes.map { ($0.id, try db.state(of: $0.id)) }))
-      memory.automations.append(automation)
-      try memory.recount(automation.id, db, now: at)
-      return memory.automations[memory.automations.count - 1]
-    }
-  }
-
   /// 止める・再開する。`nodeId` があればそのノード自身の印、無ければ自動化の印を書く（2 つの印は別に持つ）。版は変えない。
   func setPaused(_ id: Int, nodeId: AutomationNodeID? = nil, _ paused: Bool, now: Date)
     throws(AutomationError) -> Automation
