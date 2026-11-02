@@ -197,4 +197,63 @@ extension AutomationStoreTests {
     XCTAssertEqual(
       read.taken.map(\.id), ["old", "new"].map { "\(store.nodeId(id, "fetch")):\($0)" })
   }
+
+  /// 今の集合の古い版の掃除の基準は、回数の内か期間の内で残る回のうち最も古い始まり（期間の内で残る回が読みうる版を残す）。
+  func testAReplacedVersionStaysWhileARunWithinTheDaysCouldHaveReadIt() throws {
+    let retention = AutomationRetention(runCount: 1, runDays: 2, eventDays: 30)
+    var store: AutomationStore? = AutomationStore(
+      opening: AutomationPersistence.open(retention: { retention }))
+    let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
+    func fetch(_ body: String, onDay day: Int) throws {
+      try Self.fetch(
+        XCTUnwrap(store), id,
+        [AutomationItem(id: "a", link: "https://example.com/a", body: body, time: Self.at)],
+        at: Self.at.addingTimeInterval(Self.day * Double(day)))
+    }
+    func versions() throws -> Int {
+      try XCTUnwrap(store).read {
+        try $0.db.select("SELECT count(*) FROM item_versions", []) { $0.int(at: 0) }
+      }
+      .first ?? -1
+    }
+    for day in 0...3 { try fetch("v\(day)", onDay: day) }
+    XCTAssertEqual(try versions(), 4, "2 日以内に始まった回が読みうる版は残る")
+
+    try fetch("v5", onDay: 5)
+    XCTAssertEqual(try versions(), 3, "残る回より前に置き換わった版は消える")
+    store = nil
+  }
+
+  /// 全体の設定の出来事の日数が、出す側のノードが日数を書かないときの見分けの窓になる。
+  func testTheEventDaysSettingIsTheWindowOfANodeWithoutItsOwnDays() throws {
+    let store = AutomationStore(
+      opening: AutomationPersistence.open(retention: {
+        AutomationRetention(runCount: 20, runDays: 7, eventDays: 10)
+      }))
+    let id = try store.create(Self.definition(coverage: .newArrivals), now: Self.at).id
+    try Self.fetch(store, id, [Self.item("a")])
+    try Self.fetch(store, id, [Self.item("a")], at: Self.at.addingTimeInterval(11 * Self.day))
+
+    XCTAssertEqual(
+      store.automation(id)?.state(key: "fetch").runs.first?.run?.result,
+      .fetch(fresh: 1, duplicates: 0), "10 日を過ぎたので新しい出来事")
+  }
+
+  /// 保持の回数がメモリの直近の数より小さくても、メモリの直近の回は掃除の後の DB と同じ（消えた回を画面に残さない）。
+  func testTheRecentRunsInMemoryFollowTheSweep() throws {
+    let store = AutomationStore(
+      opening: AutomationPersistence.open(retention: {
+        AutomationRetention(runCount: 2, runDays: 1, eventDays: 30)
+      }))
+    let id = try store.create(Self.definition(), now: Self.at).id
+    for day in 0...4 {
+      try Self.fetch(
+        store, id, [], outcome: DesignSceneFixtures.failed("boom"),
+        at: Self.at.addingTimeInterval(Self.day * Double(day)))
+    }
+
+    XCTAssertEqual(
+      store.automation(id)?.state(key: "fetch").runs.map(\.startedAt),
+      [4, 3].map { Self.at.addingTimeInterval(Self.day * Double($0)) })
+  }
 }

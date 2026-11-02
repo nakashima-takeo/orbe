@@ -63,18 +63,19 @@ extension AutomationStoreTests {
       AutomationRunner.runId(id, fetch, anchor))
   }
 
-  /// 鍵・名前・予定・件数の上限だけの変化は何をするかの変化に入らず、指示文の変化は新しい定義を足して指し直す。前の回の記録は
-  /// 前の定義を、後の回の記録は新しい定義を指す。ノードの定義の行は書いた後に変わらず、保存した値にノードの鍵が残るのは自動化の
-  /// ノードの鍵だけ。
+  /// 鍵・名前・予定・件数の上限・出来事の残す日数だけの変化は何をするかの変化に入らず、指示文の変化は新しい定義を足して指し
+  /// 直す。前の回の記録は前の定義を、後の回の記録は新しい定義を指す。ノードの定義の行は書いた後に変わらず、保存した値にノードの
+  /// 鍵が残るのは自動化のノードの鍵だけ。
   func testOnlyWhatANodeDoesMakesANewDefinition() throws {
     let store = AutomationStore()
-    let id = try store.create(Self.definition(), now: Self.at).id
+    let id = try store.create(Self.definition(coverage: .newArrivals), now: Self.at).id
     try Self.fetch(store, id, [Self.item("a")])
     try Self.judge(store, id)
     let judge = store.nodeId(id, "judge")
     let first = try XCTUnwrap(store.automation(id)?.graph.node(judge)?.entity.defId)
 
     var plain = try XCTUnwrap(store.automation(id)?.definition)
+    plain.nodes[0].retentionDays = 60
     plain.nodes[1].name = "別名"
     plain.nodes[1].trigger = .manual
     plain.nodes[1].maxItems = 5

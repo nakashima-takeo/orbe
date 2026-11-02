@@ -229,7 +229,9 @@ import Observation
         let result = try body(database, &memory)
         if let sweep {
           if memory.heldLinks != held { try memory.recountJudges(database, now: sweep) }
-          try database.sweep(now: sweep, holding: holding)
+          for nodeId in try database.sweep(now: sweep, holding: holding) {
+            try memory.reread(nodeId, database)
+          }
         }
         memory.judgeOwners = try database.judgeOwners()
         return result
@@ -339,6 +341,12 @@ struct AutomationMemory: Equatable {
   /// 覚えている候補のリンク（読めない候補を含む）。「既に候補がある」はこれで言う。
   var heldLinks: Set<String> {
     Set(proposals.map(\.item.link) + unreadableProposals.map(\.link))
+  }
+
+  /// ノードの自分の状態を、持ち主の自動化を引いて DB から読み直す（持ち主が無ければ何もしない）。
+  mutating func reread(_ nodeId: AutomationNodeID, _ db: AutomationDatabase) throws {
+    guard let id = automations.first(where: { $0.states[nodeId] != nil })?.id else { return }
+    try reread(nodeId, of: id, db)
   }
 
   /// ノードの自分の状態を DB から読み直す（読めば取る行は保つ）。

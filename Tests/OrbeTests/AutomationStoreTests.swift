@@ -120,6 +120,14 @@ final class AutomationStoreTests: OrbeTestCase {
       "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report)
     digest.from = [AutomationDefinition.Input(nodeKey: "fetch", take: .all, maxAgeHours: 24)]
     rewritten.nodes.append(digest)
+    var mail = DesignSceneFixtures.commandNode(
+      "mail", "メール", .manual, script: "mail", coverage: .newArrivals)
+    mail.retentionDays = 60
+    rewritten.nodes += [
+      mail,
+      DesignSceneFixtures.commandNode(
+        "log", "記録", .arrival, from: ["mail"], script: "log", deliver: .sideEffect),
+    ]
     _ = try store?.setPaused(id, nodeId: XCTUnwrap(store).nodeId(id, "fetch"), true, now: Self.at)
     try Self.rewrite(XCTUnwrap(store), id, rewritten)
     XCTAssertEqual(store?.automation(id)?.state(key: "fetch").paused, true, "書き換えでノードの止めた印を引き継ぐ")
