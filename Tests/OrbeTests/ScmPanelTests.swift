@@ -242,7 +242,6 @@ final class ScmPanelTests: OrbeTestCase {
 
     XCTAssertTrue(repo.git(["-C", "sub", "add", "inner.txt"]).isSuccess)
     XCTAssertTrue(repo.git(["-C", "sub", "commit", "-qm", "inner"]).isSuccess)
-    panel.refresh()
     pumpMain(
       until: {
         self.panel.changes.changes.first { $0.path == "sub" }?.submodule == .commit(dirty: false)
