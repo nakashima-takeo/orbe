@@ -260,11 +260,13 @@ final class RootFilesTests: OrbeTestCase {
       pumpMain(
         until: { files.status?.entries[path]?.unstagedSubmodule == .content }, "\(path): 中身だけ")
       let gitStateChanges = recorder.gitStateChanges
+      let nestedGitStateChanges = recorder.nestedGitStateChanges
       XCTAssertTrue(repo.git(["-C", path, "commit", "-qam", "inside"]).isSuccess)
       pumpMain(
         until: { files.status?.entries[path]?.unstagedSubmodule == .commit(dirty: false) },
         "\(path): コミットが動いた")
-      XCTAssertGreaterThan(recorder.nestedGitStateChanges, 0)
+      XCTAssertGreaterThan(
+        recorder.nestedGitStateChanges, nestedGitStateChanges, "\(path): 入れ子の git dir が変わった")
       XCTAssertEqual(recorder.gitStateChanges, gitStateChanges, "親の git の状態は変わっていない")
       XCTAssertTrue(repo.git(["-C", path, "reset", "-q", "--soft", "HEAD~1"]).isSuccess)
       pumpMain(
