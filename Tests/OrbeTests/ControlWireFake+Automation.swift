@@ -2,6 +2,13 @@ import Foundation
 
 @testable import Orbe
 
+/// `pause_automation` が届けたもの。
+struct FakePause {
+  let automationId: Int
+  let nodeKey: String?
+  let paused: Bool
+}
+
 /// `list_automation_runs` が届けたもの。
 struct FakeRunList {
   let nodeKey: String?

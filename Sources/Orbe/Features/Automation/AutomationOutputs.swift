@@ -4,9 +4,8 @@ import Foundation
 /// 1 度に出す——どちらも同じ決まりで確かめ、1 度に出した分（1 件 1 つの JSON。道具の 1 件はここで 1 行にする）は全部受けるか
 /// 全部断る。一部だけ受けると、外れた分が黙って落ちるため。
 struct AutomationOutputs {
-  /// 残す報告・仕事の文の上限（字）。回の記録はノードごとに 20 回残る。
-  static let reportLimit = 2000
-  /// 下流へ渡す行 1 つの大きさの上限（下流へ渡す形の UTF-8 のバイト、KiB）。行を見る agent は行を Orbe の口
+  /// 下流へ渡す行 1 つと、報告・仕事の文の大きさの上限（KiB）。行は下流へ渡す形の UTF-8 のバイト、文は前後の空白を除いた
+  /// UTF-8 のバイトで測る（文は下流へ渡らず、回の記録と `list_automations` の最新の回とカードに全文で出る）。行を見る agent は行を Orbe の口
   /// （`read_run_rows`）で読み、claude は道具の 1 回の結果が閾値（Orbe の口は 500,000 字に上げてある）を超えるとファイルに
   /// 書き出して agent に見せないので、どの行も 1 ページで届く大きさにする。claude は結果を復号後の文字（UTF-16 の単位）で数え、
   /// その数は UTF-8 のバイト数を超えないので、上限は閾値より十分小さく取ってある。
@@ -59,11 +58,15 @@ struct AutomationOutputs {
     return broken
   }
 
-  /// 報告・仕事の文。前後の空白を除いて上限で切り（切ったら「…」を付ける）、空なら受けない。出し直した報告は前の報告を
-  /// 置き換える——報告は 1 つの文なので、直した中身を受ける。
-  mutating func putReport(_ text: String) {
-    guard let kept = Self.kept(text) else { return }
-    report = kept
+  /// 報告・仕事の文。前後の空白を除いて受ける。空なら受けず、大きさの上限を超えれば外れた件（位置無し）を返して受けない。出し直した
+  /// 報告は前の報告を置き換える——報告は 1 つの文なので、直した中身を受ける。
+  mutating func putReport(_ text: String) -> AutomationBrokenLine? {
+    guard let trimmed = Self.trimmedReport(text) else { return nil }
+    guard trimmed.utf8.count <= Self.rowKiB << 10 else {
+      return AutomationBrokenLine(line: nil, fault: .tooLarge)
+    }
+    report = trimmed
+    return nil
   }
 
   /// 受けたものからの結果。`nothing` は何も無い回の理由（仕事の「何もしなかった」に使う）。
@@ -78,10 +81,10 @@ struct AutomationOutputs {
     }
   }
 
-  static func kept(_ text: String) -> String? {
+  /// 前後の空白を除いた報告の文。空なら nil。
+  static func trimmedReport(_ text: String) -> String? {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return nil }
-    return trimmed.count > reportLimit ? String(trimmed.prefix(reportLimit)) + "…" : trimmed
+    return trimmed.isEmpty ? nil : trimmed
   }
 
   // MARK: - 役割ごとの確かめ

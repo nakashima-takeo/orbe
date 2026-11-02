@@ -22,7 +22,9 @@ extension AutomationNodePass {
     var outputs = AutomationOutputs(input, writer: writer)
     switch input {
     case .report:
-      outputs.putReport(text)
+      if let broken = outputs.putReport(text) {
+        return .failed(.brokeRules, execution(result), breach: AutomationRejections([broken]))
+      }
     case .fetch, .process, .judge:
       let broken = outputs.put(text)
       guard broken.isEmpty else {

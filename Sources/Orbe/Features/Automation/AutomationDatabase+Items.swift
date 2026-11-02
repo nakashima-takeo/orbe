@@ -2,9 +2,6 @@ import Foundation
 
 /// 出す側の行（今の集合の項目と版・出来事の流れの出来事）と、受け手の読み。
 extension AutomationDatabase {
-  /// 出来事の流れの残す期間。
-  static let retention: TimeInterval = 30 * 24 * 3600
-
   /// 出した行 1 つ（書かれたまま）。
   struct Output: Equatable {
     /// 書かれた id。
@@ -77,12 +74,13 @@ extension AutomationDatabase {
   /// 違っても）。行が保存の都合で残っていても、見分けは残す期間の内かで決める。
   func writeEvents(of nodeId: AutomationNodeID, _ outputs: [Output], at: Date) throws -> Written {
     let p = Int64(nodeId.rawValue)
+    let cutoff = try eventCutoff(of: nodeId, now: at)
     var written = Written()
     for output in outputs {
       let seen = try db.select(
         """
         SELECT 1 FROM events WHERE node_id = ? AND written_id = ? AND created_at >= ? LIMIT 1
-        """, [.integer(p), .text(output.id), Self.cutoff(at)]
+        """, [.integer(p), .text(output.id), cutoff]
       ) { _ in true }
       if !seen.isEmpty {
         written.duplicates += 1
@@ -179,9 +177,33 @@ extension AutomationDatabase {
     "(SELECT max(id) FROM item_versions WHERE item_id = \(item))"
   }
 
-  static func cutoff(_ now: Date) -> SQLiteValue {
-    instant(now.addingTimeInterval(-retention))
+  /// 出す側のノードの出来事を残す期間の始まり（これより前に作られた出来事は期限を過ぎた）。期間はノードの `retention_days`、
+  /// 無ければ今の設定の値。
+  func eventCutoff(of nodeId: AutomationNodeID, now: Date) throws -> SQLiteValue {
+    let days =
+      try db.select(
+        "SELECT retention_days FROM nodes WHERE id = ?", [.integer(Int64(nodeId.rawValue))]
+      ) { $0.optionalInt64(at: 0).map(Int.init) }.first ?? nil
+    return Self.instant(
+      now.addingTimeInterval(-TimeInterval(days ?? retention().eventDays) * Self.day))
   }
+
+  /// 時刻 `now` に、出したノードの残す期間（ノードの `retention_days`、無ければ今の設定の値）を過ぎた出来事の ID を選ぶ SQL と、
+  /// その値。
+  func expiredEvents(at now: Date) -> (sql: String, values: [SQLiteValue]) {
+    (
+      """
+      SELECT x.id FROM events x WHERE x.created_at < ?
+        - coalesce((SELECT retention_days FROM nodes WHERE id = x.node_id), ?) * ?
+      """,
+      [
+        Self.instant(now), .integer(Int64(retention().eventDays)),
+        .integer(Int64(Self.day * 1000)),
+      ]
+    )
+  }
+
+  static let day: TimeInterval = 24 * 3600
 
   static func source(_ s: SQLiteStatement, item: Int, event: Int) -> AutomationSourceRef? {
     if let id = s.optionalInt64(at: item) { return .item(Int(id)) }

@@ -4,8 +4,10 @@ import Foundation
 /// 中身の JSON を読めない回の記録は「不明な記録」、指す行や値が読めない候補は「読めない候補」として残し、ほかは普段どおり読む。
 /// 読みの SQL の失敗は投げる（そのセッションは書かない）。
 extension AutomationDatabase {
-  static func memory(_ db: SQLiteDatabase, now: Date) throws -> AutomationMemory {
-    let database = AutomationDatabase(db)
+  static func memory(
+    _ db: SQLiteDatabase, now: Date, retention: @escaping () -> AutomationRetention
+  ) throws -> AutomationMemory {
+    let database = AutomationDatabase(db, retention: retention)
     var automations: [Automation] = []
     var unreadable: [AutomationUnreadable] = []
     for row in try db.select(
@@ -99,6 +101,7 @@ extension AutomationDatabase {
     let name: String
     let trigger: String?
     let maxItems: Int?
+    let retentionDays: Int?
     /// 組み合わせの定義を指すか。
     let composite: Bool
     let action: String?
@@ -114,7 +117,8 @@ extension AutomationDatabase {
   private func nodeRows(of automation: Int) throws -> [NodeRow] {
     try db.select(
       """
-      SELECT n.id, n.key, n.name, n.trigger, n.max_items, n.def_id, d.kind, a.action
+      SELECT n.id, n.key, n.name, n.trigger, n.max_items, n.def_id, d.kind, a.action,
+        n.retention_days
       FROM nodes n JOIN node_defs d ON d.id = n.def_id LEFT JOIN action_defs a ON a.id = n.def_id
       WHERE n.automation_id = ? AND n.removed_at IS NULL ORDER BY n.position
       """, [.integer(Int64(automation))]
@@ -123,12 +127,13 @@ extension AutomationDatabase {
         id: AutomationNodeID(s.int(at: 0)), key: s.text(at: 1) ?? "", name: s.text(at: 2) ?? "",
         trigger: s.text(at: 3), maxItems: s.optionalInt64(at: 4).map(Int.init),
         defId: AutomationNodeDefID(s.int(at: 5)), composite: s.text(at: 6) == "composite",
-        action: s.text(at: 7)
+        action: s.text(at: 7), retentionDays: s.optionalInt64(at: 8).map(Int.init)
       )
     }.map { row in
       NodeRow(
         id: row.id, defId: row.defId, key: row.key, name: row.name, trigger: row.trigger,
-        maxItems: row.maxItems, composite: row.composite, action: row.action,
+        maxItems: row.maxItems, retentionDays: row.retentionDays, composite: row.composite,
+        action: row.action,
         inputs: try db.select(
           """
           SELECT from_node_id, take, max_age_hours FROM node_edges WHERE to_node_id = ?
@@ -175,7 +180,7 @@ extension AutomationDatabase {
         from: row.inputs.map {
           AutomationDefinition.Input(
             nodeKey: keys[$0.from] ?? "", take: $0.take, maxAgeHours: $0.maxAgeHours)
-        }, action: action, maxItems: row.maxItems))
+        }, action: action, maxItems: row.maxItems, retentionDays: row.retentionDays))
   }
 
   private static func decode<T: Decodable>(_ type: T.Type, _ object: [String: Any], at: String)
@@ -201,6 +206,7 @@ extension AutomationDatabase {
         ]
         if let trigger = nodeRow.trigger.flatMap(jsonObject) { object["trigger"] = trigger }
         if let maxItems = nodeRow.maxItems { object["maxItems"] = maxItems }
+        if let days = nodeRow.retentionDays { object["retentionDays"] = days }
         let from = nodeRow.inputs.map { edge -> Any in
           let key = keys[edge.from] ?? ""
           guard edge.take != .new || edge.maxAgeHours != nil else { return key }

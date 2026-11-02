@@ -98,9 +98,9 @@ final class AutomationStoreTests: OrbeTestCase {
 
   // MARK: - 再起動
 
-  /// 自動化・つながりの取り方（take・古さの上限）・ノードの状態（今有効な項目のリンク・決まりを外した印・回の記録・読めば取る行
-  /// の数）・版・候補は、どの変異（作る・確定・書き換え・さばく・止める・消す）の後に開き直しても同じ。回の記録は
-  /// 失敗・判定の確定で捨てた案も、候補は候補にした理由と候補を出した自動化も同じ。
+  /// 自動化・ノードの出来事の残す日数・つながりの取り方（take・古さの上限）・ノードの状態（今有効な項目のリンク・決まりを外した印・
+  /// 止めた印・回の記録・読めば取る行の数）・版・候補は、どの変異（作る・確定・書き換え・さばく・自動化とノードを止める・消す）の後に
+  /// 開き直しても同じ。回の記録は失敗・判定の確定で捨てた案も、候補は候補にした理由と候補を出した自動化も同じ。
   func testEverythingSurvivesARestart() throws {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
@@ -120,7 +120,17 @@ final class AutomationStoreTests: OrbeTestCase {
       "digest", "要約", .arrival, from: ["fetch"], script: "digest", deliver: .report)
     digest.from = [AutomationDefinition.Input(nodeKey: "fetch", take: .all, maxAgeHours: 24)]
     rewritten.nodes.append(digest)
+    var mail = DesignSceneFixtures.commandNode(
+      "mail", "メール", .manual, script: "mail", coverage: .newArrivals)
+    mail.retentionDays = 60
+    rewritten.nodes += [
+      mail,
+      DesignSceneFixtures.commandNode(
+        "log", "記録", .arrival, from: ["mail"], script: "log", deliver: .sideEffect),
+    ]
+    _ = try store?.setPaused(id, nodeId: XCTUnwrap(store).nodeId(id, "fetch"), true, now: Self.at)
     try Self.rewrite(XCTUnwrap(store), id, rewritten)
+    XCTAssertEqual(store?.automation(id)?.state(key: "fetch").paused, true, "書き換えでノードの止めた印を引き継ぐ")
     try store?.dismiss(XCTUnwrap(store?.proposals.first?.id), now: Self.at)
     _ = try store?.setPaused(id, true, now: Self.at)
     let deleted = try XCTUnwrap(store?.create(Self.definition("消す"), now: Self.at).id)
@@ -230,20 +240,20 @@ final class AutomationStoreTests: OrbeTestCase {
     XCTAssertGreaterThan(try XCTUnwrap(reopened.proposals.first?.id), forgotten)
   }
 
-  /// 回の記録はノードごとに新しい 20 件を残し、それより古い回は消える。ただし最新の成功した回・外した印の回・残っている候補を
-  /// 出した回は消えない。開き直しても同じ。
+  /// 回の記録はノードごとに新しい 20 件か 7 日以内（既定の保持）のものを残し、どちらにも入らない回は消える。ただし最新の成功した
+  /// 回・外した印の回・残っている候補を出した回は消えない。開き直しても同じ。
   func testOldRunsAreSweptExceptTheOnesSomethingPointsAt() throws {
     var store: AutomationStore? = AutomationStore()
     let id = try XCTUnwrap(store?.create(Self.definition(), now: Self.at).id)
     let a = Self.item("a")
     try Self.fetch(XCTUnwrap(store), id, [a], outcome: Self.breached([a]))
     try Self.judge(XCTUnwrap(store), id, proposing: [a])
-    let count = AutomationNodeState.retainedRuns + 3
+    let count = AutomationRetention.standard.runCount + 3
     for n in 1...count {
       try Self.fetch(
         XCTUnwrap(store), id, [], outcome: DesignSceneFixtures.failed("boom"),
-        at: Self.at.addingTimeInterval(TimeInterval(60 * n)))
-      try Self.judge(XCTUnwrap(store), id, at: Self.at.addingTimeInterval(TimeInterval(60 * n)))
+        at: Self.at.addingTimeInterval(TimeInterval(86400 * n)))
+      try Self.judge(XCTUnwrap(store), id, at: Self.at.addingTimeInterval(TimeInterval(86400 * n)))
     }
     let fetches = try XCTUnwrap(store?.automation(id)?.state(key: "fetch"))
     store = nil
@@ -257,15 +267,15 @@ final class AutomationStoreTests: OrbeTestCase {
       "SELECT count(*) FROM runs r JOIN nodes n ON n.id = r.node_id WHERE n.key = 'judge'", []
     ) { $0.int(at: 0) }.first
 
-    XCTAssertEqual(fetches.runs.count, AutomationNodeState.retainedRuns)
+    XCTAssertEqual(fetches.runs.count, AutomationNodeState.recentRuns)
     XCTAssertEqual(
       kept,
-      [Self.at] + (4...count).map { Self.at.addingTimeInterval(TimeInterval(60 * $0)) },
+      [Self.at] + (4...count).map { Self.at.addingTimeInterval(TimeInterval(86400 * $0)) },
       "外した印の回で、最新の成功した回でもある最初の回は残る")
     XCTAssertEqual(fetches.succeededAt, Self.at)
     XCTAssertEqual(fetches.breach?.startedAt, Self.at)
     XCTAssertEqual(
-      judged, AutomationNodeState.retainedRuns + 1, "候補を出した回は 20 件の外でも残る")
+      judged, AutomationRetention.standard.runCount + 1, "候補を出した回は 20 件の外でも残る")
     XCTAssertEqual(AutomationStore().automation(id)?.state(key: "fetch").runs, fetches.runs)
   }
 

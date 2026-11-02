@@ -13,8 +13,8 @@ let automationUsageLines = [
   "orb automation runs <id> [--node <key>] [--before <recordId>] [--limit <n>] [--json]",
   "orb automation try <id> [--from <key>]... [--to <key>]... [--stdin] [--limit <n>] [--json]",
   "orb automation trial <id> [--wait] [--timeout-ms <ms>] [--json]",
-  "orb automation pause <id> [--json]",
-  "orb automation resume <id> [--json]",
+  "orb automation pause <id> [--node <key>] [--json]",
+  "orb automation resume <id> [--node <key>] [--json]",
   "orb automation rm <id> [--json]",
 ]
 
@@ -81,9 +81,7 @@ let automationUsage = """
              no tools. Keep each item's id: a run fails when no line that
              reaches the last step carries an id of this run's items.
              Narrow with cheap steps (commands, haiku) before costly ones.
-             Without model, the last step runs sonnet and the other steps
-             and the source run haiku; an omitted model stays omitted, so
-             reordering steps moves the default with them.
+             An agent needs a model; a definition without one is refused.
              The lines a step command or the sink command receives are text
              from outside, or what steps made from it, so instructions hidden
              in that text can reshape them, and Orbe does not check what they
@@ -124,11 +122,11 @@ let automationUsage = """
              large output to /dev/null. Editing the definition does not make
              the next run process every fetched item again.
              {"kind": "report"}
-             The output of the last step is the report, kept as text (up to
-             2000 characters) in the run record; a command last step prints
-             it on stdout. Its first line shows on the board's heading and in
+             The output of the last step is the report, kept as text in the
+             run record (up to 64 KiB; a larger report breaks the rules); a
+             command last step prints it on stdout. Its first line shows in
              the notification. An agent last step gives it through Orbe's
-             tool, kept short, or says there is nothing to report; a command
+             tool, or says there is nothing to report; a command
              that prints nothing, or an agent that says so, succeeds as
              "nothing to report". Editing
              the definition does not make the next run process every fetched
@@ -155,10 +153,10 @@ let automationUsage = """
              can read under your settings' additionalDirectories without
              naming anything. Instructions hidden in outside text the agent
              reads with its tools can make it use a writing tool it was given.
-             Without model it runs sonnet; it is cut off after 10 minutes, or
+             It needs a model; it is cut off after 10 minutes, or
              3 minutes without output. It gives its report through Orbe's
-             tool, kept as the result of the run (the first line shows on the
-             board's heading and in the notification); when there is nothing
+             tool, kept as the result of the run (the first line shows in the
+             notification); when there is nothing
              to do it says so and delivers nothing. A run fails when the agent
              says it cannot do it, ends without a result, crashes, hits its
              limit, or a named MCP tool is unavailable. A failed run, or
@@ -172,8 +170,9 @@ let automationUsage = """
              report, an agent run that had something to do), or on the first
              of consecutive failed runs, the automation's name and the result
              line show with a sound: in the menu bar, or in macOS Notification
-             Center. Notification Center keeps one notification per
-             automation; a new run replaces it. Setting notificationCenter
+             Center. Notification Center keeps one notification per node;
+             the node's next run replaces it (other nodes' notifications
+             stay). Setting notificationCenter
              makes macOS ask for Orbe's notification permission if it is not
              decided yet; without permission, the run shows in the menu bar.
              Clicking either opens the automation on Home's board. Runs that
@@ -190,8 +189,9 @@ let automationUsage = """
   with task candidates the next run also processes every fetched item
   again.
   run starts a run now (paused automations too) and returns at once; the
-  result shows up in list. pause stops only the schedule; resume restarts
-  it.
+  result shows up in list. pause stops only what Orbe starts on its own
+  (schedules and arriving lines), not a running run or the run command;
+  --node pauses one node. resume restarts it.
   try runs the nodes on a copy and returns at once (nothing saved or notified;
   side effects are held). trial reads it per node; --wait exits 124 on timeout.
   list prints one automation per line: id, state (active / paused /
@@ -343,11 +343,17 @@ private func automationSet(_ rest: [String]) -> Never {
 
 private func automationPause(_ rest: [String], paused: Bool) -> Never {
   exitIfAutomationHelp(rest)
-  rejectLeftovers(rest, positionals: 1)
-  let id = automationIdArg(rest, verb: paused ? "pause" : "resume")
-  let result = callOrExit("pause_automation", ["automationId": id, "paused": paused])
+  var args = rest
+  let nodeKey = takeOption(&args, "--node", requires: "a <key> value")
+  rejectLeftovers(args, positionals: 1)
+  let id = automationIdArg(args, verb: paused ? "pause" : "resume")
+  var params: [String: Any] = ["automationId": id, "paused": paused]
+  if let nodeKey { params["nodeKey"] = nodeKey }
+  let result = callOrExit("pause_automation", params)
   if wantJSON {
     printJSON(result)
+  } else if let nodeKey {
+    print("\(paused ? "paused" : "resumed") node \(nodeKey) of automation \(id)")
   } else {
     print("\(paused ? "paused" : "resumed") automation \(id)")
   }

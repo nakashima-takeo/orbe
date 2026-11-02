@@ -25,12 +25,6 @@ struct AutomationGraph: Equatable {
     var id: AutomationNodeID { entity.id }
     var key: String { entity.key }
 
-    /// 走るモデル。保存は省略のまま持ち、走らせるとき・画面はここで解く。コマンドは nil。
-    var model: String? {
-      guard case .agent(let agent) = action.method else { return nil }
-      return agent.model ?? role.defaultModel
-    }
-
     /// 省略を解いた上限（分）。
     var timeoutMinutes: Int {
       if let minutes = action.timeoutMinutes { return minutes }
@@ -40,13 +34,8 @@ struct AutomationGraph: Equatable {
       }
     }
 
-    /// 出力の性質を解いたもの。行を出すノード（取得・処理）だけが持ち、処理の省略は出来事の流れ。
-    var coverage: AutomationCoverage? {
-      switch role {
-      case .fetch, .process: action.coverage ?? .newArrivals
-      case .judge, .report, .work, .sideEffect: nil
-      }
-    }
+    /// 出力の性質を解いたもの（`AutomationNodeRole.coverage`）。
+    var coverage: AutomationCoverage? { role.coverage(action.coverage) }
 
     /// 入力のノード。
     var inputNodeIds: [AutomationNodeID] { inputs.map(\.from) }
@@ -55,11 +44,7 @@ struct AutomationGraph: Equatable {
     /// 同じ値を書き足しただけでは変わらない。
     var behavior: Behavior {
       var method = action.method
-      switch method {
-      case .agent(var agent):
-        agent.model = model
-        method = .agent(agent)
-      case .command(var command):
+      if case .command(var command) = method {
         command.workspace = workspace
         method = .command(command)
       }
@@ -116,7 +101,8 @@ struct AutomationGraph: Equatable {
           AutomationDefinition.Input(
             nodeKey: self.node(edge.from)?.key ?? "", take: edge.take, maxAgeHours: edge.maxAgeHours
           )
-        }, action: node.action, maxItems: node.entity.maxItems)
+        }, action: node.action, maxItems: node.entity.maxItems,
+        retentionDays: node.entity.retentionDays)
     }
   }
 

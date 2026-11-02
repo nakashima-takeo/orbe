@@ -27,16 +27,23 @@ struct BoardAutomationStanding: Equatable, Identifiable {
     return failing || unreadable != nil ? .failing : .active
   }
 
-  /// 名前の右の状態。走っているのを止めているより先に言う（止めていても流せる）。
+  /// 名前の右の状態。走っているのを止めているより先に言う（止めていても流せる）。ノードの状態も同じ決まりで言う。
   enum State: Equatable {
     case running
     case paused
+
+    init?(running: Bool, paused: Bool) {
+      if running {
+        self = .running
+      } else if paused {
+        self = .paused
+      } else {
+        return nil
+      }
+    }
   }
 
-  var state: State? {
-    if running { return .running }
-    return paused ? .paused : nil
-  }
+  var state: State? { State(running: running, paused: paused) }
 }
 
 extension BoardAutomationStanding {

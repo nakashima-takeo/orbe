@@ -138,191 +138,198 @@ enum SettingsRegistry {
   /// agent-state-icons〔gui.conf 非経由〕→ worktree-dir〔同〕→
   /// notification-sound〔同〕→ notification-sound-volume〔同〕→ notification-sound-enabled〔同〕→
   /// notification-sound-custom-done / -waiting / -waiting-same-as-done〔いずれも同〕→
-  /// menubar-notification-duration〔同〕）。
+  /// menubar-notification-duration〔同〕→ automation-run-retention-count / -days・-event-retention-days〔同〕）。
   /// `rootOrder`（表示順）とは別物——混同すると gui.conf のバイト順が崩れる。
-  static let all: [SettingDescriptor] = [
-    SettingDescriptor(
-      id: .fontSize, key: "font-size", labelKey: .settingsFontSize, activation: .stepper,
-      defaultValue: { .int(12) }, domain: .intRange(6...72, step: 1, unit: "pt"),
-      guiConf: { $0.layer[SettingKeys.fontSize].map { "font-size = \($0)" } },
-      display: { v, _ in if case .int(let n) = v { return "\(n)pt" } else { return "" } },
-      unsetPlaceholderKey: nil),
-    SettingDescriptor(
-      id: .fontFamily, key: "font-family", labelKey: .settingsFontFamily, activation: .drillIn,
-      defaultValue: { nil }, domain: .enumeration(values: { FontCatalog.names() }),
-      // gui.conf は解決順の最後（層3）で append される。層1の既定チェーンへ単純追記すると選択フォントが
-      // 末尾に回り無視されるため、`font-family = ""` でチェーンを reset して選択をプライマリに据え直す
-      // 2行を吐く。層1 と同じくチェーンは 1 本に保つ（font-family の face は presentation を無視して奪う
-      // ため、広カバレッジを足すと絵文字が白黒になり記号の解決先も半角字形へすり替わる。
-      // 理由の詳細と実測値は `app/orbe-defaults.conf`）。
-      guiConf: {
-        $0.layer[SettingKeys.fontFamily].map {
-          "font-family = \"\"\nfont-family = \($0)"
-        }
-      },
-      display: { v, _ in if case .string(let s) = v { return s } else { return "" } },
-      unsetPlaceholderKey: nil),
-    SettingDescriptor(
-      id: .tabTitleFontFamily, key: "tab-title-font-family", labelKey: .settingsTabTitleFont,
-      activation: .drillIn,
-      // 開いた列挙（defaultAgent 前例）: 任意の family 名を受理する。パレットの列挙候補は
-      // FontCatalog.allNames() を提示側が差す。解決不能名は保存値として保持し、描画時解決で
-      // 既定（システム等幅 11pt）へ退避する（ChromeFontResolver）。
-      defaultValue: { nil }, domain: .enumeration(values: { [] }),
-      guiConf: nil,  // gui.conf 非経由（端末に影響しない chrome 専用。resolver 直配信）
-      display: { v, _ in if case .string(let s) = v { return s } else { return "" } },
-      unsetPlaceholderKey: nil),
-    SettingDescriptor(
-      id: .emojiFont, key: "emoji-font", labelKey: .settingsEmojiFont, activation: .drillIn,
-      defaultValue: { .string(EmojiFontMode.noto.rawValue) },
-      domain: .enumeration(values: { EmojiFontMode.allCases.map(\.rawValue) }),
-      // noto は「同梱 Noto のフラット字形で描く」という機能そのもの。emoji-presentation 全域を
-      // 同梱 Noto（sbix・.process 登録済み）へ map する。codepoint-map は解決順の最上位で名前解決し、
-      // map 先未保有 codepoint は libghostty が hasCodepoint 検証で通常解決へ落とすため tofu にならない
-      // （ghostty の src/font/CodepointResolver.zig の getIndexCodepointOverride）。
-      // apple は map を出さない。libghostty が macOS で Apple Color Emoji を必ず fallback へ挿すため
-      // （ghostty の src/font/SharedGridSet.zig）、放っておけばそれが色付きで描く。奪う側の font-family を
-      // JetBrains 1 本に絞ってあるので、横取りを打ち消すための map はもう要らない。
-      guiConf: { settings in
-        switch settings[SettingKeys.emojiFont] {
-        case .noto:
-          return "font-codepoint-map = \(EmojiPresentationRanges.confValue)=Noto Color Emoji"
-        case .apple:
-          return nil
-        }
-      },
-      display: { v, store in
-        guard case .string(let raw) = v, let mode = EmojiFontMode(rawValue: raw) else { return "" }
-        return store.string(mode.labelKey)
-      },
-      unsetPlaceholderKey: nil),
-    SettingDescriptor(
-      id: .theme, key: "theme", labelKey: .settingsTheme, activation: .drillIn,
-      defaultValue: { .string(ThemeMode.auto.rawValue) },
-      domain: .enumeration(values: {
-        [ThemeMode.auto.rawValue, ThemeMode.light.rawValue, ThemeMode.dark.rawValue]
-      }),
-      // 値非依存の定数行を常時吐く。目的はユーザー `~/.config/ghostty` の theme 指定を層3の後勝ちで
-      // 恒久無効化し、端末色を Orbe の端末テーマ 2 枚に固定すること。ライト/ダークどちらに見せるかはこの行では
-      // なく ThemeMode（NSApp.appearance・applyActiveWorkspaceConfig）が決める。
-      guiConf: { _ in "theme = light:OrbeLight,dark:OrbeDark" },
-      display: { v, _ in
-        if case .string(let s) = v { return ThemeMode(rawValue: s)?.label ?? s } else { return "" }
-      },
-      unsetPlaceholderKey: nil),
-    SettingDescriptor(
-      id: .defaultAgent, key: "default-agent", labelKey: .settingsDefaultAgent,
-      activation: .drillIn,
-      defaultValue: { nil }, domain: .enumeration(values: { [] }),  // 検出済み一覧は control 側で動的に差す
-      guiConf: nil,  // gui.conf 非経由（AgentLauncher 直行）
-      display: { v, _ in if case .string(let s) = v { return s } else { return "" } },
-      unsetPlaceholderKey: .settingsUnset),
-    SettingDescriptor(
-      id: .backgroundOpacity, key: "background-opacity", labelKey: .settingsBackgroundOpacity,
-      activation: .stepper,
-      defaultValue: { .int(95) }, domain: .intRange(20...100, step: 1, unit: "%"),
-      // percent Int を真実の値として持ち、書き出し時のみ /100（整数演算で誤差を避ける）。%.2f で 2 桁固定。
-      guiConf: {
-        $0.layer[SettingKeys.backgroundOpacity].map {
-          String(format: "background-opacity = %.2f", Double($0) / 100)
-        }
-      },
-      display: { v, _ in percentLabel(v) }, unsetPlaceholderKey: nil),
-    SettingDescriptor(
-      id: .backgroundBlur, key: "background-blur", labelKey: .settingsBackgroundBlur,
-      activation: .toggle,
-      defaultValue: { .bool(true) }, domain: .toggle,
-      // Swift Bool 補間で true/false（ghostty の期待構文）。true=既定強度20 のすりガラス、false=無ブラー。
-      guiConf: { $0.layer[SettingKeys.backgroundBlur].map { "background-blur = \($0)" } },
-      display: boolLabel, unsetPlaceholderKey: nil),
-    SettingDescriptor(
-      id: .cursorStyleBlink, key: "cursor-style-blink", labelKey: .settingsCursorBlink,
-      activation: .toggle,
-      defaultValue: { .bool(true) }, domain: .toggle,  // 既定 conf の cursor-style-blink = true と一致
-      guiConf: { $0.layer[SettingKeys.cursorStyleBlink].map { "cursor-style-blink = \($0)" } },
-      display: boolLabel, unsetPlaceholderKey: nil),
-    SettingDescriptor(
-      id: .agentStateIcons, key: "agent-state-icons", labelKey: .settingsAgentIcons,
-      activation: .drillIn,
-      defaultValue: { .stringMap([:]) },
-      domain: .stringMap(allowedKeys: { AgentStateIcon.Kind.allCases.map(\.state) }),
-      guiConf: nil,  // gui.conf 非経由（chrome が AgentIconResolver 経由で直接描く）
-      display: { v, store in
-        if case .stringMap(let m) = v {
-          let n = AgentStateIcon.decode(m).count
-          return n == 0
-            ? store.string(.settingsIconsDefault)
-            : store.plural(n, one: .settingsIconsCustomOne, other: .settingsIconsCustomOther)
-        }
-        return ""
-      },
-      unsetPlaceholderKey: nil),
-    SettingDescriptor(
-      id: .worktreeDir, key: "worktree-dir", labelKey: .settingsWorktreeDir, activation: .drillIn,
-      defaultValue: { .string(WorktreePathTemplate.defaultTemplate) },
-      domain: .pathTemplate,
-      guiConf: nil,  // gui.conf 非経由（worktree パレットの worktree 作成時に実効値を pull する）
-      display: { v, _ in if case .string(let s) = v { return s } else { return "" } },
-      unsetPlaceholderKey: nil),
-    SettingDescriptor(
-      id: .notificationSound, key: "notification-sound", labelKey: .settingsNotificationSound,
-      activation: .drillIn,
-      // 既定の選択は `AgentSoundChoice.default`（＝`NotificationSound.default` の案）が SSOT
-      // （実機で聴き比べて決め直すときの唯一の差し替え点）。
-      defaultValue: { AgentSoundChoice.default.settingValue },
-      domain: .enumeration(values: { AgentSoundChoice.allRawValues }),
-      guiConf: nil,  // gui.conf 非経由（libghostty 設定ではない）
-      display: { v, store in
-        guard case .string(let raw) = v, let choice = AgentSoundChoice(rawValue: raw) else {
+  static let all: [SettingDescriptor] =
+    [
+      SettingDescriptor(
+        id: .fontSize, key: "font-size", labelKey: .settingsFontSize, activation: .stepper,
+        defaultValue: { .int(12) }, domain: .intRange(6...72, step: 1, unit: "pt"),
+        guiConf: { $0.layer[SettingKeys.fontSize].map { "font-size = \($0)" } },
+        display: { v, _ in if case .int(let n) = v { return "\(n)pt" } else { return "" } },
+        unsetPlaceholderKey: nil),
+      SettingDescriptor(
+        id: .fontFamily, key: "font-family", labelKey: .settingsFontFamily, activation: .drillIn,
+        defaultValue: { nil }, domain: .enumeration(values: { FontCatalog.names() }),
+        // gui.conf は解決順の最後（層3）で append される。層1の既定チェーンへ単純追記すると選択フォントが
+        // 末尾に回り無視されるため、`font-family = ""` でチェーンを reset して選択をプライマリに据え直す
+        // 2行を吐く。層1 と同じくチェーンは 1 本に保つ（font-family の face は presentation を無視して奪う
+        // ため、広カバレッジを足すと絵文字が白黒になり記号の解決先も半角字形へすり替わる。
+        // 理由の詳細と実測値は `app/orbe-defaults.conf`）。
+        guiConf: {
+          $0.layer[SettingKeys.fontFamily].map {
+            "font-family = \"\"\nfont-family = \($0)"
+          }
+        },
+        display: { v, _ in if case .string(let s) = v { return s } else { return "" } },
+        unsetPlaceholderKey: nil),
+      SettingDescriptor(
+        id: .tabTitleFontFamily, key: "tab-title-font-family", labelKey: .settingsTabTitleFont,
+        activation: .drillIn,
+        // 開いた列挙（defaultAgent 前例）: 任意の family 名を受理する。パレットの列挙候補は
+        // FontCatalog.allNames() を提示側が差す。解決不能名は保存値として保持し、描画時解決で
+        // 既定（システム等幅 11pt）へ退避する（ChromeFontResolver）。
+        defaultValue: { nil }, domain: .enumeration(values: { [] }),
+        guiConf: nil,  // gui.conf 非経由（端末に影響しない chrome 専用。resolver 直配信）
+        display: { v, _ in if case .string(let s) = v { return s } else { return "" } },
+        unsetPlaceholderKey: nil),
+      SettingDescriptor(
+        id: .emojiFont, key: "emoji-font", labelKey: .settingsEmojiFont, activation: .drillIn,
+        defaultValue: { .string(EmojiFontMode.noto.rawValue) },
+        domain: .enumeration(values: { EmojiFontMode.allCases.map(\.rawValue) }),
+        // noto は「同梱 Noto のフラット字形で描く」という機能そのもの。emoji-presentation 全域を
+        // 同梱 Noto（sbix・.process 登録済み）へ map する。codepoint-map は解決順の最上位で名前解決し、
+        // map 先未保有 codepoint は libghostty が hasCodepoint 検証で通常解決へ落とすため tofu にならない
+        // （ghostty の src/font/CodepointResolver.zig の getIndexCodepointOverride）。
+        // apple は map を出さない。libghostty が macOS で Apple Color Emoji を必ず fallback へ挿すため
+        // （ghostty の src/font/SharedGridSet.zig）、放っておけばそれが色付きで描く。奪う側の font-family を
+        // JetBrains 1 本に絞ってあるので、横取りを打ち消すための map はもう要らない。
+        guiConf: { settings in
+          switch settings[SettingKeys.emojiFont] {
+          case .noto:
+            return "font-codepoint-map = \(EmojiPresentationRanges.confValue)=Noto Color Emoji"
+          case .apple:
+            return nil
+          }
+        },
+        display: { v, store in
+          guard case .string(let raw) = v, let mode = EmojiFontMode(rawValue: raw) else {
+            return ""
+          }
+          return store.string(mode.labelKey)
+        },
+        unsetPlaceholderKey: nil),
+      SettingDescriptor(
+        id: .theme, key: "theme", labelKey: .settingsTheme, activation: .drillIn,
+        defaultValue: { .string(ThemeMode.auto.rawValue) },
+        domain: .enumeration(values: {
+          [ThemeMode.auto.rawValue, ThemeMode.light.rawValue, ThemeMode.dark.rawValue]
+        }),
+        // 値非依存の定数行を常時吐く。目的はユーザー `~/.config/ghostty` の theme 指定を層3の後勝ちで
+        // 恒久無効化し、端末色を Orbe の端末テーマ 2 枚に固定すること。ライト/ダークどちらに見せるかはこの行では
+        // なく ThemeMode（NSApp.appearance・applyActiveWorkspaceConfig）が決める。
+        guiConf: { _ in "theme = light:OrbeLight,dark:OrbeDark" },
+        display: { v, _ in
+          if case .string(let s) = v {
+            return ThemeMode(rawValue: s)?.label ?? s
+          } else {
+            return ""
+          }
+        },
+        unsetPlaceholderKey: nil),
+      SettingDescriptor(
+        id: .defaultAgent, key: "default-agent", labelKey: .settingsDefaultAgent,
+        activation: .drillIn,
+        defaultValue: { nil }, domain: .enumeration(values: { [] }),  // 検出済み一覧は control 側で動的に差す
+        guiConf: nil,  // gui.conf 非経由（AgentLauncher 直行）
+        display: { v, _ in if case .string(let s) = v { return s } else { return "" } },
+        unsetPlaceholderKey: .settingsUnset),
+      SettingDescriptor(
+        id: .backgroundOpacity, key: "background-opacity", labelKey: .settingsBackgroundOpacity,
+        activation: .stepper,
+        defaultValue: { .int(95) }, domain: .intRange(20...100, step: 1, unit: "%"),
+        // percent Int を真実の値として持ち、書き出し時のみ /100（整数演算で誤差を避ける）。%.2f で 2 桁固定。
+        guiConf: {
+          $0.layer[SettingKeys.backgroundOpacity].map {
+            String(format: "background-opacity = %.2f", Double($0) / 100)
+          }
+        },
+        display: { v, _ in percentLabel(v) }, unsetPlaceholderKey: nil),
+      SettingDescriptor(
+        id: .backgroundBlur, key: "background-blur", labelKey: .settingsBackgroundBlur,
+        activation: .toggle,
+        defaultValue: { .bool(true) }, domain: .toggle,
+        // Swift Bool 補間で true/false（ghostty の期待構文）。true=既定強度20 のすりガラス、false=無ブラー。
+        guiConf: { $0.layer[SettingKeys.backgroundBlur].map { "background-blur = \($0)" } },
+        display: boolLabel, unsetPlaceholderKey: nil),
+      SettingDescriptor(
+        id: .cursorStyleBlink, key: "cursor-style-blink", labelKey: .settingsCursorBlink,
+        activation: .toggle,
+        defaultValue: { .bool(true) }, domain: .toggle,  // 既定 conf の cursor-style-blink = true と一致
+        guiConf: { $0.layer[SettingKeys.cursorStyleBlink].map { "cursor-style-blink = \($0)" } },
+        display: boolLabel, unsetPlaceholderKey: nil),
+      SettingDescriptor(
+        id: .agentStateIcons, key: "agent-state-icons", labelKey: .settingsAgentIcons,
+        activation: .drillIn,
+        defaultValue: { .stringMap([:]) },
+        domain: .stringMap(allowedKeys: { AgentStateIcon.Kind.allCases.map(\.state) }),
+        guiConf: nil,  // gui.conf 非経由（chrome が AgentIconResolver 経由で直接描く）
+        display: { v, store in
+          if case .stringMap(let m) = v {
+            let n = AgentStateIcon.decode(m).count
+            return n == 0
+              ? store.string(.settingsIconsDefault)
+              : store.plural(n, one: .settingsIconsCustomOne, other: .settingsIconsCustomOther)
+          }
           return ""
-        }
-        return store.string(choice.labelKey)
-      },
-      unsetPlaceholderKey: nil),
-    SettingDescriptor(
-      id: .notificationSoundVolume, key: "notification-sound-volume",
-      labelKey: .settingsNotificationSoundVolume, activation: .stepper,
-      // 下限は 0 でなく 5——「鳴らない状態」の担体はオン/オフ 1 つに閉じる。0 を許すと
-      // サブパレットの試聴まで無音になり、聴きながら選ぶという面の目的が立たなくなる。
-      // 既定音量は `SoundRenderer.defaultVolume` が SSOT（リテラルを 2 箇所に置かない）。
-      defaultValue: { .int(SoundRenderer.defaultVolume) },
-      domain: .intRange(5...100, step: 5, unit: "%"),
-      guiConf: nil,  // gui.conf 非経由（合成の入力＝コンプレッサの手前に掛かる）
-      display: { v, _ in percentLabel(v) }, unsetPlaceholderKey: nil),
-    SettingDescriptor(
-      id: .notificationSoundEnabled, key: "notification-sound-enabled",
-      labelKey: .settingsNotificationSoundEnabled, activation: .toggle,
-      defaultValue: { .bool(true) }, domain: .toggle,
-      guiConf: nil,  // gui.conf 非経由
-      display: boolLabel, unsetPlaceholderKey: nil),
-    SettingDescriptor(
-      id: .notificationSoundCustomDone, key: "notification-sound-custom-done",
-      labelKey: .settingsSoundCustomDoneRow, activation: .drillIn,
-      defaultValue: { nil },  // 未取り込み（実効は紋章の同 event 音へフォールバック）
-      domain: .stringMap(allowedKeys: { customSoundKeys }),
-      guiConf: nil,  // gui.conf 非経由
-      display: customSoundLabel, unsetPlaceholderKey: .settingsSoundCustomUnset),
-    SettingDescriptor(
-      id: .notificationSoundCustomWaiting, key: "notification-sound-custom-waiting",
-      labelKey: .settingsSoundCustomWaitingRow, activation: .drillIn,
-      defaultValue: { nil },
-      domain: .stringMap(allowedKeys: { customSoundKeys }),
-      guiConf: nil,  // gui.conf 非経由
-      display: customSoundLabel, unsetPlaceholderKey: .settingsSoundCustomUnset),
-    SettingDescriptor(
-      id: .notificationSoundCustomWaitingSameAsDone,
-      key: "notification-sound-custom-waiting-same-as-done",
-      labelKey: .settingsSoundCustomSameAsDone, activation: .toggle,
-      defaultValue: { .bool(true) }, domain: .toggle,
-      guiConf: nil,  // gui.conf 非経由
-      display: boolLabel, unsetPlaceholderKey: nil),
-    SettingDescriptor(
-      id: .menuBarNotificationDuration, key: "menubar-notification-duration",
-      labelKey: .settingsMenuBarNotificationDuration, activation: .stepper,
-      defaultValue: { .int(40) }, domain: .intRange(5...180, step: 5, unit: "s"),
-      guiConf: nil,  // gui.conf 非経由（メニューバー chrome の尺で libghostty 設定ではない）
-      display: secondsLabel, unsetPlaceholderKey: nil),
-  ]
+        },
+        unsetPlaceholderKey: nil),
+      SettingDescriptor(
+        id: .worktreeDir, key: "worktree-dir", labelKey: .settingsWorktreeDir, activation: .drillIn,
+        defaultValue: { .string(WorktreePathTemplate.defaultTemplate) },
+        domain: .pathTemplate,
+        guiConf: nil,  // gui.conf 非経由（worktree パレットの worktree 作成時に実効値を pull する）
+        display: { v, _ in if case .string(let s) = v { return s } else { return "" } },
+        unsetPlaceholderKey: nil),
+      SettingDescriptor(
+        id: .notificationSound, key: "notification-sound", labelKey: .settingsNotificationSound,
+        activation: .drillIn,
+        // 既定の選択は `AgentSoundChoice.default`（＝`NotificationSound.default` の案）が SSOT
+        // （実機で聴き比べて決め直すときの唯一の差し替え点）。
+        defaultValue: { AgentSoundChoice.default.settingValue },
+        domain: .enumeration(values: { AgentSoundChoice.allRawValues }),
+        guiConf: nil,  // gui.conf 非経由（libghostty 設定ではない）
+        display: { v, store in
+          guard case .string(let raw) = v, let choice = AgentSoundChoice(rawValue: raw) else {
+            return ""
+          }
+          return store.string(choice.labelKey)
+        },
+        unsetPlaceholderKey: nil),
+      SettingDescriptor(
+        id: .notificationSoundVolume, key: "notification-sound-volume",
+        labelKey: .settingsNotificationSoundVolume, activation: .stepper,
+        // 下限は 0 でなく 5——「鳴らない状態」の担体はオン/オフ 1 つに閉じる。0 を許すと
+        // サブパレットの試聴まで無音になり、聴きながら選ぶという面の目的が立たなくなる。
+        // 既定音量は `SoundRenderer.defaultVolume` が SSOT（リテラルを 2 箇所に置かない）。
+        defaultValue: { .int(SoundRenderer.defaultVolume) },
+        domain: .intRange(5...100, step: 5, unit: "%"),
+        guiConf: nil,  // gui.conf 非経由（合成の入力＝コンプレッサの手前に掛かる）
+        display: { v, _ in percentLabel(v) }, unsetPlaceholderKey: nil),
+      SettingDescriptor(
+        id: .notificationSoundEnabled, key: "notification-sound-enabled",
+        labelKey: .settingsNotificationSoundEnabled, activation: .toggle,
+        defaultValue: { .bool(true) }, domain: .toggle,
+        guiConf: nil,  // gui.conf 非経由
+        display: boolLabel, unsetPlaceholderKey: nil),
+      SettingDescriptor(
+        id: .notificationSoundCustomDone, key: "notification-sound-custom-done",
+        labelKey: .settingsSoundCustomDoneRow, activation: .drillIn,
+        defaultValue: { nil },  // 未取り込み（実効は紋章の同 event 音へフォールバック）
+        domain: .stringMap(allowedKeys: { customSoundKeys }),
+        guiConf: nil,  // gui.conf 非経由
+        display: customSoundLabel, unsetPlaceholderKey: .settingsSoundCustomUnset),
+      SettingDescriptor(
+        id: .notificationSoundCustomWaiting, key: "notification-sound-custom-waiting",
+        labelKey: .settingsSoundCustomWaitingRow, activation: .drillIn,
+        defaultValue: { nil },
+        domain: .stringMap(allowedKeys: { customSoundKeys }),
+        guiConf: nil,  // gui.conf 非経由
+        display: customSoundLabel, unsetPlaceholderKey: .settingsSoundCustomUnset),
+      SettingDescriptor(
+        id: .notificationSoundCustomWaitingSameAsDone,
+        key: "notification-sound-custom-waiting-same-as-done",
+        labelKey: .settingsSoundCustomSameAsDone, activation: .toggle,
+        defaultValue: { .bool(true) }, domain: .toggle,
+        guiConf: nil,  // gui.conf 非経由
+        display: boolLabel, unsetPlaceholderKey: nil),
+      SettingDescriptor(
+        id: .menuBarNotificationDuration, key: "menubar-notification-duration",
+        labelKey: .settingsMenuBarNotificationDuration, activation: .stepper,
+        defaultValue: { .int(40) }, domain: .intRange(5...180, step: 5, unit: "s"),
+        guiConf: nil,  // gui.conf 非経由（メニューバー chrome の尺で libghostty 設定ではない）
+        display: secondsLabel, unsetPlaceholderKey: nil),
+    ] + automationRetention
 
   /// 取り込み済み音源の実体（`sounds/` 配下のファイル）を指す項目。参照集合 GC の契機判定が読む。
   /// 参照集合の収集（`WindowController.collectCustomSoundGarbage`）と同じ `SettingKeys` の 1 列から
@@ -339,14 +346,15 @@ enum SettingsRegistry {
 
   /// パレット root の表示順（fontSize → backgroundOpacity → backgroundBlur → cursorStyleBlink →
   /// theme → agent → fontFamily → tabTitleFontFamily → emojiFont → agentStateIcons →
-  /// worktreeDir → notificationSound → 音量 → オン/オフ → メニューバー通知の表示時間）。
-  /// 背景関連・フォント関連・通知音関連をそれぞれ隣接させる。
+  /// worktreeDir → notificationSound → 音量 → オン/オフ → メニューバー通知の表示時間 → 自動化の保持 3 つ）。
+  /// 背景関連・フォント関連・通知音関連・自動化の保持をそれぞれ隣接させる。
   static let rootOrder: [SettingDescriptor] =
     [
       SettingID.fontSize, .backgroundOpacity, .backgroundBlur, .cursorStyleBlink, .theme,
       .defaultAgent, .fontFamily, .tabTitleFontFamily, .emojiFont, .agentStateIcons,
       .worktreeDir, .notificationSound, .notificationSoundVolume,
-      .notificationSoundEnabled, .menuBarNotificationDuration,
+      .notificationSoundEnabled, .menuBarNotificationDuration, .automationRunRetentionCount,
+      .automationRunRetentionDays, .automationEventRetentionDays,
     ].map { id in all.first { $0.id == id }! }
 
   static func descriptor(_ id: SettingID) -> SettingDescriptor { all.first { $0.id == id }! }

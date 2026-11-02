@@ -7,7 +7,8 @@ import XCTest
 /// 壊れると何が起きるか: 失敗したノードがあるのに一覧の印が成功に見え、壊れたノードに気づけない。流している間や止めている間に
 /// 前回の結果が見えなくなる。地図の線が入力と違う行へつながり、
 /// どのノードの出力がどこへ行くかを読み違える。英語の実行履歴と知らせが「judged 1 items」と言う。新着なしの回が他の回を
-/// 押し出す、または畳んではいけない回（新着のある回・形式エラーを修正した回）が畳まれて見えなくなる。
+/// 押し出す、または畳んではいけない回（新着のある回・形式エラーを修正した回）が畳まれて見えなくなる。止めた自動化のノードの
+/// カードの「次回」が空になり、止まっていることが分からない。
 @MainActor
 final class BoardAutomationSummaryTests: OrbeTestCase {
   private let text = AutomationText(
@@ -46,6 +47,19 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     XCTAssertEqual(wide.last, "未実行")
   }
 
+  /// 次回: 予定のあるノードがすべて止まっていれば「ノードを一時停止中」、一部だけなら出さない（残りの次の時刻は走らせ役が渡す）。
+  func testTheNextSaysPausedWhenEveryScheduledNodeIsPaused() throws {
+    var automation = try XCTUnwrap(automations().first)
+    let scheduled = automation.graph.nodes.filter {
+      if case .scheduled = $0.entity.trigger { true } else { false }
+    }
+    XCTAssertGreaterThan(scheduled.count, 1, "前提: 予定のあるノードが 2 つ以上")
+    automation.states[scheduled[0].id]?.pausedAt = DesignSceneFixtures.taskToday
+    XCTAssertNil(BoardAutomationSummary(automation, text: text, next: nil).next)
+    for node in scheduled { automation.states[node.id]?.pausedAt = DesignSceneFixtures.taskToday }
+    XCTAssertEqual(BoardAutomationSummary(automation, text: text, next: nil).next, "ノードを一時停止中")
+  }
+
   /// 名前の右の状態（実行中・停止中）と前回の印は混ぜない。失敗したノードのある自動化を流している間も印は失敗のまま、止めて
   /// いる自動化の印は前回の成否のまま。
   func testListRowKeepsTheStateApartFromTheLastResult() throws {
@@ -63,6 +77,48 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     XCTAssertEqual(model.summary(charge, text: text, now: now)?.mark, .failure, "流している間も前回の印")
     XCTAssertEqual(states[weekend], .paused)
     XCTAssertEqual(model.summary(weekend, text: text, now: now)?.mark, .success, "止めていても前回の印")
+  }
+
+  /// 地図の行の見え方は、走っている → ノード自身を止めている → 最新の回が失敗の順に言う。カードの頭は状態だけを言い、前回の
+  /// 成否の印は止めても失敗のまま。
+  func testAPausedNodeSaysItIsPausedBeforeItsFailure() throws {
+    var automation = try XCTUnwrap(automations().first)
+    let failing = try XCTUnwrap(
+      automation.graph.nodes.first { automation.state($0.id).runs.first?.failed == true }?.id,
+      "前提: 最新の回が失敗したノード")
+    func look(running: Bool) -> BoardNodeLook? {
+      let detail = BoardAutomationDetailValue(
+        automation, text: text, running: { $0 == failing && running }, open: 0, next: nil,
+        workspaces: AutomationWorkspaces(all: [], home: nil))
+      return detail.rows.lazy.compactMap { row -> BoardNodeLook? in
+        guard case .node(let node) = row.content, node.id == failing else { return nil }
+        return node.look
+      }.first
+    }
+    XCTAssertEqual(look(running: false), .failed)
+
+    automation.states[failing]?.pausedAt = DesignSceneFixtures.taskToday
+    XCTAssertEqual(look(running: false), .paused, "止めていれば失敗より先に言う")
+    XCTAssertEqual(look(running: true), .running, "走っていれば止めているより先に言う")
+    let card = try XCTUnwrap(
+      BoardAutomationNodeValue(
+        automation, nodeId: failing, text: text, running: false, next: nil, open: 0,
+        workspaces: AutomationWorkspaces(all: [], home: nil)))
+    XCTAssertEqual(card.state, .paused)
+    XCTAssertEqual(card.mark, .failure, "頭の印は前回の成否のまま")
+  }
+
+  /// カードの「次回」は、ノード自身を止めていなくても自動化を止めていれば「一時停止中」。
+  func testTheCardNextSaysPausedWhileTheAutomationIsPaused() throws {
+    var automation = try XCTUnwrap(automations().first)
+    XCTAssertFalse(automation.state(key: "github").paused, "前提: ノード自身は止めていない")
+    automation.pausedAt = DesignSceneFixtures.taskToday
+    let card = try XCTUnwrap(
+      BoardAutomationNodeValue(
+        automation, key: "github", text: text, running: false, next: nil, open: 0))
+
+    XCTAssertEqual(
+      card.facts.first { $0.label == .boardNodeNext }?.value.map(\.text), ["一時停止中"])
   }
 
   /// 見本の 12 ノードの線: 行を上から見て、最後の受け手を迎える入力の線のうち最も左に点を置き、無ければ空いている最も左。
@@ -85,7 +141,7 @@ final class BoardAutomationSummaryTests: OrbeTestCase {
     let index = try XCTUnwrap(samples[0].definition.nodes.firstIndex { $0.key == "backlog" })
     samples[0].definition.nodes[index].action.method = .agent(
       AutomationNodeAgent(
-        cli: "claude", model: nil,
+        cli: "claude", model: "haiku",
         tools: [
           "mcp__claude_ai_Gmail__search_threads", "mcp__plugin_core_backlog__get_issues",
           "mcp__claude_ai_Gmail__get_thread", "Bash(npm run test:unit:*)",

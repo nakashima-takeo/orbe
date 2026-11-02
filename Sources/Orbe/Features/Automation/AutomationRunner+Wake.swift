@@ -4,10 +4,10 @@ import Foundation
 /// 基準線は入力ごと・表ごとに「読んだ位置」と「前の契機の始まりの時点の上流の最後の番号」の大きい方で、取り方によらない——項目の
 /// 表の番号は変化の番号（項目の追加・版の追加・無効化で進む）なので、毎回すべてを取る入力も同じ比べ方で上流の変化に起きる。
 /// 読んだ位置と上流の最後の番号は、見るたびに DB から読む（再起動の後も、読んでいない変化で起こす）。この決まりは、
-/// 上流の行が変わったとき（上流の確定）・登録したとき（起動・書き換え・再開。止めた自動化は除く）・そのノードの契機が終わったときに
-/// 見る。失敗した契機の行は基準線以下なので、この決まりでは起こさない（同じ行で失敗をすぐ繰り返さない）。代わりに、
-/// 「届いたら」でないノードの契機が終わるたびに、下流の「届いたら」のノードを、読んだ位置より後の上流の番号があればすべて起こす
-/// （祖先の予定の間隔でやり直す）。
+/// 上流の行が変わったとき（上流の確定）・登録したとき（起動・書き換え・再開）・そのノードの契機が終わったときに見る。失敗した
+/// 契機の行は基準線以下なので、この決まりでは起こさない（同じ行で失敗をすぐ繰り返さない）。代わりに、「届いたら」でないノードの
+/// 契機が終わるたびに、下流の「届いたら」のノードを、読んだ位置より後の上流の番号があればすべて起こす（祖先の予定の間隔でやり
+/// 直す）。どちらの入口も、実効で止めたノード（`Automation.halted`）は起こさない——未処理は積もり、再開で起こす決まりを見る。
 extension AutomationRunner {
   /// 受け手の 1 つのつながりの今: 読んだ位置と、上流の最後の番号。
   struct Inlet: Equatable {
@@ -49,10 +49,20 @@ extension AutomationRunner {
     }
   }
 
-  /// 起こす決まり。「届いたら」のノードに、基準線より新しい上流の行があり、走っていなければ起こす。
+  /// 契機の終わりの時点で、その契機の基準線（`baseline`）より新しい上流の行が無いか。入力を読まなかった契機（基準線が空）は偽。
+  func covered(
+    _ nodeId: AutomationNodeID, of id: Int, since baseline: [AutomationNodeID: AutomationSeqs]
+  ) -> Bool {
+    guard !baseline.isEmpty, let node = store.automation(id)?.graph.node(nodeId),
+      let inlets = inlets(of: nodeId)
+    else { return false }
+    return !Self.hasNew(node, inlets, since: baseline)
+  }
+
+  /// 起こす決まり。実効で止めていない「届いたら」のノードに、基準線より新しい上流の行があり、走っていなければ起こす。
   func wake(_ id: Int, _ nodeId: AutomationNodeID) {
     guard let automation = store.automation(id), let node = automation.graph.node(nodeId),
-      node.entity.trigger == .arrival
+      node.entity.trigger == .arrival, !automation.halted(nodeId)
     else { return }
     let key = Self.key(id, nodeId)
     guard !scheduler.isRunning(id: key), let inlets = inlets(of: nodeId),
@@ -61,11 +71,12 @@ extension AutomationRunner {
     scheduler.runNow(id: key)
   }
 
-  /// 失敗のやり直し。「届いたら」でないノードの契機が終わったら、下流の「届いたら」のノードを、読んだ位置より後の上流の番号が
-  /// あればすべて起こす（`needsRetry`）。
+  /// 失敗のやり直し。「届いたら」でないノードの契機が終わったら、実効で止めていない下流の「届いたら」のノードを、読んだ位置より
+  /// 後の上流の番号があればすべて起こす（`needsRetry`）。
   func retry(below nodeId: AutomationNodeID, in id: Int) {
     guard let automation = store.automation(id) else { return }
-    for node in automation.graph.descendants(of: nodeId) where node.entity.trigger == .arrival {
+    for node in automation.graph.descendants(of: nodeId)
+    where node.entity.trigger == .arrival && !automation.halted(node.id) {
       let key = Self.key(id, node.id)
       guard let inlets = inlets(of: node.id), Self.needsRetry(node, inlets) else {
         continue

@@ -58,11 +58,16 @@ final class WindowController: NSObject, NSWindowDelegate {
   // workspace の参照は表示・応答のときに解くので、workspace の復元との順序の依存は無い。
   let taskStore = TaskStore()
   // 自動化の走らせ役。定義の変異はここを通して番人の登録を合わせ、読みと提案のさばきは `automationStore` が持つ。
+  // 保持の値は Home の実効設定から読む（自動化は workspace に属さない。通知の設定と同じ読み方）。
   private(set) lazy var automationRunner = AutomationRunner(
-    store: AutomationStore(), workspaces: { [store] in AutomationWorkspaces(store) },
+    store: AutomationStore(
+      opening: AutomationPersistence.open(retention: { [weak self] in
+        self?.automationRetention ?? .standard
+      })),
+    workspaces: { [store] in AutomationWorkspaces(store) },
     recorded: { [weak self] in self?.notifyAutomationRecorded($0.end.automationId, $0.end.nodeId) },
-    defined: { [weak self] in self?.automationDefined($0) },
-    deleted: { [weak self] in self?.automationDeleted($0) })
+    defined: { [weak self] in self?.automationDefined($0, removed: $1) },
+    deleted: { [weak self] in self?.automationDeleted($0, nodeIds: $1) })
   var automationStore: AutomationStore { automationRunner.store }
   // 自動化の試走の係（自動化ごとに 1 つ、メモリだけ）。
   private(set) lazy var automationTrials = AutomationTrials(runner: automationRunner)

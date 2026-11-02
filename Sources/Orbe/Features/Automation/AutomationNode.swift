@@ -61,9 +61,12 @@ struct AutomationNode: Equatable {
   var trigger: Trigger
   /// 受け手として 1 回に取る件数の上限。入力のあるノードだけが持てる。
   var maxItems: Int?
+  /// 出来事を残す日数。出来事の流れを出すノードだけが持てる。省略は設定の値（`AutomationRetention.eventDays`）。
+  var retentionDays: Int?
   var defId: AutomationNodeDefID
 
   static let keyLength = 1...32
+  static let retentionDaysRange = 1...365
 
   enum Trigger: Equatable {
     /// 間隔か cron 式。
@@ -82,8 +85,7 @@ extension AutomationNode {
   ) {
     self.init(
       id: id, key: definitionNode.key, name: definitionNode.name, trigger: definitionNode.trigger,
-      maxItems: definitionNode.maxItems,
-      defId: defId)
+      maxItems: definitionNode.maxItems, retentionDays: definitionNode.retentionDays, defId: defId)
   }
 }
 
@@ -115,8 +117,7 @@ struct AutomationNodeCommand: Equatable {
 /// ノードの agent。
 struct AutomationNodeAgent: Equatable {
   var cli: String
-  /// 省略は役割の既定（`AutomationNodeRole.defaultModel`）。
-  var model: String?
+  var model: String
   /// 許可の規則。MCP のツールの完全名か `Bash(<コマンドの接頭>:*)`。空はツールを持たない。
   var tools: [String]
   var instruction: String
@@ -137,12 +138,11 @@ enum AutomationNodeRole: Equatable {
   /// 何も渡さないコマンド。
   case sideEffect
 
-  /// Orbe へ渡す役割は sonnet、次のノードへ渡す役割は haiku。副作用はコマンドだけの役割なのでモデルを持たない。
-  var defaultModel: String? {
+  /// 書かれた出力の性質を解く。行を出す役割（取得・処理）だけが持ち、処理の省略は出来事の流れ。
+  func coverage(_ written: AutomationCoverage?) -> AutomationCoverage? {
     switch self {
-    case .judge, .report, .work: "sonnet"
-    case .fetch, .process: "haiku"
-    case .sideEffect: nil
+    case .fetch, .process: written ?? .newArrivals
+    case .judge, .report, .work, .sideEffect: nil
     }
   }
 }

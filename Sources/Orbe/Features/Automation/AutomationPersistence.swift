@@ -24,7 +24,10 @@ enum AutomationPersistence {
 
   /// 起動時に開いて全部を読む。旧形式の JSON があれば退避する（失敗しても続け、次の起動でやり直す）。使わない（開けない・
   /// 確かめられない・別の Orbe が持っている・新しい版）ときは理由を返し、そのセッションは自動化を読まず・走らせず・書かない。
-  static func open(now: Date = Date()) -> Result<AutomationDatabase.Opened, AutomationError> {
+  /// `retention` は今の保持の値（DB が使うたびに読む）。
+  static func open(
+    now: Date = Date(), retention: @escaping () -> AutomationRetention = { .standard }
+  ) -> Result<AutomationDatabase.Opened, AutomationError> {
     if let legacy = legacyFile, FileManager.default.fileExists(atPath: legacy.path) {
       var quarantine = StateFileQuarantine()
       quarantine.quarantine(legacy)
@@ -35,12 +38,13 @@ enum AutomationPersistence {
     }
     switch StateDatabase.open(
       folder: folder, version: version, schema: AutomationDatabase.schema, migrations: migrations,
-      read: { try AutomationDatabase.memory($0, now: now) })
+      read: { try AutomationDatabase.memory($0, now: now, retention: retention) })
     {
     case .opened(let opened):
       return .success(
         AutomationDatabase.Opened(
-          database: AutomationDatabase(opened.database), memory: opened.contents))
+          database: AutomationDatabase(opened.database, retention: retention),
+          memory: opened.contents))
     case .refused(let reason):
       return .failure(
         .unavailable("automations are unavailable in this session: the database \(reason)"))

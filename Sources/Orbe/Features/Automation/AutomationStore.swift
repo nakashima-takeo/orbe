@@ -6,9 +6,9 @@ import Observation
 ///
 /// 変異はどれも「変わる行を DB に 1 トランザクションで書き、最後に掃除し、通ってからメモリを進める」の 1 経路で行う。書けなければ
 /// メモリは変わらず、呼び手に `.unavailable` を返す——逆だと、書けなかった変化が画面にだけ残り、再起動で巻き戻る。出す側の行の
-/// 本文は DB にだけ置き、メモリは画面と予定が同期で読む分（ノードの状態・覚えている候補）だけを持つ。ノードの状態は変わったノードに
-/// ついて DB から読み直す（`AutomationMemory.reread`・`recount`）。確定の中でしか使わない事実（読んだ位置・最後の番号・持ち越し）
-/// は持たず、使う場で DB から読む。
+/// 本文は DB にだけ置き、メモリは画面と予定が同期で読む分（ノードの状態・覚えている候補）だけを持つ。ノードの状態は変わったノードと、
+/// 掃除で回の記録を消したノードについて DB から読み直す（`AutomationMemory.reread`・`recount`）。確定の中でしか使わない事実（読んだ
+/// 位置・最後の番号・持ち越し）は持たず、使う場で DB から読む。
 ///
 /// DB を使えない（開けない・別の Orbe が持つ・新しい版・運転中に壊れを見つけた）ストアは、自動化 0 件として描き、変異と読みを
 /// 理由付きで断る。壊れの退避は次の起動の検査に任せる。
@@ -23,6 +23,8 @@ import Observation
   private(set) var unavailableError: AutomationError
   /// DB を使える。
   var available: Bool { database != nil }
+  /// 今の保持の値を返す関数（DB が持つ。写しの DB も同じ関数を使う）。使えないストアは既定の値。
+  var retention: () -> AutomationRetention { database?.retention ?? { .standard } }
   /// 運転中に使えなくなった（走らせ役が全ノードの予定を外す）。
   @ObservationIgnored var onUnavailable: () -> Void = {}
   /// 走っている回が確定まで使うもの（確定まで掃除から守る）。走らせ役が渡す。
@@ -99,22 +101,33 @@ import Observation
     }
   }
 
-  /// 止める・再開する。版は変えない。
-  func setPaused(_ id: Int, _ paused: Bool, now: Date) throws(AutomationError) -> Automation {
+  /// 止める・再開する。`nodeId` があればそのノード自身の印、無ければ自動化の印を書く（2 つの印は別に持つ）。版は変えない。
+  func setPaused(_ id: Int, nodeId: AutomationNodeID? = nil, _ paused: Bool, now: Date)
+    throws(AutomationError) -> Automation
+  {
     let index = try index(id)
     var next = automations[index]
-    guard next.paused != paused else { return next }
-    next.pausedAt = paused ? TaskItem.storedInstant(now) : nil
+    let at = paused ? TaskItem.storedInstant(now) : nil
+    if let nodeId {
+      guard next.graph.node(nodeId) != nil else { throw .nodeNotFound(id, "\(nodeId)") }
+      guard next.state(nodeId).paused != paused else { return next }
+      next.states[nodeId]?.pausedAt = at
+    } else {
+      guard next.paused != paused else { return next }
+      next.pausedAt = at
+    }
     try commit(sweepingAt: nil) { db, memory in
-      try db.setPaused(id, at: next.pausedAt)
+      if let nodeId { try db.setPaused(nodeId, at: at) } else { try db.setPaused(id, at: at) }
       memory.automations[index] = next
     }
     return next
   }
 
   /// 消す。ノードをすべて外し（今有効な項目を無効にし、記録を消す）、自動化の行を消す。その自動化の判定の候補はすべて忘れる。
-  /// 定義を読めない自動化も消せる。
-  func delete(_ id: Int, now: Date) throws(AutomationError) {
+  /// 定義を読めない自動化も消せる（ノードはノードの台帳から引く）。外したノードを返す。
+  @discardableResult func delete(_ id: Int, now: Date) throws(AutomationError)
+    -> [AutomationNodeID]
+  {
     let nodeIds: [AutomationNodeID]
     if let automation = automation(id) {
       nodeIds = automation.graph.nodes.map(\.id)
@@ -133,6 +146,7 @@ import Observation
       memory.unreadable.removeAll { $0.id == id }
       try memory.forgetUnheld(db, now: at)
     }
+    return nodeIds
   }
 
   // MARK: - 候補をさばく
@@ -232,7 +246,9 @@ import Observation
           let after = memory.closedLinksByJudge
           let changed = Set(closed.keys).union(after.keys).filter { closed[$0] != after[$0] }
           try memory.recountJudges(changed, database, now: sweep)
-          try database.sweep(now: sweep, holding: holding)
+          for nodeId in try database.sweep(now: sweep, holding: holding) {
+            try memory.reread(nodeId, database)
+          }
         }
         return result
       }
@@ -307,7 +323,8 @@ extension AutomationStore {
       return AutomationStore(
         opening: .success(
           AutomationDatabase.Opened(
-            database: AutomationDatabase(database), memory: production.memory)))
+            database: AutomationDatabase(database, retention: production.retention),
+            memory: production.memory)))
     }
   }
 
@@ -331,6 +348,12 @@ struct AutomationMemory: Equatable {
 
   func automation(_ id: Int) -> Automation? {
     automations.first { $0.id == id }
+  }
+
+  /// ノードの自分の状態を、持ち主の自動化を引いて DB から読み直す（持ち主が無ければ何もしない）。
+  mutating func reread(_ nodeId: AutomationNodeID, _ db: AutomationDatabase) throws {
+    guard let id = automations.first(where: { $0.states[nodeId] != nil })?.id else { return }
+    try reread(nodeId, of: id, db)
   }
 
   /// ノードの自分の状態を DB から読み直す（読めば取る行は保つ）。

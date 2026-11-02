@@ -66,6 +66,17 @@ extension AutomationGraph {
     }
     try checkInputs(definitionNode, path)
     let role = try role(of: definitionNode, path)
+    if let days = definitionNode.retentionDays {
+      guard role.coverage(definitionNode.action.coverage) == .newArrivals else {
+        throw .invalid(
+          "\(path).retentionDays: only a node whose coverage is newArrivals keeps events")
+      }
+      guard AutomationNode.retentionDaysRange.contains(days) else {
+        throw .invalid(
+          "\(path).retentionDays: must be \(AutomationNode.retentionDaysRange.lowerBound) to "
+            + "\(AutomationNode.retentionDaysRange.upperBound)")
+      }
+    }
     if role == .process, definitionNode.action.coverage == .currentSet {
       if let index = definitionNode.from.firstIndex(where: { $0.take != .all }) {
         throw .invalid(
@@ -253,7 +264,7 @@ extension AutomationGraph {
           "\(path).agent: \(agent.cli) cannot run in the background (\(reason.message))")
       case nil: throw .invalid("\(path).agent: agent \(agent.cli) is not supported")
       }
-      if let model = agent.model, isBlank(model) { throw .invalid("\(path).model: model is empty") }
+      if isBlank(agent.model) { throw .invalid("\(path).model: model is empty") }
       if let tool = agent.tools.first(where: { !isMCPToolName($0) && !isBashRule($0) }) {
         throw .invalid(
           "\(path).tools: \(tool) is neither a full MCP tool name (mcp__<server>__<tool>) nor a Bash "

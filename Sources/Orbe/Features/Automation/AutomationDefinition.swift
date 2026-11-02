@@ -20,6 +20,8 @@ struct AutomationDefinition: Equatable, Codable {
     var action: AutomationActionDef
     /// 1 回に取る件数の上限。
     var maxItems: Int?
+    /// 出来事を残す日数（出来事の流れを出すノードだけ）。
+    var retentionDays: Int?
 
     /// 行を見るか——入力があり、ツールを持つ agent でない。
     var readsRows: Bool { !from.isEmpty && !action.hasTools }

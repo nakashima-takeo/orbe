@@ -77,7 +77,7 @@ extension DesignSceneFixtures {
     automationStore(boardDesignSamples()) { db in
       try db.exec(
         """
-        UPDATE action_defs SET action = '{"instruction": 1}'
+        UPDATE action_defs SET action = '{"model": "sonnet", "instruction": 1}'
         WHERE id = (SELECT def_id FROM nodes WHERE automation_id = 2 AND key = 'judge');
         UPDATE runs SET record = '{}' WHERE id = (
           SELECT max(r.id) FROM runs r JOIN nodes n ON n.id = r.node_id
@@ -225,7 +225,7 @@ extension DesignSceneFixtures {
 
   nonisolated static func agentNode(
     _ key: String, _ name: String, _ trigger: AutomationNode.Trigger, from inputs: [String] = [],
-    model: String? = nil, tools: [String] = [], instruction: String,
+    model: String = "sonnet", tools: [String] = [], instruction: String,
     coverage: AutomationCoverage? = nil, deliver: AutomationActionDef.Destination = .nextNode
   ) -> AutomationDefinition.Node {
     AutomationDefinition.Node(

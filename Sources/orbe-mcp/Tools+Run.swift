@@ -91,7 +91,9 @@ let runTools: [[String: Any]] = [
   obj([
     ("name", "put_report"),
     (
-      "description", "Gives Orbe the report (plain text). Giving it again replaces the earlier one."
+      "description",
+      "Gives Orbe the report (plain text, at most 64 KiB; the first line is the summary shown in the "
+        + "notification). Giving it again replaces the earlier one."
     ),
     ("inputSchema", schema(["text": strProp("the report")], required: ["text"])),
   ]),

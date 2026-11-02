@@ -63,18 +63,19 @@ extension AutomationStoreTests {
       AutomationRunner.runId(id, fetch, anchor))
   }
 
-  /// 鍵・名前・予定・件数の上限だけの変化は何をするかの変化に入らず、指示文の変化は新しい定義を足して指し直す。前の回の記録は
-  /// 前の定義を、後の回の記録は新しい定義を指す。ノードの定義の行は書いた後に変わらず、保存した値にノードの鍵が残るのは自動化の
-  /// ノードの鍵だけ。
+  /// 鍵・名前・予定・件数の上限・出来事の残す日数だけの変化は何をするかの変化に入らず、指示文の変化は新しい定義を足して指し
+  /// 直す。前の回の記録は前の定義を、後の回の記録は新しい定義を指す。ノードの定義の行は書いた後に変わらず、保存した値にノードの
+  /// 鍵が残るのは自動化のノードの鍵だけ。
   func testOnlyWhatANodeDoesMakesANewDefinition() throws {
     let store = AutomationStore()
-    let id = try store.create(Self.definition(), now: Self.at).id
+    let id = try store.create(Self.definition(coverage: .newArrivals), now: Self.at).id
     try Self.fetch(store, id, [Self.item("a")])
     try Self.judge(store, id)
     let judge = store.nodeId(id, "judge")
     let first = try XCTUnwrap(store.automation(id)?.graph.node(judge)?.entity.defId)
 
     var plain = try XCTUnwrap(store.automation(id)?.definition)
+    plain.nodes[0].retentionDays = 60
     plain.nodes[1].name = "別名"
     plain.nodes[1].trigger = .manual
     plain.nodes[1].maxItems = 5
@@ -106,8 +107,8 @@ extension AutomationStoreTests {
     XCTAssertFalse(stored.contains { $0.contains(#""key""#) }, "定義に鍵は残らない")
   }
 
-  /// 省略していた値に既定と同じ値を書き足すだけ（判定のモデル・上限）は、何をするかの変化に入らず、走っている回を止めない。
-  /// 既定と違う値は変化。
+  /// 省略していた値に既定と同じ値を書き足すだけ（上限）は、何をするかの変化に入らず、走っている回を止めない。既定と違う値と、
+  /// モデルの書き換えは変化。
   func testSpellingOutADefaultIsNotAChangeOfBehavior() throws {
     let store = AutomationStore()
     let id = try store.create(Self.definition(), now: Self.at).id
@@ -118,7 +119,7 @@ extension AutomationStoreTests {
       let version = try XCTUnwrap(store.automation(id)?.version)
       return try store.replace(id, version: version, with: definition, now: Self.at).reworked
     }
-    func model(_ model: String?) -> (inout AutomationActionDef) -> Void {
+    func model(_ model: String) -> (inout AutomationActionDef) -> Void {
       { action in
         guard case .agent(var agent) = action.method else { return }
         agent.model = model
@@ -126,7 +127,6 @@ extension AutomationStoreTests {
       }
     }
 
-    XCTAssertEqual(try rewritten(model(nil)), [], "省略は既定の sonnet と同じ")
     XCTAssertEqual(
       try rewritten { $0.timeoutMinutes = AutomationActionDef.agentTimeoutMinutes }, [],
       "agent の既定の上限を明示")

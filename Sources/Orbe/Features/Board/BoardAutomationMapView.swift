@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// 詳細の「地図」。ノードを入力の深さ順に 1 行ずつ縦に並べ、左の溝に入力のつながりを線で描き、続けて出力先の行を並べる。行は
-/// 溝・役割・名前と予定の札と入力・未処理・前回（成否の印・時刻・量）。最新の回が失敗したノードは、行の下に理由の行を足す（溝の
+/// 溝・役割・名前と予定の札と状態（実行中・一時停止中）と入力・未処理・前回（成否の印・時刻・量）。ノード自身を止めている行は、
+/// 溝の点を停止の印に替え、名前を沈める（一覧の止めた行と同じ語彙）——グラフの上でも止めたノードが読めるため。最新の回が失敗したノードは、行の下に理由の行を足す（溝の
 /// 線は途切れずに続く）。地図に居る間は選ばれているノードの行に濃い地を敷く。ノードの行のクリックはそのノードを選ぶ。線の割り当ても
 /// 行の文言も読み替えが解いた値で、ここは描くだけ。
 struct BoardAutomationMapView: View {
@@ -92,9 +93,10 @@ struct BoardMapRowView: View {
     switch row.content {
     case .node(let mapNode):
       switch mapNode.look {
+      case .running: .running
+      case .paused: .paused
       case .idle: .idle
       case .failed: .failed
-      case .running: .running
       }
     case .taskCandidates, .reports: .destination
     }
@@ -106,7 +108,9 @@ struct BoardMapRowView: View {
     HStack(spacing: Self.cellGap) {
       fontResolver.text(mapNode.name, base: Theme.Typography.code)
         .font(Font.theme.code)
-        .foregroundStyle(Color.theme.textPrimary)
+        .foregroundStyle(
+          mapNode.look == .paused ? Color.theme.textMuted : Color.theme.textPrimary
+        )
         .padding(.trailing, Theme.Space.hair)
         .truncationMode(.tail)
         .layoutPriority(1)
@@ -116,6 +120,14 @@ struct BoardMapRowView: View {
           .font(Font.theme.codeSmall)
           .foregroundStyle(Color.theme.accentBright)
           .fixedSize()
+      } else if mapNode.look == .paused {
+        HStack(spacing: 5) {
+          MarkGlyph(kind: .paused, color: Color.theme.textMuted)
+          Text(l10n.string(.automationPaused))
+        }
+        .font(Font.theme.codeSmall)
+        .foregroundStyle(Color.theme.textMuted)
+        .fixedSize()
       }
       if mapNode.breached {
         BoardChip(

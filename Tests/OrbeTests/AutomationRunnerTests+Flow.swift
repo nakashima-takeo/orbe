@@ -15,12 +15,13 @@ extension AutomationRunnerTests {
     try runner.flow(id, to: target)
   }
 
-  /// もう一度流すと流している途中で断られるか。断られなければ、そこで新しい一巡が始まっている。
+  /// もう一度終わりまで流すと、道の重なる流しとして断られるか。断られなければ、そこで新しい一巡が始まっている。
   private func refusesAnotherFlow(_ id: Int) -> Bool {
     do throws(AutomationError) {
       try runner.flow(id, to: .ends)
     } catch {
-      return error == .flowing(id)
+      if case .flowing(id, _) = error { return true }
+      return false
     }
     return false
   }
@@ -88,14 +89,12 @@ extension AutomationRunnerTests {
   }
 
   /// 上流が何も積まなくても一巡は終わる——「届いたら」は起きないまま、流しが起こした手動のノードは取る行が無いまま終わる。
-  /// 止めた自動化も流せる。
-  func testAFlowWhoseUpstreamAddsNothingStillEndsAndPausedAutomationsFlow() throws {
+  func testAFlowWhoseUpstreamAddsNothingStillEnds() throws {
     let id = try define([
       fetch("f", every: 3600),
       definitionNode("digest", .arrival, from: ["f"], deliver: .report),
       definitionNode("p", .manual, from: ["f"], deliver: .report),
     ])
-    _ = try runner.pause(id, true)
 
     try flow(id)
     finish("f", fetched([]))
