@@ -120,6 +120,50 @@ extension ControlWireTests {
     XCTAssertEqual(errorCode(wire.nextResponse()), -32601, "method 名だけで決まる")
   }
 
+  /// 封筒は `jsonrpc`・`id`・`method`・`params`・`caller` だけを受け、書き損じた鍵を省略と読まない。知らない method は
+  /// 封筒によらず -32601。
+  func testTheEnvelopeRejectsKeysItDoesNotTake() {
+    let fake = FakeControlTarget()
+    let wire = startWire(target: fake)
+
+    wire.send([
+      "jsonrpc": "2.0", "id": 1, "method": "list_tabs", "param": ["workspaceId": Self.workspace],
+    ])
+    XCTAssertEqual(message(wire.nextResponse()), "unknown param", "params の省略と読んで全タブを返さない")
+    wire.send([
+      "jsonrpc": "2.0", "id": 2, "method": "add_task", "params": ["title": "a"], "callerTabId": 5,
+    ])
+    XCTAssertEqual(message(wire.nextResponse()), "unknown callerTabId")
+    wire.send(["jsonrpc": "2.0", "id": 3, "method": "no_such_verb", "param": [:]])
+    XCTAssertEqual(errorCode(wire.nextResponse()), -32601)
+    XCTAssertTrue(fake.tabLists.isEmpty)
+    XCTAssertTrue(fake.addedTasks.isEmpty)
+  }
+
+  /// 型の違う値は、ほかの引数の値の不正（値域外・語彙の外）より先に断る。
+  func testAWrongTypeIsRefusedBeforeAnInvalidValue() {
+    let fake = FakeControlTarget()
+    let wire = startWire(target: fake)
+
+    for (index, entry) in [
+      ("spawn_agent", ["timeoutMs": 0, "cwd": 1], "cwd"),
+      (
+        "resume_agent",
+        ["command": "codex", "sessionId": "s", "timeoutMs": 0, "workspaceId": 1], "workspaceId"
+      ),
+      ("add_task", ["title": "a", "status": "x", "workspaceId": 1], "workspaceId"),
+      (
+        "add_task",
+        ["title": "a", "links": [["kind": "x", "repo": "o/n", "number": 1]], "worktree": 1],
+        "worktree"
+      ),
+      ("update_task", ["taskId": 7, "due": "x", "priority": "x", "worktree": 1], "worktree"),
+    ].enumerated() {
+      let response = wire.request(id: index, method: entry.0, params: entry.1)
+      XCTAssertEqual(message(response), "invalid \(entry.2)", "\(entry.0) \(entry.1)")
+    }
+  }
+
   /// 呼び出し元のタブは封筒の `caller: {tabId}` で伝え、引数の `callerTabId` は知らない鍵。読まない動詞は封筒を使わない。
   func testTheCallerTabRidesOnTheEnvelope() {
     let fake = FakeControlTarget()
@@ -133,7 +177,7 @@ extension ControlWireTests {
     XCTAssertEqual(message(spoofed), "unknown callerTabId")
 
     let callers: [Any] = [
-      5, "5", [String: Any](), ["tabId": "5"], ["tabId": true], ["tabId": 5, "x": 1],
+      5, "5", NSNull(), [String: Any](), ["tabId": "5"], ["tabId": true], ["tabId": 5, "x": 1],
     ]
     for (index, caller) in callers.enumerated() {
       wire.send([
@@ -192,6 +236,9 @@ extension ControlWireTests {
       wire.send([
         "jsonrpc": "2.0", "id": 2, "method": method, "params": ["tabId": fake.tabId],
         "caller": "x",
+      ])
+      wire.send([
+        "jsonrpc": "2.0", "id": 3, "method": method, "params": ["tabId": fake.tabId], "partKey": 1,
       ])
     }
     wire.barrier()

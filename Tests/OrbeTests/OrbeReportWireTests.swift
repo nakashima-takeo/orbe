@@ -13,8 +13,8 @@ import XCTest
 /// 生の 1 行を読めば、どの語がどう欠けたかがその場で出る。
 ///
 /// 壊れると何が起きるか: hook からの状態報告が無言で no-op に倒れる。エージェントの状態は
-/// タブに一切現れなくなるが、どの実行体もエラーを出さない（`orbe-report` は接続できなくても
-/// exit 0、サーバは知らない params を捨てるだけ）。
+/// タブに一切現れなくなるが、どの実行体もエラーを表に出さない（`orbe-report` は接続できなくても
+/// exit 0、知らない鍵を持つ報告をサーバが断った応答も読み捨てる）。
 final class OrbeReportWireTests: OrbeTestCase {
   /// 報告元として名乗るタブ id（実タブは要らない——測るのは wire に載る語だけ）。
   private static let tabId = 7

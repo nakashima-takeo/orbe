@@ -65,15 +65,22 @@ extension ControlServer {
   static func addTask(_ target: ControlTaskTarget, _ p: ControlParams) throws(ControlError)
     -> Result<Any, ControlError>
   {
-    var draft = TaskDraft(title: try p.string("title"))
-    if let status = try p.status() { draft.status = status }
-    if let priority = try p.priority() { draft.priority = priority }
-    draft.due = try p.due()?.value
-    draft.waitingReason = try p.clearableString("waitingReason")?.value
-    if let description = try p.optionalString("description") { draft.description = description }
-    if let links = try p.links() { draft.links = links }
+    let title = try p.string("title")
+    let status = try p.optionalString("status")
+    let priority = try p.optionalString("priority")
+    let due = try p.clearableString("due")
+    let waitingReason = try p.clearableString("waitingReason")
+    let description = try p.optionalString("description")
+    let links = try p.optionalObjects("links")
     let workspaceId = try p.clearableWorkspaceId()
     let worktree = try p.optionalString("worktree")
+    var draft = TaskDraft(title: title)
+    if let status = try p.status(status) { draft.status = status }
+    if let priority = try p.priority(priority) { draft.priority = priority }
+    draft.due = try p.due(due)?.value
+    draft.waitingReason = waitingReason?.value
+    if let description { draft.description = description }
+    if let links = try p.links(links) { draft.links = links }
     return target.controlAddTask(
       draft, workspaceId: workspaceId, callerTabId: p.callerTabId, worktree: worktree)
   }
@@ -82,12 +89,19 @@ extension ControlServer {
     -> Result<Any, ControlError>
   {
     let taskId = try p.int("taskId")
-    let update = TaskUpdate(
-      title: try p.optionalString("title"), status: try p.status(), priority: try p.priority(),
-      due: try p.due(), waitingReason: try p.clearableString("waitingReason"),
-      description: try p.optionalString("description"), links: try p.links())
+    let title = try p.optionalString("title")
+    let status = try p.optionalString("status")
+    let priority = try p.optionalString("priority")
+    let due = try p.clearableString("due")
+    let waitingReason = try p.clearableString("waitingReason")
+    let description = try p.optionalString("description")
+    let links = try p.optionalObjects("links")
     let workspaceId = try p.clearableWorkspaceId()
     let worktree = try p.clearableString("worktree")
+    let update = TaskUpdate(
+      title: title, status: try p.status(status), priority: try p.priority(priority),
+      due: try p.due(due), waitingReason: waitingReason, description: description,
+      links: try p.links(links))
     return target.controlUpdateTask(
       taskId: taskId, update, workspaceId: workspaceId, worktree: worktree)
   }
@@ -108,22 +122,25 @@ extension ControlServer {
   }
 }
 
-/// タスクの引数のうち、語彙や入れ子の形を持つもの。キーが無いことと `null` を区別する（`null` は「外す」）。
+/// タスクの引数のうち、語彙や入れ子の形を持つものを、型を確かめて読んだ値から値へ写す（型違いを値の不正より先に断るため、
+/// 読むのはハンドラが全部済ませてから）。キーが無いことと `null` を区別する（`null` は「外す」）。
 extension ControlParams {
-  fileprivate func status() throws(ControlError) -> TaskItem.Status? {
-    guard let raw = try optionalString("status") else { return nil }
+  fileprivate func status(_ raw: String?) throws(ControlError) -> TaskItem.Status? {
+    guard let raw else { return nil }
     guard let status = TaskItem.Status(rawValue: raw) else { throw invalid("status") }
     return status
   }
 
-  fileprivate func priority() throws(ControlError) -> TaskItem.Priority? {
-    guard let raw = try optionalString("priority") else { return nil }
+  fileprivate func priority(_ raw: String?) throws(ControlError) -> TaskItem.Priority? {
+    guard let raw else { return nil }
     guard let priority = TaskItem.Priority(rawValue: raw) else { throw invalid("priority") }
     return priority
   }
 
-  fileprivate func due() throws(ControlError) -> ClearableValue<TaskItem.DueDate>? {
-    switch try clearableString("due") {
+  fileprivate func due(_ raw: ClearableValue<String>?) throws(ControlError)
+    -> ClearableValue<TaskItem.DueDate>?
+  {
+    switch raw {
     case .set(let raw):
       guard let due = TaskItem.DueDate(raw) else { throw invalid("due") }
       return .set(due)
@@ -134,8 +151,8 @@ extension ControlParams {
 
   /// 結び付きの列。オブジェクトの配列だけを受け（`null` は型の違反）、各要素は `{kind, repo, number}` だけを持ち、値の型
   /// （`GitHubItemKind`・`GitHubItemID`）で形と範囲を確かめる。要素の誤りは要素の場所で言う（`missing links[0].number`）。
-  fileprivate func links() throws(ControlError) -> [TaskLink]? {
-    guard let elements = try optionalObjects("links") else { return nil }
+  fileprivate func links(_ elements: [[String: Any]]?) throws(ControlError) -> [TaskLink]? {
+    guard let elements else { return nil }
     var links: [TaskLink] = []
     for (index, element) in elements.enumerated() {
       let at = "links[\(index)]"

@@ -24,7 +24,7 @@ extension ControlServer {
     let tabId = try p.optionalInt("tabId")
     let text = try p.optionalString("text")
     guard let tab = tabId.flatMap(target.controlResolveTab) else { return .failure(tabNotFound) }
-    guard let text else { return .failure(p.missing("text")) }
+    guard let text else { throw p.missing("text") }
     tab.surface.controlSendText(text)
     return .success(["ok": true])
   }
@@ -35,7 +35,7 @@ extension ControlServer {
     let tabId = try p.optionalInt("tabId")
     let spec = try p.optionalString("key")
     guard let tab = tabId.flatMap(target.controlResolveTab) else { return .failure(tabNotFound) }
-    guard let key = spec.flatMap(ControlKey.parse) else { return .failure(p.invalid("key")) }
+    guard let key = spec.flatMap(ControlKey.parse) else { throw p.invalid("key") }
     tab.surface.controlSendKey(key)
     return .success(["ok": true])
   }
@@ -116,10 +116,10 @@ extension ControlServer {
     let workspaceId: UUID?
     let cwd: String?
     do throws(ControlError) {
-      timeoutMs = try WaitTimeout.parse(p, default: WaitTimeout.launchDefaultMs)
       command = try p.optionalString("command")
       workspaceId = try p.optionalWorkspaceId()
       cwd = try p.optionalString("cwd")
+      timeoutMs = try WaitTimeout.parse(p, default: WaitTimeout.launchDefaultMs)
     } catch {
       return conn.respond(id: id, result: .failure(error))
     }
@@ -136,11 +136,11 @@ extension ControlServer {
     let workspaceId: UUID?
     let cwd: String?
     do throws(ControlError) {
-      timeoutMs = try WaitTimeout.parse(p, default: WaitTimeout.launchDefaultMs)
       command = try p.string("command")
       sessionId = try p.string("sessionId")
       workspaceId = try p.optionalWorkspaceId()
       cwd = try p.optionalString("cwd")
+      timeoutMs = try WaitTimeout.parse(p, default: WaitTimeout.launchDefaultMs)
     } catch {
       return conn.respond(id: id, result: .failure(error))
     }

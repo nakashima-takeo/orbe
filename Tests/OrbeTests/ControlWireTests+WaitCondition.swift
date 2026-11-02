@@ -3,13 +3,12 @@ import XCTest
 
 @testable import Orbe
 
-/// 待ちの条件の口（`set_wait_condition`）の params の形と日時の読み方、呼び出し元タブを target へ届けること、帳簿の動詞
-/// （`add_task` / `update_task`）が条件を受けないこと。値の規則（期限が未来・間隔の下限）はストアが持ち、ここは形だけを
-/// 見る。
+/// 待ちの条件の口（`set_wait_condition`）の params の形と日時の読み方、呼び出し元タブを target へ届けること。値の規則
+/// （期限が未来・間隔の下限）はストアが持ち、ここは形だけを見る。
 ///
 /// 壊れると何が起きるか: 時差の無い期限が UTC と読まれ、Mac の時刻で 9 時間ずれて解ける。`null`（条件だけを外す）が
 /// 「変えない」になり、外したつもりの条件が裏で走り続ける。呼び出し元タブが届かず、条件に作業ディレクトリも会話も
-/// 入らない。帳簿の動詞を「常に許可」した agent に、裏で走る任意のコマンドを登録させる抜け道ができる。
+/// 入らない。
 extension ControlWireTests {
   private var condition: [String: Any] {
     [

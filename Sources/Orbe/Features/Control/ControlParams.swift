@@ -43,8 +43,15 @@ struct ControlParams {
     self.callerTabId = callerTabId
   }
 
-  /// 要求の `params`（省いた要求は引数なし）と封筒の `caller`（`{tabId}`）から作る。
+  /// 要求の封筒が持つ鍵。
+  private static let envelopeKeys: Set = ["jsonrpc", "id", "method", "params", "caller"]
+
+  /// 要求の `params`（省いた要求は引数なし）と封筒の `caller`（`{tabId}`）から作る。封筒の知らない鍵も断る（書き損じた
+  /// `params` や `caller` を省略と読まない）。
   init(request: [String: Any], accepting types: [String: ControlParamType]) throws(ControlError) {
+    if let unknown = request.keys.sorted().first(where: { !Self.envelopeKeys.contains($0) }) {
+      throw ControlError(code: -32602, message: "unknown \(unknown)")
+    }
     let values: [String: Any]
     switch request["params"] {
     case nil: values = [:]
@@ -57,7 +64,7 @@ struct ControlParams {
   private static func caller(_ raw: Any?) throws(ControlError) -> Int? {
     guard let raw else { return nil }
     guard let object = raw as? [String: Any], object.count == 1,
-      let tabId = object["tabId"].flatMap(int)
+      let tabId = object["tabId"].flatMap(Self.asInt)
     else { throw ControlError(code: -32602, message: "invalid caller") }
     return tabId
   }
@@ -73,10 +80,12 @@ struct ControlParams {
   // MARK: - 読み
 
   func int(_ key: String) throws(ControlError) -> Int { try required(key, optionalInt(key)) }
-  func optionalInt(_ key: String) throws(ControlError) -> Int? { try read(key, .int, Self.int) }
+  func optionalInt(_ key: String) throws(ControlError) -> Int? { try read(key, .int, Self.asInt) }
 
   func bool(_ key: String) throws(ControlError) -> Bool { try required(key, optionalBool(key)) }
-  func optionalBool(_ key: String) throws(ControlError) -> Bool? { try read(key, .bool, Self.bool) }
+  func optionalBool(_ key: String) throws(ControlError) -> Bool? {
+    try read(key, .bool, Self.asBool)
+  }
 
   func string(_ key: String) throws(ControlError) -> String {
     try required(key, optionalString(key))
@@ -119,11 +128,11 @@ struct ControlParams {
     try required(Self.workspaceKey, optionalWorkspaceId())
   }
   func optionalWorkspaceId() throws(ControlError) -> UUID? {
-    try read(Self.workspaceKey, .workspaceId, Self.workspaceId)
+    try read(Self.workspaceKey, .workspaceId, Self.asWorkspaceId)
   }
   /// `null` で「なし」にできる workspace の ID（タスクの付き先）。
   func clearableWorkspaceId() throws(ControlError) -> ClearableValue<UUID>? {
-    try clearable(Self.workspaceKey, .workspaceId, Self.workspaceId)
+    try clearable(Self.workspaceKey, .workspaceId, Self.asWorkspaceId)
   }
 
   private func required<T>(_ key: String, _ value: T?) throws(ControlError) -> T {
@@ -154,11 +163,11 @@ struct ControlParams {
     (raw as? NSNumber).map { CFGetTypeID($0) == CFBooleanGetTypeID() } ?? false
   }
 
-  private static func int(_ raw: Any) -> Int? { isBool(raw) ? nil : raw as? Int }
+  private static func asInt(_ raw: Any) -> Int? { isBool(raw) ? nil : raw as? Int }
 
-  private static func bool(_ raw: Any) -> Bool? { isBool(raw) ? raw as? Bool : nil }
+  private static func asBool(_ raw: Any) -> Bool? { isBool(raw) ? raw as? Bool : nil }
 
-  private static func workspaceId(_ raw: Any) -> UUID? {
+  private static func asWorkspaceId(_ raw: Any) -> UUID? {
     (raw as? String).flatMap(UUID.init(uuidString:))
   }
 }

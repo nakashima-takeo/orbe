@@ -15,7 +15,7 @@ final class OrbeMcpTaskProcessTests: OrbeTestCase {
     try XCTUnwrap(control.target.workspaces.first { $0.name == workspace }?.tabs.first)
   }
 
-  func testAddTaskAttachesToTheBridgesTabRegardlessOfTheArguments() throws {
+  func testAddTaskAttachesToTheBridgesTabAndRejectsACallerInTheArguments() throws {
     let control = try startControlProcess()
     let background = try tab(control, in: "background")
     let main = try tab(control, in: "main")

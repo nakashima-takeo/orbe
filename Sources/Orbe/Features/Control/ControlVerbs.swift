@@ -30,7 +30,7 @@ struct ControlVerb {
 }
 
 extension ControlServer {
-  /// 動詞の表。受け口はここだけを引き、無い method は -32601（method 名だけで決まる）。行の鍵は今のハンドラが読む鍵と
+  /// 動詞の表。受け口はここだけを引き、無い method は -32601（method 名だけで決まる）。行の鍵はハンドラが読む鍵と
   /// ちょうど同じで、MCP に出す道具の `inputSchema` の欄とも一致する（テストで縛る）。
   static let verbs: [String: ControlVerb] = [
     "list_workspaces": ControlVerb(.window(listWorkspaces)),
